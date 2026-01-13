@@ -1,5 +1,11 @@
 ﻿Project("Editor")
 
+find_package(fmt CONFIG REQUIRED)
+find_package(SDL3 CONFIG REQUIRED)
+find_package(glm CONFIG REQUIRED)
+find_package(imgui CONFIG REQUIRED)
+find_package(Vulkan REQUIRED) 
+
 set(EDITOR_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Source")
 set(EDITOR_PCH_HEADER "${EDITOR_SOURCE_DIR}/Editor_Includes.h")
 

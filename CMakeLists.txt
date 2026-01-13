@@ -3,8 +3,8 @@
 #
 cmake_minimum_required (VERSION 3.10)
 
-# C++ 표준 설정 (20 추천)
-set(CMAKE_CXX_STANDARD 20)
+# C++ 표준 설정 (23 추천)
+set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF) # MSVC 전용 확장 기능 끄기 (표준 준수)
 

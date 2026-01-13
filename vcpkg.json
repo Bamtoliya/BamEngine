@@ -6,6 +6,7 @@
     "sdl3",
     "glm",
     "vulkan",
+    "glaze",
     {
       "name": "imgui",
       "features": [

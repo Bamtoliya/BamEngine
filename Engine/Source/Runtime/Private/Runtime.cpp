@@ -1,6 +1,5 @@
 ﻿#pragma once
 #include "Runtime.h"
-#include "TimeManager.h"
 
 IMPLEMENT_SINGLETON(Runtime)
 
@@ -11,12 +10,19 @@ EResult Runtime::Initialize(void* arg)
 	_CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
 #endif
 
-	TimeManager::Create();
+	RUNTIMEDESC* pRuntimeDesc = reinterpret_cast<RUNTIMEDESC*>(arg);
+	RENDERERDESC RendererDesc = pRuntimeDesc->RendererDesc;
+
+	m_Renderer = Renderer::Create(&RendererDesc);
+	if (!m_Renderer) return EResult::Fail;
+	m_TimeManager = TimeManager::Create();
+	if (!m_TimeManager) return EResult::Fail;
 	return EResult::Success;
 }
 
 void Runtime::Free()
 {
+	Renderer::Destroy();
 	TimeManager::Destroy();
 }
 #pragma endregion
@@ -43,6 +49,18 @@ void Runtime::LateUpdate(f32 dt)
 }
 EResult Runtime::Render()
 {
+	if (IsFailure(Renderer::Get().BeginFrame()))
+	{
+		fmt::print(stderr, "Renderer BeginFrame Failed\n");
+	}
+
+	// Rendering Logic Here
+
+
+	if (IsFailure(Renderer::Get().EndFrame()))
+	{
+		fmt::print(stderr, "Renderer EndFrame Failed\n");
+	}
 	return EResult::Success;
 }
 #pragma endregion

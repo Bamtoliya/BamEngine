@@ -12,7 +12,7 @@ public:
 	typedef struct tagImGuiCreateInfo
 	{
 		SDL_Window* Window = { nullptr };
-		SDL_Renderer* Renderer = { nullptr };
+		class RHI* RHI = { nullptr };
 	}IMGUISDLDESC;
 
 #pragma region Constructor&Destructor
@@ -28,10 +28,14 @@ public:
 	void Begin();
 	void End();
 	void ProcessEvent(const SDL_Event* event);
+	void Draw();
+
+private:
+	void MainDockspace();
 #pragma region Variables
 private:
 	SDL_Window* m_Window = { nullptr };
-	SDL_Renderer* m_Renderer = { nullptr };
+	class RHI* m_RHI = { nullptr };
 #pragma endregion
 
 

@@ -4,8 +4,8 @@
 
 namespace Editor
 {
-	uint32 g_WindowWidth = 1280;
-	uint32 g_WindowHeight = 720;
+	static uint32 g_WindowWidth = 1920;
+	static uint32 g_WindowHeight = 1080;
 }
 
 using namespace Editor;

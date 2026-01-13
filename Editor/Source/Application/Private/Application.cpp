@@ -4,6 +4,7 @@
 #include "Application.h"
 #include "TimeManager.h"
 #include "ImGuiManager.h"
+#include "RHI.h"
 
 BEGIN(Editor)
 
@@ -12,7 +13,7 @@ IMPLEMENT_SINGLETON(Application)
 #pragma region Constructor&Destructor
 EResult Application::Initialize(void* arg)
 {
-	m_Runtime = Runtime::Create(arg);
+	
 
 	if (!SDL_Init(SDL_INIT_VIDEO))
     {
@@ -22,17 +23,23 @@ EResult Application::Initialize(void* arg)
 
     m_Window = SDL_CreateWindow(
         "BamEngine Editor",
-        1280, 720,
-        0 // 기본 윈도우 플래그 (SDL_WINDOW_RESIZABLE 등 필요시 추가)
+        g_WindowWidth, g_WindowHeight,
+        SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY  // 기본 윈도우 플래그 (SDL_WINDOW_RESIZABLE 등 필요시 추가)
 	);
 
-	m_Renderer = SDL_CreateRenderer(m_Window, NULL);
+	RUNTIMEDESC runtimeDesc = {};
+	runtimeDesc.RendererDesc.RHIType = ERHIType::SDLRenderer;
+	runtimeDesc.RendererDesc.WindowHandle = m_Window;
+	runtimeDesc.RendererDesc.Width = g_WindowWidth;
+	runtimeDesc.RendererDesc.Height = g_WindowHeight;
+    runtimeDesc.RendererDesc.IsVSync = true;
 
-	if (!m_Window || !m_Renderer) return EResult::Fail;
+    m_Runtime = Runtime::Create(&runtimeDesc);
+    if (m_Runtime) return EResult::Fail;
 
 	ImGuiManager::IMGUISDLDESC imguiDesc = {};
 	imguiDesc.Window = m_Window;
-	imguiDesc.Renderer = m_Renderer;
+    imguiDesc.RHI = Renderer::Get().GetRHI();
 
     if (!ImGuiManager::Create(&imguiDesc))
     {
@@ -47,7 +54,6 @@ void Application::Free()
 {
     ImGuiManager::Get().Destroy();
 
-    if(m_Renderer)  SDL_DestroyRenderer(m_Renderer);
     if(m_Window) SDL_DestroyWindow(m_Window);
     SDL_Quit();
 
@@ -75,25 +81,43 @@ void Application::Run(int argc, char* argv[])
 		f32 dt = timeManager.GetDeltaTime();
 		UpdateTitle(dt);
 		m_Runtime->RunFrame(dt);
-
-        SDL_SetRenderDrawColor(m_Renderer, 50, 50, 50, 255);
-        SDL_RenderClear(m_Renderer);
+        
         m_Runtime->Render();
 
         ImGuiManager::Get().Begin();
         {
-            // 원하는 UI 코드 작성
-            ImGui::ShowDemoWindow();
+			ImGuiManager::Get().Draw();
         }
         ImGuiManager::Get().End();
-
-        SDL_RenderPresent(m_Renderer);
+        Renderer::Get().EndFrame();
     }
 }
 
 void Application::Shutdown()
 {
     Free();
+}
+
+void Application::SetResolution(uint32 width, uint32 height, bool fullscreen)
+{
+    if (!m_Window) return;
+
+    if(fullscreen)
+    {
+		SDL_SetWindowFullscreen(m_Window, true);
+    }
+    else
+    {
+        SDL_SetWindowFullscreen(m_Window, false);
+        SDL_SetWindowSize(m_Window, width, height);
+        SDL_SetWindowPosition(m_Window, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
+    }
+}
+
+void Application::GetWindowSize(int32* w, int32* h) const
+{
+    if (m_Window)
+        SDL_GetWindowSize(m_Window, w, h);
 }
 
 void Application::UpdateTitle(f32 dt)

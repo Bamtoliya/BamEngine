@@ -26,6 +26,22 @@ namespace Engine
 		return result != EResult::Success;
 	}
 
+	inline const char* ResultToString(EResult result)
+	{
+		switch (result)
+		{
+		case EResult::Success:				return "Success";
+		case EResult::Fail:					return "Fail";
+		case EResult::InvalidArgument:		return "Invalid Argument";
+		case EResult::NotImplemented:		return "Not Implemented";
+		case EResult::OutOfMemory:			return "Out Of Memory";
+		case EResult::FileNotFound:			return "File Not Found";
+		case EResult::AlreadyInitialized:	return "Already Initialized";
+		case EResult::AccessDenied:			return "Access Denied";
+		default:							return "Unknown Error";
+		}
+	}
+
 	struct ActionResult
 	{
 		EResult Result;

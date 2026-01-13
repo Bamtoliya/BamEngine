@@ -11,6 +11,7 @@
 #include <functional>
 #include <map>
 #include <unordered_map>
+#include <filesystem>
 #pragma endregion
 
 using namespace std;
@@ -33,6 +34,9 @@ using namespace std;
 
 // Vulkan
 #include <vulkan/vulkan.h>
+
+// Glaze
+#include <glaze/glaze.hpp>
 #pragma endregion
 
 

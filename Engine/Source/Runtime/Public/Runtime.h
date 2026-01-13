@@ -1,8 +1,15 @@
 ﻿#pragma once
 
 #include "Base.h"
+#include "Renderer.h"
+#include "TimeManager.h"
 
 BEGIN(Engine)
+
+typedef struct tagRuntimeCreateInfo
+{
+	RENDERERDESC RendererDesc;
+} RUNTIMEDESC;
 
 class ENGINE_API Runtime : public Base
 {
@@ -20,7 +27,9 @@ public:
 
 public:
 	void RunFrame(f32 dt);
+	EResult BeginFrame();
 	EResult Render();
+	EResult EndFrame();
 private:
 	void FixedUpdate(f32 dt);
 	void Update(f32 dt);
@@ -28,7 +37,9 @@ private:
 #pragma endregion
 
 #pragma region Variables
-
+private:
+	Renderer* m_Renderer = { nullptr };
+	TimeManager* m_TimeManager = { nullptr };
 #pragma endregion
 };
 

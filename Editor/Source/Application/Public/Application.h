@@ -27,12 +27,16 @@ public:
 public:
 	void Run(int argc, char* argv[]);
 	void Shutdown();
+public:
+	void SetResolution(uint32 width, uint32 height, bool fullscreen);
+	void GetWindowSize(int32* w, int32* h) const;
 private:
 	void UpdateTitle(f32 dt);
 private:
 	class Runtime* m_Runtime = { nullptr };
+	
 	struct SDL_Window* m_Window = { nullptr };
-	struct SDL_Renderer* m_Renderer = { nullptr };
+	class RHI* m_RHI = { nullptr };
 private:
 	f32 m_FPSTimer = { 0.f };
 };
