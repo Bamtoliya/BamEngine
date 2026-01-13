@@ -22,6 +22,7 @@ EResult Runtime::Initialize(void* arg)
 
 void Runtime::Free()
 {
+	OnUIRender.Clear();
 	Renderer::Destroy();
 	TimeManager::Destroy();
 }
@@ -33,7 +34,7 @@ void Runtime::RunFrame(f32 dt)
 	FixedUpdate(dt);
 	Update(dt);
 	LateUpdate(dt);
-	Render();
+	Render(dt);
 }
 void Runtime::FixedUpdate(f32 dt)
 {
@@ -47,7 +48,7 @@ void Runtime::LateUpdate(f32 dt)
 {
 	// Late Update Logic Here
 }
-EResult Runtime::Render()
+EResult Runtime::Render(f32 dt)
 {
 	if (IsFailure(Renderer::Get().BeginFrame()))
 	{
@@ -55,6 +56,11 @@ EResult Runtime::Render()
 	}
 
 	// Rendering Logic Here
+
+	if (OnUIRender.IsBound())
+	{
+		OnUIRender.Broadcast(dt);
+	}
 
 
 	if (IsFailure(Renderer::Get().EndFrame()))

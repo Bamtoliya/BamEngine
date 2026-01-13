@@ -20,7 +20,6 @@ protected:
 public:
     virtual void Free() override {};
 public:
-    virtual void Shutdown() PURE;
     virtual void Resize() PURE;
 public:
     virtual EResult BeginFrame() PURE;

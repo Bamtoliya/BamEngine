@@ -13,8 +13,6 @@ IMPLEMENT_SINGLETON(Application)
 #pragma region Constructor&Destructor
 EResult Application::Initialize(void* arg)
 {
-	
-
 	if (!SDL_Init(SDL_INIT_VIDEO))
     {
         fmt::print(stderr, "SDL_Init Failed: {}\n", SDL_GetError());
@@ -35,7 +33,7 @@ EResult Application::Initialize(void* arg)
     runtimeDesc.RendererDesc.IsVSync = true;
 
     m_Runtime = Runtime::Create(&runtimeDesc);
-    if (m_Runtime) return EResult::Fail;
+    if (!m_Runtime) return EResult::Fail;
 
 	ImGuiManager::IMGUISDLDESC imguiDesc = {};
 	imguiDesc.Window = m_Window;
@@ -47,17 +45,24 @@ EResult Application::Initialize(void* arg)
 		return EResult::Fail;
     }
 
+    m_Runtime->OnUIRender.AddLambda([](float dt)
+        {
+            ImGuiManager::Get().Begin();
+            ImGuiManager::Get().Draw(); // 내부 로직은 매번 달라질 수 있음
+            ImGuiManager::Get().End();
+        });
+
     return EResult::Success;
 }
 
 void Application::Free()
 {
-    ImGuiManager::Get().Destroy();
+    ImGuiManager::Destroy();
+
+    if (m_Runtime) m_Runtime->Destroy();
 
     if(m_Window) SDL_DestroyWindow(m_Window);
     SDL_Quit();
-
-    if (m_Runtime) m_Runtime->Destroy();
 }
 
 #pragma endregion
@@ -81,15 +86,6 @@ void Application::Run(int argc, char* argv[])
 		f32 dt = timeManager.GetDeltaTime();
 		UpdateTitle(dt);
 		m_Runtime->RunFrame(dt);
-        
-        m_Runtime->Render();
-
-        ImGuiManager::Get().Begin();
-        {
-			ImGuiManager::Get().Draw();
-        }
-        ImGuiManager::Get().End();
-        Renderer::Get().EndFrame();
     }
 }
 

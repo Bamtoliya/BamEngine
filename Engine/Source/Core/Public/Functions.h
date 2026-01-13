@@ -23,9 +23,9 @@ namespace Engine
 	}
 
 	template<typename T>
-	unsigned int Safe_AddRef(T& Instance)
+	int32 Safe_AddRef(T& Instance)
 	{
-		unsigned int iRefCnt = { 0 };
+		int32 iRefCnt = { 0 };
 
 		if (nullptr != Instance)
 			iRefCnt = Instance->AddRef();
@@ -34,9 +34,9 @@ namespace Engine
 	}
 
 	template<typename T>
-	unsigned int Safe_Release(T& Instance)
+	int32 Safe_Release(T& Instance)
 	{
-		unsigned int iRefCnt = { 0 };
+		int32 iRefCnt = { 0 };
 
 		if (nullptr != Instance)
 		{

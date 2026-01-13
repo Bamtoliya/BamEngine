@@ -28,13 +28,22 @@ public:
 public:
 	void RunFrame(f32 dt);
 	EResult BeginFrame();
-	EResult Render();
+	EResult Render(f32 dt);
 	EResult EndFrame();
 private:
 	void FixedUpdate(f32 dt);
 	void Update(f32 dt);
 	void LateUpdate(f32 dt);
 #pragma endregion
+
+#pragma region Delegates
+public:
+	//Rendering Delegates
+	MulticastDelegate<f32> OnPreRender;
+	MulticastDelegate<f32> OnUIRender;
+
+#pragma endregion
+
 
 #pragma region Variables
 private:

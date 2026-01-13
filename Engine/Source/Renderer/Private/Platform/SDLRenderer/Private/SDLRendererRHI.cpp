@@ -52,9 +52,9 @@ EResult SDLRendererRHI::BeginFrame()
 {
 	if (m_Renderer)
 	{
-		SDL_SetRenderTarget(m_Renderer, m_BackBuffer);
-		SDL_SetRenderDrawColor(m_Renderer, 0, 0, 0, 255);
+		//SDL_SetRenderTarget(m_Renderer, m_BackBuffer);
 		SDL_RenderClear(m_Renderer);
+		SDL_SetRenderDrawColor(m_Renderer, 100, 100, 100, 255);
 		return EResult::Success;
 	}
 	return EResult::Fail;

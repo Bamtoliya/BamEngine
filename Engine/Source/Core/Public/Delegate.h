@@ -48,7 +48,7 @@ class MulticastDelegate
 public:
 	using FunctionType = function<void(ParamTypes...)>;
 private:
-	struct Listner
+	struct Listener
 	{
 		DelegateHandle Handle;
 		FunctionType Function;
@@ -68,7 +68,7 @@ public:
 
 	void Remove(DelegateHandle handle)
 	{
-		erase_if()(m_Listeners, [handle](const Listner& listener) {
+		std::erase_if()(m_Listeners, [handle](const Listener& listener) {
 			return listener.Handle == handle;
 		});
 	}
@@ -92,7 +92,7 @@ public:
 	}
 
 private:
-	vector<Listner> m_Listners;
+	vector<Listener> m_Listeners;
 	DelegateHandle m_CurrentHandle = 0;
 };
 

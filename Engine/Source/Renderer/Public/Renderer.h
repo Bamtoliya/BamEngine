@@ -25,7 +25,7 @@ typedef struct tagRendererCreateInfo
 	bool IsVSync = true;
 } RENDERERDESC;
 
-class Renderer final : public Base
+class ENGINE_API Renderer final : public Base
 {
 	DECLARE_SINGLETON(Renderer)
 
@@ -47,7 +47,7 @@ public:
 	class RHI* GetRHI() const { return m_RHI; }
 
 private:
-	class RHI* m_RHI;
+	class RHI* m_RHI = { nullptr };
 
 };
 END

@@ -46,6 +46,7 @@ using namespace std;
 #include "Result.h"
 #include "Macro.h"
 #include "Functions.h"
+#include "Delegate.h"
 #pragma endregion
 using namespace Engine;
 
