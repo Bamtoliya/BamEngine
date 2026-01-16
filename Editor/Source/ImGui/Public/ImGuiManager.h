@@ -31,6 +31,7 @@ public:
 	void Draw();
 
 private:
+	void ToolBar();
 	void MainDockspace();
 #pragma region Variables
 private:

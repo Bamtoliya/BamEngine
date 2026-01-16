@@ -32,6 +32,7 @@ public:
 	void GetWindowSize(int32* w, int32* h) const;
 private:
 	void UpdateTitle(f32 dt);
+	void Test(f32 dt);
 private:
 	class Runtime* m_Runtime = { nullptr };
 	

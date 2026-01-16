@@ -1,5 +1,5 @@
 ﻿#pragma once
-#include "BamEngine/Base.h"
+#include "Base.h"
 
 class ENGINE_API Object : public Base
 {

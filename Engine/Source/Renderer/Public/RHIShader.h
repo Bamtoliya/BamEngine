@@ -1,11 +1,13 @@
 ﻿#pragma once
 
-#include "RHIResouce.h"
+#include "RHIResource.h"
 BEGIN(Engine)
-class ENGINE_API Shader : public RHIResource
+class ENGINE_API RHIShader : public RHIResource
 {
 protected:
-	Shader() {}
-	virtual ~Shader() = default;
-}
+	RHIShader() : RHIResource(ERHIResourceType::Shader) {}
+	virtual ~RHIShader() = default;
+public:
+
+};
 END

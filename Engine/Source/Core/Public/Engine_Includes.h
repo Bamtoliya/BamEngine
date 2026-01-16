@@ -11,6 +11,8 @@
 #include <functional>
 #include <map>
 #include <unordered_map>
+#include <set>
+#include <unordered_set>
 #include <filesystem>
 #pragma endregion
 
@@ -26,8 +28,12 @@ using namespace std;
 #include <SDL3/SDL.h>
 
 // GLM
+#define GLM_ENABLE_EXPERIMENTAL
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtx/matrix_decompose.hpp>
+#include <glm/gtx/quaternion.hpp>
+using namespace glm;
 
 // ImGui
 #include <imgui.h>
@@ -47,6 +53,7 @@ using namespace std;
 #include "Macro.h"
 #include "Functions.h"
 #include "Delegate.h"
+#include "EnumBit.h"
 #pragma endregion
 using namespace Engine;
 

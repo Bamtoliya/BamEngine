@@ -1,7 +1,8 @@
 ﻿#pragma once
-#include "Base.h"
-BEGIN(Engine)
 
+#include "Base.h"
+
+BEGIN(Engine)
 enum class ERHIResourceType
 {
 	Unknown,
@@ -23,24 +24,11 @@ enum class ERHIResourceType
 class ENGINE_API RHIResource : public Base
 {
 protected:
-	RHIResource() {}
+	RHIResource(ERHIResourceType type) : m_ResourceType{ type } {}
 	virtual ~RHIResource() = default;
 public:
 	virtual void* GetNativeHandle() const PURE;
 protected:
 	ERHIResourceType m_ResourceType = ERHIResourceType::Unknown;
-};
-
-class ENGINE_API RHIBuffer : public RHIResource
-{
-};
-class ENGINE_API RHITexture : public RHIResource
-{
-};
-class ENGINE_API RHIShader : public RHIResource
-{
-};
-class ENGINE_API RHIPipeline : public RHIResource
-{
 };
 END

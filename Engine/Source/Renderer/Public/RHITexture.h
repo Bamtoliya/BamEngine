@@ -2,11 +2,13 @@
 
 #include "RHIResource.h"
 
-class ENGINE_API Texture : public RHIResource
+BEGIN(Engine)
+class ENGINE_API RHITexture : public RHIResource
 {
-private:
-
+protected:
+	RHITexture() : RHIResource(ERHIResourceType::Texture) {}
+	virtual ~RHITexture() = default;
 public:
-	virtual Texture* Create(void* arg) PURE;
 
-}
+};
+END

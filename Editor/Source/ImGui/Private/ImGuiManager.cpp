@@ -68,7 +68,7 @@ void ImGuiManager::Free()
 }
 #pragma endregion
 
-#pragma region
+#pragma region Frame
 
 void ImGuiManager::Begin()
 {
@@ -127,6 +127,76 @@ void ImGuiManager::ProcessEvent(const SDL_Event* event)
 	ImGui_ImplSDL3_ProcessEvent(event);
 }
 
+void ImGuiManager::ToolBar()
+{
+	// [2. Main Toolbar (Menu Bar) 생성] --------------------------------
+	if (ImGui::BeginMenuBar())
+	{
+		if (ImGui::BeginMenu("File"))
+		{
+			if (ImGui::MenuItem("Save Settings"))
+			{
+				// ConfigManager::Get().SaveSettings();
+			}
+			if (ImGui::MenuItem("Exit", "Alt+F4"))
+			{
+				// SDL Quit 이벤트 발생 시킴
+				SDL_Event quit_event;
+				quit_event.type = SDL_EVENT_QUIT;
+				SDL_PushEvent(&quit_event);
+			}
+			ImGui::EndMenu();
+		}
+
+		if (ImGui::BeginMenu("Window"))
+		{
+			ImGui::MenuItem("Display Settings", nullptr); // 체크박스 연동 가능
+			ImGui::EndMenu();
+		}
+		ImGui::EndMenuBar();
+	}
+}
+
+void ImGuiManager::MainDockspace()
+{
+	// [1. Fullscreen DockSpace 생성] ----------------------------------
+	// 메인 뷰포트 전체를 덮는 "DockSpace" 윈도우를 만듭니다.
+	const ImGuiViewport* viewport = ImGui::GetMainViewport();
+	ImGui::SetNextWindowPos(viewport->WorkPos);
+	ImGui::SetNextWindowSize(viewport->WorkSize);
+	ImGui::SetNextWindowViewport(viewport->ID);
+
+	// 스타일: 라운딩 없음, 테두리 없음, 패딩 없음
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+
+	// 플래그: 제목 표시줄 없음, 이동/크기조절 불가, 뒤로 보내기(배경역할), 메뉴바 포함
+	ImGuiWindowFlags window_flags = ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoDocking;
+	window_flags |= ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove;
+	window_flags |= ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus;
+	window_flags |= ImGuiWindowFlags_NoBackground; // 투명하게 해서 뒤의 게임 화면이 보이게 할 수도 있음 (선택사항)
+
+	// 메인 독스페이스 컨테이너 시작
+	ImGui::Begin("MainDockSpace", nullptr, window_flags);
+
+	// 스타일 복구
+	ImGui::PopStyleVar(3);
+
+	// DockSpace ID 제출
+	ImGuiID dockspace_id = ImGui::GetID("MyDockSpace");
+	// PassthruCentralNode: 중앙 노드를 투명하게 만들어서, 도킹되지 않은 영역에 게임 씬을 그릴 수 있게 함
+	ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_PassthruCentralNode);
+
+	ToolBar();
+	
+	ImGui::End(); // MainDockSpace 끝 (이제부터 그리는 창은 이 안에 도킹됨)
+}
+#pragma endregion
+
+
+#pragma region DrawUI
+
 void ImGuiManager::Draw()
 {
 	MainDockspace();
@@ -161,70 +231,8 @@ void ImGuiManager::Draw()
 		}
 	}
 	ImGui::End();
-
-	ImGui::ShowDemoWindow();
 }
 
-void ImGuiManager::MainDockspace()
-{
-	// [1. Fullscreen DockSpace 생성] ----------------------------------
-	// 메인 뷰포트 전체를 덮는 "DockSpace" 윈도우를 만듭니다.
-	const ImGuiViewport* viewport = ImGui::GetMainViewport();
-	ImGui::SetNextWindowPos(viewport->WorkPos);
-	ImGui::SetNextWindowSize(viewport->WorkSize);
-	ImGui::SetNextWindowViewport(viewport->ID);
 
-	// 스타일: 라운딩 없음, 테두리 없음, 패딩 없음
-	ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
-	ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
-	ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
-
-	// 플래그: 제목 표시줄 없음, 이동/크기조절 불가, 뒤로 보내기(배경역할), 메뉴바 포함
-	ImGuiWindowFlags window_flags = ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoDocking;
-	window_flags |= ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove;
-	window_flags |= ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus;
-	window_flags |= ImGuiWindowFlags_NoBackground; // 투명하게 해서 뒤의 게임 화면이 보이게 할 수도 있음 (선택사항)
-
-	// 메인 독스페이스 컨테이너 시작
-	ImGui::Begin("MainDockSpace", nullptr, window_flags);
-
-	// 스타일 복구
-	ImGui::PopStyleVar(3);
-
-	// DockSpace ID 제출
-	ImGuiID dockspace_id = ImGui::GetID("MyDockSpace");
-	// PassthruCentralNode: 중앙 노드를 투명하게 만들어서, 도킹되지 않은 영역에 게임 씬을 그릴 수 있게 함
-	ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_PassthruCentralNode);
-
-
-	// [2. Main Toolbar (Menu Bar) 생성] --------------------------------
-	if (ImGui::BeginMenuBar())
-	{
-		if (ImGui::BeginMenu("File"))
-		{
-			if (ImGui::MenuItem("Save Settings"))
-			{
-				// ConfigManager::Get().SaveSettings();
-			}
-			if (ImGui::MenuItem("Exit", "Alt+F4"))
-			{
-				// SDL Quit 이벤트 발생 시킴
-				SDL_Event quit_event;
-				quit_event.type = SDL_EVENT_QUIT;
-				SDL_PushEvent(&quit_event);
-			}
-			ImGui::EndMenu();
-		}
-
-		if (ImGui::BeginMenu("Window"))
-		{
-			ImGui::MenuItem("Display Settings", nullptr); // 체크박스 연동 가능
-			ImGui::EndMenu();
-		}
-		ImGui::EndMenuBar();
-	}
-
-	ImGui::End(); // MainDockSpace 끝 (이제부터 그리는 창은 이 안에 도킹됨)
-}
 
 #pragma endregion

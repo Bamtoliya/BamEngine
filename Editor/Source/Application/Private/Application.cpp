@@ -128,4 +128,9 @@ void Application::UpdateTitle(f32 dt)
 	}
 }
 
+void Application::Test(f32 dt)
+{
+
+}
+
 END

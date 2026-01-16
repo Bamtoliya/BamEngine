@@ -21,7 +21,7 @@ foreach(FILE_PATH ${ALL_SOURCE_FILES})
     get_filename_component(DIR_PATH "${FILE_PATH}" DIRECTORY)
     
     # 경로가 "/Public"으로 끝나는지 확인합니다. (Windows/Linux 경로 구분자 고려)
-    if(DIR_PATH MATCHES "/Public$")
+    if(DIR_PATH MATCHES "/Public")
         list(APPEND ENGINE_PUBLIC_INCLUDE_DIRS "${DIR_PATH}")
     endif()
 endforeach()

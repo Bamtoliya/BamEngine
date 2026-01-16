@@ -26,7 +26,7 @@ foreach(FILE_PATH ${EDITOR_ALL_SOURCE_FILES})
     get_filename_component(DIR_PATH "${FILE_PATH}" DIRECTORY)
     
     # 경로가 "/Public"으로 끝나는지 확인합니다.
-    if(DIR_PATH MATCHES "/Public$")
+    if(DIR_PATH MATCHES "/Public")
         list(APPEND EDITOR_PUBLIC_INCLUDE_DIRS "${DIR_PATH}")
     endif()
 endforeach()
