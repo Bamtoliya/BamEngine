@@ -22,7 +22,7 @@ private:												\
 #define IMPLEMENT_SINGLETON(ClassName)					\
 ClassName* ClassName::m_instance = nullptr;				\
 														\
-ClassName* ClassName::Create(void* arg)		\
+ClassName* ClassName::Create(void* arg)					\
 {														\
 	if (!m_instance)									\
 	{													\
@@ -46,15 +46,12 @@ int32_t ClassName::Destroy()							\
 {														\
 	if (m_instance)										\
 	{													\
-		if (m_instance->m_RefCount == 0)				\
+		int32_t count = m_instance->Release();			\
+		if (count == 0)									\
 		{												\
-			m_instance->Free();							\
-			delete m_instance;							\
 			m_instance = nullptr;						\
-			return 0;									\
 		}												\
-		return m_instance->m_RefCount;					\
+		return count;									\
 	}													\
 	return 0;											\
-}														
-
+}

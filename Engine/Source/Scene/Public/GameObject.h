@@ -35,11 +35,11 @@ public:
 #pragma endregion
 
 #pragma region Loop
-	virtual void	FixedUpdate(f32 dt) {};
-	virtual void	Update(f32 dt) {};
-	virtual void	LateUpdate(f32 dt) {};
+	virtual void	FixedUpdate(f32 dt);
+	virtual void	Update(f32 dt);
+	virtual void	LateUpdate(f32 dt);
 
-	virtual EResult	Render(f32 dt) { return EResult::Success; }
+	virtual EResult	Render(f32 dt);
 #pragma endregion
 
 #pragma region Component Management

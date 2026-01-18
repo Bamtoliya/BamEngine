@@ -118,6 +118,28 @@ RHITexture* SDLRendererRHI::CreateTextureFromFile(const char* filename)
 	return texture;
 }
 
+RHITexture* SDLRendererRHI::CreateTextureFromFile(const wchar* filename)
+{
+	string strFileName = WStrToStr(filename);
+	SDL_Surface* surface = SDL_LoadBMP(strFileName.c_str());
+	if (!surface)
+	{
+		return nullptr;
+	}
+
+	SDLTexture* texture = new SDLTexture(surface->w, surface->h, 1, 1);
+	texture->m_Texture = SDL_CreateTextureFromSurface(m_Renderer, surface);
+	SDL_DestroySurface(surface);
+
+	if (!texture->m_Texture)
+	{
+		delete texture;
+		texture = nullptr;
+		return nullptr;
+	}
+	return texture;
+}
+
 RHITexture* SDLRendererRHI::CreateTextureFromMemory(void* data, uint32 size)
 {
 	return nullptr;

@@ -22,11 +22,15 @@ public:
 	virtual EResult	Render(f32 dt) override;
 #pragma endregion
 
+#pragma region Setter
+public:
+	void SetMesh(class Mesh* mesh);
+#pragma endregion
+
+
 #pragma region Variable
 private:
-	class RHIBuffer* m_VertexBuffer = { nullptr };
-	class RHIBuffer* m_IndexBuffer = { nullptr };
-	uint32 m_VertexCount = { 0 };
+	class Mesh* m_Mesh = { nullptr };
 #pragma endregion
 };
 END

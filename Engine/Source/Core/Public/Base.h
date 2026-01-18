@@ -26,7 +26,7 @@ public:
 		return refCount;
 	}
 protected:
-	int32 m_RefCount = { 0 };
+	int32 m_RefCount = { 1 };
 };
 
 END

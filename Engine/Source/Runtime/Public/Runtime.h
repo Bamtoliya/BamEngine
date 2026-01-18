@@ -47,6 +47,7 @@ public:
 
 #pragma region Variables
 private:
+	class GameObject* m_TestObject = { nullptr };
 	Renderer* m_Renderer = { nullptr };
 	TimeManager* m_TimeManager = { nullptr };
 #pragma endregion

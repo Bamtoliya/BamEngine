@@ -26,8 +26,9 @@ public:
 	virtual RHIBuffer* CreateBuffer(void* data, uint32 size, uint32 stride, ERHIBufferType type) override;
 	virtual RHIBuffer* CreateVertexBuffer(void* data, uint32 size, uint32 stride) override;
 	virtual RHIBuffer* CreateIndexBuffer(void* data, uint32 size, uint32 stride) override;
-
+public:
 	virtual RHITexture* CreateTextureFromFile(const char* filename) override;
+	virtual RHITexture* CreateTextureFromFile(const wchar* filename) override;
 	virtual RHITexture* CreateTextureFromMemory(void* data, uint32 size) override;
 	virtual RHITexture* CreateTexture2D(void* data, uint32 width, uint32 height, uint32 mipLevels, uint32 arraySize) override;
 	virtual RHITexture* CreateTextureCube(void* data, uint32 size, uint32 mipLevels) override;
@@ -58,7 +59,7 @@ public:
 	virtual void* GetNativeRHI() const override { return m_Renderer; }
 #pragma endregion
 
-	virtual void CreateTexture(void* data, uint32 size) override {};
+	
 	
 
 #pragma region Variables

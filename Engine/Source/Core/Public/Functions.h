@@ -46,4 +46,14 @@ namespace Engine
 		}
 		return iRefCnt;
 	}
+
+	inline wstring StrToWStr(const string& str)
+	{
+		return filesystem::path(str).wstring();
+	}
+
+	inline string WStrToStr(const wstring& wstr)
+	{
+		return filesystem::path(wstr).string();
+	}
 }

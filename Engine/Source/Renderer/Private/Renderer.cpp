@@ -30,7 +30,6 @@ EResult Renderer::Initialize(void* arg)
 	}
 	if (!m_RHI) return EResult::Fail;
 
-	Safe_AddRef(m_RHI);
 	return EResult::Success;
 }
 

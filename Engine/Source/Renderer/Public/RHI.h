@@ -3,6 +3,8 @@
 #include "RHIResource.h"
 #include "RHIBuffer.h"
 #include "RHITexture.h"
+#include "RHIShader.h"
+#include "RHIPipeline.h"
 
 BEGIN(Engine)
 
@@ -35,7 +37,8 @@ public:
 	virtual RHIBuffer* CreateVertexBuffer(void* data, uint32 size, uint32 stride) PURE;
 	virtual RHIBuffer* CreateIndexBuffer(void* data, uint32 size, uint32 stride) PURE;
 public:
-	virtual RHITexture* CreateTextureFromFile(const char* filename) PURE;
+    virtual RHITexture* CreateTextureFromFile(const char* filename) PURE;
+    virtual RHITexture* CreateTextureFromFile(const wchar* filename) PURE;
     virtual RHITexture* CreateTextureFromMemory(void* data, uint32 size) PURE;
 	virtual RHITexture* CreateTexture2D(void* data, uint32 width, uint32 height, uint32 mipLevels, uint32 arraySize) PURE;
 	virtual RHITexture* CreateTextureCube(void* data, uint32 size, uint32 mipLevels) PURE;
@@ -43,6 +46,9 @@ public:
 	virtual RHITexture* CreateRenderTargetTexture(void* data, uint32 width, uint32 height, uint32 mipLevels, uint32 arraySize) PURE;
 	virtual RHITexture* CreateDepthStencilTexture(void* data, uint32 width, uint32 height, uint32 mipLevels, uint32 arraySize) PURE;
 	virtual RHITexture* CreateTextureFromNativeHandle(void* nativeHandle) PURE;
+public:
+	//virtual RHIShader* CreateShader(void* arg) PURE;
+    //virtual RHIPipeline* CreatePipeline(void* arg) PURE;
 #pragma endregion
 
 #pragma region Bind
@@ -69,7 +75,6 @@ public:
 #pragma region Getter
     virtual void* GetNativeRHI() const PURE;
 #pragma endregion
-    virtual void CreateTexture(void* data, uint32 size)  PURE;
 
 protected:
     RHIBuffer* m_VertexBuffer   = { nullptr };

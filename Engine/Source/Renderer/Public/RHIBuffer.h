@@ -14,6 +14,14 @@ enum class ERHIBufferType
 	Upload,
 };
 
+typedef struct tagRHIBufferDesc
+{
+	ERHIBufferType BufferType = ERHIBufferType::Vertex;
+	uint32 Size = 0;
+	uint32 Stride = 0;
+	void* InitialData = nullptr;
+} RHIBUFFERDESC;
+
 class ENGINE_API RHIBuffer : public RHIResource
 {
 protected:
