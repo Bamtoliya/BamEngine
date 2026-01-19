@@ -3,6 +3,8 @@
 #include "Base.h"
 #include "Renderer.h"
 #include "TimeManager.h"
+#include "ResourceManager.h"
+#include "PrototypeManager.h"
 
 BEGIN(Engine)
 
@@ -50,6 +52,9 @@ private:
 	class GameObject* m_TestObject = { nullptr };
 	Renderer* m_Renderer = { nullptr };
 	TimeManager* m_TimeManager = { nullptr };
+private:
+	ResourceManager* m_ResourceManager = { nullptr };
+	PrototypeManager* m_PrototypeManager = { nullptr };
 #pragma endregion
 };
 

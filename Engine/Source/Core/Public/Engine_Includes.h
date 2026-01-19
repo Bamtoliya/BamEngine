@@ -14,6 +14,7 @@
 #include <set>
 #include <unordered_set>
 #include <filesystem>
+#include <typeindex>
 #pragma endregion
 
 using namespace std;

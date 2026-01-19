@@ -55,3 +55,8 @@ int32_t ClassName::Destroy()							\
 	}													\
 	return 0;											\
 }
+
+#define RELEASE_MAP(MapType)						\
+	for (auto& pair : MapType)						\
+		Safe_Release(pair.second);					\
+	MapType.clear();
