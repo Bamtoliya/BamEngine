@@ -20,7 +20,6 @@ public:
 	virtual void FixedUpdate(f32 dt);
 	virtual void Update(f32 dt);
 	virtual void LateUpdate(f32 dt);
-	virtual EResult Render(f32 dt);
 #pragma endregion
 
 

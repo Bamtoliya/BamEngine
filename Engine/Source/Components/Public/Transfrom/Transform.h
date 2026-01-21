@@ -1,9 +1,12 @@
 ﻿#pragma once
 
 #include "Component.h"
+#include "ReflectionMacro.h"
 
 BEGIN(Engine)
 
+
+#pragma region Enum
 enum class ESpace { Local, World };
 enum class EMobility { Static, Movable };
 
@@ -25,20 +28,34 @@ enum class ETransformFlag : uint16
 	AllLocked = LockPosition | LockRotation | LockScale,
 	Default = Dirty | AllInherit,
 };
+#pragma endregion
+
+#pragma region Struct
+
+STRUCT()
+typedef struct tagTransformDesc : tagComponentDesc
+{
+	REFLECT_STRUCT(tagTransformDesc)
+
+	PROPERTY()
+	vec3	Position;
+
+	PROPERTY()
+	vec3	Rotation;
+
+	PROPERTY()
+	vec3	Scale;
+}DESC;
+#pragma endregion
 
 ENABLE_BITMASK_OPERATORS(ETransformFlag)
 
+CLASS()
 class ENGINE_API Transform final : public Component
 {
-#pragma region Struct
-public:
-	typedef struct tagTransformDesc
-	{
-		vec3	Position;
-		vec3	Rotation;
-		vec3	Scale;
-	}TRANSFORMDESC;
-#pragma endregion
+	REFLECT_CLASS(Transform);
+
+	using DESC = tagTransformDesc;
 
 #pragma region Constructor&Destructor
 private:
@@ -123,11 +140,23 @@ public:
 
 #pragma region Variable
 private:
+
+	PROPERTY()
 	vec3 m_Position = vec3(0.0f);
+
+	PROPERTY()
 	quat m_Rotation = glm::identity<quat>();
+
+	PROPERTY()
 	vec3 m_Scale = vec3(1.0f);
+
+	PROPERTY()
 	mat4 m_LocalMatrix = glm::identity<mat4>();
+
+	PROPERTY()
 	mat4 m_WorldMatrix = glm::identity<mat4>();
+
+	PROPERTY()
 	ETransformFlag m_Flags = ETransformFlag::Default;
 #pragma endregion
 

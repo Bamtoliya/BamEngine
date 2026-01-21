@@ -2,6 +2,7 @@
 
 #include "Base.h"
 #include "Component.h"
+#include "ReflectionMacro.h"
 
 enum class EObjectFlag : uint8
 {
@@ -10,11 +11,18 @@ enum class EObjectFlag : uint8
 	Visible = 1 << 1,
 	Paused = 1 << 2,
 	Dead = 1 << 3,
+	Default = Active | Visible
 };
 
+ENABLE_BITMASK_OPERATORS(EObjectFlag)
+
+
+
 BEGIN(Engine)
+CLASS()
 class ENGINE_API GameObject : public Base
 {
+	REFLECT_CLASS(GameObject)
 #pragma region Struct
 public:
 	typedef struct GameObjectCreateArg
@@ -38,8 +46,6 @@ public:
 	virtual void	FixedUpdate(f32 dt);
 	virtual void	Update(f32 dt);
 	virtual void	LateUpdate(f32 dt);
-
-	virtual EResult	Render(f32 dt);
 #pragma endregion
 
 #pragma region Component Management
@@ -120,16 +126,49 @@ public:
 	wstring GetName() const { return m_Name; }
 #pragma endregion
 
+#pragma region Flag Management
+public:
+	EObjectFlag GetFlags() const { return m_Flags; }
+	bool IsActive() const { return HasFlag(m_Flags, EObjectFlag::Active); }
+	bool IsVisible() const { return HasFlag(m_Flags, EObjectFlag::Visible); }
+	bool IsPaused() const { return HasFlag(m_Flags, EObjectFlag::Paused); }
+	bool IsDead() const { return HasFlag(m_Flags, EObjectFlag::Dead); }
+	EResult SetFlags(EObjectFlag flags) { m_Flags = flags; return EResult::Success; }
+
+public:
+	void SetActive(bool active)
+	{
+		if (active)
+			AddFlag(m_Flags, EObjectFlag::Active);
+		else
+			m_Flags &= ~EObjectFlag::Active;
+	}
+#pragma endregion
+
+
 #pragma region Variables
 protected:
+
+	PROPERTY()
 	GameObject* m_Parent = { nullptr };
+
+	PROPERTY()
 	vector<GameObject*> m_Childs = {};
+
+	PROPERTY()
 	vector<Component*> m_Components = {};
+
+	PROPERTY()
 	unordered_set<wstring> m_TagSet = {};
-	wstring m_Name = { L"" };
+
+	PROPERTY()
+	wstring m_Name = { L"GameObject" };
+
+	PROPERTY()
 	uint64 m_ID = { 0 };
-	bool m_Active = { true };
-	bool m_Visible = { true };
+
+	PROPERTY()
+	EObjectFlag m_Flags = { EObjectFlag::Default };
 #pragma endregion
 
 };

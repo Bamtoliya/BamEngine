@@ -1,5 +1,6 @@
 ﻿#pragma once
 #include "MeshRenderer.h"
+#include "GameObject.h"
 #include "Renderer.h"
 #include "Mesh.h"
 
@@ -43,8 +44,13 @@ void MeshRenderer::Free()
 #pragma endregion
 
 #pragma region Loop
-void MeshRenderer::Update(f32 dt)
+void MeshRenderer::LateUpdate(f32 dt)
 {
+	__super::LateUpdate(dt);
+	if (m_Active && m_Owner->IsActive() && m_Owner->IsVisible())
+	{
+		Renderer::Get().Submit(this, m_RenderPassID);
+	}
 }
 
 EResult MeshRenderer::Render(f32 dt)

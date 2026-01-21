@@ -66,11 +66,10 @@ void GameObject::Free()
 
 #pragma endregion
 
-
 #pragma region Loop
 void GameObject::FixedUpdate(f32 dt)
 {
-	if (!m_Active) return;
+	if (!IsActive()) return;
 	for(Component* comp : m_Components)
 	{
 		comp->FixedUpdate(dt);
@@ -78,7 +77,7 @@ void GameObject::FixedUpdate(f32 dt)
 }
 void GameObject::Update(f32 dt)
 {
-	if (!m_Active) return;
+	if (!IsActive()) return;
 	for (Component* comp : m_Components)
 	{
 		comp->Update(dt);
@@ -86,21 +85,11 @@ void GameObject::Update(f32 dt)
 }
 void GameObject::LateUpdate(f32 dt)
 {
-	if (!m_Active) return;
+	if (!IsActive()) return;
 	for (Component* comp : m_Components)
 	{
 		comp->LateUpdate(dt);
 	}
-}
-EResult GameObject::Render(f32 dt)
-{
-	if (!m_Active || !m_Visible) return EResult::Success;
-	for (Component* comp : m_Components)
-	{
-		if (IsFailure(comp->Render(dt)))
-			return EResult::Fail;
-	}
-	return EResult::Success;
 }
 #pragma endregion
 

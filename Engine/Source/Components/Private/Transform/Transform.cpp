@@ -9,6 +9,10 @@ EResult Transform::Initialize(void* arg)
 	if (IsFailure(__super::Initialize(arg)))
 		return EResult::Fail;
 
+	DESC* desc = static_cast<DESC*>(arg);
+	m_Position = desc ? desc->Position : vec3(0.0f);
+	m_Rotation = desc ? quat(glm::radians(desc->Rotation)) : quat(1.0f, 0.0f, 0.0f, 0.0f);
+	m_Scale = desc ? desc->Scale : vec3(1.0f);
 
 	UpdateLocalMatrix();
 	UpdateWorldMatrix();

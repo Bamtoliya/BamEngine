@@ -72,7 +72,7 @@ EResult Renderer::RenderComponents(f32 dt, vector<class RenderComponent*> queue,
 	{
 		if (component)
 		{
-			component->Render(dt); // Pass dt if needed
+			component->Render(dt);
 		}
 	}
 	return EResult::Success;

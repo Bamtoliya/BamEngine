@@ -9,6 +9,8 @@
 #include "LayerManager.h"
 #include "SceneManager.h"
 
+#include "RenderPassManager.h"
+
 BEGIN(Engine)
 
 typedef struct tagRuntimeCreateInfo
@@ -18,7 +20,7 @@ typedef struct tagRuntimeCreateInfo
 
 class ENGINE_API Runtime : public Base
 {
-DECLARE_SINGLETON(Runtime)
+	DECLARE_SINGLETON(Runtime)
 #pragma region Constructor&Destructor
 private:
 	Runtime() {}
@@ -29,31 +31,21 @@ public:
 #pragma endregion
 
 #pragma region Loop
-
 public:
 	void RunFrame(f32 dt);
-	EResult BeginFrame();
-	EResult Render(f32 dt);
-	EResult EndFrame();
 private:
 	void FixedUpdate(f32 dt);
 	void Update(f32 dt);
 	void LateUpdate(f32 dt);
+	EResult Render(f32 dt);
 #pragma endregion
-
-#pragma region Delegates
-public:
-	//Rendering Delegates
-	MulticastDelegate<f32> OnPreRender;
-	MulticastDelegate<f32> OnUIRender;
-
-#pragma endregion
-
 
 #pragma region Variables
 private:
-	Renderer* m_Renderer = { nullptr };
 	TimeManager* m_TimeManager = { nullptr };
+private:
+	Renderer* m_Renderer = { nullptr };
+	RenderPassManager* m_RenderPassManager = { nullptr };
 private:
 	ResourceManager* m_ResourceManager = { nullptr };
 	PrototypeManager* m_PrototypeManager = { nullptr };

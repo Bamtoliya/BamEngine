@@ -5,9 +5,6 @@
 #include "MeshRenderer.h"
 #include "Mesh.h"
 
-#include "LayerManager.h"
-#include "SceneManager.h"
-
 IMPLEMENT_SINGLETON(Runtime)
 
 #pragma region Constructor&Destructor
@@ -20,10 +17,14 @@ EResult Runtime::Initialize(void* arg)
 	RUNTIMEDESC* pRuntimeDesc = reinterpret_cast<RUNTIMEDESC*>(arg);
 	Renderer::RENDERERDESC RendererDesc = pRuntimeDesc->RendererDesc;
 
-	m_Renderer = Renderer::Create(&RendererDesc);
-	if (!m_Renderer) return EResult::Fail;
 	m_TimeManager = TimeManager::Create();
 	if (!m_TimeManager) return EResult::Fail;
+
+	m_Renderer = Renderer::Create(&RendererDesc);
+	if (!m_Renderer) return EResult::Fail;
+	m_RenderPassManager = RenderPassManager::Create();
+	if (!m_RenderPassManager) return EResult::Fail;
+	
 	m_ResourceManager = ResourceManager::Create();
 	if (!m_ResourceManager) return EResult::Fail;
 	m_PrototypeManager = PrototypeManager::Create();
@@ -39,11 +40,14 @@ EResult Runtime::Initialize(void* arg)
 
 void Runtime::Free()
 {
-	OnUIRender.Clear();
-	Renderer::Destroy();
 	TimeManager::Destroy();
+
+	RenderPassManager::Destroy();
+	Renderer::Destroy();
+	
 	ResourceManager::Destroy();
 	PrototypeManager::Destroy();
+
 	LayerManager::Destroy();
 	SceneManager::Destroy();
 }
@@ -51,8 +55,7 @@ void Runtime::Free()
 
 #pragma region Loop
 void Runtime::RunFrame(f32 dt)
-{
-	
+{	
 	FixedUpdate(dt);
 	Update(dt);
 	LateUpdate(dt);
@@ -77,15 +80,10 @@ EResult Runtime::Render(f32 dt)
 		fmt::print(stderr, "Renderer BeginFrame Failed\n");
 	}
 
-	// Rendering Logic Here
-
-	SceneManager::Get().Render(dt);
-
-	if (OnUIRender.IsBound())
+	if (IsFailure(Renderer::Get().Render(dt)))
 	{
-		OnUIRender.Broadcast(dt);
+		fmt::print(stderr, "Renderer Render Failed\n");
 	}
-
 
 	if (IsFailure(Renderer::Get().EndFrame()))
 	{

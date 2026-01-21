@@ -36,10 +36,10 @@ public:
 #pragma endregion
 
 #pragma region Loop
+public:
 	void FixedUpdate(f32 dt);
 	void Update(f32 dt);
 	void LateUpdate(f32 dt);
-	EResult Render(f32 dt);
 #pragma endregion
 
 #pragma region Layer Management

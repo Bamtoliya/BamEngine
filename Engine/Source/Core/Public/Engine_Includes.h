@@ -36,9 +36,6 @@ using namespace std;
 #include <glm/gtx/quaternion.hpp>
 using namespace glm;
 
-// ImGui
-#include <imgui.h>
-
 // Vulkan
 #include <vulkan/vulkan.h>
 

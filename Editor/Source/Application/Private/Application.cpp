@@ -2,7 +2,7 @@
 #include <fmt/core.h>
 #include <SDL3/SDL.h>
 #include "Application.h"
-#include "TimeManager.h"
+#include "Runtime.h"
 #include "ImGuiManager.h"
 #include "RHI.h"
 
@@ -39,18 +39,20 @@ EResult Application::Initialize(void* arg)
 	imguiDesc.Window = m_Window;
     imguiDesc.RHI = Renderer::Get().GetRHI();
 
-    if (!ImGuiManager::Create(&imguiDesc))
+    m_ImGuiManager = ImGuiManager::Create(&imguiDesc);
+    if (!m_ImGuiManager)
     {
         fmt::print(stderr, "ImGuiManager Creation Failed\n");
 		return EResult::Fail;
     }
 
-    m_Runtime->OnUIRender.AddLambda([](float dt)
-        {
-            ImGuiManager::Get().Begin();
-            ImGuiManager::Get().Draw(); // 내부 로직은 매번 달라질 수 있음
-            ImGuiManager::Get().End();
+    RenderPassID uiPassID = RenderPassManager::Get().RegisterRenderPass(L"Editor UI", 1000, ERenderSortType::None);
+    DelegateHandle uiHandle = Renderer::Get().GetRenderPassDelegate(uiPassID).AddLambda([](f32 dt) {
+        ImGuiManager::Get().Begin();
+        ImGuiManager::Get().Draw();
+        ImGuiManager::Get().End();
         });
+    Renderer::Get().GetRenderPassDelegate(uiPassID).Remove(uiHandle);
 
     return EResult::Success;
 }
@@ -85,6 +87,7 @@ void Application::Run(int argc, char* argv[])
         timeManager.Update();
 		f32 dt = timeManager.GetDeltaTime();
 		UpdateTitle(dt);
+        Test(dt);
 		m_Runtime->RunFrame(dt);
     }
 }
@@ -130,7 +133,7 @@ void Application::UpdateTitle(f32 dt)
 
 void Application::Test(f32 dt)
 {
-
+    
 }
 
 END

@@ -37,12 +37,6 @@ void SceneManager::LateUpdate(f32 dt)
 	if(m_ActiveScene)
 		m_ActiveScene->LateUpdate(dt);
 }
-EResult SceneManager::Render(f32 dt)
-{
-	if(m_ActiveScene)
-		return m_ActiveScene->Render(dt);
-	return EResult::Success;
-}
 #pragma endregion
 
 

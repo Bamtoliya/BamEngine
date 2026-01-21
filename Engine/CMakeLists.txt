@@ -3,18 +3,22 @@
 find_package(fmt CONFIG REQUIRED)
 find_package(SDL3 CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
-find_package(imgui CONFIG REQUIRED)
 find_package(Vulkan REQUIRED) 
 
+find_package(Python3 COMPONENTS Interpreter REQUIRED)
 
 # 경로 변수 정의
 set(ENGINE_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Source")
 set(ENGINE_PCH_HEADER "${ENGINE_SOURCE_DIR}/Core/Public/Engine_Includes.h")
 
+set(REFLECTION_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/../ReflectionGenerator.py")
+set(GENERATED_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/Source/Core/Private/Reflection/Reflection.gen.cpp")
+
 file(GLOB_RECURSE ENGINE_HEADERS CONFIGURE_DEPENDS "${ENGINE_SOURCE_DIR}/*.h")
 file(GLOB_RECURSE ENGINE_SOURCES CONFIGURE_DEPENDS "${ENGINE_SOURCE_DIR}/*.cpp")
 file(GLOB_RECURSE ALL_SOURCE_FILES "${ENGINE_SOURCE_DIR}/*")
 set(ENGINE_PUBLIC_INCLUDE_DIRS "")
+list(APPEND ENGINE_SOURCES ${GENERATED_SOURCE})
 
 # 2. 각 파일의 경로를 검사합니다.
 foreach(FILE_PATH ${ALL_SOURCE_FILES})
@@ -37,6 +41,14 @@ add_library(Engine SHARED
     ${ENGINE_SOURCES}
 )
 
+add_custom_target(RunReflectionGenerator ALL
+    COMMAND ${Python3_EXECUTABLE} "${REFLECTION_SCRIPT}"
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/.."
+    COMMENT "Running Reflection Generator Script..."
+    VERBATIM
+)
+
+add_dependencies(Engine RunReflectionGenerator)
 
 set_target_properties(Engine PROPERTIES UNITY_BUILD ON)
 
@@ -56,6 +68,5 @@ target_link_libraries(Engine PUBLIC
 	fmt::fmt
 	SDL3::SDL3
     glm::glm
-    imgui::imgui
     Vulkan::Vulkan
 )

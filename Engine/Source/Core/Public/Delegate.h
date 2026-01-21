@@ -68,7 +68,7 @@ public:
 
 	void Remove(DelegateHandle handle)
 	{
-		std::erase_if()(m_Listeners, [handle](const Listener& listener) {
+		std::erase_if(m_Listeners, [handle](const Listener& listener) {
 			return listener.Handle == handle;
 		});
 	}

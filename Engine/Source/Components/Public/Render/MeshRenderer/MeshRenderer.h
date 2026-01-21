@@ -18,15 +18,14 @@ public:
 
 #pragma region Loop
 public:
-	virtual void	Update(f32 dt) override;
-	virtual EResult	Render(f32 dt) override;
+	virtual void	LateUpdate(f32 dt)	override;
+	virtual EResult	Render(f32 dt)		override;
 #pragma endregion
 
 #pragma region Setter
 public:
 	void SetMesh(class Mesh* mesh);
 #pragma endregion
-
 
 #pragma region Variable
 private:

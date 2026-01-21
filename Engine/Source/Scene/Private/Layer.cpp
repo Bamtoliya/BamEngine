@@ -59,17 +59,6 @@ void Layer::LateUpdate(f32 dt)
         gameObject->LateUpdate(dt);
     }
 }
-
-EResult Layer::Render(f32 dt)
-{
-	if (!IsVisible()) return EResult::Success;
-    for (auto& gameObject : m_GameObjects)
-    {
-        if(IsFailure(gameObject->Render(dt)))
-			return EResult::Fail;
-    }
-    return EResult::Success;
-}
 #pragma endregion
 
 

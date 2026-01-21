@@ -56,14 +56,4 @@ void Scene::LateUpdate(f32 dt)
 		layer->LateUpdate(dt);
 	}
 }
-
-EResult Scene::Render(f32 dt)
-{
-	for (auto& layer : m_Layers)
-	{
-		if(IsFailure(layer->Render(dt)))
-			return EResult::Fail;
-	}
-	return EResult::Success;
-}
 #pragma endregion

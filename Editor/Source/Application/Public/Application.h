@@ -35,7 +35,7 @@ private:
 	void Test(f32 dt);
 private:
 	class Runtime* m_Runtime = { nullptr };
-	
+	class ImGuiManager* m_ImGuiManager = { nullptr };
 	struct SDL_Window* m_Window = { nullptr };
 	class RHI* m_RHI = { nullptr };
 private:
