@@ -26,14 +26,17 @@ public:
 
 #pragma region Getter
 	GameObject* GetOwner() const { return m_Owner; }
+	wstring GetTag() const { return m_Tag; }
 #pragma endregion
 
 #pragma region Setter
 	void SetOwner(GameObject* owner) { m_Owner = owner; }
+	void SetTag(const wstring& tag) { m_Tag = tag; }
 #pragma endregion
 
 
 protected:
+	wstring m_Tag = { L"" };
 	GameObject* m_Owner = { nullptr };
 };
 

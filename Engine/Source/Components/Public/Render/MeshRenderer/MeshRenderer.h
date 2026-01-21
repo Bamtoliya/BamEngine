@@ -1,18 +1,18 @@
 ﻿#pragma once
 
-#include "Component.h"
+#include "RenderComponent.h"
 
 BEGIN(Engine)
-class ENGINE_API MeshRenderer final : public Component
+class ENGINE_API MeshRenderer final : public RenderComponent
 {
 #pragma region Constructor&Destructor
 private:
-	MeshRenderer() : Component{} {}
+	MeshRenderer() : RenderComponent{} {}
 	virtual ~MeshRenderer() {}
 	virtual EResult Initialize(void* arg = nullptr) override;
 public:
 	static Component* Create(void* arg = nullptr);
-	virtual Component* Clone(GameObject* owner, void* arg = nullptr) override;
+	virtual Component* Clone(GameObject* owner, void* arg = nullptr);
 	virtual void Free() override;
 #pragma endregion
 

@@ -26,6 +26,30 @@ GameObject* GameObject::Create(void* arg)
 	return instance;
 }
 
+GameObject* GameObject::Clone(void* arg)
+{
+	GameObject* instance = new GameObject(*this);
+	if (IsFailure(instance->Initialize(arg)))
+	{
+		Safe_Release(instance);
+		return nullptr;
+	}
+
+	for (Component* comp : m_Components)
+	{
+		Component* clonedComp = comp->Clone(instance, arg);
+		if (IsFailure(instance->AddComponent(clonedComp)))
+		{
+			Safe_Release(clonedComp);
+			Safe_Release(instance);
+			return nullptr;
+		}
+		Safe_Release(clonedComp);
+	}
+
+	return instance;
+}
+
 void GameObject::Free()
 {
 	for (Component* comp : m_Components)
@@ -92,6 +116,16 @@ EResult GameObject::AddComponent(Component* component)
 	return EResult::Success;
 }
 
+EResult GameObject::AddComponent(Component* component, const wstring& tag)
+{
+	if (!component)
+		return EResult::Fail;
+	component->SetTag(tag);
+	Safe_AddRef(component);
+	m_Components.push_back(component);
+	return EResult::Success;
+}
+
 EResult GameObject::RemoveComponent()
 {
 	if (m_Components.empty())
@@ -102,9 +136,21 @@ EResult GameObject::RemoveComponent()
 	m_Components.pop_back();
 	return EResult::Success;
 }
+Component* GameObject::GetComponent(const wstring& tag)
+{
+	for (Component* comp : m_Components)
+	{
+		if (comp->GetTag() == tag)
+		{
+			return comp;
+		}
+	}
+	return nullptr;
+}
 #pragma endregion
 
 #pragma region Child Management
+
 EResult GameObject::AddChild(GameObject* child)
 {
 	if (!child)

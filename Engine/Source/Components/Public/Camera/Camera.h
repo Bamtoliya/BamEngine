@@ -6,7 +6,7 @@ BEGIN(Engine)
 class ENGINE_API Camera final : public Component
 {
 #pragma region Constructor&Destructor
-	private:
+private:
 	Camera() : Component{} {}
 	virtual ~Camera() {}
 	virtual EResult Initialize(void* arg = nullptr) override;
@@ -16,7 +16,7 @@ public:
 	virtual void Free() override;
 #pragma endregion
 #pragma region Loop
-	public:
+public:
 	virtual void	Update(f32 dt) override;
 	virtual EResult	Render(f32 dt) override;
 #pragma endregion
@@ -31,6 +31,5 @@ private:
 	glm::mat4 m_ProjMatrix = glm::identity<mat4>();
 	glm::mat4 m_ViewMatrix = glm::identity<mat4>();
 #pragma endregion	
-}
-
+};
 END

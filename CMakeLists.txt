@@ -1,12 +1,14 @@
 ﻿# CMakeList.txt : 최상위 CMake 프로젝트 파일, 전역 구성을 수행하고
 # 여기에 하위 프로젝트를 포함합니다.
 #
-cmake_minimum_required (VERSION 3.10)
+cmake_minimum_required (VERSION 3.16)
 
 # C++ 표준 설정 (23 추천)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF) # MSVC 전용 확장 기능 끄기 (표준 준수)
+
+set(CMAKE_UNITY_BUILD ON)
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")

@@ -10,6 +10,7 @@
 ClassName(const ClassName&) = delete;					\
 ClassName& operator=(const ClassName&) = delete;
 
+#pragma region Singleton
 #define DECLARE_SINGLETON(ClassName)					\
 		NO_COPY(ClassName)								\
 public:													\
@@ -55,8 +56,19 @@ int32_t ClassName::Destroy()							\
 	}													\
 	return 0;											\
 }
+#pragma endregion
 
+#pragma region Release Macro
 #define RELEASE_MAP(MapType)						\
 	for (auto& pair : MapType)						\
 		Safe_Release(pair.second);					\
 	MapType.clear();
+
+#define RELEASE_VECTOR(VectorType)					\
+	for (auto& element : VectorType)				\
+		Safe_Release(element);						\
+	VectorType.clear();
+#pragma endregion
+
+/******************************************************************************/
+#define MAX_LAYER_COUNT 32

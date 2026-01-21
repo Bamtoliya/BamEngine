@@ -30,7 +30,7 @@ protected:
 	virtual EResult Initialize(void* arg = nullptr);
 public:
 	static GameObject* Create(void* arg = nullptr);
-	virtual GameObject* Clone(void* arg = nullptr) { return nullptr; }
+	virtual GameObject* Clone(void* arg = nullptr);
 	virtual void Free() override;
 #pragma endregion
 
@@ -45,6 +45,7 @@ public:
 #pragma region Component Management
 public:
 	EResult AddComponent(Component* component);
+	EResult AddComponent(Component* component, const wstring& tag);
 	EResult RemoveComponent();
 
 	template<typename T>
@@ -60,25 +61,61 @@ public:
 		}
 		return nullptr;
 	}
+	template<typename T>
+	T* GetComponent(const wstring& tag)
+	{
+		for (Component* comp : m_Components)
+		{
+			if (comp->GetTag() == tag)
+			{
+				return dynamic_cast<T*>(comp);
+			}
+		}
+		return nullptr;
+	}
+	template<typename T>
+	vector<T*> GetComponents()
+	{
+		vector<T*> components;
+		for (Component* comp : m_Components)
+		{
+			T* castedComp = dynamic_cast<T*>(comp);
+			if (castedComp)
+			{
+				components.push_back(castedComp);
+			}
+		}
+		return components;
+	}
+	Component* GetComponent(const wstring& tag);
 #pragma endregion
 
 #pragma region Parent
+public:
 	GameObject* GetParent() const { if (m_Parent) return m_Parent; return nullptr; }
 	EResult SetParent(GameObject* parent) { if (!parent) return EResult::Fail; m_Parent = parent; return EResult::Success; }
 #pragma endregion
 
+#pragma region ID
+public:
+	uint64 GetID() const { return m_ID; }
+#pragma endregion
+
 #pragma region Child Management	
+public:
 	EResult AddChild(GameObject* child);
 	EResult RemoveChild();
 #pragma endregion
 
 #pragma region Tag Management
+public:
 	EResult AddTag(const wstring& tag);
 	EResult RemoveTag(const wstring& tag);
 	bool HasTag(const wstring& tag) const;
 #pragma endregion
 
 #pragma region Name Management
+public:
 	EResult SetName(const wstring& name) { m_Name = name; return EResult::Success; }
 	wstring GetName() const { return m_Name; }
 #pragma endregion

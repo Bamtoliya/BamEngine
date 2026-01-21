@@ -6,11 +6,14 @@
 #include "ResourceManager.h"
 #include "PrototypeManager.h"
 
+#include "LayerManager.h"
+#include "SceneManager.h"
+
 BEGIN(Engine)
 
 typedef struct tagRuntimeCreateInfo
 {
-	RENDERERDESC RendererDesc;
+	Renderer::RENDERERDESC RendererDesc;
 } RUNTIMEDESC;
 
 class ENGINE_API Runtime : public Base
@@ -49,12 +52,14 @@ public:
 
 #pragma region Variables
 private:
-	class GameObject* m_TestObject = { nullptr };
 	Renderer* m_Renderer = { nullptr };
 	TimeManager* m_TimeManager = { nullptr };
 private:
 	ResourceManager* m_ResourceManager = { nullptr };
 	PrototypeManager* m_PrototypeManager = { nullptr };
+private:
+	LayerManager* m_LayerManager = { nullptr };
+	SceneManager* m_SceneManager = { nullptr };
 #pragma endregion
 };
 

@@ -6,6 +6,7 @@ find_package(glm CONFIG REQUIRED)
 find_package(imgui CONFIG REQUIRED)
 find_package(Vulkan REQUIRED) 
 
+
 # 경로 변수 정의
 set(ENGINE_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Source")
 set(ENGINE_PCH_HEADER "${ENGINE_SOURCE_DIR}/Core/Public/Engine_Includes.h")
@@ -35,6 +36,9 @@ add_library(Engine SHARED
     ${ENGINE_HEADERS}
     ${ENGINE_SOURCES}
 )
+
+
+set_target_properties(Engine PROPERTIES UNITY_BUILD ON)
 
 target_compile_definitions(Engine PRIVATE ENGINE_EXPORTS)
 
