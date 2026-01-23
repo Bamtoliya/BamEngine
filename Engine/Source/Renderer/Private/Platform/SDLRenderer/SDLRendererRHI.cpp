@@ -194,6 +194,30 @@ RHITexture* SDLRendererRHI::CreateTextureFromNativeHandle(void* nativeHandle)
 
 
 #pragma region Bind
+EResult SDLRendererRHI::BindShader(RHIShader* shader)
+{
+	if (!shader) return EResult::InvalidArgument;
+	m_CurrentShader = static_cast<RHIShader*>(shader);
+	return EResult::Success;
+}
+EResult SDLRendererRHI::BindConstantBuffer(void* arg, uint32 slot)
+{
+	RHIBuffer* buffer = reinterpret_cast<RHIBuffer*>(arg);
+	if (!buffer) return EResult::InvalidArgument;
+
+	void* data = buffer->GetNativeHandle();
+
+	if (slot == 0)
+	{
+		memcpy(&m_WorldMatrix, data, sizeof(mat4));
+	}
+	else if (slot == 1)
+	{
+		memcpy(&m_MaterialColor, data, sizeof(vec4));
+	}
+
+	return EResult::Success;
+}
 #pragma endregion
 
 
@@ -226,12 +250,20 @@ EResult SDLRendererRHI::DrawIndexed(uint32 count)
 
 	if (!vertexBuffer || !indexBuffer) return EResult::Fail;
 
-	SDL_Vertex* vertices = reinterpret_cast<SDL_Vertex*>(vertexBuffer->GetNativeHandle());
+	int32 w, h;
+	SDL_GetWindowSize(m_Window, &w, &h);
+	glm::vec2 screenCenter(w * 0.5f, h * 0.5f);
+
+	SDL_Vertex* finalVertices = static_cast<SDLShader*>(m_CurrentShader)->ProcessVertex(vertexBuffer, m_WorldMatrix, m_MaterialColor, screenCenter);
+	if (!finalVertices) return EResult::Fail;
+	//SDL_Vertex* vertices = reinterpret_cast<SDL_Vertex*>(vertexBuffer->GetNativeHandle());
 	const int* indices = reinterpret_cast<const int*>(indexBuffer->GetNativeHandle());
+
+
 
 	sizet numVertices = vertexBuffer->m_Data.size() / sizeof(SDL_Vertex);
 
-	if (!SDL_RenderGeometry(m_Renderer, nullptr, vertices, numVertices, indices, count))
+	if (!SDL_RenderGeometry(m_Renderer, nullptr, finalVertices, count, indices, count))
 	{
 		return EResult::Fail;
 	}

@@ -4,10 +4,13 @@
 #pragma region Constructor&Destructor
 EResult Component::Initialize(void* arg)
 {
-	DESC* desc = static_cast<DESC*>(arg);
-	m_Active = desc->Active;
-	m_Tag = desc->Tag;
-	m_Owner = desc->Owner;
+	if (arg)
+	{
+		CAST_DESC
+		m_Active = desc->Active;
+		m_Tag = desc->Tag;
+		m_Owner = desc->Owner;
+	}
 	return EResult::Success;
 }
 

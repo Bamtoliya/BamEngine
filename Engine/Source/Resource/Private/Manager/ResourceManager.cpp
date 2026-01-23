@@ -28,7 +28,6 @@ void ResourceManager::Free()
 }
 #pragma endregion
 
-
 #pragma region Resource Management
 EResult ResourceManager::LoadMesh(const wstring& key, void* arg)
 {
@@ -161,3 +160,37 @@ void ResourceManager::RegisterExplicitLoader()
 	m_LoaderRegistry[L".fbx"] = meshLoader;
 }
 #pragma endregion
+
+#ifdef _DEBUG
+#pragma region Test
+void ResourceManager::CreateQuadMesh()
+{
+	vector<Vertex2D> 	vertices;
+	vector<uint32>	indices;
+	vertices.resize(4);
+	indices.resize(6);
+	
+	vertices[0].position = glm::vec3(-0.5f, 0.5f, 0.f);
+	vertices[1].position = glm::vec3(0.5f, 0.5f, 0.f);
+	vertices[2].position = glm::vec3(0.5f, -0.5f, 0.f);
+	vertices[3].position = glm::vec3(-0.5f, -0.5f, 0.f);
+
+	vertices[0].color = glm::vec4(1.f, 0.f, 0.f, 1.f);
+	vertices[1].color = glm::vec4(0.f, 1.f, 0.f, 1.f);
+	vertices[2].color = glm::vec4(0.f, 0.f, 1.f, 1.f);
+	vertices[3].color = glm::vec4(1.f, 1.f, 1.f, 1.f);
+
+	vertices[0].texCoord = glm::vec2(0.f, 0.f);
+	vertices[1].texCoord = glm::vec2(1.f, 0.f);
+	vertices[2].texCoord = glm::vec2(1.f, 1.f);
+	vertices[3].texCoord = glm::vec2(0.f, 1.f);
+
+	indices = { 0, 1, 2, 2, 3, 0 };
+
+	//Mesh* quadMesh = Mesh::CreateFromData(vertices.data(), sizeof(Vertex2D), (uint32)vertices.size(),
+	//	indices.data(), (uint32)indices.size());
+
+
+}
+#pragma endregion
+#endif

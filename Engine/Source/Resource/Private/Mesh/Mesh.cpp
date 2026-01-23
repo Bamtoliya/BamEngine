@@ -6,7 +6,7 @@
 EResult Mesh::Initialize(void* arg)
 {
 	if (!arg) return EResult::InvalidArgument;
-	MESHDESC* meshDesc = reinterpret_cast<MESHDESC*>(arg);
+	DESC* meshDesc = reinterpret_cast<DESC*>(arg);
 	m_VertexCount = static_cast<uint32>(meshDesc->VertexCount);
 	m_IndexCount = static_cast<uint32>(meshDesc->IndexCount);
 

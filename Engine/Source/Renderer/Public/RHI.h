@@ -53,6 +53,8 @@ public:
 
 #pragma region Bind
 public:
+    virtual EResult BindShader(RHIShader* shader) PURE;
+public:
     virtual EResult BindPipeline(void* arg) PURE;
     virtual EResult BindVertexBuffer(RHIBuffer* vertexBuffer) { if (!vertexBuffer) return EResult::Fail; m_VertexBuffer = vertexBuffer; return EResult::Success; }
     virtual EResult BindIndexBuffer(RHIBuffer* indexBuffer) { if (!indexBuffer) return EResult::Fail; m_IndexBuffer = indexBuffer;  return EResult::Success; }
@@ -76,9 +78,13 @@ public:
     virtual void* GetNativeRHI() const PURE;
 #pragma endregion
 
+#pragma region Variable
 protected:
-    RHIBuffer* m_VertexBuffer   = { nullptr };
-	RHIBuffer* m_IndexBuffer    = { nullptr };
+    RHIBuffer* m_VertexBuffer = { nullptr };
+    RHIBuffer* m_IndexBuffer = { nullptr };
+protected:
+	RHIShader* m_CurrentShader = { nullptr };
+#pragma endregion
 };
 
 END

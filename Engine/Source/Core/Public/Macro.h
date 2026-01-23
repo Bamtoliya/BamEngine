@@ -70,5 +70,12 @@ int32_t ClassName::Destroy()							\
 	VectorType.clear();
 #pragma endregion
 
+#define CAST_DESC DESC* desc = reinterpret_cast<DESC*>(arg);
+
+#pragma region Component Register Macro
+#define REGISTER_COMPONENT(ClassName)				\
+	static Engine::ComponentRegisterHelper<ClassName> _reg_##ClassName(L#ClassName);
+#pragma endregion
+
 /******************************************************************************/
 #define MAX_LAYER_COUNT 32

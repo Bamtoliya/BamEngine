@@ -39,8 +39,11 @@ public:
 #pragma endregion
 
 #pragma region Bind
+public:
+	virtual EResult BindShader(RHIShader* shader) override;
+public:
 	virtual EResult BindPipeline(void* arg) override { return EResult::NotImplemented; }
-	virtual EResult BindConstantBuffer(void* arg, uint32 slot) override { return EResult::NotImplemented;  }
+	virtual EResult BindConstantBuffer(void* arg, uint32 slot) override;
 	virtual EResult BindConstantRangeBuffer(void* arg, uint32 slot, uint32 offset, uint32 size) override { return EResult::NotImplemented; }
 #pragma endregion
 
@@ -59,14 +62,14 @@ public:
 	virtual void* GetNativeRHI() const override { return m_Renderer; }
 #pragma endregion
 
-	
-	
-
 #pragma region Variables
 private:
 	SDL_Window*		m_Window		= { nullptr };
 	SDL_Renderer*	m_Renderer		= { nullptr };
 	SDL_Texture*	m_BackBuffer	= { nullptr };
+private:
+	mat4 m_WorldMatrix = glm::identity<mat4>();
+	vec4 m_MaterialColor = vec4(1.0f);
 #pragma endregion
 
 

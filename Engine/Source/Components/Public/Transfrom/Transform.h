@@ -33,7 +33,7 @@ enum class ETransformFlag : uint16
 #pragma region Struct
 
 STRUCT()
-typedef struct tagTransformDesc : tagComponentDesc
+struct tagTransformDesc : tagComponentDesc
 {
 	REFLECT_STRUCT(tagTransformDesc)
 
@@ -45,7 +45,7 @@ typedef struct tagTransformDesc : tagComponentDesc
 
 	PROPERTY()
 	vec3	Scale;
-}DESC;
+};
 #pragma endregion
 
 ENABLE_BITMASK_OPERATORS(ETransformFlag)

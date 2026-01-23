@@ -44,11 +44,57 @@ def get_property_type(raw_type, var_name):
             return "Enum", raw_type
     return "Struct", raw_type
 
+def find_scope_content(full_content, match_index):
+    """
+    REFLECT_ 매크로가 위치한 가장 가까운 중괄호 { } 범위를 찾아 그 내용을 반환합니다.
+    주석이나 문자열 내부의 중괄호로 인한 오류를 방지하기 위해 마스킹 처리를 포함합니다.
+    """
+    # 1. 주석 및 문자열 마스킹 (중괄호 카운팅 방해 요소 제거)
+    # 문자열("...", '...')을 공백으로 치환
+    masked = re.sub(r'"(\\"|[^"])*?"', lambda m: " " * len(m.group(0)), full_content)
+    masked = re.sub(r"'(\\'|[^'])*?'", lambda m: " " * len(m.group(0)), masked)
+    # 블록 주석(/* ... */)을 공백으로 치환
+    masked = re.sub(r'/\*.*?\*/', lambda m: " " * len(m.group(0)), masked, flags=re.DOTALL)
+    # 라인 주석(// ...)을 공백으로 치환
+    masked = re.sub(r'//.*', lambda m: " " * len(m.group(0)), masked)
+
+    # 2. 모든 중괄호 쌍 찾기
+    stack = []
+    scopes = [] # (start, end) 튜플 리스트
+    
+    for i, char in enumerate(masked):
+        if char == '{':
+            stack.append(i)
+        elif char == '}':
+            if stack:
+                start = stack.pop()
+                scopes.append((start, i))
+
+    # 3. match_index(매크로 위치)를 포함하는 가장 작은(최하위) 범위 찾기
+    best_scope = None
+    min_len = float('inf')
+
+    for start, end in scopes:
+        if start < match_index < end:
+            length = end - start
+            if length < min_len:
+                min_len = length
+                best_scope = (start, end)
+    
+    if best_scope:
+        # 실제 원본 콘텐츠에서 해당 범위만 추출
+        return full_content[best_scope[0]:best_scope[1]]
+    
+    return full_content # 범위를 못 찾으면 전체 반환 (Fallback)
+
 def generate_reflection_code():
     print(f"[Reflection] Start Generating... Target: {OUTPUT_FILE}")
     
     generated_body = ""
     parsed_files = []
+    
+    # [추가 1] 헤더 파일을 수집할 집합(Set) 생성 (중복 방지)
+    included_headers = set()
 
     for root, dirs, files in os.walk(ENGINE_SOURCE_DIR):
         for file in files:
@@ -63,13 +109,22 @@ def generate_reflection_code():
                     except: continue
 
                 if "REFLECT_CLASS" in content or "REFLECT_STRUCT" in content:
+                    # [추가 2] 해당 파일의 경로를 수집
+                    # Engine/Source를 기준으로 상대 경로 계산 및 역슬래시(\)를 슬래시(/)로 변경
+                    rel_path = os.path.relpath(filepath, ENGINE_SOURCE_DIR).replace("\\", "/")
+                    included_headers.add(rel_path)
+
                     matches = CLASS_STRUCT_PATTERN.finditer(content)
                     
                     for match in matches:
+                        type_keyword = match.group(1) # CLASS or STRUCT
+                        type_label = "Struct" if type_keyword == "STRUCT" else "Class"
                         class_name = match.group(2)
-                        properties = PROPERTY_PATTERN.findall(content)
+                        
+                        scope_content = find_scope_content(content, match.start())
+                        properties = PROPERTY_PATTERN.findall(scope_content)
 
-                        code_block = f"\n// Class: {class_name}\n"
+                        code_block = f"\n// {type_label}: {class_name}\n"
                         code_block += f"BEGIN_REFLECT({class_name})\n"
                         
                         if properties:
@@ -77,38 +132,24 @@ def generate_reflection_code():
                                 full_type = re.sub(r'\s+', ' ', type_str.strip())
                                 raw_type = full_type.replace("std::", "").replace("Engine::", "").strip()
                                 
-                                # [컨테이너 처리]
                                 if raw_type.startswith(("vector<", "deque<", "list<", "set<", "unordered_set<", "map<", "unordered_map<")):
                                     args = parse_template_args(raw_type)
-                                    
-                                    # 1. Map (인자 2개)
                                     if raw_type.startswith(("map", "unordered_map")):
                                         key_t = args[0] if len(args)>0 else "void"
                                         val_t = args[1] if len(args)>1 else "void"
-                                        # REFLECT_MAP(변수, 전체타입, 키타입, 값타입, 값타입문자열)
                                         code_block += f'    REFLECT_MAP({var_name}, {full_type}, {key_t}, {val_t}, "{val_t}")\n'
-
-                                    # 2. List (인자 1개) - ListAccessor는 FullType 필요 없음
                                     elif raw_type.startswith("list"):
                                         inner_t = args[0] if args else "void"
-                                        # REFLECT_LIST(변수, 내부타입, 내부타입문자열)
                                         code_block += f'    REFLECT_LIST({var_name}, {inner_t}, "{inner_t}")\n'
-
-                                    # 3. Set (인자 1개 + FullType)
                                     elif raw_type.startswith(("set", "unordered_set")):
                                         inner_t = args[0] if args else "void"
-                                        # REFLECT_SET(변수, 전체타입, 내부타입, 내부타입문자열)
                                         code_block += f'    REFLECT_SET({var_name}, {full_type}, {inner_t}, "{inner_t}")\n'
-
-                                    # 4. Vector/Deque (Linear)
                                     else:
                                         inner_t = args[0] if args else "void"
-                                        # REFLECT_VECTOR(변수, 전체타입, 내부타입, 내부타입문자열)
                                         code_block += f'    REFLECT_VECTOR({var_name}, {full_type}, {inner_t}, "{inner_t}")\n'
-
-                                # [일반 변수 처리]
                                 else:
-                                    prop_type, type_name = get_property_type(raw_type)
+                                    # 인자 개수 수정 적용
+                                    prop_type, type_name = get_property_type(raw_type, var_name)
                                     if prop_type == "BitFlag":
                                         code_block += f'    REFLECT_BITFLAG({var_name}, Engine::EPropertyType::{prop_type}, "{type_name}")\n'
                                     else:
@@ -118,14 +159,21 @@ def generate_reflection_code():
                         generated_body += code_block
                         parsed_files.append(f"{class_name}")
 
-    final_output = f"""// Auto-generated by ReflectionGenerator.py
+    # [추가 3] 수집된 헤더들을 문자열로 변환
+    # 정렬(sorted)하여 매번 순서가 바뀌지 않도록 함
+    headers_code = ""
+    for header in sorted(included_headers):
+        headers_code += f'#include "{header}"\n'
+
+    # [추가 4] final_output에 headers_code 삽입
+    final_output = f"""#pragma once
+// Auto-generated by ReflectionGenerator.py
 #include "Core/Public/Engine_Includes.h"
 #include "Core/Public/Reflection/ReflectionMacro.h"
 #include "Core/Public/Reflection/ContainerReflection.h"
 
 // [헤더 파일 자동 포함]
-#include "Components/Public/Components.h" 
-#include "Scene/Public/GameObject.h"
+{headers_code}
 
 namespace Engine {{
 {generated_body}

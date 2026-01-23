@@ -2,6 +2,9 @@
 
 #include "Transform.h"
 #include "GameObject.h"
+#include "ComponentRegistry.h"
+
+REGISTER_COMPONENT(Transform)
 
 #pragma region Constructor&Destructor
 EResult Transform::Initialize(void* arg)

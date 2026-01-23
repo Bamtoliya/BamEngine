@@ -4,7 +4,8 @@
 #include "Vertex.h"
 
 BEGIN(Engine)
-typedef struct tagMeshCreateInfo
+
+struct tagMeshCreateInfo
 {
 	void* VertexData = { nullptr };
 	uint32 VertexCount = { 0 };
@@ -13,11 +14,12 @@ typedef struct tagMeshCreateInfo
 	void* IndexData = { nullptr };
 	uint32 IndexCount = { 0 };
 	uint32 IndexStride = { 0 };
-} MESHDESC;
-class ENGINE_API Mesh final : public Base
+};
+class ENGINE_API Mesh : public Base
 {
 #pragma region Constructor&Destructor
-private:
+protected:
+	using DESC = tagMeshCreateInfo;
 	Mesh() {}
 	virtual ~Mesh() = default;
 	EResult Initialize(void* arg = nullptr);
@@ -38,7 +40,7 @@ public:
 
 
 #pragma region Variable
-private:
+protected:
 	RHIBuffer* m_VertexBuffer = { nullptr };
 	RHIBuffer* m_IndexBuffer = { nullptr };
 

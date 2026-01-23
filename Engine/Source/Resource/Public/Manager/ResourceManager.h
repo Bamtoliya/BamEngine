@@ -128,6 +128,12 @@ private:
 	}
 #pragma endregion
 
+#ifdef _DEBUG
+#pragma region Test
+	void CreateQuadMesh();
+#pragma endregion
+#endif
+
 #pragma region Variable
 private:
 	unordered_map<wstring, class Mesh*> m_Meshes;

@@ -6,7 +6,7 @@
 BEGIN(Engine)
 #pragma region Struct
 STRUCT()
-typedef struct tagComponentDesc
+struct tagComponentDesc
 {
 	REFLECT_STRUCT(tagComponentDesc)
 
@@ -17,11 +17,9 @@ typedef struct tagComponentDesc
 	wstring Tag = { L"" };
 
 	PROPERTY()
-	GameObject* Owner = { nullptr };
-} DESC;
+	class GameObject* Owner = { nullptr };
+};
 #pragma endregion
-
-typedef
 
 class GameObject;
 CLASS()
@@ -70,8 +68,6 @@ protected:
 	PROPERTY()
 	GameObject* m_Owner = { nullptr };
 #pragma endregion
-
-
 };
 
 END

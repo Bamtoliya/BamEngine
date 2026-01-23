@@ -10,7 +10,7 @@ class ENGINE_API RenderComponent : public Component
 protected:
 	RenderComponent() {}
 	virtual ~RenderComponent() = default;
-	virtual EResult Initialize(void* arg = nullptr) override { return EResult::Success; }
+	virtual EResult Initialize(void* arg = nullptr) override { return __super::Initialize(arg); }
 public:
 	virtual Component* Clone(GameObject* owner, void* arg = nullptr) PURE;
 	virtual void Free() override
