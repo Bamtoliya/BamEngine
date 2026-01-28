@@ -35,7 +35,7 @@ EResult Application::Initialize(void* arg)
     m_Runtime = Runtime::Create(&runtimeDesc);
     if (!m_Runtime) return EResult::Fail;
 
-	ImGuiManager::IMGUISDLDESC imguiDesc = {};
+	tagImGuiManagerDesc imguiDesc = {};
 	imguiDesc.Window = m_Window;
     imguiDesc.RHI = Renderer::Get().GetRHI();
 
@@ -52,7 +52,7 @@ EResult Application::Initialize(void* arg)
         ImGuiManager::Get().Draw();
         ImGuiManager::Get().End();
         });
-    Renderer::Get().GetRenderPassDelegate(uiPassID).Remove(uiHandle);
+    //Renderer::Get().GetRenderPassDelegate(uiPassID).Remove(uiHandle);
 
     return EResult::Success;
 }

@@ -4,6 +4,8 @@
 #include "Renderer.h"
 #include "Mesh.h"
 
+REGISTER_COMPONENT(MeshRenderer)
+
 #pragma region Contructor&Destructor
 EResult MeshRenderer::Initialize(void* arg)
 {

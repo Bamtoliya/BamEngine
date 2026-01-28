@@ -82,14 +82,14 @@ EResult Renderer::EndFrame()
 {
 	if (m_RHI)
 	{
-		return m_RHI->EndFrame();
+		m_RHI->EndFrame();
 	}
 
 	for (auto& pair : m_RenderQueues)
 	{
 		RELEASE_VECTOR(pair.second);
 	}
-	return EResult::Fail;
+	return EResult::Success;
 }
 #pragma endregion
 

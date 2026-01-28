@@ -1,8 +1,15 @@
 ﻿#pragma once
+
+#pragma region Imgui Header
 #include "imgui.h"
 #include "imgui_impl_sdl3.h"
 #include "imgui_impl_sdlrenderer3.h"
+#pragma endregion
+
+#pragma region Third Library
 #include <fmt/core.h>
+#pragma endregion
+
 #include "ImGuiManager.h"
 #include "Application.h"
 #include "RHI.h"
@@ -12,9 +19,9 @@ IMPLEMENT_SINGLETON(ImGuiManager)
 #pragma region Constructor&Destructor
 EResult ImGuiManager::Initialize(void* arg)
 {
-	IMGUISDLDESC* pDesc = reinterpret_cast<IMGUISDLDESC*>(arg);
-	m_Window = pDesc->Window;
-	m_RHI = pDesc->RHI;
+	CAST_DESC
+	m_Window = desc->Window;
+	m_RHI = desc->RHI;
 
 	if (!m_Window || !m_RHI) return EResult::Fail;
 

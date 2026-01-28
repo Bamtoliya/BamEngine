@@ -3,6 +3,7 @@
 #include "Base.h"
 #include "Component.h"
 #include "ReflectionMacro.h"
+#include "ComponentRegistry.h"
 
 enum class EObjectFlag : uint8
 {
@@ -16,21 +17,21 @@ enum class EObjectFlag : uint8
 
 ENABLE_BITMASK_OPERATORS(EObjectFlag)
 
-
-
 BEGIN(Engine)
+
+#pragma region Struct
+struct tagGameObjectDesc
+{
+	wstring name = L"GameObject";
+};
+#pragma endregion
+
 CLASS()
 class ENGINE_API GameObject : public Base
 {
 	REFLECT_CLASS(GameObject)
-#pragma region Struct
-public:
-	typedef struct GameObjectCreateArg
-	{
-		wstring name = L"GameObject";
-	} GAMEOBJECTDESC;
-#pragma endregion
 
+	using DESC = tagGameObjectDesc;
 #pragma region Constructor&Destructor
 protected:
 	GameObject() {}
@@ -52,7 +53,27 @@ public:
 public:
 	EResult AddComponent(Component* component);
 	EResult AddComponent(Component* component, const wstring& tag);
-	EResult RemoveComponent();
+	EResult RemoveComponent(const wstring& tag);
+	EResult RemoveComponent(Component* component);
+
+	template<typename T>
+	EResult AddComponent(void* arg = nullptr)
+	{
+		Component* component = ComponentRegistry::Get().Create<T>(arg);
+		if (!component)
+			return EResult::Fail;
+
+		return AddComponent(component);
+	}
+		
+	EResult AddComponent(const wstring& componentTag, void* arg = nullptr)
+	{
+		Component* component = ComponentRegistry::Get().Create(componentTag, arg);
+		if (!component)
+			return EResult::Fail;
+
+		return AddComponent(component);
+	}
 
 	template<typename T>
 	T* GetComponent()

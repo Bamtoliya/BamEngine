@@ -2,8 +2,7 @@
 
 #include "ComponentRegistry.h"
 
-IMPLEMENT_SINGLETON(ComponentRegistry)
-
+IMPLEMENT_LAZY_SINGLETON(ComponentRegistry)
 
 #pragma region Constructor&Destructor
 EResult ComponentRegistry::Initialize(void* arg)

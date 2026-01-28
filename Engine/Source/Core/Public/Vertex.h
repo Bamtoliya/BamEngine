@@ -32,6 +32,16 @@ namespace Engine
 			const glm::vec3& pos,
 			const glm::vec3& nor,
 			const glm::vec2& uv,
+			const glm::vec3& tan)
+			: position(pos), normal(nor), texCoord(uv), tangent(tan)
+		{
+
+		}
+
+		Vertex(
+			const glm::vec3& pos,
+			const glm::vec3& nor,
+			const glm::vec2& uv,
 			const glm::vec3& tan,
 			const glm::vec3& bitan,
 			const glm::vec4& col)

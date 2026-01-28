@@ -5,6 +5,7 @@
 #include "SDLShader.h"
 #include "SDLTexture.h"
 #include "SDLPipeline.h"
+#include "Vertex.h"
 
 #pragma region Constructor&Destructor
 EResult SDLRendererRHI::Initialize(void* arg)
@@ -259,11 +260,9 @@ EResult SDLRendererRHI::DrawIndexed(uint32 count)
 	//SDL_Vertex* vertices = reinterpret_cast<SDL_Vertex*>(vertexBuffer->GetNativeHandle());
 	const int* indices = reinterpret_cast<const int*>(indexBuffer->GetNativeHandle());
 
+	sizet numVertices = vertexBuffer->m_Data.size() / sizeof(Vertex);
 
-
-	sizet numVertices = vertexBuffer->m_Data.size() / sizeof(SDL_Vertex);
-
-	if (!SDL_RenderGeometry(m_Renderer, nullptr, finalVertices, count, indices, count))
+	if (!SDL_RenderGeometry(m_Renderer, nullptr, finalVertices, numVertices, indices, count))
 	{
 		return EResult::Fail;
 	}

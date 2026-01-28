@@ -43,5 +43,8 @@ target_include_directories(Editor PRIVATE
 
 target_precompile_headers(Editor PRIVATE ${EDITOR_PCH_HEADER})
 
-target_link_libraries(Editor PRIVATE Engine)
+target_link_libraries(Editor PRIVATE
+    Engine
+    imgui::imgui
+)
 

@@ -4,17 +4,16 @@
 
 BEGIN(Editor)
 
+struct tagImGuiManagerDesc
+{
+	SDL_Window* Window = { nullptr };
+	class RHI* RHI = { nullptr };
+};
+
 class ImGuiManager final : public Base
 {
 	DECLARE_SINGLETON(ImGuiManager)
-
-public:
-	typedef struct tagImGuiCreateInfo
-	{
-		SDL_Window* Window = { nullptr };
-		class RHI* RHI = { nullptr };
-	}IMGUISDLDESC;
-
+	using DESC = tagImGuiManagerDesc;
 #pragma region Constructor&Destructor
 private:
 	ImGuiManager() {}

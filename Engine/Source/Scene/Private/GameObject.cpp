@@ -7,9 +7,9 @@ static uint64 g_GameObjectIDCounter = 0;
 #pragma region Constructor&Destructor
 EResult GameObject::Initialize(void* arg)
 {
-	GAMEOBJECTDESC* desc = static_cast<GAMEOBJECTDESC*>(arg);
-	if (desc)
+	if (arg)
 	{
+		CAST_DESC
 		m_Name = desc->name;
 	}
 	m_ID = ++g_GameObjectIDCounter;
@@ -52,16 +52,8 @@ GameObject* GameObject::Clone(void* arg)
 
 void GameObject::Free()
 {
-	for (Component* comp : m_Components)
-	{
-		Safe_Release(comp);
-	}
-	m_Components.clear();
-	for (GameObject* child : m_Childs)
-	{
-		Safe_Release(child);
-	}
-	m_Childs.clear();
+	RELEASE_VECTOR(m_Components);
+	RELEASE_VECTOR(m_Childs);
 }
 
 #pragma endregion
@@ -93,13 +85,13 @@ void GameObject::LateUpdate(f32 dt)
 }
 #pragma endregion
 
-
 #pragma region Component Management
 
 EResult GameObject::AddComponent(Component* component)
 {
 	if (!component)
 		return EResult::Fail;
+	component->SetOwner(this);
 	Safe_AddRef(component);
 	m_Components.push_back(component);
 	return EResult::Success;
@@ -109,20 +101,38 @@ EResult GameObject::AddComponent(Component* component, const wstring& tag)
 {
 	if (!component)
 		return EResult::Fail;
+	component->SetOwner(this);
 	component->SetTag(tag);
 	Safe_AddRef(component);
 	m_Components.push_back(component);
 	return EResult::Success;
 }
 
-EResult GameObject::RemoveComponent()
+EResult GameObject::RemoveComponent(const wstring& tag)
 {
-	if (m_Components.empty())
+	for (auto it = m_Components.begin(); it != m_Components.end(); ++it)
+	{
+		if ((*it)->GetTag() == tag)
+		{
+			(*it)->Free();
+			Safe_Release(*it);
+			m_Components.erase(it);
+			return EResult::Success;
+		}
+	}
+	return EResult::Fail;
+}
+
+EResult GameObject::RemoveComponent(Component* component)
+{
+	if (!component)
 		return EResult::Fail;
-	Component* comp = m_Components.back();
-	comp->Free();
-	Safe_Release(comp);
-	m_Components.pop_back();
+	auto it = std::find(m_Components.begin(), m_Components.end(), component);
+	if (it == m_Components.end())
+		return EResult::Fail;
+	(*it)->Free();
+	Safe_Release(*it);
+	m_Components.erase(it);
 	return EResult::Success;
 }
 Component* GameObject::GetComponent(const wstring& tag)

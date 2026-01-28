@@ -11,6 +11,8 @@
 
 #include "RenderPassManager.h"
 
+#include "ComponentRegistry.h"
+
 BEGIN(Engine)
 
 typedef struct tagRuntimeCreateInfo
@@ -52,6 +54,17 @@ private:
 private:
 	LayerManager* m_LayerManager = { nullptr };
 	SceneManager* m_SceneManager = { nullptr };
+private:
+	ComponentRegistry* m_ComponentRegistry = { nullptr };
+
+#pragma region Test
+#ifdef _DEBUG
+private:
+	class GameObject* m_TestObject = { nullptr };
+	class RHIShader* m_TestShader = { nullptr };
+#endif
+#pragma endregion
+
 #pragma endregion
 };
 

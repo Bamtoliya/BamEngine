@@ -55,6 +55,46 @@ int32_t ClassName::Destroy()							\
 		return count;									\
 	}													\
 	return 0;											\
+}	
+
+#define IMPLEMENT_LAZY_SINGLETON(ClassName)				\
+ClassName* ClassName::m_instance = nullptr;				\
+														\
+ClassName* ClassName::Create(void* arg)					\
+{														\
+	if (!m_instance)									\
+	{													\
+		m_instance = new ClassName();					\
+		if(IsFailure(m_instance->Initialize(arg)))		\
+		{												\
+			delete m_instance;							\
+			m_instance = nullptr;						\
+		}												\
+	}													\
+	return m_instance;									\
+}														\
+														\
+ClassName& ClassName::Get()								\
+{														\
+	if (!m_instance)									\
+	{													\
+		Create(nullptr);								\
+	}													\
+	return *m_instance;									\
+}														\
+														\
+int32_t ClassName::Destroy()							\
+{														\
+	if (m_instance)										\
+	{													\
+		int32_t count = m_instance->Release();			\
+		if (count == 0)									\
+		{												\
+			m_instance = nullptr;						\
+		}												\
+		return count;									\
+	}													\
+	return 0;											\
 }
 #pragma endregion
 
