@@ -53,6 +53,7 @@ struct PropertyInfo
 		: Name(name), TypeName(typeName), Type(type), Offset(offset), Accessor(accessor) {}
 
 	void Apply(const Engine::Name& attr){ Metadata.DisplayName = attr.Text; }
+	void Apply(const char* key) { Metadata.DisplayName = key; }
 	void Apply(const Engine::Tooltip& attr) { Metadata.Tooltip = attr.Text; }
 	void Apply(const EUIWidget& attr) { Metadata.WidgetType = attr; }
 	void Apply(const Engine::Range& attr) { Metadata.Min = attr.Min; Metadata.Max = attr.Max; Metadata.WidgetType = EUIWidget::Slider; }

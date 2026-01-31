@@ -31,15 +31,18 @@ public:
 
 #pragma region Data Management
 public:
-	void LoadData();
+	EResult LoadData();
+
+	EResult RegisterLocalizationData(const wstring& filePath);
 	string GetText(const string& key) const;
-	void AddText(ELocalizationLanguage lang, const string& key, const string& text);
+	EResult AddText(ELocalizationLanguage lang, const string& key, const string& text);
 #pragma endregion
 
 #pragma region Variables
 private:
 	ELocalizationLanguage m_CurrentLanguage = ELocalizationLanguage::English;
 	vector<unordered_map<string, string>> m_LocalizationData;
+	vector<wstring> m_RegisteredFiles;
 #pragma endregion
 
 	

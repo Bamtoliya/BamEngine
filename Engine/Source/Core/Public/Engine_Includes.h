@@ -15,6 +15,8 @@
 #include <unordered_set>
 #include <filesystem>
 #include <typeindex>
+#include <fstream>
+#include <sstream>
 #pragma endregion
 
 using namespace std;

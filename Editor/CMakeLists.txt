@@ -6,9 +6,11 @@ find_package(glm CONFIG REQUIRED)
 find_package(imgui CONFIG REQUIRED)
 find_package(Vulkan REQUIRED) 
 
+find_package(Python3 COMPONENTS Interpreter REQUIRED)
+
 set(EDITOR_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Source")
 set(EDITOR_PCH_HEADER "${EDITOR_SOURCE_DIR}/Editor_Includes.h")
-
+set(LOCALIZATION_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/../Utility/CSVToJsonConverter/localizationcsvtojson.py")
 file(GLOB_RECURSE EDITOR_HEADERS CONFIGURE_DEPENDS "${EDITOR_SOURCE_DIR}/*.h")
 file(GLOB_RECURSE EDITOR_SOURCES CONFIGURE_DEPENDS "${EDITOR_SOURCE_DIR}/*.cpp")
 file(GLOB_RECURSE EDITOR_ALL_SOURCE_FILES "${EDITOR_SOURCE_DIR}/*")
@@ -40,6 +42,15 @@ target_include_directories(Editor PRIVATE
 	${EDITOR_SOURCE_DIR}
 	${EDITOR_PUBLIC_INCLUDE_DIRS}
 )
+
+add_custom_target(RunLocalizationGenerator ALL
+    COMMAND ${Python3_EXECUTABLE} "${LOCALIZATION_SCRIPT}"
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/.."
+    COMMENT "Running Localization Generator Script..."
+    VERBATIM
+)
+
+add_dependencies(Engine RunLocalizationGenerator)
 
 target_precompile_headers(Editor PRIVATE ${EDITOR_PCH_HEADER})
 

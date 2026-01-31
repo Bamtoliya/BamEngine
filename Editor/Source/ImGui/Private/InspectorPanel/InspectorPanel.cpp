@@ -48,8 +48,10 @@ void InspectorPanel::DrawProperties(void* instance, const TypeInfo& typeInfo)
 		{
 			void* data = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(instance) + property.Offset);
 			const char* label = property.Name.c_str();
+			string displayLabel = SanitizeDisplayLabel(typeInfo, property);
 			ImGui::PushID(label);
-
+			ImGui::Text("%s", displayLabel.c_str());
+			ImGui::SameLine();
 			switch (property.Type)
 			{
 			case EPropertyType::Int32:
@@ -136,3 +138,42 @@ void InspectorPanel::DrawProperties(void* instance, const TypeInfo& typeInfo)
 		}
 	}
 }
+
+
+#pragma region Helper
+string InspectorPanel::SanitizeVarName(const string& varName)
+{
+	string cleanName = varName;
+
+	if (cleanName.length() > 2 && cleanName.substr(0, 2) == "m_")
+	{
+		cleanName = cleanName.substr(2);
+	}
+	else if (cleanName.length() > 1 && cleanName[0] == 'b' && isupper(cleanName[1]))
+	{
+		cleanName = cleanName.substr(1);
+	}
+	return  cleanName;
+}
+
+string InspectorPanel::SanitizeDisplayLabel(const TypeInfo& typeInfo, const PropertyInfo& property)
+{
+	string lookupKey;
+	if (!property.Metadata.DisplayName.empty())
+	{
+		lookupKey = property.Metadata.DisplayName;
+	}
+	else
+	{
+		string cleanVarName = SanitizeVarName(property.Name);
+		lookupKey = typeInfo.GetName() + "." + cleanVarName;
+	}	
+
+	string displayLabel = Engine::LocalizationManager::Get().GetText(lookupKey);
+	if (displayLabel == lookupKey)
+	{
+		displayLabel = SanitizeVarName(property.Name);
+	}
+	return displayLabel;
+}
+#pragma endregion

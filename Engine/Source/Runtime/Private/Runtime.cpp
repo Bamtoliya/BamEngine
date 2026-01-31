@@ -41,6 +41,11 @@ EResult Runtime::Initialize(void* arg)
 	m_SceneManager = SceneManager::Create();
 	if (!m_SceneManager) return EResult::Fail;
 
+	m_LocalizationManager = LocalizationManager::Create();
+	if (!m_LocalizationManager) return EResult::Fail;
+
+	m_LocalizationManager->LoadData();
+
 #pragma region Test
 	{
 		tagSDLShdaerCreateDesc shaderDesc = {};
@@ -118,6 +123,7 @@ void Runtime::Free()
 
 	ComponentRegistry::Destroy();
 	ReflectionRegistry::Destroy();
+	LocalizationManager::Destroy();
 }
 #pragma endregion
 

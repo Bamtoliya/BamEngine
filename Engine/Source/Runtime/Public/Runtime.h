@@ -13,6 +13,8 @@
 
 #include "ComponentRegistry.h"
 
+#include "LocalizationManager.h"
+
 BEGIN(Engine)
 
 typedef struct tagRuntimeCreateInfo
@@ -56,6 +58,8 @@ private:
 	SceneManager* m_SceneManager = { nullptr };
 private:
 	ComponentRegistry* m_ComponentRegistry = { nullptr };
+private:
+	LocalizationManager* m_LocalizationManager = { nullptr };
 
 #pragma region Test
 #ifdef _DEBUG

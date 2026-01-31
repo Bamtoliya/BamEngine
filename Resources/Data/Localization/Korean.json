@@ -1,0 +1,11 @@
+{
+    "Korean": {
+        "PROP_NAME": "이름",
+        "PROP_ID": "ID",
+        "PROP_LANGUAGE": "언어",
+        "Transform.Position": "위치",
+        "Transform.Rotation": "회전",
+        "Transform.Scale": "크기",
+        "PROP_TEST": "테스트"
+    }
+}

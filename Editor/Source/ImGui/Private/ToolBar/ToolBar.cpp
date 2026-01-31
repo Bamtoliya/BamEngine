@@ -7,6 +7,8 @@
 #include "SceneManager.h"
 #include "Transform.h"
 
+#include "LocalizationManager.h"
+
 
 void ToolBar::Draw()
 {
@@ -104,6 +106,15 @@ void ToolBar::DrawHelpMenu()
 {
 	if (ImGui::BeginMenu("Help"))
 	{
+		string buffer = LocalizationManager::Get().GetText("PROP_LANGUAGE");
+		if (ImGui::BeginMenu(buffer.c_str()))
+		{
+			if (ImGui::MenuItem("English"))
+				LocalizationManager::Get().SetCurrentLanguage(ELocalizationLanguage::English);
+			if (ImGui::MenuItem("Korean"))
+				LocalizationManager::Get().SetCurrentLanguage(ELocalizationLanguage::Korean);
+			ImGui::EndMenu();
+		}
 		ImGui::EndMenu();
 	}
 }

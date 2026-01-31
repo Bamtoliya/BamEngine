@@ -190,22 +190,21 @@ protected:
 
 	vector<GameObject*> m_Childs = {};
 
-	PROPERTY()
 	vector<Component*> m_Components = {};
 
 	PROPERTY()
 	unordered_set<wstring> m_TagSet = {};
 
-	PROPERTY()
+	PROPERTY("PROP_NAME")
 	wstring m_Name = { L"GameObject" };
 
-	PROPERTY()
+	PROPERTY(READONLY)
 	uint64 m_ID = { 0 };
 
 	PROPERTY()
 	EObjectFlag m_Flags = { EObjectFlag::Default };
 
-	PROPERTY()
+	PROPERTY(READONLY)
 	uint32 m_LayerIndex = { static_cast<uint32>(-1) };
 #pragma endregion
 

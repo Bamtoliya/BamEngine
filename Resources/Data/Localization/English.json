@@ -1,0 +1,11 @@
+{
+    "English": {
+        "PROP_NAME": "Name",
+        "PROP_ID": "ID",
+        "PROP_LANGUAGE": "Language",
+        "Transform.Position": "Position",
+        "Transform.Rotation": "Rotation",
+        "Transform.Scale": "Scale",
+        "PROP_TEST": "Test"
+    }
+}

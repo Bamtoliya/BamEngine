@@ -52,6 +52,7 @@ EResult Application::Initialize(void* arg)
         ImGuiManager::Get().Draw();
         ImGuiManager::Get().End();
         });
+    InitializeLocalization();
     //Renderer::Get().GetRenderPassDelegate(uiPassID).Remove(uiHandle);
 
     return EResult::Success;
@@ -68,6 +69,17 @@ void Application::Free()
 }
 
 #pragma endregion
+
+#pragma region Localization
+void Application::InitializeLocalization()
+{
+    LocalizationManager::Get().RegisterLocalizationData(L"Resources/Data/Localization/English.json");
+    LocalizationManager::Get().RegisterLocalizationData(L"Resources/Data/Localization/Korean.json");
+    LocalizationManager::Get().LoadData();
+}
+#pragma endregion
+
+
 
 void Application::Run(int argc, char* argv[])
 {

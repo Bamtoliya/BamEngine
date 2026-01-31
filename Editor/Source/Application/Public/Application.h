@@ -24,6 +24,13 @@ public:
 	void Free() override;
 #pragma endregion
 
+
+#pragma region Localization
+private:
+	void InitializeLocalization();
+#pragma endregion
+
+
 public:
 	void Run(int argc, char* argv[]);
 	void Shutdown();

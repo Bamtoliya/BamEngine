@@ -46,10 +46,10 @@ private: \
 	void ClassName::RegisterProperties(Engine::TypeInfo& typeInfo) {
 
 #define REFLECT_PROPERTY(VarName, TypeEnum, TypeName, ...) \
-	typeInfo.AddProperty(Engine::PropertyInfo(#VarName, TypeName, TypeEnum, offsetof(ThisClass, VarName), ##__VA_ARGS__));
+	typeInfo.AddProperty(Engine::PropertyInfo(#VarName, TypeName, TypeEnum, offsetof(ThisClass, VarName)), ##__VA_ARGS__);
 
 #define REFLECT_BITFLAG(VarName, TypeEnum, TypeName, ...) \
-	typeInfo.AddProperty(Engine::PropertyInfo(#VarName, TypeName, TypeEnum, offsetof(ThisClass, VarName), ##__VA_ARGS__));
+	typeInfo.AddProperty(Engine::PropertyInfo(#VarName, TypeName, TypeEnum, offsetof(ThisClass, VarName)), ##__VA_ARGS__);
 
 #define REFLECT_VECTOR(VarName, FullType, InnerType, TypeName, ...) \
 	{ \
@@ -76,3 +76,8 @@ private: \
 	}
 
 #define END_REFLECT() }
+
+#define NAME(text) Engine::Name(text)
+#define TOOLTIP(text) Engine::Tooltip(text)
+#define RANGE(min, max) Engine::Range(min, max)
+#define READONLY Engine::ReadOnly(true)

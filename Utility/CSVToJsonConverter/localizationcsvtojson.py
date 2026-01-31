@@ -3,42 +3,41 @@ import json
 import os
 import glob
 import argparse
+import sys  # [추가] 종료를 위해 필요
 
 def main():
     # 1. 인자 설정
-    parser = argparse.ArgumentParser(description='Convert CSV localization files to separated JSON files (e.g., English.json).')
+    parser = argparse.ArgumentParser(description='Convert CSV to JSON with Duplicate Key Check.')
     parser.add_argument('--input', '-i', default='Resources/Data/Localization', help='Input directory or single CSV file.')
-    parser.add_argument('--output', '-o', default=None, help='Output directory or file path. Files will be saved as {Language}.json in this folder.')
+    parser.add_argument('--output', '-o', default=None, help='Output directory or file path.')
     
     args = parser.parse_args()
     input_path = args.input
     output_arg = args.output
     
     # 2. 출력 디렉토리 결정
-    # 사용자가 출력 경로를 입력하지 않으면 -> 입력 경로의 폴더를 사용
     if output_arg is None:
         if os.path.isfile(input_path):
             output_dir = os.path.dirname(input_path)
         else:
-            output_dir = input_path # 폴더인 경우 그 폴더 그대로 사용
+            output_dir = input_path
     else:
-        # 사용자가 파일 경로(예: Data/Loc.json)를 입력했더라도 폴더(Data/)만 추출해서 사용
-        # 사용자가 폴더(Data/)를 입력했다면 그 폴더 사용
         ext = os.path.splitext(output_arg)[1]
-        if ext: # 확장자가 있으면 파일로 간주하고 부모 폴더 추출
+        if ext:
             output_dir = os.path.dirname(output_arg)
         else:
             output_dir = output_arg
 
-    # 출력 폴더가 비어있으면(현재 폴더) '.' 로 설정
-    if not output_dir:
-        output_dir = '.'
+    if not output_dir: output_dir = '.'
 
-    # 데이터 구조 (필요한 언어 추가 가능)
+    # 데이터 구조
     data = {
         "English": {},
         "Korean": {}
     }
+
+    # [추가] 중복 키 검사를 위한 집합 (Set)
+    seen_keys = set()
 
     # 3. CSV 파일 목록 수집
     csv_files = []
@@ -51,15 +50,15 @@ def main():
         print(f"[Warning] No CSV files found in {input_path}")
         return
 
-    print(f"Sources: {len(csv_files)} files found. Target Directory: '{output_dir}'")
+    print(f"Checking for duplicates and converting {len(csv_files)} files...")
 
-    # 4. CSV 읽기 및 데이터 병합
+    # 4. CSV 읽기 및 병합
     for file_path in csv_files:
         filename = os.path.basename(file_path)
-        file_category = os.path.splitext(filename)[0]
+        print(f" - Scanning: {filename}")
+
         current_sub_group = "" 
 
-        # 인코딩 처리
         try:
             f = open(file_path, 'r', encoding='utf-8-sig')
             f.read(1); f.seek(0)
@@ -68,7 +67,9 @@ def main():
 
         with f:
             reader = csv.DictReader(f)
+            line_count = 0
             for row in reader:
+                line_count += 1
                 raw_key = row.get('Key', '').strip()
                 if not raw_key: continue
 
@@ -76,28 +77,46 @@ def main():
                 raw_group = row.get('Group', '').strip()
                 if raw_group: current_sub_group = raw_group
                 
-                # 키 생성 (카테고리.그룹.키)
-                if current_sub_group: final_key = f"{file_category}.{current_sub_group}.{raw_key}"
-                else: final_key = f"{file_category}.{raw_key}"
+                # 키 생성 (Group.Key 또는 Key)
+                if current_sub_group:
+                    final_key = f"{current_sub_group}.{raw_key}"
+                else:
+                    final_key = raw_key
+
+                # -------------------------------------------------------
+                # [핵심] 중복 키 검사 로직
+                # -------------------------------------------------------
+                if final_key in seen_keys:
+                    print(f"\n[ERROR] Duplicate Key Detected!")
+                    print(f"--------------------------------------------------")
+                    print(f" File    : {filename}")
+                    print(f" Line    : {line_count + 1} (approx)")
+                    print(f" Key     : '{final_key}'")
+                    print(f"--------------------------------------------------")
+                    print(f"Aborting conversion to prevent data corruption.")
+                    
+                    # 스크립트 비정상 종료 (에러 코드 1 반환)
+                    sys.exit(1)
+                
+                # 중복이 아니면 등록
+                seen_keys.add(final_key)
+                # -------------------------------------------------------
 
                 # 언어별 데이터 수집
                 for lang in data.keys():
                     if row.get(lang):
                         data[lang][final_key] = row[lang]
 
-    # 5. 언어별로 파일 저장 (파일명: English.json, Korean.json)
+    # 5. 저장 (중복이 없을 때만 실행됨)
     if output_dir:
         os.makedirs(output_dir, exist_ok=True)
 
+    print(f"\n[Success] No duplicates found. Saving files...")
+
     for lang, content in data.items():
-        if not content:
-            continue 
+        if not content: continue 
 
-        # [변경점] 파일명에서 BaseName 제거 -> 순수하게 {Language}.json 사용
-        lang_filename = f"{lang}.json"
-        lang_filepath = os.path.join(output_dir, lang_filename)
-
-        # JSON 구조: { "English": { ... } }
+        lang_filepath = os.path.join(output_dir, f"{lang}.json")
         final_json_structure = { lang: content }
 
         try:
