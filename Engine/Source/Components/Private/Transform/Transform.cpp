@@ -263,14 +263,13 @@ void Transform::UpdateWorldMatrix()
 	if (IsStatic() && !IsDirty()) return;
 
 	GameObject* parent = (m_Owner) ? m_Owner->GetParent() : nullptr;
-	Transform* parentTransform = parent->GetComponent<Transform>();
-
-	if (!parent || !parentTransform)
+	if (!parent)
 	{
 		m_WorldMatrix = m_LocalMatrix;
 		RemoveFlag(m_Flags, ETransformFlag::Dirty);
 		return;
 	}
+	Transform* parentTransform = parent->GetComponent<Transform>();
 
 	const mat4& parentWorldMatrix = parentTransform->GetWorldMatrix();
 	if (HasFlag(m_Flags, ETransformFlag::AllInherit))

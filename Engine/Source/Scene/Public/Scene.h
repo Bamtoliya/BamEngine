@@ -3,10 +3,17 @@
 #include "Base.h"
 
 BEGIN(Engine)
+
+struct tagSceneCreateDesc
+{
+	wstring name = L"Scene";
+};
+
 class ENGINE_API Scene : public Base
 {
 #pragma region Constructor&Destructor
 protected:
+	using DESC = tagSceneCreateDesc;
 	Scene() {}
 	virtual ~Scene() {}
 	virtual EResult Initialize(void* arg = nullptr);
@@ -23,22 +30,45 @@ public:
 #pragma endregion
 
 
-#pragma region Object Management
+#pragma region Scene Management
 public:
-	EResult AddGameObject(class GameObject* gameObject, uint32 layerIndex);
+	void SetName(const wstring& name) { m_Name = name; }
+	const wstring& GetName() const { return m_Name; }
+#pragma endregion
 
-	EResult RemoveGameObject(class GameObject* gameObject, uint32 layerIndex);
-	EResult RemoveGameObject(class GameObject* gameObject);
+#pragma region Layer Management
+public:
+	EResult AddLayer(class Layer* layer);
+	EResult InsertLayer(uint32 layerIndex, class Layer* layer);
+	EResult CreateLayer(const wstring& layerName, uint32 layerIndex = -1);
 
-	class Layer* FindLayerByIndex(uint32 layerIndex) const;
-	class Layer* FindLayerByName(const wstring& layerName) const;
+	EResult RemoveLayer(uint32 layerIndex);
+	EResult RemoveLayer(class Layer* layer);
+	EResult RemoveLayer(const wstring& layerName);
 
 	const vector<class Layer*>& GetAllLayers() const { return m_Layers; }
+
+	class Layer* FindLayer(uint32 layerIndex) const;
+	class Layer* FindLayer(const wstring& layerName) const;
+
+private:
+	void UpdateLayerIndices(uint32 startIndex);
+#pragma endregion
+
+#pragma region Object Management
+public:
+	EResult AddGameObject(class GameObject* gameObject, uint32 layerIndex = -1);
+	EResult RemoveGameObject(class GameObject* gameObject);
+
+	class GameObject* FindGameObject(const wstring& name, uint32 layerIndex = -1);
+	class GameObject* FindGameObject(uint64 id, uint32 layerIndex = -1);
+
+	EResult MoveGameObjectLayer(class GameObject* gameObject, uint32 targetLayerIndex);
 #pragma endregion
 
 #pragma region Variable
 protected:
-	wstring m_SceneName = L"Scene";
+	wstring m_Name = { L"Scene" };
 	vector<class Layer*> m_Layers;
 #pragma endregion
 };

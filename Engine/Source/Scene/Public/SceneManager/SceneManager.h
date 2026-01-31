@@ -3,6 +3,14 @@
 #include "Scene.h"
 
 BEGIN(Engine)
+
+enum class ESceneState : uint8
+{
+	Edit,
+	Play,
+	Pause,
+};
+
 class ENGINE_API SceneManager : public Base
 {
 	DECLARE_SINGLETON(SceneManager)
@@ -25,12 +33,16 @@ public:
 #pragma region Scene Management
 public:
 	EResult OpenScene(Scene* newScene);
-	class Scene* GetActiveScene() const { return m_ActiveScene; }
+	class Scene* GetCurrentScene() const { return m_CurrentScene; }
+
+	EResult NewScene(void* arg = nullptr);
+	EResult SaveScene(const wstring& filePath);
+	EResult LoadScene(const wstring& filePath);
 #pragma endregion
 
 #pragma region Variable
 protected:
-	Scene* m_ActiveScene = { nullptr };
+	Scene* m_CurrentScene = { nullptr };
 	vector<Scene*> m_Scenes;
 #pragma endregion
 

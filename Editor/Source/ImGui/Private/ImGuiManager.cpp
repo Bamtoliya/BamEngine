@@ -33,7 +33,28 @@ EResult ImGuiManager::Initialize(void* arg)
 	io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 	io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
 
-	ImGui::StyleColorsDark();
+	std::string fontPath = "C:\\Windows\\Fonts\\malgun.ttf";
+
+	if (std::filesystem::exists(fontPath))
+	{
+		// 한글 글리프 범위 가져오기
+		ImVector<ImWchar> ranges;
+		ImFontGlyphRangesBuilder builder;
+		builder.AddRanges(io.Fonts->GetGlyphRangesKorean()); // 한글
+		builder.AddRanges(io.Fonts->GetGlyphRangesDefault()); // 영문/특수문자
+		builder.BuildRanges(&ranges);
+
+		// 폰트 로드 (사이즈 18.0f)
+		io.Fonts->AddFontFromFileTTF(fontPath.c_str(), 18.0f, nullptr, ranges.Data);
+		io.Fonts->Build();
+	}
+	else
+	{
+		fmt::print(stderr, "Font file not found: {}\n", fontPath);
+	}
+
+	// [2. 스타일 적용 함수 호출]
+	SetCustomStyle();
 
 	ImGuiStyle& style = ImGui::GetStyle();
 	if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
@@ -134,79 +155,16 @@ void ImGuiManager::ProcessEvent(const SDL_Event* event)
 	ImGui_ImplSDL3_ProcessEvent(event);
 }
 
-void ImGuiManager::ToolBar()
-{
-	// [2. Main Toolbar (Menu Bar) 생성] --------------------------------
-	if (ImGui::BeginMenuBar())
-	{
-		if (ImGui::BeginMenu("File"))
-		{
-			if (ImGui::MenuItem("Save Settings"))
-			{
-				// ConfigManager::Get().SaveSettings();
-			}
-			if (ImGui::MenuItem("Exit", "Alt+F4"))
-			{
-				// SDL Quit 이벤트 발생 시킴
-				SDL_Event quit_event;
-				quit_event.type = SDL_EVENT_QUIT;
-				SDL_PushEvent(&quit_event);
-			}
-			ImGui::EndMenu();
-		}
-
-		if (ImGui::BeginMenu("Window"))
-		{
-			ImGui::MenuItem("Display Settings", nullptr); // 체크박스 연동 가능
-			ImGui::EndMenu();
-		}
-		ImGui::EndMenuBar();
-	}
-}
-
-void ImGuiManager::MainDockspace()
-{
-	// [1. Fullscreen DockSpace 생성] ----------------------------------
-	// 메인 뷰포트 전체를 덮는 "DockSpace" 윈도우를 만듭니다.
-	const ImGuiViewport* viewport = ImGui::GetMainViewport();
-	ImGui::SetNextWindowPos(viewport->WorkPos);
-	ImGui::SetNextWindowSize(viewport->WorkSize);
-	ImGui::SetNextWindowViewport(viewport->ID);
-
-	// 스타일: 라운딩 없음, 테두리 없음, 패딩 없음
-	ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
-	ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
-	ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
-
-	// 플래그: 제목 표시줄 없음, 이동/크기조절 불가, 뒤로 보내기(배경역할), 메뉴바 포함
-	ImGuiWindowFlags window_flags = ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoDocking;
-	window_flags |= ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove;
-	window_flags |= ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus;
-	window_flags |= ImGuiWindowFlags_NoBackground; // 투명하게 해서 뒤의 게임 화면이 보이게 할 수도 있음 (선택사항)
-
-	// 메인 독스페이스 컨테이너 시작
-	ImGui::Begin("MainDockSpace", nullptr, window_flags);
-
-	// 스타일 복구
-	ImGui::PopStyleVar(3);
-
-	// DockSpace ID 제출
-	ImGuiID dockspace_id = ImGui::GetID("MyDockSpace");
-	// PassthruCentralNode: 중앙 노드를 투명하게 만들어서, 도킹되지 않은 영역에 게임 씬을 그릴 수 있게 함
-	ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_PassthruCentralNode);
-
-	ToolBar();
-	
-	ImGui::End(); // MainDockSpace 끝 (이제부터 그리는 창은 이 안에 도킹됨)
-}
 #pragma endregion
-
 
 #pragma region DrawUI
 
 void ImGuiManager::Draw()
 {
 	MainDockspace();
+
+	m_HierarchyPanel.Draw(m_SelectedObject);
+	m_InspectorPanel.Draw(m_SelectedObject);
 	if (ImGui::Begin("Display Settings")) // 창 이름
 	{
 		static int width = g_WindowWidth;
@@ -240,6 +198,110 @@ void ImGuiManager::Draw()
 	ImGui::End();
 }
 
+void ImGuiManager::MainDockspace()
+{
+	// [1. Fullscreen DockSpace 생성] ----------------------------------
+	// 메인 뷰포트 전체를 덮는 "DockSpace" 윈도우를 만듭니다.
+	const ImGuiViewport* viewport = ImGui::GetMainViewport();
+	ImGui::SetNextWindowPos(viewport->WorkPos);
+	ImGui::SetNextWindowSize(viewport->WorkSize);
+	ImGui::SetNextWindowViewport(viewport->ID);
+
+	// 스타일: 라운딩 없음, 테두리 없음, 패딩 없음
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+
+	// 플래그: 제목 표시줄 없음, 이동/크기조절 불가, 뒤로 보내기(배경역할), 메뉴바 포함
+	ImGuiWindowFlags window_flags = ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoDocking;
+	window_flags |= ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove;
+	window_flags |= ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus;
+	window_flags |= ImGuiWindowFlags_NoBackground; // 투명하게 해서 뒤의 게임 화면이 보이게 할 수도 있음 (선택사항)
+
+	// 메인 독스페이스 컨테이너 시작
+	ImGui::Begin("MainDockSpace", nullptr, window_flags);
+
+	// 스타일 복구
+	ImGui::PopStyleVar(3);
+
+	// DockSpace ID 제출
+	ImGuiID dockspace_id = ImGui::GetID("MyDockSpace");
+	// PassthruCentralNode: 중앙 노드를 투명하게 만들어서, 도킹되지 않은 영역에 게임 씬을 그릴 수 있게 함
+	ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_PassthruCentralNode);
+
+	m_ToolBar.Draw();
+
+	ImGui::End(); // MainDockSpace 끝 (이제부터 그리는 창은 이 안에 도킹됨)
+}
 
 
+#pragma endregion
+
+#pragma region Style
+void ImGuiManager::SetCustomStyle()
+{
+	ImGuiStyle& style = ImGui::GetStyle();
+	ImVec4* colors = style.Colors;
+
+	// 1. 레이아웃 수치 조정 (둥글게, 여백 넉넉하게)
+	style.WindowRounding = 5.0f;    // 창 모서리 둥글기
+	style.FrameRounding = 4.0f;     // 입력 필드 둥글기
+	style.PopupRounding = 4.0f;     // 팝업 둥글기
+	style.GrabRounding = 4.0f;      // 슬라이더 손잡이 둥글기
+	style.TabRounding = 4.0f;       // 탭 둥글기
+
+	style.WindowPadding = ImVec2(8.0f, 8.0f);
+	style.FramePadding = ImVec2(5.0f, 3.0f);
+	style.ItemSpacing = ImVec2(8.0f, 4.0f);
+	style.ScrollbarSize = 12.0f;
+
+	// 2. 색상 팔레트 설정 (Modern Dark Theme)
+	// 기본 배경
+	colors[ImGuiCol_Text] = ImVec4(0.95f, 0.96f, 0.98f, 1.00f);
+	colors[ImGuiCol_TextDisabled] = ImVec4(0.36f, 0.42f, 0.47f, 1.00f);
+	colors[ImGuiCol_WindowBg] = ImVec4(0.11f, 0.12f, 0.13f, 1.00f); // 아주 어두운 회색
+	colors[ImGuiCol_ChildBg] = ImVec4(0.15f, 0.18f, 0.22f, 1.00f);
+	colors[ImGuiCol_PopupBg] = ImVec4(0.08f, 0.08f, 0.08f, 0.94f);
+	colors[ImGuiCol_Border] = ImVec4(0.08f, 0.10f, 0.12f, 1.00f);
+	colors[ImGuiCol_BorderShadow] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
+
+	// 헤더 (Inspector 등의 제목)
+	colors[ImGuiCol_Header] = ImVec4(0.22f, 0.29f, 0.41f, 1.00f);       // 약간 푸른빛 도는 회색
+	colors[ImGuiCol_HeaderHovered] = ImVec4(0.26f, 0.59f, 0.98f, 0.80f); // 호버 시 밝은 파랑
+	colors[ImGuiCol_HeaderActive] = ImVec4(0.26f, 0.59f, 0.98f, 1.00f);
+
+	// 타이틀 바 (창 제목 표시줄)
+	colors[ImGuiCol_TitleBg] = ImVec4(0.09f, 0.10f, 0.11f, 1.00f);
+	colors[ImGuiCol_TitleBgActive] = ImVec4(0.13f, 0.14f, 0.16f, 1.00f);
+	colors[ImGuiCol_TitleBgCollapsed] = ImVec4(0.00f, 0.00f, 0.00f, 0.51f);
+	colors[ImGuiCol_MenuBarBg] = ImVec4(0.14f, 0.14f, 0.14f, 1.00f);
+
+	// 버튼
+	colors[ImGuiCol_Button] = ImVec4(0.20f, 0.25f, 0.29f, 1.00f);
+	colors[ImGuiCol_ButtonHovered] = ImVec4(0.26f, 0.59f, 0.98f, 1.00f); // 파란색 하이라이트
+	colors[ImGuiCol_ButtonActive] = ImVec4(0.06f, 0.53f, 0.98f, 1.00f);
+
+	// 프레임 (InputText, Checkbox 배경)
+	colors[ImGuiCol_FrameBg] = ImVec4(0.20f, 0.21f, 0.22f, 0.54f);
+	colors[ImGuiCol_FrameBgHovered] = ImVec4(0.26f, 0.59f, 0.98f, 0.40f);
+	colors[ImGuiCol_FrameBgActive] = ImVec4(0.26f, 0.59f, 0.98f, 0.67f);
+
+	// 탭 (Docking 탭)
+	colors[ImGuiCol_Tab] = ImVec4(0.15f, 0.18f, 0.22f, 0.86f);
+	colors[ImGuiCol_TabHovered] = ImVec4(0.26f, 0.59f, 0.98f, 0.80f);
+	colors[ImGuiCol_TabActive] = ImVec4(0.20f, 0.25f, 0.29f, 1.00f);
+	colors[ImGuiCol_TabUnfocused] = ImVec4(0.15f, 0.18f, 0.22f, 0.97f);
+	colors[ImGuiCol_TabUnfocusedActive] = ImVec4(0.20f, 0.25f, 0.29f, 1.00f);
+
+	// 기타
+	colors[ImGuiCol_CheckMark] = ImVec4(0.26f, 0.59f, 0.98f, 1.00f);
+	colors[ImGuiCol_SliderGrab] = ImVec4(0.24f, 0.52f, 0.88f, 1.00f);
+	colors[ImGuiCol_SliderGrabActive] = ImVec4(0.26f, 0.59f, 0.98f, 1.00f);
+	colors[ImGuiCol_Separator] = ImVec4(0.43f, 0.43f, 0.50f, 0.50f);
+	colors[ImGuiCol_SeparatorHovered] = ImVec4(0.10f, 0.40f, 0.75f, 0.78f);
+	colors[ImGuiCol_SeparatorActive] = ImVec4(0.10f, 0.40f, 0.75f, 1.00f);
+	colors[ImGuiCol_ResizeGrip] = ImVec4(0.26f, 0.59f, 0.98f, 0.20f);
+	colors[ImGuiCol_ResizeGripHovered] = ImVec4(0.26f, 0.59f, 0.98f, 0.67f);
+	colors[ImGuiCol_ResizeGripActive] = ImVec4(0.26f, 0.59f, 0.98f, 0.95f);
+}
 #pragma endregion

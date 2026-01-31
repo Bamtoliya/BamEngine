@@ -50,7 +50,7 @@ add_custom_target(RunReflectionGenerator ALL
 
 add_dependencies(Engine RunReflectionGenerator)
 
-set_target_properties(Engine PROPERTIES UNITY_BUILD ON)
+#set_target_properties(Engine PROPERTIES UNITY_BUILD ON)
 
 target_compile_definitions(Engine PRIVATE ENGINE_EXPORTS)
 

@@ -51,29 +51,35 @@ public:
 
 #pragma region Component Management
 public:
-	EResult AddComponent(Component* component);
-	EResult AddComponent(Component* component, const wstring& tag);
 	EResult RemoveComponent(const wstring& tag);
 	EResult RemoveComponent(Component* component);
 
 	template<typename T>
-	EResult AddComponent(void* arg = nullptr)
+	T* AddComponent(void* arg = nullptr)
 	{
-		Component* component = ComponentRegistry::Get().Create<T>(arg);
+		T* component = ComponentRegistry::Get().Create<T>(arg);
 		if (!component)
-			return EResult::Fail;
+			return nullptr;
 
-		return AddComponent(component);
+		AttachComponent(component);
+		Safe_Release(component);
+
+		return component;
 	}
-		
-	EResult AddComponent(const wstring& componentTag, void* arg = nullptr)
+	
+	Component* AddComponent(const wstring& componentTag, void* arg = nullptr)
 	{
 		Component* component = ComponentRegistry::Get().Create(componentTag, arg);
 		if (!component)
-			return EResult::Fail;
+			return nullptr;
 
-		return AddComponent(component);
+		AttachComponent(component);
+		Safe_Release(component);
+
+		return component;
 	}
+
+	EResult AttachComponent(Component* component);
 
 	template<typename T>
 	T* GetComponent()
@@ -115,6 +121,7 @@ public:
 		return components;
 	}
 	Component* GetComponent(const wstring& tag);
+	vector<Component*> GetAllComponents() const { return m_Components; }
 #pragma endregion
 
 #pragma region Parent
@@ -130,8 +137,10 @@ public:
 
 #pragma region Child Management	
 public:
+	vector<GameObject*> GetAllChilds() const { return m_Childs; }
 	EResult AddChild(GameObject* child);
 	EResult RemoveChild();
+	EResult RemoveChild(GameObject* child);
 #pragma endregion
 
 #pragma region Tag Management
@@ -166,14 +175,19 @@ public:
 	}
 #pragma endregion
 
+#pragma region Layer Management
+public:
+	uint32 GetLayerIndex() const { return m_LayerIndex; }
+	void SetLayerIndex(uint32 layerIndex);
+#pragma endregion
+
+
 
 #pragma region Variables
 protected:
 
-	PROPERTY()
 	GameObject* m_Parent = { nullptr };
 
-	PROPERTY()
 	vector<GameObject*> m_Childs = {};
 
 	PROPERTY()
@@ -190,6 +204,9 @@ protected:
 
 	PROPERTY()
 	EObjectFlag m_Flags = { EObjectFlag::Default };
+
+	PROPERTY()
+	uint32 m_LayerIndex = { static_cast<uint32>(-1) };
 #pragma endregion
 
 };

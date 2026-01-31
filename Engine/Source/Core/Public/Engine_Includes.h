@@ -21,6 +21,8 @@ using namespace std;
 
 #pragma region ThirdParty Library
 // 2. Third Party Library (변경 빈도가 가장 낮음)
+#include "imgui.h"
+
 // fmt
 #include <fmt/core.h>
 #include <fmt/color.h>
@@ -62,9 +64,9 @@ using namespace Engine;
 #include <stdlib.h>
 #include <crtdbg.h>
 
-//#ifndef DBG_NEW 
-//#define DBG_NEW new ( _NORMAL_BLOCK , __FILE__ , __LINE__ ) 
-//#define new DBG_NEW 
-//#endif
+#ifndef DBG_NEW 
+#define DBG_NEW new ( _NORMAL_BLOCK , __FILE__ , __LINE__ ) 
+#define new DBG_NEW 
+#endif
 
 #endif

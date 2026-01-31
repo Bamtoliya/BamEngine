@@ -56,13 +56,12 @@ END_REFLECT()
 
 // Class: GameObject
 BEGIN_REFLECT(GameObject)
-    REFLECT_PROPERTY(m_Parent, Engine::EPropertyType::Object, "GameObject")
-    REFLECT_VECTOR(m_Childs, vector<GameObject*>, GameObject*, "GameObject*")
     REFLECT_VECTOR(m_Components, vector<Component*>, Component*, "Component*")
     REFLECT_SET(m_TagSet, unordered_set<wstring>, wstring, "wstring")
     REFLECT_PROPERTY(m_Name, Engine::EPropertyType::String, "wstring")
     REFLECT_PROPERTY(m_ID, Engine::EPropertyType::UInt64, "uint64")
     REFLECT_BITFLAG(m_Flags, Engine::EPropertyType::BitFlag, "EObjectFlag")
+    REFLECT_PROPERTY(m_LayerIndex, Engine::EPropertyType::UInt32, "uint32")
 END_REFLECT()
 
 }

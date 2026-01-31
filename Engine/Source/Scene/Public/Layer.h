@@ -13,20 +13,20 @@ enum class ELayerFlags : uint8
 };
 
 ENABLE_BITMASK_OPERATORS(ELayerFlags)
+
+#pragma region Struct
+struct tagLayerCreateDesc
+{
+	uint32 index = 0;
+	wstring name = L"Layer";
+};
+#pragma endregion
  
 class ENGINE_API Layer : public Base
 {
-#pragma region Struct
-public:
-	typedef struct tagLayerCreateArg
-	{
-		uint32 layerIndex = 0;
-		wstring layerName = L"Layer";
-	} LAYERDESC;
-#pragma endregion
-
 #pragma region Constructor&Destructor
 protected:
+	using DESC = tagLayerCreateDesc;
 	Layer() {}
 	virtual ~Layer() {}
 	EResult Initialize(void* arg = nullptr);
@@ -44,11 +44,11 @@ public:
 
 #pragma region Layer Management
 public:
-	uint32 GetLayerIndex() const { return m_LayerIndex; }
-	wstring GetLayerName() const { return m_LayerName; }
+	uint32 GetIndex() const { return m_Index; }
+	wstring GetName() const { return m_Name; }
 public:
-	void SetLayerIndex(uint32 index) { m_LayerIndex = index; }
-	void SetLayerName(const wstring& name) { m_LayerName = name; }
+	void SetIndex(uint32 index);
+	void SetName(const wstring& name) { m_Name = name; }
 #pragma endregion
 
 #pragma region Object Management
@@ -56,10 +56,10 @@ public:
 	EResult AddGameObject(class GameObject* gameObject);
 	EResult RemoveGameObject(class GameObject* gameObject);
 public:
-	class GameObject* FindGameObjectByID(uint64 id) const;
-	class GameObject* FindGameObjectByName(const wstring& name) const;
+	class GameObject* FindGameObject(uint64 id) const;
+	class GameObject* FindGameObject(const wstring& name) const;
 public:
-	vector<class GameObject*> GetAllGameObjects() const;
+	vector<class GameObject*> GetAllGameObjects() const { return m_GameObjects; }
 	vector<class GameObject*> FindGameObjectsByTag(const wstring& tag) const;
 #pragma endregion
 
@@ -78,8 +78,8 @@ public:
 
 #pragma region Variable
 protected:
-	uint32 m_LayerIndex = { 0 };
-	wstring m_LayerName = L"";
+	uint32 m_Index = { 0 };
+	wstring m_Name = L"Layer";
 	ELayerFlags m_Flags = ELayerFlags::Default;
 	vector<class GameObject*> m_GameObjects;
 #pragma endregion

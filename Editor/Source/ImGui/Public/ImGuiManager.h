@@ -2,6 +2,10 @@
 #include "Base.h"
 #include <SDL3/SDL.h>
 
+#include "HierarchyPanel.h"
+#include "InspectorPanel.h"
+#include "ToolBar.h"
+
 BEGIN(Editor)
 
 struct tagImGuiManagerDesc
@@ -28,14 +32,29 @@ public:
 	void End();
 	void ProcessEvent(const SDL_Event* event);
 	void Draw();
-
+#pragma region DrawUI
 private:
-	void ToolBar();
 	void MainDockspace();
+#pragma endregion
+
+#pragma region Style
+private:
+	void SetCustomStyle();
+#pragma endregion
+
 #pragma region Variables
 private:
 	SDL_Window* m_Window = { nullptr };
 	class RHI* m_RHI = { nullptr };
+#pragma region ImGui
+private:
+	ToolBar m_ToolBar;
+	HierarchyPanel m_HierarchyPanel;
+	InspectorPanel m_InspectorPanel;
+#pragma endregion
+
+private:
+	class GameObject* m_SelectedObject = { nullptr };
 #pragma endregion
 
 

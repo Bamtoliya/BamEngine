@@ -2,7 +2,7 @@
 
 #include "GameObject.h"
 
-static uint64 g_GameObjectIDCounter = 0;
+static uint64 g_GameObjectIDCounter = 1;
 
 #pragma region Constructor&Destructor
 EResult GameObject::Initialize(void* arg)
@@ -29,6 +29,7 @@ GameObject* GameObject::Create(void* arg)
 GameObject* GameObject::Clone(void* arg)
 {
 	GameObject* instance = new GameObject(*this);
+	instance->m_Components.clear();
 	if (IsFailure(instance->Initialize(arg)))
 	{
 		Safe_Release(instance);
@@ -38,13 +39,26 @@ GameObject* GameObject::Clone(void* arg)
 	for (Component* comp : m_Components)
 	{
 		Component* clonedComp = comp->Clone(instance, arg);
-		if (IsFailure(instance->AddComponent(clonedComp)))
+		if (IsFailure(instance->AttachComponent(clonedComp)))
 		{
 			Safe_Release(clonedComp);
 			Safe_Release(instance);
 			return nullptr;
 		}
 		Safe_Release(clonedComp);
+	}
+
+	for (auto& child : m_Childs)
+	{
+		GameObject* clonedChild = child->Clone(arg);
+		if (IsFailure(instance->AddChild(clonedChild)))
+		{
+			Safe_Release(clonedChild);
+			Safe_Release(instance);
+			return nullptr;
+		}
+		Safe_Release(clonedChild);
+		clonedChild->SetParent(instance);
 	}
 
 	return instance;
@@ -54,6 +68,7 @@ void GameObject::Free()
 {
 	RELEASE_VECTOR(m_Components);
 	RELEASE_VECTOR(m_Childs);
+	m_ID = -1;
 }
 
 #pragma endregion
@@ -87,22 +102,11 @@ void GameObject::LateUpdate(f32 dt)
 
 #pragma region Component Management
 
-EResult GameObject::AddComponent(Component* component)
+EResult GameObject::AttachComponent(Component* component)
 {
 	if (!component)
 		return EResult::Fail;
 	component->SetOwner(this);
-	Safe_AddRef(component);
-	m_Components.push_back(component);
-	return EResult::Success;
-}
-
-EResult GameObject::AddComponent(Component* component, const wstring& tag)
-{
-	if (!component)
-		return EResult::Fail;
-	component->SetOwner(this);
-	component->SetTag(tag);
 	Safe_AddRef(component);
 	m_Components.push_back(component);
 	return EResult::Success;
@@ -167,6 +171,18 @@ EResult GameObject::RemoveChild()
 	m_Childs.pop_back();
 	return EResult::Success;
 }
+EResult GameObject::RemoveChild(GameObject* child)
+{
+	if (!child)
+		return EResult::Fail;
+	auto it = std::find(m_Childs.begin(), m_Childs.end(), child);
+	if (it == m_Childs.end())
+		return EResult::Fail;
+	(*it)->Free();
+	Safe_Release(*it);
+	m_Childs.erase(it);
+	return EResult::Success;
+}
 #pragma endregion
 
 #pragma region Tag Management
@@ -190,3 +206,13 @@ bool GameObject::HasTag(const wstring& tag) const
 }
 #pragma endregion
 
+#pragma region Layer Management
+void GameObject::SetLayerIndex(uint32 layerIndex)
+{
+	m_LayerIndex = layerIndex;
+	for(auto& child : m_Childs)
+	{
+		child->SetLayerIndex(layerIndex);
+	}
+}
+#pragma endregion

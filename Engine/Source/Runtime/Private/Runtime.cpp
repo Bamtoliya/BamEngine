@@ -18,6 +18,11 @@ EResult Runtime::Initialize(void* arg)
 	RUNTIMEDESC* pRuntimeDesc = reinterpret_cast<RUNTIMEDESC*>(arg);
 	Renderer::RENDERERDESC RendererDesc = pRuntimeDesc->RendererDesc;
 
+	if (!ReflectionRegistry::Create()) return EResult::Fail;
+
+	m_ComponentRegistry = ComponentRegistry::Create();
+	if (!m_ComponentRegistry) return EResult::Fail;
+
 	m_TimeManager = TimeManager::Create();
 	if (!m_TimeManager) return EResult::Fail;
 
@@ -35,11 +40,6 @@ EResult Runtime::Initialize(void* arg)
 	if (!m_LayerManager) return EResult::Fail;
 	m_SceneManager = SceneManager::Create();
 	if (!m_SceneManager) return EResult::Fail;
-
-	m_ComponentRegistry = ComponentRegistry::Create();
-	if (!m_ComponentRegistry) return EResult::Fail;
-
-
 
 #pragma region Test
 	{
@@ -85,15 +85,13 @@ EResult Runtime::Initialize(void* arg)
 
 		// 3. GameObject 및 MeshRenderer 생성
 		m_TestObject = GameObject::Create();
-		MeshRenderer* meshRenderer = m_ComponentRegistry->Create<MeshRenderer>(); // Registry 통해 생성
+		MeshRenderer* meshRenderer = m_TestObject->AddComponent<MeshRenderer>(); // Registry 통해 생성
 		meshRenderer->SetMesh(quadMesh);
 		meshRenderer->SetRenderPassID(0);
 
 		// Mesh는 Renderer가 내부적으로 RefCount를 관리하지 않는다면(현재 구조상) 
 		// MeshRenderer가 소유하거나 별도로 관리해야 함. 여기서는 MeshRenderer에 넘긴 후 Release(소유권 이전 가정)
 		Safe_Release(quadMesh);
-
-		m_TestObject->AddComponent(meshRenderer);
 	}
 #pragma endregion
 
@@ -119,6 +117,7 @@ void Runtime::Free()
 	SceneManager::Destroy();
 
 	ComponentRegistry::Destroy();
+	ReflectionRegistry::Destroy();
 }
 #pragma endregion
 

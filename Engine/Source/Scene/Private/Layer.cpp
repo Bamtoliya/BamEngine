@@ -6,12 +6,12 @@
 #pragma region Constructor&Destructor
 EResult Layer::Initialize(void* arg)
 {
-	LAYERDESC* layerDesc = reinterpret_cast<LAYERDESC*>(arg);
-	if (layerDesc)
-	{
-		m_LayerIndex = layerDesc->layerIndex;
-		m_LayerName = layerDesc->layerName;
-	}
+    if (arg)
+    {
+        CAST_DESC
+		m_Index = desc->index;
+		m_Name = desc->name;
+    }
     return EResult::Success;
 }
 
@@ -61,6 +61,17 @@ void Layer::LateUpdate(f32 dt)
 }
 #pragma endregion
 
+#pragma region Layer Management
+void Layer::SetIndex(uint32 index)
+{
+    m_Index = index;
+    for(auto& gameObject : m_GameObjects)
+    {
+		gameObject->SetLayerIndex(index);
+	}
+}
+#pragma endregion
+
 
 #pragma region Object Management
 EResult Layer::AddGameObject(GameObject* gameObject)
@@ -69,6 +80,7 @@ EResult Layer::AddGameObject(GameObject* gameObject)
         return EResult::Fail;
     Safe_AddRef(gameObject);
     m_GameObjects.push_back(gameObject);
+	gameObject->SetLayerIndex(m_Index);
     return EResult::Success;
 }
 
@@ -86,7 +98,7 @@ EResult Layer::RemoveGameObject(GameObject* gameObject)
     return EResult::Success;
 }
 
-GameObject* Layer::FindGameObjectByID(uint64 id) const
+GameObject* Layer::FindGameObject(uint64 id) const
 {
     for (GameObject* gameObject : m_GameObjects)
     {
@@ -96,7 +108,7 @@ GameObject* Layer::FindGameObjectByID(uint64 id) const
     return nullptr;
 }
 
-GameObject* Layer::FindGameObjectByName(const wstring& name) const
+GameObject* Layer::FindGameObject(const wstring& name) const
 {
     for (GameObject* gameObject : m_GameObjects)
     {
@@ -104,11 +116,6 @@ GameObject* Layer::FindGameObjectByName(const wstring& name) const
             return gameObject;
     }
     return nullptr;
-}
-
-vector<class GameObject*> Layer::GetAllGameObjects() const
-{
-    return m_GameObjects;
 }
 
 vector<class GameObject*> Layer::FindGameObjectsByTag(const wstring& tag) const

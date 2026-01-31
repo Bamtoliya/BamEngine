@@ -45,34 +45,34 @@ private: \
 #define BEGIN_REFLECT(ClassName) \
 	void ClassName::RegisterProperties(Engine::TypeInfo& typeInfo) {
 
-#define REFLECT_PROPERTY(VarName, TypeEnum, TypeName) \
-	typeInfo.AddProperty(Engine::PropertyInfo(#VarName, TypeName, TypeEnum, offsetof(ThisClass, VarName)));
+#define REFLECT_PROPERTY(VarName, TypeEnum, TypeName, ...) \
+	typeInfo.AddProperty(Engine::PropertyInfo(#VarName, TypeName, TypeEnum, offsetof(ThisClass, VarName), ##__VA_ARGS__));
 
-#define REFLECT_BITFLAG(VarName, TypeEnum, TypeName) \
-	typeInfo.AddProperty(Engine::PropertyInfo(#VarName, TypeName, TypeEnum, offsetof(ThisClass, VarName)));
+#define REFLECT_BITFLAG(VarName, TypeEnum, TypeName, ...) \
+	typeInfo.AddProperty(Engine::PropertyInfo(#VarName, TypeName, TypeEnum, offsetof(ThisClass, VarName), ##__VA_ARGS__));
 
-#define REFLECT_VECTOR(VarName, FullType, InnerType, TypeName) \
+#define REFLECT_VECTOR(VarName, FullType, InnerType, TypeName, ...) \
 	{ \
 		static Engine::ContainerAccessor acc = Engine::LinearContainerAccessor<FullType, InnerType>::Get(); \
-		typeInfo.AddProperty(Engine::PropertyInfo(#VarName, TypeName, Engine::EPropertyType::List, offsetof(ThisClass, VarName), &acc)); \
+		typeInfo.AddProperty(Engine::PropertyInfo(#VarName, TypeName, Engine::EPropertyType::List, offsetof(ThisClass, VarName), &acc), ##__VA_ARGS__); \
 	}
 
-#define REFLECT_LIST(VarName, InnerType, TypeName) \
+#define REFLECT_LIST(VarName, InnerType, TypeName, ...) \
 	{ \
 		static Engine::ContainerAccessor acc = Engine::ListAccessor<InnerType>::Get(); \
-		typeInfo.AddProperty(Engine::PropertyInfo(#VarName, TypeName, Engine::EPropertyType::List, offsetof(ThisClass, VarName), &acc)); \
+		typeInfo.AddProperty(Engine::PropertyInfo(#VarName, TypeName, Engine::EPropertyType::List, offsetof(ThisClass, VarName), &acc), ##__VA_ARGS__); \
 	}
 
-#define REFLECT_SET(VarName, FullType, InnerType, TypeName) \
+#define REFLECT_SET(VarName, FullType, InnerType, TypeName, ...) \
 	{ \
 		static Engine::ContainerAccessor acc = Engine::SetAccessor<FullType, InnerType>::Get(); \
-		typeInfo.AddProperty(Engine::PropertyInfo(#VarName, TypeName, Engine::EPropertyType::Set, offsetof(ThisClass, VarName), &acc)); \
+		typeInfo.AddProperty(Engine::PropertyInfo(#VarName, TypeName, Engine::EPropertyType::Set, offsetof(ThisClass, VarName), &acc), ##__VA_ARGS__); \
 	}
 
-#define REFLECT_MAP(VarName, FullType, KeyType, ValueType, TypeName) \
+#define REFLECT_MAP(VarName, FullType, KeyType, ValueType, TypeName, ...) \
 	{ \
 		static Engine::ContainerAccessor acc = Engine::MapAccessor<FullType, KeyType, ValueType>::Get(); \
-		typeInfo.AddProperty(Engine::PropertyInfo(#VarName, TypeName, Engine::EPropertyType::Map, offsetof(ThisClass, VarName), &acc)); \
+		typeInfo.AddProperty(Engine::PropertyInfo(#VarName, TypeName, Engine::EPropertyType::Map, offsetof(ThisClass, VarName), &acc), ##__VA_ARGS__); \
 	}
 
 #define END_REFLECT() }

@@ -49,11 +49,12 @@ namespace Engine
 
 	inline wstring StrToWStr(const string& str)
 	{
-		return filesystem::path(str).wstring();
+		return std::filesystem::path((const char8_t*)str.c_str()).wstring();
 	}
 
 	inline string WStrToStr(const wstring& wstr)
 	{
-		return filesystem::path(wstr).string();
+		auto u8str = std::filesystem::path(wstr).u8string();
+		return string(u8str.begin(), u8str.end());
 	}
 }
