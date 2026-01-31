@@ -8,7 +8,7 @@ OUTPUT_FILE = os.path.abspath("Engine/Source/Core/Private/Reflection/Reflection.
 
 # 2. 정규식
 CLASS_STRUCT_PATTERN = re.compile(r'REFLECT_(CLASS|STRUCT)\s*\(\s*(\w+)\s*\)')
-PROPERTY_PATTERN = re.compile(r'PROPERTY\s*\(.*?\)\s+([a-zA-Z0-9_:<, >\*&]+)\s+(\w+)(?:[^;]*?);', re.DOTALL)
+PROPERTY_PATTERN = re.compile(r'PROPERTY\s*\((.*?)\)\s+([a-zA-Z0-9_:<, >\*&]+)\s+(\w+)(?:[^;]*?);', re.DOTALL)
 
 # 3. 타입 매핑
 TYPE_MAP = {
@@ -128,7 +128,13 @@ def generate_reflection_code():
                         code_block += f"BEGIN_REFLECT({class_name})\n"
                         
                         if properties:
-                            for type_str, var_name in properties:
+                            for attr_str, type_str, var_name in properties:
+
+                                attributes = attr_str.strip().replace('\n', ' ')
+
+                                if attributes:
+                                    attributes = f", {attributes}"
+
                                 full_type = re.sub(r'\s+', ' ', type_str.strip())
                                 raw_type = full_type.replace("std::", "").replace("Engine::", "").strip()
                                 
@@ -137,24 +143,24 @@ def generate_reflection_code():
                                     if raw_type.startswith(("map", "unordered_map")):
                                         key_t = args[0] if len(args)>0 else "void"
                                         val_t = args[1] if len(args)>1 else "void"
-                                        code_block += f'    REFLECT_MAP({var_name}, {full_type}, {key_t}, {val_t}, "{val_t}")\n'
+                                        code_block += f'    REFLECT_MAP({var_name}, {full_type}, {key_t}, {val_t}, "{val_t}"{attributes})\n'
                                     elif raw_type.startswith("list"):
                                         inner_t = args[0] if args else "void"
-                                        code_block += f'    REFLECT_LIST({var_name}, {inner_t}, "{inner_t}")\n'
+                                        code_block += f'    REFLECT_LIST({var_name}, {inner_t}, "{inner_t}"{attributes})\n'
                                     elif raw_type.startswith(("set", "unordered_set")):
                                         inner_t = args[0] if args else "void"
-                                        code_block += f'    REFLECT_SET({var_name}, {full_type}, {inner_t}, "{inner_t}")\n'
+                                        code_block += f'    REFLECT_SET({var_name}, {full_type}, {inner_t}, "{inner_t}"{attributes})\n'
                                     else:
                                         inner_t = args[0] if args else "void"
-                                        code_block += f'    REFLECT_VECTOR({var_name}, {full_type}, {inner_t}, "{inner_t}")\n'
+                                        code_block += f'    REFLECT_VECTOR({var_name}, {full_type}, {inner_t}, "{inner_t}"{attributes})\n'
                                 else:
                                     # 인자 개수 수정 적용
                                     prop_type, type_name = get_property_type(raw_type, var_name)
                                     if prop_type == "BitFlag":
-                                        code_block += f'    REFLECT_BITFLAG({var_name}, Engine::EPropertyType::{prop_type}, "{type_name}")\n'
+                                        code_block += f'    REFLECT_BITFLAG({var_name}, Engine::EPropertyType::{prop_type}, "{type_name}"{attributes})\n'
                                     else:
-                                        code_block += f'    REFLECT_PROPERTY({var_name}, Engine::EPropertyType::{prop_type}, "{type_name}")\n'
-                        
+                                        code_block += f'    REFLECT_PROPERTY({var_name}, Engine::EPropertyType::{prop_type}, "{type_name}"{attributes})\n'
+
                         code_block += "END_REFLECT()\n"
                         generated_body += code_block
                         parsed_files.append(f"{class_name}")
