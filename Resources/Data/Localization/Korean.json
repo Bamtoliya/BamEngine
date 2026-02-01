@@ -8,6 +8,7 @@
         "PROP_WORLDMATRIX": "월드 매트릭스",
         "PROP_BITFLAG": "비트 플래그",
         "PROP_INFORMATION": "정보",
+        "Hirarchy_AddGameObject": "게임 오브젝트 추가+",
         "Transform.Position": "위치",
         "Transform.Rotation": "회전",
         "Transform.Scale": "크기",

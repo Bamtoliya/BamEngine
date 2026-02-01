@@ -8,6 +8,7 @@
         "PROP_WORLDMATRIX": "World Matrix",
         "PROP_BITFLAG": "BitFlag",
         "PROP_INFORMATION": "Information",
+        "Hirarchy_AddGameObject": "Add GameObject",
         "Transform.Position": "Position",
         "Transform.Rotation": "Rotation",
         "Transform.Scale": "Scale",
