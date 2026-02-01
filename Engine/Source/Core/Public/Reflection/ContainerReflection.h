@@ -116,11 +116,30 @@ struct SetAccessor
 				func(const_cast<void*>(static_cast<const void*>(&element)), nullptr);
 			}
 		};
-		accessor.Add = [](void* container)
+		accessor.Add = [](void* container, const void* valuePtr)
+		{
+			auto* cont = static_cast<ContainerType*>(container);
+			const ElementType* value = static_cast<const ElementType*>(valuePtr);
+			cont->insert(*value);
+		};
+		accessor.Remove = [](void* container, const void* valuePtr)
+		{
+			auto* cont = static_cast<ContainerType*>(container);
+			const ElementType* value = static_cast<const ElementType*>(valuePtr);
+			cont->erase(*value);
+			};
+
+		accessor.GetElements = [](void* container) -> vector<void*>
 		{
 			ContainerType* cont = static_cast<ContainerType*>(container);
-			cont->emplace();
-		};
+			vector<void*> elements;
+			elements.reserve(cont->size());
+			for (auto& element : *cont)
+			{
+				elements.push_back(const_cast<void*>(static_cast<const void*>(&element)));
+			}
+			return elements;
+			};
 		return accessor;
 
 	}

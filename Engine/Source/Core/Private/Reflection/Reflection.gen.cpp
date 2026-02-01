@@ -13,6 +13,38 @@
 
 namespace Engine {
 
+// [Explicit Initialization Function for Enums]
+void InitEnumReflection()
+{
+// Enum: ETransformFlag
+BEGIN_ENUM_REFLECT(ETransformFlag)
+    REFLECT_ENUM_ENTRY(ETransformFlag, None)
+    REFLECT_ENUM_ENTRY(ETransformFlag, Dirty)
+    REFLECT_ENUM_ENTRY(ETransformFlag, InheritPosition)
+    REFLECT_ENUM_ENTRY(ETransformFlag, InheritRotation)
+    REFLECT_ENUM_ENTRY(ETransformFlag, InheritScale)
+    REFLECT_ENUM_ENTRY(ETransformFlag, LockPosition)
+    REFLECT_ENUM_ENTRY(ETransformFlag, LockRotation)
+    REFLECT_ENUM_ENTRY(ETransformFlag, LockScale)
+    REFLECT_ENUM_ENTRY(ETransformFlag, Static)
+    REFLECT_ENUM_ENTRY(ETransformFlag, AllInherit)
+    REFLECT_ENUM_ENTRY(ETransformFlag, AllLocked)
+    REFLECT_ENUM_ENTRY(ETransformFlag, Default)
+END_ENUM_REFLECT(ETransformFlag)
+// Enum: EObjectFlag
+BEGIN_ENUM_REFLECT(EObjectFlag)
+    REFLECT_ENUM_ENTRY(EObjectFlag, None)
+    REFLECT_ENUM_ENTRY(EObjectFlag, Active)
+    REFLECT_ENUM_ENTRY(EObjectFlag, Visible)
+    REFLECT_ENUM_ENTRY(EObjectFlag, Paused)
+    REFLECT_ENUM_ENTRY(EObjectFlag, Dead)
+    REFLECT_ENUM_ENTRY(EObjectFlag, Default)
+END_ENUM_REFLECT(EObjectFlag)
+
+}
+
+// [Class/Struct Property Registration]
+
 // Struct: tagComponentDesc
 BEGIN_REFLECT(tagComponentDesc)
     REFLECT_PROPERTY(Active, Engine::EPropertyType::Bool, "bool")
@@ -39,9 +71,9 @@ BEGIN_REFLECT(Transform)
     REFLECT_PROPERTY(m_Position, Engine::EPropertyType::Vector3, "vec3")
     REFLECT_PROPERTY(m_Rotation, Engine::EPropertyType::Quaternion, "quat")
     REFLECT_PROPERTY(m_Scale, Engine::EPropertyType::Vector3, "vec3")
-    REFLECT_PROPERTY(m_LocalMatrix, Engine::EPropertyType::Struct, "mat4")
-    REFLECT_PROPERTY(m_WorldMatrix, Engine::EPropertyType::Struct, "mat4")
-    REFLECT_BITFLAG(m_Flags, Engine::EPropertyType::BitFlag, "ETransformFlag")
+    REFLECT_PROPERTY(m_LocalMatrix, Engine::EPropertyType::Matrix4, "mat4", "PROP_LOCALMATRIX",READONLY)
+    REFLECT_PROPERTY(m_WorldMatrix, Engine::EPropertyType::Matrix4, "mat4", "PROP_WORLDMATRIX", READONLY)
+    REFLECT_BITFLAG(m_Flags, Engine::EPropertyType::BitFlag, "ETransformFlag", "PROP_BITFLAG")
 END_REFLECT()
 
 // Struct: Vertex
@@ -56,11 +88,11 @@ END_REFLECT()
 
 // Class: GameObject
 BEGIN_REFLECT(GameObject)
-    REFLECT_SET(m_TagSet, unordered_set<wstring>, wstring, "wstring")
+    REFLECT_PROPERTY(m_ID, Engine::EPropertyType::UInt64, "uint64", CATEGORY("PROP_INFORMATION"), READONLY)
+    REFLECT_PROPERTY(m_LayerIndex, Engine::EPropertyType::UInt32, "uint32", CATEGORY("PROP_INFORMATION"), READONLY)
+    REFLECT_SET(m_TagSet, unordered_set<wstring>, wstring, "wstring", "PROP_TAGS")
     REFLECT_PROPERTY(m_Name, Engine::EPropertyType::String, "wstring", "PROP_NAME")
-    REFLECT_PROPERTY(m_ID, Engine::EPropertyType::UInt64, "uint64", READONLY)
-    REFLECT_BITFLAG(m_Flags, Engine::EPropertyType::BitFlag, "EObjectFlag")
-    REFLECT_PROPERTY(m_LayerIndex, Engine::EPropertyType::UInt32, "uint32", READONLY)
+    REFLECT_BITFLAG(m_Flags, Engine::EPropertyType::BitFlag, "EObjectFlag", "PROP_BITFLAG")
 END_REFLECT()
 
 }

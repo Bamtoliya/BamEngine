@@ -19,6 +19,7 @@ EResult Runtime::Initialize(void* arg)
 	Renderer::RENDERERDESC RendererDesc = pRuntimeDesc->RendererDesc;
 
 	if (!ReflectionRegistry::Create()) return EResult::Fail;
+	InitEnumReflection();
 
 	m_ComponentRegistry = ComponentRegistry::Create();
 	if (!m_ComponentRegistry) return EResult::Fail;

@@ -5,6 +5,7 @@
 #include "ReflectionMacro.h"
 #include "ComponentRegistry.h"
 
+ENUM()
 enum class EObjectFlag : uint8
 {
 	None = 0,
@@ -12,7 +13,7 @@ enum class EObjectFlag : uint8
 	Visible = 1 << 1,
 	Paused = 1 << 2,
 	Dead = 1 << 3,
-	Default = Active | Visible
+	Default = Active | Visible,
 };
 
 ENABLE_BITMASK_OPERATORS(EObjectFlag)
@@ -192,20 +193,20 @@ protected:
 
 	vector<Component*> m_Components = {};
 
-	PROPERTY()
+	PROPERTY(CATEGORY("PROP_INFORMATION"), READONLY)
+	uint64 m_ID = { 0 };
+
+	PROPERTY(CATEGORY("PROP_INFORMATION"), READONLY)
+	uint32 m_LayerIndex = { static_cast<uint32>(-1) };
+
+	PROPERTY("PROP_TAGS")
 	unordered_set<wstring> m_TagSet = {};
 
 	PROPERTY("PROP_NAME")
 	wstring m_Name = { L"GameObject" };
 
-	PROPERTY(READONLY)
-	uint64 m_ID = { 0 };
-
-	PROPERTY()
+	PROPERTY("PROP_BITFLAG")
 	EObjectFlag m_Flags = { EObjectFlag::Default };
-
-	PROPERTY(READONLY)
-	uint32 m_LayerIndex = { static_cast<uint32>(-1) };
 #pragma endregion
 
 };

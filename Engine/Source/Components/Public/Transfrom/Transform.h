@@ -10,6 +10,7 @@ BEGIN(Engine)
 enum class ESpace { Local, World };
 enum class EMobility { Static, Movable };
 
+ENUM()
 enum class ETransformFlag : uint16
 {
 	None = 0,
@@ -150,13 +151,13 @@ private:
 	PROPERTY()
 	vec3 m_Scale = vec3(1.0f);
 
-	PROPERTY()
+	PROPERTY("PROP_LOCALMATRIX",READONLY)
 	mat4 m_LocalMatrix = glm::identity<mat4>();
 
-	PROPERTY()
+	PROPERTY("PROP_WORLDMATRIX", READONLY)
 	mat4 m_WorldMatrix = glm::identity<mat4>();
 
-	PROPERTY()
+	PROPERTY("PROP_BITFLAG")
 	ETransformFlag m_Flags = ETransformFlag::Default;
 #pragma endregion
 

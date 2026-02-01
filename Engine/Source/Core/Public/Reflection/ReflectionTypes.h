@@ -32,11 +32,25 @@ enum class EPropertyType : uint8
 struct ContainerAccessor
 {
 	function<size_t(const void*)> GetSize;
+	function<void(void*)> Clear;
 	function<void(void*, function<void(void*, void*)>)> ForEach;
-	function<void(void*)> Add;
+	function<void(void*, const void*)> Add;
+	function<void(void*, const void*)> Remove;
 	function<void* (void*, size_t)> GetElement;
+	function<vector<void*>(void*)> GetElements;
 	function<void(void*, size_t)> Resize;
 	function<void(void*)> AddPair;
+
+	struct Iterator
+	{
+		void* Ptr;
+	};
+
+	function<void* (const void*)> Begin;
+	function<void* (const void*)> End;
+	function<void(void*)> Next;
+	function<void* (void*)> GetVal;
+	function<void(void*)> DestroyIter;
 };
 
 struct PropertyInfo
@@ -45,31 +59,78 @@ struct PropertyInfo
 	string TypeName;
 	EPropertyType Type;
 	size_t Offset;
+	size_t Size;
+
+	string InnerTypeName;
+	string KeyTypeName;
 	ContainerAccessor* Accessor = nullptr;
 
 	PropertyMetadata Metadata;
 
-	PropertyInfo(const string& name, const string& typeName, EPropertyType type, size_t offset, ContainerAccessor* accessor = nullptr)
-		: Name(name), TypeName(typeName), Type(type), Offset(offset), Accessor(accessor) {}
+	PropertyInfo(const string& name, const string& typeName, EPropertyType type, size_t offset, ContainerAccessor* accessor = nullptr, const string& innerTypeName = "", const string& keyTypeName = "", void* arg = nullptr)
+		: Name(name), TypeName(typeName), Type(type), Offset(offset), Accessor(accessor), InnerTypeName(innerTypeName), KeyTypeName(keyTypeName) {}
+
+	PropertyInfo(const string& name, const string& typeName, EPropertyType type, size_t offset, size_t size, ContainerAccessor* accessor = nullptr, const string& innerTypeName = "", const string& keyTypeName = "", void* arg = nullptr)
+		: Name(name), TypeName(typeName), Type(type), Offset(offset), Size(size), Accessor(accessor), InnerTypeName(innerTypeName), KeyTypeName(keyTypeName) {}
 
 	void Apply(const Engine::Name& attr){ Metadata.DisplayName = attr.Text; }
 	void Apply(const char* key) { Metadata.DisplayName = key; }
 	void Apply(const Engine::Tooltip& attr) { Metadata.Tooltip = attr.Text; }
-	void Apply(const EUIWidget& attr) { Metadata.WidgetType = attr; }
-	void Apply(const Engine::Range& attr) { Metadata.Min = attr.Min; Metadata.Max = attr.Max; Metadata.WidgetType = EUIWidget::Slider; }
-	void Apply(const Engine::ReadOnly& attr) { Metadata.ReadOnly = attr.Value; }
-	void Apply(const Color& attr) { Metadata.WidgetType = EUIWidget::Color; }
-	void Apply(f32 min, f32 max, f32 speed = 0.1f)
+	void Apply(const Engine::Category& attr) { Metadata.Category = attr.Text; }
+	void Apply(const Engine::Range& attr) { Metadata.Min = attr.Min; Metadata.Max = attr.Max; Metadata.bHasRange = true; Metadata.Speed = attr.Speed; }
+	void Apply(const Engine::ReadOnly& attr) { Metadata.bIsReadOnly = attr.bEnable; }
+	void Apply(const Engine::FilePath& attr) { Metadata.bIsFilePath = true; Metadata.FileFilter = attr.Filter; }
+	void Apply(const Engine::Directory& attr) { Metadata.bIsDirectory = true; }
+	void Apply(const Color& attr) {}
+	void Apply(f32 min, f32 max, f32 speed = 1.f)
 	{
 		Metadata.Min = min;
 		Metadata.Max = max;
 		Metadata.Speed = speed;
-		Metadata.WidgetType = EUIWidget::Drag;
+		Metadata.bHasRange = true;
 	}
 	void Apply(const Flags& attr)
 	{
 		Metadata.BitFlags = attr.Items;
-		Metadata.WidgetType = EUIWidget::BitFlag;
+	}
+	template <typename T, typename... Args, typename = std::enable_if_t<(sizeof...(Args) > 0)>>
+	void Apply(T&& first, Args&&... args)
+	{
+		Apply(std::forward<T>(first));
+		Apply(std::forward<Args>(args)...);
+	}
+	void Apply() {}
+};
+
+struct EnumInfo
+{
+	string Name;
+	unordered_map<string, uint64> Entries;
+	vector<pair<string, uint64>> OrderedEntries;
+	string GetBitFlagsString(uint64 value) const
+	{
+		if (value == 0)
+		{
+			for (const auto& [name, entryVal] : Entries)
+			{
+				if (entryVal == 0) return name; 
+			}
+			return "None";
+		}
+
+		string result;
+		for (const auto& [name, entryVal] : Entries)
+		{
+			if (entryVal == 0) continue;
+
+			if ((value & entryVal) == entryVal)
+			{
+				if (!result.empty()) result += " | ";
+				result += name;
+			}
+		}
+
+		return result.empty() ? std::to_string(value) : result;
 	}
 
 };

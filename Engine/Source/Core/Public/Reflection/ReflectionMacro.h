@@ -6,6 +6,7 @@
 #define PROPERTY(...)
 #define CLASS()
 #define STRUCT()
+#define ENUM(...)
 
 
 #define REFLECT_STRUCT(StructName) \
@@ -46,10 +47,10 @@ private: \
 	void ClassName::RegisterProperties(Engine::TypeInfo& typeInfo) {
 
 #define REFLECT_PROPERTY(VarName, TypeEnum, TypeName, ...) \
-	typeInfo.AddProperty(Engine::PropertyInfo(#VarName, TypeName, TypeEnum, offsetof(ThisClass, VarName)), ##__VA_ARGS__);
+	typeInfo.AddProperty(Engine::PropertyInfo(#VarName, TypeName, TypeEnum, offsetof(ThisClass, VarName), sizeof(ThisClass::VarName)), ##__VA_ARGS__);
 
 #define REFLECT_BITFLAG(VarName, TypeEnum, TypeName, ...) \
-	typeInfo.AddProperty(Engine::PropertyInfo(#VarName, TypeName, TypeEnum, offsetof(ThisClass, VarName)), ##__VA_ARGS__);
+	typeInfo.AddProperty(Engine::PropertyInfo(#VarName, TypeName, TypeEnum, offsetof(ThisClass, VarName), sizeof(ThisClass::VarName)), ##__VA_ARGS__);
 
 #define REFLECT_VECTOR(VarName, FullType, InnerType, TypeName, ...) \
 	{ \
@@ -66,7 +67,7 @@ private: \
 #define REFLECT_SET(VarName, FullType, InnerType, TypeName, ...) \
 	{ \
 		static Engine::ContainerAccessor acc = Engine::SetAccessor<FullType, InnerType>::Get(); \
-		typeInfo.AddProperty(Engine::PropertyInfo(#VarName, TypeName, Engine::EPropertyType::Set, offsetof(ThisClass, VarName), &acc), ##__VA_ARGS__); \
+		typeInfo.AddProperty(Engine::PropertyInfo(#VarName, TypeName, Engine::EPropertyType::Set, offsetof(ThisClass, VarName), &acc, #InnerType), ##__VA_ARGS__); \
 	}
 
 #define REFLECT_MAP(VarName, FullType, KeyType, ValueType, TypeName, ...) \
@@ -77,7 +78,27 @@ private: \
 
 #define END_REFLECT() }
 
+#define BEGIN_ENUM_REFLECT(EnumName) \
+    struct Reflector_##EnumName { \
+        Reflector_##EnumName() { \
+            std::unordered_map<std::string, uint64> entries;
+
+#define REFLECT_ENUM_ENTRY(EnumName, EntryName) \
+            entries[#EntryName] = (uint64)EnumName::EntryName;
+
+#define END_ENUM_REFLECT(EnumName) \
+            Engine::ReflectionRegistry::Get().RegisterEnum(#EnumName, entries); \
+        } \
+    }; \
+    static Reflector_##EnumName global_##EnumName##_reflector;
+
 #define NAME(text) Engine::Name(text)
 #define TOOLTIP(text) Engine::Tooltip(text)
-#define RANGE(min, max) Engine::Range(min, max)
+#define CATEGORY(text) Engine::Category(text)
+#define RANGE(...) Engine::Range({ __VA_ARGS__ })
 #define READONLY Engine::ReadOnly(true)
+#define FILEPATH(filter) Engine::FilePath(filter)
+#define DIRECTORY Engine::Directory()
+#define COLOR(r, g, b, a) Engine::Color(vec4(r, g, b, a))
+#define FLAGS(...) Engine::Flags({ __VA_ARGS__ })
+

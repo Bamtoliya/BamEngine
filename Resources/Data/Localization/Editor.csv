@@ -1,0 +1,12 @@
+﻿Group,Key,English,Korean
+,PROP_NAME,Name,이름
+,PROP_ID,ID,ID
+,PROP_LANGUAGE,Language,언어
+,PROP_TAGS,Tags,태그
+,PROP_LOCALMATRIX,Local Matrix,로컬 매트릭스
+,PROP_WORLDMATRIX,World Matrix,월드 매트릭스
+,PROP_BITFLAG,BitFlag,비트 플래그
+,PROP_INFORMATION,Information,정보
+Transform,Position,Position,위치
+,Rotation,Rotation,회전
+,Scale,Scale,크기

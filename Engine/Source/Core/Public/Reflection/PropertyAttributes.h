@@ -11,6 +11,22 @@ struct Name
 	Name(const wstring& _text) : Text(WStrToStr(_text)) {}
 };
 
+struct Category
+{
+	string Text;
+	Category(const char* _text) : Text(_text) {}
+	Category(const string& _text) : Text(_text) {}
+	Category(const wstring& _text) : Text(WStrToStr(_text)) {}
+};
+
+struct FilePath
+{
+	string Filter;
+	FilePath(const char* _filter = "") : Filter(_filter) {}
+	FilePath(const string& _filter = "") : Filter(_filter) {}
+	FilePath(const wstring& _filter) : Filter(WStrToStr(_filter)) {}
+};
+
 struct Tooltip
 {
 	string Text;
@@ -23,13 +39,15 @@ struct Range
 {
 	f32 Min;
 	f32 Max;
-	Range(f32 _min, f32 _max) : Min(_min), Max(_max) {}
+	f32 Speed;
+	Range(f32 _min, f32 _max) : Min(_min), Max(_max), Speed(1.f) {}
+	Range(f32 _min, f32 _max, f32 _speed = 1.f) : Min(_min), Max(_max), Speed(_speed) {}
 };
 
 struct ReadOnly
 {
-	bool Value;
-	ReadOnly(bool _value = true) : Value(_value) {}
+	bool bEnable;
+	ReadOnly(bool enable = true) : bEnable(enable) {}
 };
 
 struct Color
@@ -56,6 +74,12 @@ struct Flags
 			Items.push_back({WStrToStr(item.first), item.second});
 		}
 	}
+};
+
+
+
+struct Directory
+{
 };
 
 
