@@ -46,7 +46,7 @@ EResult ImGuiManager::Initialize(void* arg)
 
 		// 폰트 로드 (사이즈 18.0f)
 		io.Fonts->AddFontFromFileTTF(fontPath.c_str(), 18.0f, nullptr, ranges.Data);
-		io.Fonts->Build();
+		//io.Fonts->Build();
 	}
 	else
 	{

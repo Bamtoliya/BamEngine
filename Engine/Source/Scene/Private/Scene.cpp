@@ -157,6 +157,24 @@ void Scene::UpdateLayerIndices(uint32 startIndex)
 		m_Layers[i]->SetIndex(i);
 	}
 }
+
+EResult Scene::ReorderLayer(uint32 oldIndex, uint32 newIndex)
+{
+	if (oldIndex == newIndex) return EResult::Success;
+	if (oldIndex >= m_Layers.size() || newIndex >= m_Layers.size())	return EResult::InvalidArgument;
+	Layer* layer = m_Layers[oldIndex];
+	m_Layers.erase(m_Layers.begin() + oldIndex);
+	m_Layers.insert(m_Layers.begin() + newIndex, layer);
+	uint32 startIndex = std::min(oldIndex, newIndex);
+	UpdateLayerIndices(startIndex);
+	return EResult::Success;
+}
+
+void Scene::SetLayerName(uint32 layerIndex, const wstring& name)
+{
+	if (layerIndex < m_Layers.size())
+		m_Layers[layerIndex]->SetName(name);
+}
 #pragma endregion
 
 #pragma region Object Management
@@ -208,4 +226,23 @@ EResult Scene::MoveGameObjectLayer(class GameObject* gameObject, uint32 targetLa
 	return EResult::Success;
 }
 
+#pragma endregion
+
+#pragma region Flag Management
+void Scene::SetActive(bool active)
+{
+	if (active)
+	{
+		AddFlag(m_Flags, ESceneFlags::Active);
+	}
+	else
+	{
+		RemoveFlag(m_Flags, ESceneFlags::Active);
+	}
+
+	for (auto& Layer : m_Layers)
+	{
+		Layer->SetActive(active);
+	}
+}
 #pragma endregion

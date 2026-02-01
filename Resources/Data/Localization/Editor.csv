@@ -7,6 +7,7 @@
 ,PROP_WORLDMATRIX,World Matrix,월드 매트릭스
 ,PROP_BITFLAG,BitFlag,비트 플래그
 ,PROP_INFORMATION,Information,정보
+,Hirarchy_AddGameObject,Add GameObject,게임 오브젝트 추가+
 Transform,Position,Position,위치
 ,Rotation,Rotation,회전
 ,Scale,Scale,크기

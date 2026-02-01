@@ -65,14 +65,18 @@ public:
 
 #pragma region Flag Management
 public:
-	void SetVisible(bool visible) { SetFlag(m_Flags, ELayerFlags::Visible, visible); }
-	void SetActive(bool active) { SetFlag(m_Flags, ELayerFlags::Active, active); }
+	void SetVisible(bool visible);
+	void SetActive(bool active);
+public:
+	void SetAllObjectVisible(bool visible);
+	void SetAllObjectActive(bool active);
 public:
 	bool IsVisible() const { return HasFlag(m_Flags, ELayerFlags::Visible); }
 	bool IsActive()  const { return HasFlag(m_Flags, ELayerFlags::Active); }
 public:
 	ELayerFlags GetFlags() const { return m_Flags; }
 	void SetFlags(ELayerFlags flags) { m_Flags = flags; }
+public:
 #pragma endregion
 
 

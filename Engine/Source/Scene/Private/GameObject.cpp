@@ -206,6 +206,52 @@ bool GameObject::HasTag(const wstring& tag) const
 }
 #pragma endregion
 
+#pragma region Flag Management
+void GameObject::SetVisible(bool visible)
+{
+	if (visible)
+	{
+		AddFlag(m_Flags, EObjectFlag::Visible);
+	}
+	else
+	{
+		RemoveFlag(m_Flags, EObjectFlag::Visible);
+	}
+	for (auto& component : m_Components)
+	{
+		if(RenderComponent* renderComp = dynamic_cast<RenderComponent*>(component))
+		{
+			renderComp->SetActive(visible);
+		}
+	}
+	for (auto& child : m_Childs)
+	{
+		child->SetVisible(visible);
+	}
+}
+void GameObject::SetActive(bool active)
+{
+	if (active)
+	{
+		AddFlag(m_Flags, EObjectFlag::Active);
+	}
+	else
+	{
+		RemoveFlag(m_Flags, EObjectFlag::Active);
+	}
+	for (auto& component : m_Components)
+	{
+		component->SetActive(active);
+	}
+	for (auto& child : m_Childs)
+	{
+		child->SetActive(active);
+	}
+}
+
+#pragma endregion
+
+
 #pragma region Layer Management
 void GameObject::SetLayerIndex(uint32 layerIndex)
 {

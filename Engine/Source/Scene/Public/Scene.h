@@ -9,6 +9,14 @@ struct tagSceneCreateDesc
 	wstring name = L"Scene";
 };
 
+enum class ESceneFlags : uint8
+{
+	None = 0,
+	Active = 1 << 0,
+};
+
+ENABLE_BITMASK_OPERATORS(ESceneFlags)
+
 class ENGINE_API Scene : public Base
 {
 #pragma region Constructor&Destructor
@@ -51,6 +59,9 @@ public:
 	class Layer* FindLayer(uint32 layerIndex) const;
 	class Layer* FindLayer(const wstring& layerName) const;
 
+	EResult ReorderLayer(uint32 oldIndex, uint32 newIndex);
+	void SetLayerName(uint32 layerIndex, const wstring& name);
+
 private:
 	void UpdateLayerIndices(uint32 startIndex);
 #pragma endregion
@@ -66,8 +77,15 @@ public:
 	EResult MoveGameObjectLayer(class GameObject* gameObject, uint32 targetLayerIndex);
 #pragma endregion
 
+#pragma region Flag Mangement
+public:
+	void SetActive(bool active);
+#pragma endregion
+
+
 #pragma region Variable
 protected:
+	ESceneFlags m_Flags = ESceneFlags::Active;
 	wstring m_Name = { L"Scene" };
 	vector<class Layer*> m_Layers;
 #pragma endregion

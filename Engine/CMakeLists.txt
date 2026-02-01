@@ -41,6 +41,15 @@ add_library(Engine SHARED
     ${ENGINE_SOURCES}
 )
 
+# [Hot Reload] Edit and Continue 기능 활성화 (/ZI)
+if(MSVC)
+    # 컴파일 옵션: 디버그 정보를 생성하여 실행 중 수정 가능하게 함 (/ZI)
+    target_compile_options(${PROJECT_NAME} PRIVATE $<$<CONFIG:Debug>:/ZI>)
+    
+    # 링크 옵션: 증분 링크 활성화 (/INCREMENTAL)
+    target_link_options(${PROJECT_NAME} PRIVATE $<$<CONFIG:Debug>:/INCREMENTAL>)
+endif()
+
 add_custom_target(RunReflectionGenerator ALL
     COMMAND ${Python3_EXECUTABLE} "${REFLECTION_SCRIPT}"
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/.."

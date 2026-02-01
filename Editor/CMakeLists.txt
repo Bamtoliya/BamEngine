@@ -20,6 +20,15 @@ add_executable(Editor
     ${EDITOR_SOURCES}
 )
 
+# [Hot Reload] Edit and Continue 기능 활성화 (/ZI)
+if(MSVC)
+    # 컴파일 옵션: 디버그 정보를 생성하여 실행 중 수정 가능하게 함 (/ZI)
+    target_compile_options(${PROJECT_NAME} PRIVATE $<$<CONFIG:Debug>:/ZI>)
+    
+    # 링크 옵션: 증분 링크 활성화 (/INCREMENTAL)
+    target_link_options(${PROJECT_NAME} PRIVATE $<$<CONFIG:Debug>:/INCREMENTAL>)
+endif()
+
 set(EDITOR_PUBLIC_INCLUDE_DIRS "")
 
 # 각 파일의 경로를 검사하여 Public 폴더를 찾습니다.

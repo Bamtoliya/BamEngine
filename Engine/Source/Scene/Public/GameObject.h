@@ -165,15 +165,9 @@ public:
 	bool IsPaused() const { return HasFlag(m_Flags, EObjectFlag::Paused); }
 	bool IsDead() const { return HasFlag(m_Flags, EObjectFlag::Dead); }
 	EResult SetFlags(EObjectFlag flags) { m_Flags = flags; return EResult::Success; }
-
 public:
-	void SetActive(bool active)
-	{
-		if (active)
-			AddFlag(m_Flags, EObjectFlag::Active);
-		else
-			m_Flags &= ~EObjectFlag::Active;
-	}
+	void SetVisible(bool visible);
+	void SetActive(bool active);
 #pragma endregion
 
 #pragma region Layer Management

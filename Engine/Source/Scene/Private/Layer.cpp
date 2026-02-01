@@ -129,3 +129,47 @@ vector<class GameObject*> Layer::FindGameObjectsByTag(const wstring& tag) const
     return result;
 }
 #pragma endregion
+
+#pragma region Flag Managment
+void Layer::SetVisible(bool visible)
+{
+    if (visible)
+    {
+		AddFlag(m_Flags, ELayerFlags::Visible);
+    }
+    else
+    {
+		RemoveFlag(m_Flags, ELayerFlags::Visible);
+		SetAllObjectVisible(visible);
+    }
+}
+
+void Layer::SetActive(bool active)
+{
+    if (active)
+    {
+        AddFlag(m_Flags, ELayerFlags::Active);
+    }
+    else
+    {
+        RemoveFlag(m_Flags, ELayerFlags::Active);
+		SetAllObjectActive(active);
+    }
+}
+
+void Layer::SetAllObjectVisible(bool visible)
+{
+    for (auto& gameObject : m_GameObjects)
+    {
+        gameObject->SetVisible(visible);
+    }
+}
+
+void Layer::SetAllObjectActive(bool active)
+{
+    for (auto& gameObject : m_GameObjects)
+    {
+        gameObject->SetActive(active);
+    }
+}
+#pragma endregion

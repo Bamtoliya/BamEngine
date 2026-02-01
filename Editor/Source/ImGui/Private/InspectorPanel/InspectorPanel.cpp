@@ -429,9 +429,14 @@ void InspectorPanel::DrawMatrixProperty(void* data, const TypeInfo& typeinfo, co
 {
 	string headerName = SanitizeVarName(property.Name) + "###" + property.Name;
 	float* matData = reinterpret_cast<float*>((uint8_t*)data);
+	bool bReadOnly = property.Metadata.bIsReadOnly;
 
+	if (bReadOnly)
+		ImGui::EndDisabled();
 	if (ImGui::CollapsingHeader(headerName.c_str()))
 	{
+		if (bReadOnly)
+			ImGui::BeginDisabled();
 		ImGui::Indent();
 
 		// ------------------------------------------------------------------
@@ -474,7 +479,7 @@ void InspectorPanel::DrawMatrixProperty(void* data, const TypeInfo& typeinfo, co
 		}
 
 		// [편의 기능] Identity(단위 행렬)로 초기화 버튼
-		if (ImGui::Button("Reset Identity"))
+		if (!bReadOnly && ImGui::Button("Reset Identity"))
 		{
 			// 0으로 밀고 대각선만 1로 설정
 			memset(matData, 0, 16 * sizeof(f32));
@@ -483,9 +488,14 @@ void InspectorPanel::DrawMatrixProperty(void* data, const TypeInfo& typeinfo, co
 			matData[10] = 1.0f; // [2][2]
 			matData[15] = 1.0f; // [3][3]
 		}
+		
 
 		ImGui::Unindent();
+		if (bReadOnly)
+			ImGui::EndDisabled();
 	}
+	if (bReadOnly)
+		ImGui::BeginDisabled();
 }
 void InspectorPanel::DrawSetProperty(void* data, const TypeInfo& typeinfo, const PropertyInfo& property)
 {
