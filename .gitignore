@@ -66,3 +66,6 @@ out
 #cmake-build-*
 Gemini
 imgui.ini
+Resources/kenney_game-icons
+Resources/Model
+Resources/Fonts
