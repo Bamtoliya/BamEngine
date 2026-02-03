@@ -89,6 +89,7 @@ END_REFLECT()
 // Class: GameObject
 BEGIN_REFLECT(GameObject)
     REFLECT_PROPERTY(m_ID, Engine::EPropertyType::UInt64, "uint64", CATEGORY("PROP_INFORMATION"), READONLY)
+    REFLECT_PROPERTY(m_Index, Engine::EPropertyType::UInt32, "uint32", CATEGORY("PROP_INFORMATION"), READONLY)
     REFLECT_PROPERTY(m_LayerIndex, Engine::EPropertyType::UInt32, "uint32", CATEGORY("PROP_INFORMATION"), READONLY)
     REFLECT_SET(m_TagSet, unordered_set<wstring>, wstring, "wstring", "PROP_TAGS")
     REFLECT_PROPERTY(m_Name, Engine::EPropertyType::String, "wstring", "PROP_NAME")

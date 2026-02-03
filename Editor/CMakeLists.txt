@@ -10,6 +10,7 @@ find_package(Python3 COMPONENTS Interpreter REQUIRED)
 
 set(EDITOR_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Source")
 set(EDITOR_PCH_HEADER "${EDITOR_SOURCE_DIR}/Editor_Includes.h")
+set(THIRDPARTY_LIBRARY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../ThirdParty/")
 set(LOCALIZATION_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/../Utility/CSVToJsonConverter/localizationcsvtojson.py")
 file(GLOB_RECURSE EDITOR_HEADERS CONFIGURE_DEPENDS "${EDITOR_SOURCE_DIR}/*.h")
 file(GLOB_RECURSE EDITOR_SOURCES CONFIGURE_DEPENDS "${EDITOR_SOURCE_DIR}/*.cpp")
@@ -50,6 +51,7 @@ endif()
 target_include_directories(Editor PRIVATE 
 	${EDITOR_SOURCE_DIR}
 	${EDITOR_PUBLIC_INCLUDE_DIRS}
+    ${THIRDPARTY_LIBRARY_DIR}
 )
 
 add_custom_target(RunLocalizationGenerator ALL
@@ -59,6 +61,8 @@ add_custom_target(RunLocalizationGenerator ALL
     VERBATIM
 )
 
+set_target_properties(Engine PROPERTIES UNITY_BUILD ON)
+
 add_dependencies(Engine RunLocalizationGenerator)
 
 target_precompile_headers(Editor PRIVATE ${EDITOR_PCH_HEADER})
@@ -67,4 +71,10 @@ target_link_libraries(Editor PRIVATE
     Engine
     imgui::imgui
 )
+
+if(MSVC)
+    set_target_properties(Editor PROPERTIES 
+        VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    )
+endif()
 

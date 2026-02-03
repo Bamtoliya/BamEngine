@@ -72,7 +72,6 @@ void Layer::SetIndex(uint32 index)
 }
 #pragma endregion
 
-
 #pragma region Object Management
 EResult Layer::AddGameObject(GameObject* gameObject)
 {
@@ -81,6 +80,7 @@ EResult Layer::AddGameObject(GameObject* gameObject)
     Safe_AddRef(gameObject);
     m_GameObjects.push_back(gameObject);
 	gameObject->SetLayerIndex(m_Index);
+    gameObject->SetIndex(m_GameObjects.size() - 1);
     return EResult::Success;
 }
 
@@ -93,6 +93,10 @@ EResult Layer::RemoveGameObject(GameObject* gameObject)
     {
         Safe_Release(*it);
         m_GameObjects.erase(it);
+        for (uint32 i = 0; i < m_GameObjects.size(); ++i)
+        {
+            m_GameObjects[i]->SetIndex(i);
+        }
     }
 
     return EResult::Success;
@@ -128,33 +132,35 @@ vector<class GameObject*> Layer::FindGameObjectsByTag(const wstring& tag) const
     }
     return result;
 }
+
+EResult Layer::RemoveDeadGameObject(GameObject* gameObject)
+{
+    if (!gameObject || gameObject->GetParent() != nullptr) return EResult::InvalidArgument;
+
+    uint32 index = gameObject->GetIndex();
+    if (index < m_GameObjects.size() && m_GameObjects[index] == gameObject)
+    {
+		GameObject* last = m_GameObjects.back();
+        last->SetIndex(index);
+        m_GameObjects[index] = last;
+        m_GameObjects.pop_back();
+        Safe_Release(gameObject);
+    }
+    return EResult::Success;
+}
 #pragma endregion
 
 #pragma region Flag Managment
 void Layer::SetVisible(bool visible)
 {
-    if (visible)
-    {
-		AddFlag(m_Flags, ELayerFlags::Visible);
-    }
-    else
-    {
-		RemoveFlag(m_Flags, ELayerFlags::Visible);
-		SetAllObjectVisible(visible);
-    }
+    if (visible) AddFlag(m_Flags, ELayerFlags::Visible);
+    else RemoveFlag(m_Flags, ELayerFlags::Visible);
 }
 
 void Layer::SetActive(bool active)
 {
-    if (active)
-    {
-        AddFlag(m_Flags, ELayerFlags::Active);
-    }
-    else
-    {
-        RemoveFlag(m_Flags, ELayerFlags::Active);
-		SetAllObjectActive(active);
-    }
+    if (active)AddFlag(m_Flags, ELayerFlags::Active);
+    else RemoveFlag(m_Flags, ELayerFlags::Active);
 }
 
 void Layer::SetAllObjectVisible(bool visible)

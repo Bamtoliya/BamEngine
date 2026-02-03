@@ -4,6 +4,7 @@
 #include "Application.h"
 #include "Runtime.h"
 #include "ImGuiManager.h"
+#include "SelectionManager.h"
 #include "RHI.h"
 
 BEGIN(Editor)
@@ -40,6 +41,7 @@ EResult Application::Initialize(void* arg)
     imguiDesc.RHI = Renderer::Get().GetRHI();
 
     m_ImGuiManager = ImGuiManager::Create(&imguiDesc);
+    m_SelectionManager = SelectionManager::Create();
     if (!m_ImGuiManager)
     {
         fmt::print(stderr, "ImGuiManager Creation Failed\n");
@@ -61,6 +63,7 @@ EResult Application::Initialize(void* arg)
 void Application::Free()
 {
     ImGuiManager::Destroy();
+	SelectionManager::Destroy();
 
     if (m_Runtime) m_Runtime->Destroy();
 
@@ -91,8 +94,25 @@ void Application::Run(int argc, char* argv[])
     {
         while (SDL_PollEvent(&event)) {
             ImGuiManager::Get().ProcessEvent(&event);
+            if (event.type == SDL_EVENT_TEXT_EDITING || event.type == SDL_EVENT_TEXT_EDITING_CANDIDATES)
+            {
+                int a = 10;
+                
+            }
             if (event.type == SDL_EVENT_QUIT) {
                 bIsRunning = false;
+            }
+            if (m_Window)
+            {
+                //// 1. 강제 활성화 (이미 켜져 있어도 계속 켬)
+                //SDL_StartTextInput(m_Window);
+                //
+                //// 2. 강제 위치 지정 (화면 100,100 좌표에 빨간색 박스만한 영역 지정)
+                //SDL_Rect r = { 100, 100, 20, 20 };
+                //SDL_SetTextInputArea(m_Window, &r, 0);
+                //
+                //// 3. 상태 확인 (콘솔에 출력)
+                //fmt::print("IME Active: {}\n", SDL_TextInputActive(m_Window));
             }
         }
 

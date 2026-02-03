@@ -1,12 +1,15 @@
 ﻿#pragma once
 
 #include "GameObject.h"
+#include "Layer.h"
+#include "SceneManager.h"
 
 static uint64 g_GameObjectIDCounter = 1;
 
 #pragma region Constructor&Destructor
 EResult GameObject::Initialize(void* arg)
 {
+	m_Parent = nullptr;
 	if (arg)
 	{
 		CAST_DESC
@@ -153,22 +156,34 @@ Component* GameObject::GetComponent(const wstring& tag)
 #pragma endregion
 
 #pragma region Child Management
+bool GameObject::IsDescendant(GameObject* target) const
+{
+	if (!target) return false;
 
+	GameObject* current = m_Parent;
+	while (current)
+	{
+		if (current == target)
+			return true;
+		current = current->GetParent();
+	}
+	return false;
+}
 EResult GameObject::AddChild(GameObject* child)
 {
-	if (!child)
-		return EResult::Fail;
+	if (!child) return EResult::Fail;
+	if (child == this) return EResult::Fail;
+	if (this->IsDescendant(child)) return EResult::Fail;
+
+	Safe_AddRef(child);
+	if (child->m_Parent)
+	{
+		child->m_Parent->RemoveChild(child);
+	}
+	child->SetLayerIndex(m_LayerIndex);
+	child->SetParent(this);
+	child->SetIndex(m_Childs.size() - 1);
 	m_Childs.push_back(child);
-	return EResult::Success;
-}
-EResult GameObject::RemoveChild()
-{
-	if (m_Childs.empty())
-		return EResult::Fail;
-	GameObject* child = m_Childs.back();
-	child->Free();
-	Safe_Release(child);
-	m_Childs.pop_back();
 	return EResult::Success;
 }
 EResult GameObject::RemoveChild(GameObject* child)
@@ -178,11 +193,21 @@ EResult GameObject::RemoveChild(GameObject* child)
 	auto it = std::find(m_Childs.begin(), m_Childs.end(), child);
 	if (it == m_Childs.end())
 		return EResult::Fail;
-	(*it)->Free();
+	child->ClearParent();
 	Safe_Release(*it);
 	m_Childs.erase(it);
+	UpdateChildIndex();
 	return EResult::Success;
 }
+
+void GameObject::UpdateChildIndex()
+{
+	for (int i = 0; i < m_Childs.size(); ++i)
+	{
+		m_Childs[i]->SetIndex(i);
+	}
+}
+
 #pragma endregion
 
 #pragma region Tag Management
@@ -209,50 +234,62 @@ bool GameObject::HasTag(const wstring& tag) const
 #pragma region Flag Management
 void GameObject::SetVisible(bool visible)
 {
-	if (visible)
+	if (visible) AddFlag(m_Flags, EObjectFlag::Visible);
+	else RemoveFlag(m_Flags, EObjectFlag::Visible);
+}
+void GameObject::SetActive(bool active)
+{
+	if (active) AddFlag(m_Flags, EObjectFlag::Active);
+	else RemoveFlag(m_Flags, EObjectFlag::Active);
+}
+void GameObject::SetPaused(bool paused)
+{
+	if (paused) AddFlag(m_Flags, EObjectFlag::Paused);
+	else RemoveFlag(m_Flags, EObjectFlag::Paused);
+}
+void GameObject::SetDead(bool dead)
+{
+	if (dead)
 	{
-		AddFlag(m_Flags, EObjectFlag::Visible);
+		AddFlag(m_Flags, EObjectFlag::Dead);
+		SetActive(false);
+		SetVisible(false);
+		SceneManager::Get().GetCurrentScene()->RegisterDeadGameObject(this);
 	}
-	else
-	{
-		RemoveFlag(m_Flags, EObjectFlag::Visible);
-	}
-	for (auto& component : m_Components)
-	{
-		if(RenderComponent* renderComp = dynamic_cast<RenderComponent*>(component))
-		{
-			renderComp->SetActive(visible);
-		}
-	}
+	else RemoveFlag(m_Flags, EObjectFlag::Dead);
+}
+
+void GameObject::SetAllChildVisible(bool visible)
+{
 	for (auto& child : m_Childs)
 	{
 		child->SetVisible(visible);
 	}
 }
-void GameObject::SetActive(bool active)
+
+void GameObject::SetAllChildActive(bool active)
 {
-	if (active)
-	{
-		AddFlag(m_Flags, EObjectFlag::Active);
-	}
-	else
-	{
-		RemoveFlag(m_Flags, EObjectFlag::Active);
-	}
-	for (auto& component : m_Components)
-	{
-		component->SetActive(active);
-	}
 	for (auto& child : m_Childs)
 	{
 		child->SetActive(active);
 	}
 }
 
+bool GameObject::IsVisibleInHierarchy() const
+{
+	if (!IsVisible())
+		return false;
+	if (m_Parent)
+		return m_Parent->IsVisibleInHierarchy();
+	return true;
+}
 #pragma endregion
 
-
 #pragma region Layer Management
+void GameObject::SetIndex(uint32 index)
+{
+	m_Index = index;
+}
 void GameObject::SetLayerIndex(uint32 layerIndex)
 {
 	m_LayerIndex = layerIndex;

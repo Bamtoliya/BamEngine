@@ -61,6 +61,8 @@ public:
 public:
 	vector<class GameObject*> GetAllGameObjects() const { return m_GameObjects; }
 	vector<class GameObject*> FindGameObjectsByTag(const wstring& tag) const;
+public:
+	EResult RemoveDeadGameObject(class GameObject* gameObject);
 #pragma endregion
 
 #pragma region Flag Management
@@ -86,6 +88,7 @@ protected:
 	wstring m_Name = L"Layer";
 	ELayerFlags m_Flags = ELayerFlags::Default;
 	vector<class GameObject*> m_GameObjects;
+	vector<class GameObject*> m_DeadGameObjects;
 #pragma endregion
 
 

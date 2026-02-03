@@ -34,23 +34,58 @@ EResult ImGuiManager::Initialize(void* arg)
 	io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
 
 	std::string fontPath = "C:\\Windows\\Fonts\\malgun.ttf";
+	vector<string> iconsFontPaths;
 
+	iconsFontPaths.push_back("Resources/Fonts/fontawesome-free-7.1.0-desktop/otfs/Font Awesome 7 Free-Regular-400.otf");
+	iconsFontPaths.push_back("Resources\\Fonts\\fontawesome-free-7.1.0-desktop\\otfs\\Font Awesome 7 Free-Solid-900.otf");
+
+	
 	if (std::filesystem::exists(fontPath))
 	{
-		// 한글 글리프 범위 가져오기
-		ImVector<ImWchar> ranges;
-		ImFontGlyphRangesBuilder builder;
-		builder.AddRanges(io.Fonts->GetGlyphRangesKorean()); // 한글
-		builder.AddRanges(io.Fonts->GetGlyphRangesDefault()); // 영문/특수문자
-		builder.BuildRanges(&ranges);
+		// static으로 선언하여 메모리 유지
+		static ImVector<ImWchar> ranges;
 
-		// 폰트 로드 (사이즈 18.0f)
+		// [중요] 이미 만들어졌으면 다시 만들지 않음 (중복 방지 & 성능 최적화)
+		if (ranges.empty())
+		{
+			ImFontGlyphRangesBuilder builder;
+
+			// 1. 기본 한글 (완성형)
+			builder.AddRanges(io.Fonts->GetGlyphRangesKorean());
+			// 2. 영문 및 특수기호
+			builder.AddRanges(io.Fonts->GetGlyphRangesDefault());
+
+			// 3. [핵심] 한글 자음/모음(Jamo) 범위 직접 추가
+			// 'ㄱ', 'ㅏ' 등 조합 중인 상태가 이 범위에 해당합니다. (0x3131 ~ 0x3163)
+			static const ImWchar ranges_jamo[] = { 0x3131, 0x3163, 0 };
+			builder.AddRanges(ranges_jamo);
+
+			builder.BuildRanges(&ranges);
+		}
+
+		// 폰트 로드
 		io.Fonts->AddFontFromFileTTF(fontPath.c_str(), 18.0f, nullptr, ranges.Data);
-		//io.Fonts->Build();
 	}
 	else
 	{
 		fmt::print(stderr, "Font file not found: {}\n", fontPath);
+	}
+
+	for (auto& filePath : iconsFontPaths)
+	{
+		if (filesystem::exists(filePath))
+		{
+			// 아이콘 폰트 로드
+			ImFontConfig iconsConfig;
+			iconsConfig.MergeMode = true;
+			iconsConfig.PixelSnapH = true;
+			static const ImWchar icons_ranges[] = { ICON_MIN_FA, ICON_MAX_FA, 0 };
+			io.Fonts->AddFontFromFileTTF(filePath.c_str(), 16.0f, &iconsConfig, icons_ranges);
+		}
+		else
+		{
+			fmt::print(stderr, "Icons font file not found: {}\n", filePath);
+		}
 	}
 
 	// [2. 스타일 적용 함수 호출]
@@ -163,8 +198,10 @@ void ImGuiManager::Draw()
 {
 	MainDockspace();
 
-	m_HierarchyPanel.Draw(m_SelectedObject);
-	m_InspectorPanel.Draw(m_SelectedObject);
+	ImGui::ShowDemoWindow(nullptr); // 데모 윈도우 (테스트용, 나중에 제거)
+
+	m_HierarchyPanel.Draw();
+	m_InspectorPanel.Draw();
 	if (ImGui::Begin("Display Settings")) // 창 이름
 	{
 		static int width = g_WindowWidth;

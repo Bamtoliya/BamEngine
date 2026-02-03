@@ -52,9 +52,6 @@ private:
 	HierarchyPanel m_HierarchyPanel;
 	InspectorPanel m_InspectorPanel;
 #pragma endregion
-
-private:
-	class GameObject* m_SelectedObject = { nullptr };
 #pragma endregion
 
 

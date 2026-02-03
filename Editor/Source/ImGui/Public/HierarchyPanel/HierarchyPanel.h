@@ -8,29 +8,27 @@ BEGIN(Editor)
 class HierarchyPanel
 {
 public:
-	void Draw(class GameObject*& selectedObject);
+	void Draw();
 
 private:
-	void DrawLayerItem(class Layer* layer, class GameObject*& selectedObject, class Scene* scene);
-	void DrawGameObjectNode(class GameObject* gameObject, class GameObject*& selectedObject);
+	void DrawLayerItem(class Scene* scene, class Layer* layer);
+	void DrawGameObjectNode(class GameObject* gameObject);
 
-	void DrawAddGameObjectButton(Scene* currentScene, GameObject*& selectedObject);
-
-	void SelectObject(class GameOjbect* gameObject, bool multiSelect);
-	bool IsSelected(class GameObject* gameObject) const;
-	void ClearSelection();
-
-
+	void DrawAddGameObjectButton(class Scene* currentScene);
 private:
-	void CreateEmptyObject(class Scene* scene, class GameObject*& selectedObject);
-	void CreatePrimitive(class Scene* scene, class GameObject*& selectedObject, const wstring& name, const wstring& meshName);
-
+	void DrawSceneTitle(class Scene* scene);
 private:
-	vector<class GameObject*> m_SelectedObjects;
-	class GameObject* m_LastSelectedObject = { nullptr };
+	void DrawLayerContextMenu(class Scene* scene);
+private:
+	void CreateEmptyObject(class Scene* scene);
+	void CreatePrimitive(class Scene* scene, const wstring& name, const wstring& meshName);
 
+
+#pragma region Variables
+private:
 	bool m_isRenamingLayer = false;
 	uint32 m_RenamingLayerIndex = -1;
 	char m_RenameBuffer[256] = "";
+#pragma endregion
 };
 END

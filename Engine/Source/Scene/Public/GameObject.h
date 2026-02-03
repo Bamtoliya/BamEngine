@@ -125,23 +125,25 @@ public:
 	vector<Component*> GetAllComponents() const { return m_Components; }
 #pragma endregion
 
-#pragma region Parent
+#pragma region Parent & Child
 public:
 	GameObject* GetParent() const { if (m_Parent) return m_Parent; return nullptr; }
 	EResult SetParent(GameObject* parent) { if (!parent) return EResult::Fail; m_Parent = parent; return EResult::Success; }
+	EResult ClearParent() { if (m_Parent) m_Parent = nullptr; return EResult::Success; }
+public:
+	bool IsDescendant(GameObject* target) const;
+public:
+	vector<GameObject*> GetAllChilds() const { return m_Childs; }
+	EResult AddChild(GameObject* child);
+	EResult RemoveChild(GameObject* child);
+	EResult ReorderChild(GameObject* child, GameObject* target, bool insertAfter);
+private:
+	void UpdateChildIndex();
 #pragma endregion
 
 #pragma region ID
 public:
 	uint64 GetID() const { return m_ID; }
-#pragma endregion
-
-#pragma region Child Management	
-public:
-	vector<GameObject*> GetAllChilds() const { return m_Childs; }
-	EResult AddChild(GameObject* child);
-	EResult RemoveChild();
-	EResult RemoveChild(GameObject* child);
 #pragma endregion
 
 #pragma region Tag Management
@@ -168,10 +170,18 @@ public:
 public:
 	void SetVisible(bool visible);
 	void SetActive(bool active);
+	void SetPaused(bool paused);
+	void SetDead(bool dead = true);
+public:
+	void SetAllChildVisible(bool visible);
+	void SetAllChildActive(bool active);
+	bool IsVisibleInHierarchy() const;
 #pragma endregion
 
 #pragma region Layer Management
 public:
+	uint32 GetIndex() const { return m_Index; }
+	void SetIndex(uint32 index);
 	uint32 GetLayerIndex() const { return m_LayerIndex; }
 	void SetLayerIndex(uint32 layerIndex);
 #pragma endregion
@@ -189,6 +199,9 @@ protected:
 
 	PROPERTY(CATEGORY("PROP_INFORMATION"), READONLY)
 	uint64 m_ID = { 0 };
+
+	PROPERTY(CATEGORY("PROP_INFORMATION"), READONLY)
+	uint32 m_Index = { 0 };
 
 	PROPERTY(CATEGORY("PROP_INFORMATION"), READONLY)
 	uint32 m_LayerIndex = { static_cast<uint32>(-1) };

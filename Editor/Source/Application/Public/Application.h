@@ -43,6 +43,7 @@ private:
 private:
 	class Runtime* m_Runtime = { nullptr };
 	class ImGuiManager* m_ImGuiManager = { nullptr };
+	class SelectionManager* m_SelectionManager = { nullptr };
 	struct SDL_Window* m_Window = { nullptr };
 	class RHI* m_RHI = { nullptr };
 private:

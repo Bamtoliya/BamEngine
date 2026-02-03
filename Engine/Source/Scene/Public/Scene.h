@@ -37,7 +37,6 @@ public:
 	virtual void LateUpdate(f32 dt);
 #pragma endregion
 
-
 #pragma region Scene Management
 public:
 	void SetName(const wstring& name) { m_Name = name; }
@@ -70,24 +69,27 @@ private:
 public:
 	EResult AddGameObject(class GameObject* gameObject, uint32 layerIndex = -1);
 	EResult RemoveGameObject(class GameObject* gameObject);
-
-	class GameObject* FindGameObject(const wstring& name, uint32 layerIndex = -1);
-	class GameObject* FindGameObject(uint64 id, uint32 layerIndex = -1);
-
 	EResult MoveGameObjectLayer(class GameObject* gameObject, uint32 targetLayerIndex);
+	EResult RegisterDeadGameObject(class GameObject* gameObject);
+	EResult FlushDeadGameObjects();
+public:
+	class GameObject* FindGameObject(const wstring& name);
+	class GameObject* FindGameObject(uint64 id);
 #pragma endregion
 
 #pragma region Flag Mangement
 public:
+	bool IsActive() const { return HasFlag(m_Flags, ESceneFlags::Active); }
 	void SetActive(bool active);
 #pragma endregion
-
 
 #pragma region Variable
 protected:
 	ESceneFlags m_Flags = ESceneFlags::Active;
 	wstring m_Name = { L"Scene" };
 	vector<class Layer*> m_Layers;
+	unordered_map<uint64, class GameObject*> m_GameObjectMap;
+	vector<class GameObject*> m_DeadGameObjects;
 #pragma endregion
 };
 END

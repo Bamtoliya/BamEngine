@@ -1,6 +1,7 @@
 ﻿#pragma once
 #include "imgui.h"
 #include "InspectorPanel.h"
+#include "SelectionManager.h"
 
 #include "GameObject.h"
 #include "Component.h"
@@ -33,8 +34,9 @@ void WriteInteger(void* data, size_t size, int64_t value)
 }
 #pragma endregion
 
-void InspectorPanel::Draw(class GameObject* selectedObject)
+void InspectorPanel::Draw()
 {
+	GameObject* selectedObject = SelectionManager::Get().GetPrimarySelection();
 	ImGui::Begin("Inspector");
 	if (selectedObject)
 	{

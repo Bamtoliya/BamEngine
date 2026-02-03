@@ -40,6 +40,7 @@ void Scene::Free()
 #pragma region Loop
 void Scene::FixedUpdate(f32 dt)
 {
+	if (!IsActive()) return;
 	for (auto& layer : m_Layers)
 	{
 		layer->FixedUpdate(dt);
@@ -48,14 +49,18 @@ void Scene::FixedUpdate(f32 dt)
 
 void Scene::Update(f32 dt)
 {
+	if (!IsActive()) return;
 	for (auto& layer : m_Layers)
 	{
 		layer->Update(dt);
 	}
+
+	FlushDeadGameObjects();
 }
 
 void Scene::LateUpdate(f32 dt)
 {
+	if (!IsActive()) return;
 	for (auto& layer : m_Layers)
 	{
 		layer->LateUpdate(dt);
@@ -180,14 +185,17 @@ void Scene::SetLayerName(uint32 layerIndex, const wstring& name)
 #pragma region Object Management
 EResult Scene::AddGameObject(class GameObject* gameObject, uint32 layerIndex)
 {
-	if (!gameObject) return EResult::InvalidArgument;
+	if (!gameObject || m_Layers.empty()) return EResult::InvalidArgument;
 	if (layerIndex >= m_Layers.size()) layerIndex = 0;
-	return m_Layers[layerIndex]->AddGameObject(gameObject);
+	if (IsFailure(m_Layers[layerIndex]->AddGameObject(gameObject)))
+		return EResult::Fail;
+	m_GameObjectMap[gameObject->GetID()] = gameObject;
+	return EResult::Success;
 }
 
 EResult Scene::RemoveGameObject(class GameObject* gameObject)
 {
-	if (!gameObject) return EResult::InvalidArgument;
+	if (!gameObject || m_Layers.empty()) return EResult::InvalidArgument;
 	uint32 layerIndex = gameObject->GetLayerIndex();
 	if (layerIndex >= m_Layers.size()) return EResult::InvalidArgument;
 	return m_Layers[layerIndex]->RemoveGameObject(gameObject);
@@ -199,50 +207,73 @@ EResult Scene::MoveGameObjectLayer(class GameObject* gameObject, uint32 targetLa
 	if (targetLayerIndex >= m_Layers.size()) return EResult::InvalidArgument;
 
 	uint32 currentLayerIndex = gameObject->GetLayerIndex();
-	if (currentLayerIndex == targetLayerIndex)
-		return EResult::Success;
+	if (currentLayerIndex == targetLayerIndex) return EResult::Success;
+
 	Safe_AddRef(gameObject);
 
-	if (currentLayerIndex < m_Layers.size())
-	{
-		if (IsFailure(m_Layers[currentLayerIndex]->RemoveGameObject(gameObject)))
-		{
-			Safe_Release(gameObject);
-			return EResult::Fail;
-		}
-	}
-	else
-	{
-		Safe_Release(gameObject);
-		return EResult::Fail;
-	}
+	Layer* currentLayer = FindLayer(currentLayerIndex);
+	Layer* targetLayer = FindLayer(targetLayerIndex);
 
-	if (IsFailure(m_Layers[currentLayerIndex]->AddGameObject(gameObject)))
-	{
-		Safe_Release(gameObject);
-		return EResult::Fail;
-	}
+	currentLayer->RemoveGameObject(gameObject);
+	targetLayer->AddGameObject(gameObject);
+
 	Safe_Release(gameObject);
 	return EResult::Success;
 }
 
+EResult Scene::RegisterDeadGameObject(class GameObject* gameObject)
+{
+	if (!gameObject) return EResult::InvalidArgument;
+	m_DeadGameObjects.push_back(gameObject);
+	return EResult::Success;
+}
+
+EResult Scene::FlushDeadGameObjects()
+{
+	for (auto& deadObject : m_DeadGameObjects)
+	{
+		if (deadObject == nullptr || !deadObject->IsDead()) continue;
+		uint32 layerIndex = deadObject->GetLayerIndex();
+		m_GameObjectMap.erase(deadObject->GetID());
+		if (GameObject* parent = deadObject->GetParent())
+		{
+			parent->RemoveChild(deadObject);
+		}
+		else if(layerIndex < m_Layers.size())
+		{
+			m_Layers[layerIndex]->RemoveDeadGameObject(deadObject);
+		}
+	}
+	m_DeadGameObjects.clear();
+	return EResult::Success;
+}
+
+GameObject* Scene::FindGameObject(const wstring& name)
+{
+	for (auto& layer : m_Layers)
+	{
+		GameObject* gameObject = layer->FindGameObject(name);
+		if (gameObject)
+			return gameObject;
+	}
+	return nullptr;
+}
+
+GameObject* Scene::FindGameObject(uint64 id)
+{
+	auto it = m_GameObjectMap.find(id);
+	if (it != m_GameObjectMap.end())
+	{
+		return it->second;
+	}
+	return nullptr;
+}
 #pragma endregion
 
 #pragma region Flag Management
 void Scene::SetActive(bool active)
 {
-	if (active)
-	{
-		AddFlag(m_Flags, ESceneFlags::Active);
-	}
-	else
-	{
-		RemoveFlag(m_Flags, ESceneFlags::Active);
-	}
-
-	for (auto& Layer : m_Layers)
-	{
-		Layer->SetActive(active);
-	}
+	if (active) AddFlag(m_Flags, ESceneFlags::Active);
+	else RemoveFlag(m_Flags, ESceneFlags::Active);
 }
 #pragma endregion

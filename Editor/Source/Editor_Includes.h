@@ -23,3 +23,4 @@ using namespace Editor;
 #endif
 #pragma endregion
 
+#include "IconsFontAwesome7.h"
