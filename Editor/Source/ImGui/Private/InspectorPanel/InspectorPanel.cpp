@@ -151,7 +151,6 @@ string InspectorPanel::SanitizeDisplayLabel(const TypeInfo& typeInfo, const Prop
 }
 #pragma endregion
 
-
 #pragma region Table
 void InspectorPanel::DrawPropertyTable(void* instance, const TypeInfo& typeInfo, const vector<const Engine::PropertyInfo*>& props)
 {
@@ -252,19 +251,19 @@ void InspectorPanel::DrawPropertyTable(void* instance, const TypeInfo& typeInfo,
 				case EPropertyType::Vector3:
 				{
 					vec3* value = reinterpret_cast<vec3*>(data);
-					ImGui::DragFloat3("##value", &(*value)[0]);
+					DrawVector3Property(instance, data, typeInfo, property);
 					break;
 				}
 				case EPropertyType::Quaternion:
 				{
 					vec3* value = reinterpret_cast<vec3*>(data);
-					ImGui::DragFloat4("##value", &(*value)[0]);
+					DrawQuaternionProperty(instance, data, typeInfo, property);
 					break;
 				}
 				case EPropertyType::Vector4:
 				{
 					vec4* value = reinterpret_cast<vec4*>(data);
-					ImGui::DragFloat4("##value", &(*value)[0]);
+					DrawVector4Property(instance, data, typeInfo, property);
 					break;
 				}
 				case EPropertyType::Color:
@@ -426,6 +425,312 @@ void InspectorPanel::DrawIntegerProperty(void* data, const PropertyInfo& propert
 	}
 
 	ImGui::DragScalar("##value", dataType, data);
+}
+
+static bool DrawVec3Control(const std::string& label, glm::vec3& values, bool& lockX, bool& lockY, bool& lockZ, float resetValue = 0.0f)
+{
+	bool changed = false;
+	ImGui::PushID(label.c_str());
+
+	// ---------------------------------------------------------
+	// 1. 레이아웃 및 너비 계산
+	// ---------------------------------------------------------
+	float lineHeight = ImGui::GetFontSize() + ImGui::GetStyle().FramePadding.y * 2.0f;
+	ImVec2 buttonSize = { lineHeight, lineHeight }; // XYZ 색상 버튼 크기
+	ImVec2 lockSize = { lineHeight, lineHeight };        // 자물쇠 버튼 크기 (정사각형)
+
+	float availableWidth = ImGui::GetContentRegionAvail().x;
+	float itemSpacing = ImGui::GetStyle().ItemSpacing.x;
+
+	// 전체 너비에서 [색상버튼3개] + [자물쇠3개] + [사이간격들]을 뺌
+	// 간격 구성: (Btn-Input)*3 + (Input-Lock)*3 + (Group-Group)*2
+	// ImGui::SameLine(0,0)을 쓰는 곳은 간격 0으로 계산
+
+	// 그룹 간 간격(2개) + 입력창과 자물쇠 사이 간격(3개) 고려
+	float totalFixed = (buttonSize.x * 3) + (lockSize.x * 3) + (itemSpacing * 2);
+
+	float inputWidth = (availableWidth - totalFixed) / 3.0f;
+	if (inputWidth < 1.0f) inputWidth = 1.0f;
+
+
+	// ---------------------------------------------------------
+	// X Axis (Red)
+	// ---------------------------------------------------------
+	ImGui::PushID("X");
+
+	// [잠금 구역 시작]: 색상 버튼과 입력창만 비활성화
+	if (lockX) ImGui::BeginDisabled();
+	{
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4{ 0.8f, 0.1f, 0.15f, 1.0f });
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4{ 0.9f, 0.2f, 0.2f, 1.0f });
+		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4{ 0.8f, 0.1f, 0.15f, 1.0f });
+		if (ImGui::Button("X", buttonSize)) { values.x = resetValue; changed = true; }
+		ImGui::PopStyleColor(3);
+
+		ImGui::SameLine(0, 0); // 버튼과 입력창 딱 붙이기
+		ImGui::SetNextItemWidth(inputWidth);
+		if (ImGui::DragFloat("##Val", &values.x, 0.1f, 0.0f, 0.0f, "%.2f")) changed = true;
+	}
+	if (lockX) ImGui::EndDisabled();
+	// [잠금 구역 끝]
+
+	// 자물쇠 버튼 (항상 활성화)
+	ImGui::SameLine(0, 0);
+	const char* iconX = lockX ? ICON_FA_LOCK : ICON_FA_LOCK_OPEN;
+	if (ImGui::Button(iconX, lockSize)) { lockX = !lockX; changed = true; } // 클릭 시 토글
+	if (ImGui::IsItemHovered()) ImGui::SetTooltip(lockX ? "Unlock X" : "Lock X");
+
+	ImGui::PopID();
+
+	ImGui::SameLine(0, itemSpacing); // X그룹과 Y그룹 사이 간격
+
+
+	// ---------------------------------------------------------
+	// Y Axis (Green)
+	// ---------------------------------------------------------
+	ImGui::PushID("Y");
+
+	if (lockY) ImGui::BeginDisabled();
+	{
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4{ 0.2f, 0.7f, 0.2f, 1.0f });
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4{ 0.3f, 0.8f, 0.3f, 1.0f });
+		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4{ 0.2f, 0.7f, 0.2f, 1.0f });
+		if (ImGui::Button("Y", buttonSize)) { values.y = resetValue; changed = true; }
+		ImGui::PopStyleColor(3);
+
+		ImGui::SameLine(0, 0);
+		ImGui::SetNextItemWidth(inputWidth);
+		if (ImGui::DragFloat("##Val", &values.y, 0.1f, 0.0f, 0.0f, "%.2f")) changed = true;
+	}
+	if (lockY) ImGui::EndDisabled();
+
+	ImGui::SameLine(0, 0);
+	const char* iconY = lockY ? ICON_FA_LOCK : ICON_FA_LOCK_OPEN;
+	if (ImGui::Button(iconY, lockSize)) { lockY = !lockY; changed = true; }
+	if (ImGui::IsItemHovered()) ImGui::SetTooltip(lockY ? "Unlock Y" : "Lock Y");
+
+	ImGui::PopID();
+
+	ImGui::SameLine(0, itemSpacing);
+
+
+	// ---------------------------------------------------------
+	// Z Axis (Blue)
+	// ---------------------------------------------------------
+	ImGui::PushID("Z");
+
+	if (lockZ) ImGui::BeginDisabled();
+	{
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4{ 0.1f, 0.25f, 0.8f, 1.0f });
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4{ 0.2f, 0.35f, 0.9f, 1.0f });
+		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4{ 0.1f, 0.25f, 0.8f, 1.0f });
+		if (ImGui::Button("Z", buttonSize)) { values.z = resetValue; changed = true; }
+		ImGui::PopStyleColor(3);
+
+		ImGui::SameLine(0, 0);
+		ImGui::SetNextItemWidth(inputWidth);
+		if (ImGui::DragFloat("##Val", &values.z, 0.1f, 0.0f, 0.0f, "%.2f")) changed = true;
+	}
+	if (lockZ) ImGui::EndDisabled();
+
+	ImGui::SameLine(0, 0);
+	const char* iconZ = lockZ ? ICON_FA_LOCK : ICON_FA_LOCK_OPEN;
+	if (ImGui::Button(iconZ, lockSize)) { lockZ = !lockZ; changed = true; }
+	if (ImGui::IsItemHovered()) ImGui::SetTooltip(lockZ ? "Unlock Z" : "Lock Z");
+
+	ImGui::PopID();
+
+	ImGui::PopID(); // Main Label ID
+	return changed;
+}
+
+static void DrawVec4Control(const std::string& label, glm::vec4& values, float resetValue = 0.0f)
+{
+	ImGui::PushID(label.c_str());
+
+	// 1. 사이즈 및 간격 계산
+	float lineHeight = ImGui::GetFontSize() + ImGui::GetStyle().FramePadding.y * 2.0f;
+	ImVec2 buttonSize = { lineHeight + 3.0f, lineHeight }; // 버튼 크기
+
+	// 테이블 컬럼의 전체 가용 너비 가져오기
+	float availableWidth = ImGui::GetContentRegionAvail().x;
+
+	// 요소 사이의 간격 (X-Y, Y-Z, Z-W => 총 3개)
+	float itemSpacing = ImGui::GetStyle().ItemSpacing.x;
+
+	// [버튼 4개] + [간격 3개]를 전체에서 뺀 후, 4로 나누어 입력창 하나의 너비 계산
+	float inputWidth = (availableWidth - (buttonSize.x * 4) - (itemSpacing * 3)) / 4.0f;
+
+	// 최소 너비 보정
+	if (inputWidth < 1.0f) inputWidth = 1.0f;
+
+	// -------------------------------------------------------------------------
+	// X Axis (Red)
+	// -------------------------------------------------------------------------
+	ImGui::PushStyleColor(ImGuiCol_Button, ImVec4{ 0.8f, 0.1f, 0.15f, 1.0f });
+	ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4{ 0.9f, 0.2f, 0.2f, 1.0f });
+	ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4{ 0.8f, 0.1f, 0.15f, 1.0f });
+	if (ImGui::Button("X", buttonSize)) values.x = resetValue;
+	ImGui::PopStyleColor(3);
+
+	ImGui::SameLine(0, 0);
+	ImGui::SetNextItemWidth(inputWidth);
+	ImGui::DragFloat("##X", &values.x, 0.1f, 0.0f, 0.0f, "%.2f");
+
+	ImGui::SameLine(0, itemSpacing);
+
+	// -------------------------------------------------------------------------
+	// Y Axis (Green)
+	// -------------------------------------------------------------------------
+	ImGui::PushStyleColor(ImGuiCol_Button, ImVec4{ 0.2f, 0.7f, 0.2f, 1.0f });
+	ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4{ 0.3f, 0.8f, 0.3f, 1.0f });
+	ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4{ 0.2f, 0.7f, 0.2f, 1.0f });
+	if (ImGui::Button("Y", buttonSize)) values.y = resetValue;
+	ImGui::PopStyleColor(3);
+
+	ImGui::SameLine(0, 0);
+	ImGui::SetNextItemWidth(inputWidth);
+	ImGui::DragFloat("##Y", &values.y, 0.1f, 0.0f, 0.0f, "%.2f");
+
+	ImGui::SameLine(0, itemSpacing);
+
+	// -------------------------------------------------------------------------
+	// Z Axis (Blue)
+	// -------------------------------------------------------------------------
+	ImGui::PushStyleColor(ImGuiCol_Button, ImVec4{ 0.1f, 0.25f, 0.8f, 1.0f });
+	ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4{ 0.2f, 0.35f, 0.9f, 1.0f });
+	ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4{ 0.1f, 0.25f, 0.8f, 1.0f });
+	if (ImGui::Button("Z", buttonSize)) values.z = resetValue;
+	ImGui::PopStyleColor(3);
+
+	ImGui::SameLine(0, 0);
+	ImGui::SetNextItemWidth(inputWidth);
+	ImGui::DragFloat("##Z", &values.z, 0.1f, 0.0f, 0.0f, "%.2f");
+
+	ImGui::SameLine(0, itemSpacing);
+
+	// -------------------------------------------------------------------------
+	// W Axis (Gray / Alpha)
+	// -------------------------------------------------------------------------
+	// W는 보통 회색이나 흰색 계열을 사용합니다.
+	ImGui::PushStyleColor(ImGuiCol_Button, ImVec4{ 0.5f, 0.5f, 0.5f, 1.0f });
+	ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4{ 0.6f, 0.6f, 0.6f, 1.0f });
+	ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4{ 0.5f, 0.5f, 0.5f, 1.0f });
+	if (ImGui::Button("W", buttonSize)) values.w = resetValue;
+	ImGui::PopStyleColor(3);
+
+	ImGui::SameLine(0, 0);
+	ImGui::SetNextItemWidth(inputWidth);
+	ImGui::DragFloat("##W", &values.w, 0.1f, 0.0f, 0.0f, "%.2f");
+
+	ImGui::PopID();
+}
+
+void InspectorPanel::DrawVector3Property(void* instance, void* data, const TypeInfo& typeinfo, const PropertyInfo& property)
+{
+	vec3* value = reinterpret_cast<vec3*>(data);
+	bool lockX = false, lockY = false, lockZ = false;
+	bool isTransform = typeinfo.GetName() == "Transform";
+	Transform* transform = isTransform ? static_cast<Transform*>(instance) : nullptr;
+	f32 resetValue = 0.0f;
+	
+	bool isPosition = false;
+	bool isScale = false;
+
+	if (isTransform)
+	{
+		if (property.Name == "m_Position")
+		{
+			lockX = transform->GetState(ETransformFlag::LockPositionX);
+			lockY = transform->GetState(ETransformFlag::LockPositionY);
+			lockZ = transform->GetState(ETransformFlag::LockPositionZ);
+			isPosition = true;
+		}
+		else if (property.Name == "m_Scale")
+		{
+			lockX = transform->GetState(ETransformFlag::LockScaleX);
+			lockY = transform->GetState(ETransformFlag::LockScaleY);
+			lockZ = transform->GetState(ETransformFlag::LockScaleZ);
+			resetValue = 1.0f;
+			isScale = true;
+		}		
+	}
+
+	bool changed = DrawVec3Control(property.Name, *value, lockX, lockY, lockZ, resetValue);
+
+	if(changed && transform)
+	{
+		if(isPosition) 
+		{
+			transform->SetState(ETransformFlag::LockPositionX, lockX);
+			transform->SetState(ETransformFlag::LockPositionY, lockY);
+			transform->SetState(ETransformFlag::LockPositionZ, lockZ);
+			transform->SetPosition(*value);
+		}
+		else if(isScale)
+		{
+			transform->SetState(ETransformFlag::LockScaleX, lockX);
+			transform->SetState(ETransformFlag::LockScaleY, lockY);
+			transform->SetState(ETransformFlag::LockScaleZ, lockZ);
+			transform->SetScale(*value);
+		}
+	}
+
+}
+void InspectorPanel::DrawVector4Property(void* instance, void* data, const TypeInfo& typeinfo, const PropertyInfo& property)
+{
+	vec4* value = reinterpret_cast<vec4*>(data);
+	DrawVec4Control(property.Name, *value);
+}
+void InspectorPanel::DrawQuaternionProperty(void* instance, void* data, const TypeInfo& typeinfo, const PropertyInfo& property)
+{
+	quat* qValue = reinterpret_cast<quat*>(data);
+	bool lockX = false, lockY = false, lockZ = false;
+	bool isTransform = typeinfo.GetName() == "Transform";
+	bool isRotation = property.Name == "m_Rotation";
+	Transform* transform = isTransform ? static_cast<Transform*>(instance) : nullptr;
+
+	if (isTransform && isRotation)
+	{
+		Transform* transform = static_cast<Transform*>(instance);
+
+		// 1. 읽기: 쿼터니언 변환값 대신, 저장된 'EulerHint(Local)'를 가져옴 (90도 반전 해결)
+		// Transform에 GetEulerHint() getter가 필요합니다.
+		vec3 displayEuler = transform->GetLocalRotationEuler();
+		lockX = transform->GetState(ETransformFlag::LockRotationX);
+		lockY = transform->GetState(ETransformFlag::LockRotationY);
+		lockZ = transform->GetState(ETransformFlag::LockRotationZ);
+
+		// 2. UI 그리기
+		bool changed = DrawVec3Control(property.Name, displayEuler, lockX, lockY, lockZ);
+
+		// 3. 쓰기: 값이 변경되었는지 확인
+		// (DrawVec3Control이 변경 여부를 bool로 반환하게 수정하거나, 값 비교)
+		vec3 currentHint = transform->GetLocalRotationEuler();
+		if (glm::distance(displayEuler, currentHint) > 0.001f || changed)
+		{
+			// [중요] 단순 대입이 아니라, Dirty Flag 등을 처리하는 함수 호출
+			transform->SetState(ETransformFlag::LockRotationX, lockX);
+			transform->SetState(ETransformFlag::LockRotationY, lockY);
+			transform->SetState(ETransformFlag::LockRotationZ, lockZ);
+			transform->SetRotation(displayEuler);
+		}
+	}
+	else
+	{
+		// [일반적인 쿼터니언] (Transform 아님)
+		// 기존처럼 매번 계산해서 보여줌 (반전 현상 있을 수 있음)
+		vec3 eulerDegree = glm::degrees(glm::eulerAngles(*qValue));
+
+		DrawVec3Control(property.Name, eulerDegree, lockX, lockY, lockZ);
+
+		// 변경 감지 및 적용
+		vec3 currentEuler = glm::degrees(glm::eulerAngles(*qValue));
+		if (glm::distance(eulerDegree, currentEuler) > 0.001f)
+		{
+			*qValue = glm::quat(glm::radians(eulerDegree));
+		}
+	}
 }
 void InspectorPanel::DrawMatrixProperty(void* data, const TypeInfo& typeinfo, const PropertyInfo& property, uint32 dim)
 {

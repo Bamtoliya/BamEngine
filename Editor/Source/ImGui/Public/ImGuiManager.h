@@ -2,6 +2,7 @@
 #include "Base.h"
 #include <SDL3/SDL.h>
 
+#include "ViewportPanel.h"
 #include "HierarchyPanel.h"
 #include "InspectorPanel.h"
 #include "ToolBar.h"
@@ -51,6 +52,8 @@ private:
 	ToolBar m_ToolBar;
 	HierarchyPanel m_HierarchyPanel;
 	InspectorPanel m_InspectorPanel;
+	ViewportPanel m_ViewportPanel;
+
 #pragma endregion
 #pragma endregion
 

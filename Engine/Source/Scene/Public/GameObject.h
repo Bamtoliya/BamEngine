@@ -151,6 +151,8 @@ public:
 	EResult AddTag(const wstring& tag);
 	EResult RemoveTag(const wstring& tag);
 	bool HasTag(const wstring& tag) const;
+	unordered_set<wstring> GetTags() const { return m_TagSet; }
+	EResult SetTags(const unordered_set<wstring>& tags) { m_TagSet = tags; return EResult::Success; }
 #pragma endregion
 
 #pragma region Name Management

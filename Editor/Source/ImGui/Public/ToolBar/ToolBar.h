@@ -13,5 +13,14 @@ private:
 	void DrawSceneMenu();
 	void DrawWindowMenu();
 	void DrawHelpMenu();
+
+private:
+	void DrawDisplaySettingsWindow();
+
+#pragma region Variables
+private:
+	bool m_DisplaySettingsWindow = false;
+#pragma endregion
+
 };
 END

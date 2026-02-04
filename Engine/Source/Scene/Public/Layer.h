@@ -56,6 +56,7 @@ public:
 	EResult AddGameObject(class GameObject* gameObject);
 	EResult RemoveGameObject(class GameObject* gameObject);
 	EResult MoveGameObject(class GameObject* gameObject, int8 dir);
+	EResult CloneGameObject(class GameObject* gameObject);
 public:
 	class GameObject* FindGameObject(class GameObject* gameObject) const;
 	class GameObject* FindGameObject(uint64 id) const;

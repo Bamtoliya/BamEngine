@@ -95,8 +95,15 @@ void ToolBar::DrawWindowMenu()
 {
 	if (ImGui::BeginMenu("Window"))
 	{
+		if (ImGui::MenuItem("Display Settings"))
+		{
+			m_DisplaySettingsWindow = !m_DisplaySettingsWindow;
+		}
 		ImGui::EndMenu();
 	}
+
+	if(m_DisplaySettingsWindow)
+		DrawDisplaySettingsWindow();
 }
 #pragma endregion
 
@@ -117,5 +124,39 @@ void ToolBar::DrawHelpMenu()
 		}
 		ImGui::EndMenu();
 	}
+}
+void ToolBar::DrawDisplaySettingsWindow()
+{
+	if (ImGui::Begin("Display Settings", &m_DisplaySettingsWindow)) // 창 이름
+	{
+		static int width = g_WindowWidth;
+		static int height = g_WindowHeight;
+		static bool isFullscreen = false;
+
+		// 현재 상태 가져오기 (처음 한 번만 동기화하거나, 매번 갱신하거나 선택)
+		// 여기서는 UI 조작 값을 우선하도록 단순화했습니다.
+
+		ImGui::Text("Resolution");
+		ImGui::InputInt("Width", &width);
+		ImGui::InputInt("Height", &height);
+
+		ImGui::Checkbox("Fullscreen", &isFullscreen);
+
+		if (ImGui::Button("Apply Resolution"))
+		{
+			// 실제 적용
+			Application::Get().SetResolution(width, height, isFullscreen);
+		}
+
+		ImGui::Separator();
+
+		// [옵션] UI 스케일 조절 (4K 모니터 대응용)
+		static float uiScale = 1.0f;
+		if (ImGui::DragFloat("UI Scale", &uiScale, 0.01f, 0.5f, 3.0f))
+		{
+			ImGui::GetIO().FontGlobalScale = uiScale; // 간단한 스케일링 방법
+		}
+	}
+	ImGui::End();
 }
 #pragma endregion

@@ -24,8 +24,8 @@ private:
 						function<void()> onContextMenu = nullptr);
 private:
 	void DrawSceneContextMenu();
-	void DrawLayerContextMenu(class Scene* scene);
-	void DrawGameObjectContextMenu();
+	void DrawLayerContextMenu(class Layer* layer);
+	void DrawGameObjectContextMenu(class GameObject* gameObject);
 private:
 	void CreateEmptyObject(class Scene* scene);
 	void CreatePrimitive(class Scene* scene, const wstring& name, const wstring& meshName);

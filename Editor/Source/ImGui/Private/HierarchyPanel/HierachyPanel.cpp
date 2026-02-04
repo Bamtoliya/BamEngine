@@ -624,7 +624,7 @@ void HierarchyPanel::DrawGameObjectNode(class GameObject* gameObject)
 				ImGui::EndDragDropTarget();
 			}
 #pragma endregion
-		}, bind(&HierarchyPanel::DrawGameObjectContextMenu, this));
+		}, bind(&HierarchyPanel::DrawGameObjectContextMenu, this, gameObject));
 #pragma region Selection Control
 	if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
     {
@@ -919,30 +919,167 @@ void HierarchyPanel::DrawSceneTitle(Scene* scene)
 	ImGui::Separator();
 }
 
-void HierarchyPanel::DrawGameObjectContextMenu()
+void HierarchyPanel::DrawGameObjectContextMenu(GameObject* gameObject)
 {
+	SelectionManager& selectionManager = SelectionManager::Get();
+	auto& selectionContext = selectionManager.GetSelectionContext();
+
+	// 1. 팝업 시작 (ID를 지정하지 않으면 LastItem, 즉 트리 노드에 붙음)
 	if (ImGui::BeginPopupContextItem())
 	{
-		if (ImGui::MenuItem("Delete Object"))
+		// [UX 보정] 우클릭한 대상이 선택된 상태가 아니라면, 
+		// 기존 선택을 다 풀고 얘만 선택함 (윈도우 탐색기 방식)
+		if (!selectionManager.IsSelected(gameObject))
 		{
-			//if (!selectionManager.IsSelected(gameObject))
-			//{
-			//	selectionManager.ClearSelection();
-			//	selectionManager.GetSelectionContext().push_back(gameObject);
-			//}
-			//char label[64];
-			//sprintf_s(label, "Delete Selected (%d)", (int)selectionContext.size());
-			//
-			//if (ImGui::MenuItem(label))
-			//{
-			//	for (GameObject* obj : selectionContext)
-			//	{
-			//		obj->SetDead();
-			//	}
-			//
-			//	selectionContext.clear();
-			//}
+			selectionManager.ClearSelection();
+			selectionManager.AddToSelection(gameObject);
 		}
+
+		// 헤더 (이름 표시)
+		ImGui::TextDisabled("Action: %s", WStrToStr(gameObject->GetName()).c_str());
+		ImGui::Separator();
+
+		// =========================================================
+		// 1. 기본 편집 (Rename, Duplicate, Delete)
+		// =========================================================
+
+		// [이름 변경] - 단일 대상일 때만 가능
+		if (selectionContext.size() == 1)
+		{
+#ifdef ICON_FA_PEN
+			if (ImGui::MenuItem(ICON_FA_PEN "  Rename", "F2"))
+#else
+			if (ImGui::MenuItem("Rename", "F2"))
+#endif
+			{
+				m_RenamingId = (void*)GetNodeID(gameObject); // 리네임 트리거
+				strcpy_s(m_RenameBuffer, WStrToStr(gameObject->GetName()).c_str());
+			}
+		}
+
+		// [복제] - 다중 선택 지원
+#ifdef ICON_FA_COPY
+		if (ImGui::MenuItem(ICON_FA_COPY "  Duplicate", "Ctrl+D"))
+#else
+		if (ImGui::MenuItem("Duplicate", "Ctrl+D"))
+#endif
+		{
+			// 선택된 모든 객체 복제 (Clone 함수 필요)
+			for (GameObject* obj : selectionContext)
+			{
+				GameObject* clonedObject = SceneManager::Get().GetCurrentScene()->CloneGameObject(obj);
+				if (clonedObject)
+					Safe_Release(clonedObject);
+			}
+				
+		}
+
+		// [삭제] - 다중 선택 지원
+#ifdef ICON_FA_TRASH
+		if (ImGui::MenuItem(ICON_FA_TRASH "  Delete", "Del"))
+#else
+		if (ImGui::MenuItem("Delete", "Del"))
+#endif
+		{
+			// 선택된 모든 객체 삭제 예약
+			for (GameObject* obj : selectionContext)
+			{
+				obj->SetDead(); // 혹은 Scene::RemoveGameObject 호출
+			}
+			selectionManager.ClearSelection(); // 삭제했으니 선택 해제
+		}
+
+		ImGui::Separator();
+
+		// =========================================================
+		// 2. 상태 제어 (Active, Visible)
+		// =========================================================
+
+		// [활성화 토글]
+		bool isCurrentActive = gameObject->IsActive();
+		if (ImGui::MenuItem("Is Active", nullptr, isCurrentActive))
+		{
+			bool newState = !isCurrentActive;
+			// 다중 선택 시 모두 같은 상태로 변경
+			for (GameObject* obj : selectionContext)
+			{
+				obj->SetActive(newState);
+			}
+		}
+
+		// [가시성 토글]
+		bool isCurrentVisible = gameObject->IsVisible();
+#ifdef ICON_FA_EYE
+		if (ImGui::MenuItem(ICON_FA_EYE "  Visible", nullptr, isCurrentVisible))
+#else
+		if (ImGui::MenuItem("Visible", nullptr, isCurrentVisible))
+#endif
+		{
+			bool newState = !isCurrentVisible;
+			for (GameObject* obj : selectionContext)
+			{
+				obj->SetVisible(newState);
+			}
+		}
+
+		ImGui::Separator();
+
+		// =========================================================
+		// 3. 구조 변경 (Parenting)
+		// =========================================================
+
+		// [자식 생성] - 여기에 빈 오브젝트 추가
+#ifdef ICON_FA_PLUS
+		if (ImGui::MenuItem(ICON_FA_PLUS "  Create Child Empty"))
+#else
+		if (ImGui::MenuItem("Create Child Empty"))
+#endif
+		{
+			// 새 게임오브젝트 생성 로직 (엔진 구현에 맞게 수정 필요)
+			tagGameObjectDesc desc;
+			desc.name = L"New GameObject";
+			GameObject* newObj = GameObject::Create(&desc);
+			gameObject->AddChild(newObj);
+			SceneManager::Get().GetCurrentScene()->AddGameObject(newObj);
+			newObj->Release(); // AddChild가 RefCount 올렸다면
+		}
+
+		// [루트로 이동] - 부모가 있는 경우에만 표시
+		if (gameObject->GetParent() != nullptr)
+		{
+			if (ImGui::MenuItem("Move to Root"))
+			{
+				for (GameObject* obj : selectionContext)
+				{
+					Safe_AddRef(obj);
+					// 부모 떼어내고 씬 루트로 이동
+					if (obj->GetParent()) obj->GetParent()->RemoveChild(obj);
+					SceneManager::Get().GetCurrentScene()->AddGameObject(obj, obj->GetLayerIndex());
+					Safe_Release(obj);
+				}
+			}
+		}
+
+		// =========================================================
+		// 4. 기타 유틸리티
+		// =========================================================
+		//ImGui::Separator();
+		//if (ImGui::MenuItem("Reset Transform"))
+		//{
+		//	for (GameObject* obj : selectionContext)
+		//	{
+		//		obj->GetTransform()->SetPosition(_float3(0, 0, 0));
+		//		obj->GetTransform()->SetRotation(_float3(0, 0, 0));
+		//		obj->GetTransform()->SetScale(_float3(1, 1, 1));
+		//	}
+		//}
+
+		//ImGui::Separator();
+		//if (ImGui::MenuItem("Reset Transform"))
+		//{
+		// 
+		//}
+
 		ImGui::EndPopup();
 	}
 }

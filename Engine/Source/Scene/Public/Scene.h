@@ -68,6 +68,7 @@ private:
 #pragma region Object Management
 public:
 	EResult AddGameObject(class GameObject* gameObject, uint32 layerIndex = -1);
+	class GameObject* CloneGameObject(class GameObject* gameObject);
 	EResult RemoveGameObject(class GameObject* gameObject);
 	EResult MoveGameObjectLayer(class GameObject* gameObject, uint32 targetLayerIndex);
 	EResult MoveGameObjectOrder(class GameObject* gameObject, int8 dir);

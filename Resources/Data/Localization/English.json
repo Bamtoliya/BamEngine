@@ -12,6 +12,7 @@
         "Transform.Position": "Position",
         "Transform.Rotation": "Rotation",
         "Transform.Scale": "Scale",
+        "Transform.EulerRotation": "Euler Rotation",
         "PROP_TEST": "Test"
     }
 }

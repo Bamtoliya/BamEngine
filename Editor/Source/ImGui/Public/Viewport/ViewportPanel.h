@@ -4,10 +4,10 @@
 
 BEGIN(Editor)
 
-class Viewport
+class ViewportPanel
 {
 public:
 	void Draw();
 private:
-}
+};
 END

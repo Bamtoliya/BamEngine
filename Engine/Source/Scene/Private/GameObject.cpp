@@ -31,37 +31,55 @@ GameObject* GameObject::Create(void* arg)
 
 GameObject* GameObject::Clone(void* arg)
 {
-	GameObject* instance = new GameObject(*this);
-	instance->m_Components.clear();
+	GameObject* instance = new GameObject();
+
+	// 2. 기본 속성 복사 (이름, 태그, 레이어, 활성화 상태 등)
+	instance->SetName(this->GetName());
+	instance->SetTags(this->GetTags());
+	instance->SetActive(this->IsActive());
+	instance->SetLayerIndex(this->GetLayerIndex());
 	if (IsFailure(instance->Initialize(arg)))
 	{
 		Safe_Release(instance);
 		return nullptr;
 	}
 
-	for (Component* comp : m_Components)
+	for (auto& comp : m_Components)
 	{
 		Component* clonedComp = comp->Clone(instance, arg);
-		if (IsFailure(instance->AttachComponent(clonedComp)))
+
+		if (clonedComp)
 		{
+			if (IsFailure(instance->AttachComponent(clonedComp)))
+			{
+				Safe_Release(clonedComp);
+				Safe_Release(instance);
+				return nullptr;
+			}
+
 			Safe_Release(clonedComp);
-			Safe_Release(instance);
-			return nullptr;
 		}
-		Safe_Release(clonedComp);
 	}
 
 	for (auto& child : m_Childs)
 	{
+		// 자식도 Clone을 호출 -> 그 자식의 자식도 Clone 호출 ... (재귀)
 		GameObject* clonedChild = child->Clone(arg);
-		if (IsFailure(instance->AddChild(clonedChild)))
+
+		if (clonedChild)
 		{
+			// 부모-자식 관계 설정
+			if (IsFailure(instance->AddChild(clonedChild)))
+			{
+				Safe_Release(clonedChild);
+				Safe_Release(instance);
+				return nullptr;
+			}
+
+			// AddChild 내부에서 clonedChild->m_pParent = instance; 처리를 해줘야 함
+			// AddChild 내부에서 AddRef를 했다면 여기서 Release
 			Safe_Release(clonedChild);
-			Safe_Release(instance);
-			return nullptr;
 		}
-		Safe_Release(clonedChild);
-		clonedChild->SetParent(instance);
 	}
 
 	return instance;
@@ -84,6 +102,10 @@ void GameObject::FixedUpdate(f32 dt)
 	{
 		comp->FixedUpdate(dt);
 	}
+	for (GameObject* child : m_Childs)
+	{
+		child->FixedUpdate(dt);
+	}
 }
 void GameObject::Update(f32 dt)
 {
@@ -92,6 +114,10 @@ void GameObject::Update(f32 dt)
 	{
 		comp->Update(dt);
 	}
+	for (GameObject* child : m_Childs)
+	{
+		child->Update(dt);
+	}
 }
 void GameObject::LateUpdate(f32 dt)
 {
@@ -99,6 +125,10 @@ void GameObject::LateUpdate(f32 dt)
 	for (Component* comp : m_Components)
 	{
 		comp->LateUpdate(dt);
+	}
+	for (GameObject* child : m_Childs)
+	{
+		child->LateUpdate(dt);
 	}
 }
 #pragma endregion

@@ -12,11 +12,15 @@ EResult Transform::Initialize(void* arg)
 	if (IsFailure(__super::Initialize(arg)))
 		return EResult::Fail;
 
-	DESC* desc = static_cast<DESC*>(arg);
-	m_Position = desc ? desc->Position : vec3(0.0f);
-	m_Rotation = desc ? quat(glm::radians(desc->Rotation)) : quat(1.0f, 0.0f, 0.0f, 0.0f);
-	m_Scale = desc ? desc->Scale : vec3(1.0f);
+	if (arg)
+	{
+		CAST_DESC
+		m_Position = desc ? desc->Position : vec3(0.0f);
+		m_Rotation = desc ? quat(glm::radians(desc->Rotation)) : quat(1.0f, 0.0f, 0.0f, 0.0f);
+		m_Scale = desc ? desc->Scale : vec3(1.0f);
+	}
 
+	AddFlag(m_Flags, ETransformFlag::Dirty);
 	UpdateLocalMatrix();
 	UpdateWorldMatrix();
 
@@ -36,14 +40,20 @@ Component* Transform::Create(void* arg)
 
 Component* Transform::Clone(GameObject* owner, void* arg)
 {
-	Transform* instance = new Transform(*this);
-	AddFlag(instance->m_Flags, ETransformFlag::Dirty);
-	if (IsFailure(instance->Initialize(arg)))
+	Transform* instance = new Transform();
+	DESC transformDesc;
+	transformDesc.Position = this->m_Position;
+	transformDesc.Rotation = glm::degrees(glm::eulerAngles(this->m_Rotation));
+	transformDesc.Scale = this->m_Scale;
+	transformDesc.Owner = owner;
+	transformDesc.Active = this->m_Active;
+	transformDesc.Tag = this->m_Tag;
+
+	if (IsFailure(instance->Initialize(&transformDesc)))
 	{
 		Safe_Release(instance);
 		return nullptr;
 	}
-	instance->SetOwner(owner);
 	return instance;
 }
 
@@ -57,6 +67,8 @@ void Transform::Free()
 #pragma region Loop
 void Transform::Update(f32 dt)
 {
+	UpdateLocalMatrix();		
+	UpdateWorldMatrix();
 }
 
 EResult Transform::Render(f32 dt)
@@ -181,8 +193,10 @@ void Transform::SetRotation(const quat& rotation)
 {
 	if (!IsStatic())
 	{
-		AddFlag(m_Flags, ETransformFlag::Dirty);
 		m_Rotation = rotation;
+		m_EulerRotation = glm::degrees(glm::eulerAngles(m_Rotation));
+		AddFlag(m_Flags, ETransformFlag::Dirty);
+
 	}
 }
 
@@ -190,8 +204,9 @@ void Transform::SetRotation(const vec3& eulerAngles)
 {
 	if (!IsStatic())
 	{
+		m_EulerRotation = eulerAngles;
 		AddFlag(m_Flags, ETransformFlag::Dirty);
-		m_Rotation = quat(glm::radians(eulerAngles));
+		m_Rotation = quat(glm::radians(m_EulerRotation));
 	}
 }
 
@@ -216,31 +231,16 @@ void Transform::SetMobility(EMobility mobility)
 	}
 }
 
-void Transform::SetInheritPosition(bool inherit)
+void Transform::SetState(ETransformFlag state, bool value)
 {
-	SetFlag(m_Flags, ETransformFlag::InheritPosition, inherit);
-}
-
-void Transform::SetInheritRotation(bool inherit)
-{
-	SetFlag(m_Flags, ETransformFlag::InheritRotation, inherit);
-}
-
-void Transform::SetInheritScale(bool inherit)
-{
-	SetFlag(m_Flags, ETransformFlag::InheritScale, inherit);
-}
-void Transform::SetLockPosition(bool lock)
-{
-	SetFlag(m_Flags, ETransformFlag::LockPosition, lock);
-}
-void Transform::SetLockRotation(bool lock)
-{
-	SetFlag(m_Flags, ETransformFlag::LockRotation, lock);
-}
-void Transform::SetLockScale(bool lock)
-{
-	SetFlag(m_Flags, ETransformFlag::LockScale, lock);
+	if(value)
+	{
+		AddFlag(m_Flags, state);
+	}
+	else
+	{
+		RemoveFlag(m_Flags, state);
+	}
 }
 #pragma endregion
 

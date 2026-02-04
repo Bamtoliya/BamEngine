@@ -10,8 +10,9 @@
         "PROP_INFORMATION": "정보",
         "Hirarchy_AddGameObject": "게임 오브젝트 추가+",
         "Transform.Position": "위치",
-        "Transform.Rotation": "회전",
+        "Transform.Rotation": "회전(쿼터니언)",
         "Transform.Scale": "크기",
+        "Transform.EulerRotation": "회전(각도)",
         "PROP_TEST": "테스트"
     }
 }

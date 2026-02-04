@@ -187,10 +187,34 @@ EResult Scene::AddGameObject(class GameObject* gameObject, uint32 layerIndex)
 {
 	if (!gameObject || m_Layers.empty()) return EResult::InvalidArgument;
 	if (layerIndex >= m_Layers.size()) layerIndex = 0;
+	m_GameObjectMap[gameObject->GetID()] = gameObject;
+	if (gameObject->GetParent())
+	{
+		return EResult::Success;
+	}
 	if (IsFailure(m_Layers[layerIndex]->AddGameObject(gameObject)))
 		return EResult::Fail;
-	m_GameObjectMap[gameObject->GetID()] = gameObject;
+	
 	return EResult::Success;
+}
+
+GameObject* Scene::CloneGameObject(GameObject* gameObject)
+{
+	if (!gameObject || m_Layers.empty()) return nullptr;
+	uint32 layerIndex = gameObject->GetLayerIndex();
+	GameObject* clonedObject = gameObject->Clone();
+	if (!clonedObject)
+	{
+		Safe_Release(clonedObject);
+		return nullptr;
+	}
+	m_GameObjectMap[clonedObject->GetID()] = clonedObject;
+	if (IsFailure(m_Layers[layerIndex]->AddGameObject(clonedObject)))
+	{
+		Safe_Release(clonedObject);
+		return nullptr;
+	}
+	return clonedObject;
 }
 
 EResult Scene::RemoveGameObject(class GameObject* gameObject)

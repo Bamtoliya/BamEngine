@@ -19,14 +19,28 @@ enum class ETransformFlag : uint16
 	InheritRotation = 1 << 2,
 	InheritScale = 1 << 3,
 
-	LockPosition = 1 << 4,
-	LockRotation = 1 << 5,
-	LockScale = 1 << 6,
+	LockPositionX = 1 << 4,
+	LockPositionY = 1 << 5,
+	LockPositionZ = 1 << 6,
 
-	Static = 1 << 7,
+	LockPosition = LockPositionX | LockPositionY | LockPositionZ,
+
+	LockRotationX = 1 << 7,
+	LockRotationY = 1 << 8,
+	LockRotationZ = 1 << 9,
+
+	LockRotation = LockRotationX | LockRotationY | LockRotationZ,
+
+	LockScaleX = 1 << 10,
+	LockScaleY = 1 << 11,
+	LockScaleZ = 1 << 12,
+
+	LockScale = LockScaleX | LockScaleY | LockScaleZ,
+
+	Static = 1 << 13,
 
 	AllInherit = InheritPosition | InheritRotation | InheritScale,
-	AllLocked = LockPosition | LockRotation | LockScale,
+	AllLocked = LockPosition |  LockRotation | LockScale,
 	Default = Dirty | AllInherit,
 };
 #pragma endregion
@@ -79,7 +93,7 @@ public:
 public:
 	const vec3& GetLocalPosition()		const { return m_Position; }
 	const quat& GetLocalRotationQuat()	const { return m_Rotation; }
-	vec3		GetLocalRotationEuler() const { return glm::degrees(glm::eulerAngles(m_Rotation)); }
+	vec3		GetLocalRotationEuler() const { return m_EulerRotation; }
 	const vec3& GetLocalScale()			const { return m_Scale; }
 	EMobility   GetMobility()			const { return HasFlag(m_Flags, ETransformFlag::Static) ? EMobility::Static : EMobility::Movable; }
 	const mat4& GetLocalMatrix();
@@ -88,11 +102,13 @@ public:
 	quat GetWorldRotationQuat();
 	vec3 GetWorldRotationEuler();
 	vec3 GetWorldScale();
-
 	const mat4& GetWorldMatrix();
+public:
 	vec3 GetRight();
 	vec3 GetUp();
 	vec3 GetForward();
+public:
+	bool GetState(ETransformFlag state) const { return HasFlag(m_Flags, state); }
 #pragma endregion
 
 #pragma region Internal Helper Functions
@@ -112,15 +128,10 @@ public:
 	void SetPosition(const vec3& position);
 	void SetRotation(const quat& rotation);
 	void SetRotation(const vec3& eulerAngles);
-	
 	void SetScale(const vec3& scale);
+	
 	void SetMobility(EMobility mobility);
-	void SetInheritPosition(bool inherit);
-	void SetInheritRotation(bool inherit);
-	void SetInheritScale(bool inherit);
-	void SetLockPosition(bool lock);
-	void SetLockRotation(bool lock);
-	void SetLockScale(bool lock);
+	void SetState(ETransformFlag state, bool value = true);
 #pragma endregion
 
 #pragma region Matrix
@@ -147,6 +158,8 @@ private:
 
 	PROPERTY()
 	quat m_Rotation = glm::identity<quat>();
+
+	vec3 m_EulerRotation = vec3(0.f);
 
 	PROPERTY()
 	vec3 m_Scale = vec3(1.0f);
