@@ -41,6 +41,14 @@ public:
 	{
 		return find(m_SelectedObjects.begin(), m_SelectedObjects.end(), gameObject) != m_SelectedObjects.end();
 	}
+	void AddToSelection(class GameObject* gameObject)
+	{
+		if (!gameObject) return;
+		if (!IsSelected(gameObject))
+		{
+			m_SelectedObjects.push_back(gameObject);
+		}
+	}
 #pragma endregion
 
 private:

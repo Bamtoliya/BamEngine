@@ -47,7 +47,7 @@ static uintptr_t GetNodeID(Layer* layer)
 
 
 template<typename T>
-bool HierarchyPanel::DrawRenameBox(T* target, ImGuiTreeNodeFlags flags, bool isSelected)
+bool HierarchyPanel::DrawRenameBox(T* target, ImGuiTreeNodeFlags flags, bool isSelected, function<void()> onDragDrop, function<void()> onContextMenu)
 {
 	void* targetId = (void*)GetNodeID(target);
 	string name = WStrToStr(target->GetName());
@@ -85,6 +85,106 @@ bool HierarchyPanel::DrawRenameBox(T* target, ImGuiTreeNodeFlags flags, bool isS
 
 	// 가져온 ID(targetId)를 사용하여 TreeNode 생성
 	bool opened = ImGui::TreeNodeEx(targetId, flags, "%s", name.c_str());
+
+	if (m_IsBoxSelecting)
+	{
+		// 1. 현재 노드의 화면상 영역 가져오기
+		ImVec2 itemMin = ImGui::GetItemRectMin();
+		ImVec2 itemMax = ImGui::GetItemRectMax();
+
+		// 2. 선택 박스 영역 계산
+		ImVec2 boxMin = ImVec2(std::min(m_BoxStartPos.x, m_BoxEndPos.x), std::min(m_BoxStartPos.y, m_BoxEndPos.y));
+		ImVec2 boxMax = ImVec2(std::max(m_BoxStartPos.x, m_BoxEndPos.x), std::max(m_BoxStartPos.y, m_BoxEndPos.y));
+
+		// 3. AABB(Axis-Aligned Bounding Box) 교차 검사
+		// 두 사각형이 겹치는지 확인
+		bool overlap = (itemMin.x < boxMax.x && itemMax.x > boxMin.x) &&
+			(itemMin.y < boxMax.y && itemMax.y > boxMin.y);
+
+		if (overlap)
+		{
+			// 1. 시각적 피드백 (하이라이트)
+			ImGui::GetWindowDrawList()->AddRectFilled(itemMin, itemMax, IM_COL32(255, 255, 255, 50));
+
+			// 2. 임시 후보군 등록 (나중에 마우스 떼면 SelectionManager로 넘어감)
+			if constexpr (std::is_same_v<T, GameObject>)
+			{
+				// 중복 방지: 이미 후보군에 있는지 체크
+				bool alreadyIn = false;
+				for (auto* cand : m_BoxSelectionCandidates) { if (cand == target) { alreadyIn = true; break; } }
+
+				if (!alreadyIn)
+				{
+					m_BoxSelectionCandidates.push_back(target);
+				}
+			}
+		}
+	}
+
+	if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
+	{
+		// T가 GameObject일 때만 SelectionManager 호출 (C++17 if constexpr 사용 권장)
+		// 만약 C++17 미만이라면 일반 if문과 dynamic_cast 등을 사용해야 함
+		if constexpr (std::is_same_v<T, GameObject>)
+		{
+			SelectionManager& mgr = SelectionManager::Get();
+			if (ImGui::GetIO().KeyCtrl)
+			{
+				mgr.ToggleSelection(target);
+			}
+			else
+			{
+				// 이미 선택된 상태가 아니라면 단일 선택으로 변경
+				if (!isSelected)
+				{
+					mgr.GetSelectionContext().clear();
+					mgr.GetSelectionContext().push_back(target);
+				}
+			}
+		}
+	}
+
+	// [선택 정리 로직] 마우스를 뗐을 때 나머지 선택 해제 (단순 클릭 시)
+	if (ImGui::IsItemHovered() && ImGui::IsMouseReleased(ImGuiMouseButton_Left))
+	{
+		if constexpr (std::is_same_v<T, GameObject>)
+		{
+			if (!ImGui::GetIO().KeyCtrl && !ImGui::IsMouseDragging(ImGuiMouseButton_Left))
+			{
+				SelectionManager& mgr = SelectionManager::Get();
+				if (isSelected && mgr.GetSelectionContext().size() > 1)
+				{
+					mgr.GetSelectionContext().clear();
+					mgr.GetSelectionContext().push_back(target);
+				}
+			}
+		}
+	}
+
+	if (ImGui::IsItemClicked(ImGuiMouseButton_Right))
+	{
+		// GameObject인 경우에만 선택 처리
+		if constexpr (std::is_same_v<T, GameObject>)
+		{
+			// 이미 선택된 그룹에 포함되어 있지 않다면, 얘만 단독 선택
+			SelectionManager& mgr = SelectionManager::Get();
+			if (!mgr.IsSelected(target))
+			{
+				mgr.GetSelectionContext().clear();
+				mgr.GetSelectionContext().push_back(target);
+			}
+		}
+	}
+
+	if (onContextMenu)
+	{
+		onContextMenu();
+	}
+
+	if (onDragDrop)
+	{
+		onDragDrop();
+	}
 
 	if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
 	{
@@ -135,6 +235,40 @@ bool HierarchyPanel::DrawRenameBox(T* target, ImGuiTreeNodeFlags flags, bool isS
 void HierarchyPanel::Draw()
 {
 	ImGui::Begin("Hierarchy");
+
+	SelectionManager& selectionMgr = SelectionManager::Get();
+
+	if (ImGui::IsWindowHovered() && !ImGui::IsAnyItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+	{
+		m_IsBoxSelecting = true;
+		m_BoxStartPos = ImGui::GetMousePos();
+		m_BoxSelectionCandidates.clear(); // 임시 후보군 초기화
+
+		// Shift나 Ctrl이 없으면 기존 선택 다 비우기 (SelectionManager 활용)
+		if (!ImGui::GetIO().KeyShift && !ImGui::GetIO().KeyCtrl)
+		{
+			selectionMgr.ClearSelection();
+		}
+	}
+
+	// (2) 드래그 중 업데이트
+	if (m_IsBoxSelecting)
+	{
+		m_BoxEndPos = ImGui::GetMousePos();
+
+		// 마우스를 뗐을 때 (확정)
+		if (ImGui::IsMouseReleased(ImGuiMouseButton_Left))
+		{
+			m_IsBoxSelecting = false;
+
+			// [핵심] 임시 후보군들을 실제 SelectionManager에 등록
+			for (GameObject* obj : m_BoxSelectionCandidates)
+			{
+				selectionMgr.AddToSelection(obj);
+			}
+			m_BoxSelectionCandidates.clear();
+		}
+	}
 	
 	Scene* currentScene = SceneManager::Get().GetCurrentScene();
 	if (currentScene)
@@ -180,6 +314,21 @@ void HierarchyPanel::Draw()
 	{
 		// ... (씬 없을 때 처리) ...
 	}
+
+	if (m_IsBoxSelecting)
+	{
+		// 드래그 박스 좌표 계산 (Min, Max)
+		ImVec2 p_min = ImVec2(std::min(m_BoxStartPos.x, m_BoxEndPos.x), std::min(m_BoxStartPos.y, m_BoxEndPos.y));
+		ImVec2 p_max = ImVec2(std::max(m_BoxStartPos.x, m_BoxEndPos.x), std::max(m_BoxStartPos.y, m_BoxEndPos.y));
+
+		ImDrawList* drawList = ImGui::GetWindowDrawList();
+
+		// 반투명 파란색 채우기
+		drawList->AddRectFilled(p_min, p_max, IM_COL32(0, 130, 255, 50));
+		// 외곽선
+		drawList->AddRect(p_min, p_max, IM_COL32(0, 130, 255, 255));
+	}
+
 	ImGui::End();
 }
 
@@ -218,17 +367,63 @@ void HierarchyPanel::DrawLayerItem(Scene* scene, Layer* layer)
 #pragma endregion
 
 #pragma region Layer Name (Inline Input)
-	static int s_RenamingLayerIdx = -1;
-	static char s_RenamingBuf[256] = "";
-	string layerName = WStrToStr(layer->GetName());
-
-	// 현재 이 레이어가 수정 중인지 확인
-	bool isRenaming = (s_RenamingLayerIdx == (int)layerIndex);
 	ImGuiTreeNodeFlags nodeFlags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_Framed;
-	bool layerOpen = DrawRenameBox(layer, nodeFlags, false);;
+	bool layerOpen = DrawRenameBox(layer, nodeFlags, false, [&]()
+		{
+#pragma region Drag & Drop
+			if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceNoDisableHover))
+			{
+				// 현재 레이어 인덱스를 페이로드로 보냄
+				ImGui::SetDragDropPayload("LAYER_PAYLOAD", &layerIndex, sizeof(uint32));
+				ImGui::Text("Move Layer %d", layerIndex);
+				ImGui::EndDragDropSource();
+			}
+
+			if (ImGui::BeginDragDropTarget())
+			{
+#pragma region Layer Order
+				if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("LAYER_PAYLOAD"))
+				{
+					uint32 sourceLayerIndex = *(uint32*)payload->Data;
+
+					// Scene의 ReorderLayer 함수 호출 (Source -> Target 순서 변경)
+					if (sourceLayerIndex != layerIndex)
+					{
+						scene->ReorderLayer(sourceLayerIndex, layerIndex);
+					}
+				}
 #pragma endregion
+
+#pragma region Object
+				if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("GAMEOBJECT_PAYLOAD"))
+				{
+					GameObject* droppedObj = *(GameObject**)payload->Data;
+
+					if (droppedObj)
+					{
+						Safe_AddRef(droppedObj);
+						if (droppedObj->GetParent() != nullptr)
+						{
+							droppedObj->GetParent()->RemoveChild(droppedObj);
+							scene->AddGameObject(droppedObj, layerIndex);
+						}
+						else
+						{
+							scene->MoveGameObjectLayer(droppedObj, layerIndex);
+						}
+						Safe_Release(droppedObj);
+					}
+				}
+#pragma endregion
+
+				ImGui::EndDragDropTarget();
+			}
+#pragma endregion
+		});
+#pragma endregion
+
 #pragma region Checkboxes
-	if (!isRenaming)
+	if (m_RenamingId != (void*)GetNodeID(layer))
 	{
 
 		ImGui::SameLine();
@@ -314,7 +509,6 @@ void HierarchyPanel::DrawLayerItem(Scene* scene, Layer* layer)
 	}
 #pragma endregion
 
-
 #pragma region Draw Objects
 	if (layerOpen)
 	{
@@ -378,7 +572,59 @@ void HierarchyPanel::DrawGameObjectNode(class GameObject* gameObject)
 #pragma endregion
 		
 #pragma region Namebox
-	bool opened = DrawRenameBox(gameObject, nodeFlags, isSelected);
+	bool opened = DrawRenameBox(gameObject, nodeFlags, isSelected, [&]()
+		{
+#pragma region Drap & Drop
+
+			if (ImGui::BeginDragDropSource())
+			{
+				ImGui::SetDragDropPayload("GAMEOBJECT_PAYLOAD", &gameObject, sizeof(GameObject*));
+				if (selectionManager.IsSelected(gameObject) && selectionManager.GetSelectionContext().size() > 1)
+				{
+					ImGui::Text("%s (+%d objects)", WStrToStr(gameObject->GetName()).c_str(), (int)selectionManager.GetSelectionContext().size() - 1);
+				}
+				else
+				{
+					ImGui::Text("%s", WStrToStr(gameObject->GetName()).c_str());
+				}
+
+				ImGui::EndDragDropSource();
+			}
+
+			if (ImGui::BeginDragDropTarget())
+			{
+				if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("GAMEOBJECT_PAYLOAD"))
+				{
+					GameObject* droppedObject = *(GameObject**)payload->Data;
+					vector<GameObject*> objectsToMove;
+
+					if (selectionManager.IsSelected(droppedObject))
+					{
+						objectsToMove = selectionManager.GetSelectionContext();
+					}
+					else
+					{
+						objectsToMove.push_back(droppedObject);
+					}
+
+					for (GameObject* obj : objectsToMove)
+					{
+						if (!obj || obj == gameObject) continue;
+						if (gameObject->IsDescendant(obj) || obj->GetParent() == gameObject) continue;
+
+						Safe_AddRef(obj);
+						if (obj->GetParent() == nullptr)
+						{
+							SceneManager::Get().GetCurrentScene()->RemoveGameObject(obj);
+						}
+						gameObject->AddChild(obj);
+						Safe_Release(obj);
+					}
+				}
+				ImGui::EndDragDropTarget();
+			}
+#pragma endregion
+		}, bind(&HierarchyPanel::DrawGameObjectContextMenu, this));
 #pragma region Selection Control
 	if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
     {
@@ -424,188 +670,118 @@ void HierarchyPanel::DrawGameObjectNode(class GameObject* gameObject)
 	
 #pragma region Context Menu
 	
-	if (ImGui::BeginPopupContextItem())
-	{
-		if(ImGui::MenuItem("Delete Object"))
-		{
-			//if (!selectionManager.IsSelected(gameObject))
-			//{
-			//	selectionManager.ClearSelection();
-			//	selectionManager.GetSelectionContext().push_back(gameObject);
-			//}
-			//char label[64];
-			//sprintf_s(label, "Delete Selected (%d)", (int)selectionContext.size());
-			//
-			//if (ImGui::MenuItem(label))
-			//{
-			//	for (GameObject* obj : selectionContext)
-			//	{
-			//		obj->SetDead();
-			//	}
-			//
-			//	selectionContext.clear();
-			//}
-		}
-		ImGui::EndPopup();
-	}
+	
 #pragma endregion
 
 	
-#pragma region Drap & Drop
-
-	if (ImGui::BeginDragDropSource())
-	{
-		ImGui::SetDragDropPayload("GAMEOBJECT_PAYLOAD", &gameObject, sizeof(GameObject*));
-		if (selectionManager.IsSelected(gameObject) && selectionManager.GetSelectionContext().size() > 1)
-		{
-			ImGui::Text("%s (+%d objects)", WStrToStr(gameObject->GetName()).c_str(), (int)selectionManager.GetSelectionContext().size() - 1);
-		}
-		else
-		{
-			ImGui::Text("%s", WStrToStr(gameObject->GetName()).c_str());
-		}
-
-		ImGui::EndDragDropSource();
-	}
-
-	if (ImGui::BeginDragDropTarget())
-	{
-		if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("GAMEOBJECT_PAYLOAD"))
-		{
-			GameObject* droppedObject = *(GameObject**)payload->Data;
-			vector<GameObject*> objectsToMove;
-
-			if (selectionManager.IsSelected(droppedObject))
-			{
-				objectsToMove = selectionManager.GetSelectionContext();
-			}
-			else
-			{
-				objectsToMove.push_back(droppedObject);
-			}
-
-			for (GameObject* obj : objectsToMove)
-			{
-				if (!obj || obj == gameObject) continue;
-				if (gameObject->IsDescendant(obj) || obj->GetParent() == gameObject) continue;
-
-				Safe_AddRef(obj);
-				if (obj->GetParent() == nullptr)
-				{
-					SceneManager::Get().GetCurrentScene()->RemoveGameObject(obj);
-				}
-				gameObject->AddChild(obj);
-				Safe_Release(obj);
-			}
-		}
-		ImGui::EndDragDropTarget();
-	}
-#pragma endregion
 
 #pragma endregion
 
 #pragma region Checkboxes
-	ImGui::SameLine();
-
-	// 1. 사이즈 및 위치 계산
-	float itemHeight = ImGui::GetFrameHeight();
-	float buttonSize = itemHeight;
-	float spacing = itemHeight / 6.f;                           // 컨트롤 간 간격
-	float rightPadding = itemHeight / 2.f;                      // 윈도우 우측 여백
-	float windowWidth = ImGui::GetWindowContentRegionMax().x;
-
-	float totalRightWidth = itemHeight + (buttonSize * 3) + (spacing * 3) + rightPadding;
-	float activeBoxPos = windowWidth - totalRightWidth;
-	ImGui::SetCursorPosX(activeBoxPos);
-
-	// 스타일 보정 (작은 화살표 버튼을 위해 패딩 조절)
-	ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
-	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
-	ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0)); // 배경 투명
-	
-	// 1. 위로 이동 (Up Arrow)
-	ImGui::PushID("MoveUp");
-	// ArrowButton 대신 Button을 써서 크기를 강제함 (frameHeight)
-	if (ImGui::Button(ICON_FA_UP_LONG, ImVec2(buttonSize, itemHeight)))
+	if (m_RenamingId != (void*)GetNodeID(gameObject))
 	{
-		GameObject* parent = gameObject->GetParent();
-		if (parent)
+		ImGui::SameLine();
+
+		// 1. 사이즈 및 위치 계산
+		float itemHeight = ImGui::GetFrameHeight();
+		float buttonSize = itemHeight;
+		float spacing = itemHeight / 6.f;                           // 컨트롤 간 간격
+		float rightPadding = itemHeight / 2.f;                      // 윈도우 우측 여백
+		float windowWidth = ImGui::GetWindowContentRegionMax().x;
+
+		float totalRightWidth = itemHeight + (buttonSize * 3) + (spacing * 3) + rightPadding;
+		float activeBoxPos = windowWidth - totalRightWidth;
+		ImGui::SetCursorPosX(activeBoxPos);
+
+		// 스타일 보정 (작은 화살표 버튼을 위해 패딩 조절)
+		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
+		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0)); // 배경 투명
+
+		// 1. 위로 이동 (Up Arrow)
+		ImGui::PushID("MoveUp");
+		// ArrowButton 대신 Button을 써서 크기를 강제함 (frameHeight)
+		if (ImGui::Button(ICON_FA_UP_LONG, ImVec2(buttonSize, itemHeight)))
 		{
-			parent->MoveChild(gameObject, -1);
+			GameObject* parent = gameObject->GetParent();
+			if (parent)
+			{
+				parent->MoveChild(gameObject, -1);
+			}
+			else
+			{
+				// [루트 객체 처리]
+				SceneManager::Get().GetCurrentScene()->MoveGameObjectOrder(gameObject, -1);
+			}
 		}
-		else
+		if (ImGui::IsItemHovered()) ImGui::SetTooltip("Move Up");
+		ImGui::PopID();
+
+		ImGui::SameLine(); // 간격 0
+
+		// 2. 아래로 이동 (Down)
+		ImGui::PushID("MoveDown");
+		if (ImGui::Button(ICON_FA_DOWN_LONG, ImVec2(buttonSize, itemHeight)))
 		{
-			// [루트 객체 처리]
-			SceneManager::Get().GetCurrentScene()->MoveGameObjectOrder(gameObject, -1);
+			GameObject* parent = gameObject->GetParent();
+			if (parent)
+			{
+				parent->MoveChild(gameObject, 1);
+			}
+			else
+			{
+				// [루트 객체 처리]
+				SceneManager::Get().GetCurrentScene()->MoveGameObjectOrder(gameObject, 1);
+			}
 		}
-	}
-	if (ImGui::IsItemHovered()) ImGui::SetTooltip("Move Up");
-	ImGui::PopID();
-	
-	ImGui::SameLine(); // 간격 0
-	
-	// 2. 아래로 이동 (Down)
-	ImGui::PushID("MoveDown");
-	if (ImGui::Button(ICON_FA_DOWN_LONG, ImVec2(buttonSize, itemHeight)))
-	{
-		GameObject* parent = gameObject->GetParent();
-		if (parent)
+		if (ImGui::IsItemHovered()) ImGui::SetTooltip("Move Down");
+		ImGui::PopID();
+
+		ImGui::PopStyleVar(2);   // FramePadding, ItemSpacing 복구
+		ImGui::PopStyleColor();  // Button Color 복구
+
+		ImGui::SameLine();
+
+		bool isObjectActive = hasAllChildActive;
+		bool isMixedActive = hasAnyChildActive && !hasAllChildActive;
+
+		if (isMixedActive)
 		{
-			parent->MoveChild(gameObject, 1);
+			ImGui::PushItemFlag(ImGuiItemFlags_MixedValue, true);
 		}
-		else
+
+		bool gameObjectActive = gameObject->IsActive();
+		if (ImGui::Checkbox("##ObjectActive", &gameObjectActive))
 		{
-			// [루트 객체 처리]
-			SceneManager::Get().GetCurrentScene()->MoveGameObjectOrder(gameObject, 1);
+			gameObject->SetActive(gameObjectActive);
 		}
-	}
-	if (ImGui::IsItemHovered()) ImGui::SetTooltip("Move Down");
-	ImGui::PopID();
-	
-	ImGui::PopStyleVar(2);   // FramePadding, ItemSpacing 복구
-	ImGui::PopStyleColor();  // Button Color 복구
-	
-	ImGui::SameLine();
 
-	bool isObjectActive = hasAllChildActive;
-	bool isMixedActive = hasAnyChildActive && !hasAllChildActive;
+		if (isMixedActive)
+			ImGui::PopItemFlag();
 
-	if (isMixedActive)
-	{
-		ImGui::PushItemFlag(ImGuiItemFlags_MixedValue, true);
-	}
+		if (ImGui::IsItemHovered()) ImGui::SetTooltip("Toggle Object Active");
 
-	bool gameObjectActive = gameObject->IsActive();
-	if (ImGui::Checkbox("##ObjectActive", &gameObjectActive))
-	{
-		gameObject->SetActive(gameObjectActive);
-	}
+		ImGui::SameLine();
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0)); // 투명 버튼
 
-	if (isMixedActive)
-		ImGui::PopItemFlag();
-
-	if (ImGui::IsItemHovered()) ImGui::SetTooltip("Toggle Object Active");
-
-	ImGui::SameLine();
-	ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0)); // 투명 버튼
-
-	bool isVisible = gameObject->IsVisible();
+		bool isVisible = gameObject->IsVisible();
 #ifdef ICON_FA_EYE
-	const char* visIcon = isVisible ? ICON_FA_EYE : ICON_FA_EYE_SLASH;
+		const char* visIcon = isVisible ? ICON_FA_EYE : ICON_FA_EYE_SLASH;
 #else
-	const char* visIcon = isVisible ? "(O)" : "(-)";
+		const char* visIcon = isVisible ? "(O)" : "(-)";
 #endif
 
-	if (ImGui::Button(visIcon, ImVec2(buttonSize, itemHeight)))
-	{
-		gameObject->SetVisible(!isVisible);
+		if (ImGui::Button(visIcon, ImVec2(buttonSize, itemHeight)))
+		{
+			gameObject->SetVisible(!isVisible);
+		}
+
+		if (ImGui::IsItemHovered()) ImGui::SetTooltip("Toggle Object Visibility");
+
+		ImGui::PopStyleColor();
 	}
-
-	if (ImGui::IsItemHovered()) ImGui::SetTooltip("Toggle Object Visibility");
-
-	ImGui::PopStyleColor();
-
 #pragma endregion
+
 
 #pragma region Draw Child
 	if (opened && !children.empty())
@@ -741,6 +917,34 @@ void HierarchyPanel::DrawSceneTitle(Scene* scene)
 	}
 
 	ImGui::Separator();
+}
+
+void HierarchyPanel::DrawGameObjectContextMenu()
+{
+	if (ImGui::BeginPopupContextItem())
+	{
+		if (ImGui::MenuItem("Delete Object"))
+		{
+			//if (!selectionManager.IsSelected(gameObject))
+			//{
+			//	selectionManager.ClearSelection();
+			//	selectionManager.GetSelectionContext().push_back(gameObject);
+			//}
+			//char label[64];
+			//sprintf_s(label, "Delete Selected (%d)", (int)selectionContext.size());
+			//
+			//if (ImGui::MenuItem(label))
+			//{
+			//	for (GameObject* obj : selectionContext)
+			//	{
+			//		obj->SetDead();
+			//	}
+			//
+			//	selectionContext.clear();
+			//}
+		}
+		ImGui::EndPopup();
+	}
 }
 
 void HierarchyPanel::CreateEmptyObject(Scene* scene)
