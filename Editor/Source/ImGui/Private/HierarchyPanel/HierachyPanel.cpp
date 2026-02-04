@@ -276,8 +276,39 @@ void HierarchyPanel::DrawLayerItem(Scene* scene, Layer* layer)
 	float rightPadding = 5.0f;                      // 윈도우 우측 여백
 	float windowWidth = ImGui::GetWindowContentRegionMax().x;
 
-	float activeBoxPos = windowWidth - visibleBtnWidth - spacing - activeBoxWidth - rightPadding;
+	float activeBoxPos = windowWidth - (visibleBtnWidth * 3) - (spacing * 3) - activeBoxWidth - rightPadding + 2.f;
 	ImGui::SetCursorPosX(activeBoxPos);
+
+	// 스타일 보정 (작은 화살표 버튼을 위해 패딩 조절)
+	ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
+	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
+	ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0)); // 배경 투명
+
+	// 1. 위로 이동 (Up Arrow)
+	ImGui::PushID("MoveUp");
+	// ArrowButton 대신 Button을 써서 크기를 강제함 (frameHeight)
+	if (ImGui::Button(ICON_FA_UP_LONG, ImVec2(visibleBtnWidth, itemHeight)))
+	{
+		SceneManager::Get().GetCurrentScene()->ReorderLayer(layerIndex, layerIndex - 1);
+	}
+	if (ImGui::IsItemHovered()) ImGui::SetTooltip("Move Up");
+	ImGui::PopID();
+
+	ImGui::SameLine(); // 간격 0
+
+	// 2. 아래로 이동 (Down)
+	ImGui::PushID("MoveDown");
+	if (ImGui::Button(ICON_FA_DOWN_LONG, ImVec2(visibleBtnWidth, itemHeight)))
+	{
+		SceneManager::Get().GetCurrentScene()->ReorderLayer(layerIndex, layerIndex + 1);
+	}
+	if (ImGui::IsItemHovered()) ImGui::SetTooltip("Move Down");
+	ImGui::PopID();
+
+	ImGui::PopStyleVar(2);   // FramePadding, ItemSpacing 복구
+	ImGui::PopStyleColor();  // Button Color 복구
+
+	ImGui::SameLine();
 
 	bool isLayerActive = hasAllObjectActive;
 	bool isMixedActive = hasAnyObjectActive && !hasAllObjectActive;
@@ -499,10 +530,11 @@ void HierarchyPanel::DrawGameObjectNode(class GameObject* gameObject)
 				if (gameObject->IsDescendant(obj) || obj->GetParent() == gameObject) continue;
 
 				Safe_AddRef(obj);
-				if (IsSuccess(SceneManager::Get().GetCurrentScene()->RemoveGameObject(obj)))
+				if (obj->GetParent() == nullptr)
 				{
-					gameObject->AddChild(obj);
+					SceneManager::Get().GetCurrentScene()->RemoveGameObject(obj);
 				}
+				gameObject->AddChild(obj);
 				Safe_Release(obj);
 			}
 		}
@@ -510,19 +542,71 @@ void HierarchyPanel::DrawGameObjectNode(class GameObject* gameObject)
 	}
 #pragma endregion
 
+#pragma endregion
+
+
 #pragma region Checkboxes
 	ImGui::SameLine();
 
 	// 1. 사이즈 및 위치 계산
 	float itemHeight = ImGui::GetFrameHeight();
-	float visibleBtnWidth = 30.0f;                  // Visible 버튼 너비
-	float activeBoxWidth = itemHeight;              // 체크박스는 보통 정사각형 (높이와 같음)
-	float spacing = 5.0f;                           // 컨트롤 간 간격
+	float buttonSize = 30.f;
+	float spacing = 5.f;                           // 컨트롤 간 간격
 	float rightPadding = 5.0f;                      // 윈도우 우측 여백
 	float windowWidth = ImGui::GetWindowContentRegionMax().x;
 
-	float activeBoxPos = windowWidth - visibleBtnWidth - spacing - activeBoxWidth - rightPadding;
+	float totalRightWidth = itemHeight + (buttonSize * 3) + (spacing * 3) + rightPadding - 2.f;
+	float activeBoxPos = windowWidth - totalRightWidth;
 	ImGui::SetCursorPosX(activeBoxPos);
+
+	// 스타일 보정 (작은 화살표 버튼을 위해 패딩 조절)
+	ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
+	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
+	ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0)); // 배경 투명
+	
+	// 1. 위로 이동 (Up Arrow)
+	ImGui::PushID("MoveUp");
+	// ArrowButton 대신 Button을 써서 크기를 강제함 (frameHeight)
+	if (ImGui::Button(ICON_FA_UP_LONG, ImVec2(buttonSize, itemHeight)))
+	{
+		GameObject* parent = gameObject->GetParent();
+		if (parent)
+		{
+			parent->MoveChild(gameObject, -1);
+		}
+		else
+		{
+			// [루트 객체 처리]
+			SceneManager::Get().GetCurrentScene()->MoveGameObjectOrder(gameObject, -1);
+		}
+	}
+	if (ImGui::IsItemHovered()) ImGui::SetTooltip("Move Up");
+	ImGui::PopID();
+	
+	ImGui::SameLine(); // 간격 0
+	
+	// 2. 아래로 이동 (Down)
+	ImGui::PushID("MoveDown");
+	if (ImGui::Button(ICON_FA_DOWN_LONG, ImVec2(buttonSize, itemHeight)))
+	{
+		GameObject* parent = gameObject->GetParent();
+		if (parent)
+		{
+			parent->MoveChild(gameObject, 1);
+		}
+		else
+		{
+			// [루트 객체 처리]
+			SceneManager::Get().GetCurrentScene()->MoveGameObjectOrder(gameObject, 1);
+		}
+	}
+	if (ImGui::IsItemHovered()) ImGui::SetTooltip("Move Down");
+	ImGui::PopID();
+	
+	ImGui::PopStyleVar(2);   // FramePadding, ItemSpacing 복구
+	ImGui::PopStyleColor();  // Button Color 복구
+	
+	ImGui::SameLine();
 
 	bool isObjectActive = hasAllChildActive;
 	bool isMixedActive = hasAnyChildActive && !hasAllChildActive;
@@ -553,7 +637,7 @@ void HierarchyPanel::DrawGameObjectNode(class GameObject* gameObject)
 	const char* visIcon = isVisible ? "(O)" : "(-)";
 #endif
 
-	if (ImGui::Button(visIcon, ImVec2(visibleBtnWidth, itemHeight)))
+	if (ImGui::Button(visIcon, ImVec2(buttonSize, itemHeight)))
 	{
 		gameObject->SetVisible(!isVisible);
 	}

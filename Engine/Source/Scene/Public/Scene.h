@@ -70,6 +70,7 @@ public:
 	EResult AddGameObject(class GameObject* gameObject, uint32 layerIndex = -1);
 	EResult RemoveGameObject(class GameObject* gameObject);
 	EResult MoveGameObjectLayer(class GameObject* gameObject, uint32 targetLayerIndex);
+	EResult MoveGameObjectOrder(class GameObject* gameObject, int8 dir);
 	EResult RegisterDeadGameObject(class GameObject* gameObject);
 	EResult FlushDeadGameObjects();
 public:

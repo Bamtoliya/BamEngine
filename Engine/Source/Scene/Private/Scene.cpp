@@ -221,6 +221,16 @@ EResult Scene::MoveGameObjectLayer(class GameObject* gameObject, uint32 targetLa
 	return EResult::Success;
 }
 
+EResult Scene::MoveGameObjectOrder(class GameObject* gameObject, int8 dir)
+{
+	if (!gameObject) return EResult::InvalidArgument;
+
+	Layer* layer = FindLayer(gameObject->GetLayerIndex());
+	if(layer)
+		return layer->MoveGameObject(gameObject, dir);
+	return EResult::Fail;
+}
+
 EResult Scene::RegisterDeadGameObject(class GameObject* gameObject)
 {
 	if (!gameObject) return EResult::InvalidArgument;

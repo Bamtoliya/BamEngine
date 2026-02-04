@@ -182,8 +182,8 @@ EResult GameObject::AddChild(GameObject* child)
 	}
 	child->SetLayerIndex(m_LayerIndex);
 	child->SetParent(this);
-	child->SetIndex(m_Childs.size() - 1);
 	m_Childs.push_back(child);
+	child->SetIndex(m_Childs.size() - 1);
 	return EResult::Success;
 }
 EResult GameObject::RemoveChild(GameObject* child)
@@ -200,6 +200,24 @@ EResult GameObject::RemoveChild(GameObject* child)
 	return EResult::Success;
 }
 
+EResult GameObject::MoveChild(GameObject* child, int8 dir)
+{
+	if (!child) return EResult::Fail;
+	auto it = std::find(m_Childs.begin(), m_Childs.end(), child);
+	if (it == m_Childs.end()) return EResult::Fail;
+
+	int currentIndex = static_cast<int>(std::distance(m_Childs.begin(), it));
+	int targetIndex = currentIndex + dir;
+
+	if (targetIndex < 0 || targetIndex >= m_Childs.size()) return EResult::Fail;
+
+	std::iter_swap(m_Childs.begin() + currentIndex, m_Childs.begin() + targetIndex);
+
+	m_Childs[currentIndex]->SetIndex(currentIndex);
+	m_Childs[targetIndex]->SetIndex(targetIndex);
+
+	return EResult::Success;
+}
 void GameObject::UpdateChildIndex()
 {
 	for (int i = 0; i < m_Childs.size(); ++i)

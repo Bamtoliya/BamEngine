@@ -136,7 +136,7 @@ public:
 	vector<GameObject*> GetAllChilds() const { return m_Childs; }
 	EResult AddChild(GameObject* child);
 	EResult RemoveChild(GameObject* child);
-	EResult ReorderChild(GameObject* child, GameObject* target, bool insertAfter);
+	EResult MoveChild(GameObject* child, int8 dir);
 private:
 	void UpdateChildIndex();
 #pragma endregion

@@ -55,7 +55,9 @@ public:
 public:
 	EResult AddGameObject(class GameObject* gameObject);
 	EResult RemoveGameObject(class GameObject* gameObject);
+	EResult MoveGameObject(class GameObject* gameObject, int8 dir);
 public:
+	class GameObject* FindGameObject(class GameObject* gameObject) const;
 	class GameObject* FindGameObject(uint64 id) const;
 	class GameObject* FindGameObject(const wstring& name) const;
 public:

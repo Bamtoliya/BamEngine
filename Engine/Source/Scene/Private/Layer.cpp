@@ -102,6 +102,28 @@ EResult Layer::RemoveGameObject(GameObject* gameObject)
     return EResult::Success;
 }
 
+EResult Layer::MoveGameObject(GameObject* gameObject, int8 dir)
+{
+    if (!gameObject) return EResult::Fail;
+	if (FindGameObject(gameObject) == nullptr)
+        return EResult::Fail;
+	int currentIndex = static_cast<int>(gameObject->GetIndex());
+	int targetIndex = currentIndex + dir;
+	if (targetIndex < 0 || targetIndex >= m_GameObjects.size()) return EResult::Fail;
+	std::iter_swap(m_GameObjects.begin() + currentIndex, m_GameObjects.begin() + targetIndex);
+	m_GameObjects[currentIndex]->SetIndex(currentIndex);
+	m_GameObjects[targetIndex]->SetIndex(targetIndex);
+	return EResult::Success;
+}
+
+GameObject* Layer::FindGameObject(class GameObject* gameObject) const
+{
+    auto it = std::find(m_GameObjects.begin(), m_GameObjects.end(), gameObject);
+    if (it != m_GameObjects.end())
+		return *it;
+    return nullptr;
+}
+
 GameObject* Layer::FindGameObject(uint64 id) const
 {
     for (GameObject* gameObject : m_GameObjects)
