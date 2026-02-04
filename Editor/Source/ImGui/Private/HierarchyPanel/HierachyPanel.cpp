@@ -28,6 +28,110 @@ static bool CheckboxTristate(const char* label, bool* v, bool is_mixed)
 	return pressed;
 }
 
+static uintptr_t GetNodeID(GameObject* obj)
+{
+	return (uintptr_t)obj->GetID();
+}
+
+// 2. Scene은 메모리 주소를 ID로 사용
+static uintptr_t GetNodeID(Scene* scene)
+{
+	return (uintptr_t)scene;
+}
+
+// 3. Layer도 메모리 주소를 ID로 사용
+static uintptr_t GetNodeID(Layer* layer)
+{
+	return (uintptr_t)layer;
+}
+
+
+template<typename T>
+bool HierarchyPanel::DrawRenameBox(T* target, ImGuiTreeNodeFlags flags, bool isSelected)
+{
+	void* targetId = (void*)GetNodeID(target);
+	string name = WStrToStr(target->GetName());
+
+	ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(ImGui::GetStyle().FramePadding.x, ImGui::GetStyle().FramePadding.y));
+	ImGui::AlignTextToFramePadding();
+	if (m_RenamingId == targetId)
+	{
+		ImGui::Bullet();
+		ImGui::SameLine();
+
+		if (ImGui::IsWindowFocused() && !ImGui::IsAnyItemActive() && !ImGui::IsMouseClicked(0))
+			ImGui::SetKeyboardFocusHere();
+
+		if (ImGui::InputText("##Rename", m_RenameBuffer, sizeof(m_RenameBuffer), ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll))
+		{
+			target->SetName(StrToWStr(m_RenameBuffer));
+			m_RenamingId = nullptr;
+		}
+		else if (ImGui::IsKeyPressed(ImGuiKey_Escape))
+		{
+			m_RenamingId = nullptr;
+		}
+		else if (ImGui::IsItemDeactivated())
+		{
+			target->SetName(StrToWStr(m_RenameBuffer));
+			m_RenamingId = nullptr;
+		}
+		ImGui::PopStyleVar();
+		return false;
+	}
+
+	// 2. [일반 표시 모드]
+	ImGui::SetNextItemAllowOverlap();
+
+	// 가져온 ID(targetId)를 사용하여 TreeNode 생성
+	bool opened = ImGui::TreeNodeEx(targetId, flags, "%s", name.c_str());
+
+	if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+	{
+		m_RenamingId = targetId;                 // 리네임 대상 설정
+		strcpy_s(m_RenameBuffer, name.c_str());  // 현재 이름 버퍼에 복사
+	}
+
+	// 3. [F2 키 트리거]
+	if (isSelected && ImGui::IsWindowFocused() && !ImGui::IsAnyItemActive())
+	{
+		if (ImGui::IsKeyPressed(ImGuiKey_F2))
+		{
+			m_RenamingId = targetId;
+			strcpy_s(m_RenameBuffer, name.c_str());
+		}
+	}
+
+	ImGui::SameLine();
+
+	// ---------------------------------------------------------------------
+		// 수정 버튼 (펜 아이콘)
+		// ---------------------------------------------------------------------
+	ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+	ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
+	ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(1, 1, 1, 0.1f));
+
+#ifdef ICON_FA_PEN
+	const char* editIcon = ICON_FA_PEN;
+#else
+	const char* editIcon = "(E)";
+#endif
+	// 작은 버튼
+	if (ImGui::Button(editIcon, ImVec2(ImGui::GetFrameHeight(), ImGui::GetFrameHeight())))
+	{
+		// [핵심] 리네임 시작 트리거
+		m_RenamingId = targetId;                 // ID 등록
+		strcpy_s(m_RenameBuffer, name.c_str()); // 이름 복사
+	}
+
+	if (ImGui::IsItemHovered()) ImGui::SetTooltip("Rename Scene");
+
+	ImGui::PopStyleColor(3);
+	
+	ImGui::PopStyleVar();
+	return opened;
+}
+
 void HierarchyPanel::Draw()
 {
 	ImGui::Begin("Hierarchy");
@@ -120,234 +224,96 @@ void HierarchyPanel::DrawLayerItem(Scene* scene, Layer* layer)
 
 	// 현재 이 레이어가 수정 중인지 확인
 	bool isRenaming = (s_RenamingLayerIdx == (int)layerIndex);
-	bool layerOpen = false;
-
-	if (isRenaming)
-	{
-		// [수정 모드]
-		// 1. TreeNode 그리기 (모양 유지를 위해 빈 라벨 사용, ID는 유지)
-		char idStr[32]; sprintf_s(idStr, "###Layer_%d", layerIndex);
-
-		// InputText가 겹쳐질 수 있도록 허용
-		ImGui::SetNextItemAllowOverlap();
-		layerOpen = ImGui::TreeNodeEx(idStr, ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_Framed | ImGuiTreeNodeFlags_AllowOverlap | ImGuiTreeNodeFlags_DrawLinesFull);
-
-		// 2. InputText 위치 잡기 (TreeNode 텍스트 위치로 커서 이동)
-		ImGui::SameLine();
-
-		// TreeNode의 화살표+패딩 만큼 커서를 이동시켜야 자연스럽습니다.
-		ImVec2 textPos = ImGui::GetCursorScreenPos();
-		float indent = ImGui::GetTreeNodeToLabelSpacing(); // 화살표 너비
-		ImGui::SetCursorScreenPos(ImVec2(textPos.x + indent, textPos.y));
-
-		// 3. InputText 그리기
-		// 너비 계산 (전체 - 우측 버튼 영역)
-		float w = ImGui::GetContentRegionAvail().x - 60.0f;
-		ImGui::SetNextItemWidth(w);
-
-		// 포커스 설정 (수정 모드 진입 직후 한 번만)
-		if (ImGui::IsWindowAppearing() || ImGui::IsMouseClicked(0))
-		{
-			// InputText가 자동으로 잡겠지만, 명시적으로 잡으려면 아래 사용
-			ImGui::SetKeyboardFocusHere(0);
-		}
-
-		// Enter 키를 누르면 저장(true 반환)
-		if (ImGui::InputText("##Rename", s_RenamingBuf, sizeof(s_RenamingBuf), ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll))
-		{
-			// 이름 저장 로직 (string -> wstring 변환 필요)
-			layer->SetName(StrToWStr(s_RenamingBuf)); // 실제 API 사용 시 주석 해제
-			s_RenamingLayerIdx = -1; // 수정 모드 종료
-		}
-
-		// 4. 수정 취소/완료 처리
-		// ESC 키: 취소
-		if (ImGui::IsItemFocused() && ImGui::IsKeyPressed(ImGuiKey_Escape))
-		{
-			s_RenamingLayerIdx = -1;
-		}
-		// 다른 곳 클릭 시: 저장하고 종료 (원하는 동작에 따라 변경 가능)
-		if (!ImGui::IsItemActive() && ImGui::IsMouseClicked(0))
-		{
-			layer->SetName(StrToWStr(s_RenamingBuf)); // 저장하려면 주석 해제
-			s_RenamingLayerIdx = -1;
-		}
-	}
-	else
-	{
-		// [일반 모드]
-		char label[256];
-		sprintf_s(label, "%s###Layer_%d", layerName.c_str(), layerIndex);
-
-		ImGui::SetNextItemAllowOverlap();
-		layerOpen = ImGui::TreeNodeEx(label, ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_Framed | ImGuiTreeNodeFlags_AllowOverlap | ImGuiTreeNodeFlags_DrawLinesFull);
-
-#pragma region Drag & Drop
-		if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceNoDisableHover))
-		{
-			// 현재 레이어 인덱스를 페이로드로 보냄
-			ImGui::SetDragDropPayload("LAYER_PAYLOAD", &layerIndex, sizeof(uint32));
-			ImGui::Text("Move Layer %d", layerIndex);
-			ImGui::EndDragDropSource();
-		}
-
-		if (ImGui::BeginDragDropTarget())
-		{
-#pragma region Layer Order
-			if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("LAYER_PAYLOAD"))
-			{
-				uint32 sourceLayerIndex = *(uint32*)payload->Data;
-
-				// Scene의 ReorderLayer 함수 호출 (Source -> Target 순서 변경)
-				if (sourceLayerIndex != layerIndex)
-				{
-					scene->ReorderLayer(sourceLayerIndex, layerIndex);
-				}
-			}
+	ImGuiTreeNodeFlags nodeFlags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_Framed;
+	bool layerOpen = DrawRenameBox(layer, nodeFlags, false);;
 #pragma endregion
-
-#pragma region Object
-			if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("GAMEOBJECT_PAYLOAD"))
-			{
-				GameObject* droppedObj = *(GameObject**)payload->Data;
-
-				if (droppedObj)
-				{
-					Safe_AddRef(droppedObj);
-					if (droppedObj->GetParent() != nullptr)
-					{
-						droppedObj->GetParent()->RemoveChild(droppedObj);
-						scene->AddGameObject(droppedObj, layerIndex);
-					}
-					else
-					{
-						scene->MoveGameObjectLayer(droppedObj, layerIndex);
-					}
-					Safe_Release(droppedObj);
-				}
-			}
-#pragma endregion
-
-			ImGui::EndDragDropTarget();
-		}
-#pragma endregion
-
-
-		// [수정 버튼 (펜 아이콘)] - 일반 모드일 때만 표시
-		ImGui::SameLine();
-
-		float nodeStartX = ImGui::GetItemRectMin().x;
-		float arrowSpacing = ImGui::GetTreeNodeToLabelSpacing();
-		float textWidth = ImGui::CalcTextSize(layerName.c_str()).x;
-		float padding = 10.0f;
-
-		ImGui::SetCursorPosX(nodeStartX + arrowSpacing + textWidth + padding);
-
-		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
-		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
-		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(1, 1, 1, 0.1f));
-
-#ifdef ICON_FA_PEN
-		const char* editIcon = ICON_FA_PEN;
-#else
-		const char* editIcon = "(E)";
-#endif
-		// 버튼 클릭 시 수정 모드로 전환
-		if (ImGui::Button(editIcon, ImVec2(30.0f, ImGui::GetFrameHeight())))
-		{
-			s_RenamingLayerIdx = (int)layerIndex;
-			strcpy_s(s_RenamingBuf, layerName.c_str()); // 현재 이름을 버퍼에 복사
-		}
-		if (ImGui::IsItemHovered()) ImGui::SetTooltip("Rename Layer");
-
-		ImGui::PopStyleColor(3);
-	}
-
-#pragma endregion
-
 #pragma region Checkboxes
-	ImGui::SameLine();
-
-	// 1. 사이즈 및 위치 계산
-	float itemHeight = ImGui::GetFrameHeight();
-	float visibleBtnWidth = 30.0f;                  // Visible 버튼 너비
-	float activeBoxWidth = itemHeight;              // 체크박스는 보통 정사각형 (높이와 같음)
-	float spacing = 5.0f;                           // 컨트롤 간 간격
-	float rightPadding = 5.0f;                      // 윈도우 우측 여백
-	float windowWidth = ImGui::GetWindowContentRegionMax().x;
-
-	float activeBoxPos = windowWidth - (visibleBtnWidth * 3) - (spacing * 3) - activeBoxWidth - rightPadding + 2.f;
-	ImGui::SetCursorPosX(activeBoxPos);
-
-	// 스타일 보정 (작은 화살표 버튼을 위해 패딩 조절)
-	ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
-	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
-	ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0)); // 배경 투명
-
-	// 1. 위로 이동 (Up Arrow)
-	ImGui::PushID("MoveUp");
-	// ArrowButton 대신 Button을 써서 크기를 강제함 (frameHeight)
-	if (ImGui::Button(ICON_FA_UP_LONG, ImVec2(visibleBtnWidth, itemHeight)))
+	if (!isRenaming)
 	{
-		SceneManager::Get().GetCurrentScene()->ReorderLayer(layerIndex, layerIndex - 1);
-	}
-	if (ImGui::IsItemHovered()) ImGui::SetTooltip("Move Up");
-	ImGui::PopID();
 
-	ImGui::SameLine(); // 간격 0
+		ImGui::SameLine();
 
-	// 2. 아래로 이동 (Down)
-	ImGui::PushID("MoveDown");
-	if (ImGui::Button(ICON_FA_DOWN_LONG, ImVec2(visibleBtnWidth, itemHeight)))
-	{
-		SceneManager::Get().GetCurrentScene()->ReorderLayer(layerIndex, layerIndex + 1);
-	}
-	if (ImGui::IsItemHovered()) ImGui::SetTooltip("Move Down");
-	ImGui::PopID();
+		// 1. 사이즈 및 위치 계산
+		float itemHeight = ImGui::GetFrameHeight();
+		float visibleBtnWidth = itemHeight;                  // Visible 버튼 너비
+		float activeBoxWidth = itemHeight;              // 체크박스는 보통 정사각형 (높이와 같음)
+		float spacing = itemHeight / 6.f;                           // 컨트롤 간 간격
+		float rightPadding = itemHeight / 2.f;                      // 윈도우 우측 여백
+		float windowWidth = ImGui::GetWindowContentRegionMax().x;
 
-	ImGui::PopStyleVar(2);   // FramePadding, ItemSpacing 복구
-	ImGui::PopStyleColor();  // Button Color 복구
+		float activeBoxPos = windowWidth - (visibleBtnWidth * 3) - (spacing * 3) - activeBoxWidth - rightPadding;
+		ImGui::SetCursorPosX(activeBoxPos);
 
-	ImGui::SameLine();
+		// 스타일 보정 (작은 화살표 버튼을 위해 패딩 조절)
+		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
+		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0)); // 배경 투명
 
-	bool isLayerActive = hasAllObjectActive;
-	bool isMixedActive = hasAnyObjectActive && !hasAllObjectActive;
+		// 1. 위로 이동 (Up Arrow)
+		ImGui::PushID("MoveUp");
+		// ArrowButton 대신 Button을 써서 크기를 강제함 (frameHeight)
+		if (ImGui::Button(ICON_FA_UP_LONG, ImVec2(visibleBtnWidth, itemHeight)))
+		{
+			SceneManager::Get().GetCurrentScene()->ReorderLayer(layerIndex, layerIndex - 1);
+		}
+		if (ImGui::IsItemHovered()) ImGui::SetTooltip("Move Up");
+		ImGui::PopID();
 
-	if (isMixedActive)
-	{
-		ImGui::PushItemFlag(ImGuiItemFlags_MixedValue, true);
-	}
+		ImGui::SameLine(); // 간격 0
 
-	if (ImGui::Checkbox("##LayerActive", &isLayerActive))
-	{
-		layer->SetActive(isLayerActive);
-	}
+		// 2. 아래로 이동 (Down)
+		ImGui::PushID("MoveDown");
+		if (ImGui::Button(ICON_FA_DOWN_LONG, ImVec2(visibleBtnWidth, itemHeight)))
+		{
+			SceneManager::Get().GetCurrentScene()->ReorderLayer(layerIndex, layerIndex + 1);
+		}
+		if (ImGui::IsItemHovered()) ImGui::SetTooltip("Move Down");
+		ImGui::PopID();
 
-	if (isMixedActive)
-		ImGui::PopItemFlag();
+		ImGui::PopStyleVar(2);   // FramePadding, ItemSpacing 복구
+		ImGui::PopStyleColor();  // Button Color 복구
 
-	if (ImGui::IsItemHovered()) ImGui::SetTooltip("Toggle Layer Active");
+		ImGui::SameLine();
 
-	ImGui::SameLine();
-	ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0)); // 투명 버튼
+		bool isLayerActive = hasAllObjectActive;
+		bool isMixedActive = hasAnyObjectActive && !hasAllObjectActive;
 
-	bool isVisible = layer->IsVisible();
+		if (isMixedActive)
+		{
+			ImGui::PushItemFlag(ImGuiItemFlags_MixedValue, true);
+		}
+
+		if (ImGui::Checkbox("##LayerActive", &isLayerActive))
+		{
+			layer->SetActive(isLayerActive);
+		}
+
+		if (isMixedActive)
+			ImGui::PopItemFlag();
+
+		if (ImGui::IsItemHovered()) ImGui::SetTooltip("Toggle Layer Active");
+
+		ImGui::SameLine();
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0)); // 투명 버튼
+
+		bool isVisible = layer->IsVisible();
 #ifdef ICON_FA_EYE
-	const char* visIcon = isVisible ? ICON_FA_EYE : ICON_FA_EYE_SLASH;
+		const char* visIcon = isVisible ? ICON_FA_EYE : ICON_FA_EYE_SLASH;
 #else
-	const char* visIcon = isVisible ? "(O)" : "(-)";
+		const char* visIcon = isVisible ? "(O)" : "(-)";
 #endif
 
-	if (ImGui::Button(visIcon, ImVec2(visibleBtnWidth, itemHeight)))
-	{
-		layer->SetVisible(!isVisible);
+		if (ImGui::Button(visIcon, ImVec2(visibleBtnWidth, itemHeight)))
+		{
+			layer->SetVisible(!isVisible);
+		}
+
+		if (ImGui::IsItemHovered()) ImGui::SetTooltip("Toggle Layer Visibility");
+
+		ImGui::PopStyleColor();
 	}
-
-	if (ImGui::IsItemHovered()) ImGui::SetTooltip("Toggle Layer Visibility");
-
-	ImGui::PopStyleColor();
-	
 #pragma endregion
+
 
 #pragma region Draw Objects
 	if (layerOpen)
@@ -369,6 +335,8 @@ void HierarchyPanel::DrawLayerItem(Scene* scene, Layer* layer)
 void HierarchyPanel::DrawGameObjectNode(class GameObject* gameObject)
 {
 	ImGui::PushID((void*)(uintptr_t)gameObject->GetID());
+	float fontSize = ImGui::GetFontSize();
+	ImGui::PushStyleVar(ImGuiStyleVar_IndentSpacing, fontSize);
 	ImGui::Indent();
 	
 	SelectionManager& selectionManager = SelectionManager::Get();
@@ -410,14 +378,7 @@ void HierarchyPanel::DrawGameObjectNode(class GameObject* gameObject)
 #pragma endregion
 		
 #pragma region Namebox
-	ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(ImGui::GetStyle().FramePadding.x, ImGui::GetStyle().FramePadding.y));
-
-	string gameObjectName = WStrToStr(gameObject->GetName());
-	ImGui::AlignTextToFramePadding();
-	ImGui::SetNextItemAllowOverlap();
-	bool opened = ImGui::TreeNodeEx((void*)(uintptr_t)gameObject->GetID(), nodeFlags, "%s", gameObjectName.c_str());
-	ImGui::PopStyleVar();
-
+	bool opened = DrawRenameBox(gameObject, nodeFlags, isSelected);
 #pragma region Selection Control
 	if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
     {
@@ -461,7 +422,6 @@ void HierarchyPanel::DrawGameObjectNode(class GameObject* gameObject)
     }
 #pragma endregion
 	
-
 #pragma region Context Menu
 	
 	if (ImGui::BeginPopupContextItem())
@@ -498,11 +458,11 @@ void HierarchyPanel::DrawGameObjectNode(class GameObject* gameObject)
 		ImGui::SetDragDropPayload("GAMEOBJECT_PAYLOAD", &gameObject, sizeof(GameObject*));
 		if (selectionManager.IsSelected(gameObject) && selectionManager.GetSelectionContext().size() > 1)
 		{
-			ImGui::Text("%s (+%d objects)", gameObjectName.c_str(), (int)selectionManager.GetSelectionContext().size() - 1);
+			ImGui::Text("%s (+%d objects)", WStrToStr(gameObject->GetName()).c_str(), (int)selectionManager.GetSelectionContext().size() - 1);
 		}
 		else
 		{
-			ImGui::Text("%s", gameObjectName.c_str());
+			ImGui::Text("%s", WStrToStr(gameObject->GetName()).c_str());
 		}
 
 		ImGui::EndDragDropSource();
@@ -544,18 +504,17 @@ void HierarchyPanel::DrawGameObjectNode(class GameObject* gameObject)
 
 #pragma endregion
 
-
 #pragma region Checkboxes
 	ImGui::SameLine();
 
 	// 1. 사이즈 및 위치 계산
 	float itemHeight = ImGui::GetFrameHeight();
-	float buttonSize = 30.f;
-	float spacing = 5.f;                           // 컨트롤 간 간격
-	float rightPadding = 5.0f;                      // 윈도우 우측 여백
+	float buttonSize = itemHeight;
+	float spacing = itemHeight / 6.f;                           // 컨트롤 간 간격
+	float rightPadding = itemHeight / 2.f;                      // 윈도우 우측 여백
 	float windowWidth = ImGui::GetWindowContentRegionMax().x;
 
-	float totalRightWidth = itemHeight + (buttonSize * 3) + (spacing * 3) + rightPadding - 2.f;
+	float totalRightWidth = itemHeight + (buttonSize * 3) + (spacing * 3) + rightPadding;
 	float activeBoxPos = windowWidth - totalRightWidth;
 	ImGui::SetCursorPosX(activeBoxPos);
 
@@ -659,6 +618,7 @@ void HierarchyPanel::DrawGameObjectNode(class GameObject* gameObject)
 	}
 #pragma endregion
 	ImGui::Unindent();
+	ImGui::PopStyleVar(); // IndentSpacing Pop
 	ImGui::PopID();
 }
 
@@ -702,81 +662,85 @@ void HierarchyPanel::DrawAddGameObjectButton(Scene* scene)
 
 void HierarchyPanel::DrawSceneTitle(Scene* scene)
 {
-	static bool s_IsRenamingScene = false;
-	static char s_RenamingBuf[256] = "";
+	if (!scene) return;
+
+	// 1. 씬의 ID와 이름 가져오기
+	// (아까 만든 GetNodeID 오버로딩 함수 사용, 혹은 (void*)scene 직접 캐스팅)
+	void* sceneId = (void*)GetNodeID(scene);
 	string sceneName = WStrToStr(scene->GetName());
 
 	ImGui::Separator();
 
-	if (s_IsRenamingScene)
+	// 2. [이름 변경 모드] 인가? (m_RenamingId 공유)
+	if (m_RenamingId == sceneId)
 	{
-		// [수정 모드]
-		// 1. 텍스트 박스 너비 계산 (전체 너비 사용)
+		// 텍스트 박스 너비 계산
 		float w = ImGui::GetContentRegionAvail().x;
+
+		// 아이콘/버튼 공간을 고려해 조금 줄일 수도 있음
+		// float w = ImGui::GetContentRegionAvail().x - ImGui::GetFrameHeight(); 
+
 		ImGui::SetNextItemWidth(w);
 
-		// 2. 포커스 자동 설정 (진입 시 즉시 입력 가능하도록)
-		if (ImGui::IsWindowAppearing() || ImGui::IsMouseClicked(0))
+		// 포커스 자동 설정
+		if (ImGui::IsWindowFocused() && !ImGui::IsAnyItemActive() && !ImGui::IsMouseClicked(0))
 		{
 			ImGui::SetKeyboardFocusHere(0);
 		}
 
-		// 3. InputText 그리기
-		// Enter 키(true 반환)를 누르면 저장
-		if (ImGui::InputText("##RenameScene", s_RenamingBuf, sizeof(s_RenamingBuf), ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll))
+		// InputText 그리기
+		if (ImGui::InputText("##RenameScene", m_RenameBuffer, sizeof(m_RenameBuffer), ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll))
 		{
-			scene->SetName(StrToWStr(s_RenamingBuf));
-			s_IsRenamingScene = false;
+			scene->SetName(StrToWStr(m_RenameBuffer));
+			m_RenamingId = nullptr; // 종료
 		}
-
-		// 4. 취소/완료 처리
-		// ESC 키: 취소
-		if (ImGui::IsItemFocused() && ImGui::IsKeyPressed(ImGuiKey_Escape))
+		else if (ImGui::IsItemDeactivated())
 		{
-			s_IsRenamingScene = false;
+			scene->SetName(StrToWStr(m_RenameBuffer));
+			m_RenamingId = nullptr;
 		}
-		// 외부 클릭: 저장하고 종료 (일반적인 동작)
-		if (!ImGui::IsItemActive() && ImGui::IsMouseClicked(0))
+		else if (ImGui::IsKeyPressed(ImGuiKey_Escape))
 		{
-			scene->SetName(StrToWStr(s_RenamingBuf));
-			s_IsRenamingScene = false;
+			m_RenamingId = nullptr;
 		}
 	}
 	else
 	{
-		// [일반 모드]
-		// 1. 씬 이름 출력 (조금 강조하기 위해 폰트가 있다면 PushFont 사용 가능)
+		// 3. [일반 모드] (타이틀바 형식)
+
+		// (선택 사항) 폰트를 키워서 강조
+		// ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]); 
 		ImGui::Text("Scene: %s", sceneName.c_str());
+		// ImGui::PopFont();
+
 		ImGui::SameLine();
 
-		// 2. 수정 버튼 (펜 아이콘) 위치 계산
-		// 텍스트 바로 옆에 붙이기
-		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));       // 배경 투명
-		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.5f, 0.5f, 1.0f)); // 글자색 회색
-		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(1, 1, 1, 0.1f)); // 호버 효과
+		// ---------------------------------------------------------------------
+		// 수정 버튼 (펜 아이콘)
+		// ---------------------------------------------------------------------
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(1, 1, 1, 0.1f));
 
-		// 아이콘 설정 (FontAwesome이 있다면 ICON_FA_PEN 사용)
 #ifdef ICON_FA_PEN
 		const char* editIcon = ICON_FA_PEN;
 #else
-		const char* editIcon = "(E)"; // 텍스트 대체 아이콘
+		const char* editIcon = "(E)";
 #endif
-
-		// 버튼 클릭 시 수정 모드로 전환
-		if (ImGui::Button(editIcon, ImVec2(30.0f, ImGui::GetFrameHeight())))
+		// 작은 버튼
+		if (ImGui::Button(editIcon, ImVec2(ImGui::GetFrameHeight(), ImGui::GetFrameHeight())))
 		{
-			s_IsRenamingScene = true;
-			strcpy_s(s_RenamingBuf, sceneName.c_str()); // 현재 이름을 버퍼에 복사
+			// [핵심] 리네임 시작 트리거
+			m_RenamingId = sceneId;                 // ID 등록
+			strcpy_s(m_RenameBuffer, sceneName.c_str()); // 이름 복사
 		}
 
-		// 툴팁 표시
-		if (ImGui::IsItemHovered())
-		{
-			ImGui::SetTooltip("Rename Scene");
-		}
+		if (ImGui::IsItemHovered()) ImGui::SetTooltip("Rename Scene");
 
 		ImGui::PopStyleColor(3);
 	}
+
+	ImGui::Separator();
 }
 
 void HierarchyPanel::CreateEmptyObject(Scene* scene)
