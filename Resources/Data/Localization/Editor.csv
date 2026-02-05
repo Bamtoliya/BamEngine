@@ -9,6 +9,6 @@
 ,PROP_INFORMATION,Information,정보
 ,Hirarchy_AddGameObject,Add GameObject,게임 오브젝트 추가+
 Transform,Position,Position,위치
-,Rotation,Rotation,회전(쿼터니언)
+,Rotation,Rotation,회전
 ,Scale,Scale,크기
 ,EulerRotation,Euler Rotation,회전(각도)

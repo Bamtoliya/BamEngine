@@ -1,7 +1,7 @@
 ﻿#pragma once
 
 #include "Base.h"
-#include "Renderer.h"
+
 #include "TimeManager.h"
 #include "ResourceManager.h"
 #include "PrototypeManager.h"
@@ -9,7 +9,9 @@
 #include "LayerManager.h"
 #include "SceneManager.h"
 
+#include "Renderer.h"
 #include "RenderPassManager.h"
+#include "RenderTargetManager.h"
 
 #include "ComponentRegistry.h"
 
@@ -19,7 +21,7 @@ BEGIN(Engine)
 
 typedef struct tagRuntimeCreateInfo
 {
-	Renderer::RENDERERDESC RendererDesc;
+	tagRendererDesc RendererDesc;
 } RUNTIMEDESC;
 
 class ENGINE_API Runtime : public Base
@@ -50,6 +52,7 @@ private:
 private:
 	Renderer* m_Renderer = { nullptr };
 	RenderPassManager* m_RenderPassManager = { nullptr };
+	RenderTargetManager* m_RenderTargetManager = { nullptr };
 private:
 	ResourceManager* m_ResourceManager = { nullptr };
 	PrototypeManager* m_PrototypeManager = { nullptr };
@@ -60,6 +63,7 @@ private:
 	ComponentRegistry* m_ComponentRegistry = { nullptr };
 private:
 	LocalizationManager* m_LocalizationManager = { nullptr };
+
 
 #pragma region Test
 #ifdef _DEBUG

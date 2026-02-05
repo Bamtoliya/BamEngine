@@ -2,10 +2,17 @@
 
 #include "RHIResource.h"
 
+struct tagRHITextureDesc
+{
+	uint32		Width = 0;
+	uint32		Height = 0;
+};
+
 BEGIN(Engine)
 class ENGINE_API RHITexture : public RHIResource
 {
 protected:
+	using DESC = tagRHITextureDesc;
 	RHITexture() : RHIResource(ERHIResourceType::Texture) {}
 	virtual ~RHITexture() = default;
 public:

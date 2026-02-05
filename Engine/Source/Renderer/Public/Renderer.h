@@ -3,6 +3,7 @@
 #include "Base.h"
 #include "RHI.h"
 #include "RenderTypes.h"
+#include "RenderTarget.h"
 
 BEGIN(Engine)
 
@@ -17,22 +18,25 @@ enum class ERHIType
 	Metal
 };
 
+struct tagRendererDesc
+{
+	ERHIType RHIType = ERHIType::Unknown;
+	void* WindowHandle = nullptr;
+	uint32 Width = 0;
+	uint32 Height = 0;
+	bool IsVSync = true;
+};
+
 
 class ENGINE_API Renderer final : public Base
 {
 	DECLARE_SINGLETON(Renderer)
+	using DESC = tagRendererDesc;
 	friend class Runtime;
 	using RenderDelegate = MulticastDelegate<f32>;
 #pragma region Struct
 public:
-	typedef struct tagRendererCreateInfo
-	{
-		ERHIType RHIType = ERHIType::Unknown;
-		void* WindowHandle = nullptr;
-		uint32 Width = 0;
-		uint32 Height = 0;
-		bool IsVSync = true;
-	} RENDERERDESC;
+	
 #pragma endregion
 
 #pragma region Constructor&Destructor
@@ -74,6 +78,7 @@ private:
 	class RHI* m_RHI = { nullptr };
 	map<RenderPassID, RenderDelegate> m_RenderPassDelegates;
 	map<RenderPassID, vector<class RenderComponent*>> m_RenderQueues;
+	RenderTarget* m_SceneBuffer = { nullptr };
 #pragma endregion
 };
 END

@@ -102,17 +102,12 @@ void Application::Run(int argc, char* argv[])
             if (event.type == SDL_EVENT_QUIT) {
                 bIsRunning = false;
             }
-            if (m_Window)
+            else if (event.type == SDL_EVENT_WINDOW_RESIZED || event.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED)
             {
-                //// 1. 강제 활성화 (이미 켜져 있어도 계속 켬)
-                //SDL_StartTextInput(m_Window);
-                //
-                //// 2. 강제 위치 지정 (화면 100,100 좌표에 빨간색 박스만한 영역 지정)
-                //SDL_Rect r = { 100, 100, 20, 20 };
-                //SDL_SetTextInputArea(m_Window, &r, 0);
-                //
-                //// 3. 상태 확인 (콘솔에 출력)
-                //fmt::print("IME Active: {}\n", SDL_TextInputActive(m_Window));
+                uint32 newWidth = (uint32)event.window.data1;
+                uint32 newHeight = (uint32)event.window.data2;
+
+                Renderer::Get().GetRHI()->Resize(newWidth, newHeight);
             }
         }
 

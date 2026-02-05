@@ -16,7 +16,7 @@ public:
 	virtual void Free() override;
 #pragma endregion
 
-	virtual void Resize() override {};
+	virtual EResult Resize(uint32 width, uint32 height) override;
 public:
 	virtual EResult BeginFrame() override;
 	virtual EResult EndFrame() override;
@@ -38,13 +38,23 @@ public:
 	virtual RHITexture* CreateTextureFromNativeHandle(void* nativeHandle) override;
 #pragma endregion
 
-#pragma region Bind
+#pragma region Bind Resources
+public:
+	virtual EResult BindRenderTarget(RHITexture* renderTarget, RHITexture* depthStencil)  override;
+	virtual EResult BindTexture(RHITexture* texture, uint32 slot) override;
+	virtual EResult BindRenderTargets(uint32 count, RHITexture** renderTargets, RHITexture* depthStencil) override;
 public:
 	virtual EResult BindShader(RHIShader* shader) override;
 public:
 	virtual EResult BindPipeline(void* arg) override { return EResult::NotImplemented; }
 	virtual EResult BindConstantBuffer(void* arg, uint32 slot) override;
 	virtual EResult BindConstantRangeBuffer(void* arg, uint32 slot, uint32 offset, uint32 size) override { return EResult::NotImplemented; }
+#pragma endregion
+
+#pragma region Clear Resources
+public:
+	virtual EResult ClearRenderTarget(RHITexture* renderTarget, vec4 color) override;
+	virtual EResult ClearDepthStencil(RHITexture* depthStencil, f32 depth, uint8 stencil) override;
 #pragma endregion
 
 #pragma region Draw
@@ -54,8 +64,8 @@ public:
 #pragma endregion
 
 #pragma region Setter
-	virtual void SetClearColor(void* arg) override {};
-	virtual void SetViewport(void* arg) override {};
+	virtual EResult SetClearColor(vec4 color) override;
+	virtual EResult SetViewport(int32 x, int32 y, uint32 width, uint32 height) override;
 #pragma endregion
 
 #pragma region Getter

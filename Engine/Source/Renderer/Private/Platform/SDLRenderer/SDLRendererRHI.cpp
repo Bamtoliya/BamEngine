@@ -52,7 +52,18 @@ void SDLRendererRHI::Free()
 }
 #pragma endregion
 
+#pragma region Resize
+EResult SDLRendererRHI::Resize(uint32 width, uint32 height)
+{
+	RHI::Resize(width, height);
+	SetViewport(0, 0, width, height);
+	return EResult::Success;
+}
+#pragma endregion
+
+
 #pragma region Frame
+
 EResult SDLRendererRHI::BeginFrame()
 {
 	if (m_Renderer)
@@ -172,14 +183,27 @@ RHITexture* SDLRendererRHI::CreateTexture3D(void* data, uint32 width, uint32 hei
 RHITexture* SDLRendererRHI::CreateRenderTargetTexture(void* data, uint32 width, uint32 height, uint32 mipLevels, uint32 arraySize)
 {
 	SDLTexture* texture = new SDLTexture(width, height, mipLevels, arraySize);
-	texture->m_Texture = SDL_CreateTexture(m_Renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, width, height);
-
+	SDL_Texture* sdlNativeTexture = SDL_CreateTexture(m_Renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, width, height);
+	if (!sdlNativeTexture)
+	{
+		delete texture;
+		return nullptr;
+	}
+	texture->m_Texture = sdlNativeTexture;
 	return texture;
 }
 
 RHITexture* SDLRendererRHI::CreateDepthStencilTexture(void* data, uint32 width, uint32 height, uint32 mipLevels, uint32 arraySize)
 {
-	return nullptr;
+	SDLTexture* texture = new SDLTexture(width, height, mipLevels, arraySize);
+	SDL_Texture* sdlNativeTexture = SDL_CreateTexture(m_Renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, width, height);
+	if (!sdlNativeTexture)
+	{
+		delete texture;
+		return nullptr;
+	}
+	texture->m_Texture = sdlNativeTexture;
+	return texture;
 }
 
 RHITexture* SDLRendererRHI::CreateTextureFromNativeHandle(void* nativeHandle)
@@ -193,8 +217,63 @@ RHITexture* SDLRendererRHI::CreateTextureFromNativeHandle(void* nativeHandle)
 
 #pragma endregion
 
-
 #pragma region Bind
+EResult SDLRendererRHI::BindRenderTarget(RHITexture* renderTarget, RHITexture* depthStencil)
+{
+	if (renderTarget)
+	{
+		SDL_Texture* sdlTexture = reinterpret_cast<SDL_Texture*>(renderTarget->GetNativeHandle());
+		if(!SDL_SetRenderTarget(m_Renderer, sdlTexture))
+		{
+			printf("Failed to Set Render Target: %s\n", SDL_GetError());
+			if (!SDL_SetRenderTarget(m_Renderer, nullptr))
+				return EResult::Fail;
+			return EResult::Fail;
+		}
+	}
+	else
+	{
+		if (!SDL_SetRenderTarget(m_Renderer, nullptr) != 0)
+		{
+			return EResult::Fail;
+		}
+	}
+	return EResult::Success;
+}
+EResult SDLRendererRHI::BindTexture(RHITexture* texture, uint32 slot)
+{
+	return EResult();
+}
+EResult SDLRendererRHI::BindRenderTargets(uint32 count, RHITexture** renderTargets, RHITexture* depthStencil)
+{
+	bool bIsChanged = false;
+	if (m_CurrentRenderTargetCount != count) bIsChanged = true;
+	else if (m_CurrentDepthStencil != depthStencil) bIsChanged = true;
+	else
+	{
+		for (uint32 i = 0; i < count; ++i)
+		{
+			if (m_CurrentRenderTargets[i] != renderTargets[i])
+			{
+				bIsChanged = true;
+				break;
+			}
+		}
+	}
+
+	if (!bIsChanged) return EResult::Success;
+
+	m_CurrentRenderTargetCount = count;
+	for (uint32 i = 0; i < count; ++i)
+	{
+		m_CurrentRenderTargets[i] = renderTargets[i];
+	}
+	m_CurrentDepthStencil = depthStencil;
+
+	SDL_SetRenderTarget(m_Renderer, static_cast<SDLTexture*>(renderTargets[0])->m_Texture);
+
+	return EResult();
+}
 EResult SDLRendererRHI::BindShader(RHIShader* shader)
 {
 	if (!shader) return EResult::InvalidArgument;
@@ -217,6 +296,63 @@ EResult SDLRendererRHI::BindConstantBuffer(void* arg, uint32 slot)
 		memcpy(&m_MaterialColor, data, sizeof(vec4));
 	}
 
+	return EResult::Success;
+}
+#pragma endregion
+
+#pragma region Clear Resources
+EResult SDLRendererRHI::ClearRenderTarget(RHITexture* renderTarget, vec4 color)
+{
+	SDL_Texture* oldTarget = SDL_GetRenderTarget(m_Renderer);
+	if (renderTarget)
+	{
+		SDL_Texture* sdlTexture = static_cast<SDLTexture*>(renderTarget)->m_Texture;
+		SDL_SetRenderTarget(m_Renderer, sdlTexture);
+	}
+	else
+	{
+		SDL_SetRenderTarget(m_Renderer, nullptr);
+	}
+
+	SDL_SetRenderDrawColor(m_Renderer,
+		static_cast<uint8>(color.r * 255.0f),
+		static_cast<uint8>(color.g * 255.0f),
+		static_cast<uint8>(color.b * 255.0f),
+		static_cast<uint8>(color.a * 255.0f));
+
+	SDL_RenderClear(m_Renderer);
+	SDL_SetRenderTarget(m_Renderer, oldTarget);
+
+	return EResult::Success;
+}
+EResult SDLRendererRHI::ClearDepthStencil(RHITexture* depthStencil, f32 depth, uint8 stencil)
+{
+	return EResult::NotImplemented;
+}
+#pragma endregion
+
+#pragma region Setter
+EResult SDLRendererRHI::SetClearColor(vec4 color)
+{
+	SDL_SetRenderDrawColor(m_Renderer,
+		static_cast<uint8>(color.r * 255.0f),
+		static_cast<uint8>(color.g * 255.0f),
+		static_cast<uint8>(color.b * 255.0f),
+		static_cast<uint8>(color.a * 255.0f));
+	return EResult::Success;
+}
+
+EResult SDLRendererRHI::SetViewport(int32 x, int32 y, uint32 width, uint32 height)
+{
+	SDL_Rect viewport;
+	viewport.x = x;
+	viewport.y = y;
+	viewport.w = width;
+	viewport.h = height;
+	if (!SDL_SetRenderViewport(m_Renderer, &viewport))
+	{
+		return EResult::Fail;
+	}
 	return EResult::Success;
 }
 #pragma endregion
@@ -271,4 +407,3 @@ EResult SDLRendererRHI::DrawIndexed(uint32 count)
 }
 
 #pragma endregion
-

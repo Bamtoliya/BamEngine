@@ -16,7 +16,7 @@ EResult Runtime::Initialize(void* arg)
 #endif
 
 	RUNTIMEDESC* pRuntimeDesc = reinterpret_cast<RUNTIMEDESC*>(arg);
-	Renderer::RENDERERDESC RendererDesc = pRuntimeDesc->RendererDesc;
+	tagRendererDesc RendererDesc = pRuntimeDesc->RendererDesc;
 
 	if (!ReflectionRegistry::Create()) return EResult::Fail;
 	InitEnumReflection();
@@ -27,10 +27,12 @@ EResult Runtime::Initialize(void* arg)
 	m_TimeManager = TimeManager::Create();
 	if (!m_TimeManager) return EResult::Fail;
 
-	m_Renderer = Renderer::Create(&RendererDesc);
-	if (!m_Renderer) return EResult::Fail;
+	m_RenderTargetManager = RenderTargetManager::Create();
+	if (!m_RenderTargetManager) return EResult::Fail;
 	m_RenderPassManager = RenderPassManager::Create();
 	if (!m_RenderPassManager) return EResult::Fail;
+	m_Renderer = Renderer::Create(&RendererDesc);
+	if (!m_Renderer) return EResult::Fail;
 	
 	m_ResourceManager = ResourceManager::Create();
 	if (!m_ResourceManager) return EResult::Fail;
@@ -113,6 +115,7 @@ void Runtime::Free()
 #endif
 	TimeManager::Destroy();
 
+	RenderTargetManager::Destroy();
 	RenderPassManager::Destroy();
 	Renderer::Destroy();
 	

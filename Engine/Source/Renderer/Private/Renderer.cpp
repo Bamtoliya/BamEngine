@@ -10,17 +10,16 @@ IMPLEMENT_SINGLETON(Renderer)
 
 #pragma region Constructor&Destructor
 EResult Renderer::Initialize(void* arg)
-{
-	RENDERERDESC* pDesc = reinterpret_cast<RENDERERDESC*>(arg);
+{	
+	if (!arg) return EResult::InvalidArgument;
+
+	CAST_DESC
 	RHICREATEINFO RHIDesc = {};
-
-	RHIDesc.WindowHandle = pDesc->WindowHandle;
-	RHIDesc.Width = pDesc->Width;
-	RHIDesc.Height = pDesc->Height;
-	RHIDesc.IsVSync = pDesc->IsVSync;
-
-	if (!pDesc) return EResult::Fail;
-	switch (pDesc->RHIType)
+	RHIDesc.WindowHandle = desc->WindowHandle;
+	RHIDesc.Width = desc->Width;
+	RHIDesc.Height = desc->Height;
+	RHIDesc.IsVSync = desc->IsVSync;
+	switch (desc->RHIType)
 	{
 	case ERHIType::SDLRenderer:
 		m_RHI = SDLRendererRHI::Create(&RHIDesc);
@@ -28,19 +27,30 @@ EResult Renderer::Initialize(void* arg)
 	default:
 		return EResult::Fail;
 	}
+	
 	if (!m_RHI) return EResult::Fail;
+
+	tagRenderTargetDesc rtDesc;
+	rtDesc.Width = desc->Width;
+	rtDesc.Height = desc->Height;
+	m_SceneBuffer = RenderTargetManager::Get().CreateRenderTarget(&rtDesc);
+	if (!m_SceneBuffer) return EResult::Fail;
 
 	return EResult::Success;
 }
 
 void Renderer::Free()
 {	
+	if(m_SceneBuffer)
+	{
+		Safe_Release(m_SceneBuffer);
+	}
 	Safe_Release(m_RHI);
 }
 #pragma endregion
 
 
-#pragma region Render Manangement
+#pragma region Render Management	
 EResult Renderer::BeginFrame()
 {
 	if (m_RHI)
@@ -54,6 +64,19 @@ EResult Renderer::Render(f32 dt)
 {
 	RenderPassManager& renderPassManager = RenderPassManager::Get();
 	const vector<RenderPassInfo>& renderPasses = renderPassManager.GetAllRenderPasses();
+	if (m_SceneBuffer && m_RHI)
+	{
+		if(IsFailure(m_RHI->BindRenderTarget(m_SceneBuffer->GetTexture(0), m_SceneBuffer->GetDepthStencilTexture())))
+		{
+			return EResult::Fail;
+		}
+		if(IsFailure(m_RHI->SetViewport(0, 0, m_SceneBuffer->GetWidth(), m_SceneBuffer->GetHeight())))
+		{
+			return EResult::Fail;
+		}
+		vec4 clearColor = { 0.1f, 0.1f, 0.1f, 1.0f }; // 게임 배경색 (검정/회색)
+		m_RHI->ClearRenderTarget(m_SceneBuffer->GetTexture(0), clearColor);
+	}
 	for (const auto& pass : renderPasses)
 	{
 		auto it = m_RenderQueues.find(pass.ID);
@@ -61,6 +84,17 @@ EResult Renderer::Render(f32 dt)
 		{
 			RenderComponents(dt, it->second, pass.SortType);
 		}
+	}
+
+	if (m_RHI)
+	{
+		m_RHI->BindRenderTarget(nullptr, nullptr);
+		m_RHI->SetViewport(0, 0, m_RHI->GetSwapChainWidth(), m_RHI->GetSwapChainHeight());
+	}
+
+	for (const auto& pass : renderPasses)
+	{
+		auto it = m_RenderQueues.find(pass.ID);
 		GetRenderPassDelegate(pass.ID).Broadcast(dt);
 	}
 	return EResult::Success;
@@ -82,6 +116,8 @@ EResult Renderer::EndFrame()
 {
 	if (m_RHI)
 	{
+		m_RHI->BindRenderTarget(nullptr, nullptr);
+		m_RHI->SetViewport(0, 0, m_RHI->GetSwapChainWidth(), m_RHI->GetSwapChainHeight());
 		m_RHI->EndFrame();
 	}
 
