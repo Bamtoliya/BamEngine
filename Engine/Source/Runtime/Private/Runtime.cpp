@@ -19,7 +19,7 @@ EResult Runtime::Initialize(void* arg)
 	tagRendererDesc RendererDesc = pRuntimeDesc->RendererDesc;
 
 	if (!ReflectionRegistry::Create()) return EResult::Fail;
-	InitEnumReflection();
+	InitReflectionSystem();
 
 	m_ComponentRegistry = ComponentRegistry::Create();
 	if (!m_ComponentRegistry) return EResult::Fail;
@@ -91,10 +91,12 @@ EResult Runtime::Initialize(void* arg)
 
 		Mesh* quadMesh = Mesh::Create(&meshDesc);
 
+		ResourceManager::Get().LoadMesh(L"QuadMesh", &meshDesc);
+
 		// 3. GameObject 및 MeshRenderer 생성
 		m_TestObject = GameObject::Create();
 		MeshRenderer* meshRenderer = m_TestObject->AddComponent<MeshRenderer>(); // Registry 통해 생성
-		meshRenderer->SetMesh(quadMesh);
+		meshRenderer->SetMesh(ResourceManager::Get().GetMesh(L"QuadMesh"));
 		meshRenderer->SetRenderPassID(0);
 
 		// Mesh는 Renderer가 내부적으로 RefCount를 관리하지 않는다면(현재 구조상) 
@@ -150,7 +152,7 @@ void Runtime::Update(f32 dt)
 void Runtime::LateUpdate(f32 dt)
 {
 #ifdef _DEBUG
-	m_TestObject->LateUpdate(dt);
+	//m_TestObject->LateUpdate(dt);
 #endif
 	SceneManager::Get().LateUpdate(dt);
 }

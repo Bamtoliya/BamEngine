@@ -27,8 +27,12 @@ struct PropertyMetadata
 	bool bIsFilePath = { false };
 	bool bIsDirectory = { false };
 	string FileFilter;
+	string DialogPath;
 
 	vector<pair<string, uint32>> BitFlags;
+
+	std::any DefaultValue;
+	bool bHasDefault = { false };
 
 	PropertyMetadata() = default;
 };

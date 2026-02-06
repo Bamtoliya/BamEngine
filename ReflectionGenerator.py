@@ -11,11 +11,11 @@ CLASS_STRUCT_PATTERN = re.compile(r'REFLECT_(CLASS|STRUCT)\s*\(\s*(\w+)\s*\)')
 PROPERTY_PATTERN = re.compile(r'PROPERTY\s*\((.*?)\)\s+([a-zA-Z0-9_:<, >\*&]+)\s+(\w+)(?:[^;]*?);', re.DOTALL)
 ENUM_PATTERN = re.compile(r'ENUM\s*\((.*?)\)\s*enum\s+(?:class\s+)?(\w+)', re.DOTALL)
 
-# 3. 타입 매핑 (Matrix 추가됨)
+# 3. 타입 매핑
 TYPE_MAP = {
     "int8": "Int8", "int16": "Int16", "int32": "Int32", "int64": "Int64", "long long": "Int64",
     "uint8": "UInt8", "uint16": "UInt16", "uint32": "UInt32", "uint64": "UInt64", "unsigned long long": "UInt64", "size_t": "UInt64",
-    "f32": "F32", "float": "F32", "double": "Double",
+    "f32": "F32", "float": "F32", "double": "Double", "f64": "Double",
     "bool": "Bool",
     "vec2": "Vector2", "glm::vec2": "Vector2",
     "vec3": "Vector3", "glm::vec3": "Vector3",
@@ -38,7 +38,6 @@ def get_property_type(raw_type, var_name):
     if raw_type.endswith("*"): return "Object", raw_type.rstrip("*").strip()
     if raw_type in TYPE_MAP: return TYPE_MAP[raw_type], raw_type
     
-    # Enum / BitFlag 판별
     if raw_type.startswith("E"):
         if "Flag" in raw_type or "Mask" in raw_type or "Flag" in var_name or "Mask" in var_name:
             return "BitFlag", raw_type
@@ -54,7 +53,7 @@ def mask_comments_and_strings(content):
     masked = re.sub(r'//.*', lambda m: " " * len(m.group(0)), masked)
     return masked
 
-def find_scope_content(full_content, match_index):
+def find_scope_content_info(full_content, match_index):
     masked = mask_comments_and_strings(full_content)
     stack = []
     scopes = [] 
@@ -64,16 +63,30 @@ def find_scope_content(full_content, match_index):
             if stack:
                 start = stack.pop()
                 scopes.append((start, i))
+    
     best_scope = None
     min_len = float('inf')
+    
     for start, end in scopes:
         if start < match_index < end:
             length = end - start
             if length < min_len:
                 min_len = length
                 best_scope = (start, end)
-    if best_scope: return full_content[best_scope[0]:best_scope[1]]
-    return full_content
+                
+    if best_scope: 
+        return full_content[best_scope[0]:best_scope[1]], best_scope[0]
+    return full_content, 0
+
+def find_parent_class(full_content, class_name, search_end_index):
+    search_start = max(0, search_end_index - 500)
+    pre_text = full_content[search_start:search_end_index]
+    pre_text = mask_comments_and_strings(pre_text)
+    pattern_str = r'(class|struct)\s+(?:[A-Z0-9_]+\s+)?' + re.escape(class_name) + r'\s*(?:final)?\s*:\s*public\s+(\w+)'
+    match = re.search(pattern_str, pre_text)
+    if match:
+        return match.group(2)
+    return None
 
 def find_next_scope_content(full_content, start_search_index):
     masked = mask_comments_and_strings(full_content)
@@ -91,8 +104,11 @@ def find_next_scope_content(full_content, start_search_index):
 def generate_reflection_code():
     print(f"[Reflection] Start Generating... Target: {OUTPUT_FILE}")
     
-    generated_class_body = ""  # 클래스/구조체용
-    generated_enum_body = ""   # 이넘 등록 함수 내부용
+    generated_class_body = ""
+    generated_enum_body = ""
+    
+    # [추가] 모든 리플렉션 클래스 이름을 저장할 리스트
+    all_reflected_classes = []
     
     parsed_files = []
     included_headers = set()
@@ -105,55 +121,42 @@ def generate_reflection_code():
                 try:
                     with open(filepath, 'r', encoding='utf-8') as f: content = f.read()
                 except:
-                    try: 
-                        with open(filepath, 'r', encoding='cp949') as f: content = f.read()
+                    try:
+                       with open(filepath, 'r', encoding='cp949') as f: content = f.read()
                     except: continue
 
                 rel_path = os.path.relpath(filepath, ENGINE_SOURCE_DIR).replace("\\", "/")
 
-                # -----------------------------------------------------------
-                # ENUM 파싱 로직 (매크로 사용 버전으로 변경)
-                # -----------------------------------------------------------
+                # ENUM 파싱
                 if "ENUM" in content:
                     enum_matches = ENUM_PATTERN.finditer(content)
                     has_enum = False
-                    
                     for match in enum_matches:
                         enum_name = match.group(2)
                         enum_body = find_next_scope_content(content, match.end())
-                        
                         clean_body = re.sub(r'//.*', '', enum_body)
                         clean_body = re.sub(r'/\*.*?\*/', '', clean_body, flags=re.DOTALL)
                         
                         entries_code = ""
                         items = [x.strip() for x in clean_body.split(',')]
-                        
                         for item in items:
                             if not item: continue
                             if '=' in item: name = item.split('=')[0].strip()
                             else: name = item.strip()
-                            
                             if name and re.match(r'^\w+$', name):
-                                # [수정됨] 매크로 형식으로 생성
                                 entries_code += f'    REFLECT_ENUM_ENTRY({enum_name}, {name})\n'
                         
                         if entries_code:
                             has_enum = True
-                            # [수정됨] BEGIN / END 매크로로 감싸기
                             code_block = f"// Enum: {enum_name}\n"
                             code_block += f"BEGIN_ENUM_REFLECT({enum_name})\n"
                             code_block += entries_code
                             code_block += f"END_ENUM_REFLECT({enum_name})\n"
-                            
                             generated_enum_body += code_block
-                            parsed_files.append(enum_name)
                     
-                    if has_enum:
-                        included_headers.add(rel_path)
+                    if has_enum: included_headers.add(rel_path)
 
-                # -----------------------------------------------------------
-                # CLASS / STRUCT 파싱 로직 (Matrix 자동 감지 포함)
-                # -----------------------------------------------------------
+                # CLASS / STRUCT 파싱
                 if "REFLECT_CLASS" in content or "REFLECT_STRUCT" in content:
                     matches = CLASS_STRUCT_PATTERN.finditer(content)
                     has_class = False
@@ -161,11 +164,19 @@ def generate_reflection_code():
                         type_keyword = match.group(1) 
                         type_label = "Struct" if type_keyword == "STRUCT" else "Class"
                         class_name = match.group(2)
-                        scope_content = find_scope_content(content, match.start())
+                        
+                        # [추가] 클래스 이름 저장
+                        all_reflected_classes.append(class_name)
+                        
+                        scope_content, scope_start = find_scope_content_info(content, match.start())
+                        parent_name = find_parent_class(content, class_name, scope_start)
                         properties = PROPERTY_PATTERN.findall(scope_content)
 
                         code_block = f"\n// {type_label}: {class_name}\n"
                         code_block += f"BEGIN_REFLECT({class_name})\n"
+                        
+                        if parent_name:
+                            code_block += f'    REFLECT_PARENT({parent_name})\n'
                         
                         if properties:
                             has_class = True
@@ -175,7 +186,6 @@ def generate_reflection_code():
                                 full_type = re.sub(r'\s+', ' ', type_str.strip())
                                 raw_type = full_type.replace("std::", "").replace("Engine::", "").strip()
                                 
-                                # 컨테이너 처리
                                 if raw_type.startswith(("vector<", "deque<", "list<", "set<", "unordered_set<", "map<", "unordered_map<")):
                                     args = parse_template_args(raw_type)
                                     if raw_type.startswith(("map", "unordered_map")):
@@ -192,13 +202,10 @@ def generate_reflection_code():
                                         inner_t = args[0] if args else "void"
                                         code_block += f'    REFLECT_VECTOR({var_name}, {full_type}, {inner_t}, "{inner_t}"{attributes})\n'
                                 else:
-                                    # [수정됨] TYPE_MAP에 Matrix가 추가되어 get_property_type이 'Matrix'를 반환함
                                     prop_type, type_name = get_property_type(raw_type, var_name)
-                                    
                                     if prop_type == "BitFlag":
                                         code_block += f'    REFLECT_BITFLAG({var_name}, Engine::EPropertyType::{prop_type}, "{type_name}"{attributes})\n'
                                     else:
-                                        # Matrix 등 일반 속성
                                         code_block += f'    REFLECT_PROPERTY({var_name}, Engine::EPropertyType::{prop_type}, "{type_name}"{attributes})\n'
                         
                         code_block += "END_REFLECT()\n"
@@ -211,7 +218,11 @@ def generate_reflection_code():
     for header in sorted(included_headers):
         headers_code += f'#include "{header}"\n'
 
-    # [최종 파일 생성]
+    # [추가] 초기화 함수 본문 생성
+    init_code = ""
+    for cls in all_reflected_classes:
+        init_code += f"\tREFLECT_STATIC_TYPE({cls});\n"
+
     final_output = f"""#pragma once
 // Auto-generated by ReflectionGenerator.py
 #include "Core/Public/Engine_Includes.h"
@@ -227,6 +238,14 @@ namespace Engine {{
 void InitEnumReflection()
 {{
 {generated_enum_body}
+}}
+
+// [System Initialization Function]
+// 이 함수를 엔진 초기화 단계에서 반드시 호출해야 모든 타입이 정상 등록됩니다.
+void InitReflectionSystem()
+{{
+\tInitEnumReflection();
+{init_code}
 }}
 
 // [Class/Struct Property Registration]

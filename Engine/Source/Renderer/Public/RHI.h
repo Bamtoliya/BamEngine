@@ -77,6 +77,7 @@ public:
     virtual EResult Draw(uint32 count) PURE;
     virtual EResult DrawIndexed(uint32 count) PURE;
     virtual EResult DrawIndexedInstanced() PURE;
+    virtual EResult DrawTexture(RHITexture* texture) PURE;
 #pragma endregion
 
 #pragma region Setter

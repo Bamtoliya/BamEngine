@@ -22,7 +22,7 @@ struct tagComponentDesc
 #pragma endregion
 
 class GameObject;
-CLASS()
+
 class ENGINE_API Component abstract : public Base
 {
 	using DESC = tagComponentDesc;
@@ -59,13 +59,8 @@ public:
 
 #pragma region Variable
 protected:
-	PROPERTY()
 	bool m_Active = { true };
-
-	PROPERTY()
 	wstring m_Tag = { L"" };
-
-	PROPERTY()
 	GameObject* m_Owner = { nullptr };
 #pragma endregion
 };

@@ -1,9 +1,10 @@
 ﻿#pragma once 
 
 #include "RHIShader.h"
+#include "Resource.h"
 
 BEGIN(Engine)
-class ENGINE_API Shader final : public Base
+class ENGINE_API Shader final : public Resource
 {
 #pragma region Struct
 	typedef struct tagShaderInfo {

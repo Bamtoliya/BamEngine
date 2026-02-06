@@ -62,10 +62,10 @@ SDL_Vertex* SDLShader::ProcessVertex(const SDLBuffer* vertexBuffer, const glm::m
 		m_CacheVertices[i].position.y = (-worldPos.y * scale) + screenInfo.y;
 		glm::vec4 finalColor = src->color * matColor;
 
-		m_CacheVertices[i].color.r = static_cast<Uint8>(finalColor.r * 255.0f);
-		m_CacheVertices[i].color.g = static_cast<Uint8>(finalColor.g * 255.0f);
-		m_CacheVertices[i].color.b = static_cast<Uint8>(finalColor.b * 255.0f);
-		m_CacheVertices[i].color.a = static_cast<Uint8>(finalColor.a * 255.0f);
+		m_CacheVertices[i].color.r = finalColor.r;
+		m_CacheVertices[i].color.g = finalColor.g;
+		m_CacheVertices[i].color.b = finalColor.b;
+		m_CacheVertices[i].color.a = finalColor.a;
 
 		m_CacheVertices[i].tex_coord.x = src->texCoord.x;
 		m_CacheVertices[i].tex_coord.y = src->texCoord.y;

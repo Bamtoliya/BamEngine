@@ -2,6 +2,7 @@
 
 #include "Base.h"
 #include "RenderTarget.h"
+#include "ImGuizmo.h"
 
 enum class EViewportMode : uint8
 {
@@ -36,10 +37,18 @@ private:
 
 public:
 	void Draw();
+private:
+	void DrawGuizmo(ImVec2 size);
+	void DrawOptionsBar();
 #pragma region Members
 private:
-	bool m_IsFocused = false;
-	bool m_IsHovered = false;
+	bool m_IsFocused = { false };
+	bool m_IsHovered = { false };
+	bool m_IsOrthographic = { true };
+private:
+	ImGuizmo::OPERATION m_GizmoOperation = { ImGuizmo::OPERATION::TRANSLATE };
+	ImGuizmo::MODE m_GizmoMode = { ImGuizmo::MODE::LOCAL };
+	bool m_GizmoUseSnap = { false };
 #pragma endregion
 };
 END

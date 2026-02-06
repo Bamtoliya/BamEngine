@@ -28,6 +28,11 @@ namespace Engine
 		{
 		}
 
+		Vertex(const glm::vec3& pos, const glm::vec2& uv)
+			: position(pos), texCoord(uv)
+		{
+		}
+
 		Vertex(
 			const glm::vec3& pos,
 			const glm::vec3& nor,

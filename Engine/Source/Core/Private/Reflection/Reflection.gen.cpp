@@ -6,8 +6,15 @@
 
 // [헤더 파일 자동 포함]
 #include "Components/Public/Component.h"
+#include "Components/Public/Render/MeshRenderer/MeshRenderer.h"
+#include "Components/Public/Render/RenderComponent.h"
+#include "Components/Public/Render/SpriteRenderer/SpriteRenderer.h"
 #include "Components/Public/Transfrom/Transform.h"
+#include "Core/Public/Rect.h"
 #include "Core/Public/Vertex.h"
+#include "Resource/Public/Resource.h"
+#include "Resource/Public/Sprite/Sprite.h"
+#include "Resource/Public/Texture/Texture.h"
 #include "Scene/Public/GameObject.h"
 
 
@@ -52,6 +59,27 @@ END_ENUM_REFLECT(EObjectFlag)
 
 }
 
+// [System Initialization Function]
+// 이 함수를 엔진 초기화 단계에서 반드시 호출해야 모든 타입이 정상 등록됩니다.
+void InitReflectionSystem()
+{
+	InitEnumReflection();
+	REFLECT_STATIC_TYPE(tagComponentDesc);
+	REFLECT_STATIC_TYPE(Component);
+	REFLECT_STATIC_TYPE(RenderComponent);
+	REFLECT_STATIC_TYPE(MeshRenderer);
+	REFLECT_STATIC_TYPE(SpriteRenderer);
+	REFLECT_STATIC_TYPE(tagTransformDesc);
+	REFLECT_STATIC_TYPE(Transform);
+	REFLECT_STATIC_TYPE(Rect);
+	REFLECT_STATIC_TYPE(Vertex);
+	REFLECT_STATIC_TYPE(Resource);
+	REFLECT_STATIC_TYPE(Sprite);
+	REFLECT_STATIC_TYPE(Texture);
+	REFLECT_STATIC_TYPE(GameObject);
+
+}
+
 // [Class/Struct Property Registration]
 
 // Struct: tagComponentDesc
@@ -63,9 +91,27 @@ END_REFLECT()
 
 // Class: Component
 BEGIN_REFLECT(Component)
-    REFLECT_PROPERTY(m_Active, Engine::EPropertyType::Bool, "bool")
-    REFLECT_PROPERTY(m_Tag, Engine::EPropertyType::String, "wstring")
-    REFLECT_PROPERTY(m_Owner, Engine::EPropertyType::Object, "GameObject")
+END_REFLECT()
+
+// Class: RenderComponent
+BEGIN_REFLECT(RenderComponent)
+    REFLECT_PARENT(Component)
+    REFLECT_PROPERTY(m_RenderPassID, Engine::EPropertyType::UInt32, "uint32", CATEGORY("PROP_INFORMATION"))
+END_REFLECT()
+
+// Class: MeshRenderer
+BEGIN_REFLECT(MeshRenderer)
+    REFLECT_PARENT(RenderComponent)
+    REFLECT_PROPERTY(m_Mesh, Engine::EPropertyType::Object, "class Mesh", NAME(L"Mesh"))
+END_REFLECT()
+
+// Class: SpriteRenderer
+BEGIN_REFLECT(SpriteRenderer)
+    REFLECT_PARENT(RenderComponent)
+    REFLECT_PROPERTY(m_Pivot, Engine::EPropertyType::Vector2, "vec2", DEFAULT(vec2(0.5f, 0.5f)))
+    REFLECT_PROPERTY(m_Tiling, Engine::EPropertyType::Vector2, "vec2", DEFAULT(vec2(1.f, 1.f)))
+    REFLECT_PROPERTY(m_Mesh, Engine::EPropertyType::Object, "Mesh")
+    REFLECT_PROPERTY(m_Texture, Engine::EPropertyType::Object, "Texture")
 END_REFLECT()
 
 // Struct: tagTransformDesc
@@ -77,12 +123,21 @@ END_REFLECT()
 
 // Class: Transform
 BEGIN_REFLECT(Transform)
+    REFLECT_PARENT(Component)
     REFLECT_PROPERTY(m_Position, Engine::EPropertyType::Vector3, "vec3")
     REFLECT_PROPERTY(m_Rotation, Engine::EPropertyType::Quaternion, "quat")
     REFLECT_PROPERTY(m_Scale, Engine::EPropertyType::Vector3, "vec3")
     REFLECT_PROPERTY(m_LocalMatrix, Engine::EPropertyType::Matrix4, "mat4", "PROP_LOCALMATRIX",READONLY)
     REFLECT_PROPERTY(m_WorldMatrix, Engine::EPropertyType::Matrix4, "mat4", "PROP_WORLDMATRIX", READONLY)
     REFLECT_BITFLAG(m_Flags, Engine::EPropertyType::BitFlag, "ETransformFlag", "PROP_BITFLAG")
+END_REFLECT()
+
+// Struct: Rect
+BEGIN_REFLECT(Rect)
+    REFLECT_PROPERTY(Left, Engine::EPropertyType::F32, "f32")
+    REFLECT_PROPERTY(Top, Engine::EPropertyType::F32, "f32")
+    REFLECT_PROPERTY(Width, Engine::EPropertyType::F32, "f32")
+    REFLECT_PROPERTY(Height, Engine::EPropertyType::F32, "f32")
 END_REFLECT()
 
 // Struct: Vertex
@@ -95,8 +150,31 @@ BEGIN_REFLECT(Vertex)
     REFLECT_PROPERTY(color, Engine::EPropertyType::Vector4, "glm::vec4")
 END_REFLECT()
 
+// Class: Resource
+BEGIN_REFLECT(Resource)
+    REFLECT_PARENT(Base)
+    REFLECT_PROPERTY(m_Tag, Engine::EPropertyType::String, "wstring")
+    REFLECT_PROPERTY(m_Version, Engine::EPropertyType::UInt32, "uint32", READONLY)
+END_REFLECT()
+
+// Class: Sprite
+BEGIN_REFLECT(Sprite)
+    REFLECT_PARENT(Resource)
+    REFLECT_PROPERTY(m_Texture, Engine::EPropertyType::Object, "Texture")
+    REFLECT_PROPERTY(m_Region, Engine::EPropertyType::Struct, "Rect")
+    REFLECT_PROPERTY(m_Pivot, Engine::EPropertyType::Vector2, "vec2")
+END_REFLECT()
+
+// Class: Texture
+BEGIN_REFLECT(Texture)
+    REFLECT_PARENT(Resource)
+    REFLECT_PROPERTY(m_PixelPerUnit, Engine::EPropertyType::F32, "f32")
+    REFLECT_PROPERTY(m_Path, Engine::EPropertyType::String, "wstring", DIRECTORY, READONLY)
+END_REFLECT()
+
 // Class: GameObject
 BEGIN_REFLECT(GameObject)
+    REFLECT_PARENT(Base)
     REFLECT_PROPERTY(m_ID, Engine::EPropertyType::UInt64, "uint64", CATEGORY("PROP_INFORMATION"), READONLY)
     REFLECT_PROPERTY(m_Index, Engine::EPropertyType::UInt32, "uint32", CATEGORY("PROP_INFORMATION"), READONLY)
     REFLECT_PROPERTY(m_LayerIndex, Engine::EPropertyType::UInt32, "uint32", CATEGORY("PROP_INFORMATION"), READONLY)

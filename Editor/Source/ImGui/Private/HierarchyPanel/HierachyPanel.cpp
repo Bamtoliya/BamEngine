@@ -4,12 +4,15 @@
 
 #include "ImGuiManager.h"
 #include "SelectionManager.h"
+#include "ResourceManager.h"
 
 #include "SceneManager.h"
 #include "Scene.h"
 #include "Layer.h"
 #include "GameObject.h"
 #include "Transform.h"
+#include "MeshRenderer.h"
+#include "SpriteRenderer.h"
 
 
 static bool CheckboxTristate(const char* label, bool* v, bool is_mixed)
@@ -828,7 +831,17 @@ void HierarchyPanel::DrawAddGameObjectButton(Scene* scene)
 
 		if (ImGui::MenuItem("Quad"))
 		{
-			CreatePrimitive(scene, L"Quad", L"Quad");
+			CreatePrimitive(scene, L"Quad", L"QuadMesh");
+		}
+
+		if (ImGui::MenuItem("Plane"))
+		{
+			CreatePrimitive(scene, L"Plane", L"PlaneMesh");
+		}
+
+		if (ImGui::MenuItem("Sprite"))
+		{
+			CreateSpriteObject(scene);
 		}
 
 		ImGui::EndPopup();
@@ -1095,5 +1108,26 @@ void HierarchyPanel::CreateEmptyObject(Scene* scene)
 
 void HierarchyPanel::CreatePrimitive(Scene* scene, const wstring& name, const wstring& meshName)
 {
+	GameObject* newGameObject = GameObject::Create();
+	newGameObject->SetName(L"New" + name);
+	newGameObject->AddComponent<Transform>();
+	newGameObject->AddComponent(L"MeshRenderer");
+	MeshRenderer* meshRenderer = newGameObject->GetComponent<MeshRenderer>();
+	meshRenderer->SetMesh(ResourceManager::Get().GetMesh(meshName));
+	meshRenderer->SetRenderPassID(0);
+	scene->AddGameObject(newGameObject);
+	Safe_Release(newGameObject);
+}
 
+void HierarchyPanel::CreateSpriteObject(Scene* scene)
+{
+	GameObject* newGameObject = GameObject::Create();
+	newGameObject->SetName(L"New Sprite");
+	newGameObject->AddComponent<Transform>();
+	newGameObject->AddComponent(L"SpriteRenderer");
+	SpriteRenderer* spriteRenderer = newGameObject->GetComponent<SpriteRenderer>();
+	spriteRenderer->SetTexture(ResourceManager::Get().GetTexture(L"SampleTexture"));
+	spriteRenderer->SetRenderPassID(0);
+	scene->AddGameObject(newGameObject);
+	Safe_Release(newGameObject);
 }

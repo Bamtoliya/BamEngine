@@ -17,6 +17,7 @@
 #include <typeindex>
 #include <fstream>
 #include <sstream>
+#include <any>
 #pragma endregion
 
 using namespace std;
@@ -46,6 +47,8 @@ using namespace glm;
 // Glaze
 #include <glaze/glaze.hpp>
 
+#define STB_IMAGE_IMPLEMENTATION
+#include <stb_image.h>
 #pragma endregion
 
 

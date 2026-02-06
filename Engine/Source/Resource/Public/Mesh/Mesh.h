@@ -2,6 +2,7 @@
 
 #include "RHIBuffer.h"
 #include "Vertex.h"
+#include "Resource.h"
 
 BEGIN(Engine)
 
@@ -15,7 +16,7 @@ struct tagMeshCreateInfo
 	uint32 IndexCount = { 0 };
 	uint32 IndexStride = { 0 };
 };
-class ENGINE_API Mesh : public Base
+class ENGINE_API Mesh : public Resource
 {
 #pragma region Constructor&Destructor
 protected:
@@ -38,6 +39,11 @@ public:
 	uint32 GetIndexCount() const { return m_IndexCount; }
 #pragma endregion
 
+#pragma region Setter
+public:
+	EResult SetVertexBuffer(const void* data, uint32 vertexCount);
+	EResult SetIndexBuffer(const void* data	, uint32 indexCount);
+#pragma endregion
 
 #pragma region Variable
 protected:

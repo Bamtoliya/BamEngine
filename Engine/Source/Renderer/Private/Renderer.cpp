@@ -90,6 +90,7 @@ EResult Renderer::Render(f32 dt)
 	{
 		m_RHI->BindRenderTarget(nullptr, nullptr);
 		m_RHI->SetViewport(0, 0, m_RHI->GetSwapChainWidth(), m_RHI->GetSwapChainHeight());
+		m_RHI->DrawTexture(m_SceneBuffer->GetTexture(0));
 	}
 
 	for (const auto& pass : renderPasses)
@@ -97,6 +98,7 @@ EResult Renderer::Render(f32 dt)
 		auto it = m_RenderQueues.find(pass.ID);
 		GetRenderPassDelegate(pass.ID).Broadcast(dt);
 	}
+
 	return EResult::Success;
 }
 

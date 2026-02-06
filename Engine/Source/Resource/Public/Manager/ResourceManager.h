@@ -61,11 +61,13 @@ public:
 public:
 	EResult LoadMesh(const wstring& key, void* arg);
 	EResult LoadShader(const wstring& key, void* arg);
+	EResult LoadSprite(const wstring& key, void* arg);
 	EResult LoadTexture(const wstring& key, const wstring& texturePath);
 	EResult LoadMaterial(const wstring& key, void* arg);
 public:
 	class Mesh* GetMesh(const wstring& key);
 	class Shader* GetShader(const wstring& key);
+	class Sprite* GetSprite(const wstring& key);
 	class Texture* GetTexture(const wstring& key);
 	class Material* GetMaterial(const wstring& key);
 #pragma region Generic Case
@@ -140,6 +142,7 @@ private:
 	unordered_map<wstring, class Shader*> m_Shaders;
 	unordered_map<wstring, class Texture*> m_Textures;
 	unordered_map<wstring, class Material*> m_Materials;
+	unordered_map<wstring, class Sprite*> m_Sprites;
 private:
 	unordered_map<type_index, IResourceContainer*> m_GenericContainers;
 private:

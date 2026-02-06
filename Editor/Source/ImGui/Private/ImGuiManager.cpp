@@ -4,6 +4,7 @@
 #include "imgui.h"
 #include "imgui_impl_sdl3.h"
 #include "imgui_impl_sdlrenderer3.h"
+#include "ImGuizmo.h"
 #pragma endregion
 
 #pragma region Third Library
@@ -140,6 +141,7 @@ void ImGuiManager::Begin()
 
 	ImGui_ImplSDL3_NewFrame();
 	ImGui::NewFrame();
+	ImGuizmo::BeginFrame();
 }
 
 void ImGuiManager::End()

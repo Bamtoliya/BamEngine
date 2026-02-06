@@ -4,6 +4,7 @@ find_package(fmt CONFIG REQUIRED)
 find_package(SDL3 CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
 find_package(Vulkan REQUIRED) 
+find_package(stb REQUIRED)
 
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
 

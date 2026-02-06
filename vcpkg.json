@@ -8,6 +8,8 @@
     "vulkan",
     "glaze",
     "assimp",
+    "imguizmo",
+    "stb",
     {
       "name": "imgui",
       "features": [

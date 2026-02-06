@@ -4,8 +4,11 @@
 
 
 BEGIN(Engine)
+
+CLASS()
 class ENGINE_API MeshRenderer final : public RenderComponent
 {
+	REFLECT_CLASS(MeshRenderer);
 #pragma region Constructor&Destructor
 private:
 	MeshRenderer() : RenderComponent{} {}
@@ -17,9 +20,8 @@ public:
 	virtual void Free() override;
 #pragma endregion
 
-#pragma region Loop
+#pragma region Render
 public:
-	virtual void	LateUpdate(f32 dt)	override;
 	virtual EResult	Render(f32 dt)		override;
 #pragma endregion
 
@@ -30,6 +32,8 @@ public:
 
 #pragma region Variable
 private:
+
+	PROPERTY(NAME(L"Mesh"))
 	class Mesh* m_Mesh = { nullptr };
 #pragma endregion
 };

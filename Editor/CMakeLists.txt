@@ -4,6 +4,7 @@ find_package(fmt CONFIG REQUIRED)
 find_package(SDL3 CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
 find_package(imgui CONFIG REQUIRED)
+find_package(imguizmo CONFIG REQUIRED)
 find_package(Vulkan REQUIRED) 
 
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
@@ -70,6 +71,7 @@ target_precompile_headers(Editor PRIVATE ${EDITOR_PCH_HEADER})
 target_link_libraries(Editor PRIVATE
     Engine
     imgui::imgui
+    imguizmo::imguizmo
 )
 
 if(MSVC)

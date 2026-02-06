@@ -7,8 +7,8 @@
 EResult Texture::Initialize(void* arg)
 {
 	if (!arg) return EResult::InvalidArgument;
-	wstring* path = reinterpret_cast<wstring*>(arg);
-	m_Path = *path;
+	const wchar* path = reinterpret_cast<const wchar*>(arg);
+	m_Path = path;
 	RHI* rhi = Renderer::Get().GetRHI();
 	// Create RHI Texture
 	{
@@ -26,7 +26,7 @@ Texture* Texture::Create(void* arg)
 	Texture* instance = new Texture();
 	if (IsFailure(instance->Initialize(arg)))
 	{
-		delete instance;
+		Safe_Release(instance);
 		return nullptr;
 	}
 	return instance;
@@ -36,5 +36,24 @@ void Texture::Free()
 {
 	Base::Free();
 	Safe_Release(m_RHITexture);
+}
+#pragma endregion
+
+
+#pragma region Load
+
+EResult Texture::LoadFromFile(const wstring& path)
+{
+	// Release existing texture
+	Safe_Release(m_RHITexture);
+	RHI* rhi = Renderer::Get().GetRHI();
+	if(rhi)
+	{
+		m_RHITexture = rhi->CreateTextureFromFile(path.c_str());
+		if (!m_RHITexture)
+			return EResult::Fail;
+	}
+	m_Path = path;
+	return EResult::Success;
 }
 #pragma endregion

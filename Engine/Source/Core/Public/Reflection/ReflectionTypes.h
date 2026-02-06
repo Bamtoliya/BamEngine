@@ -12,6 +12,7 @@ enum class EPropertyType : uint8
 	None = 0,
 	Int8, Int16, Int32, Int64,
 	UInt8, UInt16, UInt32, UInt64,
+	F32, F64,
 	Float, Double, Bool,
 	String,
 	Wstring, 
@@ -64,6 +65,7 @@ struct PropertyInfo
 	string InnerTypeName;
 	string KeyTypeName;
 	ContainerAccessor* Accessor = nullptr;
+	//const TypeInfo* ClassTypeInfo = nullptr;	
 
 	PropertyMetadata Metadata;
 
@@ -80,7 +82,7 @@ struct PropertyInfo
 	void Apply(const Engine::Range& attr) { Metadata.Min = attr.Min; Metadata.Max = attr.Max; Metadata.bHasRange = true; Metadata.Speed = attr.Speed; }
 	void Apply(const Engine::ReadOnly& attr) { Metadata.bIsReadOnly = attr.bEnable; }
 	void Apply(const Engine::FilePath& attr) { Metadata.bIsFilePath = true; Metadata.FileFilter = attr.Filter; }
-	void Apply(const Engine::Directory& attr) { Metadata.bIsDirectory = true; }
+	void Apply(const Engine::Directory& attr) { Metadata.bIsDirectory = true; Metadata.DialogPath = attr.Path; }
 	void Apply(const Color& attr) {}
 	void Apply(f32 min, f32 max, f32 speed = 1.f)
 	{
@@ -92,6 +94,11 @@ struct PropertyInfo
 	void Apply(const Flags& attr)
 	{
 		Metadata.BitFlags = attr.Items;
+	}
+	void Apply(const Engine::Default& attr)
+	{
+		Metadata.DefaultValue = attr.Value;
+		Metadata.bHasDefault = true;
 	}
 	template <typename T, typename... Args, typename = std::enable_if_t<(sizeof...(Args) > 0)>>
 	void Apply(T&& first, Args&&... args)
@@ -157,8 +164,11 @@ public:
 		m_Properties.push_back(property);
 	}
 
+	void SetParentName(const string& parentName) { m_ParentName = parentName; }
+	const string& GetParentName() const { return m_ParentName; }
 private:
 	string m_Name;
+	string m_ParentName;
 	size_t m_Size;
 	vector<PropertyInfo> m_Properties;
 };

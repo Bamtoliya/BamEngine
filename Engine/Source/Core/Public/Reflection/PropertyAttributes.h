@@ -24,7 +24,7 @@ struct FilePath
 	string Filter;
 	FilePath(const char* _filter = "") : Filter(_filter) {}
 	FilePath(const string& _filter = "") : Filter(_filter) {}
-	FilePath(const wstring& _filter) : Filter(WStrToStr(_filter)) {}
+	FilePath(const wstring& _filter = L"") : Filter(WStrToStr(_filter)) {}
 };
 
 struct Tooltip
@@ -76,10 +76,20 @@ struct Flags
 	}
 };
 
-
-
 struct Directory
 {
+	string Path;
+	Directory() = default;
+	Directory(const char* _path) : Path(_path) {}
+	Directory(const string& _path) : Path(_path) {}
+	Directory(const wstring& _path) : Path(WStrToStr(_path)) {}
+};
+
+struct Default
+{
+	std::any Value;
+	template<typename T>
+	Default(T&& _value) : Value(_value) {}
 };
 
 

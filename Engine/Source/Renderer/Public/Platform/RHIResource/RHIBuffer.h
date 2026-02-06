@@ -32,10 +32,19 @@ protected:
 		m_Stride{ stride } {
 	}
 	virtual ~RHIBuffer() = default;
+
+#pragma region Getter
 public:
 	ERHIBufferType GetBufferType() const { return m_BufferType; }
 	uint32 GetSize() const { return m_Size; }
 	uint32 GetStride() const { return m_Stride; }
+#pragma endregion
+
+#pragma region Setter
+public:
+	virtual void SetData(const void* data, uint32 size) PURE;
+#pragma endregion
+
 protected:
 	ERHIBufferType m_BufferType = { ERHIBufferType::Vertex };
 	uint32 m_Size = { 0 };

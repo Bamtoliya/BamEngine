@@ -24,6 +24,7 @@ private:
 	void DrawVectorProperty(void* data, const TypeInfo& typeinfo, const PropertyInfo& property);
 	void DrawMapProperty(void* data, const TypeInfo& typeinfo, const PropertyInfo& property);
 	void DrawListProperty(void* data, const TypeInfo& typeinfo, const PropertyInfo& property);
+	void DrawVector2Property(void* instance, void* data, const TypeInfo& typeinfo, const PropertyInfo& property);
 	void DrawVector3Property(void* instance, void* data, const TypeInfo& typeinfo, const PropertyInfo& property);
 	void DrawVector4Property(void* instance, void* data, const TypeInfo& typeinfo, const PropertyInfo& property);
 	void DrawQuaternionProperty(void* instance, void* data, const TypeInfo& typeinfo, const PropertyInfo& property);
@@ -31,6 +32,7 @@ private:
 	void DrawMatrixProperty(void* data, const TypeInfo& typeinfo, const PropertyInfo& property, uint32 dim = 4);
 	void DrawStructProperty(void* data, const TypeInfo& typeinfo, const PropertyInfo& property);
 	void DrawSetProperty(void* data, const TypeInfo& typeinfo, const PropertyInfo& property);
+	void DrawDetails(void* instance, const TypeInfo& typeInfo);
 	void DrawEnumProperty(void* data, const TypeInfo& typeinfo, const PropertyInfo& property);
 	void DrawBitFlagProperty(void* data, const TypeInfo& typeinfo, const PropertyInfo& property);
 

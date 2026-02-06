@@ -29,6 +29,7 @@ private:
 private:
 	void CreateEmptyObject(class Scene* scene);
 	void CreatePrimitive(class Scene* scene, const wstring& name, const wstring& meshName);
+	void CreateSpriteObject(class Scene* scene);
 
 
 

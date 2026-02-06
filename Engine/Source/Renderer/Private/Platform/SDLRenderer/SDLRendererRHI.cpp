@@ -133,20 +133,18 @@ RHITexture* SDLRendererRHI::CreateTextureFromFile(const char* filename)
 RHITexture* SDLRendererRHI::CreateTextureFromFile(const wchar* filename)
 {
 	string strFileName = WStrToStr(filename);
-	SDL_Surface* surface = SDL_LoadBMP(strFileName.c_str());
+	SDL_Surface* surface = SDL_LoadPNG(strFileName.c_str());
 	if (!surface)
 	{
 		return nullptr;
 	}
 
-	SDLTexture* texture = new SDLTexture(surface->w, surface->h, 1, 1);
-	texture->m_Texture = SDL_CreateTextureFromSurface(m_Renderer, surface);
+	SDLTexture* texture = new SDLTexture(m_Renderer, surface);
 	SDL_DestroySurface(surface);
 
-	if (!texture->m_Texture)
+	if (!texture->GetNativeHandle())
 	{
-		delete texture;
-		texture = nullptr;
+		Safe_Release(texture);
 		return nullptr;
 	}
 	return texture;
@@ -242,7 +240,14 @@ EResult SDLRendererRHI::BindRenderTarget(RHITexture* renderTarget, RHITexture* d
 }
 EResult SDLRendererRHI::BindTexture(RHITexture* texture, uint32 slot)
 {
-	return EResult();
+	if (texture == nullptr)
+	{
+		m_CurrentTextures[slot] = nullptr;
+		return EResult::Success;
+	}
+
+	m_CurrentTextures[slot] = texture;
+	return EResult::Success;
 }
 EResult SDLRendererRHI::BindRenderTargets(uint32 count, RHITexture** renderTargets, RHITexture* depthStencil)
 {
@@ -282,18 +287,15 @@ EResult SDLRendererRHI::BindShader(RHIShader* shader)
 }
 EResult SDLRendererRHI::BindConstantBuffer(void* arg, uint32 slot)
 {
-	RHIBuffer* buffer = reinterpret_cast<RHIBuffer*>(arg);
-	if (!buffer) return EResult::InvalidArgument;
-
-	void* data = buffer->GetNativeHandle();
+	if (!arg) return EResult::InvalidArgument;
 
 	if (slot == 0)
 	{
-		memcpy(&m_WorldMatrix, data, sizeof(mat4));
+		memcpy(&m_WorldMatrix, arg, sizeof(mat4));
 	}
 	else if (slot == 1)
 	{
-		memcpy(&m_MaterialColor, data, sizeof(vec4));
+		memcpy(&m_MaterialColor, arg, sizeof(vec4));
 	}
 
 	return EResult::Success;
@@ -387,22 +389,48 @@ EResult SDLRendererRHI::DrawIndexed(uint32 count)
 
 	if (!vertexBuffer || !indexBuffer) return EResult::Fail;
 
-	int32 w, h;
-	SDL_GetWindowSize(m_Window, &w, &h);
+	float w, h;
+
+	// 현재 렌더러가 렌더 타겟(텍스처)을 보고 있는지 확인합니다.
+	SDL_Texture* currentTarget = SDL_GetRenderTarget(m_Renderer);
+
+	if (currentTarget)
+	{
+		// 렌더 타겟이 설정되어 있다면, 그 텍스처의 크기를 가져옵니다.
+		SDL_GetTextureSize(currentTarget, &w, &h);
+	}
+	else
+	{
+		// 렌더 타겟이 없다면(nullptr), 메인 윈도우(백버퍼)의 크기를 가져옵니다.
+		int iw, ih;
+		SDL_GetWindowSize(m_Window, &iw, &ih);
+		w = (float)iw;
+		h = (float)ih;
+	}
+
 	glm::vec2 screenCenter(w * 0.5f, h * 0.5f);
 
 	SDL_Vertex* finalVertices = static_cast<SDLShader*>(m_CurrentShader)->ProcessVertex(vertexBuffer, m_WorldMatrix, m_MaterialColor, screenCenter);
 	if (!finalVertices) return EResult::Fail;
 	//SDL_Vertex* vertices = reinterpret_cast<SDL_Vertex*>(vertexBuffer->GetNativeHandle());
+
+	SDL_Texture* texture = static_cast<SDL_Texture*>(m_CurrentTextures[0]->GetNativeHandle());
 	const int* indices = reinterpret_cast<const int*>(indexBuffer->GetNativeHandle());
 
 	sizet numVertices = vertexBuffer->m_Data.size() / sizeof(Vertex);
 
-	if (!SDL_RenderGeometry(m_Renderer, nullptr, finalVertices, numVertices, indices, count))
+	if (!SDL_RenderGeometry(m_Renderer, texture, finalVertices, numVertices, indices, count))
 	{
 		return EResult::Fail;
 	}
 
+	return EResult::Success;
+}
+
+EResult SDLRendererRHI::DrawTexture(RHITexture* texture)
+{
+	SDL_Texture* sdlTexture = static_cast<SDL_Texture*>(texture->GetNativeHandle());
+	SDL_RenderTexture(m_Renderer, sdlTexture, nullptr, nullptr);
 	return EResult::Success;
 }
 

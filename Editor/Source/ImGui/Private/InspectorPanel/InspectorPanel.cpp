@@ -8,6 +8,20 @@
 #include "ReflectionTypes.h"
 
 #pragma region Helper
+template <typename T>
+T GetResetValue(const PropertyMetadata& meta, T fallback)
+{
+	// 1. 메타데이터(DEFAULT 매크로) 확인
+	if (meta.bHasDefault && meta.DefaultValue.has_value())
+	{
+		try
+		{
+			return std::any_cast<T>(meta.DefaultValue);
+		}
+		catch (...) {}
+	}
+	return fallback;
+}
 // Enum이나 정수형 데이터를 안전하게 읽어오는 헬퍼
 int64_t ReadInteger(void* data, size_t size)
 {
@@ -72,42 +86,121 @@ void InspectorPanel::DrawProperties(void* instance, const TypeInfo& typeInfo)
 {
 
 	ImGui::PushID(instance);
-	if (ImGui::CollapsingHeader(typeInfo.GetName().c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+
+	ImGui::SetNextItemAllowOverlap();
+	bool opened = ImGui::CollapsingHeader(typeInfo.GetName().c_str(), ImGuiTreeNodeFlags_DefaultOpen);
+
 	{
+		ImGui::SameLine();
 
-		map<string, vector<const Engine::PropertyInfo*>> categoryMap;
-		vector<const Engine::PropertyInfo*> defaultProps;
+		// 스타일 여백 및 체크박스 크기 계산
+		float checkboxSize = ImGui::GetFrameHeight();
+		float windowWidth = ImGui::GetWindowContentRegionMax().x;
+		float stylePadding = ImGui::GetStyle().FramePadding.x;
 
-		for (const auto& property : typeInfo.GetProperties())
+		// 오른쪽 끝에서 체크박스 크기와 여백만큼 뺀 위치로 커서 이동
+		ImGui::SetCursorPosX(windowWidth - checkboxSize - stylePadding);
+
+		// TODO: 실제 GameObject나 Component의 활성화 변수를 가져오세요.
+		// 예: bool isEnable = ((Component*)instance)->GetEnable(); 
+		bool isEnable = true;
+		string typeName = typeInfo.GetName();
+
+		if(typeName == "GameObject")
 		{
-			if (property.Metadata.Category.empty())
-				defaultProps.push_back(&property);
-			else
-				categoryMap[property.Metadata.Category].push_back(&property);
+			isEnable = static_cast<GameObject*>(instance)->IsActive();
+		}
+		else
+		{
+			isEnable = static_cast<Component*>(instance)->IsActive();
 		}
 
-		DrawPropertyTable(instance, typeInfo, defaultProps);
+		// 헤더와 ID가 겹치지 않도록 별도의 ID 스택 사용
+		ImGui::PushID("IsActiveParams");
 
-		for (const auto& [catName, props] : categoryMap)
+		// "##"을 사용하여 라벨 텍스트는 숨기고 체크박스만 표시
+		if (ImGui::Checkbox("##IsActive", &isEnable))
 		{
-			ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.2f, 0.2f, 0.25f, 1.0f)); // 평소 색
-			ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.25f, 0.25f, 0.3f, 1.0f)); // 마우스 올렸을 때
-			ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0.15f, 0.15f, 0.2f, 1.0f)); // 클릭했을 때
-			string categoryName = LocalizationManager::Get().GetText(catName);
-
-			if (ImGui::CollapsingHeader(categoryName.c_str(), ImGuiTreeNodeFlags_None))
+			if (typeName == "GameObject")
 			{
-				ImGui::PopStyleColor(3);
-				ImGui::Indent();
-				DrawPropertyTable(instance, typeInfo, props);
-				ImGui::Unindent();
+				static_cast<GameObject*>(instance)->SetActive(isEnable);
 			}
 			else
 			{
-				ImGui::PopStyleColor(3);
+				static_cast<Component*>(instance)->SetActive(isEnable);
+			}
+			
+		}
+		ImGui::PopID();
+	}
+
+	if(opened)
+	{
+		// 3. [핵심 변경] 재귀 호출 대신, 타입 계층을 순회하며 그리기
+		const TypeInfo* currentTypeInfo = &typeInfo;
+
+		while (currentTypeInfo != nullptr)
+		{
+			// (선택사항) 부모 클래스로 넘어갈 때 구분선이나 간격을 주면 보기 좋습니다.
+			if (currentTypeInfo != &typeInfo)
+			{
+				ImGui::Spacing();
+				ImGui::Separator();
+				ImGui::Spacing();
+			}
+
+			// --- 속성 분류 및 그리기 로직 (기존 코드 재사용) ---
+			map<string, vector<const Engine::PropertyInfo*>> categoryMap;
+			vector<const Engine::PropertyInfo*> defaultProps;
+
+			for (const auto& property : currentTypeInfo->GetProperties())
+			{
+				if (property.Metadata.Category.empty())
+					defaultProps.push_back(&property);
+				else
+					categoryMap[property.Metadata.Category].push_back(&property);
+			}
+
+			// 기본 속성 그리기
+			DrawPropertyTable(instance, *currentTypeInfo, defaultProps);
+
+			// 카테고리별 속성 그리기
+			for (const auto& [catName, props] : categoryMap)
+			{
+				ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.2f, 0.2f, 0.25f, 1.0f));
+				ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.25f, 0.25f, 0.3f, 1.0f));
+				ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0.15f, 0.15f, 0.2f, 1.0f));
+
+				string categoryName = LocalizationManager::Get().GetText(catName);
+
+				// 카테고리는 여전히 헤더로 구분하는 것이 깔끔합니다.
+				if (ImGui::CollapsingHeader(categoryName.c_str(), ImGuiTreeNodeFlags_None))
+				{
+					ImGui::PopStyleColor(3);
+					ImGui::Indent();
+					DrawPropertyTable(instance, *currentTypeInfo, props);
+					ImGui::Unindent();
+				}
+				else
+				{
+					ImGui::PopStyleColor(3);
+				}
+			}
+			// ----------------------------------------------------
+
+			// 4. 다음 부모 클래스로 이동 (재귀 대신 반복문)
+			string parentName = currentTypeInfo->GetParentName();
+			if (parentName.empty())
+			{
+				currentTypeInfo = nullptr; // 부모가 없으면 종료
+			}
+			else
+			{
+				currentTypeInfo = ReflectionRegistry::Get().GetType(parentName);
+				// 만약 등록된 부모 타입이 없으면 루프 종료
+				if (!currentTypeInfo) break;
 			}
 		}
-
 	}
 	ImGui::PopID();
 }
@@ -192,33 +285,77 @@ void InspectorPanel::DrawPropertyTable(void* instance, const TypeInfo& typeInfo,
 
 			if (property.Metadata.bIsFilePath || property.Metadata.bIsDirectory)
 			{
-				string* strVal = reinterpret_cast<string*>(data);
-				char buffer[1024];
-				strcpy_s(buffer, strVal->c_str());
+				bool isWString = (property.Type == EPropertyType::Wstring) || (property.TypeName == "wstring");
 
+				// 1. 현재 값을 UTF-8 문자열로 변환하여 버퍼에 복사
+				string utf8Str;
+				if (isWString)
+				{
+					wstring* strVal = reinterpret_cast<wstring*>(data);
+					utf8Str = Engine::WStrToStr(*strVal);
+				}
+				else
+				{
+					string* strVal = reinterpret_cast<string*>(data);
+					utf8Str = *strVal;
+				}
+
+				char buffer[1024];
+				strcpy_s(buffer, utf8Str.c_str());
 				f32 buttonWidth = ImGui::GetFrameHeight();
 				ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - buttonWidth - ImGui::GetStyle().ItemSpacing.x);
 
+				bool bChanged = false;
+				string resultPath;
+
 				if (ImGui::InputText("##path", buffer, sizeof(buffer)))
 				{
-					*strVal = buffer;
+					resultPath = buffer;
+					bChanged = true;
 				}
 
-				if (ImGui::Button(property.Metadata.bIsDirectory ? "D" : "...", ImVec2(buttonWidth, 0)))
+				ImGui::SameLine();
+
+				const char* buttonLabel = property.Metadata.bIsDirectory ? ICON_FA_FOLDER : ICON_FA_FILE;
+				if (ImGui::Button(buttonLabel, ImVec2(buttonWidth, buttonWidth)))
 				{
 					std::string selectedPath;
+
+					// 실제 플랫폼 다이얼로그 연동 (Platform 헤더 필요)
+					/*
 					if (property.Metadata.bIsDirectory)
 					{
-						// selectedPath = Platform::OpenFolderDialog();
+						selectedPath = Platform::OpenFolderDialog();
 					}
 					else
 					{
-						// selectedPath = Platform::OpenFileDialog(property.Metadata.FileFilter);
+						selectedPath = Platform::OpenFileDialog(property.Metadata.FileFilter);
 					}
+					*/
 
+					// 다이얼로그 결과가 있다면 적용
 					if (!selectedPath.empty())
 					{
-						*strVal = selectedPath;
+						resultPath = selectedPath;
+						bChanged = true;
+					}
+				}
+
+				// 버튼 툴팁
+				if (ImGui::IsItemHovered())
+				{
+					ImGui::SetTooltip(property.Metadata.bIsDirectory ? "Open Directory" : "Select File");
+				}
+
+				if (bChanged)
+				{
+					if (isWString)
+					{
+						*reinterpret_cast<wstring*>(data) = Engine::StrToWStr(resultPath);
+					}
+					else
+					{
+						*reinterpret_cast<string*>(data) = resultPath;
 					}
 				}
 			}
@@ -234,6 +371,10 @@ void InspectorPanel::DrawPropertyTable(void* instance, const TypeInfo& typeInfo,
 					DrawIntegerProperty(data, property);
 					break;
 				}
+
+				case EPropertyType::F32:
+				case EPropertyType::F64:
+				case EPropertyType::Double:
 				case EPropertyType::Float:
 				{
 					if (property.Metadata.bHasRange)
@@ -246,6 +387,12 @@ void InspectorPanel::DrawPropertyTable(void* instance, const TypeInfo& typeInfo,
 						float* value = reinterpret_cast<float*>(data);
 						ImGui::DragFloat("##value", value);
 					}
+					break;
+				}
+				case EPropertyType::Vector2:
+				{
+					vec2* value = reinterpret_cast<vec2*>(data);
+					DrawVector2Property(instance, data, typeInfo, property);
 					break;
 				}
 				case EPropertyType::Vector3:
@@ -278,6 +425,7 @@ void InspectorPanel::DrawPropertyTable(void* instance, const TypeInfo& typeInfo,
 					ImGui::Checkbox("##value", value);
 					break;
 				}
+				case EPropertyType::Wstring:
 				case EPropertyType::String:
 				{
 					if (property.TypeName == "wstring")
@@ -396,6 +544,33 @@ void InspectorPanel::DrawPropertyTable(void* instance, const TypeInfo& typeInfo,
 					DrawMatrixProperty(data, typeInfo, property);
 					break;
 				}
+				case EPropertyType::Struct:
+				{
+					TypeInfo* structType = Engine::ReflectionRegistry::Get().GetType(property.TypeName);
+					if (structType)
+					{
+						if (ImGui::TreeNode(property.Name.c_str()))
+						{
+							DrawDetails(data, *structType);
+							ImGui::TreePop();
+						}
+					}
+					break;
+				}
+				case EPropertyType::Object:
+				{
+					void* objectPtr = *static_cast<void**>(data);
+					if (objectPtr)
+					{
+						ImGui::Text(property.TypeName.c_str());
+						TypeInfo* objectType = ReflectionRegistry::Get().GetType(property.TypeName);
+						if (objectType)
+						{
+							DrawDetails(objectPtr, *objectType);
+						}
+					}
+					break;
+				}
 				default:
 					ImGui::Text("Unsupported property type.");
 					break;
@@ -427,6 +602,94 @@ void InspectorPanel::DrawIntegerProperty(void* data, const PropertyInfo& propert
 	ImGui::DragScalar("##value", dataType, data);
 }
 
+
+static bool DrawVec2Control(const std::string& label, glm::vec2& values, bool& lockX, bool& lockY, vec2 resetValue = { 0.f, 0.f })
+{
+	bool changed = false;
+	ImGui::PushID(label.c_str());
+
+	// ---------------------------------------------------------
+	// 1. 레이아웃 및 너비 계산
+	// ---------------------------------------------------------
+	float lineHeight = ImGui::GetFontSize() + ImGui::GetStyle().FramePadding.y * 2.0f;
+	ImVec2 buttonSize = { lineHeight, lineHeight }; // XYZ 색상 버튼 크기
+	ImVec2 lockSize = { lineHeight, lineHeight };        // 자물쇠 버튼 크기 (정사각형)
+
+	float availableWidth = ImGui::GetContentRegionAvail().x;
+	float itemSpacing = ImGui::GetStyle().ItemSpacing.x;
+
+	// 전체 너비에서 [색상버튼3개] + [자물쇠3개] + [사이간격들]을 뺌
+	// 간격 구성: (Btn-Input)*3 + (Input-Lock)*3 + (Group-Group)*2
+	// ImGui::SameLine(0,0)을 쓰는 곳은 간격 0으로 계산
+
+	// 그룹 간 간격(2개) + 입력창과 자물쇠 사이 간격(3개) 고려
+	float totalFixed = (buttonSize.x * 3) + (lockSize.x * 3) + (itemSpacing * 2);
+
+	float inputWidth = (availableWidth - totalFixed) / 3.0f;
+	if (inputWidth < 1.0f) inputWidth = 1.0f;
+
+
+	// ---------------------------------------------------------
+	// X Axis (Red)
+	// ---------------------------------------------------------
+	ImGui::PushID("X");
+
+	// [잠금 구역 시작]: 색상 버튼과 입력창만 비활성화
+	if (lockX) ImGui::BeginDisabled();
+	{
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4{ 0.8f, 0.1f, 0.15f, 1.0f });
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4{ 0.9f, 0.2f, 0.2f, 1.0f });
+		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4{ 0.8f, 0.1f, 0.15f, 1.0f });
+		if (ImGui::Button("X", buttonSize)) { values.x = resetValue.x; changed = true; }
+		ImGui::PopStyleColor(3);
+
+		ImGui::SameLine(0, 0); // 버튼과 입력창 딱 붙이기
+		ImGui::SetNextItemWidth(inputWidth);
+		if (ImGui::DragFloat("##Val", &values.x, 0.1f, 0.0f, 0.0f, "%.2f")) changed = true;
+	}
+	if (lockX) ImGui::EndDisabled();
+	// [잠금 구역 끝]
+
+	// 자물쇠 버튼 (항상 활성화)
+	ImGui::SameLine(0, 0);
+	const char* iconX = lockX ? ICON_FA_LOCK : ICON_FA_LOCK_OPEN;
+	if (ImGui::Button(iconX, lockSize)) { lockX = !lockX; changed = true; } // 클릭 시 토글
+	if (ImGui::IsItemHovered()) ImGui::SetTooltip(lockX ? "Unlock X" : "Lock X");
+
+	ImGui::PopID();
+
+	ImGui::SameLine(0, itemSpacing); // X그룹과 Y그룹 사이 간격
+
+
+	// ---------------------------------------------------------
+	// Y Axis (Green)
+	// ---------------------------------------------------------
+	ImGui::PushID("Y");
+
+	if (lockY) ImGui::BeginDisabled();
+	{
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4{ 0.2f, 0.7f, 0.2f, 1.0f });
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4{ 0.3f, 0.8f, 0.3f, 1.0f });
+		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4{ 0.2f, 0.7f, 0.2f, 1.0f });
+		if (ImGui::Button("Y", buttonSize)) { values.y = resetValue.y; changed = true; }
+		ImGui::PopStyleColor(3);
+
+		ImGui::SameLine(0, 0);
+		ImGui::SetNextItemWidth(inputWidth);
+		if (ImGui::DragFloat("##Val", &values.y, 0.1f, 0.0f, 0.0f, "%.2f")) changed = true;
+	}
+	if (lockY) ImGui::EndDisabled();
+
+	ImGui::SameLine(0, 0);
+	const char* iconY = lockY ? ICON_FA_LOCK : ICON_FA_LOCK_OPEN;
+	if (ImGui::Button(iconY, lockSize)) { lockY = !lockY; changed = true; }
+	if (ImGui::IsItemHovered()) ImGui::SetTooltip(lockY ? "Unlock Y" : "Lock Y");
+
+	ImGui::PopID();
+
+	ImGui::PopID(); // Main Label ID
+	return changed;
+}
 static bool DrawVec3Control(const std::string& label, glm::vec3& values, bool& lockX, bool& lockY, bool& lockZ, float resetValue = 0.0f)
 {
 	bool changed = false;
@@ -626,6 +889,15 @@ static void DrawVec4Control(const std::string& label, glm::vec4& values, float r
 	ImGui::PopID();
 }
 
+void InspectorPanel::DrawVector2Property(void* instance, void* data, const TypeInfo& typeinfo, const PropertyInfo& property)
+{
+	vec2* value = reinterpret_cast<vec2*>(data);
+	bool lockX = false, lockY = false, lockZ = false;
+	bool isTransform = typeinfo.GetName() == "Transform";
+	vec2 fallback = vec2(0.0f);
+	vec2 resetValue = GetResetValue<vec2>(property.Metadata, fallback);
+	bool changed = DrawVec2Control(property.Name, *value, lockX, lockY, resetValue);
+}
 void InspectorPanel::DrawVector3Property(void* instance, void* data, const TypeInfo& typeinfo, const PropertyInfo& property)
 {
 	vec3* value = reinterpret_cast<vec3*>(data);
@@ -919,6 +1191,47 @@ void InspectorPanel::DrawSetProperty(void* data, const TypeInfo& typeinfo, const
 		ImGui::Unindent();
 	}
 
+}
+void InspectorPanel::DrawDetails(void* instance, const TypeInfo& typeInfo)
+{
+	const TypeInfo* currentTypeInfo = &typeInfo;
+
+	while (currentTypeInfo != nullptr)
+	{
+		// 1. 현재 계층의 속성 정보 수집
+		vector<const PropertyInfo*> properties;
+		for (const auto& prop : currentTypeInfo->GetProperties())
+		{
+			// (필요 시 여기서 숨김 처리나 필터링 수행)
+			properties.push_back(&prop);
+		}
+
+		// 2. 속성이 있다면 테이블 그리기
+		if (!properties.empty())
+		{
+			// 자신이 아닌 부모 클래스의 속성인 경우, 시각적으로 구분해주면 좋습니다.
+			if (currentTypeInfo != &typeInfo)
+			{
+				ImGui::Spacing();
+				ImGui::TextDisabled("Inherited from %s", currentTypeInfo->GetName().c_str());
+				ImGui::Separator();
+			}
+
+			// 테이블 출력 (해당 계층의 속성들)
+			DrawPropertyTable(instance, *currentTypeInfo, properties);
+		}
+
+		// 3. 다음 부모 타입으로 이동
+		string parentName = currentTypeInfo->GetParentName();
+		if (parentName.empty())
+		{
+			currentTypeInfo = nullptr; // 부모가 없으면 종료
+		}
+		else
+		{
+			currentTypeInfo = ReflectionRegistry::Get().GetType(parentName);
+		}
+	}
 }
 #pragma endregion
 

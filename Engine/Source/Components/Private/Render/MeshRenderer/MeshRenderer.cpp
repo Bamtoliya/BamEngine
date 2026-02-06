@@ -1,6 +1,8 @@
 ﻿#pragma once
 #include "MeshRenderer.h"
+
 #include "GameObject.h"
+#include "Transform.h"
 #include "Renderer.h"
 #include "Mesh.h"
 
@@ -45,16 +47,7 @@ void MeshRenderer::Free()
 }
 #pragma endregion
 
-#pragma region Loop
-void MeshRenderer::LateUpdate(f32 dt)
-{
-	__super::LateUpdate(dt);
-	if (m_Active && m_Owner->IsActive() && m_Owner->IsVisible())
-	{
-		Renderer::Get().Submit(this, m_RenderPassID);
-	}
-}
-
+#pragma region Render
 EResult MeshRenderer::Render(f32 dt)
 {
 	if (!m_Mesh) return EResult::Success;
@@ -63,6 +56,8 @@ EResult MeshRenderer::Render(f32 dt)
 
 	RHIBuffer* vertexBuffer = m_Mesh->GetVertexBuffer();
 	RHIBuffer* indexBuffer = m_Mesh->GetIndexBuffer();
+
+	rhi->BindConstantBuffer((void*)&m_Owner->GetComponent<Transform>()->GetWorldMatrix(), 0);
 
 	if (!rhi || !vertexBuffer) return EResult::Fail;
 

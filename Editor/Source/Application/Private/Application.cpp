@@ -57,6 +57,8 @@ EResult Application::Initialize(void* arg)
     InitializeLocalization();
     //Renderer::Get().GetRenderPassDelegate(uiPassID).Remove(uiHandle);
 
+	ResourceManager::Get().LoadTexture(L"SampleTexture", L"Resources/Texture/uv1.png");
+
     return EResult::Success;
 }
 

@@ -2,6 +2,7 @@
 #include "ResourceManager.h"
 #include "Mesh.h"
 #include "Shader.h"
+#include "Sprite.h"
 #include "Texture.h"
 
 IMPLEMENT_SINGLETON(ResourceManager)
@@ -36,7 +37,9 @@ EResult ResourceManager::LoadMesh(const wstring& key, void* arg)
 	Mesh* mesh = Mesh::Create(arg);
 	if (!mesh)
 		return EResult::Fail;
+	mesh->SetTag(key);
 	m_Meshes.emplace(key, mesh);
+
 	return EResult::Success;
 }
 EResult ResourceManager::LoadShader(const wstring& key, void* arg)
@@ -46,16 +49,34 @@ EResult ResourceManager::LoadShader(const wstring& key, void* arg)
 	Shader* shader = Shader::Create(arg);
 	if (!shader)
 		return EResult::Fail;
+	shader->SetTag(key);
 	m_Shaders.emplace(key, shader);
+	return EResult::Success;
+}
+EResult ResourceManager::LoadSprite(const wstring& key, void* arg)
+{
+	if (m_Sprites.find(key) != m_Sprites.end())
+		return EResult::AlreadyInitialized;
+	Sprite* sprite = Sprite::Create(arg);
+	if (!sprite)
+		return EResult::Fail;
+	sprite->SetTag(key);
+	m_Sprites.emplace(key, sprite);
 	return EResult::Success;
 }
 EResult ResourceManager::LoadTexture(const wstring& key, const wstring& texturePath)
 {
 	if (m_Textures.find(key) != m_Textures.end())
 		return EResult::AlreadyInitialized;
-	Texture* texture = Texture::Create((void*)&texturePath);
+	Texture* texture = Texture::Create((void*)(texturePath.c_str()));
+	if (!texture)
+	{
+		Safe_Release(texture);
+		return EResult::Fail;
+	}
 	if (!texture)
 		return EResult::Fail;
+	texture->SetTag(key);
 	m_Textures.emplace(key, texture);
 	return EResult::Success;
 }

@@ -61,6 +61,7 @@ public:
 	virtual EResult Draw(uint32 count) override;
 	virtual EResult DrawIndexed(uint32 count) override;
 	virtual EResult DrawIndexedInstanced() override { return EResult::NotImplemented; }
+	virtual EResult DrawTexture(RHITexture* texture) override;
 #pragma endregion
 
 #pragma region Setter

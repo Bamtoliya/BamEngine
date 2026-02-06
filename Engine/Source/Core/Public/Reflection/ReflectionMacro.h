@@ -2,6 +2,7 @@
 
 #include "ReflectionRegistry.h"
 #include <cstddef>
+#include <type_traits>
 
 #define PROPERTY(...)
 #define CLASS()
@@ -76,7 +77,13 @@ private: \
 		typeInfo.AddProperty(Engine::PropertyInfo(#VarName, TypeName, Engine::EPropertyType::Map, offsetof(ThisClass, VarName), &acc), ##__VA_ARGS__); \
 	}
 
+#define REFLECT_PARENT(ParentName) \
+	typeInfo.SetParentName(#ParentName);
+
 #define END_REFLECT() }
+
+#define REFLECT_STATIC_TYPE(TypeName) \
+	TypeName::GetStaticType();
 
 #define BEGIN_ENUM_REFLECT(EnumName) \
     struct Reflector_##EnumName { \
@@ -92,6 +99,8 @@ private: \
     }; \
     static Reflector_##EnumName global_##EnumName##_reflector;
 
+
+
 #define NAME(text) Engine::Name(text)
 #define TOOLTIP(text) Engine::Tooltip(text)
 #define CATEGORY(text) Engine::Category(text)
@@ -101,4 +110,4 @@ private: \
 #define DIRECTORY Engine::Directory()
 #define COLOR(r, g, b, a) Engine::Color(vec4(r, g, b, a))
 #define FLAGS(...) Engine::Flags({ __VA_ARGS__ })
-
+#define DEFAULT(value) Engine::Default(value)

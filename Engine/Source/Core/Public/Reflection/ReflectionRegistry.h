@@ -5,6 +5,7 @@
 
 BEGIN(Engine)
 void InitEnumReflection();
+void InitReflectionSystem();
 class ENGINE_API ReflectionRegistry : public Base
 {
 	DECLARE_SINGLETON(ReflectionRegistry)
@@ -20,7 +21,6 @@ public:
 
 #pragma endregion
 
-
 #pragma region Type Management
 public:
 	TypeInfo& RegisterType(const string& name, size_t size);
@@ -32,7 +32,6 @@ public:
 	EnumInfo& RegisterEnum(const string& name, const unordered_map<string, uint64>& entries);
 	EnumInfo* GetEnum(const string& name);
 #pragma endregion
-
 
 #pragma region Variable
 private:
