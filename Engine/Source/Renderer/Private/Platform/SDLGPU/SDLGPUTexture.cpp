@@ -8,6 +8,8 @@
 EResult SDLGPUTexture::Initialize(const SDL_GPUTextureCreateInfo& createInfo)
 {
 	if (createInfo.format == SDL_GPU_TEXTUREFORMAT_INVALID && !m_IsOwned) return EResult::Success;
+	m_Width = createInfo.width;
+	m_Height = createInfo.height;
 	m_Texture = SDL_CreateGPUTexture(static_cast<SDL_GPUDevice*>(m_RHI->GetNativeRHI()), &createInfo);
 	return m_Texture ? EResult::Success : EResult::Fail;
 }

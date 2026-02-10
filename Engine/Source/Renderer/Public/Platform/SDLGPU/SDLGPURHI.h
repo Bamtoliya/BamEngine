@@ -97,6 +97,7 @@ private:
 private:
 	mat4 m_WorldMatrix = glm::identity<mat4>();
 	vec4 m_MaterialColor = vec4(1.0f);
+	vec4 m_ClearColor = vec4(0.1f, 0.1f, 0.1f, 1.0f);
 #pragma endregion
 };
 END

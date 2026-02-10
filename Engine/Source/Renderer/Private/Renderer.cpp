@@ -85,6 +85,8 @@ EResult Renderer::Render(f32 dt)
 	const vector<RenderPassInfo>& renderPasses = renderPassManager.GetAllRenderPasses();
 	if (m_SceneBuffer && m_RHI)
 	{
+		vec4 clearColor = { 0.1f, 0.1f, 0.1f, 1.0f }; // 게임 배경색 (검정/회색)
+		m_RHI->ClearRenderTarget(m_SceneBuffer->GetTexture(0), clearColor);
 		if(IsFailure(m_RHI->BindRenderTarget(m_SceneBuffer->GetTexture(0), m_SceneBuffer->GetDepthStencilTexture())))
 		{
 			return EResult::Fail;
@@ -93,8 +95,6 @@ EResult Renderer::Render(f32 dt)
 		{
 			return EResult::Fail;
 		}
-		vec4 clearColor = { 0.1f, 0.1f, 0.1f, 1.0f }; // 게임 배경색 (검정/회색)
-		m_RHI->ClearRenderTarget(m_SceneBuffer->GetTexture(0), clearColor);
 	}
 	for (const auto& pass : renderPasses)
 	{
@@ -107,9 +107,9 @@ EResult Renderer::Render(f32 dt)
 
 	if (m_RHI)
 	{
+		m_RHI->DrawTexture(m_SceneBuffer->GetTexture(0));
 		m_RHI->BindRenderTarget(nullptr, nullptr);
 		m_RHI->SetViewport(0, 0, m_RHI->GetSwapChainWidth(), m_RHI->GetSwapChainHeight());
-		m_RHI->DrawTexture(m_SceneBuffer->GetTexture(0));
 		if (m_RHIType == ERHIType::SDLGPU)
 		{
 			static_cast<SDLGPURHI*>(m_RHI)->ClearRenderPass();

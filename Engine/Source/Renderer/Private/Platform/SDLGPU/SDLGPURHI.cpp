@@ -166,7 +166,7 @@ RHITexture* SDLGPURHI::CreateTextureFromFile(const char* filename)
 		return nullptr;
 	}
 
-	SDL_Surface* convertedSurface = SDL_ConvertSurface(surface, SDL_PIXELFORMAT_RGBA8888);
+	SDL_Surface* convertedSurface = SDL_ConvertSurface(surface, SDL_PIXELFORMAT_ABGR8888);
 	SDL_DestroySurface(surface);
 	surface = convertedSurface;
 
@@ -213,7 +213,7 @@ RHITexture* SDLGPURHI::CreateTextureFromFile(const wchar* filename)
 		return nullptr;
 	}
 
-	SDL_Surface* convertedSurface = SDL_ConvertSurface(surface, SDL_PIXELFORMAT_RGBA8888);
+	SDL_Surface* convertedSurface = SDL_ConvertSurface(surface, SDL_PIXELFORMAT_ABGR8888);
 	SDL_DestroySurface(surface);
 	surface = convertedSurface;
 
@@ -465,25 +465,55 @@ RHIShader* SDLGPURHI::CreateShader(const tagRHIShaderDesc& desc)
 #pragma region Bind
 EResult SDLGPURHI::BindRenderTarget(RHITexture* renderTarget, RHITexture* depthStencil)
 {
-	//if (renderTarget)
-	//{
-	//	SDL_Texture* sdlTexture = reinterpret_cast<SDL_Texture*>(renderTarget->GetNativeHandle());
-	//	if (!SDL_SetRenderTarget(m_Renderer, sdlTexture))
-	//	{
-	//		printf("Failed to Set Render Target: %s\n", SDL_GetError());
-	//		if (!SDL_SetRenderTarget(m_Renderer, nullptr))
-	//			return EResult::Fail;
-	//		return EResult::Fail;
-	//	}
-	//}
-	//else
-	//{
-	//	if (!SDL_SetRenderTarget(m_Renderer, nullptr) != 0)
-	//	{
-	//		return EResult::Fail;
-	//	}
-	//}
-	return EResult::Success;
+	if (m_CurrentRenderPass)
+	{
+		SDL_EndGPURenderPass(m_CurrentRenderPass);
+		m_CurrentRenderPass = nullptr;
+	}
+
+	if (!m_CurrentCommandBuffer) return EResult::Fail;
+
+	// Color target 설정
+	SDL_GPUColorTargetInfo colorTargetInfo = {};
+
+	if (renderTarget)
+	{
+		// 오프스크린 렌더 타겟에 렌더링
+		colorTargetInfo.texture = static_cast<SDL_GPUTexture*>(renderTarget->GetNativeHandle());
+		colorTargetInfo.clear_color = { m_ClearColor.r, m_ClearColor.g, m_ClearColor.b, m_ClearColor.a };
+		colorTargetInfo.load_op = SDL_GPU_LOADOP_CLEAR;
+		colorTargetInfo.store_op = SDL_GPU_STOREOP_STORE;
+	}
+	else
+	{
+		// Backbuffer에 렌더링 — 기존 내용 보존 (blit 결과 유지)
+		SDL_GPUTexture* backBufferHandle = static_cast<SDL_GPUTexture*>(m_BackBuffer->GetNativeHandle());
+		if (!backBufferHandle) return EResult::Fail;
+		colorTargetInfo.texture = backBufferHandle;
+		colorTargetInfo.load_op = SDL_GPU_LOADOP_LOAD;
+		colorTargetInfo.store_op = SDL_GPU_STOREOP_STORE;
+	}
+
+	if (!colorTargetInfo.texture) return EResult::Fail;
+
+	// Depth/Stencil target 설정
+	SDL_GPUDepthStencilTargetInfo depthInfo = {};
+	SDL_GPUDepthStencilTargetInfo* depthInfoPtr = nullptr;
+
+	if (depthStencil)
+	{
+		depthInfo.texture = static_cast<SDL_GPUTexture*>(depthStencil->GetNativeHandle());
+		depthInfo.load_op = SDL_GPU_LOADOP_CLEAR;
+		depthInfo.store_op = SDL_GPU_STOREOP_DONT_CARE;
+		depthInfo.stencil_load_op = SDL_GPU_LOADOP_CLEAR;
+		depthInfo.stencil_store_op = SDL_GPU_STOREOP_DONT_CARE;
+		depthInfo.clear_depth = 1.0f;
+		depthInfo.clear_stencil = 0;
+		depthInfoPtr = &depthInfo;
+	}
+
+	m_CurrentRenderPass = SDL_BeginGPURenderPass(m_CurrentCommandBuffer, &colorTargetInfo, 1, depthInfoPtr);
+	return m_CurrentRenderPass ? EResult::Success : EResult::Fail;
 }
 EResult SDLGPURHI::BindTexture(RHITexture* texture, uint32 slot)
 {
@@ -562,26 +592,7 @@ EResult SDLGPURHI::BindConstantBuffer(void* arg, uint32 slot)
 #pragma region Clear Resources
 EResult SDLGPURHI::ClearRenderTarget(RHITexture* renderTarget, vec4 color)
 {
-	//SDL_Texture* oldTarget = SDL_GetRenderTarget(m_Renderer);
-	//if (renderTarget)
-	//{
-	//	SDL_Texture* sdlTexture = static_cast<SDLTexture*>(renderTarget)->m_Texture;
-	//	SDL_SetRenderTarget(m_Renderer, sdlTexture);
-	//}
-	//else
-	//{
-	//	SDL_SetRenderTarget(m_Renderer, nullptr);
-	//}
-	//
-	//SDL_SetRenderDrawColor(m_Renderer,
-	//	static_cast<uint8>(color.r * 255.0f),
-	//	static_cast<uint8>(color.g * 255.0f),
-	//	static_cast<uint8>(color.b * 255.0f),
-	//	static_cast<uint8>(color.a * 255.0f));
-	//
-	//SDL_RenderClear(m_Renderer);
-	//SDL_SetRenderTarget(m_Renderer, oldTarget);
-	//
+	m_ClearColor = color;
 	return EResult::Success;
 }
 EResult SDLGPURHI::ClearDepthStencil(RHITexture* depthStencil, f32 depth, uint8 stencil)
@@ -681,8 +692,32 @@ EResult SDLGPURHI::DrawIndexed(uint32 count)
 
 EResult SDLGPURHI::DrawTexture(RHITexture* texture)
 {
-	//SDL_Texture* sdlTexture = static_cast<SDL_Texture*>(texture->GetNativeHandle());
-	//SDL_RenderTexture(m_Renderer, sdlTexture, nullptr, nullptr);
+	if (!texture || !m_CurrentCommandBuffer || !m_BackBuffer->GetNativeHandle()) return EResult::Fail;
+
+	// SDL_BlitGPUTexture는 렌더 패스 밖에서 호출해야 함
+	if (m_CurrentRenderPass)
+	{
+		SDL_EndGPURenderPass(m_CurrentRenderPass);
+		m_CurrentRenderPass = nullptr;
+	}
+
+	SDL_GPUBlitInfo blitInfo = {};
+
+	// Source: 오프스크린 렌더 타겟
+	blitInfo.source.texture = static_cast<SDL_GPUTexture*>(texture->GetNativeHandle());
+	blitInfo.source.w = texture->GetWidth();
+	blitInfo.source.h = texture->GetHeight();
+
+	// Destination: 스왑체인 backbuffer
+	blitInfo.destination.texture = static_cast<SDL_GPUTexture*>(m_BackBuffer->GetNativeHandle());
+	blitInfo.destination.w = m_SwapChainWidth;
+	blitInfo.destination.h = m_SwapChainHeight;
+
+	blitInfo.load_op = SDL_GPU_LOADOP_DONT_CARE;
+	blitInfo.filter = SDL_GPU_FILTER_LINEAR;
+
+	SDL_BlitGPUTexture(m_CurrentCommandBuffer, &blitInfo);
+
 	return EResult::Success;
 }
 

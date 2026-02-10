@@ -49,7 +49,7 @@ EResult SDLGPUPipeline::Initialize(const DESC& desc)
 
 	// Color Target (스왑체인 포맷)
 	SDL_GPUColorTargetDescription colorTarget = {};
-	colorTarget.format = SDL_GPU_TEXTUREFORMAT_B8G8R8A8_UNORM;
+	colorTarget.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
 
 	SDL_GPUGraphicsPipelineTargetInfo targetInfo = {};
 	targetInfo.color_target_descriptions = &colorTarget;
