@@ -2,9 +2,19 @@
 
 #include "Renderer.h"
 #include "RHI.h"
+
+#include "SDLGPURHI.h"
 #include "SDLRendererRHI.h"
+
+#include "ResourceManager.h"
+
+#include "PipelineManager.h"
 #include "RenderPassManager.h"
 #include "RenderComponent.h"
+
+#include "RHIPipeline.h"
+
+#include "Shader.h"
 
 IMPLEMENT_SINGLETON(Renderer)
 
@@ -14,15 +24,15 @@ EResult Renderer::Initialize(void* arg)
 	if (!arg) return EResult::InvalidArgument;
 
 	CAST_DESC
-	RHICREATEINFO RHIDesc = {};
-	RHIDesc.WindowHandle = desc->WindowHandle;
-	RHIDesc.Width = desc->Width;
-	RHIDesc.Height = desc->Height;
-	RHIDesc.IsVSync = desc->IsVSync;
-	switch (desc->RHIType)
+	tagRHIDesc RHIDesc = desc->RHIDesc;
+	m_RHIType = desc->RHIType;
+	switch (m_RHIType)
 	{
 	case ERHIType::SDLRenderer:
 		m_RHI = SDLRendererRHI::Create(&RHIDesc);
+		break;
+	case ERHIType::SDLGPU:
+		m_RHI = SDLGPURHI::Create(&RHIDesc);
 		break;
 	default:
 		return EResult::Fail;
@@ -30,9 +40,15 @@ EResult Renderer::Initialize(void* arg)
 	
 	if (!m_RHI) return EResult::Fail;
 
+	// 쉐이더 & 파이프라인 생성 (SDLGPU일 때)
+	if (m_RHIType == ERHIType::SDLGPU)
+	{
+		
+	}
+
 	tagRenderTargetDesc rtDesc;
-	rtDesc.Width = desc->Width;
-	rtDesc.Height = desc->Height;
+	rtDesc.Width = desc->RHIDesc.Width;
+	rtDesc.Height = desc->RHIDesc.Height;
 	m_SceneBuffer = RenderTargetManager::Get().CreateRenderTarget(&rtDesc);
 	if (!m_SceneBuffer) return EResult::Fail;
 
@@ -41,11 +57,14 @@ EResult Renderer::Initialize(void* arg)
 
 void Renderer::Free()
 {	
-	if(m_SceneBuffer)
+	Safe_Release(m_SceneBuffer);
+
+	if (m_RHI)
 	{
-		Safe_Release(m_SceneBuffer);
+		//순환참조 때문에 명시적으로 해제
+		m_RHI->Free();
+		Safe_Release(m_RHI);
 	}
-	Safe_Release(m_RHI);
 }
 #pragma endregion
 
@@ -91,6 +110,10 @@ EResult Renderer::Render(f32 dt)
 		m_RHI->BindRenderTarget(nullptr, nullptr);
 		m_RHI->SetViewport(0, 0, m_RHI->GetSwapChainWidth(), m_RHI->GetSwapChainHeight());
 		m_RHI->DrawTexture(m_SceneBuffer->GetTexture(0));
+		if (m_RHIType == ERHIType::SDLGPU)
+		{
+			static_cast<SDLGPURHI*>(m_RHI)->ClearRenderPass();
+		}
 	}
 
 	for (const auto& pass : renderPasses)
@@ -98,6 +121,8 @@ EResult Renderer::Render(f32 dt)
 		auto it = m_RenderQueues.find(pass.ID);
 		GetRenderPassDelegate(pass.ID).Broadcast(dt);
 	}
+
+
 
 	return EResult::Success;
 }

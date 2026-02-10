@@ -1,15 +1,24 @@
 ﻿#pragma once
 #include "Material.h"
+#include "RHIPipeline.h"
+#include "RHITexture.h"
+#include "RHISampler.h"
+#include "PipelineManager.h"
+#include "SamplerManager.h"
+#include "Renderer.h"
 
 #pragma region Cosntructor&Destructor
 EResult Material::Initialize(void* arg)
 {
-	//wstring* shaderPath = reinterpret_cast<wstring*>(arg);
-	//if (!shaderPath) return EResult::Fail;
-	//m_VertexShader = RHIShader::Create(RHIShader::EShaderType::Vertex, *shaderPath + L".vs");
-	//if (!m_VertexShader) return EResult::Fail;
-	//m_PixelShader = RHIShader::Create(RHIShader::EShaderType::Pixel, *shaderPath + L".ps");
-	//if (!m_PixelShader) return EResult::Fail;
+	if (arg)
+	{
+		CAST_DESC
+		m_PipelineKey = desc->PipelineKey;
+	}
+	else
+	{
+		m_PipelineKey = L"Default";
+	}
 	return EResult::Success;
 }
 Material* Material::Create(void* arg)
@@ -22,17 +31,17 @@ Material* Material::Create(void* arg)
 	}
 	return instance;
 }
-Material* Material::Clone(void* arg)
-{
-	Material* instance = new Material(*this);
-	if (!instance) return nullptr;
-	instance->m_VertexShader = m_VertexShader;
-	instance->m_PixelShader = m_PixelShader;
-	return instance;
-}
 void Material::Free()
 {
-	Safe_Release(m_VertexShader);
-	Safe_Release(m_PixelShader);
+	__super::Free();
 }
 #pragma endregion
+
+
+#pragma region Bind
+EResult Material::Bind(uint32 slot)
+{
+	return __super::Bind(slot);
+}
+#pragma endregion
+

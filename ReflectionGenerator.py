@@ -168,6 +168,9 @@ def generate_reflection_code():
                         # [추가] 클래스 이름 저장
                         all_reflected_classes.append(class_name)
                         
+                        # REFLECT_CLASS/STRUCT가 발견되면 항상 헤더 포함
+                        has_class = True
+                        
                         scope_content, scope_start = find_scope_content_info(content, match.start())
                         parent_name = find_parent_class(content, class_name, scope_start)
                         properties = PROPERTY_PATTERN.findall(scope_content)
@@ -179,7 +182,6 @@ def generate_reflection_code():
                             code_block += f'    REFLECT_PARENT({parent_name})\n'
                         
                         if properties:
-                            has_class = True
                             for attr_str, type_str, var_name in properties:
                                 attributes = attr_str.strip().replace('\n', ' ')
                                 if attributes: attributes = f", {attributes}"
@@ -191,7 +193,7 @@ def generate_reflection_code():
                                     if raw_type.startswith(("map", "unordered_map")):
                                         key_t = args[0] if len(args)>0 else "void"
                                         val_t = args[1] if len(args)>1 else "void"
-                                        code_block += f'    REFLECT_MAP({var_name}, {full_type}, {key_t}, {val_t}, "{val_t}"{attributes})\n'
+                                        code_block += f'    REFLECT_MAP({var_name}, "{val_t}", "{key_t}"{attributes})\n'
                                     elif raw_type.startswith("list"):
                                         inner_t = args[0] if args else "void"
                                         code_block += f'    REFLECT_LIST({var_name}, {inner_t}, "{inner_t}"{attributes})\n'

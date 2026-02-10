@@ -30,6 +30,12 @@ private:
 	void InitializeLocalization();
 #pragma endregion
 
+#pragma region Test Prepare
+private:
+	void InitializeResources();
+#pragma endregion
+
+
 
 public:
 	void Run(int argc, char* argv[]);

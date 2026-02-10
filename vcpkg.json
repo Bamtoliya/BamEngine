@@ -3,13 +3,19 @@
   "version-string": "0.1.0",
   "dependencies": [
     "fmt",
-    "sdl3",
+    {
+      "name": "sdl3",
+      "features": ["vulkan"]
+    },
     "glm",
     "vulkan",
     "glaze",
     "assimp",
     "imguizmo",
     "stb",
+    "glslang",
+    "spirv-tools",
+    "spirv-cross",
     {
       "name": "imgui",
       "features": [
@@ -17,7 +23,8 @@
         "sdl3-binding",
         "vulkan-binding",
         "docking-experimental",
-        "sdl3-renderer-binding"
+        "sdl3-renderer-binding",
+        "sdlgpu3-binding"
       ]
     }
   ]

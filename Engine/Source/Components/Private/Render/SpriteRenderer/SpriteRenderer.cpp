@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "SpriteRenderer.h"
+#include "ResourceManager.h"
 
 REGISTER_COMPONENT(SpriteRenderer)
 
@@ -38,7 +39,7 @@ Component* SpriteRenderer::Clone(GameObject* owner, void* arg)
 void SpriteRenderer::Free()
 {
 	Safe_Release(m_Mesh);
-	Safe_Release(m_Texture);
+	Safe_Release(m_Sprite);
 	__super::Free();
 }
 #pragma endregion
@@ -47,30 +48,27 @@ void SpriteRenderer::Free()
 #pragma region Loop
 void SpriteRenderer::LateUpdate(f32 dt)
 {
-	if (m_Texture)
+	if (m_Sprite)
 	{
-		if (m_CachedPPU != m_Texture->GetPixelPerUnit() || m_PrevPivot != m_Pivot)
-		{
-			UpdateMesh();
-		}
+
 	}
 	__super::LateUpdate(dt);
 }
 EResult SpriteRenderer::Render(f32 dt)
 {
-	if (!m_Texture || !m_Mesh) return EResult::Success;
+	if (!m_Sprite || !m_Mesh) return EResult::Success;
 
 	RHI* rhi = Renderer::Get().GetRHI();
 
 	RHIBuffer* vertexBuffer = m_Mesh->GetVertexBuffer();
 	RHIBuffer* indexBuffer = m_Mesh->GetIndexBuffer();
-	RHITexture* texture = m_Texture->GetRHITexture();
-
-
-	rhi->BindConstantBuffer((void*)&m_Owner->GetComponent<Transform>()->GetWorldMatrix(), 0);
-	rhi->BindTexture(texture, 0);
+	RHITexture* texture = m_Sprite->GetTexture()->GetRHITexture();
+	MaterialInstance* material = GetMaterialInstance();
 
 	if (!rhi || !vertexBuffer) return EResult::Fail;
+
+	material->Bind(0);
+	rhi->BindConstantBuffer((void*)&m_Owner->GetComponent<Transform>()->GetWorldMatrix(), 0);
 
 	rhi->BindVertexBuffer(vertexBuffer);
 
@@ -89,37 +87,47 @@ EResult SpriteRenderer::Render(f32 dt)
 #pragma endregion
 
 #pragma region Setter
-EResult SpriteRenderer::SetTexture(Texture* texture)
+EResult SpriteRenderer::SetSprite(Sprite* sprite)
 {
-	if (m_Texture)
-		Safe_Release(m_Texture);
-	m_Texture = texture;
-	Safe_AddRef(m_Texture);
+	if (m_Sprite)
+		Safe_Release(m_Sprite);
+	m_Sprite = sprite;
+	Safe_AddRef(m_Sprite);
 
 	if (IsFailure(UpdateMesh()))
 		return EResult::Fail;
+	if (IsFailure(UpdateMaterialInstance()))
+		return EResult::Fail;
 	return EResult::Success;
 }
-EResult SpriteRenderer::SetPivot(vec2 pivot)
+EResult SpriteRenderer::SetSprite(Texture* texture)
 {
-	m_Pivot = pivot;
+	if(m_Sprite)
+		Safe_Release(m_Sprite);
+	tagSpriteCreateDesc desc;
+	desc.Texture = texture;
+	m_Sprite = Sprite::Create(&desc);
 	if (IsFailure(UpdateMesh()))
+		return EResult::Fail;
+	if (IsFailure(UpdateMaterialInstance()))
 		return EResult::Fail;
 	return EResult();
 }
 EResult SpriteRenderer::UpdateMesh()
 {
-	if (!m_Texture) return EResult::Fail;
+	if (!m_Sprite) return EResult::Fail;
 
-	m_CachedPPU = m_Texture->GetPixelPerUnit();
-	m_PrevPivot = m_Pivot;
+	m_CachedSpriteVersion = m_Sprite->GetVersion();
 
-	f32 ppu = m_Texture->GetPixelPerUnit();
-	f32 width = m_Texture->GetWorldWidth();
-	f32 height = m_Texture->GetWorldHeight();
+	f32 ppu = m_Sprite->GetTexture()->GetPixelPerUnit();
+	f32 width = m_Sprite->GetTexture()->GetWorldWidth();
+	f32 height = m_Sprite->GetTexture()->GetWorldHeight();
 
-	f32 xOffset = width * m_Pivot.x;
-	f32 yOffset = height * m_Pivot.y;
+	vec2 pivot = m_Sprite->GetPivot();
+	Rect region = m_Sprite->GetRegion();
+
+	f32 xOffset = width * pivot.x;
+	f32 yOffset = height * pivot.y;
 
 	f32 left = 0.0f - xOffset;
 	f32 right = width - xOffset;
@@ -154,6 +162,23 @@ EResult SpriteRenderer::UpdateMesh()
 
 	m_Mesh->SetVertexBuffer(vertices.data(), static_cast<uint32>(vertices.size()));
 
+	return EResult::Success;
+}
+EResult SpriteRenderer::UpdateMaterialInstance()
+{
+	if (!m_Sprite || !m_Sprite->GetTexture()) return EResult::Fail;
+
+	// MaterialInstance가 없으면 base material로부터 생성
+	if (!m_MaterialInstances[0])
+	{
+		Material* baseMaterial = GetSharedMaterial();
+		if (!baseMaterial) return EResult::Fail;
+		m_MaterialInstances[0] = MaterialInstance::Create(baseMaterial);
+		if (!m_MaterialInstances[0]) return EResult::Fail;
+	}
+
+	// Sprite 텍스처를 slot 0에 오버라이드
+	m_MaterialInstances[0]->SetTextureBySlot(0, m_Sprite->GetTexture()->GetRHITexture());
 	return EResult::Success;
 }
 #pragma endregion

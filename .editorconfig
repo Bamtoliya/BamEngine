@@ -1,4 +1,7 @@
-root = true
+﻿root = true
 
 [*]
 charset = utf-8-bom
+
+[*.{vert,frag,glsl,comp,geom,tesc,tese,hlsl}]
+charset = utf-8

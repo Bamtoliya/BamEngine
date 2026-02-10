@@ -24,6 +24,8 @@ private:
 	ImGuiManager() {}
 	virtual ~ImGuiManager() = default;
 	EResult Initialize(void* arg = nullptr);
+private:
+	EResult InitializeImGui();
 public:
 	virtual void Free()override;
 #pragma endregion
@@ -33,6 +35,47 @@ public:
 	void End();
 	void ProcessEvent(const SDL_Event* event);
 	void Draw();
+
+#pragma region SDLRenderer3
+private:
+	EResult InitializeImGuiSDLRenderer3();
+	void SDLRenderer3Begin();
+	void SDLRenderer3End();
+	void ShutdownImGuiSDLRenderer3();
+#pragma endregion
+
+#pragma region SDLGPU3
+private:
+	EResult InitializeImGuiSDLGPU3();
+	void SDLGPU3Begin();
+	void SDLGPU3End();
+	void ShutdownImGuiSDLGPU3();
+#pragma endregion
+
+#pragma region DirectX12
+private:
+	EResult InitializeImGuiDirectX12();
+	void DirectX12Begin();
+	void DirectX12End();
+	void ShutdownImGuiDirectX12();
+#pragma endregion
+
+#pragma region Vulkan
+	EResult InitializeImGuiVulkan();
+	void VulkanBegin();
+	void VulkanEnd();
+	void ShutdownImGuiVulkan();
+#pragma endregion
+
+#pragma region OpenGL
+private:
+	EResult InitializeImGuiOpenGL();
+	void OpenGLBegin();
+	void OpenGLEnd();
+	void ShutdownImGuiOpenGL();
+#pragma endregion
+
+
 #pragma region DrawUI
 private:
 	void MainDockspace();
@@ -47,6 +90,7 @@ private:
 private:
 	SDL_Window* m_Window = { nullptr };
 	class RHI* m_RHI = { nullptr };
+	ERHIType m_RHIType = ERHIType::Unknown;
 #pragma region ImGui
 private:
 	ToolBar m_ToolBar;

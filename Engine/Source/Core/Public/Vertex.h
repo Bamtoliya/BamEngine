@@ -1,11 +1,11 @@
 ﻿#pragma once
 
-#include <ReflectionMacro.h>
+#include "ReflectionMacro.h"
 namespace Engine
 {
 
 	STRUCT()
-	struct Vertex
+	struct ENGINE_API Vertex
 	{
 		REFLECT_STRUCT(Vertex);
 

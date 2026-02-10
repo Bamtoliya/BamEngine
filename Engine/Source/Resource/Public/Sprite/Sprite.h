@@ -32,9 +32,15 @@ public:
 
 #pragma region MyRegion
 public:
-	vec4 GetUVTransform();
+	EResult Bind(uint32 slot);
 #pragma endregion
 
+
+
+#pragma region MyRegion
+public:
+	vec4 GetUVTransform();
+#pragma endregion
 
 #pragma region Region Management
 public:
@@ -63,7 +69,7 @@ private:
 	PROPERTY()
 	Rect m_Region = { 0.f, 0.f, 0.f, 0.f };
 
-	PROPERTY()
+	PROPERTY(DEFAULT(vec2(0.5f, 0.5f)))
 	vec2 m_Pivot = { 0.5f, 0.5f };
 #pragma endregion
 };

@@ -18,8 +18,6 @@ enum class EObjectFlag : uint8
 
 ENABLE_BITMASK_OPERATORS(EObjectFlag)
 
-BEGIN(Engine)
-
 #pragma region Struct
 struct tagGameObjectDesc
 {
@@ -27,6 +25,7 @@ struct tagGameObjectDesc
 };
 #pragma endregion
 
+BEGIN(Engine)
 CLASS()
 class ENGINE_API GameObject : public Base
 {

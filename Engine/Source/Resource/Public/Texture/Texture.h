@@ -20,13 +20,19 @@ private:
 	EResult Initialize(void* arg = nullptr);
 public:
 	static Texture* Create(void* arg = nullptr);
-	Texture* Clone(void* arg = nullptr);
 	virtual void Free() override;
 #pragma endregion
+
+
 
 #pragma region Load
 	virtual EResult LoadFromFile(const wstring& path) override;
 #pragma endregion
+
+#pragma region Bind
+	virtual EResult Bind(uint32 slot) override;
+#pragma endregion
+
 
 
 #pragma region Getter

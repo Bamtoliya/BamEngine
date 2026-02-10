@@ -10,14 +10,15 @@
 #pragma region Constructor&Destructor
 EResult SDLRendererRHI::Initialize(void* arg)
 {
-	RHICREATEINFO* pDesc = reinterpret_cast<RHICREATEINFO*>(arg);
-	m_Window = reinterpret_cast<SDL_Window*>(pDesc->WindowHandle);
+	if (!arg) return EResult::InvalidArgument;
+	CAST_DESC
+	m_Window = reinterpret_cast<SDL_Window*>(desc->WindowHandle);
 	m_Renderer = SDL_CreateRenderer(m_Window, nullptr);
 	if (!m_Window || !m_Renderer) return EResult::Fail;
 
 	int32 width, height;
 	SDL_GetWindowSize(m_Window, &width, &height);
-	m_BackBuffer = SDL_CreateTexture(m_Renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, width, height);
+	m_BackBuffer = new SDLTexture(m_Renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, width, height);
 	if (!m_BackBuffer)
 	{
 		return EResult::Fail;
@@ -39,11 +40,7 @@ RHI* SDLRendererRHI::Create(void* arg)
 
 void SDLRendererRHI::Free()
 {
-	if (m_BackBuffer)
-	{
-		SDL_DestroyTexture(m_BackBuffer);
-		m_BackBuffer = nullptr;
-	}
+	Safe_Release(m_BackBuffer);
 	if (m_Renderer)
 	{
 		SDL_DestroyRenderer(m_Renderer);

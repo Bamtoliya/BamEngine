@@ -14,7 +14,7 @@ EResult Mesh::Initialize(void* arg)
 
 	// Create Vertex Buffer
 	{
-		RHIBUFFERDESC vertexBufferDesc = {};
+		tagRHIBufferDesc vertexBufferDesc = {};
 		vertexBufferDesc.BufferType = ERHIBufferType::Vertex;
 		uint32 totalSize = meshDesc->VertexStride * m_VertexCount;
 		m_VertexBuffer = rhi->CreateBuffer(
@@ -86,7 +86,7 @@ EResult Mesh::SetVertexBuffer(const void* data, uint32 vertexCount)
 	{
 		// RHIResource 관리자 등을 통해 생성하거나 직접 생성
 		// (여기서는 예시로 직접 new 하지만, 실제 엔진에서는 Factory 패턴 사용 권장)
-		RHIBUFFERDESC desc;
+		tagRHIBufferDesc desc;
 		desc.BufferType = ERHIBufferType::Vertex;
 		desc.Size = totalSize;
 		desc.Stride = stride;
@@ -113,4 +113,15 @@ EResult Mesh::SetVertexBuffer(const void* data, uint32 vertexCount)
 //	Engine::Safe_AddRef(m_IndexBuffer);
 //	return EResult::Success;
 //}
+#pragma endregion
+
+#pragma region Bind
+EResult Mesh::Bind(uint32 slot)
+{
+	RHI* rhi = Renderer::Get().GetRHI();
+	if (!rhi) return EResult::Fail;
+	rhi->BindVertexBuffer(m_VertexBuffer);
+	rhi->BindIndexBuffer(m_IndexBuffer);
+	return EResult::Success;
+}
 #pragma endregion

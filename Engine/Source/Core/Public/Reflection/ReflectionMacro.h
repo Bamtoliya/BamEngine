@@ -71,10 +71,10 @@ private: \
 		typeInfo.AddProperty(Engine::PropertyInfo(#VarName, TypeName, Engine::EPropertyType::Set, offsetof(ThisClass, VarName), &acc, #InnerType), ##__VA_ARGS__); \
 	}
 
-#define REFLECT_MAP(VarName, FullType, KeyType, ValueType, TypeName, ...) \
+#define REFLECT_MAP(VarName, ValueTypeName, KeyTypeName, ...) \
 	{ \
-		static Engine::ContainerAccessor acc = Engine::MapAccessor<FullType, KeyType, ValueType>::Get(); \
-		typeInfo.AddProperty(Engine::PropertyInfo(#VarName, TypeName, Engine::EPropertyType::Map, offsetof(ThisClass, VarName), &acc), ##__VA_ARGS__); \
+		static Engine::ContainerAccessor acc = Engine::MapAccessor<decltype(ThisClass::VarName)>::Get(); \
+		typeInfo.AddProperty(Engine::PropertyInfo(#VarName, ValueTypeName, Engine::EPropertyType::Map, offsetof(ThisClass, VarName), &acc, ValueTypeName, KeyTypeName), ##__VA_ARGS__); \
 	}
 
 #define REFLECT_PARENT(ParentName) \
@@ -83,7 +83,7 @@ private: \
 #define END_REFLECT() }
 
 #define REFLECT_STATIC_TYPE(TypeName) \
-	TypeName::GetStaticType();
+	TypeName::GetStaticType();  
 
 #define BEGIN_ENUM_REFLECT(EnumName) \
     struct Reflector_##EnumName { \

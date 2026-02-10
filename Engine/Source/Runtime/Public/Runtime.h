@@ -12,6 +12,8 @@
 #include "Renderer.h"
 #include "RenderPassManager.h"
 #include "RenderTargetManager.h"
+#include "PipelineManager.h"
+#include "SamplerManager.h"
 
 #include "ComponentRegistry.h"
 
@@ -53,6 +55,8 @@ private:
 	Renderer* m_Renderer = { nullptr };
 	RenderPassManager* m_RenderPassManager = { nullptr };
 	RenderTargetManager* m_RenderTargetManager = { nullptr };
+	PipelineManager* m_PipelineManager = { nullptr };
+	SamplerManager* m_SamplerManager = { nullptr };
 private:
 	ResourceManager* m_ResourceManager = { nullptr };
 	PrototypeManager* m_PrototypeManager = { nullptr };
@@ -63,16 +67,6 @@ private:
 	ComponentRegistry* m_ComponentRegistry = { nullptr };
 private:
 	LocalizationManager* m_LocalizationManager = { nullptr };
-
-
-#pragma region Test
-#ifdef _DEBUG
-private:
-	class GameObject* m_TestObject = { nullptr };
-	class RHIShader* m_TestShader = { nullptr };
-#endif
-#pragma endregion
-
 #pragma endregion
 };
 

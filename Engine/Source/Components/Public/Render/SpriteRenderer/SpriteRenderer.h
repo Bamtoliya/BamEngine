@@ -1,7 +1,8 @@
 ﻿#pragma once
 
 #include "RenderComponent.h"
-#include "Texture.h"
+#include "Sprite.h"
+#include "Material.h"
 
 BEGIN(Engine)
 
@@ -32,20 +33,17 @@ public:
 #pragma endregion
 #pragma region Setter
 public:
-	EResult SetTexture(Texture* texture);
+	EResult SetSprite(Sprite* sprite);
+	EResult SetSprite(Texture* texture);
 	EResult SetPivot(vec2 pivot);
 	EResult SetTiling(vec2 tiling);
 private:
 	EResult UpdateMesh();
+	EResult UpdateMaterialInstance();
 #pragma endregion
 
 #pragma region Variable
 private:
-	PROPERTY(DEFAULT(vec2(0.5f, 0.5f)))
-	vec2 m_Pivot = { 0.5f, 0.5f };
-
-	vec2 m_PrevPivot = { -1.f, -1.f };
-
 	PROPERTY(DEFAULT(vec2(1.f, 1.f)))
 	vec2 m_Tiling = { 1.f, 1.f };
 
@@ -53,12 +51,10 @@ private:
 	Mesh* m_Mesh = { nullptr };
 
 	PROPERTY()
-	Texture* m_Texture = { nullptr };
+	Sprite* m_Sprite = { nullptr };
 
-	f32 m_CachedPPU = { 0.f };
-
-	//PROPERTY(READONLY)
-	//uint32 m_CachedTextureVersion = { 0 };
+	PROPERTY(CATEGORY("DETAIL"), READONLY)
+	uint32 m_CachedSpriteVersion = { 0 };
 #pragma endregion
 
 

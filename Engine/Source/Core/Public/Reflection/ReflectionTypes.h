@@ -41,6 +41,7 @@ struct ContainerAccessor
 	function<vector<void*>(void*)> GetElements;
 	function<void(void*, size_t)> Resize;
 	function<void(void*)> AddPair;
+	function<void* (void*, const void*)> GetValue;
 
 	struct Iterator
 	{

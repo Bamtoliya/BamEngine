@@ -57,24 +57,37 @@ void Sprite::Free()
 #pragma endregion
 
 
+#pragma region Bind
+EResult Sprite::Bind(uint32 slot)
+{
+	if (!m_Texture) return EResult::Fail;
+	return m_Texture->Bind(slot);
+}
+#pragma endregion
+
+#pragma region Setter
 EResult Sprite::SetRegion(const Rect& region)
 {
 	m_Region = region;
+	IncreaseVersion();
 	return EResult::Success;
 }
 EResult Sprite::SetPivot(const vec2& pivot)
 {
 	m_Pivot = pivot;
+	IncreaseVersion();
 	return EResult::Success;
 }
 EResult Sprite::SetTexture(Texture* texture)
 {
 	if (m_Texture)
 		Safe_Release(m_Texture);
-		if (texture)
-		{
-			m_Texture = texture;
-			Safe_AddRef(m_Texture);
-		}
+	if (texture)
+	{
+		m_Texture = texture;
+		Safe_AddRef(m_Texture);
+	}
+	IncreaseVersion();
 	return EResult::Success;
 }
+#pragma endregion

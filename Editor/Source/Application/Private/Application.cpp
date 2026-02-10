@@ -23,15 +23,15 @@ EResult Application::Initialize(void* arg)
     m_Window = SDL_CreateWindow(
         "BamEngine Editor",
         g_WindowWidth, g_WindowHeight,
-        SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY  // 기본 윈도우 플래그 (SDL_WINDOW_RESIZABLE 등 필요시 추가)
+        SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_VULKAN // 기본 윈도우 플래그 (SDL_WINDOW_RESIZABLE 등 필요시 추가)
 	);
 
 	RUNTIMEDESC runtimeDesc = {};
-	runtimeDesc.RendererDesc.RHIType = ERHIType::SDLRenderer;
-	runtimeDesc.RendererDesc.WindowHandle = m_Window;
-	runtimeDesc.RendererDesc.Width = g_WindowWidth;
-	runtimeDesc.RendererDesc.Height = g_WindowHeight;
-    runtimeDesc.RendererDesc.IsVSync = true;
+	runtimeDesc.RendererDesc.RHIType = ERHIType::SDLGPU;
+	runtimeDesc.RendererDesc.RHIDesc.WindowHandle = m_Window;
+	runtimeDesc.RendererDesc.RHIDesc.Width = g_WindowWidth;
+	runtimeDesc.RendererDesc.RHIDesc.Height = g_WindowHeight;
+    runtimeDesc.RendererDesc.RHIDesc.IsVSync = true;
 
     m_Runtime = Runtime::Create(&runtimeDesc);
     if (!m_Runtime) return EResult::Fail;
@@ -55,6 +55,7 @@ EResult Application::Initialize(void* arg)
         ImGuiManager::Get().End();
         });
     InitializeLocalization();
+    InitializeResources();
     //Renderer::Get().GetRenderPassDelegate(uiPassID).Remove(uiHandle);
 
 	ResourceManager::Get().LoadTexture(L"SampleTexture", L"Resources/Texture/uv1.png");
@@ -84,7 +85,62 @@ void Application::InitializeLocalization()
 }
 #pragma endregion
 
+#pragma region Resources
+void Application::InitializeResources()
+{
+#pragma region Test
+    {
+        // 1. 사각형 정점 데이터 정의 (화면 좌표계: Top-Left가 0,0 가정 시 대략적인 중앙 배치)
+        // 색상은 SDLRendererRHI 구현에 따라 다를 수 있으나 Vertex 구조체에 맞춰 설정
+        vector<Vertex> vertices = {
+            // position (x, y, z)          // normal       // texCoord // tangent
+            { { -1.0f,  1.0f, 0.0f }, { 0, 0, -1 }, { 0, 0 }, { 0, 0, 0 } }, // Top-Left
+            { {  1.0f,  1.0f, 0.0f }, { 0, 0, -1 }, { 1, 0 }, { 0, 0, 0 } }, // Top-Right
+            { {  1.0f, -1.0f, 0.0f }, { 0, 0, -1 }, { 1, 1 }, { 0, 0, 0 } }, // Bottom-Right
+            { { -1.0f, -1.0f, 0.0f }, { 0, 0, -1 }, { 0, 1 }, { 0, 0, 0 } }  // Bottom-Left
+        };
 
+        // 인덱스 (사각형을 구성하는 두 개의 삼각형)
+        vector<uint32> indices = {
+            0, 1, 2, // 첫 번째 삼각형
+            0, 2, 3  // 두 번째 삼각형
+        };
+
+        // 2. Mesh 생성
+        tagMeshCreateInfo meshDesc = {};
+        meshDesc.VertexData = vertices.data();
+        meshDesc.VertexCount = static_cast<uint32>(vertices.size());
+        meshDesc.VertexStride = sizeof(Vertex);
+        meshDesc.IndexData = indices.data();
+        meshDesc.IndexStride = sizeof(uint32);
+        meshDesc.IndexCount = static_cast<uint32>(indices.size());
+
+        ResourceManager::Get().LoadMesh(L"QuadMesh", &meshDesc);
+    }
+#pragma endregion
+
+    tagShaderDesc vsDesc;
+    vsDesc.ShaderType = EShaderType::Vertex;
+    vsDesc.FilePath = L"Resources/Shader/sprite.vert.spv";
+    vsDesc.EntryPoint = "main";
+    ResourceManager::Get().LoadShader(L"DefaultVS", &vsDesc);
+    
+    tagShaderDesc psDesc;
+    psDesc.ShaderType = EShaderType::Pixel;
+    psDesc.FilePath = L"Resources/Shader/sprite.frag.spv";
+    psDesc.EntryPoint = "main";
+    ResourceManager::Get().LoadShader(L"DefaultPS", &psDesc);
+    
+    tagRHIPipelineDesc pipelineDesc;
+    pipelineDesc.VertexShader = ResourceManager::Get().GetShader(L"DefaultVS")->GetRHIShader();
+    pipelineDesc.PixelShader = ResourceManager::Get().GetShader(L"DefaultPS")->GetRHIShader();
+    PipelineManager::Get().CreatePipeline(L"Default", pipelineDesc);
+    
+    tagMaterialDesc materialDesc;
+    materialDesc.PipelineKey = L"Default";
+    ResourceManager::Get().LoadMaterial(L"DefaultMaterial", &materialDesc);
+}
+#pragma endregion
 
 void Application::Run(int argc, char* argv[])
 {

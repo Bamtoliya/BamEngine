@@ -31,6 +31,12 @@ public:
 	virtual void Free() PURE;
 #pragma	endregion
 
+
+#pragma region Bind
+	virtual EResult Bind(uint32 slot) PURE;
+#pragma endregion
+
+
 #pragma region Load
 public:
 	virtual EResult LoadFromFile(const wstring& path) { return EResult::NotImplemented; }

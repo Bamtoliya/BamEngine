@@ -1,8 +1,6 @@
 ﻿#pragma once
 
 #include "RHIResource.h"
-
-BEGIN(Engine)
 enum class ERHIBufferType
 {
 	Vertex,
@@ -14,22 +12,31 @@ enum class ERHIBufferType
 	Upload,
 };
 
-typedef struct tagRHIBufferDesc
+struct tagRHIBufferDesc
 {
 	ERHIBufferType BufferType = ERHIBufferType::Vertex;
 	uint32 Size = 0;
 	uint32 Stride = 0;
 	void* InitialData = nullptr;
-} RHIBUFFERDESC;
+};
 
+BEGIN(Engine)
 class ENGINE_API RHIBuffer : public RHIResource
 {
 protected:
-	RHIBuffer(ERHIBufferType bufferType, uint32 size, uint32 stride) :
-		RHIResource(ERHIResourceType::Buffer),
+	using DESC = tagRHIBufferDesc;
+	RHIBuffer(RHI* rhi, ERHIBufferType bufferType, uint32 size, uint32 stride) :
+		RHIResource(rhi, ERHIResourceType::Buffer),
 		m_BufferType{ bufferType },
 		m_Size{ size },
 		m_Stride{ stride } {
+	}
+	RHIBuffer(RHI* rhi, DESC desc) :
+		RHIResource(rhi, ERHIResourceType::Buffer),
+		m_BufferType{ desc.BufferType },
+		m_Size{ desc.Size },
+		m_Stride{ desc.Stride }
+	{
 	}
 	virtual ~RHIBuffer() = default;
 

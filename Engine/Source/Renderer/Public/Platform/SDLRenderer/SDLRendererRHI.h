@@ -36,17 +36,26 @@ public:
 	virtual RHITexture* CreateRenderTargetTexture(void* data, uint32 width, uint32 height, uint32 mipLevels, uint32 arraySize) override;
 	virtual RHITexture* CreateDepthStencilTexture(void* data, uint32 width, uint32 height, uint32 mipLevels, uint32 arraySize) override;
 	virtual RHITexture* CreateTextureFromNativeHandle(void* nativeHandle) override;
+public:
+	virtual RHIPipeline* CreatePipeline(const tagRHIPipelineDesc& desc) override { return nullptr; }
+public:
+	virtual RHISampler* CreateSampler(const tagRHISamplerDesc& desc) override { return nullptr; }
+public:
+	virtual RHIShader* CreateShader(const tagRHIShaderDesc& desc) override { return nullptr; }
 #pragma endregion
 
 #pragma region Bind Resources
 public:
 	virtual EResult BindRenderTarget(RHITexture* renderTarget, RHITexture* depthStencil)  override;
 	virtual EResult BindTexture(RHITexture* texture, uint32 slot) override;
+	virtual EResult BindTextureSampler(RHITexture* texture, RHISampler* sampler, uint32 slot) override { return EResult::NotImplemented; }
 	virtual EResult BindRenderTargets(uint32 count, RHITexture** renderTargets, RHITexture* depthStencil) override;
 public:
 	virtual EResult BindShader(RHIShader* shader) override;
 public:
-	virtual EResult BindPipeline(void* arg) override { return EResult::NotImplemented; }
+	virtual EResult BindPipeline(RHIPipeline* pipeline) override { return EResult::NotImplemented; }
+public:
+	virtual EResult BindSampler(RHISampler* sampler) override { return EResult::NotImplemented; }
 	virtual EResult BindConstantBuffer(void* arg, uint32 slot) override;
 	virtual EResult BindConstantRangeBuffer(void* arg, uint32 slot, uint32 offset, uint32 size) override { return EResult::NotImplemented; }
 #pragma endregion
@@ -77,7 +86,6 @@ public:
 private:
 	SDL_Window*		m_Window		= { nullptr };
 	SDL_Renderer*	m_Renderer		= { nullptr };
-	SDL_Texture*	m_BackBuffer	= { nullptr };
 private:
 	mat4 m_WorldMatrix = glm::identity<mat4>();
 	vec4 m_MaterialColor = vec4(1.0f);

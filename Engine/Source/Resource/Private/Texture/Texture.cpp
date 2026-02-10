@@ -34,7 +34,6 @@ Texture* Texture::Create(void* arg)
 
 void Texture::Free()
 {
-	Base::Free();
 	Safe_Release(m_RHITexture);
 }
 #pragma endregion
@@ -57,3 +56,13 @@ EResult Texture::LoadFromFile(const wstring& path)
 	return EResult::Success;
 }
 #pragma endregion
+
+#pragma region Bind
+EResult Texture::Bind(uint32 slot)
+{
+	RHI* rhi = Renderer::Get().GetRHI();
+	if (!rhi || !m_RHITexture) return EResult::Fail;
+	return rhi->BindTexture(m_RHITexture, slot);
+}
+#pragma endregion
+

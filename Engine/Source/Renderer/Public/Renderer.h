@@ -11,6 +11,7 @@ enum class ERHIType
 {
 	Unknown,
 	SDLRenderer,
+	SDLGPU,
 	D3D11,
 	D3D12,
 	Vulkan,
@@ -21,10 +22,7 @@ enum class ERHIType
 struct tagRendererDesc
 {
 	ERHIType RHIType = ERHIType::Unknown;
-	void* WindowHandle = nullptr;
-	uint32 Width = 0;
-	uint32 Height = 0;
-	bool IsVSync = true;
+	tagRHIDesc RHIDesc = {};
 };
 
 
@@ -71,11 +69,13 @@ public:
 	{
 		return m_RenderPassDelegates[passID];
 	}
+	ERHIType GetRHIType() const { return m_RHIType; }
 #pragma endregion
 
 #pragma region Variable
 private:
 	class RHI* m_RHI = { nullptr };
+	ERHIType m_RHIType = ERHIType::Unknown;
 	map<RenderPassID, RenderDelegate> m_RenderPassDelegates;
 	map<RenderPassID, vector<class RenderComponent*>> m_RenderQueues;
 	RenderTarget* m_SceneBuffer = { nullptr };

@@ -1,20 +1,26 @@
 ﻿#pragma once
+
 #include "Shader.h"
 #include "Renderer.h"
-
+#include "RHIShader.h"
 
 #pragma region Constructor&Destructor
 EResult Shader::Initialize(void* arg)
 {
-	if (!arg) return EResult::InvalidArgument;
-	// Create RHI Shader
+	if (arg)
 	{
+		CAST_DESC
+		__super::Initialize(arg);
 		RHI* rhi = Renderer::Get().GetRHI();
-		tagShaderInfo* shaderInfo = reinterpret_cast<tagShaderInfo*>(arg);
-		// For simplicity, assuming RHI has a method CreateShader (not shown in previous snippets)
-		// m_RHIShader = rhi->CreateShader(shaderInfo);
-		// if (!m_RHIShader)
-		//     return EResult::Fail;
+		tagRHIShaderDesc rhiShaderDesc;
+		rhiShaderDesc.ShaderType = desc->ShaderType;
+		rhiShaderDesc.FilePath = desc->FilePath;
+		rhiShaderDesc.EntryPoint = desc->EntryPoint;
+		m_RHIShader = rhi->CreateShader(rhiShaderDesc);
+		if (!m_RHIShader)
+		{
+			return EResult::Fail;
+		}
 	}
 	return EResult::Success;
 }
@@ -32,7 +38,7 @@ Shader* Shader::Create(void* arg)
 
 void Shader::Free()
 {
-	Base::Free();
 	Safe_Release(m_RHIShader);
+	Base::Free();
 }
 #pragma endregion

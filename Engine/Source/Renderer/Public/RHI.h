@@ -1,24 +1,33 @@
 ﻿#pragma once
 #include "Base.h"
-#include "RHIResource.h"
-#include "RHIBuffer.h"
-#include "RHITexture.h"
-#include "RHIShader.h"
-#include "RHIPipeline.h"
+
+struct tagRHIDesc
+{
+    void* WindowHandle = { nullptr };
+    uint32 Width = { 0 };
+    uint32 Height = { 0 };
+    bool IsVSync = { true };
+};
+
+struct tagRHIBufferDesc;
+struct tagRHIShaderDesc;
+struct tagRHITextureDesc;
+struct tagRHISamplerDesc;
+struct tagRHIPipelineDesc;
+
+enum class ERHIBufferType;
 
 BEGIN(Engine)
 
-typedef struct tagRHICreateInfo
-{
-	void* WindowHandle = { nullptr };
-	uint32 Width = { 0 };
-    uint32 Height = { 0 };
-    bool IsVSync = { true };
-} RHICREATEINFO;
-
+class RHIBuffer;
+class RHIShader;
+class RHISampler;
+class RHITexture;
+class RHIPipeline;
 class ENGINE_API RHI : public Base
 {
 protected:
+	using DESC = tagRHIDesc;
     RHI() {}
     virtual ~RHI() = default;
     virtual EResult Initialize(void* arg) PURE;
@@ -47,23 +56,31 @@ public:
 	virtual RHITexture* CreateDepthStencilTexture(void* data, uint32 width, uint32 height, uint32 mipLevels, uint32 arraySize) PURE;
 	virtual RHITexture* CreateTextureFromNativeHandle(void* nativeHandle) PURE;
 public:
-	//virtual RHIShader* CreateShader(void* arg) PURE;
-    //virtual RHIPipeline* CreatePipeline(void* arg) PURE;
+    virtual RHIPipeline* CreatePipeline(const tagRHIPipelineDesc& desc) PURE;
+public:
+    virtual RHISampler* CreateSampler(const tagRHISamplerDesc& desc) PURE;
+public:
+	virtual RHIShader* CreateShader(const tagRHIShaderDesc& desc) PURE;
 #pragma endregion
 
 #pragma region Bind Resources
 public:
     virtual EResult BindRenderTarget(RHITexture* renderTarget, RHITexture* depthStencil) PURE;
 	virtual EResult BindTexture(RHITexture* texture, uint32 slot) PURE;
+    virtual EResult BindTextureSampler(RHITexture* texture, RHISampler* sampler, uint32 slot) PURE;
     virtual EResult BindRenderTargets(uint32 count, RHITexture** renderTargets, RHITexture* depthStencil) PURE;
 public:
     virtual EResult BindShader(RHIShader* shader) PURE;
 public:
-    virtual EResult BindPipeline(void* arg) PURE;
+    virtual EResult BindPipeline(RHIPipeline* pipeline) PURE;
+public:
+    virtual EResult BindSampler(RHISampler* sampler) PURE;
+public:
     virtual EResult BindVertexBuffer(RHIBuffer* vertexBuffer) { if (!vertexBuffer) return EResult::Fail; m_VertexBuffer = vertexBuffer; return EResult::Success; }
     virtual EResult BindIndexBuffer(RHIBuffer* indexBuffer) { if (!indexBuffer) return EResult::Fail; m_IndexBuffer = indexBuffer;  return EResult::Success; }
     virtual EResult BindConstantBuffer(void* arg, uint32 slot) PURE;
     virtual EResult BindConstantRangeBuffer(void* arg, uint32 slot, uint32 offset, uint32 size) PURE;
+
 #pragma endregion
 
 #pragma region Clear Resources
@@ -89,6 +106,8 @@ public:
 
 #pragma region Getter
     virtual void* GetNativeRHI() const PURE;
+    virtual void* GetCurrentCommandBuffer() const { return nullptr; }
+	virtual RHITexture* GetBackBuffer() const { return m_BackBuffer; }
     uint32 GetSwapChainWidth() { return m_SwapChainWidth; }
     uint32 GetSwapChainHeight() { return m_SwapChainHeight; }
 #pragma endregion
@@ -111,6 +130,9 @@ protected:
 	uint32 m_CurrentRenderTargetCount = { 0 };
 	RHITexture* m_CurrentDepthStencil = { nullptr };
 	RHITexture* m_CurrentTextures[MAX_TEXTURE_SLOTS] = { nullptr };
+
+protected:
+	RHIPipeline* m_CurrentPipeline = { nullptr };
 #pragma endregion
 };
 

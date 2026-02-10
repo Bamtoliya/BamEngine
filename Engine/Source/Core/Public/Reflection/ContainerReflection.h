@@ -1,6 +1,7 @@
 ﻿#pragma once
 #include "ReflectionTypes.h"
 #include <map>
+#include <unordered_map>
 
 BEGIN(Engine)
 
@@ -36,7 +37,7 @@ struct LinearContainerAccessor
 			return nullptr;
 		};
 
-		accessor.Add = [](void* container)
+		accessor.Add = [](void* container, const void*)
 		{
 			ContainerType* cont = static_cast<ContainerType*>(container);
 			cont->emplace_back();
@@ -145,21 +146,23 @@ struct SetAccessor
 	}
 };
 
-template<typename K, typename V>
+template<typename ContainerType>
 struct MapAccessor
 {
+	using K = typename ContainerType::key_type;
+	using V = typename ContainerType::mapped_type;
 	static ContainerAccessor Get()
 	{
 		ContainerAccessor accessor;
 		accessor.GetSize = [](const void* container) -> size_t
 		{
-			const std::map<K, V>* map = static_cast<const std::map<K, V>*>(container);
+			const ContainerType* map = static_cast<const ContainerType*>(container);
 			return map->size();
 		};
 
 		accessor.ForEach = [](void* container, std::function<void(void*, void*)> func)
 		{
-			std::map<K, V>* map = static_cast<std::map<K, V>*>(container);
+			ContainerType* map = static_cast<ContainerType*>(container);
 			for (auto& pair : *map)
 			{
 				func(&pair.second, const_cast<void*>(static_cast<const void*>(&pair.first)));
@@ -168,10 +171,19 @@ struct MapAccessor
 
 		accessor.AddPair = [](void* container)
 		{
-			std::map<K, V>* map = static_cast<std::map<K, V>*>(container);
+			ContainerType* map = static_cast<ContainerType*>(container);
 			map->emplace(K(), V());
 		};
+
+		accessor.GetValue = [](void* container, const void* keyPtr) -> void*
+			{
+				ContainerType* map = static_cast<ContainerType*>(container);
+				const K* key = static_cast<const K*>(keyPtr);
+				auto it = map->find(*key);
+				return (it != map->end()) ? &it->second : nullptr;
+			};
+
+		return accessor;
 	}
 };
-
 END

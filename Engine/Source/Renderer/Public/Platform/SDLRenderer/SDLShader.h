@@ -31,6 +31,10 @@ public:
 public:
 	//virtual void* GetNativeHandle() const override { return (void*)(uintptr_t)m_ShaderID; }
 	virtual void* GetNativeHandle() const override { return (void*)(this); }
+	virtual void SetNativeHandle(void* nativeHandle) override
+	{
+		m_ShaderID = static_cast<uint32>(reinterpret_cast<uintptr_t>(nativeHandle));
+	}
 #pragma endregion
 
 

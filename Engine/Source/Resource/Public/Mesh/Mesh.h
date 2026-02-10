@@ -16,8 +16,11 @@ struct tagMeshCreateInfo
 	uint32 IndexCount = { 0 };
 	uint32 IndexStride = { 0 };
 };
+
+CLASS()
 class ENGINE_API Mesh : public Resource
 {
+	REFLECT_CLASS(Mesh)
 #pragma region Constructor&Destructor
 protected:
 	using DESC = tagMeshCreateInfo;
@@ -26,9 +29,14 @@ protected:
 	EResult Initialize(void* arg = nullptr);
 public:
 	static Mesh* Create(void* arg = nullptr);
-	Mesh* Clone(void* arg = nullptr);
 	virtual void Free() override;
 #pragma endregion
+
+#pragma region Bind
+public:
+	EResult Bind(uint32 slot) override;
+#pragma endregion
+
 
 #pragma region Getter
 public:
@@ -50,7 +58,10 @@ protected:
 	RHIBuffer* m_VertexBuffer = { nullptr };
 	RHIBuffer* m_IndexBuffer = { nullptr };
 
+
+	PROPERTY(CATEGORY("PROP_INFORMATION"), READONLY)
 	uint32 m_VertexCount = { 0 };
+	PROPERTY(CATEGORY("PROP_INFORMATION"), READONLY)
 	uint32 m_IndexCount = { 0 };
 #pragma endregion
 };

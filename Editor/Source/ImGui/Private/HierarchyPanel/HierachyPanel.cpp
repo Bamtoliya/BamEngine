@@ -1126,7 +1126,8 @@ void HierarchyPanel::CreateSpriteObject(Scene* scene)
 	newGameObject->AddComponent<Transform>();
 	newGameObject->AddComponent(L"SpriteRenderer");
 	SpriteRenderer* spriteRenderer = newGameObject->GetComponent<SpriteRenderer>();
-	spriteRenderer->SetTexture(ResourceManager::Get().GetTexture(L"SampleTexture"));
+	spriteRenderer->SetMaterial(ResourceManager::Get().GetMaterial(L"DefaultMaterial"));
+	spriteRenderer->SetSprite(ResourceManager::Get().GetTexture(L"SampleTexture"));
 	spriteRenderer->SetRenderPassID(0);
 	scene->AddGameObject(newGameObject);
 	Safe_Release(newGameObject);

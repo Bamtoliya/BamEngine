@@ -30,6 +30,8 @@ void ResourceManager::Free()
 #pragma endregion
 
 #pragma region Resource Management
+
+#pragma region Load
 EResult ResourceManager::LoadMesh(const wstring& key, void* arg)
 {
 	if (m_Meshes.find(key) != m_Meshes.end())
@@ -59,7 +61,10 @@ EResult ResourceManager::LoadSprite(const wstring& key, void* arg)
 		return EResult::AlreadyInitialized;
 	Sprite* sprite = Sprite::Create(arg);
 	if (!sprite)
+	{
+		Safe_Release(sprite);
 		return EResult::Fail;
+	}
 	sprite->SetTag(key);
 	m_Sprites.emplace(key, sprite);
 	return EResult::Success;
@@ -74,17 +79,27 @@ EResult ResourceManager::LoadTexture(const wstring& key, const wstring& textureP
 		Safe_Release(texture);
 		return EResult::Fail;
 	}
-	if (!texture)
-		return EResult::Fail;
 	texture->SetTag(key);
 	m_Textures.emplace(key, texture);
 	return EResult::Success;
 }
 EResult ResourceManager::LoadMaterial(const wstring& key, void* arg)
 {
-	// Implementation for loading material goes here
-	return EResult::NotImplemented;
+	if (m_Materials.find(key) != m_Materials.end())
+		return EResult::AlreadyInitialized;
+	Material* material = Material::Create();
+	if (!material)
+	{
+		Safe_Release(material);
+		return EResult::Fail;
+	}
+	material->SetTag(key);
+	m_Materials.emplace(key, material);
+	return EResult::Success;
 }
+#pragma endregion
+
+#pragma region Getter
 Mesh* ResourceManager::GetMesh(const wstring& key)
 {
 	auto	iter = m_Meshes.find(key);
@@ -96,6 +111,13 @@ Shader* ResourceManager::GetShader(const wstring& key)
 {
 	auto	iter = m_Shaders.find(key);
 	if (iter != m_Shaders.end())
+		return iter->second;
+	return nullptr;
+}
+Sprite* ResourceManager::GetSprite(const wstring& key)
+{
+	auto	iter = m_Sprites.find(key);
+	if (iter != m_Sprites.end())
 		return iter->second;
 	return nullptr;
 }
@@ -113,6 +135,9 @@ Material* ResourceManager::GetMaterial(const wstring& key)
 		return iter->second;
 	return nullptr;
 }
+#pragma endregion
+
+
 EResult ResourceManager::ImportFolder(const wstring& folderPath)
 {
 	namespace fs = std::filesystem;

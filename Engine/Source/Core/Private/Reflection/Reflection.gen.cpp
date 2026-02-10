@@ -12,7 +12,12 @@
 #include "Components/Public/Transfrom/Transform.h"
 #include "Core/Public/Rect.h"
 #include "Core/Public/Vertex.h"
+#include "Resource/Public/Material/Material.h"
+#include "Resource/Public/Material/MaterialInstance.h"
+#include "Resource/Public/Material/MaterialInterface.h"
+#include "Resource/Public/Mesh/Mesh.h"
 #include "Resource/Public/Resource.h"
+#include "Resource/Public/Shader/Shader.h"
 #include "Resource/Public/Sprite/Sprite.h"
 #include "Resource/Public/Texture/Texture.h"
 #include "Scene/Public/GameObject.h"
@@ -47,6 +52,16 @@ BEGIN_ENUM_REFLECT(ETransformFlag)
     REFLECT_ENUM_ENTRY(ETransformFlag, AllLocked)
     REFLECT_ENUM_ENTRY(ETransformFlag, Default)
 END_ENUM_REFLECT(ETransformFlag)
+// Enum: EMaterialParameterType
+BEGIN_ENUM_REFLECT(EMaterialParameterType)
+    REFLECT_ENUM_ENTRY(EMaterialParameterType, Float)
+    REFLECT_ENUM_ENTRY(EMaterialParameterType, Float2)
+    REFLECT_ENUM_ENTRY(EMaterialParameterType, Float3)
+    REFLECT_ENUM_ENTRY(EMaterialParameterType, Float4)
+    REFLECT_ENUM_ENTRY(EMaterialParameterType, Int)
+    REFLECT_ENUM_ENTRY(EMaterialParameterType, Bool)
+    REFLECT_ENUM_ENTRY(EMaterialParameterType, Matrix)
+END_ENUM_REFLECT(EMaterialParameterType)
 // Enum: EObjectFlag
 BEGIN_ENUM_REFLECT(EObjectFlag)
     REFLECT_ENUM_ENTRY(EObjectFlag, None)
@@ -74,6 +89,12 @@ void InitReflectionSystem()
 	REFLECT_STATIC_TYPE(Rect);
 	REFLECT_STATIC_TYPE(Vertex);
 	REFLECT_STATIC_TYPE(Resource);
+	REFLECT_STATIC_TYPE(Material);
+	REFLECT_STATIC_TYPE(MaterialInstance);
+	REFLECT_STATIC_TYPE(MaterialParameter);
+	REFLECT_STATIC_TYPE(MaterialInterface);
+	REFLECT_STATIC_TYPE(Mesh);
+	REFLECT_STATIC_TYPE(Shader);
 	REFLECT_STATIC_TYPE(Sprite);
 	REFLECT_STATIC_TYPE(Texture);
 	REFLECT_STATIC_TYPE(GameObject);
@@ -97,6 +118,7 @@ END_REFLECT()
 BEGIN_REFLECT(RenderComponent)
     REFLECT_PARENT(Component)
     REFLECT_PROPERTY(m_RenderPassID, Engine::EPropertyType::UInt32, "uint32", CATEGORY("PROP_INFORMATION"))
+    REFLECT_VECTOR(m_MaterialInstances, vector<MaterialInstance*>, MaterialInstance*, "MaterialInstance*")
 END_REFLECT()
 
 // Class: MeshRenderer
@@ -108,10 +130,10 @@ END_REFLECT()
 // Class: SpriteRenderer
 BEGIN_REFLECT(SpriteRenderer)
     REFLECT_PARENT(RenderComponent)
-    REFLECT_PROPERTY(m_Pivot, Engine::EPropertyType::Vector2, "vec2", DEFAULT(vec2(0.5f, 0.5f)))
     REFLECT_PROPERTY(m_Tiling, Engine::EPropertyType::Vector2, "vec2", DEFAULT(vec2(1.f, 1.f)))
     REFLECT_PROPERTY(m_Mesh, Engine::EPropertyType::Object, "Mesh")
-    REFLECT_PROPERTY(m_Texture, Engine::EPropertyType::Object, "Texture")
+    REFLECT_PROPERTY(m_Sprite, Engine::EPropertyType::Object, "Sprite")
+    REFLECT_PROPERTY(m_CachedSpriteVersion, Engine::EPropertyType::UInt32, "uint32", CATEGORY("DETAIL"), READONLY)
 END_REFLECT()
 
 // Struct: tagTransformDesc
@@ -157,12 +179,50 @@ BEGIN_REFLECT(Resource)
     REFLECT_PROPERTY(m_Version, Engine::EPropertyType::UInt32, "uint32", READONLY)
 END_REFLECT()
 
+// Class: Material
+BEGIN_REFLECT(Material)
+    REFLECT_PARENT(MaterialInterface)
+END_REFLECT()
+
+// Class: MaterialInstance
+BEGIN_REFLECT(MaterialInstance)
+    REFLECT_PARENT(MaterialInterface)
+    REFLECT_PROPERTY(m_BaseMaterial, Engine::EPropertyType::Object, "class Material")
+END_REFLECT()
+
+// Struct: MaterialParameter
+BEGIN_REFLECT(MaterialParameter)
+    REFLECT_PROPERTY(type, Engine::EPropertyType::Enum, "EMaterialParameterType")
+    REFLECT_VECTOR(data, vector<uint8>, uint8, "uint8")
+END_REFLECT()
+
+// Class: MaterialInterface
+BEGIN_REFLECT(MaterialInterface)
+    REFLECT_PARENT(Resource)
+    REFLECT_PROPERTY(m_PipelineKey, Engine::EPropertyType::String, "wstring")
+    REFLECT_MAP(m_Parameters, "MaterialParameter", "string")
+    REFLECT_MAP(m_TextureSlots, "TextureSlot", "string")
+END_REFLECT()
+
+// Class: Mesh
+BEGIN_REFLECT(Mesh)
+    REFLECT_PARENT(Resource)
+    REFLECT_PROPERTY(m_VertexCount, Engine::EPropertyType::UInt32, "uint32", CATEGORY("PROP_INFORMATION"), READONLY)
+    REFLECT_PROPERTY(m_IndexCount, Engine::EPropertyType::UInt32, "uint32", CATEGORY("PROP_INFORMATION"), READONLY)
+END_REFLECT()
+
+// Class: Shader
+BEGIN_REFLECT(Shader)
+    REFLECT_PARENT(Resource)
+    REFLECT_PROPERTY(m_RHIShader, Engine::EPropertyType::Object, "RHIShader")
+END_REFLECT()
+
 // Class: Sprite
 BEGIN_REFLECT(Sprite)
     REFLECT_PARENT(Resource)
     REFLECT_PROPERTY(m_Texture, Engine::EPropertyType::Object, "Texture")
     REFLECT_PROPERTY(m_Region, Engine::EPropertyType::Struct, "Rect")
-    REFLECT_PROPERTY(m_Pivot, Engine::EPropertyType::Vector2, "vec2")
+    REFLECT_PROPERTY(m_Pivot, Engine::EPropertyType::Vector2, "vec2", DEFAULT(vec2(0.5f, 0.5f)))
 END_REFLECT()
 
 // Class: Texture

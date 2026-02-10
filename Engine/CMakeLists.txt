@@ -6,6 +6,19 @@ find_package(glm CONFIG REQUIRED)
 find_package(Vulkan REQUIRED) 
 find_package(stb REQUIRED)
 
+find_package(glslang CONFIG REQUIRED)
+find_package(SPIRV-Tools CONFIG REQUIRED)
+find_package(SPIRV-Tools-opt CONFIG REQUIRED)
+
+
+find_package(spirv_cross_core CONFIG REQUIRED)
+find_package(spirv_cross_glsl CONFIG REQUIRED)
+find_package(spirv_cross_hlsl CONFIG REQUIRED)
+find_package(spirv_cross_msl CONFIG REQUIRED)
+find_package(spirv_cross_cpp CONFIG REQUIRED)
+find_package(spirv_cross_reflect CONFIG REQUIRED)
+find_package(spirv_cross_c CONFIG REQUIRED)
+
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
 
 # 경로 변수 정의
@@ -18,6 +31,14 @@ set(GENERATED_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/Source/Core/Private/Reflection
 file(GLOB_RECURSE ENGINE_HEADERS CONFIGURE_DEPENDS "${ENGINE_SOURCE_DIR}/*.h")
 file(GLOB_RECURSE ENGINE_SOURCES CONFIGURE_DEPENDS "${ENGINE_SOURCE_DIR}/*.cpp")
 file(GLOB_RECURSE ALL_SOURCE_FILES "${ENGINE_SOURCE_DIR}/*")
+
+# 실제 쉐이더 파일 위치: Resources/Shader/
+set(SHADER_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../Resources/Shader")
+file(GLOB_RECURSE SHADER_SOURCES CONFIGURE_DEPENDS
+    "${SHADER_SOURCE_DIR}/*.vert"
+    "${SHADER_SOURCE_DIR}/*.frag"
+)
+
 set(ENGINE_PUBLIC_INCLUDE_DIRS "")
 list(APPEND ENGINE_SOURCES ${GENERATED_SOURCE})
 
@@ -58,7 +79,26 @@ add_custom_target(RunReflectionGenerator ALL
     VERBATIM
 )
 
-add_dependencies(Engine RunReflectionGenerator)
+find_program(GLSLC glslc HINTS $ENV{VULKAN_SDK}/Bin)
+
+set(SPIRV_OUTPUTS "")
+foreach(SHADER ${SHADER_SOURCES})
+    # 쉐이더 소스와 같은 디렉토리에 .spv 출력
+    get_filename_component(SHADER_DIR ${SHADER} DIRECTORY)
+    get_filename_component(SHADER_NAME ${SHADER} NAME)
+    set(SPIRV_OUTPUT "${SHADER_DIR}/${SHADER_NAME}.spv")
+
+    add_custom_command(
+        OUTPUT ${SPIRV_OUTPUT}
+        COMMAND ${GLSLC} ${SHADER} -o ${SPIRV_OUTPUT}
+        DEPENDS ${SHADER}
+        COMMENT "Compiling shader: ${SHADER_NAME} -> ${SHADER_NAME}.spv"
+    )
+    list(APPEND SPIRV_OUTPUTS ${SPIRV_OUTPUT})
+endforeach()
+
+add_custom_target(CompileShaders DEPENDS ${SPIRV_OUTPUTS})
+add_dependencies(Engine RunReflectionGenerator CompileShaders)
 
 set_target_properties(Engine PROPERTIES UNITY_BUILD ON)
 
@@ -79,4 +119,8 @@ target_link_libraries(Engine PUBLIC
 	SDL3::SDL3
     glm::glm
     Vulkan::Vulkan
+    glslang::glslang
+    spirv-cross-c
+    #SPIRV-Tools::SPIRV-Tools         
+    #SPIRV-Tools::SPIRV-Tools-opt     
 )
