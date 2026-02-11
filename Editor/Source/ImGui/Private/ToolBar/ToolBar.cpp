@@ -67,6 +67,10 @@ void ToolBar::DrawSceneMenu()
 				currentScene->CreateLayer(L"Default");
 
 				GameObject* gameObject = GameObject::Create();
+				gameObject->SetName(L"Camera");
+				Camera* camera = static_cast<Camera*>(gameObject->AddComponent(L"Camera"));
+				CameraManager::Get().AddCamera(camera);
+				CameraManager::Get().SetMainCamera(camera);
 				currentScene->AddGameObject(gameObject);
 				gameObject->AddComponent<Transform>();
 				Safe_Release(gameObject);

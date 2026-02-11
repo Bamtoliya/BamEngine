@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "RenderComponent.h"
+#include "Mesh.h"
 #include "Sprite.h"
 #include "Material.h"
 

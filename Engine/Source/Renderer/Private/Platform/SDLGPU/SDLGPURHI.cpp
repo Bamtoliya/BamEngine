@@ -587,6 +587,24 @@ EResult SDLGPURHI::BindConstantBuffer(void* arg, uint32 slot)
 	SDL_PushGPUVertexUniformData(m_CurrentCommandBuffer, slot, arg, sizeof(mat4));
 	return EResult::Success;
 }
+EResult SDLGPURHI::BindConstantBuffer(void* arg, uint32 size, uint32 slot)
+{
+	if (!arg || !m_CurrentCommandBuffer) return EResult::InvalidArgument;
+	SDL_PushGPUVertexUniformData(m_CurrentCommandBuffer, slot, arg, size);
+	SDL_PushGPUFragmentUniformData(m_CurrentCommandBuffer, slot, arg, size);
+	return EResult::Success;
+}
+EResult SDLGPURHI::BindConstantRangeBuffer(void* arg, uint32 slot, uint32 offset, uint32 size)
+{
+	if (!arg || !m_CurrentCommandBuffer) return EResult::InvalidArgument;
+
+	uint8* dataPtr = static_cast<uint8*>(arg) + offset;
+
+	SDL_PushGPUVertexUniformData(m_CurrentCommandBuffer, slot, dataPtr, size);
+	SDL_PushGPUFragmentUniformData(m_CurrentCommandBuffer, slot, dataPtr, size);
+
+	return EResult::Success;
+}
 #pragma endregion
 
 #pragma region Clear Resources

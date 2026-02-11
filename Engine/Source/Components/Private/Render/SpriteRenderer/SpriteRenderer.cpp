@@ -2,6 +2,11 @@
 
 #include "SpriteRenderer.h"
 #include "ResourceManager.h"
+#include "Renderer.h"
+#include "ComponentRegistry.h"
+#include "GameObject.h"
+#include "Transform.h"
+#include "CameraManager.h"
 
 REGISTER_COMPONENT(SpriteRenderer)
 
@@ -50,15 +55,26 @@ void SpriteRenderer::LateUpdate(f32 dt)
 {
 	if (m_Sprite)
 	{
-
+		UpdateMesh();
 	}
 	__super::LateUpdate(dt);
 }
+
+struct SceneUBO
+{
+	mat4 worldMatrix;
+	mat4 viewMatrix;
+	mat4 projMatrix;
+};
+
 EResult SpriteRenderer::Render(f32 dt)
 {
 	if (!m_Sprite || !m_Mesh) return EResult::Success;
 
 	RHI* rhi = Renderer::Get().GetRHI();
+
+	Camera* mainCamera = CameraManager::Get().GetMainCamera();
+	if (!mainCamera) return EResult::Fail;
 
 	RHIBuffer* vertexBuffer = m_Mesh->GetVertexBuffer();
 	RHIBuffer* indexBuffer = m_Mesh->GetIndexBuffer();
@@ -68,7 +84,14 @@ EResult SpriteRenderer::Render(f32 dt)
 	if (!rhi || !vertexBuffer) return EResult::Fail;
 
 	material->Bind(0);
-	rhi->BindConstantBuffer((void*)&m_Owner->GetComponent<Transform>()->GetWorldMatrix(), 0);
+
+	SceneUBO uboData;
+	uboData.worldMatrix = m_Owner->GetComponent<Transform>()->GetWorldMatrix();
+	// 카메라의 View/Projection 행렬
+	uboData.viewMatrix = mainCamera->GetViewMatrix();
+	uboData.projMatrix = mainCamera->GetProjMatrix();
+
+	rhi->BindConstantBuffer((void*)&uboData, sizeof(SceneUBO), 0);
 
 	rhi->BindVertexBuffer(vertexBuffer);
 
@@ -126,13 +149,16 @@ EResult SpriteRenderer::UpdateMesh()
 	vec2 pivot = m_Sprite->GetPivot();
 	Rect region = m_Sprite->GetRegion();
 
+	f32 worldWidth = region.Width / ppu;
+	f32 worldHeight = region.Height / ppu;
+
 	f32 xOffset = width * pivot.x;
 	f32 yOffset = height * pivot.y;
 
-	f32 left = 0.0f - xOffset;
-	f32 right = width - xOffset;
-	f32 bottom = 0.0f - yOffset;
-	f32 top = height - yOffset;
+	f32 left = -worldWidth * pivot.x;
+	f32 right = worldWidth * (1.0f - pivot.x);
+	f32 bottom = -worldHeight * pivot.y;
+	f32 top = worldHeight * (1.0f - pivot.y);
 
 	vector<Vertex> vertices;
 

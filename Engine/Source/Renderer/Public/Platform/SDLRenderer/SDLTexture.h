@@ -1,6 +1,6 @@
 ﻿#pragma once
 
-#include "RHIResource.h"
+#include "RHITexture.h"
 
 struct SDL_Texture;
 struct SDL_Surface;
@@ -28,7 +28,14 @@ private:
 
 	virtual ~SDLTexture() = default;
 public:
-	virtual void Free() override {};
+	virtual void Free() override
+	{
+		if (m_Texture)
+		{
+			SDL_DestroyTexture(m_Texture);
+		}
+		__super::Free();
+	};
 #pragma endregion
 public:
 	virtual void* GetNativeHandle() const override { return m_Texture; }

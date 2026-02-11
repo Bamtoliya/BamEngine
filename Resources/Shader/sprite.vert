@@ -8,9 +8,11 @@ layout(location = 0) out vec2 fragTexCoord;
 
 layout(set = 1, binding = 0) uniform UBO {
     mat4 worldMatrix;
+    mat4 viewMatrix;
+    mat4 projMatrix;
 } ubo;
 
 void main() {
-    gl_Position = ubo.worldMatrix * vec4(inPosition, 1.0);
+    gl_Position = ubo.projMatrix * ubo.viewMatrix * ubo.worldMatrix * vec4(inPosition, 1.0);
     fragTexCoord = inTexCoord;
 }

@@ -50,6 +50,8 @@ EResult Runtime::Initialize(void* arg)
 	if (!m_RenderPassManager) return EResult::Fail;
 	m_Renderer = Renderer::Create(&RendererDesc);
 	if (!m_Renderer) return EResult::Fail;
+	m_CameraManager = CameraManager::Create();
+	if (!m_CameraManager) return EResult::Fail;
 
 	tagPipelineManagerDesc pipelineDesc = {};
 	pipelineDesc.rhi = m_Renderer->GetRHI();
@@ -76,6 +78,7 @@ void Runtime::Free()
 	ReflectionRegistry::Destroy();
 	LocalizationManager::Destroy();
 
+	CameraManager::Destroy();
 	SamplerManager::Destroy();
 	PipelineManager::Destroy();
 	RenderTargetManager::Destroy();

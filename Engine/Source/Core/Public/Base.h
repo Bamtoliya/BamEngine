@@ -1,7 +1,6 @@
 ﻿#pragma once
 
 #include "Engine_Includes.h"
-//#include "ReflectionMacro.h"
 
 BEGIN(Engine)
 

@@ -844,6 +844,13 @@ void HierarchyPanel::DrawAddGameObjectButton(Scene* scene)
 			CreateSpriteObject(scene);
 		}
 
+		ImGui::Separator();
+
+		if (ImGui::MenuItem("Camera"))
+		{
+			CreateCamera(scene);
+		}
+
 		ImGui::EndPopup();
 	}
 	ImGui::Separator();
@@ -1129,6 +1136,16 @@ void HierarchyPanel::CreateSpriteObject(Scene* scene)
 	spriteRenderer->SetMaterial(ResourceManager::Get().GetMaterial(L"DefaultMaterial"));
 	spriteRenderer->SetSprite(ResourceManager::Get().GetTexture(L"SampleTexture"));
 	spriteRenderer->SetRenderPassID(0);
+	scene->AddGameObject(newGameObject);
+	Safe_Release(newGameObject);
+}
+
+void HierarchyPanel::CreateCamera(Scene* scene)
+{
+	GameObject* newGameObject = GameObject::Create();
+	newGameObject->SetName(L"Camera");
+	newGameObject->AddComponent<Transform>();
+	newGameObject->AddComponent(L"Camera");
 	scene->AddGameObject(newGameObject);
 	Safe_Release(newGameObject);
 }

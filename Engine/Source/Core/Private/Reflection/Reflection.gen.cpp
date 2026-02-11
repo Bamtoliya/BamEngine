@@ -5,6 +5,7 @@
 #include "Core/Public/Reflection/ContainerReflection.h"
 
 // [헤더 파일 자동 포함]
+#include "Components/Public/Camera/Camera.h"
 #include "Components/Public/Component.h"
 #include "Components/Public/Render/MeshRenderer/MeshRenderer.h"
 #include "Components/Public/Render/RenderComponent.h"
@@ -81,6 +82,7 @@ void InitReflectionSystem()
 	InitEnumReflection();
 	REFLECT_STATIC_TYPE(tagComponentDesc);
 	REFLECT_STATIC_TYPE(Component);
+	REFLECT_STATIC_TYPE(Camera);
 	REFLECT_STATIC_TYPE(RenderComponent);
 	REFLECT_STATIC_TYPE(MeshRenderer);
 	REFLECT_STATIC_TYPE(SpriteRenderer);
@@ -112,6 +114,20 @@ END_REFLECT()
 
 // Class: Component
 BEGIN_REFLECT(Component)
+END_REFLECT()
+
+// Class: Camera
+BEGIN_REFLECT(Camera)
+    REFLECT_PARENT(Component)
+    REFLECT_PROPERTY(m_FOV, Engine::EPropertyType::F32, "f32")
+    REFLECT_PROPERTY(m_Near, Engine::EPropertyType::F32, "f32")
+    REFLECT_PROPERTY(m_Far, Engine::EPropertyType::F32, "f32")
+    REFLECT_PROPERTY(m_Aspect, Engine::EPropertyType::F32, "f32")
+    REFLECT_PROPERTY(m_Width, Engine::EPropertyType::F32, "f32")
+    REFLECT_PROPERTY(m_Height, Engine::EPropertyType::F32, "f32")
+    REFLECT_PROPERTY(m_IsPerspective, Engine::EPropertyType::Bool, "bool")
+    REFLECT_PROPERTY(m_ProjMatrix, Engine::EPropertyType::Matrix4, "glm::mat4", READONLY)
+    REFLECT_PROPERTY(m_ViewMatrix, Engine::EPropertyType::Matrix4, "glm::mat4", READONLY)
 END_REFLECT()
 
 // Class: RenderComponent

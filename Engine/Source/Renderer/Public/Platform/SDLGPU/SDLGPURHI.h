@@ -61,7 +61,8 @@ public:
 public:
 	virtual EResult BindSampler(RHISampler* sampler) override { return EResult::NotImplemented; }
 	virtual EResult BindConstantBuffer(void* arg, uint32 slot) override;
-	virtual EResult BindConstantRangeBuffer(void* arg, uint32 slot, uint32 offset, uint32 size) override { return EResult::NotImplemented; }
+	virtual EResult BindConstantBuffer(void* arg, uint32 size, uint32 slot) override;
+	virtual EResult BindConstantRangeBuffer(void* arg, uint32 slot, uint32 offset, uint32 size) override;
 #pragma endregion
 
 #pragma region Clear Resources

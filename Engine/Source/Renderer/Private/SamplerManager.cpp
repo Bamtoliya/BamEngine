@@ -1,8 +1,8 @@
 ﻿#pragma once
 
-IMPLEMENT_SINGLETON(SamplerManager)
-
 #include "SamplerManager.h"
+
+IMPLEMENT_SINGLETON(SamplerManager)
 
 #pragma region Constructor&Destructor
 EResult SamplerManager::Initialize(void* arg)

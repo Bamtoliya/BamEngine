@@ -18,6 +18,7 @@
 #include "ComponentRegistry.h"
 
 #include "LocalizationManager.h"
+#include "CameraManager.h"
 
 BEGIN(Engine)
 
@@ -57,6 +58,7 @@ private:
 	RenderTargetManager* m_RenderTargetManager = { nullptr };
 	PipelineManager* m_PipelineManager = { nullptr };
 	SamplerManager* m_SamplerManager = { nullptr };
+	CameraManager* m_CameraManager = { nullptr };
 private:
 	ResourceManager* m_ResourceManager = { nullptr };
 	PrototypeManager* m_PrototypeManager = { nullptr };
