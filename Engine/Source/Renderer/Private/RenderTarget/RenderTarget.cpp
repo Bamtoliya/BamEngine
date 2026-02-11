@@ -8,18 +8,14 @@
 #pragma region Constructor&Destructor
 EResult RenderTarget::Initialize(void* arg) 
 {
-	if (arg)
-	{
-		CAST_DESC
-		m_Width = desc->Width;
-		m_Height = desc->Height;
-	}
-	tagRHITextureDesc textureDesc = {};
-	textureDesc.Width = m_Width;
-	textureDesc.Height = m_Height;
+	if (!arg) return EResult::InvalidArgument;
+	
+	CAST_DESC
+	m_Width = desc->Width;
+	m_Height = desc->Height;
 	RHI* rhi = Renderer::Get().GetRHI();
-	m_Textures.push_back(rhi->CreateRenderTargetTexture(nullptr, m_Width, m_Height, 1, 1));
-	m_DepthStencilTexture = rhi->CreateDepthStencilTexture(nullptr, m_Width, m_Height, 1, 1);
+	m_Textures.push_back(rhi->CreateRenderTargetTexture(desc, m_Width, m_Height, 1, 1));
+	m_DepthStencilTexture = rhi->CreateDepthStencilTexture(desc, m_Width, m_Height, 1, 1);
 	return EResult::Success;
 }
 

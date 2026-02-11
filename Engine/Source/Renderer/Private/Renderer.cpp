@@ -40,12 +40,6 @@ EResult Renderer::Initialize(void* arg)
 	
 	if (!m_RHI) return EResult::Fail;
 
-	// 쉐이더 & 파이프라인 생성 (SDLGPU일 때)
-	if (m_RHIType == ERHIType::SDLGPU)
-	{
-		
-	}
-
 	tagRenderTargetDesc rtDesc;
 	rtDesc.Width = desc->RHIDesc.Width;
 	rtDesc.Height = desc->RHIDesc.Height;
@@ -57,8 +51,8 @@ EResult Renderer::Initialize(void* arg)
 
 void Renderer::Free()
 {	
+	m_RenderPassManager = nullptr;
 	Safe_Release(m_SceneBuffer);
-
 	if (m_RHI)
 	{
 		//순환참조 때문에 명시적으로 해제
@@ -72,6 +66,8 @@ void Renderer::Free()
 #pragma region Render Management	
 EResult Renderer::BeginFrame()
 {
+	if (!m_RenderPassManager)
+		m_RenderPassManager = &RenderPassManager::Get();
 	if (m_RHI)
 	{
 		return m_RHI->BeginFrame();
@@ -81,8 +77,7 @@ EResult Renderer::BeginFrame()
 
 EResult Renderer::Render(f32 dt)
 {
-	RenderPassManager& renderPassManager = RenderPassManager::Get();
-	const vector<RenderPassInfo>& renderPasses = renderPassManager.GetAllRenderPasses();
+	const vector<RenderPassInfo>& renderPasses = m_RenderPassManager->GetAllRenderPasses();
 	if (m_SceneBuffer && m_RHI)
 	{
 		vec4 clearColor = { 0.1f, 0.1f, 0.1f, 1.0f }; // 게임 배경색 (검정/회색)

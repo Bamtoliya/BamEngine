@@ -6,6 +6,7 @@
 #include "SDLGPUSampler.h"
 #include "SDLGPUTexture.h"
 #include "SDLGPUPipeline.h"
+#include "RenderTarget.h"
 #include "Vertex.h"
 
 #pragma region Constructor&Destructor
@@ -280,9 +281,10 @@ RHITexture* SDLGPURHI::CreateTexture3D(void* data, uint32 width, uint32 height, 
 
 RHITexture* SDLGPURHI::CreateRenderTargetTexture(void* data, uint32 width, uint32 height, uint32 mipLevels, uint32 arraySize)
 {
+	tagRenderTargetDesc* rtDesc = reinterpret_cast<tagRenderTargetDesc*>(data);
 	SDL_GPUTextureCreateInfo desc = {};
-	desc.type = SDL_GPU_TEXTURETYPE_2D;
-	desc.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+	desc.format = SDL_GPUTextureFormats[static_cast<uint8>(rtDesc->Format)];
+	desc.type = SDL_GPUTextureTypes[static_cast<uint8>(rtDesc->TextureType)];
 	desc.usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
 	desc.width = width;
 	desc.height = height;

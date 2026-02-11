@@ -9,6 +9,7 @@ enum class ERenderTargetFormat : uint8
 	RTF_RGBA16F,
 	RTF_RGBA32F,
 	RTF_DEPTH24STENCIL8,
+	RTF_UINT32,
 };
 
 enum class ERenderTargetUsage : uint8
@@ -40,12 +41,22 @@ enum class ERenderTargetType : uint8
 	DepthStencil,
 };
 
+enum class ERenderTargetTextureType: uint8
+{
+	RTTT_2D,
+	RTTT_2DArray,
+	RTTT_3D,
+	RTTT_Cube,
+	RTTT_CubeArray,
+};
+
 struct tagRenderTargetDesc
 {
 	ERenderTargetFormat		Format = ERenderTargetFormat::RTF_RGBA8;
 	ERenderTargetUsage		Usage = ERenderTargetUsage::RTU_Color;
 	ERenderTargetBindFlag	BindFlag = ERenderTargetBindFlag::RTBF_None;
 	ERenderTargetType 		Type = ERenderTargetType::Color;
+	ERenderTargetTextureType TextureType = ERenderTargetTextureType::RTTT_2D;
 	uint32					Width = 800;
 	uint32					Height = 600;
 };

@@ -79,6 +79,8 @@ private:
 	map<RenderPassID, RenderDelegate> m_RenderPassDelegates;
 	map<RenderPassID, vector<class RenderComponent*>> m_RenderQueues;
 	RenderTarget* m_SceneBuffer = { nullptr };
+private:
+	class RenderPassManager* m_RenderPassManager = { nullptr };
 #pragma endregion
 };
 END
