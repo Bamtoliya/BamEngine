@@ -5,6 +5,16 @@
 #include "Sprite.h"
 #include "Material.h"
 
+
+ENUM()
+enum class EDrawMode
+{
+	Simple,
+	Sliced,
+	Tiled,
+	Filled
+};
+
 BEGIN(Engine)
 
 
@@ -48,7 +58,6 @@ private:
 	PROPERTY(DEFAULT(vec2(1.f, 1.f)))
 	vec2 m_Tiling = { 1.f, 1.f };
 
-	PROPERTY()
 	Mesh* m_Mesh = { nullptr };
 
 	PROPERTY()
@@ -56,6 +65,9 @@ private:
 
 	PROPERTY(CATEGORY("DETAIL"), READONLY)
 	uint32 m_CachedSpriteVersion = { 0 };
+
+	PROPERTY()
+	EDrawMode m_DrawMode = EDrawMode::Simple;
 #pragma endregion
 
 

@@ -20,7 +20,7 @@ EResult Transform::Initialize(void* arg)
 		m_Scale = desc ? desc->Scale : vec3(1.0f);
 	}
 
-	AddFlag(m_Flags, ETransformFlag::Dirty);
+	SetDirty();
 	UpdateLocalMatrix();
 	UpdateWorldMatrix();
 
@@ -184,7 +184,7 @@ void Transform::SetPosition(const vec3& position)
 {
 	if (!IsStatic())
 	{
-		AddFlag(m_Flags, ETransformFlag::Dirty);
+		SetDirty();
 		m_Position = position;
 	}
 }
@@ -195,7 +195,7 @@ void Transform::SetRotation(const quat& rotation)
 	{
 		m_Rotation = rotation;
 		m_EulerRotation = glm::degrees(glm::eulerAngles(m_Rotation));
-		AddFlag(m_Flags, ETransformFlag::Dirty);
+		SetDirty();
 
 	}
 }
@@ -205,7 +205,7 @@ void Transform::SetRotation(const vec3& eulerAngles)
 	if (!IsStatic())
 	{
 		m_EulerRotation = eulerAngles;
-		AddFlag(m_Flags, ETransformFlag::Dirty);
+		SetDirty();
 		m_Rotation = quat(glm::radians(m_EulerRotation));
 	}
 }
@@ -214,7 +214,7 @@ void Transform::SetScale(const vec3& scale)
 {
 	if (!IsStatic())
 	{
-		AddFlag(m_Flags, ETransformFlag::Dirty);
+		SetDirty();
 		m_Scale = scale;
 	}
 }
@@ -266,7 +266,7 @@ void Transform::UpdateWorldMatrix()
 	if (!parent)
 	{
 		m_WorldMatrix = m_LocalMatrix;
-		RemoveFlag(m_Flags, ETransformFlag::Dirty);
+		SetDirty(false);
 		return;
 	}
 	Transform* parentTransform = parent->GetComponent<Transform>();
@@ -281,7 +281,7 @@ void Transform::UpdateWorldMatrix()
 		mat4 effectiveParent = CalculateEffectiveParentMatrix(parentTransform);
 		m_WorldMatrix = effectiveParent * m_LocalMatrix;
 	}
-	RemoveFlag(m_Flags, ETransformFlag::Dirty);
+	SetDirty(false);
 }
 #pragma endregion
 
@@ -309,7 +309,7 @@ void Transform::Translate(const vec3& translation, ESpace space)
 		}
 		m_Position += localTranslation;
 	}
-	AddFlag(m_Flags, ETransformFlag::Dirty);
+	SetDirty();
 }
 void Transform::Rotate(const vec3& eulerAngle, ESpace space)
 {
@@ -337,7 +337,7 @@ void Transform::Rotate(const quat& rotation, ESpace space)
 	{
 		m_Rotation = rotation * m_Rotation;
 	}
-	AddFlag(m_Flags, ETransformFlag::Dirty);
+	SetDirty();
 }
 void Transform::LookAt(const vec3& target, const vec3& up)
 {
@@ -370,7 +370,7 @@ void Transform::LookAt(const vec3& target, const vec3& up)
 	{
 		m_Rotation = targetRot;
 	}
-	AddFlag(m_Flags, ETransformFlag::Dirty);
+	SetDirty();
 }
 #pragma endregion
 

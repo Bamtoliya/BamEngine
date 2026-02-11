@@ -5,6 +5,8 @@
 #include "imgui.h"
 #include "ImViewGuizmo.h"
 
+#include "CameraManager.h"
+
 
 #pragma region Contructor&Destructor
 void ViewportPanel::Initialize(void* arg)
@@ -84,11 +86,12 @@ void ViewportPanel::DrawGuizmo(ImVec2 size)
 
 	ImGuizmo::SetRect(imageMin.x, imageMin.y, imageMax.x - imageMin.x, imageMax.y - imageMin.y);
 
-	f32 halfW = size.x * 0.005f;
-	f32 halfH = size.y * 0.005f;
+	f32 halfW = size.x;
+	f32 halfH = size.y;
 
-	mat4 projMatrix = glm::ortho(-halfW, halfW, -halfH, halfH, -1000.0f, 1000.0f);
-	mat4 viewMatrix = glm::identity<mat4>();
+	Camera* mainCamera = CameraManager::Get().GetMainCamera();
+	mat4 projMatrix = mainCamera->GetProjMatrix();
+	mat4 viewMatrix = mainCamera->GetViewMatrix();
 
 	Transform* transform = selectedObject->GetComponent<Transform>();
 	if (!transform)

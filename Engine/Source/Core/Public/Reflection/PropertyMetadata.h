@@ -34,5 +34,12 @@ struct PropertyMetadata
 	std::any DefaultValue;
 	bool bHasDefault = { false };
 
+	string EditCondition;
+
+	bool bEditConditionBit = { false };
+	string EditCondtionBit;
+	uint64 EditConditionMask = { 0 };
+	bool bEditConditionExact = { false };
+
 	PropertyMetadata() = default;
 };

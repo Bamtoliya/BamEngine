@@ -92,5 +92,23 @@ struct Default
 	Default(T&& _value) : Value(_value) {}
 };
 
+struct EditCondition
+{
+	string ConditionVariableName;
+	EditCondition(const char* _name) : ConditionVariableName(_name) {}
+	EditCondition(const string& _name) : ConditionVariableName(_name) {}
+	EditCondition(const wstring& _name) : ConditionVariableName(WStrToStr(_name)) {}
+};
+
+struct EditConditionBit
+{
+	string ConditionVariableName;
+	uint64 Mask;
+	bool bExactMatch;
+	EditConditionBit(const char* _name, uint64 _mask, bool _exact = false) : ConditionVariableName(_name), Mask(_mask), bExactMatch(_exact) {}
+	EditConditionBit(const string& _name, uint64 _mask, bool _exact = false) : ConditionVariableName(_name), Mask(_mask), bExactMatch(_exact) {}
+	EditConditionBit(const wstring& _name, uint64 _mask, bool _exact = false) : ConditionVariableName(WStrToStr(_name)), Mask(_mask), bExactMatch(_exact) {}
+};
+
 
 END

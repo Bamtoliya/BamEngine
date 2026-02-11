@@ -46,6 +46,57 @@ void WriteInteger(void* data, size_t size, int64_t value)
 	case 8: *(int64_t*)data = (int64_t)value; break;
 	}
 }
+
+bool CheckEditCondition(void* instance, const TypeInfo& typeInfo, const PropertyMetadata& meta)
+{
+	// 1. 조건이 없으면 무조건 보여줌
+	if (meta.EditCondition.empty()) return true;
+
+	// 2. 변수명 파싱 (! 접두사 분리)
+	string targetVarName = meta.EditCondition;
+	bool bInvert = false;
+
+	// 비트 검사 모드가 아닐 때만 ! 파싱 수행 (비트 모드는 변수명을 명확히 넘기므로)
+	if (!meta.bEditConditionBit)
+	{
+		if (targetVarName.rfind("!", 0) == 0) // Starts with "!"
+		{
+			bInvert = true;
+			targetVarName = targetVarName.substr(1); // "!" 제거한 이름 추출
+		}
+	}
+
+	// 3. 프로퍼티 찾기 (순수 변수명으로 검색)
+	const PropertyInfo* targetProp = nullptr;
+	for (const auto& prop : typeInfo.GetProperties())
+	{
+		if (prop.Name == targetVarName)
+		{
+			targetProp = &prop;
+			break;
+		}
+	}
+
+	// 프로퍼티를 못 찾았으면 안전하게 보여줌 (오타 방지 로그를 남겨도 좋음)
+	if (!targetProp) return true;
+
+	// 4. 값 읽기
+	int64 val = 0;
+	void* ptr = (uint8_t*)instance + targetProp->Offset;
+
+	// ReadInteger는 1/2/4/8 바이트 정수 및 Bool을 모두 int64로 변환해주는 헬퍼라고 가정
+	val = ReadInteger(ptr, targetProp->Size);
+
+	// 5. 조건 판별
+
+	// [Case A] 비트 마스크 검사
+	if (meta.bEditConditionBit)
+	{
+		return meta.bEditConditionExact ? val == (int64)meta.EditConditionMask : (val & meta.EditConditionMask) != 0;
+	}
+
+	return bInvert ? val == 0 : val != 0;
+}
 #pragma endregion
 
 void InspectorPanel::Draw()
@@ -58,7 +109,10 @@ void InspectorPanel::Draw()
 		const vector<Component*>& components = selectedObject->GetAllComponents();
 		for (Component* component : components)
 		{
-			DrawProperties(component, component->GetType());
+			if (DrawProperties(component, component->GetType()))
+			{
+				component->SetDirty();
+			}
 		}
 
 		ImGui::Spacing();
@@ -82,14 +136,14 @@ void InspectorPanel::Draw()
 	ImGui::End();
 }
 
-void InspectorPanel::DrawProperties(void* instance, const TypeInfo& typeInfo)
+bool InspectorPanel::DrawProperties(void* instance, const TypeInfo& typeInfo)
 {
 
 	ImGui::PushID(instance);
 
 	ImGui::SetNextItemAllowOverlap();
 	bool opened = ImGui::CollapsingHeader(typeInfo.GetName().c_str(), ImGuiTreeNodeFlags_DefaultOpen);
-
+	bool anyChanged = false;
 	{
 		ImGui::SameLine();
 
@@ -162,11 +216,12 @@ void InspectorPanel::DrawProperties(void* instance, const TypeInfo& typeInfo)
 			}
 
 			// 기본 속성 그리기
-			DrawPropertyTable(instance, *currentTypeInfo, defaultProps);
+			anyChanged |= DrawPropertyTable(instance, *currentTypeInfo, defaultProps);
 
 			// 카테고리별 속성 그리기
 			for (const auto& [catName, props] : categoryMap)
 			{
+				bool changed = false;
 				ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.2f, 0.2f, 0.25f, 1.0f));
 				ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.25f, 0.25f, 0.3f, 1.0f));
 				ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0.15f, 0.15f, 0.2f, 1.0f));
@@ -178,13 +233,14 @@ void InspectorPanel::DrawProperties(void* instance, const TypeInfo& typeInfo)
 				{
 					ImGui::PopStyleColor(3);
 					ImGui::Indent();
-					DrawPropertyTable(instance, *currentTypeInfo, props);
+					changed = DrawPropertyTable(instance, *currentTypeInfo, props);
 					ImGui::Unindent();
 				}
 				else
 				{
 					ImGui::PopStyleColor(3);
 				}
+				anyChanged |= changed;
 			}
 			// ----------------------------------------------------
 
@@ -203,6 +259,8 @@ void InspectorPanel::DrawProperties(void* instance, const TypeInfo& typeInfo)
 		}
 	}
 	ImGui::PopID();
+
+	return anyChanged;
 }
 
 
@@ -219,7 +277,7 @@ string InspectorPanel::SanitizeVarName(const string& varName)
 	{
 		cleanName = cleanName.substr(1);
 	}
-	return  cleanName;
+	return cleanName;
 }
 
 string InspectorPanel::SanitizeDisplayLabel(const TypeInfo& typeInfo, const PropertyInfo& property)
@@ -245,10 +303,10 @@ string InspectorPanel::SanitizeDisplayLabel(const TypeInfo& typeInfo, const Prop
 #pragma endregion
 
 #pragma region Table
-void InspectorPanel::DrawPropertyTable(void* instance, const TypeInfo& typeInfo, const vector<const Engine::PropertyInfo*>& props)
+bool InspectorPanel::DrawPropertyTable(void* instance, const TypeInfo& typeInfo, const vector<const Engine::PropertyInfo*>& props)
 {
-	if (props.empty()) return;
-
+	if (props.empty()) return false;
+	bool anyChanged = false;
 	if (ImGui::BeginTable("PropTable", 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_Resizable | ImGuiTableFlags_SizingStretchProp))
 	{
 		ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch, 0.35f);
@@ -258,8 +316,22 @@ void InspectorPanel::DrawPropertyTable(void* instance, const TypeInfo& typeInfo,
 		for (const auto* propPtr : props)
 		{
 			const auto& property = *propPtr;
+
+			if (!property.Metadata.EditCondition.empty())
+			{
+				if (!CheckEditCondition(instance, typeInfo, property.Metadata))
+				{
+					continue; // 조건 불만족 시 그리기 건너뜀 (Hide)
+
+					// 만약 숨기지 않고 비활성화(Disable)만 하고 싶다면:
+					// ImGui::BeginDisabled();
+					// (그리고 아래에서 EndDisabled 처리)
+				}
+			}
+
 			void* data = (uint8_t*)instance + property.Offset;
 			string displayLabel = SanitizeDisplayLabel(typeInfo, property);
+			bool changed = false;
 
 			ImGui::PushID(property.Name.c_str());
 			ImGui::TableNextRow();
@@ -368,7 +440,7 @@ void InspectorPanel::DrawPropertyTable(void* instance, const TypeInfo& typeInfo,
 				case EPropertyType::UInt32:
 				case EPropertyType::UInt64:
 				{
-					DrawIntegerProperty(data, property);
+					changed = DrawIntegerProperty(data, property);
 					break;
 				}
 
@@ -380,49 +452,49 @@ void InspectorPanel::DrawPropertyTable(void* instance, const TypeInfo& typeInfo,
 					if (property.Metadata.bHasRange)
 					{
 						float* value = reinterpret_cast<float*>(data);
-						ImGui::SliderFloat("##value", value, property.Metadata.Min, property.Metadata.Max, "%.3f", ImGuiSliderFlags_None);
+						changed = ImGui::SliderFloat("##value", value, property.Metadata.Min, property.Metadata.Max, "%.3f", ImGuiSliderFlags_None);
 					}
 					else
 					{
 						float* value = reinterpret_cast<float*>(data);
-						ImGui::DragFloat("##value", value);
+						changed = ImGui::DragFloat("##value", value);
 					}
 					break;
 				}
 				case EPropertyType::Vector2:
 				{
 					vec2* value = reinterpret_cast<vec2*>(data);
-					DrawVector2Property(instance, data, typeInfo, property);
+					changed = DrawVector2Property(instance, data, typeInfo, property);
 					break;
 				}
 				case EPropertyType::Vector3:
 				{
 					vec3* value = reinterpret_cast<vec3*>(data);
-					DrawVector3Property(instance, data, typeInfo, property);
+					changed = DrawVector3Property(instance, data, typeInfo, property);
 					break;
 				}
 				case EPropertyType::Quaternion:
 				{
 					vec3* value = reinterpret_cast<vec3*>(data);
-					DrawQuaternionProperty(instance, data, typeInfo, property);
+					changed = DrawQuaternionProperty(instance, data, typeInfo, property);
 					break;
 				}
 				case EPropertyType::Vector4:
 				{
 					vec4* value = reinterpret_cast<vec4*>(data);
-					DrawVector4Property(instance, data, typeInfo, property);
+					changed = DrawVector4Property(instance, data, typeInfo, property);
 					break;
 				}
 				case EPropertyType::Color:
 				{
 					vec4* value = reinterpret_cast<vec4*>(data);
-					ImGui::ColorEdit4("##value", &(*value)[0]);
+					if(ImGui::ColorEdit4("##value", &(*value)[0])) changed = true;
 					break;
 				}
 				case EPropertyType::Bool:
 				{
 					bool* value = reinterpret_cast<bool*>(data);
-					ImGui::Checkbox("##value", value);
+					if (ImGui::Checkbox("##value", value)) changed = true;
 					break;
 				}
 				case EPropertyType::Wstring:
@@ -438,6 +510,7 @@ void InspectorPanel::DrawPropertyTable(void* instance, const TypeInfo& typeInfo,
 						if (ImGui::InputText("##value", buffer, sizeof(buffer)))
 						{
 							*value = Engine::StrToWStr(buffer);
+							changed = true;
 						}
 					}
 					else
@@ -448,6 +521,7 @@ void InspectorPanel::DrawPropertyTable(void* instance, const TypeInfo& typeInfo,
 						if (ImGui::InputText("##value", buffer, sizeof(buffer)))
 						{
 							*value = std::string(buffer);
+							changed = true;	
 						}
 					}
 					break;
@@ -476,6 +550,7 @@ void InspectorPanel::DrawPropertyTable(void* instance, const TypeInfo& typeInfo,
 								if (ImGui::Selectable(name.c_str(), isSelected))
 								{
 									WriteInteger(data, property.Size, val);
+									changed = true;
 								}
 							}
 						}
@@ -518,6 +593,7 @@ void InspectorPanel::DrawPropertyTable(void* instance, const TypeInfo& typeInfo,
 										currentVal &= ~flagVal; // 비트 끄기 (AND NOT)
 
 									WriteInteger(data, property.Size, currentVal);
+									changed = true;
 								}
 							}
 						}
@@ -531,17 +607,17 @@ void InspectorPanel::DrawPropertyTable(void* instance, const TypeInfo& typeInfo,
 				}
 				case EPropertyType::Set:
 				{
-					DrawSetProperty(data, typeInfo, property);
+					changed = DrawSetProperty(data, typeInfo, property);
 					break;
 				}
 				case EPropertyType::Matrix3:
 				{
-					DrawMatrixProperty(data, typeInfo, property, 3);
+					changed = DrawMatrixProperty(data, typeInfo, property, 3);
 					break;
 				}
 				case EPropertyType::Matrix4:
 				{
-					DrawMatrixProperty(data, typeInfo, property);
+					changed = DrawMatrixProperty(data, typeInfo, property);
 					break;
 				}
 				case EPropertyType::Struct:
@@ -551,7 +627,7 @@ void InspectorPanel::DrawPropertyTable(void* instance, const TypeInfo& typeInfo,
 					{
 						if (ImGui::TreeNode(property.Name.c_str()))
 						{
-							DrawDetails(data, *structType);
+							changed = DrawDetails(data, *structType);
 							ImGui::TreePop();
 						}
 					}
@@ -566,7 +642,7 @@ void InspectorPanel::DrawPropertyTable(void* instance, const TypeInfo& typeInfo,
 						TypeInfo* objectType = ReflectionRegistry::Get().GetType(property.TypeName);
 						if (objectType)
 						{
-							DrawDetails(objectPtr, *objectType);
+							changed = DrawDetails(objectPtr, *objectType);
 						}
 					}
 					break;
@@ -578,17 +654,26 @@ void InspectorPanel::DrawPropertyTable(void* instance, const TypeInfo& typeInfo,
 			}
 			if (bReadOnly)
 				ImGui::EndDisabled();
+
+			if (changed)
+			{
+				anyChanged = true;
+			}
+				
+
 			ImGui::PopID();
 		}
 		ImGui::EndTable();
 	}
+	return anyChanged;
 }
 #pragma endregion
 
 #pragma region Types
 
-void InspectorPanel::DrawIntegerProperty(void* data, const PropertyInfo& property)
+bool InspectorPanel::DrawIntegerProperty(void* data, const PropertyInfo& property)
 {
+	bool changed = false;
 	ImGuiDataType dataType = ImGuiDataType_S32;
 
 	switch (property.Type)
@@ -599,7 +684,9 @@ void InspectorPanel::DrawIntegerProperty(void* data, const PropertyInfo& propert
 		case EPropertyType::UInt64: dataType = ImGuiDataType_U64; break;
 	}
 
-	ImGui::DragScalar("##value", dataType, data);
+	if (ImGui::DragScalar("##value", dataType, data)) changed = true;
+
+	return changed;
 }
 
 
@@ -807,8 +894,9 @@ static bool DrawVec3Control(const std::string& label, glm::vec3& values, bool& l
 	return changed;
 }
 
-static void DrawVec4Control(const std::string& label, glm::vec4& values, float resetValue = 0.0f)
+static bool DrawVec4Control(const std::string& label, glm::vec4& values, float resetValue = 0.0f)
 {
+	bool changed = false;
 	ImGui::PushID(label.c_str());
 
 	// 1. 사이즈 및 간격 계산
@@ -833,12 +921,12 @@ static void DrawVec4Control(const std::string& label, glm::vec4& values, float r
 	ImGui::PushStyleColor(ImGuiCol_Button, ImVec4{ 0.8f, 0.1f, 0.15f, 1.0f });
 	ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4{ 0.9f, 0.2f, 0.2f, 1.0f });
 	ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4{ 0.8f, 0.1f, 0.15f, 1.0f });
-	if (ImGui::Button("X", buttonSize)) values.x = resetValue;
+	if (ImGui::Button("X", buttonSize)) { values.x = resetValue; changed = true; }
 	ImGui::PopStyleColor(3);
 
 	ImGui::SameLine(0, 0);
 	ImGui::SetNextItemWidth(inputWidth);
-	ImGui::DragFloat("##X", &values.x, 0.1f, 0.0f, 0.0f, "%.2f");
+	if (ImGui::DragFloat("##X", &values.x, 0.1f, 0.0f, 0.0f, "%.2f")) changed = true;
 
 	ImGui::SameLine(0, itemSpacing);
 
@@ -848,12 +936,12 @@ static void DrawVec4Control(const std::string& label, glm::vec4& values, float r
 	ImGui::PushStyleColor(ImGuiCol_Button, ImVec4{ 0.2f, 0.7f, 0.2f, 1.0f });
 	ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4{ 0.3f, 0.8f, 0.3f, 1.0f });
 	ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4{ 0.2f, 0.7f, 0.2f, 1.0f });
-	if (ImGui::Button("Y", buttonSize)) values.y = resetValue;
+	if (ImGui::Button("Y", buttonSize)) { values.y = resetValue; changed = true; }
 	ImGui::PopStyleColor(3);
 
 	ImGui::SameLine(0, 0);
 	ImGui::SetNextItemWidth(inputWidth);
-	ImGui::DragFloat("##Y", &values.y, 0.1f, 0.0f, 0.0f, "%.2f");
+	if (ImGui::DragFloat("##Y", &values.y, 0.1f, 0.0f, 0.0f, "%.2f")) changed = true;
 
 	ImGui::SameLine(0, itemSpacing);
 
@@ -863,12 +951,12 @@ static void DrawVec4Control(const std::string& label, glm::vec4& values, float r
 	ImGui::PushStyleColor(ImGuiCol_Button, ImVec4{ 0.1f, 0.25f, 0.8f, 1.0f });
 	ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4{ 0.2f, 0.35f, 0.9f, 1.0f });
 	ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4{ 0.1f, 0.25f, 0.8f, 1.0f });
-	if (ImGui::Button("Z", buttonSize)) values.z = resetValue;
+	if (ImGui::Button("Z", buttonSize)) { values.z = resetValue; changed = true; }
 	ImGui::PopStyleColor(3);
 
 	ImGui::SameLine(0, 0);
 	ImGui::SetNextItemWidth(inputWidth);
-	ImGui::DragFloat("##Z", &values.z, 0.1f, 0.0f, 0.0f, "%.2f");
+	if (ImGui::DragFloat("##Z", &values.z, 0.1f, 0.0f, 0.0f, "%.2f")) changed = true;
 
 	ImGui::SameLine(0, itemSpacing);
 
@@ -879,17 +967,18 @@ static void DrawVec4Control(const std::string& label, glm::vec4& values, float r
 	ImGui::PushStyleColor(ImGuiCol_Button, ImVec4{ 0.5f, 0.5f, 0.5f, 1.0f });
 	ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4{ 0.6f, 0.6f, 0.6f, 1.0f });
 	ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4{ 0.5f, 0.5f, 0.5f, 1.0f });
-	if (ImGui::Button("W", buttonSize)) values.w = resetValue;
+	if (ImGui::Button("W", buttonSize)) { values.w = resetValue; changed = true; }
 	ImGui::PopStyleColor(3);
 
 	ImGui::SameLine(0, 0);
 	ImGui::SetNextItemWidth(inputWidth);
-	ImGui::DragFloat("##W", &values.w, 0.1f, 0.0f, 0.0f, "%.2f");
+	if (ImGui::DragFloat("##W", &values.w, 0.1f, 0.0f, 0.0f, "%.2f")) changed = true;
 
 	ImGui::PopID();
+	return changed;
 }
 
-void InspectorPanel::DrawVector2Property(void* instance, void* data, const TypeInfo& typeinfo, const PropertyInfo& property)
+bool InspectorPanel::DrawVector2Property(void* instance, void* data, const TypeInfo& typeinfo, const PropertyInfo& property)
 {
 	vec2* value = reinterpret_cast<vec2*>(data);
 	bool lockX = false, lockY = false, lockZ = false;
@@ -897,8 +986,9 @@ void InspectorPanel::DrawVector2Property(void* instance, void* data, const TypeI
 	vec2 fallback = vec2(0.0f);
 	vec2 resetValue = GetResetValue<vec2>(property.Metadata, fallback);
 	bool changed = DrawVec2Control(property.Name, *value, lockX, lockY, resetValue);
+	return changed;
 }
-void InspectorPanel::DrawVector3Property(void* instance, void* data, const TypeInfo& typeinfo, const PropertyInfo& property)
+bool InspectorPanel::DrawVector3Property(void* instance, void* data, const TypeInfo& typeinfo, const PropertyInfo& property)
 {
 	vec3* value = reinterpret_cast<vec3*>(data);
 	bool lockX = false, lockY = false, lockZ = false;
@@ -947,20 +1037,22 @@ void InspectorPanel::DrawVector3Property(void* instance, void* data, const TypeI
 			transform->SetScale(*value);
 		}
 	}
-
+	return changed;
 }
-void InspectorPanel::DrawVector4Property(void* instance, void* data, const TypeInfo& typeinfo, const PropertyInfo& property)
+bool InspectorPanel::DrawVector4Property(void* instance, void* data, const TypeInfo& typeinfo, const PropertyInfo& property)
 {
 	vec4* value = reinterpret_cast<vec4*>(data);
-	DrawVec4Control(property.Name, *value);
+	bool changed = DrawVec4Control(property.Name, *value);
+	return changed;
 }
-void InspectorPanel::DrawQuaternionProperty(void* instance, void* data, const TypeInfo& typeinfo, const PropertyInfo& property)
+bool InspectorPanel::DrawQuaternionProperty(void* instance, void* data, const TypeInfo& typeinfo, const PropertyInfo& property)
 {
 	quat* qValue = reinterpret_cast<quat*>(data);
 	bool lockX = false, lockY = false, lockZ = false;
 	bool isTransform = typeinfo.GetName() == "Transform";
 	bool isRotation = property.Name == "m_Rotation";
 	Transform* transform = isTransform ? static_cast<Transform*>(instance) : nullptr;
+	bool changed = false;
 
 	if (isTransform && isRotation)
 	{
@@ -974,7 +1066,7 @@ void InspectorPanel::DrawQuaternionProperty(void* instance, void* data, const Ty
 		lockZ = transform->GetState(ETransformFlag::LockRotationZ);
 
 		// 2. UI 그리기
-		bool changed = DrawVec3Control(property.Name, displayEuler, lockX, lockY, lockZ);
+		changed = DrawVec3Control(property.Name, displayEuler, lockX, lockY, lockZ);
 
 		// 3. 쓰기: 값이 변경되었는지 확인
 		// (DrawVec3Control이 변경 여부를 bool로 반환하게 수정하거나, 값 비교)
@@ -994,7 +1086,7 @@ void InspectorPanel::DrawQuaternionProperty(void* instance, void* data, const Ty
 		// 기존처럼 매번 계산해서 보여줌 (반전 현상 있을 수 있음)
 		vec3 eulerDegree = glm::degrees(glm::eulerAngles(*qValue));
 
-		DrawVec3Control(property.Name, eulerDegree, lockX, lockY, lockZ);
+		changed = DrawVec3Control(property.Name, eulerDegree, lockX, lockY, lockZ);
 
 		// 변경 감지 및 적용
 		vec3 currentEuler = glm::degrees(glm::eulerAngles(*qValue));
@@ -1003,12 +1095,14 @@ void InspectorPanel::DrawQuaternionProperty(void* instance, void* data, const Ty
 			*qValue = glm::quat(glm::radians(eulerDegree));
 		}
 	}
+	return changed;
 }
-void InspectorPanel::DrawMatrixProperty(void* data, const TypeInfo& typeinfo, const PropertyInfo& property, uint32 dim)
+bool InspectorPanel::DrawMatrixProperty(void* data, const TypeInfo& typeinfo, const PropertyInfo& property, uint32 dim)
 {
 	string headerName = SanitizeVarName(property.Name) + "###" + property.Name;
 	float* matData = reinterpret_cast<float*>((uint8_t*)data);
 	bool bReadOnly = property.Metadata.bIsReadOnly;
+	bool changed = false;
 
 	if (bReadOnly)
 		ImGui::EndDisabled();
@@ -1049,7 +1143,7 @@ void InspectorPanel::DrawMatrixProperty(void* data, const TypeInfo& typeinfo, co
 
 					// 값 그리기 (DragFloat 추천 - 미세 조정 가능)
 					// 속도(v_speed)는 0.01f ~ 0.1f 정도로 설정
-					ImGui::DragFloat("##cell", &matData[index], 0.05f, 0.0f, 0.0f, "%.2f");
+					if (ImGui::DragFloat("##cell", &matData[index], 0.05f, 0.0f, 0.0f, "%.2f")) changed = true;
 
 					ImGui::PopID();
 				}
@@ -1066,6 +1160,7 @@ void InspectorPanel::DrawMatrixProperty(void* data, const TypeInfo& typeinfo, co
 			matData[5] = 1.0f;  // [1][1]
 			matData[10] = 1.0f; // [2][2]
 			matData[15] = 1.0f; // [3][3]
+			changed = true;
 		}
 		
 
@@ -1075,15 +1170,18 @@ void InspectorPanel::DrawMatrixProperty(void* data, const TypeInfo& typeinfo, co
 	}
 	if (bReadOnly)
 		ImGui::BeginDisabled();
+
+	return changed;
 }
-void InspectorPanel::DrawSetProperty(void* data, const TypeInfo& typeinfo, const PropertyInfo& property)
+bool InspectorPanel::DrawSetProperty(void* data, const TypeInfo& typeinfo, const PropertyInfo& property)
 {
 	auto* accessor = property.Accessor;
-	if (!accessor) return;
+	if (!accessor) return false;
 
 	uint32 size = accessor->GetSize(data);
 	string headerName = SanitizeDisplayLabel(typeinfo, property) + " (" + to_string(size) + ")###" + property.Name;
 	string innerType = property.InnerTypeName;
+	bool changed = false;
 
 	if (ImGui::CollapsingHeader(headerName.c_str()))
 	{
@@ -1130,6 +1228,7 @@ void InspectorPanel::DrawSetProperty(void* data, const TypeInfo& typeinfo, const
 		if (ImGui::Button("+") && valueToAdd)
 		{
 			accessor->Add(data, valueToAdd);
+			changed = true;
 		}
 
 		ImGui::Separator();
@@ -1185,17 +1284,17 @@ void InspectorPanel::DrawSetProperty(void* data, const TypeInfo& typeinfo, const
 		if (toRemove)
 		{
 			accessor->Remove(data, toRemove);
+			changed = true;
 		}
-
 
 		ImGui::Unindent();
 	}
-
+	return changed;
 }
-void InspectorPanel::DrawDetails(void* instance, const TypeInfo& typeInfo)
+bool InspectorPanel::DrawDetails(void* instance, const TypeInfo& typeInfo)
 {
 	const TypeInfo* currentTypeInfo = &typeInfo;
-
+	bool changed = false;
 	while (currentTypeInfo != nullptr)
 	{
 		// 1. 현재 계층의 속성 정보 수집
@@ -1218,7 +1317,7 @@ void InspectorPanel::DrawDetails(void* instance, const TypeInfo& typeInfo)
 			}
 
 			// 테이블 출력 (해당 계층의 속성들)
-			DrawPropertyTable(instance, *currentTypeInfo, properties);
+			changed |= DrawPropertyTable(instance, *currentTypeInfo, properties);
 		}
 
 		// 3. 다음 부모 타입으로 이동
@@ -1232,6 +1331,7 @@ void InspectorPanel::DrawDetails(void* instance, const TypeInfo& typeInfo)
 			currentTypeInfo = ReflectionRegistry::Get().GetType(parentName);
 		}
 	}
+	return changed;
 }
 #pragma endregion
 

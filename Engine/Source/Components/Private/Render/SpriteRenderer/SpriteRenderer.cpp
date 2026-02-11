@@ -53,9 +53,10 @@ void SpriteRenderer::Free()
 #pragma region Loop
 void SpriteRenderer::LateUpdate(f32 dt)
 {
-	if (m_Sprite)
+	if(IsDirty())
 	{
 		UpdateMesh();
+		SetDirty(false);
 	}
 	__super::LateUpdate(dt);
 }
@@ -129,6 +130,7 @@ EResult SpriteRenderer::SetSprite(Texture* texture)
 		Safe_Release(m_Sprite);
 	tagSpriteCreateDesc desc;
 	desc.Texture = texture;
+	//ResourceManager::Get().LoadSprite()
 	m_Sprite = Sprite::Create(&desc);
 	if (IsFailure(UpdateMesh()))
 		return EResult::Fail;
@@ -155,10 +157,15 @@ EResult SpriteRenderer::UpdateMesh()
 	f32 xOffset = width * pivot.x;
 	f32 yOffset = height * pivot.y;
 
-	f32 left = -worldWidth * pivot.x;
-	f32 right = worldWidth * (1.0f - pivot.x);
-	f32 bottom = -worldHeight * pivot.y;
-	f32 top = worldHeight * (1.0f - pivot.y);
+	//f32 left = -worldWidth * pivot.x;
+	//f32 right = worldWidth * (1.0f - pivot.x);
+	//f32 bottom = -worldHeight * pivot.y;
+	//f32 top = worldHeight * (1.0f - pivot.y);
+
+	f32 left = 0.0f - xOffset;
+	f32 right = width - xOffset;
+	f32 bottom = 0.0f - yOffset;
+	f32 top = height - yOffset;
 
 	vector<Vertex> vertices;
 

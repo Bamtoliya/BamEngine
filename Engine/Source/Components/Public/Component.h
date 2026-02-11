@@ -46,20 +46,25 @@ public:
 #pragma endregion
 
 #pragma region Getter
+public:
 	GameObject* GetOwner() const { return m_Owner; }
 	wstring GetTag() const { return m_Tag; }
 	bool IsActive() const { return m_Active; }
+	bool IsDirty() const { return m_Dirty; }
 #pragma endregion
 
 #pragma region Setter
+public:
 	void SetOwner(GameObject* owner) { m_Owner = owner; }
 	void SetTag(const wstring& tag) { m_Tag = tag; }
 	void SetActive(bool active) { m_Active = active; }
+	void SetDirty(bool dirty = true) { m_Dirty = dirty; }
 #pragma endregion
 
 #pragma region Variable
 protected:
 	bool m_Active = { true };
+	bool m_Dirty = { false };
 	wstring m_Tag = { L"" };
 	GameObject* m_Owner = { nullptr };
 #pragma endregion

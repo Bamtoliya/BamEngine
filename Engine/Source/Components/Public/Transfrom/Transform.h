@@ -14,34 +14,32 @@ ENUM()
 enum class ETransformFlag : uint16
 {
 	None = 0,
-	Dirty = 1 << 0,
-	InheritPosition = 1 << 1,
-	InheritRotation = 1 << 2,
-	InheritScale = 1 << 3,
+	InheritPosition = 1 << 0,
+	InheritRotation = 1 << 1,
+	InheritScale = 1 << 2,
 
-	LockPositionX = 1 << 4,
-	LockPositionY = 1 << 5,
-	LockPositionZ = 1 << 6,
+	LockPositionX = 1 << 3,
+	LockPositionY = 1 << 4,
+	LockPositionZ = 1 << 5,
 
 	LockPosition = LockPositionX | LockPositionY | LockPositionZ,
 
-	LockRotationX = 1 << 7,
-	LockRotationY = 1 << 8,
-	LockRotationZ = 1 << 9,
+	LockRotationX = 1 << 6,
+	LockRotationY = 1 << 7,
+	LockRotationZ = 1 << 8,
 
 	LockRotation = LockRotationX | LockRotationY | LockRotationZ,
 
-	LockScaleX = 1 << 10,
-	LockScaleY = 1 << 11,
-	LockScaleZ = 1 << 12,
+	LockScaleX = 1 << 9,
+	LockScaleY = 1 << 10,
+	LockScaleZ = 1 << 11,
 
 	LockScale = LockScaleX | LockScaleY | LockScaleZ,
 
-	Static = 1 << 13,
-
+	Static = 1 << 12,
 	AllInherit = InheritPosition | InheritRotation | InheritScale,
 	AllLocked = LockPosition |  LockRotation | LockScale,
-	Default = Dirty | AllInherit,
+	Default = AllInherit,
 };
 #pragma endregion
 
@@ -113,7 +111,6 @@ public:
 
 #pragma region Internal Helper Functions
 private:
-	bool IsDirty()  const { return HasFlag(m_Flags, ETransformFlag::Dirty); }
 	bool IsStatic() const { return HasFlag(m_Flags, ETransformFlag::Static); }
 
 	bool IsPositionLocked() const { return IsStatic() || HasFlag(m_Flags, ETransformFlag::LockPosition); }

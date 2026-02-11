@@ -101,6 +101,17 @@ struct PropertyInfo
 		Metadata.DefaultValue = attr.Value;
 		Metadata.bHasDefault = true;
 	}
+	void Apply(const Engine::EditCondition& attr)
+	{
+		Metadata.EditCondition = attr.ConditionVariableName;
+	}
+	void Apply(const Engine::EditConditionBit& attr)
+	{
+		Metadata.EditCondtionBit = attr.ConditionVariableName;
+		Metadata.EditConditionMask = attr.Mask;
+		Metadata.bEditConditionBit = true;
+		Metadata.bEditConditionExact = attr.bExactMatch;
+	}
 	template <typename T, typename... Args, typename = std::enable_if_t<(sizeof...(Args) > 0)>>
 	void Apply(T&& first, Args&&... args)
 	{

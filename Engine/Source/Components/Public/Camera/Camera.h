@@ -62,17 +62,17 @@ private:
 #pragma region Variables
 private:
 
-	PROPERTY()
+	PROPERTY(EDITCONDITION("m_IsPerspective"))
 	f32 m_FOV = { 60.f };
 	PROPERTY()
 	f32 m_Near = { 0.1f };
 	PROPERTY()
 	f32 m_Far = { 1000.f };
-	PROPERTY()
+	PROPERTY(EDITCONDITION("m_IsPerspective"))
 	f32 m_Aspect = { 1.777f };
-	PROPERTY()
+	PROPERTY(EDITCONDITION("!m_IsPerspective"))
 	f32 m_Width = { 10.f };
-	PROPERTY()
+	PROPERTY(EDITCONDITION("!m_IsPerspective"))
 	f32 m_Height = { 10.f };
 
 

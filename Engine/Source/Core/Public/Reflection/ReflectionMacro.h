@@ -111,3 +111,5 @@ private: \
 #define COLOR(r, g, b, a) Engine::Color(vec4(r, g, b, a))
 #define FLAGS(...) Engine::Flags({ __VA_ARGS__ })
 #define DEFAULT(value) Engine::Default(value)
+#define EDITCONDITION(condition) Engine::EditCondition(condition)
+#define EDTIOCONDTIONBIT(conditionBit, mask, ...) Engine::EditConditionBit(conditionBit, mask, ##__VA_ARGS__)
