@@ -43,7 +43,18 @@ EResult Renderer::Initialize(void* arg)
 	tagRenderTargetDesc rtDesc;
 	rtDesc.Width = desc->RHIDesc.Width;
 	rtDesc.Height = desc->RHIDesc.Height;
+	rtDesc.BindFlag = ERenderTargetBindFlag::RTBF_ShaderResource | ERenderTargetBindFlag::RTBF_RenderTarget;
 	m_SceneBuffer = RenderTargetManager::Get().CreateRenderTarget(&rtDesc);
+	tagRenderTargetDesc depthStencilDesc;
+	depthStencilDesc.Width = desc->RHIDesc.Width;
+	depthStencilDesc.Height = desc->RHIDesc.Height;
+	depthStencilDesc.Type = ERenderTargetType::DepthStencil;
+	depthStencilDesc.Usage = ERenderTargetUsage::RTU_DepthStencil;
+	depthStencilDesc.BindFlag = ERenderTargetBindFlag::RTBF_ShaderResource | ERenderTargetBindFlag::RTBF_DepthStencil | ERenderTargetBindFlag::RTBF_RenderTarget;
+	depthStencilDesc.Format = ERenderTargetFormat::RTF_DEPTH24STENCIL8;
+	m_DepthBuffer = RenderTargetManager::Get().CreateRenderTarget(&depthStencilDesc);
+	RenderPassManager::Get().RegisterRenderPass(L"MainPass", { L"RenderTarget_1" }, L"RenderTarget_2", ERenderPassLoadOperation::RPLO_Clear, ERenderPassStoreOperation::RPSO_Store, vec4(0.0f, 0.0f, 0.0f, -1.0f), 0, ERenderSortType::FrontToBack);
+
 	if (!m_SceneBuffer) return EResult::Fail;
 
 	return EResult::Success;
@@ -77,47 +88,40 @@ EResult Renderer::BeginFrame()
 
 EResult Renderer::Render(f32 dt)
 {
-	const vector<RenderPassInfo>& renderPasses = m_RenderPassManager->GetAllRenderPasses();
-	if (m_SceneBuffer && m_RHI)
-	{
-		vec4 clearColor = { 0.1f, 0.1f, 0.1f, 1.0f }; // 게임 배경색 (검정/회색)
-		m_RHI->ClearRenderTarget(m_SceneBuffer->GetTexture(0), clearColor);
-		if(IsFailure(m_RHI->BindRenderTarget(m_SceneBuffer->GetTexture(0), m_SceneBuffer->GetDepthStencilTexture())))
-		{
-			return EResult::Fail;
-		}
-		if(IsFailure(m_RHI->SetViewport(0, 0, m_SceneBuffer->GetWidth(), m_SceneBuffer->GetHeight())))
-		{
-			return EResult::Fail;
-		}
-	}
+	const vector<RenderPass*>& renderPasses = m_RenderPassManager->GetAllRenderPasses();
 	for (const auto& pass : renderPasses)
 	{
-		auto it = m_RenderQueues.find(pass.ID);
+		m_RHI->BindRenderPass(pass);
+		m_RHI->SetViewport(0, 0, 1920, 1080);
+		auto it = m_RenderQueues.find(pass->GetID());
 		if (it != m_RenderQueues.end())
 		{
-			RenderComponents(dt, it->second, pass.SortType);
+			RenderComponents(dt, it->second, pass->GetSortType());
 		}
-	}
-
-	if (m_RHI)
-	{
-		m_RHI->DrawTexture(m_SceneBuffer->GetTexture(0));
-		m_RHI->BindRenderTarget(nullptr, nullptr);
-		m_RHI->SetViewport(0, 0, m_RHI->GetSwapChainWidth(), m_RHI->GetSwapChainHeight());
-		if (m_RHIType == ERHIType::SDLGPU)
-		{
-			static_cast<SDLGPURHI*>(m_RHI)->ClearRenderPass();
-		}
-	}
-
-	for (const auto& pass : renderPasses)
-	{
-		auto it = m_RenderQueues.find(pass.ID);
-		GetRenderPassDelegate(pass.ID).Broadcast(dt);
+		static_cast<SDLGPURHI*>(m_RHI)->ClearRenderPass();
+		GetRenderPassDelegate(pass->GetID()).Broadcast(dt);
 	}
 
 
+	//if (m_RHI)
+	//{
+	//	//if (IsFailure(m_RHI->BindRenderTarget(nullptr, nullptr)))
+	//	//{
+	//	//	return EResult::Success;
+	//	//};
+	//	//m_RHI->SetViewport(0, 0, m_RHI->GetSwapChainWidth(), m_RHI->GetSwapChainHeight());
+	//	m_RHI->DrawTexture(m_SceneBuffer->GetTexture());
+	//	//if (m_RHIType == ERHIType::SDLGPU)
+	//	//{
+	//	//	static_cast<SDLGPURHI*>(m_RHI)->ClearRenderPass();
+	//	//}
+	//}
+
+	//for (const auto& pass : renderPasses)
+	//{
+	//	auto it = m_RenderQueues.find(pass->GetID());
+	//	GetRenderPassDelegate(pass->GetID()).Broadcast(dt);
+	//}
 
 	return EResult::Success;
 }

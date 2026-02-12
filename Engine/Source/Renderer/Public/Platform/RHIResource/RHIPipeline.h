@@ -59,6 +59,10 @@ struct tagRHIPipelineDesc
 	class RHIShader* GeometryShader = nullptr;
 	class RHIShader* HullShader = nullptr;
 	class RHIShader* DomainShader = nullptr;
+
+	bool operator==(const tagRHIPipelineDesc& other) const {
+		return memcmp(this, &other, sizeof(tagRHIPipelineDesc)) == 0; // 패딩 주의, 혹은 멤버별 비교
+	}
 };
 
 BEGIN(Engine)

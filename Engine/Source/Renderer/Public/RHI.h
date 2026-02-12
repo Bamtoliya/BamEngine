@@ -24,6 +24,8 @@ class RHIShader;
 class RHISampler;
 class RHITexture;
 class RHIPipeline;
+
+class RenderPass;
 class ENGINE_API RHI : public Base
 {
 protected:
@@ -81,7 +83,8 @@ public:
     virtual EResult BindConstantBuffer(void* arg, uint32 slot) PURE;
     virtual EResult BindConstantBuffer(void* arg, uint32 size, uint32 slot) { return EResult::NotImplemented; }
     virtual EResult BindConstantRangeBuffer(void* arg, uint32 slot, uint32 offset, uint32 size) PURE;
-
+public:
+    virtual EResult BindRenderPass(RenderPass* renderPass) { return EResult::NotImplemented; }
 #pragma endregion
 
 #pragma region Clear Resources
@@ -124,8 +127,7 @@ protected:
     uint32 m_SwapChainHeight = { 0 };
 	RHITexture* m_BackBuffer = { nullptr };
 protected:
-	static const uint32 MAX_RENDER_TARGET_COUNT = 8;
-    static const uint32 MAX_TEXTURE_SLOTS = 128;
+	
 
 	RHITexture* m_CurrentRenderTargets[MAX_RENDER_TARGET_COUNT] = {nullptr};
 	uint32 m_CurrentRenderTargetCount = { 0 };

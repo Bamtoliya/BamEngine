@@ -11,20 +11,34 @@ EResult RenderPassManager::Initialize(void* arg)
 
 void RenderPassManager::Free()
 {
+	for (auto& pass : m_RenderPasses)
+	{
+		Safe_Release(pass);
+	}
 	m_RenderPasses.clear();
 }
 #pragma endregion
 
 
 #pragma region RenderPass Management
-RenderPassID RenderPassManager::RegisterRenderPass(const wstring& name, uint32 priority, ERenderSortType sortType)
+RenderPassID RenderPassManager::RegisterRenderPass(const wstring& name, vector<wstring> renderTargetNames, const wstring& depthstencilName,
+	ERenderPassLoadOperation loadOperation,
+	ERenderPassStoreOperation storeOperation,
+	vec4 overrideClearColor,
+	uint32 priority, ERenderSortType sortType)
 {
-	RenderPassInfo newPass = {};
+	tagRenderPassDesc newPass = {};
 	newPass.ID = m_NextRenderPassID++;
 	newPass.Name = name;
+	newPass.RenderTargetNames = renderTargetNames;
+	newPass.DepthStencilName = depthstencilName;
 	newPass.Priority = priority;
 	newPass.SortType = sortType;
-	m_RenderPasses.push_back(newPass);
+	newPass.LoadOperation = loadOperation;
+	newPass.StoreOperation = storeOperation;
+	newPass.OverrideClearColor = overrideClearColor;
+	RenderPass* pass = RenderPass::Create(&newPass);
+	m_RenderPasses.push_back(pass);
 	SortRenderPasses();
 	return newPass.ID;
 }
@@ -33,9 +47,9 @@ RenderPassID RenderPassManager::GetRenderPassIDByName(const wstring& name)
 {
 	for (const auto& pass : m_RenderPasses)
 	{
-		if (pass.Name == name)
+		if (pass->GetName() == name)
 		{
-			return pass.ID;
+			return pass->GetID();
 		}
 	}
 	return INVALID_PASS_ID;
@@ -44,13 +58,13 @@ RenderPassID RenderPassManager::GetRenderPassIDByName(const wstring& name)
 void RenderPassManager::SortRenderPasses()
 {
 	std::sort(m_RenderPasses.begin(), m_RenderPasses.end(),
-		[](const RenderPassInfo& a, const RenderPassInfo& b)
+		[](const RenderPass* a, const RenderPass* b)
 		{
-			if (a.Priority != b.Priority)
+			if (a->GetPriority() != b->GetPriority())
 			{
-				return a.Priority < b.Priority;
+				return a->GetPriority() < b->GetPriority();
 			}
-			return a.ID < b.ID;
+			return a->GetID() < b->GetID();
 		});
 }
 

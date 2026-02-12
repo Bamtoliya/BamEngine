@@ -30,7 +30,7 @@ void ViewportPanel::Draw()
 		RenderTarget* target = RenderTargetManager::Get().GetRenderTarget(L"RenderTarget_1");
 		if (target)
 		{
-			RHITexture* texture = target->GetTexture(0);
+			RHITexture* texture = target->GetTexture();
 			if (texture)
 			{
 				f32 imageWidth = (f32)target->GetWidth();

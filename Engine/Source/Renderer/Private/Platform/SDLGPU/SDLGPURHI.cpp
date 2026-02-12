@@ -6,7 +6,8 @@
 #include "SDLGPUSampler.h"
 #include "SDLGPUTexture.h"
 #include "SDLGPUPipeline.h"
-#include "RenderTarget.h"
+#include "RenderTargetManager.h"
+#include "RenderPass.h"
 #include "Vertex.h"
 
 #pragma region Constructor&Destructor
@@ -568,6 +569,75 @@ EResult SDLGPURHI::BindRenderTargets(uint32 count, RHITexture** renderTargets, R
 	//
 	return EResult::Success;
 }
+EResult SDLGPURHI::BindRenderPass(RenderPass* renderPass)
+{
+	if (m_CurrentRenderPass)
+	{
+		SDL_EndGPURenderPass(m_CurrentRenderPass);
+		m_CurrentRenderPass = nullptr;
+	}
+
+	if (!m_CurrentCommandBuffer) return EResult::Fail;
+
+	SDL_GPUColorTargetInfo colorTargetInfo[MAX_RENDER_TARGET_COUNT] = {};
+	uint32 targetCount = renderPass->GetRenderTargetCount();
+	if (targetCount == 0)
+	{
+		colorTargetInfo[0].texture = static_cast<SDL_GPUTexture*>(m_BackBuffer->GetNativeHandle());
+		colorTargetInfo[0].load_op = SDL_GPURenderPassLoadOperations[static_cast<uint8>(renderPass->GetLoadOperation())];
+		colorTargetInfo[0].store_op = SDL_GPURenderPassStoreOperations[static_cast<uint8>(renderPass->GetStoreOperation())];
+		colorTargetInfo[0].cycle = false;
+		colorTargetInfo[0].mip_level = 0;
+		colorTargetInfo[0].layer_or_depth_plane = 0;
+
+		targetCount = 1;
+	}
+	else
+	{
+		for (uint i = 0; i < targetCount; ++i)
+		{
+			RenderTarget* renderTarget = RenderTargetManager::Get().GetRenderTarget(renderPass->GetRenderTargetName(i));
+			colorTargetInfo[i].texture = static_cast<SDL_GPUTexture*>(renderTarget->GetTexture()->GetNativeHandle());
+			vec4 clearColor = renderTarget->GetClearColor();
+			if (renderPass->HasOverrideClearColor())
+			{
+				clearColor = renderPass->GetOverrideClearColor();
+			}
+			colorTargetInfo[i].clear_color = { clearColor.r, clearColor.g, clearColor.b, clearColor.a };
+			colorTargetInfo[i].load_op = SDL_GPURenderPassLoadOperations[static_cast<uint8>(renderPass->GetLoadOperation())];
+			colorTargetInfo[i].store_op = SDL_GPURenderPassStoreOperations[static_cast<uint8>(renderPass->GetStoreOperation())];
+
+			colorTargetInfo[i].cycle = false;
+			colorTargetInfo[i].mip_level = 0;
+			colorTargetInfo[i].layer_or_depth_plane = 0;
+		}
+	}
+
+	SDL_GPUDepthStencilTargetInfo depthInfo = {};
+	bool bUseDepth = !renderPass->GetDepthStencilName().empty();
+
+	if (bUseDepth)
+	{
+		RenderTarget* depthStencil = RenderTargetManager::Get().GetRenderTarget(renderPass->GetDepthStencilName());
+		depthInfo.texture = static_cast<SDL_GPUTexture*>(depthStencil->GetTexture()->GetNativeHandle());
+		depthInfo.cycle = false;
+		depthInfo.clear_stencil = 0;
+		depthInfo.clear_depth = 1.f;
+		depthInfo.load_op = SDL_GPURenderPassLoadOperations[static_cast<uint8>(renderPass->GetLoadOperation())];
+		depthInfo.store_op = SDL_GPURenderPassStoreOperations[static_cast<uint8>(renderPass->GetStoreOperation())];
+		depthInfo.stencil_load_op = SDL_GPURenderPassLoadOperations[static_cast<uint8>(renderPass->GetStencilLoadOperation())];
+		depthInfo.stencil_store_op = SDL_GPURenderPassStoreOperations[static_cast<uint8>(renderPass->GetStencilStoreOperation())];
+	}
+
+	m_CurrentRenderPass = SDL_BeginGPURenderPass(m_CurrentCommandBuffer, colorTargetInfo, targetCount, bUseDepth ? &depthInfo : nullptr);
+	if(!m_CurrentRenderPass)
+	{
+		return EResult::Fail;
+	}
+
+
+	return EResult::Success;
+}
 EResult SDLGPURHI::BindShader(RHIShader* shader)
 {
 	//if (!shader) return EResult::InvalidArgument;
@@ -641,15 +711,24 @@ EResult SDLGPURHI::SetClearColor(vec4 color)
 
 EResult SDLGPURHI::SetViewport(int32 x, int32 y, uint32 width, uint32 height)
 {
-	//SDL_Rect viewport;
-	//viewport.x = x;
-	//viewport.y = y;
-	//viewport.w = width;
-	//viewport.h = height;
-	//if (!SDL_SetRenderViewport(m_Renderer, &viewport))
-	//{
-	//	return EResult::Fail;
-	//}
+	SDL_GPUViewport viewport;
+	viewport.x = 0.0f;
+	viewport.y = 0.f;
+	viewport.w = (float)width;
+	viewport.h = (float)height;
+	viewport.min_depth = 0.0f;
+	viewport.max_depth = 1.0f;
+
+	SDL_SetGPUViewport(m_CurrentRenderPass, &viewport);
+
+	//SDL_Rect scissor;
+	//scissor.x = 0;
+	//scissor.y = 0;
+	//scissor.w = (int)width;
+	//scissor.h = (int)height;
+	//
+	//// 렌더 패스 객체(pass)에 시저 설정
+	//SDL_SetGPUScissor(m_CurrentRenderPass, &scissor);
 	return EResult::Success;
 }
 #pragma endregion
@@ -733,7 +812,7 @@ EResult SDLGPURHI::DrawTexture(RHITexture* texture)
 	blitInfo.destination.w = m_SwapChainWidth;
 	blitInfo.destination.h = m_SwapChainHeight;
 
-	blitInfo.load_op = SDL_GPU_LOADOP_DONT_CARE;
+	blitInfo.load_op = SDL_GPU_LOADOP_CLEAR;
 	blitInfo.filter = SDL_GPU_FILTER_LINEAR;
 
 	SDL_BlitGPUTexture(m_CurrentCommandBuffer, &blitInfo);

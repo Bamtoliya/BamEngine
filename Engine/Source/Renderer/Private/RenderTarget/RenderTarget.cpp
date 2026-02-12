@@ -11,11 +11,14 @@ EResult RenderTarget::Initialize(void* arg)
 	if (!arg) return EResult::InvalidArgument;
 	
 	CAST_DESC
-	m_Width = desc->Width;
-	m_Height = desc->Height;
+	memcpy(&m_Desc, desc, sizeof(DESC));
 	RHI* rhi = Renderer::Get().GetRHI();
-	m_Textures.push_back(rhi->CreateRenderTargetTexture(desc, m_Width, m_Height, 1, 1));
-	m_DepthStencilTexture = rhi->CreateDepthStencilTexture(desc, m_Width, m_Height, 1, 1);
+	if(m_Desc.Type == ERenderTargetType::DepthStencil)
+	{
+		m_Texture = rhi->CreateDepthStencilTexture(desc, m_Desc.Width, m_Desc.Height, 1, 1);
+	}
+	else
+		m_Texture = rhi->CreateRenderTargetTexture(desc, m_Desc.Width, m_Desc.Height, 1, 1);
 	return EResult::Success;
 }
 
@@ -32,22 +35,20 @@ RenderTarget* RenderTarget::Create(void* arg)
 
 void RenderTarget::Free()
 {
-	RELEASE_VECTOR(m_Textures);
-	Safe_Release(m_DepthStencilTexture);
+	Safe_Release(m_Texture);
 }
 #pragma endregion
 
 #pragma region Texture Management
 EResult RenderTarget::Resize(uint32 width, uint32 height)
 {
-	if (m_Width == width && m_Height == height)
+	if (m_Desc.Width == width && m_Desc.Height == height)
 		return EResult::Success;
-	m_Width = width;
-	m_Height = height;
-	//Pool 고려 해봐야함
-	RELEASE_VECTOR(m_Textures);
+	m_Desc.Width = width;
+	m_Desc.Height = height;
+	Safe_Release(m_Texture);
 	RHI* rhi = Renderer::Get().GetRHI();
-	m_Textures.push_back(rhi->CreateRenderTargetTexture(nullptr, m_Width, m_Height, 1, 1));
+	m_Texture = rhi->CreateRenderTargetTexture(&m_Desc, m_Desc.Width, m_Desc.Height, 1, 1);
 	return EResult::Success;
 }
 #pragma endregion

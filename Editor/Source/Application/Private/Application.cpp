@@ -48,7 +48,7 @@ EResult Application::Initialize(void* arg)
 		return EResult::Fail;
     }
 
-    RenderPassID uiPassID = RenderPassManager::Get().RegisterRenderPass(L"Editor UI", 1000, ERenderSortType::None);
+    RenderPassID uiPassID = RenderPassManager::Get().RegisterRenderPass(L"Editor UI", {L"RenderTarget_1"}, L"", ERenderPassLoadOperation::RPLO_Load, ERenderPassStoreOperation::RPSO_Store, vec4(0.0f, 0.0f, 0.0f, -1.0f), 1000, ERenderSortType::None);
     DelegateHandle uiHandle = Renderer::Get().GetRenderPassDelegate(uiPassID).AddLambda([](f32 dt) {
         ImGuiManager::Get().Begin();
         ImGuiManager::Get().Draw();

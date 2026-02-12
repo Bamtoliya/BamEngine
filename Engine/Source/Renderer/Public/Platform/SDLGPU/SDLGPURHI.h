@@ -19,6 +19,19 @@ static const SDL_GPUTextureType SDL_GPUTextureTypes[] = {
 	SDL_GPU_TEXTURETYPE_CUBE_ARRAY
 };
 
+static const SDL_GPULoadOp SDL_GPURenderPassLoadOperations[] = {
+	SDL_GPU_LOADOP_LOAD,
+	SDL_GPU_LOADOP_CLEAR,
+	SDL_GPU_LOADOP_DONT_CARE
+};
+
+static const SDL_GPUStoreOp SDL_GPURenderPassStoreOperations[] = {
+	SDL_GPU_STOREOP_STORE,
+	SDL_GPU_STOREOP_DONT_CARE,
+	SDL_GPU_STOREOP_RESOLVE,
+	SDL_GPU_STOREOP_RESOLVE_AND_STORE
+};
+
 BEGIN(Engine)
 class ENGINE_API SDLGPURHI final : public RHI
 {
@@ -69,6 +82,7 @@ public:
 	virtual EResult BindTexture(RHITexture* texture, uint32 slot) override;
 	virtual EResult BindTextureSampler(RHITexture* texture, RHISampler* sampler, uint32 slot) override;
 	virtual EResult BindRenderTargets(uint32 count, RHITexture** renderTargets, RHITexture* depthStencil) override;
+	virtual EResult BindRenderPass(class RenderPass* renderPass) override;
 public:
 	virtual EResult BindShader(RHIShader* shader) override;
 public:

@@ -1,7 +1,7 @@
 ﻿#pragma once
 
 #include "Base.h"
-#include "RenderTypes.h"
+#include "RenderPass.h"
 
 BEGIN(Engine)
 class ENGINE_API RenderPassManager final : public Base
@@ -18,16 +18,20 @@ public:
 
 #pragma region RenderPass Management
 public:
-	RenderPassID RegisterRenderPass(const wstring& name, uint32 priority, ERenderSortType sortType);
+	RenderPassID RegisterRenderPass(const wstring& name, vector<wstring> renderTargetNames, const wstring& depthstencilName,
+		ERenderPassLoadOperation loadOperation = ERenderPassLoadOperation::RPLO_Load,
+		ERenderPassStoreOperation storeOperation = ERenderPassStoreOperation::RPSO_Store,
+		vec4 overrideClearColor = vec4(0.0f, 0.0f, 0.0f, -1.0f),
+		uint32 priority = 0, ERenderSortType sortType = ERenderSortType::None);
 	RenderPassID GetRenderPassIDByName(const wstring& name);
-	const vector<RenderPassInfo>& GetAllRenderPasses() const { return m_RenderPasses; }
+	const vector<RenderPass*>& GetAllRenderPasses() const { return m_RenderPasses; }
 private:
 	void SortRenderPasses();
 #pragma endregion
 
 #pragma region Variable
 private:
-	vector<RenderPassInfo> m_RenderPasses;
+	vector<RenderPass*> m_RenderPasses;
 	uint32 m_NextRenderPassID = { 0 };
 #pragma endregion
 };
