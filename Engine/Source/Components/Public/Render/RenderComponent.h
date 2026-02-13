@@ -4,6 +4,8 @@
 #include "RenderTypes.h"
 #include "Material.h"
 #include "MaterialInstance.h"
+#include "Mesh.h"
+#include "RenderPass.h"
 
 BEGIN(Engine)
 
@@ -28,7 +30,7 @@ public:
 #pragma region Render
 public:
 	virtual void LateUpdate(f32 dt) override;
-	virtual EResult Render(f32 dt) PURE;
+	virtual EResult Render(f32 dt, RenderPass* renderPass = nullptr) PURE;
 #pragma endregion
 
 #pragma region Management
@@ -75,8 +77,13 @@ public:
 			return nullptr;
 		return m_MaterialInstances[index];
 	}
-
 #pragma endregion
+
+#pragma region MyRegion
+public:
+	EResult BindPipeline(Mesh* mesh, MaterialInterface* material, RenderPass* renderPass);
+#pragma endregion
+
 
 
 

@@ -1,6 +1,5 @@
 ﻿#pragma once
 
-#include "Base.h"
 #include "RHIPipeline.h"
 
 struct tagPipelineManagerDesc
@@ -24,10 +23,7 @@ public:
 
 #pragma region Pipeline Management
 public:
-	RHIPipeline* CreatePipeline(const wstring& name, const tagRHIPipelineDesc& desc);
-	EResult RemovePipeline(const wstring& name);
-	RHIPipeline* GetPipeline(const wstring& name) const;
-
+	RHIPipeline* GetOrCreatePipeline(const tagRHIPipelineDesc& desc);
 public:
 	void SetDefaultPipeline(RHIPipeline* pipeline) { m_DefaultPipeline = pipeline; }
 	RHIPipeline* GetDefaultPipeline() const { return m_DefaultPipeline; }
@@ -36,7 +32,8 @@ public:
 
 #pragma region Variable
 private:
-	unordered_map<wstring, RHIPipeline*> m_Pipelines;
+	unordered_map<tagRHIPipelineDesc, RHIPipeline*, hash<tagRHIPipelineDesc>> m_Pipelines;
+	//unordered_map<wstring, RHIPipeline*> m_Pipelines;
 	RHIPipeline* m_DefaultPipeline = { nullptr };
 	RHI* m_RHI = { nullptr };
 #pragma endregion

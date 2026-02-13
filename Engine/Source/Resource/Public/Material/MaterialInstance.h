@@ -28,7 +28,6 @@ public:
 
 #pragma region Bind
 	virtual EResult Bind(uint32 slot) override;
-	virtual const wstring& GetPipelineKey() const override;
 #pragma endregion
 
 
@@ -36,6 +35,17 @@ public:
 	void SetBaseMaterial(Material* material);
 	Material* GetBaseMaterial() const { return m_BaseMaterial; }
 #pragma endregion
+
+
+#pragma region Shader
+public:
+	virtual Shader* GetVertexShader() const;
+	virtual Shader* GetPixelShader() const;
+public:
+	virtual void SetVertexShader(Shader* shader);
+	virtual void SetPixelShader(Shader* shader);
+#pragma endregion
+
 
 
 #pragma region Variable

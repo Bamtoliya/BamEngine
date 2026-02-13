@@ -10,6 +10,7 @@
 
 #include "PipelineManager.h"
 #include "RenderPassManager.h"
+#include "RenderTargetManager.h"
 #include "RenderComponent.h"
 
 #include "RHIPipeline.h"
@@ -91,48 +92,28 @@ EResult Renderer::Render(f32 dt)
 	const vector<RenderPass*>& renderPasses = m_RenderPassManager->GetAllRenderPasses();
 	for (const auto& pass : renderPasses)
 	{
-		m_RHI->BindRenderPass(pass);
+		if (IsFailure(m_RHI->BeginRenderPass(pass)))
+			return EResult::Fail;
 		m_RHI->SetViewport(0, 0, 1920, 1080);
 		auto it = m_RenderQueues.find(pass->GetID());
 		if (it != m_RenderQueues.end())
 		{
-			RenderComponents(dt, it->second, pass->GetSortType());
+			RenderComponents(dt, it->second, pass->GetSortType(), pass);
 		}
-		static_cast<SDLGPURHI*>(m_RHI)->ClearRenderPass();
+		if(IsFailure(m_RHI->EndRenderPass()))
+			return EResult::Fail;
 		GetRenderPassDelegate(pass->GetID()).Broadcast(dt);
 	}
-
-
-	//if (m_RHI)
-	//{
-	//	//if (IsFailure(m_RHI->BindRenderTarget(nullptr, nullptr)))
-	//	//{
-	//	//	return EResult::Success;
-	//	//};
-	//	//m_RHI->SetViewport(0, 0, m_RHI->GetSwapChainWidth(), m_RHI->GetSwapChainHeight());
-	//	m_RHI->DrawTexture(m_SceneBuffer->GetTexture());
-	//	//if (m_RHIType == ERHIType::SDLGPU)
-	//	//{
-	//	//	static_cast<SDLGPURHI*>(m_RHI)->ClearRenderPass();
-	//	//}
-	//}
-
-	//for (const auto& pass : renderPasses)
-	//{
-	//	auto it = m_RenderQueues.find(pass->GetID());
-	//	GetRenderPassDelegate(pass->GetID()).Broadcast(dt);
-	//}
-
 	return EResult::Success;
 }
 
-EResult Renderer::RenderComponents(f32 dt, vector<class RenderComponent*> queue, ERenderSortType sortType)
+EResult Renderer::RenderComponents(f32 dt, vector<class RenderComponent*> queue, ERenderSortType sortType, RenderPass* renderPass)
 {
 	for (auto* component : queue)
 	{
 		if (component)
 		{
-			component->Render(dt);
+			component->Render(dt, renderPass);
 		}
 	}
 	return EResult::Success;

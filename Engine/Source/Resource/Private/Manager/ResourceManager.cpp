@@ -87,7 +87,7 @@ EResult ResourceManager::LoadMaterial(const wstring& key, void* arg)
 {
 	if (m_Materials.find(key) != m_Materials.end())
 		return EResult::AlreadyInitialized;
-	Material* material = Material::Create();
+	Material* material = Material::Create(arg);
 	if (!material)
 	{
 		Safe_Release(material);

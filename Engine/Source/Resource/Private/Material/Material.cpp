@@ -10,15 +10,20 @@
 #pragma region Cosntructor&Destructor
 EResult Material::Initialize(void* arg)
 {
-	if (arg)
-	{
-		CAST_DESC
-		m_PipelineKey = desc->PipelineKey;
-	}
-	else
-	{
-		m_PipelineKey = L"Default";
-	}
+	if (!arg) return EResult::Fail;
+	CAST_DESC
+	m_VertexShader = desc->VertexShader;
+	m_PixelShader = desc->PixelShader;
+
+	Safe_AddRef(m_VertexShader);
+	Safe_AddRef(m_PixelShader);
+
+	m_BlendMode = desc->BlendMode;
+	m_CullMode = desc->CullMode;
+	m_FillMode = desc->FillMode;
+	m_DepthMode = desc->DepthMode;
+	m_DepthCompareOp = desc->DepthCompareOp;
+	
 	return EResult::Success;
 }
 Material* Material::Create(void* arg)
@@ -33,6 +38,8 @@ Material* Material::Create(void* arg)
 }
 void Material::Free()
 {
+	Safe_Release(m_VertexShader);
+	Safe_Release(m_PixelShader);
 	__super::Free();
 }
 #pragma endregion

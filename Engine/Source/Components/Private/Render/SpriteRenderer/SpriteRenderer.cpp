@@ -68,7 +68,7 @@ struct SceneUBO
 	mat4 projMatrix;
 };
 
-EResult SpriteRenderer::Render(f32 dt)
+EResult SpriteRenderer::Render(f32 dt, RenderPass* renderPass)
 {
 	if (!m_Sprite || !m_Mesh) return EResult::Success;
 
@@ -83,6 +83,9 @@ EResult SpriteRenderer::Render(f32 dt)
 	MaterialInstance* material = GetMaterialInstance();
 
 	if (!rhi || !vertexBuffer) return EResult::Fail;
+
+	if(IsFailure(BindPipeline(m_Mesh, material, renderPass)))
+		return EResult::Fail;
 
 	material->Bind(0);
 

@@ -10,6 +10,9 @@
 #include "RenderPass.h"
 #include "Vertex.h"
 
+#include "Mesh.h"
+#include "Material.h"
+
 #pragma region Constructor&Destructor
 EResult SDLGPURHI::Initialize(void* arg)
 {
@@ -569,7 +572,7 @@ EResult SDLGPURHI::BindRenderTargets(uint32 count, RHITexture** renderTargets, R
 	//
 	return EResult::Success;
 }
-EResult SDLGPURHI::BindRenderPass(RenderPass* renderPass)
+EResult SDLGPURHI::BeginRenderPass(RenderPass* renderPass)
 {
 	if (m_CurrentRenderPass)
 	{
@@ -638,6 +641,14 @@ EResult SDLGPURHI::BindRenderPass(RenderPass* renderPass)
 
 	return EResult::Success;
 }
+EResult SDLGPURHI::EndRenderPass()
+{
+	if (!m_CurrentRenderPass)
+		return EResult::Fail;
+	SDL_EndGPURenderPass(m_CurrentRenderPass);
+	m_CurrentRenderPass = nullptr;
+	return EResult::Success;
+}
 EResult SDLGPURHI::BindShader(RHIShader* shader)
 {
 	//if (!shader) return EResult::InvalidArgument;
@@ -691,7 +702,8 @@ EResult SDLGPURHI::ClearDepthStencil(RHITexture* depthStencil, f32 depth, uint8 
 }
 EResult SDLGPURHI::ClearRenderPass()
 {
-	if (!m_CurrentRenderPass) return EResult::Fail;
+	if (!m_CurrentRenderPass)
+		return EResult::Fail;
 	SDL_EndGPURenderPass(m_CurrentRenderPass);
 	m_CurrentRenderPass = nullptr;
 	return EResult::Success;

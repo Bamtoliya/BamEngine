@@ -84,7 +84,7 @@ public:
 #pragma region Loop
 public:
 	virtual void	Update(f32 dt) override;
-	virtual EResult	Render(f32 dt) override;
+	virtual EResult	Render(f32 dt, RenderPass* renderPass) override;
 #pragma endregion
 
 #pragma region Getter

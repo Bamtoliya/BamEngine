@@ -51,7 +51,7 @@ private:
 	EResult BeginFrame();
 	EResult EndFrame();
 	EResult Render(f32 dt);
-	EResult RenderComponents(f32 dt, vector<class RenderComponent*> queue, ERenderSortType sortType);
+	EResult RenderComponents(f32 dt, vector<class RenderComponent*> queue, ERenderSortType sortType, RenderPass* renderPass);
 #pragma endregion
 
 #pragma region Queue Management

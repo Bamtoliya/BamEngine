@@ -17,6 +17,7 @@ enum class ERenderSortType
 
 enum class ERenderTargetFormat : uint8
 {
+	RTF_UNKNOWN,
 	RTF_RGBA8,
 	RTF_RGBA16F,
 	RTF_RGBA32F,

@@ -45,12 +45,17 @@ public:
 public:
 	uint32 GetVertexCount() const { return m_VertexCount; }
 	uint32 GetIndexCount() const { return m_IndexCount; }
+public:
+	ETopology GetTopology() const { return m_Topology; }
+
 #pragma endregion
 
 #pragma region Setter
 public:
 	EResult SetVertexBuffer(const void* data, uint32 vertexCount);
 	EResult SetIndexBuffer(const void* data	, uint32 indexCount);
+public:
+	void SetTopology(ETopology topology) { m_Topology = topology; }
 #pragma endregion
 
 #pragma region Variable
@@ -59,6 +64,9 @@ protected:
 	RHIBuffer* m_IndexBuffer = { nullptr };
 
 
+	//Input Layout
+	PROPERTY(CATEGORY("PROP_INFORMATION"))
+	ETopology m_Topology = { ETopology::TriangleList };
 	PROPERTY(CATEGORY("PROP_INFORMATION"), READONLY)
 	uint32 m_VertexCount = { 0 };
 	PROPERTY(CATEGORY("PROP_INFORMATION"), READONLY)

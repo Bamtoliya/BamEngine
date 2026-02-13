@@ -2,18 +2,12 @@
 
 #include "MaterialInterface.h"
 
-struct tagMaterialDesc
-{
-	wstring PipelineKey = {};
-};
-
 BEGIN(Engine)
 
 CLASS()
 class ENGINE_API Material : public MaterialInterface
 {
 	REFLECT_CLASS(Material)
-	using DESC = tagMaterialDesc;
 #pragma region Constructor&Destructor
 private:
 	Material() {}

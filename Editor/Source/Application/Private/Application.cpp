@@ -58,8 +58,6 @@ EResult Application::Initialize(void* arg)
     InitializeResources();
     //Renderer::Get().GetRenderPassDelegate(uiPassID).Remove(uiHandle);
 
-	ResourceManager::Get().LoadTexture(L"SampleTexture", L"Resources/Texture/uv1.png");
-
     return EResult::Success;
 }
 
@@ -130,15 +128,13 @@ void Application::InitializeResources()
     psDesc.FilePath = L"Resources/Shader/sprite.frag.spv";
     psDesc.EntryPoint = "main";
     ResourceManager::Get().LoadShader(L"DefaultPS", &psDesc);
-    
-    tagRHIPipelineDesc pipelineDesc;
-    pipelineDesc.VertexShader = ResourceManager::Get().GetShader(L"DefaultVS")->GetRHIShader();
-    pipelineDesc.PixelShader = ResourceManager::Get().GetShader(L"DefaultPS")->GetRHIShader();
-    PipelineManager::Get().CreatePipeline(L"Default", pipelineDesc);
-    
+       
     tagMaterialDesc materialDesc;
-    materialDesc.PipelineKey = L"Default";
+	materialDesc.VertexShader = ResourceManager::Get().GetShader(L"DefaultVS");
+    materialDesc.PixelShader = ResourceManager::Get().GetShader(L"DefaultPS");
     ResourceManager::Get().LoadMaterial(L"DefaultMaterial", &materialDesc);
+
+    ResourceManager::Get().LoadTexture(L"SampleTexture", L"Resources/Texture/uv1.png");
 }
 #pragma endregion
 

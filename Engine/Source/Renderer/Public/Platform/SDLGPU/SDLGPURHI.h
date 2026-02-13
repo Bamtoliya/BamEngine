@@ -4,6 +4,7 @@
 #include <SDL3/SDL_GPU.h>
 
 static const SDL_GPUTextureFormat SDL_GPUTextureFormats[] = {
+	SDL_GPU_TEXTUREFORMAT_INVALID,
 	SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM,
 	SDL_GPU_TEXTUREFORMAT_R16G16B16A16_FLOAT,
 	SDL_GPU_TEXTUREFORMAT_R32G32B32A32_FLOAT,
@@ -82,7 +83,7 @@ public:
 	virtual EResult BindTexture(RHITexture* texture, uint32 slot) override;
 	virtual EResult BindTextureSampler(RHITexture* texture, RHISampler* sampler, uint32 slot) override;
 	virtual EResult BindRenderTargets(uint32 count, RHITexture** renderTargets, RHITexture* depthStencil) override;
-	virtual EResult BindRenderPass(class RenderPass* renderPass) override;
+	
 public:
 	virtual EResult BindShader(RHIShader* shader) override;
 public:
@@ -94,11 +95,20 @@ public:
 	virtual EResult BindConstantRangeBuffer(void* arg, uint32 slot, uint32 offset, uint32 size) override;
 #pragma endregion
 
+
+#pragma region RenderPass
+	virtual EResult BeginRenderPass(class RenderPass* renderPass) override;
+	virtual EResult EndRenderPass() override;
+	virtual EResult ClearRenderPass() override;
+#pragma endregion
+
+
 #pragma region Clear Resources
 public:
+	
 	virtual EResult ClearRenderTarget(RHITexture* renderTarget, vec4 color) override;
 	virtual EResult ClearDepthStencil(RHITexture* depthStencil, f32 depth, uint8 stencil) override;
-	virtual EResult ClearRenderPass();
+	
 #pragma endregion
 
 #pragma region Draw

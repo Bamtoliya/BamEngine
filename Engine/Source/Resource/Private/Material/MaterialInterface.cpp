@@ -112,13 +112,6 @@ RHISampler* MaterialInterface::GetSampler(const string& name) const
 EResult MaterialInterface::Bind(uint32 slot)
 {
 	RHI* rhi = Renderer::Get().GetRHI();
-	RHIPipeline* pipeline = PipelineManager::Get().GetPipeline(GetPipelineKey());
-	if (!pipeline)
-		pipeline = PipelineManager::Get().GetDefaultPipeline();
-
-	if (IsFailure(rhi->BindPipeline(pipeline)))
-		return EResult::Fail;
-
 	for (auto& [name, textureSlot] : m_TextureSlots)
 	{
 		RHITexture* texture = textureSlot.texture;

@@ -42,7 +42,7 @@ public:
 	virtual void FixedUpdate(f32 dt) {}
 	virtual void Update(f32 dt) {}
 	virtual void LateUpdate(f32 dt) {}
-	virtual EResult Render(f32 dt) { return EResult::Success; }
+	virtual EResult Render(f32 dt, class RenderPass* renderPass = nullptr) { return EResult::Success; }
 #pragma endregion
 
 #pragma region Getter

@@ -36,7 +36,7 @@ public:
 	virtual void	FixedUpdate(f32 dt) override;
 	virtual void	Update(f32 dt) override;
 	virtual void	LateUpdate(f32 dt) override;
-	virtual EResult	Render(f32 dt) override;
+	virtual EResult	Render(f32 dt, RenderPass* renderPass) override;
 #pragma endregion
 
 #pragma region MyRegion

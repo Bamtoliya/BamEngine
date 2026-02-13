@@ -40,23 +40,18 @@ MaterialInstance* MaterialInstance::Clone(void* arg)
 void MaterialInstance::Free()
 {
 	Safe_Release(m_BaseMaterial);
+	Safe_Release(m_VertexShader);
+	Safe_Release(m_PixelShader);
 	__super::Free();
 }
 #pragma endregion
-
 
 EResult MaterialInstance::Bind(uint32 slot)
 {
 	if (!m_BaseMaterial) return EResult::Fail;
 
 	RHI* rhi = Renderer::Get().GetRHI();
-
-	// 파이프라인 바인드
-	RHIPipeline* pipeline = PipelineManager::Get().GetPipeline(GetPipelineKey());
-	if (!pipeline)
-		pipeline = PipelineManager::Get().GetDefaultPipeline();
-	if (IsFailure(rhi->BindPipeline(pipeline)))
-		return EResult::Fail;
+	RenderPass* renderPass = rhi->GetCurrentRenderPass();
 
 	// 1단계: Base Material의 텍스처 슬롯 순회
 	for (auto& [name, baseSlot] : m_BaseMaterial->GetTextureSlots())
@@ -89,12 +84,6 @@ EResult MaterialInstance::Bind(uint32 slot)
 	return EResult::Success;
 }
 
-const wstring& MaterialInstance::GetPipelineKey() const
-{
-	if (!m_PipelineKey.empty()) return m_PipelineKey;
-	return m_BaseMaterial->GetPipelineKey();
-}
-
 void MaterialInstance::SetBaseMaterial(Material* material)
 {
 	if (m_BaseMaterial)
@@ -103,3 +92,35 @@ void MaterialInstance::SetBaseMaterial(Material* material)
 	if (material)
 		Safe_AddRef(m_BaseMaterial);
 }
+
+
+#pragma region Shader
+Shader* MaterialInstance::GetVertexShader() const
+{
+	if (m_VertexShader) return m_VertexShader;
+	return m_BaseMaterial->GetVertexShader();
+}
+
+Shader* MaterialInstance::GetPixelShader() const
+{
+	if (m_PixelShader) return m_PixelShader;
+	return m_BaseMaterial->GetPixelShader();
+}
+
+
+void MaterialInstance::SetVertexShader(Shader* shader)
+{
+	if (m_VertexShader)
+		Safe_Release(m_VertexShader);
+	m_VertexShader = shader;
+	Safe_AddRef(m_VertexShader);
+}
+
+void MaterialInstance::SetPixelShader(Shader* shader)
+{
+	if (m_PixelShader)
+		Safe_Release(m_PixelShader);
+	m_PixelShader = shader;
+	Safe_AddRef(m_PixelShader);
+}
+#pragma endregion

@@ -2,6 +2,7 @@
 
 #include "Base.h"
 #include "RHI.h"
+#include "RHIDefinitions.h"
 
 enum class ERHIResourceType
 {

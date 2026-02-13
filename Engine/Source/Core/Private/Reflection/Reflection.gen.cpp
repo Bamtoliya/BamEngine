@@ -13,6 +13,7 @@
 #include "Components/Public/Transfrom/Transform.h"
 #include "Core/Public/Rect.h"
 #include "Core/Public/Vertex.h"
+#include "Renderer/Public/RHIDefinitions.h"
 #include "Resource/Public/Material/Material.h"
 #include "Resource/Public/Material/MaterialInstance.h"
 #include "Resource/Public/Material/MaterialInterface.h"
@@ -59,6 +60,60 @@ BEGIN_ENUM_REFLECT(ETransformFlag)
     REFLECT_ENUM_ENTRY(ETransformFlag, AllLocked)
     REFLECT_ENUM_ENTRY(ETransformFlag, Default)
 END_ENUM_REFLECT(ETransformFlag)
+// Enum: EPipelineType
+BEGIN_ENUM_REFLECT(EPipelineType)
+    REFLECT_ENUM_ENTRY(EPipelineType, Graphics)
+    REFLECT_ENUM_ENTRY(EPipelineType, Compute)
+END_ENUM_REFLECT(EPipelineType)
+// Enum: EBlendMode
+BEGIN_ENUM_REFLECT(EBlendMode)
+    REFLECT_ENUM_ENTRY(EBlendMode, Opaque)
+    REFLECT_ENUM_ENTRY(EBlendMode, AlphaBlend)
+    REFLECT_ENUM_ENTRY(EBlendMode, Additive)
+    REFLECT_ENUM_ENTRY(EBlendMode, NonPremultiplied)
+    REFLECT_ENUM_ENTRY(EBlendMode, Masked)
+END_ENUM_REFLECT(EBlendMode)
+// Enum: EFillMode
+BEGIN_ENUM_REFLECT(EFillMode)
+    REFLECT_ENUM_ENTRY(EFillMode, Wireframe)
+    REFLECT_ENUM_ENTRY(EFillMode, Solid)
+END_ENUM_REFLECT(EFillMode)
+// Enum: ECullMode
+BEGIN_ENUM_REFLECT(ECullMode)
+    REFLECT_ENUM_ENTRY(ECullMode, None)
+    REFLECT_ENUM_ENTRY(ECullMode, Front)
+    REFLECT_ENUM_ENTRY(ECullMode, Back)
+END_ENUM_REFLECT(ECullMode)
+// Enum: EFrontFace
+BEGIN_ENUM_REFLECT(EFrontFace)
+    REFLECT_ENUM_ENTRY(EFrontFace, Clockwise)
+    REFLECT_ENUM_ENTRY(EFrontFace, CounterClockwise)
+END_ENUM_REFLECT(EFrontFace)
+// Enum: EDepthMode
+BEGIN_ENUM_REFLECT(EDepthMode)
+    REFLECT_ENUM_ENTRY(EDepthMode, None)
+    REFLECT_ENUM_ENTRY(EDepthMode, ReadOnly)
+    REFLECT_ENUM_ENTRY(EDepthMode, ReadWrite)
+END_ENUM_REFLECT(EDepthMode)
+// Enum: ETopology
+BEGIN_ENUM_REFLECT(ETopology)
+    REFLECT_ENUM_ENTRY(ETopology, TriangleList)
+    REFLECT_ENUM_ENTRY(ETopology, TriangleStrip)
+    REFLECT_ENUM_ENTRY(ETopology, LineList)
+    REFLECT_ENUM_ENTRY(ETopology, LineStrip)
+    REFLECT_ENUM_ENTRY(ETopology, PointList)
+END_ENUM_REFLECT(ETopology)
+// Enum: ECompareOp
+BEGIN_ENUM_REFLECT(ECompareOp)
+    REFLECT_ENUM_ENTRY(ECompareOp, Never)
+    REFLECT_ENUM_ENTRY(ECompareOp, Less)
+    REFLECT_ENUM_ENTRY(ECompareOp, Equal)
+    REFLECT_ENUM_ENTRY(ECompareOp, LessOrEqual)
+    REFLECT_ENUM_ENTRY(ECompareOp, Greater)
+    REFLECT_ENUM_ENTRY(ECompareOp, NotEqual)
+    REFLECT_ENUM_ENTRY(ECompareOp, GreaterOrEqual)
+    REFLECT_ENUM_ENTRY(ECompareOp, Always)
+END_ENUM_REFLECT(ECompareOp)
 // Enum: EMaterialParameterType
 BEGIN_ENUM_REFLECT(EMaterialParameterType)
     REFLECT_ENUM_ENTRY(EMaterialParameterType, Float)
@@ -99,6 +154,7 @@ void InitReflectionSystem()
 	REFLECT_STATIC_TYPE(Resource);
 	REFLECT_STATIC_TYPE(Material);
 	REFLECT_STATIC_TYPE(MaterialInstance);
+	REFLECT_STATIC_TYPE(TextureSlot);
 	REFLECT_STATIC_TYPE(MaterialParameter);
 	REFLECT_STATIC_TYPE(MaterialInterface);
 	REFLECT_STATIC_TYPE(Mesh);
@@ -212,6 +268,13 @@ BEGIN_REFLECT(MaterialInstance)
     REFLECT_PROPERTY(m_BaseMaterial, Engine::EPropertyType::Object, "class Material")
 END_REFLECT()
 
+// Struct: TextureSlot
+BEGIN_REFLECT(TextureSlot)
+    REFLECT_PROPERTY(slot, Engine::EPropertyType::UInt32, "uint32")
+    REFLECT_PROPERTY(texture, Engine::EPropertyType::Object, "RHITexture")
+    REFLECT_PROPERTY(SamplerKey, Engine::EPropertyType::String, "wstring")
+END_REFLECT()
+
 // Struct: MaterialParameter
 BEGIN_REFLECT(MaterialParameter)
     REFLECT_PROPERTY(type, Engine::EPropertyType::Enum, "EMaterialParameterType")
@@ -221,7 +284,13 @@ END_REFLECT()
 // Class: MaterialInterface
 BEGIN_REFLECT(MaterialInterface)
     REFLECT_PARENT(Resource)
-    REFLECT_PROPERTY(m_PipelineKey, Engine::EPropertyType::String, "wstring")
+    REFLECT_PROPERTY(m_BlendMode, Engine::EPropertyType::Enum, "EBlendMode", CATEGORY(L"Pipeline"))
+    REFLECT_PROPERTY(m_CullMode, Engine::EPropertyType::Enum, "ECullMode", CATEGORY(L"Pipeline"))
+    REFLECT_PROPERTY(m_FillMode, Engine::EPropertyType::Enum, "EFillMode", CATEGORY(L"Pipeline"))
+    REFLECT_PROPERTY(m_DepthMode, Engine::EPropertyType::Enum, "EDepthMode", CATEGORY(L"Pipeline"))
+    REFLECT_PROPERTY(m_DepthCompareOp, Engine::EPropertyType::Enum, "ECompareOp", CATEGORY(L"Pipeline"))
+    REFLECT_PROPERTY(m_VertexShader, Engine::EPropertyType::Object, "Shader")
+    REFLECT_PROPERTY(m_PixelShader, Engine::EPropertyType::Object, "Shader")
     REFLECT_MAP(m_Parameters, "MaterialParameter", "string")
     REFLECT_MAP(m_TextureSlots, "TextureSlot", "string")
 END_REFLECT()
@@ -229,6 +298,7 @@ END_REFLECT()
 // Class: Mesh
 BEGIN_REFLECT(Mesh)
     REFLECT_PARENT(Resource)
+    REFLECT_PROPERTY(m_Topology, Engine::EPropertyType::Enum, "ETopology", CATEGORY("PROP_INFORMATION"))
     REFLECT_PROPERTY(m_VertexCount, Engine::EPropertyType::UInt32, "uint32", CATEGORY("PROP_INFORMATION"), READONLY)
     REFLECT_PROPERTY(m_IndexCount, Engine::EPropertyType::UInt32, "uint32", CATEGORY("PROP_INFORMATION"), READONLY)
 END_REFLECT()

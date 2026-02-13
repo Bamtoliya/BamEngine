@@ -71,7 +71,7 @@ void Transform::Update(f32 dt)
 	UpdateWorldMatrix();
 }
 
-EResult Transform::Render(f32 dt)
+EResult Transform::Render(f32 dt, RenderPass* renderPass)
 {
 	return EResult::Success;
 }
@@ -79,7 +79,7 @@ EResult Transform::Render(f32 dt)
 
 #pragma region Getter
 const mat4& Transform::GetLocalMatrix()
-{
+{ 
 	UpdateLocalMatrix();
 	return m_LocalMatrix;
 }

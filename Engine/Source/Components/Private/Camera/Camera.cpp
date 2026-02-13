@@ -59,7 +59,7 @@ void Camera::LateUpdate(f32 dt)
 {
 }
 
-EResult Camera::Render(f32 dt)
+EResult Camera::Render(f32 dt, RenderPass* renderPass)
 {
 	return EResult();
 }

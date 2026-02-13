@@ -84,11 +84,13 @@ public:
     virtual EResult BindConstantBuffer(void* arg, uint32 size, uint32 slot) { return EResult::NotImplemented; }
     virtual EResult BindConstantRangeBuffer(void* arg, uint32 slot, uint32 offset, uint32 size) PURE;
 public:
-    virtual EResult BindRenderPass(RenderPass* renderPass) { return EResult::NotImplemented; }
+    virtual EResult BeginRenderPass(RenderPass* renderPass) { return EResult::NotImplemented; }
 #pragma endregion
 
 #pragma region Clear Resources
 public:
+	virtual EResult EndRenderPass() { return EResult::NotImplemented; }
+    virtual EResult ClearRenderPass() { return EResult::NotImplemented; }
     virtual EResult ClearRenderTarget(RHITexture* renderTarget, vec4 color) PURE;
 	virtual EResult ClearDepthStencil(RHITexture* depthStencil, f32 depth, uint8 stencil) PURE;
 #pragma endregion
@@ -114,6 +116,7 @@ public:
 	virtual RHITexture* GetBackBuffer() const { return m_BackBuffer; }
     uint32 GetSwapChainWidth() { return m_SwapChainWidth; }
     uint32 GetSwapChainHeight() { return m_SwapChainHeight; }
+	virtual RenderPass* GetCurrentRenderPass() const { return m_CurrentRenderPass; }
 #pragma endregion
 
 #pragma region Variable
@@ -127,15 +130,13 @@ protected:
     uint32 m_SwapChainHeight = { 0 };
 	RHITexture* m_BackBuffer = { nullptr };
 protected:
-	
-
 	RHITexture* m_CurrentRenderTargets[MAX_RENDER_TARGET_COUNT] = {nullptr};
 	uint32 m_CurrentRenderTargetCount = { 0 };
 	RHITexture* m_CurrentDepthStencil = { nullptr };
 	RHITexture* m_CurrentTextures[MAX_TEXTURE_SLOTS] = { nullptr };
-
 protected:
 	RHIPipeline* m_CurrentPipeline = { nullptr };
+    RenderPass* m_CurrentRenderPass = { nullptr };
 #pragma endregion
 };
 

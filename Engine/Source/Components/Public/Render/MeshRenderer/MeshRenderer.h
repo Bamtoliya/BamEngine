@@ -22,7 +22,7 @@ public:
 
 #pragma region Render
 public:
-	virtual EResult	Render(f32 dt)		override;
+	virtual EResult	Render(f32 dt, RenderPass* renderPass = nullptr)	override;
 #pragma endregion
 
 #pragma region Setter

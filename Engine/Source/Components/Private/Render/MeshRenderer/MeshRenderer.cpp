@@ -48,7 +48,7 @@ void MeshRenderer::Free()
 #pragma endregion
 
 #pragma region Render
-EResult MeshRenderer::Render(f32 dt)
+EResult MeshRenderer::Render(f32 dt, RenderPass* renderPass)
 {
 	if (!m_Mesh) return EResult::Success;
 
