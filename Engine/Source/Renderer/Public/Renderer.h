@@ -25,6 +25,12 @@ struct tagRendererDesc
 	tagRHIDesc RHIDesc = {};
 };
 
+struct tagViewportCameraInfo
+{
+	class Camera* Camera = { nullptr };
+	RenderPassID PassID = { 0 };
+};
+
 
 class ENGINE_API Renderer final : public Base
 {
@@ -57,9 +63,19 @@ private:
 #pragma region Queue Management
 public:
 	void Submit(class RenderComponent* component, RenderPassID passID);
+	void SubmitAllPass(class RenderComponent* component);
 	void ClearRenderQueue(RenderPassID passID);
 	void ClearAllRenderQueues();
 #pragma endregion
+
+#pragma region Viewport Camera Management
+public:
+	void RegisterViewportCamera(Camera* camera, RenderPassID passID);
+	void UnregisterViewportCamera(RenderPassID passID);
+	Camera* GetViewportCamera(RenderPassID passID) const;
+	vector<tagViewportCameraInfo>& GetActiveViewportCameras() { return m_ViewportCameras; }
+#pragma endregion
+
 
 
 #pragma region Getter
@@ -82,6 +98,8 @@ private:
 	RenderTarget* m_DepthBuffer = { nullptr };
 private:
 	class RenderPassManager* m_RenderPassManager = { nullptr };
+private:
+	vector<tagViewportCameraInfo> m_ViewportCameras;
 #pragma endregion
 };
 END

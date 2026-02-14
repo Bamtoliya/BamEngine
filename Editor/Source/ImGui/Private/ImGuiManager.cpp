@@ -108,6 +108,12 @@ EResult ImGuiManager::Initialize(void* arg)
 		return EResult::Fail;
 	}	
 
+	tagViewportPanelDesc scenePanelDesc;
+	scenePanelDesc.Name = L"Scene View";
+	m_ViewportPanel.Initialize(&scenePanelDesc);
+	tagViewportPanelDesc viewportPanelDesc;
+	viewportPanelDesc.Name = L"Game View";
+	m_ViewportPanel2.Initialize(&viewportPanelDesc);
 	return EResult::Success;
 }
 
@@ -139,14 +145,22 @@ void ImGuiManager::Free()
 	default:
 		break;
 	}
-	
+	m_ViewportPanel.Free();
+	m_ViewportPanel2.Free();
 
 	ImGui_ImplSDL3_Shutdown();
 	ImGui::DestroyContext();
 }
+
 #pragma endregion
 
 #pragma region Frame
+
+void ImGuiManager::Update(f32 dt)
+{
+	m_ViewportPanel.Update(dt);
+	m_ViewportPanel2.Update(dt);
+}
 
 void ImGuiManager::Begin()
 {
@@ -224,6 +238,7 @@ void ImGuiManager::Draw()
 	m_HierarchyPanel.Draw();
 	m_InspectorPanel.Draw();
 	m_ViewportPanel.Draw();
+	m_ViewportPanel2.Draw();
 }
 
 void ImGuiManager::MainDockspace()

@@ -27,10 +27,7 @@ RenderTarget* RenderTargetManager::CreateRenderTarget(void* arg)
 	RenderTarget* renderTarget = RenderTarget::Create(arg);
 	if (!renderTarget)
 		return nullptr;
-	// 고유 이름 생성
-	wstring name = L"RenderTarget_" + to_wstring(m_RenderTargets.size() + 1);
-	renderTarget->SetName(name);
-	m_RenderTargets[name] = renderTarget;
+	m_RenderTargets[renderTarget->GetName()] = renderTarget;
 	return renderTarget;
 }
 

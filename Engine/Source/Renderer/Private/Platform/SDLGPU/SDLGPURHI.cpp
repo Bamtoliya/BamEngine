@@ -644,7 +644,7 @@ EResult SDLGPURHI::BeginRenderPass(RenderPass* renderPass)
 EResult SDLGPURHI::EndRenderPass()
 {
 	if (!m_CurrentRenderPass)
-		return EResult::Fail;
+		return EResult::Success;
 	SDL_EndGPURenderPass(m_CurrentRenderPass);
 	m_CurrentRenderPass = nullptr;
 	return EResult::Success;

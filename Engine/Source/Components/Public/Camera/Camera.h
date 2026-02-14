@@ -14,6 +14,15 @@ struct tagCameraDesc
 	f32 Height = { 10.f };
 };
 
+struct tagCameraBuffer
+{
+	mat4 viewMatrix;
+	mat4 projMatrix;
+	mat4 viewProjMatrix;
+	vec3 cameraPosition;
+	float time;
+};
+
 BEGIN(Engine)
 
 CLASS()
@@ -54,6 +63,8 @@ public:
 #pragma endregion
 
 #pragma region Matrix
+public:
+	tagCameraBuffer GetCameraBuffer() const;
 private:
 	void UpdateMatrix();
 #pragma endregion

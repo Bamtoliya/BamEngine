@@ -99,10 +99,17 @@ bool CheckEditCondition(void* instance, const TypeInfo& typeInfo, const Property
 }
 #pragma endregion
 
-void InspectorPanel::Draw()
+void InspectorPanel::Draw(GameObject* gameObject)
 {
 	GameObject* selectedObject = SelectionManager::Get().GetPrimarySelection();
-	ImGui::Begin("Inspector");
+	string windowID = "Inspector";
+	if (gameObject)
+	{
+		windowID += " - " + WStrToStr(gameObject->GetName()) + "##";
+		selectedObject = gameObject;
+	}
+	
+	ImGui::Begin(windowID.c_str());
 	if (selectedObject)
 	{
 		DrawProperties(selectedObject, selectedObject->GetType());
@@ -127,7 +134,6 @@ void InspectorPanel::Draw()
 			ImGui::Text("Component List Placeholder");
 			ImGui::EndPopup();
 		}
-
 	}
 	else
 	{

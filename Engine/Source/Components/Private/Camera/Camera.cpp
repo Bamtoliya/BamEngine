@@ -100,3 +100,16 @@ void Camera::UpdateMatrix()
 			SetOrthographic(m_Width, m_Height, m_Near, m_Far);
 	}
 }
+
+#pragma region Matrix
+tagCameraBuffer Camera::GetCameraBuffer() const
+{
+	tagCameraBuffer buffer;
+	buffer.viewMatrix = m_ViewMatrix;
+	buffer.projMatrix = m_ProjMatrix;
+	buffer.viewProjMatrix = m_ProjMatrix * m_ViewMatrix;
+	if (m_Owner)
+		buffer.cameraPosition = m_Owner->GetComponent<Transform>()->GetWorldPosition();
+	return buffer;
+}
+#pragma endregion

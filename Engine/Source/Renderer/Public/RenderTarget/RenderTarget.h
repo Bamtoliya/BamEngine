@@ -12,6 +12,7 @@ struct tagRenderTargetDesc
 	uint32						Width		= 800;
 	uint32						Height		= 600;
 	vec4						ClearColor	= vec4(0.0f, 0.0f, 0.0f, 1.0f);
+	wstring						Name = L"RenderTarget";
 };
 
 BEGIN(Engine)
@@ -44,8 +45,8 @@ public:
 
 #pragma region Name Management
 public:
-	const wstring& GetName() const { return m_Name; }
-	void SetName(const wstring& name) { m_Name = name; }
+	const wstring& GetName() const { return m_Desc.Name; }
+	void SetName(const wstring& name) { m_Desc.Name = name; }
 #pragma endregion
 
 
@@ -54,7 +55,6 @@ public:
 private:
 	RHITexture* m_Texture = { nullptr };
 	DESC m_Desc;
-	wstring m_Name;
 #pragma endregion
 };
 END

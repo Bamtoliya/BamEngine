@@ -11,7 +11,16 @@ EResult RenderTarget::Initialize(void* arg)
 	if (!arg) return EResult::InvalidArgument;
 	
 	CAST_DESC
-	memcpy(&m_Desc, desc, sizeof(DESC));
+	m_Desc.Format = desc->Format;
+	m_Desc.Usage = desc->Usage;
+	m_Desc.BindFlag = desc->BindFlag;
+	m_Desc.Type = desc->Type;
+	m_Desc.TextureType = desc->TextureType;
+	m_Desc.Width = desc->Width;
+	m_Desc.Height = desc->Height;
+	m_Desc.ClearColor = desc->ClearColor;
+	m_Desc.Name = desc->Name;
+
 	RHI* rhi = Renderer::Get().GetRHI();
 	if(m_Desc.Type == ERenderTargetType::DepthStencil)
 	{

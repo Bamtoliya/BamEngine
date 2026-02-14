@@ -168,7 +168,7 @@ void Application::Run(int argc, char* argv[])
         timeManager.Update();
 		f32 dt = timeManager.GetDeltaTime();
 		UpdateTitle(dt);
-        Test(dt);
+		ImGuiManager::Get().Update(dt);
 		m_Runtime->RunFrame(dt);
     }
 }

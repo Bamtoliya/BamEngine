@@ -16,6 +16,9 @@
 #include "RHIPipeline.h"
 
 #include "Shader.h"
+#include "Camera.h"
+
+#include "Transform.h"
 
 IMPLEMENT_SINGLETON(Renderer)
 
@@ -87,20 +90,42 @@ EResult Renderer::BeginFrame()
 	return EResult::Fail;
 }
 
+
+
 EResult Renderer::Render(f32 dt)
 {
+	unordered_map<RenderPassID, vector<Camera*>> jobsPerPass;
+
+	for (const auto& viewportInfo : m_ViewportCameras)
+	{
+		jobsPerPass[viewportInfo.PassID].push_back(viewportInfo.Camera);
+	}
+
 	const vector<RenderPass*>& renderPasses = m_RenderPassManager->GetAllRenderPasses();
 	for (const auto& pass : renderPasses)
 	{
-		if (IsFailure(m_RHI->BeginRenderPass(pass)))
-			return EResult::Fail;
-		m_RHI->SetViewport(0, 0, 1920, 1080);
-		auto it = m_RenderQueues.find(pass->GetID());
-		if (it != m_RenderQueues.end())
+		auto jobsIt = jobsPerPass.find(pass->GetID());
+		if (jobsIt != jobsPerPass.end())
 		{
-			RenderComponents(dt, it->second, pass->GetSortType(), pass);
+			const vector<Camera*>& cameras = jobsIt->second;
+			for (Camera* cam : cameras)
+			{
+				tagCameraBuffer cameraBuffer = cam->GetCameraBuffer();
+				cameraBuffer.time = dt;
+				m_RHI->BindConstantBuffer(&cameraBuffer, sizeof(tagCameraBuffer), 0);
+				if (IsFailure(m_RHI->BeginRenderPass(pass)))
+					return EResult::Fail;
+				m_RHI->SetViewport(0, 0, 1920, 1080);
+				auto it = m_RenderQueues.find(pass->GetID());
+				if (it != m_RenderQueues.end())
+				{
+					RenderComponents(dt, it->second, pass->GetSortType(), pass);
+				}
+				if (IsFailure(m_RHI->EndRenderPass()))
+					return EResult::Fail;
+			}
 		}
-		if(IsFailure(m_RHI->EndRenderPass()))
+		if (IsFailure(m_RHI->EndRenderPass()))
 			return EResult::Fail;
 		GetRenderPassDelegate(pass->GetID()).Broadcast(dt);
 	}
@@ -132,6 +157,8 @@ EResult Renderer::EndFrame()
 	{
 		RELEASE_VECTOR(pair.second);
 	}
+	m_RenderQueues.clear();
+	m_ViewportCameras.clear();
 	return EResult::Success;
 }
 #pragma endregion
@@ -142,6 +169,14 @@ void Renderer::Submit(class RenderComponent* component, RenderPassID passID)
 {
 	Safe_AddRef(component);
 	m_RenderQueues[passID].push_back(component);
+}
+void Renderer::SubmitAllPass(RenderComponent* component)
+{
+	for (auto& pair : m_RenderPassManager->GetAllRenderPasses())
+	{
+		m_RenderQueues[pair->GetID()].push_back(component);
+		Safe_AddRef(component);
+	}
 }
 
 void Renderer::ClearRenderQueue(RenderPassID passID)
@@ -164,3 +199,28 @@ void Renderer::ClearAllRenderQueues()
 }
 #pragma endregion
 
+#pragma region Viewport Camera Management
+
+void Renderer::RegisterViewportCamera(Camera* camera, RenderPassID passID)
+{
+	m_ViewportCameras.push_back({ camera, passID });
+}
+
+void Renderer::UnregisterViewportCamera(RenderPassID passID)
+{
+	m_ViewportCameras.erase(std::remove_if(m_ViewportCameras.begin(), m_ViewportCameras.end(),
+		[passID](const tagViewportCameraInfo& info) { return info.PassID == passID; }), m_ViewportCameras.end());
+}
+
+Camera* Renderer::GetViewportCamera(RenderPassID passID) const
+{
+	for (const auto& info : m_ViewportCameras)
+	{
+		if (info.PassID == passID)
+		{
+			return info.Camera;
+		}
+	}
+	return nullptr;
+}
+#pragma endregion

@@ -6,7 +6,7 @@ BEGIN(Editor)
 class InspectorPanel final
 {
 public:
-	void Draw();
+	void Draw(GameObject* gameObject = nullptr);
 private:
 	bool DrawProperties(void* instance, const TypeInfo& typeInfo);
 	string SanitizeVarName(const string& varName);

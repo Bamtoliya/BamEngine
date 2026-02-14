@@ -64,8 +64,6 @@ void SpriteRenderer::LateUpdate(f32 dt)
 struct SceneUBO
 {
 	mat4 worldMatrix;
-	mat4 viewMatrix;
-	mat4 projMatrix;
 };
 
 EResult SpriteRenderer::Render(f32 dt, RenderPass* renderPass)
@@ -73,9 +71,6 @@ EResult SpriteRenderer::Render(f32 dt, RenderPass* renderPass)
 	if (!m_Sprite || !m_Mesh) return EResult::Success;
 
 	RHI* rhi = Renderer::Get().GetRHI();
-
-	Camera* mainCamera = CameraManager::Get().GetMainCamera();
-	if (!mainCamera) return EResult::Fail;
 
 	RHIBuffer* vertexBuffer = m_Mesh->GetVertexBuffer();
 	RHIBuffer* indexBuffer = m_Mesh->GetIndexBuffer();
@@ -87,15 +82,12 @@ EResult SpriteRenderer::Render(f32 dt, RenderPass* renderPass)
 	if(IsFailure(BindPipeline(m_Mesh, material, renderPass)))
 		return EResult::Fail;
 
-	material->Bind(0);
+	material->Bind(2);
 
 	SceneUBO uboData;
 	uboData.worldMatrix = m_Owner->GetComponent<Transform>()->GetWorldMatrix();
-	// 카메라의 View/Projection 행렬
-	uboData.viewMatrix = mainCamera->GetViewMatrix();
-	uboData.projMatrix = mainCamera->GetProjMatrix();
 
-	rhi->BindConstantBuffer((void*)&uboData, sizeof(SceneUBO), 0);
+	rhi->BindConstantBuffer((void*)&uboData, sizeof(SceneUBO), 1);
 
 	rhi->BindVertexBuffer(vertexBuffer);
 

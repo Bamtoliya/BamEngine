@@ -30,6 +30,12 @@ public:
 	virtual void Free()override;
 #pragma endregion
 
+#pragma region Update
+public:
+	void Update(f32 dt);
+#pragma endregion
+
+
 public:
 	void Begin();
 	void End();
@@ -97,6 +103,7 @@ private:
 	HierarchyPanel m_HierarchyPanel;
 	InspectorPanel m_InspectorPanel;
 	ViewportPanel m_ViewportPanel;
+	ViewportPanel m_ViewportPanel2;
 
 #pragma endregion
 #pragma endregion

@@ -6,20 +6,62 @@
 #include "ImViewGuizmo.h"
 
 #include "CameraManager.h"
+#include "SelectionManager.h"
 
 
 #pragma region Contructor&Destructor
 void ViewportPanel::Initialize(void* arg)
 {
+	if (arg)
+	{
+		CAST_DESC
+		m_ViewportName = desc->Name;
+		m_EditorCamera = EditorCamera::Create();
+		m_EditorCamera->SetName(m_ViewportName + L"_Camera");
+		tagRenderTargetDesc rtDesc;
+		rtDesc.Width = 1920;
+		rtDesc.Height = 1080;
+		rtDesc.BindFlag = ERenderTargetBindFlag::RTBF_ShaderResource | ERenderTargetBindFlag::RTBF_RenderTarget;
+		rtDesc.ClearColor = vec4(0.4f, 0.1f, 0.1f, 1.0f);
+		rtDesc.Name = m_ViewportName + L"_RenderTarget";
+		m_RenderTarget = RenderTargetManager::Get().CreateRenderTarget(&rtDesc);
+		tagRenderTargetDesc depthStencilDesc;
+		depthStencilDesc.Width = 1920;
+		depthStencilDesc.Height = 1080;
+		depthStencilDesc.Type = ERenderTargetType::DepthStencil;
+		depthStencilDesc.Usage = ERenderTargetUsage::RTU_DepthStencil;
+		depthStencilDesc.BindFlag = ERenderTargetBindFlag::RTBF_ShaderResource | ERenderTargetBindFlag::RTBF_DepthStencil | ERenderTargetBindFlag::RTBF_RenderTarget;
+		depthStencilDesc.Format = ERenderTargetFormat::RTF_DEPTH24STENCIL8;
+		depthStencilDesc.Name = m_ViewportName + L"_DepthStencil";
+		m_DepthStencil = RenderTargetManager::Get().CreateRenderTarget(&depthStencilDesc);
+		wstring passName = m_ViewportName + L"_Pass";
+		m_PassID = RenderPassManager::Get().RegisterRenderPass(passName, { m_RenderTarget->GetName()}, m_DepthStencil->GetName(), ERenderPassLoadOperation::RPLO_Clear, ERenderPassStoreOperation::RPSO_Store, vec4(0.0f, 0.0f, 0.0f, -1.0f), 0, ERenderSortType::FrontToBack);
+	}
+}
+void ViewportPanel::Free()
+{
+	Safe_Release(m_EditorCamera);
+	Safe_Release(m_RenderTarget);
+	Safe_Release(m_DepthStencil);
 }
 #pragma endregion
 
+void ViewportPanel::Update(f32 dt)
+{
+	m_EditorCamera->FixedUpdate(dt);
+	m_EditorCamera->Update(dt);
+	m_EditorCamera->LateUpdate(dt);
+	Renderer::Get().RegisterViewportCamera(m_EditorCamera->GetCamera(), m_PassID);
+}
+
 void ViewportPanel::Draw()
 {
+	ImGui::PushID(this);
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
 	bool opened = true;
 	ImGuiWindowFlags window_flags = ImGuiWindowFlags_MenuBar;
-	if (ImGui::Begin("Viewport", &opened, window_flags))
+	string windowID = "Viewport##" + WStrToStr(m_ViewportName);
+	if (ImGui::Begin(windowID.c_str(), &opened, window_flags))
 	{
 		DrawOptionsBar();
 		ImVec2 panelSize = ImGui::GetContentRegionAvail();
@@ -27,14 +69,13 @@ void ViewportPanel::Draw()
 		uint32 height = (uint32)panelSize.y;
 		f32 panelAspectRatio = (f32)width / (f32)height;
 
-		RenderTarget* target = RenderTargetManager::Get().GetRenderTarget(L"RenderTarget_1");
-		if (target)
+		if (m_RenderTarget)
 		{
-			RHITexture* texture = target->GetTexture();
+			RHITexture* texture = m_RenderTarget->GetTexture();
 			if (texture)
 			{
-				f32 imageWidth = (f32)target->GetWidth();
-				f32 imageHeight = (f32)target->GetHeight();
+				f32 imageWidth = (f32)m_RenderTarget->GetWidth();
+				f32 imageHeight = (f32)m_RenderTarget->GetHeight();
 
 				f32 imageRatio = imageWidth / imageHeight;
 
@@ -70,6 +111,9 @@ void ViewportPanel::Draw()
 	}
 	ImGui::End();
 	ImGui::PopStyleVar();
+
+	m_InspectorPanel.Draw(m_EditorCamera);
+	ImGui::PopID();
 }
 
 void ViewportPanel::DrawGuizmo(ImVec2 size)
@@ -89,9 +133,9 @@ void ViewportPanel::DrawGuizmo(ImVec2 size)
 	f32 halfW = size.x;
 	f32 halfH = size.y;
 
-	Camera* mainCamera = CameraManager::Get().GetMainCamera();
-	mat4 projMatrix = mainCamera->GetProjMatrix();
-	mat4 viewMatrix = mainCamera->GetViewMatrix();
+	Camera* camera = m_EditorCamera->GetCamera();
+	mat4 projMatrix = camera->GetProjMatrix();
+	mat4 viewMatrix = camera->GetViewMatrix();
 
 	Transform* transform = selectedObject->GetComponent<Transform>();
 	if (!transform)
