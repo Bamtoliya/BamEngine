@@ -6,6 +6,7 @@
 #include "PipelineManager.h"
 #include "RHI.h"
 #include "RenderTargetManager.h"
+#include "GameObject.h"
 
 void RenderComponent::LateUpdate(f32 dt)
 {

@@ -8,7 +8,6 @@
 #include "SDLGPUPipeline.h"
 #include "RenderTargetManager.h"
 #include "RenderPass.h"
-#include "Vertex.h"
 
 #include "Mesh.h"
 #include "Material.h"

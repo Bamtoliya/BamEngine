@@ -6,13 +6,13 @@
 
 // [헤더 파일 자동 포함]
 #include "Components/Public/Camera/Camera.h"
+#include "Components/Public/Collider/Collider.h"
 #include "Components/Public/Component.h"
 #include "Components/Public/Render/MeshRenderer/MeshRenderer.h"
 #include "Components/Public/Render/RenderComponent.h"
 #include "Components/Public/Render/SpriteRenderer/SpriteRenderer.h"
 #include "Components/Public/Transfrom/Transform.h"
-#include "Core/Public/Rect.h"
-#include "Core/Public/Vertex.h"
+#include "Core/Public/Structs.h"
 #include "Renderer/Public/RHIDefinitions.h"
 #include "Resource/Public/Material/Material.h"
 #include "Resource/Public/Material/MaterialInstance.h"
@@ -144,6 +144,7 @@ void InitReflectionSystem()
 	REFLECT_STATIC_TYPE(tagComponentDesc);
 	REFLECT_STATIC_TYPE(Component);
 	REFLECT_STATIC_TYPE(Camera);
+	REFLECT_STATIC_TYPE(Collider);
 	REFLECT_STATIC_TYPE(RenderComponent);
 	REFLECT_STATIC_TYPE(MeshRenderer);
 	REFLECT_STATIC_TYPE(SpriteRenderer);
@@ -190,6 +191,11 @@ BEGIN_REFLECT(Camera)
     REFLECT_PROPERTY(m_IsPerspective, Engine::EPropertyType::Bool, "bool")
     REFLECT_PROPERTY(m_ProjMatrix, Engine::EPropertyType::Matrix4, "glm::mat4", READONLY)
     REFLECT_PROPERTY(m_ViewMatrix, Engine::EPropertyType::Matrix4, "glm::mat4", READONLY)
+END_REFLECT()
+
+// Class: Collider
+BEGIN_REFLECT(Collider)
+    REFLECT_PARENT(Component)
 END_REFLECT()
 
 // Class: RenderComponent

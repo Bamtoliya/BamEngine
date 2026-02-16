@@ -5,7 +5,6 @@
 #include "SDLShader.h"
 #include "SDLTexture.h"
 #include "SDLPipeline.h"
-#include "Vertex.h"
 
 #pragma region Constructor&Destructor
 EResult SDLRendererRHI::Initialize(void* arg)

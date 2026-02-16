@@ -2,7 +2,6 @@
 
 #include "SDLShader.h"
 #include "SDLBuffer.h"
-#include "Vertex.h"
 
 #pragma region Constructor&Destructor
 EResult SDLShader::Initialize(void* arg)

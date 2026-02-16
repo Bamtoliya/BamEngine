@@ -1,8 +1,6 @@
 ﻿#pragma once
 
 #include "Texture.h"
-#include "Rect.h"
-#include "ReflectionMacro.h"
 
 struct tagSpriteCreateDesc : public tagResourceCreateDesc
 {

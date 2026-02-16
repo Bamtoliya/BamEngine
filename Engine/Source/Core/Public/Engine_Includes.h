@@ -61,6 +61,7 @@ using namespace glm;
 #include "Delegate.h"
 #include "EnumBit.h"
 #include "RenderTypes.h"
+#include "Base.h"
 #pragma endregion
 using namespace Engine;
 

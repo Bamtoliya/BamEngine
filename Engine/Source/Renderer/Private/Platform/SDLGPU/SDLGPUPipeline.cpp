@@ -1,7 +1,6 @@
 ﻿#pragma once
 
 #include "SDLGPUPipeline.h"
-#include "Vertex.h"
 
 #pragma region Helper
 static SDL_GPUCullMode ToSDLCullMode(ECullMode mode) {

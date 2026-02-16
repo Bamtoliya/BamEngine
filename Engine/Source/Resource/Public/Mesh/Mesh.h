@@ -1,7 +1,6 @@
 ﻿#pragma once
 
 #include "RHIBuffer.h"
-#include "Vertex.h"
 #include "Resource.h"
 
 BEGIN(Engine)

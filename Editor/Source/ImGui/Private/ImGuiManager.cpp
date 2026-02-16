@@ -67,8 +67,11 @@ EResult ImGuiManager::Initialize(void* arg)
 			builder.BuildRanges(&ranges);
 		}
 
-		// 폰트 로드
-		io.Fonts->AddFontFromFileTTF(fontPath.c_str(), 18.0f, nullptr, ranges.Data);
+		ImFontConfig fontConfig;
+		fontConfig.OversampleH = 1; // 메모리 최적화: 기본값 3 -> 1 (폰트 아틀라스 크기 축소)
+		fontConfig.OversampleV = 1;
+		fontConfig.PixelSnapH = true;
+		io.Fonts->AddFontFromFileTTF(fontPath.c_str(), 18.0f, &fontConfig, ranges.Data);
 	}
 	else
 	{
