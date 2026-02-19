@@ -10,7 +10,7 @@ EResult EditorCamera::Initialize(void* arg)
 	m_Transform = AddComponent<Transform>();
 	Safe_AddRef(m_Transform);
 	// Camera 컴포넌트 추가
-	m_Camera = AddComponent<Camera>();
+	m_Camera = AddComponent<Camera>(arg);
 	Safe_AddRef(m_Camera);
 	return EResult::Success;
 }

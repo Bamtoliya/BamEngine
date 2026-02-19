@@ -1,15 +1,6 @@
 ﻿#pragma once
 #include "Runtime.h"
 
-
-#ifdef _DEBUG
-#include "GameObject.h"
-#include "Transform.h"
-#include "MeshRenderer.h"
-#include "Mesh.h"
-#include "SDLShader.h"
-#endif
-
 IMPLEMENT_SINGLETON(Runtime)
 
 #pragma region Constructor&Destructor

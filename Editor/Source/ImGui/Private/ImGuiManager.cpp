@@ -113,6 +113,11 @@ EResult ImGuiManager::Initialize(void* arg)
 
 	tagViewportPanelDesc scenePanelDesc;
 	scenePanelDesc.Name = L"Scene View";
+	scenePanelDesc.Type = EViewportType::Scene;
+	scenePanelDesc.CameraType = EViewportCameraType::Orthographic;
+	scenePanelDesc.ViewportMode = EViewportMode::Textured;
+	scenePanelDesc.RenderTargetWidth = g_WindowWidth;
+	scenePanelDesc.RenderTargetHeight = g_WindowHeight;
 	m_ViewportPanel.Initialize(&scenePanelDesc);
 	tagViewportPanelDesc viewportPanelDesc;
 	viewportPanelDesc.Name = L"Game View";
