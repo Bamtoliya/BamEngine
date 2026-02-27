@@ -61,11 +61,6 @@ void SpriteRenderer::LateUpdate(f32 dt)
 	__super::LateUpdate(dt);
 }
 
-struct SceneUBO
-{
-	mat4 worldMatrix;
-};
-
 EResult SpriteRenderer::Render(f32 dt, RenderPass* renderPass)
 {
 	if (!m_Sprite || !m_Mesh) return EResult::Success;
@@ -74,7 +69,6 @@ EResult SpriteRenderer::Render(f32 dt, RenderPass* renderPass)
 
 	RHIBuffer* vertexBuffer = m_Mesh->GetVertexBuffer();
 	RHIBuffer* indexBuffer = m_Mesh->GetIndexBuffer();
-	RHITexture* texture = m_Sprite->GetTexture()->GetRHITexture();
 	MaterialInstance* material = GetMaterialInstance();
 
 	if (!rhi || !vertexBuffer) return EResult::Fail;

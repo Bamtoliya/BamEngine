@@ -86,7 +86,7 @@ void Application::InitializeLocalization()
 #pragma region Resources
 void Application::InitializeResources()
 {
-#pragma region Test
+#pragma region Quad
     {
         // 1. 사각형 정점 데이터 정의 (화면 좌표계: Top-Left가 0,0 가정 시 대략적인 중앙 배치)
         // 색상은 SDLRendererRHI 구현에 따라 다를 수 있으나 Vertex 구조체에 맞춰 설정
@@ -117,6 +117,77 @@ void Application::InitializeResources()
     }
 #pragma endregion
 
+
+#pragma region Cube
+    {
+        vector<Vertex> vertices = {
+            // 앞면 (Z+)
+            { { -1.0f,  1.0f,  1.0f }, { 0, 0, 1 }, { 0, 0 }, { 1, 0, 0 } },
+            { {  1.0f,  1.0f,  1.0f }, { 0, 0, 1 }, { 1, 0 }, { 1, 0, 0 } },
+            { {  1.0f, -1.0f,  1.0f }, { 0, 0, 1 }, { 1, 1 }, { 1, 0, 0 } },
+            { { -1.0f, -1.0f,  1.0f }, { 0, 0, 1 }, { 0, 1 }, { 1, 0, 0 } },
+
+            // 뒷면 (Z-)
+            { {  1.0f,  1.0f, -1.0f }, { 0, 0, -1 }, { 0, 0 }, { -1, 0, 0 } },
+            { { -1.0f,  1.0f, -1.0f }, { 0, 0, -1 }, { 1, 0 }, { -1, 0, 0 } },
+            { { -1.0f, -1.0f, -1.0f }, { 0, 0, -1 }, { 1, 1 }, { -1, 0, 0 } },
+            { {  1.0f, -1.0f, -1.0f }, { 0, 0, -1 }, { 0, 1 }, { -1, 0, 0 } },
+
+            // 윗면 (Y+)
+            { { -1.0f,  1.0f, -1.0f }, { 0, 1, 0 }, { 0, 0 }, { 1, 0, 0 } },
+            { {  1.0f,  1.0f, -1.0f }, { 0, 1, 0 }, { 1, 0 }, { 1, 0, 0 } },
+            { {  1.0f,  1.0f,  1.0f }, { 0, 1, 0 }, { 1, 1 }, { 1, 0, 0 } },
+            { { -1.0f,  1.0f,  1.0f }, { 0, 1, 0 }, { 0, 1 }, { 1, 0, 0 } },
+
+            // 아랫면 (Y-)
+            { { -1.0f, -1.0f,  1.0f }, { 0, -1, 0 }, { 0, 0 }, { 1, 0, 0 } },
+            { {  1.0f, -1.0f,  1.0f }, { 0, -1, 0 }, { 1, 0 }, { 1, 0, 0 } },
+            { {  1.0f, -1.0f, -1.0f }, { 0, -1, 0 }, { 1, 1 }, { 1, 0, 0 } },
+            { { -1.0f, -1.0f, -1.0f }, { 0, -1, 0 }, { 0, 1 }, { 1, 0, 0 } },
+
+            // 우측면 (X+)
+            { {  1.0f,  1.0f,  1.0f }, { 1, 0, 0 }, { 0, 0 }, { 0, 0, -1 } },
+            { {  1.0f,  1.0f, -1.0f }, { 1, 0, 0 }, { 1, 0 }, { 0, 0, -1 } },
+            { {  1.0f, -1.0f, -1.0f }, { 1, 0, 0 }, { 1, 1 }, { 0, 0, -1 } },
+            { {  1.0f, -1.0f,  1.0f }, { 1, 0, 0 }, { 0, 1 }, { 0, 0, -1 } },
+
+            // 좌측면 (X-)
+            { { -1.0f,  1.0f, -1.0f }, { -1, 0, 0 }, { 0, 0 }, { 0, 0, 1 } },
+            { { -1.0f,  1.0f,  1.0f }, { -1, 0, 0 }, { 1, 0 }, { 0, 0, 1 } },
+            { { -1.0f, -1.0f,  1.0f }, { -1, 0, 0 }, { 1, 1 }, { 0, 0, 1 } },
+            { { -1.0f, -1.0f, -1.0f }, { -1, 0, 0 }, { 0, 1 }, { 0, 0, 1 } }
+        };
+
+        // 2. 인덱스 데이터 정의 (36개 인덱스 - 6면 * 2삼각형 * 3정점)
+        vector<uint32> indices;
+        for (uint32 i = 0; i < 6; ++i)
+        {
+            uint32 startIdx = i * 4;
+            // 첫 번째 삼각형
+            indices.push_back(startIdx + 0);
+            indices.push_back(startIdx + 1);
+            indices.push_back(startIdx + 2);
+            // 두 번째 삼각형
+            indices.push_back(startIdx + 0);
+            indices.push_back(startIdx + 2);
+            indices.push_back(startIdx + 3);
+        }
+
+        // 3. Mesh 생성 정보 설정
+        tagMeshCreateInfo meshDesc = {};
+        meshDesc.VertexData = vertices.data();
+        meshDesc.VertexCount = static_cast<uint32>(vertices.size());
+        meshDesc.VertexStride = sizeof(Vertex);
+        meshDesc.IndexData = indices.data();
+        meshDesc.IndexStride = sizeof(uint32);
+        meshDesc.IndexCount = static_cast<uint32>(indices.size());
+
+        // 4. ResourceManager를 통한 로드
+        ResourceManager::Get().LoadMesh(L"CubeMesh", &meshDesc);
+    }
+#pragma endregion
+
+
     tagShaderDesc vsDesc;
     vsDesc.ShaderType = EShaderType::Vertex;
     vsDesc.FilePath = L"Resources/Shader/sprite.vert.spv";
@@ -135,6 +206,11 @@ void Application::InitializeResources()
     ResourceManager::Get().LoadMaterial(L"DefaultMaterial", &materialDesc);
 
     ResourceManager::Get().LoadTexture(L"SampleTexture", L"Resources/Texture/uv1.png");
+
+
+#ifdef _DEBUG
+	
+#endif
 }
 #pragma endregion
 

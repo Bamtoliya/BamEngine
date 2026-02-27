@@ -51,6 +51,9 @@ EResult Runtime::Initialize(void* arg)
 	m_SamplerManager = SamplerManager::Create(m_Renderer->GetRHI());
 	if (!m_SamplerManager) return EResult::Fail;
 
+	m_CollisionManager = CollisionManager::Create();
+	if (!m_CollisionManager) return EResult::Fail;
+
 	m_LocalizationManager->LoadData();
 	return EResult::Success;
 }
@@ -67,6 +70,7 @@ void Runtime::Free()
 
 	ComponentRegistry::Destroy();
 	ReflectionRegistry::Destroy();
+	CollisionManager::Destroy();
 	LocalizationManager::Destroy();
 
 	CameraManager::Destroy();

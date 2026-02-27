@@ -22,19 +22,15 @@ public:
 
 #pragma region Render
 public:
-	virtual EResult	Render(f32 dt, RenderPass* renderPass = nullptr)	override;
+	virtual EResult	Render(f32 dt, RenderPass* renderPass = nullptr)override;
 #pragma endregion
 
 #pragma region Setter
-public:
-	void SetMesh(class Mesh* mesh);
+
 #pragma endregion
 
 #pragma region Variable
 private:
-
-	PROPERTY(NAME(L"Mesh"))
-	class Mesh* m_Mesh = { nullptr };
 #pragma endregion
 };
 END

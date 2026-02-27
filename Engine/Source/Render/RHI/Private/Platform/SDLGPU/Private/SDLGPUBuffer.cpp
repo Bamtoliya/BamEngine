@@ -6,7 +6,6 @@
 #pragma region Constructor&Destructor
 EResult SDLGPUBuffer::Initialize(const DESC& desc)
 {
-	memcpy(m_Data.data(), desc.InitialData, desc.Size);
 	SDLGPURHI* rhi = static_cast<SDLGPURHI*>(m_RHI);
 	SDL_GPUDevice* device = static_cast<SDL_GPUDevice*>(rhi->GetNativeRHI());
 
@@ -29,6 +28,7 @@ EResult SDLGPUBuffer::Initialize(const DESC& desc)
 
 	if (desc.InitialData)
 	{
+		memcpy(m_Data.data(), desc.InitialData, desc.Size);
 		rhi->UploadBufferData(m_GPUBuffer, desc.InitialData, desc.Size);
 	}
 
@@ -60,15 +60,15 @@ void SDLGPUBuffer::Free()
 void SDLGPUBuffer::SetData(const void* data, uint32 size)
 {
 	if (!data || size == 0) return;
+	if (size > m_Size) size = m_Size;
 	if (size > m_Data.size())
 	{
-		m_Size = size;
 		m_Data.resize(size);
 	}
 	memcpy(m_Data.data(), data, size);
 	SDLGPURHI* rhi = static_cast<SDLGPURHI*>(m_RHI);
 	if (rhi && m_GPUBuffer)
 	{
-		rhi->UploadBufferData(m_GPUBuffer, m_Data.data(), m_Size);
+		rhi->UploadBufferData(m_GPUBuffer, m_Data.data(), size);
 	}
 }

@@ -4,7 +4,7 @@
 #include "GameObject.h"
 #include "Transform.h"
 #include "Renderer.h"
-#include "Mesh.h"
+#include "MeshFilter.h"
 
 REGISTER_COMPONENT(MeshRenderer)
 
@@ -42,49 +42,56 @@ Component* MeshRenderer::Clone(GameObject* owner, void* arg)
 
 void MeshRenderer::Free()
 {
-	Safe_Release(m_Mesh);
 	__super::Free();
 }
 #pragma endregion
 
 #pragma region Render
+
+
 EResult MeshRenderer::Render(f32 dt, RenderPass* renderPass)
 {
-	if (!m_Mesh) return EResult::Success;
-
-	RHI* rhi = Renderer::Get().GetRHI();
-
-	RHIBuffer* vertexBuffer = m_Mesh->GetVertexBuffer();
-	RHIBuffer* indexBuffer = m_Mesh->GetIndexBuffer();
-
-	rhi->BindConstantBuffer((void*)&m_Owner->GetComponent<Transform>()->GetWorldMatrix(), 0);
-
-	if (!rhi || !vertexBuffer) return EResult::Fail;
-
-	rhi->BindVertexBuffer(vertexBuffer);
-
-	if (indexBuffer)
+	MeshFilter* meshFilter = m_Owner->GetComponent<MeshFilter>();
+	if (meshFilter)
 	{
-		rhi->BindIndexBuffer(indexBuffer);
-		rhi->DrawIndexed(m_Mesh->GetIndexCount());
-	}
-	else
-	{
-		rhi->Draw(m_Mesh->GetVertexCount());
-	}
+		Mesh* mesh = meshFilter->GetMesh();
+		if (!mesh)
+			return EResult::Success;
 
+		RHI* rhi = Renderer::Get().GetRHI();
+
+		RHIBuffer* vertexBuffer = mesh->GetVertexBuffer();
+		RHIBuffer* indexBuffer = mesh->GetIndexBuffer();
+		MaterialInstance* material = GetMaterialInstance();
+
+		if (IsFailure(BindPipeline(mesh, material, renderPass)))
+			return EResult::Fail;
+
+		material->Bind(2);
+
+		SceneUBO uboData;
+		uboData.worldMatrix = m_Owner->GetComponent<Transform>()->GetWorldMatrix();
+
+		rhi->BindConstantBuffer((void*)&uboData, sizeof(SceneUBO), 1);
+
+		rhi->BindVertexBuffer(vertexBuffer);
+
+		if (indexBuffer)
+		{
+			rhi->BindIndexBuffer(indexBuffer);
+			rhi->DrawIndexed(mesh->GetIndexCount());
+		}
+		else
+		{
+			rhi->Draw(mesh->GetVertexCount());
+		}
+
+		return EResult::Success;
+	}
 	return EResult::Success;
 }
 
 #pragma endregion
 
 #pragma region Setter
-void MeshRenderer::SetMesh(Mesh* mesh)
-{
-	if(m_Mesh)
-		Safe_Release(m_Mesh);
-	m_Mesh = mesh;
-	if (m_Mesh)
-		Safe_AddRef(m_Mesh);
-}
 #pragma endregion

@@ -27,16 +27,26 @@ public:
 #pragma endregion
 
 #pragma region Collision
-	virtual bool Intersects(const Ray& ray, const mat4& transform, HitResult& outHit) override { return false; }
+public:
+	virtual bool Raycast(const struct Ray& ray, struct HitResult& outResult) override;
 #pragma endregion
 
+#pragma region Getter
+public:
+	const AABB GetBox() const { return AABB(m_Center - m_Extents, m_Center + m_Extents); }
+	const vec3 GetCenter() const { return m_Center; }
+	const vec3 GetExtent() const { return m_Extents; }
+	const vec3 GetMin() const { return m_Center - m_Extents; }
+	const vec3 GetMax() const { return m_Center + m_Extents; }
+#pragma endregion
 
 #pragma region Member Variable
 private:
 	PROPERTY()
-	vec3 m_Center = vec3(0.f);
+	vec3 m_Center;
+
 	PROPERTY()
-	vec3 m_Extent = vec3(0.5f);
+	vec3 m_Extents;
 #pragma endregion
 
 };

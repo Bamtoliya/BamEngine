@@ -46,7 +46,8 @@ public:
 	uint32 GetIndexCount() const { return m_IndexCount; }
 public:
 	ETopology GetTopology() const { return m_Topology; }
-
+public:
+	virtual const tagInputLayoutDesc GetInputLayoutDesc() const { return Vertex::Layout; }
 #pragma endregion
 
 #pragma region Setter

@@ -88,6 +88,29 @@ public:
 	ERHIType GetRHIType() const { return m_RHIType; }
 #pragma endregion
 
+
+
+
+#ifdef _DEBUG
+#pragma region Functions
+public:
+	void DrawDebugLine(const vec3& start, const vec3& end, const vec4& color);
+	void DrawDebugRect(const Rect& rect, const vec4& color);
+	void DrawDebugBox(const vec3& center, const vec3& extent, const vec4& color, const mat4& transform = glm::identity<mat4>());
+	void DrawDebugSphere(const vec3& center, float radius, const vec4& color);
+private:
+	EResult RenderDebugLines(f32 dt);
+#pragma endregion
+
+#pragma region Variable
+private:
+	vector<DebugVertex> m_DebugVertices;
+	class RHIBuffer* m_DebugVertexBuffer = { nullptr };
+	class RHIPipeline* m_DebugPipeline = { nullptr };
+#pragma endregion
+#endif // _DEBUG
+
+
 #pragma region Variable
 private:
 	class RHI* m_RHI = { nullptr };

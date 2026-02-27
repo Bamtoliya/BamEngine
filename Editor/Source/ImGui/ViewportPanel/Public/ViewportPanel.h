@@ -61,6 +61,14 @@ private:
 	void DrawOptionsBar();
 private:
 	void DrawEditorCameraInspector();
+private:
+	void MouseInput(const ImVec2& mousePos, const ImVec2& imageMin, const ImVec2& imageSize);
+
+#pragma region MyRegion
+private:
+	Ray ScreenPosToRay(const ImVec2& mousePos, const ImVec2& imageMin, const ImVec2&imageSize);
+#pragma endregion
+
 #pragma region Members
 private:
 	EditorCamera* m_EditorCamera = { nullptr };
@@ -82,6 +90,7 @@ private:
 	EViewportCameraType m_CameraType = EViewportCameraType::Orthographic;
 	EViewportMode m_ViewportMode = EViewportMode::Textured;
 	uint32 m_PassID = { 0 };
+	uint32 m_DebugPassID = { 0 };
 
 #pragma endregion
 };

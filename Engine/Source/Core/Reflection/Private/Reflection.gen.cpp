@@ -8,9 +8,11 @@
 #include "Core/Public/Component.h"
 #include "Core/Public/Structs.h"
 #include "Core/Public/Transform.h"
+#include "Physics/Components/Collider/Public/Box2DCollider.h"
 #include "Physics/Components/Collider/Public/BoxCollider.h"
 #include "Physics/Components/Collider/Public/Collider.h"
 #include "Render/Camera/Public/Camera.h"
+#include "Render/Components/Public/MeshFilter.h"
 #include "Render/Components/Public/MeshRenderer.h"
 #include "Render/Components/Public/RenderComponent.h"
 #include "Render/Components/Public/SpriteRenderer.h"
@@ -23,6 +25,8 @@
 #include "Resource/Shader/Public/Shader.h"
 #include "Resource/Sprite/Public/Sprite.h"
 #include "Resource/Texture/Public/Texture.h"
+#include "UI/Button/Public/Button.h"
+#include "UI/Public/UIComponent.h"
 #include "World/Public/GameObject.h"
 
 
@@ -144,13 +148,16 @@ void InitReflectionSystem()
 	InitEnumReflection();
 	REFLECT_STATIC_TYPE(tagComponentDesc);
 	REFLECT_STATIC_TYPE(Component);
+	REFLECT_STATIC_TYPE(AABB);
 	REFLECT_STATIC_TYPE(Rect);
 	REFLECT_STATIC_TYPE(Vertex);
 	REFLECT_STATIC_TYPE(tagTransformDesc);
 	REFLECT_STATIC_TYPE(Transform);
+	REFLECT_STATIC_TYPE(Box2DCollider);
 	REFLECT_STATIC_TYPE(BoxCollider);
 	REFLECT_STATIC_TYPE(Collider);
 	REFLECT_STATIC_TYPE(Camera);
+	REFLECT_STATIC_TYPE(MeshFilter);
 	REFLECT_STATIC_TYPE(MeshRenderer);
 	REFLECT_STATIC_TYPE(RenderComponent);
 	REFLECT_STATIC_TYPE(SpriteRenderer);
@@ -164,6 +171,8 @@ void InitReflectionSystem()
 	REFLECT_STATIC_TYPE(Shader);
 	REFLECT_STATIC_TYPE(Sprite);
 	REFLECT_STATIC_TYPE(Texture);
+	REFLECT_STATIC_TYPE(Button);
+	REFLECT_STATIC_TYPE(UIComponent);
 	REFLECT_STATIC_TYPE(GameObject);
 
 }
@@ -179,6 +188,12 @@ END_REFLECT()
 
 // Class: Component
 BEGIN_REFLECT(Component)
+END_REFLECT()
+
+// Struct: AABB
+BEGIN_REFLECT(AABB)
+    REFLECT_PROPERTY(Min, Engine::EPropertyType::Vector3, "vec3")
+    REFLECT_PROPERTY(Max, Engine::EPropertyType::Vector3, "vec3")
 END_REFLECT()
 
 // Struct: Rect
@@ -217,16 +232,24 @@ BEGIN_REFLECT(Transform)
     REFLECT_BITFLAG(m_Flags, Engine::EPropertyType::BitFlag, "ETransformFlag", "PROP_BITFLAG")
 END_REFLECT()
 
+// Class: Box2DCollider
+BEGIN_REFLECT(Box2DCollider)
+    REFLECT_PARENT(Collider)
+    REFLECT_PROPERTY(m_Center, Engine::EPropertyType::Vector2, "vec2")
+    REFLECT_PROPERTY(m_Extent, Engine::EPropertyType::Vector2, "vec2")
+END_REFLECT()
+
 // Class: BoxCollider
 BEGIN_REFLECT(BoxCollider)
     REFLECT_PARENT(Collider)
     REFLECT_PROPERTY(m_Center, Engine::EPropertyType::Vector3, "vec3")
-    REFLECT_PROPERTY(m_Extent, Engine::EPropertyType::Vector3, "vec3")
+    REFLECT_PROPERTY(m_Extents, Engine::EPropertyType::Vector3, "vec3")
 END_REFLECT()
 
 // Class: Collider
 BEGIN_REFLECT(Collider)
     REFLECT_PARENT(Component)
+    REFLECT_PROPERTY(m_DrawCollider, Engine::EPropertyType::Bool, "bool")
 END_REFLECT()
 
 // Class: Camera
@@ -243,10 +266,15 @@ BEGIN_REFLECT(Camera)
     REFLECT_PROPERTY(m_ViewMatrix, Engine::EPropertyType::Matrix4, "glm::mat4", READONLY)
 END_REFLECT()
 
+// Class: MeshFilter
+BEGIN_REFLECT(MeshFilter)
+    REFLECT_PARENT(Component)
+    REFLECT_PROPERTY(m_Mesh, Engine::EPropertyType::Object, "Mesh")
+END_REFLECT()
+
 // Class: MeshRenderer
 BEGIN_REFLECT(MeshRenderer)
     REFLECT_PARENT(RenderComponent)
-    REFLECT_PROPERTY(m_Mesh, Engine::EPropertyType::Object, "class Mesh", NAME(L"Mesh"))
 END_REFLECT()
 
 // Class: RenderComponent
@@ -337,6 +365,16 @@ BEGIN_REFLECT(Texture)
     REFLECT_PARENT(Resource)
     REFLECT_PROPERTY(m_PixelPerUnit, Engine::EPropertyType::F32, "f32")
     REFLECT_PROPERTY(m_Path, Engine::EPropertyType::String, "wstring", DIRECTORY, READONLY)
+END_REFLECT()
+
+// Class: Button
+BEGIN_REFLECT(Button)
+    REFLECT_PARENT(UIComponent)
+END_REFLECT()
+
+// Class: UIComponent
+BEGIN_REFLECT(UIComponent)
+    REFLECT_PARENT(Component)
 END_REFLECT()
 
 // Class: GameObject

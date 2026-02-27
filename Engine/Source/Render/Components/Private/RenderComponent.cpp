@@ -31,6 +31,7 @@ EResult RenderComponent::BindPipeline(Mesh* mesh, MaterialInterface* material, R
 	pipelineDesc.BlendMode = material->GetBlendMode();
 	pipelineDesc.CullMode = material->GetCullMode();
 	pipelineDesc.ColorAttachmentCount = renderPass->GetRenderTargetCount();
+	pipelineDesc.InputLayout = mesh->GetInputLayoutDesc();
 
 	
 	for (uint32 i = 0; i < pipelineDesc.ColorAttachmentCount; ++i)

@@ -51,6 +51,12 @@ public:
 	}
 #pragma endregion
 
+#pragma region Picking Object
+public:
+	class GameObject* PickObjectByRay(const struct Ray& ray);
+#pragma endregion
+
+
 private:
 	vector<class GameObject*> m_SelectedObjects;
 };

@@ -21,29 +21,49 @@ namespace Engine
 	{
 		vec3 Point;
 		vec3 Normal;
-		f32 Distance;
+		union {
+			f32 Distance;
+			f32 PenetrationDepth;
+		};
+
+		union
+		{
+			vec3 Extents;
+			vec3 Barycentric;
+		};
+		
 		void* UserData;
+		bool HasHit;
 
 		void Reset()
 		{
 			Point = vec3(0.f);
 			Normal = vec3(0.f);
 			Distance = 0.f;
+			Extents = vec3(0.f);
 			UserData = nullptr;
+			HasHit = false;
 		}
 	};
 #pragma endregion
 
 #pragma region Bounds
+
+	STRUCT()
 	struct AABB
 	{
+		REFLECT_STRUCT(AABB);
+
+		PROPERTY()
 		vec3 Min;
+		PROPERTY()
 		vec3 Max;
 		AABB() = default;
 		AABB(const vec3& min, const vec3& max)
 			: Min(min), Max(max) {
 		}
-		bool Intersect(const Ray& ray, float* t = nullptr) const;
+		vec3 Center() const { return (Min + Max) * 0.5f; }
+		vec3 Extent() const { return (Max - Min) * 0.5f; }
 	};
 
 	struct BoundingBox
@@ -54,7 +74,6 @@ namespace Engine
 		BoundingBox(const vec3& center, const vec3& extent)
 			: Center(center), Extent(extent) {
 		}
-		bool Intersect(const Ray& ray, float* t = nullptr) const;
 	};
 
 	struct BoundingSphere
@@ -65,7 +84,19 @@ namespace Engine
 		BoundingSphere(const vec3& center, float radius)
 			: Center(center), Radius(radius) {
 		}
-		bool Intersect(const Ray& ray, float* t = nullptr) const;
+	};
+
+	struct Capsule
+	{
+		vec3 PointA;
+		vec3 PointB;
+		f32 Radius;
+		Capsule() = default;
+		Capsule(const vec3& pointA, const vec3& pointB, f32 radius)
+			: PointA(pointA), PointB(pointB), Radius(radius) {
+		}
+		vec3 Center() const { return (PointA + PointB) * 0.5f; }
+		f32 Height() const { return glm::distance(PointA, PointB); }
 	};
 #pragma endregion
 
@@ -116,7 +147,7 @@ namespace Engine
 
 #pragma region Vertex
 	STRUCT()
-		struct ENGINE_API Vertex
+	struct ENGINE_API Vertex
 	{
 		REFLECT_STRUCT(Vertex);
 
@@ -164,6 +195,8 @@ namespace Engine
 			: position(pos), normal(nor), texCoord(uv), tangent(tan), bitangent(bitan), color(col)
 		{
 		}
+
+		static const tagInputLayoutDesc Layout;
 	};
 
 	struct Vertex2D
@@ -171,6 +204,22 @@ namespace Engine
 		glm::vec3 position = {};
 		glm::vec4 color = {};
 		glm::vec2 texCoord = {};
+
+		static const tagInputLayoutDesc Layout;
+	};
+
+#ifdef _DEBUG
+	struct DebugVertex
+	{
+		vec3 position;
+		vec4 color;
+
+		static const tagInputLayoutDesc Layout;
+	};
+#endif
+	struct SceneUBO
+	{
+		mat4 worldMatrix;
 	};
 #pragma endregion
 }

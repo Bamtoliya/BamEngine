@@ -58,6 +58,43 @@ static SDL_GPUTextureFormat ToSDLFormat(ERenderTargetFormat format) {
     default: return SDL_GPU_TEXTUREFORMAT_INVALID;
     }
 }
+
+static SDL_GPUVertexElementFormat ToSDLVertexFormat(EVertexElementFormat format) {
+    switch (format)
+    {
+    case EVertexElementFormat::Int: return SDL_GPU_VERTEXELEMENTFORMAT_INT;
+    case EVertexElementFormat::Int2: return SDL_GPU_VERTEXELEMENTFORMAT_INT2;
+    case EVertexElementFormat::Int3: return SDL_GPU_VERTEXELEMENTFORMAT_INT3;
+    case EVertexElementFormat::Int4: return SDL_GPU_VERTEXELEMENTFORMAT_INT4;
+    case EVertexElementFormat::UInt: return SDL_GPU_VERTEXELEMENTFORMAT_UINT;
+    case EVertexElementFormat::UInt2: return SDL_GPU_VERTEXELEMENTFORMAT_UINT2;
+    case EVertexElementFormat::UInt3: return SDL_GPU_VERTEXELEMENTFORMAT_UINT3;
+    case EVertexElementFormat::UInt4: return SDL_GPU_VERTEXELEMENTFORMAT_UINT4;
+	case EVertexElementFormat::Float: return SDL_GPU_VERTEXELEMENTFORMAT_FLOAT;
+	case EVertexElementFormat::Float2: return SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2;
+	case EVertexElementFormat::Float3: return SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3;
+	case EVertexElementFormat::Float4: return SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4;
+	case EVertexElementFormat::Byte2: return SDL_GPU_VERTEXELEMENTFORMAT_BYTE2;
+	case EVertexElementFormat::Byte4: return SDL_GPU_VERTEXELEMENTFORMAT_BYTE4;
+	case EVertexElementFormat::UByte2: return SDL_GPU_VERTEXELEMENTFORMAT_UBYTE2;
+	case EVertexElementFormat::UByte4: return SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4;
+	case EVertexElementFormat::Byte2_Norm: return SDL_GPU_VERTEXELEMENTFORMAT_BYTE2_NORM;
+	case EVertexElementFormat::Byte4_Norm: return SDL_GPU_VERTEXELEMENTFORMAT_BYTE4_NORM;
+	case EVertexElementFormat::UByte2_Norm: return SDL_GPU_VERTEXELEMENTFORMAT_UBYTE2_NORM;
+	case EVertexElementFormat::UByte4_Norm: return SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4_NORM;
+	case EVertexElementFormat::Short2: return SDL_GPU_VERTEXELEMENTFORMAT_SHORT2;
+	case EVertexElementFormat::Short4: return SDL_GPU_VERTEXELEMENTFORMAT_SHORT4;
+	case EVertexElementFormat::UShort2: return SDL_GPU_VERTEXELEMENTFORMAT_USHORT2;
+	case EVertexElementFormat::UShort4: return SDL_GPU_VERTEXELEMENTFORMAT_USHORT4;
+	case EVertexElementFormat::Short2_Norm: return SDL_GPU_VERTEXELEMENTFORMAT_SHORT2_NORM;
+	case EVertexElementFormat::Short4_Norm: return SDL_GPU_VERTEXELEMENTFORMAT_SHORT4_NORM;
+	case EVertexElementFormat::UShort2_Norm: return SDL_GPU_VERTEXELEMENTFORMAT_USHORT2_NORM;
+	case EVertexElementFormat::UShort4_Norm: return SDL_GPU_VERTEXELEMENTFORMAT_USHORT4_NORM;
+	case EVertexElementFormat::Half2: return SDL_GPU_VERTEXELEMENTFORMAT_HALF2;
+	case EVertexElementFormat::Half4: return SDL_GPU_VERTEXELEMENTFORMAT_HALF4;
+	default: return SDL_GPU_VERTEXELEMENTFORMAT_INVALID;
+    }
+}
 #pragma endregion
 
 #pragma region Constructor&Destructor
@@ -77,51 +114,36 @@ EResult SDLGPUPipeline::Initialize(const DESC& desc)
     // 2. Vertex Input 설정 (기존 동일 - 추후 Mesh InputLayout 연동 필요)
     SDL_GPUVertexBufferDescription vertexBufferDesc = {};
     vertexBufferDesc.slot = 0;
-    vertexBufferDesc.pitch = sizeof(Vertex);
+    vertexBufferDesc.pitch = desc.InputLayout.Stride;
     vertexBufferDesc.input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
 
-    SDL_GPUVertexAttribute vertexAttributes[3] = {};
-    vertexAttributes[0].location = 0;
-    vertexAttributes[0].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3;
-    vertexAttributes[0].offset = offsetof(Vertex, position);
-    vertexAttributes[1].location = 1;
-    vertexAttributes[1].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2;
-    vertexAttributes[1].offset = offsetof(Vertex, texCoord);
-    vertexAttributes[2].location = 2;
-    vertexAttributes[2].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3;
-    vertexAttributes[2].offset = offsetof(Vertex, normal);
+	vector<SDL_GPUVertexAttribute> vertexAttributes(desc.InputLayout.Elements.size());
+    for (size_t i = 0; i < desc.InputLayout.Elements.size(); ++i)
+    {
+        vertexAttributes[i].location = desc.InputLayout.Elements[i].Location;
+        vertexAttributes[i].buffer_slot = 0; // 단일 버퍼 가정
+        vertexAttributes[i].format = ToSDLVertexFormat(desc.InputLayout.Elements[i].Format);
+        vertexAttributes[i].offset = desc.InputLayout.Elements[i].Offset;
+	}
 
     SDL_GPUVertexInputState vertexInputState = {};
     vertexInputState.vertex_buffer_descriptions = &vertexBufferDesc;
     vertexInputState.num_vertex_buffers = 1;
-    vertexInputState.vertex_attributes = vertexAttributes;
-    vertexInputState.num_vertex_attributes = 3;
+    vertexInputState.vertex_attributes = vertexAttributes.data();
+    vertexInputState.num_vertex_attributes = static_cast<uint32>(vertexAttributes.size());
     createInfo.vertex_input_state = vertexInputState;
 
-    // =========================================================
-    // [누락된 부분 1] Rasterizer State (Cull, Fill, FrontFace)
-    // =========================================================
     createInfo.rasterizer_state.cull_mode = ToSDLCullMode(desc.CullMode);
     createInfo.rasterizer_state.fill_mode = ToSDLFillMode(desc.FillMode);
     createInfo.rasterizer_state.front_face = ToSDLFrontFace(desc.FrontFace);
     // Depth Bias가 필요하다면 여기에 추가 (RHIRasterizerState에서 가져옴)
 
-    // =========================================================
-    // [누락된 부분 2] Primitive Topology
-    // =========================================================
     createInfo.primitive_type = ToSDLTopology(desc.Topology);
-
-    // =========================================================
-    // [누락된 부분 3] Depth Stencil State
-    // =========================================================
     createInfo.depth_stencil_state.enable_depth_test = desc.DepthStencilState.DepthTestEnable;
     createInfo.depth_stencil_state.enable_depth_write = desc.DepthStencilState.DepthWriteEnable;
     createInfo.depth_stencil_state.compare_op = ToSDLCompareOp(desc.DepthStencilState.DepthCompareOp);
     createInfo.depth_stencil_state.enable_stencil_test = desc.DepthStencilState.StencilTestEnable;
 
-    // =========================================================
-    // [누락된 부분 4] Color Targets & Blend State
-    // =========================================================
     SDL_GPUColorTargetDescription colorTargets[8] = {};
 
     for (uint32 i = 0; i < desc.ColorAttachmentCount; ++i)
@@ -159,9 +181,6 @@ EResult SDLGPUPipeline::Initialize(const DESC& desc)
     targetInfo.color_target_descriptions = colorTargets;
     targetInfo.num_color_targets = desc.ColorAttachmentCount;
 
-    // =========================================================
-    // [누락된 부분 5] Depth Format (Target Info)
-    // =========================================================
     if (desc.DepthStencilAttachmentFormat != ERenderTargetFormat::RTF_UNKNOWN)
     {
         targetInfo.has_depth_stencil_target = true;

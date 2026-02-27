@@ -15,7 +15,12 @@ private:
 public:
 	virtual void Free() override;
 public:
-	EResult AddCollider(Collider* collider);
-	EResult RemoveCollider(Collider* collider);
+	EResult AddCollider(class Collider* collider);
+	EResult RemoveCollider(class Collider* collider);
+
+public:
+	bool Raycast(const Ray& ray, HitResult& outResult);
+private:
+	vector<class Collider*> m_Colliders;
 };
 END

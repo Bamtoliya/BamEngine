@@ -14,6 +14,8 @@
 #include "MeshRenderer.h"
 #include "SpriteRenderer.h"
 
+#include "MeshFilter.h"
+
 
 static bool CheckboxTristate(const char* label, bool* v, bool is_mixed)
 {
@@ -1117,8 +1119,11 @@ void HierarchyPanel::CreatePrimitive(Scene* scene, const wstring& name, const ws
 	GameObject* newGameObject = GameObject::Create();
 	newGameObject->SetName(L"New" + name);
 	newGameObject->AddComponent(L"MeshRenderer");
+	newGameObject->AddComponent(L"MeshFilter");
+	MeshFilter* meshFilter = newGameObject->GetComponent<MeshFilter>();
+	meshFilter->SetMesh(ResourceManager::Get().GetMesh(meshName));
 	MeshRenderer* meshRenderer = newGameObject->GetComponent<MeshRenderer>();
-	meshRenderer->SetMesh(ResourceManager::Get().GetMesh(meshName));
+	meshRenderer->SetMaterial(ResourceManager::Get().GetMaterial(L"DefaultMaterial"));
 	meshRenderer->SetRenderPassID(0);
 	scene->AddGameObject(newGameObject);
 	Safe_Release(newGameObject);
@@ -1129,6 +1134,7 @@ void HierarchyPanel::CreateSpriteObject(Scene* scene)
 	GameObject* newGameObject = GameObject::Create();
 	newGameObject->SetName(L"New Sprite");
 	newGameObject->AddComponent(L"SpriteRenderer");
+	newGameObject->AddComponent(L"Box2DCollider");
 	SpriteRenderer* spriteRenderer = newGameObject->GetComponent<SpriteRenderer>();
 	spriteRenderer->SetMaterial(ResourceManager::Get().GetMaterial(L"DefaultMaterial"));
 	spriteRenderer->SetSprite(ResourceManager::Get().GetTexture(L"SampleTexture"));

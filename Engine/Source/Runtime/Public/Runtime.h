@@ -20,6 +20,8 @@
 #include "LocalizationManager.h"
 #include "CameraManager.h"
 
+#include "CollisionManager.h"
+
 BEGIN(Engine)
 
 typedef struct tagRuntimeCreateInfo
@@ -69,6 +71,8 @@ private:
 	ComponentRegistry* m_ComponentRegistry = { nullptr };
 private:
 	LocalizationManager* m_LocalizationManager = { nullptr };
+private:
+	CollisionManager* m_CollisionManager = { nullptr };
 #pragma endregion
 };
 

@@ -32,8 +32,38 @@ struct tagRHIPipelineDesc
 
 	RHIDepthStencilState DepthStencilState;
 
-	bool operator==(const tagRHIPipelineDesc& other) const {
-		return memcmp(this, &other, sizeof(tagRHIPipelineDesc)) == 0; // 패딩 주의, 혹은 멤버별 비교
+	tagInputLayoutDesc InputLayout;
+
+	bool operator==(const tagRHIPipelineDesc& other) const
+	{
+		if (PipelineType != other.PipelineType) return false;
+		if (BlendMode != other.BlendMode) return false;
+		if (FillMode != other.FillMode) return false;
+		if (CullMode != other.CullMode) return false;
+		if (FrontFace != other.FrontFace) return false;
+		if (Topology != other.Topology) return false;
+
+		if (VertexShader != other.VertexShader) return false;
+		if (PixelShader != other.PixelShader) return false;
+		if (ComputeShader != other.ComputeShader) return false;
+		if (GeometryShader != other.GeometryShader) return false;
+		if (HullShader != other.HullShader) return false;
+		if (DomainShader != other.DomainShader) return false;
+
+		if (ColorAttachmentCount != other.ColorAttachmentCount) return false;
+		for (uint32 i = 0; i < ColorAttachmentCount; ++i)
+		{
+			if (ColorAttachmentFormats[i] != other.ColorAttachmentFormats[i]) return false;
+		}
+
+		if (DepthStencilAttachmentFormat != other.DepthStencilAttachmentFormat) return false;
+
+		if (DepthStencilState.DepthTestEnable != other.DepthStencilState.DepthTestEnable) return false;
+		if (DepthStencilState.DepthWriteEnable != other.DepthStencilState.DepthWriteEnable) return false;
+
+		if (!(InputLayout == other.InputLayout)) return false;
+
+		return true;
 	}
 };
 
@@ -70,6 +100,17 @@ namespace std
 			// Depth State
 			HashCombine(seed, hash<bool>()(desc.DepthStencilState.DepthTestEnable));
 			HashCombine(seed, hash<bool>()(desc.DepthStencilState.DepthWriteEnable));
+
+			HashCombine(seed, hash<uint32>()(desc.InputLayout.Stride));
+			HashCombine(seed, hash<size_t>()(desc.InputLayout.Elements.size())); // 속성 개수 해싱
+
+			for (const auto& attr : desc.InputLayout.Elements)
+			{
+				// 각 속성의 세부 정보(Location, Format, Offset)를 섞어줌
+				HashCombine(seed, hash<uint32>()(attr.Location));
+				HashCombine(seed, hash<int>()((int)attr.Format));
+				HashCombine(seed, hash<uint32>()(attr.Offset));
+			}
 
 			return seed;
 		}

@@ -16,6 +16,8 @@ void ViewportPanel::Initialize(void* arg)
 	{
 		CAST_DESC
 		m_ViewportName = desc->Name;
+
+#pragma region Prepare Camera
 		tagCameraDesc cameraDesc;
 		if (desc->CameraType == EViewportCameraType::Orthographic)
 		{
@@ -26,6 +28,10 @@ void ViewportPanel::Initialize(void* arg)
 		}
 		m_EditorCamera = EditorCamera::Create(&cameraDesc);
 		m_EditorCamera->SetName(m_ViewportName + L"_Camera");
+
+#pragma endregion
+
+#pragma region Prepare Color RenderTarget
 		tagRenderTargetDesc rtDesc;
 		rtDesc.Width = desc->RenderTargetWidth;
 		rtDesc.Height = desc->RenderTargetHeight;
@@ -33,6 +39,10 @@ void ViewportPanel::Initialize(void* arg)
 		rtDesc.ClearColor = vec4(0.4f, 0.1f, 0.1f, 1.0f);
 		rtDesc.Name = m_ViewportName + L"_RenderTarget";
 		m_RenderTarget = RenderTargetManager::Get().CreateRenderTarget(&rtDesc);
+#pragma endregion
+
+
+#pragma region Prepare Depth Stencil RenderTarget
 		tagRenderTargetDesc depthStencilDesc;
 		depthStencilDesc.Width = desc->RenderTargetWidth;
 		depthStencilDesc.Height = desc->RenderTargetHeight;
@@ -42,8 +52,20 @@ void ViewportPanel::Initialize(void* arg)
 		depthStencilDesc.Format = ERenderTargetFormat::RTF_DEPTH24STENCIL8;
 		depthStencilDesc.Name = m_ViewportName + L"_DepthStencil";
 		m_DepthStencil = RenderTargetManager::Get().CreateRenderTarget(&depthStencilDesc);
+#pragma endregion
 		wstring passName = m_ViewportName + L"_Pass";
 		m_PassID = RenderPassManager::Get().RegisterRenderPass(passName, { m_RenderTarget->GetName()}, m_DepthStencil->GetName(), ERenderPassLoadOperation::RPLO_Clear, ERenderPassStoreOperation::RPSO_Store, vec4(0.0f, 0.0f, 0.0f, -1.0f), 0, ERenderSortType::FrontToBack);
+
+		wstring debugPassName = L"Debug" + passName;
+		m_DebugPassID = RenderPassManager::Get().RegisterRenderPass(
+			debugPassName,
+			{ m_RenderTarget->GetName() },
+			m_DepthStencil->GetName(),     // Depth Buffer
+			ERenderPassLoadOperation::RPLO_Load,  // 매우 중요: 기존 화면(MainPass 결과) 유지
+			ERenderPassStoreOperation::RPSO_Store,
+			vec4(0.0f, 0.0f, 0.0f, 0.0f), 0,
+			ERenderSortType::None  // 선분은 정렬이 크게 필요 없음
+		);
 	}
 }
 void ViewportPanel::Free()
@@ -60,6 +82,7 @@ void ViewportPanel::Update(f32 dt)
 	m_EditorCamera->Update(dt);
 	m_EditorCamera->LateUpdate(dt);
 	Renderer::Get().RegisterViewportCamera(m_EditorCamera->GetCamera(), m_PassID);
+	Renderer::Get().RegisterViewportCamera(m_EditorCamera->GetCamera(), m_DebugPassID);
 }
 
 void ViewportPanel::Draw()
@@ -111,10 +134,12 @@ void ViewportPanel::Draw()
 				ImGui::SetCursorPos(ImVec2((float)(int)(cursorStart.x + offsetX), (float)(int)(cursorStart.y + offsetY)));
 				ImVec2 imageScreenPos = ImGui::GetCursorScreenPos();
 
+				
+
 				ImTextureID textureID = (ImTextureID)(size_t)texture->GetNativeHandle();
 				ImGui::Image(textureID, finalSize);
-
 				DrawGuizmo(imageScreenPos, finalSize);
+				MouseInput(ImGui::GetMousePos(), imageScreenPos, finalSize);
 			}
 		}
 	}
@@ -136,8 +161,10 @@ void ViewportPanel::DrawGuizmo(ImVec2 pos, ImVec2 size)
 	ImGuizmo::SetOrthographic(m_IsOrthographic);
 	ImGuizmo::SetDrawlist();
 
-
+	ImVec2 windowPos = ImGui::GetWindowPos();
+	ImVec2 windowSize = ImGui::GetWindowSize();
 	ImGuizmo::SetRect(pos.x, pos.y, size.x, size.y);
+	ImGuizmo::SetID(ImGui::GetID(this));
 
 	f32 halfW = size.x;
 	f32 halfH = size.y;
@@ -286,4 +313,54 @@ void ViewportPanel::DrawOptionsBar()
 		ImGui::PopStyleVar(2); // ItemSpacing, FrameRounding
 	}
 	ImGui::EndMenuBar();
+}
+
+void ViewportPanel::MouseInput(const ImVec2& mousePos, const ImVec2& imageMin, const ImVec2& imageSize)
+{
+	if (ImGui::IsMouseClicked(0) && ImGui::IsWindowHovered() && !ImGuizmo::IsOver() )
+	{
+		Ray mouseRay = ScreenPosToRay(mousePos, imageMin, imageSize);
+		GameObject* pickedObject = SelectionManager::Get().PickObjectByRay(mouseRay);
+		if (pickedObject)
+		{
+			// 선택된 객체가 있다면, 해당 객체를 선택 상태로 전환
+			SelectionManager::Get().ToggleSelection(pickedObject);
+			ImGui::SetWindowFocus();
+		}
+		else
+		{
+			SelectionManager::Get().ClearSelection();
+		}
+	}
+}
+
+Ray ViewportPanel::ScreenPosToRay(const ImVec2& mousePos, const ImVec2& imageMin, const ImVec2& imageSize)
+{
+	f32 localX = mousePos.x - imageMin.x;
+	f32 localY = mousePos.y - imageMin.y;
+
+	f32 ndcX = (localX / imageSize.x) * 2.0f - 1.0f;
+	f32 ndcY = 1.0f - (localY / imageSize.y) * 2.0f;
+
+	mat4 projInvMatrix = m_EditorCamera->GetCamera()->GetProjMatrixInv();
+	mat4 viewInvMatrix = m_EditorCamera->GetCamera()->GetViewMatrixInv();
+
+	mat4 invVP = viewInvMatrix * projInvMatrix;
+
+	vec4 nearPointNDC = vec4(ndcX, ndcY, 0.0f, 1.0f);
+	vec4 farPointNDC = vec4(ndcX, ndcY, 1.0f, 1.0f);
+
+	vec4 nearPointWorld = invVP * nearPointNDC;
+	vec4 farPointWorld = invVP * farPointNDC;
+
+	Ray ray;
+	ray.Origin = vec3(nearPointWorld) / nearPointWorld.w;
+	//ray.Origin.x += m_RenderTarget->GetWidth() / 2.f;
+	//ray.Origin.y -= m_RenderTarget->GetHeight() / 2.f;
+	ray.Direction = glm::normalize(vec3(farPointWorld / farPointWorld.w - vec4(ray.Origin, 0.f)));
+
+	cout << "Ray Origin: " << ray.Origin.x << ", " << ray.Origin.y << ", " << ray.Origin.z << endl;
+	cout << "Ray Direction: " << ray.Direction.x << ", " << ray.Direction.y << ", " << ray.Direction.z << endl;
+
+	return ray;
 }

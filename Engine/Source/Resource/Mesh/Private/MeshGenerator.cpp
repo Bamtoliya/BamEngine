@@ -31,6 +31,5 @@ void MeshGenerator::Free()
 void MeshGenerator::SetMesh(Mesh* mesh)
 {
 	m_GeneratedMesh = mesh;
-	if(m_MeshRenderer) m_MeshRenderer->SetMesh(mesh);
 }
 #pragma endregion
