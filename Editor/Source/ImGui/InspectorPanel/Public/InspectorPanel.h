@@ -1,16 +1,22 @@
 ﻿#pragma once
 
-#include "Base.h"
+#include "ImGuiInterface.h"
 
 BEGIN(Editor)
-class InspectorPanel final
+class InspectorPanel final : public ImGuiInterface
 {
 public:
-	void Draw(GameObject* gameObject = nullptr, bool* open = (bool*)(0));
+	InspectorPanel() { m_Name = L"Inspector Panel"; }
+	virtual ~InspectorPanel() = default;
+public:
+	virtual void Draw() override;
+	virtual void Free() override { __super::Free(); }
 private:
 	bool DrawProperties(void* instance, const TypeInfo& typeInfo);
 	string SanitizeVarName(const string& varName);
 	string SanitizeDisplayLabel(const TypeInfo& typeInfo, const PropertyInfo& property);
+public:
+	EResult SetSelectedGameObject(class GameObject* gameObject) { m_SelectedGameObject = gameObject; return EResult::Success; }
 
 
 private:
@@ -36,5 +42,7 @@ private:
 	bool DrawEnumProperty(void* data, const TypeInfo& typeinfo, const PropertyInfo& property);
 	bool DrawBitFlagProperty(void* data, const TypeInfo& typeinfo, const PropertyInfo& property);
 
+private:
+	class GameObject* m_SelectedGameObject = nullptr;
 };
 END

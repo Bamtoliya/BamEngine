@@ -16,6 +16,10 @@
 #include "Application.h"
 #include "RHI.h"
 
+#include "ViewportPanel.h"
+#include "InspectorPanel.h"
+#include "HierarchyPanel.h"
+
 IMPLEMENT_SINGLETON(ImGuiManager)
 
 #pragma region Constructor&Destructor
@@ -111,17 +115,12 @@ EResult ImGuiManager::Initialize(void* arg)
 		return EResult::Fail;
 	}	
 
-	tagViewportPanelDesc scenePanelDesc;
-	scenePanelDesc.Name = L"Scene View";
-	scenePanelDesc.Type = EViewportType::Scene;
-	scenePanelDesc.CameraType = EViewportCameraType::Orthographic;
-	scenePanelDesc.ViewportMode = EViewportMode::Textured;
-	scenePanelDesc.RenderTargetWidth = g_WindowWidth;
-	scenePanelDesc.RenderTargetHeight = g_WindowHeight;
-	m_ViewportPanel.Initialize(&scenePanelDesc);
-	tagViewportPanelDesc viewportPanelDesc;
-	viewportPanelDesc.Name = L"Game View";
-	m_ViewportPanel2.Initialize(&viewportPanelDesc);
+	
+	
+	
+	
+	
+	CreateDefaultPanels();
 	return EResult::Success;
 }
 
@@ -153,8 +152,12 @@ void ImGuiManager::Free()
 	default:
 		break;
 	}
-	m_ViewportPanel.Free();
-	m_ViewportPanel2.Free();
+
+	for (auto& panel : m_ImGuiPanels)
+	{
+		Safe_Release(panel);
+	}
+
 
 	ImGui_ImplSDL3_Shutdown();
 	ImGui::DestroyContext();
@@ -166,8 +169,10 @@ void ImGuiManager::Free()
 
 void ImGuiManager::Update(f32 dt)
 {
-	m_ViewportPanel.Update(dt);
-	m_ViewportPanel2.Update(dt);
+	for (auto& panel : m_ImGuiPanels)
+	{
+		panel->Update(dt);
+	}
 }
 
 void ImGuiManager::Begin()
@@ -236,17 +241,16 @@ void ImGuiManager::ProcessEvent(const SDL_Event* event)
 #pragma endregion
 
 #pragma region DrawUI
-
 void ImGuiManager::Draw()
 {
 	MainDockspace();
 
 	ImGui::ShowDemoWindow(nullptr); // 데모 윈도우 (테스트용, 나중에 제거)
 
-	m_HierarchyPanel.Draw();
-	m_InspectorPanel.Draw();
-	m_ViewportPanel.Draw();
-	m_ViewportPanel2.Draw();
+	for (auto& panel : m_ImGuiPanels)
+	{
+		panel->Draw();
+	}
 }
 
 void ImGuiManager::MainDockspace()
@@ -284,8 +288,42 @@ void ImGuiManager::MainDockspace()
 
 	ImGui::End(); // MainDockSpace 끝 (이제부터 그리는 창은 이 안에 도킹됨)
 }
+#pragma endregion
 
+#pragma region ImGui Management
+EResult ImGuiManager::AddImGuiPanel(ImGuiInterface* panel)
+{
+	if(!panel) return EResult::InvalidArgument;
+	m_ImGuiPanels.push_back(panel);
+	return EResult::Success;
+}
 
+EResult ImGuiManager::RemoveImGuiPanel(ImGuiInterface* panel)
+{
+	auto it = std::find(m_ImGuiPanels.begin(), m_ImGuiPanels.end(), panel);
+	if (it != m_ImGuiPanels.end())
+	{
+		m_ImGuiPanels.erase(it);
+		return EResult::Success;
+	}
+	return EResult::InvalidArgument;
+}
+EResult ImGuiManager::CreateDefaultPanels()
+{
+	tagViewportPanelDesc scenePanelDesc;
+	scenePanelDesc.Name = L"Scene View";
+	scenePanelDesc.Type = EViewportType::Scene;
+	scenePanelDesc.CameraType = EViewportCameraType::Orthographic;
+	scenePanelDesc.ViewportMode = EViewportMode::Textured;
+	scenePanelDesc.RenderTargetWidth = g_WindowWidth;
+	scenePanelDesc.RenderTargetHeight = g_WindowHeight;
+	ViewportPanel* viewportPanel = new ViewportPanel();
+	viewportPanel->Initialize(&scenePanelDesc);
+	AddImGuiPanel(viewportPanel);
+	AddImGuiPanel(new InspectorPanel());
+	AddImGuiPanel(new HierarchyPanel());
+	return EResult::Success;
+}
 #pragma endregion
 
 #pragma region Style

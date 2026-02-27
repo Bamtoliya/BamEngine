@@ -18,6 +18,7 @@
 #include <fstream>
 #include <sstream>
 #include <any>
+#include <array>
 #pragma endregion
 
 using namespace std;

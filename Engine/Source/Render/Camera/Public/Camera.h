@@ -48,12 +48,16 @@ public:
 	virtual EResult	Render(f32 dt, RenderPass* renderPass) override;
 #pragma endregion
 
-#pragma region MyRegion
+#pragma region Matrix
 public:
 	const mat4& GetViewMatrix() const { return m_ViewMatrix; }
 	const mat4& GetProjMatrix() const { return m_ProjMatrix; }
 	const mat4& GetViewMatrixInv() const { return m_ViewMatrixInv; }
 	const mat4& GetProjMatrixInv() const { return m_ProjMatrixInv; }
+public:
+	tagCameraBuffer GetCameraBuffer() const;
+private:
+	void UpdateMatrix();
 #pragma endregion
 
 #pragma region Projection Space
@@ -63,14 +67,6 @@ public:
 	void SetPerspective(f32 fov, f32 aspect, f32 near, f32 far);
 	void SetOrthographic(f32 width, f32 height, f32 near, f32 far);
 #pragma endregion
-
-#pragma region Matrix
-public:
-	tagCameraBuffer GetCameraBuffer() const;
-private:
-	void UpdateMatrix();
-#pragma endregion
-
 
 #pragma region Variables
 private:
@@ -87,7 +83,6 @@ private:
 	f32 m_Width = { 10.f };
 	PROPERTY(EDITCONDITION("!m_IsPerspective"))
 	f32 m_Height = { 10.f };
-
 
 	PROPERTY()
 	bool m_IsPerspective = { true };

@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "Button.h"
+#include "ComponentRegistry.h"
 
 REGISTER_COMPONENT(Button)
 

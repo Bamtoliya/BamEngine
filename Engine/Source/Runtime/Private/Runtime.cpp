@@ -21,6 +21,8 @@ EResult Runtime::Initialize(void* arg)
 
 	m_TimeManager = TimeManager::Create();
 	if (!m_TimeManager) return EResult::Fail;
+	m_InputManager = InputManager::Create();
+	if (!m_InputManager) return EResult::Fail;
 
 	m_ResourceManager = ResourceManager::Create();
 	if (!m_ResourceManager) return EResult::Fail;
@@ -61,6 +63,7 @@ EResult Runtime::Initialize(void* arg)
 void Runtime::Free()
 {
 	TimeManager::Destroy();
+	InputManager::Destroy();
 
 	ResourceManager::Destroy();
 	PrototypeManager::Destroy();
@@ -96,6 +99,7 @@ void Runtime::FixedUpdate(f32 dt)
 }
 void Runtime::Update(f32 dt)
 {
+	InputManager::Get().Update(dt);
 	SceneManager::Get().Update(dt);
 }
 void Runtime::LateUpdate(f32 dt)

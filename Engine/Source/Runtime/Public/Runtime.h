@@ -3,6 +3,8 @@
 #include "Base.h"
 
 #include "TimeManager.h"
+#include "InputManager.h"
+
 #include "ResourceManager.h"
 #include "PrototypeManager.h"
 
@@ -21,6 +23,7 @@
 #include "CameraManager.h"
 
 #include "CollisionManager.h"
+
 
 BEGIN(Engine)
 
@@ -54,6 +57,7 @@ private:
 #pragma region Variables
 private:
 	TimeManager* m_TimeManager = { nullptr };
+	InputManager* m_InputManager = { nullptr };
 private:
 	Renderer* m_Renderer = { nullptr };
 	RenderPassManager* m_RenderPassManager = { nullptr };
@@ -73,6 +77,7 @@ private:
 	LocalizationManager* m_LocalizationManager = { nullptr };
 private:
 	CollisionManager* m_CollisionManager = { nullptr };
+private:
 #pragma endregion
 };
 

@@ -5,6 +5,7 @@
 #include "ImGuizmo.h"
 #include "EditorCamera.h"
 #include "InspectorPanel.h"
+#include "ImGuiInterface.h"
 
 enum class EViewportMode : uint8
 {
@@ -39,13 +40,13 @@ struct tagViewportPanelDesc
 
 BEGIN(Editor)
 
-class ViewportPanel
+class ViewportPanel : public ImGuiInterface
 {
 	using DESC = tagViewportPanelDesc;
 
 #pragma region Constructor&Destructor
 public:
-	ViewportPanel() {};
+	ViewportPanel() { m_Name = L"Viewport Panel"; }
 	virtual ~ViewportPanel() = default;
 public:
 	void Initialize(void* arg = nullptr);
@@ -83,10 +84,8 @@ private:
 	ImGuizmo::MODE m_GizmoMode = { ImGuizmo::MODE::LOCAL };
 	bool m_GizmoUseSnap = { false };
 private:
-	bool m_IsInspectorPanelOpened = { false };
-	InspectorPanel m_InspectorPanel;
+	InspectorPanel* m_InspectorPanel = { nullptr };
 private:
-	wstring m_ViewportName = L"Viewport";
 	EViewportCameraType m_CameraType = EViewportCameraType::Orthographic;
 	EViewportMode m_ViewportMode = EViewportMode::Textured;
 	uint32 m_PassID = { 0 };

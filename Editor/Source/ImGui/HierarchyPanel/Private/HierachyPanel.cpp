@@ -239,6 +239,7 @@ bool HierarchyPanel::DrawRenameBox(T* target, ImGuiTreeNodeFlags flags, bool isS
 
 void HierarchyPanel::Draw()
 {
+	if (!m_Open) return;
 	ImGui::Begin("Hierarchy");
 
 	SelectionManager& selectionMgr = SelectionManager::Get();

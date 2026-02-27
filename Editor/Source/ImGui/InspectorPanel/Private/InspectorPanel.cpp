@@ -100,18 +100,18 @@ bool CheckEditCondition(void* instance, const TypeInfo& typeInfo, const Property
 }
 #pragma endregion
 
-void InspectorPanel::Draw(GameObject* gameObject, bool* open)
+void InspectorPanel::Draw()
 {
-	if (open && !*open) return;
+	if (!m_Open) return;
 	GameObject* selectedObject = SelectionManager::Get().GetPrimarySelection();
 	string windowID = "Inspector";
-	if (gameObject)
+	if (m_SelectedGameObject)
 	{
-		windowID += " - " + WStrToStr(gameObject->GetName()) + "##";
-		selectedObject = gameObject;
+		windowID += " - " + WStrToStr(m_SelectedGameObject->GetName()) + "##";
+		selectedObject = m_SelectedGameObject;
 	}
 	
-	if (ImGui::Begin(windowID.c_str(), open))
+	if (ImGui::Begin(windowID.c_str(), &m_Open))
 	{
 		if (selectedObject)
 		{
@@ -272,7 +272,6 @@ bool InspectorPanel::DrawProperties(void* instance, const TypeInfo& typeInfo)
 
 	return anyChanged;
 }
-
 
 #pragma region VarName & Label Sanitization
 string InspectorPanel::SanitizeVarName(const string& varName)
@@ -1001,7 +1000,14 @@ bool InspectorPanel::DrawVector2Property(void* instance, void* data, const TypeI
 bool InspectorPanel::DrawVector3Property(void* instance, void* data, const TypeInfo& typeinfo, const PropertyInfo& property)
 {
 	vec3* value = reinterpret_cast<vec3*>(data);
-	bool lockX = false, lockY = false, lockZ = false;
+	ImGui::PushID(instance);
+	ImGuiStorage* storage = ImGui::GetStateStorage();
+	ImGuiID lockXId = ImGui::GetID((property.Name + "_lockX").c_str());
+	ImGuiID lockYId = ImGui::GetID((property.Name + "_lockY").c_str());
+	ImGuiID lockZId = ImGui::GetID((property.Name + "_lockZ").c_str());
+	bool lockX = storage->GetBool(lockXId, false);
+	bool lockY = storage->GetBool(lockYId, false);
+	bool lockZ = storage->GetBool(lockZId, false);
 	bool isTransform = typeinfo.GetName() == "Transform";
 	Transform* transform = isTransform ? static_cast<Transform*>(instance) : nullptr;
 	f32 resetValue = 0.0f;
@@ -1047,6 +1053,7 @@ bool InspectorPanel::DrawVector3Property(void* instance, void* data, const TypeI
 			transform->SetScale(*value);
 		}
 	}
+	ImGui::PopID();
 	return changed;
 }
 bool InspectorPanel::DrawVector4Property(void* instance, void* data, const TypeInfo& typeinfo, const PropertyInfo& property)
@@ -1344,5 +1351,3 @@ bool InspectorPanel::DrawDetails(void* instance, const TypeInfo& typeInfo)
 	return changed;
 }
 #pragma endregion
-
-

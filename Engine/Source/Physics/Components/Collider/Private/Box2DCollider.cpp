@@ -53,11 +53,14 @@ void Box2DCollider::Free()
 void Box2DCollider::LateUpdate(f32 dt)
 {
 #ifdef _DEBUG
-	vec3 worldPos = m_Owner ? m_Owner->GetTransform()->GetWorldPosition() : vec3(0.f);
-	Rect worldRect = GetRect();
-	worldRect.Left += worldPos.x;
-	worldRect.Top += worldPos.y;
-	Renderer::Get().DrawDebugRect(worldRect, vec4(0.f, 1.f, 0.f, 1.f));
+	if (m_DrawCollider)
+	{
+		vec3 worldPos = m_Owner ? m_Owner->GetTransform()->GetWorldPosition() : vec3(0.f);
+		Rect worldRect = GetRect();
+		worldRect.Left += worldPos.x;
+		worldRect.Top += worldPos.y;
+		Renderer::Get().DrawDebugRect(worldRect, vec4(0.f, 1.f, 0.f, 1.f));
+	}
 #endif // _DEBUG
 
 }

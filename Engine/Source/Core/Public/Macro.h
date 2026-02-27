@@ -120,5 +120,5 @@ int32_t ClassName::Destroy()							\
 /******************************************************************************/
 #define MAX_LAYER_COUNT 32
 
-#define DEFAULT_PPU 100.f
+#define DEFAULT_PPU 1.f
 #define GRAVITY -9.81f

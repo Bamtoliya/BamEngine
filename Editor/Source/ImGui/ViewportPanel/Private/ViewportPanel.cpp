@@ -15,7 +15,7 @@ void ViewportPanel::Initialize(void* arg)
 	if (arg)
 	{
 		CAST_DESC
-		m_ViewportName = desc->Name;
+		m_Name = desc->Name;
 
 #pragma region Prepare Camera
 		tagCameraDesc cameraDesc;
@@ -27,7 +27,7 @@ void ViewportPanel::Initialize(void* arg)
 			cameraDesc.Height = desc->RenderTargetHeight;
 		}
 		m_EditorCamera = EditorCamera::Create(&cameraDesc);
-		m_EditorCamera->SetName(m_ViewportName + L"_Camera");
+		m_EditorCamera->SetName(m_Name + L"_Camera");
 
 #pragma endregion
 
@@ -37,7 +37,7 @@ void ViewportPanel::Initialize(void* arg)
 		rtDesc.Height = desc->RenderTargetHeight;
 		rtDesc.BindFlag = ERenderTargetBindFlag::RTBF_ShaderResource | ERenderTargetBindFlag::RTBF_RenderTarget;
 		rtDesc.ClearColor = vec4(0.4f, 0.1f, 0.1f, 1.0f);
-		rtDesc.Name = m_ViewportName + L"_RenderTarget";
+		rtDesc.Name = m_Name + L"_RenderTarget";
 		m_RenderTarget = RenderTargetManager::Get().CreateRenderTarget(&rtDesc);
 #pragma endregion
 
@@ -50,10 +50,10 @@ void ViewportPanel::Initialize(void* arg)
 		depthStencilDesc.Usage = ERenderTargetUsage::RTU_DepthStencil;
 		depthStencilDesc.BindFlag = ERenderTargetBindFlag::RTBF_ShaderResource | ERenderTargetBindFlag::RTBF_DepthStencil | ERenderTargetBindFlag::RTBF_RenderTarget;
 		depthStencilDesc.Format = ERenderTargetFormat::RTF_DEPTH24STENCIL8;
-		depthStencilDesc.Name = m_ViewportName + L"_DepthStencil";
+		depthStencilDesc.Name = m_Name + L"_DepthStencil";
 		m_DepthStencil = RenderTargetManager::Get().CreateRenderTarget(&depthStencilDesc);
 #pragma endregion
-		wstring passName = m_ViewportName + L"_Pass";
+		wstring passName = m_Name + L"_Pass";
 		m_PassID = RenderPassManager::Get().RegisterRenderPass(passName, { m_RenderTarget->GetName()}, m_DepthStencil->GetName(), ERenderPassLoadOperation::RPLO_Clear, ERenderPassStoreOperation::RPSO_Store, vec4(0.0f, 0.0f, 0.0f, -1.0f), 0, ERenderSortType::FrontToBack);
 
 		wstring debugPassName = L"Debug" + passName;
@@ -67,12 +67,17 @@ void ViewportPanel::Initialize(void* arg)
 			ERenderSortType::None  // 선분은 정렬이 크게 필요 없음
 		);
 	}
+
+	m_InspectorPanel = new InspectorPanel();
+	m_InspectorPanel->Close();
+	m_InspectorPanel->SetSelectedGameObject(m_EditorCamera);
 }
 void ViewportPanel::Free()
 {
 	Safe_Release(m_EditorCamera);
 	Safe_Release(m_RenderTarget);
 	Safe_Release(m_DepthStencil);
+	Safe_Release(m_InspectorPanel);
 }
 #pragma endregion
 
@@ -87,11 +92,12 @@ void ViewportPanel::Update(f32 dt)
 
 void ViewportPanel::Draw()
 {
+	if (!m_Open) return;
 	ImGui::PushID(this);
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
 	bool opened = true;
 	ImGuiWindowFlags window_flags = ImGuiWindowFlags_MenuBar;
-	string windowID = "Viewport##" + WStrToStr(m_ViewportName);
+	string windowID = WStrToStr(m_Name);
 	if (ImGui::Begin(windowID.c_str(), &opened, window_flags))
 	{
 		DrawOptionsBar();
@@ -127,14 +133,19 @@ void ViewportPanel::Draw()
 				//{
 				//	Renderer::Get().GetRHI()->Resize((uint32)finalSize.x, (uint32)finalSize.y);
 				//}
+				bool isFocused = ImGui::IsWindowFocused();
+				bool isHovered = ImGui::IsWindowHovered();
+				f32 dt = TimeManager::Get().GetDeltaTime();
+				if(isFocused || isHovered)
+				{
+					m_EditorCamera->HandleInput(dt);
+				}
 
 				ImVec2 cursorStart = ImGui::GetCursorPos();
 				float offsetX = (panelSize.x - finalSize.x) * 0.5f;
 				float offsetY = (panelSize.y - finalSize.y) * 0.5f;
 				ImGui::SetCursorPos(ImVec2((float)(int)(cursorStart.x + offsetX), (float)(int)(cursorStart.y + offsetY)));
 				ImVec2 imageScreenPos = ImGui::GetCursorScreenPos();
-
-				
 
 				ImTextureID textureID = (ImTextureID)(size_t)texture->GetNativeHandle();
 				ImGui::Image(textureID, finalSize);
@@ -146,10 +157,8 @@ void ViewportPanel::Draw()
 	ImGui::End();
 	ImGui::PopStyleVar();
 
-	if (m_IsInspectorPanelOpened)
-	{
-		m_InspectorPanel.Draw(m_EditorCamera, &m_IsInspectorPanelOpened);
-	}
+	m_InspectorPanel->Draw();
+
 	ImGui::PopID();
 }
 
@@ -255,7 +264,7 @@ void ViewportPanel::DrawOptionsBar()
 
 		if (ImGui::Button("Camera"))
 		{
-			m_IsInspectorPanelOpened = !m_IsInspectorPanelOpened;
+			m_InspectorPanel->ToggleOpen();
 		}
 
 

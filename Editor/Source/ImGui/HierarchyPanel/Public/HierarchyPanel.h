@@ -1,15 +1,19 @@
 ﻿#pragma once
 
 #include "Base.h"
+#include "ImGuiInterface.h"
 #include "Editor_Includes.h"
 
 BEGIN(Editor)
 
-class HierarchyPanel
+class HierarchyPanel : public ImGuiInterface
 {
 public:
-	void Draw();
-
+	HierarchyPanel() { m_Name = L"Hierarchy Panel"; }
+	virtual ~HierarchyPanel() = default;
+public:
+	virtual void Draw() override;
+	virtual void Free() override { __super::Free(); }
 private:
 	void DrawLayerItem(class Scene* scene, class Layer* layer);
 	void DrawGameObjectNode(class GameObject* gameObject);
@@ -31,9 +35,6 @@ private:
 	void CreatePrimitive(class Scene* scene, const wstring& name, const wstring& meshName);
 	void CreateSpriteObject(class Scene* scene);
 	void CreateCamera(class Scene* scene);
-
-
-
 
 
 #pragma region Variables

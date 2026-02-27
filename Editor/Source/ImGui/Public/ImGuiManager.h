@@ -1,11 +1,8 @@
 ﻿#pragma once
-#include "Base.h"
-#include <SDL3/SDL.h>
 
-#include "ViewportPanel.h"
-#include "HierarchyPanel.h"
-#include "InspectorPanel.h"
+#include "ImGuiInterface.h"
 #include "ToolBar.h"
+#include <SDL3/SDL.h>
 
 BEGIN(Editor)
 
@@ -41,6 +38,18 @@ public:
 	void End();
 	void ProcessEvent(const SDL_Event* event);
 	void Draw();
+
+
+#pragma region ImGui Management
+public:
+	EResult AddImGuiPanel(ImGuiInterface* panel);
+	EResult RemoveImGuiPanel(ImGuiInterface* panel);
+public:
+	const vector<ImGuiInterface*>& GetImGuiPanels() const { return m_ImGuiPanels; }
+private:
+	EResult CreateDefaultPanels();
+#pragma endregion
+
 
 #pragma region SDLRenderer3
 private:
@@ -100,11 +109,7 @@ private:
 #pragma region ImGui
 private:
 	ToolBar m_ToolBar;
-	HierarchyPanel m_HierarchyPanel;
-	InspectorPanel m_InspectorPanel;
-	ViewportPanel m_ViewportPanel;
-	ViewportPanel m_ViewportPanel2;
-
+	vector<ImGuiInterface*> m_ImGuiPanels;
 #pragma endregion
 #pragma endregion
 

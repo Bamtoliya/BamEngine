@@ -9,6 +9,10 @@
 
 #include "LocalizationManager.h"
 
+#include "ViewportPanel.h"
+#include "InspectorPanel.h"
+#include "HierarchyPanel.h"
+
 
 void ToolBar::Draw()
 {
@@ -103,11 +107,84 @@ void ToolBar::DrawWindowMenu()
 		{
 			m_DisplaySettingsWindow = !m_DisplaySettingsWindow;
 		}
+
+		if (ImGui::MenuItem("New Viewport Panel"))
+		{
+			AddNewViewportPanel();
+		}
+
+		ImGui::Separator();
+
+		if (ImGui::BeginMenu("Panels"))
+		{
+			const auto& panels = ImGuiManager::Get().GetImGuiPanels();
+
+			for (const auto& panel : panels)
+			{
+				bool IsOpen = panel->IsOpen();
+				if (ImGui::MenuItem(WStrToStr(panel->GetName()).c_str(), nullptr, &IsOpen))
+				{
+					panel->SetOpen(IsOpen);
+				}
+			}
+
+
+			ImGui::EndMenu();
+		}
 		ImGui::EndMenu();
 	}
 
 	if(m_DisplaySettingsWindow)
 		DrawDisplaySettingsWindow();
+
+	DrawNewViewportPopup();
+}
+void ToolBar::AddNewViewportPanel()
+{
+	m_newViewportDesc = tagViewportPanelDesc();
+	strcpy_s(m_NewViewportNameBuf, "New Viewport");
+	m_ShowNewViewportPopup = true;
+}
+void ToolBar::DrawNewViewportPopup()
+{
+	if (m_ShowNewViewportPopup)
+	{
+		ImGui::OpenPopup("NewViewportPopup");
+		m_ShowNewViewportPopup = false;
+	}
+	if (ImGui::BeginPopup("NewViewportPopup"))
+	{
+		ImGui::InputText("Name", m_NewViewportNameBuf, sizeof(m_NewViewportNameBuf));
+		ImGui::InputInt("Width", (int*)&m_newViewportDesc.RenderTargetWidth);
+		ImGui::InputInt("Height", (int*)&m_newViewportDesc.RenderTargetHeight);
+		const char* cameraTypes[] = { "Perspective", "Orthographic" };
+		int currentCameraType = (int)m_newViewportDesc.CameraType;
+		if (ImGui::Combo("Camera Type", &currentCameraType, cameraTypes, IM_ARRAYSIZE(cameraTypes)))
+		{
+			m_newViewportDesc.CameraType = (EViewportCameraType)currentCameraType;
+		}
+		const char* viewportModes[] = { "Wireframe", "Solid", "Textured" };
+		int currentViewportMode = (int)m_newViewportDesc.ViewportMode;
+		if (ImGui::Combo("Viewport Mode", &currentViewportMode, viewportModes, IM_ARRAYSIZE(viewportModes)))
+		{
+			m_newViewportDesc.ViewportMode = (EViewportMode)currentViewportMode;
+		}
+		if (ImGui::Button("Create"))
+		{
+			m_newViewportDesc.Name = StrToWStr(m_NewViewportNameBuf);
+			ViewportPanel* newPanel = new ViewportPanel();
+			newPanel->Initialize(&m_newViewportDesc);
+			ImGuiManager::Get().AddImGuiPanel(newPanel);
+			ImGui::CloseCurrentPopup();
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Cancel"))
+		{
+			ImGui::CloseCurrentPopup();
+		}
+		
+		ImGui::EndPopup();
+	}
 }
 #pragma endregion
 
