@@ -56,13 +56,13 @@ private: \
 #define REFLECT_VECTOR(VarName, FullType, InnerType, TypeName, ...) \
 	{ \
 		static Engine::ContainerAccessor acc = Engine::LinearContainerAccessor<FullType, InnerType>::Get(); \
-		typeInfo.AddProperty(Engine::PropertyInfo(#VarName, TypeName, Engine::EPropertyType::List, offsetof(ThisClass, VarName), &acc), ##__VA_ARGS__); \
+		typeInfo.AddProperty(Engine::PropertyInfo(#VarName, TypeName, Engine::EPropertyType::List, offsetof(ThisClass, VarName), &acc, #InnerType), ##__VA_ARGS__); \
 	}
 
 #define REFLECT_LIST(VarName, InnerType, TypeName, ...) \
 	{ \
 		static Engine::ContainerAccessor acc = Engine::ListAccessor<InnerType>::Get(); \
-		typeInfo.AddProperty(Engine::PropertyInfo(#VarName, TypeName, Engine::EPropertyType::List, offsetof(ThisClass, VarName), &acc), ##__VA_ARGS__); \
+		typeInfo.AddProperty(Engine::PropertyInfo(#VarName, TypeName, Engine::EPropertyType::List, offsetof(ThisClass, VarName), &acc, #InnerType), ##__VA_ARGS__); \
 	}
 
 #define REFLECT_SET(VarName, FullType, InnerType, TypeName, ...) \

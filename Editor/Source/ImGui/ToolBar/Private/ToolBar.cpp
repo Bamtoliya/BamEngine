@@ -237,6 +237,14 @@ void ToolBar::DrawDisplaySettingsWindow()
 		{
 			ImGui::GetIO().FontGlobalScale = uiScale; // 간단한 스케일링 방법
 		}
+
+		ImGui::Separator();
+		static int32 targetFPS = TimeManager::Get().GetTargetFPS();
+		ImGui::DragInt("FPS", &targetFPS);
+		if (ImGui::Button("Apply FPS"))
+		{
+			TimeManager::Get().SetTargetFPS(targetFPS);
+		}
 	}
 	ImGui::End();
 }

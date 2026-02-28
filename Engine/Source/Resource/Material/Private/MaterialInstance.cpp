@@ -126,3 +126,27 @@ void MaterialInstance::SetPixelShader(Shader* shader)
 	Safe_AddRef(m_PixelShader);
 }
 #pragma endregion
+
+
+#pragma region Pipeline
+EBlendMode MaterialInstance::GetBlendMode() const
+{
+	return m_BaseMaterial ? m_BaseMaterial->GetBlendMode() : EBlendMode::Opaque;
+}
+ECullMode  MaterialInstance::GetCullMode() const
+{
+	return m_BaseMaterial ? m_BaseMaterial->GetCullMode() : ECullMode::Back;
+}
+EFillMode  MaterialInstance::GetFillMode() const
+{
+	return m_BaseMaterial ? m_BaseMaterial->GetFillMode() : EFillMode::Solid;
+}
+EDepthMode MaterialInstance::GetDepthMode() const
+{
+	return m_BaseMaterial ? m_BaseMaterial->GetDepthMode() : EDepthMode::ReadWrite;
+}
+ECompareOp MaterialInstance::GetDepthCompareOp() const
+{
+	return m_BaseMaterial ? m_BaseMaterial->GetDepthCompareOp() : ECompareOp::Less;
+}
+#pragma endregion

@@ -470,6 +470,13 @@ bool InspectorPanel::DrawPropertyTable(void* instance, const TypeInfo& typeInfo,
 					}
 					break;
 				}
+
+				case EPropertyType::List:
+				{
+					changed = DrawListProperty(data, typeInfo, property);
+					break;
+				}
+
 				case EPropertyType::Vector2:
 				{
 					vec2* value = reinterpret_cast<vec2*>(data);
@@ -698,6 +705,219 @@ bool InspectorPanel::DrawIntegerProperty(void* data, const PropertyInfo& propert
 	return changed;
 }
 
+bool InspectorPanel::DrawListProperty(void* data, const TypeInfo& typeinfo, const PropertyInfo& property)
+{
+	auto* accessor = property.Accessor;
+	if (!accessor) return false;
+
+	uint32 size = accessor->GetSize(data);
+	string headerName = SanitizeDisplayLabel(typeinfo, property) + " [" + to_string(size) + "]###" + property.Name;
+	string innerType = property.InnerTypeName;
+	bool changed = false;
+
+	if (ImGui::CollapsingHeader(headerName.c_str()))
+	{
+		ImGui::Indent();
+
+		// [1. 리스트에 새 요소 추가]
+		if (ImGui::Button("+ Add Element"))
+		{
+			int32 defInt = 0;
+			f32 defFloat = 0.0f;
+			bool defBool = false;
+			string defStr = "";
+			wstring defWStr = L"";
+			vec2 defVec2 = vec2(0.f);
+			vec3 defVec3 = vec3(0.f);
+			vec4 defVec4 = vec4(0.f);
+			quat defQuat = glm::identity<quat>();
+
+			void* valueToAdd = nullptr;
+
+			// 내부 타입(InnerType)에 따라 추가할 기본값 포인터 연결
+			if (innerType == "int32" || innerType == "int64" || innerType == "uint32" || innerType == "uint64" || innerType == "Int32" || innerType == "int")
+				valueToAdd = &defInt;
+			else if (innerType == "float" || innerType == "F32")
+				valueToAdd = &defFloat;
+			else if (innerType == "bool" || innerType == "Bool")
+				valueToAdd = &defBool;
+			else if (innerType == "string" || innerType == "String")
+				valueToAdd = &defStr;
+			else if (innerType == "wstring" || innerType == "WString")
+				valueToAdd = &defWStr;
+			else if (innerType == "vec2" || innerType == "Vector2")
+				valueToAdd = &defVec2;
+			else if (innerType == "vec3" || innerType == "Vector3")
+				valueToAdd = &defVec3;
+			else if (innerType == "vec4" || innerType == "Vector4")
+				valueToAdd = &defVec4;
+			else if (innerType == "quat" || innerType == "Quaternion")
+				valueToAdd = &defQuat;
+
+			// 구조체나 오브젝트(또는 포인터)의 경우 valueToAdd가 nullptr로 넘어갑니다.
+			// Accessor가 emplace_back()을 호출하여 기본 생성자(또는 nullptr)로 리스트에 추가합니다.
+			accessor->Add(data, valueToAdd);
+			changed = true;
+		}
+
+		ImGui::Separator();
+
+		vector<void*> elements = accessor->GetElements(data);
+		void* toRemove = nullptr;
+
+		// [2. 테이블 형태로 리스트 요소들 그리기]
+		if (!elements.empty())
+		{
+			// 3개의 컬럼: Index(고정 너비), Value(확장 너비), Action(고정 너비)
+			if (ImGui::BeginTable("##ListTable", 3, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_SizingStretchProp))
+			{
+				ImGui::TableSetupColumn("Index", ImGuiTableColumnFlags_WidthFixed, 35.0f);
+				ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+				ImGui::TableSetupColumn("Action", ImGuiTableColumnFlags_WidthFixed, 30.0f);
+
+				for (int i = 0; i < elements.size(); ++i)
+				{
+					ImGui::PushID(i);
+					ImGui::TableNextRow();
+					void* elemPtr = elements[i];
+
+					// --- [Column 1] Index 표시 ---
+					ImGui::TableNextColumn();
+					ImGui::AlignTextToFramePadding();
+					ImGui::Text("[%d]", i);
+
+					// --- [Column 2] 값 인라인 편집기(Editor) 또는 재귀 구조체 렌더링 ---
+					ImGui::TableNextColumn();
+					ImGui::SetNextItemWidth(-FLT_MIN);
+
+					if (innerType == "int32" || innerType == "int64" || innerType == "uint32" || innerType == "uint64" || innerType == "Int32" || innerType == "int")
+					{
+						if (ImGui::DragInt("##val", (int*)elemPtr)) changed = true;
+					}
+					else if (innerType == "float" || innerType == "F32")
+					{
+						if (ImGui::DragFloat("##val", (float*)elemPtr)) changed = true;
+					}
+					else if (innerType == "bool" || innerType == "Bool")
+					{
+						if (ImGui::Checkbox("##val", (bool*)elemPtr)) changed = true;
+					}
+					else if (innerType == "string" || innerType == "String")
+					{
+						string* val = static_cast<string*>(elemPtr);
+						char buffer[1024];
+						strcpy_s(buffer, val->c_str());
+						if (ImGui::InputText("##val", buffer, sizeof(buffer)))
+						{
+							*val = string(buffer);
+							changed = true;
+						}
+					}
+					else if (innerType == "wstring" || innerType == "WString")
+					{
+						wstring* val = static_cast<wstring*>(elemPtr);
+						string utf8Str = Engine::WStrToStr(*val);
+						char buffer[1024];
+						strcpy_s(buffer, utf8Str.c_str());
+						if (ImGui::InputText("##val", buffer, sizeof(buffer)))
+						{
+							*val = Engine::StrToWStr(buffer);
+							changed = true;
+						}
+					}
+					else if (innerType == "vec2" || innerType == "Vector2")
+					{
+						vec2* val = static_cast<vec2*>(elemPtr);
+						if (ImGui::DragFloat2("##val", &val->x)) changed = true;
+					}
+					else if (innerType == "vec3" || innerType == "Vector3")
+					{
+						vec3* val = static_cast<vec3*>(elemPtr);
+						if (ImGui::DragFloat3("##val", &val->x)) changed = true;
+					}
+					else if (innerType == "vec4" || innerType == "Vector4")
+					{
+						vec4* val = static_cast<vec4*>(elemPtr);
+						if (ImGui::DragFloat4("##val", &val->x)) changed = true;
+					}
+					else if (innerType == "quat" || innerType == "Quaternion")
+					{
+						quat* q = static_cast<quat*>(elemPtr);
+						vec3 euler = glm::degrees(glm::eulerAngles(*q));
+						if (ImGui::DragFloat3("##val", &euler.x))
+						{
+							*q = glm::quat(glm::radians(euler));
+							changed = true;
+						}
+					}
+					else
+					{
+						// [핵심] 일반 변수가 아닌 경우: 구조체, 클래스, 혹은 포인터(*) 일 수 있음
+						bool isPointer = false;
+						string cleanInnerType = innerType;
+
+						// 1. 만약 포인터 타입(예: MaterialInstance*)이라면 '*' 제거
+						if (!cleanInnerType.empty() && cleanInnerType.back() == '*')
+						{
+							isPointer = true;
+							cleanInnerType.pop_back();
+						}
+
+						// 2. 순수한 타입명으로 리플렉션 레지스트리 검색
+						TypeInfo* innerTypeInfo = Engine::ReflectionRegistry::Get().GetType(cleanInnerType);
+
+						if (innerTypeInfo)
+						{
+							// 3. 포인터라면 이중 포인터 해제(Dereference), 일반 구조체면 그대로 사용
+							void* targetData = isPointer ? *static_cast<void**>(elemPtr) : elemPtr;
+
+							if (targetData)
+							{
+								// 4. TreeNode를 이용해 접고 펼칠 수 있는 형태의 하위 패널 구성
+								string nodeLabel = cleanInnerType + "##StructNode";
+								if (ImGui::TreeNodeEx(nodeLabel.c_str(), ImGuiTreeNodeFlags_SpanAvailWidth))
+								{
+									// 우리가 만들어둔 DrawDetails를 다시 호출하여 완벽한 재귀(Recursive) 렌더링 달성!
+									changed |= DrawDetails(targetData, *innerTypeInfo);
+									ImGui::TreePop();
+								}
+							}
+							else
+							{
+								ImGui::TextDisabled("Empty (nullptr)");
+							}
+						}
+						else
+						{
+							ImGui::TextDisabled("Unsupported List Type: %s", innerType.c_str());
+						}
+					}
+
+					// --- [Column 3] 요소 삭제 액션 (X 버튼) ---
+					ImGui::TableNextColumn();
+					if (ImGui::Button("X", ImVec2(-1, 0)))
+					{
+						toRemove = elemPtr;
+					}
+
+					ImGui::PopID();
+				}
+				ImGui::EndTable();
+			}
+		}
+
+		// [3. 삭제 요청 처리]
+		if (toRemove)
+		{
+			accessor->Remove(data, toRemove);
+			changed = true;
+		}
+
+		ImGui::Unindent();
+	}
+	return changed;
+}
+
 
 static bool DrawVec2Control(const std::string& label, glm::vec2& values, bool& lockX, bool& lockY, vec2 resetValue = { 0.f, 0.f })
 {
@@ -902,7 +1122,6 @@ static bool DrawVec3Control(const std::string& label, glm::vec3& values, bool& l
 	ImGui::PopID(); // Main Label ID
 	return changed;
 }
-
 static bool DrawVec4Control(const std::string& label, glm::vec4& values, float resetValue = 0.0f)
 {
 	bool changed = false;

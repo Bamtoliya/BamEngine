@@ -7,6 +7,20 @@ struct tagMaterialInstanceDesc
 	class Material* BaseMaterial = { nullptr };
 };
 
+ENUM()
+enum class EPipelineOverrideFlag : uint8
+{
+	None = 0,
+	BlendMode = 1 << 0,
+	CullMode = 1 << 1,
+	FillMode = 1 << 2,
+	DepthMode = 1 << 3,
+	DepthCompareOp = 1 << 4,
+	Count
+};
+
+ENABLE_BITMASK_OPERATORS(EPipelineOverrideFlag)
+
 BEGIN(Engine)
 
 CLASS()
@@ -32,8 +46,19 @@ public:
 
 
 #pragma region Base Material Management
+public:
 	void SetBaseMaterial(Material* material);
 	Material* GetBaseMaterial() const { return m_BaseMaterial; }
+#pragma endregion
+
+
+#pragma region Pipeline
+public:
+	virtual EBlendMode GetBlendMode() const override;
+	virtual ECullMode GetCullMode() const override;
+	virtual EFillMode GetFillMode() const override;
+	virtual EDepthMode GetDepthMode() const override;
+	virtual ECompareOp GetDepthCompareOp() const override;
 #pragma endregion
 
 
@@ -52,6 +77,9 @@ public:
 private:
 	PROPERTY()
 	class Material* m_BaseMaterial = { nullptr };
+private:
+	PROPERTY()
+	EPipelineOverrideFlag m_OverrideFlags = EPipelineOverrideFlag::None;
 #pragma endregion
 };
 END

@@ -205,6 +205,13 @@ void Application::InitializeResources()
     materialDesc.PixelShader = ResourceManager::Get().GetShader(L"DefaultPS");
     ResourceManager::Get().LoadMaterial(L"DefaultMaterial", &materialDesc);
 
+	tagMaterialDesc spriteMaterialDesc;
+	spriteMaterialDesc.VertexShader = ResourceManager::Get().GetShader(L"DefaultVS");
+	spriteMaterialDesc.PixelShader = ResourceManager::Get().GetShader(L"DefaultPS");
+	spriteMaterialDesc.BlendMode = EBlendMode::AlphaBlend;
+	spriteMaterialDesc.CullMode = ECullMode::None;
+	ResourceManager::Get().LoadMaterial(L"SpriteMaterial", &spriteMaterialDesc);
+
     ResourceManager::Get().LoadTexture(L"SampleTexture", L"Resources/Texture/uv1.png");
 
 
@@ -278,14 +285,16 @@ void Application::GetWindowSize(int32* w, int32* h) const
 
 void Application::UpdateTitle(f32 dt)
 {
-    m_FPSTimer += dt;
-    if (m_FPSTimer >= 1.0f)
+    static uint32 lastFPS = 0;
+
+    uint32 currentFPS = Engine::TimeManager::Get().GetFPS();
+
+    if (lastFPS != currentFPS)
     {
-        uint32 fps = Engine::TimeManager::Get().GetFPS();
-        std::string title = fmt::format("BamEngine Editor - FPS: {}", fps);
+        lastFPS = currentFPS;
+        std::string title = fmt::format("BamEngine Editor - FPS: {}", currentFPS);
         SDL_SetWindowTitle(m_Window, title.c_str());
-        m_FPSTimer -= 1.0f;
-	}
+    }
 }
 
 void Application::Test(f32 dt)
