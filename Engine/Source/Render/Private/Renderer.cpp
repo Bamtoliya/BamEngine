@@ -4,7 +4,7 @@
 #include "RHI.h"
 
 #include "SDLGPURHI.h"
-#include "../Private/Platform/SDLRenderer/SDLRendererRHI.h"
+#include "SDLRendererRHI.h"
 
 #include "ResourceManager.h"
 

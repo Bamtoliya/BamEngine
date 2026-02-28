@@ -33,6 +33,6 @@ private:
 	Transform* m_Transform = { nullptr };
 	Camera* m_Camera = { nullptr };
 private:
-	f32 m_CameraSpeed = { 5.0f };
+	f32 m_CameraSpeed = { 100.0f };
 };
 END

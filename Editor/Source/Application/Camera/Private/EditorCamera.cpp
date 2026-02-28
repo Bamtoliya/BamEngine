@@ -52,7 +52,7 @@ void EditorCamera::HandleInput(f32 dt)
 {
 	f32 mouseX = InputManager::Get().GetMouseDelta().x;
 	f32 mouseY = InputManager::Get().GetMouseDelta().y;
-	f32 rotationSpeed = 0.1f; // 마우스 회전 속도 조절
+	f32 rotationSpeed = 0.3f; // 마우스 회전 속도 조절
 	f32 movementSpeed = m_CameraSpeed * dt; // 이동 속도 조절
 	vec3 moveDirection = vec3(0.0f);
 
@@ -60,16 +60,23 @@ void EditorCamera::HandleInput(f32 dt)
 
 	if (m_Camera->GetIsPerspective())
 	{
-		vec3 fowrard = m_Transform->GetForward();
-		vec3 right = m_Transform->GetRight();
-		vec3 up = m_Transform->GetUp();
-		if (KEY_PRESSED("W")) moveDirection += fowrard;
-		if (KEY_PRESSED("S")) moveDirection -= fowrard;
-		if (KEY_PRESSED("A")) moveDirection -= right;
-		if (KEY_PRESSED("D")) moveDirection += right;
+		if (MOUSE_BUTTON_PRESSED("Right"))
+		{
+			vec3 currentRot = m_Transform->GetLocalRotationEuler();
+			currentRot.y -= mouseX * rotationSpeed;
+			currentRot.x -= mouseY * rotationSpeed;
+			currentRot.x = std::clamp(currentRot.x, -89.0f, 89.0f); // 수직 회전 제한
+			currentRot.z = 0.0f; // 롤 회전 방지
+			m_Transform->SetRotation(currentRot);
+		}
 
-		if (KEY_PRESSED("Q")) moveDirection -= up;
-		if (KEY_PRESSED("E")) moveDirection += up;
+		if (KEY_PRESSED("W")) moveDirection -= vec3(0.f, 0.f, 1.f);
+		if (KEY_PRESSED("S")) moveDirection += vec3(0.f, 0.f, 1.f);
+		if (KEY_PRESSED("A")) moveDirection -= vec3(1.0f, 0.f, 0.f);
+		if (KEY_PRESSED("D")) moveDirection += vec3(1.0f, 0.f, 0.f);
+
+		if (KEY_PRESSED("Q")) moveDirection += vec3(0.0f, 1.f, 0.f);
+		if (KEY_PRESSED("E")) moveDirection -= vec3(0.0f, 1.f, 0.f);
 	}
 	else
 	{

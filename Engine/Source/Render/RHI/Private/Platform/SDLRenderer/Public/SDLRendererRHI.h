@@ -80,6 +80,7 @@ public:
 
 #pragma region Getter
 	virtual void* GetNativeRHI() const override { return m_Renderer; }
+	virtual void* GetWindowHandle() const override { return m_Window; }
 #pragma endregion
 
 #pragma region Variables

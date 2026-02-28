@@ -341,6 +341,22 @@ void ViewportPanel::MouseInput(const ImVec2& mousePos, const ImVec2& imageMin, c
 			SelectionManager::Get().ClearSelection();
 		}
 	}
+
+	SDL_Window* window = static_cast<SDL_Window*>(Renderer::Get().GetRHI()->GetWindowHandle());
+	if (ImGui::IsMouseClicked(1))
+	{
+		m_InitialMousePos = InputManager::Get().GetMousePosition();
+	}
+	else if (ImGui::IsMouseDown(1))
+	{
+		SDL_SetWindowRelativeMouseMode(window, true);
+		ImGui::GetIO().MousePos = ImVec2(-FLT_MAX, -FLT_MAX);
+	}
+	else if(ImGui::IsMouseReleased(1))
+	{
+		SDL_SetWindowRelativeMouseMode(window, false);
+		SDL_WarpMouseInWindow(window, (int)m_InitialMousePos.x, (int)m_InitialMousePos.y);
+	}
 }
 
 Ray ViewportPanel::ScreenPosToRay(const ImVec2& mousePos, const ImVec2& imageMin, const ImVec2& imageSize)

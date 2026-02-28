@@ -112,6 +112,7 @@ public:
 
 #pragma region Getter
     virtual void* GetNativeRHI() const PURE;
+    virtual void* GetWindowHandle() const PURE;
     virtual void* GetCurrentCommandBuffer() const { return nullptr; }
 	virtual RHITexture* GetBackBuffer() const { return m_BackBuffer; }
     uint32 GetSwapChainWidth() { return m_SwapChainWidth; }

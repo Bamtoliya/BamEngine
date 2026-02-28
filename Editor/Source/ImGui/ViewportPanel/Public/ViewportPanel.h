@@ -90,6 +90,8 @@ private:
 	EViewportMode m_ViewportMode = EViewportMode::Textured;
 	uint32 m_PassID = { 0 };
 	uint32 m_DebugPassID = { 0 };
+private:
+	vec2 m_InitialMousePos;
 
 #pragma endregion
 };

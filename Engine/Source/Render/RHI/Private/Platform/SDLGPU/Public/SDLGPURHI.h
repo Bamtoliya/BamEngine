@@ -125,6 +125,7 @@ public:
 
 #pragma region Getter
 	virtual void* GetNativeRHI() const override { return m_Device; }
+	virtual void* GetWindowHandle() const override { return m_Window; }
 	virtual void* GetCurrentCommandBuffer() const override { return m_CurrentCommandBuffer; }
 #pragma endregion
 

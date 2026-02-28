@@ -317,6 +317,7 @@ void Transform::Rotate(const vec3& eulerAngle, ESpace space)
 
 	quat q = quat(glm::radians(eulerAngle));
 	Rotate(q, space);
+	SetDirty();
 }
 void Transform::Rotate(const vec3& axis, float angle, ESpace space)
 {
@@ -324,6 +325,7 @@ void Transform::Rotate(const vec3& axis, float angle, ESpace space)
 
 	quat q = glm::angleAxis(glm::radians(angle), glm::normalize(axis));
 	Rotate(q, space);
+	SetDirty();
 }
 void Transform::Rotate(const quat& rotation, ESpace space)
 {

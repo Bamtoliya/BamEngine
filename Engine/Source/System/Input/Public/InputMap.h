@@ -68,7 +68,6 @@ enum class EKeyCode : uint32
 
     Count // 전체 키보드 키 개수 (배열 크기 할당 시 유용함)
 };
-
 enum class EMouseButton : uint32
 {
     Left = 0,
@@ -79,7 +78,6 @@ enum class EMouseButton : uint32
 
     Count
 };
-
 static EKeyCode SDLKeyToEngineKeyCode(SDL_Scancode sdlScancode);
 static EKeyCode StringToEngineKeyCode(const string& keyString);
 static EMouseButton SDLButtonToEngineMouseButton(uint8 sdlButton);

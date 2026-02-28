@@ -45,7 +45,12 @@ void InputManager::Update(f32 dt)
 
 	for (uint32 i = 1; i < static_cast<uint32>(EMouseButton::Count); ++i)
 	{
-		m_CurrentMouseButtonStates[i] = (mouseMask & SDL_BUTTON_MASK(i)) != 0;
+		EMouseButton engineButton = SDLButtonToEngineMouseButton(i);
+		if (engineButton != EMouseButton::Count)
+		{
+			uint32 engineButtonIndex = static_cast<uint32>(engineButton);
+			m_CurrentMouseButtonStates[engineButtonIndex] = (mouseMask & SDL_BUTTON_MASK(i)) != 0;
+		}
 	}
 	vec2 newMousePosition = vec2(mouseX, mouseY);
 	m_MouseDelta = newMousePosition - m_MousePosition;
