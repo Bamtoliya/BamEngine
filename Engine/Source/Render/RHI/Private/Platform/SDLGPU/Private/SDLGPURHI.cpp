@@ -667,6 +667,7 @@ EResult SDLGPURHI::BindConstantBuffer(void* arg, uint32 slot)
 	if (!arg || !m_CurrentCommandBuffer) return EResult::InvalidArgument;
 
 	SDL_PushGPUVertexUniformData(m_CurrentCommandBuffer, slot, arg, sizeof(mat4));
+	SDL_PushGPUFragmentUniformData(m_CurrentCommandBuffer, slot, arg, sizeof(mat4));
 	return EResult::Success;
 }
 EResult SDLGPURHI::BindConstantBuffer(void* arg, uint32 size, uint32 slot)

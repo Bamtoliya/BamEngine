@@ -16,7 +16,7 @@ layout(set = 1, binding = 1) uniform UBO {
 } ubo;
 
 void main() {
-    gl_Position = commondata.viewProjection * ubo.worldMatrix * vec4(inPosition, 1.0);
+    gl_Position = commonVertdata.viewProjection * ubo.worldMatrix * vec4(inPosition, 1.0);
     
     fragTexCoord = inTexCoord;
     fragNormal = mat3(ubo.worldMatrix) * inNormal;

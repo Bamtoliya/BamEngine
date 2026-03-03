@@ -188,18 +188,32 @@ void Application::InitializeResources()
 #pragma endregion
 
 
+#pragma region Shader
     tagShaderDesc vsDesc;
     vsDesc.ShaderType = EShaderType::Vertex;
     vsDesc.FilePath = L"Resources/Shader/sprite.vert.spv";
     vsDesc.EntryPoint = "main";
     ResourceManager::Get().LoadShader(L"DefaultVS", &vsDesc);
-    
+
     tagShaderDesc psDesc;
     psDesc.ShaderType = EShaderType::Pixel;
     psDesc.FilePath = L"Resources/Shader/sprite.frag.spv";
     psDesc.EntryPoint = "main";
     ResourceManager::Get().LoadShader(L"DefaultPS", &psDesc);
-       
+
+	tagShaderDesc spriteVSDesc;
+	spriteVSDesc.ShaderType = EShaderType::Vertex;
+	spriteVSDesc.FilePath = L"Resources/Shader/sprite.vert.spv";
+	spriteVSDesc.EntryPoint = "main";
+	ResourceManager::Get().LoadShader(L"SpriteVS", &spriteVSDesc);
+
+    tagShaderDesc spritePsDesc;
+    spritePsDesc.ShaderType = EShaderType::Pixel;
+    spritePsDesc.FilePath = L"Resources/Shader/sprite.frag.spv";
+    spritePsDesc.EntryPoint = "main";
+    ResourceManager::Get().LoadShader(L"SpritePS", &spritePsDesc);
+#pragma endregion
+
     tagMaterialDesc materialDesc;
 	materialDesc.VertexShader = ResourceManager::Get().GetShader(L"DefaultVS");
     materialDesc.PixelShader = ResourceManager::Get().GetShader(L"DefaultPS");
@@ -210,6 +224,7 @@ void Application::InitializeResources()
 	spriteMaterialDesc.PixelShader = ResourceManager::Get().GetShader(L"DefaultPS");
 	spriteMaterialDesc.BlendMode = EBlendMode::AlphaBlend;
 	spriteMaterialDesc.CullMode = ECullMode::None;
+	spriteMaterialDesc.DepthMode = EDepthMode::ReadWrite;
 	ResourceManager::Get().LoadMaterial(L"SpriteMaterial", &spriteMaterialDesc);
 
     ResourceManager::Get().LoadTexture(L"SampleTexture", L"Resources/Texture/uv1.png");

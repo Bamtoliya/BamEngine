@@ -38,6 +38,7 @@ class ENGINE_API Renderer final : public Base
 	using DESC = tagRendererDesc;
 	friend class Runtime;
 	using RenderDelegate = MulticastDelegate<f32>;
+	using CustomRenderCommand = function<EResult(f32, RenderPass*)>;
 #pragma region Struct
 public:
 	
@@ -64,6 +65,7 @@ private:
 public:
 	void Submit(class RenderComponent* component, RenderPassID passID);
 	void SubmitAllPass(class RenderComponent* component);
+	void SubmitCustomCommand(const CustomRenderCommand& command, RenderPassID passID);
 	void ClearRenderQueue(RenderPassID passID);
 	void ClearAllRenderQueues();
 #pragma endregion
@@ -117,6 +119,7 @@ private:
 	ERHIType m_RHIType = ERHIType::Unknown;
 	map<RenderPassID, RenderDelegate> m_RenderPassDelegates;
 	map<RenderPassID, vector<class RenderComponent*>> m_RenderQueues;
+	map<RenderPassID, vector<CustomRenderCommand>> m_CustomRenderQueues;
 	RenderTarget* m_SceneBuffer = { nullptr };
 	RenderTarget* m_DepthBuffer = { nullptr };
 private:

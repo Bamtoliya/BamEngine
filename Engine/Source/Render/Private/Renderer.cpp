@@ -143,6 +143,7 @@ EResult Renderer::Render(f32 dt)
 				tagCameraBuffer cameraBuffer = cam->GetCameraBuffer();
 				cameraBuffer.time = dt;
 				m_RHI->BindConstantBuffer(&cameraBuffer, sizeof(tagCameraBuffer), 0);
+				m_RHI->BindConstantBuffer(&cameraBuffer, sizeof(tagCameraBuffer), 3);
 				if (IsFailure(m_RHI->BeginRenderPass(pass)))
 					return EResult::Fail;
 				m_RHI->SetViewport(0, 0, 1920, 1080);
@@ -161,6 +162,17 @@ EResult Renderer::Render(f32 dt)
 				{
 					if(IsFailure(RenderComponents(dt, it->second, pass->GetSortType(), pass)))
 						return EResult::Fail;
+				}
+				auto customIt = m_CustomRenderQueues.find(pass->GetID());
+				if (customIt != m_CustomRenderQueues.end())
+				{
+					for (const auto& command : customIt->second)
+					{
+						if (IsFailure(command(dt, pass)))
+						{
+							return EResult::Fail;
+						}
+					}
 				}
 				if (IsFailure(m_RHI->EndRenderPass()))
 					return EResult::Fail;
@@ -205,6 +217,7 @@ EResult Renderer::EndFrame()
 	m_DebugVertices.clear();
 #endif // _DEBUG
 	m_RenderQueues.clear();
+	m_CustomRenderQueues.clear();
 	m_ViewportCameras.clear();
 	return EResult::Success;
 }
@@ -225,6 +238,10 @@ void Renderer::SubmitAllPass(RenderComponent* component)
 		Safe_AddRef(component);
 	}
 }
+void Renderer::SubmitCustomCommand(const CustomRenderCommand& command, RenderPassID passID)
+{
+	m_CustomRenderQueues[passID].push_back(command);
+}
 
 void Renderer::ClearRenderQueue(RenderPassID passID)
 {
@@ -233,6 +250,12 @@ void Renderer::ClearRenderQueue(RenderPassID passID)
 	{
 		RELEASE_VECTOR(it->second);
 		m_RenderQueues.erase(it);
+	}
+	auto customIt = m_CustomRenderQueues.find(passID);
+	if (customIt != m_CustomRenderQueues.end())
+	{
+		customIt->second.clear();
+		m_CustomRenderQueues.erase(customIt);
 	}
 }
 
@@ -243,6 +266,11 @@ void Renderer::ClearAllRenderQueues()
 		RELEASE_VECTOR(pair.second);
 	}
 	m_RenderQueues.clear();
+	for (auto& pair : m_CustomRenderQueues)
+	{
+		pair.second.clear();
+	}
+	m_CustomRenderQueues.clear();
 }
 #pragma endregion
 

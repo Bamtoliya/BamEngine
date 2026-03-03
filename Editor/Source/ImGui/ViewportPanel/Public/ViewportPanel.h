@@ -6,6 +6,7 @@
 #include "EditorCamera.h"
 #include "InspectorPanel.h"
 #include "ImGuiInterface.h"
+#include "Grid.h"
 
 enum class EViewportMode : uint8
 {
@@ -59,13 +60,18 @@ public:
 	void Draw();
 private:
 	void DrawGuizmo(ImVec2 pos, ImVec2 size);
+private:
+	void SubmitGridRenderCommand(f32 dt);
+#pragma region Options Bar
+private:
 	void DrawOptionsBar();
 private:
-	void DrawEditorCameraInspector();
+	void DrawDimensionToggleButton();
+#pragma endregion
+
+#pragma region Input
 private:
 	void MouseInput(const ImVec2& mousePos, const ImVec2& imageMin, const ImVec2& imageSize);
-
-#pragma region MyRegion
 private:
 	Ray ScreenPosToRay(const ImVec2& mousePos, const ImVec2& imageMin, const ImVec2&imageSize);
 #pragma endregion
@@ -83,15 +89,31 @@ private:
 	ImGuizmo::OPERATION m_GizmoOperation = { ImGuizmo::OPERATION::TRANSLATE };
 	ImGuizmo::MODE m_GizmoMode = { ImGuizmo::MODE::LOCAL };
 	bool m_GizmoUseSnap = { false };
+	vec3 m_GizmoSnapTranslation = { 1.0f, 1.0f, 1.0f };
+	vec3 m_GizmoSnapRotation = { 15.0f, 15.0f, 15.0f };
+	vec3 m_GizmoSnapScale = { 0.1f, 0.1f, 0.1f };
 private:
 	InspectorPanel* m_InspectorPanel = { nullptr };
 private:
 	EViewportCameraType m_CameraType = EViewportCameraType::Orthographic;
 	EViewportMode m_ViewportMode = EViewportMode::Textured;
+private:
+	bool m_EditorMode = { true };
+	//이걸 비트연산으로 바꿀까
+	bool m_ShowGrid = { true };
+	//bool m_ShowAxis = { true };
+	//bool m_ShowBoundingBox = { true };
+	//bool m_ShowLight = { true };
+	//bool m_ShowCollider = { true };
+	//bool m_ShowSkeleton = { true };
+	//bool m_ShowDebugInfo = { true };
+private:
 	uint32 m_PassID = { 0 };
 	uint32 m_DebugPassID = { 0 };
 private:
 	vec2 m_InitialMousePos;
+private:
+	Grid m_Grid;
 
 #pragma endregion
 };

@@ -71,6 +71,7 @@ void ViewportPanel::Initialize(void* arg)
 	m_InspectorPanel = new InspectorPanel();
 	m_InspectorPanel->Close();
 	m_InspectorPanel->SetSelectedGameObject(m_EditorCamera);
+	m_Grid.Initialize();
 }
 void ViewportPanel::Free()
 {
@@ -78,6 +79,7 @@ void ViewportPanel::Free()
 	Safe_Release(m_RenderTarget);
 	Safe_Release(m_DepthStencil);
 	Safe_Release(m_InspectorPanel);
+	m_Grid.Free();
 }
 #pragma endregion
 
@@ -86,8 +88,10 @@ void ViewportPanel::Update(f32 dt)
 	m_EditorCamera->FixedUpdate(dt);
 	m_EditorCamera->Update(dt);
 	m_EditorCamera->LateUpdate(dt);
+	m_IsOrthographic = !m_EditorCamera->GetCamera()->GetIsPerspective();
 	Renderer::Get().RegisterViewportCamera(m_EditorCamera->GetCamera(), m_PassID);
 	Renderer::Get().RegisterViewportCamera(m_EditorCamera->GetCamera(), m_DebugPassID);
+	m_Grid.SubmitGrid(m_PassID, m_IsOrthographic);
 }
 
 void ViewportPanel::Draw()
@@ -162,6 +166,11 @@ void ViewportPanel::Draw()
 	ImGui::PopID();
 }
 
+#pragma region Guizmo
+
+#pragma endregion
+
+
 void ViewportPanel::DrawGuizmo(ImVec2 pos, ImVec2 size)
 {
 	GameObject* selectedObject = SelectionManager::Get().GetPrimarySelection();
@@ -193,8 +202,14 @@ void ViewportPanel::DrawGuizmo(ImVec2 pos, ImVec2 size)
 		if (ImGui::IsKeyPressed(ImGuiKey_E)) m_GizmoOperation = ImGuizmo::ROTATE;
 		if (ImGui::IsKeyPressed(ImGuiKey_R)) m_GizmoOperation = ImGuizmo::SCALE;
 	}
-	
-	ImGuizmo::Manipulate(glm::value_ptr(viewMatrix), glm::value_ptr(projMatrix), m_GizmoOperation, m_GizmoMode, glm::value_ptr(worldMatrix));
+
+	bool snap = m_GizmoUseSnap || ImGui::GetIO().KeyCtrl;
+	vec3 snapValues = m_GizmoSnapTranslation;
+	if (m_GizmoOperation == ImGuizmo::ROTATE)
+		snapValues = m_GizmoSnapRotation;
+	else if (m_GizmoOperation == ImGuizmo::SCALE)
+		snapValues = m_GizmoSnapScale;
+	ImGuizmo::Manipulate(glm::value_ptr(viewMatrix), glm::value_ptr(projMatrix), m_GizmoOperation, m_GizmoMode, glm::value_ptr(worldMatrix), nullptr, snap ? glm::value_ptr(snapValues) : nullptr);
 
 	if (ImGuizmo::IsUsing())
 	{
@@ -232,6 +247,12 @@ void ViewportPanel::DrawGuizmo(ImVec2 pos, ImVec2 size)
 	}
 }
 
+void ViewportPanel::SubmitGridRenderCommand(f32 dt)
+{
+
+}
+
+#pragma region Options Bar
 void ViewportPanel::DrawOptionsBar()
 {
 	if (ImGui::BeginMenuBar())
@@ -249,17 +270,36 @@ void ViewportPanel::DrawOptionsBar()
 				m_GizmoMode = ImGuizmo::LOCAL;
 			if (ImGui::MenuItem("World", nullptr, m_GizmoMode == ImGuizmo::WORLD))
 				m_GizmoMode = ImGuizmo::WORLD;
+
+			ImGui::Separator();
+			if (ImGui::MenuItem("Snap to Grid", nullptr, m_GizmoUseSnap))
+				m_GizmoUseSnap = !m_GizmoUseSnap;
+			if (m_GizmoUseSnap)
+			{
+				ImGui::InputFloat3("Snap Translation", glm::value_ptr(m_GizmoSnapTranslation));
+				ImGui::InputFloat3("Snap Rotation", glm::value_ptr(m_GizmoSnapRotation));
+				ImGui::InputFloat3("Snap Scale", glm::value_ptr(m_GizmoSnapScale));
+			}
 			ImGui::EndMenu();
 		}
 
 		if (ImGui::BeginMenu("RenderTarget"))
 		{
+			ImGui::EndMenu();
+		}
 
+		if (ImGui::BeginMenu("Grid"))
+		{
+			if (ImGui::MenuItem("Show Grid"))
+			{
+				m_Grid.Toggle();
+			}
+			ImGui::EndMenu();
 		}
 
 		if (ImGui::BeginMenu("TempMenu"))
 		{
-
+			ImGui::EndMenu();
 		}
 
 		if (ImGui::Button("Camera"))
@@ -267,66 +307,71 @@ void ViewportPanel::DrawOptionsBar()
 			m_InspectorPanel->ToggleOpen();
 		}
 
-
-		// 1. 버튼 크기 및 그룹 전체 너비 계산
-		ImVec2 buttonSize(30.0f, 0.0f); // 너비 30px 고정 (텍스트에 맞춰 조절 가능)
-		float groupWidth = buttonSize.x * 2.0f;
-		float rightPadding = 10.0f; // 우측 여백
-
-		// 2. 커서를 우측 끝으로 이동 (윈도우 너비 - 그룹 너비 - 여백)
-		ImGui::SameLine(ImGui::GetWindowWidth() - groupWidth - rightPadding);
-
-		// 3. 스타일 적용: 간격 제거 및 각진 모서리 (토글 느낌)
-		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 0.0f));
-		ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 0.0f); // 네모난 버튼
-
-		// 4. [2D 버튼] 그리기
-		// 활성화 상태(2D)면 'Active' 색상, 아니면 기본 배경보다 어두운 색상 사용
-		if (m_IsOrthographic)
-			ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyle().Colors[ImGuiCol_ButtonActive]);
-		else
-			ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyle().Colors[ImGuiCol_FrameBg]);
-
-		if (ImGui::Button("2D", buttonSize))
-		{
-			m_IsOrthographic = true;
-
-			// 카메라 설정을 즉시 변경하고 싶다면 여기서 호출
-			if (m_EditorCamera) {
-				m_EditorCamera->GetCamera()->SetPerspective(false);
-			}
-		}
-		ImGui::PopStyleColor(); // 색상 복구
-
-		ImGui::SameLine(); // 옆에 바로 붙이기
-
-		// 5. [3D 버튼] 그리기
-		// 비활성화 상태(!2D)면 'Active' 색상
-		if (!m_IsOrthographic)
-			ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyle().Colors[ImGuiCol_ButtonActive]);
-		else
-			ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyle().Colors[ImGuiCol_FrameBg]);
-
-		if (ImGui::Button("3D", buttonSize))
-		{
-			m_IsOrthographic = false;
-
-			// 카메라 설정을 즉시 변경하고 싶다면 여기서 호출
-			if (m_EditorCamera) {
-				m_EditorCamera->GetCamera()->SetPerspective();
-			}
-		}
-		ImGui::PopStyleColor(); // 색상 복구
-
-		// 6. 스타일 복구
-		ImGui::PopStyleVar(2); // ItemSpacing, FrameRounding
+		DrawDimensionToggleButton();
 	}
 	ImGui::EndMenuBar();
 }
+void ViewportPanel::DrawDimensionToggleButton()
+{
+	// 1. 버튼 크기 및 그룹 전체 너비 계산
+	ImVec2 buttonSize(30.0f, 0.0f); // 너비 30px 고정 (텍스트에 맞춰 조절 가능)
+	float groupWidth = buttonSize.x * 2.0f;
+	float rightPadding = 10.0f; // 우측 여백
 
+	// 2. 커서를 우측 끝으로 이동 (윈도우 너비 - 그룹 너비 - 여백)
+	ImGui::SameLine(ImGui::GetWindowWidth() - groupWidth - rightPadding);
+
+	// 3. 스타일 적용: 간격 제거 및 각진 모서리 (토글 느낌)
+	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 0.0f));
+	ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 0.0f); // 네모난 버튼
+
+	// 4. [2D 버튼] 그리기
+	// 활성화 상태(2D)면 'Active' 색상, 아니면 기본 배경보다 어두운 색상 사용
+	if (m_IsOrthographic)
+		ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyle().Colors[ImGuiCol_ButtonActive]);
+	else
+		ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyle().Colors[ImGuiCol_FrameBg]);
+
+	if (ImGui::Button("2D", buttonSize))
+	{
+		m_IsOrthographic = true;
+
+		// 카메라 설정을 즉시 변경하고 싶다면 여기서 호출
+		if (m_EditorCamera) {
+			m_EditorCamera->GetCamera()->SetPerspective(false);
+		}
+	}
+	ImGui::PopStyleColor(); // 색상 복구
+
+	ImGui::SameLine(); // 옆에 바로 붙이기
+
+	// 5. [3D 버튼] 그리기
+	// 비활성화 상태(!2D)면 'Active' 색상
+	if (!m_IsOrthographic)
+		ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyle().Colors[ImGuiCol_ButtonActive]);
+	else
+		ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyle().Colors[ImGuiCol_FrameBg]);
+
+	if (ImGui::Button("3D", buttonSize))
+	{
+		m_IsOrthographic = false;
+
+		// 카메라 설정을 즉시 변경하고 싶다면 여기서 호출
+		if (m_EditorCamera) {
+			m_EditorCamera->GetCamera()->SetPerspective();
+		}
+	}
+	ImGui::PopStyleColor(); // 색상 복구
+
+	// 6. 스타일 복구
+	ImGui::PopStyleVar(2); // ItemSpacing, FrameRounding
+}
+#pragma endregion
+
+#pragma region Input
 void ViewportPanel::MouseInput(const ImVec2& mousePos, const ImVec2& imageMin, const ImVec2& imageSize)
 {
-	if (ImGui::IsMouseClicked(0) && ImGui::IsWindowHovered() && !ImGuizmo::IsOver() )
+	if (ImGui::IsMouseClicked(0) && ImGui::IsWindowHovered() && !ImGuizmo::IsOver())
 	{
 		Ray mouseRay = ScreenPosToRay(mousePos, imageMin, imageSize);
 		GameObject* pickedObject = SelectionManager::Get().PickObjectByRay(mouseRay);
@@ -352,7 +397,7 @@ void ViewportPanel::MouseInput(const ImVec2& mousePos, const ImVec2& imageMin, c
 		SDL_SetWindowRelativeMouseMode(window, true);
 		ImGui::GetIO().MousePos = ImVec2(-FLT_MAX, -FLT_MAX);
 	}
-	else if(ImGui::IsMouseReleased(1))
+	else if (ImGui::IsMouseReleased(1))
 	{
 		SDL_SetWindowRelativeMouseMode(window, false);
 		SDL_WarpMouseInWindow(window, (int)m_InitialMousePos.x, (int)m_InitialMousePos.y);
@@ -389,3 +434,4 @@ Ray ViewportPanel::ScreenPosToRay(const ImVec2& mousePos, const ImVec2& imageMin
 
 	return ray;
 }
+#pragma endregion
