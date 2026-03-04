@@ -60,8 +60,6 @@ public:
 	void Draw();
 private:
 	void DrawGuizmo(ImVec2 pos, ImVec2 size);
-private:
-	void SubmitGridRenderCommand(f32 dt);
 #pragma region Options Bar
 private:
 	void DrawOptionsBar();

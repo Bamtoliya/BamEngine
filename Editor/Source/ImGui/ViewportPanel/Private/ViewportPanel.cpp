@@ -7,6 +7,7 @@
 
 #include "CameraManager.h"
 #include "SelectionManager.h"
+#include "InputManager.h"
 
 
 #pragma region Contructor&Destructor
@@ -167,10 +168,6 @@ void ViewportPanel::Draw()
 }
 
 #pragma region Guizmo
-
-#pragma endregion
-
-
 void ViewportPanel::DrawGuizmo(ImVec2 pos, ImVec2 size)
 {
 	GameObject* selectedObject = SelectionManager::Get().GetPrimarySelection();
@@ -219,7 +216,7 @@ void ViewportPanel::DrawGuizmo(ImVec2 pos, ImVec2 size)
 		if (parent)
 		{
 			Transform* parentTransform = parent->GetTransform();
-			if(parentTransform)
+			if (parentTransform)
 			{
 				mat4 parentWorldMatrix = parentTransform->GetWorldMatrix();
 				mat4 inverseParentWorldMatrix = glm::inverse(parentWorldMatrix);
@@ -246,11 +243,7 @@ void ViewportPanel::DrawGuizmo(ImVec2 pos, ImVec2 size)
 		transform->SetScale(glm::make_vec3(matrixScale));
 	}
 }
-
-void ViewportPanel::SubmitGridRenderCommand(f32 dt)
-{
-
-}
+#pragma endregion
 
 #pragma region Options Bar
 void ViewportPanel::DrawOptionsBar()
@@ -388,16 +381,17 @@ void ViewportPanel::MouseInput(const ImVec2& mousePos, const ImVec2& imageMin, c
 	}
 
 	SDL_Window* window = static_cast<SDL_Window*>(Renderer::Get().GetRHI()->GetWindowHandle());
-	if (ImGui::IsMouseClicked(1))
+	
+	if (MOUSE_BUTTON_DOWN("right"))
 	{
 		m_InitialMousePos = InputManager::Get().GetMousePosition();
 	}
-	else if (ImGui::IsMouseDown(1))
+	else if (MOUSE_BUTTON_PRESSED("right"))
 	{
 		SDL_SetWindowRelativeMouseMode(window, true);
 		ImGui::GetIO().MousePos = ImVec2(-FLT_MAX, -FLT_MAX);
 	}
-	else if (ImGui::IsMouseReleased(1))
+	else if (MOUSE_BUTTON_UP("right"))
 	{
 		SDL_SetWindowRelativeMouseMode(window, false);
 		SDL_WarpMouseInWindow(window, (int)m_InitialMousePos.x, (int)m_InitialMousePos.y);
