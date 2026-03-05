@@ -59,7 +59,7 @@ void Grid::SubmitGrid(RenderPassID renderPassID, bool isOrthographic)
             }
 
             // [핵심 3] 깊이 비교 설정 (이전과 동일하게 배경으로 깔리도록 설정)
-            pipelineDesc.DepthStencilState.DepthTestEnable = false;
+            pipelineDesc.DepthStencilState.DepthTestEnable = true;
             pipelineDesc.DepthStencilState.DepthWriteEnable = false; // 그리드끼리 가리지 않도록 Write는 끔
             pipelineDesc.DepthStencilState.DepthCompareOp = ECompareOp::LessOrEqual;
 

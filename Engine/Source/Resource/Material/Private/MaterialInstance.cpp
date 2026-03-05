@@ -53,7 +53,6 @@ EResult MaterialInstance::Bind(uint32 slot)
 	if (!m_BaseMaterial) return EResult::Fail;
 
 	RHI* rhi = Renderer::Get().GetRHI();
-	RenderPass* renderPass = rhi->GetCurrentRenderPass();
 
 	// 1단계: Base Material의 텍스처 슬롯 순회
 	for (auto& [name, baseSlot] : m_BaseMaterial->GetTextureSlots())
@@ -64,7 +63,7 @@ EResult MaterialInstance::Bind(uint32 slot)
 
 		RHITexture* texture = baseSlot.texture;
 		if (!texture)
-			texture = ResourceManager::Get().GetTexture(L"DefaultTexture")->GetRHITexture();
+			texture = ResourceManager::Get().GetTexture(L"Magenta1x1")->GetRHITexture();
 		RHISampler* sampler = SamplerManager::Get().GetSampler(baseSlot.SamplerKey);
 		if (!sampler)
 			sampler = SamplerManager::Get().GetDefaultSampler();
@@ -76,7 +75,7 @@ EResult MaterialInstance::Bind(uint32 slot)
 	{
 		RHITexture* texture = textureSlot.texture;
 		if (!texture)
-			texture = ResourceManager::Get().GetTexture(L"DefaultTexture")->GetRHITexture();
+			texture = ResourceManager::Get().GetTexture(L"Magenta1x1")->GetRHITexture();
 		RHISampler* sampler = SamplerManager::Get().GetSampler(textureSlot.SamplerKey);
 		if (!sampler)
 			sampler = SamplerManager::Get().GetDefaultSampler();

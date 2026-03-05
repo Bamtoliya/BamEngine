@@ -24,8 +24,7 @@ void ViewportPanel::Initialize(void* arg)
 		{
 			m_IsOrthographic = true;
 			cameraDesc.IsPerspective = false;
-			cameraDesc.Width = desc->RenderTargetWidth;
-			cameraDesc.Height = desc->RenderTargetHeight;
+			cameraDesc.OrthoSize = 10.0f;
 		}
 		m_EditorCamera = EditorCamera::Create(&cameraDesc);
 		m_EditorCamera->SetName(m_Name + L"_Camera");
@@ -391,7 +390,7 @@ void ViewportPanel::MouseInput(const ImVec2& mousePos, const ImVec2& imageMin, c
 		SDL_SetWindowRelativeMouseMode(window, true);
 		ImGui::GetIO().MousePos = ImVec2(-FLT_MAX, -FLT_MAX);
 	}
-	else if (MOUSE_BUTTON_UP("right"))
+	else if (MOUSE_BUTTON_UP("right")) 
 	{
 		SDL_SetWindowRelativeMouseMode(window, false);
 		SDL_WarpMouseInWindow(window, (int)m_InitialMousePos.x, (int)m_InitialMousePos.y);

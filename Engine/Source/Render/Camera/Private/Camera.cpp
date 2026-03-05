@@ -18,8 +18,7 @@ EResult Camera::Initialize(void* arg)
 		m_Near = desc->Near;
 		m_Far = desc->Far;
 		m_Aspect = desc->Aspect;
-		m_Width = desc->Width;
-		m_Height = desc->Height;
+		m_OrthoSize = desc->OrthoSize;
 	}
 	UpdateMatrix();
 	return EResult::Success;
@@ -45,8 +44,7 @@ Component* Camera::Clone(GameObject* owner, void* arg)
 	desc.Near = m_Near;
 	desc.Far = m_Far;
 	desc.Aspect = m_Aspect;
-	desc.Width = m_Width;
-	desc.Height = m_Height;
+	desc.OrthoSize = m_OrthoSize;
 	desc.Owner = owner;
 	desc.Tag = this->m_Tag;
 	if (IsFailure(instance->Initialize(&desc)))
@@ -116,7 +114,11 @@ void Camera::UpdateMatrix()
 		if (m_IsPerspective)
 			SetPerspective(glm::radians(m_FOV), m_Aspect, m_Near, m_Far);
 		else
-			SetOrthographic(m_Width, m_Height, m_Near, m_Far);
+		{
+			f32 orthoWidth = m_OrthoSize * m_Aspect;
+			f32 orthoHeight = m_OrthoSize;
+			SetOrthographic(orthoWidth, orthoHeight, m_Near, m_Far);
+		}
 	}
 }
 

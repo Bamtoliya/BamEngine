@@ -21,10 +21,17 @@ private:
 	virtual ~BoxCollider() {}
 	EResult Initialize(void* arg = nullptr);
 public:
+	EResult LateInitialize(void* arg = nullptr) override;
 	static BoxCollider* Create(void* arg = nullptr);
 	Component* Clone(GameObject* owner, void* arg = nullptr) override;
 	virtual void Free() override;
 #pragma endregion
+
+#pragma region Loop
+public:
+	virtual void LateUpdate(f32 dt);
+#pragma endregion
+
 
 #pragma region Collision
 public:
@@ -39,6 +46,12 @@ public:
 	const vec3 GetMin() const { return m_Center - m_Extents; }
 	const vec3 GetMax() const { return m_Center + m_Extents; }
 #pragma endregion
+
+#pragma region Bounds
+private:
+	void AutoFit();
+#pragma endregion
+
 
 #pragma region Member Variable
 private:

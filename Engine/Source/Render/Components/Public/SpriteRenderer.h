@@ -41,6 +41,7 @@ public:
 #pragma region Getter
 public:
 	vec2 GetTiling() const { return m_Tiling; }
+	Sprite* GetSprite() const { return m_Sprite; }
 #pragma endregion
 #pragma region Setter
 public:

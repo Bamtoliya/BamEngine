@@ -31,8 +31,9 @@ class ENGINE_API Component abstract : public Base
 protected:
 	Component() {}
 	virtual ~Component() {}
-	virtual EResult Initialize(void* arg = nullptr);
+	virtual EResult Initialize(void* arg = nullptr);	
 public:
+	virtual EResult LateInitialize(void* arg = nullptr) { return EResult::Success; }
 	virtual Component* Clone(GameObject* owner, void* arg = nullptr) PURE;
 	virtual void Free() override;
 #pragma endregion

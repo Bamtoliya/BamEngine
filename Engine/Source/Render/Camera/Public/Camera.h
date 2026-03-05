@@ -22,8 +22,7 @@ struct ENGINE_API tagCameraDesc : public tagComponentDesc
 	f32 Near = { 0.1f };
 	f32 Far = { 1000.f };
 	f32 Aspect = { 1.777f };
-	f32 Width = { 10.f };
-	f32 Height = { 10.f };
+	f32 OrthoSize = { 10.f };
 };
 CLASS()
 class ENGINE_API Camera final : public Component
@@ -66,6 +65,12 @@ public:
 	void SetPerspective(bool perspective = true) { m_IsPerspective = perspective; }
 	void SetPerspective(f32 fov, f32 aspect, f32 near, f32 far);
 	void SetOrthographic(f32 width, f32 height, f32 near, f32 far);
+public:
+	f32 GetFOV() const { return m_FOV; }
+	f32 GetOrthoSize() const { return m_OrthoSize; }
+public:
+	void SetFOV(f32 fov) { m_FOV = fov; UpdateMatrix(); }
+	void SetOrthoSize(f32 orthoSize) { m_OrthoSize = orthoSize; UpdateMatrix(); }
 #pragma endregion
 
 #pragma region Variables
@@ -80,9 +85,7 @@ private:
 	PROPERTY(EDITCONDITION("m_IsPerspective"))
 	f32 m_Aspect = { 1.777f };
 	PROPERTY(EDITCONDITION("!m_IsPerspective"))
-	f32 m_Width = { 10.f };
-	PROPERTY(EDITCONDITION("!m_IsPerspective"))
-	f32 m_Height = { 10.f };
+	f32 m_OrthoSize = { 10.f };
 
 	PROPERTY()
 	bool m_IsPerspective = { true };

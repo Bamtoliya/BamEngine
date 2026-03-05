@@ -824,7 +824,7 @@ void HierarchyPanel::DrawAddGameObjectButton(Scene* scene)
 
 		if (ImGui::MenuItem("Cube"))
 		{
-			CreatePrimitive(scene, L"Cube", L"Cube");
+			CreatePrimitive(scene, L"Cube", L"CubeMesh");
 		}
 
 		if (ImGui::MenuItem("Sphere"))
@@ -1126,6 +1126,7 @@ void HierarchyPanel::CreatePrimitive(Scene* scene, const wstring& name, const ws
 	MeshRenderer* meshRenderer = newGameObject->GetComponent<MeshRenderer>();
 	meshRenderer->SetMaterial(ResourceManager::Get().GetMaterial(L"DefaultMaterial"));
 	meshRenderer->SetRenderPassID(0);
+	newGameObject->AddComponent(L"BoxCollider");
 	scene->AddGameObject(newGameObject);
 	Safe_Release(newGameObject);
 }
@@ -1135,10 +1136,10 @@ void HierarchyPanel::CreateSpriteObject(Scene* scene)
 	GameObject* newGameObject = GameObject::Create();
 	newGameObject->SetName(L"New Sprite");
 	newGameObject->AddComponent(L"SpriteRenderer");
-	newGameObject->AddComponent(L"Box2DCollider");
 	SpriteRenderer* spriteRenderer = newGameObject->GetComponent<SpriteRenderer>();
 	spriteRenderer->SetMaterial(ResourceManager::Get().GetMaterial(L"SpriteMaterial"));
 	spriteRenderer->SetSprite(ResourceManager::Get().GetTexture(L"SampleTexture"));
+	newGameObject->AddComponent(L"Box2DCollider");
 	spriteRenderer->SetRenderPassID(0);
 	scene->AddGameObject(newGameObject);
 	Safe_Release(newGameObject);

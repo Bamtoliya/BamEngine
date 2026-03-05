@@ -5,6 +5,7 @@
 #include "GameObject.h"
 #include "Transform.h"
 #include "Collision.h"
+#include "SpriteRenderer.h"
 #ifdef _DEBUG
 #include "Renderer.h"
 #endif
@@ -21,6 +22,12 @@ EResult Box2DCollider::Initialize(void* arg)
 		m_Extent = desc->extent;
 	}
 	return __super::Initialize();
+}
+
+EResult Box2DCollider::LateInitialize(void* arg)
+{
+	AutoFit();
+	return __super::LateInitialize();
 }
 
 Box2DCollider* Box2DCollider::Create(void* arg)
@@ -40,6 +47,7 @@ Component* Box2DCollider::Clone(GameObject* owner, void* arg)
 	if (clone)
 	{
 		clone->SetOwner(owner);
+		AutoFit();
 	}
 	return clone;
 }
@@ -64,7 +72,28 @@ void Box2DCollider::LateUpdate(f32 dt)
 #endif // _DEBUG
 
 }
+
 #pragma endregion
+
+#pragma region AutoFit
+void Box2DCollider::AutoFit()
+{
+	if (!m_Owner) return;
+
+	SpriteRenderer* spriteRenderer = m_Owner->GetComponent<SpriteRenderer>();
+	if (spriteRenderer && spriteRenderer->GetSprite())
+	{
+		Texture* texture = spriteRenderer->GetSprite()->GetTexture();
+		if (texture)
+		{
+			f32 worldWidth = texture->GetWorldWidth() * spriteRenderer->GetTiling().x;
+			f32 worldHeight = texture->GetWorldHeight() * spriteRenderer->GetTiling().y;
+			m_Extent = vec2(worldWidth, worldHeight) * 0.5f;
+		}
+	}
+}
+#pragma endregion
+
 
 
 #pragma region Collision

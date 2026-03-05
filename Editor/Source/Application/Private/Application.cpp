@@ -86,6 +86,16 @@ void Application::InitializeLocalization()
 #pragma region Resources
 void Application::InitializeResources()
 {
+
+#pragma region Basic Textures
+    ResourceManager::Get().LoadTexture(L"SampleTexture", L"Resources/Texture/uv1.png");
+    ResourceManager::Get().LoadTexture(L"White1x1", L"Resources/Texture/white1x1.png");
+    ResourceManager::Get().LoadTexture(L"Black1x1", L"Resources/Texture/black1x1.png");
+    ResourceManager::Get().LoadTexture(L"Magenta1x1", L"Resources/Texture/magenta1x1.png");
+    ResourceManager::Get().LoadTexture(L"Green1x1", L"Resources/Texture/green1x1.png");
+    ResourceManager::Get().LoadTexture(L"Blue1x1", L"Resources/Texture/blue1x1.png");
+#pragma endregion
+
 #pragma region Quad
     {
         // 1. 사각형 정점 데이터 정의 (화면 좌표계: Top-Left가 0,0 가정 시 대략적인 중앙 배치)
@@ -116,7 +126,6 @@ void Application::InitializeResources()
         ResourceManager::Get().LoadMesh(L"QuadMesh", &meshDesc);
     }
 #pragma endregion
-
 
 #pragma region Cube
     {
@@ -158,6 +167,22 @@ void Application::InitializeResources()
             { { -1.0f, -1.0f, -1.0f }, { -1, 0, 0 }, { 0, 1 }, { 0, 0, 1 } }
         };
 
+        vec3 minBound = vec3((numeric_limits<f32>::max)());
+        vec3 maxBound = vec3(numeric_limits<f32>::lowest());
+
+        for (const auto& v : vertices)
+        {
+            // Vertex 구조체의 위치(Position) 변수명에 맞추어 접근하세요.
+            // 여기서는 v.position.x 와 같이 가정했습니다. (코드에 맞춰 수정 필요)
+            minBound.x = std::min(minBound.x, v.position.x);
+            minBound.y = std::min(minBound.y, v.position.y);
+            minBound.z = std::min(minBound.z, v.position.z);
+
+            maxBound.x = std::max(maxBound.x, v.position.x);
+            maxBound.y = std::max(maxBound.y, v.position.y);
+            maxBound.z = std::max(maxBound.z, v.position.z);
+        }
+
         // 2. 인덱스 데이터 정의 (36개 인덱스 - 6면 * 2삼각형 * 3정점)
         vector<uint32> indices;
         for (uint32 i = 0; i < 6; ++i)
@@ -181,23 +206,24 @@ void Application::InitializeResources()
         meshDesc.IndexData = indices.data();
         meshDesc.IndexStride = sizeof(uint32);
         meshDesc.IndexCount = static_cast<uint32>(indices.size());
+        meshDesc.BoundingBoxMin = minBound;
+		meshDesc.BoundingBoxMax = maxBound;
 
         // 4. ResourceManager를 통한 로드
         ResourceManager::Get().LoadMesh(L"CubeMesh", &meshDesc);
     }
 #pragma endregion
 
-
 #pragma region Shader
     tagShaderDesc vsDesc;
     vsDesc.ShaderType = EShaderType::Vertex;
-    vsDesc.FilePath = L"Resources/Shader/sprite.vert.spv";
+    vsDesc.FilePath = L"Resources/Shader/default.vert.spv";
     vsDesc.EntryPoint = "main";
     ResourceManager::Get().LoadShader(L"DefaultVS", &vsDesc);
 
     tagShaderDesc psDesc;
     psDesc.ShaderType = EShaderType::Pixel;
-    psDesc.FilePath = L"Resources/Shader/sprite.frag.spv";
+    psDesc.FilePath = L"Resources/Shader/default.frag.spv";
     psDesc.EntryPoint = "main";
     ResourceManager::Get().LoadShader(L"DefaultPS", &psDesc);
 
@@ -217,7 +243,9 @@ void Application::InitializeResources()
     tagMaterialDesc materialDesc;
 	materialDesc.VertexShader = ResourceManager::Get().GetShader(L"DefaultVS");
     materialDesc.PixelShader = ResourceManager::Get().GetShader(L"DefaultPS");
+    materialDesc.DepthMode = EDepthMode::ReadWrite;
     ResourceManager::Get().LoadMaterial(L"DefaultMaterial", &materialDesc);
+	ResourceManager::Get().GetMaterial(L"DefaultMaterial")->SetTextureBySlot(0, ResourceManager::Get().GetTexture(L"Magenta1x1")->GetRHITexture());
 
 	tagMaterialDesc spriteMaterialDesc;
 	spriteMaterialDesc.VertexShader = ResourceManager::Get().GetShader(L"DefaultVS");
@@ -227,7 +255,10 @@ void Application::InitializeResources()
 	spriteMaterialDesc.DepthMode = EDepthMode::ReadWrite;
 	ResourceManager::Get().LoadMaterial(L"SpriteMaterial", &spriteMaterialDesc);
 
-    ResourceManager::Get().LoadTexture(L"SampleTexture", L"Resources/Texture/uv1.png");
+
+
+    
+
 
 
 #ifdef _DEBUG
@@ -246,6 +277,7 @@ void Application::Run(int argc, char* argv[])
     {
         while (SDL_PollEvent(&event)) {
             ImGuiManager::Get().ProcessEvent(&event);
+			InputManager::Get().ProcessEvent(event);
             if (event.type == SDL_EVENT_TEXT_EDITING || event.type == SDL_EVENT_TEXT_EDITING_CANDIDATES)
             {
                 int a = 10;

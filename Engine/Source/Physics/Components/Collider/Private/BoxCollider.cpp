@@ -5,6 +5,11 @@
 #include "GameObject.h"
 #include "Transform.h"
 #include "Collision.h"
+#include "MeshFilter.h"
+
+#ifdef _DEBUG
+#include "Renderer.h"
+#endif // 
 
 REGISTER_COMPONENT(BoxCollider)
 
@@ -17,6 +22,12 @@ EResult BoxCollider::Initialize(void* arg)
 		m_Center = desc->center;
 		m_Extents = desc->extent;
 	}
+	return EResult::Success;
+}
+
+EResult BoxCollider::LateInitialize(void* arg)
+{
+	AutoFit();
 	return EResult::Success;
 }
 
@@ -56,6 +67,20 @@ void BoxCollider::Free()
 }
 #pragma endregion
 
+#pragma region Loop
+void BoxCollider::LateUpdate(f32 dt)
+{
+#ifdef _DEBUG
+	if (m_DrawCollider)
+	{
+		mat4 worldMatrix = m_Owner ? m_Owner->GetTransform()->GetWorldMatrix() : mat4(1.0f);
+		Renderer::Get().DrawDebugBox(m_Center, m_Extents, vec4(0.f, 1.f, 0.f, 1.f), worldMatrix);
+	}
+#endif // _DEBUG
+}
+#pragma endregion
+
+
 
 #pragma region Collision
 bool BoxCollider::Raycast(const Ray& ray, HitResult& outResult)
@@ -69,3 +94,18 @@ bool BoxCollider::Raycast(const Ray& ray, HitResult& outResult)
 	return false;
 }
 #pragma endregion
+
+#pragma region Bounds
+void BoxCollider::AutoFit()
+{
+	MeshFilter* meshFilter = m_Owner->GetComponent<MeshFilter>();
+	if (!meshFilter)
+		return;
+	Mesh* mesh = meshFilter->GetMesh();
+	if (!mesh)
+		return;
+	m_Center = mesh->GetCenter();
+	m_Extents = mesh->GetExtents();
+}
+#pragma endregion
+

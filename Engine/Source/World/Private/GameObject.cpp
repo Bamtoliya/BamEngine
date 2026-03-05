@@ -142,8 +142,10 @@ EResult GameObject::AttachComponent(Component* component)
 	if (!component)
 		return EResult::Fail;
 	component->SetOwner(this);
+	component->LateInitialize();
 	Safe_AddRef(component);
 	m_Components.push_back(component);
+
 	return EResult::Success;
 }
 

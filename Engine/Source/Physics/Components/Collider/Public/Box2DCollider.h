@@ -18,7 +18,8 @@ class ENGINE_API Box2DCollider final : public Collider
 private:
 	Box2DCollider() : Collider(EColliderType::Box2D) {}
 	virtual ~Box2DCollider() = default;
-	EResult Initialize(void* arg = nullptr) override;
+	virtual EResult Initialize(void* arg = nullptr) override;
+	virtual EResult LateInitialize(void* arg = nullptr) override;
 public:
 	static Box2DCollider* Create(void* arg = nullptr);
 	virtual Component* Clone(GameObject* owner, void* arg = nullptr) override;
@@ -26,9 +27,14 @@ public:
 #pragma endregion
 
 #pragma region Loop
+public:
 	virtual void LateUpdate(f32 dt) override;
 #pragma endregion
 
+#pragma region Auto Fit
+public:
+	virtual void AutoFit();
+#pragma endregion
 
 
 #pragma region Collision
@@ -47,7 +53,7 @@ private:
 	PROPERTY()
 	vec2 m_Center = vec2(0.f);
 	PROPERTY()
-	vec2 m_Extent = vec2(0.5f);
+	vec2 m_Extent = vec2(10.f);
 #pragma endregion
 };
 END

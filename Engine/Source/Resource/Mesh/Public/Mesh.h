@@ -14,6 +14,9 @@ struct tagMeshCreateInfo
 	void* IndexData = { nullptr };
 	uint32 IndexCount = { 0 };
 	uint32 IndexStride = { 0 };
+
+	vec3 BoundingBoxMin = { 0.0f, 0.0f, 0.0f };
+	vec3 BoundingBoxMax = { 0.0f, 0.0f, 0.0f };
 };
 
 CLASS()
@@ -58,6 +61,16 @@ public:
 	void SetTopology(ETopology topology) { m_Topology = topology; }
 #pragma endregion
 
+
+#pragma region Bounds
+public:
+	vec3 GetMin() const { return m_BoundingBoxMin; }
+	vec3 GetMax() const { return m_BoundingBoxMax; }
+	vec3 GetCenter() const { return (m_BoundingBoxMin + m_BoundingBoxMax) * 0.5f; }
+	vec3 GetExtents() const { return (m_BoundingBoxMax - m_BoundingBoxMin) * 0.5f; }
+#pragma endregion
+
+
 #pragma region Variable
 protected:
 	RHIBuffer* m_VertexBuffer = { nullptr };
@@ -65,12 +78,17 @@ protected:
 
 
 	//Input Layout
-	PROPERTY(CATEGORY("PROP_INFORMATION"))
+	PROPERTY(CATEGORY(L"PROP_INFORMATION"), READONLY)
 	ETopology m_Topology = { ETopology::TriangleList };
-	PROPERTY(CATEGORY("PROP_INFORMATION"), READONLY)
+	PROPERTY(CATEGORY(L"PROP_INFORMATION"), READONLY)
 	uint32 m_VertexCount = { 0 };
-	PROPERTY(CATEGORY("PROP_INFORMATION"), READONLY)
+	PROPERTY(CATEGORY(L"PROP_INFORMATION"), READONLY)
 	uint32 m_IndexCount = { 0 };
+
+	PROPERTY(CATEGORY(L"PROP_INFORMATION"), READONLY)
+	vec3 m_BoundingBoxMin = { 0.0f, 0.0f, 0.0f };
+	PROPERTY(CATEGORY(L"PROP_INFORMATION"), READONLY)
+	vec3 m_BoundingBoxMax = { 0.0f, 0.0f, 0.0f };
 #pragma endregion
 };
 END

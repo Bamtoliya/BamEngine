@@ -361,6 +361,10 @@ EResult Renderer::RenderDebugLines(f32 dt)
 		debugPipelineDesc.VertexShader = ResourceManager::Get().GetShader(L"DebugLineVS")->GetRHIShader();
 		debugPipelineDesc.PixelShader = ResourceManager::Get().GetShader(L"DebugLinePS")->GetRHIShader();
 		debugPipelineDesc.InputLayout = DebugVertex::Layout;
+		debugPipelineDesc.DepthStencilState.DepthTestEnable = false;
+		debugPipelineDesc.DepthStencilState.StencilTestEnable = false;
+		debugPipelineDesc.DepthStencilState.DepthWriteEnable = false;
+		debugPipelineDesc.DepthStencilState.DepthCompareOp = ECompareOp::Always;
 		m_DebugPipeline = PipelineManager::Get().GetOrCreatePipeline(debugPipelineDesc);
 	}
 	if (m_DebugVertices.empty()) return EResult::Success;

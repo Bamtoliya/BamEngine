@@ -11,6 +11,8 @@
 #define MOUSE_BUTTON_UP(button) InputManager::Get().IsMouseButtonUp(button)
 #define MOUSE_BUTTON_PRESSED(button) InputManager::Get().IsMouseButtonPressed(button)
 
+#define MOUSE_SCROLL InputManager::Get().GetMouseScrollDelta()
+
 BEGIN(Engine)
 class ENGINE_API InputManager : public Base
 {
@@ -52,6 +54,11 @@ public:
 public:
 	vec2 GetMousePosition() const { return m_MousePosition; }
 	vec2 GetMouseDelta() const { return m_MouseDelta; }
+	vec2 GetMouseScrollDelta() const { return m_MouseScrollDelta; }
+	f32 GetMouseScrollDeltaX() const { return m_MouseScrollDelta.x; }
+	f32 GetMouseScrollDeltaY() const { return m_MouseScrollDelta.y; }
+public:
+	void ProcessEvent(const SDL_Event& event);
 #pragma endregion
 
 #pragma region Member Variables
@@ -64,6 +71,9 @@ public:
 
 	vec2 m_MousePosition = vec2(0.f);
 	vec2 m_MouseDelta = vec2(0.f);
+
+	vec2 m_AccmulatedMouseScrollDelta = vec2(0.f);
+	vec2 m_MouseScrollDelta = vec2(0.f);
 #pragma endregion
 };
 END

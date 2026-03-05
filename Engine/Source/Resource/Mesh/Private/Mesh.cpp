@@ -6,9 +6,11 @@
 EResult Mesh::Initialize(void* arg)
 {
 	if (!arg) return EResult::InvalidArgument;
-	DESC* meshDesc = reinterpret_cast<DESC*>(arg);
-	m_VertexCount = static_cast<uint32>(meshDesc->VertexCount);
-	m_IndexCount = static_cast<uint32>(meshDesc->IndexCount);
+	CAST_DESC
+	m_VertexCount = static_cast<uint32>(desc->VertexCount);
+	m_IndexCount = static_cast<uint32>(desc->IndexCount);
+	m_BoundingBoxMin = desc->BoundingBoxMin;
+	m_BoundingBoxMax = desc->BoundingBoxMax;
 
 	RHI* rhi = Renderer::Get().GetRHI();
 
@@ -16,11 +18,11 @@ EResult Mesh::Initialize(void* arg)
 	{
 		tagRHIBufferDesc vertexBufferDesc = {};
 		vertexBufferDesc.BufferType = ERHIBufferType::Vertex;
-		uint32 totalSize = meshDesc->VertexStride * m_VertexCount;
+		uint32 totalSize = desc->VertexStride * m_VertexCount;
 		m_VertexBuffer = rhi->CreateBuffer(
-			meshDesc->VertexData,
+			desc->VertexData,
 			totalSize,
-			meshDesc->VertexStride,
+			desc->VertexStride,
 			ERHIBufferType::Vertex
 		);
 		if (!m_VertexBuffer)
@@ -29,11 +31,11 @@ EResult Mesh::Initialize(void* arg)
 
 	// Create Index Buffer
 	{
-		uint32 totalSize = meshDesc->IndexStride * m_IndexCount;
+		uint32 totalSize = desc->IndexStride * m_IndexCount;
 		m_IndexBuffer = rhi->CreateBuffer(
-			meshDesc->IndexData,
+			desc->IndexData,
 			totalSize,
-			meshDesc->IndexStride,
+			desc->IndexStride,
 			ERHIBufferType::Index
 		);
 		if (!m_IndexBuffer)

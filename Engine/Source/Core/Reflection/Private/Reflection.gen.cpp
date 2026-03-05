@@ -12,11 +12,11 @@
 #include "Physics/Components/Collider/Public/BoxCollider.h"
 #include "Physics/Components/Collider/Public/Collider.h"
 #include "Render/Camera/Public/Camera.h"
-#include "Render/Components/Public/MeshFilter.h"
 #include "Render/Components/Public/MeshRenderer.h"
 #include "Render/Components/Public/RenderComponent.h"
 #include "Render/Components/Public/SpriteRenderer.h"
 #include "Render/RHI/Public/RHIDefinitions.h"
+#include "Resource/Components/MeshFilter/Public/MeshFilter.h"
 #include "Resource/Material/Public/Material.h"
 #include "Resource/Material/Public/MaterialInstance.h"
 #include "Resource/Material/Public/MaterialInterface.h"
@@ -167,10 +167,10 @@ void InitReflectionSystem()
 	REFLECT_STATIC_TYPE(BoxCollider);
 	REFLECT_STATIC_TYPE(Collider);
 	REFLECT_STATIC_TYPE(Camera);
-	REFLECT_STATIC_TYPE(MeshFilter);
 	REFLECT_STATIC_TYPE(MeshRenderer);
 	REFLECT_STATIC_TYPE(RenderComponent);
 	REFLECT_STATIC_TYPE(SpriteRenderer);
+	REFLECT_STATIC_TYPE(MeshFilter);
 	REFLECT_STATIC_TYPE(Material);
 	REFLECT_STATIC_TYPE(MaterialInstance);
 	REFLECT_STATIC_TYPE(TextureSlot);
@@ -269,17 +269,10 @@ BEGIN_REFLECT(Camera)
     REFLECT_PROPERTY(m_Near, Engine::EPropertyType::F32, "f32")
     REFLECT_PROPERTY(m_Far, Engine::EPropertyType::F32, "f32")
     REFLECT_PROPERTY(m_Aspect, Engine::EPropertyType::F32, "f32", EDITCONDITION("m_IsPerspective"))
-    REFLECT_PROPERTY(m_Width, Engine::EPropertyType::F32, "f32", EDITCONDITION("!m_IsPerspective"))
-    REFLECT_PROPERTY(m_Height, Engine::EPropertyType::F32, "f32", EDITCONDITION("!m_IsPerspective"))
+    REFLECT_PROPERTY(m_OrthoSize, Engine::EPropertyType::F32, "f32", EDITCONDITION("!m_IsPerspective"))
     REFLECT_PROPERTY(m_IsPerspective, Engine::EPropertyType::Bool, "bool")
     REFLECT_PROPERTY(m_ProjMatrix, Engine::EPropertyType::Matrix4, "glm::mat4", READONLY)
     REFLECT_PROPERTY(m_ViewMatrix, Engine::EPropertyType::Matrix4, "glm::mat4", READONLY)
-END_REFLECT()
-
-// Class: MeshFilter
-BEGIN_REFLECT(MeshFilter)
-    REFLECT_PARENT(Component)
-    REFLECT_PROPERTY(m_Mesh, Engine::EPropertyType::Object, "Mesh")
 END_REFLECT()
 
 // Class: MeshRenderer
@@ -301,6 +294,12 @@ BEGIN_REFLECT(SpriteRenderer)
     REFLECT_PROPERTY(m_Sprite, Engine::EPropertyType::Object, "Sprite")
     REFLECT_PROPERTY(m_CachedSpriteVersion, Engine::EPropertyType::UInt32, "uint32", CATEGORY("DETAIL"), READONLY)
     REFLECT_PROPERTY(m_DrawMode, Engine::EPropertyType::Enum, "EDrawMode")
+END_REFLECT()
+
+// Class: MeshFilter
+BEGIN_REFLECT(MeshFilter)
+    REFLECT_PARENT(Component)
+    REFLECT_PROPERTY(m_Mesh, Engine::EPropertyType::Object, "Mesh")
 END_REFLECT()
 
 // Class: Material
@@ -345,9 +344,11 @@ END_REFLECT()
 // Class: Mesh
 BEGIN_REFLECT(Mesh)
     REFLECT_PARENT(Resource)
-    REFLECT_PROPERTY(m_Topology, Engine::EPropertyType::Enum, "ETopology", CATEGORY("PROP_INFORMATION"))
-    REFLECT_PROPERTY(m_VertexCount, Engine::EPropertyType::UInt32, "uint32", CATEGORY("PROP_INFORMATION"), READONLY)
-    REFLECT_PROPERTY(m_IndexCount, Engine::EPropertyType::UInt32, "uint32", CATEGORY("PROP_INFORMATION"), READONLY)
+    REFLECT_PROPERTY(m_Topology, Engine::EPropertyType::Enum, "ETopology", CATEGORY(L"PROP_INFORMATION"), READONLY)
+    REFLECT_PROPERTY(m_VertexCount, Engine::EPropertyType::UInt32, "uint32", CATEGORY(L"PROP_INFORMATION"), READONLY)
+    REFLECT_PROPERTY(m_IndexCount, Engine::EPropertyType::UInt32, "uint32", CATEGORY(L"PROP_INFORMATION"), READONLY)
+    REFLECT_PROPERTY(m_BoundingBoxMin, Engine::EPropertyType::Vector3, "vec3", CATEGORY(L"PROP_INFORMATION"), READONLY)
+    REFLECT_PROPERTY(m_BoundingBoxMax, Engine::EPropertyType::Vector3, "vec3", CATEGORY(L"PROP_INFORMATION"), READONLY)
 END_REFLECT()
 
 // Class: Resource

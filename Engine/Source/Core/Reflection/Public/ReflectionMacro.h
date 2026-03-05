@@ -8,6 +8,7 @@
 #define CLASS()
 #define STRUCT()
 #define ENUM(...)
+#define FUNCTION(...)
 
 
 #define REFLECT_STRUCT(StructName) \

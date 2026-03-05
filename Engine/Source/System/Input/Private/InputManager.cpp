@@ -55,6 +55,8 @@ void InputManager::Update(f32 dt)
 	vec2 newMousePosition = vec2(mouseX, mouseY);
 	m_MouseDelta = newMousePosition - m_MousePosition;
 	m_MousePosition = newMousePosition;
+	m_MouseScrollDelta = m_AccmulatedMouseScrollDelta;
+	m_AccmulatedMouseScrollDelta = vec2(0.f);
 }
 #pragma endregion
 
@@ -173,5 +175,13 @@ bool InputManager::IsMouseButtonPressed(const string& key)
 		return false;
 	}
 	return m_CurrentMouseButtonStates[buttonIndex];
+}
+void InputManager::ProcessEvent(const SDL_Event& event)
+{
+	if (event.type == SDL_EVENT_MOUSE_WHEEL)
+	{
+		m_AccmulatedMouseScrollDelta.x += static_cast<f32>(event.wheel.x);
+		m_AccmulatedMouseScrollDelta.y += static_cast<f32>(event.wheel.y);
+	}
 }
 #pragma endregion
