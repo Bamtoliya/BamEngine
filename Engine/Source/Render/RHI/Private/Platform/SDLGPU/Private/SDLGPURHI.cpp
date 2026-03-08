@@ -251,9 +251,27 @@ RHITexture* SDLGPURHI::CreateTextureFromFile(const wchar* filename)
 	return texture;
 }
 
-RHITexture* SDLGPURHI::CreateTextureFromMemory(void* data, uint32 size)
+RHITexture* SDLGPURHI::CreateTextureFromMemory(void* data, uint32 width, uint32 height, uint32 depthOrArraySize, uint32 mipLevels, uint32 channels)
 {
-	return nullptr;
+	SDL_GPUTextureCreateInfo createInfo = {};
+	createInfo.type = SDL_GPU_TEXTURETYPE_2D;
+	createInfo.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+	createInfo.width = width;
+	createInfo.height = height;
+	createInfo.layer_count_or_depth = depthOrArraySize;
+	createInfo.num_levels = mipLevels;
+	createInfo.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER;
+
+	SDLGPUTexture* texture = SDLGPUTexture::Create(this, createInfo);
+	if (!texture) return nullptr;
+
+	if (IsFailure(UploadTextureData(static_cast<SDL_GPUTexture*>(texture->GetNativeHandle()), data, width, height, depthOrArraySize, mipLevels, channels)))
+	{
+		Safe_Release(texture);
+		return nullptr;
+	}
+
+	return texture;
 }
 
 RHITexture* SDLGPURHI::CreateTexture2D(void* data, uint32 width, uint32 height, uint32 mipLevels, uint32 arraySize)
@@ -329,11 +347,11 @@ RHITexture* SDLGPURHI::CreateTextureFromNativeHandle(void* nativeHandle)
 	return nullptr;
 }
 
-EResult SDLGPURHI::UploadTextureData(SDL_GPUTexture* texture, void* data, uint32 width, uint32 height)
+EResult SDLGPURHI::UploadTextureData(SDL_GPUTexture* texture, void* data, uint32 width, uint32 height, uint32 depthOrArraySize, uint32 mipLevels, uint32 channels)
 {
 	if (!texture || !data) return EResult::InvalidArgument;
 
-	uint32 dataSize = width * height * 4;
+	uint32 dataSize = width * height * channels;
 
 	SDL_GPUTransferBufferCreateInfo transferBufferInfo = {};
 	transferBufferInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
@@ -370,7 +388,7 @@ EResult SDLGPURHI::UploadTextureData(SDL_GPUTexture* texture, void* data, uint32
 	destination.texture = texture;
 	destination.w = width;
 	destination.h = height;
-	destination.d = 1;
+	destination.d = depthOrArraySize;
 
 	SDL_UploadToGPUTexture(copyPass, &source, &destination, false);
 
