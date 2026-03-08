@@ -100,7 +100,6 @@ namespace Engine
 	};
 #pragma endregion
 
-
 #pragma region Rect
 	STRUCT()
 	struct Rect
@@ -143,7 +142,6 @@ namespace Engine
 
 	};
 #pragma endregion
-
 
 #pragma region Vertex
 	STRUCT()
@@ -205,6 +203,13 @@ namespace Engine
 		glm::vec4 color = {};
 		glm::vec2 texCoord = {};
 
+		static const tagInputLayoutDesc Layout;
+	};
+
+	struct VertexSkinData
+	{
+		uvec4 boneIDs;
+		vec4 weights;
 		static const tagInputLayoutDesc Layout;
 	};
 

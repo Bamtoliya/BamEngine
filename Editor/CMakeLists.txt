@@ -9,6 +9,8 @@ find_package(Vulkan REQUIRED)
 
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
 
+find_package(Assimp CONFIG REQUIRED)
+
 set(EDITOR_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Source")
 set(EDITOR_PCH_HEADER "${EDITOR_SOURCE_DIR}/Editor_Includes.h")
 set(THIRDPARTY_LIBRARY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../ThirdParty/")
@@ -72,6 +74,7 @@ target_link_libraries(Editor PRIVATE
     Engine
     imgui::imgui
     imguizmo::imguizmo
+    assimp::assimp
 )
 
 if(MSVC)

@@ -53,12 +53,8 @@ RHI* SDLGPURHI::Create(void* arg)
 
 void SDLGPURHI::Free()
 {
-	Safe_Release(m_VertexBuffer);
-	Safe_Release(m_IndexBuffer);
-	Safe_Release(m_CurrentShader);
-	Safe_Release(m_CurrentPipeline);
+	__super::Free();
 
-	Safe_Release(m_BackBuffer);
 	if(m_Device)
 	{
 		SDL_WaitForGPUIdle(m_Device);

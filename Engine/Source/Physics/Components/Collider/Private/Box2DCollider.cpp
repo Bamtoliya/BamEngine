@@ -13,7 +13,7 @@
 REGISTER_COMPONENT(Box2DCollider)
 
 #pragma region Constructor&Destructor
-EResult Box2DCollider::Initialize(void* arg)
+EResult Box2DCollider::Initialize(void* arg)	
 {
 	if (arg)
 	{

@@ -1,6 +1,7 @@
 ﻿#pragma once
 #include "ResourceManager.h"
 #include "Mesh.h"
+#include "Model.h"
 #include "Shader.h"
 #include "Sprite.h"
 #include "Texture.h"
@@ -42,6 +43,17 @@ EResult ResourceManager::LoadMesh(const wstring& key, void* arg)
 	mesh->SetTag(key);
 	m_Meshes.emplace(key, mesh);
 
+	return EResult::Success;
+}
+EResult ResourceManager::LoadModel(const wstring& key, void* arg)
+{
+	if (m_Models.find(key) != m_Models.end())
+		return EResult::AlreadyInitialized;
+	Model* model = Model::Create(arg);
+	if (!model)
+		return EResult::Fail;
+	model->SetTag(key);
+	m_Models.emplace(key, model);
 	return EResult::Success;
 }
 EResult ResourceManager::LoadShader(const wstring& key, void* arg)

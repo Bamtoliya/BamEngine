@@ -12,6 +12,7 @@
 #include "Physics/Components/Collider/Public/BoxCollider.h"
 #include "Physics/Components/Collider/Public/Collider.h"
 #include "Render/Camera/Public/Camera.h"
+#include "Render/Components/Public/Animator.h"
 #include "Render/Components/Public/MeshRenderer.h"
 #include "Render/Components/Public/RenderComponent.h"
 #include "Render/Components/Public/SpriteRenderer.h"
@@ -21,6 +22,8 @@
 #include "Resource/Material/Public/MaterialInstance.h"
 #include "Resource/Material/Public/MaterialInterface.h"
 #include "Resource/Mesh/Public/Mesh.h"
+#include "Resource/Model/Public/Model.h"
+#include "Resource/Model/Public/Skeleton.h"
 #include "Resource/Public/Resource.h"
 #include "Resource/Shader/Public/Shader.h"
 #include "Resource/Sprite/Public/Sprite.h"
@@ -167,6 +170,7 @@ void InitReflectionSystem()
 	REFLECT_STATIC_TYPE(BoxCollider);
 	REFLECT_STATIC_TYPE(Collider);
 	REFLECT_STATIC_TYPE(Camera);
+	REFLECT_STATIC_TYPE(Animator);
 	REFLECT_STATIC_TYPE(MeshRenderer);
 	REFLECT_STATIC_TYPE(RenderComponent);
 	REFLECT_STATIC_TYPE(SpriteRenderer);
@@ -177,6 +181,8 @@ void InitReflectionSystem()
 	REFLECT_STATIC_TYPE(MaterialParameter);
 	REFLECT_STATIC_TYPE(MaterialInterface);
 	REFLECT_STATIC_TYPE(Mesh);
+	REFLECT_STATIC_TYPE(Model);
+	REFLECT_STATIC_TYPE(Skeleton);
 	REFLECT_STATIC_TYPE(Resource);
 	REFLECT_STATIC_TYPE(Shader);
 	REFLECT_STATIC_TYPE(Sprite);
@@ -275,6 +281,11 @@ BEGIN_REFLECT(Camera)
     REFLECT_PROPERTY(m_ViewMatrix, Engine::EPropertyType::Matrix4, "glm::mat4", READONLY)
 END_REFLECT()
 
+// Class: Animator
+BEGIN_REFLECT(Animator)
+    REFLECT_PARENT(Component)
+END_REFLECT()
+
 // Class: MeshRenderer
 BEGIN_REFLECT(MeshRenderer)
     REFLECT_PARENT(RenderComponent)
@@ -349,6 +360,21 @@ BEGIN_REFLECT(Mesh)
     REFLECT_PROPERTY(m_IndexCount, Engine::EPropertyType::UInt32, "uint32", CATEGORY(L"PROP_INFORMATION"), READONLY)
     REFLECT_PROPERTY(m_BoundingBoxMin, Engine::EPropertyType::Vector3, "vec3", CATEGORY(L"PROP_INFORMATION"), READONLY)
     REFLECT_PROPERTY(m_BoundingBoxMax, Engine::EPropertyType::Vector3, "vec3", CATEGORY(L"PROP_INFORMATION"), READONLY)
+END_REFLECT()
+
+// Class: Model
+BEGIN_REFLECT(Model)
+    REFLECT_PARENT(Resource)
+    REFLECT_VECTOR(m_Materials, vector<Material*>, Material*, "Material*")
+    REFLECT_VECTOR(m_Meshes, vector<Mesh*>, Mesh*, "Mesh*")
+    REFLECT_PROPERTY(m_Skeleton, Engine::EPropertyType::Object, "Skeleton")
+END_REFLECT()
+
+// Class: Skeleton
+BEGIN_REFLECT(Skeleton)
+    REFLECT_PARENT(Resource)
+    REFLECT_VECTOR(m_Bones, vector<Bone>, Bone, "Bone")
+    REFLECT_MAP(m_BoneMap, "uint32", "wstring")
 END_REFLECT()
 
 // Class: Resource

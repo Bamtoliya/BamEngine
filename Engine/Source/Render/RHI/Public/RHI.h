@@ -34,7 +34,7 @@ protected:
     virtual ~RHI() = default;
     virtual EResult Initialize(void* arg) PURE;
 public:
-    virtual void Free() override {};
+    virtual void Free() override;
 public:
     virtual EResult Resize(uint32 width, uint32 height) { m_SwapChainWidth = width; m_SwapChainHeight = height; return EResult::Success; }
 public:
@@ -78,8 +78,8 @@ public:
 public:
     virtual EResult BindSampler(RHISampler* sampler) PURE;
 public:
-    virtual EResult BindVertexBuffer(RHIBuffer* vertexBuffer) { if (!vertexBuffer) return EResult::Fail; m_VertexBuffer = vertexBuffer; return EResult::Success; }
-    virtual EResult BindIndexBuffer(RHIBuffer* indexBuffer) { if (!indexBuffer) return EResult::Fail; m_IndexBuffer = indexBuffer;  return EResult::Success; }
+    virtual EResult BindVertexBuffer(RHIBuffer* vertexBuffer) { if (!vertexBuffer) return EResult::Fail; Safe_Release(m_VertexBuffer); m_VertexBuffer = vertexBuffer; Safe_AddRef(m_VertexBuffer); return EResult::Success; }
+    virtual EResult BindIndexBuffer(RHIBuffer* indexBuffer) { if (!indexBuffer) return EResult::Fail; Safe_Release(m_IndexBuffer); m_IndexBuffer = indexBuffer; Safe_AddRef(m_IndexBuffer);  return EResult::Success; }
     virtual EResult BindConstantBuffer(void* arg, uint32 slot) PURE;
     virtual EResult BindConstantBuffer(void* arg, uint32 size, uint32 slot) { return EResult::NotImplemented; }
     virtual EResult BindConstantRangeBuffer(void* arg, uint32 slot, uint32 offset, uint32 size) PURE;

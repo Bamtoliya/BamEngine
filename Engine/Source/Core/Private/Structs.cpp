@@ -25,6 +25,15 @@ const tagInputLayoutDesc Vertex2D::Layout =
 	sizeof(Vertex2D)
 };
 
+const tagInputLayoutDesc VertexSkinData::Layout =
+{
+	{
+		{ 0, EVertexElementFormat::UInt4, offsetof(VertexSkinData, boneIDs) },
+		{ 1, EVertexElementFormat::Float4, offsetof(VertexSkinData, weights) }
+	},
+	sizeof(VertexSkinData)
+};
+
 #ifdef _DEBUG
 const tagInputLayoutDesc DebugVertex::Layout =
 {

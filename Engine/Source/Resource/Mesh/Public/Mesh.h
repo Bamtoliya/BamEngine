@@ -11,6 +11,10 @@ struct tagMeshCreateInfo
 	uint32 VertexCount = { 0 };
 	uint32 VertexStride = { 0 };
 
+	void* SkinData = { nullptr };
+	uint32 SkinDataCount = { 0 };
+	uint32 SkinDataStride = { 0 };
+
 	void* IndexData = { nullptr };
 	uint32 IndexCount = { 0 };
 	uint32 IndexStride = { 0 };
@@ -74,6 +78,7 @@ public:
 #pragma region Variable
 protected:
 	RHIBuffer* m_VertexBuffer = { nullptr };
+	RHIBuffer* m_SkinDataBuffer = { nullptr };
 	RHIBuffer* m_IndexBuffer = { nullptr };
 
 

@@ -19,6 +19,7 @@
 #include "ViewportPanel.h"
 #include "InspectorPanel.h"
 #include "HierarchyPanel.h"
+#include "ResourceFilter.h"
 
 IMPLEMENT_SINGLETON(ImGuiManager)
 
@@ -322,6 +323,7 @@ EResult ImGuiManager::CreateDefaultPanels()
 	AddImGuiPanel(viewportPanel);
 	AddImGuiPanel(new InspectorPanel());
 	AddImGuiPanel(new HierarchyPanel());
+	AddImGuiPanel(new ResourceFilter());
 	return EResult::Success;
 }
 #pragma endregion
