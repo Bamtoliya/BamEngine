@@ -12,6 +12,9 @@
 #include "ViewportPanel.h"
 #include "InspectorPanel.h"
 #include "HierarchyPanel.h"
+#include "ImGuiManager.h"
+
+#include "Application.h"
 
 
 void ToolBar::Draw()

@@ -20,6 +20,7 @@
 #include "InspectorPanel.h"
 #include "HierarchyPanel.h"
 #include "ResourceFilter.h"
+#include "ContentBrowserPanel.h"
 
 IMPLEMENT_SINGLETON(ImGuiManager)
 
@@ -324,6 +325,9 @@ EResult ImGuiManager::CreateDefaultPanels()
 	AddImGuiPanel(new InspectorPanel());
 	AddImGuiPanel(new HierarchyPanel());
 	AddImGuiPanel(new ResourceFilter());
+	ContentBrowserPanel* contentBrowserPanel = new ContentBrowserPanel();
+	contentBrowserPanel->Initialize();
+	AddImGuiPanel(contentBrowserPanel);
 	return EResult::Success;
 }
 #pragma endregion
