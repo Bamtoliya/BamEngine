@@ -53,6 +53,8 @@ private:
 	struct SDL_Window* m_Window = { nullptr };
 	class RHI* m_RHI = { nullptr };
 private:
+	class AssetManager* m_AssetManager = { nullptr };
+private:
 	f32 m_FPSTimer = { 0.f };
 };
 

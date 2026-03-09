@@ -6,6 +6,7 @@
 #include "ImGuiManager.h"
 #include "SelectionManager.h"
 #include "RHI.h"
+#include "AssetManager.h"
 
 BEGIN(Editor)
 
@@ -36,6 +37,9 @@ EResult Application::Initialize(void* arg)
     m_Runtime = Runtime::Create(&runtimeDesc);
     if (!m_Runtime) return EResult::Fail;
 
+    m_AssetManager = AssetManager::Create();
+	if (!m_AssetManager) return EResult::Fail;
+
 	tagImGuiManagerDesc imguiDesc = {};
 	imguiDesc.Window = m_Window;
     imguiDesc.RHI = Renderer::Get().GetRHI();
@@ -58,11 +62,14 @@ EResult Application::Initialize(void* arg)
     InitializeResources();
     //Renderer::Get().GetRenderPassDelegate(uiPassID).Remove(uiHandle);
 
+	
+
     return EResult::Success;
 }
 
 void Application::Free()
 {
+	AssetManager::Destroy();
     ImGuiManager::Destroy();
 	SelectionManager::Destroy();
 

@@ -3,6 +3,7 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 #include "LocalizationManager.h"
+#include "AssetManager.h"
 
 using namespace std;
 
@@ -47,8 +48,14 @@ static void ResolveConflict(const FileDropConflict& conflict, int action)
 	try {
 		if (action == 1) // 덮어쓰기
 		{
-			auto copyOptions = std::filesystem::copy_options::recursive | std::filesystem::copy_options::overwrite_existing;
-			std::filesystem::copy(conflict.Source, conflict.Dest, copyOptions);
+			EResult result = AssetManager::Get().Import(conflict.Source, conflict.Dest);
+
+			if (IsFailure(result))
+			{
+				MessageBoxA(nullptr, "Failed to import asset. Please check the file and try again.", "Import Error", MB_ICONERROR);
+				auto copyOptions = std::filesystem::copy_options::recursive | std::filesystem::copy_options::overwrite_existing;
+				std::filesystem::copy(conflict.Source, conflict.Dest, copyOptions);
+			}
 		}
 		else if (action == 2) // 복사본 생성 (Rename)
 		{
@@ -62,7 +69,11 @@ static void ResolveConflict(const FileDropConflict& conflict, int action)
 				newDest = conflict.Dest.parent_path() / (stem + "_copy" + std::to_string(suffix++) + ext);
 			} while (std::filesystem::exists(newDest));
 
-			std::filesystem::copy(conflict.Source, newDest, std::filesystem::copy_options::recursive);
+			EResult result = AssetManager::Get().Import(conflict.Source, newDest);
+			if(IsFailure(result))
+			{
+				std::filesystem::copy(conflict.Source, newDest, std::filesystem::copy_options::recursive);
+			}
 		}
 		// action == 3 (건너뛰기) 일 경우 아무 작업도 하지 않음
 	}
@@ -153,12 +164,17 @@ void ContentBrowserPanel::DrawDirectoryTree(const filesystem::path& path)
 
 
 	bool hasChildDirectory = false;
-	for (auto& directoryEntry : filesystem::directory_iterator(path))
+	std::error_code ec;
+	auto dirIt = filesystem::directory_iterator(path, ec);
+	if (!ec)
 	{
-		if (directoryEntry.is_directory())
+		for (auto& directoryEntry : filesystem::directory_iterator(path))
 		{
-			hasChildDirectory = true;
-			break;
+			if (directoryEntry.is_directory())
+			{
+				hasChildDirectory = true;
+				break;
+			}
 		}
 	}
 
@@ -209,10 +225,15 @@ void ContentBrowserPanel::DrawDirectoryTree(const filesystem::path& path)
 
 	if (opened && hasChildDirectory)
 	{
-		for (auto& entry : std::filesystem::directory_iterator(path))
+		std::error_code childEc;
+		auto childIt = std::filesystem::directory_iterator(path, childEc);
+		if (!childEc)
 		{
-			if (entry.is_directory())
-				DrawDirectoryTree(entry.path());
+			for (auto& entry : childIt)
+			{
+				if (entry.is_directory())
+					DrawDirectoryTree(entry.path());
+			}
 		}
 		ImGui::TreePop();
 	}
@@ -558,9 +579,19 @@ void ContentBrowserPanel::DrawGrid(bool enterPressed)
 	if(needsCacheRefresh)
 	{
 		m_CachedEntries.clear();
-		for (auto& entry : filesystem::directory_iterator(m_CurrentDirectory))
+		std::error_code ec;
+		if (std::filesystem::exists(m_CurrentDirectory, ec))
 		{
-			m_CachedEntries.push_back(entry);
+			for (auto& directoryEntry : filesystem::directory_iterator(m_CurrentDirectory, ec))
+			{
+				m_CachedEntries.push_back(directoryEntry);
+			}
+		}
+		else
+		{
+			// 현재 디렉토리가 외부에서 통째로 날아갔다면 루트 에셋 폴더로 강제 복귀
+			m_CurrentDirectory = m_RootPath;
+			m_LastWatchedDirectory = ""; // 다음 프레임에 Watcher 재설정을 유도
 		}
 	}
 
@@ -803,8 +834,6 @@ void ContentBrowserPanel::FileConfilictPopup()
 #pragma endregion
 
 #pragma region Helper
-
-
 void ContentBrowserPanel::OnExteranalDropped(const vector<string>& droppedFiles)
 {
 	for (const string& filepathStr : droppedFiles)

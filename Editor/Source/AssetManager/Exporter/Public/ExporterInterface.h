@@ -3,21 +3,20 @@
 #include "Editor_Includes.h"
 
 BEGIN(Editor)
-class Importer : public Base
+class ExporterInterface : public Base
 {
 protected:
-	Importer() = default;
-	virtual ~Importer() = default;
+	ExporterInterface() = default;
+	virtual ~ExporterInterface() = default;
 	virtual EResult Initialize(void* arg = nullptr) { return EResult::Success; }
 public:
 	virtual void Free() override { Base::Free(); }
 
 public:
-	virtual EResult Import(const filesystem::path& filePath) PURE;
+	virtual EResult Export(const filesystem::path& sourcePath, const filesystem::path& destDir) PURE;
 
 #pragma region Member Variable
 private:
 
-#pragma endregion
 };
 END

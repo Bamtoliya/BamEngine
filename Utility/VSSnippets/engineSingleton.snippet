@@ -1,0 +1,42 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<CodeSnippets xmlns="http://schemas.microsoft.com/VisualStudio/2005/CodeSnippet">
+  <CodeSnippet Format="1.0.0">
+    <Header>
+      <Title>기본 에디터 싱글턴</Title>
+      <Shortcut>myeditorsingleton</Shortcut> <Description>C++ 싱글턴 클래스 기본 구조를 생성합니다.</Description>
+      <Author>Myung</Author>
+    </Header>
+    <Snippet>
+      <Declarations>
+        <Literal>
+          <ID>classname</ID>
+          <ToolTip>클래스 이름을 입력하세요</ToolTip>
+          <Default>MyClass</Default>
+        </Literal>
+      </Declarations>
+      <Code Language="cpp">
+        <![CDATA[#pragma once
+#include "Editor_Includes.h"
+BEGIN(Editor)
+class $classname$ : public Base
+{
+    DECLARE_SINGLETON($classname$)
+#pragma region Constructor&Destructor
+private:
+    $classname$() = default;
+    virtual ~$classname$() = default;
+    virtual EResult Initialize(void* arg = nullptr) { return EResult::Success; }
+public:
+    virtual void Free() override { Base::Free(); }
+#pragma endregion
+
+#pragma region Member Variables
+private:
+#pragma endregion
+};
+END
+]]>
+      </Code>
+    </Snippet>
+  </CodeSnippet>
+</CodeSnippets>
