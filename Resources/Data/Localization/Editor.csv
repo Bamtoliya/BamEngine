@@ -12,3 +12,10 @@ Transform,Position,Position,위치
 ,Rotation,Rotation,회전
 ,Scale,Scale,크기
 ,EulerRotation,Euler Rotation,회전(각도)
+ContentBrowser,Cancel,Cancel,취소
+,Overwrite,OverWrite,덮어쓰기
+,CreateCopy,Create Copy,복사본 생성
+,Skip,Skip,건너뛰기
+,ApplyToAll,Apply To All,전체적용
+,FileConflictMessage,A file with the same name already exists in the destination.\nWhat would you like to do?,대상 위치에 이미 동일한 이름의 항목이 존재합니다:
+,FileConflictPopup,File Conflict,파일 충돌

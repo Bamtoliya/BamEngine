@@ -13,6 +13,13 @@
         "Transform.Rotation": "Rotation",
         "Transform.Scale": "Scale",
         "Transform.EulerRotation": "Euler Rotation",
+        "ContentBrowser.Cancel": "Cancel",
+        "ContentBrowser.Overwrite": "OverWrite",
+        "ContentBrowser.CreateCopy": "Create Copy",
+        "ContentBrowser.Skip": "Skip",
+        "ContentBrowser.ApplyToAll": "Apply To All",
+        "ContentBrowser.FileConflictMessage": "A file with the same name already exists in the destination.\\nWhat would you like to do?",
+        "ContentBrowser.FileConflictPopup": "File Conflict",
         "PROP_TEST": "Test"
     }
 }

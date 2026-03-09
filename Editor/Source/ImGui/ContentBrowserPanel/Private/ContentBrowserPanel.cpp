@@ -2,6 +2,7 @@
 #include "ContentBrowserPanel.h"
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
+#include "LocalizationManager.h"
 
 using namespace std;
 
@@ -41,6 +42,33 @@ static bool PassesFilter(const filesystem::path& path, uint32 filterMask)
 	return false;
 }
 
+static void ResolveConflict(const FileDropConflict& conflict, int action)
+{
+	try {
+		if (action == 1) // 덮어쓰기
+		{
+			auto copyOptions = std::filesystem::copy_options::recursive | std::filesystem::copy_options::overwrite_existing;
+			std::filesystem::copy(conflict.Source, conflict.Dest, copyOptions);
+		}
+		else if (action == 2) // 복사본 생성 (Rename)
+		{
+			std::string stem = conflict.Dest.stem().string();
+			std::string ext = conflict.Dest.extension().string();
+			std::filesystem::path newDest;
+			int suffix = 1;
+
+			// filename_copy1, filename_copy2 형식으로 중복 안 될 때까지 탐색
+			do {
+				newDest = conflict.Dest.parent_path() / (stem + "_copy" + std::to_string(suffix++) + ext);
+			} while (std::filesystem::exists(newDest));
+
+			std::filesystem::copy(conflict.Source, newDest, std::filesystem::copy_options::recursive);
+		}
+		// action == 3 (건너뛰기) 일 경우 아무 작업도 하지 않음
+	}
+	catch (...) {}
+}
+
 EResult ContentBrowserPanel::Initialize(void* arg)
 {
 	m_Name = L"Content Browser";
@@ -57,7 +85,10 @@ EResult ContentBrowserPanel::Initialize(void* arg)
 void ContentBrowserPanel::Draw()
 {
 	if (!m_Open) return;
-	ImGui::Begin("Content Browser", &m_Open);
+
+	ImGui::Begin(WStrToStr(m_Name).c_str(), &m_Open);
+
+	FileConfilictPopup();
 
 	if (m_CurrentDirectory != m_LastDirectory)
 	{
@@ -335,6 +366,7 @@ void ContentBrowserPanel::AddressBar()
 	for (size_t i = 0; i < nodes.size(); ++i)
 	{
 		std::string name = (i == 0) ? "Assets" : nodes[i].filename().string();
+		name += "###" + std::to_string(static_cast<int>(i));
 
 		// 경로의 폴더 이름을 클릭하면 해당 경로로 즉시 이동
 		if (ImGui::Button(name.c_str()))
@@ -705,9 +737,74 @@ void ContentBrowserPanel::DragAndDropTarget(const filesystem::path& path)
 	}
 }
 
+void ContentBrowserPanel::FileConfilictPopup()
+{
+	LocalizationManager& localizationManager = LocalizationManager::Get();
+	string popupTitle = localizationManager.GetText("ContentBrowser.FileConflictPopup");
+	if(m_OpenConflictPopup)
+	{
+		ImGui::OpenPopup(popupTitle.c_str());
+		m_OpenConflictPopup = false;
+	}
+
+	if (ImGui::BeginPopupModal(popupTitle.c_str(), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+	{
+		if (m_PendingConflicts.empty())
+		{
+			ImGui::CloseCurrentPopup();
+		}
+		else
+		{
+			auto& conflict = m_PendingConflicts.front();
+			
+			ImGui::Text("%s", localizationManager.GetText("ContentBrowser.FileConflictMessage").c_str());
+			ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "%s", conflict.Dest.filename().string().c_str());
+			ImGui::Separator();
+			if (m_PendingConflicts.size() > 1)
+			{
+				ImGui::Checkbox(localizationManager.GetText("ContentBrowser.ApplyToAll").c_str(), &m_ApplyToAllConflicts);
+			}
+
+			auto processConflict = [&](int32 action)
+				{
+					if(m_ApplyToAllConflicts)
+					{
+						for (const auto& conflict : m_PendingConflicts)
+						{
+							ResolveConflict(conflict, action);
+						}
+						m_PendingConflicts.clear();
+					}
+					else
+					{
+						const auto& conflict = m_PendingConflicts.front();
+						ResolveConflict(conflict, action);
+						m_PendingConflicts.erase(m_PendingConflicts.begin());
+						m_NeedsCacheRefresh = true;
+					}
+
+					if (m_PendingConflicts.empty())
+					{
+						m_ApplyToAllConflicts = false;
+						ImGui::CloseCurrentPopup();
+					}
+				};
+
+			if (ImGui::Button(localizationManager.GetText("ContentBrowser.Overwrite").c_str())) processConflict(1);
+			ImGui::SameLine();
+			if (ImGui::Button(localizationManager.GetText("ContentBrowser.CreateCopy").c_str())) processConflict(2);
+			ImGui::SameLine();
+			if (ImGui::Button(localizationManager.GetText("ContentBrowser.Skip").c_str())) ImGui::CloseCurrentPopup();
+		}
+		ImGui::EndPopup();
+	}
+}
+
 #pragma endregion
 
 #pragma region Helper
+
+
 void ContentBrowserPanel::OnExteranalDropped(const vector<string>& droppedFiles)
 {
 	for (const string& filepathStr : droppedFiles)
@@ -717,16 +814,26 @@ void ContentBrowserPanel::OnExteranalDropped(const vector<string>& droppedFiles)
 		if (filesystem::exists(sourcePath))
 		{
 			filesystem::path destinationPath = m_CurrentDirectory / sourcePath.filename();
-			try
+
+			if (filesystem::exists(destinationPath))
 			{
-				// recursive 옵션을 주어 폴더일 경우 내부 파일들까지 통째로 복사
-				// overwrite_existing 옵션을 주어 이름이 겹치면 덮어쓰도록 처리
-				auto copyOptions = filesystem::copy_options::recursive | filesystem::copy_options::overwrite_existing;
-				filesystem::copy(sourcePath, destinationPath, copyOptions);
+				FileDropConflict conflict{ sourcePath, destinationPath };
+				m_PendingConflicts.push_back(conflict);
+				m_OpenConflictPopup = true;
 			}
-			catch (const filesystem::filesystem_error& e)
+			else
 			{
-				// 복사 실패 처리
+				try
+				{
+					// recursive 옵션을 주어 폴더일 경우 내부 파일들까지 통째로 복사
+					auto copyOptions = filesystem::copy_options::recursive;
+					filesystem::copy(sourcePath, destinationPath, copyOptions);
+					m_NeedsCacheRefresh = true;
+				}
+				catch (const filesystem::filesystem_error& e)
+				{
+					// 복사 실패 처리
+				}
 			}
 		}
 	}

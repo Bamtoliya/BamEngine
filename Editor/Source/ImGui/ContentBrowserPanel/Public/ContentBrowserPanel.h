@@ -24,6 +24,12 @@ public:
 	}
 };
 
+struct FileDropConflict
+{
+	filesystem::path Source;
+	filesystem::path Dest;
+};
+
 class ContentBrowserPanel : public ImGuiInterface
 {
 public:
@@ -61,6 +67,8 @@ private:
 	void DrawThumbnail(const filesystem::directory_entry& directoryEntry);
 	void GridItemContextMenu(const filesystem::path& path);
 	void DragAndDropTarget(const filesystem::path& path);
+private:
+	void FileConfilictPopup();
 #pragma endregion
 #pragma region Helper Functions
 private:
@@ -98,6 +106,11 @@ private:
 	efsw::WatchID m_WatchID;
 	class ContentBrowserFileListener* m_FileListener;
 	atomic<bool> m_NeedsCacheRefresh = { false };
+
+private:
+	bool m_OpenConflictPopup = false;
+	bool m_ApplyToAllConflicts = false;
+	vector< FileDropConflict> m_PendingConflicts;
 
 private:
 	inline static unordered_map<string, void*> m_ThumbnailCache;
