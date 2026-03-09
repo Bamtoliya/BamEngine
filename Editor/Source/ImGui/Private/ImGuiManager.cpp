@@ -238,6 +238,10 @@ void ImGuiManager::End()
 void ImGuiManager::ProcessEvent(const SDL_Event* event)
 {
 	ImGui_ImplSDL3_ProcessEvent(event);
+	for (auto& panel : m_ImGuiPanels)
+	{
+		panel->ProcessEvent(event);
+	}
 }
 
 #pragma endregion

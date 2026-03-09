@@ -6,6 +6,7 @@ find_package(glm CONFIG REQUIRED)
 find_package(imgui CONFIG REQUIRED)
 find_package(imguizmo CONFIG REQUIRED)
 find_package(Vulkan REQUIRED) 
+find_package(efsw CONFIG REQUIRED)
 
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
 
@@ -75,6 +76,7 @@ target_link_libraries(Editor PRIVATE
     imgui::imgui
     imguizmo::imguizmo
     assimp::assimp
+    efsw::efsw
 )
 
 if(MSVC)

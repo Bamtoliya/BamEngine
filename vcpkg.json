@@ -16,6 +16,7 @@
     "glslang",
     "spirv-tools",
     "spirv-cross",
+    "efsw",
     {
       "name": "imgui",
       "features": [

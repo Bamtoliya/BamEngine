@@ -35,6 +35,7 @@
 #include <any>
 #include <array>
 #include <thread>
+#include <atomic>
 #pragma endregion
 
 #pragma region ThirdParty Library

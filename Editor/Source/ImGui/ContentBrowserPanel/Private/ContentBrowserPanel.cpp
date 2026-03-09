@@ -5,6 +5,42 @@
 
 using namespace std;
 
+static bool StringContainsCaseInsensitive(const string& str, const string& subStr)
+{
+	if (subStr.empty()) return true;
+
+	std::wstring wStr = StrToWStr(str);
+	std::wstring wSubStr = StrToWStr(subStr);
+
+	auto it = std::search(
+		wStr.begin(), wStr.end(),
+		wSubStr.begin(), wSubStr.end(),
+		[](wchar_t ch1, wchar_t ch2) {
+			// CharUpperW를 사용하여 다국어 문자도 안전하게 대문자로 변환하여 비교
+			return CharUpperW((LPWSTR)(INT_PTR)ch1) == CharUpperW((LPWSTR)(INT_PTR)ch2);
+		}
+	);
+	return (it != wStr.end());
+}
+
+static bool PassesFilter(const filesystem::path& path, uint32 filterMask)
+{
+	if (filterMask == 0) return true; // 아무것도 선택하지 않거나 "All"인 경우 모두 표시
+	if (filesystem::is_directory(path)) return true; // 폴더는 무조건 표시
+
+	string ext = path.extension().string();
+	for (auto& c : ext) c = tolower(c); // 소문자로 변환
+
+	// 선택된 각 카테고리의 비트가 켜져있는지 확인하고 해당 확장자면 true 반환
+	if ((filterMask & (1 << 0)) && (ext == ".png" || ext == ".jpg" || ext == ".tga")) return true; // Texture
+	if ((filterMask & (1 << 1)) && (ext == ".fbx" || ext == ".obj" || ext == ".gltf" || ext == ".blend")) return true; // Model
+	if ((filterMask & (1 << 2)) && (ext == ".mat")) return true; // Material
+	if ((filterMask & (1 << 3)) && (ext == ".hlsl" || ext == ".glsl")) return true; // Shader
+	if ((filterMask & (1 << 4)) && (ext == ".csv" || ext == ".json")) return true; // Data
+
+	return false;
+}
+
 EResult ContentBrowserPanel::Initialize(void* arg)
 {
 	m_Name = L"Content Browser";
@@ -14,6 +50,7 @@ EResult ContentBrowserPanel::Initialize(void* arg)
 	m_CurrentDirectory = m_RootPath;
 	m_LastDirectory = m_CurrentDirectory;
 	m_NeedToExpandTree = true;
+	memset(m_SearchBuffer, 0, sizeof(m_SearchBuffer));
 	return EResult::Success;
 }
 
@@ -52,6 +89,19 @@ void ContentBrowserPanel::Draw()
 	m_NeedToExpandTree = false;
 }
 
+void ContentBrowserPanel::ProcessEvent(const SDL_Event* event)
+{
+	if(event->type == SDL_EVENT_DROP_FILE)
+	{
+		const char* droppedFile = event->drop.data;
+		if(droppedFile)
+		{
+			vector<string> droppedFiles = { droppedFile };
+			OnExteranalDropped(droppedFiles);
+		}
+	}
+}
+
 void ContentBrowserPanel::Free()
 {
 	for (auto& [path, texture] : m_ThumbnailTextures)
@@ -60,6 +110,8 @@ void ContentBrowserPanel::Free()
 	}
 	m_ThumbnailTextures.clear();
 	m_ThumbnailCache.clear();
+	Safe_Delete(m_FileListener);
+	Safe_Delete(m_FileWatcher);
 }
 
 #pragma region TreeView
@@ -191,62 +243,35 @@ void ContentBrowserPanel::TreeViewContextMenu(const filesystem::path& path)
 }
 #pragma endregion
 
-
 #pragma region GridView
 void ContentBrowserPanel::DrawDirectoryGrid()
 {
 	BackButton();
 	ImGui::SameLine();
 	AddressBar();
+	ImGui::SameLine();
+	ContentFilter();
+	ImGui::SameLine();
+	bool enterPressed = SearchBar();
 	ImGui::Separator();
-
-	f32 cellSize = m_ThumbnailSize + m_Padding;
-	f32 panelWidth = ImGui::GetContentRegionAvail().x;
-	int32 columnCount = static_cast<int>(panelWidth / cellSize);
-	if (columnCount < 1) columnCount = 1;
 
 	if (ImGui::BeginChild("GridArea", ImVec2(0, 0), false))
 	{
-		GridViewContextMenu(m_CurrentDirectory);
-		if (ImGui::BeginTable("ContentBrowserTable", columnCount))
+		if (ImGui::IsWindowHovered() && ImGui::GetIO().KeyCtrl)
 		{
-			for (auto& directoryEntry : filesystem::directory_iterator(m_CurrentDirectory))
+			float wheel = ImGui::GetIO().MouseWheel;
+			if (wheel != 0.0f)
 			{
-				const auto& path = directoryEntry.path();
-				auto relativePath = filesystem::relative(path, m_RootPath);
-				string filenameString = relativePath.filename().string();
+				m_ThumbnailSize += wheel * 10.0f; // 스크롤 민감도
 
-				ImGui::TableNextColumn();
-
-				ImGui::PushID(filenameString.c_str());
-
-				DrawThumbnail(directoryEntry);
-				GridItemContextMenu(path);
-				DragAndDropTarget(relativePath);
-
-
-				// 인터랙션: 폴더 진입
-				if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
-				{
-					if (directoryEntry.is_directory())
-					{
-						m_CurrentDirectory /= path.filename();
-					}
-				}
-
-				if (m_RenamingPath == path)
-				{
-					DrawRename(path);
-				}
-				else
-				{
-					ImGui::TextWrapped("%s", filenameString.c_str());
-				}
-
-				ImGui::PopID();
+				// 크기 한계 지정
+				if (m_ThumbnailSize < 32.0f) m_ThumbnailSize = 32.0f;
+				if (m_ThumbnailSize > 256.0f) m_ThumbnailSize = 256.0f;
 			}
-			ImGui::EndTable();
 		}
+
+		GridViewContextMenu(m_CurrentDirectory);
+		DrawGrid(enterPressed);
 		ImGui::EndChild();
 	}
 }
@@ -269,33 +294,7 @@ void ContentBrowserPanel::GridViewContextMenu(const filesystem::path& path)
 	}
 }
 
-void ContentBrowserPanel::AddressBar()
-{
-	static char pathBuffer[1024] = "";
-	string relateivePathStr = filesystem::relative(m_CurrentDirectory, m_RootPath).string();
-	if (relateivePathStr == ".") relateivePathStr = "";
-
-	if (!ImGui::IsItemActive())
-	{
-		strncpy(pathBuffer, relateivePathStr.c_str(), sizeof(pathBuffer));
-	}
-
-	ImGui::SetNextItemWidth(-1);
-
-	if (ImGui::InputText("##AddressBar", pathBuffer, sizeof(pathBuffer), ImGuiInputTextFlags_EnterReturnsTrue))
-	{
-		filesystem::path newPath = m_RootPath / pathBuffer;
-		if (filesystem::exists(newPath) && filesystem::is_directory(newPath))
-		{
-			m_CurrentDirectory = newPath;
-		}
-		else
-		{
-			strncpy(pathBuffer, relateivePathStr.c_str(), sizeof(pathBuffer));
-		}
-	}
-}
-
+#pragma region Header Bar
 void ContentBrowserPanel::BackButton()
 {
 	bool isRoot = (m_CurrentDirectory == m_RootPath);
@@ -305,12 +304,282 @@ void ContentBrowserPanel::BackButton()
 	if (ImGui::Button(ICON_FA_ARROW_LEFT_LONG))
 	{
 		m_CurrentDirectory = m_CurrentDirectory.parent_path();
+		memset(m_SearchBuffer, 0, sizeof(m_SearchBuffer));
 	}
 
 	if (isRoot) ImGui::EndDisabled();
 }
 
-void ContentBrowserPanel::DrawThumbnail(const filesystem::directory_entry directoryEntry)
+void ContentBrowserPanel::AddressBar()
+{
+	float availWidth = ImGui::GetContentRegionAvail().x - 280.f;
+	if (availWidth < 100.f) availWidth = 100.f;
+
+	ImGui::BeginChild("##AddressBarChild", ImVec2(availWidth, ImGui::GetFrameHeight()), false, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+
+	// 브레드크럼 버튼의 기본 스타일을 투명하게 설정
+	ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(2.0f, 0.0f));
+
+	// 현재 경로를 분해하여 노드 리스트 생성
+	std::vector<std::filesystem::path> nodes;
+	std::filesystem::path current = m_CurrentDirectory;
+	while (current != m_RootPath && !current.empty() && current != current.parent_path())
+	{
+		nodes.push_back(current);
+		current = current.parent_path();
+	}
+	nodes.push_back(m_RootPath);
+	std::reverse(nodes.begin(), nodes.end()); // Root부터 시작하도록 순서 뒤집기
+
+	for (size_t i = 0; i < nodes.size(); ++i)
+	{
+		std::string name = (i == 0) ? "Assets" : nodes[i].filename().string();
+
+		// 경로의 폴더 이름을 클릭하면 해당 경로로 즉시 이동
+		if (ImGui::Button(name.c_str()))
+		{
+			m_CurrentDirectory = nodes[i];
+			memset(m_SearchBuffer, 0, sizeof(m_SearchBuffer));
+			m_LastSearchString = "";
+			m_SearchResults.clear();
+		}
+
+		// 마지막 노드가 아니라면 구분자(>) 추가
+		if (i < nodes.size() - 1)
+		{
+			ImGui::SameLine();
+			ImGui::TextUnformatted(">");
+			ImGui::SameLine();
+		}
+	}
+
+	ImGui::PopStyleVar();
+	ImGui::PopStyleColor();
+	ImGui::EndChild();
+}
+
+bool ContentBrowserPanel::SearchBar()
+{
+	ImGui::SetNextItemWidth(150.f);
+	return ImGui::InputTextWithHint("##SearchBar", ICON_FA_MAGNIFYING_GLASS " Search...", m_SearchBuffer, sizeof(m_SearchBuffer), ImGuiInputTextFlags_EnterReturnsTrue);
+}
+
+void ContentBrowserPanel::ContentFilter()
+{
+	const char* filterNames[] = { "Texture", "Model", "Material", "Shader", "Data" };
+	int filterCount = IM_ARRAYSIZE(filterNames);
+
+	// 콤보박스 타이틀 설정 로직
+	std::string previewText = "All";
+	if (m_FilterMask != 0)
+	{
+		int activeCount = 0;
+		std::string activeNames = "";
+		for (int i = 0; i < filterCount; ++i)
+		{
+			if (m_FilterMask & (1 << i))
+			{
+				if (activeCount > 0) activeNames += ", ";
+				activeNames += filterNames[i];
+				activeCount++;
+			}
+		}
+
+		if (activeCount == 1)
+			previewText = activeNames;
+		else if (activeCount > 1)
+			previewText = "Multiple (" + std::to_string(activeCount) + ")";
+	}
+
+	ImGui::SetNextItemWidth(100.f);
+	if (ImGui::BeginCombo("##Filter", previewText.c_str()))
+	{
+		// "All" 항목 (마스크 초기화)
+		bool allSelected = (m_FilterMask == 0);
+		if (ImGui::Selectable("All", allSelected))
+		{
+			m_FilterMask = 0;
+		}
+		ImGui::Separator();
+
+		// 각 필터별 체크박스
+		for (int i = 0; i < filterCount; ++i)
+		{
+			bool isSelected = (m_FilterMask & (1 << i)) != 0;
+			if (ImGui::Checkbox(filterNames[i], &isSelected))
+			{
+				if (isSelected)
+					m_FilterMask |= (1 << i);
+				else
+					m_FilterMask &= ~(1 << i);
+			}
+		}
+		ImGui::EndCombo();
+	}
+}
+#pragma endregion
+
+void ContentBrowserPanel::DrawGridItem(const filesystem::directory_entry& directoryEntry)
+{
+	const auto& path = directoryEntry.path();
+	auto relativePath = filesystem::relative(path, m_RootPath);
+	string filenameString = relativePath.filename().string();
+
+	ImGui::PushID(path.string().c_str());
+
+	DrawThumbnail(directoryEntry);
+	GridItemTooltip(directoryEntry);
+	GridItemContextMenu(path);
+	DragAndDropTarget(relativePath);
+
+
+	// 인터랙션: 폴더 진입
+	if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+	{
+		if (directoryEntry.is_directory())
+		{
+			m_CurrentDirectory /= path.filename();
+			memset(m_SearchBuffer, 0, sizeof(m_SearchBuffer));
+		}
+	}
+
+	if (m_RenamingPath == path)
+	{
+		DrawRename(path);
+	}
+	else
+	{
+		ImGui::TextWrapped("%s", filenameString.c_str());
+	}
+
+	ImGui::PopID();
+}
+
+void ContentBrowserPanel::GridItemTooltip(const filesystem::directory_entry& directoryEntry)
+{
+	if (ImGui::IsItemHovered())
+	{
+		filesystem::path path = directoryEntry.path();
+		string filenameString = path.filename().string();
+		ImGui::BeginTooltip();
+		ImGui::TextUnformatted(filenameString.c_str());
+		ImGui::Separator();
+
+		if (directoryEntry.is_directory())
+		{
+			ImGui::Text("Type: Folder");
+		}
+		else
+		{
+			string ext = path.extension().string();
+			for (auto& c : ext) c = tolower(c);
+			ImGui::Text("Type: %s File", ext.c_str());
+
+			// 안전하게 파일 용량 가져오기
+			try
+			{
+				uintmax_t fileSize = filesystem::file_size(path);
+				if (fileSize < 1024)
+					ImGui::Text("Size: %ju Bytes", fileSize);
+				else if (fileSize < 1024 * 1024)
+					ImGui::Text("Size: %ju KB", fileSize / 1024);
+				else
+					ImGui::Text("Size: %.2f MB", (float)fileSize / (1024.0f * 1024.0f));
+			}
+			catch (...) {}
+		}
+		ImGui::EndTooltip();
+	}
+}
+
+void ContentBrowserPanel::DrawGrid(bool enterPressed)
+{
+	f32 cellSize = m_ThumbnailSize + m_Padding;
+	f32 panelWidth = ImGui::GetContentRegionAvail().x;
+	int32 columnCount = static_cast<int>(panelWidth / cellSize);
+	if (columnCount < 1) columnCount = 1;
+
+	bool needsCacheRefresh = false;
+
+	if (m_LastWatchedDirectory != m_CurrentDirectory)
+	{
+		m_LastWatchedDirectory = m_CurrentDirectory;
+		needsCacheRefresh = true;
+		if (!m_FileWatcher)
+		{
+			m_FileWatcher = new efsw::FileWatcher();
+			m_FileListener = new ContentBrowserFileListener(&m_NeedsCacheRefresh);
+		}
+
+		if(m_WatchID > 0)
+			m_FileWatcher->removeWatch(m_WatchID);
+
+		const string& watchPath = m_CurrentDirectory.string();
+		m_WatchID = m_FileWatcher->addWatch(watchPath, m_FileListener, false);
+	}
+	else if (m_NeedsCacheRefresh.exchange(false))
+	{
+		needsCacheRefresh = true;
+	}
+
+	if(needsCacheRefresh)
+	{
+		m_CachedEntries.clear();
+		for (auto& entry : filesystem::directory_iterator(m_CurrentDirectory))
+		{
+			m_CachedEntries.push_back(entry);
+		}
+	}
+
+	if (ImGui::BeginTable("ContentBrowserTable", columnCount))
+	{
+		string searchStr(m_SearchBuffer);
+		bool isSearching = !searchStr.empty();
+		bool searchCleared = (m_SearchBuffer[0] == '\0' && !m_LastSearchString.empty());
+
+		if (enterPressed)
+		{
+			m_LastSearchString = searchStr; // 검색어 업데이트
+			m_SearchResults.clear();
+
+			if (isSearching)
+			{
+				for (auto& directoryEntry : filesystem::recursive_directory_iterator(m_RootPath, filesystem::directory_options::skip_permission_denied))
+				{
+					string filenameString = directoryEntry.path().filename().string();
+					if (StringContainsCaseInsensitive(filenameString, searchStr))
+					{
+						m_SearchResults.push_back(directoryEntry);
+					}
+				}
+			}
+		}
+
+		if (isSearching && !m_SearchResults.empty())
+		{
+			for (auto& directoryEntry : m_SearchResults)
+			{
+				if (!PassesFilter(directoryEntry.path(), m_FilterMask)) continue;
+				ImGui::TableNextColumn();
+				DrawGridItem(directoryEntry);
+			}
+		}
+		else
+		{
+			for (auto& directoryEntry : m_CachedEntries)
+			{
+				if (!PassesFilter(directoryEntry.path(), m_FilterMask)) continue;
+				ImGui::TableNextColumn();
+				DrawGridItem(directoryEntry);
+			}
+			m_SearchResults.clear();
+		}
+		ImGui::EndTable();
+	}
+}
+
+void ContentBrowserPanel::DrawThumbnail(const filesystem::directory_entry& directoryEntry)
 {
 	const char* icon = ICON_FA_FILE;
 	ImVec4 typeColor = ImVec4(1.0f, 1.0f, 1.0f, 0.1f); // 기본 투명한 회색
@@ -439,6 +708,29 @@ void ContentBrowserPanel::DragAndDropTarget(const filesystem::path& path)
 #pragma endregion
 
 #pragma region Helper
+void ContentBrowserPanel::OnExteranalDropped(const vector<string>& droppedFiles)
+{
+	for (const string& filepathStr : droppedFiles)
+	{
+		filesystem::path sourcePath(filepathStr);
+
+		if (filesystem::exists(sourcePath))
+		{
+			filesystem::path destinationPath = m_CurrentDirectory / sourcePath.filename();
+			try
+			{
+				// recursive 옵션을 주어 폴더일 경우 내부 파일들까지 통째로 복사
+				// overwrite_existing 옵션을 주어 이름이 겹치면 덮어쓰도록 처리
+				auto copyOptions = filesystem::copy_options::recursive | filesystem::copy_options::overwrite_existing;
+				filesystem::copy(sourcePath, destinationPath, copyOptions);
+			}
+			catch (const filesystem::filesystem_error& e)
+			{
+				// 복사 실패 처리
+			}
+		}
+	}
+}
 void ContentBrowserPanel::DrawRename(const filesystem::path& path)
 {
 	// 입력창 너비 설정 (그리드일 때는 썸네일 크기, 트리일 때는 가변)

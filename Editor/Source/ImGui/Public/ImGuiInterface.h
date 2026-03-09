@@ -9,6 +9,8 @@ public:
 	virtual ~ImGuiInterface() = default;
 	virtual void Draw() PURE;
 	virtual void Update(f32 dt) {}
+	virtual void ProcessEvent(const SDL_Event* event) {}
+public:
 	bool IsOpen() const { return m_Open; }
 	void SetOpen(bool open) { m_Open = open; }
 	void ToggleOpen() { m_Open = !m_Open; }
