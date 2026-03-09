@@ -3,6 +3,8 @@
 #include "Base.h"
 #include "InputMap.h"
 
+using namespace std;
+
 #define KEY_DOWN(key) InputManager::Get().IsKeyButtonDown(key)
 #define KEY_UP(key) InputManager::Get().IsKeyButtonUp(key)
 #define KEY_PRESSED(key) InputManager::Get().IsKeyButtonPressed(key)

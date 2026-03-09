@@ -4,6 +4,7 @@
 #include "SelectionManager.h"
 
 #include "GameObject.h"
+#include "Transform.h"
 #include "Component.h"
 #include "ReflectionTypes.h"
 

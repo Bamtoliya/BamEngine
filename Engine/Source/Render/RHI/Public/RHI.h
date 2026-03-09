@@ -78,8 +78,8 @@ public:
 public:
     virtual EResult BindSampler(RHISampler* sampler) PURE;
 public:
-    virtual EResult BindVertexBuffer(RHIBuffer* vertexBuffer) { if (!vertexBuffer) return EResult::Fail; Safe_Release(m_VertexBuffer); m_VertexBuffer = vertexBuffer; Safe_AddRef(m_VertexBuffer); return EResult::Success; }
-    virtual EResult BindIndexBuffer(RHIBuffer* indexBuffer) { if (!indexBuffer) return EResult::Fail; Safe_Release(m_IndexBuffer); m_IndexBuffer = indexBuffer; Safe_AddRef(m_IndexBuffer);  return EResult::Success; }
+    virtual EResult BindVertexBuffer(RHIBuffer* vertexBuffer); 
+    virtual EResult BindIndexBuffer(RHIBuffer* indexBuffer);
     virtual EResult BindConstantBuffer(void* arg, uint32 slot) PURE;
     virtual EResult BindConstantBuffer(void* arg, uint32 size, uint32 slot) { return EResult::NotImplemented; }
     virtual EResult BindConstantRangeBuffer(void* arg, uint32 slot, uint32 offset, uint32 size) PURE;

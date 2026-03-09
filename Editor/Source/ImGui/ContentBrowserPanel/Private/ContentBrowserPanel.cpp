@@ -2,14 +2,8 @@
 #include "ContentBrowserPanel.h"
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#include <Windows.h>
-#include <shellapi.h> 
+
+using namespace std;
 
 EResult ContentBrowserPanel::Initialize(void* arg)
 {
@@ -342,6 +336,7 @@ void ContentBrowserPanel::DrawThumbnail(const filesystem::directory_entry direct
 		{
 			icon = ICON_FA_CUBE;
 			typeColor = ImVec4(0.2f, 0.4f, 0.9f, 0.4f); // 모델: 파란색
+			thumbnailTexID = LoadModelThumbnail(directoryEntry.path());
 		}
 		else if (ext == ".mat")
 		{
@@ -502,6 +497,87 @@ void* ContentBrowserPanel::LoadThumbnail(const filesystem::path& path)
 			m_ThumbnailCache[pathStr] = (void*)(ImTextureID)(size_t)(rhiTexture->GetNativeHandle());
 			return m_ThumbnailCache[pathStr];
 		}
+	}
+
+	m_ThumbnailCache[pathStr] = nullptr;
+	return nullptr;
+}
+void* ContentBrowserPanel::LoadModelThumbnail(const filesystem::path& path)
+{
+	string pathStr = path.string();
+
+	if (m_ThumbnailCache.find(pathStr) != m_ThumbnailCache.end())
+	{
+		return m_ThumbnailCache[pathStr];
+	}
+
+	bool comInitialized = SUCCEEDED(CoInitialize(NULL));
+
+	// [수정점 1] SHCreateItemFromParsingName은 절대 경로를 요구합니다.
+	filesystem::path absolutePath = filesystem::absolute(path);
+	wstring wPathStr = absolutePath.wstring();
+
+	IShellItemImageFactory* imageFactory = nullptr;
+	HRESULT hr = SHCreateItemFromParsingName(wPathStr.c_str(), nullptr, IID_PPV_ARGS(&imageFactory));
+
+	if (SUCCEEDED(hr) && imageFactory)
+	{
+		HBITMAP hBitmap;
+		SIZE size = { 256, 256 }; // 원하는 썸네일 크기
+
+		// [수정점 2] SIIGBF_ICONONLY를 제거하고 SIIGBF_RESIZETOFIT만 사용합니다.
+		hr = imageFactory->GetImage(size, SIIGBF_RESIZETOFIT, &hBitmap);
+
+		imageFactory->Release();
+		if (SUCCEEDED(hr))
+		{
+			BITMAP bm;
+			GetObject(hBitmap, sizeof(bm), &bm);
+
+			int width = bm.bmWidth;
+			int height = bm.bmHeight;
+
+			BITMAPINFO bi = { 0 };
+			bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+			bi.bmiHeader.biWidth = width;
+			bi.bmiHeader.biHeight = -height; // Top-down 방식으로 읽기
+			bi.bmiHeader.biPlanes = 1;
+			bi.bmiHeader.biBitCount = 32;
+			bi.bmiHeader.biCompression = BI_RGB;
+
+			HDC hdc = GetDC(NULL);
+			std::vector<uint8_t> pixels(width * height * 4);
+			GetDIBits(hdc, hBitmap, 0, height, pixels.data(), &bi, DIB_RGB_COLORS);
+			ReleaseDC(NULL, hdc);
+
+			// Windows HBITMAP은 기본적으로 BGRA 순서이므로 RGBA로 스왑
+			for (size_t i = 0; i < pixels.size(); i += 4)
+			{
+				uint8_t b = pixels[i];
+				uint8_t r = pixels[i + 2];
+				pixels[i] = r;
+				pixels[i + 2] = b;
+
+				// 윈도우 썸네일은 포맷에 따라 알파가 0으로 올 수 있으므로 불투명(255) 강제 처리
+				pixels[i + 3] = 255;
+			}
+
+			DeleteObject(hBitmap);
+
+			RHITexture* rhiTexture = Renderer::Get().GetRHI()->CreateTextureFromMemory(pixels.data(), width, height, 1, 1, 4);
+			if (rhiTexture)
+			{
+				m_ThumbnailTextures[pathStr] = rhiTexture;
+				m_ThumbnailCache[pathStr] = (void*)(ImTextureID)(size_t)(rhiTexture->GetNativeHandle());
+				if (comInitialized) CoUninitialize();
+				return m_ThumbnailCache[pathStr];
+			}
+		}
+	}
+
+	if (comInitialized)
+	{
+		CoUninitialize();
 	}
 
 	m_ThumbnailCache[pathStr] = nullptr;

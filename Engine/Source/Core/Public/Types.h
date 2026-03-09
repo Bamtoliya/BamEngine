@@ -16,9 +16,6 @@ namespace Engine
 	using char32 = char32_t;		// UTF-32 (Linux/Unix Wide char, U"문자열")
 	using wchar = wchar_t;			// 플랫폼 종속적 Wide char (Win: 16bit, Linux: 32bit)
 
-	// [Bytes]
-	using byte = std::uint8_t;
-
 	// [Integers]
 	using int8 = std::int8_t;
 	using int16 = std::int16_t;

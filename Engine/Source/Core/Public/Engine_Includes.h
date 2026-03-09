@@ -1,5 +1,20 @@
 ﻿#pragma once
 
+#ifdef WIN32
+#define _HAS_STD_BYTE 0
+
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <Windows.h>
+#include <shobjidl.h>
+#include <shellapi.h> 
+#define _HAS_STD_BYTE 1
+#endif
+
 #pragma warning(push)
 #pragma warning(disable: 4251) 
 
@@ -21,8 +36,6 @@
 #include <array>
 #include <thread>
 #pragma endregion
-
-using namespace std;
 
 #pragma region ThirdParty Library
 // 2. Third Party Library (변경 빈도가 가장 낮음)

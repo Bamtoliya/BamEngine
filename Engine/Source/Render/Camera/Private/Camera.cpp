@@ -4,6 +4,13 @@
 #include "Transform.h"
 #include "CameraManager.h"
 
+#ifdef near
+#undef near
+#endif
+#ifdef far
+#undef far
+#endif
+
 REGISTER_COMPONENT(Camera);
 
 #pragma region Constructor&Destructor

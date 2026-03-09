@@ -78,8 +78,8 @@ enum class EMouseButton : uint32
 
     Count
 };
-static EKeyCode SDLKeyToEngineKeyCode(SDL_Scancode sdlScancode);
-static EKeyCode StringToEngineKeyCode(const string& keyString);
-static EMouseButton SDLButtonToEngineMouseButton(uint8 sdlButton);
-static EMouseButton StringToEngineMouseButton(const string& buttonString);
+EKeyCode SDLKeyToEngineKeyCode(SDL_Scancode sdlScancode);
+EKeyCode StringToEngineKeyCode(const string& keyString);
+EMouseButton SDLButtonToEngineMouseButton(uint8 sdlButton);
+EMouseButton StringToEngineMouseButton(const string& buttonString);
 END

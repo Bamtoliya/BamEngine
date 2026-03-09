@@ -64,7 +64,7 @@ add_custom_target(RunLocalizationGenerator ALL
     VERBATIM
 )
 
-set_target_properties(Engine PROPERTIES UNITY_BUILD ON)
+set_target_properties(Editor PROPERTIES UNITY_BUILD OFF)
 
 add_dependencies(Engine RunLocalizationGenerator)
 

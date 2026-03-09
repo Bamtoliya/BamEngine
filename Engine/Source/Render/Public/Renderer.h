@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "Base.h"
+#include "Structs.h"
 #include "RHI.h"
 #include "RenderTypes.h"
 #include "RenderTarget.h"
@@ -39,11 +40,6 @@ class ENGINE_API Renderer final : public Base
 	friend class Runtime;
 	using RenderDelegate = MulticastDelegate<f32>;
 	using CustomRenderCommand = function<EResult(f32, RenderPass*)>;
-#pragma region Struct
-public:
-	
-#pragma endregion
-
 #pragma region Constructor&Destructor
 private:
 	Renderer() {}

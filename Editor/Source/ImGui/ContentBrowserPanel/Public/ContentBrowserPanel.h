@@ -38,6 +38,7 @@ private:
 private:
 	void DrawRename(const filesystem::path& path);
 	void* LoadThumbnail(const filesystem::path& path);
+	void* LoadModelThumbnail(const filesystem::path& path);
 #pragma endregion
 
 	

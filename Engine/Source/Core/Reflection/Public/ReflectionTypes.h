@@ -5,6 +5,8 @@
 #include "PropertyMetadata.h"
 #include "PropertyAttributes.h"
 
+using namespace std;
+
 BEGIN(Engine)
 
 enum class EPropertyType : uint8

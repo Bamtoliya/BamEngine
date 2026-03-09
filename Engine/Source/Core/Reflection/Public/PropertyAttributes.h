@@ -1,8 +1,8 @@
 ﻿#pragma once
 #include "Base.h"
+using namespace std;
 
 BEGIN(Engine)
-
 struct Name
 {
 	string Text;
