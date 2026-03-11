@@ -18,6 +18,8 @@ struct TextureSlot
 	RHITexture* texture = { nullptr };
 	PROPERTY()
 	wstring SamplerKey = {};
+
+	bool operator==(const TextureSlot& other) const = default;
 };
 
 ENUM()
@@ -49,6 +51,8 @@ struct MaterialParameter
 	{
 		memcpy(data.data(), ptr, size);
 	}
+
+	bool operator==(const MaterialParameter& other) const = default;
 };
 
 

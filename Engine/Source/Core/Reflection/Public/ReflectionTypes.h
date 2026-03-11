@@ -3,8 +3,6 @@
 #include "PropertyMetadata.h"
 #include "ReflectionContainers.h"
 
-using namespace std;
-
 BEGIN(Engine)
 
 enum class EPropertyType : uint8
@@ -55,6 +53,9 @@ struct PropertyInfo
 
 	const ContainerInfo* ContainerData = nullptr;
 	span<const MetadataEntry> Metadata;
+
+	void (*CopyProp)(void* dst, const void* src) = nullptr;
+	bool (*EqualProp)(const void* a, const void* b) = nullptr;
 };
 
 struct EnumEntry

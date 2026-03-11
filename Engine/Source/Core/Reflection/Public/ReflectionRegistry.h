@@ -18,8 +18,6 @@ public:
 	virtual void Free();
 #pragma endregion
 
-#pragma endregion
-
 #pragma region Type Management
 public:
 	void RegisterType(uint64 hash, const TypeInfo& typeInfo);
@@ -56,9 +54,9 @@ private:
 
 #pragma region Variable
 private:
-	unordered_map<uint64, TypeInfo> m_Types;
-	unordered_map<uint64, EnumInfo> m_Enums;
-	unordered_map<uint64, FunctionInfo> m_Functions;
+	unordered_map<uint64, const TypeInfo*> m_Types;
+	unordered_map<uint64, const EnumInfo*> m_Enums;
+	unordered_map<uint64, const FunctionInfo*> m_Functions;
 	unordered_map<uint64, vector<uint8>> m_CDOs;
 #pragma endregion
 };

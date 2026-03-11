@@ -166,7 +166,7 @@ END_ENUM_REFLECT(EObjectFlag)
 // ==========================================================
 // [CLASS/STRUCT REFLECTIONS]
 // ==========================================================
-// STRUCT: tagComponentDesc
+#pragma region STRUCT: tagComponentDesc
 BEGIN_PROPERTIES(tagComponentDesc)
 	REFLECT_PROPERTY(tagComponentDesc, Active, "bool", Engine::EPropertyType::Bool, {})
 	REFLECT_PROPERTY(tagComponentDesc, Tag, "wstring", Engine::EPropertyType::Wstring, {})
@@ -177,14 +177,18 @@ EMPTY_FUNCTIONS(tagComponentDesc)
 
 IMPLEMENT_CLASS(tagComponentDesc, None)
 
-// CLASS: Component
+#pragma endregion // STRUCT: tagComponentDesc
+
+#pragma region CLASS: Component
 EMPTY_PROPERTIES(Component)
 
 EMPTY_FUNCTIONS(Component)
 
 IMPLEMENT_CLASS(Component, Base)
 
-// STRUCT: AABB
+#pragma endregion // CLASS: Component
+
+#pragma region STRUCT: AABB
 BEGIN_PROPERTIES(AABB)
 	REFLECT_PROPERTY(AABB, Min, "vec3", Engine::EPropertyType::Vector3, {})
 	REFLECT_PROPERTY(AABB, Max, "vec3", Engine::EPropertyType::Vector3, {})
@@ -194,7 +198,9 @@ EMPTY_FUNCTIONS(AABB)
 
 IMPLEMENT_CLASS(AABB, None)
 
-// STRUCT: Rect
+#pragma endregion // STRUCT: AABB
+
+#pragma region STRUCT: Rect
 BEGIN_PROPERTIES(Rect)
 	REFLECT_PROPERTY(Rect, Left, "f32", Engine::EPropertyType::F32, {})
 	REFLECT_PROPERTY(Rect, Top, "f32", Engine::EPropertyType::F32, {})
@@ -206,7 +212,9 @@ EMPTY_FUNCTIONS(Rect)
 
 IMPLEMENT_CLASS(Rect, None)
 
-// STRUCT: Vertex
+#pragma endregion // STRUCT: Rect
+
+#pragma region STRUCT: Vertex
 BEGIN_PROPERTIES(Vertex)
 	REFLECT_PROPERTY(Vertex, position, "glm::vec3", Engine::EPropertyType::Vector3, {})
 	REFLECT_PROPERTY(Vertex, normal, "glm::vec3", Engine::EPropertyType::Vector3, {})
@@ -220,7 +228,9 @@ EMPTY_FUNCTIONS(Vertex)
 
 IMPLEMENT_CLASS(Vertex, None)
 
-// STRUCT: tagTransformDesc
+#pragma endregion // STRUCT: Vertex
+
+#pragma region STRUCT: tagTransformDesc
 BEGIN_PROPERTIES(tagTransformDesc)
 	REFLECT_PROPERTY(tagTransformDesc, Position, "vec3", Engine::EPropertyType::Vector3, {})
 	REFLECT_PROPERTY(tagTransformDesc, Rotation, "vec3", Engine::EPropertyType::Vector3, {})
@@ -231,7 +241,9 @@ EMPTY_FUNCTIONS(tagTransformDesc)
 
 IMPLEMENT_CLASS(tagTransformDesc, None)
 
-// CLASS: Transform
+#pragma endregion // STRUCT: tagTransformDesc
+
+#pragma region CLASS: Transform
 BEGIN_METADATA(Transform, m_LocalMatrix)
 	NAME("PROP_LOCALMATRIX")
 	READONLY
@@ -259,7 +271,9 @@ EMPTY_FUNCTIONS(Transform)
 
 IMPLEMENT_CLASS(Transform, Component)
 
-// CLASS: Box2DCollider
+#pragma endregion // CLASS: Transform
+
+#pragma region CLASS: Box2DCollider
 BEGIN_PROPERTIES(Box2DCollider)
 	REFLECT_PROPERTY(Box2DCollider, m_Center, "vec2", Engine::EPropertyType::Vector2, {})
 	REFLECT_PROPERTY(Box2DCollider, m_Extent, "vec2", Engine::EPropertyType::Vector2, {})
@@ -269,7 +283,9 @@ EMPTY_FUNCTIONS(Box2DCollider)
 
 IMPLEMENT_CLASS(Box2DCollider, Collider)
 
-// CLASS: BoxCollider
+#pragma endregion // CLASS: Box2DCollider
+
+#pragma region CLASS: BoxCollider
 BEGIN_PROPERTIES(BoxCollider)
 	REFLECT_PROPERTY(BoxCollider, m_Center, "vec3", Engine::EPropertyType::Vector3, {})
 	REFLECT_PROPERTY(BoxCollider, m_Extents, "vec3", Engine::EPropertyType::Vector3, {})
@@ -279,7 +295,9 @@ EMPTY_FUNCTIONS(BoxCollider)
 
 IMPLEMENT_CLASS(BoxCollider, Collider)
 
-// CLASS: Collider
+#pragma endregion // CLASS: BoxCollider
+
+#pragma region CLASS: Collider
 BEGIN_PROPERTIES(Collider)
 	REFLECT_PROPERTY(Collider, m_DrawCollider, "bool", Engine::EPropertyType::Bool, {})
 END_PROPERTIES
@@ -288,7 +306,9 @@ EMPTY_FUNCTIONS(Collider)
 
 IMPLEMENT_CLASS(Collider, Component)
 
-// CLASS: Camera
+#pragma endregion // CLASS: Collider
+
+#pragma region CLASS: Camera
 BEGIN_METADATA(Camera, m_FOV)
 	EDITCONDITION("m_IsPerspective")
 END_METADATA
@@ -324,14 +344,18 @@ EMPTY_FUNCTIONS(Camera)
 
 IMPLEMENT_CLASS(Camera, Component)
 
-// CLASS: MeshRenderer
+#pragma endregion // CLASS: Camera
+
+#pragma region CLASS: MeshRenderer
 EMPTY_PROPERTIES(MeshRenderer)
 
 EMPTY_FUNCTIONS(MeshRenderer)
 
 IMPLEMENT_CLASS(MeshRenderer, RenderComponent)
 
-// CLASS: RenderComponent
+#pragma endregion // CLASS: MeshRenderer
+
+#pragma region CLASS: RenderComponent
 BEGIN_METADATA(RenderComponent, m_RenderPassID)
 	CATEGORY("PROP_INFORMATION")
 END_METADATA
@@ -346,7 +370,9 @@ EMPTY_FUNCTIONS(RenderComponent)
 
 IMPLEMENT_CLASS(RenderComponent, Component)
 
-// CLASS: SpriteRenderer
+#pragma endregion // CLASS: RenderComponent
+
+#pragma region CLASS: SpriteRenderer
 BEGIN_METADATA(SpriteRenderer, m_Tiling)
 	DEFAULT(vec2(1.f, 1.f))
 END_METADATA
@@ -367,7 +393,9 @@ EMPTY_FUNCTIONS(SpriteRenderer)
 
 IMPLEMENT_CLASS(SpriteRenderer, RenderComponent)
 
-// CLASS: MeshFilter
+#pragma endregion // CLASS: SpriteRenderer
+
+#pragma region CLASS: MeshFilter
 BEGIN_PROPERTIES(MeshFilter)
 	REFLECT_PROPERTY(MeshFilter, m_Mesh, "Mesh", Engine::EPropertyType::Object, {})
 END_PROPERTIES
@@ -376,14 +404,18 @@ EMPTY_FUNCTIONS(MeshFilter)
 
 IMPLEMENT_CLASS(MeshFilter, Component)
 
-// CLASS: Material
+#pragma endregion // CLASS: MeshFilter
+
+#pragma region CLASS: Material
 EMPTY_PROPERTIES(Material)
 
 EMPTY_FUNCTIONS(Material)
 
 IMPLEMENT_CLASS(Material, MaterialInterface)
 
-// CLASS: MaterialInstance
+#pragma endregion // CLASS: Material
+
+#pragma region CLASS: MaterialInstance
 BEGIN_PROPERTIES(MaterialInstance)
 	REFLECT_PROPERTY(MaterialInstance, m_BaseMaterial, "class Material", Engine::EPropertyType::Object, {})
 	REFLECT_PROPERTY(MaterialInstance, m_OverrideFlags, "EPipelineOverrideFlag", Engine::EPropertyType::Enum, {})
@@ -393,7 +425,9 @@ EMPTY_FUNCTIONS(MaterialInstance)
 
 IMPLEMENT_CLASS(MaterialInstance, MaterialInterface)
 
-// STRUCT: TextureSlot
+#pragma endregion // CLASS: MaterialInstance
+
+#pragma region STRUCT: TextureSlot
 BEGIN_PROPERTIES(TextureSlot)
 	REFLECT_PROPERTY(TextureSlot, slot, "uint32", Engine::EPropertyType::UInt32, {})
 	REFLECT_PROPERTY(TextureSlot, texture, "RHITexture", Engine::EPropertyType::Object, {})
@@ -404,7 +438,9 @@ EMPTY_FUNCTIONS(TextureSlot)
 
 IMPLEMENT_CLASS(TextureSlot, None)
 
-// STRUCT: MaterialParameter
+#pragma endregion // STRUCT: TextureSlot
+
+#pragma region STRUCT: MaterialParameter
 DECLARE_CONTAINER_INFO(MaterialParameter, data, "uint8", Engine::EPropertyType::UInt8, Engine::LinearContainerAccessor<vector<uint8>, uint8>::Get())
 BEGIN_PROPERTIES(MaterialParameter)
 	REFLECT_PROPERTY(MaterialParameter, type, "EMaterialParameterType", Engine::EPropertyType::Enum, {})
@@ -415,7 +451,9 @@ EMPTY_FUNCTIONS(MaterialParameter)
 
 IMPLEMENT_CLASS(MaterialParameter, None)
 
-// CLASS: MaterialInterface
+#pragma endregion // STRUCT: MaterialParameter
+
+#pragma region CLASS: MaterialInterface
 BEGIN_METADATA(MaterialInterface, m_BlendMode)
 	CATEGORY(L"Pipeline")
 END_METADATA
@@ -454,7 +492,9 @@ EMPTY_FUNCTIONS(MaterialInterface)
 
 IMPLEMENT_CLASS(MaterialInterface, Resource)
 
-// CLASS: Mesh
+#pragma endregion // CLASS: MaterialInterface
+
+#pragma region CLASS: Mesh
 BEGIN_METADATA(Mesh, m_Topology)
 	CATEGORY(L"PROP_INFORMATION")
 	READONLY
@@ -492,7 +532,9 @@ EMPTY_FUNCTIONS(Mesh)
 
 IMPLEMENT_CLASS(Mesh, Resource)
 
-// CLASS: Model
+#pragma endregion // CLASS: Mesh
+
+#pragma region CLASS: Model
 DECLARE_CONTAINER_INFO(Model, m_Materials, "Material*", Engine::EPropertyType::Object, Engine::LinearContainerAccessor<vector<Material*>, Material*>::Get())
 DECLARE_CONTAINER_INFO(Model, m_Meshes, "Mesh*", Engine::EPropertyType::Object, Engine::LinearContainerAccessor<vector<Mesh*>, Mesh*>::Get())
 BEGIN_PROPERTIES(Model)
@@ -505,7 +547,9 @@ EMPTY_FUNCTIONS(Model)
 
 IMPLEMENT_CLASS(Model, Resource)
 
-// CLASS: Skeleton
+#pragma endregion // CLASS: Model
+
+#pragma region CLASS: Skeleton
 DECLARE_CONTAINER_INFO(Skeleton, m_Bones, "Bone", Engine::EPropertyType::Struct, Engine::LinearContainerAccessor<vector<Bone>, Bone>::Get())
 DECLARE_MAP_INFO(Skeleton, m_BoneMap, "wstring", Engine::EPropertyType::Wstring, "uint32", Engine::EPropertyType::UInt32, Engine::MapAccessor<unordered_map<wstring, uint32>>::Get())
 BEGIN_PROPERTIES(Skeleton)
@@ -517,7 +561,9 @@ EMPTY_FUNCTIONS(Skeleton)
 
 IMPLEMENT_CLASS(Skeleton, Resource)
 
-// CLASS: Resource
+#pragma endregion // CLASS: Skeleton
+
+#pragma region CLASS: Resource
 BEGIN_METADATA(Resource, m_Version)
 	READONLY
 END_METADATA
@@ -531,7 +577,9 @@ EMPTY_FUNCTIONS(Resource)
 
 IMPLEMENT_CLASS(Resource, Base)
 
-// CLASS: Shader
+#pragma endregion // CLASS: Resource
+
+#pragma region CLASS: Shader
 BEGIN_PROPERTIES(Shader)
 	REFLECT_PROPERTY(Shader, m_RHIShader, "RHIShader", Engine::EPropertyType::Object, {})
 END_PROPERTIES
@@ -540,7 +588,9 @@ EMPTY_FUNCTIONS(Shader)
 
 IMPLEMENT_CLASS(Shader, Resource)
 
-// CLASS: Sprite
+#pragma endregion // CLASS: Shader
+
+#pragma region CLASS: Sprite
 BEGIN_METADATA(Sprite, m_Pivot)
 	DEFAULT(vec2(0.5f, 0.5f))
 END_METADATA
@@ -555,7 +605,9 @@ EMPTY_FUNCTIONS(Sprite)
 
 IMPLEMENT_CLASS(Sprite, Resource)
 
-// CLASS: Texture
+#pragma endregion // CLASS: Sprite
+
+#pragma region CLASS: Texture
 BEGIN_METADATA(Texture, m_Path)
 	DIRECTORY
 	READONLY
@@ -570,21 +622,27 @@ EMPTY_FUNCTIONS(Texture)
 
 IMPLEMENT_CLASS(Texture, Resource)
 
-// CLASS: Button
+#pragma endregion // CLASS: Texture
+
+#pragma region CLASS: Button
 EMPTY_PROPERTIES(Button)
 
 EMPTY_FUNCTIONS(Button)
 
 IMPLEMENT_CLASS(Button, UIComponent)
 
-// CLASS: UIComponent
+#pragma endregion // CLASS: Button
+
+#pragma region CLASS: UIComponent
 EMPTY_PROPERTIES(UIComponent)
 
 EMPTY_FUNCTIONS(UIComponent)
 
 IMPLEMENT_CLASS(UIComponent, Component)
 
-// CLASS: GameObject
+#pragma endregion // CLASS: UIComponent
+
+#pragma region CLASS: GameObject
 BEGIN_METADATA(GameObject, m_ID)
 	CATEGORY("PROP_INFORMATION")
 	READONLY
@@ -625,6 +683,8 @@ END_PROPERTIES
 EMPTY_FUNCTIONS(GameObject)
 
 IMPLEMENT_CLASS(GameObject, Base)
+
+#pragma endregion // CLASS: GameObject
 
 
 #pragma endregion

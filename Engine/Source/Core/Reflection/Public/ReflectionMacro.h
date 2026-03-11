@@ -65,18 +65,29 @@ public: \
 	static constexpr std::span<const Engine::FunctionInfo> ClassName##_Functions{};
 
 #define REFLECT_PROPERTY(Class, VarName, TypeName, TypeEnum, MetaArray) \
-	{ Engine::CompileTimeHash(#VarName), #VarName, {TypeName, TypeEnum}, offsetof(Class, VarName), sizeof(Class::VarName), nullptr, MetaArray },
+	{ Engine::CompileTimeHash(#VarName), #VarName, {TypeName, TypeEnum}, offsetof(Class, VarName), sizeof(Class::VarName), nullptr, MetaArray, \
+	  &Engine::PropertyCopy<decltype(Class::VarName)>, &Engine::PropertyEqual<decltype(Class::VarName)> },
 
 #define REFLECT_CONTAINER_PROPERTY(Class, VarName, TypeName, TypeEnum, ContainerDataPtr, MetaArray) \
-	{ Engine::CompileTimeHash(#VarName), #VarName, {TypeName, TypeEnum}, offsetof(Class, VarName), sizeof(Class::VarName), ContainerDataPtr, MetaArray },
+	{ Engine::CompileTimeHash(#VarName), #VarName, {TypeName, TypeEnum}, offsetof(Class, VarName), sizeof(Class::VarName), ContainerDataPtr, MetaArray, \
+	  &Engine::PropertyCopy<decltype(Class::VarName)>, &Engine::PropertyEqual<decltype(Class::VarName)> },
+
+#define DECLARE_FUNCTION_PARAMS(ClassName, FuncName) \
+	static constexpr Engine::VariableInfo ClassName##_##FuncName##_Params[] = {
+
+#define FUNCTION_PARAM(TypeName, TypeEnum) \
+	{TypeName, TypeEnum},
+
+#define END_FUNCTION_PARAMS };
 
 #define BEGIN_FUNCTIONS(ClassName) \
 	static constexpr Engine::FunctionInfo ClassName##_Functions[] = {
 
 #define END_FUNCTIONS };
 
-#define REFLECT_FUNCTION(Class, FuncName, ReturnTypeName, ReturnTypeEnum, ...) \
-	{ Engine::CompileTimeHash(#FuncName), #FuncName, {ReturnTypeName, ReturnTypeEnum}, {__VA_ARGS__}, nullptr },
+#define REFLECT_FUNCTION(Class, FuncName, ReturnTypeName, ReturnTypeEnum, ParamsSpan) \
+	{ Engine::CompileTimeHash(#FuncName), #FuncName, {ReturnTypeName, ReturnTypeEnum}, ParamsSpan, \
+	  &Engine::AutoThunk<&Class::FuncName> },
 
 #define IMPLEMENT_CLASS(ClassName, ParentName) \
 	void ClassName::CreateCDO(void* cdoBuf) \

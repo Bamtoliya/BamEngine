@@ -233,30 +233,28 @@ def extract_functions(class_name: str, functions: list) -> tuple[str, list[str]]
     funcs_list = []
 
     for _func_attrs, return_type_raw, func_name, params_str in functions:
-        # ── 반환 타입 정규화 (한정자 제거) ──────────────────────────────
+        # ── 반환 타입 정규화 ──────────────────────────────────
         ret = return_type_raw.strip()
         for q in ('virtual','static','inline','constexpr','explicit','override','final'):
             ret = re.sub(rf'\b{q}\b', '', ret).strip()
 
-        r_type, r_name = get_property_type(
-            ret.replace("const","").replace("&","").replace("*","").strip()
-        )
+        ret_clean = ret.replace("const","").replace("&","").replace("*","").strip()
+        r_type, r_name = get_property_type(ret_clean)
         r_enum = f"Engine::EPropertyType::{r_type}"
 
-        # ── 파라미터 배열 ────────────────────────────────────────────────
-        params     = parse_param_list(params_str)
+        # ── 파라미터 ─────────────────────────────────────────
+        params = parse_param_list(params_str)
         params_arg = "{}"
 
         if params:
-            arr_name   = f"{class_name}_{func_name}_Params"
-            params_arg = arr_name
-            param_code += f"static constexpr Engine::VariableInfo {arr_name}[] = {{\n"
+            params_arg = f"{class_name}_{func_name}_Params"
+            param_code += f"DECLARE_FUNCTION_PARAMS({class_name}, {func_name})\n"
             for p_type_str, _ in params:
                 pt, ptn = get_property_type(
                     p_type_str.replace("const","").replace("&","").replace("*","").strip()
                 )
-                param_code += f'\t{{"{ptn}", Engine::EPropertyType::{pt}}},\n'
-            param_code += "};\n"
+                param_code += f'\tFUNCTION_PARAM("{ptn}", Engine::EPropertyType::{pt})\n'
+            param_code += "END_FUNCTION_PARAMS\n\n"
 
         funcs_list.append(
             f'REFLECT_FUNCTION({class_name}, {func_name}, "{r_name}", {r_enum}, {params_arg})'
@@ -324,7 +322,7 @@ def parse_class_struct(content: str, rel_path: str) -> tuple[bool, str]:
         raw_properties = PROPERTY_PATTERN.findall(scope_content)
         raw_functions  = FUNCTION_PATTERN.findall(scope_content)
 
-        code_block = f"// {type_keyword}: {class_name}\n"
+        code_block = f"#pragma region {type_keyword}: {class_name}\n"
 
         # ── 프로퍼티 ─────────────────────────────────────────────────────
         prop_decl_code, props_list = extract_properties(class_name, raw_properties)
@@ -353,6 +351,7 @@ def parse_class_struct(content: str, rel_path: str) -> tuple[bool, str]:
             code_block += "END_FUNCTIONS\n\n"
 
         code_block += f"IMPLEMENT_CLASS({class_name}, {parent_name})\n\n"
+        code_block += f"#pragma endregion // {type_keyword}: {class_name}\n\n"
         generated_class_body += code_block
 
     return has_type_in_file, generated_class_body

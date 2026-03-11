@@ -9,8 +9,8 @@ void ReflectionRegistry::Free()
 	for (auto& [typeId, buf] : m_CDOs)
 	{
 		auto it = m_Types.find(typeId);
-		if (it != m_Types.end() && it->second.Destroy != nullptr)
-			it->second.Destroy(buf.data());
+		if (it != m_Types.end() && it->second->Destroy != nullptr)
+			it->second->Destroy(buf.data());
 	}
 
 	m_CDOs.clear();
@@ -22,13 +22,13 @@ void ReflectionRegistry::Free()
 #pragma region Type Management
 void ReflectionRegistry::RegisterType(uint64 hash, const TypeInfo& typeInfo)
 {
-	m_Types[hash] = typeInfo;
+	m_Types[hash] = &typeInfo;
 }
 
 const TypeInfo* ReflectionRegistry::GetType(uint64 hash) const
 {
 	auto it = m_Types.find(hash);
-	return (it != m_Types.end()) ? &it->second : nullptr;
+	return (it != m_Types.end()) ? it->second : nullptr;
 }
 
 const TypeInfo* ReflectionRegistry::GetType(const string& name) const
@@ -40,13 +40,13 @@ const TypeInfo* ReflectionRegistry::GetType(const string& name) const
 #pragma region Enum Management
 void ReflectionRegistry::RegisterEnum(uint64 hash, const EnumInfo& enumInfo)
 {
-	m_Enums[hash] = enumInfo;
+	m_Enums[hash] = &enumInfo;
 }
 
 const EnumInfo* ReflectionRegistry::GetEnum(uint64 hash) const
 {
 	auto it = m_Enums.find(hash);
-	return (it != m_Enums.end()) ? &it->second : nullptr;
+	return (it != m_Enums.end()) ? it->second : nullptr;
 }
 
 const EnumInfo* ReflectionRegistry::GetEnum(const string& name) const
@@ -58,12 +58,12 @@ const EnumInfo* ReflectionRegistry::GetEnum(const string& name) const
 #pragma region Function Management
 void ReflectionRegistry::RegisterFunction(uint64 hash, const FunctionInfo& functionInfo)
 {
-	m_Functions[hash] = functionInfo;
+	m_Functions[hash] = &functionInfo;
 }
 const FunctionInfo* ReflectionRegistry::GetFunction(uint64 hash) const
 {
 	auto it = m_Functions.find(hash);
-	return (it != m_Functions.end()) ? &it->second : nullptr;
+	return (it != m_Functions.end()) ? it->second : nullptr;
 }
 const FunctionInfo* ReflectionRegistry::GetFunction(const string& name) const
 {
@@ -87,20 +87,20 @@ vector<uint8>* ReflectionRegistry::GetCDO(uint64 hash)
 	auto typeIt = m_Types.find(hash);
 	if (typeIt == m_Types.end()) return nullptr;
 
-	const TypeInfo& type = typeIt->second;
+	const TypeInfo& type = *typeIt->second;
 
 	if (type.Create != nullptr)
 	{
-		EnsureCDO(typeIt->second);
+		EnsureCDO(type);
 		auto cdoIt = m_CDOs.find(hash);
 		return (cdoIt != m_CDOs.end()) ? &cdoIt->second : nullptr;
 	}
 
 	for (const auto& [childId, childType] : m_Types)
 	{
-		if (childType.ParentName == type.Name && childType.Create != nullptr)
+		if (childType->ParentName == type.Name && childType->Create != nullptr)
 		{
-			EnsureCDO(childType);
+			EnsureCDO(*childType);
 			auto cdoIt = m_CDOs.find(childId);
 			return (cdoIt != m_CDOs.end()) ? &cdoIt->second : nullptr;
 		}
@@ -119,11 +119,14 @@ bool ReflectionRegistry::ResetPropertyToDefault(void* instance, const TypeInfo& 
 	const vector<uint8>* cdo = GetCDO(type.ID);
 	if (!cdo) return false;
 
-	const uint8* defaultVal = cdo->data() + prop.Offset;
-	uint8* currentVal = static_cast<uint8*>(instance) + prop.Offset;
+	const void* defaultVal = cdo->data() + prop.Offset;
+	void* currentVal = static_cast<uint8*>(instance) + prop.Offset;
 
-	// string, vector 같은 non-trivially-copyable 타입은 ResetObjectToDefault 사용 권장
-	memcpy(currentVal, defaultVal, prop.Size);
+	if (prop.CopyProp)
+		prop.CopyProp(currentVal, defaultVal);
+	else
+		memcpy(currentVal, defaultVal, prop.Size);
+
 	return true;
 }
 bool ReflectionRegistry::ResetObjectToDefault(void* instance, const TypeInfo& type)
@@ -149,8 +152,11 @@ bool ReflectionRegistry::IsPropertyDefault(const void* instance, const TypeInfo&
 	const vector<uint8>* cdo = GetCDO(type.ID);
 	if (!cdo) return false;
 
-	const uint8* defaultVal = cdo->data() + prop.Offset;
-	const uint8* currentVal = static_cast<const uint8*>(instance) + prop.Offset;
+	const void* defaultVal = cdo->data() + prop.Offset;
+	const void* currentVal = static_cast<const uint8*>(instance) + prop.Offset;
+
+	if (prop.EqualProp)
+		return prop.EqualProp(currentVal, defaultVal);
 
 	return memcmp(currentVal, defaultVal, prop.Size) == 0;
 }

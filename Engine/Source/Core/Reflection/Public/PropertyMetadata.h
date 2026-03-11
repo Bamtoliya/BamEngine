@@ -11,7 +11,13 @@ using MetaValue = std::variant<
 	MetaRange,
 	MetaColor,
 	MetaEditCondition,
-	span<const pair<string_view, uint32>>
+	span<const pair<string_view, uint32>>,
+	int32,
+	int64,
+	uint32,
+	uint64,
+	f32,
+	f64
 >;
 
 struct MetadataEntry
@@ -34,6 +40,13 @@ struct MetadataEntry
 	constexpr MetadataEntry(uint64 _keyHash, const MetaColor& _value) : KeyHash(_keyHash), Value(_value) {}
 	constexpr MetadataEntry(uint64 _keyHash, const MetaEditCondition& _value) : KeyHash(_keyHash), Value(_value) {}
 	constexpr MetadataEntry(uint64 _keyHash, std::span<const std::pair<std::string_view, uint32>> _value): KeyHash(_keyHash), Value(_value) {}
+
+	static constexpr const MetadataEntry* Find(std::span<const MetadataEntry> entries, uint64 keyHash)
+	{
+		for (auto& e : entries)
+			if (e.KeyHash == keyHash) return &e;
+		return nullptr;
+	}
 };
 
 END

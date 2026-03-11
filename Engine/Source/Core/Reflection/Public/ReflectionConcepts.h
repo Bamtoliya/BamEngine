@@ -19,6 +19,6 @@ concept ReflectableContainer = requires(T a)
 	{ a.begin() } -> std::forward_iterator;
 	{ a.end() } -> std::forward_iterator;
 	typename T::value_type;
-} && !is_convertible_v<T, std::string_view>;;
+} && !is_convertible_v<T, std::string_view>;
 
 END
