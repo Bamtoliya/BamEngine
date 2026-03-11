@@ -26,7 +26,7 @@ struct tagMeshCreateInfo
 CLASS()
 class ENGINE_API Mesh : public Resource
 {
-	REFLECT_CLASS(Mesh)
+	REFLECT_CLASS()
 #pragma region Constructor&Destructor
 protected:
 	using DESC = tagMeshCreateInfo;

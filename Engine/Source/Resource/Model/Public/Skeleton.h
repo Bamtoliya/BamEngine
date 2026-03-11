@@ -10,9 +10,11 @@ struct tagSkeletonCreateDesc
 };
 
 BEGIN(Engine)
+
+CLASS()
 class ENGINE_API Skeleton : public Resource
 {
-	REFLECT_CLASS(Skeleton)
+	REFLECT_CLASS()
 #pragma region Constructor&Destructor
 private:
 	Skeleton() = default;

@@ -26,7 +26,7 @@ BEGIN(Engine)
 CLASS()
 class ENGINE_API MaterialInstance : public MaterialInterface
 {
-	REFLECT_CLASS(MaterialInstance)
+	REFLECT_CLASS()
 	using DESC = tagMaterialInstanceDesc;
 #pragma region Constructor&Destructor
 private:

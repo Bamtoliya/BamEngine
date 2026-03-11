@@ -3,9 +3,11 @@
 #include "Component.h"
 
 BEGIN(Engine)
+
+CLASS()
 class ENGINE_API UIComponent : public Component	
 {
-	REFLECT_CLASS(UIComponent)
+	REFLECT_CLASS()
 #pragma region Constructor&Destructor
 protected:
 	UIComponent() {}

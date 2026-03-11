@@ -3,9 +3,11 @@
 #include "UIComponent.h"
 
 BEGIN(Engine)
+
+CLASS()
 class ENGINE_API Button final : public UIComponent
 {
-	REFLECT_CLASS(Button)
+	REFLECT_CLASS()
 #pragma region Constructor&Destructor
 private:
 	Button() {}

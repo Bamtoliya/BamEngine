@@ -7,7 +7,7 @@ BEGIN(Engine)
 CLASS()
 class ENGINE_API Material : public MaterialInterface
 {
-	REFLECT_CLASS(Material)
+	REFLECT_CLASS()
 #pragma region Constructor&Destructor
 private:
 	Material() {}

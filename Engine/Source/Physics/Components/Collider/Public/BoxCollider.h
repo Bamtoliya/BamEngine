@@ -13,7 +13,7 @@ BEGIN(Engine)
 CLASS()
 class ENGINE_API BoxCollider : public Collider
 {
-	REFLECT_CLASS(BoxCollider)
+	REFLECT_CLASS()
 	using DESC = tagBoxColliderDesc;
 #pragma region Constructor&Destructor
 private:

@@ -24,7 +24,7 @@ BEGIN(Engine)
 CLASS()
 class ENGINE_API Collider : public Component
 {
-	REFLECT_CLASS(Collider)
+	REFLECT_CLASS()
 #pragma region Constructor&Destructor
 protected:
 	Collider(EColliderType type) : m_Type(type) {}

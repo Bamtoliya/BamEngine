@@ -1,45 +1,39 @@
 ﻿#pragma once
-#include "Base.h"
+#include "PropertyAttributes.h"
+#include "ReflectionHelper.h"
 
-enum class EUIWidget
+BEGIN(Engine)
+
+using MetaValue = std::variant<
+	string_view,
+	wstring_view,
+	bool,
+	MetaRange,
+	MetaColor,
+	MetaEditCondition,
+	span<const pair<string_view, uint32>>
+>;
+
+struct MetadataEntry
 {
-	Default,
-	Slider,
-	Drag,
-	Color,
-	Directory,
-	BitFlag,
+	uint64 KeyHash;
+	MetaValue Value;
+
+	constexpr MetadataEntry(const char* _value) : KeyHash(CompileTimeHash("Name")), Value(string_view(_value)) {}
+	constexpr MetadataEntry(const wchar* _value) : KeyHash(CompileTimeHash(L"Name")), Value(wstring_view(_value)) {}
+	constexpr MetadataEntry(string_view _value) : KeyHash(CompileTimeHash("Name")), Value(_value) {}
+	constexpr MetadataEntry(wstring_view _value) : KeyHash(CompileTimeHash(L"Name")), Value(_value) {}
+
+	constexpr MetadataEntry(uint64 _keyHash, const char* _value) : KeyHash(_keyHash), Value(string_view(_value)) {}
+	constexpr MetadataEntry(uint64 _keyHash, const wchar* _value) : KeyHash(_keyHash), Value(wstring_view(_value)) {}
+	constexpr MetadataEntry(uint64 _keyHash, string_view _value) : KeyHash(_keyHash), Value(_value) {}
+	constexpr MetadataEntry(uint64 _keyHash, wstring_view _value) : KeyHash(_keyHash), Value(_value) {}
+
+	constexpr MetadataEntry(uint64 _keyHash, bool _value) : KeyHash(_keyHash), Value(_value) {}
+	constexpr MetadataEntry(uint64 _keyHash, const MetaRange& _value) : KeyHash(_keyHash), Value(_value) {}
+	constexpr MetadataEntry(uint64 _keyHash, const MetaColor& _value) : KeyHash(_keyHash), Value(_value) {}
+	constexpr MetadataEntry(uint64 _keyHash, const MetaEditCondition& _value) : KeyHash(_keyHash), Value(_value) {}
+	constexpr MetadataEntry(uint64 _keyHash, std::span<const std::pair<std::string_view, uint32>> _value): KeyHash(_keyHash), Value(_value) {}
 };
 
-struct PropertyMetadata
-{
-	string DisplayName;
-	string Tooltip;
-	string Category;
-
-	bool bHasRange = { false };
-	f32 Min = { 0.0f };
-	f32 Max = { 0.0f };
-	f32 Speed = { 0.1f };
-
-	bool bIsReadOnly = { false };
-
-	bool bIsFilePath = { false };
-	bool bIsDirectory = { false };
-	string FileFilter;
-	string DialogPath;
-
-	vector<pair<string, uint32>> BitFlags;
-
-	std::any DefaultValue;
-	bool bHasDefault = { false };
-
-	string EditCondition;
-
-	bool bEditConditionBit = { false };
-	string EditCondtionBit;
-	uint64 EditConditionMask = { 0 };
-	bool bEditConditionExact = { false };
-
-	PropertyMetadata() = default;
-};
+END

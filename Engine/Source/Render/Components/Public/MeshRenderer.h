@@ -8,7 +8,7 @@ BEGIN(Engine)
 CLASS()
 class ENGINE_API MeshRenderer final : public RenderComponent
 {
-	REFLECT_CLASS(MeshRenderer);
+	REFLECT_CLASS();
 #pragma region Constructor&Destructor
 private:
 	MeshRenderer() : RenderComponent{} {}

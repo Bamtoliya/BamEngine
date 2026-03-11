@@ -8,7 +8,7 @@ BEGIN(Engine)
 STRUCT()
 struct ENGINE_API tagComponentDesc
 {
-	REFLECT_STRUCT(tagComponentDesc)
+	REFLECT_STRUCT()
 
 	PROPERTY()
 	bool Active = { true };
@@ -23,10 +23,11 @@ struct ENGINE_API tagComponentDesc
 
 class GameObject;
 
+CLASS()
 class ENGINE_API Component abstract : public Base
 {
+	REFLECT_BASE()
 	using DESC = tagComponentDesc;
-	REFLECT_CLASS(Component)
 #pragma region Constructor&Destructor
 protected:
 	Component() {}

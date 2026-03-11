@@ -10,9 +10,10 @@ struct tagBox2DColliderDesc : public tagColliderDesc
 };
 
 BEGIN(Engine)
+CLASS()
 class ENGINE_API Box2DCollider final : public Collider
 {
-	REFLECT_CLASS(Box2DCollider)
+	REFLECT_CLASS()
 	using DESC = tagBox2DColliderDesc;
 #pragma region Constructor&Destructor
 private:

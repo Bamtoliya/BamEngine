@@ -48,7 +48,7 @@ enum class ETransformFlag : uint16
 STRUCT()
 struct tagTransformDesc : tagComponentDesc
 {
-	REFLECT_STRUCT(tagTransformDesc)
+	REFLECT_STRUCT()
 
 	PROPERTY()
 	vec3	Position;
@@ -66,7 +66,7 @@ ENABLE_BITMASK_OPERATORS(ETransformFlag)
 CLASS()
 class ENGINE_API Transform final : public Component
 {
-	REFLECT_CLASS(Transform);
+	REFLECT_CLASS()
 
 	using DESC = tagTransformDesc;
 
@@ -161,13 +161,13 @@ private:
 	PROPERTY()
 	vec3 m_Scale = vec3(1.0f);
 
-	PROPERTY("PROP_LOCALMATRIX",READONLY)
+	PROPERTY(NAME("PROP_LOCALMATRIX"), READONLY)
 	mat4 m_LocalMatrix = glm::identity<mat4>();
 
-	PROPERTY("PROP_WORLDMATRIX", READONLY)
+	PROPERTY(NAME("PROP_WORLDMATRIX"), READONLY)
 	mat4 m_WorldMatrix = glm::identity<mat4>();
 
-	PROPERTY("PROP_BITFLAG")
+	PROPERTY(NAME("PROP_BITFLAG"))
 	ETransformFlag m_Flags = ETransformFlag::Default;
 #pragma endregion
 

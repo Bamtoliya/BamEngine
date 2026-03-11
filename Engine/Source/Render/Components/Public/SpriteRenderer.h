@@ -21,7 +21,7 @@ BEGIN(Engine)
 CLASS()
 class ENGINE_API SpriteRenderer : public RenderComponent
 {
-	REFLECT_CLASS(SpriteRenderer)
+	REFLECT_CLASS()
 #pragma region Constructor&Destructor
 private:
 	SpriteRenderer() {}

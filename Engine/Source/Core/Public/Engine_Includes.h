@@ -36,6 +36,12 @@
 #include <array>
 #include <thread>
 #include <atomic>
+#include <string_view>
+#include <variant>
+#include <span>
+#include <cstddef>
+#include <type_traits>
+#include <memory>
 #pragma endregion
 
 #pragma region ThirdParty Library

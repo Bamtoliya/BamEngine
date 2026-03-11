@@ -12,7 +12,7 @@ typedef struct tagTextureCreateInfo
 CLASS()
 class ENGINE_API Texture final : public Resource
 {
-	REFLECT_CLASS(Texture)
+	REFLECT_CLASS()
 #pragma region Constructor&Destructor
 private:
 	Texture() {}

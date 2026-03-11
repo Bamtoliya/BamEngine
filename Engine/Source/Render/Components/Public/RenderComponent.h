@@ -12,7 +12,7 @@ BEGIN(Engine)
 CLASS()
 class ENGINE_API RenderComponent : public Component
 {
-	REFLECT_CLASS(RenderComponent)
+	REFLECT_CLASS()
 #pragma region Constructor&Destructor
 protected:
 	RenderComponent() {}

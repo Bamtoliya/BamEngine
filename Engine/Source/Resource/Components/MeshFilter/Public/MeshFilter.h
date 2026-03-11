@@ -7,7 +7,7 @@ BEGIN(Engine)
 CLASS()
 class ENGINE_API MeshFilter : public Component
 {
-	REFLECT_CLASS(MeshFilter)
+	REFLECT_CLASS()
 #pragma region Constructor&Destructor
 private:
 	MeshFilter() {}

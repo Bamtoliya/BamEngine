@@ -27,7 +27,7 @@ struct ENGINE_API tagCameraDesc : public tagComponentDesc
 CLASS()
 class ENGINE_API Camera final : public Component
 {
-	REFLECT_CLASS(Camera)
+	REFLECT_CLASS()
 	using DESC = tagCameraDesc;
 #pragma region Constructor&Destructor
 private:

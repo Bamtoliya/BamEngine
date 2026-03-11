@@ -52,7 +52,7 @@ namespace Engine
 	STRUCT()
 	struct AABB
 	{
-		REFLECT_STRUCT(AABB);
+		REFLECT_STRUCT();
 
 		PROPERTY()
 		vec3 Min;
@@ -104,7 +104,7 @@ namespace Engine
 	STRUCT()
 	struct Rect
 	{
-		REFLECT_STRUCT(Rect);
+		REFLECT_STRUCT();
 
 		PROPERTY()
 		f32 Left;
@@ -147,7 +147,7 @@ namespace Engine
 	STRUCT()
 	struct ENGINE_API Vertex
 	{
-		REFLECT_STRUCT(Vertex);
+		REFLECT_STRUCT();
 
 		PROPERTY()
 		glm::vec3 position = {};

@@ -11,7 +11,7 @@ BEGIN(Engine)
 STRUCT()
 struct TextureSlot
 {
-	REFLECT_STRUCT(TextureSlot)
+	REFLECT_STRUCT()
 	PROPERTY()
 	uint32 slot = 0;
 	PROPERTY()
@@ -35,7 +35,7 @@ enum class EMaterialParameterType
 STRUCT()
 struct MaterialParameter
 {
-	REFLECT_STRUCT(MaterialParameter)
+	REFLECT_STRUCT()
 
 	PROPERTY()
 	EMaterialParameterType type;
@@ -66,7 +66,7 @@ struct tagMaterialDesc
 CLASS()
 class ENGINE_API MaterialInterface : public Resource
 {
-	REFLECT_CLASS(MaterialInterface)
+	REFLECT_CLASS()
 #pragma region Constructor&Destructor
 protected:
 	using DESC = tagMaterialDesc;

@@ -4,46 +4,155 @@
 
 IMPLEMENT_SINGLETON(ReflectionRegistry)
 
-#pragma region Type Management
-TypeInfo& ReflectionRegistry::RegisterType(const string& name, size_t size)
+void ReflectionRegistry::Free()
 {
-	if (m_Types.find(name) == m_Types.end())
+	for (auto& [typeId, buf] : m_CDOs)
 	{
-		m_Types.emplace(name, TypeInfo(name, size));
+		auto it = m_Types.find(typeId);
+		if (it != m_Types.end() && it->second.Destroy != nullptr)
+			it->second.Destroy(buf.data());
 	}
-	return m_Types.at(name);
+
+	m_CDOs.clear();
+	m_Types.clear();
+	m_Enums.clear();
+	m_Functions.clear();
 }
 
-TypeInfo* ReflectionRegistry::GetType(const string& name)
+#pragma region Type Management
+void ReflectionRegistry::RegisterType(uint64 hash, const TypeInfo& typeInfo)
 {
-	if (m_Types.find(name) != m_Types.end())
-		return &m_Types.at(name);
-	return nullptr;
+	m_Types[hash] = typeInfo;
+}
+
+const TypeInfo* ReflectionRegistry::GetType(uint64 hash) const
+{
+	auto it = m_Types.find(hash);
+	return (it != m_Types.end()) ? &it->second : nullptr;
+}
+
+const TypeInfo* ReflectionRegistry::GetType(const string& name) const
+{
+	return GetType(RunTimeHash(name));
 }
 #pragma endregion
 
 #pragma region Enum Management
-EnumInfo& ReflectionRegistry::RegisterEnum(const string& name, const unordered_map<string, uint64>& entries)
+void ReflectionRegistry::RegisterEnum(uint64 hash, const EnumInfo& enumInfo)
 {
-	if (m_Enums.find(name) == m_Enums.end())
-	{
-		vector<pair<string, uint64>> sortedEntries(entries.begin(), entries.end());
-		sort(sortedEntries.begin(), sortedEntries.end(),
-			[](const auto& a, const auto& b)
-			{
-				return a.second < b.second;
-			});
-		m_Enums.emplace(name, EnumInfo{ name, entries, sortedEntries });
-
-	}
-	return m_Enums.at(name);
+	m_Enums[hash] = enumInfo;
 }
 
-EnumInfo* ReflectionRegistry::GetEnum(const string& name)
+const EnumInfo* ReflectionRegistry::GetEnum(uint64 hash) const
 {
-	if (m_Enums.find(name) != m_Enums.end())
-		return &m_Enums.at(name);
+	auto it = m_Enums.find(hash);
+	return (it != m_Enums.end()) ? &it->second : nullptr;
+}
+
+const EnumInfo* ReflectionRegistry::GetEnum(const string& name) const
+{
+	return GetEnum(RunTimeHash(name));
+}
+#pragma endregion
+
+#pragma region Function Management
+void ReflectionRegistry::RegisterFunction(uint64 hash, const FunctionInfo& functionInfo)
+{
+	m_Functions[hash] = functionInfo;
+}
+const FunctionInfo* ReflectionRegistry::GetFunction(uint64 hash) const
+{
+	auto it = m_Functions.find(hash);
+	return (it != m_Functions.end()) ? &it->second : nullptr;
+}
+const FunctionInfo* ReflectionRegistry::GetFunction(const string& name) const
+{
+	return GetFunction(RunTimeHash(name));
+}
+#pragma endregion
+
+#pragma region CDO Management
+void ReflectionRegistry::EnsureCDO(const TypeInfo& type)
+{
+	if (m_CDOs.contains(type.ID)) return;
+	if (type.Create == nullptr) return;       
+
+	auto& buf = m_CDOs[type.ID];
+	buf.resize(type.Size);
+	type.Create(buf.data());                   
+}
+
+vector<uint8>* ReflectionRegistry::GetCDO(uint64 hash)
+{
+	auto typeIt = m_Types.find(hash);
+	if (typeIt == m_Types.end()) return nullptr;
+
+	const TypeInfo& type = typeIt->second;
+
+	if (type.Create != nullptr)
+	{
+		EnsureCDO(typeIt->second);
+		auto cdoIt = m_CDOs.find(hash);
+		return (cdoIt != m_CDOs.end()) ? &cdoIt->second : nullptr;
+	}
+
+	for (const auto& [childId, childType] : m_Types)
+	{
+		if (childType.ParentName == type.Name && childType.Create != nullptr)
+		{
+			EnsureCDO(childType);
+			auto cdoIt = m_CDOs.find(childId);
+			return (cdoIt != m_CDOs.end()) ? &cdoIt->second : nullptr;
+		}
+	}
+
 	return nullptr;
+}
+
+vector<uint8>* ReflectionRegistry::GetCDO(const string& name)
+{
+	return GetCDO(RunTimeHash(name));
+}
+
+bool ReflectionRegistry::ResetPropertyToDefault(void* instance, const TypeInfo& type, const PropertyInfo& prop)
+{
+	const vector<uint8>* cdo = GetCDO(type.ID);
+	if (!cdo) return false;
+
+	const uint8* defaultVal = cdo->data() + prop.Offset;
+	uint8* currentVal = static_cast<uint8*>(instance) + prop.Offset;
+
+	// string, vector 같은 non-trivially-copyable 타입은 ResetObjectToDefault 사용 권장
+	memcpy(currentVal, defaultVal, prop.Size);
+	return true;
+}
+bool ReflectionRegistry::ResetObjectToDefault(void* instance, const TypeInfo& type)
+{
+	const vector<uint8>* cdo = GetCDO(type.ID);
+	if (!cdo) return false;
+
+	if (type.Copy)
+	{
+		// copy assignment: string, vector 등 non-trivial 타입 포함 안전하게 복원
+		type.Copy(instance, cdo->data());
+	}
+	else
+	{
+		// Copy 없으면 Destroy + Create 로 전체 재초기화
+		if (type.Destroy) type.Destroy(instance);
+		if (type.Create)  type.Create(instance);
+	}
+	return true;
+}
+bool ReflectionRegistry::IsPropertyDefault(const void* instance, const TypeInfo& type, const PropertyInfo& prop)
+{
+	const vector<uint8>* cdo = GetCDO(type.ID);
+	if (!cdo) return false;
+
+	const uint8* defaultVal = cdo->data() + prop.Offset;
+	const uint8* currentVal = static_cast<const uint8*>(instance) + prop.Offset;
+
+	return memcmp(currentVal, defaultVal, prop.Size) == 0;
 }
 #pragma endregion
 

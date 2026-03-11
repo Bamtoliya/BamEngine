@@ -4,7 +4,6 @@
 #include "ReflectionTypes.h"
 
 BEGIN(Engine)
-void InitEnumReflection();
 void InitReflectionSystem();
 class ENGINE_API ReflectionRegistry : public Base
 {
@@ -16,27 +15,51 @@ private:
 	virtual ~ReflectionRegistry() = default;
 	EResult Initialize(void* arg = nullptr) { return EResult::Success; }
 public:
-	virtual void Free() {}
+	virtual void Free();
 #pragma endregion
 
 #pragma endregion
 
 #pragma region Type Management
 public:
-	TypeInfo& RegisterType(const string& name, size_t size);
-	TypeInfo* GetType(const string& name);
+	void RegisterType(uint64 hash, const TypeInfo& typeInfo);
+	const TypeInfo* GetType(uint64 hash) const;
+	const TypeInfo* GetType(const string& name) const;
 #pragma endregion
 
 #pragma region Enum Management
 public:
-	EnumInfo& RegisterEnum(const string& name, const unordered_map<string, uint64>& entries);
-	EnumInfo* GetEnum(const string& name);
+	void RegisterEnum(uint64 hash, const EnumInfo& enumInfo);
+	const EnumInfo* GetEnum(uint64 hash) const;
+	const EnumInfo* GetEnum(const string& name) const;
 #pragma endregion
+
+#pragma region Function Management
+public:
+	void RegisterFunction(uint64 hash, const FunctionInfo& functionInfo);
+	const FunctionInfo* GetFunction(uint64 hash) const;
+	const FunctionInfo* GetFunction(const string& name) const;
+#pragma endregion
+
+#pragma region CDO Management
+public:
+	vector<uint8>* GetCDO(uint64 hash);
+	vector<uint8>* GetCDO(const string& name);
+public:
+	bool ResetPropertyToDefault(void* instance, const TypeInfo& type, const PropertyInfo& prop);
+	bool ResetObjectToDefault(void* instance, const TypeInfo& type);
+	bool IsPropertyDefault(const void* instance, const TypeInfo& type, const PropertyInfo& prop);
+private:
+	void EnsureCDO(const TypeInfo& type);
+#pragma endregion
+
 
 #pragma region Variable
 private:
-	unordered_map<string, TypeInfo> m_Types;
-	unordered_map<string, EnumInfo> m_Enums;
+	unordered_map<uint64, TypeInfo> m_Types;
+	unordered_map<uint64, EnumInfo> m_Enums;
+	unordered_map<uint64, FunctionInfo> m_Functions;
+	unordered_map<uint64, vector<uint8>> m_CDOs;
 #pragma endregion
 };
 

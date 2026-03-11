@@ -14,9 +14,11 @@ struct tagModelCreateDesc
 };
 
 BEGIN(Engine)
+
+CLASS()
 class ENGINE_API Model : public Resource
 {
-	REFLECT_CLASS(Model)
+	REFLECT_CLASS()
 	using DESC = tagModelCreateDesc;
 #pragma region Constrcutor&Destructor
 private:

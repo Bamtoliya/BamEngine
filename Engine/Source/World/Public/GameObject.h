@@ -30,7 +30,7 @@ class Transform;
 CLASS()
 class ENGINE_API GameObject : public Base
 {
-	REFLECT_CLASS(GameObject)
+	REFLECT_BASE()
 
 	using DESC = tagGameObjectDesc;
 #pragma region Constructor&Destructor

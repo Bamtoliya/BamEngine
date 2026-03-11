@@ -13,7 +13,7 @@ BEGIN(Engine)
 CLASS()
 class ENGINE_API Resource : public Base
 {
-	REFLECT_CLASS(Resource)
+	REFLECT_BASE()
 	using DESC = tagResourceCreateDesc;
 #pragma region Constructor&Destructor
 protected:

@@ -14,7 +14,6 @@ EResult Runtime::Initialize(void* arg)
 	tagRendererDesc RendererDesc = pRuntimeDesc->RendererDesc;
 
 	if (!ReflectionRegistry::Create()) return EResult::Fail;
-	InitReflectionSystem();
 
 	m_ComponentRegistry = ComponentRegistry::Create();
 	if (!m_ComponentRegistry) return EResult::Fail;
