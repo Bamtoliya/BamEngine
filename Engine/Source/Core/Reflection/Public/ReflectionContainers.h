@@ -18,6 +18,7 @@ struct ContainerAccessor
 
 	void (*AddPair)(void* container) = nullptr;
 	void* (*GetValue)(void* container, const void* keyPtr) = nullptr;
+	void* (*AddAndGetElement)(void* container, const void* keyPtr) = nullptr;
 };
 
 template<typename ContainerType, typename ElementType>
@@ -214,6 +215,12 @@ struct MapAccessor
 		return (it != map->end()) ? &it->second : nullptr;
 	}
 
+	static void* AddAndGetElement_Impl(void* c, const void* kPtr)
+	{
+		auto& map = *static_cast<ContainerType*>(c);
+		return &map[*static_cast<const K*>(kPtr)];
+	}
+
 	static constexpr ContainerAccessor Get()
 	{
 		ContainerAccessor accessor{};
@@ -223,6 +230,7 @@ struct MapAccessor
 		accessor.AddPair = &AddPair_Impl;
 		accessor.Remove = &Remove_Impl;
 		accessor.GetValue = &GetValue_Impl;
+		accessor.AddAndGetElement = &AddAndGetElement_Impl;
 		return accessor;
 	}
 };

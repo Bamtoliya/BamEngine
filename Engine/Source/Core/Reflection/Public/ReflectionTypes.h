@@ -33,6 +33,8 @@ struct VariableInfo
 { 
 	string_view Name;
 	EPropertyType Type;
+
+	const ContainerAccessor* Accessor = nullptr;
 };
 
 struct ContainerInfo
@@ -41,6 +43,8 @@ struct ContainerInfo
 	VariableInfo Key;
 
 	const ContainerAccessor* Accessor = nullptr;
+
+	const ContainerInfo* InnerContainerData = nullptr;
 };
 
 struct PropertyInfo

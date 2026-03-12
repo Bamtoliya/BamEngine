@@ -38,14 +38,27 @@ public: \
 #define DECLARE_CONTAINER_INFO(ClassName, PropName, InnerTypeName, InnerTypeEnum, ...) \
 	static constexpr Engine::ContainerAccessor ClassName##_##PropName##_Accessor = __VA_ARGS__; \
 	static constexpr Engine::ContainerInfo ClassName##_##PropName##_ContainerData = { \
-		{InnerTypeName, InnerTypeEnum}, {"", Engine::EPropertyType::None}, &ClassName##_##PropName##_Accessor \
+		{InnerTypeName, InnerTypeEnum}, {"", Engine::EPropertyType::None}, &ClassName##_##PropName##_Accessor, nullptr \
+	};
+
+#define DECLARE_NESTED_CONTAINER_INFO(ClassName, PropName, InnerTypeName, InnerTypeEnum, InnerContainerPtr, ...) \
+	static constexpr Engine::ContainerAccessor ClassName##_##PropName##_Accessor = __VA_ARGS__; \
+	static constexpr Engine::ContainerInfo ClassName##_##PropName##_ContainerData = { \
+		{InnerTypeName, InnerTypeEnum}, {"", Engine::EPropertyType::None}, &ClassName##_##PropName##_Accessor, InnerContainerPtr \
 	};
 
 #define DECLARE_MAP_INFO(ClassName, PropName, KeyTypeName, KeyTypeEnum, InnerTypeName, InnerTypeEnum, ...) \
 	static constexpr Engine::ContainerAccessor ClassName##_##PropName##_Accessor = __VA_ARGS__; \
 	static constexpr Engine::ContainerInfo ClassName##_##PropName##_ContainerData = { \
-		{InnerTypeName, InnerTypeEnum}, {KeyTypeName, KeyTypeEnum}, &ClassName##_##PropName##_Accessor \
+		{InnerTypeName, InnerTypeEnum}, {KeyTypeName, KeyTypeEnum}, &ClassName##_##PropName##_Accessor, nullptr \
 	};
+
+#define DECLARE_MAP_NESTED_VALUE_INFO(ClassName, PropName, KeyTypeName, KeyTypeEnum, ValueTypeName, ValueTypeEnum, ValueContainerPtr, ...) \
+    static constexpr Engine::ContainerAccessor ClassName##_##PropName##_Accessor = __VA_ARGS__; \
+    static constexpr Engine::ContainerInfo ClassName##_##PropName##_ContainerData = { \
+        {ValueTypeName, ValueTypeEnum}, {KeyTypeName, KeyTypeEnum}, \
+        &ClassName##_##PropName##_Accessor, ValueContainerPtr \
+    };
 
 #define BEGIN_PROPERTIES(ClassName) \
 	constexpr std::span<const Engine::PropertyInfo> ClassName::GetProperties() noexcept { \

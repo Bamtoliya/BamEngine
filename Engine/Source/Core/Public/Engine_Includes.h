@@ -20,28 +20,36 @@
 
 #pragma region C++ Headers
 #include <iostream>
-#include <vector>
-#include <string>
 #include <algorithm>
 #include <functional>
+
+#include <string>
+#include <string_view>
+#include <span>
+#include <array>
+#include <vector>
+#include <stack>
+#include <queue>
+#include <deque>
 #include <map>
 #include <unordered_map>
 #include <set>
 #include <unordered_set>
+
 #include <filesystem>
 #include <typeindex>
 #include <fstream>
 #include <sstream>
 #include <any>
-#include <array>
+
 #include <thread>
 #include <atomic>
-#include <string_view>
 #include <variant>
-#include <span>
+
 #include <cstddef>
 #include <type_traits>
 #include <memory>
+
 #pragma endregion
 
 #pragma region ThirdParty Library

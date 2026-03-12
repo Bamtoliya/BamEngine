@@ -2,6 +2,7 @@
 
 #include "Engine_Includes.h"
 #include "Archive.h"
+#include "SerializationHelper.h"
 
 BEGIN(Engine)
 class SerialzableInterface
