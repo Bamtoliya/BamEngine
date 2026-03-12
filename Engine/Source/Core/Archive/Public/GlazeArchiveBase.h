@@ -14,7 +14,12 @@ public:
 	void PopScope() override;
 public:
 	void Process(string_view key, bool& v) override;
+	void Process(string_view key, int8& v) override;
+	void Process(string_view key, int16& v) override;
 	void Process(string_view key, int32& v) override;
+	void Process(string_view key, int64& v) override;
+	void Process(string_view key, uint8& v) override;
+	void Process(string_view key, uint16& v) override;
 	void Process(string_view key, uint32& v) override;
 	void Process(string_view key, uint64& v) override;
 	void Process(string_view key, f32& v) override;
@@ -25,6 +30,7 @@ public:
 	void Process(string_view key, glm::vec3& v) override;
 	void Process(string_view key, glm::vec4& v) override;
 	void Process(string_view key, glm::quat& v) override;
+	void Process(string_view key, glm::mat3& v) override;
 	void Process(string_view key, glm::mat4& v) override;
 public:
 	void ProcessEnum(string_view key, void* enumPtr, size_t size) override;

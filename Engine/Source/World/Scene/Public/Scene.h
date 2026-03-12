@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "Base.h"
+#include "SerializableInterface.h"
 
 BEGIN(Engine)
 
@@ -17,7 +18,7 @@ enum class ESceneFlags : uint8
 
 ENABLE_BITMASK_OPERATORS(ESceneFlags)
 
-class ENGINE_API Scene : public Base
+class ENGINE_API Scene : public Base, public SerializableInterface
 {
 #pragma region Constructor&Destructor
 protected:
@@ -84,6 +85,13 @@ public:
 	bool IsActive() const { return HasFlag(m_Flags, ESceneFlags::Active); }
 	void SetActive(bool active);
 #pragma endregion
+
+#pragma region Save&Load
+public:
+	virtual void Serialize(class Archive& ar) override;
+	virtual void Deserialize(class Archive& ar) override;
+#pragma endregion
+
 
 #pragma region Variable
 protected:

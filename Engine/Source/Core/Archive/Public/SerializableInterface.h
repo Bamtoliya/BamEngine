@@ -5,10 +5,10 @@
 #include "SerializationHelper.h"
 
 BEGIN(Engine)
-class SerialzableInterface
+class SerializableInterface
 {
 public:
-	virtual ~SerialzableInterface() = default;
+	virtual ~SerializableInterface() = default;
 
 	virtual void Serialize(class Archive& ar) {}
 	virtual void Deserialize(class Archive& ar) {}

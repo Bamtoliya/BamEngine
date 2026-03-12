@@ -20,8 +20,13 @@ public:
 	template<typename T>
 	void Process(string_view key, T& type);
 	virtual void Process(string_view key, bool& v) PURE;
+	virtual void Process(string_view key, int8& v) PURE;
+	virtual void Process(string_view key, int16& v) PURE;
 	virtual void Process(string_view key, int32& v) PURE;
+	virtual void Process(string_view key, int64& v) PURE;
+	virtual void Process(string_view key, uint8& v) PURE;
 	virtual void Process(string_view key, uint32& v) PURE;
+	virtual void Process(string_view key, uint16& v) PURE;
 	virtual void Process(string_view key, uint64& v) PURE;
 	virtual void Process(string_view key, f32& v) PURE;
 	virtual void Process(string_view key, f64& v) PURE;
@@ -32,6 +37,7 @@ public:
 	virtual void Process(string_view key, glm::vec3& v) PURE;
 	virtual void Process(string_view key, glm::vec4& v) PURE;
 	virtual void Process(string_view key, glm::quat& v) PURE;
+	virtual void Process(string_view key, glm::mat3& v) PURE;
 	virtual void Process(string_view key, glm::mat4& v) PURE;
 public:
 	virtual void ProcessEnum(string_view key, void* enumPtr, size_t size) PURE;
@@ -47,8 +53,8 @@ public:
 	virtual void   EndMapElement() PURE;
 
 public:
-	virtual bool SaveToFile(string_view filePath) {}
-	virtual bool LoadFromFile(string_view filePath) {}
+	virtual bool SaveToFile(string_view filePath) { return false; }
+	virtual bool LoadFromFile(string_view filePath) { return false; }
 
 	virtual bool SaveToFile(wstring_view filePath) { return SaveToFile(WStrToStr(filePath.data())); }
 	virtual bool LoadFromFile(wstring_view filePath) { return LoadFromFile(WStrToStr(filePath.data())); }

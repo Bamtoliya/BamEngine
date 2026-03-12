@@ -6,7 +6,7 @@
 
 BEGIN(Engine)
 
-class SeralizationHelper
+class SerializationHelper
 {
 public:
 	static void SerializeReflectionProperties(Archive& ar, const TypeInfo* typeInfo, void* instance)

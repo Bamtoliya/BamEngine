@@ -59,7 +59,107 @@ void GlazeArchiveBase::Process(string_view key, bool& v)
 	}
 }
 
+void GlazeArchiveBase::Process(string_view key, int8& v)
+{
+	auto* currentTop = m_ScopeStack.top();
+	string keyStr(key);
+
+	if (IsWriting())
+	{
+		(*currentTop)[keyStr] = static_cast<f64>(v);
+	}
+	else if (IsReading() && currentTop->is_object())
+	{
+		auto& obj = currentTop->get_object();
+		auto it = obj.find(keyStr);
+		if (it != obj.end() && it->second.is_number())
+		{
+			v = it->second.get_number();
+		}
+	}
+}
+
+void GlazeArchiveBase::Process(string_view key, int16& v)
+{
+	auto* currentTop = m_ScopeStack.top();
+	string keyStr(key);
+
+	if (IsWriting())
+	{
+		(*currentTop)[keyStr] = static_cast<f64>(v);
+	}
+	else if (IsReading() && currentTop->is_object())
+	{
+		auto& obj = currentTop->get_object();
+		auto it = obj.find(keyStr);
+		if (it != obj.end() && it->second.is_number())
+		{
+			v = it->second.get_number();
+		}
+	}
+}
+
 void GlazeArchiveBase::Process(string_view key, int32& v)
+{
+	auto* currentTop = m_ScopeStack.top();
+	string keyStr(key);
+
+	if (IsWriting())
+	{
+		(*currentTop)[keyStr] = static_cast<f64>(v);
+	}
+	else if (IsReading() && currentTop->is_object())
+	{
+		auto& obj = currentTop->get_object();
+		auto it = obj.find(keyStr);
+		if (it != obj.end() && it->second.is_number())
+		{
+			v = it->second.get_number();
+		}
+	}
+}
+
+void GlazeArchiveBase::Process(string_view key, int64& v)
+{
+	auto* currentTop = m_ScopeStack.top();
+	string keyStr(key);
+
+	if (IsWriting())
+	{
+		(*currentTop)[keyStr] = static_cast<f64>(v);
+	}
+	else if (IsReading() && currentTop->is_object())
+	{
+		auto& obj = currentTop->get_object();
+		auto it = obj.find(keyStr);
+		if (it != obj.end() && it->second.is_number())
+		{
+			v = it->second.get_number();
+		}
+	}
+}
+
+void GlazeArchiveBase::Process(string_view key, uint8& v)
+{
+	auto* currentTop = m_ScopeStack.top();
+	string keyStr(key);
+
+	if (IsWriting())
+	{
+		(*currentTop)[keyStr] = static_cast<f64>(v);
+	}
+	else if (IsReading() && currentTop->is_object())
+	{
+		auto& obj = currentTop->get_object();
+		auto it = obj.find(keyStr);
+		if (it != obj.end() && it->second.is_number())
+		{
+			v = it->second.get_number();
+		}
+	}
+}
+
+void GlazeArchiveBase::Process(string_view key, uint16& v)
 {
 	auto* currentTop = m_ScopeStack.top();
 	string keyStr(key);
@@ -299,6 +399,45 @@ void GlazeArchiveBase::Process(string_view key, glm::quat& v)
 				v.y = it->second.get_array()[1].get_number();
 				v.z = it->second.get_array()[2].get_number();
 				v.w = it->second.get_array()[3].get_number();
+			}
+		}
+	}
+}
+
+void GlazeArchiveBase::Process(string_view key, glm::mat3& v)
+{
+	auto* currentTop = m_ScopeStack.top();
+	string keyStr(key);
+
+	if (IsWriting())
+	{
+		glz::json_t::array_t arr;
+		for (int i = 0; i < 3; ++i)
+		{
+			for (int j = 0; j < 3; ++j)
+			{
+				arr.push_back(v[i][j]);
+			}
+		}
+		(*currentTop)[keyStr] = arr;
+	}
+	else if (IsReading() && currentTop->is_object())
+	{
+		auto& obj = currentTop->get_object();
+		auto it = obj.find(keyStr);
+		if (it != obj.end() && it->second.is_array())
+		{
+			auto& arr = it->second.get_array();
+			if (arr.size() >= 9)
+			{
+				int index = 0;
+				for (int i = 0; i < 3; ++i)
+				{
+					for (int j = 0; j < 3; ++j)
+					{
+						v[i][j] = static_cast<f32>(arr[index++].get_number());
+					}
+				}
 			}
 		}
 	}

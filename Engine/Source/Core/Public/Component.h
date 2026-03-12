@@ -2,6 +2,7 @@
 
 #include "Base.h"
 #include "ReflectionMacro.h"
+#include "SerializableInterface.h"
 
 BEGIN(Engine)
 #pragma region Struct
@@ -24,7 +25,7 @@ struct ENGINE_API tagComponentDesc
 class GameObject;
 
 CLASS()
-class ENGINE_API Component abstract : public Base
+class ENGINE_API Component abstract : public Base, public SerializableInterface
 {
 	REFLECT_BASE()
 	using DESC = tagComponentDesc;

@@ -28,7 +28,7 @@ struct tagGameObjectDesc
 BEGIN(Engine)
 class Transform;
 CLASS()
-class ENGINE_API GameObject : public Base
+class ENGINE_API GameObject : public Base, public SerializableInterface
 {
 	REFLECT_BASE()
 
@@ -192,6 +192,13 @@ public:
 #pragma region Transform Management
 public:
 	Transform* GetTransform() const { return m_Transform; }
+#pragma endregion
+
+
+#pragma region Save&Load
+public:
+	virtual void Serialize(Archive& ar) override;
+	virtual void Deserialize(Archive& ar) override;
 #pragma endregion
 
 

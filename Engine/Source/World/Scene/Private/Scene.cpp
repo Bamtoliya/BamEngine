@@ -311,3 +311,21 @@ void Scene::SetActive(bool active)
 	else RemoveFlag(m_Flags, ESceneFlags::Active);
 }
 #pragma endregion
+
+
+#pragma region Save&Load
+void Scene::Serialize(class Archive& ar)
+{
+	const TypeInfo* typeInfo = ReflectionRegistry::Get().GetType("Scene");
+
+	if (typeInfo)
+	{
+		SerializationHelper::SerializeReflectionProperties(ar, typeInfo, this);
+	}
+}
+
+void Scene::Deserialize(class Archive& ar)
+{
+	Serialize(ar);
+}
+#pragma endregion

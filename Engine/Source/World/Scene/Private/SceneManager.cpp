@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "SceneManager.h"
+#include "Archives.h"
 
 IMPLEMENT_SINGLETON(SceneManager)
 
@@ -41,6 +42,19 @@ void SceneManager::LateUpdate(f32 dt)
 
 
 #pragma region Scene Management
+EResult SceneManager::OpenScene(Scene* newScene)
+{
+	if (!newScene) return EResult::Fail;
+
+	if (m_CurrentScene)
+	{
+		Safe_Release(m_CurrentScene);
+		m_CurrentScene = nullptr;
+	}
+	m_CurrentScene = newScene;
+
+	return EResult::Success;
+}
 EResult SceneManager::NewScene(void* arg)
 {
 	if (m_CurrentScene)
@@ -56,6 +70,47 @@ EResult SceneManager::NewScene(void* arg)
 	m_Scenes.push_back(m_CurrentScene);
 	
 	return EResult::Success;
+}
+
+EResult SceneManager::SaveScene(const wstring& filePath)
+{
+	if (!m_CurrentScene) return EResult::Fail;
+
+	string pathStr = WStrToStr(filePath);
+	JsonArchive archive(EArchiveMode::Write);
+	if(archive.PushScope("SceneData"))
+	{
+		m_CurrentScene->Serialize(archive);
+		archive.PopScope();
+	}
+
+	if (archive.SaveToFile(pathStr))
+	{
+		return EResult::Success;
+	}
+
+	return EResult::Fail;
+}
+
+EResult SceneManager::LoadScene(const wstring& filePath)
+{
+	string pathStr = WStrToStr(filePath);
+	JsonArchive archive(EArchiveMode::Read);
+	if (!archive.LoadFromFile(pathStr))
+	{
+		return EResult::Fail;
+	}
+
+	Scene* newScene = Scene::Create();
+	if (!newScene) return EResult::Fail;
+	
+	if (archive.PushScope("SceneData"))
+	{
+		newScene->Deserialize(archive);
+		archive.PopScope();
+	}
+
+	return OpenScene(newScene);
 }
 #pragma endregion
 
