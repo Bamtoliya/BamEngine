@@ -2,6 +2,7 @@
 
 #include "Base.h"
 #include "SerializableInterface.h"
+#include "ReflectionMacro.h"
 
 BEGIN(Engine)
 
@@ -18,8 +19,10 @@ enum class ESceneFlags : uint8
 
 ENABLE_BITMASK_OPERATORS(ESceneFlags)
 
+CLASS()
 class ENGINE_API Scene : public Base, public SerializableInterface
 {
+	REFLECT_BASE()
 #pragma region Constructor&Destructor
 protected:
 	using DESC = tagSceneCreateDesc;
@@ -89,16 +92,23 @@ public:
 #pragma region Save&Load
 public:
 	virtual void Serialize(class Archive& ar) override;
-	virtual void Deserialize(class Archive& ar) override;
+	virtual void Deserialize(class Archive& ar) override { Serialize(ar); }
 #pragma endregion
 
 
 #pragma region Variable
 protected:
+	PROPERTY()
 	ESceneFlags m_Flags = ESceneFlags::Active;
+
+	PROPERTY()
 	wstring m_Name = { L"Scene" };
+
+	PROPERTY()
 	vector<class Layer*> m_Layers;
+
 	unordered_map<uint64, class GameObject*> m_GameObjectMap;
+
 	vector<class GameObject*> m_DeadGameObjects;
 #pragma endregion
 };

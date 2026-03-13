@@ -323,9 +323,4 @@ void Scene::Serialize(class Archive& ar)
 		SerializationHelper::SerializeReflectionProperties(ar, typeInfo, this);
 	}
 }
-
-void Scene::Deserialize(class Archive& ar)
-{
-	Serialize(ar);
-}
 #pragma endregion

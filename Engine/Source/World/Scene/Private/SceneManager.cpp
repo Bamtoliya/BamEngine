@@ -72,12 +72,11 @@ EResult SceneManager::NewScene(void* arg)
 	return EResult::Success;
 }
 
-EResult SceneManager::SaveScene(const wstring& filePath)
+EResult SceneManager::SaveScene(Archive& archive, const wstring& filePath)
 {
 	if (!m_CurrentScene) return EResult::Fail;
 
 	string pathStr = WStrToStr(filePath);
-	JsonArchive archive(EArchiveMode::Write);
 	if(archive.PushScope("SceneData"))
 	{
 		m_CurrentScene->Serialize(archive);
@@ -92,10 +91,9 @@ EResult SceneManager::SaveScene(const wstring& filePath)
 	return EResult::Fail;
 }
 
-EResult SceneManager::LoadScene(const wstring& filePath)
+EResult SceneManager::LoadScene(Archive& archive, const wstring& filePath)
 {
 	string pathStr = WStrToStr(filePath);
-	JsonArchive archive(EArchiveMode::Read);
 	if (!archive.LoadFromFile(pathStr))
 	{
 		return EResult::Fail;

@@ -3,7 +3,7 @@
 #include "GlazeArchiveBase.h"
 
 BEGIN(Engine)
-class BeveArchive : public GlazeArchiveBase
+class ENGINE_API BeveArchive : public GlazeArchiveBase
 {
 public:
 	explicit BeveArchive(EArchiveMode mode) : GlazeArchiveBase(mode) {}

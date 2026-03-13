@@ -36,8 +36,8 @@ public:
 	class Scene* GetCurrentScene() const { return m_CurrentScene; }
 
 	EResult NewScene(void* arg = nullptr);
-	EResult SaveScene(const wstring& filePath);
-	EResult LoadScene(const wstring& filePath);
+	EResult SaveScene(class Archive& archive, const wstring& filePath);
+	EResult LoadScene(class Archive& archive, const wstring& filePath);
 #pragma endregion
 
 #pragma region Variable

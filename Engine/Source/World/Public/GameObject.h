@@ -199,7 +199,7 @@ public:
 #pragma region Save&Load
 public:
 	virtual void Serialize(Archive& ar) override;
-	virtual void Deserialize(Archive& ar) override;
+	virtual void Deserialize(Archive& ar) override { Serialize(ar); }
 #pragma endregion
 
 
@@ -207,11 +207,12 @@ public:
 
 #pragma region Variables
 protected:
-
 	GameObject* m_Parent = { nullptr };
 
+	PROPERTY()
 	vector<GameObject*> m_Childs = {};
 
+	PROPERTY(EDITABLE, "PROP_COMPONENTS")
 	vector<Component*> m_Components = {};
 
 	Transform* m_Transform = { nullptr };
@@ -225,13 +226,13 @@ protected:
 	PROPERTY(CATEGORY("PROP_INFORMATION"), READONLY)
 	uint32 m_LayerIndex = { static_cast<uint32>(-1) };
 
-	PROPERTY("PROP_TAGS")
+	PROPERTY(EDITABLE, "PROP_TAGS")
 	unordered_set<wstring> m_TagSet = {};
 
-	PROPERTY("PROP_NAME")
+	PROPERTY(EDITABLE,"PROP_NAME")
 	wstring m_Name = { L"GameObject" };
 
-	PROPERTY("PROP_BITFLAG")
+	PROPERTY(EDITABLE, "PROP_BITFLAG")
 	EObjectFlag m_Flags = { EObjectFlag::Default };
 #pragma endregion
 

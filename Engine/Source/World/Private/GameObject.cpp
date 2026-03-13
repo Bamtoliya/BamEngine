@@ -358,9 +358,5 @@ void GameObject::Serialize(Archive& ar)
 	const TypeInfo* typeInfo = ReflectionRegistry::Get().GetType("GameObject");
 	SerializationHelper::SerializeReflectionProperties(ar, typeInfo, this);
 }
-void GameObject::Deserialize(Archive& ar)
-{
-
-}
 #pragma endregion
 

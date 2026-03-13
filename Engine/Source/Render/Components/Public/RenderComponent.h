@@ -19,7 +19,6 @@ protected:
 	virtual ~RenderComponent() = default;
 	virtual EResult Initialize(void* arg = nullptr) override { return __super::Initialize(arg); }
 public:
-	virtual Component* Clone(GameObject* owner, void* arg = nullptr) PURE;
 	virtual void Free() override
 	{
 		Component::Free();
@@ -30,7 +29,7 @@ public:
 #pragma region Render
 public:
 	virtual void LateUpdate(f32 dt) override;
-	virtual EResult Render(f32 dt, RenderPass* renderPass = nullptr) PURE;
+	virtual EResult Render(f32 dt, RenderPass* renderPass = nullptr) { return EResult::NotImplemented; }
 #pragma endregion
 
 #pragma region Management

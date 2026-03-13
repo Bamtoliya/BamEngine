@@ -26,7 +26,7 @@ struct ENGINE_API tagComponentDesc
 class GameObject;
 
 CLASS()
-class ENGINE_API Component abstract : public Base, public SerializableInterface, public ActiveInterface
+class ENGINE_API Component : public Base, public SerializableInterface, public ActiveInterface
 {
 	REFLECT_BASE()
 	using DESC = tagComponentDesc;
@@ -37,7 +37,7 @@ protected:
 	virtual EResult Initialize(void* arg = nullptr);	
 public:
 	virtual EResult LateInitialize(void* arg = nullptr) { return EResult::Success; }
-	virtual Component* Clone(GameObject* owner, void* arg = nullptr) PURE;
+	virtual Component* Clone(GameObject* owner, void* arg = nullptr) { return nullptr; }
 	virtual void Free() override;
 #pragma endregion
 

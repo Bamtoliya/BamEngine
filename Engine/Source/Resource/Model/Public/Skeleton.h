@@ -27,10 +27,10 @@ public:
 
 #pragma region Member Variable
 private:
-	PROPERTY()
+	PROPERTY(CATEGORY("PROP_BONE"))
 	vector<Bone> m_Bones;
 
-	PROPERTY()
+	PROPERTY(CATEGORY("PROP_BONE"))
 	unordered_map<wstring, uint32> m_BoneMap;
 #pragma endregion
 };

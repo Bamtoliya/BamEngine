@@ -11,7 +11,9 @@
 #define REFLECT_CDO \
 	static void CreateCDO(void* buffer); \
 	static void DestroyCDO(void* buffer); \
-	static void CopyCDO(void* dst, const void* src);
+	static void CopyCDO(void* dst, const void* src); \
+	static void* HeapNew(); \
+	virtual void PostLoad() {}
 
 
 #define REFLECT_BASE() \
@@ -130,13 +132,20 @@ public: \
 			} \
 		}(static_cast<ClassName*>(nullptr), dst, src); \
 	} \
+	void* ClassName::HeapNew() \
+	{ \
+		if constexpr (!std::is_abstract_v<ClassName>) return new ClassName(); \
+		return nullptr; \
+	} \
 	static constexpr Engine::TypeInfo ClassName##_TypeInfo = { \
 		Engine::CompileTimeHash(#ClassName), #ClassName, #ParentName, sizeof(ClassName), \
 		ClassName::GetProperties(), \
 		ClassName##_Functions, \
 		std::is_abstract_v<ClassName> ? nullptr : &ClassName::CreateCDO, \
 		std::is_abstract_v<ClassName> ? nullptr : &ClassName::DestroyCDO, \
-		std::is_abstract_v<ClassName> ? nullptr : &ClassName::CopyCDO \
+		std::is_abstract_v<ClassName> ? nullptr : &ClassName::CopyCDO, \
+		std::is_abstract_v<ClassName> ? nullptr : &ClassName::HeapNew, \
+		[](void* inst) { static_cast<ClassName*>(inst)->PostLoad(); } \
 	}; \
 	const Engine::TypeInfo& ClassName::GetStaticType() { return ClassName##_TypeInfo; } \
 	namespace { \
@@ -172,10 +181,11 @@ public: \
 #define TOOLTIP(text) {Engine::CompileTimeHash("Tooltip"), text},
 #define CATEGORY(text) {Engine::CompileTimeHash("Category"), text},
 #define RANGE(...) {Engine::CompileTimeHash("Range"), Engine::MetaRange{ __VA_ARGS__ }},
-#define COLOR(r, g, b, a) {Engine::CompileTimeHash("Color"), Engine::MetaColor{ vec4(r, g, b, a) }},
-#define READONLY {Engine::CompileTimeHash("ReadOnly"), true},
-#define FILEPATH(filter) {Engine::CompileTimeHash("FilePath"), filter},
-#define DIRECTORY        {Engine::CompileTimeHash("Directory"), true},
+#define COLOR(r, g, b, a)	{Engine::CompileTimeHash("Color"), Engine::MetaColor{ vec4(r, g, b, a) }},
+#define EDITABLE			{Engine::CompileTimeHash("Editable"), true},
+#define READONLY			{Engine::CompileTimeHash("ReadOnly"), true},
+#define FILEPATH(filter)	{Engine::CompileTimeHash("FilePath"), filter},
+#define DIRECTORY			{Engine::CompileTimeHash("Directory"), true},
 #define EDITCONDITION(conditionVar, ...) {Engine::CompileTimeHash("EditCondition"), Engine::MetaEditCondition{ conditionVar, __VA_ARGS__ }},
 #define DEFAULT(value) {Engine::CompileTimeHash("Default"), std::string_view(#value)},
 #define ONCHANGED(...)  {Engine::CompileTimeHash("OnChanged"), Engine::MetaOnChanged{ __VA_ARGS__ }},

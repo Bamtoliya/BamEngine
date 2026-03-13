@@ -4,7 +4,7 @@
 
 BEGIN(Engine)
 enum class EArchiveMode : uint8_t { Read, Write };
-class Archive abstract
+class ENGINE_API Archive abstract
 {
 public:
 	explicit Archive(EArchiveMode mode) : m_Mode(mode) {}

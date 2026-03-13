@@ -246,6 +246,21 @@ private:
 		case Engine::EPropertyType::Enum:
 		case Engine::EPropertyType::BitFlag: return ar.ProcessEnum(propName, valuePtr, size);
 		case Engine::EPropertyType::Object:
+		{
+			void* objectInstance = *static_cast<void**>(valuePtr);
+			if (!objectInstance) break; // nullptr 포인터 안전 처리
+
+			if (ar.PushScope(propName))
+			{
+				const TypeInfo* InnerTypeInfo = ReflectionRegistry::Get().GetType(NormalizeTypeName(varInfo.Name));
+				if (InnerTypeInfo)
+				{
+					SerializeReflectionProperties(ar, InnerTypeInfo, objectInstance);
+				}
+				ar.PopScope();
+			}
+			break;
+		}
 		case Engine::EPropertyType::Struct:
 		{
 			if (ar.PushScope(propName))

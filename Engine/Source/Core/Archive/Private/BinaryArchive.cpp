@@ -348,7 +348,7 @@ bool BinaryArchive::SaveToFile(string_view filePath)
 	std::ofstream outFile(filePath.data(), std::ios::binary);
     if (!outFile || !outFile.is_open()) return false;
     outFile.write(reinterpret_cast<const char*>(m_Buffer.data()), m_Buffer.size());
-    return false;
+    return true;
 }
 
 bool BinaryArchive::LoadFromFile(string_view filePath)
@@ -370,7 +370,7 @@ bool BinaryArchive::LoadFromFile(string_view filePath)
 	if (header.Magic != 0x42414D42) return false; // 'BAMB'
 
 	ParseScopeDirectory(size);
-    return false;
+    return true;
 }
 
 #pragma endregion

@@ -343,6 +343,7 @@ void HierarchyPanel::Draw()
 
 void HierarchyPanel::DrawLayerItem(Scene* scene, Layer* layer)
 {
+	if (!layer) return;
 	uint32 layerIndex = layer->GetIndex();
 	ImGui::PushID(layerIndex);
 

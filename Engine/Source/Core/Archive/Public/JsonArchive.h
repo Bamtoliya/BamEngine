@@ -3,7 +3,7 @@
 #include "GlazeArchiveBase.h"
 
 BEGIN(Engine)
-class JsonArchive : public GlazeArchiveBase
+class ENGINE_API JsonArchive : public GlazeArchiveBase
 {
 public:
 	explicit JsonArchive(EArchiveMode mode) : GlazeArchiveBase(mode) {}

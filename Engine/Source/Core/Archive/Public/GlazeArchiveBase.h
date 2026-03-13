@@ -4,7 +4,7 @@
 #include <glaze/json.hpp>
 
 BEGIN(Engine)
-class GlazeArchiveBase : public Archive
+class ENGINE_API GlazeArchiveBase : public Archive
 {
 public:
 	explicit GlazeArchiveBase(EArchiveMode mode) : Archive(mode) { m_Root = glz::json_t::object_t{}; m_ScopeStack.push(&m_Root); }

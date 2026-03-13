@@ -70,6 +70,7 @@ bool InspectorPanel::DrawProperties(void* instance, const TypeInfo& typeInfo)
 
 			for (const auto& prop : currentTypeInfo->Properties)
 			{
+				if (!GetMetadataEditable(prop.Metadata)) continue;
 				string category = GetMetadataString(prop.Metadata, MetaCategoryHash);
 				if (!category.empty())
 					categoryMap[category].push_back(&prop);

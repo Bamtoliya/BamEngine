@@ -9,6 +9,7 @@ inline constexpr uint64 MetaTooltipHash = Engine::CompileTimeHash("Tooltip");
 inline constexpr uint64 MetaCategoryHash = Engine::CompileTimeHash("Category");
 inline constexpr uint64 MetaRangeHash = Engine::CompileTimeHash("Range");
 inline constexpr uint64 MetaColorHash = Engine::CompileTimeHash("Color");
+inline constexpr uint64 MetaEditableHash = Engine::CompileTimeHash("Editable");
 inline constexpr uint64 MetaReadOnlyHash = Engine::CompileTimeHash("ReadOnly");
 inline constexpr uint64 MetaFilePathHash = Engine::CompileTimeHash("FilePath");
 inline constexpr uint64 MetaDirectoryHash = Engine::CompileTimeHash("Directory");
@@ -111,6 +112,12 @@ inline MetaOnChanged* GetMetadataOnChanged(std::span<const Engine::MetadataEntry
 inline bool GetMetadataReadOnly(std::span<const Engine::MetadataEntry> metadata)
 {
 	return GetMetadataBool(metadata, MetaReadOnlyHash, false);
+}
+
+inline bool GetMetadataEditable(std::span<const Engine::MetadataEntry> metadata)
+{
+	if (GetMetadataBool(metadata, MetaReadOnlyHash, false)) return true;
+	return GetMetadataBool(metadata, MetaEditableHash, false);
 }
 
 inline string NormalizeReflectedTypeName(string_view rawTypeName)

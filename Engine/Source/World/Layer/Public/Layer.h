@@ -1,9 +1,13 @@
 ﻿#pragma once
 
 #include "Base.h"
+#include "SerializableInterface.h"
+#include "ReflectionMacro.h"
+#include "CommonInterface.h"
 
 BEGIN(Engine)
 
+ENUM()
 enum class ELayerFlags : uint8
 {
 	None = 0,
@@ -22,8 +26,10 @@ struct tagLayerCreateDesc
 };
 #pragma endregion
  
-class ENGINE_API Layer : public Base
+CLASS()
+class ENGINE_API Layer : public Base, public SerializableInterface, public ActiveInterface, public VisibleInterface
 {
+	REFLECT_BASE()
 #pragma region Constructor&Destructor
 protected:
 	using DESC = tagLayerCreateDesc;
@@ -70,14 +76,14 @@ public:
 
 #pragma region Flag Management
 public:
-	void SetVisible(bool visible);
-	void SetActive(bool active);
+	virtual void SetVisible(bool visible)  override;
+	virtual void SetActive(bool active) override;
 public:
 	void SetAllObjectVisible(bool visible);
 	void SetAllObjectActive(bool active);
 public:
-	bool IsVisible() const { return HasFlag(m_Flags, ELayerFlags::Visible); }
-	bool IsActive()  const { return HasFlag(m_Flags, ELayerFlags::Active); }
+	bool IsVisible() const override { return HasFlag(m_Flags, ELayerFlags::Visible); }
+	bool IsActive()  const override { return HasFlag(m_Flags, ELayerFlags::Active); }
 public:
 	ELayerFlags GetFlags() const { return m_Flags; }
 	void SetFlags(ELayerFlags flags) { m_Flags = flags; }
@@ -85,12 +91,25 @@ public:
 #pragma endregion
 
 
+#pragma region Save&Load
+public:
+	void Serialize(class Archive& ar) override;
+	void Deserialize(class Archive& ar) override { Serialize(ar); }
+#pragma endregion
+
+
+
 #pragma region Variable
 protected:
+	PROPERTY()
 	uint32 m_Index = { 0 };
+	PROPERTY()
 	wstring m_Name = L"Layer";
+	PROPERTY()
 	ELayerFlags m_Flags = ELayerFlags::Default;
+	PROPERTY()
 	vector<class GameObject*> m_GameObjects;
+	PROPERTY()
 	vector<class GameObject*> m_DeadGameObjects;
 #pragma endregion
 

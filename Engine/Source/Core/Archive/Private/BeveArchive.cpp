@@ -21,16 +21,18 @@ bool BeveArchive::SaveToFile(string_view filePath)
 bool BeveArchive::LoadFromFile(string_view filePath)
 {
 	if (IsWriting()) return false;
-
 	std::ifstream inFile(filePath.data(), std::ios::binary);
+
 	if (!inFile || !inFile.is_open()) return false;
 
+	inFile.seekg(0, std::ios::end);
 	size_t size = (size_t)inFile.tellg();
+	inFile.seekg(0, std::ios::beg);
+
 	std::string buffer(size, '\0');
-	inFile.seekg(0);
 	inFile.read(buffer.data(), size);
 
-	auto ec = glz::read_beve(buffer, m_Root);
+	auto ec = glz::read_json(m_Root, buffer);
 	return !ec;
 }
 #pragma endregion

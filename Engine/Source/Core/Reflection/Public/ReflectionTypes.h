@@ -130,9 +130,13 @@ struct TypeInfo
 	using CDOCreateFunc = void(*)(void* buffer);           
 	using CDODestroyFunc = void(*)(void* buffer);          
 	using CDOCopyFunc = void(*)(void* dst, const void* src);
+	using HeapCreateFunc = void*(*)();
+	using PostLoadFunc = void(*)(void* instance);
 
 	CDOCreateFunc  Create = nullptr;
 	CDODestroyFunc Destroy = nullptr;
 	CDOCopyFunc    Copy = nullptr;
+	HeapCreateFunc HeapCreate = nullptr;
+	PostLoadFunc   PostLoad = nullptr;
 };
 END

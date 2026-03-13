@@ -9,19 +9,44 @@ class ToolBar
 public:
 	void Draw();
 private:
+#pragma region File Menu
+private:
 	void DrawFileMenu();
+private:
+	void ImportAsset();
+#pragma endregion
+
+#pragma region Edit Menu
+private:
 	void DrawEditMenu();
+#pragma endregion
+
+#pragma region Scene Menu
+private:
 	void DrawSceneMenu();
-	void DrawWindowMenu();
-	void DrawHelpMenu();
+private:
+	void NewScene();
+	void SaveScene();
+	void LoadScene();
+#pragma endregion
 
 #pragma region Window Menu
+private:
+	void DrawWindowMenu();
 private:
 	void DrawDisplaySettingsWindow();
 private:
 	void AddNewViewportPanel();
 	void DrawNewViewportPopup();
 #pragma endregion
+
+#pragma region Help Menu
+private:
+	void DrawHelpMenu();
+#pragma endregion
+
+
+
 
 #pragma region Variables
 private:

@@ -16,6 +16,9 @@
 
 #include "Application.h"
 
+#include "Archives.h"
+#include "FileDialogs.h"
+
 
 void ToolBar::Draw()
 {
@@ -41,9 +44,14 @@ void ToolBar::DrawFileMenu()
 			quit_event.type = SDL_EVENT_QUIT;
 			SDL_PushEvent(&quit_event);
 		}
+		if (ImGui::MenuItem("Settings", ""))
+		{
+
+		}
 		ImGui::EndMenu();
 	}
 }
+
 
 #pragma endregion
 
@@ -66,36 +74,59 @@ void ToolBar::DrawSceneMenu()
 	{
 		if (ImGui::MenuItem("New Scene", "Ctrl+N"))
 		{
-			SceneManager::Get().NewScene();
-			Scene* currentScene = SceneManager::Get().GetCurrentScene();
-			if (currentScene)
-			{
-				currentScene->SetName(L"Untitled Scene");
-				currentScene->CreateLayer(L"Default");
-
-				GameObject* gameObject = GameObject::Create();
-				gameObject->SetName(L"Camera");
-				Camera* camera = static_cast<Camera*>(gameObject->AddComponent(L"Camera"));
-				CameraManager::Get().AddCamera(camera);
-				CameraManager::Get().SetMainCamera(camera);
-				currentScene->AddGameObject(gameObject);
-				gameObject->AddComponent<Transform>();
-				Safe_Release(gameObject);
-			}
+			NewScene();
 		}
 
 		if (ImGui::MenuItem("Save Scene", "Ctrl+S"))
 		{
-
+			SaveScene();
 		}
 
 		if (ImGui::MenuItem("Load Scene", "Ctrl+O"))
 		{
-
+			LoadScene();
 		}
 
 		ImGui::EndMenu();
 	}
+}
+void ToolBar::NewScene()
+{
+	SceneManager::Get().NewScene();
+	Scene* currentScene = SceneManager::Get().GetCurrentScene();
+	if (currentScene)
+	{
+		currentScene->SetName(L"Untitled Scene");
+		currentScene->CreateLayer(L"Default");
+
+		GameObject* gameObject = GameObject::Create();
+		gameObject->SetName(L"Camera");
+		Camera* camera = static_cast<Camera*>(gameObject->AddComponent(L"Camera"));
+		CameraManager::Get().AddCamera(camera);
+		CameraManager::Get().SetMainCamera(camera);
+		currentScene->AddGameObject(gameObject);
+		gameObject->AddComponent<Transform>();
+		Safe_Release(gameObject);
+	}
+}
+
+void ToolBar::SaveScene()
+{
+	wstring filePath;
+	if (!FileDialogs::SaveFileDialog(filePath, { {L"Scene Files (*.json)", L"*.json"} }, L"NewScene.json", L"json"))
+		return;
+
+	JsonArchive archive(EArchiveMode::Write);
+	SceneManager::Get().SaveScene(archive, filePath);
+}
+void ToolBar::LoadScene()
+{
+	wstring filePath;
+	if (!FileDialogs::OpenFileDialog(filePath, { {L"Scene Files (*.json)", L"*.json"} }))
+		return;
+
+	JsonArchive archive(EArchiveMode::Read);
+	SceneManager::Get().LoadScene(archive, filePath);
 }
 #pragma endregion
 
@@ -141,6 +172,48 @@ void ToolBar::DrawWindowMenu()
 		DrawDisplaySettingsWindow();
 
 	DrawNewViewportPopup();
+}
+void ToolBar::DrawDisplaySettingsWindow()
+{
+	if (ImGui::Begin("Display Settings", &m_DisplaySettingsWindow)) // 창 이름
+	{
+		static int width = g_WindowWidth;
+		static int height = g_WindowHeight;
+		static bool isFullscreen = false;
+
+		// 현재 상태 가져오기 (처음 한 번만 동기화하거나, 매번 갱신하거나 선택)
+		// 여기서는 UI 조작 값을 우선하도록 단순화했습니다.
+
+		ImGui::Text("Resolution");
+		ImGui::InputInt("Width", &width);
+		ImGui::InputInt("Height", &height);
+
+		ImGui::Checkbox("Fullscreen", &isFullscreen);
+
+		if (ImGui::Button("Apply Resolution"))
+		{
+			// 실제 적용
+			Application::Get().SetResolution(width, height, isFullscreen);
+		}
+
+		ImGui::Separator();
+
+		// [옵션] UI 스케일 조절 (4K 모니터 대응용)
+		static float uiScale = 1.0f;
+		if (ImGui::DragFloat("UI Scale", &uiScale, 0.01f, 0.5f, 3.0f))
+		{
+			ImGui::GetIO().FontGlobalScale = uiScale; // 간단한 스케일링 방법
+		}
+
+		ImGui::Separator();
+		static int32 targetFPS = TimeManager::Get().GetTargetFPS();
+		ImGui::DragInt("FPS", &targetFPS);
+		if (ImGui::Button("Apply FPS"))
+		{
+			TimeManager::Get().SetTargetFPS(targetFPS);
+		}
+	}
+	ImGui::End();
 }
 void ToolBar::AddNewViewportPanel()
 {
@@ -189,6 +262,7 @@ void ToolBar::DrawNewViewportPopup()
 		ImGui::EndPopup();
 	}
 }
+
 #pragma endregion
 
 
@@ -209,46 +283,5 @@ void ToolBar::DrawHelpMenu()
 		ImGui::EndMenu();
 	}
 }
-void ToolBar::DrawDisplaySettingsWindow()
-{
-	if (ImGui::Begin("Display Settings", &m_DisplaySettingsWindow)) // 창 이름
-	{
-		static int width = g_WindowWidth;
-		static int height = g_WindowHeight;
-		static bool isFullscreen = false;
 
-		// 현재 상태 가져오기 (처음 한 번만 동기화하거나, 매번 갱신하거나 선택)
-		// 여기서는 UI 조작 값을 우선하도록 단순화했습니다.
-
-		ImGui::Text("Resolution");
-		ImGui::InputInt("Width", &width);
-		ImGui::InputInt("Height", &height);
-
-		ImGui::Checkbox("Fullscreen", &isFullscreen);
-
-		if (ImGui::Button("Apply Resolution"))
-		{
-			// 실제 적용
-			Application::Get().SetResolution(width, height, isFullscreen);
-		}
-
-		ImGui::Separator();
-
-		// [옵션] UI 스케일 조절 (4K 모니터 대응용)
-		static float uiScale = 1.0f;
-		if (ImGui::DragFloat("UI Scale", &uiScale, 0.01f, 0.5f, 3.0f))
-		{
-			ImGui::GetIO().FontGlobalScale = uiScale; // 간단한 스케일링 방법
-		}
-
-		ImGui::Separator();
-		static int32 targetFPS = TimeManager::Get().GetTargetFPS();
-		ImGui::DragInt("FPS", &targetFPS);
-		if (ImGui::Button("Apply FPS"))
-		{
-			TimeManager::Get().SetTargetFPS(targetFPS);
-		}
-	}
-	ImGui::End();
-}
 #pragma endregion

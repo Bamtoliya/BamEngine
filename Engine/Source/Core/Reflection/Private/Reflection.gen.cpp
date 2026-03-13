@@ -28,7 +28,9 @@
 #include "Resource/Texture/Public/Texture.h"
 #include "UI/Button/Public/Button.h"
 #include "UI/Public/UIComponent.h"
+#include "World/Layer/Public/Layer.h"
 #include "World/Public/GameObject.h"
+#include "World/Scene/Public/Scene.h"
 
 namespace Engine {
 
@@ -157,6 +159,13 @@ BEGIN_ENUM(EMaterialParameterType)
 	REFLECT_ENUM_ENTRY(EMaterialParameterType, Bool)
 	REFLECT_ENUM_ENTRY(EMaterialParameterType, Matrix)
 END_ENUM_REFLECT(EMaterialParameterType)
+// Enum: ELayerFlags
+BEGIN_ENUM(ELayerFlags)
+	REFLECT_ENUM_ENTRY(ELayerFlags, None)
+	REFLECT_ENUM_ENTRY(ELayerFlags, Active)
+	REFLECT_ENUM_ENTRY(ELayerFlags, Visible)
+	REFLECT_ENUM_ENTRY(ELayerFlags, Default)
+END_ENUM_REFLECT(ELayerFlags)
 // Enum: EObjectFlag
 BEGIN_ENUM(EObjectFlag)
 	REFLECT_ENUM_ENTRY(EObjectFlag, None)
@@ -330,6 +339,7 @@ IMPLEMENT_CLASS(BoxCollider, Collider)
 
 #pragma region CLASS: Collider
 BEGIN_PROPERTIES(Collider)
+	REFLECT_PROPERTY(Collider, m_Type, "EColliderType", Engine::EPropertyType::Enum, {})
 	REFLECT_PROPERTY(Collider, m_DrawCollider, "bool", Engine::EPropertyType::Bool, {})
 END_PROPERTIES
 
@@ -673,7 +683,31 @@ IMPLEMENT_CLASS(UIComponent, Component)
 
 #pragma endregion // CLASS: UIComponent
 
+#pragma region CLASS: Layer
+DECLARE_CONTAINER_INFO(Layer, m_GameObjects, "class GameObject*", Engine::EPropertyType::Object, Engine::LinearContainerAccessor<vector<class GameObject*>, class GameObject*>::Get())
+DECLARE_CONTAINER_INFO(Layer, m_DeadGameObjects, "class GameObject*", Engine::EPropertyType::Object, Engine::LinearContainerAccessor<vector<class GameObject*>, class GameObject*>::Get())
+BEGIN_PROPERTIES(Layer)
+	REFLECT_PROPERTY(Layer, m_Index, "uint32", Engine::EPropertyType::UInt32, {})
+	REFLECT_PROPERTY(Layer, m_Name, "wstring", Engine::EPropertyType::Wstring, {})
+	REFLECT_PROPERTY(Layer, m_Flags, "ELayerFlags", Engine::EPropertyType::BitFlag, {})
+	REFLECT_CONTAINER_PROPERTY(Layer, m_GameObjects, "vector<class GameObject*>", Engine::EPropertyType::Array, &Layer_m_GameObjects_ContainerData, {})
+	REFLECT_CONTAINER_PROPERTY(Layer, m_DeadGameObjects, "vector<class GameObject*>", Engine::EPropertyType::Array, &Layer_m_DeadGameObjects_ContainerData, {})
+END_PROPERTIES
+
+EMPTY_FUNCTIONS(Layer)
+
+IMPLEMENT_CLASS(Layer, Base)
+
+#pragma endregion // CLASS: Layer
+
 #pragma region CLASS: GameObject
+DECLARE_CONTAINER_INFO(GameObject, m_Childs, "GameObject*", Engine::EPropertyType::Object, Engine::LinearContainerAccessor<vector<GameObject*>, GameObject*>::Get())
+BEGIN_METADATA(GameObject, m_Components)
+	EDITABLE
+	"PROP_COMPONENTS"
+END_METADATA
+
+DECLARE_CONTAINER_INFO(GameObject, m_Components, "Component*", Engine::EPropertyType::Object, Engine::LinearContainerAccessor<vector<Component*>, Component*>::Get())
 BEGIN_METADATA(GameObject, m_ID)
 	CATEGORY("PROP_INFORMATION")
 	READONLY
@@ -690,19 +724,24 @@ BEGIN_METADATA(GameObject, m_LayerIndex)
 END_METADATA
 
 BEGIN_METADATA(GameObject, m_TagSet)
+	EDITABLE
 	"PROP_TAGS"
 END_METADATA
 
 DECLARE_CONTAINER_INFO(GameObject, m_TagSet, "wstring", Engine::EPropertyType::Wstring, Engine::SetAccessor<unordered_set<wstring>, wstring>::Get())
 BEGIN_METADATA(GameObject, m_Name)
+	EDITABLE
 	"PROP_NAME"
 END_METADATA
 
 BEGIN_METADATA(GameObject, m_Flags)
+	EDITABLE
 	"PROP_BITFLAG"
 END_METADATA
 
 BEGIN_PROPERTIES(GameObject)
+	REFLECT_CONTAINER_PROPERTY(GameObject, m_Childs, "vector<GameObject*>", Engine::EPropertyType::Array, &GameObject_m_Childs_ContainerData, {})
+	REFLECT_CONTAINER_PROPERTY(GameObject, m_Components, "vector<Component*>", Engine::EPropertyType::Array, &GameObject_m_Components_ContainerData, GameObject_m_Components_Meta)
 	REFLECT_PROPERTY(GameObject, m_ID, "uint64", Engine::EPropertyType::UInt64, GameObject_m_ID_Meta)
 	REFLECT_PROPERTY(GameObject, m_Index, "uint32", Engine::EPropertyType::UInt32, GameObject_m_Index_Meta)
 	REFLECT_PROPERTY(GameObject, m_LayerIndex, "uint32", Engine::EPropertyType::UInt32, GameObject_m_LayerIndex_Meta)
@@ -716,6 +755,20 @@ EMPTY_FUNCTIONS(GameObject)
 IMPLEMENT_CLASS(GameObject, Base)
 
 #pragma endregion // CLASS: GameObject
+
+#pragma region CLASS: Scene
+DECLARE_CONTAINER_INFO(Scene, m_Layers, "class Layer*", Engine::EPropertyType::Object, Engine::LinearContainerAccessor<vector<class Layer*>, class Layer*>::Get())
+BEGIN_PROPERTIES(Scene)
+	REFLECT_PROPERTY(Scene, m_Flags, "ESceneFlags", Engine::EPropertyType::BitFlag, {})
+	REFLECT_PROPERTY(Scene, m_Name, "wstring", Engine::EPropertyType::Wstring, {})
+	REFLECT_CONTAINER_PROPERTY(Scene, m_Layers, "vector<class Layer*>", Engine::EPropertyType::Array, &Scene_m_Layers_ContainerData, {})
+END_PROPERTIES
+
+EMPTY_FUNCTIONS(Scene)
+
+IMPLEMENT_CLASS(Scene, Base)
+
+#pragma endregion // CLASS: Scene
 
 
 #pragma endregion

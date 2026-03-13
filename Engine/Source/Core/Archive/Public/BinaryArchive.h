@@ -31,7 +31,7 @@ struct NodeView {
 	size_t PayloadOffset;
 };
 
-class BinaryArchive : public Archive
+class ENGINE_API BinaryArchive : public Archive
 {
 private:
 	struct ScopeWriteState
