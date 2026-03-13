@@ -35,6 +35,7 @@ public:
 
 	EResult RegisterLocalizationData(const wstring& filePath);
 	string GetText(const string& key) const;
+	string GetText(const wstring& key) const;
 	EResult AddText(ELocalizationLanguage lang, const string& key, const string& text);
 #pragma endregion
 

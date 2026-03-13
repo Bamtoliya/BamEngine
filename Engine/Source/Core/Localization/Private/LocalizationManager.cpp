@@ -99,6 +99,10 @@ string LocalizationManager::GetText(const string& key) const
 
 	return key;
 }
+string LocalizationManager::GetText(const wstring& key) const
+{
+	return GetText(WStrToStr(key));
+}
 
 EResult LocalizationManager::AddText(ELocalizationLanguage lang, const string& key, const string& text)
 {

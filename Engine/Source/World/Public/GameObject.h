@@ -4,6 +4,7 @@
 #include "Component.h"
 #include "ReflectionMacro.h"
 #include "ComponentRegistry.h"
+#include "CommonInterface.h"
 
 ENUM()
 enum class EObjectFlag : uint8
@@ -28,7 +29,7 @@ struct tagGameObjectDesc
 BEGIN(Engine)
 class Transform;
 CLASS()
-class ENGINE_API GameObject : public Base, public SerializableInterface
+class ENGINE_API GameObject : public Base, public SerializableInterface, public ActiveInterface, public VisibleInterface
 {
 	REFLECT_BASE()
 
@@ -164,14 +165,14 @@ public:
 #pragma region Flag Management
 public:
 	EObjectFlag GetFlags() const { return m_Flags; }
-	bool IsActive() const { return HasFlag(m_Flags, EObjectFlag::Active); }
-	bool IsVisible() const { return HasFlag(m_Flags, EObjectFlag::Visible); }
+	virtual bool IsActive() const override { return HasFlag(m_Flags, EObjectFlag::Active); }
+	virtual bool IsVisible() const override { return HasFlag(m_Flags, EObjectFlag::Visible); }
 	bool IsPaused() const { return HasFlag(m_Flags, EObjectFlag::Paused); }
 	bool IsDead() const { return HasFlag(m_Flags, EObjectFlag::Dead); }
 	EResult SetFlags(EObjectFlag flags) { m_Flags = flags; return EResult::Success; }
 public:
-	void SetVisible(bool visible);
-	void SetActive(bool active);
+	virtual void SetVisible(bool visible) override;
+	virtual void SetActive(bool active) override;
 	void SetPaused(bool paused);
 	void SetDead(bool dead = true);
 public:

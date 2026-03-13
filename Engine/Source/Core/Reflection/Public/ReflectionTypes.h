@@ -51,7 +51,7 @@ struct PropertyInfo
 {
 	uint64 ID;
 	string_view Name;
-	VariableInfo Type;
+	VariableInfo TypeInfo;
 	size_t Offset;
 	size_t Size;
 

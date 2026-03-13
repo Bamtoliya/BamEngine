@@ -3,6 +3,7 @@
 #include "Base.h"
 #include "ReflectionMacro.h"
 #include "SerializableInterface.h"
+#include "CommonInterface.h"
 
 BEGIN(Engine)
 #pragma region Struct
@@ -25,7 +26,7 @@ struct ENGINE_API tagComponentDesc
 class GameObject;
 
 CLASS()
-class ENGINE_API Component abstract : public Base, public SerializableInterface
+class ENGINE_API Component abstract : public Base, public SerializableInterface, public ActiveInterface
 {
 	REFLECT_BASE()
 	using DESC = tagComponentDesc;
@@ -52,7 +53,7 @@ public:
 public:
 	GameObject* GetOwner() const { return m_Owner; }
 	wstring GetTag() const { return m_Tag; }
-	bool IsActive() const { return m_Active; }
+	virtual bool IsActive() const override { return m_Active; }
 	bool IsDirty() const { return m_Dirty; }
 #pragma endregion
 
@@ -60,7 +61,7 @@ public:
 public:
 	void SetOwner(GameObject* owner) { m_Owner = owner; }
 	void SetTag(const wstring& tag) { m_Tag = tag; }
-	void SetActive(bool active) { m_Active = active; }
+	virtual void SetActive(bool active)  override { m_Active = active; }
 	void SetDirty(bool dirty = true) { m_Dirty = dirty; }
 #pragma endregion
 

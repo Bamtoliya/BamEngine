@@ -17,7 +17,7 @@ public:
 		{
 			string_view propName = prop.Name;
 			void* valuePtr = PropertyAccessor::GetValuePtr(instance, prop);
-			SerializeValue(ar, propName, prop.Type, valuePtr, prop.Size, prop.ContainerData);
+			SerializeValue(ar, propName, prop.TypeInfo, valuePtr, prop.Size, prop.ContainerData);
 		}
 	}
 

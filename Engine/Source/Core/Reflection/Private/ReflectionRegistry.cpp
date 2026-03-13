@@ -2,7 +2,7 @@
 
 #include "ReflectionRegistry.h"
 
-IMPLEMENT_SINGLETON(ReflectionRegistry)
+IMPLEMENT_LAZY_SINGLETON(ReflectionRegistry)
 
 void ReflectionRegistry::Free()
 {
