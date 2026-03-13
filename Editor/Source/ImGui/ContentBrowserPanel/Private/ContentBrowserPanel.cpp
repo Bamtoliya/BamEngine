@@ -287,7 +287,7 @@ void ContentBrowserPanel::TreeViewContextMenu(const filesystem::path& path)
 		ImGui::EndPopup();
 	}
 
-	if (ImGui::IsItemHovered() && ImGui::IsKeyPressed(ImGuiKey_F2))
+	if (ImGui::IsItemHovered() && KEY_DOWN(EKeyCode::F2))
 	{
 		m_RenamingPath = path;
 		strncpy(m_RenameBuffer, filename.c_str(), sizeof(m_RenameBuffer));
@@ -488,7 +488,8 @@ void ContentBrowserPanel::DrawGridItem(const filesystem::directory_entry& direct
 
 
 	// 인터랙션: 폴더 진입
-	if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+	
+	if (ImGui::IsItemHovered() && MOUSE_BUTTON_DOUBLE_CLICK(EMouseButton::Left))
 	{
 		if (directoryEntry.is_directory())
 		{
@@ -748,7 +749,7 @@ void ContentBrowserPanel::GridItemContextMenu(const filesystem::path& path)
 		ImGui::EndPopup();
 	}
 
-	if (ImGui::IsItemHovered() && ImGui::IsKeyPressed(ImGuiKey_F2))
+	if (ImGui::IsItemHovered() && KEY_DOWN(EKeyCode::F2))
 	{
 		m_RenamingPath = path;
 		strncpy(m_RenameBuffer, filenameString.c_str(), sizeof(m_RenameBuffer));
@@ -896,7 +897,7 @@ void ContentBrowserPanel::DrawRename(const filesystem::path& path)
 	{
 		m_RenamingPath.clear();
 	}
-	else if (ImGui::IsKeyPressed(ImGuiKey_Escape))
+	else if (KEY_DOWN(EKeyCode::Escape))
 	{
 		m_RenamingPath.clear();
 	}

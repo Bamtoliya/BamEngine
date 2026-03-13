@@ -177,46 +177,41 @@ mat4 Transform::CalculateEffectiveParentMatrix(Transform* parent)
 }
 #pragma endregion
 
-
 #pragma region Setter
 
 void Transform::SetPosition(const vec3& position)
 {
-	if (!IsStatic())
-	{
-		SetDirty();
-		m_Position = position;
-	}
+	if (IsPositionLocked()) return;
+
+	SetDirty();
+	m_Position = position;
 }
 
 void Transform::SetRotation(const quat& rotation)
 {
-	if (!IsStatic())
-	{
-		m_Rotation = rotation;
-		m_EulerRotation = glm::degrees(glm::eulerAngles(m_Rotation));
-		SetDirty();
+	if (IsRotationLocked()) return;
 
-	}
+	SetDirty();
+	m_Rotation = rotation;
+	m_EulerRotation = glm::degrees(glm::eulerAngles(m_Rotation));
+
 }
 
 void Transform::SetRotation(const vec3& eulerAngles)
 {
-	if (!IsStatic())
-	{
-		m_EulerRotation = eulerAngles;
-		SetDirty();
-		m_Rotation = quat(glm::radians(m_EulerRotation));
-	}
+	if (IsRotationLocked()) return;
+
+	SetDirty();
+	m_EulerRotation = eulerAngles;
+	m_Rotation = quat(glm::radians(m_EulerRotation));
 }
 
 void Transform::SetScale(const vec3& scale)
 {
-	if (!IsStatic())
-	{
-		SetDirty();
-		m_Scale = scale;
-	}
+	if (IsScaleLocked()) return;
+
+	SetDirty();
+	m_Scale = scale;
 }
 
 void Transform::SetMobility(EMobility mobility)
@@ -288,7 +283,7 @@ void Transform::UpdateWorldMatrix()
 #pragma region Control
 void Transform::Translate(const vec3& translation, ESpace space)
 {
-	if (IsStatic() || HasFlag(m_Flags, ETransformFlag::LockPosition)) return;
+	if (IsPositionLocked()) return;
 
 	if (space == ESpace::Local)
 	{
@@ -313,7 +308,7 @@ void Transform::Translate(const vec3& translation, ESpace space)
 }
 void Transform::Rotate(const vec3& eulerAngle, ESpace space)
 {
-	if (IsStatic() || HasFlag(m_Flags, ETransformFlag::LockRotation)) return;
+	if (IsRotationLocked()) return;
 
 	quat q = quat(glm::radians(eulerAngle));
 	Rotate(q, space);
@@ -321,7 +316,7 @@ void Transform::Rotate(const vec3& eulerAngle, ESpace space)
 }
 void Transform::Rotate(const vec3& axis, float angle, ESpace space)
 {
-	if (IsStatic() || HasFlag(m_Flags, ETransformFlag::LockRotation)) return;
+	if (IsRotationLocked()) return;
 
 	quat q = glm::angleAxis(glm::radians(angle), glm::normalize(axis));
 	Rotate(q, space);
@@ -329,7 +324,7 @@ void Transform::Rotate(const vec3& axis, float angle, ESpace space)
 }
 void Transform::Rotate(const quat& rotation, ESpace space)
 {
-	if (IsStatic() || HasFlag(m_Flags, ETransformFlag::LockRotation)) return;
+	if (IsRotationLocked()) return;
 
 	if (space == ESpace::Local)
 	{
@@ -343,7 +338,8 @@ void Transform::Rotate(const quat& rotation, ESpace space)
 }
 void Transform::LookAt(const vec3& target, const vec3& up)
 {
-	if (IsStatic() || HasFlag(m_Flags, ETransformFlag::LockRotation)) return;
+	if (IsRotationLocked()) return;
+
 	vec3 worldPos = GetWorldPosition();
 	vec3 direction = target - worldPos;
 	float length = glm::length(direction);
@@ -375,8 +371,3 @@ void Transform::LookAt(const vec3& target, const vec3& up)
 	SetDirty();
 }
 #pragma endregion
-
-
-
-
-

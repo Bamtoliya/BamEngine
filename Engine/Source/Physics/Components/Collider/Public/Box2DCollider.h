@@ -47,6 +47,7 @@ public:
 #pragma region Getter
 public:
 	const Rect GetRect() const { return Rect(m_Center.x - m_Extent.x, m_Center.y - m_Extent.y, m_Extent.x * 2, m_Extent.y * 2); }
+	const AABB GetAABB2D() const { return AABB(vec3(m_Center, 0.f), vec3(m_Extent, 0.f)); }
 #pragma endregion
 
 #pragma region Member Variable

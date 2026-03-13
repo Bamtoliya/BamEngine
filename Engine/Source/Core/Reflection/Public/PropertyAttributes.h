@@ -24,6 +24,31 @@ struct MetaEditCondition
 
 	constexpr MetaEditCondition(string_view InConditionVariableName, uint64 InMask = 0, bool InExactMatch = false)
 		: ConditionVariableName(InConditionVariableName), Mask(InMask), bExactMatch(InExactMatch) {}
+
+	template<typename T>
+	requires(std::is_integral_v<T> || std::is_enum_v<T>)
+	constexpr MetaEditCondition(string_view InConditionVariableName, T InMask, bool InExactMatch = false)
+		: ConditionVariableName(InConditionVariableName), Mask(static_cast<uint64>(InMask)), bExactMatch(InExactMatch) {
+	}
+};
+
+struct MetaOnChanged
+{
+	static constexpr size_t MaxArgumentCount = 4;
+	string_view FunctionName;
+	std::array<string_view, MaxArgumentCount> ArgumentPropertyNames{};
+	uint32 ArgumentCount = 0;
+
+	constexpr MetaOnChanged(string_view InFunctionName) : FunctionName(InFunctionName) {}
+
+	template<typename... TArgs>
+	requires ((std::is_convertible_v<TArgs, string_view> && ...) && (sizeof...(TArgs) <= MaxArgumentCount))
+	constexpr MetaOnChanged(string_view inFunctionName, TArgs... inArgs)
+		: FunctionName(inFunctionName)
+		, ArgumentPropertyNames{ string_view(inArgs)... }
+		, ArgumentCount(static_cast<uint32>(sizeof...(TArgs)))
+	{
+	}
 };
 
 END

@@ -99,8 +99,12 @@ public: \
 #define END_FUNCTIONS };
 
 #define REFLECT_FUNCTION(Class, FuncName, ReturnTypeName, ReturnTypeEnum, ParamsSpan) \
-	{ Engine::CompileTimeHash(#FuncName), #FuncName, {ReturnTypeName, ReturnTypeEnum}, ParamsSpan, \
+	{ Engine::CompileTimeHash(#FuncName), #FuncName, #FuncName, {ReturnTypeName, ReturnTypeEnum}, ParamsSpan, \
 	  &Engine::AutoThunk<&Class::FuncName> },
+
+#define REFLECT_FUNCTION_OVERLOAD(Class, DisplayName, SignatureText, FunctionPtr, ReturnTypeName, ReturnTypeEnum, ParamsSpan) \
+	{ Engine::CompileTimeHash(SignatureText), DisplayName, SignatureText, {ReturnTypeName, ReturnTypeEnum}, ParamsSpan, \
+	  &Engine::AutoThunk<FunctionPtr> },
 
 #define IMPLEMENT_CLASS(ClassName, ParentName) \
 	void ClassName::CreateCDO(void* cdoBuf) \
@@ -174,3 +178,4 @@ public: \
 #define DIRECTORY        {Engine::CompileTimeHash("Directory"), true},
 #define EDITCONDITION(conditionVar, ...) {Engine::CompileTimeHash("EditCondition"), Engine::MetaEditCondition{ conditionVar, __VA_ARGS__ }},
 #define DEFAULT(value) {Engine::CompileTimeHash("Default"), std::string_view(#value)},
+#define ONCHANGED(...)  {Engine::CompileTimeHash("OnChanged"), Engine::MetaOnChanged{ __VA_ARGS__ }},

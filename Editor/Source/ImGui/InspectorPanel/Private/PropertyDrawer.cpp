@@ -3,7 +3,10 @@
 #include "PropertyDrawer.h"
 #include "InspectorHelper.h"
 #include "LocalizationManager.h"
+#include <regex>
 
+
+#pragma region Vector Axis
 static vector<string> axisLabels = { "X", "Y", "Z", "W" };
 
 static map<string, ImVec4> buttonColors = {
@@ -19,6 +22,265 @@ static map<string, ImVec4> buttonHoverColors = {
 	{ "Z", ImVec4{ 0.2f, 0.3f, 0.9f, 1.0f } },
 	{ "W", ImVec4{ 0.6f, 0.6f, 0.6f, 1.0f } }
 };
+#pragma endregion
+
+#pragma region Default Value Resolver
+inline string_view GetLiteralArgs(string_view literal)
+{
+	const size_t l = literal.find('(');
+	const size_t r = literal.rfind(')');
+	if (l != string_view::npos && r != string_view::npos && r > l)
+	{
+		return literal.substr(l + 1, r - l - 1);
+	}
+	return literal;
+}
+
+inline bool ParseNumberList(string_view literal, vector<f32>& out)
+{
+	out.clear();
+	const string args(GetLiteralArgs(literal));
+	static const std::regex numberPattern(R"([-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?)");
+
+	for (std::sregex_iterator it(args.begin(), args.end(), numberPattern), end; it != end; ++it)
+	{
+		try { out.push_back(static_cast<f32>(std::stod(it->str()))); }
+		catch (...) { return false; }
+	}
+	return !out.empty();
+}
+
+template<typename T>
+bool TryGetDefaultFromCDO(const TypeInfo& typeInfo, const PropertyInfo& property, T& outValue)
+{
+	vector<uint8>* cdo = Engine::ReflectionRegistry::Get().GetCDO(typeInfo.ID);
+	if (!cdo) return false;
+	if (property.Offset + sizeof(T) > cdo->size()) return false;
+
+	outValue = *reinterpret_cast<const T*>(cdo->data() + property.Offset);
+	return true;
+}
+
+template<typename T>
+bool TryGetDefaultFromMetadata(const PropertyInfo& property, T& outValue)
+{
+	const Engine::MetadataEntry* entry = FindMetadata(property.Metadata, MetaDefaultHash);
+	if (!entry) return false;
+
+	if (const T* typed = std::get_if<T>(&entry->Value))
+	{
+		outValue = *typed;
+		return true;
+	}
+
+	const string literal = GetMetadataString(property.Metadata, MetaDefaultHash);
+	if (literal.empty()) return false;
+
+	try
+	{
+		if constexpr (std::is_same_v<T, int32_t>) { outValue = static_cast<int32_t>(std::stoll(literal)); return true; }
+		if constexpr (std::is_same_v<T, int64_t>) { outValue = static_cast<int64_t>(std::stoll(literal)); return true; }
+		if constexpr (std::is_same_v<T, uint32_t>) { outValue = static_cast<uint32_t>(std::stoull(literal)); return true; }
+		if constexpr (std::is_same_v<T, uint64_t>) { outValue = static_cast<uint64_t>(std::stoull(literal)); return true; }
+		if constexpr (std::is_same_v<T, f32>) { outValue = static_cast<f32>(std::stod(literal)); return true; }
+		if constexpr (std::is_same_v<T, vec2>)
+		{
+			vector<f32> nums;
+			if (!ParseNumberList(literal, nums) || nums.size() < 2) return false;
+			outValue = vec2(nums[0], nums[1]);
+			return true;
+		}
+		if constexpr (std::is_same_v<T, vec3>)
+		{
+			vector<f32> nums;
+			if (!ParseNumberList(literal, nums) || nums.size() < 3) return false;
+			outValue = vec3(nums[0], nums[1], nums[2]);
+			return true;
+		}
+		if constexpr (std::is_same_v<T, vec4>)
+		{
+			vector<f32> nums;
+			if (!ParseNumberList(literal, nums) || nums.size() < 4) return false;
+			outValue = vec4(nums[0], nums[1], nums[2], nums[3]);
+			return true;
+		}
+		if constexpr (std::is_same_v<T, quat>)
+		{
+			vector<f32> nums;
+			if (!ParseNumberList(literal, nums) || nums.size() < 4) return false;
+			outValue = quat(nums[3], nums[0], nums[1], nums[2]); // w, x, y, z
+			return true;
+		}
+	}
+	catch (...) {}
+
+	return false;
+}
+
+template<typename T>
+T ResolveDefaultValue(const TypeInfo& typeInfo, const PropertyInfo& property, const T& fallback)
+{
+	T value = fallback;
+	if (TryGetDefaultFromMetadata<T>(property, value)) return value;
+	if (TryGetDefaultFromCDO<T>(typeInfo, property, value)) return value;
+	return fallback;
+}
+#pragma endregion
+
+#pragma region Vector Lock Resolver
+enum class ETransformVectorGroup : uint8
+{
+	None,
+	Position,
+	Rotation,
+	Scale
+};
+
+struct TransformLockMaskCache
+{
+	bool Initialized = false;
+	bool Valid = false;
+	uint64 StaticMask = 0;
+	uint64 PositionMasks[3] = { 0, 0, 0 };
+	uint64 RotationMasks[3] = { 0, 0, 0 };
+	uint64 ScaleMasks[3] = { 0, 0, 0 };
+};
+
+static TransformLockMaskCache g_TransformLockMaskCache;
+static std::unordered_map<uint64, bool> g_EditorAxisLockState;
+
+inline uint64 MakeAxisLockKey(const void* instance, const TypeInfo& typeInfo, const PropertyInfo& property, uint32 axis)
+{
+	uint64 h = 14695981039346656037ull;
+	auto mix = [&h](uint64 v)
+		{
+			h ^= v;
+			h *= 1099511628211ull;
+		};
+
+	mix(reinterpret_cast<uint64>(instance));
+	mix(typeInfo.ID);
+	mix(property.ID);
+	mix(axis);
+	return h;
+}
+
+inline ETransformVectorGroup GetTransformVectorGroup(const TypeInfo& typeInfo, const PropertyInfo& property)
+{
+	if (typeInfo.Name != "Transform")
+		return ETransformVectorGroup::None;
+
+	if (property.Name == "m_Position")
+		return ETransformVectorGroup::Position;
+	if (property.Name == "m_Rotation" || property.Name == "m_EulerRotation")
+		return ETransformVectorGroup::Rotation;
+	if (property.Name == "m_Scale")
+		return ETransformVectorGroup::Scale;
+
+	return ETransformVectorGroup::None;
+}
+
+inline void InitializeTransformLockMasksIfNeeded()
+{
+	if (g_TransformLockMaskCache.Initialized)
+		return;
+
+	g_TransformLockMaskCache.Initialized = true;
+
+	const EnumInfo* enumInfo = Engine::ReflectionRegistry::Get().GetEnum("ETransformFlag");
+	if (!enumInfo)
+		return;
+
+	for (const auto& [name, val] : enumInfo->Entries)
+	{
+		if (name == "Static")        g_TransformLockMaskCache.StaticMask = val;
+		if (name == "LockPositionX") g_TransformLockMaskCache.PositionMasks[0] = val;
+		if (name == "LockPositionY") g_TransformLockMaskCache.PositionMasks[1] = val;
+		if (name == "LockPositionZ") g_TransformLockMaskCache.PositionMasks[2] = val;
+		if (name == "LockRotationX") g_TransformLockMaskCache.RotationMasks[0] = val;
+		if (name == "LockRotationY") g_TransformLockMaskCache.RotationMasks[1] = val;
+		if (name == "LockRotationZ") g_TransformLockMaskCache.RotationMasks[2] = val;
+		if (name == "LockScaleX")    g_TransformLockMaskCache.ScaleMasks[0] = val;
+		if (name == "LockScaleY")    g_TransformLockMaskCache.ScaleMasks[1] = val;
+		if (name == "LockScaleZ")    g_TransformLockMaskCache.ScaleMasks[2] = val;
+	}
+
+	g_TransformLockMaskCache.Valid = true;
+}
+
+inline uint64 GetAxisMask(ETransformVectorGroup group, uint32 axis)
+{
+	if (axis >= 3)
+		return 0;
+
+	switch (group)
+	{
+	case ETransformVectorGroup::Position: return g_TransformLockMaskCache.PositionMasks[axis];
+	case ETransformVectorGroup::Rotation: return g_TransformLockMaskCache.RotationMasks[axis];
+	case ETransformVectorGroup::Scale:    return g_TransformLockMaskCache.ScaleMasks[axis];
+	default: return 0;
+	}
+}
+
+inline bool GetTransformAxisLock(void* instance, const TypeInfo& typeInfo, ETransformVectorGroup group, uint32 axis)
+{
+	InitializeTransformLockMasksIfNeeded();
+	if (!g_TransformLockMaskCache.Valid)
+		return false;
+
+	const PropertyInfo* flagsProp = FindPropertyByName(typeInfo, "m_Flags");
+	if (!flagsProp)
+		return false;
+
+	void* flagsPtr = reinterpret_cast<uint8_t*>(instance) + flagsProp->Offset;
+	const uint64 flags = ReadUnsignedInteger(flagsPtr, flagsProp->Size);
+
+	if (g_TransformLockMaskCache.StaticMask != 0 &&
+		(flags & g_TransformLockMaskCache.StaticMask) == g_TransformLockMaskCache.StaticMask)
+	{
+		return true;
+	}
+
+	const uint64 axisMask = GetAxisMask(group, axis);
+	return axisMask != 0 && (flags & axisMask) == axisMask;
+}
+
+inline void SetTransformAxisLock(void* instance, const TypeInfo& typeInfo, ETransformVectorGroup group, uint32 axis, bool locked)
+{
+	InitializeTransformLockMasksIfNeeded();
+	if (!g_TransformLockMaskCache.Valid)
+		return;
+
+	const PropertyInfo* flagsProp = FindPropertyByName(typeInfo, "m_Flags");
+	if (!flagsProp)
+		return;
+
+	const uint64 axisMask = GetAxisMask(group, axis);
+	if (axisMask == 0)
+		return;
+
+	void* flagsPtr = reinterpret_cast<uint8_t*>(instance) + flagsProp->Offset;
+	uint64 flags = ReadUnsignedInteger(flagsPtr, flagsProp->Size);
+
+	if (locked) flags |= axisMask;
+	else flags &= ~axisMask;
+
+	WriteUnsignedInteger(flagsPtr, flagsProp->Size, flags);
+}
+
+inline bool GetEditorAxisLock(const void* instance, const TypeInfo& typeInfo, const PropertyInfo& property, uint32 axis)
+{
+	const uint64 key = MakeAxisLockKey(instance, typeInfo, property, axis);
+	auto it = g_EditorAxisLockState.find(key);
+	return (it != g_EditorAxisLockState.end()) ? it->second : false;
+}
+
+inline void SetEditorAxisLock(const void* instance, const TypeInfo& typeInfo, const PropertyInfo& property, uint32 axis, bool locked)
+{
+	const uint64 key = MakeAxisLockKey(instance, typeInfo, property, axis);
+	g_EditorAxisLockState[key] = locked;
+}
+#pragma endregion
 
 #pragma region VarName & Label Sanitization
 string PropertyDrawer::SanitizeVarName(const string& varName)
@@ -87,23 +349,23 @@ bool PropertyDrawer::DrawPropertyTable(void* instance, const TypeInfo& typeInfo,
 	bool changed = false;
 	if (props.empty()) return false;
 
-	ImGui::BeginTable("PropertyTable", 2, ImGuiTableFlags_BordersInner | ImGuiTableFlags_Resizable | ImGuiTableFlags_SizingStretchProp);
+	ImGui::BeginTable("PropertyTable", 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_Resizable | ImGuiTableFlags_SizingStretchProp);
 
-	ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch, 0.35f);
-	ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch, 0.65f);
+	ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch, 0.25f);
+	ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch, 0.75f);
 
 	for (const auto* propPtr : props)
 	{
 		const auto& prop = *propPtr;
-		MetaEditCondition* editCondition = GetMetadataEditCondition(prop.Metadata, MetaEditConditionHash);
-		if (!editCondition) continue;
+		if (!CheckEditCondition(instance, typeInfo, prop.Metadata))
+		{
+			continue;
+		}
 
 		string displayLabel = SanitizeDisplayLabel(typeInfo, prop);
 
-
 		ImGui::PushID(displayLabel.c_str());
 		ImGui::TableNextRow();
-
 
 		ImGui::TableNextColumn();
 		ImGui::AlignTextToFramePadding();
@@ -120,7 +382,13 @@ bool PropertyDrawer::DrawPropertyTable(void* instance, const TypeInfo& typeInfo,
 
 		bool isReadOnly = GetMetadataReadOnly(prop.Metadata);
 		if (isReadOnly) ImGui::BeginDisabled();
-
+		void* data = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(instance) + prop.Offset);
+		bool propertyChanged = DrawProperty(instance, data, typeInfo, prop);
+		if (propertyChanged)
+		{
+			changed = true;
+			InvokeOnChanged(instance, typeInfo, prop.Metadata);
+		}
 		if (isReadOnly) ImGui::EndDisabled();
 
 		ImGui::PopID();
@@ -138,7 +406,7 @@ bool PropertyDrawer::DrawProperty(void* instance, void* data, const TypeInfo& ty
 	case EPropertyType::Int32:
 	case EPropertyType::Int64:
 	case EPropertyType::UInt32:
-	case EPropertyType::UInt64:		return DrawIntegerProperty(data, property);
+	case EPropertyType::UInt64:		return DrawIntegerProperty(data, typeinfo, property);
 
 	case EPropertyType::F64:
 	case EPropertyType::F32:
@@ -156,7 +424,7 @@ bool PropertyDrawer::DrawProperty(void* instance, void* data, const TypeInfo& ty
 	case EPropertyType::Vector2: 
 	case EPropertyType::Vector3: 
 	case EPropertyType::Vector4: 
-	case EPropertyType::Quaternion: return DrawVectorProperty(data, typeinfo, property);
+	case EPropertyType::Quaternion: return DrawVectorProperty(instance, data, typeinfo, property);
 
 	case EPropertyType::Color:		return DrawColorProperty(data, typeinfo, property);
 
@@ -178,8 +446,9 @@ bool PropertyDrawer::DrawProperty(void* instance, void* data, const TypeInfo& ty
 #pragma region Property Variables
 
 //Integer 타입(드래그로 값 조절)
-bool PropertyDrawer::DrawIntegerProperty(void* data, const PropertyInfo& property)
+bool PropertyDrawer::DrawIntegerProperty(void* data, const TypeInfo& typeinfo, const PropertyInfo& property)
 {
+	
 	ImGuiDataType dataType;
 	switch (property.TypeInfo.Type)
 	{
@@ -191,23 +460,61 @@ bool PropertyDrawer::DrawIntegerProperty(void* data, const PropertyInfo& propert
 		ImGui::Text("Unsupported Integer Type");
 		return false;
 	}
-	if (ImGui::DragScalar("##value", dataType, data)) return true;
-	return false;
+
+	bool changed = ImGui::DragScalar("##value", dataType, data);
+
+	MetaRange* range = GetMetadataRange(property.Metadata, MetaRangeHash);
+	bool hasRange = (range != nullptr);
+
+	
+	switch (property.TypeInfo.Type)
+	{
+	case EPropertyType::Int32:
+	{
+		const int32_t resetValue = ResolveDefaultValue<int32_t>(typeinfo, property, 0);
+		changed |= ApplyMouseWheelInput(reinterpret_cast<int32_t*>(data), resetValue, 1.0f, 10.0f, hasRange, hasRange ? static_cast<int32_t>(range->Min) : 0, hasRange ? static_cast<int32_t>(range->Max) : 0);
+		break;
+	}
+	case EPropertyType::Int64:
+	{
+		const int64_t resetValue = ResolveDefaultValue<int64_t>(typeinfo, property, 0);
+		changed |= ApplyMouseWheelInput(reinterpret_cast<int64_t*>(data), resetValue, 1.0f, 10.0f, hasRange, hasRange ? static_cast<int64_t>(range->Min) : 0, hasRange ? static_cast<int64_t>(range->Max) : 0);
+		break;
+	}
+	case EPropertyType::UInt32:
+	{
+		const uint32_t resetValue = ResolveDefaultValue<uint32_t>(typeinfo, property, 0u);
+		changed |= ApplyMouseWheelInput(reinterpret_cast<uint32_t*>(data), resetValue, 1.0f, 10.0f, hasRange, hasRange ? static_cast<uint32_t>(range->Min) : 0, hasRange ? static_cast<uint32_t>(range->Max) : 0);
+		break;
+	}
+	case EPropertyType::UInt64:
+	{
+		const uint64_t resetValue = ResolveDefaultValue<uint64_t>(typeinfo, property, 0ull);
+		changed |= ApplyMouseWheelInput(reinterpret_cast<uint64_t*>(data), resetValue, 1.0f, 10.0f, hasRange, hasRange ? static_cast<uint64_t>(range->Min) : 0, hasRange ? static_cast<uint64_t>(range->Max) : 0);
+		break;
+	}
+	}
+
+	return changed;
 }
 
 //Float 타입(드래그로 값 조절)
 bool PropertyDrawer::DrawFloatProperty(void* data, const TypeInfo& typeinfo, const PropertyInfo& property)
 {
+	bool changed = false;
+	const f32 resetValue = ResolveDefaultValue<f32>(typeinfo, property, 0.0f);
 	MetaRange* range = GetMetadataRange(property.Metadata, MetaRangeHash);
 	if (range)
 	{
-		return ImGui::SliderFloat("##value", reinterpret_cast<f32*>(data), range->Min, range->Max, "%.3f", ImGuiSliderFlags_None);
+		changed |= ImGui::SliderFloat("##value", reinterpret_cast<f32*>(data), range->Min, range->Max, "%.3f", ImGuiSliderFlags_None);
+		changed |= ApplyMouseWheelInput(reinterpret_cast<f32*>(data), resetValue, range->Speed, range->Speed * 10.0f, true, range->Min, range->Max);
 	}
 	else
 	{
-		return ImGui::DragFloat("##value", reinterpret_cast<f32*>(data));
+		changed |= ImGui::DragFloat("##value", reinterpret_cast<f32*>(data));
+		changed |= ApplyMouseWheelInput(reinterpret_cast<f32*>(data), resetValue, 0.1f, 1.0f);
 	}
-	return false;
+	return changed;
 }
 
 //Boolean 타입(체크박스)
@@ -463,7 +770,8 @@ bool PropertyDrawer::DrawFloatInVector(string axis, f32& value, bool& lock, ImVe
 
 		ImGui::SameLine(0, 0); // 버튼과 입력창 딱 붙이기
 		ImGui::SetNextItemWidth(inputWidth);
-		if (ImGui::DragFloat("##Val", &value, 0.1f, 0.0f, 0.0f, "%.2f")) changed = true;
+		changed |= ImGui::DragFloat("##Val", &value, 0.1f, 0.0f, 0.0f, "%.2f");
+		changed |= ApplyMouseWheelInput(&value, resetValue, 0.1f, 10.0f);
 	}
 	if (lock) ImGui::EndDisabled();
 
@@ -476,41 +784,92 @@ bool PropertyDrawer::DrawFloatInVector(string axis, f32& value, bool& lock, ImVe
 	return changed;
 }
 
-bool PropertyDrawer::DrawVectorProperty(void* data, const TypeInfo& typeinfo, const PropertyInfo& property)
+bool PropertyDrawer::DrawVectorProperty(void* instance, void* data, const TypeInfo& typeinfo, const PropertyInfo& property)
 {
 	bool changed = false;
-	//uint32 n = 0;
-	//switch (property.Type)
-	//{
-	//case EPropertyType::Vector2: n = 2; break;
-	//case EPropertyType::Vector3: n = 3; break;
-	//case EPropertyType::Vector4: n = 4; break;
-	//case EPropertyType::Quaternion: n = 4; break;
-	//}
+	uint32 n = 0;
+	switch (property.TypeInfo.Type)
+	{
+	case EPropertyType::Vector2: n = 2; break;
+	case EPropertyType::Vector3: n = 3; break;
+	case EPropertyType::Vector4: n = 4; break;
+	case EPropertyType::Quaternion: n = 4; break;
+	}
 
-	//// 1. 사이즈 및 간격 계산
-	//float lineHeight = ImGui::GetFontSize() + ImGui::GetStyle().FramePadding.y * 2.0f;
-	//ImVec2 buttonSize = { lineHeight + 3.0f, lineHeight }; // 버튼 크기
+	std::array<f32, 4> defaults = { 0.f, 0.f, 0.f, 0.f };
+	switch (property.TypeInfo.Type)
+	{
+	case EPropertyType::Vector2:
+	{
+		const vec2 d = ResolveDefaultValue<vec2>(typeinfo, property, vec2(0.f));
+		defaults[0] = d.x; defaults[1] = d.y;
+		break;
+	}
+	case EPropertyType::Vector3:
+	{
+		const vec3 d = ResolveDefaultValue<vec3>(typeinfo, property, vec3(0.f));
+		defaults[0] = d.x; defaults[1] = d.y; defaults[2] = d.z;
+		break;
+	}
+	case EPropertyType::Vector4:
+	{
+		const vec4 d = ResolveDefaultValue<vec4>(typeinfo, property, vec4(0.f));
+		defaults[0] = d.x; defaults[1] = d.y; defaults[2] = d.z; defaults[3] = d.w;
+		break;
+	}
+	case EPropertyType::Quaternion:
+	{
+		const quat d = ResolveDefaultValue<quat>(typeinfo, property, glm::identity<quat>());
+		defaults[0] = d.x; defaults[1] = d.y; defaults[2] = d.z; defaults[3] = d.w;
+		break;
+	}
+	}
 
-	//// 테이블 컬럼의 전체 가용 너비 가져오기
-	//f32 availableWidth = ImGui::GetContentRegionAvail().x;
+	// 1. 사이즈 및 간격 계산
+	float lineHeight = ImGui::GetFontSize() + ImGui::GetStyle().FramePadding.y * 2.0f;
+	ImVec2 buttonSize = { lineHeight + 3.0f, lineHeight }; // 버튼 크기
 
-	//// 요소 사이의 간격 (X-Y, Y-Z, Z-W => 총 3개)
-	//f32 itemSpacing = ImGui::GetStyle().ItemSpacing.x;
+	// 테이블 컬럼의 전체 가용 너비 가져오기
+	f32 availableWidth = ImGui::GetContentRegionAvail().x;
 
-	//// [버튼 4개] + [간격 3개]를 전체에서 뺀 후, 4로 나누어 입력창 하나의 너비 계산
-	//f32 inputWidth = (availableWidth - (buttonSize.x * n) - (itemSpacing * (n-1))) / static_cast<f32>(n);
+	// 요소 사이의 간격 (X-Y, Y-Z, Z-W => 총 3개)
+	f32 itemSpacing = ImGui::GetStyle().ItemSpacing.x;
 
-	//// 최소 너비 보정
-	//if (inputWidth < 1.0f) inputWidth = 1.0f;
-	//
+	f32 totalButtonWidth = static_cast<f32>(n) * buttonSize.x * 2.f;
+	f32 totalExternalSpacing = static_cast<f32>(n - 1) * itemSpacing;
 
-	//for (uint32 i = 0; i < n; ++i)
-	//{
-	//	bool dummyLock = false; // 각 축마다 별도의 잠금 상태를 관리하려면 이 부분을 수정해야 합니다.
-	//	changed |= DrawFloatInVector(axisLabels[i], ((f32*)data)[i], dummyLock, buttonSize, buttonSize, 0.0f, inputWidth);
-	//	if (i < n - 1) ImGui::SameLine(0, itemSpacing);
-	//}
+	// [버튼 4개] + [간격 3개]를 전체에서 뺀 후, 4로 나누어 입력창 하나의 너비 계산
+	f32 inputWidth = (availableWidth - totalButtonWidth - totalExternalSpacing) / static_cast<f32>(n);
+
+	// 최소 너비 보정
+	if (inputWidth < 1.0f) inputWidth = 1.0f;
+	
+	const ETransformVectorGroup transformGroup = GetTransformVectorGroup(typeinfo, property);
+	const bool useTransformLock = (transformGroup != ETransformVectorGroup::None);
+
+	for (uint32 i = 0; i < n; ++i)
+	{
+		bool axisLock = false;
+
+		if (useTransformLock && i < 3)
+			axisLock = GetTransformAxisLock(instance, typeinfo, transformGroup, i);
+		else
+			axisLock = GetEditorAxisLock(instance, typeinfo, property, i);
+
+		const bool prevLock = axisLock;
+		changed |= DrawFloatInVector(axisLabels[i], ((f32*)data)[i], axisLock, buttonSize, buttonSize, defaults[i], inputWidth);
+
+		if (axisLock != prevLock)
+		{
+			if (useTransformLock && i < 3)
+				SetTransformAxisLock(instance, typeinfo, transformGroup, i, axisLock);
+			else
+				SetEditorAxisLock(instance, typeinfo, property, i, axisLock);
+
+			changed = true;
+		}
+		if (i < n - 1) ImGui::SameLine(0, itemSpacing);
+	}
 
 	return changed;
 }
@@ -593,37 +952,38 @@ bool PropertyDrawer::DrawEnumProperty(void* data, const TypeInfo& typeinfo, cons
 {
 	bool changed = false;
 
-	//int64 enumValue = ReadInteger(data, property.Size);
+	uint64 enumValue = ReadUnsignedInteger(data, property.Size);
 
-	//const auto* enumInfo = Engine::ReflectionRegistry::Get().GetEnum(property.TypeName);
-	//string previewName = "Unknown";
+	uint64 key = RunTimeHash(property.TypeInfo.Name.data());
+	const EnumInfo* enumInfo = Engine::ReflectionRegistry::Get().GetEnum(key);
+	string previewName = "Unknown";
 
-	//if (enumInfo)
-	//{
-	//	for (const auto& [name, val] : enumInfo->Entries)
-	//	{
-	//		if (val == enumValue) { previewName = name; break; }
-	//	}
-	//}
+	if (enumInfo)
+	{
+		for (const auto& [name, val] : enumInfo->Entries)
+		{
+			if (val == enumValue) { previewName = name; break; }
+		}
+	}
 
-	//if(ImGui::BeginCombo("##Enum", previewName.c_str()))
-	//{
-	//	if (enumInfo)
-	//	{
-	//		for (const auto& [name, val] : enumInfo->Entries)
-	//		{
-	//			bool isSelected = (val == enumValue);
-	//			if (ImGui::Selectable(name.c_str(), isSelected))
-	//			{
-	//				enumValue = val;
-	//				changed = true;
-	//			}
-	//			if (isSelected)
-	//				ImGui::SetItemDefaultFocus();
-	//		}
-	//	}
-	//	ImGui::EndCombo();
-	//}
+	if(ImGui::BeginCombo("##Enum", previewName.c_str()))
+	{
+		if (enumInfo)
+		{
+			for (const auto& [name, val] : enumInfo->Entries)
+			{
+				bool isSelected = (val == enumValue);
+				if (ImGui::Selectable(name.data(), isSelected))
+				{
+					WriteUnsignedInteger(data, property.Size, val);
+					changed = true;
+				}
+				if (isSelected)
+					ImGui::SetItemDefaultFocus();
+			}
+		}
+		ImGui::EndCombo();
+	}
 
 	return changed;
 }
@@ -633,40 +993,111 @@ bool PropertyDrawer::DrawBitFlagProperty(void* data, const TypeInfo& typeinfo, c
 {
 	bool changed = false;
 
-	//int64 enumValue = ReadInteger(data, property.Size);
+	uint64 enumValue = ReadUnsignedInteger(data, property.Size);
+	uint64 key = RunTimeHash(property.TypeInfo.Name.data());
 
-	//const auto* enumInfo = Engine::ReflectionRegistry::Get().GetEnum(property.TypeName);
-	//string previewName = enumInfo ? enumInfo->GetBitFlagsString(enumValue) : "Unknown";
+	const EnumInfo* enumInfo = Engine::ReflectionRegistry::Get().GetEnum(key);
+	string previewName = enumInfo ? enumInfo->GetBitFlagsString(enumValue) : "Unknown";
 
-	//if (ImGui::BeginCombo("##BitFlag", previewName.c_str()))
-	//{
-	//	if (enumInfo)
-	//	{
-	//		for (const auto& [name, val] : enumInfo->Entries)
-	//		{
-	//			bool isSelected = (enumValue & val) == val;
-	//			if (ImGui::Selectable(name.c_str(), isSelected))
-	//			{
-	//				if (isSelected)
-	//					enumValue &= ~val; // 이미 선택된 경우: 해당 비트 클리어
-	//				else
-	//					enumValue |= val;  // 선택되지 않은 경우: 해당 비트 세트
+	if (ImGui::BeginCombo("##BitFlag", previewName.c_str()))
+	{
+		if (enumInfo)
+		{
+			for (const auto& [name, val] : enumInfo->Entries)
+			{
+				bool isSelected = (enumValue & val) == val;
+				if (ImGui::Selectable(name.data(), isSelected))
+				{
+					if (isSelected)
+						enumValue &= ~val; // 이미 선택된 경우: 해당 비트 클리어
+					else
+						enumValue |= val;  // 선택되지 않은 경우: 해당 비트 세트
 
-	//				WriteInteger(data, property.Size, enumValue);
-	//				changed = true;
-	//			}
-	//			if (isSelected)
-	//				ImGui::SetItemDefaultFocus();
-	//		}
-	//	}
-	//	else
-	//	{
-	//		ImGui::TextDisabled("Enum info not found");
-	//	}
-	//	ImGui::EndCombo();
-	//}
+					WriteUnsignedInteger(data, property.Size, enumValue);
+					changed = true;
+				}
+				if (isSelected)
+					ImGui::SetItemDefaultFocus();
+			}
+		}
+		else
+		{
+			ImGui::TextDisabled("Enum info not found");
+		}
+		ImGui::EndCombo();
+	}
 
 	return changed;
 }
 
+template <typename T>
+bool PropertyDrawer::ApplyMouseWheelInput(T* value, T resetValue, float step, float shiftMultiplier, bool hasRange, T minVal, T maxVal)
+{
+	bool changed = false;
+	
+	if (ImGui::IsItemHovered())
+	{
+		f32 scrollDelta = MOUSE_SCROLL.y;
+
+		if (scrollDelta != 0.0f)
+		{
+			float currentStep = ImGui::GetIO().KeyShift ? (step * shiftMultiplier) : step;
+			*value = static_cast<T>(*value + (ImGui::GetIO().MouseWheel * currentStep));
+			ImGui::GetIO().MouseWheel = 0.0f; // 이벤트 소비 (스크롤 방지)
+			changed = true;
+		}
+
+		
+		if (MOUSE_BUTTON_DOWN(EMouseButton::Middle))
+		{
+			*value = resetValue;
+			changed = true;
+		}
+	}
+
+	if (ImGui::BeginPopupContextItem())
+	{
+		if (ImGui::MenuItem("Reset to Default"))
+		{
+			*value = resetValue;
+			changed = true;
+		}
+
+		ImGui::Separator();
+
+		if (ImGui::MenuItem("Copy Value"))
+		{
+			ImGui::SetClipboardText(std::to_string(*value).c_str());
+		}
+
+		if (ImGui::MenuItem("Paste Value"))
+		{
+			const char* clipText = ImGui::GetClipboardText();
+			if (clipText)
+			{
+				try
+				{
+					// 문자열을 타입에 맞게 안전하게 변환
+					if constexpr (std::is_floating_point_v<T>)
+						*value = static_cast<T>(std::stod(clipText));
+					else if constexpr (std::is_unsigned_v<T>)
+						*value = static_cast<T>(std::stoull(clipText));
+					else
+						*value = static_cast<T>(std::stoll(clipText));
+
+					changed = true;
+				}
+				catch (...) {} // 클립보드에 숫자가 아닌 문자가 있으면 안전하게 무시
+			}
+		}
+		ImGui::EndPopup();
+	}
+
+	// 3. 변경 사항이 있을 때 범위(Range) 제한 (Clamp)
+	if (changed && hasRange)
+	{
+		*value = std::clamp(*value, minVal, maxVal);
+	}
+	return changed;
+}
 #pragma endregion

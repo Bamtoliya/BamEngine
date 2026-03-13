@@ -62,6 +62,13 @@ BEGIN_ENUM(ETransformFlag)
 	REFLECT_ENUM_ENTRY(ETransformFlag, AllLocked)
 	REFLECT_ENUM_ENTRY(ETransformFlag, Default)
 END_ENUM_REFLECT(ETransformFlag)
+
+// Enum: ERotationMode
+BEGIN_ENUM(ERotationMode)
+	REFLECT_ENUM_ENTRY(ERotationMode, Euler)
+	REFLECT_ENUM_ENTRY(ERotationMode, QuaternionXYZW)
+	REFLECT_ENUM_ENTRY(ERotationMode, QuaternionWXYZ)
+END_ENUM_REFLECT(ERotationMode)
 // Enum: EDrawMode
 BEGIN_ENUM(EDrawMode)
 	REFLECT_ENUM_ENTRY(EDrawMode, Simple)
@@ -244,6 +251,16 @@ IMPLEMENT_CLASS(tagTransformDesc, None)
 #pragma endregion // STRUCT: tagTransformDesc
 
 #pragma region CLASS: Transform
+BEGIN_METADATA(Transform, m_Rotation)
+	EDITCONDITION("!m_RotationMode", ERotationMode::Euler, true)
+	ONCHANGED("SetRotation", "m_Rotation")
+END_METADATA
+
+BEGIN_METADATA(Transform, m_EulerRotation)
+	EDITCONDITION("m_RotationMode", ERotationMode::Euler, true)
+	ONCHANGED("SetRotation", "m_EulerRotation")
+END_METADATA
+
 BEGIN_METADATA(Transform, m_LocalMatrix)
 	NAME("PROP_LOCALMATRIX")
 	READONLY
@@ -260,14 +277,28 @@ END_METADATA
 
 BEGIN_PROPERTIES(Transform)
 	REFLECT_PROPERTY(Transform, m_Position, "vec3", Engine::EPropertyType::Vector3, {})
-	REFLECT_PROPERTY(Transform, m_Rotation, "quat", Engine::EPropertyType::Quaternion, {})
+	REFLECT_PROPERTY(Transform, m_RotationMode, "ERotationMode", Engine::EPropertyType::Enum, {})
+	REFLECT_PROPERTY(Transform, m_Rotation, "quat", Engine::EPropertyType::Quaternion, Transform_m_Rotation_Meta)
+	REFLECT_PROPERTY(Transform, m_EulerRotation, "vec3", Engine::EPropertyType::Vector3, Transform_m_EulerRotation_Meta)
 	REFLECT_PROPERTY(Transform, m_Scale, "vec3", Engine::EPropertyType::Vector3, {})
 	REFLECT_PROPERTY(Transform, m_LocalMatrix, "mat4", Engine::EPropertyType::Matrix4, Transform_m_LocalMatrix_Meta)
 	REFLECT_PROPERTY(Transform, m_WorldMatrix, "mat4", Engine::EPropertyType::Matrix4, Transform_m_WorldMatrix_Meta)
-	REFLECT_PROPERTY(Transform, m_Flags, "ETransformFlag", Engine::EPropertyType::Enum, Transform_m_Flags_Meta)
+	REFLECT_PROPERTY(Transform, m_Flags, "ETransformFlag", Engine::EPropertyType::BitFlag, Transform_m_Flags_Meta)
 END_PROPERTIES
 
-EMPTY_FUNCTIONS(Transform)
+DECLARE_FUNCTION_PARAMS(Transform, SetRotation_quat)
+	FUNCTION_PARAM("quat", Engine::EPropertyType::Quaternion)
+END_FUNCTION_PARAMS
+
+DECLARE_FUNCTION_PARAMS(Transform, SetRotation_vec3)
+	FUNCTION_PARAM("vec3", Engine::EPropertyType::Vector3)
+END_FUNCTION_PARAMS
+
+
+BEGIN_FUNCTIONS(Transform)
+	REFLECT_FUNCTION_OVERLOAD(Transform, "SetRotation", "SetRotation(const quat&)", static_cast<void (Transform::*)(const quat&)>(&Transform::SetRotation), "void", Engine::EPropertyType::None, Transform_SetRotation_quat_Params)
+	REFLECT_FUNCTION_OVERLOAD(Transform, "SetRotation", "SetRotation(const vec3&)", static_cast<void (Transform::*)(const vec3&)>(&Transform::SetRotation), "void", Engine::EPropertyType::None, Transform_SetRotation_vec3_Params)
+END_FUNCTIONS
 
 IMPLEMENT_CLASS(Transform, Component)
 
@@ -418,7 +449,7 @@ IMPLEMENT_CLASS(Material, MaterialInterface)
 #pragma region CLASS: MaterialInstance
 BEGIN_PROPERTIES(MaterialInstance)
 	REFLECT_PROPERTY(MaterialInstance, m_BaseMaterial, "class Material", Engine::EPropertyType::Object, {})
-	REFLECT_PROPERTY(MaterialInstance, m_OverrideFlags, "EPipelineOverrideFlag", Engine::EPropertyType::Enum, {})
+	REFLECT_PROPERTY(MaterialInstance, m_OverrideFlags, "EPipelineOverrideFlag", Engine::EPropertyType::BitFlag, {})
 END_PROPERTIES
 
 EMPTY_FUNCTIONS(MaterialInstance)
@@ -677,7 +708,7 @@ BEGIN_PROPERTIES(GameObject)
 	REFLECT_PROPERTY(GameObject, m_LayerIndex, "uint32", Engine::EPropertyType::UInt32, GameObject_m_LayerIndex_Meta)
 	REFLECT_CONTAINER_PROPERTY(GameObject, m_TagSet, "unordered_set<wstring>", Engine::EPropertyType::Set, &GameObject_m_TagSet_ContainerData, GameObject_m_TagSet_Meta)
 	REFLECT_PROPERTY(GameObject, m_Name, "wstring", Engine::EPropertyType::Wstring, GameObject_m_Name_Meta)
-	REFLECT_PROPERTY(GameObject, m_Flags, "EObjectFlag", Engine::EPropertyType::Enum, GameObject_m_Flags_Meta)
+	REFLECT_PROPERTY(GameObject, m_Flags, "EObjectFlag", Engine::EPropertyType::BitFlag, GameObject_m_Flags_Meta)
 END_PROPERTIES
 
 EMPTY_FUNCTIONS(GameObject)

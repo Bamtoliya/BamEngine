@@ -63,11 +63,8 @@ void Box2DCollider::LateUpdate(f32 dt)
 #ifdef _DEBUG
 	if (m_DrawCollider)
 	{
-		vec3 worldPos = m_Owner ? m_Owner->GetTransform()->GetWorldPosition() : vec3(0.f);
-		Rect worldRect = GetRect();
-		worldRect.Left += worldPos.x;
-		worldRect.Top += worldPos.y;
-		Renderer::Get().DrawDebugRect(worldRect, vec4(0.f, 1.f, 0.f, 1.f));
+		mat4 worldMatrix = m_Owner ? m_Owner->GetTransform()->GetWorldMatrix() : glm::identity<mat4>();
+		Renderer::Get().DrawDebugBox(vec3(m_Center, 0.0f), vec3(m_Extent, 0.0f), vec4(0.f, 1.f, 0.f, 1.f), worldMatrix);
 	}
 #endif // _DEBUG
 
@@ -99,11 +96,9 @@ void Box2DCollider::AutoFit()
 #pragma region Collision
 bool Box2DCollider::Raycast(const Ray& ray, HitResult& outResult)
 {
-	vec3 worldPos = m_Owner ? m_Owner->GetTransform()->GetWorldPosition() : vec3(0.f);
-	Rect worldRect = GetRect();
-	worldRect.Left += worldPos.x;
-	worldRect.Top += worldPos.y;
-	if (Collision::Raycast(ray, worldRect, outResult))
+	mat4 worldMatrix = m_Owner ? m_Owner->GetTransform()->GetWorldMatrix() : glm::identity<mat4>();
+	const AABB localAABB = GetAABB2D();
+	if (Collision::Raycast(ray, localAABB, worldMatrix, outResult))
 	{
 		outResult.UserData = m_Owner;
 		return true;

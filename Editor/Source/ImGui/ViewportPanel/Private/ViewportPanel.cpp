@@ -10,6 +10,28 @@
 #include "InputManager.h"
 
 
+#pragma region Helper
+static quat ExtractRotationQuat(const mat4& matrix)
+{
+	vec3 scale;
+	vec3 translation;
+	vec3 skew;
+	vec4 perspective;
+	quat rotation;
+
+	glm::decompose(matrix, scale, rotation, translation, skew, perspective);
+	return glm::normalize(rotation);
+}
+
+static vec3 ExtractDeltaEulerDegrees(const mat4& deltaMatrix)
+{
+	const quat deltaRotation = ExtractRotationQuat(deltaMatrix);
+	return glm::degrees(glm::eulerAngles(deltaRotation));
+}
+#pragma endregion
+
+
+
 #pragma region Contructor&Destructor
 void ViewportPanel::Initialize(void* arg)
 {
@@ -17,14 +39,14 @@ void ViewportPanel::Initialize(void* arg)
 	{
 		CAST_DESC
 		m_Name = desc->Name;
-
+		
 #pragma region Prepare Camera
 		tagCameraDesc cameraDesc;
 		if (desc->CameraType == EViewportCameraType::Orthographic)
 		{
 			m_IsOrthographic = true;
 			cameraDesc.IsPerspective = false;
-			cameraDesc.OrthoSize = 10.0f;
+			cameraDesc.OrthoSize = desc->RenderTargetHeight;
 		}
 		m_EditorCamera = EditorCamera::Create(&cameraDesc);
 		m_EditorCamera->SetName(m_Name + L"_Camera");
@@ -170,76 +192,78 @@ void ViewportPanel::Draw()
 void ViewportPanel::DrawGuizmo(ImVec2 pos, ImVec2 size)
 {
 	GameObject* selectedObject = SelectionManager::Get().GetPrimarySelection();
-	if (selectedObject == nullptr)
-		return;
+	if (!selectedObject) return;
+
+	Transform* transform = selectedObject->GetComponent<Transform>();
+	if (!transform) return;
+
+	// 1. ImGuizmo 초기 설정
 	ImGuizmo::SetOrthographic(m_IsOrthographic);
 	ImGuizmo::SetDrawlist();
-
-	ImVec2 windowPos = ImGui::GetWindowPos();
-	ImVec2 windowSize = ImGui::GetWindowSize();
 	ImGuizmo::SetRect(pos.x, pos.y, size.x, size.y);
 	ImGuizmo::SetID(ImGui::GetID(this));
 
-	f32 halfW = size.x;
-	f32 halfH = size.y;
-
+	// 2. 카메라 및 매트릭스 준비
 	Camera* camera = m_EditorCamera->GetCamera();
 	mat4 projMatrix = camera->GetProjMatrix();
 	mat4 viewMatrix = camera->GetViewMatrix();
-
-	Transform* transform = selectedObject->GetComponent<Transform>();
-	if (!transform)
-		return;
 	mat4 worldMatrix = transform->GetWorldMatrix();
+	mat4 deltaMatrix = glm::identity<mat4>();
 
+	// [Helper] 월드 매트릭스를 로컬 매트릭스로 변환하는 람다 함수 (중복 제거)
+	auto getLocalMatrix = [](GameObject* obj, const mat4& wMatrix) -> mat4 {
+		GameObject* parent = obj->GetParent();
+		if (parent && parent->GetTransform())
+			return glm::inverse(parent->GetTransform()->GetWorldMatrix()) * wMatrix;
+		return wMatrix;
+		};
+
+	// 3. 조작 전(Old) 로컬 회전값 백업 (Euler Flip 방지용)
+	mat4 oldLocalMatrix = getLocalMatrix(selectedObject, worldMatrix);
+	quat oldLocalQuat = ExtractRotationQuat(oldLocalMatrix);
+
+	// 4. 기즈모 단축키 및 스냅 설정
 	if (ImGui::IsWindowFocused())
 	{
-		if (ImGui::IsKeyPressed(ImGuiKey_W)) m_GizmoOperation = ImGuizmo::TRANSLATE;
-		if (ImGui::IsKeyPressed(ImGuiKey_E)) m_GizmoOperation = ImGuizmo::ROTATE;
-		if (ImGui::IsKeyPressed(ImGuiKey_R)) m_GizmoOperation = ImGuizmo::SCALE;
+		if (KEY_PRESSED(Engine::EKeyCode::W)) m_GizmoOperation = ImGuizmo::TRANSLATE;
+		if (KEY_PRESSED(Engine::EKeyCode::E)) m_GizmoOperation = ImGuizmo::ROTATE;
+		if (KEY_PRESSED(Engine::EKeyCode::R)) m_GizmoOperation = ImGuizmo::SCALE;
 	}
 
 	bool snap = m_GizmoUseSnap || ImGui::GetIO().KeyCtrl;
 	vec3 snapValues = m_GizmoSnapTranslation;
-	if (m_GizmoOperation == ImGuizmo::ROTATE)
-		snapValues = m_GizmoSnapRotation;
-	else if (m_GizmoOperation == ImGuizmo::SCALE)
-		snapValues = m_GizmoSnapScale;
-	ImGuizmo::Manipulate(glm::value_ptr(viewMatrix), glm::value_ptr(projMatrix), m_GizmoOperation, m_GizmoMode, glm::value_ptr(worldMatrix), nullptr, snap ? glm::value_ptr(snapValues) : nullptr);
+	if (m_GizmoOperation == ImGuizmo::ROTATE) snapValues = m_GizmoSnapRotation;
+	else if (m_GizmoOperation == ImGuizmo::SCALE) snapValues = m_GizmoSnapScale;
+
+	// 5. 기즈모 조작 렌더링 및 연산
+	ImGuizmo::Manipulate(glm::value_ptr(viewMatrix), glm::value_ptr(projMatrix),
+		m_GizmoOperation, m_GizmoMode,
+		glm::value_ptr(worldMatrix), glm::value_ptr(deltaMatrix),
+		snap ? glm::value_ptr(snapValues) : nullptr);
 
 	if (ImGuizmo::IsUsing())
 	{
+		// 조작 후(New) 로컬 매트릭스
+		mat4 localMatrix = getLocalMatrix(selectedObject, worldMatrix);
 
-		GameObject* parent = selectedObject->GetParent();
-		mat4 localMatrix;
-		if (parent)
+		if (m_GizmoOperation == ImGuizmo::ROTATE)
 		{
-			Transform* parentTransform = parent->GetTransform();
-			if (parentTransform)
-			{
-				mat4 parentWorldMatrix = parentTransform->GetWorldMatrix();
-				mat4 inverseParentWorldMatrix = glm::inverse(parentWorldMatrix);
-				localMatrix = inverseParentWorldMatrix * worldMatrix;
-			}
-			else
-			{
-				localMatrix = worldMatrix;
-			}
+			// 쿼터니언을 이용해 순수 회전 변화량(Delta) 추출 후 기존 오일러에 누적 (연속성 보장)
+			quat newLocalQuat = ExtractRotationQuat(localMatrix);
+			quat deltaLocalQuat = glm::inverse(oldLocalQuat) * newLocalQuat;
+			vec3 deltaEuler = glm::degrees(glm::eulerAngles(deltaLocalQuat));
+
+			transform->SetRotation(transform->GetLocalRotationEuler() + deltaEuler);
 		}
 		else
 		{
-			localMatrix = worldMatrix;
+			// 이동 및 크기 조절은 로컬 매트릭스 분해값을 그대로 적용
+			float matrixTranslation[3], matrixRotation[3], matrixScale[3];
+			ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(localMatrix), matrixTranslation, matrixRotation, matrixScale);
+
+			transform->SetPosition(glm::make_vec3(matrixTranslation));
+			transform->SetScale(glm::make_vec3(matrixScale));
 		}
-		float matrixTranslation[3], matrixRotation[3], matrixScale[3];
-		ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(localMatrix), matrixTranslation, matrixRotation, matrixScale);
-
-
-
-		// 2D이므로 Z값 변경을 막고 싶다면 여기서 matrixTranslation[2] = 0.0f; 처리를 할 수 있습니다.
-
-		transform->SetPosition(glm::make_vec3(matrixTranslation));
-		transform->SetRotation(glm::make_vec3(matrixRotation));
-		transform->SetScale(glm::make_vec3(matrixScale));
 	}
 }
 #pragma endregion
@@ -363,7 +387,7 @@ void ViewportPanel::DrawDimensionToggleButton()
 #pragma region Input
 void ViewportPanel::MouseInput(const ImVec2& mousePos, const ImVec2& imageMin, const ImVec2& imageSize)
 {
-	if (ImGui::IsMouseClicked(0) && ImGui::IsWindowHovered() && !ImGuizmo::IsOver())
+	if (MOUSE_BUTTON_DOWN(Engine::EMouseButton::Left) && ImGui::IsWindowHovered() && !ImGuizmo::IsOver())
 	{
 		Ray mouseRay = ScreenPosToRay(mousePos, imageMin, imageSize);
 		GameObject* pickedObject = SelectionManager::Get().PickObjectByRay(mouseRay);

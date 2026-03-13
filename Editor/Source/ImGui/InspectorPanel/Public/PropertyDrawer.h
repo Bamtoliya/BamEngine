@@ -24,14 +24,14 @@ public:
 
 #pragma region Property Variables
 public:
-	static bool DrawIntegerProperty(void* data, const PropertyInfo& property);
+	static bool DrawIntegerProperty(void* data, const TypeInfo& typeinfo, const PropertyInfo& property);
 	static bool DrawFloatProperty(void* data, const TypeInfo& typeinfo, const PropertyInfo& property);
 	static bool DrawBooleanProperty(void* data, const TypeInfo& typeinfo, const PropertyInfo& property);
 	static bool DrawStringProperty(void* data, const TypeInfo& typeinfo, const PropertyInfo& property);
 	//static bool DrawMapProperty(void* data, const TypeInfo& typeinfo, const PropertyInfo& property);
 	static bool DrawListProperty(void* data, const TypeInfo& typeinfo, const PropertyInfo& property);
 	static bool DrawFloatInVector(string axis, f32& value, bool& lock, ImVec2 buttonSize, ImVec2 lockSize, f32 resetValue, f32 inputWidth);
-	static bool DrawVectorProperty(void* data, const TypeInfo& typeinfo, const PropertyInfo& property);
+	static bool DrawVectorProperty(void* instance, void* data, const TypeInfo& typeinfo, const PropertyInfo& property);
 
 	static bool DrawColorProperty(void* data, const TypeInfo& typeinfo, const PropertyInfo& property);
 	static bool DrawMatrixProperty(void* data, const TypeInfo& typeinfo, const PropertyInfo& property);
@@ -39,6 +39,13 @@ public:
 	//static bool DrawSetProperty(void* data, const TypeInfo& typeinfo, const PropertyInfo& property);
 	static bool DrawEnumProperty(void* data, const TypeInfo& typeinfo, const PropertyInfo& property);
 	static bool DrawBitFlagProperty(void* data, const TypeInfo& typeinfo, const PropertyInfo& property);
+#pragma endregion
+
+
+#pragma region Mouse Wheel Value Change Helper
+public:
+	template <typename T>
+	static bool ApplyMouseWheelInput(T* value, T resetValue = static_cast<T>(0), float step = 0.1f, float shiftMultiplier = 10.0f, bool hasRange = false, T minVal = static_cast<T>(0), T maxVal = static_cast<T>(0));
 #pragma endregion
 
 

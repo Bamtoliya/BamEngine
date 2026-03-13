@@ -13,7 +13,17 @@ using namespace std;
 #define MOUSE_BUTTON_UP(button) InputManager::Get().IsMouseButtonUp(button)
 #define MOUSE_BUTTON_PRESSED(button) InputManager::Get().IsMouseButtonPressed(button)
 
+#define MOUSE_BUTTON_DOUBLE_CLICK(button) InputManager::Get().IsMouseButtonDoubleClicked(button)
+#define MOUSE_BUTTON_DRAGGING(button) InputManager::Get().IsMouseButtonDragging(button)
+
 #define MOUSE_SCROLL InputManager::Get().GetMouseScrollDelta()
+
+struct MouseStateData
+{
+	f32 LastDownTime = -1.0f;
+	vec2 DownPosition = vec2(0.f);
+	bool IsDragging = false;
+};
 
 BEGIN(Engine)
 class ENGINE_API InputManager : public Base
@@ -49,10 +59,16 @@ public:
 	bool IsMouseButtonDown(EMouseButton button);
 	bool IsMouseButtonUp(EMouseButton button);	
 	bool IsMouseButtonPressed(EMouseButton button);
+
+	bool IsMouseButtonDoubleClicked(EMouseButton button);
+	bool IsMouseButtonDragging(EMouseButton button);
 public:
 	bool IsMouseButtonDown(const string& key);
 	bool IsMouseButtonUp(const string& key);
 	bool IsMouseButtonPressed(const string& key);
+
+	bool IsMouseButtonDoubleClicked(const string& key);
+	bool IsMouseButtonDragging(const string& key);
 public:
 	vec2 GetMousePosition() const { return m_MousePosition; }
 	vec2 GetMouseDelta() const { return m_MouseDelta; }
@@ -64,7 +80,7 @@ public:
 #pragma endregion
 
 #pragma region Member Variables
-public:
+private:
 	array<uint8, SDL_SCANCODE_COUNT> m_CurrentKeyStates;
 	array<uint8, SDL_SCANCODE_COUNT> m_PreviousKeyStates;
 
@@ -76,6 +92,13 @@ public:
 
 	vec2 m_AccmulatedMouseScrollDelta = vec2(0.f);
 	vec2 m_MouseScrollDelta = vec2(0.f);
+
+	f32 m_CurrentTime = 0.0f;
+	f32 m_DoubleClickThreshold = 0.3f;
+	f32 m_DragThreshold = 3.0f;
+
+	array<MouseStateData, static_cast<uint32>(EMouseButton::Count)> m_MouseButtonStatesData;
+	array<bool, static_cast<uint32>(EMouseButton::Count)> m_CurrentDoubleClicks;
 #pragma endregion
 };
 END

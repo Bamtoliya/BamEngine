@@ -105,12 +105,13 @@ struct FunctionInfo
 {
 	uint64 ID;
 	string_view Name;
+	string_view Signature;
 	VariableInfo ReturnType;
 	span<const VariableInfo> Parameters;
 
 	InvokeFunctionPtr InvokeFunc = nullptr;
 
-	void* Invoke(void* instance, void** args)
+	void* Invoke(void* instance, void** args = nullptr) const
 	{
 		if (InvokeFunc) return InvokeFunc(instance, args);
 		return nullptr;

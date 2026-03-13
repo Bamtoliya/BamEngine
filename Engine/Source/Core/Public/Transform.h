@@ -41,6 +41,14 @@ enum class ETransformFlag : uint16
 	AllLocked = LockPosition |  LockRotation | LockScale,
 	Default = AllInherit,
 };
+
+ENUM()
+enum class ERotationMode : uint8
+{
+	Euler,
+	QuaternionXYZW,
+	QuaternionWXYZ
+};
 #pragma endregion
 
 #pragma region Struct
@@ -123,7 +131,10 @@ private:
 #pragma region Setter
 public:
 	void SetPosition(const vec3& position);
+	FUNCTION()
 	void SetRotation(const quat& rotation);
+
+	FUNCTION()
 	void SetRotation(const vec3& eulerAngles);
 	void SetScale(const vec3& scale);
 	
@@ -154,8 +165,12 @@ private:
 	vec3 m_Position = vec3(0.0f);
 
 	PROPERTY()
+	ERotationMode m_RotationMode = ERotationMode::Euler;
+
+	PROPERTY(EDITCONDITION("!m_RotationMode", ERotationMode::Euler, true), ONCHANGED("SetRotation", "m_Rotation"))
 	quat m_Rotation = glm::identity<quat>();
 
+	PROPERTY(EDITCONDITION("m_RotationMode", ERotationMode::Euler, true), ONCHANGED("SetRotation", "m_EulerRotation"))
 	vec3 m_EulerRotation = vec3(0.f);
 
 	PROPERTY()

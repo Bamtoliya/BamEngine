@@ -64,7 +64,8 @@ bool HierarchyPanel::DrawRenameBox(T* target, ImGuiTreeNodeFlags flags, bool isS
 		ImGui::Bullet();
 		ImGui::SameLine();
 
-		if (ImGui::IsWindowFocused() && !ImGui::IsAnyItemActive() && !ImGui::IsMouseClicked(0))
+		
+		if (ImGui::IsWindowFocused() && !ImGui::IsAnyItemActive() && !MOUSE_BUTTON_DOWN(EMouseButton::Left))
 			ImGui::SetKeyboardFocusHere();
 
 		if (ImGui::InputText("##Rename", m_RenameBuffer, sizeof(m_RenameBuffer), ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll))
@@ -72,7 +73,7 @@ bool HierarchyPanel::DrawRenameBox(T* target, ImGuiTreeNodeFlags flags, bool isS
 			target->SetName(StrToWStr(m_RenameBuffer));
 			m_RenamingId = nullptr;
 		}
-		else if (ImGui::IsKeyPressed(ImGuiKey_Escape))
+		else if (KEY_DOWN(EKeyCode::Escape))
 		{
 			m_RenamingId = nullptr;
 		}
@@ -150,11 +151,12 @@ bool HierarchyPanel::DrawRenameBox(T* target, ImGuiTreeNodeFlags flags, bool isS
 	}
 
 	// [선택 정리 로직] 마우스를 뗐을 때 나머지 선택 해제 (단순 클릭 시)
-	if (ImGui::IsItemHovered() && ImGui::IsMouseReleased(ImGuiMouseButton_Left))
+	if (ImGui::IsItemHovered() && MOUSE_BUTTON_UP(EMouseButton::Right))
 	{
 		if constexpr (std::is_same_v<T, GameObject>)
 		{
-			if (!ImGui::GetIO().KeyCtrl && !ImGui::IsMouseDragging(ImGuiMouseButton_Left))
+		
+			if (!ImGui::GetIO().KeyCtrl && !MOUSE_BUTTON_DRAGGING(EMouseButton::Left))
 			{
 				SelectionManager& mgr = SelectionManager::Get();
 				if (isSelected && mgr.GetSelectionContext().size() > 1)
@@ -191,7 +193,7 @@ bool HierarchyPanel::DrawRenameBox(T* target, ImGuiTreeNodeFlags flags, bool isS
 		onDragDrop();
 	}
 
-	if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+	if (ImGui::IsItemHovered() && MOUSE_BUTTON_DOUBLE_CLICK(EMouseButton::Left))
 	{
 		m_RenamingId = targetId;                 // 리네임 대상 설정
 		strcpy_s(m_RenameBuffer, name.c_str());  // 현재 이름 버퍼에 복사
@@ -200,7 +202,7 @@ bool HierarchyPanel::DrawRenameBox(T* target, ImGuiTreeNodeFlags flags, bool isS
 	// 3. [F2 키 트리거]
 	if (isSelected && ImGui::IsWindowFocused() && !ImGui::IsAnyItemActive())
 	{
-		if (ImGui::IsKeyPressed(ImGuiKey_F2))
+		if (KEY_DOWN(EKeyCode::F2))
 		{
 			m_RenamingId = targetId;
 			strcpy_s(m_RenameBuffer, name.c_str());
@@ -244,14 +246,14 @@ void HierarchyPanel::Draw()
 
 	SelectionManager& selectionMgr = SelectionManager::Get();
 
-	if (ImGui::IsWindowHovered() && !ImGui::IsAnyItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+	if (ImGui::IsWindowHovered() && !ImGui::IsAnyItemHovered() && MOUSE_BUTTON_DOWN(EMouseButton::Left))
 	{
 		m_IsBoxSelecting = true;
 		m_BoxStartPos = ImGui::GetMousePos();
 		m_BoxSelectionCandidates.clear(); // 임시 후보군 초기화
 
 		// Shift나 Ctrl이 없으면 기존 선택 다 비우기 (SelectionManager 활용)
-		if (!ImGui::GetIO().KeyShift && !ImGui::GetIO().KeyCtrl)
+		if (!KEY_PRESSED(EKeyCode::LShift) && !KEY_PRESSED(EKeyCode::RShift) && !KEY_PRESSED(EKeyCode::LCtrl) && !KEY_PRESSED(EKeyCode::RCtrl))
 		{
 			selectionMgr.ClearSelection();
 		}
@@ -263,7 +265,8 @@ void HierarchyPanel::Draw()
 		m_BoxEndPos = ImGui::GetMousePos();
 
 		// 마우스를 뗐을 때 (확정)
-		if (ImGui::IsMouseReleased(ImGuiMouseButton_Left))
+		
+		if (MOUSE_BUTTON_UP(EMouseButton::Left))
 		{
 			m_IsBoxSelecting = false;
 
@@ -309,7 +312,7 @@ void HierarchyPanel::Draw()
 		ImGui::EndPopup();
 	}
 	
-	if (ImGui::IsMouseDown(0) && ImGui::IsWindowHovered())
+	if (MOUSE_BUTTON_DOWN(EMouseButton::Left) && ImGui::IsWindowHovered())
 	{
 		if (!ImGui::IsAnyItemHovered())
 		{
@@ -655,9 +658,10 @@ void HierarchyPanel::DrawGameObjectNode(class GameObject* gameObject)
 
     // [추가됨] 2. 마우스 뗐을 때 (MouseUp)
     // 드래그를 하지 않고 그냥 클릭만 했다면, 이때 나머지 선택을 해제합니다.
-    if (ImGui::IsItemHovered() && ImGui::IsMouseReleased(ImGuiMouseButton_Left))
+    if (ImGui::IsItemHovered() && MOUSE_BUTTON_UP(EMouseButton::Left))
     {
-        if (!ImGui::GetIO().KeyCtrl && !ImGui::IsMouseDragging(ImGuiMouseButton_Left))
+		// 드래그 중인지 체크
+        if (!ImGui::GetIO().KeyCtrl && !MOUSE_BUTTON_DRAGGING(EMouseButton::Left))
         {
             // Ctrl도 안 눌렀고, 드래그도 안 함 -> 단순 클릭으로 간주
             // 이제서야 "나 말고 나머지 선택 해제"를 수행
@@ -882,7 +886,7 @@ void HierarchyPanel::DrawSceneTitle(Scene* scene)
 		ImGui::SetNextItemWidth(w);
 
 		// 포커스 자동 설정
-		if (ImGui::IsWindowFocused() && !ImGui::IsAnyItemActive() && !ImGui::IsMouseClicked(0))
+		if (ImGui::IsWindowFocused() && !ImGui::IsAnyItemActive() && !MOUSE_BUTTON_DOWN(EMouseButton::Left))
 		{
 			ImGui::SetKeyboardFocusHere(0);
 		}
@@ -898,7 +902,7 @@ void HierarchyPanel::DrawSceneTitle(Scene* scene)
 			scene->SetName(StrToWStr(m_RenameBuffer));
 			m_RenamingId = nullptr;
 		}
-		else if (ImGui::IsKeyPressed(ImGuiKey_Escape))
+		else if (KEY_DOWN(EKeyCode::Escape))
 		{
 			m_RenamingId = nullptr;
 		}
