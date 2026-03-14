@@ -1,9 +1,10 @@
 ﻿#pragma once
 
-#include "Base.h"
+#include <vector>
+#include <functional>
 using namespace std;
-BEGIN(Engine)
-
+namespace Engine
+{
 using DelegateHandle = uint64;
 
 template<typename RetVal, typename... ParamTypes>
@@ -97,4 +98,4 @@ private:
 	DelegateHandle m_CurrentHandle = 0;
 };
 
-END
+}

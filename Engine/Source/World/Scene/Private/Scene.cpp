@@ -316,11 +316,6 @@ void Scene::SetActive(bool active)
 #pragma region Save&Load
 void Scene::Serialize(class Archive& ar)
 {
-	const TypeInfo* typeInfo = ReflectionRegistry::Get().GetType("Scene");
-
-	if (typeInfo)
-	{
-		SerializationHelper::SerializeReflectionProperties(ar, typeInfo, this);
-	}
+	SerializationHelper::SerializeReflectionProperties(ar, &GetTypeInfo(), this);
 }
 #pragma endregion

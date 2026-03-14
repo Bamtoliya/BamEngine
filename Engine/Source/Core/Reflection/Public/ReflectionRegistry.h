@@ -51,12 +51,27 @@ private:
 	void EnsureCDO(const TypeInfo& type);
 #pragma endregion
 
+#pragma region Constructor Management
+public:
+	template<typename T>
+	void RegisterConstructor(uint64 hash)
+	{
+		m_Constructors[hash] = []() -> void* { return new T(); };
+	}
+	void* CreateInstance(uint64 hash) const;
+	void* CreateInstance(const string& name) const;
+
+
+#pragma endregion
+
+
 
 #pragma region Variable
 private:
 	unordered_map<uint64, const TypeInfo*> m_Types;
 	unordered_map<uint64, const EnumInfo*> m_Enums;
 	unordered_map<uint64, const FunctionInfo*> m_Functions;
+	unordered_map<uint64, function<void*()>> m_Constructors;
 	unordered_map<uint64, vector<uint8>> m_CDOs;
 #pragma endregion
 };

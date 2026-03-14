@@ -32,6 +32,7 @@ struct MetadataEntry
 	uint64 KeyHash;
 	MetaValue Value;
 
+	constexpr MetadataEntry() : KeyHash(0), Value(uint64(0)) {}
 	constexpr MetadataEntry(const char* _value) : KeyHash(CompileTimeHash("Name")), Value(string_view(_value)) {}
 	constexpr MetadataEntry(const wchar* _value) : KeyHash(CompileTimeHash(L"Name")), Value(wstring_view(_value)) {}
 	constexpr MetadataEntry(string_view _value) : KeyHash(CompileTimeHash("Name")), Value(_value) {}

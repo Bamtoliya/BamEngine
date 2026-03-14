@@ -105,7 +105,6 @@ void ToolBar::NewScene()
 		CameraManager::Get().AddCamera(camera);
 		CameraManager::Get().SetMainCamera(camera);
 		currentScene->AddGameObject(gameObject);
-		gameObject->AddComponent<Transform>();
 		Safe_Release(gameObject);
 	}
 }

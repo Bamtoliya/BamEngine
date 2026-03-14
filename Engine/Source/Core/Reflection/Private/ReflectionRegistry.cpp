@@ -162,3 +162,20 @@ bool ReflectionRegistry::IsPropertyDefault(const void* instance, const TypeInfo&
 }
 #pragma endregion
 
+#pragma region Constructor Management
+void* ReflectionRegistry::CreateInstance(uint64 hash) const 
+{
+	auto it = m_Constructors.find(hash);
+	if (it != m_Constructors.end())
+	{
+		return it->second();
+	}
+
+	TODO("CreateInstance 구현해야함");
+	return nullptr;
+}
+void* ReflectionRegistry::CreateInstance(const string& name) const
+{
+	return CreateInstance(RunTimeHash(name));
+}
+#pragma endregion

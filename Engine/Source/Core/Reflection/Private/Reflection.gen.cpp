@@ -69,7 +69,6 @@ END_ENUM_REFLECT(ETransformFlag)
 BEGIN_ENUM(ERotationMode)
 	REFLECT_ENUM_ENTRY(ERotationMode, Euler)
 	REFLECT_ENUM_ENTRY(ERotationMode, QuaternionXYZW)
-	REFLECT_ENUM_ENTRY(ERotationMode, QuaternionWXYZ)
 END_ENUM_REFLECT(ERotationMode)
 // Enum: EDrawMode
 BEGIN_ENUM(EDrawMode)
@@ -196,7 +195,11 @@ IMPLEMENT_CLASS(tagComponentDesc, None)
 #pragma endregion // STRUCT: tagComponentDesc
 
 #pragma region CLASS: Component
-EMPTY_PROPERTIES(Component)
+BEGIN_PROPERTIES(Component)
+	REFLECT_PROPERTY(Component, m_Active, "bool", Engine::EPropertyType::Bool, {})
+	REFLECT_PROPERTY(Component, m_Dirty, "bool", Engine::EPropertyType::Bool, {})
+	REFLECT_PROPERTY(Component, m_Tag, "wstring", Engine::EPropertyType::Wstring, {})
+END_PROPERTIES
 
 EMPTY_FUNCTIONS(Component)
 
@@ -260,14 +263,29 @@ IMPLEMENT_CLASS(tagTransformDesc, None)
 #pragma endregion // STRUCT: tagTransformDesc
 
 #pragma region CLASS: Transform
+BEGIN_METADATA(Transform, m_Position)
+	EDITABLE
+END_METADATA
+
+BEGIN_METADATA(Transform, m_RotationMode)
+	EDITABLE
+END_METADATA
+
 BEGIN_METADATA(Transform, m_Rotation)
+	EDITABLE
 	EDITCONDITION("!m_RotationMode", ERotationMode::Euler, true)
 	ONCHANGED("SetRotation", "m_Rotation")
 END_METADATA
 
 BEGIN_METADATA(Transform, m_EulerRotation)
+	EDITABLE
 	EDITCONDITION("m_RotationMode", ERotationMode::Euler, true)
 	ONCHANGED("SetRotation", "m_EulerRotation")
+END_METADATA
+
+BEGIN_METADATA(Transform, m_Scale)
+	EDITABLE
+	
 END_METADATA
 
 BEGIN_METADATA(Transform, m_LocalMatrix)
@@ -281,15 +299,16 @@ BEGIN_METADATA(Transform, m_WorldMatrix)
 END_METADATA
 
 BEGIN_METADATA(Transform, m_Flags)
+	EDITABLE
 	NAME("PROP_BITFLAG")
 END_METADATA
 
 BEGIN_PROPERTIES(Transform)
-	REFLECT_PROPERTY(Transform, m_Position, "vec3", Engine::EPropertyType::Vector3, {})
-	REFLECT_PROPERTY(Transform, m_RotationMode, "ERotationMode", Engine::EPropertyType::Enum, {})
+	REFLECT_PROPERTY(Transform, m_Position, "vec3", Engine::EPropertyType::Vector3, Transform_m_Position_Meta)
+	REFLECT_PROPERTY(Transform, m_RotationMode, "ERotationMode", Engine::EPropertyType::Enum, Transform_m_RotationMode_Meta)
 	REFLECT_PROPERTY(Transform, m_Rotation, "quat", Engine::EPropertyType::Quaternion, Transform_m_Rotation_Meta)
 	REFLECT_PROPERTY(Transform, m_EulerRotation, "vec3", Engine::EPropertyType::Vector3, Transform_m_EulerRotation_Meta)
-	REFLECT_PROPERTY(Transform, m_Scale, "vec3", Engine::EPropertyType::Vector3, {})
+	REFLECT_PROPERTY(Transform, m_Scale, "vec3", Engine::EPropertyType::Vector3, Transform_m_Scale_Meta)
 	REFLECT_PROPERTY(Transform, m_LocalMatrix, "mat4", Engine::EPropertyType::Matrix4, Transform_m_LocalMatrix_Meta)
 	REFLECT_PROPERTY(Transform, m_WorldMatrix, "mat4", Engine::EPropertyType::Matrix4, Transform_m_WorldMatrix_Meta)
 	REFLECT_PROPERTY(Transform, m_Flags, "ETransformFlag", Engine::EPropertyType::BitFlag, Transform_m_Flags_Meta)
@@ -591,11 +610,19 @@ IMPLEMENT_CLASS(Model, Resource)
 #pragma endregion // CLASS: Model
 
 #pragma region CLASS: Skeleton
+BEGIN_METADATA(Skeleton, m_Bones)
+	CATEGORY("PROP_BONE")
+END_METADATA
+
 DECLARE_CONTAINER_INFO(Skeleton, m_Bones, "Bone", Engine::EPropertyType::Struct, Engine::LinearContainerAccessor<vector<Bone>, Bone>::Get())
+BEGIN_METADATA(Skeleton, m_BoneMap)
+	CATEGORY("PROP_BONE")
+END_METADATA
+
 DECLARE_MAP_INFO(Skeleton, m_BoneMap, "wstring", Engine::EPropertyType::Wstring, "uint32", Engine::EPropertyType::UInt32, Engine::MapAccessor<unordered_map<wstring, uint32>>::Get())
 BEGIN_PROPERTIES(Skeleton)
-	REFLECT_CONTAINER_PROPERTY(Skeleton, m_Bones, "vector<Bone>", Engine::EPropertyType::Array, &Skeleton_m_Bones_ContainerData, {})
-	REFLECT_CONTAINER_PROPERTY(Skeleton, m_BoneMap, "unordered_map<wstring, uint32>", Engine::EPropertyType::Map, &Skeleton_m_BoneMap_ContainerData, {})
+	REFLECT_CONTAINER_PROPERTY(Skeleton, m_Bones, "vector<Bone>", Engine::EPropertyType::Array, &Skeleton_m_Bones_ContainerData, Skeleton_m_Bones_Meta)
+	REFLECT_CONTAINER_PROPERTY(Skeleton, m_BoneMap, "unordered_map<wstring, uint32>", Engine::EPropertyType::Map, &Skeleton_m_BoneMap_ContainerData, Skeleton_m_BoneMap_Meta)
 END_PROPERTIES
 
 EMPTY_FUNCTIONS(Skeleton)
@@ -703,8 +730,7 @@ IMPLEMENT_CLASS(Layer, Base)
 #pragma region CLASS: GameObject
 DECLARE_CONTAINER_INFO(GameObject, m_Childs, "GameObject*", Engine::EPropertyType::Object, Engine::LinearContainerAccessor<vector<GameObject*>, GameObject*>::Get())
 BEGIN_METADATA(GameObject, m_Components)
-	EDITABLE
-	"PROP_COMPONENTS"
+	NAME("PROP_COMPONENTS")
 END_METADATA
 
 DECLARE_CONTAINER_INFO(GameObject, m_Components, "Component*", Engine::EPropertyType::Object, Engine::LinearContainerAccessor<vector<Component*>, Component*>::Get())
@@ -723,12 +749,6 @@ BEGIN_METADATA(GameObject, m_LayerIndex)
 	READONLY
 END_METADATA
 
-BEGIN_METADATA(GameObject, m_TagSet)
-	EDITABLE
-	"PROP_TAGS"
-END_METADATA
-
-DECLARE_CONTAINER_INFO(GameObject, m_TagSet, "wstring", Engine::EPropertyType::Wstring, Engine::SetAccessor<unordered_set<wstring>, wstring>::Get())
 BEGIN_METADATA(GameObject, m_Name)
 	EDITABLE
 	"PROP_NAME"
@@ -739,15 +759,23 @@ BEGIN_METADATA(GameObject, m_Flags)
 	"PROP_BITFLAG"
 END_METADATA
 
+BEGIN_METADATA(GameObject, m_TagSet)
+	EDITABLE
+	"PROP_TAGS"
+END_METADATA
+
+DECLARE_CONTAINER_INFO(GameObject, m_TagSet, "wstring", Engine::EPropertyType::Wstring, Engine::SetAccessor<unordered_set<wstring>, wstring>::Get())
 BEGIN_PROPERTIES(GameObject)
 	REFLECT_CONTAINER_PROPERTY(GameObject, m_Childs, "vector<GameObject*>", Engine::EPropertyType::Array, &GameObject_m_Childs_ContainerData, {})
 	REFLECT_CONTAINER_PROPERTY(GameObject, m_Components, "vector<Component*>", Engine::EPropertyType::Array, &GameObject_m_Components_ContainerData, GameObject_m_Components_Meta)
+	REFLECT_PROPERTY(GameObject, m_Transform, "Transform", Engine::EPropertyType::Object, {})
+	REFLECT_PROPERTY(GameObject, m_TempTransform, "Transform", Engine::EPropertyType::Object, {})
 	REFLECT_PROPERTY(GameObject, m_ID, "uint64", Engine::EPropertyType::UInt64, GameObject_m_ID_Meta)
 	REFLECT_PROPERTY(GameObject, m_Index, "uint32", Engine::EPropertyType::UInt32, GameObject_m_Index_Meta)
 	REFLECT_PROPERTY(GameObject, m_LayerIndex, "uint32", Engine::EPropertyType::UInt32, GameObject_m_LayerIndex_Meta)
-	REFLECT_CONTAINER_PROPERTY(GameObject, m_TagSet, "unordered_set<wstring>", Engine::EPropertyType::Set, &GameObject_m_TagSet_ContainerData, GameObject_m_TagSet_Meta)
 	REFLECT_PROPERTY(GameObject, m_Name, "wstring", Engine::EPropertyType::Wstring, GameObject_m_Name_Meta)
 	REFLECT_PROPERTY(GameObject, m_Flags, "EObjectFlag", Engine::EPropertyType::BitFlag, GameObject_m_Flags_Meta)
+	REFLECT_CONTAINER_PROPERTY(GameObject, m_TagSet, "unordered_set<wstring>", Engine::EPropertyType::Set, &GameObject_m_TagSet_ContainerData, GameObject_m_TagSet_Meta)
 END_PROPERTIES
 
 EMPTY_FUNCTIONS(GameObject)

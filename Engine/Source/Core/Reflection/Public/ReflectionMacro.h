@@ -18,8 +18,8 @@
 
 #define REFLECT_BASE() \
 public: \
-	static const Engine::TypeInfo& GetStaticType(); \
-	virtual const Engine::TypeInfo& GetType() const { return GetStaticType(); } \
+	static const Engine::TypeInfo& GetStaticTypeInfo(); \
+	virtual const Engine::TypeInfo& GetTypeInfo() const { return GetStaticTypeInfo(); } \
 	static constexpr std::span<const Engine::PropertyInfo> GetProperties() noexcept; \
 	REFLECT_CDO
 
@@ -27,9 +27,9 @@ public: \
 
 #define REFLECT_CLASS() \
 public: \
-	static const Engine::TypeInfo& GetStaticType(); \
+	static const Engine::TypeInfo& GetStaticTypeInfo(); \
 	static constexpr std::span<const Engine::PropertyInfo> GetProperties() noexcept; \
-	virtual const Engine::TypeInfo& GetType() const override { return GetStaticType(); } \
+	virtual const Engine::TypeInfo& GetTypeInfo() const override { return GetStaticTypeInfo(); } \
 	REFLECT_CDO
 
 #define BEGIN_METADATA(ClassName, PropName) \
@@ -132,11 +132,6 @@ public: \
 			} \
 		}(static_cast<ClassName*>(nullptr), dst, src); \
 	} \
-	void* ClassName::HeapNew() \
-	{ \
-		if constexpr (!std::is_abstract_v<ClassName>) return new ClassName(); \
-		return nullptr; \
-	} \
 	static constexpr Engine::TypeInfo ClassName##_TypeInfo = { \
 		Engine::CompileTimeHash(#ClassName), #ClassName, #ParentName, sizeof(ClassName), \
 		ClassName::GetProperties(), \
@@ -144,10 +139,9 @@ public: \
 		std::is_abstract_v<ClassName> ? nullptr : &ClassName::CreateCDO, \
 		std::is_abstract_v<ClassName> ? nullptr : &ClassName::DestroyCDO, \
 		std::is_abstract_v<ClassName> ? nullptr : &ClassName::CopyCDO, \
-		std::is_abstract_v<ClassName> ? nullptr : &ClassName::HeapNew, \
 		[](void* inst) { static_cast<ClassName*>(inst)->PostLoad(); } \
 	}; \
-	const Engine::TypeInfo& ClassName::GetStaticType() { return ClassName##_TypeInfo; } \
+	const Engine::TypeInfo& ClassName::GetStaticTypeInfo() { return ClassName##_TypeInfo; } \
 	namespace { \
 		struct AutoRegister_##ClassName { \
 			AutoRegister_##ClassName() { \

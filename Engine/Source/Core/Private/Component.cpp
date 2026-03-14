@@ -21,4 +21,10 @@ void Component::Free()
 }
 #pragma endregion
 
+#pragma region Save&Load
+void Component::Serialize(Archive& ar)
+{
+	SerializationHelper::SerializeReflectionProperties(ar, &GetTypeInfo(), this);
+}
+#pragma endregion
 

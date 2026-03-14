@@ -371,3 +371,11 @@ void Transform::LookAt(const vec3& target, const vec3& up)
 	SetDirty();
 }
 #pragma endregion
+
+#pragma region Save&Load
+void Transform::Serialize(Archive& ar)
+{
+	SerializationHelper::SerializeReflectionProperties(ar, &GetTypeInfo(), this);
+}
+#pragma endregion
+

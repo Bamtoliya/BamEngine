@@ -299,6 +299,7 @@ void GlazeArchiveBase::Process(string_view key, wstring& v)
 	}
 }
 
+TODO("vec타입과 mat타입 들이 전부 수직으로 적어지고있는데 이를 눈에 보기좋은 수평형태로 바꿔야할듯")
 void GlazeArchiveBase::Process(string_view key, glm::vec2& v)
 {
 	auto* currentTop = m_ScopeStack.top();

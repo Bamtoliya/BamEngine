@@ -47,7 +47,6 @@ enum class ERotationMode : uint8
 {
 	Euler,
 	QuaternionXYZW,
-	QuaternionWXYZ
 };
 #pragma endregion
 
@@ -158,22 +157,29 @@ public:
 	void LookAt(const vec3& target, const vec3& up = glm::vec3(0, 1, 0));
 #pragma endregion
 
+
+#pragma region Save&Load
+public:
+	virtual void Serialize(Archive& ar) override;
+#pragma endregion
+
+
 #pragma region Variable
 private:
 
-	PROPERTY()
+	PROPERTY(EDITABLE)
 	vec3 m_Position = vec3(0.0f);
 
-	PROPERTY()
+	PROPERTY(EDITABLE)
 	ERotationMode m_RotationMode = ERotationMode::Euler;
 
-	PROPERTY(EDITCONDITION("!m_RotationMode", ERotationMode::Euler, true), ONCHANGED("SetRotation", "m_Rotation"))
+	PROPERTY(EDITABLE, EDITCONDITION("!m_RotationMode", ERotationMode::Euler, true), ONCHANGED("SetRotation", "m_Rotation"))
 	quat m_Rotation = glm::identity<quat>();
 
-	PROPERTY(EDITCONDITION("m_RotationMode", ERotationMode::Euler, true), ONCHANGED("SetRotation", "m_EulerRotation"))
+	PROPERTY(EDITABLE, EDITCONDITION("m_RotationMode", ERotationMode::Euler, true), ONCHANGED("SetRotation", "m_EulerRotation"))
 	vec3 m_EulerRotation = vec3(0.f);
 
-	PROPERTY()
+	PROPERTY(EDITABLE,)
 	vec3 m_Scale = vec3(1.0f);
 
 	PROPERTY(NAME("PROP_LOCALMATRIX"), READONLY)
@@ -182,7 +188,7 @@ private:
 	PROPERTY(NAME("PROP_WORLDMATRIX"), READONLY)
 	mat4 m_WorldMatrix = glm::identity<mat4>();
 
-	PROPERTY(NAME("PROP_BITFLAG"))
+	PROPERTY(EDITABLE, NAME("PROP_BITFLAG"))
 	ETransformFlag m_Flags = ETransformFlag::Default;
 #pragma endregion
 

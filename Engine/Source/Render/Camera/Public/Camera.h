@@ -3,8 +3,6 @@
 #include "Component.h"
 #include "ReflectionMacro.h"
 
-
-
 struct tagCameraBuffer
 {
 	mat4 viewMatrix;
@@ -14,8 +12,7 @@ struct tagCameraBuffer
 	float time;
 };
 
-BEGIN(Engine)
-struct ENGINE_API tagCameraDesc : public tagComponentDesc
+struct tagCameraDesc : public tagComponentDesc
 {
 	bool IsPerspective = { true };
 	f32 FOV = { 60.f };
@@ -24,6 +21,9 @@ struct ENGINE_API tagCameraDesc : public tagComponentDesc
 	f32 Aspect = { 1.777f };
 	f32 OrthoSize = { 10.f };
 };
+
+
+BEGIN(Engine)
 CLASS()
 class ENGINE_API Camera final : public Component
 {

@@ -1,16 +1,17 @@
 ﻿#pragma once
 
 #include "Engine_Includes.h"
+#include "ReflectionTypes.h"
 
 BEGIN(Engine)
-
 class ENGINE_API Base
 {
 protected:
-	Base() {};
+	Base() {}
 	virtual ~Base() = default;
 public:
 	virtual void Free() {}
+	virtual const TypeInfo& GetTypeInfo() const { static const TypeInfo emptyTypeInfo = {}; return emptyTypeInfo; }
 	int32 AddRef()
 	{
 		return ++m_RefCount;

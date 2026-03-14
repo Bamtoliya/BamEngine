@@ -65,11 +65,22 @@ public:
 	void SetDirty(bool dirty = true) { m_Dirty = dirty; }
 #pragma endregion
 
+#pragma region Save&Load
+public:
+	virtual void Serialize(Archive& ar) override;
+	virtual void Deserialize(Archive& ar) override { Serialize(ar); }
+#pragma endregion
+
+
 #pragma region Variable
 protected:
+	PROPERTY()
 	bool m_Active = { true };
+	PROPERTY()
 	bool m_Dirty = { false };
+	PROPERTY()
 	wstring m_Tag = { L"" };
+
 	GameObject* m_Owner = { nullptr };
 #pragma endregion
 };

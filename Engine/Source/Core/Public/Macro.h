@@ -122,3 +122,30 @@ int32_t ClassName::Destroy()							\
 
 #define DEFAULT_PPU 1.f
 #define GRAVITY -9.81f
+
+/*****************************************************************************/
+// 문자열 변환을 위한 보조 매크로
+#define TODO_STR2(x) #x
+#define TODO_STR1(x) TODO_STR2(x)
+
+// 1. 컴파일러 출력창(Terminal)에 메시지를 띄우는 매크로
+// 출력창의 메시지를 클릭하면 해당 라인으로 바로 이동할 수 있습니다.
+
+#if defined(_MSC_VER)
+	// MSVC: "파일경로(라인번호) : 키워드: 메시지" 형식으로 출력하여 더블클릭 이동 지원
+#define TODO(msg)  __pragma(message(__FILE__ "(" TODO_STR1(__LINE__) ") : TODO: " msg))
+#define FIXME(msg) __pragma(message(__FILE__ "(" TODO_STR1(__LINE__) ") : FIXME: " msg))
+#elif defined(__GNUC__) || defined(__clang__)
+	// GCC/Clang: _Pragma를 이용한 메시지 출력
+#define DO_PRAGMA(x) _Pragma(#x)
+#define TODO(msg)  DO_PRAGMA(message ("TODO: " msg))
+#define FIXME(msg) DO_PRAGMA(message ("FIXME: " msg))
+#else
+#define TODO(msg)
+#define FIXME(msg)
+#endif
+
+// 2. 컴파일을 중단시키는 강력한 리마인더 (C++17 static_assert 활용)
+// 구현이 누락되면 빌드 자체가 안 되게 막아줍니다.
+#define TODO_ERROR(msg)  static_assert(false, "CRITICAL TODO: " msg)
+#define FIXME_ERROR(msg) static_assert(false, "CRITICAL FIXME: " msg)

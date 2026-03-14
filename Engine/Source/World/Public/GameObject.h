@@ -212,10 +212,16 @@ protected:
 	PROPERTY()
 	vector<GameObject*> m_Childs = {};
 
-	PROPERTY(EDITABLE, "PROP_COMPONENTS")
+	PROPERTY(NAME("PROP_COMPONENTS"))
 	vector<Component*> m_Components = {};
 
+
+	PROPERTY()
 	Transform* m_Transform = { nullptr };
+	
+	TODO("임시 테스트용 객체입니다 나중에 꼭 지우세요.")
+	PROPERTY()
+	Transform* m_TempTransform = { nullptr };
 
 	PROPERTY(CATEGORY("PROP_INFORMATION"), READONLY)
 	uint64 m_ID = { 0 };
@@ -226,14 +232,14 @@ protected:
 	PROPERTY(CATEGORY("PROP_INFORMATION"), READONLY)
 	uint32 m_LayerIndex = { static_cast<uint32>(-1) };
 
-	PROPERTY(EDITABLE, "PROP_TAGS")
-	unordered_set<wstring> m_TagSet = {};
-
-	PROPERTY(EDITABLE,"PROP_NAME")
+	PROPERTY(EDITABLE, "PROP_NAME")
 	wstring m_Name = { L"GameObject" };
 
 	PROPERTY(EDITABLE, "PROP_BITFLAG")
 	EObjectFlag m_Flags = { EObjectFlag::Default };
+
+	PROPERTY(EDITABLE, "PROP_TAGS")
+	unordered_set<wstring> m_TagSet = {};
 #pragma endregion
 
 };

@@ -355,8 +355,7 @@ void GameObject::SetLayerIndex(uint32 layerIndex)
 #pragma region Save&Load
 void GameObject::Serialize(Archive& ar)
 {
-	const TypeInfo* typeInfo = ReflectionRegistry::Get().GetType("GameObject");
-	SerializationHelper::SerializeReflectionProperties(ar, typeInfo, this);
+	SerializationHelper::SerializeReflectionProperties(ar, &GetTypeInfo(), this);
 }
 #pragma endregion
 

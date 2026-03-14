@@ -26,11 +26,11 @@ void InspectorPanel::Draw()
 	{
 		if (selectedObject)
 		{
-			DrawProperties(selectedObject, selectedObject->GetType());
+			DrawProperties(selectedObject, selectedObject->GetTypeInfo());
 			const vector<Component*>& components = selectedObject->GetAllComponents();
 			for (Component* component : components)
 			{
-				if (DrawProperties(component, component->GetType()))
+				if (DrawProperties(component, component->GetTypeInfo()))
 				{
 					component->SetDirty();
 				}

@@ -247,17 +247,47 @@ private:
 		case Engine::EPropertyType::BitFlag: return ar.ProcessEnum(propName, valuePtr, size);
 		case Engine::EPropertyType::Object:
 		{
-			void* objectInstance = *static_cast<void**>(valuePtr);
-			if (!objectInstance) break; // nullptr 포인터 안전 처리
+			void** objectInstance = static_cast<void**>(valuePtr);
 
-			if (ar.PushScope(propName))
+			bool isInline = propName.empty();
+			bool scopePushed = isInline ? true : ar.PushScope(propName.data());
+			if (scopePushed)
 			{
-				const TypeInfo* InnerTypeInfo = ReflectionRegistry::Get().GetType(NormalizeTypeName(varInfo.Name));
-				if (InnerTypeInfo)
+				string instanceTypeName = NormalizeTypeName(varInfo.Name);
+				if (ar.IsWriting())
 				{
-					SerializeReflectionProperties(ar, InnerTypeInfo, objectInstance);
+					if(*objectInstance)
+					{
+						Base* polyObj = static_cast<Engine::Base*>(*objectInstance);
+						string actualTypeName = polyObj->GetTypeInfo().Name.data();
+						ar.Process("__Type__", actualTypeName);
+						SerializeReflectionProperties(ar, &polyObj->GetTypeInfo(), *objectInstance);
+					}
 				}
-				ar.PopScope();
+				else
+				{
+					string loadedTypeName;
+					ar.Process("__Type__", loadedTypeName);
+
+					if (loadedTypeName.empty())
+					{
+						loadedTypeName = instanceTypeName;
+					}
+					if (*objectInstance == nullptr)
+					{
+						*objectInstance = ReflectionRegistry::Get().CreateInstance(loadedTypeName);
+					}
+
+					if (*objectInstance)
+					{
+						const TypeInfo* actualTypeInfo = ReflectionRegistry::Get().GetType(loadedTypeName);
+						if (actualTypeInfo)
+						{
+							SerializeReflectionProperties(ar, actualTypeInfo, *objectInstance);
+						}
+					}
+				}
+				if(!isInline) ar.PopScope();
 			}
 			break;
 		}
