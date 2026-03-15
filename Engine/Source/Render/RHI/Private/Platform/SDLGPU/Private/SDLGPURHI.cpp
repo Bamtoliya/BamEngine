@@ -34,7 +34,11 @@ EResult SDLGPURHI::Initialize(void* arg)
 
 		m_SwapChainHeight = desc->Height;
 		m_SwapChainWidth = desc->Width;
-		m_BackBuffer = SDLGPUTexture::Create(this, {}, false);
+		tagRHITextureDesc backBufferDesc = {};
+		backBufferDesc.Width = m_SwapChainWidth;
+		backBufferDesc.Height = m_SwapChainHeight;
+
+		m_BackBuffer = SDLGPUTexture::Create(this, backBufferDesc, false);
 	}
 	return EResult::Success;
 }

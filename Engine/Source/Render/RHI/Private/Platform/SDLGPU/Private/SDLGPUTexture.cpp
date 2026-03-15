@@ -7,7 +7,7 @@
 
 EResult SDLGPUTexture::Initialize(const tagRHITextureDesc& desc)
 {
-	if (desc.Format == ETextureFormat::UNKNOWN && !m_IsOwned) return EResult::Success;
+	if (desc.Format == ETextureFormat::UNKNOWN || !m_IsOwned) return EResult::Success;
 
 	m_Width = desc.Width;
 	m_Height = desc.Height;
