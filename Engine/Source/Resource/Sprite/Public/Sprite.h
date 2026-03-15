@@ -61,7 +61,7 @@ public:
 
 #pragma region Member Variable
 private:
-	PROPERTY()
+	PROPERTY(NOSERIALIZE)
 	Texture* m_Texture = { nullptr };
 
 	PROPERTY()

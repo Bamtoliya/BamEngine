@@ -91,7 +91,7 @@ protected:
 	PROPERTY(CATEGORY("PROP_INFORMATION"))
 	uint32 m_RenderPassID = { INVALID_PASS_ID };
 
-	PROPERTY()
+	PROPERTY(EDITABLE)
 	vector<MaterialInstance*> m_MaterialInstances;
 #pragma endregion
 };

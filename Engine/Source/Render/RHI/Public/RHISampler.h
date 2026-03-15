@@ -29,6 +29,45 @@ struct tagRHISamplerDesc
 	ESamplerAddressMode AddressW = ESamplerAddressMode::Wrap;
 	uint32 MaxAnisotropy = 1;
 	vec4 BorderColor = vec4{ 0.0f, 0.0f, 0.0f, 0.0f };
+
+	bool operator==(const tagRHISamplerDesc& other) const
+	{
+		return MinFilter == other.MinFilter &&
+			MagFilter == other.MagFilter &&
+			MipFilter == other.MipFilter &&
+			AddressU == other.AddressU &&
+			AddressV == other.AddressV &&
+			AddressW == other.AddressW &&
+			MaxAnisotropy == other.MaxAnisotropy &&
+			BorderColor == other.BorderColor;
+	}
+};
+
+
+
+template<>
+struct hash<tagRHISamplerDesc>
+{
+	size_t operator()(const tagRHISamplerDesc& desc) const
+	{
+		size_t seed = 0;
+
+		HashCombine(seed, hash<int>()((int)desc.MinFilter));
+		HashCombine(seed, hash<int>()((int)desc.MagFilter));
+		HashCombine(seed, hash<int>()((int)desc.MipFilter));
+		HashCombine(seed, hash<int>()((int)desc.AddressU));
+		HashCombine(seed, hash<int>()((int)desc.AddressV));
+		HashCombine(seed, hash<int>()((int)desc.AddressW));
+		HashCombine(seed, hash<uint32>()(desc.MaxAnisotropy));
+
+
+		HashCombine(seed, hash<float>()(desc.BorderColor.x));
+		HashCombine(seed, hash<float>()(desc.BorderColor.y));
+		HashCombine(seed, hash<float>()(desc.BorderColor.z));
+		HashCombine(seed, hash<float>()(desc.BorderColor.w));
+
+		return seed;
+	}
 };
 
 BEGIN(Engine)

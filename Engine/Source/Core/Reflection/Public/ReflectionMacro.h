@@ -177,6 +177,7 @@ public: \
 #define RANGE(...) {Engine::CompileTimeHash("Range"), Engine::MetaRange{ __VA_ARGS__ }},
 #define COLOR(r, g, b, a)	{Engine::CompileTimeHash("Color"), Engine::MetaColor{ vec4(r, g, b, a) }},
 #define EDITABLE			{Engine::CompileTimeHash("Editable"), true},
+#define NOSERIALIZE			{Engine::CompileTimeHash("NoSerialize"), true},
 #define READONLY			{Engine::CompileTimeHash("ReadOnly"), true},
 #define FILEPATH(filter)	{Engine::CompileTimeHash("FilePath"), filter},
 #define DIRECTORY			{Engine::CompileTimeHash("Directory"), true},

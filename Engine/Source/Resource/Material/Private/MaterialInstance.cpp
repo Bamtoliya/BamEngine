@@ -64,7 +64,7 @@ EResult MaterialInstance::Bind(uint32 slot)
 		RHITexture* texture = baseSlot.texture;
 		if (!texture)
 			texture = ResourceManager::Get().GetTexture(L"Magenta1x1")->GetRHITexture();
-		RHISampler* sampler = SamplerManager::Get().GetSampler(baseSlot.SamplerKey);
+		RHISampler* sampler = baseSlot.sampler;
 		if (!sampler)
 			sampler = SamplerManager::Get().GetDefaultSampler();
 		rhi->BindTextureSampler(texture, sampler, baseSlot.slot);
@@ -76,7 +76,7 @@ EResult MaterialInstance::Bind(uint32 slot)
 		RHITexture* texture = textureSlot.texture;
 		if (!texture)
 			texture = ResourceManager::Get().GetTexture(L"Magenta1x1")->GetRHITexture();
-		RHISampler* sampler = SamplerManager::Get().GetSampler(textureSlot.SamplerKey);
+		RHISampler* sampler = textureSlot.sampler;
 		if (!sampler)
 			sampler = SamplerManager::Get().GetDefaultSampler();
 		rhi->BindTextureSampler(texture, sampler, textureSlot.slot);

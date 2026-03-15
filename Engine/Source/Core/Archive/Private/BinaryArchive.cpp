@@ -122,10 +122,10 @@ void BinaryArchive::Process(string_view key, string& v)
 	if (IsWriting())
 	{
 		uint32 strLen = static_cast<uint32>(v.size());
-		uint32 totalPayloadSize = sizeof(uint32) + strLen; // 문자열 길이(4바이트) + 실제 문자열 버퍼
+		uint32 totalPayloadSize = sizeof(uint32) + strLen;
 
 		if (!key.empty() && !IsCurrentSequential()) {
-			WriteNodeHeader(key, EBinTag::Value, static_cast<uint8>(EPropertyType::String), totalPayloadSize);
+			WriteNodeHeader(key, EBinTag::Value, static_cast<uint8>(Engine::EPropertyType::String), totalPayloadSize);
 		}
 		WriteRaw(&strLen, sizeof(uint32));
 		if (strLen > 0) WriteRaw(v.data(), strLen);
@@ -138,7 +138,18 @@ void BinaryArchive::Process(string_view key, string& v)
 			auto it = m_ReadScopeStack.top().Index.find(keyHash);
 
 			if (it != m_ReadScopeStack.top().Index.end()) {
+				const BinNodeHeader& header = it->second.Header;
+
+				if (header.ValueType != static_cast<uint8>(Engine::EPropertyType::String)) {
+					v.clear(); return;
+				}
+
 				size_t offset = it->second.PayloadOffset;
+
+				if (offset + sizeof(uint32) > m_Buffer.size()) {
+					v.clear(); return;
+				}
+
 				uint32 strLen = 0;
 				std::memcpy(&strLen, m_Buffer.data() + offset, sizeof(uint32));
 				offset += sizeof(uint32);
@@ -169,15 +180,50 @@ void BinaryArchive::Process(string_view key, wstring& v)
 		uint32 totalPayloadSize = sizeof(uint32) + strLen;
 
 		if (!key.empty() && !IsCurrentSequential()) {
-			WriteNodeHeader(key, EBinTag::Value, static_cast<uint8>(EPropertyType::Wstring), totalPayloadSize);
+			WriteNodeHeader(key, EBinTag::Value, static_cast<uint8>(Engine::EPropertyType::Wstring), totalPayloadSize);
 		}
 		WriteRaw(&strLen, sizeof(uint32));
 		if (strLen > 0) WriteRaw(utf8.data(), strLen);
 	}
 	else {
-		string utf8;
-		Process(key, utf8);
-		v = Engine::StrToWStr(utf8);
+		if (!key.empty() && !IsCurrentSequential()) {
+			if (m_ReadScopeStack.empty()) return;
+			uint64 keyHash = RunTimeHash(key);
+			auto it = m_ReadScopeStack.top().Index.find(keyHash);
+
+			if (it != m_ReadScopeStack.top().Index.end()) {
+				const BinNodeHeader& header = it->second.Header;
+
+				if (header.ValueType != static_cast<uint8>(Engine::EPropertyType::Wstring)) {
+					v.clear(); return;
+				}
+
+				size_t offset = it->second.PayloadOffset;
+				if (offset + sizeof(uint32) > m_Buffer.size()) {
+					v.clear(); return;
+				}
+
+				uint32 strLen = 0;
+				std::memcpy(&strLen, m_Buffer.data() + offset, sizeof(uint32));
+				offset += sizeof(uint32);
+
+				if (strLen > 0 && offset + strLen <= m_Buffer.size()) {
+					string utf8(reinterpret_cast<const char*>(m_Buffer.data() + offset), strLen);
+					v = Engine::StrToWStr(utf8);
+				}
+				else { v.clear(); }
+			}
+		}
+		else {
+			uint32 strLen = 0;
+			ReadRaw(&strLen, sizeof(uint32));
+			if (strLen > 0 && m_Cursor + strLen <= m_Buffer.size()) {
+				string utf8(reinterpret_cast<const char*>(m_Buffer.data() + m_Cursor), strLen);
+				v = Engine::StrToWStr(utf8);
+				m_Cursor += strLen;
+			}
+			else { v.clear(); }
+		}
 	}
 }
 
@@ -236,6 +282,37 @@ void BinaryArchive::ProcessEnum(string_view key, void* enumPtr, size_t size)
 		else {
 			if (m_Cursor + size <= m_Buffer.size()) {
 				std::memcpy(enumPtr, m_Buffer.data() + m_Cursor, size);
+				m_Cursor += size;
+			}
+		}
+	}
+}
+
+void BinaryArchive::ProcessRaw(string_view key, const void* data, size_t size)
+{
+	if (IsWriting())
+	{
+		if (!key.empty() && !IsCurrentSequential()) {
+			WriteNodeHeader(key, EBinTag::Value, static_cast<uint8>(Engine::EPropertyType::None), static_cast<uint32>(size));
+		}
+		WriteRaw(data, size);
+	}
+	else
+	{
+		if (!key.empty() && !IsCurrentSequential()) {
+			if (m_ReadScopeStack.empty()) return;
+			uint64 keyHash = RunTimeHash(key);
+			auto it = m_ReadScopeStack.top().Index.find(keyHash);
+			if (it != m_ReadScopeStack.top().Index.end() && it->second.Header.Tag == static_cast<uint8>(EBinTag::Value)) {
+				const BinNodeHeader& header = it->second.Header;
+				if (header.ValueType == static_cast<uint8>(Engine::EPropertyType::None) && header.PayloadSize == size) {
+					std::memcpy(const_cast<void*>(data), m_Buffer.data() + it->second.PayloadOffset, size);
+				}
+			}
+		}
+		else {
+			if (m_Cursor + size <= m_Buffer.size()) {
+				std::memcpy(const_cast<void*>(data), m_Buffer.data() + m_Cursor, size);
 				m_Cursor += size;
 			}
 		}

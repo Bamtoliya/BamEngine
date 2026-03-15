@@ -2,6 +2,10 @@
 
 #include "ReflectionRegistry.h"
 
+#ifdef new
+#undef new
+#endif
+
 IMPLEMENT_LAZY_SINGLETON(ReflectionRegistry)
 
 void ReflectionRegistry::Free()
@@ -165,10 +169,13 @@ bool ReflectionRegistry::IsPropertyDefault(const void* instance, const TypeInfo&
 #pragma region Constructor Management
 void* ReflectionRegistry::CreateInstance(uint64 hash) const 
 {
-	auto it = m_Constructors.find(hash);
-	if (it != m_Constructors.end())
+	const TypeInfo* typeInfo = GetType(hash);
+	if (typeInfo && typeInfo->Create)
 	{
-		return it->second();
+		typeInfo->Size;
+		void* instance = ::operator new(typeInfo->Size);
+		typeInfo->Create(instance);
+		return instance;
 	}
 
 	TODO("CreateInstance 구현해야함");

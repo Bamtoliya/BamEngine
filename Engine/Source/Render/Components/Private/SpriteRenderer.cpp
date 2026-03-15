@@ -106,6 +106,8 @@ EResult SpriteRenderer::SetSprite(Sprite* sprite)
 		Safe_Release(m_Sprite);
 	m_Sprite = sprite;
 	Safe_AddRef(m_Sprite);
+	m_SpriteTag = m_Sprite->GetTag();
+	m_SpritePath = m_Sprite->GetPath();
 
 	if (IsFailure(UpdateMesh()))
 		return EResult::Fail;
@@ -120,7 +122,19 @@ EResult SpriteRenderer::SetSprite(Texture* texture)
 	tagSpriteCreateDesc desc;
 	desc.Texture = texture;
 	//ResourceManager::Get().LoadSprite()
-	m_Sprite = Sprite::Create(&desc);
+	
+	ResourceManager& resourceManager = ResourceManager::Get();
+	wstring textureTag = desc.Texture->GetTag();
+	if (IsFailure(resourceManager.LoadSprite(textureTag, &desc)))
+	{
+		return EResult::Fail;
+	}
+	m_Sprite = resourceManager.GetSprite(textureTag);
+	m_SpriteTag = m_Sprite->GetTag();
+	m_SpritePath = m_Sprite->GetPath();
+	
+	if (m_Sprite)
+		m_SpriteTag = m_Sprite->GetTag();
 	if (IsFailure(UpdateMesh()))
 		return EResult::Fail;
 	if (IsFailure(UpdateMaterialInstance()))
@@ -205,4 +219,13 @@ EResult SpriteRenderer::UpdateMaterialInstance()
 }
 #pragma endregion
 
+#pragma region Save&Load
 
+#pragma endregion
+
+void SpriteRenderer::Deserialize(Archive& ar)
+{
+	ResourceManager& resourceManager = ResourceManager::Get();
+	resourceManager.LoadTexture(m_SpriteTag, m_SpritePath);
+	SetSprite(resourceManager.GetTexture(m_SpriteTag));
+}

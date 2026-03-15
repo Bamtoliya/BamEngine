@@ -45,6 +45,8 @@ public:
 	EResult AddImGuiPanel(ImGuiInterface* panel);
 	EResult RemoveImGuiPanel(ImGuiInterface* panel);
 public:
+	ImGuiInterface* GetImGuiPanel(const wstring& name);
+	vector<ImGuiInterface*> GetImGuiPanels(const wstring& name);
 	const vector<ImGuiInterface*>& GetImGuiPanels() const { return m_ImGuiPanels; }
 private:
 	EResult CreateDefaultPanels();

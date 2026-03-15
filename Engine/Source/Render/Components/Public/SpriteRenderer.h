@@ -47,27 +47,38 @@ public:
 public:
 	EResult SetSprite(Sprite* sprite);
 	EResult SetSprite(Texture* texture);
-	EResult SetPivot(vec2 pivot);
-	EResult SetTiling(vec2 tiling);
+	//EResult SetPivot(vec2 pivot);
+	EResult SetTiling(vec2 tiling) { m_Tiling = tiling; return EResult::Success; }
 private:
 	EResult UpdateMesh();
 	EResult UpdateMaterialInstance();
 #pragma endregion
 
+#pragma region Save&Load
+public:
+	virtual void Deserialize(Archive& ar) override;
+#pragma endregion
+
+
 #pragma region Variable
 private:
-	PROPERTY(DEFAULT(vec2(1.f, 1.f)))
+	PROPERTY(READONLY)
+	wstring m_SpriteTag = L"";
+	PROPERTY(READONLY)
+	wstring m_SpritePath = L"";
+
+	PROPERTY(EDITABLE, DEFAULT(vec2(1.f, 1.f)))
 	vec2 m_Tiling = { 1.f, 1.f };
 
 	Mesh* m_Mesh = { nullptr };
 
-	PROPERTY()
+	PROPERTY(EDITABLE, NOSERIALIZE)
 	Sprite* m_Sprite = { nullptr };
 
 	PROPERTY(CATEGORY("DETAIL"), READONLY)
 	uint32 m_CachedSpriteVersion = { 0 };
 
-	PROPERTY()
+	PROPERTY(EDITABLE)
 	EDrawMode m_DrawMode = EDrawMode::Simple;
 #pragma endregion
 

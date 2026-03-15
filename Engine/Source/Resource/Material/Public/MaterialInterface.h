@@ -17,7 +17,7 @@ struct TextureSlot
 	PROPERTY()
 	RHITexture* texture = { nullptr };
 	PROPERTY()
-	wstring SamplerKey = {};
+	RHISampler* sampler = { nullptr };
 
 	bool operator==(const TextureSlot& other) const = default;
 };

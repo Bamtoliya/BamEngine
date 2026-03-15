@@ -40,6 +40,8 @@ public:
 #pragma endregion
 
 #pragma region CDO Management
+private:
+	void EnsureCDO(const TypeInfo& type);
 public:
 	vector<uint8>* GetCDO(uint64 hash);
 	vector<uint8>* GetCDO(const string& name);
@@ -47,21 +49,11 @@ public:
 	bool ResetPropertyToDefault(void* instance, const TypeInfo& type, const PropertyInfo& prop);
 	bool ResetObjectToDefault(void* instance, const TypeInfo& type);
 	bool IsPropertyDefault(const void* instance, const TypeInfo& type, const PropertyInfo& prop);
-private:
-	void EnsureCDO(const TypeInfo& type);
 #pragma endregion
 
 #pragma region Constructor Management
-public:
-	template<typename T>
-	void RegisterConstructor(uint64 hash)
-	{
-		m_Constructors[hash] = []() -> void* { return new T(); };
-	}
 	void* CreateInstance(uint64 hash) const;
 	void* CreateInstance(const string& name) const;
-
-
 #pragma endregion
 
 
@@ -71,7 +63,6 @@ private:
 	unordered_map<uint64, const TypeInfo*> m_Types;
 	unordered_map<uint64, const EnumInfo*> m_Enums;
 	unordered_map<uint64, const FunctionInfo*> m_Functions;
-	unordered_map<uint64, function<void*()>> m_Constructors;
 	unordered_map<uint64, vector<uint8>> m_CDOs;
 #pragma endregion
 };

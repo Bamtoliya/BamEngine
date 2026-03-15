@@ -299,7 +299,7 @@ void GlazeArchiveBase::Process(string_view key, wstring& v)
 	}
 }
 
-TODO("vec타입과 mat타입 들이 전부 수직으로 적어지고있는데 이를 눈에 보기좋은 수평형태로 바꿔야할듯")
+TODO("vec타입과 mat타입 들이 전부 수직으로 적어지고있는데 이를 눈에 보기좋은 포맷으로 바꾸면 좋을듯")
 void GlazeArchiveBase::Process(string_view key, glm::vec2& v)
 {
 	auto* currentTop = m_ScopeStack.top();
@@ -513,6 +513,35 @@ void GlazeArchiveBase::ProcessEnum(string_view key, void* enumPtr, size_t size)
 			case 2: *static_cast<uint16*>(enumPtr) = static_cast<uint16>(val); break;
 			case 4: *static_cast<uint32*>(enumPtr) = static_cast<uint32>(val); break;
 			case 8: *static_cast<uint64*>(enumPtr) = static_cast<uint64>(val); break;
+			}
+		}
+	}
+}
+
+void GlazeArchiveBase::ProcessRaw(string_view key, const void* data, size_t size)
+{
+	auto* currentTop = m_ScopeStack.top();
+	string keyStr(key);
+	if (IsWriting())
+	{
+		std::string base64Str = cppcodec::base64_rfc4648::encode(static_cast<const uint8_t*>(data), size);
+		(*currentTop)[keyStr] = base64Str;
+	}
+	else if (IsReading() && currentTop->is_object())
+	{
+		auto& obj = currentTop->get_object();
+		auto it = obj.find(keyStr);
+
+		if (it != obj.end() && it->second.is_string())
+		{
+			std::string base64Str = it->second.get_string();
+			std::vector<uint8_t> decodedData = cppcodec::base64_rfc4648::decode<std::vector<uint8_t>>(base64Str);
+			size_t copySize = std::min(size, decodedData.size());
+			std::memcpy(const_cast<void*>(data), decodedData.data(), copySize);
+
+			if (copySize != size) 
+			{
+				ENGINE_LOG_WARN("GlazeArchiveBase::ProcessRaw - Decoded data size ({}) does not match expected size ({}). Data may be truncated.", decodedData.size(), size);
 			}
 		}
 	}

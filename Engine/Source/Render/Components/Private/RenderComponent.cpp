@@ -11,7 +11,7 @@
 void RenderComponent::LateUpdate(f32 dt)
 {
 	__super::LateUpdate(dt);
-	if (m_Active && m_Owner->IsActive() && m_Owner->IsVisible())
+	if (m_Active && m_Owner && m_Owner->IsActive() && m_Owner->IsVisible())
 	{
 		const auto& activePasses = Renderer::Get().GetActiveViewportCameras();
 		for (const auto& passInfo : activePasses)

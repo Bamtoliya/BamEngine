@@ -33,12 +33,15 @@ public:
 	void Process(string_view key, glm::mat3& v) override;
 	void Process(string_view key, glm::mat4& v) override;
 public:
+	void ProcessRaw(string_view key, const void* data, size_t size) override;
+public:
 	void ProcessEnum(string_view key, void* enumPtr, size_t size) override;
 public:
 	size_t BeginArray(string_view key) override;
 	void EndArray() override;
 	void BeginArrayElement() override;
 	void EndArrayElement() override;
+public:
 	size_t BeginMap(string_view key) override;
 	void EndMap() override;
 	void BeginMapElement(string& outKey) override;

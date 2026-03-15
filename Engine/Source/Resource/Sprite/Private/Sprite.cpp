@@ -19,6 +19,7 @@ EResult Sprite::Initialize(void* arg)
 		{
 			m_Texture = desc->Texture;
 			Safe_AddRef(m_Texture);
+			
 		}
 		else if (!desc->TexturePath.empty())
 		{
@@ -27,12 +28,15 @@ EResult Sprite::Initialize(void* arg)
 				return EResult::Fail;
 			}
 			Texture* texture = ResourceManager::Get().GetTexture(m_Tag);
+			
 			if (texture)
 			{
 				m_Texture = texture;
 				Safe_AddRef(m_Texture);
 			}
 		}
+		
+		m_Path = m_Texture->GetPath();
 		m_Region = desc->Region;
 		m_Pivot = desc->Pivot;
 	}

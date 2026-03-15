@@ -112,6 +112,19 @@ public:
 	void RegisterExplicitLoader();
 #pragma endregion
 
+
+#pragma region Save & Load
+public:
+	EResult SaveToJsonFile(Resource* resource, const wstring& filePath);
+	EResult SaveToBeveFile(Resource* resource, const wstring& filePath);
+	EResult SaveToBinaryFile(Resource* resource, const wstring& filePath);
+public:
+	EResult LoadFromJsonFile(const wstring& filePath);
+	EResult LoadFromBeveFile(const wstring& filePath);
+	EResult LoadFromBinaryFile(const wstring& filePath);
+#pragma endregion
+
+
 #pragma region Helper Functions
 private:
 	template<typename T>
@@ -132,13 +145,7 @@ private:
 	}
 #pragma endregion
 
-#ifdef _DEBUG
-#pragma region Test
-	void CreateQuadMesh();
-#pragma endregion
-#endif
-
-#pragma region Variable
+#pragma region Member Variables
 private:
 	unordered_map<wstring, class Mesh*>		m_Meshes;
 	unordered_map<wstring, class Model*>	m_Models;

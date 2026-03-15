@@ -27,8 +27,8 @@ struct tagRHIPipelineDesc
 	class RHIShader* DomainShader = nullptr;
 
 	uint32 ColorAttachmentCount = 1;
-	ERenderTargetFormat ColorAttachmentFormats[MAX_RENDER_TARGET_COUNT] = { ERenderTargetFormat::RTF_RGBA8, };
-	ERenderTargetFormat DepthStencilAttachmentFormat = ERenderTargetFormat::RTF_DEPTH24STENCIL8;
+	ETextureFormat ColorAttachmentFormats[MAX_RENDER_TARGET_COUNT] = { ETextureFormat::R8G8B8A8_UNORM, };
+	ETextureFormat DepthStencilAttachmentFormat = ETextureFormat::D24_UNORM_S8_UINT;
 
 	RHIDepthStencilState DepthStencilState;
 
@@ -67,55 +67,46 @@ struct tagRHIPipelineDesc
 	}
 };
 
-inline void HashCombine(std::size_t& seed, std::size_t value)
+template<>
+struct hash<tagRHIPipelineDesc>
 {
-	seed ^= value + 0x9e3779b9 + (seed << 6) + (seed >> 2);
-}
-
-// std::hash 특수화 (namespace Engine 밖, 전역 범위에 있어야 함)
-namespace std
-{
-	template<>
-	struct hash<tagRHIPipelineDesc>
+	size_t operator()(const tagRHIPipelineDesc& desc) const
 	{
-		size_t operator()(const tagRHIPipelineDesc& desc) const
+		size_t seed = 0;
+		// 주요 필드들을 해싱합니다.
+		// 주의: 구조체 패딩 이슈를 피하기 위해 멤버별로 해싱하는 것이 안전합니다.
+		HashCombine(seed, hash<int>()((int)desc.PipelineType));
+		HashCombine(seed, hash<int>()((int)desc.BlendMode));
+		HashCombine(seed, hash<int>()((int)desc.CullMode));
+		HashCombine(seed, hash<void*>()(desc.VertexShader));
+		HashCombine(seed, hash<void*>()(desc.PixelShader));
+
+		// 포맷들도 해싱에 포함
+		HashCombine(seed, hash<int>()(desc.ColorAttachmentCount));
+		for (uint32 i = 0; i < desc.ColorAttachmentCount; ++i)
 		{
-			size_t seed = 0;
-			// 주요 필드들을 해싱합니다.
-			// 주의: 구조체 패딩 이슈를 피하기 위해 멤버별로 해싱하는 것이 안전합니다.
-			HashCombine(seed, hash<int>()((int)desc.PipelineType));
-			HashCombine(seed, hash<int>()((int)desc.BlendMode));
-			HashCombine(seed, hash<int>()((int)desc.CullMode));
-			HashCombine(seed, hash<void*>()(desc.VertexShader));
-			HashCombine(seed, hash<void*>()(desc.PixelShader));
-
-			// 포맷들도 해싱에 포함
-			HashCombine(seed, hash<int>()(desc.ColorAttachmentCount));
-			for (uint32 i = 0; i < desc.ColorAttachmentCount; ++i)
-			{
-				HashCombine(seed, hash<int>()((int)desc.ColorAttachmentFormats[i]));
-			}
-			HashCombine(seed, hash<int>()((int)desc.DepthStencilAttachmentFormat));
-
-			// Depth State
-			HashCombine(seed, hash<bool>()(desc.DepthStencilState.DepthTestEnable));
-			HashCombine(seed, hash<bool>()(desc.DepthStencilState.DepthWriteEnable));
-
-			HashCombine(seed, hash<uint32>()(desc.InputLayout.Stride));
-			HashCombine(seed, hash<size_t>()(desc.InputLayout.Elements.size())); // 속성 개수 해싱
-
-			for (const auto& attr : desc.InputLayout.Elements)
-			{
-				// 각 속성의 세부 정보(Location, Format, Offset)를 섞어줌
-				HashCombine(seed, hash<uint32>()(attr.Location));
-				HashCombine(seed, hash<int>()((int)attr.Format));
-				HashCombine(seed, hash<uint32>()(attr.Offset));
-			}
-
-			return seed;
+			HashCombine(seed, hash<int>()((int)desc.ColorAttachmentFormats[i]));
 		}
-	};
-}
+		HashCombine(seed, hash<int>()((int)desc.DepthStencilAttachmentFormat));
+
+		// Depth State
+		HashCombine(seed, hash<bool>()(desc.DepthStencilState.DepthTestEnable));
+		HashCombine(seed, hash<bool>()(desc.DepthStencilState.DepthWriteEnable));
+
+		HashCombine(seed, hash<uint32>()(desc.InputLayout.Stride));
+		HashCombine(seed, hash<size_t>()(desc.InputLayout.Elements.size())); // 속성 개수 해싱
+
+		for (const auto& attr : desc.InputLayout.Elements)
+		{
+			// 각 속성의 세부 정보(Location, Format, Offset)를 섞어줌
+			HashCombine(seed, hash<uint32>()(attr.Location));
+			HashCombine(seed, hash<int>()((int)attr.Format));
+			HashCombine(seed, hash<uint32>()(attr.Offset));
+		}
+
+		return seed;
+	}
+};
 
 BEGIN(Engine)
 class ENGINE_API RHIPipeline abstract : public RHIResource

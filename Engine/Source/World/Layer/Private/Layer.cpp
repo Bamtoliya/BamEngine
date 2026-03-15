@@ -206,6 +206,15 @@ void Layer::SetAllObjectActive(bool active)
 #pragma region Save& Load
 void Layer::Serialize(Archive& ar)
 {
-    int a = 10;
+    SerializationHelper::SerializeReflectionProperties(ar, &GetTypeInfo(), this);
+}
+void Layer::Deserialize(Archive& ar)
+{
+	for (GameObject* gameObject : m_GameObjects)
+    {
+        if (!gameObject) continue;
+		gameObject->Deserialize(ar);
+		gameObject->SetLayerIndex(m_Index);
+    }
 }
 #pragma endregion

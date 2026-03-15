@@ -15,7 +15,7 @@ EResult SamplerManager::Initialize(void* arg)
 	defaultDesc.AddressV = ESamplerAddressMode::Wrap;
 	defaultDesc.AddressW = ESamplerAddressMode::Wrap;
 
-	m_DefaultSampler = CreateSampler(L"LinearWrap", defaultDesc);
+	m_DefaultSampler = GetOrCreateSampler(defaultDesc);
 	Safe_AddRef(m_DefaultSampler);
 	if (!m_DefaultSampler) return EResult::Fail;
 
@@ -26,7 +26,7 @@ EResult SamplerManager::Initialize(void* arg)
 	linearClampDesc.AddressU = ESamplerAddressMode::Clamp;
 	linearClampDesc.AddressV = ESamplerAddressMode::Clamp;
 	linearClampDesc.AddressW = ESamplerAddressMode::Clamp;
-	CreateSampler(L"LinearClamp", linearClampDesc);
+	GetOrCreateSampler(linearClampDesc);
 
 	tagRHISamplerDesc pointWrapDesc;
 	pointWrapDesc.MinFilter = ESamplerFilter::Point;
@@ -34,7 +34,7 @@ EResult SamplerManager::Initialize(void* arg)
 	pointWrapDesc.AddressU = ESamplerAddressMode::Wrap;
 	pointWrapDesc.AddressV = ESamplerAddressMode::Wrap;
 	pointWrapDesc.AddressW = ESamplerAddressMode::Wrap;
-	CreateSampler(L"PointWrap", pointWrapDesc);
+	GetOrCreateSampler(pointWrapDesc);
 
 	return EResult::Success;
 }
@@ -65,43 +65,22 @@ void SamplerManager::Free()
 #pragma endregion
 
 #pragma region Sampler Management
-RHISampler* SamplerManager::CreateSampler(const wstring& name, const tagRHISamplerDesc& desc)
+RHISampler* SamplerManager::GetOrCreateSampler(const tagRHISamplerDesc& desc)
 {
-	auto it = m_Samplers.find(name);
-	if (it != m_Samplers.end())
+	auto it = m_Samplers.find(desc);
+	if(it != m_Samplers.end())
 	{
 		return it->second;
 	}
+
 	RHISampler* sampler = m_RHI->CreateSampler(desc);
 	if (sampler)
 	{
-		m_Samplers[name] = sampler;
+		m_Samplers[desc] = sampler;
 		return sampler;
-	}
+	} 
+
+	ENGINE_LOG_ERROR("Failed to create sampler with the given description.");
 	return nullptr;
-}
-RHISampler* SamplerManager::GetSampler(const wstring& name) const
-{
-	auto it = m_Samplers.find(name);
-	if (it != m_Samplers.end())
-	{
-		return it->second;
-	}
-	return nullptr;
-}
-EResult SamplerManager::RemoveSampler(const wstring& name)
-{
-	auto it = m_Samplers.find(name);
-	if (it != m_Samplers.end())
-	{
-		Safe_Release(it->second);
-		m_Samplers.erase(it);
-		return EResult::Success;
-	}
-	return EResult::Fail;
-}
-RHISampler* SamplerManager::GetDefaultSampler() const
-{
-	return m_DefaultSampler;
 }
 #pragma endregion

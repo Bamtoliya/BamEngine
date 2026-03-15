@@ -12,6 +12,31 @@
 #include "Mesh.h"
 #include "Material.h"
 
+#pragma region Helper
+inline SDL_GPUTextureType ToSDLGPUTextureType(ETetxtureDimension dimension)
+{
+	switch (dimension)
+	{
+	case ETetxtureDimension::Texture1D:
+		// SDL3 GPU API는 1D 텍스처를 명시적으로 지원하지 않으므로 높이가 1인 2D로 취급
+		return SDL_GPU_TEXTURETYPE_2D;
+	case ETetxtureDimension::Texture2D:
+		return SDL_GPU_TEXTURETYPE_2D;
+	case ETetxtureDimension::Texture2DArray:
+		return SDL_GPU_TEXTURETYPE_2D_ARRAY;
+	case ETetxtureDimension::Texture3D:
+		return SDL_GPU_TEXTURETYPE_3D;
+	case ETetxtureDimension::TextureCube:
+		return SDL_GPU_TEXTURETYPE_CUBE;
+	case ETetxtureDimension::TextureCubeArray:
+		return SDL_GPU_TEXTURETYPE_CUBE_ARRAY;
+	default:
+		return SDL_GPU_TEXTURETYPE_2D;
+	}
+}
+#pragma endregion
+
+
 #pragma region Constructor&Destructor
 EResult SDLGPURHI::Initialize(void* arg)
 {
@@ -301,7 +326,7 @@ RHITexture* SDLGPURHI::CreateRenderTargetTexture(void* data, uint32 width, uint3
 	tagRenderTargetDesc* rtDesc = reinterpret_cast<tagRenderTargetDesc*>(data);
 	SDL_GPUTextureCreateInfo desc = {};
 	desc.format = SDL_GPUTextureFormats[static_cast<uint8>(rtDesc->Format)];
-	desc.type = SDL_GPUTextureTypes[static_cast<uint8>(rtDesc->TextureType)];
+	desc.type = ToSDLGPUTextureType(rtDesc->TextureType);
 	desc.usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
 	desc.width = width;
 	desc.height = height;

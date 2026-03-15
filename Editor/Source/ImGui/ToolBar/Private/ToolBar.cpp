@@ -19,6 +19,10 @@
 #include "Archives.h"
 #include "FileDialogs.h"
 
+#include "SelectionManager.h"
+#include "AssetManager.h"
+#include "ContentBrowserPanel.h"
+
 
 void ToolBar::Draw()
 {
@@ -44,12 +48,25 @@ void ToolBar::DrawFileMenu()
 			quit_event.type = SDL_EVENT_QUIT;
 			SDL_PushEvent(&quit_event);
 		}
+		if (ImGui::MenuItem("Import Asset", ""))
+		{
+			ImportAsset();
+		}
 		if (ImGui::MenuItem("Settings", ""))
 		{
 
 		}
 		ImGui::EndMenu();
 	}
+}
+
+void ToolBar::ImportAsset()
+{
+	wstring filePath;
+	if (!FileDialogs::OpenFileDialog(filePath, { {L"Asset Files", L""}}, filePath))
+		return;
+	AssetManager::Get().Import(filePath, filePath);
+	//static_cast<ContentBrowserPanel*>(ImGuiManager::Get().GetImGuiPanel(L"Content Browser"))->RequestRefresh();
 }
 
 
@@ -74,6 +91,7 @@ void ToolBar::DrawSceneMenu()
 	{
 		if (ImGui::MenuItem("New Scene", "Ctrl+N"))
 		{
+			SelectionManager::Get().ClearSelection();
 			NewScene();
 		}
 
@@ -84,6 +102,7 @@ void ToolBar::DrawSceneMenu()
 
 		if (ImGui::MenuItem("Load Scene", "Ctrl+O"))
 		{
+			SelectionManager::Get().ClearSelection();
 			LoadScene();
 		}
 

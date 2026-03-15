@@ -114,7 +114,7 @@ int32_t ClassName::Destroy()							\
 
 #pragma region Component Register Macro
 #define REGISTER_COMPONENT(ClassName)				\
-	static Engine::ComponentRegisterHelper<ClassName> _reg_##ClassName(L#ClassName);
+	static Engine::ComponentRegisterHelper<ClassName> _reg_##ClassName(L"" #ClassName);
 #pragma endregion
 
 /******************************************************************************/
@@ -149,3 +149,13 @@ int32_t ClassName::Destroy()							\
 // 구현이 누락되면 빌드 자체가 안 되게 막아줍니다.
 #define TODO_ERROR(msg)  static_assert(false, "CRITICAL TODO: " msg)
 #define FIXME_ERROR(msg) static_assert(false, "CRITICAL FIXME: " msg)
+
+/*****************************************************************************/
+
+#define ENGINE_LOG_TRACE(Format, ...) fmt::print(fmt::fg(fmt::color::gray),         "[Engine|TRACE] " Format "\n" __VA_OPT__(,) __VA_ARGS__)
+#define ENGINE_LOG_INFO(Format, ...)  fmt::print(fmt::fg(fmt::color::white),        "[Engine|INFO]  " Format "\n" __VA_OPT__(,) __VA_ARGS__)
+#define ENGINE_LOG_WARN(Format, ...)  fmt::print(fmt::fg(fmt::color::yellow),       "[Engine|WARN]  " Format "\n" __VA_OPT__(,) __VA_ARGS__)
+#define ENGINE_LOG_ERROR(Format, ...) fmt::print(fmt::fg(fmt::color::red),          "[Engine|ERROR] " Format "\n" __VA_OPT__(,) __VA_ARGS__)
+#define ENGINE_LOG_FATAL(Format, ...) fmt::print(fmt::bg(fmt::color::red) | fmt::fg(fmt::color::white), "[Engine|FATAL] " Format "\n" __VA_OPT__(,) __VA_ARGS__)
+
+/*****************************************************************************/

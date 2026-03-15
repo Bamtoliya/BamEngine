@@ -21,6 +21,8 @@ find_package(spirv_cross_c CONFIG REQUIRED)
 
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
 
+find_path(CPPCODEC_INCLUDE_DIRS "cppcodec/base64_rfc4648.hpp" REQUIRED)
+
 # 경로 변수 정의
 set(ENGINE_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Source")
 set(ENGINE_PCH_HEADER "${ENGINE_SOURCE_DIR}/Core/Public/Engine_Includes.h")
@@ -66,7 +68,10 @@ add_library(Engine SHARED
 # [Hot Reload] Edit and Continue 기능 활성화 (/ZI)
 if(MSVC)
     # 컴파일 옵션: 디버그 정보를 생성하여 실행 중 수정 가능하게 함 (/ZI)
-    target_compile_options(${PROJECT_NAME} PRIVATE $<$<CONFIG:Debug>:/ZI>)
+    target_compile_options(${PROJECT_NAME} PRIVATE
+        $<$<CONFIG:Debug>:/ZI>
+        /Zc:preprocessor
+    )
     
     # 링크 옵션: 증분 링크 활성화 (/INCREMENTAL)
     target_link_options(${PROJECT_NAME} PRIVATE $<$<CONFIG:Debug>:/INCREMENTAL>)
@@ -108,6 +113,7 @@ target_compile_definitions(Engine PRIVATE ENGINE_EXPORTS)
 target_include_directories(Engine PUBLIC 
     PUBLIC 
         ${ENGINE_PUBLIC_INCLUDE_DIRS}
+        ${CPPCODEC_INCLUDE_DIRS}
     PRIVATE
         ${ENGINE_SOURCE_DIR}
 )

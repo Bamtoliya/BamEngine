@@ -6,6 +6,8 @@
 
 BEGIN(Engine)
 
+inline constexpr uint64 MetaNoSerializeHash = Engine::CompileTimeHash("NoSerialize");
+
 class SerializationHelper
 {
 public:
@@ -15,6 +17,7 @@ public:
 
 		for (const auto& prop : typeInfo->Properties)
 		{
+			if (MetadataEntry::Find(prop.Metadata, MetaNoSerializeHash)) continue;
 			string_view propName = prop.Name;
 			void* valuePtr = PropertyAccessor::GetValuePtr(instance, prop);
 			SerializeValue(ar, propName, prop.TypeInfo, valuePtr, prop.Size, prop.ContainerData);

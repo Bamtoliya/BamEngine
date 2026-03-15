@@ -114,6 +114,11 @@ inline bool GetMetadataReadOnly(std::span<const Engine::MetadataEntry> metadata)
 	return GetMetadataBool(metadata, MetaReadOnlyHash, false);
 }
 
+inline bool GetMetadataNoSerialize(std::span<const Engine::MetadataEntry> metadata)
+{
+	return GetMetadataBool(metadata, MetaNoSerializeHash, false);
+}
+
 inline bool GetMetadataEditable(std::span<const Engine::MetadataEntry> metadata)
 {
 	if (GetMetadataBool(metadata, MetaReadOnlyHash, false)) return true;

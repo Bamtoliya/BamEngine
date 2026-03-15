@@ -2,16 +2,18 @@
 
 #include "Base.h"
 #include "ReflectionMacro.h"
+#include "SerializableInterface.h"
 
 struct tagResourceCreateDesc
 {
 	wstring		Tag = L"";
+	wstring		Path = L"";
 };
 
 BEGIN(Engine)
 
 CLASS()
-class ENGINE_API Resource : public Base
+class ENGINE_API Resource : public Base, public SerializableInterface
 {
 	REFLECT_BASE()
 	using DESC = tagResourceCreateDesc;
@@ -54,15 +56,30 @@ public:
 	void IncreaseVersion() { m_Version++; }
 #pragma endregion
 
+#pragma region Path Management
+public:
+	const wstring& GetPath() const { return m_Path; }
+	void SetPath(const wstring& path) { m_Path = path; }
+#pragma endregion
+
+#pragma region Save & Load
+public:
+	virtual void Serialize(Archive& ar) override { SerializationHelper::SerializeReflectionProperties(ar, &GetTypeInfo(), this); }
+	virtual void Deserialize(Archive& ar) override { Serialize(ar); }
+#pragma endregion
+
 
 
 #pragma region Member Variables
 protected:
-	PROPERTY()
+	PROPERTY(READONLY)
 	wstring m_Tag = {};
 
 	PROPERTY(READONLY)
 	uint32 m_Version = { 0 };
+
+	PROPERTY(READONLY)
+	wstring m_Path = {};
 #pragma endregion
 };
 END

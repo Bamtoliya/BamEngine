@@ -7,7 +7,19 @@
 
 static uint64 g_GameObjectIDCounter = 1;
 
+static uint64 GenerateUniqueID()
+{
+	static std::random_device rd;
+	static std::mt19937_64 gen(rd());
+	static std::uniform_int_distribution<uint64> dis(1, UINT64_MAX);
+
+	return dis(gen);
+}
+
 #pragma region Constructor&Destructor
+GameObject::GameObject() : m_ID(GenerateUniqueID())
+{
+}
 EResult GameObject::Initialize(void* arg)
 {
 	m_Parent = nullptr;
@@ -16,7 +28,6 @@ EResult GameObject::Initialize(void* arg)
 		CAST_DESC
 		m_Name = desc->name;
 	}
-	m_ID = ++g_GameObjectIDCounter;
 	m_Transform = AddComponent<Transform>();
 	return EResult::Success;
 }
@@ -356,6 +367,28 @@ void GameObject::SetLayerIndex(uint32 layerIndex)
 void GameObject::Serialize(Archive& ar)
 {
 	SerializationHelper::SerializeReflectionProperties(ar, &GetTypeInfo(), this);
+}
+void GameObject::Deserialize(Archive& ar)
+{
+	//Serialize(ar);
+	for (const auto& comp : m_Components)
+	{
+		if (!comp) continue;
+
+		comp->SetOwner(this);
+		if (comp->GetTypeInfo().ID == RunTimeHash("Transform"))
+		{
+			m_Transform = dynamic_cast<Transform*>(comp);
+		}
+		comp->Deserialize(ar);
+	}
+
+	for (const auto& child : m_Childs)
+	{
+		if (!child) continue;
+		child->SetParent(this);
+		child->Deserialize(ar);
+	}
 }
 #pragma endregion
 

@@ -5,7 +5,7 @@
 #pragma comment(lib, "comdlg32.lib")
 
 BEGIN(Editor)
-
+TODO("IMGUI 기반 파일 다이얼로그 로 변경 가능성 있음")
 struct FileDialogFilter
 {
 	std::wstring Name;

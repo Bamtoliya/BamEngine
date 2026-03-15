@@ -44,18 +44,18 @@ EResult Renderer::Initialize(void* arg)
 	
 	if (!m_RHI) return EResult::Fail;
 
-	tagRenderTargetDesc rtDesc;
+	tagRenderTargetDesc rtDesc = {};
 	rtDesc.Width = desc->RHIDesc.Width;
 	rtDesc.Height = desc->RHIDesc.Height;
 	rtDesc.BindFlag = ERenderTargetBindFlag::RTBF_ShaderResource | ERenderTargetBindFlag::RTBF_RenderTarget;
 	m_SceneBuffer = RenderTargetManager::Get().CreateRenderTarget(&rtDesc);
-	tagRenderTargetDesc depthStencilDesc;
+	tagRenderTargetDesc depthStencilDesc = {};
 	depthStencilDesc.Width = desc->RHIDesc.Width;
 	depthStencilDesc.Height = desc->RHIDesc.Height;
 	depthStencilDesc.Type = ERenderTargetType::DepthStencil;
 	depthStencilDesc.Usage = ERenderTargetUsage::RTU_DepthStencil;
 	depthStencilDesc.BindFlag = ERenderTargetBindFlag::RTBF_ShaderResource | ERenderTargetBindFlag::RTBF_DepthStencil | ERenderTargetBindFlag::RTBF_RenderTarget;
-	depthStencilDesc.Format = ERenderTargetFormat::RTF_DEPTH24STENCIL8;
+	depthStencilDesc.Format = ETextureFormat::D24_UNORM_S8_UINT;
 	m_DepthBuffer = RenderTargetManager::Get().CreateRenderTarget(&depthStencilDesc);
 	RenderPassManager::Get().RegisterRenderPass(L"MainPass", { L"RenderTarget_1" }, L"RenderTarget_2", ERenderPassLoadOperation::RPLO_Clear, ERenderPassStoreOperation::RPSO_Store, vec4(0.0f, 0.0f, 0.0f, -1.0f), 0, ERenderSortType::FrontToBack);
 
@@ -365,6 +365,7 @@ EResult Renderer::RenderDebugLines(f32 dt)
 		debugPipelineDesc.DepthStencilState.StencilTestEnable = false;
 		debugPipelineDesc.DepthStencilState.DepthWriteEnable = false;
 		debugPipelineDesc.DepthStencilState.DepthCompareOp = ECompareOp::Always;
+		debugPipelineDesc.ColorAttachmentFormats[0] = ETextureFormat::R8G8B8A8_UNORM;
 		m_DebugPipeline = PipelineManager::Get().GetOrCreatePipeline(debugPipelineDesc);
 	}
 	if (m_DebugVertices.empty()) return EResult::Success;

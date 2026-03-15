@@ -94,7 +94,7 @@ public:
 #pragma region Save&Load
 public:
 	void Serialize(class Archive& ar) override;
-	void Deserialize(class Archive& ar) override { Serialize(ar); }
+	void Deserialize(class Archive& ar) override;
 #pragma endregion
 
 

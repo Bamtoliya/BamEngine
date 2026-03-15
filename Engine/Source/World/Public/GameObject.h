@@ -36,7 +36,7 @@ class ENGINE_API GameObject : public Base, public SerializableInterface, public 
 	using DESC = tagGameObjectDesc;
 #pragma region Constructor&Destructor
 protected:
-	GameObject() {}
+	GameObject();
 	virtual ~GameObject() {}
 	virtual EResult Initialize(void* arg = nullptr);
 public:
@@ -199,7 +199,7 @@ public:
 #pragma region Save&Load
 public:
 	virtual void Serialize(Archive& ar) override;
-	virtual void Deserialize(Archive& ar) override { Serialize(ar); }
+	virtual void Deserialize(Archive& ar) override;
 #pragma endregion
 
 
@@ -207,23 +207,7 @@ public:
 
 #pragma region Variables
 protected:
-	GameObject* m_Parent = { nullptr };
-
-	PROPERTY()
-	vector<GameObject*> m_Childs = {};
-
-	PROPERTY(NAME("PROP_COMPONENTS"))
-	vector<Component*> m_Components = {};
-
-
-	PROPERTY()
-	Transform* m_Transform = { nullptr };
-	
-	TODO("임시 테스트용 객체입니다 나중에 꼭 지우세요.")
-	PROPERTY()
-	Transform* m_TempTransform = { nullptr };
-
-	PROPERTY(CATEGORY("PROP_INFORMATION"), READONLY)
+	PROPERTY(CATEGORY("PROP_INFORMATION"), READONLY, NOSERIALIZE)
 	uint64 m_ID = { 0 };
 
 	PROPERTY(CATEGORY("PROP_INFORMATION"), READONLY)
@@ -240,6 +224,15 @@ protected:
 
 	PROPERTY(EDITABLE, "PROP_TAGS")
 	unordered_set<wstring> m_TagSet = {};
+
+	GameObject* m_Parent = { nullptr };
+	Transform* m_Transform = { nullptr };
+
+	PROPERTY(NAME("PROP_COMPONENTS"))
+	vector<Component*> m_Components = {};
+
+	PROPERTY()
+	vector<GameObject*> m_Childs = {};
 #pragma endregion
 
 };

@@ -50,6 +50,8 @@
 #include <type_traits>
 #include <memory>
 
+#include <random>
+
 #pragma endregion
 
 #pragma region ThirdParty Library
@@ -78,6 +80,8 @@ using namespace glm;
 #include <glaze/glaze.hpp>
 
 #include <stb_image.h>
+
+#include <cppcodec/base64_rfc4648.hpp>
 #pragma endregion
 
 

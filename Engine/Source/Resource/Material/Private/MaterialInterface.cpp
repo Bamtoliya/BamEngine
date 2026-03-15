@@ -10,6 +10,7 @@ void MaterialInterface::Free()
 	for (auto& [name, textureSlot] : m_TextureSlots)
 	{
 		Safe_Release(textureSlot.texture);
+		Safe_Release(textureSlot.sampler);
 	}
 	m_TextureSlots.clear();
 	m_Parameters.clear();
@@ -57,8 +58,8 @@ void MaterialInterface::SetSampler(const string& name, RHISampler* sampler)
 {
 	auto it = m_TextureSlots.find(name);
 	if (it == m_TextureSlots.end()) return;
-	// SamplerKey is wstring, convert from name
-	it->second.SamplerKey = wstring(name.begin(), name.end());
+	it->second.sampler = sampler;
+	Safe_AddRef(sampler);
 }
 
 template<typename T>
@@ -105,7 +106,7 @@ RHISampler* MaterialInterface::GetSampler(const string& name) const
 {
 	auto it = m_TextureSlots.find(name);
 	if (it != m_TextureSlots.end())
-		return SamplerManager::Get().GetSampler(it->second.SamplerKey);
+		return it->second.sampler;
 	return nullptr;
 }
 #pragma endregion
@@ -120,7 +121,7 @@ EResult MaterialInterface::Bind(uint32 slot)
 		RHITexture* texture = textureSlot.texture;
 		if (!texture)
 			texture = ResourceManager::Get().GetTexture(L"DefaultTexture")->GetRHITexture();
-		RHISampler* sampler = SamplerManager::Get().GetSampler(textureSlot.SamplerKey);
+		RHISampler* sampler = textureSlot.sampler;
 		if (!sampler)
 			sampler = SamplerManager::Get().GetDefaultSampler();
 		if (IsFailure(rhi->BindTextureSampler(texture, sampler, textureSlot.slot)))

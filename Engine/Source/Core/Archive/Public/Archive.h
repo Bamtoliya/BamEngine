@@ -40,13 +40,15 @@ public:
 	virtual void Process(string_view key, glm::mat3& v) PURE;
 	virtual void Process(string_view key, glm::mat4& v) PURE;
 public:
+	virtual void ProcessRaw(string_view key, const void* data, size_t size) PURE;
+public:
 	virtual void ProcessEnum(string_view key, void* enumPtr, size_t size) PURE;
 public:
 	virtual size_t BeginArray(string_view key) PURE; // 로드 시 크기 반환
 	virtual void   EndArray() PURE;
 	virtual void   BeginArrayElement() PURE;
 	virtual void   EndArrayElement() PURE;
-
+public:
 	virtual size_t BeginMap(string_view key) PURE;
 	virtual void   EndMap() PURE;
 	virtual void   BeginMapElement(string& outKey) PURE;

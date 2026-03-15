@@ -420,10 +420,14 @@ BEGIN_METADATA(RenderComponent, m_RenderPassID)
 	CATEGORY("PROP_INFORMATION")
 END_METADATA
 
+BEGIN_METADATA(RenderComponent, m_MaterialInstances)
+	EDITABLE
+END_METADATA
+
 DECLARE_CONTAINER_INFO(RenderComponent, m_MaterialInstances, "MaterialInstance*", Engine::EPropertyType::Object, Engine::LinearContainerAccessor<vector<MaterialInstance*>, MaterialInstance*>::Get())
 BEGIN_PROPERTIES(RenderComponent)
 	REFLECT_PROPERTY(RenderComponent, m_RenderPassID, "uint32", Engine::EPropertyType::UInt32, RenderComponent_m_RenderPassID_Meta)
-	REFLECT_CONTAINER_PROPERTY(RenderComponent, m_MaterialInstances, "vector<MaterialInstance*>", Engine::EPropertyType::Array, &RenderComponent_m_MaterialInstances_ContainerData, {})
+	REFLECT_CONTAINER_PROPERTY(RenderComponent, m_MaterialInstances, "vector<MaterialInstance*>", Engine::EPropertyType::Array, &RenderComponent_m_MaterialInstances_ContainerData, RenderComponent_m_MaterialInstances_Meta)
 END_PROPERTIES
 
 EMPTY_FUNCTIONS(RenderComponent)
@@ -433,8 +437,22 @@ IMPLEMENT_CLASS(RenderComponent, Component)
 #pragma endregion // CLASS: RenderComponent
 
 #pragma region CLASS: SpriteRenderer
+BEGIN_METADATA(SpriteRenderer, m_SpriteTag)
+	READONLY
+END_METADATA
+
+BEGIN_METADATA(SpriteRenderer, m_SpritePath)
+	READONLY
+END_METADATA
+
 BEGIN_METADATA(SpriteRenderer, m_Tiling)
+	EDITABLE
 	DEFAULT(vec2(1.f, 1.f))
+END_METADATA
+
+BEGIN_METADATA(SpriteRenderer, m_Sprite)
+	EDITABLE
+	NOSERIALIZE
 END_METADATA
 
 BEGIN_METADATA(SpriteRenderer, m_CachedSpriteVersion)
@@ -442,11 +460,17 @@ BEGIN_METADATA(SpriteRenderer, m_CachedSpriteVersion)
 	READONLY
 END_METADATA
 
+BEGIN_METADATA(SpriteRenderer, m_DrawMode)
+	EDITABLE
+END_METADATA
+
 BEGIN_PROPERTIES(SpriteRenderer)
+	REFLECT_PROPERTY(SpriteRenderer, m_SpriteTag, "wstring", Engine::EPropertyType::Wstring, SpriteRenderer_m_SpriteTag_Meta)
+	REFLECT_PROPERTY(SpriteRenderer, m_SpritePath, "wstring", Engine::EPropertyType::Wstring, SpriteRenderer_m_SpritePath_Meta)
 	REFLECT_PROPERTY(SpriteRenderer, m_Tiling, "vec2", Engine::EPropertyType::Vector2, SpriteRenderer_m_Tiling_Meta)
-	REFLECT_PROPERTY(SpriteRenderer, m_Sprite, "Sprite", Engine::EPropertyType::Object, {})
+	REFLECT_PROPERTY(SpriteRenderer, m_Sprite, "Sprite", Engine::EPropertyType::Object, SpriteRenderer_m_Sprite_Meta)
 	REFLECT_PROPERTY(SpriteRenderer, m_CachedSpriteVersion, "uint32", Engine::EPropertyType::UInt32, SpriteRenderer_m_CachedSpriteVersion_Meta)
-	REFLECT_PROPERTY(SpriteRenderer, m_DrawMode, "EDrawMode", Engine::EPropertyType::Enum, {})
+	REFLECT_PROPERTY(SpriteRenderer, m_DrawMode, "EDrawMode", Engine::EPropertyType::Enum, SpriteRenderer_m_DrawMode_Meta)
 END_PROPERTIES
 
 EMPTY_FUNCTIONS(SpriteRenderer)
@@ -491,7 +515,7 @@ IMPLEMENT_CLASS(MaterialInstance, MaterialInterface)
 BEGIN_PROPERTIES(TextureSlot)
 	REFLECT_PROPERTY(TextureSlot, slot, "uint32", Engine::EPropertyType::UInt32, {})
 	REFLECT_PROPERTY(TextureSlot, texture, "RHITexture", Engine::EPropertyType::Object, {})
-	REFLECT_PROPERTY(TextureSlot, SamplerKey, "wstring", Engine::EPropertyType::Wstring, {})
+	REFLECT_PROPERTY(TextureSlot, sampler, "RHISampler", Engine::EPropertyType::Object, {})
 END_PROPERTIES
 
 EMPTY_FUNCTIONS(TextureSlot)
@@ -632,13 +656,22 @@ IMPLEMENT_CLASS(Skeleton, Resource)
 #pragma endregion // CLASS: Skeleton
 
 #pragma region CLASS: Resource
+BEGIN_METADATA(Resource, m_Tag)
+	READONLY
+END_METADATA
+
 BEGIN_METADATA(Resource, m_Version)
 	READONLY
 END_METADATA
 
+BEGIN_METADATA(Resource, m_Path)
+	READONLY
+END_METADATA
+
 BEGIN_PROPERTIES(Resource)
-	REFLECT_PROPERTY(Resource, m_Tag, "wstring", Engine::EPropertyType::Wstring, {})
+	REFLECT_PROPERTY(Resource, m_Tag, "wstring", Engine::EPropertyType::Wstring, Resource_m_Tag_Meta)
 	REFLECT_PROPERTY(Resource, m_Version, "uint32", Engine::EPropertyType::UInt32, Resource_m_Version_Meta)
+	REFLECT_PROPERTY(Resource, m_Path, "wstring", Engine::EPropertyType::Wstring, Resource_m_Path_Meta)
 END_PROPERTIES
 
 EMPTY_FUNCTIONS(Resource)
@@ -659,12 +692,16 @@ IMPLEMENT_CLASS(Shader, Resource)
 #pragma endregion // CLASS: Shader
 
 #pragma region CLASS: Sprite
+BEGIN_METADATA(Sprite, m_Texture)
+	NOSERIALIZE
+END_METADATA
+
 BEGIN_METADATA(Sprite, m_Pivot)
 	DEFAULT(vec2(0.5f, 0.5f))
 END_METADATA
 
 BEGIN_PROPERTIES(Sprite)
-	REFLECT_PROPERTY(Sprite, m_Texture, "Texture", Engine::EPropertyType::Object, {})
+	REFLECT_PROPERTY(Sprite, m_Texture, "Texture", Engine::EPropertyType::Object, Sprite_m_Texture_Meta)
 	REFLECT_PROPERTY(Sprite, m_Region, "Rect", Engine::EPropertyType::Struct, {})
 	REFLECT_PROPERTY(Sprite, m_Pivot, "vec2", Engine::EPropertyType::Vector2, Sprite_m_Pivot_Meta)
 END_PROPERTIES
@@ -676,14 +713,8 @@ IMPLEMENT_CLASS(Sprite, Resource)
 #pragma endregion // CLASS: Sprite
 
 #pragma region CLASS: Texture
-BEGIN_METADATA(Texture, m_Path)
-	DIRECTORY
-	READONLY
-END_METADATA
-
 BEGIN_PROPERTIES(Texture)
 	REFLECT_PROPERTY(Texture, m_PixelPerUnit, "f32", Engine::EPropertyType::F32, {})
-	REFLECT_PROPERTY(Texture, m_Path, "wstring", Engine::EPropertyType::Wstring, Texture_m_Path_Meta)
 END_PROPERTIES
 
 EMPTY_FUNCTIONS(Texture)
@@ -728,15 +759,10 @@ IMPLEMENT_CLASS(Layer, Base)
 #pragma endregion // CLASS: Layer
 
 #pragma region CLASS: GameObject
-DECLARE_CONTAINER_INFO(GameObject, m_Childs, "GameObject*", Engine::EPropertyType::Object, Engine::LinearContainerAccessor<vector<GameObject*>, GameObject*>::Get())
-BEGIN_METADATA(GameObject, m_Components)
-	NAME("PROP_COMPONENTS")
-END_METADATA
-
-DECLARE_CONTAINER_INFO(GameObject, m_Components, "Component*", Engine::EPropertyType::Object, Engine::LinearContainerAccessor<vector<Component*>, Component*>::Get())
 BEGIN_METADATA(GameObject, m_ID)
 	CATEGORY("PROP_INFORMATION")
 	READONLY
+	NOSERIALIZE
 END_METADATA
 
 BEGIN_METADATA(GameObject, m_Index)
@@ -765,17 +791,21 @@ BEGIN_METADATA(GameObject, m_TagSet)
 END_METADATA
 
 DECLARE_CONTAINER_INFO(GameObject, m_TagSet, "wstring", Engine::EPropertyType::Wstring, Engine::SetAccessor<unordered_set<wstring>, wstring>::Get())
+BEGIN_METADATA(GameObject, m_Components)
+	NAME("PROP_COMPONENTS")
+END_METADATA
+
+DECLARE_CONTAINER_INFO(GameObject, m_Components, "Component*", Engine::EPropertyType::Object, Engine::LinearContainerAccessor<vector<Component*>, Component*>::Get())
+DECLARE_CONTAINER_INFO(GameObject, m_Childs, "GameObject*", Engine::EPropertyType::Object, Engine::LinearContainerAccessor<vector<GameObject*>, GameObject*>::Get())
 BEGIN_PROPERTIES(GameObject)
-	REFLECT_CONTAINER_PROPERTY(GameObject, m_Childs, "vector<GameObject*>", Engine::EPropertyType::Array, &GameObject_m_Childs_ContainerData, {})
-	REFLECT_CONTAINER_PROPERTY(GameObject, m_Components, "vector<Component*>", Engine::EPropertyType::Array, &GameObject_m_Components_ContainerData, GameObject_m_Components_Meta)
-	REFLECT_PROPERTY(GameObject, m_Transform, "Transform", Engine::EPropertyType::Object, {})
-	REFLECT_PROPERTY(GameObject, m_TempTransform, "Transform", Engine::EPropertyType::Object, {})
 	REFLECT_PROPERTY(GameObject, m_ID, "uint64", Engine::EPropertyType::UInt64, GameObject_m_ID_Meta)
 	REFLECT_PROPERTY(GameObject, m_Index, "uint32", Engine::EPropertyType::UInt32, GameObject_m_Index_Meta)
 	REFLECT_PROPERTY(GameObject, m_LayerIndex, "uint32", Engine::EPropertyType::UInt32, GameObject_m_LayerIndex_Meta)
 	REFLECT_PROPERTY(GameObject, m_Name, "wstring", Engine::EPropertyType::Wstring, GameObject_m_Name_Meta)
 	REFLECT_PROPERTY(GameObject, m_Flags, "EObjectFlag", Engine::EPropertyType::BitFlag, GameObject_m_Flags_Meta)
 	REFLECT_CONTAINER_PROPERTY(GameObject, m_TagSet, "unordered_set<wstring>", Engine::EPropertyType::Set, &GameObject_m_TagSet_ContainerData, GameObject_m_TagSet_Meta)
+	REFLECT_CONTAINER_PROPERTY(GameObject, m_Components, "vector<Component*>", Engine::EPropertyType::Array, &GameObject_m_Components_ContainerData, GameObject_m_Components_Meta)
+	REFLECT_CONTAINER_PROPERTY(GameObject, m_Childs, "vector<GameObject*>", Engine::EPropertyType::Array, &GameObject_m_Childs_ContainerData, {})
 END_PROPERTIES
 
 EMPTY_FUNCTIONS(GameObject)

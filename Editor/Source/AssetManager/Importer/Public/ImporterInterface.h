@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "Editor_Includes.h"
+#include "Archives.h"
 
 BEGIN(Editor)
 class ImporterInterface : public Base

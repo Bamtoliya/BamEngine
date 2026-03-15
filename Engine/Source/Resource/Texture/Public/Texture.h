@@ -3,6 +3,20 @@
 #include "RHITexture.h"
 #include "Resource.h"
 
+struct tagTextureBinaryHeader
+{
+	uint32 MagicNumber = 0;
+	uint32 Version = 0;
+	uint32 Width = 0;
+	uint32 Height = 0;
+	uint32 Depth = 0;
+	uint32 MipLevels = 0;
+	uint32 ArraySize = 0;
+	Engine::ETextureFormat Format = Engine::ETextureFormat::UNKNOWN;
+	Engine::ETetxtureDimension Dimension = Engine::ETetxtureDimension::Texture2D;
+	uint32 DataSize = 0;
+};
+
 BEGIN(Engine)
 typedef struct tagTextureCreateInfo
 {
@@ -52,9 +66,6 @@ private:
 
 	PROPERTY()
 	f32 m_PixelPerUnit = { DEFAULT_PPU };
-
-	PROPERTY(DIRECTORY, READONLY)
-	wstring m_Path = L"";
 #pragma endregion
 };
 END

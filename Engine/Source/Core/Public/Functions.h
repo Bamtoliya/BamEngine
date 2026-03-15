@@ -58,3 +58,8 @@ namespace Engine
 		return string(u8str.begin(), u8str.end());
 	}
 }
+
+inline void HashCombine(std::size_t& seed, std::size_t value)
+{
+	seed ^= value + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+}

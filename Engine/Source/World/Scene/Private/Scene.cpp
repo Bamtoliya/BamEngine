@@ -318,4 +318,24 @@ void Scene::Serialize(class Archive& ar)
 {
 	SerializationHelper::SerializeReflectionProperties(ar, &GetTypeInfo(), this);
 }
+void Scene::Deserialize(Archive& ar)
+{
+	Serialize(ar);
+
+	m_GameObjectMap.clear();
+
+	for (uint32 i = 0; i < m_Layers.size(); ++i)
+	{
+		Layer* layer = m_Layers[i];
+		if (!layer) continue;
+		m_Layers[i]->SetIndex(i);
+		m_Layers[i]->Deserialize(ar);
+
+		for(GameObject* gameObject : layer->GetAllGameObjects())
+		{
+			if (!gameObject) continue;
+			m_GameObjectMap[gameObject->GetID()] = gameObject;
+		}
+	}
+}
 #pragma endregion

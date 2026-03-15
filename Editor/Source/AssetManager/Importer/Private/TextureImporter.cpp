@@ -6,31 +6,24 @@ EResult TextureImporter::Import(const filesystem::path & sourcePath, const files
 {
 	uint32 width = { 0 }, height = { 0 }, channel = { 0 };
 
-	stbi_uc* data = stbi_load(sourcePath.string().c_str(), reinterpret_cast<int*>(&width), reinterpret_cast<int*>(&height), reinterpret_cast<int*>(&channel), 0);
+	stbi_uc* data = stbi_load(sourcePath.string().c_str(), reinterpret_cast<int*>(&width), reinterpret_cast<int*>(&height), reinterpret_cast<int*>(&channel), 4);
+	if (!data) return EResult::Fail;
+	channel = 4;
+
+
 	filesystem::path outputPath = destDir;
 	outputPath.replace_extension(".bamtex");
 
-	ofstream outputFile(outputPath, ios::binary);
-	if (!outputFile)
-	{
-		stbi_image_free(data);
-		return EResult::Fail;
-	}
+	BinaryArchive archive(EArchiveMode::Write);
 
-	const char magic[8] = "BAMTEX0";
-	outputFile.write(magic, sizeof(magic));
-
-	outputFile.write(reinterpret_cast<char*>(&width), sizeof(width));
-	outputFile.write(reinterpret_cast<char*>(&height), sizeof(height));
-	outputFile.write(reinterpret_cast<char*>(&channel), sizeof(channel));
-
+	string magic = "BAMTEX0";
+	archive.Process("Magic", magic);
+	archive.Process("Width", width);
+	archive.Process("Height", height);
+	archive.Process("Channels", channel);
 
 	size_t dataSize = width * height * channel;
-	outputFile.write(reinterpret_cast<char*>(data), dataSize);
-
-	outputFile.close();
-
+	archive.ProcessRaw("Data", data, dataSize);
 	stbi_image_free(data);
-
-	return EResult::Success;
+	return archive.SaveToFile(outputPath.string()) ? EResult::Success : EResult::Fail;
 }

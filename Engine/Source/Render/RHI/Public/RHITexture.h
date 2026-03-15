@@ -4,9 +4,16 @@
 
 struct tagRHITextureDesc
 {
-	uint32		Width = 0;
-	uint32		Height = 0;
-	uint32		Channels = 0;
+	uint32	Width = 0;
+	uint32	Height = 0;
+	uint32	Depth = 0;
+	uint32 	MipLevels = 1;
+	uint32 	ArraySize = 1;
+	uint32	SampleCount = 1;
+
+	Engine::ETextureFormat Format = Engine::ETextureFormat::UNKNOWN;
+	Engine::ETetxtureDimension Dimension = Engine::ETetxtureDimension::Texture2D;
+
 	void*		Data = nullptr;
 };
 
@@ -26,5 +33,10 @@ public:
 protected:
 	uint32 m_Width = { 0 };
 	uint32 m_Height = { 0 };
+	uint32 m_Depth = { 0 };
+	uint32 m_MipLevels = { 1 };
+	uint32 m_ArraySize = { 1 };
+	Engine::ETextureFormat m_Format = Engine::ETextureFormat::UNKNOWN;
+	Engine::ETetxtureDimension m_Dimension = Engine::ETetxtureDimension::Texture2D;
 };
 END

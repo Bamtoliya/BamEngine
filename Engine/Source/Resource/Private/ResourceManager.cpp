@@ -5,6 +5,9 @@
 #include "Shader.h"
 #include "Sprite.h"
 #include "Texture.h"
+#include "Material.h"
+
+#include "Archives.h"
 
 IMPLEMENT_SINGLETON(ResourceManager)
 
@@ -149,7 +152,6 @@ Material* ResourceManager::GetMaterial(const wstring& key)
 }
 #pragma endregion
 
-
 EResult ResourceManager::ImportFolder(const wstring& folderPath)
 {
 	namespace fs = std::filesystem;
@@ -204,6 +206,7 @@ void ResourceManager::RegisterExplicitLoader()
 	m_LoaderRegistry[L".bmp"] = textureLoader;
 	m_LoaderRegistry[L".tga"] = textureLoader;
 	m_LoaderRegistry[L".jpeg"] = textureLoader;
+	m_LoaderRegistry[L".bamtexture"] = textureLoader;
 
 	auto meshLoader = [this](wstring key, wstring path) -> EResult
 	{
@@ -217,38 +220,30 @@ void ResourceManager::RegisterExplicitLoader()
 	m_LoaderRegistry[L".obj"] = meshLoader;
 	m_LoaderRegistry[L".fbx"] = meshLoader;
 }
-#pragma endregion
 
-#ifdef _DEBUG
-#pragma region Test
-void ResourceManager::CreateQuadMesh()
+
+#pragma region Save & Load 
+EResult ResourceManager::SaveToJsonFile(Resource* resource, const wstring& filePath)
 {
-	vector<Vertex2D> 	vertices;
-	vector<uint32>	indices;
-	vertices.resize(4);
-	indices.resize(6);
-	
-	vertices[0].position = glm::vec3(-0.5f, 0.5f, 0.f);
-	vertices[1].position = glm::vec3(0.5f, 0.5f, 0.f);
-	vertices[2].position = glm::vec3(0.5f, -0.5f, 0.f);
-	vertices[3].position = glm::vec3(-0.5f, -0.5f, 0.f);
 
-	vertices[0].color = glm::vec4(1.f, 0.f, 0.f, 1.f);
-	vertices[1].color = glm::vec4(0.f, 1.f, 0.f, 1.f);
-	vertices[2].color = glm::vec4(0.f, 0.f, 1.f, 1.f);
-	vertices[3].color = glm::vec4(1.f, 1.f, 1.f, 1.f);
+	JsonArchive archive(EArchiveMode::Write);
+	resource->Serialize(archive);
+	return archive.SaveToFile(WStrToStr(filePath)) ? EResult::Success : EResult::Fail;
+}
 
-	vertices[0].texCoord = glm::vec2(0.f, 0.f);
-	vertices[1].texCoord = glm::vec2(1.f, 0.f);
-	vertices[2].texCoord = glm::vec2(1.f, 1.f);
-	vertices[3].texCoord = glm::vec2(0.f, 1.f);
+EResult ResourceManager::SaveToBeveFile(Resource* resource, const wstring& filePath)
+{
+	BeveArchive archive(EArchiveMode::Write);
+	resource->Serialize(archive);
+	return archive.SaveToFile(WStrToStr(filePath)) ? EResult::Success : EResult::Fail;
+}
 
-	indices = { 0, 1, 2, 2, 3, 0 };
-
-	//Mesh* quadMesh = Mesh::CreateFromData(vertices.data(), sizeof(Vertex2D), (uint32)vertices.size(),
-	//	indices.data(), (uint32)indices.size());
-
-
+EResult ResourceManager::SaveToBinaryFile(Resource* resource, const wstring& filePath)
+{
+	BinaryArchive archive(EArchiveMode::Write);
+	resource->Serialize(archive);
+	return archive.SaveToFile(WStrToStr(filePath)) ? EResult::Success : EResult::Fail;
 }
 #pragma endregion
-#endif
+
+#pragma endregion

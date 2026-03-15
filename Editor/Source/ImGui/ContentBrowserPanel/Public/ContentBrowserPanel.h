@@ -40,6 +40,11 @@ public:
 	virtual void ProcessEvent(const SDL_Event* event) override;
 	virtual void Free() override;
 
+#pragma region Request
+public:
+	void RequestRefresh() { m_NeedsCacheRefresh = true; }
+#pragma endregion
+
 
 
 #pragma region TreeView
@@ -53,6 +58,7 @@ private:
 	void DrawGrid(bool enterPressed);
 private:
 	void BackButton();
+	void RefreshButton();
 	void DrawDirectoryGrid();
 	void GridViewContextMenu(const filesystem::path& path);
 	void AddressBar();

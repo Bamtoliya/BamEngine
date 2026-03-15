@@ -314,6 +314,28 @@ EResult ImGuiManager::RemoveImGuiPanel(ImGuiInterface* panel)
 	}
 	return EResult::InvalidArgument;
 }
+ImGuiInterface* ImGuiManager::GetImGuiPanel(const wstring& name)
+{
+	auto it = std::find_if(m_ImGuiPanels.begin(), m_ImGuiPanels.end(),
+		[&name](ImGuiInterface* panel) { return panel->GetName() == name; });
+	if (it != m_ImGuiPanels.end())
+	{
+		return *it;
+	}
+	return nullptr;
+}
+vector<ImGuiInterface*> ImGuiManager::GetImGuiPanels(const wstring& name)
+{
+	vector<ImGuiInterface*> panels;
+	for (const auto& panel : m_ImGuiPanels)
+	{
+		if (panel->GetName() == name)
+		{
+			panels.push_back(panel);
+		}
+	}
+	return panels;
+}
 EResult ImGuiManager::CreateDefaultPanels()
 {
 	tagViewportPanelDesc scenePanelDesc;

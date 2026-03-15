@@ -300,6 +300,8 @@ void ContentBrowserPanel::DrawDirectoryGrid()
 {
 	BackButton();
 	ImGui::SameLine();
+	RefreshButton();
+	ImGui::SameLine();
 	AddressBar();
 	ImGui::SameLine();
 	ContentFilter();
@@ -360,6 +362,14 @@ void ContentBrowserPanel::BackButton()
 	}
 
 	if (isRoot) ImGui::EndDisabled();
+}
+
+void ContentBrowserPanel::RefreshButton()
+{
+	if(ImGui::Button(ICON_FA_ARROW_ROTATE_RIGHT))
+	{
+		RequestRefresh();
+	}
 }
 
 void ContentBrowserPanel::AddressBar()
@@ -564,6 +574,7 @@ void ContentBrowserPanel::DrawGrid(bool enterPressed)
 		{
 			m_FileWatcher = new efsw::FileWatcher();
 			m_FileListener = new ContentBrowserFileListener(&m_NeedsCacheRefresh);
+			m_FileWatcher->watch();
 		}
 
 		if(m_WatchID > 0)
@@ -845,7 +856,40 @@ void ContentBrowserPanel::OnExteranalDropped(const vector<string>& droppedFiles)
 		{
 			filesystem::path destinationPath = m_CurrentDirectory / sourcePath.filename();
 
-			if (filesystem::exists(destinationPath))
+			std::error_code ec;
+			if (filesystem::exists(destinationPath, ec) && filesystem::equivalent(sourcePath, destinationPath, ec))
+			{
+				AssetManager::Get().Import(sourcePath, destinationPath);
+
+				m_NeedsCacheRefresh = true;
+				continue;
+			}
+
+			bool isConflict = false;
+			std::string srcStem = sourcePath.stem().string();
+			std::string srcExt = sourcePath.extension().string();
+			for (auto& c : srcStem) c = tolower(c);
+			for (auto& c : srcExt) c = tolower(c);
+
+			if (filesystem::exists(m_CurrentDirectory, ec))
+			{
+				for (const auto& entry : filesystem::directory_iterator(m_CurrentDirectory, ec))
+				{
+					std::string existingStem = entry.path().stem().string();
+					std::string existingExt = entry.path().extension().string();
+					for (auto& c : existingStem) c = tolower(c);
+					for (auto& c : existingExt) c = tolower(c);
+
+					if (srcStem == existingStem && srcExt == existingExt)
+					{
+						isConflict = true;
+						destinationPath = entry.path();
+						break;
+					}
+				}
+			}
+
+			if (isConflict)
 			{
 				FileDropConflict conflict{ sourcePath, destinationPath };
 				m_PendingConflicts.push_back(conflict);
