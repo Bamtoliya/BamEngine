@@ -17,6 +17,7 @@
     "spirv-tools",
     "spirv-cross",
     "efsw",
+    "cppcodec",
     {
       "name": "imgui",
       "features": [
