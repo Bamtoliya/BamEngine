@@ -146,7 +146,7 @@ RHITexture* SDLRendererRHI::CreateTextureFromFile(const wchar* filename)
 	return texture;
 }
 
-RHITexture* SDLRendererRHI::CreateTextureFromMemory(void* data, uint32 width, uint32 height, uint32 depthOrArraySize, uint32 mipLevels, uint32 channels)
+RHITexture* SDLRendererRHI::CreateTextureFromMemory(const tagRHITextureDesc& desc)
 {
 	return nullptr;
 }

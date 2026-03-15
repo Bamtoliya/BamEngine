@@ -12,31 +12,6 @@
 #include "Mesh.h"
 #include "Material.h"
 
-#pragma region Helper
-inline SDL_GPUTextureType ToSDLGPUTextureType(ETetxtureDimension dimension)
-{
-	switch (dimension)
-	{
-	case ETetxtureDimension::Texture1D:
-		// SDL3 GPU API는 1D 텍스처를 명시적으로 지원하지 않으므로 높이가 1인 2D로 취급
-		return SDL_GPU_TEXTURETYPE_2D;
-	case ETetxtureDimension::Texture2D:
-		return SDL_GPU_TEXTURETYPE_2D;
-	case ETetxtureDimension::Texture2DArray:
-		return SDL_GPU_TEXTURETYPE_2D_ARRAY;
-	case ETetxtureDimension::Texture3D:
-		return SDL_GPU_TEXTURETYPE_3D;
-	case ETetxtureDimension::TextureCube:
-		return SDL_GPU_TEXTURETYPE_CUBE;
-	case ETetxtureDimension::TextureCubeArray:
-		return SDL_GPU_TEXTURETYPE_CUBE_ARRAY;
-	default:
-		return SDL_GPU_TEXTURETYPE_2D;
-	}
-}
-#pragma endregion
-
-
 #pragma region Constructor&Destructor
 EResult SDLGPURHI::Initialize(void* arg)
 {
@@ -185,7 +160,7 @@ RHIBuffer* SDLGPURHI::CreateIndexBuffer(void* data, uint32 size, uint32 stride)
 
 RHITexture* SDLGPURHI::CreateTextureFromFile(const char* filename)
 {
-	SDL_Surface* surface = SDL_LoadBMP(filename);
+	SDL_Surface* surface = SDL_LoadPNG(filename);
 	if (!surface)
 	{
 		return nullptr;
@@ -197,19 +172,22 @@ RHITexture* SDLGPURHI::CreateTextureFromFile(const char* filename)
 
 	uint32 width = static_cast<uint32>(surface->w);
 	uint32 height = static_cast<uint32>(surface->h);
-	uint32 dataSize = width * height * 4;
 
-	SDL_GPUTextureCreateInfo createInfo = {};
+	uint32 dataSize = static_cast<uint32>(surface->pitch * surface->h);
 
-	createInfo.type = SDL_GPU_TEXTURETYPE_2D;
-	createInfo.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
-	createInfo.width = width;
-	createInfo.height = height;
-	createInfo.layer_count_or_depth = 1;
-	createInfo.num_levels = 1;
-	createInfo.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER;
+	tagRHITextureDesc desc = {};
+	desc.Width = width;
+	desc.Height = height;
+	desc.Depth = 1;
+	desc.ArraySize = 1;
+	desc.MipLevels = 1;
+	desc.SampleCount = Engine::ETextureSampleCount::TextureSampleCount1;
+	desc.Dimension = Engine::ETextureDimension::Texture2D;
+	desc.Format = Engine::ETextureFormat::R8G8B8A8_UNORM;
+	desc.Usage = Engine::ETextureUsage::Sampler;
+	desc.DataSize = dataSize;
 
-	SDLGPUTexture* texture = SDLGPUTexture::Create(this, createInfo);
+	RHITexture* texture = CreateTexture(desc);
 
 	if (!texture->GetNativeHandle())
 	{
@@ -218,7 +196,7 @@ RHITexture* SDLGPURHI::CreateTextureFromFile(const char* filename)
 		return nullptr;
 	}
 
-	if (IsFailure(UploadTextureData(static_cast<SDL_GPUTexture*>(texture->GetNativeHandle()), surface->pixels, width, height)))
+	if (IsFailure(UploadTextureData(static_cast<SDL_GPUTexture*>(texture->GetNativeHandle()), surface->pixels, dataSize, width, height)))
 	{
 		SDL_DestroySurface(surface);
 		Safe_Release(texture);
@@ -231,71 +209,20 @@ RHITexture* SDLGPURHI::CreateTextureFromFile(const char* filename)
 
 RHITexture* SDLGPURHI::CreateTextureFromFile(const wchar* filename)
 {
-	string filePath = WStrToStr(filename);
-	SDL_Surface* surface = SDL_LoadPNG(filePath.c_str());
-	if (!surface)
-	{
-		return nullptr;
-	}
-
-	SDL_Surface* convertedSurface = SDL_ConvertSurface(surface, SDL_PIXELFORMAT_ABGR8888);
-	SDL_DestroySurface(surface);
-	surface = convertedSurface;
-
-	uint32 width = static_cast<uint32>(surface->w);
-	uint32 height = static_cast<uint32>(surface->h);
-	uint32 dataSize = width * height * 4;
-
-	SDL_GPUTextureCreateInfo createInfo = {};
-
-	createInfo.type = SDL_GPU_TEXTURETYPE_2D;
-	createInfo.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
-	createInfo.width = width;
-	createInfo.height = height;
-	createInfo.layer_count_or_depth = 1;
-	createInfo.num_levels = 1;
-	createInfo.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER;
-
-	SDLGPUTexture* texture = SDLGPUTexture::Create(this, createInfo);
-
-	if (!texture->GetNativeHandle())
-	{
-		SDL_DestroySurface(surface);
-		Safe_Release(texture);
-		return nullptr;
-	}
-
-	if (IsFailure(UploadTextureData(static_cast<SDL_GPUTexture*>(texture->GetNativeHandle()), surface->pixels, width, height)))
-	{
-		SDL_DestroySurface(surface);
-		Safe_Release(texture);
-		return nullptr;
-	}
-
-	SDL_DestroySurface(surface);
-	return texture;
+	return CreateTextureFromFile(WStrToStr(filename).c_str());
 }
 
-RHITexture* SDLGPURHI::CreateTextureFromMemory(void* data, uint32 width, uint32 height, uint32 depthOrArraySize, uint32 mipLevels, uint32 channels)
+RHITexture* SDLGPURHI::CreateTextureFromMemory(const tagRHITextureDesc& desc)
 {
-	SDL_GPUTextureCreateInfo createInfo = {};
-	createInfo.type = SDL_GPU_TEXTURETYPE_2D;
-	createInfo.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
-	createInfo.width = width;
-	createInfo.height = height;
-	createInfo.layer_count_or_depth = depthOrArraySize;
-	createInfo.num_levels = mipLevels;
-	createInfo.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER;
-
-	SDLGPUTexture* texture = SDLGPUTexture::Create(this, createInfo);
+	RHITexture* texture = CreateTexture(desc);
 	if (!texture) return nullptr;
 
-	if (IsFailure(UploadTextureData(static_cast<SDL_GPUTexture*>(texture->GetNativeHandle()), data, width, height, depthOrArraySize, mipLevels, channels)))
+	uint32 depthOrArraySize = desc.Dimension == ETextureDimension::Texture3D ? desc.Depth : desc.ArraySize;
+	if (IsFailure(UploadTextureData(static_cast<SDL_GPUTexture*>(texture->GetNativeHandle()), desc.Data, desc.DataSize, desc.Width, desc.Height, depthOrArraySize, desc.MipLevels)))
 	{
 		Safe_Release(texture);
 		return nullptr;
 	}
-
 	return texture;
 }
 
@@ -324,42 +251,30 @@ RHITexture* SDLGPURHI::CreateTexture3D(void* data, uint32 width, uint32 height, 
 RHITexture* SDLGPURHI::CreateRenderTargetTexture(void* data, uint32 width, uint32 height, uint32 mipLevels, uint32 arraySize)
 {
 	tagRenderTargetDesc* rtDesc = reinterpret_cast<tagRenderTargetDesc*>(data);
-	SDL_GPUTextureCreateInfo desc = {};
-	desc.format = SDL_GPUTextureFormats[static_cast<uint8>(rtDesc->Format)];
-	desc.type = ToSDLGPUTextureType(rtDesc->TextureType);
-	desc.usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
-	desc.width = width;
-	desc.height = height;
-	desc.layer_count_or_depth = arraySize;
-	desc.num_levels = mipLevels;
+	tagRHITextureDesc desc = {};
+	desc.Format = rtDesc->Format;
+	desc.Dimension = rtDesc->TextureType;
+	desc.Width = width;
+	desc.Height = height;
+	desc.ArraySize = arraySize;
+	desc.MipLevels = mipLevels;
+	desc.Usage = Engine::ETextureUsage::RenderTarget | Engine::ETextureUsage::Sampler;
 
-	SDLGPUTexture* texture = SDLGPUTexture::Create(this, desc);
-	if (!texture)
-	{
-		Safe_Release(texture);
-		return nullptr;
-	}
-	return texture;
+	return  CreateTexture(desc);
 }
 
 RHITexture* SDLGPURHI::CreateDepthStencilTexture(void* data, uint32 width, uint32 height, uint32 mipLevels, uint32 arraySize)
 {
-	SDL_GPUTextureCreateInfo desc = {};
-	desc.type = SDL_GPU_TEXTURETYPE_2D;
-	desc.format = SDL_GPU_TEXTUREFORMAT_D24_UNORM_S8_UINT;
-	desc.usage = SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
-	desc.width = width;
-	desc.height = height;
-	desc.layer_count_or_depth = arraySize;
-	desc.num_levels = mipLevels;
+	tagRHITextureDesc desc = {};
+	desc.Dimension = Engine::ETextureDimension::Texture2D;
+	desc.Format = Engine::ETextureFormat::D24_UNORM_S8_UINT;
+	desc.Width = width;
+	desc.Height = height;
+	desc.ArraySize = arraySize;
+	desc.MipLevels = mipLevels;
+	desc.Usage = Engine::ETextureUsage::DepthStencilTarget | Engine::ETextureUsage::Sampler;
 
-	SDLGPUTexture* texture = SDLGPUTexture::Create(this, desc);
-	if (!texture)
-	{
-		Safe_Release(texture);
-		return nullptr;
-	}
-	return texture;
+	return CreateTexture(desc);
 }
 
 RHITexture* SDLGPURHI::CreateTextureFromNativeHandle(void* nativeHandle)
@@ -372,11 +287,9 @@ RHITexture* SDLGPURHI::CreateTextureFromNativeHandle(void* nativeHandle)
 	return nullptr;
 }
 
-EResult SDLGPURHI::UploadTextureData(SDL_GPUTexture* texture, void* data, uint32 width, uint32 height, uint32 depthOrArraySize, uint32 mipLevels, uint32 channels)
+EResult SDLGPURHI::UploadTextureData(SDL_GPUTexture* texture, void* data, uint32 dataSize, uint32 width, uint32 height, uint32 depthOrArraySize, uint32 mipLevels)
 {
-	if (!texture || !data) return EResult::InvalidArgument;
-
-	uint32 dataSize = width * height * channels;
+	if (!texture || !data || dataSize == 0) return EResult::InvalidArgument;
 
 	SDL_GPUTransferBufferCreateInfo transferBufferInfo = {};
 	transferBufferInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
@@ -477,6 +390,17 @@ EResult SDLGPURHI::UploadBufferData(SDL_GPUBuffer* buffer, void* data, uint32 si
 
 	SDL_ReleaseGPUTransferBuffer(m_Device, transferBuffer);
 	return EResult::Success;
+}
+
+RHITexture* SDLGPURHI::CreateTexture(const tagRHITextureDesc& desc)
+{
+	SDLGPUTexture* texture = SDLGPUTexture::Create(this, desc);
+	if (!texture)
+	{
+		Safe_Release(texture);
+		return nullptr;
+	}
+	return texture;
 }
 
 #pragma endregion

@@ -10,9 +10,9 @@ class SDLGPUTexture final : public RHITexture
 private:
 	SDLGPUTexture(SDLGPURHI* rhi) : RHITexture{ rhi } {}
 	virtual ~SDLGPUTexture() = default;
-	EResult Initialize(const SDL_GPUTextureCreateInfo& createInfo);
+	EResult Initialize(const tagRHITextureDesc& desc);
 public:
-	static SDLGPUTexture* Create(SDLGPURHI* rhi, const SDL_GPUTextureCreateInfo& createInfo = {}, bool isOwned = true);
+	static SDLGPUTexture* Create(SDLGPURHI* rhi, const tagRHITextureDesc& desc = {}, bool isOwned = true);
 	virtual void Free() override;
 #pragma endregion
 
@@ -20,7 +20,6 @@ public:
 public:
 	EResult Bind(uint32 slot = 0) override;
 #pragma endregion
-
 
 public:
 	virtual void* GetNativeHandle() const override { return m_Texture; }

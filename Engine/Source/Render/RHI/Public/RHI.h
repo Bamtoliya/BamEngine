@@ -50,7 +50,7 @@ public:
 public:
     virtual RHITexture* CreateTextureFromFile(const char* filename) PURE;
     virtual RHITexture* CreateTextureFromFile(const wchar* filename) PURE;
-    virtual RHITexture* CreateTextureFromMemory(void* data, uint32 width, uint32 height, uint32 depthOrArraySize, uint32 mipLevels, uint32 channels) PURE;
+    virtual RHITexture* CreateTextureFromMemory(const tagRHITextureDesc& desc) PURE;
 	virtual RHITexture* CreateTexture2D(void* data, uint32 width, uint32 height, uint32 mipLevels, uint32 arraySize) PURE;
 	virtual RHITexture* CreateTextureCube(void* data, uint32 size, uint32 mipLevels) PURE;
 	virtual RHITexture* CreateTexture3D(void* data, uint32 width, uint32 height, uint32 depth, uint32 mipLevels) PURE;

@@ -5,10 +5,10 @@
 struct tagRenderTargetDesc
 {
 	ETextureFormat				Format		= ETextureFormat::R8G8B8A8_UNORM;
-	ERenderTargetUsage			Usage		= ERenderTargetUsage::RTU_Color;
+	ETextureUsage				Usage		= ETextureUsage::RenderTarget;
 	ERenderTargetBindFlag		BindFlag	= ERenderTargetBindFlag::RTBF_None;
 	ERenderTargetType 			Type		= ERenderTargetType::Color;
-	ETetxtureDimension			TextureType = ETetxtureDimension::Texture2D;
+	ETextureDimension			TextureType = ETextureDimension::Texture2D;
 	uint32						Width		= 800;
 	uint32						Height		= 600;
 	vec4						ClearColor	= vec4(0.0f, 0.0f, 0.0f, 1.0f);
@@ -37,9 +37,9 @@ public:
 	EResult Resize(uint32 width, uint32 height);
 	ETextureFormat GetFormat() const { return m_Desc.Format; }
 	ERenderTargetBindFlag GetBindFlag() const { return m_Desc.BindFlag; }
-	ERenderTargetUsage GetUsage() const { return m_Desc.Usage; }
+	ETextureUsage GetUsage() const { return m_Desc.Usage; }
 	ERenderTargetType GetType() const { return m_Desc.Type; }
-	ETetxtureDimension GetTextureType() const { return m_Desc.TextureType; }
+	ETextureDimension GetTextureType() const { return m_Desc.TextureType; }
 	vec4 GetClearColor() const { return m_Desc.ClearColor; }
 #pragma endregion
 

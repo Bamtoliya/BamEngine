@@ -148,7 +148,7 @@ void ContentBrowserPanel::Free()
 {
 	for (auto& [path, texture] : m_ThumbnailTextures)
 	{
-		if (texture) texture->Release();
+		Safe_Release(texture);
 	}
 	m_ThumbnailTextures.clear();
 	m_ThumbnailCache.clear();
@@ -961,7 +961,12 @@ void* ContentBrowserPanel::LoadThumbnail(const filesystem::path& path)
 
 	if (data)
 	{
-		RHITexture* rhiTexture = Renderer::Get().GetRHI()->CreateTextureFromMemory(data, width, height, 1, 1, 4);
+		tagRHITextureDesc desc = {};
+		desc.Width = width;
+		desc.Height = height;
+		desc.Data = data;
+		desc.DataSize = width * height * 4;
+		RHITexture* rhiTexture = Renderer::Get().GetRHI()->CreateTextureFromMemory(desc);
 		stbi_image_free(data);
 
 		if (rhiTexture)
@@ -1037,7 +1042,12 @@ void* ContentBrowserPanel::LoadModelThumbnail(const filesystem::path& path)
 
 			DeleteObject(hBitmap);
 
-			RHITexture* rhiTexture = Renderer::Get().GetRHI()->CreateTextureFromMemory(pixels.data(), width, height, 1, 1, 4);
+			tagRHITextureDesc desc = {};
+			desc.Width = width;
+			desc.Height = height;
+			desc.Data = pixels.data();
+			desc.DataSize = width * height * 4;
+			RHITexture* rhiTexture = Renderer::Get().GetRHI()->CreateTextureFromMemory(desc);
 			if (rhiTexture)
 			{
 				m_ThumbnailTextures[pathStr] = rhiTexture;

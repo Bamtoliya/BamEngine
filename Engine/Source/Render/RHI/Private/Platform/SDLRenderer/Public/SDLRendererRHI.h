@@ -29,7 +29,7 @@ public:
 public:
 	virtual RHITexture* CreateTextureFromFile(const char* filename) override;
 	virtual RHITexture* CreateTextureFromFile(const wchar* filename) override;
-	virtual RHITexture* CreateTextureFromMemory(void* data, uint32 width, uint32 height, uint32 depthOrArraySize, uint32 mipLevels, uint32 channels) override;
+	virtual RHITexture* CreateTextureFromMemory(const tagRHITextureDesc& desc) override;
 	virtual RHITexture* CreateTexture2D(void* data, uint32 width, uint32 height, uint32 mipLevels, uint32 arraySize) override;
 	virtual RHITexture* CreateTextureCube(void* data, uint32 size, uint32 mipLevels) override;
 	virtual RHITexture* CreateTexture3D(void* data, uint32 width, uint32 height, uint32 depth, uint32 mipLevels) override;

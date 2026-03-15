@@ -150,7 +150,9 @@ static const SDL_GPUStoreOp SDL_GPURenderPassStoreOperations[] = {
 };
 
 #pragma region Helper
-static SDL_GPUCullMode ToSDLCullMode(ECullMode mode) {
+
+#pragma region Pipeline
+constexpr SDL_GPUCullMode ToSDLCullMode(ECullMode mode) {
     switch (mode) {
     case ECullMode::None: return SDL_GPU_CULLMODE_NONE;
     case ECullMode::Front: return SDL_GPU_CULLMODE_FRONT;
@@ -159,15 +161,15 @@ static SDL_GPUCullMode ToSDLCullMode(ECullMode mode) {
     }
 }
 
-static SDL_GPUFillMode ToSDLFillMode(EFillMode mode) {
+constexpr SDL_GPUFillMode ToSDLFillMode(EFillMode mode) {
     return (mode == EFillMode::Wireframe) ? SDL_GPU_FILLMODE_LINE : SDL_GPU_FILLMODE_FILL;
 }
 
-static SDL_GPUFrontFace ToSDLFrontFace(EFrontFace face) {
+constexpr SDL_GPUFrontFace ToSDLFrontFace(EFrontFace face) {
     return (face == EFrontFace::CounterClockwise) ? SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE : SDL_GPU_FRONTFACE_CLOCKWISE;
 }
 
-static SDL_GPUCompareOp ToSDLCompareOp(ECompareOp op) {
+constexpr SDL_GPUCompareOp ToSDLCompareOp(ECompareOp op) {
     // 순서가 같다면 캐스팅 가능, 여기선 안전하게 매핑
     switch (op) {
     case ECompareOp::Never: return SDL_GPU_COMPAREOP_NEVER;
@@ -182,7 +184,7 @@ static SDL_GPUCompareOp ToSDLCompareOp(ECompareOp op) {
     }
 }
 
-static SDL_GPUPrimitiveType ToSDLTopology(ETopology topology) {
+constexpr SDL_GPUPrimitiveType ToSDLTopology(ETopology topology) {
     switch (topology) {
     case ETopology::TriangleList: return SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
     case ETopology::TriangleStrip: return SDL_GPU_PRIMITIVETYPE_TRIANGLESTRIP;
@@ -193,7 +195,23 @@ static SDL_GPUPrimitiveType ToSDLTopology(ETopology topology) {
     }
 }
 
-static SDL_GPUTextureFormat ToSDLGPUTextureFormat(Engine::ETextureFormat format)
+#pragma endregion
+
+#pragma region SDLGPUTexture
+constexpr SDL_GPUTextureType ToSDLGPUTextureType(Engine::ETextureDimension dimension)
+{
+    switch (dimension)
+    {
+    case Engine::ETextureDimension::Texture2D: return SDL_GPU_TEXTURETYPE_2D;
+    case Engine::ETextureDimension::TextureCube: return SDL_GPU_TEXTURETYPE_CUBE;
+    case Engine::ETextureDimension::Texture3D: return SDL_GPU_TEXTURETYPE_3D;
+    case Engine::ETextureDimension::Texture2DArray: return SDL_GPU_TEXTURETYPE_2D_ARRAY;
+    case Engine::ETextureDimension::TextureCubeArray: return SDL_GPU_TEXTURETYPE_CUBE_ARRAY;
+    default: return SDL_GPU_TEXTURETYPE_2D;
+    }
+}
+
+constexpr SDL_GPUTextureFormat ToSDLGPUTextureFormat(Engine::ETextureFormat format)
 {
     using namespace Engine; // 타이핑을 줄이고 가독성을 높이기 위해 namespace 사용
 
@@ -340,7 +358,51 @@ static SDL_GPUTextureFormat ToSDLGPUTextureFormat(Engine::ETextureFormat format)
     }
 }
 
-static SDL_GPUVertexElementFormat ToSDLVertexFormat(EVertexElementFormat format) {
+constexpr SDL_GPUTextureUsageFlags ToSDLGPUTextureUsage(Engine::ETextureUsage usage)
+{
+    SDL_GPUTextureUsageFlags flags = 0;
+
+    if (Engine::HasFlag(usage, Engine::ETextureUsage::Sampler))
+    {
+        flags |= SDL_GPU_TEXTUREUSAGE_SAMPLER;
+    }
+
+    if (Engine::HasFlag(usage, Engine::ETextureUsage::RenderTarget))
+    {
+        flags |= SDL_GPU_TEXTUREUSAGE_COLOR_TARGET;
+    }
+
+    if (Engine::HasFlag(usage, Engine::ETextureUsage::DepthStencilTarget))
+    {
+        flags |= SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET;
+    }
+
+    if (Engine::HasFlag(usage, Engine::ETextureUsage::ComputeReadWrite))
+    {
+        flags |= SDL_GPU_TEXTUREUSAGE_COMPUTE_STORAGE_READ | SDL_GPU_TEXTUREUSAGE_COMPUTE_STORAGE_WRITE;
+    }
+
+    return flags;
+}
+
+constexpr SDL_GPUSampleCount ToSDLGPUTextureSampleCount(Engine::ETextureSampleCount sampleCount)
+{
+    switch (sampleCount)
+    {
+    case Engine::ETextureSampleCount::TextureSampleCount1: return SDL_GPU_SAMPLECOUNT_1;
+    case Engine::ETextureSampleCount::TextureSampleCount2: return SDL_GPU_SAMPLECOUNT_2;
+    case Engine::ETextureSampleCount::TextureSampleCount4: return SDL_GPU_SAMPLECOUNT_4;
+    case Engine::ETextureSampleCount::TextureSampleCount8: return SDL_GPU_SAMPLECOUNT_8;
+    default: return SDL_GPU_SAMPLECOUNT_1;
+    }
+}
+#pragma endregion
+
+
+
+
+#pragma region Vertex
+constexpr SDL_GPUVertexElementFormat ToSDLVertexFormat(EVertexElementFormat format) {
     switch (format)
     {
     case EVertexElementFormat::Int: return SDL_GPU_VERTEXELEMENTFORMAT_INT;
@@ -376,4 +438,7 @@ static SDL_GPUVertexElementFormat ToSDLVertexFormat(EVertexElementFormat format)
     default: return SDL_GPU_VERTEXELEMENTFORMAT_INVALID;
     }
 }
+#pragma endregion
+
+
 #pragma endregion

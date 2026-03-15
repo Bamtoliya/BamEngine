@@ -13,7 +13,7 @@ struct tagTextureBinaryHeader
 	uint32 MipLevels = 0;
 	uint32 ArraySize = 0;
 	Engine::ETextureFormat Format = Engine::ETextureFormat::UNKNOWN;
-	Engine::ETetxtureDimension Dimension = Engine::ETetxtureDimension::Texture2D;
+	Engine::ETextureDimension Dimension = Engine::ETextureDimension::Texture2D;
 	uint32 DataSize = 0;
 };
 

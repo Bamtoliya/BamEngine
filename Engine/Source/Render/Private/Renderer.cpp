@@ -53,7 +53,7 @@ EResult Renderer::Initialize(void* arg)
 	depthStencilDesc.Width = desc->RHIDesc.Width;
 	depthStencilDesc.Height = desc->RHIDesc.Height;
 	depthStencilDesc.Type = ERenderTargetType::DepthStencil;
-	depthStencilDesc.Usage = ERenderTargetUsage::RTU_DepthStencil;
+	depthStencilDesc.Usage = ETextureUsage::DepthStencilTarget;
 	depthStencilDesc.BindFlag = ERenderTargetBindFlag::RTBF_ShaderResource | ERenderTargetBindFlag::RTBF_DepthStencil | ERenderTargetBindFlag::RTBF_RenderTarget;
 	depthStencilDesc.Format = ETextureFormat::D24_UNORM_S8_UINT;
 	m_DepthBuffer = RenderTargetManager::Get().CreateRenderTarget(&depthStencilDesc);

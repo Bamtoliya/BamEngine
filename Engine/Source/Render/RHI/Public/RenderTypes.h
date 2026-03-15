@@ -227,17 +227,13 @@ namespace Engine
 
 	enum class ETextureUsage : uint8
 	{
-		Sampler,
-		RenderTarget,
-		DepthStencilTarget,
-		ComputeReadWrite,
+		None				= 0,
+		Sampler				= 1 << 0,
+		RenderTarget		= 1 << 1,
+		DepthStencilTarget	= 1 << 2,
+		ComputeReadWrite	= 1 << 3,
 	};
-
-	enum class ERenderTargetUsage : uint8
-	{
-		RTU_Color,
-		RTU_DepthStencil,
-	};
+	ENABLE_BITMASK_OPERATORS(ETextureUsage)
 
 	enum class ERenderTargetBindFlag : uint8
 	{
@@ -257,6 +253,7 @@ namespace Engine
 		RTCF_Stencil = 1 << 2,
 	};
 
+	
 	enum class ERenderTargetType : uint8
 	{
 		Color,
@@ -264,7 +261,7 @@ namespace Engine
 		DepthStencil,
 	};
 
-	enum class ETetxtureDimension : uint8
+	enum class ETextureDimension : uint8
 	{
 		Texture1D,
 		Texture2D,
@@ -272,6 +269,14 @@ namespace Engine
 		Texture3D,
 		TextureCube,
 		TextureCubeArray,
+	};
+
+	enum class ETextureSampleCount : uint8
+	{
+		TextureSampleCount1 = 1,
+		TextureSampleCount2 = 2,
+		TextureSampleCount4 = 4,
+		TextureSampleCount8 = 8,
 	};
 
 	enum class ERenderPassLoadOperation : uint8
