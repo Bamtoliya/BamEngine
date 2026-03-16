@@ -22,7 +22,7 @@ EResult BoxCollider::Initialize(void* arg)
 		m_Center = desc->center;
 		m_Extents = desc->extent;
 	}
-	return EResult::Success;
+	return __super::Initialize(arg);
 }
 
 EResult BoxCollider::LateInitialize(void* arg)

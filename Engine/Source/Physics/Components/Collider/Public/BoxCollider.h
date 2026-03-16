@@ -56,10 +56,10 @@ private:
 #pragma region Member Variable
 private:
 	PROPERTY(EDITABLE)
-	vec3 m_Center;
+	vec3 m_Center = vec3(0.f);
 
 	PROPERTY(EDITABLE)
-	vec3 m_Extents;
+	vec3 m_Extents = vec3(1.f);
 #pragma endregion
 
 };
