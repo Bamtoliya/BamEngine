@@ -59,12 +59,12 @@ public:
 #pragma endregion
 #pragma region Resource Management
 public:
-	EResult LoadMesh(const wstring& key, void* arg);
-	EResult LoadModel(const wstring& key, void* arg);
-	EResult LoadShader(const wstring& key, void* arg);
-	EResult LoadSprite(const wstring& key, void* arg);
-	EResult LoadTexture(const wstring& key, const wstring& texturePath);
-	EResult LoadMaterial(const wstring& key, void* arg);
+	class Mesh* LoadMesh(const wstring& key, void* arg);
+	class Model* LoadModel(const wstring& key, void* arg);
+	class Shader* LoadShader(const wstring& key, void* arg);
+	class Sprite* LoadSprite(const wstring& key, void* arg);
+	class Texture* LoadTexture(const wstring& key, const wstring& texturePath);
+	class Material* LoadMaterial(const wstring& key, void* arg);
 public:
 	class Mesh* GetMesh(const wstring& key);
 	class Model* GetModel(const wstring& key);
@@ -75,18 +75,17 @@ public:
 #pragma region Generic Case
 public:
 	template<typename T>
-	EResult Load(const wstring& key, void* arg)
+	T* Load(const wstring& key, void* arg)
 	{
 		ResourceContainer<T>* container = GetContainer<T>();
-		if (container->Get(key)) return EResult::AlreadyInitialized;
+		if (container->Get(key)) return nullptr;
 
 		T* resource = T::Create(arg);
 
-		if (!resource) return EResult::Fail;
-
+		if (!resource) return nullptr;
 		container->Add(key, resource);
 
-		return EResult::Success;
+		return resource;
 	}
 
 	template<typename T>
@@ -156,7 +155,7 @@ private:
 private:
 	unordered_map<type_index, IResourceContainer*> m_GenericContainers;
 private:
-	unordered_map<wstring, function<EResult(wstring, wstring)>> m_LoaderRegistry;
+	unordered_map<wstring, function<void*(wstring, wstring)>> m_LoaderRegistry;
 #pragma endregion
 };
 END

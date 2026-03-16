@@ -260,7 +260,11 @@ void Application::InitializeResources()
 	spriteMaterialDesc.BlendMode = EBlendMode::AlphaBlend;
 	spriteMaterialDesc.CullMode = ECullMode::None;
 	spriteMaterialDesc.DepthMode = EDepthMode::ReadWrite;
-	ResourceManager::Get().LoadMaterial(L"SpriteMaterial", &spriteMaterialDesc);
+    BinaryArchive archive(EArchiveMode::Write);
+	ResourceManager::Get().LoadMaterial(L"SpriteMaterial", &spriteMaterialDesc)->Serialize(archive);
+    archive.SaveToFile("Resources/Material/SpriteMaterial.materialInstance");
+	
+
 
 
 

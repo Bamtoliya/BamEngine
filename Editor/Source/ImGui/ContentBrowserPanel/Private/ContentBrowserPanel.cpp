@@ -1,9 +1,12 @@
 ﻿#pragma once
 #include "ContentBrowserPanel.h"
+#include "ContentBrowserGridItem.h"
+#include "ContentBrowserTreeItem.h"
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 #include "LocalizationManager.h"
 #include "AssetManager.h"
+
 
 using namespace std;
 
@@ -159,10 +162,6 @@ void ContentBrowserPanel::Free()
 #pragma region TreeView
 void ContentBrowserPanel::DrawDirectoryTree(const filesystem::path& path)
 {
-	ImGuiTreeNodeFlags baseFlags = ((m_CurrentDirectory == path) ? ImGuiTreeNodeFlags_Selected : 0);
-	baseFlags |= ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth;
-
-
 	bool hasChildDirectory = false;
 	std::error_code ec;
 	auto dirIt = filesystem::directory_iterator(path, ec);
@@ -178,52 +177,23 @@ void ContentBrowserPanel::DrawDirectoryTree(const filesystem::path& path)
 		}
 	}
 
-	if (m_NeedToExpandTree)
-	{
-		try {
-			// relative 결과에 ".."이 없으면 하위 경로임
-			auto rel = filesystem::relative(m_CurrentDirectory, path);
-			bool isAncestor = !rel.empty() && rel.string().find("..") == string::npos;
+	bool isSelected = (m_CurrentDirectory == path);
 
-			if (isAncestor)
-			{
-				ImGui::SetNextItemOpen(true);
-			}
-		}
-		catch (...) {}
-	}
+	// 분리한 TreeItem 클래스에 노드 렌더링 위임
+	bool shouldDrawChildren = ContentBrowserTreeItem::DrawNode(
+		path,
+		m_RootPath,
+		hasChildDirectory,
+		isSelected,
+		m_NeedToExpandTree,
+		m_RenamingPath,
+		m_RenameBuffer,
+		sizeof(m_RenameBuffer),
+		m_CurrentDirectory
+	);
 
-	if (!hasChildDirectory)
-	{
-		baseFlags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
-	}
-
-	string filename = path.filename().string();
-	string icon = (m_CurrentDirectory == path && hasChildDirectory) ? ICON_FA_FOLDER_OPEN : ICON_FA_FOLDER;
-	if (path == m_RootPath) icon = ICON_FA_DATABASE;
-
-	// 이름 변경 중이면 트리 노드의 텍스트 부분을 비워두거나 커스텀 처리
-	bool isRenaming = (m_RenamingPath == path);
-	string label = isRenaming ? "" : (icon + " " + filename);
-	if (path == m_RootPath && !isRenaming) label = ICON_FA_DATABASE " Assets";
-
-	bool opened = ImGui::TreeNodeEx((void*)std::hash<string>{}(path.string()), baseFlags, "%s", label.c_str());
-
-	// 트리 뷰 인라인 이름 변경 UI 배치
-	if (isRenaming)
-	{
-		ImGui::SameLine();
-		DrawRename(path);
-	}
-
-	TreeViewContextMenu(path);
-
-	if (ImGui::IsItemClicked())
-	{
-		m_CurrentDirectory = path;
-	}
-
-	if (opened && hasChildDirectory)
+	// 노드가 열렸고 자식 디렉토리가 있다면 재귀 호출
+	if (shouldDrawChildren)
 	{
 		std::error_code childEc;
 		auto childIt = std::filesystem::directory_iterator(path, childEc);
@@ -489,72 +459,30 @@ void ContentBrowserPanel::DrawGridItem(const filesystem::directory_entry& direct
 	auto relativePath = filesystem::relative(path, m_RootPath);
 	string filenameString = relativePath.filename().string();
 
-	ImGui::PushID(path.string().c_str());
-
-	DrawThumbnail(directoryEntry);
-	GridItemTooltip(directoryEntry);
-	GridItemContextMenu(path);
-	DragAndDropTarget(relativePath);
-
-
-	// 인터랙션: 폴더 진입
-	
-	if (ImGui::IsItemHovered() && MOUSE_BUTTON_DOUBLE_CLICK(EMouseButton::Left))
+	void* thumbnailTexID = nullptr;
+	if (!directoryEntry.is_directory())
 	{
-		if (directoryEntry.is_directory())
-		{
-			m_CurrentDirectory /= path.filename();
-			memset(m_SearchBuffer, 0, sizeof(m_SearchBuffer));
-		}
+		string ext = path.extension().string();
+		for (auto& c : ext) c = tolower(c);
+
+		if (ext == ".png" || ext == ".jpg" || ext == ".tga")
+			thumbnailTexID = LoadThumbnail(path);
+		else if (ext == ".fbx" || ext == ".obj")
+			thumbnailTexID = LoadModelThumbnail(path);
 	}
 
-	if (m_RenamingPath == path)
-	{
-		DrawRename(path);
-	}
-	else
-	{
-		ImGui::TextWrapped("%s", filenameString.c_str());
-	}
-
-	ImGui::PopID();
-}
-
-void ContentBrowserPanel::GridItemTooltip(const filesystem::directory_entry& directoryEntry)
-{
-	if (ImGui::IsItemHovered())
-	{
-		filesystem::path path = directoryEntry.path();
-		string filenameString = path.filename().string();
-		ImGui::BeginTooltip();
-		ImGui::TextUnformatted(filenameString.c_str());
-		ImGui::Separator();
-
-		if (directoryEntry.is_directory())
-		{
-			ImGui::Text("Type: Folder");
-		}
-		else
-		{
-			string ext = path.extension().string();
-			for (auto& c : ext) c = tolower(c);
-			ImGui::Text("Type: %s File", ext.c_str());
-
-			// 안전하게 파일 용량 가져오기
-			try
-			{
-				uintmax_t fileSize = filesystem::file_size(path);
-				if (fileSize < 1024)
-					ImGui::Text("Size: %ju Bytes", fileSize);
-				else if (fileSize < 1024 * 1024)
-					ImGui::Text("Size: %ju KB", fileSize / 1024);
-				else
-					ImGui::Text("Size: %.2f MB", (float)fileSize / (1024.0f * 1024.0f));
-			}
-			catch (...) {}
-		}
-		ImGui::EndTooltip();
-	}
+	ContentBrowserGridItem::Draw(
+		directoryEntry,
+		m_RootPath,
+		thumbnailTexID,
+		m_ThumbnailSize,
+		m_Padding,
+		m_RenamingPath,
+		m_RenameBuffer,
+		sizeof(m_RenameBuffer),
+		m_CurrentDirectory,
+		m_SearchBuffer
+	);
 }
 
 void ContentBrowserPanel::DrawGrid(bool enterPressed)
@@ -651,132 +579,6 @@ void ContentBrowserPanel::DrawGrid(bool enterPressed)
 			m_SearchResults.clear();
 		}
 		ImGui::EndTable();
-	}
-}
-
-void ContentBrowserPanel::DrawThumbnail(const filesystem::directory_entry& directoryEntry)
-{
-	const char* icon = ICON_FA_FILE;
-	ImVec4 typeColor = ImVec4(1.0f, 1.0f, 1.0f, 0.1f); // 기본 투명한 회색
-	void* thumbnailTexID = nullptr;
-
-	if (directoryEntry.is_directory())
-	{
-		icon = ICON_FA_FOLDER;
-		typeColor = ImVec4(0.9f, 0.7f, 0.2f, 0.3f); // 폴더: 노란색
-	}
-	else
-	{
-		string ext = directoryEntry.path().extension().string();
-		for (auto& c : ext) c = tolower(c); // 소문자로 변환
-
-		if (ext == ".png" || ext == ".jpg" || ext == ".tga")
-		{
-			icon = ICON_FA_IMAGE;
-			typeColor = ImVec4(0.2f, 0.8f, 0.2f, 0.4f); // 이미지: 초록색
-			thumbnailTexID = LoadThumbnail(directoryEntry.path());
-		}
-		else if (ext == ".fbx" || ext == ".obj")
-		{
-			icon = ICON_FA_CUBE;
-			typeColor = ImVec4(0.2f, 0.4f, 0.9f, 0.4f); // 모델: 파란색
-			thumbnailTexID = LoadModelThumbnail(directoryEntry.path());
-		}
-		else if (ext == ".mat")
-		{
-			icon = ICON_FA_CIRCLE;
-			typeColor = ImVec4(0.9f, 0.3f, 0.3f, 0.4f); // 머티리얼: 빨간색
-		}
-		else if (ext == ".hlsl" || ext == ".glsl")
-		{
-			icon = ICON_FA_CODE;
-			typeColor = ImVec4(0.7f, 0.3f, 0.9f, 0.4f); // 셰이더: 보라색
-		}
-		else if (ext == ".csv" || ext == ".json")
-		{
-			icon = ICON_FA_FILE_LINES;
-			typeColor = ImVec4(0.6f, 0.6f, 0.6f, 0.4f); // 데이터: 회색
-		}
-	}
-
-	ImVec2 cursorPos = ImGui::GetCursorScreenPos();
-	ImDrawList* drawList = ImGui::GetWindowDrawList();
-
-	// 1. 텍스처가 없을 때만 배경 색상 + 텍스트 아이콘 렌더링 (Fallback)
-	if (!thumbnailTexID)
-	{
-		drawList->AddRectFilled(cursorPos, ImVec2(cursorPos.x + m_ThumbnailSize, cursorPos.y + m_ThumbnailSize), ImGui::GetColorU32(typeColor), 8.0f); // 8.0f는 라운드 처리
-
-		ImFont* font = ImGui::GetFont();
-		float iconFontSize = m_ThumbnailSize * 0.85f; // 아이콘 크기를 85%로 꽉 차게
-		ImVec2 iconSize = font->CalcTextSizeA(iconFontSize, FLT_MAX, 0.0f, icon);
-		ImVec2 iconPos = ImVec2(cursorPos.x + (m_ThumbnailSize - iconSize.x) * 0.5f, cursorPos.y + (m_ThumbnailSize - iconSize.y) * 0.5f);
-		drawList->AddText(font, iconFontSize, iconPos, ImGui::GetColorU32(ImGuiCol_Text), icon);
-	}
-
-	// 2. 투명 버튼 스타일 지정
-	ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
-	ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(1.0f, 1.0f, 1.0f, 0.1f));
-	ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(1.0f, 1.0f, 1.0f, 0.2f));
-
-	string buttonId = "##Btn_" + directoryEntry.path().filename().string();
-
-	// 3. 텍스처 존재 여부에 따라 ImageButton 또는 일반 투명 Button 렌더링
-	if (thumbnailTexID)
-	{
-		ImGui::ImageButton(buttonId.c_str(), (ImTextureID)thumbnailTexID, { m_ThumbnailSize, m_ThumbnailSize });
-	}
-	else
-	{
-		ImGui::Button(buttonId.c_str(), { m_ThumbnailSize, m_ThumbnailSize });
-	}
-
-	ImGui::PopStyleColor(3);
-}
-
-void ContentBrowserPanel::GridItemContextMenu(const filesystem::path& path)
-{
-	string filenameString = path.filename().string();
-	if (ImGui::BeginPopupContextItem())
-	{
-		if (ImGui::MenuItem(ICON_FA_PEN " Rename", "F2"))
-		{
-			m_RenamingPath = path;
-			strncpy(m_RenameBuffer, filenameString.c_str(), sizeof(m_RenameBuffer));
-		}
-
-		if (ImGui::MenuItem(ICON_FA_COPY " Copy Path", "Ctrl+C"))
-		{
-			ImGui::SetClipboardText(path.string().c_str());
-		}
-
-		ImGui::Separator();
-
-		if (ImGui::MenuItem(ICON_FA_TRASH " Delete"))
-		{
-			// 삭제 로직
-		}
-
-		ImGui::EndPopup();
-	}
-
-	if (ImGui::IsItemHovered() && KEY_DOWN(EKeyCode::F2))
-	{
-		m_RenamingPath = path;
-		strncpy(m_RenameBuffer, filenameString.c_str(), sizeof(m_RenameBuffer));
-	}
-}
-
-void ContentBrowserPanel::DragAndDropTarget(const filesystem::path& path)
-{
-	if (ImGui::BeginDragDropSource())
-	{
-		const wchar_t* itemPath = path.c_str();
-		// "CONTENT_BROWSER_ITEM" 이라는 이름으로 경로 데이터 전달
-		ImGui::SetDragDropPayload("CONTENT_BROWSER_ITEM", itemPath, (wcslen(itemPath) + 1) * sizeof(wchar_t));
-
-		ImGui::Text("%s", path.filename().string().c_str());
-		ImGui::EndDragDropSource();
 	}
 }
 
@@ -910,40 +712,6 @@ void ContentBrowserPanel::OnExteranalDropped(const vector<string>& droppedFiles)
 				}
 			}
 		}
-	}
-}
-void ContentBrowserPanel::DrawRename(const filesystem::path& path)
-{
-	// 입력창 너비 설정 (그리드일 때는 썸네일 크기, 트리일 때는 가변)
-	float width = (m_CurrentDirectory == path.parent_path()) ? m_ThumbnailSize : ImGui::GetContentRegionAvail().x * 0.8f;
-	ImGui::SetNextItemWidth(width);
-
-	if (ImGui::InputText("##RenameInput", m_RenameBuffer, sizeof(m_RenameBuffer), ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll))
-	{
-		filesystem::path newPath = path.parent_path() / m_RenameBuffer;
-		if (m_RenameBuffer[0] != '\0' && !filesystem::exists(newPath))
-		{
-			try {
-				filesystem::rename(path, newPath);
-				if (m_CurrentDirectory == path) m_CurrentDirectory = newPath;
-			}
-			catch (...) {}
-		}
-		m_RenamingPath.clear();
-	}
-
-	// 처음 나타날 때 포커스 강제
-	if (ImGui::IsItemVisible() && !ImGui::IsAnyItemActive())
-		ImGui::SetKeyboardFocusHere(-1);
-
-	// ESC를 누르거나, 입력창 활성 상태에서 다른 곳을 클릭하면 취소
-	if (ImGui::IsItemDeactivated() && !ImGui::IsItemDeactivatedAfterEdit())
-	{
-		m_RenamingPath.clear();
-	}
-	else if (KEY_DOWN(EKeyCode::Escape))
-	{
-		m_RenamingPath.clear();
 	}
 }
 void* ContentBrowserPanel::LoadThumbnail(const filesystem::path& path)

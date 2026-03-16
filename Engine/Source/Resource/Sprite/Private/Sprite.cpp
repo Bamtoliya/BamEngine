@@ -23,11 +23,7 @@ EResult Sprite::Initialize(void* arg)
 		}
 		else if (!desc->TexturePath.empty())
 		{
-			if (IsFailure(ResourceManager::Get().LoadTexture(m_Tag, desc->TexturePath)))
-			{
-				return EResult::Fail;
-			}
-			Texture* texture = ResourceManager::Get().GetTexture(m_Tag);
+			Texture* texture = ResourceManager::Get().LoadTexture(m_Tag, desc->TexturePath);
 			
 			if (texture)
 			{

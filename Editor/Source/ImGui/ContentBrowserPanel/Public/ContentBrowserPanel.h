@@ -68,11 +68,6 @@ private:
 	void ContentFilter();
 private:
 	void DrawGridItem(const filesystem::directory_entry& directoryEntry);
-	void GridItemTooltip(const filesystem::directory_entry& directoryEntry);
-private:
-	void DrawThumbnail(const filesystem::directory_entry& directoryEntry);
-	void GridItemContextMenu(const filesystem::path& path);
-	void DragAndDropTarget(const filesystem::path& path);
 private:
 	void FileConfilictPopup();
 #pragma endregion
