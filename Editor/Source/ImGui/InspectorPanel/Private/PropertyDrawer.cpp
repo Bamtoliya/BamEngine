@@ -318,6 +318,7 @@ string PropertyDrawer::SanitizeDisplayLabel(const TypeInfo& typeInfo, const Prop
 #pragma region Property Header Node
 bool PropertyDrawer::DrawHeaderNode(void* instance, const TypeInfo& typeInfo)
 {
+	ImGui::SetNextItemAllowOverlap();
 	bool opened = ImGui::CollapsingHeader(typeInfo.Name.data(), ImGuiTreeNodeFlags_DefaultOpen);
 	ImGui::SameLine();
 	DrawCheckbox(dynamic_cast<ActiveInterface*>(reinterpret_cast<Base*>(instance)), typeInfo);

@@ -20,7 +20,7 @@ bool GlazeArchiveBase::PushScope(string_view key)
 		{
 			auto& obj = currentTop->get_object();
 			auto it = obj.find(keyStr);
-			if (it != obj.end())
+			if (it != obj.end() && !it->second.is_null())
 			{
 				m_ScopeStack.push(&it->second);
 				return true;

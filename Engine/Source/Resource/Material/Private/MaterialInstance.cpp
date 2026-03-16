@@ -61,25 +61,25 @@ EResult MaterialInstance::Bind(uint32 slot)
 		if (m_TextureSlots.contains(name))
 			continue;
 
-		RHITexture* texture = baseSlot.texture;
+		Texture* texture = baseSlot.texture;
 		if (!texture)
-			texture = ResourceManager::Get().GetTexture(L"Magenta1x1")->GetRHITexture();
+			texture = ResourceManager::Get().GetTexture(L"Magenta1x1");
 		RHISampler* sampler = baseSlot.sampler;
 		if (!sampler)
 			sampler = SamplerManager::Get().GetDefaultSampler();
-		rhi->BindTextureSampler(texture, sampler, baseSlot.slot);
+		rhi->BindTextureSampler(texture->GetRHITexture(), sampler, baseSlot.slot);
 	}
 
 	// 2단계: 자신의 오버라이드 바인드
 	for (auto& [name, textureSlot] : m_TextureSlots)
 	{
-		RHITexture* texture = textureSlot.texture;
+		Texture* texture = textureSlot.texture;
 		if (!texture)
-			texture = ResourceManager::Get().GetTexture(L"Magenta1x1")->GetRHITexture();
+			texture = ResourceManager::Get().GetTexture(L"Magenta1x1");
 		RHISampler* sampler = textureSlot.sampler;
 		if (!sampler)
 			sampler = SamplerManager::Get().GetDefaultSampler();
-		rhi->BindTextureSampler(texture, sampler, textureSlot.slot);
+		rhi->BindTextureSampler(texture->GetRHITexture(), sampler, textureSlot.slot);
 	}
 
 	return EResult::Success;
@@ -90,7 +90,7 @@ void MaterialInstance::SetBaseMaterial(Material* material)
 	if (m_BaseMaterial)
 		Safe_Release(m_BaseMaterial);
 	m_BaseMaterial = material;
-	if (material)
+	if (m_BaseMaterial)
 		Safe_AddRef(m_BaseMaterial);
 }
 
@@ -149,3 +149,9 @@ ECompareOp MaterialInstance::GetDepthCompareOp() const
 	return m_BaseMaterial ? m_BaseMaterial->GetDepthCompareOp() : ECompareOp::Less;
 }
 #pragma endregion
+
+
+void MaterialInstance::Deserialize(Archive& ar)
+{
+	Safe_AddRef(m_BaseMaterial);
+}

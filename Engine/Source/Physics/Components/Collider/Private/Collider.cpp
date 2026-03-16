@@ -14,3 +14,11 @@ void Collider::Free()
 	__super::Free();
 }
 #pragma endregion
+
+#pragma region Save&Load
+void Collider::Deserialize(Archive& ar)
+{
+	CollisionManager::Get().AddCollider(this);
+}
+#pragma endregion
+

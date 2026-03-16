@@ -88,7 +88,7 @@ public:
 
 #pragma region Variable
 protected:
-	PROPERTY(CATEGORY("PROP_INFORMATION"))
+	PROPERTY(EDITABLE, CATEGORY("PROP_INFORMATION"))
 	uint32 m_RenderPassID = { INVALID_PASS_ID };
 
 	PROPERTY(EDITABLE)

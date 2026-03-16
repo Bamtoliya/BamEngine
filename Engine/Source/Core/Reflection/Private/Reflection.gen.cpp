@@ -15,6 +15,7 @@
 #include "Render/Components/Public/RenderComponent.h"
 #include "Render/Components/Public/SpriteRenderer.h"
 #include "Render/RHI/Public/RHIDefinitions.h"
+#include "Render/RHI/Public/RHIShader.h"
 #include "Resource/Components/MeshFilter/Public/MeshFilter.h"
 #include "Resource/Material/Public/Material.h"
 #include "Resource/Material/Public/MaterialInstance.h"
@@ -70,6 +71,14 @@ BEGIN_ENUM(ERotationMode)
 	REFLECT_ENUM_ENTRY(ERotationMode, Euler)
 	REFLECT_ENUM_ENTRY(ERotationMode, QuaternionXYZW)
 END_ENUM_REFLECT(ERotationMode)
+// Enum: EColliderType
+BEGIN_ENUM(EColliderType)
+	REFLECT_ENUM_ENTRY(EColliderType, Box)
+	REFLECT_ENUM_ENTRY(EColliderType, Box2D)
+	REFLECT_ENUM_ENTRY(EColliderType, Sphere)
+	REFLECT_ENUM_ENTRY(EColliderType, Capsule)
+	REFLECT_ENUM_ENTRY(EColliderType, Mesh)
+END_ENUM_REFLECT(EColliderType)
 // Enum: EDrawMode
 BEGIN_ENUM(EDrawMode)
 	REFLECT_ENUM_ENTRY(EDrawMode, Simple)
@@ -333,9 +342,17 @@ IMPLEMENT_CLASS(Transform, Component)
 #pragma endregion // CLASS: Transform
 
 #pragma region CLASS: Box2DCollider
+BEGIN_METADATA(Box2DCollider, m_Center)
+	EDITABLE
+END_METADATA
+
+BEGIN_METADATA(Box2DCollider, m_Extent)
+	EDITABLE
+END_METADATA
+
 BEGIN_PROPERTIES(Box2DCollider)
-	REFLECT_PROPERTY(Box2DCollider, m_Center, "vec2", Engine::EPropertyType::Vector2, {})
-	REFLECT_PROPERTY(Box2DCollider, m_Extent, "vec2", Engine::EPropertyType::Vector2, {})
+	REFLECT_PROPERTY(Box2DCollider, m_Center, "vec2", Engine::EPropertyType::Vector2, Box2DCollider_m_Center_Meta)
+	REFLECT_PROPERTY(Box2DCollider, m_Extent, "vec2", Engine::EPropertyType::Vector2, Box2DCollider_m_Extent_Meta)
 END_PROPERTIES
 
 EMPTY_FUNCTIONS(Box2DCollider)
@@ -345,9 +362,17 @@ IMPLEMENT_CLASS(Box2DCollider, Collider)
 #pragma endregion // CLASS: Box2DCollider
 
 #pragma region CLASS: BoxCollider
+BEGIN_METADATA(BoxCollider, m_Center)
+	EDITABLE
+END_METADATA
+
+BEGIN_METADATA(BoxCollider, m_Extents)
+	EDITABLE
+END_METADATA
+
 BEGIN_PROPERTIES(BoxCollider)
-	REFLECT_PROPERTY(BoxCollider, m_Center, "vec3", Engine::EPropertyType::Vector3, {})
-	REFLECT_PROPERTY(BoxCollider, m_Extents, "vec3", Engine::EPropertyType::Vector3, {})
+	REFLECT_PROPERTY(BoxCollider, m_Center, "vec3", Engine::EPropertyType::Vector3, BoxCollider_m_Center_Meta)
+	REFLECT_PROPERTY(BoxCollider, m_Extents, "vec3", Engine::EPropertyType::Vector3, BoxCollider_m_Extents_Meta)
 END_PROPERTIES
 
 EMPTY_FUNCTIONS(BoxCollider)
@@ -357,9 +382,17 @@ IMPLEMENT_CLASS(BoxCollider, Collider)
 #pragma endregion // CLASS: BoxCollider
 
 #pragma region CLASS: Collider
+BEGIN_METADATA(Collider, m_Type)
+	EDITABLE
+END_METADATA
+
+BEGIN_METADATA(Collider, m_DrawCollider)
+	EDITABLE
+END_METADATA
+
 BEGIN_PROPERTIES(Collider)
-	REFLECT_PROPERTY(Collider, m_Type, "EColliderType", Engine::EPropertyType::Enum, {})
-	REFLECT_PROPERTY(Collider, m_DrawCollider, "bool", Engine::EPropertyType::Bool, {})
+	REFLECT_PROPERTY(Collider, m_Type, "EColliderType", Engine::EPropertyType::Enum, Collider_m_Type_Meta)
+	REFLECT_PROPERTY(Collider, m_DrawCollider, "bool", Engine::EPropertyType::Bool, Collider_m_DrawCollider_Meta)
 END_PROPERTIES
 
 EMPTY_FUNCTIONS(Collider)
@@ -370,15 +403,30 @@ IMPLEMENT_CLASS(Collider, Component)
 
 #pragma region CLASS: Camera
 BEGIN_METADATA(Camera, m_FOV)
+	EDITABLE
 	EDITCONDITION("m_IsPerspective")
 END_METADATA
 
+BEGIN_METADATA(Camera, m_Near)
+	EDITABLE
+END_METADATA
+
+BEGIN_METADATA(Camera, m_Far)
+	EDITABLE
+END_METADATA
+
 BEGIN_METADATA(Camera, m_Aspect)
+	EDITABLE
 	EDITCONDITION("m_IsPerspective")
 END_METADATA
 
 BEGIN_METADATA(Camera, m_OrthoSize)
+	EDITABLE
 	EDITCONDITION("!m_IsPerspective")
+END_METADATA
+
+BEGIN_METADATA(Camera, m_IsPerspective)
+	EDITABLE
 END_METADATA
 
 BEGIN_METADATA(Camera, m_ProjMatrix)
@@ -391,11 +439,11 @@ END_METADATA
 
 BEGIN_PROPERTIES(Camera)
 	REFLECT_PROPERTY(Camera, m_FOV, "f32", Engine::EPropertyType::F32, Camera_m_FOV_Meta)
-	REFLECT_PROPERTY(Camera, m_Near, "f32", Engine::EPropertyType::F32, {})
-	REFLECT_PROPERTY(Camera, m_Far, "f32", Engine::EPropertyType::F32, {})
+	REFLECT_PROPERTY(Camera, m_Near, "f32", Engine::EPropertyType::F32, Camera_m_Near_Meta)
+	REFLECT_PROPERTY(Camera, m_Far, "f32", Engine::EPropertyType::F32, Camera_m_Far_Meta)
 	REFLECT_PROPERTY(Camera, m_Aspect, "f32", Engine::EPropertyType::F32, Camera_m_Aspect_Meta)
 	REFLECT_PROPERTY(Camera, m_OrthoSize, "f32", Engine::EPropertyType::F32, Camera_m_OrthoSize_Meta)
-	REFLECT_PROPERTY(Camera, m_IsPerspective, "bool", Engine::EPropertyType::Bool, {})
+	REFLECT_PROPERTY(Camera, m_IsPerspective, "bool", Engine::EPropertyType::Bool, Camera_m_IsPerspective_Meta)
 	REFLECT_PROPERTY(Camera, m_ProjMatrix, "glm::mat4", Engine::EPropertyType::Matrix4, Camera_m_ProjMatrix_Meta)
 	REFLECT_PROPERTY(Camera, m_ViewMatrix, "glm::mat4", Engine::EPropertyType::Matrix4, Camera_m_ViewMatrix_Meta)
 END_PROPERTIES
@@ -417,6 +465,7 @@ IMPLEMENT_CLASS(MeshRenderer, RenderComponent)
 
 #pragma region CLASS: RenderComponent
 BEGIN_METADATA(RenderComponent, m_RenderPassID)
+	EDITABLE
 	CATEGORY("PROP_INFORMATION")
 END_METADATA
 
@@ -479,6 +528,18 @@ IMPLEMENT_CLASS(SpriteRenderer, RenderComponent)
 
 #pragma endregion // CLASS: SpriteRenderer
 
+#pragma region CLASS: RHIShader
+BEGIN_PROPERTIES(RHIShader)
+	REFLECT_PROPERTY(RHIShader, m_ShaderType, "EShaderType", Engine::EPropertyType::Enum, {})
+	REFLECT_PROPERTY(RHIShader, m_EntryPoint, "string", Engine::EPropertyType::String, {})
+END_PROPERTIES
+
+EMPTY_FUNCTIONS(RHIShader)
+
+IMPLEMENT_CLASS(RHIShader, RHIResource)
+
+#pragma endregion // CLASS: RHIShader
+
 #pragma region CLASS: MeshFilter
 BEGIN_PROPERTIES(MeshFilter)
 	REFLECT_PROPERTY(MeshFilter, m_Mesh, "Mesh", Engine::EPropertyType::Object, {})
@@ -514,7 +575,8 @@ IMPLEMENT_CLASS(MaterialInstance, MaterialInterface)
 #pragma region STRUCT: TextureSlot
 BEGIN_PROPERTIES(TextureSlot)
 	REFLECT_PROPERTY(TextureSlot, slot, "uint32", Engine::EPropertyType::UInt32, {})
-	REFLECT_PROPERTY(TextureSlot, texture, "RHITexture", Engine::EPropertyType::Object, {})
+	REFLECT_PROPERTY(TextureSlot, textureTag, "wstring", Engine::EPropertyType::Wstring, {})
+	REFLECT_PROPERTY(TextureSlot, texture, "Texture", Engine::EPropertyType::Object, {})
 	REFLECT_PROPERTY(TextureSlot, sampler, "RHISampler", Engine::EPropertyType::Object, {})
 END_PROPERTIES
 

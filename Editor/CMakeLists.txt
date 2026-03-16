@@ -29,7 +29,7 @@ add_executable(Editor
 if(MSVC)
     # 컴파일 옵션: 디버그 정보를 생성하여 실행 중 수정 가능하게 함 (/ZI)
     target_compile_options(${PROJECT_NAME} PRIVATE $<$<CONFIG:Debug>:/ZI>)
-    
+    add_compile_options(/fsanitize=address)
     # 링크 옵션: 증분 링크 활성화 (/INCREMENTAL)
     target_link_options(${PROJECT_NAME} PRIVATE $<$<CONFIG:Debug>:/INCREMENTAL>)
 endif()

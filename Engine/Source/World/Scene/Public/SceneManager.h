@@ -33,6 +33,7 @@ public:
 #pragma region Scene Management
 public:
 	EResult OpenScene(Scene* newScene);
+	EResult CloseScene();
 	class Scene* GetCurrentScene() const { return m_CurrentScene; }
 
 	EResult NewScene(void* arg = nullptr);

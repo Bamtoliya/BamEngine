@@ -22,8 +22,10 @@ struct tagRHIShaderDesc
 };
 
 BEGIN(Engine)
+CLASS()
 class ENGINE_API RHIShader : public RHIResource
 {
+	REFLECT_CLASS()
 protected:
 	RHIShader() : RHIResource(ERHIResourceType::Shader) {}
 	RHIShader(RHI* rhi) : RHIResource(rhi, ERHIResourceType::Shader) {}
@@ -33,8 +35,11 @@ public:
 	EShaderType GetShaderType() const { return m_ShaderType; }
 	const string& GetEntryPoint() const { return m_EntryPoint; }
 protected:
+	PROPERTY()
 	EShaderType m_ShaderType = { EShaderType::Unknown };
+	PROPERTY()
 	string m_EntryPoint = { "" };
+
 	vector<uint8> m_ShaderBytecode = {};
 };
 END

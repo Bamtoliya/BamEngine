@@ -71,6 +71,11 @@ public:
 	virtual void SetPixelShader(Shader* shader);
 #pragma endregion
 
+#pragma region Save&Load
+public:
+	virtual void Deserialize(Archive& ar);
+#pragma endregion
+
 
 
 #pragma region Variable

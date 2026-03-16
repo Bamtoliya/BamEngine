@@ -55,6 +55,15 @@ EResult SceneManager::OpenScene(Scene* newScene)
 
 	return EResult::Success;
 }
+EResult SceneManager::CloseScene()
+{
+	if (!m_CurrentScene) return EResult::Success;
+
+	Safe_Release(m_CurrentScene);
+	m_CurrentScene = nullptr;
+
+	return EResult::Success;
+}
 EResult SceneManager::NewScene(void* arg)
 {
 	if (m_CurrentScene)

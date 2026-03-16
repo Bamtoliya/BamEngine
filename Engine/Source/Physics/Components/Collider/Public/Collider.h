@@ -4,6 +4,7 @@
 #include "Structs.h"
 #include "CollisionManager.h"
 
+ENUM()
 enum class EColliderType : uint8
 {
 	Box,
@@ -46,14 +47,19 @@ public:
 	void SetColliderType(EColliderType type) { m_Type = type; }
 #pragma endregion
 
+#pragma region Save & Load
+	virtual void Deserialize(Archive& ar) override;
+#pragma endregion
+
+
 
 
 #pragma region Member Variable
 protected:
-	PROPERTY()
+	PROPERTY(EDITABLE)
 	EColliderType m_Type = EColliderType::Box;
 #ifdef _DEBUG
-	PROPERTY()
+	PROPERTY(EDITABLE)
 	bool m_DrawCollider = { true };
 #endif
 #pragma endregion

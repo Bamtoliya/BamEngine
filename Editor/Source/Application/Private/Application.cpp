@@ -252,7 +252,7 @@ void Application::InitializeResources()
     materialDesc.PixelShader = ResourceManager::Get().GetShader(L"DefaultPS");
     materialDesc.DepthMode = EDepthMode::ReadWrite;
     ResourceManager::Get().LoadMaterial(L"DefaultMaterial", &materialDesc);
-	ResourceManager::Get().GetMaterial(L"DefaultMaterial")->SetTextureBySlot(0, ResourceManager::Get().GetTexture(L"Magenta1x1")->GetRHITexture());
+	ResourceManager::Get().GetMaterial(L"DefaultMaterial")->SetTextureBySlot(0, ResourceManager::Get().GetTexture(L"Magenta1x1"));
 
 	tagMaterialDesc spriteMaterialDesc;
 	spriteMaterialDesc.VertexShader = ResourceManager::Get().GetShader(L"DefaultVS");

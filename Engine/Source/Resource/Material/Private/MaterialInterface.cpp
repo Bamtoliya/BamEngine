@@ -17,7 +17,7 @@ void MaterialInterface::Free()
 }
 #pragma endregion
 
-void MaterialInterface::SetTexture(const string& name, RHITexture* texture)
+void MaterialInterface::SetTexture(const string& name, Texture* texture)
 {
 	auto it = m_TextureSlots.find(name);
 	if (it != m_TextureSlots.end())
@@ -35,7 +35,7 @@ void MaterialInterface::SetTexture(const string& name, RHITexture* texture)
 	Safe_AddRef(texture);
 }
 
-void MaterialInterface::SetTextureBySlot(uint32 slot, RHITexture* texture)
+void MaterialInterface::SetTextureBySlot(uint32 slot, Texture* texture)
 {
 	string slotName = std::to_string(slot);
 	auto it = m_TextureSlots.find(slotName);
@@ -84,7 +84,7 @@ template int32 MaterialInterface::GetParameter<int32>(const string&) const;
 template bool MaterialInterface::GetParameter<bool>(const string&) const;
 template mat4 MaterialInterface::GetParameter<mat4>(const string&) const;
 
-RHITexture* MaterialInterface::GetTexture(const string& name) const
+Texture* MaterialInterface::GetTexture(const string& name) const
 {
 	auto it = m_TextureSlots.find(name);
 	if (it != m_TextureSlots.end())
@@ -92,7 +92,7 @@ RHITexture* MaterialInterface::GetTexture(const string& name) const
 	return nullptr;
 }
 
-RHITexture* MaterialInterface::GetTextureBySlot(uint32 slot) const
+Texture* MaterialInterface::GetTextureBySlot(uint32 slot) const
 {
 	for (auto& [name, textureSlot] : m_TextureSlots)
 	{
@@ -118,15 +118,24 @@ EResult MaterialInterface::Bind(uint32 slot)
 	RHI* rhi = Renderer::Get().GetRHI();
 	for (auto& [name, textureSlot] : m_TextureSlots)
 	{
-		RHITexture* texture = textureSlot.texture;
+		Texture* texture = textureSlot.texture;
 		if (!texture)
-			texture = ResourceManager::Get().GetTexture(L"DefaultTexture")->GetRHITexture();
+			texture = ResourceManager::Get().GetTexture(L"DefaultTexture");
 		RHISampler* sampler = textureSlot.sampler;
 		if (!sampler)
 			sampler = SamplerManager::Get().GetDefaultSampler();
-		if (IsFailure(rhi->BindTextureSampler(texture, sampler, textureSlot.slot)))
+		if (IsFailure(rhi->BindTextureSampler(texture->GetRHITexture(), sampler, textureSlot.slot)))
 			return EResult::Fail;
 	}
 	return EResult::Success;
 }
 #pragma endregion
+
+#pragma region Save&Load
+void MaterialInterface::Deserialize(Archive& ar)
+{
+
+}
+#pragma endregion
+
+

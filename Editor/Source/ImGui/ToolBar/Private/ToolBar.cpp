@@ -42,7 +42,7 @@ void ToolBar::DrawFileMenu()
 {
 	if (ImGui::BeginMenu("File"))
 	{
-		if (ImGui::MenuItem("Eixt", "Alt+F4"))
+		if (ImGui::MenuItem("Exit", "Alt+F4"))
 		{
 			SDL_Event quit_event;
 			quit_event.type = SDL_EVENT_QUIT;
@@ -104,6 +104,12 @@ void ToolBar::DrawSceneMenu()
 		{
 			SelectionManager::Get().ClearSelection();
 			LoadScene();
+		}
+
+		if (ImGui::MenuItem("Close Scene"))
+		{
+			SelectionManager::Get().ClearSelection();
+			SceneManager::Get().CloseScene();
 		}
 
 		ImGui::EndMenu();

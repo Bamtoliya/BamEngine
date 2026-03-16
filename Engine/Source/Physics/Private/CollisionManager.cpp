@@ -18,7 +18,6 @@ EResult CollisionManager::AddCollider(Collider* collider)
 {
 	if (!collider) return EResult::InvalidArgument;
 	m_Colliders.push_back(collider);
-	Safe_AddRef(collider);
 	return EResult::Success;
 }
 EResult CollisionManager::RemoveCollider(Collider* collider)
@@ -26,7 +25,6 @@ EResult CollisionManager::RemoveCollider(Collider* collider)
 	auto it = std::find(m_Colliders.begin(), m_Colliders.end(), collider);
 	if (it != m_Colliders.end())
 	{
-		Safe_Release(*it);
 		m_Colliders.erase(it);
 		return EResult::Success;
 	}

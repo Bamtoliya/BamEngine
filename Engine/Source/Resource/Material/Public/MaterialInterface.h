@@ -2,7 +2,7 @@
 
 #include "Resource.h"
 #include "Shader.h"
-#include "RHITexture.h"
+#include "Texture.h"
 #include "RHIDefinitions.h"
 
 BEGIN(Engine)
@@ -15,7 +15,9 @@ struct TextureSlot
 	PROPERTY()
 	uint32 slot = 0;
 	PROPERTY()
-	RHITexture* texture = { nullptr };
+	wstring textureTag = {};
+	PROPERTY()
+	Texture* texture = { nullptr };
 	PROPERTY()
 	RHISampler* sampler = { nullptr };
 
@@ -97,15 +99,15 @@ public:
 	void SetMatrix(const string& name, const mat4& value) { m_Parameters[name] = MaterialParameter(EMaterialParameterType::Matrix, &value, sizeof(value)); };
 
 	// Texture/Sampler
-	void SetTexture(const string& name, RHITexture* texture);
-	void SetTextureBySlot(uint32 slot, RHITexture* texture);
+	void SetTexture(const string& name, Texture* texture);
+	void SetTextureBySlot(uint32 slot, Texture* texture);
 	void SetSampler(const string& name, RHISampler* sampler);
 
 	// Getter
 	template<typename T>
 	T GetParameter(const string& name) const;
-	RHITexture* GetTexture(const string& name) const;
-	RHITexture* GetTextureBySlot(uint32 slot) const;
+	Texture* GetTexture(const string& name) const;
+	Texture* GetTextureBySlot(uint32 slot) const;
 	RHISampler* GetSampler(const string& name) const;
 	unordered_map<string, TextureSlot>& GetTextureSlots() { return m_TextureSlots; }
 #pragma endregion
@@ -133,6 +135,12 @@ public:
 	virtual void SetVertexShader(Shader* shader) { m_VertexShader = shader; }
 	virtual void SetPixelShader(Shader* shader) { m_PixelShader = shader; }
 #pragma endregion
+
+#pragma region Save&Load
+public:
+	virtual void Deserialize(Archive& ar) override;
+#pragma endregion
+
 
 #pragma region Variable
 protected:

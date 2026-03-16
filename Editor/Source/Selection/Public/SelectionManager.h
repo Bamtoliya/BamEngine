@@ -37,6 +37,14 @@ public:
 	void ClearSelection() {
 		m_SelectedObjects.clear();
 	}
+	void SetSelectedObject(class GameObject* gameObject)
+	{
+		ClearSelection();
+		if (gameObject)
+		{
+			m_SelectedObjects.push_back(gameObject);
+		}
+	}
 	bool IsSelected(class GameObject* gameObject) const
 	{
 		return find(m_SelectedObjects.begin(), m_SelectedObjects.end(), gameObject) != m_SelectedObjects.end();

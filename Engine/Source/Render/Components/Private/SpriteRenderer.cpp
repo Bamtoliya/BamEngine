@@ -121,15 +121,11 @@ EResult SpriteRenderer::SetSprite(Texture* texture)
 		Safe_Release(m_Sprite);
 	tagSpriteCreateDesc desc;
 	desc.Texture = texture;
-	//ResourceManager::Get().LoadSprite()
-	
 	ResourceManager& resourceManager = ResourceManager::Get();
 	wstring textureTag = desc.Texture->GetTag();
-	if (IsFailure(resourceManager.LoadSprite(textureTag, &desc)))
-	{
-		return EResult::Fail;
-	}
+	resourceManager.LoadSprite(textureTag, &desc);
 	m_Sprite = resourceManager.GetSprite(textureTag);
+	Safe_AddRef(m_Sprite);
 	m_SpriteTag = m_Sprite->GetTag();
 	m_SpritePath = m_Sprite->GetPath();
 	
@@ -205,16 +201,16 @@ EResult SpriteRenderer::UpdateMaterialInstance()
 	if (!m_Sprite || !m_Sprite->GetTexture()) return EResult::Fail;
 
 	// MaterialInstance가 없으면 base material로부터 생성
-	if (!m_MaterialInstances[0])
+	if (m_MaterialInstances.empty())
 	{
 		Material* baseMaterial = GetSharedMaterial();
 		if (!baseMaterial) return EResult::Fail;
-		m_MaterialInstances[0] = MaterialInstance::Create(baseMaterial);
+		m_MaterialInstances.push_back(MaterialInstance::Create(baseMaterial));
 		if (!m_MaterialInstances[0]) return EResult::Fail;
 	}
 
 	// Sprite 텍스처를 slot 0에 오버라이드
-	m_MaterialInstances[0]->SetTextureBySlot(0, m_Sprite->GetTexture()->GetRHITexture());
+	m_MaterialInstances[0]->SetTextureBySlot(0, m_Sprite->GetTexture());
 	return EResult::Success;
 }
 #pragma endregion
@@ -228,4 +224,8 @@ void SpriteRenderer::Deserialize(Archive& ar)
 	ResourceManager& resourceManager = ResourceManager::Get();
 	resourceManager.LoadTexture(m_SpriteTag, m_SpritePath);
 	SetSprite(resourceManager.GetTexture(m_SpriteTag));
+	for (auto& materialInstance : m_MaterialInstances)
+	{
+		materialInstance->Deserialize(ar);
+	}
 }

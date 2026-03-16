@@ -9,7 +9,6 @@
 #include "SelectionManager.h"
 #include "InputManager.h"
 
-
 #pragma region Helper
 static quat ExtractRotationQuat(const mat4& matrix)
 {
@@ -390,16 +389,23 @@ void ViewportPanel::MouseInput(const ImVec2& mousePos, const ImVec2& imageMin, c
 	if (MOUSE_BUTTON_DOWN(Engine::EMouseButton::Left) && ImGui::IsWindowHovered() && !ImGuizmo::IsOver())
 	{
 		Ray mouseRay = ScreenPosToRay(mousePos, imageMin, imageSize);
-		GameObject* pickedObject = SelectionManager::Get().PickObjectByRay(mouseRay);
+		SelectionManager& selectionManager = SelectionManager::Get();
+		GameObject* pickedObject = selectionManager.PickObjectByRay(mouseRay);
 		if (pickedObject)
 		{
-			// 선택된 객체가 있다면, 해당 객체를 선택 상태로 전환
-			SelectionManager::Get().ToggleSelection(pickedObject);
+			if (KEY_PRESSED(EKeyCode::LCtrl))
+			{
+				selectionManager.ToggleSelection(pickedObject);
+			}
+			else
+			{
+				selectionManager.SetSelectedObject(pickedObject);
+			}
 			ImGui::SetWindowFocus();
 		}
 		else
 		{
-			SelectionManager::Get().ClearSelection();
+			selectionManager.ClearSelection();
 		}
 	}
 
@@ -434,7 +440,7 @@ Ray ViewportPanel::ScreenPosToRay(const ImVec2& mousePos, const ImVec2& imageMin
 
 	mat4 invVP = viewInvMatrix * projInvMatrix;
 
-	vec4 nearPointNDC = vec4(ndcX, ndcY, 0.0f, 1.0f);
+	vec4 nearPointNDC = vec4(ndcX, ndcY, -1.0f, 1.0f);
 	vec4 farPointNDC = vec4(ndcX, ndcY, 1.0f, 1.0f);
 
 	vec4 nearPointWorld = invVP * nearPointNDC;
@@ -444,7 +450,7 @@ Ray ViewportPanel::ScreenPosToRay(const ImVec2& mousePos, const ImVec2& imageMin
 	ray.Origin = vec3(nearPointWorld) / nearPointWorld.w;
 	//ray.Origin.x += m_RenderTarget->GetWidth() / 2.f;
 	//ray.Origin.y -= m_RenderTarget->GetHeight() / 2.f;
-	ray.Direction = glm::normalize(vec3(farPointWorld / farPointWorld.w - vec4(ray.Origin, 0.f)));
+	ray.Direction = glm::normalize(vec3(farPointWorld / farPointWorld.w) - ray.Origin);
 
 	cout << "Ray Origin: " << ray.Origin.x << ", " << ray.Origin.y << ", " << ray.Origin.z << endl;
 	cout << "Ray Direction: " << ray.Direction.x << ", " << ray.Direction.y << ", " << ray.Direction.z << endl;

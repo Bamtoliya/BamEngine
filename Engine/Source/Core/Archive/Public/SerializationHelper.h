@@ -11,9 +11,22 @@ inline constexpr uint64 MetaNoSerializeHash = Engine::CompileTimeHash("NoSeriali
 class SerializationHelper
 {
 public:
+	using ResourceInstantiatorFunction = bool(*)(string_view typeName, Archive& ar, void** outInstance);
+	static inline ResourceInstantiatorFunction CustomResourceInstantiator = nullptr;
+	static void SetResourceInstantiatorFunction(ResourceInstantiatorFunction func) { CustomResourceInstantiator = func; }
+
 	static void SerializeReflectionProperties(Archive& ar, const TypeInfo* typeInfo, void* instance)
 	{
 		if (!typeInfo || !instance) return;
+
+		if(!typeInfo->ParentName.empty())
+		{
+			const TypeInfo* parentTypeInfo = ReflectionRegistry::Get().GetType(typeInfo->ParentName.data());
+			if (parentTypeInfo)
+			{
+				SerializeReflectionProperties(ar, parentTypeInfo, instance);
+			}
+		}
 
 		for (const auto& prop : typeInfo->Properties)
 		{
@@ -262,7 +275,7 @@ private:
 					if(*objectInstance)
 					{
 						Base* polyObj = static_cast<Engine::Base*>(*objectInstance);
-						string actualTypeName = polyObj->GetTypeInfo().Name.data();
+						string actualTypeName{ polyObj->GetTypeInfo().Name };
 						ar.Process("__Type__", actualTypeName);
 						SerializeReflectionProperties(ar, &polyObj->GetTypeInfo(), *objectInstance);
 					}
@@ -276,21 +289,34 @@ private:
 					{
 						loadedTypeName = instanceTypeName;
 					}
-					if (*objectInstance == nullptr)
-					{
-						*objectInstance = ReflectionRegistry::Get().CreateInstance(loadedTypeName);
-					}
 
-					if (*objectInstance)
+					bool customInstanstiated = false;
+					if (CustomResourceInstantiator)
 					{
-						const TypeInfo* actualTypeInfo = ReflectionRegistry::Get().GetType(loadedTypeName);
-						if (actualTypeInfo)
+						customInstanstiated = CustomResourceInstantiator(loadedTypeName, ar, objectInstance);
+					}
+					if (!customInstanstiated)
+					{
+						if (*objectInstance == nullptr)
 						{
-							SerializeReflectionProperties(ar, actualTypeInfo, *objectInstance);
+							*objectInstance = ReflectionRegistry::Get().CreateInstance(loadedTypeName);
+						}
+
+						if (*objectInstance)
+						{
+							const TypeInfo* actualTypeInfo = ReflectionRegistry::Get().GetType(loadedTypeName);
+							if (actualTypeInfo)
+							{
+								SerializeReflectionProperties(ar, actualTypeInfo, *objectInstance);
+							}
 						}
 					}
 				}
 				if(!isInline) ar.PopScope();
+			}
+			else if(ar.IsReading())
+			{
+				*objectInstance = nullptr;
 			}
 			break;
 		}

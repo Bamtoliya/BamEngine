@@ -70,7 +70,7 @@ bool Collision::Raycast(const Ray& ray, const AABB& aabb, HitResult& outHitResul
 	}
 	outHitResult.Normal = normal;
 
-	return false;
+	return true;
 }
 
 bool Collision::Raycast(const Ray& ray, const AABB& aabb, const mat4& worldMatrix, HitResult& outHitResult)

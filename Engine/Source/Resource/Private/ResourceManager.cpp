@@ -14,6 +14,45 @@ IMPLEMENT_SINGLETON(ResourceManager)
 #pragma region Constructor&Destructor
 EResult ResourceManager::Initialize(void* arg)
 {
+	SerializationHelper::SetResourceInstantiatorFunction([](string_view typeName, Archive& ar, void** outInstance) -> bool
+	{
+		wstring path;
+		ar.Process("m_Path", path);
+		wstring tag;
+		ar.Process("m_Tag", tag);
+		if (typeName == "Mesh")
+		{
+			*outInstance = ResourceManager::Get().GetMesh(tag);
+			return true;
+		}
+		else if (typeName == "Model")
+		{
+			*outInstance = ResourceManager::Get().GetModel(tag);
+			return true;
+		}
+		else if (typeName == "Shader")
+		{
+			*outInstance = ResourceManager::Get().GetShader(tag);
+			return true;
+		}
+		else if (typeName == "Sprite")
+		{
+			*outInstance = ResourceManager::Get().GetSprite(tag);
+			return true;
+		}
+		else if (typeName == "Texture")
+		{
+			*outInstance = ResourceManager::Get().GetTexture(tag);
+			return true;
+		}
+		else if (typeName == "Material")
+		{
+			*outInstance = ResourceManager::Get().GetMaterial(tag);
+			return true;
+		}
+		
+		return false; // 알 수 없는 타입
+	});
 	return EResult::Success;
 }
 
@@ -23,6 +62,8 @@ void ResourceManager::Free()
 	RELEASE_MAP(m_Shaders)
 	RELEASE_MAP(m_Textures);
 	RELEASE_MAP(m_Materials);
+	RELEASE_MAP(m_Sprites);
+	RELEASE_MAP(m_Models);
 	
 	for (auto& pair : m_GenericContainers)
 	{
@@ -119,6 +160,13 @@ Mesh* ResourceManager::GetMesh(const wstring& key)
 {
 	auto	iter = m_Meshes.find(key);
 	if (iter != m_Meshes.end())
+		return iter->second;
+	return nullptr;
+}
+Model* ResourceManager::GetModel(const wstring& key)
+{
+	auto	iter = m_Models.find(key);
+	if (iter != m_Models.end())
 		return iter->second;
 	return nullptr;
 }

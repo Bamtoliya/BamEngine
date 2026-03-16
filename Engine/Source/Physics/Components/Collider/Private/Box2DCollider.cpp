@@ -61,7 +61,7 @@ void Box2DCollider::Free()
 void Box2DCollider::LateUpdate(f32 dt)
 {
 #ifdef _DEBUG
-	if (m_DrawCollider)
+	if (m_DrawCollider && m_Active)
 	{
 		mat4 worldMatrix = m_Owner ? m_Owner->GetTransform()->GetWorldMatrix() : glm::identity<mat4>();
 		Renderer::Get().DrawDebugBox(vec3(m_Center, 0.0f), vec3(m_Extent, 0.0f), vec4(0.f, 1.f, 0.f, 1.f), worldMatrix);
