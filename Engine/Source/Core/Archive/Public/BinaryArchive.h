@@ -2,6 +2,7 @@
 
 #include "Archive.h"
 #include "ReflectionTypes.h"
+#include "Resource.h"
 
 BEGIN(Engine)
 
@@ -11,12 +12,6 @@ enum class EBinTag : uint8
 	Object = 2,   // PushScope / PopScope
 	Array = 3,    // BeginArray / EndArray
 	Map = 4       // BeginMap / EndMap
-};
-struct BinFileHeader
-{
-	uint32 Magic = 0x42414D42; // 'BAMB' (BamEngine Binary)
-	uint16 Major = 1;
-	uint16 Minor = 0;
 };
 struct BinNodeHeader
 {
@@ -53,12 +48,13 @@ private:
 	
 	
 public:
+	using Archive::Process;
 	explicit BinaryArchive(EArchiveMode mode) : Archive(mode), m_Cursor(0)
 	{
 		if (IsWriting())
 		{
 			m_WriteScopeStack.push({ 0, false, false, 0, 0 }); // Root scope
-			BinFileHeader header;
+			tagResourceBinaryHeader header;
 			WriteRaw(&header, sizeof(header));
 		}
 	}

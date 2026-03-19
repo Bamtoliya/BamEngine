@@ -42,6 +42,7 @@
 #include <sstream>
 #include <any>
 
+#include <future>
 #include <thread>
 #include <atomic>
 #include <variant>
@@ -94,6 +95,7 @@ using namespace glm;
 #include "Delegate.h"
 #include "EnumBit.h"
 #include "RenderTypes.h"
+#include "Handle.h"
 #pragma endregion
 using namespace Engine;
 

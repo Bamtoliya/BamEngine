@@ -19,7 +19,7 @@ class ENGINE_API Sprite final : public Resource
 	using DESC = tagSpriteCreateDesc;
 #pragma region Constructor&Destructor
 private:
-	Sprite() {}
+	Sprite() : Resource(EResourceType::Sprite) {}
 	virtual ~Sprite() = default;
 	EResult Initialize(void* arg = nullptr);
 public:
@@ -61,7 +61,7 @@ public:
 
 #pragma region Member Variable
 private:
-	PROPERTY(NOSERIALIZE)
+	PROPERTY(READONLY, NOSERIALIZE)
 	Texture* m_Texture = { nullptr };
 
 	PROPERTY()

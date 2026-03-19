@@ -1,11 +1,11 @@
 ﻿#pragma once
 
+#include "AssetRef.h"
 #include "Archive.h"
 #include "ReflectionRegistry.h"
 #include "PropertyAccessor.h"
 
 BEGIN(Engine)
-
 inline constexpr uint64 MetaNoSerializeHash = Engine::CompileTimeHash("NoSerialize");
 
 class SerializationHelper
@@ -322,6 +322,19 @@ private:
 		}
 		case Engine::EPropertyType::Struct:
 		{
+			string typeName = NormalizeTypeName(varInfo.Name);
+
+			if (typeName.starts_with("AssetRef<"))
+			{
+				if (ar.PushScope(propName))
+				{
+					AssetRefBase* assetRef = static_cast<AssetRefBase*>(valuePtr);
+					assetRef->Serialize(ar);
+			
+					ar.PopScope();
+				}
+				break;
+			}
 			if (ar.PushScope(propName))
 			{
 				const TypeInfo* InnerTypeInfo = ReflectionRegistry::Get().GetType(NormalizeTypeName(varInfo.Name));
@@ -436,4 +449,43 @@ private:
 		}
 	}
 };
+
+template<typename T>
+inline void Archive::Process(string_view key, T& type)
+{
+	if (IsWriting())
+	{
+		PushScope(key);
+
+		// 1. 클래스가 SerializableInterface 처럼 자체 Serialize 멤버 함수를 가진 경우
+		if constexpr (requires { type.Serialize(*this); })
+		{
+			type.Serialize(*this);
+		}
+		// 2. 자체 멤버함수는 없지만 REFLECT_STRUCT 매크로를 사용한 구조체인 경우
+		else if constexpr (requires { T::GetStaticTypeInfo(); })
+		{
+			SerializationHelper::SerializeReflectionProperties(*this, &T::GetStaticTypeInfo(), &type);
+		}
+
+		PopScope();
+	}
+	else if (IsReading())
+	{
+		// 읽기일 때는 Scope가 존재하는지 확인 후에 진행
+		if (PushScope(key))
+		{
+			if constexpr (requires { type.Deserialize(*this); })
+			{
+				type.Deserialize(*this);
+			}
+			else if constexpr (requires { T::GetStaticTypeInfo(); })
+			{
+				SerializationHelper::SerializeReflectionProperties(*this, &T::GetStaticTypeInfo(), &type);
+			}
+
+			PopScope();
+		}
+	}
+}
 END

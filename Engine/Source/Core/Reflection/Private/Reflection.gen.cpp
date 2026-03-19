@@ -4,7 +4,7 @@
 #include "Core/Reflection/Public/ReflectionContainers.h"
 
 // [Header Includes]
-#include "Core/Public/Component.h"
+#include "Core/Public/Interface/Component.h"
 #include "Core/Public/Structs.h"
 #include "Core/Public/Transform.h"
 #include "Physics/Components/Collider/Public/Box2DCollider.h"
@@ -167,6 +167,24 @@ BEGIN_ENUM(EMaterialParameterType)
 	REFLECT_ENUM_ENTRY(EMaterialParameterType, Bool)
 	REFLECT_ENUM_ENTRY(EMaterialParameterType, Matrix)
 END_ENUM_REFLECT(EMaterialParameterType)
+// Enum: EResourceType
+BEGIN_ENUM(EResourceType)
+	REFLECT_ENUM_ENTRY(EResourceType, Unknown)
+	REFLECT_ENUM_ENTRY(EResourceType, Texture)
+	REFLECT_ENUM_ENTRY(EResourceType, Sprite)
+	REFLECT_ENUM_ENTRY(EResourceType, Material)
+	REFLECT_ENUM_ENTRY(EResourceType, MaterialInstance)
+	REFLECT_ENUM_ENTRY(EResourceType, Shader)
+	REFLECT_ENUM_ENTRY(EResourceType, Mesh)
+	REFLECT_ENUM_ENTRY(EResourceType, Model)
+	REFLECT_ENUM_ENTRY(EResourceType, Animation)
+	REFLECT_ENUM_ENTRY(EResourceType, AudioClip)
+	REFLECT_ENUM_ENTRY(EResourceType, Skeleton)
+	REFLECT_ENUM_ENTRY(EResourceType, Prefab)
+	REFLECT_ENUM_ENTRY(EResourceType, Script)
+	REFLECT_ENUM_ENTRY(EResourceType, Scene)
+	REFLECT_ENUM_ENTRY(EResourceType, Save)
+END_ENUM_REFLECT(EResourceType)
 // Enum: ELayerFlags
 BEGIN_ENUM(ELayerFlags)
 	REFLECT_ENUM_ENTRY(ELayerFlags, None)
@@ -190,32 +208,6 @@ END_ENUM_REFLECT(EObjectFlag)
 // ==========================================================
 // [CLASS/STRUCT REFLECTIONS]
 // ==========================================================
-#pragma region STRUCT: tagComponentDesc
-BEGIN_PROPERTIES(tagComponentDesc)
-	REFLECT_PROPERTY(tagComponentDesc, Active, "bool", Engine::EPropertyType::Bool, {})
-	REFLECT_PROPERTY(tagComponentDesc, Tag, "wstring", Engine::EPropertyType::Wstring, {})
-	REFLECT_PROPERTY(tagComponentDesc, Owner, "class GameObject", Engine::EPropertyType::Object, {})
-END_PROPERTIES
-
-EMPTY_FUNCTIONS(tagComponentDesc)
-
-IMPLEMENT_CLASS(tagComponentDesc, None)
-
-#pragma endregion // STRUCT: tagComponentDesc
-
-#pragma region CLASS: Component
-BEGIN_PROPERTIES(Component)
-	REFLECT_PROPERTY(Component, m_Active, "bool", Engine::EPropertyType::Bool, {})
-	REFLECT_PROPERTY(Component, m_Dirty, "bool", Engine::EPropertyType::Bool, {})
-	REFLECT_PROPERTY(Component, m_Tag, "wstring", Engine::EPropertyType::Wstring, {})
-END_PROPERTIES
-
-EMPTY_FUNCTIONS(Component)
-
-IMPLEMENT_CLASS(Component, Base)
-
-#pragma endregion // CLASS: Component
-
 #pragma region STRUCT: AABB
 BEGIN_PROPERTIES(AABB)
 	REFLECT_PROPERTY(AABB, Min, "vec3", Engine::EPropertyType::Vector3, {})
@@ -340,6 +332,32 @@ END_FUNCTIONS
 IMPLEMENT_CLASS(Transform, Component)
 
 #pragma endregion // CLASS: Transform
+
+#pragma region STRUCT: tagComponentDesc
+BEGIN_PROPERTIES(tagComponentDesc)
+	REFLECT_PROPERTY(tagComponentDesc, Active, "bool", Engine::EPropertyType::Bool, {})
+	REFLECT_PROPERTY(tagComponentDesc, Tag, "wstring", Engine::EPropertyType::Wstring, {})
+	REFLECT_PROPERTY(tagComponentDesc, Owner, "class GameObject", Engine::EPropertyType::Object, {})
+END_PROPERTIES
+
+EMPTY_FUNCTIONS(tagComponentDesc)
+
+IMPLEMENT_CLASS(tagComponentDesc, None)
+
+#pragma endregion // STRUCT: tagComponentDesc
+
+#pragma region CLASS: Component
+BEGIN_PROPERTIES(Component)
+	REFLECT_PROPERTY(Component, m_Active, "bool", Engine::EPropertyType::Bool, {})
+	REFLECT_PROPERTY(Component, m_Dirty, "bool", Engine::EPropertyType::Bool, {})
+	REFLECT_PROPERTY(Component, m_Tag, "wstring", Engine::EPropertyType::Wstring, {})
+END_PROPERTIES
+
+EMPTY_FUNCTIONS(Component)
+
+IMPLEMENT_CLASS(Component, Base)
+
+#pragma endregion // CLASS: Component
 
 #pragma region CLASS: Box2DCollider
 BEGIN_METADATA(Box2DCollider, m_Center)
@@ -486,14 +504,6 @@ IMPLEMENT_CLASS(RenderComponent, Component)
 #pragma endregion // CLASS: RenderComponent
 
 #pragma region CLASS: SpriteRenderer
-BEGIN_METADATA(SpriteRenderer, m_SpriteTag)
-	READONLY
-END_METADATA
-
-BEGIN_METADATA(SpriteRenderer, m_SpritePath)
-	READONLY
-END_METADATA
-
 BEGIN_METADATA(SpriteRenderer, m_Tiling)
 	EDITABLE
 	DEFAULT(vec2(1.f, 1.f))
@@ -501,7 +511,6 @@ END_METADATA
 
 BEGIN_METADATA(SpriteRenderer, m_Sprite)
 	EDITABLE
-	NOSERIALIZE
 END_METADATA
 
 BEGIN_METADATA(SpriteRenderer, m_CachedSpriteVersion)
@@ -514,10 +523,8 @@ BEGIN_METADATA(SpriteRenderer, m_DrawMode)
 END_METADATA
 
 BEGIN_PROPERTIES(SpriteRenderer)
-	REFLECT_PROPERTY(SpriteRenderer, m_SpriteTag, "wstring", Engine::EPropertyType::Wstring, SpriteRenderer_m_SpriteTag_Meta)
-	REFLECT_PROPERTY(SpriteRenderer, m_SpritePath, "wstring", Engine::EPropertyType::Wstring, SpriteRenderer_m_SpritePath_Meta)
 	REFLECT_PROPERTY(SpriteRenderer, m_Tiling, "vec2", Engine::EPropertyType::Vector2, SpriteRenderer_m_Tiling_Meta)
-	REFLECT_PROPERTY(SpriteRenderer, m_Sprite, "Sprite", Engine::EPropertyType::Object, SpriteRenderer_m_Sprite_Meta)
+	REFLECT_PROPERTY(SpriteRenderer, m_Sprite, "AssetRef<Sprite>", Engine::EPropertyType::Struct, SpriteRenderer_m_Sprite_Meta)
 	REFLECT_PROPERTY(SpriteRenderer, m_CachedSpriteVersion, "uint32", Engine::EPropertyType::UInt32, SpriteRenderer_m_CachedSpriteVersion_Meta)
 	REFLECT_PROPERTY(SpriteRenderer, m_DrawMode, "EDrawMode", Engine::EPropertyType::Enum, SpriteRenderer_m_DrawMode_Meta)
 END_PROPERTIES
@@ -717,12 +724,29 @@ IMPLEMENT_CLASS(Skeleton, Resource)
 
 #pragma endregion // CLASS: Skeleton
 
+#pragma region STRUCT: tagResourceBinaryHeader
+BEGIN_PROPERTIES(tagResourceBinaryHeader)
+	REFLECT_PROPERTY(tagResourceBinaryHeader, MagicNumber, "uint64", Engine::EPropertyType::UInt64, {})
+	REFLECT_PROPERTY(tagResourceBinaryHeader, ResourceType, "EResourceType", Engine::EPropertyType::Enum, {})
+	REFLECT_PROPERTY(tagResourceBinaryHeader, Version, "uint32", Engine::EPropertyType::UInt32, {})
+END_PROPERTIES
+
+EMPTY_FUNCTIONS(tagResourceBinaryHeader)
+
+IMPLEMENT_CLASS(tagResourceBinaryHeader, None)
+
+#pragma endregion // STRUCT: tagResourceBinaryHeader
+
 #pragma region CLASS: Resource
 BEGIN_METADATA(Resource, m_Tag)
 	READONLY
 END_METADATA
 
 BEGIN_METADATA(Resource, m_Version)
+	READONLY
+END_METADATA
+
+BEGIN_METADATA(Resource, m_ResourceType)
 	READONLY
 END_METADATA
 
@@ -733,6 +757,7 @@ END_METADATA
 BEGIN_PROPERTIES(Resource)
 	REFLECT_PROPERTY(Resource, m_Tag, "wstring", Engine::EPropertyType::Wstring, Resource_m_Tag_Meta)
 	REFLECT_PROPERTY(Resource, m_Version, "uint32", Engine::EPropertyType::UInt32, Resource_m_Version_Meta)
+	REFLECT_PROPERTY(Resource, m_ResourceType, "EResourceType", Engine::EPropertyType::Enum, Resource_m_ResourceType_Meta)
 	REFLECT_PROPERTY(Resource, m_Path, "wstring", Engine::EPropertyType::Wstring, Resource_m_Path_Meta)
 END_PROPERTIES
 
@@ -755,6 +780,7 @@ IMPLEMENT_CLASS(Shader, Resource)
 
 #pragma region CLASS: Sprite
 BEGIN_METADATA(Sprite, m_Texture)
+	READONLY
 	NOSERIALIZE
 END_METADATA
 
@@ -773,6 +799,24 @@ EMPTY_FUNCTIONS(Sprite)
 IMPLEMENT_CLASS(Sprite, Resource)
 
 #pragma endregion // CLASS: Sprite
+
+#pragma region STRUCT: tagTextureBinaryHeader
+BEGIN_PROPERTIES(tagTextureBinaryHeader)
+	REFLECT_PROPERTY(tagTextureBinaryHeader, Width, "uint32", Engine::EPropertyType::UInt32, {})
+	REFLECT_PROPERTY(tagTextureBinaryHeader, Height, "uint32", Engine::EPropertyType::UInt32, {})
+	REFLECT_PROPERTY(tagTextureBinaryHeader, Depth, "uint32", Engine::EPropertyType::UInt32, {})
+	REFLECT_PROPERTY(tagTextureBinaryHeader, MipLevels, "uint32", Engine::EPropertyType::UInt32, {})
+	REFLECT_PROPERTY(tagTextureBinaryHeader, ArraySize, "uint32", Engine::EPropertyType::UInt32, {})
+	REFLECT_PROPERTY(tagTextureBinaryHeader, Format, "ETextureFormat", Engine::EPropertyType::Enum, {})
+	REFLECT_PROPERTY(tagTextureBinaryHeader, Dimension, "ETextureDimension", Engine::EPropertyType::Enum, {})
+	REFLECT_PROPERTY(tagTextureBinaryHeader, DataSize, "uint32", Engine::EPropertyType::UInt32, {})
+END_PROPERTIES
+
+EMPTY_FUNCTIONS(tagTextureBinaryHeader)
+
+IMPLEMENT_CLASS(tagTextureBinaryHeader, None)
+
+#pragma endregion // STRUCT: tagTextureBinaryHeader
 
 #pragma region CLASS: Texture
 BEGIN_PROPERTIES(Texture)

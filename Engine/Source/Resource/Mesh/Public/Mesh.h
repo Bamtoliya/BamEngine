@@ -30,7 +30,7 @@ class ENGINE_API Mesh : public Resource
 #pragma region Constructor&Destructor
 protected:
 	using DESC = tagMeshCreateInfo;
-	Mesh() {}
+	Mesh() : Resource(EResourceType::Mesh) {}
 	virtual ~Mesh() = default;
 	EResult Initialize(void* arg = nullptr);
 public:

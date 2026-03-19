@@ -97,8 +97,8 @@ private:
 	f32 m_DoubleClickThreshold = 0.3f;
 	f32 m_DragThreshold = 3.0f;
 
-	array<MouseStateData, static_cast<uint32>(EMouseButton::Count)> m_MouseButtonStatesData;
-	array<bool, static_cast<uint32>(EMouseButton::Count)> m_CurrentDoubleClicks;
+	array<MouseStateData, static_cast<uint32>(EMouseButton::Count)> m_MouseButtonStatesData = {};
+	array<bool, static_cast<uint32>(EMouseButton::Count)> m_CurrentDoubleClicks = {false,};
 #pragma endregion
 };
 END

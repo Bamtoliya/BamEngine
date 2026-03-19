@@ -58,13 +58,13 @@ struct tagTransformDesc : tagComponentDesc
 	REFLECT_STRUCT()
 
 	PROPERTY()
-	vec3	Position;
+	vec3	Position = vec3(0.0f);
 
 	PROPERTY()
-	vec3	Rotation;
+	vec3	Rotation = vec3(0.0f);
 
 	PROPERTY()
-	vec3	Scale;
+	vec3	Scale = vec3(1.0f);
 };
 #pragma endregion
 

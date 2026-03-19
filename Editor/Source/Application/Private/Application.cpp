@@ -265,8 +265,8 @@ void Application::InitializeResources()
     archive.SaveToFile("Resources/Material/SpriteMaterial.materialInstance");
 	
 
-
-
+    ResourceManager::Get().LoadFile(L"Resources/Texture/uv1.bamtex");
+	ResourceManager::Get().SaveToJsonFile(ResourceManager::Get().GetTexture(L"SampleTexture"), L"Resources/Texture/SampleTexture.json");
 
     
 
@@ -310,6 +310,7 @@ void Application::Run(int argc, char* argv[])
 		f32 dt = timeManager.GetDeltaTime();
 		UpdateTitle(dt);
 		ImGuiManager::Get().Update(dt);
+		m_AssetManager->Update(dt);
 		m_Runtime->RunFrame(dt);
     }
 }

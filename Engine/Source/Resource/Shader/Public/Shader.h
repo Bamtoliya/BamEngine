@@ -17,7 +17,7 @@ class ENGINE_API Shader final : public Resource
 	using DESC = tagShaderDesc;
 #pragma region Constructor&Destructor
 private:
-	Shader() {}
+	Shader() : Resource(EResourceType::Shader) {}
 	virtual ~Shader() = default;
 	EResult Initialize(void* arg = nullptr);
 public:

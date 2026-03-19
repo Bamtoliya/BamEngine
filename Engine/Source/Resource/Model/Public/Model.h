@@ -22,7 +22,7 @@ class ENGINE_API Model : public Resource
 	using DESC = tagModelCreateDesc;
 #pragma region Constrcutor&Destructor
 private:
-	Model() {}
+	Model() : Resource(EResourceType::Model) {}
 	virtual ~Model() = default;
 	EResult Initialize(void* arg = nullptr);
 public:

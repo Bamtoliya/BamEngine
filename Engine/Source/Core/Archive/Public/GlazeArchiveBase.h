@@ -7,6 +7,7 @@ BEGIN(Engine)
 class ENGINE_API GlazeArchiveBase : public Archive
 {
 public:
+	using Archive::Process;
 	explicit GlazeArchiveBase(EArchiveMode mode) : Archive(mode) { m_Root = glz::json_t::object_t{}; m_ScopeStack.push(&m_Root); }
 	virtual ~GlazeArchiveBase() = default;
 public:

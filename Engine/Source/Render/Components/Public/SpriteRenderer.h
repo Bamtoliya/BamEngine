@@ -4,6 +4,7 @@
 #include "Mesh.h"
 #include "Sprite.h"
 #include "Material.h"
+#include "AssetRef.h"
 
 
 ENUM()
@@ -62,18 +63,13 @@ public:
 
 #pragma region Variable
 private:
-	PROPERTY(READONLY)
-	wstring m_SpriteTag = L"";
-	PROPERTY(READONLY)
-	wstring m_SpritePath = L"";
-
 	PROPERTY(EDITABLE, DEFAULT(vec2(1.f, 1.f)))
 	vec2 m_Tiling = { 1.f, 1.f };
 
 	Mesh* m_Mesh = { nullptr };
 
-	PROPERTY(EDITABLE, NOSERIALIZE)
-	Sprite* m_Sprite = { nullptr };
+	PROPERTY(EDITABLE)
+	AssetRef<Sprite> m_Sprite = { nullptr };
 
 	PROPERTY(CATEGORY("DETAIL"), READONLY)
 	uint32 m_CachedSpriteVersion = { 0 };

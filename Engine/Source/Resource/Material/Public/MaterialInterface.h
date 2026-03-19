@@ -42,7 +42,7 @@ struct MaterialParameter
 	REFLECT_STRUCT()
 
 	PROPERTY()
-	EMaterialParameterType type;
+	EMaterialParameterType type = EMaterialParameterType::Float;
 
 	PROPERTY()
 	vector<uint8> data;
@@ -76,7 +76,8 @@ class ENGINE_API MaterialInterface : public Resource
 #pragma region Constructor&Destructor
 protected:
 	using DESC = tagMaterialDesc;
-	MaterialInterface() {}
+	MaterialInterface() : Resource(EResourceType::Material) {}
+	MaterialInterface(EResourceType type) : Resource(type) {}
 	virtual ~MaterialInterface() = default;
 public:
 	virtual void Free() override;

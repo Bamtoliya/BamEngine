@@ -53,6 +53,7 @@ EResult ResourceManager::Initialize(void* arg)
 		
 		return false; // 알 수 없는 타입
 	});
+	RegisterExplicitLoader();
 	return EResult::Success;
 }
 
@@ -218,12 +219,12 @@ EResult ResourceManager::ImportFolder(const wstring& folderPath)
 
 	return EResult::Success;
 }
-EResult ResourceManager::LoadFile(const wstring& filePath)
+void* ResourceManager::LoadFile(const wstring& filePath)
 {
 	namespace fs = std::filesystem;
 	fs::path path(filePath);
 	if(!fs::exists(path))
-		return EResult::FileNotFound;
+		return nullptr;
 
 	wstring extension = path.extension().wstring();
 
@@ -233,17 +234,30 @@ EResult ResourceManager::LoadFile(const wstring& filePath)
 	if (iter != m_LoaderRegistry.end())
 	{
 		wstring key = path.stem().wstring();
-		if (iter->second(key, filePath))
-			return EResult::Success;
-		else
-			return EResult::Fail;;
-	}
-	else
-	{
-		return EResult::NotImplemented;
+		return iter->second(key, filePath);
 	}
 
-	return EResult::Success;
+	return nullptr;
+}
+void* ResourceManager::GetOrLoadFile(const wstring& key, const wstring& filePath)
+{
+	namespace fs = std::filesystem;
+	fs::path path(filePath);
+	if (!fs::exists(path))
+		return nullptr;
+
+	wstring extension = path.extension().wstring();
+
+	std::transform(extension.begin(), extension.end(), extension.begin(), ::towlower);
+
+	auto iter = m_LoaderRegistry.find(extension);
+	if (iter != m_LoaderRegistry.end())
+	{
+		wstring key = path.stem().wstring();
+		return iter->second(key, filePath);
+	}
+
+	return nullptr;
 }
 void ResourceManager::RegisterExplicitLoader()
 {
@@ -257,7 +271,6 @@ void ResourceManager::RegisterExplicitLoader()
 	m_LoaderRegistry[L".bmp"] = textureLoader;
 	m_LoaderRegistry[L".tga"] = textureLoader;
 	m_LoaderRegistry[L".jpeg"] = textureLoader;
-	m_LoaderRegistry[L".bamtexture"] = textureLoader;
 
 	auto meshLoader = [this](wstring key, wstring path) -> Mesh*
 	{
@@ -270,6 +283,29 @@ void ResourceManager::RegisterExplicitLoader()
 	m_LoaderRegistry[L".mesh"] = meshLoader;
 	m_LoaderRegistry[L".obj"] = meshLoader;
 	m_LoaderRegistry[L".fbx"] = meshLoader;
+
+	auto jsonLoader = [this](wstring key, wstring path) -> void*
+		{
+			return this->LoadFromJsonFile(path);
+		};
+	m_LoaderRegistry[L".json"] = jsonLoader;
+
+	auto beveLoader = [this](wstring key, wstring path) -> void*
+		{
+			return this->LoadFromBeveFile(path);
+		};
+	m_LoaderRegistry[L".beve"] = beveLoader;
+
+	auto binaryLoader = [this](wstring key, wstring path) -> void*
+		{
+			return this->LoadFromBinaryFile(path);
+		};
+	m_LoaderRegistry[L".bin"] = binaryLoader;
+
+	//Custonm binary formats
+	m_LoaderRegistry[L".asset"] = binaryLoader;
+	m_LoaderRegistry[L".bamtex"] = binaryLoader;
+	m_LoaderRegistry[L".bammat"] = binaryLoader;
 }
 
 
@@ -294,6 +330,109 @@ EResult ResourceManager::SaveToBinaryFile(Resource* resource, const wstring& fil
 	BinaryArchive archive(EArchiveMode::Write);
 	resource->Serialize(archive);
 	return archive.SaveToFile(WStrToStr(filePath)) ? EResult::Success : EResult::Fail;
+}
+
+void* ResourceManager::LoadFromJsonFile(const wstring& filePath)
+{
+	JsonArchive archive(EArchiveMode::Read);
+	if (!archive.LoadFromFile(WStrToStr(filePath)))
+		return nullptr;
+	string typeName;
+	archive.Process("__Type__", typeName);
+
+	if (typeName.empty())
+		return nullptr;
+
+	void* instance = ReflectionRegistry::Get().CreateInstance(typeName);
+	if (!instance)
+		return nullptr;
+
+	Resource* resource = static_cast<Resource*>(instance);
+	resource->Deserialize(archive);
+
+	wstring tag = resource->GetTag();
+	if (typeName == "Mesh") m_Meshes[tag] = static_cast<Mesh*>(resource);
+	else if (typeName == "Model") m_Models[tag] = static_cast<Model*>(resource);
+	else if (typeName == "Shader") m_Shaders[tag] = static_cast<Shader*>(resource);
+	else if (typeName == "Sprite") m_Sprites[tag] = static_cast<Sprite*>(resource);
+	else if (typeName == "Texture") m_Textures[tag] = static_cast<Texture*>(resource);
+	else if (typeName == "Material") m_Materials[tag] = static_cast<Material*>(resource);
+
+	return resource;
+}
+
+void* ResourceManager::LoadFromBeveFile(const wstring& filePath)
+{
+	BeveArchive archive(EArchiveMode::Read); // Read 모드로 수정
+	if (!archive.LoadFromFile(WStrToStr(filePath)))
+		return nullptr;
+
+	string typeName;
+	archive.Process("__Type__", typeName);
+
+	if (typeName.empty())
+		return nullptr;
+
+	void* instance = ReflectionRegistry::Get().CreateInstance(typeName);
+	if (!instance)
+		return nullptr;
+	Resource* resource = static_cast<Resource*>(instance);
+	resource->Deserialize(archive);
+
+	wstring tag = resource->GetTag();
+	if (typeName == "Mesh") m_Meshes[tag] = static_cast<Mesh*>(resource);
+	else if (typeName == "Model") m_Models[tag] = static_cast<Model*>(resource);
+	else if (typeName == "Shader") m_Shaders[tag] = static_cast<Shader*>(resource);
+	else if (typeName == "Sprite") m_Sprites[tag] = static_cast<Sprite*>(resource);
+	else if (typeName == "Texture") m_Textures[tag] = static_cast<Texture*>(resource);
+	else if (typeName == "Material") m_Materials[tag] = static_cast<Material*>(resource);
+
+	return resource;
+}
+
+void* ResourceManager::LoadFromBinaryFile(const wstring& filePath)
+{
+	BinaryArchive archive(EArchiveMode::Read); // Read 모드로 수정
+	if (!archive.LoadFromFile(WStrToStr(filePath)))
+		return nullptr;
+
+	string typeName;
+	archive.Process("__Type__", typeName);
+
+	if (typeName.empty())
+		return nullptr;
+
+	void* instance = ReflectionRegistry::Get().CreateInstance(typeName);
+	if (!instance)
+		return nullptr;
+	Resource* resource = static_cast<Resource*>(instance);
+	resource->Deserialize(archive);
+
+	std::filesystem::path fsPath(filePath);
+
+	// 1. Path 세팅 (실제 로드한 파일의 전체/상대 경로)
+	resource->SetPath(filePath);
+
+	// 2. 직렬화된 Tag가 비어있다면, 파일 경로를 기반으로 Tag를 만들어줍니다.
+	if (resource->GetTag().empty())
+	{
+		// 추천: 파일 이름만 쓰지 말고, 충돌 방지를 위해 적절한 상대 경로를 Tag로 씁니다.
+		// 임시로 filename의 확장자를 제외한 부분(stem)을 사용하되, 
+		// 향후 프로젝트 규모가 커지면 "경로+이름" 형태의 고유 식별자로 바꾸시는 것을 권장합니다.
+		wstring newTag = fsPath.stem().wstring();
+		resource->SetTag(newTag);
+	}
+	// ---------------------------------------------------------
+
+	wstring tag = resource->GetTag();
+	if (typeName == "Mesh") m_Meshes[tag] = static_cast<Mesh*>(resource);
+	else if (typeName == "Model") m_Models[tag] = static_cast<Model*>(resource);
+	else if (typeName == "Shader") m_Shaders[tag] = static_cast<Shader*>(resource);
+	else if (typeName == "Sprite") m_Sprites[tag] = static_cast<Sprite*>(resource);
+	else if (typeName == "Texture") m_Textures[tag] = static_cast<Texture*>(resource);
+	else if (typeName == "Material") m_Materials[tag] = static_cast<Material*>(resource);
+
+	return resource;
 }
 #pragma endregion
 

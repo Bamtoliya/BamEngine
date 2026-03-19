@@ -51,14 +51,7 @@ static void ResolveConflict(const FileDropConflict& conflict, int action)
 	try {
 		if (action == 1) // 덮어쓰기
 		{
-			EResult result = AssetManager::Get().Import(conflict.Source, conflict.Dest);
-
-			if (IsFailure(result))
-			{
-				MessageBoxA(nullptr, "Failed to import asset. Please check the file and try again.", "Import Error", MB_ICONERROR);
-				auto copyOptions = std::filesystem::copy_options::recursive | std::filesystem::copy_options::overwrite_existing;
-				std::filesystem::copy(conflict.Source, conflict.Dest, copyOptions);
-			}
+			AssetManager::Get().ImportAsync(conflict.Source, conflict.Dest);
 		}
 		else if (action == 2) // 복사본 생성 (Rename)
 		{
@@ -72,16 +65,14 @@ static void ResolveConflict(const FileDropConflict& conflict, int action)
 				newDest = conflict.Dest.parent_path() / (stem + "_copy" + std::to_string(suffix++) + ext);
 			} while (std::filesystem::exists(newDest));
 
-			EResult result = AssetManager::Get().Import(conflict.Source, newDest);
-			if(IsFailure(result))
-			{
-				std::filesystem::copy(conflict.Source, newDest, std::filesystem::copy_options::recursive);
-			}
+			AssetManager::Get().ImportAsync(conflict.Source, newDest);
 		}
 		// action == 3 (건너뛰기) 일 경우 아무 작업도 하지 않음
 	}
 	catch (...) {}
 }
+
+
 
 EResult ContentBrowserPanel::Initialize(void* arg)
 {
@@ -93,11 +84,22 @@ EResult ContentBrowserPanel::Initialize(void* arg)
 	m_LastDirectory = m_CurrentDirectory;
 	m_NeedToExpandTree = true;
 	memset(m_SearchBuffer, 0, sizeof(m_SearchBuffer));
+	AssetManager::Get().GetAsyncDelegate().AddLambda([this]() {
+		RequestRefresh();
+		});
 	return EResult::Success;
 }
 
 void ContentBrowserPanel::Draw()
 {
+	// AssetManager가 처리 중인 비동기 작업이 있다면 UI에 로딩 상태를 표시
+	size_t activeTasks = AssetManager::Get().GetActiveTaskCount();
+	if (activeTasks > 0)
+	{
+		ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), ICON_FA_ARROW_ROTATE_RIGHT " Importing %d Asset(s) in background...", (int)activeTasks);
+		ImGui::Separator();
+	}
+
 	if (!m_Open) return;
 
 	ImGui::Begin(WStrToStr(m_Name).c_str(), &m_Open);
@@ -252,6 +254,7 @@ void ContentBrowserPanel::TreeViewContextMenu(const filesystem::path& path)
 		{
 			// 루트가 아닐 때만 삭제 가능 (실제 삭제 시 모달 팝업 권장)
 			// filesystem::remove_all(path);
+			TODO("Tree View Folder 삭제 기능 구현하기")
 		}
 
 		ImGui::EndPopup();
@@ -313,6 +316,14 @@ void ContentBrowserPanel::GridViewContextMenu(const filesystem::path& path)
 				newFolderPath = m_CurrentDirectory / ("NewFolder_" + std::to_string(suffix++));
 			}
 			filesystem::create_directory(newFolderPath);
+		}
+
+		ImGui::Separator();
+
+		if (ImGui::MenuItem(ICON_FA_FOLDER_OPEN " Show in Explorer"))
+		{
+			// Windows 전용 명령 (ShellExecute)
+			ShellExecuteA(NULL, "open", path.string().c_str(), NULL, NULL, SW_SHOWNORMAL);
 		}
 		ImGui::EndPopup();
 	}
@@ -661,9 +672,7 @@ void ContentBrowserPanel::OnExteranalDropped(const vector<string>& droppedFiles)
 			std::error_code ec;
 			if (filesystem::exists(destinationPath, ec) && filesystem::equivalent(sourcePath, destinationPath, ec))
 			{
-				AssetManager::Get().Import(sourcePath, destinationPath);
-
-				m_NeedsCacheRefresh = true;
+				AssetManager::Get().ImportAsync(sourcePath, destinationPath);
 				continue;
 			}
 
@@ -699,17 +708,7 @@ void ContentBrowserPanel::OnExteranalDropped(const vector<string>& droppedFiles)
 			}
 			else
 			{
-				try
-				{
-					// recursive 옵션을 주어 폴더일 경우 내부 파일들까지 통째로 복사
-					auto copyOptions = filesystem::copy_options::recursive;
-					filesystem::copy(sourcePath, destinationPath, copyOptions);
-					m_NeedsCacheRefresh = true;
-				}
-				catch (const filesystem::filesystem_error& e)
-				{
-					// 복사 실패 처리
-				}
+				AssetManager::Get().Import(sourcePath, destinationPath);
 			}
 		}
 	}

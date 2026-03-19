@@ -97,7 +97,8 @@ public:
 #pragma endregion
 public:
 	EResult ImportFolder(const wstring& folderPath);
-	EResult LoadFile(const wstring& filePath);
+	void* LoadFile(const wstring& filePath);
+	void* GetOrLoadFile(const wstring& key, const wstring& filePath);
 
 	template<typename T>
 	void RegisterExtension(const wstring& extension)
@@ -118,9 +119,9 @@ public:
 	EResult SaveToBeveFile(Resource* resource, const wstring& filePath);
 	EResult SaveToBinaryFile(Resource* resource, const wstring& filePath);
 public:
-	EResult LoadFromJsonFile(const wstring& filePath);
-	EResult LoadFromBeveFile(const wstring& filePath);
-	EResult LoadFromBinaryFile(const wstring& filePath);
+	void* LoadFromJsonFile(const wstring& filePath);
+	void* LoadFromBeveFile(const wstring& filePath);
+	void* LoadFromBinaryFile(const wstring& filePath);
 #pragma endregion
 
 

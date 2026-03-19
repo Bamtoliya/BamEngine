@@ -65,4 +65,5 @@ public:
 protected:
 	EArchiveMode m_Mode;
 };
+
 END

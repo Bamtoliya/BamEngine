@@ -152,10 +152,10 @@ int32_t ClassName::Destroy()							\
 
 /*****************************************************************************/
 
-#define ENGINE_LOG_TRACE(Format, ...) fmt::print(fmt::fg(fmt::color::gray),         "[Engine|TRACE] " Format "\n" __VA_OPT__(,) __VA_ARGS__)
-#define ENGINE_LOG_INFO(Format, ...)  fmt::print(fmt::fg(fmt::color::white),        "[Engine|INFO]  " Format "\n" __VA_OPT__(,) __VA_ARGS__)
-#define ENGINE_LOG_WARN(Format, ...)  fmt::print(fmt::fg(fmt::color::yellow),       "[Engine|WARN]  " Format "\n" __VA_OPT__(,) __VA_ARGS__)
-#define ENGINE_LOG_ERROR(Format, ...) fmt::print(fmt::fg(fmt::color::red),          "[Engine|ERROR] " Format "\n" __VA_OPT__(,) __VA_ARGS__)
-#define ENGINE_LOG_FATAL(Format, ...) fmt::print(fmt::bg(fmt::color::red) | fmt::fg(fmt::color::white), "[Engine|FATAL] " Format "\n" __VA_OPT__(,) __VA_ARGS__)
+#define ENGINE_LOG_TRACE(Format, ...) fmt::print(fmt::fg(fmt::color::gray),         "[Engine|TRACE] " Format "\n", ##__VA_ARGS__)
+#define ENGINE_LOG_INFO(Format, ...)  fmt::print(fmt::fg(fmt::color::white),        "[Engine|INFO]  " Format "\n", ##__VA_ARGS__)
+#define ENGINE_LOG_WARN(Format, ...)  fmt::print(fmt::fg(fmt::color::yellow),       "[Engine|WARN]  " Format "\n", ##__VA_ARGS__)
+#define ENGINE_LOG_ERROR(Format, ...) fmt::print(fmt::fg(fmt::color::red),          "[Engine|ERROR] " Format "\n", ##__VA_ARGS__)
+#define ENGINE_LOG_FATAL(Format, ...) fmt::print(fmt::bg(fmt::color::red) | fmt::fg(fmt::color::white), "[Engine|FATAL] " Format "\n", ##__VA_ARGS__)
 
 /*****************************************************************************/

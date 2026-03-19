@@ -106,8 +106,6 @@ EResult SpriteRenderer::SetSprite(Sprite* sprite)
 		Safe_Release(m_Sprite);
 	m_Sprite = sprite;
 	Safe_AddRef(m_Sprite);
-	m_SpriteTag = m_Sprite->GetTag();
-	m_SpritePath = m_Sprite->GetPath();
 
 	if (IsFailure(UpdateMesh()))
 		return EResult::Fail;
@@ -126,11 +124,7 @@ EResult SpriteRenderer::SetSprite(Texture* texture)
 	resourceManager.LoadSprite(textureTag, &desc);
 	m_Sprite = resourceManager.GetSprite(textureTag);
 	Safe_AddRef(m_Sprite);
-	m_SpriteTag = m_Sprite->GetTag();
-	m_SpritePath = m_Sprite->GetPath();
 	
-	if (m_Sprite)
-		m_SpriteTag = m_Sprite->GetTag();
 	if (IsFailure(UpdateMesh()))
 		return EResult::Fail;
 	if (IsFailure(UpdateMaterialInstance()))
@@ -221,11 +215,11 @@ EResult SpriteRenderer::UpdateMaterialInstance()
 
 void SpriteRenderer::Deserialize(Archive& ar)
 {
-	ResourceManager& resourceManager = ResourceManager::Get();
-	resourceManager.LoadTexture(m_SpriteTag, m_SpritePath);
-	SetSprite(resourceManager.GetTexture(m_SpriteTag));
-	for (auto& materialInstance : m_MaterialInstances)
-	{
-		materialInstance->Deserialize(ar);
-	}
+	//ResourceManager& resourceManager = ResourceManager::Get();
+	//resourceManager.LoadTexture(m_SpriteTag, m_SpritePath);
+	//SetSprite(resourceManager.GetTexture(m_SpriteTag));
+	//for (auto& materialInstance : m_MaterialInstances)
+	//{
+	//	materialInstance->Deserialize(ar);
+	//}
 }

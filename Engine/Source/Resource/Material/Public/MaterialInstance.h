@@ -30,7 +30,7 @@ class ENGINE_API MaterialInstance : public MaterialInterface
 	using DESC = tagMaterialInstanceDesc;
 #pragma region Constructor&Destructor
 private:
-	MaterialInstance() {}
+	MaterialInstance() : MaterialInterface(EResourceType::MaterialInstance) {}
 	virtual ~MaterialInstance() = default;
 	EResult Initialize(void* arg = nullptr);
 public:

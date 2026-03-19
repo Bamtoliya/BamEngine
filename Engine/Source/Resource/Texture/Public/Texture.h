@@ -3,21 +3,29 @@
 #include "RHITexture.h"
 #include "Resource.h"
 
-struct tagTextureBinaryHeader
+BEGIN(Engine)
+STRUCT()
+struct ENGINE_API tagTextureBinaryHeader
 {
-	uint32 MagicNumber = 0;
-	uint32 Version = 0;
+	REFLECT_STRUCT()
+
+	PROPERTY()
 	uint32 Width = 0;
+	PROPERTY()
 	uint32 Height = 0;
+	PROPERTY()
 	uint32 Depth = 0;
+	PROPERTY()
 	uint32 MipLevels = 0;
+	PROPERTY()
 	uint32 ArraySize = 0;
+	PROPERTY()
 	Engine::ETextureFormat Format = Engine::ETextureFormat::UNKNOWN;
+	PROPERTY()
 	Engine::ETextureDimension Dimension = Engine::ETextureDimension::Texture2D;
+	PROPERTY()
 	uint32 DataSize = 0;
 };
-
-BEGIN(Engine)
 typedef struct tagTextureCreateInfo
 {
 	wstring FilePath;
@@ -29,7 +37,7 @@ class ENGINE_API Texture final : public Resource
 	REFLECT_CLASS()
 #pragma region Constructor&Destructor
 private:
-	Texture() {}
+	Texture() : Resource(EResourceType::Texture) {}
 	virtual ~Texture() = default;
 	EResult Initialize(void* arg = nullptr);
 public:
@@ -37,19 +45,13 @@ public:
 	virtual void Free() override;
 #pragma endregion
 
-
-
-#pragma region Load
-	virtual EResult LoadFromFile(const wstring& path) override;
-#pragma endregion
-
 #pragma region Bind
+public:
 	virtual EResult Bind(uint32 slot) override;
 #pragma endregion
 
-
-
 #pragma region Getter
+public:
 	RHITexture* GetRHITexture() const { return m_RHITexture; }
 	f32 GetWorldWidth() const { return m_RHITexture->GetWidth() / m_PixelPerUnit; }
 	f32 GetWorldHeight()const { return m_RHITexture->GetHeight() / m_PixelPerUnit; }
@@ -57,7 +59,14 @@ public:
 #pragma endregion
 
 #pragma region Setter
+public:
 	void SetPixelPerUnit(f32 ppu) { m_PixelPerUnit = ppu; IncreaseVersion(); }
+#pragma endregion
+
+#pragma region Save&Load
+public:
+	virtual void Serialize(Archive& ar);
+	virtual void Deserialize(Archive& ar);
 #pragma endregion
 
 #pragma region Variable

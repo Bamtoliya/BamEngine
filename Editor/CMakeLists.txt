@@ -1,12 +1,9 @@
 ﻿Project("Editor")
 
-find_package(fmt CONFIG REQUIRED)
-find_package(SDL3 CONFIG REQUIRED)
-find_package(glm CONFIG REQUIRED)
 find_package(imgui CONFIG REQUIRED)
 find_package(imguizmo CONFIG REQUIRED)
-find_package(Vulkan REQUIRED) 
 find_package(efsw CONFIG REQUIRED)
+find_package(directxtex CONFIG REQUIRED)
 
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
 
@@ -19,6 +16,8 @@ set(LOCALIZATION_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/../Utility/CSVToJsonConvert
 file(GLOB_RECURSE EDITOR_HEADERS CONFIGURE_DEPENDS "${EDITOR_SOURCE_DIR}/*.h")
 file(GLOB_RECURSE EDITOR_SOURCES CONFIGURE_DEPENDS "${EDITOR_SOURCE_DIR}/*.cpp")
 file(GLOB_RECURSE EDITOR_ALL_SOURCE_FILES "${EDITOR_SOURCE_DIR}/*")
+
+source_group(TREE "${EDITOR_SOURCE_DIR}" FILES ${EDITOR_HEADERS} ${EDITOR_SOURCES})
 
 add_executable(Editor
     ${EDITOR_HEADERS}
@@ -73,6 +72,7 @@ target_precompile_headers(Editor PRIVATE ${EDITOR_PCH_HEADER})
 
 target_link_libraries(Editor PRIVATE
     Engine
+    TextureConverter
     imgui::imgui
     imguizmo::imguizmo
     assimp::assimp

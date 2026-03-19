@@ -440,12 +440,6 @@ bool BinaryArchive::LoadFromFile(string_view filePath)
 	inFile.read(reinterpret_cast<char*>(m_Buffer.data()), size);
 	m_Cursor = 0;
 
-	if (size < sizeof(BinFileHeader)) return false;
-	BinFileHeader header;
-	ReadRaw(&header, sizeof(header));
-
-	if (header.Magic != 0x42414D42) return false; // 'BAMB'
-
 	ParseScopeDirectory(size);
     return true;
 }

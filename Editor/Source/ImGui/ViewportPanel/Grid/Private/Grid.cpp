@@ -3,6 +3,7 @@
 #include "Grid.h"
 #include "Mesh.h"
 #include "Renderer.h"
+#include "Resources.h"
 #include "ResourceManager.h"
 #include "PipelineManager.h"
 
