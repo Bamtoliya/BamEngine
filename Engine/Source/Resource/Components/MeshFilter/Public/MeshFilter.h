@@ -2,6 +2,7 @@
 
 #include "Component.h"
 #include "Mesh.h"
+#include "ResourceHandle.h"
 
 BEGIN(Engine)
 CLASS()
@@ -22,17 +23,16 @@ public:
 
 #pragma region Management
 public:
-	Mesh* GetMesh() { return m_Mesh; }
-	void SetMesh(Mesh* mesh);
+	Mesh* GetMesh() { if(!m_MeshHandle.IsValid()) return nullptr; return m_MeshHandle.Get(); }
+	const ResourceHandle<Mesh>& GetMeshHandle() const { return m_MeshHandle; }
+	void SetMeshHandle(ResourceHandle<Mesh> handle);
 #pragma endregion
 
 
 #pragma region Variable
 private:
 	PROPERTY()
-	Mesh* m_Mesh = { nullptr };
+	ResourceHandle<Mesh> m_MeshHandle;
 #pragma endregion
-
-
 };
 END

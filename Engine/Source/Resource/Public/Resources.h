@@ -8,3 +8,5 @@
 #include "Texture.h"
 #include "Material.h"
 #include "Skeleton.h"
+
+#include "MaterialInstance.h"

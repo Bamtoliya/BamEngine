@@ -6,8 +6,7 @@
 
 struct tagResourceCreateDesc
 {
-	wstring		Tag = L"";
-	wstring		Path = L"";
+	wstring		Key = L"";
 };
 
 BEGIN(Engine)
@@ -54,20 +53,20 @@ struct ENGINE_API tagResourceBinaryHeader
 
 
 CLASS()
-class ENGINE_API Resource : public Base, public SerializableInterface
+class ENGINE_API Resource : public SerializableInterface
 {
 	REFLECT_BASE()
 	using DESC = tagResourceCreateDesc;
+	friend class ResourceManager;
 #pragma region Constructor&Destructor
 protected:
  	Resource(EResourceType type) : m_ResourceType(type) {}
 	virtual ~Resource() = default;
-	virtual EResult Initialize(void* arg = nullptr) {
-		if (arg)
-		{
-			CAST_DESC
-			m_Tag = desc->Tag;
-		}
+	virtual EResult Initialize(void* arg = nullptr)
+	{
+		if (!arg) return EResult::InvalidArgument;
+		CAST_DESC
+		m_Key = desc->Key;
 		return EResult::Success; 
 	}
 public:
@@ -76,13 +75,7 @@ public:
 
 
 #pragma region Bind
-	virtual EResult Bind(uint32 slot) PURE;
-#pragma endregion
-
-#pragma region Tag Management
-public:
-	wstring GetTag() { return m_Tag; }
-	void SetTag(const wstring& tag) { m_Tag = tag; }
+	virtual EResult Bind(uint32 slot) { return EResult::NotImplemented; }
 #pragma endregion
 
 #pragma region Version Management
@@ -91,10 +84,10 @@ public:
 	void IncreaseVersion() { m_Version++; }
 #pragma endregion
 
-#pragma region Path Management
+#pragma region Key Management
 public:
-	const wstring& GetPath() const { return m_Path; }
-	void SetPath(const wstring& path) { m_Path = path; }
+	const wstring& GetKey() const { return m_Key; }
+	void SetKey(const wstring& key) { m_Key = key; }
 #pragma endregion
 
 #pragma region Save & Load
@@ -131,16 +124,13 @@ public:
 #pragma region Member Variables
 protected:
 	PROPERTY(READONLY)
-	wstring m_Tag = {};
-
-	PROPERTY(READONLY)
 	uint32 m_Version = { 0 };
 
 	PROPERTY(READONLY)
 	EResourceType m_ResourceType;
 
 	PROPERTY(READONLY)
-	wstring m_Path = {};
+	wstring m_Key = {};
 #pragma endregion
 };
 END

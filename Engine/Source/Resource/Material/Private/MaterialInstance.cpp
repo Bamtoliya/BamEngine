@@ -11,8 +11,7 @@ EResult MaterialInstance::Initialize(void* arg)
 {
 	if (!arg) return EResult::InvalidArgument;
 	CAST_DESC
-	m_BaseMaterial = desc->BaseMaterial;
-	Safe_AddRef(m_BaseMaterial);
+	m_BaseMaterialHandle = desc->BaseMaterialHandle;
 	return EResult::Success;
 }
 
@@ -21,49 +20,48 @@ MaterialInstance* MaterialInstance::Create(void* arg)
 	MaterialInstance* instance = new MaterialInstance();
 	if (IsFailure(instance->Initialize(arg)))
 	{
-		Safe_Release(instance);
+		instance->Free();
+		delete instance;
 		return nullptr;
 	}
 	return instance;
 }
 
-MaterialInstance* MaterialInstance::Create(Material* baseMaterial)
+MaterialInstance* MaterialInstance::Create(const ResourceHandle<Material>& baseMaterialHandle)
 {
 	DESC desc = {};
-	desc.BaseMaterial = baseMaterial;
+	desc.BaseMaterialHandle	= baseMaterialHandle;
 	return Create(&desc);
 }
 
 MaterialInstance* MaterialInstance::Clone(void* arg)
 {
+	TODO("MaterialInstance Clone 구현 필요");
 	return nullptr;
 }
 
 void MaterialInstance::Free()
 {
-	Safe_Release(m_BaseMaterial);
-	Safe_Release(m_VertexShader);
-	Safe_Release(m_PixelShader);
 	__super::Free();
 }
 #pragma endregion
 
 EResult MaterialInstance::Bind(uint32 slot)
 {
-	if (!m_BaseMaterial) return EResult::Fail;
+	if (!m_BaseMaterialHandle) return EResult::Fail;
 
 	RHI* rhi = Renderer::Get().GetRHI();
 
 	// 1단계: Base Material의 텍스처 슬롯 순회
-	for (auto& [name, baseSlot] : m_BaseMaterial->GetTextureSlots())
+	for (auto& [name, baseSlot] : m_BaseMaterialHandle.Get()->GetTextureSlots())
 	{
 		// 자신에게 오버라이드가 있으면 스킵 (2단계에서 처리)
 		if (m_TextureSlots.contains(name))
 			continue;
 
-		Texture* texture = baseSlot.texture;
+		Texture* texture = baseSlot.texture.Get();
 		if (!texture)
-			texture = ResourceManager::Get().GetTexture(L"Magenta1x1");
+			texture = ResourceManager::Get().GetResourceHandle<Texture>(L"Magenta1x1").Get();
 		RHISampler* sampler = baseSlot.sampler;
 		if (!sampler)
 			sampler = SamplerManager::Get().GetDefaultSampler();
@@ -73,9 +71,9 @@ EResult MaterialInstance::Bind(uint32 slot)
 	// 2단계: 자신의 오버라이드 바인드
 	for (auto& [name, textureSlot] : m_TextureSlots)
 	{
-		Texture* texture = textureSlot.texture;
+		Texture* texture = textureSlot.texture.Get();
 		if (!texture)
-			texture = ResourceManager::Get().GetTexture(L"Magenta1x1");
+			texture = ResourceManager::Get().GetResourceHandle<Texture>(L"Magenta1x1").Get();
 		RHISampler* sampler = textureSlot.sampler;
 		if (!sampler)
 			sampler = SamplerManager::Get().GetDefaultSampler();
@@ -85,73 +83,64 @@ EResult MaterialInstance::Bind(uint32 slot)
 	return EResult::Success;
 }
 
-void MaterialInstance::SetBaseMaterial(Material* material)
+void MaterialInstance::SetBaseMaterial(const ResourceHandle<Material>& material)
 {
-	if (m_BaseMaterial)
-		Safe_Release(m_BaseMaterial);
-	m_BaseMaterial = material;
-	if (m_BaseMaterial)
-		Safe_AddRef(m_BaseMaterial);
+	m_BaseMaterialHandle = material;
 }
 
 
 #pragma region Shader
 Shader* MaterialInstance::GetVertexShader() const
 {
-	if (m_VertexShader) return m_VertexShader;
-	return m_BaseMaterial->GetVertexShader();
+	if (m_VertexShaderHandle) return m_VertexShaderHandle.Get();
+	return m_BaseMaterialHandle.Get()->GetVertexShader();
 }
 
 Shader* MaterialInstance::GetPixelShader() const
 {
-	if (m_PixelShader) return m_PixelShader;
-	return m_BaseMaterial->GetPixelShader();
+	if (m_PixelShaderHandle) return m_PixelShaderHandle.Get();
+	return m_BaseMaterialHandle.Get()->GetPixelShader();
 }
 
-
-void MaterialInstance::SetVertexShader(Shader* shader)
+void MaterialInstance::SetVertexShaderHandle(const ResourceHandle<Shader>& shader)
 {
-	if (m_VertexShader)
-		Safe_Release(m_VertexShader);
-	m_VertexShader = shader;
-	Safe_AddRef(m_VertexShader);
+	m_VertexShaderHandle = shader;
 }
 
-void MaterialInstance::SetPixelShader(Shader* shader)
+void MaterialInstance::SetPixelShaderHandle(const ResourceHandle<Shader>& shader)
 {
-	if (m_PixelShader)
-		Safe_Release(m_PixelShader);
-	m_PixelShader = shader;
-	Safe_AddRef(m_PixelShader);
+	m_PixelShaderHandle = shader;
 }
+
 #pragma endregion
 
 
 #pragma region Pipeline
 EBlendMode MaterialInstance::GetBlendMode() const
 {
-	return m_BaseMaterial ? m_BaseMaterial->GetBlendMode() : EBlendMode::Opaque;
+	return m_BaseMaterialHandle ? m_BaseMaterialHandle.Get()->GetBlendMode() : EBlendMode::Opaque;
 }
 ECullMode  MaterialInstance::GetCullMode() const
 {
-	return m_BaseMaterial ? m_BaseMaterial->GetCullMode() : ECullMode::Back;
+	return m_BaseMaterialHandle ? m_BaseMaterialHandle.Get()->GetCullMode() : ECullMode::Back;
 }
 EFillMode  MaterialInstance::GetFillMode() const
 {
-	return m_BaseMaterial ? m_BaseMaterial->GetFillMode() : EFillMode::Solid;
+	return m_BaseMaterialHandle ? m_BaseMaterialHandle.Get()->GetFillMode() : EFillMode::Solid;
 }
 EDepthMode MaterialInstance::GetDepthMode() const
 {
-	return m_BaseMaterial ? m_BaseMaterial->GetDepthMode() : EDepthMode::ReadWrite;
+	return m_BaseMaterialHandle ? m_BaseMaterialHandle.Get()->GetDepthMode() : EDepthMode::ReadWrite;
 }
 ECompareOp MaterialInstance::GetDepthCompareOp() const
 {
-	return m_BaseMaterial ? m_BaseMaterial->GetDepthCompareOp() : ECompareOp::Less;
+	return m_BaseMaterialHandle ? m_BaseMaterialHandle.Get()->GetDepthCompareOp() : ECompareOp::Less;
 }
 #pragma endregion
 
 
 void MaterialInstance::Deserialize(Archive& ar)
 {
-	Safe_AddRef(m_BaseMaterial);
+	//Safe_AddRef(m_BaseMaterialHandle);
 }
+

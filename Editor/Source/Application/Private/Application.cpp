@@ -93,14 +93,39 @@ void Application::InitializeLocalization()
 #pragma region Resources
 void Application::InitializeResources()
 {
+	ResourceManager& resourceManager = ResourceManager::Get();
+
 
 #pragma region Basic Textures
-    ResourceManager::Get().LoadTexture(L"SampleTexture", L"Resources/Texture/uv1.png");
-    ResourceManager::Get().LoadTexture(L"White1x1", L"Resources/Texture/white1x1.png");
-    ResourceManager::Get().LoadTexture(L"Black1x1", L"Resources/Texture/black1x1.png");
-    ResourceManager::Get().LoadTexture(L"Magenta1x1", L"Resources/Texture/magenta1x1.png");
-    ResourceManager::Get().LoadTexture(L"Green1x1", L"Resources/Texture/green1x1.png");
-    ResourceManager::Get().LoadTexture(L"Blue1x1", L"Resources/Texture/blue1x1.png");
+
+    struct TextureCreationData
+    {
+        wstring Name;
+        wstring Path;
+	};
+
+    TextureCreationData textureToLoad[] =
+    {
+        { L"SampleTexture", L"Resources/Texture/uv1.png"},
+        { L"White1x1",      L"Resources/Texture/white1x1.png" },
+        { L"Black1x1",      L"Resources/Texture/black1x1.png" },
+        { L"Magenta1x1",    L"Resources/Texture/magenta1x1.png" },
+        { L"Green1x1",      L"Resources/Texture/green1x1.png" },
+        { L"Blue1x1",       L"Resources/Texture/blue1x1.png"  },
+    };
+
+    for (const auto& texData : textureToLoad)
+    {
+		tagTextureCreateDesc createDesc = { texData.Path };
+        resourceManager.LoadResource<Texture>(texData.Name, &createDesc);
+    }
+
+    //ResourceManager::Get().LoadTexture(L"SampleTexture", L"Resources/Texture/uv1.png");
+    //ResourceManager::Get().LoadTexture(L"White1x1", L"Resources/Texture/white1x1.png");
+    //ResourceManager::Get().LoadTexture(L"Black1x1", L"Resources/Texture/black1x1.png");
+    //ResourceManager::Get().LoadTexture(L"Magenta1x1", L"Resources/Texture/magenta1x1.png");
+    //ResourceManager::Get().LoadTexture(L"Green1x1", L"Resources/Texture/green1x1.png");
+    //ResourceManager::Get().LoadTexture(L"Blue1x1", L"Resources/Texture/blue1x1.png");
 #pragma endregion
 
 #pragma region Quad
@@ -130,7 +155,7 @@ void Application::InitializeResources()
         meshDesc.IndexStride = sizeof(uint32);
         meshDesc.IndexCount = static_cast<uint32>(indices.size());
 
-        ResourceManager::Get().LoadMesh(L"QuadMesh", &meshDesc);
+        resourceManager.LoadResource<Mesh>(L"QuadMesh", &meshDesc);
     }
 #pragma endregion
 
@@ -217,7 +242,7 @@ void Application::InitializeResources()
 		meshDesc.BoundingBoxMax = maxBound;
 
         // 4. ResourceManager를 통한 로드
-        ResourceManager::Get().LoadMesh(L"CubeMesh", &meshDesc);
+		resourceManager.LoadResource<Mesh>(L"CubeMesh", &meshDesc);
     }
 #pragma endregion
 
@@ -226,52 +251,46 @@ void Application::InitializeResources()
     vsDesc.ShaderType = EShaderType::Vertex;
     vsDesc.FilePath = L"Resources/Shader/default.vert.spv";
     vsDesc.EntryPoint = "main";
-    ResourceManager::Get().LoadShader(L"DefaultVS", &vsDesc);
+    resourceManager.LoadResource<Shader>(L"DefaultVS", &vsDesc);
 
     tagShaderDesc psDesc;
     psDesc.ShaderType = EShaderType::Pixel;
     psDesc.FilePath = L"Resources/Shader/default.frag.spv";
     psDesc.EntryPoint = "main";
-    ResourceManager::Get().LoadShader(L"DefaultPS", &psDesc);
+    resourceManager.LoadResource<Shader>(L"DefaultPS", &psDesc);
 
 	tagShaderDesc spriteVSDesc;
 	spriteVSDesc.ShaderType = EShaderType::Vertex;
 	spriteVSDesc.FilePath = L"Resources/Shader/sprite.vert.spv";
 	spriteVSDesc.EntryPoint = "main";
-	ResourceManager::Get().LoadShader(L"SpriteVS", &spriteVSDesc);
+	resourceManager.LoadResource<Shader>(L"SpriteVS", &spriteVSDesc);
 
     tagShaderDesc spritePsDesc;
     spritePsDesc.ShaderType = EShaderType::Pixel;
     spritePsDesc.FilePath = L"Resources/Shader/sprite.frag.spv";
     spritePsDesc.EntryPoint = "main";
-    ResourceManager::Get().LoadShader(L"SpritePS", &spritePsDesc);
+    resourceManager.LoadResource<Shader>(L"SpritePS", &spritePsDesc);
 #pragma endregion
-
+	
     tagMaterialDesc materialDesc;
-	materialDesc.VertexShader = ResourceManager::Get().GetShader(L"DefaultVS");
-    materialDesc.PixelShader = ResourceManager::Get().GetShader(L"DefaultPS");
+	materialDesc.VertexShaderHandle = resourceManager.GetResourceHandle<Shader>(L"DefaultVS");
+    materialDesc.PixelShaderHandle = resourceManager.GetResourceHandle<Shader>(L"DefaultPS");
     materialDesc.DepthMode = EDepthMode::ReadWrite;
-    ResourceManager::Get().LoadMaterial(L"DefaultMaterial", &materialDesc);
-	ResourceManager::Get().GetMaterial(L"DefaultMaterial")->SetTextureBySlot(0, ResourceManager::Get().GetTexture(L"Magenta1x1"));
+	resourceManager.LoadResource<Material>(L"DefaultMaterial", &materialDesc).Get()->SetTextureBySlot(0, resourceManager.GetResourceHandle<Texture>(L"Magenta1x1"));
 
 	tagMaterialDesc spriteMaterialDesc;
-	spriteMaterialDesc.VertexShader = ResourceManager::Get().GetShader(L"DefaultVS");
-	spriteMaterialDesc.PixelShader = ResourceManager::Get().GetShader(L"DefaultPS");
+	spriteMaterialDesc.VertexShaderHandle = resourceManager.GetResourceHandle<Shader>(L"DefaultVS");
+	spriteMaterialDesc.PixelShaderHandle = resourceManager.GetResourceHandle<Shader>(L"DefaultPS");
 	spriteMaterialDesc.BlendMode = EBlendMode::AlphaBlend;
 	spriteMaterialDesc.CullMode = ECullMode::None;
 	spriteMaterialDesc.DepthMode = EDepthMode::ReadWrite;
     BinaryArchive archive(EArchiveMode::Write);
-	ResourceManager::Get().LoadMaterial(L"SpriteMaterial", &spriteMaterialDesc)->Serialize(archive);
-    archive.SaveToFile("Resources/Material/SpriteMaterial.materialInstance");
-	
-
-    ResourceManager::Get().LoadFile(L"Resources/Texture/uv1.bamtex");
-	ResourceManager::Get().SaveToJsonFile(ResourceManager::Get().GetTexture(L"SampleTexture"), L"Resources/Texture/SampleTexture.json");
-
-    
-
-
-
+    resourceManager.LoadResource<Material>(L"SpriteMaterial", &spriteMaterialDesc)->Serialize(archive);
+    //archive.SaveToFile("Resources/Material/SpriteMaterial.materialInstance");
+	//
+    //
+    //resourceManager.LoadFile(L"Resources/Texture/uv1.bamtex");
+    //resourceManager.SaveToJsonFile(resourceManager.GetResourceHandle<Texture>(L"SampleTexture").Get(), L"Resources/Texture/SampleTexture.json");
 #ifdef _DEBUG
 	
 #endif

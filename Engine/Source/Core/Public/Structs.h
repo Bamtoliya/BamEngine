@@ -55,10 +55,10 @@ namespace Engine
 		REFLECT_STRUCT();
 
 		PROPERTY()
-		vec3 Min;
+		vec3 Min = {0.f, 0.f, 0.f};
 		PROPERTY()
-		vec3 Max;
-		AABB() = default;
+		vec3 Max = {0.f, 0.f, 0.f};
+		AABB() {}
 		AABB(const vec3& min, const vec3& max)
 			: Min(min), Max(max) {
 		}

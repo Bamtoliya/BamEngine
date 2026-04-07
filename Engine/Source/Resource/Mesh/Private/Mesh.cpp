@@ -57,7 +57,6 @@ Mesh* Mesh::Create(void* arg)
 
 void Mesh::Free()
 {
-	Base::Free();
 	Safe_Release(m_VertexBuffer);
 	Safe_Release(m_IndexBuffer);
 }

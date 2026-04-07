@@ -1122,14 +1122,15 @@ void HierarchyPanel::CreateEmptyObject(Scene* scene)
 
 void HierarchyPanel::CreatePrimitive(Scene* scene, const wstring& name, const wstring& meshName)
 {
+	ResourceManager& resourceMgr = ResourceManager::Get();
 	GameObject* newGameObject = GameObject::Create();
 	newGameObject->SetName(L"New" + name);
 	newGameObject->AddComponent(L"MeshRenderer");
 	newGameObject->AddComponent(L"MeshFilter");
 	MeshFilter* meshFilter = newGameObject->GetComponent<MeshFilter>();
-	meshFilter->SetMesh(ResourceManager::Get().GetMesh(meshName));
+	meshFilter->SetMeshHandle(resourceMgr.GetResourceHandle<Mesh>(meshName));
 	MeshRenderer* meshRenderer = newGameObject->GetComponent<MeshRenderer>();
-	meshRenderer->SetMaterial(ResourceManager::Get().GetMaterial(L"DefaultMaterial"));
+	meshRenderer->SetMaterial(resourceMgr.GetResourceHandle<Material>(L"DefaultMaterial"));
 	meshRenderer->SetRenderPassID(0);
 	newGameObject->AddComponent(L"BoxCollider");
 	scene->AddGameObject(newGameObject);
@@ -1138,12 +1139,13 @@ void HierarchyPanel::CreatePrimitive(Scene* scene, const wstring& name, const ws
 
 void HierarchyPanel::CreateSpriteObject(Scene* scene)
 {
+	ResourceManager& resourceMgr = ResourceManager::Get();
 	GameObject* newGameObject = GameObject::Create();
 	newGameObject->SetName(L"New Sprite");
 	newGameObject->AddComponent(L"SpriteRenderer");
 	SpriteRenderer* spriteRenderer = newGameObject->GetComponent<SpriteRenderer>();
-	spriteRenderer->SetMaterial(ResourceManager::Get().GetMaterial(L"SpriteMaterial"));
-	spriteRenderer->SetSprite(ResourceManager::Get().GetTexture(L"SampleTexture"));
+	spriteRenderer->SetMaterial(resourceMgr.GetResourceHandle<Material>(L"SpriteMaterial"));
+	spriteRenderer->SetSprite(resourceMgr.GetResourceHandle<Texture>(L"SampleTexture"));
 	newGameObject->AddComponent(L"Box2DCollider");
 	spriteRenderer->SetRenderPassID(0);
 	scene->AddGameObject(newGameObject);

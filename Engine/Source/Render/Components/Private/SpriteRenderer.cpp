@@ -1,6 +1,9 @@
 ﻿#pragma once
 
 #include "SpriteRenderer.h"
+
+#include "MaterialInstance.h"
+
 #include "ResourceManager.h"
 #include "Renderer.h"
 #include "ComponentRegistry.h"
@@ -43,8 +46,6 @@ Component* SpriteRenderer::Clone(GameObject* owner, void* arg)
 
 void SpriteRenderer::Free()
 {
-	Safe_Release(m_Mesh);
-	Safe_Release(m_Sprite);
 	__super::Free();
 }
 #pragma endregion
@@ -73,7 +74,7 @@ EResult SpriteRenderer::Render(f32 dt, RenderPass* renderPass)
 
 	if (!rhi || !vertexBuffer) return EResult::Fail;
 
-	if(IsFailure(BindPipeline(m_Mesh, material, renderPass)))
+	if(IsFailure(BindPipeline(m_Mesh.Get(), material, renderPass)))
 		return EResult::Fail;
 
 	material->Bind(2);
@@ -100,12 +101,9 @@ EResult SpriteRenderer::Render(f32 dt, RenderPass* renderPass)
 #pragma endregion
 
 #pragma region Setter
-EResult SpriteRenderer::SetSprite(Sprite* sprite)
+EResult SpriteRenderer::SetSprite(const ResourceHandle<Sprite>& sprite)
 {
-	if (m_Sprite)
-		Safe_Release(m_Sprite);
 	m_Sprite = sprite;
-	Safe_AddRef(m_Sprite);
 
 	if (IsFailure(UpdateMesh()))
 		return EResult::Fail;
@@ -113,17 +111,14 @@ EResult SpriteRenderer::SetSprite(Sprite* sprite)
 		return EResult::Fail;
 	return EResult::Success;
 }
-EResult SpriteRenderer::SetSprite(Texture* texture)
+EResult SpriteRenderer::SetSprite(const ResourceHandle<Texture>& texture)
 {
-	if(m_Sprite)
-		Safe_Release(m_Sprite);
 	tagSpriteCreateDesc desc;
 	desc.Texture = texture;
 	ResourceManager& resourceManager = ResourceManager::Get();
-	wstring textureTag = desc.Texture->GetTag();
-	resourceManager.LoadSprite(textureTag, &desc);
-	m_Sprite = resourceManager.GetSprite(textureTag);
-	Safe_AddRef(m_Sprite);
+	wstring textureKey = desc.Texture.Get()->GetKey();
+	TODO("이미 로드한 Texture 로부터 Sprite 리소스를 생성하게 만들어야함");
+	m_Sprite = resourceManager.LoadResource<Sprite>(textureKey + L"_Sprite", &desc);
 	
 	if (IsFailure(UpdateMesh()))
 		return EResult::Fail;
@@ -172,6 +167,7 @@ EResult SpriteRenderer::UpdateMesh()
 		0, 2, 3
 	};
 
+	m_Mesh = ResourceManager::Get().GetResourceHandle<Mesh>(L"QuadMesh");
 	if (!m_Mesh)
 	{
 		tagMeshCreateInfo desc;
@@ -183,7 +179,7 @@ EResult SpriteRenderer::UpdateMesh()
 		desc.IndexCount = static_cast<uint32>(indices.size());
 		desc.IndexStride = sizeof(uint32);
 
-		m_Mesh = Mesh::Create(&desc);
+		m_Mesh = ResourceManager::Get().AddResource(L"QuadMesh", Mesh::Create(&desc));
 	}
 
 	m_Mesh->SetVertexBuffer(vertices.data(), static_cast<uint32>(vertices.size()));
@@ -199,12 +195,18 @@ EResult SpriteRenderer::UpdateMaterialInstance()
 	{
 		Material* baseMaterial = GetSharedMaterial();
 		if (!baseMaterial) return EResult::Fail;
-		m_MaterialInstances.push_back(MaterialInstance::Create(baseMaterial));
+		wstring instanceKey = baseMaterial->GetKey() + L"_Instance";
+		ResourceHandle<MaterialInstance> instanceHandle = ResourceManager::Get().GetResourceHandle<MaterialInstance>(instanceKey);
+		if (!instanceHandle)
+		{
+			instanceHandle = ResourceManager::Get().AddResource(instanceKey, MaterialInstance::Create(baseMaterial));
+		}
+		m_MaterialInstances.push_back(instanceHandle);
 		if (!m_MaterialInstances[0]) return EResult::Fail;
 	}
 
 	// Sprite 텍스처를 slot 0에 오버라이드
-	m_MaterialInstances[0]->SetTextureBySlot(0, m_Sprite->GetTexture());
+	m_MaterialInstances[0]->SetTextureBySlot(0, m_Sprite.Get()->GetTextureHandle());
 	return EResult::Success;
 }
 #pragma endregion

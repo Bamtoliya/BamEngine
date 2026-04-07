@@ -1,6 +1,9 @@
 ﻿#pragma once
 #include "MeshRenderer.h"
 
+#include "Material.h"
+#include "MaterialInstance.h"
+
 #include "GameObject.h"
 #include "Transform.h"
 #include "Renderer.h"

@@ -8,27 +8,23 @@ void AssetRefBase::Serialize(Archive& ar)
 {
 	if (ar.IsWriting())
 	{
-		wstring tag = m_Ptr ? m_Ptr->GetTag() : L"";
-		ar.Process("AssetTag", tag);
-		wstring path = m_Ptr ? m_Ptr->GetPath() : L"";
-		ar.Process("AssetPath", path);
+		wstring tag = m_Ptr ? m_Ptr->GetKey() : L"";
+		ar.Process("AssetKey", tag);
 	}
 	else
 	{
-		wstring tag;
-		ar.Process("AssetTag", tag);
-		wstring path;
-		ar.Process("AssetPath", path);
-		if (!tag.empty() && !path.empty())
+		wstring key;
+		ar.Process("AssetKey", key);
+		if (!key.empty())
 		{
-			m_Ptr = static_cast<Resource*>(ResourceManager::Get().LoadFile(path));
+			m_Ptr = static_cast<Resource*>(ResourceManager::Get().LoadFile(key));
 			if (!m_Ptr)
 			{
-				ENGINE_LOG_ERROR("Failed to load asset: {} at path: {}", WStrToStr(tag), WStrToStr(path));
+				ENGINE_LOG_ERROR("Failed to load asset: {}", WStrToStr(key));
 			}
 			else
 			{
-				ENGINE_LOG_INFO("Successfully loaded asset: {} at path: {}", WStrToStr(tag), WStrToStr(path));
+				ENGINE_LOG_INFO("Successfully loaded asset: {}", WStrToStr(key));
 			}
 		}
 	}

@@ -4,6 +4,7 @@
 #include "Shader.h"
 #include "Texture.h"
 #include "RHIDefinitions.h"
+#include "ResourceHandle.h"
 
 BEGIN(Engine)
 
@@ -17,7 +18,7 @@ struct TextureSlot
 	PROPERTY()
 	wstring textureTag = {};
 	PROPERTY()
-	Texture* texture = { nullptr };
+	ResourceHandle<Texture> texture;
 	PROPERTY()
 	RHISampler* sampler = { nullptr };
 
@@ -60,8 +61,8 @@ struct MaterialParameter
 
 struct tagMaterialDesc
 {
-	Shader* VertexShader = { nullptr };
-	Shader* PixelShader = { nullptr };
+	ResourceHandle<Shader> VertexShaderHandle;
+	ResourceHandle<Shader> PixelShaderHandle;
 	EBlendMode BlendMode = EBlendMode::Opaque;
 	ECullMode CullMode = ECullMode::Back;
 	EFillMode FillMode = EFillMode::Solid;
@@ -100,8 +101,8 @@ public:
 	void SetMatrix(const string& name, const mat4& value) { m_Parameters[name] = MaterialParameter(EMaterialParameterType::Matrix, &value, sizeof(value)); };
 
 	// Texture/Sampler
-	void SetTexture(const string& name, Texture* texture);
-	void SetTextureBySlot(uint32 slot, Texture* texture);
+	void SetTexture(const string& name, const ResourceHandle<Texture>& texture);
+	void SetTextureBySlot(uint32 slot, const ResourceHandle<Texture>& texture);
 	void SetSampler(const string& name, RHISampler* sampler);
 
 	// Getter
@@ -109,6 +110,8 @@ public:
 	T GetParameter(const string& name) const;
 	Texture* GetTexture(const string& name) const;
 	Texture* GetTextureBySlot(uint32 slot) const;
+	ResourceHandle<Texture> GetTextureHandle(const string& name) const;
+	ResourceHandle<Texture> GetTextureHandleBySlot(uint32 slot) const;
 	RHISampler* GetSampler(const string& name) const;
 	unordered_map<string, TextureSlot>& GetTextureSlots() { return m_TextureSlots; }
 #pragma endregion
@@ -130,11 +133,11 @@ public:
 
 #pragma region Shader
 public:
-	virtual Shader* GetVertexShader() const { return m_VertexShader; }
-	virtual Shader* GetPixelShader() const { return m_PixelShader; }
+	virtual Shader* GetVertexShader() const { return m_VertexShaderHandle.Get(); }
+	virtual Shader* GetPixelShader() const { return m_PixelShaderHandle.Get(); }
 public:
-	virtual void SetVertexShader(Shader* shader) { m_VertexShader = shader; }
-	virtual void SetPixelShader(Shader* shader) { m_PixelShader = shader; }
+	virtual void SetVertexShaderHandle(const ResourceHandle<Shader>& shader) { m_VertexShaderHandle = shader; }
+	virtual void SetPixelShaderHandle(const ResourceHandle<Shader>& shader) { m_PixelShaderHandle = shader; }
 #pragma endregion
 
 #pragma region Save&Load
@@ -157,10 +160,10 @@ protected:
 	ECompareOp m_DepthCompareOp = { ECompareOp::Less };
 
 	PROPERTY()
-	Shader* m_VertexShader = { nullptr };
+	ResourceHandle<Shader> m_VertexShaderHandle;
 
 	PROPERTY()
-	Shader* m_PixelShader = { nullptr };
+	ResourceHandle<Shader> m_PixelShaderHandle;
 
 	PROPERTY()
 	unordered_map<string, MaterialParameter> m_Parameters = {};

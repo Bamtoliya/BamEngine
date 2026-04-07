@@ -2,47 +2,17 @@
 
 #include "Base.h"
 #include "Resources.h"
+#include "ResourceHandle.h"
 
 BEGIN(Engine)
 
 #pragma region Generic Interface
-struct IResourceContainer
+struct ResourceSlot
 {
-	virtual ~IResourceContainer() = default;
-	virtual void Clear() = 0;
-};
-
-template<typename T>
-struct ResourceContainer : public IResourceContainer
-{
-	unordered_map<wstring, T*> m_Map;
-	virtual ~ResourceContainer()
-	{
-		Clear();
-	}
-	virtual void Clear() override
-	{
-		for (auto& pair : m_Map)
-		{
-			delete pair.second;
-		}
-		m_Map.clear();
-	}
-
-	void Add(const wstring& key, T* resource)
-	{
-		m_Map.emplace(key, resource);
-	}
-
-	T* Get(const wstring& key)
-	{
-		auto iter = m_Map.find(key);
-		if (iter != m_Map.end())
-		{
-			return iter->second;
-		}
-		return nullptr;
-	}
+	Resource* Instance = { nullptr };
+	uint32 Generation = { 0 };
+	uint32 RefCount = { 0 };
+	bool IsActive = { false };
 };
 #pragma endregion
 
@@ -57,61 +27,69 @@ private:
 public:
 	virtual void Free() override;
 #pragma endregion
+
 #pragma region Resource Management
 public:
-	class Mesh* LoadMesh(const wstring& key, void* arg);
-	class Model* LoadModel(const wstring& key, void* arg);
-	class Shader* LoadShader(const wstring& key, void* arg);
-	class Sprite* LoadSprite(const wstring& key, void* arg);
-	class Texture* LoadTexture(const wstring& key, const wstring& texturePath);
-	class Material* LoadMaterial(const wstring& key, void* arg);
-public:
-	class Mesh* GetMesh(const wstring& key);
-	class Model* GetModel(const wstring& key);
-	class Shader* GetShader(const wstring& key);
-	class Sprite* GetSprite(const wstring& key);
-	class Texture* GetTexture(const wstring& key);
-	class Material* GetMaterial(const wstring& key);
-#pragma region Generic Case
-public:
-	template<typename T>
-	T* Load(const wstring& key, void* arg)
+	template<typename T, typename... Args>
+	ResourceHandle<T> LoadResource(const wstring& path, Args&&... args)
 	{
-		ResourceContainer<T>* container = GetContainer<T>();
-		if (container->Get(key)) return nullptr;
+		static_assert(is_base_of_v<Resource, T>, "T must be derived from Resource");
 
-		T* resource = T::Create(arg);
+		uint64 hash = RunTimeHash(path);
+		Handle handle = FindHandle(hash);
 
-		if (!resource) return nullptr;
-		container->Add(key, resource);
+		if (handle.IsValid())
+		{
+			return ResourceHandle<T>(handle);
+		}
 
-		return resource;
+		T* resource = T::Create(forward<Args>(args)...);
+		if(!resource)
+			return ResourceHandle<T>();
+
+		resource->SetKey(path);
+		handle = AddResourceInternal(path, resource);
+		return ResourceHandle<T>(handle);
+	}
+	template <typename T>
+	ResourceHandle<T> AddResource(const wstring& key, T* resource)
+	{
+		static_assert(is_base_of_v<Resource, T>, "T must be derived from Resource");
+		if(!resource) return ResourceHandle<T>();
+
+		uint64 hash = RunTimeHash(key);
+		resource->SetKey(key);
+
+		return ResourceHandle<T>(AddResourceInternal(key, resource));
 	}
 
-	template<typename T>
-	T* Get(const wstring& key)
+	template <typename T>
+	ResourceHandle<T> GetResourceHandle(const wstring& key)
 	{
-		ResourceContainer<T>* container = GetContainer<T>();
-		return container->Get(key);
+		uint64 hash = RunTimeHash(key);
+		return ResourceHandle<T>(FindHandle(hash));
 	}
-#pragma endregion
 public:
 	EResult ImportFolder(const wstring& folderPath);
 	void* LoadFile(const wstring& filePath);
-	void* GetOrLoadFile(const wstring& key, const wstring& filePath);
-
-	template<typename T>
-	void RegisterExtension(const wstring& extension)
-	{
-		m_LoaderRegistry[extension] = [this](wstring key, wstring path) -> EResult
-		{
-			return this->Load<T>(key, (void*)&path);
-		};
-	}
-
 	void RegisterExplicitLoader();
 #pragma endregion
 
+#pragma region Handle Management
+public:
+	void AddRefResource(const Handle& handle);
+	void ReleaseResource(const Handle& handle);
+	bool IsValid(const Handle& handle);
+	Resource* GetResource(const Handle& handle);
+#pragma endregion
+
+#pragma region Slot Management
+private:
+	Handle FindHandle(uint64 hash);
+	Handle AddResourceInternal(const wstring& key, Resource* resource);
+	Handle AllocateSlot(Resource* resource);
+	void FreeSlotInternal(uint32 slotIndex);
+#pragma endregion
 
 #pragma region Save & Load
 public:
@@ -124,39 +102,16 @@ public:
 	void* LoadFromBinaryFile(const wstring& filePath);
 #pragma endregion
 
-
-#pragma region Helper Functions
-private:
-	template<typename T>
-	ResourceContainer<T>* GetContainer()
-	{
-		type_index typeIdx = type_index(typeid(T));
-		auto iter = m_GenericContainers.find(typeIdx);
-		if (iter != m_GenericContainers.end())
-		{
-			return static_cast<ResourceContainer<T>*>(iter->second);
-		}
-		else
-		{
-			ResourceContainer<T>* newContainer = new ResourceContainer<T>();
-			m_GenericContainers[typeIdx] = newContainer;
-			return newContainer;
-		}
-	}
-#pragma endregion
-
 #pragma region Member Variables
 private:
-	unordered_map<wstring, class Mesh*>		m_Meshes;
-	unordered_map<wstring, class Model*>	m_Models;
-	unordered_map<wstring, class Shader*>	m_Shaders;
-	unordered_map<wstring, class Sprite*>	m_Sprites;
-	unordered_map<wstring, class Texture*>	m_Textures;
-	unordered_map<wstring, class Material*> m_Materials;
-private:
-	unordered_map<type_index, IResourceContainer*> m_GenericContainers;
+	vector<ResourceSlot> m_Resources;
+	vector<uint32> m_FreeSlots;
+	unordered_map<uint64, Handle> m_HashToHandle;
+	shared_mutex m_PoolMutex;
 private:
 	unordered_map<wstring, function<void*(wstring, wstring)>> m_LoaderRegistry;
 #pragma endregion
 };
+
+#include "ResourceHandle.inl"
 END

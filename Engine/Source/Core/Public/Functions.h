@@ -1,8 +1,12 @@
 ﻿#pragma once
 
+#include "Types.h"
+#include <string_view>
+#include <cstddef>
+
 namespace Engine
 {
-	template<typename T>
+	template<typename T> requires std::is_pointer_v<T>
 	void Safe_Delete(T& Pointer)
 	{
 		if (nullptr != Pointer)
@@ -22,7 +26,7 @@ namespace Engine
 		}
 	}
 
-	template<typename T>
+	template<typename T> requires std::is_pointer_v<T>
 	int32 Safe_AddRef(T& Instance)
 	{
 		int32 iRefCnt = { 0 };
@@ -33,7 +37,7 @@ namespace Engine
 		return iRefCnt;
 	}
 
-	template<typename T>
+	template<typename T> requires std::is_pointer_v<T>
 	int32 Safe_Release(T& Instance)
 	{
 		int32 iRefCnt = { 0 };
@@ -56,6 +60,51 @@ namespace Engine
 	{
 		auto u8str = std::filesystem::path(wstr).u8string();
 		return string(u8str.begin(), u8str.end());
+	}
+
+	// FNV-1a 64-bit Hash Function for compile-time string hashing
+	consteval uint64 CompileTimeHash(std::string_view str) noexcept
+	{
+		uint64 hash = 14695981039346656037ull;
+		for (char c : str)
+		{
+			hash ^= static_cast<uint64>(c);
+			hash *= 1099511628211ull;
+		}
+		return hash;
+	}
+
+	consteval uint64 CompileTimeHash(std::wstring_view str) noexcept
+	{
+		uint64 hash = 14695981039346656037ull;
+		for (wchar_t c : str)
+		{
+			hash ^= static_cast<uint64>(c);
+			hash *= 1099511628211ull;
+		}
+		return hash;
+	}
+
+	constexpr uint64 RunTimeHash(std::string_view str) noexcept
+	{
+		uint64 hash = 14695981039346656037ull;
+		for (char c : str)
+		{
+			hash ^= static_cast<uint64>(c);
+			hash *= 1099511628211ull;
+		}
+		return hash;
+	}
+
+	constexpr uint64 RunTimeHash(std::wstring_view str) noexcept
+	{
+		uint64 hash = 14695981039346656037ull;
+		for (wchar_t c : str)
+		{
+			hash ^= static_cast<uint64>(c);
+			hash *= 1099511628211ull;
+		}
+		return hash;
 	}
 }
 

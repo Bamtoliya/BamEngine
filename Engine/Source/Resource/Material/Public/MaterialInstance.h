@@ -4,7 +4,7 @@
 
 struct tagMaterialInstanceDesc
 {
-	class Material* BaseMaterial = { nullptr };
+	ResourceHandle<Material> BaseMaterialHandle;
 };
 
 ENUM()
@@ -35,7 +35,7 @@ private:
 	EResult Initialize(void* arg = nullptr);
 public:
 	static MaterialInstance* Create(void* arg = nullptr);
-	static MaterialInstance* Create(Material* baseMaterial);
+	static MaterialInstance* Create(const ResourceHandle<Material>& baseMaterial);
 	virtual MaterialInstance* Clone(void* arg = nullptr);
 	virtual void Free() override;
 #pragma endregion
@@ -47,8 +47,8 @@ public:
 
 #pragma region Base Material Management
 public:
-	void SetBaseMaterial(Material* material);
-	Material* GetBaseMaterial() const { return m_BaseMaterial; }
+	void SetBaseMaterial(const ResourceHandle<Material>& material);
+	Material* GetBaseMaterial() const { return m_BaseMaterialHandle.Get(); }
 #pragma endregion
 
 
@@ -67,8 +67,8 @@ public:
 	virtual Shader* GetVertexShader() const;
 	virtual Shader* GetPixelShader() const;
 public:
-	virtual void SetVertexShader(Shader* shader);
-	virtual void SetPixelShader(Shader* shader);
+	virtual void SetVertexShaderHandle(const ResourceHandle<Shader>& shader);
+	virtual void SetPixelShaderHandle(const ResourceHandle<Shader>& shader);
 #pragma endregion
 
 #pragma region Save&Load
@@ -81,7 +81,7 @@ public:
 #pragma region Variable
 private:
 	PROPERTY()
-	class Material* m_BaseMaterial = { nullptr };
+	ResourceHandle<Material> m_BaseMaterialHandle;
 private:
 	PROPERTY()
 	EPipelineOverrideFlag m_OverrideFlags = EPipelineOverrideFlag::None;

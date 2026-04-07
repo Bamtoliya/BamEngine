@@ -46,6 +46,8 @@
 #include <thread>
 #include <atomic>
 #include <variant>
+#include <mutex>
+#include <shared_mutex>
 
 #include <cstddef>
 #include <type_traits>

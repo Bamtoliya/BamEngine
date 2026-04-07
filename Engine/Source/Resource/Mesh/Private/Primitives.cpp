@@ -28,7 +28,7 @@ TriangleMesh* TriangleMesh::Create(void* arg)
 	TriangleMesh* mesh = new TriangleMesh{};
 	if (mesh->Initialize(arg) != EResult::Success)
 	{
-		mesh->Release();
+		mesh->Free();
 		return nullptr;
 	}
 	return mesh;
@@ -60,7 +60,7 @@ QuadMesh* QuadMesh::Create(void* arg)
 	QuadMesh* mesh = new QuadMesh{};
 	if (mesh->Initialize(arg) != EResult::Success)
 	{
-		mesh->Release();
+		mesh->Free();
 		return nullptr;
 	}
 	return mesh;
@@ -121,7 +121,7 @@ CubeMesh* CubeMesh::Create(void* arg)
 	CubeMesh* mesh = new CubeMesh{};
 	if (mesh->Initialize(arg) != EResult::Success)
 	{
-		mesh->Release();
+		mesh->Free();
 		return nullptr;
 	}
 	return mesh;
@@ -136,7 +136,7 @@ SphereMesh* SphereMesh::Create(void* arg)
 	SphereMesh* mesh = new SphereMesh{};
 	if (mesh->Initialize(arg) != EResult::Success)
 	{
-		mesh->Release();
+		mesh->Free();
 		return nullptr;
 	}
 	return mesh;

@@ -17,7 +17,7 @@ EResult Shader::Initialize(void* arg)
 		rhiShaderDesc.FilePath = desc->FilePath;
 		rhiShaderDesc.EntryPoint = desc->EntryPoint;
 		m_RHIShader = rhi->CreateShader(rhiShaderDesc);
-		m_Path = desc->FilePath;
+		m_Key = desc->FilePath;
 		if (!m_RHIShader)
 		{
 			return EResult::Fail;
@@ -40,7 +40,6 @@ Shader* Shader::Create(void* arg)
 void Shader::Free()
 {
 	Safe_Release(m_RHIShader);
-	Base::Free();
 }
 #pragma endregion
 
@@ -48,14 +47,14 @@ void Shader::Free()
 #pragma region Shader
 void Shader::Deserialize(Archive& ar)
 {
-	Shader* shader = ResourceManager::Get().GetShader(m_Tag);
-	if (shader)
-	{
-		m_RHIShader->SetNativeHandle(shader->GetRHIShader()->GetNativeHandle());
-	}
-	else
-	{
-
-	}
+	//Shader* shader = ResourceManager::Get().GetShader(m_Tag);
+	//if (shader)
+	//{
+	//	m_RHIShader->SetNativeHandle(shader->GetRHIShader()->GetNativeHandle());
+	//}
+	//else
+	//{
+	//
+	//}
 }
 #pragma endregion

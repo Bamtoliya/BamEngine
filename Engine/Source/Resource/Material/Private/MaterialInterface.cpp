@@ -9,7 +9,6 @@ void MaterialInterface::Free()
 {
 	for (auto& [name, textureSlot] : m_TextureSlots)
 	{
-		Safe_Release(textureSlot.texture);
 		Safe_Release(textureSlot.sampler);
 	}
 	m_TextureSlots.clear();
@@ -17,12 +16,12 @@ void MaterialInterface::Free()
 }
 #pragma endregion
 
-void MaterialInterface::SetTexture(const string& name, Texture* texture)
+#pragma region Parameter Interface
+void MaterialInterface::SetTexture(const string& name, const ResourceHandle<Texture>& texture)
 {
 	auto it = m_TextureSlots.find(name);
 	if (it != m_TextureSlots.end())
 	{
-		Safe_Release(it->second.texture);
 		it->second.texture = texture;
 	}
 	else
@@ -32,16 +31,14 @@ void MaterialInterface::SetTexture(const string& name, Texture* texture)
 		ts.texture = texture;
 		m_TextureSlots[name] = ts;
 	}
-	Safe_AddRef(texture);
 }
 
-void MaterialInterface::SetTextureBySlot(uint32 slot, Texture* texture)
+void MaterialInterface::SetTextureBySlot(uint32 slot, const ResourceHandle<Texture>& texture)
 {
 	string slotName = std::to_string(slot);
 	auto it = m_TextureSlots.find(slotName);
 	if (it != m_TextureSlots.end())
 	{
-		Safe_Release(it->second.texture);
 		it->second.texture = texture;
 	}
 	else
@@ -51,7 +48,6 @@ void MaterialInterface::SetTextureBySlot(uint32 slot, Texture* texture)
 		ts.texture = texture;
 		m_TextureSlots[slotName] = ts;
 	}
-	Safe_AddRef(texture);
 }
 
 void MaterialInterface::SetSampler(const string& name, RHISampler* sampler)
@@ -88,7 +84,7 @@ Texture* MaterialInterface::GetTexture(const string& name) const
 {
 	auto it = m_TextureSlots.find(name);
 	if (it != m_TextureSlots.end())
-		return it->second.texture;
+		return it->second.texture.Get();
 	return nullptr;
 }
 
@@ -97,9 +93,27 @@ Texture* MaterialInterface::GetTextureBySlot(uint32 slot) const
 	for (auto& [name, textureSlot] : m_TextureSlots)
 	{
 		if (textureSlot.slot == slot)
-			return textureSlot.texture;
+			return textureSlot.texture.Get();
 	}
 	return nullptr;
+}
+
+ResourceHandle<Texture> MaterialInterface::GetTextureHandle(const string& name) const
+{
+	auto it = m_TextureSlots.find(name);
+	if (it != m_TextureSlots.end())
+		return m_TextureSlots.at(name).texture;
+	return ResourceHandle<Texture>();
+}
+
+ResourceHandle<Texture> MaterialInterface::GetTextureHandleBySlot(uint32 slot) const
+{
+	for (auto& [name, textureSlot] : m_TextureSlots)
+	{
+		if (textureSlot.slot == slot)
+			return textureSlot.texture;
+	}
+	return ResourceHandle<Texture>();
 }
 
 RHISampler* MaterialInterface::GetSampler(const string& name) const
@@ -112,15 +126,19 @@ RHISampler* MaterialInterface::GetSampler(const string& name) const
 #pragma endregion
 
 
+
+#pragma endregion
+
+
 #pragma region Bind
 EResult MaterialInterface::Bind(uint32 slot)
 {
 	RHI* rhi = Renderer::Get().GetRHI();
 	for (auto& [name, textureSlot] : m_TextureSlots)
 	{
-		Texture* texture = textureSlot.texture;
+		Texture* texture = textureSlot.texture.Get();
 		if (!texture)
-			texture = ResourceManager::Get().GetTexture(L"DefaultTexture");
+			texture = ResourceManager::Get().GetResourceHandle<Texture>(L"DefaultTexture").Get();
 		RHISampler* sampler = textureSlot.sampler;
 		if (!sampler)
 			sampler = SamplerManager::Get().GetDefaultSampler();

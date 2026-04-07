@@ -1,41 +1,26 @@
-﻿#include "Sprite.h"
-#include "Sprite.h"
-#include "Sprite.h"
-#pragma once
-
+﻿#pragma once
 #include "Sprite.h"
 #include "ResourceManager.h"
 
 #pragma region Constructor&Destructor
 EResult Sprite::Initialize(void* arg)
 {
-	if (IsFailure(__super::Initialize(arg)))
-		return EResult::Fail;
+	if (!arg) return EResult::InvalidArgument;
+	if (IsFailure(__super::Initialize(arg))) return EResult::Fail;
 
-	if (arg)
+	CAST_DESC
+	if (desc->Texture.IsValid())
 	{
-		CAST_DESC
-		if (desc->Texture)
-		{
-			m_Texture = desc->Texture;
-			Safe_AddRef(m_Texture);
-			
-		}
-		else if (!desc->TexturePath.empty())
-		{
-			Texture* texture = ResourceManager::Get().LoadTexture(m_Tag, desc->TexturePath);
-			
-			if (texture)
-			{
-				m_Texture = texture;
-				Safe_AddRef(m_Texture);
-			}
-		}
-		
-		m_Path = m_Texture->GetPath();
-		m_Region = desc->Region;
-		m_Pivot = desc->Pivot;
+		m_Texture = desc->Texture;		
 	}
+	else if (!desc->TexturePath.empty())
+	{
+		m_Texture = ResourceManager::Get().LoadResource<Texture>(desc->TexturePath);
+	}
+	
+	m_Key = m_Texture->GetKey() + L"_Sprite";
+	m_Region = desc->Region;
+	m_Pivot = desc->Pivot;
 	return EResult::Success;
 }
 
@@ -44,7 +29,7 @@ Sprite* Sprite::Create(void* arg)
 	Sprite* instance = new Sprite();
 	if (IsFailure(instance->Initialize(arg)))
 	{
-		Safe_Release(instance);
+		delete instance;
 		return nullptr;
 	}
 	return instance;
@@ -52,7 +37,7 @@ Sprite* Sprite::Create(void* arg)
 
 void Sprite::Free()
 {
-	Safe_Release(m_Texture);
+
 }
 #pragma endregion
 
@@ -78,15 +63,10 @@ EResult Sprite::SetPivot(const vec2& pivot)
 	IncreaseVersion();
 	return EResult::Success;
 }
-EResult Sprite::SetTexture(Texture* texture)
+EResult Sprite::SetTexture(ResourceHandle<Texture> texture)
 {
-	if (m_Texture)
-		Safe_Release(m_Texture);
-	if (texture)
-	{
-		m_Texture = texture;
-		Safe_AddRef(m_Texture);
-	}
+	if (!texture) return EResult::InvalidArgument;
+	m_Texture = texture;
 	IncreaseVersion();
 	return EResult::Success;
 }

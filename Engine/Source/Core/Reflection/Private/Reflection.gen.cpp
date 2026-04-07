@@ -24,6 +24,7 @@
 #include "Resource/Model/Public/Model.h"
 #include "Resource/Model/Public/Skeleton.h"
 #include "Resource/Public/Resource.h"
+#include "Resource/Script/Public/Script.h"
 #include "Resource/Shader/Public/Shader.h"
 #include "Resource/Sprite/Public/Sprite.h"
 #include "Resource/Texture/Public/Texture.h"
@@ -491,10 +492,10 @@ BEGIN_METADATA(RenderComponent, m_MaterialInstances)
 	EDITABLE
 END_METADATA
 
-DECLARE_CONTAINER_INFO(RenderComponent, m_MaterialInstances, "MaterialInstance*", Engine::EPropertyType::Object, Engine::LinearContainerAccessor<vector<MaterialInstance*>, MaterialInstance*>::Get())
+DECLARE_CONTAINER_INFO(RenderComponent, m_MaterialInstances, "ResourceHandle<class MaterialInstance>", Engine::EPropertyType::Struct, Engine::LinearContainerAccessor<vector<ResourceHandle<class MaterialInstance>>, ResourceHandle<class MaterialInstance>>::Get())
 BEGIN_PROPERTIES(RenderComponent)
 	REFLECT_PROPERTY(RenderComponent, m_RenderPassID, "uint32", Engine::EPropertyType::UInt32, RenderComponent_m_RenderPassID_Meta)
-	REFLECT_CONTAINER_PROPERTY(RenderComponent, m_MaterialInstances, "vector<MaterialInstance*>", Engine::EPropertyType::Array, &RenderComponent_m_MaterialInstances_ContainerData, RenderComponent_m_MaterialInstances_Meta)
+	REFLECT_CONTAINER_PROPERTY(RenderComponent, m_MaterialInstances, "vector<ResourceHandle<class MaterialInstance>>", Engine::EPropertyType::Array, &RenderComponent_m_MaterialInstances_ContainerData, RenderComponent_m_MaterialInstances_Meta)
 END_PROPERTIES
 
 EMPTY_FUNCTIONS(RenderComponent)
@@ -524,7 +525,7 @@ END_METADATA
 
 BEGIN_PROPERTIES(SpriteRenderer)
 	REFLECT_PROPERTY(SpriteRenderer, m_Tiling, "vec2", Engine::EPropertyType::Vector2, SpriteRenderer_m_Tiling_Meta)
-	REFLECT_PROPERTY(SpriteRenderer, m_Sprite, "AssetRef<Sprite>", Engine::EPropertyType::Struct, SpriteRenderer_m_Sprite_Meta)
+	REFLECT_PROPERTY(SpriteRenderer, m_Sprite, "ResourceHandle<Sprite>", Engine::EPropertyType::Struct, SpriteRenderer_m_Sprite_Meta)
 	REFLECT_PROPERTY(SpriteRenderer, m_CachedSpriteVersion, "uint32", Engine::EPropertyType::UInt32, SpriteRenderer_m_CachedSpriteVersion_Meta)
 	REFLECT_PROPERTY(SpriteRenderer, m_DrawMode, "EDrawMode", Engine::EPropertyType::Enum, SpriteRenderer_m_DrawMode_Meta)
 END_PROPERTIES
@@ -549,7 +550,7 @@ IMPLEMENT_CLASS(RHIShader, RHIResource)
 
 #pragma region CLASS: MeshFilter
 BEGIN_PROPERTIES(MeshFilter)
-	REFLECT_PROPERTY(MeshFilter, m_Mesh, "Mesh", Engine::EPropertyType::Object, {})
+	REFLECT_PROPERTY(MeshFilter, m_MeshHandle, "ResourceHandle<Mesh>", Engine::EPropertyType::Struct, {})
 END_PROPERTIES
 
 EMPTY_FUNCTIONS(MeshFilter)
@@ -569,7 +570,7 @@ IMPLEMENT_CLASS(Material, MaterialInterface)
 
 #pragma region CLASS: MaterialInstance
 BEGIN_PROPERTIES(MaterialInstance)
-	REFLECT_PROPERTY(MaterialInstance, m_BaseMaterial, "class Material", Engine::EPropertyType::Object, {})
+	REFLECT_PROPERTY(MaterialInstance, m_BaseMaterialHandle, "ResourceHandle<Material>", Engine::EPropertyType::Struct, {})
 	REFLECT_PROPERTY(MaterialInstance, m_OverrideFlags, "EPipelineOverrideFlag", Engine::EPropertyType::BitFlag, {})
 END_PROPERTIES
 
@@ -583,7 +584,7 @@ IMPLEMENT_CLASS(MaterialInstance, MaterialInterface)
 BEGIN_PROPERTIES(TextureSlot)
 	REFLECT_PROPERTY(TextureSlot, slot, "uint32", Engine::EPropertyType::UInt32, {})
 	REFLECT_PROPERTY(TextureSlot, textureTag, "wstring", Engine::EPropertyType::Wstring, {})
-	REFLECT_PROPERTY(TextureSlot, texture, "Texture", Engine::EPropertyType::Object, {})
+	REFLECT_PROPERTY(TextureSlot, texture, "ResourceHandle<Texture>", Engine::EPropertyType::Struct, {})
 	REFLECT_PROPERTY(TextureSlot, sampler, "RHISampler", Engine::EPropertyType::Object, {})
 END_PROPERTIES
 
@@ -635,8 +636,8 @@ BEGIN_PROPERTIES(MaterialInterface)
 	REFLECT_PROPERTY(MaterialInterface, m_FillMode, "EFillMode", Engine::EPropertyType::Enum, MaterialInterface_m_FillMode_Meta)
 	REFLECT_PROPERTY(MaterialInterface, m_DepthMode, "EDepthMode", Engine::EPropertyType::Enum, MaterialInterface_m_DepthMode_Meta)
 	REFLECT_PROPERTY(MaterialInterface, m_DepthCompareOp, "ECompareOp", Engine::EPropertyType::Enum, MaterialInterface_m_DepthCompareOp_Meta)
-	REFLECT_PROPERTY(MaterialInterface, m_VertexShader, "Shader", Engine::EPropertyType::Object, {})
-	REFLECT_PROPERTY(MaterialInterface, m_PixelShader, "Shader", Engine::EPropertyType::Object, {})
+	REFLECT_PROPERTY(MaterialInterface, m_VertexShaderHandle, "ResourceHandle<Shader>", Engine::EPropertyType::Struct, {})
+	REFLECT_PROPERTY(MaterialInterface, m_PixelShaderHandle, "ResourceHandle<Shader>", Engine::EPropertyType::Struct, {})
 	REFLECT_CONTAINER_PROPERTY(MaterialInterface, m_Parameters, "unordered_map<string, MaterialParameter>", Engine::EPropertyType::Map, &MaterialInterface_m_Parameters_ContainerData, {})
 	REFLECT_CONTAINER_PROPERTY(MaterialInterface, m_TextureSlots, "unordered_map<string, TextureSlot>", Engine::EPropertyType::Map, &MaterialInterface_m_TextureSlots_ContainerData, {})
 END_PROPERTIES
@@ -738,10 +739,6 @@ IMPLEMENT_CLASS(tagResourceBinaryHeader, None)
 #pragma endregion // STRUCT: tagResourceBinaryHeader
 
 #pragma region CLASS: Resource
-BEGIN_METADATA(Resource, m_Tag)
-	READONLY
-END_METADATA
-
 BEGIN_METADATA(Resource, m_Version)
 	READONLY
 END_METADATA
@@ -750,22 +747,30 @@ BEGIN_METADATA(Resource, m_ResourceType)
 	READONLY
 END_METADATA
 
-BEGIN_METADATA(Resource, m_Path)
+BEGIN_METADATA(Resource, m_Key)
 	READONLY
 END_METADATA
 
 BEGIN_PROPERTIES(Resource)
-	REFLECT_PROPERTY(Resource, m_Tag, "wstring", Engine::EPropertyType::Wstring, Resource_m_Tag_Meta)
 	REFLECT_PROPERTY(Resource, m_Version, "uint32", Engine::EPropertyType::UInt32, Resource_m_Version_Meta)
 	REFLECT_PROPERTY(Resource, m_ResourceType, "EResourceType", Engine::EPropertyType::Enum, Resource_m_ResourceType_Meta)
-	REFLECT_PROPERTY(Resource, m_Path, "wstring", Engine::EPropertyType::Wstring, Resource_m_Path_Meta)
+	REFLECT_PROPERTY(Resource, m_Key, "wstring", Engine::EPropertyType::Wstring, Resource_m_Key_Meta)
 END_PROPERTIES
 
 EMPTY_FUNCTIONS(Resource)
 
-IMPLEMENT_CLASS(Resource, Base)
+IMPLEMENT_CLASS(Resource, SerializableInterface)
 
 #pragma endregion // CLASS: Resource
+
+#pragma region CLASS: Script
+EMPTY_PROPERTIES(Script)
+
+EMPTY_FUNCTIONS(Script)
+
+IMPLEMENT_CLASS(Script, Resource)
+
+#pragma endregion // CLASS: Script
 
 #pragma region CLASS: Shader
 BEGIN_PROPERTIES(Shader)
@@ -789,7 +794,7 @@ BEGIN_METADATA(Sprite, m_Pivot)
 END_METADATA
 
 BEGIN_PROPERTIES(Sprite)
-	REFLECT_PROPERTY(Sprite, m_Texture, "Texture", Engine::EPropertyType::Object, Sprite_m_Texture_Meta)
+	REFLECT_PROPERTY(Sprite, m_Texture, "ResourceHandle<Texture>", Engine::EPropertyType::Struct, Sprite_m_Texture_Meta)
 	REFLECT_PROPERTY(Sprite, m_Region, "Rect", Engine::EPropertyType::Struct, {})
 	REFLECT_PROPERTY(Sprite, m_Pivot, "vec2", Engine::EPropertyType::Vector2, Sprite_m_Pivot_Meta)
 END_PROPERTIES

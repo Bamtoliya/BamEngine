@@ -63,17 +63,23 @@ EResult Renderer::Initialize(void* arg)
 
 
 #ifdef _DEBUG
+
+	TODO("ResourceManager::Get().LoadResource<Shader>(tag or path, args) need to be create");
+	ResourceManager& rm = ResourceManager::Get();
 	tagShaderDesc debugLineVsDesc;
 	debugLineVsDesc.ShaderType = EShaderType::Vertex;
 	debugLineVsDesc.FilePath = L"Resources/Shader/debugLine.vert.spv";
 	debugLineVsDesc.EntryPoint = "main";
-	ResourceManager::Get().LoadShader(L"DebugLineVS", &debugLineVsDesc);
+	rm.LoadResource<Shader>(L"DebugLineVS", &debugLineVsDesc);
+	//ResourceManager::Get().LoadShader(L"DebugLineVS", &debugLineVsDesc);
 
 	tagShaderDesc debugLinePsDesc;
 	debugLinePsDesc.ShaderType = EShaderType::Pixel;
 	debugLinePsDesc.FilePath = L"Resources/Shader/debugLine.frag.spv";
 	debugLinePsDesc.EntryPoint = "main";
-	ResourceManager::Get().LoadShader(L"DebugLinePS", &debugLinePsDesc);
+	rm.LoadResource<Shader>(L"DebugLinePS", &debugLinePsDesc);
+	//ResourceManager::Get().LoadShader(L"DebugLinePS", &debugLinePsDesc);
+	
 	//디버그 버텍스 버퍼는 최대 1000개의 라인을 그릴 수 있도록 설정
 	uint32 maxDebugLines = 1000;
 	tagRHIBufferDesc bufferDesc;
@@ -358,8 +364,13 @@ EResult Renderer::RenderDebugLines(f32 dt)
 		debugPipelineDesc.CullMode = ECullMode::None;
 		debugPipelineDesc.FrontFace = EFrontFace::CounterClockwise;
 		debugPipelineDesc.Topology = ETopology::LineList;
-		debugPipelineDesc.VertexShader = ResourceManager::Get().GetShader(L"DebugLineVS")->GetRHIShader();
-		debugPipelineDesc.PixelShader = ResourceManager::Get().GetShader(L"DebugLinePS")->GetRHIShader();
+
+		TODO("ResourceManager::Get().GetResource<Shader>(tag or path) need to be create");
+		ResourceManager& rm = ResourceManager::Get();
+		debugPipelineDesc.VertexShader = rm.GetResourceHandle<Shader>(L"DebugLineVS").Get()->GetRHIShader();
+		debugPipelineDesc.PixelShader = rm.GetResourceHandle<Shader>(L"DebugLinePS").Get()->GetRHIShader();
+		//debugPipelineDesc.VertexShader = ResourceManager::Get().GetShader(L"DebugLineVS")->GetRHIShader();
+		//debugPipelineDesc.PixelShader = ResourceManager::Get().GetShader(L"DebugLinePS")->GetRHIShader();
 		debugPipelineDesc.InputLayout = DebugVertex::Layout;
 		debugPipelineDesc.DepthStencilState.DepthTestEnable = false;
 		debugPipelineDesc.DepthStencilState.StencilTestEnable = false;

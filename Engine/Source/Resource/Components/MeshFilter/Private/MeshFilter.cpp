@@ -33,14 +33,10 @@ Component* MeshFilter::Clone(GameObject* owner, void* arg)
 }
 void MeshFilter::Free()
 {
-	Safe_Release(m_Mesh);
 	Component::Free();
 }
-void MeshFilter::SetMesh(Mesh* mesh)
+void MeshFilter::SetMeshHandle(ResourceHandle<Mesh> handle)
 {
-	if (m_Mesh)
-		Safe_Release(m_Mesh);
-	m_Mesh = mesh;
-	Safe_AddRef(m_Mesh);
+	m_MeshHandle = handle;
 }
 #pragma endregion

@@ -6,18 +6,17 @@
 #pragma region Constructor&Destructor
 EResult Texture::Initialize(void* arg)
 {
+	if (IsFailure(__super::Initialize(arg)))
+		return EResult::Fail;
 	if (!arg) return EResult::InvalidArgument;
-	const wchar* path = reinterpret_cast<const wchar*>(arg);
-	m_Path = path;
+	CAST_DESC
 	RHI* rhi = Renderer::Get().GetRHI();
-	// Create RHI Texture
-	{
-		TEXTUREDESC textureDesc = {};
-		textureDesc.FilePath = m_Path;
-		m_RHITexture = rhi->CreateTextureFromFile(textureDesc.FilePath.c_str());
-		if (!m_RHITexture)
-			return EResult::Fail;
-	}
+
+	m_RHITexture = rhi->CreateTextureFromFile(m_Key.c_str());
+
+	if (!m_RHITexture)
+		return EResult::Fail;
+
 	return EResult::Success;
 }
 
@@ -26,7 +25,7 @@ Texture* Texture::Create(void* arg)
 	Texture* instance = new Texture();
 	if (IsFailure(instance->Initialize(arg)))
 	{
-		Safe_Release(instance);
+		delete instance;
 		return nullptr;
 	}
 	return instance;

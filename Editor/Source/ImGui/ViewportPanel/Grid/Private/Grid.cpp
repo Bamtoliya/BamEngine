@@ -9,14 +9,15 @@
 
 void Grid::Initialize()
 {
+	ResourceManager& resourceManager = ResourceManager::Get();
 	tagShaderDesc gridVsDesc = { EShaderType::Vertex, L"Resources/Shader/infinite_grid.vert.spv", "main" };
-	ResourceManager::Get().LoadShader(L"InfiniteGridVS", &gridVsDesc);
+	resourceManager.LoadResource<Shader>(L"InfiniteGridVS", &gridVsDesc);
 
 	tagShaderDesc grid2DPsDesc = { EShaderType::Pixel, L"Resources/Shader/infinite_grid_2d.frag.spv", "main" };
-	ResourceManager::Get().LoadShader(L"InfiniteGrid2DPS", &grid2DPsDesc);
+	resourceManager.LoadResource<Shader>(L"InfiniteGrid2DPS", &grid2DPsDesc);
 
 	tagShaderDesc grid3DPsDesc = { EShaderType::Pixel, L"Resources/Shader/infinite_grid.frag.spv", "main" };
-	ResourceManager::Get().LoadShader(L"InfiniteGrid3DPS", &grid3DPsDesc);
+	resourceManager.LoadResource<Shader>(L"InfiniteGrid3DPS", &grid3DPsDesc);
 }
 
 void Grid::Free()
@@ -32,12 +33,13 @@ void Grid::SubmitGrid(RenderPassID renderPassID, bool isOrthographic)
             if (!m_Visible) return EResult::Success;
 
             RHI* rhi = Renderer::Get().GetRHI();
+            ResourceManager& resourceManager = ResourceManager::Get();
 
             // 1. 파이프라인 디스크립터 설정 (RenderComponent와 동일한 방식 적용!)
             tagRHIPipelineDesc pipelineDesc = {};
             pipelineDesc.PipelineType = EPipelineType::Graphics;
-            pipelineDesc.VertexShader = ResourceManager::Get().GetShader(L"InfiniteGridVS")->GetRHIShader();
-            pipelineDesc.PixelShader = ResourceManager::Get().GetShader(isOrthographic ? L"InfiniteGrid2DPS" : L"InfiniteGrid3DPS")->GetRHIShader();
+            pipelineDesc.VertexShader = resourceManager.GetResourceHandle<Shader>(L"InfiniteGridVS")->GetRHIShader();
+            pipelineDesc.PixelShader = resourceManager.GetResourceHandle<Shader>(isOrthographic ? L"InfiniteGrid2DPS" : L"InfiniteGrid3DPS")->GetRHIShader();
 
             pipelineDesc.BlendMode = EBlendMode::AlphaBlend;
             pipelineDesc.FillMode = EFillMode::Solid;
@@ -71,7 +73,7 @@ void Grid::SubmitGrid(RenderPassID renderPassID, bool isOrthographic)
                 return EResult::Fail;
 
             // 3. 메쉬 바인딩 및 렌더링
-            Mesh* quadMesh = ResourceManager::Get().GetMesh(L"QuadMesh");
+            Mesh* quadMesh = resourceManager.GetResourceHandle<Mesh>(L"QuadMesh").Get();
             if (!quadMesh) return EResult::Fail;
 
             rhi->BindVertexBuffer(quadMesh->GetVertexBuffer());

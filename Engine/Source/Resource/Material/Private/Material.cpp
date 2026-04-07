@@ -12,11 +12,8 @@ EResult Material::Initialize(void* arg)
 {
 	if (!arg) return EResult::Fail;
 	CAST_DESC
-	m_VertexShader = desc->VertexShader;
-	m_PixelShader = desc->PixelShader;
-
-	Safe_AddRef(m_VertexShader);
-	Safe_AddRef(m_PixelShader);
+	m_VertexShaderHandle = desc->VertexShaderHandle;
+	m_PixelShaderHandle = desc->PixelShaderHandle;
 
 	m_BlendMode = desc->BlendMode;
 	m_CullMode = desc->CullMode;
@@ -31,15 +28,14 @@ Material* Material::Create(void* arg)
 	Material* instance = new Material();
 	if (IsFailure(instance->Initialize(arg)))
 	{
-		Safe_Release(instance);
+		instance->Free();
+		delete instance;
 		return nullptr;
 	}
 	return instance;
 }
 void Material::Free()
 {
-	Safe_Release(m_VertexShader);
-	Safe_Release(m_PixelShader);
 	__super::Free();
 }
 #pragma endregion

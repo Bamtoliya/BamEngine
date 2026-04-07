@@ -26,15 +26,15 @@ struct ENGINE_API tagTextureBinaryHeader
 	PROPERTY()
 	uint32 DataSize = 0;
 };
-typedef struct tagTextureCreateInfo
+struct tagTextureCreateDesc : public tagResourceCreateDesc
 {
-	wstring FilePath;
-} TEXTUREDESC;
+};
 
 CLASS()
 class ENGINE_API Texture final : public Resource
 {
 	REFLECT_CLASS()
+	using DESC = tagTextureCreateDesc;
 #pragma region Constructor&Destructor
 private:
 	Texture() : Resource(EResourceType::Texture) {}

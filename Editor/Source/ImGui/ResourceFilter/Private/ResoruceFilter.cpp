@@ -45,8 +45,11 @@ void ResourceFilter::ProcessModelNode(const aiNode* node, const aiScene* scene, 
 		}
 		ProcessMeshIndex(mesh, scene, meshCreateInfo);
 
-		resourceManager.LoadMesh(StrToWStr(mesh->mName.C_Str()), &meshCreateInfo);
-		meshes.push_back(resourceManager.GetMesh(StrToWStr(mesh->mName.C_Str())));
+		TODO("Process Model Node to be done in here, and ResourceManager::Get().LoadResource<Mesh>(tag or path, args) need to be create");
+		resourceManager.LoadResource<Mesh>(StrToWStr(mesh->mName.C_Str()), &meshCreateInfo);
+
+		//resourceManager.LoadMesh(StrToWStr(mesh->mName.C_Str()), &meshCreateInfo);
+		//meshes.push_back(resourceManager.GetMesh(StrToWStr(mesh->mName.C_Str())));
 	}
 	modelCreateDesc.Meshes = meshes;
 	for (uint32 i = 0; i < node->mNumChildren; ++i)

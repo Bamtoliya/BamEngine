@@ -17,7 +17,7 @@ class ENGINE_API Skeleton : public Resource
 	REFLECT_CLASS()
 #pragma region Constructor&Destructor
 private:
-	Skeleton() = default;
+	Skeleton() : Resource(EResourceType::Skeleton) {}
 	virtual ~Skeleton() = default;
 	EResult Initialize(void* arg = nullptr);
 public:

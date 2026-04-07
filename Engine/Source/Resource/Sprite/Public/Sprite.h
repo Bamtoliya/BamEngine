@@ -1,10 +1,11 @@
 ﻿#pragma once
 
 #include "Texture.h"
+#include "ResourceHandle.h"
 
 struct tagSpriteCreateDesc : public tagResourceCreateDesc
 {
-	Texture* Texture = { nullptr };
+	ResourceHandle<Texture> Texture;
 	wstring TexturePath = L"";
 	Engine::Rect Region = { 0.f, 0.f, 0.f, 0.f };
 	vec2 Pivot = { 0.5f, 0.5f };
@@ -54,15 +55,16 @@ public:
 
 #pragma region Texture Management
 public:
-	Texture* GetTexture() const { return m_Texture; }
-	EResult SetTexture(Texture* texture);
+	Texture* GetTexture() { return m_Texture.Get(); }
+	const ResourceHandle<Texture>& GetTextureHandle() const { return m_Texture; }
+	EResult SetTexture(ResourceHandle<Texture> texture);
 #pragma endregion
 
 
 #pragma region Member Variable
 private:
 	PROPERTY(READONLY, NOSERIALIZE)
-	Texture* m_Texture = { nullptr };
+	ResourceHandle<Texture> m_Texture;
 
 	PROPERTY()
 	Rect m_Region = { 0.f, 0.f, 0.f, 0.f };

@@ -42,12 +42,12 @@ public:
 #pragma region Getter
 public:
 	vec2 GetTiling() const { return m_Tiling; }
-	Sprite* GetSprite() const { return m_Sprite; }
+	Sprite* GetSprite() const { return m_Sprite.Get(); }
 #pragma endregion
 #pragma region Setter
 public:
-	EResult SetSprite(Sprite* sprite);
-	EResult SetSprite(Texture* texture);
+	EResult SetSprite(const ResourceHandle<Sprite>& sprite);
+	EResult SetSprite(const ResourceHandle<Texture>& texture);
 	//EResult SetPivot(vec2 pivot);
 	EResult SetTiling(vec2 tiling) { m_Tiling = tiling; return EResult::Success; }
 private:
@@ -66,10 +66,10 @@ private:
 	PROPERTY(EDITABLE, DEFAULT(vec2(1.f, 1.f)))
 	vec2 m_Tiling = { 1.f, 1.f };
 
-	Mesh* m_Mesh = { nullptr };
+	ResourceHandle<Mesh> m_Mesh;
 
 	PROPERTY(EDITABLE)
-	AssetRef<Sprite> m_Sprite = { nullptr };
+	ResourceHandle<Sprite> m_Sprite;
 
 	PROPERTY(CATEGORY("DETAIL"), READONLY)
 	uint32 m_CachedSpriteVersion = { 0 };
