@@ -122,7 +122,17 @@ void ResourceManager::RegisterExplicitLoader()
 	//m_LoaderRegistry[L".bamtex"] = binaryLoader;
 	//m_LoaderRegistry[L".bammat"] = binaryLoader;
 }
-
+const vector<Handle>& ResourceManager::GetResourceHandles(uint64 typeHash)
+{
+	static const vector<Handle> emptyList; // 반환용 빈 리스트
+	shared_lock lock(m_PoolMutex); // 읽기 락
+	auto it = m_TypeToHandles.find(typeHash);
+	if (it != m_TypeToHandles.end())
+	{
+		return it->second;
+	}
+	return emptyList;
+}
 #pragma endregion
 
 #pragma region Handle Management
@@ -177,7 +187,6 @@ Resource* ResourceManager::GetResource(const Handle& handle)
 }
 #pragma endregion
 
-
 #pragma region Resource Slot Management
 Handle ResourceManager::FindHandle(uint64 hash)
 {
@@ -209,6 +218,9 @@ Handle ResourceManager::AddResourceInternal(const wstring& key, Resource* resour
 
 	Handle handle = AllocateSlot(resource);
 	m_HashToHandle[hash] = handle; // Map hash to handle
+
+	uint64 typeHash = resource->GetTypeInfo().ID;
+	m_TypeToHandles[typeHash].push_back(handle);
 	return handle;
 }
 
@@ -242,6 +254,17 @@ void ResourceManager::FreeSlotInternal(uint32 slotIndex)
 	{
 		uint64 hash = RunTimeHash(resource->GetKey());
 		m_HashToHandle.erase(hash);
+
+		uint64 typeHash = resource->GetTypeInfo().ID;
+		auto& handles = m_TypeToHandles[typeHash];
+		Handle targetHandle(slotIndex, m_Resources[slotIndex].Generation);
+
+		auto it = std::find(handles.begin(), handles.end(), targetHandle);
+		if (it != handles.end())
+		{
+			*it = handles.back();
+			handles.pop_back();
+		}
 
 		resource->Free();
 		delete resource;

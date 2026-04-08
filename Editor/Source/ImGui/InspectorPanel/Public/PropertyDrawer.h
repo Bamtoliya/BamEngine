@@ -39,6 +39,8 @@ public:
 	//static bool DrawSetProperty(void* data, const TypeInfo& typeinfo, const PropertyInfo& property);
 	static bool DrawEnumProperty(void* data, const TypeInfo& typeinfo, const PropertyInfo& property);
 	static bool DrawBitFlagProperty(void* data, const TypeInfo& typeinfo, const PropertyInfo& property);
+
+	static bool DrawResourceHandleProperty(void* data, const TypeInfo& typeinfo, const PropertyInfo& property);
 #pragma endregion
 
 

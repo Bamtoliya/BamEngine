@@ -69,6 +69,13 @@ public:
 		uint64 hash = RunTimeHash(key);
 		return ResourceHandle<T>(FindHandle(hash));
 	}
+	template<typename T>
+	const vector<Handle>& GetResourceHandles()
+	{
+		return GetResourceHandles(T::GetStaticTypeInfo().ID);
+	}
+
+	const vector<Handle>& GetResourceHandles(uint64 typeHash);
 public:
 	EResult ImportFolder(const wstring& folderPath);
 	void* LoadFile(const wstring& filePath);
@@ -107,6 +114,7 @@ private:
 	vector<ResourceSlot> m_Resources;
 	vector<uint32> m_FreeSlots;
 	unordered_map<uint64, Handle> m_HashToHandle;
+	unordered_map<uint64, vector<Handle>> m_TypeToHandles;
 	shared_mutex m_PoolMutex;
 private:
 	unordered_map<wstring, function<void*(wstring, wstring)>> m_LoaderRegistry;

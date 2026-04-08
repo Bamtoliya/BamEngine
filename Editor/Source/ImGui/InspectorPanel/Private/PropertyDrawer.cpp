@@ -438,6 +438,7 @@ bool PropertyDrawer::DrawProperty(void* instance, void* data, const TypeInfo& ty
 	case EPropertyType::Enum:		return DrawEnumProperty(data, typeinfo, property);
 
 	case EPropertyType::BitFlag:	return DrawBitFlagProperty(data, typeinfo, property);
+	case EPropertyType::ResourceHandle: return DrawResourceHandleProperty(data, typeinfo, property);
 	default:
 		ImGui::Text("Unsupported Type");
 		return false;
@@ -1028,6 +1029,115 @@ bool PropertyDrawer::DrawBitFlagProperty(void* data, const TypeInfo& typeinfo, c
 		ImGui::EndCombo();
 	}
 
+	return changed;
+}
+
+bool PropertyDrawer::DrawResourceHandleProperty(void* data, const TypeInfo& typeinfo, const PropertyInfo& property)
+{
+	// 템플릿 T에 관계없이 ResourceHandle<T>는 내부적으로 Handle 클래스와 동일한 레이아웃을 가짐
+	Engine::Handle* handleData = reinterpret_cast<Engine::Handle*>(data);
+
+	// 타겟 리소스 타입 추출 (e.g. "ResourceHandle<Texture>" -> "Texture")
+	string typeNameStr(property.TypeInfo.Name);
+	size_t start = typeNameStr.find('<');
+	size_t end = typeNameStr.find('>');
+	string targetResourceType = "Unknown";
+	if (start != string::npos && end != string::npos)
+	{
+		targetResourceType = typeNameStr.substr(start + 1, end - start - 1);
+	}
+
+	// 현재 할당된 데이터 Key (이름) 가져오기
+	string currentAssetKey = "None";
+	if (handleData->IsValid())
+	{
+		if (Engine::Resource* res = Engine::ResourceManager::Get().GetResource(*handleData))
+		{
+			currentAssetKey = Engine::WStrToStr(res->GetKey());
+		}
+	}
+
+	bool changed = false;
+	ImGui::PushID(data); // 변수 주소 기반 고유 ID
+
+	// -- 1. 읽기 전용 텍스트 필드로 할당된 에셋 이름 시각화 --
+	float availWidth = ImGui::GetContentRegionAvail().x;
+	float buttonWidth = 30.0f; // [ O ] 버튼 영역
+
+	// 핸들이 유효하면 글씨를 불투명하게, 아니면 반투명(회색)으로 표시
+	ImGui::PushStyleColor(ImGuiCol_Text, handleData->IsValid() ? ImVec4(1, 1, 1, 1) : ImVec4(0.5f, 0.5f, 0.5f, 1));
+	ImGui::PushItemWidth(availWidth - buttonWidth - ImGui::GetStyle().ItemSpacing.x);
+	ImGui::InputText("##ResourceHandleName", (char*)currentAssetKey.c_str(), currentAssetKey.capacity() + 1, ImGuiInputTextFlags_ReadOnly);
+	ImGui::PopItemWidth();
+	ImGui::PopStyleColor();
+
+	// -- 2. 드래그 앤 드롭 타겟 (Drag & Drop) 처리 --
+	if (ImGui::BeginDragDropTarget())
+	{
+		// 콘텐츠 브라우저에서 사용할 페이로드 정의 (예: "CONTENT_ITEM_Texture")
+		string payloadType = "CONTENT_ITEM_" + targetResourceType;
+		if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(payloadType.c_str()))
+		{
+			// TODO: 넘어온 wchar_t* (또는 ID)를 기반으로 Handle을 찾아 교체
+			// wstring* incomingKey = (wstring*)payload->Data;
+			// *handleData = ResourceManager::Get().GetResourceHandle(*incomingKey);
+			// changed = true;
+		}
+		ImGui::EndDragDropTarget();
+	}
+
+	ImGui::SameLine();
+
+	// -- 3. 선택/필터 팝업 창 --
+	if (ImGui::Button(ICON_FA_O, ImVec2(buttonWidth, 0)))
+	{
+		ImGui::OpenPopup("ResourcePickerPopup");
+	}
+
+	// 팝업 내용
+	if (ImGui::BeginPopup("ResourcePickerPopup"))
+	{
+		ImGui::Text("Select %s", targetResourceType.c_str());
+		ImGui::Separator();
+
+		// 선택 해제 UI
+		if (ImGui::Selectable("None (Clear)"))
+		{
+			*handleData = Engine::Handle(); // 핸들 무효화
+			changed = true;
+		}
+
+		uint64 typeHash = Engine::RunTimeHash(targetResourceType);
+		const vector<Engine::Handle>& handleList = Engine::ResourceManager::Get().GetResourceHandles(typeHash);
+
+		for (const Engine::Handle& handle : handleList)
+		{
+			if (Engine::Resource* res = Engine::ResourceManager::Get().GetResource(handle))
+			{
+				string keyStr = Engine::WStrToStr(res->GetKey());
+				bool isSelected = (*handleData == handle);
+
+				if (ImGui::Selectable(keyStr.c_str(), isSelected))
+				{
+					*handleData = handle;
+					changed = true;
+				}
+
+				// 현재 선택된 항목에 포커스 유지
+				if (isSelected)
+				{
+					ImGui::SetItemDefaultFocus();
+				}
+			}
+		}
+
+		// [TODO] ResourceManager에 등록된 해당 'targetResourceType'을 순회하며 리스트업
+		// ImGui::Selectable("Asset_uv1") -> 클릭 시 handleData를 해당 에셋의 핸들로 교체!
+
+		ImGui::EndPopup();
+	}
+
+	ImGui::PopID();
 	return changed;
 }
 

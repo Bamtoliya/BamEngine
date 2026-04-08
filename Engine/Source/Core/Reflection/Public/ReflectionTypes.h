@@ -26,7 +26,9 @@ enum class EPropertyType : uint8
 	Array,
 	List,
 	Map,
-	Set
+	Set,
+
+	ResourceHandle,
 };
 
 struct VariableInfo

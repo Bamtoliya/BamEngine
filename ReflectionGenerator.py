@@ -162,6 +162,9 @@ def collect_bitflag_enums(content: str) -> set[str]:
 def get_property_type(raw_type: str, bitflag_enums: set[str] | None = None, var_name: str = "") -> tuple[str, str]:
     raw_type = normalize_type_name(raw_type)
 
+    if raw_type.startswith("ResourceHandle<"):
+        return "ResourceHandle", raw_type
+
     if raw_type.endswith("*"):
         return "Object", raw_type.rstrip("*").strip()
 
