@@ -68,16 +68,18 @@ EResult Renderer::Initialize(void* arg)
 	ResourceManager& rm = ResourceManager::Get();
 	tagShaderDesc debugLineVsDesc;
 	debugLineVsDesc.ShaderType = EShaderType::Vertex;
-	debugLineVsDesc.FilePath = L"Resources/Shader/debugLine.vert.spv";
+	debugLineVsDesc.Key = L"DebugLineVS";
+	debugLineVsDesc.Path = L"Resources/Shader/debugLine.vert.spv";
 	debugLineVsDesc.EntryPoint = "main";
-	rm.LoadResource<Shader>(L"DebugLineVS", &debugLineVsDesc);
+	rm.LoadResource<Shader>(&debugLineVsDesc);
 	//ResourceManager::Get().LoadShader(L"DebugLineVS", &debugLineVsDesc);
 
 	tagShaderDesc debugLinePsDesc;
 	debugLinePsDesc.ShaderType = EShaderType::Pixel;
-	debugLinePsDesc.FilePath = L"Resources/Shader/debugLine.frag.spv";
+	debugLinePsDesc.Key = L"DebugLinePS";
+	debugLinePsDesc.Path = L"Resources/Shader/debugLine.frag.spv";
 	debugLinePsDesc.EntryPoint = "main";
-	rm.LoadResource<Shader>(L"DebugLinePS", &debugLinePsDesc);
+	rm.LoadResource<Shader>(&debugLinePsDesc);
 	//ResourceManager::Get().LoadShader(L"DebugLinePS", &debugLinePsDesc);
 	
 	//디버그 버텍스 버퍼는 최대 1000개의 라인을 그릴 수 있도록 설정

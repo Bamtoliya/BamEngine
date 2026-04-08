@@ -3,9 +3,8 @@
 #include "Resource.h"
 #include "RHIShader.h"
 
-struct tagShaderDesc {
+struct tagShaderDesc : public tagResourceCreateDesc {
 	EShaderType ShaderType;
-	wstring FilePath;
 	string EntryPoint;
 };
 

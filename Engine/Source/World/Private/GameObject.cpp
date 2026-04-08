@@ -4,6 +4,7 @@
 #include "Layer.h"
 #include "SceneManager.h"
 #include "Transform.h"
+#include "SerializationHelper.h"
 
 static uint64 g_GameObjectIDCounter = 1;
 

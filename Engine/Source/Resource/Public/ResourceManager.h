@@ -31,36 +31,53 @@ public:
 #pragma region Resource Management
 public:
 	template<typename T, typename... Args>
-	ResourceHandle<T> LoadResource(const wstring& path, Args&&... args)
+	ResourceHandle<T> LoadResource(Args&&... args)
 	{
-		static_assert(is_base_of_v<Resource, T>, "T must be derived from Resource");
+		static_assert(std::is_base_of_v<Resource, T>, "T must be derived from Resource");
 
-		uint64 hash = RunTimeHash(path);
-		Handle handle = FindHandle(hash);
+		// 1. 인자에서 Desc 추출 및 경로 식별
+		using FirstArg = std::decay_t<std::tuple_element_t<0, std::tuple<Args...>>>;
+		std::wstring_view pathView;
 
-		if (handle.IsValid())
+		auto first = std::get<0>(std::forward_as_tuple(args...));
+
+		if constexpr (std::is_pointer_v<FirstArg> &&
+			std::is_base_of_v<tagResourceCreateDesc, std::remove_pointer_t<FirstArg>>)
 		{
-			return ResourceHandle<T>(handle);
+			// Desc 구조체 포인터가 들어온 경우 내부의 Path나 Key를 식별자로 사용
+			if (first)
+				pathView = !first->Path.empty() ? first->Path : first->Key;
+		}
+		else if constexpr (std::is_convertible_v<FirstArg, std::wstring_view>)
+		{
+			// 단순 경로 문자열만 들어온 경우
+			pathView = first;
 		}
 
-		T* resource = T::Create(forward<Args>(args)...);
-		if(!resource)
+		// 2. 캐시 확인
+		uint64 hash = RunTimeHash(first->Key);
+		Handle handle = FindHandle(hash);
+		if (handle.IsValid())
+			return ResourceHandle<T>(handle);
+
+		// 3. 신규 생성 및 등록
+		T* resource = T::Create(std::forward<Args>(args)...);
+		if (!resource)
 			return ResourceHandle<T>();
 
-		resource->SetKey(path);
-		handle = AddResourceInternal(path, resource);
+		handle = AddResourceInternal(hash, resource);
 		return ResourceHandle<T>(handle);
 	}
 	template <typename T>
-	ResourceHandle<T> AddResource(const wstring& key, T* resource)
+	ResourceHandle<T> AddResource(const wstring_view& key, T* resource)
 	{
 		static_assert(is_base_of_v<Resource, T>, "T must be derived from Resource");
 		if(!resource) return ResourceHandle<T>();
 
 		uint64 hash = RunTimeHash(key);
-		resource->SetKey(key);
+		resource->SetKey(key.data());
 
-		return ResourceHandle<T>(AddResourceInternal(key, resource));
+		return ResourceHandle<T>(AddResourceInternal(hash, resource));
 	}
 
 	template <typename T>
@@ -88,12 +105,13 @@ public:
 	void ReleaseResource(const Handle& handle);
 	bool IsValid(const Handle& handle);
 	Resource* GetResource(const Handle& handle);
+	Handle FindHandleByKey(const wstring& key);
 #pragma endregion
 
 #pragma region Slot Management
 private:
 	Handle FindHandle(uint64 hash);
-	Handle AddResourceInternal(const wstring& key, Resource* resource);
+	Handle AddResourceInternal(uint64 hash, Resource* resource);
 	Handle AllocateSlot(Resource* resource);
 	void FreeSlotInternal(uint32 slotIndex);
 #pragma endregion

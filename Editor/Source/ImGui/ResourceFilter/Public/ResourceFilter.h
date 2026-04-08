@@ -25,9 +25,9 @@ public:
 private:
 	void ImportModel(wstring filepath);
 	void ProcessModelNode(const aiNode* node, const aiScene* scene, struct tagModelCreateDesc& modelCreateDesc);
-	void ProcessMeshVertex(const aiMesh* mesh, const aiScene* scene, struct tagMeshCreateInfo& meshCreateInfo);
-	void ProcessMeshSkinData(const aiMesh* mesh, const aiScene* scene, struct tagMeshCreateInfo& meshCreateInfo);
-	void ProcessMeshIndex(const aiMesh* mesh, const aiScene* scene, struct tagMeshCreateInfo& meshCreateInfo);
+	void ProcessMeshVertex(const aiMesh* mesh, const aiScene* scene, struct tagMeshCreateDesc& meshCreateInfo);
+	void ProcessMeshSkinData(const aiMesh* mesh, const aiScene* scene, struct tagMeshCreateDesc& meshCreateInfo);
+	void ProcessMeshIndex(const aiMesh* mesh, const aiScene* scene, struct tagMeshCreateDesc& meshCreateInfo);
 
 	void ProcessAnimations(const aiScene* scene);
 	void ProcessMaterial(const aiMaterial* material);

@@ -751,10 +751,15 @@ BEGIN_METADATA(Resource, m_Key)
 	READONLY
 END_METADATA
 
+BEGIN_METADATA(Resource, m_Path)
+	READONLY
+END_METADATA
+
 BEGIN_PROPERTIES(Resource)
 	REFLECT_PROPERTY(Resource, m_Version, "uint32", Engine::EPropertyType::UInt32, Resource_m_Version_Meta)
 	REFLECT_PROPERTY(Resource, m_ResourceType, "EResourceType", Engine::EPropertyType::Enum, Resource_m_ResourceType_Meta)
 	REFLECT_PROPERTY(Resource, m_Key, "wstring", Engine::EPropertyType::Wstring, Resource_m_Key_Meta)
+	REFLECT_PROPERTY(Resource, m_Path, "wstring", Engine::EPropertyType::Wstring, Resource_m_Path_Meta)
 END_PROPERTIES
 
 EMPTY_FUNCTIONS(Resource)

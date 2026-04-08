@@ -1,5 +1,6 @@
 ﻿#pragma once
 #include "Component.h"
+#include "SerializationHelper.h"
 
 #pragma region Constructor&Destructor
 EResult Component::Initialize(void* arg)

@@ -185,6 +185,11 @@ Resource* ResourceManager::GetResource(const Handle& handle)
 	}
 	return nullptr;
 }
+Handle ResourceManager::FindHandleByKey(const wstring& key)
+{
+	uint64 hash = RunTimeHash(key);
+	return FindHandle(hash);
+}
 #pragma endregion
 
 #pragma region Resource Slot Management
@@ -199,10 +204,9 @@ Handle ResourceManager::FindHandle(uint64 hash)
 	return Handle();
 }
 
-Handle ResourceManager::AddResourceInternal(const wstring& key, Resource* resource)
+Handle ResourceManager::AddResourceInternal(uint64 hash, Resource* resource)
 {
 	unique_lock lock(m_PoolMutex);
-	uint64 hash = RunTimeHash(key);
 	// Check for existing resource
 	auto iter = m_HashToHandle.find(hash);
 	if (iter != m_HashToHandle.end())

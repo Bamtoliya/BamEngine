@@ -115,10 +115,8 @@ EResult SpriteRenderer::SetSprite(const ResourceHandle<Texture>& texture)
 {
 	tagSpriteCreateDesc desc;
 	desc.Texture = texture;
-	ResourceManager& resourceManager = ResourceManager::Get();
-	wstring textureKey = desc.Texture.Get()->GetKey();
 	TODO("이미 로드한 Texture 로부터 Sprite 리소스를 생성하게 만들어야함");
-	m_Sprite = resourceManager.LoadResource<Sprite>(textureKey + L"_Sprite", &desc);
+	m_Sprite = ResourceManager::Get().LoadResource<Sprite>(&desc);
 	
 	if (IsFailure(UpdateMesh()))
 		return EResult::Fail;
@@ -170,7 +168,7 @@ EResult SpriteRenderer::UpdateMesh()
 	m_Mesh = ResourceManager::Get().GetResourceHandle<Mesh>(L"QuadMesh");
 	if (!m_Mesh)
 	{
-		tagMeshCreateInfo desc;
+		tagMeshCreateDesc desc;
 		desc.VertexData = vertices.data();
 		desc.VertexCount = static_cast<uint32>(vertices.size());
 		desc.VertexStride = sizeof(Vertex);

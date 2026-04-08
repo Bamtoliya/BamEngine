@@ -2,6 +2,7 @@
 
 #include "Layer.h"
 #include "GameObject.h"
+#include "SerializationHelper.h"
 
 #pragma region Constructor&Destructor
 EResult Layer::Initialize(void* arg)

@@ -7,21 +7,18 @@
 #pragma region Constructor&Destructor
 EResult Shader::Initialize(void* arg)
 {
-	if (arg)
+	if (IsFailure(__super::Initialize(arg))) return EResult::Fail;
+
+	CAST_DESC
+	RHI* rhi = Renderer::Get().GetRHI();
+	tagRHIShaderDesc rhiShaderDesc;
+	rhiShaderDesc.ShaderType = desc->ShaderType;
+	rhiShaderDesc.FilePath = desc->Path;
+	rhiShaderDesc.EntryPoint = desc->EntryPoint;
+	m_RHIShader = rhi->CreateShader(rhiShaderDesc);
+	if (!m_RHIShader)
 	{
-		CAST_DESC
-		__super::Initialize(arg);
-		RHI* rhi = Renderer::Get().GetRHI();
-		tagRHIShaderDesc rhiShaderDesc;
-		rhiShaderDesc.ShaderType = desc->ShaderType;
-		rhiShaderDesc.FilePath = desc->FilePath;
-		rhiShaderDesc.EntryPoint = desc->EntryPoint;
-		m_RHIShader = rhi->CreateShader(rhiShaderDesc);
-		m_Key = desc->FilePath;
-		if (!m_RHIShader)
-		{
-			return EResult::Fail;
-		}
+		return EResult::Fail;
 	}
 	return EResult::Success;
 }

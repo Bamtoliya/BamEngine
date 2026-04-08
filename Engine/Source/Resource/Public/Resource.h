@@ -7,6 +7,7 @@
 struct tagResourceCreateDesc
 {
 	wstring		Key = L"";
+	wstring		Path = L"";
 };
 
 BEGIN(Engine)
@@ -31,7 +32,6 @@ enum class EResourceType : uint32
 	Script,
 	Scene,
 	Save,
-
 };
 
 STRUCT()
@@ -67,6 +67,7 @@ protected:
 		if (!arg) return EResult::InvalidArgument;
 		CAST_DESC
 		m_Key = desc->Key;
+		m_Path = desc->Path;
 		return EResult::Success; 
 	}
 public:
@@ -90,36 +91,18 @@ public:
 	void SetKey(const wstring& key) { m_Key = key; }
 #pragma endregion
 
-#pragma region Save & Load
+#pragma region Path Management
 public:
-	virtual void Serialize(Archive& ar) override
-	{
-		tagResourceBinaryHeader header;
-		header.ResourceType = m_ResourceType;
-		header.Version = m_Version;
-		ar.Process<tagResourceBinaryHeader>("AssetHeader", header);
-		SerializationHelper::SerializeReflectionProperties(ar, &GetTypeInfo(), this);
-	}
-	virtual void Deserialize(Archive& ar) override
-	{
-		tagResourceBinaryHeader header;
-		ar.Process<tagResourceBinaryHeader>("AssetHeader", header);
-		if (header.MagicNumber != ENGINE_ASSET_MAGIC)
-		{
-			fmt::print(stderr, "Invalid asset file: Magic number mismatch.\n");
-		}
-		return;
-		
-		if(header.Version < 1)
-		{
-
-		}
-
-		SerializationHelper::SerializeReflectionProperties(ar, &GetTypeInfo(), this);
-	}
+	const wstring& GetPath() const { return m_Path; }
+	void SetPath(const wstring& path) { m_Path = path; }
 #pragma endregion
 
 
+#pragma region Save & Load
+public:
+	virtual void Serialize(Archive& ar) override;
+	virtual void Deserialize(Archive& ar) override;
+#pragma endregion
 
 #pragma region Member Variables
 protected:
@@ -131,6 +114,9 @@ protected:
 
 	PROPERTY(READONLY)
 	wstring m_Key = {};
+
+	PROPERTY(READONLY)
+	wstring m_Path = {};
 #pragma endregion
 };
 END

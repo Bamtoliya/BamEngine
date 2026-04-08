@@ -5,17 +5,19 @@
 #pragma region Constructor&Destructor
 EResult Sprite::Initialize(void* arg)
 {
-	if (!arg) return EResult::InvalidArgument;
 	if (IsFailure(__super::Initialize(arg))) return EResult::Fail;
 
 	CAST_DESC
-	if (desc->Texture.IsValid())
+	if (desc->Texture)
 	{
 		m_Texture = desc->Texture;		
 	}
 	else if (!desc->TexturePath.empty())
 	{
-		m_Texture = ResourceManager::Get().LoadResource<Texture>(desc->TexturePath);
+		tagTextureCreateDesc texDesc;
+		texDesc.Key = desc->Key + L"_Texture";
+		texDesc.Path = desc->TexturePath;
+		m_Texture = ResourceManager::Get().LoadResource<Texture>(&texDesc);
 	}
 	
 	m_Key = m_Texture->GetKey() + L"_Sprite";

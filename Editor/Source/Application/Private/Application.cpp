@@ -116,16 +116,9 @@ void Application::InitializeResources()
 
     for (const auto& texData : textureToLoad)
     {
-		tagTextureCreateDesc createDesc = { texData.Path };
-        resourceManager.LoadResource<Texture>(texData.Name, &createDesc);
+        tagTextureCreateDesc createDesc = { texData.Name, texData.Path };
+        resourceManager.LoadResource<Texture>(&createDesc);
     }
-
-    //ResourceManager::Get().LoadTexture(L"SampleTexture", L"Resources/Texture/uv1.png");
-    //ResourceManager::Get().LoadTexture(L"White1x1", L"Resources/Texture/white1x1.png");
-    //ResourceManager::Get().LoadTexture(L"Black1x1", L"Resources/Texture/black1x1.png");
-    //ResourceManager::Get().LoadTexture(L"Magenta1x1", L"Resources/Texture/magenta1x1.png");
-    //ResourceManager::Get().LoadTexture(L"Green1x1", L"Resources/Texture/green1x1.png");
-    //ResourceManager::Get().LoadTexture(L"Blue1x1", L"Resources/Texture/blue1x1.png");
 #pragma endregion
 
 #pragma region Quad
@@ -147,7 +140,7 @@ void Application::InitializeResources()
         };
 
         // 2. Mesh 생성
-        tagMeshCreateInfo meshDesc = {};
+        tagMeshCreateDesc meshDesc = {};
         meshDesc.VertexData = vertices.data();
         meshDesc.VertexCount = static_cast<uint32>(vertices.size());
         meshDesc.VertexStride = sizeof(Vertex);
@@ -155,7 +148,7 @@ void Application::InitializeResources()
         meshDesc.IndexStride = sizeof(uint32);
         meshDesc.IndexCount = static_cast<uint32>(indices.size());
 
-        resourceManager.LoadResource<Mesh>(L"QuadMesh", &meshDesc);
+        resourceManager.AddResource<Mesh>(L"QuadMesh", Mesh::Create(&meshDesc));
     }
 #pragma endregion
 
@@ -231,7 +224,7 @@ void Application::InitializeResources()
         }
 
         // 3. Mesh 생성 정보 설정
-        tagMeshCreateInfo meshDesc = {};
+        tagMeshCreateDesc meshDesc = {};
         meshDesc.VertexData = vertices.data();
         meshDesc.VertexCount = static_cast<uint32>(vertices.size());
         meshDesc.VertexStride = sizeof(Vertex);
@@ -242,41 +235,45 @@ void Application::InitializeResources()
 		meshDesc.BoundingBoxMax = maxBound;
 
         // 4. ResourceManager를 통한 로드
-		resourceManager.LoadResource<Mesh>(L"CubeMesh", &meshDesc);
+		resourceManager.AddResource<Mesh>(L"CubeMesh", Mesh::Create(&meshDesc));
     }
 #pragma endregion
 
 #pragma region Shader
     tagShaderDesc vsDesc;
     vsDesc.ShaderType = EShaderType::Vertex;
-    vsDesc.FilePath = L"Resources/Shader/default.vert.spv";
+	vsDesc.Key = L"DefaultVS";
+    vsDesc.Path = L"Resources/Shader/default.vert.spv";
     vsDesc.EntryPoint = "main";
-    resourceManager.LoadResource<Shader>(L"DefaultVS", &vsDesc);
+    resourceManager.LoadResource<Shader>(&vsDesc);
 
     tagShaderDesc psDesc;
     psDesc.ShaderType = EShaderType::Pixel;
-    psDesc.FilePath = L"Resources/Shader/default.frag.spv";
+	psDesc.Key = L"DefaultPS";
+    psDesc.Path = L"Resources/Shader/default.frag.spv";
     psDesc.EntryPoint = "main";
-    resourceManager.LoadResource<Shader>(L"DefaultPS", &psDesc);
+    resourceManager.LoadResource<Shader>(&psDesc);
 
 	tagShaderDesc spriteVSDesc;
 	spriteVSDesc.ShaderType = EShaderType::Vertex;
-	spriteVSDesc.FilePath = L"Resources/Shader/sprite.vert.spv";
+	spriteVSDesc.Key = L"SpriteVS";
+	spriteVSDesc.Path = L"Resources/Shader/sprite.vert.spv";
 	spriteVSDesc.EntryPoint = "main";
-	resourceManager.LoadResource<Shader>(L"SpriteVS", &spriteVSDesc);
+	resourceManager.LoadResource<Shader>(&spriteVSDesc);
 
-    tagShaderDesc spritePsDesc;
-    spritePsDesc.ShaderType = EShaderType::Pixel;
-    spritePsDesc.FilePath = L"Resources/Shader/sprite.frag.spv";
-    spritePsDesc.EntryPoint = "main";
-    resourceManager.LoadResource<Shader>(L"SpritePS", &spritePsDesc);
+    tagShaderDesc spritePSDesc;
+    spritePSDesc.ShaderType = EShaderType::Pixel;
+    spritePSDesc.Key = L"SpritePS";
+    spritePSDesc.Path = L"Resources/Shader/sprite.frag.spv";
+    spritePSDesc.EntryPoint = "main";
+    resourceManager.LoadResource<Shader>(&spritePSDesc);
 #pragma endregion
 	
     tagMaterialDesc materialDesc;
 	materialDesc.VertexShaderHandle = resourceManager.GetResourceHandle<Shader>(L"DefaultVS");
     materialDesc.PixelShaderHandle = resourceManager.GetResourceHandle<Shader>(L"DefaultPS");
     materialDesc.DepthMode = EDepthMode::ReadWrite;
-	resourceManager.LoadResource<Material>(L"DefaultMaterial", &materialDesc).Get()->SetTextureBySlot(0, resourceManager.GetResourceHandle<Texture>(L"Magenta1x1"));
+	resourceManager.AddResource<Material>(L"DefaultMaterial", Material::Create(&materialDesc))->SetTextureBySlot(0, resourceManager.GetResourceHandle<Texture>(L"Magenta1x1"));
 
 	tagMaterialDesc spriteMaterialDesc;
 	spriteMaterialDesc.VertexShaderHandle = resourceManager.GetResourceHandle<Shader>(L"DefaultVS");
@@ -285,7 +282,7 @@ void Application::InitializeResources()
 	spriteMaterialDesc.CullMode = ECullMode::None;
 	spriteMaterialDesc.DepthMode = EDepthMode::ReadWrite;
     BinaryArchive archive(EArchiveMode::Write);
-    resourceManager.LoadResource<Material>(L"SpriteMaterial", &spriteMaterialDesc)->Serialize(archive);
+    resourceManager.AddResource<Material>(L"SpriteMaterial", Material::Create(&spriteMaterialDesc))->Serialize(archive);
     //archive.SaveToFile("Resources/Material/SpriteMaterial.materialInstance");
 	//
     //

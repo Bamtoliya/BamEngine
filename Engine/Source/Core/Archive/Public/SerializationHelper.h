@@ -4,10 +4,10 @@
 #include "Archive.h"
 #include "ReflectionRegistry.h"
 #include "PropertyAccessor.h"
+#include "ResourceManager.h"
 
 BEGIN(Engine)
 inline constexpr uint64 MetaNoSerializeHash = Engine::CompileTimeHash("NoSerialize");
-
 class SerializationHelper
 {
 public:
@@ -441,6 +441,37 @@ private:
 				}
 
 				ar.EndMap();
+			}
+			break;
+		}
+		case Engine::EPropertyType::ResourceHandle:
+		{
+			Engine::Handle* handleData = reinterpret_cast<Engine::Handle*>(valuePtr);
+			if (ar.IsWriting())
+			{
+				string assetKey = "";
+				if (handleData->IsValid())
+				{
+					if (Engine::Resource* res = Engine::ResourceManager::Get().GetResource(*handleData))
+					{
+						assetKey = Engine::WStrToStr(res->GetKey());
+					}
+				}
+				ar.Process("AssetKey", assetKey);
+			}
+			else
+			{
+				string assetKey;
+				ar.Process("AssetKey", assetKey);
+
+				if (!assetKey.empty())
+				{
+					*handleData = Engine::ResourceManager::Get().FindHandleByKey(Engine::StrToWStr(assetKey));
+				}
+				else
+				{
+					*handleData = Engine::Handle(); // Key가 없다면 유효하지 않은 핸들(Null)로 초기화
+				}
 			}
 			break;
 		}

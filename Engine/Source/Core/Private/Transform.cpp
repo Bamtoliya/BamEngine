@@ -3,6 +3,7 @@
 #include "Transform.h"
 #include "GameObject.h"
 #include "ComponentRegistry.h"
+#include "SerializationHelper.h"
 
 REGISTER_COMPONENT(Transform)
 

@@ -5,7 +5,7 @@
 
 BEGIN(Engine)
 
-struct tagMeshCreateInfo
+struct tagMeshCreateDesc : public tagResourceCreateDesc
 {
 	void* VertexData = { nullptr };
 	uint32 VertexCount = { 0 };
@@ -29,7 +29,7 @@ class ENGINE_API Mesh : public Resource
 	REFLECT_CLASS()
 #pragma region Constructor&Destructor
 protected:
-	using DESC = tagMeshCreateInfo;
+	using DESC = tagMeshCreateDesc;
 	Mesh() : Resource(EResourceType::Mesh) {}
 	virtual ~Mesh() = default;
 	EResult Initialize(void* arg = nullptr);

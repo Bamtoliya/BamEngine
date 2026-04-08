@@ -36,8 +36,9 @@ void ResourceFilter::ProcessModelNode(const aiNode* node, const aiScene* scene, 
 	ResourceManager& resourceManager = ResourceManager::Get();
 	for (uint32 i = 0; i < node->mNumMeshes; ++i)
 	{
-		tagMeshCreateInfo meshCreateInfo;
+		tagMeshCreateDesc meshCreateInfo;
 		aiMesh* mesh = scene->mMeshes[node->mMeshes[i]];
+		meshCreateInfo.Key = StrToWStr(mesh->mName.C_Str());
 		ProcessMeshVertex(mesh, scene, meshCreateInfo);
 		if (mesh->HasBones())
 		{
@@ -46,7 +47,7 @@ void ResourceFilter::ProcessModelNode(const aiNode* node, const aiScene* scene, 
 		ProcessMeshIndex(mesh, scene, meshCreateInfo);
 
 		TODO("Process Model Node to be done in here, and ResourceManager::Get().LoadResource<Mesh>(tag or path, args) need to be create");
-		resourceManager.LoadResource<Mesh>(StrToWStr(mesh->mName.C_Str()), &meshCreateInfo);
+		resourceManager.LoadResource<Mesh>(&meshCreateInfo);
 
 		//resourceManager.LoadMesh(StrToWStr(mesh->mName.C_Str()), &meshCreateInfo);
 		//meshes.push_back(resourceManager.GetMesh(StrToWStr(mesh->mName.C_Str())));
@@ -58,7 +59,7 @@ void ResourceFilter::ProcessModelNode(const aiNode* node, const aiScene* scene, 
 	}
 }
 
-void ResourceFilter::ProcessMeshVertex(const aiMesh* mesh, const aiScene* scene, tagMeshCreateInfo& meshCreateInfo)
+void ResourceFilter::ProcessMeshVertex(const aiMesh* mesh, const aiScene* scene, tagMeshCreateDesc& meshCreateInfo)
 {
 	uint32 n = mesh->mNumVertices;
 	vector<Vertex> vertices(n);
@@ -100,7 +101,7 @@ void ResourceFilter::ProcessMeshVertex(const aiMesh* mesh, const aiScene* scene,
 	meshCreateInfo.BoundingBoxMax = maxBounds;
 }
 
-void ResourceFilter::ProcessMeshSkinData(const aiMesh* mesh, const aiScene* scene, tagMeshCreateInfo& meshCreateInfo)
+void ResourceFilter::ProcessMeshSkinData(const aiMesh* mesh, const aiScene* scene, tagMeshCreateDesc& meshCreateInfo)
 {
 	vector<VertexSkinData> skinData(mesh->mNumVertices);
 	for (uint32 i = 0; i < mesh->mNumBones; ++i)
@@ -130,7 +131,7 @@ void ResourceFilter::ProcessMeshSkinData(const aiMesh* mesh, const aiScene* scen
 	meshCreateInfo.SkinDataStride = sizeof(VertexSkinData);
 }
 
-void ResourceFilter::ProcessMeshIndex(const aiMesh* mesh, const aiScene* scene, tagMeshCreateInfo& meshCreateInfo)
+void ResourceFilter::ProcessMeshIndex(const aiMesh* mesh, const aiScene* scene, tagMeshCreateDesc& meshCreateInfo)
 {
 	vector<uint32> indices;
 	for (uint32 i = 0; i < mesh->mNumFaces; ++i)

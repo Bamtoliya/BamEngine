@@ -8,11 +8,10 @@ EResult Texture::Initialize(void* arg)
 {
 	if (IsFailure(__super::Initialize(arg)))
 		return EResult::Fail;
-	if (!arg) return EResult::InvalidArgument;
 	CAST_DESC
 	RHI* rhi = Renderer::Get().GetRHI();
 
-	m_RHITexture = rhi->CreateTextureFromFile(m_Key.c_str());
+	m_RHITexture = rhi->CreateTextureFromFile(m_Path.c_str());
 
 	if (!m_RHITexture)
 		return EResult::Fail;

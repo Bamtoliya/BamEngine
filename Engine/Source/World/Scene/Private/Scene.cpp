@@ -3,6 +3,7 @@
 #include "Scene.h"
 #include "Layer.h"
 #include "GameObject.h"
+#include "SerializationHelper.h"
 
 #pragma region Constructor&Destructor
 EResult Scene::Initialize(void* arg)

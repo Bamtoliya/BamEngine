@@ -10,14 +10,14 @@
 void Grid::Initialize()
 {
 	ResourceManager& resourceManager = ResourceManager::Get();
-	tagShaderDesc gridVsDesc = { EShaderType::Vertex, L"Resources/Shader/infinite_grid.vert.spv", "main" };
-	resourceManager.LoadResource<Shader>(L"InfiniteGridVS", &gridVsDesc);
+	tagShaderDesc gridVsDesc = { L"InfiniteGridVS", L"Resources/Shader/infinite_grid.vert.spv", EShaderType::Vertex, "main" };
+	resourceManager.LoadResource<Shader>(&gridVsDesc);
 
-	tagShaderDesc grid2DPsDesc = { EShaderType::Pixel, L"Resources/Shader/infinite_grid_2d.frag.spv", "main" };
-	resourceManager.LoadResource<Shader>(L"InfiniteGrid2DPS", &grid2DPsDesc);
+	tagShaderDesc grid2DPsDesc = { L"InfiniteGrid2DPS", L"Resources/Shader/infinite_grid_2d.frag.spv", EShaderType::Pixel, "main" };
+	resourceManager.LoadResource<Shader>(&grid2DPsDesc);
 
-	tagShaderDesc grid3DPsDesc = { EShaderType::Pixel, L"Resources/Shader/infinite_grid.frag.spv", "main" };
-	resourceManager.LoadResource<Shader>(L"InfiniteGrid3DPS", &grid3DPsDesc);
+	tagShaderDesc grid3DPsDesc = { L"InfiniteGrid3DPS", L"Resources/Shader/infinite_grid.frag.spv", EShaderType::Pixel, "main" };
+	resourceManager.LoadResource<Shader>(&grid3DPsDesc);
 }
 
 void Grid::Free()
@@ -38,6 +38,7 @@ void Grid::SubmitGrid(RenderPassID renderPassID, bool isOrthographic)
             // 1. 파이프라인 디스크립터 설정 (RenderComponent와 동일한 방식 적용!)
             tagRHIPipelineDesc pipelineDesc = {};
             pipelineDesc.PipelineType = EPipelineType::Graphics;
+            //ResourceHandle<Shader> shandle = resourceManager.GetResourceHandle<Shader>(L"InfiniteGridVS");
             pipelineDesc.VertexShader = resourceManager.GetResourceHandle<Shader>(L"InfiniteGridVS")->GetRHIShader();
             pipelineDesc.PixelShader = resourceManager.GetResourceHandle<Shader>(isOrthographic ? L"InfiniteGrid2DPS" : L"InfiniteGrid3DPS")->GetRHIShader();
 

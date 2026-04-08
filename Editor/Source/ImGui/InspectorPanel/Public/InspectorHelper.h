@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "Editor_Includes.h"
+#include "SerializationHelper.h"
 
 BEGIN(Editor)
 
