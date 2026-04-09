@@ -59,7 +59,7 @@ struct MaterialParameter
 };
 
 
-struct tagMaterialDesc
+struct tagMaterialDesc : public tagResourceCreateDesc
 {
 	ResourceHandle<Shader> VertexShaderHandle;
 	ResourceHandle<Shader> PixelShaderHandle;
@@ -74,6 +74,7 @@ CLASS()
 class ENGINE_API MaterialInterface : public Resource
 {
 	REFLECT_CLASS()
+	DECLARE_RESOURCE(MaterialInterface)
 #pragma region Constructor&Destructor
 protected:
 	using DESC = tagMaterialDesc;

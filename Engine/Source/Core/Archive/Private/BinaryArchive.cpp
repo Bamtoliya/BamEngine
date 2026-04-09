@@ -430,18 +430,21 @@ bool BinaryArchive::SaveToFile(string_view filePath)
 
 bool BinaryArchive::LoadFromFile(string_view filePath)
 {
-    if (IsWriting()) return false;
+	if (IsWriting()) return false;
 	std::ifstream inFile(filePath.data(), std::ios::binary);
 	if (!inFile || !inFile.is_open()) return false;
 
-    size_t size = (size_t)inFile.tellg();
-	inFile.seekg(0);
+	inFile.seekg(0, std::ios::end);
+	size_t size = (size_t)inFile.tellg();
+
+	inFile.seekg(0, std::ios::beg);
+
 	m_Buffer.resize(size);
 	inFile.read(reinterpret_cast<char*>(m_Buffer.data()), size);
 	m_Cursor = 0;
 
 	ParseScopeDirectory(size);
-    return true;
+	return true;
 }
 
 #pragma endregion

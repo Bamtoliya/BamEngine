@@ -5,6 +5,7 @@
 #include "Mesh.h"
 #include "Model.h"
 #include "Shader.h"
+#include "Sprite.h"
 #include "Texture.h"
 #include "Material.h"
 #include "Skeleton.h"

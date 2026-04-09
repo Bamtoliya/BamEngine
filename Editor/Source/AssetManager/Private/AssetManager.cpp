@@ -30,6 +30,9 @@ EResult AssetManager::Initialize(void* arg)
 
 	m_Importers[".anim"] = AnimationImporter::Create();
 
+	m_AssetCache = AssetCache::Create();
+	if (!m_AssetCache) return EResult::Fail;
+
 	return EResult::Success;
 }
 
@@ -44,6 +47,7 @@ void AssetManager::Free()
 	RELEASE_MAP(m_Importers);
 	RELEASE_MAP(m_Exporters);
 	m_OnAsyncDelegate.Clear();
+	AssetCache::Destroy();
 }
 
 #pragma endregion
@@ -90,7 +94,7 @@ EResult AssetManager::Import(const filesystem::path& sourcePath, const filesyste
 	for (char& c : extension) c = tolower(c);
 	if (m_Importers.find(extension) != m_Importers.end())
 	{
-		return m_Importers[extension]->Import(sourcePath, destDir);
+		return m_Importers[extension]->Import(sourcePath, destDir, arg);
 	}
 	return EResult::Fail;
 }
@@ -100,7 +104,7 @@ void AssetManager::ImportAsync(const filesystem::path& sourcePath, const filesys
 	auto futureTask = std::async(std::launch::async, [this, sourcePath, destDir, arg]() -> EResult
 		{
 			// 이 안은 백그라운드 스레드이므로 여기서 무거운 Import를 호출해도 UI가 멈추지 않습니다!
-			return this->Import(sourcePath, destDir);
+			return this->Import(sourcePath, destDir, arg);
 		});
 
 	m_ActiveTasks.push_back(std::move(futureTask));

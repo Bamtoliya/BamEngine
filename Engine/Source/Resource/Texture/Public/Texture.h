@@ -34,6 +34,7 @@ CLASS()
 class ENGINE_API Texture final : public Resource
 {
 	REFLECT_CLASS()
+	DECLARE_RESOURCE(Texture)
 	using DESC = tagTextureCreateDesc;
 #pragma region Constructor&Destructor
 private:
@@ -42,6 +43,7 @@ private:
 	EResult Initialize(void* arg = nullptr);
 public:
 	static Texture* Create(void* arg = nullptr);
+	static Texture* Create(const tagTextureBinaryHeader& header, const vector<uint8>& pixelData, const wstring& key = L"");
 	virtual void Free() override;
 #pragma endregion
 
@@ -63,6 +65,13 @@ public:
 	void SetPixelPerUnit(f32 ppu) { m_PixelPerUnit = ppu; IncreaseVersion(); }
 #pragma endregion
 
+#pragma region TempData
+public:
+	void SetTempData(const vector<uint8>& data) { m_TempData = data; }
+	void ClearTempData() { m_TempData.clear(); }
+#pragma endregion
+
+
 #pragma region Save&Load
 public:
 	virtual void Serialize(Archive& ar);
@@ -75,6 +84,9 @@ private:
 
 	PROPERTY()
 	f32 m_PixelPerUnit = { DEFAULT_PPU };
+
+	tagTextureBinaryHeader m_CachedHeader; // Serialize 시 텍스처 헤더 정보를 저장하는 용도 (BinaryArchive에서만 사용)
+	vector<uint8> m_TempData; // Serialize 시 임시로 원본 텍스처 데이터를 저장하는 용도 (BinaryArchive에서만 사용)
 #pragma endregion
 };
 END

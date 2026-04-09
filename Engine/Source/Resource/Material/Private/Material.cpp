@@ -10,7 +10,7 @@
 #pragma region Cosntructor&Destructor
 EResult Material::Initialize(void* arg)
 {
-	if (!arg) return EResult::Fail;
+	if (IsFailure(__super::Initialize(arg))) return EResult::Fail;
 	CAST_DESC
 	m_VertexShaderHandle = desc->VertexShaderHandle;
 	m_PixelShaderHandle = desc->PixelShaderHandle;

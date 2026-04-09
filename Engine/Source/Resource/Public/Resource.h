@@ -4,6 +4,11 @@
 #include "ReflectionMacro.h"
 #include "SerializableInterface.h"
 
+#define DECLARE_RESOURCE(ClassType) \
+public: \
+	static ClassType* CreateEmpty() { return new ClassType(); } \
+private:
+
 struct tagResourceCreateDesc
 {
 	wstring		Key = L"";

@@ -27,6 +27,7 @@ CLASS()
 class ENGINE_API Mesh : public Resource
 {
 	REFLECT_CLASS()
+	DECLARE_RESOURCE(Mesh)
 #pragma region Constructor&Destructor
 protected:
 	using DESC = tagMeshCreateDesc;

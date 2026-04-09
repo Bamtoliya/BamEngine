@@ -1,16 +1,17 @@
 ﻿#pragma once
 
 #include "ImGuiInterface.h"
+#include "InspectorInterface.h"
 
 BEGIN(Editor)
 class InspectorPanel final : public ImGuiInterface
 {
 public:
-	InspectorPanel() { m_Name = L"Inspector Panel"; }
+	InspectorPanel();
 	virtual ~InspectorPanel() = default;
 public:
+	virtual void Free() override;
 	virtual void Draw() override;
-	virtual void Free() override { __super::Free(); }
 private:
 	bool DrawProperties(void* instance, const TypeInfo& typeInfo);
 public:
@@ -30,5 +31,6 @@ private:
 
 private:
 	class GameObject* m_SelectedGameObject = nullptr;
+	vector<InspectorInterface*> m_AssetInspectors;
 };
 END

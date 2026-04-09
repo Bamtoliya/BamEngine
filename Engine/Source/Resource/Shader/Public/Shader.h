@@ -13,6 +13,7 @@ CLASS()
 class ENGINE_API Shader final : public Resource
 {
 	REFLECT_CLASS()
+	DECLARE_RESOURCE(Shader)
 	using DESC = tagShaderDesc;
 #pragma region Constructor&Destructor
 private:

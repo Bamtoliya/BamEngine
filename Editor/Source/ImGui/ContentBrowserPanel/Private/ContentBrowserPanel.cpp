@@ -7,8 +7,24 @@
 #include "LocalizationManager.h"
 #include "AssetManager.h"
 
-
 using namespace std;
+
+#pragma region ContentBrowserFileListner
+void ContentBrowserFileListener::handleFileAction(efsw::WatchID watchid, const std::string& dir, const std::string& filename, efsw::Action action, std::string oldFilename)
+{
+	if (action == efsw::Action::Modified || action == efsw::Action::Add || action == efsw::Action::Delete || action == efsw::Action::Moved)
+	{
+		filesystem::path fullPath = dir;
+		fullPath.append(filename);
+		AssetCache::Get().ClearCache(fullPath);
+	}
+
+	if (m_RefreshFlag)
+	{
+		*m_RefreshFlag = true; // 메인 스레드에 캐시 갱신이 필요함을 알림
+	}
+}
+#pragma endregion
 
 static bool StringContainsCaseInsensitive(const string& str, const string& subStr)
 {
@@ -151,12 +167,6 @@ void ContentBrowserPanel::ProcessEvent(const SDL_Event* event)
 
 void ContentBrowserPanel::Free()
 {
-	for (auto& [path, texture] : m_ThumbnailTextures)
-	{
-		Safe_Release(texture);
-	}
-	m_ThumbnailTextures.clear();
-	m_ThumbnailCache.clear();
 	Safe_Delete(m_FileListener);
 	Safe_Delete(m_FileWatcher);
 }
@@ -473,13 +483,8 @@ void ContentBrowserPanel::DrawGridItem(const filesystem::directory_entry& direct
 	void* thumbnailTexID = nullptr;
 	if (!directoryEntry.is_directory())
 	{
+		thumbnailTexID = AssetCache::Get().GetThumbnail(path);
 		string ext = path.extension().string();
-		for (auto& c : ext) c = tolower(c);
-
-		if (ext == ".png" || ext == ".jpg" || ext == ".tga")
-			thumbnailTexID = LoadThumbnail(path);
-		else if (ext == ".fbx" || ext == ".obj")
-			thumbnailTexID = LoadModelThumbnail(path);
 	}
 
 	ContentBrowserGridItem::Draw(
@@ -712,125 +717,5 @@ void ContentBrowserPanel::OnExteranalDropped(const vector<string>& droppedFiles)
 			}
 		}
 	}
-}
-void* ContentBrowserPanel::LoadThumbnail(const filesystem::path& path)
-{
-	string pathStr = path.string();
-
-	if(m_ThumbnailCache.find(pathStr) != m_ThumbnailCache.end())
-	{
-		return m_ThumbnailCache[pathStr];
-	}
-
-	int32 width, height, channels;
-
-	stbi_uc* data = stbi_load(pathStr.c_str(), &width, &height, &channels, 4);
-
-	if (data)
-	{
-		tagRHITextureDesc desc = {};
-		desc.Width = width;
-		desc.Height = height;
-		desc.Data = data;
-		desc.DataSize = width * height * 4;
-		RHITexture* rhiTexture = Renderer::Get().GetRHI()->CreateTextureFromMemory(desc);
-		stbi_image_free(data);
-
-		if (rhiTexture)
-		{
-			m_ThumbnailTextures[pathStr] = rhiTexture; // take ownership
-			m_ThumbnailCache[pathStr] = (void*)(ImTextureID)(size_t)(rhiTexture->GetNativeHandle());
-			return m_ThumbnailCache[pathStr];
-		}
-	}
-
-	m_ThumbnailCache[pathStr] = nullptr;
-	return nullptr;
-}
-void* ContentBrowserPanel::LoadModelThumbnail(const filesystem::path& path)
-{
-	string pathStr = path.string();
-
-	if (m_ThumbnailCache.find(pathStr) != m_ThumbnailCache.end())
-	{
-		return m_ThumbnailCache[pathStr];
-	}
-
-	bool comInitialized = SUCCEEDED(CoInitialize(NULL));
-
-	// [수정점 1] SHCreateItemFromParsingName은 절대 경로를 요구합니다.
-	filesystem::path absolutePath = filesystem::absolute(path);
-	wstring wPathStr = absolutePath.wstring();
-
-	IShellItemImageFactory* imageFactory = nullptr;
-	HRESULT hr = SHCreateItemFromParsingName(wPathStr.c_str(), nullptr, IID_PPV_ARGS(&imageFactory));
-
-	if (SUCCEEDED(hr) && imageFactory)
-	{
-		HBITMAP hBitmap;
-		SIZE size = { 256, 256 }; // 원하는 썸네일 크기
-
-		// [수정점 2] SIIGBF_ICONONLY를 제거하고 SIIGBF_RESIZETOFIT만 사용합니다.
-		hr = imageFactory->GetImage(size, SIIGBF_RESIZETOFIT, &hBitmap);
-
-		imageFactory->Release();
-		if (SUCCEEDED(hr))
-		{
-			BITMAP bm;
-			GetObject(hBitmap, sizeof(bm), &bm);
-
-			int width = bm.bmWidth;
-			int height = bm.bmHeight;
-
-			BITMAPINFO bi = { 0 };
-			bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-			bi.bmiHeader.biWidth = width;
-			bi.bmiHeader.biHeight = -height; // Top-down 방식으로 읽기
-			bi.bmiHeader.biPlanes = 1;
-			bi.bmiHeader.biBitCount = 32;
-			bi.bmiHeader.biCompression = BI_RGB;
-
-			HDC hdc = GetDC(NULL);
-			std::vector<uint8_t> pixels(width * height * 4);
-			GetDIBits(hdc, hBitmap, 0, height, pixels.data(), &bi, DIB_RGB_COLORS);
-			ReleaseDC(NULL, hdc);
-
-			// Windows HBITMAP은 기본적으로 BGRA 순서이므로 RGBA로 스왑
-			for (size_t i = 0; i < pixels.size(); i += 4)
-			{
-				uint8_t b = pixels[i];
-				uint8_t r = pixels[i + 2];
-				pixels[i] = r;
-				pixels[i + 2] = b;
-
-				// 윈도우 썸네일은 포맷에 따라 알파가 0으로 올 수 있으므로 불투명(255) 강제 처리
-				pixels[i + 3] = 255;
-			}
-
-			DeleteObject(hBitmap);
-
-			tagRHITextureDesc desc = {};
-			desc.Width = width;
-			desc.Height = height;
-			desc.Data = pixels.data();
-			desc.DataSize = width * height * 4;
-			RHITexture* rhiTexture = Renderer::Get().GetRHI()->CreateTextureFromMemory(desc);
-			if (rhiTexture)
-			{
-				m_ThumbnailTextures[pathStr] = rhiTexture;
-				m_ThumbnailCache[pathStr] = (void*)(ImTextureID)(size_t)(rhiTexture->GetNativeHandle());
-				if (comInitialized) CoUninitialize();
-				return m_ThumbnailCache[pathStr];
-			}
-		}
-	}
-
-	if (comInitialized)
-	{
-		CoUninitialize();
-	}
-
-	m_ThumbnailCache[pathStr] = nullptr;
-	return nullptr;
 }
 #pragma endregion

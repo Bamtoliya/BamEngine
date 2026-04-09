@@ -24,8 +24,11 @@ add_executable(Editor
     ${EDITOR_SOURCES}
 )
 
+set_target_properties(Editor PROPERTIES UNITY_BUILD ON)
+
 # [Hot Reload] Edit and Continue 기능 활성화 (/ZI)
 if(MSVC)
+target_compile_options(Editor PRIVATE /MP) 
     # 컴파일 옵션: 디버그 정보를 생성하여 실행 중 수정 가능하게 함 (/ZI)
     target_compile_options(${PROJECT_NAME} PRIVATE $<$<CONFIG:Debug>:/ZI>)
     add_compile_options(/fsanitize=address)
@@ -64,7 +67,7 @@ add_custom_target(RunLocalizationGenerator ALL
     VERBATIM
 )
 
-set_target_properties(Editor PROPERTIES UNITY_BUILD OFF)
+
 
 add_dependencies(Engine RunLocalizationGenerator)
 

@@ -1,25 +1,17 @@
 ﻿#pragma once
 
 #include "ImporterInterface.h"
-#include "TextureCompressorInterface.h"
-
-struct tagTextureImportDesc
-{
-	Engine::ETextureFormat TargetFormat = Engine::ETextureFormat::BC3_RGBA_UNORM;
-	ECompressFlags CompressFlags = ECompressFlags::GenerateMipMaps | ECompressFlags::HighQuality;
-};
 
 BEGIN(Editor)
-class TextureImporter : public ImporterInterface
+class SpriteImporter : public ImporterInterface
 {
 #pragma region Constructor&Destructor
 private:
-	using DESC = tagTextureImportDesc;
-	TextureImporter() = default;
-	virtual ~TextureImporter() = default;
+	SpriteImporter() = default;
+	virtual ~SpriteImporter() = default;
 	virtual EResult Initialize(void* arg = nullptr) override { return EResult::Success; }
 public:
-	static TextureImporter* Create() { return new TextureImporter(); }
+	static SpriteImporter* Create() { return new SpriteImporter(); }
 	virtual void Free() override { ImporterInterface::Free(); }
 #pragma endregion
 

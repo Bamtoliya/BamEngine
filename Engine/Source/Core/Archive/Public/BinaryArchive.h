@@ -54,8 +54,6 @@ public:
 		if (IsWriting())
 		{
 			m_WriteScopeStack.push({ 0, false, false, 0, 0 }); // Root scope
-			tagResourceBinaryHeader header;
-			WriteRaw(&header, sizeof(header));
 		}
 	}
 	virtual ~BinaryArchive() = default;

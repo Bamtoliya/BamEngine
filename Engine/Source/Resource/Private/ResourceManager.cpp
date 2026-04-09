@@ -76,16 +76,27 @@ void* ResourceManager::LoadFile(const wstring& filePath)
 }
 void ResourceManager::RegisterExplicitLoader()
 {
-	//auto textureLoader = [this](wstring key, wstring path) -> Texture*
-	//{
-	//	return this->LoadTexture(key, path);
-	//};
-	//
-	//m_LoaderRegistry[L".png"] = textureLoader;
-	//m_LoaderRegistry[L".jpg"] = textureLoader;
-	//m_LoaderRegistry[L".bmp"] = textureLoader;
-	//m_LoaderRegistry[L".tga"] = textureLoader;
-	//m_LoaderRegistry[L".jpeg"] = textureLoader;
+	auto textureLoader = [this](wstring key, wstring path) -> void*
+		{
+			tagTextureCreateDesc desc;
+			desc.Key = key;
+			desc.Path = path;
+			return this->LoadResource<Texture>(&desc).Get();
+		};
+	
+	m_LoaderRegistry[L".png"] = textureLoader;
+	m_LoaderRegistry[L".jpg"] = textureLoader;
+	m_LoaderRegistry[L".bmp"] = textureLoader;
+	m_LoaderRegistry[L".tga"] = textureLoader;
+	m_LoaderRegistry[L".jpeg"] = textureLoader;
+
+	auto binaryLoader = [this](wstring key, wstring path) -> void*
+		{
+			return LoadFromBinaryFile(path);
+		};
+	m_LoaderRegistry[L".bamtex"] = binaryLoader;
+	m_LoaderRegistry[L".bammat"] = binaryLoader;
+
 	//
 	//auto meshLoader = [this](wstring key, wstring path) -> Mesh*
 	//{
@@ -132,6 +143,14 @@ const vector<Handle>& ResourceManager::GetResourceHandles(uint64 typeHash)
 		return it->second;
 	}
 	return emptyList;
+}
+EResult ResourceManager::DestroyResource(Resource* resource)
+{
+	if (!resource) return EResult::InvalidArgument;
+	resource->Free();
+	delete resource;
+	resource = nullptr;
+	return EResult::Success;
 }
 #pragma endregion
 
@@ -368,6 +387,12 @@ void* ResourceManager::LoadFromBeveFile(const wstring& filePath)
 
 void* ResourceManager::LoadFromBinaryFile(const wstring& filePath)
 {
+	BinaryArchive archive(EArchiveMode::Read); // Read 모드로 수정
+	if (!archive.LoadFromFile(WStrToStr(filePath)))
+		return nullptr;
+
+
+
 	//BinaryArchive archive(EArchiveMode::Read); // Read 모드로 수정
 	//if (!archive.LoadFromFile(WStrToStr(filePath)))
 	//	return nullptr;

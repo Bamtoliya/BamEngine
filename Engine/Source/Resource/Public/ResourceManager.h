@@ -3,6 +3,7 @@
 #include "Base.h"
 #include "Resources.h"
 #include "ResourceHandle.h"
+#include "Archives.h"
 
 BEGIN(Engine)
 
@@ -31,72 +32,19 @@ public:
 #pragma region Resource Management
 public:
 	template<typename T, typename... Args>
-	ResourceHandle<T> LoadResource(Args&&... args)
-	{
-		static_assert(std::is_base_of_v<Resource, T>, "T must be derived from Resource");
-
-		// 1. 인자에서 Desc 추출 및 경로 식별
-		using FirstArg = std::decay_t<std::tuple_element_t<0, std::tuple<Args...>>>;
-		std::wstring_view pathView;
-
-		auto first = std::get<0>(std::forward_as_tuple(args...));
-
-		if constexpr (std::is_pointer_v<FirstArg> &&
-			std::is_base_of_v<tagResourceCreateDesc, std::remove_pointer_t<FirstArg>>)
-		{
-			// Desc 구조체 포인터가 들어온 경우 내부의 Path나 Key를 식별자로 사용
-			if (first)
-				pathView = !first->Path.empty() ? first->Path : first->Key;
-		}
-		else if constexpr (std::is_convertible_v<FirstArg, std::wstring_view>)
-		{
-			// 단순 경로 문자열만 들어온 경우
-			pathView = first;
-		}
-
-		// 2. 캐시 확인
-		uint64 hash = RunTimeHash(first->Key);
-		Handle handle = FindHandle(hash);
-		if (handle.IsValid())
-			return ResourceHandle<T>(handle);
-
-		// 3. 신규 생성 및 등록
-		T* resource = T::Create(std::forward<Args>(args)...);
-		if (!resource)
-			return ResourceHandle<T>();
-
-		handle = AddResourceInternal(hash, resource);
-		return ResourceHandle<T>(handle);
-	}
+	ResourceHandle<T> LoadResource(Args&&... args);
 	template <typename T>
-	ResourceHandle<T> AddResource(const wstring_view& key, T* resource)
-	{
-		static_assert(is_base_of_v<Resource, T>, "T must be derived from Resource");
-		if(!resource) return ResourceHandle<T>();
-
-		uint64 hash = RunTimeHash(key);
-		resource->SetKey(key.data());
-
-		return ResourceHandle<T>(AddResourceInternal(hash, resource));
-	}
-
+	ResourceHandle<T> AddResource(const wstring_view& key, T* resource);
 	template <typename T>
-	ResourceHandle<T> GetResourceHandle(const wstring& key)
-	{
-		uint64 hash = RunTimeHash(key);
-		return ResourceHandle<T>(FindHandle(hash));
-	}
+	ResourceHandle<T> GetResourceHandle(const wstring& key);
 	template<typename T>
-	const vector<Handle>& GetResourceHandles()
-	{
-		return GetResourceHandles(T::GetStaticTypeInfo().ID);
-	}
-
+	const vector<Handle>& GetResourceHandles();
 	const vector<Handle>& GetResourceHandles(uint64 typeHash);
 public:
 	EResult ImportFolder(const wstring& folderPath);
 	void* LoadFile(const wstring& filePath);
 	void RegisterExplicitLoader();
+	EResult DestroyResource(Resource* resource);
 #pragma endregion
 
 #pragma region Handle Management
@@ -140,4 +88,5 @@ private:
 };
 
 #include "ResourceHandle.inl"
+#include "ResourceManager.inl"
 END

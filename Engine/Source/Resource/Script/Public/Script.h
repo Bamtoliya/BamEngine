@@ -12,6 +12,7 @@ CLASS()
 class Script : public Resource
 {
 	REFLECT_CLASS()
+	DECLARE_RESOURCE(Script)
 	using DESC = tagScripteDesc;
 
 #pragma region Constructor&Destructor

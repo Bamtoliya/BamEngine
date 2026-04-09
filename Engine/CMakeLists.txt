@@ -75,6 +75,7 @@ if(MSVC)
     target_compile_options(${PROJECT_NAME} PRIVATE
         $<$<CONFIG:Debug>:/ZI>
         /Zc:preprocessor
+        /MP
     )
     
     # 링크 옵션: 증분 링크 활성화 (/INCREMENTAL)

@@ -1,4 +1,6 @@
-﻿#include "ContentBrowserGridItem.h"
+﻿#pragma once
+#include "ContentBrowserGridItem.h"
+#include "SelectionManager.h"
 
 void ContentBrowserGridItem::Draw(const std::filesystem::directory_entry& directoryEntry, const std::filesystem::path& rootPath, void* thumbnailTexID, f32 thumbnailSize, f32 padding, std::filesystem::path& outRenamingPath, char* renameBuffer, size_t renameBufferSize, std::filesystem::path& currentDirectory, char* searchBuffer)
 {
@@ -15,12 +17,20 @@ void ContentBrowserGridItem::Draw(const std::filesystem::directory_entry& direct
 	DragAndDropTarget(relativePath);
 
 	// 썸네일 위에서 더블클릭 시 폴더 이동
-	if (ImGui::IsItemHovered() && MOUSE_BUTTON_DOUBLE_CLICK(EMouseButton::Left))
+	if (ImGui::IsItemHovered())
 	{
-		if (directoryEntry.is_directory())
+		if (MOUSE_BUTTON_DOWN(EMouseButton::Left))
 		{
-			currentDirectory /= path.filename();
-			if (searchBuffer) searchBuffer[0] = '\0';
+			SelectionManager::Get().SetSelectedAsset(path);
+		}
+
+		if (MOUSE_BUTTON_DOUBLE_CLICK(EMouseButton::Left))
+		{
+			if (directoryEntry.is_directory())
+			{
+				currentDirectory /= path.filename();
+				if (searchBuffer) searchBuffer[0] = '\0';
+			}
 		}
 	}
 

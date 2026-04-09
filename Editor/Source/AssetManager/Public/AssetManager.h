@@ -3,6 +3,7 @@
 #include "Editor_Includes.h"
 #include "ImporterInterface.h"
 #include "ExporterInterface.h"
+#include "AssetCache.h"
 
 BEGIN(Editor)
 class AssetManager : public Base
@@ -41,6 +42,8 @@ private:
 	unordered_map<string, ExporterInterface*> m_Exporters;
 	vector<future<EResult>> m_ActiveTasks;
 	Engine::MulticastDelegate<> m_OnAsyncDelegate;
+private:
+	AssetCache* m_AssetCache = nullptr;
 #pragma endregion
 };
 END

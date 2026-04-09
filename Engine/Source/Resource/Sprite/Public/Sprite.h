@@ -17,6 +17,7 @@ CLASS()
 class ENGINE_API Sprite final : public Resource
 {
 	REFLECT_CLASS()
+	DECLARE_RESOURCE(Sprite)
 	using DESC = tagSpriteCreateDesc;
 #pragma region Constructor&Destructor
 private:

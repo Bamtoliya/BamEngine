@@ -9,7 +9,7 @@
 #pragma region Constructor&Destructor
 EResult MaterialInstance::Initialize(void* arg)
 {
-	if (!arg) return EResult::InvalidArgument;
+	if (IsFailure(__super::Initialize(arg))) return EResult::Fail;
 	CAST_DESC
 	m_BaseMaterialHandle = desc->BaseMaterialHandle;
 	return EResult::Success;

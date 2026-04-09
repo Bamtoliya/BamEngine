@@ -447,22 +447,25 @@ private:
 		case Engine::EPropertyType::ResourceHandle:
 		{
 			Engine::Handle* handleData = reinterpret_cast<Engine::Handle*>(valuePtr);
+			string assetKey = "";
+			string assetPath = "";
 			if (ar.IsWriting())
 			{
-				string assetKey = "";
 				if (handleData->IsValid())
 				{
 					if (Engine::Resource* res = Engine::ResourceManager::Get().GetResource(*handleData))
 					{
 						assetKey = Engine::WStrToStr(res->GetKey());
+						assetPath = Engine::WStrToStr(res->GetPath());
 					}
 				}
 				ar.Process("AssetKey", assetKey);
+				ar.Process("AssetPath", assetPath);
 			}
 			else
 			{
-				string assetKey;
 				ar.Process("AssetKey", assetKey);
+				ar.Process("AssetPath", assetPath);
 
 				if (!assetKey.empty())
 				{

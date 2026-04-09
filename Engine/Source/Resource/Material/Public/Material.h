@@ -8,6 +8,7 @@ CLASS()
 class ENGINE_API Material : public MaterialInterface
 {
 	REFLECT_CLASS()
+	DECLARE_RESOURCE(Material)
 #pragma region Constructor&Destructor
 private:
 	Material() {}

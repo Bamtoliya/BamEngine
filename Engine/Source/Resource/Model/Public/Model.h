@@ -19,6 +19,7 @@ CLASS()
 class ENGINE_API Model : public Resource
 {
 	REFLECT_CLASS()
+	DECLARE_RESOURCE(Model)
 	using DESC = tagModelCreateDesc;
 #pragma region Constrcutor&Destructor
 private:

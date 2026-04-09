@@ -2,7 +2,7 @@
 
 #include "MaterialInterface.h"
 
-struct tagMaterialInstanceDesc
+struct tagMaterialInstanceDesc : public tagResourceCreateDesc
 {
 	ResourceHandle<Material> BaseMaterialHandle;
 };
@@ -27,6 +27,7 @@ CLASS()
 class ENGINE_API MaterialInstance : public MaterialInterface
 {
 	REFLECT_CLASS()
+	DECLARE_RESOURCE(MaterialInstance)
 	using DESC = tagMaterialInstanceDesc;
 #pragma region Constructor&Destructor
 private:

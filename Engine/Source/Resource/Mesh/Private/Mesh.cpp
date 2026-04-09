@@ -5,7 +5,7 @@
 #pragma region Constructor&Destructor
 EResult Mesh::Initialize(void* arg)
 {
-	if (!arg) return EResult::InvalidArgument;
+	if (IsFailure(__super::Initialize(arg))) return EResult::Fail;
 	CAST_DESC
 	m_VertexCount = static_cast<uint32>(desc->VertexCount);
 	m_IndexCount = static_cast<uint32>(desc->IndexCount);

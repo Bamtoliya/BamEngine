@@ -6,7 +6,7 @@
 namespace Engine
 {
 #pragma region Ray
-	struct Ray
+	struct ENGINE_API Ray
 	{
 		vec3 Origin;
 		vec3 Direction;
@@ -17,7 +17,7 @@ namespace Engine
 		}
 	};
 
-	struct HitResult
+	struct ENGINE_API HitResult
 	{
 		vec3 Point;
 		vec3 Normal;
@@ -50,7 +50,7 @@ namespace Engine
 #pragma region Bounds
 
 	STRUCT()
-	struct AABB
+	struct ENGINE_API AABB
 	{
 		REFLECT_STRUCT();
 
@@ -102,7 +102,7 @@ namespace Engine
 
 #pragma region Rect
 	STRUCT()
-	struct Rect
+	struct ENGINE_API Rect
 	{
 		REFLECT_STRUCT();
 

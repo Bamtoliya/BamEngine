@@ -6,6 +6,7 @@
 #pragma region Constructor&Destructor
 EResult Script::Initialize(void* arg) 
 {
+	if (IsFailure(__super::Initialize(arg))) return EResult::Fail;
 	return EResult::Success;
 }
 

@@ -11,10 +11,31 @@
 #include "PropertyDrawer.h"
 #include "LocalizationManager.h"
 
+#include "TextureInspector.h"
+
+#pragma region Constructor&Destructor
+InspectorPanel::InspectorPanel()
+{
+	m_AssetInspectors.push_back(new TextureInspector());
+}
+
+void InspectorPanel::Free()
+{
+	__super::Free();
+	for (InspectorInterface* inspector : m_AssetInspectors)
+	{
+		delete inspector;
+	}
+	m_AssetInspectors.clear();
+}
+#pragma endregion
+
+
 void InspectorPanel::Draw()
 {
 	if (!m_Open) return;
 	GameObject* selectedObject = SelectionManager::Get().GetPrimarySelection();
+	filesystem::path selectedAssetPath = SelectionManager::Get().GetSelectedAssetPath();
 	string windowID = "Inspector";
 	if (m_SelectedGameObject)
 	{
@@ -39,6 +60,28 @@ void InspectorPanel::Draw()
 			ImGui::Spacing();
 
 			DrawAddComponentButton();
+		}
+		else if (!selectedAssetPath.empty())
+		{
+
+			bool bIsSupported = false;
+			string assetName = selectedAssetPath.stem().string();
+			ImGui::Text(("Selected Asset: " + assetName).c_str());
+			for (InspectorInterface* inspector : m_AssetInspectors)
+			{
+				if (bIsSupported = inspector->IsSupported(selectedAssetPath))
+				{
+					inspector->OnInspectorGUI(selectedAssetPath);
+					break;
+				}
+			}
+
+			if (!bIsSupported)
+			{
+				ImGui::Text("Unsupported Asset File");
+				ImGui::Separator();
+				ImGui::Text("File: %s", selectedAssetPath.filename().string().c_str());
+			}
 		}
 		else
 		{

@@ -13,15 +13,7 @@ class ContentBrowserFileListener : public efsw::FileWatchListener
 public:
 	std::atomic<bool>* m_RefreshFlag;
 	ContentBrowserFileListener(std::atomic<bool>* flag) : m_RefreshFlag(flag) {}
-
-	// 파일 변경 이벤트가 발생할 때마다 efsw 백그라운드 스레드에서 호출됨
-	void handleFileAction(efsw::WatchID watchid, const std::string& dir, const std::string& filename, efsw::Action action, std::string oldFilename) override
-	{
-		if (m_RefreshFlag)
-		{
-			*m_RefreshFlag = true; // 메인 스레드에 캐시 갱신이 필요함을 알림
-		}
-	}
+	void handleFileAction(efsw::WatchID watchid, const std::string& dir, const std::string& filename, efsw::Action action, std::string oldFilename) override;
 };
 
 struct FileDropConflict
@@ -76,8 +68,6 @@ private:
 	void OnExteranalDropped(const vector<string>& droppedFiles);
 private:
 	void DrawRename(const filesystem::path& path);
-	void* LoadThumbnail(const filesystem::path& path);
-	void* LoadModelThumbnail(const filesystem::path& path);
 #pragma endregion
 
 	
@@ -114,8 +104,8 @@ private:
 	vector< FileDropConflict> m_PendingConflicts;
 
 private:
-	inline static unordered_map<string, void*> m_ThumbnailCache;
-	inline static unordered_map<string, RHITexture*> m_ThumbnailTextures;
+	//inline static unordered_map<string, void*> m_ThumbnailCache;
+	//inline static unordered_map<string, RHITexture*> m_ThumbnailTextures;
 #pragma endregion
 };
 END
