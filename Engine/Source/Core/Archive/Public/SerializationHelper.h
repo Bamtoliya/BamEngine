@@ -459,6 +459,8 @@ private:
 				if (!assetKey.empty())
 				{
 					*handleData = Engine::ResourceManager::Get().FindHandleByKey(Engine::StrToWStr(assetKey));
+					if(!handleData->IsValid())
+						*handleData = Engine::ResourceManager::Get().LoadFile(StrToWStr(assetPath));
 				}
 				else
 				{
