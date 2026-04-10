@@ -215,6 +215,7 @@ EResult SpriteRenderer::UpdateMaterialInstance()
 
 void SpriteRenderer::Deserialize(Archive& ar)
 {
+	__super::Deserialize(ar);
 	//ResourceManager& resourceManager = ResourceManager::Get();
 	//resourceManager.LoadTexture(m_SpriteTag, m_SpritePath);
 	//SetSprite(resourceManager.GetTexture(m_SpriteTag));

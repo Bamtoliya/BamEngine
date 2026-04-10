@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "Layer.h"
 #include "GameObject.h"
@@ -212,10 +212,10 @@ void Layer::Serialize(Archive& ar)
 void Layer::Deserialize(Archive& ar)
 {
 	for (GameObject* gameObject : m_GameObjects)
-    {
-        if (!gameObject) continue;
+	{
+		if (!gameObject) continue;
 		gameObject->Deserialize(ar);
 		gameObject->SetLayerIndex(m_Index);
-    }
+	}
 }
 #pragma endregion

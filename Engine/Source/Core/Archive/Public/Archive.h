@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "Engine_Includes.h"
 
@@ -48,6 +48,8 @@ public:
 	virtual void   EndArray() PURE;
 	virtual void   BeginArrayElement() PURE;
 	virtual void   EndArrayElement() PURE;
+	// 현재 아카이브 스코프 스택 깊이 (루트=1). 읽기 시 BeginArray/BeginMap이 키를 못 찾으면 깊이가 늘지 않음.
+	virtual size_t GetScopeDepth() const PURE;
 public:
 	virtual size_t BeginMap(string_view key) PURE;
 	virtual void   EndMap() PURE;

@@ -64,12 +64,13 @@ private:
 	PROPERTY(EDITABLE, DEFAULT(vec2(1.f, 1.f)))
 	vec2 m_Tiling = { 1.f, 1.f };
 
+	PROPERTY(EDITABLE)
 	ResourceHandle<Mesh> m_Mesh;
 
 	PROPERTY(EDITABLE)
 	ResourceHandle<Sprite> m_Sprite;
 
-	PROPERTY(CATEGORY("DETAIL"), READONLY)
+	PROPERTY(CATEGORY("DETAIL"), READONLY, NOSERIALIZE)
 	uint32 m_CachedSpriteVersion = { 0 };
 
 	PROPERTY(EDITABLE)

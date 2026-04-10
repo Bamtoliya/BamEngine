@@ -141,6 +141,6 @@ ECompareOp MaterialInstance::GetDepthCompareOp() const
 
 void MaterialInstance::Deserialize(Archive& ar)
 {
-	//Safe_AddRef(m_BaseMaterialHandle);
+	Serialize(ar);
 }
 

@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "BinaryArchive.h"
 
 bool BinaryArchive::PushScope(string_view key)
@@ -379,6 +379,13 @@ void BinaryArchive::EndArrayElement()
 	if (IsWriting() && !m_WriteScopeStack.empty()) {
 		m_WriteScopeStack.top().ElementCount++;
 	}
+}
+
+size_t BinaryArchive::GetScopeDepth() const
+{
+	if (IsWriting())
+		return m_WriteScopeStack.size();
+	return m_ReadScopeStack.size();
 }
 
 size_t BinaryArchive::BeginMap(string_view key)

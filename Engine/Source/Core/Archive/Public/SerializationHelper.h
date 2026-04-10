@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "Archive.h"
 #include "ReflectionRegistry.h"
@@ -83,6 +83,7 @@ private:
 		case EPropertyType::Matrix4:    return sizeof(glm::mat4);
 		case EPropertyType::Enum:
 		case EPropertyType::BitFlag:    return sizeof(int64); // 임시 기본값
+		case EPropertyType::ResourceHandle: return sizeof(Engine::Handle);
 		default:                        return 0;
 		}
 	}
@@ -356,23 +357,26 @@ private:
 				}
 				else
 				{
-					size_t count = ar.BeginArray(propName);
-					if (containerData->Accessor->Resize)
-					{
-						containerData->Accessor->Resize(valuePtr, count);
-						vector<void*> elements = containerData->Accessor->GetElements(valuePtr);
-						for(size_t i = 0; i < count; ++i)
-						{
-							ar.BeginArrayElement();
-							SerializeValue(ar, "", containerData->Inner, elements[i], innerSize, containerData->InnerContainerData);
-							ar.EndArrayElement();
-						}
-					}
-					else
-					{
+					const size_t scopeBefore = ar.GetScopeDepth();
+					const size_t count = ar.BeginArray(propName);
+					const bool arrayOpened = ar.GetScopeDepth() > scopeBefore;
 
+					if (arrayOpened)
+					{
+						if (containerData->Accessor->Resize)
+						{
+							containerData->Accessor->Resize(valuePtr, count);
+							vector<void*> elements = containerData->Accessor->GetElements(valuePtr);
+							for (size_t i = 0; i < count; ++i)
+							{
+								ar.BeginArrayElement();
+								SerializeValue(ar, "", containerData->Inner, elements[i], innerSize, containerData->InnerContainerData);
+								ar.EndArrayElement();
+							}
+						}
+						ar.EndArray();
 					}
-					ar.EndArray();
+					// arrayOpened == false: 현재 노드에 propName 배열 없음 → Resize/EndArray 생략, 기존 값 유지
 				}
 			}
 			break;
@@ -409,65 +413,86 @@ private:
 			}
 			else
 			{
-				size_t size = ar.BeginMap(propName);
-				containerData->Accessor->Clear(valuePtr);
+				const size_t scopeBefore = ar.GetScopeDepth();
+				const size_t size = ar.BeginMap(propName);
+				const bool mapOpened = ar.GetScopeDepth() > scopeBefore;
 
-				for (size_t i = 0; i < size; ++i)
+				if (mapOpened)
+					containerData->Accessor->Clear(valuePtr);
+
+				if (mapOpened)
 				{
-					string keyStr;
-					ar.BeginMapElement(keyStr);
-					WithParsedKey(containerData->Key.Type, keyStr, [&](void* keyPtr)
+					for (size_t i = 0; i < size; ++i)
 					{
-						if (!keyPtr || !containerData->Accessor->AddAndGetElement) return;
-						void* newVal = containerData->Accessor->AddAndGetElement(valuePtr, keyPtr);
-						if (newVal)
+						string keyStr;
+						ar.BeginMapElement(keyStr);
+						WithParsedKey(containerData->Key.Type, keyStr, [&](void* keyPtr)
 						{
-							SerializeValue(ar, "", containerData->Inner, newVal, 0, containerData->InnerContainerData);
-						}
-					});
-					ar.EndMapElement();
+							if (!keyPtr || !containerData->Accessor->AddAndGetElement) return;
+							void* newVal = containerData->Accessor->AddAndGetElement(valuePtr, keyPtr);
+							if (newVal)
+							{
+								SerializeValue(ar, "", containerData->Inner, newVal, 0, containerData->InnerContainerData);
+							}
+						});
+						ar.EndMapElement();
+					}
 				}
 
-				ar.EndMap();
+				if (mapOpened)
+					ar.EndMap();
 			}
 			break;
 		}
 		case Engine::EPropertyType::ResourceHandle:
 		{
-			ar.PushScope(propName);
-			Engine::Handle* handleData = reinterpret_cast<Engine::Handle*>(valuePtr);
-			string assetKey = "";
-			string assetPath = "";
-			if (ar.IsWriting())
-			{
-				if (handleData->IsValid())
-				{
-					if (Engine::Resource* res = Engine::ResourceManager::Get().GetResource(*handleData))
-					{
-						assetKey = Engine::WStrToStr(res->GetKey());
-						assetPath = Engine::WStrToStr(res->GetPath());
-					}
-				}
-				ar.Process("AssetKey", assetKey);
-				ar.Process("AssetPath", assetPath);
-			}
-			else
-			{
-				ar.Process("AssetKey", assetKey);
-				ar.Process("AssetPath", assetPath);
+			bool isInline = propName.empty();
+			bool scopePushed = isInline ? true : ar.PushScope(propName);
 
-				if (!assetKey.empty())
+			if (scopePushed)
+			{
+				Engine::Handle* handleData = reinterpret_cast<Engine::Handle*>(valuePtr);
+				string assetKey = "";
+				string assetPath = "";
+
+				if (ar.IsWriting())
 				{
-					*handleData = Engine::ResourceManager::Get().FindHandleByKey(Engine::StrToWStr(assetKey));
-					if(!handleData->IsValid())
-						*handleData = Engine::ResourceManager::Get().LoadFile(StrToWStr(assetPath));
+					if (handleData->IsValid())
+					{
+						if (Engine::Resource* res = Engine::ResourceManager::Get().GetResource(*handleData))
+						{
+							assetKey = Engine::WStrToStr(res->GetKey());
+							assetPath = Engine::WStrToStr(res->GetPath());
+						}
+					}
+					ar.Process("AssetKey", assetKey);
+					ar.Process("AssetPath", assetPath);
 				}
 				else
 				{
-					*handleData = Engine::ResourceManager::Get().LoadFile(StrToWStr(assetPath));
+					ar.Process("AssetKey", assetKey);
+					ar.Process("AssetPath", assetPath);
+
+					if (!assetKey.empty())
+					{
+						*handleData = Engine::ResourceManager::Get().FindHandleByKey(Engine::StrToWStr(assetKey));
+						if (!handleData->IsValid() && !assetPath.empty())
+						{
+							*handleData = Engine::ResourceManager::Get().LoadFile(Engine::StrToWStr(assetPath));
+						}
+					}
+					else if (!assetPath.empty())
+					{
+						*handleData = Engine::ResourceManager::Get().LoadFile(Engine::StrToWStr(assetPath));
+					}
+					else
+					{
+						*handleData = Engine::Handle(); // Key가 없다면 Null
+					}
 				}
+
+				if (!isInline) ar.PopScope();
 			}
-			ar.PopScope();
 			break;
 		}
 		default:

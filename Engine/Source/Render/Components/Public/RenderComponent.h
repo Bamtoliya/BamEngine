@@ -49,7 +49,7 @@ protected:
 	uint32 m_RenderPassID = { INVALID_PASS_ID };
 
 	PROPERTY(EDITABLE)
-	vector<ResourceHandle<class MaterialInstance>> m_MaterialInstances;
+	vector<ResourceHandle<MaterialInstance>> m_MaterialInstances;
 #pragma endregion
 };
 END

@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "Archive.h"
 #include "ReflectionTypes.h"
@@ -96,6 +96,7 @@ public:
 	void EndMap() override;
 	void BeginMapElement(string& outKey) override;
 	void EndMapElement() override;
+	size_t GetScopeDepth() const override;
 public:
 	virtual bool SaveToFile(string_view filePath) override;
 	virtual bool LoadFromFile(string_view filePath)  override;

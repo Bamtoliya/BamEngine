@@ -122,7 +122,7 @@ void Application::InitializeResources()
 #pragma endregion
 
 #pragma region Sprites
-	resourceManager.LoadFile(L"Resources/Texture/uv1.bamtex");
+	//resourceManager.LoadFile(L"Resources/Texture/uv1.bamtex");
     resourceManager.LoadFile(L"Resources/Texture/uv1.bamsprite");
 	//tagSpriteCreateDesc spriteCreateDesc = {};
 	//spriteCreateDesc.Path = L"Resources/Texture/uv1.bamsprite";

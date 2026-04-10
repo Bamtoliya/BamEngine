@@ -371,7 +371,6 @@ void GameObject::Serialize(Archive& ar)
 }
 void GameObject::Deserialize(Archive& ar)
 {
-	//Serialize(ar);
 	for (const auto& comp : m_Components)
 	{
 		if (!comp) continue;

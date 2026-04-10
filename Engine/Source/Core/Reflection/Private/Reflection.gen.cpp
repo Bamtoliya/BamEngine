@@ -492,10 +492,10 @@ BEGIN_METADATA(RenderComponent, m_MaterialInstances)
 	EDITABLE
 END_METADATA
 
-DECLARE_CONTAINER_INFO(RenderComponent, m_MaterialInstances, "ResourceHandle<class MaterialInstance>", Engine::EPropertyType::ResourceHandle, Engine::LinearContainerAccessor<vector<ResourceHandle<class MaterialInstance>>, ResourceHandle<class MaterialInstance>>::Get())
+DECLARE_CONTAINER_INFO(RenderComponent, m_MaterialInstances, "ResourceHandle<MaterialInstance>", Engine::EPropertyType::ResourceHandle, Engine::LinearContainerAccessor<vector<ResourceHandle<MaterialInstance>>, ResourceHandle<MaterialInstance>>::Get())
 BEGIN_PROPERTIES(RenderComponent)
 	REFLECT_PROPERTY(RenderComponent, m_RenderPassID, "uint32", Engine::EPropertyType::UInt32, RenderComponent_m_RenderPassID_Meta)
-	REFLECT_CONTAINER_PROPERTY(RenderComponent, m_MaterialInstances, "vector<ResourceHandle<class MaterialInstance>>", Engine::EPropertyType::Array, &RenderComponent_m_MaterialInstances_ContainerData, RenderComponent_m_MaterialInstances_Meta)
+	REFLECT_CONTAINER_PROPERTY(RenderComponent, m_MaterialInstances, "vector<ResourceHandle<MaterialInstance>>", Engine::EPropertyType::Array, &RenderComponent_m_MaterialInstances_ContainerData, RenderComponent_m_MaterialInstances_Meta)
 END_PROPERTIES
 
 EMPTY_FUNCTIONS(RenderComponent)
@@ -510,6 +510,10 @@ BEGIN_METADATA(SpriteRenderer, m_Tiling)
 	DEFAULT(vec2(1.f, 1.f))
 END_METADATA
 
+BEGIN_METADATA(SpriteRenderer, m_Mesh)
+	EDITABLE
+END_METADATA
+
 BEGIN_METADATA(SpriteRenderer, m_Sprite)
 	EDITABLE
 END_METADATA
@@ -517,6 +521,7 @@ END_METADATA
 BEGIN_METADATA(SpriteRenderer, m_CachedSpriteVersion)
 	CATEGORY("DETAIL")
 	READONLY
+	NOSERIALIZE
 END_METADATA
 
 BEGIN_METADATA(SpriteRenderer, m_DrawMode)
@@ -525,6 +530,7 @@ END_METADATA
 
 BEGIN_PROPERTIES(SpriteRenderer)
 	REFLECT_PROPERTY(SpriteRenderer, m_Tiling, "vec2", Engine::EPropertyType::Vector2, SpriteRenderer_m_Tiling_Meta)
+	REFLECT_PROPERTY(SpriteRenderer, m_Mesh, "ResourceHandle<Mesh>", Engine::EPropertyType::ResourceHandle, SpriteRenderer_m_Mesh_Meta)
 	REFLECT_PROPERTY(SpriteRenderer, m_Sprite, "ResourceHandle<Sprite>", Engine::EPropertyType::ResourceHandle, SpriteRenderer_m_Sprite_Meta)
 	REFLECT_PROPERTY(SpriteRenderer, m_CachedSpriteVersion, "uint32", Engine::EPropertyType::UInt32, SpriteRenderer_m_CachedSpriteVersion_Meta)
 	REFLECT_PROPERTY(SpriteRenderer, m_DrawMode, "EDrawMode", Engine::EPropertyType::Enum, SpriteRenderer_m_DrawMode_Meta)

@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "Archive.h"
 #include <glaze/json.hpp>
@@ -47,6 +47,7 @@ public:
 	void EndMap() override;
 	void BeginMapElement(string& outKey) override;
 	void EndMapElement() override;
+	size_t GetScopeDepth() const override { return m_ScopeStack.size(); }
 
 protected:
 	glz::json_t m_Root;
