@@ -1,12 +1,6 @@
 ﻿#pragma once
 #include "ResourceManager.h"
-#include "Mesh.h"
-#include "Model.h"
-#include "Shader.h"
-#include "Sprite.h"
-#include "Texture.h"
-#include "Material.h"
-
+#include "Resources.h"
 #include "Archives.h"
 
 IMPLEMENT_SINGLETON(ResourceManager)
@@ -98,10 +92,13 @@ void ResourceManager::RegisterExplicitLoader()
 			return this->LoadResource<Sprite>(&desc).GetRawHandle();
 		};
 
-	//m_LoaderRegistry[L".bammat"] = [this](wstring key, wstring path) -> Handle
-	//	{
-	//		return this->LoadResource<Material>(path).GetRawHandle();
-	//	};
+	m_LoaderRegistry[L".bammat"] = [this](wstring key, wstring path) -> Handle
+		{
+			tagMaterialDesc desc;
+			desc.Key = path;
+			desc.Path = path;
+			return this->LoadResource<Material>(&desc).GetRawHandle();
+		};
 
 	// 주석 처리된 부분도 나중에 살릴 때 Handle을 반환하도록 수정하시면 됩니다.
 	/*

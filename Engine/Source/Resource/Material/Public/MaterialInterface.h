@@ -141,12 +141,6 @@ public:
 	virtual void SetPixelShaderHandle(const ResourceHandle<Shader>& shader) { m_PixelShaderHandle = shader; }
 #pragma endregion
 
-#pragma region Save&Load
-public:
-	virtual void Deserialize(Archive& ar) override;
-#pragma endregion
-
-
 #pragma region Variable
 protected:
 	PROPERTY(CATEGORY(L"Pipeline"))

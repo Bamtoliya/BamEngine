@@ -74,14 +74,3 @@ EResult Sprite::SetTexture(ResourceHandle<Texture> texture)
 	return EResult::Success;
 }
 #pragma endregion
-
-#pragma region Save&Load
-void Sprite::Serialize(Archive& ar)
-{
-	Resource::Serialize(ar);
-}
-void Sprite::Deserialize(Archive& ar)
-{
-	Resource::Deserialize(ar);
-}
-#pragma endregion

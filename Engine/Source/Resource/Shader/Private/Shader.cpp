@@ -39,19 +39,3 @@ void Shader::Free()
 	Safe_Release(m_RHIShader);
 }
 #pragma endregion
-
-
-#pragma region Shader
-void Shader::Deserialize(Archive& ar)
-{
-	//Shader* shader = ResourceManager::Get().GetShader(m_Tag);
-	//if (shader)
-	//{
-	//	m_RHIShader->SetNativeHandle(shader->GetRHIShader()->GetNativeHandle());
-	//}
-	//else
-	//{
-	//
-	//}
-}
-#pragma endregion

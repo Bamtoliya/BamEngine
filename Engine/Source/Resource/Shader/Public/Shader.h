@@ -36,12 +36,6 @@ public:
 	EResult Bind(uint32 slot) override { return EResult::NotImplemented; }
 #pragma endregion
 
-#pragma region Save&Load
-public:
-	virtual void Deserialize(Archive& ar);
-#pragma endregion
-
-
 #pragma region Variable
 private:
 	PROPERTY()

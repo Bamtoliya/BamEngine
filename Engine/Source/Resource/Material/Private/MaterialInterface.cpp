@@ -148,12 +148,3 @@ EResult MaterialInterface::Bind(uint32 slot)
 	return EResult::Success;
 }
 #pragma endregion
-
-#pragma region Save&Load
-void MaterialInterface::Deserialize(Archive& ar)
-{
-
-}
-#pragma endregion
-
-

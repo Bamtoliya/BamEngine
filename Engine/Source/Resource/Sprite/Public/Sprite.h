@@ -59,14 +59,6 @@ public:
 	EResult SetTexture(ResourceHandle<Texture> texture);
 #pragma endregion
 
-#pragma region Save&Load
-public:
-	virtual void Serialize(Archive& ar);
-	virtual void Deserialize(Archive& ar);
-#pragma endregion
-
-
-
 #pragma region Member Variable
 private:
 	PROPERTY(READONLY)

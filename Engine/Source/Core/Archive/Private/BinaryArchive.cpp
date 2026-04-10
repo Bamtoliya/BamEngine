@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "BinaryArchive.h"
 
 bool BinaryArchive::PushScope(string_view key)
@@ -11,6 +11,7 @@ bool BinaryArchive::PushScope(string_view key)
 			WriteNodeHeader(key, EBinTag::Object, static_cast<uint8>(Engine::EPropertyType::Object), 0); // Placeholder header, will be updated later
 		}
 		m_WriteScopeStack.push({ headerOffset, false, false, 0, 0 });
+		return true;
 	}
 	else
 	{

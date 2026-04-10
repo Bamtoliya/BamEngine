@@ -293,12 +293,14 @@ void Application::InitializeResources()
 	spriteMaterialDesc.BlendMode = EBlendMode::AlphaBlend;
 	spriteMaterialDesc.CullMode = ECullMode::None;
 	spriteMaterialDesc.DepthMode = EDepthMode::ReadWrite;
-    BinaryArchive archive(EArchiveMode::Write);
-    resourceManager.AddResource<Material>(L"SpriteMaterial", Material::Create(&spriteMaterialDesc))->Serialize(archive);
-    //archive.SaveToFile("Resources/Material/SpriteMaterial.materialInstance");
+
+    JsonArchive jsonArchive(EArchiveMode::Write);
+    BinaryArchive binaryArchive(EArchiveMode::Write);
+    resourceManager.AddResource<Material>(L"SpriteMaterial", Material::Create(&spriteMaterialDesc))->Serialize(binaryArchive);
+    binaryArchive.SaveToFile("Resources/Material/SpriteMaterial.bammat");
 	//
     //
-    //resourceManager.LoadFile(L"Resources/Texture/uv1.bamtex");
+    resourceManager.LoadFile(L"Resources/Material/SpriteMaterial.bammat");
     //resourceManager.SaveToJsonFile(resourceManager.GetResourceHandle<Texture>(L"SampleTexture").Get(), L"Resources/Texture/SampleTexture.json");
 #ifdef _DEBUG
 	
