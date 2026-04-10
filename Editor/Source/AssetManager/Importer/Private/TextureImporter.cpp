@@ -32,6 +32,7 @@ EResult TextureImporter::Import(const filesystem::path& sourcePath, const filesy
 	// 3. CPU 데이터 전용 임시 Texture 객체 생성 후 Serialize로 .bamtex 저장
 	//    저장 포맷(AssetHeader + TextureHeader + PixelData)이 Texture::Serialize 내부에서 일관되게 관리됩니다.
 	Engine::Texture* texture = Engine::Texture::Create(texHeader, rawData);
+	texture->SetKey(texture->GetPath());
 	if (!texture) return EResult::Fail;
 
 	EResult result = ResourceManager::Get().SaveToBinaryFile(texture, outputPath.wstring());

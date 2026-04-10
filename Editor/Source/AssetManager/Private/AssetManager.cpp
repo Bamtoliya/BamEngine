@@ -3,7 +3,9 @@
 #include "AssetManager.h"
 
 #pragma region Importer
+#include "SpriteImporter.h"
 #include "TextureImporter.h"
+
 #include "ModelImporter.h"
 #include "AnimationImporter.h"
 #pragma endregion
@@ -23,6 +25,8 @@ EResult AssetManager::Initialize(void* arg)
 	m_Importers[".jpg"] = m_Importers[".png"];
 	m_Importers[".tga"] = m_Importers[".png"];
 	m_Importers[".bmp"] = m_Importers[".png"];
+
+	m_Importers[".bamtex"] = SpriteImporter::Create();
 
 	m_Importers[".fbx"] = ModelImporter::Create();
 	m_Importers[".obj"] = m_Importers[".fbx"];
@@ -88,6 +92,11 @@ void AssetManager::Update(f32 dt)
 
 
 #pragma region Codec
+void AssetManager::ExecuteAsync(std::function<EResult()> task)
+{
+	auto futureTask = std::async(std::launch::async, task);
+	m_ActiveTasks.push_back(std::move(futureTask));
+}
 EResult AssetManager::Import(const filesystem::path& sourcePath, const filesystem::path& destDir, void* arg)
 {
 	string extension = sourcePath.extension().string();

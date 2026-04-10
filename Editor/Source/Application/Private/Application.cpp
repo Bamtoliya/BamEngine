@@ -107,7 +107,6 @@ void Application::InitializeResources()
     TextureCreationData textureToLoad[] =
     {
         { L"SampleTexture", L"Resources/Texture/uv1.png"},
-        { L"SampleBamTex",  L"Resources/Texture/uv1.bamtex"},
         { L"White1x1",      L"Resources/Texture/white1x1.png" },
         { L"Black1x1",      L"Resources/Texture/black1x1.png" },
         { L"Magenta1x1",    L"Resources/Texture/magenta1x1.png" },
@@ -123,10 +122,14 @@ void Application::InitializeResources()
 #pragma endregion
 
 #pragma region Sprites
-	tagSpriteCreateDesc spriteDesc = {};
-	spriteDesc.Texture = resourceManager.GetResourceHandle<Texture>(L"SampleBamTex");
-	spriteDesc.Key = L"SampleSprite";
-    resourceManager.LoadResource<Sprite>(&spriteDesc);
+	resourceManager.LoadFile(L"Resources/Texture/uv1.bamtex");
+    resourceManager.LoadFile(L"Resources/Texture/uv1.bamsprite");
+	//tagSpriteCreateDesc spriteCreateDesc = {};
+	//spriteCreateDesc.Path = L"Resources/Texture/uv1.bamsprite";
+    //resourceManager.LoadResource<Sprite>(&spriteCreateDesc);
+    //tagSpriteCreateDesc spriteDesc = {};
+	//spriteDesc.Texture = resourceManager.GetResourceHandle<Texture>(L"Resources/Texture/uv1.bamtex");
+    //resourceManager.LoadResource<Sprite>(&spriteDesc);
 #pragma endregion
 
 

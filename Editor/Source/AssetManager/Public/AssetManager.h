@@ -26,6 +26,7 @@ public:
 
 #pragma region Codec
 public:
+	void ExecuteAsync(std::function<EResult()> task);
 	EResult Import(const filesystem::path & sourcePath, const filesystem::path & destDir, void* arg = nullptr);
 	void ImportAsync(const filesystem::path& sourcePath, const filesystem::path& destDir, void* arg = nullptr);
 	EResult Export(const filesystem::path & sourcePath, const filesystem::path & destDir, void* arg = nullptr);

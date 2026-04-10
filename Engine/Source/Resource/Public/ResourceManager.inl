@@ -24,7 +24,7 @@ ResourceHandle<T> ResourceManager::LoadResource(Args&&... args)
 	}
 
 	// 2. 캐시 확인
-	uint64 hash = RunTimeHash(first->Key.empty() ? pathStr : first->Key); // 정상적으로 const wstring& 으로 매칭됨
+	uint64 hash = RunTimeHash(NormalizePath(first->Key.empty() ? pathStr : first->Key)); // 정상적으로 const wstring& 으로 매칭됨
 	Handle handle = FindHandle(hash);
 	if (handle.IsValid())
 		return ResourceHandle<T>(handle);
@@ -44,8 +44,8 @@ ResourceHandle<T> ResourceManager::LoadResource(Args&&... args)
 			{
 				resource->Deserialize(archive);
 			}
+			resource->SetKey(pathStr);
 			resource->SetPath(pathStr);
-			resource->SetKey(fsPath.stem().wstring());
 		}
 	}
 	else if (ext.find(".json") != std::string::npos)
@@ -58,8 +58,8 @@ ResourceHandle<T> ResourceManager::LoadResource(Args&&... args)
 			{
 				resource->Deserialize(archive);
 			}
+			resource->SetKey(pathStr);
 			resource->SetPath(pathStr);
-			resource->SetKey(fsPath.stem().wstring());
 		}
 	}
 	else

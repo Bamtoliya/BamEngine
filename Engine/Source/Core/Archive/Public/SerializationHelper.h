@@ -1,6 +1,5 @@
 ﻿#pragma once
 
-#include "AssetRef.h"
 #include "Archive.h"
 #include "ReflectionRegistry.h"
 #include "PropertyAccessor.h"
@@ -324,17 +323,6 @@ private:
 		{
 			string typeName = NormalizeTypeName(varInfo.Name);
 
-			if (typeName.starts_with("AssetRef<"))
-			{
-				if (ar.PushScope(propName))
-				{
-					AssetRefBase* assetRef = static_cast<AssetRefBase*>(valuePtr);
-					assetRef->Serialize(ar);
-			
-					ar.PopScope();
-				}
-				break;
-			}
 			if (ar.PushScope(propName))
 			{
 				const TypeInfo* InnerTypeInfo = ReflectionRegistry::Get().GetType(NormalizeTypeName(varInfo.Name));
@@ -446,6 +434,7 @@ private:
 		}
 		case Engine::EPropertyType::ResourceHandle:
 		{
+			ar.PushScope(propName);
 			Engine::Handle* handleData = reinterpret_cast<Engine::Handle*>(valuePtr);
 			string assetKey = "";
 			string assetPath = "";
@@ -473,9 +462,10 @@ private:
 				}
 				else
 				{
-					*handleData = Engine::Handle(); // Key가 없다면 유효하지 않은 핸들(Null)로 초기화
+					*handleData = Engine::ResourceManager::Get().LoadFile(StrToWStr(assetPath));
 				}
 			}
+			ar.PopScope();
 			break;
 		}
 		default:

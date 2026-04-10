@@ -42,7 +42,7 @@ public:
 	const vector<Handle>& GetResourceHandles(uint64 typeHash);
 public:
 	EResult ImportFolder(const wstring& folderPath);
-	void* LoadFile(const wstring& filePath);
+	Handle LoadFile(const wstring& filePath);
 	void RegisterExplicitLoader();
 	EResult DestroyResource(Resource* resource);
 #pragma endregion
@@ -70,9 +70,9 @@ public:
 	EResult SaveToBeveFile(Resource* resource, const wstring& filePath);
 	EResult SaveToBinaryFile(Resource* resource, const wstring& filePath);
 public:
-	void* LoadFromJsonFile(const wstring& filePath);
-	void* LoadFromBeveFile(const wstring& filePath);
-	void* LoadFromBinaryFile(const wstring& filePath);
+	Handle LoadFromJsonFile(const wstring& filePath);
+	Handle LoadFromBeveFile(const wstring& filePath);
+	Handle LoadFromBinaryFile(const wstring& filePath);
 #pragma endregion
 
 #pragma region Member Variables
@@ -83,7 +83,7 @@ private:
 	unordered_map<uint64, vector<Handle>> m_TypeToHandles;
 	shared_mutex m_PoolMutex;
 private:
-	unordered_map<wstring, function<void*(wstring, wstring)>> m_LoaderRegistry;
+	unordered_map<wstring, function<Handle(wstring, wstring)>> m_LoaderRegistry;
 #pragma endregion
 };
 

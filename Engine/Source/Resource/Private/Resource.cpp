@@ -17,17 +17,13 @@ void Resource::Deserialize(Archive& ar)
 {
 	tagResourceBinaryHeader header;
 	ar.Process<tagResourceBinaryHeader>("AssetHeader", header);
+	m_ResourceType = header.ResourceType;
+	m_Version = header.Version;
 	if (header.MagicNumber != ENGINE_ASSET_MAGIC)
 	{
 		fmt::print(stderr, "Invalid asset file: Magic number mismatch.\n");
+		return;
 	}
-	return;
-
-	if (header.Version < 1)
-	{
-
-	}
-
 	SerializationHelper::SerializeReflectionProperties(ar, &GetTypeInfo(), this);
 }
 

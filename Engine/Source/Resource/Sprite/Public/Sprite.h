@@ -30,12 +30,10 @@ public:
 #pragma endregion
 
 
-#pragma region MyRegion
+#pragma region Bind
 public:
 	EResult Bind(uint32 slot);
 #pragma endregion
-
-
 
 #pragma region MyRegion
 public:
@@ -61,10 +59,17 @@ public:
 	EResult SetTexture(ResourceHandle<Texture> texture);
 #pragma endregion
 
+#pragma region Save&Load
+public:
+	virtual void Serialize(Archive& ar);
+	virtual void Deserialize(Archive& ar);
+#pragma endregion
+
+
 
 #pragma region Member Variable
 private:
-	PROPERTY(READONLY, NOSERIALIZE)
+	PROPERTY(READONLY)
 	ResourceHandle<Texture> m_Texture;
 
 	PROPERTY()

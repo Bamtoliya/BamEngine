@@ -791,7 +791,6 @@ IMPLEMENT_CLASS(Shader, Resource)
 #pragma region CLASS: Sprite
 BEGIN_METADATA(Sprite, m_Texture)
 	READONLY
-	NOSERIALIZE
 END_METADATA
 
 BEGIN_METADATA(Sprite, m_Pivot)

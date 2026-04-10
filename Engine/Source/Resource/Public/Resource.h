@@ -71,8 +71,8 @@ protected:
 	{
 		if (!arg) return EResult::InvalidArgument;
 		CAST_DESC
-		m_Key = desc->Key;
-		m_Path = desc->Path;
+		m_Key = NormalizePath(desc->Key.empty() ? desc->Path : desc->Key);
+		m_Path = NormalizePath(desc->Path);
 		return EResult::Success; 
 	}
 public:

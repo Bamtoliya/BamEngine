@@ -4,8 +4,6 @@
 #include "Mesh.h"
 #include "Sprite.h"
 #include "Material.h"
-#include "AssetRef.h"
-
 
 ENUM()
 enum class EDrawMode

@@ -62,6 +62,17 @@ namespace Engine
 		return string(u8str.begin(), u8str.end());
 	}
 
+	inline wstring NormalizePath(wstring path)
+	{
+		std::replace(path.begin(), path.end(), L'\\', L'/');
+		return path;
+	}
+	inline string NormalizePath(string path)
+	{
+		std::replace(path.begin(), path.end(), '\\', '/');
+		return path;
+	}
+
 	// FNV-1a 64-bit Hash Function for compile-time string hashing
 	consteval uint64 CompileTimeHash(std::string_view str) noexcept
 	{

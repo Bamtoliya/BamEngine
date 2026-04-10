@@ -7,8 +7,12 @@
 #include "PropertyDrawer.h"
 #include "AssetManager.h"
 
-static Engine::ETextureFormat s_TargetFormat = Engine::ETextureFormat::BC7_RGBA_UNORM;
+static Engine::ETextureFormat s_TargetFormat = Engine::ETextureFormat::BC1_RGBA_UNORM;
 static uint32 s_CompressFlagsValue = static_cast<uint32>(ECompressFlags::GenerateMipMaps | ECompressFlags::HighQuality);
+static bool s_AutoGenerateSprite = true;
+
+static bool s_IsImporting = false;       // 비동기 작업 진행 중 여부
+static bool s_ShowSuccessPopup = false;  // 작업 완료 팝업 트리거
 
 bool TextureInspector::IsSupported(const std::filesystem::path& assetPath)
 {
@@ -92,28 +96,82 @@ bool TextureInspector::OnInspectorGUI(const std::filesystem::path& assetPath)
     DrawFlag("Normal Map Mode", ECompressFlags::NormalMap);
 
     ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Text("Sprite Generation");
+
+    // 스프라이트 자동 생성 체크박스
+    ImGui::Checkbox("Auto-Generate Sprite (.bamsprite)", &s_AutoGenerateSprite);
+
+    ImGui::Spacing();
 
     // 5. 실행 버튼
-    if (ImGui::Button("Import / Re-Compress", ImVec2(-1, 30)))
+    if (s_IsImporting)
     {
-        // 결과 파일 경로 설정 (예: Content 폴더 내 .bamtex)
-        std::filesystem::path outputPath = assetPath;
-        outputPath.replace_extension(".bamtex");
+        // 작업 중일 때는 중복 클릭 방지를 위해 버튼 비활성화
+        ImGui::BeginDisabled();
+        ImGui::Button("Importing... Please wait", ImVec2(-1, 30));
+        ImGui::EndDisabled();
 
-        // UI에서 설정된 값을 기반으로 변환 수행
-        tagTextureImportDesc desc = {};
-		desc.CompressFlags = static_cast<ECompressFlags>(s_CompressFlagsValue);
-		desc.TargetFormat = s_TargetFormat;
-        EResult result = AssetManager::Get().Import(assetPath, outputPath, &desc);
+        // AssetManager의 Update() 루프에서 작업 완료 시 m_ActiveTasks를 지우므로,
+        // 카운트가 0이 되면 작업이 끝난 것으로 간주하고 팝업을 띄웁니다.
+        if (AssetManager::Get().GetActiveTaskCount() == 0)
+        {
+            s_IsImporting = false;
+            s_ShowSuccessPopup = true;
+        }
+    }
+    else
+    {
+        if (ImGui::Button("Import / Re-Compress", ImVec2(-1, 30)))
+        {
+            s_IsImporting = true;
 
-        // 결과 알림 팝업 (실제 구현 시 결과에 따라 메시지 변경 가능)
+            // [핵심 변경점] 절대 경로를 프로젝트 루트 기준의 '상대 경로'로 변환합니다.
+            // (std::filesystem::current_path()가 엔진의 작업 디렉토리 즉, 프로젝트 루트라고 가정)
+            std::filesystem::path relSourcePath = std::filesystem::relative(assetPath, std::filesystem::current_path());
+            std::filesystem::path relDestDir = relSourcePath;
+
+            bool autoGenSprite = s_AutoGenerateSprite;
+
+            tagTextureImportDesc desc = {};
+            desc.CompressFlags = static_cast<ECompressFlags>(s_CompressFlagsValue);
+            desc.TargetFormat = s_TargetFormat;
+
+            // 이제 AssetManager와 Importer들은 모두 '상대 경로'만을 가지고 작업하게 됩니다.
+            AssetManager::Get().ExecuteAsync([relSourcePath, relDestDir, autoGenSprite, desc]() -> EResult
+                {
+                    std::filesystem::path outputPath = relSourcePath;
+                    outputPath.replace_extension(".bamtex");
+
+                    // 1. 텍스처 임포트 (.bamtex 생성)
+                    EResult result = AssetManager::Get().Import(relSourcePath, relDestDir, (void*)&desc);
+
+                    // 2. 스프라이트 임포트 연쇄 호출 (.bamsprite 생성)
+                    if (result == EResult::Success && autoGenSprite)
+                    {
+                        result = AssetManager::Get().Import(outputPath, relDestDir, nullptr);
+                    }
+
+                    return result;
+                });
+        }
+    }
+
+    // 팝업 오픈 트리거 (비동기 작업이 끝났을 때 1프레임 동안 호출)
+    if (s_ShowSuccessPopup)
+    {
         ImGui::OpenPopup("Import Result");
+        s_ShowSuccessPopup = false;
     }
 
     // 결과 팝업 창
     if (ImGui::BeginPopupModal("Import Result", NULL, ImGuiWindowFlags_AlwaysAutoResize))
     {
-        ImGui::Text("Texture has been successfully converted to .bamtex!");
+        if (s_AutoGenerateSprite)
+            ImGui::Text("Texture & Sprite have been successfully converted asynchronously!");
+        else
+            ImGui::Text("Texture has been successfully converted to .bamtex asynchronously!");
+
         ImGui::Separator();
         if (ImGui::Button("OK", ImVec2(120, 0))) { ImGui::CloseCurrentPopup(); }
         ImGui::EndPopup();
