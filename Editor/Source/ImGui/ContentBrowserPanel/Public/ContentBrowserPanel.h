@@ -68,6 +68,8 @@ private:
 	void OnExteranalDropped(const vector<string>& droppedFiles);
 private:
 	void DrawRename(const filesystem::path& path);
+private:
+	void CreateEmptyMaterial(const filesystem::path& path);
 #pragma endregion
 
 	

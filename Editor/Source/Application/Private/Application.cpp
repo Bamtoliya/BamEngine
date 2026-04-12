@@ -97,41 +97,35 @@ void Application::InitializeResources()
 
 
 #pragma region Basic Textures
-
-    struct TextureCreationData
+    wstring resourcesToLoad[] =
     {
-        wstring Name;
-        wstring Path;
-	};
+        //Texture
+        L"Resources/Texture/uv1.png",
+        L"Resources/Texture/white1x1.png",
+        L"Resources/Texture/black1x1.png",
+        L"Resources/Texture/magenta1x1.png",
+        L"Resources/Texture/green1x1.png",
+        L"Resources/Texture/blue1x1.png",
+		L"Resources/Texture/uv1.bamtex",
 
-    TextureCreationData textureToLoad[] =
-    {
-        { L"SampleTexture", L"Resources/Texture/uv1.png"},
-        { L"White1x1",      L"Resources/Texture/white1x1.png" },
-        { L"Black1x1",      L"Resources/Texture/black1x1.png" },
-        { L"Magenta1x1",    L"Resources/Texture/magenta1x1.png" },
-        { L"Green1x1",      L"Resources/Texture/green1x1.png" },
-        { L"Blue1x1",       L"Resources/Texture/blue1x1.png"  },
+        ///Sprite
+        L"Resources/Texture/uv1.bamsprite",
+
+        //Shader
+        L"Resources/Shader/default.vert.bamshader",
+        L"Resources/Shader/default.frag.bamshader",
+        L"Resources/Shader/sprite.vert.bamshader",
+        L"Resources/Shader/sprite.frag.bamshader",
+
+        //Material
+        L"Resources/Material/SpriteMaterial.bammat",
     };
 
-    for (const auto& texData : textureToLoad)
+    for (const auto& path : resourcesToLoad)
     {
-        tagTextureCreateDesc createDesc = { texData.Name, texData.Path };
-        resourceManager.LoadResource<Texture>(&createDesc);
+		resourceManager.LoadFile(path);
     }
 #pragma endregion
-
-#pragma region Sprites
-	//resourceManager.LoadFile(L"Resources/Texture/uv1.bamtex");
-    resourceManager.LoadFile(L"Resources/Texture/uv1.bamsprite");
-	//tagSpriteCreateDesc spriteCreateDesc = {};
-	//spriteCreateDesc.Path = L"Resources/Texture/uv1.bamsprite";
-    //resourceManager.LoadResource<Sprite>(&spriteCreateDesc);
-    //tagSpriteCreateDesc spriteDesc = {};
-	//spriteDesc.Texture = resourceManager.GetResourceHandle<Texture>(L"Resources/Texture/uv1.bamtex");
-    //resourceManager.LoadResource<Sprite>(&spriteDesc);
-#pragma endregion
-
 
 #pragma region Quad
     {
@@ -251,56 +245,27 @@ void Application::InitializeResources()
     }
 #pragma endregion
 
-#pragma region Shader
-    tagShaderDesc vsDesc;
-    vsDesc.ShaderType = EShaderType::Vertex;
-	vsDesc.Key = L"DefaultVS";
-    vsDesc.Path = L"Resources/Shader/default.vert.spv";
-    vsDesc.EntryPoint = "main";
-    resourceManager.LoadResource<Shader>(&vsDesc);
 
-    tagShaderDesc psDesc;
-    psDesc.ShaderType = EShaderType::Pixel;
-	psDesc.Key = L"DefaultPS";
-    psDesc.Path = L"Resources/Shader/default.frag.spv";
-    psDesc.EntryPoint = "main";
-    resourceManager.LoadResource<Shader>(&psDesc);
-
-	tagShaderDesc spriteVSDesc;
-	spriteVSDesc.ShaderType = EShaderType::Vertex;
-	spriteVSDesc.Key = L"SpriteVS";
-	spriteVSDesc.Path = L"Resources/Shader/sprite.vert.spv";
-	spriteVSDesc.EntryPoint = "main";
-	resourceManager.LoadResource<Shader>(&spriteVSDesc);
-
-    tagShaderDesc spritePSDesc;
-    spritePSDesc.ShaderType = EShaderType::Pixel;
-    spritePSDesc.Key = L"SpritePS";
-    spritePSDesc.Path = L"Resources/Shader/sprite.frag.spv";
-    spritePSDesc.EntryPoint = "main";
-    resourceManager.LoadResource<Shader>(&spritePSDesc);
-#pragma endregion
-	
+#pragma region Material
     tagMaterialDesc materialDesc;
-	materialDesc.VertexShaderHandle = resourceManager.GetResourceHandle<Shader>(L"DefaultVS");
-    materialDesc.PixelShaderHandle = resourceManager.GetResourceHandle<Shader>(L"DefaultPS");
+    materialDesc.VertexShaderHandle = resourceManager.GetResourceHandle<Shader>(L"Resources/Shader/default.vert.bamshader");
+    materialDesc.PixelShaderHandle = resourceManager.GetResourceHandle<Shader>(L"Resources/Shader/default.frag.bamshader");
     materialDesc.DepthMode = EDepthMode::ReadWrite;
-	resourceManager.AddResource<Material>(L"DefaultMaterial", Material::Create(&materialDesc))->SetTextureBySlot(0, resourceManager.GetResourceHandle<Texture>(L"Magenta1x1"));
+    resourceManager.AddResource<Material>(L"DefaultMaterial", Material::Create(&materialDesc))->SetTextureBySlot(0, resourceManager.GetResourceHandle<Texture>(L"Resources/Texture/magenta1x1.png"));
 
-	tagMaterialDesc spriteMaterialDesc;
-	spriteMaterialDesc.VertexShaderHandle = resourceManager.GetResourceHandle<Shader>(L"DefaultVS");
-	spriteMaterialDesc.PixelShaderHandle = resourceManager.GetResourceHandle<Shader>(L"DefaultPS");
-	spriteMaterialDesc.BlendMode = EBlendMode::AlphaBlend;
-	spriteMaterialDesc.CullMode = ECullMode::None;
-	spriteMaterialDesc.DepthMode = EDepthMode::ReadWrite;
+    tagMaterialDesc spriteMaterialDesc;
+    spriteMaterialDesc.VertexShaderHandle = resourceManager.GetResourceHandle<Shader>(L"Resources/Shader/sprite.vert.bamshader");
+    spriteMaterialDesc.PixelShaderHandle = resourceManager.GetResourceHandle<Shader>(L"Resources/Shader/sprite.frag.bamshader");
+    spriteMaterialDesc.BlendMode = EBlendMode::AlphaBlend;
+    spriteMaterialDesc.CullMode = ECullMode::None;
+    spriteMaterialDesc.DepthMode = EDepthMode::ReadWrite;
 
-    JsonArchive jsonArchive(EArchiveMode::Write);
-    BinaryArchive binaryArchive(EArchiveMode::Write);
-    resourceManager.AddResource<Material>(L"SpriteMaterial", Material::Create(&spriteMaterialDesc))->Serialize(binaryArchive);
-    binaryArchive.SaveToFile("Resources/Material/SpriteMaterial.bammat");
-	//
-    //
+
+    resourceManager.SaveToBinaryFile(resourceManager.AddResource<Material>(L"SpriteMaterial", Material::Create(&spriteMaterialDesc)).Get(), L"Resources/Material/SpriteMaterial.bammat");
     resourceManager.LoadFile(L"Resources/Material/SpriteMaterial.bammat");
+#pragma endregion
+
+    
     //resourceManager.SaveToJsonFile(resourceManager.GetResourceHandle<Texture>(L"SampleTexture").Get(), L"Resources/Texture/SampleTexture.json");
 #ifdef _DEBUG
 	

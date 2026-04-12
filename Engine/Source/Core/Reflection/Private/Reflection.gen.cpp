@@ -784,8 +784,19 @@ IMPLEMENT_CLASS(Script, Resource)
 #pragma endregion // CLASS: Script
 
 #pragma region CLASS: Shader
+BEGIN_METADATA(Shader, m_RHIShader)
+	NOSERIALIZE
+END_METADATA
+
 BEGIN_PROPERTIES(Shader)
-	REFLECT_PROPERTY(Shader, m_RHIShader, "RHIShader", Engine::EPropertyType::Object, {})
+	REFLECT_PROPERTY(Shader, m_ShaderType, "EShaderType", Engine::EPropertyType::Enum, {})
+	REFLECT_PROPERTY(Shader, m_SpirvPath, "wstring", Engine::EPropertyType::Wstring, {})
+	REFLECT_PROPERTY(Shader, m_EntryPoint, "string", Engine::EPropertyType::String, {})
+	REFLECT_PROPERTY(Shader, m_NumSamplers, "uint32", Engine::EPropertyType::UInt32, {})
+	REFLECT_PROPERTY(Shader, m_NumStorageTextures, "uint32", Engine::EPropertyType::UInt32, {})
+	REFLECT_PROPERTY(Shader, m_NumStorageBuffers, "uint32", Engine::EPropertyType::UInt32, {})
+	REFLECT_PROPERTY(Shader, m_NumUniformBuffers, "uint32", Engine::EPropertyType::UInt32, {})
+	REFLECT_PROPERTY(Shader, m_RHIShader, "RHIShader", Engine::EPropertyType::Object, Shader_m_RHIShader_Meta)
 END_PROPERTIES
 
 EMPTY_FUNCTIONS(Shader)

@@ -1,24 +1,20 @@
 ﻿#pragma once
 
 #include "RHIResource.h"
-
-enum class EShaderType
-{
-	Vertex,
-	Pixel,
-	Compute,
-	Geometry,
-	Hull,
-	Domain,
-	Unknown,
-};
+#include "ShaderReflection.h"
 
 struct tagRHIShaderDesc
 {
 	EShaderType ShaderType = EShaderType::Unknown;
 	string EntryPoint = { "main" };
+
 	wstring FilePath = { L"" };
 	vector<uint8> ShaderBytecode = {};
+
+	uint32 NumSamplers;
+	uint32 NumStorageTextures;
+	uint32 NumStorageBuffers;
+	uint32 NumUniformBuffers;
 };
 
 BEGIN(Engine)

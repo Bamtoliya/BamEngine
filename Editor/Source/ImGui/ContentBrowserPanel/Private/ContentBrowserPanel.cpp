@@ -6,6 +6,7 @@
 #include <stb_image.h>
 #include "LocalizationManager.h"
 #include "AssetManager.h"
+#include "Archives.h"
 
 using namespace std;
 
@@ -317,16 +318,27 @@ void ContentBrowserPanel::GridViewContextMenu(const filesystem::path& path)
 {
 	if (ImGui::BeginPopupContextWindow("GridContextMenu", ImGuiPopupFlags_MouseButtonRight | ImGuiPopupFlags_NoOpenOverItems))
 	{
-		if (ImGui::MenuItem(ICON_FA_PLUS " New Folder"))
+		if (ImGui::BeginMenu(ICON_FA_PLUS " Create"))
 		{
-			filesystem::path newFolderPath = m_CurrentDirectory / "NewFolder";
-			int suffix = 1;
-			while (filesystem::exists(newFolderPath))
+			if (ImGui::MenuItem(ICON_FA_FOLDER " New Folder"))
 			{
-				newFolderPath = m_CurrentDirectory / ("NewFolder_" + std::to_string(suffix++));
+				filesystem::path newFolderPath = m_CurrentDirectory / "NewFolder";
+				int suffix = 1;
+				while (filesystem::exists(newFolderPath))
+				{
+					newFolderPath = m_CurrentDirectory / ("NewFolder_" + std::to_string(suffix++));
+				}
+				filesystem::create_directory(newFolderPath);
 			}
-			filesystem::create_directory(newFolderPath);
+
+			if (ImGui::MenuItem(ICON_FA_GLOBE " Create Empty Material"))
+			{
+				CreateEmptyMaterial(m_CurrentDirectory);
+			}
+
+			ImGui::EndMenu();
 		}
+		
 
 		ImGui::Separator();
 
@@ -335,6 +347,9 @@ void ContentBrowserPanel::GridViewContextMenu(const filesystem::path& path)
 			// Windows 전용 명령 (ShellExecute)
 			ShellExecuteA(NULL, "open", path.string().c_str(), NULL, NULL, SW_SHOWNORMAL);
 		}
+
+		
+		
 		ImGui::EndPopup();
 	}
 }
@@ -717,5 +732,15 @@ void ContentBrowserPanel::OnExteranalDropped(const vector<string>& droppedFiles)
 			}
 		}
 	}
+}
+void ContentBrowserPanel::CreateEmptyMaterial(const filesystem::path& path)
+{
+	filesystem::path outputPath = path;
+	outputPath += "\\NewMaterial.bammat";
+	JsonArchive archive(EArchiveMode::Write);
+	Material* material = Engine::Material::CreateEmpty();
+	material->Serialize(archive);
+	archive.SaveToFile(outputPath.string());
+	ResourceManager::Get().DestroyResource(material);
 }
 #pragma endregion

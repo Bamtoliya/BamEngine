@@ -8,6 +8,8 @@
 
 #include "ModelImporter.h"
 #include "AnimationImporter.h"
+
+#include "ShaderImporter.h"
 #pragma endregion
 
 #pragma region Exporter
@@ -33,6 +35,8 @@ EResult AssetManager::Initialize(void* arg)
 	m_Importers[".gltf"] = m_Importers[".fbx"];
 
 	m_Importers[".anim"] = AnimationImporter::Create();
+
+	m_Importers[".spv"] = ShaderImporter::Create();
 
 	m_AssetCache = AssetCache::Create();
 	if (!m_AssetCache) return EResult::Fail;

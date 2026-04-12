@@ -61,7 +61,7 @@ EResult MaterialInstance::Bind(uint32 slot)
 
 		Texture* texture = baseSlot.texture.Get();
 		if (!texture)
-			texture = ResourceManager::Get().GetResourceHandle<Texture>(L"Magenta1x1").Get();
+			texture = ResourceManager::Get().GetResourceHandle<Texture>(L"Resources/Texture/magenta1x1.png").Get();
 		RHISampler* sampler = baseSlot.sampler;
 		if (!sampler)
 			sampler = SamplerManager::Get().GetDefaultSampler();
@@ -73,7 +73,7 @@ EResult MaterialInstance::Bind(uint32 slot)
 	{
 		Texture* texture = textureSlot.texture.Get();
 		if (!texture)
-			texture = ResourceManager::Get().GetResourceHandle<Texture>(L"Magenta1x1").Get();
+			texture = ResourceManager::Get().GetResourceHandle<Texture>(L"Resources/Texture/magenta1x1.png").Get();
 		RHISampler* sampler = textureSlot.sampler;
 		if (!sampler)
 			sampler = SamplerManager::Get().GetDefaultSampler();
@@ -92,13 +92,15 @@ void MaterialInstance::SetBaseMaterial(const ResourceHandle<Material>& material)
 #pragma region Shader
 Shader* MaterialInstance::GetVertexShader() const
 {
-	if (m_VertexShaderHandle) return m_VertexShaderHandle.Get();
+	if (m_VertexShaderHandle)
+		return m_VertexShaderHandle.Get();
 	return m_BaseMaterialHandle.Get()->GetVertexShader();
 }
 
 Shader* MaterialInstance::GetPixelShader() const
 {
-	if (m_PixelShaderHandle) return m_PixelShaderHandle.Get();
+	if (m_PixelShaderHandle)
+		return m_PixelShaderHandle.Get();
 	return m_BaseMaterialHandle.Get()->GetPixelShader();
 }
 

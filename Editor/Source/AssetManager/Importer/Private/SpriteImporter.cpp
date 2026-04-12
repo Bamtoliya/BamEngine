@@ -15,7 +15,7 @@ EResult SpriteImporter::Import(const filesystem::path& sourcePath, const filesys
 		return EResult::InvalidArgument;
 	}
 
-	filesystem::path outputPath = destDir;
+	filesystem::path outputPath = destDir.empty() ? sourcePath.parent_path() : destDir;
 	outputPath.replace_extension(L".bamsprite");
 
 	tagSpriteCreateDesc desc;
@@ -28,6 +28,5 @@ EResult SpriteImporter::Import(const filesystem::path& sourcePath, const filesys
 	EResult result = ResourceManager::Get().SaveToBinaryFile(sprite, outputPath.wstring());
 	ResourceManager::Get().DestroyResource(sprite); // 저장 후 임시 Sprite 객체 해제
 
-	TODO("SpriteImporter");
-	return EResult::NotImplemented;
+	return EResult::Success;
 }

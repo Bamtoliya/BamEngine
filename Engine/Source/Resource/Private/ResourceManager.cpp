@@ -100,6 +100,15 @@ void ResourceManager::RegisterExplicitLoader()
 			return this->LoadResource<Material>(&desc).GetRawHandle();
 		};
 
+
+	m_LoaderRegistry[L".bamshader"] = [this](wstring key, wstring path) -> Handle
+		{
+			tagShaderDesc desc;
+			desc.Key = path;
+			desc.Path = path;
+			return this->LoadResource<Shader>(&desc).GetRawHandle();
+		};
+
 	// 주석 처리된 부분도 나중에 살릴 때 Handle을 반환하도록 수정하시면 됩니다.
 	/*
 	auto meshLoader = [this](wstring key, wstring path) -> Handle

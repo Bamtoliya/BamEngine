@@ -27,10 +27,10 @@ public:
 #pragma region Codec
 public:
 	void ExecuteAsync(std::function<EResult()> task);
-	EResult Import(const filesystem::path & sourcePath, const filesystem::path & destDir, void* arg = nullptr);
-	void ImportAsync(const filesystem::path& sourcePath, const filesystem::path& destDir, void* arg = nullptr);
-	EResult Export(const filesystem::path & sourcePath, const filesystem::path & destDir, void* arg = nullptr);
-	void ExportAsync(const filesystem::path& sourcePath, const filesystem::path& destDir, void* arg = nullptr);
+	EResult Import(const filesystem::path& sourcePath, const filesystem::path& destDir = {}, void* arg = nullptr);
+	void ImportAsync(const filesystem::path& sourcePath, const filesystem::path& destDir = {}, void* arg = nullptr);
+	EResult Export(const filesystem::path& sourcePath, const filesystem::path& destDir = {}, void* arg = nullptr);
+	void ExportAsync(const filesystem::path& sourcePath, const filesystem::path& destDir = {}, void* arg = nullptr);
 public:
 	Engine::MulticastDelegate<> GetAsyncDelegate() { return m_OnAsyncDelegate; }
 	size_t GetActiveTaskCount() const { return m_ActiveTasks.size(); }

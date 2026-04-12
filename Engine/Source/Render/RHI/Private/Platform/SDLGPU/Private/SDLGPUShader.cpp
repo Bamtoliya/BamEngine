@@ -3,74 +3,6 @@
 #include "SDLGPUShader.h"
 #include "SDLGPURHI.h"
 
-#include <spirv_cross/spirv_cross_c.h>
-
-#pragma region SPIRV Reflection
-struct ShaderResourceCounts
-{
-	uint32 numSamplers = 0;
-	uint32 numStorageTextures = 0;
-	uint32 numStorageBuffers = 0;
-	uint32 numUniformBuffers = 0;
-};
-
-static ShaderResourceCounts ReflectSPIRV(const vector<uint8>& bytecode)
-{
-	ShaderResourceCounts counts = {};
-
-	const uint32_t* spirvData = reinterpret_cast<const uint32_t*>(bytecode.data());
-	size_t wordCount = bytecode.size() / sizeof(uint32_t);
-
-	spvc_context context = nullptr;
-	spvc_parsed_ir ir = nullptr;
-	spvc_compiler compiler = nullptr;
-	spvc_resources resources = nullptr;
-	const spvc_reflected_resource* resourceList = nullptr;
-	size_t resourceCount = 0;
-
-	if (spvc_context_create(&context) != SPVC_SUCCESS)
-		return counts;
-
-	if (spvc_context_parse_spirv(context, spirvData, wordCount, &ir) != SPVC_SUCCESS)
-	{
-		spvc_context_destroy(context);
-		return counts;
-	}
-
-	if (spvc_context_create_compiler(context, SPVC_BACKEND_NONE, ir, SPVC_CAPTURE_MODE_TAKE_OWNERSHIP, &compiler) != SPVC_SUCCESS)
-	{
-		spvc_context_destroy(context);
-		return counts;
-	}
-
-	if (spvc_compiler_create_shader_resources(compiler, &resources) != SPVC_SUCCESS)
-	{
-		spvc_context_destroy(context);
-		return counts;
-	}
-
-	// sampler2D (combined image sampler)
-	spvc_resources_get_resource_list_for_type(resources, SPVC_RESOURCE_TYPE_SAMPLED_IMAGE, &resourceList, &resourceCount);
-	counts.numSamplers = static_cast<uint32>(resourceCount);
-
-	// storage image
-	spvc_resources_get_resource_list_for_type(resources, SPVC_RESOURCE_TYPE_STORAGE_IMAGE, &resourceList, &resourceCount);
-	counts.numStorageTextures = static_cast<uint32>(resourceCount);
-
-	// storage buffer (SSBO)
-	spvc_resources_get_resource_list_for_type(resources, SPVC_RESOURCE_TYPE_STORAGE_BUFFER, &resourceList, &resourceCount);
-	counts.numStorageBuffers = static_cast<uint32>(resourceCount);
-
-	// uniform buffer
-	spvc_resources_get_resource_list_for_type(resources, SPVC_RESOURCE_TYPE_UNIFORM_BUFFER, &resourceList, &resourceCount);
-	counts.numUniformBuffers = static_cast<uint32>(resourceCount);
-
-	spvc_context_destroy(context);
-	return counts;
-}
-#pragma endregion
-
-
 #pragma region Constructor&Destructor
 EResult SDLGPUShader::Initialize(const DESC& desc)
 {
@@ -93,17 +25,17 @@ EResult SDLGPUShader::Initialize(const DESC& desc)
 		shaderFile.close();
 	}
 
-	ShaderResourceCounts counts = ReflectSPIRV(m_ShaderBytecode);
+	ShaderReflectionInfo info = ReflectSPIRV(m_ShaderBytecode);
 
 	SDL_GPUShaderCreateInfo createInfo = {};
 	createInfo.entrypoint = m_EntryPoint.c_str();
 	createInfo.code = m_ShaderBytecode.data();
 	createInfo.code_size = m_ShaderBytecode.size();
 	createInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
-	createInfo.num_samplers = counts.numSamplers;
-	createInfo.num_storage_textures = counts.numStorageTextures;
-	createInfo.num_storage_buffers = counts.numStorageBuffers;
-	createInfo.num_uniform_buffers = counts.numUniformBuffers;
+	createInfo.num_samplers = info.NumSamplers;
+	createInfo.num_storage_textures = info.NumStorageTextures;
+	createInfo.num_storage_buffers = info.NumStorageBuffers;
+	createInfo.num_uniform_buffers = info.NumUniformBuffers;
 
 	switch (m_ShaderType)
 	{
@@ -114,7 +46,7 @@ EResult SDLGPUShader::Initialize(const DESC& desc)
 		createInfo.stage = SDL_GPU_SHADERSTAGE_FRAGMENT;
 		break;
 	case EShaderType::Compute:
-		return EResult::Success;
+		return EResult::NotImplemented;
 		break;
 	default:
 		return EResult::NotImplemented;

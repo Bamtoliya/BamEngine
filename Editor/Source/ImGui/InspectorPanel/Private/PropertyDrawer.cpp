@@ -1089,7 +1089,7 @@ bool PropertyDrawer::DrawResourceHandleProperty(void* data, const TypeInfo& type
 	ImGui::SameLine();
 
 	// -- 3. 선택/필터 팝업 창 --
-	if (ImGui::Button(ICON_FA_O, ImVec2(buttonWidth, 0)))
+	if (ImGui::Button(ICON_FA_BULLSEYE, ImVec2(buttonWidth, 0)))
 	{
 		ImGui::OpenPopup("ResourcePickerPopup");
 	}

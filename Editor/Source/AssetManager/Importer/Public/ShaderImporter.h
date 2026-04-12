@@ -2,16 +2,22 @@
 
 #include "ImporterInterface.h"
 
-BEGIN(Editor)
-class SpriteImporter : public ImporterInterface
+struct tagShaderImportDesc
 {
-#pragma region Constructor&Destructor
+
+};
+
+BEGIN(Engine)
+class ShaderImporter : public ImporterInterface
+{
+#pragma region Constructor& Destructor
 private:
-	SpriteImporter() = default;
-	virtual ~SpriteImporter() = default;
+	using DESC = tagShaderImportDesc;
+	ShaderImporter() = default;
+	virtual ~ShaderImporter() = default;
 	virtual EResult Initialize(void* arg = nullptr) override { return EResult::Success; }
 public:
-	static SpriteImporter* Create() { return new SpriteImporter(); }
+	static ShaderImporter* Create() { return new ShaderImporter(); }
 	virtual void Free() override { ImporterInterface::Free(); }
 #pragma endregion
 

@@ -130,9 +130,12 @@ EResult SpriteRenderer::UpdateMesh()
 
 	m_CachedSpriteVersion = m_Sprite->GetVersion();
 
-	f32 ppu = m_Sprite->GetTexture()->GetPixelPerUnit();
-	f32 width = m_Sprite->GetTexture()->GetWorldWidth();
-	f32 height = m_Sprite->GetTexture()->GetWorldHeight();
+	Texture* texture = m_Sprite->GetTexture();
+	if (!texture) return EResult::Fail;
+
+	f32 ppu = texture->GetPixelPerUnit();
+	f32 width = texture->GetWorldWidth();
+	f32 height = texture->GetWorldHeight();
 
 	vec2 pivot = m_Sprite->GetPivot();
 	Rect region = m_Sprite->GetRegion();

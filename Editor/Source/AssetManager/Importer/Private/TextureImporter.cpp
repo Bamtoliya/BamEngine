@@ -11,7 +11,8 @@ EResult TextureImporter::Import(const filesystem::path& sourcePath, const filesy
 	if (!arg) return EResult::InvalidArgument;
 	CAST_DESC
 
-	filesystem::path outputPath = destDir;
+	filesystem::path outputPath = destDir.empty() ? sourcePath.parent_path() : destDir;
+	outputPath /= sourcePath.filename();
 	outputPath.replace_extension(".bamtex");
 
 	// 1. 팩토리에서 압축기 생성

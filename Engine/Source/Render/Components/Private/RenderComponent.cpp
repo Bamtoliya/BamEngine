@@ -49,6 +49,7 @@ void RenderComponent::LateUpdate(f32 dt)
 #pragma region Material Management
 void RenderComponent::SetMaterial(const ResourceHandle<Material>& material, uint32 index)
 {
+	if (!material) return;
 	if (index >= m_MaterialInstances.size())
 		m_MaterialInstances.resize(index + 1);
 
@@ -83,6 +84,7 @@ MaterialInstance* RenderComponent::GetMaterialInstance(uint32 index) const
 #pragma region Bind
 EResult RenderComponent::BindPipeline(Mesh* mesh, MaterialInterface* material, RenderPass* renderPass)
 {
+	if (!mesh || !material || !renderPass) return EResult::InvalidArgument;
 	tagRHIPipelineDesc pipelineDesc = {};
 	pipelineDesc.Topology = mesh->GetTopology();
 	pipelineDesc.PipelineType = EPipelineType::Graphics;
