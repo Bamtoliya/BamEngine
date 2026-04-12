@@ -51,33 +51,47 @@ EResult MaterialInstance::Bind(uint32 slot)
 	if (!m_BaseMaterialHandle) return EResult::Fail;
 
 	RHI* rhi = Renderer::Get().GetRHI();
+	Material* baseMaterial = m_BaseMaterialHandle.Get();
+	if (!rhi || !baseMaterial)
+		return EResult::Fail;
 
 	// 1단계: Base Material의 텍스처 슬롯 순회
-	for (auto& [name, baseSlot] : m_BaseMaterialHandle.Get()->GetTextureSlots())
+	for (auto& baseBinding : m_BaseMaterialHandle.Get()->GetTextureBindings())
 	{
+		bool hasOverride = HasTextureBindingBySlot(baseBinding.slot) || (!baseBinding.name.empty() && HasTextureBinding(baseBinding.name));
 		// 자신에게 오버라이드가 있으면 스킵 (2단계에서 처리)
-		if (m_TextureSlots.contains(name))
+		if (hasOverride)
 			continue;
 
-		Texture* texture = baseSlot.texture.Get();
+		Texture* texture = baseBinding.texture.Get();
 		if (!texture)
 			texture = ResourceManager::Get().GetResourceHandle<Texture>(L"Resources/Texture/magenta1x1.png").Get();
-		RHISampler* sampler = baseSlot.sampler;
-		if (!sampler)
-			sampler = SamplerManager::Get().GetDefaultSampler();
-		rhi->BindTextureSampler(texture->GetRHITexture(), sampler, baseSlot.slot);
+
+		RHISampler* sampler = baseBinding.hasCustomSampler
+			? SamplerManager::Get().GetOrCreateSampler(baseBinding.samplerDesc)
+			: SamplerManager::Get().GetDefaultSampler();
+
+		if (!texture || !sampler)
+			return EResult::Fail;
+
+		if (IsFailure(rhi->BindTextureSampler(texture->GetRHITexture(), sampler, baseBinding.slot)))
+			return EResult::Fail;
 	}
 
 	// 2단계: 자신의 오버라이드 바인드
-	for (auto& [name, textureSlot] : m_TextureSlots)
+	for (auto& binding : m_TextureBindings)
 	{
-		Texture* texture = textureSlot.texture.Get();
+		Texture* texture = binding.texture.Get();
 		if (!texture)
 			texture = ResourceManager::Get().GetResourceHandle<Texture>(L"Resources/Texture/magenta1x1.png").Get();
-		RHISampler* sampler = textureSlot.sampler;
-		if (!sampler)
-			sampler = SamplerManager::Get().GetDefaultSampler();
-		rhi->BindTextureSampler(texture->GetRHITexture(), sampler, textureSlot.slot);
+		RHISampler* sampler = binding.hasCustomSampler
+			? SamplerManager::Get().GetOrCreateSampler(binding.samplerDesc)
+			: SamplerManager::Get().GetDefaultSampler();
+		if (!texture || !sampler)
+			return EResult::Fail;
+
+		if (IsFailure(rhi->BindTextureSampler(texture->GetRHITexture(), sampler, binding.slot)))
+			return EResult::Fail;
 	}
 
 	return EResult::Success;
@@ -120,29 +134,54 @@ void MaterialInstance::SetPixelShaderHandle(const ResourceHandle<Shader>& shader
 #pragma region Pipeline
 EBlendMode MaterialInstance::GetBlendMode() const
 {
-	return m_BaseMaterialHandle ? m_BaseMaterialHandle.Get()->GetBlendMode() : EBlendMode::Opaque;
+	return HasFlag(m_OverrideFlags, EPipelineOverrideFlag::BlendMode) ? m_BlendMode : (m_BaseMaterialHandle ? m_BaseMaterialHandle.Get()->GetBlendMode() : EBlendMode::Opaque);
 }
 ECullMode  MaterialInstance::GetCullMode() const
 {
-	return m_BaseMaterialHandle ? m_BaseMaterialHandle.Get()->GetCullMode() : ECullMode::Back;
+	return HasFlag(m_OverrideFlags, EPipelineOverrideFlag::CullMode) ? m_CullMode : (m_BaseMaterialHandle ? m_BaseMaterialHandle.Get()->GetCullMode() : ECullMode::Back);
 }
 EFillMode  MaterialInstance::GetFillMode() const
 {
-	return m_BaseMaterialHandle ? m_BaseMaterialHandle.Get()->GetFillMode() : EFillMode::Solid;
+	return HasFlag(m_OverrideFlags, EPipelineOverrideFlag::FillMode) ? m_FillMode : (m_BaseMaterialHandle ? m_BaseMaterialHandle.Get()->GetFillMode() : EFillMode::Solid);
 }
 EDepthMode MaterialInstance::GetDepthMode() const
 {
-	return m_BaseMaterialHandle ? m_BaseMaterialHandle.Get()->GetDepthMode() : EDepthMode::ReadWrite;
+	return HasFlag(m_OverrideFlags, EPipelineOverrideFlag::DepthMode) ? m_DepthMode : (m_BaseMaterialHandle ? m_BaseMaterialHandle.Get()->GetDepthMode() : EDepthMode::ReadWrite);
 }
 ECompareOp MaterialInstance::GetDepthCompareOp() const
 {
-	return m_BaseMaterialHandle ? m_BaseMaterialHandle.Get()->GetDepthCompareOp() : ECompareOp::Less;
+	return HasFlag(m_OverrideFlags, EPipelineOverrideFlag::DepthCompareOp) ? m_DepthCompareOp : (m_BaseMaterialHandle ? m_BaseMaterialHandle.Get()->GetDepthCompareOp() : ECompareOp::Less);
 }
-#pragma endregion
 
-
-void MaterialInstance::Deserialize(Archive& ar)
+void MaterialInstance::SetBlendMode(EBlendMode mode)
 {
-	Serialize(ar);
+	m_BlendMode = mode;
+	AddFlag(m_OverrideFlags, EPipelineOverrideFlag::BlendMode);
 }
+
+void MaterialInstance::SetCullMode(ECullMode mode)
+{
+	m_CullMode = mode;
+	AddFlag(m_OverrideFlags, EPipelineOverrideFlag::CullMode);
+}
+
+void MaterialInstance::SetFillMode(EFillMode mode)
+{
+	m_FillMode = mode;
+	AddFlag(m_OverrideFlags, EPipelineOverrideFlag::FillMode);
+}
+
+void MaterialInstance::SetDepthMode(EDepthMode mode)
+{
+	m_DepthMode = mode;
+	AddFlag(m_OverrideFlags, EPipelineOverrideFlag::DepthMode);
+}
+
+void MaterialInstance::SetDepthCompareOp(ECompareOp op)
+{
+	m_DepthCompareOp = op;
+	AddFlag(m_OverrideFlags, EPipelineOverrideFlag::DepthCompareOp);
+}
+
+#pragma endregion
 

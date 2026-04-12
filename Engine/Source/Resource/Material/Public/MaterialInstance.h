@@ -50,6 +50,7 @@ public:
 public:
 	void SetBaseMaterial(const ResourceHandle<Material>& material);
 	Material* GetBaseMaterial() const { return m_BaseMaterialHandle.Get(); }
+	const ResourceHandle<Material>& GetBaseMaterialHandle() const { return m_BaseMaterialHandle; }
 #pragma endregion
 
 
@@ -60,6 +61,21 @@ public:
 	virtual EFillMode GetFillMode() const override;
 	virtual EDepthMode GetDepthMode() const override;
 	virtual ECompareOp GetDepthCompareOp() const override;
+public:
+	virtual void SetBlendMode(EBlendMode mode) override;
+	virtual void SetCullMode(ECullMode mode) override;
+	virtual void SetFillMode(EFillMode mode) override;
+	virtual void SetDepthMode(EDepthMode mode) override;
+	virtual void SetDepthCompareOp(ECompareOp op) override;
+public:
+	void ClearBlendModeOverride() { RemoveFlag(m_OverrideFlags, EPipelineOverrideFlag::BlendMode); }
+	void ClearCullModeOverride() { RemoveFlag(m_OverrideFlags, EPipelineOverrideFlag::CullMode); }
+	void ClearFillModeOverride() { RemoveFlag(m_OverrideFlags, EPipelineOverrideFlag::FillMode); }
+	void ClearDepthModeOverride() { RemoveFlag(m_OverrideFlags, EPipelineOverrideFlag::DepthMode); }
+	void ClearDepthCompareOpOverride() { RemoveFlag(m_OverrideFlags, EPipelineOverrideFlag::DepthCompareOp); }
+public:
+	EPipelineOverrideFlag GetPipelineOverrideFlags() const { return m_OverrideFlags; }
+	void SetPipelineOverrideFlags(EPipelineOverrideFlag flags) { m_OverrideFlags = flags; }
 #pragma endregion
 
 
@@ -71,13 +87,6 @@ public:
 	virtual void SetVertexShaderHandle(const ResourceHandle<Shader>& shader);
 	virtual void SetPixelShaderHandle(const ResourceHandle<Shader>& shader);
 #pragma endregion
-
-#pragma region Save&Load
-public:
-	virtual void Deserialize(Archive& ar);
-#pragma endregion
-
-
 
 #pragma region Variable
 private:

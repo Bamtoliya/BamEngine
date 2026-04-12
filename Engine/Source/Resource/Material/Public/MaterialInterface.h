@@ -5,24 +5,29 @@
 #include "Texture.h"
 #include "RHIDefinitions.h"
 #include "ResourceHandle.h"
+#include "RHISampler.h"
 
 BEGIN(Engine)
 
-
 STRUCT()
-struct TextureSlot
+struct MaterialTextureBinding
 {
 	REFLECT_STRUCT()
-	PROPERTY()
 	uint32 slot = 0;
+
 	PROPERTY()
-	wstring textureTag = {};
+	string name = {};
+
 	PROPERTY()
 	ResourceHandle<Texture> texture;
-	PROPERTY()
-	RHISampler* sampler = { nullptr };
 
-	bool operator==(const TextureSlot& other) const = default;
+	PROPERTY()
+	bool hasCustomSampler = false;
+
+	PROPERTY()
+	tagRHISamplerDesc samplerDesc = {};
+
+	bool operator==(const MaterialTextureBinding& other) const = default;
 };
 
 ENUM()
@@ -101,21 +106,39 @@ public:
 	void SetBool(const string& name, bool value) { m_Parameters[name] = MaterialParameter(EMaterialParameterType::Bool, &value, sizeof(value)); }
 	void SetMatrix(const string& name, const mat4& value) { m_Parameters[name] = MaterialParameter(EMaterialParameterType::Matrix, &value, sizeof(value)); };
 
-	// Texture/Sampler
-	void SetTexture(const string& name, const ResourceHandle<Texture>& texture);
-	void SetTextureBySlot(uint32 slot, const ResourceHandle<Texture>& texture);
-	void SetSampler(const string& name, RHISampler* sampler);
-
 	// Getter
 	template<typename T>
-	T GetParameter(const string& name) const;
+	T GetParameter(const string& name) const;	
+#pragma endregion
+
+
+#pragma region Texture Binding Interface
+public:
+	void SetTexture(const string& name, const ResourceHandle<Texture>& texture);
+	void SetTextureBySlot(uint32 slot, const ResourceHandle<Texture>& texture);
+	void SetTextureBinding(const string& name, uint32 slot, const ResourceHandle<Texture>& texture);
+
+	void SetSamplerDesc(const string& name, const tagRHISamplerDesc& desc);
+	void SetSamplerDescBySlot(uint32 slot, const tagRHISamplerDesc& desc);
+
 	Texture* GetTexture(const string& name) const;
 	Texture* GetTextureBySlot(uint32 slot) const;
 	ResourceHandle<Texture> GetTextureHandle(const string& name) const;
 	ResourceHandle<Texture> GetTextureHandleBySlot(uint32 slot) const;
-	RHISampler* GetSampler(const string& name) const;
-	unordered_map<string, TextureSlot>& GetTextureSlots() { return m_TextureSlots; }
+
+	const tagRHISamplerDesc* GetSamplerDesc(const string& name) const;
+	const tagRHISamplerDesc* GetSamplerDescBySlot(uint32 slot) const;
+
+	bool HasTextureBinding(const string& name) const;
+	bool HasTextureBindingBySlot(uint32 slot) const;
+
+	void RemoveTextureBinding(const string& name);
+	void RemoveTextureBindingBySlot(uint32 slot);
+	void ClearTextureBindings();
+
+	const vector<MaterialTextureBinding>& GetTextureBindings() const { return m_TextureBindings; }
 #pragma endregion
+
 
 #pragma region Pipeline
 public:
@@ -125,11 +148,11 @@ public:
 	virtual EDepthMode GetDepthMode() const { return m_DepthMode; }
 	virtual ECompareOp GetDepthCompareOp() const { return m_DepthCompareOp; }
 public:
-	void SetBlendMode(EBlendMode mode) { m_BlendMode = mode; }
-	void SetCullMode(ECullMode mode) { m_CullMode = mode; }
-	void SetFillMode(EFillMode mode) { m_FillMode = mode; }
-	void SetDepthMode(EDepthMode mode) { m_DepthMode = mode; }
-	void SetDepthCompareOp(ECompareOp op) { m_DepthCompareOp = op; }
+	virtual void SetBlendMode(EBlendMode mode) { m_BlendMode = mode; }
+	virtual void SetCullMode(ECullMode mode) { m_CullMode = mode; }
+	virtual void SetFillMode(EFillMode mode) { m_FillMode = mode; }
+	virtual void SetDepthMode(EDepthMode mode) { m_DepthMode = mode; }
+	virtual void SetDepthCompareOp(ECompareOp op) { m_DepthCompareOp = op; }
 #pragma endregion
 
 #pragma region Shader
@@ -140,6 +163,18 @@ public:
 	virtual void SetVertexShaderHandle(const ResourceHandle<Shader>& shader) { m_VertexShaderHandle = shader; }
 	virtual void SetPixelShaderHandle(const ResourceHandle<Shader>& shader) { m_PixelShaderHandle = shader; }
 #pragma endregion
+
+
+#pragma region Save&Load
+public:
+	virtual void Deserialize(Archive& ar) override;
+
+protected:
+	void RebuildTextureBindingCache();
+	int32 FindTextureBindingIndexByName(const string& name) const;
+	int32 FindTextureBindingIndexBySlot(uint32 slot) const;
+#pragma endregion
+
 
 #pragma region Variable
 protected:
@@ -160,11 +195,16 @@ protected:
 	PROPERTY()
 	ResourceHandle<Shader> m_PixelShaderHandle;
 
-	PROPERTY()
+	PROPERTY(CATEGORY(L"Parameter"))
 	unordered_map<string, MaterialParameter> m_Parameters = {};
 
-	PROPERTY()
-	unordered_map<string, TextureSlot> m_TextureSlots = {};
+
+	PROPERTY(CATEGORY("Texture"))
+	vector<MaterialTextureBinding> m_TextureBindings = {};
+
+private:
+	unordered_map<string, uint32> m_TextureNameToIndex = {};
+	unordered_map<uint32, uint32> m_TextureSlotToIndex = {};
 #pragma endregion
 };
 END

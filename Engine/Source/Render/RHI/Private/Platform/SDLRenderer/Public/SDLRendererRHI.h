@@ -39,7 +39,7 @@ public:
 public:
 	virtual RHIPipeline* CreatePipeline(const tagRHIPipelineDesc& desc) override { return nullptr; }
 public:
-	virtual RHISampler* CreateSampler(const tagRHISamplerDesc& desc) override { return nullptr; }
+	virtual RHISampler* CreateSampler(const tagSamplerDesc& desc) override { return nullptr; }
 public:
 	virtual RHIShader* CreateShader(const tagRHIShaderDesc& desc) override { return nullptr; }
 #pragma endregion

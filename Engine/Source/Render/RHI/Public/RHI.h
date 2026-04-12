@@ -12,7 +12,7 @@ struct tagRHIDesc
 struct tagRHIBufferDesc;
 struct tagRHIShaderDesc;
 struct tagRHITextureDesc;
-struct tagRHISamplerDesc;
+struct tagSamplerDesc;
 struct tagRHIPipelineDesc;
 
 enum class ERHIBufferType;
@@ -60,7 +60,7 @@ public:
 public:
     virtual RHIPipeline* CreatePipeline(const tagRHIPipelineDesc& desc) PURE;
 public:
-    virtual RHISampler* CreateSampler(const tagRHISamplerDesc& desc) PURE;
+    virtual RHISampler* CreateSampler(const tagSamplerDesc& desc) PURE;
 public:
 	virtual RHIShader* CreateShader(const tagRHIShaderDesc& desc) PURE;
 #pragma endregion

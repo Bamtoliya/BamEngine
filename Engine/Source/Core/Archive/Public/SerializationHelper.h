@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "Archive.h"
 #include "ReflectionRegistry.h"
@@ -323,14 +323,17 @@ private:
 		case Engine::EPropertyType::Struct:
 		{
 			string typeName = NormalizeTypeName(varInfo.Name);
+			const TypeInfo* InnerTypeInfo = ReflectionRegistry::Get().GetType(NormalizeTypeName(varInfo.Name));
+			if(!InnerTypeInfo)
+				break;
 
-			if (ar.PushScope(propName))
+			if (propName.empty())
 			{
-				const TypeInfo* InnerTypeInfo = ReflectionRegistry::Get().GetType(NormalizeTypeName(varInfo.Name));
-				if (InnerTypeInfo)
-				{
-					SerializeReflectionProperties(ar, InnerTypeInfo, valuePtr);
-				}
+				SerializeReflectionProperties(ar, InnerTypeInfo, valuePtr);
+			}
+			else if (ar.PushScope(propName))
+			{
+				SerializeReflectionProperties(ar, InnerTypeInfo, valuePtr);
 				ar.PopScope();
 			}
 			break;

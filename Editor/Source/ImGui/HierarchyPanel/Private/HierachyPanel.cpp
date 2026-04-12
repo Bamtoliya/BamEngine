@@ -1130,7 +1130,7 @@ void HierarchyPanel::CreatePrimitive(Scene* scene, const wstring& name, const ws
 	MeshFilter* meshFilter = newGameObject->GetComponent<MeshFilter>();
 	meshFilter->SetMeshHandle(resourceMgr.GetResourceHandle<Mesh>(meshName));
 	MeshRenderer* meshRenderer = newGameObject->GetComponent<MeshRenderer>();
-	meshRenderer->SetMaterial(resourceMgr.GetResourceHandle<Material>(L"DefaultMaterial"));
+	meshRenderer->SetMaterial(resourceMgr.GetResourceHandle<Material>(L"Resources/Material/DefaultMaterial.bammat"));
 	meshRenderer->SetRenderPassID(0);
 	newGameObject->AddComponent(L"BoxCollider");
 	scene->AddGameObject(newGameObject);

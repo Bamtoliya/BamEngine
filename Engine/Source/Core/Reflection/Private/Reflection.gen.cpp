@@ -16,6 +16,7 @@
 #include "Render/Components/Public/SpriteRenderer.h"
 #include "Render/RHI/Public/RHIDefinitions.h"
 #include "Render/RHI/Public/RHIShader.h"
+#include "Render/Sampler/Public/SamplerDesc.h"
 #include "Resource/Components/MeshFilter/Public/MeshFilter.h"
 #include "Resource/Material/Public/Material.h"
 #include "Resource/Material/Public/MaterialInstance.h"
@@ -148,6 +149,21 @@ BEGIN_ENUM(ECompareOp)
 	REFLECT_ENUM_ENTRY(ECompareOp, GreaterOrEqual)
 	REFLECT_ENUM_ENTRY(ECompareOp, Always)
 END_ENUM_REFLECT(ECompareOp)
+// Enum: ESamplerFilter
+BEGIN_ENUM(ESamplerFilter)
+	REFLECT_ENUM_ENTRY(ESamplerFilter, Point)
+	REFLECT_ENUM_ENTRY(ESamplerFilter, Linear)
+	REFLECT_ENUM_ENTRY(ESamplerFilter, Anisotropic)
+END_ENUM_REFLECT(ESamplerFilter)
+
+// Enum: ESamplerAddressMode
+BEGIN_ENUM(ESamplerAddressMode)
+	REFLECT_ENUM_ENTRY(ESamplerAddressMode, Wrap)
+	REFLECT_ENUM_ENTRY(ESamplerAddressMode, Mirror)
+	REFLECT_ENUM_ENTRY(ESamplerAddressMode, Clamp)
+	REFLECT_ENUM_ENTRY(ESamplerAddressMode, Border)
+	REFLECT_ENUM_ENTRY(ESamplerAddressMode, MirrorOnce)
+END_ENUM_REFLECT(ESamplerAddressMode)
 // Enum: EPipelineOverrideFlag
 BEGIN_ENUM(EPipelineOverrideFlag)
 	REFLECT_ENUM_ENTRY(EPipelineOverrideFlag, None)
@@ -554,6 +570,24 @@ IMPLEMENT_CLASS(RHIShader, RHIResource)
 
 #pragma endregion // CLASS: RHIShader
 
+#pragma region STRUCT: tagSamplerDesc
+BEGIN_PROPERTIES(tagSamplerDesc)
+	REFLECT_PROPERTY(tagSamplerDesc, MinFilter, "ESamplerFilter", Engine::EPropertyType::Enum, {})
+	REFLECT_PROPERTY(tagSamplerDesc, MagFilter, "ESamplerFilter", Engine::EPropertyType::Enum, {})
+	REFLECT_PROPERTY(tagSamplerDesc, MipFilter, "ESamplerFilter", Engine::EPropertyType::Enum, {})
+	REFLECT_PROPERTY(tagSamplerDesc, AddressU, "ESamplerAddressMode", Engine::EPropertyType::Enum, {})
+	REFLECT_PROPERTY(tagSamplerDesc, AddressV, "ESamplerAddressMode", Engine::EPropertyType::Enum, {})
+	REFLECT_PROPERTY(tagSamplerDesc, AddressW, "ESamplerAddressMode", Engine::EPropertyType::Enum, {})
+	REFLECT_PROPERTY(tagSamplerDesc, MaxAnisotropy, "uint32", Engine::EPropertyType::UInt32, {})
+	REFLECT_PROPERTY(tagSamplerDesc, BorderColor, "vec4", Engine::EPropertyType::Vector4, {})
+END_PROPERTIES
+
+EMPTY_FUNCTIONS(tagSamplerDesc)
+
+IMPLEMENT_CLASS(tagSamplerDesc, None)
+
+#pragma endregion // STRUCT: tagSamplerDesc
+
 #pragma region CLASS: MeshFilter
 BEGIN_PROPERTIES(MeshFilter)
 	REFLECT_PROPERTY(MeshFilter, m_MeshHandle, "ResourceHandle<Mesh>", Engine::EPropertyType::ResourceHandle, {})
@@ -586,19 +620,19 @@ IMPLEMENT_CLASS(MaterialInstance, MaterialInterface)
 
 #pragma endregion // CLASS: MaterialInstance
 
-#pragma region STRUCT: TextureSlot
-BEGIN_PROPERTIES(TextureSlot)
-	REFLECT_PROPERTY(TextureSlot, slot, "uint32", Engine::EPropertyType::UInt32, {})
-	REFLECT_PROPERTY(TextureSlot, textureTag, "wstring", Engine::EPropertyType::Wstring, {})
-	REFLECT_PROPERTY(TextureSlot, texture, "ResourceHandle<Texture>", Engine::EPropertyType::ResourceHandle, {})
-	REFLECT_PROPERTY(TextureSlot, sampler, "RHISampler", Engine::EPropertyType::Object, {})
+#pragma region STRUCT: MaterialTextureBinding
+BEGIN_PROPERTIES(MaterialTextureBinding)
+	REFLECT_PROPERTY(MaterialTextureBinding, name, "string", Engine::EPropertyType::String, {})
+	REFLECT_PROPERTY(MaterialTextureBinding, texture, "ResourceHandle<Texture>", Engine::EPropertyType::ResourceHandle, {})
+	REFLECT_PROPERTY(MaterialTextureBinding, hasCustomSampler, "bool", Engine::EPropertyType::Bool, {})
+	REFLECT_PROPERTY(MaterialTextureBinding, samplerDesc, "tagRHISamplerDesc", Engine::EPropertyType::Struct, {})
 END_PROPERTIES
 
-EMPTY_FUNCTIONS(TextureSlot)
+EMPTY_FUNCTIONS(MaterialTextureBinding)
 
-IMPLEMENT_CLASS(TextureSlot, None)
+IMPLEMENT_CLASS(MaterialTextureBinding, None)
 
-#pragma endregion // STRUCT: TextureSlot
+#pragma endregion // STRUCT: MaterialTextureBinding
 
 #pragma region STRUCT: MaterialParameter
 DECLARE_CONTAINER_INFO(MaterialParameter, data, "uint8", Engine::EPropertyType::UInt8, Engine::LinearContainerAccessor<vector<uint8>, uint8>::Get())
@@ -634,8 +668,16 @@ BEGIN_METADATA(MaterialInterface, m_DepthCompareOp)
 	CATEGORY(L"Pipeline")
 END_METADATA
 
+BEGIN_METADATA(MaterialInterface, m_Parameters)
+	CATEGORY(L"Parameter")
+END_METADATA
+
 DECLARE_MAP_INFO(MaterialInterface, m_Parameters, "string", Engine::EPropertyType::String, "MaterialParameter", Engine::EPropertyType::Struct, Engine::MapAccessor<unordered_map<string, MaterialParameter>>::Get())
-DECLARE_MAP_INFO(MaterialInterface, m_TextureSlots, "string", Engine::EPropertyType::String, "TextureSlot", Engine::EPropertyType::Struct, Engine::MapAccessor<unordered_map<string, TextureSlot>>::Get())
+BEGIN_METADATA(MaterialInterface, m_TextureBindings)
+	CATEGORY("Texture")
+END_METADATA
+
+DECLARE_CONTAINER_INFO(MaterialInterface, m_TextureBindings, "MaterialTextureBinding", Engine::EPropertyType::Struct, Engine::LinearContainerAccessor<vector<MaterialTextureBinding>, MaterialTextureBinding>::Get())
 BEGIN_PROPERTIES(MaterialInterface)
 	REFLECT_PROPERTY(MaterialInterface, m_BlendMode, "EBlendMode", Engine::EPropertyType::Enum, MaterialInterface_m_BlendMode_Meta)
 	REFLECT_PROPERTY(MaterialInterface, m_CullMode, "ECullMode", Engine::EPropertyType::Enum, MaterialInterface_m_CullMode_Meta)
@@ -644,8 +686,8 @@ BEGIN_PROPERTIES(MaterialInterface)
 	REFLECT_PROPERTY(MaterialInterface, m_DepthCompareOp, "ECompareOp", Engine::EPropertyType::Enum, MaterialInterface_m_DepthCompareOp_Meta)
 	REFLECT_PROPERTY(MaterialInterface, m_VertexShaderHandle, "ResourceHandle<Shader>", Engine::EPropertyType::ResourceHandle, {})
 	REFLECT_PROPERTY(MaterialInterface, m_PixelShaderHandle, "ResourceHandle<Shader>", Engine::EPropertyType::ResourceHandle, {})
-	REFLECT_CONTAINER_PROPERTY(MaterialInterface, m_Parameters, "unordered_map<string, MaterialParameter>", Engine::EPropertyType::Map, &MaterialInterface_m_Parameters_ContainerData, {})
-	REFLECT_CONTAINER_PROPERTY(MaterialInterface, m_TextureSlots, "unordered_map<string, TextureSlot>", Engine::EPropertyType::Map, &MaterialInterface_m_TextureSlots_ContainerData, {})
+	REFLECT_CONTAINER_PROPERTY(MaterialInterface, m_Parameters, "unordered_map<string, MaterialParameter>", Engine::EPropertyType::Map, &MaterialInterface_m_Parameters_ContainerData, MaterialInterface_m_Parameters_Meta)
+	REFLECT_CONTAINER_PROPERTY(MaterialInterface, m_TextureBindings, "vector<MaterialTextureBinding>", Engine::EPropertyType::Array, &MaterialInterface_m_TextureBindings_ContainerData, MaterialInterface_m_TextureBindings_Meta)
 END_PROPERTIES
 
 EMPTY_FUNCTIONS(MaterialInterface)
