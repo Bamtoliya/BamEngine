@@ -50,13 +50,28 @@ namespace Engine
     
         PROPERTY()
         vec4 BorderColor = vec4(0.f);
+
+        bool operator==(const tagSamplerDesc& other) const
+        {
+            return MinFilter == other.MinFilter
+                && MagFilter == other.MagFilter
+                && MipFilter == other.MipFilter
+                && AddressU == other.AddressU
+                && AddressV == other.AddressV
+                && AddressW == other.AddressW
+                && MaxAnisotropy == other.MaxAnisotropy
+                && BorderColor.x == other.BorderColor.x
+                && BorderColor.y == other.BorderColor.y
+                && BorderColor.z == other.BorderColor.z
+                && BorderColor.w == other.BorderColor.w;
+        }
     };
 }
 
 template<>
-struct hash<tagSamplerDesc>
+struct hash<Engine::tagSamplerDesc>
 {
-    size_t operator()(const tagSamplerDesc& desc) const
+    size_t operator()(const Engine::tagSamplerDesc& desc) const
     {
         size_t seed = 0;
 

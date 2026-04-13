@@ -170,12 +170,12 @@ inline const Engine::PropertyInfo* FindPropertyByName(const Engine::TypeInfo& ty
 			}
 		}
 
-		if (current->ParentName.empty())
+		if (current->ParentQualifiedName.empty())
 		{
 			break;
 		}
 
-		current = Engine::ReflectionRegistry::Get().GetType(string(current->ParentName));
+		current = Engine::ReflectionRegistry::Get().GetTypeByQualifiedName(string(current->ParentQualifiedName));
 	}
 
 	return nullptr;
@@ -195,12 +195,12 @@ inline const Engine::FunctionInfo* FindFunctionByName(const Engine::TypeInfo& ty
 			}
 		}
 
-		if (current->ParentName.empty())
+		if (current->ParentQualifiedName.empty())
 		{
 			break;
 		}
 
-		current = Engine::ReflectionRegistry::Get().GetType(string(current->ParentName));
+		current = Engine::ReflectionRegistry::Get().GetTypeByQualifiedName(string(current->ParentQualifiedName));
 	}
 
 	return nullptr;
@@ -260,12 +260,12 @@ inline const Engine::FunctionInfo* FindOnChangedFunction(const Engine::TypeInfo&
 			}
 		}
 
-		if (current->ParentName.empty())
+		if (current->ParentQualifiedName.empty())
 		{
 			break;
 		}
 
-		current = Engine::ReflectionRegistry::Get().GetType(string(current->ParentName));
+		current = Engine::ReflectionRegistry::Get().GetTypeByQualifiedName(string(current->ParentQualifiedName));
 	}
 
 	return nullptr;

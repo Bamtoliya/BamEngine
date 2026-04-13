@@ -5,65 +5,78 @@
 
 BEGIN(Engine)
 void InitReflectionSystem();
+
 class ENGINE_API ReflectionRegistry : public Base
 {
-	DECLARE_SINGLETON(ReflectionRegistry)
+    DECLARE_SINGLETON(ReflectionRegistry)
 
 #pragma region Constructor&Destructor
 private:
-	ReflectionRegistry() {}
-	virtual ~ReflectionRegistry() = default;
-	EResult Initialize(void* arg = nullptr) { return EResult::Success; }
+    ReflectionRegistry() {}
+    virtual ~ReflectionRegistry() = default;
+    EResult Initialize(void* arg = nullptr) { return EResult::Success; }
+
 public:
-	virtual void Free();
+    virtual void Free();
 #pragma endregion
 
 #pragma region Type Management
 public:
-	void RegisterType(uint64 hash, const TypeInfo& typeInfo);
-	const TypeInfo* GetType(uint64 hash) const;
-	const TypeInfo* GetType(const string& name) const;
+    void RegisterType(const TypeInfo& typeInfo);
+
+    const TypeInfo* GetType(uint64 hash) const;
+    const TypeInfo* GetTypeByQualifiedName(string_view qualifiedName) const;
+    const vector<const TypeInfo*>& GetTypesByShortName(string_view shortName) const;
+
+    const TypeInfo* ResolveTypeName(string_view typeName) const;
+    bool HasType(string_view qualifiedName) const;
 #pragma endregion
 
 #pragma region Enum Management
 public:
-	void RegisterEnum(uint64 hash, const EnumInfo& enumInfo);
-	const EnumInfo* GetEnum(uint64 hash) const;
-	const EnumInfo* GetEnum(const string& name) const;
+    void RegisterEnum(const EnumInfo& enumInfo);
+
+    const EnumInfo* GetEnum(uint64 hash) const;
+    const EnumInfo* GetEnumByQualifiedName(string_view qualifiedName) const;
 #pragma endregion
 
 #pragma region Function Management
 public:
-	void RegisterFunction(uint64 hash, const FunctionInfo& functionInfo);
-	const FunctionInfo* GetFunction(uint64 hash) const;
-	const FunctionInfo* GetFunction(const string& name) const;
+    void RegisterFunction(const FunctionInfo& functionInfo);
+
+    const FunctionInfo* GetFunction(uint64 hash) const;
+    const FunctionInfo* GetFunctionByQualifiedName(string_view ownerQualifiedName, string_view signature) const;
 #pragma endregion
 
 #pragma region CDO Management
 private:
-	void EnsureCDO(const TypeInfo& type);
+    void EnsureCDO(const TypeInfo& type);
+
 public:
-	vector<uint8>* GetCDO(uint64 hash);
-	vector<uint8>* GetCDO(const string& name);
-public:
-	bool ResetPropertyToDefault(void* instance, const TypeInfo& type, const PropertyInfo& prop);
-	bool ResetObjectToDefault(void* instance, const TypeInfo& type);
-	bool IsPropertyDefault(const void* instance, const TypeInfo& type, const PropertyInfo& prop);
+    vector<uint8>* GetCDO(uint64 hash);
+    vector<uint8>* GetCDOByQualifiedName(string_view qualifiedName);
 #pragma endregion
 
 #pragma region Constructor Management
-	void* CreateInstance(uint64 hash) const;
-	void* CreateInstance(const string& name) const;
+public:
+    void* CreateInstance(uint64 hash) const;
+    void* CreateInstanceByQualifiedName(string_view qualifiedName) const;
+    void DestroyInstance(void* instance) const;
 #pragma endregion
 
-
-
-#pragma region Variable
+#pragma region Variables
 private:
-	unordered_map<uint64, const TypeInfo*> m_Types;
-	unordered_map<uint64, const EnumInfo*> m_Enums;
-	unordered_map<uint64, const FunctionInfo*> m_Functions;
-	unordered_map<uint64, vector<uint8>> m_CDOs;
+    unordered_map<uint64, const TypeInfo*> m_TypesById;
+    unordered_map<string, const TypeInfo*> m_TypesByQualifiedName;
+    unordered_map<string, vector<const TypeInfo*>> m_TypesByShortName;
+
+    unordered_map<uint64, const EnumInfo*> m_EnumsById;
+    unordered_map<string, const EnumInfo*> m_EnumsByQualifiedName;
+
+    unordered_map<uint64, const FunctionInfo*> m_FunctionsById;
+    unordered_map<string, const FunctionInfo*> m_FunctionsByQualifiedName;
+
+    unordered_map<uint64, vector<uint8>> m_CDOs;
 #pragma endregion
 };
 

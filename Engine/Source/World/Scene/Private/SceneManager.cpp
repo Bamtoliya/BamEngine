@@ -86,7 +86,7 @@ EResult SceneManager::SaveScene(Archive& archive, const wstring& filePath)
 	if (!m_CurrentScene) return EResult::Fail;
 
 	string pathStr = WStrToStr(filePath);
-	if(archive.PushScope(m_CurrentScene->GetTypeInfo().Name.data()))
+	if(archive.PushScope(m_CurrentScene->GetTypeInfo().QualifiedName.data()))
 	{
 		m_CurrentScene->Serialize(archive);
 		archive.PopScope();
@@ -111,7 +111,7 @@ EResult SceneManager::LoadScene(Archive& archive, const wstring& filePath)
 	Scene* newScene = Scene::Create();
 	if (!newScene) return EResult::Fail;
 	
-	if (archive.PushScope(newScene->GetTypeInfo().Name.data()))
+	if (archive.PushScope(newScene->GetTypeInfo().QualifiedName.data()))
 	{
 		newScene->Deserialize(archive);
 		archive.PopScope();

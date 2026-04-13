@@ -10,7 +10,7 @@ inline constexpr uint64 MetaNoSerializeHash = Engine::CompileTimeHash("NoSeriali
 class SerializationHelper
 {
 public:
-	using ResourceInstantiatorFunction = bool(*)(string_view typeName, Archive& ar, void** outInstance);
+	using ResourceInstantiatorFunction = bool(*)(string_view qualifiedTypeName, Archive& ar, void** outInstance);
 	static inline ResourceInstantiatorFunction CustomResourceInstantiator = nullptr;
 	static void SetResourceInstantiatorFunction(ResourceInstantiatorFunction func) { CustomResourceInstantiator = func; }
 
@@ -18,13 +18,21 @@ public:
 	{
 		if (!typeInfo || !instance) return;
 
-		if(!typeInfo->ParentName.empty())
+		const TypeInfo* parentTypeInfo = nullptr;
+
+		if (!typeInfo->ParentQualifiedName.empty())
 		{
-			const TypeInfo* parentTypeInfo = ReflectionRegistry::Get().GetType(typeInfo->ParentName.data());
-			if (parentTypeInfo)
-			{
-				SerializeReflectionProperties(ar, parentTypeInfo, instance);
-			}
+			parentTypeInfo = ReflectionRegistry::Get().GetTypeByQualifiedName(typeInfo->ParentQualifiedName);
+		}
+
+		if (!parentTypeInfo && !typeInfo->ParentQualifiedName.empty())
+		{
+			parentTypeInfo = ReflectionRegistry::Get().ResolveTypeName(typeInfo->ParentQualifiedName);
+		}
+
+		if (parentTypeInfo)
+		{
+			SerializeReflectionProperties(ar, parentTypeInfo, instance);
 		}
 
 		for (const auto& prop : typeInfo->Properties)
@@ -41,15 +49,38 @@ private:
 	{
 		string name(typeName);
 
-		if (name.starts_with("class "))
-			name.erase(0, 6);
-		else if (name.starts_with("struct "))
-			name.erase(0, 7);
+		auto erasePrefix = [&](string_view prefix)
+			{
+				if (name.starts_with(prefix))
+					name.erase(0, prefix.size());
+			};
 
-		while (!name.empty() && (name.back() == '*' || name.back() == ' '))
+		erasePrefix("class ");
+		erasePrefix("struct ");
+		erasePrefix("enum ");
+		erasePrefix("const ");
+
+		while (!name.empty() && (name.back() == '*' || name.back() == '&' || name.back() == ' '))
 			name.pop_back();
 
+		while (name.ends_with(" const"))
+			name.erase(name.size() - 6);
+
+		while (name.ends_with(" volatile"))
+			name.erase(name.size() - 9);
+
 		return name;
+	}
+	static const TypeInfo* ResolveTypeInfo(string_view typeName)
+	{
+		if (typeName.empty())
+			return nullptr;
+
+		string normalized = NormalizeTypeName(typeName);
+		if (normalized.empty())
+			return nullptr;
+
+		return ReflectionRegistry::Get().ResolveTypeName(normalized);
 	}
 
 	static size_t GetValueSize(const VariableInfo& varInfo, size_t explicitSize = 0)
@@ -269,15 +300,21 @@ private:
 			bool scopePushed = isInline ? true : ar.PushScope(propName.data());
 			if (scopePushed)
 			{
-				string instanceTypeName = NormalizeTypeName(varInfo.Name);
 				if (ar.IsWriting())
 				{
-					if(*objectInstance)
+					string actualTypeName;
+					if (*objectInstance)
 					{
 						Base* polyObj = static_cast<Engine::Base*>(*objectInstance);
-						string actualTypeName{ polyObj->GetTypeInfo().Name };
+						actualTypeName = string(polyObj->GetTypeInfo().QualifiedName);
 						ar.Process("__Type__", actualTypeName);
-						SerializeReflectionProperties(ar, &polyObj->GetTypeInfo(), *objectInstance);
+
+						const TypeInfo& actualTypeInfo = polyObj->GetTypeInfo();
+						SerializeReflectionProperties(ar, &actualTypeInfo, *objectInstance);
+					}
+					else
+					{
+						ar.Process("__Type__", actualTypeName);
 					}
 				}
 				else
@@ -285,36 +322,49 @@ private:
 					string loadedTypeName;
 					ar.Process("__Type__", loadedTypeName);
 
-					if (loadedTypeName.empty())
+					const TypeInfo* actualTypeInfo = ResolveTypeInfo(loadedTypeName);
+					if (!actualTypeInfo && !loadedTypeName.empty())
 					{
-						loadedTypeName = instanceTypeName;
+						*objectInstance = nullptr;
 					}
-
-					bool customInstanstiated = false;
-					if (CustomResourceInstantiator)
+					else
 					{
-						customInstanstiated = CustomResourceInstantiator(loadedTypeName, ar, objectInstance);
-					}
-					if (!customInstanstiated)
-					{
-						if (*objectInstance == nullptr)
+						bool customInstantiated = false;
+						if (CustomResourceInstantiator)
 						{
-							*objectInstance = ReflectionRegistry::Get().CreateInstance(loadedTypeName);
+							customInstantiated = CustomResourceInstantiator(loadedTypeName, ar, objectInstance);
 						}
 
-						if (*objectInstance)
+						if (!customInstantiated)
 						{
-							const TypeInfo* actualTypeInfo = ReflectionRegistry::Get().GetType(loadedTypeName);
-							if (actualTypeInfo)
+							if (*objectInstance && actualTypeInfo)
+							{
+								Base* existingBase = static_cast<Base*>(*objectInstance);
+								const TypeInfo& existingTypeInfo = existingBase->GetTypeInfo();
+
+								if (existingTypeInfo.QualifiedName != actualTypeInfo->QualifiedName)
+								{
+									ReflectionRegistry::Get().DestroyInstance(*objectInstance);
+									*objectInstance = nullptr;
+								}
+							}
+
+							if (*objectInstance == nullptr && actualTypeInfo)
+							{
+								*objectInstance = ReflectionRegistry::Get().CreateInstanceByQualifiedName(actualTypeInfo->QualifiedName);
+							}
+
+							if (*objectInstance && actualTypeInfo)
 							{
 								SerializeReflectionProperties(ar, actualTypeInfo, *objectInstance);
 							}
 						}
 					}
 				}
-				if(!isInline) ar.PopScope();
+
+				if (!isInline) ar.PopScope();
 			}
-			else if(ar.IsReading())
+			else if (ar.IsReading())
 			{
 				*objectInstance = nullptr;
 			}
@@ -322,18 +372,14 @@ private:
 		}
 		case Engine::EPropertyType::Struct:
 		{
-			string typeName = NormalizeTypeName(varInfo.Name);
-			const TypeInfo* InnerTypeInfo = ReflectionRegistry::Get().GetType(NormalizeTypeName(varInfo.Name));
-			if(!InnerTypeInfo)
-				break;
-
+			const TypeInfo* innerTypeInfo = ResolveTypeInfo(varInfo.Name);
 			if (propName.empty())
 			{
-				SerializeReflectionProperties(ar, InnerTypeInfo, valuePtr);
+				SerializeReflectionProperties(ar, innerTypeInfo, valuePtr);
 			}
 			else if (ar.PushScope(propName))
 			{
-				SerializeReflectionProperties(ar, InnerTypeInfo, valuePtr);
+				SerializeReflectionProperties(ar, innerTypeInfo, valuePtr);
 				ar.PopScope();
 			}
 			break;

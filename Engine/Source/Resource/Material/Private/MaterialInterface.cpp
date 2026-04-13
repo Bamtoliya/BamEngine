@@ -169,7 +169,7 @@ void MaterialInterface::SetTextureBinding(const string& name, uint32 slot, const
     RebuildTextureBindingCache();
 }
 
-void MaterialInterface::SetSamplerDesc(const string& name, const tagRHISamplerDesc& desc)
+void MaterialInterface::SetSamplerDesc(const string& name, const tagSamplerDesc& desc)
 {
     int32 index = FindTextureBindingIndexByName(name);
     if (index < 0)
@@ -188,7 +188,7 @@ void MaterialInterface::SetSamplerDesc(const string& name, const tagRHISamplerDe
     m_TextureBindings[index].samplerDesc = desc;
 }
 
-void MaterialInterface::SetSamplerDescBySlot(uint32 slot, const tagRHISamplerDesc& desc)
+void MaterialInterface::SetSamplerDescBySlot(uint32 slot, const tagSamplerDesc& desc)
 {
     int32 index = FindTextureBindingIndexBySlot(slot);
     if (index < 0)
@@ -247,7 +247,7 @@ ResourceHandle<Texture> MaterialInterface::GetTextureHandleBySlot(uint32 slot) c
     return ResourceHandle<Texture>();
 }
 
-const tagRHISamplerDesc* MaterialInterface::GetSamplerDesc(const string& name) const
+const Engine::tagSamplerDesc* MaterialInterface::GetSamplerDesc(const string& name) const
 {
     int32 index = FindTextureBindingIndexByName(name);
     if (index >= 0 && m_TextureBindings[index].hasCustomSampler)
@@ -257,7 +257,7 @@ const tagRHISamplerDesc* MaterialInterface::GetSamplerDesc(const string& name) c
     return nullptr;
 }
 
-const tagRHISamplerDesc* MaterialInterface::GetSamplerDescBySlot(uint32 slot) const
+const Engine::tagSamplerDesc* MaterialInterface::GetSamplerDescBySlot(uint32 slot) const
 {
     int32 index = FindTextureBindingIndexBySlot(slot);
     if (index >= 0 && m_TextureBindings[index].hasCustomSampler)

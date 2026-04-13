@@ -31,6 +31,34 @@ enum class EPropertyType : uint8
 	ResourceHandle,
 };
 
+inline bool IsQualifiedName(string_view name)
+{
+	return name.find("::") != string_view::npos;
+}
+
+inline string_view GetShortNameFromQualifiedName(string_view qualifiedName)
+{
+	const size_t pos = qualifiedName.rfind("::");
+	if (pos == string_view::npos)
+		return qualifiedName;
+	return qualifiedName.substr(pos + 2);
+}
+
+inline string_view GetNamespaceFromQualifiedName(string_view qualifiedName)
+{
+	const size_t pos = qualifiedName.rfind("::");
+	if (pos == string_view::npos)
+		return {};
+	return qualifiedName.substr(0, pos);
+}
+
+inline string MakeQualifiedMemberName(string_view ownerQualifiedName, string_view memberName)
+{
+	if (ownerQualifiedName.empty())
+		return string(memberName);
+	return std::format("{}::{}", ownerQualifiedName, memberName);
+}
+
 struct VariableInfo
 { 
 	string_view Name;
@@ -72,7 +100,8 @@ struct EnumEntry
 
 struct EnumInfo
 {
-	string_view Name;
+	uint64 ID;
+	string_view QualifiedName;
 	span<const EnumEntry> Entries;
 	string GetBitFlagsString(uint64 value) const
 	{
@@ -108,6 +137,7 @@ struct FunctionInfo
 	uint64 ID;
 	string_view Name;
 	string_view Signature;
+	string_view OwnerQualifiedName;
 	VariableInfo ReturnType;
 	span<const VariableInfo> Parameters;
 
@@ -123,8 +153,8 @@ struct FunctionInfo
 struct TypeInfo
 {
 	uint64 ID;
-	string_view Name;
-	string_view ParentName;
+	string_view QualifiedName;
+	string_view ParentQualifiedName;
 	size_t Size;
 	span<const PropertyInfo> Properties;
 	span<const FunctionInfo> Functions;

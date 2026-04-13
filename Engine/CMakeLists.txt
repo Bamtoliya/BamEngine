@@ -27,7 +27,8 @@ find_path(CPPCODEC_INCLUDE_DIRS "cppcodec/base64_rfc4648.hpp" REQUIRED)
 set(ENGINE_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Source")
 set(ENGINE_PCH_HEADER "${ENGINE_SOURCE_DIR}/Core/Public/Engine_Includes.h")
 
-set(REFLECTION_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/../ReflectionGenerator.py")
+#set(REFLECTION_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/../ReflectionGenerator.py")
+set(REFLECTION_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/../Tools/ReflectionTool/main.py")
 set(GENERATED_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/Source/Core/Reflection/Private/Reflection.gen.cpp")
 
 file(GLOB_RECURSE ENGINE_HEADERS CONFIGURE_DEPENDS "${ENGINE_SOURCE_DIR}/*.h")
@@ -74,6 +75,7 @@ if(MSVC)
     # 컴파일 옵션: 디버그 정보를 생성하여 실행 중 수정 가능하게 함 (/ZI)
     target_compile_options(${PROJECT_NAME} PRIVATE
         $<$<CONFIG:Debug>:/ZI>
+        $<$<CONFIG:Debug>:/FS>
         /Zc:preprocessor
         /MP
     )

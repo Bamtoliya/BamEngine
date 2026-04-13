@@ -12,13 +12,14 @@ struct tagRHIDesc
 struct tagRHIBufferDesc;
 struct tagRHIShaderDesc;
 struct tagRHITextureDesc;
-struct tagSamplerDesc;
+
 struct tagRHIPipelineDesc;
 
 enum class ERHIBufferType;
 
 BEGIN(Engine)
-
+TODO("tagSamplerDesc should move to out of Engine namespace because it is used in both RHI and RenderPass, and it is not related to RHI directly");
+struct tagSamplerDesc;
 class RHIBuffer;
 class RHIShader;
 class RHISampler;

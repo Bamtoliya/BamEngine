@@ -25,7 +25,7 @@ struct MaterialTextureBinding
 	bool hasCustomSampler = false;
 
 	PROPERTY()
-	tagRHISamplerDesc samplerDesc = {};
+	tagSamplerDesc samplerDesc = {};
 
 	bool operator==(const MaterialTextureBinding& other) const = default;
 };
@@ -118,16 +118,16 @@ public:
 	void SetTextureBySlot(uint32 slot, const ResourceHandle<Texture>& texture);
 	void SetTextureBinding(const string& name, uint32 slot, const ResourceHandle<Texture>& texture);
 
-	void SetSamplerDesc(const string& name, const tagRHISamplerDesc& desc);
-	void SetSamplerDescBySlot(uint32 slot, const tagRHISamplerDesc& desc);
+	void SetSamplerDesc(const string& name, const tagSamplerDesc& desc);
+	void SetSamplerDescBySlot(uint32 slot, const tagSamplerDesc& desc);
 
 	Texture* GetTexture(const string& name) const;
 	Texture* GetTextureBySlot(uint32 slot) const;
 	ResourceHandle<Texture> GetTextureHandle(const string& name) const;
 	ResourceHandle<Texture> GetTextureHandleBySlot(uint32 slot) const;
 
-	const tagRHISamplerDesc* GetSamplerDesc(const string& name) const;
-	const tagRHISamplerDesc* GetSamplerDescBySlot(uint32 slot) const;
+	const tagSamplerDesc* GetSamplerDesc(const string& name) const;
+	const tagSamplerDesc* GetSamplerDescBySlot(uint32 slot) const;
 
 	bool HasTextureBinding(const string& name) const;
 	bool HasTextureBindingBySlot(uint32 slot) const;

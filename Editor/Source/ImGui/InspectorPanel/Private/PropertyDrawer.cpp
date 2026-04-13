@@ -167,7 +167,7 @@ inline uint64 MakeAxisLockKey(const void* instance, const TypeInfo& typeInfo, co
 
 inline ETransformVectorGroup GetTransformVectorGroup(const TypeInfo& typeInfo, const PropertyInfo& property)
 {
-	if (typeInfo.Name != "Transform")
+	if (typeInfo.QualifiedName != "Engine::Transform")
 		return ETransformVectorGroup::None;
 
 	if (property.Name == "m_Position")
@@ -186,8 +186,7 @@ inline void InitializeTransformLockMasksIfNeeded()
 		return;
 
 	g_TransformLockMaskCache.Initialized = true;
-
-	const EnumInfo* enumInfo = Engine::ReflectionRegistry::Get().GetEnum("ETransformFlag");
+	const EnumInfo* enumInfo = Engine::ReflectionRegistry::Get().GetEnumByQualifiedName("Engine::ETransformFlag");
 	if (!enumInfo)
 		return;
 
@@ -303,7 +302,7 @@ string PropertyDrawer::SanitizeDisplayLabel(const TypeInfo& typeInfo, const Prop
 	string lookupKey = GetMetadataString(property.Metadata, MetaNameHash);
 	if (lookupKey.empty())
 	{
-		lookupKey = typeInfo.Name.data() + string(".") + property.Name.data();
+		lookupKey = typeInfo.QualifiedName.data() + string(".") + property.Name.data();
 	}
 
 	string displayLabel = Engine::LocalizationManager::Get().GetText(lookupKey);
@@ -319,7 +318,7 @@ string PropertyDrawer::SanitizeDisplayLabel(const TypeInfo& typeInfo, const Prop
 bool PropertyDrawer::DrawHeaderNode(void* instance, const TypeInfo& typeInfo)
 {
 	ImGui::SetNextItemAllowOverlap();
-	bool opened = ImGui::CollapsingHeader(typeInfo.Name.data(), ImGuiTreeNodeFlags_DefaultOpen);
+	bool opened = ImGui::CollapsingHeader(typeInfo.QualifiedName.data(), ImGuiTreeNodeFlags_DefaultOpen);
 	ImGui::SameLine();
 	DrawCheckbox(dynamic_cast<ActiveInterface*>(reinterpret_cast<Base*>(instance)), typeInfo);
 	return opened;

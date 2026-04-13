@@ -10,179 +10,241 @@ IMPLEMENT_LAZY_SINGLETON(ReflectionRegistry)
 
 void ReflectionRegistry::Free()
 {
-	for (auto& [typeId, buf] : m_CDOs)
-	{
-		auto it = m_Types.find(typeId);
-		if (it != m_Types.end() && it->second->Destroy != nullptr)
-			it->second->Destroy(buf.data());
-	}
+    for (auto& [typeId, buf] : m_CDOs)
+    {
+        auto it = m_TypesById.find(typeId);
+        if (it != m_TypesById.end() && it->second->Destroy != nullptr)
+        {
+            it->second->Destroy(buf.data());
+        }
+    }
 
-	m_CDOs.clear();
-	m_Types.clear();
-	m_Enums.clear();
-	m_Functions.clear();
+    m_CDOs.clear();
+
+    m_TypesById.clear();
+    m_TypesByQualifiedName.clear();
+    m_TypesByShortName.clear();
+
+    m_EnumsById.clear();
+    m_EnumsByQualifiedName.clear();
+
+    m_FunctionsById.clear();
+    m_FunctionsByQualifiedName.clear();
 }
 
 #pragma region Type Management
-void ReflectionRegistry::RegisterType(uint64 hash, const TypeInfo& typeInfo)
+
+void ReflectionRegistry::RegisterType(const TypeInfo& typeInfo)
 {
-	m_Types[hash] = &typeInfo;
+    if (typeInfo.QualifiedName.empty())
+        return;
+
+    const string qualified(typeInfo.QualifiedName);
+
+    if (m_TypesByQualifiedName.contains(qualified))
+    {
+        return;
+    }
+
+    m_TypesById[typeInfo.ID] = &typeInfo;
+    m_TypesByQualifiedName[qualified] = &typeInfo;
+
+    const string shortName(GetShortNameFromQualifiedName(typeInfo.QualifiedName));
+    m_TypesByShortName[shortName].push_back(&typeInfo);
 }
 
 const TypeInfo* ReflectionRegistry::GetType(uint64 hash) const
 {
-	auto it = m_Types.find(hash);
-	return (it != m_Types.end()) ? it->second : nullptr;
+    auto it = m_TypesById.find(hash);
+    return it != m_TypesById.end() ? it->second : nullptr;
 }
 
-const TypeInfo* ReflectionRegistry::GetType(const string& name) const
+const TypeInfo* ReflectionRegistry::GetTypeByQualifiedName(string_view qualifiedName) const
 {
-	return GetType(RunTimeHash(name));
+    auto it = m_TypesByQualifiedName.find(string(qualifiedName));
+    return it != m_TypesByQualifiedName.end() ? it->second : nullptr;
+}
+
+const vector<const TypeInfo*>& ReflectionRegistry::GetTypesByShortName(string_view shortName) const
+{
+    static const vector<const TypeInfo*> empty;
+
+    auto it = m_TypesByShortName.find(string(shortName));
+    return it != m_TypesByShortName.end() ? it->second : empty;
+}
+
+const TypeInfo* ReflectionRegistry::ResolveTypeName(string_view typeName) const
+{
+    if (typeName.empty())
+        return nullptr;
+
+    if (IsQualifiedName(typeName))
+    {
+        return GetTypeByQualifiedName(typeName);
+    }
+
+    const auto& matches = GetTypesByShortName(typeName);
+    if (matches.empty())
+        return nullptr;
+
+    if (matches.size() == 1)
+        return matches[0];
+
+    return nullptr;
+}
+
+bool ReflectionRegistry::HasType(string_view qualifiedName) const
+{
+    return GetTypeByQualifiedName(qualifiedName) != nullptr;
 }
 #pragma endregion
 
 #pragma region Enum Management
-void ReflectionRegistry::RegisterEnum(uint64 hash, const EnumInfo& enumInfo)
+
+void ReflectionRegistry::RegisterEnum(const EnumInfo& enumInfo)
 {
-	m_Enums[hash] = &enumInfo;
+    if (enumInfo.QualifiedName.empty())
+        return;
+
+    const string qualified(enumInfo.QualifiedName);
+
+    if (m_EnumsByQualifiedName.contains(qualified))
+    {
+        return;
+    }
+
+    m_EnumsById[enumInfo.ID] = &enumInfo;
+    m_EnumsByQualifiedName[qualified] = &enumInfo;
 }
 
 const EnumInfo* ReflectionRegistry::GetEnum(uint64 hash) const
 {
-	auto it = m_Enums.find(hash);
-	return (it != m_Enums.end()) ? it->second : nullptr;
+    auto it = m_EnumsById.find(hash);
+    return it != m_EnumsById.end() ? it->second : nullptr;
 }
 
-const EnumInfo* ReflectionRegistry::GetEnum(const string& name) const
+const EnumInfo* ReflectionRegistry::GetEnumByQualifiedName(string_view qualifiedName) const
 {
-	return GetEnum(RunTimeHash(name));
+    auto it = m_EnumsByQualifiedName.find(string(qualifiedName));
+    return it != m_EnumsByQualifiedName.end() ? it->second : nullptr;
 }
 #pragma endregion
 
 #pragma region Function Management
-void ReflectionRegistry::RegisterFunction(uint64 hash, const FunctionInfo& functionInfo)
+
+void ReflectionRegistry::RegisterFunction(const FunctionInfo& functionInfo)
 {
-	m_Functions[hash] = &functionInfo;
+    if (functionInfo.OwnerQualifiedName.empty() || functionInfo.Signature.empty())
+        return;
+
+    const string qualifiedKey = MakeQualifiedMemberName(functionInfo.OwnerQualifiedName, functionInfo.Signature);
+
+    if (m_FunctionsByQualifiedName.contains(qualifiedKey))
+    {
+        return;
+    }
+
+    m_FunctionsById[functionInfo.ID] = &functionInfo;
+    m_FunctionsByQualifiedName[qualifiedKey] = &functionInfo;
 }
+
 const FunctionInfo* ReflectionRegistry::GetFunction(uint64 hash) const
 {
-	auto it = m_Functions.find(hash);
-	return (it != m_Functions.end()) ? it->second : nullptr;
+    auto it = m_FunctionsById.find(hash);
+    return it != m_FunctionsById.end() ? it->second : nullptr;
 }
-const FunctionInfo* ReflectionRegistry::GetFunction(const string& name) const
+
+const FunctionInfo* ReflectionRegistry::GetFunctionByQualifiedName(string_view ownerQualifiedName, string_view signature) const
 {
-	return GetFunction(RunTimeHash(name));
+    const string key = MakeQualifiedMemberName(ownerQualifiedName, signature);
+    auto it = m_FunctionsByQualifiedName.find(key);
+    return it != m_FunctionsByQualifiedName.end() ? it->second : nullptr;
 }
 #pragma endregion
 
 #pragma region CDO Management
+
 void ReflectionRegistry::EnsureCDO(const TypeInfo& type)
 {
-	if (m_CDOs.contains(type.ID)) return;
-	if (type.Create == nullptr) return;       
+    if (m_CDOs.contains(type.ID))
+        return;
+    if (type.Create == nullptr)
+        return;
 
-	auto& buf = m_CDOs[type.ID];
-	buf.resize(type.Size);
-	type.Create(buf.data());                   
+    auto& buf = m_CDOs[type.ID];
+    buf.resize(type.Size);
+    type.Create(buf.data());
 }
 
 vector<uint8>* ReflectionRegistry::GetCDO(uint64 hash)
 {
-	auto typeIt = m_Types.find(hash);
-	if (typeIt == m_Types.end()) return nullptr;
+    const TypeInfo* type = GetType(hash);
+    if (!type)
+        return nullptr;
 
-	const TypeInfo& type = *typeIt->second;
+    if (type->Create != nullptr)
+    {
+        EnsureCDO(*type);
+        auto it = m_CDOs.find(hash);
+        return it != m_CDOs.end() ? &it->second : nullptr;
+    }
 
-	if (type.Create != nullptr)
-	{
-		EnsureCDO(type);
-		auto cdoIt = m_CDOs.find(hash);
-		return (cdoIt != m_CDOs.end()) ? &cdoIt->second : nullptr;
-	}
+    for (const auto& [childId, childType] : m_TypesById)
+    {
+        if (childType->ParentQualifiedName == type->QualifiedName && childType->Create != nullptr)
+        {
+            EnsureCDO(*childType);
+            auto cdoIt = m_CDOs.find(childId);
+            return cdoIt != m_CDOs.end() ? &cdoIt->second : nullptr;
+        }
+    }
 
-	for (const auto& [childId, childType] : m_Types)
-	{
-		if (childType->ParentName == type.Name && childType->Create != nullptr)
-		{
-			EnsureCDO(*childType);
-			auto cdoIt = m_CDOs.find(childId);
-			return (cdoIt != m_CDOs.end()) ? &cdoIt->second : nullptr;
-		}
-	}
-
-	return nullptr;
+    return nullptr;
 }
 
-vector<uint8>* ReflectionRegistry::GetCDO(const string& name)
+vector<uint8>* ReflectionRegistry::GetCDOByQualifiedName(string_view qualifiedName)
 {
-	return GetCDO(RunTimeHash(name));
-}
-
-bool ReflectionRegistry::ResetPropertyToDefault(void* instance, const TypeInfo& type, const PropertyInfo& prop)
-{
-	const vector<uint8>* cdo = GetCDO(type.ID);
-	if (!cdo) return false;
-
-	const void* defaultVal = cdo->data() + prop.Offset;
-	void* currentVal = static_cast<uint8*>(instance) + prop.Offset;
-
-	if (prop.CopyProp)
-		prop.CopyProp(currentVal, defaultVal);
-	else
-		memcpy(currentVal, defaultVal, prop.Size);
-
-	return true;
-}
-bool ReflectionRegistry::ResetObjectToDefault(void* instance, const TypeInfo& type)
-{
-	const vector<uint8>* cdo = GetCDO(type.ID);
-	if (!cdo) return false;
-
-	if (type.Copy)
-	{
-		// copy assignment: string, vector 등 non-trivial 타입 포함 안전하게 복원
-		type.Copy(instance, cdo->data());
-	}
-	else
-	{
-		// Copy 없으면 Destroy + Create 로 전체 재초기화
-		if (type.Destroy) type.Destroy(instance);
-		if (type.Create)  type.Create(instance);
-	}
-	return true;
-}
-bool ReflectionRegistry::IsPropertyDefault(const void* instance, const TypeInfo& type, const PropertyInfo& prop)
-{
-	const vector<uint8>* cdo = GetCDO(type.ID);
-	if (!cdo) return false;
-
-	const void* defaultVal = cdo->data() + prop.Offset;
-	const void* currentVal = static_cast<const uint8*>(instance) + prop.Offset;
-
-	if (prop.EqualProp)
-		return prop.EqualProp(currentVal, defaultVal);
-
-	return memcmp(currentVal, defaultVal, prop.Size) == 0;
+    const TypeInfo* type = GetTypeByQualifiedName(qualifiedName);
+    if (!type)
+        return nullptr;
+    return GetCDO(type->ID);
 }
 #pragma endregion
 
 #pragma region Constructor Management
-void* ReflectionRegistry::CreateInstance(uint64 hash) const 
+void* ReflectionRegistry::CreateInstance(uint64 hash) const
 {
-	const TypeInfo* typeInfo = GetType(hash);
-	if (typeInfo && typeInfo->Create)
-	{
-		typeInfo->Size;
-		void* instance = ::operator new(typeInfo->Size);
-		typeInfo->Create(instance);
-		return instance;
-	}
-
-	TODO("CreateInstance 구현해야함");
-	return nullptr;
+    const TypeInfo* typeInfo = GetType(hash);
+    if (typeInfo && typeInfo->Create)
+    {
+        void* instance = ::operator new(typeInfo->Size);
+        typeInfo->Create(instance);
+        return instance;
+    }
+    return nullptr;
 }
-void* ReflectionRegistry::CreateInstance(const string& name) const
+
+void* ReflectionRegistry::CreateInstanceByQualifiedName(string_view qualifiedName) const
 {
-	return CreateInstance(RunTimeHash(name));
+    const TypeInfo* typeInfo = GetTypeByQualifiedName(qualifiedName);
+    if (!typeInfo)
+        return nullptr;
+    return CreateInstance(typeInfo->ID);
+}
+
+void ReflectionRegistry::DestroyInstance(void* instance) const
+{
+    if (!instance)
+        return;
+
+    Base* base = static_cast<Base*>(instance);
+    const TypeInfo& typeInfo = base->GetTypeInfo();
+
+    if (typeInfo.Destroy)
+    {
+        typeInfo.Destroy(instance);
+    }
+
+    ::operator delete(instance);
 }
 #pragma endregion

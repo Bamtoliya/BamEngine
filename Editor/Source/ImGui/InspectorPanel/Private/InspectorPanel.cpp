@@ -136,7 +136,7 @@ bool InspectorPanel::DrawProperties(void* instance, const TypeInfo& typeInfo)
 				if(categoryOpened)
 					anyChanged |= PropertyDrawer::DrawPropertyTable(instance, *currentTypeInfo, props);
 			}	
-			currentTypeInfo = currentTypeInfo->ParentName.empty() ? nullptr : Engine::ReflectionRegistry::Get().GetType(currentTypeInfo->ParentName.data());
+			currentTypeInfo = currentTypeInfo->ParentQualifiedName.empty() ? nullptr : Engine::ReflectionRegistry::Get().GetTypeByQualifiedName(currentTypeInfo->ParentQualifiedName.data());
 		}
 	}
 	ImGui::PopID();
