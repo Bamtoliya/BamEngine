@@ -7,6 +7,8 @@ struct tagMaterialInstanceDesc : public tagResourceCreateDesc
 	ResourceHandle<Material> BaseMaterialHandle;
 };
 
+BEGIN(Engine)
+
 ENUM()
 enum class EPipelineOverrideFlag : uint8
 {
@@ -20,8 +22,6 @@ enum class EPipelineOverrideFlag : uint8
 };
 
 ENABLE_BITMASK_OPERATORS(EPipelineOverrideFlag)
-
-BEGIN(Engine)
 
 CLASS()
 class ENGINE_API MaterialInstance : public MaterialInterface

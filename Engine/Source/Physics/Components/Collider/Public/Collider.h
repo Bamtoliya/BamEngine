@@ -4,6 +4,8 @@
 #include "Structs.h"
 #include "CollisionManager.h"
 
+BEGIN(Engine)
+
 ENUM()
 enum class EColliderType : uint8
 {
@@ -18,9 +20,6 @@ struct tagColliderDesc : public tagComponentDesc
 {
 	EColliderType type = EColliderType::Box;
 };
-
-
-BEGIN(Engine)
 
 CLASS()
 class ENGINE_API Collider : public Component

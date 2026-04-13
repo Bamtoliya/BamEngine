@@ -1,6 +1,98 @@
 ﻿import os
 import re
+from dataclasses import dataclass, field
 from collections import Counter
+
+@dataclass
+class ReflectedEnum:
+    name: str
+    qualified_name: str
+    namespace_parts: list[str]
+    entries: list[str]
+    source_file: str
+
+@dataclass
+class ReflectedFunction:
+    name: str
+    signature: str
+    owner_name: str
+    owner_qualified_name: str
+    return_type_raw: str
+    params: list[tuple[str, str]]
+    qualifiers: dict[str, object]
+
+@dataclass
+class ReflectedType:
+    kind: str
+    name: str
+    qualified_name: str
+    namespace_parts: list[str]
+    parent_name: str
+    parent_qualified_name: str
+    source_file: str
+    properties: list = field(default_factory=list)
+    functions: list = field(default_factory=list)
+    generated_code: str = ""
+
+BEGIN_NAMESPACE_PATTERN = re.compile(r'BEGIN\s*\(\s*([A-Za-z_]\w*(?:::\w+)*)\s*\)')
+CPP_NAMESPACE_PATTERN = re.compile(r'namespace\s+([A-Za-z_]\w*(?:::\w+)*)\s*\{')
+END_NAMESPACE_PATTERN = re.compile(r'(?m)^\s*END\s*$')
+
+def split_namespace(ns: str) -> list[str]:
+    if not ns:
+        return []
+    return [part.strip() for part in ns.split("::") if part.strip()]
+
+def make_qualified_name(namespace_parts: list[str], local_name: str) -> str:
+    if not namespace_parts:
+        return local_name
+    return "::".join(namespace_parts + [local_name])
+
+def resolve_parent_qualified_name(current_namespace: list[str], parent_name: str) -> str:
+    parent_name = normalize_type_name(parent_name)
+    if not parent_name or parent_name == "None":
+        return ""
+    if "::" in parent_name:
+        return parent_name
+    if not current_namespace:
+        return parent_name
+    return "::".join(current_namespace + [parent_name])
+
+class NamespaceTracker:
+    def __init__(self, content: str):
+        self.content = content
+        self.events = self._build_events(content)
+
+    def _build_events(self, content: str):
+        events = []
+
+        for match in BEGIN_NAMESPACE_PATTERN.finditer(content):
+            ns_parts = split_namespace(match.group(1))
+            events.append((match.start(), "push", ns_parts))
+
+        for match in CPP_NAMESPACE_PATTERN.finditer(content):
+            ns_parts = split_namespace(match.group(1))
+            events.append((match.start(), "push", ns_parts))
+
+        for match in END_NAMESPACE_PATTERN.finditer(content):
+            events.append((match.start(), "pop", []))
+
+        events.sort(key=lambda x: x[0])
+        return events
+
+    def get_namespace_at(self, offset: int) -> list[str]:
+        stack = []
+        for pos, kind, ns_parts in self.events:
+            if pos > offset:
+                break
+
+            if kind == "push":
+                stack.extend(ns_parts)
+            elif kind == "pop":
+                if stack:
+                    stack.pop()
+
+        return stack.copy()
 
 # 1. 경로 설정
 ENGINE_SOURCE_DIR = "Engine/Source"

@@ -1,90 +1,58 @@
-﻿Project("Editor")
+﻿project(Editor)
 
-find_package(imgui CONFIG REQUIRED)
-find_package(imguizmo CONFIG REQUIRED)
-find_package(efsw CONFIG REQUIRED)
-find_package(directxtex CONFIG REQUIRED)
-
-find_package(Python3 COMPONENTS Interpreter REQUIRED)
-
-find_package(Assimp CONFIG REQUIRED)
+include("${CMAKE_SOURCE_DIR}/Projects/ReflectionCMake/ReflectionBundles.cmake")
 
 set(EDITOR_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Source")
-set(EDITOR_PCH_HEADER "${EDITOR_SOURCE_DIR}/Editor_Includes.h")
-set(THIRDPARTY_LIBRARY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../ThirdParty/")
-set(LOCALIZATION_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/../Utility/CSVToJsonConverter/localizationcsvtojson.py")
+set(EDITOR_GENERATED_SOURCE
+    "${CMAKE_CURRENT_SOURCE_DIR}/Source/Reflection/Private/Generated/EditorReflection.gen.cpp"
+)
+
 file(GLOB_RECURSE EDITOR_HEADERS CONFIGURE_DEPENDS "${EDITOR_SOURCE_DIR}/*.h")
 file(GLOB_RECURSE EDITOR_SOURCES CONFIGURE_DEPENDS "${EDITOR_SOURCE_DIR}/*.cpp")
-file(GLOB_RECURSE EDITOR_ALL_SOURCE_FILES "${EDITOR_SOURCE_DIR}/*")
+file(GLOB_RECURSE EDITOR_ALL_FILES CONFIGURE_DEPENDS "${EDITOR_SOURCE_DIR}/*")
+
+list(APPEND EDITOR_SOURCES "${EDITOR_GENERATED_SOURCE}")
 
 source_group(TREE "${EDITOR_SOURCE_DIR}" FILES ${EDITOR_HEADERS} ${EDITOR_SOURCES})
+
+set(EDITOR_PUBLIC_INCLUDE_DIRS "")
+foreach(FILE_PATH ${EDITOR_ALL_FILES})
+    get_filename_component(DIR_PATH "${FILE_PATH}" DIRECTORY)
+    if(DIR_PATH MATCHES "/Public$")
+        list(APPEND EDITOR_PUBLIC_INCLUDE_DIRS "${DIR_PATH}")
+    endif()
+endforeach()
+
+if(EDITOR_PUBLIC_INCLUDE_DIRS)
+    list(REMOVE_DUPLICATES EDITOR_PUBLIC_INCLUDE_DIRS)
+endif()
 
 add_executable(Editor
     ${EDITOR_HEADERS}
     ${EDITOR_SOURCES}
 )
 
-set_target_properties(Editor PROPERTIES UNITY_BUILD ON)
-
-# [Hot Reload] Edit and Continue 기능 활성화 (/ZI)
-if(MSVC)
-target_compile_options(Editor PRIVATE /MP) 
-    # 컴파일 옵션: 디버그 정보를 생성하여 실행 중 수정 가능하게 함 (/ZI)
-    target_compile_options(${PROJECT_NAME} PRIVATE $<$<CONFIG:Debug>:/ZI>)
-    add_compile_options(/fsanitize=address)
-    # 링크 옵션: 증분 링크 활성화 (/INCREMENTAL)
-    target_link_options(${PROJECT_NAME} PRIVATE $<$<CONFIG:Debug>:/INCREMENTAL>)
-endif()
-
-set(EDITOR_PUBLIC_INCLUDE_DIRS "")
-
-# 각 파일의 경로를 검사하여 Public 폴더를 찾습니다.
-foreach(FILE_PATH ${EDITOR_ALL_SOURCE_FILES})
-    # 파일명은 떼고 디렉토리 경로만 가져옵니다.
-    get_filename_component(DIR_PATH "${FILE_PATH}" DIRECTORY)
-    
-    # 경로가 "/Public"으로 끝나는지 확인합니다.
-    if(DIR_PATH MATCHES "/Public")
-        list(APPEND EDITOR_PUBLIC_INCLUDE_DIRS "${DIR_PATH}")
-    endif()
-endforeach()
-
-# 중복된 경로는 제거합니다.
-if(EDITOR_PUBLIC_INCLUDE_DIRS)
-    list(REMOVE_DUPLICATES EDITOR_PUBLIC_INCLUDE_DIRS)
-endif()
-
-target_include_directories(Editor PRIVATE 
-	${EDITOR_SOURCE_DIR}
-	${EDITOR_PUBLIC_INCLUDE_DIRS}
-    ${THIRDPARTY_LIBRARY_DIR}
+add_reflection_bundle(
+    TARGET Editor
+    MODULE Editor
+    SOURCE_ROOT "${EDITOR_SOURCE_DIR}"
+    OUTPUT_CPP "${EDITOR_GENERATED_SOURCE}"
+    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
 
-add_custom_target(RunLocalizationGenerator ALL
-    COMMAND ${Python3_EXECUTABLE} "${LOCALIZATION_SCRIPT}"
-    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/.."
-    COMMENT "Running Localization Generator Script..."
-    VERBATIM
+target_include_directories(Editor
+    PUBLIC
+        ${EDITOR_PUBLIC_INCLUDE_DIRS}
+    PRIVATE
+        ${EDITOR_SOURCE_DIR}
 )
 
-
-
-add_dependencies(Engine RunLocalizationGenerator)
-
-target_precompile_headers(Editor PRIVATE ${EDITOR_PCH_HEADER})
-
-target_link_libraries(Editor PRIVATE
-    Engine
-    TextureConverter
-    imgui::imgui
-    imguizmo::imguizmo
-    assimp::assimp
-    efsw::efsw
+target_link_libraries(Editor
+    PRIVATE
+        BamEngine::Engine
+        Reflection::Core
 )
 
-if(MSVC)
-    set_target_properties(Editor PROPERTIES 
-        VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
-    )
-endif()
-
+set_target_properties(Editor PROPERTIES
+    FOLDER "Applications"
+)

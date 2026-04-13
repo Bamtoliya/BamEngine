@@ -72,22 +72,22 @@ BEGIN_ENUM(ERotationMode)
 	REFLECT_ENUM_ENTRY(ERotationMode, QuaternionXYZW)
 END_ENUM_REFLECT_EX(ERotationMode, "Engine::ERotationMode")
 
-// Enum: EColliderType
+// Enum: Engine::EColliderType
 BEGIN_ENUM(EColliderType)
 	REFLECT_ENUM_ENTRY(EColliderType, Box)
 	REFLECT_ENUM_ENTRY(EColliderType, Box2D)
 	REFLECT_ENUM_ENTRY(EColliderType, Sphere)
 	REFLECT_ENUM_ENTRY(EColliderType, Capsule)
 	REFLECT_ENUM_ENTRY(EColliderType, Mesh)
-END_ENUM_REFLECT_EX(EColliderType, "EColliderType")
+END_ENUM_REFLECT_EX(EColliderType, "Engine::EColliderType")
 
-// Enum: EDrawMode
+// Enum: Engine::EDrawMode
 BEGIN_ENUM(EDrawMode)
 	REFLECT_ENUM_ENTRY(EDrawMode, Simple)
 	REFLECT_ENUM_ENTRY(EDrawMode, Sliced)
 	REFLECT_ENUM_ENTRY(EDrawMode, Tiled)
 	REFLECT_ENUM_ENTRY(EDrawMode, Filled)
-END_ENUM_REFLECT_EX(EDrawMode, "EDrawMode")
+END_ENUM_REFLECT_EX(EDrawMode, "Engine::EDrawMode")
 
 // Enum: Engine::EPipelineType
 BEGIN_ENUM(EPipelineType)
@@ -167,7 +167,7 @@ BEGIN_ENUM(ESamplerAddressMode)
 	REFLECT_ENUM_ENTRY(ESamplerAddressMode, MirrorOnce)
 END_ENUM_REFLECT_EX(ESamplerAddressMode, "Engine::ESamplerAddressMode")
 
-// Enum: EPipelineOverrideFlag
+// Enum: Engine::EPipelineOverrideFlag
 BEGIN_ENUM(EPipelineOverrideFlag)
 	REFLECT_ENUM_ENTRY(EPipelineOverrideFlag, None)
 	REFLECT_ENUM_ENTRY(EPipelineOverrideFlag, BlendMode)
@@ -176,7 +176,7 @@ BEGIN_ENUM(EPipelineOverrideFlag)
 	REFLECT_ENUM_ENTRY(EPipelineOverrideFlag, DepthMode)
 	REFLECT_ENUM_ENTRY(EPipelineOverrideFlag, DepthCompareOp)
 	REFLECT_ENUM_ENTRY(EPipelineOverrideFlag, Count)
-END_ENUM_REFLECT_EX(EPipelineOverrideFlag, "EPipelineOverrideFlag")
+END_ENUM_REFLECT_EX(EPipelineOverrideFlag, "Engine::EPipelineOverrideFlag")
 
 // Enum: Engine::EMaterialParameterType
 BEGIN_ENUM(EMaterialParameterType)
@@ -216,7 +216,7 @@ BEGIN_ENUM(ELayerFlags)
 	REFLECT_ENUM_ENTRY(ELayerFlags, Default)
 END_ENUM_REFLECT_EX(ELayerFlags, "Engine::ELayerFlags")
 
-// Enum: EObjectFlag
+// Enum: Engine::EObjectFlag
 BEGIN_ENUM(EObjectFlag)
 	REFLECT_ENUM_ENTRY(EObjectFlag, None)
 	REFLECT_ENUM_ENTRY(EObjectFlag, Active)
@@ -224,7 +224,7 @@ BEGIN_ENUM(EObjectFlag)
 	REFLECT_ENUM_ENTRY(EObjectFlag, Paused)
 	REFLECT_ENUM_ENTRY(EObjectFlag, Dead)
 	REFLECT_ENUM_ENTRY(EObjectFlag, Default)
-END_ENUM_REFLECT_EX(EObjectFlag, "EObjectFlag")
+END_ENUM_REFLECT_EX(EObjectFlag, "Engine::EObjectFlag")
 
 #pragma endregion
 
@@ -236,7 +236,7 @@ END_ENUM_REFLECT_EX(EObjectFlag, "EObjectFlag")
 BEGIN_PROPERTIES(tagComponentDesc)
 	REFLECT_PROPERTY(tagComponentDesc, Active, "bool", Engine::EPropertyType::Bool, std::span<const Engine::MetadataEntry>{})
 	REFLECT_PROPERTY(tagComponentDesc, Tag, "wstring", Engine::EPropertyType::Wstring, std::span<const Engine::MetadataEntry>{})
-	REFLECT_PROPERTY(tagComponentDesc, Owner, "class GameObject", Engine::EPropertyType::Object, std::span<const Engine::MetadataEntry>{})
+	REFLECT_PROPERTY(tagComponentDesc, Owner, "Engine::GameObject", Engine::EPropertyType::Object, std::span<const Engine::MetadataEntry>{})
 END_PROPERTIES
 EMPTY_FUNCTIONS(tagComponentDesc)
 IMPLEMENT_CLASS_EX(tagComponentDesc, "Engine::tagComponentDesc", "")
@@ -407,7 +407,7 @@ BEGIN_METADATA(Collider, m_DrawCollider)
 	EDITABLE
 END_METADATA
 BEGIN_PROPERTIES(Collider)
-	REFLECT_PROPERTY(Collider, m_Type, "EColliderType", Engine::EPropertyType::Enum, std::span<const Engine::MetadataEntry>{Collider_m_Type_Meta})
+	REFLECT_PROPERTY(Collider, m_Type, "Engine::EColliderType", Engine::EPropertyType::Enum, std::span<const Engine::MetadataEntry>{Collider_m_Type_Meta})
 	REFLECT_PROPERTY(Collider, m_DrawCollider, "bool", Engine::EPropertyType::Bool, std::span<const Engine::MetadataEntry>{Collider_m_DrawCollider_Meta})
 END_PROPERTIES
 EMPTY_FUNCTIONS(Collider)
@@ -520,7 +520,7 @@ BEGIN_PROPERTIES(SpriteRenderer)
 	REFLECT_PROPERTY(SpriteRenderer, m_Mesh, "ResourceHandle<Mesh>", Engine::EPropertyType::ResourceHandle, std::span<const Engine::MetadataEntry>{SpriteRenderer_m_Mesh_Meta})
 	REFLECT_PROPERTY(SpriteRenderer, m_Sprite, "ResourceHandle<Sprite>", Engine::EPropertyType::ResourceHandle, std::span<const Engine::MetadataEntry>{SpriteRenderer_m_Sprite_Meta})
 	REFLECT_PROPERTY(SpriteRenderer, m_CachedSpriteVersion, "uint32", Engine::EPropertyType::UInt32, std::span<const Engine::MetadataEntry>{SpriteRenderer_m_CachedSpriteVersion_Meta})
-	REFLECT_PROPERTY(SpriteRenderer, m_DrawMode, "EDrawMode", Engine::EPropertyType::Enum, std::span<const Engine::MetadataEntry>{SpriteRenderer_m_DrawMode_Meta})
+	REFLECT_PROPERTY(SpriteRenderer, m_DrawMode, "Engine::EDrawMode", Engine::EPropertyType::Enum, std::span<const Engine::MetadataEntry>{SpriteRenderer_m_DrawMode_Meta})
 END_PROPERTIES
 EMPTY_FUNCTIONS(SpriteRenderer)
 IMPLEMENT_CLASS_EX(SpriteRenderer, "Engine::SpriteRenderer", "Engine::RenderComponent")
@@ -572,7 +572,7 @@ IMPLEMENT_CLASS_EX(Material, "Engine::Material", "Engine::MaterialInterface")
 #pragma region CLASS: Engine::MaterialInstance
 BEGIN_PROPERTIES(MaterialInstance)
 	REFLECT_PROPERTY(MaterialInstance, m_BaseMaterialHandle, "ResourceHandle<Material>", Engine::EPropertyType::ResourceHandle, std::span<const Engine::MetadataEntry>{})
-	REFLECT_PROPERTY(MaterialInstance, m_OverrideFlags, "EPipelineOverrideFlag", Engine::EPropertyType::BitFlag, std::span<const Engine::MetadataEntry>{})
+	REFLECT_PROPERTY(MaterialInstance, m_OverrideFlags, "Engine::EPipelineOverrideFlag", Engine::EPropertyType::BitFlag, std::span<const Engine::MetadataEntry>{})
 END_PROPERTIES
 EMPTY_FUNCTIONS(MaterialInstance)
 IMPLEMENT_CLASS_EX(MaterialInstance, "Engine::MaterialInstance", "Engine::MaterialInterface")
@@ -641,8 +641,8 @@ BEGIN_PROPERTIES(MaterialInterface)
 	REFLECT_PROPERTY(MaterialInterface, m_DepthCompareOp, "Engine::ECompareOp", Engine::EPropertyType::Enum, std::span<const Engine::MetadataEntry>{MaterialInterface_m_DepthCompareOp_Meta})
 	REFLECT_PROPERTY(MaterialInterface, m_VertexShaderHandle, "ResourceHandle<Shader>", Engine::EPropertyType::ResourceHandle, std::span<const Engine::MetadataEntry>{})
 	REFLECT_PROPERTY(MaterialInterface, m_PixelShaderHandle, "ResourceHandle<Shader>", Engine::EPropertyType::ResourceHandle, std::span<const Engine::MetadataEntry>{})
-	REFLECT_CONTAINER_PROPERTY(MaterialInterface, m_Parameters, "unordered_map<string, MaterialParameter>", Engine::EPropertyType::Map, &MaterialInterface_m_Parameters_Root_ContainerData, std::span<const Engine::MetadataEntry>{MaterialInterface_m_Parameters_Meta})
-	REFLECT_CONTAINER_PROPERTY(MaterialInterface, m_TextureBindings, "vector<MaterialTextureBinding>", Engine::EPropertyType::Array, &MaterialInterface_m_TextureBindings_Root_ContainerData, std::span<const Engine::MetadataEntry>{MaterialInterface_m_TextureBindings_Meta})
+	REFLECT_CONTAINER_PROPERTY(MaterialInterface, m_Parameters, "unordered_map<string, Engine::MaterialParameter>", Engine::EPropertyType::Map, &MaterialInterface_m_Parameters_Root_ContainerData, std::span<const Engine::MetadataEntry>{MaterialInterface_m_Parameters_Meta})
+	REFLECT_CONTAINER_PROPERTY(MaterialInterface, m_TextureBindings, "vector<Engine::MaterialTextureBinding>", Engine::EPropertyType::Array, &MaterialInterface_m_TextureBindings_Root_ContainerData, std::span<const Engine::MetadataEntry>{MaterialInterface_m_TextureBindings_Meta})
 END_PROPERTIES
 EMPTY_FUNCTIONS(MaterialInterface)
 IMPLEMENT_CLASS_EX(MaterialInterface, "Engine::MaterialInterface", "Engine::Resource")
@@ -690,8 +690,8 @@ IMPLEMENT_CLASS_EX(Mesh, "Engine::Mesh", "Engine::Resource")
 DECLARE_CONTAINER_INFO(Model, m_Materials_Root, "Engine::Material", Engine::EPropertyType::Struct, Engine::LinearContainerAccessor<vector<Material*>, Material*>::Get())
 DECLARE_CONTAINER_INFO(Model, m_Meshes_Root, "Engine::Mesh", Engine::EPropertyType::Struct, Engine::LinearContainerAccessor<vector<Mesh*>, Mesh*>::Get())
 BEGIN_PROPERTIES(Model)
-	REFLECT_CONTAINER_PROPERTY(Model, m_Materials, "vector<Material*>", Engine::EPropertyType::Array, &Model_m_Materials_Root_ContainerData, std::span<const Engine::MetadataEntry>{})
-	REFLECT_CONTAINER_PROPERTY(Model, m_Meshes, "vector<Mesh*>", Engine::EPropertyType::Array, &Model_m_Meshes_Root_ContainerData, std::span<const Engine::MetadataEntry>{})
+	REFLECT_CONTAINER_PROPERTY(Model, m_Materials, "vector<Engine::Material*>", Engine::EPropertyType::Array, &Model_m_Materials_Root_ContainerData, std::span<const Engine::MetadataEntry>{})
+	REFLECT_CONTAINER_PROPERTY(Model, m_Meshes, "vector<Engine::Mesh*>", Engine::EPropertyType::Array, &Model_m_Meshes_Root_ContainerData, std::span<const Engine::MetadataEntry>{})
 	REFLECT_PROPERTY(Model, m_Skeleton, "Engine::Skeleton", Engine::EPropertyType::Object, std::span<const Engine::MetadataEntry>{})
 END_PROPERTIES
 EMPTY_FUNCTIONS(Model)
@@ -808,8 +808,8 @@ BEGIN_PROPERTIES(tagTextureBinaryHeader)
 	REFLECT_PROPERTY(tagTextureBinaryHeader, Depth, "uint32", Engine::EPropertyType::UInt32, std::span<const Engine::MetadataEntry>{})
 	REFLECT_PROPERTY(tagTextureBinaryHeader, MipLevels, "uint32", Engine::EPropertyType::UInt32, std::span<const Engine::MetadataEntry>{})
 	REFLECT_PROPERTY(tagTextureBinaryHeader, ArraySize, "uint32", Engine::EPropertyType::UInt32, std::span<const Engine::MetadataEntry>{})
-	REFLECT_PROPERTY(tagTextureBinaryHeader, Format, "ETextureFormat", Engine::EPropertyType::Enum, std::span<const Engine::MetadataEntry>{})
-	REFLECT_PROPERTY(tagTextureBinaryHeader, Dimension, "ETextureDimension", Engine::EPropertyType::Enum, std::span<const Engine::MetadataEntry>{})
+	REFLECT_PROPERTY(tagTextureBinaryHeader, Format, "Engine::ETextureFormat", Engine::EPropertyType::Enum, std::span<const Engine::MetadataEntry>{})
+	REFLECT_PROPERTY(tagTextureBinaryHeader, Dimension, "Engine::ETextureDimension", Engine::EPropertyType::Enum, std::span<const Engine::MetadataEntry>{})
 	REFLECT_PROPERTY(tagTextureBinaryHeader, DataSize, "uint32", Engine::EPropertyType::UInt32, std::span<const Engine::MetadataEntry>{})
 END_PROPERTIES
 EMPTY_FUNCTIONS(tagTextureBinaryHeader)
@@ -841,14 +841,14 @@ IMPLEMENT_CLASS_EX(UIComponent, "Engine::UIComponent", "Engine::Component")
 #pragma endregion // CLASS: Engine::UIComponent
 
 #pragma region CLASS: Engine::Layer
-DECLARE_CONTAINER_INFO(Layer, m_GameObjects_Root, "class GameObject", Engine::EPropertyType::Struct, Engine::LinearContainerAccessor<vector<class GameObject*>, class GameObject*>::Get())
-DECLARE_CONTAINER_INFO(Layer, m_DeadGameObjects_Root, "class GameObject", Engine::EPropertyType::Struct, Engine::LinearContainerAccessor<vector<class GameObject*>, class GameObject*>::Get())
+DECLARE_CONTAINER_INFO(Layer, m_GameObjects_Root, "Engine::GameObject", Engine::EPropertyType::Struct, Engine::LinearContainerAccessor<vector<GameObject*>, GameObject*>::Get())
+DECLARE_CONTAINER_INFO(Layer, m_DeadGameObjects_Root, "Engine::GameObject", Engine::EPropertyType::Struct, Engine::LinearContainerAccessor<vector<GameObject*>, GameObject*>::Get())
 BEGIN_PROPERTIES(Layer)
 	REFLECT_PROPERTY(Layer, m_Index, "uint32", Engine::EPropertyType::UInt32, std::span<const Engine::MetadataEntry>{})
 	REFLECT_PROPERTY(Layer, m_Name, "wstring", Engine::EPropertyType::Wstring, std::span<const Engine::MetadataEntry>{})
 	REFLECT_PROPERTY(Layer, m_Flags, "Engine::ELayerFlags", Engine::EPropertyType::BitFlag, std::span<const Engine::MetadataEntry>{})
-	REFLECT_CONTAINER_PROPERTY(Layer, m_GameObjects, "vector<class GameObject*>", Engine::EPropertyType::Array, &Layer_m_GameObjects_Root_ContainerData, std::span<const Engine::MetadataEntry>{})
-	REFLECT_CONTAINER_PROPERTY(Layer, m_DeadGameObjects, "vector<class GameObject*>", Engine::EPropertyType::Array, &Layer_m_DeadGameObjects_Root_ContainerData, std::span<const Engine::MetadataEntry>{})
+	REFLECT_CONTAINER_PROPERTY(Layer, m_GameObjects, "vector<Engine::GameObject*>", Engine::EPropertyType::Array, &Layer_m_GameObjects_Root_ContainerData, std::span<const Engine::MetadataEntry>{})
+	REFLECT_CONTAINER_PROPERTY(Layer, m_DeadGameObjects, "vector<Engine::GameObject*>", Engine::EPropertyType::Array, &Layer_m_DeadGameObjects_Root_ContainerData, std::span<const Engine::MetadataEntry>{})
 END_PROPERTIES
 EMPTY_FUNCTIONS(Layer)
 IMPLEMENT_CLASS_EX(Layer, "Engine::Layer", "Engine::Base")
@@ -899,10 +899,10 @@ BEGIN_PROPERTIES(GameObject)
 	REFLECT_PROPERTY(GameObject, m_Index, "uint32", Engine::EPropertyType::UInt32, std::span<const Engine::MetadataEntry>{GameObject_m_Index_Meta})
 	REFLECT_PROPERTY(GameObject, m_LayerIndex, "uint32", Engine::EPropertyType::UInt32, std::span<const Engine::MetadataEntry>{GameObject_m_LayerIndex_Meta})
 	REFLECT_PROPERTY(GameObject, m_Name, "wstring", Engine::EPropertyType::Wstring, std::span<const Engine::MetadataEntry>{GameObject_m_Name_Meta})
-	REFLECT_PROPERTY(GameObject, m_Flags, "EObjectFlag", Engine::EPropertyType::BitFlag, std::span<const Engine::MetadataEntry>{GameObject_m_Flags_Meta})
+	REFLECT_PROPERTY(GameObject, m_Flags, "Engine::EObjectFlag", Engine::EPropertyType::BitFlag, std::span<const Engine::MetadataEntry>{GameObject_m_Flags_Meta})
 	REFLECT_CONTAINER_PROPERTY(GameObject, m_TagSet, "unordered_set<wstring>", Engine::EPropertyType::Set, &GameObject_m_TagSet_Root_ContainerData, std::span<const Engine::MetadataEntry>{GameObject_m_TagSet_Meta})
-	REFLECT_CONTAINER_PROPERTY(GameObject, m_Components, "vector<Component*>", Engine::EPropertyType::Array, &GameObject_m_Components_Root_ContainerData, std::span<const Engine::MetadataEntry>{GameObject_m_Components_Meta})
-	REFLECT_CONTAINER_PROPERTY(GameObject, m_Childs, "vector<GameObject*>", Engine::EPropertyType::Array, &GameObject_m_Childs_Root_ContainerData, std::span<const Engine::MetadataEntry>{})
+	REFLECT_CONTAINER_PROPERTY(GameObject, m_Components, "vector<Engine::Component*>", Engine::EPropertyType::Array, &GameObject_m_Components_Root_ContainerData, std::span<const Engine::MetadataEntry>{GameObject_m_Components_Meta})
+	REFLECT_CONTAINER_PROPERTY(GameObject, m_Childs, "vector<Engine::GameObject*>", Engine::EPropertyType::Array, &GameObject_m_Childs_Root_ContainerData, std::span<const Engine::MetadataEntry>{})
 END_PROPERTIES
 EMPTY_FUNCTIONS(GameObject)
 IMPLEMENT_CLASS_EX(GameObject, "Engine::GameObject", "Engine::Base")
@@ -910,11 +910,11 @@ IMPLEMENT_CLASS_EX(GameObject, "Engine::GameObject", "Engine::Base")
 #pragma endregion // CLASS: Engine::GameObject
 
 #pragma region CLASS: Engine::Scene
-DECLARE_CONTAINER_INFO(Scene, m_Layers_Root, "class Layer", Engine::EPropertyType::Struct, Engine::LinearContainerAccessor<vector<class Layer*>, class Layer*>::Get())
+DECLARE_CONTAINER_INFO(Scene, m_Layers_Root, "Engine::Layer", Engine::EPropertyType::Struct, Engine::LinearContainerAccessor<vector<Layer*>, Layer*>::Get())
 BEGIN_PROPERTIES(Scene)
 	REFLECT_PROPERTY(Scene, m_Flags, "ESceneFlags", Engine::EPropertyType::BitFlag, std::span<const Engine::MetadataEntry>{})
 	REFLECT_PROPERTY(Scene, m_Name, "wstring", Engine::EPropertyType::Wstring, std::span<const Engine::MetadataEntry>{})
-	REFLECT_CONTAINER_PROPERTY(Scene, m_Layers, "vector<class Layer*>", Engine::EPropertyType::Array, &Scene_m_Layers_Root_ContainerData, std::span<const Engine::MetadataEntry>{})
+	REFLECT_CONTAINER_PROPERTY(Scene, m_Layers, "vector<Engine::Layer*>", Engine::EPropertyType::Array, &Scene_m_Layers_Root_ContainerData, std::span<const Engine::MetadataEntry>{})
 END_PROPERTIES
 EMPTY_FUNCTIONS(Scene)
 IMPLEMENT_CLASS_EX(Scene, "Engine::Scene", "Engine::Base")

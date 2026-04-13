@@ -6,6 +6,17 @@
 #include "ComponentRegistry.h"
 #include "CommonInterface.h"
 
+
+
+#pragma region Struct
+struct tagGameObjectDesc
+{
+	wstring name = L"GameObject";
+};
+#pragma endregion
+
+BEGIN(Engine)
+
 ENUM()
 enum class EObjectFlag : uint8
 {
@@ -19,14 +30,6 @@ enum class EObjectFlag : uint8
 
 ENABLE_BITMASK_OPERATORS(EObjectFlag)
 
-#pragma region Struct
-struct tagGameObjectDesc
-{
-	wstring name = L"GameObject";
-};
-#pragma endregion
-
-BEGIN(Engine)
 class Transform;
 CLASS()
 class ENGINE_API GameObject : public Base, public SerializableInterface, public ActiveInterface, public VisibleInterface

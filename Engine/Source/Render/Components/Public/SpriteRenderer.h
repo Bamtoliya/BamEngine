@@ -5,6 +5,9 @@
 #include "Sprite.h"
 #include "Material.h"
 
+
+BEGIN(Engine)
+
 ENUM()
 enum class EDrawMode
 {
@@ -13,9 +16,6 @@ enum class EDrawMode
 	Tiled,
 	Filled
 };
-
-BEGIN(Engine)
-
 
 CLASS()
 class ENGINE_API SpriteRenderer : public RenderComponent
