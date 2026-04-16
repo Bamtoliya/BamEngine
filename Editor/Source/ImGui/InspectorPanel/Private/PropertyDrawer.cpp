@@ -44,75 +44,144 @@ inline bool ParseNumberList(string_view literal, vector<f32>& out)
 
 	for (std::sregex_iterator it(args.begin(), args.end(), numberPattern), end; it != end; ++it)
 	{
-		try { out.push_back(static_cast<f32>(std::stod(it->str()))); }
-		catch (...) { return false; }
+		try
+		{
+			out.push_back(static_cast<f32>(std::stod(it->str())));
+		}
+		catch (...)
+		{
+			return false;
+		}
 	}
+
 	return !out.empty();
-}
-
-template<typename T>
-bool TryGetDefaultFromCDO(const TypeInfo& typeInfo, const PropertyInfo& property, T& outValue)
-{
-	vector<uint8>* cdo = Engine::ReflectionRegistry::Get().GetCDO(typeInfo.ID);
-	if (!cdo) return false;
-	if (property.Offset + sizeof(T) > cdo->size()) return false;
-
-	outValue = *reinterpret_cast<const T*>(cdo->data() + property.Offset);
-	return true;
 }
 
 template<typename T>
 bool TryGetDefaultFromMetadata(const PropertyInfo& property, T& outValue)
 {
 	const Engine::MetadataEntry* entry = FindMetadata(property.Metadata, MetaDefaultHash);
-	if (!entry) return false;
-
-	if (const T* typed = std::get_if<T>(&entry->Value))
+	if (!entry)
 	{
-		outValue = *typed;
-		return true;
+		return false;
+	}
+
+	if constexpr (std::is_same_v<T, bool>)
+	{
+		if (const bool* typed = std::get_if<bool>(&entry->Value))
+		{
+			outValue = *typed;
+			return true;
+		}
+	}
+	else if constexpr (std::is_integral_v<T> && std::is_signed_v<T>)
+	{
+		if (const int64* typed = std::get_if<int64>(&entry->Value))
+		{
+			outValue = static_cast<T>(*typed);
+			return true;
+		}
+	}
+	else if constexpr (std::is_integral_v<T> && std::is_unsigned_v<T>)
+	{
+		if (const uint64* typed = std::get_if<uint64>(&entry->Value))
+		{
+			outValue = static_cast<T>(*typed);
+			return true;
+		}
+	}
+	else if constexpr (std::is_floating_point_v<T>)
+	{
+		if (const double* typed = std::get_if<double>(&entry->Value))
+		{
+			outValue = static_cast<T>(*typed);
+			return true;
+		}
 	}
 
 	const string literal = GetMetadataString(property.Metadata, MetaDefaultHash);
-	if (literal.empty()) return false;
+	if (literal.empty())
+	{
+		return false;
+	}
 
 	try
 	{
-		if constexpr (std::is_same_v<T, int32_t>) { outValue = static_cast<int32_t>(std::stoll(literal)); return true; }
-		if constexpr (std::is_same_v<T, int64_t>) { outValue = static_cast<int64_t>(std::stoll(literal)); return true; }
-		if constexpr (std::is_same_v<T, uint32_t>) { outValue = static_cast<uint32_t>(std::stoull(literal)); return true; }
-		if constexpr (std::is_same_v<T, uint64_t>) { outValue = static_cast<uint64_t>(std::stoull(literal)); return true; }
-		if constexpr (std::is_same_v<T, f32>) { outValue = static_cast<f32>(std::stod(literal)); return true; }
+		if constexpr (std::is_integral_v<T> && std::is_signed_v<T>)
+		{
+			outValue = static_cast<T>(std::stoll(literal));
+			return true;
+		}
+
+		if constexpr (std::is_integral_v<T> && std::is_unsigned_v<T>)
+		{
+			outValue = static_cast<T>(std::stoull(literal));
+			return true;
+		}
+
+		if constexpr (std::is_same_v<T, f32>)
+		{
+			outValue = static_cast<f32>(std::stod(literal));
+			return true;
+		}
+
+		if constexpr (std::is_same_v<T, double>)
+		{
+			outValue = std::stod(literal);
+			return true;
+		}
+
 		if constexpr (std::is_same_v<T, vec2>)
 		{
 			vector<f32> nums;
-			if (!ParseNumberList(literal, nums) || nums.size() < 2) return false;
+			if (!ParseNumberList(literal, nums) || nums.size() < 2)
+			{
+				return false;
+			}
+
 			outValue = vec2(nums[0], nums[1]);
 			return true;
 		}
+
 		if constexpr (std::is_same_v<T, vec3>)
 		{
 			vector<f32> nums;
-			if (!ParseNumberList(literal, nums) || nums.size() < 3) return false;
+			if (!ParseNumberList(literal, nums) || nums.size() < 3)
+			{
+				return false;
+			}
+
 			outValue = vec3(nums[0], nums[1], nums[2]);
 			return true;
 		}
+
 		if constexpr (std::is_same_v<T, vec4>)
 		{
 			vector<f32> nums;
-			if (!ParseNumberList(literal, nums) || nums.size() < 4) return false;
+			if (!ParseNumberList(literal, nums) || nums.size() < 4)
+			{
+				return false;
+			}
+
 			outValue = vec4(nums[0], nums[1], nums[2], nums[3]);
 			return true;
 		}
+
 		if constexpr (std::is_same_v<T, quat>)
 		{
 			vector<f32> nums;
-			if (!ParseNumberList(literal, nums) || nums.size() < 4) return false;
-			outValue = quat(nums[3], nums[0], nums[1], nums[2]); // w, x, y, z
+			if (!ParseNumberList(literal, nums) || nums.size() < 4)
+			{
+				return false;
+			}
+
+			outValue = quat(nums[3], nums[0], nums[1], nums[2]);
 			return true;
 		}
 	}
-	catch (...) {}
+	catch (...)
+	{
+	}
 
 	return false;
 }
@@ -121,9 +190,76 @@ template<typename T>
 T ResolveDefaultValue(const TypeInfo& typeInfo, const PropertyInfo& property, const T& fallback)
 {
 	T value = fallback;
-	if (TryGetDefaultFromMetadata<T>(property, value)) return value;
-	if (TryGetDefaultFromCDO<T>(typeInfo, property, value)) return value;
+	if (TryGetDefaultFromMetadata<T>(property, value))
+	{
+		return value;
+	}
+
 	return fallback;
+}
+
+inline bool MatchesNormalizedTypeName(string_view rawTypeName, string_view expected)
+{
+	return NormalizeReflectedTypeName(rawTypeName) == expected;
+}
+
+inline bool IsVector2Property(const PropertyInfo& property)
+{
+	return property.TypeInfo.Type == EPropertyType::UserDefined &&
+		(MatchesNormalizedTypeName(property.TypeInfo.Name, "vec2") || MatchesNormalizedTypeName(property.TypeInfo.Name, "glm::vec2"));
+}
+
+inline bool IsVector3Property(const PropertyInfo& property)
+{
+	return property.TypeInfo.Type == EPropertyType::UserDefined &&
+		(MatchesNormalizedTypeName(property.TypeInfo.Name, "vec3") || MatchesNormalizedTypeName(property.TypeInfo.Name, "glm::vec3"));
+}
+
+inline bool IsVector4Property(const PropertyInfo& property)
+{
+	return property.TypeInfo.Type == EPropertyType::UserDefined &&
+		(MatchesNormalizedTypeName(property.TypeInfo.Name, "vec4") || MatchesNormalizedTypeName(property.TypeInfo.Name, "glm::vec4"));
+}
+
+inline bool IsQuaternionProperty(const PropertyInfo& property)
+{
+	return property.TypeInfo.Type == EPropertyType::UserDefined &&
+		(MatchesNormalizedTypeName(property.TypeInfo.Name, "quat") || MatchesNormalizedTypeName(property.TypeInfo.Name, "glm::quat"));
+}
+
+inline bool IsMatrix3Property(const PropertyInfo& property)
+{
+	return property.TypeInfo.Type == EPropertyType::UserDefined &&
+		(MatchesNormalizedTypeName(property.TypeInfo.Name, "mat3") || MatchesNormalizedTypeName(property.TypeInfo.Name, "glm::mat3"));
+}
+
+inline bool IsMatrix4Property(const PropertyInfo& property)
+{
+	return property.TypeInfo.Type == EPropertyType::UserDefined &&
+		(MatchesNormalizedTypeName(property.TypeInfo.Name, "mat4") || MatchesNormalizedTypeName(property.TypeInfo.Name, "glm::mat4"));
+}
+
+inline bool IsColorProperty(const PropertyInfo& property)
+{
+	return HasMetadataColor(property.Metadata) ||
+		MatchesNormalizedTypeName(property.TypeInfo.Name, "Color") ||
+		MatchesNormalizedTypeName(property.TypeInfo.Name, "Engine::Color");
+}
+
+inline uint32 GetVectorComponentCount(const PropertyInfo& property)
+{
+	if (IsVector2Property(property)) return 2;
+	if (IsVector3Property(property)) return 3;
+	if (IsVector4Property(property)) return 4;
+	if (IsQuaternionProperty(property)) return 4;
+	return 0;
+}
+
+inline uint32 GetMatrixDimension(const PropertyInfo& property)
+{
+	if (IsMatrix3Property(property)) return 3;
+	if (IsMatrix4Property(property)) return 4;
+	return 0;
 }
 #pragma endregion
 
@@ -183,15 +319,22 @@ inline ETransformVectorGroup GetTransformVectorGroup(const TypeInfo& typeInfo, c
 inline void InitializeTransformLockMasksIfNeeded()
 {
 	if (g_TransformLockMaskCache.Initialized)
+	{
 		return;
+	}
 
 	g_TransformLockMaskCache.Initialized = true;
-	const EnumInfo* enumInfo = Engine::ReflectionRegistry::Get().GetEnumByQualifiedName("Engine::ETransformFlag");
+	const EnumInfo* enumInfo = reflection::Registry::Get().GetEnumByQualifiedName("Engine::ETransformFlag");
 	if (!enumInfo)
-		return;
-
-	for (const auto& [name, val] : enumInfo->Entries)
 	{
+		return;
+	}
+
+	for (const auto& entry : enumInfo->Entries)
+	{
+		const string_view name = entry.Name;
+		const uint64 val = entry.Value;
+
 		if (name == "Static")        g_TransformLockMaskCache.StaticMask = val;
 		if (name == "LockPositionX") g_TransformLockMaskCache.PositionMasks[0] = val;
 		if (name == "LockPositionY") g_TransformLockMaskCache.PositionMasks[1] = val;
@@ -403,45 +546,64 @@ bool PropertyDrawer::DrawProperty(void* instance, void* data, const TypeInfo& ty
 {
 	switch (property.TypeInfo.Type)
 	{
+	case EPropertyType::Int8:
+	case EPropertyType::Int16:
 	case EPropertyType::Int32:
 	case EPropertyType::Int64:
+	case EPropertyType::UInt8:
+	case EPropertyType::UInt16:
 	case EPropertyType::UInt32:
-	case EPropertyType::UInt64:		return DrawIntegerProperty(data, typeinfo, property);
+	case EPropertyType::UInt64:
+		return DrawIntegerProperty(data, typeinfo, property);
 
-	case EPropertyType::F64:
-	case EPropertyType::F32:
-	case EPropertyType::Double:
-	case EPropertyType::Float:		return DrawFloatProperty(data, typeinfo, property);
+	case EPropertyType::Float32:
+	case EPropertyType::Float64:
+		return DrawFloatProperty(data, typeinfo, property);
 
-	case EPropertyType::Bool:		return DrawBooleanProperty(data, typeinfo, property);
+	case EPropertyType::Bool:
+		return DrawBooleanProperty(data, typeinfo, property);
 
-	case EPropertyType::Wstring:
-	case EPropertyType::String:		return DrawStringProperty(data, typeinfo, property);
+	case EPropertyType::String:
+	case EPropertyType::WString:
+		return DrawStringProperty(data, typeinfo, property);
 
-	//case EPropertyType::Map: return DrawMapProperty(data, typeinfo, property);
-	case EPropertyType::List: return DrawListProperty(data, typeinfo, property);
+	case EPropertyType::Array:
+	case EPropertyType::List:
+		return DrawListProperty(data, typeinfo, property);
 
-	case EPropertyType::Vector2: 
-	case EPropertyType::Vector3: 
-	case EPropertyType::Vector4: 
-	case EPropertyType::Quaternion: return DrawVectorProperty(instance, data, typeinfo, property);
+	case EPropertyType::Enum:
+		return DrawEnumProperty(data, typeinfo, property);
 
-	case EPropertyType::Color:		return DrawColorProperty(data, typeinfo, property);
+	case EPropertyType::BitFlag:
+		return DrawBitFlagProperty(data, typeinfo, property);
 
-	case EPropertyType::Matrix3:
-	case EPropertyType::Matrix4:	return DrawMatrixProperty(data, typeinfo, property);
+	case EPropertyType::ResourceHandle:
+		return DrawResourceHandleProperty(data, typeinfo, property);
 
-	//case EPropertyType::Struct: return PropertyDrawer::DrawStructProperty(data, typeinfo, property);
-	//case EPropertyType::Set: return DrawSetProperty(data, typeinfo, property);
+	case EPropertyType::UserDefined:
+		if (IsColorProperty(property))
+		{
+			return DrawColorProperty(data, typeinfo, property);
+		}
 
-	case EPropertyType::Enum:		return DrawEnumProperty(data, typeinfo, property);
+		if (GetVectorComponentCount(property) != 0)
+		{
+			return DrawVectorProperty(instance, data, typeinfo, property);
+		}
 
-	case EPropertyType::BitFlag:	return DrawBitFlagProperty(data, typeinfo, property);
-	case EPropertyType::ResourceHandle: return DrawResourceHandleProperty(data, typeinfo, property);
+		if (GetMatrixDimension(property) != 0)
+		{
+			return DrawMatrixProperty(data, typeinfo, property);
+		}
+
+		break;
+
 	default:
-		ImGui::Text("Unsupported Type");
-		return false;
+		break;
 	}
+
+	ImGui::Text("Unsupported Type");
+	return false;
 }
 
 #pragma region Property Variables
@@ -449,12 +611,16 @@ bool PropertyDrawer::DrawProperty(void* instance, void* data, const TypeInfo& ty
 //Integer 타입(드래그로 값 조절)
 bool PropertyDrawer::DrawIntegerProperty(void* data, const TypeInfo& typeinfo, const PropertyInfo& property)
 {
-	
-	ImGuiDataType dataType;
+	ImGuiDataType dataType = ImGuiDataType_S32;
+
 	switch (property.TypeInfo.Type)
 	{
-	case EPropertyType::Int32: dataType = ImGuiDataType_S32; break;
-	case EPropertyType::Int64: dataType = ImGuiDataType_S64; break;
+	case EPropertyType::Int8:   dataType = ImGuiDataType_S8; break;
+	case EPropertyType::Int16:  dataType = ImGuiDataType_S16; break;
+	case EPropertyType::Int32:  dataType = ImGuiDataType_S32; break;
+	case EPropertyType::Int64:  dataType = ImGuiDataType_S64; break;
+	case EPropertyType::UInt8:  dataType = ImGuiDataType_U8; break;
+	case EPropertyType::UInt16: dataType = ImGuiDataType_U16; break;
 	case EPropertyType::UInt32: dataType = ImGuiDataType_U32; break;
 	case EPropertyType::UInt64: dataType = ImGuiDataType_U64; break;
 	default:
@@ -464,36 +630,77 @@ bool PropertyDrawer::DrawIntegerProperty(void* data, const TypeInfo& typeinfo, c
 
 	bool changed = ImGui::DragScalar("##value", dataType, data);
 
-	MetaRange* range = GetMetadataRange(property.Metadata, MetaRangeHash);
-	bool hasRange = (range != nullptr);
+	const auto range = GetMetadataRange(property.Metadata);
+	const bool hasRange = range.has_value();
 
-	
 	switch (property.TypeInfo.Type)
 	{
+	case EPropertyType::Int8:
+	{
+		const int8_t resetValue = ResolveDefaultValue<int8_t>(typeinfo, property, 0);
+		changed |= ApplyMouseWheelInput(reinterpret_cast<int8_t*>(data), resetValue, 1.0f, 10.0f, hasRange,
+			hasRange ? static_cast<int8_t>(range->Min) : static_cast<int8_t>(0),
+			hasRange ? static_cast<int8_t>(range->Max) : static_cast<int8_t>(0));
+		break;
+	}
+	case EPropertyType::Int16:
+	{
+		const int16_t resetValue = ResolveDefaultValue<int16_t>(typeinfo, property, 0);
+		changed |= ApplyMouseWheelInput(reinterpret_cast<int16_t*>(data), resetValue, 1.0f, 10.0f, hasRange,
+			hasRange ? static_cast<int16_t>(range->Min) : static_cast<int16_t>(0),
+			hasRange ? static_cast<int16_t>(range->Max) : static_cast<int16_t>(0));
+		break;
+	}
 	case EPropertyType::Int32:
 	{
 		const int32_t resetValue = ResolveDefaultValue<int32_t>(typeinfo, property, 0);
-		changed |= ApplyMouseWheelInput(reinterpret_cast<int32_t*>(data), resetValue, 1.0f, 10.0f, hasRange, hasRange ? static_cast<int32_t>(range->Min) : 0, hasRange ? static_cast<int32_t>(range->Max) : 0);
+		changed |= ApplyMouseWheelInput(reinterpret_cast<int32_t*>(data), resetValue, 1.0f, 10.0f, hasRange,
+			hasRange ? static_cast<int32_t>(range->Min) : static_cast<int32_t>(0),
+			hasRange ? static_cast<int32_t>(range->Max) : static_cast<int32_t>(0));
 		break;
 	}
 	case EPropertyType::Int64:
 	{
 		const int64_t resetValue = ResolveDefaultValue<int64_t>(typeinfo, property, 0);
-		changed |= ApplyMouseWheelInput(reinterpret_cast<int64_t*>(data), resetValue, 1.0f, 10.0f, hasRange, hasRange ? static_cast<int64_t>(range->Min) : 0, hasRange ? static_cast<int64_t>(range->Max) : 0);
+		changed |= ApplyMouseWheelInput(reinterpret_cast<int64_t*>(data), resetValue, 1.0f, 10.0f, hasRange,
+			hasRange ? static_cast<int64_t>(range->Min) : static_cast<int64_t>(0),
+			hasRange ? static_cast<int64_t>(range->Max) : static_cast<int64_t>(0));
+		break;
+	}
+	case EPropertyType::UInt8:
+	{
+		const uint8_t resetValue = ResolveDefaultValue<uint8_t>(typeinfo, property, 0);
+		changed |= ApplyMouseWheelInput(reinterpret_cast<uint8_t*>(data), resetValue, 1.0f, 10.0f, hasRange,
+			hasRange ? static_cast<uint8_t>(range->Min) : static_cast<uint8_t>(0),
+			hasRange ? static_cast<uint8_t>(range->Max) : static_cast<uint8_t>(0));
+		break;
+	}
+	case EPropertyType::UInt16:
+	{
+		const uint16_t resetValue = ResolveDefaultValue<uint16_t>(typeinfo, property, 0);
+		changed |= ApplyMouseWheelInput(reinterpret_cast<uint16_t*>(data), resetValue, 1.0f, 10.0f, hasRange,
+			hasRange ? static_cast<uint16_t>(range->Min) : static_cast<uint16_t>(0),
+			hasRange ? static_cast<uint16_t>(range->Max) : static_cast<uint16_t>(0));
 		break;
 	}
 	case EPropertyType::UInt32:
 	{
 		const uint32_t resetValue = ResolveDefaultValue<uint32_t>(typeinfo, property, 0u);
-		changed |= ApplyMouseWheelInput(reinterpret_cast<uint32_t*>(data), resetValue, 1.0f, 10.0f, hasRange, hasRange ? static_cast<uint32_t>(range->Min) : 0, hasRange ? static_cast<uint32_t>(range->Max) : 0);
+		changed |= ApplyMouseWheelInput(reinterpret_cast<uint32_t*>(data), resetValue, 1.0f, 10.0f, hasRange,
+			hasRange ? static_cast<uint32_t>(range->Min) : static_cast<uint32_t>(0),
+			hasRange ? static_cast<uint32_t>(range->Max) : static_cast<uint32_t>(0));
 		break;
 	}
 	case EPropertyType::UInt64:
 	{
 		const uint64_t resetValue = ResolveDefaultValue<uint64_t>(typeinfo, property, 0ull);
-		changed |= ApplyMouseWheelInput(reinterpret_cast<uint64_t*>(data), resetValue, 1.0f, 10.0f, hasRange, hasRange ? static_cast<uint64_t>(range->Min) : 0, hasRange ? static_cast<uint64_t>(range->Max) : 0);
+		changed |= ApplyMouseWheelInput(reinterpret_cast<uint64_t*>(data), resetValue, 1.0f, 10.0f, hasRange,
+			hasRange ? static_cast<uint64_t>(range->Min) : static_cast<uint64_t>(0),
+			hasRange ? static_cast<uint64_t>(range->Max) : static_cast<uint64_t>(0));
 		break;
 	}
+	default:
+		break;
 	}
 
 	return changed;
@@ -502,19 +709,46 @@ bool PropertyDrawer::DrawIntegerProperty(void* data, const TypeInfo& typeinfo, c
 //Float 타입(드래그로 값 조절)
 bool PropertyDrawer::DrawFloatProperty(void* data, const TypeInfo& typeinfo, const PropertyInfo& property)
 {
-	bool changed = false;
-	const f32 resetValue = ResolveDefaultValue<f32>(typeinfo, property, 0.0f);
-	MetaRange* range = GetMetadataRange(property.Metadata, MetaRangeHash);
-	if (range)
+	const auto range = GetMetadataRange(property.Metadata);
+
+	if (property.TypeInfo.Type == EPropertyType::Float64)
 	{
-		changed |= ImGui::SliderFloat("##value", reinterpret_cast<f32*>(data), range->Min, range->Max, "%.3f", ImGuiSliderFlags_None);
-		changed |= ApplyMouseWheelInput(reinterpret_cast<f32*>(data), resetValue, range->Speed, range->Speed * 10.0f, true, range->Min, range->Max);
+		bool changed = false;
+		double* value = reinterpret_cast<double*>(data);
+		const double resetValue = ResolveDefaultValue<double>(typeinfo, property, 0.0);
+
+		if (range.has_value())
+		{
+			const double minValue = static_cast<double>(range->Min);
+			const double maxValue = static_cast<double>(range->Max);
+
+			changed |= ImGui::SliderScalar("##value", ImGuiDataType_Double, value, &minValue, &maxValue, "%.3f");
+			changed |= ApplyMouseWheelInput(value, resetValue, range->Speed, range->Speed * 10.0f, true, minValue, maxValue);
+		}
+		else
+		{
+			changed |= ImGui::DragScalar("##value", ImGuiDataType_Double, value);
+			changed |= ApplyMouseWheelInput(value, resetValue, 0.1f, 1.0f);
+		}
+
+		return changed;
+	}
+
+	bool changed = false;
+	f32* value = reinterpret_cast<f32*>(data);
+	const f32 resetValue = ResolveDefaultValue<f32>(typeinfo, property, 0.0f);
+
+	if (range.has_value())
+	{
+		changed |= ImGui::SliderFloat("##value", value, range->Min, range->Max, "%.3f", ImGuiSliderFlags_None);
+		changed |= ApplyMouseWheelInput(value, resetValue, range->Speed, range->Speed * 10.0f, true, range->Min, range->Max);
 	}
 	else
 	{
-		changed |= ImGui::DragFloat("##value", reinterpret_cast<f32*>(data));
-		changed |= ApplyMouseWheelInput(reinterpret_cast<f32*>(data), resetValue, 0.1f, 1.0f);
+		changed |= ImGui::DragFloat("##value", value);
+		changed |= ApplyMouseWheelInput(value, resetValue, 0.1f, 1.0f);
 	}
+
 	return changed;
 }
 
@@ -536,18 +770,20 @@ bool PropertyDrawer::DrawStringProperty(void* data, const TypeInfo& typeinfo, co
 		string* strData = reinterpret_cast<string*>(data);
 		char buffer[1024];
 		strcpy_s(buffer, strData->c_str());
+
 		if (ImGui::InputText("##value", buffer, sizeof(buffer)))
 		{
 			*strData = string(buffer);
 			changed = true;
 		}
 	}
-	else if(property.TypeInfo.Type == EPropertyType::Wstring)
+	else if (property.TypeInfo.Type == EPropertyType::WString)
 	{
 		wstring* wstrData = reinterpret_cast<wstring*>(data);
 		string utf8Str = Engine::WStrToStr(*wstrData);
 		char buffer[1024];
 		strcpy_s(buffer, utf8Str.c_str());
+
 		if (ImGui::InputText("##value", buffer, sizeof(buffer)))
 		{
 			*wstrData = Engine::StrToWStr(buffer);
@@ -788,63 +1024,59 @@ bool PropertyDrawer::DrawFloatInVector(string axis, f32& value, bool& lock, ImVe
 bool PropertyDrawer::DrawVectorProperty(void* instance, void* data, const TypeInfo& typeinfo, const PropertyInfo& property)
 {
 	bool changed = false;
-	uint32 n = 0;
-	switch (property.TypeInfo.Type)
+	const uint32 n = GetVectorComponentCount(property);
+	if (n == 0)
 	{
-	case EPropertyType::Vector2: n = 2; break;
-	case EPropertyType::Vector3: n = 3; break;
-	case EPropertyType::Vector4: n = 4; break;
-	case EPropertyType::Quaternion: n = 4; break;
+		ImGui::Text("Unsupported Vector Type");
+		return false;
 	}
 
 	std::array<f32, 4> defaults = { 0.f, 0.f, 0.f, 0.f };
-	switch (property.TypeInfo.Type)
-	{
-	case EPropertyType::Vector2:
+
+	if (IsVector2Property(property))
 	{
 		const vec2 d = ResolveDefaultValue<vec2>(typeinfo, property, vec2(0.f));
-		defaults[0] = d.x; defaults[1] = d.y;
-		break;
+		defaults[0] = d.x;
+		defaults[1] = d.y;
 	}
-	case EPropertyType::Vector3:
+	else if (IsVector3Property(property))
 	{
 		const vec3 d = ResolveDefaultValue<vec3>(typeinfo, property, vec3(0.f));
-		defaults[0] = d.x; defaults[1] = d.y; defaults[2] = d.z;
-		break;
+		defaults[0] = d.x;
+		defaults[1] = d.y;
+		defaults[2] = d.z;
 	}
-	case EPropertyType::Vector4:
+	else if (IsVector4Property(property))
 	{
 		const vec4 d = ResolveDefaultValue<vec4>(typeinfo, property, vec4(0.f));
-		defaults[0] = d.x; defaults[1] = d.y; defaults[2] = d.z; defaults[3] = d.w;
-		break;
+		defaults[0] = d.x;
+		defaults[1] = d.y;
+		defaults[2] = d.z;
+		defaults[3] = d.w;
 	}
-	case EPropertyType::Quaternion:
+	else if (IsQuaternionProperty(property))
 	{
 		const quat d = ResolveDefaultValue<quat>(typeinfo, property, glm::identity<quat>());
-		defaults[0] = d.x; defaults[1] = d.y; defaults[2] = d.z; defaults[3] = d.w;
-		break;
-	}
+		defaults[0] = d.x;
+		defaults[1] = d.y;
+		defaults[2] = d.z;
+		defaults[3] = d.w;
 	}
 
-	// 1. 사이즈 및 간격 계산
 	float lineHeight = ImGui::GetFontSize() + ImGui::GetStyle().FramePadding.y * 2.0f;
-	ImVec2 buttonSize = { lineHeight + 3.0f, lineHeight }; // 버튼 크기
+	ImVec2 buttonSize = { lineHeight + 3.0f, lineHeight };
 
-	// 테이블 컬럼의 전체 가용 너비 가져오기
 	f32 availableWidth = ImGui::GetContentRegionAvail().x;
-
-	// 요소 사이의 간격 (X-Y, Y-Z, Z-W => 총 3개)
 	f32 itemSpacing = ImGui::GetStyle().ItemSpacing.x;
-
-	f32 totalButtonWidth = static_cast<f32>(n) * buttonSize.x * 2.f;
+	f32 totalButtonWidth = static_cast<f32>(n) * buttonSize.x * 2.0f;
 	f32 totalExternalSpacing = static_cast<f32>(n - 1) * itemSpacing;
-
-	// [버튼 4개] + [간격 3개]를 전체에서 뺀 후, 4로 나누어 입력창 하나의 너비 계산
 	f32 inputWidth = (availableWidth - totalButtonWidth - totalExternalSpacing) / static_cast<f32>(n);
 
-	// 최소 너비 보정
-	if (inputWidth < 1.0f) inputWidth = 1.0f;
-	
+	if (inputWidth < 1.0f)
+	{
+		inputWidth = 1.0f;
+	}
+
 	const ETransformVectorGroup transformGroup = GetTransformVectorGroup(typeinfo, property);
 	const bool useTransformLock = (transformGroup != ETransformVectorGroup::None);
 
@@ -853,23 +1085,35 @@ bool PropertyDrawer::DrawVectorProperty(void* instance, void* data, const TypeIn
 		bool axisLock = false;
 
 		if (useTransformLock && i < 3)
+		{
 			axisLock = GetTransformAxisLock(instance, typeinfo, transformGroup, i);
+		}
 		else
+		{
 			axisLock = GetEditorAxisLock(instance, typeinfo, property, i);
+		}
 
 		const bool prevLock = axisLock;
-		changed |= DrawFloatInVector(axisLabels[i], ((f32*)data)[i], axisLock, buttonSize, buttonSize, defaults[i], inputWidth);
+		changed |= DrawFloatInVector(axisLabels[i], reinterpret_cast<f32*>(data)[i], axisLock, buttonSize, buttonSize, defaults[i], inputWidth);
 
 		if (axisLock != prevLock)
 		{
 			if (useTransformLock && i < 3)
+			{
 				SetTransformAxisLock(instance, typeinfo, transformGroup, i, axisLock);
+			}
 			else
+			{
 				SetEditorAxisLock(instance, typeinfo, property, i, axisLock);
+			}
 
 			changed = true;
 		}
-		if (i < n - 1) ImGui::SameLine(0, itemSpacing);
+
+		if (i < n - 1)
+		{
+			ImGui::SameLine(0, itemSpacing);
+		}
 	}
 
 	return changed;
@@ -886,52 +1130,60 @@ bool PropertyDrawer::DrawColorProperty(void* data, const TypeInfo& typeinfo, con
 bool PropertyDrawer::DrawMatrixProperty(void* data, const TypeInfo& typeinfo, const PropertyInfo& property)
 {
 	bool changed = false;
-	
+	const uint32 dim = GetMatrixDimension(property);
+	if (dim == 0)
+	{
+		ImGui::Text("Unsupported Matrix Type");
+		return false;
+	}
 
-	uint32 dim = property.TypeInfo.Type == EPropertyType::Matrix3 ? 3 : 4;
-	
 	bool bReadOnly = GetMetadataReadOnly(property.Metadata);
 	if (bReadOnly)
+	{
 		ImGui::EndDisabled();
+	}
 
 	string headerName = SanitizeDisplayLabel(typeinfo, property) + "###" + property.Name.data();
 	if (ImGui::CollapsingHeader(headerName.c_str()))
 	{
 		if (bReadOnly)
+		{
 			ImGui::BeginDisabled();
+		}
 
 		ImGui::Indent();
 
 		if (ImGui::BeginTable("##MatrixTable", dim, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp))
 		{
-			for (uint32 i = 0; i < dim; i++)
+			for (uint32 i = 0; i < dim; ++i)
 			{
 				ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthStretch);
 			}
 
-			for (uint32 row = 0; row < dim; row++)
+			for (uint32 row = 0; row < dim; ++row)
 			{
 				ImGui::TableNextRow();
-				for (uint32 col = 0; col < dim; col++)
+				for (uint32 col = 0; col < dim; ++col)
 				{
 					ImGui::TableNextColumn();
-					uint32 index = row * dim + col;
+					const uint32 index = row * dim + col;
+
 					ImGui::PushID(index);
 					ImGui::SetNextItemWidth(-FLT_MIN);
-					changed |= ImGui::DragFloat("##Val", &((f32*)data)[index], 0.1f, 0.0f, 0.0f, "%.2f");
+					changed |= ImGui::DragFloat("##Val", &reinterpret_cast<f32*>(data)[index], 0.1f, 0.0f, 0.0f, "%.2f");
 					ImGui::PopID();
 				}
 			}
+
 			ImGui::EndTable();
 		}
 
 		if (!bReadOnly && ImGui::Button("Reset Identity"))
 		{
-			// 0으로 밀고 대각선만 1로 설정
 			memset(data, 0, dim * dim * sizeof(f32));
 			for (uint32 i = 0; i < dim; ++i)
 			{
-				((f32*)data)[i * dim + i] = 1.0f;
+				reinterpret_cast<f32*>(data)[i * dim + i] = 1.0f;
 			}
 			changed = true;
 		}
@@ -939,11 +1191,15 @@ bool PropertyDrawer::DrawMatrixProperty(void* data, const TypeInfo& typeinfo, co
 		ImGui::Unindent();
 
 		if (bReadOnly)
+		{
 			ImGui::EndDisabled();
+		}
 	}
 
 	if (bReadOnly)
+	{
 		ImGui::BeginDisabled();
+	}
 
 	return changed;
 }
@@ -951,38 +1207,42 @@ bool PropertyDrawer::DrawMatrixProperty(void* data, const TypeInfo& typeinfo, co
 //Enum 타입(콤보박스)
 bool PropertyDrawer::DrawEnumProperty(void* data, const TypeInfo& typeinfo, const PropertyInfo& property)
 {
-	bool changed = false;
-
 	uint64 enumValue = ReadUnsignedInteger(data, property.Size);
 
-	uint64 key = RunTimeHash(property.TypeInfo.Name.data());
-	const EnumInfo* enumInfo = Engine::ReflectionRegistry::Get().GetEnum(key);
-	string previewName = "Unknown";
+	const EnumInfo* enumInfo = ResolveEnumInfo(property.TypeInfo.Name, &typeinfo);
+	string previewName = GetEnumPreviewName(enumValue, enumInfo);
 
-	if (enumInfo)
-	{
-		for (const auto& [name, val] : enumInfo->Entries)
-		{
-			if (val == enumValue) { previewName = name; break; }
-		}
-	}
+	bool changed = false;
 
-	if(ImGui::BeginCombo("##Enum", previewName.c_str()))
+	if (ImGui::BeginCombo("##Enum", previewName.c_str()))
 	{
 		if (enumInfo)
 		{
-			for (const auto& [name, val] : enumInfo->Entries)
+			for (const auto& entry : enumInfo->Entries)
 			{
-				bool isSelected = (val == enumValue);
-				if (ImGui::Selectable(name.data(), isSelected))
+				if (!ShouldDisplayEnumEntry(entry))
 				{
-					WriteUnsignedInteger(data, property.Size, val);
+					continue;
+				}
+
+				const bool isSelected = (entry.Value == enumValue);
+				if (ImGui::Selectable(string(entry.Name).c_str(), isSelected))
+				{
+					WriteUnsignedInteger(data, property.Size, entry.Value);
 					changed = true;
 				}
+
 				if (isSelected)
+				{
 					ImGui::SetItemDefaultFocus();
+				}
 			}
 		}
+		else
+		{
+			ImGui::TextDisabled("Enum info not found");
+		}
+
 		ImGui::EndCombo();
 	}
 
@@ -992,39 +1252,60 @@ bool PropertyDrawer::DrawEnumProperty(void* data, const TypeInfo& typeinfo, cons
 //BitFlag 타입(콤보박스 - 다중 선택)
 bool PropertyDrawer::DrawBitFlagProperty(void* data, const TypeInfo& typeinfo, const PropertyInfo& property)
 {
-	bool changed = false;
-
 	uint64 enumValue = ReadUnsignedInteger(data, property.Size);
-	uint64 key = RunTimeHash(property.TypeInfo.Name.data());
 
-	const EnumInfo* enumInfo = Engine::ReflectionRegistry::Get().GetEnum(key);
-	string previewName = enumInfo ? enumInfo->GetBitFlagsString(enumValue) : "Unknown";
+	const EnumInfo* enumInfo = ResolveEnumInfo(property.TypeInfo.Name, &typeinfo);
+	string previewName = GetBitFlagPreviewName(enumValue, enumInfo);
+
+	bool changed = false;
 
 	if (ImGui::BeginCombo("##BitFlag", previewName.c_str()))
 	{
 		if (enumInfo)
 		{
-			for (const auto& [name, val] : enumInfo->Entries)
+			for (const auto& entry : enumInfo->Entries)
 			{
-				bool isSelected = (enumValue & val) == val;
-				if (ImGui::Selectable(name.data(), isSelected))
+				if (!ShouldDisplayBitFlagEntry(entry))
 				{
-					if (isSelected)
-						enumValue &= ~val; // 이미 선택된 경우: 해당 비트 클리어
+					continue;
+				}
+
+				const bool isSelected = (entry.Value != 0) && ((enumValue & entry.Value) == entry.Value);
+				bool selected = isSelected;
+
+				if (entry.Value == 0)
+				{
+					selected = (enumValue == 0);
+				}
+
+				if (ImGui::Selectable(string(entry.Name).c_str(), selected, ImGuiSelectableFlags_DontClosePopups))
+				{
+					if (entry.Value == 0)
+					{
+						enumValue = 0;
+					}
 					else
-						enumValue |= val;  // 선택되지 않은 경우: 해당 비트 세트
+					{
+						if (selected)
+						{
+							enumValue &= ~entry.Value;
+						}
+						else
+						{
+							enumValue |= entry.Value;
+						}
+					}
 
 					WriteUnsignedInteger(data, property.Size, enumValue);
 					changed = true;
 				}
-				if (isSelected)
-					ImGui::SetItemDefaultFocus();
 			}
 		}
 		else
 		{
 			ImGui::TextDisabled("Enum info not found");
 		}
+
 		ImGui::EndCombo();
 	}
 
@@ -1106,10 +1387,25 @@ bool PropertyDrawer::DrawResourceHandleProperty(void* data, const TypeInfo& type
 			changed = true;
 		}
 
-		uint64 typeHash = Engine::RunTimeHash(targetResourceType);
-		const vector<Engine::Handle>& handleList = Engine::ResourceManager::Get().GetResourceHandles(typeHash);
+		uint64 typeHash = 0;
 
-		for (const Engine::Handle& handle : handleList)
+		const string normalizedTargetType = NormalizeReflectedTypeName(targetResourceType);
+
+		const Engine::TypeInfo* targetTypeInfo = reflection::Registry::Get().ResolveTypeName(normalizedTargetType);
+		if (!targetTypeInfo && !normalizedTargetType.empty())
+		{
+			targetTypeInfo = reflection::Registry::Get().GetTypeByQualifiedName("Engine::" + normalizedTargetType);
+		}
+
+		vector<Engine::Handle> emptyList;
+		const vector<Engine::Handle>* handleList = &emptyList;
+
+		if (targetTypeInfo)
+		{
+			handleList = &Engine::ResourceManager::Get().GetResourceHandles(targetTypeInfo->ID);
+		}
+
+		for (const Engine::Handle& handle : *handleList)
 		{
 			if (Engine::Resource* res = Engine::ResourceManager::Get().GetResource(handle))
 			{
@@ -1122,7 +1418,6 @@ bool PropertyDrawer::DrawResourceHandleProperty(void* data, const TypeInfo& type
 					changed = true;
 				}
 
-				// 현재 선택된 항목에 포커스 유지
 				if (isSelected)
 				{
 					ImGui::SetItemDefaultFocus();

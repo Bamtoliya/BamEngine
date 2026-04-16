@@ -1145,7 +1145,7 @@ void HierarchyPanel::CreateSpriteObject(Scene* scene)
 	newGameObject->AddComponent(L"SpriteRenderer");
 	SpriteRenderer* spriteRenderer = newGameObject->GetComponent<SpriteRenderer>();
 	spriteRenderer->SetMaterial(resourceMgr.GetResourceHandle<Material>(L"Resources/Material/SpriteMaterial.bammat"));
-	spriteRenderer->SetSprite(resourceMgr.GetResourceHandle<Texture>(L"Resources/Texture/uv1.bamtex"));
+	spriteRenderer->SetSprite(resourceMgr.GetResourceHandle<Sprite>(L"Resources/Texture/uv1.bamsprite"));
 
 	newGameObject->AddComponent(L"Box2DCollider");
 	spriteRenderer->SetRenderPassID(0);

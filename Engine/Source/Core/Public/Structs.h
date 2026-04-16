@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "Types.h"
+#include "RenderTypes.h"
 #include "ReflectionMacro.h"
 
 namespace Engine

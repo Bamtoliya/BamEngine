@@ -1,7 +1,6 @@
 ﻿#pragma once
 
 #ifdef WIN32
-#define _HAS_STD_BYTE 0
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -12,7 +11,6 @@
 #include <Windows.h>
 #include <shobjidl.h>
 #include <shellapi.h> 
-#define _HAS_STD_BYTE 1
 #endif
 
 #pragma warning(push)
@@ -96,7 +94,6 @@ using namespace glm;
 #include "Functions.h"
 #include "Delegate.h"
 #include "EnumBit.h"
-#include "RenderTypes.h"
 #include "Handle.h"
 #pragma endregion
 using namespace Engine;

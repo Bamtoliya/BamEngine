@@ -68,8 +68,11 @@ EResult Renderer::Initialize(void* arg)
 	ResourceManager& rm = ResourceManager::Get();
 	tagShaderDesc debugLineVsDesc;
 	debugLineVsDesc.ShaderType = EShaderType::Vertex;
+	
 	debugLineVsDesc.Key = L"DebugLineVS";
-	debugLineVsDesc.Path = L"Resources/Shader/debugLine.vert.spv";
+	//debugLineVsDesc.Path = L"Resources/Shader/debugLine.vert.spv";
+	debugLineVsDesc.Path = L"I:\\BamtoliyaGithub\\BamEngine\\Resources\\Shader\\debugLine.vert.spv";
+	debugLineVsDesc.SpirvPath = L"I:\\BamtoliyaGithub\\BamEngine\\Resources\\Shader\\debugLine.vert.spv";
 	debugLineVsDesc.EntryPoint = "main";
 	rm.LoadResource<Shader>(&debugLineVsDesc);
 	//ResourceManager::Get().LoadShader(L"DebugLineVS", &debugLineVsDesc);
@@ -78,6 +81,7 @@ EResult Renderer::Initialize(void* arg)
 	debugLinePsDesc.ShaderType = EShaderType::Pixel;
 	debugLinePsDesc.Key = L"DebugLinePS";
 	debugLinePsDesc.Path = L"Resources/Shader/debugLine.frag.spv";
+	debugLinePsDesc.SpirvPath = L"Resources/Shader/debugLine.frag.spv";
 	debugLinePsDesc.EntryPoint = "main";
 	rm.LoadResource<Shader>(&debugLinePsDesc);
 	//ResourceManager::Get().LoadShader(L"DebugLinePS", &debugLinePsDesc);

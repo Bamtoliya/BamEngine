@@ -1,6 +1,7 @@
 ﻿import os
 import re
 
+from config.job_schema import get_active_profile
 from .file_utils import read_file_content
 
 
@@ -8,9 +9,16 @@ BITMASK_ENUM_PATTERN = re.compile(
     r"ENABLE_BITMASK_OPERATORS\s*\(\s*([a-zA-Z_]\w*(?:::\w+)*)\s*\)"
 )
 
+_CPP_DECL_KEYWORD_PATTERN = re.compile(r"\b(class|struct|enum)\s+")
+
 
 def normalize_type_name(type_name: str) -> str:
-    return type_name.replace("std::", "").replace("Engine::", "").strip()
+    text = _CPP_DECL_KEYWORD_PATTERN.sub("", type_name).strip()
+
+    for namespace in get_active_profile().stripped_namespaces:
+        text = text.replace(f"{namespace}::", "")
+
+    return text.strip()
 
 
 def get_unqualified_name(type_name: str) -> str:
@@ -31,12 +39,13 @@ def collect_bitflag_enums(content: str) -> set[str]:
 
 def collect_header_files(source_root: str) -> list[tuple[str, str]]:
     header_contents: list[tuple[str, str]] = []
+    ignored_headers = set(get_active_profile().ignored_headers)
 
     for root, _dirs, files in os.walk(source_root):
         for file_name in files:
             if not file_name.endswith(".h"):
                 continue
-            if file_name == "ReflectionMacro.h":
+            if file_name in ignored_headers:
                 continue
 
             filepath = os.path.join(root, file_name)

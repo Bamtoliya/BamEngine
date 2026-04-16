@@ -13,8 +13,6 @@ EResult Runtime::Initialize(void* arg)
 	RUNTIMEDESC* pRuntimeDesc = reinterpret_cast<RUNTIMEDESC*>(arg);
 	tagRendererDesc RendererDesc = pRuntimeDesc->RendererDesc;
 
-	if (!ReflectionRegistry::Create()) return EResult::Fail;
-
 	m_ComponentRegistry = ComponentRegistry::Create();
 	if (!m_ComponentRegistry) return EResult::Fail;
 
@@ -64,16 +62,16 @@ void Runtime::Free()
 	TimeManager::Destroy();
 	InputManager::Destroy();
 
-	ResourceManager::Destroy();
 	PrototypeManager::Destroy();
 
 	LayerManager::Destroy();
 	SceneManager::Destroy();
 
 	ComponentRegistry::Destroy();
-	ReflectionRegistry::Destroy();
 	CollisionManager::Destroy();
 	LocalizationManager::Destroy();
+
+	ResourceManager::Destroy();
 
 	CameraManager::Destroy();
 	SamplerManager::Destroy();

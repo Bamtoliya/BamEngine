@@ -1,5 +1,6 @@
 ﻿import re
 
+from config.job_schema import get_active_profile
 from model import ReflectedType
 
 from .function_parser import parse_functions
@@ -9,14 +10,31 @@ from .property_parser import parse_properties
 from utils import mask_comments_and_strings
 
 
+_CPP_DECL_KEYWORD_PATTERN = re.compile(r"\b(class|struct|enum)\s+")
+
+
+def strip_type_keywords(type_name: str) -> str:
+    return _CPP_DECL_KEYWORD_PATTERN.sub("", type_name).strip()
+
+
 def normalize_type_name(type_name: str) -> str:
-    return type_name.replace("std::", "").replace("Engine::", "").strip()
+    text = strip_type_keywords(type_name)
+
+    for namespace in get_active_profile().stripped_namespaces:
+        text = text.replace(f"{namespace}::", "")
+
+    return text.strip()
 
 
 def resolve_parent_qualified_name(current_namespace: list[str], parent_name: str) -> str:
+    raw_parent = strip_type_keywords(parent_name)
     normalized_parent = normalize_type_name(parent_name)
+
     if not normalized_parent or normalized_parent == "None":
         return ""
+
+    if "::" in raw_parent:
+        return raw_parent
 
     if "::" in normalized_parent:
         return normalized_parent
@@ -50,9 +68,9 @@ def find_parent_class(full_content: str, class_name: str, search_end_index: int)
     pre_text = mask_comments_and_strings(full_content[search_start:search_end_index])
 
     pattern = (
-        r'(class|struct)\s+(?:[A-Z0-9_]+\s+)*'
+        r"(class|struct)\s+(?:[A-Z0-9_]+\s+)*"
         + re.escape(class_name)
-        + r'\s*(?:final|abstract)?\s*:\s*public\s+([A-Za-z_]\w*(?:::\w+)*)'
+        + r"\s*(?:final|abstract)?\s*:\s*public\s+([A-Za-z_]\w*(?:::\w+)*)"
     )
 
     match = re.search(pattern, pre_text)

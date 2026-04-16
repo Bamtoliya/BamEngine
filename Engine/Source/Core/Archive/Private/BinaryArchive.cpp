@@ -110,12 +110,12 @@ void BinaryArchive::Process(string_view key, uint64& v)
 
 void BinaryArchive::Process(string_view key, f32& v)
 {
-	ProcessPrimitive(key, Engine::EPropertyType::F32, v);
+	ProcessPrimitive(key, Engine::EPropertyType::Float32, v);
 }
 
 void BinaryArchive::Process(string_view key, f64& v)
 {
-	ProcessPrimitive(key, Engine::EPropertyType::F64, v);
+	ProcessPrimitive(key, Engine::EPropertyType::Float64, v);
 }
 
 void BinaryArchive::Process(string_view key, string& v)
@@ -181,7 +181,7 @@ void BinaryArchive::Process(string_view key, wstring& v)
 		uint32 totalPayloadSize = sizeof(uint32) + strLen;
 
 		if (!key.empty() && !IsCurrentSequential()) {
-			WriteNodeHeader(key, EBinTag::Value, static_cast<uint8>(Engine::EPropertyType::Wstring), totalPayloadSize);
+			WriteNodeHeader(key, EBinTag::Value, static_cast<uint8>(Engine::EPropertyType::WString), totalPayloadSize);
 		}
 		WriteRaw(&strLen, sizeof(uint32));
 		if (strLen > 0) WriteRaw(utf8.data(), strLen);
@@ -195,7 +195,7 @@ void BinaryArchive::Process(string_view key, wstring& v)
 			if (it != m_ReadScopeStack.top().Index.end()) {
 				const BinNodeHeader& header = it->second.Header;
 
-				if (header.ValueType != static_cast<uint8>(Engine::EPropertyType::Wstring)) {
+				if (header.ValueType != static_cast<uint8>(Engine::EPropertyType::WString)) {
 					v.clear(); return;
 				}
 
@@ -230,32 +230,32 @@ void BinaryArchive::Process(string_view key, wstring& v)
 
 void BinaryArchive::Process(string_view key, glm::vec2& v)
 {
-	ProcessPrimitive(key, Engine::EPropertyType::Vector2, v);
+	ProcessPrimitive(key, Engine::EPropertyType::UserDefined, v);
 }
 
 void BinaryArchive::Process(string_view key, glm::vec3& v)
 {
-	ProcessPrimitive(key, Engine::EPropertyType::Vector3, v);
+	ProcessPrimitive(key, Engine::EPropertyType::UserDefined, v);
 }
 
 void BinaryArchive::Process(string_view key, glm::vec4& v)
 {
-	ProcessPrimitive(key, Engine::EPropertyType::Vector4, v);
+	ProcessPrimitive(key, Engine::EPropertyType::UserDefined, v);
 }
 
 void BinaryArchive::Process(string_view key, glm::quat& v)
 {
-	ProcessPrimitive(key, Engine::EPropertyType::Quaternion, v);
+	ProcessPrimitive(key, Engine::EPropertyType::UserDefined, v);
 }
 
 void BinaryArchive::Process(string_view key, glm::mat3& v)
 {
-	ProcessPrimitive(key, Engine::EPropertyType::Matrix3, v);
+	ProcessPrimitive(key, Engine::EPropertyType::UserDefined, v);
 }
 
 void BinaryArchive::Process(string_view key, glm::mat4& v)
 {
-	ProcessPrimitive(key, Engine::EPropertyType::Matrix4, v);
+	ProcessPrimitive(key, Engine::EPropertyType::UserDefined, v);
 }
 
 void BinaryArchive::ProcessEnum(string_view key, void* enumPtr, size_t size)

@@ -1,7 +1,7 @@
 ﻿#pragma once
 #include <cassert>
 
-#define PURE =0
+#define BAM_PURE =0
 
 #define BEGIN(NAMESPACE) namespace NAMESPACE {
 #define END }

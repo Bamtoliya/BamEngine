@@ -6,6 +6,7 @@
 #include "ComponentRegistry.h"
 #include "CommonInterface.h"
 
+#include "ReflectableInterface.h"
 
 
 #pragma region Struct
@@ -32,7 +33,7 @@ ENABLE_BITMASK_OPERATORS(EObjectFlag)
 
 class Transform;
 CLASS()
-class ENGINE_API GameObject : public Base, public SerializableInterface, public ActiveInterface, public VisibleInterface
+class ENGINE_API GameObject : public Base, public ReflectableInterface, public SerializableInterface, public ActiveInterface, public VisibleInterface
 {
 	REFLECT_BASE()
 

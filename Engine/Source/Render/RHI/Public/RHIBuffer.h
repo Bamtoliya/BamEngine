@@ -49,7 +49,7 @@ public:
 
 #pragma region Setter
 public:
-	virtual void SetData(const void* data, uint32 size) PURE;
+	virtual void SetData(const void* data, uint32 size) BAM_PURE;
 #pragma endregion
 
 protected:

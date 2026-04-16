@@ -1,8 +1,12 @@
 ﻿import re
 
+from config.job_schema import get_active_profile
 from model import ContainerTypeNode, ReflectedEnum, ReflectedProperty, ReflectedType, ResolvedTypeRef
 
 from .patterns import PROPERTY_PATTERN
+
+
+_CPP_DECL_KEYWORD_PATTERN = re.compile(r"\b(class|struct|enum)\s+")
 
 
 def normalize_cpp_type(type_str: str) -> str:
@@ -11,8 +15,11 @@ def normalize_cpp_type(type_str: str) -> str:
 
 def normalize_type_name(type_name: str) -> str:
     text = normalize_cpp_type(type_name)
-    text = re.sub(r"\b(class|struct|enum)\s+", "", text)
-    text = text.replace("std::", "")
+    text = _CPP_DECL_KEYWORD_PATTERN.sub("", text)
+
+    for namespace in get_active_profile().stripped_namespaces:
+        text = text.replace(f"{namespace}::", "")
+
     return text.strip()
 
 
@@ -142,10 +149,11 @@ def resolve_symbol_name(
             return local_match
 
     if "::" not in normalized:
-        engine_candidate = f"Engine::{normalized}"
-        engine_match = symbol_table.get(engine_candidate)
-        if engine_match:
-            return engine_match
+        for fallback_namespace in get_active_profile().namespace_fallbacks:
+            fallback_candidate = f"{fallback_namespace}::{normalized}"
+            fallback_match = symbol_table.get(fallback_candidate)
+            if fallback_match:
+                return fallback_match
 
     return ""
 

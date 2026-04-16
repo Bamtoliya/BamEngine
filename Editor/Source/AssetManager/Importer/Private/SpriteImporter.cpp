@@ -20,7 +20,8 @@ EResult SpriteImporter::Import(const filesystem::path& sourcePath, const filesys
 
 	tagSpriteCreateDesc desc;
 	desc.TexturePath = sourcePath.wstring();
-	desc.Key = sourcePath.stem().wstring() + L"_Sprite";
+	desc.Path = outputPath.wstring();
+	desc.Key = outputPath.wstring();
 
 	Engine::Sprite* sprite = Engine::Sprite::Create(&desc);
 	if (!sprite) return EResult::Fail;

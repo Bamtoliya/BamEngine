@@ -38,7 +38,7 @@ struct hash<Engine::Handle>
 {
 	size_t operator()(const Engine::Handle& handle) const
 	{
-		return std::hash<uint64>()(handle.GetID());
+		return std::hash<uint64_t>()(handle.GetID());
 	}
 };
 END

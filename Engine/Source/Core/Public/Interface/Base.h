@@ -1,7 +1,9 @@
 ﻿#pragma once
 
-#include "Engine_Includes.h"
-#include "ReflectionTypes.h"
+#include "Engine_API.h"
+#include "Macro.h"
+#include "Result.h"
+#include <cstdint>
 
 BEGIN(Engine)
 class ENGINE_API Base
@@ -11,7 +13,6 @@ protected:
 	virtual ~Base() = default;
 public:
 	virtual void Free() {}
-	virtual const TypeInfo& GetTypeInfo() const { static const TypeInfo emptyTypeInfo = {}; return emptyTypeInfo; }
 	int32 AddRef()
 	{
 		return ++m_RefCount;
@@ -29,5 +30,4 @@ public:
 protected:
 	int32 m_RefCount = { 1 };
 };
-
 END

@@ -23,8 +23,8 @@ class TextureCompressorInterface
 {
 public:
 	virtual ~TextureCompressorInterface() = default;
-	virtual bool CompressTexture(const std::wstring& inputFilePath, const std::wstring& outputFilePath, Engine::ETextureFormat targetFormat = Engine::ETextureFormat::BC7_RGBA_UNORM, ECompressFlags flags = ECompressFlags::None) PURE;
-	virtual bool GetRawCompressedData(const std::wstring& inputFilePath, std::vector<uint8>& outData, tagTextureBinaryHeader& header, Engine::ETextureFormat targetFormat = Engine::ETextureFormat::BC7_RGBA_UNORM, ECompressFlags flags = ECompressFlags::None) PURE;
+	virtual bool CompressTexture(const std::wstring& inputFilePath, const std::wstring& outputFilePath, Engine::ETextureFormat targetFormat = Engine::ETextureFormat::BC7_RGBA_UNORM, ECompressFlags flags = ECompressFlags::None) BAM_PURE;
+	virtual bool GetRawCompressedData(const std::wstring& inputFilePath, std::vector<uint8>& outData, tagTextureBinaryHeader& header, Engine::ETextureFormat targetFormat = Engine::ETextureFormat::BC7_RGBA_UNORM, ECompressFlags flags = ECompressFlags::None) BAM_PURE;
 };
 
 class TextureCompressorFactory

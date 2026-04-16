@@ -20,7 +20,7 @@ enum class ESceneFlags : uint8
 ENABLE_BITMASK_OPERATORS(ESceneFlags)
 
 CLASS()
-class ENGINE_API Scene : public Base, public SerializableInterface
+class ENGINE_API Scene : public Base, public ReflectableInterface, public SerializableInterface
 {
 	REFLECT_BASE()
 #pragma region Constructor&Destructor

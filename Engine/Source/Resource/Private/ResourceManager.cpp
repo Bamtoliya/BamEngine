@@ -255,7 +255,7 @@ Handle ResourceManager::AllocateSlot(Resource* resource)
 
 void ResourceManager::FreeSlotInternal(uint32 slotIndex)
 {
-	if (slotIndex < m_Resources.size() || !m_Resources[slotIndex].IsActive) return;
+	if (slotIndex >= m_Resources.size() || !m_Resources[slotIndex].IsActive) return;
 
 	Resource* resource = m_Resources[slotIndex].Instance;
 	if(resource)

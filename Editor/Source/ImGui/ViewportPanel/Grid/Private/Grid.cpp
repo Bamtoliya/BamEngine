@@ -10,13 +10,29 @@
 void Grid::Initialize()
 {
 	ResourceManager& resourceManager = ResourceManager::Get();
-	tagShaderDesc gridVsDesc = { L"InfiniteGridVS", L"Resources/Shader/infinite_grid.vert.spv", EShaderType::Vertex, "main" };
+    tagShaderDesc gridVsDesc = {};
+    gridVsDesc.Key = L"InfiniteGridVS";
+	gridVsDesc.Path = L"Resources/Shader/infinite_grid.vert.spv";
+    gridVsDesc.SpirvPath = L"Resources/Shader/infinite_grid.vert.spv";
+	gridVsDesc.ShaderType = EShaderType::Vertex;
+	gridVsDesc.EntryPoint = "main";
 	resourceManager.LoadResource<Shader>(&gridVsDesc);
 
-	tagShaderDesc grid2DPsDesc = { L"InfiniteGrid2DPS", L"Resources/Shader/infinite_grid_2d.frag.spv", EShaderType::Pixel, "main" };
+	tagShaderDesc grid2DPsDesc = {};
+	grid2DPsDesc.Key = L"InfiniteGrid2DPS";
+	grid2DPsDesc.Path = L"Resources/Shader/infinite_grid_2d.frag.spv";
+    grid2DPsDesc.SpirvPath = L"Resources/Shader/infinite_grid_2d.frag.spv";
+	grid2DPsDesc.ShaderType = EShaderType::Pixel;
+	grid2DPsDesc.EntryPoint = "main";
 	resourceManager.LoadResource<Shader>(&grid2DPsDesc);
 
-	tagShaderDesc grid3DPsDesc = { L"InfiniteGrid3DPS", L"Resources/Shader/infinite_grid.frag.spv", EShaderType::Pixel, "main" };
+
+	tagShaderDesc grid3DPsDesc = {};
+    grid3DPsDesc.Key = L"InfiniteGrid3DPS";
+    grid3DPsDesc.Path = L"Resources/Shader/infinite_grid.frag.spv";
+    grid3DPsDesc.SpirvPath = L"Resources/Shader/infinite_grid.frag.spv";
+    grid3DPsDesc.ShaderType = EShaderType::Pixel;
+    grid3DPsDesc.EntryPoint = "main";
 	resourceManager.LoadResource<Shader>(&grid3DPsDesc);
 }
 

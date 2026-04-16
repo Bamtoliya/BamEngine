@@ -27,7 +27,7 @@ public:
 
 #pragma region Management
 public:
-	virtual void Rebuild() PURE;
+	virtual void Rebuild() BAM_PURE;
 protected:
 	void SetMesh(class Mesh* mesh);
 #pragma endregion

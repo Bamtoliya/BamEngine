@@ -1,13 +1,18 @@
 ﻿#pragma once
 
 #include "Base.h"
+#include "Macro.h"
+
+#include <SDL3/SDL_events.h>
+
+using namespace Engine;
 
 BEGIN(Editor)
 class ImGuiInterface : public Base
 {
 public:
 	virtual ~ImGuiInterface() = default;
-	virtual void Draw() PURE;
+	virtual void Draw() BAM_PURE;
 	virtual void Update(f32 dt) {}
 	virtual void ProcessEvent(const SDL_Event* event) {}
 public:

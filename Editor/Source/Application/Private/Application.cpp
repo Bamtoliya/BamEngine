@@ -95,7 +95,10 @@ void Application::InitializeResources()
 {
 	ResourceManager& resourceManager = ResourceManager::Get();
 
-
+    //m_AssetManager->Import(L"Resources/Shader/default.vert.spv");
+    //m_AssetManager->Import(L"Resources/Shader/default.frag.spv");
+    //m_AssetManager->Import(L"Resources/Shader/sprite.vert.spv");
+    //m_AssetManager->Import(L"Resources/Shader/sprite.frag.spv");
 #pragma region Basic Textures
     wstring resourcesToLoad[] =
     {
@@ -118,29 +121,28 @@ void Application::InitializeResources()
         L"Resources/Shader/sprite.frag.bamshader",
 
         //Material
-        //L"Resources/Material/DefaultMaterial.bammat",
-        //L"Resources/Material/SpriteMaterial.bammat",
+        L"Resources/Material/DefaultMaterial.bammat",
+        L"Resources/Material/SpriteMaterial.bammat",
     };
 
     for (const auto& path : resourcesToLoad)
     {
 		resourceManager.LoadFile(path);
     }
-
-
-	tagMaterialDesc defaultMaterialDesc = {};
-	defaultMaterialDesc.Key = L"Resources/Material/DefaultMaterial.bammat";
-	defaultMaterialDesc.VertexShaderHandle = resourceManager.GetResourceHandle<Shader>(L"Resources/Shader/default.vert.bamshader");
-	defaultMaterialDesc.PixelShaderHandle = resourceManager.GetResourceHandle<Shader>(L"Resources/Shader/default.frag.bamshader");
-    Material* material = resourceManager.LoadResource<Material>(&defaultMaterialDesc).Get();
-    material->SetTextureBinding("Default", 0, resourceManager.GetResourceHandle<Texture>(L"Resources/Texture/magenta1x1.png"));
-	resourceManager.SaveToJsonFile(material, L"Resources/Material/DefaultMaterial.bammat.json");
-
-	tagMaterialDesc spriteMaterialDesc = {};
-    spriteMaterialDesc.Key = L"Resources/Material/SpriteMaterial.bammat";
-	spriteMaterialDesc.VertexShaderHandle = resourceManager.GetResourceHandle<Shader>(L"Resources/Shader/sprite.vert.bamshader");
-	spriteMaterialDesc.PixelShaderHandle = resourceManager.GetResourceHandle<Shader>(L"Resources/Shader/sprite.frag.bamshader");
-    Material* spriteMaterial = resourceManager.LoadResource<Material>(&spriteMaterialDesc).Get();
+	//tagMaterialDesc defaultMaterialDesc = {};
+	//defaultMaterialDesc.Key = L"Resources/Material/DefaultMaterial";
+	//defaultMaterialDesc.VertexShaderHandle = resourceManager.GetResourceHandle<Shader>(L"Resources/Shader/default.vert.bamshader");
+	//defaultMaterialDesc.PixelShaderHandle = resourceManager.GetResourceHandle<Shader>(L"Resources/Shader/default.frag.bamshader");
+    //Material* material = resourceManager.LoadResource<Material>(&defaultMaterialDesc).Get();
+    //material->SetTextureBinding("Default", 0, resourceManager.GetResourceHandle<Texture>(L"Resources/Texture/magenta1x1.png"));
+	//resourceManager.SaveToBinaryFile(material, L"Resources/Material/DefaultMaterial.bammat");
+    //
+	//tagMaterialDesc spriteMaterialDesc = {};
+    //spriteMaterialDesc.Key = L"Resources/Material/SpriteMaterial";
+	//spriteMaterialDesc.VertexShaderHandle = resourceManager.GetResourceHandle<Shader>(L"Resources/Shader/sprite.vert.bamshader");
+	//spriteMaterialDesc.PixelShaderHandle = resourceManager.GetResourceHandle<Shader>(L"Resources/Shader/sprite.frag.bamshader");
+    //Material* spriteMaterial = resourceManager.LoadResource<Material>(&spriteMaterialDesc).Get();
+    //resourceManager.SaveToBinaryFile(material, L"Resources/Material/SpriteMaterial.bammat");
 
 
 	//Material* defaultMaterial = resourceManager.GetResourceHandle<Material>(L"Resources/Material/DefaultMaterial.bammat").Get();

@@ -1,416 +1,925 @@
 ﻿#pragma once
 
 #include "Editor_Includes.h"
+#include "ReflectionMetadataKeys.h"
 #include "SerializationHelper.h"
+
+#include <reflection/runtime/Registry.h>
+
+#include <array>
+#include <cctype>
+#include <cfloat>
+#include <cstdlib>
+#include <optional>
+#include <vector>
 
 BEGIN(Editor)
 
-inline constexpr uint64 MetaNameHash = Engine::CompileTimeHash("Name");
-inline constexpr uint64 MetaTooltipHash = Engine::CompileTimeHash("Tooltip");
-inline constexpr uint64 MetaCategoryHash = Engine::CompileTimeHash("Category");
-inline constexpr uint64 MetaRangeHash = Engine::CompileTimeHash("Range");
-inline constexpr uint64 MetaColorHash = Engine::CompileTimeHash("Color");
-inline constexpr uint64 MetaEditableHash = Engine::CompileTimeHash("Editable");
-inline constexpr uint64 MetaReadOnlyHash = Engine::CompileTimeHash("ReadOnly");
-inline constexpr uint64 MetaFilePathHash = Engine::CompileTimeHash("FilePath");
-inline constexpr uint64 MetaDirectoryHash = Engine::CompileTimeHash("Directory");
-inline constexpr uint64 MetaEditConditionHash = Engine::CompileTimeHash("EditCondition");
-inline constexpr uint64 MetaDefaultHash = Engine::CompileTimeHash("Default");
-inline constexpr uint64 MetaOnChangedHash = Engine::CompileTimeHash("OnChanged");
+using Engine::MetaNameHash;
+using Engine::MetaTooltipHash;
+using Engine::MetaCategoryHash;
+using Engine::MetaRangeHash;
+using Engine::MetaColorHash;
+using Engine::MetaEditableHash;
+using Engine::MetaReadOnlyHash;
+using Engine::MetaFilePathHash;
+using Engine::MetaDirectoryHash;
+using Engine::MetaEditConditionHash;
+using Engine::MetaDefaultHash;
+using Engine::MetaOnChangedHash;
+using Engine::MetaNoSerializeHash;
 
+struct ParsedMetaRange
+{
+    f32 Min = -FLT_MAX;
+    f32 Max = FLT_MAX;
+    f32 Speed = 1.0f;
+};
 
-#pragma region MetadataEntry
+struct ParsedMetaColor
+{
+    bool Enabled = true;
+};
+
+struct ParsedMetaEditCondition
+{
+    string ConditionVariableName;
+    string MaskLiteral;
+    bool HasMaskLiteral = false;
+    bool bExactMatch = false;
+    bool bInvert = false;
+};
+
+struct ParsedMetaOnChanged
+{
+    string FunctionName;
+    vector<string> ArgumentPropertyNames;
+};
+
+inline string_view TrimView(string_view text)
+{
+    size_t begin = 0;
+    while (begin < text.size() && std::isspace(static_cast<unsigned char>(text[begin])))
+    {
+        ++begin;
+    }
+
+    size_t end = text.size();
+    while (end > begin && std::isspace(static_cast<unsigned char>(text[end - 1])))
+    {
+        --end;
+    }
+
+    return text.substr(begin, end - begin);
+}
+
+inline string TrimCopy(string_view text)
+{
+    return string(TrimView(text));
+}
+
+inline string UnquoteString(string_view text)
+{
+    text = TrimView(text);
+    if (text.size() >= 2)
+    {
+        const char first = text.front();
+        const char last = text.back();
+        if ((first == '"' && last == '"') || (first == '\'' && last == '\''))
+        {
+            text.remove_prefix(1);
+            text.remove_suffix(1);
+        }
+    }
+    return string(text);
+}
+
+inline vector<string> SplitMetadataArgs(string_view text)
+{
+    vector<string> result;
+    string current;
+
+    int parenDepth = 0;
+    int braceDepth = 0;
+    int bracketDepth = 0;
+    int angleDepth = 0;
+    bool inQuote = false;
+    char quoteChar = '\0';
+
+    for (size_t i = 0; i < text.size(); ++i)
+    {
+        const char ch = text[i];
+
+        if (inQuote)
+        {
+            current.push_back(ch);
+            if (ch == quoteChar && (i == 0 || text[i - 1] != '\\'))
+            {
+                inQuote = false;
+            }
+            continue;
+        }
+
+        if (ch == '"' || ch == '\'')
+        {
+            inQuote = true;
+            quoteChar = ch;
+            current.push_back(ch);
+            continue;
+        }
+
+        switch (ch)
+        {
+        case '(': ++parenDepth; break;
+        case ')': --parenDepth; break;
+        case '{': ++braceDepth; break;
+        case '}': --braceDepth; break;
+        case '[': ++bracketDepth; break;
+        case ']': --bracketDepth; break;
+        case '<': ++angleDepth; break;
+        case '>': --angleDepth; break;
+        default: break;
+        }
+
+        if (ch == ',' && parenDepth == 0 && braceDepth == 0 && bracketDepth == 0 && angleDepth == 0)
+        {
+            result.push_back(TrimCopy(current));
+            current.clear();
+            continue;
+        }
+
+        current.push_back(ch);
+    }
+
+    if (!current.empty())
+    {
+        result.push_back(TrimCopy(current));
+    }
+
+    return result;
+}
+
+inline bool ParseBoolLiteral(string_view text, bool& outValue)
+{
+    text = TrimView(text);
+    string lowered;
+    lowered.reserve(text.size());
+
+    for (char ch : text)
+    {
+        lowered.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(ch))));
+    }
+
+    if (lowered == "true" || lowered == "1")
+    {
+        outValue = true;
+        return true;
+    }
+
+    if (lowered == "false" || lowered == "0")
+    {
+        outValue = false;
+        return true;
+    }
+
+    return false;
+}
+
+inline bool ParseFloatLiteral(string_view text, f32& outValue)
+{
+    const string token = TrimCopy(text);
+    if (token.empty())
+    {
+        return false;
+    }
+
+    char* endPtr = nullptr;
+    const float parsed = std::strtof(token.c_str(), &endPtr);
+    if (endPtr == token.c_str())
+    {
+        return false;
+    }
+
+    while (*endPtr != '\0' && std::isspace(static_cast<unsigned char>(*endPtr)))
+    {
+        ++endPtr;
+    }
+
+    if (*endPtr == 'f' || *endPtr == 'F')
+    {
+        ++endPtr;
+    }
+
+    while (*endPtr != '\0' && std::isspace(static_cast<unsigned char>(*endPtr)))
+    {
+        ++endPtr;
+    }
+
+    if (*endPtr != '\0')
+    {
+        return false;
+    }
+
+    outValue = parsed;
+    return true;
+}
+
+inline bool ParseUnsignedLiteral(string_view text, uint64& outValue)
+{
+    const string token = TrimCopy(text);
+    if (token.empty())
+    {
+        return false;
+    }
+
+    char* endPtr = nullptr;
+    const unsigned long long parsed = std::strtoull(token.c_str(), &endPtr, 0);
+    if (endPtr == token.c_str())
+    {
+        return false;
+    }
+
+    while (*endPtr != '\0' && std::isspace(static_cast<unsigned char>(*endPtr)))
+    {
+        ++endPtr;
+    }
+
+    if (*endPtr != '\0')
+    {
+        return false;
+    }
+
+    outValue = static_cast<uint64>(parsed);
+    return true;
+}
 
 inline const Engine::MetadataEntry* FindMetadata(std::span<const Engine::MetadataEntry> metadata, uint64 keyHash)
 {
-	return Engine::MetadataEntry::Find(metadata, keyHash);
+    return Engine::MetadataEntry::Find(metadata, keyHash);
 }
 
 inline string GetMetadataString(std::span<const Engine::MetadataEntry> metadata, uint64 keyHash, const string& fallback = "")
 {
-	const auto* entry = FindMetadata(metadata, keyHash);
-	if (!entry) return fallback;
+    const auto* entry = FindMetadata(metadata, keyHash);
+    if (!entry)
+    {
+        return fallback;
+    }
 
-	const auto* value = std::get_if<string_view>(&entry->Value);
-	if (value) return string(*value);
+    if (const auto* value = std::get_if<string_view>(&entry->Value))
+    {
+        return string(*value);
+    }
 
-	const auto* wvalue = std::get_if<wstring_view>(&entry->Value);
-	if (wvalue) return Engine::WStrToStr(wvalue->data());
+    if (const auto* value = std::get_if<wstring_view>(&entry->Value))
+    {
+        return Engine::WStrToStr(wstring(value->begin(), value->end()));
+    }
 
-	return fallback;
+    return fallback;
 }
 
 inline string GetMetadataName(std::span<const Engine::MetadataEntry> metadata, const string& fallback = "")
 {
-	return GetMetadataString(metadata, MetaNameHash, fallback);
+    return GetMetadataString(metadata, MetaNameHash, fallback);
 }
 
 inline string GetMetadataTooltip(std::span<const Engine::MetadataEntry> metadata, const string& fallback = "")
 {
-	return GetMetadataString(metadata, MetaTooltipHash, fallback);
+    return GetMetadataString(metadata, MetaTooltipHash, fallback);
 }
 
 inline string GetMetadataCategory(std::span<const Engine::MetadataEntry> metadata, const string& fallback = "")
 {
-	return GetMetadataString(metadata, MetaCategoryHash, fallback);
+    return GetMetadataString(metadata, MetaCategoryHash, fallback);
 }
 
 inline string GetMetadataFilePath(std::span<const Engine::MetadataEntry> metadata, const string& fallback = "")
 {
-	return GetMetadataString(metadata, MetaFilePathHash, fallback);
+    return GetMetadataString(metadata, MetaFilePathHash, fallback);
 }
 
 inline string GetMetadataDirectory(std::span<const Engine::MetadataEntry> metadata, const string& fallback = "")
 {
-	return GetMetadataString(metadata, MetaDirectoryHash, fallback);
+    return GetMetadataString(metadata, MetaDirectoryHash, fallback);
 }
 
 inline bool GetMetadataBool(std::span<const Engine::MetadataEntry> metadata, uint64 keyHash, bool fallback = false)
 {
-	const auto* entry = FindMetadata(metadata, keyHash);
-	if (!entry) return fallback;
-	const auto* value = std::get_if<bool>(&entry->Value);
-	if (value) return *value;
-	return fallback;
+    const auto* entry = FindMetadata(metadata, keyHash);
+    if (!entry)
+    {
+        return fallback;
+    }
+
+    if (const auto* value = std::get_if<bool>(&entry->Value))
+    {
+        return *value;
+    }
+
+    return fallback;
 }
 
-inline MetaRange* GetMetadataRange(std::span<const Engine::MetadataEntry> metadata, uint64 keyHash)
+inline std::optional<ParsedMetaRange> GetMetadataRange(std::span<const Engine::MetadataEntry> metadata)
 {
-	const auto* entry = FindMetadata(metadata, keyHash);
-	if (!entry) return nullptr;
-	const auto* value = std::get_if<MetaRange>(&entry->Value);
-	if (value) return const_cast<MetaRange*>(value);
-	return nullptr;
+    const string literal = GetMetadataString(metadata, MetaRangeHash);
+    if (literal.empty())
+    {
+        return std::nullopt;
+    }
+
+    const vector<string> args = SplitMetadataArgs(literal);
+    if (args.size() < 2)
+    {
+        return std::nullopt;
+    }
+
+    ParsedMetaRange range;
+    if (!ParseFloatLiteral(args[0], range.Min))
+    {
+        return std::nullopt;
+    }
+
+    if (!ParseFloatLiteral(args[1], range.Max))
+    {
+        return std::nullopt;
+    }
+
+    if (args.size() >= 3)
+    {
+        f32 speed = 0.0f;
+        if (ParseFloatLiteral(args[2], speed))
+        {
+            range.Speed = speed;
+        }
+    }
+
+    return range;
 }
 
-inline MetaColor* GetMetadataColor(std::span<const Engine::MetadataEntry> metadata, uint64 keyHash)
+inline std::optional<ParsedMetaColor> GetMetadataColor(std::span<const Engine::MetadataEntry> metadata)
 {
-	const auto* entry = FindMetadata(metadata, keyHash);
-	if (!entry) return nullptr;
-	const auto* value = std::get_if<MetaColor>(&entry->Value);
-	if (value) return const_cast<MetaColor*>(value);
-	return nullptr;
+    if (!FindMetadata(metadata, MetaColorHash))
+    {
+        return std::nullopt;
+    }
+
+    return ParsedMetaColor{};
 }
 
-inline MetaEditCondition* GetMetadataEditCondition(std::span<const Engine::MetadataEntry> metadata)
+inline bool HasMetadataColor(std::span<const Engine::MetadataEntry> metadata)
 {
-	const auto* entry = FindMetadata(metadata, MetaEditConditionHash);
-	if (!entry) return nullptr;
-	const auto* value = std::get_if<MetaEditCondition>(&entry->Value);
-	if (value) return const_cast<MetaEditCondition*>(value);
-	return nullptr;
+    return FindMetadata(metadata, MetaColorHash) != nullptr;
 }
 
-inline MetaOnChanged* GetMetadataOnChanged(std::span<const Engine::MetadataEntry> metadata)
+inline std::optional<ParsedMetaEditCondition> GetMetadataEditCondition(std::span<const Engine::MetadataEntry> metadata)
 {
-	const auto* entry = FindMetadata(metadata, MetaOnChangedHash);
-	if (!entry) return nullptr;
-	const auto* value = std::get_if<MetaOnChanged>(&entry->Value);
-	if (value) return const_cast<MetaOnChanged*>(value);
-	return nullptr;
+    const string literal = GetMetadataString(metadata, MetaEditConditionHash);
+    if (literal.empty())
+    {
+        return std::nullopt;
+    }
+
+    const vector<string> args = SplitMetadataArgs(literal);
+    if (args.empty())
+    {
+        return std::nullopt;
+    }
+
+    ParsedMetaEditCondition result;
+    result.ConditionVariableName = UnquoteString(args[0]);
+    if (result.ConditionVariableName.empty())
+    {
+        return std::nullopt;
+    }
+
+    if (!result.ConditionVariableName.empty() && result.ConditionVariableName.front() == '!')
+    {
+        result.bInvert = true;
+        result.ConditionVariableName.erase(result.ConditionVariableName.begin());
+    }
+
+    if (args.size() >= 2)
+    {
+        result.MaskLiteral = TrimCopy(args[1]);
+        result.HasMaskLiteral = !result.MaskLiteral.empty();
+    }
+
+    if (args.size() >= 3)
+    {
+        bool exactMatch = false;
+        if (ParseBoolLiteral(args[2], exactMatch))
+        {
+            result.bExactMatch = exactMatch;
+        }
+    }
+
+    return result;
+}
+
+inline std::optional<ParsedMetaOnChanged> GetMetadataOnChanged(std::span<const Engine::MetadataEntry> metadata)
+{
+    const string literal = GetMetadataString(metadata, MetaOnChangedHash);
+    if (literal.empty())
+    {
+        return std::nullopt;
+    }
+
+    const vector<string> args = SplitMetadataArgs(literal);
+    if (args.empty())
+    {
+        return std::nullopt;
+    }
+
+    ParsedMetaOnChanged result;
+    result.FunctionName = UnquoteString(args[0]);
+    if (result.FunctionName.empty())
+    {
+        return std::nullopt;
+    }
+
+    for (size_t i = 1; i < args.size(); ++i)
+    {
+        const string propertyName = UnquoteString(args[i]);
+        if (!propertyName.empty())
+        {
+            result.ArgumentPropertyNames.push_back(propertyName);
+        }
+    }
+
+    return result;
 }
 
 inline bool GetMetadataReadOnly(std::span<const Engine::MetadataEntry> metadata)
 {
-	return GetMetadataBool(metadata, MetaReadOnlyHash, false);
+    return GetMetadataBool(metadata, MetaReadOnlyHash, false);
 }
 
 inline bool GetMetadataNoSerialize(std::span<const Engine::MetadataEntry> metadata)
 {
-	return GetMetadataBool(metadata, MetaNoSerializeHash, false);
+    return GetMetadataBool(metadata, MetaNoSerializeHash, false);
 }
 
 inline bool GetMetadataEditable(std::span<const Engine::MetadataEntry> metadata)
 {
-	if (GetMetadataBool(metadata, MetaReadOnlyHash, false)) return true;
-	return GetMetadataBool(metadata, MetaEditableHash, false);
+    if (GetMetadataBool(metadata, MetaReadOnlyHash, false))
+    {
+        return true;
+    }
+
+    return GetMetadataBool(metadata, MetaEditableHash, false);
 }
 
 inline string NormalizeReflectedTypeName(string_view rawTypeName)
 {
-	string name(rawTypeName);
-	if (name.starts_with("class "))
-	{
-		name.erase(0, 6);
-	}
-	else if (name.starts_with("struct "))
-	{
-		name.erase(0, 7);
-	}
+    string name = TrimCopy(rawTypeName);
 
-	while (!name.empty() && std::isspace(static_cast<unsigned char>(name.front())))
-	{
-		name.erase(name.begin());
-	}
+    while (name.rfind("class ", 0) == 0)
+    {
+        name.erase(0, 6);
+    }
 
-	while (!name.empty())
-	{
-		const char last = name.back();
-		if (last == '*' || last == '&' || std::isspace(static_cast<unsigned char>(last)))
-		{
-			name.pop_back();
-			continue;
-		}
-		break;
-	}
-	return name;
+    while (name.rfind("struct ", 0) == 0)
+    {
+        name.erase(0, 7);
+    }
+
+    while (name.rfind("const ", 0) == 0)
+    {
+        name.erase(0, 6);
+    }
+
+    while (name.rfind("volatile ", 0) == 0)
+    {
+        name.erase(0, 9);
+    }
+
+    while (!name.empty())
+    {
+        const char last = name.back();
+        if (last == '*' || last == '&' || std::isspace(static_cast<unsigned char>(last)))
+        {
+            name.pop_back();
+            continue;
+        }
+        break;
+    }
+
+    return name;
+}
+
+inline bool IsQualifiedTypeName(string_view typeName)
+{
+    return typeName.find("::") != string_view::npos;
+}
+
+inline string_view GetShortTypeName(string_view qualifiedName)
+{
+    const size_t pos = qualifiedName.rfind("::");
+    return (pos == string_view::npos) ? qualifiedName : qualifiedName.substr(pos + 2);
+}
+
+inline string GetTypeNamespace(string_view qualifiedName)
+{
+    const size_t pos = qualifiedName.rfind("::");
+    if (pos == string_view::npos)
+    {
+        return {};
+    }
+
+    return string(qualifiedName.substr(0, pos));
+}
+
+inline const Engine::EnumInfo* ResolveEnumInfo(string_view rawTypeName, const Engine::TypeInfo* ownerTypeInfo = nullptr)
+{
+    auto& registry = reflection::Registry::Get();
+
+    const string normalized = NormalizeReflectedTypeName(rawTypeName);
+    if (normalized.empty())
+    {
+        return nullptr;
+    }
+
+    if (const Engine::EnumInfo* enumInfo = registry.GetEnumByQualifiedName(normalized))
+    {
+        return enumInfo;
+    }
+
+    if (!IsQualifiedTypeName(normalized))
+    {
+        if (ownerTypeInfo && !ownerTypeInfo->QualifiedName.empty())
+        {
+            const string ownerNamespace = GetTypeNamespace(ownerTypeInfo->QualifiedName);
+            if (!ownerNamespace.empty())
+            {
+                const string candidate = ownerNamespace + "::" + normalized;
+                if (const Engine::EnumInfo* enumInfo = registry.GetEnumByQualifiedName(candidate))
+                {
+                    return enumInfo;
+                }
+            }
+        }
+
+        const string engineCandidate = "Engine::" + normalized;
+        if (const Engine::EnumInfo* enumInfo = registry.GetEnumByQualifiedName(engineCandidate))
+        {
+            return enumInfo;
+        }
+    }
+
+    return nullptr;
+}
+
+inline bool IsSentinelEnumEntry(string_view entryName)
+{
+    const string_view shortName = GetShortTypeName(entryName);
+    return
+        shortName == "Count" ||
+        shortName == "MAX" ||
+        shortName == "Max" ||
+        shortName == "NUM" ||
+        shortName == "Num";
+}
+
+inline bool ShouldDisplayEnumEntry(const Engine::EnumEntry& entry)
+{
+    return !IsSentinelEnumEntry(entry.Name);
+}
+
+inline bool ShouldDisplayBitFlagEntry(const Engine::EnumEntry& entry)
+{
+    return !IsSentinelEnumEntry(entry.Name);
+}
+
+inline string GetEnumPreviewName(uint64 value, const Engine::EnumInfo* enumInfo)
+{
+    if (!enumInfo)
+    {
+        return std::to_string(value);
+    }
+
+    for (const auto& entry : enumInfo->Entries)
+    {
+        if (!ShouldDisplayEnumEntry(entry))
+        {
+            continue;
+        }
+
+        if (entry.Value == value)
+        {
+            return string(entry.Name);
+        }
+    }
+
+    return std::to_string(value);
+}
+
+inline string GetBitFlagPreviewName(uint64 value, const Engine::EnumInfo* enumInfo)
+{
+    if (!enumInfo)
+    {
+        return std::to_string(value);
+    }
+
+    if (value == 0)
+    {
+        for (const auto& entry : enumInfo->Entries)
+        {
+            if (!ShouldDisplayBitFlagEntry(entry))
+            {
+                continue;
+            }
+
+            if (entry.Value == 0)
+            {
+                return string(entry.Name);
+            }
+        }
+
+        return "None";
+    }
+
+    string result;
+    for (const auto& entry : enumInfo->Entries)
+    {
+        if (!ShouldDisplayBitFlagEntry(entry))
+        {
+            continue;
+        }
+
+        if (entry.Value == 0)
+        {
+            continue;
+        }
+
+        if ((value & entry.Value) == entry.Value)
+        {
+            if (!result.empty())
+            {
+                result += " | ";
+            }
+            result += entry.Name;
+        }
+    }
+
+    return result.empty() ? std::to_string(value) : result;
 }
 
 inline const Engine::PropertyInfo* FindPropertyByName(const Engine::TypeInfo& typeInfo, string_view propertyName)
 {
-	const Engine::TypeInfo* current = &typeInfo;
+    const Engine::TypeInfo* current = &typeInfo;
 
-	while (current != nullptr)
-	{
-		for (const auto& prop : current->Properties)
-		{
-			if (prop.Name == propertyName)
-			{
-				return &prop;
-			}
-		}
+    while (current != nullptr)
+    {
+        for (const auto& prop : current->Properties)
+        {
+            if (prop.Name == propertyName)
+            {
+                return &prop;
+            }
+        }
 
-		if (current->ParentQualifiedName.empty())
-		{
-			break;
-		}
+        if (current->ParentQualifiedName.empty())
+        {
+            break;
+        }
 
-		current = Engine::ReflectionRegistry::Get().GetTypeByQualifiedName(string(current->ParentQualifiedName));
-	}
+        current = reflection::Registry::Get().GetTypeByQualifiedName(current->ParentQualifiedName);
+    }
 
-	return nullptr;
+    return nullptr;
 }
 
-inline const Engine::FunctionInfo* FindFunctionByName(const Engine::TypeInfo& typeInfo, string_view functionName)
+inline bool TryResolveEnumLiteral(string_view token, const Engine::EnumInfo& enumInfo, uint64& outValue)
 {
-	const Engine::TypeInfo* current = &typeInfo;
+    token = TrimView(token);
 
-	while (current != nullptr)
-	{
-		for (const auto& func : current->Functions)
-		{
-			if (func.Name == functionName)
-			{
-				return &func;
-			}
-		}
+    if (ParseUnsignedLiteral(token, outValue))
+    {
+        return true;
+    }
 
-		if (current->ParentQualifiedName.empty())
-		{
-			break;
-		}
+    const string_view tokenShort = GetShortTypeName(token);
 
-		current = Engine::ReflectionRegistry::Get().GetTypeByQualifiedName(string(current->ParentQualifiedName));
-	}
+    for (const auto& entry : enumInfo.Entries)
+    {
+        const string_view entryShort = GetShortTypeName(entry.Name);
+        if (entry.Name == token || entryShort == token || entryShort == tokenShort)
+        {
+            outValue = entry.Value;
+            return true;
+        }
+    }
 
-	return nullptr;
+    return false;
 }
 
-inline bool IsOnChangedFunctionMatch(const Engine::TypeInfo& typeInfo, const Engine::FunctionInfo& functionInfo, const MetaOnChanged& onChanged)
+inline bool IsOnChangedFunctionMatch(const Engine::TypeInfo& typeInfo, const Engine::FunctionInfo& functionInfo, const ParsedMetaOnChanged& onChanged)
 {
-	if (functionInfo.Parameters.size() != onChanged.ArgumentCount)
-	{
-		return false;
-	}
+    if (functionInfo.Parameters.size() != onChanged.ArgumentPropertyNames.size())
+    {
+        return false;
+    }
 
-	for (uint32 i = 0; i < onChanged.ArgumentCount; ++i)
-	{
-		const string_view propertyName = onChanged.ArgumentPropertyNames[i];
-		const Engine::PropertyInfo* propertyInfo = FindPropertyByName(typeInfo, propertyName);
-		if (!propertyInfo)
-		{
-			return false;
-		}
+    for (size_t i = 0; i < onChanged.ArgumentPropertyNames.size(); ++i)
+    {
+        const Engine::PropertyInfo* propertyInfo = FindPropertyByName(typeInfo, onChanged.ArgumentPropertyNames[i]);
+        if (!propertyInfo)
+        {
+            return false;
+        }
 
-		const Engine::VariableInfo& parameterInfo = functionInfo.Parameters[i];
+        const Engine::VariableInfo& parameterInfo = functionInfo.Parameters[i];
+        if (parameterInfo.Type != propertyInfo->TypeInfo.Type)
+        {
+            return false;
+        }
 
-		if (parameterInfo.Type != propertyInfo->TypeInfo.Type)
-		{
-			return false;
-		}
+        const string parameterTypeName = NormalizeReflectedTypeName(parameterInfo.Name);
+        const string propertyTypeName = NormalizeReflectedTypeName(propertyInfo->TypeInfo.Name);
 
-		const string parameterTypeName = NormalizeReflectedTypeName(parameterInfo.Name);
-		const string propertyTypeName = NormalizeReflectedTypeName(propertyInfo->TypeInfo.Name);
+        if (!parameterTypeName.empty() && !propertyTypeName.empty() && parameterTypeName != propertyTypeName)
+        {
+            return false;
+        }
+    }
 
-		if (!parameterTypeName.empty() && !propertyTypeName.empty() && parameterTypeName != propertyTypeName)
-		{
-			return false;
-		}
-	}
-
-	return true;
+    return true;
 }
 
-inline const Engine::FunctionInfo* FindOnChangedFunction(const Engine::TypeInfo& typeInfo, const MetaOnChanged& onChanged)
+inline const Engine::FunctionInfo* FindOnChangedFunction(const Engine::TypeInfo& typeInfo, const ParsedMetaOnChanged& onChanged)
 {
-	const Engine::TypeInfo* current = &typeInfo;
+    const Engine::TypeInfo* current = &typeInfo;
 
-	while (current != nullptr)
-	{
-		for (const auto& func : current->Functions)
-		{
-			if (func.Name != onChanged.FunctionName)
-			{
-				continue;
-			}
+    while (current != nullptr)
+    {
+        for (const auto& func : current->Functions)
+        {
+            if (func.Name != onChanged.FunctionName)
+            {
+                continue;
+            }
 
-			if (IsOnChangedFunctionMatch(typeInfo, func, onChanged))
-			{
-				return &func;
-			}
-		}
+            if (IsOnChangedFunctionMatch(typeInfo, func, onChanged))
+            {
+                return &func;
+            }
+        }
 
-		if (current->ParentQualifiedName.empty())
-		{
-			break;
-		}
+        if (current->ParentQualifiedName.empty())
+        {
+            break;
+        }
 
-		current = Engine::ReflectionRegistry::Get().GetTypeByQualifiedName(string(current->ParentQualifiedName));
-	}
+        current = reflection::Registry::Get().GetTypeByQualifiedName(current->ParentQualifiedName);
+    }
 
-	return nullptr;
+    return nullptr;
 }
 
-
-#pragma endregion
-
-
-#pragma region Helper
-// Enum이나 정수형 데이터를 안전하게 읽어오는 헬퍼
 inline int64 ReadInteger(void* data, size_t size)
-
 {
-	switch (size)
-	{
-	case 1: return *(int8_t*)data;
-	case 2: return *(int16_t*)data;
-	case 4: return *(int32_t*)data;
-	case 8: return *(int64_t*)data;
-	default: return 0;
-	}
+    switch (size)
+    {
+    case 1: return *reinterpret_cast<int8_t*>(data);
+    case 2: return *reinterpret_cast<int16_t*>(data);
+    case 4: return *reinterpret_cast<int32_t*>(data);
+    case 8: return *reinterpret_cast<int64_t*>(data);
+    default: return 0;
+    }
 }
 
 inline uint64 ReadUnsignedInteger(const void* data, size_t size)
 {
-	switch (size)
-	{
-	case 1: return *reinterpret_cast<const uint8_t*>(data);
-	case 2: return *reinterpret_cast<const uint16_t*>(data);
-	case 4: return *reinterpret_cast<const uint32_t*>(data);
-	case 8: return *reinterpret_cast<const uint64_t*>(data);
-	default: return 0;
-	}
+    switch (size)
+    {
+    case 1: return *reinterpret_cast<const uint8_t*>(data);
+    case 2: return *reinterpret_cast<const uint16_t*>(data);
+    case 4: return *reinterpret_cast<const uint32_t*>(data);
+    case 8: return *reinterpret_cast<const uint64_t*>(data);
+    default: return 0;
+    }
 }
 
-// 데이터를 다시 원본 메모리에 쓰는 헬퍼
-inline void WriteInteger(void* data, size_t size, int64_t value)
+inline void WriteInteger(void* data, size_t size, int64 value)
 {
-	switch (size)
-	{
-	case 1: *(int8_t*)data = (int8_t)value; break;
-	case 2: *(int16_t*)data = (int16_t)value; break;
-	case 4: *(int32_t*)data = (int32_t)value; break;
-	case 8: *(int64_t*)data = (int64_t)value; break;
-	}
+    switch (size)
+    {
+    case 1: *reinterpret_cast<int8_t*>(data) = static_cast<int8_t>(value); break;
+    case 2: *reinterpret_cast<int16_t*>(data) = static_cast<int16_t>(value); break;
+    case 4: *reinterpret_cast<int32_t*>(data) = static_cast<int32_t>(value); break;
+    case 8: *reinterpret_cast<int64_t*>(data) = static_cast<int64_t>(value); break;
+    default: break;
+    }
 }
 
-inline void WriteUnsignedInteger(void* data, size_t size, uint64_t value)
+inline void WriteUnsignedInteger(void* data, size_t size, uint64 value)
 {
-	switch (size)
-	{
-	case 1: *reinterpret_cast<uint8_t*>(data) = (uint8_t)value; break;
-	case 2: *reinterpret_cast<uint16_t*>(data) = (uint16_t)value; break;
-	case 4: *reinterpret_cast<uint32_t*>(data) = (uint32_t)value; break;
-	case 8: *reinterpret_cast<uint64_t*>(data) = (uint64_t)value; break;
-	}
+    switch (size)
+    {
+    case 1: *reinterpret_cast<uint8_t*>(data) = static_cast<uint8_t>(value); break;
+    case 2: *reinterpret_cast<uint16_t*>(data) = static_cast<uint16_t>(value); break;
+    case 4: *reinterpret_cast<uint32_t*>(data) = static_cast<uint32_t>(value); break;
+    case 8: *reinterpret_cast<uint64_t*>(data) = static_cast<uint64_t>(value); break;
+    default: break;
+    }
 }
 
 inline bool InvokeOnChanged(void* instance, const Engine::TypeInfo& typeInfo, std::span<const Engine::MetadataEntry> metadata)
 {
-	MetaOnChanged* onChanged = GetMetadataOnChanged(metadata);
-	if (!onChanged)
-	{
-		return false;
-	}
+    const auto onChanged = GetMetadataOnChanged(metadata);
+    if (!onChanged.has_value())
+    {
+        return false;
+    }
 
-	if (onChanged->FunctionName.empty())
-	{
-		return false;
-	}
+    const Engine::FunctionInfo* functionInfo = FindOnChangedFunction(typeInfo, *onChanged);
+    if (!functionInfo)
+    {
+        return false;
+    }
 
-	const Engine::FunctionInfo* functionInfo = FindOnChangedFunction(typeInfo, *onChanged);
-	if (!functionInfo)
-	{
-		return false;
-	}
+    vector<void*> arguments;
+    arguments.reserve(onChanged->ArgumentPropertyNames.size());
 
-	vector<void*> arguments;
-	arguments.reserve(onChanged->ArgumentCount);
+    for (const string& propertyName : onChanged->ArgumentPropertyNames)
+    {
+        const Engine::PropertyInfo* propertyInfo = FindPropertyByName(typeInfo, propertyName);
+        if (!propertyInfo)
+        {
+            return false;
+        }
 
-	for (uint32 i = 0; i < onChanged->ArgumentCount; ++i)
-	{
-		const string_view propertyName = onChanged->ArgumentPropertyNames[i];
-		const Engine::PropertyInfo* propertyInfo = FindPropertyByName(typeInfo, propertyName);
-		if (!propertyInfo)
-		{
-			return false;
-		}
+        void* argumentPtr = reinterpret_cast<uint8*>(instance) + propertyInfo->Offset;
+        arguments.push_back(argumentPtr);
+    }
 
-		void* argumentPtr = reinterpret_cast<uint8_t*>(instance) + propertyInfo->Offset;
-		arguments.push_back(argumentPtr);
-	}
-
-	functionInfo->Invoke(instance, arguments.empty() ? nullptr : arguments.data());
-	return true;
+    functionInfo->Invoke(instance, arguments.empty() ? nullptr : arguments.data());
+    return true;
 }
 
 inline bool CheckEditCondition(void* instance, const TypeInfo& typeInfo, std::span<const Engine::MetadataEntry> metadata)
 {
-	MetaEditCondition* editCondition = GetMetadataEditCondition(metadata);
-	if(!editCondition) return true;
-	string conditionVarName = editCondition ? string(editCondition->ConditionVariableName) : "";
+    const auto editCondition = GetMetadataEditCondition(metadata);
+    if (!editCondition.has_value())
+    {
+        return true;
+    }
 
-	if (conditionVarName.empty()) return true;
-	bool invert = false;
-	if (conditionVarName.starts_with('!'))
-	{
-		invert = true;
-		conditionVarName.erase(0, 1);
-	}
+    if (editCondition->ConditionVariableName.empty())
+    {
+        return true;
+    }
 
-	uint64 mask = editCondition->Mask;
-	bool bExactMatch = editCondition->bExactMatch;
-	const Engine::PropertyInfo* conditionProp = FindPropertyByName(typeInfo, conditionVarName);
-	if (!conditionProp)
-	{
-		return true;
-	}
+    const Engine::PropertyInfo* conditionProp = FindPropertyByName(typeInfo, editCondition->ConditionVariableName);
+    if (!conditionProp)
+    {
+        return true;
+    }
 
-	void* valuePtr = reinterpret_cast<uint8_t*>(instance) + conditionProp->Offset;
+    void* valuePtr = reinterpret_cast<uint8*>(instance) + conditionProp->Offset;
+    bool conditionResult = false;
 
-	bool conditionResult = false;
+    if (conditionProp->TypeInfo.Type == EPropertyType::Enum || conditionProp->TypeInfo.Type == EPropertyType::BitFlag)
+    {
+        const uint64 currentValue = ReadUnsignedInteger(valuePtr, conditionProp->Size);
+        uint64 mask = 0;
 
-	if (conditionProp->TypeInfo.Type == EPropertyType::Enum || conditionProp->TypeInfo.Type == EPropertyType::BitFlag)
-	{
-		int64 intValue = ReadUnsignedInteger(valuePtr, conditionProp->Size);
-		if (bExactMatch)
-		{
-			conditionResult = (intValue == mask);
-		}
-		else if (mask == 0)
-		{
-			conditionResult = intValue != 0;
-		}
-		else
-		{
-			conditionResult = ((intValue & mask) == mask);
-		}
-	}
-	else
-	{
-		conditionResult = *reinterpret_cast<bool*>(valuePtr);
-	}
-	return invert ? !conditionResult : conditionResult;
+        if (editCondition->HasMaskLiteral)
+        {
+            const Engine::EnumInfo* enumInfo = reflection::Registry::Get().GetEnumByQualifiedName(conditionProp->TypeInfo.Name);
+            if (enumInfo)
+            {
+                if (!TryResolveEnumLiteral(editCondition->MaskLiteral, *enumInfo, mask))
+                {
+                    return true;
+                }
+            }
+            else if (!ParseUnsignedLiteral(editCondition->MaskLiteral, mask))
+            {
+                return true;
+            }
+        }
+
+        if (editCondition->bExactMatch)
+        {
+            conditionResult = (currentValue == mask);
+        }
+        else if (!editCondition->HasMaskLiteral || mask == 0)
+        {
+            conditionResult = (currentValue != 0);
+        }
+        else
+        {
+            conditionResult = ((currentValue & mask) == mask);
+        }
+    }
+    else
+    {
+        conditionResult = *reinterpret_cast<bool*>(valuePtr);
+    }
+
+    return editCondition->bInvert ? !conditionResult : conditionResult;
 }
-#pragma endregion
+
 END

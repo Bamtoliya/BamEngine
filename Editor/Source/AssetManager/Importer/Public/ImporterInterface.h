@@ -14,7 +14,7 @@ public:
 	virtual void Free() override { Base::Free(); }
 
 public:
-	virtual EResult Import(const filesystem::path& sourcePath, const filesystem::path& destDir = {}, void* arg = nullptr) PURE;
+	virtual EResult Import(const filesystem::path& sourcePath, const filesystem::path& destDir = {}, void* arg = nullptr) BAM_PURE;
 
 #pragma region Member Variable
 private:

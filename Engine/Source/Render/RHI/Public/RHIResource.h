@@ -38,8 +38,8 @@ public:
 public:
 	virtual EResult Bind(uint32 slot = 0) { return EResult::NotImplemented; }
 public:
-	virtual void* GetNativeHandle() const PURE;
-	virtual void SetNativeHandle(void* nativeHandle) PURE;
+	virtual void* GetNativeHandle() const BAM_PURE;
+	virtual void SetNativeHandle(void* nativeHandle) BAM_PURE;
 protected:
 	RHI* m_RHI = nullptr;
 	ERHIResourceType m_ResourceType = ERHIResourceType::Unknown;

@@ -1,21 +1,13 @@
 ﻿import argparse
 import os
 import sys
-from dataclasses import dataclass
 
+from config.job_schema import ReflectionCodegenProfile, ReflectionJob, set_active_profile
 from emitter import emit_generated_file
 from parser import parse_enums, parse_types
 from parser.property_parser import resolve_property_types
 from utils import collect_bitflag_enums, collect_header_files, write_text_file
 from validation import validate_reflected_symbols
-
-
-@dataclass(slots=True)
-class ReflectionJob:
-    module_name: str
-    source_root: str
-    output_file: str
-    working_directory: str
 
 
 def parse_args(argv: list[str]) -> ReflectionJob:
@@ -45,6 +37,31 @@ def parse_args(argv: list[str]) -> ReflectionJob:
         help="Optional working directory used to resolve relative paths.",
     )
 
+    parser.add_argument(
+        "--strip-namespace",
+        action="append",
+        default=[],
+        help="Namespace prefix to strip during loose type normalization. Repeatable.",
+    )
+    parser.add_argument(
+        "--namespace-fallback",
+        action="append",
+        default=[],
+        help="Namespace fallback to try when resolving unqualified symbols. Repeatable.",
+    )
+    parser.add_argument(
+        "--resource-handle-template",
+        action="append",
+        default=[],
+        help="Template name treated as a resource handle property kind. Repeatable.",
+    )
+    parser.add_argument(
+        "--ignore-header",
+        action="append",
+        default=[],
+        help="Header filename to skip while scanning. Repeatable.",
+    )
+
     args = parser.parse_args(argv)
 
     working_directory = args.working_directory or os.getcwd()
@@ -61,18 +78,34 @@ def parse_args(argv: list[str]) -> ReflectionJob:
     else:
         output_file = os.path.abspath(output_file)
 
+    profile = ReflectionCodegenProfile().extend(
+        stripped_namespaces=args.strip_namespace,
+        namespace_fallbacks=args.namespace_fallback,
+        resource_handle_templates=args.resource_handle_template,
+        ignored_headers=args.ignore_header,
+    )
+
     return ReflectionJob(
         module_name=args.module,
         source_root=source_root,
         output_file=output_file,
         working_directory=os.path.abspath(working_directory),
+        profile=profile,
     )
 
 
 def generate_reflection_code(job: ReflectionJob) -> int:
+    set_active_profile(job.profile)
+
     print(f"[Reflection] Module: {job.module_name}")
     print(f"[Reflection] Scanning source root: {job.source_root}")
     print(f"[Reflection] Output file: {job.output_file}")
+    print(
+        "[Reflection] Profile: "
+        f"strip={list(job.profile.stripped_namespaces)}, "
+        f"fallback={list(job.profile.namespace_fallbacks)}, "
+        f"resource_handles={list(job.profile.resource_handle_templates)}"
+    )
 
     if not os.path.isdir(job.source_root):
         raise FileNotFoundError(f"Source root does not exist: {job.source_root}")

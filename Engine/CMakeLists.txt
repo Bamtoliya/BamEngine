@@ -25,15 +25,17 @@ include("${CMAKE_SOURCE_DIR}/Projects/ReflectionCMake/ReflectionBundles.cmake")
 set(ENGINE_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Source")
 set(ENGINE_PCH_HEADER "${ENGINE_SOURCE_DIR}/Core/Public/Engine_Includes.h")
 set(GENERATED_SOURCE
-    "${CMAKE_CURRENT_SOURCE_DIR}/Source/Core/Reflection/Private/Generated/EngineReflection.gen.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Source/Generated/EngineReflection.gen.cpp"
 )
 
 file(GLOB_RECURSE ENGINE_HEADERS CONFIGURE_DEPENDS "${ENGINE_SOURCE_DIR}/*.h")
 file(GLOB_RECURSE ENGINE_SOURCES CONFIGURE_DEPENDS "${ENGINE_SOURCE_DIR}/*.cpp")
+file(GLOB_RECURSE ENGINE_INLINE CONFIGURE_DEPENDS "${ENGINE_SOURCE_DIR}/*.inl")
+file(GLOB_RECURSE REFLECTION_CODEGEN_SOURCES CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/Projects/ReflectionCodegen/*.py")
 file(GLOB_RECURSE ALL_SOURCE_FILES CONFIGURE_DEPENDS "${ENGINE_SOURCE_DIR}/*")
 
 list(APPEND ENGINE_SOURCES "${GENERATED_SOURCE}")
-
+list(APPEND ENGINE_SOURCES ${ENGINE_INLINE})
 source_group(TREE "${ENGINE_SOURCE_DIR}" FILES ${ENGINE_HEADERS} ${ENGINE_SOURCES})
 
 set(SHADER_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../Resources/Shader")
@@ -57,7 +59,8 @@ endif()
 add_library(Engine SHARED
     ${ENGINE_HEADERS}
     ${ENGINE_SOURCES}
-)
+    $<TARGET_OBJECTS:ReflectionBamAdapterObjects>
+ )
 
 add_library(BamEngine::Engine ALIAS Engine)
 
@@ -99,6 +102,14 @@ add_reflection_bundle(
     MODULE Engine
     SOURCE_ROOT "${ENGINE_SOURCE_DIR}"
     OUTPUT_CPP "${GENERATED_SOURCE}"
+    DEPENDS
+        "${CMAKE_CURRENT_LIST_FILE}"
+        ${ENGINE_HEADERS}
+        ${REFLECTION_CODEGEN_SOURCES}
+    EXTRA_ARGS
+        --strip-namespace Engine
+        --namespace-fallback Engine
+        --resource-handle-template ResourceHandle
     WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
 
@@ -108,7 +119,10 @@ set_target_properties(Engine PROPERTIES
     UNITY_BUILD ON
 )
 
-target_compile_definitions(Engine PRIVATE ENGINE_EXPORTS)
+target_compile_definitions(Engine PRIVATE
+    ENGINE_EXPORTS
+    BAMENGINE_PROJECT_ROOT="${CMAKE_SOURCE_DIR}"
+)
 
 target_include_directories(Engine
     PUBLIC
@@ -123,6 +137,7 @@ target_precompile_headers(Engine PRIVATE ${ENGINE_PCH_HEADER})
 target_link_libraries(Engine
     PUBLIC
         Reflection::Core
+        Reflection::BamAdapter
         fmt::fmt
         SDL3::SDL3
         glm::glm
@@ -130,6 +145,3 @@ target_link_libraries(Engine
         glslang::glslang
         spirv-cross-c
 )
-
-# 나중에 Adapter target이 생기면 여기 추가
-# target_link_libraries(Engine PUBLIC Reflection::BamAdapter)

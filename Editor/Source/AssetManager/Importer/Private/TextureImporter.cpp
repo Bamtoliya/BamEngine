@@ -12,7 +12,6 @@ EResult TextureImporter::Import(const filesystem::path& sourcePath, const filesy
 	CAST_DESC
 
 	filesystem::path outputPath = destDir.empty() ? sourcePath.parent_path() : destDir;
-	outputPath /= sourcePath.filename();
 	outputPath.replace_extension(".bamtex");
 
 	// 1. 팩토리에서 압축기 생성
@@ -33,8 +32,10 @@ EResult TextureImporter::Import(const filesystem::path& sourcePath, const filesy
 	// 3. CPU 데이터 전용 임시 Texture 객체 생성 후 Serialize로 .bamtex 저장
 	//    저장 포맷(AssetHeader + TextureHeader + PixelData)이 Texture::Serialize 내부에서 일관되게 관리됩니다.
 	Engine::Texture* texture = Engine::Texture::Create(texHeader, rawData);
-	texture->SetKey(texture->GetPath());
 	if (!texture) return EResult::Fail;
+
+	texture->SetPath(outputPath.wstring());
+	texture->SetKey(outputPath.wstring());
 
 	EResult result = ResourceManager::Get().SaveToBinaryFile(texture, outputPath.wstring());
 	ResourceManager::Get().DestroyResource(texture); // 저장 후 임시 Texture 객체 해제

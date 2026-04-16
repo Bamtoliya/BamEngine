@@ -3,7 +3,9 @@
 #include <cstddef>
 #include <vector>
 #include <string>
+#include <string_view>
 #include <glm/glm.hpp>
+#include <glm/gtc/quaternion.hpp>
 
 namespace Engine
 {
@@ -38,8 +40,10 @@ namespace Engine
 
 	// [String Objects]
 	using string = std::string;				// base: char (ansichar)
+	using string_view = std::string_view;
 	using u8string = std::u8string;			// base: char8_t (C++20 Standard)
 	using wstring = std::wstring;			// base: wchar_t
+	using wstring_view = std::wstring_view;
 	using u16string = std::u16string;		// base: char16_t
 	using u32string = std::u32string;		// base: char32_t
 

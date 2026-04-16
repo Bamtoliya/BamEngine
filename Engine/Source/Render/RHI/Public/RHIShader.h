@@ -18,10 +18,8 @@ struct tagRHIShaderDesc
 };
 
 BEGIN(Engine)
-CLASS()
 class ENGINE_API RHIShader : public RHIResource
 {
-	REFLECT_CLASS()
 protected:
 	RHIShader() : RHIResource(ERHIResourceType::Shader) {}
 	RHIShader(RHI* rhi) : RHIResource(rhi, ERHIResourceType::Shader) {}

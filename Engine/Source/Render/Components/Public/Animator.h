@@ -5,6 +5,6 @@
 BEGIN(Engine)
 class ENGINE_API Animator : public Component
 {
-	REFLECT_CLASS(Animator)
+	REFLECT_CLASS()
 };
 END

@@ -1,5 +1,7 @@
 ﻿import re
 
+from config.job_schema import get_active_profile
+
 
 TYPE_MAP = {
     "int8": "Int8",
@@ -7,49 +9,69 @@ TYPE_MAP = {
     "int32": "Int32",
     "int64": "Int64",
     "int": "Int32",
+
     "uint8": "UInt8",
     "uint16": "UInt16",
     "uint32": "UInt32",
     "uint64": "UInt64",
     "uint": "UInt32",
-    "f32": "F32",
-    "float": "F32",
-    "double": "Double",
-    "f64": "Double",
+
+    "f32": "Float32",
+    "float": "Float32",
+    "f64": "Float64",
+    "double": "Float64",
+
     "bool": "Bool",
-    "vec2": "Vector2",
-    "glm::vec2": "Vector2",
-    "Vector2": "Vector2",
-    "vec3": "Vector3",
-    "glm::vec3": "Vector3",
-    "Vector3": "Vector3",
-    "vec4": "Vector4",
-    "glm::vec4": "Vector4",
-    "Vector4": "Vector4",
-    "mat3": "Matrix3",
-    "glm::mat3": "Matrix3",
-    "mat4": "Matrix4",
-    "glm::mat4": "Matrix4",
-    "Matrix": "Matrix4",
-    "quat": "Quaternion",
-    "glm::quat": "Quaternion",
-    "Quaternion": "Quaternion",
+
     "string": "String",
     "std::string": "String",
     "String": "String",
-    "wstring": "Wstring",
-    "std::wstring": "Wstring",
-    "Wstring": "Wstring",
+
+    "wstring": "WString",
+    "std::wstring": "WString",
+    "WString": "WString",
+    "Wstring": "WString",
+
+    "vec2": "UserDefined",
+    "glm::vec2": "UserDefined",
+    "Vector2": "UserDefined",
+
+    "vec3": "UserDefined",
+    "glm::vec3": "UserDefined",
+    "Vector3": "UserDefined",
+
+    "vec4": "UserDefined",
+    "glm::vec4": "UserDefined",
+    "Vector4": "UserDefined",
+
+    "quat": "UserDefined",
+    "glm::quat": "UserDefined",
+    "Quaternion": "UserDefined",
+
+    "mat3": "UserDefined",
+    "glm::mat3": "UserDefined",
+    "Matrix3": "UserDefined",
+
+    "mat4": "UserDefined",
+    "glm::mat4": "UserDefined",
+    "Matrix4": "UserDefined",
+    "Matrix": "UserDefined",
+
     "void": "None",
 }
 
 
 def normalize_cpp_type(type_str: str) -> str:
-    return re.sub(r'\s+', ' ', type_str.strip())
+    return re.sub(r"\s+", " ", type_str.strip())
 
 
 def normalize_type_name(type_name: str) -> str:
-    return type_name.replace("std::", "").replace("Engine::", "").strip()
+    text = normalize_cpp_type(type_name)
+
+    for namespace in get_active_profile().stripped_namespaces:
+        text = text.replace(f"{namespace}::", "")
+
+    return text.strip()
 
 
 def get_unqualified_name(type_name: str) -> str:
@@ -84,10 +106,17 @@ def parse_template_args(type_str: str) -> list[str]:
     return parts
 
 
+def _is_resource_handle_type(raw_type: str) -> bool:
+    for template_name in get_active_profile().resource_handle_templates:
+        if raw_type.startswith(f"{template_name}<"):
+            return True
+    return False
+
+
 def get_property_type(raw_type: str, bitflag_enums: set[str] | None = None) -> tuple[str, str]:
     raw_type = normalize_type_name(raw_type)
 
-    if raw_type.startswith("ResourceHandle<"):
+    if _is_resource_handle_type(raw_type):
         return "ResourceHandle", raw_type
 
     if raw_type.endswith("*"):

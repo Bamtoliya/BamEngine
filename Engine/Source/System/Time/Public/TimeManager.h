@@ -1,6 +1,9 @@
 ﻿#pragma once
 
 #include "Base.h"
+#include "Macro.h"
+#include "Result.h"
+
 #include <chrono>
 
 BEGIN(Engine)
@@ -44,7 +47,7 @@ public:
 
 #pragma region Variables
 private:
-	chrono::steady_clock::time_point m_LastTime = std::chrono::steady_clock::now();
+	std::chrono::steady_clock::time_point m_LastTime = std::chrono::steady_clock::now();
 
 	//Time
 	f32		m_DeltaTime = { 0.f };

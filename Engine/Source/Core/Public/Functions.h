@@ -1,8 +1,11 @@
 ﻿#pragma once
 
 #include "Types.h"
-#include <string_view>
+#include <algorithm>
 #include <cstddef>
+#include <filesystem>
+#include <string_view>
+#include <type_traits>
 
 namespace Engine
 {

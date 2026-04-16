@@ -113,12 +113,20 @@ bool InspectorPanel::DrawProperties(void* instance, const TypeInfo& typeInfo)
 
 			for (const auto& prop : currentTypeInfo->Properties)
 			{
-				if (!GetMetadataEditable(prop.Metadata)) continue;
+				if (!GetMetadataEditable(prop.Metadata))
+				{
+					continue;
+				}
+
 				string category = GetMetadataString(prop.Metadata, MetaCategoryHash);
 				if (!category.empty())
+				{
 					categoryMap[category].push_back(&prop);
+				}
 				else
+				{
 					defaultProps.push_back(&prop);
+				}
 			}
 
 			anyChanged |= PropertyDrawer::DrawPropertyTable(instance, *currentTypeInfo, defaultProps);
@@ -128,17 +136,23 @@ bool InspectorPanel::DrawProperties(void* instance, const TypeInfo& typeInfo)
 				ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.2f, 0.2f, 0.25f, 1.0f));
 				ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.25f, 0.25f, 0.3f, 1.0f));
 				ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0.15f, 0.15f, 0.2f, 1.0f));
-	
+
 				string categoryName = category.empty() ? LOCAL("General") : LOCAL(category);
 				bool categoryOpened = ImGui::CollapsingHeader(categoryName.c_str(), ImGuiTreeNodeFlags_None);
 				ImGui::PopStyleColor(3);
 
-				if(categoryOpened)
+				if (categoryOpened)
+				{
 					anyChanged |= PropertyDrawer::DrawPropertyTable(instance, *currentTypeInfo, props);
-			}	
-			currentTypeInfo = currentTypeInfo->ParentQualifiedName.empty() ? nullptr : Engine::ReflectionRegistry::Get().GetTypeByQualifiedName(currentTypeInfo->ParentQualifiedName.data());
+				}
+			}
+
+			currentTypeInfo = currentTypeInfo->ParentQualifiedName.empty()
+				? nullptr
+				: reflection::Registry::Get().GetTypeByQualifiedName(currentTypeInfo->ParentQualifiedName);
 		}
 	}
+
 	ImGui::PopID();
 	return anyChanged;
 }

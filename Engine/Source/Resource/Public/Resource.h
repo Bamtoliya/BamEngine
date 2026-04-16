@@ -3,6 +3,7 @@
 #include "Base.h"
 #include "ReflectionMacro.h"
 #include "SerializableInterface.h"
+#include "ReflectableInterface.h"
 
 #define DECLARE_RESOURCE(ClassType) \
 public: \
@@ -58,7 +59,7 @@ struct ENGINE_API tagResourceBinaryHeader
 
 
 CLASS()
-class ENGINE_API Resource : public SerializableInterface
+class ENGINE_API Resource : public SerializableInterface, public ReflectableInterface
 {
 	REFLECT_BASE()
 	using DESC = tagResourceCreateDesc;
@@ -76,7 +77,7 @@ protected:
 		return EResult::Success; 
 	}
 public:
-	virtual void Free() PURE;
+	virtual void Free() BAM_PURE;
 #pragma	endregion
 
 

@@ -13,7 +13,7 @@ public:
 	virtual void Free() override { Base::Free(); }
 
 public:
-	virtual EResult Export(const filesystem::path& sourcePath, const filesystem::path& destDir) PURE;
+	virtual EResult Export(const filesystem::path& sourcePath, const filesystem::path& destDir) BAM_PURE;
 
 #pragma region Member Variable
 private:

@@ -36,7 +36,7 @@ def emit_function_params_block(owner_name: str, reflected_function: ReflectedFun
 
         property_type_name, reflected_type_name = get_property_type(clean_type)
         lines.append(
-            f'\tFUNCTION_PARAM("{reflected_type_name}", Engine::EPropertyType::{property_type_name})'
+            f'\tFUNCTION_PARAM("{reflected_type_name}", reflection::EPropertyType::{property_type_name})'
         )
 
     lines.append("END_FUNCTION_PARAMS")
@@ -81,13 +81,13 @@ def emit_functions_block(
             function_lines.append(
                 f'REFLECT_FUNCTION_OVERLOAD_EX({owner_name}, "{owner_qualified_name}", '
                 f'"{reflected_function.name}", "{reflected_function.signature}", {function_pointer}, '
-                f'"{reflected_return_type}", Engine::EPropertyType::{property_type_name}, {params_argument})'
+                f'"{reflected_return_type}", reflection::EPropertyType::{property_type_name}, {params_argument})'
             )
         else:
             function_lines.append(
                 f'REFLECT_FUNCTION_EX({owner_name}, "{owner_qualified_name}", '
                 f'{reflected_function.name}, "{reflected_return_type}", '
-                f'Engine::EPropertyType::{property_type_name}, {params_argument})'
+                f'reflection::EPropertyType::{property_type_name}, {params_argument})'
             )
 
     if not function_lines:
