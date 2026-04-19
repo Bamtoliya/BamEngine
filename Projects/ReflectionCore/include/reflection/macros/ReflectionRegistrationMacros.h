@@ -25,71 +25,87 @@ namespace reflection::detail
     inline constexpr bool HasPostLoad_v = HasPostLoad<T>::value;
 
     template<typename T>
-    inline constexpr bool CanCreateReflectionObject_v =
-        !std::is_abstract_v<T> && std::is_default_constructible_v<T>;
-
+    inline constexpr bool CanCreateReflectionObject_v = !std::is_abstract_v<T>;
     template<typename T>
-    inline constexpr bool CanDestroyReflectionObject_v =
-        !std::is_abstract_v<T> && std::is_destructible_v<T>;
-
+    inline constexpr bool CanDestroyReflectionObject_v = !std::is_abstract_v<T>;
     template<typename T>
-    inline constexpr bool CanCopyReflectionObject_v =
-        !std::is_abstract_v<T> && std::is_copy_assignable_v<T>;
+    inline constexpr bool CanCopyReflectionObject_v = !std::is_abstract_v<T>;
 
-    template<typename T>
-    inline void CreateReflectionObjectIfSupported(void* buffer)
-    {
-        if constexpr (CanCreateReflectionObject_v<T>)
-        {
-            std::construct_at(static_cast<T*>(buffer));
-        }
-    }
+    //template<typename T>
+    //inline void CreateReflectionObjectIfSupported(void* buffer)
+    //{
+    //    if constexpr (CanCreateReflectionObject_v<T>)
+    //    {
+    //        std::construct_at(static_cast<T*>(buffer));
+    //    }
+    //}
 
-    template<typename T>
-    inline void DestroyReflectionObjectIfSupported(void* buffer)
-    {
-        if constexpr (CanDestroyReflectionObject_v<T>)
-        {
-            std::destroy_at(static_cast<T*>(buffer));
-        }
-    }
+    //template<typename T>
+    //inline void DestroyReflectionObjectIfSupported(void* buffer)
+    //{
+    //    if constexpr (CanDestroyReflectionObject_v<T>)
+    //    {
+    //        std::destroy_at(static_cast<T*>(buffer));
+    //    }
+    //}
 
-    template<typename T>
-    inline void CopyReflectionObjectIfSupported(void* dst, const void* src)
-    {
-        if constexpr (CanCopyReflectionObject_v<T>)
-        {
-            *static_cast<T*>(dst) = *static_cast<const T*>(src);
-        }
-    }
+    //template<typename T>
+    //inline void CopyReflectionObjectIfSupported(void* dst, const void* src)
+    //{
+    //    if constexpr (CanCopyReflectionObject_v<T>)
+    //    {
+    //        *static_cast<T*>(dst) = *static_cast<const T*>(src);
+    //    }
+    //}
 
-    template<typename T>
-    inline void PostLoadReflectionObjectIfSupported(void* instance)
-    {
-        if constexpr (HasPostLoad_v<T>)
-        {
-            static_cast<T*>(instance)->PostLoad();
-        }
-    }
+    //template<typename T>
+    //inline void PostLoadReflectionObjectIfSupported(void* instance)
+    //{
+    //    if constexpr (HasPostLoad_v<T>)
+    //    {
+    //        static_cast<T*>(instance)->PostLoad();
+    //    }
+    //}
 }
 
 #define IMPLEMENT_CLASS_EX(TypeName, QualifiedTypeNameLiteral, QualifiedParentTypeNameLiteral) \
     void TypeName::CreateReflectionObject(void* buffer) \
     { \
-        reflection::detail::CreateReflectionObjectIfSupported<TypeName>(buffer); \
+        [](auto* tag, void* buf) { \
+            using T = std::remove_pointer_t<decltype(tag)>; \
+            if constexpr (reflection::detail::CanCreateReflectionObject_v<T>) \
+            { \
+                new(buf) T(); \
+            } \
+        }(static_cast<TypeName*>(nullptr), buffer); \
     } \
     void TypeName::DestroyReflectionObject(void* buffer) \
     { \
-        reflection::detail::DestroyReflectionObjectIfSupported<TypeName>(buffer); \
+        [](auto* tag, void* buf) { \
+            using T = std::remove_pointer_t<decltype(tag)>; \
+            if constexpr (reflection::detail::CanDestroyReflectionObject_v<T>) \
+            { \
+                static_cast<T*>(buf)->~T(); \
+            } \
+        }(static_cast<TypeName*>(nullptr), buffer); \
     } \
     void TypeName::CopyReflectionObject(void* dst, const void* src) \
     { \
-        reflection::detail::CopyReflectionObjectIfSupported<TypeName>(dst, src); \
+        [](auto* tag, void* d, const void* s) { \
+            using T = std::remove_pointer_t<decltype(tag)>; \
+            if constexpr (reflection::detail::CanCopyReflectionObject_v<T>) \
+            { \
+                *static_cast<T*>(d) = *static_cast<const T*>(s); \
+            } \
+        }(static_cast<TypeName*>(nullptr), dst, src); \
     } \
-    void TypeName::PostLoadReflectionObject(void* instance) \
+    /*void TypeName::PostLoadReflectionObject(void* instance) \
     { \
-        reflection::detail::PostLoadReflectionObjectIfSupported<TypeName>(instance); \
-    } \
+        if constexpr (reflection::detail::HasPostLoad_v<TypeName>) \
+        { \
+            static_cast<TypeName*>(instance)->PostLoad(); \
+        } \
+    }*/ \
     static constexpr reflection::TypeInfo TypeName##_TypeInfo = { \
         reflection::CompileTimeHash(QualifiedTypeNameLiteral), \
         QualifiedTypeNameLiteral, \

@@ -28,15 +28,16 @@ public:
 	static bool DrawFloatProperty(void* data, const TypeInfo& typeinfo, const PropertyInfo& property);
 	static bool DrawBooleanProperty(void* data, const TypeInfo& typeinfo, const PropertyInfo& property);
 	static bool DrawStringProperty(void* data, const TypeInfo& typeinfo, const PropertyInfo& property);
-	//static bool DrawMapProperty(void* data, const TypeInfo& typeinfo, const PropertyInfo& property);
-	static bool DrawListProperty(void* data, const TypeInfo& typeinfo, const PropertyInfo& property);
+	static bool DrawListProperty(void* instance, void* data, const TypeInfo& typeinfo, const PropertyInfo& property);
+	static bool DrawMapProperty(void* instance, void* data, const TypeInfo& typeinfo, const PropertyInfo& property);
+	static bool DrawSetProperty(void* instance, void* data, const TypeInfo& typeinfo, const PropertyInfo& property);
 	static bool DrawFloatInVector(string axis, f32& value, bool& lock, ImVec2 buttonSize, ImVec2 lockSize, f32 resetValue, f32 inputWidth);
 	static bool DrawVectorProperty(void* instance, void* data, const TypeInfo& typeinfo, const PropertyInfo& property);
 
 	static bool DrawColorProperty(void* data, const TypeInfo& typeinfo, const PropertyInfo& property);
 	static bool DrawMatrixProperty(void* data, const TypeInfo& typeinfo, const PropertyInfo& property);
 	//static bool DrawStructProperty(void* data, const TypeInfo& typeinfo, const PropertyInfo& property);
-	//static bool DrawSetProperty(void* data, const TypeInfo& typeinfo, const PropertyInfo& property);
+	
 	static bool DrawEnumProperty(void* data, const TypeInfo& typeinfo, const PropertyInfo& property);
 	static bool DrawBitFlagProperty(void* data, const TypeInfo& typeinfo, const PropertyInfo& property);
 

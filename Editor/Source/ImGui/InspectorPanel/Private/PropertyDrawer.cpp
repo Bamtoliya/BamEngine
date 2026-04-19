@@ -5,7 +5,6 @@
 #include "LocalizationManager.h"
 #include <regex>
 
-
 #pragma region Vector Axis
 static vector<string> axisLabels = { "X", "Y", "Z", "W" };
 
@@ -36,7 +35,7 @@ inline string_view GetLiteralArgs(string_view literal)
 	return literal;
 }
 
-inline bool ParseNumberList(string_view literal, vector<f32>& out)
+inline bool ParseNumberList(string_view literal, vector<Engine::f32>& out)
 {
 	out.clear();
 	const string args(GetLiteralArgs(literal));
@@ -46,7 +45,7 @@ inline bool ParseNumberList(string_view literal, vector<f32>& out)
 	{
 		try
 		{
-			out.push_back(static_cast<f32>(std::stod(it->str())));
+			out.push_back(static_cast<Engine::f32>(std::stod(it->str())));
 		}
 		catch (...)
 		{
@@ -263,6 +262,488 @@ inline uint32 GetMatrixDimension(const PropertyInfo& property)
 }
 #pragma endregion
 
+#pragma region Container Helpers
+static std::unordered_map<uint64, string> g_ContainerTextInputs;
+
+struct MapEntryView
+{
+	void* Value = nullptr;
+	void* Key = nullptr;
+};
+
+inline uint64 MakeContainerInputKey(const void* data, const PropertyInfo& property, uint64 salt)
+{
+	uint64 h = 14695981039346656037ull;
+	auto mix = [&h](uint64 v)
+		{
+			h ^= v;
+			h *= 1099511628211ull;
+		};
+
+	mix(reinterpret_cast<uint64>(data));
+	mix(property.ID);
+	mix(salt);
+	return h;
+}
+
+inline vector<string> SplitContainerTypeArguments(string_view typeName)
+{
+	vector<string> result;
+
+	const size_t l = typeName.find('<');
+	const size_t r = typeName.rfind('>');
+	if (l == string_view::npos || r == string_view::npos || r <= l)
+	{
+		return result;
+	}
+
+	string current;
+	int angleDepth = 0;
+	const string_view argsView = typeName.substr(l + 1, r - l - 1);
+
+	for (char ch : argsView)
+	{
+		if (ch == '<')
+		{
+			++angleDepth;
+		}
+		else if (ch == '>')
+		{
+			--angleDepth;
+		}
+
+		if (ch == ',' && angleDepth == 0)
+		{
+			result.push_back(TrimCopy(current));
+			current.clear();
+			continue;
+		}
+
+		current.push_back(ch);
+	}
+
+	if (!current.empty())
+	{
+		result.push_back(TrimCopy(current));
+	}
+
+	return result;
+}
+
+inline bool IsContainerTokenPointer(string_view token)
+{
+	token = TrimView(token);
+	return !token.empty() && token.back() == '*';
+}
+
+inline bool IsLinearContainerElementPointer(const PropertyInfo& property)
+{
+	const vector<string> args = SplitContainerTypeArguments(property.TypeInfo.Name);
+	return !args.empty() && IsContainerTokenPointer(args[0]);
+}
+
+inline bool IsMapValuePointer(const PropertyInfo& property)
+{
+	const vector<string> args = SplitContainerTypeArguments(property.TypeInfo.Name);
+	return args.size() >= 2 && IsContainerTokenPointer(args[1]);
+}
+
+inline bool ParseSignedLiteral(string_view text, int64& outValue)
+{
+	const string token = TrimCopy(text);
+	if (token.empty())
+	{
+		return false;
+	}
+
+	char* endPtr = nullptr;
+	const long long parsed = std::strtoll(token.c_str(), &endPtr, 0);
+	if (endPtr == token.c_str())
+	{
+		return false;
+	}
+
+	while (*endPtr != '\0' && std::isspace(static_cast<unsigned char>(*endPtr)))
+	{
+		++endPtr;
+	}
+
+	if (*endPtr != '\0')
+	{
+		return false;
+	}
+
+	outValue = static_cast<int64>(parsed);
+	return true;
+}
+
+inline void DrawPersistentTextInput(const char* label, string& value, size_t capacity = 256)
+{
+	vector<char> buffer(capacity, '\0');
+	strncpy_s(buffer.data(), buffer.size(), value.c_str(), _TRUNCATE);
+
+	if (ImGui::InputText(label, buffer.data(), buffer.size()))
+	{
+		value = buffer.data();
+	}
+}
+
+inline bool CanInputContainerLiteral(const VariableInfo& variableInfo)
+{
+	switch (variableInfo.Type)
+	{
+	case EPropertyType::Int8:
+	case EPropertyType::Int16:
+	case EPropertyType::Int32:
+	case EPropertyType::Int64:
+	case EPropertyType::UInt8:
+	case EPropertyType::UInt16:
+	case EPropertyType::UInt32:
+	case EPropertyType::UInt64:
+	case EPropertyType::Float32:
+	case EPropertyType::Float64:
+	case EPropertyType::Bool:
+	case EPropertyType::String:
+	case EPropertyType::WString:
+		return true;
+	default:
+		return false;
+	}
+}
+
+template<typename Callback>
+bool WithParsedContainerLiteral(string_view text, const VariableInfo& variableInfo, Callback&& callback)
+{
+	switch (variableInfo.Type)
+	{
+	case EPropertyType::String:
+	{
+		string value = UnquoteString(text);
+		callback(&value);
+		return true;
+	}
+	case EPropertyType::WString:
+	{
+		wstring value = Engine::StrToWStr(UnquoteString(text));
+		callback(&value);
+		return true;
+	}
+	case EPropertyType::Bool:
+	{
+		bool value = false;
+		if (!ParseBoolLiteral(text, value))
+		{
+			return false;
+		}
+		callback(&value);
+		return true;
+	}
+	case EPropertyType::Int8:
+	case EPropertyType::Int16:
+	case EPropertyType::Int32:
+	case EPropertyType::Int64:
+	{
+		int64 parsed = 0;
+		if (!ParseSignedLiteral(text, parsed))
+		{
+			return false;
+		}
+
+		switch (variableInfo.Type)
+		{
+		case EPropertyType::Int8: { int8 value = static_cast<int8>(parsed); callback(&value); return true; }
+		case EPropertyType::Int16: { int16 value = static_cast<int16>(parsed); callback(&value); return true; }
+		case EPropertyType::Int32: { int32 value = static_cast<int32>(parsed); callback(&value); return true; }
+		case EPropertyType::Int64: { int64 value = parsed; callback(&value); return true; }
+		default: break;
+		}
+		return false;
+	}
+	case EPropertyType::UInt8:
+	case EPropertyType::UInt16:
+	case EPropertyType::UInt32:
+	case EPropertyType::UInt64:
+	{
+		uint64 parsed = 0;
+		if (!ParseUnsignedLiteral(text, parsed))
+		{
+			return false;
+		}
+
+		switch (variableInfo.Type)
+		{
+		case EPropertyType::UInt8: { uint8 value = static_cast<uint8>(parsed); callback(&value); return true; }
+		case EPropertyType::UInt16: { uint16 value = static_cast<uint16>(parsed); callback(&value); return true; }
+		case EPropertyType::UInt32: { uint32 value = static_cast<uint32>(parsed); callback(&value); return true; }
+		case EPropertyType::UInt64: { uint64 value = parsed; callback(&value); return true; }
+		default: break;
+		}
+		return false;
+	}
+	case EPropertyType::Float32:
+	{
+		f32 value = 0.0f;
+		if (!ParseFloatLiteral(text, value))
+		{
+			return false;
+		}
+		callback(&value);
+		return true;
+	}
+	case EPropertyType::Float64:
+	{
+		f32 parsed = 0.0f;
+		if (!ParseFloatLiteral(text, parsed))
+		{
+			return false;
+		}
+		double value = static_cast<double>(parsed);
+		callback(&value);
+		return true;
+	}
+	default:
+		return false;
+	}
+}
+
+inline const TypeInfo* ResolveReflectedTypeInfo(string_view rawTypeName, const TypeInfo* ownerTypeInfo = nullptr)
+{
+	auto& registry = reflection::Registry::Get();
+
+	const string normalized = NormalizeReflectedTypeName(rawTypeName);
+	if (normalized.empty())
+	{
+		return nullptr;
+	}
+
+	if (const TypeInfo* typeInfo = registry.GetTypeByQualifiedName(normalized))
+	{
+		return typeInfo;
+	}
+
+	if (const TypeInfo* typeInfo = registry.ResolveTypeName(normalized))
+	{
+		return typeInfo;
+	}
+
+	if (!IsQualifiedTypeName(normalized))
+	{
+		if (ownerTypeInfo && !ownerTypeInfo->QualifiedName.empty())
+		{
+			const string ownerNamespace = GetTypeNamespace(ownerTypeInfo->QualifiedName);
+			if (!ownerNamespace.empty())
+			{
+				const string candidate = ownerNamespace + "::" + normalized;
+				if (const TypeInfo* typeInfo = registry.GetTypeByQualifiedName(candidate))
+				{
+					return typeInfo;
+				}
+			}
+		}
+
+		const string engineCandidate = "Engine::" + normalized;
+		if (const TypeInfo* typeInfo = registry.GetTypeByQualifiedName(engineCandidate))
+		{
+			return typeInfo;
+		}
+	}
+
+	return nullptr;
+}
+
+inline size_t ResolveVariableSize(const VariableInfo& variableInfo, const TypeInfo* resolvedType, bool pointerSlot)
+{
+	if (pointerSlot || variableInfo.Type == EPropertyType::Object)
+	{
+		return sizeof(void*);
+	}
+
+	switch (variableInfo.Type)
+	{
+	case EPropertyType::Int8:
+	case EPropertyType::UInt8:
+		return 1;
+
+	case EPropertyType::Int16:
+	case EPropertyType::UInt16:
+		return 2;
+
+	case EPropertyType::Int32:
+	case EPropertyType::UInt32:
+	case EPropertyType::Float32:
+		return 4;
+
+	case EPropertyType::Int64:
+	case EPropertyType::UInt64:
+	case EPropertyType::Float64:
+		return 8;
+
+	case EPropertyType::Bool:
+		return sizeof(bool);
+
+	case EPropertyType::String:
+		return sizeof(string);
+
+	case EPropertyType::WString:
+		return sizeof(wstring);
+
+	case EPropertyType::ResourceHandle:
+		return sizeof(Engine::Handle);
+
+	case EPropertyType::Struct:
+		return resolvedType ? resolvedType->Size : 0;
+
+	case EPropertyType::UserDefined:
+	{
+		const string normalized = NormalizeReflectedTypeName(variableInfo.Name);
+		if (normalized == "vec2" || normalized == "glm::vec2") return sizeof(vec2);
+		if (normalized == "vec3" || normalized == "glm::vec3") return sizeof(vec3);
+		if (normalized == "vec4" || normalized == "glm::vec4") return sizeof(vec4);
+		if (normalized == "quat" || normalized == "glm::quat") return sizeof(quat);
+		if (normalized == "mat3" || normalized == "glm::mat3") return sizeof(mat3);
+		if (normalized == "mat4" || normalized == "glm::mat4") return sizeof(mat4);
+		return resolvedType ? resolvedType->Size : 0;
+	}
+
+	default:
+		break;
+	}
+
+	return 0;
+}
+
+inline vector<const PropertyInfo*> CollectEditableProperties(const TypeInfo& typeInfo)
+{
+	vector<const PropertyInfo*> props;
+	props.reserve(typeInfo.Properties.size());
+
+	for (const auto& prop : typeInfo.Properties)
+	{
+		if (GetMetadataEditable(prop.Metadata))
+		{
+			props.push_back(&prop);
+		}
+	}
+
+	return props;
+}
+
+inline bool DrawReflectedTypeProperties(void* instance, const TypeInfo& typeInfo, bool readOnly)
+{
+	bool changed = false;
+
+	if (!typeInfo.ParentQualifiedName.empty())
+	{
+		if (const TypeInfo* parentType = reflection::Registry::Get().GetTypeByQualifiedName(typeInfo.ParentQualifiedName))
+		{
+			changed |= DrawReflectedTypeProperties(instance, *parentType, readOnly);
+		}
+	}
+
+	vector<const PropertyInfo*> props = CollectEditableProperties(typeInfo);
+	if (props.empty())
+	{
+		return changed;
+	}
+
+	ImGui::PushID(typeInfo.QualifiedName.data());
+
+	if (readOnly)
+	{
+		ImGui::BeginDisabled();
+	}
+
+	changed |= PropertyDrawer::DrawPropertyTable(instance, typeInfo, props);
+
+	if (readOnly)
+	{
+		ImGui::EndDisabled();
+	}
+
+	ImGui::PopID();
+	return changed;
+}
+
+inline bool DrawContainerField(
+	void* instance,
+	void* elementData,
+	const TypeInfo& ownerType,
+	const VariableInfo& variableInfo,
+	const ContainerInfo* nestedContainerData,
+	const string& syntheticName,
+	bool pointerSlot,
+	bool readOnly)
+{
+	const TypeInfo* resolvedType = ResolveReflectedTypeInfo(variableInfo.Name, &ownerType);
+
+	if (pointerSlot || variableInfo.Type == EPropertyType::Struct || variableInfo.Type == EPropertyType::Object)
+	{
+		void* targetData = elementData;
+		const TypeInfo* drawType = resolvedType;
+
+		if (pointerSlot || variableInfo.Type == EPropertyType::Object)
+		{
+			targetData = *reinterpret_cast<void**>(elementData);
+			if (!targetData)
+			{
+				ImGui::TextDisabled("nullptr");
+				return false;
+			}
+
+			if (drawType && drawType->GetDynamicType)
+			{
+				drawType = &drawType->GetDynamicType(targetData);
+			}
+		}
+
+		if (!drawType)
+		{
+			ImGui::TextDisabled("Unsupported reflected type");
+			return false;
+		}
+
+		const string nodeLabel = string(GetShortTypeName(drawType->QualifiedName)) + "###" + syntheticName;
+		bool changed = false;
+
+		if (ImGui::TreeNodeEx(nodeLabel.c_str(), ImGuiTreeNodeFlags_SpanAvailWidth))
+		{
+			changed |= DrawReflectedTypeProperties(targetData, *drawType, readOnly);
+			ImGui::TreePop();
+		}
+
+		return changed;
+	}
+
+	PropertyInfo syntheticProperty{};
+	syntheticProperty.Name = syntheticName;
+	syntheticProperty.TypeInfo = variableInfo;
+	syntheticProperty.Size = ResolveVariableSize(variableInfo, resolvedType, pointerSlot);
+	syntheticProperty.ContainerData = nestedContainerData;
+
+	bool changed = false;
+
+	if (readOnly)
+	{
+		ImGui::BeginDisabled();
+	}
+
+	changed |= PropertyDrawer::DrawProperty(instance, elementData, ownerType, syntheticProperty);
+
+	if (readOnly)
+	{
+		ImGui::EndDisabled();
+	}
+
+	return changed;
+}
+
+inline void CollectMapEntry(void* value, void* key, void* userData)
+{
+	auto* entries = static_cast<vector<MapEntryView>*>(userData);
+	entries->push_back({ value, key });
+}
+#pragma endregion
+
 #pragma region Vector Lock Resolver
 enum class ETransformVectorGroup : uint8
 {
@@ -461,7 +942,7 @@ string PropertyDrawer::SanitizeDisplayLabel(const TypeInfo& typeInfo, const Prop
 bool PropertyDrawer::DrawHeaderNode(void* instance, const TypeInfo& typeInfo)
 {
 	ImGui::SetNextItemAllowOverlap();
-	bool opened = ImGui::CollapsingHeader(typeInfo.QualifiedName.data(), ImGuiTreeNodeFlags_DefaultOpen);
+	bool opened = ImGui::CollapsingHeader(GetShortTypeName(typeInfo.QualifiedName).data(), ImGuiTreeNodeFlags_DefaultOpen);
 	ImGui::SameLine();
 	DrawCheckbox(dynamic_cast<ActiveInterface*>(reinterpret_cast<Base*>(instance)), typeInfo);
 	return opened;
@@ -569,7 +1050,13 @@ bool PropertyDrawer::DrawProperty(void* instance, void* data, const TypeInfo& ty
 
 	case EPropertyType::Array:
 	case EPropertyType::List:
-		return DrawListProperty(data, typeinfo, property);
+		return DrawListProperty(instance, data, typeinfo, property);
+
+	case EPropertyType::Map:
+		return DrawMapProperty(instance, data, typeinfo, property);
+
+	case EPropertyType::Set:
+		return DrawSetProperty(instance, data, typeinfo, property);
 
 	case EPropertyType::Enum:
 		return DrawEnumProperty(data, typeinfo, property);
@@ -798,196 +1285,274 @@ bool PropertyDrawer::DrawStringProperty(void* data, const TypeInfo& typeinfo, co
 	return changed;
 }
 
-bool PropertyDrawer::DrawListProperty(void* data, const TypeInfo& typeinfo, const PropertyInfo& property)
+
+
+bool PropertyDrawer::DrawListProperty(void* instance, void* data, const TypeInfo& typeinfo, const PropertyInfo& property)
 {
+	if (!property.ContainerData || !property.ContainerData->Accessor)
+	{
+		ImGui::TextDisabled("Container accessor not found");
+		return false;
+	}
+
 	bool changed = false;
-	//auto* accessor = property.TypeInfo.Accessor;
-	//if (!accessor) return false;
+	const ContainerInfo& containerInfo = *property.ContainerData;
+	const ContainerAccessor& accessor = *containerInfo.Accessor;
+	const size_t size = accessor.GetSize ? accessor.GetSize(data) : 0;
+	const bool pointerElement = IsLinearContainerElementPointer(property);
 
-	//uint32 size = accessor->GetSize(data);
-	//string headerName = SanitizeDisplayLabel(typeinfo, property) + " [" + to_string(size) + "]###" + property.Name;
-	//string innerType = property.InnerTypeName;
-	//
+	const string headerName = SanitizeDisplayLabel(typeinfo, property) + " [" + to_string(size) + "]###" + string(property.Name);
+	if (!ImGui::CollapsingHeader(headerName.c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+	{
+		return false;
+	}
 
-	//if (ImGui::CollapsingHeader(headerName.c_str()))
-	//{
-	//	ImGui::Indent();
+	ImGui::Indent();
 
-	//	// [1. 리스트에 새 요소 추가]
-	//	if (ImGui::Button(ICON_FA_PLUS " Add Element"))
-	//	{
-	//		accessor->Add(data, nullptr);
-	//		changed = true;
-	//	}
+	if (accessor.Add && ImGui::Button(ICON_FA_PLUS " Add Element"))
+	{
+		accessor.Add(data, nullptr);
+		changed = true;
+	}
 
-	//	ImGui::Separator();
+	ImGui::Separator();
 
-	//	vector<void*> elements = accessor->GetElements(data);
-	//	void* toRemove = nullptr;
+	vector<void*> elements = accessor.GetElements ? accessor.GetElements(data) : vector<void*>{};
+	void* removeElement = nullptr;
 
-	//	// [2. 테이블 형태로 리스트 요소들 그리기]
-	//	if (!elements.empty())
-	//	{
-	//		// 3개의 컬럼: Index(고정 너비), Value(확장 너비), Action(고정 너비)
-	//		if (ImGui::BeginTable("##ListTable", 3, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_SizingStretchProp))
-	//		{
-	//			ImGui::TableSetupColumn("Index", ImGuiTableColumnFlags_WidthFixed, 35.0f);
-	//			ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
-	//			ImGui::TableSetupColumn("Action", ImGuiTableColumnFlags_WidthFixed, 30.0f);
+	if (!elements.empty() && ImGui::BeginTable("##ListTable", 3, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_SizingStretchProp))
+	{
+		ImGui::TableSetupColumn("Index", ImGuiTableColumnFlags_WidthFixed, 48.0f);
+		ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+		ImGui::TableSetupColumn("Delete", ImGuiTableColumnFlags_WidthFixed, 32.0f);
 
-	//			for (int i = 0; i < elements.size(); ++i)
-	//			{
-	//				ImGui::PushID(i);
-	//				ImGui::TableNextRow();
-	//				void* elemPtr = elements[i];
+		for (size_t index = 0; index < elements.size(); ++index)
+		{
+			ImGui::PushID(static_cast<int>(index));
+			ImGui::TableNextRow();
 
-	//				// --- [Column 1] Index 표시 ---
-	//				ImGui::TableNextColumn();
-	//				ImGui::AlignTextToFramePadding();
-	//				ImGui::Text("[%d]", i);
+			ImGui::TableNextColumn();
+			ImGui::AlignTextToFramePadding();
+			ImGui::Text("[%zu]", index);
 
-	//				// --- [Column 2] 값 인라인 편집기(Editor) 또는 재귀 구조체 렌더링 ---
-	//				ImGui::TableNextColumn();
-	//				ImGui::SetNextItemWidth(-FLT_MIN);
+			ImGui::TableNextColumn();
+			ImGui::SetNextItemWidth(-FLT_MIN);
+			const string valueName = "Element";
+			changed |= DrawContainerField(instance, elements[index], typeinfo, containerInfo.Inner, containerInfo.InnerContainerData, valueName, pointerElement, false);
 
-	//				if (innerType == "int32" || innerType == "int64" || innerType == "uint32" || innerType == "uint64" || innerType == "Int32" || innerType == "int")
-	//				{
-	//					if (ImGui::DragInt("##val", (int*)elemPtr)) changed = true;
-	//				}
-	//				else if (innerType == "float" || innerType == "F32")
-	//				{
-	//					if (ImGui::DragFloat("##val", (float*)elemPtr)) changed = true;
-	//				}
-	//				else if (innerType == "bool" || innerType == "Bool")
-	//				{
-	//					if (ImGui::Checkbox("##val", (bool*)elemPtr)) changed = true;
-	//				}
-	//				else if (innerType == "string" || innerType == "String")
-	//				{
-	//					string* val = static_cast<string*>(elemPtr);
-	//					char buffer[1024];
-	//					strcpy_s(buffer, val->c_str());
-	//					if (ImGui::InputText("##val", buffer, sizeof(buffer)))
-	//					{
-	//						*val = string(buffer);
-	//						changed = true;
-	//					}
-	//				}
-	//				else if (innerType == "wstring" || innerType == "WString")
-	//				{
-	//					wstring* val = static_cast<wstring*>(elemPtr);
-	//					string utf8Str = Engine::WStrToStr(*val);
-	//					char buffer[1024];
-	//					strcpy_s(buffer, utf8Str.c_str());
-	//					if (ImGui::InputText("##val", buffer, sizeof(buffer)))
-	//					{
-	//						*val = Engine::StrToWStr(buffer);
-	//						changed = true;
-	//					}
-	//				}
-	//				else if (innerType == "vec2" || innerType == "Vector2")
-	//				{
-	//					vec2* val = static_cast<vec2*>(elemPtr);
-	//					if (ImGui::DragFloat2("##val", &val->x)) changed = true;
-	//				}
-	//				else if (innerType == "vec3" || innerType == "Vector3")
-	//				{
-	//					vec3* val = static_cast<vec3*>(elemPtr);
-	//					if (ImGui::DragFloat3("##val", &val->x)) changed = true;
-	//				}
-	//				else if (innerType == "vec4" || innerType == "Vector4")
-	//				{
-	//					vec4* val = static_cast<vec4*>(elemPtr);
-	//					if (ImGui::DragFloat4("##val", &val->x)) changed = true;
-	//				}
-	//				else if (innerType == "quat" || innerType == "Quaternion")
-	//				{
-	//					quat* q = static_cast<quat*>(elemPtr);
-	//					vec3 euler = glm::degrees(glm::eulerAngles(*q));
-	//					if (ImGui::DragFloat3("##val", &euler.x))
-	//					{
-	//						*q = glm::quat(glm::radians(euler));
-	//						changed = true;
-	//					}
-	//				}
-	//				else
-	//				{
-	//					// [핵심] 일반 변수가 아닌 경우: 구조체, 클래스, 혹은 포인터(*) 일 수 있음
-	//					bool isPointer = false;
-	//					string cleanInnerType = innerType;
+			ImGui::TableNextColumn();
+			if (accessor.Remove && ImGui::Button("X", ImVec2(-1.0f, 0.0f)))
+			{
+				removeElement = elements[index];
+			}
 
-	//					// 1. 만약 포인터 타입(예: MaterialInstance*)이라면 '*' 제거
-	//					if (!cleanInnerType.empty() && cleanInnerType.back() == '*')
-	//					// [개선] const, *, & 제거 로직 강화 (ex: "const MyClass*" -> "MyClass")
-	//					// 뒤쪽의 포인터/참조 제거
-	//					while (!cleanInnerType.empty() && (cleanInnerType.back() == '*' || cleanInnerType.back() == '&' || cleanInnerType.back() == ' '))
-	//					{
-	//						isPointer = true;
-	//						if (cleanInnerType.back() == '*') isPointer = true;
-	//						cleanInnerType.pop_back();
-	//					}
-	//					
-	//					// 앞쪽의 const/volatile 제거
-	//					if (cleanInnerType.rfind("const ", 0) == 0) cleanInnerType = cleanInnerType.substr(6);
-	//					if (cleanInnerType.rfind("volatile ", 0) == 0) cleanInnerType = cleanInnerType.substr(9);
-	//					
-	//					// 공백 제거 (Trim)
-	//					if (!cleanInnerType.empty() && cleanInnerType.front() == ' ') {
-	//						cleanInnerType.erase(0, cleanInnerType.find_first_not_of(' '));
-	//					}
+			ImGui::PopID();
+		}
 
-	//					// 2. 순수한 타입명으로 리플렉션 레지스트리 검색
-	//					TypeInfo* innerTypeInfo = Engine::ReflectionRegistry::Get().GetType(cleanInnerType);
+		ImGui::EndTable();
+	}
 
-	//					if (innerTypeInfo)
-	//					{
-	//						// 3. 포인터라면 이중 포인터 해제(Dereference), 일반 구조체면 그대로 사용
-	//						void* targetData = isPointer ? *static_cast<void**>(elemPtr) : elemPtr;
+	if (removeElement && accessor.Remove)
+	{
+		accessor.Remove(data, removeElement);
+		changed = true;
+	}
 
-	//						if (targetData)
-	//						{
-	//							// 4. TreeNode를 이용해 접고 펼칠 수 있는 형태의 하위 패널 구성
-	//							string nodeLabel = cleanInnerType + "##StructNode";
-	//							if (ImGui::TreeNodeEx(nodeLabel.c_str(), ImGuiTreeNodeFlags_SpanAvailWidth))
-	//							{
-	//								// 우리가 만들어둔 DrawDetails를 다시 호출하여 완벽한 재귀(Recursive) 렌더링 달성!
-	//								changed |= DrawDetails(targetData, *innerTypeInfo);
-	//								ImGui::TreePop();
-	//							}
-	//						}
-	//						else
-	//						{
-	//							ImGui::TextDisabled("Empty (nullptr)");
-	//						}
-	//					}
-	//					else
-	//					{
-	//						ImGui::TextDisabled("Unsupported List Type: %s", innerType.c_str());
-	//					}
-	//				}
+	ImGui::Unindent();
+	return changed;
+}
 
-	//				// --- [Column 3] 요소 삭제 액션 (X 버튼) ---
-	//				ImGui::TableNextColumn();
-	//				if (ImGui::Button("X", ImVec2(-1, 0)))
-	//				{
-	//					toRemove = elemPtr;
-	//				}
+bool PropertyDrawer::DrawSetProperty(void* instance, void* data, const TypeInfo& typeinfo, const PropertyInfo& property)
+{
+	if (!property.ContainerData || !property.ContainerData->Accessor)
+	{
+		ImGui::TextDisabled("Container accessor not found");
+		return false;
+	}
 
-	//				ImGui::PopID();
-	//			}
-	//			ImGui::EndTable();
-	//		}
-	//	}
+	bool changed = false;
+	const ContainerInfo& containerInfo = *property.ContainerData;
+	const ContainerAccessor& accessor = *containerInfo.Accessor;
+	const size_t size = accessor.GetSize ? accessor.GetSize(data) : 0;
+	const bool pointerElement = IsLinearContainerElementPointer(property);
 
-	//	// [3. 삭제 요청 처리]
-	//	if (toRemove)
-	//	{
-	//		accessor->Remove(data, toRemove);
-	//		changed = true;
-	//	}
+	const string headerName = SanitizeDisplayLabel(typeinfo, property) + " [" + to_string(size) + "]###" + string(property.Name);
+	if (!ImGui::CollapsingHeader(headerName.c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+	{
+		return false;
+	}
 
-	//	ImGui::Unindent();
-	//}
+	ImGui::Indent();
+
+	if (accessor.Add)
+	{
+		if (CanInputContainerLiteral(containerInfo.Inner))
+		{
+			string& inputText = g_ContainerTextInputs[MakeContainerInputKey(data, property, 0x534554ull)];
+			ImGui::SetNextItemWidth(-FLT_MIN);
+			DrawPersistentTextInput("##SetInput", inputText);
+
+			if (ImGui::Button(ICON_FA_PLUS " Add"))
+			{
+				const bool parsed = WithParsedContainerLiteral(inputText, containerInfo.Inner, [&](const void* valuePtr)
+					{
+						accessor.Add(data, valuePtr);
+					});
+
+				if (parsed)
+				{
+					inputText.clear();
+					changed = true;
+				}
+			}
+		}
+		else if (ImGui::Button(ICON_FA_PLUS " Add Element"))
+		{
+			accessor.Add(data, nullptr);
+			changed = true;
+		}
+	}
+
+	ImGui::Separator();
+
+	vector<void*> elements = accessor.GetElements ? accessor.GetElements(data) : vector<void*>{};
+	void* removeElement = nullptr;
+
+	if (!elements.empty() && ImGui::BeginTable("##SetTable", 2, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_SizingStretchProp))
+	{
+		ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+		ImGui::TableSetupColumn("Delete", ImGuiTableColumnFlags_WidthFixed, 32.0f);
+
+		for (void* element : elements)
+		{
+			ImGui::PushID(element);
+			ImGui::TableNextRow();
+
+			ImGui::TableNextColumn();
+			ImGui::SetNextItemWidth(-FLT_MIN);
+			const string valueName = "Element";
+			DrawContainerField(instance, element, typeinfo, containerInfo.Inner, containerInfo.InnerContainerData, valueName, pointerElement, true);
+
+			ImGui::TableNextColumn();
+			if (accessor.Remove && ImGui::Button("X", ImVec2(-1.0f, 0.0f)))
+			{
+				removeElement = element;
+			}
+
+			ImGui::PopID();
+		}
+
+		ImGui::EndTable();
+	}
+
+	if (removeElement && accessor.Remove)
+	{
+		accessor.Remove(data, removeElement);
+		changed = true;
+	}
+
+	ImGui::Unindent();
+	return changed;
+}
+
+bool PropertyDrawer::DrawMapProperty(void* instance, void* data, const TypeInfo& typeinfo, const PropertyInfo& property)
+{
+	if (!property.ContainerData || !property.ContainerData->Accessor)
+	{
+		ImGui::TextDisabled("Container accessor not found");
+		return false;
+	}
+
+	bool changed = false;
+	const ContainerInfo& containerInfo = *property.ContainerData;
+	const ContainerAccessor& accessor = *containerInfo.Accessor;
+	const size_t size = accessor.GetSize ? accessor.GetSize(data) : 0;
+	const bool pointerValue = IsMapValuePointer(property);
+
+	const string headerName = SanitizeDisplayLabel(typeinfo, property) + " [" + to_string(size) + "]###" + string(property.Name);
+	if (!ImGui::CollapsingHeader(headerName.c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+	{
+		return false;
+	}
+
+	ImGui::Indent();
+
+	if (CanInputContainerLiteral(containerInfo.Key) && accessor.AddAndGetElement)
+	{
+		string& keyText = g_ContainerTextInputs[MakeContainerInputKey(data, property, 0x4D4150ull)];
+		ImGui::SetNextItemWidth(-FLT_MIN);
+		DrawPersistentTextInput("##MapKeyInput", keyText);
+
+		if (ImGui::Button(ICON_FA_PLUS " Add Pair"))
+		{
+			const bool parsed = WithParsedContainerLiteral(keyText, containerInfo.Key, [&](const void* keyPtr)
+				{
+					accessor.AddAndGetElement(data, keyPtr);
+				});
+
+			if (parsed)
+			{
+				keyText.clear();
+				changed = true;
+			}
+		}
+	}
+	else if (accessor.AddPair && ImGui::Button(ICON_FA_PLUS " Add Pair"))
+	{
+		accessor.AddPair(data);
+		changed = true;
+	}
+
+	ImGui::Separator();
+
+	vector<MapEntryView> entries;
+	if (accessor.ForEach)
+	{
+		accessor.ForEach(data, CollectMapEntry, &entries);
+	}
+
+	void* removeKey = nullptr;
+
+	if (!entries.empty() && ImGui::BeginTable("##MapTable", 3, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_SizingStretchProp))
+	{
+		ImGui::TableSetupColumn("Key", ImGuiTableColumnFlags_WidthStretch);
+		ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+		ImGui::TableSetupColumn("Delete", ImGuiTableColumnFlags_WidthFixed, 32.0f);
+
+		for (const MapEntryView& entry : entries)
+		{
+			ImGui::PushID(entry.Key ? entry.Key : entry.Value);
+			ImGui::TableNextRow();
+
+			ImGui::TableNextColumn();
+			ImGui::SetNextItemWidth(-FLT_MIN);
+			const string keyName = "Key";
+			DrawContainerField(instance, entry.Key, typeinfo, containerInfo.Key, nullptr, keyName, false, true);
+
+			ImGui::TableNextColumn();
+			ImGui::SetNextItemWidth(-FLT_MIN);
+			const string valueName = "Value";
+			changed |= DrawContainerField(instance, entry.Value, typeinfo, containerInfo.Inner, containerInfo.InnerContainerData, valueName, pointerValue, false);
+
+			ImGui::TableNextColumn();
+			if (accessor.Remove && ImGui::Button("X", ImVec2(-1.0f, 0.0f)))
+			{
+				removeKey = entry.Key;
+			}
+
+			ImGui::PopID();
+		}
+
+		ImGui::EndTable();
+	}
+
+	if (removeKey && accessor.Remove)
+	{
+		accessor.Remove(data, removeKey);
+		changed = true;
+	}
+
+	ImGui::Unindent();
 	return changed;
 }
 

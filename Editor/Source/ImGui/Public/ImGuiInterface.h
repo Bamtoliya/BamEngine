@@ -1,14 +1,11 @@
 ﻿#pragma once
 
-#include "Base.h"
-#include "Macro.h"
+#include "Editor_Includes.h"
 
 #include <SDL3/SDL_events.h>
 
-using namespace Engine;
-
 BEGIN(Editor)
-class ImGuiInterface : public Base
+class ImGuiInterface : public Engine::Base
 {
 public:
 	virtual ~ImGuiInterface() = default;

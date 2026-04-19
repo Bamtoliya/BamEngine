@@ -137,12 +137,15 @@ void Application::InitializeResources()
     //material->SetTextureBinding("Default", 0, resourceManager.GetResourceHandle<Texture>(L"Resources/Texture/magenta1x1.png"));
 	//resourceManager.SaveToBinaryFile(material, L"Resources/Material/DefaultMaterial.bammat");
     //
-	//tagMaterialDesc spriteMaterialDesc = {};
-    //spriteMaterialDesc.Key = L"Resources/Material/SpriteMaterial";
-	//spriteMaterialDesc.VertexShaderHandle = resourceManager.GetResourceHandle<Shader>(L"Resources/Shader/sprite.vert.bamshader");
-	//spriteMaterialDesc.PixelShaderHandle = resourceManager.GetResourceHandle<Shader>(L"Resources/Shader/sprite.frag.bamshader");
-    //Material* spriteMaterial = resourceManager.LoadResource<Material>(&spriteMaterialDesc).Get();
-    //resourceManager.SaveToBinaryFile(material, L"Resources/Material/SpriteMaterial.bammat");
+    tagMaterialDesc spriteMaterialDesc = {};
+    spriteMaterialDesc.Key = L"Resources/Material/SpriteMaterial";
+    spriteMaterialDesc.VertexShaderHandle = resourceManager.GetResourceHandle<Shader>(L"Resources/Shader/sprite.vert.bamshader");
+    spriteMaterialDesc.PixelShaderHandle = resourceManager.GetResourceHandle<Shader>(L"Resources/Shader/sprite.frag.bamshader");
+    spriteMaterialDesc.BlendMode = EBlendMode::AlphaBlend;
+    spriteMaterialDesc.CullMode = ECullMode::None;
+    spriteMaterialDesc.DepthMode = EDepthMode::ReadWrite;
+    Material* spriteMaterial = resourceManager.LoadResource<Material>(&spriteMaterialDesc).Get();
+    resourceManager.SaveToBinaryFile(spriteMaterial, L"Resources/Material/SpriteMaterial.bammat");
 
 
 	//Material* defaultMaterial = resourceManager.GetResourceHandle<Material>(L"Resources/Material/DefaultMaterial.bammat").Get();

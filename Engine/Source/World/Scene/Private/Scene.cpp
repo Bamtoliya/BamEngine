@@ -321,9 +321,8 @@ void Scene::Serialize(class Archive& ar)
 }
 void Scene::Deserialize(Archive& ar)
 {
-	Serialize(ar);
-
 	m_GameObjectMap.clear();
+	Serialize(ar);
 
 	for (uint32 i = 0; i < m_Layers.size(); ++i)
 	{

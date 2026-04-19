@@ -376,7 +376,7 @@ void GameObject::Deserialize(Archive& ar)
 		if (!comp) continue;
 
 		comp->SetOwner(this);
-		if (comp->GetTypeInfo().ID == RunTimeHash("Transform"))
+		if (comp->GetTypeInfo().ID == RunTimeHash("Engine::Transform"))
 		{
 			m_Transform = dynamic_cast<Transform*>(comp);
 		}

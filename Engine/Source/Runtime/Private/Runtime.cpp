@@ -1,5 +1,6 @@
 ﻿#pragma once
 #include "Runtime.h"
+#include "reflection/runtime/Registry.h"
 
 IMPLEMENT_SINGLETON(Runtime)
 
@@ -12,6 +13,9 @@ EResult Runtime::Initialize(void* arg)
 
 	RUNTIMEDESC* pRuntimeDesc = reinterpret_cast<RUNTIMEDESC*>(arg);
 	tagRendererDesc RendererDesc = pRuntimeDesc->RendererDesc;
+
+	m_ReflectionRegistry = &reflection::Registry::Get();
+	if (!m_ReflectionRegistry) return EResult::Fail;
 
 	m_ComponentRegistry = ComponentRegistry::Create();
 	if (!m_ComponentRegistry) return EResult::Fail;

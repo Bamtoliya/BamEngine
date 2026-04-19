@@ -27,6 +27,16 @@ def emitted_container_type_name(node: ContainerTypeNode | None, fallback: str = 
     return fallback
 
 
+def emitted_leaf_property_kind(
+    type_ref: ResolvedTypeRef | None,
+    emitted_type_name: str,
+    bitflag_enums: set[str],
+) -> str:
+    if type_ref is not None and type_ref.property_kind:
+        return type_ref.property_kind
+    return get_property_type(emitted_type_name, bitflag_enums)[0]
+
+
 def metadata_span_expr(owner_name: str, prop: ReflectedProperty) -> str:
     if not prop.has_attributes():
         return "std::span<const reflection::MetadataEntry>{}"
@@ -92,7 +102,7 @@ def emit_container_info_decl(
 
     if node.container_kind == "Map":
         key_type_name = emitted_leaf_type_name(node.key_type, "void")
-        key_enum_name = get_property_type(key_type_name, bitflag_enums)[0]
+        key_enum_name = emitted_leaf_property_kind(node.key_type, key_type_name, bitflag_enums)
 
         if node.inner_container is not None:
             child_lines, child_data_name = emit_container_info_decl(
@@ -115,7 +125,7 @@ def emit_container_info_decl(
             return lines, data_name
 
         value_type_name = emitted_leaf_type_name(node.value_type, "void")
-        value_enum_name = get_property_type(value_type_name, bitflag_enums)[0]
+        value_enum_name = emitted_leaf_property_kind(node.value_type, value_type_name, bitflag_enums)
 
         lines.append(
             f'DECLARE_MAP_INFO({owner_name}, {prop_name}_{suffix}, "{key_type_name}", '
@@ -144,7 +154,7 @@ def emit_container_info_decl(
         return lines, data_name
 
     inner_type_name = emitted_leaf_type_name(node.value_type, "void")
-    inner_enum_name = get_property_type(inner_type_name, bitflag_enums)[0]
+    inner_enum_name = emitted_leaf_property_kind(node.value_type, inner_type_name, bitflag_enums)
 
     lines.append(
         f'DECLARE_CONTAINER_INFO({owner_name}, {prop_name}_{suffix}, "{inner_type_name}", '

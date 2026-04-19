@@ -675,8 +675,8 @@ IMPLEMENT_CLASS_EX(Mesh, "Engine::Mesh", "Engine::Resource")
 #pragma endregion // CLASS: Engine::Mesh
 
 #pragma region CLASS: Engine::Model
-DECLARE_CONTAINER_INFO(Model, m_Materials_Root, "Engine::Material", reflection::EPropertyType::Struct, reflection::LinearContainerAccessor<vector<Material*>, Material*>::Get())
-DECLARE_CONTAINER_INFO(Model, m_Meshes_Root, "Engine::Mesh", reflection::EPropertyType::Struct, reflection::LinearContainerAccessor<vector<Mesh*>, Mesh*>::Get())
+DECLARE_CONTAINER_INFO(Model, m_Materials_Root, "Engine::Material", reflection::EPropertyType::Object, reflection::LinearContainerAccessor<vector<Material*>, Material*>::Get())
+DECLARE_CONTAINER_INFO(Model, m_Meshes_Root, "Engine::Mesh", reflection::EPropertyType::Object, reflection::LinearContainerAccessor<vector<Mesh*>, Mesh*>::Get())
 BEGIN_PROPERTIES(Model)
 	REFLECT_CONTAINER_PROPERTY(Model, m_Materials, "vector<Engine::Material*>", reflection::EPropertyType::Array, &Model_m_Materials_Root_ContainerData, std::span<const reflection::MetadataEntry>{})
 	REFLECT_CONTAINER_PROPERTY(Model, m_Meshes, "vector<Engine::Mesh*>", reflection::EPropertyType::Array, &Model_m_Meshes_Root_ContainerData, std::span<const reflection::MetadataEntry>{})
@@ -829,8 +829,8 @@ IMPLEMENT_CLASS_EX(UIComponent, "Engine::UIComponent", "Engine::Component")
 #pragma endregion // CLASS: Engine::UIComponent
 
 #pragma region CLASS: Engine::Layer
-DECLARE_CONTAINER_INFO(Layer, m_GameObjects_Root, "Engine::GameObject", reflection::EPropertyType::Struct, reflection::LinearContainerAccessor<vector<GameObject*>, GameObject*>::Get())
-DECLARE_CONTAINER_INFO(Layer, m_DeadGameObjects_Root, "Engine::GameObject", reflection::EPropertyType::Struct, reflection::LinearContainerAccessor<vector<GameObject*>, GameObject*>::Get())
+DECLARE_CONTAINER_INFO(Layer, m_GameObjects_Root, "Engine::GameObject", reflection::EPropertyType::Object, reflection::LinearContainerAccessor<vector<GameObject*>, GameObject*>::Get())
+DECLARE_CONTAINER_INFO(Layer, m_DeadGameObjects_Root, "Engine::GameObject", reflection::EPropertyType::Object, reflection::LinearContainerAccessor<vector<GameObject*>, GameObject*>::Get())
 BEGIN_PROPERTIES(Layer)
 	REFLECT_PROPERTY(Layer, m_Index, "uint32", reflection::EPropertyType::UInt32, std::span<const reflection::MetadataEntry>{})
 	REFLECT_PROPERTY(Layer, m_Name, "wstring", reflection::EPropertyType::WString, std::span<const reflection::MetadataEntry>{})
@@ -880,8 +880,8 @@ BEGIN_METADATA(GameObject, m_Components)
 	NAME("PROP_COMPONENTS")
 END_METADATA
 
-DECLARE_CONTAINER_INFO(GameObject, m_Components_Root, "Engine::Component", reflection::EPropertyType::Struct, reflection::LinearContainerAccessor<vector<Component*>, Component*>::Get())
-DECLARE_CONTAINER_INFO(GameObject, m_Childs_Root, "Engine::GameObject", reflection::EPropertyType::Struct, reflection::LinearContainerAccessor<vector<GameObject*>, GameObject*>::Get())
+DECLARE_CONTAINER_INFO(GameObject, m_Components_Root, "Engine::Component", reflection::EPropertyType::Object, reflection::LinearContainerAccessor<vector<Component*>, Component*>::Get())
+DECLARE_CONTAINER_INFO(GameObject, m_Childs_Root, "Engine::GameObject", reflection::EPropertyType::Object, reflection::LinearContainerAccessor<vector<GameObject*>, GameObject*>::Get())
 BEGIN_PROPERTIES(GameObject)
 	REFLECT_PROPERTY(GameObject, m_ID, "uint64", reflection::EPropertyType::UInt64, std::span<const reflection::MetadataEntry>{GameObject_m_ID_Meta})
 	REFLECT_PROPERTY(GameObject, m_Index, "uint32", reflection::EPropertyType::UInt32, std::span<const reflection::MetadataEntry>{GameObject_m_Index_Meta})
@@ -898,7 +898,7 @@ IMPLEMENT_CLASS_EX(GameObject, "Engine::GameObject", "Engine::Base")
 #pragma endregion // CLASS: Engine::GameObject
 
 #pragma region CLASS: Engine::Scene
-DECLARE_CONTAINER_INFO(Scene, m_Layers_Root, "Engine::Layer", reflection::EPropertyType::Struct, reflection::LinearContainerAccessor<vector<Layer*>, Layer*>::Get())
+DECLARE_CONTAINER_INFO(Scene, m_Layers_Root, "Engine::Layer", reflection::EPropertyType::Object, reflection::LinearContainerAccessor<vector<Layer*>, Layer*>::Get())
 BEGIN_PROPERTIES(Scene)
 	REFLECT_PROPERTY(Scene, m_Flags, "ESceneFlags", reflection::EPropertyType::BitFlag, std::span<const reflection::MetadataEntry>{})
 	REFLECT_PROPERTY(Scene, m_Name, "wstring", reflection::EPropertyType::WString, std::span<const reflection::MetadataEntry>{})
