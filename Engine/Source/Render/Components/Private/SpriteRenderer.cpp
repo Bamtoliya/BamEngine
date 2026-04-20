@@ -57,6 +57,7 @@ void SpriteRenderer::LateUpdate(f32 dt)
 	if(IsDirty())
 	{
 		UpdateMesh();
+		UpdateMaterialInstance();
 		SetDirty(false);
 	}
 	__super::LateUpdate(dt);
@@ -218,12 +219,9 @@ EResult SpriteRenderer::UpdateMaterialInstance()
 
 void SpriteRenderer::Deserialize(Archive& ar)
 {
-	__super::Deserialize(ar);
-	//ResourceManager& resourceManager = ResourceManager::Get();
-	//resourceManager.LoadTexture(m_SpriteTag, m_SpritePath);
-	//SetSprite(resourceManager.GetTexture(m_SpriteTag));
-	//for (auto& materialInstance : m_MaterialInstances)
-	//{
-	//	materialInstance->Deserialize(ar);
-	//}
+	SetDirty();
+	//if (IsFailure(UpdateMesh()))
+	//	return;
+	//if (IsFailure(UpdateMaterialInstance()))
+	//	return;
 }

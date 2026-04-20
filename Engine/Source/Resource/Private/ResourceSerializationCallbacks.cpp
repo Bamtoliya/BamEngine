@@ -68,7 +68,19 @@ namespace
             );
         }
 
-        std::memcpy(erased_handle, &resolved_handle, sizeof(resolved_handle));
+        Engine::Handle* target_handle = static_cast<Engine::Handle*>(erased_handle);
+
+        if (target_handle->IsValid())
+        {
+            Engine::ResourceManager::Get().ReleaseResource(*target_handle);
+        }
+
+        *target_handle = resolved_handle;
+
+        if (target_handle->IsValid())
+        {
+            Engine::ResourceManager::Get().AddRefResource(*target_handle);
+        }
         return true;
     }
 

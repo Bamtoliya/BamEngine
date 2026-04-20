@@ -60,7 +60,10 @@ void RenderComponent::SetMaterial(const ResourceHandle<Material>& material, uint
 	else
 	{
 		TODO("Render Component에서 MaterialInstance 생성 방식 결정 필요 (현재는 매번 새로 생성)");
-		m_MaterialInstances[index] = ResourceManager::Get().AddResource<MaterialInstance>(material.Get()->GetKey() + L"_Instance", MaterialInstance::Create(material));
+		tagMaterialInstanceDesc desc;
+		desc.BaseMaterialHandle = material;
+		desc.Key = material->GetKey() + L"inst";
+		m_MaterialInstances[index] = ResourceManager::Get().AddResource<MaterialInstance>(material.Get()->GetKey() + L"_Instance", MaterialInstance::Create(&desc));
 	}
 }
 

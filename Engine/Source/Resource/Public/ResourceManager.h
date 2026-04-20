@@ -44,6 +44,7 @@ public:
 	EResult ImportFolder(const wstring& folderPath);
 	Handle LoadFile(const wstring& filePath);
 	void RegisterExplicitLoader();
+	EResult DestroyResource(const Handle& handle);
 	EResult DestroyResource(Resource* resource);
 #pragma endregion
 

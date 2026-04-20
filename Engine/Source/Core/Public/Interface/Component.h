@@ -69,7 +69,7 @@ public:
 #pragma region Save&Load
 public:
 	virtual void Serialize(Archive& ar) override;
-	virtual void Deserialize(Archive& ar) override { Serialize(ar); }
+	virtual void Deserialize(Archive& ar) override;
 #pragma endregion
 
 

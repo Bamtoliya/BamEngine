@@ -109,6 +109,14 @@ void ResourceManager::RegisterExplicitLoader()
 			return this->LoadResource<Shader>(&desc).GetRawHandle();
 		};
 
+	m_LoaderRegistry[L".bammatinst"] = [this](wstring key, wstring path) -> Handle
+		{
+			tagMaterialInstanceDesc desc;
+			desc.Key = path;
+			desc.Path = path;
+			return this->LoadResource<MaterialInstance>(&desc).GetRawHandle();
+		};
+
 	// 주석 처리된 부분도 나중에 살릴 때 Handle을 반환하도록 수정하시면 됩니다.
 	/*
 	auto meshLoader = [this](wstring key, wstring path) -> Handle
@@ -117,6 +125,21 @@ void ResourceManager::RegisterExplicitLoader()
 	};
 	m_LoaderRegistry[L".mesh"] = meshLoader;
 	*/
+}
+EResult ResourceManager::DestroyResource(const Handle& handle)
+{
+	if (!handle.IsValid()) return EResult::InvalidArgument;
+
+	unique_lock lock(m_PoolMutex);
+	uint32 index = handle.GetIndex();
+
+	if (index < m_Resources.size() && m_Resources[index].Generation == handle.GetGeneration())
+	{
+		FreeSlotInternal(index); // O(1) 해제
+		return EResult::Success;
+	}
+
+	return EResult::Fail;
 }
 const vector<Handle>& ResourceManager::GetResourceHandles(uint64 typeHash)
 {
@@ -132,9 +155,21 @@ const vector<Handle>& ResourceManager::GetResourceHandles(uint64 typeHash)
 EResult ResourceManager::DestroyResource(Resource* resource)
 {
 	if (!resource) return EResult::InvalidArgument;
+
+	unique_lock lock(m_PoolMutex);
+
+	for (uint32 i = 0; i < m_Resources.size(); ++i)
+	{
+		if (m_Resources[i].IsActive && m_Resources[i].Instance == resource)
+		{
+			FreeSlotInternal(i);
+			return EResult::Success;
+		}
+	}
+
 	resource->Free();
 	delete resource;
-	resource = nullptr;
+
 	return EResult::Success;
 }
 #pragma endregion

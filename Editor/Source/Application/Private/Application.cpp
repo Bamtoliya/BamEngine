@@ -123,6 +123,9 @@ void Application::InitializeResources()
         //Material
         L"Resources/Material/DefaultMaterial.bammat",
         L"Resources/Material/SpriteMaterial.bammat",
+
+		//MaterialInstance
+        L"Resources/Material/SpriteMaterial.bammatinst",
     };
 
     for (const auto& path : resourcesToLoad)
@@ -146,6 +149,14 @@ void Application::InitializeResources()
     spriteMaterialDesc.DepthMode = EDepthMode::ReadWrite;
     Material* spriteMaterial = resourceManager.LoadResource<Material>(&spriteMaterialDesc).Get();
     resourceManager.SaveToBinaryFile(spriteMaterial, L"Resources/Material/SpriteMaterial.bammat");
+
+	tagMaterialInstanceDesc spriteMaterialInstanceDesc = {};
+	spriteMaterialInstanceDesc.BaseMaterialHandle = resourceManager.GetResourceHandle<Material>(L"Resources/Material/SpriteMaterial.bammat");
+	spriteMaterialInstanceDesc.Key = L"Resources/Material/SpriteMaterialInstance";
+	ResourceHandle<MaterialInstance> spriteMaterialInstanceHandle = resourceManager.LoadResource<MaterialInstance>(&spriteMaterialInstanceDesc);
+	MaterialInstance* spriteMaterialInstance = spriteMaterialInstanceHandle.Get();
+	resourceManager.SaveToBinaryFile(spriteMaterialInstance, L"Resources/Material/SpriteMaterial.bammatinst");
+	//resourceManager.DestroyResource(spriteMaterialInstanceHandle.GetRawHandle());
 
 
 	//Material* defaultMaterial = resourceManager.GetResourceHandle<Material>(L"Resources/Material/DefaultMaterial.bammat").Get();

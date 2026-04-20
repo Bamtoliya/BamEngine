@@ -376,6 +376,7 @@ void GameObject::Deserialize(Archive& ar)
 		if (!comp) continue;
 
 		comp->SetOwner(this);
+		comp->SetDirty();
 		if (comp->GetTypeInfo().ID == RunTimeHash("Engine::Transform"))
 		{
 			m_Transform = dynamic_cast<Transform*>(comp);
@@ -391,4 +392,3 @@ void GameObject::Deserialize(Archive& ar)
 	}
 }
 #pragma endregion
-

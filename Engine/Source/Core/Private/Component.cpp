@@ -27,5 +27,9 @@ void Component::Serialize(Archive& ar)
 {
 	SerializationHelper::SerializeReflectionProperties(ar, &GetTypeInfo(), this);
 }
+void Component::Deserialize(Archive& ar)
+{
+	//SerializationHelper::SerializeReflectionProperties(ar, &GetTypeInfo(), this);
+}
 #pragma endregion
 

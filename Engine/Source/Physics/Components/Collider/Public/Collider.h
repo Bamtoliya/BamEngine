@@ -37,6 +37,8 @@ public:
 
 #pragma region Collision
 public:
+
+public:
 	virtual bool Raycast(const struct Ray& ray, struct HitResult& outResult) { return false; }
 #pragma endregion
 
