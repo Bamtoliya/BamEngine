@@ -12,11 +12,15 @@
 #include "LocalizationManager.h"
 
 #include "TextureInspector.h"
+#include "SpriteInspector.h"
+#include "ModelInspector.h"
 
 #pragma region Constructor&Destructor
 InspectorPanel::InspectorPanel()
 {
 	m_AssetInspectors.push_back(new TextureInspector());
+	//m_AssetInspectors.push_back(new SpriteInspector());
+	m_AssetInspectors.push_back(new ModelInspector());
 }
 
 void InspectorPanel::Free()

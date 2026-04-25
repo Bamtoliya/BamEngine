@@ -10,6 +10,7 @@
 #include "Physics/Components/Collider/Public/BoxCollider.h"
 #include "Physics/Components/Collider/Public/Collider.h"
 #include "Render/Camera/Public/Camera.h"
+#include "Render/Components/Public/Animator.h"
 #include "Render/Components/Public/MeshRenderer.h"
 #include "Render/Components/Public/RenderComponent.h"
 #include "Render/Components/Public/SpriteRenderer.h"
@@ -19,7 +20,8 @@
 #include "Resource/Material/Public/Material.h"
 #include "Resource/Material/Public/MaterialInstance.h"
 #include "Resource/Material/Public/MaterialInterface.h"
-#include "Resource/Mesh/Public/Mesh.h"
+#include "Resource/Model/Public/Animation.h"
+#include "Resource/Model/Public/Mesh.h"
 #include "Resource/Model/Public/Model.h"
 #include "Resource/Model/Public/Skeleton.h"
 #include "Resource/Public/Resource.h"
@@ -186,6 +188,19 @@ BEGIN_ENUM(EMaterialParameterType)
 	REFLECT_ENUM_ENTRY(EMaterialParameterType, Bool)
 	REFLECT_ENUM_ENTRY(EMaterialParameterType, Matrix)
 END_ENUM_REFLECT_EX(EMaterialParameterType, "Engine::EMaterialParameterType")
+
+// Enum: Engine::EMeshFlag
+BEGIN_ENUM(EMeshFlag)
+	REFLECT_ENUM_ENTRY(EMeshFlag, None)
+	REFLECT_ENUM_ENTRY(EMeshFlag, HasPosition)
+	REFLECT_ENUM_ENTRY(EMeshFlag, HasNormal)
+	REFLECT_ENUM_ENTRY(EMeshFlag, HasTexCoord)
+	REFLECT_ENUM_ENTRY(EMeshFlag, HasTangent)
+	REFLECT_ENUM_ENTRY(EMeshFlag, HasBitangent)
+	REFLECT_ENUM_ENTRY(EMeshFlag, HasColor)
+	REFLECT_ENUM_ENTRY(EMeshFlag, Dynamic)
+	REFLECT_ENUM_ENTRY(EMeshFlag, KeepRawData)
+END_ENUM_REFLECT_EX(EMeshFlag, "Engine::EMeshFlag")
 
 // Enum: Engine::EResourceType
 BEGIN_ENUM(EResourceType)
@@ -463,6 +478,15 @@ IMPLEMENT_CLASS_EX(Camera, "Engine::Camera", "Engine::Component")
 
 #pragma endregion // CLASS: Engine::Camera
 
+#pragma region CLASS: Engine::Animator
+BEGIN_PROPERTIES(Animator)
+	REFLECT_PROPERTY(Animator, m_Skeleton, "ResourceHandle<Skeleton>", reflection::EPropertyType::ResourceHandle, std::span<const reflection::MetadataEntry>{})
+END_PROPERTIES
+EMPTY_FUNCTIONS(Animator)
+IMPLEMENT_CLASS_EX(Animator, "Engine::Animator", "Engine::Component")
+
+#pragma endregion // CLASS: Engine::Animator
+
 #pragma region CLASS: Engine::MeshRenderer
 EMPTY_PROPERTIES(MeshRenderer)
 EMPTY_FUNCTIONS(MeshRenderer)
@@ -542,8 +566,11 @@ IMPLEMENT_CLASS_EX(tagSamplerDesc, "Engine::tagSamplerDesc", "")
 #pragma endregion // STRUCT: Engine::tagSamplerDesc
 
 #pragma region CLASS: Engine::MeshFilter
+BEGIN_METADATA(MeshFilter, m_MeshHandle)
+	EDITABLE
+END_METADATA
 BEGIN_PROPERTIES(MeshFilter)
-	REFLECT_PROPERTY(MeshFilter, m_MeshHandle, "ResourceHandle<Mesh>", reflection::EPropertyType::ResourceHandle, std::span<const reflection::MetadataEntry>{})
+	REFLECT_PROPERTY(MeshFilter, m_MeshHandle, "ResourceHandle<Mesh>", reflection::EPropertyType::ResourceHandle, std::span<const reflection::MetadataEntry>{MeshFilter_m_MeshHandle_Meta})
 END_PROPERTIES
 EMPTY_FUNCTIONS(MeshFilter)
 IMPLEMENT_CLASS_EX(MeshFilter, "Engine::MeshFilter", "Engine::Component")
@@ -637,6 +664,36 @@ IMPLEMENT_CLASS_EX(MaterialInterface, "Engine::MaterialInterface", "Engine::Reso
 
 #pragma endregion // CLASS: Engine::MaterialInterface
 
+#pragma region CLASS: Engine::Animation
+DECLARE_CONTAINER_INFO(Animation, m_Tracks_Root, "AnimationTrack", reflection::EPropertyType::Struct, reflection::LinearContainerAccessor<vector<AnimationTrack>, AnimationTrack>::Get())
+BEGIN_PROPERTIES(Animation)
+	REFLECT_PROPERTY(Animation, m_Name, "wstring", reflection::EPropertyType::WString, std::span<const reflection::MetadataEntry>{})
+	REFLECT_PROPERTY(Animation, m_Duration, "f64", reflection::EPropertyType::Float64, std::span<const reflection::MetadataEntry>{})
+	REFLECT_PROPERTY(Animation, m_TicksPerSecond, "f64", reflection::EPropertyType::Float64, std::span<const reflection::MetadataEntry>{})
+	REFLECT_CONTAINER_PROPERTY(Animation, m_Tracks, "vector<AnimationTrack>", reflection::EPropertyType::Array, &Animation_m_Tracks_Root_ContainerData, std::span<const reflection::MetadataEntry>{})
+END_PROPERTIES
+EMPTY_FUNCTIONS(Animation)
+IMPLEMENT_CLASS_EX(Animation, "Engine::Animation", "Engine::Resource")
+
+#pragma endregion // CLASS: Engine::Animation
+
+#pragma region STRUCT: Engine::tagMeshBinaryHeader
+BEGIN_PROPERTIES(tagMeshBinaryHeader)
+	REFLECT_PROPERTY(tagMeshBinaryHeader, VertexCount, "uint32", reflection::EPropertyType::UInt32, std::span<const reflection::MetadataEntry>{})
+	REFLECT_PROPERTY(tagMeshBinaryHeader, VertexStride, "uint32", reflection::EPropertyType::UInt32, std::span<const reflection::MetadataEntry>{})
+	REFLECT_PROPERTY(tagMeshBinaryHeader, SkinDataCount, "uint32", reflection::EPropertyType::UInt32, std::span<const reflection::MetadataEntry>{})
+	REFLECT_PROPERTY(tagMeshBinaryHeader, SkinDataStride, "uint32", reflection::EPropertyType::UInt32, std::span<const reflection::MetadataEntry>{})
+	REFLECT_PROPERTY(tagMeshBinaryHeader, IndexCount, "uint32", reflection::EPropertyType::UInt32, std::span<const reflection::MetadataEntry>{})
+	REFLECT_PROPERTY(tagMeshBinaryHeader, IndexStride, "uint32", reflection::EPropertyType::UInt32, std::span<const reflection::MetadataEntry>{})
+	REFLECT_PROPERTY(tagMeshBinaryHeader, BoundingBoxMin, "vec3", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{})
+	REFLECT_PROPERTY(tagMeshBinaryHeader, BoundingBoxMax, "vec3", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{})
+	REFLECT_PROPERTY(tagMeshBinaryHeader, Flags, "Engine::EMeshFlag", reflection::EPropertyType::BitFlag, std::span<const reflection::MetadataEntry>{})
+END_PROPERTIES
+EMPTY_FUNCTIONS(tagMeshBinaryHeader)
+IMPLEMENT_CLASS_EX(tagMeshBinaryHeader, "Engine::tagMeshBinaryHeader", "")
+
+#pragma endregion // STRUCT: Engine::tagMeshBinaryHeader
+
 #pragma region CLASS: Engine::Mesh
 BEGIN_METADATA(Mesh, m_Topology)
 	CATEGORY(L"PROP_INFORMATION")
@@ -649,6 +706,11 @@ BEGIN_METADATA(Mesh, m_VertexCount)
 END_METADATA
 
 BEGIN_METADATA(Mesh, m_IndexCount)
+	CATEGORY(L"PROP_INFORMATION")
+	READONLY
+END_METADATA
+
+BEGIN_METADATA(Mesh, m_SkinDataCount)
 	CATEGORY(L"PROP_INFORMATION")
 	READONLY
 END_METADATA
@@ -666,6 +728,7 @@ BEGIN_PROPERTIES(Mesh)
 	REFLECT_PROPERTY(Mesh, m_Topology, "Engine::ETopology", reflection::EPropertyType::Enum, std::span<const reflection::MetadataEntry>{Mesh_m_Topology_Meta})
 	REFLECT_PROPERTY(Mesh, m_VertexCount, "uint32", reflection::EPropertyType::UInt32, std::span<const reflection::MetadataEntry>{Mesh_m_VertexCount_Meta})
 	REFLECT_PROPERTY(Mesh, m_IndexCount, "uint32", reflection::EPropertyType::UInt32, std::span<const reflection::MetadataEntry>{Mesh_m_IndexCount_Meta})
+	REFLECT_PROPERTY(Mesh, m_SkinDataCount, "uint32", reflection::EPropertyType::UInt32, std::span<const reflection::MetadataEntry>{Mesh_m_SkinDataCount_Meta})
 	REFLECT_PROPERTY(Mesh, m_BoundingBoxMin, "vec3", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{Mesh_m_BoundingBoxMin_Meta})
 	REFLECT_PROPERTY(Mesh, m_BoundingBoxMax, "vec3", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{Mesh_m_BoundingBoxMax_Meta})
 END_PROPERTIES
@@ -675,12 +738,14 @@ IMPLEMENT_CLASS_EX(Mesh, "Engine::Mesh", "Engine::Resource")
 #pragma endregion // CLASS: Engine::Mesh
 
 #pragma region CLASS: Engine::Model
-DECLARE_CONTAINER_INFO(Model, m_Materials_Root, "Engine::Material", reflection::EPropertyType::Object, reflection::LinearContainerAccessor<vector<Material*>, Material*>::Get())
-DECLARE_CONTAINER_INFO(Model, m_Meshes_Root, "Engine::Mesh", reflection::EPropertyType::Object, reflection::LinearContainerAccessor<vector<Mesh*>, Mesh*>::Get())
+DECLARE_CONTAINER_INFO(Model, m_Meshes_Root, "ResourceHandle<Mesh>", reflection::EPropertyType::ResourceHandle, reflection::LinearContainerAccessor<vector<ResourceHandle<Mesh>>, ResourceHandle<Mesh>>::Get())
+DECLARE_CONTAINER_INFO(Model, m_Materials_Root, "ResourceHandle<Material>", reflection::EPropertyType::ResourceHandle, reflection::LinearContainerAccessor<vector<ResourceHandle<Material>>, ResourceHandle<Material>>::Get())
+DECLARE_CONTAINER_INFO(Model, m_Animations_Root, "ResourceHandle<Animation>", reflection::EPropertyType::ResourceHandle, reflection::LinearContainerAccessor<vector<ResourceHandle<Animation>>, ResourceHandle<Animation>>::Get())
 BEGIN_PROPERTIES(Model)
-	REFLECT_CONTAINER_PROPERTY(Model, m_Materials, "vector<Engine::Material*>", reflection::EPropertyType::Array, &Model_m_Materials_Root_ContainerData, std::span<const reflection::MetadataEntry>{})
-	REFLECT_CONTAINER_PROPERTY(Model, m_Meshes, "vector<Engine::Mesh*>", reflection::EPropertyType::Array, &Model_m_Meshes_Root_ContainerData, std::span<const reflection::MetadataEntry>{})
-	REFLECT_PROPERTY(Model, m_Skeleton, "Engine::Skeleton", reflection::EPropertyType::Object, std::span<const reflection::MetadataEntry>{})
+	REFLECT_CONTAINER_PROPERTY(Model, m_Meshes, "vector<ResourceHandle<Mesh>>", reflection::EPropertyType::Array, &Model_m_Meshes_Root_ContainerData, std::span<const reflection::MetadataEntry>{})
+	REFLECT_CONTAINER_PROPERTY(Model, m_Materials, "vector<ResourceHandle<Material>>", reflection::EPropertyType::Array, &Model_m_Materials_Root_ContainerData, std::span<const reflection::MetadataEntry>{})
+	REFLECT_PROPERTY(Model, m_Skeleton, "ResourceHandle<Skeleton>", reflection::EPropertyType::ResourceHandle, std::span<const reflection::MetadataEntry>{})
+	REFLECT_CONTAINER_PROPERTY(Model, m_Animations, "vector<ResourceHandle<Animation>>", reflection::EPropertyType::Array, &Model_m_Animations_Root_ContainerData, std::span<const reflection::MetadataEntry>{})
 END_PROPERTIES
 EMPTY_FUNCTIONS(Model)
 IMPLEMENT_CLASS_EX(Model, "Engine::Model", "Engine::Resource")

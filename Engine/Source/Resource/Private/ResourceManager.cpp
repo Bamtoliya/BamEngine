@@ -18,8 +18,11 @@ void ResourceManager::Free()
 {
 	for (auto& slot : m_Resources)
 	{
-		slot.Instance->Free();
-		delete slot.Instance;
+		if (slot.Instance)
+		{
+			slot.Instance->Free();
+			delete slot.Instance;
+		}
 		slot.Instance = nullptr;
 	}
 	m_Resources.clear();
@@ -117,14 +120,37 @@ void ResourceManager::RegisterExplicitLoader()
 			return this->LoadResource<MaterialInstance>(&desc).GetRawHandle();
 		};
 
-	// 주석 처리된 부분도 나중에 살릴 때 Handle을 반환하도록 수정하시면 됩니다.
-	/*
-	auto meshLoader = [this](wstring key, wstring path) -> Handle
-	{
-		return LoadResource<Mesh>(path);
-	};
-	m_LoaderRegistry[L".mesh"] = meshLoader;
-	*/
+	m_LoaderRegistry[L".bammesh"] = [this](wstring key, wstring path) -> Handle
+		{
+			tagMaterialInstanceDesc desc;
+			desc.Key = path;
+			desc.Path = path;
+			return this->LoadResource<Mesh>(&desc).GetRawHandle();
+		};
+
+	m_LoaderRegistry[L".bamskeleton"] = [this](wstring key, wstring path) -> Handle
+		{
+			tagMaterialInstanceDesc desc;
+			desc.Key = path;
+			desc.Path = path;
+			return this->LoadResource<Skeleton>(&desc).GetRawHandle();
+		};
+
+	m_LoaderRegistry[L".bamanim"] = [this](wstring key, wstring path) -> Handle
+		{
+			tagMaterialInstanceDesc desc;
+			desc.Key = path;
+			desc.Path = path;
+			return this->LoadResource<Animation>(&desc).GetRawHandle();
+		};
+
+	m_LoaderRegistry[L".bammodel"] = [this](wstring key, wstring path) -> Handle
+		{
+			tagMaterialInstanceDesc desc;
+			desc.Key = path;
+			desc.Path = path;
+			return this->LoadResource<Model>(&desc).GetRawHandle();
+		};
 }
 EResult ResourceManager::DestroyResource(const Handle& handle)
 {
@@ -347,44 +373,16 @@ EResult ResourceManager::SaveToBinaryFile(Resource* resource, const wstring& fil
 
 Handle ResourceManager::LoadFromJsonFile(const wstring& filePath)
 {
-	return Handle();
+	return LoadFile(filePath);
 }
 
 Handle ResourceManager::LoadFromBeveFile(const wstring& filePath)
 {
-	//BeveArchive archive(EArchiveMode::Read); // Read 모드로 수정
-	//if (!archive.LoadFromFile(WStrToStr(filePath)))
-	//	return nullptr;
-	//
-	//string typeName;
-	//archive.Process("__Type__", typeName);
-	//
-	//if (typeName.empty())
-	//	return nullptr;
-	//
-	//void* instance = ReflectionRegistry::Get().CreateInstance(typeName);
-	//if (!instance)
-	//	return nullptr;
-	//Resource* resource = static_cast<Resource*>(instance);
-	//resource->Deserialize(archive);
-	//
-	//wstring tag = resource->GetTag();
-	//if (typeName == "Mesh") m_Meshes[tag] = static_cast<Mesh*>(resource);
-	//else if (typeName == "Model") m_Models[tag] = static_cast<Model*>(resource);
-	//else if (typeName == "Shader") m_Shaders[tag] = static_cast<Shader*>(resource);
-	//else if (typeName == "Sprite") m_Sprites[tag] = static_cast<Sprite*>(resource);
-	//else if (typeName == "Texture") m_Textures[tag] = static_cast<Texture*>(resource);
-	//else if (typeName == "Material") m_Materials[tag] = static_cast<Material*>(resource);
-	//
-	//return resource;
-	return Handle();
+	return LoadFile(filePath);
 }
 
 Handle ResourceManager::LoadFromBinaryFile(const wstring& filePath)
 {
-	BinaryArchive archive(EArchiveMode::Read); // Read 모드로 수정
-	if (!archive.LoadFromFile(WStrToStr(filePath)))
-		return Handle();
-	return Handle();
+	return LoadFile(filePath);
 }
 #pragma endregion

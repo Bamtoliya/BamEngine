@@ -5,6 +5,7 @@ find_package(SDL3 CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
 find_package(Vulkan REQUIRED)
 find_package(stb REQUIRED)
+find_package(lz4 CONFIG REQUIRED)
 
 find_package(glslang CONFIG REQUIRED)
 find_package(SPIRV-Tools CONFIG REQUIRED)
@@ -144,4 +145,5 @@ target_link_libraries(Engine
         Vulkan::Vulkan
         glslang::glslang
         spirv-cross-c
+        lz4::lz4
 )

@@ -9,5 +9,6 @@
 #include "Texture.h"
 #include "Material.h"
 #include "Skeleton.h"
+#include "Animation.h"
 
 #include "MaterialInstance.h"

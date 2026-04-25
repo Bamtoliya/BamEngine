@@ -54,7 +54,8 @@ EResult MaterialInstance::Bind(uint32 slot)
 	Material* baseMaterial = m_BaseMaterialHandle.Get();
 	if (!rhi || !baseMaterial)
 		return EResult::Fail;
-
+	Texture* texture = nullptr;
+	RHISampler* sampler = nullptr;
 	// 1단계: Base Material의 텍스처 슬롯 순회
 	for (auto& baseBinding : m_BaseMaterialHandle.Get()->GetTextureBindings())
 	{
@@ -63,11 +64,8 @@ EResult MaterialInstance::Bind(uint32 slot)
 		if (hasOverride)
 			continue;
 
-		Texture* texture = baseBinding.texture.Get();
-		if (!texture)
-			texture = ResourceManager::Get().GetResourceHandle<Texture>(L"Resources/Texture/magenta1x1.png").Get();
-
-		RHISampler* sampler = baseBinding.hasCustomSampler
+		texture = baseBinding.texture.Get();
+		sampler = baseBinding.hasCustomSampler
 			? SamplerManager::Get().GetOrCreateSampler(baseBinding.samplerDesc)
 			: SamplerManager::Get().GetDefaultSampler();
 
@@ -81,16 +79,26 @@ EResult MaterialInstance::Bind(uint32 slot)
 	// 2단계: 자신의 오버라이드 바인드
 	for (auto& binding : m_TextureBindings)
 	{
-		Texture* texture = binding.texture.Get();
-		if (!texture)
-			texture = ResourceManager::Get().GetResourceHandle<Texture>(L"Resources/Texture/magenta1x1.png").Get();
-		RHISampler* sampler = binding.hasCustomSampler
+		texture = binding.texture.Get();
+		sampler = binding.hasCustomSampler
 			? SamplerManager::Get().GetOrCreateSampler(binding.samplerDesc)
 			: SamplerManager::Get().GetDefaultSampler();
 		if (!texture || !sampler)
 			return EResult::Fail;
 
 		if (IsFailure(rhi->BindTextureSampler(texture->GetRHITexture(), sampler, binding.slot)))
+			return EResult::Fail;
+	}
+
+	if (!texture || !sampler)
+	{
+		texture = ResourceManager::Get().GetResourceHandle<Texture>(L"Resources/Texture/magenta1x1.png").Get();
+		sampler = SamplerManager::Get().GetDefaultSampler();
+
+		if (!texture || !sampler)
+			return EResult::Fail;
+	
+		if (IsFailure(rhi->BindTextureSampler(texture->GetRHITexture(), sampler, 0)))
 			return EResult::Fail;
 	}
 

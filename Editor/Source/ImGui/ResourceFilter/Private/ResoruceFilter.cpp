@@ -52,7 +52,7 @@ void ResourceFilter::ProcessModelNode(const aiNode* node, const aiScene* scene, 
 		//resourceManager.LoadMesh(StrToWStr(mesh->mName.C_Str()), &meshCreateInfo);
 		//meshes.push_back(resourceManager.GetMesh(StrToWStr(mesh->mName.C_Str())));
 	}
-	modelCreateDesc.Meshes = meshes;
+	//modelCreateDesc.Meshes = meshes;
 	for (uint32 i = 0; i < node->mNumChildren; ++i)
 	{
 		ProcessModelNode(node->mChildren[i], scene, modelCreateDesc);

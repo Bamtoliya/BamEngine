@@ -3,7 +3,7 @@
 #include "reflection/runtime/ContainerAdapters.h"
 
 // [Header Includes]
-
+#include "AssetManager/Importer/Public/ModelImporter.h"
 
 #pragma push_macro("new")
 #undef new
@@ -12,6 +12,43 @@
 // [ENUM REFLECTIONS]
 // ==========================================================
 #pragma region EnumReflections
+// Enum: EModelPostProcessFlag
+BEGIN_ENUM(EModelPostProcessFlag)
+	REFLECT_ENUM_ENTRY(EModelPostProcessFlag, None)
+	REFLECT_ENUM_ENTRY(EModelPostProcessFlag, CalcTangentSpace)
+	REFLECT_ENUM_ENTRY(EModelPostProcessFlag, JoinIdenticalVertices)
+	REFLECT_ENUM_ENTRY(EModelPostProcessFlag, MakeLeftHanded)
+	REFLECT_ENUM_ENTRY(EModelPostProcessFlag, Triangulate)
+	REFLECT_ENUM_ENTRY(EModelPostProcessFlag, RemoveComponent)
+	REFLECT_ENUM_ENTRY(EModelPostProcessFlag, GenNormals)
+	REFLECT_ENUM_ENTRY(EModelPostProcessFlag, GenSmoothNormals)
+	REFLECT_ENUM_ENTRY(EModelPostProcessFlag, SplitLargeMeshes)
+	REFLECT_ENUM_ENTRY(EModelPostProcessFlag, PreTransformVertices)
+	REFLECT_ENUM_ENTRY(EModelPostProcessFlag, LimitBoneWeights)
+	REFLECT_ENUM_ENTRY(EModelPostProcessFlag, ValidateDataStructure)
+	REFLECT_ENUM_ENTRY(EModelPostProcessFlag, ImproveCacheLocality)
+	REFLECT_ENUM_ENTRY(EModelPostProcessFlag, RemoveRedundantMaterials)
+	REFLECT_ENUM_ENTRY(EModelPostProcessFlag, FixInfacingNormals)
+	REFLECT_ENUM_ENTRY(EModelPostProcessFlag, SortByPType)
+	REFLECT_ENUM_ENTRY(EModelPostProcessFlag, FindDegenerates)
+	REFLECT_ENUM_ENTRY(EModelPostProcessFlag, FindInvalidData)
+	REFLECT_ENUM_ENTRY(EModelPostProcessFlag, GenUVCoords)
+	REFLECT_ENUM_ENTRY(EModelPostProcessFlag, TransformUVCoords)
+	REFLECT_ENUM_ENTRY(EModelPostProcessFlag, FindInstances)
+	REFLECT_ENUM_ENTRY(EModelPostProcessFlag, OptimizeMeshes)
+	REFLECT_ENUM_ENTRY(EModelPostProcessFlag, OptimizeGraph)
+	REFLECT_ENUM_ENTRY(EModelPostProcessFlag, FlipUVs)
+	REFLECT_ENUM_ENTRY(EModelPostProcessFlag, FlipWindingOrder)
+END_ENUM_REFLECT_EX(EModelPostProcessFlag, "EModelPostProcessFlag")
+
+// Enum: EModelImportOption
+BEGIN_ENUM(EModelImportOption)
+	REFLECT_ENUM_ENTRY(EModelImportOption, None)
+	REFLECT_ENUM_ENTRY(EModelImportOption, Animations)
+	REFLECT_ENUM_ENTRY(EModelImportOption, Materials)
+	REFLECT_ENUM_ENTRY(EModelImportOption, Meshes)
+	REFLECT_ENUM_ENTRY(EModelImportOption, Skeleton)
+END_ENUM_REFLECT_EX(EModelImportOption, "EModelImportOption")
 
 #pragma endregion
 

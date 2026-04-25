@@ -2,20 +2,19 @@
 
 #include "RHI.h"
 
+BEGIN(Engine)
 struct tagRenderTargetDesc
 {
-	ETextureFormat				Format		= ETextureFormat::R8G8B8A8_UNORM;
-	ETextureUsage				Usage		= ETextureUsage::RenderTarget;
-	ERenderTargetBindFlag		BindFlag	= ERenderTargetBindFlag::RTBF_None;
-	ERenderTargetType 			Type		= ERenderTargetType::Color;
+	ETextureFormat				Format = ETextureFormat::R8G8B8A8_UNORM;
+	ETextureUsage				Usage = ETextureUsage::RenderTarget;
+	ERenderTargetBindFlag		BindFlag = ERenderTargetBindFlag::RTBF_None;
+	ERenderTargetType 			Type = ERenderTargetType::Color;
 	ETextureDimension			TextureType = ETextureDimension::Texture2D;
-	uint32						Width		= 800;
-	uint32						Height		= 600;
-	vec4						ClearColor	= vec4(0.0f, 0.0f, 0.0f, 1.0f);
+	uint32						Width = 800;
+	uint32						Height = 600;
+	vec4						ClearColor = vec4(0.0f, 0.0f, 0.0f, 1.0f);
 	wstring						Name = L"RenderTarget";
 };
-
-BEGIN(Engine)
 class ENGINE_API RenderTarget final : public Base
 {
 #pragma region Constructr&Destructor

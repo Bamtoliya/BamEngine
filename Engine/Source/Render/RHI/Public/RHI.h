@@ -5,8 +5,8 @@
 struct tagRHIDesc
 {
     void* WindowHandle = { nullptr };
-    uint32 Width = { 0 };
-    uint32 Height = { 0 };
+    Engine::uint32 Width = { 0 };
+    Engine::uint32 Height = { 0 };
     bool IsVSync = { true };
 };
 

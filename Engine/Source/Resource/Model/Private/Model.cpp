@@ -4,31 +4,16 @@
 
 #pragma region Constructor&Destructor
 
-#pragma endregion
-
 EResult Model::Initialize(void* arg)
 {
-    TODO("Model Initialization Implement");
-    //if (!arg) return EResult::InvalidArgument;
-    //CAST_DESC
-    //
-    //m_Materials = desc->Materials;
-    //m_Meshes = desc->Meshes;
-    //m_Skeleton = desc->Skeleton;
-    //
-	//for (auto& material : m_Materials)
-    //{
-    //    if (!material) return EResult::InvalidArgument;
-	//	Safe_AddRef(material);
-    //}
-    //for (auto& mesh : m_Meshes)
-    //{
-	//	if (!mesh) return EResult::InvalidArgument;
-    //    Safe_AddRef(mesh);
-	//}
-    //
-	//Safe_AddRef(m_Skeleton);
-    //
+    if (IsFailure(__super::Initialize(arg))) return EResult::Fail;
+    CAST_DESC
+
+    m_Meshes = desc->Meshes;
+    m_Materials = desc->Materials;
+    m_Skeleton = desc->Skeleton;
+    m_Animations = desc->Animations;
+
     return EResult::Success;
 }
 
@@ -46,11 +31,13 @@ Model* Model::Create(void* arg)
 
 void Model::Free()
 {
-    TODO("Model Free Implement");
-    //RELEASE_VECTOR(m_Meshes);
-	//RELEASE_VECTOR(m_Materials);
-	//Safe_Release(m_Skeleton);
+    m_Meshes.clear();
+    m_Materials.clear();
+    m_Skeleton.Reset();
+    m_Animations.clear();
 }
+
+#pragma endregion
 
 EResult Model::Bind(uint32 slot)
 {

@@ -84,7 +84,7 @@ namespace Engine
 
 	struct tagInputLayoutDesc
 	{
-		vector<tagVertexElementDesc> Elements;
+		std::vector<tagVertexElementDesc> Elements;
 		uint32 Stride = { 0 };
 
 		bool operator==(const tagInputLayoutDesc& other) const
@@ -300,7 +300,7 @@ namespace Engine
 		RenderPassID ID = INVALID_PASS_ID;
 		wstring Name = { L"" };
 		wstring DepthStencilName = { L"" };
-		vector<wstring> RenderTargetNames;
+		std::vector<wstring> RenderTargetNames;
 		ERenderSortType SortType = ERenderSortType::None;
 		ERenderPassLoadOperation LoadOperation = ERenderPassLoadOperation::RPLO_Load;
 		ERenderPassStoreOperation StoreOperation = ERenderPassStoreOperation::RPSO_Store;
@@ -308,4 +308,4 @@ namespace Engine
 		ERenderPassStoreOperation StencilStoreOperation = ERenderPassStoreOperation::RPSO_Store;
 		vec4 OverrideClearColor = vec4(0.0f, 0.0f, 0.0f, -1.0f);
 	};
-}
+}	

@@ -5,6 +5,22 @@
 
 BEGIN(Engine)
 
+ENUM()
+enum class EMeshFlag : uint8
+{
+	None = 0,
+	HasPosition = 1 << 0,
+	HasNormal = 1 << 1,
+	HasTexCoord = 1 << 2,
+	HasTangent = 1 << 3,
+	HasBitangent = 1 << 4,
+	HasColor = 1 << 5,
+	Dynamic = 1 << 6,
+	KeepRawData = 1 << 7,
+};
+
+ENABLE_BITMASK_OPERATORS(EMeshFlag);
+
 struct tagMeshCreateDesc : public tagResourceCreateDesc
 {
 	void* VertexData = { nullptr };
@@ -21,6 +37,36 @@ struct tagMeshCreateDesc : public tagResourceCreateDesc
 
 	vec3 BoundingBoxMin = { 0.0f, 0.0f, 0.0f };
 	vec3 BoundingBoxMax = { 0.0f, 0.0f, 0.0f };
+
+	EMeshFlag Flags = { EMeshFlag::None };
+};
+
+
+STRUCT()
+struct tagMeshBinaryHeader
+{
+	REFLECT_STRUCT()
+
+	PROPERTY()
+	uint32 VertexCount = { 0 };
+	PROPERTY()
+	uint32 VertexStride = { 0 };
+
+	PROPERTY()
+	uint32 SkinDataCount = { 0 };
+	PROPERTY()
+	uint32 SkinDataStride = { 0 };
+	PROPERTY()
+	uint32 IndexCount = { 0 };
+	PROPERTY()
+	uint32 IndexStride = { 0 };
+	
+	PROPERTY()
+	vec3 BoundingBoxMin = { 0.0f, 0.0f, 0.0f };
+	PROPERTY()
+	vec3 BoundingBoxMax = { 0.0f, 0.0f, 0.0f };
+	PROPERTY()
+	EMeshFlag Flags = { EMeshFlag::None };
 };
 
 CLASS()
@@ -56,6 +102,7 @@ public:
 	ETopology GetTopology() const { return m_Topology; }
 public:
 	virtual const tagInputLayoutDesc GetInputLayoutDesc() const { return Vertex::Layout; }
+	bool IsDynamic() const { return HasFlag(m_Flags, EMeshFlag::Dynamic); }
 #pragma endregion
 
 #pragma region Setter
@@ -76,11 +123,27 @@ public:
 #pragma endregion
 
 
+#pragma region Save&Load
+public:
+	virtual void Serialize(Archive& ar) override;
+	virtual void Deserialize(Archive& ar) override;
+#pragma endregion
+
+
+
 #pragma region Variable
 protected:
 	RHIBuffer* m_VertexBuffer = { nullptr };
 	RHIBuffer* m_SkinDataBuffer = { nullptr };
 	RHIBuffer* m_IndexBuffer = { nullptr };
+
+	uint32 m_VertexStride = 0;
+	uint32 m_SkinDataStride = 0;
+	uint32 m_IndexStride = 0;
+
+	vector<uint8> m_VertexRaw;
+	vector<uint8> m_SkinRaw;
+	vector<uint8> m_IndexRaw;
 
 
 	//Input Layout
@@ -90,11 +153,15 @@ protected:
 	uint32 m_VertexCount = { 0 };
 	PROPERTY(CATEGORY(L"PROP_INFORMATION"), READONLY)
 	uint32 m_IndexCount = { 0 };
+	PROPERTY(CATEGORY(L"PROP_INFORMATION"), READONLY)
+	uint32 m_SkinDataCount = { 0 };
 
 	PROPERTY(CATEGORY(L"PROP_INFORMATION"), READONLY)
 	vec3 m_BoundingBoxMin = { 0.0f, 0.0f, 0.0f };
 	PROPERTY(CATEGORY(L"PROP_INFORMATION"), READONLY)
 	vec3 m_BoundingBoxMax = { 0.0f, 0.0f, 0.0f };
+
+	EMeshFlag m_Flags = { EMeshFlag::None };
 #pragma endregion
 };
 END

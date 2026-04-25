@@ -115,7 +115,7 @@ public:
 #pragma region Texture Binding Interface
 public:
 	void SetTexture(const string& name, const ResourceHandle<Texture>& texture);
-	void SetTextureBySlot(uint32 slot, const ResourceHandle<Texture>& texture);
+	void SetTextureBySlot(uint32 slot, const ResourceHandle<Texture>& texture);		
 	void SetTextureBinding(const string& name, uint32 slot, const ResourceHandle<Texture>& texture);
 
 	void SetSamplerDesc(const string& name, const tagSamplerDesc& desc);

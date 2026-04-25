@@ -1,5 +1,6 @@
 ﻿#pragma once
 #include "BinaryArchive.h"
+#include "LZ4Compressor.h"
 
 bool BinaryArchive::PushScope(string_view key)
 {
@@ -431,27 +432,68 @@ bool BinaryArchive::SaveToFile(string_view filePath)
 	if (IsReading()) return false;
 
 	std::ofstream outFile(filePath.data(), std::ios::binary);
-    if (!outFile || !outFile.is_open()) return false;
-    outFile.write(reinterpret_cast<const char*>(m_Buffer.data()), m_Buffer.size());
-    return true;
+	if (!outFile || !outFile.is_open()) return false;
+
+	vector<uint8> packed;
+	const std::span<const uint8> srcSpan(
+		m_Buffer.empty() ? nullptr : m_Buffer.data(),
+		m_Buffer.size()
+	);
+
+	if (!LZ4Compressor::CompressWithHeader(srcSpan, packed))
+	{
+		return false;
+	}
+
+	if (!packed.empty())
+	{
+		outFile.write(reinterpret_cast<const char*>(packed.data()), static_cast<std::streamsize>(packed.size()));
+	}
+	return outFile.good();
 }
 
 bool BinaryArchive::LoadFromFile(string_view filePath)
 {
 	if (IsWriting()) return false;
+
 	std::ifstream inFile(filePath.data(), std::ios::binary);
 	if (!inFile || !inFile.is_open()) return false;
 
 	inFile.seekg(0, std::ios::end);
-	size_t size = (size_t)inFile.tellg();
-
+	const size_t fileSize = static_cast<size_t>(inFile.tellg());
 	inFile.seekg(0, std::ios::beg);
 
-	m_Buffer.resize(size);
-	inFile.read(reinterpret_cast<char*>(m_Buffer.data()), size);
+	vector<uint8> fileBytes(fileSize);
+	if (fileSize > 0)
+	{
+		inFile.read(reinterpret_cast<char*>(fileBytes.data()), static_cast<std::streamsize>(fileSize));
+		if (!inFile.good() && !inFile.eof()) return false;
+	}
+
+	vector<uint8> decompressed;
+	const std::span<const uint8> packedSpan(
+		fileBytes.empty() ? nullptr : fileBytes.data(),
+		fileBytes.size()
+	);
+
+	// 신규 포맷(LZ4+헤더) 우선 시도
+	const bool lz4Ok = LZ4Compressor::DecompressWithHeader(packedSpan, decompressed);
+
+	if (lz4Ok)
+	{
+		m_Buffer = std::move(decompressed);
+	}
+	else
+	{
+		// 구버전(무압축) 파일 호환
+		m_Buffer = std::move(fileBytes);
+	}
+
 	m_Cursor = 0;
 
-	ParseScopeDirectory(size);
+	while (!m_ReadScopeStack.empty()) m_ReadScopeStack.pop();
+	ParseScopeDirectory(m_Buffer.size());
+
 	return true;
 }
 

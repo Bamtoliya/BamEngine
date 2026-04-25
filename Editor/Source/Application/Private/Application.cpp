@@ -126,6 +126,9 @@ void Application::InitializeResources()
 
 		//MaterialInstance
         L"Resources/Material/SpriteMaterial.bammatinst",
+
+        //Mesh
+		L"Resources/Model/Cube2_Cube.bammesh",
     };
 
     for (const auto& path : resourcesToLoad)

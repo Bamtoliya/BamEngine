@@ -1,19 +1,23 @@
 ﻿#pragma once
 
 #include "Resource.h"
-#include "Material.h"
+#include "ResourceHandle.h"
+#include "ResourceHandle.inl"
+
 #include "Mesh.h"
-#include "Bone.h"
+#include "Material.h"
 #include "Skeleton.h"
+#include "Animation.h"
+
+BEGIN(Engine)
 
 struct tagModelCreateDesc
 {
-	vector<Mesh*> Meshes;
-	vector<Material*> Materials;
-	Skeleton* Skeleton = { nullptr };
+	vector<ResourceHandle<Mesh>> Meshes;
+	vector<ResourceHandle<Material>> Materials;
+	ResourceHandle<Skeleton> Skeleton;
+	vector<ResourceHandle<Animation>> Animations;
 };
-
-BEGIN(Engine)
 
 CLASS()
 class ENGINE_API Model : public Resource
@@ -38,9 +42,10 @@ public:
 
 #pragma region Getter
 public:
-	vector<Material*> GetMaterials() const { return m_Materials; }
-	vector<Mesh*> GetMeshes() const { return m_Meshes; }
-	Skeleton* GetSkeleton() const { return m_Skeleton; }
+	vector<ResourceHandle<Mesh>> GetMeshes() const { return m_Meshes; }
+	vector<ResourceHandle<Material>> GetMaterials() const { return m_Materials; }
+	ResourceHandle<Skeleton> GetSkeleton() const { return m_Skeleton; }
+	vector<ResourceHandle<Animation>> GetAnimations() const { return m_Animations; }
 #pragma endregion
 
 #pragma region Setter
@@ -50,13 +55,16 @@ public:
 #pragma region Member Variable
 private:
 	PROPERTY()
-	vector<Material*> m_Materials;
+	vector<ResourceHandle<Mesh>> m_Meshes;
 
 	PROPERTY()
-	vector<Mesh*> m_Meshes;
+	vector<ResourceHandle<Material>> m_Materials;
 
 	PROPERTY()
-	Skeleton* m_Skeleton = { nullptr };
+	ResourceHandle<Skeleton> m_Skeleton;
+
+	PROPERTY()
+	vector<ResourceHandle<Animation>> m_Animations;
 #pragma endregion
 };
 END

@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "GlazeArchiveBase.h"
+#include "LZ4Compressor.h"
 
 #pragma region Scope
 bool GlazeArchiveBase::PushScope(string_view key)
@@ -522,9 +523,28 @@ void GlazeArchiveBase::ProcessRaw(string_view key, const void* data, size_t size
 {
 	auto* currentTop = m_ScopeStack.top();
 	string keyStr(key);
+
 	if (IsWriting())
 	{
-		std::string base64Str = cppcodec::base64_rfc4648::encode(static_cast<const uint8_t*>(data), size);
+		// 1) Raw -> LZ4(+헤더)
+		vector<uint8> packed;
+		const std::span<const uint8> srcSpan(
+			size == 0 ? nullptr : static_cast<const uint8*>(data),
+			size
+		);
+
+		if (!LZ4Compressor::CompressWithHeader(srcSpan, packed))
+		{
+			ENGINE_LOG_ERROR("GlazeArchiveBase::ProcessRaw - LZ4 compress failed for key: {}", keyStr);
+			(*currentTop)[keyStr] = "";
+			return;
+		}
+
+		// 2) Base64 문자열로 JSON 저장
+		std::string base64Str = cppcodec::base64_rfc4648::encode(
+			packed.empty() ? nullptr : packed.data(),
+			packed.size()
+		);
 		(*currentTop)[keyStr] = base64Str;
 	}
 	else if (IsReading() && currentTop->is_object())
@@ -532,17 +552,57 @@ void GlazeArchiveBase::ProcessRaw(string_view key, const void* data, size_t size
 		auto& obj = currentTop->get_object();
 		auto it = obj.find(keyStr);
 
-		if (it != obj.end() && it->second.is_string())
+		if (it == obj.end() || !it->second.is_string())
 		{
-			std::string base64Str = it->second.get_string();
-			std::vector<uint8_t> decodedData = cppcodec::base64_rfc4648::decode<std::vector<uint8_t>>(base64Str);
-			size_t copySize = std::min(size, decodedData.size());
-			std::memcpy(const_cast<void*>(data), decodedData.data(), copySize);
+			return;
+		}
 
-			if (copySize != size) 
+		try
+		{
+			// 1) Base64 decode
+			std::string base64Str = it->second.get_string();
+			std::vector<uint8> decodedData = cppcodec::base64_rfc4648::decode<std::vector<uint8>>(base64Str);
+
+			// 2) LZ4 해제 시도(신규 포맷)
+			vector<uint8> decompressed;
+			const std::span<const uint8> packedSpan(
+				decodedData.empty() ? nullptr : decodedData.data(),
+				decodedData.size()
+			);
+
+			bool lz4Ok = LZ4Compressor::DecompressWithHeader(packedSpan, decompressed);
+
+			if (lz4Ok)
 			{
-				ENGINE_LOG_WARN("GlazeArchiveBase::ProcessRaw - Decoded data size ({}) does not match expected size ({}). Data may be truncated.", decodedData.size(), size);
+				size_t copySize = std::min(size, decompressed.size());
+				std::memcpy(const_cast<void*>(data), decompressed.data(), copySize);
+
+				if (copySize != size)
+				{
+					ENGINE_LOG_WARN(
+						"GlazeArchiveBase::ProcessRaw - LZ4 decoded size ({}) != expected size ({})",
+						decompressed.size(), size
+					);
+				}
 			}
+			else
+			{
+				// 구버전(JSON base64 raw) 호환
+				size_t copySize = std::min(size, decodedData.size());
+				std::memcpy(const_cast<void*>(data), decodedData.data(), copySize);
+
+				if (copySize != size)
+				{
+					ENGINE_LOG_WARN(
+						"GlazeArchiveBase::ProcessRaw - Legacy decoded size ({}) != expected size ({})",
+						decodedData.size(), size
+					);
+				}
+			}
+		}
+		catch (...)
+		{
+			ENGINE_LOG_ERROR("GlazeArchiveBase::ProcessRaw - Base64 decode failed for key: {}", keyStr);
 		}
 	}
 }

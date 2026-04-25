@@ -31,7 +31,7 @@ public:
 
 #pragma region Variable
 private:
-	PROPERTY()
+	PROPERTY(EDITABLE)
 	ResourceHandle<Mesh> m_MeshHandle;
 #pragma endregion
 };

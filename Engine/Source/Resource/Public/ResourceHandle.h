@@ -50,5 +50,4 @@ private:
 private:
 	Handle m_Handle;
 };
-
 END

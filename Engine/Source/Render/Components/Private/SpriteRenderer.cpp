@@ -220,8 +220,4 @@ EResult SpriteRenderer::UpdateMaterialInstance()
 void SpriteRenderer::Deserialize(Archive& ar)
 {
 	SetDirty();
-	//if (IsFailure(UpdateMesh()))
-	//	return;
-	//if (IsFailure(UpdateMaterialInstance()))
-	//	return;
 }
