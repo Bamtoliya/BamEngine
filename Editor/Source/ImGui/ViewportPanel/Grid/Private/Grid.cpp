@@ -51,6 +51,9 @@ void Grid::SubmitGrid(RenderPassID renderPassID, bool isOrthographic)
             RHI* rhi = Renderer::Get().GetRHI();
             ResourceManager& resourceManager = ResourceManager::Get();
 
+            Mesh* quadMesh = resourceManager.GetResourceHandle<Mesh>(L"QuadMesh").Get();
+            if (!quadMesh) return EResult::Fail;
+
             // 1. 파이프라인 디스크립터 설정 (RenderComponent와 동일한 방식 적용!)
             tagRHIPipelineDesc pipelineDesc = {};
             pipelineDesc.PipelineType = EPipelineType::Graphics;
@@ -62,7 +65,7 @@ void Grid::SubmitGrid(RenderPassID renderPassID, bool isOrthographic)
             pipelineDesc.FillMode = EFillMode::Solid;
             pipelineDesc.CullMode = ECullMode::None;
             pipelineDesc.Topology = ETopology::TriangleList;
-            pipelineDesc.InputLayout = Vertex::Layout;
+            pipelineDesc.InputLayouts = quadMesh->GetInputLayoutDescs();
 
             // [핵심 1] RenderPass에서 Color Attachment 포맷 동적 매칭
             pipelineDesc.ColorAttachmentCount = renderPass->GetRenderTargetCount();
@@ -89,15 +92,11 @@ void Grid::SubmitGrid(RenderPassID renderPassID, bool isOrthographic)
             if (!pipeline || IsFailure(rhi->BindPipeline(pipeline)))
                 return EResult::Fail;
 
-            // 3. 메쉬 바인딩 및 렌더링
-            Mesh* quadMesh = resourceManager.GetResourceHandle<Mesh>(L"QuadMesh").Get();
-            if (!quadMesh) return EResult::Fail;
+         
+            if(IsFailure(quadMesh->Bind(0)))
+                return EResult::Fail;
 
-            rhi->BindVertexBuffer(quadMesh->GetVertexBuffer());
-            rhi->BindIndexBuffer(quadMesh->GetIndexBuffer());
-            rhi->DrawIndexed(quadMesh->GetIndexCount());
-
-            return EResult::Success;
+            return rhi->DrawIndexed(quadMesh->GetIndexCount());
         }
     , renderPassID);
 }

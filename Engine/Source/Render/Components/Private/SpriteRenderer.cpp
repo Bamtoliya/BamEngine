@@ -69,35 +69,26 @@ EResult SpriteRenderer::Render(f32 dt, RenderPass* renderPass)
 
 	RHI* rhi = Renderer::Get().GetRHI();
 
-	RHIBuffer* vertexBuffer = m_Mesh->GetVertexBuffer();
-	RHIBuffer* indexBuffer = m_Mesh->GetIndexBuffer();
 	MaterialInstance* material = GetMaterialInstance();
 
-	if (!rhi || !vertexBuffer) return EResult::Fail;
+	if (!rhi) return EResult::Fail;
 
 	if(IsFailure(BindPipeline(m_Mesh.Get(), material, renderPass)))
 		return EResult::Fail;
 
-	material->Bind(2);
+	if(IsFailure(material->Bind(2)))
+		return EResult::Fail;
 
 	SceneUBO uboData;
 	uboData.worldMatrix = m_Owner->GetComponent<Transform>()->GetWorldMatrix();
 
-	rhi->BindConstantBuffer((void*)&uboData, sizeof(SceneUBO), 1);
+	if(IsFailure(rhi->BindConstantBuffer((void*)&uboData, sizeof(SceneUBO), 1)))
+		return EResult::Fail;
 
-	rhi->BindVertexBuffer(vertexBuffer);
+	if(IsFailure(m_Mesh->Bind(0)))
+		return EResult::Fail;
 
-	if (indexBuffer)
-	{
-		rhi->BindIndexBuffer(indexBuffer);
-		rhi->DrawIndexed(m_Mesh->GetIndexCount());
-	}
-	else
-	{
-		rhi->Draw(m_Mesh->GetVertexCount());
-	}
-
-	return EResult::Success;
+	return m_Mesh->GetIndexBuffer() ? rhi->DrawIndexed(m_Mesh->GetIndexCount()) : rhi->Draw(m_Mesh->GetVertexCount());
 }
 #pragma endregion
 
@@ -128,7 +119,6 @@ EResult SpriteRenderer::SetSprite(const ResourceHandle<Texture>& texture)
 EResult SpriteRenderer::UpdateMesh()
 {
 	if (!m_Sprite) return EResult::Fail;
-
 	m_CachedSpriteVersion = m_Sprite->GetVersion();
 
 	Texture* texture = m_Sprite->GetTexture();
@@ -147,35 +137,40 @@ EResult SpriteRenderer::UpdateMesh()
 	f32 xOffset = width * pivot.x;
 	f32 yOffset = height * pivot.y;
 
-	//f32 left = -worldWidth * pivot.x;
-	//f32 right = worldWidth * (1.0f - pivot.x);
-	//f32 bottom = -worldHeight * pivot.y;
-	//f32 top = worldHeight * (1.0f - pivot.y);
-
 	f32 left = 0.0f - xOffset;
 	f32 right = width - xOffset;
 	f32 bottom = 0.0f - yOffset;
 	f32 top = height - yOffset;
 
-	vector<Vertex> vertices;
-
-	vertices.push_back({ vec3(left, bottom, 0), vec2(0, m_Tiling.y) });
-	vertices.push_back({ vec3(right, bottom, 0), vec2(m_Tiling.x, m_Tiling.y) });
-	vertices.push_back({ vec3(right, top, 0), vec2(m_Tiling.x, 0) });
-	vertices.push_back({ vec3(left, top, 0), vec2(0, 0) });
-
-	vector<uint32> indices = {
-		0, 1, 2,
-		0, 2, 3
+	// Position 스트림
+	vector<VertexPosition> positions = {
+		{ vec3(left, bottom, 0) },
+		{ vec3(right, bottom, 0) },
+		{ vec3(right, top, 0) },
+		{ vec3(left, top, 0) }
 	};
+
+	// Material 스트림
+	VertexMaterial matDefault;
+	matDefault.normal = vec3(0.0f, 0.0f, -1.0f);
+
+	VertexMaterial mat0 = matDefault; mat0.texCoord = vec2(0, m_Tiling.y);
+	VertexMaterial mat1 = matDefault; mat1.texCoord = vec2(m_Tiling.x, m_Tiling.y);
+	VertexMaterial mat2 = matDefault; mat2.texCoord = vec2(m_Tiling.x, 0);
+	VertexMaterial mat3 = matDefault; mat3.texCoord = vec2(0, 0);
+
+	vector<VertexMaterial> materials = { mat0, mat1, mat2, mat3 };
+
+	vector<uint32> indices = { 0, 1, 2, 0, 2, 3 };
 
 	m_Mesh = ResourceManager::Get().GetResourceHandle<Mesh>(L"QuadMesh");
 	if (!m_Mesh)
 	{
 		tagMeshCreateDesc desc;
-		desc.VertexData = vertices.data();
-		desc.VertexCount = static_cast<uint32>(vertices.size());
-		desc.VertexStride = sizeof(Vertex);
+
+		// Streams 배열에 직접 세팅
+		desc.Streams[(uint32)EMeshStream::Position] = { positions.data(), (uint32)positions.size(), sizeof(VertexPosition) };
+		desc.Streams[(uint32)EMeshStream::Material] = { materials.data(), (uint32)materials.size(), sizeof(VertexMaterial) };
 
 		desc.IndexData = indices.data();
 		desc.IndexCount = static_cast<uint32>(indices.size());
@@ -184,10 +179,13 @@ EResult SpriteRenderer::UpdateMesh()
 		m_Mesh = ResourceManager::Get().AddResource(L"QuadMesh", Mesh::Create(&desc));
 	}
 
-	m_Mesh->SetVertexBuffer(vertices.data(), static_cast<uint32>(vertices.size()));
+	// 다이내믹 업데이트도 통일된 함수 하나로 처리
+	m_Mesh->SetStreamBuffer(EMeshStream::Position, positions.data(), (uint32)positions.size(), sizeof(VertexPosition));
+	m_Mesh->SetStreamBuffer(EMeshStream::Material, materials.data(), (uint32)materials.size(), sizeof(VertexMaterial));
 
 	return EResult::Success;
 }
+
 EResult SpriteRenderer::UpdateMaterialInstance()
 {
 	if (!m_Sprite || !m_Sprite->GetTexture()) return EResult::Fail;

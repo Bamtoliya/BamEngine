@@ -116,14 +116,14 @@ Shader* MaterialInstance::GetVertexShader() const
 {
 	if (m_VertexShaderHandle)
 		return m_VertexShaderHandle.Get();
-	return m_BaseMaterialHandle.Get()->GetVertexShader();
+	return m_BaseMaterialHandle.Get() ? m_BaseMaterialHandle.Get()->GetVertexShader() : nullptr;
 }
 
 Shader* MaterialInstance::GetPixelShader() const
 {
 	if (m_PixelShaderHandle)
 		return m_PixelShaderHandle.Get();
-	return m_BaseMaterialHandle.Get()->GetPixelShader();
+	return m_BaseMaterialHandle ? m_BaseMaterialHandle.Get()->GetPixelShader() : nullptr;
 }
 
 void MaterialInstance::SetVertexShaderHandle(const ResourceHandle<Shader>& shader)

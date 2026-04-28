@@ -6,6 +6,7 @@
 #include "Core/Public/Interface/Component.h"
 #include "Core/Public/Structs.h"
 #include "Core/Public/Transform.h"
+#include "Core/Public/Vertex.h"
 #include "Physics/Components/Collider/Public/Box2DCollider.h"
 #include "Physics/Components/Collider/Public/BoxCollider.h"
 #include "Physics/Components/Collider/Public/Collider.h"
@@ -13,6 +14,7 @@
 #include "Render/Components/Public/Animator.h"
 #include "Render/Components/Public/MeshRenderer.h"
 #include "Render/Components/Public/RenderComponent.h"
+#include "Render/Components/Public/SkinnedMeshRenderer.h"
 #include "Render/Components/Public/SpriteRenderer.h"
 #include "Render/RHI/Public/RHIDefinitions.h"
 #include "Render/Sampler/Public/SamplerDesc.h"
@@ -21,6 +23,7 @@
 #include "Resource/Material/Public/MaterialInstance.h"
 #include "Resource/Material/Public/MaterialInterface.h"
 #include "Resource/Model/Public/Animation.h"
+#include "Resource/Model/Public/Bone.h"
 #include "Resource/Model/Public/Mesh.h"
 #include "Resource/Model/Public/Model.h"
 #include "Resource/Model/Public/Skeleton.h"
@@ -289,20 +292,6 @@ IMPLEMENT_CLASS_EX(Rect, "Engine::Rect", "")
 
 #pragma endregion // STRUCT: Engine::Rect
 
-#pragma region STRUCT: Engine::Vertex
-BEGIN_PROPERTIES(Vertex)
-	REFLECT_PROPERTY(Vertex, position, "glm::vec3", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{})
-	REFLECT_PROPERTY(Vertex, normal, "glm::vec3", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{})
-	REFLECT_PROPERTY(Vertex, texCoord, "glm::vec2", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{})
-	REFLECT_PROPERTY(Vertex, tangent, "glm::vec3", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{})
-	REFLECT_PROPERTY(Vertex, bitangent, "glm::vec3", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{})
-	REFLECT_PROPERTY(Vertex, color, "glm::vec4", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{})
-END_PROPERTIES
-EMPTY_FUNCTIONS(Vertex)
-IMPLEMENT_CLASS_EX(Vertex, "Engine::Vertex", "")
-
-#pragma endregion // STRUCT: Engine::Vertex
-
 #pragma region STRUCT: Engine::tagTransformDesc
 BEGIN_PROPERTIES(tagTransformDesc)
 	REFLECT_PROPERTY(tagTransformDesc, Position, "vec3", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{})
@@ -376,6 +365,42 @@ END_FUNCTIONS
 IMPLEMENT_CLASS_EX(Transform, "Engine::Transform", "Engine::Component")
 
 #pragma endregion // CLASS: Engine::Transform
+
+#pragma region STRUCT: Engine::VertexPosition
+BEGIN_PROPERTIES(VertexPosition)
+	REFLECT_PROPERTY(VertexPosition, position, "glm::vec3", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{})
+END_PROPERTIES
+EMPTY_FUNCTIONS(VertexPosition)
+IMPLEMENT_CLASS_EX(VertexPosition, "Engine::VertexPosition", "")
+
+#pragma endregion // STRUCT: Engine::VertexPosition
+
+#pragma region STRUCT: Engine::VertexMaterial
+BEGIN_PROPERTIES(VertexMaterial)
+	REFLECT_PROPERTY(VertexMaterial, normal, "glm::vec3", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{})
+	REFLECT_PROPERTY(VertexMaterial, texCoord, "glm::vec2", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{})
+	REFLECT_PROPERTY(VertexMaterial, tangent, "glm::vec3", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{})
+	REFLECT_PROPERTY(VertexMaterial, bitangent, "glm::vec3", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{})
+	REFLECT_PROPERTY(VertexMaterial, color, "glm::vec4", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{})
+END_PROPERTIES
+EMPTY_FUNCTIONS(VertexMaterial)
+IMPLEMENT_CLASS_EX(VertexMaterial, "Engine::VertexMaterial", "")
+
+#pragma endregion // STRUCT: Engine::VertexMaterial
+
+#pragma region STRUCT: Engine::Vertex
+BEGIN_PROPERTIES(Vertex)
+	REFLECT_PROPERTY(Vertex, position, "glm::vec3", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{})
+	REFLECT_PROPERTY(Vertex, normal, "glm::vec3", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{})
+	REFLECT_PROPERTY(Vertex, texCoord, "glm::vec2", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{})
+	REFLECT_PROPERTY(Vertex, tangent, "glm::vec3", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{})
+	REFLECT_PROPERTY(Vertex, bitangent, "glm::vec3", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{})
+	REFLECT_PROPERTY(Vertex, color, "glm::vec4", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{})
+END_PROPERTIES
+EMPTY_FUNCTIONS(Vertex)
+IMPLEMENT_CLASS_EX(Vertex, "Engine::Vertex", "")
+
+#pragma endregion // STRUCT: Engine::Vertex
 
 #pragma region CLASS: Engine::Box2DCollider
 BEGIN_METADATA(Box2DCollider, m_Center)
@@ -478,9 +503,46 @@ IMPLEMENT_CLASS_EX(Camera, "Engine::Camera", "Engine::Component")
 
 #pragma endregion // CLASS: Engine::Camera
 
+#pragma region STRUCT: Engine::tagAnimationState
+BEGIN_METADATA(tagAnimationState, Name)
+	READONLY
+END_METADATA
+
+BEGIN_METADATA(tagAnimationState, Clip)
+	READONLY
+END_METADATA
+
+BEGIN_METADATA(tagAnimationState, Loop)
+	EDITABLE
+END_METADATA
+
+BEGIN_METADATA(tagAnimationState, PlaybackSpeed)
+	EDITABLE
+END_METADATA
+BEGIN_PROPERTIES(tagAnimationState)
+	REFLECT_PROPERTY(tagAnimationState, Name, "wstring", reflection::EPropertyType::WString, std::span<const reflection::MetadataEntry>{tagAnimationState_Name_Meta})
+	REFLECT_PROPERTY(tagAnimationState, Clip, "ResourceHandle<Animation>", reflection::EPropertyType::ResourceHandle, std::span<const reflection::MetadataEntry>{tagAnimationState_Clip_Meta})
+	REFLECT_PROPERTY(tagAnimationState, Loop, "bool", reflection::EPropertyType::Bool, std::span<const reflection::MetadataEntry>{tagAnimationState_Loop_Meta})
+	REFLECT_PROPERTY(tagAnimationState, PlaybackSpeed, "f32", reflection::EPropertyType::Float32, std::span<const reflection::MetadataEntry>{tagAnimationState_PlaybackSpeed_Meta})
+END_PROPERTIES
+EMPTY_FUNCTIONS(tagAnimationState)
+IMPLEMENT_CLASS_EX(tagAnimationState, "Engine::tagAnimationState", "")
+
+#pragma endregion // STRUCT: Engine::tagAnimationState
+
 #pragma region CLASS: Engine::Animator
+BEGIN_METADATA(Animator, m_Skeleton)
+	EDITABLE
+END_METADATA
+
+BEGIN_METADATA(Animator, m_States)
+	EDITABLE
+END_METADATA
+
+DECLARE_MAP_INFO(Animator, m_States_Root, "wstring", reflection::EPropertyType::WString, "Engine::tagAnimationState", reflection::EPropertyType::Struct, reflection::MapAccessor<unordered_map<wstring, tagAnimationState>>::Get())
 BEGIN_PROPERTIES(Animator)
-	REFLECT_PROPERTY(Animator, m_Skeleton, "ResourceHandle<Skeleton>", reflection::EPropertyType::ResourceHandle, std::span<const reflection::MetadataEntry>{})
+	REFLECT_PROPERTY(Animator, m_Skeleton, "ResourceHandle<Skeleton>", reflection::EPropertyType::ResourceHandle, std::span<const reflection::MetadataEntry>{Animator_m_Skeleton_Meta})
+	REFLECT_CONTAINER_PROPERTY(Animator, m_States, "unordered_map<wstring, Engine::tagAnimationState>", reflection::EPropertyType::Map, &Animator_m_States_Root_ContainerData, std::span<const reflection::MetadataEntry>{Animator_m_States_Meta})
 END_PROPERTIES
 EMPTY_FUNCTIONS(Animator)
 IMPLEMENT_CLASS_EX(Animator, "Engine::Animator", "Engine::Component")
@@ -513,6 +575,13 @@ EMPTY_FUNCTIONS(RenderComponent)
 IMPLEMENT_CLASS_EX(RenderComponent, "Engine::RenderComponent", "Engine::Component")
 
 #pragma endregion // CLASS: Engine::RenderComponent
+
+#pragma region CLASS: Engine::SkinnedMeshRenderer
+EMPTY_PROPERTIES(SkinnedMeshRenderer)
+EMPTY_FUNCTIONS(SkinnedMeshRenderer)
+IMPLEMENT_CLASS_EX(SkinnedMeshRenderer, "Engine::SkinnedMeshRenderer", "Engine::MeshRenderer")
+
+#pragma endregion // CLASS: Engine::SkinnedMeshRenderer
 
 #pragma region CLASS: Engine::SpriteRenderer
 BEGIN_METADATA(SpriteRenderer, m_Tiling)
@@ -677,22 +746,17 @@ IMPLEMENT_CLASS_EX(Animation, "Engine::Animation", "Engine::Resource")
 
 #pragma endregion // CLASS: Engine::Animation
 
-#pragma region STRUCT: Engine::tagMeshBinaryHeader
-BEGIN_PROPERTIES(tagMeshBinaryHeader)
-	REFLECT_PROPERTY(tagMeshBinaryHeader, VertexCount, "uint32", reflection::EPropertyType::UInt32, std::span<const reflection::MetadataEntry>{})
-	REFLECT_PROPERTY(tagMeshBinaryHeader, VertexStride, "uint32", reflection::EPropertyType::UInt32, std::span<const reflection::MetadataEntry>{})
-	REFLECT_PROPERTY(tagMeshBinaryHeader, SkinDataCount, "uint32", reflection::EPropertyType::UInt32, std::span<const reflection::MetadataEntry>{})
-	REFLECT_PROPERTY(tagMeshBinaryHeader, SkinDataStride, "uint32", reflection::EPropertyType::UInt32, std::span<const reflection::MetadataEntry>{})
-	REFLECT_PROPERTY(tagMeshBinaryHeader, IndexCount, "uint32", reflection::EPropertyType::UInt32, std::span<const reflection::MetadataEntry>{})
-	REFLECT_PROPERTY(tagMeshBinaryHeader, IndexStride, "uint32", reflection::EPropertyType::UInt32, std::span<const reflection::MetadataEntry>{})
-	REFLECT_PROPERTY(tagMeshBinaryHeader, BoundingBoxMin, "vec3", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{})
-	REFLECT_PROPERTY(tagMeshBinaryHeader, BoundingBoxMax, "vec3", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{})
-	REFLECT_PROPERTY(tagMeshBinaryHeader, Flags, "Engine::EMeshFlag", reflection::EPropertyType::BitFlag, std::span<const reflection::MetadataEntry>{})
+#pragma region STRUCT: Bone
+BEGIN_PROPERTIES(Bone)
+	REFLECT_PROPERTY(Bone, Name, "wstring", reflection::EPropertyType::WString, std::span<const reflection::MetadataEntry>{})
+	REFLECT_PROPERTY(Bone, OffsetMatrix, "mat4", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{})
+	REFLECT_PROPERTY(Bone, LocalTransform, "mat4", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{})
+	REFLECT_PROPERTY(Bone, ParentIndex, "int32", reflection::EPropertyType::Int32, std::span<const reflection::MetadataEntry>{})
 END_PROPERTIES
-EMPTY_FUNCTIONS(tagMeshBinaryHeader)
-IMPLEMENT_CLASS_EX(tagMeshBinaryHeader, "Engine::tagMeshBinaryHeader", "")
+EMPTY_FUNCTIONS(Bone)
+IMPLEMENT_CLASS_EX(Bone, "Bone", "")
 
-#pragma endregion // STRUCT: Engine::tagMeshBinaryHeader
+#pragma endregion // STRUCT: Bone
 
 #pragma region CLASS: Engine::Mesh
 BEGIN_METADATA(Mesh, m_Topology)
@@ -700,17 +764,7 @@ BEGIN_METADATA(Mesh, m_Topology)
 	READONLY
 END_METADATA
 
-BEGIN_METADATA(Mesh, m_VertexCount)
-	CATEGORY(L"PROP_INFORMATION")
-	READONLY
-END_METADATA
-
 BEGIN_METADATA(Mesh, m_IndexCount)
-	CATEGORY(L"PROP_INFORMATION")
-	READONLY
-END_METADATA
-
-BEGIN_METADATA(Mesh, m_SkinDataCount)
 	CATEGORY(L"PROP_INFORMATION")
 	READONLY
 END_METADATA
@@ -726,9 +780,7 @@ BEGIN_METADATA(Mesh, m_BoundingBoxMax)
 END_METADATA
 BEGIN_PROPERTIES(Mesh)
 	REFLECT_PROPERTY(Mesh, m_Topology, "Engine::ETopology", reflection::EPropertyType::Enum, std::span<const reflection::MetadataEntry>{Mesh_m_Topology_Meta})
-	REFLECT_PROPERTY(Mesh, m_VertexCount, "uint32", reflection::EPropertyType::UInt32, std::span<const reflection::MetadataEntry>{Mesh_m_VertexCount_Meta})
 	REFLECT_PROPERTY(Mesh, m_IndexCount, "uint32", reflection::EPropertyType::UInt32, std::span<const reflection::MetadataEntry>{Mesh_m_IndexCount_Meta})
-	REFLECT_PROPERTY(Mesh, m_SkinDataCount, "uint32", reflection::EPropertyType::UInt32, std::span<const reflection::MetadataEntry>{Mesh_m_SkinDataCount_Meta})
 	REFLECT_PROPERTY(Mesh, m_BoundingBoxMin, "vec3", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{Mesh_m_BoundingBoxMin_Meta})
 	REFLECT_PROPERTY(Mesh, m_BoundingBoxMax, "vec3", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{Mesh_m_BoundingBoxMax_Meta})
 END_PROPERTIES

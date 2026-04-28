@@ -1,22 +1,22 @@
-﻿#pragma once
+#pragma once
 
-#include "RenderComponent.h"
+#include "MeshRenderer.h"
 
 
 BEGIN(Engine)
 
 CLASS()
-class ENGINE_API MeshRenderer : public RenderComponent
+class ENGINE_API SkinnedMeshRenderer final : public MeshRenderer
 {
 	REFLECT_CLASS();
 #pragma region Constructor&Destructor
-protected:
-	MeshRenderer() : RenderComponent{} {}
-	virtual ~MeshRenderer() {}
+private:
+	SkinnedMeshRenderer() : MeshRenderer{} {}
+	virtual ~SkinnedMeshRenderer() {}
 	virtual EResult Initialize(void* arg = nullptr) override;
 public:
-	static Component* Create(void* arg = nullptr);
-	virtual Component* Clone(GameObject* owner, void* arg = nullptr);
+	static SkinnedMeshRenderer* Create(void* arg = nullptr);
+	virtual SkinnedMeshRenderer* Clone(GameObject* owner, void* arg = nullptr);
 	virtual void Free() override;
 #pragma endregion
 
@@ -31,6 +31,8 @@ public:
 
 #pragma region Variable
 private:
+	RHIBuffer* m_BoneSSBO = nullptr;
+	uint32 m_LastBoneCount = 0;
 #pragma endregion
 };
 END

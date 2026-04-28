@@ -19,7 +19,6 @@
 #include "ViewportPanel.h"
 #include "InspectorPanel.h"
 #include "HierarchyPanel.h"
-#include "ResourceFilter.h"
 #include "ContentBrowserPanel.h"
 
 IMPLEMENT_SINGLETON(ImGuiManager)
@@ -257,6 +256,7 @@ void ImGuiManager::Draw()
 	{
 		panel->Draw();
 	}
+	ImGui::ShowMetricsWindow();
 }
 
 void ImGuiManager::MainDockspace()
@@ -350,7 +350,6 @@ EResult ImGuiManager::CreateDefaultPanels()
 	AddImGuiPanel(viewportPanel);
 	AddImGuiPanel(new InspectorPanel());
 	AddImGuiPanel(new HierarchyPanel());
-	AddImGuiPanel(new ResourceFilter());
 	ContentBrowserPanel* contentBrowserPanel = new ContentBrowserPanel();
 	contentBrowserPanel->Initialize();
 	AddImGuiPanel(contentBrowserPanel);

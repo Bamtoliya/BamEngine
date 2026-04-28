@@ -128,7 +128,7 @@ void Application::InitializeResources()
         L"Resources/Material/SpriteMaterial.bammatinst",
 
         //Mesh
-		L"Resources/Model/Cube2_Cube.bammesh",
+		//L"Resources/Model/Cube2_Cube.bammesh",
     };
 
     for (const auto& path : resourcesToLoad)
@@ -162,40 +162,58 @@ void Application::InitializeResources()
 	//resourceManager.DestroyResource(spriteMaterialInstanceHandle.GetRawHandle());
 
 
-	//Material* defaultMaterial = resourceManager.GetResourceHandle<Material>(L"Resources/Material/DefaultMaterial.bammat").Get();
-	//Material* spriteMaterial = resourceManager.GetResourceHandle<Material>(L"Resources/Material/SpriteMaterial.bammat").Get();
+	tagShaderDesc defaultSkinningShaderDesc = {};
+	defaultSkinningShaderDesc.Key = L"Resources/Shader/Skinning";
+	defaultSkinningShaderDesc.Path = L"Resources/Shader/skinning.vert.spv";
+	defaultSkinningShaderDesc.SpirvPath = L"Resources/Shader/skinning.vert.spv";
+	defaultSkinningShaderDesc.ShaderType = EShaderType::Vertex;
+    defaultSkinningShaderDesc.NumStorageBuffers = 1;
+    Shader* skinningShader = resourceManager.LoadResource<Shader>(&defaultSkinningShaderDesc).Get();
+	resourceManager.SaveToBinaryFile(skinningShader, L"Resources/Shader/skinning.vert.bamshader");
+	resourceManager.LoadFile(L"Resources/Shader/skinning.vert.bamshader");
 
-    //Material* material = resourceManager.GetResourceHandle<Material>(L"Resources/Material/DefaultMaterial.bammat").Get();
-    //material->SetTextureBySlot(0, resourceManager.GetResourceHandle<Texture>(L"Resources/Texture/magenta1x1.png"));
-    //resourceManager.SaveToJsonFile(material, L"Resources/Material/DefaultMaterial.bammat.json");
+	tagMaterialDesc skinningMaterialDesc = {};
+	skinningMaterialDesc.Key = L"Resources/Material/SkinningMaterial";
+    skinningMaterialDesc.VertexShaderHandle = resourceManager.GetResourceHandle<Shader>(L"Resources/Shader/skinning.vert.bamshader");
+    skinningMaterialDesc.PixelShaderHandle = resourceManager.GetResourceHandle<Shader>(L"Resources/Shader/default.frag.bamshader");
+    skinningMaterialDesc.BlendMode = EBlendMode::AlphaBlend;
+    skinningMaterialDesc.CullMode = ECullMode::None;
+    skinningMaterialDesc.DepthMode = EDepthMode::ReadWrite;
+	Material* skinningMaterial = resourceManager.LoadResource<Material>(&skinningMaterialDesc).Get();
+	resourceManager.SaveToBinaryFile(skinningMaterial, L"Resources/Material/SkinningMaterial.bammat");
+	resourceManager.LoadFile(L"Resources/Material/SkinningMaterial.bammat");
+
+	tagMaterialInstanceDesc skinningMaterialInstanceDesc = {};
+	skinningMaterialInstanceDesc.BaseMaterialHandle = resourceManager.GetResourceHandle<Material>(L"Resources/Material/SkinningMaterial.bammat");
+	skinningMaterialInstanceDesc.Key = L"Resources/Material/SkinningMaterialInstance";
+	MaterialInstance* skinningMaterialInstance = resourceManager.LoadResource<MaterialInstance>(&skinningMaterialInstanceDesc).Get();
+	resourceManager.SaveToBinaryFile(skinningMaterialInstance, L"Resources/Material/SkinningMaterial.bammatinst");
+	resourceManager.LoadFile(L"Resources/Material/SkinningMaterial.bammatinst");
+
 #pragma endregion
 
 #pragma region Quad
     {
-        // 1. 사각형 정점 데이터 정의 (화면 좌표계: Top-Left가 0,0 가정 시 대략적인 중앙 배치)
-        // 색상은 SDLRendererRHI 구현에 따라 다를 수 있으나 Vertex 구조체에 맞춰 설정
-        vector<Vertex> vertices = {
-            // position (x, y, z)          // normal       // texCoord // tangent
-            { { -1.0f,  1.0f, 0.0f }, { 0, 0, -1 }, { 0, 0 }, { 0, 0, 0 } }, // Top-Left
-            { {  1.0f,  1.0f, 0.0f }, { 0, 0, -1 }, { 1, 0 }, { 0, 0, 0 } }, // Top-Right
-            { {  1.0f, -1.0f, 0.0f }, { 0, 0, -1 }, { 1, 1 }, { 0, 0, 0 } }, // Bottom-Right
-            { { -1.0f, -1.0f, 0.0f }, { 0, 0, -1 }, { 0, 1 }, { 0, 0, 0 } }  // Bottom-Left
+        vector<VertexPosition> positions = {
+            { { -1.0f,  1.0f, 0.0f } },
+            { {  1.0f,  1.0f, 0.0f } },
+            { {  1.0f, -1.0f, 0.0f } },
+            { { -1.0f, -1.0f, 0.0f } }
         };
-
-        // 인덱스 (사각형을 구성하는 두 개의 삼각형)
-        vector<uint32> indices = {
-            0, 1, 2, // 첫 번째 삼각형
-            0, 2, 3  // 두 번째 삼각형
+        vector<VertexMaterial> materials = {
+            { { 0, 0, -1 }, { 0, 0 }, { 0, 0, 0 }, { 0, 1, 0 }, vec4(1.0f) },
+            { { 0, 0, -1 }, { 1, 0 }, { 0, 0, 0 }, { 0, 1, 0 }, vec4(1.0f) },
+            { { 0, 0, -1 }, { 1, 1 }, { 0, 0, 0 }, { 0, 1, 0 }, vec4(1.0f) },
+            { { 0, 0, -1 }, { 0, 1 }, { 0, 0, 0 }, { 0, 1, 0 }, vec4(1.0f) }
         };
+        vector<uint32> indices = { 0, 1, 2, 0, 2, 3 };
 
-        // 2. Mesh 생성
         tagMeshCreateDesc meshDesc = {};
-        meshDesc.VertexData = vertices.data();
-        meshDesc.VertexCount = static_cast<uint32>(vertices.size());
-        meshDesc.VertexStride = sizeof(Vertex);
+        meshDesc.Streams[(uint32)EMeshStream::Position] = { positions.data(), (uint32)positions.size(), sizeof(VertexPosition) };
+        meshDesc.Streams[(uint32)EMeshStream::Material] = { materials.data(), (uint32)materials.size(), sizeof(VertexMaterial) };
         meshDesc.IndexData = indices.data();
-        meshDesc.IndexStride = sizeof(uint32);
         meshDesc.IndexCount = static_cast<uint32>(indices.size());
+        meshDesc.IndexStride = sizeof(uint32);
 
         resourceManager.AddResource<Mesh>(L"QuadMesh", Mesh::Create(&meshDesc));
     }
@@ -203,90 +221,84 @@ void Application::InitializeResources()
 
 #pragma region Cube
     {
+        // 1. 기존 통짜 Vertex 배열은 그대로 유지 (데이터 소스)
         vector<Vertex> vertices = {
-            // 앞면 (Z+)
-            { { -1.0f,  1.0f,  1.0f }, { 0, 0, 1 }, { 0, 0 }, { 1, 0, 0 } },
-            { {  1.0f,  1.0f,  1.0f }, { 0, 0, 1 }, { 1, 0 }, { 1, 0, 0 } },
-            { {  1.0f, -1.0f,  1.0f }, { 0, 0, 1 }, { 1, 1 }, { 1, 0, 0 } },
-            { { -1.0f, -1.0f,  1.0f }, { 0, 0, 1 }, { 0, 1 }, { 1, 0, 0 } },
-
-            // 뒷면 (Z-)
-            { {  1.0f,  1.0f, -1.0f }, { 0, 0, -1 }, { 0, 0 }, { -1, 0, 0 } },
-            { { -1.0f,  1.0f, -1.0f }, { 0, 0, -1 }, { 1, 0 }, { -1, 0, 0 } },
-            { { -1.0f, -1.0f, -1.0f }, { 0, 0, -1 }, { 1, 1 }, { -1, 0, 0 } },
-            { {  1.0f, -1.0f, -1.0f }, { 0, 0, -1 }, { 0, 1 }, { -1, 0, 0 } },
-
-            // 윗면 (Y+)
-            { { -1.0f,  1.0f, -1.0f }, { 0, 1, 0 }, { 0, 0 }, { 1, 0, 0 } },
-            { {  1.0f,  1.0f, -1.0f }, { 0, 1, 0 }, { 1, 0 }, { 1, 0, 0 } },
-            { {  1.0f,  1.0f,  1.0f }, { 0, 1, 0 }, { 1, 1 }, { 1, 0, 0 } },
-            { { -1.0f,  1.0f,  1.0f }, { 0, 1, 0 }, { 0, 1 }, { 1, 0, 0 } },
-
-            // 아랫면 (Y-)
-            { { -1.0f, -1.0f,  1.0f }, { 0, -1, 0 }, { 0, 0 }, { 1, 0, 0 } },
-            { {  1.0f, -1.0f,  1.0f }, { 0, -1, 0 }, { 1, 0 }, { 1, 0, 0 } },
-            { {  1.0f, -1.0f, -1.0f }, { 0, -1, 0 }, { 1, 1 }, { 1, 0, 0 } },
-            { { -1.0f, -1.0f, -1.0f }, { 0, -1, 0 }, { 0, 1 }, { 1, 0, 0 } },
-
-            // 우측면 (X+)
-            { {  1.0f,  1.0f,  1.0f }, { 1, 0, 0 }, { 0, 0 }, { 0, 0, -1 } },
-            { {  1.0f,  1.0f, -1.0f }, { 1, 0, 0 }, { 1, 0 }, { 0, 0, -1 } },
-            { {  1.0f, -1.0f, -1.0f }, { 1, 0, 0 }, { 1, 1 }, { 0, 0, -1 } },
-            { {  1.0f, -1.0f,  1.0f }, { 1, 0, 0 }, { 0, 1 }, { 0, 0, -1 } },
-
-            // 좌측면 (X-)
-            { { -1.0f,  1.0f, -1.0f }, { -1, 0, 0 }, { 0, 0 }, { 0, 0, 1 } },
-            { { -1.0f,  1.0f,  1.0f }, { -1, 0, 0 }, { 1, 0 }, { 0, 0, 1 } },
-            { { -1.0f, -1.0f,  1.0f }, { -1, 0, 0 }, { 1, 1 }, { 0, 0, 1 } },
-            { { -1.0f, -1.0f, -1.0f }, { -1, 0, 0 }, { 0, 1 }, { 0, 0, 1 } }
+            // ---- 기존 24개 정점 데이터를 그대로 두세요 (변경 없음) ----
+            // 앞면, 뒷면, 윗면, 아랫면, 우측면, 좌측면
+            {{ -1.0f,  1.0f,  1.0f }, { 0, 0, 1 }, { 0, 0 }, { 1, 0, 0 }},
+            {{  1.0f,  1.0f,  1.0f }, { 0, 0, 1 }, { 1, 0 }, { 1, 0, 0 }},
+            {{  1.0f, -1.0f,  1.0f }, { 0, 0, 1 }, { 1, 1 }, { 1, 0, 0 }},
+            {{ -1.0f, -1.0f,  1.0f }, { 0, 0, 1 }, { 0, 1 }, { 1, 0, 0 }},
+            {{  1.0f,  1.0f, -1.0f }, { 0, 0,-1 }, { 0, 0 }, {-1, 0, 0 }},
+            {{ -1.0f,  1.0f, -1.0f }, { 0, 0,-1 }, { 1, 0 }, {-1, 0, 0 }},
+            {{ -1.0f, -1.0f, -1.0f }, { 0, 0,-1 }, { 1, 1 }, {-1, 0, 0 }},
+            {{  1.0f, -1.0f, -1.0f }, { 0, 0,-1 }, { 0, 1 }, {-1, 0, 0 }},
+            {{ -1.0f,  1.0f, -1.0f }, { 0, 1, 0 }, { 0, 0 }, { 1, 0, 0 }},
+            {{  1.0f,  1.0f, -1.0f }, { 0, 1, 0 }, { 1, 0 }, { 1, 0, 0 }},
+            {{  1.0f,  1.0f,  1.0f }, { 0, 1, 0 }, { 1, 1 }, { 1, 0, 0 }},
+            {{ -1.0f,  1.0f,  1.0f }, { 0, 1, 0 }, { 0, 1 }, { 1, 0, 0 }},
+            {{ -1.0f, -1.0f,  1.0f }, { 0,-1, 0 }, { 0, 0 }, { 1, 0, 0 }},
+            {{  1.0f, -1.0f,  1.0f }, { 0,-1, 0 }, { 1, 0 }, { 1, 0, 0 }},
+            {{  1.0f, -1.0f, -1.0f }, { 0,-1, 0 }, { 1, 1 }, { 1, 0, 0 }},
+            {{ -1.0f, -1.0f, -1.0f }, { 0,-1, 0 }, { 0, 1 }, { 1, 0, 0 }},
+            {{  1.0f,  1.0f,  1.0f }, { 1, 0, 0 }, { 0, 0 }, { 0, 0,-1 }},
+            {{  1.0f,  1.0f, -1.0f }, { 1, 0, 0 }, { 1, 0 }, { 0, 0,-1 }},
+            {{  1.0f, -1.0f, -1.0f }, { 1, 0, 0 }, { 1, 1 }, { 0, 0,-1 }},
+            {{  1.0f, -1.0f,  1.0f }, { 1, 0, 0 }, { 0, 1 }, { 0, 0,-1 }},
+            {{ -1.0f,  1.0f, -1.0f }, {-1, 0, 0 }, { 0, 0 }, { 0, 0, 1 }},
+            {{ -1.0f,  1.0f,  1.0f }, {-1, 0, 0 }, { 1, 0 }, { 0, 0, 1 }},
+            {{ -1.0f, -1.0f,  1.0f }, {-1, 0, 0 }, { 1, 1 }, { 0, 0, 1 }},
+            {{ -1.0f, -1.0f, -1.0f }, {-1, 0, 0 }, { 0, 1 }, { 0, 0, 1 }}
         };
 
+        // 2. 루프를 돌며 Position과 Material로 분리 + 바운딩 박스 계산
+        vector<VertexPosition> positions;
+        vector<VertexMaterial> materials;
         vec3 minBound = vec3((numeric_limits<f32>::max)());
         vec3 maxBound = vec3(numeric_limits<f32>::lowest());
 
+        positions.reserve(vertices.size());
+        materials.reserve(vertices.size());
+
         for (const auto& v : vertices)
         {
-            // Vertex 구조체의 위치(Position) 변수명에 맞추어 접근하세요.
-            // 여기서는 v.position.x 와 같이 가정했습니다. (코드에 맞춰 수정 필요)
-            minBound.x = std::min(minBound.x, v.position.x);
-            minBound.y = std::min(minBound.y, v.position.y);
-            minBound.z = std::min(minBound.z, v.position.z);
+            positions.push_back({ v.position });
 
-            maxBound.x = std::max(maxBound.x, v.position.x);
-            maxBound.y = std::max(maxBound.y, v.position.y);
-            maxBound.z = std::max(maxBound.z, v.position.z);
+            VertexMaterial mat;
+            mat.normal = v.normal;
+            mat.texCoord = v.texCoord;
+            mat.tangent = v.tangent;
+            mat.bitangent = glm::cross(v.normal, v.tangent); // 자동 계산
+            mat.color = vec4(1.0f);
+            materials.push_back(mat);
+
+            minBound = glm::min(minBound, v.position);
+            maxBound = glm::max(maxBound, v.position);
         }
 
-        // 2. 인덱스 데이터 정의 (36개 인덱스 - 6면 * 2삼각형 * 3정점)
+        // 3. 인덱스 생성 (기존과 동일)
         vector<uint32> indices;
         for (uint32 i = 0; i < 6; ++i)
         {
-            uint32 startIdx = i * 4;
-            // 첫 번째 삼각형
-            indices.push_back(startIdx + 0);
-            indices.push_back(startIdx + 1);
-            indices.push_back(startIdx + 2);
-            // 두 번째 삼각형
-            indices.push_back(startIdx + 0);
-            indices.push_back(startIdx + 2);
-            indices.push_back(startIdx + 3);
+            uint32 s = i * 4;
+            indices.push_back(s + 0); indices.push_back(s + 1); indices.push_back(s + 2);
+            indices.push_back(s + 0); indices.push_back(s + 2); indices.push_back(s + 3);
         }
 
-        // 3. Mesh 생성 정보 설정
+        // 4. 새로운 Streams 배열 기반 Desc 구성
         tagMeshCreateDesc meshDesc = {};
-        meshDesc.VertexData = vertices.data();
-        meshDesc.VertexCount = static_cast<uint32>(vertices.size());
-        meshDesc.VertexStride = sizeof(Vertex);
+        meshDesc.Streams[(uint32)EMeshStream::Position] = { positions.data(), (uint32)positions.size(), sizeof(VertexPosition) };
+        meshDesc.Streams[(uint32)EMeshStream::Material] = { materials.data(), (uint32)materials.size(), sizeof(VertexMaterial) };
         meshDesc.IndexData = indices.data();
-        meshDesc.IndexStride = sizeof(uint32);
         meshDesc.IndexCount = static_cast<uint32>(indices.size());
+        meshDesc.IndexStride = sizeof(uint32);
         meshDesc.BoundingBoxMin = minBound;
-		meshDesc.BoundingBoxMax = maxBound;
+        meshDesc.BoundingBoxMax = maxBound;
 
-        // 4. ResourceManager를 통한 로드
-		resourceManager.AddResource<Mesh>(L"CubeMesh", Mesh::Create(&meshDesc));
+        resourceManager.AddResource<Mesh>(L"CubeMesh", Mesh::Create(&meshDesc));
     }
 #pragma endregion
+
 
 #ifdef _DEBUG
 	

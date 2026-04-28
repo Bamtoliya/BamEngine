@@ -5,7 +5,6 @@
 #include "Sprite.h"
 #include "Material.h"
 
-
 BEGIN(Engine)
 
 ENUM()

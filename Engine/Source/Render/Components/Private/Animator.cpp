@@ -1,9 +1,9 @@
-﻿#include "Animator.h"
+#pragma once
+#include "Animator.h"
 #include "ComponentRegistry.h"
 
 REGISTER_COMPONENT(Animator)
 
-BEGIN(Engine)
 #pragma region Constructor&Destructor
 EResult Animator::Initialize(void* arg)
 {
@@ -64,6 +64,13 @@ void Animator::Play(const wstring& stateName, f32 blendTime)
 
 void Animator::Update(f32 dt)
 {
+    // [임시 코드] 실행 중인 애니메이션이 없는데 등록된 상태가 있다면 첫 번째(0번) 상태 강제 재생
+    if (!m_CurrentState && !m_States.empty())
+    {
+        m_CurrentState = &m_States.begin()->second;
+        m_CurrentTime = 0.0f;
+    }
+
     if (!m_CurrentState || !m_CurrentState->Clip.IsValid() || !m_Skeleton.IsValid())
         return;
 
@@ -93,7 +100,7 @@ void Animator::Update(f32 dt)
 void Animator::CalculateBoneTransforms(f32 time, ResourceHandle<Animation> clip, const mat4& parentTransform, int32 boneIndex)
 {
     const auto& bone = m_Skeleton->GetBones()[boneIndex];
-    mat4 nodeTransform = glm::identity<mat4>();
+    mat4 nodeTransform = bone.LocalTransform; // 애니메이션 트랙이 없는 노드를 위해 로컬 트랜스폼으로 초기화
 
     // 해당 본과 이름이 맞는 애니메이션 트랙 찾기 (최적화를 원한다면 map 사용 가능)
     const AnimationTrack* pTrack = nullptr;
@@ -144,6 +151,7 @@ void Animator::CalculateBoneTransforms(f32 time, ResourceHandle<Animation> clip,
 // -----------------------------------------------------
 vec3 Animator::InterpolateTranslation(f32 time, const AnimationTrack& track)
 {
+    if (track.PositionKeyframes.empty()) return vec3(0.0f);
     if (track.PositionKeyframes.size() == 1) return track.PositionKeyframes[0].Value;
 
     // 간단한 선형 탐색 (이분 탐색/인덱스 캐싱 등으로 최적화 가능)
@@ -161,6 +169,7 @@ vec3 Animator::InterpolateTranslation(f32 time, const AnimationTrack& track)
 
 quat Animator::InterpolateRotation(f32 time, const AnimationTrack& track)
 {
+    if (track.RotationKeyframes.empty()) return quat(1.0f, 0.0f, 0.0f, 0.0f);
     if (track.RotationKeyframes.size() == 1) return track.RotationKeyframes[0].Value;
 
     for (size_t i = 0; i < track.RotationKeyframes.size() - 1; ++i)
@@ -178,6 +187,7 @@ quat Animator::InterpolateRotation(f32 time, const AnimationTrack& track)
 
 vec3 Animator::InterpolateScale(f32 time, const AnimationTrack& track)
 {
+    if (track.ScaleKeyframes.empty()) return vec3(1.0f);
     if (track.ScaleKeyframes.size() == 1) return track.ScaleKeyframes[0].Value;
 
     for (size_t i = 0; i < track.ScaleKeyframes.size() - 1; ++i)
@@ -191,4 +201,3 @@ vec3 Animator::InterpolateScale(f32 time, const AnimationTrack& track)
     }
     return track.ScaleKeyframes.back().Value;
 }
-END

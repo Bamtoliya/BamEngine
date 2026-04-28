@@ -59,6 +59,7 @@ class ENGINE_API Animation : public Resource
 	DECLARE_RESOURCE(Animation)
 #pragma region Constructor&Destructor
 private:
+	using DESC = tagAnimationCreateDesc;
 	Animation() : Resource(EResourceType::Animation) {}
 	virtual ~Animation() = default;
 	EResult Initialize(void* arg = nullptr);

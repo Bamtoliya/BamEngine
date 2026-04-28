@@ -17,23 +17,42 @@ EResult SDLGPUPipeline::Initialize(const DESC& desc)
     createInfo.fragment_shader = static_cast<SDL_GPUShader*>(desc.PixelShader->GetNativeHandle());
 
     // 2. Vertex Input 설정 (기존 동일 - 추후 Mesh InputLayout 연동 필요)
-    SDL_GPUVertexBufferDescription vertexBufferDesc = {};
-    vertexBufferDesc.slot = 0;
-    vertexBufferDesc.pitch = desc.InputLayout.Stride;
-    vertexBufferDesc.input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
-
-	vector<SDL_GPUVertexAttribute> vertexAttributes(desc.InputLayout.Elements.size());
-    for (size_t i = 0; i < desc.InputLayout.Elements.size(); ++i)
+    uint32 numBuffers = static_cast<uint32>(desc.InputLayouts.size());
+    // 슬롯별 Buffer Description 배열 생성
+    vector<SDL_GPUVertexBufferDescription> vertexBufferDescs(numBuffers);
+    for (uint32 i = 0; i < numBuffers; ++i)
     {
-        vertexAttributes[i].location = desc.InputLayout.Elements[i].Location;
-        vertexAttributes[i].buffer_slot = 0; // 단일 버퍼 가정
-        vertexAttributes[i].format = ToSDLVertexFormat(desc.InputLayout.Elements[i].Format);
-        vertexAttributes[i].offset = desc.InputLayout.Elements[i].Offset;
-	}
+        vertexBufferDescs[i].slot = i;
+        vertexBufferDescs[i].pitch = desc.InputLayouts[i].Stride;
+        vertexBufferDescs[i].input_rate = (desc.InputLayouts[i].InputRate == EVertexInputRate::PerInstance)
+            ? SDL_GPU_VERTEXINPUTRATE_INSTANCE
+            : SDL_GPU_VERTEXINPUTRATE_VERTEX;
+        vertexBufferDescs[i].instance_step_rate =
+            (desc.InputLayouts[i].InputRate == EVertexInputRate::PerInstance)
+            ? (desc.InputLayouts[i].InstanceDataStepRate == 0 ? 1 : desc.InputLayouts[i].InstanceDataStepRate)
+            : 0;
+    }
+
+    vector<SDL_GPUVertexAttribute> vertexAttributes;
+    uint32 locationOffset = 0;
+    for (uint32 slot = 0; slot < numBuffers; ++slot)
+    {
+        for (const auto& elem : desc.InputLayouts[slot].Elements)
+        {
+            SDL_GPUVertexAttribute attr = {};
+            attr.location = locationOffset + elem.Location;  // 오프셋 적용!
+            attr.buffer_slot = slot;
+            attr.format = ToSDLVertexFormat(elem.Format);
+            attr.offset = elem.Offset;
+            vertexAttributes.push_back(attr);
+        }
+        // 다음 슬롯은 이 슬롯의 attribute 개수만큼 뒤에서 시작
+        locationOffset += static_cast<uint32>(desc.InputLayouts[slot].Elements.size());
+    }
 
     SDL_GPUVertexInputState vertexInputState = {};
-    vertexInputState.vertex_buffer_descriptions = &vertexBufferDesc;
-    vertexInputState.num_vertex_buffers = 1;
+    vertexInputState.vertex_buffer_descriptions = vertexBufferDescs.data();
+    vertexInputState.num_vertex_buffers = numBuffers;
     vertexInputState.vertex_attributes = vertexAttributes.data();
     vertexInputState.num_vertex_attributes = static_cast<uint32>(vertexAttributes.size());
     createInfo.vertex_input_state = vertexInputState;

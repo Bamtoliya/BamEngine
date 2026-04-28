@@ -1,8 +1,18 @@
-﻿#include "Animation.h"
+﻿#pragma once
+#include "Animation.h"
 
 EResult Animation::Initialize(void* arg)
 {
 	TODO("Animation Initialize Implement");
+	if(IsFailure(Resource::Initialize(arg)))
+		return EResult::Fail;
+	CAST_DESC
+
+	m_Name = desc->Name;
+	m_Tracks = desc->Tracks;
+	m_Duration = desc->Duration;
+	m_TicksPerSecond = desc->TicksPerSecond;
+	
 	return EResult::Success;
 }
 

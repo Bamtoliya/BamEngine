@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "Bone.h"
 #include "Resource.h"
@@ -28,8 +28,10 @@ public:
 
 #pragma region Getter
 public:
-	vector<Bone> GetBones() const { return m_Bones; }
+	const vector<Bone>& GetBones() const { return m_Bones; }
 	const unordered_map<wstring, uint32>& GetBoneMap() const { return m_BoneMap; }
+	uint32 GetBoneIndex(const wstring& boneName) const;
+	wstring GetBoneName(uint32 boneIndex) const;
 #pragma endregion
 
 

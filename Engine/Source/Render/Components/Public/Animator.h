@@ -9,26 +9,46 @@
 BEGIN(Engine)
 
 // State Machine을 위한 간이 상태 구조체
+
+STRUCT()
 struct tagAnimationState
 {
+    REFLECT_STRUCT()
+
+    PROPERTY(READONLY)
     wstring Name;
+
+    PROPERTY(READONLY)
     ResourceHandle<Animation> Clip;
+
+    PROPERTY(EDITABLE)
     bool Loop = true;
+
+    PROPERTY(EDITABLE)
     f32 PlaybackSpeed = 1.0f;
+
+    bool operator==(const tagAnimationState& other) const = default;
 };
 
 CLASS()
 class ENGINE_API Animator : public Component
 {
     REFLECT_CLASS()
+
+#pragma region Constructor&Destructor
 private:
     Animator() {}
-	virtual ~Animator() = default;
+    virtual ~Animator() = default;
     virtual EResult Initialize(void* arg = nullptr) override;
 public:
-	static Animator* Create(void* arg = nullptr);
+    static Animator* Create(void* arg = nullptr);
     virtual void Free() override;
+#pragma endregion
+#pragma region Loop
+public:
     virtual void Update(f32 dt); // 컴포넌트 업데이트 시 호출
+#pragma endregion
+
 public:
     void SetSkeleton(ResourceHandle<Skeleton> skeleton);
 
@@ -48,7 +68,7 @@ private:
     vec3 InterpolateScale(f32 time, const AnimationTrack& track);
 
 private:
-    PROPERTY()
+    PROPERTY(EDITABLE)
     ResourceHandle<Skeleton> m_Skeleton;
 
     // 연산 캐싱용 변수
@@ -56,7 +76,11 @@ private:
     vector<mat4> m_GlobalTransforms;
 
     // State 관리 관련
+
+    PROPERTY(EDITABLE)
     unordered_map<wstring, tagAnimationState> m_States;
+
+
     tagAnimationState* m_CurrentState = nullptr;
 
     f32 m_CurrentTime = 0.0f;

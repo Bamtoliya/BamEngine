@@ -90,13 +90,15 @@ private:
 		uint32& meshSerial,
 		tagModelCreateDesc& modelCreateDesc);
 	void ProcessMeshVertex(
-		const aiMesh* mesh,
-		const aiScene* scene,
-		tagMeshCreateDesc& meshCreateInfo,
-		vector<Vertex>& outVertices);
+		const aiMesh*,
+		const aiScene*,
+		tagMeshCreateDesc&,
+		vector<VertexPosition>&,
+		vector<VertexMaterial>&);
 	void ProcessMeshSkinData(
 		const aiMesh* mesh,
 		const aiScene* scene,
+		Skeleton* skeleton,
 		tagMeshCreateDesc& meshCreateInfo,
 		vector<VertexSkinData>& outSkinData);
 	void ProcessMeshIndex(

@@ -31,9 +31,11 @@ private:
 	void DrawLayerContextMenu(class Layer* layer);
 	void DrawGameObjectContextMenu(class GameObject* gameObject);
 private:
+	
 	void CreateEmptyObject(class Scene* scene);
 	void CreatePrimitive(class Scene* scene, const wstring& name, const wstring& meshName);
 	void CreateSpriteObject(class Scene* scene);
+	void CreateAnimatorObject(class Scene* scene);
 	void CreateCamera(class Scene* scene);
 
 

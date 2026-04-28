@@ -18,10 +18,16 @@ EResult SDLGPUBuffer::Initialize(const DESC& desc)
 	case ERHIBufferType::Index:
 		createInfo.usage = SDL_GPU_BUFFERUSAGE_INDEX;
 		break;
+	case ERHIBufferType::Structured:
+		createInfo.usage = SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ;
+		break;
 	default:
 		break;
 	}
 	createInfo.size = desc.Size;
+
+	m_Size = desc.Size;
+	m_Data.resize(desc.Size);
 
 	m_GPUBuffer = SDL_CreateGPUBuffer(device, &createInfo);
 	if (!m_GPUBuffer) return EResult::Fail;

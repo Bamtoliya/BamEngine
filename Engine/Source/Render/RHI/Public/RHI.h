@@ -80,11 +80,16 @@ public:
 public:
     virtual EResult BindSampler(RHISampler* sampler) BAM_PURE;
 public:
-    virtual EResult BindVertexBuffer(RHIBuffer* vertexBuffer); 
+    virtual EResult BindVertexBuffers(uint32 firstSlot, RHIBuffer** vertexBuffers, uint32 count);
     virtual EResult BindIndexBuffer(RHIBuffer* indexBuffer);
     virtual EResult BindConstantBuffer(void* arg, uint32 slot) BAM_PURE;
     virtual EResult BindConstantBuffer(void* arg, uint32 size, uint32 slot) { return EResult::NotImplemented; }
     virtual EResult BindConstantRangeBuffer(void* arg, uint32 slot, uint32 offset, uint32 size) BAM_PURE;
+
+    virtual EResult BindVertexStorageBuffers(uint32 firstSlot, RHIBuffer** storageBuffers, uint32 count);
+    virtual EResult BindFragmentStorageBuffers(uint32 firstSlot, RHIBuffer** storageBuffers, uint32 count);
+    virtual EResult BindComputeStorageBuffers(uint32 firstSlot, RHIBuffer** storageBuffers, uint32 count);
+
 public:
     virtual EResult BeginRenderPass(RenderPass* renderPass) { return EResult::NotImplemented; }
 #pragma endregion
@@ -122,10 +127,21 @@ public:
 	virtual RenderPass* GetCurrentRenderPass() const { return m_CurrentRenderPass; }
 #pragma endregion
 
-#pragma region Variable
+#pragma region Member Variable
+    
 protected:
-    RHIBuffer* m_VertexBuffer = { nullptr };
+    RHIBuffer* m_VertexBuffers[MAX_BUFFER_SLOTS] = {nullptr};
+    uint32 m_NumVertexBuffersBound = { 0 };
     RHIBuffer* m_IndexBuffer = { nullptr };
+protected:
+    RHIBuffer* m_VertexStorageBuffers[MAX_STORAGE_BUFFERS] = { nullptr };
+    uint32 m_NumVertexStorageBuffersBound = { 0 };
+
+    RHIBuffer* m_FragmentStorageBuffers[MAX_STORAGE_BUFFERS] = { nullptr };
+    uint32 m_NumFragmentStorageBuffersBound = { 0 };
+
+    RHIBuffer* m_ComputeStorageBuffers[MAX_STORAGE_BUFFERS] = { nullptr };
+    uint32 m_NumComputeStorageBuffersBound = { 0 };
 protected:
 	RHIShader* m_CurrentShader = { nullptr };
 protected:
@@ -137,6 +153,9 @@ protected:
 	uint32 m_CurrentRenderTargetCount = { 0 };
 	RHITexture* m_CurrentDepthStencil = { nullptr };
 	RHITexture* m_CurrentTextures[MAX_TEXTURE_SLOTS] = { nullptr };
+
+
+
 protected:
 	RHIPipeline* m_CurrentPipeline = { nullptr };
     RenderPass* m_CurrentRenderPass = { nullptr };

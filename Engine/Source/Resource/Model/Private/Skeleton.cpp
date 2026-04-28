@@ -38,5 +38,24 @@ void Skeleton::Free()
 	m_Bones.clear();
 	m_BoneMap.clear();
 }
+#pragma endregion
 
+#pragma region Getter
+uint32 Skeleton::GetBoneIndex(const wstring& boneName) const
+{
+	auto iter = m_BoneMap.find(boneName);
+	if (iter != m_BoneMap.end())
+	{
+		return iter->second;
+	}
+	return UINT32_MAX; // Not found
+}
+wstring Skeleton::GetBoneName(uint32 boneIndex) const
+{
+	if (boneIndex < m_Bones.size())
+	{
+		return m_Bones[boneIndex].Name;
+	}
+	return L"";
+}
 #pragma endregion

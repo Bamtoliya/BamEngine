@@ -55,43 +55,29 @@ void MeshRenderer::Free()
 EResult MeshRenderer::Render(f32 dt, RenderPass* renderPass)
 {
 	MeshFilter* meshFilter = m_Owner->GetComponent<MeshFilter>();
-	if (meshFilter)
-	{
-		Mesh* mesh = meshFilter->GetMesh();
-		if (!mesh)
-			return EResult::Success;
+	if (!meshFilter) return EResult::Success;
+	Mesh* mesh = meshFilter->GetMesh();
+	if (!mesh) return EResult::Success;
 
-		RHI* rhi = Renderer::Get().GetRHI();
+	RHI* rhi = Renderer::Get().GetRHI();
+	MaterialInstance* material = GetMaterialInstance();
 
-		RHIBuffer* vertexBuffer = mesh->GetVertexBuffer();
-		RHIBuffer* indexBuffer = mesh->GetIndexBuffer();
-		MaterialInstance* material = GetMaterialInstance();
+	if (IsFailure(BindPipeline(mesh, material, renderPass)))
+		return EResult::Fail;
 
-		if (IsFailure(BindPipeline(mesh, material, renderPass)))
-			return EResult::Fail;
+	if (IsFailure(material->Bind(2)))
+		return EResult::Fail;
 
-		material->Bind(2);
+	SceneUBO uboData;
+	uboData.worldMatrix = m_Owner->GetComponent<Transform>()->GetWorldMatrix();
 
-		SceneUBO uboData;
-		uboData.worldMatrix = m_Owner->GetComponent<Transform>()->GetWorldMatrix();
+	if (IsFailure(rhi->BindConstantBuffer((void*)&uboData, sizeof(SceneUBO), 1)))
+		return EResult::Fail;
 
-		rhi->BindConstantBuffer((void*)&uboData, sizeof(SceneUBO), 1);
+	if (IsFailure(mesh->Bind(0)))
+		return EResult::Fail;
 
-		rhi->BindVertexBuffer(vertexBuffer);
-
-		if (indexBuffer)
-		{
-			rhi->BindIndexBuffer(indexBuffer);
-			rhi->DrawIndexed(mesh->GetIndexCount());
-		}
-		else
-		{
-			rhi->Draw(mesh->GetVertexCount());
-		}
-
-		return EResult::Success;
-	}
-	return EResult::Success;
+	return mesh->GetIndexBuffer() ? rhi->DrawIndexed(mesh->GetIndexCount()) : rhi->Draw(mesh->GetVertexCount());
 }
 
 #pragma endregion

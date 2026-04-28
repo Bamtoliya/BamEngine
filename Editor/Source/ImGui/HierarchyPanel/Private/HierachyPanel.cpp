@@ -13,6 +13,8 @@
 #include "Transform.h"
 #include "MeshRenderer.h"
 #include "SpriteRenderer.h"
+#include "SkinnedMeshRenderer.h"
+#include "Animator.h"
 
 #include "MeshFilter.h"
 
@@ -525,6 +527,7 @@ void HierarchyPanel::DrawLayerItem(Scene* scene, Layer* layer)
 		const vector<GameObject*>& gameObjects = layer->GetAllGameObjects();
 		for (GameObject* gameObject : gameObjects)
 		{
+			if (!gameObject || gameObject->IsDead()) continue;
 			if (gameObject->GetParent() == nullptr)
 			{
 				DrawGameObjectNode(gameObject);
@@ -538,6 +541,7 @@ void HierarchyPanel::DrawLayerItem(Scene* scene, Layer* layer)
 
 void HierarchyPanel::DrawGameObjectNode(class GameObject* gameObject)
 {
+	if (!gameObject || gameObject->IsDead()) return;
 	ImGui::PushID((void*)(uintptr_t)gameObject->GetID());
 	float fontSize = ImGui::GetFontSize();
 	ImGui::PushStyleVar(ImGuiStyleVar_IndentSpacing, fontSize);
@@ -799,6 +803,7 @@ void HierarchyPanel::DrawGameObjectNode(class GameObject* gameObject)
 	{
 		for (GameObject* child : children)
 		{
+			if (!child || child->IsDead()) continue;
 			DrawGameObjectNode(child);
 		}
 		ImGui::TreePop();
@@ -850,6 +855,11 @@ void HierarchyPanel::DrawAddGameObjectButton(Scene* scene)
 		if (ImGui::MenuItem("Sprite"))
 		{
 			CreateSpriteObject(scene);
+		}
+
+		if (ImGui::MenuItem("Animation Object"))
+		{
+			CreateAnimatorObject(scene);
 		}
 
 		ImGui::Separator();
@@ -1149,6 +1159,44 @@ void HierarchyPanel::CreateSpriteObject(Scene* scene)
 
 	newGameObject->AddComponent(L"Box2DCollider");
 	spriteRenderer->SetRenderPassID(0);
+	scene->AddGameObject(newGameObject);
+	Safe_Release(newGameObject);
+}
+
+void HierarchyPanel::CreateAnimatorObject(Scene* scene)
+{
+	ResourceManager& resourceMgr = ResourceManager::Get();
+	GameObject* newGameObject = GameObject::Create();
+	newGameObject->SetName(L"New Animation Object");
+	// 1. 3D 모델 렌더링을 위한 필수 컴포넌트
+	newGameObject->AddComponent(L"MeshFilter");
+	newGameObject->AddComponent(L"SkinnedMeshRenderer");
+
+	SkinnedMeshRenderer* skinnedMeshRenderer = newGameObject->GetComponent<SkinnedMeshRenderer>();
+	skinnedMeshRenderer->SetMaterial(resourceMgr.GetResourceHandle<Material>(L"Resources/Material/SkinningMaterial.bammat"));
+	skinnedMeshRenderer->SetRenderPassID(0);
+
+	// 2. 애니메이터 컴포넌트 부착 (스켈레톤과 애니메이션 제어용)
+	newGameObject->AddComponent(L"Animator");
+	Animator* animator = newGameObject->GetComponent<Animator>();
+
+	// [테스트용 임시 코드] 스켈레톤과 애니메이션 로드 및 설정
+	// TODO: 실제 임포트하신 파일 경로로 변경해 주세요!
+	ResourceHandle<Skeleton> skeleton = resourceMgr.GetResourceHandle<Skeleton>(L"Resources/Model/TestBall_Skeleton.bamskel");
+	ResourceHandle<Animation> animation = resourceMgr.GetResourceHandle<Animation>(L"Resources/Model/TestBall_Armature_Anim_Bend.bamanim");
+	ResourceHandle<Animation> animation2 = resourceMgr.GetResourceHandle<Animation>(L"Resources/Model/TestBall_Armature_Anim_Jump.bamanim");
+
+	if (skeleton.IsValid() && animation.IsValid())
+	{
+		animator->SetSkeleton(skeleton);
+		animator->AddState(L"TestAnim", animation, true, 1.0f);
+		animator->AddState(L"TestAnim2", animation2, true, 1.0f);
+		animator->Play(L"TestAnim");
+	}
+
+	// (선택) 물리 충돌체
+	newGameObject->AddComponent(L"BoxCollider");
+	// 3. 씬에 등록
 	scene->AddGameObject(newGameObject);
 	Safe_Release(newGameObject);
 }

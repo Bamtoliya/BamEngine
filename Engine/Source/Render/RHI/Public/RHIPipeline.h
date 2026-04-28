@@ -32,7 +32,7 @@ struct tagRHIPipelineDesc
 
 	RHIDepthStencilState DepthStencilState;
 
-	tagInputLayoutDesc InputLayout;
+	vector<tagInputLayoutDesc> InputLayouts;
 
 	bool operator==(const tagRHIPipelineDesc& other) const
 	{
@@ -61,7 +61,11 @@ struct tagRHIPipelineDesc
 		if (DepthStencilState.DepthTestEnable != other.DepthStencilState.DepthTestEnable) return false;
 		if (DepthStencilState.DepthWriteEnable != other.DepthStencilState.DepthWriteEnable) return false;
 
-		if (!(InputLayout == other.InputLayout)) return false;
+		if (InputLayouts.size() != other.InputLayouts.size()) return false;
+		for (size_t i = 0; i < InputLayouts.size(); ++i)
+		{
+			if (!(InputLayouts[i] == other.InputLayouts[i])) return false;
+		}
 
 		return true;
 	}
@@ -93,15 +97,16 @@ struct hash<tagRHIPipelineDesc>
 		HashCombine(seed, hash<bool>()(desc.DepthStencilState.DepthTestEnable));
 		HashCombine(seed, hash<bool>()(desc.DepthStencilState.DepthWriteEnable));
 
-		HashCombine(seed, hash<uint32>()(desc.InputLayout.Stride));
-		HashCombine(seed, hash<size_t>()(desc.InputLayout.Elements.size())); // 속성 개수 해싱
-
-		for (const auto& attr : desc.InputLayout.Elements)
+		HashCombine(seed, hash<size_t>()(desc.InputLayouts.size()));
+		for (const auto& layout : desc.InputLayouts)
 		{
-			// 각 속성의 세부 정보(Location, Format, Offset)를 섞어줌
-			HashCombine(seed, hash<uint32>()(attr.Location));
-			HashCombine(seed, hash<int>()((int)attr.Format));
-			HashCombine(seed, hash<uint32>()(attr.Offset));
+			HashCombine(seed, hash<uint32>()(layout.Stride));
+			for (const auto& attr : layout.Elements)
+			{
+				HashCombine(seed, hash<uint32>()(attr.Location));
+				HashCombine(seed, hash<int>()((int)attr.Format));
+				HashCombine(seed, hash<uint32>()(attr.Offset));
+			}
 		}
 
 		return seed;

@@ -33,6 +33,16 @@ namespace
 
 		return finalStem;
 	}
+
+	mat4 AssimpMat4ToGlm(const aiMatrix4x4& aiMat)
+	{
+		return mat4(
+			aiMat.a1, aiMat.b1, aiMat.c1, aiMat.d1,
+			aiMat.a2, aiMat.b2, aiMat.c2, aiMat.d2,
+			aiMat.a3, aiMat.b3, aiMat.c3, aiMat.d3,
+			aiMat.a4, aiMat.b4, aiMat.c4, aiMat.d4
+		);
+	}
 }
 
 EResult ModelImporter::Import(const filesystem::path& sourcePath, const filesystem::path& destDir, void* arg)
@@ -59,7 +69,26 @@ EResult ModelImporter::Import(const filesystem::path& sourcePath, const filesyst
 	wstring sourceStem = sourcePath.stem().wstring();
 	unordered_map<wstring, uint32> nameCounts;
 	uint32 meshSerial = 0;
+
+	if (HasFlag(desc->ImportOptions, EModelImportOption::Skeleton))
+	{
+		ProcessSkeleton(scene, outputDir, sourceStem, modelCreateDesc);
+	}
+
 	ProcessModelNode(scene->mRootNode, scene, outputDir, sourceStem, nameCounts, meshSerial, modelCreateDesc);
+
+	if (HasFlag(desc->ImportOptions, EModelImportOption::Animations))
+	{
+		ProcessAnimations(scene, outputDir, sourceStem, modelCreateDesc);
+	}
+
+	//if (HasFlag(desc->ImportOptions, EModelImportOption::Materials))
+	//{
+	//	for (uint32 i = 0; i < scene->mNumMaterials; ++i)
+	//	{
+	//		ProcessMaterial(scene->mMaterials[i], i, scene, outputDir, sourceStem, modelCreateDesc);
+	//	}
+	//}
 
 #pragma region Save To File
 	//filesystem::path outputPath = outputDir / sourcePath.filename().replace_extension(".bammodel.json");
@@ -102,28 +131,32 @@ void ModelImporter::ProcessModelNode(
 	{
 		tagMeshCreateDesc meshCreateInfo = {};
 		const aiMesh* mesh = scene->mMeshes[node->mMeshes[i]];
-		vector<Vertex> vertices;
+
+		// 분리된 배열로 받기
+		vector<VertexPosition> positions;
+		vector<VertexMaterial> materials;
 		vector<VertexSkinData> skinData;
 		vector<uint32> indices;
-		ProcessMeshVertex(mesh, scene, meshCreateInfo, vertices);
-		if (mesh->HasBones())
+
+		ProcessMeshVertex(mesh, scene, meshCreateInfo, positions, materials);
+
+		Skeleton* pSkeleton = modelCreateDesc.Skeleton.Get();
+		if (mesh->HasBones() && pSkeleton)
 		{
 			meshCreateInfo.Flags |= EMeshFlag::Dynamic;
-			ProcessMeshSkinData(mesh, scene, meshCreateInfo, skinData);
+			ProcessMeshSkinData(mesh, scene, pSkeleton, meshCreateInfo, skinData);
 		}
-		else
-		{
-			meshCreateInfo.SkinData = nullptr;
-			meshCreateInfo.SkinDataCount = 0;
-			meshCreateInfo.SkinDataStride = sizeof(VertexSkinData);
-		}
+
 		ProcessMeshIndex(mesh, scene, meshCreateInfo, indices);
+
 		const wstring meshKey = StrToWStr(mesh->mName.C_Str());
 		const wstring meshStem = MakeUniqueMeshStem(sourceStem, meshKey, meshSerial++, nameCounts);
 		filesystem::path meshPath = outputDir / (meshStem + L".bammesh");
+
 		meshCreateInfo.Path = NormalizePath(meshPath.wstring());
 		meshCreateInfo.Key = meshCreateInfo.Path;
 		meshCreateInfo.Flags |= EMeshFlag::KeepRawData;
+
 		Mesh* newMesh = Mesh::Create(&meshCreateInfo);
 		if (newMesh)
 		{
@@ -137,78 +170,122 @@ void ModelImporter::ProcessModelNode(
 		ProcessModelNode(node->mChildren[i], scene, outputDir, sourceStem, nameCounts, meshSerial, modelCreateDesc);
 	}
 }
-void ModelImporter::ProcessMeshVertex(const aiMesh* mesh, const aiScene* scene, tagMeshCreateDesc& meshCreateInfo, vector<Vertex>& outVertices)
+
+void ModelImporter::ProcessMeshVertex(
+	const aiMesh* mesh,
+	const aiScene* scene,
+	tagMeshCreateDesc& meshCreateInfo,
+	vector<VertexPosition>& outPositions,
+	vector<VertexMaterial>& outMaterials)
 {
 	(void)scene;
-	outVertices.clear();
-	outVertices.reserve(mesh->mNumVertices);
-	vec3 boundingBoxMin(FLT_MAX, FLT_MAX, FLT_MAX);
-	vec3 boundingBoxMax(-FLT_MAX, -FLT_MAX, -FLT_MAX);
+	outPositions.clear();
+	outMaterials.clear();
+	outPositions.reserve(mesh->mNumVertices);
+	outMaterials.reserve(mesh->mNumVertices);
+
+	vec3 boundingBoxMin(FLT_MAX);
+	vec3 boundingBoxMax(-FLT_MAX);
+
 	for (uint32 i = 0; i < mesh->mNumVertices; ++i)
 	{
-		Vertex vertex = {};
-		vertex.position = { mesh->mVertices[i].x, mesh->mVertices[i].y, mesh->mVertices[i].z };
-		vertex.normal = { 0.0f, 0.0f, 0.0f };
-		vertex.texCoord = { 0.0f, 0.0f };
-		vertex.bitangent = { 0.0f, 0.0f, 0.0f };
-		vertex.tangent = { 0.0f, 0.0f, 0.0f };
-		vertex.color = { 1.0f, 1.0f, 1.0f, 1.0f };
-		boundingBoxMin = glm::min(boundingBoxMin, vertex.position);
-		boundingBoxMax = glm::max(boundingBoxMax, vertex.position);
+		// Position 스트림
+		VertexPosition pos = {};
+		pos.position = { mesh->mVertices[i].x, mesh->mVertices[i].y, mesh->mVertices[i].z };
+		boundingBoxMin = glm::min(boundingBoxMin, pos.position);
+		boundingBoxMax = glm::max(boundingBoxMax, pos.position);
+		outPositions.push_back(pos);
+
+		// Material 스트림
+		VertexMaterial mat = {};
+		mat.color = { 1.0f, 1.0f, 1.0f, 1.0f };
+
 		if (mesh->HasNormals())
-		{
-			vertex.normal = { mesh->mNormals[i].x, mesh->mNormals[i].y, mesh->mNormals[i].z };
-		}
+			mat.normal = { mesh->mNormals[i].x, mesh->mNormals[i].y, mesh->mNormals[i].z };
+
 		if (mesh->mTextureCoords[0])
-		{
-			vertex.texCoord = { mesh->mTextureCoords[0][i].x, mesh->mTextureCoords[0][i].y };
-		}
+			mat.texCoord = { mesh->mTextureCoords[0][i].x, mesh->mTextureCoords[0][i].y };
+
 		if (mesh->HasTangentsAndBitangents())
 		{
-			vertex.tangent = { mesh->mTangents[i].x, mesh->mTangents[i].y, mesh->mTangents[i].z };
-			vertex.bitangent = { mesh->mBitangents[i].x, mesh->mBitangents[i].y, mesh->mBitangents[i].z };
+			mat.tangent = { mesh->mTangents[i].x,   mesh->mTangents[i].y,   mesh->mTangents[i].z };
+			mat.bitangent = { mesh->mBitangents[i].x, mesh->mBitangents[i].y, mesh->mBitangents[i].z };
 		}
+
 		if (mesh->HasVertexColors(0))
-		{
-			vertex.color = { mesh->mColors[0][i].r, mesh->mColors[0][i].g, mesh->mColors[0][i].b, mesh->mColors[0][i].a };
-		}
-		outVertices.push_back(vertex);
+			mat.color = { mesh->mColors[0][i].r, mesh->mColors[0][i].g, mesh->mColors[0][i].b, mesh->mColors[0][i].a };
+
+		outMaterials.push_back(mat);
 	}
-	meshCreateInfo.VertexData = outVertices.empty() ? nullptr : outVertices.data();
-	meshCreateInfo.VertexCount = static_cast<uint32>(outVertices.size());
-	meshCreateInfo.VertexStride = sizeof(Vertex);
-	meshCreateInfo.BoundingBoxMin = outVertices.empty() ? vec3(0.0f, 0.0f, 0.0f) : boundingBoxMin;
-	meshCreateInfo.BoundingBoxMax = outVertices.empty() ? vec3(0.0f, 0.0f, 0.0f) : boundingBoxMax;
+
+	// Streams 배열에 세팅
+	uint32 vertexCount = static_cast<uint32>(outPositions.size());
+
+	meshCreateInfo.Streams[(uint32)EMeshStream::Position] = {
+		outPositions.empty() ? nullptr : outPositions.data(),
+		vertexCount,
+		sizeof(VertexPosition)
+	};
+
+	meshCreateInfo.Streams[(uint32)EMeshStream::Material] = {
+		outMaterials.empty() ? nullptr : outMaterials.data(),
+		vertexCount,
+		sizeof(VertexMaterial)
+	};
+
+	meshCreateInfo.BoundingBoxMin = outPositions.empty() ? vec3(0.0f) : boundingBoxMin;
+	meshCreateInfo.BoundingBoxMax = outPositions.empty() ? vec3(0.0f) : boundingBoxMax;
 }
-void ModelImporter::ProcessMeshSkinData(const aiMesh* mesh, const aiScene* scene, tagMeshCreateDesc& meshCreateInfo, vector<VertexSkinData>& outSkinData)
+
+void ModelImporter::ProcessMeshSkinData(
+	const aiMesh* mesh,
+	const aiScene* scene,
+	Skeleton* skeleton,
+	tagMeshCreateDesc& meshCreateInfo,
+	vector<VertexSkinData>& outSkinData)
 {
 	(void)scene;
 	outSkinData.clear();
 	outSkinData.resize(mesh->mNumVertices);
+
+	// 초기화 (모든 웨이트와 BoneID를 0으로)
+	for (auto& skin : outSkinData) {
+		skin.boneIDs = uvec4(0);
+		skin.weights = vec4(0.0f);
+	}
 	for (uint32 i = 0; i < mesh->mNumBones; ++i)
 	{
 		const aiBone* bone = mesh->mBones[i];
-		const uint32 boneID = i;
+		wstring boneName = StrToWStr(bone->mName.C_Str());
+
+		// 1. 핵심: 메쉬 로컬 i 번호가 아니라, Skeleton에 등록된 진짜 뼈 번호를 가져옵니다.
+		uint32 globalBoneID = skeleton->GetBoneIndex(boneName);
+		// (Skeleton 클래스에 이름으로 Index를 찾는 함수가 있어야 합니다)
 		for (uint32 j = 0; j < bone->mNumWeights; ++j)
 		{
 			const aiVertexWeight& weight = bone->mWeights[j];
 			const uint32 vertexID = weight.mVertexId;
-			if (vertexID >= outSkinData.size())
-				continue;
+
+			if (vertexID >= outSkinData.size()) continue;
+			// 빈 슬롯 찾아서 채우기
 			for (uint32 slot = 0; slot < 4; ++slot)
 			{
 				if (outSkinData[vertexID].weights[slot] == 0.0f)
 				{
-					outSkinData[vertexID].boneIDs[slot] = boneID;
+					outSkinData[vertexID].boneIDs[slot] = globalBoneID; // <--- 로컬 i가 아닌 절대 번호 대입!
 					outSkinData[vertexID].weights[slot] = weight.mWeight;
 					break;
 				}
 			}
 		}
 	}
-	meshCreateInfo.SkinData = outSkinData.empty() ? nullptr : outSkinData.data();
-	meshCreateInfo.SkinDataCount = static_cast<uint32>(outSkinData.size());
-	meshCreateInfo.SkinDataStride = sizeof(VertexSkinData);
+	// 함수 맨 끝 부분만 수정
+	meshCreateInfo.Streams[(uint32)EMeshStream::SkinData] = {
+		outSkinData.empty() ? nullptr : outSkinData.data(),
+		static_cast<uint32>(outSkinData.size()),
+		sizeof(VertexSkinData)
+	};
+
 }
 void ModelImporter::ProcessMeshIndex(const aiMesh* mesh, const aiScene* scene, tagMeshCreateDesc& meshCreateInfo, vector<uint32>& outIndices)
 {
@@ -226,6 +303,71 @@ void ModelImporter::ProcessMeshIndex(const aiMesh* mesh, const aiScene* scene, t
 	meshCreateInfo.IndexData = outIndices.empty() ? nullptr : outIndices.data();
 	meshCreateInfo.IndexCount = static_cast<uint32>(outIndices.size());
 	meshCreateInfo.IndexStride = sizeof(uint32);
+}
+void ModelImporter::ProcessSkeleton(
+	const aiScene* scene,
+	const filesystem::path& outputDir,
+	const wstring& sourceStem,
+	tagModelCreateDesc& modelCreateDesc)
+{
+	// 1. 전체 메쉬를 돌면서 뼈의 이름과 OffsetMatrix(역 바인드 포즈)를 수집합니다.
+	unordered_map<string, mat4> boneOffsetMap;
+	for (uint32 i = 0; i < scene->mNumMeshes; ++i)
+	{
+		const aiMesh* mesh = scene->mMeshes[i];
+		for (uint32 j = 0; j < mesh->mNumBones; ++j)
+		{
+			const aiBone* aiBone = mesh->mBones[j];
+			string boneName = aiBone->mName.C_Str();
+			if (boneOffsetMap.find(boneName) == boneOffsetMap.end())
+			{
+				mat4 offset = AssimpMat4ToGlm(aiBone->mOffsetMatrix);
+				boneOffsetMap[boneName] = offset;
+			}
+		}
+	}
+	// 뼈가 하나도 없다면 스켈레톤을 만들 필요가 없습니다.
+	if (boneOffsetMap.empty())
+		return;
+	tagSkeletonCreateDesc skeletonDesc;
+	// 2. DFS 재귀로 트리를 순회. (오타 수정: <auto& self -> auto& self)
+	// 부모를 push_back 한 뒤 자식을 재귀호출하므로, 무조건 부모 Index < 자식 Index 가 보장됩니다.
+	auto buildSkeletonTree = [&](auto& self, const aiNode* node, int32 parentIndex) -> void
+		{
+			string nodeName = node->mName.C_Str();
+			Bone newBone;
+			newBone.Name = StrToWStr(nodeName);
+			newBone.ParentIndex = parentIndex;
+			newBone.LocalTransform = AssimpMat4ToGlm(node->mTransformation);
+			// 실제 스키닝에 관여하는 뼈라면 수집해둔 OffsetMatrix를 사용, 아니면 단위행렬
+			if (boneOffsetMap.find(nodeName) != boneOffsetMap.end()) {
+				newBone.OffsetMatrix = boneOffsetMap[nodeName];
+			}
+			else {
+				newBone.OffsetMatrix = mat4(1.0f);
+			}
+			// 현재 내 인덱스를 얻어 배열에 삽입
+			int32 myIndex = static_cast<int32>(skeletonDesc.Bones.size());
+			skeletonDesc.Bones.push_back(newBone);
+			// 자식 탐색
+			for (uint32 i = 0; i < node->mNumChildren; ++i) {
+				self(self, node->mChildren[i], myIndex);
+			}
+		};
+	// 씬의 루트부터 파싱 시작
+	buildSkeletonTree(buildSkeletonTree, scene->mRootNode, -1);
+	// 3. 리소스 생성 및 등록
+	wstring skelStem = SanitizeFileName(sourceStem + L"_Skeleton");
+	filesystem::path skelPath = outputDir / (skelStem + L".bamskel");
+	skeletonDesc.Path = NormalizePath(skelPath.wstring());
+	skeletonDesc.Key = skeletonDesc.Path;
+	Skeleton* newSkeleton = Skeleton::Create(&skeletonDesc);
+	if (newSkeleton)
+	{
+		ResourceHandle<Skeleton> handle = ResourceManager::Get().AddResource<Skeleton>(skeletonDesc.Key, newSkeleton);
+		modelCreateDesc.Skeleton = handle;
+		ResourceManager::Get().SaveToBinaryFile(newSkeleton, skeletonDesc.Path);
+	}
 }
 void ModelImporter::ProcessAnimations(
 	const aiScene* scene,

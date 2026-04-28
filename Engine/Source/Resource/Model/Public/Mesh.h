@@ -2,6 +2,7 @@
 
 #include "RHIBuffer.h"
 #include "Resource.h"
+#include "Vertex.h"
 
 BEGIN(Engine)
 
@@ -19,17 +20,27 @@ enum class EMeshFlag : uint8
 	KeepRawData = 1 << 7,
 };
 
+enum class EMeshStream : uint32
+{
+	Position = 0,
+	Material = 1,
+	SkinData = 2,
+	Max = MAX_BUFFER_SLOTS // RHI.h에 정의된 4 사용
+};
+
+struct tagMeshStreamDesc
+{
+	void* Data = nullptr;
+	uint32 Count = 0;
+	uint32 Stride = 0;
+};
+
+
 ENABLE_BITMASK_OPERATORS(EMeshFlag);
 
 struct tagMeshCreateDesc : public tagResourceCreateDesc
 {
-	void* VertexData = { nullptr };
-	uint32 VertexCount = { 0 };
-	uint32 VertexStride = { 0 };
-
-	void* SkinData = { nullptr };
-	uint32 SkinDataCount = { 0 };
-	uint32 SkinDataStride = { 0 };
+	tagMeshStreamDesc Streams[(uint32)EMeshStream::Max] = {};
 
 	void* IndexData = { nullptr };
 	uint32 IndexCount = { 0 };
@@ -42,30 +53,17 @@ struct tagMeshCreateDesc : public tagResourceCreateDesc
 };
 
 
-STRUCT()
 struct tagMeshBinaryHeader
 {
-	REFLECT_STRUCT()
+	uint32 StreamCounts[(uint32)EMeshStream::Max] = { 0 };
+	uint32 StreamStrides[(uint32)EMeshStream::Max] = { 0 };
 
-	PROPERTY()
-	uint32 VertexCount = { 0 };
-	PROPERTY()
-	uint32 VertexStride = { 0 };
-
-	PROPERTY()
-	uint32 SkinDataCount = { 0 };
-	PROPERTY()
-	uint32 SkinDataStride = { 0 };
-	PROPERTY()
 	uint32 IndexCount = { 0 };
-	PROPERTY()
 	uint32 IndexStride = { 0 };
-	
-	PROPERTY()
+
 	vec3 BoundingBoxMin = { 0.0f, 0.0f, 0.0f };
-	PROPERTY()
 	vec3 BoundingBoxMax = { 0.0f, 0.0f, 0.0f };
-	PROPERTY()
+
 	EMeshFlag Flags = { EMeshFlag::None };
 };
 
@@ -93,22 +91,27 @@ public:
 
 #pragma region Getter
 public:
-	RHIBuffer* GetVertexBuffer() const { return m_VertexBuffer; }
+	RHIBuffer* GetStreamBuffer(EMeshStream stream) const { return m_VertexBuffers[(uint32)stream]; }
+	uint32 GetStreamCount(EMeshStream stream) const { return m_StreamCounts[(uint32)stream]; }
+	uint32 GetStreamStride(EMeshStream stream) const { return m_StreamStrides[(uint32)stream]; }
+	RHIBuffer* GetPositionBuffer() const { return GetStreamBuffer(EMeshStream::Position); }
+	RHIBuffer* GetMaterialBuffer() const { return GetStreamBuffer(EMeshStream::Material); }
+	RHIBuffer* GetSkinDataBuffer() const { return GetStreamBuffer(EMeshStream::SkinData); }
 	RHIBuffer* GetIndexBuffer() const { return m_IndexBuffer; }
-public:
-	uint32 GetVertexCount() const { return m_VertexCount; }
+	uint32 GetVertexCount() const { return GetStreamCount(EMeshStream::Position); }
 	uint32 GetIndexCount() const { return m_IndexCount; }
+	uint32 GetActiveBufferCount() const { return m_ActiveBufferCount; }
 public:
 	ETopology GetTopology() const { return m_Topology; }
 public:
-	virtual const tagInputLayoutDesc GetInputLayoutDesc() const { return Vertex::Layout; }
+	virtual const vector<tagInputLayoutDesc> GetInputLayoutDescs() const;
 	bool IsDynamic() const { return HasFlag(m_Flags, EMeshFlag::Dynamic); }
 #pragma endregion
 
 #pragma region Setter
 public:
-	EResult SetVertexBuffer(const void* data, uint32 vertexCount);
-	EResult SetIndexBuffer(const void* data	, uint32 indexCount);
+	EResult SetStreamBuffer(EMeshStream stream, void* data, uint32 count, uint32 stride);
+	EResult SetIndexBuffer(void* data, uint32 indexCount, uint32 stride);
 public:
 	void SetTopology(ETopology topology) { m_Topology = topology; }
 #pragma endregion
@@ -129,39 +132,34 @@ public:
 	virtual void Deserialize(Archive& ar) override;
 #pragma endregion
 
-
+private:
+	// 캐싱된 버퍼 배열을 다시 구축하는 내부 헬퍼
+	void RebuildCachedBuffers();
 
 #pragma region Variable
 protected:
-	RHIBuffer* m_VertexBuffer = { nullptr };
-	RHIBuffer* m_SkinDataBuffer = { nullptr };
-	RHIBuffer* m_IndexBuffer = { nullptr };
+	EMeshFlag m_Flags = { EMeshFlag::None };
 
-	uint32 m_VertexStride = 0;
-	uint32 m_SkinDataStride = 0;
-	uint32 m_IndexStride = 0;
-
-	vector<uint8> m_VertexRaw;
-	vector<uint8> m_SkinRaw;
-	vector<uint8> m_IndexRaw;
-
-
-	//Input Layout
 	PROPERTY(CATEGORY(L"PROP_INFORMATION"), READONLY)
 	ETopology m_Topology = { ETopology::TriangleList };
-	PROPERTY(CATEGORY(L"PROP_INFORMATION"), READONLY)
-	uint32 m_VertexCount = { 0 };
+
+	uint32 m_StreamCounts[(uint32)EMeshStream::Max] = { 0 };
+	uint32 m_StreamStrides[(uint32)EMeshStream::Max] = { 0 };
+	RHIBuffer* m_VertexBuffers[(uint32)EMeshStream::Max] = { nullptr };
+	vector<uint8> m_RawData[(uint32)EMeshStream::Max];
+
+	RHIBuffer* m_IndexBuffer = { nullptr };
 	PROPERTY(CATEGORY(L"PROP_INFORMATION"), READONLY)
 	uint32 m_IndexCount = { 0 };
-	PROPERTY(CATEGORY(L"PROP_INFORMATION"), READONLY)
-	uint32 m_SkinDataCount = { 0 };
+	uint32 m_IndexStride = { 0 };
+	vector<uint8> m_IndexRaw;
 
 	PROPERTY(CATEGORY(L"PROP_INFORMATION"), READONLY)
 	vec3 m_BoundingBoxMin = { 0.0f, 0.0f, 0.0f };
 	PROPERTY(CATEGORY(L"PROP_INFORMATION"), READONLY)
 	vec3 m_BoundingBoxMax = { 0.0f, 0.0f, 0.0f };
 
-	EMeshFlag m_Flags = { EMeshFlag::None };
+	uint32 m_ActiveBufferCount = { 0 };
 #pragma endregion
 };
 END

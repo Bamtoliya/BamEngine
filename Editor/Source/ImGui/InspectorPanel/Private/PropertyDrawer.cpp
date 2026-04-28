@@ -1,9 +1,10 @@
-﻿#pragma once
+#pragma once
 
 #include "PropertyDrawer.h"
 #include "InspectorHelper.h"
 #include "LocalizationManager.h"
 #include <regex>
+#include <new>
 
 #pragma region Vector Axis
 static vector<string> axisLabels = { "X", "Y", "Z", "W" };
@@ -263,7 +264,6 @@ inline uint32 GetMatrixDimension(const PropertyInfo& property)
 #pragma endregion
 
 #pragma region Container Helpers
-static std::unordered_map<uint64, string> g_ContainerTextInputs;
 
 struct MapEntryView
 {
@@ -1287,6 +1287,72 @@ bool PropertyDrawer::DrawStringProperty(void* data, const TypeInfo& typeinfo, co
 
 
 
+struct ContainerTempElement
+{
+	vector<uint8> Buffer;
+	bool Initialized = false;
+
+	void Initialize(const VariableInfo& info, const TypeInfo* resolvedType, bool pointerSlot)
+	{
+		if (Initialized) return;
+
+		size_t size = ResolveVariableSize(info, resolvedType, pointerSlot);
+		if (size == 0) return;
+
+		Buffer.resize(size, 0);
+
+		if (!pointerSlot)
+		{
+			if (info.Type == EPropertyType::String)
+			{
+#pragma push_macro("new")
+#undef new
+				new(Buffer.data()) string();
+#pragma pop_macro("new")
+			}
+			else if (info.Type == EPropertyType::WString)
+			{
+#pragma push_macro("new")
+#undef new
+				new(Buffer.data()) wstring();
+#pragma pop_macro("new")
+			}
+			else if (resolvedType && resolvedType->Create)
+			{
+				resolvedType->Create(Buffer.data());
+			}
+		}
+
+		Initialized = true;
+	}
+
+	void Destroy(const VariableInfo& info, const TypeInfo* resolvedType, bool pointerSlot)
+	{
+		if (!Initialized) return;
+
+		if (!pointerSlot)
+		{
+			if (info.Type == EPropertyType::String)
+			{
+				reinterpret_cast<string*>(Buffer.data())->~basic_string();
+			}
+			else if (info.Type == EPropertyType::WString)
+			{
+				reinterpret_cast<wstring*>(Buffer.data())->~basic_string();
+			}
+			else if (resolvedType && resolvedType->Destroy)
+			{
+				resolvedType->Destroy(Buffer.data());
+			}
+		}
+
+		Buffer.clear();
+		Initialized = false;
+	}
+};
+
+static std::unordered_map<uint64, ContainerTempElement> g_ContainerTempElements;
+
 bool PropertyDrawer::DrawListProperty(void* instance, void* data, const TypeInfo& typeinfo, const PropertyInfo& property)
 {
 	if (!property.ContainerData || !property.ContainerData->Accessor)
@@ -1309,10 +1375,24 @@ bool PropertyDrawer::DrawListProperty(void* instance, void* data, const TypeInfo
 
 	ImGui::Indent();
 
-	if (accessor.Add && ImGui::Button(ICON_FA_PLUS " Add Element"))
+	if (accessor.Add)
 	{
-		accessor.Add(data, nullptr);
-		changed = true;
+		const uint64 inputKey = MakeContainerInputKey(data, property, 0x4C495354ull);
+		ContainerTempElement& tempElement = g_ContainerTempElements[inputKey];
+
+		const TypeInfo* resolvedType = ResolveReflectedTypeInfo(containerInfo.Inner.Name, &typeinfo);
+		tempElement.Initialize(containerInfo.Inner, resolvedType, pointerElement);
+
+		ImGui::SetNextItemWidth(-FLT_MIN);
+		const string valueName = "New Element";
+		DrawContainerField(instance, tempElement.Buffer.data(), typeinfo, containerInfo.Inner, containerInfo.InnerContainerData, valueName, pointerElement, false);
+
+		if (ImGui::Button(ICON_FA_PLUS " Add Element"))
+		{
+			accessor.Add(data, tempElement.Buffer.data());
+			tempElement.Destroy(containerInfo.Inner, resolvedType, pointerElement);
+			changed = true;
+		}
 	}
 
 	ImGui::Separator();
@@ -1362,6 +1442,7 @@ bool PropertyDrawer::DrawListProperty(void* instance, void* data, const TypeInfo
 	return changed;
 }
 
+
 bool PropertyDrawer::DrawSetProperty(void* instance, void* data, const TypeInfo& typeinfo, const PropertyInfo& property)
 {
 	if (!property.ContainerData || !property.ContainerData->Accessor)
@@ -1386,29 +1467,20 @@ bool PropertyDrawer::DrawSetProperty(void* instance, void* data, const TypeInfo&
 
 	if (accessor.Add)
 	{
-		if (CanInputContainerLiteral(containerInfo.Inner))
-		{
-			string& inputText = g_ContainerTextInputs[MakeContainerInputKey(data, property, 0x534554ull)];
-			ImGui::SetNextItemWidth(-FLT_MIN);
-			DrawPersistentTextInput("##SetInput", inputText);
+		const uint64 inputKey = MakeContainerInputKey(data, property, 0x534554ull);
+		ContainerTempElement& tempElement = g_ContainerTempElements[inputKey];
 
-			if (ImGui::Button(ICON_FA_PLUS " Add"))
-			{
-				const bool parsed = WithParsedContainerLiteral(inputText, containerInfo.Inner, [&](const void* valuePtr)
-					{
-						accessor.Add(data, valuePtr);
-					});
+		const TypeInfo* resolvedType = ResolveReflectedTypeInfo(containerInfo.Inner.Name, &typeinfo);
+		tempElement.Initialize(containerInfo.Inner, resolvedType, pointerElement);
 
-				if (parsed)
-				{
-					inputText.clear();
-					changed = true;
-				}
-			}
-		}
-		else if (ImGui::Button(ICON_FA_PLUS " Add Element"))
+		ImGui::SetNextItemWidth(-FLT_MIN);
+		const string valueName = "New Element";
+		DrawContainerField(instance, tempElement.Buffer.data(), typeinfo, containerInfo.Inner, containerInfo.InnerContainerData, valueName, pointerElement, false);
+
+		if (ImGui::Button(ICON_FA_PLUS " Add Element"))
 		{
-			accessor.Add(data, nullptr);
+			accessor.Add(data, tempElement.Buffer.data());
+			tempElement.Destroy(containerInfo.Inner, resolvedType, pointerElement);
 			changed = true;
 		}
 	}
@@ -1455,6 +1527,7 @@ bool PropertyDrawer::DrawSetProperty(void* instance, void* data, const TypeInfo&
 	return changed;
 }
 
+
 bool PropertyDrawer::DrawMapProperty(void* instance, void* data, const TypeInfo& typeinfo, const PropertyInfo& property)
 {
 	if (!property.ContainerData || !property.ContainerData->Accessor)
@@ -1477,24 +1550,23 @@ bool PropertyDrawer::DrawMapProperty(void* instance, void* data, const TypeInfo&
 
 	ImGui::Indent();
 
-	if (CanInputContainerLiteral(containerInfo.Key) && accessor.AddAndGetElement)
+	if (accessor.AddAndGetElement)
 	{
-		string& keyText = g_ContainerTextInputs[MakeContainerInputKey(data, property, 0x4D4150ull)];
+		const uint64 inputKey = MakeContainerInputKey(data, property, 0x4D4150ull);
+		ContainerTempElement& tempElement = g_ContainerTempElements[inputKey];
+
+		const TypeInfo* resolvedType = ResolveReflectedTypeInfo(containerInfo.Key.Name, &typeinfo);
+		tempElement.Initialize(containerInfo.Key, resolvedType, false);
+
 		ImGui::SetNextItemWidth(-FLT_MIN);
-		DrawPersistentTextInput("##MapKeyInput", keyText);
+		const string keyName = "New Key";
+		DrawContainerField(instance, tempElement.Buffer.data(), typeinfo, containerInfo.Key, nullptr, keyName, false, false);
 
 		if (ImGui::Button(ICON_FA_PLUS " Add Pair"))
 		{
-			const bool parsed = WithParsedContainerLiteral(keyText, containerInfo.Key, [&](const void* keyPtr)
-				{
-					accessor.AddAndGetElement(data, keyPtr);
-				});
-
-			if (parsed)
-			{
-				keyText.clear();
-				changed = true;
-			}
+			accessor.AddAndGetElement(data, tempElement.Buffer.data());
+			tempElement.Destroy(containerInfo.Key, resolvedType, false);
+			changed = true;
 		}
 	}
 	else if (accessor.AddPair && ImGui::Button(ICON_FA_PLUS " Add Pair"))
@@ -1555,6 +1627,7 @@ bool PropertyDrawer::DrawMapProperty(void* instance, void* data, const TypeInfo&
 	ImGui::Unindent();
 	return changed;
 }
+
 
 //Vector 타입(Vector2, Vector3, Vector4, Quaternion) - 각 축마다 드래그로 값 조절 + 리셋 버튼 + 잠금 버튼
 #pragma region Vector

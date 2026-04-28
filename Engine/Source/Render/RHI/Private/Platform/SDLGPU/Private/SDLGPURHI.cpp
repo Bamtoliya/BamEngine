@@ -390,7 +390,12 @@ EResult SDLGPURHI::UploadBufferData(SDL_GPUBuffer* buffer, void* data, uint32 si
 	SDL_UploadToGPUBuffer(copyPass, &source, &destination, false);
 
 	SDL_EndGPUCopyPass(copyPass);
-	SDL_SubmitGPUCommandBuffer(cmd);
+
+	SDL_GPUFence* fence = SDL_SubmitGPUCommandBufferAndAcquireFence(cmd);
+	SDL_WaitForGPUFences(m_Device, true, &fence, 1);
+	SDL_ReleaseGPUFence(m_Device, fence);
+
+	//SDL_SubmitGPUCommandBuffer(cmd);
 
 	SDL_ReleaseGPUTransferBuffer(m_Device, transferBuffer);
 	return EResult::Success;
@@ -715,17 +720,63 @@ EResult SDLGPURHI::SetViewport(int32 x, int32 y, uint32 width, uint32 height)
 #pragma region Draw
 EResult SDLGPURHI::Draw(uint32 count)
 {
-	if (!m_Device || !m_CurrentRenderPass || !m_VertexBuffer) return EResult::Fail;
+	if (!m_Device || !m_CurrentRenderPass || !m_VertexBuffers[0]) return EResult::Fail;
 
-	SDLGPUBuffer* vertexBuffer = static_cast<SDLGPUBuffer*>(m_VertexBuffer);
-	SDL_GPUBuffer* nativeVertexBuffer = static_cast<SDL_GPUBuffer*>(vertexBuffer->GetNativeHandle());
-	if (!nativeVertexBuffer) return EResult::Fail;
+	// Vertex Buffer Binding
+	SDL_GPUBufferBinding vertexBindings[MAX_BUFFER_SLOTS] = {};
+	uint32 highestVBIndex = 0;
+	for (uint32 i = 0; i < m_NumVertexBuffersBound; ++i)
+	{
+		if (m_VertexBuffers[i])
+		{
+			SDLGPUBuffer* vertexBuffer = static_cast<SDLGPUBuffer*>(m_VertexBuffers[i]);
+			SDL_GPUBuffer* nativeVertexBuffer = static_cast<SDL_GPUBuffer*>(vertexBuffer->GetNativeHandle());
+			if (!nativeVertexBuffer) return EResult::Fail;
+			vertexBindings[i].buffer = nativeVertexBuffer;
+			vertexBindings[i].offset = 0;
+			highestVBIndex = i + 1;
+		}
+	}
 
-	SDL_GPUBufferBinding binding = {};
-	binding.buffer = nativeVertexBuffer;
-	binding.offset = 0;
+	if(highestVBIndex > 0)
+	{
+		SDL_BindGPUVertexBuffers(m_CurrentRenderPass, 0, vertexBindings, highestVBIndex);
+	}
 
-	SDL_BindGPUVertexBuffers(m_CurrentRenderPass, 0, &binding, 1);
+	// Vertex Storage Buffer Binding
+	SDL_GPUBuffer* vertexStorageBindings[MAX_STORAGE_BUFFERS] = { nullptr };
+	uint32 highestVStorageIndex = 0;
+	for (uint32 i = 0; i < m_NumVertexStorageBuffersBound; ++i)
+	{
+		if (m_VertexStorageBuffers[i])
+		{
+			SDLGPUBuffer* sbuf = static_cast<SDLGPUBuffer*>(m_VertexStorageBuffers[i]);
+			vertexStorageBindings[i] = static_cast<SDL_GPUBuffer*>(sbuf->GetNativeHandle());
+			highestVStorageIndex = i + 1;
+		}
+	}
+	if (highestVStorageIndex > 0)
+	{
+		SDL_BindGPUVertexStorageBuffers(m_CurrentRenderPass, 0, vertexStorageBindings, highestVStorageIndex);
+	}
+
+	// Fragment Storage Buffer Binding
+	SDL_GPUBuffer* fragmentStorageBindings[MAX_STORAGE_BUFFERS] = { nullptr };
+	uint32 highestFStorageIndex = 0;
+	for (uint32 i = 0; i < m_NumFragmentStorageBuffersBound; ++i)
+	{
+		if (m_FragmentStorageBuffers[i])
+		{
+			SDLGPUBuffer* sbuf = static_cast<SDLGPUBuffer*>(m_FragmentStorageBuffers[i]);
+			fragmentStorageBindings[i] = static_cast<SDL_GPUBuffer*>(sbuf->GetNativeHandle());
+			highestFStorageIndex = i + 1;
+		}
+	}
+	if (highestFStorageIndex > 0)
+	{
+		SDL_BindGPUFragmentStorageBuffers(m_CurrentRenderPass, 0, fragmentStorageBindings, highestFStorageIndex);
+	}
+
 	SDL_DrawGPUPrimitives(m_CurrentRenderPass, count, 1, 0, 0);
 
 	return EResult::Success;
@@ -733,24 +784,70 @@ EResult SDLGPURHI::Draw(uint32 count)
 
 EResult SDLGPURHI::DrawIndexed(uint32 count)
 {
-	if (!m_Device || !m_CurrentRenderPass || !m_VertexBuffer || !m_IndexBuffer) return EResult::Fail;
+	if (!m_Device || !m_CurrentRenderPass || !m_VertexBuffers[0] || !m_IndexBuffer) return EResult::Fail;
 
-	SDLGPUBuffer* vertexBuffer = static_cast<SDLGPUBuffer*>(m_VertexBuffer);
+	// Vertex Buffer Binding
+	SDL_GPUBufferBinding vertexBindings[MAX_BUFFER_SLOTS] = {};
+	uint32 highestVBIndex = 0;
+	for (uint32 i = 0; i < m_NumVertexBuffersBound; ++i)
+	{
+		if (m_VertexBuffers[i])
+		{
+			SDLGPUBuffer* vertexBuffer = static_cast<SDLGPUBuffer*>(m_VertexBuffers[i]);
+			SDL_GPUBuffer* nativeVertexBuffer = static_cast<SDL_GPUBuffer*>(vertexBuffer->GetNativeHandle());
+			if (!nativeVertexBuffer) return EResult::Fail;
+			vertexBindings[i].buffer = nativeVertexBuffer;
+			vertexBindings[i].offset = 0;
+			highestVBIndex = i + 1;
+		}
+	}
+
+	if (highestVBIndex > 0)
+	{
+		SDL_BindGPUVertexBuffers(m_CurrentRenderPass, 0, vertexBindings, highestVBIndex);
+	}
+
+	// Vertex Storage Buffer Binding
+	SDL_GPUBuffer* vertexStorageBindings[MAX_STORAGE_BUFFERS] = { nullptr };
+	uint32 highestVStorageIndex = 0;
+	for (uint32 i = 0; i < m_NumVertexStorageBuffersBound; ++i)
+	{
+		if (m_VertexStorageBuffers[i])
+		{
+			SDLGPUBuffer* sbuf = static_cast<SDLGPUBuffer*>(m_VertexStorageBuffers[i]);
+			vertexStorageBindings[i] = static_cast<SDL_GPUBuffer*>(sbuf->GetNativeHandle());
+			highestVStorageIndex = i + 1;
+		}
+	}
+	if (highestVStorageIndex > 0)
+	{
+		SDL_BindGPUVertexStorageBuffers(m_CurrentRenderPass, 0, vertexStorageBindings, highestVStorageIndex);
+	}
+
+	// Fragment Storage Buffer Binding
+	SDL_GPUBuffer* fragmentStorageBindings[MAX_STORAGE_BUFFERS] = { nullptr };
+	uint32 highestFStorageIndex = 0;
+	for (uint32 i = 0; i < m_NumFragmentStorageBuffersBound; ++i)
+	{
+		if (m_FragmentStorageBuffers[i])
+		{
+			SDLGPUBuffer* sbuf = static_cast<SDLGPUBuffer*>(m_FragmentStorageBuffers[i]);
+			fragmentStorageBindings[i] = static_cast<SDL_GPUBuffer*>(sbuf->GetNativeHandle());
+			highestFStorageIndex = i + 1;
+		}
+	}
+	if (highestFStorageIndex > 0)
+	{
+		SDL_BindGPUFragmentStorageBuffers(m_CurrentRenderPass, 0, fragmentStorageBindings, highestFStorageIndex);
+	}
+
+	// Index Buffer Binding
 	SDLGPUBuffer* indexBuffer = static_cast<SDLGPUBuffer*>(m_IndexBuffer);
-
-	SDL_GPUBuffer* nativeVertexBuffer = static_cast<SDL_GPUBuffer*>(vertexBuffer->GetNativeHandle());
 	SDL_GPUBuffer* nativeIndexBuffer = static_cast<SDL_GPUBuffer*>(indexBuffer->GetNativeHandle());
-
-	if (!nativeVertexBuffer || !nativeIndexBuffer) return EResult::Fail;
-
-	SDL_GPUBufferBinding vertexBinding = {};
-	vertexBinding.buffer = nativeVertexBuffer;
-	vertexBinding.offset = 0;
-
+	if (!nativeIndexBuffer) return EResult::Fail;
 	SDL_GPUBufferBinding indexBinding = {};
 	indexBinding.buffer = nativeIndexBuffer;
 	indexBinding.offset = 0;
-
 	SDL_GPUIndexElementSize indexSize = SDL_GPU_INDEXELEMENTSIZE_32BIT;
 	if (indexBuffer->GetStride() == sizeof(uint16))
 	{
@@ -760,11 +857,10 @@ EResult SDLGPURHI::DrawIndexed(uint32 count)
 	{
 		return EResult::InvalidArgument;
 	}
-
-	SDL_BindGPUVertexBuffers(m_CurrentRenderPass, 0, &vertexBinding, 1);
 	SDL_BindGPUIndexBuffer(m_CurrentRenderPass, &indexBinding, indexSize);
-
+	// 최종 DrawIndexed 슛
 	SDL_DrawGPUIndexedPrimitives(m_CurrentRenderPass, count, 1, 0, 0, 0);
+
 	return EResult::Success;
 }
 

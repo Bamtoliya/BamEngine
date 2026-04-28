@@ -9,66 +9,63 @@ EResult Mesh::Initialize(void* arg)
 {
 	if (IsFailure(__super::Initialize(arg))) return EResult::Fail;
 	CAST_DESC
-	m_VertexCount = static_cast<uint32>(desc->VertexCount);
-	m_IndexCount = static_cast<uint32>(desc->IndexCount);
-	m_SkinDataCount = static_cast<uint32>(desc->SkinDataCount);
-	
-	m_VertexStride = desc->VertexStride;
-	m_SkinDataStride = desc->SkinDataStride;
-	m_IndexStride = desc->IndexStride;
 
-	m_BoundingBoxMin = desc->BoundingBoxMin;
-	m_BoundingBoxMax = desc->BoundingBoxMax;
+		RHI* rhi = Renderer::Get().GetRHI();
 
-	RHI* rhi = Renderer::Get().GetRHI();
-
-	// Create Vertex Buffer
+	// 1. 모든 버텍스 스트림을 루프 하나로 처리
+	for (uint32 i = 0; i < (uint32)EMeshStream::Max; ++i)
 	{
-		tagRHIBufferDesc vertexBufferDesc = {};
-		vertexBufferDesc.BufferType = ERHIBufferType::Vertex;
-		uint32 totalSize = desc->VertexStride * m_VertexCount;
-		m_VertexBuffer = rhi->CreateBuffer(
-			desc->VertexData,
-			totalSize,
-			desc->VertexStride,
-			ERHIBufferType::Vertex
-		);
-		if (!m_VertexBuffer)
-			return EResult::Fail;
+		const auto& stream = desc->Streams[i];
+		m_StreamCounts[i] = stream.Count;
+		m_StreamStrides[i] = stream.Stride;
+
+		if (stream.Data && stream.Count > 0 && stream.Stride > 0)
+		{
+			uint32 totalSize = stream.Stride * stream.Count;
+			m_VertexBuffers[i] = rhi->CreateBuffer(stream.Data, totalSize, stream.Stride, ERHIBufferType::Vertex);
+			if (!m_VertexBuffers[i]) return EResult::Fail;
+		}
 	}
 
-	// Create Index Buffer
+	// 2. Index Buffer 생성
+	m_IndexCount = desc->IndexCount;
+	m_IndexStride = desc->IndexStride;
+	if (desc->IndexData && m_IndexCount > 0)
 	{
 		uint32 totalSize = desc->IndexStride * m_IndexCount;
-		m_IndexBuffer = rhi->CreateBuffer(
-			desc->IndexData,
-			totalSize,
-			desc->IndexStride,
-			ERHIBufferType::Index
-		);
-		if (!m_IndexBuffer)
-			return EResult::Fail;
+		m_IndexBuffer = rhi->CreateBuffer(desc->IndexData, totalSize, desc->IndexStride, ERHIBufferType::Index);
+		if (!m_IndexBuffer) return EResult::Fail;
 	}
 
-	if (HasFlag(desc->Flags, EMeshFlag::Dynamic))
+	// 3. Bounding Box & Flags
+	m_BoundingBoxMin = desc->BoundingBoxMin;
+	m_BoundingBoxMax = desc->BoundingBoxMax;
+	m_Flags = desc->Flags;
+
+	// 4. 원본 데이터 보존 (KeepRawData 플래그)
+	if (HasFlag(m_Flags, EMeshFlag::KeepRawData))
 	{
-
+		for (uint32 i = 0; i < (uint32)EMeshStream::Max; ++i)
+		{
+			const auto& stream = desc->Streams[i];
+			if (stream.Data && stream.Count > 0)
+			{
+				uint32 bytes = stream.Stride * stream.Count;
+				m_RawData[i].resize(bytes);
+				memcpy(m_RawData[i].data(), stream.Data, bytes);
+			}
+		}
+		if (desc->IndexData && m_IndexCount > 0)
+		{
+			uint32 bytes = m_IndexStride * m_IndexCount;
+			m_IndexRaw.resize(bytes);
+			memcpy(m_IndexRaw.data(), desc->IndexData, bytes);
+		}
 	}
 
-	if (HasFlag(desc->Flags, EMeshFlag::KeepRawData))
-	{
-		uint32 vertexBytes = m_VertexStride * m_VertexCount;
-		uint32 skinBytes = m_SkinDataStride * m_SkinDataCount;
-		uint32 indexBytes = m_IndexStride * m_IndexCount;
+	// 5. Bind용 캐싱 배열 구축
+	RebuildCachedBuffers();
 
-		m_VertexRaw.resize(vertexBytes);
-		m_SkinRaw.resize(skinBytes);
-		m_IndexRaw.resize(indexBytes);
-
-		memcpy(m_VertexRaw.data(), desc->VertexData, vertexBytes);
-		memcpy(m_SkinRaw.data(), desc->SkinData, skinBytes);
-		memcpy(m_IndexRaw.data(), desc->IndexData, indexBytes);
-	}
 	return EResult::Success;
 }
 
@@ -85,67 +82,18 @@ Mesh* Mesh::Create(void* arg)
 
 void Mesh::Free()
 {
-	Safe_Release(m_VertexBuffer);
+	for (auto& buffer : m_VertexBuffers)
+	{
+		Safe_Release(buffer);
+	}
 	Safe_Release(m_IndexBuffer);
 
-	m_VertexRaw.clear();
-	m_SkinRaw.clear();
+	for (auto& raw : m_RawData)
+	{
+		raw.clear();
+	}
 	m_IndexRaw.clear();
 }
-#pragma endregion
-
-#pragma region Setter
-EResult Mesh::SetVertexBuffer(const void* data, uint32 vertexCount)
-{
-	if (!data || vertexCount == 0)
-		return EResult::InvalidArgument;
-	// 현재 메쉬가 사용하는 버텍스 구조체의 크기 (예: Position + UV)
-	// 기존에 생성된 버퍼가 있다면 그 stride를 유지하거나, 
-	// 혹은 Mesh가 Stride 정보를 별도로 알고 있어야 합니다.
-	// 여기서는 최초 생성 시 결정된 Stride를 유지한다고 가정합니다.
-	uint32 stride = (m_VertexBuffer) ? m_VertexBuffer->GetStride() : sizeof(Vertex); // Vertex 구조체 크기
-
-	uint32 totalSize = vertexCount * stride;
-
-	// 1. 버퍼가 이미 존재하면 -> 데이터만 교체 (Update)
-	if (m_VertexBuffer != nullptr)
-	{
-		// 만약 Stride가 바뀌는 상황이라면 새로 만들어야 하지만,
-		// 스프라이트 렌더링에서는 Stride가 바뀔 일이 거의 없습니다.
-		m_VertexBuffer->SetData(data, totalSize);
-	}
-	// 2. 버퍼가 없으면 -> 새로 생성 (Create)
-	else
-	{
-		// RHIResource 관리자 등을 통해 생성하거나 직접 생성
-		// (여기서는 예시로 직접 new 하지만, 실제 엔진에서는 Factory 패턴 사용 권장)
-		tagRHIBufferDesc desc;
-		desc.BufferType = ERHIBufferType::Vertex;
-		desc.Size = totalSize;
-		desc.Stride = stride;
-		desc.InitialData = (void*)data;
-
-		// SDL용 버퍼 생성 (실제로는 Renderer가 Factory로 만들어줘야 함)
-		RHI* rhi = Renderer::Get().GetRHI();
-		m_VertexBuffer = rhi->CreateVertexBuffer((void*)data, totalSize, stride);
-		m_VertexBuffer->SetData(data, totalSize);
-	}
-
-	// 메쉬의 버텍스 개수 정보 갱신
-	m_VertexCount = vertexCount;
-
-	return EResult::Success;
-}
-
-//EResult Mesh::SetIndexBuffer(const void* data, uint32 indexCount)
-//{
-//	if (!data || indexCount == 0)
-//		return EResult::InvalidArgument;
-//	Safe_Release(m_IndexBuffer);
-//	m_IndexBuffer = indexBuffer;
-//	Engine::Safe_AddRef(m_IndexBuffer);
-//	return EResult::Success;
-//}
 #pragma endregion
 
 #pragma region Bind
@@ -153,114 +101,188 @@ EResult Mesh::Bind(uint32 slot)
 {
 	RHI* rhi = Renderer::Get().GetRHI();
 	if (!rhi) return EResult::Fail;
-	rhi->BindVertexBuffer(m_VertexBuffer);
-	rhi->BindIndexBuffer(m_IndexBuffer);
+
+	// 캐싱된 배열을 그대로 던진다 → if문 0개, 루프 0개
+	if (m_ActiveBufferCount > 0)
+		rhi->BindVertexBuffers(0, m_VertexBuffers, m_ActiveBufferCount);
+
+	if (m_IndexBuffer)
+		rhi->BindIndexBuffer(m_IndexBuffer);
+
 	return EResult::Success;
 }
 #pragma endregion
 
+#pragma region Getter
+static const tagInputLayoutDesc* s_StreamLayoutTable[] = {
+	&VertexPosition::Layout,   // EMeshStream::Position = 0
+	&VertexMaterial::Layout,   // EMeshStream::Material = 1
+	&VertexSkinData::Layout,   // EMeshStream::SkinData = 2
+	nullptr                    // 여분 슬롯 (아직 미정의)
+};
+const vector<tagInputLayoutDesc> Mesh::GetInputLayoutDescs() const
+{
+	vector<tagInputLayoutDesc> result;
+	for (uint32 i = 0; i < (uint32)EMeshStream::Max; ++i)
+	{
+		// 해당 슬롯에 실제로 버퍼가 존재하고, 매핑 테이블에 레이아웃이 정의되어 있을 때만 추가
+		if (m_VertexBuffers[i] && s_StreamLayoutTable[i])
+		{
+			result.push_back(*s_StreamLayoutTable[i]);
+		}
+	}
+	return result;
+}
+#pragma endregion
+
+
+#pragma region Setter
+EResult Mesh::SetStreamBuffer(EMeshStream stream, void* data, uint32 count, uint32 stride)
+{
+	uint32 idx = (uint32)stream;
+	if (idx >= (uint32)EMeshStream::Max || !data || count == 0) return EResult::InvalidArgument;
+
+	RHI* rhi = Renderer::Get().GetRHI();
+	uint32 totalSize = stride * count;
+
+	// 기존 버퍼가 있으면 해제 후 재생성
+	Safe_Release(m_VertexBuffers[idx]);
+	m_VertexBuffers[idx] = rhi->CreateBuffer(data, totalSize, stride, ERHIBufferType::Vertex);
+	m_StreamCounts[idx] = count;
+	m_StreamStrides[idx] = stride;
+
+	RebuildCachedBuffers();
+	return m_VertexBuffers[idx] ? EResult::Success : EResult::Fail;
+}
+
+EResult Mesh::SetIndexBuffer(void* data, uint32 indexCount, uint32 stride)
+{
+	if (!data || indexCount == 0) return EResult::InvalidArgument;
+
+	RHI* rhi = Renderer::Get().GetRHI();
+	uint32 totalSize = stride * indexCount;
+
+	Safe_Release(m_IndexBuffer);
+	m_IndexBuffer = rhi->CreateBuffer(data, totalSize, stride, ERHIBufferType::Index);
+	m_IndexCount = indexCount;
+	m_IndexStride = stride;
+
+	return m_IndexBuffer ? EResult::Success : EResult::Fail;
+}
+#pragma endregion
+
+#pragma region Internal
+void Mesh::RebuildCachedBuffers()
+{
+	// m_VertexBuffers 배열에서 nullptr이 아닌 마지막 인덱스를 찾아서
+	// SDL_BindGPUVertexBuffers에 넘길 개수를 확정합니다.
+	// 중간에 빈 슬롯이 있어도 SDL_GPU는 순서대로 슬롯 바인딩하므로,
+	// "가장 높은 활성 슬롯 + 1"이 넘길 개수입니다.
+	m_ActiveBufferCount = 0;
+	for (uint32 i = 0; i < (uint32)EMeshStream::Max; ++i)
+	{
+		if (m_VertexBuffers[i])
+			m_ActiveBufferCount = i + 1;
+	}
+}
+#pragma endregion
 
 #pragma region Save&Load
+
+static const char* s_StreamNames[] = { "PositionData", "MaterialData", "SkinData" };
+
 void Mesh::Serialize(Archive& ar)
 {
 	Resource::Serialize(ar);
+
+	// 1. 헤더 구성
 	tagMeshBinaryHeader header = {};
-
-	header.VertexCount = m_VertexCount;
-	header.VertexStride = m_VertexStride;
-
+	for (uint32 i = 0; i < (uint32)EMeshStream::Max; ++i)
+	{
+		header.StreamCounts[i] = m_StreamCounts[i];
+		header.StreamStrides[i] = m_StreamStrides[i];
+	}
 	header.IndexCount = m_IndexCount;
 	header.IndexStride = m_IndexStride;
-
-	header.SkinDataCount = m_SkinDataCount;
-	header.SkinDataStride = m_SkinDataStride;
-
 	header.BoundingBoxMin = m_BoundingBoxMin;
 	header.BoundingBoxMax = m_BoundingBoxMax;
+	header.Flags = m_Flags;
 
-	if (ar.PushScope("MeshHeader"))
+	// 2. 헤더를 통째로 바이너리 직렬화
+	ar.ProcessRaw("MeshHeader", &header, sizeof(tagMeshBinaryHeader));
+
+	// 3. 스트림별 원본 데이터 직렬화
+	for (uint32 i = 0; i < (uint32)EMeshStream::Max; ++i)
 	{
-		SerializationHelper::SerializeStaticType(ar, header);
-		ar.PopScope();
+		if (m_RawData[i].size() > 0)
+			ar.ProcessRaw(s_StreamNames[i], m_RawData[i].data(), m_RawData[i].size());
 	}
 
-	ar.ProcessRaw("VertexData", m_VertexRaw.data(), m_VertexRaw.size());
-	ar.ProcessRaw("SkinData", m_SkinRaw.data(), m_SkinRaw.size());
-	ar.ProcessRaw("IndexData", m_IndexRaw.data(), m_IndexRaw.size());
+	// 4. 인덱스 데이터 직렬화
+	if (m_IndexRaw.size() > 0)
+		ar.ProcessRaw("IndexData", m_IndexRaw.data(), m_IndexRaw.size());
 }
-void Mesh::Deserialize(Archive& ar) 
+
+void Mesh::Deserialize(Archive& ar)
 {
 	Resource::Deserialize(ar);
 
-	tagMeshBinaryHeader header;
-	if (ar.PushScope("MeshHeader"))
-	{
-		SerializationHelper::SerializeStaticType(ar, header);
-		ar.PopScope();
-	}
+	// 1. 헤더를 통째로 바이너리 역직렬화
+	tagMeshBinaryHeader header = {};
+	ar.ProcessRaw("MeshHeader", &header, sizeof(tagMeshBinaryHeader));
 
-	m_VertexCount = header.VertexCount;
+	// 2. 헤더에서 멤버로 복사
+	for (uint32 i = 0; i < (uint32)EMeshStream::Max; ++i)
+	{
+		m_StreamCounts[i] = header.StreamCounts[i];
+		m_StreamStrides[i] = header.StreamStrides[i];
+	}
 	m_IndexCount = header.IndexCount;
-	m_SkinDataCount = header.SkinDataCount;
-	m_VertexStride = header.VertexStride;
 	m_IndexStride = header.IndexStride;
-	m_SkinDataStride = header.SkinDataStride;
 	m_BoundingBoxMin = header.BoundingBoxMin;
 	m_BoundingBoxMax = header.BoundingBoxMax;
 	m_Flags = header.Flags;
 
-	uint32 vertexBytes = m_VertexStride * m_VertexCount;
-	uint32 skinBytes = m_SkinDataStride * m_SkinDataCount;
+	// 3. 스트림별 원본 데이터 역직렬화
+	for (uint32 i = 0; i < (uint32)EMeshStream::Max; ++i)
+	{
+		uint32 bytes = m_StreamStrides[i] * m_StreamCounts[i];
+		if (bytes > 0)
+		{
+			m_RawData[i].resize(bytes);
+			ar.ProcessRaw(s_StreamNames[i], m_RawData[i].data(), m_RawData[i].size());
+		}
+	}
+
+	// 4. 인덱스 데이터 역직렬화
 	uint32 indexBytes = m_IndexStride * m_IndexCount;
+	if (indexBytes > 0)
+	{
+		m_IndexRaw.resize(indexBytes);
+		ar.ProcessRaw("IndexData", m_IndexRaw.data(), m_IndexRaw.size());
+	}
 
-	m_VertexRaw.resize(vertexBytes);
-	m_SkinRaw.resize(skinBytes);
-	m_IndexRaw.resize(indexBytes);
-
-	ar.ProcessRaw("VertexData", m_VertexRaw.data(), m_VertexRaw.size());
-	ar.ProcessRaw("SkinData", m_SkinRaw.data(), m_SkinRaw.size());
-	ar.ProcessRaw("IndexData", m_IndexRaw.data(), m_IndexRaw.size());
-
+	// 5. GPU 버퍼 재생성
 	RHI* rhi = Renderer::Get().GetRHI();
-	// Create Vertex Buffer
+	for (uint32 i = 0; i < (uint32)EMeshStream::Max; ++i)
 	{
-		tagRHIBufferDesc vertexBufferDesc = {};
-		vertexBufferDesc.BufferType = ERHIBufferType::Vertex;
-		uint32 totalSize = m_VertexStride * m_VertexCount;
-		m_VertexBuffer = rhi->CreateBuffer(
-			m_VertexRaw.data(),
-			totalSize,
-			m_VertexStride,
-			ERHIBufferType::Vertex
-		);
-		if (!m_VertexBuffer)
-			return;
+		if (m_RawData[i].size() > 0 && m_StreamCounts[i] > 0)
+		{
+			m_VertexBuffers[i] = rhi->CreateBuffer(
+				m_RawData[i].data(),
+				(uint32)m_RawData[i].size(),
+				m_StreamStrides[i],
+				ERHIBufferType::Vertex
+			);
+		}
+	}
+	if (m_IndexRaw.size() > 0 && m_IndexCount > 0)
+	{
+		m_IndexBuffer = rhi->CreateBuffer(m_IndexRaw.data(), indexBytes, m_IndexStride, ERHIBufferType::Index);
 	}
 
-	// Create Index Buffer
-	{
-		uint32 totalSize = m_IndexStride * m_IndexCount;
-		m_IndexBuffer = rhi->CreateBuffer(
-			m_IndexRaw.data(),
-			totalSize,
-			m_IndexStride,
-			ERHIBufferType::Index
-		);
-		if (!m_IndexBuffer)
-			return;
-	}
-
-	//Create Skin Data Buffer
-	//{
-	//	uint32 totalSize = m_SkinDataStride * m_SkinDataCount;
-	//	m_SkinDataBuffer = rhi->CreateBuffer(
-	//		m_SkinRaw.data(),
-	//		totalSize,
-	//		m_SkinDataStride,
-	//		ERHIBufferType::Vertex // Skin Data도 Vertex Buffer로 취급할 수 있음
-	//	);
-	//	if (!m_SkinDataBuffer)
-	//		return;
-	//}
+	// 6. Bind용 캐싱 배열 구축
+	RebuildCachedBuffers();
 }
+
 #pragma endregion

@@ -377,7 +377,7 @@ EResult Renderer::RenderDebugLines(f32 dt)
 		debugPipelineDesc.PixelShader = rm.GetResourceHandle<Shader>(L"DebugLinePS").Get()->GetRHIShader();
 		//debugPipelineDesc.VertexShader = ResourceManager::Get().GetShader(L"DebugLineVS")->GetRHIShader();
 		//debugPipelineDesc.PixelShader = ResourceManager::Get().GetShader(L"DebugLinePS")->GetRHIShader();
-		debugPipelineDesc.InputLayout = DebugVertex::Layout;
+		debugPipelineDesc.InputLayouts.push_back(DebugVertex::Layout);
 		debugPipelineDesc.DepthStencilState.DepthTestEnable = false;
 		debugPipelineDesc.DepthStencilState.StencilTestEnable = false;
 		debugPipelineDesc.DepthStencilState.DepthWriteEnable = false;
@@ -388,7 +388,8 @@ EResult Renderer::RenderDebugLines(f32 dt)
 	if (m_DebugVertices.empty()) return EResult::Success;
 	m_DebugVertexBuffer->SetData(m_DebugVertices.data(), (uint32)m_DebugVertices.size() * sizeof(DebugVertex));
 	if(IsFailure(m_RHI->BindPipeline(m_DebugPipeline))) return EResult::Fail;
-	m_RHI->BindVertexBuffer(m_DebugVertexBuffer);
+	RHIBuffer* buffersToBind[1] = { m_DebugVertexBuffer };
+	m_RHI->BindVertexBuffers(0, buffersToBind, 1);
 	m_RHI->Draw((uint32)m_DebugVertices.size());
 	return EResult::Success;
 }

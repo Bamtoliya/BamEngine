@@ -5,6 +5,8 @@ namespace Engine
 {
 #define MAX_RENDER_TARGET_COUNT 8
 #define MAX_TEXTURE_SLOTS 128
+#define MAX_STORAGE_BUFFERS 8
+#define MAX_BUFFER_SLOTS 4
 
 	using RenderPassID = uint32;
 	constexpr RenderPassID INVALID_PASS_ID = 0xFFFFFFFF;
@@ -82,10 +84,18 @@ namespace Engine
 		}
 	};
 
+	enum class EVertexInputRate
+	{
+		PerVertex,
+		PerInstance,
+	};
+
 	struct tagInputLayoutDesc
 	{
 		std::vector<tagVertexElementDesc> Elements;
 		uint32 Stride = { 0 };
+		EVertexInputRate InputRate = EVertexInputRate::PerVertex;
+		uint32 InstanceDataStepRate = { 0 }; // PerInstance일 때, 인스턴스마다 데이터를 몇 개씩 건너뛸지 설정 (0이면 자동으로 1로 간주)
 
 		bool operator==(const tagInputLayoutDesc& other) const
 		{

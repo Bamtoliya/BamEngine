@@ -359,66 +359,66 @@ EResult SDLRendererRHI::SetViewport(int32 x, int32 y, uint32 width, uint32 heigh
 #pragma region Draw
 EResult SDLRendererRHI::Draw(uint32 count)
 {
-	if (!m_Renderer || !m_VertexBuffer) return EResult::Fail;
-
-	SDLBuffer* vertexBuffer = static_cast<SDLBuffer*>(m_VertexBuffer);
-	if (!vertexBuffer) return EResult::Fail;
-
-	SDL_Vertex* vertices = reinterpret_cast<SDL_Vertex*>(vertexBuffer->GetNativeHandle());
-
-	// For demonstration, we will just draw points
-	const uint32 stride = m_VertexBuffer->GetStride();
-	if (!SDL_RenderGeometry(m_Renderer, nullptr, vertices, count, nullptr, 0))
-	{
-		return EResult::Fail;
-	}
+	//if (!m_Renderer || !m_VertexBuffer) return EResult::Fail;
+	//
+	//SDLBuffer* vertexBuffer = static_cast<SDLBuffer*>(m_VertexBuffer);
+	//if (!vertexBuffer) return EResult::Fail;
+	//
+	//SDL_Vertex* vertices = reinterpret_cast<SDL_Vertex*>(vertexBuffer->GetNativeHandle());
+	//
+	//// For demonstration, we will just draw points
+	//const uint32 stride = m_VertexBuffer->GetStride();
+	//if (!SDL_RenderGeometry(m_Renderer, nullptr, vertices, count, nullptr, 0))
+	//{
+	//	return EResult::Fail;
+	//}
 
 	return EResult::Success;
 }
 
 EResult SDLRendererRHI::DrawIndexed(uint32 count)
 {
-	if (!m_Renderer || !m_VertexBuffer || !m_IndexBuffer) return EResult::Fail;
-
-	SDLBuffer* vertexBuffer = static_cast<SDLBuffer*>(m_VertexBuffer);
-	SDLBuffer* indexBuffer = static_cast<SDLBuffer*>(m_IndexBuffer);
-
-	if (!vertexBuffer || !indexBuffer) return EResult::Fail;
-
-	float w, h;
-
-	// 현재 렌더러가 렌더 타겟(텍스처)을 보고 있는지 확인합니다.
-	SDL_Texture* currentTarget = SDL_GetRenderTarget(m_Renderer);
-
-	if (currentTarget)
-	{
-		// 렌더 타겟이 설정되어 있다면, 그 텍스처의 크기를 가져옵니다.
-		SDL_GetTextureSize(currentTarget, &w, &h);
-	}
-	else
-	{
-		// 렌더 타겟이 없다면(nullptr), 메인 윈도우(백버퍼)의 크기를 가져옵니다.
-		int iw, ih;
-		SDL_GetWindowSize(m_Window, &iw, &ih);
-		w = (float)iw;
-		h = (float)ih;
-	}
-
-	glm::vec2 screenCenter(w * 0.5f, h * 0.5f);
-
-	SDL_Vertex* finalVertices = static_cast<SDLShader*>(m_CurrentShader)->ProcessVertex(vertexBuffer, m_WorldMatrix, m_MaterialColor, screenCenter);
-	if (!finalVertices) return EResult::Fail;
-	//SDL_Vertex* vertices = reinterpret_cast<SDL_Vertex*>(vertexBuffer->GetNativeHandle());
-
-	SDL_Texture* texture = static_cast<SDL_Texture*>(m_CurrentTextures[0]->GetNativeHandle());
-	const int* indices = reinterpret_cast<const int*>(indexBuffer->GetNativeHandle());
-
-	sizet numVertices = vertexBuffer->m_Data.size() / sizeof(Vertex);
-
-	if (!SDL_RenderGeometry(m_Renderer, texture, finalVertices, numVertices, indices, count))
-	{
-		return EResult::Fail;
-	}
+	//if (!m_Renderer || !m_VertexBuffer || !m_IndexBuffer) return EResult::Fail;
+	//
+	//SDLBuffer* vertexBuffer = static_cast<SDLBuffer*>(m_VertexBuffer);
+	//SDLBuffer* indexBuffer = static_cast<SDLBuffer*>(m_IndexBuffer);
+	//
+	//if (!vertexBuffer || !indexBuffer) return EResult::Fail;
+	//
+	//float w, h;
+	//
+	//// 현재 렌더러가 렌더 타겟(텍스처)을 보고 있는지 확인합니다.
+	//SDL_Texture* currentTarget = SDL_GetRenderTarget(m_Renderer);
+	//
+	//if (currentTarget)
+	//{
+	//	// 렌더 타겟이 설정되어 있다면, 그 텍스처의 크기를 가져옵니다.
+	//	SDL_GetTextureSize(currentTarget, &w, &h);
+	//}
+	//else
+	//{
+	//	// 렌더 타겟이 없다면(nullptr), 메인 윈도우(백버퍼)의 크기를 가져옵니다.
+	//	int iw, ih;
+	//	SDL_GetWindowSize(m_Window, &iw, &ih);
+	//	w = (float)iw;
+	//	h = (float)ih;
+	//}
+	//
+	//glm::vec2 screenCenter(w * 0.5f, h * 0.5f);
+	//
+	//SDL_Vertex* finalVertices = static_cast<SDLShader*>(m_CurrentShader)->ProcessVertex(vertexBuffer, m_WorldMatrix, m_MaterialColor, screenCenter);
+	//if (!finalVertices) return EResult::Fail;
+	////SDL_Vertex* vertices = reinterpret_cast<SDL_Vertex*>(vertexBuffer->GetNativeHandle());
+	//
+	//SDL_Texture* texture = static_cast<SDL_Texture*>(m_CurrentTextures[0]->GetNativeHandle());
+	//const int* indices = reinterpret_cast<const int*>(indexBuffer->GetNativeHandle());
+	//
+	//sizet numVertices = vertexBuffer->m_Data.size() / sizeof(Vertex);
+	//
+	//if (!SDL_RenderGeometry(m_Renderer, texture, finalVertices, numVertices, indices, count))
+	//{
+	//	return EResult::Fail;
+	//}
 
 	return EResult::Success;
 }
