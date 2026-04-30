@@ -70,5 +70,5 @@ private:
 	vec3 m_SpotAngles = { 15.0f, 30.0f, 45.0f }; // 스포트라이트의 inner, outer, falloff 각도 (degree)
 	vec3 m_SpotAttenuation = { 1.0f, 0.0f, 0.0f }; // 스포트라이트의 감쇠 계수 (상수, 선형, 제곱)
 	ELightFlags m_Flags = { ELightFlags::None };
-}
+};
 END

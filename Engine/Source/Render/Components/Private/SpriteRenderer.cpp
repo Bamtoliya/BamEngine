@@ -69,7 +69,7 @@ EResult SpriteRenderer::Render(f32 dt, RenderPass* renderPass)
 
 	RHI* rhi = Renderer::Get().GetRHI();
 
-	MaterialInstance* material = GetMaterialInstance();
+	MaterialInterface* material = GetMaterial();
 
 	if (!rhi) return EResult::Fail;
 
@@ -191,9 +191,9 @@ EResult SpriteRenderer::UpdateMaterialInstance()
 	if (!m_Sprite || !m_Sprite->GetTexture()) return EResult::Fail;
 
 	// MaterialInstance가 없으면 base material로부터 생성
-	if (m_MaterialInstances.empty())
+	if (m_Materials.empty())
 	{
-		Material* baseMaterial = GetSharedMaterial();
+		MaterialInterface* baseMaterial = GetMaterial();
 		if (!baseMaterial) return EResult::Fail;
 		wstring instanceKey = baseMaterial->GetKey() + L"_Instance";
 		ResourceHandle<MaterialInstance> instanceHandle = ResourceManager::Get().GetResourceHandle<MaterialInstance>(instanceKey);
@@ -201,12 +201,12 @@ EResult SpriteRenderer::UpdateMaterialInstance()
 		{
 			instanceHandle = ResourceManager::Get().AddResource(instanceKey, MaterialInstance::Create(baseMaterial));
 		}
-		m_MaterialInstances.push_back(instanceHandle);
-		if (!m_MaterialInstances[0]) return EResult::Fail;
+		m_Materials.push_back(instanceHandle);
+		if (!m_Materials[0]) return EResult::Fail;
 	}
 
 	// Sprite 텍스처를 slot 0에 오버라이드
-	m_MaterialInstances[0]->SetTextureBySlot(0, m_Sprite.Get()->GetTextureHandle());
+	m_Materials[0]->SetTextureBySlot(0, m_Sprite.Get()->GetTextureHandle());
 	return EResult::Success;
 }
 #pragma endregion

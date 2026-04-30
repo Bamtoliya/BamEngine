@@ -25,7 +25,16 @@ void RenderComponent::Free()
 {
 	Component::Free();
 	m_RenderPassID = { INVALID_PASS_ID };
-	m_MaterialInstances.clear();
+	m_Materials.clear();
+	for (auto& pair : m_DynamicInstances)
+	{
+		if (pair.second)
+		{
+			pair.second->Free();
+			ResourceManager::Get().DestroyResource(pair.second);
+		}
+	}
+	m_DynamicInstances.clear();
 }
 #pragma endregion
 
@@ -47,38 +56,59 @@ void RenderComponent::LateUpdate(f32 dt)
 #pragma endregion
 
 #pragma region Material Management
-void RenderComponent::SetMaterial(const ResourceHandle<Material>& material, uint32 index)
+void RenderComponent::SetMaterial(const ResourceHandle<MaterialInterface>& material, uint32 index)
 {
 	if (!material) return;
-	if (index >= m_MaterialInstances.size())
-		m_MaterialInstances.resize(index + 1);
+	if (index >= m_Materials.size())
+		m_Materials.resize(index + 1);
+	m_Materials[index] = material;
+}
 
-	if (m_MaterialInstances[index])
+MaterialInterface* RenderComponent::GetMaterial(uint32 index) const
+{
+	auto it = m_DynamicInstances.find(index);
+	if (it != m_DynamicInstances.end() && it->second)
+		return it->second;
+	if (index >= m_Materials.size())
+		return nullptr;
+	return m_Materials[index].Get();
+}
+EResult RenderComponent::CreateDynamicMaterialInstance(uint32 index)
+{
+	// 이미 Dynamic Instance가 있으면 성공으로 반환 (중복 생성 방지)
+	if (m_DynamicInstances.count(index) && m_DynamicInstances[index])
+		return EResult::Success;
+	// 원본 머티리얼 가져오기
+	if (index >= m_Materials.size() || !m_Materials[index])
+		return EResult::InvalidArgument;
+	MaterialInterface* original = m_Materials[index].Get();
+	if (!original)
+		return EResult::Fail;
+	// 원본이 Material이면 그것을 Base로, MaterialInstance이면 그 Base를 가져옴
+	Material* baseMaterial = nullptr;
+	if (MaterialInstance* existingInst = dynamic_cast<MaterialInstance*>(original))
 	{
-		m_MaterialInstances[index]->SetBaseMaterial(material);
+		baseMaterial = existingInst->GetBaseMaterial();
 	}
 	else
 	{
-		TODO("Render Component에서 MaterialInstance 생성 방식 결정 필요 (현재는 매번 새로 생성)");
-		tagMaterialInstanceDesc desc;
-		desc.BaseMaterialHandle = material;
-		desc.Key = material->GetKey() + L"inst";
-		m_MaterialInstances[index] = ResourceManager::Get().AddResource<MaterialInstance>(material.Get()->GetKey() + L"_Instance", MaterialInstance::Create(&desc));
+		baseMaterial = dynamic_cast<Material*>(original);
 	}
+	if (!baseMaterial)
+		return EResult::Fail;
+	// ResourceManager를 거치지 않고 직접 생성 (파일 없는 런타임 전용)
+	tagMaterialInstanceDesc desc = {};
+	desc.BaseMaterialHandle = ResourceManager::Get().GetResourceHandle<Material>(baseMaterial->GetKey());
+	MaterialInstance* dynamicInst = MaterialInstance::Create(&desc);
+	if (!dynamicInst)
+		return EResult::Fail;
+	m_DynamicInstances[index] = dynamicInst;
+	return EResult::Success;
 }
-
-Material* RenderComponent::GetSharedMaterial(uint32 index) const
+bool RenderComponent::HasDynamicMaterialInstance(uint32 index) const
 {
-	if (index >= m_MaterialInstances.size() || !m_MaterialInstances[index])
-		return nullptr;
-	return m_MaterialInstances[index]->GetBaseMaterial();
-}
-
-MaterialInstance* RenderComponent::GetMaterialInstance(uint32 index) const
-{
-	if (index >= m_MaterialInstances.size())
-		return nullptr;
-	return m_MaterialInstances[index].Get();
+	auto it = m_DynamicInstances.find(index);
+	return it != m_DynamicInstances.end() && it->second != nullptr;
 }
 #pragma endregion
 

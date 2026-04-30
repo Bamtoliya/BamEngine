@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "SkinnedMeshRenderer.h"
 
@@ -60,7 +60,7 @@ EResult SkinnedMeshRenderer::Render(f32 dt, RenderPass* renderPass)
 	if (!mesh) return EResult::Success;
 
 	RHI* rhi = Renderer::Get().GetRHI();
-	MaterialInstance* material = GetMaterialInstance();
+	MaterialInterface* material = GetMaterial();
 
 	if (IsFailure(BindPipeline(mesh, material, renderPass)))
 		return EResult::Fail;

@@ -23,6 +23,22 @@ inline ResourceHandle<T>::ResourceHandle(ResourceHandle&& other) noexcept
 }
 
 template<typename T>
+template <typename U, typename std::enable_if_t<std::is_convertible_v<U*, T*>, int>>
+inline ResourceHandle<T>::ResourceHandle(const ResourceHandle<U>& other)
+	: m_Handle(other.m_Handle)
+{
+	InternalAddRef();
+}
+
+template<typename T>
+template <typename U, typename std::enable_if_t<std::is_convertible_v<U*, T*>, int>>
+inline ResourceHandle<T>::ResourceHandle(ResourceHandle<U>&& other) noexcept
+	: m_Handle(other.m_Handle)
+{
+	other.m_Handle = Handle();
+}
+
+template<typename T>
 inline ResourceHandle<T>::~ResourceHandle()
 {
 	InternalRelease();
@@ -46,6 +62,32 @@ inline ResourceHandle<T>& ResourceHandle<T>::operator=(ResourceHandle&& other) n
 	if (this == &other)
 		return *this;
 
+	InternalRelease();
+	m_Handle = other.m_Handle;
+	other.m_Handle = Handle();
+	return *this;
+}
+
+template<typename T>
+template <typename U>
+inline ResourceHandle<T>& ResourceHandle<T>::operator=(const ResourceHandle<U>& other)
+{
+	static_assert(std::is_convertible_v<U*, T*>, "U must be derived from T");
+	if (m_Handle == other.m_Handle)
+		return *this;
+	InternalRelease();
+	m_Handle = other.m_Handle;
+	InternalAddRef();
+	return *this;
+}
+
+template<typename T>
+template <typename U>
+inline ResourceHandle<T>& ResourceHandle<T>::operator=(ResourceHandle<U>&& other) noexcept
+{
+	static_assert(std::is_convertible_v<U*, T*>, "U must be derived from T");
+	if (m_Handle == other.m_Handle)
+		return *this;
 	InternalRelease();
 	m_Handle = other.m_Handle;
 	other.m_Handle = Handle();

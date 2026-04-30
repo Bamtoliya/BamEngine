@@ -182,7 +182,8 @@ EResult Renderer::Render(f32 dt)
 					{
 						if (IsFailure(command(dt, pass)))
 						{
-							return EResult::Fail;
+							ENGINE_LOG_ERROR("Custom Render Command Failed!");
+							continue;
 						}
 					}
 				}
@@ -205,7 +206,8 @@ EResult Renderer::RenderComponents(f32 dt, vector<class RenderComponent*> queue,
 		{
 			if (IsFailure(component->Render(dt, renderPass)))
 			{
-				return EResult::Fail;
+				ENGINE_LOG_ERROR("Component Render Failed! Component Name: {0}", WStrToStr(component->GetOwner()->GetName()));
+				continue;
 			}
 		}
 	}

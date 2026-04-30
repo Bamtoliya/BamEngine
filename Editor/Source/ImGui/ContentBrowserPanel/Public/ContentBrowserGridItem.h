@@ -27,5 +27,11 @@ private:
 	// 이름 변경 로직과 네임 박스 렌더링 로직을 분리
 	static void DrawRename(const std::filesystem::path& path, f32 thumbnailSize, std::filesystem::path& outRenamingPath, char* renameBuffer, size_t renameBufferSize, std::filesystem::path& currentDirectory);
 	static void DrawNameBox(const std::filesystem::directory_entry& directoryEntry, const std::filesystem::path& rootPath, f32 thumbnailSize, std::filesystem::path& currentDirectory, char* searchBuffer);
+
+private:
+	static void ContextMenu_Material(const std::filesystem::path& path);
+	static void ContextMenu_Model(const std::filesystem::path& path);
+	// static void ContextMenu_Texture(const std::filesystem::path& path);
+	// static void ContextMenu_Shader(const std::filesystem::path& path);
 };
 END

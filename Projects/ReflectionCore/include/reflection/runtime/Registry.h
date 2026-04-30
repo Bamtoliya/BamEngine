@@ -37,6 +37,18 @@ namespace reflection
         void* CreateInstanceByQualifiedName(std::string_view qualified_name) const;
         void DestroyInstanceByQualifiedName(std::string_view qualified_name, void* instance) const;
 
+
+        template<typename Func>
+        void ForEachType(Func&& func) const
+        {
+            for (const auto& pair : m_types_by_id)
+            {
+                func(*pair.second);
+            }
+        }
+
+        std::vector<std::uint64_t> GetDerivedTypeIDs(std::uint64_t baseTypeID) const;
+
     private:
         Registry() = default;
 

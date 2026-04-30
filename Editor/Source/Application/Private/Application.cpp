@@ -304,6 +304,14 @@ void Application::InitializeResources()
 	
 #endif
 }
+
+#pragma endregion
+
+#pragma region Rendering
+void Application::IntializeRenderer()
+{
+
+}
 #pragma endregion
 
 void Application::Run(int argc, char* argv[])

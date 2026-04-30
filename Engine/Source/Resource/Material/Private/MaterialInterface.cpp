@@ -308,21 +308,36 @@ void MaterialInterface::ClearTextureBindings()
 #pragma region Bind
 EResult MaterialInterface::Bind(uint32 slot)
 {
-	RHI* rhi = Renderer::Get().GetRHI();
-	for (auto& binding : m_TextureBindings)
-	{
-		Texture* texture = binding.texture.Get();
-		if (!texture)
-			texture = ResourceManager::Get().GetResourceHandle<Texture>(L"Resources/Texture/magenta1x1.png").Get();
-		RHISampler* sampler = binding.hasCustomSampler
-			? SamplerManager::Get().GetOrCreateSampler(binding.samplerDesc)
-			: SamplerManager::Get().GetDefaultSampler();
-		if (!texture || !sampler) return EResult::Fail;
+    RHI* rhi = Renderer::Get().GetRHI();
+    bool bBoundAny = false; // 텍스처를 하나라도 바인딩했는지 추적
+    for (auto& binding : m_TextureBindings)
+    {
+        Texture* texture = binding.texture.Get();
+        if (!texture) // 텍스처가 비어있을 경우 더미 텍스처로 대체
+            texture = ResourceManager::Get().GetResourceHandle<Texture>(L"Resources/Texture/magenta1x1.png").Get();
 
-		if (IsFailure(rhi->BindTextureSampler(texture->GetRHITexture(), sampler, binding.slot)))
-			return EResult::Fail;
-	}
-	return EResult::Success;
+        RHISampler* sampler = binding.hasCustomSampler
+            ? SamplerManager::Get().GetOrCreateSampler(binding.samplerDesc)
+            : SamplerManager::Get().GetDefaultSampler();
+
+        if (!texture || !sampler) return EResult::Fail;
+        if (IsFailure(rhi->BindTextureSampler(texture->GetRHITexture(), sampler, binding.slot)))
+            return EResult::Fail;
+
+        bBoundAny = true; // 성공적으로 바인딩됨
+    }
+    // 안전장치 - 텍스처가 단 하나도 세팅되지 않은 경우
+    if (!bBoundAny)
+    {
+        Texture* texture = ResourceManager::Get().GetResourceHandle<Texture>(L"Resources/Texture/magenta1x1.png").Get();
+        RHISampler* sampler = SamplerManager::Get().GetDefaultSampler();
+        if (!texture || !sampler)
+            return EResult::Fail;
+
+        if (IsFailure(rhi->BindTextureSampler(texture->GetRHITexture(), sampler, 0)))
+            return EResult::Fail;
+    }
+    return EResult::Success;
 }
 #pragma endregion
 

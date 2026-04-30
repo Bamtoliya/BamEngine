@@ -45,7 +45,6 @@ public:
 	virtual EResult Bind(uint32 slot) override;
 #pragma endregion
 
-
 #pragma region Base Material Management
 public:
 	void SetBaseMaterial(const ResourceHandle<Material>& material);

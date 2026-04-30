@@ -49,59 +49,59 @@ void MaterialInstance::Free()
 EResult MaterialInstance::Bind(uint32 slot)
 {
 	if (!m_BaseMaterialHandle) return EResult::Fail;
-
 	RHI* rhi = Renderer::Get().GetRHI();
 	Material* baseMaterial = m_BaseMaterialHandle.Get();
 	if (!rhi || !baseMaterial)
 		return EResult::Fail;
-	Texture* texture = nullptr;
-	RHISampler* sampler = nullptr;
+	bool bBoundAny = false; // ★ 텍스처를 하나라도 바인딩했는지 추적
 	// 1단계: Base Material의 텍스처 슬롯 순회
-	for (auto& baseBinding : m_BaseMaterialHandle.Get()->GetTextureBindings())
+	for (auto& baseBinding : baseMaterial->GetTextureBindings())
 	{
 		bool hasOverride = HasTextureBindingBySlot(baseBinding.slot) || (!baseBinding.name.empty() && HasTextureBinding(baseBinding.name));
 		// 자신에게 오버라이드가 있으면 스킵 (2단계에서 처리)
 		if (hasOverride)
 			continue;
-
-		texture = baseBinding.texture.Get();
-		sampler = baseBinding.hasCustomSampler
+		Texture* texture = baseBinding.texture.Get();
+		if (!texture) // 텍스처가 유실되었을 경우 더미 텍스처로 대체
+			texture = ResourceManager::Get().GetResourceHandle<Texture>(L"Resources/Texture/magenta1x1.png").Get();
+		RHISampler* sampler = baseBinding.hasCustomSampler
 			? SamplerManager::Get().GetOrCreateSampler(baseBinding.samplerDesc)
 			: SamplerManager::Get().GetDefaultSampler();
-
 		if (!texture || !sampler)
 			return EResult::Fail;
-
 		if (IsFailure(rhi->BindTextureSampler(texture->GetRHITexture(), sampler, baseBinding.slot)))
 			return EResult::Fail;
-	}
 
+		bBoundAny = true; // 성공적으로 바인딩됨
+	}
 	// 2단계: 자신의 오버라이드 바인드
 	for (auto& binding : m_TextureBindings)
 	{
-		texture = binding.texture.Get();
-		sampler = binding.hasCustomSampler
+		Texture* texture = binding.texture.Get();
+		if (!texture)
+			texture = ResourceManager::Get().GetResourceHandle<Texture>(L"Resources/Texture/magenta1x1.png").Get();
+		RHISampler* sampler = binding.hasCustomSampler
 			? SamplerManager::Get().GetOrCreateSampler(binding.samplerDesc)
 			: SamplerManager::Get().GetDefaultSampler();
+
 		if (!texture || !sampler)
 			return EResult::Fail;
-
 		if (IsFailure(rhi->BindTextureSampler(texture->GetRHITexture(), sampler, binding.slot)))
 			return EResult::Fail;
+
+		bBoundAny = true; // 성공적으로 바인딩됨
 	}
-
-	if (!texture || !sampler)
+	// 3단계: 안전장치 - 텍스처가 단 하나도 세팅되지 않은 기본 상태일 경우
+	if (!bBoundAny)
 	{
-		texture = ResourceManager::Get().GetResourceHandle<Texture>(L"Resources/Texture/magenta1x1.png").Get();
-		sampler = SamplerManager::Get().GetDefaultSampler();
-
+		Texture* texture = ResourceManager::Get().GetResourceHandle<Texture>(L"Resources/Texture/magenta1x1.png").Get();
+		RHISampler* sampler = SamplerManager::Get().GetDefaultSampler();
 		if (!texture || !sampler)
 			return EResult::Fail;
-	
+
 		if (IsFailure(rhi->BindTextureSampler(texture->GetRHITexture(), sampler, 0)))
 			return EResult::Fail;
 	}
-
 	return EResult::Success;
 }
 
@@ -137,7 +137,6 @@ void MaterialInstance::SetPixelShaderHandle(const ResourceHandle<Shader>& shader
 }
 
 #pragma endregion
-
 
 #pragma region Pipeline
 EBlendMode MaterialInstance::GetBlendMode() const
@@ -192,4 +191,3 @@ void MaterialInstance::SetDepthCompareOp(ECompareOp op)
 }
 
 #pragma endregion
-

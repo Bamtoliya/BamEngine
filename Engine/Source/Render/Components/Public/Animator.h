@@ -15,10 +15,10 @@ struct tagAnimationState
 {
     REFLECT_STRUCT()
 
-    PROPERTY(READONLY)
+    PROPERTY(EDITABLE)
     wstring Name;
 
-    PROPERTY(READONLY)
+    PROPERTY(EDITABLE)
     ResourceHandle<Animation> Clip;
 
     PROPERTY(EDITABLE)

@@ -141,6 +141,24 @@ void ContentBrowserGridItem::ContextMenu(const std::filesystem::path& path, std:
 			ImGui::SetClipboardText(path.string().c_str());
 		}
 
+		if (!std::filesystem::is_directory(path))
+		{
+			std::string ext = path.extension().string();
+			for (auto& c : ext) c = tolower(c);
+			if (ext == ".bammat" || ext == ".bammatinst")
+			{
+				ContextMenu_Material(path);
+			}
+			else if (ext == ".fbx" || ext == ".obj" || ext == ".gltf")
+			{
+				ContextMenu_Model(path);
+			}
+			// else if (ext == ".png" || ext == ".jpg" || ext == ".tga")
+			// {
+			//     ContextMenu_Texture(path);
+			// }
+		}
+
 		ImGui::Separator();
 
 		if (ImGui::MenuItem(ICON_FA_TRASH " Delete"))
@@ -320,4 +338,54 @@ void ContentBrowserGridItem::DrawNameBox(const std::filesystem::directory_entry&
 			if (searchBuffer) searchBuffer[0] = '\0';
 		}
 	}
+}
+
+void ContentBrowserGridItem::ContextMenu_Material(const std::filesystem::path& path)
+{
+	std::string ext = path.extension().string();
+	for (auto& c : ext) c = tolower(c);
+	ImGui::Separator();
+	// .bammat 전용: Material Instance 생성
+	if (ext == ".bammat")
+	{
+		if (ImGui::MenuItem(ICON_FA_CLONE " Create Material Instance"))
+		{
+			std::filesystem::path instPath = path;
+			instPath.replace_extension(".bammatinst");
+			int suffix = 1;
+			while (std::filesystem::exists(instPath))
+			{
+				instPath = path.parent_path() /
+					(path.stem().string() + "_" + std::to_string(suffix) + ".bammatinst");
+				++suffix;
+			}
+			std::wstring wBasePath = std::filesystem::relative(path).wstring();
+			auto baseHandle = Engine::ResourceManager::Get().GetResourceHandle<Engine::Material>(wBasePath);
+			if (baseHandle)
+			{
+				tagMaterialInstanceDesc desc = {};
+				desc.BaseMaterialHandle = baseHandle;
+				desc.Key = std::filesystem::relative(instPath).wstring();
+				desc.Path = instPath.wstring();
+				auto instHandle = Engine::ResourceManager::Get().LoadResource<Engine::MaterialInstance>(&desc);
+				if (instHandle)
+				{
+					Engine::ResourceManager::Get().SaveToBinaryFile(instHandle.Get(), instPath.wstring());
+					ENGINE_LOG_INFO("Created Material Instance: {}", instPath.string());
+				}
+			}
+		}
+	}
+	// .bammatinst 전용: Base Material 열기 등
+	if (ext == ".bammatinst")
+	{
+		if (ImGui::MenuItem(ICON_FA_LINK " Open Base Material"))
+		{
+			// TODO: Base Material 파일로 포커스 이동
+		}
+	}
+}
+
+void ContentBrowserGridItem::ContextMenu_Model(const std::filesystem::path& path)
+{
 }

@@ -12,6 +12,7 @@
 #include "Physics/Components/Collider/Public/Collider.h"
 #include "Render/Camera/Public/Camera.h"
 #include "Render/Components/Public/Animator.h"
+#include "Render/Components/Public/LightSource.h"
 #include "Render/Components/Public/MeshRenderer.h"
 #include "Render/Components/Public/RenderComponent.h"
 #include "Render/Components/Public/SkinnedMeshRenderer.h"
@@ -83,6 +84,13 @@ BEGIN_ENUM(EColliderType)
 	REFLECT_ENUM_ENTRY(EColliderType, Capsule)
 	REFLECT_ENUM_ENTRY(EColliderType, Mesh)
 END_ENUM_REFLECT_EX(EColliderType, "Engine::EColliderType")
+
+// Enum: Engine::ELightType
+BEGIN_ENUM(ELightType)
+	REFLECT_ENUM_ENTRY(ELightType, Point)
+	REFLECT_ENUM_ENTRY(ELightType, Directional)
+	REFLECT_ENUM_ENTRY(ELightType, Spot)
+END_ENUM_REFLECT_EX(ELightType, "Engine::ELightType")
 
 // Enum: Engine::EDrawMode
 BEGIN_ENUM(EDrawMode)
@@ -505,11 +513,11 @@ IMPLEMENT_CLASS_EX(Camera, "Engine::Camera", "Engine::Component")
 
 #pragma region STRUCT: Engine::tagAnimationState
 BEGIN_METADATA(tagAnimationState, Name)
-	READONLY
+	EDITABLE
 END_METADATA
 
 BEGIN_METADATA(tagAnimationState, Clip)
-	READONLY
+	EDITABLE
 END_METADATA
 
 BEGIN_METADATA(tagAnimationState, Loop)
@@ -549,6 +557,13 @@ IMPLEMENT_CLASS_EX(Animator, "Engine::Animator", "Engine::Component")
 
 #pragma endregion // CLASS: Engine::Animator
 
+#pragma region CLASS: Engine::LightSource
+EMPTY_PROPERTIES(LightSource)
+EMPTY_FUNCTIONS(LightSource)
+IMPLEMENT_CLASS_EX(LightSource, "Engine::LightSource", "Engine::Component")
+
+#pragma endregion // CLASS: Engine::LightSource
+
 #pragma region CLASS: Engine::MeshRenderer
 EMPTY_PROPERTIES(MeshRenderer)
 EMPTY_FUNCTIONS(MeshRenderer)
@@ -562,14 +577,14 @@ BEGIN_METADATA(RenderComponent, m_RenderPassID)
 	CATEGORY("PROP_INFORMATION")
 END_METADATA
 
-BEGIN_METADATA(RenderComponent, m_MaterialInstances)
+BEGIN_METADATA(RenderComponent, m_Materials)
 	EDITABLE
 END_METADATA
 
-DECLARE_CONTAINER_INFO(RenderComponent, m_MaterialInstances_Root, "ResourceHandle<MaterialInstance>", reflection::EPropertyType::ResourceHandle, reflection::LinearContainerAccessor<vector<ResourceHandle<MaterialInstance>>, ResourceHandle<MaterialInstance>>::Get())
+DECLARE_CONTAINER_INFO(RenderComponent, m_Materials_Root, "ResourceHandle<MaterialInterface>", reflection::EPropertyType::ResourceHandle, reflection::LinearContainerAccessor<vector<ResourceHandle<MaterialInterface>>, ResourceHandle<MaterialInterface>>::Get())
 BEGIN_PROPERTIES(RenderComponent)
 	REFLECT_PROPERTY(RenderComponent, m_RenderPassID, "uint32", reflection::EPropertyType::UInt32, std::span<const reflection::MetadataEntry>{RenderComponent_m_RenderPassID_Meta})
-	REFLECT_CONTAINER_PROPERTY(RenderComponent, m_MaterialInstances, "vector<ResourceHandle<MaterialInstance>>", reflection::EPropertyType::Array, &RenderComponent_m_MaterialInstances_Root_ContainerData, std::span<const reflection::MetadataEntry>{RenderComponent_m_MaterialInstances_Meta})
+	REFLECT_CONTAINER_PROPERTY(RenderComponent, m_Materials, "vector<ResourceHandle<MaterialInterface>>", reflection::EPropertyType::Array, &RenderComponent_m_Materials_Root_ContainerData, std::span<const reflection::MetadataEntry>{RenderComponent_m_Materials_Meta})
 END_PROPERTIES
 EMPTY_FUNCTIONS(RenderComponent)
 IMPLEMENT_CLASS_EX(RenderComponent, "Engine::RenderComponent", "Engine::Component")

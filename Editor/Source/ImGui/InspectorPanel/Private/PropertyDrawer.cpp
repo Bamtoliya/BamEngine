@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "PropertyDrawer.h"
 #include "InspectorHelper.h"
@@ -2035,13 +2035,12 @@ bool PropertyDrawer::DrawResourceHandleProperty(void* data, const TypeInfo& type
 			targetTypeInfo = reflection::Registry::Get().GetTypeByQualifiedName("Engine::" + normalizedTargetType);
 		}
 
-		vector<Engine::Handle> emptyList;
-		const vector<Engine::Handle>* handleList = &emptyList;
-
+		vector<Engine::Handle> collectedHandles;
 		if (targetTypeInfo)
 		{
-			handleList = &Engine::ResourceManager::Get().GetResourceHandles(targetTypeInfo->ID);
+			collectedHandles = Engine::ResourceManager::Get().GetResourceHandlesIncludingDerived(targetTypeInfo->ID);
 		}
+		const vector<Engine::Handle>* handleList = &collectedHandles;
 
 		for (const Engine::Handle& handle : *handleList)
 		{

@@ -123,4 +123,30 @@ namespace reflection
 
         ::operator delete(instance);
     }
+
+    std::vector<std::uint64_t> Registry::GetDerivedTypeIDs(std::uint64_t baseTypeID) const
+    {
+        std::vector<std::uint64_t> result;
+        const TypeInfo* baseType = GetType(baseTypeID);
+        if (!baseType) return result;
+        for (const auto& pair : m_types_by_id)
+        {
+            const TypeInfo* candidate = pair.second;
+            if (candidate->ID == baseTypeID) continue; // 자기 자신은 스킵
+            // 상속 체인을 올라가며 baseType과 매칭되는지 확인
+            const TypeInfo* current = candidate;
+            while (current && !current->ParentQualifiedName.empty())
+            {
+                const TypeInfo* parent = GetTypeByQualifiedName(current->ParentQualifiedName);
+                if (!parent) break;
+                if (parent->ID == baseTypeID)
+                {
+                    result.push_back(candidate->ID);
+                    break;
+                }
+                current = parent;
+            }
+        }
+        return result;
+    }
 }

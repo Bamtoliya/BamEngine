@@ -40,6 +40,7 @@ public:
 	template<typename T>
 	const vector<Handle>& GetResourceHandles();
 	const vector<Handle>& GetResourceHandles(uint64 typeHash);
+	vector<Handle> GetResourceHandlesIncludingDerived(uint64 baseTypeID);
 public:
 	EResult ImportFolder(const wstring& folderPath);
 	Handle LoadFile(const wstring& filePath);
@@ -62,7 +63,7 @@ private:
 	Handle FindHandle(uint64 hash);
 	Handle AddResourceInternal(uint64 hash, Resource* resource);
 	Handle AllocateSlot(Resource* resource);
-	void FreeSlotInternal(uint32 slotIndex);
+	Resource* FreeSlotInternal(uint32 slotIndex);
 #pragma endregion
 
 #pragma region Save & Load

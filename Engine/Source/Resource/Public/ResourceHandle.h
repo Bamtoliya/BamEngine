@@ -10,16 +10,28 @@ class ResourceManager;
 template<typename T>
 class ResourceHandle
 {
+	template<typename U>
+	friend class ResourceHandle;
+
 public:
 	ResourceHandle() = default;
 	explicit ResourceHandle(Handle handle);
 
 	ResourceHandle(const ResourceHandle& other);
 	ResourceHandle(ResourceHandle&& other) noexcept;
+	template <typename U, typename std::enable_if_t<std::is_convertible_v<U*, T*>, int> = 0>
+	ResourceHandle(const ResourceHandle<U>& other);
+	template <typename U, typename std::enable_if_t<std::is_convertible_v<U*, T*>, int> = 0>
+	ResourceHandle(ResourceHandle<U>&& other) noexcept;
 	~ResourceHandle();
 
 	ResourceHandle& operator=(const ResourceHandle& other);
 	ResourceHandle& operator=(ResourceHandle&& other) noexcept;
+	template <typename U>
+	ResourceHandle& operator=(const ResourceHandle<U>& other);
+	template <typename U>
+	ResourceHandle& operator=(ResourceHandle<U>&& other) noexcept;
+	
 
 public:
 	bool operator==(const ResourceHandle& other) const { return m_Handle == other.m_Handle; }

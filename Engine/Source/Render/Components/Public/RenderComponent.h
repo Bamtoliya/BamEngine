@@ -32,10 +32,12 @@ public:
 
 #pragma region Material Management
 public:
-	void SetMaterial(const ResourceHandle<class Material>& material, uint32 index = 0);	
+	void SetMaterial(const ResourceHandle<class MaterialInterface>& material, uint32 index = 0);	
+	class MaterialInterface* GetMaterial(uint32 index = 0) const;
 
-	class Material* GetSharedMaterial(uint32 index = 0) const;
-	class MaterialInstance* GetMaterialInstance(uint32 index = 0) const;
+public:
+	EResult CreateDynamicMaterialInstance(uint32 index = 0);
+	bool HasDynamicMaterialInstance(uint32 index = 0) const;
 #pragma endregion
 
 #pragma region Bind
@@ -49,7 +51,10 @@ protected:
 	uint32 m_RenderPassID = { INVALID_PASS_ID };
 
 	PROPERTY(EDITABLE)
-	vector<ResourceHandle<MaterialInstance>> m_MaterialInstances;
+	vector<ResourceHandle<MaterialInterface>> m_Materials;
+
+private:
+	unordered_map<uint32, class MaterialInstance*> m_DynamicInstances;
 #pragma endregion
 };
 END

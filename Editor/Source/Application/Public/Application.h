@@ -35,6 +35,12 @@ private:
 	void InitializeResources();
 #pragma endregion
 
+#pragma region Rendering
+private:
+	void IntializeRenderer();
+#pragma endregion
+
+
 
 
 public:

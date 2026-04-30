@@ -74,6 +74,14 @@ void Animator::Update(f32 dt)
     if (!m_CurrentState || !m_CurrentState->Clip.IsValid() || !m_Skeleton.IsValid())
         return;
 
+    // 리플렉션/역직렬화를 통해 m_Skeleton이 직접 할당된 경우 컨테이너 크기 확보 (Lazy Init)
+    uint32 boneCount = static_cast<uint32>(m_Skeleton->GetBones().size());
+    if (m_FinalBoneMatrices.size() != boneCount)
+    {
+        m_FinalBoneMatrices.assign(boneCount, glm::identity<mat4>());
+        m_GlobalTransforms.assign(boneCount, glm::identity<mat4>());
+    }
+
     auto anim = m_CurrentState->Clip;
     f32 ticksPerSec = (anim->GetTicksPerSecond() != 0.0) ? (f32)anim->GetTicksPerSecond() : 25.0f;
 

@@ -868,7 +868,6 @@ void HierarchyPanel::DrawAddGameObjectButton(Scene* scene)
 		{
 			CreateCamera(scene);
 		}
-
 		ImGui::EndPopup();
 	}
 	ImGui::Separator();
