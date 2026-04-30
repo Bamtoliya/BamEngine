@@ -304,6 +304,16 @@ namespace Engine
 		RPSO_ResolveAndStore,
 	};
 
+	enum class ERenderPassType : uint8
+	{
+		Custom = 0,
+		Geometry,
+		Lighting,
+		Shadow,
+		ForwardTransparent,
+		PostProcess,
+	};
+
 	struct tagRenderPassDesc
 	{
 		uint32 Priority = { 0 };
@@ -317,5 +327,6 @@ namespace Engine
 		ERenderPassLoadOperation StencilLoadOperation = ERenderPassLoadOperation::RPLO_Load;
 		ERenderPassStoreOperation StencilStoreOperation = ERenderPassStoreOperation::RPSO_Store;
 		vec4 OverrideClearColor = vec4(0.0f, 0.0f, 0.0f, -1.0f);
+		ERenderPassType PassType = ERenderPassType::Custom;
 	};
 }	
