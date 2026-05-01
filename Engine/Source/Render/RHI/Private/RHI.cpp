@@ -14,7 +14,7 @@ void RHI::Free()
 
 	Safe_Release(m_IndexBuffer);
 	Safe_Release(m_CurrentShader);
-	Safe_Release(m_CurrentPipeline);
+	m_CurrentPipeline = nullptr;
 	Safe_Release(m_BackBuffer);
 }
 

@@ -33,11 +33,16 @@ private:
 #pragma region Test Prepare
 private:
 	void InitializeResources();
+	void InitializeFiles();
+	void InitializeShaders();
+	void InitializeMeshes();
+	void InitializeMaterials();
 #pragma endregion
 
 #pragma region Rendering
 private:
 	void IntializeRenderer();
+	void SubmitRenderPasses();
 #pragma endregion
 
 
@@ -62,6 +67,12 @@ private:
 	class AssetManager* m_AssetManager = { nullptr };
 private:
 	f32 m_FPSTimer = { 0.f };
+
+private:
+	RenderPassID m_LightingPassID		= INVALID_PASS_ID;
+	RenderPassID m_GemetryPassID		= INVALID_PASS_ID;
+	RenderPassID m_FowardPassID			= INVALID_PASS_ID;
+	RenderPassID m_PostProcessPassID	= INVALID_PASS_ID;
 };
 
 END

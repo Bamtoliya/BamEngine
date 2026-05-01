@@ -189,24 +189,11 @@ EResult SpriteRenderer::UpdateMesh()
 EResult SpriteRenderer::UpdateMaterialInstance()
 {
 	if (!m_Sprite || !m_Sprite->GetTexture()) return EResult::Fail;
-
-	// MaterialInstance가 없으면 base material로부터 생성
-	if (m_Materials.empty())
-	{
-		MaterialInterface* baseMaterial = GetMaterial();
-		if (!baseMaterial) return EResult::Fail;
-		wstring instanceKey = baseMaterial->GetKey() + L"_Instance";
-		ResourceHandle<MaterialInstance> instanceHandle = ResourceManager::Get().GetResourceHandle<MaterialInstance>(instanceKey);
-		if (!instanceHandle)
-		{
-			instanceHandle = ResourceManager::Get().AddResource(instanceKey, MaterialInstance::Create(baseMaterial));
-		}
-		m_Materials.push_back(instanceHandle);
-		if (!m_Materials[0]) return EResult::Fail;
-	}
-
-	// Sprite 텍스처를 slot 0에 오버라이드
-	m_Materials[0]->SetTextureBySlot(0, m_Sprite.Get()->GetTextureHandle());
+	// DynamicMaterialInstance가 없으면 생성 (오브젝트별 고유)
+	if (!HasDynamicMaterialInstance(0))
+		CreateDynamicMaterialInstance(0);
+	// DynamicInstance에 텍스처 설정 → 원본 Material 영향 없음
+	GetMaterial(0)->SetTextureBySlot(0, m_Sprite.Get()->GetTextureHandle());
 	return EResult::Success;
 }
 #pragma endregion

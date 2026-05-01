@@ -52,47 +52,102 @@ void ViewportPanel::Initialize(void* arg)
 
 #pragma endregion
 
-#pragma region Prepare Color RenderTarget
-		tagRenderTargetDesc rtDesc;
-		rtDesc.Width = desc->RenderTargetWidth;
-		rtDesc.Height = desc->RenderTargetHeight;
-		rtDesc.BindFlag = ERenderTargetBindFlag::RTBF_ShaderResource | ERenderTargetBindFlag::RTBF_RenderTarget;
-		rtDesc.ClearColor = vec4(0.4f, 0.1f, 0.1f, 1.0f);
-		rtDesc.Name = m_Name + L"_RenderTarget";
-		m_RenderTarget = RenderTargetManager::Get().CreateRenderTarget(&rtDesc);
-#pragma endregion
+		auto& rtMgr = RenderTargetManager::Get();
+		auto& rpMgr = RenderPassManager::Get();
+		uint32 w = desc->RenderTargetWidth;
+		uint32 h = desc->RenderTargetHeight;
+		wstring prefix = m_Name + L"_";
 
-
-#pragma region Prepare Depth Stencil RenderTarget
-		tagRenderTargetDesc depthStencilDesc;
-		depthStencilDesc.Width = desc->RenderTargetWidth;
-		depthStencilDesc.Height = desc->RenderTargetHeight;
-		depthStencilDesc.Type = ERenderTargetType::DepthStencil;
-		depthStencilDesc.Usage = ETextureUsage::DepthStencilTarget;
-		depthStencilDesc.BindFlag = ERenderTargetBindFlag::RTBF_ShaderResource | ERenderTargetBindFlag::RTBF_DepthStencil | ERenderTargetBindFlag::RTBF_RenderTarget;
-		depthStencilDesc.Format = ETextureFormat::D24_UNORM_S8_UINT;
-		depthStencilDesc.Name = m_Name + L"_DepthStencil";
-		m_DepthStencil = RenderTargetManager::Get().CreateRenderTarget(&depthStencilDesc);
-#pragma endregion
-		wstring passName = m_Name + L"_Pass";
-		m_PassID = RenderPassManager::Get().RegisterRenderPass(passName, { m_RenderTarget->GetName()}, m_DepthStencil->GetName(), ERenderPassLoadOperation::RPLO_Clear, ERenderPassStoreOperation::RPSO_Store, vec4(0.0f, 0.0f, 0.0f, -1.0f), 0, ERenderSortType::FrontToBack);
-
-		wstring debugPassName = L"Debug" + passName;
-		m_DebugPassID = RenderPassManager::Get().RegisterRenderPass(
-			debugPassName,
-			{ m_RenderTarget->GetName() },
-			m_DepthStencil->GetName(),     // Depth Buffer
-			ERenderPassLoadOperation::RPLO_Load,  // 매우 중요: 기존 화면(MainPass 결과) 유지
+		struct { const wchar_t* suffix; ETextureFormat fmt; } gBufferDefs[] = {
+					{ L"GBuffer_Diffuse",  ETextureFormat::R8G8B8A8_UNORM },
+					{ L"GBuffer_Normal",   ETextureFormat::R16G16B16A16_FLOAT },
+					{ L"GBuffer_PBR",      ETextureFormat::R8G8B8A8_UNORM },
+					{ L"GBuffer_Emission", ETextureFormat::R8G8B8A8_UNORM },
+					{ L"GBuffer_Position", ETextureFormat::R16G16B16A16_FLOAT },
+		};
+		vector<wstring> gBufferNames;
+		for (auto& def : gBufferDefs)
+		{
+			wstring name = prefix + def.suffix;
+			tagRenderTargetDesc rtDesc = {};
+			rtDesc.Name = name;
+			rtDesc.Width = w;
+			rtDesc.Height = h;
+			rtDesc.Format = def.fmt;
+			rtDesc.BindFlag = ERenderTargetBindFlag::RTBF_ShaderResource
+				| ERenderTargetBindFlag::RTBF_RenderTarget;
+			rtMgr.CreateRenderTarget(&rtDesc);
+			gBufferNames.push_back(name);
+			m_OwnedRTNames.push_back(name);
+		}
+		// ── Depth ──
+		wstring depthName = prefix + L"Depth";
+		tagRenderTargetDesc depthDesc = {};
+		depthDesc.Name = depthName;
+		depthDesc.Width = w;
+		depthDesc.Height = h;
+		depthDesc.Format = ETextureFormat::D24_UNORM_S8_UINT;
+		depthDesc.Type = ERenderTargetType::DepthStencil;
+		depthDesc.Usage = ETextureUsage::DepthStencilTarget;
+		depthDesc.BindFlag = ERenderTargetBindFlag::RTBF_ShaderResource
+			| ERenderTargetBindFlag::RTBF_DepthStencil;
+		rtMgr.CreateRenderTarget(&depthDesc);
+		m_OwnedRTNames.push_back(depthName);
+		// ── FinalColor ──
+		m_FinalColorName = prefix + L"FinalColor";
+		tagRenderTargetDesc finalDesc = {};
+		finalDesc.Name = m_FinalColorName;
+		finalDesc.Width = w;
+		finalDesc.Height = h;
+		finalDesc.ClearColor = vec4(0.5f, 0.f, 0.0f, 1.0f);
+		finalDesc.BindFlag = ERenderTargetBindFlag::RTBF_ShaderResource
+			| ERenderTargetBindFlag::RTBF_RenderTarget;
+		rtMgr.CreateRenderTarget(&finalDesc);
+		m_OwnedRTNames.push_back(m_FinalColorName);
+		// ── Pass 등록 ──
+		m_GeometryPassID = rpMgr.RegisterRenderPass(
+			prefix + L"GeometryPass",
+			gBufferNames, depthName,
+			ERenderPassLoadOperation::RPLO_Clear,
 			ERenderPassStoreOperation::RPSO_Store,
-			vec4(0.0f, 0.0f, 0.0f, 0.0f), 0,
-			ERenderSortType::None  // 선분은 정렬이 크게 필요 없음
-		);
+			vec4(0.0f, 0.f, 0.f, -1.f), 0, ERenderSortType::FrontToBack);
+		m_LightingPassID = rpMgr.RegisterRenderPass(
+			prefix + L"LightingPass",
+			{ m_FinalColorName }, L"",
+			ERenderPassLoadOperation::RPLO_Clear,
+			ERenderPassStoreOperation::RPSO_Store,
+			vec4(0.0f, 0.0f, 0.0f, -1.0f), 100, ERenderSortType::None);
+#ifdef _DEBUG
+		m_DebugPassID = rpMgr.RegisterRenderPass(
+			L"Debug" + prefix + L"Pass",
+			{ m_FinalColorName }, depthName,
+			ERenderPassLoadOperation::RPLO_Load,
+			ERenderPassStoreOperation::RPSO_Store,
+			vec4(0.0f), 500, ERenderSortType::None);
+#endif
+		m_DisplayRenderTargetName = gBufferNames[0]; // 초기: GBuffer_Diffuse
 	}
 
 	m_InspectorPanel = new InspectorPanel();
 	m_InspectorPanel->Close();
 	m_InspectorPanel->SetSelectedGameObject(m_EditorCamera);
 	m_Grid.Initialize();
+	
+
+	ResourceManager& rm = ResourceManager::Get();
+	tagRHIPipelineDesc pipelineDesc = {};
+	pipelineDesc.PipelineType = EPipelineType::Graphics;
+	pipelineDesc.VertexShader = rm.GetResourceHandle<Shader>(L"FullscreenQuadVS")->GetRHIShader();
+	pipelineDesc.PixelShader = rm.GetResourceHandle<Shader>(L"LightingPS")->GetRHIShader();
+	pipelineDesc.ColorAttachmentCount = 1;
+	pipelineDesc.ColorAttachmentFormats[0] = ETextureFormat::R8G8B8A8_UNORM;
+	pipelineDesc.DepthStencilAttachmentFormat = ETextureFormat::UNKNOWN;
+	pipelineDesc.DepthStencilState.DepthTestEnable = false;
+	pipelineDesc.DepthStencilState.DepthWriteEnable = false;
+	pipelineDesc.Topology = ETopology::TriangleList;
+	pipelineDesc.CullMode = ECullMode::None;
+	pipelineDesc.BlendMode = EBlendMode::Opaque;
+	m_LightingPipeline = PipelineManager::Get().GetOrCreatePipeline(pipelineDesc);
 }
 void ViewportPanel::Free()
 {
@@ -110,9 +165,10 @@ void ViewportPanel::Update(f32 dt)
 	m_EditorCamera->Update(dt);
 	m_EditorCamera->LateUpdate(dt);
 	m_IsOrthographic = !m_EditorCamera->GetCamera()->GetIsPerspective();
-	Renderer::Get().RegisterViewportCamera(m_EditorCamera->GetCamera(), m_PassID);
+	Renderer::Get().RegisterViewportCamera(m_EditorCamera->GetCamera(), m_GeometryPassID);
 	Renderer::Get().RegisterViewportCamera(m_EditorCamera->GetCamera(), m_DebugPassID);
-	m_Grid.SubmitGrid(m_PassID, m_IsOrthographic);
+	m_Grid.SubmitGrid(m_GeometryPassID, m_IsOrthographic);
+	SubmitLightingPass();
 }
 
 void ViewportPanel::Draw()
@@ -131,13 +187,14 @@ void ViewportPanel::Draw()
 		uint32 height = (uint32)panelSize.y;
 		f32 panelAspectRatio = (f32)width / (f32)height;
 
-		if (m_RenderTarget)
+		RenderTarget* currentRT = RenderTargetManager::Get().GetRenderTarget(m_DisplayRenderTargetName);
+		if (currentRT)
 		{
-			RHITexture* texture = m_RenderTarget->GetTexture();
+			RHITexture* texture = currentRT->GetTexture();
 			if (texture)
 			{
-				f32 imageWidth = (f32)m_RenderTarget->GetWidth();
-				f32 imageHeight = (f32)m_RenderTarget->GetHeight();
+				f32 imageWidth = (f32)currentRT->GetWidth();
+				f32 imageHeight = (f32)currentRT->GetHeight();
 
 				f32 imageRatio = imageWidth / imageHeight;
 
@@ -300,6 +357,47 @@ void ViewportPanel::DrawOptionsBar()
 
 		if (ImGui::BeginMenu("RenderTarget"))
 		{
+			// ── 1. 콤보박스: 이 뷰포트의 RT (짧은 이름) ──
+			wstring prefix = m_Name + L"_";
+			int currentIdx = 0;
+			vector<string> shortLabels;
+			for (int i = 0; i < m_OwnedRTNames.size(); ++i)
+			{
+				wstring shortW = m_OwnedRTNames[i];
+				if (shortW.find(prefix) == 0)
+					shortW = shortW.substr(prefix.size());
+				shortLabels.push_back(WStrToStr(shortW));
+				if (m_OwnedRTNames[i] == m_DisplayRenderTargetName)
+					currentIdx = i;
+			}
+			// 현재 선택이 OwnedRT가 아니면 "Other" 표시
+			const char* preview = currentIdx < shortLabels.size()
+				? shortLabels[currentIdx].c_str() : "Other";
+			if (ImGui::BeginCombo("##RTSelect", preview))
+			{
+				for (int i = 0; i < shortLabels.size(); ++i)
+				{
+					bool selected = (m_OwnedRTNames[i] == m_DisplayRenderTargetName);
+					if (ImGui::Selectable(shortLabels[i].c_str(), selected))
+						m_DisplayRenderTargetName = m_OwnedRTNames[i];
+					if (selected)
+						ImGui::SetItemDefaultFocus();
+				}
+				ImGui::EndCombo();
+			}
+			// ── 2. 접힌 메뉴: 전체 RT (풀 이름) ──
+			if (ImGui::BeginMenu("All RenderTargets"))
+			{
+				auto allNames = RenderTargetManager::Get().GetAllRenderTargetNames();
+				for (const auto& name : allNames)
+				{
+					string label = WStrToStr(name);
+					bool selected = (name == m_DisplayRenderTargetName);
+					if (ImGui::MenuItem(label.c_str(), nullptr, selected))
+						m_DisplayRenderTargetName = name;
+				}
+				ImGui::EndMenu();
+			}
 			ImGui::EndMenu();
 		}
 
@@ -386,7 +484,8 @@ void ViewportPanel::DrawDimensionToggleButton()
 #pragma region Input
 void ViewportPanel::MouseInput(const ImVec2& mousePos, const ImVec2& imageMin, const ImVec2& imageSize)
 {
-	if (MOUSE_BUTTON_DOWN(Engine::EMouseButton::Left) && ImGui::IsWindowHovered() && !ImGuizmo::IsOver())
+	if (MOUSE_BUTTON_DOWN(Engine::EMouseButton::Left) &&
+		ImGui::IsWindowHovered() && !ImGui::IsAnyItemHovered() && !ImGuizmo::IsOver())
 	{
 		Ray mouseRay = ScreenPosToRay(mousePos, imageMin, imageSize);
 		SelectionManager& selectionManager = SelectionManager::Get();
@@ -456,5 +555,45 @@ Ray ViewportPanel::ScreenPosToRay(const ImVec2& mousePos, const ImVec2& imageMin
 	cout << "Ray Direction: " << ray.Direction.x << ", " << ray.Direction.y << ", " << ray.Direction.z << endl;
 
 	return ray;
+}
+#pragma endregion
+
+#pragma region Rendering
+void ViewportPanel::SubmitLightingPass()
+{
+	Renderer::Get().SubmitCustomCommand(
+		[this](f32 dt, RenderPass* pass) -> EResult
+		{
+			auto* rhi = Renderer::Get().GetRHI();
+			auto& rtMgr = RenderTargetManager::Get();
+			auto& smMgr = SamplerManager::Get();
+			RHISampler* sampler = smMgr.GetDefaultSampler();
+			wstring prefix = m_Name + L"_";
+			tagCameraBuffer camBuf = m_EditorCamera->GetCamera()->GetCameraBuffer();
+			camBuf.time = dt;
+			rhi->BindConstantBuffer(&camBuf, sizeof(tagCameraBuffer), 0);
+			rhi->BindConstantBuffer(&camBuf, sizeof(tagCameraBuffer), 3);
+			rhi->BindTextureSampler(
+				rtMgr.GetRenderTarget(prefix + L"GBuffer_Diffuse")->GetTexture(),
+				sampler, 0);
+			rhi->BindTextureSampler(
+				rtMgr.GetRenderTarget(prefix + L"GBuffer_Normal")->GetTexture(),
+				sampler, 1);
+			rhi->BindTextureSampler(
+				rtMgr.GetRenderTarget(prefix + L"GBuffer_PBR")->GetTexture(),
+				sampler, 2);
+			rhi->BindTextureSampler(
+				rtMgr.GetRenderTarget(prefix + L"GBuffer_Emission")->GetTexture(),
+				sampler, 3);
+			rhi->BindTextureSampler(
+				rtMgr.GetRenderTarget(prefix + L"GBuffer_Position")->GetTexture(),
+				sampler, 4);
+			// Lighting 파이프라인 바인딩
+			rhi->BindPipeline(m_LightingPipeline);
+			// 풀스크린 삼각형 (버텍스 버퍼 없이 3개 그리기)
+			rhi->Draw(3);
+			return EResult::Success;
+		},
+		m_LightingPassID);
 }
 #pragma endregion

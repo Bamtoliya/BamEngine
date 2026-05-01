@@ -47,7 +47,6 @@ public:
 #pragma region Loop
 public:
 	void RunFrame(f32 dt);
-private:
 	void FixedUpdate(f32 dt);
 	void Update(f32 dt);
 	void LateUpdate(f32 dt);

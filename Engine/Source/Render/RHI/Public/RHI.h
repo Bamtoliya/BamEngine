@@ -108,6 +108,7 @@ public:
     virtual EResult DrawIndexed(uint32 count) BAM_PURE;
     virtual EResult DrawIndexedInstanced() BAM_PURE;
     virtual EResult DrawTexture(RHITexture* texture) BAM_PURE;
+    virtual EResult BlitTexture(class RHITexture* src, class RHITexture* dst) { return EResult::NotImplemented; }
 #pragma endregion
 
 #pragma region Setter

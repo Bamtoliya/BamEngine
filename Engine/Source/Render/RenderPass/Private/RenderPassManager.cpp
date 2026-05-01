@@ -25,7 +25,7 @@ RenderPassID RenderPassManager::RegisterRenderPass(const wstring& name, vector<w
 	ERenderPassLoadOperation loadOperation,
 	ERenderPassStoreOperation storeOperation,
 	vec4 overrideClearColor,
-	uint32 priority, ERenderSortType sortType)
+	uint32 priority, ERenderSortType sortType, ERenderPassType passType)
 {
 	tagRenderPassDesc newPass = {};
 	newPass.ID = m_NextRenderPassID++;
@@ -37,6 +37,8 @@ RenderPassID RenderPassManager::RegisterRenderPass(const wstring& name, vector<w
 	newPass.LoadOperation = loadOperation;
 	newPass.StoreOperation = storeOperation;
 	newPass.OverrideClearColor = overrideClearColor;
+	newPass.PassType = passType;
+
 	RenderPass* pass = RenderPass::Create(&newPass);
 	m_RenderPasses.push_back(pass);
 	SortRenderPasses();

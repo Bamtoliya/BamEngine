@@ -33,6 +33,7 @@ public:
 	const ERenderPassStoreOperation GetStencilStoreOperation() const { return m_Desc.StencilStoreOperation; }	
 	const vec4& GetOverrideClearColor() const { return m_Desc.OverrideClearColor; }
 	bool HasOverrideClearColor() const { return m_Desc.OverrideClearColor.a >= 0.0f; }
+	const ERenderPassType GetPassType() const { return m_Desc.PassType; }
 #pragma endregion
 
 

@@ -116,8 +116,8 @@ private:
 	map<RenderPassID, RenderDelegate> m_RenderPassDelegates;
 	map<RenderPassID, vector<class RenderComponent*>> m_RenderQueues;
 	map<RenderPassID, vector<CustomRenderCommand>> m_CustomRenderQueues;
-	RenderTarget* m_SceneBuffer = { nullptr };
-	RenderTarget* m_DepthBuffer = { nullptr };
+	//RenderTarget* m_SceneBuffer = { nullptr };
+	//RenderTarget* m_DepthBuffer = { nullptr };
 private:
 	class RenderPassManager* m_RenderPassManager = { nullptr };
 private:

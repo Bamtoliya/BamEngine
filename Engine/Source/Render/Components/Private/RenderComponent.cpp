@@ -49,7 +49,8 @@ void RenderComponent::LateUpdate(f32 dt)
 		const auto& activePasses = Renderer::Get().GetActiveViewportCameras();
 		for (const auto& passInfo : activePasses)
 		{
-			Renderer::Get().Submit(this, passInfo.PassID);
+			if(passInfo.Camera)
+				Renderer::Get().Submit(this, passInfo.PassID);
 		}
 	}
 }

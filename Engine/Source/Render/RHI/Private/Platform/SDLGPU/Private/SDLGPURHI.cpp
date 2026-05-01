@@ -895,4 +895,19 @@ EResult SDLGPURHI::DrawTexture(RHITexture* texture)
 	return EResult::Success;
 }
 
+EResult SDLGPURHI::BlitTexture(RHITexture* src, RHITexture* dst)
+{
+	if(!src || !dst || !m_CurrentCommandBuffer) return EResult::Fail;
+	SDL_GPUBlitInfo blitInfo = {};
+	blitInfo.source.texture = static_cast<SDL_GPUTexture*>(src->GetNativeHandle());
+	blitInfo.source.w = src->GetWidth();
+	blitInfo.source.h = src->GetHeight();
+	blitInfo.destination.texture = static_cast<SDL_GPUTexture*>(dst->GetNativeHandle());
+	blitInfo.destination.w = dst->GetWidth();
+	blitInfo.destination.h = dst->GetHeight();
+	blitInfo.filter = SDL_GPU_FILTER_LINEAR;
+	SDL_BlitGPUTexture(m_CurrentCommandBuffer, &blitInfo);
+	return EResult::Success;
+}
+
 #pragma endregion

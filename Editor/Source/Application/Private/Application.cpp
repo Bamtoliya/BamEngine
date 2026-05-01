@@ -44,6 +44,9 @@ EResult Application::Initialize(void* arg)
 	imguiDesc.Window = m_Window;
     imguiDesc.RHI = Renderer::Get().GetRHI();
 
+    IntializeRenderer();
+    InitializeResources();
+
     m_ImGuiManager = ImGuiManager::Create(&imguiDesc);
     m_SelectionManager = SelectionManager::Create();
     if (!m_ImGuiManager)
@@ -52,18 +55,15 @@ EResult Application::Initialize(void* arg)
 		return EResult::Fail;
     }
 
-    RenderPassID uiPassID = RenderPassManager::Get().RegisterRenderPass(L"Editor UI", {L"RenderTarget_1"}, L"", ERenderPassLoadOperation::RPLO_Load, ERenderPassStoreOperation::RPSO_Store, vec4(0.0f, 0.0f, 0.0f, -1.0f), 1000, ERenderSortType::None);
+
+    RenderPassID uiPassID = RenderPassManager::Get().RegisterRenderPass(L"Editor UI", {L"FinalColor"}, L"", ERenderPassLoadOperation::RPLO_Load, ERenderPassStoreOperation::RPSO_Store, vec4(0.0f, 0.0f, 0.0f, -1.0f), 1000, ERenderSortType::None);
     DelegateHandle uiHandle = Renderer::Get().GetRenderPassDelegate(uiPassID).AddLambda([](f32 dt) {
         ImGuiManager::Get().Begin();
         ImGuiManager::Get().Draw();
         ImGuiManager::Get().End();
         });
     InitializeLocalization();
-    InitializeResources();
-    //Renderer::Get().GetRenderPassDelegate(uiPassID).Remove(uiHandle);
-
-	
-
+    
     return EResult::Success;
 }
 
@@ -93,13 +93,15 @@ void Application::InitializeLocalization()
 #pragma region Resources
 void Application::InitializeResources()
 {
-	ResourceManager& resourceManager = ResourceManager::Get();
+    InitializeFiles();
+    InitializeShaders();
+    InitializeMeshes();
+    InitializeMaterials();
+}
 
-    //m_AssetManager->Import(L"Resources/Shader/default.vert.spv");
-    //m_AssetManager->Import(L"Resources/Shader/default.frag.spv");
-    //m_AssetManager->Import(L"Resources/Shader/sprite.vert.spv");
-    //m_AssetManager->Import(L"Resources/Shader/sprite.frag.spv");
-#pragma region Basic Textures
+void Application::InitializeFiles()
+{
+    ResourceManager& resourceManager = ResourceManager::Get();
     wstring resourcesToLoad[] =
     {
         //Texture
@@ -109,7 +111,7 @@ void Application::InitializeResources()
         L"Resources/Texture/magenta1x1.png",
         L"Resources/Texture/green1x1.png",
         L"Resources/Texture/blue1x1.png",
-		L"Resources/Texture/uv1.bamtex",
+        L"Resources/Texture/uv1.bamtex",
 
         ///Sprite
         L"Resources/Texture/uv1.bamsprite",
@@ -124,74 +126,43 @@ void Application::InitializeResources()
         L"Resources/Material/DefaultMaterial.bammat",
         L"Resources/Material/SpriteMaterial.bammat",
 
-		//MaterialInstance
+        //MaterialInstance
         L"Resources/Material/SpriteMaterial.bammatinst",
 
         //Mesh
-		//L"Resources/Model/Cube2_Cube.bammesh",
+        //L"Resources/Model/Cube2_Cube.bammesh",
     };
 
     for (const auto& path : resourcesToLoad)
     {
-		resourceManager.LoadFile(path);
+        resourceManager.LoadFile(path);
     }
-	//tagMaterialDesc defaultMaterialDesc = {};
-	//defaultMaterialDesc.Key = L"Resources/Material/DefaultMaterial";
-	//defaultMaterialDesc.VertexShaderHandle = resourceManager.GetResourceHandle<Shader>(L"Resources/Shader/default.vert.bamshader");
-	//defaultMaterialDesc.PixelShaderHandle = resourceManager.GetResourceHandle<Shader>(L"Resources/Shader/default.frag.bamshader");
-    //Material* material = resourceManager.LoadResource<Material>(&defaultMaterialDesc).Get();
-    //material->SetTextureBinding("Default", 0, resourceManager.GetResourceHandle<Texture>(L"Resources/Texture/magenta1x1.png"));
-	//resourceManager.SaveToBinaryFile(material, L"Resources/Material/DefaultMaterial.bammat");
-    //
-    tagMaterialDesc spriteMaterialDesc = {};
-    spriteMaterialDesc.Key = L"Resources/Material/SpriteMaterial";
-    spriteMaterialDesc.VertexShaderHandle = resourceManager.GetResourceHandle<Shader>(L"Resources/Shader/sprite.vert.bamshader");
-    spriteMaterialDesc.PixelShaderHandle = resourceManager.GetResourceHandle<Shader>(L"Resources/Shader/sprite.frag.bamshader");
-    spriteMaterialDesc.BlendMode = EBlendMode::AlphaBlend;
-    spriteMaterialDesc.CullMode = ECullMode::None;
-    spriteMaterialDesc.DepthMode = EDepthMode::ReadWrite;
-    Material* spriteMaterial = resourceManager.LoadResource<Material>(&spriteMaterialDesc).Get();
-    resourceManager.SaveToBinaryFile(spriteMaterial, L"Resources/Material/SpriteMaterial.bammat");
+}
 
-	tagMaterialInstanceDesc spriteMaterialInstanceDesc = {};
-	spriteMaterialInstanceDesc.BaseMaterialHandle = resourceManager.GetResourceHandle<Material>(L"Resources/Material/SpriteMaterial.bammat");
-	spriteMaterialInstanceDesc.Key = L"Resources/Material/SpriteMaterialInstance";
-	ResourceHandle<MaterialInstance> spriteMaterialInstanceHandle = resourceManager.LoadResource<MaterialInstance>(&spriteMaterialInstanceDesc);
-	MaterialInstance* spriteMaterialInstance = spriteMaterialInstanceHandle.Get();
-	resourceManager.SaveToBinaryFile(spriteMaterialInstance, L"Resources/Material/SpriteMaterial.bammatinst");
-	//resourceManager.DestroyResource(spriteMaterialInstanceHandle.GetRawHandle());
+void Application::InitializeShaders()
+{
+    ResourceManager& rm = ResourceManager::Get();
+    // Fullscreen Quad VS
+    tagShaderDesc fsQuadVsDesc = {};
+    fsQuadVsDesc.Key = L"FullscreenQuadVS";
+    fsQuadVsDesc.ShaderType = EShaderType::Vertex;
+    fsQuadVsDesc.Path = L"Resources/Shader/fullscreen_quad.vert.spv";
+    fsQuadVsDesc.SpirvPath = L"Resources/Shader/fullscreen_quad.vert.spv";
+    fsQuadVsDesc.EntryPoint = "main";
+    rm.LoadResource<Shader>(&fsQuadVsDesc);
+    // Lighting PS
+    tagShaderDesc lightingPsDesc = {};
+    lightingPsDesc.Key = L"LightingPS";
+    lightingPsDesc.ShaderType = EShaderType::Pixel;
+    lightingPsDesc.Path = L"Resources/Shader/lighting.frag.spv";
+    lightingPsDesc.SpirvPath = L"Resources/Shader/lighting.frag.spv";
+    lightingPsDesc.EntryPoint = "main";
+    rm.LoadResource<Shader>(&lightingPsDesc);
+}
 
-
-	tagShaderDesc defaultSkinningShaderDesc = {};
-	defaultSkinningShaderDesc.Key = L"Resources/Shader/Skinning";
-	defaultSkinningShaderDesc.Path = L"Resources/Shader/skinning.vert.spv";
-	defaultSkinningShaderDesc.SpirvPath = L"Resources/Shader/skinning.vert.spv";
-	defaultSkinningShaderDesc.ShaderType = EShaderType::Vertex;
-    defaultSkinningShaderDesc.NumStorageBuffers = 1;
-    Shader* skinningShader = resourceManager.LoadResource<Shader>(&defaultSkinningShaderDesc).Get();
-	resourceManager.SaveToBinaryFile(skinningShader, L"Resources/Shader/skinning.vert.bamshader");
-	resourceManager.LoadFile(L"Resources/Shader/skinning.vert.bamshader");
-
-	tagMaterialDesc skinningMaterialDesc = {};
-	skinningMaterialDesc.Key = L"Resources/Material/SkinningMaterial";
-    skinningMaterialDesc.VertexShaderHandle = resourceManager.GetResourceHandle<Shader>(L"Resources/Shader/skinning.vert.bamshader");
-    skinningMaterialDesc.PixelShaderHandle = resourceManager.GetResourceHandle<Shader>(L"Resources/Shader/default.frag.bamshader");
-    skinningMaterialDesc.BlendMode = EBlendMode::AlphaBlend;
-    skinningMaterialDesc.CullMode = ECullMode::None;
-    skinningMaterialDesc.DepthMode = EDepthMode::ReadWrite;
-	Material* skinningMaterial = resourceManager.LoadResource<Material>(&skinningMaterialDesc).Get();
-	resourceManager.SaveToBinaryFile(skinningMaterial, L"Resources/Material/SkinningMaterial.bammat");
-	resourceManager.LoadFile(L"Resources/Material/SkinningMaterial.bammat");
-
-	tagMaterialInstanceDesc skinningMaterialInstanceDesc = {};
-	skinningMaterialInstanceDesc.BaseMaterialHandle = resourceManager.GetResourceHandle<Material>(L"Resources/Material/SkinningMaterial.bammat");
-	skinningMaterialInstanceDesc.Key = L"Resources/Material/SkinningMaterialInstance";
-	MaterialInstance* skinningMaterialInstance = resourceManager.LoadResource<MaterialInstance>(&skinningMaterialInstanceDesc).Get();
-	resourceManager.SaveToBinaryFile(skinningMaterialInstance, L"Resources/Material/SkinningMaterial.bammatinst");
-	resourceManager.LoadFile(L"Resources/Material/SkinningMaterial.bammatinst");
-
-#pragma endregion
-
+void Application::InitializeMeshes()
+{
+    ResourceManager& resourceManager = ResourceManager::Get();
 #pragma region Quad
     {
         vector<VertexPosition> positions = {
@@ -298,11 +269,102 @@ void Application::InitializeResources()
         resourceManager.AddResource<Mesh>(L"CubeMesh", Mesh::Create(&meshDesc));
     }
 #pragma endregion
+}
+
+void Application::InitializeMaterials()
+{
+    ResourceManager& resourceManager = ResourceManager::Get();
+#pragma region Basic Materials
+
+    //tagMaterialDesc defaultMaterialDesc = {};
+    //defaultMaterialDesc.Key = L"Resources/Material/DefaultMaterial";
+    //defaultMaterialDesc.VertexShaderHandle = resourceManager.GetResourceHandle<Shader>(L"Resources/Shader/default.vert.bamshader");
+    //defaultMaterialDesc.PixelShaderHandle = resourceManager.GetResourceHandle<Shader>(L"Resources/Shader/default.frag.bamshader");
+    //Material* material = resourceManager.LoadResource<Material>(&defaultMaterialDesc).Get();
+    //material->SetTextureBinding("Default", 0, resourceManager.GetResourceHandle<Texture>(L"Resources/Texture/magenta1x1.png"));
+    //resourceManager.SaveToBinaryFile(material, L"Resources/Material/DefaultMaterial.bammat");
+    //
+    tagMaterialDesc spriteMaterialDesc = {};
+    spriteMaterialDesc.Key = L"Resources/Material/SpriteMaterial";
+    spriteMaterialDesc.VertexShaderHandle = resourceManager.GetResourceHandle<Shader>(L"Resources/Shader/sprite.vert.bamshader");
+    spriteMaterialDesc.PixelShaderHandle = resourceManager.GetResourceHandle<Shader>(L"Resources/Shader/sprite.frag.bamshader");
+    spriteMaterialDesc.BlendMode = EBlendMode::AlphaBlend;
+    spriteMaterialDesc.CullMode = ECullMode::None;
+    spriteMaterialDesc.DepthMode = EDepthMode::ReadWrite;
+    Material* spriteMaterial = resourceManager.LoadResource<Material>(&spriteMaterialDesc).Get();
+    resourceManager.SaveToBinaryFile(spriteMaterial, L"Resources/Material/SpriteMaterial.bammat");
+
+    tagMaterialInstanceDesc spriteMaterialInstanceDesc = {};
+    spriteMaterialInstanceDesc.BaseMaterialHandle = resourceManager.GetResourceHandle<Material>(L"Resources/Material/SpriteMaterial.bammat");
+    spriteMaterialInstanceDesc.Key = L"Resources/Material/SpriteMaterialInstance";
+    ResourceHandle<MaterialInstance> spriteMaterialInstanceHandle = resourceManager.LoadResource<MaterialInstance>(&spriteMaterialInstanceDesc);
+    MaterialInstance* spriteMaterialInstance = spriteMaterialInstanceHandle.Get();
+    resourceManager.SaveToBinaryFile(spriteMaterialInstance, L"Resources/Material/SpriteMaterial.bammatinst");
+    //resourceManager.DestroyResource(spriteMaterialInstanceHandle.GetRawHandle());
 
 
-#ifdef _DEBUG
-	
-#endif
+    tagShaderDesc defaultSkinningShaderDesc = {};
+    defaultSkinningShaderDesc.Key = L"Resources/Shader/Skinning";
+    defaultSkinningShaderDesc.Path = L"Resources/Shader/skinning.vert.spv";
+    defaultSkinningShaderDesc.SpirvPath = L"Resources/Shader/skinning.vert.spv";
+    defaultSkinningShaderDesc.ShaderType = EShaderType::Vertex;
+    defaultSkinningShaderDesc.NumStorageBuffers = 1;
+    Shader* skinningShader = resourceManager.LoadResource<Shader>(&defaultSkinningShaderDesc).Get();
+    resourceManager.SaveToBinaryFile(skinningShader, L"Resources/Shader/skinning.vert.bamshader");
+    resourceManager.LoadFile(L"Resources/Shader/skinning.vert.bamshader");
+
+    tagMaterialDesc skinningMaterialDesc = {};
+    skinningMaterialDesc.Key = L"Resources/Material/SkinningMaterial";
+    skinningMaterialDesc.VertexShaderHandle = resourceManager.GetResourceHandle<Shader>(L"Resources/Shader/skinning.vert.bamshader");
+    skinningMaterialDesc.PixelShaderHandle = resourceManager.GetResourceHandle<Shader>(L"Resources/Shader/default.frag.bamshader");
+    skinningMaterialDesc.BlendMode = EBlendMode::AlphaBlend;
+    skinningMaterialDesc.CullMode = ECullMode::None;
+    skinningMaterialDesc.DepthMode = EDepthMode::ReadWrite;
+    Material* skinningMaterial = resourceManager.LoadResource<Material>(&skinningMaterialDesc).Get();
+    resourceManager.SaveToBinaryFile(skinningMaterial, L"Resources/Material/SkinningMaterial.bammat");
+    resourceManager.LoadFile(L"Resources/Material/SkinningMaterial.bammat");
+
+    tagMaterialInstanceDesc skinningMaterialInstanceDesc = {};
+    skinningMaterialInstanceDesc.BaseMaterialHandle = resourceManager.GetResourceHandle<Material>(L"Resources/Material/SkinningMaterial.bammat");
+    skinningMaterialInstanceDesc.Key = L"Resources/Material/SkinningMaterialInstance";
+    MaterialInstance* skinningMaterialInstance = resourceManager.LoadResource<MaterialInstance>(&skinningMaterialInstanceDesc).Get();
+    resourceManager.SaveToBinaryFile(skinningMaterialInstance, L"Resources/Material/SkinningMaterial.bammatinst");
+    resourceManager.LoadFile(L"Resources/Material/SkinningMaterial.bammatinst");
+#pragma endregion
+
+    tagShaderDesc gbufferVsDesc = {};
+    gbufferVsDesc.Key = L"Resources/Shader/GBufferVS";
+    gbufferVsDesc.Path = L"Resources/Shader/gbuffer.vert.spv";
+    gbufferVsDesc.SpirvPath = L"Resources/Shader/gbuffer.vert.spv";
+    gbufferVsDesc.ShaderType = EShaderType::Vertex;
+    resourceManager.LoadResource<Shader>(&gbufferVsDesc);
+    resourceManager.SaveToBinaryFile(
+        resourceManager.GetResourceHandle<Shader>(gbufferVsDesc.Key).Get(),
+        L"Resources/Shader/gbuffer.vert.bamshader");
+    resourceManager.LoadFile(L"Resources/Shader/gbuffer.vert.bamshader");
+    tagShaderDesc gbufferPsDesc = {};
+    gbufferPsDesc.Key = L"Resources/Shader/GBufferPS";
+    gbufferPsDesc.Path = L"Resources/Shader/gbuffer.frag.spv";
+    gbufferPsDesc.SpirvPath = L"Resources/Shader/gbuffer.frag.spv";
+    gbufferPsDesc.ShaderType = EShaderType::Pixel;
+    resourceManager.LoadResource<Shader>(&gbufferPsDesc);
+    resourceManager.SaveToBinaryFile(
+        resourceManager.GetResourceHandle<Shader>(gbufferPsDesc.Key).Get(),
+        L"Resources/Shader/gbuffer.frag.bamshader");
+    resourceManager.LoadFile(L"Resources/Shader/gbuffer.frag.bamshader");
+    // ── G-Buffer Material 생성 ──
+    tagMaterialDesc gbufferMatDesc = {};
+    gbufferMatDesc.Key = L"Resources/Material/GBufferMaterial";
+    gbufferMatDesc.VertexShaderHandle = resourceManager.GetResourceHandle<Shader>(
+        L"Resources/Shader/gbuffer.vert.bamshader");
+    gbufferMatDesc.PixelShaderHandle = resourceManager.GetResourceHandle<Shader>(
+        L"Resources/Shader/gbuffer.frag.bamshader");
+    gbufferMatDesc.BlendMode = EBlendMode::Opaque;
+    gbufferMatDesc.CullMode = ECullMode::Back;
+    gbufferMatDesc.DepthMode = EDepthMode::ReadWrite;
+    Material* gbufferMat = resourceManager.LoadResource<Material>(&gbufferMatDesc).Get();
+    resourceManager.SaveToBinaryFile(gbufferMat, L"Resources/Material/GBufferMaterial.bammat");
+    resourceManager.LoadFile(L"Resources/Material/GBufferMaterial.bammat");
 }
 
 #pragma endregion
@@ -310,7 +372,45 @@ void Application::InitializeResources()
 #pragma region Rendering
 void Application::IntializeRenderer()
 {
+    auto& rtMgr = RenderTargetManager::Get();
+    auto* rhi = Renderer::Get().GetRHI();
+    uint32 w = rhi->GetSwapChainWidth();
+    uint32 h = rhi->GetSwapChainHeight();
+    // ── 에디터 최종 출력용 RT (ImGui가 여기에 렌더) ──
+    tagRenderTargetDesc finalDesc = {};
+    finalDesc.Name = L"FinalColor";
+    finalDesc.Width = w;
+    finalDesc.Height = h;
+    finalDesc.BindFlag = ERenderTargetBindFlag::RTBF_ShaderResource
+        | ERenderTargetBindFlag::RTBF_RenderTarget;
+    rtMgr.CreateRenderTarget(&finalDesc);
 
+}
+void Application::SubmitRenderPasses()
+{
+    //Renderer::Get().SubmitCustomCommand([](f32 dt, RenderPass* pass) -> EResult
+    //    {
+    //        auto* rhi = Renderer::Get().GetRHI();
+    //        auto& rtMgr = RenderTargetManager::Get();
+    //        RHISampler* sampler = SamplerManager::Get().GetDefaultSampler();
+    //        rhi->BindTextureSampler(
+    //            rtMgr.GetRenderTarget(L"GBuffer_Diffuse")->GetTexture(),
+    //            sampler, 0);
+    //        rhi->BindTextureSampler(
+    //            rtMgr.GetRenderTarget(L"GBuffer_Normal")->GetTexture(),
+    //            sampler, 1);
+    //        rhi->BindTextureSampler(
+    //            rtMgr.GetRenderTarget(L"GBuffer_PBR")->GetTexture(),
+    //            sampler, 2);
+    //        rhi->BindTextureSampler(
+    //            rtMgr.GetRenderTarget(L"GBuffer_Emission")->GetTexture(),
+    //            sampler, 3);
+    //        rhi->BindTextureSampler(
+    //            rtMgr.GetRenderTarget(L"GBuffer_Position")->GetTexture(),
+    //            sampler, 4);
+
+    //        return EResult::Success;
+    //    }, m_LightingPassID);
 }
 #pragma endregion
 
@@ -347,7 +447,11 @@ void Application::Run(int argc, char* argv[])
 		UpdateTitle(dt);
 		ImGuiManager::Get().Update(dt);
 		m_AssetManager->Update(dt);
-		m_Runtime->RunFrame(dt);
+		//m_Runtime->RunFrame(dt);
+        m_Runtime->FixedUpdate(dt);
+        m_Runtime->Update(dt);
+        m_Runtime->LateUpdate(dt);
+		m_Runtime->Render(dt);
     }
 }
 

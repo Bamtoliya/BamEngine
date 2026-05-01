@@ -18,11 +18,16 @@ public:
 
 #pragma region RenderPass Management
 public:
-	RenderPassID RegisterRenderPass(const wstring& name, vector<wstring> renderTargetNames, const wstring& depthstencilName,
+	RenderPassID RegisterRenderPass(
+		const wstring& name,
+		vector<wstring> renderTargetNames,
+		const wstring& depthstencilName,
 		ERenderPassLoadOperation loadOperation = ERenderPassLoadOperation::RPLO_Load,
 		ERenderPassStoreOperation storeOperation = ERenderPassStoreOperation::RPSO_Store,
 		vec4 overrideClearColor = vec4(0.0f, 0.0f, 0.0f, -1.0f),
-		uint32 priority = 0, ERenderSortType sortType = ERenderSortType::None);
+		uint32 priority = 0,
+		ERenderSortType sortType = ERenderSortType::None,
+		ERenderPassType passType = ERenderPassType::Custom);
 	RenderPassID GetRenderPassIDByName(const wstring& name);
 	const vector<RenderPass*>& GetAllRenderPasses() const { return m_RenderPasses; }
 private:

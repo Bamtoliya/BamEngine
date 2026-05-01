@@ -63,25 +63,29 @@ EResult Runtime::Initialize(void* arg)
 
 void Runtime::Free()
 {
+	// ── 1. 게임 로직 (RHI 무관) ──
 	TimeManager::Destroy();
 	InputManager::Destroy();
-
-	PrototypeManager::Destroy();
-
-	LayerManager::Destroy();
-	SceneManager::Destroy();
-
-	ComponentRegistry::Destroy();
 	CollisionManager::Destroy();
 	LocalizationManager::Destroy();
+	ComponentRegistry::Destroy();
 
+	// ── 2. 씬 (Component가 Pipeline/Buffer 참조) ──
+	SceneManager::Destroy();
+	LayerManager::Destroy();
+	PrototypeManager::Destroy();
+
+	// ── 3. 리소스 (RHI 리소스: Mesh, Texture, Shader) ──
+	CameraManager::Destroy();
 	ResourceManager::Destroy();
 
-	CameraManager::Destroy();
+	// ── 4. 렌더링 인프라 (RHI 리소스) ──
 	SamplerManager::Destroy();
 	PipelineManager::Destroy();
 	RenderTargetManager::Destroy();
 	RenderPassManager::Destroy();
+
+	// ── 5. RHI (GPU Device) — 가장 마지막 ──
 	Renderer::Destroy();
 }
 #pragma endregion

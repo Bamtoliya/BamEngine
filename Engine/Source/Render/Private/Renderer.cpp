@@ -44,27 +44,24 @@ EResult Renderer::Initialize(void* arg)
 	
 	if (!m_RHI) return EResult::Fail;
 
-	tagRenderTargetDesc rtDesc = {};
-	rtDesc.Width = desc->RHIDesc.Width;
-	rtDesc.Height = desc->RHIDesc.Height;
-	rtDesc.BindFlag = ERenderTargetBindFlag::RTBF_ShaderResource | ERenderTargetBindFlag::RTBF_RenderTarget;
-	m_SceneBuffer = RenderTargetManager::Get().CreateRenderTarget(&rtDesc);
-	tagRenderTargetDesc depthStencilDesc = {};
-	depthStencilDesc.Width = desc->RHIDesc.Width;
-	depthStencilDesc.Height = desc->RHIDesc.Height;
-	depthStencilDesc.Type = ERenderTargetType::DepthStencil;
-	depthStencilDesc.Usage = ETextureUsage::DepthStencilTarget;
-	depthStencilDesc.BindFlag = ERenderTargetBindFlag::RTBF_ShaderResource | ERenderTargetBindFlag::RTBF_DepthStencil | ERenderTargetBindFlag::RTBF_RenderTarget;
-	depthStencilDesc.Format = ETextureFormat::D24_UNORM_S8_UINT;
-	m_DepthBuffer = RenderTargetManager::Get().CreateRenderTarget(&depthStencilDesc);
-	RenderPassManager::Get().RegisterRenderPass(L"MainPass", { L"RenderTarget_1" }, L"RenderTarget_2", ERenderPassLoadOperation::RPLO_Clear, ERenderPassStoreOperation::RPSO_Store, vec4(0.0f, 0.0f, 0.0f, -1.0f), 0, ERenderSortType::FrontToBack);
-
-	if (!m_SceneBuffer) return EResult::Fail;
+	//tagRenderTargetDesc rtDesc = {};
+	//rtDesc.Width = desc->RHIDesc.Width;
+	//rtDesc.Height = desc->RHIDesc.Height;
+	//rtDesc.BindFlag = ERenderTargetBindFlag::RTBF_ShaderResource | ERenderTargetBindFlag::RTBF_RenderTarget;
+	//m_SceneBuffer = RenderTargetManager::Get().CreateRenderTarget(&rtDesc);
+	//tagRenderTargetDesc depthStencilDesc = {};
+	//depthStencilDesc.Width = desc->RHIDesc.Width;
+	//depthStencilDesc.Height = desc->RHIDesc.Height;
+	//depthStencilDesc.Type = ERenderTargetType::DepthStencil;
+	//depthStencilDesc.Usage = ETextureUsage::DepthStencilTarget;
+	//depthStencilDesc.BindFlag = ERenderTargetBindFlag::RTBF_ShaderResource | ERenderTargetBindFlag::RTBF_DepthStencil | ERenderTargetBindFlag::RTBF_RenderTarget;
+	//depthStencilDesc.Format = ETextureFormat::D24_UNORM_S8_UINT;
+	//m_DepthBuffer = RenderTargetManager::Get().CreateRenderTarget(&depthStencilDesc);
+	//RenderPassManager::Get().RegisterRenderPass(L"MainPass", { L"RenderTarget_1" }, L"RenderTarget_2", ERenderPassLoadOperation::RPLO_Clear, ERenderPassStoreOperation::RPSO_Store, vec4(0.0f, 0.0f, 0.0f, -1.0f), 0, ERenderSortType::FrontToBack);
+	//if (!m_SceneBuffer) return EResult::Fail;
 
 
 #ifdef _DEBUG
-
-	TODO("ResourceManager::Get().LoadResource<Shader>(tag or path, args) need to be create");
 	ResourceManager& rm = ResourceManager::Get();
 	tagShaderDesc debugLineVsDesc;
 	debugLineVsDesc.ShaderType = EShaderType::Vertex;
@@ -104,11 +101,12 @@ EResult Renderer::Initialize(void* arg)
 void Renderer::Free()
 {	
 	m_RenderPassManager = nullptr;
-	Safe_Release(m_SceneBuffer);
-	Safe_Release(m_DepthBuffer);
+	//Safe_Release(m_SceneBuffer);
+	//Safe_Release(m_DepthBuffer);
 #ifdef _DEBUG
 	Safe_Release(m_DebugVertexBuffer);
-	Safe_Release(m_DebugPipeline);
+	m_DebugPipeline = nullptr;
+	//Safe_Release(m_DebugPipeline);
 #endif // _DEBUG
 	if (m_RHI)
 	{
@@ -137,66 +135,81 @@ EResult Renderer::BeginFrame()
 EResult Renderer::Render(f32 dt)
 {
 	unordered_map<RenderPassID, vector<Camera*>> jobsPerPass;
-
 	for (const auto& viewportInfo : m_ViewportCameras)
-	{
 		jobsPerPass[viewportInfo.PassID].push_back(viewportInfo.Camera);
-	}
 
 	const vector<RenderPass*>& renderPasses = m_RenderPassManager->GetAllRenderPasses();
+
 	for (const auto& pass : renderPasses)
 	{
 		auto jobsIt = jobsPerPass.find(pass->GetID());
+
+		vector<Camera*> cameras;
 		if (jobsIt != jobsPerPass.end())
+			cameras = jobsIt->second;
+		else
+			cameras.push_back(nullptr);
+
+		for (Camera* cam : cameras)
 		{
-			const vector<Camera*>& cameras = jobsIt->second;
-			for (Camera* cam : cameras)
+			tagCameraBuffer cameraBuffer = {};
+			if (cam)
+				cameraBuffer = cam->GetCameraBuffer();
+			else
 			{
-				tagCameraBuffer cameraBuffer = cam->GetCameraBuffer();
-				cameraBuffer.time = dt;
-				m_RHI->BindConstantBuffer(&cameraBuffer, sizeof(tagCameraBuffer), 0);
-				m_RHI->BindConstantBuffer(&cameraBuffer, sizeof(tagCameraBuffer), 3);
-				if (IsFailure(m_RHI->BeginRenderPass(pass)))
-					return EResult::Fail;
-				m_RHI->SetViewport(0, 0, 1920, 1080);
-#ifdef _DEBUG
-				if(pass->GetName().find(L"Debug") == 0)
-				{
-					if (IsFailure(RenderDebugLines(dt)))
-						return EResult::Fail;
-					if (IsFailure(m_RHI->EndRenderPass()))
-						return EResult::Fail;
-					continue;
-				}
-#endif
-				auto it = m_RenderQueues.find(pass->GetID());
-				if (it != m_RenderQueues.end())
-				{
-					if(IsFailure(RenderComponents(dt, it->second, pass->GetSortType(), pass)))
-						return EResult::Fail;
-				}
-				auto customIt = m_CustomRenderQueues.find(pass->GetID());
-				if (customIt != m_CustomRenderQueues.end())
-				{
-					for (const auto& command : customIt->second)
-					{
-						if (IsFailure(command(dt, pass)))
-						{
-							ENGINE_LOG_ERROR("Custom Render Command Failed!");
-							continue;
-						}
-					}
-				}
-				if (IsFailure(m_RHI->EndRenderPass()))
-					return EResult::Fail;
+				cameraBuffer.viewMatrix = glm::identity<mat4>();
+				cameraBuffer.projMatrix = glm::identity<mat4>();
+				cameraBuffer.viewProjMatrix = glm::identity<mat4>();
+				cameraBuffer.cameraPosition = vec3(0.f);
 			}
+			cameraBuffer.time = dt;
+			m_RHI->BindConstantBuffer(&cameraBuffer, sizeof(tagCameraBuffer), 0);
+			m_RHI->BindConstantBuffer(&cameraBuffer, sizeof(tagCameraBuffer), 3);
+
+			if (IsFailure(m_RHI->BeginRenderPass(pass)))
+				continue;
+
+			uint32 rtWidth = m_RHI->GetSwapChainWidth();
+			uint32 rtHeight = m_RHI->GetSwapChainHeight();
+			if (pass->GetRenderTargetCount() > 0)
+			{
+				RenderTarget* rt = RenderTargetManager::Get().GetRenderTarget(pass->GetRenderTargetName(0));
+				if (rt)
+				{
+					rtWidth = rt->GetWidth();
+					rtHeight = rt->GetHeight();
+				}
+			}
+			m_RHI->SetViewport(0, 0, rtWidth, rtHeight);
+
+#ifdef _DEBUG
+			if (pass->GetName().find(L"Debug") == 0)
+			{
+				RenderDebugLines(dt);
+				m_RHI->EndRenderPass();
+				continue;
+			}
+#endif
+			auto it = m_RenderQueues.find(pass->GetID());
+			if (it != m_RenderQueues.end())
+				RenderComponents(dt, it->second, pass->GetSortType(), pass);
+
+			auto customIt = m_CustomRenderQueues.find(pass->GetID());
+			if (customIt != m_CustomRenderQueues.end())
+			{
+				for (const auto& command : customIt->second)
+					command(dt, pass);
+			}
+
+			m_RHI->EndRenderPass();
 		}
-		if (IsFailure(m_RHI->EndRenderPass()))
-			return EResult::Fail;
+
 		GetRenderPassDelegate(pass->GetID()).Broadcast(dt);
 	}
+
 	return EResult::Success;
 }
+
 
 EResult Renderer::RenderComponents(f32 dt, vector<class RenderComponent*> queue, ERenderSortType sortType, RenderPass* renderPass)
 {
@@ -373,12 +386,9 @@ EResult Renderer::RenderDebugLines(f32 dt)
 		debugPipelineDesc.FrontFace = EFrontFace::CounterClockwise;
 		debugPipelineDesc.Topology = ETopology::LineList;
 
-		TODO("ResourceManager::Get().GetResource<Shader>(tag or path) need to be create");
 		ResourceManager& rm = ResourceManager::Get();
 		debugPipelineDesc.VertexShader = rm.GetResourceHandle<Shader>(L"DebugLineVS").Get()->GetRHIShader();
 		debugPipelineDesc.PixelShader = rm.GetResourceHandle<Shader>(L"DebugLinePS").Get()->GetRHIShader();
-		//debugPipelineDesc.VertexShader = ResourceManager::Get().GetShader(L"DebugLineVS")->GetRHIShader();
-		//debugPipelineDesc.PixelShader = ResourceManager::Get().GetShader(L"DebugLinePS")->GetRHIShader();
 		debugPipelineDesc.InputLayouts.push_back(DebugVertex::Layout);
 		debugPipelineDesc.DepthStencilState.DepthTestEnable = false;
 		debugPipelineDesc.DepthStencilState.StencilTestEnable = false;

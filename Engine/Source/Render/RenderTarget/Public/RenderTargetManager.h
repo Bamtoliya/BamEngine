@@ -23,6 +23,7 @@ public:
 	RenderTarget* GetRenderTarget(const wstring& name) const;
 	void ResizeRenderTarget(const wstring& name, uint32 width, uint32 height);
 	void ResizeAllRenderTargets(uint32 width, uint32 height);
+	vector<wstring> GetAllRenderTargetNames() const;
 #pragma endregion
 
 

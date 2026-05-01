@@ -70,4 +70,11 @@ void RenderTargetManager::ResizeAllRenderTargets(uint32 width, uint32 height)
 		}
 	}
 }
+vector<wstring> RenderTargetManager::GetAllRenderTargetNames() const
+{
+	vector<wstring> names;
+	for (const auto& pair : m_RenderTargets)
+		names.push_back(pair.first);
+	return names;
+}
 #pragma endregion

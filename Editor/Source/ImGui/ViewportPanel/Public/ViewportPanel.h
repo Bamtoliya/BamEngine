@@ -74,6 +74,12 @@ private:
 	Ray ScreenPosToRay(const ImVec2& mousePos, const ImVec2& imageMin, const ImVec2&imageSize);
 #pragma endregion
 
+#pragma region Rendering
+private:
+	void SubmitLightingPass();
+#pragma endregion
+
+
 #pragma region Members
 private:
 	EditorCamera* m_EditorCamera = { nullptr };
@@ -105,9 +111,16 @@ private:
 	//bool m_ShowCollider = { true };
 	//bool m_ShowSkeleton = { true };
 	//bool m_ShowDebugInfo = { true };
+#pragma region Rendering
 private:
-	uint32 m_PassID = { 0 };
-	uint32 m_DebugPassID = { 0 };
+	RenderPassID m_GeometryPassID = INVALID_PASS_ID;
+	RenderPassID m_LightingPassID = INVALID_PASS_ID;
+	RenderPassID m_DebugPassID = INVALID_PASS_ID;
+	wstring m_DisplayRenderTargetName;
+	wstring m_FinalColorName;
+	vector<wstring> m_OwnedRTNames;    // Free()에서 해제할 RT 이름들
+	class RHIPipeline* m_LightingPipeline = { nullptr };
+#pragma endregion
 private:
 	vec2 m_InitialMousePos;
 private:
