@@ -590,8 +590,18 @@ void ViewportPanel::SubmitLightingPass()
 				sampler, 4);
 			// Lighting 파이프라인 바인딩
 			rhi->BindPipeline(m_LightingPipeline);
-			// 풀스크린 삼각형 (버텍스 버퍼 없이 3개 그리기)
-			rhi->Draw(3);
+
+			if (IsFailure(LightManager::Get().Bind(0)))
+			{
+				fmt::print(stderr, "LightManager::Bind failed\n");
+				return EResult::Fail;
+			}
+
+			if (IsFailure(rhi->Draw(3)))
+			{
+				fmt::print(stderr, "Lighting draw failed\n");
+				return EResult::Fail;
+			}
 			return EResult::Success;
 		},
 		m_LightingPassID);

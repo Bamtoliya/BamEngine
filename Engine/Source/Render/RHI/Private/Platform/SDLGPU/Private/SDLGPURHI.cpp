@@ -720,7 +720,7 @@ EResult SDLGPURHI::SetViewport(int32 x, int32 y, uint32 width, uint32 height)
 #pragma region Draw
 EResult SDLGPURHI::Draw(uint32 count)
 {
-	if (!m_Device || !m_CurrentRenderPass || !m_VertexBuffers[0]) return EResult::Fail;
+	if (!m_Device || !m_CurrentRenderPass) return EResult::Fail;
 
 	// Vertex Buffer Binding
 	SDL_GPUBufferBinding vertexBindings[MAX_BUFFER_SLOTS] = {};
@@ -769,6 +769,7 @@ EResult SDLGPURHI::Draw(uint32 count)
 		{
 			SDLGPUBuffer* sbuf = static_cast<SDLGPUBuffer*>(m_FragmentStorageBuffers[i]);
 			fragmentStorageBindings[i] = static_cast<SDL_GPUBuffer*>(sbuf->GetNativeHandle());
+			if (!fragmentStorageBindings[i]) return EResult::Fail;
 			highestFStorageIndex = i + 1;
 		}
 	}
@@ -833,6 +834,7 @@ EResult SDLGPURHI::DrawIndexed(uint32 count)
 		{
 			SDLGPUBuffer* sbuf = static_cast<SDLGPUBuffer*>(m_FragmentStorageBuffers[i]);
 			fragmentStorageBindings[i] = static_cast<SDL_GPUBuffer*>(sbuf->GetNativeHandle());
+			if (!fragmentStorageBindings[i]) return EResult::Fail;
 			highestFStorageIndex = i + 1;
 		}
 	}

@@ -38,6 +38,11 @@ private:
 	void CreateAnimatorObject(class Scene* scene);
 	void CreateCamera(class Scene* scene);
 
+	//-------Lights----------
+	void CreateDirectionalLight(class Scene* scene);
+	void CreatePointLight(class Scene* scene);
+	void CreateSpotLight(class Scene* scene);
+
 
 #pragma region Variables
 private:

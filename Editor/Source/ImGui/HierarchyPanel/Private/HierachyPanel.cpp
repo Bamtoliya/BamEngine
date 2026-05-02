@@ -864,6 +864,24 @@ void HierarchyPanel::DrawAddGameObjectButton(Scene* scene)
 
 		ImGui::Separator();
 
+		if (ImGui::BeginMenu("Lights"))
+		{
+			if (ImGui::MenuItem("Directional Light"))
+			{
+				CreateDirectionalLight(scene);
+			}
+			if (ImGui::MenuItem("Point Light"))
+			{
+				CreatePointLight(scene);
+			}
+			if (ImGui::MenuItem("Spot Light"))
+			{
+				CreateSpotLight(scene);
+			}
+			ImGui::EndMenu();
+		}
+		ImGui::Separator();
+
 		if (ImGui::MenuItem("Camera"))
 		{
 			CreateCamera(scene);
@@ -1205,6 +1223,42 @@ void HierarchyPanel::CreateCamera(Scene* scene)
 	GameObject* newGameObject = GameObject::Create();
 	newGameObject->SetName(L"Camera");
 	newGameObject->AddComponent(L"Camera");
+	scene->AddGameObject(newGameObject);
+	Safe_Release(newGameObject);
+}
+
+void HierarchyPanel::CreateDirectionalLight(Scene* scene)
+{
+	GameObject* newGameObject = GameObject::Create();
+	newGameObject->SetName(L"Directional Light");
+	tagLightSourceDesc lightDesc;
+	lightDesc.Type = ELightType::Directional;
+	lightDesc.Color = vec3(1.0f, 1.0f, 1.f);
+	newGameObject->AddComponent(L"LightSource", &lightDesc);
+	scene->AddGameObject(newGameObject);
+	Safe_Release(newGameObject);
+}
+
+void HierarchyPanel::CreatePointLight(Scene* scene)
+{
+	GameObject* newGameObject = GameObject::Create();
+	newGameObject->SetName(L"Point Light");
+	tagLightSourceDesc lightDesc;
+	lightDesc.Type = ELightType::Point;
+	lightDesc.Color = vec3(1.0f, 1.0f, 1.f);
+	newGameObject->AddComponent(L"LightSource", &lightDesc);
+	scene->AddGameObject(newGameObject);
+	Safe_Release(newGameObject);
+}
+
+void HierarchyPanel::CreateSpotLight(Scene* scene)
+{
+	GameObject* newGameObject = GameObject::Create();
+	newGameObject->SetName(L"Spot Light");
+	tagLightSourceDesc lightDesc;
+	lightDesc.Type = ELightType::Spot;
+	lightDesc.Color = vec3(1.0f, 1.0f, 1.f);
+	newGameObject->AddComponent(L"LightSource", &lightDesc);
 	scene->AddGameObject(newGameObject);
 	Safe_Release(newGameObject);
 }

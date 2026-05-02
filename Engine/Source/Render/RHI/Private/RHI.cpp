@@ -59,7 +59,7 @@ EResult RHI::BindFragmentStorageBuffers(uint32 firstSlot, RHIBuffer** storageBuf
 {
 	if (!storageBuffers || count == 0) return EResult::Fail;
 	for (uint32 i = 0; i < count; ++i)
-	{
+	{	
 		if (firstSlot + i >= MAX_BUFFER_SLOTS) break;
 		Safe_Release(m_FragmentStorageBuffers[firstSlot + i]);
 		m_FragmentStorageBuffers[firstSlot + i] = storageBuffers[i];

@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "Component.h"
+#include "Light.h"
 
 BEGIN(Engine)
 
@@ -12,34 +13,15 @@ enum class ELightType
 	Spot
 };
 
-enum class ELightAttenuationType
+ENUM()
+enum class EAttenuationMode : uint8
 {
-	Constant,
-	Linear,
-	Quadratic
+	Coefficients,
+	InverseSquare,
+	Disabled
 };
 
-enum class ELightSpotAttenuationType
-{
-	Constant,
-	Linear,
-	Quadratic
-};
-
-enum class ELightSpotAngleType
-{
-	Inner,
-	Outer,
-	Falloff
-};
-
-enum class ELightIntensityType
-{
-	Base,
-	Max,
-	AttenuationStartDistance
-};
-
+ENUM()
 enum class ELightFlags
 {
 	None = 0,
@@ -47,6 +29,28 @@ enum class ELightFlags
 	UseInForwardRendering = 1 << 1,
 	UseInDeferredRendering = 1 << 2,
 	Volumetric = 1 << 3,
+	AffectDiffuse = 1 << 4,
+	AffectSpecular = 1 << 5
+};
+
+ENABLE_BITMASK_OPERATORS(ELightFlags)
+
+struct tagLightSourceDesc : public tagComponentDesc
+{
+	ELightType Type = ELightType::Point;
+	vec3 Color = vec3(1.0f);
+	f32 Intensity = 1.0f;
+
+	f32 Range = 10.0f;
+	EAttenuationMode AttenuationMode = EAttenuationMode::Coefficients;
+	vec3 AttenuationCoefficients = vec3(1.0f, 0.09f, 0.032f);
+
+	f32 SpotInnerAngle = 15.0f;
+	f32 SpotOuterAngle = 30.0f;
+	f32 SpotFalloffExponent = 1.0f;
+
+	uint32 LightingLayerMask = 0xFFFFFFFFu;
+	ELightFlags Flags = ELightFlags::UseInDeferredRendering | ELightFlags::AffectDiffuse | ELightFlags::AffectSpecular;
 };
 
 
@@ -54,21 +58,97 @@ CLASS()
 class ENGINE_API LightSource : public Component
 {
 	REFLECT_CLASS()
+	using DESC = tagLightSourceDesc;
+#pragma region Constructor&Destructor
 private:
+	LightSource() {}
+	virtual ~LightSource() = default;
+	EResult Initialize(void* arg = nullptr) override;
+	EResult LateInitialize(void* arg = nullptr) override;
+public:
+	static LightSource* Create(void* arg = nullptr);
+	Component* Clone(GameObject* owner, void* arg = nullptr) override;
+	void Free() override;
+#pragma endregion
 
+#pragma region Loop
+public:
+	void LateUpdate(f32 dt) override;
+#pragma endregion
+
+#pragma region GPU
+public:
+	struct tagGPULight BuildGPULightDesc() const;
+#pragma endregion
+
+#pragma region Getter
 public:
 	ELightType GetType() const { return m_Type; }
-	EResult SetType(ELightType type) { m_Type = type; return EResult::Success; }
+	const vec3& GetColor() const { return m_Color; }
+	f32 GetIntensity() const { return m_Intensity; }
 
+	f32 GetRange() const { return m_Range; }
+	EAttenuationMode GetAttenuationMode() const { return m_AttenuationMode; }
+	const vec3& GetAttenuationCoefficients() const { return m_AttenuationCoefficients; }
+
+	f32 GetSpotInnerAngle() const { return m_SpotInnerAngle; }
+	f32 GetSpotOuterAngle() const { return m_SpotOuterAngle; }
+	f32 GetSpotFalloffExponent() const { return m_SpotFalloffExponent; }
+
+	uint32 GetLightingLayerMask() const { return m_LightingLayerMask; }
+	ELightFlags GetFlags() const { return m_Flags; }
+#pragma endregion
+
+#pragma region Setter
+public:
+	EResult SetType(ELightType type) { m_Type = type; return EResult::Success; }
+	EResult SetColor(const vec3& color) { m_Color = color; return EResult::Success; }
+	EResult SetIntensity(f32 intensity) { m_Intensity = glm::max(0.0f, intensity); return EResult::Success; }
+
+	EResult SetRange(f32 range) { m_Range = glm::max(0.0f, range); return EResult::Success; }
+	EResult SetAttenuationMode(EAttenuationMode mode) { m_AttenuationMode = mode; return EResult::Success; }
+	EResult SetAttenuationCoefficients(const vec3& coeff) { m_AttenuationCoefficients = glm::max(coeff, vec3(0.0f)); return EResult::Success; }
+
+	EResult SetSpotInnerAngle(f32 angleDeg) { m_SpotInnerAngle = glm::clamp(angleDeg, 0.0f, 89.0f); return EResult::Success; }
+	EResult SetSpotOuterAngle(f32 angleDeg) { m_SpotOuterAngle = glm::clamp(angleDeg, m_SpotInnerAngle, 89.0f); return EResult::Success; }
+	EResult SetSpotFalloffExponent(f32 value) { m_SpotFalloffExponent = glm::max(0.01f, value); return EResult::Success; }
+
+	EResult SetLightingLayerMask(uint32 mask) { m_LightingLayerMask = mask; return EResult::Success; }
+	EResult SetFlags(ELightFlags flags) { m_Flags = flags; return EResult::Success; }
+#pragma endregion
 
 private:
-	ELightType m_Type = { ELightType::Point };
-	vec3 m_Direction = { 0.0f, -1.0f, 0.0f }; // 방향성 광원과 스포트라이트에 사용
-	vec3 m_Color = { 1.0f, 1.0f, 1.0f };
-	vec3 m_Intensity = { 1.0f, 0.0f, 0.0f }; // 기본 밝기, 최대 밝기, 감쇠 시작 거리
-	vec3 m_Attenuation = { 1.0f, 0.0f, 0.0f }; // 상수, 선형, 제곱 감쇠 계수
-	vec3 m_SpotAngles = { 15.0f, 30.0f, 45.0f }; // 스포트라이트의 inner, outer, falloff 각도 (degree)
-	vec3 m_SpotAttenuation = { 1.0f, 0.0f, 0.0f }; // 스포트라이트의 감쇠 계수 (상수, 선형, 제곱)
-	ELightFlags m_Flags = { ELightFlags::None };
+	PROPERTY(EDITABLE)
+	ELightType m_Type = ELightType::Point;
+
+	PROPERTY(EDITABLE)
+	vec3 m_Color = vec3(1.0f);
+
+	PROPERTY(EDITABLE)
+	f32 m_Intensity = 1.0f;
+
+	PROPERTY(EDITABLE)
+	f32 m_Range = 10.0f;
+
+	PROPERTY(EDITABLE)
+	EAttenuationMode m_AttenuationMode = EAttenuationMode::Coefficients;
+
+	PROPERTY(EDITABLE)
+	vec3 m_AttenuationCoefficients = vec3(1.0f, 0.09f, 0.032f);
+
+	PROPERTY(EDITABLE)
+	f32 m_SpotInnerAngle = 15.0f;
+
+	PROPERTY(EDITABLE)
+	f32 m_SpotOuterAngle = 30.0f;
+
+	PROPERTY(EDITABLE)
+	f32 m_SpotFalloffExponent = 1.0f;
+
+	PROPERTY(EDITABLE)
+	uint32 m_LightingLayerMask = 0xFFFFFFFFu;
+
+	PROPERTY(EDITABLE)
+	ELightFlags m_Flags = ELightFlags::UseInDeferredRendering | ELightFlags::AffectDiffuse | ELightFlags::AffectSpecular;
 };
 END

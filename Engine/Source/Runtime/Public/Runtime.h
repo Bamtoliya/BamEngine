@@ -16,6 +16,7 @@
 #include "RenderTargetManager.h"
 #include "PipelineManager.h"
 #include "SamplerManager.h"
+#include "LightManager.h"
 
 #include "ComponentRegistry.h"
 
@@ -66,6 +67,7 @@ private:
 	PipelineManager* m_PipelineManager = { nullptr };
 	SamplerManager* m_SamplerManager = { nullptr };
 	CameraManager* m_CameraManager = { nullptr };
+	LightManager* m_LightManager = { nullptr };
 private:
 	ResourceManager* m_ResourceManager = { nullptr };
 	PrototypeManager* m_PrototypeManager = { nullptr };

@@ -157,6 +157,7 @@ void Application::InitializeShaders()
     lightingPsDesc.Path = L"Resources/Shader/lighting.frag.spv";
     lightingPsDesc.SpirvPath = L"Resources/Shader/lighting.frag.spv";
     lightingPsDesc.EntryPoint = "main";
+    lightingPsDesc.NumStorageBuffers = 1;
     rm.LoadResource<Shader>(&lightingPsDesc);
 }
 

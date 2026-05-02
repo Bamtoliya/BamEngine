@@ -53,6 +53,10 @@ EResult Runtime::Initialize(void* arg)
 	if (!m_PipelineManager) return EResult::Fail;
 	m_SamplerManager = SamplerManager::Create(m_Renderer->GetRHI());
 	if (!m_SamplerManager) return EResult::Fail;
+	tagLightManagerDesc lightDesc = {};
+	lightDesc.RHI = m_Renderer->GetRHI();
+	m_LightManager = LightManager::Create(&lightDesc);
+	if (!m_LightManager) return EResult::Fail;
 
 	m_CollisionManager = CollisionManager::Create();
 	if (!m_CollisionManager) return EResult::Fail;
@@ -80,6 +84,7 @@ void Runtime::Free()
 	ResourceManager::Destroy();
 
 	// ── 4. 렌더링 인프라 (RHI 리소스) ──
+	LightManager::Destroy();
 	SamplerManager::Destroy();
 	PipelineManager::Destroy();
 	RenderTargetManager::Destroy();
@@ -97,6 +102,7 @@ void Runtime::RunFrame(f32 dt)
 	Update(dt);
 	LateUpdate(dt);
 	Render(dt);
+	
 }
 void Runtime::FixedUpdate(f32 dt)
 {
@@ -127,6 +133,7 @@ EResult Runtime::Render(f32 dt)
 	{
 		fmt::print(stderr, "Renderer EndFrame Failed\n");
 	}
+	m_LightManager->Update(dt);
 	return EResult::Success;
 }
 #pragma endregion

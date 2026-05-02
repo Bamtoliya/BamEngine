@@ -53,7 +53,7 @@ Component* Camera::Clone(GameObject* owner, void* arg)
 	desc.Aspect = m_Aspect;
 	desc.OrthoSize = m_OrthoSize;
 	desc.Owner = owner;
-	desc.Tag = this->m_Tag;
+	desc.Tag = m_Tag;
 	if (IsFailure(instance->Initialize(&desc)))
 	{
 		Safe_Release(instance);

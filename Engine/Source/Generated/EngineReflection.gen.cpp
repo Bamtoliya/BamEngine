@@ -92,6 +92,24 @@ BEGIN_ENUM(ELightType)
 	REFLECT_ENUM_ENTRY(ELightType, Spot)
 END_ENUM_REFLECT_EX(ELightType, "Engine::ELightType")
 
+// Enum: Engine::EAttenuationMode
+BEGIN_ENUM(EAttenuationMode)
+	REFLECT_ENUM_ENTRY(EAttenuationMode, Coefficients)
+	REFLECT_ENUM_ENTRY(EAttenuationMode, InverseSquare)
+	REFLECT_ENUM_ENTRY(EAttenuationMode, Disabled)
+END_ENUM_REFLECT_EX(EAttenuationMode, "Engine::EAttenuationMode")
+
+// Enum: Engine::ELightFlags
+BEGIN_ENUM(ELightFlags)
+	REFLECT_ENUM_ENTRY(ELightFlags, None)
+	REFLECT_ENUM_ENTRY(ELightFlags, CastShadows)
+	REFLECT_ENUM_ENTRY(ELightFlags, UseInForwardRendering)
+	REFLECT_ENUM_ENTRY(ELightFlags, UseInDeferredRendering)
+	REFLECT_ENUM_ENTRY(ELightFlags, Volumetric)
+	REFLECT_ENUM_ENTRY(ELightFlags, AffectDiffuse)
+	REFLECT_ENUM_ENTRY(ELightFlags, AffectSpecular)
+END_ENUM_REFLECT_EX(ELightFlags, "Engine::ELightFlags")
+
 // Enum: Engine::EDrawMode
 BEGIN_ENUM(EDrawMode)
 	REFLECT_ENUM_ENTRY(EDrawMode, Simple)
@@ -558,7 +576,62 @@ IMPLEMENT_CLASS_EX(Animator, "Engine::Animator", "Engine::Component")
 #pragma endregion // CLASS: Engine::Animator
 
 #pragma region CLASS: Engine::LightSource
-EMPTY_PROPERTIES(LightSource)
+BEGIN_METADATA(LightSource, m_Type)
+	EDITABLE
+END_METADATA
+
+BEGIN_METADATA(LightSource, m_Color)
+	EDITABLE
+END_METADATA
+
+BEGIN_METADATA(LightSource, m_Intensity)
+	EDITABLE
+END_METADATA
+
+BEGIN_METADATA(LightSource, m_Range)
+	EDITABLE
+END_METADATA
+
+BEGIN_METADATA(LightSource, m_AttenuationMode)
+	EDITABLE
+END_METADATA
+
+BEGIN_METADATA(LightSource, m_AttenuationCoefficients)
+	EDITABLE
+END_METADATA
+
+BEGIN_METADATA(LightSource, m_SpotInnerAngle)
+	EDITABLE
+END_METADATA
+
+BEGIN_METADATA(LightSource, m_SpotOuterAngle)
+	EDITABLE
+END_METADATA
+
+BEGIN_METADATA(LightSource, m_SpotFalloffExponent)
+	EDITABLE
+END_METADATA
+
+BEGIN_METADATA(LightSource, m_LightingLayerMask)
+	EDITABLE
+END_METADATA
+
+BEGIN_METADATA(LightSource, m_Flags)
+	EDITABLE
+END_METADATA
+BEGIN_PROPERTIES(LightSource)
+	REFLECT_PROPERTY(LightSource, m_Type, "Engine::ELightType", reflection::EPropertyType::Enum, std::span<const reflection::MetadataEntry>{LightSource_m_Type_Meta})
+	REFLECT_PROPERTY(LightSource, m_Color, "vec3", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{LightSource_m_Color_Meta})
+	REFLECT_PROPERTY(LightSource, m_Intensity, "f32", reflection::EPropertyType::Float32, std::span<const reflection::MetadataEntry>{LightSource_m_Intensity_Meta})
+	REFLECT_PROPERTY(LightSource, m_Range, "f32", reflection::EPropertyType::Float32, std::span<const reflection::MetadataEntry>{LightSource_m_Range_Meta})
+	REFLECT_PROPERTY(LightSource, m_AttenuationMode, "Engine::EAttenuationMode", reflection::EPropertyType::Enum, std::span<const reflection::MetadataEntry>{LightSource_m_AttenuationMode_Meta})
+	REFLECT_PROPERTY(LightSource, m_AttenuationCoefficients, "vec3", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{LightSource_m_AttenuationCoefficients_Meta})
+	REFLECT_PROPERTY(LightSource, m_SpotInnerAngle, "f32", reflection::EPropertyType::Float32, std::span<const reflection::MetadataEntry>{LightSource_m_SpotInnerAngle_Meta})
+	REFLECT_PROPERTY(LightSource, m_SpotOuterAngle, "f32", reflection::EPropertyType::Float32, std::span<const reflection::MetadataEntry>{LightSource_m_SpotOuterAngle_Meta})
+	REFLECT_PROPERTY(LightSource, m_SpotFalloffExponent, "f32", reflection::EPropertyType::Float32, std::span<const reflection::MetadataEntry>{LightSource_m_SpotFalloffExponent_Meta})
+	REFLECT_PROPERTY(LightSource, m_LightingLayerMask, "uint32", reflection::EPropertyType::UInt32, std::span<const reflection::MetadataEntry>{LightSource_m_LightingLayerMask_Meta})
+	REFLECT_PROPERTY(LightSource, m_Flags, "Engine::ELightFlags", reflection::EPropertyType::BitFlag, std::span<const reflection::MetadataEntry>{LightSource_m_Flags_Meta})
+END_PROPERTIES
 EMPTY_FUNCTIONS(LightSource)
 IMPLEMENT_CLASS_EX(LightSource, "Engine::LightSource", "Engine::Component")
 
