@@ -270,13 +270,23 @@ RHITexture* SDLGPURHI::CreateRenderTargetTexture(void* data, uint32 width, uint3
 RHITexture* SDLGPURHI::CreateDepthStencilTexture(void* data, uint32 width, uint32 height, uint32 mipLevels, uint32 arraySize)
 {
 	tagRHITextureDesc desc = {};
-	desc.Dimension = Engine::ETextureDimension::Texture2D;
-	desc.Format = Engine::ETextureFormat::D24_UNORM_S8_UINT;
+	if (data)
+	{
+		tagRenderTargetDesc* rtDesc = reinterpret_cast<tagRenderTargetDesc*>(data);
+		desc.Dimension = rtDesc->TextureType;
+		desc.Format = rtDesc->Format;
+		desc.Usage = rtDesc->Usage;
+	}
+	else
+	{
+		desc.Dimension = Engine::ETextureDimension::Texture2D;
+		desc.Format = Engine::ETextureFormat::D24_UNORM_S8_UINT;
+		desc.Usage = Engine::ETextureUsage::DepthStencilTarget | Engine::ETextureUsage::Sampler;
+	}
 	desc.Width = width;
 	desc.Height = height;
 	desc.ArraySize = arraySize;
 	desc.MipLevels = mipLevels;
-	desc.Usage = Engine::ETextureUsage::DepthStencilTarget | Engine::ETextureUsage::Sampler;
 
 	return CreateTexture(desc);
 }
@@ -554,8 +564,9 @@ EResult SDLGPURHI::BeginRenderPass(RenderPass* renderPass)
 	if (!m_CurrentCommandBuffer) return EResult::Fail;
 
 	SDL_GPUColorTargetInfo colorTargetInfo[MAX_RENDER_TARGET_COUNT] = {};
-	uint32 targetCount = renderPass->GetRenderTargetCount();
-	if (targetCount == 0)
+	const uint32 requestedColorCount = renderPass->GetRenderTargetCount();
+	uint32 targetCount = requestedColorCount;
+	if (targetCount == 0 && renderPass->GetDepthStencilName().empty())
 	{
 		colorTargetInfo[0].texture = static_cast<SDL_GPUTexture*>(m_BackBuffer->GetNativeHandle());
 		colorTargetInfo[0].load_op = SDL_GPURenderPassLoadOperations[static_cast<uint8>(renderPass->GetLoadOperation())];
@@ -566,25 +577,36 @@ EResult SDLGPURHI::BeginRenderPass(RenderPass* renderPass)
 
 		targetCount = 1;
 	}
-	else
+	else if(targetCount > 0)
 	{
+		uint32 validCount = 0;
 		for (uint i = 0; i < targetCount; ++i)
 		{
 			RenderTarget* renderTarget = RenderTargetManager::Get().GetRenderTarget(renderPass->GetRenderTargetName(i));
-			colorTargetInfo[i].texture = static_cast<SDL_GPUTexture*>(renderTarget->GetTexture()->GetNativeHandle());
+			if (!renderTarget || !renderTarget->GetTexture()) continue;
+
+			SDL_GPUTexture* nativeTex = static_cast<SDL_GPUTexture*>(renderTarget->GetTexture()->GetNativeHandle());
+			if (!nativeTex) continue;  // UNKNOWN 포맷 등 텍스처 미생성 RT는 스킵
+
+			colorTargetInfo[validCount].texture = nativeTex;
 			vec4 clearColor = renderTarget->GetClearColor();
 			if (renderPass->HasOverrideClearColor())
-			{
 				clearColor = renderPass->GetOverrideClearColor();
-			}
-			colorTargetInfo[i].clear_color = { clearColor.r, clearColor.g, clearColor.b, clearColor.a };
-			colorTargetInfo[i].load_op = SDL_GPURenderPassLoadOperations[static_cast<uint8>(renderPass->GetLoadOperation())];
-			colorTargetInfo[i].store_op = SDL_GPURenderPassStoreOperations[static_cast<uint8>(renderPass->GetStoreOperation())];
-
-			colorTargetInfo[i].cycle = false;
-			colorTargetInfo[i].mip_level = 0;
-			colorTargetInfo[i].layer_or_depth_plane = 0;
+			colorTargetInfo[validCount].clear_color = { clearColor.r, clearColor.g, clearColor.b, clearColor.a };
+			colorTargetInfo[validCount].load_op = SDL_GPURenderPassLoadOperations[static_cast<uint8>(renderPass->GetLoadOperation())];
+			colorTargetInfo[validCount].store_op = SDL_GPURenderPassStoreOperations[static_cast<uint8>(renderPass->GetStoreOperation())];
+			colorTargetInfo[validCount].cycle = false;
+			colorTargetInfo[validCount].mip_level = 0;
+			colorTargetInfo[validCount].layer_or_depth_plane = 0;
+			++validCount;
 		}
+		targetCount = validCount;  // 실제 유효한 타겟 수로 교정
+	}
+
+	if (requestedColorCount > 0 && targetCount == 0)
+	{
+		// 선언상 color pass인데 실제 color texture가 없음
+		return EResult::Fail;
 	}
 
 	SDL_GPUDepthStencilTargetInfo depthInfo = {};
@@ -593,14 +615,29 @@ EResult SDLGPURHI::BeginRenderPass(RenderPass* renderPass)
 	if (bUseDepth)
 	{
 		RenderTarget* depthStencil = RenderTargetManager::Get().GetRenderTarget(renderPass->GetDepthStencilName());
-		depthInfo.texture = static_cast<SDL_GPUTexture*>(depthStencil->GetTexture()->GetNativeHandle());
-		depthInfo.cycle = false;
-		depthInfo.clear_stencil = 0;
-		depthInfo.clear_depth = 1.f;
-		depthInfo.load_op = SDL_GPURenderPassLoadOperations[static_cast<uint8>(renderPass->GetLoadOperation())];
-		depthInfo.store_op = SDL_GPURenderPassStoreOperations[static_cast<uint8>(renderPass->GetStoreOperation())];
-		depthInfo.stencil_load_op = SDL_GPURenderPassLoadOperations[static_cast<uint8>(renderPass->GetStencilLoadOperation())];
-		depthInfo.stencil_store_op = SDL_GPURenderPassStoreOperations[static_cast<uint8>(renderPass->GetStencilStoreOperation())];
+		if (!depthStencil || !depthStencil->GetTexture())
+		{
+			bUseDepth = false;
+		}
+		else
+		{
+			SDL_GPUTexture* depthTex = static_cast<SDL_GPUTexture*>(depthStencil->GetTexture()->GetNativeHandle());
+			if (!depthTex)
+			{
+				bUseDepth = false;
+			}
+			else
+			{
+				depthInfo.texture = depthTex;
+				depthInfo.cycle = false;
+				depthInfo.clear_stencil = 0;
+				depthInfo.clear_depth = 1.f;
+				depthInfo.load_op = SDL_GPURenderPassLoadOperations[static_cast<uint8>(renderPass->GetLoadOperation())];
+				depthInfo.store_op = SDL_GPURenderPassStoreOperations[static_cast<uint8>(renderPass->GetStoreOperation())];
+				depthInfo.stencil_load_op = SDL_GPURenderPassLoadOperations[static_cast<uint8>(renderPass->GetStencilLoadOperation())];
+				depthInfo.stencil_store_op = SDL_GPURenderPassStoreOperations[static_cast<uint8>(renderPass->GetStencilStoreOperation())];
+			}
+		}
 	}
 
 	m_CurrentRenderPass = SDL_BeginGPURenderPass(m_CurrentCommandBuffer, colorTargetInfo, targetCount, bUseDepth ? &depthInfo : nullptr);
@@ -695,6 +732,8 @@ EResult SDLGPURHI::SetClearColor(vec4 color)
 
 EResult SDLGPURHI::SetViewport(int32 x, int32 y, uint32 width, uint32 height)
 {
+	if (!m_CurrentRenderPass) return EResult::Fail;
+	if (width == 0 || height == 0) return EResult::Fail;
 	SDL_GPUViewport viewport;
 	viewport.x = 0.0f;
 	viewport.y = 0.f;

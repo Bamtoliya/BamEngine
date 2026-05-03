@@ -29,7 +29,7 @@ struct tagRendererDesc
 struct tagViewportCameraInfo
 {
 	class Camera* Camera = { nullptr };
-	RenderPassID PassID = { 0 };
+	class RenderPass* RenderPass = { nullptr };
 };
 
 
@@ -68,13 +68,11 @@ public:
 
 #pragma region Viewport Camera Management
 public:
-	void RegisterViewportCamera(Camera* camera, RenderPassID passID);
+	void RegisterViewportCamera(Camera* camera, RenderPass* renderPass);
 	void UnregisterViewportCamera(RenderPassID passID);
 	Camera* GetViewportCamera(RenderPassID passID) const;
 	vector<tagViewportCameraInfo>& GetActiveViewportCameras() { return m_ViewportCameras; }
 #pragma endregion
-
-
 
 #pragma region Getter
 public:
@@ -85,9 +83,6 @@ public:
 	}
 	ERHIType GetRHIType() const { return m_RHIType; }
 #pragma endregion
-
-
-
 
 #ifdef _DEBUG
 #pragma region Functions
@@ -116,8 +111,6 @@ private:
 	map<RenderPassID, RenderDelegate> m_RenderPassDelegates;
 	map<RenderPassID, vector<class RenderComponent*>> m_RenderQueues;
 	map<RenderPassID, vector<CustomRenderCommand>> m_CustomRenderQueues;
-	//RenderTarget* m_SceneBuffer = { nullptr };
-	//RenderTarget* m_DepthBuffer = { nullptr };
 private:
 	class RenderPassManager* m_RenderPassManager = { nullptr };
 private:

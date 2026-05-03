@@ -15,6 +15,7 @@ public:
 	void Free();
 	void SubmitGrid(RenderPassID renderPassID, bool isOrthographic);
 public:
+	bool* GetVisible() { return &m_Visible; }
 	void Show() { m_Visible = true; }
 	void Hide() { m_Visible = false; }
 	void Toggle() { m_Visible = !m_Visible; }

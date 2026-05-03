@@ -27,6 +27,36 @@ static vec3 ExtractDeltaEulerDegrees(const mat4& deltaMatrix)
 	const quat deltaRotation = ExtractRotationQuat(deltaMatrix);
 	return glm::degrees(glm::eulerAngles(deltaRotation));
 }
+
+static bool WorldToViewportScreen(
+	const vec3& worldPos,
+	const mat4& viewProj,
+	const ImVec2& imageScreenPos,
+	const ImVec2& imageSize,
+	ImVec2& outScreenPos)
+{
+	vec4 clip = viewProj * vec4(worldPos, 1.0f);
+
+	if (glm::abs(clip.w) < 0.000001f || clip.w <= 0.0f)
+		return false;
+
+	vec3 ndc = vec3(clip) / clip.w;
+
+	const bool inDepthGL = (ndc.z >= -1.0f && ndc.z <= 1.0f);
+	const bool inDepthVK = (ndc.z >= 0.0f && ndc.z <= 1.0f);
+	if (!(inDepthGL || inDepthVK))
+		return false;
+
+	if (ndc.x < -1.0f || ndc.x > 1.0f || ndc.y < -1.0f || ndc.y > 1.0f)
+		return false;
+
+	const float u = ndc.x * 0.5f + 0.5f;
+	const float v = 1.0f - (ndc.y * 0.5f + 0.5f);
+
+	outScreenPos.x = imageScreenPos.x + u * imageSize.x;
+	outScreenPos.y = imageScreenPos.y + v * imageSize.y;
+	return true;
+}
 #pragma endregion
 
 
@@ -63,7 +93,7 @@ void ViewportPanel::Initialize(void* arg)
 					{ L"GBuffer_Normal",   ETextureFormat::R16G16B16A16_FLOAT },
 					{ L"GBuffer_PBR",      ETextureFormat::R8G8B8A8_UNORM },
 					{ L"GBuffer_Emission", ETextureFormat::R8G8B8A8_UNORM },
-					{ L"GBuffer_Position", ETextureFormat::R16G16B16A16_FLOAT },
+					{ L"GBuffer_Position", ETextureFormat::R32G32B32A32_FLOAT },
 		};
 		vector<wstring> gBufferNames;
 		for (auto& def : gBufferDefs)
@@ -80,6 +110,19 @@ void ViewportPanel::Initialize(void* arg)
 			gBufferNames.push_back(name);
 			m_OwnedRTNames.push_back(name);
 		}
+		// ── ShadowDepth ──
+		m_ShadowDepthName = prefix + L"ShadowDepth";
+		tagRenderTargetDesc shadowDepthDesc = {};
+		shadowDepthDesc.Name = m_ShadowDepthName;
+		shadowDepthDesc.Width = w;
+		shadowDepthDesc.Height = h;
+		shadowDepthDesc.Format = ETextureFormat::D32_FLOAT;
+		shadowDepthDesc.Type = ERenderTargetType::DepthStencil;
+		shadowDepthDesc.Usage = ETextureUsage::DepthStencilTarget | ETextureUsage::Sampler;
+		shadowDepthDesc.BindFlag = ERenderTargetBindFlag::RTBF_ShaderResource
+			| ERenderTargetBindFlag::RTBF_DepthStencil;
+		rtMgr.CreateRenderTarget(&shadowDepthDesc);
+		m_OwnedRTNames.push_back(m_ShadowDepthName);
 		// ── Depth ──
 		wstring depthName = prefix + L"Depth";
 		tagRenderTargetDesc depthDesc = {};
@@ -88,7 +131,7 @@ void ViewportPanel::Initialize(void* arg)
 		depthDesc.Height = h;
 		depthDesc.Format = ETextureFormat::D24_UNORM_S8_UINT;
 		depthDesc.Type = ERenderTargetType::DepthStencil;
-		depthDesc.Usage = ETextureUsage::DepthStencilTarget;
+		depthDesc.Usage = ETextureUsage::DepthStencilTarget | ETextureUsage::Sampler;
 		depthDesc.BindFlag = ERenderTargetBindFlag::RTBF_ShaderResource
 			| ERenderTargetBindFlag::RTBF_DepthStencil;
 		rtMgr.CreateRenderTarget(&depthDesc);
@@ -99,15 +142,32 @@ void ViewportPanel::Initialize(void* arg)
 		finalDesc.Name = m_FinalColorName;
 		finalDesc.Width = w;
 		finalDesc.Height = h;
+		finalDesc.Format = ETextureFormat::R8G8B8A8_UNORM;
 		finalDesc.ClearColor = vec4(0.5f, 0.f, 0.0f, 1.0f);
 		finalDesc.BindFlag = ERenderTargetBindFlag::RTBF_ShaderResource
 			| ERenderTargetBindFlag::RTBF_RenderTarget;
 		rtMgr.CreateRenderTarget(&finalDesc);
 		m_OwnedRTNames.push_back(m_FinalColorName);
+		// ── Channel Preview ──
+		m_ChannelPreviewName = prefix + L"ChannelPreview";
+		tagRenderTargetDesc channelPreviewDesc = {};
+		channelPreviewDesc.Name = m_ChannelPreviewName;
+		channelPreviewDesc.Width = w;
+		channelPreviewDesc.Height = h;
+		channelPreviewDesc.Format = ETextureFormat::R8G8B8A8_UNORM;
+		channelPreviewDesc.ClearColor = vec4(0.0f, 0.0f, 0.0f, 1.0f);
+		channelPreviewDesc.BindFlag = ERenderTargetBindFlag::RTBF_ShaderResource
+			| ERenderTargetBindFlag::RTBF_RenderTarget;
+		rtMgr.CreateRenderTarget(&channelPreviewDesc);
+		m_OwnedRTNames.push_back(m_ChannelPreviewName);
+
+
 		// ── Pass 등록 ──
 		m_GeometryPassID = rpMgr.RegisterRenderPass(
 			prefix + L"GeometryPass",
 			gBufferNames, depthName,
+			ERenderPassLoadOperation::RPLO_Clear,
+			ERenderPassStoreOperation::RPSO_Store,
 			ERenderPassLoadOperation::RPLO_Clear,
 			ERenderPassStoreOperation::RPSO_Store,
 			vec4(0.0f, 0.f, 0.f, -1.f), 0, ERenderSortType::FrontToBack);
@@ -116,15 +176,41 @@ void ViewportPanel::Initialize(void* arg)
 			{ m_FinalColorName }, L"",
 			ERenderPassLoadOperation::RPLO_Clear,
 			ERenderPassStoreOperation::RPSO_Store,
+			ERenderPassLoadOperation::RPLO_Clear,
+			ERenderPassStoreOperation::RPSO_Store,
 			vec4(0.0f, 0.0f, 0.0f, -1.0f), 100, ERenderSortType::None);
+		m_ShadowPassID = rpMgr.RegisterRenderPass(
+			prefix + L"ShadowPass",
+			{},                          // color 타깃 없음 (depth-only)
+			m_ShadowDepthName,
+			ERenderPassLoadOperation::RPLO_Clear,
+			ERenderPassStoreOperation::RPSO_Store,
+			ERenderPassLoadOperation::RPLO_Clear,
+			ERenderPassStoreOperation::RPSO_Store,
+			vec4(0.0f, 0.0f, 0.0f, -1.0f),
+			0,                           // priority — geometry와 동일하지만 ID가 먼저여서 앞에 실행됨
+			ERenderSortType::FrontToBack,
+			ERenderPassType::Shadow);
+		m_ChannelPreviewPassID = rpMgr.RegisterRenderPass(
+			prefix + L"ChannelPreviewPass",
+			{ m_ChannelPreviewName }, L"",
+			ERenderPassLoadOperation::RPLO_Clear,
+			ERenderPassStoreOperation::RPSO_Store,
+			ERenderPassLoadOperation::RPLO_Clear,
+			ERenderPassStoreOperation::RPSO_Store,
+			vec4(0.0f, 0.0f, 0.0f, 1.0f),
+			150, ERenderSortType::None);
 #ifdef _DEBUG
 		m_DebugPassID = rpMgr.RegisterRenderPass(
 			L"Debug" + prefix + L"Pass",
 			{ m_FinalColorName }, depthName,
 			ERenderPassLoadOperation::RPLO_Load,
 			ERenderPassStoreOperation::RPSO_Store,
+			ERenderPassLoadOperation::RPLO_Load,
+			ERenderPassStoreOperation::RPSO_Store,
 			vec4(0.0f), 500, ERenderSortType::None);
 #endif
+		
 		m_DisplayRenderTargetName = gBufferNames[0]; // 초기: GBuffer_Diffuse
 	}
 
@@ -133,7 +219,6 @@ void ViewportPanel::Initialize(void* arg)
 	m_InspectorPanel->SetSelectedGameObject(m_EditorCamera);
 	m_Grid.Initialize();
 	
-
 	ResourceManager& rm = ResourceManager::Get();
 	tagRHIPipelineDesc pipelineDesc = {};
 	pipelineDesc.PipelineType = EPipelineType::Graphics;
@@ -148,6 +233,20 @@ void ViewportPanel::Initialize(void* arg)
 	pipelineDesc.CullMode = ECullMode::None;
 	pipelineDesc.BlendMode = EBlendMode::Opaque;
 	m_LightingPipeline = PipelineManager::Get().GetOrCreatePipeline(pipelineDesc);
+
+	tagRHIPipelineDesc channelPipelineDesc = {};
+	channelPipelineDesc.PipelineType = EPipelineType::Graphics;
+	channelPipelineDesc.VertexShader = rm.GetResourceHandle<Shader>(L"FullscreenQuadVS")->GetRHIShader();
+	channelPipelineDesc.PixelShader = rm.GetResourceHandle<Shader>(L"ViewportChannelPS")->GetRHIShader();
+	channelPipelineDesc.ColorAttachmentCount = 1;
+	channelPipelineDesc.ColorAttachmentFormats[0] = ETextureFormat::R8G8B8A8_UNORM;
+	channelPipelineDesc.DepthStencilAttachmentFormat = ETextureFormat::UNKNOWN;
+	channelPipelineDesc.DepthStencilState.DepthTestEnable = false;
+	channelPipelineDesc.DepthStencilState.DepthWriteEnable = false;
+	channelPipelineDesc.Topology = ETopology::TriangleList;
+	channelPipelineDesc.CullMode = ECullMode::None;
+	channelPipelineDesc.BlendMode = EBlendMode::Opaque;
+	m_ChannelPreviewPipeline = PipelineManager::Get().GetOrCreatePipeline(channelPipelineDesc);
 }
 void ViewportPanel::Free()
 {
@@ -165,10 +264,13 @@ void ViewportPanel::Update(f32 dt)
 	m_EditorCamera->Update(dt);
 	m_EditorCamera->LateUpdate(dt);
 	m_IsOrthographic = !m_EditorCamera->GetCamera()->GetIsPerspective();
-	Renderer::Get().RegisterViewportCamera(m_EditorCamera->GetCamera(), m_GeometryPassID);
-	Renderer::Get().RegisterViewportCamera(m_EditorCamera->GetCamera(), m_DebugPassID);
+	RenderPassManager& rpMgr = RenderPassManager::Get();
+	Renderer::Get().RegisterViewportCamera(nullptr, rpMgr.GetRenderPassByID(m_ShadowPassID));
+	Renderer::Get().RegisterViewportCamera(m_EditorCamera->GetCamera(), rpMgr.GetRenderPassByID(m_GeometryPassID));
+	Renderer::Get().RegisterViewportCamera(m_EditorCamera->GetCamera(), rpMgr.GetRenderPassByID(m_DebugPassID));
 	m_Grid.SubmitGrid(m_GeometryPassID, m_IsOrthographic);
 	SubmitLightingPass();
+	SubmitChannelPreviewPass();
 }
 
 void ViewportPanel::Draw()
@@ -187,7 +289,9 @@ void ViewportPanel::Draw()
 		uint32 height = (uint32)panelSize.y;
 		f32 panelAspectRatio = (f32)width / (f32)height;
 
-		RenderTarget* currentRT = RenderTargetManager::Get().GetRenderTarget(m_DisplayRenderTargetName);
+		const bool useChannelPreview = (m_ChannelView != EViewportChannelView::RGBA);
+		const wstring& displayName = useChannelPreview ? m_ChannelPreviewName : m_DisplayRenderTargetName;
+		RenderTarget* currentRT = RenderTargetManager::Get().GetRenderTarget(displayName);
 		if (currentRT)
 		{
 			RHITexture* texture = currentRT->GetTexture();
@@ -231,6 +335,7 @@ void ViewportPanel::Draw()
 
 				ImTextureID textureID = (ImTextureID)(size_t)texture->GetNativeHandle();
 				ImGui::Image(textureID, finalSize);
+				DrawLightOverlay(imageScreenPos, finalSize);
 				DrawGuizmo(imageScreenPos, finalSize);
 				MouseInput(ImGui::GetMousePos(), imageScreenPos, finalSize);
 			}
@@ -324,6 +429,144 @@ void ViewportPanel::DrawGuizmo(ImVec2 pos, ImVec2 size)
 }
 #pragma endregion
 
+#pragma region LightOverlay
+void ViewportPanel::DrawLightOverlay(const ImVec2& imageScreenPos, const ImVec2& imageSize)
+{
+	if (!m_ShowLightOverlay || !m_EditorCamera || !m_EditorCamera->GetCamera())
+		return;
+
+	ImDrawList* drawList = ImGui::GetWindowDrawList();
+	if (!drawList)
+		return;
+
+	Camera* camera = m_EditorCamera->GetCamera();
+	const mat4 viewProj = camera->GetProjMatrix() * camera->GetViewMatrix();
+	const vec3 cameraPos = camera->GetCameraBuffer().cameraPosition;
+
+	const auto& lights = LightManager::Get().GetLightSources();
+	for (LightSource* light : lights)
+	{
+		if (!light || !light->IsActive())
+			continue;
+
+		GameObject* owner = light->GetOwner();
+		if (!owner || !owner->IsActive())
+			continue;
+
+		Transform* tr = owner->GetTransform();
+		if (!tr)
+			continue;
+
+		vec3 worldPos = tr->GetWorldPosition();
+
+		vec3 forward = tr->GetForward();
+		if (glm::dot(forward, forward) < 0.000001f)
+			forward = vec3(0.0f, 0.0f, 1.0f);
+		else
+			forward = glm::normalize(forward);
+
+		ImVec2 screenPos;
+		if (!WorldToViewportScreen(worldPos, viewProj, imageScreenPos, imageSize, screenPos))
+			continue;
+
+		ImU32 color = IM_COL32(255, 220, 80, 255);
+		const char* lightIcon = ICON_FA_LIGHTBULB;
+		bool drawDir = false;
+		float dirLen = 1.5f;
+
+		switch (light->GetType())
+		{
+		case ELightType::Directional:
+			color = IM_COL32(255, 180, 0, 255);
+			lightIcon = ICON_FA_SUN;
+			drawDir = true;
+			dirLen = 3.0f;
+			break;
+		case ELightType::Spot:
+			color = IM_COL32(80, 220, 255, 255);
+			lightIcon = ICON_FA_LOCATION_DOT;
+			drawDir = true;
+			dirLen = 1.8f;
+			break;
+		case ELightType::Point:
+		default:
+			color = IM_COL32(255, 220, 80, 255);
+			lightIcon = ICON_FA_LIGHTBULB;
+			drawDir = false;
+			dirLen = 1.5f;
+			break;
+		}
+
+		// distance-based scale
+		const float dist = glm::length(worldPos - cameraPos);
+
+		// 원하는 감도에 맞게 조절
+		const float nearDist = 2.0f;
+		const float farDist = 40.0f;
+		const float nearScale = 1.9f; // 가까울 때 크게
+		const float farScale = 0.75f; // 멀 때 작게
+
+		float t = (dist - nearDist) / (farDist - nearDist);
+		t = glm::clamp(t, 0.0f, 1.0f);
+		const float distanceScale = glm::mix(nearScale, farScale, t);
+
+		// 배경 링 + 아이콘
+		ImFont* font = ImGui::GetFont();
+		const float iconFontSize = ImGui::GetFontSize() * 1.8f * distanceScale;
+		const ImVec2 iconSize = font->CalcTextSizeA(iconFontSize, FLT_MAX, 0.0f, lightIcon);
+
+		const float fillRadius = (glm::max(iconSize.x, iconSize.y) * 0.5f + 4.0f);
+		const float strokeRadius = fillRadius + 2.0f;
+		const float ringThickness = glm::max(1.5f, 2.0f * distanceScale);
+
+		drawList->AddCircleFilled(screenPos, fillRadius, IM_COL32(0, 0, 0, 140));
+		drawList->AddCircle(screenPos, strokeRadius, color, 0, ringThickness);
+		drawList->AddText(
+			font,
+			iconFontSize,
+			ImVec2(screenPos.x - iconSize.x * 0.5f, screenPos.y - iconSize.y * 0.5f),
+			color,
+			lightIcon);
+
+		if (!drawDir)
+			continue;
+
+		// 방향 길이도 거리 기반으로 살짝 반영
+		const float dirLenScaled = dirLen * glm::mix(0.9f, 1.35f, distanceScale);
+		ImVec2 tipScreen;
+		vec3 tipWorld = worldPos + forward * dirLenScaled;
+		if (!WorldToViewportScreen(tipWorld, viewProj, imageScreenPos, imageSize, tipScreen))
+			continue;
+
+		const float lineThickness = glm::max(1.5f, 2.0f * distanceScale);
+		drawList->AddLine(screenPos, tipScreen, color, lineThickness);
+
+		ImVec2 d(tipScreen.x - screenPos.x, tipScreen.y - screenPos.y);
+		float len = sqrtf(d.x * d.x + d.y * d.y);
+		if (len > 0.0001f)
+		{
+			d.x /= len;
+			d.y /= len;
+			ImVec2 n(-d.y, d.x);
+
+			const float headLen = 10.0f * distanceScale;
+			const float headW = 4.0f * distanceScale;
+
+			ImVec2 a = tipScreen;
+			ImVec2 b(tipScreen.x - d.x * headLen + n.x * headW,
+				tipScreen.y - d.y * headLen + n.y * headW);
+			ImVec2 c(tipScreen.x - d.x * headLen - n.x * headW,
+				tipScreen.y - d.y * headLen - n.y * headW);
+
+			drawList->AddTriangleFilled(a, b, c, color);
+		}
+
+		// 방향 아이콘도 같이 찍고 싶으면 사용
+		//drawList->AddText(ImVec2(tipScreen.x + 3.0f, tipScreen.y - 8.0f), color, ICON_FA_ARROW_RIGHT_LONG);
+	}
+}
+#pragma endregion
+
 #pragma region Options Bar
 void ViewportPanel::DrawOptionsBar()
 {
@@ -403,10 +646,8 @@ void ViewportPanel::DrawOptionsBar()
 
 		if (ImGui::BeginMenu("Grid"))
 		{
-			if (ImGui::MenuItem("Show Grid"))
-			{
-				m_Grid.Toggle();
-			}
+			ImGui::MenuItem("Show Grid", nullptr, m_Grid.GetVisible());
+			ImGui::MenuItem("Show Light Overlay", nullptr, &m_ShowLightOverlay);
 			ImGui::EndMenu();
 		}
 
@@ -420,9 +661,63 @@ void ViewportPanel::DrawOptionsBar()
 			m_InspectorPanel->ToggleOpen();
 		}
 
+		DrawChannelViewButton();
 		DrawDimensionToggleButton();
 	}
 	ImGui::EndMenuBar();
+}
+void ViewportPanel::DrawChannelViewButton()
+{
+	const ImVec2 buttonSize(28.0f, 0.0f);
+	const float buttonSpacing = 0.0f;
+	const float groupGapToDimension = 8.0f;
+	const float rightPadding = 10.0f;
+
+	const float dimensionGroupWidth = 30.0f * 2.0f;
+	const float channelGroupWidth = buttonSize.x * 4.0f + buttonSpacing * 3.0f;
+
+	ImGui::SameLine(
+		ImGui::GetWindowWidth() - dimensionGroupWidth - groupGapToDimension - channelGroupWidth - rightPadding);
+
+	auto toggleFlag = [this](EViewportChannelView flag)
+		{
+			const uint8 current = static_cast<uint8>(m_ChannelView);
+			const uint8 bit = static_cast<uint8>(flag);
+
+			if ((current & bit) != 0)
+				m_ChannelView = static_cast<EViewportChannelView>(current & ~bit);
+			else
+				m_ChannelView = static_cast<EViewportChannelView>(current | bit);
+		};
+
+	auto drawToggleButton = [&](const char* label, EViewportChannelView flag, const ImVec4& activeColor)
+		{
+			const bool isActive = HasFlag(m_ChannelView, flag);
+
+			if (isActive)
+				ImGui::PushStyleColor(ImGuiCol_Button, activeColor);
+			else
+				ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyle().Colors[ImGuiCol_FrameBg]);
+
+			if (ImGui::Button(label, buttonSize))
+				toggleFlag(flag);
+
+			ImGui::PopStyleColor();
+		};
+
+	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(buttonSpacing, 0.0f));
+	ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 0.0f);
+
+	drawToggleButton("R", EViewportChannelView::R, ImVec4(0.75f, 0.20f, 0.20f, 1.0f));
+	ImGui::SameLine();
+	drawToggleButton("G", EViewportChannelView::G, ImVec4(0.20f, 0.65f, 0.20f, 1.0f));
+	ImGui::SameLine();
+	drawToggleButton("B", EViewportChannelView::B, ImVec4(0.20f, 0.35f, 0.80f, 1.0f));
+	ImGui::SameLine();
+	drawToggleButton("A", EViewportChannelView::A, ImVec4(0.55f, 0.55f, 0.55f, 1.0f));
+
+	ImGui::PopStyleVar(2);
+
 }
 void ViewportPanel::DrawDimensionToggleButton()
 {
@@ -588,7 +883,16 @@ void ViewportPanel::SubmitLightingPass()
 			rhi->BindTextureSampler(
 				rtMgr.GetRenderTarget(prefix + L"GBuffer_Position")->GetTexture(),
 				sampler, 4);
+			rhi->BindTextureSampler(
+				rtMgr.GetRenderTarget(m_ShadowDepthName)->GetTexture(),
+				sampler, 5);
 			// Lighting 파이프라인 바인딩
+			{
+				
+				tagCameraBuffer shadowCam = LightManager::Get().GetShadowCameraBuffer(0u);
+				tagLightShadowData shadowCamData = LightManager::Get().GetShadowData(0u);
+				rhi->BindConstantBuffer(&shadowCamData, sizeof(shadowCamData), 1);
+			}
 			rhi->BindPipeline(m_LightingPipeline);
 
 			if (IsFailure(LightManager::Get().Bind(0)))
@@ -605,5 +909,48 @@ void ViewportPanel::SubmitLightingPass()
 			return EResult::Success;
 		},
 		m_LightingPassID);
+}
+
+namespace
+{
+	static bool IsFullRGBA(EViewportChannelView flags)
+	{
+		return flags == EViewportChannelView::RGBA;
+	}
+}
+void ViewportPanel::SubmitChannelPreviewPass()
+{
+	if (IsFullRGBA(m_ChannelView))
+		return;
+
+	Renderer::Get().SubmitCustomCommand(
+		[this](f32 dt, RenderPass* pass) -> EResult
+		{
+			if (!m_ChannelPreviewPipeline)
+				return EResult::Fail;
+
+			RenderTarget* sourceRT = RenderTargetManager::Get().GetRenderTarget(m_DisplayRenderTargetName);
+			if (!sourceRT || !sourceRT->GetTexture())
+				return EResult::Fail;
+
+			auto* rhi = Renderer::Get().GetRHI();
+			auto& smMgr = SamplerManager::Get();
+			RHISampler* sampler = smMgr.GetDefaultSampler();
+
+			ChannelViewData channelData = {};
+			channelData.Flags = static_cast<uint32>(m_ChannelView);
+
+			if (IsFailure(rhi->BindConstantBuffer(&channelData, sizeof(ChannelViewData), 0)))
+				return EResult::Fail;
+
+			if (IsFailure(rhi->BindTextureSampler(sourceRT->GetTexture(), sampler, 0)))
+				return EResult::Fail;
+
+			if (IsFailure(rhi->BindPipeline(m_ChannelPreviewPipeline)))
+				return EResult::Fail;
+
+			return rhi->Draw(3);
+		},
+		m_ChannelPreviewPassID);
 }
 #pragma endregion

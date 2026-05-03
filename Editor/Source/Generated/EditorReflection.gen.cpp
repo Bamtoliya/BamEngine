@@ -4,6 +4,7 @@
 
 // [Header Includes]
 #include "AssetManager/Importer/Public/ModelImporter.h"
+#include "ImGui/ViewportPanel/Public/ViewportPanel.h"
 
 #pragma push_macro("new")
 #undef new
@@ -49,6 +50,17 @@ BEGIN_ENUM(EModelImportOption)
 	REFLECT_ENUM_ENTRY(EModelImportOption, Meshes)
 	REFLECT_ENUM_ENTRY(EModelImportOption, Skeleton)
 END_ENUM_REFLECT_EX(EModelImportOption, "EModelImportOption")
+
+// Enum: EViewportChannelView
+BEGIN_ENUM(EViewportChannelView)
+	REFLECT_ENUM_ENTRY(EViewportChannelView, None)
+	REFLECT_ENUM_ENTRY(EViewportChannelView, R)
+	REFLECT_ENUM_ENTRY(EViewportChannelView, G)
+	REFLECT_ENUM_ENTRY(EViewportChannelView, B)
+	REFLECT_ENUM_ENTRY(EViewportChannelView, A)
+	REFLECT_ENUM_ENTRY(EViewportChannelView, RGB)
+	REFLECT_ENUM_ENTRY(EViewportChannelView, RGBA)
+END_ENUM_REFLECT_EX(EViewportChannelView, "EViewportChannelView")
 
 #pragma endregion
 

@@ -2,6 +2,7 @@
 
 #include "Component.h"
 #include "Light.h"
+#include "Camera.h"
 
 BEGIN(Engine)
 
@@ -78,8 +79,15 @@ public:
 
 #pragma region GPU
 public:
-	struct tagGPULight BuildGPULightDesc() const;
+	tagGPULight BuildGPULightDesc() const;
 #pragma endregion
+
+#pragma region Shadow
+public:
+	tagCameraBuffer BuildShadowCameraBuffer() const;
+	tagLightShadowData BuildShadowData() const;
+#pragma endregion
+
 
 #pragma region Getter
 public:
@@ -147,6 +155,16 @@ private:
 
 	PROPERTY(EDITABLE)
 	uint32 m_LightingLayerMask = 0xFFFFFFFFu;
+
+
+	PROPERTY(EDITABLE, EDITCONDITION("m_Flags", ELightFlags::CastShadows, false), CATEGORY("Shadow"), RANGE(-FLT_MAX, FLT_MAX, 0.01f))
+	f32 m_ShadowRange = 50.0f;
+	PROPERTY(EDITABLE, EDITCONDITION("m_Flags", ELightFlags::CastShadows, false), CATEGORY("Shadow"), RANGE(-FLT_MAX, FLT_MAX, 0.01f))
+	f32 m_ShadowBias = 0.002f;
+	PROPERTY(EDITABLE, EDITCONDITION("m_Flags", ELightFlags::CastShadows, false), CATEGORY("Shadow"), RANGE(-FLT_MAX, FLT_MAX, 0.01f))
+	f32 m_ShadowSlopeBias = 0.5f;
+	PROPERTY(EDITABLE, EDITCONDITION("m_Flags", ELightFlags::CastShadows, false), CATEGORY("Shadow"), RANGE(-FLT_MAX, FLT_MAX, 0.01f))
+	f32 m_ShadowNormalBias = 0.01f;
 
 	PROPERTY(EDITABLE)
 	ELightFlags m_Flags = ELightFlags::UseInDeferredRendering | ELightFlags::AffectDiffuse | ELightFlags::AffectSpecular;

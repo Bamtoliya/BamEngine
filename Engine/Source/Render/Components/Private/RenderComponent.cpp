@@ -15,6 +15,8 @@
 #include "RenderTargetManager.h"
 #include "GameObject.h"
 
+#include "LightManager.h"
+
 
 #pragma region Constructor&Destructor
 EResult RenderComponent::Initialize(void* arg)
@@ -49,8 +51,22 @@ void RenderComponent::LateUpdate(f32 dt)
 		const auto& activePasses = Renderer::Get().GetActiveViewportCameras();
 		for (const auto& passInfo : activePasses)
 		{
-			if(passInfo.Camera)
-				Renderer::Get().Submit(this, passInfo.PassID);
+			if (!passInfo.RenderPass) continue;
+
+			const ERenderPassType passType = passInfo.RenderPass->GetPassType();
+
+			if (passType == ERenderPassType::Shadow)
+			{
+				// 그림자 광원이 없으면 Shadow 패스에 submit하지 않음
+				if (LightManager::Get().GetShadowCastingLights().empty())
+					continue;
+			}
+			else if (!passInfo.Camera)
+			{
+				continue;
+			}
+
+			Renderer::Get().Submit(this, passInfo.RenderPass->GetID());
 		}
 	}
 }
@@ -137,7 +153,7 @@ EResult RenderComponent::BindPipeline(Mesh* mesh, MaterialInterface* material, R
 	wstring depthStencilName = renderPass->GetDepthStencilName();
 	if (!depthStencilName.empty())
 		pipelineDesc.DepthStencilAttachmentFormat = RenderTargetManager::Get().GetRenderTarget(depthStencilName)->GetFormat();
-	pipelineDesc.DepthStencilState.DepthTestEnable = (renderPass->GetDepthStencilName() != L"") && (material->GetDepthMode() != EDepthMode::None);
+	pipelineDesc.DepthStencilState.DepthTestEnable = (!renderPass->GetDepthStencilName().empty()) && (material->GetDepthMode() != EDepthMode::None);
 	pipelineDesc.DepthStencilState.DepthWriteEnable = pipelineDesc.DepthStencilState.DepthTestEnable && (material->GetDepthMode() == EDepthMode::ReadWrite);
 
 	pipelineDesc.DepthStencilState.DepthCompareOp = material->GetDepthCompareOp();

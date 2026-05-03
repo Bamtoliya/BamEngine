@@ -616,6 +616,34 @@ BEGIN_METADATA(LightSource, m_LightingLayerMask)
 	EDITABLE
 END_METADATA
 
+BEGIN_METADATA(LightSource, m_ShadowRange)
+	EDITABLE
+	EDITCONDITION("m_Flags", ELightFlags::CastShadows, false)
+	CATEGORY("Shadow")
+	RANGE(-FLT_MAX, FLT_MAX, 0.01f)
+END_METADATA
+
+BEGIN_METADATA(LightSource, m_ShadowBias)
+	EDITABLE
+	EDITCONDITION("m_Flags", ELightFlags::CastShadows, false)
+	CATEGORY("Shadow")
+	RANGE(-FLT_MAX, FLT_MAX, 0.01f)
+END_METADATA
+
+BEGIN_METADATA(LightSource, m_ShadowSlopeBias)
+	EDITABLE
+	EDITCONDITION("m_Flags", ELightFlags::CastShadows, false)
+	CATEGORY("Shadow")
+	RANGE(-FLT_MAX, FLT_MAX, 0.01f)
+END_METADATA
+
+BEGIN_METADATA(LightSource, m_ShadowNormalBias)
+	EDITABLE
+	EDITCONDITION("m_Flags", ELightFlags::CastShadows, false)
+	CATEGORY("Shadow")
+	RANGE(-FLT_MAX, FLT_MAX, 0.01f)
+END_METADATA
+
 BEGIN_METADATA(LightSource, m_Flags)
 	EDITABLE
 END_METADATA
@@ -630,6 +658,10 @@ BEGIN_PROPERTIES(LightSource)
 	REFLECT_PROPERTY(LightSource, m_SpotOuterAngle, "f32", reflection::EPropertyType::Float32, std::span<const reflection::MetadataEntry>{LightSource_m_SpotOuterAngle_Meta})
 	REFLECT_PROPERTY(LightSource, m_SpotFalloffExponent, "f32", reflection::EPropertyType::Float32, std::span<const reflection::MetadataEntry>{LightSource_m_SpotFalloffExponent_Meta})
 	REFLECT_PROPERTY(LightSource, m_LightingLayerMask, "uint32", reflection::EPropertyType::UInt32, std::span<const reflection::MetadataEntry>{LightSource_m_LightingLayerMask_Meta})
+	REFLECT_PROPERTY(LightSource, m_ShadowRange, "f32", reflection::EPropertyType::Float32, std::span<const reflection::MetadataEntry>{LightSource_m_ShadowRange_Meta})
+	REFLECT_PROPERTY(LightSource, m_ShadowBias, "f32", reflection::EPropertyType::Float32, std::span<const reflection::MetadataEntry>{LightSource_m_ShadowBias_Meta})
+	REFLECT_PROPERTY(LightSource, m_ShadowSlopeBias, "f32", reflection::EPropertyType::Float32, std::span<const reflection::MetadataEntry>{LightSource_m_ShadowSlopeBias_Meta})
+	REFLECT_PROPERTY(LightSource, m_ShadowNormalBias, "f32", reflection::EPropertyType::Float32, std::span<const reflection::MetadataEntry>{LightSource_m_ShadowNormalBias_Meta})
 	REFLECT_PROPERTY(LightSource, m_Flags, "Engine::ELightFlags", reflection::EPropertyType::BitFlag, std::span<const reflection::MetadataEntry>{LightSource_m_Flags_Meta})
 END_PROPERTIES
 EMPTY_FUNCTIONS(LightSource)
@@ -645,6 +677,14 @@ IMPLEMENT_CLASS_EX(MeshRenderer, "Engine::MeshRenderer", "Engine::RenderComponen
 #pragma endregion // CLASS: Engine::MeshRenderer
 
 #pragma region CLASS: Engine::RenderComponent
+BEGIN_METADATA(RenderComponent, m_DrawShadow)
+	EDITABLE
+END_METADATA
+
+BEGIN_METADATA(RenderComponent, m_ReceiveShadow)
+	EDITABLE
+END_METADATA
+
 BEGIN_METADATA(RenderComponent, m_RenderPassID)
 	EDITABLE
 	CATEGORY("PROP_INFORMATION")
@@ -656,6 +696,8 @@ END_METADATA
 
 DECLARE_CONTAINER_INFO(RenderComponent, m_Materials_Root, "ResourceHandle<MaterialInterface>", reflection::EPropertyType::ResourceHandle, reflection::LinearContainerAccessor<vector<ResourceHandle<MaterialInterface>>, ResourceHandle<MaterialInterface>>::Get())
 BEGIN_PROPERTIES(RenderComponent)
+	REFLECT_PROPERTY(RenderComponent, m_DrawShadow, "bool", reflection::EPropertyType::Bool, std::span<const reflection::MetadataEntry>{RenderComponent_m_DrawShadow_Meta})
+	REFLECT_PROPERTY(RenderComponent, m_ReceiveShadow, "bool", reflection::EPropertyType::Bool, std::span<const reflection::MetadataEntry>{RenderComponent_m_ReceiveShadow_Meta})
 	REFLECT_PROPERTY(RenderComponent, m_RenderPassID, "uint32", reflection::EPropertyType::UInt32, std::span<const reflection::MetadataEntry>{RenderComponent_m_RenderPassID_Meta})
 	REFLECT_CONTAINER_PROPERTY(RenderComponent, m_Materials, "vector<ResourceHandle<MaterialInterface>>", reflection::EPropertyType::Array, &RenderComponent_m_Materials_Root_ContainerData, std::span<const reflection::MetadataEntry>{RenderComponent_m_Materials_Meta})
 END_PROPERTIES

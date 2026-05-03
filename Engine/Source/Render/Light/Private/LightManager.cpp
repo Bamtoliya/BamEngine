@@ -125,4 +125,39 @@ EResult LightManager::EnsureBuffer()
 
 	return EResult::Success;
 }
+tagCameraBuffer LightManager::GetShadowCameraBuffer(const LightSource* lightSource) const
+{
+	return lightSource ? lightSource->BuildShadowCameraBuffer() : tagCameraBuffer();
+}
+tagCameraBuffer LightManager::GetShadowCameraBuffer(uint32 shadowLightIndex) const
+{
+	auto shadowLights = GetShadowCastingLights();
+	if (shadowLightIndex >= shadowLights.size())
+		return tagCameraBuffer{}; // 빈 버퍼
+
+	return GetShadowCameraBuffer(shadowLights[shadowLightIndex]);
+}
+vector<LightSource*> LightManager::GetShadowCastingLights() const
+{
+	vector<LightSource*> shadowCasters;
+	for (auto* light : m_LightSources)
+	{
+		if (HasFlag(light->GetFlags(), ELightFlags::CastShadows))
+			shadowCasters.push_back(light);
+	}
+	return shadowCasters;
+}
+tagLightShadowData LightManager::GetShadowData(const LightSource* lightSource) const
+{
+	return lightSource ? lightSource->BuildShadowData() : tagLightShadowData();
+}
+tagLightShadowData LightManager::GetShadowData(uint32 shadowLightIndex) const
+{
+	auto shadowLights = GetShadowCastingLights();
+	if (shadowLightIndex >= shadowLights.size())
+		return tagLightShadowData{}; // 빈 데이터
+
+	return GetShadowData(shadowLights[shadowLightIndex]);
+}
+
 #pragma endregion

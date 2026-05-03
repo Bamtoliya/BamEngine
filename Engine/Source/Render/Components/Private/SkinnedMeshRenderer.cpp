@@ -11,6 +11,9 @@
 #include "MeshFilter.h"
 #include "Animator.h"
 
+#include "ResourceManager.h"
+#include "RenderPass.h"
+
 REGISTER_COMPONENT(SkinnedMeshRenderer)
 
 #pragma region Contructor&Destructor
@@ -62,10 +65,18 @@ EResult SkinnedMeshRenderer::Render(f32 dt, RenderPass* renderPass)
 	RHI* rhi = Renderer::Get().GetRHI();
 	MaterialInterface* material = GetMaterial();
 
-	if (IsFailure(BindPipeline(mesh, material, renderPass)))
-		return EResult::Fail;
+	if (renderPass && renderPass->GetPassType() == ERenderPassType::Shadow)
+	{
+		material = ResourceManager::Get().GetResourceHandle<Material>(L"Resources/Material/ShadowDepthSkinningMaterial").Get();
+		if (!material) return EResult::Success;
+	}
+	else
+	{
+		if (IsFailure(material->Bind(2)))
+			return EResult::Fail;
+	}
 
-	if (IsFailure(material->Bind(2)))
+	if (IsFailure(BindPipeline(mesh, material, renderPass)))
 		return EResult::Fail;
 
 	SceneUBO uboData;

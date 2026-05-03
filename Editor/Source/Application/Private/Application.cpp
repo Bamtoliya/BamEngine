@@ -56,7 +56,15 @@ EResult Application::Initialize(void* arg)
     }
 
 
-    RenderPassID uiPassID = RenderPassManager::Get().RegisterRenderPass(L"Editor UI", {L"FinalColor"}, L"", ERenderPassLoadOperation::RPLO_Load, ERenderPassStoreOperation::RPSO_Store, vec4(0.0f, 0.0f, 0.0f, -1.0f), 1000, ERenderSortType::None);
+    RenderPassID uiPassID = RenderPassManager::Get().RegisterRenderPass(
+        L"Editor UI",
+        {L"FinalColor"},
+        L"",
+        ERenderPassLoadOperation::RPLO_Load, ERenderPassStoreOperation::RPSO_Store,
+        ERenderPassLoadOperation::RPLO_Load, ERenderPassStoreOperation::RPSO_Store,
+        vec4(0.0f, 0.0f, 0.0f, -1.0f),
+        1000,
+        ERenderSortType::None);
     DelegateHandle uiHandle = Renderer::Get().GetRenderPassDelegate(uiPassID).AddLambda([](f32 dt) {
         ImGuiManager::Get().Begin();
         ImGuiManager::Get().Draw();
@@ -142,6 +150,28 @@ void Application::InitializeFiles()
 void Application::InitializeShaders()
 {
     ResourceManager& rm = ResourceManager::Get();
+
+    tagShaderDesc gbufferVsDesc = {};
+    gbufferVsDesc.Key = L"Resources/Shader/GBufferVS";
+    gbufferVsDesc.Path = L"Resources/Shader/gbuffer.vert.spv";
+    gbufferVsDesc.SpirvPath = L"Resources/Shader/gbuffer.vert.spv";
+    gbufferVsDesc.ShaderType = EShaderType::Vertex;
+    rm.LoadResource<Shader>(&gbufferVsDesc);
+    rm.SaveToBinaryFile(
+        rm.GetResourceHandle<Shader>(gbufferVsDesc.Key).Get(),
+        L"Resources/Shader/gbuffer.vert.bamshader");
+    rm.LoadFile(L"Resources/Shader/gbuffer.vert.bamshader");
+    tagShaderDesc gbufferPsDesc = {};
+    gbufferPsDesc.Key = L"Resources/Shader/GBufferPS";
+    gbufferPsDesc.Path = L"Resources/Shader/gbuffer.frag.spv";
+    gbufferPsDesc.SpirvPath = L"Resources/Shader/gbuffer.frag.spv";
+    gbufferPsDesc.ShaderType = EShaderType::Pixel;
+    rm.LoadResource<Shader>(&gbufferPsDesc);
+    rm.SaveToBinaryFile(
+        rm.GetResourceHandle<Shader>(gbufferPsDesc.Key).Get(),
+        L"Resources/Shader/gbuffer.frag.bamshader");
+    rm.LoadFile(L"Resources/Shader/gbuffer.frag.bamshader");
+
     // Fullscreen Quad VS
     tagShaderDesc fsQuadVsDesc = {};
     fsQuadVsDesc.Key = L"FullscreenQuadVS";
@@ -150,6 +180,11 @@ void Application::InitializeShaders()
     fsQuadVsDesc.SpirvPath = L"Resources/Shader/fullscreen_quad.vert.spv";
     fsQuadVsDesc.EntryPoint = "main";
     rm.LoadResource<Shader>(&fsQuadVsDesc);
+    rm.SaveToBinaryFile(
+        rm.GetResourceHandle<Shader>(fsQuadVsDesc.Key).Get(),
+        L"Resources/Shader/fullscreen_quad.vert.bamshader");
+    rm.LoadFile(L"Resources/Shader/fullscreen_quad.vert.bamshader");
+
     // Lighting PS
     tagShaderDesc lightingPsDesc = {};
     lightingPsDesc.Key = L"LightingPS";
@@ -157,8 +192,64 @@ void Application::InitializeShaders()
     lightingPsDesc.Path = L"Resources/Shader/lighting.frag.spv";
     lightingPsDesc.SpirvPath = L"Resources/Shader/lighting.frag.spv";
     lightingPsDesc.EntryPoint = "main";
+    lightingPsDesc.NumSamplers = 6;
     lightingPsDesc.NumStorageBuffers = 1;
+    lightingPsDesc.NumUniformBuffers = 2;
     rm.LoadResource<Shader>(&lightingPsDesc);
+    rm.SaveToBinaryFile(
+        rm.GetResourceHandle<Shader>(lightingPsDesc.Key).Get(),
+        L"Resources/Shader/lighting.frag.bamshader");
+    rm.LoadFile(L"Resources/Shader/lighting.frag.bamshader");
+
+    // Shadow Depth VS (static mesh)
+    tagShaderDesc shadowDepthVsDesc = {};
+    shadowDepthVsDesc.Key = L"ShadowDepthVS";
+    shadowDepthVsDesc.ShaderType = EShaderType::Vertex;
+    shadowDepthVsDesc.Path = L"Resources/Shader/shadow_depth.vert.spv";
+    shadowDepthVsDesc.SpirvPath = L"Resources/Shader/shadow_depth.vert.spv";
+    shadowDepthVsDesc.EntryPoint = "main";
+    rm.LoadResource<Shader>(&shadowDepthVsDesc);
+    rm.SaveToBinaryFile(
+        rm.GetResourceHandle<Shader>(shadowDepthVsDesc.Key).Get(),
+        L"Resources/Shader/shadow_depth.vert.bamshader");
+    rm.LoadFile(L"Resources/Shader/shadow_depth.vert.bamshader");
+
+    // Shadow Depth VS (skinning)
+    tagShaderDesc shadowDepthSkinVsDesc = {};
+    shadowDepthSkinVsDesc.Key = L"ShadowDepthSkinningVS";
+    shadowDepthSkinVsDesc.ShaderType = EShaderType::Vertex;
+    shadowDepthSkinVsDesc.Path = L"Resources/Shader/shadow_depth_skinning.vert.spv";
+    shadowDepthSkinVsDesc.SpirvPath = L"Resources/Shader/shadow_depth_skinning.vert.spv";
+    shadowDepthSkinVsDesc.EntryPoint = "main";
+    shadowDepthSkinVsDesc.NumStorageBuffers = 1;
+    rm.LoadResource<Shader>(&shadowDepthSkinVsDesc);
+    rm.SaveToBinaryFile(
+        rm.GetResourceHandle<Shader>(shadowDepthSkinVsDesc.Key).Get(),
+        L"Resources/Shader/shadow_depth_skinning.vert.bamshader");
+    rm.LoadFile(L"Resources/Shader/shadow_depth_skinning.vert.bamshader");
+
+    // Shadow Depth PS (depth-only)
+    tagShaderDesc shadowDepthPsDesc = {};
+    shadowDepthPsDesc.Key = L"ShadowDepthPS";
+    shadowDepthPsDesc.ShaderType = EShaderType::Pixel;
+    shadowDepthPsDesc.Path = L"Resources/Shader/shadow_depth.frag.spv";
+    shadowDepthPsDesc.SpirvPath = L"Resources/Shader/shadow_depth.frag.spv";
+    shadowDepthPsDesc.EntryPoint = "main";
+    rm.LoadResource<Shader>(&shadowDepthPsDesc);
+    rm.SaveToBinaryFile(
+        rm.GetResourceHandle<Shader>(shadowDepthPsDesc.Key).Get(),
+        L"Resources/Shader/shadow_depth.frag.bamshader");
+    rm.LoadFile(L"Resources/Shader/shadow_depth.frag.bamshader");
+
+    tagShaderDesc viewportChannelPsDesc = {};
+    viewportChannelPsDesc.Key = L"ViewportChannelPS";
+    viewportChannelPsDesc.ShaderType = EShaderType::Pixel;
+    viewportChannelPsDesc.Path = L"Resources/Shader/viewport_channel.frag.spv";
+    viewportChannelPsDesc.SpirvPath = L"Resources/Shader/viewport_channel.frag.spv";
+    viewportChannelPsDesc.EntryPoint = "main";
+    viewportChannelPsDesc.NumSamplers = 1;
+    viewportChannelPsDesc.NumUniformBuffers = 1;
+    rm.LoadResource<Shader>(&viewportChannelPsDesc);
 }
 
 void Application::InitializeMeshes()
@@ -333,26 +424,6 @@ void Application::InitializeMaterials()
     resourceManager.LoadFile(L"Resources/Material/SkinningMaterial.bammatinst");
 #pragma endregion
 
-    tagShaderDesc gbufferVsDesc = {};
-    gbufferVsDesc.Key = L"Resources/Shader/GBufferVS";
-    gbufferVsDesc.Path = L"Resources/Shader/gbuffer.vert.spv";
-    gbufferVsDesc.SpirvPath = L"Resources/Shader/gbuffer.vert.spv";
-    gbufferVsDesc.ShaderType = EShaderType::Vertex;
-    resourceManager.LoadResource<Shader>(&gbufferVsDesc);
-    resourceManager.SaveToBinaryFile(
-        resourceManager.GetResourceHandle<Shader>(gbufferVsDesc.Key).Get(),
-        L"Resources/Shader/gbuffer.vert.bamshader");
-    resourceManager.LoadFile(L"Resources/Shader/gbuffer.vert.bamshader");
-    tagShaderDesc gbufferPsDesc = {};
-    gbufferPsDesc.Key = L"Resources/Shader/GBufferPS";
-    gbufferPsDesc.Path = L"Resources/Shader/gbuffer.frag.spv";
-    gbufferPsDesc.SpirvPath = L"Resources/Shader/gbuffer.frag.spv";
-    gbufferPsDesc.ShaderType = EShaderType::Pixel;
-    resourceManager.LoadResource<Shader>(&gbufferPsDesc);
-    resourceManager.SaveToBinaryFile(
-        resourceManager.GetResourceHandle<Shader>(gbufferPsDesc.Key).Get(),
-        L"Resources/Shader/gbuffer.frag.bamshader");
-    resourceManager.LoadFile(L"Resources/Shader/gbuffer.frag.bamshader");
     // ── G-Buffer Material 생성 ──
     tagMaterialDesc gbufferMatDesc = {};
     gbufferMatDesc.Key = L"Resources/Material/GBufferMaterial";
@@ -366,6 +437,33 @@ void Application::InitializeMaterials()
     Material* gbufferMat = resourceManager.LoadResource<Material>(&gbufferMatDesc).Get();
     resourceManager.SaveToBinaryFile(gbufferMat, L"Resources/Material/GBufferMaterial.bammat");
     resourceManager.LoadFile(L"Resources/Material/GBufferMaterial.bammat");
+
+
+	// ── Shadow Depth Material 생성 ──
+    tagMaterialDesc shadowDepthMatDesc = {};
+    shadowDepthMatDesc.Key = L"Resources/Material/ShadowDepthMaterial";
+    shadowDepthMatDesc.VertexShaderHandle = resourceManager.GetResourceHandle<Shader>(
+        L"Resources/Shader/shadow_depth.vert.bamshader");
+    shadowDepthMatDesc.PixelShaderHandle = resourceManager.GetResourceHandle<Shader>(
+        L"Resources/Shader/shadow_depth.frag.bamshader");
+    shadowDepthMatDesc.BlendMode = EBlendMode::Opaque;
+    shadowDepthMatDesc.CullMode = ECullMode::Back;
+    shadowDepthMatDesc.DepthMode = EDepthMode::ReadWrite;
+    Material* shadowDepthMat = resourceManager.LoadResource<Material>(&shadowDepthMatDesc).Get();
+    resourceManager.SaveToBinaryFile(shadowDepthMat, L"Resources/Material/ShadowDepthMaterial.bammat");
+	resourceManager.LoadFile(L"Resources/Material/ShadowDepthMaterial.bammat");
+
+	tagMaterialDesc shadowDepthSkinMatDesc = {};
+    shadowDepthSkinMatDesc.Key = L"Resources/Material/ShadowDepthSkinningMaterial";
+    shadowDepthSkinMatDesc.VertexShaderHandle = resourceManager.GetResourceHandle<Shader>(
+        L"Resources/Shader/shadow_depth_skinning.vert.bamshader");
+    shadowDepthSkinMatDesc.PixelShaderHandle = resourceManager.GetResourceHandle<Shader>(
+        L"Resources/Shader/shadow_depth.frag.bamshader");
+    shadowDepthSkinMatDesc.BlendMode = EBlendMode::Opaque;
+    shadowDepthSkinMatDesc.CullMode = ECullMode::Back;
+    shadowDepthSkinMatDesc.DepthMode = EDepthMode::ReadWrite;
+    Material* shadowDepthSkinMat = resourceManager.LoadResource<Material>(&shadowDepthSkinMatDesc).Get();
+	resourceManager.SaveToBinaryFile(shadowDepthSkinMat, L"Resources/Material/ShadowDepthSkinningMaterial.bammat");
 }
 
 #pragma endregion
@@ -438,6 +536,9 @@ void Application::Run(int argc, char* argv[])
             {
                 uint32 newWidth = (uint32)event.window.data1;
                 uint32 newHeight = (uint32)event.window.data2;
+
+                if (newWidth <= 0 || newHeight <= 0)
+                    continue;
 
                 Renderer::Get().GetRHI()->Resize(newWidth, newHeight);
             }

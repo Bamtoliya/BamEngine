@@ -12,6 +12,7 @@
 #include <cstdlib>
 #include <optional>
 #include <vector>
+#include <limits>
 
 BEGIN(Editor)
 
@@ -191,6 +192,45 @@ inline bool ParseFloatLiteral(string_view text, f32& outValue)
     if (token.empty())
     {
         return false;
+    }
+
+    string normalized;
+    normalized.reserve(token.size());
+    for (char ch : token)
+    {
+        if (std::isspace(static_cast<unsigned char>(ch)))
+        {
+            continue;
+        }
+        normalized.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(ch))));
+    }
+
+    if (normalized == "intmax" ||
+        normalized == "+intmax" ||
+        normalized == "int_max" ||
+        normalized == "+int_max" ||
+        normalized == "std::numeric_limits<int>::max()" ||
+        normalized == "+std::numeric_limits<int>::max()")
+    {
+        outValue = static_cast<f32>(std::numeric_limits<int>::max());
+        return true;
+    }
+
+    if (normalized == "intmin" ||
+        normalized == "int_min" ||
+        normalized == "std::numeric_limits<int>::min()" ||
+        normalized == "std::numeric_limits<int>::lowest()")
+    {
+        outValue = static_cast<f32>(std::numeric_limits<int>::lowest());
+        return true;
+    }
+
+    if (normalized == "-intmax" ||
+        normalized == "-int_max" ||
+        normalized == "-std::numeric_limits<int>::max()")
+    {
+        outValue = static_cast<f32>(-std::numeric_limits<int>::max());
+        return true;
     }
 
     char* endPtr = nullptr;

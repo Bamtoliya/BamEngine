@@ -45,9 +45,6 @@ private:
 	void SubmitRenderPasses();
 #pragma endregion
 
-
-
-
 public:
 	void Run(int argc, char* argv[]);
 	void Shutdown();

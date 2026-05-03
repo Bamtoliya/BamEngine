@@ -24,11 +24,14 @@ public:
 		const wstring& depthstencilName,
 		ERenderPassLoadOperation loadOperation = ERenderPassLoadOperation::RPLO_Load,
 		ERenderPassStoreOperation storeOperation = ERenderPassStoreOperation::RPSO_Store,
+		ERenderPassLoadOperation stencilLoadOperation = ERenderPassLoadOperation::RPLO_Load,
+		ERenderPassStoreOperation stencilStoreOperation = ERenderPassStoreOperation::RPSO_Store,
 		vec4 overrideClearColor = vec4(0.0f, 0.0f, 0.0f, -1.0f),
 		uint32 priority = 0,
 		ERenderSortType sortType = ERenderSortType::None,
 		ERenderPassType passType = ERenderPassType::Custom);
 	RenderPassID GetRenderPassIDByName(const wstring& name);
+	RenderPass* GetRenderPassByID(RenderPassID id);
 	const vector<RenderPass*>& GetAllRenderPasses() const { return m_RenderPasses; }
 private:
 	void SortRenderPasses();

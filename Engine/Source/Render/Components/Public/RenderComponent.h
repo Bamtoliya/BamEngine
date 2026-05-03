@@ -34,7 +34,6 @@ public:
 public:
 	void SetMaterial(const ResourceHandle<class MaterialInterface>& material, uint32 index = 0);	
 	class MaterialInterface* GetMaterial(uint32 index = 0) const;
-
 public:
 	EResult CreateDynamicMaterialInstance(uint32 index = 0);
 	bool HasDynamicMaterialInstance(uint32 index = 0) const;
@@ -47,6 +46,10 @@ public:
 
 #pragma region Variable
 protected:
+	PROPERTY(EDITABLE)
+	bool m_DrawShadow = { false };
+	PROPERTY(EDITABLE)
+	bool m_ReceiveShadow = { false };
 	PROPERTY(EDITABLE, CATEGORY("PROP_INFORMATION"))
 	uint32 m_RenderPassID = { INVALID_PASS_ID };
 

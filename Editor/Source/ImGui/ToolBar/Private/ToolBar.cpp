@@ -23,6 +23,8 @@
 #include "AssetManager.h"
 #include "ContentBrowserPanel.h"
 
+#include "MeshFilter.h"
+#include "MeshRenderer.h"
 
 void ToolBar::Draw()
 {
@@ -131,6 +133,18 @@ void ToolBar::NewScene()
 		CameraManager::Get().SetMainCamera(camera);
 		currentScene->AddGameObject(gameObject);
 		Safe_Release(gameObject);
+
+
+		GameObject* plane = GameObject::Create();
+		plane->SetName(L"Plane");
+		MeshFilter* meshFilter = static_cast<MeshFilter*>(plane->AddComponent(L"MeshFilter"));
+		meshFilter->SetMeshHandle(ResourceManager::Get().GetResourceHandle<Mesh>(L"Resources/Mesh/Plane.bammesh"));
+		MeshRenderer* meshRenderer = static_cast<MeshRenderer*>(plane->AddComponent(L"MeshRenderer"));
+		meshRenderer->SetMaterial(ResourceManager::Get().GetResourceHandle<Material>(L"Resources/Material/DefaultMaterial.bammat"));
+		currentScene->AddGameObject(plane);
+		Safe_Release(plane);
+
+
 	}
 }
 

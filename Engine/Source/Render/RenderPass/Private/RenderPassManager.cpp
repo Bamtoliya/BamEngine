@@ -24,6 +24,8 @@ void RenderPassManager::Free()
 RenderPassID RenderPassManager::RegisterRenderPass(const wstring& name, vector<wstring> renderTargetNames, const wstring& depthstencilName,
 	ERenderPassLoadOperation loadOperation,
 	ERenderPassStoreOperation storeOperation,
+	ERenderPassLoadOperation stencilLoadOperation,
+	ERenderPassStoreOperation stencilStoreOperation,
 	vec4 overrideClearColor,
 	uint32 priority, ERenderSortType sortType, ERenderPassType passType)
 {
@@ -36,6 +38,8 @@ RenderPassID RenderPassManager::RegisterRenderPass(const wstring& name, vector<w
 	newPass.SortType = sortType;
 	newPass.LoadOperation = loadOperation;
 	newPass.StoreOperation = storeOperation;
+	newPass.StencilLoadOperation = stencilLoadOperation;
+	newPass.StencilStoreOperation = stencilStoreOperation;
 	newPass.OverrideClearColor = overrideClearColor;
 	newPass.PassType = passType;
 
@@ -55,6 +59,18 @@ RenderPassID RenderPassManager::GetRenderPassIDByName(const wstring& name)
 		}
 	}
 	return INVALID_PASS_ID;
+}
+
+RenderPass* RenderPassManager::GetRenderPassByID(RenderPassID id)
+{
+	for (const auto& pass : m_RenderPasses)
+	{
+		if (pass->GetID() == id)
+		{
+			return pass;
+		}
+	}
+	return nullptr;
 }
 
 void RenderPassManager::SortRenderPasses()

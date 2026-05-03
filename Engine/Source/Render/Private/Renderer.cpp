@@ -44,23 +44,6 @@ EResult Renderer::Initialize(void* arg)
 	
 	if (!m_RHI) return EResult::Fail;
 
-	//tagRenderTargetDesc rtDesc = {};
-	//rtDesc.Width = desc->RHIDesc.Width;
-	//rtDesc.Height = desc->RHIDesc.Height;
-	//rtDesc.BindFlag = ERenderTargetBindFlag::RTBF_ShaderResource | ERenderTargetBindFlag::RTBF_RenderTarget;
-	//m_SceneBuffer = RenderTargetManager::Get().CreateRenderTarget(&rtDesc);
-	//tagRenderTargetDesc depthStencilDesc = {};
-	//depthStencilDesc.Width = desc->RHIDesc.Width;
-	//depthStencilDesc.Height = desc->RHIDesc.Height;
-	//depthStencilDesc.Type = ERenderTargetType::DepthStencil;
-	//depthStencilDesc.Usage = ETextureUsage::DepthStencilTarget;
-	//depthStencilDesc.BindFlag = ERenderTargetBindFlag::RTBF_ShaderResource | ERenderTargetBindFlag::RTBF_DepthStencil | ERenderTargetBindFlag::RTBF_RenderTarget;
-	//depthStencilDesc.Format = ETextureFormat::D24_UNORM_S8_UINT;
-	//m_DepthBuffer = RenderTargetManager::Get().CreateRenderTarget(&depthStencilDesc);
-	//RenderPassManager::Get().RegisterRenderPass(L"MainPass", { L"RenderTarget_1" }, L"RenderTarget_2", ERenderPassLoadOperation::RPLO_Clear, ERenderPassStoreOperation::RPSO_Store, vec4(0.0f, 0.0f, 0.0f, -1.0f), 0, ERenderSortType::FrontToBack);
-	//if (!m_SceneBuffer) return EResult::Fail;
-
-
 #ifdef _DEBUG
 	ResourceManager& rm = ResourceManager::Get();
 	tagShaderDesc debugLineVsDesc;
@@ -130,18 +113,18 @@ EResult Renderer::BeginFrame()
 	return EResult::Fail;
 }
 
-
-
 EResult Renderer::Render(f32 dt)
 {
 	unordered_map<RenderPassID, vector<Camera*>> jobsPerPass;
 	for (const auto& viewportInfo : m_ViewportCameras)
-		jobsPerPass[viewportInfo.PassID].push_back(viewportInfo.Camera);
+		jobsPerPass[viewportInfo.RenderPass->GetID()].push_back(viewportInfo.Camera);
 
 	const vector<RenderPass*>& renderPasses = m_RenderPassManager->GetAllRenderPasses();
 
 	for (const auto& pass : renderPasses)
 	{
+		if (pass->GetPassType() == ERenderPassType::Shadow && LightManager::Get().GetShadowCastingLights().empty())
+			continue;
 		auto jobsIt = jobsPerPass.find(pass->GetID());
 
 		vector<Camera*> cameras;
@@ -153,8 +136,14 @@ EResult Renderer::Render(f32 dt)
 		for (Camera* cam : cameras)
 		{
 			tagCameraBuffer cameraBuffer = {};
-			if (cam)
+			if (pass->GetPassType() == ERenderPassType::Shadow)
+			{
+				cameraBuffer = LightManager::Get().GetShadowCameraBuffer(uint32(0));
+			}
+			else if (cam)
+			{
 				cameraBuffer = cam->GetCameraBuffer();
+			}
 			else
 			{
 				cameraBuffer.viewMatrix = glm::identity<mat4>();
@@ -174,6 +163,15 @@ EResult Renderer::Render(f32 dt)
 			if (pass->GetRenderTargetCount() > 0)
 			{
 				RenderTarget* rt = RenderTargetManager::Get().GetRenderTarget(pass->GetRenderTargetName(0));
+				if (rt)
+				{
+					rtWidth = rt->GetWidth();
+					rtHeight = rt->GetHeight();
+				}
+			}
+			else if (!pass->GetDepthStencilName().empty())
+			{
+				RenderTarget* rt = RenderTargetManager::Get().GetRenderTarget(pass->GetDepthStencilName());
 				if (rt)
 				{
 					rtWidth = rt->GetWidth();
@@ -209,7 +207,6 @@ EResult Renderer::Render(f32 dt)
 
 	return EResult::Success;
 }
-
 
 EResult Renderer::RenderComponents(f32 dt, vector<class RenderComponent*> queue, ERenderSortType sortType, RenderPass* renderPass)
 {
@@ -303,22 +300,22 @@ void Renderer::ClearAllRenderQueues()
 
 #pragma region Viewport Camera Management
 
-void Renderer::RegisterViewportCamera(Camera* camera, RenderPassID passID)
+void Renderer::RegisterViewportCamera(Camera* camera, RenderPass* renderPass)
 {
-	m_ViewportCameras.push_back({ camera, passID });
+	m_ViewportCameras.push_back({ camera, renderPass });
 }
 
 void Renderer::UnregisterViewportCamera(RenderPassID passID)
 {
 	m_ViewportCameras.erase(std::remove_if(m_ViewportCameras.begin(), m_ViewportCameras.end(),
-		[passID](const tagViewportCameraInfo& info) { return info.PassID == passID; }), m_ViewportCameras.end());
+		[passID](const tagViewportCameraInfo& info) { return info.RenderPass->GetID() == passID; }), m_ViewportCameras.end());
 }
 
 Camera* Renderer::GetViewportCamera(RenderPassID passID) const
 {
 	for (const auto& info : m_ViewportCameras)
 	{
-		if (info.PassID == passID)
+		if (info.RenderPass->GetID() == passID)
 		{
 			return info.Camera;
 		}

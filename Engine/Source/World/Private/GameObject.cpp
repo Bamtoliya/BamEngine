@@ -47,21 +47,35 @@ GameObject* GameObject::Clone(void* arg)
 {
 	GameObject* instance = new GameObject();
 
-	// 2. 기본 속성 복사 (이름, 태그, 레이어, 활성화 상태 등)
 	instance->SetName(this->GetName());
 	instance->SetTags(this->GetTags());
 	instance->SetActive(this->IsActive());
 	instance->SetLayerIndex(this->GetLayerIndex());
+
 	if (IsFailure(instance->Initialize(arg)))
 	{
 		Safe_Release(instance);
 		return nullptr;
 	}
 
+	Transform* srcTransform = this->GetTransform();
+	Transform* dstTransform = instance->GetTransform();
+	if (srcTransform && dstTransform)
+	{
+		dstTransform->SetPosition(srcTransform->GetLocalPosition());
+		dstTransform->SetRotation(srcTransform->GetLocalRotationQuat());
+		dstTransform->SetScale(srcTransform->GetLocalScale());
+	}
+
 	for (auto& comp : m_Components)
 	{
-		Component* clonedComp = comp->Clone(instance, arg);
+		if (!comp)
+			continue;
 
+		if (comp->GetTypeInfo().ID == RunTimeHash("Engine::Transform"))
+			continue;
+
+		Component* clonedComp = comp->Clone(instance, arg);
 		if (clonedComp)
 		{
 			if (IsFailure(instance->AttachComponent(clonedComp)))
@@ -77,12 +91,10 @@ GameObject* GameObject::Clone(void* arg)
 
 	for (auto& child : m_Childs)
 	{
-		// 자식도 Clone을 호출 -> 그 자식의 자식도 Clone 호출 ... (재귀)
 		GameObject* clonedChild = child->Clone(arg);
 
 		if (clonedChild)
 		{
-			// 부모-자식 관계 설정
 			if (IsFailure(instance->AddChild(clonedChild)))
 			{
 				Safe_Release(clonedChild);
@@ -90,8 +102,6 @@ GameObject* GameObject::Clone(void* arg)
 				return nullptr;
 			}
 
-			// AddChild 내부에서 clonedChild->m_pParent = instance; 처리를 해줘야 함
-			// AddChild 내부에서 AddRef를 했다면 여기서 Release
 			Safe_Release(clonedChild);
 		}
 	}

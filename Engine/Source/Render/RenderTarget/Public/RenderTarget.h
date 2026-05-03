@@ -5,7 +5,7 @@
 BEGIN(Engine)
 struct tagRenderTargetDesc
 {
-	ETextureFormat				Format = ETextureFormat::R8G8B8A8_UNORM;
+	ETextureFormat				Format = ETextureFormat::UNKNOWN;
 	ETextureUsage				Usage = ETextureUsage::RenderTarget;
 	ERenderTargetBindFlag		BindFlag = ERenderTargetBindFlag::RTBF_None;
 	ERenderTargetType 			Type = ERenderTargetType::Color;

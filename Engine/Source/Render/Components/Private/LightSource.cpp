@@ -6,17 +6,17 @@
 #include "ComponentRegistry.h"
 
 REGISTER_COMPONENT(LightSource);
-
+#pragma region Constructor&Destructor
 EResult LightSource::Initialize(void* arg)
 {
-	if(IsFailure(__super::Initialize(arg)))
+	if (IsFailure(__super::Initialize(arg)))
 		return EResult::Fail;
 
 	if (arg)
 	{
 		CAST_DESC
 
-		m_Type = desc->Type;
+			m_Type = desc->Type;
 		m_Color = glm::max(desc->Color, vec3(0.0f));
 		m_Intensity = glm::max(0.0f, desc->Intensity);
 
@@ -100,13 +100,18 @@ void LightSource::Free()
 	__super::Free();
 }
 
+#pragma endregion
+
+#pragma region Loop
 void LightSource::LateUpdate(f32 dt)
 {
 	__super::LateUpdate(dt);
 	if (m_Active && m_Owner && m_Owner->IsActive())
 		LightManager::Get().AddLightSource(this);
 }
+#pragma endregion
 
+#pragma region GPU
 tagGPULight LightSource::BuildGPULightDesc() const
 {
 	tagGPULight out = {};
@@ -116,28 +121,58 @@ tagGPULight LightSource::BuildGPULightDesc() const
 
 	Transform* transform = m_Owner->GetTransform();
 
-	out.Position  = transform ? transform->GetWorldPosition() : vec3(0.0f);
+	out.Position = transform ? transform->GetWorldPosition() : vec3(0.0f);
 
 	vec3 forward = transform ? transform->GetForward() : vec3(0.0f, 0.0f, 1.0f);
 	out.Direction = glm::dot(forward, forward) > 0.000001f ? glm::normalize(forward) : vec3(0.0f, 0.0f, 1.0f);
 
 	out.Intensity = glm::max(0.0f, m_Intensity);
-	out.Range     = glm::max(0.0f, m_Range);
-	out.Color     = glm::max(m_Color, vec3(0.0f));
+	out.Range = glm::max(0.0f, m_Range);
+	out.Color = glm::max(m_Color, vec3(0.0f));
 
 	out.AttenuationCoeff = glm::max(m_AttenuationCoefficients, vec3(0.0f));
 
-	f32 innerAngle   = glm::clamp(m_SpotInnerAngle, 0.0f, 89.0f);
-	f32 outerAngle   = glm::clamp(m_SpotOuterAngle, innerAngle, 89.0f);
+	f32 innerAngle = glm::clamp(m_SpotInnerAngle, 0.0f, 89.0f);
+	f32 outerAngle = glm::clamp(m_SpotOuterAngle, innerAngle, 89.0f);
 	out.SpotInnerCos = glm::cos(glm::radians(innerAngle));
 	out.SpotOuterCos = glm::cos(glm::radians(outerAngle));
-	out.SpotFalloff  = glm::max(0.01f, m_SpotFalloffExponent);
+	out.SpotFalloff = glm::max(0.01f, m_SpotFalloffExponent);
 
 	out.PackedFlags = PackLightFlags(
 		static_cast<uint32>(m_Flags),
 		static_cast<uint32>(m_Type),
 		static_cast<uint32>(m_AttenuationMode)
 	);
-
 	return out;
 }
+#pragma endregion
+
+#pragma region Shadow
+tagCameraBuffer LightSource::BuildShadowCameraBuffer() const
+{
+	tagCameraBuffer buffer = {};
+	if (!m_Active || !m_Owner || !m_Owner->IsActive())
+		return buffer;
+	Transform* transform = m_Owner->GetTransform();
+	vec3 position = transform ? transform->GetWorldPosition() : vec3(0.0f);
+	vec3 forward = transform ? transform->GetForward() : vec3(0.0f, 0.0f, 1.0f);
+	mat4 view = glm::lookAt(position, position + forward, vec3(0.0f, 1.0f, 0.0f));
+	// 단일 방향성 라이트의 경우, 범위를 크게 잡아서 전체 씬을 커버하도록 할 수 있습니다.
+	// 실제로는 씬의 크기에 따라 적절히 조정하는 것이 좋습니다.
+	f32 shadowRange = m_ShadowRange;
+	mat4 proj = glm::ortho(-shadowRange, shadowRange, -shadowRange, shadowRange, 0.1f, shadowRange * 2.0f);
+	buffer.viewMatrix = view;
+	buffer.projMatrix = proj;
+	buffer.viewProjMatrix = proj * view;
+	buffer.cameraPosition = position;
+	return buffer;
+}
+tagLightShadowData LightSource::BuildShadowData() const
+{
+	tagLightShadowData data = {};
+	if (!m_Active || !m_Owner || !m_Owner->IsActive()) return data;
+	data.LightViewProjMatrix = BuildShadowCameraBuffer().viewProjMatrix;
+	data.ShadowParams = vec4(m_ShadowBias, m_ShadowSlopeBias, m_ShadowNormalBias, 0.0f);
+	return data;
+}
+#pragma endregion

@@ -44,6 +44,17 @@ private:
 	EResult EnsureBuffer();
 #pragma endregion
 
+#pragma region Shadow
+public:
+	tagCameraBuffer GetShadowCameraBuffer(const LightSource* lightSource) const;
+	tagCameraBuffer GetShadowCameraBuffer(uint32 shadowLightIndex) const;
+	vector<LightSource*> GetShadowCastingLights() const;
+	
+	tagLightShadowData GetShadowData(const LightSource* lightSource) const;
+	tagLightShadowData GetShadowData(uint32 shadowLightIndex) const;
+#pragma endregion
+
+
 #pragma region Member Variables
 private:
 	vector<LightSource*> m_LightSources;

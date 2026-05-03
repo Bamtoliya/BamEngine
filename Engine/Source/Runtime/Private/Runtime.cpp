@@ -70,7 +70,6 @@ void Runtime::Free()
 	// ── 1. 게임 로직 (RHI 무관) ──
 	TimeManager::Destroy();
 	InputManager::Destroy();
-	CollisionManager::Destroy();
 	LocalizationManager::Destroy();
 	ComponentRegistry::Destroy();
 
@@ -78,6 +77,7 @@ void Runtime::Free()
 	SceneManager::Destroy();
 	LayerManager::Destroy();
 	PrototypeManager::Destroy();
+	CollisionManager::Destroy();
 
 	// ── 3. 리소스 (RHI 리소스: Mesh, Texture, Shader) ──
 	CameraManager::Destroy();

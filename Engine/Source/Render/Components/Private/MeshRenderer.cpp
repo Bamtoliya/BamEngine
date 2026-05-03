@@ -9,6 +9,9 @@
 #include "Renderer.h"
 #include "MeshFilter.h"
 
+#include "ResourceManager.h"
+#include "RenderPass.h"
+
 REGISTER_COMPONENT(MeshRenderer)
 
 #pragma region Contructor&Destructor
@@ -54,6 +57,7 @@ void MeshRenderer::Free()
 
 EResult MeshRenderer::Render(f32 dt, RenderPass* renderPass)
 {
+	if(!m_DrawShadow && renderPass && renderPass->GetPassType() == ERenderPassType::Shadow) return EResult::Success;
 	MeshFilter* meshFilter = m_Owner->GetComponent<MeshFilter>();
 	if (!meshFilter) return EResult::Success;
 	Mesh* mesh = meshFilter->GetMesh();
@@ -62,10 +66,26 @@ EResult MeshRenderer::Render(f32 dt, RenderPass* renderPass)
 	RHI* rhi = Renderer::Get().GetRHI();
 	MaterialInterface* material = GetMaterial();
 
-	if (IsFailure(BindPipeline(mesh, material, renderPass)))
-		return EResult::Fail;
+	if (!material)
+	{
+		ENGINE_LOG_WARN("MeshRenderer material is null. Owner: {}", WStrToStr(m_Owner->GetName()));
+		return EResult::Fail; // 또는 fallback material
+	}
 
-	if (IsFailure(material->Bind(2)))
+	if (renderPass && renderPass->GetPassType() == ERenderPassType::Shadow)
+	{
+		material = ResourceManager::Get().GetResourceHandle<Material>(L"Resources/Material/ShadowDepthMaterial").Get();
+		if (!material) return EResult::Success;
+	}
+	else
+	{
+		if (IsFailure(material->Bind(2)))
+			return EResult::Fail;
+	}
+	
+	
+
+	if (IsFailure(BindPipeline(mesh, material, renderPass)))
 		return EResult::Fail;
 
 	SceneUBO uboData;

@@ -39,6 +39,26 @@ struct tagViewportPanelDesc
 	uint32 RenderTargetHeight = 1080;
 };
 
+ENUM()
+enum class EViewportChannelView : uint8
+{
+	None = 0,
+	R = 1 << 0,
+	G = 1 << 1,
+	B = 1 << 2,
+	A = 1 << 3,
+	RGB = R | G | B,
+	RGBA = R | G | B | A
+};
+
+ENABLE_BITMASK_OPERATORS(EViewportChannelView)
+
+struct ChannelViewData
+{
+	uint32 Flags = 0;
+	vec3 Padding = vec3(0.0f);
+};
+
 BEGIN(Editor)
 
 class ViewportPanel : public ImGuiInterface
@@ -60,10 +80,12 @@ public:
 	void Draw();
 private:
 	void DrawGuizmo(ImVec2 pos, ImVec2 size);
+	void DrawLightOverlay(const ImVec2& imageScreenPos, const ImVec2& imageSize);
 #pragma region Options Bar
 private:
 	void DrawOptionsBar();
 private:
+	void DrawChannelViewButton();
 	void DrawDimensionToggleButton();
 #pragma endregion
 
@@ -77,6 +99,8 @@ private:
 #pragma region Rendering
 private:
 	void SubmitLightingPass();
+private:
+	void SubmitChannelPreviewPass();
 #pragma endregion
 
 
@@ -111,15 +135,23 @@ private:
 	//bool m_ShowCollider = { true };
 	//bool m_ShowSkeleton = { true };
 	//bool m_ShowDebugInfo = { true };
+	bool m_ShowLightOverlay = { true };
 #pragma region Rendering
 private:
 	RenderPassID m_GeometryPassID = INVALID_PASS_ID;
 	RenderPassID m_LightingPassID = INVALID_PASS_ID;
 	RenderPassID m_DebugPassID = INVALID_PASS_ID;
+	RenderPassID m_ShadowPassID = INVALID_PASS_ID;
+	wstring m_ShadowDepthName;
 	wstring m_DisplayRenderTargetName;
 	wstring m_FinalColorName;
 	vector<wstring> m_OwnedRTNames;    // Free()에서 해제할 RT 이름들
 	class RHIPipeline* m_LightingPipeline = { nullptr };
+private:
+	EViewportChannelView m_ChannelView = EViewportChannelView::RGBA;
+	wstring m_ChannelPreviewName;
+	RenderPassID m_ChannelPreviewPassID = INVALID_PASS_ID;
+	class RHIPipeline* m_ChannelPreviewPipeline = { nullptr };
 #pragma endregion
 private:
 	vec2 m_InitialMousePos;

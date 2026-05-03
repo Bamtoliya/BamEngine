@@ -39,3 +39,9 @@ inline uint32 PackLightFlags(uint32 flags, uint32 type, uint32 attenuationMode)
 		| ((type & 0x3u) << 24u)
 		| ((attenuationMode & 0x3u) << 26u);
 }
+
+struct tagLightShadowData
+{
+	mat4 LightViewProjMatrix;
+	vec4 ShadowParams; // Bias, SlopeBias, NormalBias, ShadowMapIndex
+};
