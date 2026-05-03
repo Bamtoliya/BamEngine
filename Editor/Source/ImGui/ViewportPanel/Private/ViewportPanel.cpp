@@ -57,6 +57,40 @@ static bool WorldToViewportScreen(
 	outScreenPos.y = imageScreenPos.y + v * imageSize.y;
 	return true;
 }
+
+static bool UnprojectFrustumCorner(
+	const mat4& invViewProj,
+	const vec3& ndcPos,
+	vec3& outWorldPos)
+{
+	vec4 worldPos = invViewProj * vec4(ndcPos, 1.0f);
+	if (glm::abs(worldPos.w) < 0.000001f)
+		return false;
+
+	outWorldPos = vec3(worldPos) / worldPos.w;
+	return true;
+}
+
+static void DrawViewportLineIfVisible(
+	ImDrawList* drawList,
+	const vec3& worldStart,
+	const vec3& worldEnd,
+	const mat4& viewProj,
+	const ImVec2& imageScreenPos,
+	const ImVec2& imageSize,
+	ImU32 color,
+	float thickness)
+{
+	ImVec2 screenStart;
+	ImVec2 screenEnd;
+
+	if (!WorldToViewportScreen(worldStart, viewProj, imageScreenPos, imageSize, screenStart))
+		return;
+	if (!WorldToViewportScreen(worldEnd, viewProj, imageScreenPos, imageSize, screenEnd))
+		return;
+
+	drawList->AddLine(screenStart, screenEnd, color, thickness);
+}
 #pragma endregion
 
 
@@ -211,7 +245,7 @@ void ViewportPanel::Initialize(void* arg)
 			vec4(0.0f), 500, ERenderSortType::None);
 #endif
 		
-		m_DisplayRenderTargetName = gBufferNames[0]; // 초기: GBuffer_Diffuse
+		m_DisplayRenderTargetName = m_FinalColorName; // 초기: GBuffer_Diffuse
 	}
 
 	m_InspectorPanel = new InspectorPanel();
@@ -250,6 +284,7 @@ void ViewportPanel::Initialize(void* arg)
 }
 void ViewportPanel::Free()
 {
+	m_LockedSceneCamera = nullptr;
 	Safe_Release(m_EditorCamera);
 	Safe_Release(m_RenderTarget);
 	Safe_Release(m_DepthStencil);
@@ -264,10 +299,18 @@ void ViewportPanel::Update(f32 dt)
 	m_EditorCamera->Update(dt);
 	m_EditorCamera->LateUpdate(dt);
 	m_IsOrthographic = !m_EditorCamera->GetCamera()->GetIsPerspective();
+
 	RenderPassManager& rpMgr = RenderPassManager::Get();
+
+	// 씬 카메라 잠금 상태면 해당 카메라로 렌더, 아니면 에디터 카메라
+	Camera* activeCamera = (m_LockedSceneCamera && m_LockedSceneCamera->IsActive())
+		? m_LockedSceneCamera
+		: m_EditorCamera->GetCamera();
+
 	Renderer::Get().RegisterViewportCamera(nullptr, rpMgr.GetRenderPassByID(m_ShadowPassID));
-	Renderer::Get().RegisterViewportCamera(m_EditorCamera->GetCamera(), rpMgr.GetRenderPassByID(m_GeometryPassID));
-	Renderer::Get().RegisterViewportCamera(m_EditorCamera->GetCamera(), rpMgr.GetRenderPassByID(m_DebugPassID));
+	Renderer::Get().RegisterViewportCamera(activeCamera, rpMgr.GetRenderPassByID(m_GeometryPassID));
+	Renderer::Get().RegisterViewportCamera(activeCamera, rpMgr.GetRenderPassByID(m_DebugPassID));
+
 	m_Grid.SubmitGrid(m_GeometryPassID, m_IsOrthographic);
 	SubmitLightingPass();
 	SubmitChannelPreviewPass();
@@ -322,7 +365,8 @@ void ViewportPanel::Draw()
 				bool isFocused = ImGui::IsWindowFocused();
 				bool isHovered = ImGui::IsWindowHovered();
 				f32 dt = TimeManager::Get().GetDeltaTime();
-				if(isFocused || isHovered)
+				const bool useSceneCamera = (m_LockedSceneCamera && m_LockedSceneCamera->IsActive());
+				if (!useSceneCamera && (isFocused || isHovered))
 				{
 					m_EditorCamera->HandleInput(dt);
 				}
@@ -336,6 +380,32 @@ void ViewportPanel::Draw()
 				ImTextureID textureID = (ImTextureID)(size_t)texture->GetNativeHandle();
 				ImGui::Image(textureID, finalSize);
 				DrawLightOverlay(imageScreenPos, finalSize);
+				DrawCameraOverlay(imageScreenPos, finalSize);
+
+				{
+					if (m_LockedSceneCamera && m_LockedSceneCamera->IsActive())
+					{
+						ImDrawList* drawList = ImGui::GetWindowDrawList();
+						if (drawList)
+						{
+							const string camName = [&]() -> string {
+								GameObject* owner = m_LockedSceneCamera->GetOwner();
+								return owner ? WStrToStr(owner->GetName()) : "Scene Camera";
+								}();
+
+							const string label = ICON_FA_CAMERA " " + camName;
+							const ImVec2 labelPos = ImVec2(imageScreenPos.x + 8.0f, imageScreenPos.y + 8.0f);
+
+							drawList->AddRectFilled(
+								ImVec2(labelPos.x - 4.0f, labelPos.y - 2.0f),
+								ImVec2(labelPos.x + ImGui::CalcTextSize(label.c_str()).x + 4.0f,
+									labelPos.y + ImGui::GetTextLineHeight() + 2.0f),
+								IM_COL32(0, 0, 0, 160), 3.0f);
+
+							drawList->AddText(labelPos, IM_COL32(90, 210, 255, 255), label.c_str());
+						}
+					}
+				}
 				DrawGuizmo(imageScreenPos, finalSize);
 				MouseInput(ImGui::GetMousePos(), imageScreenPos, finalSize);
 			}
@@ -429,7 +499,7 @@ void ViewportPanel::DrawGuizmo(ImVec2 pos, ImVec2 size)
 }
 #pragma endregion
 
-#pragma region LightOverlay
+#pragma region Overlay
 void ViewportPanel::DrawLightOverlay(const ImVec2& imageScreenPos, const ImVec2& imageSize)
 {
 	if (!m_ShowLightOverlay || !m_EditorCamera || !m_EditorCamera->GetCamera())
@@ -439,7 +509,9 @@ void ViewportPanel::DrawLightOverlay(const ImVec2& imageScreenPos, const ImVec2&
 	if (!drawList)
 		return;
 
-	Camera* camera = m_EditorCamera->GetCamera();
+	const bool useSceneCamera = (m_LockedSceneCamera && m_LockedSceneCamera->IsActive());
+	Camera* camera = useSceneCamera ? m_LockedSceneCamera : m_EditorCamera->GetCamera();
+
 	const mat4 viewProj = camera->GetProjMatrix() * camera->GetViewMatrix();
 	const vec3 cameraPos = camera->GetCameraBuffer().cameraPosition;
 
@@ -565,6 +637,142 @@ void ViewportPanel::DrawLightOverlay(const ImVec2& imageScreenPos, const ImVec2&
 		//drawList->AddText(ImVec2(tipScreen.x + 3.0f, tipScreen.y - 8.0f), color, ICON_FA_ARROW_RIGHT_LONG);
 	}
 }
+void ViewportPanel::DrawCameraOverlay(const ImVec2& imageScreenPos, const ImVec2& imageSize)
+{
+	if (!m_ShowCameraOverlay || !m_EditorCamera || !m_EditorCamera->GetCamera())
+		return;
+
+	ImDrawList* drawList = ImGui::GetWindowDrawList();
+	if (!drawList)
+		return;
+
+	const bool useSceneCamera = (m_LockedSceneCamera && m_LockedSceneCamera->IsActive());
+	Camera* activeCamera = useSceneCamera ? m_LockedSceneCamera : m_EditorCamera->GetCamera();
+
+	const mat4 editorViewProj = activeCamera->GetProjMatrix() * activeCamera->GetViewMatrix();
+	const vec3 editorCameraPos = activeCamera->GetCameraBuffer().cameraPosition;
+
+	const ImU32 cameraColor = IM_COL32(90, 210, 255, 255);
+	const ImU32 frustumColor = IM_COL32(90, 210, 255, 200);
+	const char* cameraIcon = ICON_FA_CAMERA;
+
+	const auto& cameras = CameraManager::Get().GetCameras();
+	for (Camera* targetCamera : cameras)
+	{
+		if (!targetCamera || targetCamera == activeCamera || !targetCamera->IsActive())
+			continue;
+
+		if (targetCamera == m_LockedSceneCamera)
+			continue;
+
+		GameObject* owner = targetCamera->GetOwner();
+		if (!owner || !owner->IsActive())
+			continue;
+
+		Transform* transform = owner->GetTransform();
+		if (!transform)
+			continue;
+
+		const vec3 worldPos = transform->GetWorldPosition();
+		ImVec2 screenPos;
+		if (!WorldToViewportScreen(worldPos, editorViewProj, imageScreenPos, imageSize, screenPos))
+			continue;
+
+		// ── 거리 기반 스케일 (아이콘 크기) ──────────────────────
+		const float dist = glm::length(worldPos - editorCameraPos);
+		float t = glm::clamp((dist - 2.0f) / (40.0f - 2.0f), 0.0f, 1.0f);
+		const float distanceScale = glm::mix(1.9f, 0.75f, t);
+		const float lineThickness = glm::max(1.5f, 1.8f * distanceScale);
+
+		// ── 카메라 아이콘 ────────────────────────────────────────
+		ImFont* font = ImGui::GetFont();
+		const float iconFontSize = ImGui::GetFontSize() * 1.7f * distanceScale;
+		const ImVec2 iconSize = font->CalcTextSizeA(iconFontSize, FLT_MAX, 0.0f, cameraIcon);
+		const float fillRadius = glm::max(iconSize.x, iconSize.y) * 0.5f + 4.0f;
+		const float strokeRadius = fillRadius + 2.0f;
+
+		drawList->AddCircleFilled(screenPos, fillRadius, IM_COL32(0, 0, 0, 140));
+		drawList->AddCircle(screenPos, strokeRadius, cameraColor, 0, lineThickness);
+		drawList->AddText(
+			font, iconFontSize,
+			ImVec2(screenPos.x - iconSize.x * 0.5f, screenPos.y - iconSize.y * 0.5f),
+			cameraColor, cameraIcon);
+
+		// ── Frustum 직접 계산 ─────────────────────────────────────
+		// 에디터 카메라와의 거리에 비례해 displayFar를 결정.
+		// 너무 멀면 작아지지 않도록 min(실제Far, 에디터거리 * 0.5)로 클램프.
+		const float actualFar = targetCamera->GetCameraBuffer().projMatrix[3][2]; // 사용 안 함
+		const float displayNear = 0.5f;
+		const float displayFar = glm::clamp(dist * 0.5f, 2.0f, 20.0f);
+
+		const vec3 forward = glm::normalize(-transform->GetForward());
+		const vec3 right = glm::normalize(transform->GetRight());
+		const vec3 up = glm::normalize(transform->GetUp());
+
+		const bool isPerspective = targetCamera->GetIsPerspective();
+
+		// near/far 평면의 하프 크기 계산
+		float nearHalfH, nearHalfW, farHalfH, farHalfW;
+		if (isPerspective)
+		{
+			const float fovRad = glm::radians(targetCamera->GetFOV());
+			const float aspect = 16.0f / 9.0f; // 고정 aspect — Camera에 GetAspect()가 있으면 교체
+			nearHalfH = glm::tan(fovRad * 0.5f) * displayNear;
+			nearHalfW = nearHalfH * aspect;
+			farHalfH = glm::tan(fovRad * 0.5f) * displayFar;
+			farHalfW = farHalfH * aspect;
+		}
+		else
+		{
+			// Ortho: OrthoSize가 절반 높이
+			const float orthoH = targetCamera->GetOrthoSize();
+			const float orthoW = orthoH * (16.0f / 9.0f);
+			nearHalfH = farHalfH = orthoH;
+			nearHalfW = farHalfW = orthoW;
+		}
+
+		const vec3 nearCenter = worldPos + forward * displayNear;
+		const vec3 farCenter = worldPos + forward * displayFar;
+
+		// 8 코너
+		const vec3 corners[8] =
+		{
+			nearCenter - right * nearHalfW - up * nearHalfH, // near BL
+			nearCenter + right * nearHalfW - up * nearHalfH, // near BR
+			nearCenter + right * nearHalfW + up * nearHalfH, // near TR
+			nearCenter - right * nearHalfW + up * nearHalfH, // near TL
+			farCenter - right * farHalfW - up * farHalfH,  // far  BL
+			farCenter + right * farHalfW - up * farHalfH,  // far  BR
+			farCenter + right * farHalfW + up * farHalfH,  // far  TR
+			farCenter - right * farHalfW + up * farHalfH,  // far  TL
+		};
+
+		const int edges[12][2] =
+		{
+			{ 0, 1 }, { 1, 2 }, { 2, 3 }, { 3, 0 }, // near rect
+			{ 4, 5 }, { 5, 6 }, { 6, 7 }, { 7, 4 }, // far  rect
+			{ 0, 4 }, { 1, 5 }, { 2, 6 }, { 3, 7 }, // connecting
+		};
+
+		for (int i = 0; i < 12; ++i)
+		{
+			DrawViewportLineIfVisible(
+				drawList,
+				corners[edges[i][0]],
+				corners[edges[i][1]],
+				editorViewProj,
+				imageScreenPos,
+				imageSize,
+				frustumColor,
+				lineThickness);
+		}
+
+		// 카메라 아이콘 → far 중심 방향선
+		ImVec2 farCenterScreen;
+		if (WorldToViewportScreen(farCenter, editorViewProj, imageScreenPos, imageSize, farCenterScreen))
+			drawList->AddLine(screenPos, farCenterScreen, cameraColor, lineThickness);
+	}
+}
 #pragma endregion
 
 #pragma region Options Bar
@@ -644,15 +852,57 @@ void ViewportPanel::DrawOptionsBar()
 			ImGui::EndMenu();
 		}
 
-		if (ImGui::BeginMenu("Grid"))
+		if (ImGui::BeginMenu("Overlay"))
 		{
 			ImGui::MenuItem("Show Grid", nullptr, m_Grid.GetVisible());
 			ImGui::MenuItem("Show Light Overlay", nullptr, &m_ShowLightOverlay);
+			ImGui::MenuItem("Show Camera Overlay", nullptr, &m_ShowCameraOverlay);
 			ImGui::EndMenu();
 		}
 
 		if (ImGui::BeginMenu("TempMenu"))
 		{
+			ImGui::EndMenu();
+		}
+
+		if (ImGui::BeginMenu("SceneCamera"))
+		{
+			// [에디터 카메라로 복귀]
+			bool editorSelected = (m_LockedSceneCamera == nullptr);
+			if (ImGui::MenuItem("Editor Camera", nullptr, editorSelected))
+				m_LockedSceneCamera = nullptr;
+
+			ImGui::Separator();
+
+			// [씬 내 카메라 목록]
+			Camera* editorCam = m_EditorCamera->GetCamera();
+			const auto& cameras = CameraManager::Get().GetCameras();
+
+			if (cameras.empty() || (cameras.size() == 1 && cameras[0] == editorCam))
+			{
+				ImGui::TextDisabled("(No scene cameras)");
+			}
+			else
+			{
+				for (Camera* cam : cameras)
+				{
+					if (!cam || cam == editorCam)
+						continue;
+
+					GameObject* owner = cam->GetOwner();
+					if (!owner)
+						continue;
+
+					string label = WStrToStr(owner->GetName());
+					if (!cam->IsActive() || !owner->IsActive())
+						label += " (inactive)";
+
+					bool isSelected = (m_LockedSceneCamera == cam);
+					if (ImGui::MenuItem(label.c_str(), nullptr, isSelected))
+						m_LockedSceneCamera = cam;
+				}
+			}
+
 			ImGui::EndMenu();
 		}
 

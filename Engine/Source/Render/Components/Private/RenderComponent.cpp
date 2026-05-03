@@ -66,6 +66,28 @@ void RenderComponent::LateUpdate(f32 dt)
 				continue;
 			}
 
+			tagFrustum frustum;
+			bool isShadow = false;
+			if (Renderer::Get().TryGetPassFrustum(passInfo.RenderPass->GetID(), frustum, isShadow))
+			{
+				const std::optional<AABB> localBounds = GetLocalBounds();
+				if (localBounds.has_value())
+				{
+					Transform* transform = m_Owner->GetComponent<Transform>();
+					if (transform)
+					{
+						AABB worldAABB = FrustumCuller::TransformAABB(localBounds.value(), transform->GetWorldMatrix());
+
+						// Shadow Pass: 큰 오브젝트의 그림자 누락 방지를 위해 AABB를 보수적으로 확장
+						if (isShadow)
+							worldAABB = FrustumCuller::ExpandAABB(worldAABB, 1.f);
+
+						if (!FrustumCuller::TestAABB(frustum, worldAABB))
+							continue; // 프러스텀 밖 → 컬링
+					}
+				}
+			}
+
 			Renderer::Get().Submit(this, passInfo.RenderPass->GetID());
 		}
 	}

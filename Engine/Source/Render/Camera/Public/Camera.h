@@ -73,6 +73,13 @@ public:
 	void SetOrthoSize(f32 orthoSize) { m_OrthoSize = orthoSize; UpdateMatrix(); }
 #pragma endregion
 
+
+#pragma region Save&Load
+public:
+	virtual void Deserialize(Archive& ar) override; 
+#pragma endregion
+
+
 #pragma region Variables
 private:
 	PROPERTY(EDITABLE, EDITCONDITION("m_IsPerspective"))

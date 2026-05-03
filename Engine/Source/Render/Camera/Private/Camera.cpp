@@ -28,6 +28,7 @@ EResult Camera::Initialize(void* arg)
 		m_OrthoSize = desc->OrthoSize;
 	}
 	UpdateMatrix();
+	CameraManager::Get().AddCamera(this);
 	return EResult::Success;
 }
 
@@ -139,5 +140,13 @@ tagCameraBuffer Camera::GetCameraBuffer() const
 	if (m_Owner)
 		buffer.cameraPosition = m_Owner->GetComponent<Transform>()->GetWorldPosition();
 	return buffer;
+}
+#pragma endregion
+
+
+#pragma region Save&Load
+void Camera::Deserialize(Archive& ar)
+{
+	CameraManager::Get().AddCamera(this);
 }
 #pragma endregion

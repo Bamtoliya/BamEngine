@@ -81,6 +81,7 @@ public:
 private:
 	void DrawGuizmo(ImVec2 pos, ImVec2 size);
 	void DrawLightOverlay(const ImVec2& imageScreenPos, const ImVec2& imageSize);
+	void DrawCameraOverlay(const ImVec2& imageScreenPos, const ImVec2& imageSize);
 #pragma region Options Bar
 private:
 	void DrawOptionsBar();
@@ -136,6 +137,8 @@ private:
 	//bool m_ShowSkeleton = { true };
 	//bool m_ShowDebugInfo = { true };
 	bool m_ShowLightOverlay = { true };
+	bool m_ShowCameraOverlay = { true };
+	Camera* m_LockedSceneCamera = { nullptr };
 #pragma region Rendering
 private:
 	RenderPassID m_GeometryPassID = INVALID_PASS_ID;

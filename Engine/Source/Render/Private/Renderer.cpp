@@ -242,7 +242,9 @@ EResult Renderer::EndFrame()
 #endif // _DEBUG
 	m_RenderQueues.clear();
 	m_CustomRenderQueues.clear();
-	m_ViewportCameras.clear();
+	m_ViewportCameras.clear(); 
+	m_PassFrustums.clear();
+	m_PassFrustumIsShadow.clear();
 	return EResult::Success;
 }
 #pragma endregion
@@ -303,6 +305,28 @@ void Renderer::ClearAllRenderQueues()
 void Renderer::RegisterViewportCamera(Camera* camera, RenderPass* renderPass)
 {
 	m_ViewportCameras.push_back({ camera, renderPass });
+	if (!renderPass) return;
+
+	const RenderPassID passID = renderPass->GetID();
+	const bool isShadow = (renderPass->GetPassType() == ERenderPassType::Shadow);
+
+	if (isShadow)
+	{
+		// Shadow Pass: 라이트의 View-Projection 기준으로 프러스텀 생성
+		if (!LightManager::Get().GetShadowCastingLights().empty())
+		{
+			m_PassFrustums[passID] = FrustumCuller::ExtractFrustum(
+				LightManager::Get().GetShadowCameraBuffer(uint32(0)).viewProjMatrix);
+			m_PassFrustumIsShadow[passID] = true;
+		}
+	}
+	else if (camera)
+	{
+		// 일반 Pass: 카메라의 View-Projection 기준으로 프러스텀 생성
+		m_PassFrustums[passID] = FrustumCuller::ExtractFrustum(
+			camera->GetCameraBuffer().viewProjMatrix);
+		m_PassFrustumIsShadow[passID] = false;
+	}
 }
 
 void Renderer::UnregisterViewportCamera(RenderPassID passID)
@@ -323,6 +347,20 @@ Camera* Renderer::GetViewportCamera(RenderPassID passID) const
 	return nullptr;
 }
 #pragma endregion
+
+#pragma region Frustum Culling
+bool Renderer::TryGetPassFrustum(RenderPassID passID, tagFrustum& outFrustum, bool& outIsShadow) const
+{
+	const auto it = m_PassFrustums.find(passID);
+	if (it == m_PassFrustums.end())
+		return false;
+
+	outFrustum = it->second;
+	outIsShadow = m_PassFrustumIsShadow.at(passID);
+	return true;
+}
+#pragma endregion
+
 
 
 #pragma region Debug

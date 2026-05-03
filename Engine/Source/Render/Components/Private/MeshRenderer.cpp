@@ -102,5 +102,17 @@ EResult MeshRenderer::Render(f32 dt, RenderPass* renderPass)
 
 #pragma endregion
 
+#pragma region Bounds
+std::optional<AABB> MeshRenderer::GetLocalBounds() const
+{
+	if (!m_Owner) return std::nullopt;
+	MeshFilter* meshFilter = m_Owner->GetComponent<MeshFilter>();
+	if (!meshFilter) return std::nullopt;
+	Mesh* mesh = meshFilter->GetMesh();
+	if (!mesh) return std::nullopt;
+	return AABB(mesh->GetMin(), mesh->GetMax());
+}
+#pragma endregion
+
 #pragma region Setter
 #pragma endregion

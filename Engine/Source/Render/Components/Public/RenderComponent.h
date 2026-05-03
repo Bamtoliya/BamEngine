@@ -3,6 +3,7 @@
 #include "Component.h"
 #include "RenderTypes.h"
 #include "ResourceHandle.h"
+#include "Structs.h"
 
 BEGIN(Engine)
 
@@ -22,6 +23,11 @@ public:
 public:
 	virtual void LateUpdate(f32 dt) override;
 	virtual EResult Render(f32 dt, class RenderPass* renderPass = nullptr) { return EResult::NotImplemented; }
+#pragma endregion
+
+#pragma region Bounds
+public:
+	virtual std::optional<AABB> GetLocalBounds() const { return std::nullopt; }
 #pragma endregion
 
 #pragma region Management

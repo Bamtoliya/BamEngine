@@ -5,6 +5,7 @@
 #include "RHI.h"
 #include "RenderTypes.h"
 #include "RenderTarget.h"
+#include "FrustumCuller.h"
 
 BEGIN(Engine)
 
@@ -74,6 +75,11 @@ public:
 	vector<tagViewportCameraInfo>& GetActiveViewportCameras() { return m_ViewportCameras; }
 #pragma endregion
 
+#pragma region Frustum Culling
+public:
+	bool TryGetPassFrustum(RenderPassID passID, tagFrustum& outFrustum, bool& outIsShadow) const;
+#pragma endregion
+
 #pragma region Getter
 public:
 	class RHI* GetRHI() const { return m_RHI; }
@@ -115,6 +121,9 @@ private:
 	class RenderPassManager* m_RenderPassManager = { nullptr };
 private:
 	vector<tagViewportCameraInfo> m_ViewportCameras;
+private:
+	unordered_map<RenderPassID, tagFrustum> m_PassFrustums;
+	unordered_map<RenderPassID, bool>    m_PassFrustumIsShadow;
 #pragma endregion
 };
 END

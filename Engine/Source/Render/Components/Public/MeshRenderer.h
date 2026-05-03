@@ -25,6 +25,11 @@ public:
 	virtual EResult	Render(f32 dt, RenderPass* renderPass = nullptr)override;
 #pragma endregion
 
+#pragma region Bounds
+public:
+	virtual std::optional<AABB> GetLocalBounds() const override;
+#pragma endregion
+
 #pragma region Setter
 
 #pragma endregion
