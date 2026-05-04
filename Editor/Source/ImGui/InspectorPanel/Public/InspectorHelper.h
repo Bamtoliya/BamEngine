@@ -37,9 +37,10 @@ struct ParsedMetaRange
     f32 Speed = 1.0f;
 };
 
-struct ParsedMetaColor
+struct ParsedMetaColor 
 {
     bool Enabled = true;
+    vec4 RGBA = vec4(1.0f);
 };
 
 struct ParsedMetaEditCondition
@@ -399,12 +400,19 @@ inline std::optional<ParsedMetaRange> GetMetadataRange(std::span<const Engine::M
 
 inline std::optional<ParsedMetaColor> GetMetadataColor(std::span<const Engine::MetadataEntry> metadata)
 {
-    if (!FindMetadata(metadata, MetaColorHash))
-    {
+    const string literal = GetMetadataString(metadata, MetaColorHash);
+    if (literal.empty())
         return std::nullopt;
-    }
 
-    return ParsedMetaColor{};
+    const vector<string> args = SplitMetadataArgs(literal);
+    ParsedMetaColor result;
+    f32 r = 1.f, g = 1.f, b = 1.f, a = 1.f;
+    if (args.size() >= 1) ParseFloatLiteral(args[0], r);
+    if (args.size() >= 2) ParseFloatLiteral(args[1], g);
+    if (args.size() >= 3) ParseFloatLiteral(args[2], b);
+    if (args.size() >= 4) ParseFloatLiteral(args[3], a);
+    result.RGBA = vec4(r, g, b, a);
+    return result;
 }
 
 inline bool HasMetadataColor(std::span<const Engine::MetadataEntry> metadata)

@@ -93,8 +93,6 @@ static void DrawViewportLineIfVisible(
 }
 #pragma endregion
 
-
-
 #pragma region Contructor&Destructor
 void ViewportPanel::Initialize(void* arg)
 {
@@ -194,6 +192,22 @@ void ViewportPanel::Initialize(void* arg)
 			| ERenderTargetBindFlag::RTBF_RenderTarget;
 		rtMgr.CreateRenderTarget(&channelPreviewDesc);
 		m_OwnedRTNames.push_back(m_ChannelPreviewName);
+		// ── PostProcess ping-pong RTs ──
+		m_PPRTNames[0] = prefix + L"PP_A";
+		m_PPRTNames[1] = prefix + L"PP_B";
+		for (uint32 pi = 0; pi < 2; ++pi)
+		{
+			tagRenderTargetDesc ppRTDesc = {};
+			ppRTDesc.Name = m_PPRTNames[pi];
+			ppRTDesc.Width = w;
+			ppRTDesc.Height = h;
+			ppRTDesc.Format = ETextureFormat::R8G8B8A8_UNORM;
+			ppRTDesc.ClearColor = vec4(0.f, 0.f, 0.f, 1.f);
+			ppRTDesc.BindFlag = ERenderTargetBindFlag::RTBF_ShaderResource
+				| ERenderTargetBindFlag::RTBF_RenderTarget;
+			rtMgr.CreateRenderTarget(&ppRTDesc);
+			m_OwnedRTNames.push_back(m_PPRTNames[pi]);
+		}
 
 
 		// ── Pass 등록 ──
@@ -225,6 +239,34 @@ void ViewportPanel::Initialize(void* arg)
 			0,                           // priority — geometry와 동일하지만 ID가 먼저여서 앞에 실행됨
 			ERenderSortType::FrontToBack,
 			ERenderPassType::Shadow);
+		m_ForwardTransparentPassID = rpMgr.RegisterRenderPass(
+			prefix + L"ForwardTransparentPass",
+			{ m_FinalColorName },    // color: FinalColor에 블렌딩
+			depthName,               // depth: Geometry 공유 (읽기 전용)
+			ERenderPassLoadOperation::RPLO_Load,    // 이미 그려진 FinalColor 유지
+			ERenderPassStoreOperation::RPSO_Store,
+			ERenderPassLoadOperation::RPLO_Load,    // Geometry depth 유지
+			ERenderPassStoreOperation::RPSO_Store,
+			vec4(0.0f, 0.0f, 0.0f, -1.0f),
+			110,                     // Lighting(100) 이후, ChannelPreview(150) 이전
+			ERenderSortType::BackToFront,
+			ERenderPassType::ForwardTransparent);
+		// ── PostProcess ping-pong passes (priorities 120~127) ──
+		for (uint32 pi = 0; pi < MAX_PP_PASSES; ++pi)
+		{
+			m_PPPassIDs[pi] = rpMgr.RegisterRenderPass(
+				prefix + L"PP_" + std::to_wstring(pi),
+				{ m_PPRTNames[pi % 2] },     // 짝수 → PP_A, 홀수 → PP_B
+				L"",
+				ERenderPassLoadOperation::RPLO_Load,   // 핑퐁: clear 없이 로드
+				ERenderPassStoreOperation::RPSO_Store,
+				ERenderPassLoadOperation::RPLO_Load,
+				ERenderPassStoreOperation::RPSO_Store,
+				vec4(0.f, 0.f, 0.f, -1.f),
+				120 + pi,
+				ERenderSortType::None,
+				ERenderPassType::PostProcess);
+		}
 		m_ChannelPreviewPassID = rpMgr.RegisterRenderPass(
 			prefix + L"ChannelPreviewPass",
 			{ m_ChannelPreviewName }, L"",
@@ -281,6 +323,31 @@ void ViewportPanel::Initialize(void* arg)
 	channelPipelineDesc.CullMode = ECullMode::None;
 	channelPipelineDesc.BlendMode = EBlendMode::Opaque;
 	m_ChannelPreviewPipeline = PipelineManager::Get().GetOrCreatePipeline(channelPipelineDesc);
+
+	// ── PostProcess 파이프라인 생성 ──
+	{
+		tagRHIPipelineDesc ppDesc = {};
+		ppDesc.PipelineType = EPipelineType::Graphics;
+		ppDesc.VertexShader = rm.GetResourceHandle<Shader>(L"FullscreenQuadVS")->GetRHIShader();
+		ppDesc.PixelShader = rm.GetResourceHandle<Shader>(L"PostProcess_ToneMappingPS")->GetRHIShader();
+		ppDesc.ColorAttachmentCount = 1;
+		ppDesc.ColorAttachmentFormats[0] = ETextureFormat::R8G8B8A8_UNORM;
+		ppDesc.DepthStencilAttachmentFormat = ETextureFormat::UNKNOWN;
+		ppDesc.DepthStencilState.DepthTestEnable = false;
+		ppDesc.DepthStencilState.DepthWriteEnable = false;
+		ppDesc.Topology = ETopology::TriangleList;
+		ppDesc.CullMode = ECullMode::None;
+		ppDesc.BlendMode = EBlendMode::Opaque;
+
+		tagPPEffect toneMappingEffect;
+		toneMappingEffect.Name = L"Tone Mapping (ACES)";
+		toneMappingEffect.Enabled = true;
+		toneMappingEffect.Pipeline = PipelineManager::Get().GetOrCreatePipeline(ppDesc);
+		m_PPEffects.push_back(std::move(toneMappingEffect));
+	}
+
+	m_DisplayRenderTargetName = m_FinalColorName;
+	m_LastPostProcessOutputRT = m_FinalColorName;
 }
 void ViewportPanel::Free()
 {
@@ -295,25 +362,31 @@ void ViewportPanel::Free()
 
 void ViewportPanel::Update(f32 dt)
 {
-	m_EditorCamera->FixedUpdate(dt);
-	m_EditorCamera->Update(dt);
-	m_EditorCamera->LateUpdate(dt);
+	const bool bEditorMode = CanControlEditorCamera();
+
+	if (bEditorMode)
+	{
+		m_EditorCamera->FixedUpdate(dt);
+		m_EditorCamera->Update(dt);
+		m_EditorCamera->LateUpdate(dt);
+	}
 	m_IsOrthographic = !m_EditorCamera->GetCamera()->GetIsPerspective();
 
 	RenderPassManager& rpMgr = RenderPassManager::Get();
 
-	// 씬 카메라 잠금 상태면 해당 카메라로 렌더, 아니면 에디터 카메라
-	Camera* activeCamera = (m_LockedSceneCamera && m_LockedSceneCamera->IsActive())
-		? m_LockedSceneCamera
-		: m_EditorCamera->GetCamera();
+	Camera* activeCamera = ResolveActiveCamera(true);
+	if (!activeCamera)
+		return;
 
 	Renderer::Get().RegisterViewportCamera(nullptr, rpMgr.GetRenderPassByID(m_ShadowPassID));
 	Renderer::Get().RegisterViewportCamera(activeCamera, rpMgr.GetRenderPassByID(m_GeometryPassID));
+	Renderer::Get().RegisterViewportCamera(activeCamera, rpMgr.GetRenderPassByID(m_ForwardTransparentPassID));
 	Renderer::Get().RegisterViewportCamera(activeCamera, rpMgr.GetRenderPassByID(m_DebugPassID));
 
-	m_Grid.SubmitGrid(m_GeometryPassID, m_IsOrthographic);
 	SubmitLightingPass();
+	SubmitPostProcessPass();
 	SubmitChannelPreviewPass();
+	m_Grid.SubmitGrid(m_ForwardTransparentPassID, m_IsOrthographic);
 }
 
 void ViewportPanel::Draw()
@@ -358,18 +431,15 @@ void ViewportPanel::Draw()
 					finalSize.y = finalSize.x / imageRatio;
 				}
 
-				//if (panelSize.x > 0 && panelSize.y > 0)
-				//{
-				//	Renderer::Get().GetRHI()->Resize((uint32)finalSize.x, (uint32)finalSize.y);
-				//}
 				bool isFocused = ImGui::IsWindowFocused();
 				bool isHovered = ImGui::IsWindowHovered();
 				f32 dt = TimeManager::Get().GetDeltaTime();
-				const bool useSceneCamera = (m_LockedSceneCamera && m_LockedSceneCamera->IsActive());
-				if (!useSceneCamera && (isFocused || isHovered))
-				{
+
+				const bool useSceneCamera = IsUsingSceneCamera();
+				const bool bCanControlEditorCam = CanControlEditorCamera();
+
+				if (bCanControlEditorCam && !useSceneCamera && (isFocused || isHovered))
 					m_EditorCamera->HandleInput(dt);
-				}
 
 				ImVec2 cursorStart = ImGui::GetCursorPos();
 				float offsetX = (panelSize.x - finalSize.x) * 0.5f;
@@ -378,6 +448,10 @@ void ViewportPanel::Draw()
 				ImVec2 imageScreenPos = ImGui::GetCursorScreenPos();
 
 				ImTextureID textureID = (ImTextureID)(size_t)texture->GetNativeHandle();
+				ImGui::GetWindowDrawList()->AddRectFilled(
+					imageScreenPos,
+					ImVec2(imageScreenPos.x + finalSize.x, imageScreenPos.y + finalSize.y),
+					IM_COL32(50, 50, 50, 255));
 				ImGui::Image(textureID, finalSize);
 				DrawLightOverlay(imageScreenPos, finalSize);
 				DrawCameraOverlay(imageScreenPos, finalSize);
@@ -435,7 +509,9 @@ void ViewportPanel::DrawGuizmo(ImVec2 pos, ImVec2 size)
 	ImGuizmo::SetID(ImGui::GetID(this));
 
 	// 2. 카메라 및 매트릭스 준비
-	Camera* camera = m_EditorCamera->GetCamera();
+	Camera* camera = ResolveActiveCamera(true);
+	if (!camera) return;
+
 	mat4 projMatrix = camera->GetProjMatrix();
 	mat4 viewMatrix = camera->GetViewMatrix();
 	mat4 worldMatrix = transform->GetWorldMatrix();
@@ -510,7 +586,9 @@ void ViewportPanel::DrawLightOverlay(const ImVec2& imageScreenPos, const ImVec2&
 		return;
 
 	const bool useSceneCamera = (m_LockedSceneCamera && m_LockedSceneCamera->IsActive());
-	Camera* camera = useSceneCamera ? m_LockedSceneCamera : m_EditorCamera->GetCamera();
+	Camera* camera = ResolveActiveCamera(true);
+	if (!camera)
+		return;
 
 	const mat4 viewProj = camera->GetProjMatrix() * camera->GetViewMatrix();
 	const vec3 cameraPos = camera->GetCameraBuffer().cameraPosition;
@@ -647,7 +725,9 @@ void ViewportPanel::DrawCameraOverlay(const ImVec2& imageScreenPos, const ImVec2
 		return;
 
 	const bool useSceneCamera = (m_LockedSceneCamera && m_LockedSceneCamera->IsActive());
-	Camera* activeCamera = useSceneCamera ? m_LockedSceneCamera : m_EditorCamera->GetCamera();
+	Camera* activeCamera = ResolveActiveCamera(true);
+	if (!activeCamera)
+		return;
 
 	const mat4 editorViewProj = activeCamera->GetProjMatrix() * activeCamera->GetViewMatrix();
 	const vec3 editorCameraPos = activeCamera->GetCameraBuffer().cameraPosition;
@@ -860,8 +940,46 @@ void ViewportPanel::DrawOptionsBar()
 			ImGui::EndMenu();
 		}
 
-		if (ImGui::BeginMenu("TempMenu"))
+		if (ImGui::BeginMenu("Post FX"))
 		{
+			ImGui::MenuItem("Use Post FX Output as Display", nullptr, &m_UsePostProcessOutputAsDisplay);
+			ImGui::SeparatorText("Effects");
+
+			for (int i = 0; i < (int)m_PPEffects.size(); ++i)
+			{
+				auto& effect = m_PPEffects[i];
+				string effectName = WStrToStr(effect.Name);
+				string checkboxID = "##PPEnabled_" + std::to_string(i);
+
+				ImGui::Checkbox(checkboxID.c_str(), &effect.Enabled);
+				ImGui::SameLine();
+
+				if (effect.Enabled)
+				{
+					if (ImGui::BeginMenu(effectName.c_str()))
+					{
+						if (i == 0) // Tone Mapping
+						{
+							ImGui::SetNextItemWidth(160.f);
+							ImGui::SliderFloat("Exposure", &m_ToneMappingParams.exposure, 0.1f, 5.0f, "%.2f");
+							ImGui::SetNextItemWidth(160.f);
+							ImGui::SliderFloat("Gamma", &m_ToneMappingParams.gamma, 1.0f, 3.0f, "%.2f");
+							if (ImGui::Button("Reset", ImVec2(-1, 0)))
+							{
+								m_ToneMappingParams.exposure = 1.0f;
+								m_ToneMappingParams.gamma = 2.2f;
+							}
+						}
+
+						ImGui::EndMenu();
+					}
+				}
+				else
+				{
+					ImGui::TextDisabled("%s", effectName.c_str());
+				}
+			}
+
 			ImGui::EndMenu();
 		}
 
@@ -1079,8 +1197,12 @@ Ray ViewportPanel::ScreenPosToRay(const ImVec2& mousePos, const ImVec2& imageMin
 	f32 ndcX = (localX / imageSize.x) * 2.0f - 1.0f;
 	f32 ndcY = 1.0f - (localY / imageSize.y) * 2.0f;
 
-	mat4 projInvMatrix = m_EditorCamera->GetCamera()->GetProjMatrixInv();
-	mat4 viewInvMatrix = m_EditorCamera->GetCamera()->GetViewMatrixInv();
+	Camera* camera = ResolveActiveCamera(true);
+	if (!camera)
+		return Ray{};
+
+	mat4 projInvMatrix = camera->GetProjMatrixInv();
+	mat4 viewInvMatrix = camera->GetViewMatrixInv();
 
 	mat4 invVP = viewInvMatrix * projInvMatrix;
 
@@ -1103,6 +1225,51 @@ Ray ViewportPanel::ScreenPosToRay(const ImVec2& mousePos, const ImVec2& imageMin
 }
 #pragma endregion
 
+#pragma region Camera& Play
+EPlayState ViewportPanel::GetPlayState() const
+{
+	return Application::Get().GetPlayState();
+}
+
+bool ViewportPanel::CanControlEditorCamera() const
+{
+	const EPlayState state = GetPlayState();
+	return (state == EPlayState::Edit || state == EPlayState::Pause);
+}
+
+bool ViewportPanel::IsUsingSceneCamera() const
+{
+	const EPlayState state = GetPlayState();
+	if (state == EPlayState::Play)
+		return true;
+
+	return (m_LockedSceneCamera && m_LockedSceneCamera->IsActive());
+}
+
+Camera* ViewportPanel::ResolveActiveCamera(bool allowPlayMain) const
+{
+	if (!m_EditorCamera)
+		return nullptr;
+
+	Camera* editorCam = m_EditorCamera->GetCamera();
+	if (!editorCam)
+		return nullptr;
+
+	const EPlayState state = GetPlayState();
+
+	if (allowPlayMain && state == EPlayState::Play)
+	{
+		Camera* mainCam = CameraManager::Get().GetMainCamera();
+		return mainCam ? mainCam : editorCam;
+	}
+
+	if (m_LockedSceneCamera && m_LockedSceneCamera->IsActive())
+		return m_LockedSceneCamera;
+
+	return editorCam;
+}
+#pragma endregion
+
 #pragma region Rendering
 void ViewportPanel::SubmitLightingPass()
 {
@@ -1114,7 +1281,11 @@ void ViewportPanel::SubmitLightingPass()
 			auto& smMgr = SamplerManager::Get();
 			RHISampler* sampler = smMgr.GetDefaultSampler();
 			wstring prefix = m_Name + L"_";
-			tagCameraBuffer camBuf = m_EditorCamera->GetCamera()->GetCameraBuffer();
+			Camera* activeCamera = ResolveActiveCamera(true);
+			if (!activeCamera)
+				return EResult::Fail;
+
+			tagCameraBuffer camBuf = activeCamera->GetCameraBuffer();
 			camBuf.time = dt;
 			rhi->BindConstantBuffer(&camBuf, sizeof(tagCameraBuffer), 0);
 			rhi->BindConstantBuffer(&camBuf, sizeof(tagCameraBuffer), 3);
@@ -1202,5 +1373,53 @@ void ViewportPanel::SubmitChannelPreviewPass()
 			return rhi->Draw(3);
 		},
 		m_ChannelPreviewPassID);
+}
+void ViewportPanel::SubmitPostProcessPass()
+{
+	uint32 activeCount = 0;
+	for (auto& e : m_PPEffects)
+		if (e.Enabled) ++activeCount;
+
+	if (activeCount == 0)
+	{
+		m_LastPostProcessOutputRT = m_FinalColorName;
+		if (m_UsePostProcessOutputAsDisplay)
+			m_DisplayRenderTargetName = m_LastPostProcessOutputRT;
+		return;
+	}
+
+	wstring readRT = m_FinalColorName;
+	uint32 slot = 0;
+
+	for (auto& effect : m_PPEffects)
+	{
+		if (!effect.Enabled || !effect.Pipeline) continue;
+		if (slot >= MAX_PP_PASSES) break;
+
+		const wstring writeRT = m_PPRTNames[slot % 2];
+
+		Renderer::Get().SubmitCustomCommand(
+			[this, &effect, capturedRead = readRT](f32 dt, RenderPass* pass) -> EResult
+			{
+				RenderTarget* src = RenderTargetManager::Get().GetRenderTarget(capturedRead);
+				if (!src || !src->GetTexture()) return EResult::Fail;
+
+				auto* rhi = Renderer::Get().GetRHI();
+				auto* sampler = SamplerManager::Get().GetDefaultSampler();
+
+				rhi->BindTextureSampler(src->GetTexture(), sampler, 0);
+				rhi->BindConstantBuffer(&m_ToneMappingParams, sizeof(m_ToneMappingParams), 0);
+				rhi->BindPipeline(effect.Pipeline);
+				return rhi->Draw(3);
+			},
+			m_PPPassIDs[slot]);
+
+		readRT = writeRT;
+		++slot;
+	}
+
+	m_LastPostProcessOutputRT = readRT;
+	if (m_UsePostProcessOutputAsDisplay)
+		m_DisplayRenderTargetName = m_LastPostProcessOutputRT;
 }
 #pragma endregion

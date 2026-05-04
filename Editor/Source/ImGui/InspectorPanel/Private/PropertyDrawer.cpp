@@ -1,10 +1,14 @@
 ﻿#pragma once
 
+#include "ImGuiManager.h"
+#include "ResourceEditorInterface.h"
+#include "SelectionManager.h"
 #include "PropertyDrawer.h"
 #include "InspectorHelper.h"
 #include "LocalizationManager.h"
 #include <regex>
 #include <new>
+
 
 #pragma region Vector Axis
 static vector<string> axisLabels = { "X", "Y", "Z", "W" };
@@ -932,7 +936,7 @@ string PropertyDrawer::SanitizeDisplayLabel(const TypeInfo& typeInfo, const Prop
 	string displayLabel = Engine::LocalizationManager::Get().GetText(lookupKey);
 	if (displayLabel == lookupKey)
 	{
-		displayLabel = SanitizeVarName(property.Name.data());
+		displayLabel = SanitizeVarName(string(property.Name));
 	}
 	return displayLabel;
 }
@@ -1057,6 +1061,9 @@ bool PropertyDrawer::DrawProperty(void* instance, void* data, const TypeInfo& ty
 
 	case EPropertyType::Set:
 		return DrawSetProperty(instance, data, typeinfo, property);
+
+	case EPropertyType::Struct:
+		return DrawStructProperty(data, typeinfo, property);
 
 	case EPropertyType::Enum:
 		return DrawEnumProperty(data, typeinfo, property);
@@ -1762,6 +1769,15 @@ bool PropertyDrawer::DrawVectorProperty(void* instance, void* data, const TypeIn
 //Color 타입(컬러 피커)
 bool PropertyDrawer::DrawColorProperty(void* data, const TypeInfo& typeinfo, const PropertyInfo& property)
 {
+	auto colorMeta = GetMetadataColor(property.Metadata);
+	if (colorMeta.has_value() && colorMeta->RGBA != vec4(1.0f))
+	{
+		ImGui::PushStyleColor(ImGuiCol_FrameBg,
+			ImVec4(colorMeta->RGBA.r * 0.3f, colorMeta->RGBA.g * 0.3f, colorMeta->RGBA.b * 0.3f, 0.6f));
+		bool changed = ImGui::ColorEdit4("##Color", reinterpret_cast<f32*>(data));
+		ImGui::PopStyleColor();
+		return changed;
+	}
 	return ImGui::ColorEdit4("##Color", reinterpret_cast<f32*>(data));
 }
 
@@ -1837,6 +1853,28 @@ bool PropertyDrawer::DrawMatrixProperty(void* data, const TypeInfo& typeinfo, co
 	if (bReadOnly)
 	{
 		ImGui::BeginDisabled();
+	}
+
+	return changed;
+}
+
+bool PropertyDrawer::DrawStructProperty(void* data, const TypeInfo& typeinfo, const PropertyInfo& property)
+{
+	const TypeInfo* structType = ResolveReflectedTypeInfo(property.TypeInfo.Name, &typeinfo);
+	if (!structType)
+	{
+		const string unresolved = NormalizeReflectedTypeName(property.TypeInfo.Name);
+		ImGui::TextDisabled("Unresolved struct: %s", unresolved.c_str());
+		return false;
+	}
+	const string displayName = string(GetShortTypeName(structType->QualifiedName));
+	const string nodeLabel = displayName + "###Struct_" + SanitizeVarName(string(property.Name));
+
+	bool changed = false;
+	if (ImGui::TreeNodeEx(nodeLabel.c_str(), ImGuiTreeNodeFlags_SpanAvailWidth))
+	{
+		changed |= DrawReflectedTypeProperties(data, *structType, false);
+		ImGui::TreePop();
 	}
 
 	return changed;
@@ -1986,20 +2024,49 @@ bool PropertyDrawer::DrawResourceHandleProperty(void* data, const TypeInfo& type
 	ImGui::PushStyleColor(ImGuiCol_Text, handleData->IsValid() ? ImVec4(1, 1, 1, 1) : ImVec4(0.5f, 0.5f, 0.5f, 1));
 	ImGui::PushItemWidth(availWidth - buttonWidth - ImGui::GetStyle().ItemSpacing.x);
 	ImGui::InputText("##ResourceHandleName", (char*)currentAssetKey.c_str(), currentAssetKey.capacity() + 1, ImGuiInputTextFlags_ReadOnly);
+	if (handleData->IsValid() &&
+		ImGui::IsItemHovered() &&
+		ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+	{
+		if (Engine::Resource* res = Engine::ResourceManager::Get().GetResource(*handleData))
+		{
+			const std::filesystem::path assetPath(res->GetKey());
+			SelectionManager::Get().SetSelectedResource(assetPath);
+
+			for (ImGuiInterface* panel : ImGuiManager::Get().GetImGuiPanels())
+			{
+				ResourceEditorInterface* editor = dynamic_cast<ResourceEditorInterface*>(panel);
+				if (!editor) continue;
+
+				if (editor->IsSupported(assetPath))
+				{
+					editor->SetTargetResource(assetPath);
+					editor->Open();
+					break;
+				}
+			}
+		}
+	}
 	ImGui::PopItemWidth();
 	ImGui::PopStyleColor();
 
 	// -- 2. 드래그 앤 드롭 타겟 (Drag & Drop) 처리 --
 	if (ImGui::BeginDragDropTarget())
 	{
-		// 콘텐츠 브라우저에서 사용할 페이로드 정의 (예: "CONTENT_ITEM_Texture")
 		string payloadType = "CONTENT_ITEM_" + targetResourceType;
 		if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(payloadType.c_str()))
 		{
-			// TODO: 넘어온 wchar_t* (또는 ID)를 기반으로 Handle을 찾아 교체
-			// wstring* incomingKey = (wstring*)payload->Data;
-			// *handleData = ResourceManager::Get().GetResourceHandle(*incomingKey);
-			// changed = true;
+			const wchar_t* incomingPath = static_cast<const wchar_t*>(payload->Data);
+			if (incomingPath)
+			{
+				wstring key(incomingPath);
+				Engine::Handle newHandle = Engine::ResourceManager::Get().LoadFile(key);
+				if (newHandle.IsValid())
+				{
+					*handleData = newHandle;
+					changed = true;
+				}
+			}
 		}
 		ImGui::EndDragDropTarget();
 	}

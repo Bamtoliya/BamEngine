@@ -8,12 +8,14 @@ class ToolBar
 {
 public:
 	void Draw();
+	float GetPlayBarHeight() const;
 private:
 #pragma region File Menu
 private:
 	void DrawFileMenu();
 private:
 	void ImportAsset();
+	void LoadResourceFile();
 #pragma endregion
 
 #pragma region Edit Menu
@@ -43,6 +45,11 @@ private:
 #pragma region Help Menu
 private:
 	void DrawHelpMenu();
+#pragma endregion
+
+#pragma region Play Controls
+private:
+    void DrawPlayControls();
 #pragma endregion
 
 

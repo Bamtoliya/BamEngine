@@ -50,6 +50,8 @@ public:
 	const vector<ImGuiInterface*>& GetImGuiPanels() const { return m_ImGuiPanels; }
 private:
 	EResult CreateDefaultPanels();
+private:
+	EResult CreateResourceEditors();
 #pragma endregion
 
 

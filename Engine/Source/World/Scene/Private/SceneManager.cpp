@@ -2,6 +2,9 @@
 
 #include "SceneManager.h"
 #include "Archives.h"
+#include "LightManager.h"
+#include "CollisionManager.h"
+#include "CameraManager.h"
 
 IMPLEMENT_SINGLETON(SceneManager)
 
@@ -46,11 +49,6 @@ EResult SceneManager::OpenScene(Scene* newScene)
 {
 	if (!newScene) return EResult::Fail;
 
-	if (m_CurrentScene)
-	{
-		Safe_Release(m_CurrentScene);
-		m_CurrentScene = nullptr;
-	}
 	m_CurrentScene = newScene;
 
 	return EResult::Success;
@@ -61,17 +59,16 @@ EResult SceneManager::CloseScene()
 
 	Safe_Release(m_CurrentScene);
 	m_CurrentScene = nullptr;
+	LightManager::Get().ClearLightSources();
+	CollisionManager::Get().ClearColliders();
+	CollisionManager::Get().ClearRigidBodies();
+	CameraManager::Get().ClearCameras();
 
 	return EResult::Success;
 }
 EResult SceneManager::NewScene(void* arg)
 {
-	if (m_CurrentScene)
-	{
-		Safe_Release(m_CurrentScene);
-		m_CurrentScene = nullptr;
-	}
-	
+	CloseScene();	
 	Scene* newScene = Scene::Create(arg);
 	if (!newScene) return EResult::Fail;
 
@@ -108,6 +105,7 @@ EResult SceneManager::LoadScene(Archive& archive, const wstring& filePath)
 		return EResult::Fail;
 	}
 
+	CloseScene();
 	Scene* newScene = Scene::Create();
 	if (!newScene) return EResult::Fail;
 	

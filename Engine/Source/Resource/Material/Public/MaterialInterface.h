@@ -13,18 +13,20 @@ STRUCT()
 struct MaterialTextureBinding
 {
 	REFLECT_STRUCT()
+
+	PROPERTY(EDITABLE)
 	uint32 slot = 0;
 
-	PROPERTY()
+	PROPERTY(EDITABLE)
 	string name = {};
 
-	PROPERTY()
+	PROPERTY(EDITABLE)
 	ResourceHandle<Texture> texture;
 
-	PROPERTY()
+	PROPERTY(EDITABLE)
 	bool hasCustomSampler = false;
 
-	PROPERTY()
+	PROPERTY(EDITABLE)
 	tagSamplerDesc samplerDesc = {};
 
 	bool operator==(const MaterialTextureBinding& other) const = default;
@@ -97,6 +99,10 @@ public:
 
 #pragma region Parameter Interface
 public:
+	const unordered_map<string, MaterialParameter>& GetParameters() const { return m_Parameters; }
+	bool HasParameter(const string& name) const { return m_Parameters.find(name) != m_Parameters.end(); }
+	bool RemoveParameter(const string& name) { return m_Parameters.erase(name) > 0; }
+	void ClearParameters() { m_Parameters.clear(); }
 	// Scalar
 	void SetFloat(const string& name, f32 value) { m_Parameters[name] = MaterialParameter(EMaterialParameterType::Float, &value, sizeof(value)); }
 	void SetFloat2(const string& name, const vec2& value) { m_Parameters[name] = MaterialParameter(EMaterialParameterType::Float2, &value, sizeof(value)); }
@@ -178,28 +184,27 @@ protected:
 
 #pragma region Variable
 protected:
-	PROPERTY(CATEGORY(L"Pipeline"))
+	PROPERTY(EDITABLE, CATEGORY(L"Pipeline"))
 	EBlendMode m_BlendMode = { EBlendMode::Opaque };
-	PROPERTY(CATEGORY(L"Pipeline"))
+	PROPERTY(EDITABLE, CATEGORY(L"Pipeline"))
 	ECullMode m_CullMode = { ECullMode::Back };
-	PROPERTY(CATEGORY(L"Pipeline"))
+	PROPERTY(EDITABLE, CATEGORY(L"Pipeline"))
 	EFillMode m_FillMode = { EFillMode::Solid };
-	PROPERTY(CATEGORY(L"Pipeline"))
+	PROPERTY(EDITABLE, CATEGORY(L"Pipeline"))
 	EDepthMode m_DepthMode = { EDepthMode::None };
-	PROPERTY(CATEGORY(L"Pipeline"))
+	PROPERTY(EDITABLE, CATEGORY(L"Pipeline"))
 	ECompareOp m_DepthCompareOp = { ECompareOp::Less };
 
-	PROPERTY()
+	PROPERTY(EDITABLE, CATEGORY(L"Shader"))
 	ResourceHandle<Shader> m_VertexShaderHandle;
 
-	PROPERTY()
+	PROPERTY(EDITABLE, CATEGORY(L"Shader"))
 	ResourceHandle<Shader> m_PixelShaderHandle;
 
-	PROPERTY(CATEGORY(L"Parameter"))
+	PROPERTY(EDITABLE, CATEGORY(L"Parameter"))
 	unordered_map<string, MaterialParameter> m_Parameters = {};
 
-
-	PROPERTY(CATEGORY("Texture"))
+	PROPERTY(EDITABLE, CATEGORY("Texture"))
 	vector<MaterialTextureBinding> m_TextureBindings = {};
 
 private:

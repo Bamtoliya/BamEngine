@@ -17,9 +17,12 @@ public:
 public:
 	EResult AddCollider(class Collider* collider);
 	EResult RemoveCollider(class Collider* collider);
-
+	EResult ClearColliders();
+	EResult ClearRigidBodies();
 public:
 	bool Raycast(const Ray& ray, HitResult& outResult);
+	void ResolveCollisions(f32 dt);
+
 private:
 	vector<class Collider*> m_Colliders;
 };

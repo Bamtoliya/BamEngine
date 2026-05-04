@@ -210,6 +210,25 @@ EResult Renderer::Render(f32 dt)
 
 EResult Renderer::RenderComponents(f32 dt, vector<class RenderComponent*> queue, ERenderSortType sortType, RenderPass* renderPass)
 {
+	if (sortType != ERenderSortType::None && !queue.empty())
+	{
+		const Camera* cam = GetViewportCamera(renderPass->GetID());
+		const vec3 camPos = cam ? cam->GetCameraBuffer().cameraPosition : vec3(0.f);
+
+		const bool bBackToFront = (sortType == ERenderSortType::BackToFront);
+
+		std::sort(queue.begin(), queue.end(),
+			[&camPos, bBackToFront](const RenderComponent* a, const RenderComponent* b)
+			{
+				Transform* ta = a->GetOwner()->GetComponent<Transform>();
+				Transform* tb = b->GetOwner()->GetComponent<Transform>();
+				if (!ta || !tb) return false;
+				const float da = glm::distance2(vec3(ta->GetWorldMatrix()[3]), camPos);
+				const float db = glm::distance2(vec3(tb->GetWorldMatrix()[3]), camPos);
+				return bBackToFront ? (da > db) : (da < db);
+			});
+	}
+
 	for (auto* component : queue)
 	{
 		if (component)

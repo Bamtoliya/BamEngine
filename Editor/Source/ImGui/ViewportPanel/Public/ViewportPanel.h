@@ -7,6 +7,7 @@
 #include "EditorCamera.h"
 #include "InspectorPanel.h"
 #include "Grid.h"
+#include "Application.h"
 
 enum class EViewportMode : uint8
 {
@@ -97,11 +98,46 @@ private:
 	Ray ScreenPosToRay(const ImVec2& mousePos, const ImVec2& imageMin, const ImVec2&imageSize);
 #pragma endregion
 
+#pragma region Camera & Play
+private:
+	EPlayState GetPlayState() const;
+	bool CanControlEditorCamera() const;
+	bool IsUsingSceneCamera() const;
+	Camera* ResolveActiveCamera(bool allowPlayMain = true) const;
+#pragma endregion
+
+
+
 #pragma region Rendering
+	// ─── Post Process ───────────────────────────────────────────────
+public:
+	struct tagPPEffect
+	{
+		wstring       Name;
+		bool          Enabled = false;
+		RHIPipeline* Pipeline = nullptr;
+	};
+	struct tagToneMappingParams
+	{
+		float exposure = 1.0f;
+		float gamma = 2.2f;
+		float _pad0 = 0.f;
+		float _pad1 = 0.f;
+	};
+private:
+	static constexpr uint32 MAX_PP_PASSES = 8;
+	vector<tagPPEffect>     m_PPEffects;
+	tagToneMappingParams    m_ToneMappingParams;
+
+	wstring      m_PPRTNames[2];               // ping-pong A / B
+	RenderPassID m_PPPassIDs[MAX_PP_PASSES] = {};
+	// ────────────────────────────────────────────────────────────────
 private:
 	void SubmitLightingPass();
 private:
 	void SubmitChannelPreviewPass();
+private:
+	void SubmitPostProcessPass();
 #pragma endregion
 
 
@@ -145,9 +181,12 @@ private:
 	RenderPassID m_LightingPassID = INVALID_PASS_ID;
 	RenderPassID m_DebugPassID = INVALID_PASS_ID;
 	RenderPassID m_ShadowPassID = INVALID_PASS_ID;
+	RenderPassID m_ForwardTransparentPassID = INVALID_PASS_ID;
 	wstring m_ShadowDepthName;
 	wstring m_DisplayRenderTargetName;
 	wstring m_FinalColorName;
+	bool m_UsePostProcessOutputAsDisplay = false;
+	wstring m_LastPostProcessOutputRT;
 	vector<wstring> m_OwnedRTNames;    // Free()에서 해제할 RT 이름들
 	class RHIPipeline* m_LightingPipeline = { nullptr };
 private:

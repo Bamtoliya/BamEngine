@@ -129,7 +129,7 @@ private:
 	PROPERTY(EDITABLE)
 	ELightType m_Type = ELightType::Point;
 
-	PROPERTY(EDITABLE)
+	PROPERTY(EDITABLE, COLOR)
 	vec3 m_Color = vec3(1.0f);
 
 	PROPERTY(EDITABLE)

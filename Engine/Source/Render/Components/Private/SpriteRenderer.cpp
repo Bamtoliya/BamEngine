@@ -60,20 +60,12 @@ void SpriteRenderer::LateUpdate(f32 dt)
 		UpdateMaterialInstance();
 		SetDirty(false);
 	}
-	if (m_Active && m_Owner && m_Owner->IsActive() && m_Owner->IsVisible())
-	{
-		const auto& activePasses = Renderer::Get().GetActiveViewportCameras();
-		for (const auto& passInfo : activePasses)
-		{
-			if (passInfo.Camera)
-				Renderer::Get().Submit(this, passInfo.RenderPass->GetID());
-		}
-	}
+	__super::LateUpdate(dt);
 }
 
 EResult SpriteRenderer::Render(f32 dt, RenderPass* renderPass)
 {
-	if (!m_Sprite || !m_Mesh || renderPass->GetDesc().PassType == ERenderPassType::Shadow) return EResult::Success;
+	if (!m_Sprite || !m_Mesh) return EResult::Success;
 
 	RHI* rhi = Renderer::Get().GetRHI();
 

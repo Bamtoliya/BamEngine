@@ -87,13 +87,22 @@ GameObject* SelectionManager::PickObjectByRay(const Ray& ray)
 #pragma region Asset Selection
 void SelectionManager::SetSelectedAsset(const filesystem::path& assetPath)
 {
-	ClearSelection();
+	m_LastSelectedAssetPath.clear();
 	m_LastSelectedAssetPath = assetPath;
 }
 
 filesystem::path SelectionManager::GetSelectedAssetPath() const
 {
 	return m_LastSelectedAssetPath;
+}
+void SelectionManager::SetSelectedResource(const filesystem::path& assetPath)
+{
+	m_LastSelectedResourcePath.clear();
+	m_LastSelectedResourcePath = assetPath;
+}
+filesystem::path SelectionManager::GetSelectedAssetResource() const
+{
+	return m_LastSelectedResourcePath;
 }
 #pragma endregion
 

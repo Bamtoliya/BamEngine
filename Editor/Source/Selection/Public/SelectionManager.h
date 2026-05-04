@@ -36,8 +36,16 @@ public:
 	filesystem::path GetSelectedAssetPath() const;
 #pragma endregion
 
+#pragma region Resource Selection
+public:
+	void SetSelectedResource(const filesystem::path& assetPath);
+	filesystem::path GetSelectedAssetResource() const;
+#pragma endregion
+
+
 private:
 	vector<class GameObject*> m_SelectedObjects;
 	filesystem::path m_LastSelectedAssetPath;
+	filesystem::path m_LastSelectedResourcePath;
 };
 END

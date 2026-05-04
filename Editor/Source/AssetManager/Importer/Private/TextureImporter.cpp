@@ -11,6 +11,13 @@ EResult TextureImporter::Import(const filesystem::path& sourcePath, const filesy
 	if (!arg) return EResult::InvalidArgument;
 	CAST_DESC
 
+	constexpr bool kQuickTextureSanityMode = true;
+	if (kQuickTextureSanityMode)
+	{
+		desc->TargetFormat = Engine::ETextureFormat::R8G8B8A8_UNORM;
+		desc->CompressFlags = ECompressFlags::None;
+	}
+
 	filesystem::path outputPath = destDir.empty() ? sourcePath.parent_path() : destDir;
 	outputPath.replace_extension(".bamtex");
 

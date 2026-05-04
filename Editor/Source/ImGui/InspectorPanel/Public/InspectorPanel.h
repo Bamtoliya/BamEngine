@@ -29,6 +29,12 @@ private:
 	void DrawComponentMenuPopup();
 #pragma endregion
 
+#pragma region Components
+private:
+	void DrawRenderComponentMaterialEditor(class RenderComponent* renderComponent);
+#pragma endregion
+
+
 private:
 	class GameObject* m_SelectedGameObject = nullptr;
 	vector<InspectorInterface*> m_AssetInspectors;

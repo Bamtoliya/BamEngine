@@ -36,7 +36,7 @@ public:
 
 	static bool DrawColorProperty(void* data, const TypeInfo& typeinfo, const PropertyInfo& property);
 	static bool DrawMatrixProperty(void* data, const TypeInfo& typeinfo, const PropertyInfo& property);
-	//static bool DrawStructProperty(void* data, const TypeInfo& typeinfo, const PropertyInfo& property);
+	static bool DrawStructProperty(void* data, const TypeInfo& typeinfo, const PropertyInfo& property);
 	
 	static bool DrawEnumProperty(void* data, const TypeInfo& typeinfo, const PropertyInfo& property);
 	static bool DrawBitFlagProperty(void* data, const TypeInfo& typeinfo, const PropertyInfo& property);

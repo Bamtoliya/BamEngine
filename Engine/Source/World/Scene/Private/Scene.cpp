@@ -4,6 +4,7 @@
 #include "Layer.h"
 #include "GameObject.h"
 #include "SerializationHelper.h"
+#include "CollisionManager.h"
 
 #pragma region Constructor&Destructor
 EResult Scene::Initialize(void* arg)
@@ -46,6 +47,7 @@ void Scene::FixedUpdate(f32 dt)
 	{
 		layer->FixedUpdate(dt);
 	}
+	CollisionManager::Get().ResolveCollisions(dt);
 }
 
 void Scene::Update(f32 dt)

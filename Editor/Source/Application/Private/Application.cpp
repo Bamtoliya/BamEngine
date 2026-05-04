@@ -241,6 +241,8 @@ void Application::InitializeShaders()
         L"Resources/Shader/shadow_depth.frag.bamshader");
     rm.LoadFile(L"Resources/Shader/shadow_depth.frag.bamshader");
 
+
+    // Viewport Channel PS
     tagShaderDesc viewportChannelPsDesc = {};
     viewportChannelPsDesc.Key = L"ViewportChannelPS";
     viewportChannelPsDesc.ShaderType = EShaderType::Pixel;
@@ -250,6 +252,34 @@ void Application::InitializeShaders()
     viewportChannelPsDesc.NumSamplers = 1;
     viewportChannelPsDesc.NumUniformBuffers = 1;
     rm.LoadResource<Shader>(&viewportChannelPsDesc);
+    rm.SaveToBinaryFile(rm.GetResourceHandle<Shader>(viewportChannelPsDesc.Key).Get(), L"Resources/Shader/viewport_channel.frag.bamshader");
+    rm.LoadFile(L"Resources/Shader/viewport_channel.frag.bamshader");
+
+    // PostProcess PS
+    tagShaderDesc postProcessPsDesc = {};
+    postProcessPsDesc.Key = L"PostProcessPS";
+    postProcessPsDesc.ShaderType = EShaderType::Pixel;
+    postProcessPsDesc.Path = L"Resources/Shader/postprocess.frag.spv";
+    postProcessPsDesc.SpirvPath = L"Resources/Shader/postprocess.frag.spv";
+    postProcessPsDesc.EntryPoint = "main";
+    postProcessPsDesc.NumSamplers = 1;
+    postProcessPsDesc.NumUniformBuffers = 1;
+    rm.LoadResource<Shader>(&postProcessPsDesc);
+    rm.SaveToBinaryFile(rm.GetResourceHandle<Shader>(postProcessPsDesc.Key).Get(), L"Resources/Shader/postprocess.frag.bamshader");
+    rm.LoadFile(L"Resources/Shader/postprocess.frag.bamshader");
+
+    // PostProcess - Tone Mapping PS
+    tagShaderDesc ppToneMappingPsDesc = {};
+    ppToneMappingPsDesc.Key = L"PostProcess_ToneMappingPS";
+    ppToneMappingPsDesc.ShaderType = EShaderType::Pixel;
+    ppToneMappingPsDesc.Path = L"Resources/Shader/postprocess_tonemapping.frag.spv";
+    ppToneMappingPsDesc.SpirvPath = L"Resources/Shader/postprocess_tonemapping.frag.spv";
+    ppToneMappingPsDesc.EntryPoint = "main";
+    ppToneMappingPsDesc.NumSamplers = 1;
+    ppToneMappingPsDesc.NumUniformBuffers = 1;
+    rm.LoadResource<Shader>(&ppToneMappingPsDesc);
+    rm.SaveToBinaryFile(rm.GetResourceHandle<Shader>(ppToneMappingPsDesc.Key).Get(), L"Resources/Shader/postprocess_tonemapping.frag.bamshader");
+    rm.LoadFile(L"Resources/Shader/postprocess_tonemapping.frag.bamshader");
 }
 
 void Application::InitializeMeshes()
@@ -464,6 +494,20 @@ void Application::InitializeMaterials()
     shadowDepthSkinMatDesc.DepthMode = EDepthMode::ReadWrite;
     Material* shadowDepthSkinMat = resourceManager.LoadResource<Material>(&shadowDepthSkinMatDesc).Get();
 	resourceManager.SaveToBinaryFile(shadowDepthSkinMat, L"Resources/Material/ShadowDepthSkinningMaterial.bammat");
+
+
+	// ── Transparent Material 생성 ──
+	tagMaterialDesc transparentMatDesc = {};
+    transparentMatDesc.Key = L"Resources/Material/TransparentMaterial";
+    transparentMatDesc.VertexShaderHandle = resourceManager.GetResourceHandle<Shader>(
+        L"Resources/Shader/default.vert.bamshader");
+    transparentMatDesc.PixelShaderHandle = resourceManager.GetResourceHandle<Shader>(
+        L"Resources/Shader/default.frag.bamshader");
+    transparentMatDesc.BlendMode = EBlendMode::AlphaBlend;
+    transparentMatDesc.CullMode = ECullMode::None;
+    transparentMatDesc.DepthMode = EDepthMode::ReadOnly;
+	Material* transparentMat = resourceManager.LoadResource<Material>(&transparentMatDesc).Get();
+	resourceManager.SaveToBinaryFile(transparentMat, L"Resources/Material/TransparentMaterial.bammat");
 }
 
 #pragma endregion
@@ -512,6 +556,78 @@ void Application::SubmitRenderPasses()
     //    }, m_LightingPassID);
 }
 #pragma endregion
+#pragma region PIE (Play In Editor)
+void Application::EnterPlayMode()
+{
+    if (m_PlayState != EPlayState::Edit) return;
+
+    SnapshotScene();
+    m_PlayState = EPlayState::Play;
+    fmt::print("[PIE] Enter Play\n");
+}
+void Application::PausePlayMode()
+{
+    if (m_PlayState != EPlayState::Play) return;
+
+    m_PlayState = EPlayState::Pause;
+    fmt::print("[PIE] Paused\n");
+}
+void Application::ResumePlayMode()
+{
+    if (m_PlayState != EPlayState::Pause) return;
+
+    m_PlayState = EPlayState::Play;
+    fmt::print("[PIE] Resumed\n");
+}
+void Application::StopPlayMode()
+{
+    if (m_PlayState == EPlayState::Edit) return;
+
+    m_PlayState = EPlayState::Edit;
+    RestoreScene();
+    fmt::print("[PIE] Stopped — scene restored\n");
+}
+
+void Application::SnapshotScene()
+{
+    Scene* scene = SceneManager::Get().GetCurrentScene();
+    if (!scene) return;
+
+    JsonArchive archive(EArchiveMode::Write);
+    if (archive.PushScope(scene->GetTypeInfo().QualifiedName.data()))
+    {
+        scene->Serialize(archive);
+        archive.PopScope();
+    }
+    archive.SaveToFile(WStrToStr(m_SnapshotPath));
+}
+
+void Application::RestoreScene()
+{
+    SelectionManager::Get().ClearSelection();
+
+    JsonArchive archive(EArchiveMode::Read);
+    if (!archive.LoadFromFile(WStrToStr(m_SnapshotPath)))
+    {
+        fmt::print(stderr, "[PIE] Failed to load snapshot: {}\n", WStrToStr(m_SnapshotPath));
+        return;
+    }
+
+	SceneManager::Get().CloseScene();
+    Scene* newScene = Scene::Create();
+    if (!newScene) return;
+
+    if (archive.PushScope(newScene->GetTypeInfo().QualifiedName.data()))
+    {
+        newScene->Deserialize(archive);
+        archive.PopScope();
+    }
+
+    SceneManager::Get().OpenScene(newScene);
+}
+#pragma endregion
+
+
 
 void Application::Run(int argc, char* argv[])
 {
@@ -547,12 +663,20 @@ void Application::Run(int argc, char* argv[])
         timeManager.Update();
 		f32 dt = timeManager.GetDeltaTime();
 		UpdateTitle(dt);
-		ImGuiManager::Get().Update(dt);
-		m_AssetManager->Update(dt);
-		//m_Runtime->RunFrame(dt);
-        m_Runtime->FixedUpdate(dt);
-        m_Runtime->Update(dt);
-        m_Runtime->LateUpdate(dt);
+        ImGuiManager::Get().Update(dt);
+        m_AssetManager->Update(dt);
+
+        if (m_PlayState == EPlayState::Play)
+        {
+            m_Runtime->FixedUpdate(dt);
+            m_Runtime->Update(dt);
+            m_Runtime->LateUpdate(dt);
+        }
+        else
+        {
+            InputManager::Get().Update(dt);
+            m_Runtime->LateUpdate(dt);
+        }
 		m_Runtime->Render(dt);
     }
 }

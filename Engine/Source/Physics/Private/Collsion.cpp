@@ -75,24 +75,24 @@ bool Collision::Raycast(const Ray& ray, const AABB& aabb, HitResult& outHitResul
 
 bool Collision::Raycast(const Ray& ray, const AABB& aabb, const mat4& worldMatrix, HitResult& outHitResult)
 {
-	mat4 invWorld = glm::inverse(worldMatrix);
-	vec3 localOrigin = vec3(invWorld * vec4(ray.Origin, 1.0f));
-	vec3 localDirection = vec3(invWorld * vec4(ray.Direction, 0.0f));
+    mat4 invWorld = glm::inverse(worldMatrix);
+    vec3 localOrigin = vec3(invWorld * vec4(ray.Origin, 1.0f));
+    vec3 localDirection = vec3(invWorld * vec4(ray.Direction, 0.0f));
 
-	f32 localDirectionLength = glm::length(localDirection);
-	localDirection = glm::normalize(localDirection);
+    f32 localDirectionLength = glm::length(localDirection);
+    localDirection = glm::normalize(localDirection);
 
-	Ray localRay(localOrigin, localDirection);
-	if (Raycast(localRay, aabb, outHitResult))
-	{
-		outHitResult.Point = vec3(worldMatrix * vec4(outHitResult.Point, 1.0f));
-		outHitResult.Normal = vec3(glm::transpose(glm::inverse(worldMatrix)) * vec4(outHitResult.Normal, 0.0f));
-		outHitResult.Normal = glm::normalize(outHitResult.Normal);
-		outHitResult.Distance *= localDirectionLength;
-		return true;
-	}
+    Ray localRay(localOrigin, localDirection);
+    if (Raycast(localRay, aabb, outHitResult))
+    {
+        outHitResult.Point = vec3(worldMatrix * vec4(outHitResult.Point, 1.0f));
+        outHitResult.Normal = vec3(glm::transpose(glm::inverse(worldMatrix)) * vec4(outHitResult.Normal, 0.0f));
+        outHitResult.Normal = glm::normalize(outHitResult.Normal);
+        outHitResult.Distance /= localDirectionLength;
+        return true;
+    }
 
-	return false;
+    return false;
 }
 
 bool Collision::Raycast(const Ray& ray, const BoundingSphere& sphere, HitResult& outHitResult)

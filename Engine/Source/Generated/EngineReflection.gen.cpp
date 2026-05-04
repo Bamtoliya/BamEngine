@@ -10,6 +10,7 @@
 #include "Physics/Components/Collider/Public/Box2DCollider.h"
 #include "Physics/Components/Collider/Public/BoxCollider.h"
 #include "Physics/Components/Collider/Public/Collider.h"
+#include "Physics/Components/RigidBody/Public/RigidBody.h"
 #include "Render/Camera/Public/Camera.h"
 #include "Render/Components/Public/Animator.h"
 #include "Render/Components/Public/LightSource.h"
@@ -479,6 +480,43 @@ IMPLEMENT_CLASS_EX(Collider, "Engine::Collider", "Engine::Component")
 
 #pragma endregion // CLASS: Engine::Collider
 
+#pragma region CLASS: Engine::RigidBody
+BEGIN_METADATA(RigidBody, m_Mass)
+	EDITABLE
+END_METADATA
+
+BEGIN_METADATA(RigidBody, m_UseGravity)
+	EDITABLE
+END_METADATA
+
+BEGIN_METADATA(RigidBody, m_GravityScale)
+	EDITABLE
+END_METADATA
+
+BEGIN_METADATA(RigidBody, m_LinearDamping)
+	EDITABLE
+END_METADATA
+
+BEGIN_METADATA(RigidBody, m_IsKinematic)
+	EDITABLE
+END_METADATA
+
+BEGIN_METADATA(RigidBody, m_Velocity)
+	READONLY
+END_METADATA
+BEGIN_PROPERTIES(RigidBody)
+	REFLECT_PROPERTY(RigidBody, m_Mass, "f32", reflection::EPropertyType::Float32, std::span<const reflection::MetadataEntry>{RigidBody_m_Mass_Meta})
+	REFLECT_PROPERTY(RigidBody, m_UseGravity, "bool", reflection::EPropertyType::Bool, std::span<const reflection::MetadataEntry>{RigidBody_m_UseGravity_Meta})
+	REFLECT_PROPERTY(RigidBody, m_GravityScale, "f32", reflection::EPropertyType::Float32, std::span<const reflection::MetadataEntry>{RigidBody_m_GravityScale_Meta})
+	REFLECT_PROPERTY(RigidBody, m_LinearDamping, "f32", reflection::EPropertyType::Float32, std::span<const reflection::MetadataEntry>{RigidBody_m_LinearDamping_Meta})
+	REFLECT_PROPERTY(RigidBody, m_IsKinematic, "bool", reflection::EPropertyType::Bool, std::span<const reflection::MetadataEntry>{RigidBody_m_IsKinematic_Meta})
+	REFLECT_PROPERTY(RigidBody, m_Velocity, "vec3", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{RigidBody_m_Velocity_Meta})
+END_PROPERTIES
+EMPTY_FUNCTIONS(RigidBody)
+IMPLEMENT_CLASS_EX(RigidBody, "Engine::RigidBody", "Engine::Component")
+
+#pragma endregion // CLASS: Engine::RigidBody
+
 #pragma region CLASS: Engine::Camera
 BEGIN_METADATA(Camera, m_FOV)
 	EDITABLE
@@ -582,6 +620,7 @@ END_METADATA
 
 BEGIN_METADATA(LightSource, m_Color)
 	EDITABLE
+	COLOR()
 END_METADATA
 
 BEGIN_METADATA(LightSource, m_Intensity)
@@ -749,15 +788,47 @@ IMPLEMENT_CLASS_EX(SpriteRenderer, "Engine::SpriteRenderer", "Engine::RenderComp
 #pragma endregion // CLASS: Engine::SpriteRenderer
 
 #pragma region STRUCT: Engine::tagSamplerDesc
+BEGIN_METADATA(tagSamplerDesc, MinFilter)
+	EDITABLE
+END_METADATA
+
+BEGIN_METADATA(tagSamplerDesc, MagFilter)
+	EDITABLE
+END_METADATA
+
+BEGIN_METADATA(tagSamplerDesc, MipFilter)
+	EDITABLE
+END_METADATA
+
+BEGIN_METADATA(tagSamplerDesc, AddressU)
+	EDITABLE
+END_METADATA
+
+BEGIN_METADATA(tagSamplerDesc, AddressV)
+	EDITABLE
+END_METADATA
+
+BEGIN_METADATA(tagSamplerDesc, AddressW)
+	EDITABLE
+END_METADATA
+
+BEGIN_METADATA(tagSamplerDesc, MaxAnisotropy)
+	EDITABLE
+END_METADATA
+
+BEGIN_METADATA(tagSamplerDesc, BorderColor)
+	EDITABLE
+	COLOR()
+END_METADATA
 BEGIN_PROPERTIES(tagSamplerDesc)
-	REFLECT_PROPERTY(tagSamplerDesc, MinFilter, "Engine::ESamplerFilter", reflection::EPropertyType::Enum, std::span<const reflection::MetadataEntry>{})
-	REFLECT_PROPERTY(tagSamplerDesc, MagFilter, "Engine::ESamplerFilter", reflection::EPropertyType::Enum, std::span<const reflection::MetadataEntry>{})
-	REFLECT_PROPERTY(tagSamplerDesc, MipFilter, "Engine::ESamplerFilter", reflection::EPropertyType::Enum, std::span<const reflection::MetadataEntry>{})
-	REFLECT_PROPERTY(tagSamplerDesc, AddressU, "Engine::ESamplerAddressMode", reflection::EPropertyType::Enum, std::span<const reflection::MetadataEntry>{})
-	REFLECT_PROPERTY(tagSamplerDesc, AddressV, "Engine::ESamplerAddressMode", reflection::EPropertyType::Enum, std::span<const reflection::MetadataEntry>{})
-	REFLECT_PROPERTY(tagSamplerDesc, AddressW, "Engine::ESamplerAddressMode", reflection::EPropertyType::Enum, std::span<const reflection::MetadataEntry>{})
-	REFLECT_PROPERTY(tagSamplerDesc, MaxAnisotropy, "uint32", reflection::EPropertyType::UInt32, std::span<const reflection::MetadataEntry>{})
-	REFLECT_PROPERTY(tagSamplerDesc, BorderColor, "vec4", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{})
+	REFLECT_PROPERTY(tagSamplerDesc, MinFilter, "Engine::ESamplerFilter", reflection::EPropertyType::Enum, std::span<const reflection::MetadataEntry>{tagSamplerDesc_MinFilter_Meta})
+	REFLECT_PROPERTY(tagSamplerDesc, MagFilter, "Engine::ESamplerFilter", reflection::EPropertyType::Enum, std::span<const reflection::MetadataEntry>{tagSamplerDesc_MagFilter_Meta})
+	REFLECT_PROPERTY(tagSamplerDesc, MipFilter, "Engine::ESamplerFilter", reflection::EPropertyType::Enum, std::span<const reflection::MetadataEntry>{tagSamplerDesc_MipFilter_Meta})
+	REFLECT_PROPERTY(tagSamplerDesc, AddressU, "Engine::ESamplerAddressMode", reflection::EPropertyType::Enum, std::span<const reflection::MetadataEntry>{tagSamplerDesc_AddressU_Meta})
+	REFLECT_PROPERTY(tagSamplerDesc, AddressV, "Engine::ESamplerAddressMode", reflection::EPropertyType::Enum, std::span<const reflection::MetadataEntry>{tagSamplerDesc_AddressV_Meta})
+	REFLECT_PROPERTY(tagSamplerDesc, AddressW, "Engine::ESamplerAddressMode", reflection::EPropertyType::Enum, std::span<const reflection::MetadataEntry>{tagSamplerDesc_AddressW_Meta})
+	REFLECT_PROPERTY(tagSamplerDesc, MaxAnisotropy, "uint32", reflection::EPropertyType::UInt32, std::span<const reflection::MetadataEntry>{tagSamplerDesc_MaxAnisotropy_Meta})
+	REFLECT_PROPERTY(tagSamplerDesc, BorderColor, "vec4", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{tagSamplerDesc_BorderColor_Meta})
 END_PROPERTIES
 EMPTY_FUNCTIONS(tagSamplerDesc)
 IMPLEMENT_CLASS_EX(tagSamplerDesc, "Engine::tagSamplerDesc", "")
@@ -794,11 +865,31 @@ IMPLEMENT_CLASS_EX(MaterialInstance, "Engine::MaterialInstance", "Engine::Materi
 #pragma endregion // CLASS: Engine::MaterialInstance
 
 #pragma region STRUCT: Engine::MaterialTextureBinding
+BEGIN_METADATA(MaterialTextureBinding, slot)
+	EDITABLE
+END_METADATA
+
+BEGIN_METADATA(MaterialTextureBinding, name)
+	EDITABLE
+END_METADATA
+
+BEGIN_METADATA(MaterialTextureBinding, texture)
+	EDITABLE
+END_METADATA
+
+BEGIN_METADATA(MaterialTextureBinding, hasCustomSampler)
+	EDITABLE
+END_METADATA
+
+BEGIN_METADATA(MaterialTextureBinding, samplerDesc)
+	EDITABLE
+END_METADATA
 BEGIN_PROPERTIES(MaterialTextureBinding)
-	REFLECT_PROPERTY(MaterialTextureBinding, name, "string", reflection::EPropertyType::String, std::span<const reflection::MetadataEntry>{})
-	REFLECT_PROPERTY(MaterialTextureBinding, texture, "ResourceHandle<Texture>", reflection::EPropertyType::ResourceHandle, std::span<const reflection::MetadataEntry>{})
-	REFLECT_PROPERTY(MaterialTextureBinding, hasCustomSampler, "bool", reflection::EPropertyType::Bool, std::span<const reflection::MetadataEntry>{})
-	REFLECT_PROPERTY(MaterialTextureBinding, samplerDesc, "Engine::tagSamplerDesc", reflection::EPropertyType::Struct, std::span<const reflection::MetadataEntry>{})
+	REFLECT_PROPERTY(MaterialTextureBinding, slot, "uint32", reflection::EPropertyType::UInt32, std::span<const reflection::MetadataEntry>{MaterialTextureBinding_slot_Meta})
+	REFLECT_PROPERTY(MaterialTextureBinding, name, "string", reflection::EPropertyType::String, std::span<const reflection::MetadataEntry>{MaterialTextureBinding_name_Meta})
+	REFLECT_PROPERTY(MaterialTextureBinding, texture, "ResourceHandle<Texture>", reflection::EPropertyType::ResourceHandle, std::span<const reflection::MetadataEntry>{MaterialTextureBinding_texture_Meta})
+	REFLECT_PROPERTY(MaterialTextureBinding, hasCustomSampler, "bool", reflection::EPropertyType::Bool, std::span<const reflection::MetadataEntry>{MaterialTextureBinding_hasCustomSampler_Meta})
+	REFLECT_PROPERTY(MaterialTextureBinding, samplerDesc, "Engine::tagSamplerDesc", reflection::EPropertyType::Struct, std::span<const reflection::MetadataEntry>{MaterialTextureBinding_samplerDesc_Meta})
 END_PROPERTIES
 EMPTY_FUNCTIONS(MaterialTextureBinding)
 IMPLEMENT_CLASS_EX(MaterialTextureBinding, "Engine::MaterialTextureBinding", "")
@@ -838,11 +929,13 @@ BEGIN_METADATA(MaterialInterface, m_DepthCompareOp)
 END_METADATA
 
 BEGIN_METADATA(MaterialInterface, m_Parameters)
+	EDITABLE
 	CATEGORY(L"Parameter")
 END_METADATA
 
 DECLARE_MAP_INFO(MaterialInterface, m_Parameters_Root, "string", reflection::EPropertyType::String, "Engine::MaterialParameter", reflection::EPropertyType::Struct, reflection::MapAccessor<unordered_map<string, MaterialParameter>>::Get())
 BEGIN_METADATA(MaterialInterface, m_TextureBindings)
+	EDITABLE
 	CATEGORY("Texture")
 END_METADATA
 

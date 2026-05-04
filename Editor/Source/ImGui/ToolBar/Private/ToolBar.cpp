@@ -35,8 +35,42 @@ void ToolBar::Draw()
 		DrawSceneMenu();
 		DrawWindowMenu();
 		DrawHelpMenu();
+
 		ImGui::EndMainMenuBar();
 	}
+
+	const ImGuiViewport* vp = ImGui::GetMainViewport();
+	const float menuBarH = ImGui::GetFrameHeight();
+	const float playBarH = ImGui::GetFrameHeight() + ImGui::GetStyle().FramePadding.y * 2.0f;
+
+	ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x, vp->WorkPos.y));
+	ImGui::SetNextWindowSize(ImVec2(vp->WorkSize.x, GetPlayBarHeight()));
+
+	ImGuiWindowFlags flags = 0;
+	flags |= ImGuiWindowFlags_NoDocking;
+	flags |= ImGuiWindowFlags_NoTitleBar;
+	flags |= ImGuiWindowFlags_NoResize;
+	flags |= ImGuiWindowFlags_NoMove;
+	flags |= ImGuiWindowFlags_NoScrollbar;
+	flags |= ImGuiWindowFlags_NoSavedSettings;
+	flags |= ImGuiWindowFlags_NoNavFocus;
+
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.0f, 4.0f));
+
+	if (ImGui::Begin("##PlayBarRow", nullptr, flags))
+	{
+		DrawPlayControls();
+	}
+	ImGui::End();
+
+	ImGui::PopStyleVar(3);
+}
+
+float ToolBar::GetPlayBarHeight() const
+{
+	return ImGui::GetFrameHeight() + ImGui::GetStyle().FramePadding.y * 2.0f + ImGui::GetStyle().ItemSpacing.y;
 }
 
 #pragma region FileMenu
@@ -54,6 +88,11 @@ void ToolBar::DrawFileMenu()
 		{
 			ImportAsset();
 		}
+		if (ImGui::MenuItem("Load Resource", ""))
+		{
+			LoadResourceFile();
+		}
+
 		if (ImGui::MenuItem("Settings", ""))
 		{
 
@@ -69,6 +108,14 @@ void ToolBar::ImportAsset()
 		return;
 	AssetManager::Get().Import(filePath, filePath);
 	//static_cast<ContentBrowserPanel*>(ImGuiManager::Get().GetImGuiPanel(L"Content Browser"))->RequestRefresh();
+}
+
+void ToolBar::LoadResourceFile()
+{
+	wstring filePath;
+	if (!FileDialogs::OpenFileDialog(filePath, { {L"Resource Files", L""} }, filePath))
+		return;
+	ResourceManager::Get().LoadFile(filePath);
 }
 
 
@@ -320,6 +367,78 @@ void ToolBar::DrawHelpMenu()
 		}
 		ImGui::EndMenu();
 	}
+}
+
+#pragma endregion
+
+#pragma region PlayControls
+
+void ToolBar::DrawPlayControls()
+{
+	Application& app = Application::Get();
+	EPlayState state = app.GetPlayState();
+
+	const float btnWidth = 60.f;
+	const float spacing = ImGui::GetStyle().ItemSpacing.x;
+
+	// ── Pause 상태 시각화: 배경색 변경 ──────────────────────────────────
+	if (state == EPlayState::Pause)
+	{
+		ImDrawList* drawList = ImGui::GetWindowDrawList();
+		ImVec2 windowPos = ImGui::GetWindowPos();
+		ImVec2 windowSize = ImGui::GetWindowSize();
+
+		// 주황색 배경 (Pause 상태 강조)
+		ImU32 pauseColor = ImGui::GetColorU32(ImVec4(1.0f, 0.8f, 0.2f, 0.3f)); // RGBA
+		drawList->AddRectFilled(
+			windowPos,
+			ImVec2(windowPos.x + windowSize.x, windowPos.y + windowSize.y),
+			pauseColor);
+	}
+	// ─────────────────────────────────────────────────────────────────────
+
+	float totalWidth = btnWidth * 3.0f + spacing * 2.0f;
+	float startX = (ImGui::GetWindowWidth() - totalWidth) * 0.5f;
+	if (startX < 0.0f) startX = 0.0f;
+	ImGui::SetCursorPosX(startX);
+
+	// ── ▶ Play (Edit 상태일 때만 활성) ───────────────
+	ImGui::PushID("PlayBtn");
+	if (state != EPlayState::Edit) ImGui::BeginDisabled();
+	if (ImGui::Button(ICON_FA_PLAY, ImVec2(btnWidth, 0)))
+		app.EnterPlayMode();
+	if (state != EPlayState::Edit) ImGui::EndDisabled();
+	if (ImGui::IsItemHovered()) ImGui::SetTooltip("Play (Enter PIE)");
+	ImGui::PopID();
+
+	ImGui::SameLine();
+
+	ImGui::PushID("PauseResumeBtn");
+	if (state == EPlayState::Edit) ImGui::BeginDisabled();
+	if (state == EPlayState::Pause)
+	{
+		if (ImGui::Button(ICON_FA_PLAY, ImVec2(btnWidth, 0)))
+			app.ResumePlayMode();
+		if (ImGui::IsItemHovered()) ImGui::SetTooltip("Resume: 게임 로직 재개");
+	}
+	else
+	{
+		if (ImGui::Button(ICON_FA_PAUSE, ImVec2(btnWidth, 0)))
+			app.PausePlayMode();
+		if (ImGui::IsItemHovered()) ImGui::SetTooltip("Pause: 게임 정지, 에디터 조작 가능");
+	}
+	if (state == EPlayState::Edit) ImGui::EndDisabled();
+	ImGui::PopID();
+
+	ImGui::SameLine();
+
+	ImGui::PushID("StopBtn");
+	if (state == EPlayState::Edit) ImGui::BeginDisabled();
+	if (ImGui::Button(ICON_FA_STOP, ImVec2(btnWidth, 0)))
+		app.StopPlayMode();
+	if (state == EPlayState::Edit) ImGui::EndDisabled();
+	if (ImGui::IsItemHovered()) ImGui::SetTooltip("Stop (restore scene)");
+	ImGui::PopID();
 }
 
 #pragma endregion

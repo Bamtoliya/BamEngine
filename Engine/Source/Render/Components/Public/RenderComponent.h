@@ -28,6 +28,7 @@ public:
 #pragma region Bounds
 public:
 	virtual std::optional<AABB> GetLocalBounds() const { return std::nullopt; }
+	virtual bool IsTransparent() const;
 #pragma endregion
 
 #pragma region Management
@@ -40,6 +41,10 @@ public:
 public:
 	void SetMaterial(const ResourceHandle<class MaterialInterface>& material, uint32 index = 0);	
 	class MaterialInterface* GetMaterial(uint32 index = 0) const;
+	uint32 GetMaterialSlotCount() const { return static_cast<uint32>(m_Materials.size()); }
+	MaterialInterface* GetSharedMaterial(uint32 index = 0) const;
+	class MaterialInstance* GetDynamicMaterialInstance(uint32 index = 0) const;
+	MaterialInterface* GetEditableMaterial(uint32 index = 0, bool forceDynamicInstance = true);
 public:
 	EResult CreateDynamicMaterialInstance(uint32 index = 0);
 	bool HasDynamicMaterialInstance(uint32 index = 0) const;
@@ -49,6 +54,12 @@ public:
 public:
 	EResult BindPipeline(class Mesh* mesh, class MaterialInterface* material, class RenderPass* renderPass);
 #pragma endregion
+
+#pragma region Save&Load
+public:
+	void Serialize(Archive& ar);
+#pragma endregion
+
 
 #pragma region Variable
 protected:

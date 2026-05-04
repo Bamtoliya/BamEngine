@@ -12,6 +12,13 @@ struct ApplicationCreateInfo
 	const char* AppName = "BamEngine Editor";
 };
 
+enum class EPlayState : uint8
+{
+	Edit,
+	Play,
+	Pause,
+};
+
 class Application final : public Base
 {
 	DECLARE_SINGLETON(Application)
@@ -45,6 +52,23 @@ private:
 	void SubmitRenderPasses();
 #pragma endregion
 
+
+#pragma region PIE(Play In Editor)
+public:
+	void EnterPlayMode();
+	void PausePlayMode();
+	void ResumePlayMode();
+	void StopPlayMode();
+
+	EPlayState GetPlayState() const { return m_PlayState; }
+	bool IsPlaying() const { return m_PlayState == EPlayState::Play; }
+	bool IsPaused() const { return m_PlayState == EPlayState::Pause; }
+	bool IsEditing() const { return m_PlayState == EPlayState::Edit; }
+private:
+	void SnapshotScene();    // Play 직전 씬 직렬화
+	void RestoreScene();     // Stop 시 씬 복원
+#pragma endregion
+
 public:
 	void Run(int argc, char* argv[]);
 	void Shutdown();
@@ -70,6 +94,9 @@ private:
 	RenderPassID m_GemetryPassID		= INVALID_PASS_ID;
 	RenderPassID m_FowardPassID			= INVALID_PASS_ID;
 	RenderPassID m_PostProcessPassID	= INVALID_PASS_ID;
+private:
+	EPlayState m_PlayState = EPlayState::Edit;
+	wstring m_SnapshotPath = L"Temp/__pie_snapshot__.json";
 };
 
 END

@@ -1,5 +1,7 @@
-﻿#include "EditorCamera.h"
+﻿#pragma once
+#include "EditorCamera.h"
 #include "InputManager.h"
+#include "CameraManager.h"
 
 BEGIN(Editor)
 
@@ -11,6 +13,7 @@ Engine::EResult EditorCamera::Initialize(void* arg)
 
     m_Camera = AddComponent<Engine::Camera>(arg);
     Safe_AddRef(m_Camera);
+	CameraManager::Get().RemoveCamera(m_Camera);
 
     return Engine::EResult::Success;
 }

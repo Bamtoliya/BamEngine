@@ -45,6 +45,17 @@ EResult CameraManager::RemoveCamera(Camera* camera)
 	}
 	return EResult::Fail;
 }
+EResult CameraManager::ClearCameras()
+{
+	RELEASE_VECTOR(m_Cameras)
+	return EResult::Success;
+}
+Camera* CameraManager::GetCameraByIndex(size_t index) const
+{
+	if (index < m_Cameras.size())
+		return m_Cameras[index];
+	return nullptr;
+}
 #pragma endregion
 
 

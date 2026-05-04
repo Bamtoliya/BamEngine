@@ -7,7 +7,7 @@
 
 struct tagLightManagerDesc
 {
-	RHI* RHI = { nullptr };
+	class RHI* RHI = { nullptr };
 };
 
 BEGIN(Engine)

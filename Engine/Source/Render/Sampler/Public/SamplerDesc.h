@@ -27,28 +27,28 @@ namespace Engine
     {
         REFLECT_STRUCT()
     
-        PROPERTY()
+        PROPERTY(EDITABLE)
         ESamplerFilter MinFilter = ESamplerFilter::Linear;
     
-        PROPERTY()
+        PROPERTY(EDITABLE)
         ESamplerFilter MagFilter = ESamplerFilter::Linear;
     
-        PROPERTY()
+        PROPERTY(EDITABLE)
         ESamplerFilter MipFilter = ESamplerFilter::Linear;
     
-        PROPERTY()
+        PROPERTY(EDITABLE)
         ESamplerAddressMode AddressU = ESamplerAddressMode::Wrap;
     
-        PROPERTY()
+        PROPERTY(EDITABLE)
         ESamplerAddressMode AddressV = ESamplerAddressMode::Wrap;
     
-        PROPERTY()
+        PROPERTY(EDITABLE)
         ESamplerAddressMode AddressW = ESamplerAddressMode::Wrap;
     
-        PROPERTY()
+        PROPERTY(EDITABLE)
         uint32 MaxAnisotropy = 1;
     
-        PROPERTY()
+        PROPERTY(EDITABLE, COLOR)
         vec4 BorderColor = vec4(0.f);
 
         bool operator==(const tagSamplerDesc& other) const

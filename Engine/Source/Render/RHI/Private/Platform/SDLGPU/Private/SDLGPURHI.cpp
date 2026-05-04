@@ -517,9 +517,14 @@ EResult SDLGPURHI::BindTextureSampler(RHITexture* texture, RHISampler* sampler, 
 {
 	if (!texture || !sampler || !m_CurrentRenderPass) return EResult::InvalidArgument;
 
+	void* nativeTexture = texture->GetNativeHandle();
+	void* nativeSampler = sampler->GetNativeHandle();
+
+	if (!nativeTexture || !nativeSampler) return EResult::InvalidArgument;
+
 	SDL_GPUTextureSamplerBinding binding = {};
-	binding.texture = static_cast<SDL_GPUTexture*>(texture->GetNativeHandle());
-	binding.sampler = static_cast<SDL_GPUSampler*>(sampler->GetNativeHandle());
+	binding.texture = static_cast<SDL_GPUTexture*>(nativeTexture);
+	binding.sampler = static_cast<SDL_GPUSampler*>(nativeSampler);
 	SDL_BindGPUFragmentSamplers(m_CurrentRenderPass, slot, &binding, 1);
 	return EResult::Success;
 }

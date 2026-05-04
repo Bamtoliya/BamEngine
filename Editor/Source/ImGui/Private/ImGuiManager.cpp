@@ -21,6 +21,8 @@
 #include "HierarchyPanel.h"
 #include "ContentBrowserPanel.h"
 
+#include "ResourceEditors.h"
+
 IMPLEMENT_SINGLETON(ImGuiManager)
 
 #pragma region Constructor&Destructor
@@ -264,8 +266,9 @@ void ImGuiManager::MainDockspace()
 	// [1. Fullscreen DockSpace 생성] ----------------------------------
 	// 메인 뷰포트 전체를 덮는 "DockSpace" 윈도우를 만듭니다.
 	const ImGuiViewport* viewport = ImGui::GetMainViewport();
-	ImGui::SetNextWindowPos(viewport->WorkPos);
-	ImGui::SetNextWindowSize(viewport->WorkSize);
+	const float topReserve = m_ToolBar.GetPlayBarHeight();
+	ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x, viewport->WorkPos.y + topReserve));
+	ImGui::SetNextWindowSize(ImVec2(viewport->WorkSize.x, viewport->WorkSize.y - topReserve));
 	ImGui::SetNextWindowViewport(viewport->ID);
 
 	// 스타일: 라운딩 없음, 테두리 없음, 패딩 없음
@@ -274,7 +277,7 @@ void ImGuiManager::MainDockspace()
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
 
 	// 플래그: 제목 표시줄 없음, 이동/크기조절 불가, 뒤로 보내기(배경역할), 메뉴바 포함
-	ImGuiWindowFlags window_flags = ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoDocking;
+	ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoDocking;
 	window_flags |= ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove;
 	window_flags |= ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus;
 	window_flags |= ImGuiWindowFlags_NoBackground; // 투명하게 해서 뒤의 게임 화면이 보이게 할 수도 있음 (선택사항)
@@ -353,6 +356,30 @@ EResult ImGuiManager::CreateDefaultPanels()
 	ContentBrowserPanel* contentBrowserPanel = new ContentBrowserPanel();
 	contentBrowserPanel->Initialize();
 	AddImGuiPanel(contentBrowserPanel);
+	CreateResourceEditors();
+	return EResult::Success;
+}
+EResult ImGuiManager::CreateResourceEditors()
+{
+	TextureEditor* textureEditor = new TextureEditor();
+	textureEditor->Close();
+	AddImGuiPanel(textureEditor);
+
+	MaterialEditor* materialEditor = new MaterialEditor();
+	materialEditor->Close();
+	AddImGuiPanel(materialEditor);
+
+	ModelEditor* modelEditor = new ModelEditor();
+	modelEditor->Close();
+	AddImGuiPanel(modelEditor);
+
+	ShaderEditor* shaderEditor = new ShaderEditor();
+	shaderEditor->Close();
+	AddImGuiPanel(shaderEditor);
+
+	SpriteEditor* spriteEditor = new SpriteEditor();
+	spriteEditor->Close();
+	AddImGuiPanel(spriteEditor);
 	return EResult::Success;
 }
 #pragma endregion

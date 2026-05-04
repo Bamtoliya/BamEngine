@@ -7,6 +7,7 @@ void ContentBrowserGridItem::Draw(const std::filesystem::directory_entry& direct
 	float filledSize = ImGui::GetContentRegionAvail().x;
 	const auto& path = directoryEntry.path();
 	auto relativePath = std::filesystem::relative(path, rootPath);
+	std::filesystem::path payloadPath = rootPath.filename() / relativePath;
 
 	ImGui::PushID(path.string().c_str());
 
@@ -14,22 +15,21 @@ void ContentBrowserGridItem::Draw(const std::filesystem::directory_entry& direct
 	Thumbnail(directoryEntry, thumbnailTexID, filledSize, padding);
 	ToolTip(directoryEntry);
 	ContextMenu(path, outRenamingPath, renameBuffer, renameBufferSize);
-	DragAndDropTarget(relativePath);
+	DragAndDropTarget(payloadPath);
 
 	// 썸네일 위에서 더블클릭 시 폴더 이동
 	if (ImGui::IsItemHovered())
 	{
-		if (MOUSE_BUTTON_DOWN(EMouseButton::Left))
-		{
-			SelectionManager::Get().SetSelectedAsset(path);
-		}
-
 		if (MOUSE_BUTTON_DOUBLE_CLICK(EMouseButton::Left))
 		{
 			if (directoryEntry.is_directory())
 			{
 				currentDirectory /= path.filename();
 				if (searchBuffer) searchBuffer[0] = '\0';
+			}
+			else
+			{
+				SelectionManager::Get().SetSelectedAsset(path);
 			}
 		}
 	}
@@ -217,8 +217,37 @@ void ContentBrowserGridItem::DragAndDropTarget(const std::filesystem::path& rela
 {
 	if (ImGui::BeginDragDropSource())
 	{
-		std::wstring wPath = relativePath.wstring();
-		ImGui::SetDragDropPayload("CONTENT_BROWSER_ITEM", wPath.c_str(), (wPath.length() + 1) * sizeof(wchar_t));
+		std::wstring wPath = Engine::NormalizePath(relativePath.wstring());
+
+		// 기존 범용 페이로드
+		ImGui::SetDragDropPayload(
+			"CONTENT_BROWSER_ITEM",
+			wPath.c_str(),
+			(wPath.length() + 1) * sizeof(wchar_t));
+
+		// 확장자로 리소스 타입을 결정해 전용 페이로드 추가 발행
+		std::string ext = relativePath.extension().string();
+		for (auto& c : ext) c = tolower(c);
+
+		const char* typedPayload = nullptr;
+		if (ext == ".bamtex" || ext == ".png" || ext == ".jpg" || ext == ".jpeg")
+			typedPayload = "CONTENT_ITEM_Texture";
+		else if (ext == ".bammat")
+			typedPayload = "CONTENT_ITEM_Material";
+		else if (ext == ".bammatinst")
+			typedPayload = "CONTENT_ITEM_MaterialInstance";
+		else if (ext == ".bammesh")
+			typedPayload = "CONTENT_ITEM_Mesh";
+		else if (ext == ".bamshader")
+			typedPayload = "CONTENT_ITEM_Shader";
+
+		if (typedPayload)
+		{
+			ImGui::SetDragDropPayload(
+				typedPayload,
+				wPath.c_str(),
+				(wPath.length() + 1) * sizeof(wchar_t));
+		}
 
 		ImGui::Text("%s", relativePath.filename().string().c_str());
 		ImGui::EndDragDropSource();
