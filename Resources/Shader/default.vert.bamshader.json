@@ -1,0 +1,18 @@
+{
+   "AssetHeader": {
+      "MagicNumber": 6072351289621955000,
+      "ResourceType": 5,
+      "Version": 0
+   },
+   "m_EntryPoint": "main",
+   "m_Key": "default.vert.bamshader",
+   "m_NumSamplers": 0,
+   "m_NumStorageBuffers": 0,
+   "m_NumStorageTextures": 0,
+   "m_NumUniformBuffers": 3,
+   "m_Path": "Resources/Shader/default.vert.bamshader.json",
+   "m_ResourceType": 5,
+   "m_ShaderType": 0,
+   "m_SpirvPath": "Resources/Shader/default.vert.spv",
+   "m_Version": 0
+}

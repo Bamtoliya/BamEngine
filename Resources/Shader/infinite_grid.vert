@@ -11,6 +11,6 @@ layout(location = 5) in vec4 inColor;
 layout(location = 0) out vec2 outNDC; 
 
 void main() {
-    outNDC = inPosition.xy; // 넘겨줄 데이터 할당
+    outNDC = inPosition.xy;
     gl_Position = vec4(inPosition.xy, 1.0, 1.0);
 }

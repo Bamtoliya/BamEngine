@@ -1,0 +1,14 @@
+{
+   "AssetHeader": {
+      "MagicNumber": 6072351289621955000,
+      "ResourceType": 5,
+      "Version": 0
+   },
+   "m_EntryPoint": "",
+   "m_Key": "DefaultPS",
+   "m_Path": "Resources/Shader/default.frag.spv",
+   "m_ResourceType": 5,
+   "m_ShaderType": 6,
+   "m_SpirvPath": "",
+   "m_Version": 0
+}
