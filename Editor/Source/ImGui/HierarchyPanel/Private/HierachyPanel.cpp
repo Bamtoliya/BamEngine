@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "HierarchyPanel.h"
 
@@ -493,6 +493,8 @@ void HierarchyPanel::DrawLayerItem(Scene* scene, Layer* layer)
 		if (ImGui::Checkbox("##LayerActive", &isLayerActive))
 		{
 			layer->SetActive(isLayerActive);
+			for (auto* obj : layerObjects)
+				obj->SetActive(isLayerActive);
 		}
 
 		if (isMixedActive)
@@ -513,6 +515,8 @@ void HierarchyPanel::DrawLayerItem(Scene* scene, Layer* layer)
 		if (ImGui::Button(visIcon, ImVec2(visibleBtnWidth, itemHeight)))
 		{
 			layer->SetVisible(!isVisible);
+			for (auto* obj : layerObjects)
+				obj->SetVisible(!isVisible);
 		}
 
 		if (ImGui::IsItemHovered()) ImGui::SetTooltip("Toggle Layer Visibility");
@@ -769,6 +773,7 @@ void HierarchyPanel::DrawGameObjectNode(class GameObject* gameObject)
 		if (ImGui::Checkbox("##ObjectActive", &gameObjectActive))
 		{
 			gameObject->SetActive(gameObjectActive);
+			gameObject->SetAllChildActive(gameObjectActive);
 		}
 
 		if (isMixedActive)
@@ -789,6 +794,7 @@ void HierarchyPanel::DrawGameObjectNode(class GameObject* gameObject)
 		if (ImGui::Button(visIcon, ImVec2(buttonSize, itemHeight)))
 		{
 			gameObject->SetVisible(!isVisible);
+			gameObject->SetAllChildVisible(!isVisible);
 		}
 
 		if (ImGui::IsItemHovered()) ImGui::SetTooltip("Toggle Object Visibility");

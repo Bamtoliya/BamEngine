@@ -5,6 +5,7 @@
 #include "CameraManager.h"
 #include "SelectionManager.h"
 #include "InputManager.h"
+#include "ImViewGuizmo.h"
 
 #pragma region Contructor&Destructor
 void BaseViewportPanel::Initialize(void* arg)
@@ -37,7 +38,7 @@ void BaseViewportPanel::Initialize(void* arg)
 	m_SelectedRTName = m_LightingColorName;
 
 #ifdef _DEBUG
-	//m_DebugRenderer.Initialize(m_Name);
+	m_DebugRenderer.Initialize(m_Name);
 #endif // _DEBUG
 
 }
@@ -94,13 +95,13 @@ void BaseViewportPanel::PrepareRenderTargetsAndPasses(uint32 width, uint32 heigh
 		prefix + L"GeometryPass", gBufferNames, depthName,
 		ERenderPassLoadOperation::RPLO_Clear, ERenderPassStoreOperation::RPSO_Store,
 		ERenderPassLoadOperation::RPLO_Clear, ERenderPassStoreOperation::RPSO_Store,
-		vec4(0.0f, 0.f, 0.f, -1.f), 0, ERenderSortType::FrontToBack);
+		vec4(0.0f, 0.f, 0.f, -1.f), 0, ERenderSortType::FrontToBack, ERenderPassType::Geometry);
 
 	m_LightingPassID = rpMgr.RegisterRenderPass(
 		prefix + L"LightingPass", { m_LightingColorName }, L"",
 		ERenderPassLoadOperation::RPLO_Clear, ERenderPassStoreOperation::RPSO_Store,
 		ERenderPassLoadOperation::RPLO_Clear, ERenderPassStoreOperation::RPSO_Store,
-		vec4(0.0f, 0.0f, 0.0f, -1.0f), 100, ERenderSortType::None);
+		vec4(0.0f, 0.0f, 0.0f, -1.0f), 100, ERenderSortType::None, ERenderPassType::Lighting);
 
 	m_ForwardTransparentPassID = rpMgr.RegisterRenderPass(
 		prefix + L"ForwardTransparentPass",
@@ -114,8 +115,8 @@ void BaseViewportPanel::PrepareRenderTargetsAndPasses(uint32 width, uint32 heigh
 	{
 		RenderPassID rpID = rpMgr.RegisterRenderPass(
 			prefix + L"PP_" + std::to_wstring(pi), { m_PPRTNames[pi % 2] }, L"",
-			ERenderPassLoadOperation::RPLO_Clear, ERenderPassStoreOperation::RPSO_Store,
-			ERenderPassLoadOperation::RPLO_Clear, ERenderPassStoreOperation::RPSO_Store,
+			ERenderPassLoadOperation::RPLO_Load, ERenderPassStoreOperation::RPSO_Store,
+			ERenderPassLoadOperation::RPLO_Load, ERenderPassStoreOperation::RPSO_Store,
 			vec4(0.0f, 0.f, 0.f, -1.f), 120 + pi, ERenderSortType::None, ERenderPassType::PostProcess);
 		m_PPPassIDs.push_back(rpID);
 	}
@@ -129,8 +130,8 @@ void BaseViewportPanel::PrepareRenderTargetsAndPasses(uint32 width, uint32 heigh
 
 	m_ChannelPreviewPassID = rpMgr.RegisterRenderPass(
 		prefix + L"ChannelPreviewPass", { m_PPRTNames[0] }, L"",
-		ERenderPassLoadOperation::RPLO_Clear, ERenderPassStoreOperation::RPSO_Store,
-		ERenderPassLoadOperation::RPLO_Clear, ERenderPassStoreOperation::RPSO_Store,
+		ERenderPassLoadOperation::RPLO_Load, ERenderPassStoreOperation::RPSO_Store,
+		ERenderPassLoadOperation::RPLO_Load, ERenderPassStoreOperation::RPSO_Store,
 		vec4(0.0f, 0.0f, 0.0f, -1.0f), 400, ERenderSortType::None, ERenderPassType::Custom);
 
 	m_PassOptions = {
@@ -182,6 +183,7 @@ void BaseViewportPanel::Free()
 
 void BaseViewportPanel::Update(f32 dt)
 {
+	CalculateRenderResolution(m_PanelWidth, m_PanelHeight);
 	m_EditorCamera->FixedUpdate(dt);
 	m_EditorCamera->Update(dt);
 	m_EditorCamera->LateUpdate(dt);
@@ -217,10 +219,10 @@ void BaseViewportPanel::Update(f32 dt)
 	}
 
 #ifdef _DEBUG
-	//if (*m_DebugRenderer.GetDrawCollidersPtr())
-	//{
-	//	m_DebugRenderer.SubmitDebugDraw(camera, m_DisplayRTName);
-	//}
+	if (*m_DebugRenderer.GetDrawCollidersPtr())
+	{
+		m_DebugRenderer.SubmitDebugDraw(camera, m_DisplayRTName);
+	}
 #endif
 	
 
@@ -232,6 +234,139 @@ void BaseViewportPanel::HandleInput(f32 dt)
 {
 	m_EditorCamera->HandleInput(dt);
 }
+
+#pragma region Resolution&Ratio
+void BaseViewportPanel::CalculateRenderResolution(uint32 panelWidth, uint32 panelHeight)
+{
+	uint32 newWidth = panelWidth;
+	uint32 newHeight = panelHeight;
+	switch (m_ResolutionMode)
+	{
+	case EViewportResolutionMode::Free:
+		newWidth = panelWidth;
+		newHeight = panelHeight;
+		break;
+	case EViewportResolutionMode::Preset:
+		newWidth = g_ResolutionPresets[m_PresetIndex].Width;
+		newHeight = g_ResolutionPresets[m_PresetIndex].Height;
+		break;
+	case EViewportResolutionMode::Custom:
+		newWidth = (uint32)m_CustomWidth;
+		newHeight = (uint32)m_CustomHeight;
+		break;
+	}
+	// Aspect Ratio 강제 적용 (Free 모드 + 비율 고정 시)
+	if (m_AspectRatioMode != EAspectRatioMode::Free)
+	{
+		float targetRatio = GetAspectRatio(m_AspectRatioMode);
+		float currentRatio = (float)newWidth / (float)newHeight;
+		if (currentRatio > targetRatio)
+			newWidth = (uint32)(newHeight * targetRatio);
+		else
+			newHeight = (uint32)(newWidth / targetRatio);
+	}
+	// 최소 크기 보정
+	newWidth = glm::max(newWidth, (uint32)64);
+	newHeight = glm::max(newHeight, (uint32)64);
+	// 변경 감지 → RT 재생성
+	if (newWidth != m_RenderWidth || newHeight != m_RenderHeight)
+	{
+		m_RenderWidth = newWidth;
+		m_RenderHeight = newHeight;
+		ResizeRenderTargets(m_RenderWidth, m_RenderHeight);
+	}
+}
+
+f32 BaseViewportPanel::GetAspectRatio(EAspectRatioMode mode) const
+{
+	switch (mode)
+	{
+	case EAspectRatioMode::Ratio_16_9:  return 16.f / 9.f;
+	case EAspectRatioMode::Ratio_16_10: return 16.f / 10.f;
+	case EAspectRatioMode::Ratio_4_3:   return 4.f / 3.f;
+	case EAspectRatioMode::Ratio_21_9:  return 21.f / 9.f;
+	case EAspectRatioMode::Ratio_1_1:   return 1.f;
+	case EAspectRatioMode::Ratio_9_16:  return 9.f / 16.f;
+	default: return 1.f;
+	}
+}
+
+void BaseViewportPanel::ResizeRenderTargets(uint32 width, uint32 height)
+{
+	auto& rtMgr = RenderTargetManager::Get();
+	// 소유한 모든 RT를 새 크기로 재생성
+	for (const auto& rtName : m_OwnedRTNames)
+	{
+		RenderTarget* rt = rtMgr.GetRenderTarget(rtName);
+		if (rt)
+			rt->Resize(width, height);   // RenderTarget::Resize()가 필요
+	}
+	// 카메라 종횡비 갱신
+	m_EditorCamera->GetCamera()->SetAspect((f32)width / (f32)height);
+	// Ortho 카메라의 경우 OrthoSize도 갱신
+	if (IsOrthographic())
+		m_EditorCamera->GetCamera()->SetOrthoSize((f32)height);
+}
+
+void BaseViewportPanel::DrawResolutionMenu()
+{
+	if (ImGui::BeginMenu("Resolution"))
+	{
+		// --- Resolution Mode ---
+		if (ImGui::MenuItem("Free (Panel Size)", nullptr,
+			m_ResolutionMode == EViewportResolutionMode::Free))
+			m_ResolutionMode = EViewportResolutionMode::Free;
+		ImGui::Separator();
+		// --- Presets ---
+		for (uint32 i = 0; i < g_PresetCount; ++i)
+		{
+			bool selected = (m_ResolutionMode == EViewportResolutionMode::Preset
+				&& m_PresetIndex == (int32)i);
+			if (ImGui::MenuItem(g_ResolutionPresets[i].Name, nullptr, selected))
+			{
+				m_ResolutionMode = EViewportResolutionMode::Preset;
+				m_PresetIndex = i;
+			}
+		}
+		ImGui::Separator();
+		// --- Custom ---
+		bool isCustom = (m_ResolutionMode == EViewportResolutionMode::Custom);
+		if (ImGui::MenuItem("Custom...", nullptr, isCustom))
+			m_ResolutionMode = EViewportResolutionMode::Custom;
+		if (isCustom)
+		{
+			ImGui::InputInt("Width", &m_CustomWidth, 1, 100);
+			ImGui::InputInt("Height", &m_CustomHeight, 1, 100);
+			m_CustomWidth = glm::clamp(m_CustomWidth, 64, 7680);
+			m_CustomHeight = glm::clamp(m_CustomHeight, 64, 4320);
+		}
+		ImGui::Separator();
+		// --- Aspect Ratio ---
+		if (ImGui::BeginMenu("Aspect Ratio"))
+		{
+			auto ratioItem = [&](const char* label, EAspectRatioMode mode)
+				{
+					if (ImGui::MenuItem(label, nullptr, m_AspectRatioMode == mode))
+						m_AspectRatioMode = mode;
+				};
+			ratioItem("Free", EAspectRatioMode::Free);
+			ratioItem("16:9", EAspectRatioMode::Ratio_16_9);
+			ratioItem("16:10", EAspectRatioMode::Ratio_16_10);
+			ratioItem("4:3", EAspectRatioMode::Ratio_4_3);
+			ratioItem("21:9", EAspectRatioMode::Ratio_21_9);
+			ratioItem("1:1", EAspectRatioMode::Ratio_1_1);
+			ratioItem("9:16", EAspectRatioMode::Ratio_9_16);
+			ImGui::EndMenu();
+		}
+		// --- 현재 해상도 표시 ---
+		ImGui::Separator();
+		ImGui::Text("Render: %u x %u", m_RenderWidth, m_RenderHeight);
+		float scale = (float)m_RenderWidth / (float)m_PanelWidth * 100.f;
+		ImGui::Text("Scale: %.0f%%", scale);
+		ImGui::EndMenu();
+	}
+}
+#pragma endregion
 
 void BaseViewportPanel::Draw()
 {
@@ -245,6 +380,8 @@ void BaseViewportPanel::Draw()
 	{
 		DrawOptionsBar();
 		ImVec2 panelSize = ImGui::GetContentRegionAvail();
+		m_PanelWidth = glm::max((uint32)panelSize.x, (uint32)1);
+		m_PanelHeight = glm::max((uint32)panelSize.y, (uint32)1);
 		uint32 width = (uint32)panelSize.x;
 		uint32 height = (uint32)panelSize.y;
 		f32 panelAspectRatio = (f32)width / (f32)height;
@@ -363,9 +500,12 @@ void BaseViewportPanel::DrawOptionsBar()
 			ImGui::EndMenu();
 		}
 
-		if (ImGui::BeginMenu("Grid"))
+		DrawResolutionMenu();
+
+		if (ImGui::BeginMenu("Debug"))
 		{
 			ImGui::MenuItem("Show Grid", nullptr, m_Grid.GetVisible());
+			ImGui::MenuItem("Show Collider", nullptr, m_DebugRenderer.GetDrawCollidersPtr());
 			ImGui::EndMenu();
 		}
 

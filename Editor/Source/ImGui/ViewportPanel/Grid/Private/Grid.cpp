@@ -79,7 +79,7 @@ void Grid::SubmitGrid(Camera* camera, bool isOrthographic, const wstring& colorR
     Renderer::Get().SubmitCustomCommand(
         [this, isOrthographic, colorRTName, depthStencilName](f32 dt, RenderPass* renderPass)->EResult
         {
-            if (!m_Visible) return EResult::Success;
+            if (!m_Visible) return EResult::Success;    
             if (!renderPass) return EResult::Fail;
 
             RHI* rhi = Renderer::Get().GetRHI();
@@ -107,7 +107,7 @@ void Grid::SubmitGrid(Camera* camera, bool isOrthographic, const wstring& colorR
 
             desc.DepthStencilState.DepthTestEnable = true;
             desc.DepthStencilState.DepthWriteEnable = false;
-            desc.DepthStencilState.DepthCompareOp = ECompareOp::Less;
+            desc.DepthStencilState.DepthCompareOp = isOrthographic ? ECompareOp::LessOrEqual : ECompareOp::Less;
 
             // PipelineManager 캐시에서 조회 → 없을 때만 실제 생성
             RHIPipeline* pipeline = PipelineManager::Get().GetOrCreatePipeline(desc);

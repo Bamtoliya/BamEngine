@@ -57,6 +57,11 @@ void MeshRenderer::Free()
 
 EResult MeshRenderer::Render(f32 dt, RenderPass* renderPass)
 {
+	if (m_Dirty)
+	{
+
+		SetDirty(false);
+	}
 	if(!m_DrawShadow && renderPass && renderPass->GetPassType() == ERenderPassType::Shadow) return EResult::Success;
 	MeshFilter* meshFilter = m_Owner->GetComponent<MeshFilter>();
 	if (!meshFilter) return EResult::Success;

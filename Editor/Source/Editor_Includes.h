@@ -15,8 +15,12 @@ using namespace Editor;
 #undef DBG_NEW
 #undef new
 
+
 #include "imgui.h"
+#define IMVIEWGUIZMO_IMPLEMENTATION
+#include "ImViewGuizmo.h"
 #include "imgui_internal.h"
+
 
 #ifndef DBG_NEW 
 #define DBG_NEW new ( _NORMAL_BLOCK , __FILE__ , __LINE__ ) 

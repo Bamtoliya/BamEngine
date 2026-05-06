@@ -40,6 +40,7 @@ public:
 public:
 	const Rect GetRect() const { return Rect(m_Center.x - m_Extent.x, m_Center.y - m_Extent.y, m_Extent.x * 2, m_Extent.y * 2); }
 	const AABB GetAABB2D() const { return AABB(vec3(m_Center - m_Extent, -1.f), vec3(m_Center + m_Extent, 1.0f)); }
+	virtual tagColliderDesc GetColliderDesc() const override { return tagColliderDesc{ m_Type, vec3(m_Center.x, m_Center.y, 0.f), vec3(m_Extent.x, m_Extent.y, 0.f) }; }
 #pragma endregion
 
 #pragma region Member Variable

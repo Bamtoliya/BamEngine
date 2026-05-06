@@ -102,8 +102,8 @@ void ResourceManager::RegisterExplicitLoader()
 	auto textureLoader = [this](wstring key, wstring path) -> Handle
 		{
 			tagTextureCreateDesc desc;
-			desc.Key = path;
-			desc.Path = path;
+			desc.Key = key;
+			desc.Path = key;
 			return this->LoadResource<Texture>(&desc).GetRawHandle();
 		};
 

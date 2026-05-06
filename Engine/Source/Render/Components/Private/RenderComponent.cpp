@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "RenderComponent.h"
 
@@ -71,8 +71,10 @@ void RenderComponent::LateUpdate(f32 dt)
 				if (bTransparent) continue;
 				if (!passInfo.Camera) continue;
 			}
-			else if (!passInfo.Camera)
+			else
 			{
+				// Shadow, ForwardTransparent, Geometry 패스가 아니면 (UI, PostProcess, Custom 등) 
+				// 메쉬/스프라이트를 그리는 패스가 아니므로 스킵합니다.
 				continue;
 			}
 

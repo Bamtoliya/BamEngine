@@ -57,7 +57,7 @@ EResult RenderTarget::Resize(uint32 width, uint32 height)
 	m_Desc.Height = height;
 	Safe_Release(m_Texture);
 	RHI* rhi = Renderer::Get().GetRHI();
-	if (m_Desc.Usage == ETextureUsage::DepthStencilTarget)
+	if (HasFlag(m_Desc.Usage, ETextureUsage::DepthStencilTarget))
 	{
 		m_Texture = rhi->CreateDepthStencilTexture(&m_Desc, m_Desc.Width, m_Desc.Height, 1, 1);
 	}

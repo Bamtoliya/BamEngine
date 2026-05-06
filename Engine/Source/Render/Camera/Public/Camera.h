@@ -70,9 +70,11 @@ public:
 public:
 	f32 GetFOV() const { return m_FOV; }
 	f32 GetOrthoSize() const { return m_OrthoSize; }
+	f32 GetAspect() const { return m_Aspect; }
 public:
 	void SetFOV(f32 fov) { m_FOV = fov; UpdateMatrix(); }
 	void SetOrthoSize(f32 orthoSize) { m_OrthoSize = orthoSize; UpdateMatrix(); }
+	void SetAspect(f32 aspect) { m_Aspect = aspect; }
 #pragma endregion
 
 

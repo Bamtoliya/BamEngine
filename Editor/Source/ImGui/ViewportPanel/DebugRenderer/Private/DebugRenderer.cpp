@@ -54,7 +54,7 @@ void DebugRenderer::SubmitDebugDraw(Camera* camera, const wstring& colorRTName)
 	RegisterColliderDebug(camera);
 	if (m_Vertices.empty() || !camera || colorRTName.empty()) return;
 	RenderPass* pass = Engine::RenderPassManager::Get().GetRenderPassByID(m_RenderPassID);
-	pass->SetColorAttachments({	colorRTName	});
+	pass->SetColorAttachments({ colorRTName });
 	Renderer::Get().RegisterViewportCamera(camera, pass);
 
 	Engine::Renderer::Get().SubmitCustomCommand(
@@ -82,21 +82,24 @@ void DebugRenderer::SubmitDebugDraw(Camera* camera, const wstring& colorRTName)
 			desc.DepthStencilState.StencilTestEnable = false;
 			desc.DepthStencilState.DepthCompareOp = ECompareOp::Always;
 
-			// [핵심] RenderPass에서 Color Attachment 포맷 동적 매칭
 			desc.ColorAttachmentCount = pass->GetRenderTargetCount();
-			//for (uint32 i = 0; i < desc.ColorAttachmentCount; ++i)
-			//{
-			//	desc.ColorAttachmentFormats[i] = Engine::RenderTargetManager::Get()
-			//		.GetRenderTarget(pass->GetRenderTargetName(i))->GetFormat();
-			//}
+			for (uint32 i = 0; i < desc.ColorAttachmentCount; ++i)
+			{
+				desc.ColorAttachmentFormats[i] = Engine::RenderTargetManager::Get()
+					.GetRenderTarget(pass->GetRenderTargetName(i))->GetFormat();
+			}
 
 			// [핵심] RenderPass에서 Depth Stencil 포맷 동적 매칭
-			//wstring depthStencilName = pass->GetDepthStencilName();
-			//if (!depthStencilName.empty())
-			//{
-			//	desc.DepthStencilAttachmentFormat = Engine::RenderTargetManager::Get()
-			//		.GetRenderTarget(depthStencilName)->GetFormat();
-			//}
+			wstring depthStencilName = pass->GetDepthStencilName();
+			if (!depthStencilName.empty())
+			{
+				desc.DepthStencilAttachmentFormat = Engine::RenderTargetManager::Get()
+					.GetRenderTarget(depthStencilName)->GetFormat();
+			}
+			else
+			{
+				desc.DepthStencilAttachmentFormat = Engine::ETextureFormat::UNKNOWN;
+			}
 
 			RHIPipeline* pipeline = PipelineManager::Get().GetOrCreatePipeline(desc);
 			if (!pipeline || IsFailure(rhi->BindPipeline(pipeline)))
@@ -107,10 +110,10 @@ void DebugRenderer::SubmitDebugDraw(Camera* camera, const wstring& colorRTName)
 			RHIBuffer* buffers[1] = { m_VertexBuffer };
 			rhi->BindVertexBuffers(0, buffers, 1);
 
-			return rhi->Draw((uint32)m_Vertices.size());
+			EResult res = rhi->Draw((uint32)m_Vertices.size());
+			m_Vertices.clear();
+			return res;
 		}, m_RenderPassID);
-
-	m_Vertices.clear();
 }
 
 void DebugRenderer::RegisterColliderDebug(Camera* camera)
