@@ -2013,6 +2013,15 @@ bool PropertyDrawer::DrawResourceHandleProperty(void* data, const TypeInfo& type
 		}
 	}
 
+	auto AssignHandle = [&](Engine::Handle newHandle)
+    {
+        if (handleData->IsValid())
+            Engine::ResourceManager::Get().ReleaseResource(*handleData);
+        if (newHandle.IsValid())
+            Engine::ResourceManager::Get().AddRefResource(newHandle);
+        *handleData = newHandle;
+    };
+
 	bool changed = false;
 	ImGui::PushID(data); // 변수 주소 기반 고유 ID
 
@@ -2063,7 +2072,7 @@ bool PropertyDrawer::DrawResourceHandleProperty(void* data, const TypeInfo& type
 				Engine::Handle newHandle = Engine::ResourceManager::Get().LoadFile(key);
 				if (newHandle.IsValid())
 				{
-					*handleData = newHandle;
+					AssignHandle(newHandle);
 					changed = true;
 				}
 			}
@@ -2088,7 +2097,7 @@ bool PropertyDrawer::DrawResourceHandleProperty(void* data, const TypeInfo& type
 		// 선택 해제 UI
 		if (ImGui::Selectable("None (Clear)"))
 		{
-			*handleData = Engine::Handle(); // 핸들 무효화
+			AssignHandle(Engine::Handle());
 			changed = true;
 		}
 
@@ -2118,7 +2127,7 @@ bool PropertyDrawer::DrawResourceHandleProperty(void* data, const TypeInfo& type
 
 				if (ImGui::Selectable(keyStr.c_str(), isSelected))
 				{
-					*handleData = handle;
+					AssignHandle(handle);
 					changed = true;
 				}
 
