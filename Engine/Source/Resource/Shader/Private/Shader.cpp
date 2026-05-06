@@ -18,6 +18,13 @@ EResult Shader::Initialize(void* arg)
 	m_NumStorageBuffers = desc->NumStorageBuffers;
 	m_NumUniformBuffers = desc->NumUniformBuffers;
 
+	m_UniformBuffers = desc->UniformBuffers;
+	m_StorageBuffers = desc->StorageBuffers;
+	m_Samplers = desc->Samplers;
+	m_StorageTextures = desc->StorageTextures;
+	m_StageInputs = desc->StageInputs;
+	m_StageOutputs = desc->StageOutputs;
+
 
 	RHI* rhi = Renderer::Get().GetRHI();
 	if (!rhi) return EResult::Fail;

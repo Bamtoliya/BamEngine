@@ -11,7 +11,7 @@
 
 BEGIN(Engine)
 
-struct tagModelCreateDesc
+struct tagModelCreateDesc : public tagResourceCreateDesc
 {
 	vector<ResourceHandle<Mesh>> Meshes;
 	vector<ResourceHandle<Material>> Materials;

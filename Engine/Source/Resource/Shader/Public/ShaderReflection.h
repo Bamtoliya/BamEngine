@@ -34,6 +34,13 @@ struct ShaderEntryPointInfo
     EShaderType ShaderType = EShaderType::Unknown;
 };
 
+struct ShaderUniformMemberInfo
+{
+    string   Name;
+    uint32   Offset;
+    uint32   Size;
+};
+
 struct ShaderResourceBindingInfo
 {
     string Name = {};
@@ -47,6 +54,8 @@ struct ShaderResourceBindingInfo
     uint32 StructSize = 0;
 
     bool bWritable = false;
+
+    vector<ShaderUniformMemberInfo> Members; 
 };
 
 struct ShaderInterfaceVariableInfo

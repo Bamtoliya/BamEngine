@@ -7,9 +7,7 @@
 #include "Collision.h"
 #include "MeshFilter.h"
 
-#ifdef _DEBUG
-#include "Renderer.h"
-#endif // 
+
 
 REGISTER_COMPONENT(BoxCollider)
 
@@ -19,8 +17,8 @@ EResult BoxCollider::Initialize(void* arg)
 	if (arg)
 	{
 		CAST_DESC
-		m_Center = desc->center;
-		m_Extents = desc->extent;
+		m_Center = desc->colliderDesc.center;
+		m_Extents = desc->colliderDesc.extent;
 	}
 	return __super::Initialize(arg);
 }
@@ -46,14 +44,13 @@ Component* BoxCollider::Clone(GameObject* owner, void* arg)
 {
 	BoxCollider* instance = new BoxCollider();
 
-	DESC colliderDesc;
-	colliderDesc.center = this->m_Center;
-	colliderDesc.extent = this->m_Extents;
-	colliderDesc.Owner = owner;
-	colliderDesc.Active = this->m_Active;
-	colliderDesc.Tag = this->m_Tag;
-
-	if (IsFailure(instance->Initialize(&colliderDesc)))
+	DESC desc;
+	desc.colliderDesc.center = this->m_Center;
+	desc.colliderDesc.extent = this->m_Extents;
+	desc.Owner = owner;
+	desc.Active = this->m_Active;
+	desc.Tag = this->m_Tag;
+	if (IsFailure(instance->Initialize(&desc)))
 	{
 		Safe_Release(instance);
 		return nullptr;
@@ -70,13 +67,6 @@ void BoxCollider::Free()
 #pragma region Loop
 void BoxCollider::LateUpdate(f32 dt)
 {
-#ifdef _DEBUG
-	if (m_DrawCollider)
-	{
-		mat4 worldMatrix = m_Owner ? m_Owner->GetTransform()->GetWorldMatrix() : mat4(1.0f);
-		Renderer::Get().DrawDebugBox(m_Center, m_Extents, vec4(0.f, 1.f, 0.f, 1.f), worldMatrix);
-	}
-#endif // _DEBUG
 }
 #pragma endregion
 

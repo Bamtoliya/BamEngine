@@ -114,7 +114,7 @@ namespace Engine
 
 
 #ifdef _DEBUG
-	struct DebugVertex
+	struct ENGINE_API DebugVertex
 	{
 		vec3 position;
 		vec4 color;
@@ -122,7 +122,7 @@ namespace Engine
 		static const tagInputLayoutDesc Layout;
 	};
 #endif
-	struct SceneUBO
+	struct ENGINE_API SceneUBO
 	{
 		mat4 worldMatrix;
 	};

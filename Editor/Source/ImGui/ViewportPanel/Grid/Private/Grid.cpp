@@ -3,37 +3,56 @@
 #include "Grid.h"
 #include "Mesh.h"
 #include "Renderer.h"
-#include "Resources.h"
 #include "ResourceManager.h"
 #include "PipelineManager.h"
 
-void Grid::Initialize()
+void Grid::Initialize(const wstring& prefix)
 {
-	ResourceManager& resourceManager = ResourceManager::Get();
+    PrepareShaders();
+    PrepareRenderPass(prefix + L"_");
+}
+
+void Grid::PrepareShaders()
+{
+    ResourceManager& resourceManager = ResourceManager::Get();
     tagShaderDesc gridVsDesc = {};
     gridVsDesc.Key = L"InfiniteGridVS";
-	gridVsDesc.Path = L"Resources/Shader/infinite_grid.vert.spv";
+    gridVsDesc.Path = L"Resources/Shader/infinite_grid.vert.spv";
     gridVsDesc.SpirvPath = L"Resources/Shader/infinite_grid.vert.spv";
-	gridVsDesc.ShaderType = EShaderType::Vertex;
-	gridVsDesc.EntryPoint = "main";
-	resourceManager.LoadResource<Shader>(&gridVsDesc);
+    gridVsDesc.ShaderType = EShaderType::Vertex;
+    gridVsDesc.EntryPoint = "main";
+    resourceManager.LoadResource<Shader>(&gridVsDesc);
+    resourceManager.SaveToBinaryFile(resourceManager.GetResourceHandle<Shader>(L"InfiniteGridVS").Get(), L"Resources/Shader/infinite_grid.vert.bamshader");
 
-	tagShaderDesc grid2DPsDesc = {};
-	grid2DPsDesc.Key = L"InfiniteGrid2DPS";
-	grid2DPsDesc.Path = L"Resources/Shader/infinite_grid_2d.frag.spv";
+    tagShaderDesc grid2DPsDesc = {};
+    grid2DPsDesc.Key = L"InfiniteGrid2DPS";
+    grid2DPsDesc.Path = L"Resources/Shader/infinite_grid_2d.frag.spv";
     grid2DPsDesc.SpirvPath = L"Resources/Shader/infinite_grid_2d.frag.spv";
-	grid2DPsDesc.ShaderType = EShaderType::Pixel;
-	grid2DPsDesc.EntryPoint = "main";
-	resourceManager.LoadResource<Shader>(&grid2DPsDesc);
+    grid2DPsDesc.ShaderType = EShaderType::Pixel;
+    grid2DPsDesc.EntryPoint = "main";
+    resourceManager.LoadResource<Shader>(&grid2DPsDesc);
+    resourceManager.SaveToBinaryFile(resourceManager.GetResourceHandle<Shader>(L"InfiniteGrid2DPS").Get(), L"Resources/Shader/infinite_grid_2d.frag.bamshader");
 
 
-	tagShaderDesc grid3DPsDesc = {};
+    tagShaderDesc grid3DPsDesc = {};
     grid3DPsDesc.Key = L"InfiniteGrid3DPS";
     grid3DPsDesc.Path = L"Resources/Shader/infinite_grid.frag.spv";
     grid3DPsDesc.SpirvPath = L"Resources/Shader/infinite_grid.frag.spv";
     grid3DPsDesc.ShaderType = EShaderType::Pixel;
     grid3DPsDesc.EntryPoint = "main";
-	resourceManager.LoadResource<Shader>(&grid3DPsDesc);
+    resourceManager.LoadResource<Shader>(&grid3DPsDesc);
+    resourceManager.SaveToBinaryFile(resourceManager.GetResourceHandle<Shader>(L"InfiniteGrid3DPS").Get(), L"Resources/Shader/infinite_grid.frag.bamshader");
+}
+
+void Grid::PrepareRenderPass(const wstring& prefix)
+{
+    m_GridPassID = RenderPassManager::Get().RegisterRenderPass(
+        prefix + L"GridPass", {}, L"",
+        ERenderPassLoadOperation::RPLO_Load, ERenderPassStoreOperation::RPSO_Store,
+        ERenderPassLoadOperation::RPLO_Load, ERenderPassStoreOperation::RPSO_Store,
+        vec4(0.f, 0.f, 0.f, -1.f),
+        410,
+        ERenderSortType::None, ERenderPassType::Custom);
 }
 
 void Grid::Free()
@@ -41,62 +60,65 @@ void Grid::Free()
 
 }
 
-void Grid::SubmitGrid(RenderPassID renderPassID, bool isOrthographic)
+void Grid::SubmitGrid(Camera* camera, bool isOrthographic, const wstring& colorRTName, const wstring& depthStencilName)
 {
+    if (m_GridPassID == INVALID_PASS_ID)
+        return;
+
+    RenderPass* pass = RenderPassManager::Get().GetRenderPassByID(m_GridPassID);
+    if (!pass) return;
+
+    if (!colorRTName.empty())
+        pass->SetColorAttachments({ colorRTName });
+    if (!depthStencilName.empty())
+        pass->SetDepthStencilAttachment(depthStencilName);
+
+    Renderer::Get().RegisterViewportCamera(camera, pass);
+
     // 람다의 매개변수로 RenderPass* 가 넘어오는 것을 적극 활용합니다!
-    Renderer::Get().SubmitCustomCommand([this, isOrthographic](f32 dt, RenderPass* renderPass)->EResult
+    Renderer::Get().SubmitCustomCommand(
+        [this, isOrthographic, colorRTName, depthStencilName](f32 dt, RenderPass* renderPass)->EResult
         {
             if (!m_Visible) return EResult::Success;
+            if (!renderPass) return EResult::Fail;
 
             RHI* rhi = Renderer::Get().GetRHI();
-            ResourceManager& resourceManager = ResourceManager::Get();
-
-            Mesh* quadMesh = resourceManager.GetResourceHandle<Mesh>(L"QuadMesh").Get();
+            Mesh* quadMesh = ResourceManager::Get().GetResourceHandle<Mesh>(L"QuadMesh").Get();
             if (!quadMesh) return EResult::Fail;
 
-            // 1. 파이프라인 디스크립터 설정 (RenderComponent와 동일한 방식 적용!)
-            tagRHIPipelineDesc pipelineDesc = {};
-            pipelineDesc.PipelineType = EPipelineType::Graphics;
-            //ResourceHandle<Shader> shandle = resourceManager.GetResourceHandle<Shader>(L"InfiniteGridVS");
-            pipelineDesc.VertexShader = resourceManager.GetResourceHandle<Shader>(L"InfiniteGridVS")->GetRHIShader();
-            pipelineDesc.PixelShader = resourceManager.GetResourceHandle<Shader>(isOrthographic ? L"InfiniteGrid2DPS" : L"InfiniteGrid3DPS")->GetRHIShader();
+            // 매 프레임 RT 이름으로 포맷 조회 → pipelineDesc 구성
+            tagRHIPipelineDesc desc = {};
+            desc.PipelineType = EPipelineType::Graphics;
+            desc.VertexShader = ResourceManager::Get().GetResourceHandle<Shader>(L"InfiniteGridVS")->GetRHIShader();
+            desc.PixelShader = ResourceManager::Get().GetResourceHandle<Shader>(
+                isOrthographic ? L"InfiniteGrid2DPS" : L"InfiniteGrid3DPS")->GetRHIShader();
+            desc.BlendMode = EBlendMode::AlphaBlend;
+            desc.FillMode = EFillMode::Solid;
+            desc.CullMode = ECullMode::None;
+            desc.Topology = ETopology::TriangleList;
+            desc.InputLayouts = quadMesh->GetInputLayoutDescs();
 
-            pipelineDesc.BlendMode = EBlendMode::AlphaBlend;
-            pipelineDesc.FillMode = EFillMode::Solid;
-            pipelineDesc.CullMode = ECullMode::None;
-            pipelineDesc.Topology = ETopology::TriangleList;
-            pipelineDesc.InputLayouts = quadMesh->GetInputLayoutDescs();
+            auto* colorRT = RenderTargetManager::Get().GetRenderTarget(colorRTName);
+            auto* depthRT = RenderTargetManager::Get().GetRenderTarget(depthStencilName);
 
-            // [핵심 1] RenderPass에서 Color Attachment 포맷 동적 매칭
-            pipelineDesc.ColorAttachmentCount = renderPass->GetRenderTargetCount();
-            for (uint32 i = 0; i < pipelineDesc.ColorAttachmentCount; ++i)
-            {
-                pipelineDesc.ColorAttachmentFormats[i] = RenderTargetManager::Get().GetRenderTarget(renderPass->GetRenderTargetName(i))->GetFormat();
-            }
+            desc.ColorAttachmentCount = colorRT ? 1 : 0;
+            desc.ColorAttachmentFormats[0] = colorRT ? colorRT->GetFormat() : ETextureFormat::R8G8B8A8_UNORM;
+            desc.DepthStencilAttachmentFormat = depthRT ? depthRT->GetFormat() : ETextureFormat::UNKNOWN;
 
-            // [핵심 2] RenderPass에서 Depth Stencil 포맷 동적 매칭
-            wstring depthStencilName = renderPass->GetDepthStencilName();
-            if (!depthStencilName.empty())
-            {
-                pipelineDesc.DepthStencilAttachmentFormat = RenderTargetManager::Get().GetRenderTarget(depthStencilName)->GetFormat();
-            }
+            desc.DepthStencilState.DepthTestEnable = true;
+            desc.DepthStencilState.DepthWriteEnable = false;
+            desc.DepthStencilState.DepthCompareOp = ECompareOp::Less;
 
-            // [핵심 3] 깊이 비교 설정 (이전과 동일하게 배경으로 깔리도록 설정)
-            pipelineDesc.DepthStencilState.DepthTestEnable = true;
-            pipelineDesc.DepthStencilState.DepthWriteEnable = false; // 그리드끼리 가리지 않도록 Write는 끔
-            pipelineDesc.DepthStencilState.DepthCompareOp = ECompareOp::LessOrEqual;
-
-            // 2. 파이프라인 가져오기 및 바인딩
-            // 매 프레임 호출되어도 PipelineManager 내부 Map에서 캐싱된 포인터를 반환하므로 오버헤드가 없습니다.
-            RHIPipeline* pipeline = PipelineManager::Get().GetOrCreatePipeline(pipelineDesc);
+            // PipelineManager 캐시에서 조회 → 없을 때만 실제 생성
+            RHIPipeline* pipeline = PipelineManager::Get().GetOrCreatePipeline(desc);
             if (!pipeline || IsFailure(rhi->BindPipeline(pipeline)))
                 return EResult::Fail;
 
-         
-            if(IsFailure(quadMesh->Bind(0)))
+            if (IsFailure(quadMesh->Bind(0)))
                 return EResult::Fail;
 
             return rhi->DrawIndexed(quadMesh->GetIndexCount());
-        }
-    , renderPassID);
+        },
+        m_GridPassID);
 }
+

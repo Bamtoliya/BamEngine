@@ -312,6 +312,7 @@ namespace Engine
 		Shadow,
 		ForwardTransparent,
 		PostProcess,
+		UI,
 	};
 
 	struct tagRenderPassDesc

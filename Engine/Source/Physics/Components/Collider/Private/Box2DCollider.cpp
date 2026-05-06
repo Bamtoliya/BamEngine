@@ -6,9 +6,7 @@
 #include "Transform.h"
 #include "Collision.h"
 #include "SpriteRenderer.h"
-#ifdef _DEBUG
-#include "Renderer.h"
-#endif
+
 
 REGISTER_COMPONENT(Box2DCollider)
 
@@ -18,8 +16,8 @@ EResult Box2DCollider::Initialize(void* arg)
 	if (arg)
 	{
 		CAST_DESC
-		m_Center = desc->center;
-		m_Extent = desc->extent;
+		m_Center = vec2(desc->colliderDesc.center.x, desc->colliderDesc.center.y);
+		m_Extent = vec2(desc->colliderDesc.extent.x, desc->colliderDesc.extent.y);
 	}
 	return __super::Initialize();
 }
@@ -60,14 +58,6 @@ void Box2DCollider::Free()
 #pragma region Loop
 void Box2DCollider::LateUpdate(f32 dt)
 {
-#ifdef _DEBUG
-	if (m_DrawCollider && m_Active)
-	{
-		mat4 worldMatrix = m_Owner ? m_Owner->GetTransform()->GetWorldMatrix() : glm::identity<mat4>();
-		Renderer::Get().DrawDebugBox(vec3(m_Center, 0.0f), vec3(m_Extent, 0.0f), vec4(0.f, 1.f, 0.f, 1.f), worldMatrix);
-	}
-#endif // _DEBUG
-
 }
 
 #pragma endregion

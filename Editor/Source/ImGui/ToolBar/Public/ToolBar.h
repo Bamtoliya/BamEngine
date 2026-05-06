@@ -1,7 +1,7 @@
 ﻿#pragma once
 
 #include "Base.h"
-#include "ViewportPanel.h"
+#include "BaseViewportPanel.h"
 
 BEGIN(Editor)
 class ToolBar

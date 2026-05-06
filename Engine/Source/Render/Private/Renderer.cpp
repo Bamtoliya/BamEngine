@@ -15,10 +15,13 @@
 
 #include "RHIPipeline.h"
 
+#include "GameObject.h"
+
 #include "Shader.h"
 #include "Camera.h"
 
 #include "Transform.h"
+#include "LightManager.h"
 
 IMPLEMENT_SINGLETON(Renderer)
 
@@ -44,39 +47,7 @@ EResult Renderer::Initialize(void* arg)
 	
 	if (!m_RHI) return EResult::Fail;
 
-#ifdef _DEBUG
-	ResourceManager& rm = ResourceManager::Get();
-	tagShaderDesc debugLineVsDesc;
-	debugLineVsDesc.ShaderType = EShaderType::Vertex;
-	
-	debugLineVsDesc.Key = L"DebugLineVS";
-	//debugLineVsDesc.Path = L"Resources/Shader/debugLine.vert.spv";
-	debugLineVsDesc.Path = L"I:\\BamtoliyaGithub\\BamEngine\\Resources\\Shader\\debugLine.vert.spv";
-	debugLineVsDesc.SpirvPath = L"I:\\BamtoliyaGithub\\BamEngine\\Resources\\Shader\\debugLine.vert.spv";
-	debugLineVsDesc.EntryPoint = "main";
-	rm.LoadResource<Shader>(&debugLineVsDesc);
-	//ResourceManager::Get().LoadShader(L"DebugLineVS", &debugLineVsDesc);
 
-	tagShaderDesc debugLinePsDesc;
-	debugLinePsDesc.ShaderType = EShaderType::Pixel;
-	debugLinePsDesc.Key = L"DebugLinePS";
-	debugLinePsDesc.Path = L"Resources/Shader/debugLine.frag.spv";
-	debugLinePsDesc.SpirvPath = L"Resources/Shader/debugLine.frag.spv";
-	debugLinePsDesc.EntryPoint = "main";
-	rm.LoadResource<Shader>(&debugLinePsDesc);
-	//ResourceManager::Get().LoadShader(L"DebugLinePS", &debugLinePsDesc);
-	
-	//디버그 버텍스 버퍼는 최대 1000개의 라인을 그릴 수 있도록 설정
-	uint32 maxDebugLines = 1000;
-	tagRHIBufferDesc bufferDesc;
-	m_DebugVertices.reserve(2 * maxDebugLines);
-	bufferDesc.InitialData = nullptr;
-	bufferDesc.BufferType = ERHIBufferType::Vertex;
-	bufferDesc.Size = 2 * maxDebugLines* sizeof(DebugVertex); // 1000 lines * 2 vertices per line
-	bufferDesc.Stride = sizeof(DebugVertex);
-	m_DebugVertexBuffer = m_RHI->CreateBuffer(nullptr, bufferDesc.Size, bufferDesc.Stride, bufferDesc.BufferType);
-	if (!m_DebugVertexBuffer) return EResult::Fail;
-#endif // _DEBUG
 
 	return EResult::Success;
 }
@@ -86,11 +57,7 @@ void Renderer::Free()
 	m_RenderPassManager = nullptr;
 	//Safe_Release(m_SceneBuffer);
 	//Safe_Release(m_DepthBuffer);
-#ifdef _DEBUG
-	Safe_Release(m_DebugVertexBuffer);
-	m_DebugPipeline = nullptr;
-	//Safe_Release(m_DebugPipeline);
-#endif // _DEBUG
+
 	if (m_RHI)
 	{
 		//순환참조 때문에 명시적으로 해제
@@ -180,14 +147,7 @@ EResult Renderer::Render(f32 dt)
 			}
 			m_RHI->SetViewport(0, 0, rtWidth, rtHeight);
 
-#ifdef _DEBUG
-			if (pass->GetName().find(L"Debug") == 0)
-			{
-				RenderDebugLines(dt);
-				m_RHI->EndRenderPass();
-				continue;
-			}
-#endif
+
 			auto it = m_RenderQueues.find(pass->GetID());
 			if (it != m_RenderQueues.end())
 				RenderComponents(dt, it->second, pass->GetSortType(), pass);
@@ -256,9 +216,7 @@ EResult Renderer::EndFrame()
 	{
 		RELEASE_VECTOR(pair.second);
 	}
-#ifdef _DEBUG
-	m_DebugVertices.clear();
-#endif // _DEBUG
+
 	m_RenderQueues.clear();
 	m_CustomRenderQueues.clear();
 	m_ViewportCameras.clear(); 
@@ -378,86 +336,4 @@ bool Renderer::TryGetPassFrustum(RenderPassID passID, tagFrustum& outFrustum, bo
 	outIsShadow = m_PassFrustumIsShadow.at(passID);
 	return true;
 }
-#pragma endregion
-
-
-
-#pragma region Debug
-#ifdef _DEBUG
-void Renderer::DrawDebugLine(const vec3& start, const vec3& end, const vec4& color)
-{
-	m_DebugVertices.push_back({ start, color });
-	m_DebugVertices.push_back({ end, color });
-}
-
-void Renderer::DrawDebugRect(const Rect& rect, const vec4& color)
-{
-	DrawDebugLine(vec3(rect.Left, rect.Top, 0.f), vec3(rect.Right(), rect.Top, 0.f), color);
-	DrawDebugLine(vec3(rect.Right(), rect.Top, 0.f), vec3(rect.Right(), rect.Bottom(), 0.f), color);
-	DrawDebugLine(vec3(rect.Right(), rect.Bottom(), 0.f), vec3(rect.Left, rect.Bottom(), 0.f), color);
-	DrawDebugLine(vec3(rect.Left, rect.Bottom(), 0.f), vec3(rect.Left, rect.Top, 0.f), color);
-}
-
-void Renderer::DrawDebugBox(const vec3& center, const vec3& extent, const vec4& color, const mat4& transform)
-{
-	vec3 localCorners[8] = {
-		vec3(center.x - extent.x, center.y - extent.y, center.z - extent.z),
-		vec3(center.x + extent.x, center.y - extent.y, center.z - extent.z),
-		vec3(center.x + extent.x, center.y + extent.y, center.z - extent.z),
-		vec3(center.x - extent.x, center.y + extent.y, center.z - extent.z),
-		vec3(center.x - extent.x, center.y - extent.y, center.z + extent.z),
-		vec3(center.x + extent.x, center.y - extent.y, center.z + extent.z),
-		vec3(center.x + extent.x, center.y + extent.y, center.z + extent.z),
-		vec3(center.x - extent.x, center.y + extent.y, center.z + extent.z)
-	};
-
-	vec3 worldCorners[8];
-	for (int i = 0; i < 8; ++i) {
-		worldCorners[i] = vec3(transform * vec4(localCorners[i], 1.0f));
-	}
-
-	DrawDebugLine(worldCorners[0], worldCorners[1], color); DrawDebugLine(worldCorners[1], worldCorners[2], color);
-	DrawDebugLine(worldCorners[2], worldCorners[3], color); DrawDebugLine(worldCorners[3], worldCorners[0], color);
-	DrawDebugLine(worldCorners[4], worldCorners[5], color); DrawDebugLine(worldCorners[5], worldCorners[6], color);
-	DrawDebugLine(worldCorners[6], worldCorners[7], color); DrawDebugLine(worldCorners[7], worldCorners[4], color);
-	DrawDebugLine(worldCorners[0], worldCorners[4], color); DrawDebugLine(worldCorners[1], worldCorners[5], color);
-	DrawDebugLine(worldCorners[2], worldCorners[6], color); DrawDebugLine(worldCorners[3], worldCorners[7], color);
-}
-
-void Renderer::DrawDebugSphere(const vec3& center, float radius, const vec4& color)
-{
-	// Sphere drawing logic (e.g., approximate with line segments and call DrawDebugLine)
-}
-EResult Renderer::RenderDebugLines(f32 dt)
-{
-	if (!m_DebugPipeline)
-	{
-		tagRHIPipelineDesc debugPipelineDesc;
-		debugPipelineDesc.PipelineType = EPipelineType::Graphics;
-		debugPipelineDesc.BlendMode = EBlendMode::AlphaBlend;
-		debugPipelineDesc.FillMode = EFillMode::Solid;
-		debugPipelineDesc.CullMode = ECullMode::None;
-		debugPipelineDesc.FrontFace = EFrontFace::CounterClockwise;
-		debugPipelineDesc.Topology = ETopology::LineList;
-
-		ResourceManager& rm = ResourceManager::Get();
-		debugPipelineDesc.VertexShader = rm.GetResourceHandle<Shader>(L"DebugLineVS").Get()->GetRHIShader();
-		debugPipelineDesc.PixelShader = rm.GetResourceHandle<Shader>(L"DebugLinePS").Get()->GetRHIShader();
-		debugPipelineDesc.InputLayouts.push_back(DebugVertex::Layout);
-		debugPipelineDesc.DepthStencilState.DepthTestEnable = false;
-		debugPipelineDesc.DepthStencilState.StencilTestEnable = false;
-		debugPipelineDesc.DepthStencilState.DepthWriteEnable = false;
-		debugPipelineDesc.DepthStencilState.DepthCompareOp = ECompareOp::Always;
-		debugPipelineDesc.ColorAttachmentFormats[0] = ETextureFormat::R8G8B8A8_UNORM;
-		m_DebugPipeline = PipelineManager::Get().GetOrCreatePipeline(debugPipelineDesc);
-	}
-	if (m_DebugVertices.empty()) return EResult::Success;
-	m_DebugVertexBuffer->SetData(m_DebugVertices.data(), (uint32)m_DebugVertices.size() * sizeof(DebugVertex));
-	if(IsFailure(m_RHI->BindPipeline(m_DebugPipeline))) return EResult::Fail;
-	RHIBuffer* buffersToBind[1] = { m_DebugVertexBuffer };
-	m_RHI->BindVertexBuffers(0, buffersToBind, 1);
-	m_RHI->Draw((uint32)m_DebugVertices.size());
-	return EResult::Success;
-}
-#endif
 #pragma endregion

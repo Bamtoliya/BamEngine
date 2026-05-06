@@ -3,6 +3,29 @@
 #include "Resources.h"
 #include "Archives.h"
 
+namespace
+{
+	std::wstring ToProjectRelativePath(const std::wstring& inputPath)
+	{
+		namespace fs = std::filesystem;
+
+		std::error_code ec;
+		fs::path absolutePath = fs::weakly_canonical(fs::path(inputPath), ec);
+		if (ec)
+			absolutePath = fs::path(inputPath);
+
+		fs::path projectRoot = fs::weakly_canonical(fs::current_path(), ec);
+		if (ec)
+			projectRoot = fs::current_path();
+
+		fs::path relativePath = fs::relative(absolutePath, projectRoot, ec);
+		if (ec || relativePath.empty())
+			return NormalizePath(absolutePath.wstring());
+
+		return NormalizePath(relativePath.wstring());
+	}
+}
+
 IMPLEMENT_SINGLETON(ResourceManager)
 
 #pragma region Constructor&Destructor
@@ -54,21 +77,25 @@ EResult ResourceManager::ImportFolder(const wstring& folderPath)
 Handle ResourceManager::LoadFile(const wstring& filePath)
 {
 	namespace fs = std::filesystem;
-	fs::path path(filePath);
-	if (!fs::exists(path))
-		return Handle(); // nullptr 대신 빈 핸들 반환
 
-	wstring extension = path.extension().wstring();
+	fs::path absolutePath(filePath);
+	if (!absolutePath.is_absolute())
+		absolutePath = fs::absolute(absolutePath);
+
+	if (!fs::exists(absolutePath))
+		return Handle();
+
+	wstring extension = absolutePath.extension().wstring();
 	std::transform(extension.begin(), extension.end(), extension.begin(), ::towlower);
 
 	auto iter = m_LoaderRegistry.find(extension);
 	if (iter != m_LoaderRegistry.end())
 	{
-		wstring key = path.stem().wstring();
-		return iter->second(key, filePath);
+		const wstring relativePath = ToProjectRelativePath(absolutePath.wstring());
+		return iter->second(relativePath, absolutePath.wstring());
 	}
 
-	return Handle(); // 지원하지 않는 확장자일 경우 빈 핸들 반환
+	return Handle();
 }
 void ResourceManager::RegisterExplicitLoader()
 {
@@ -90,16 +117,16 @@ void ResourceManager::RegisterExplicitLoader()
 	m_LoaderRegistry[L".bamsprite"] = [this](wstring key, wstring path) -> Handle
 		{
 			tagSpriteCreateDesc desc;
-			desc.Key = path;
-			desc.Path = path;
+			desc.Key = key;
+			desc.Path = key;
 			return this->LoadResource<Sprite>(&desc).GetRawHandle();
 		};
 
 	m_LoaderRegistry[L".bammat"] = [this](wstring key, wstring path) -> Handle
 		{
 			tagMaterialDesc desc;
-			desc.Key = path;
-			desc.Path = path;
+			desc.Key = key;
+			desc.Path = key;
 			return this->LoadResource<Material>(&desc).GetRawHandle();
 		};
 
@@ -107,48 +134,48 @@ void ResourceManager::RegisterExplicitLoader()
 	m_LoaderRegistry[L".bamshader"] = [this](wstring key, wstring path) -> Handle
 		{
 			tagShaderDesc desc;
-			desc.Key = path;
-			desc.Path = path;
+			desc.Key = key;
+			desc.Path = key;
 			return this->LoadResource<Shader>(&desc).GetRawHandle();
 		};
 
 	m_LoaderRegistry[L".bammatinst"] = [this](wstring key, wstring path) -> Handle
 		{
 			tagMaterialInstanceDesc desc;
-			desc.Key = path;
-			desc.Path = path;
+			desc.Key = key;
+			desc.Path = key;
 			return this->LoadResource<MaterialInstance>(&desc).GetRawHandle();
 		};
 
 	m_LoaderRegistry[L".bammesh"] = [this](wstring key, wstring path) -> Handle
 		{
-			tagMaterialInstanceDesc desc;
-			desc.Key = path;
-			desc.Path = path;
+			tagMeshCreateDesc desc;
+			desc.Key = key;
+			desc.Path = key;
 			return this->LoadResource<Mesh>(&desc).GetRawHandle();
 		};
 
 	m_LoaderRegistry[L".bamskeleton"] = [this](wstring key, wstring path) -> Handle
 		{
-			tagMaterialInstanceDesc desc;
-			desc.Key = path;
-			desc.Path = path;
+			tagSkeletonCreateDesc desc;
+			desc.Key = key;
+			desc.Path = key;
 			return this->LoadResource<Skeleton>(&desc).GetRawHandle();
 		};
 
 	m_LoaderRegistry[L".bamanim"] = [this](wstring key, wstring path) -> Handle
 		{
-			tagMaterialInstanceDesc desc;
-			desc.Key = path;
-			desc.Path = path;
+			tagAnimationCreateDesc desc;
+			desc.Key = key;
+			desc.Path = key;
 			return this->LoadResource<Animation>(&desc).GetRawHandle();
 		};
 
 	m_LoaderRegistry[L".bammodel"] = [this](wstring key, wstring path) -> Handle
 		{
-			tagMaterialInstanceDesc desc;
-			desc.Key = path;
-			desc.Path = path;
+			tagModelCreateDesc desc;
+			desc.Key = key;
+			desc.Path = key;
 			return this->LoadResource<Model>(&desc).GetRawHandle();
 		};
 }

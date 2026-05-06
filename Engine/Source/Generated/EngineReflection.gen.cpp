@@ -119,6 +119,13 @@ BEGIN_ENUM(EDrawMode)
 	REFLECT_ENUM_ENTRY(EDrawMode, Filled)
 END_ENUM_REFLECT_EX(EDrawMode, "Engine::EDrawMode")
 
+// Enum: Engine::ESpriteRenderMode
+BEGIN_ENUM(ESpriteRenderMode)
+	REFLECT_ENUM_ENTRY(ESpriteRenderMode, World)
+	REFLECT_ENUM_ENTRY(ESpriteRenderMode, Billboard)
+	REFLECT_ENUM_ENTRY(ESpriteRenderMode, UI)
+END_ENUM_REFLECT_EX(ESpriteRenderMode, "Engine::ESpriteRenderMode")
+
 // Enum: Engine::EPipelineType
 BEGIN_ENUM(EPipelineType)
 	REFLECT_ENUM_ENTRY(EPipelineType, Graphics)
@@ -766,6 +773,10 @@ BEGIN_METADATA(SpriteRenderer, m_Sprite)
 	EDITABLE
 END_METADATA
 
+BEGIN_METADATA(SpriteRenderer, m_RenderMode)
+	EDITABLE
+END_METADATA
+
 BEGIN_METADATA(SpriteRenderer, m_CachedSpriteVersion)
 	CATEGORY("DETAIL")
 	READONLY
@@ -779,6 +790,7 @@ BEGIN_PROPERTIES(SpriteRenderer)
 	REFLECT_PROPERTY(SpriteRenderer, m_Tiling, "vec2", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{SpriteRenderer_m_Tiling_Meta})
 	REFLECT_PROPERTY(SpriteRenderer, m_Mesh, "ResourceHandle<Mesh>", reflection::EPropertyType::ResourceHandle, std::span<const reflection::MetadataEntry>{SpriteRenderer_m_Mesh_Meta})
 	REFLECT_PROPERTY(SpriteRenderer, m_Sprite, "ResourceHandle<Sprite>", reflection::EPropertyType::ResourceHandle, std::span<const reflection::MetadataEntry>{SpriteRenderer_m_Sprite_Meta})
+	REFLECT_PROPERTY(SpriteRenderer, m_RenderMode, "Engine::ESpriteRenderMode", reflection::EPropertyType::Enum, std::span<const reflection::MetadataEntry>{SpriteRenderer_m_RenderMode_Meta})
 	REFLECT_PROPERTY(SpriteRenderer, m_CachedSpriteVersion, "uint32", reflection::EPropertyType::UInt32, std::span<const reflection::MetadataEntry>{SpriteRenderer_m_CachedSpriteVersion_Meta})
 	REFLECT_PROPERTY(SpriteRenderer, m_DrawMode, "Engine::EDrawMode", reflection::EPropertyType::Enum, std::span<const reflection::MetadataEntry>{SpriteRenderer_m_DrawMode_Meta})
 END_PROPERTIES
@@ -909,23 +921,38 @@ IMPLEMENT_CLASS_EX(MaterialParameter, "Engine::MaterialParameter", "")
 
 #pragma region CLASS: Engine::MaterialInterface
 BEGIN_METADATA(MaterialInterface, m_BlendMode)
+	EDITABLE
 	CATEGORY(L"Pipeline")
 END_METADATA
 
 BEGIN_METADATA(MaterialInterface, m_CullMode)
+	EDITABLE
 	CATEGORY(L"Pipeline")
 END_METADATA
 
 BEGIN_METADATA(MaterialInterface, m_FillMode)
+	EDITABLE
 	CATEGORY(L"Pipeline")
 END_METADATA
 
 BEGIN_METADATA(MaterialInterface, m_DepthMode)
+	EDITABLE
 	CATEGORY(L"Pipeline")
 END_METADATA
 
 BEGIN_METADATA(MaterialInterface, m_DepthCompareOp)
+	EDITABLE
 	CATEGORY(L"Pipeline")
+END_METADATA
+
+BEGIN_METADATA(MaterialInterface, m_VertexShaderHandle)
+	EDITABLE
+	CATEGORY(L"Shader")
+END_METADATA
+
+BEGIN_METADATA(MaterialInterface, m_PixelShaderHandle)
+	EDITABLE
+	CATEGORY(L"Shader")
 END_METADATA
 
 BEGIN_METADATA(MaterialInterface, m_Parameters)
@@ -946,8 +973,8 @@ BEGIN_PROPERTIES(MaterialInterface)
 	REFLECT_PROPERTY(MaterialInterface, m_FillMode, "Engine::EFillMode", reflection::EPropertyType::Enum, std::span<const reflection::MetadataEntry>{MaterialInterface_m_FillMode_Meta})
 	REFLECT_PROPERTY(MaterialInterface, m_DepthMode, "Engine::EDepthMode", reflection::EPropertyType::Enum, std::span<const reflection::MetadataEntry>{MaterialInterface_m_DepthMode_Meta})
 	REFLECT_PROPERTY(MaterialInterface, m_DepthCompareOp, "Engine::ECompareOp", reflection::EPropertyType::Enum, std::span<const reflection::MetadataEntry>{MaterialInterface_m_DepthCompareOp_Meta})
-	REFLECT_PROPERTY(MaterialInterface, m_VertexShaderHandle, "ResourceHandle<Shader>", reflection::EPropertyType::ResourceHandle, std::span<const reflection::MetadataEntry>{})
-	REFLECT_PROPERTY(MaterialInterface, m_PixelShaderHandle, "ResourceHandle<Shader>", reflection::EPropertyType::ResourceHandle, std::span<const reflection::MetadataEntry>{})
+	REFLECT_PROPERTY(MaterialInterface, m_VertexShaderHandle, "ResourceHandle<Shader>", reflection::EPropertyType::ResourceHandle, std::span<const reflection::MetadataEntry>{MaterialInterface_m_VertexShaderHandle_Meta})
+	REFLECT_PROPERTY(MaterialInterface, m_PixelShaderHandle, "ResourceHandle<Shader>", reflection::EPropertyType::ResourceHandle, std::span<const reflection::MetadataEntry>{MaterialInterface_m_PixelShaderHandle_Meta})
 	REFLECT_CONTAINER_PROPERTY(MaterialInterface, m_Parameters, "unordered_map<string, Engine::MaterialParameter>", reflection::EPropertyType::Map, &MaterialInterface_m_Parameters_Root_ContainerData, std::span<const reflection::MetadataEntry>{MaterialInterface_m_Parameters_Meta})
 	REFLECT_CONTAINER_PROPERTY(MaterialInterface, m_TextureBindings, "vector<Engine::MaterialTextureBinding>", reflection::EPropertyType::Array, &MaterialInterface_m_TextureBindings_Root_ContainerData, std::span<const reflection::MetadataEntry>{MaterialInterface_m_TextureBindings_Meta})
 END_PROPERTIES
@@ -1093,12 +1120,20 @@ IMPLEMENT_CLASS_EX(Script, "Engine::Script", "Engine::Resource")
 #pragma endregion // CLASS: Engine::Script
 
 #pragma region CLASS: Engine::Shader
+BEGIN_METADATA(Shader, m_ShaderType)
+	READONLY
+END_METADATA
+
+BEGIN_METADATA(Shader, m_SpirvPath)
+	READONLY
+END_METADATA
+
 BEGIN_METADATA(Shader, m_RHIShader)
 	NOSERIALIZE
 END_METADATA
 BEGIN_PROPERTIES(Shader)
-	REFLECT_PROPERTY(Shader, m_ShaderType, "EShaderType", reflection::EPropertyType::Enum, std::span<const reflection::MetadataEntry>{})
-	REFLECT_PROPERTY(Shader, m_SpirvPath, "wstring", reflection::EPropertyType::WString, std::span<const reflection::MetadataEntry>{})
+	REFLECT_PROPERTY(Shader, m_ShaderType, "EShaderType", reflection::EPropertyType::Enum, std::span<const reflection::MetadataEntry>{Shader_m_ShaderType_Meta})
+	REFLECT_PROPERTY(Shader, m_SpirvPath, "wstring", reflection::EPropertyType::WString, std::span<const reflection::MetadataEntry>{Shader_m_SpirvPath_Meta})
 	REFLECT_PROPERTY(Shader, m_EntryPoint, "string", reflection::EPropertyType::String, std::span<const reflection::MetadataEntry>{})
 	REFLECT_PROPERTY(Shader, m_NumSamplers, "uint32", reflection::EPropertyType::UInt32, std::span<const reflection::MetadataEntry>{})
 	REFLECT_PROPERTY(Shader, m_NumStorageTextures, "uint32", reflection::EPropertyType::UInt32, std::span<const reflection::MetadataEntry>{})

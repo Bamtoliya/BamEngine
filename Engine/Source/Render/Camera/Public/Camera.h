@@ -62,7 +62,9 @@ private:
 #pragma region Projection Space
 public:
 	bool GetIsPerspective() { return m_IsPerspective; }
+	bool GetIsOrthographic() { return !m_IsPerspective; }
 	void SetPerspective(bool perspective = true) { m_IsPerspective = perspective; }
+	void SetOrthographic(bool orthographic = true) { m_IsPerspective = !orthographic; }
 	void SetPerspective(f32 fov, f32 aspect, f32 near, f32 far);
 	void SetOrthographic(f32 width, f32 height, f32 near, f32 far);
 public:

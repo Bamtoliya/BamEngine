@@ -23,6 +23,8 @@ public:
 	void SetName(const wstring& name) { m_Name = name; }
 protected:
 	bool m_Open = true;
+	bool m_Focused = false;
+	bool m_Hovered = false;
 	wstring m_Name = L"ImGui Panel";
 };
 END

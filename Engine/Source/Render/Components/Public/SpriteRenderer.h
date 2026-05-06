@@ -16,6 +16,14 @@ enum class EDrawMode
 	Filled
 };
 
+ENUM()
+enum class ESpriteRenderMode
+{
+	World,    
+    Billboard,
+    UI,
+};
+
 CLASS()
 class ENGINE_API SpriteRenderer : public RenderComponent
 {
@@ -68,6 +76,9 @@ private:
 
 	PROPERTY(EDITABLE)
 	ResourceHandle<Sprite> m_Sprite;
+
+	PROPERTY(EDITABLE)
+	ESpriteRenderMode m_RenderMode = ESpriteRenderMode::World;
 
 	PROPERTY(CATEGORY("DETAIL"), READONLY, NOSERIALIZE)
 	uint32 m_CachedSpriteVersion = { 0 };

@@ -99,6 +99,31 @@ static void AppendResourceList(
             item.StructSize = GetStructSize(compiler, resource.base_type_id);
         }
 
+        if (resourceType == SPVC_RESOURCE_TYPE_UNIFORM_BUFFER)
+        {
+            spvc_type baseType = spvc_compiler_get_type_handle(compiler, resource.base_type_id);
+            const uint32 memberCount = spvc_type_get_num_member_types(baseType);
+            item.Members.reserve(memberCount);
+
+            for (uint32 m = 0; m < memberCount; ++m)
+            {
+                ShaderUniformMemberInfo member;
+
+                const char* memberName = spvc_compiler_get_member_name(compiler, resource.base_type_id, m);
+                member.Name = memberName ? memberName : "";
+
+                unsigned offset = 0;
+                spvc_compiler_type_struct_member_offset(compiler, baseType, m, &offset);
+                member.Offset = static_cast<uint32>(offset);
+
+                size_t memberSize = 0;
+                spvc_compiler_get_declared_struct_member_size(compiler, baseType, m, &memberSize);
+                member.Size = static_cast<uint32>(memberSize);
+
+                item.Members.push_back(std::move(member));
+            }
+        }
+
         spvc_type type = spvc_compiler_get_type_handle(compiler, resource.type_id);
         item.bWritable = spvc_type_get_image_is_storage(type) ? true : false;
 

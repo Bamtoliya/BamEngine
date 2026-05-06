@@ -9,7 +9,7 @@
 
 #include "LocalizationManager.h"
 
-#include "ViewportPanel.h"
+#include "BaseViewportPanel.h"
 #include "InspectorPanel.h"
 #include "HierarchyPanel.h"
 #include "ImGuiManager.h"
@@ -308,44 +308,44 @@ void ToolBar::AddNewViewportPanel()
 }
 void ToolBar::DrawNewViewportPopup()
 {
-	if (m_ShowNewViewportPopup)
-	{
-		ImGui::OpenPopup("NewViewportPopup");
-		m_ShowNewViewportPopup = false;
-	}
-	if (ImGui::BeginPopup("NewViewportPopup"))
-	{
-		ImGui::InputText("Name", m_NewViewportNameBuf, sizeof(m_NewViewportNameBuf));
-		ImGui::InputInt("Width", (int*)&m_newViewportDesc.RenderTargetWidth);
-		ImGui::InputInt("Height", (int*)&m_newViewportDesc.RenderTargetHeight);
-		const char* cameraTypes[] = { "Perspective", "Orthographic" };
-		int currentCameraType = (int)m_newViewportDesc.CameraType;
-		if (ImGui::Combo("Camera Type", &currentCameraType, cameraTypes, IM_ARRAYSIZE(cameraTypes)))
-		{
-			m_newViewportDesc.CameraType = (EViewportCameraType)currentCameraType;
-		}
-		const char* viewportModes[] = { "Wireframe", "Solid", "Textured" };
-		int currentViewportMode = (int)m_newViewportDesc.ViewportMode;
-		if (ImGui::Combo("Viewport Mode", &currentViewportMode, viewportModes, IM_ARRAYSIZE(viewportModes)))
-		{
-			m_newViewportDesc.ViewportMode = (EViewportMode)currentViewportMode;
-		}
-		if (ImGui::Button("Create"))
-		{
-			m_newViewportDesc.Name = StrToWStr(m_NewViewportNameBuf);
-			ViewportPanel* newPanel = new ViewportPanel();
-			newPanel->Initialize(&m_newViewportDesc);
-			ImGuiManager::Get().AddImGuiPanel(newPanel);
-			ImGui::CloseCurrentPopup();
-		}
-		ImGui::SameLine();
-		if (ImGui::Button("Cancel"))
-		{
-			ImGui::CloseCurrentPopup();
-		}
-		
-		ImGui::EndPopup();
-	}
+	//if (m_ShowNewViewportPopup)
+	//{
+	//	ImGui::OpenPopup("NewViewportPopup");
+	//	m_ShowNewViewportPopup = false;
+	//}
+	//if (ImGui::BeginPopup("NewViewportPopup"))
+	//{
+	//	ImGui::InputText("Name", m_NewViewportNameBuf, sizeof(m_NewViewportNameBuf));
+	//	ImGui::InputInt("Width", (int*)&m_newViewportDesc.RenderTargetWidth);
+	//	ImGui::InputInt("Height", (int*)&m_newViewportDesc.RenderTargetHeight);
+	//	const char* cameraTypes[] = { "Perspective", "Orthographic" };
+	//	int currentCameraType = (int)m_newViewportDesc.CameraType;
+	//	if (ImGui::Combo("Camera Type", &currentCameraType, cameraTypes, IM_ARRAYSIZE(cameraTypes)))
+	//	{
+	//		m_newViewportDesc.CameraType = (EViewportCameraType)currentCameraType;
+	//	}
+	//	const char* viewportModes[] = { "Wireframe", "Solid", "Textured" };
+	//	int currentViewportMode = (int)m_newViewportDesc.ViewportMode;
+	//	if (ImGui::Combo("Viewport Mode", &currentViewportMode, viewportModes, IM_ARRAYSIZE(viewportModes)))
+	//	{
+	//		m_newViewportDesc.ViewportMode = (EViewportMode)currentViewportMode;
+	//	}
+	//	if (ImGui::Button("Create"))
+	//	{
+	//		m_newViewportDesc.Name = StrToWStr(m_NewViewportNameBuf);
+	//		ViewportPanel* newPanel = new ViewportPanel();
+	//		newPanel->Initialize(&m_newViewportDesc);
+	//		ImGuiManager::Get().AddImGuiPanel(newPanel);
+	//		ImGui::CloseCurrentPopup();
+	//	}
+	//	ImGui::SameLine();
+	//	if (ImGui::Button("Cancel"))
+	//	{
+	//		ImGui::CloseCurrentPopup();
+	//	}
+	//	
+	//	ImGui::EndPopup();
+	//}
 }
 
 #pragma endregion

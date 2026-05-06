@@ -343,12 +343,10 @@ EResult ImGuiManager::CreateDefaultPanels()
 {
 	tagViewportPanelDesc scenePanelDesc;
 	scenePanelDesc.Name = L"Scene View";
-	scenePanelDesc.Type = EViewportType::Scene;
 	scenePanelDesc.CameraType = EViewportCameraType::Orthographic;
-	scenePanelDesc.ViewportMode = EViewportMode::Textured;
 	scenePanelDesc.RenderTargetWidth = g_WindowWidth;
 	scenePanelDesc.RenderTargetHeight = g_WindowHeight;
-	ViewportPanel* viewportPanel = new ViewportPanel();
+	BaseViewportPanel* viewportPanel = new BaseViewportPanel();
 	viewportPanel->Initialize(&scenePanelDesc);
 	AddImGuiPanel(viewportPanel);
 	AddImGuiPanel(new InspectorPanel());
@@ -366,6 +364,7 @@ EResult ImGuiManager::CreateResourceEditors()
 	AddImGuiPanel(textureEditor);
 
 	MaterialEditor* materialEditor = new MaterialEditor();
+	materialEditor->Initialize();
 	materialEditor->Close();
 	AddImGuiPanel(materialEditor);
 

@@ -2,19 +2,11 @@
 
 #include "Collider.h"
 
-
-struct tagBox2DColliderDesc : public tagColliderDesc
-{
-	vec2 center = vec2(0.f);
-	vec2 extent = vec2(0.5f);
-};
-
 BEGIN(Engine)
 CLASS()
 class ENGINE_API Box2DCollider final : public Collider
 {
 	REFLECT_CLASS()
-	using DESC = tagBox2DColliderDesc;
 #pragma region Constructor&Destructor
 private:
 	Box2DCollider() : Collider(EColliderType::Box2D) {}

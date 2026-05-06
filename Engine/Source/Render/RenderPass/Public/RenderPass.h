@@ -36,6 +36,23 @@ public:
 	const ERenderPassType GetPassType() const { return m_Desc.PassType; }
 #pragma endregion
 
+#pragma region Setter
+public:
+	void SetPriority(uint32 priority) { m_Desc.Priority = priority; }
+	void SetID(RenderPassID id) { m_Desc.ID = id; }
+	void SetName(const wstring& name) { m_Desc.Name = name; }
+	void SetSortType(ERenderSortType sortType) { m_Desc.SortType = sortType; }
+	void AddColorAttachment(const wstring& rtName) { m_Desc.RenderTargetNames.push_back(rtName); }
+	void ClearColorAttachments() { m_Desc.RenderTargetNames.clear(); }
+	void SetColorAttachments(const std::vector<wstring>& rtNames) { m_Desc.RenderTargetNames = rtNames; }
+	void SetDepthStencilAttachment(const wstring& dsName) { m_Desc.DepthStencilName = dsName; }
+	void SetLoadOperation(ERenderPassLoadOperation loadOp) { m_Desc.LoadOperation = loadOp; }
+	void SetStoreOperation(ERenderPassStoreOperation storeOp) { m_Desc.StoreOperation = storeOp; }
+	void SetStencilLoadOperation(ERenderPassLoadOperation loadOp) { m_Desc.StencilLoadOperation = loadOp; }
+	void SetStencilStoreOperation(ERenderPassStoreOperation storeOp) { m_Desc.StencilStoreOperation = storeOp; }
+	void SetOverrideClearColor(const vec4& color) { m_Desc.OverrideClearColor = color; }
+	void SetPassType(ERenderPassType passType) { m_Desc.PassType = passType; }
+#pragma endregion
 
 #pragma region Variable
 private:

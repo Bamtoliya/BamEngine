@@ -12,6 +12,13 @@ struct tagShaderDesc : public tagResourceCreateDesc {
 	uint32 NumStorageTextures = { 0 };
 	uint32 NumStorageBuffers = { 0 };
 	uint32 NumUniformBuffers = { 0 };
+
+	vector<ShaderResourceBindingInfo> UniformBuffers;
+	vector<ShaderResourceBindingInfo> StorageBuffers;
+	vector<ShaderResourceBindingInfo> Samplers;
+	vector<ShaderResourceBindingInfo> StorageTextures;
+	vector<ShaderInterfaceVariableInfo> StageInputs;
+	vector<ShaderInterfaceVariableInfo> StageOutputs;
 };
 
 BEGIN(Engine)
@@ -53,6 +60,28 @@ public:
 	uint32 GetNumStorageBuffers() const { return m_NumStorageBuffers; }
 	uint32 GetNumUniformBuffers() const { return m_NumUniformBuffers; }
 
+	const vector<ShaderResourceBindingInfo>& GetUniformBuffers() const { return m_UniformBuffers; }
+	const vector<ShaderResourceBindingInfo>& GetStorageBuffers() const { return m_StorageBuffers; }
+	const vector<ShaderResourceBindingInfo>& GetSamplers() const { return m_Samplers; }
+	const vector<ShaderResourceBindingInfo>& GetStorageTextures() const { return m_StorageTextures; }
+	const vector<ShaderInterfaceVariableInfo>& GetStageInputs() const { return m_StageInputs; }
+	const vector<ShaderInterfaceVariableInfo>& GetStageOutputs() const { return m_StageOutputs; }
+
+	const ShaderResourceBindingInfo* FindUniformBuffer(uint32 set, uint32 binding) const;
+	const ShaderResourceBindingInfo* FindUniformBuffer(const string& name) const;
+	const ShaderResourceBindingInfo* FindStorageBuffer(uint32 set, uint32 binding) const;
+	const ShaderResourceBindingInfo* FindStorageBuffer(const string& name) const;
+	const ShaderResourceBindingInfo* FindSampler(uint32 set, uint32 binding) const;
+	const ShaderResourceBindingInfo* FindSampler(const string& name) const;
+	const ShaderResourceBindingInfo* FindStorageTexture(uint32 set, uint32 binding) const;
+	const ShaderResourceBindingInfo* FindStorageTexture(const string& name) const;
+	const ShaderInterfaceVariableInfo* FindStageInput(uint32 location) const;
+	const ShaderInterfaceVariableInfo* FindStageInput(const string& name) const;
+	const ShaderInterfaceVariableInfo* FindStageOutput(uint32 location) const;
+	const ShaderInterfaceVariableInfo* FindStageOutput(const string& name) const;
+	const ShaderResourceBindingInfo* FindResource(uint32 set, uint32 binding) const;
+	const ShaderResourceBindingInfo* FindResource(uint32 location) const;
+	const ShaderResourceBindingInfo* FindResource(const string& name) const;
 	tagRHIShaderDesc BuildRHIShaderDesc() const;
 #pragma endregion
 
@@ -65,10 +94,9 @@ public:
 
 #pragma region Member Variables
 private:
-
-	PROPERTY()
+	PROPERTY(READONLY)
 	EShaderType m_ShaderType = { EShaderType::Unknown };
-	PROPERTY()
+	PROPERTY(READONLY)
 	wstring m_SpirvPath = {};
 	PROPERTY()
 	string m_EntryPoint = "main";
@@ -84,6 +112,14 @@ private:
 
 	PROPERTY(NOSERIALIZE)
 	RHIShader* m_RHIShader = { nullptr };
+
+	vector<ShaderResourceBindingInfo> m_UniformBuffers = {};
+	vector<ShaderResourceBindingInfo> m_StorageBuffers = {};
+	vector<ShaderResourceBindingInfo> m_Samplers = {};
+	vector<ShaderResourceBindingInfo> m_StorageTextures = {};
+	vector<ShaderInterfaceVariableInfo> m_StageInputs = {};
+	vector<ShaderInterfaceVariableInfo> m_StageOutputs = {};
+
 #pragma endregion
 
 };
