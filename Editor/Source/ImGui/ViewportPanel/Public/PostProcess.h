@@ -18,7 +18,7 @@ namespace
 		wstring Name;
 		bool Enabled = false;
 		RHIPipeline* Pipeline = nullptr;
-		vector<uint8> Parameters; // 이펙트별로 필요한 파라미터들을 바이트 배열 형태로 저장 (예: 노출, 감마 등)
+		vector<uint8> Parameters;
 	};
 
 	struct tagToneMappingParams
@@ -28,23 +28,74 @@ namespace
 		f32 _pad0 = 0.f;
 		f32 _pad1 = 0.f;
 	};
-
-	ENUM()
-	enum class EViewportChannelView : uint8
-	{
-		None = 0,
-		R = 1 << 0,
-		G = 1 << 1,
-		B = 1 << 2,
-		A = 1 << 3,
-		RGB = R | G | B,
-		RGBA = RGB | A
-	};
-	ENABLE_BITMASK_OPERATORS(EViewportChannelView)
-
-	struct ChannelViewData
-	{
-		uint32 Flags;
-		float pad[3];
-	};
 }
+
+// -------------------------------------------------------------
+// [NEW] Object-Oriented PostProcess Architecture
+// -------------------------------------------------------------
+
+BEGIN(Editor)
+
+class PostProcess
+{
+public:
+	PostProcess(const wstring& name) : m_Name(name), m_Enabled(false) {}
+	virtual ~PostProcess() = default;
+
+public:
+	virtual void Initialize(const wstring& prefix) = 0;
+	virtual void Free() = 0;
+	virtual EResult SubmitPass(f32 dt, Engine::RenderPassID passID, const wstring& sourceRT) = 0;
+	virtual void DrawImGuiOptions() = 0;
+
+public:
+	const wstring& GetName() const { return m_Name; }
+	bool IsEnabled() const { return m_Enabled; }
+	void SetEnabled(bool enable) { m_Enabled = enable; }
+	void Toggle() { m_Enabled = !m_Enabled; }
+
+protected:
+	wstring m_Name;
+	bool m_Enabled;
+};
+
+// -------------------------------------------------------------
+
+class ToneMapping : public PostProcess
+{
+public:
+	ToneMapping() : PostProcess(L"Tone Mapping (ACES)") {}
+	virtual ~ToneMapping() = default;
+
+public:
+	virtual void Initialize(const wstring& prefix) override;
+	virtual void Free() override;
+	virtual EResult SubmitPass(f32 dt, Engine::RenderPassID passID, const wstring& sourceRT) override;
+	virtual void DrawImGuiOptions() override;
+
+private:
+	Engine::RHIPipeline* m_Pipeline = nullptr;
+	tagToneMappingParams m_Params; // 기존 구조체 재활용 (추후 Engine쪽으로 옮겨도 됨)
+};
+
+// -------------------------------------------------------------
+
+class PostProcessChain
+{
+public:
+	PostProcessChain() = default;
+	~PostProcessChain() = default;
+
+public:
+	void Initialize(const wstring& prefix);
+	void Free();
+
+	void AddPostProcess(PostProcess* effect);
+	void ExecuteChain(f32 dt, const std::vector<Engine::RenderPassID>& passIDs, wstring& currentRT, const wstring* ppRTNames);
+	void DrawImGuiMenu();
+
+private:
+	std::vector<PostProcess*> m_Effects;
+};
+
+END

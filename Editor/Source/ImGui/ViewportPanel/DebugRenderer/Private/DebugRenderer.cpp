@@ -6,6 +6,7 @@
 #include "PipelineManager.h"
 #include "RenderTargetManager.h"
 #include "Layer.h"
+#include "GameObject.h"
 
 void DebugRenderer::Initialize(const wstring& prefix)
 {

@@ -144,9 +144,22 @@ tagCameraBuffer Camera::GetCameraBuffer() const
 #pragma endregion
 
 
+#pragma region Main Camera
+void Camera::SetMainCamera(bool isMain)
+{
+	m_IsMainCamera = isMain;
+	if (isMain)
+		CameraManager::Get().SetMainCamera(this);
+	else if (CameraManager::Get().GetMainCamera() == this)
+		CameraManager::Get().SetMainCamera(nullptr);
+}
+#pragma endregion
+
 #pragma region Save&Load
 void Camera::Deserialize(Archive& ar)
 {
 	CameraManager::Get().AddCamera(this);
+	if(m_IsMainCamera)
+		CameraManager::Get().SetMainCamera(this);
 }
 #pragma endregion

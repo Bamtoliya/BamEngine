@@ -16,7 +16,7 @@
 #include "Application.h"
 #include "RHI.h"
 
-#include "ViewportPanel.h"
+#include "ViewportPanels.h"
 #include "InspectorPanel.h"
 #include "HierarchyPanel.h"
 #include "ContentBrowserPanel.h"
@@ -341,12 +341,14 @@ vector<ImGuiInterface*> ImGuiManager::GetImGuiPanels(const wstring& name)
 }
 EResult ImGuiManager::CreateDefaultPanels()
 {
-	tagViewportPanelDesc scenePanelDesc;
+	tagSceneViewportPanelDesc scenePanelDesc;
 	scenePanelDesc.Name = L"Scene View";
-	scenePanelDesc.CameraType = EViewportCameraType::Orthographic;
 	scenePanelDesc.RenderTargetWidth = g_WindowWidth;
 	scenePanelDesc.RenderTargetHeight = g_WindowHeight;
-	BaseViewportPanel* viewportPanel = new BaseViewportPanel();
+	scenePanelDesc.IsSceneCamera = false;
+	scenePanelDesc.IsPerspective = false;
+	scenePanelDesc.CameraType = EViewportCameraType::Orthographic;
+	SceneViewportPanel* viewportPanel = new SceneViewportPanel();
 	viewportPanel->Initialize(&scenePanelDesc);
 	AddImGuiPanel(viewportPanel);
 	AddImGuiPanel(new InspectorPanel());

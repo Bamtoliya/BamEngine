@@ -77,12 +77,16 @@ public:
 	void SetAspect(f32 aspect) { m_Aspect = aspect; }
 #pragma endregion
 
+#pragma region Main Camera
+public:
+	bool IsMainCamera() const { return m_IsMainCamera; }
+	void SetMainCamera(bool isMain);
+#pragma endregion
 
 #pragma region Save&Load
 public:
 	virtual void Deserialize(Archive& ar) override; 
 #pragma endregion
-
 
 #pragma region Variables
 private:
@@ -106,6 +110,9 @@ private:
 	PROPERTY(READONLY)
 	glm::mat4 m_ViewMatrix = glm::identity<mat4>();
 	glm::mat4 m_ViewMatrixInv = glm::identity<mat4>();
+
+	PROPERTY(EDITABLE)
+	bool m_IsMainCamera = { false };
 #pragma endregion	
 };
 END

@@ -4,7 +4,7 @@
 
 // [Header Includes]
 #include "AssetManager/Importer/Public/ModelImporter.h"
-#include "ImGui/ViewportPanel/Public/PostProcess.h"
+#include "ImGui/ViewportPanel/Public/ChannelFilter.h"
 
 #pragma push_macro("new")
 #undef new

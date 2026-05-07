@@ -559,6 +559,10 @@ END_METADATA
 BEGIN_METADATA(Camera, m_ViewMatrix)
 	READONLY
 END_METADATA
+
+BEGIN_METADATA(Camera, m_IsMainCamera)
+	EDITABLE
+END_METADATA
 BEGIN_PROPERTIES(Camera)
 	REFLECT_PROPERTY(Camera, m_FOV, "f32", reflection::EPropertyType::Float32, std::span<const reflection::MetadataEntry>{Camera_m_FOV_Meta})
 	REFLECT_PROPERTY(Camera, m_Near, "f32", reflection::EPropertyType::Float32, std::span<const reflection::MetadataEntry>{Camera_m_Near_Meta})
@@ -568,6 +572,7 @@ BEGIN_PROPERTIES(Camera)
 	REFLECT_PROPERTY(Camera, m_IsPerspective, "bool", reflection::EPropertyType::Bool, std::span<const reflection::MetadataEntry>{Camera_m_IsPerspective_Meta})
 	REFLECT_PROPERTY(Camera, m_ProjMatrix, "glm::mat4", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{Camera_m_ProjMatrix_Meta})
 	REFLECT_PROPERTY(Camera, m_ViewMatrix, "glm::mat4", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{Camera_m_ViewMatrix_Meta})
+	REFLECT_PROPERTY(Camera, m_IsMainCamera, "bool", reflection::EPropertyType::Bool, std::span<const reflection::MetadataEntry>{Camera_m_IsMainCamera_Meta})
 END_PROPERTIES
 EMPTY_FUNCTIONS(Camera)
 IMPLEMENT_CLASS_EX(Camera, "Engine::Camera", "Engine::Component")
