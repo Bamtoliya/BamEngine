@@ -25,6 +25,7 @@ void BaseViewportPanel::Free()
 void BaseViewportPanel::Update(f32 dt)
 {
 	CalculateRenderResolution(m_PanelWidth, m_PanelHeight);
+	m_DisplayRTName = m_SelectedRTName;
 	if (m_ChannelView != EViewportChannelView::RGBA)
 	{
 		m_ChannelFilter.SetChannelView(m_ChannelView);
