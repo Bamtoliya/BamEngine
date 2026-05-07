@@ -8,9 +8,8 @@
 void CameraViewportPanel::Initialize(void* arg)
 {
 	if (!arg) return;
+	__super::Initialize(arg);
 	CAST_DESC
-	m_Name = desc->Name;
-	
 
 	if (desc->IsSceneCamera)
 	{

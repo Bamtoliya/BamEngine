@@ -66,6 +66,11 @@ public:
 public:
 	void Draw();
 
+
+
+public:
+	void SetSelectedRenderTarget(const wstring& rtName) { m_SelectedRTName = rtName; }
+
 #pragma region Draw Image
 protected:
 	virtual void DrawCustomViewport();
@@ -80,6 +85,8 @@ protected:
 protected:
 	void DrawRenderTargetMenu();
 	void DrawChannelViewButton();
+protected:
+	void DrawRTItemContextMenu(const wstring& rtName);
 #pragma endregion
 
 #pragma region Resolution & Ratio

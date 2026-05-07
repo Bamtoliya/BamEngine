@@ -258,6 +258,20 @@ void ImGuiManager::Draw()
 	{
 		panel->Draw();
 	}
+
+	for (auto* panel : m_PendingAddPanels)
+        m_ImGuiPanels.push_back(panel);
+    m_PendingAddPanels.clear();
+	for (auto* panel : m_PendingRemovePanels)
+	{
+		auto it = std::find(m_ImGuiPanels.begin(), m_ImGuiPanels.end(), panel);
+		if (it != m_ImGuiPanels.end())
+		{
+			m_ImGuiPanels.erase(it);
+			Safe_Release(panel);
+		}
+	}
+	m_PendingRemovePanels.clear();
 	ImGui::ShowMetricsWindow();
 }
 
@@ -302,20 +316,16 @@ void ImGuiManager::MainDockspace()
 #pragma region ImGui Management
 EResult ImGuiManager::AddImGuiPanel(ImGuiInterface* panel)
 {
-	if(!panel) return EResult::InvalidArgument;
-	m_ImGuiPanels.push_back(panel);
-	return EResult::Success;
+	if (!panel) return EResult::InvalidArgument;
+    m_PendingAddPanels.push_back(panel);
+    return EResult::Success;
 }
 
 EResult ImGuiManager::RemoveImGuiPanel(ImGuiInterface* panel)
 {
-	auto it = std::find(m_ImGuiPanels.begin(), m_ImGuiPanels.end(), panel);
-	if (it != m_ImGuiPanels.end())
-	{
-		m_ImGuiPanels.erase(it);
-		return EResult::Success;
-	}
-	return EResult::InvalidArgument;
+	if (!panel) return EResult::InvalidArgument;
+    m_PendingRemovePanels.push_back(panel);
+    return EResult::Success;
 }
 ImGuiInterface* ImGuiManager::GetImGuiPanel(const wstring& name)
 {

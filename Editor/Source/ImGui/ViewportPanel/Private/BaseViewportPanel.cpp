@@ -25,6 +25,7 @@ void BaseViewportPanel::Free()
 void BaseViewportPanel::Update(f32 dt)
 {
 	CalculateRenderResolution(m_PanelWidth, m_PanelHeight);
+	m_Name = m_SelectedRTName + L" Viewer";
 	m_DisplayRTName = m_SelectedRTName;
 	if (m_ChannelView != EViewportChannelView::RGBA)
 	{
@@ -38,10 +39,9 @@ void BaseViewportPanel::Draw()
 	if (!m_Open) return;
 	ImGui::PushID(this);
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
-	bool opened = true;
 	ImGuiWindowFlags window_flags = ImGuiWindowFlags_MenuBar;
 	string windowID = WStrToStr(m_Name);
-	if (ImGui::Begin(windowID.c_str(), &opened, window_flags))
+	if (ImGui::Begin(windowID.c_str(), &m_Open, window_flags))
 	{
 		DrawOptionsBar();
 		DrawCustomViewport();
@@ -140,6 +140,7 @@ void BaseViewportPanel::DrawRenderTargetMenu()
 				{
 					m_SelectedRTName = name;
 				}
+				DrawRTItemContextMenu(name);
 			}
 			ImGui::EndMenu();
 		}
@@ -197,6 +198,32 @@ void BaseViewportPanel::DrawChannelViewButton()
 	drawToggleButton("A", EViewportChannelView::A, ImVec4(0.55f, 0.55f, 0.55f, 1.0f));
 
 	ImGui::PopStyleVar(2);
+}
+void BaseViewportPanel::DrawRTItemContextMenu(const wstring& rtName)
+{
+	string popupID = "##RTCtx_" + WStrToStr(rtName);
+	if (ImGui::BeginPopupContextItem(popupID.c_str()))
+	{
+		string label = "Open \"" + WStrToStr(rtName) + "\" in new viewport";
+		if (ImGui::MenuItem(label.c_str()))
+		{
+			// 중복 이름 방지: 이미 같은 이름 패널이 있으면 번호 붙임
+			wstring panelName = rtName + L" Viewer";
+			while (ImGuiManager::Get().GetImGuiPanel(panelName))
+				panelName += L"_";
+
+			tagViewportPanelDesc desc;
+			desc.Name = panelName;
+			desc.RenderTargetWidth = m_RenderWidth;
+			desc.RenderTargetHeight = m_RenderHeight;
+
+			BaseViewportPanel* panel = new BaseViewportPanel();
+			panel->Initialize(&desc);
+			panel->SetSelectedRenderTarget(rtName);  // ← 아래에서 추가할 setter
+			ImGuiManager::Get().AddImGuiPanel(panel);
+		}
+		ImGui::EndPopup();
+	}
 }
 #pragma endregion
 

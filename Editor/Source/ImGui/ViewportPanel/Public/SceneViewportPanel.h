@@ -43,11 +43,11 @@ protected:
 	virtual void DrawCustomViewport() override;
 private:
 protected:
-	void DrawImGuizmo(const ImVec2& imageScreenPos, const ImVec2& imageSize);
-	void DrawImViewGuizmo(const ImVec2& imageScreenPos, const ImVec2& imageSize);
+	void DrawImGuizmo();
+	void DrawImViewGuizmo();
 protected:
-	void DrawLightOverlay(const ImVec2& imageScreenPos, const ImVec2& imageSize);
-	void DrawCameraOverlay(const ImVec2& imageScreenPos, const ImVec2& imageSize);
+	void DrawLightOverlay();
+	void DrawCameraOverlay();
 protected:
 	virtual void DrawCustomOptions() override;
 protected:
@@ -73,9 +73,9 @@ private:
 
 #pragma region Inputs
 private:
-	void MouseInput(const ImVec2& mousePos, const ImVec2& imageMin, const ImVec2& imageSize);
+	void MouseInput(const ImVec2& mousePos);
 private:
-	Engine::Ray ScreenPosToRay(const ImVec2& mousePos, const ImVec2& imageMin, const ImVec2& imageSize);
+	Engine::Ray ScreenPosToRay(const ImVec2& mousePos);
 #pragma endregion
 
 #pragma region Member Variables

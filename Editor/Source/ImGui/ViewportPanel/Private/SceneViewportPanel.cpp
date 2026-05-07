@@ -2,7 +2,6 @@
 
 #include "SceneViewportPanel.h"
 #include "RenderTargetManager.h"
-#include "CameraManager.h"
 #include "SelectionManager.h"
 #include "InputManager.h"
 #include "ImViewGuizmo.h"
@@ -303,46 +302,167 @@ void SceneViewportPanel::Draw()
 void SceneViewportPanel::DrawCustomViewport()
 {
 	BaseViewportPanel::DrawCustomViewport();
-	//DrawImGuizmo();
-	//DrawImViewGuizmo();
-	//DrawLightOverlay();
-	//DrawCameraOverlay();
+	DrawImGuizmo();
+	DrawImViewGuizmo();
+	DrawLightOverlay();
+	DrawCameraOverlay();
 }
 
-void SceneViewportPanel::DrawImGuizmo(const ImVec2& imageScreenPos, const ImVec2& imageSize)
+void SceneViewportPanel::DrawImGuizmo()
 {
-}
+	GameObject* selectedObject = SelectionManager::Get().GetPrimarySelection();
+	if (!selectedObject) return;
 
-void SceneViewportPanel::DrawImViewGuizmo(const ImVec2& imageScreenPos, const ImVec2& imageSize)
-{
-	if (ImGui::BeginMenu("Gizmo"))
+	Transform* transform = selectedObject->GetComponent<Transform>();
+	if (!transform) return;
+	Camera* camera = m_Camera;
+
+	// 1. ImGuizmo 초기 설정
+	ImGuizmo::SetOrthographic(IsOrthographic());
+	ImGuizmo::SetDrawlist();
+	ImGuizmo::SetRect(m_ImageScreenPos.x, m_ImageScreenPos.y, m_ImageSize.x, m_ImageSize.y);
+	ImGuizmo::SetID(ImGui::GetID(this));
+
+	// 2. 카메라 및 매트릭스 준비
+	
+	mat4 projMatrix = camera->GetProjMatrix();
+	mat4 viewMatrix = camera->GetViewMatrix();
+	mat4 worldMatrix = transform->GetWorldMatrix();
+	mat4 deltaMatrix = glm::identity<mat4>();
+
+	// [Helper] 월드 매트릭스를 로컬 매트릭스로 변환하는 람다 함수 (중복 제거)
+	auto getLocalMatrix = [](GameObject* obj, const mat4& wMatrix) -> mat4 {
+		GameObject* parent = obj->GetParent();
+		if (parent && parent->GetTransform())
+			return glm::inverse(parent->GetTransform()->GetWorldMatrix()) * wMatrix;
+		return wMatrix;
+		};
+
+	// 3. 조작 전(Old) 로컬 회전값 백업 (Euler Flip 방지용)
+	mat4 oldLocalMatrix = getLocalMatrix(selectedObject, worldMatrix);
+	quat oldLocalQuat = ExtractRotationQuat(oldLocalMatrix);
+
+	// 4. 기즈모 단축키 및 스냅 설정
+	if (ImGui::IsWindowFocused())
 	{
-		if (ImGui::MenuItem("Translate (W)", "W", m_GizmoOperation == ImGuizmo::TRANSLATE))
-			m_GizmoOperation = ImGuizmo::TRANSLATE;
-		if (ImGui::MenuItem("Rotate (E)", "E", m_GizmoOperation == ImGuizmo::ROTATE))
-			m_GizmoOperation = ImGuizmo::ROTATE;
-		if (ImGui::MenuItem("Scale (R)", "R", m_GizmoOperation == ImGuizmo::SCALE))
-			m_GizmoOperation = ImGuizmo::SCALE;
-		ImGui::Separator();
-		if (ImGui::MenuItem("Local", nullptr, m_GizmoMode == ImGuizmo::LOCAL))
-			m_GizmoMode = ImGuizmo::LOCAL;
-		if (ImGui::MenuItem("World", nullptr, m_GizmoMode == ImGuizmo::WORLD))
-			m_GizmoMode = ImGuizmo::WORLD;
+		if (KEY_PRESSED(Engine::EKeyCode::W)) m_GizmoOperation = ImGuizmo::TRANSLATE;
+		if (KEY_PRESSED(Engine::EKeyCode::E)) m_GizmoOperation = ImGuizmo::ROTATE;
+		if (KEY_PRESSED(Engine::EKeyCode::R)) m_GizmoOperation = ImGuizmo::SCALE;
+	}
 
-		ImGui::Separator();
-		if (ImGui::MenuItem("Snap to Grid", nullptr, m_GizmoUseSnap))
-			m_GizmoUseSnap = !m_GizmoUseSnap;
-		if (m_GizmoUseSnap)
+	bool snap = m_GizmoUseSnap || ImGui::GetIO().KeyCtrl;
+	vec3 snapValues = m_GizmoSnapTranslation;
+	if (m_GizmoOperation == ImGuizmo::ROTATE) snapValues = m_GizmoSnapRotation;
+	else if (m_GizmoOperation == ImGuizmo::SCALE) snapValues = m_GizmoSnapScale;
+
+	// 5. 기즈모 조작 렌더링 및 연산
+	ImGuizmo::Manipulate(glm::value_ptr(viewMatrix), glm::value_ptr(projMatrix),
+		m_GizmoOperation, m_GizmoMode,
+		glm::value_ptr(worldMatrix), glm::value_ptr(deltaMatrix),
+		snap ? glm::value_ptr(snapValues) : nullptr);
+
+	if (ImGuizmo::IsUsing())
+	{
+		// 조작 후(New) 로컬 매트릭스
+		mat4 localMatrix = getLocalMatrix(selectedObject, worldMatrix);
+
+		if (m_GizmoOperation == ImGuizmo::ROTATE)
 		{
-			ImGui::InputFloat3("Snap Translation", glm::value_ptr(m_GizmoSnapTranslation));
-			ImGui::InputFloat3("Snap Rotation", glm::value_ptr(m_GizmoSnapRotation));
-			ImGui::InputFloat3("Snap Scale", glm::value_ptr(m_GizmoSnapScale));
+			// 쿼터니언을 이용해 순수 회전 변화량(Delta) 추출 후 기존 오일러에 누적 (연속성 보장)
+			quat newLocalQuat = ExtractRotationQuat(localMatrix);
+			quat deltaLocalQuat = glm::inverse(oldLocalQuat) * newLocalQuat;
+			vec3 deltaEuler = glm::degrees(glm::eulerAngles(deltaLocalQuat));
+
+			transform->SetRotation(transform->GetLocalRotationEuler() + deltaEuler);
 		}
-		ImGui::EndMenu();
+		else
+		{
+			// 이동 및 크기 조절은 로컬 매트릭스 분해값을 그대로 적용
+			float matrixTranslation[3], matrixRotation[3], matrixScale[3];
+			ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(localMatrix), matrixTranslation, matrixRotation, matrixScale);
+
+			transform->SetPosition(glm::make_vec3(matrixTranslation));
+			transform->SetScale(glm::make_vec3(matrixScale));
+		}
 	}
 }
 
-void SceneViewportPanel::DrawLightOverlay(const ImVec2& imageScreenPos, const ImVec2& imageSize)
+void SceneViewportPanel::DrawImViewGuizmo()
+{
+	if (!m_OwnedCamera || !m_Camera)
+		return;
+
+	if (m_ImageSize.x <= 0.0f || m_ImageSize.y <= 0.0f)
+		return;
+
+	Transform* cameraTransform = m_OwnedCamera->GetTransform();
+	if (!cameraTransform)
+		return;
+
+	ImViewGuizmo::BeginFrame();
+
+	auto& style = ImViewGuizmo::GetStyle();
+	style.scale = glm::clamp(glm::min(m_ImageSize.x, m_ImageSize.y) / 320.0f, 0.35f, 0.75f);
+
+	const float gizmoDiameter = 256.0f * style.scale;
+	const float buttonDiameter = style.toolButtonRadius * 2.0f * style.scale;
+	const float padding = 6.0f;
+	const float buttonSpacing = 4.0f;
+
+	const ImVec2 gizmoPos(
+		m_ImageScreenPos.x + m_ImageSize.x - gizmoDiameter * 0.5f,
+		m_ImageScreenPos.y + gizmoDiameter * 0.5f);
+
+	const ImVec2 dollyPos(
+		gizmoPos.x - gizmoDiameter * 0.5f - buttonDiameter * 0.5f - buttonSpacing,
+		m_ImageScreenPos.y + buttonDiameter * 0.5f - padding);
+
+	const ImVec2 panPos(
+		dollyPos.x - buttonDiameter - buttonSpacing,
+		dollyPos.y);
+
+	vec3 cameraPos = cameraTransform->GetWorldPosition();
+	quat cameraRot = cameraTransform->GetWorldRotationQuat();
+
+	vec3 pivot = cameraPos + (cameraRot * vec3(0.0f, 0.0f, 1.0f)) * 5.0f;
+
+	if (GameObject* selectedObject = SelectionManager::Get().GetPrimarySelection())
+	{
+		if (Transform* selectedTransform = selectedObject->GetTransform())
+		{
+			pivot = selectedTransform->GetWorldPosition();
+		}
+	}
+
+	bool cameraChanged = false;
+
+	cameraChanged |= ImViewGuizmo::Rotate(
+		cameraPos,
+		cameraRot,
+		pivot,
+		gizmoPos,
+		0.0125f);
+
+	cameraChanged |= ImViewGuizmo::Dolly(
+		cameraPos,
+		cameraRot,
+		dollyPos,
+		0.05f);
+
+	cameraChanged |= ImViewGuizmo::Pan(
+		cameraPos,
+		cameraRot,
+		panPos,
+		0.01f);
+
+	if (cameraChanged)
+	{
+		cameraTransform->SetPosition(cameraPos);
+		cameraTransform->SetRotation(cameraRot);
+	}
+}
+
+void SceneViewportPanel::DrawLightOverlay()
 {
 	if (!m_ShowLightOverlay || !m_OwnedCamera || !m_OwnedCamera->GetCamera())
 		return;
@@ -381,7 +501,7 @@ void SceneViewportPanel::DrawLightOverlay(const ImVec2& imageScreenPos, const Im
 			forward = glm::normalize(forward);
 
 		ImVec2 screenPos;
-		if (!WorldToViewportScreen(worldPos, viewProj, imageScreenPos, imageSize, screenPos))
+		if (!WorldToViewportScreen(worldPos, viewProj, m_ImageScreenPos, m_ImageSize, screenPos))
 			continue;
 
 		ImU32 color = IM_COL32(255, 220, 80, 255);
@@ -450,7 +570,7 @@ void SceneViewportPanel::DrawLightOverlay(const ImVec2& imageScreenPos, const Im
 		const float dirLenScaled = dirLen * glm::mix(0.9f, 1.35f, distanceScale);
 		ImVec2 tipScreen;
 		vec3 tipWorld = worldPos + forward * dirLenScaled;
-		if (!WorldToViewportScreen(tipWorld, viewProj, imageScreenPos, imageSize, tipScreen))
+		if (!WorldToViewportScreen(tipWorld, viewProj, m_ImageScreenPos, m_ImageSize, tipScreen))
 			continue;
 
 		const float lineThickness = glm::max(1.5f, 2.0f * distanceScale);
@@ -478,7 +598,7 @@ void SceneViewportPanel::DrawLightOverlay(const ImVec2& imageScreenPos, const Im
 	}
 }
 
-void SceneViewportPanel::DrawCameraOverlay(const ImVec2& imageScreenPos, const ImVec2& imageSize)
+void SceneViewportPanel::DrawCameraOverlay()
 {
 	if (!m_ShowCameraOverlay || !m_OwnedCamera || !m_OwnedCamera->GetCamera())
 		return;
@@ -516,7 +636,7 @@ void SceneViewportPanel::DrawCameraOverlay(const ImVec2& imageScreenPos, const I
 
 		const vec3 worldPos = transform->GetWorldPosition();
 		ImVec2 screenPos;
-		if (!WorldToViewportScreen(worldPos, editorViewProj, imageScreenPos, imageSize, screenPos))
+		if (!WorldToViewportScreen(worldPos, editorViewProj, m_ImageScreenPos, m_ImageSize, screenPos))
 			continue;
 
 		// ── 거리 기반 스케일 (아이콘 크기) ──────────────────────
@@ -602,15 +722,15 @@ void SceneViewportPanel::DrawCameraOverlay(const ImVec2& imageScreenPos, const I
 				corners[edges[i][0]],
 				corners[edges[i][1]],
 				editorViewProj,
-				imageScreenPos,
-				imageSize,
+				m_ImageScreenPos,
+				m_ImageSize,
 				frustumColor,
 				lineThickness);
 		}
 
 		// 카메라 아이콘 → far 중심 방향선
 		ImVec2 farCenterScreen;
-		if (WorldToViewportScreen(farCenter, editorViewProj, imageScreenPos, imageSize, farCenterScreen))
+		if (WorldToViewportScreen(farCenter, editorViewProj, m_ImageScreenPos, m_ImageSize, farCenterScreen))
 			drawList->AddLine(screenPos, farCenterScreen, cameraColor, lineThickness);
 	}
 }
@@ -669,6 +789,7 @@ void SceneViewportPanel::DrawSceneRenderTargetMenu()
 					m_SelectedRTName = m_OwnedRTNames[i];
 					m_Grid.Hide();
 				}
+				DrawRTItemContextMenu(m_OwnedRTNames[i]);
 				if (selected)
 					ImGui::SetItemDefaultFocus();
 			}
@@ -688,6 +809,7 @@ void SceneViewportPanel::DrawSceneRenderTargetMenu()
 					m_SelectedRTName = name;
 					m_Grid.Hide();
 				}
+				DrawRTItemContextMenu(name);
 			}
 			ImGui::EndMenu();
 		}
@@ -697,7 +819,31 @@ void SceneViewportPanel::DrawSceneRenderTargetMenu()
 
 void SceneViewportPanel::DrawGizmoMenu()
 {
+	if (ImGui::BeginMenu("Gizmo"))
+	{
+		if (ImGui::MenuItem("Translate (W)", "W", m_GizmoOperation == ImGuizmo::TRANSLATE))
+			m_GizmoOperation = ImGuizmo::TRANSLATE;
+		if (ImGui::MenuItem("Rotate (E)", "E", m_GizmoOperation == ImGuizmo::ROTATE))
+			m_GizmoOperation = ImGuizmo::ROTATE;
+		if (ImGui::MenuItem("Scale (R)", "R", m_GizmoOperation == ImGuizmo::SCALE))
+			m_GizmoOperation = ImGuizmo::SCALE;
+		ImGui::Separator();
+		if (ImGui::MenuItem("Local", nullptr, m_GizmoMode == ImGuizmo::LOCAL))
+			m_GizmoMode = ImGuizmo::LOCAL;
+		if (ImGui::MenuItem("World", nullptr, m_GizmoMode == ImGuizmo::WORLD))
+			m_GizmoMode = ImGuizmo::WORLD;
 
+		ImGui::Separator();
+		if (ImGui::MenuItem("Snap to Grid", nullptr, m_GizmoUseSnap))
+			m_GizmoUseSnap = !m_GizmoUseSnap;
+		if (m_GizmoUseSnap)
+		{
+			ImGui::InputFloat3("Snap Translation", glm::value_ptr(m_GizmoSnapTranslation));
+			ImGui::InputFloat3("Snap Rotation", glm::value_ptr(m_GizmoSnapRotation));
+			ImGui::InputFloat3("Snap Scale", glm::value_ptr(m_GizmoSnapScale));
+		}
+		ImGui::EndMenu();
+	}
 }
 
 void SceneViewportPanel::DrawDebugMenu()
@@ -816,5 +962,77 @@ void SceneViewportPanel::SubmitPostProcessPass(f32 dt, uint32& slot, std::wstrin
 void SceneViewportPanel::SubmitUIOverlayPass(const wstring& currentRT)
 {
 	RenderPassManager::Get().GetRenderPassByID(m_UIOverlayPassID)->SetColorAttachments({ currentRT });
+}
+void SceneViewportPanel::MouseInput(const ImVec2& mousePos)
+{
+	if (MOUSE_BUTTON_DOWN(Engine::EMouseButton::Left) &&
+		ImGui::IsWindowHovered() && !ImGui::IsAnyItemHovered() && !ImGuizmo::IsOver())
+	{
+		Ray mouseRay = ScreenPosToRay(mousePos);
+		SelectionManager& selectionManager = SelectionManager::Get();
+		GameObject* pickedObject = selectionManager.PickObjectByRay(mouseRay);
+		if (pickedObject)
+		{
+			if (KEY_PRESSED(EKeyCode::LCtrl))
+			{
+				selectionManager.ToggleSelection(pickedObject);
+			}
+			else
+			{
+				selectionManager.SetSelectedObject(pickedObject);
+			}
+			ImGui::SetWindowFocus();
+		}
+		else
+		{
+			selectionManager.ClearSelection();
+		}
+	}
+
+	SDL_Window* window = static_cast<SDL_Window*>(Renderer::Get().GetRHI()->GetWindowHandle());
+
+	if (MOUSE_BUTTON_DOWN("right"))
+	{
+		m_InitialMousePos = InputManager::Get().GetMousePosition();
+	}
+	else if (MOUSE_BUTTON_PRESSED("right"))
+	{
+		SDL_SetWindowRelativeMouseMode(window, true);
+		ImGui::GetIO().MousePos = ImVec2(-FLT_MAX, -FLT_MAX);
+	}
+	else if (MOUSE_BUTTON_UP("right"))
+	{
+		SDL_SetWindowRelativeMouseMode(window, false);
+		SDL_WarpMouseInWindow(window, (int)m_InitialMousePos.x, (int)m_InitialMousePos.y);
+	}
+}
+Engine::Ray SceneViewportPanel::ScreenPosToRay(const ImVec2& mousePos)
+{
+	f32 localX = mousePos.x - m_ImageScreenPos.x;
+	f32 localY = mousePos.y - m_ImageScreenPos.y;
+
+	f32 ndcX = (localX / m_ImageSize.x) * 2.0f - 1.0f;
+	f32 ndcY = 1.0f - (localY / m_ImageSize.y) * 2.0f;
+	mat4 projInvMatrix = m_Camera->GetProjMatrixInv();
+	mat4 viewInvMatrix = m_Camera->GetViewMatrixInv();
+
+	mat4 invVP = viewInvMatrix * projInvMatrix;
+
+	vec4 nearPointNDC = vec4(ndcX, ndcY, -1.0f, 1.0f);
+	vec4 farPointNDC = vec4(ndcX, ndcY, 1.0f, 1.0f);
+
+	vec4 nearPointWorld = invVP * nearPointNDC;
+	vec4 farPointWorld = invVP * farPointNDC;
+
+	Ray ray;
+	ray.Origin = vec3(nearPointWorld) / nearPointWorld.w;
+	//ray.Origin.x += m_RenderTarget->GetWidth() / 2.f;
+	//ray.Origin.y -= m_RenderTarget->GetHeight() / 2.f;
+	ray.Direction = glm::normalize(vec3(farPointWorld / farPointWorld.w) - ray.Origin);
+
+	cout << "Ray Origin: " << ray.Origin.x << ", " << ray.Origin.y << ", " << ray.Origin.z << endl;
+	cout << "Ray Direction: " << ray.Direction.x << ", " << ray.Direction.y << ", " << ray.Direction.z << endl;
+
+	return ray;
 }
 #pragma endregion

@@ -114,6 +114,8 @@ private:
 private:
 	ToolBar m_ToolBar;
 	vector<ImGuiInterface*> m_ImGuiPanels;
+	vector<ImGuiInterface*> m_PendingAddPanels;
+	vector<ImGuiInterface*> m_PendingRemovePanels;
 #pragma endregion
 #pragma endregion
 
