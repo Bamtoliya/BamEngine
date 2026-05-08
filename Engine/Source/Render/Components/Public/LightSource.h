@@ -11,7 +11,8 @@ enum class ELightType
 {
 	Point,
 	Directional,
-	Spot
+	Spot,
+	Sky
 };
 
 ENUM()
@@ -61,7 +62,7 @@ class ENGINE_API LightSource : public Component
 	REFLECT_CLASS()
 	using DESC = tagLightSourceDesc;
 #pragma region Constructor&Destructor
-private:
+protected:
 	LightSource() {}
 	virtual ~LightSource() = default;
 	EResult Initialize(void* arg = nullptr) override;
@@ -79,7 +80,7 @@ public:
 
 #pragma region GPU
 public:
-	tagGPULight BuildGPULightDesc() const;
+	virtual tagGPULight BuildGPULightDesc() const;
 #pragma endregion
 
 #pragma region Shadow
@@ -125,7 +126,7 @@ public:
 	EResult SetFlags(ELightFlags flags) { m_Flags = flags; return EResult::Success; }
 #pragma endregion
 
-private:
+protected:
 	PROPERTY(EDITABLE)
 	ELightType m_Type = ELightType::Point;
 
@@ -144,13 +145,13 @@ private:
 	PROPERTY(EDITABLE)
 	vec3 m_AttenuationCoefficients = vec3(1.0f, 0.09f, 0.032f);
 
-	PROPERTY(EDITABLE)
+	PROPERTY(EDITABLE, EDITCONDITION("m_Type", ELightType::Spot, true))
 	f32 m_SpotInnerAngle = 15.0f;
 
-	PROPERTY(EDITABLE)
+	PROPERTY(EDITABLE, EDITCONDITION("m_Type", ELightType::Spot, true))
 	f32 m_SpotOuterAngle = 30.0f;
 
-	PROPERTY(EDITABLE)
+	PROPERTY(EDITABLE, EDITCONDITION("m_Type", ELightType::Spot, true))
 	f32 m_SpotFalloffExponent = 1.0f;
 
 	PROPERTY(EDITABLE)

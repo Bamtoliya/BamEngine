@@ -39,6 +39,9 @@ public:
     void SetFOVZoom(bool zoomType) { m_IsFOVZoom = zoomType; }
 
 private:
+    void FocusGameObject(GameObject* gameObject);
+
+private:
     Engine::Transform* m_Transform = nullptr;
     Engine::Camera* m_Camera = nullptr;
 

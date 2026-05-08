@@ -280,6 +280,31 @@ void Application::InitializeShaders()
     rm.LoadResource<Shader>(&ppToneMappingPsDesc);
     rm.SaveToBinaryFile(rm.GetResourceHandle<Shader>(ppToneMappingPsDesc.Key).Get(), L"Resources/Shader/postprocess_tonemapping.frag.bamshader");
     rm.LoadFile(L"Resources/Shader/postprocess_tonemapping.frag.bamshader");
+
+
+    // Sky VS
+    tagShaderDesc skyVSDesc = {};
+    skyVSDesc.Key = L"SkyVS";
+    skyVSDesc.ShaderType = EShaderType::Vertex;
+    skyVSDesc.Path = L"Resources/Shader/sky.vert.spv";
+    skyVSDesc.SpirvPath = L"Resources/Shader/sky.vert.spv";
+    skyVSDesc.EntryPoint = "main";
+    skyVSDesc.NumUniformBuffers = 1;
+    rm.LoadResource<Shader>(&skyVSDesc);
+    rm.SaveToBinaryFile(rm.GetResourceHandle<Shader>(skyVSDesc.Key).Get(), L"Resources/Shader/sky.vert.bamshader");
+    rm.LoadFile(L"Resources/Shader/sky.vert.bamshader");
+
+    // Skybox PS
+    tagShaderDesc skyPSDesc = {};
+    skyPSDesc.Key = L"SkyboxPS";
+    skyPSDesc.ShaderType = EShaderType::Pixel;
+    skyPSDesc.Path = L"Resources/Shader/sky.frag.spv";
+    skyPSDesc.SpirvPath = L"Resources/Shader/sky.frag.spv";
+    skyPSDesc.EntryPoint = "main";
+    skyPSDesc.NumUniformBuffers = 1;
+    rm.LoadResource<Shader>(&skyPSDesc);
+    rm.SaveToBinaryFile(rm.GetResourceHandle<Shader>(skyPSDesc.Key).Get(), L"Resources/Shader/sky.frag.bamshader");
+    rm.LoadFile(L"Resources/Shader/sky.frag.bamshader");
 }
 
 void Application::InitializeMeshes()
@@ -508,6 +533,21 @@ void Application::InitializeMaterials()
     transparentMatDesc.DepthMode = EDepthMode::ReadOnly;
 	Material* transparentMat = resourceManager.LoadResource<Material>(&transparentMatDesc).Get();
 	resourceManager.SaveToBinaryFile(transparentMat, L"Resources/Material/TransparentMaterial.bammat");
+
+
+	// ── Sky Material 생성 ──
+	tagMaterialDesc skyMatDesc = {};
+    skyMatDesc.Key = L"Resources/Material/SkyMaterial";
+    skyMatDesc.VertexShaderHandle = resourceManager.GetResourceHandle<Shader>(
+        L"Resources/Shader/sky.vert.bamshader");
+    skyMatDesc.PixelShaderHandle = resourceManager.GetResourceHandle<Shader>(
+        L"Resources/Shader/sky.frag.bamshader");
+    skyMatDesc.BlendMode = EBlendMode::Forward;
+    skyMatDesc.CullMode = ECullMode::None; // 뒤집힌 큐브이므로 Front 면을 카울링
+	skyMatDesc.DepthMode = EDepthMode::ReadOnly; // 깊이 테스트는 하지만 쓰지는 않음'
+	skyMatDesc.DepthCompareOp = ECompareOp::LessOrEqual;
+    Material* skyMat = resourceManager.LoadResource<Material>(&skyMatDesc).Get();
+	resourceManager.SaveToBinaryFile(skyMat, L"Resources/Material/SkyMaterial.bammat");
 }
 
 #pragma endregion

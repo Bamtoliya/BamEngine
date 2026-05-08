@@ -186,6 +186,8 @@ void Transform::SetPosition(const vec3& position)
 
 	SetDirty();
 	m_Position = position;
+	UpdateLocalMatrix();
+	UpdateWorldMatrix();
 }
 
 void Transform::SetRotation(const quat& rotation)
@@ -195,7 +197,8 @@ void Transform::SetRotation(const quat& rotation)
 	SetDirty();
 	m_Rotation = rotation;
 	m_EulerRotation = glm::degrees(glm::eulerAngles(m_Rotation));
-
+	UpdateLocalMatrix();
+	UpdateWorldMatrix();
 }
 
 void Transform::SetRotation(const vec3& eulerAngles)
@@ -205,6 +208,8 @@ void Transform::SetRotation(const vec3& eulerAngles)
 	SetDirty();
 	m_EulerRotation = eulerAngles;
 	m_Rotation = quat(glm::radians(m_EulerRotation));
+	UpdateLocalMatrix();
+	UpdateWorldMatrix();
 }
 
 void Transform::SetScale(const vec3& scale)
@@ -213,6 +218,8 @@ void Transform::SetScale(const vec3& scale)
 
 	SetDirty();
 	m_Scale = scale;
+	UpdateLocalMatrix();
+	UpdateWorldMatrix();
 }
 
 void Transform::SetMobility(EMobility mobility)
@@ -341,35 +348,33 @@ void Transform::LookAt(const vec3& target, const vec3& up)
 {
 	if (IsRotationLocked()) return;
 
-	vec3 worldPos = GetWorldPosition();
-	vec3 direction = target - worldPos;
-	float length = glm::length(direction);
+	const vec3 worldPos = GetWorldPosition();
+	vec3 forwardWS = target - worldPos;
+	if (glm::length2(forwardWS) < 1e-8f) return;
+	forwardWS = glm::normalize(forwardWS);
 
-	if (length < 0.0001f) return;
+	vec3 upWS = up;
+	if (glm::length2(upWS) < 1e-8f)
+		upWS = vec3(0.f, 1.f, 0.f);
+	upWS = glm::normalize(upWS);
 
-	direction  = normalize(direction);
+	if (glm::abs(glm::dot(forwardWS, upWS)) > 0.999f)
+		upWS = (glm::abs(forwardWS.y) < 0.999f) ? vec3(0.f, 1.f, 0.f) : vec3(1.f, 0.f, 0.f);
 
-	quat targetRot = glm::quatLookAt(direction, up);
+	// 축 규약이 반대면 forwardWS 대신 -forwardWS 사용
+	const quat worldRot = glm::quatLookAt(forwardWS, upWS);
 
-	GameObject* parent = (m_Owner) ? m_Owner->GetParent() : nullptr;
-	if (parent)
+	quat localRot = worldRot;
+	if (GameObject* parent = (m_Owner ? m_Owner->GetParent() : nullptr))
 	{
-		Transform* parentTransform = parent->GetComponent<Transform>();
-		if (parentTransform)
+		if (Transform* parentTransform = parent->GetComponent<Transform>())
 		{
-			quat parentRot = parentTransform->GetWorldRotationQuat();
-			m_Rotation = glm::inverse(parentRot) * targetRot;
-		}
-		else
-		{
-			m_Rotation = targetRot;
+			if (HasFlag(m_Flags, ETransformFlag::InheritRotation))
+				localRot = glm::inverse(parentTransform->GetWorldRotationQuat()) * worldRot;
 		}
 	}
-	else
-	{
-		m_Rotation = targetRot;
-	}
-	SetDirty();
+
+	SetRotation(localRot);
 }
 #pragma endregion
 

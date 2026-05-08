@@ -58,8 +58,8 @@ ResourceHandle<T> ResourceManager::LoadResource(Args&&... args)
 			{
 				resource->Deserialize(archive);
 			}
-			//resource->SetKey(pathStr);
-			//resource->SetPath(pathStr);
+			resource->SetKey(pathStr);
+			resource->SetPath(pathStr);
 		}
 	}
 	else

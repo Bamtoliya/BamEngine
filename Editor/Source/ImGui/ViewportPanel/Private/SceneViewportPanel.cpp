@@ -156,26 +156,37 @@ void SceneViewportPanel::PrepareRenderTargetsAndPasses(uint32 width, uint32 heig
 		prefix + L"ShadowPass", {}, m_ShadowDepthName,
 		ERenderPassLoadOperation::RPLO_Clear, ERenderPassStoreOperation::RPSO_Store,
 		ERenderPassLoadOperation::RPLO_Clear, ERenderPassStoreOperation::RPSO_Store,
-		vec4(0.0f, 0.0f, 0.0f, -1.0f), 0, ERenderSortType::FrontToBack, ERenderPassType::Shadow);
+		vec4(0.0f, 0.0f, 0.0f, -1.0f), 0, ERenderSortType::FrontToBack, ERenderPassType::Shadow, EBlendMode::Opaque | EBlendMode::Masked);
 
 	m_GeometryPassID = rpMgr.RegisterRenderPass(
 		prefix + L"GeometryPass", gBufferNames, depthName,
 		ERenderPassLoadOperation::RPLO_Clear, ERenderPassStoreOperation::RPSO_Store,
 		ERenderPassLoadOperation::RPLO_Clear, ERenderPassStoreOperation::RPSO_Store,
-		vec4(0.0f, 0.f, 0.f, -1.f), 0, ERenderSortType::FrontToBack, ERenderPassType::Geometry);
+		vec4(0.0f, 0.f, 0.f, -1.f), 0, ERenderSortType::FrontToBack, ERenderPassType::Geometry, EBlendMode::Opaque | EBlendMode::Masked);
 
 	m_LightingPassID = rpMgr.RegisterRenderPass(
 		prefix + L"LightingPass", { m_LightingColorName }, L"",
 		ERenderPassLoadOperation::RPLO_Clear, ERenderPassStoreOperation::RPSO_Store,
 		ERenderPassLoadOperation::RPLO_Clear, ERenderPassStoreOperation::RPSO_Store,
-		vec4(0.0f, 0.0f, 0.0f, -1.0f), 100, ERenderSortType::None, ERenderPassType::Lighting);
+		vec4(0.0f, 0.0f, 0.0f, -1.0f), 100, ERenderSortType::None, ERenderPassType::Lighting, EBlendMode::None);
+
+	m_ForwardPassID = rpMgr.RegisterRenderPass(
+		prefix + L"ForwardPass",
+		{ m_LightingColorName }, depthName,
+		ERenderPassLoadOperation::RPLO_Load, ERenderPassStoreOperation::RPSO_Store,
+		ERenderPassLoadOperation::RPLO_Load, ERenderPassStoreOperation::RPSO_Store,
+		vec4(0.0f, 0.0f, 0.0f, -1.0f), 110, ERenderSortType::BackToFront, ERenderPassType::Forward,
+		EBlendMode::Forward);
 
 	m_ForwardTransparentPassID = rpMgr.RegisterRenderPass(
 		prefix + L"ForwardTransparentPass",
 		{ m_LightingColorName }, depthName,
 		ERenderPassLoadOperation::RPLO_Load, ERenderPassStoreOperation::RPSO_Store,
 		ERenderPassLoadOperation::RPLO_Load, ERenderPassStoreOperation::RPSO_Store,
-		vec4(0.0f, 0.0f, 0.0f, -1.0f), 110, ERenderSortType::BackToFront, ERenderPassType::ForwardTransparent);
+		vec4(0.0f, 0.0f, 0.0f, -1.0f), 120, ERenderSortType::BackToFront, ERenderPassType::ForwardTransparent,
+		EBlendMode::AlphaBlend | EBlendMode::Additive | EBlendMode::NonPremultiplied | EBlendMode::Forward | EBlendMode::Decal);
+
+	
 
 	// ── PostProcess ping-pong passes (priorities 120~135) ──
 	for (uint32 pi = 0; pi < MAX_PP_PASSES; ++pi)
@@ -184,7 +195,7 @@ void SceneViewportPanel::PrepareRenderTargetsAndPasses(uint32 width, uint32 heig
 			prefix + L"PP_" + std::to_wstring(pi), { m_PPRTNames[pi % 2] }, L"",
 			ERenderPassLoadOperation::RPLO_Load, ERenderPassStoreOperation::RPSO_Store,
 			ERenderPassLoadOperation::RPLO_Load, ERenderPassStoreOperation::RPSO_Store,
-			vec4(0.0f, 0.f, 0.f, -1.f), 120 + pi, ERenderSortType::None, ERenderPassType::PostProcess);
+			vec4(0.0f, 0.f, 0.f, -1.f), 130 + pi, ERenderSortType::None, ERenderPassType::PostProcess, EBlendMode::None);
 		m_PPPassIDs.push_back(rpID);
 	}
 
@@ -192,14 +203,14 @@ void SceneViewportPanel::PrepareRenderTargetsAndPasses(uint32 width, uint32 heig
 		prefix + L"UIOverlayPass", {}, L"",
 		ERenderPassLoadOperation::RPLO_Load, ERenderPassStoreOperation::RPSO_Store,
 		ERenderPassLoadOperation::RPLO_Load, ERenderPassStoreOperation::RPSO_Store,
-		vec4(0.f, 0.f, 0.f, -1.f), 200, ERenderSortType::FrontToBack, ERenderPassType::UI);
+		vec4(0.f, 0.f, 0.f, -1.f), 200, ERenderSortType::FrontToBack, ERenderPassType::UI, EBlendMode::None);
 #pragma endregion
 
 	m_ChannelPreviewPassID = rpMgr.RegisterRenderPass(
 		prefix + L"ChannelPreviewPass", { m_PPRTNames[0] }, L"",
 		ERenderPassLoadOperation::RPLO_Load, ERenderPassStoreOperation::RPSO_Store,
 		ERenderPassLoadOperation::RPLO_Load, ERenderPassStoreOperation::RPSO_Store,
-		vec4(0.0f, 0.0f, 0.0f, -1.0f), 400, ERenderSortType::None, ERenderPassType::Custom);
+		vec4(0.0f, 0.0f, 0.0f, -1.0f), 400, ERenderSortType::None, ERenderPassType::Custom, EBlendMode::None);
 
 	m_PassOptions = {
 		{ L"Shadow",            true  },
@@ -223,7 +234,7 @@ void SceneViewportPanel::PreparePipelines()
 		pd.DepthStencilState.DepthWriteEnable = false;
 		pd.Topology = ETopology::TriangleList;
 		pd.CullMode = ECullMode::None;
-		pd.BlendMode = EBlendMode::Opaque;
+		pd.BlendState = tagBlendState{};
 		return PipelineManager::Get().GetOrCreatePipeline(pd);
 		};
 
@@ -242,8 +253,11 @@ void SceneViewportPanel::Update(f32 dt)
 {
 	CalculateRenderResolution(m_PanelWidth, m_PanelHeight);
 
-	if (m_OwnedCamera && m_Focused)
+	if (m_OwnedCamera && m_Focused && m_Hovered)
+	{
 		m_OwnedCamera->HandleInput(dt);
+	}
+		
 
 	if (m_OwnedCamera)
 	{
@@ -256,6 +270,7 @@ void SceneViewportPanel::Update(f32 dt)
 	Renderer& renderer = Renderer::Get();
 	renderer.RegisterViewportCamera(nullptr, rpMgr.GetRenderPassByID(m_ShadowPassID));
 	renderer.RegisterViewportCamera(m_Camera, rpMgr.GetRenderPassByID(m_GeometryPassID));
+	renderer.RegisterViewportCamera(m_Camera, rpMgr.GetRenderPassByID(m_ForwardPassID));
 	renderer.RegisterViewportCamera(m_Camera, rpMgr.GetRenderPassByID(m_ForwardTransparentPassID));
 	renderer.RegisterViewportCamera(nullptr, rpMgr.GetRenderPassByID(m_UIOverlayPassID));
 
@@ -289,13 +304,15 @@ void SceneViewportPanel::Update(f32 dt)
 		m_DebugRenderer.SubmitDebugDraw(m_Camera, m_DisplayRTName);
 	}
 #endif
+
+	KeyboardInput();
+	MouseInput();
 }
 
 void SceneViewportPanel::Draw()
 {
 	__super::Draw();
 }
-
 
 #pragma region Custom Draws
 
@@ -522,6 +539,13 @@ void SceneViewportPanel::DrawLightOverlay()
 			lightIcon = ICON_FA_LOCATION_DOT;
 			drawDir = true;
 			dirLen = 1.8f;
+			break;
+		case ELightType::Sky:
+			color = IM_COL32(255, 180, 0, 255);
+			lightIcon = ICON_FA_CLOUD_SUN;
+			drawDir = true;
+			dirLen = 3.0f;
+			forward *= -1;
 			break;
 		case ELightType::Point:
 		default:
@@ -821,11 +845,11 @@ void SceneViewportPanel::DrawGizmoMenu()
 {
 	if (ImGui::BeginMenu("Gizmo"))
 	{
-		if (ImGui::MenuItem("Translate (W)", "W", m_GizmoOperation == ImGuizmo::TRANSLATE))
+		if (ImGui::MenuItem("Translate (W)", "Shift + 1", m_GizmoOperation == ImGuizmo::TRANSLATE))
 			m_GizmoOperation = ImGuizmo::TRANSLATE;
-		if (ImGui::MenuItem("Rotate (E)", "E", m_GizmoOperation == ImGuizmo::ROTATE))
+		if (ImGui::MenuItem("Rotate (E)", "Shift + 2", m_GizmoOperation == ImGuizmo::ROTATE))
 			m_GizmoOperation = ImGuizmo::ROTATE;
-		if (ImGui::MenuItem("Scale (R)", "R", m_GizmoOperation == ImGuizmo::SCALE))
+		if (ImGui::MenuItem("Scale (R)", "Shift + 3", m_GizmoOperation == ImGuizmo::SCALE))
 			m_GizmoOperation = ImGuizmo::SCALE;
 		ImGui::Separator();
 		if (ImGui::MenuItem("Local", nullptr, m_GizmoMode == ImGuizmo::LOCAL))
@@ -890,11 +914,6 @@ void SceneViewportPanel::ResizeRenderTargets(uint32 width, uint32 height)
 }
 #pragma endregion
 
-
-
-
-
-
 #pragma region Rendering
 void SceneViewportPanel::SubmitLightingPass(Camera* camera)
 {
@@ -909,8 +928,8 @@ void SceneViewportPanel::SubmitLightingPass(Camera* camera)
 
 			tagCameraBuffer camBuf = camera->GetCameraBuffer();
 			camBuf.time = dt;
-			rhi->BindConstantBuffer(&camBuf, sizeof(tagCameraBuffer), 0);
-			rhi->BindConstantBuffer(&camBuf, sizeof(tagCameraBuffer), 3);
+			rhi->BindConstantBuffer(&camBuf, sizeof(tagCameraBuffer), 0, EShaderType::Vertex);
+			rhi->BindConstantBuffer(&camBuf, sizeof(tagCameraBuffer), 0, EShaderType::Pixel);
 			rhi->BindTextureSampler(
 				rtMgr.GetRenderTarget(prefix + L"GBuffer_Diffuse")->GetTexture(),
 				sampler, 0);
@@ -934,7 +953,7 @@ void SceneViewportPanel::SubmitLightingPass(Camera* camera)
 
 				tagCameraBuffer shadowCam = LightManager::Get().GetShadowCameraBuffer(0u);
 				tagLightShadowData shadowCamData = LightManager::Get().GetShadowData(0u);
-				rhi->BindConstantBuffer(&shadowCamData, sizeof(shadowCamData), 1);
+				rhi->BindConstantBuffer(&shadowCamData, sizeof(shadowCamData), 1, EShaderType::Pixel);
 			}
 			rhi->BindPipeline(m_LightingPipeline);
 
@@ -963,10 +982,22 @@ void SceneViewportPanel::SubmitUIOverlayPass(const wstring& currentRT)
 {
 	RenderPassManager::Get().GetRenderPassByID(m_UIOverlayPassID)->SetColorAttachments({ currentRT });
 }
-void SceneViewportPanel::MouseInput(const ImVec2& mousePos)
+#pragma endregion
+
+#pragma region Inputs
+void SceneViewportPanel::KeyboardInput()
 {
-	if (MOUSE_BUTTON_DOWN(Engine::EMouseButton::Left) &&
-		ImGui::IsWindowHovered() && !ImGui::IsAnyItemHovered() && !ImGuizmo::IsOver())
+	if (KEY_PRESSED(EKeyCode::LShift))
+	{
+		if (KEY_PRESSED("1")) m_GizmoOperation = ImGuizmo::OPERATION::TRANSLATE;
+		if (KEY_PRESSED("2")) m_GizmoOperation = ImGuizmo::OPERATION::ROTATE;
+		if (KEY_PRESSED("3")) m_GizmoOperation = ImGuizmo::OPERATION::SCALE;
+	}
+}
+void SceneViewportPanel::MouseInput()
+{
+	ImVec2 mousePos = ImGui::GetMousePos();
+	if (MOUSE_BUTTON_DOWN(Engine::EMouseButton::Left) && m_Focused && m_Hovered)
 	{
 		Ray mouseRay = ScreenPosToRay(mousePos);
 		SelectionManager& selectionManager = SelectionManager::Get();
@@ -981,7 +1012,6 @@ void SceneViewportPanel::MouseInput(const ImVec2& mousePos)
 			{
 				selectionManager.SetSelectedObject(pickedObject);
 			}
-			ImGui::SetWindowFocus();
 		}
 		else
 		{

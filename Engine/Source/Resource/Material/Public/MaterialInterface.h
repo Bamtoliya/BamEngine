@@ -148,6 +148,7 @@ public:
 
 #pragma region Pipeline
 public:
+	virtual tagBlendState GetBlendState();
 	virtual EBlendMode GetBlendMode() const { return m_BlendMode; }
 	virtual ECullMode GetCullMode() const { return m_CullMode; }
 	virtual EFillMode GetFillMode() const { return m_FillMode; }

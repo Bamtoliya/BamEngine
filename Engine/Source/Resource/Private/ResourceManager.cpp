@@ -85,10 +85,32 @@ Handle ResourceManager::LoadFile(const wstring& filePath)
 	if (!fs::exists(absolutePath))
 		return Handle();
 
-	wstring extension = absolutePath.extension().wstring();
-	std::transform(extension.begin(), extension.end(), extension.begin(), ::towlower);
+	auto ToLowerExt = [](wstring ext)
+		{
+			std::transform(ext.begin(), ext.end(), ext.begin(), ::towlower);
+			return ext;
+		};
 
-	auto iter = m_LoaderRegistry.find(extension);
+	const wstring extension = ToLowerExt(absolutePath.extension().wstring());
+	wstring logicalExtension = extension;
+
+	// .bamshader.json 같은 이중 확장자 지원:
+	// 라우팅은 .bamshader 로더를 타고, 실제 로드는 원본 .json 경로를 유지한다.
+	if (extension == L".json")
+	{
+		const wstring embeddedExtension = ToLowerExt(absolutePath.stem().extension().wstring());
+		if (embeddedExtension.rfind(L".bam", 0) == 0)
+		{
+			logicalExtension = embeddedExtension;
+		}
+	}
+
+	auto iter = m_LoaderRegistry.find(logicalExtension);
+	if (iter == m_LoaderRegistry.end() && logicalExtension != extension)
+	{
+		iter = m_LoaderRegistry.find(extension);
+	}
+
 	if (iter != m_LoaderRegistry.end())
 	{
 		const wstring relativePath = ToProjectRelativePath(absolutePath.wstring());
@@ -107,14 +129,7 @@ void ResourceManager::RegisterExplicitLoader()
 			return this->LoadResource<Texture>(&desc).GetRawHandle();
 		};
 
-	m_LoaderRegistry[L".png"] = textureLoader;
-	m_LoaderRegistry[L".jpg"] = textureLoader;
-	m_LoaderRegistry[L".bmp"] = textureLoader;
-	m_LoaderRegistry[L".tga"] = textureLoader;
-	m_LoaderRegistry[L".jpeg"] = textureLoader;
-	m_LoaderRegistry[L".bamtex"] = textureLoader;
-
-	m_LoaderRegistry[L".bamsprite"] = [this](wstring key, wstring path) -> Handle
+	auto spriteLoader = [this](wstring key, wstring path) -> Handle
 		{
 			tagSpriteCreateDesc desc;
 			desc.Key = key;
@@ -122,7 +137,7 @@ void ResourceManager::RegisterExplicitLoader()
 			return this->LoadResource<Sprite>(&desc).GetRawHandle();
 		};
 
-	m_LoaderRegistry[L".bammat"] = [this](wstring key, wstring path) -> Handle
+	auto materialLoader = [this](wstring key, wstring path) -> Handle
 		{
 			tagMaterialDesc desc;
 			desc.Key = key;
@@ -130,16 +145,7 @@ void ResourceManager::RegisterExplicitLoader()
 			return this->LoadResource<Material>(&desc).GetRawHandle();
 		};
 
-
-	m_LoaderRegistry[L".bamshader"] = [this](wstring key, wstring path) -> Handle
-		{
-			tagShaderDesc desc;
-			desc.Key = key;
-			desc.Path = key;
-			return this->LoadResource<Shader>(&desc).GetRawHandle();
-		};
-
-	m_LoaderRegistry[L".bammatinst"] = [this](wstring key, wstring path) -> Handle
+	auto materialInstanceLoader = [this](wstring key, wstring path) -> Handle
 		{
 			tagMaterialInstanceDesc desc;
 			desc.Key = key;
@@ -147,7 +153,16 @@ void ResourceManager::RegisterExplicitLoader()
 			return this->LoadResource<MaterialInstance>(&desc).GetRawHandle();
 		};
 
-	m_LoaderRegistry[L".bammesh"] = [this](wstring key, wstring path) -> Handle
+
+	auto shaderLoader = [this](wstring key, wstring path) -> Handle
+		{
+			tagShaderDesc desc;
+			desc.Key = key;
+			desc.Path = key;
+			return this->LoadResource<Shader>(&desc).GetRawHandle();
+		};
+
+	auto meshLoader = [this](wstring key, wstring path) -> Handle
 		{
 			tagMeshCreateDesc desc;
 			desc.Key = key;
@@ -155,7 +170,7 @@ void ResourceManager::RegisterExplicitLoader()
 			return this->LoadResource<Mesh>(&desc).GetRawHandle();
 		};
 
-	m_LoaderRegistry[L".bamskeleton"] = [this](wstring key, wstring path) -> Handle
+	auto skeletonLoader = [this](wstring key, wstring path) -> Handle
 		{
 			tagSkeletonCreateDesc desc;
 			desc.Key = key;
@@ -163,7 +178,7 @@ void ResourceManager::RegisterExplicitLoader()
 			return this->LoadResource<Skeleton>(&desc).GetRawHandle();
 		};
 
-	m_LoaderRegistry[L".bamanim"] = [this](wstring key, wstring path) -> Handle
+	auto animationLoader = [this](wstring key, wstring path) -> Handle
 		{
 			tagAnimationCreateDesc desc;
 			desc.Key = key;
@@ -171,13 +186,37 @@ void ResourceManager::RegisterExplicitLoader()
 			return this->LoadResource<Animation>(&desc).GetRawHandle();
 		};
 
-	m_LoaderRegistry[L".bammodel"] = [this](wstring key, wstring path) -> Handle
+	auto modelLoader = [this](wstring key, wstring path) -> Handle
 		{
 			tagModelCreateDesc desc;
 			desc.Key = key;
 			desc.Path = key;
 			return this->LoadResource<Model>(&desc).GetRawHandle();
 		};
+
+	m_LoaderRegistry[L".png"] = textureLoader;
+	m_LoaderRegistry[L".jpg"] = textureLoader;
+	m_LoaderRegistry[L".bmp"] = textureLoader;
+	m_LoaderRegistry[L".tga"] = textureLoader;
+	m_LoaderRegistry[L".jpeg"] = textureLoader;
+	m_LoaderRegistry[L".bamtex"] = textureLoader;
+
+	m_LoaderRegistry[L".bamsprite"] = spriteLoader;
+
+	m_LoaderRegistry[L".bammat"] = materialLoader;
+
+
+	m_LoaderRegistry[L".bamshader"] = shaderLoader;
+
+	m_LoaderRegistry[L".bammatinst"] = materialInstanceLoader;
+
+	m_LoaderRegistry[L".bammesh"] = meshLoader;
+
+	m_LoaderRegistry[L".bamskeleton"] = skeletonLoader;
+
+	m_LoaderRegistry[L".bamanim"] = animationLoader;
+
+	m_LoaderRegistry[L".bammodel"] = modelLoader;
 }
 EResult ResourceManager::DestroyResource(const Handle& handle)
 {

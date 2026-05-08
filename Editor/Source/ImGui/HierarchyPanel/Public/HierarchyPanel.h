@@ -32,6 +32,7 @@ private:
 	void DrawGameObjectContextMenu(class GameObject* gameObject);
 private:
 	
+	//-------Create Object Menu Actions----------
 	void CreateEmptyObject(class Scene* scene);
 	void CreatePrimitive(class Scene* scene, const wstring& name, const wstring& meshName);
 	void CreateSpriteObject(class Scene* scene);
@@ -42,6 +43,9 @@ private:
 	void CreateDirectionalLight(class Scene* scene);
 	void CreatePointLight(class Scene* scene);
 	void CreateSpotLight(class Scene* scene);
+
+	//-------Environment Objects----------
+	void CreateSky(class Scene* scene);
 
 
 #pragma region Variables

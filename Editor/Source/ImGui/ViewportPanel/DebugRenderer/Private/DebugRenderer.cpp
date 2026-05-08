@@ -42,7 +42,7 @@ void DebugRenderer::Initialize(const wstring& prefix)
 		prefix + L"_DebugPass", {}, L"",
 		ERenderPassLoadOperation::RPLO_Load, ERenderPassStoreOperation::RPSO_Store,
 		ERenderPassLoadOperation::RPLO_Load, ERenderPassStoreOperation::RPSO_Store,
-		vec4(0.0f, 0.f, 0.f, -1.f), 500, ERenderSortType::None, ERenderPassType::Custom);
+		vec4(0.0f, 0.f, 0.f, -1.f), 500, ERenderSortType::None, ERenderPassType::Custom, EBlendMode::None);
 }
 
 void DebugRenderer::Free()
@@ -69,7 +69,7 @@ void DebugRenderer::SubmitDebugDraw(Camera* camera, const wstring& colorRTName)
 			// 파이프라인 디스크립터 (Grid와 동일한 방식으로 RenderPass에서 포맷 동적 매칭)
 			tagRHIPipelineDesc desc = {};
 			desc.PipelineType = EPipelineType::Graphics;
-			desc.BlendMode = EBlendMode::AlphaBlend;
+			desc.BlendState = Engine::tagBlendState{};
 			desc.FillMode = EFillMode::Solid;
 			desc.CullMode = ECullMode::None;
 			desc.Topology = ETopology::LineList;

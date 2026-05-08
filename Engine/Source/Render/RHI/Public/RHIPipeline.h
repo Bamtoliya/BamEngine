@@ -14,7 +14,7 @@ struct RHIDepthStencilState
 struct tagRHIPipelineDesc
 {
 	EPipelineType PipelineType = EPipelineType::Graphics;
-	EBlendMode BlendMode =	EBlendMode::Opaque;
+	tagBlendState BlendState = {};
 	EFillMode FillMode =	EFillMode::Solid;
 	ECullMode CullMode =	ECullMode::Back;
 	EFrontFace FrontFace =	EFrontFace::CounterClockwise;
@@ -37,7 +37,9 @@ struct tagRHIPipelineDesc
 	bool operator==(const tagRHIPipelineDesc& other) const
 	{
 		if (PipelineType != other.PipelineType) return false;
-		if (BlendMode != other.BlendMode) return false;
+
+		if (BlendState != other.BlendState) return false;
+
 		if (FillMode != other.FillMode) return false;
 		if (CullMode != other.CullMode) return false;
 		if (FrontFace != other.FrontFace) return false;
@@ -80,7 +82,19 @@ struct hash<tagRHIPipelineDesc>
 		// 주요 필드들을 해싱합니다.
 		// 주의: 구조체 패딩 이슈를 피하기 위해 멤버별로 해싱하는 것이 안전합니다.
 		HashCombine(seed, hash<int>()((int)desc.PipelineType));
-		HashCombine(seed, hash<int>()((int)desc.BlendMode));
+
+		HashCombine(seed, hash<bool>()(desc.BlendState.Enable));
+		HashCombine(seed, hash<bool>()(desc.BlendState.EnableColorWriteMask));
+
+		HashCombine(seed, hash<int>()((int)desc.BlendState.SrcColor));
+		HashCombine(seed, hash<int>()((int)desc.BlendState.DstColor));
+		HashCombine(seed, hash<int>()((int)desc.BlendState.ColorBlendOp));
+		HashCombine(seed, hash<int>()((int)desc.BlendState.SrcAlpha));
+		HashCombine(seed, hash<int>()((int)desc.BlendState.DstAlpha));
+		HashCombine(seed, hash<int>()((int)desc.BlendState.AlphaBlendOp));
+		HashCombine(seed, hash<int>()((int)desc.BlendState.ColorWriteMask));
+
+
 		HashCombine(seed, hash<int>()((int)desc.CullMode));
 		HashCombine(seed, hash<void*>()(desc.VertexShader));
 		HashCombine(seed, hash<void*>()(desc.PixelShader));
@@ -123,14 +137,14 @@ protected:
 	virtual ~RHIPipeline() = default;
 public:
 	EPipelineType GetPipelineType() const { return m_Desc.PipelineType; }
-	EBlendMode GetBlendMode() const { return m_Desc.BlendMode; }
+	tagBlendState GetBlendState() const { return m_Desc.BlendState; }
 	EFillMode GetFillMode() const { return m_Desc.FillMode; }
 	ECullMode GetCullMode() const { return m_Desc.CullMode; }
 	EFrontFace GetFrontFace() const { return m_Desc.FrontFace; }
 	ETopology GetTopology() const { return m_Desc.Topology; }
 
 	void SetPipelineType(EPipelineType type) { m_Desc.PipelineType = type; }
-	void SetBlendMode(EBlendMode mode) { m_Desc.BlendMode = mode; }
+	void SetBlendState(const tagBlendState& blendState) { m_Desc.BlendState = blendState; }
 	void SetFillMode(EFillMode mode) { m_Desc.FillMode = mode; }
 	void SetCullMode(ECullMode mode) { m_Desc.CullMode = mode; }
 	void SetFrontFace(EFrontFace face) { m_Desc.FrontFace = face; }

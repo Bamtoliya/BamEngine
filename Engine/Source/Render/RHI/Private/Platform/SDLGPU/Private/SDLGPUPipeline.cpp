@@ -74,31 +74,15 @@ EResult SDLGPUPipeline::Initialize(const DESC& desc)
     {
         colorTargets[i].format = ToSDLGPUTextureFormat(desc.ColorAttachmentFormats[i]);
 
-        // Blend Mode 설정
-        if (desc.BlendMode == EBlendMode::Opaque)
-        {
-            colorTargets[i].blend_state.enable_blend = false;
-        }
-        else if (desc.BlendMode == EBlendMode::AlphaBlend)
-        {
-            colorTargets[i].blend_state.enable_blend = true;
-            colorTargets[i].blend_state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
-            colorTargets[i].blend_state.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
-            colorTargets[i].blend_state.color_blend_op = SDL_GPU_BLENDOP_ADD;
-            colorTargets[i].blend_state.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
-            colorTargets[i].blend_state.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
-            colorTargets[i].blend_state.alpha_blend_op = SDL_GPU_BLENDOP_ADD;
-        }
-        else if (desc.BlendMode == EBlendMode::Additive)
-        {
-            colorTargets[i].blend_state.enable_blend = true;
-            colorTargets[i].blend_state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
-            colorTargets[i].blend_state.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
-            // ... Additive 설정
-        }
-
-        // Color Write Mask (일단 모두 기록)
-        colorTargets[i].blend_state.color_write_mask = 0xF;
+        colorTargets[i].blend_state.enable_blend = desc.BlendState.Enable;
+        colorTargets[i].blend_state.src_color_blendfactor = ToSDLBlendFactor(desc.BlendState.SrcColor);
+        colorTargets[i].blend_state.dst_color_blendfactor = ToSDLBlendFactor(desc.BlendState.DstColor);
+        colorTargets[i].blend_state.color_blend_op = ToSDLBlendOp(desc.BlendState.ColorBlendOp);
+        colorTargets[i].blend_state.src_alpha_blendfactor = ToSDLBlendFactor(desc.BlendState.SrcAlpha);
+        colorTargets[i].blend_state.dst_alpha_blendfactor = ToSDLBlendFactor(desc.BlendState.DstAlpha);
+        colorTargets[i].blend_state.alpha_blend_op = ToSDLBlendOp(desc.BlendState.AlphaBlendOp);
+        colorTargets[i].blend_state.color_write_mask = (int)desc.BlendState.ColorWriteMask;
+		colorTargets[i].blend_state.enable_color_write_mask = desc.BlendState.EnableColorWriteMask;
     }
 
     SDL_GPUGraphicsPipelineTargetInfo targetInfo = {};

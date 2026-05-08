@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "HierarchyPanel.h"
 
@@ -10,13 +10,7 @@
 #include "Scene.h"
 #include "Layer.h"
 #include "GameObject.h"
-#include "Transform.h"
-#include "MeshRenderer.h"
-#include "SpriteRenderer.h"
-#include "SkinnedMeshRenderer.h"
-#include "Animator.h"
-
-#include "MeshFilter.h"
+#include "Components.h"
 
 
 static bool CheckboxTristate(const char* label, bool* v, bool is_mixed)
@@ -870,6 +864,13 @@ void HierarchyPanel::DrawAddGameObjectButton(Scene* scene)
 
 		ImGui::Separator();
 
+		if (ImGui::MenuItem("Sky"))
+		{
+			CreateSky(scene);
+		}
+
+		ImGui::Separator();
+
 		if (ImGui::BeginMenu("Lights"))
 		{
 			if (ImGui::MenuItem("Directional Light"))
@@ -1265,6 +1266,27 @@ void HierarchyPanel::CreateSpotLight(Scene* scene)
 	lightDesc.Type = ELightType::Spot;
 	lightDesc.Color = vec3(1.0f, 1.0f, 1.f);
 	newGameObject->AddComponent(L"LightSource", &lightDesc);
+	scene->AddGameObject(newGameObject);
+	Safe_Release(newGameObject);
+}
+
+void HierarchyPanel::CreateSky(Scene* scene)
+{
+	ResourceManager& resourceMgr = ResourceManager::Get();
+	GameObject* newGameObject = GameObject::Create();
+	newGameObject->SetName(L"Sky");
+
+	tagSkyRendererDesc skyRendererDesc;
+	newGameObject->AddComponent(L"SkyRenderer");
+	newGameObject->AddComponent(L"SkyLight");
+	SkyRenderer* skyRenderer = newGameObject->GetComponent<SkyRenderer>();
+	if (skyRenderer)
+	{
+		skyRenderer->SetMaterial(
+			resourceMgr.GetResourceHandle<Material>(L"Resources/Material/SkyMaterial.bammat"));
+		skyRenderer->SetRenderPassID(0);
+	}
+
 	scene->AddGameObject(newGameObject);
 	Safe_Release(newGameObject);
 }

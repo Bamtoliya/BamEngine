@@ -18,6 +18,8 @@
 #include "Render/Components/Public/RenderComponent.h"
 #include "Render/Components/Public/SkinnedMeshRenderer.h"
 #include "Render/Components/Public/SpriteRenderer.h"
+#include "Render/Components/Sky/Public/SkyLight.h"
+#include "Render/Components/Sky/Public/SkyRenderer.h"
 #include "Render/RHI/Public/RHIDefinitions.h"
 #include "Render/Sampler/Public/SamplerDesc.h"
 #include "Resource/Components/MeshFilter/Public/MeshFilter.h"
@@ -91,6 +93,7 @@ BEGIN_ENUM(ELightType)
 	REFLECT_ENUM_ENTRY(ELightType, Point)
 	REFLECT_ENUM_ENTRY(ELightType, Directional)
 	REFLECT_ENUM_ENTRY(ELightType, Spot)
+	REFLECT_ENUM_ENTRY(ELightType, Sky)
 END_ENUM_REFLECT_EX(ELightType, "Engine::ELightType")
 
 // Enum: Engine::EAttenuationMode
@@ -126,6 +129,12 @@ BEGIN_ENUM(ESpriteRenderMode)
 	REFLECT_ENUM_ENTRY(ESpriteRenderMode, UI)
 END_ENUM_REFLECT_EX(ESpriteRenderMode, "Engine::ESpriteRenderMode")
 
+// Enum: Engine::ESkyShape
+BEGIN_ENUM(ESkyShape)
+	REFLECT_ENUM_ENTRY(ESkyShape, Sphere)
+	REFLECT_ENUM_ENTRY(ESkyShape, Cube)
+END_ENUM_REFLECT_EX(ESkyShape, "Engine::ESkyShape")
+
 // Enum: Engine::EPipelineType
 BEGIN_ENUM(EPipelineType)
 	REFLECT_ENUM_ENTRY(EPipelineType, Graphics)
@@ -134,11 +143,15 @@ END_ENUM_REFLECT_EX(EPipelineType, "Engine::EPipelineType")
 
 // Enum: Engine::EBlendMode
 BEGIN_ENUM(EBlendMode)
+	REFLECT_ENUM_ENTRY(EBlendMode, None)
 	REFLECT_ENUM_ENTRY(EBlendMode, Opaque)
 	REFLECT_ENUM_ENTRY(EBlendMode, AlphaBlend)
 	REFLECT_ENUM_ENTRY(EBlendMode, Additive)
 	REFLECT_ENUM_ENTRY(EBlendMode, NonPremultiplied)
 	REFLECT_ENUM_ENTRY(EBlendMode, Masked)
+	REFLECT_ENUM_ENTRY(EBlendMode, Forward)
+	REFLECT_ENUM_ENTRY(EBlendMode, Decal)
+	REFLECT_ENUM_ENTRY(EBlendMode, ALL)
 END_ENUM_REFLECT_EX(EBlendMode, "Engine::EBlendMode")
 
 // Enum: Engine::EFillMode
@@ -187,6 +200,45 @@ BEGIN_ENUM(ECompareOp)
 	REFLECT_ENUM_ENTRY(ECompareOp, GreaterOrEqual)
 	REFLECT_ENUM_ENTRY(ECompareOp, Always)
 END_ENUM_REFLECT_EX(ECompareOp, "Engine::ECompareOp")
+
+// Enum: Engine::EBlendFactor
+BEGIN_ENUM(EBlendFactor)
+	REFLECT_ENUM_ENTRY(EBlendFactor, None)
+	REFLECT_ENUM_ENTRY(EBlendFactor, Zero)
+	REFLECT_ENUM_ENTRY(EBlendFactor, One)
+	REFLECT_ENUM_ENTRY(EBlendFactor, SrcColor)
+	REFLECT_ENUM_ENTRY(EBlendFactor, InvSrcColor)
+	REFLECT_ENUM_ENTRY(EBlendFactor, SrcAlpha)
+	REFLECT_ENUM_ENTRY(EBlendFactor, InvSrcAlpha)
+	REFLECT_ENUM_ENTRY(EBlendFactor, DstColor)
+	REFLECT_ENUM_ENTRY(EBlendFactor, InvDstColor)
+	REFLECT_ENUM_ENTRY(EBlendFactor, DstAlpha)
+	REFLECT_ENUM_ENTRY(EBlendFactor, InvDstAlpha)
+	REFLECT_ENUM_ENTRY(EBlendFactor, SrcAlphaSaturate)
+	REFLECT_ENUM_ENTRY(EBlendFactor, BlendColor)
+	REFLECT_ENUM_ENTRY(EBlendFactor, InvBlendColor)
+END_ENUM_REFLECT_EX(EBlendFactor, "Engine::EBlendFactor")
+
+// Enum: Engine::EBlendOp
+BEGIN_ENUM(EBlendOp)
+	REFLECT_ENUM_ENTRY(EBlendOp, None)
+	REFLECT_ENUM_ENTRY(EBlendOp, Add)
+	REFLECT_ENUM_ENTRY(EBlendOp, Subtract)
+	REFLECT_ENUM_ENTRY(EBlendOp, RevSubtract)
+	REFLECT_ENUM_ENTRY(EBlendOp, Min)
+	REFLECT_ENUM_ENTRY(EBlendOp, Max)
+END_ENUM_REFLECT_EX(EBlendOp, "Engine::EBlendOp")
+
+// Enum: Engine::EColorChannel
+BEGIN_ENUM(EColorChannel)
+	REFLECT_ENUM_ENTRY(EColorChannel, NONE)
+	REFLECT_ENUM_ENTRY(EColorChannel, R)
+	REFLECT_ENUM_ENTRY(EColorChannel, G)
+	REFLECT_ENUM_ENTRY(EColorChannel, B)
+	REFLECT_ENUM_ENTRY(EColorChannel, A)
+	REFLECT_ENUM_ENTRY(EColorChannel, RGB)
+	REFLECT_ENUM_ENTRY(EColorChannel, RGBA)
+END_ENUM_REFLECT_EX(EColorChannel, "Engine::EColorChannel")
 
 // Enum: Engine::ESamplerFilter
 BEGIN_ENUM(ESamplerFilter)
@@ -653,14 +705,17 @@ END_METADATA
 
 BEGIN_METADATA(LightSource, m_SpotInnerAngle)
 	EDITABLE
+	EDITCONDITION("m_Type", ELightType::Spot, true)
 END_METADATA
 
 BEGIN_METADATA(LightSource, m_SpotOuterAngle)
 	EDITABLE
+	EDITCONDITION("m_Type", ELightType::Spot, true)
 END_METADATA
 
 BEGIN_METADATA(LightSource, m_SpotFalloffExponent)
 	EDITABLE
+	EDITCONDITION("m_Type", ELightType::Spot, true)
 END_METADATA
 
 BEGIN_METADATA(LightSource, m_LightingLayerMask)
@@ -803,6 +858,167 @@ EMPTY_FUNCTIONS(SpriteRenderer)
 IMPLEMENT_CLASS_EX(SpriteRenderer, "Engine::SpriteRenderer", "Engine::RenderComponent")
 
 #pragma endregion // CLASS: Engine::SpriteRenderer
+
+#pragma region CLASS: Engine::SkyLight
+BEGIN_METADATA(SkyLight, m_GroundColor)
+	EDITABLE
+	COLOR()
+END_METADATA
+
+BEGIN_METADATA(SkyLight, m_IndirectIntensity)
+	EDITABLE
+END_METADATA
+BEGIN_PROPERTIES(SkyLight)
+	REFLECT_PROPERTY(SkyLight, m_GroundColor, "vec3", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{SkyLight_m_GroundColor_Meta})
+	REFLECT_PROPERTY(SkyLight, m_IndirectIntensity, "f32", reflection::EPropertyType::Float32, std::span<const reflection::MetadataEntry>{SkyLight_m_IndirectIntensity_Meta})
+	REFLECT_PROPERTY(SkyLight, m_Direction, "vec3", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{})
+END_PROPERTIES
+EMPTY_FUNCTIONS(SkyLight)
+IMPLEMENT_CLASS_EX(SkyLight, "Engine::SkyLight", "Engine::LightSource")
+
+#pragma endregion // CLASS: Engine::SkyLight
+
+#pragma region CLASS: Engine::SkyRenderer
+BEGIN_METADATA(SkyRenderer, m_Shape)
+	EDITABLE
+	CATEGORY("Shape")
+END_METADATA
+
+BEGIN_METADATA(SkyRenderer, m_ZenithColor)
+	EDITABLE
+	COLOR()
+	CATEGORY("Atmosphere")
+END_METADATA
+
+BEGIN_METADATA(SkyRenderer, m_HorizonColor)
+	EDITABLE
+	COLOR()
+	CATEGORY("Atmosphere")
+END_METADATA
+
+BEGIN_METADATA(SkyRenderer, m_GroundColor)
+	EDITABLE
+	COLOR()
+	CATEGORY("Atmosphere")
+END_METADATA
+
+BEGIN_METADATA(SkyRenderer, m_HorizonBlend)
+	EDITABLE
+	CATEGORY("Atmosphere")
+END_METADATA
+
+BEGIN_METADATA(SkyRenderer, m_SkyIntensity)
+	EDITABLE
+	CATEGORY("Atmosphere")
+END_METADATA
+
+BEGIN_METADATA(SkyRenderer, m_SunDirection)
+	EDITABLE
+	CATEGORY("Sun")
+END_METADATA
+
+BEGIN_METADATA(SkyRenderer, m_SunColor)
+	EDITABLE
+	COLOR()
+	CATEGORY("Sun")
+END_METADATA
+
+BEGIN_METADATA(SkyRenderer, m_SunIntensity)
+	EDITABLE
+	CATEGORY("Sun")
+END_METADATA
+
+BEGIN_METADATA(SkyRenderer, m_SunSize)
+	EDITABLE
+	CATEGORY("Sun")
+END_METADATA
+
+BEGIN_METADATA(SkyRenderer, m_SphereStacks)
+	EDITABLE
+	EDITCONDITION("m_Shape", ESkyShape::Sphere, true)
+	CATEGORY("Shape")
+END_METADATA
+
+BEGIN_METADATA(SkyRenderer, m_SphereSlices)
+	EDITABLE
+	EDITCONDITION("m_Shape", ESkyShape::Sphere, true)
+	CATEGORY("Shape")
+END_METADATA
+
+BEGIN_METADATA(SkyRenderer, m_Mesh)
+	EDITABLE
+END_METADATA
+BEGIN_PROPERTIES(SkyRenderer)
+	REFLECT_PROPERTY(SkyRenderer, m_Shape, "Engine::ESkyShape", reflection::EPropertyType::Enum, std::span<const reflection::MetadataEntry>{SkyRenderer_m_Shape_Meta})
+	REFLECT_PROPERTY(SkyRenderer, m_ZenithColor, "vec3", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{SkyRenderer_m_ZenithColor_Meta})
+	REFLECT_PROPERTY(SkyRenderer, m_HorizonColor, "vec3", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{SkyRenderer_m_HorizonColor_Meta})
+	REFLECT_PROPERTY(SkyRenderer, m_GroundColor, "vec3", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{SkyRenderer_m_GroundColor_Meta})
+	REFLECT_PROPERTY(SkyRenderer, m_HorizonBlend, "f32", reflection::EPropertyType::Float32, std::span<const reflection::MetadataEntry>{SkyRenderer_m_HorizonBlend_Meta})
+	REFLECT_PROPERTY(SkyRenderer, m_SkyIntensity, "f32", reflection::EPropertyType::Float32, std::span<const reflection::MetadataEntry>{SkyRenderer_m_SkyIntensity_Meta})
+	REFLECT_PROPERTY(SkyRenderer, m_SunDirection, "vec3", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{SkyRenderer_m_SunDirection_Meta})
+	REFLECT_PROPERTY(SkyRenderer, m_SunColor, "vec3", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{SkyRenderer_m_SunColor_Meta})
+	REFLECT_PROPERTY(SkyRenderer, m_SunIntensity, "f32", reflection::EPropertyType::Float32, std::span<const reflection::MetadataEntry>{SkyRenderer_m_SunIntensity_Meta})
+	REFLECT_PROPERTY(SkyRenderer, m_SunSize, "f32", reflection::EPropertyType::Float32, std::span<const reflection::MetadataEntry>{SkyRenderer_m_SunSize_Meta})
+	REFLECT_PROPERTY(SkyRenderer, m_SphereStacks, "int32", reflection::EPropertyType::Int32, std::span<const reflection::MetadataEntry>{SkyRenderer_m_SphereStacks_Meta})
+	REFLECT_PROPERTY(SkyRenderer, m_SphereSlices, "int32", reflection::EPropertyType::Int32, std::span<const reflection::MetadataEntry>{SkyRenderer_m_SphereSlices_Meta})
+	REFLECT_PROPERTY(SkyRenderer, m_Mesh, "ResourceHandle<Mesh>", reflection::EPropertyType::ResourceHandle, std::span<const reflection::MetadataEntry>{SkyRenderer_m_Mesh_Meta})
+END_PROPERTIES
+EMPTY_FUNCTIONS(SkyRenderer)
+IMPLEMENT_CLASS_EX(SkyRenderer, "Engine::SkyRenderer", "Engine::RenderComponent")
+
+#pragma endregion // CLASS: Engine::SkyRenderer
+
+#pragma region STRUCT: Engine::tagBlendState
+BEGIN_METADATA(tagBlendState, SrcColor)
+	EDITABLE
+END_METADATA
+
+BEGIN_METADATA(tagBlendState, DstColor)
+	EDITABLE
+END_METADATA
+
+BEGIN_METADATA(tagBlendState, ColorBlendOp)
+	EDITABLE
+END_METADATA
+
+BEGIN_METADATA(tagBlendState, SrcAlpha)
+	EDITABLE
+END_METADATA
+
+BEGIN_METADATA(tagBlendState, DstAlpha)
+	EDITABLE
+END_METADATA
+
+BEGIN_METADATA(tagBlendState, AlphaBlendOp)
+	EDITABLE
+END_METADATA
+
+BEGIN_METADATA(tagBlendState, ColorWriteMask)
+	EDITABLE
+END_METADATA
+
+BEGIN_METADATA(tagBlendState, Enable)
+	EDITABLE
+END_METADATA
+
+BEGIN_METADATA(tagBlendState, EnableColorWriteMask)
+	EDITABLE
+END_METADATA
+BEGIN_PROPERTIES(tagBlendState)
+	REFLECT_PROPERTY(tagBlendState, SrcColor, "Engine::EBlendFactor", reflection::EPropertyType::Enum, std::span<const reflection::MetadataEntry>{tagBlendState_SrcColor_Meta})
+	REFLECT_PROPERTY(tagBlendState, DstColor, "Engine::EBlendFactor", reflection::EPropertyType::Enum, std::span<const reflection::MetadataEntry>{tagBlendState_DstColor_Meta})
+	REFLECT_PROPERTY(tagBlendState, ColorBlendOp, "Engine::EBlendOp", reflection::EPropertyType::Enum, std::span<const reflection::MetadataEntry>{tagBlendState_ColorBlendOp_Meta})
+	REFLECT_PROPERTY(tagBlendState, SrcAlpha, "Engine::EBlendFactor", reflection::EPropertyType::Enum, std::span<const reflection::MetadataEntry>{tagBlendState_SrcAlpha_Meta})
+	REFLECT_PROPERTY(tagBlendState, DstAlpha, "Engine::EBlendFactor", reflection::EPropertyType::Enum, std::span<const reflection::MetadataEntry>{tagBlendState_DstAlpha_Meta})
+	REFLECT_PROPERTY(tagBlendState, AlphaBlendOp, "Engine::EBlendOp", reflection::EPropertyType::Enum, std::span<const reflection::MetadataEntry>{tagBlendState_AlphaBlendOp_Meta})
+	REFLECT_PROPERTY(tagBlendState, ColorWriteMask, "Engine::EColorChannel", reflection::EPropertyType::BitFlag, std::span<const reflection::MetadataEntry>{tagBlendState_ColorWriteMask_Meta})
+	REFLECT_PROPERTY(tagBlendState, Enable, "bool", reflection::EPropertyType::Bool, std::span<const reflection::MetadataEntry>{tagBlendState_Enable_Meta})
+	REFLECT_PROPERTY(tagBlendState, EnableColorWriteMask, "bool", reflection::EPropertyType::Bool, std::span<const reflection::MetadataEntry>{tagBlendState_EnableColorWriteMask_Meta})
+END_PROPERTIES
+EMPTY_FUNCTIONS(tagBlendState)
+IMPLEMENT_CLASS_EX(tagBlendState, "Engine::tagBlendState", "")
+
+#pragma endregion // STRUCT: Engine::tagBlendState
 
 #pragma region STRUCT: Engine::tagSamplerDesc
 BEGIN_METADATA(tagSamplerDesc, MinFilter)
@@ -973,7 +1189,7 @@ END_METADATA
 
 DECLARE_CONTAINER_INFO(MaterialInterface, m_TextureBindings_Root, "Engine::MaterialTextureBinding", reflection::EPropertyType::Struct, reflection::LinearContainerAccessor<vector<MaterialTextureBinding>, MaterialTextureBinding>::Get())
 BEGIN_PROPERTIES(MaterialInterface)
-	REFLECT_PROPERTY(MaterialInterface, m_BlendMode, "Engine::EBlendMode", reflection::EPropertyType::Enum, std::span<const reflection::MetadataEntry>{MaterialInterface_m_BlendMode_Meta})
+	REFLECT_PROPERTY(MaterialInterface, m_BlendMode, "Engine::EBlendMode", reflection::EPropertyType::BitFlag, std::span<const reflection::MetadataEntry>{MaterialInterface_m_BlendMode_Meta})
 	REFLECT_PROPERTY(MaterialInterface, m_CullMode, "Engine::ECullMode", reflection::EPropertyType::Enum, std::span<const reflection::MetadataEntry>{MaterialInterface_m_CullMode_Meta})
 	REFLECT_PROPERTY(MaterialInterface, m_FillMode, "Engine::EFillMode", reflection::EPropertyType::Enum, std::span<const reflection::MetadataEntry>{MaterialInterface_m_FillMode_Meta})
 	REFLECT_PROPERTY(MaterialInterface, m_DepthMode, "Engine::EDepthMode", reflection::EPropertyType::Enum, std::span<const reflection::MetadataEntry>{MaterialInterface_m_DepthMode_Meta})

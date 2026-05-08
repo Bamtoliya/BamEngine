@@ -82,7 +82,7 @@ EResult SkinnedMeshRenderer::Render(f32 dt, RenderPass* renderPass)
 	SceneUBO uboData;
 	uboData.worldMatrix = m_Owner->GetComponent<Transform>()->GetWorldMatrix();
 
-	if (IsFailure(rhi->BindConstantBuffer((void*)&uboData, sizeof(SceneUBO), 1)))
+	if (IsFailure(rhi->BindConstantBuffer((void*)&uboData, sizeof(SceneUBO), 1, EShaderType::Vertex)))
 		return EResult::Fail;
 
 	Animator* animator = m_Owner->GetComponent<Animator>();

@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "RenderComponent.h"
 
@@ -47,7 +47,10 @@ void RenderComponent::LateUpdate(f32 dt)
 	__super::LateUpdate(dt);
 	if (m_Active && m_Owner && m_Owner->IsActive() && m_Owner->IsVisible())
 	{
-		const bool bTransparent = IsTransparent();
+		MaterialInterface* material = GetMaterial(0);
+		if (!material) return;
+
+		const EBlendMode blendMode = material->GetBlendMode();
 		const auto& activePasses = Renderer::Get().GetActiveViewportCameras();
 		for (const auto& passInfo : activePasses)
 		{
@@ -57,26 +60,16 @@ void RenderComponent::LateUpdate(f32 dt)
 
 			if (passType == ERenderPassType::Shadow)
 			{
-				if (!m_DrawShadow) continue;                                       
-				if (bTransparent) continue;                                        
+				if (!m_DrawShadow) continue;
 				if (LightManager::Get().GetShadowCastingLights().empty()) continue;
-			}
-			else if (passType == ERenderPassType::ForwardTransparent)
-			{
-				if (!bTransparent) continue;
-				if (!passInfo.Camera) continue;
-			}
-			else if (passType == ERenderPassType::Geometry)
-			{
-				if (bTransparent) continue;
-				if (!passInfo.Camera) continue;
 			}
 			else
 			{
-				// Shadow, ForwardTransparent, Geometry 패스가 아니면 (UI, PostProcess, Custom 등) 
-				// 메쉬/스프라이트를 그리는 패스가 아니므로 스킵합니다.
-				continue;
+				if (!passInfo.Camera) continue;
 			}
+
+			if (!passInfo.RenderPass->IsAcceptsBlendMode(blendMode))
+				continue;
 
 			tagFrustum frustum;
 			bool isShadow = false;
@@ -89,13 +82,10 @@ void RenderComponent::LateUpdate(f32 dt)
 					if (transform)
 					{
 						AABB worldAABB = FrustumCuller::TransformAABB(localBounds.value(), transform->GetWorldMatrix());
-
-						// Shadow Pass: 큰 오브젝트의 그림자 누락 방지를 위해 AABB를 보수적으로 확장
 						if (isShadow)
 							worldAABB = FrustumCuller::ExpandAABB(worldAABB, 1.f);
-
 						if (!FrustumCuller::TestAABB(frustum, worldAABB))
-							continue; // 프러스텀 밖 → 컬링
+							continue;
 					}
 				}
 			}
@@ -103,15 +93,6 @@ void RenderComponent::LateUpdate(f32 dt)
 			Renderer::Get().Submit(this, passInfo.RenderPass->GetID());
 		}
 	}
-}
-bool RenderComponent::IsTransparent() const
-{
-	const MaterialInterface* mat = GetMaterial(0);
-	if (!mat) return false;
-	const EBlendMode mode = mat->GetBlendMode();
-	return (mode == EBlendMode::AlphaBlend
-		|| mode == EBlendMode::Additive
-		|| mode == EBlendMode::NonPremultiplied);
 }
 #pragma endregion
 
@@ -217,7 +198,7 @@ EResult RenderComponent::BindPipeline(Mesh* mesh, MaterialInterface* material, R
 	pipelineDesc.PipelineType = EPipelineType::Graphics;
 	pipelineDesc.VertexShader = material->GetVertexShader()->GetRHIShader();
 	pipelineDesc.PixelShader = material->GetPixelShader()->GetRHIShader();
-	pipelineDesc.BlendMode = material->GetBlendMode();
+	pipelineDesc.BlendState = material->GetBlendState();
 	pipelineDesc.CullMode = material->GetCullMode();
 	pipelineDesc.ColorAttachmentCount = renderPass->GetRenderTargetCount();
 	pipelineDesc.InputLayouts = mesh->GetInputLayoutDescs();

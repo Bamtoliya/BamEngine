@@ -16,6 +16,8 @@ using namespace std;
 #define MOUSE_BUTTON_DOUBLE_CLICK(button) InputManager::Get().IsMouseButtonDoubleClicked(button)
 #define MOUSE_BUTTON_DRAGGING(button) InputManager::Get().IsMouseButtonDragging(button)
 
+#define MOUSE_POSITION InputManager::Get().GetMousePosition()
+
 #define MOUSE_SCROLL InputManager::Get().GetMouseScrollDelta()
 
 struct MouseStateData

@@ -19,6 +19,7 @@ EResult RenderPass::Initialize(void* arg)
 	m_Desc.StencilStoreOperation = desc->StencilStoreOperation;
 	m_Desc.OverrideClearColor = desc->OverrideClearColor;
 	m_Desc.PassType = desc->PassType;
+	m_Desc.AcceptedBlendModes = desc->AcceptedBlendModes;
 	return EResult::Success;
 }
 RenderPass* RenderPass::Create(void* arg)

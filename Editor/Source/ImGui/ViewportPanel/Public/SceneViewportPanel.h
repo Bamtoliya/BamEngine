@@ -73,7 +73,9 @@ private:
 
 #pragma region Inputs
 private:
-	void MouseInput(const ImVec2& mousePos);
+	void KeyboardInput();
+private:
+	void MouseInput();
 private:
 	Engine::Ray ScreenPosToRay(const ImVec2& mousePos);
 #pragma endregion
@@ -86,6 +88,7 @@ private:
 	RenderPassID m_LightingPassID = INVALID_PASS_ID;
 	RenderPassID m_DebugPassID = INVALID_PASS_ID;
 	RenderPassID m_ShadowPassID = INVALID_PASS_ID;
+	RenderPassID m_ForwardPassID = INVALID_PASS_ID;
 	RenderPassID m_ForwardTransparentPassID = INVALID_PASS_ID;
 	RenderPassID m_ChannelPreviewPassID = INVALID_PASS_ID;
 	RenderPassID m_UIOverlayPassID = INVALID_PASS_ID;

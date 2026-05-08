@@ -34,6 +34,8 @@ public:
 	const vec4& GetOverrideClearColor() const { return m_Desc.OverrideClearColor; }
 	bool HasOverrideClearColor() const { return m_Desc.OverrideClearColor.a >= 0.0f; }
 	const ERenderPassType GetPassType() const { return m_Desc.PassType; }
+	EBlendMode GetAcceptedBlendModes() const { return m_Desc.AcceptedBlendModes; }
+	bool IsAcceptsBlendMode(EBlendMode mode) const { return (m_Desc.AcceptedBlendModes & mode) != EBlendMode::None; }
 #pragma endregion
 
 #pragma region Setter
@@ -52,6 +54,7 @@ public:
 	void SetStencilStoreOperation(ERenderPassStoreOperation storeOp) { m_Desc.StencilStoreOperation = storeOp; }
 	void SetOverrideClearColor(const vec4& color) { m_Desc.OverrideClearColor = color; }
 	void SetPassType(ERenderPassType passType) { m_Desc.PassType = passType; }
+	void SetAcceptedBlendModes(EBlendMode blendModes) { m_Desc.AcceptedBlendModes = blendModes; }
 #pragma endregion
 
 #pragma region Variable

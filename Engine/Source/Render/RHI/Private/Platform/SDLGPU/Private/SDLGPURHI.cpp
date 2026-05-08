@@ -684,11 +684,28 @@ EResult SDLGPURHI::BindConstantBuffer(void* arg, uint32 slot)
 	SDL_PushGPUFragmentUniformData(m_CurrentCommandBuffer, slot, arg, sizeof(mat4));
 	return EResult::Success;
 }
-EResult SDLGPURHI::BindConstantBuffer(void* arg, uint32 size, uint32 slot)
+EResult SDLGPURHI::BindConstantBuffer(void* arg, uint32 size, uint32 slot, EShaderType type)
 {
 	if (!arg || !m_CurrentCommandBuffer) return EResult::InvalidArgument;
-	SDL_PushGPUVertexUniformData(m_CurrentCommandBuffer, slot, arg, size);
-	SDL_PushGPUFragmentUniformData(m_CurrentCommandBuffer, slot, arg, size);
+	switch (type)
+	{
+	case EShaderType::Vertex:
+		SDL_PushGPUVertexUniformData(m_CurrentCommandBuffer, slot, arg, size);
+		break;
+	case EShaderType::Pixel:
+		SDL_PushGPUFragmentUniformData(m_CurrentCommandBuffer, slot, arg, size);
+		break;
+	case EShaderType::Compute:
+		SDL_PushGPUComputeUniformData(m_CurrentCommandBuffer, slot, arg, size);
+		break;
+	case EShaderType::Geometry:
+	case EShaderType::Hull:
+	case EShaderType::Domain:
+	case EShaderType::Unknown:
+	default:
+		break;
+	}
+	
 	return EResult::Success;
 }
 EResult SDLGPURHI::BindConstantRangeBuffer(void* arg, uint32 slot, uint32 offset, uint32 size)

@@ -1,5 +1,6 @@
 ﻿#pragma once
 #include "EnumBit.h"
+#include "RHIDefinitions.h"
 
 namespace Engine
 {
@@ -310,6 +311,7 @@ namespace Engine
 		Geometry,
 		Lighting,
 		Shadow,
+		Forward,
 		ForwardTransparent,
 		PostProcess,
 		UI,
@@ -329,5 +331,6 @@ namespace Engine
 		ERenderPassStoreOperation StencilStoreOperation = ERenderPassStoreOperation::RPSO_Store;
 		vec4 OverrideClearColor = vec4(0.0f, 0.0f, 0.0f, -1.0f);
 		ERenderPassType PassType = ERenderPassType::Custom;
+		EBlendMode AcceptedBlendModes = EBlendMode::ALL;
 	};
 }	

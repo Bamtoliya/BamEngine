@@ -84,7 +84,10 @@ EResult Renderer::Render(f32 dt)
 {
 	unordered_map<RenderPassID, vector<Camera*>> jobsPerPass;
 	for (const auto& viewportInfo : m_ViewportCameras)
-		jobsPerPass[viewportInfo.RenderPass->GetID()].push_back(viewportInfo.Camera);
+	{
+    	if (!viewportInfo.RenderPass) continue;
+    	jobsPerPass[viewportInfo.RenderPass->GetID()].push_back(viewportInfo.Camera);
+	}
 
 	const vector<RenderPass*>& renderPasses = m_RenderPassManager->GetAllRenderPasses();
 
@@ -119,8 +122,8 @@ EResult Renderer::Render(f32 dt)
 				cameraBuffer.cameraPosition = vec3(0.f);
 			}
 			cameraBuffer.time = dt;
-			m_RHI->BindConstantBuffer(&cameraBuffer, sizeof(tagCameraBuffer), 0);
-			m_RHI->BindConstantBuffer(&cameraBuffer, sizeof(tagCameraBuffer), 3);
+			m_RHI->BindConstantBuffer(&cameraBuffer, sizeof(tagCameraBuffer), 0, EShaderType::Vertex);
+			m_RHI->BindConstantBuffer(&cameraBuffer, sizeof(tagCameraBuffer), 0, EShaderType::Pixel);
 
 			if (IsFailure(m_RHI->BeginRenderPass(pass)))
 				continue;

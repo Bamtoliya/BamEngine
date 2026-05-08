@@ -28,7 +28,6 @@ public:
 #pragma region Bounds
 public:
 	virtual std::optional<AABB> GetLocalBounds() const { return std::nullopt; }
-	virtual bool IsTransparent() const;
 #pragma endregion
 
 #pragma region Management

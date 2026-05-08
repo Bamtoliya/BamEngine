@@ -26,7 +26,7 @@ void ChannelFilter::Initialize(const wstring& ownerPrefix)
             pd.DepthStencilState.DepthWriteEnable = false;
             pd.Topology = ETopology::TriangleList;
             pd.CullMode = ECullMode::None;
-            pd.BlendMode = EBlendMode::Opaque;
+            pd.BlendState = Engine::tagBlendState{};
             return PipelineManager::Get().GetOrCreatePipeline(pd);
         };
 
@@ -119,7 +119,7 @@ void ChannelFilter::SubmitChannelPreviewPass(const wstring& sourceRTName, wstrin
             auto* rhi = Engine::Renderer::Get().GetRHI();
             ChannelViewData channelData = { capturedFlags };
 
-            rhi->BindConstantBuffer(&channelData, sizeof(ChannelViewData), 0);
+            rhi->BindConstantBuffer(&channelData, sizeof(ChannelViewData), 0, EShaderType::Pixel);
             rhi->BindTextureSampler(src->GetTexture(), Engine::SamplerManager::Get().GetDefaultSampler(), 0);
             rhi->BindPipeline(m_ChannelPreviewPipeline);
             return rhi->Draw(3);

@@ -183,7 +183,7 @@ void MaterialEditor::Initialize()
     pipeDesc.DepthStencilState.DepthWriteEnable = false;
     pipeDesc.Topology = ETopology::TriangleList;
     pipeDesc.CullMode = ECullMode::None;
-    pipeDesc.BlendMode = EBlendMode::Opaque;
+    pipeDesc.BlendState = Engine::tagBlendState{};
     m_LightingPipeline = PipelineManager::Get().GetOrCreatePipeline(pipeDesc);
 }
 
@@ -227,8 +227,8 @@ void MaterialEditor::Update(f32 dt)
         cb.cameraPosition = vec3(0.0f, 0.0f, -3.0f);
         cb.time = dt;
 
-        rhi->BindConstantBuffer(&cb, sizeof(tagCameraBuffer), 0);
-        rhi->BindConstantBuffer(&cb, sizeof(tagCameraBuffer), 3);
+        rhi->BindConstantBuffer(&cb, sizeof(tagCameraBuffer), 0, EShaderType::Vertex);
+        rhi->BindConstantBuffer(&cb, sizeof(tagCameraBuffer), 0, EShaderType::Pixel);
         };
 
     // [Pass 1] Geometry Pass: Sphere 구체를 그려 G-Buffer 5장 생성
@@ -245,7 +245,7 @@ void MaterialEditor::Update(f32 dt)
 
             struct SceneUBO { mat4 worldMatrix; };
             SceneUBO uboData = { glm::identity<mat4>() };
-            rhi->BindConstantBuffer(&uboData, sizeof(SceneUBO), 1);
+            rhi->BindConstantBuffer(&uboData, sizeof(SceneUBO), 1, EShaderType::Vertex);
 
             if (IsFailure(mat->Bind(2))) return EResult::Fail;
 
@@ -254,7 +254,7 @@ void MaterialEditor::Update(f32 dt)
             pipeDesc.PipelineType = EPipelineType::Graphics;
             pipeDesc.VertexShader = mat->GetVertexShader()->GetRHIShader();
             pipeDesc.PixelShader = mat->GetPixelShader()->GetRHIShader();
-            pipeDesc.BlendMode = mat->GetBlendMode();
+            pipeDesc.BlendState = mat->GetBlendState();
             pipeDesc.CullMode = mat->GetCullMode();
             pipeDesc.ColorAttachmentCount = 5; // 5개의 G-Buffer
 
@@ -297,7 +297,7 @@ void MaterialEditor::Update(f32 dt)
 
             // 셰도우 데이터 빈 구조체 바인딩 (에러 방지용)
             struct tagLightShadowData { mat4 mat[4]; vec4 splits; } shadowData = {};
-            rhi->BindConstantBuffer(&shadowData, sizeof(shadowData), 1);
+            rhi->BindConstantBuffer(&shadowData, sizeof(shadowData), 1, EShaderType::Pixel);
 
             rhi->BindPipeline(m_LightingPipeline);
 

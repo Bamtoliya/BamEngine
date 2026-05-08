@@ -1,6 +1,7 @@
 ﻿#pragma once
 #include "Base.h"
 #include "RenderTypes.h"
+#include "ShaderReflection.h"
 
 struct tagRHIDesc
 {
@@ -19,7 +20,6 @@ struct tagRHIPipelineDesc;
 enum class ERHIBufferType;
 
 BEGIN(Engine)
-TODO("tagSamplerDesc should move to out of Engine namespace because it is used in both RHI and RenderPass, and it is not related to RHI directly");
 struct tagSamplerDesc;
 class RHIBuffer;
 class RHIShader;
@@ -83,7 +83,7 @@ public:
     virtual EResult BindVertexBuffers(uint32 firstSlot, RHIBuffer** vertexBuffers, uint32 count);
     virtual EResult BindIndexBuffer(RHIBuffer* indexBuffer);
     virtual EResult BindConstantBuffer(void* arg, uint32 slot) BAM_PURE;
-    virtual EResult BindConstantBuffer(void* arg, uint32 size, uint32 slot) { return EResult::NotImplemented; }
+    virtual EResult BindConstantBuffer(void* arg, uint32 size, uint32 slot, EShaderType type) { return EResult::NotImplemented; }
     virtual EResult BindConstantRangeBuffer(void* arg, uint32 slot, uint32 offset, uint32 size) BAM_PURE;
 
     virtual EResult BindVertexStorageBuffers(uint32 firstSlot, RHIBuffer** storageBuffers, uint32 count);

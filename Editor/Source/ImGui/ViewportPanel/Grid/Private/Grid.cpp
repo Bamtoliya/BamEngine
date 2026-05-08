@@ -52,7 +52,7 @@ void Grid::PrepareRenderPass(const wstring& prefix)
         ERenderPassLoadOperation::RPLO_Load, ERenderPassStoreOperation::RPSO_Store,
         vec4(0.f, 0.f, 0.f, -1.f),
         410,
-        ERenderSortType::None, ERenderPassType::Custom);
+        ERenderSortType::None, ERenderPassType::Custom, EBlendMode::None);
 }
 
 void Grid::Free()
@@ -92,7 +92,7 @@ void Grid::SubmitGrid(Camera* camera, bool isOrthographic, const wstring& colorR
             desc.VertexShader = ResourceManager::Get().GetResourceHandle<Shader>(L"InfiniteGridVS")->GetRHIShader();
             desc.PixelShader = ResourceManager::Get().GetResourceHandle<Shader>(
                 isOrthographic ? L"InfiniteGrid2DPS" : L"InfiniteGrid3DPS")->GetRHIShader();
-            desc.BlendMode = EBlendMode::AlphaBlend;
+            desc.BlendState = Engine::tagBlendState{EBlendMode::AlphaBlend};
             desc.FillMode = EFillMode::Solid;
             desc.CullMode = ECullMode::None;
             desc.Topology = ETopology::TriangleList;

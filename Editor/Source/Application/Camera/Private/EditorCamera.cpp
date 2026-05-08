@@ -2,6 +2,7 @@
 #include "EditorCamera.h"
 #include "InputManager.h"
 #include "CameraManager.h"
+#include "SelectionManager.h"
 
 BEGIN(Editor)
 
@@ -13,6 +14,7 @@ Engine::EResult EditorCamera::Initialize(void* arg)
 
     m_Camera = AddComponent<Engine::Camera>(arg);
     Safe_AddRef(m_Camera);
+
 	CameraManager::Get().RemoveCamera(m_Camera);
 
     return Engine::EResult::Success;
@@ -113,6 +115,11 @@ void EditorCamera::HandleInput(Engine::f32 dt)
         if (KEY_PRESSED("D")) moveDirection += Engine::vec3(1.0f, 0.0f, 0.0f);
         if (KEY_PRESSED("Q")) moveDirection += Engine::vec3(0.0f, 1.0f, 0.0f);
         if (KEY_PRESSED("E")) moveDirection -= Engine::vec3(0.0f, 1.0f, 0.0f);
+
+        if (KEY_PRESSED(EKeyCode::F))
+        {
+            FocusGameObject(SelectionManager::Get().GetPrimarySelection());
+        }
     }
     else
     {
@@ -136,6 +143,22 @@ void EditorCamera::HandleInput(Engine::f32 dt)
     {
         moveDirection = glm::normalize(moveDirection);
         m_Transform->Translate(moveDirection * movementSpeed);
+    }
+}
+void EditorCamera::FocusGameObject(GameObject* gameObject)
+{
+	if (!gameObject) return;
+    Transform* targetTransform = gameObject->GetTransform();
+	if (!targetTransform) return;
+
+    vec3 targetPos = targetTransform->GetWorldPosition();
+	vec3 cameraPos = m_Transform->GetWorldPosition();
+
+	f32 distance = glm::distance(cameraPos, targetPos);
+    if (distance >= 15.f)
+    {
+        m_Transform->LookAt(targetPos);
+        m_Transform->SetPosition(targetPos + m_Transform->GetForward() * 10.0f);
     }
 }
 #pragma endregion

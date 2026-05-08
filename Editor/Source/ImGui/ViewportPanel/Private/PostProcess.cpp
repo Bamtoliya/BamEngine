@@ -24,7 +24,7 @@ void ToneMapping::Initialize(const wstring& prefix)
 	pd.DepthStencilState.DepthWriteEnable = false;
 	pd.Topology = Engine::ETopology::TriangleList;
 	pd.CullMode = Engine::ECullMode::None;
-	pd.BlendMode = Engine::EBlendMode::Opaque;
+	pd.BlendState = Engine::tagBlendState{};
 
 	m_Pipeline = Engine::PipelineManager::Get().GetOrCreatePipeline(pd);
 
@@ -52,7 +52,7 @@ EResult ToneMapping::SubmitPass(f32 dt, Engine::RenderPassID passID, const wstri
 
 			auto* rhi = Engine::Renderer::Get().GetRHI();
 			rhi->BindTextureSampler(src->GetTexture(), Engine::SamplerManager::Get().GetDefaultSampler(), 0);
-			rhi->BindConstantBuffer(&m_Params, sizeof(m_Params), 0);
+			rhi->BindConstantBuffer(&m_Params, sizeof(m_Params), 0, EShaderType::Pixel);
 			rhi->BindPipeline(m_Pipeline);
 			return rhi->Draw(3);
 		}, passID);

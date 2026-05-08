@@ -29,7 +29,9 @@ public:
 		vec4 overrideClearColor = vec4(0.0f, 0.0f, 0.0f, -1.0f),
 		uint32 priority = 0,
 		ERenderSortType sortType = ERenderSortType::None,
-		ERenderPassType passType = ERenderPassType::Custom);
+		ERenderPassType passType = ERenderPassType::Custom,
+		EBlendMode acceptedBlendModes = EBlendMode::Opaque | EBlendMode::AlphaBlend | EBlendMode::Additive | EBlendMode::NonPremultiplied | EBlendMode::Masked | EBlendMode::Forward | EBlendMode::Decal
+		);
 	RenderPassID GetRenderPassIDByName(const wstring& name);
 	RenderPass* GetRenderPassByID(RenderPassID id);
 	const vector<RenderPass*>& GetAllRenderPasses() const { return m_RenderPasses; }

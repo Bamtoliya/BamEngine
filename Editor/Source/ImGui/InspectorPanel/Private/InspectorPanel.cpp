@@ -100,8 +100,8 @@ void InspectorPanel::Draw()
 		{
 			ImGui::Text("No object selected.");
 		}
-		ImGui::End();
 	}
+	ImGui::End();
 }
 
 bool InspectorPanel::DrawProperties(void* instance, const TypeInfo& typeInfo)

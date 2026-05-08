@@ -196,6 +196,36 @@ constexpr SDL_GPUPrimitiveType ToSDLTopology(ETopology topology) {
     }
 }
 
+constexpr SDL_GPUBlendFactor ToSDLBlendFactor(EBlendFactor factor) {
+    switch (factor) {
+    case EBlendFactor::Zero: return SDL_GPU_BLENDFACTOR_ZERO;
+    case EBlendFactor::One: return SDL_GPU_BLENDFACTOR_ONE;
+    case EBlendFactor::SrcColor: return SDL_GPU_BLENDFACTOR_SRC_COLOR;
+    case EBlendFactor::InvSrcColor: return SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_COLOR;
+    case EBlendFactor::DstColor: return SDL_GPU_BLENDFACTOR_DST_COLOR;
+    case EBlendFactor::InvDstColor: return SDL_GPU_BLENDFACTOR_ONE_MINUS_DST_COLOR;
+    case EBlendFactor::SrcAlpha: return SDL_GPU_BLENDFACTOR_SRC_ALPHA;
+    case EBlendFactor::InvSrcAlpha: return SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    case EBlendFactor::DstAlpha: return SDL_GPU_BLENDFACTOR_DST_ALPHA;
+    case EBlendFactor::InvDstAlpha: return SDL_GPU_BLENDFACTOR_ONE_MINUS_DST_ALPHA;
+    case EBlendFactor::SrcAlphaSaturate: return SDL_GPU_BLENDFACTOR_SRC_ALPHA_SATURATE;
+    case EBlendFactor::BlendColor: return SDL_GPU_BLENDFACTOR_CONSTANT_COLOR;
+    case EBlendFactor::InvBlendColor: return SDL_GPU_BLENDFACTOR_ONE_MINUS_CONSTANT_COLOR;
+    default: return SDL_GPU_BLENDFACTOR_INVALID; // 기본값
+    }
+}
+
+constexpr SDL_GPUBlendOp ToSDLBlendOp(EBlendOp op) {
+    switch (op) {
+    case EBlendOp::Add: return SDL_GPU_BLENDOP_ADD;
+    case EBlendOp::Subtract: return SDL_GPU_BLENDOP_SUBTRACT;
+    case EBlendOp::RevSubtract: return SDL_GPU_BLENDOP_REVERSE_SUBTRACT;
+    case EBlendOp::Min: return SDL_GPU_BLENDOP_MIN;
+    case EBlendOp::Max: return SDL_GPU_BLENDOP_MAX;
+    default: return SDL_GPU_BLENDOP_INVALID; // 기본값
+    }
+}
+
 #pragma endregion
 
 #pragma region SDLGPUTexture
@@ -398,9 +428,6 @@ constexpr SDL_GPUSampleCount ToSDLGPUTextureSampleCount(Engine::ETextureSampleCo
     }
 }
 #pragma endregion
-
-
-
 
 #pragma region Vertex
 constexpr SDL_GPUVertexElementFormat ToSDLVertexFormat(EVertexElementFormat format) {
