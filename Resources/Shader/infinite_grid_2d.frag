@@ -33,7 +33,7 @@ void main() {
     // 1. NDC 화면 좌표를 2D World 좌표(XY)로 역투영 (Unproject)
     mat4 invViewProj = inverse(commonFragdata.viewProjection);
     vec4 worldPos = invViewProj * vec4(inNDC, 0.0, 1.0);
-    vec2 coord = worldPos.xy;
+    vec2 coord = worldPos.xy / worldPos.w;
 
     // 2. 1m 단위의 얇은 선 (두께 1.0)
     vec4 grid1 = grid2D(coord, 1.0, 1.0);

@@ -1,6 +1,7 @@
 const uint LIGHT_TYPE_POINT       = 0u;
 const uint LIGHT_TYPE_DIRECTIONAL = 1u;
 const uint LIGHT_TYPE_SPOT        = 2u;
+const uint LIGHT_TYPE_SKY         = 3u;
 
 const uint ATTENUATION_COEFFICIENTS   = 0u;
 const uint ATTENUATION_INVERSE_SQUARE = 1u;

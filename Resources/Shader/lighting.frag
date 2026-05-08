@@ -169,6 +169,8 @@ void main()
     vec3 F0 = mix(vec3(0.04), albedo, metallic);
 
     vec3 Lo = vec3(0.0);
+    vec3 skyAmbient = vec3(0.0);
+    bool hasSkyLight = false;
     bool consumedShadowMap = false;
 
     for (uint i = 0u; i < gLightBuffer.NumLights; ++i)
@@ -176,6 +178,27 @@ void main()
         GPULight light = gLightBuffer.Lights[i];
         if (!HasLightFlag(light.PackedFlags, LIGHT_FLAG_USE_IN_DEFERRED))
             continue;
+
+        uint ltype = GetLightType(light.PackedFlags);
+
+        if (ltype == LIGHT_TYPE_SKY)
+        {
+            hasSkyLight = true;
+
+            if (!HasLightFlag(light.PackedFlags, LIGHT_FLAG_AFFECT_DIFFUSE))
+                continue;
+
+            vec3 skyDir = normalize(light.Direction);
+            float hemiT = clamp(dot(N, skyDir) * 0.5 + 0.5, 0.0, 1.0);
+
+            vec3 zenith = max(light.Color, vec3(0.0));
+            vec3 ground = max(light.AttenuationCoeff, vec3(0.0));
+            vec3 hemiColor = mix(ground, zenith, hemiT);
+
+            float indirect = max(light.Range, 0.0) * max(light.Intensity, 0.0);
+            skyAmbient += hemiColor * albedo * indirect;
+            continue;
+        }
 
         float shadowFactor = 1.0;
         if (!consumedShadowMap && HasLightFlag(light.PackedFlags, LIGHT_FLAG_CAST_SHADOWS))
@@ -187,7 +210,7 @@ void main()
         Lo += CalcLight(light, worldPos, N, V, albedo, roughness, metallic, F0) * shadowFactor;
     }
 
-    vec3 ambient = vec3(0.03) * albedo * ao;
+    vec3 ambient = hasSkyLight ? (skyAmbient * ao) : (vec3(0.03) * albedo * ao);
     vec3 color = ambient + Lo + emission;
 
     color = color / (color + vec3(1.0));

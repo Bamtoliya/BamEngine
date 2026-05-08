@@ -59,7 +59,8 @@ void main()
     // 4. 깊이(Depth) 계산 및 덮어쓰기
     // 씬의 다른 3D 객체(사물)와 정상적으로 가려지기 위해 Z버퍼 값을 계산해 넣습니다.
     vec4 clip_space_pos = commonFragdata.viewProjection * vec4(fragPos3D, 1.0);
-    gl_FragDepth = clip_space_pos.z / clip_space_pos.w;
+    // Depth Bias: 바닥(Y=0)에 정확히 놓인 오브젝트와 Z-Fighting(겹쳐보이는 현상) 방지를 위해 아주 살짝 뒤로 밀어줍니다.
+    gl_FragDepth = (clip_space_pos.z / clip_space_pos.w) + 0.00001;
 
     // 5. 단위별 굵은 선 합성 (1m, 10m, 100m)
     vec4 grid1   = grid3D(fragPos3D, 1.0, 1.0, false);   // 1m 단위 (얇은 선)
