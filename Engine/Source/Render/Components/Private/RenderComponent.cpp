@@ -198,6 +198,7 @@ EResult RenderComponent::BindPipeline(Mesh* mesh, MaterialInterface* material, R
 	pipelineDesc.PipelineType = EPipelineType::Graphics;
 	pipelineDesc.VertexShader = material->GetVertexShader()->GetRHIShader();
 	pipelineDesc.PixelShader = material->GetPixelShader()->GetRHIShader();
+	pipelineDesc.FrontFace = material->GetFrontFace();
 	pipelineDesc.BlendState = material->GetBlendState();
 	pipelineDesc.CullMode = material->GetCullMode();
 	pipelineDesc.ColorAttachmentCount = renderPass->GetRenderTargetCount();

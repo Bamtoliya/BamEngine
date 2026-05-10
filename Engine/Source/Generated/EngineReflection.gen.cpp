@@ -392,6 +392,7 @@ IMPLEMENT_CLASS_EX(tagTransformDesc, "Engine::tagTransformDesc", "")
 #pragma region CLASS: Engine::Transform
 BEGIN_METADATA(Transform, m_Position)
 	EDITABLE
+	ONCHANGED("SetPosition", "m_Position")
 END_METADATA
 
 BEGIN_METADATA(Transform, m_RotationMode)
@@ -412,6 +413,7 @@ END_METADATA
 
 BEGIN_METADATA(Transform, m_Scale)
 	EDITABLE
+	ONCHANGED("SetScale", "m_Scale")
 END_METADATA
 
 BEGIN_METADATA(Transform, m_LocalMatrix)
@@ -438,15 +440,23 @@ BEGIN_PROPERTIES(Transform)
 	REFLECT_PROPERTY(Transform, m_WorldMatrix, "mat4", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{Transform_m_WorldMatrix_Meta})
 	REFLECT_PROPERTY(Transform, m_Flags, "Engine::ETransformFlag", reflection::EPropertyType::BitFlag, std::span<const reflection::MetadataEntry>{Transform_m_Flags_Meta})
 END_PROPERTIES
+DECLARE_FUNCTION_PARAMS(Transform, SetPosition_vec3)
+	FUNCTION_PARAM("vec3", reflection::EPropertyType::UserDefined)
+END_FUNCTION_PARAMS
 DECLARE_FUNCTION_PARAMS(Transform, SetRotation_quat)
 	FUNCTION_PARAM("quat", reflection::EPropertyType::UserDefined)
 END_FUNCTION_PARAMS
 DECLARE_FUNCTION_PARAMS(Transform, SetRotation_vec3)
 	FUNCTION_PARAM("vec3", reflection::EPropertyType::UserDefined)
 END_FUNCTION_PARAMS
+DECLARE_FUNCTION_PARAMS(Transform, SetScale_vec3)
+	FUNCTION_PARAM("vec3", reflection::EPropertyType::UserDefined)
+END_FUNCTION_PARAMS
 BEGIN_FUNCTIONS(Transform)
+	REFLECT_FUNCTION_EX(Transform, "Engine::Transform", SetPosition, "void", reflection::EPropertyType::None, Transform_SetPosition_vec3_Params)
 	REFLECT_FUNCTION_OVERLOAD_EX(Transform, "Engine::Transform", "SetRotation", "SetRotation(const quat&)", static_cast<void (Transform::*)(const quat&)>(&Transform::SetRotation), "void", reflection::EPropertyType::None, Transform_SetRotation_quat_Params)
 	REFLECT_FUNCTION_OVERLOAD_EX(Transform, "Engine::Transform", "SetRotation", "SetRotation(const vec3&)", static_cast<void (Transform::*)(const vec3&)>(&Transform::SetRotation), "void", reflection::EPropertyType::None, Transform_SetRotation_vec3_Params)
+	REFLECT_FUNCTION_EX(Transform, "Engine::Transform", SetScale, "void", reflection::EPropertyType::None, Transform_SetScale_vec3_Params)
 END_FUNCTIONS
 IMPLEMENT_CLASS_EX(Transform, "Engine::Transform", "Engine::Component")
 
@@ -1151,6 +1161,11 @@ BEGIN_METADATA(MaterialInterface, m_CullMode)
 	CATEGORY(L"Pipeline")
 END_METADATA
 
+BEGIN_METADATA(MaterialInterface, m_FrontFace)
+	EDITABLE
+	CATEGORY(L"Pipeline")
+END_METADATA
+
 BEGIN_METADATA(MaterialInterface, m_FillMode)
 	EDITABLE
 	CATEGORY(L"Pipeline")
@@ -1191,6 +1206,7 @@ DECLARE_CONTAINER_INFO(MaterialInterface, m_TextureBindings_Root, "Engine::Mater
 BEGIN_PROPERTIES(MaterialInterface)
 	REFLECT_PROPERTY(MaterialInterface, m_BlendMode, "Engine::EBlendMode", reflection::EPropertyType::BitFlag, std::span<const reflection::MetadataEntry>{MaterialInterface_m_BlendMode_Meta})
 	REFLECT_PROPERTY(MaterialInterface, m_CullMode, "Engine::ECullMode", reflection::EPropertyType::Enum, std::span<const reflection::MetadataEntry>{MaterialInterface_m_CullMode_Meta})
+	REFLECT_PROPERTY(MaterialInterface, m_FrontFace, "Engine::EFrontFace", reflection::EPropertyType::Enum, std::span<const reflection::MetadataEntry>{MaterialInterface_m_FrontFace_Meta})
 	REFLECT_PROPERTY(MaterialInterface, m_FillMode, "Engine::EFillMode", reflection::EPropertyType::Enum, std::span<const reflection::MetadataEntry>{MaterialInterface_m_FillMode_Meta})
 	REFLECT_PROPERTY(MaterialInterface, m_DepthMode, "Engine::EDepthMode", reflection::EPropertyType::Enum, std::span<const reflection::MetadataEntry>{MaterialInterface_m_DepthMode_Meta})
 	REFLECT_PROPERTY(MaterialInterface, m_DepthCompareOp, "Engine::ECompareOp", reflection::EPropertyType::Enum, std::span<const reflection::MetadataEntry>{MaterialInterface_m_DepthCompareOp_Meta})

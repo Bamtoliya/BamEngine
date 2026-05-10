@@ -5,7 +5,6 @@
 #include "Runtime.h"
 #include "ImGuiManager.h"
 #include "SelectionManager.h"
-#include "RHI.h"
 #include "AssetManager.h"
 
 BEGIN(Editor)
@@ -29,10 +28,40 @@ EResult Application::Initialize(void* arg)
 
 	RUNTIMEDESC runtimeDesc = {};
 	runtimeDesc.RendererDesc.RHIType = ERHIType::SDLGPU;
-	runtimeDesc.RendererDesc.RHIDesc.WindowHandle = m_Window;
-	runtimeDesc.RendererDesc.RHIDesc.Width = g_WindowWidth;
-	runtimeDesc.RendererDesc.RHIDesc.Height = g_WindowHeight;
-    runtimeDesc.RendererDesc.RHIDesc.IsVSync = true;
+    switch (runtimeDesc.RendererDesc.RHIType)
+    {
+        case ERHIType::SDLGPU:
+        {
+            tagSDLGPURHIDesc sdlgpuDesc = {};
+            sdlgpuDesc.BackendType = EGraphicsBackend::Vulkan; // 원하는 그래픽 백엔드 설정
+            runtimeDesc.RendererDesc.RHIDesc = &sdlgpuDesc;
+            break;
+		}
+        //case ERHITType::Vulkan:
+        //{
+        //    tagVulkanRHIDesc vulkanDesc = {};
+        //    runtimeDesc.RendererDesc.RHIDesc = &vulkanDesc;
+        //    break;
+		//}
+        //case ERHITType::DirectX12:
+        //{
+        //    tagDirctX12RHIDesc dirctX12Desc = {};
+        //    runtimeDesc.RendererDesc.RHIDesc = &dirctX12Desc;
+        //    break;
+        //}
+        //case ERHITType::Metal:
+        //{
+        //    tagMetalRHIDesc metalDesc = {};
+        //    runtimeDesc.RendererDesc.RHIDesc = &metalDesc;
+        //    break;
+        //}
+    default:
+        break;
+    }
+	runtimeDesc.RendererDesc.RHIDesc->WindowHandle = m_Window;
+	runtimeDesc.RendererDesc.RHIDesc->Width = g_WindowWidth;
+	runtimeDesc.RendererDesc.RHIDesc->Height = g_WindowHeight;
+    runtimeDesc.RendererDesc.RHIDesc->IsVSync = true;
 
     m_Runtime = Runtime::Create(&runtimeDesc);
     if (!m_Runtime) return EResult::Fail;

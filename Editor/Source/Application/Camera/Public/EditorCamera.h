@@ -24,6 +24,7 @@ public:
     virtual void Update(Engine::f32 dt) override;
     virtual void LateUpdate(Engine::f32 dt) override;
     void HandleInput(Engine::f32 dt);
+    void SetControlRotation(const Engine::vec3& eulerAngles);
 
 public:
     Engine::Camera* GetCamera() const { return m_Camera; }
@@ -50,6 +51,8 @@ private:
     bool m_IsFOVZoom = false;
     Engine::f32 m_ZoomSpeed3D = 2.0f;
     Engine::f32 m_ZoomSpeed2D = 0.5f;
+    //(X: Pitch, Y : Yaw, Z : Roll)
+    Engine::vec3 m_ControlRotation = Engine::vec3(0.0f);
 };
 
 END

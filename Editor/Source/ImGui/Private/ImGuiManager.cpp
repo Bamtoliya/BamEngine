@@ -131,8 +131,6 @@ EResult ImGuiManager::InitializeImGui()
 {
 	switch (m_RHIType)
 	{
-	case ERHIType::SDLRenderer:
-		return InitializeImGuiSDLRenderer3();
 	case ERHIType::SDLGPU:
 		return InitializeImGuiSDLGPU3();
 	default:
@@ -146,9 +144,6 @@ void ImGuiManager::Free()
 	Safe_Release(m_RHI);
 	switch (m_RHIType)
 	{
-	case ERHIType::SDLRenderer:
-		ShutdownImGuiSDLRenderer3();
-		break;
 	case ERHIType::SDLGPU:
 		ShutdownImGuiSDLGPU3();
 		break;
@@ -183,19 +178,12 @@ void ImGuiManager::Begin()
 	// [Future RHI] 교체 포인트
 	switch (m_RHIType)
 	{
-	case Engine::ERHIType::SDLRenderer:
-		SDLRenderer3Begin();
-		break;
 	case Engine::ERHIType::SDLGPU:
 		SDLGPU3Begin();
 		break;
-	case Engine::ERHIType::D3D11:
-		break;
-	case Engine::ERHIType::D3D12:
+	case Engine::ERHIType::DirectX12:
 		break;
 	case Engine::ERHIType::Vulkan:
-		break;
-	case Engine::ERHIType::OpenGL:
 		break;
 	case Engine::ERHIType::Metal:
 		break;
@@ -214,19 +202,12 @@ void ImGuiManager::End()
 	ImGui::Render();
 	switch (m_RHIType)
 	{
-	case Engine::ERHIType::SDLRenderer:
-		SDLRenderer3End();
-		break;
 	case Engine::ERHIType::SDLGPU:
 		SDLGPU3End();
 		break;
-	case Engine::ERHIType::D3D11:
-		break;
-	case Engine::ERHIType::D3D12:
+	case Engine::ERHIType::DirectX12:
 		break;
 	case Engine::ERHIType::Vulkan:
-		break;
-	case Engine::ERHIType::OpenGL:
 		break;
 	case Engine::ERHIType::Metal:
 		break;
@@ -464,76 +445,6 @@ void ImGuiManager::SetCustomStyle()
 }
 #pragma endregion
 
-#pragma region SDLRenderer3 Helper
-EResult ImGuiManager::InitializeImGuiSDLRenderer3()
-{
-
-	SDL_Renderer* NativeRenderer = reinterpret_cast<SDL_Renderer*>(m_RHI->GetNativeRHI());
-
-	if (!NativeRenderer)
-	{
-		fmt::print(stderr, "ImGuiManager Initialize Failed: NativeRenderer is nullptr\n");
-		return EResult::Fail;
-	}
-
-	if (!ImGui_ImplSDL3_InitForSDLRenderer(m_Window, NativeRenderer))
-	{
-		fmt::print(stderr, "ImGui_ImplSDL3_InitForSDLRenderer Failed\n");
-		return EResult::Fail;
-	}
-
-	if (!ImGui_ImplSDLRenderer3_Init(NativeRenderer))
-	{
-		fmt::print(stderr, "ImGui_ImplSDLRenderer3_Init Failed\n");
-		return EResult::Fail;
-	}
-
-	return EResult();
-}
-
-void ImGuiManager::SDLRenderer3Begin()
-{
-	ImGui_ImplSDLRenderer3_NewFrame();
-}
-
-void ImGuiManager::SDLRenderer3End()
-{
-	// 실제 그리기 명령 수행
-	// [Future RHI] 나중에 이 부분은 Engine::Renderer::FlushUI(GetDrawData()) 같은 형태로 바뀝니다.
-	if (!m_RHI) return;
-	SDL_Renderer* NativeRenderer = reinterpret_cast<SDL_Renderer*>(m_RHI->GetNativeRHI());
-	ImGuiIO& io = ImGui::GetIO();
-
-	// [SDL3] 중요: 렌더러의 현재 스케일을 저장해둡니다 (State Save)
-	float oldScaleX, oldScaleY;
-	SDL_GetRenderScale(NativeRenderer, &oldScaleX, &oldScaleY);
-
-	// [SDL3] ImGui용 스케일 적용 (High DPI 대응)
-	// 함수명 변경됨: SDL_RenderSetScale -> SDL_SetRenderScale
-	SDL_SetRenderScale(NativeRenderer, io.DisplayFramebufferScale.x, io.DisplayFramebufferScale.y);
-
-	// 그리기
-	ImGui_ImplSDLRenderer3_RenderDrawData(ImGui::GetDrawData(), NativeRenderer);
-
-	// [SDL3] 렌더러 스케일 복구 (State Restore)
-	// 이걸 안 하면 다음 프레임 게임 화면이 이 스케일의 영향을 받습니다.
-	SDL_SetRenderScale(NativeRenderer, oldScaleX, oldScaleY);
-
-	// [Multi-Viewport 처리]
-	// 창 밖으로 UI를 뺐을 때, 별도의 OS 윈도우를 그려주는 처리
-	if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
-	{
-		ImGui::UpdatePlatformWindows();
-		ImGui::RenderPlatformWindowsDefault();
-	}
-}
-
-void ImGuiManager::ShutdownImGuiSDLRenderer3()
-{
-	ImGui_ImplSDLRenderer3_Shutdown();
-}
-#pragma endregion
-
 #pragma region SDLGPU3 Helper
 EResult ImGuiManager::InitializeImGuiSDLGPU3()
 {
@@ -625,12 +536,13 @@ void ImGuiManager::ShutdownImGuiVulkan()
 }
 #pragma endregion
 
-#pragma region OpenGL Helper
-EResult ImGuiManager::InitializeImGuiOpenGL()
+
+#pragma region Metal Helper
+EResult ImGuiManager::InitializeImGuiMetal()
 {
 	return EResult();
 }
-void ImGuiManager::ShutdownImGuiOpenGL()
+void ImGuiManager::ShutdownImGuiMetal()
 {
 }
 #pragma endregion

@@ -21,14 +21,51 @@ EResult SDLGPURHI::Initialize(void* arg)
 		if (!desc->WindowHandle) return EResult::InvalidArgument;
 
 		m_Window = reinterpret_cast<SDL_Window*>(desc->WindowHandle);
+
+		const char* backendName = nullptr;
+		SDL_GPUShaderFormat shaderFormat = 0; // SDL_GPU_SHADERFORMAT_INVALID 역할을 위해 0으로 초기화
+
+		switch (desc->BackendType)
+		{
+		case EGraphicsBackend::Vulkan:
+			backendName = "vulkan";
+			shaderFormat = SDL_GPU_SHADERFORMAT_SPIRV;
+			break;
+		case EGraphicsBackend::DirectX12:
+			backendName = "d3d12";
+			shaderFormat = SDL_GPU_SHADERFORMAT_DXIL; // D3D12는 DXIL 바이트코드 사용
+			break;
+		case EGraphicsBackend::Metal:
+			backendName = "metal";
+			// 애플 환경의 경우 MSL 소스코드나 컴파일된 라이브러리를 사용
+			shaderFormat = SDL_GPU_SHADERFORMAT_MSL | SDL_GPU_SHADERFORMAT_METALLIB;
+			break;
+		case EGraphicsBackend::Unknown:
+		default:
+			// Unknown일 경우 nullptr을 전달하여 플랫폼 최적 백엔드 자동 선택 (Windows->D3D12, Mac->Metal 등)
+			backendName = nullptr;
+			// 자동 선택 시, 엔진이 런타임에 어떤 셰이더 포맷이든 제공할 수 있어야 하므로 가능한 모든 포맷의 비트마스크를 전달
+			shaderFormat = SDL_GPU_SHADERFORMAT_SPIRV | SDL_GPU_SHADERFORMAT_DXIL | SDL_GPU_SHADERFORMAT_MSL | SDL_GPU_SHADERFORMAT_METALLIB;
+			break;
+		}
+
+
 #ifdef _DEBUG
-		m_Device = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV, true, "vulkan");
+		const bool bDebugMode = true;
 #else
-		m_Device = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV, false, "vulkan");
+		const bool bDebugMode = false;
 #endif
+
+		m_Device = SDL_CreateGPUDevice(shaderFormat, bDebugMode, backendName);
+
+		if (!m_Device)
+		{
+			return EResult::Fail;
+		}
 
 		if (!SDL_ClaimWindowForGPUDevice(m_Device, m_Window))
 		{
+			SDL_DestroyGPUDevice(m_Device);
 			return EResult::Fail;
 		}
 

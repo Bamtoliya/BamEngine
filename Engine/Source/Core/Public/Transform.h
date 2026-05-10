@@ -129,12 +129,14 @@ private:
 
 #pragma region Setter
 public:
+	FUNCTION()
 	void SetPosition(const vec3& position);
 	FUNCTION()
 	void SetRotation(const quat& rotation);
 
 	FUNCTION()
 	void SetRotation(const vec3& eulerAngles);
+	FUNCTION()
 	void SetScale(const vec3& scale);
 	
 	void SetMobility(EMobility mobility);
@@ -167,7 +169,7 @@ public:
 #pragma region Variable
 private:
 
-	PROPERTY(EDITABLE)
+	PROPERTY(EDITABLE, ONCHANGED("SetPosition", "m_Position"))
 	vec3 m_Position = vec3(0.0f);
 
 	PROPERTY(EDITABLE)
@@ -179,7 +181,7 @@ private:
 	PROPERTY(EDITABLE, EDITCONDITION("m_RotationMode", ERotationMode::Euler, true), ONCHANGED("SetRotation", "m_EulerRotation"))
 	vec3 m_EulerRotation = vec3(0.f);
 
-	PROPERTY(EDITABLE,)
+	PROPERTY(EDITABLE, ONCHANGED("SetScale", "m_Scale"))
 	vec3 m_Scale = vec3(1.0f);
 
 	PROPERTY(NAME("PROP_LOCALMATRIX"), READONLY)

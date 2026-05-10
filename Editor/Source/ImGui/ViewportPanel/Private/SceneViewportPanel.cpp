@@ -175,7 +175,7 @@ void SceneViewportPanel::PrepareRenderTargetsAndPasses(uint32 width, uint32 heig
 		{ m_LightingColorName }, depthName,
 		ERenderPassLoadOperation::RPLO_Load, ERenderPassStoreOperation::RPSO_Store,
 		ERenderPassLoadOperation::RPLO_Load, ERenderPassStoreOperation::RPSO_Store,
-		vec4(0.0f, 0.0f, 0.0f, -1.0f), 110, ERenderSortType::BackToFront, ERenderPassType::Forward,
+		vec4(0.0f, 0.0f, 0.0f, -1.0f), 110, ERenderSortType::FrontToBack, ERenderPassType::Forward,
 		EBlendMode::Forward);
 
 	m_ForwardTransparentPassID = rpMgr.RegisterRenderPass(
@@ -184,7 +184,7 @@ void SceneViewportPanel::PrepareRenderTargetsAndPasses(uint32 width, uint32 heig
 		ERenderPassLoadOperation::RPLO_Load, ERenderPassStoreOperation::RPSO_Store,
 		ERenderPassLoadOperation::RPLO_Load, ERenderPassStoreOperation::RPSO_Store,
 		vec4(0.0f, 0.0f, 0.0f, -1.0f), 120, ERenderSortType::BackToFront, ERenderPassType::ForwardTransparent,
-		EBlendMode::AlphaBlend | EBlendMode::Additive | EBlendMode::NonPremultiplied | EBlendMode::Forward | EBlendMode::Decal);
+		EBlendMode::AlphaBlend | EBlendMode::Additive | EBlendMode::NonPremultiplied | EBlendMode::Decal);
 
 	
 

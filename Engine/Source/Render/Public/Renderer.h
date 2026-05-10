@@ -1,8 +1,8 @@
-#pragma once
+﻿#pragma once
 
 #include "Base.h"
 #include "Structs.h"
-#include "RHI.h"
+#include "RHIs.h"
 #include "RenderTypes.h"
 #include "RenderTarget.h"
 #include "FrustumCuller.h"
@@ -12,19 +12,16 @@ BEGIN(Engine)
 enum class ERHIType
 {
 	Unknown,
-	SDLRenderer,
 	SDLGPU,
-	D3D11,
-	D3D12,
-	Vulkan,
-	OpenGL,
-	Metal
+	DirectX12,		// LH, Z:[0,1], Y-UP Row-Major (adjust needed)
+	Vulkan,			// LH, Z:[0,1], Y-DOWN Column-Major
+	Metal			// LH, Z:[0,1], Y-UP Column-Major
 };
 
 struct tagRendererDesc
 {
 	ERHIType RHIType = ERHIType::Unknown;
-	tagRHIDesc RHIDesc = {};
+	tagRHIDesc* RHIDesc = {};
 };
 
 struct tagViewportCameraInfo

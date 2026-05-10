@@ -1,15 +1,29 @@
 ﻿#pragma once
 
 #include "RHI.h"
-#include <SDL3/SDL.h>
+#include "SDLGPUTypes.h"
+
+enum class EGraphicsBackend : uint8
+{
+	Unknown = 0,
+	DirectX12,
+	Vulkan,
+	Metal
+};
+
+struct tagSDLGPURHIDesc : public tagRHIDesc
+{
+	EGraphicsBackend BackendType = EGraphicsBackend::Unknown;
+};
 
 BEGIN(Engine)
-class ENGINE_API SDLRendererRHI final : public RHI
+class ENGINE_API SDLGPURHI final : public RHI
 {
 #pragma region Constructor&Destructor
 private:
-	SDLRendererRHI() {}
-	virtual ~SDLRendererRHI() = default;
+	using DESC = tagSDLGPURHIDesc;
+	SDLGPURHI() {}
+	virtual ~SDLGPURHI() = default;
 	virtual EResult Initialize(void* arg = nullptr) override;
 public:
 	static RHI* Create(void* arg = nullptr);
@@ -37,33 +51,50 @@ public:
 	virtual RHITexture* CreateDepthStencilTexture(void* data, uint32 width, uint32 height, uint32 mipLevels, uint32 arraySize) override;
 	virtual RHITexture* CreateTextureFromNativeHandle(void* nativeHandle) override;
 public:
-	virtual RHIPipeline* CreatePipeline(const tagRHIPipelineDesc& desc) override { return nullptr; }
+	virtual RHIPipeline* CreatePipeline(const tagRHIPipelineDesc& desc) override;
 public:
-	virtual RHISampler* CreateSampler(const tagSamplerDesc& desc) override { return nullptr; }
+	virtual RHISampler* CreateSampler(const tagSamplerDesc& desc) override;
 public:
-	virtual RHIShader* CreateShader(const tagRHIShaderDesc& desc) override { return nullptr; }
+	virtual RHIShader* CreateShader(const tagRHIShaderDesc& desc) override;
+public:
+	EResult UploadTextureData(SDL_GPUTexture* texture, void* data, uint32 dataSize, uint32 width, uint32 height, uint32 depthOrArraySize = 1, uint32 mipLevels = 1);
+	EResult UploadBufferData(SDL_GPUBuffer* buffer, void* data, uint32 size);
+private:
+	RHITexture* CreateTexture(const tagRHITextureDesc& desc);
 #pragma endregion
 
 #pragma region Bind Resources
 public:
 	virtual EResult BindRenderTarget(RHITexture* renderTarget, RHITexture* depthStencil)  override;
 	virtual EResult BindTexture(RHITexture* texture, uint32 slot) override;
-	virtual EResult BindTextureSampler(RHITexture* texture, RHISampler* sampler, uint32 slot) override { return EResult::NotImplemented; }
+	virtual EResult BindTextureSampler(RHITexture* texture, RHISampler* sampler, uint32 slot) override;
 	virtual EResult BindRenderTargets(uint32 count, RHITexture** renderTargets, RHITexture* depthStencil) override;
+	
 public:
 	virtual EResult BindShader(RHIShader* shader) override;
 public:
-	virtual EResult BindPipeline(RHIPipeline* pipeline) override { return EResult::NotImplemented; }
+	virtual EResult BindPipeline(RHIPipeline* pipeline) override;
 public:
 	virtual EResult BindSampler(RHISampler* sampler) override { return EResult::NotImplemented; }
 	virtual EResult BindConstantBuffer(void* arg, uint32 slot) override;
-	virtual EResult BindConstantRangeBuffer(void* arg, uint32 slot, uint32 offset, uint32 size) override { return EResult::NotImplemented; }
+	virtual EResult BindConstantBuffer(void* arg, uint32 size, uint32 slot, EShaderType type) override;
+	virtual EResult BindConstantRangeBuffer(void* arg, uint32 slot, uint32 offset, uint32 size) override;
 #pragma endregion
+
+
+#pragma region RenderPass
+	virtual EResult BeginRenderPass(class RenderPass* renderPass) override;
+	virtual EResult EndRenderPass() override;
+	virtual EResult ClearRenderPass() override;
+#pragma endregion
+
 
 #pragma region Clear Resources
 public:
+	
 	virtual EResult ClearRenderTarget(RHITexture* renderTarget, vec4 color) override;
 	virtual EResult ClearDepthStencil(RHITexture* depthStencil, f32 depth, uint8 stencil) override;
+	
 #pragma endregion
 
 #pragma region Draw
@@ -71,6 +102,7 @@ public:
 	virtual EResult DrawIndexed(uint32 count) override;
 	virtual EResult DrawIndexedInstanced() override { return EResult::NotImplemented; }
 	virtual EResult DrawTexture(RHITexture* texture) override;
+	virtual EResult BlitTexture(class RHITexture* src, class RHITexture* dst) override;
 #pragma endregion
 
 #pragma region Setter
@@ -79,20 +111,21 @@ public:
 #pragma endregion
 
 #pragma region Getter
-	virtual void* GetNativeRHI() const override { return m_Renderer; }
+	virtual void* GetNativeRHI() const override { return m_Device; }
 	virtual void* GetWindowHandle() const override { return m_Window; }
+	virtual void* GetCurrentCommandBuffer() const override { return m_CurrentCommandBuffer; }
 #pragma endregion
 
 #pragma region Variables
 private:
-	SDL_Window*		m_Window		= { nullptr };
-	SDL_Renderer*	m_Renderer		= { nullptr };
+	SDL_Window* m_Window = { nullptr };
+	SDL_GPUDevice* m_Device = { nullptr };
+	SDL_GPUCommandBuffer* m_CurrentCommandBuffer = { nullptr };
+	SDL_GPURenderPass* m_CurrentRenderPass = { nullptr };
 private:
 	mat4 m_WorldMatrix = glm::identity<mat4>();
 	vec4 m_MaterialColor = vec4(1.0f);
+	vec4 m_ClearColor = vec4(0.1f, 0.1f, 0.1f, 1.0f);
 #pragma endregion
-
-
-
 };
 END

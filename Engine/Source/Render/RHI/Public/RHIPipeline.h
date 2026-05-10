@@ -17,7 +17,7 @@ struct tagRHIPipelineDesc
 	tagBlendState BlendState = {};
 	EFillMode FillMode =	EFillMode::Solid;
 	ECullMode CullMode =	ECullMode::Back;
-	EFrontFace FrontFace =	EFrontFace::CounterClockwise;
+	EFrontFace FrontFace =	EFrontFace::Clockwise;
 	ETopology Topology =	ETopology::TriangleList;
 	class RHIShader* VertexShader = nullptr;
 	class RHIShader* PixelShader = nullptr;

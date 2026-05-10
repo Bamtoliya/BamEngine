@@ -196,7 +196,17 @@ void Transform::SetRotation(const quat& rotation)
 
 	SetDirty();
 	m_Rotation = rotation;
-	m_EulerRotation = glm::degrees(glm::eulerAngles(m_Rotation));
+	vec3 newEuler = glm::degrees(glm::eulerAngles(m_Rotation));
+	for (int32 i = 0; i < 3; i++)
+	{
+		f32 diff = newEuler[i] - m_EulerRotation[i];
+		if (diff > 180.0f)
+			newEuler[i] -= 360.0f;
+		else if (diff < -180.0f)
+			newEuler[i] += 360.0f;
+	}
+
+	m_EulerRotation = newEuler;
 	UpdateLocalMatrix();
 	UpdateWorldMatrix();
 }
@@ -353,16 +363,17 @@ void Transform::LookAt(const vec3& target, const vec3& up)
 	if (glm::length2(forwardWS) < 1e-8f) return;
 	forwardWS = glm::normalize(forwardWS);
 
-	vec3 upWS = up;
-	if (glm::length2(upWS) < 1e-8f)
-		upWS = vec3(0.f, 1.f, 0.f);
-	upWS = glm::normalize(upWS);
+	vec3 rightWS = glm::normalize(glm::cross(up, forwardWS));
+	vec3 actualUp = glm::cross(forwardWS, rightWS);
 
-	if (glm::abs(glm::dot(forwardWS, upWS)) > 0.999f)
-		upWS = (glm::abs(forwardWS.y) < 0.999f) ? vec3(0.f, 1.f, 0.f) : vec3(1.f, 0.f, 0.f);
+	const mat4 lookAtMat = mat4(
+		vec4(rightWS, 0.f),
+		vec4(actualUp, 0.f),
+		vec4(forwardWS, 0.f),
+		vec4(0.f, 0.f, 0.f, 1.f)
+	);
 
-	// 축 규약이 반대면 forwardWS 대신 -forwardWS 사용
-	const quat worldRot = glm::quatLookAt(forwardWS, upWS);
+	quat worldRot = glm::quat_cast(lookAtMat);
 
 	quat localRot = worldRot;
 	if (GameObject* parent = (m_Owner ? m_Owner->GetParent() : nullptr))

@@ -3,6 +3,7 @@
 #include "Engine_Includes.h"
 #include "RHIDefinitions.h"
 #include "RenderTypes.h"
+#include "Vertex.h"
 #include <SDL3/SDL_GPU.h>
 
 static const SDL_GPUTextureFormat SDL_GPUTextureFormats[] = {

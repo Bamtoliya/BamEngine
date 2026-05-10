@@ -55,14 +55,6 @@ private:
 #pragma endregion
 
 
-#pragma region SDLRenderer3
-private:
-	EResult InitializeImGuiSDLRenderer3();
-	void SDLRenderer3Begin();
-	void SDLRenderer3End();
-	void ShutdownImGuiSDLRenderer3();
-#pragma endregion
-
 #pragma region SDLGPU3
 private:
 	EResult InitializeImGuiSDLGPU3();
@@ -80,20 +72,20 @@ private:
 #pragma endregion
 
 #pragma region Vulkan
+private:
 	EResult InitializeImGuiVulkan();
 	void VulkanBegin();
 	void VulkanEnd();
 	void ShutdownImGuiVulkan();
 #pragma endregion
 
-#pragma region OpenGL
+#pragma region Metal
 private:
-	EResult InitializeImGuiOpenGL();
-	void OpenGLBegin();
-	void OpenGLEnd();
-	void ShutdownImGuiOpenGL();
+	EResult InitializeImGuiMetal();
+	void MetalBegin();
+	void MetalEnd();
+	void ShutdownImGuiMetal();
 #pragma endregion
-
 
 #pragma region DrawUI
 private:

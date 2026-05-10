@@ -73,6 +73,7 @@ struct tagMaterialDesc : public tagResourceCreateDesc
 	EBlendMode BlendMode = EBlendMode::Opaque;
 	ECullMode CullMode = ECullMode::Back;
 	EFillMode FillMode = EFillMode::Solid;
+	EFrontFace FrontFace = EFrontFace::Clockwise;
 	EDepthMode DepthMode = EDepthMode::None;
 	ECompareOp DepthCompareOp = ECompareOp::Less;
 };
@@ -151,12 +152,14 @@ public:
 	virtual tagBlendState GetBlendState();
 	virtual EBlendMode GetBlendMode() const { return m_BlendMode; }
 	virtual ECullMode GetCullMode() const { return m_CullMode; }
+	virtual EFrontFace GetFrontFace() const { return m_FrontFace; }
 	virtual EFillMode GetFillMode() const { return m_FillMode; }
 	virtual EDepthMode GetDepthMode() const { return m_DepthMode; }
 	virtual ECompareOp GetDepthCompareOp() const { return m_DepthCompareOp; }
 public:
 	virtual void SetBlendMode(EBlendMode mode) { m_BlendMode = mode; }
 	virtual void SetCullMode(ECullMode mode) { m_CullMode = mode; }
+	virtual void SetFrontFace(EFrontFace mode) { m_FrontFace = mode; }
 	virtual void SetFillMode(EFillMode mode) { m_FillMode = mode; }
 	virtual void SetDepthMode(EDepthMode mode) { m_DepthMode = mode; }
 	virtual void SetDepthCompareOp(ECompareOp op) { m_DepthCompareOp = op; }
@@ -189,6 +192,8 @@ protected:
 	EBlendMode m_BlendMode = { EBlendMode::Opaque };
 	PROPERTY(EDITABLE, CATEGORY(L"Pipeline"))
 	ECullMode m_CullMode = { ECullMode::Back };
+	PROPERTY(EDITABLE, CATEGORY(L"Pipeline"))
+	EFrontFace m_FrontFace = { EFrontFace::Clockwise };
 	PROPERTY(EDITABLE, CATEGORY(L"Pipeline"))
 	EFillMode m_FillMode = { EFillMode::Solid };
 	PROPERTY(EDITABLE, CATEGORY(L"Pipeline"))

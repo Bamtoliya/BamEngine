@@ -4,7 +4,6 @@
 #include "RHI.h"
 
 #include "SDLGPURHI.h"
-#include "SDLRendererRHI.h"
 
 #include "ResourceManager.h"
 
@@ -31,23 +30,17 @@ EResult Renderer::Initialize(void* arg)
 	if (!arg) return EResult::InvalidArgument;
 
 	CAST_DESC
-	tagRHIDesc RHIDesc = desc->RHIDesc;
 	m_RHIType = desc->RHIType;
 	switch (m_RHIType)
 	{
-	case ERHIType::SDLRenderer:
-		m_RHI = SDLRendererRHI::Create(&RHIDesc);
-		break;
 	case ERHIType::SDLGPU:
-		m_RHI = SDLGPURHI::Create(&RHIDesc);
+		m_RHI = SDLGPURHI::Create(desc->RHIDesc);
 		break;
 	default:
 		return EResult::Fail;
 	}
 	
 	if (!m_RHI) return EResult::Fail;
-
-
 
 	return EResult::Success;
 }

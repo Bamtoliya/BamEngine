@@ -23,7 +23,7 @@ enum class EBlendMode
 	Masked = 1 << 4,
 	Forward = 1 << 5,
 	Decal = 1 << 6,
-	ALL = 1 << 7 -1
+	ALL = (1 << 7) - 1
 };
 
 ENABLE_BITMASK_OPERATORS(EBlendMode)
