@@ -2,6 +2,7 @@
 
 #include "SkyLight.h"
 #include "Transform.h"
+#include "GameObject.h"
 #include "SkyRenderer.h"
 #include "ComponentRegistry.h"
 

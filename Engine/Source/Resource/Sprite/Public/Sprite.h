@@ -64,7 +64,7 @@ private:
 	PROPERTY(READONLY)
 	ResourceHandle<Texture> m_Texture;
 
-	PROPERTY()
+	PROPERTY(READONLY)
 	Rect m_Region = { 0.f, 0.f, 0.f, 0.f };
 
 	PROPERTY(DEFAULT(vec2(0.5f, 0.5f)))

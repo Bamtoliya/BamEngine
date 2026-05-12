@@ -2,6 +2,7 @@
 
 #pragma region Transform
 #include "Transform.h"
+#include "RectTransform.h"
 #pragma endregion
 
 #pragma region Collider
@@ -19,6 +20,7 @@
 #include "SkinnedMeshRenderer.h"
 #include "SpriteRenderer.h"
 #include "SkyRenderer.h"
+#include "UIRenderer.h"
 #pragma endregion
 
 #pragma region Lights
@@ -26,3 +28,6 @@
 #include "SkyLight.h"
 #pragma endregion
 
+#pragma region UIs
+#include "UIImage.h"
+#pragma endregion

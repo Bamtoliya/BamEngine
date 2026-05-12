@@ -4,6 +4,7 @@
 
 // [Header Includes]
 #include "Core/Public/Interface/Component.h"
+#include "Core/Public/RectTransform.h"
 #include "Core/Public/Structs.h"
 #include "Core/Public/Transform.h"
 #include "Core/Public/Vertex.h"
@@ -38,6 +39,8 @@
 #include "Resource/Texture/Public/Texture.h"
 #include "UI/Button/Public/Button.h"
 #include "UI/Public/UIComponent.h"
+#include "UI/Public/UIImage.h"
+#include "UI/Public/UIRenderComponent.h"
 #include "World/Layer/Public/Layer.h"
 #include "World/Public/GameObject.h"
 #include "World/Scene/Public/Scene.h"
@@ -49,6 +52,80 @@
 // [ENUM REFLECTIONS]
 // ==========================================================
 #pragma region EnumReflections
+// Enum: Engine::EAlignment
+BEGIN_ENUM(EAlignment)
+	REFLECT_ENUM_ENTRY(EAlignment, TopLeft)
+	REFLECT_ENUM_ENTRY(EAlignment, TopCenter)
+	REFLECT_ENUM_ENTRY(EAlignment, TopRight)
+	REFLECT_ENUM_ENTRY(EAlignment, MiddleLeft)
+	REFLECT_ENUM_ENTRY(EAlignment, MiddleCenter)
+	REFLECT_ENUM_ENTRY(EAlignment, MiddleRight)
+	REFLECT_ENUM_ENTRY(EAlignment, BottomLeft)
+	REFLECT_ENUM_ENTRY(EAlignment, BottomCenter)
+	REFLECT_ENUM_ENTRY(EAlignment, BottomRight)
+END_ENUM_REFLECT_EX(EAlignment, "Engine::EAlignment")
+
+// Enum: Engine::ERectSpace
+BEGIN_ENUM(ERectSpace)
+	REFLECT_ENUM_ENTRY(ERectSpace, Local)
+	REFLECT_ENUM_ENTRY(ERectSpace, Screen)
+END_ENUM_REFLECT_EX(ERectSpace, "Engine::ERectSpace")
+
+// Enum: Engine::ERectPivot
+BEGIN_ENUM(ERectPivot)
+	REFLECT_ENUM_ENTRY(ERectPivot, Custorm)
+	REFLECT_ENUM_ENTRY(ERectPivot, TopLeft)
+	REFLECT_ENUM_ENTRY(ERectPivot, TopCenter)
+	REFLECT_ENUM_ENTRY(ERectPivot, TopRight)
+	REFLECT_ENUM_ENTRY(ERectPivot, MiddleLeft)
+	REFLECT_ENUM_ENTRY(ERectPivot, MiddleCenter)
+	REFLECT_ENUM_ENTRY(ERectPivot, MiddleRight)
+	REFLECT_ENUM_ENTRY(ERectPivot, BottomLeft)
+	REFLECT_ENUM_ENTRY(ERectPivot, BottomCenter)
+	REFLECT_ENUM_ENTRY(ERectPivot, BottomRight)
+END_ENUM_REFLECT_EX(ERectPivot, "Engine::ERectPivot")
+
+// Enum: Engine::ERectAnchor
+BEGIN_ENUM(ERectAnchor)
+	REFLECT_ENUM_ENTRY(ERectAnchor, Custorm)
+	REFLECT_ENUM_ENTRY(ERectAnchor, TopLeft)
+	REFLECT_ENUM_ENTRY(ERectAnchor, TopCenter)
+	REFLECT_ENUM_ENTRY(ERectAnchor, TopRight)
+	REFLECT_ENUM_ENTRY(ERectAnchor, MiddleLeft)
+	REFLECT_ENUM_ENTRY(ERectAnchor, MiddleCenter)
+	REFLECT_ENUM_ENTRY(ERectAnchor, MiddleRight)
+	REFLECT_ENUM_ENTRY(ERectAnchor, BottomLeft)
+	REFLECT_ENUM_ENTRY(ERectAnchor, BottomCenter)
+	REFLECT_ENUM_ENTRY(ERectAnchor, BottomRight)
+	REFLECT_ENUM_ENTRY(ERectAnchor, StretchTop)
+	REFLECT_ENUM_ENTRY(ERectAnchor, StretchMiddle)
+	REFLECT_ENUM_ENTRY(ERectAnchor, StretchBottom)
+	REFLECT_ENUM_ENTRY(ERectAnchor, StretchLeft)
+	REFLECT_ENUM_ENTRY(ERectAnchor, StretchCenter)
+	REFLECT_ENUM_ENTRY(ERectAnchor, StretchRight)
+	REFLECT_ENUM_ENTRY(ERectAnchor, StretchFull)
+END_ENUM_REFLECT_EX(ERectAnchor, "Engine::ERectAnchor")
+
+// Enum: Engine::ERectTransformFlags
+BEGIN_ENUM(ERectTransformFlags)
+	REFLECT_ENUM_ENTRY(ERectTransformFlags, None)
+	REFLECT_ENUM_ENTRY(ERectTransformFlags, LockPositionX)
+	REFLECT_ENUM_ENTRY(ERectTransformFlags, LockPositionY)
+	REFLECT_ENUM_ENTRY(ERectTransformFlags, LockPosition)
+	REFLECT_ENUM_ENTRY(ERectTransformFlags, LockWidth)
+	REFLECT_ENUM_ENTRY(ERectTransformFlags, LockHeight)
+	REFLECT_ENUM_ENTRY(ERectTransformFlags, LockSize)
+	REFLECT_ENUM_ENTRY(ERectTransformFlags, LockRotation)
+	REFLECT_ENUM_ENTRY(ERectTransformFlags, LockScale)
+	REFLECT_ENUM_ENTRY(ERectTransformFlags, IgnoreLayout)
+	REFLECT_ENUM_ENTRY(ERectTransformFlags, InheritAlpha)
+	REFLECT_ENUM_ENTRY(ERectTransformFlags, RaycastTarget)
+	REFLECT_ENUM_ENTRY(ERectTransformFlags, Culled)
+	REFLECT_ENUM_ENTRY(ERectTransformFlags, LockRatio)
+	REFLECT_ENUM_ENTRY(ERectTransformFlags, AllLocked)
+	REFLECT_ENUM_ENTRY(ERectTransformFlags, Default)
+END_ENUM_REFLECT_EX(ERectTransformFlags, "Engine::ERectTransformFlags")
+
 // Enum: Engine::ETransformFlag
 BEGIN_ENUM(ETransformFlag)
 	REFLECT_ENUM_ENTRY(ETransformFlag, None)
@@ -126,7 +203,6 @@ END_ENUM_REFLECT_EX(EDrawMode, "Engine::EDrawMode")
 BEGIN_ENUM(ESpriteRenderMode)
 	REFLECT_ENUM_ENTRY(ESpriteRenderMode, World)
 	REFLECT_ENUM_ENTRY(ESpriteRenderMode, Billboard)
-	REFLECT_ENUM_ENTRY(ESpriteRenderMode, UI)
 END_ENUM_REFLECT_EX(ESpriteRenderMode, "Engine::ESpriteRenderMode")
 
 // Enum: Engine::ESkyShape
@@ -356,6 +432,144 @@ IMPLEMENT_CLASS_EX(Component, "Engine::Component", "Engine::Base")
 
 #pragma endregion // CLASS: Engine::Component
 
+#pragma region CLASS: Engine::RectTransform
+BEGIN_METADATA(RectTransform, m_AnchoredPosition)
+	NAME("PROP_POSITION")
+	EDITABLE
+	RANGE()
+	ONCHANGED("SetAnchoredPosition", "m_AnchoredPosition")
+END_METADATA
+
+BEGIN_METADATA(RectTransform, m_Rotation)
+	EDITABLE
+	RANGE()
+	ONCHANGED("SetRotation", "m_Rotation")
+END_METADATA
+
+BEGIN_METADATA(RectTransform, m_Size)
+	EDITABLE
+	RANGE()
+	ONCHANGED("SetSize", "m_Size")
+END_METADATA
+
+BEGIN_METADATA(RectTransform, m_Scale)
+	EDITABLE
+	RANGE()
+	ONCHANGED("SetScale", "m_Scale")
+END_METADATA
+
+BEGIN_METADATA(RectTransform, m_AnchorMin)
+	EDITABLE
+	RANGE()
+	CATEGORY("Anchor")
+	ONCHANGED("SetAnchorMin", "m_AnchorMin")
+END_METADATA
+
+BEGIN_METADATA(RectTransform, m_AnchorMax)
+	EDITABLE
+	RANGE()
+	CATEGORY("Anchor")
+	ONCHANGED("SetAnchorMax", "m_AnchorMax")
+END_METADATA
+
+BEGIN_METADATA(RectTransform, m_Pivot)
+	EDITABLE
+	RANGE(0.f, 1.f, 0.01f)
+	ONCHANGED("SetPivot", "m_Pivot")
+END_METADATA
+
+BEGIN_METADATA(RectTransform, m_Flags)
+	EDITABLE
+	ONCHANGED("SetFlags", "m_Flags")
+END_METADATA
+
+BEGIN_METADATA(RectTransform, m_Matrix)
+	NAME("PROP_MATRIX")
+	READONLY
+	NOSERIALIZE
+	CATEGORY("Details")
+END_METADATA
+
+BEGIN_METADATA(RectTransform, m_AbsolutePosition)
+	NAME("PROP_ABSOLUTEPOSITION")
+	READONLY
+	NOSERIALIZE
+	CATEGORY("Details")
+END_METADATA
+
+BEGIN_METADATA(RectTransform, m_AbsoluteSize)
+	NAME("PROP_ABSOLUTESIZE")
+	READONLY
+	NOSERIALIZE
+	CATEGORY("Details")
+END_METADATA
+
+BEGIN_METADATA(RectTransform, m_Ratio)
+	NAME("PROP_RATIO")
+	READONLY
+	NOSERIALIZE
+	CATEGORY("Details")
+END_METADATA
+BEGIN_PROPERTIES(RectTransform)
+	REFLECT_PROPERTY(RectTransform, m_AnchoredPosition, "vec2", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{RectTransform_m_AnchoredPosition_Meta})
+	REFLECT_PROPERTY(RectTransform, m_Rotation, "f32", reflection::EPropertyType::Float32, std::span<const reflection::MetadataEntry>{RectTransform_m_Rotation_Meta})
+	REFLECT_PROPERTY(RectTransform, m_Size, "vec2", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{RectTransform_m_Size_Meta})
+	REFLECT_PROPERTY(RectTransform, m_Scale, "vec2", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{RectTransform_m_Scale_Meta})
+	REFLECT_PROPERTY(RectTransform, m_AnchorMin, "vec2", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{RectTransform_m_AnchorMin_Meta})
+	REFLECT_PROPERTY(RectTransform, m_AnchorMax, "vec2", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{RectTransform_m_AnchorMax_Meta})
+	REFLECT_PROPERTY(RectTransform, m_Pivot, "vec2", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{RectTransform_m_Pivot_Meta})
+	REFLECT_PROPERTY(RectTransform, m_Flags, "Engine::ERectTransformFlags", reflection::EPropertyType::BitFlag, std::span<const reflection::MetadataEntry>{RectTransform_m_Flags_Meta})
+	REFLECT_PROPERTY(RectTransform, m_Matrix, "mat4", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{RectTransform_m_Matrix_Meta})
+	REFLECT_PROPERTY(RectTransform, m_AbsolutePosition, "vec2", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{RectTransform_m_AbsolutePosition_Meta})
+	REFLECT_PROPERTY(RectTransform, m_AbsoluteSize, "vec2", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{RectTransform_m_AbsoluteSize_Meta})
+	REFLECT_PROPERTY(RectTransform, m_Ratio, "f32", reflection::EPropertyType::Float32, std::span<const reflection::MetadataEntry>{RectTransform_m_Ratio_Meta})
+END_PROPERTIES
+DECLARE_FUNCTION_PARAMS(RectTransform, SetSize_vec2)
+	FUNCTION_PARAM("vec2", reflection::EPropertyType::UserDefined)
+END_FUNCTION_PARAMS
+DECLARE_FUNCTION_PARAMS(RectTransform, SetAnchorMin_vec2)
+	FUNCTION_PARAM("vec2", reflection::EPropertyType::UserDefined)
+END_FUNCTION_PARAMS
+DECLARE_FUNCTION_PARAMS(RectTransform, SetAnchorMax_vec2)
+	FUNCTION_PARAM("vec2", reflection::EPropertyType::UserDefined)
+END_FUNCTION_PARAMS
+DECLARE_FUNCTION_PARAMS(RectTransform, SetAnchoredPosition_vec2)
+	FUNCTION_PARAM("vec2", reflection::EPropertyType::UserDefined)
+END_FUNCTION_PARAMS
+DECLARE_FUNCTION_PARAMS(RectTransform, SetPivot_vec2)
+	FUNCTION_PARAM("vec2", reflection::EPropertyType::UserDefined)
+END_FUNCTION_PARAMS
+DECLARE_FUNCTION_PARAMS(RectTransform, SetScale_vec2)
+	FUNCTION_PARAM("vec2", reflection::EPropertyType::UserDefined)
+END_FUNCTION_PARAMS
+DECLARE_FUNCTION_PARAMS(RectTransform, SetRotation_f32)
+	FUNCTION_PARAM("f32", reflection::EPropertyType::Float32)
+END_FUNCTION_PARAMS
+DECLARE_FUNCTION_PARAMS(RectTransform, SetFlags_ERectTransformFlags)
+	FUNCTION_PARAM("ERectTransformFlags", reflection::EPropertyType::Enum)
+END_FUNCTION_PARAMS
+DECLARE_FUNCTION_PARAMS(RectTransform, SetAnchorPreset_ERectAnchor)
+	FUNCTION_PARAM("ERectAnchor", reflection::EPropertyType::Enum)
+END_FUNCTION_PARAMS
+DECLARE_FUNCTION_PARAMS(RectTransform, SetPivotPreset_ERectPivot)
+	FUNCTION_PARAM("ERectPivot", reflection::EPropertyType::Enum)
+END_FUNCTION_PARAMS
+BEGIN_FUNCTIONS(RectTransform)
+	REFLECT_FUNCTION_EX(RectTransform, "Engine::RectTransform", SetSize, "void", reflection::EPropertyType::None, RectTransform_SetSize_vec2_Params)
+	REFLECT_FUNCTION_EX(RectTransform, "Engine::RectTransform", SetAnchorMin, "void", reflection::EPropertyType::None, RectTransform_SetAnchorMin_vec2_Params)
+	REFLECT_FUNCTION_EX(RectTransform, "Engine::RectTransform", SetAnchorMax, "void", reflection::EPropertyType::None, RectTransform_SetAnchorMax_vec2_Params)
+	REFLECT_FUNCTION_EX(RectTransform, "Engine::RectTransform", SetAnchoredPosition, "void", reflection::EPropertyType::None, RectTransform_SetAnchoredPosition_vec2_Params)
+	REFLECT_FUNCTION_EX(RectTransform, "Engine::RectTransform", SetPivot, "void", reflection::EPropertyType::None, RectTransform_SetPivot_vec2_Params)
+	REFLECT_FUNCTION_EX(RectTransform, "Engine::RectTransform", SetScale, "void", reflection::EPropertyType::None, RectTransform_SetScale_vec2_Params)
+	REFLECT_FUNCTION_EX(RectTransform, "Engine::RectTransform", SetRotation, "void", reflection::EPropertyType::None, RectTransform_SetRotation_f32_Params)
+	REFLECT_FUNCTION_EX(RectTransform, "Engine::RectTransform", SetFlags, "void", reflection::EPropertyType::None, RectTransform_SetFlags_ERectTransformFlags_Params)
+	REFLECT_FUNCTION_EX(RectTransform, "Engine::RectTransform", SetAnchorPreset, "void", reflection::EPropertyType::None, RectTransform_SetAnchorPreset_ERectAnchor_Params)
+	REFLECT_FUNCTION_EX(RectTransform, "Engine::RectTransform", SetPivotPreset, "void", reflection::EPropertyType::None, RectTransform_SetPivotPreset_ERectPivot_Params)
+END_FUNCTIONS
+IMPLEMENT_CLASS_EX(RectTransform, "Engine::RectTransform", "Engine::Component")
+
+#pragma endregion // CLASS: Engine::RectTransform
+
 #pragma region STRUCT: Engine::AABB
 BEGIN_PROPERTIES(AABB)
 	REFLECT_PROPERTY(AABB, Min, "vec3", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{})
@@ -367,11 +581,26 @@ IMPLEMENT_CLASS_EX(AABB, "Engine::AABB", "")
 #pragma endregion // STRUCT: Engine::AABB
 
 #pragma region STRUCT: Engine::Rect
+BEGIN_METADATA(Rect, Left)
+	EDITABLE
+END_METADATA
+
+BEGIN_METADATA(Rect, Top)
+	EDITABLE
+END_METADATA
+
+BEGIN_METADATA(Rect, Width)
+	EDITABLE
+END_METADATA
+
+BEGIN_METADATA(Rect, Height)
+	EDITABLE
+END_METADATA
 BEGIN_PROPERTIES(Rect)
-	REFLECT_PROPERTY(Rect, Left, "f32", reflection::EPropertyType::Float32, std::span<const reflection::MetadataEntry>{})
-	REFLECT_PROPERTY(Rect, Top, "f32", reflection::EPropertyType::Float32, std::span<const reflection::MetadataEntry>{})
-	REFLECT_PROPERTY(Rect, Width, "f32", reflection::EPropertyType::Float32, std::span<const reflection::MetadataEntry>{})
-	REFLECT_PROPERTY(Rect, Height, "f32", reflection::EPropertyType::Float32, std::span<const reflection::MetadataEntry>{})
+	REFLECT_PROPERTY(Rect, Left, "f32", reflection::EPropertyType::Float32, std::span<const reflection::MetadataEntry>{Rect_Left_Meta})
+	REFLECT_PROPERTY(Rect, Top, "f32", reflection::EPropertyType::Float32, std::span<const reflection::MetadataEntry>{Rect_Top_Meta})
+	REFLECT_PROPERTY(Rect, Width, "f32", reflection::EPropertyType::Float32, std::span<const reflection::MetadataEntry>{Rect_Width_Meta})
+	REFLECT_PROPERTY(Rect, Height, "f32", reflection::EPropertyType::Float32, std::span<const reflection::MetadataEntry>{Rect_Height_Meta})
 END_PROPERTIES
 EMPTY_FUNCTIONS(Rect)
 IMPLEMENT_CLASS_EX(Rect, "Engine::Rect", "")
@@ -624,6 +853,12 @@ END_METADATA
 
 BEGIN_METADATA(Camera, m_IsMainCamera)
 	EDITABLE
+	ONCHANGED("SetMainCamera")
+END_METADATA
+
+BEGIN_METADATA(Camera, m_CullingMask)
+	EDITABLE
+	CATEGORY("PROP_RENDER")
 END_METADATA
 BEGIN_PROPERTIES(Camera)
 	REFLECT_PROPERTY(Camera, m_FOV, "f32", reflection::EPropertyType::Float32, std::span<const reflection::MetadataEntry>{Camera_m_FOV_Meta})
@@ -635,6 +870,7 @@ BEGIN_PROPERTIES(Camera)
 	REFLECT_PROPERTY(Camera, m_ProjMatrix, "glm::mat4", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{Camera_m_ProjMatrix_Meta})
 	REFLECT_PROPERTY(Camera, m_ViewMatrix, "glm::mat4", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{Camera_m_ViewMatrix_Meta})
 	REFLECT_PROPERTY(Camera, m_IsMainCamera, "bool", reflection::EPropertyType::Bool, std::span<const reflection::MetadataEntry>{Camera_m_IsMainCamera_Meta})
+	REFLECT_PROPERTY(Camera, m_CullingMask, "uint32", reflection::EPropertyType::UInt32, std::span<const reflection::MetadataEntry>{Camera_m_CullingMask_Meta})
 END_PROPERTIES
 EMPTY_FUNCTIONS(Camera)
 IMPLEMENT_CLASS_EX(Camera, "Engine::Camera", "Engine::Component")
@@ -743,21 +979,21 @@ BEGIN_METADATA(LightSource, m_ShadowBias)
 	EDITABLE
 	EDITCONDITION("m_Flags", ELightFlags::CastShadows, false)
 	CATEGORY("Shadow")
-	RANGE(-FLT_MAX, FLT_MAX, 0.01f)
+	RANGE(-FLT_MAX, FLT_MAX, 0.001f)
 END_METADATA
 
 BEGIN_METADATA(LightSource, m_ShadowSlopeBias)
 	EDITABLE
 	EDITCONDITION("m_Flags", ELightFlags::CastShadows, false)
 	CATEGORY("Shadow")
-	RANGE(-FLT_MAX, FLT_MAX, 0.01f)
+	RANGE(-FLT_MAX, FLT_MAX, 0.1f)
 END_METADATA
 
 BEGIN_METADATA(LightSource, m_ShadowNormalBias)
 	EDITABLE
 	EDITCONDITION("m_Flags", ELightFlags::CastShadows, false)
 	CATEGORY("Shadow")
-	RANGE(-FLT_MAX, FLT_MAX, 0.01f)
+	RANGE(-FLT_MAX, FLT_MAX, 0.001f)
 END_METADATA
 
 BEGIN_METADATA(LightSource, m_Flags)
@@ -801,21 +1037,20 @@ BEGIN_METADATA(RenderComponent, m_ReceiveShadow)
 	EDITABLE
 END_METADATA
 
-BEGIN_METADATA(RenderComponent, m_RenderPassID)
-	EDITABLE
-	CATEGORY("PROP_INFORMATION")
-END_METADATA
-
 BEGIN_METADATA(RenderComponent, m_Materials)
 	EDITABLE
 END_METADATA
 
 DECLARE_CONTAINER_INFO(RenderComponent, m_Materials_Root, "ResourceHandle<MaterialInterface>", reflection::EPropertyType::ResourceHandle, reflection::LinearContainerAccessor<vector<ResourceHandle<MaterialInterface>>, ResourceHandle<MaterialInterface>>::Get())
+BEGIN_METADATA(RenderComponent, m_VisibilityChannel)
+	EDITABLE
+	CATEGORY("PROP_RENDER")
+END_METADATA
 BEGIN_PROPERTIES(RenderComponent)
 	REFLECT_PROPERTY(RenderComponent, m_DrawShadow, "bool", reflection::EPropertyType::Bool, std::span<const reflection::MetadataEntry>{RenderComponent_m_DrawShadow_Meta})
 	REFLECT_PROPERTY(RenderComponent, m_ReceiveShadow, "bool", reflection::EPropertyType::Bool, std::span<const reflection::MetadataEntry>{RenderComponent_m_ReceiveShadow_Meta})
-	REFLECT_PROPERTY(RenderComponent, m_RenderPassID, "uint32", reflection::EPropertyType::UInt32, std::span<const reflection::MetadataEntry>{RenderComponent_m_RenderPassID_Meta})
 	REFLECT_CONTAINER_PROPERTY(RenderComponent, m_Materials, "vector<ResourceHandle<MaterialInterface>>", reflection::EPropertyType::Array, &RenderComponent_m_Materials_Root_ContainerData, std::span<const reflection::MetadataEntry>{RenderComponent_m_Materials_Meta})
+	REFLECT_PROPERTY(RenderComponent, m_VisibilityChannel, "uint32", reflection::EPropertyType::UInt32, std::span<const reflection::MetadataEntry>{RenderComponent_m_VisibilityChannel_Meta})
 END_PROPERTIES
 EMPTY_FUNCTIONS(RenderComponent)
 IMPLEMENT_CLASS_EX(RenderComponent, "Engine::RenderComponent", "Engine::Component")
@@ -1388,12 +1623,16 @@ BEGIN_METADATA(Sprite, m_Texture)
 	READONLY
 END_METADATA
 
+BEGIN_METADATA(Sprite, m_Region)
+	READONLY
+END_METADATA
+
 BEGIN_METADATA(Sprite, m_Pivot)
 	DEFAULT(vec2(0.5f, 0.5f))
 END_METADATA
 BEGIN_PROPERTIES(Sprite)
 	REFLECT_PROPERTY(Sprite, m_Texture, "ResourceHandle<Texture>", reflection::EPropertyType::ResourceHandle, std::span<const reflection::MetadataEntry>{Sprite_m_Texture_Meta})
-	REFLECT_PROPERTY(Sprite, m_Region, "Engine::Rect", reflection::EPropertyType::Struct, std::span<const reflection::MetadataEntry>{})
+	REFLECT_PROPERTY(Sprite, m_Region, "Engine::Rect", reflection::EPropertyType::Struct, std::span<const reflection::MetadataEntry>{Sprite_m_Region_Meta})
 	REFLECT_PROPERTY(Sprite, m_Pivot, "vec2", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{Sprite_m_Pivot_Meta})
 END_PROPERTIES
 EMPTY_FUNCTIONS(Sprite)
@@ -1439,6 +1678,54 @@ EMPTY_FUNCTIONS(UIComponent)
 IMPLEMENT_CLASS_EX(UIComponent, "Engine::UIComponent", "Engine::Component")
 
 #pragma endregion // CLASS: Engine::UIComponent
+
+#pragma region CLASS: Engine::UIImage
+BEGIN_METADATA(UIImage, m_Tiling)
+	EDITABLE
+	RANGE()
+END_METADATA
+
+BEGIN_METADATA(UIImage, m_Offset)
+	EDITABLE
+	RANGE()
+END_METADATA
+
+BEGIN_METADATA(UIImage, m_SpriteHandle)
+	EDITABLE
+END_METADATA
+BEGIN_PROPERTIES(UIImage)
+	REFLECT_PROPERTY(UIImage, m_Tiling, "vec2", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{UIImage_m_Tiling_Meta})
+	REFLECT_PROPERTY(UIImage, m_Offset, "vec2", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{UIImage_m_Offset_Meta})
+	REFLECT_PROPERTY(UIImage, m_SpriteHandle, "ResourceHandle<Sprite>", reflection::EPropertyType::ResourceHandle, std::span<const reflection::MetadataEntry>{UIImage_m_SpriteHandle_Meta})
+END_PROPERTIES
+EMPTY_FUNCTIONS(UIImage)
+IMPLEMENT_CLASS_EX(UIImage, "Engine::UIImage", "Engine::UIRenderComponent")
+
+#pragma endregion // CLASS: Engine::UIImage
+
+#pragma region CLASS: Engine::UIRenderComponent
+BEGIN_METADATA(UIRenderComponent, m_Color)
+	EDITABLE
+	COLOR()
+END_METADATA
+
+BEGIN_METADATA(UIRenderComponent, m_VisibilityChannel)
+	EDITABLE
+	CATEGORY("PROP_RENDER")
+END_METADATA
+
+BEGIN_METADATA(UIRenderComponent, m_Material)
+	EDITABLE
+END_METADATA
+BEGIN_PROPERTIES(UIRenderComponent)
+	REFLECT_PROPERTY(UIRenderComponent, m_Color, "vec4", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{UIRenderComponent_m_Color_Meta})
+	REFLECT_PROPERTY(UIRenderComponent, m_VisibilityChannel, "uint32", reflection::EPropertyType::UInt32, std::span<const reflection::MetadataEntry>{UIRenderComponent_m_VisibilityChannel_Meta})
+	REFLECT_PROPERTY(UIRenderComponent, m_Material, "ResourceHandle<MaterialInterface>", reflection::EPropertyType::ResourceHandle, std::span<const reflection::MetadataEntry>{UIRenderComponent_m_Material_Meta})
+END_PROPERTIES
+EMPTY_FUNCTIONS(UIRenderComponent)
+IMPLEMENT_CLASS_EX(UIRenderComponent, "Engine::UIRenderComponent", "Engine::UIComponent")
+
+#pragma endregion // CLASS: Engine::UIRenderComponent
 
 #pragma region CLASS: Engine::Layer
 DECLARE_CONTAINER_INFO(Layer, m_GameObjects_Root, "Engine::GameObject", reflection::EPropertyType::Object, reflection::LinearContainerAccessor<vector<GameObject*>, GameObject*>::Get())

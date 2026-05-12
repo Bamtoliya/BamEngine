@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "ImGuiManager.h"
 #include "ResourceEditorInterface.h"
@@ -111,75 +111,110 @@ bool TryGetDefaultFromMetadata(const PropertyInfo& property, T& outValue)
 
 	try
 	{
+		string_view trimmed = TrimView(literal);
+		bool isEmptyBraces = (trimmed == "{}" || trimmed == "{" || trimmed == "");
+
 		if constexpr (std::is_integral_v<T> && std::is_signed_v<T>)
 		{
+			if (isEmptyBraces) { outValue = static_cast<T>(0); return true; }
 			outValue = static_cast<T>(std::stoll(literal));
 			return true;
 		}
 
 		if constexpr (std::is_integral_v<T> && std::is_unsigned_v<T>)
 		{
+			if (isEmptyBraces) { outValue = static_cast<T>(0); return true; }
 			outValue = static_cast<T>(std::stoull(literal));
 			return true;
 		}
 
 		if constexpr (std::is_same_v<T, f32>)
 		{
+			if (isEmptyBraces) { outValue = 0.0f; return true; }
 			outValue = static_cast<f32>(std::stod(literal));
 			return true;
 		}
 
 		if constexpr (std::is_same_v<T, double>)
 		{
+			if (isEmptyBraces) { outValue = 0.0; return true; }
 			outValue = std::stod(literal);
 			return true;
 		}
 
 		if constexpr (std::is_same_v<T, vec2>)
 		{
+			if (isEmptyBraces) { outValue = vec2(0); return true; }
 			vector<f32> nums;
-			if (!ParseNumberList(literal, nums) || nums.size() < 2)
-			{
-				return false;
-			}
-
-			outValue = vec2(nums[0], nums[1]);
+			if (!ParseNumberList(literal, nums) || nums.empty()) return false;
+			if (nums.size() == 1) outValue = vec2(nums[0]);
+			else if (nums.size() >= 2) outValue = vec2(nums[0], nums[1]);
+			else return false;
 			return true;
 		}
 
 		if constexpr (std::is_same_v<T, vec3>)
 		{
+			if (isEmptyBraces) { outValue = vec3(0); return true; }
 			vector<f32> nums;
-			if (!ParseNumberList(literal, nums) || nums.size() < 3)
-			{
-				return false;
-			}
-
-			outValue = vec3(nums[0], nums[1], nums[2]);
+			if (!ParseNumberList(literal, nums) || nums.empty()) return false;
+			if (nums.size() == 1) outValue = vec3(nums[0]);
+			else if (nums.size() >= 3) outValue = vec3(nums[0], nums[1], nums[2]);
+			else return false;
 			return true;
 		}
 
 		if constexpr (std::is_same_v<T, vec4>)
 		{
+			if (isEmptyBraces) { outValue = vec4(0); return true; }
 			vector<f32> nums;
-			if (!ParseNumberList(literal, nums) || nums.size() < 4)
-			{
-				return false;
-			}
-
-			outValue = vec4(nums[0], nums[1], nums[2], nums[3]);
+			if (!ParseNumberList(literal, nums) || nums.empty()) return false;
+			if (nums.size() == 1) outValue = vec4(nums[0]);
+			else if (nums.size() >= 4) outValue = vec4(nums[0], nums[1], nums[2], nums[3]);
+			else return false;
 			return true;
 		}
 
 		if constexpr (std::is_same_v<T, quat>)
 		{
+			if (isEmptyBraces) { outValue = quat(1, 0, 0, 0); return true; }
 			vector<f32> nums;
-			if (!ParseNumberList(literal, nums) || nums.size() < 4)
-			{
-				return false;
-			}
+			if (!ParseNumberList(literal, nums) || nums.empty()) return false;
+			if (nums.size() >= 4) outValue = quat(nums[3], nums[0], nums[1], nums[2]);
+			else return false;
+			return true;
+		}
 
-			outValue = quat(nums[3], nums[0], nums[1], nums[2]);
+		if constexpr (std::is_same_v<T, mat3>)
+		{
+			if (isEmptyBraces) { outValue = mat3(0); return true; }
+			vector<f32> nums;
+			if (!ParseNumberList(literal, nums) || nums.empty()) return false;
+			if (nums.size() == 1) outValue = mat3(nums[0]);
+			else if (nums.size() >= 9) 
+			{
+				outValue = mat3(nums[0], nums[1], nums[2],
+								nums[3], nums[4], nums[5],
+								nums[6], nums[7], nums[8]);
+			}
+			else return false;
+			return true;
+		}
+
+		if constexpr (std::is_same_v<T, mat4>)
+		{
+			if (isEmptyBraces) { outValue = mat4(0); return true; }
+			vector<f32> nums;
+			if (!ParseNumberList(literal, nums) || nums.empty()) return false;
+			if (nums.size() == 1) outValue = mat4(nums[0]);
+			else if (nums.size() >= 16) 
+			{
+				outValue = mat4(nums[0], nums[1], nums[2], nums[3],
+								nums[4], nums[5], nums[6], nums[7],
+								nums[8], nums[9], nums[10], nums[11],
+								nums[12], nums[13], nums[14], nums[15]);
+			}
+			else return false;
 			return true;
 		}
 	}
@@ -1211,13 +1246,18 @@ bool PropertyDrawer::DrawFloatProperty(void* data, const TypeInfo& typeinfo, con
 		double* value = reinterpret_cast<double*>(data);
 		const double resetValue = ResolveDefaultValue<double>(typeinfo, property, 0.0);
 
-		if (range.has_value())
+		if (range.has_value() && range->HasFiniteBounds())
 		{
 			const double minValue = static_cast<double>(range->Min);
 			const double maxValue = static_cast<double>(range->Max);
 
 			changed |= ImGui::SliderScalar("##value", ImGuiDataType_Double, value, &minValue, &maxValue, "%.3f");
 			changed |= ApplyMouseWheelInput(value, resetValue, range->Speed, range->Speed * 10.0f, true, minValue, maxValue);
+		}
+		else if (range.has_value())
+		{
+			changed |= ImGui::DragScalar("##value", ImGuiDataType_Double, value, range->Speed);
+			changed |= ApplyMouseWheelInput(value, resetValue, range->Speed, range->Speed * 10.0f);
 		}
 		else
 		{
@@ -1232,10 +1272,15 @@ bool PropertyDrawer::DrawFloatProperty(void* data, const TypeInfo& typeinfo, con
 	f32* value = reinterpret_cast<f32*>(data);
 	const f32 resetValue = ResolveDefaultValue<f32>(typeinfo, property, 0.0f);
 
-	if (range.has_value())
+	if (range.has_value() && range->HasFiniteBounds())
 	{
 		changed |= ImGui::SliderFloat("##value", value, range->Min, range->Max, "%.3f", ImGuiSliderFlags_None);
 		changed |= ApplyMouseWheelInput(value, resetValue, range->Speed, range->Speed * 10.0f, true, range->Min, range->Max);
+	}
+	else if (range.has_value())
+	{
+		changed |= ImGui::DragFloat("##value", value, range->Speed);
+		changed |= ApplyMouseWheelInput(value, resetValue, range->Speed, range->Speed * 10.0f);
 	}
 	else
 	{

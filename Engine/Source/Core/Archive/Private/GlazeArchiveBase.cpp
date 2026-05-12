@@ -127,7 +127,7 @@ void GlazeArchiveBase::Process(string_view key, int64& v)
 
 	if (IsWriting())
 	{
-		(*currentTop)[keyStr] = static_cast<f64>(v);
+		(*currentTop)[keyStr] = std::to_string(v);
 	}
 	else if (IsReading() && currentTop->is_object())
 	{
@@ -135,7 +135,10 @@ void GlazeArchiveBase::Process(string_view key, int64& v)
 		auto it = obj.find(keyStr);
 		if (it != obj.end() && it->second.is_number())
 		{
-			v = it->second.get_number();
+			if (it->second.is_string())
+				v = std::stoll(it->second.get_string());
+			else if (it->second.is_number())  // 구버전 호환
+				v = static_cast<int64>(it->second.get_number());
 		}
 	}
 }
@@ -207,7 +210,7 @@ void GlazeArchiveBase::Process(string_view key, uint64& v)
 
 	if (IsWriting())
 	{
-		(*currentTop)[keyStr] = static_cast<f64>(v);
+		(*currentTop)[keyStr] = std::to_string(v);
 	}
 	else if (IsReading() && currentTop->is_object())
 	{
@@ -215,7 +218,10 @@ void GlazeArchiveBase::Process(string_view key, uint64& v)
 		auto it = obj.find(keyStr);
 		if (it != obj.end() && it->second.is_number())
 		{
-			v = it->second.get_number();
+			if (it->second.is_string())
+				v = std::stoull(it->second.get_string());
+			else if (it->second.is_number())  // 구버전 호환
+				v = static_cast<uint64>(it->second.get_number());
 		}
 	}
 }

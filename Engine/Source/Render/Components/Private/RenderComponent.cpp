@@ -27,7 +27,6 @@ EResult RenderComponent::Initialize(void* arg)
 void RenderComponent::Free()
 {
 	Component::Free();
-	m_RenderPassID = { INVALID_PASS_ID };
 	m_Materials.clear();
 	for (auto& pair : m_DynamicInstances)
 	{
@@ -55,17 +54,23 @@ void RenderComponent::LateUpdate(f32 dt)
 		for (const auto& passInfo : activePasses)
 		{
 			if (!passInfo.RenderPass) continue;
-
+			const RenderPassID passID = passInfo.RenderPass->GetID();
 			const ERenderPassType passType = passInfo.RenderPass->GetPassType();
 
 			if (passType == ERenderPassType::Shadow)
 			{
-				if (!m_DrawShadow) continue;
-				if (LightManager::Get().GetShadowCastingLights().empty()) continue;
+				if (!m_DrawShadow || LightManager::Get().GetShadowCastingLights().empty())
+					continue;
+
+				TODO("실제 그림자를 그리는 Light 객체로 변경해야함");
+				if ((LightManager::Get().GetShadowCastingLights()[0]->GetLightingLayerMask() & m_VisibilityChannel) == 0)
+					continue;
 			}
 			else
 			{
 				if (!passInfo.Camera) continue;
+				if ((passInfo.Camera->GetCullingMask() & m_VisibilityChannel) == 0)
+					continue;
 			}
 
 			if (!passInfo.RenderPass->IsAcceptsBlendMode(blendMode))
@@ -73,7 +78,7 @@ void RenderComponent::LateUpdate(f32 dt)
 
 			tagFrustum frustum;
 			bool isShadow = false;
-			if (Renderer::Get().TryGetPassFrustum(passInfo.RenderPass->GetID(), frustum, isShadow))
+			if (Renderer::Get().TryGetPassFrustum(passID, frustum, isShadow))
 			{
 				const std::optional<AABB> localBounds = GetLocalBounds();
 				if (localBounds.has_value())
@@ -90,7 +95,7 @@ void RenderComponent::LateUpdate(f32 dt)
 				}
 			}
 
-			Renderer::Get().Submit(this, passInfo.RenderPass->GetID());
+			Renderer::Get().Submit(this, passID);
 		}
 	}
 }
@@ -192,9 +197,8 @@ bool RenderComponent::HasDynamicMaterialInstance(uint32 index) const
 #pragma region Bind
 EResult RenderComponent::BindPipeline(Mesh* mesh, MaterialInterface* material, RenderPass* renderPass)
 {
-	if (!mesh || !material || !renderPass) return EResult::InvalidArgument;
 	tagRHIPipelineDesc pipelineDesc = {};
-	pipelineDesc.Topology = mesh->GetTopology();
+	pipelineDesc.Topology = mesh ? mesh->GetTopology() : ETopology::TriangleList;
 	pipelineDesc.PipelineType = EPipelineType::Graphics;
 	pipelineDesc.VertexShader = material->GetVertexShader()->GetRHIShader();
 	pipelineDesc.PixelShader = material->GetPixelShader()->GetRHIShader();
@@ -202,7 +206,7 @@ EResult RenderComponent::BindPipeline(Mesh* mesh, MaterialInterface* material, R
 	pipelineDesc.BlendState = material->GetBlendState();
 	pipelineDesc.CullMode = material->GetCullMode();
 	pipelineDesc.ColorAttachmentCount = renderPass->GetRenderTargetCount();
-	pipelineDesc.InputLayouts = mesh->GetInputLayoutDescs();
+	pipelineDesc.InputLayouts = mesh ? mesh->GetInputLayoutDescs() : std::vector<tagInputLayoutDesc>();
 
 	for (uint32 i = 0; i < pipelineDesc.ColorAttachmentCount; ++i)
 	{
@@ -210,6 +214,7 @@ EResult RenderComponent::BindPipeline(Mesh* mesh, MaterialInterface* material, R
 	}
 
 	wstring depthStencilName = renderPass->GetDepthStencilName();
+	pipelineDesc.DepthStencilAttachmentFormat = ETextureFormat::UNKNOWN;
 	if (!depthStencilName.empty())
 		pipelineDesc.DepthStencilAttachmentFormat = RenderTargetManager::Get().GetRenderTarget(depthStencilName)->GetFormat();
 	pipelineDesc.DepthStencilState.DepthTestEnable = (!renderPass->GetDepthStencilName().empty()) && (material->GetDepthMode() != EDepthMode::None);

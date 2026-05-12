@@ -160,7 +160,7 @@ tagCameraBuffer LightSource::BuildShadowCameraBuffer() const
 	// 단일 방향성 라이트의 경우, 범위를 크게 잡아서 전체 씬을 커버하도록 할 수 있습니다.
 	// 실제로는 씬의 크기에 따라 적절히 조정하는 것이 좋습니다.
 	f32 shadowRange = m_ShadowRange;
-	mat4 proj = glm::ortho(-shadowRange, shadowRange, -shadowRange, shadowRange, 0.1f, shadowRange * 2.0f);
+	mat4 proj = glm::ortho(-shadowRange, shadowRange, -shadowRange, shadowRange, -shadowRange, shadowRange * 2.0f);
 	buffer.viewMatrix = view;
 	buffer.projMatrix = proj;
 	buffer.viewProjMatrix = proj * view;

@@ -80,8 +80,15 @@ public:
 #pragma region Main Camera
 public:
 	bool IsMainCamera() const { return m_IsMainCamera; }
-	void SetMainCamera(bool isMain);
+	void SetMainCamera(bool isMain = true);
 #pragma endregion
+
+#pragma region Culling Mask
+public:
+	uint32 GetCullingMask() const { return m_CullingMask; }
+	void SetCullingMask(uint32 mask) { m_CullingMask = mask; }
+#pragma endregion
+
 
 #pragma region Save&Load
 public:
@@ -111,8 +118,11 @@ private:
 	glm::mat4 m_ViewMatrix = glm::identity<mat4>();
 	glm::mat4 m_ViewMatrixInv = glm::identity<mat4>();
 
-	PROPERTY(EDITABLE)
+	PROPERTY(EDITABLE, ONCHANGED("SetMainCamera"))
 	bool m_IsMainCamera = { false };
+
+	PROPERTY(EDITABLE, CATEGORY("PROP_RENDER"))
+	uint32 m_CullingMask = { 0xFFFFFFFF }; // 기본값: 모든 비트 ON (모든 레이어 렌더링)
 #pragma endregion	
 };
 END

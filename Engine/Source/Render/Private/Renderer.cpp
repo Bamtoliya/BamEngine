@@ -11,6 +11,7 @@
 #include "RenderPassManager.h"
 #include "RenderTargetManager.h"
 #include "RenderComponent.h"
+#include "UIRenderComponent.h"
 
 #include "RHIPipeline.h"
 
@@ -60,7 +61,6 @@ void Renderer::Free()
 }
 #pragma endregion
 
-
 #pragma region Render Management	
 EResult Renderer::BeginFrame()
 {
@@ -76,6 +76,8 @@ EResult Renderer::BeginFrame()
 EResult Renderer::Render(f32 dt)
 {
 	unordered_map<RenderPassID, vector<Camera*>> jobsPerPass;
+	uint32 rtWidth = m_RHI->GetSwapChainWidth();
+	uint32 rtHeight = m_RHI->GetSwapChainHeight();
 	for (const auto& viewportInfo : m_ViewportCameras)
 	{
     	if (!viewportInfo.RenderPass) continue;
@@ -86,7 +88,8 @@ EResult Renderer::Render(f32 dt)
 
 	for (const auto& pass : renderPasses)
 	{
-		if (pass->GetPassType() == ERenderPassType::Shadow && LightManager::Get().GetShadowCastingLights().empty())
+		const ERenderPassType passType = pass->GetPassType();
+		if (passType == ERenderPassType::Shadow && LightManager::Get().GetShadowCastingLights().empty())
 			continue;
 		auto jobsIt = jobsPerPass.find(pass->GetID());
 
@@ -99,9 +102,17 @@ EResult Renderer::Render(f32 dt)
 		for (Camera* cam : cameras)
 		{
 			tagCameraBuffer cameraBuffer = {};
-			if (pass->GetPassType() == ERenderPassType::Shadow)
+			
+			if (passType == ERenderPassType::Shadow)
 			{
 				cameraBuffer = LightManager::Get().GetShadowCameraBuffer(uint32(0));
+			}
+			else if (passType == ERenderPassType::UI)
+			{
+				cameraBuffer.viewMatrix = glm::identity<mat4>();
+				cameraBuffer.projMatrix = glm::ortho(0.0f, static_cast<f32>(rtWidth), static_cast<f32>(rtHeight), 0.0f, -1.0f, 1.0f);
+				cameraBuffer.viewProjMatrix = cameraBuffer.projMatrix * cameraBuffer.viewMatrix;
+				cameraBuffer.cameraPosition = vec3(0.f);
 			}
 			else if (cam)
 			{
@@ -121,8 +132,6 @@ EResult Renderer::Render(f32 dt)
 			if (IsFailure(m_RHI->BeginRenderPass(pass)))
 				continue;
 
-			uint32 rtWidth = m_RHI->GetSwapChainWidth();
-			uint32 rtHeight = m_RHI->GetSwapChainHeight();
 			if (pass->GetRenderTargetCount() > 0)
 			{
 				RenderTarget* rt = RenderTargetManager::Get().GetRenderTarget(pass->GetRenderTargetName(0));
@@ -144,10 +153,19 @@ EResult Renderer::Render(f32 dt)
 			m_RHI->SetViewport(0, 0, rtWidth, rtHeight);
 
 
-			auto it = m_RenderQueues.find(pass->GetID());
-			if (it != m_RenderQueues.end())
-				RenderComponents(dt, it->second, pass->GetSortType(), pass);
-
+			if (passType == ERenderPassType::UI)
+			{
+				auto uiIt = m_UIRenderQueues.find(pass->GetID());
+				if (uiIt != m_UIRenderQueues.end())
+					RenderUIComponents(dt, uiIt->second, pass->GetSortType(), pass);
+			}
+			else
+			{
+				auto it = m_RenderQueues.find(pass->GetID());
+				if (it != m_RenderQueues.end())
+					RenderComponents(dt, it->second, pass->GetSortType(), pass);
+			}
+			
 			auto customIt = m_CustomRenderQueues.find(pass->GetID());
 			if (customIt != m_CustomRenderQueues.end())
 			{
@@ -199,6 +217,23 @@ EResult Renderer::RenderComponents(f32 dt, vector<class RenderComponent*> queue,
 	return EResult::Success;
 }
 
+EResult Renderer::RenderUIComponents(f32 dt, vector<class UIRenderComponent*> queue, ERenderSortType sortType, RenderPass* renderPass)
+{
+
+	for (auto* component : queue)
+	{
+		if (component)
+		{
+			if (IsFailure(component->Render(dt, renderPass)))
+			{
+				ENGINE_LOG_ERROR("UI Component Render Failed! Component Name: {0}", WStrToStr(component->GetOwner()->GetName()));
+				continue;
+			}
+		}
+	}
+	return EResult();
+}
+
 EResult Renderer::EndFrame()
 {
 	if (m_RHI)
@@ -214,6 +249,7 @@ EResult Renderer::EndFrame()
 	}
 
 	m_RenderQueues.clear();
+	m_UIRenderQueues.clear();
 	m_CustomRenderQueues.clear();
 	m_ViewportCameras.clear(); 
 	m_PassFrustums.clear();
@@ -221,7 +257,6 @@ EResult Renderer::EndFrame()
 	return EResult::Success;
 }
 #pragma endregion
-
 
 #pragma region Queue Management
 void Renderer::Submit(class RenderComponent* component, RenderPassID passID)
@@ -236,6 +271,11 @@ void Renderer::SubmitAllPass(RenderComponent* component)
 		m_RenderQueues[pair->GetID()].push_back(component);
 		Safe_AddRef(component);
 	}
+}
+void Renderer::SubmitUI(UIRenderComponent* uiRenderer, RenderPassID passID)
+{
+	Safe_AddRef(uiRenderer);
+	m_UIRenderQueues[passID].push_back(uiRenderer);
 }
 void Renderer::SubmitCustomCommand(const CustomRenderCommand& command, RenderPassID passID)
 {

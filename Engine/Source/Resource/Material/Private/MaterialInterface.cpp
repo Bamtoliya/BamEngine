@@ -310,9 +310,6 @@ tagBlendState MaterialInterface::GetBlendState()
 }
 #pragma endregion
 
-
-
-
 #pragma region Bind
 EResult MaterialInterface::Bind(uint32 slot)
 {

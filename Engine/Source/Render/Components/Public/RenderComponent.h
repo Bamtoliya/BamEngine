@@ -30,12 +30,6 @@ public:
 	virtual std::optional<AABB> GetLocalBounds() const { return std::nullopt; }
 #pragma endregion
 
-#pragma region Management
-public:
-	void SetRenderPassID(RenderPassID passID) { m_RenderPassID = passID; }
-	RenderPassID GetRenderPassID() const { return m_RenderPassID; }
-#pragma endregion
-
 #pragma region Material Management
 public:
 	void SetMaterial(const ResourceHandle<class MaterialInterface>& material, uint32 index = 0);	
@@ -66,12 +60,10 @@ protected:
 	bool m_DrawShadow = { false };
 	PROPERTY(EDITABLE)
 	bool m_ReceiveShadow = { false };
-	PROPERTY(EDITABLE, CATEGORY("PROP_INFORMATION"))
-	uint32 m_RenderPassID = { INVALID_PASS_ID };
-
 	PROPERTY(EDITABLE)
 	vector<ResourceHandle<MaterialInterface>> m_Materials;
-
+	PROPERTY(EDITABLE, CATEGORY("PROP_RENDER"))
+	uint32 m_VisibilityChannel = { 1 << 0 };
 private:
 	unordered_map<uint32, class MaterialInstance*> m_DynamicInstances;
 #pragma endregion

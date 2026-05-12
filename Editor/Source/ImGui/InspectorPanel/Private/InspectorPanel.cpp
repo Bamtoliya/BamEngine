@@ -4,13 +4,9 @@
 #include "SelectionManager.h"
 
 #include "GameObject.h"
-#include "Transform.h"
-#include "Component.h"
+#include "Components.h"
+#include "Resources.h"
 #include "FileDialogs.h"
-#include "RenderComponent.h"
-#include "MaterialInterface.h"
-#include "MaterialInstance.h"
-#include "Texture.h"
 #include "ResourceManager.h"
 #include "Archives.h"
 #include "IconsFontAwesome7.h"
@@ -19,9 +15,7 @@
 #include "PropertyDrawer.h"
 #include "LocalizationManager.h"
 
-#include "TextureInspector.h"
-#include "SpriteInspector.h"
-#include "ModelInspector.h"
+#include "Inspectors.h"
 #include "ResourceEditors.h"
 #include "ImGuiManager.h"
 

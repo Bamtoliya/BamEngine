@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "Editor_Includes.h"
 #include "ReflectionMetadataKeys.h"
@@ -35,6 +35,13 @@ struct ParsedMetaRange
     f32 Min = -FLT_MAX;
     f32 Max = FLT_MAX;
     f32 Speed = 1.0f;
+
+    // ImGui Slider는 min >= -FLT_MAX/2, max <= FLT_MAX/2를 요구함
+    bool HasFiniteBounds() const
+    {
+        constexpr f32 halfMax = FLT_MAX / 2.0f;
+        return Min >= -halfMax && Max <= halfMax;
+    }
 };
 
 struct ParsedMetaColor 
@@ -206,6 +213,26 @@ inline bool ParseFloatLiteral(string_view text, f32& outValue)
         normalized.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(ch))));
     }
 
+    // FLT_MAX / -FLT_MAX 리터럴 지원
+    if (normalized == "flt_max" ||
+        normalized == "+flt_max")
+    {
+        outValue = FLT_MAX;
+        return true;
+    }
+
+    if (normalized == "-flt_max")
+    {
+        outValue = -FLT_MAX;
+        return true;
+    }
+
+    if (normalized == "flt_min")
+    {
+        outValue = FLT_MIN;
+        return true;
+    }
+
     if (normalized == "intmax" ||
         normalized == "+intmax" ||
         normalized == "int_max" ||
@@ -363,29 +390,55 @@ inline bool GetMetadataBool(std::span<const Engine::MetadataEntry> metadata, uin
 
 inline std::optional<ParsedMetaRange> GetMetadataRange(std::span<const Engine::MetadataEntry> metadata)
 {
-    const string literal = GetMetadataString(metadata, MetaRangeHash);
-    if (literal.empty())
+    // RANGE 키가 존재하지 않으면 nullopt
+    const auto* entry = FindMetadata(metadata, MetaRangeHash);
+    if (!entry)
     {
         return std::nullopt;
+    }
+
+    // 문자열로 저장된 RANGE 인자를 파싱
+    const string literal = GetMetadataString(metadata, MetaRangeHash);
+
+    // RANGE() (인자 없음) → 빈 문자열 → 기본 ParsedMetaRange 반환
+    if (literal.empty())
+    {
+        return ParsedMetaRange{};
     }
 
     const vector<string> args = SplitMetadataArgs(literal);
-    if (args.size() < 2)
+
+    // 인자가 1개 이하인 경우에도 기본값 반환 (Speed만 지정 등)
+    if (args.empty())
     {
-        return std::nullopt;
+        return ParsedMetaRange{};
     }
 
     ParsedMetaRange range;
+
+    // 인자가 1개만 있으면 Speed로 취급
+    if (args.size() == 1)
+    {
+        f32 speed = 0.0f;
+        if (ParseFloatLiteral(args[0], speed))
+        {
+            range.Speed = speed;
+        }
+        return range;
+    }
+
+    // Min, Max 파싱
     if (!ParseFloatLiteral(args[0], range.Min))
     {
-        return std::nullopt;
+        return ParsedMetaRange{};
     }
 
     if (!ParseFloatLiteral(args[1], range.Max))
     {
-        return std::nullopt;
+        return ParsedMetaRange{};
     }
 
+    // Speed (3번째 인자)
     if (args.size() >= 3)
     {
         f32 speed = 0.0f;

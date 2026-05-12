@@ -196,7 +196,7 @@ public:
 
 #pragma region Transform Management
 public:
-	Transform* GetTransform() const { return m_Transform; }
+	Transform* GetTransform();
 #pragma endregion
 
 
@@ -230,7 +230,6 @@ protected:
 	unordered_set<wstring> m_TagSet = {};
 
 	GameObject* m_Parent = { nullptr };
-	Transform* m_Transform = { nullptr };
 
 	PROPERTY(NAME("PROP_COMPONENTS"))
 	vector<Component*> m_Components = {};

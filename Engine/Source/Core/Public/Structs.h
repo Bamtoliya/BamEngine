@@ -108,13 +108,13 @@ namespace Engine
 	{
 		REFLECT_STRUCT();
 
-		PROPERTY()
+		PROPERTY(EDITABLE)
 		f32 Left;
-		PROPERTY()
+		PROPERTY(EDITABLE)
 		f32 Top;
-		PROPERTY()
+		PROPERTY(EDITABLE)
 		f32 Width;
-		PROPERTY()
+		PROPERTY(EDITABLE)
 		f32	Height;
 
 		Rect() : Left(0), Top(0), Width(0), Height(0) {}

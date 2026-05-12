@@ -79,7 +79,6 @@ float CalcShadowFactor(GPULight light, vec3 worldPos, vec3 N)
     vec3 proj = lightClip.xyz / max(lightClip.w, 0.0001);
     proj.xy = proj.xy * 0.5 + 0.5;
     proj.y  = 1.0 - proj.y;   // Vulkan NDC Y-flip
-    proj.z  = proj.z * 0.5 + 0.5;
 
     if (proj.x < 0.0 || proj.x > 1.0 || proj.y < 0.0 || proj.y > 1.0 || proj.z > 1.0)
         return 1.0;

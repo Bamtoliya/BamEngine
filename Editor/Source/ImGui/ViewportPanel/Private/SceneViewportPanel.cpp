@@ -125,7 +125,7 @@ void SceneViewportPanel::PrepareRenderTargetsAndPasses(uint32 width, uint32 heig
 		{ETextureFormat::R8G8B8A8_UNORM,		ETextureUsage::RenderTarget | ETextureUsage::Sampler,		ERenderTargetBindFlag::RTBF_RenderTarget | ERenderTargetBindFlag::RTBF_ShaderResource, ERenderTargetType::GBuffer,		ETextureDimension::Texture2D, width, height, vec4(0.f), L"GBuffer_Emission"},
 		{ETextureFormat::R32G32B32A32_FLOAT,	ETextureUsage::RenderTarget | ETextureUsage::Sampler,		ERenderTargetBindFlag::RTBF_RenderTarget | ERenderTargetBindFlag::RTBF_ShaderResource, ERenderTargetType::GBuffer,		ETextureDimension::Texture2D, width, height, vec4(0.f), L"GBuffer_Position"},
 		//ShadowDepth
-		{ETextureFormat::D32_FLOAT,				ETextureUsage::DepthStencilTarget | ETextureUsage::Sampler, ERenderTargetBindFlag::RTBF_DepthStencil | ERenderTargetBindFlag::RTBF_ShaderResource, ERenderTargetType::DepthStencil, ETextureDimension::Texture2D, width, height, vec4(0.f), L"ShadowDepth"},
+		{ETextureFormat::D32_FLOAT,				ETextureUsage::DepthStencilTarget | ETextureUsage::Sampler, ERenderTargetBindFlag::RTBF_DepthStencil | ERenderTargetBindFlag::RTBF_ShaderResource, ERenderTargetType::DepthStencil, ETextureDimension::Texture2D, 4096, 4096, vec4(0.f), L"ShadowDepth"},
 		//Depth
 		{ETextureFormat::D24_UNORM_S8_UINT,		ETextureUsage::DepthStencilTarget | ETextureUsage::Sampler, ERenderTargetBindFlag::RTBF_DepthStencil | ERenderTargetBindFlag::RTBF_ShaderResource, ERenderTargetType::DepthStencil, ETextureDimension::Texture2D, width, height, vec4(0.f), L"Depth"},
 		//LightingColor
@@ -203,7 +203,8 @@ void SceneViewportPanel::PrepareRenderTargetsAndPasses(uint32 width, uint32 heig
 		prefix + L"UIOverlayPass", {}, L"",
 		ERenderPassLoadOperation::RPLO_Load, ERenderPassStoreOperation::RPSO_Store,
 		ERenderPassLoadOperation::RPLO_Load, ERenderPassStoreOperation::RPSO_Store,
-		vec4(0.f, 0.f, 0.f, -1.f), 200, ERenderSortType::FrontToBack, ERenderPassType::UI, EBlendMode::None);
+		vec4(0.f, 0.f, 0.f, -1.f), 200, ERenderSortType::FrontToBack, ERenderPassType::UI,
+		EBlendMode::Opaque | EBlendMode::Masked | EBlendMode::AlphaBlend | EBlendMode::Additive | EBlendMode::NonPremultiplied);
 #pragma endregion
 
 	m_ChannelPreviewPassID = rpMgr.RegisterRenderPass(
@@ -902,6 +903,7 @@ void SceneViewportPanel::ResizeRenderTargets(uint32 width, uint32 height)
 	auto& rtMgr = RenderTargetManager::Get();
 	for (const auto& name : m_OwnedRTNames)
 	{
+		if (name == m_ShadowDepthName) continue;
 		if (auto* rt = rtMgr.GetRenderTarget(name))
 			rt->Resize(width, height);
 	}

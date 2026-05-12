@@ -21,7 +21,6 @@ enum class ESpriteRenderMode
 {
 	World,    
     Billboard,
-    UI,
 };
 
 CLASS()

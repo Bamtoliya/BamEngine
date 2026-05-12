@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "SDLGPUPipeline.h"
+#include "SDLGPUTypes.h"
 
 #pragma region Constructor&Destructor
 

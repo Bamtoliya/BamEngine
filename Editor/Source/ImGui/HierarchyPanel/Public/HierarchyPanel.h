@@ -47,6 +47,19 @@ private:
 	//-------Environment Objects----------
 	void CreateSky(class Scene* scene);
 
+	//-------UI Objects----------
+	void CreateCanvas(class Scene* scene);
+	void CreateButton(class Scene* scene);
+	void CreateText(class Scene* scene);
+	void CreateImage(class Scene* scene);
+	void CreatePanel(class Scene* scene);
+	void CreateSlider(class Scene* scene);
+	void CreateInputField(class Scene* scene);
+	void CreateScrollView(class Scene* scene);
+	void CreateToggle(class Scene* scene);
+	void CreateDropdown(class Scene* scene);
+	void CreateProgressBar(class Scene* scene);
+
 
 #pragma region Variables
 private:

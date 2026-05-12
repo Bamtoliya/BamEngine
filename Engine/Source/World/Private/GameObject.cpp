@@ -29,7 +29,6 @@ EResult GameObject::Initialize(void* arg)
 		CAST_DESC
 		m_Name = desc->name;
 	}
-	m_Transform = AddComponent<Transform>();
 	return EResult::Success;
 }
 GameObject* GameObject::Create(void* arg)
@@ -211,6 +210,14 @@ Component* GameObject::GetComponent(const wstring& tag)
 }
 #pragma endregion
 
+#pragma region Transform Management
+Transform* GameObject::GetTransform() 
+{
+	return GetComponent<Transform>();
+}
+#pragma endregion
+
+
 #pragma region Child Management
 bool GameObject::IsDescendant(GameObject* target) const
 {
@@ -387,10 +394,6 @@ void GameObject::Deserialize(Archive& ar)
 
 		comp->SetOwner(this);
 		comp->SetDirty();
-		if (comp->GetTypeInfo().ID == RunTimeHash("Engine::Transform"))
-		{
-			m_Transform = dynamic_cast<Transform*>(comp);
-		}
 		comp->Deserialize(ar);
 	}
 

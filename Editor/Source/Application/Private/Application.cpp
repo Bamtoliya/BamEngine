@@ -152,6 +152,7 @@ void Application::InitializeFiles()
 
         ///Sprite
         L"Resources/Texture/uv1.bamsprite",
+        L"Resources/Texture/uv1.bamsprite.json",
 
         //Shader
         L"Resources/Shader/default.vert.bamshader",
@@ -174,6 +175,8 @@ void Application::InitializeFiles()
     {
         resourceManager.LoadFile(path);
     }
+
+    //resourceManager.SaveToJsonFile(resourceManager.GetResourceHandle<Sprite>(L"Resources/Texture/uv1.bamsprite").Get(), L"Resources/Texture/uv1.bamsprite.json");
 }
 
 void Application::InitializeShaders()
@@ -334,6 +337,30 @@ void Application::InitializeShaders()
     rm.LoadResource<Shader>(&skyPSDesc);
     rm.SaveToBinaryFile(rm.GetResourceHandle<Shader>(skyPSDesc.Key).Get(), L"Resources/Shader/sky.frag.bamshader");
     rm.LoadFile(L"Resources/Shader/sky.frag.bamshader");
+
+    // UI VS
+    tagShaderDesc uiVSDesc = {};
+    uiVSDesc.Key = L"UIVS";
+    uiVSDesc.ShaderType = EShaderType::Vertex;
+    uiVSDesc.Path = L"Resources/Shader/ui.vert.spv";
+    uiVSDesc.SpirvPath = L"Resources/Shader/ui.vert.spv";
+    uiVSDesc.EntryPoint = "main";
+    uiVSDesc.NumUniformBuffers = 1;
+    rm.LoadResource<Shader>(&uiVSDesc);
+    rm.SaveToBinaryFile(rm.GetResourceHandle<Shader>(uiVSDesc.Key).Get(), L"Resources/Shader/ui.vert.bamshader");
+    rm.LoadFile(L"Resources/Shader/ui.vert.bamshader");
+
+    // UI PS
+    tagShaderDesc uiPSDesc = {};
+    uiPSDesc.Key = L"UIPS";
+    uiPSDesc.ShaderType = EShaderType::Pixel;
+    uiPSDesc.Path = L"Resources/Shader/ui.frag.spv";
+    uiPSDesc.SpirvPath = L"Resources/Shader/ui.frag.spv";
+    uiPSDesc.EntryPoint = "main";
+    uiPSDesc.NumUniformBuffers = 1;
+    rm.LoadResource<Shader>(&uiPSDesc);
+    rm.SaveToBinaryFile(rm.GetResourceHandle<Shader>(uiPSDesc.Key).Get(), L"Resources/Shader/ui.frag.bamshader");
+    rm.LoadFile(L"Resources/Shader/ui.frag.bamshader");
 }
 
 void Application::InitializeMeshes()
@@ -531,7 +558,7 @@ void Application::InitializeMaterials()
     shadowDepthMatDesc.PixelShaderHandle = resourceManager.GetResourceHandle<Shader>(
         L"Resources/Shader/shadow_depth.frag.bamshader");
     shadowDepthMatDesc.BlendMode = EBlendMode::Opaque;
-    shadowDepthMatDesc.CullMode = ECullMode::Back;
+    shadowDepthMatDesc.CullMode = ECullMode::Front;
     shadowDepthMatDesc.DepthMode = EDepthMode::ReadWrite;
     Material* shadowDepthMat = resourceManager.LoadResource<Material>(&shadowDepthMatDesc).Get();
     resourceManager.SaveToBinaryFile(shadowDepthMat, L"Resources/Material/ShadowDepthMaterial.bammat");
@@ -544,7 +571,7 @@ void Application::InitializeMaterials()
     shadowDepthSkinMatDesc.PixelShaderHandle = resourceManager.GetResourceHandle<Shader>(
         L"Resources/Shader/shadow_depth.frag.bamshader");
     shadowDepthSkinMatDesc.BlendMode = EBlendMode::Opaque;
-    shadowDepthSkinMatDesc.CullMode = ECullMode::Back;
+    shadowDepthSkinMatDesc.CullMode = ECullMode::Front;
     shadowDepthSkinMatDesc.DepthMode = EDepthMode::ReadWrite;
     Material* shadowDepthSkinMat = resourceManager.LoadResource<Material>(&shadowDepthSkinMatDesc).Get();
 	resourceManager.SaveToBinaryFile(shadowDepthSkinMat, L"Resources/Material/ShadowDepthSkinningMaterial.bammat");
@@ -577,6 +604,20 @@ void Application::InitializeMaterials()
 	skyMatDesc.DepthCompareOp = ECompareOp::LessOrEqual;
     Material* skyMat = resourceManager.LoadResource<Material>(&skyMatDesc).Get();
 	resourceManager.SaveToBinaryFile(skyMat, L"Resources/Material/SkyMaterial.bammat");
+
+    // ── UI Material 생성 ──
+    tagMaterialDesc uiMatDesc = {};
+    uiMatDesc.Key = L"Resources/Material/UIMaterial";
+    uiMatDesc.VertexShaderHandle = resourceManager.GetResourceHandle<Shader>(
+        L"Resources/Shader/ui.vert.bamshader");
+    uiMatDesc.PixelShaderHandle = resourceManager.GetResourceHandle<Shader>(
+        L"Resources/Shader/ui.frag.bamshader");
+    uiMatDesc.BlendMode = EBlendMode::AlphaBlend;
+    uiMatDesc.CullMode = ECullMode::None;
+    uiMatDesc.DepthMode = EDepthMode::None;
+    uiMatDesc.DepthCompareOp = ECompareOp::LessOrEqual;
+    Material* uiMat = resourceManager.LoadResource<Material>(&uiMatDesc).Get();
+    resourceManager.SaveToBinaryFile(uiMat, L"Resources/Material/UIMaterial.bammat");
 }
 
 #pragma endregion
@@ -695,8 +736,6 @@ void Application::RestoreScene()
     SceneManager::Get().OpenScene(newScene);
 }
 #pragma endregion
-
-
 
 void Application::Run(int argc, char* argv[])
 {

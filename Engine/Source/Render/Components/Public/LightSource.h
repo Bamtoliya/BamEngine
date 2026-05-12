@@ -160,11 +160,11 @@ protected:
 
 	PROPERTY(EDITABLE, EDITCONDITION("m_Flags", ELightFlags::CastShadows, false), CATEGORY("Shadow"), RANGE(-FLT_MAX, FLT_MAX, 0.01f))
 	f32 m_ShadowRange = 50.0f;
-	PROPERTY(EDITABLE, EDITCONDITION("m_Flags", ELightFlags::CastShadows, false), CATEGORY("Shadow"), RANGE(-FLT_MAX, FLT_MAX, 0.01f))
+	PROPERTY(EDITABLE, EDITCONDITION("m_Flags", ELightFlags::CastShadows, false), CATEGORY("Shadow"), RANGE(-FLT_MAX, FLT_MAX, 0.001f))
 	f32 m_ShadowBias = 0.002f;
-	PROPERTY(EDITABLE, EDITCONDITION("m_Flags", ELightFlags::CastShadows, false), CATEGORY("Shadow"), RANGE(-FLT_MAX, FLT_MAX, 0.01f))
+	PROPERTY(EDITABLE, EDITCONDITION("m_Flags", ELightFlags::CastShadows, false), CATEGORY("Shadow"), RANGE(-FLT_MAX, FLT_MAX, 0.1f))
 	f32 m_ShadowSlopeBias = 0.5f;
-	PROPERTY(EDITABLE, EDITCONDITION("m_Flags", ELightFlags::CastShadows, false), CATEGORY("Shadow"), RANGE(-FLT_MAX, FLT_MAX, 0.01f))
+	PROPERTY(EDITABLE, EDITCONDITION("m_Flags", ELightFlags::CastShadows, false), CATEGORY("Shadow"), RANGE(-FLT_MAX, FLT_MAX, 0.001f))
 	f32 m_ShadowNormalBias = 0.01f;
 
 	PROPERTY(EDITABLE)

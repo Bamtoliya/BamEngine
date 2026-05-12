@@ -93,7 +93,7 @@ EResult SkyRenderer::Render(f32 dt, RenderPass* renderPass)
 
     // ── SceneUBO: 스카이를 카메라 위치에 고정 (무한 원경) ──
     vec3 cameraPos = vec3(0.0f);
-    Camera* camera = Renderer::Get().GetViewportCamera(renderPass ? renderPass->GetID() : m_RenderPassID);
+    Camera* camera = Renderer::Get().GetViewportCamera(renderPass->GetID());
     if (camera && camera->GetOwner())
     {
         Transform* camTransform = camera->GetOwner()->GetComponent<Transform>();

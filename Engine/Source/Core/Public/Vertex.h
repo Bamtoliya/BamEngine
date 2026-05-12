@@ -115,7 +115,7 @@ namespace Engine
 	};
 
 	STRUCT()
-		struct ENGINE_API VertexMaterial
+	struct ENGINE_API VertexMaterial
 	{
 		REFLECT_STRUCT();
 		PROPERTY()
