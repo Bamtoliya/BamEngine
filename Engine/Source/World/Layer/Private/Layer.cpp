@@ -82,6 +82,7 @@ EResult Layer::AddGameObject(GameObject* gameObject)
     m_GameObjects.push_back(gameObject);
 	gameObject->SetLayerIndex(m_Index);
     gameObject->SetIndex(m_GameObjects.size() - 1);
+    gameObject->SetDirty(true);
     return EResult::Success;
 }
 

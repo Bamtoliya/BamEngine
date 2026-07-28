@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include <type_traits>
 
 template<typename T>
@@ -37,6 +37,14 @@ inline constexpr Enum operator~(Enum rhs)
 {
 	using T = std::underlying_type_t<Enum>;
 	return static_cast<Enum>(~static_cast<T>(rhs));
+}
+
+template<typename Enum>
+	requires (std::is_enum_v<Enum>&& EnableBitMask(Enum{}))
+inline constexpr bool operator!(Enum rhs)
+{
+	using T = std::underlying_type_t<Enum>;
+	return static_cast<T>(rhs) == T(0);
 }
 
 template<typename Enum>

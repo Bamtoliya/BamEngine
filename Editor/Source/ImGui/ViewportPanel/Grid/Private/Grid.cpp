@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "Grid.h"
 #include "Mesh.h"
@@ -22,7 +22,10 @@ void Grid::PrepareShaders()
     gridVsDesc.ShaderType = EShaderType::Vertex;
     gridVsDesc.EntryPoint = "main";
     resourceManager.LoadResource<Shader>(&gridVsDesc);
-    resourceManager.SaveToBinaryFile(resourceManager.GetResourceHandle<Shader>(L"InfiniteGridVS").Get(), L"Resources/Shader/infinite_grid.vert.bamshader");
+    {
+        auto handle = resourceManager.GetResourceHandle<Shader>(L"InfiniteGridVS");
+        resourceManager.SaveToBinaryFile(handle.Get(), L"Resources/Shader/infinite_grid.vert.bamshader");
+    }
 
     tagShaderDesc grid2DPsDesc = {};
     grid2DPsDesc.Key = L"InfiniteGrid2DPS";
@@ -31,7 +34,10 @@ void Grid::PrepareShaders()
     grid2DPsDesc.ShaderType = EShaderType::Pixel;
     grid2DPsDesc.EntryPoint = "main";
     resourceManager.LoadResource<Shader>(&grid2DPsDesc);
-    resourceManager.SaveToBinaryFile(resourceManager.GetResourceHandle<Shader>(L"InfiniteGrid2DPS").Get(), L"Resources/Shader/infinite_grid_2d.frag.bamshader");
+    {
+        auto handle = resourceManager.GetResourceHandle<Shader>(L"InfiniteGrid2DPS");
+        resourceManager.SaveToBinaryFile(handle.Get(), L"Resources/Shader/infinite_grid_2d.frag.bamshader");
+    }
 
 
     tagShaderDesc grid3DPsDesc = {};
@@ -41,7 +47,10 @@ void Grid::PrepareShaders()
     grid3DPsDesc.ShaderType = EShaderType::Pixel;
     grid3DPsDesc.EntryPoint = "main";
     resourceManager.LoadResource<Shader>(&grid3DPsDesc);
-    resourceManager.SaveToBinaryFile(resourceManager.GetResourceHandle<Shader>(L"InfiniteGrid3DPS").Get(), L"Resources/Shader/infinite_grid.frag.bamshader");
+    {
+        auto handle = resourceManager.GetResourceHandle<Shader>(L"InfiniteGrid3DPS");
+        resourceManager.SaveToBinaryFile(handle.Get(), L"Resources/Shader/infinite_grid.frag.bamshader");
+    }
 }
 
 void Grid::PrepareRenderPass(const wstring& prefix)
@@ -83,15 +92,18 @@ void Grid::SubmitGrid(Camera* camera, bool isOrthographic, const wstring& colorR
             if (!renderPass) return EResult::Fail;
 
             RHI* rhi = Renderer::Get().GetRHI();
-            Mesh* quadMesh = ResourceManager::Get().GetResourceHandle<Mesh>(L"QuadMesh").Get();
+            auto quadMeshHandle = ResourceManager::Get().GetResourceHandle<Mesh>(L"QuadMesh");
+            Mesh* quadMesh = quadMeshHandle.Get();
             if (!quadMesh) return EResult::Fail;
 
             // 매 프레임 RT 이름으로 포맷 조회 → pipelineDesc 구성
             tagRHIPipelineDesc desc = {};
             desc.PipelineType = EPipelineType::Graphics;
-            desc.VertexShader = ResourceManager::Get().GetResourceHandle<Shader>(L"InfiniteGridVS")->GetRHIShader();
-            desc.PixelShader = ResourceManager::Get().GetResourceHandle<Shader>(
-                isOrthographic ? L"InfiniteGrid2DPS" : L"InfiniteGrid3DPS")->GetRHIShader();
+            auto gridVSHandle = ResourceManager::Get().GetResourceHandle<Shader>(L"InfiniteGridVS");
+            auto gridPSHandle = ResourceManager::Get().GetResourceHandle<Shader>(
+                isOrthographic ? L"InfiniteGrid2DPS" : L"InfiniteGrid3DPS");
+            desc.VertexShader = gridVSHandle->GetRHIShader();
+            desc.PixelShader = gridPSHandle->GetRHIShader();
             desc.BlendState = Engine::tagBlendState{EBlendMode::AlphaBlend};
             desc.FillMode = EFillMode::Solid;
             desc.CullMode = ECullMode::None;

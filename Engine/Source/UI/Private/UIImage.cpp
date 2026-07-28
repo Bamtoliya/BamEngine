@@ -14,7 +14,10 @@ REGISTER_COMPONENT(UIImage)
 
 EResult UIImage::Initialize(void* arg)
 {
-	return EResult();
+	if (IsFailure(__super::Initialize(arg)))
+		return EResult::Fail;
+
+	return EResult::Success;
 }
 
 UIImage* UIImage::Create(void* arg)
@@ -104,6 +107,7 @@ EResult UIImage::Render(f32 dt, RenderPass* renderPass)
 	uboData.uvRegion = uvRegion;
 	uboData.tiling = m_Tiling;
 	uboData.offset = m_Offset;
+	uboData.color = m_Color;
 	
    if (IsFailure(rhi->BindConstantBuffer((void*)&uboData, sizeof(tagUIUBO), 1, EShaderType::Vertex)))
        return EResult::Fail;

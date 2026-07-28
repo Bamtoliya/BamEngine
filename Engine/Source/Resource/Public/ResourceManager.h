@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "Base.h"
 #include "Resources.h"
@@ -38,8 +38,8 @@ public:
 	template <typename T>
 	ResourceHandle<T> GetResourceHandle(const wstring& key);
 	template<typename T>
-	const vector<Handle>& GetResourceHandles();
-	const vector<Handle>& GetResourceHandles(uint64 typeHash);
+	vector<Handle> GetResourceHandles();
+	vector<Handle> GetResourceHandles(uint64 typeHash);
 	vector<Handle> GetResourceHandlesIncludingDerived(uint64 baseTypeID);
 public:
 	EResult ImportFolder(const wstring& folderPath);

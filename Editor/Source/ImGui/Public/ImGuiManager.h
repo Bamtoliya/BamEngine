@@ -39,7 +39,6 @@ public:
 	void ProcessEvent(const SDL_Event* event);
 	void Draw();
 
-
 #pragma region ImGui Management
 public:
 	EResult AddImGuiPanel(ImGuiInterface* panel);

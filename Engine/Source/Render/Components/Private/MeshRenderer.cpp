@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "MeshRenderer.h"
 
 #include "Material.h"
@@ -79,7 +79,8 @@ EResult MeshRenderer::Render(f32 dt, RenderPass* renderPass)
 
 	if (renderPass && renderPass->GetPassType() == ERenderPassType::Shadow)
 	{
-		material = ResourceManager::Get().GetResourceHandle<Material>(L"Resources/Material/ShadowDepthMaterial").Get();
+		auto shadowMatHandle = ResourceManager::Get().GetResourceHandle<Material>(L"Resources/Material/ShadowDepthMaterial");
+		material = shadowMatHandle.Get();
 		if (!material) return EResult::Success;
 	}
 	else

@@ -3,6 +3,10 @@
 #include "reflection/runtime/ContainerAdapters.h"
 
 // [Header Includes]
+#include "Core/Event/Public/BaseRaycaster.h"
+#include "Core/Event/Public/DynamicEvent.h"
+#include "Core/Event/Public/EventSystem.h"
+#include "Core/Event/Public/GraphicRaycaster.h"
 #include "Core/Public/Interface/Component.h"
 #include "Core/Public/RectTransform.h"
 #include "Core/Public/Structs.h"
@@ -37,10 +41,12 @@
 #include "Resource/Shader/Public/Shader.h"
 #include "Resource/Sprite/Public/Sprite.h"
 #include "Resource/Texture/Public/Texture.h"
-#include "UI/Button/Public/Button.h"
+#include "UI/Public/UIButton.h"
+#include "UI/Public/UICanvas.h"
 #include "UI/Public/UIComponent.h"
 #include "UI/Public/UIImage.h"
 #include "UI/Public/UIRenderComponent.h"
+#include "UI/Public/UISelectable.h"
 #include "World/Layer/Public/Layer.h"
 #include "World/Public/GameObject.h"
 #include "World/Scene/Public/Scene.h"
@@ -386,6 +392,35 @@ BEGIN_ENUM(EResourceType)
 	REFLECT_ENUM_ENTRY(EResourceType, Save)
 END_ENUM_REFLECT_EX(EResourceType, "Engine::EResourceType")
 
+// Enum: Engine::ECanvasRenderMode
+BEGIN_ENUM(ECanvasRenderMode)
+	REFLECT_ENUM_ENTRY(ECanvasRenderMode, ScreenSpace)
+	REFLECT_ENUM_ENTRY(ECanvasRenderMode, WorldSpace)
+	REFLECT_ENUM_ENTRY(ECanvasRenderMode, ScreenSpaceCamera)
+END_ENUM_REFLECT_EX(ECanvasRenderMode, "Engine::ECanvasRenderMode")
+
+// Enum: Engine::ECanvasLayoutSource
+BEGIN_ENUM(ECanvasLayoutSource)
+	REFLECT_ENUM_ENTRY(ECanvasLayoutSource, InheritParent)
+	REFLECT_ENUM_ENTRY(ECanvasLayoutSource, ReferenceResolution)
+	REFLECT_ENUM_ENTRY(ECanvasLayoutSource, ExternalOverride)
+END_ENUM_REFLECT_EX(ECanvasLayoutSource, "Engine::ECanvasLayoutSource")
+
+// Enum: Engine::EUIScaleMode
+BEGIN_ENUM(EUIScaleMode)
+	REFLECT_ENUM_ENTRY(EUIScaleMode, ConstantPixelSize)
+	REFLECT_ENUM_ENTRY(EUIScaleMode, ScaleWithScreenSize)
+	REFLECT_ENUM_ENTRY(EUIScaleMode, ConstantPhysicalSize)
+END_ENUM_REFLECT_EX(EUIScaleMode, "Engine::EUIScaleMode")
+
+// Enum: Engine::ESelectionState
+BEGIN_ENUM(ESelectionState)
+	REFLECT_ENUM_ENTRY(ESelectionState, Normal)
+	REFLECT_ENUM_ENTRY(ESelectionState, Hovered)
+	REFLECT_ENUM_ENTRY(ESelectionState, Pressed)
+	REFLECT_ENUM_ENTRY(ESelectionState, Disabled)
+END_ENUM_REFLECT_EX(ESelectionState, "Engine::ESelectionState")
+
 // Enum: Engine::ELayerFlags
 BEGIN_ENUM(ELayerFlags)
 	REFLECT_ENUM_ENTRY(ELayerFlags, None)
@@ -410,6 +445,37 @@ END_ENUM_REFLECT_EX(EObjectFlag, "Engine::EObjectFlag")
 // [CLASS/STRUCT REFLECTIONS]
 // ==========================================================
 #pragma region ClassStructReflections
+#pragma region CLASS: Engine::BaseRaycaster
+EMPTY_PROPERTIES(BaseRaycaster)
+EMPTY_FUNCTIONS(BaseRaycaster)
+IMPLEMENT_CLASS_EX(BaseRaycaster, "Engine::BaseRaycaster", "Engine::Component")
+
+#pragma endregion // CLASS: Engine::BaseRaycaster
+
+#pragma region CLASS: Engine::DynamicEvent
+EMPTY_PROPERTIES(DynamicEvent)
+EMPTY_FUNCTIONS(DynamicEvent)
+IMPLEMENT_CLASS_EX(DynamicEvent, "Engine::DynamicEvent", "")
+
+#pragma endregion // CLASS: Engine::DynamicEvent
+
+#pragma region CLASS: Engine::EventSystem
+DECLARE_CONTAINER_INFO(EventSystem, m_Raycasters_Root, "Engine::BaseRaycaster", reflection::EPropertyType::Object, reflection::LinearContainerAccessor<vector<BaseRaycaster*>, BaseRaycaster*>::Get())
+BEGIN_PROPERTIES(EventSystem)
+	REFLECT_CONTAINER_PROPERTY(EventSystem, m_Raycasters, "vector<Engine::BaseRaycaster*>", reflection::EPropertyType::Array, &EventSystem_m_Raycasters_Root_ContainerData, std::span<const reflection::MetadataEntry>{})
+END_PROPERTIES
+EMPTY_FUNCTIONS(EventSystem)
+IMPLEMENT_CLASS_EX(EventSystem, "Engine::EventSystem", "Engine::Component")
+
+#pragma endregion // CLASS: Engine::EventSystem
+
+#pragma region CLASS: Engine::GraphicRaycaster
+EMPTY_PROPERTIES(GraphicRaycaster)
+EMPTY_FUNCTIONS(GraphicRaycaster)
+IMPLEMENT_CLASS_EX(GraphicRaycaster, "Engine::GraphicRaycaster", "Engine::BaseRaycaster")
+
+#pragma endregion // CLASS: Engine::GraphicRaycaster
+
 #pragma region STRUCT: Engine::tagComponentDesc
 BEGIN_PROPERTIES(tagComponentDesc)
 	REFLECT_PROPERTY(tagComponentDesc, Active, "bool", reflection::EPropertyType::Bool, std::span<const reflection::MetadataEntry>{})
@@ -490,6 +556,13 @@ BEGIN_METADATA(RectTransform, m_Matrix)
 	CATEGORY("Details")
 END_METADATA
 
+BEGIN_METADATA(RectTransform, m_WorldTransform)
+	NAME("PROP_WORLD_TRANSFORM")
+	READONLY
+	NOSERIALIZE
+	CATEGORY("Details")
+END_METADATA
+
 BEGIN_METADATA(RectTransform, m_AbsolutePosition)
 	NAME("PROP_ABSOLUTEPOSITION")
 	READONLY
@@ -520,6 +593,7 @@ BEGIN_PROPERTIES(RectTransform)
 	REFLECT_PROPERTY(RectTransform, m_Pivot, "vec2", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{RectTransform_m_Pivot_Meta})
 	REFLECT_PROPERTY(RectTransform, m_Flags, "Engine::ERectTransformFlags", reflection::EPropertyType::BitFlag, std::span<const reflection::MetadataEntry>{RectTransform_m_Flags_Meta})
 	REFLECT_PROPERTY(RectTransform, m_Matrix, "mat4", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{RectTransform_m_Matrix_Meta})
+	REFLECT_PROPERTY(RectTransform, m_WorldTransform, "mat4", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{RectTransform_m_WorldTransform_Meta})
 	REFLECT_PROPERTY(RectTransform, m_AbsolutePosition, "vec2", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{RectTransform_m_AbsolutePosition_Meta})
 	REFLECT_PROPERTY(RectTransform, m_AbsoluteSize, "vec2", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{RectTransform_m_AbsoluteSize_Meta})
 	REFLECT_PROPERTY(RectTransform, m_Ratio, "f32", reflection::EPropertyType::Float32, std::span<const reflection::MetadataEntry>{RectTransform_m_Ratio_Meta})
@@ -1665,12 +1739,94 @@ IMPLEMENT_CLASS_EX(Texture, "Engine::Texture", "Engine::Resource")
 
 #pragma endregion // CLASS: Engine::Texture
 
-#pragma region CLASS: Engine::Button
-EMPTY_PROPERTIES(Button)
-EMPTY_FUNCTIONS(Button)
-IMPLEMENT_CLASS_EX(Button, "Engine::Button", "Engine::UIComponent")
+#pragma region CLASS: Engine::UIButton
+EMPTY_PROPERTIES(UIButton)
+EMPTY_FUNCTIONS(UIButton)
+IMPLEMENT_CLASS_EX(UIButton, "Engine::UIButton", "Engine::UISelectable")
 
-#pragma endregion // CLASS: Engine::Button
+#pragma endregion // CLASS: Engine::UIButton
+
+#pragma region CLASS: Engine::UICanvas
+BEGIN_METADATA(UICanvas, m_RenderMode)
+	EDITABLE
+END_METADATA
+
+BEGIN_METADATA(UICanvas, m_IsLayoutRoot)
+	EDITABLE
+	CATEGORY("Layout")
+END_METADATA
+
+BEGIN_METADATA(UICanvas, m_LayoutSource)
+	EDITABLE
+	CATEGORY("Layout")
+END_METADATA
+
+BEGIN_METADATA(UICanvas, m_ReferenceResolution)
+	EDITABLE
+	CATEGORY("Layout")
+END_METADATA
+
+BEGIN_METADATA(UICanvas, m_ScaleMode)
+	EDITABLE
+	CATEGORY("Layout")
+END_METADATA
+
+BEGIN_METADATA(UICanvas, m_MatchWidthOrHeight)
+	EDITABLE
+	RANGE(0.f, 1.f, 0.01f)
+	CATEGORY("Layout")
+END_METADATA
+
+BEGIN_METADATA(UICanvas, m_EffectiveLayoutSize)
+	READONLY
+	NOSERIALIZE
+	CATEGORY("Layout")
+END_METADATA
+
+BEGIN_METADATA(UICanvas, m_ExternalLayoutSize)
+	NOSERIALIZE
+	CATEGORY("Layout")
+END_METADATA
+
+BEGIN_METADATA(UICanvas, m_ExternalOverrideEnabled)
+	NOSERIALIZE
+	CATEGORY("Layout")
+END_METADATA
+
+BEGIN_METADATA(UICanvas, m_ExternalOwnerToken)
+	NOSERIALIZE
+	CATEGORY("Layout")
+END_METADATA
+
+BEGIN_METADATA(UICanvas, m_LayoutDirty)
+	READONLY
+	NOSERIALIZE
+	CATEGORY("Layout")
+END_METADATA
+
+BEGIN_METADATA(UICanvas, m_LayoutVersion)
+	READONLY
+	NOSERIALIZE
+	CATEGORY("Layout")
+END_METADATA
+BEGIN_PROPERTIES(UICanvas)
+	REFLECT_PROPERTY(UICanvas, m_RenderMode, "Engine::ECanvasRenderMode", reflection::EPropertyType::Enum, std::span<const reflection::MetadataEntry>{UICanvas_m_RenderMode_Meta})
+	REFLECT_PROPERTY(UICanvas, m_IsLayoutRoot, "bool", reflection::EPropertyType::Bool, std::span<const reflection::MetadataEntry>{UICanvas_m_IsLayoutRoot_Meta})
+	REFLECT_PROPERTY(UICanvas, m_LayoutSource, "Engine::ECanvasLayoutSource", reflection::EPropertyType::Enum, std::span<const reflection::MetadataEntry>{UICanvas_m_LayoutSource_Meta})
+	REFLECT_PROPERTY(UICanvas, m_ReferenceResolution, "vec2", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{UICanvas_m_ReferenceResolution_Meta})
+	REFLECT_PROPERTY(UICanvas, m_ScaleMode, "Engine::EUIScaleMode", reflection::EPropertyType::Enum, std::span<const reflection::MetadataEntry>{UICanvas_m_ScaleMode_Meta})
+	REFLECT_PROPERTY(UICanvas, m_MatchWidthOrHeight, "f32", reflection::EPropertyType::Float32, std::span<const reflection::MetadataEntry>{UICanvas_m_MatchWidthOrHeight_Meta})
+	REFLECT_PROPERTY(UICanvas, m_EffectiveLayoutSize, "vec2", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{UICanvas_m_EffectiveLayoutSize_Meta})
+	REFLECT_PROPERTY(UICanvas, m_ExternalLayoutSize, "vec2", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{UICanvas_m_ExternalLayoutSize_Meta})
+	REFLECT_PROPERTY(UICanvas, m_ExternalOverrideEnabled, "bool", reflection::EPropertyType::Bool, std::span<const reflection::MetadataEntry>{UICanvas_m_ExternalOverrideEnabled_Meta})
+	REFLECT_PROPERTY(UICanvas, m_ExternalOwnerToken, "uint64", reflection::EPropertyType::UInt64, std::span<const reflection::MetadataEntry>{UICanvas_m_ExternalOwnerToken_Meta})
+	REFLECT_PROPERTY(UICanvas, m_LayoutDirty, "bool", reflection::EPropertyType::Bool, std::span<const reflection::MetadataEntry>{UICanvas_m_LayoutDirty_Meta})
+	REFLECT_PROPERTY(UICanvas, m_LayoutVersion, "uint32", reflection::EPropertyType::UInt32, std::span<const reflection::MetadataEntry>{UICanvas_m_LayoutVersion_Meta})
+END_PROPERTIES
+EMPTY_FUNCTIONS(UICanvas)
+IMPLEMENT_CLASS_EX(UICanvas, "Engine::UICanvas", "Engine::UIComponent")
+
+#pragma endregion // CLASS: Engine::UICanvas
 
 #pragma region CLASS: Engine::UIComponent
 EMPTY_PROPERTIES(UIComponent)
@@ -1726,6 +1882,42 @@ EMPTY_FUNCTIONS(UIRenderComponent)
 IMPLEMENT_CLASS_EX(UIRenderComponent, "Engine::UIRenderComponent", "Engine::UIComponent")
 
 #pragma endregion // CLASS: Engine::UIRenderComponent
+
+#pragma region CLASS: Engine::UISelectable
+BEGIN_METADATA(UISelectable, m_Interactable)
+	EDITABLE
+END_METADATA
+
+BEGIN_METADATA(UISelectable, m_NormalColor)
+	EDITABLE
+	COLOR()
+END_METADATA
+
+BEGIN_METADATA(UISelectable, m_HoveredColor)
+	EDITABLE
+	COLOR()
+END_METADATA
+
+BEGIN_METADATA(UISelectable, m_PressedColor)
+	EDITABLE
+	COLOR()
+END_METADATA
+
+BEGIN_METADATA(UISelectable, m_DisabledColor)
+	EDITABLE
+	COLOR()
+END_METADATA
+BEGIN_PROPERTIES(UISelectable)
+	REFLECT_PROPERTY(UISelectable, m_Interactable, "bool", reflection::EPropertyType::Bool, std::span<const reflection::MetadataEntry>{UISelectable_m_Interactable_Meta})
+	REFLECT_PROPERTY(UISelectable, m_NormalColor, "vec4", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{UISelectable_m_NormalColor_Meta})
+	REFLECT_PROPERTY(UISelectable, m_HoveredColor, "vec4", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{UISelectable_m_HoveredColor_Meta})
+	REFLECT_PROPERTY(UISelectable, m_PressedColor, "vec4", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{UISelectable_m_PressedColor_Meta})
+	REFLECT_PROPERTY(UISelectable, m_DisabledColor, "vec4", reflection::EPropertyType::UserDefined, std::span<const reflection::MetadataEntry>{UISelectable_m_DisabledColor_Meta})
+END_PROPERTIES
+EMPTY_FUNCTIONS(UISelectable)
+IMPLEMENT_CLASS_EX(UISelectable, "Engine::UISelectable", "Engine::UIComponent")
+
+#pragma endregion // CLASS: Engine::UISelectable
 
 #pragma region CLASS: Engine::Layer
 DECLARE_CONTAINER_INFO(Layer, m_GameObjects_Root, "Engine::GameObject", reflection::EPropertyType::Object, reflection::LinearContainerAccessor<vector<GameObject*>, GameObject*>::Get())

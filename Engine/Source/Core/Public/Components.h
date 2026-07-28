@@ -20,7 +20,6 @@
 #include "SkinnedMeshRenderer.h"
 #include "SpriteRenderer.h"
 #include "SkyRenderer.h"
-#include "UIRenderer.h"
 #pragma endregion
 
 #pragma region Lights
@@ -28,6 +27,13 @@
 #include "SkyLight.h"
 #pragma endregion
 
-#pragma region UIs
+#pragma region Event System
+#include "EventSystem.h"
+#pragma endregion
+
+#pragma region UI
 #include "UIImage.h"
+#include "UICanvas.h"
+#include "UIButton.h"
+#include "GraphicRaycaster.h"
 #pragma endregion

@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "Material.h"
 #include "MaterialInstance.h"
@@ -63,7 +63,10 @@ EResult MaterialInstance::Bind(uint32 slot)
 			continue;
 		Texture* texture = baseBinding.texture.Get();
 		if (!texture) // 텍스처가 유실되었을 경우 더미 텍스처로 대체
-			texture = ResourceManager::Get().GetResourceHandle<Texture>(L"Resources/Texture/magenta1x1.png").Get();
+		{
+			auto fallbackHandle = ResourceManager::Get().GetResourceHandle<Texture>(L"Resources/Texture/magenta1x1.png");
+			texture = fallbackHandle.Get();
+		}
 		RHISampler* sampler = baseBinding.hasCustomSampler
 			? SamplerManager::Get().GetOrCreateSampler(baseBinding.samplerDesc)
 			: SamplerManager::Get().GetDefaultSampler();
@@ -79,7 +82,10 @@ EResult MaterialInstance::Bind(uint32 slot)
 	{
 		Texture* texture = binding.texture.Get();
 		if (!texture)
-			texture = ResourceManager::Get().GetResourceHandle<Texture>(L"Resources/Texture/magenta1x1.png").Get();
+		{
+			auto fallbackHandle = ResourceManager::Get().GetResourceHandle<Texture>(L"Resources/Texture/magenta1x1.png");
+			texture = fallbackHandle.Get();
+		}
 		RHISampler* sampler = binding.hasCustomSampler
 			? SamplerManager::Get().GetOrCreateSampler(binding.samplerDesc)
 			: SamplerManager::Get().GetDefaultSampler();
@@ -94,7 +100,8 @@ EResult MaterialInstance::Bind(uint32 slot)
 	// 3단계: 안전장치 - 텍스처가 단 하나도 세팅되지 않은 기본 상태일 경우
 	if (!bBoundAny)
 	{
-		Texture* texture = ResourceManager::Get().GetResourceHandle<Texture>(L"Resources/Texture/magenta1x1.png").Get();
+		auto fallbackHandle = ResourceManager::Get().GetResourceHandle<Texture>(L"Resources/Texture/magenta1x1.png");
+		Texture* texture = fallbackHandle.Get();
 		RHISampler* sampler = SamplerManager::Get().GetDefaultSampler();
 		if (!texture || !sampler)
 			return EResult::Fail;

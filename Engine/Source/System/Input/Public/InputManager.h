@@ -46,7 +46,7 @@ public:
 #pragma endregion
 
 #pragma region Keyboard
-public:
+public:	
 	bool IsKeyButtonDown(EKeyCode key);
 	bool IsKeyButtonUp(EKeyCode key);
 	bool IsKeyButtonPressed(EKeyCode key);
@@ -78,6 +78,22 @@ public:
 	f32 GetMouseScrollDeltaX() const { return m_MouseScrollDelta.x; }
 	f32 GetMouseScrollDeltaY() const { return m_MouseScrollDelta.y; }
 public:
+	vec2 GetLogicalMousePosition() const
+	{
+		if (m_ViewportRect.z > 0.0f && m_ViewportRect.w > 0.0f &&
+			m_TargetResolution.x > 0.0f && m_TargetResolution.y > 0.0f)
+		{
+			f32 u = (m_MousePosition.x - m_ViewportRect.x) / m_ViewportRect.z;
+			f32 v = (m_MousePosition.y - m_ViewportRect.y) / m_ViewportRect.w;
+			return vec2(u * m_TargetResolution.x, v * m_TargetResolution.y);
+		}
+		return m_MousePosition;
+	}
+	void SetViewportRect(const vec4& viewportRect) { m_ViewportRect = viewportRect; }
+	vec4 GetViewportRect() const { return m_ViewportRect; }
+	void SetTargetResolution(const vec2& targetResolution) { m_TargetResolution = targetResolution; }
+	vec2 GetTargetResolution() const { return m_TargetResolution; }
+public:
 	void ProcessEvent(const SDL_Event& event);
 #pragma endregion
 
@@ -98,6 +114,9 @@ private:
 	f32 m_CurrentTime = 0.0f;
 	f32 m_DoubleClickThreshold = 0.3f;
 	f32 m_DragThreshold = 3.0f;
+
+	vec4 m_ViewportRect = vec4(0.f); // 뷰포트 영역 (x, y, width, height)
+	vec2 m_TargetResolution = vec2(1920.f, 1080.f); // 타겟 해상도 (논리적 좌표계 기준)
 
 	array<MouseStateData, static_cast<uint32>(EMouseButton::Count)> m_MouseButtonStatesData = {};
 	array<bool, static_cast<uint32>(EMouseButton::Count)> m_CurrentDoubleClicks = {false,};

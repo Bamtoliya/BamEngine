@@ -1,9 +1,10 @@
-﻿#pragma once
+#pragma once
 
 #include "Editor_Includes.h"
 #include "ImporterInterface.h"
 #include "ExporterInterface.h"
 #include "AssetCache.h"
+#include <mutex>
 
 BEGIN(Editor)
 class AssetManager : public Base
@@ -33,7 +34,7 @@ public:
 	void ExportAsync(const filesystem::path& sourcePath, const filesystem::path& destDir = {}, void* arg = nullptr);
 public:
 	Engine::MulticastDelegate<> GetAsyncDelegate() { return m_OnAsyncDelegate; }
-	size_t GetActiveTaskCount() const { return m_ActiveTasks.size(); }
+	size_t GetActiveTaskCount() const { return m_ActiveTasks.size() + m_PendingTasks.size(); }
 #pragma endregion
 
 
@@ -41,6 +42,8 @@ public:
 private:
 	unordered_map<string, ImporterInterface*> m_Importers;
 	unordered_map<string, ExporterInterface*> m_Exporters;
+	std::mutex m_PendingMutex;
+	vector<future<EResult>> m_PendingTasks;
 	vector<future<EResult>> m_ActiveTasks;
 	Engine::MulticastDelegate<> m_OnAsyncDelegate;
 private:

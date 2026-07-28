@@ -118,11 +118,14 @@ public:
 	const ERectTransformFlags& GetFlags() const { return m_Flags; }
 
 	const mat4& GetMatrix() const { return m_Matrix; }
+	const mat4& GetWorldTransform() const { return m_WorldTransform; }
 	const vec2& GetAbsolutePosition() const { return m_AbsolutePosition; }
 	const vec2& GetAbsoluteSize() const { return m_AbsoluteSize; }
 #pragma endregion
 #pragma region Setter
 public:
+	virtual void SetDirty(bool dirty = true) override;
+
 	FUNCTION()
 	void SetSize(const vec2& size);
 	FUNCTION()
@@ -175,6 +178,8 @@ private:
 
 	PROPERTY(NAME("PROP_MATRIX"), READONLY, NOSERIALIZE, CATEGORY("Details"))
 	mat4 m_Matrix = glm::identity<mat4>();
+	PROPERTY(NAME("PROP_WORLD_TRANSFORM"), READONLY, NOSERIALIZE, CATEGORY("Details"))
+	mat4 m_WorldTransform = glm::identity<mat4>();
 	PROPERTY(NAME("PROP_ABSOLUTEPOSITION"), READONLY, NOSERIALIZE, CATEGORY("Details"))
 	vec2 m_AbsolutePosition = { 0.0f, 0.0f };
 	PROPERTY(NAME("PROP_ABSOLUTESIZE"), READONLY, NOSERIALIZE, CATEGORY("Details"))

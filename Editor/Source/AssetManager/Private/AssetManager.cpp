@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "AssetManager.h"
 
@@ -50,7 +50,12 @@ void AssetManager::Free()
 	{
 		if (task.valid()) task.wait();
 	}
+	for (auto& task : m_PendingTasks)
+	{
+		if (task.valid()) task.wait();
+	}
 	m_ActiveTasks.clear();
+	m_PendingTasks.clear();
 
 	RELEASE_MAP(m_Importers);
 	RELEASE_MAP(m_Exporters);
@@ -63,6 +68,23 @@ void AssetManager::Free()
 #pragma region Loop
 void AssetManager::Update(f32 dt)
 {
+	if (m_AssetCache) m_AssetCache->Update();
+
+	// 1단계: 백그라운드에서 예약된 작업들을 메인 큐로 이동 (가장 짧은 락 시간)
+	{
+		std::lock_guard lock(m_PendingMutex);
+		if (!m_PendingTasks.empty())
+		{
+			m_ActiveTasks.insert(
+				m_ActiveTasks.end(),
+				std::make_move_iterator(m_PendingTasks.begin()),
+				std::make_move_iterator(m_PendingTasks.end())
+			);
+			m_PendingTasks.clear();
+		}
+	}
+
+	// 2단계: 메인 쓰레드 단독으로 완료 상태 순회 및 정리 (락 불필요)
 	for (auto it = m_ActiveTasks.begin(); it != m_ActiveTasks.end(); )
 	{
 		// wait_for(0초): 진동벨이 울렸는지 안 울렸는지만 즉시 체크 (블로킹 없음)
@@ -99,7 +121,8 @@ void AssetManager::Update(f32 dt)
 void AssetManager::ExecuteAsync(std::function<EResult()> task)
 {
 	auto futureTask = std::async(std::launch::async, task);
-	m_ActiveTasks.push_back(std::move(futureTask));
+	std::lock_guard lock(m_PendingMutex);
+	m_PendingTasks.push_back(std::move(futureTask));
 }
 EResult AssetManager::Import(const filesystem::path& sourcePath, const filesystem::path& destDir, void* arg)
 {
@@ -120,7 +143,8 @@ void AssetManager::ImportAsync(const filesystem::path& sourcePath, const filesys
 			return this->Import(sourcePath, destDir, arg);
 		});
 
-	m_ActiveTasks.push_back(std::move(futureTask));
+	std::lock_guard lock(m_PendingMutex);
+	m_PendingTasks.push_back(std::move(futureTask));
 }
 
 EResult AssetManager::Export(const filesystem::path& sourcePath, const filesystem::path& destDir, void* arg)
@@ -138,9 +162,10 @@ void AssetManager::ExportAsync(const filesystem::path& sourcePath, const filesys
 	auto futureTask = std::async(std::launch::async, [this, sourcePath, destDir, arg]() -> EResult
 		{
 			// 이 안은 백그라운드 스레드이므로 여기서 무거운 Export를 호출해도 UI가 멈추지 않습니다!
-			return this->Import(sourcePath, destDir);
+			return this->Export(sourcePath, destDir, arg);
 		});
 
-	m_ActiveTasks.push_back(std::move(futureTask));
+	std::lock_guard lock(m_PendingMutex);
+	m_PendingTasks.push_back(std::move(futureTask));
 }
 #pragma endregion

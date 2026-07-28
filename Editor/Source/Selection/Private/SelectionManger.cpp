@@ -30,6 +30,7 @@ GameObject* SelectionManager::GetPrimarySelection()
 
 void SelectionManager::ToggleSelection(GameObject* gameObject)
 {
+	if (m_LockPrimarySeletion) return;
 	auto it = std::find(m_SelectedObjects.begin(), m_SelectedObjects.end(), gameObject);
 	if (it != m_SelectedObjects.end())
 	{
@@ -43,11 +44,13 @@ void SelectionManager::ToggleSelection(GameObject* gameObject)
 
 void SelectionManager::ClearSelection()
 {
+	if (m_LockPrimarySeletion) return;
 	m_SelectedObjects.clear();
 }
 
 void SelectionManager::SetSelectedObject(GameObject* gameObject)
 {
+	if (m_LockPrimarySeletion) return;
 	ClearSelection();
 	if (gameObject)
 	{

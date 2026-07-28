@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "MaterialInterface.h"
 #include "SamplerManager.h"
 #include "ResourceManager.h"
@@ -319,7 +319,10 @@ EResult MaterialInterface::Bind(uint32 slot)
     {
         Texture* texture = binding.texture.Get();
         if (!texture)
-            texture = ResourceManager::Get().GetResourceHandle<Texture>(L"Resources/Texture/magenta1x1.png").Get();
+        {
+            auto fallbackHandle = ResourceManager::Get().GetResourceHandle<Texture>(L"Resources/Texture/magenta1x1.png");
+            texture = fallbackHandle.Get();
+        }
 
         RHISampler* sampler = binding.hasCustomSampler
             ? SamplerManager::Get().GetOrCreateSampler(binding.samplerDesc)
@@ -337,7 +340,8 @@ EResult MaterialInterface::Bind(uint32 slot)
     }
     if (!bBoundAny)
     {
-        Texture* texture = ResourceManager::Get().GetResourceHandle<Texture>(L"Resources/Texture/magenta1x1.png").Get();
+        auto fallbackHandle = ResourceManager::Get().GetResourceHandle<Texture>(L"Resources/Texture/magenta1x1.png");
+        Texture* texture = fallbackHandle.Get();
         RHISampler* sampler = SamplerManager::Get().GetDefaultSampler();
         if (!texture || !sampler) return EResult::Fail;
 

@@ -276,6 +276,7 @@ void ImGuiManager::MainDockspace()
 	window_flags |= ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove;
 	window_flags |= ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus;
 	window_flags |= ImGuiWindowFlags_NoBackground; // 투명하게 해서 뒤의 게임 화면이 보이게 할 수도 있음 (선택사항)
+	//window_flags |= ImGuiWindowFlags_MenuBar;
 
 	// 메인 독스페이스 컨테이너 시작
 	ImGui::Begin("MainDockSpace", nullptr, window_flags);
@@ -288,7 +289,7 @@ void ImGuiManager::MainDockspace()
 	// PassthruCentralNode: 중앙 노드를 투명하게 만들어서, 도킹되지 않은 영역에 게임 씬을 그릴 수 있게 함
 	ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_PassthruCentralNode);
 
-	m_ToolBar.Draw();
+	m_ToolBar.Draw(m_Window);
 
 	ImGui::End(); // MainDockSpace 끝 (이제부터 그리는 창은 이 안에 도킹됨)
 }
@@ -337,11 +338,21 @@ EResult ImGuiManager::CreateDefaultPanels()
 	scenePanelDesc.RenderTargetWidth = g_WindowWidth;
 	scenePanelDesc.RenderTargetHeight = g_WindowHeight;
 	scenePanelDesc.IsSceneCamera = false;
-	scenePanelDesc.IsPerspective = false;
+	scenePanelDesc.IsPerspective = true;
 	scenePanelDesc.CameraType = EViewportCameraType::Orthographic;
 	SceneViewportPanel* viewportPanel = new SceneViewportPanel();
 	viewportPanel->Initialize(&scenePanelDesc);
 	AddImGuiPanel(viewportPanel);
+	tagCameraViewportPanelDesc UIViewportPanelDesc;
+	UIViewportPanelDesc.Name = L"UI View";
+	UIViewportPanelDesc.RenderTargetWidth = g_WindowWidth;
+	UIViewportPanelDesc.RenderTargetHeight = g_WindowHeight;
+	UIViewportPanelDesc.IsSceneCamera = false;
+	UIViewportPanelDesc.IsPerspective = false;
+	UIViewportPanelDesc.CameraType = EViewportCameraType::Orthographic;
+	UIViewportPanel* uiViewportPanel = new UIViewportPanel();
+	uiViewportPanel->Initialize(&UIViewportPanelDesc);
+	AddImGuiPanel(uiViewportPanel);
 	AddImGuiPanel(new InspectorPanel());
 	AddImGuiPanel(new HierarchyPanel());
 	ContentBrowserPanel* contentBrowserPanel = new ContentBrowserPanel();

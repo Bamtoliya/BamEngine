@@ -19,6 +19,8 @@
     "efsw",
     "cppcodec",
     "directxtex",
+    "lz4",
+    "entt",
     {
       "name": "imgui",
       "features": [

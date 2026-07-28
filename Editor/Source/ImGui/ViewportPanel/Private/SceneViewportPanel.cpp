@@ -5,6 +5,8 @@
 #include "SelectionManager.h"
 #include "InputManager.h"
 #include "ImViewGuizmo.h"
+#include "RectTransform.h"
+#include "MeshFilter.h"
 
 #pragma region Helper
 static quat ExtractRotationQuat(const mat4& matrix)
@@ -317,6 +319,20 @@ void SceneViewportPanel::Draw()
 
 #pragma region Custom Draws
 
+void SceneViewportPanel::DrawCustomOptions()
+{
+	DrawResolutionMenu();
+	DrawSceneRenderTargetMenu();
+	DrawGizmoMenu();
+	DrawDebugMenu();
+	DrawPostProcessMenu();
+	DrawRenderPassMenu();
+	if (m_InspectorPanel) DrawCameraMenu();
+	DrawChannelViewButton();
+	DrawDimensionToggleButton();
+
+}
+
 void SceneViewportPanel::DrawCustomViewport()
 {
 	BaseViewportPanel::DrawCustomViewport();
@@ -324,8 +340,156 @@ void SceneViewportPanel::DrawCustomViewport()
 	DrawImViewGuizmo();
 	DrawLightOverlay();
 	DrawCameraOverlay();
+	DrawSelectionLocked();
+}
+#pragma endregion
+
+#pragma region Options Bar
+void SceneViewportPanel::DrawSceneRenderTargetMenu()
+{
+	if (ImGui::BeginMenu("RenderTarget"))
+	{
+		if (ImGui::MenuItem("FinalRT", nullptr, m_ShowFinalComposed))
+		{
+			m_ShowFinalComposed = true;
+			m_Grid.Show();
+		}
+
+
+		ImGui::Separator();
+
+		// ── 1. 콤보박스: 이 뷰포트의 RT (짧은 이름) ──
+		wstring prefix = m_Name + L"_";
+		int currentIdx = 0;
+		vector<string> shortLabels;
+		for (int i = 0; i < m_OwnedRTNames.size(); ++i)
+		{
+			wstring shortW = m_OwnedRTNames[i];
+			if (shortW.find(prefix) == 0)
+				shortW = shortW.substr(prefix.size());
+			shortLabels.push_back(WStrToStr(shortW));
+			if (m_OwnedRTNames[i] == m_SelectedRTName)
+				currentIdx = i;
+		}
+		// 현재 선택이 OwnedRT가 아니면 "Other" 표시
+		const char* preview = currentIdx < shortLabels.size()
+			? shortLabels[currentIdx].c_str() : "Other";
+		if (ImGui::BeginCombo("##RTSelect", preview))
+		{
+			for (int i = 0; i < shortLabels.size(); ++i)
+			{
+				bool selected = !m_ShowFinalComposed && (m_OwnedRTNames[i] == m_SelectedRTName);
+				if (ImGui::Selectable(shortLabels[i].c_str(), selected))
+				{
+					m_ShowFinalComposed = false;
+					m_SelectedRTName = m_OwnedRTNames[i];
+					m_Grid.Hide();
+				}
+				DrawRTItemContextMenu(m_OwnedRTNames[i]);
+				if (selected)
+					ImGui::SetItemDefaultFocus();
+			}
+			ImGui::EndCombo();
+		}
+		// ── 2. 접힌 메뉴: 전체 RT (풀 이름) ──
+		if (ImGui::BeginMenu("All RenderTargets"))
+		{
+			auto allNames = RenderTargetManager::Get().GetAllRenderTargetNames();
+			for (const auto& name : allNames)
+			{
+				string label = WStrToStr(name);
+				bool selected = !m_ShowFinalComposed && (name == m_SelectedRTName);
+				if (ImGui::MenuItem(label.c_str(), nullptr, selected))
+				{
+					m_ShowFinalComposed = false;
+					m_SelectedRTName = name;
+					m_Grid.Hide();
+				}
+				DrawRTItemContextMenu(name);
+			}
+			ImGui::EndMenu();
+		}
+		ImGui::EndMenu();
+	}
 }
 
+void SceneViewportPanel::DrawGizmoMenu()
+{
+	if (ImGui::BeginMenu("Gizmo"))
+	{
+		if (ImGui::MenuItem("Translate (W)", "Shift + 1", m_GizmoOperation == ImGuizmo::TRANSLATE))
+			m_GizmoOperation = ImGuizmo::TRANSLATE;
+		if (ImGui::MenuItem("Rotate (E)", "Shift + 2", m_GizmoOperation == ImGuizmo::ROTATE))
+			m_GizmoOperation = ImGuizmo::ROTATE;
+		if (ImGui::MenuItem("Scale (R)", "Shift + 3", m_GizmoOperation == ImGuizmo::SCALE))
+			m_GizmoOperation = ImGuizmo::SCALE;
+		ImGui::Separator();
+		if (ImGui::MenuItem("Local", nullptr, m_GizmoMode == ImGuizmo::LOCAL))
+			m_GizmoMode = ImGuizmo::LOCAL;
+		if (ImGui::MenuItem("World", nullptr, m_GizmoMode == ImGuizmo::WORLD))
+			m_GizmoMode = ImGuizmo::WORLD;
+
+		ImGui::Separator();
+		if (ImGui::MenuItem("Snap to Grid", nullptr, m_GizmoUseSnap))
+			m_GizmoUseSnap = !m_GizmoUseSnap;
+		if (ImGui::MenuItem("Show Bounds", nullptr, m_GizmoShowBounds))
+			m_GizmoShowBounds = !m_GizmoShowBounds;
+		if (m_GizmoUseSnap)
+		{
+			ImGui::InputFloat3("Snap Translation", glm::value_ptr(m_GizmoSnapTranslation));
+			ImGui::InputFloat3("Snap Rotation", glm::value_ptr(m_GizmoSnapRotation));
+			ImGui::InputFloat3("Snap Scale", glm::value_ptr(m_GizmoSnapScale));
+		}
+		ImGui::EndMenu();
+	}
+}
+
+void SceneViewportPanel::DrawDebugMenu()
+{
+	if (ImGui::BeginMenu("Debug"))
+	{
+		ImGui::MenuItem("Show Grid", nullptr, m_Grid.GetVisible());
+		ImGui::MenuItem("Show Collider", nullptr, m_DebugRenderer.GetDrawCollidersPtr());
+		ImGui::EndMenu();
+	}
+}
+
+void SceneViewportPanel::DrawPostProcessMenu()
+{
+	m_PostProcessChain.DrawImGuiMenu();
+}
+
+void SceneViewportPanel::DrawRenderPassMenu()
+{
+	if (ImGui::BeginMenu("Passes"))
+	{
+		for (auto& pass : m_PassOptions)
+		{
+			string label = WStrToStr(pass.Name);
+			ImGui::MenuItem(label.c_str(), nullptr, &pass.Enabled);
+		}
+		ImGui::EndMenu();
+	}
+}
+void SceneViewportPanel::ResizeRenderTargets(uint32 width, uint32 height)
+{
+	auto& rtMgr = RenderTargetManager::Get();
+	for (const auto& name : m_OwnedRTNames)
+	{
+		if (name == m_ShadowDepthName) continue;
+		if (auto* rt = rtMgr.GetRenderTarget(name))
+			rt->Resize(width, height);
+	}
+
+	if (m_Camera)
+		m_Camera->SetAspect(static_cast<f32>(width) / static_cast<f32>(height));
+
+	// Base: ChannelFilter RT 리사이즈
+	BaseViewportPanel::ResizeRenderTargets(width, height);
+}
+#pragma endregion
+
+#pragma region Overlay
 void SceneViewportPanel::DrawImGuizmo()
 {
 	GameObject* selectedObject = SelectionManager::Get().GetPrimarySelection();
@@ -342,13 +506,11 @@ void SceneViewportPanel::DrawImGuizmo()
 	ImGuizmo::SetID(ImGui::GetID(this));
 
 	// 2. 카메라 및 매트릭스 준비
-	
 	mat4 projMatrix = camera->GetProjMatrix();
 	mat4 viewMatrix = camera->GetViewMatrix();
 	mat4 worldMatrix = transform->GetWorldMatrix();
 	mat4 deltaMatrix = glm::identity<mat4>();
 
-	// [Helper] 월드 매트릭스를 로컬 매트릭스로 변환하는 람다 함수 (중복 제거)
 	auto getLocalMatrix = [](GameObject* obj, const mat4& wMatrix) -> mat4 {
 		GameObject* parent = obj->GetParent();
 		if (parent && parent->GetTransform())
@@ -356,50 +518,62 @@ void SceneViewportPanel::DrawImGuizmo()
 		return wMatrix;
 		};
 
-	// 3. 조작 전(Old) 로컬 회전값 백업 (Euler Flip 방지용)
+	// 3. 조작 전 로컬 값 백업
 	mat4 oldLocalMatrix = getLocalMatrix(selectedObject, worldMatrix);
 	quat oldLocalQuat = ExtractRotationQuat(oldLocalMatrix);
 
-	// 4. 기즈모 단축키 및 스냅 설정
-	if (ImGui::IsWindowFocused())
-	{
-		if (KEY_PRESSED(Engine::EKeyCode::W)) m_GizmoOperation = ImGuizmo::TRANSLATE;
-		if (KEY_PRESSED(Engine::EKeyCode::E)) m_GizmoOperation = ImGuizmo::ROTATE;
-		if (KEY_PRESSED(Engine::EKeyCode::R)) m_GizmoOperation = ImGuizmo::SCALE;
-	}
-
+	// 5. 스냅 설정
 	bool snap = m_GizmoUseSnap || ImGui::GetIO().KeyCtrl;
 	vec3 snapValues = m_GizmoSnapTranslation;
 	if (m_GizmoOperation == ImGuizmo::ROTATE) snapValues = m_GizmoSnapRotation;
 	else if (m_GizmoOperation == ImGuizmo::SCALE) snapValues = m_GizmoSnapScale;
 
-	// 5. 기즈모 조작 렌더링 및 연산
-	ImGuizmo::Manipulate(glm::value_ptr(viewMatrix), glm::value_ptr(projMatrix),
-		m_GizmoOperation, m_GizmoMode,
-		glm::value_ptr(worldMatrix), glm::value_ptr(deltaMatrix),
-		snap ? glm::value_ptr(snapValues) : nullptr);
+	// 6. 3D Bounds 설정 (추가된 부분)
+	f32 bounds[6] = { -0.5f, -0.5f, -0.5f, 0.5f, 0.5f, 0.5f };
+	f32 boundsSnap[3] = { m_GizmoSnapScale.x, m_GizmoSnapScale.y, m_GizmoSnapScale.z };
+	
+	if (auto* meshFilter = selectedObject->GetComponent<MeshFilter>()) {
+		vec3 boundsMin = meshFilter->GetMesh()->GetMin();
+		vec3 boundsMax = meshFilter->GetMesh()->GetMax();
+		bounds[0] = boundsMin.x;
+		bounds[1] = boundsMin.y;
+		bounds[2] = boundsMin.z;
+		bounds[3] = boundsMax.x;
+		bounds[4] = boundsMax.y;
+		bounds[5] = boundsMax.z;
+	}
+
+	// 7. 기즈모 조작 렌더링 (Bounds 파라미터 포함)
+	ImGuizmo::Manipulate(
+		glm::value_ptr(viewMatrix),
+		glm::value_ptr(projMatrix),
+		m_GizmoOperation,
+		m_GizmoMode,
+		glm::value_ptr(worldMatrix),
+		glm::value_ptr(deltaMatrix),
+		snap ? glm::value_ptr(snapValues) : nullptr,
+		m_GizmoShowBounds ? bounds : nullptr,           // 바운드 데이터 전달
+		snap ? boundsSnap : nullptr                     // 바운드 조절 시 스냅
+	);
 
 	if (ImGuizmo::IsUsing())
 	{
-		// 조작 후(New) 로컬 매트릭스
 		mat4 localMatrix = getLocalMatrix(selectedObject, worldMatrix);
 
 		if (m_GizmoOperation == ImGuizmo::ROTATE)
 		{
-			// 쿼터니언을 이용해 순수 회전 변화량(Delta) 추출 후 기존 오일러에 누적 (연속성 보장)
 			quat newLocalQuat = ExtractRotationQuat(localMatrix);
 			quat deltaLocalQuat = glm::inverse(oldLocalQuat) * newLocalQuat;
 			vec3 deltaEuler = glm::degrees(glm::eulerAngles(deltaLocalQuat));
-
 			transform->SetRotation(transform->GetLocalRotationEuler() + deltaEuler);
 		}
 		else
 		{
-			// 이동 및 크기 조절은 로컬 매트릭스 분해값을 그대로 적용
 			float matrixTranslation[3], matrixRotation[3], matrixScale[3];
 			ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(localMatrix), matrixTranslation, matrixRotation, matrixScale);
 
 			transform->SetPosition(glm::make_vec3(matrixTranslation));
+			// 바운드 조작 시 스케일 값이 변하므로 아래 코드가 중요하게 작용합니다.
 			transform->SetScale(glm::make_vec3(matrixScale));
 		}
 	}
@@ -760,159 +934,30 @@ void SceneViewportPanel::DrawCameraOverlay()
 	}
 }
 
-void SceneViewportPanel::DrawCustomOptions()
+void SceneViewportPanel::DrawSelectionLocked()
 {
-	DrawResolutionMenu();
-	DrawSceneRenderTargetMenu();
-	DrawGizmoMenu();
-	DrawDebugMenu();
-	DrawPostProcessMenu();
-	DrawRenderPassMenu();
-	if (m_InspectorPanel) DrawCameraMenu();
-	DrawChannelViewButton();
-	DrawDimensionToggleButton();
-
-}
-
-void SceneViewportPanel::DrawSceneRenderTargetMenu()
-{
-	if (ImGui::BeginMenu("RenderTarget"))
+	// 선택 잠금 상태인지 확인
+	if (SelectionManager::Get().IsPrimarySelectionLocked())
 	{
-		if (ImGui::MenuItem("FinalRT", nullptr, m_ShowFinalComposed))
-		{
-			m_ShowFinalComposed = true;
-			m_Grid.Show();
-		}
+		ImDrawList* drawList = ImGui::GetWindowDrawList();
+		if (!drawList) return;
+		// ─── 1. 위치 계산 (좌측 하단) ───
+		float padding = 15.0f; // 여백
+		float fontSize = ImGui::GetFontSize();
 
-
-		ImGui::Separator();
-
-		// ── 1. 콤보박스: 이 뷰포트의 RT (짧은 이름) ──
-		wstring prefix = m_Name + L"_";
-		int currentIdx = 0;
-		vector<string> shortLabels;
-		for (int i = 0; i < m_OwnedRTNames.size(); ++i)
-		{
-			wstring shortW = m_OwnedRTNames[i];
-			if (shortW.find(prefix) == 0)
-				shortW = shortW.substr(prefix.size());
-			shortLabels.push_back(WStrToStr(shortW));
-			if (m_OwnedRTNames[i] == m_SelectedRTName)
-				currentIdx = i;
-		}
-		// 현재 선택이 OwnedRT가 아니면 "Other" 표시
-		const char* preview = currentIdx < shortLabels.size()
-			? shortLabels[currentIdx].c_str() : "Other";
-		if (ImGui::BeginCombo("##RTSelect", preview))
-		{
-			for (int i = 0; i < shortLabels.size(); ++i)
-			{
-				bool selected = !m_ShowFinalComposed && (m_OwnedRTNames[i] == m_SelectedRTName);
-				if (ImGui::Selectable(shortLabels[i].c_str(), selected))
-				{
-					m_ShowFinalComposed = false;
-					m_SelectedRTName = m_OwnedRTNames[i];
-					m_Grid.Hide();
-				}
-				DrawRTItemContextMenu(m_OwnedRTNames[i]);
-				if (selected)
-					ImGui::SetItemDefaultFocus();
-			}
-			ImGui::EndCombo();
-		}
-		// ── 2. 접힌 메뉴: 전체 RT (풀 이름) ──
-		if (ImGui::BeginMenu("All RenderTargets"))
-		{
-			auto allNames = RenderTargetManager::Get().GetAllRenderTargetNames();
-			for (const auto& name : allNames)
-			{
-				string label = WStrToStr(name);
-				bool selected = !m_ShowFinalComposed && (name == m_SelectedRTName);
-				if (ImGui::MenuItem(label.c_str(), nullptr, selected))
-				{
-					m_ShowFinalComposed = false;
-					m_SelectedRTName = name;
-					m_Grid.Hide();
-				}
-				DrawRTItemContextMenu(name);
-			}
-			ImGui::EndMenu();
-		}
-		ImGui::EndMenu();
+		// 위치: 이미지 왼쪽 끝 + 패딩, 이미지 아래쪽 끝 - 패딩 - 글자 높이
+		ImVec2 textPos = ImVec2(
+			m_ImageScreenPos.x + padding,
+			m_ImageScreenPos.y + m_ImageSize.y - padding - fontSize
+		);
+		// ─── 2. 가독성을 위한 그림자/배경 (선택 사항) ───
+		// 검은색 그림자를 살짝 깔아주면 밝은 배경에서도 잘 보입니다.
+		drawList->AddText(ImVec2(textPos.x + 1, textPos.y + 1), IM_COL32(0, 0, 0, 200), "Selection Locked");
+		// ─── 3. 초록색 텍스트 출력 ───
+		// 밝은 초록색 (Green)
+		ImU32 textColor = IM_COL32(50, 255, 50, 255);
+		drawList->AddText(textPos, textColor, "Selection Locked");
 	}
-}
-
-void SceneViewportPanel::DrawGizmoMenu()
-{
-	if (ImGui::BeginMenu("Gizmo"))
-	{
-		if (ImGui::MenuItem("Translate (W)", "Shift + 1", m_GizmoOperation == ImGuizmo::TRANSLATE))
-			m_GizmoOperation = ImGuizmo::TRANSLATE;
-		if (ImGui::MenuItem("Rotate (E)", "Shift + 2", m_GizmoOperation == ImGuizmo::ROTATE))
-			m_GizmoOperation = ImGuizmo::ROTATE;
-		if (ImGui::MenuItem("Scale (R)", "Shift + 3", m_GizmoOperation == ImGuizmo::SCALE))
-			m_GizmoOperation = ImGuizmo::SCALE;
-		ImGui::Separator();
-		if (ImGui::MenuItem("Local", nullptr, m_GizmoMode == ImGuizmo::LOCAL))
-			m_GizmoMode = ImGuizmo::LOCAL;
-		if (ImGui::MenuItem("World", nullptr, m_GizmoMode == ImGuizmo::WORLD))
-			m_GizmoMode = ImGuizmo::WORLD;
-
-		ImGui::Separator();
-		if (ImGui::MenuItem("Snap to Grid", nullptr, m_GizmoUseSnap))
-			m_GizmoUseSnap = !m_GizmoUseSnap;
-		if (m_GizmoUseSnap)
-		{
-			ImGui::InputFloat3("Snap Translation", glm::value_ptr(m_GizmoSnapTranslation));
-			ImGui::InputFloat3("Snap Rotation", glm::value_ptr(m_GizmoSnapRotation));
-			ImGui::InputFloat3("Snap Scale", glm::value_ptr(m_GizmoSnapScale));
-		}
-		ImGui::EndMenu();
-	}
-}
-
-void SceneViewportPanel::DrawDebugMenu()
-{
-	if (ImGui::BeginMenu("Debug"))
-	{
-		ImGui::MenuItem("Show Grid", nullptr, m_Grid.GetVisible());
-		ImGui::MenuItem("Show Collider", nullptr, m_DebugRenderer.GetDrawCollidersPtr());
-		ImGui::EndMenu();
-	}
-}
-
-void SceneViewportPanel::DrawPostProcessMenu()
-{
-	m_PostProcessChain.DrawImGuiMenu();
-}
-
-void SceneViewportPanel::DrawRenderPassMenu()
-{
-	if (ImGui::BeginMenu("Passes"))
-	{
-		for (auto& pass : m_PassOptions)
-		{
-			string label = WStrToStr(pass.Name);
-			ImGui::MenuItem(label.c_str(), nullptr, &pass.Enabled);
-		}
-		ImGui::EndMenu();
-	}
-}
-void SceneViewportPanel::ResizeRenderTargets(uint32 width, uint32 height)
-{
-	auto& rtMgr = RenderTargetManager::Get();
-	for (const auto& name : m_OwnedRTNames)
-	{
-		if (name == m_ShadowDepthName) continue;
-		if (auto* rt = rtMgr.GetRenderTarget(name))
-			rt->Resize(width, height);
-	}
-
-	if (m_Camera)
-		m_Camera->SetAspect(static_cast<f32>(width) / static_cast<f32>(height));
-
-	// Base: ChannelFilter RT 리사이즈
-	BaseViewportPanel::ResizeRenderTargets(width, height);
 }
 #pragma endregion
 
@@ -991,10 +1036,12 @@ void SceneViewportPanel::KeyboardInput()
 {
 	if (KEY_PRESSED(EKeyCode::LShift))
 	{
-		if (KEY_PRESSED("1")) m_GizmoOperation = ImGuizmo::OPERATION::TRANSLATE;
-		if (KEY_PRESSED("2")) m_GizmoOperation = ImGuizmo::OPERATION::ROTATE;
-		if (KEY_PRESSED("3")) m_GizmoOperation = ImGuizmo::OPERATION::SCALE;
+		if (KEY_DOWN("1")) m_GizmoOperation = ImGuizmo::OPERATION::TRANSLATE;
+		if (KEY_DOWN("2")) m_GizmoOperation = ImGuizmo::OPERATION::ROTATE;
+		if (KEY_DOWN("3")) m_GizmoOperation = ImGuizmo::OPERATION::SCALE;
+		if (KEY_DOWN(EKeyCode::L)) SelectionManager::Get().TogglePrimarySelectionLock();
 	}
+
 }
 void SceneViewportPanel::MouseInput()
 {

@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include <fmt/core.h>
 #include <SDL3/SDL.h>
 #include "Application.h"
@@ -14,60 +14,8 @@ IMPLEMENT_SINGLETON(Application)
 #pragma region Constructor&Destructor
 EResult Application::Initialize(void* arg)
 {
-	if (!SDL_Init(SDL_INIT_VIDEO))
-    {
-        fmt::print(stderr, "SDL_Init Failed: {}\n", SDL_GetError());
-        return EResult::Fail;
-    }
-
-    m_Window = SDL_CreateWindow(
-        "BamEngine Editor",
-        g_WindowWidth, g_WindowHeight,
-        SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_VULKAN // 기본 윈도우 플래그 (SDL_WINDOW_RESIZABLE 등 필요시 추가)
-	);
-
-	RUNTIMEDESC runtimeDesc = {};
-	runtimeDesc.RendererDesc.RHIType = ERHIType::SDLGPU;
-    switch (runtimeDesc.RendererDesc.RHIType)
-    {
-        case ERHIType::SDLGPU:
-        {
-            tagSDLGPURHIDesc sdlgpuDesc = {};
-            sdlgpuDesc.BackendType = EGraphicsBackend::Vulkan; // 원하는 그래픽 백엔드 설정
-            runtimeDesc.RendererDesc.RHIDesc = &sdlgpuDesc;
-            break;
-		}
-        //case ERHITType::Vulkan:
-        //{
-        //    tagVulkanRHIDesc vulkanDesc = {};
-        //    runtimeDesc.RendererDesc.RHIDesc = &vulkanDesc;
-        //    break;
-		//}
-        //case ERHITType::DirectX12:
-        //{
-        //    tagDirctX12RHIDesc dirctX12Desc = {};
-        //    runtimeDesc.RendererDesc.RHIDesc = &dirctX12Desc;
-        //    break;
-        //}
-        //case ERHITType::Metal:
-        //{
-        //    tagMetalRHIDesc metalDesc = {};
-        //    runtimeDesc.RendererDesc.RHIDesc = &metalDesc;
-        //    break;
-        //}
-    default:
-        break;
-    }
-	runtimeDesc.RendererDesc.RHIDesc->WindowHandle = m_Window;
-	runtimeDesc.RendererDesc.RHIDesc->Width = g_WindowWidth;
-	runtimeDesc.RendererDesc.RHIDesc->Height = g_WindowHeight;
-    runtimeDesc.RendererDesc.RHIDesc->IsVSync = true;
-
-    m_Runtime = Runtime::Create(&runtimeDesc);
-    if (!m_Runtime) return EResult::Fail;
-
-    m_AssetManager = AssetManager::Create();
-	if (!m_AssetManager) return EResult::Fail;
+	InitializeWindow(*(ApplicationCreateInfo*)arg);
+	InitializeRuntime(*(ApplicationCreateInfo*)arg);
 
 	tagImGuiManagerDesc imguiDesc = {};
 	imguiDesc.Window = m_Window;
@@ -116,6 +64,129 @@ void Application::Free()
     SDL_Quit();
 }
 
+#pragma endregion
+
+#pragma region Initialize
+EResult Application::InitializeWindow(const ApplicationCreateInfo& createInfo)
+{
+    if (!SDL_Init(SDL_INIT_VIDEO))
+    {
+        fmt::print(stderr, "SDL_Init Failed: {}\n", SDL_GetError());
+        return EResult::Fail;
+    }
+
+    uint32 windowFlags = SDL_WINDOW_RESIZABLE | SDL_WINDOW_BORDERLESS | SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_VULKAN;
+
+    m_Window = SDL_CreateWindow(
+        "BamEngine Editor", g_WindowWidth, g_WindowHeight,
+        windowFlags
+    );
+
+    if (m_Window)
+    {
+        SDL_SetWindowHitTest(m_Window, [](SDL_Window* win, const SDL_Point* area, void* data) -> SDL_HitTestResult {
+            int winWidth, winHeight;
+            SDL_GetWindowSize(win, &winWidth, &winHeight);
+
+            // [핵심 디테일 1] 창이 최대화(Maximized) 상태일 때는 크기 조절을 막아야 합니다.
+            bool isMaximized = (SDL_GetWindowFlags(win) & SDL_WINDOW_MAXIMIZED) != 0;
+
+            // 크기 조절을 인식할 테두리 두께 (일반적으로 6~8픽셀이 적당합니다)
+            const int resizeBorder = 6;
+
+            // --- 1. 크기 조절 영역 판정 (최대화 상태가 아닐 때만) ---
+            if (!isMaximized)
+            {
+                // 1-1. 모서리 4방향 (우선순위가 가장 높아야 함)
+                if (area->x < resizeBorder && area->y < resizeBorder) return SDL_HITTEST_RESIZE_TOPLEFT;
+                if (area->x > winWidth - resizeBorder && area->y < resizeBorder) return SDL_HITTEST_RESIZE_TOPRIGHT;
+                if (area->x < resizeBorder && area->y > winHeight - resizeBorder) return SDL_HITTEST_RESIZE_BOTTOMLEFT;
+                if (area->x > winWidth - resizeBorder && area->y > winHeight - resizeBorder) return SDL_HITTEST_RESIZE_BOTTOMRIGHT;
+
+                // 1-2. 상/하/좌/우 테두리
+                if (area->x < resizeBorder) return SDL_HITTEST_RESIZE_LEFT;
+                if (area->x > winWidth - resizeBorder) return SDL_HITTEST_RESIZE_RIGHT;
+                if (area->y > winHeight - resizeBorder) return SDL_HITTEST_RESIZE_BOTTOM;
+                if (area->y < resizeBorder) return SDL_HITTEST_RESIZE_TOP; // 상단 테두리
+            }
+
+            // --- 2. 타이틀 바 (드래그) 판정 ---
+            const int titleBarHeight = 36; // ImGui 메뉴바 높이 + 여백
+            const int leftMenuAreaWidth = 350;  // File, Edit, Scene 메뉴 등을 클릭할 공간
+            const int rightButtonAreaWidth = 150; // 우측 제어 버튼(-ㅁX)을 클릭할 공간
+
+            if (area->y < titleBarHeight)
+            {
+                // 메뉴와 우측 버튼 사이의 빈 공간만 드래그 가능하게 설정
+                if (area->x > leftMenuAreaWidth && area->x < (winWidth - rightButtonAreaWidth))
+                {
+                    return SDL_HITTEST_DRAGGABLE;
+                }
+
+                return SDL_HITTEST_NORMAL; // 메뉴나 버튼 위에 마우스가 있음
+            }
+
+            // 위 영역들에 해당하지 않으면 일반적인 클라이언트 영역(게임 화면, 에디터 UI)
+            return SDL_HITTEST_NORMAL;
+            }, nullptr);
+
+        SDL_Surface* iconSurface = SDL_LoadBMP("Resources/icon.bmp");
+
+        if (iconSurface)
+        {
+            SDL_SetWindowIcon(m_Window, iconSurface);
+            SDL_DestroySurface(iconSurface);
+        }
+    }
+    return EResult::Success;
+}
+EResult Application::InitializeRuntime(const ApplicationCreateInfo& createInfo)
+{
+    RUNTIMEDESC runtimeDesc = {};
+    runtimeDesc.RendererDesc.RHIType = ERHIType::SDLGPU;
+    switch (runtimeDesc.RendererDesc.RHIType)
+    {
+    case ERHIType::SDLGPU:
+    {
+        tagSDLGPURHIDesc sdlgpuDesc = {};
+        sdlgpuDesc.BackendType = EGraphicsBackend::Vulkan; // 원하는 그래픽 백엔드 설정
+        runtimeDesc.RendererDesc.RHIDesc = &sdlgpuDesc;
+        break;
+    }
+    //case ERHITType::Vulkan:
+    //{
+    //    tagVulkanRHIDesc vulkanDesc = {};
+    //    runtimeDesc.RendererDesc.RHIDesc = &vulkanDesc;
+    //    break;
+    //}
+    //case ERHITType::DirectX12:
+    //{
+    //    tagDirctX12RHIDesc dirctX12Desc = {};
+    //    runtimeDesc.RendererDesc.RHIDesc = &dirctX12Desc;
+    //    break;
+    //}
+    //case ERHITType::Metal:
+    //{
+    //    tagMetalRHIDesc metalDesc = {};
+    //    runtimeDesc.RendererDesc.RHIDesc = &metalDesc;
+    //    break;
+    //}
+    default:
+        break;
+    }
+    runtimeDesc.RendererDesc.RHIDesc->WindowHandle = m_Window;
+    runtimeDesc.RendererDesc.RHIDesc->Width = g_WindowWidth;
+    runtimeDesc.RendererDesc.RHIDesc->Height = g_WindowHeight;
+    runtimeDesc.RendererDesc.RHIDesc->IsVSync = true;
+
+    m_Runtime = Runtime::Create(&runtimeDesc);
+    if (!m_Runtime) return EResult::Fail;
+
+    m_AssetManager = AssetManager::Create();
+    if (!m_AssetManager) return EResult::Fail;
+
+    return EResult::Success;
+}
 #pragma endregion
 
 #pragma region Localization
@@ -189,9 +260,10 @@ void Application::InitializeShaders()
     gbufferVsDesc.SpirvPath = L"Resources/Shader/gbuffer.vert.spv";
     gbufferVsDesc.ShaderType = EShaderType::Vertex;
     rm.LoadResource<Shader>(&gbufferVsDesc);
-    rm.SaveToBinaryFile(
-        rm.GetResourceHandle<Shader>(gbufferVsDesc.Key).Get(),
-        L"Resources/Shader/gbuffer.vert.bamshader");
+    {
+        auto handle = rm.GetResourceHandle<Shader>(gbufferVsDesc.Key);
+        rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/gbuffer.vert.bamshader");
+    }
     rm.LoadFile(L"Resources/Shader/gbuffer.vert.bamshader");
     tagShaderDesc gbufferPsDesc = {};
     gbufferPsDesc.Key = L"Resources/Shader/GBufferPS";
@@ -199,9 +271,10 @@ void Application::InitializeShaders()
     gbufferPsDesc.SpirvPath = L"Resources/Shader/gbuffer.frag.spv";
     gbufferPsDesc.ShaderType = EShaderType::Pixel;
     rm.LoadResource<Shader>(&gbufferPsDesc);
-    rm.SaveToBinaryFile(
-        rm.GetResourceHandle<Shader>(gbufferPsDesc.Key).Get(),
-        L"Resources/Shader/gbuffer.frag.bamshader");
+    {
+        auto handle = rm.GetResourceHandle<Shader>(gbufferPsDesc.Key);
+        rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/gbuffer.frag.bamshader");
+    }
     rm.LoadFile(L"Resources/Shader/gbuffer.frag.bamshader");
 
     // Fullscreen Quad VS
@@ -212,9 +285,10 @@ void Application::InitializeShaders()
     fsQuadVsDesc.SpirvPath = L"Resources/Shader/fullscreen_quad.vert.spv";
     fsQuadVsDesc.EntryPoint = "main";
     rm.LoadResource<Shader>(&fsQuadVsDesc);
-    rm.SaveToBinaryFile(
-        rm.GetResourceHandle<Shader>(fsQuadVsDesc.Key).Get(),
-        L"Resources/Shader/fullscreen_quad.vert.bamshader");
+    {
+        auto handle = rm.GetResourceHandle<Shader>(fsQuadVsDesc.Key);
+        rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/fullscreen_quad.vert.bamshader");
+    }
     rm.LoadFile(L"Resources/Shader/fullscreen_quad.vert.bamshader");
 
     // Lighting PS
@@ -228,9 +302,10 @@ void Application::InitializeShaders()
     lightingPsDesc.NumStorageBuffers = 1;
     lightingPsDesc.NumUniformBuffers = 2;
     rm.LoadResource<Shader>(&lightingPsDesc);
-    rm.SaveToBinaryFile(
-        rm.GetResourceHandle<Shader>(lightingPsDesc.Key).Get(),
-        L"Resources/Shader/lighting.frag.bamshader");
+    {
+        auto handle = rm.GetResourceHandle<Shader>(lightingPsDesc.Key);
+        rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/lighting.frag.bamshader");
+    }
     rm.LoadFile(L"Resources/Shader/lighting.frag.bamshader");
 
     // Shadow Depth VS (static mesh)
@@ -241,9 +316,10 @@ void Application::InitializeShaders()
     shadowDepthVsDesc.SpirvPath = L"Resources/Shader/shadow_depth.vert.spv";
     shadowDepthVsDesc.EntryPoint = "main";
     rm.LoadResource<Shader>(&shadowDepthVsDesc);
-    rm.SaveToBinaryFile(
-        rm.GetResourceHandle<Shader>(shadowDepthVsDesc.Key).Get(),
-        L"Resources/Shader/shadow_depth.vert.bamshader");
+    {
+        auto handle = rm.GetResourceHandle<Shader>(shadowDepthVsDesc.Key);
+        rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/shadow_depth.vert.bamshader");
+    }
     rm.LoadFile(L"Resources/Shader/shadow_depth.vert.bamshader");
 
     // Shadow Depth VS (skinning)
@@ -255,9 +331,10 @@ void Application::InitializeShaders()
     shadowDepthSkinVsDesc.EntryPoint = "main";
     shadowDepthSkinVsDesc.NumStorageBuffers = 1;
     rm.LoadResource<Shader>(&shadowDepthSkinVsDesc);
-    rm.SaveToBinaryFile(
-        rm.GetResourceHandle<Shader>(shadowDepthSkinVsDesc.Key).Get(),
-        L"Resources/Shader/shadow_depth_skinning.vert.bamshader");
+    {
+        auto handle = rm.GetResourceHandle<Shader>(shadowDepthSkinVsDesc.Key);
+        rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/shadow_depth_skinning.vert.bamshader");
+    }
     rm.LoadFile(L"Resources/Shader/shadow_depth_skinning.vert.bamshader");
 
     // Shadow Depth PS (depth-only)
@@ -268,9 +345,10 @@ void Application::InitializeShaders()
     shadowDepthPsDesc.SpirvPath = L"Resources/Shader/shadow_depth.frag.spv";
     shadowDepthPsDesc.EntryPoint = "main";
     rm.LoadResource<Shader>(&shadowDepthPsDesc);
-    rm.SaveToBinaryFile(
-        rm.GetResourceHandle<Shader>(shadowDepthPsDesc.Key).Get(),
-        L"Resources/Shader/shadow_depth.frag.bamshader");
+    {
+        auto handle = rm.GetResourceHandle<Shader>(shadowDepthPsDesc.Key);
+        rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/shadow_depth.frag.bamshader");
+    }
     rm.LoadFile(L"Resources/Shader/shadow_depth.frag.bamshader");
 
 
@@ -284,7 +362,10 @@ void Application::InitializeShaders()
     viewportChannelPsDesc.NumSamplers = 1;
     viewportChannelPsDesc.NumUniformBuffers = 1;
     rm.LoadResource<Shader>(&viewportChannelPsDesc);
-    rm.SaveToBinaryFile(rm.GetResourceHandle<Shader>(viewportChannelPsDesc.Key).Get(), L"Resources/Shader/viewport_channel.frag.bamshader");
+    {
+        auto handle = rm.GetResourceHandle<Shader>(viewportChannelPsDesc.Key);
+        rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/viewport_channel.frag.bamshader");
+    }
     rm.LoadFile(L"Resources/Shader/viewport_channel.frag.bamshader");
 
     // PostProcess PS
@@ -297,7 +378,10 @@ void Application::InitializeShaders()
     postProcessPsDesc.NumSamplers = 1;
     postProcessPsDesc.NumUniformBuffers = 1;
     rm.LoadResource<Shader>(&postProcessPsDesc);
-    rm.SaveToBinaryFile(rm.GetResourceHandle<Shader>(postProcessPsDesc.Key).Get(), L"Resources/Shader/postprocess.frag.bamshader");
+    {
+        auto handle = rm.GetResourceHandle<Shader>(postProcessPsDesc.Key);
+        rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/postprocess.frag.bamshader");
+    }
     rm.LoadFile(L"Resources/Shader/postprocess.frag.bamshader");
 
     // PostProcess - Tone Mapping PS
@@ -310,7 +394,10 @@ void Application::InitializeShaders()
     ppToneMappingPsDesc.NumSamplers = 1;
     ppToneMappingPsDesc.NumUniformBuffers = 1;
     rm.LoadResource<Shader>(&ppToneMappingPsDesc);
-    rm.SaveToBinaryFile(rm.GetResourceHandle<Shader>(ppToneMappingPsDesc.Key).Get(), L"Resources/Shader/postprocess_tonemapping.frag.bamshader");
+    {
+        auto handle = rm.GetResourceHandle<Shader>(ppToneMappingPsDesc.Key);
+        rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/postprocess_tonemapping.frag.bamshader");
+    }
     rm.LoadFile(L"Resources/Shader/postprocess_tonemapping.frag.bamshader");
 
 
@@ -323,7 +410,10 @@ void Application::InitializeShaders()
     skyVSDesc.EntryPoint = "main";
     skyVSDesc.NumUniformBuffers = 1;
     rm.LoadResource<Shader>(&skyVSDesc);
-    rm.SaveToBinaryFile(rm.GetResourceHandle<Shader>(skyVSDesc.Key).Get(), L"Resources/Shader/sky.vert.bamshader");
+    {
+        auto handle = rm.GetResourceHandle<Shader>(skyVSDesc.Key);
+        rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/sky.vert.bamshader");
+    }
     rm.LoadFile(L"Resources/Shader/sky.vert.bamshader");
 
     // Skybox PS
@@ -335,7 +425,10 @@ void Application::InitializeShaders()
     skyPSDesc.EntryPoint = "main";
     skyPSDesc.NumUniformBuffers = 1;
     rm.LoadResource<Shader>(&skyPSDesc);
-    rm.SaveToBinaryFile(rm.GetResourceHandle<Shader>(skyPSDesc.Key).Get(), L"Resources/Shader/sky.frag.bamshader");
+    {
+        auto handle = rm.GetResourceHandle<Shader>(skyPSDesc.Key);
+        rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/sky.frag.bamshader");
+    }
     rm.LoadFile(L"Resources/Shader/sky.frag.bamshader");
 
     // UI VS
@@ -347,7 +440,10 @@ void Application::InitializeShaders()
     uiVSDesc.EntryPoint = "main";
     uiVSDesc.NumUniformBuffers = 1;
     rm.LoadResource<Shader>(&uiVSDesc);
-    rm.SaveToBinaryFile(rm.GetResourceHandle<Shader>(uiVSDesc.Key).Get(), L"Resources/Shader/ui.vert.bamshader");
+    {
+        auto handle = rm.GetResourceHandle<Shader>(uiVSDesc.Key);
+        rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/ui.vert.bamshader");
+    }
     rm.LoadFile(L"Resources/Shader/ui.vert.bamshader");
 
     // UI PS
@@ -359,7 +455,10 @@ void Application::InitializeShaders()
     uiPSDesc.EntryPoint = "main";
     uiPSDesc.NumUniformBuffers = 1;
     rm.LoadResource<Shader>(&uiPSDesc);
-    rm.SaveToBinaryFile(rm.GetResourceHandle<Shader>(uiPSDesc.Key).Get(), L"Resources/Shader/ui.frag.bamshader");
+    {
+        auto handle = rm.GetResourceHandle<Shader>(uiPSDesc.Key);
+        rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/ui.frag.bamshader");
+    }
     rm.LoadFile(L"Resources/Shader/ui.frag.bamshader");
 }
 

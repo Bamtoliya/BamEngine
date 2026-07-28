@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "ResourceManager.h"
 #include "Resources.h"
 #include "Archives.h"
@@ -242,16 +242,15 @@ EResult ResourceManager::DestroyResource(const Handle& handle)
 
 	return EResult::Fail;
 }
-const vector<Handle>& ResourceManager::GetResourceHandles(uint64 typeHash)
+vector<Handle> ResourceManager::GetResourceHandles(uint64 typeHash)
 {
-	static const vector<Handle> emptyList; // 반환용 빈 리스트
 	shared_lock lock(m_PoolMutex); // 읽기 락
 	auto it = m_TypeToHandles.find(typeHash);
 	if (it != m_TypeToHandles.end())
 	{
-		return it->second;
+		return it->second; // 값 복사 반환 — 락 보호 하에 복사 완료
 	}
-	return emptyList;
+	return {};
 }
 vector<Handle> ResourceManager::GetResourceHandlesIncludingDerived(uint64 baseTypeID)
 {
@@ -373,13 +372,12 @@ Handle ResourceManager::FindHandle(uint64 hash)
 {
 	shared_lock lock(m_PoolMutex);
 	auto iter = m_HashToHandle.find(hash);
-	lock.unlock();
 	if (iter != m_HashToHandle.end())
 	{
-		
 		return iter->second;
 	}
 	return Handle();
+	// lock은 스코프 종료 시 RAII로 자동 해제
 }
 
 Handle ResourceManager::AddResourceInternal(uint64 hash, Resource* resource)

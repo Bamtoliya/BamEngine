@@ -247,6 +247,7 @@ EResult GameObject::AddChild(GameObject* child)
 	child->SetParent(this);
 	m_Childs.push_back(child);
 	child->SetIndex(m_Childs.size() - 1);
+	child->SetDirty(true);
 	return EResult::Success;
 }
 EResult GameObject::RemoveChild(GameObject* child)
@@ -257,6 +258,7 @@ EResult GameObject::RemoveChild(GameObject* child)
 	if (it == m_Childs.end())
 		return EResult::Fail;
 	child->ClearParent();
+	child->SetDirty(true);
 	Safe_Release(*it);
 	m_Childs.erase(it);
 	UpdateChildIndex();
@@ -363,6 +365,18 @@ bool GameObject::IsVisibleInHierarchy() const
 	if (m_Parent)
 		return m_Parent->IsVisibleInHierarchy();
 	return true;
+}
+void GameObject::SetDirty(bool dirty)
+{
+	for (auto& comp : m_Components)
+	{
+		comp->SetDirty(dirty);
+	}
+
+	for (auto& child : m_Childs)
+	{
+		child->SetDirty(dirty);
+	}
 }
 #pragma endregion
 

@@ -31,6 +31,11 @@ public:
 	void Free() override;
 #pragma endregion
 
+#pragma region Initialize
+private:
+	EResult InitializeWindow(const ApplicationCreateInfo& createInfo);
+	EResult InitializeRuntime(const ApplicationCreateInfo& createInfo);
+#pragma endregion
 
 #pragma region Localization
 private:

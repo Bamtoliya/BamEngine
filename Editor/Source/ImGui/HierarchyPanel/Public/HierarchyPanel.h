@@ -30,36 +30,6 @@ private:
 	void DrawSceneContextMenu();
 	void DrawLayerContextMenu(class Layer* layer);
 	void DrawGameObjectContextMenu(class GameObject* gameObject);
-private:
-	
-	//-------Create Object Menu Actions----------
-	void CreateEmptyObject(class Scene* scene);
-	void CreatePrimitive(class Scene* scene, const wstring& name, const wstring& meshName);
-	void CreateSpriteObject(class Scene* scene);
-	void CreateAnimatorObject(class Scene* scene);
-	void CreateCamera(class Scene* scene);
-
-	//-------Lights----------
-	void CreateDirectionalLight(class Scene* scene);
-	void CreatePointLight(class Scene* scene);
-	void CreateSpotLight(class Scene* scene);
-
-	//-------Environment Objects----------
-	void CreateSky(class Scene* scene);
-
-	//-------UI Objects----------
-	void CreateCanvas(class Scene* scene);
-	void CreateButton(class Scene* scene);
-	void CreateText(class Scene* scene);
-	void CreateImage(class Scene* scene);
-	void CreatePanel(class Scene* scene);
-	void CreateSlider(class Scene* scene);
-	void CreateInputField(class Scene* scene);
-	void CreateScrollView(class Scene* scene);
-	void CreateToggle(class Scene* scene);
-	void CreateDropdown(class Scene* scene);
-	void CreateProgressBar(class Scene* scene);
-
 
 #pragma region Variables
 private:

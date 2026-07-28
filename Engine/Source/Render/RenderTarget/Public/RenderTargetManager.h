@@ -2,7 +2,6 @@
 
 #include "RenderTarget.h"
 
-
 BEGIN(Engine)
 class ENGINE_API RenderTargetManager final : public Base
 {

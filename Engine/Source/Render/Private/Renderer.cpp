@@ -101,8 +101,30 @@ EResult Renderer::Render(f32 dt)
 
 		for (Camera* cam : cameras)
 		{
+			if (IsFailure(m_RHI->BeginRenderPass(pass)))
+				continue;
+
+			if (pass->GetRenderTargetCount() > 0)
+			{
+				RenderTarget* rt = RenderTargetManager::Get().GetRenderTarget(pass->GetRenderTargetName(0));
+				if (rt)
+				{
+					rtWidth = rt->GetWidth();
+					rtHeight = rt->GetHeight();
+				}
+			}
+			else if (!pass->GetDepthStencilName().empty())
+			{
+				RenderTarget* rt = RenderTargetManager::Get().GetRenderTarget(pass->GetDepthStencilName());
+				if (rt)
+				{
+					rtWidth = rt->GetWidth();
+					rtHeight = rt->GetHeight();
+				}
+			}
+
 			tagCameraBuffer cameraBuffer = {};
-			
+
 			if (passType == ERenderPassType::Shadow)
 			{
 				cameraBuffer = LightManager::Get().GetShadowCameraBuffer(uint32(0));
@@ -129,42 +151,15 @@ EResult Renderer::Render(f32 dt)
 			m_RHI->BindConstantBuffer(&cameraBuffer, sizeof(tagCameraBuffer), 0, EShaderType::Vertex);
 			m_RHI->BindConstantBuffer(&cameraBuffer, sizeof(tagCameraBuffer), 0, EShaderType::Pixel);
 
-			if (IsFailure(m_RHI->BeginRenderPass(pass)))
-				continue;
-
-			if (pass->GetRenderTargetCount() > 0)
-			{
-				RenderTarget* rt = RenderTargetManager::Get().GetRenderTarget(pass->GetRenderTargetName(0));
-				if (rt)
-				{
-					rtWidth = rt->GetWidth();
-					rtHeight = rt->GetHeight();
-				}
-			}
-			else if (!pass->GetDepthStencilName().empty())
-			{
-				RenderTarget* rt = RenderTargetManager::Get().GetRenderTarget(pass->GetDepthStencilName());
-				if (rt)
-				{
-					rtWidth = rt->GetWidth();
-					rtHeight = rt->GetHeight();
-				}
-			}
 			m_RHI->SetViewport(0, 0, rtWidth, rtHeight);
 
+			auto it = m_RenderQueues.find(pass->GetID());
+			if (it != m_RenderQueues.end())
+				RenderComponents(dt, it->second, pass->GetSortType(), pass);
 
-			if (passType == ERenderPassType::UI)
-			{
-				auto uiIt = m_UIRenderQueues.find(pass->GetID());
-				if (uiIt != m_UIRenderQueues.end())
-					RenderUIComponents(dt, uiIt->second, pass->GetSortType(), pass);
-			}
-			else
-			{
-				auto it = m_RenderQueues.find(pass->GetID());
-				if (it != m_RenderQueues.end())
-					RenderComponents(dt, it->second, pass->GetSortType(), pass);
-			}
+			auto uiIt = m_UIRenderQueues.find(pass->GetID());
+			if (uiIt != m_UIRenderQueues.end())
+				RenderUIComponents(dt, uiIt->second, pass->GetSortType(), pass);
 			
 			auto customIt = m_CustomRenderQueues.find(pass->GetID());
 			if (customIt != m_CustomRenderQueues.end())

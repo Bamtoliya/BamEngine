@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "Component.h"
 #include "ReflectionMacro.h"
@@ -129,6 +129,8 @@ private:
 
 #pragma region Setter
 public:
+	virtual void SetDirty(bool dirty = true) override;
+
 	FUNCTION()
 	void SetPosition(const vec3& position);
 	FUNCTION()

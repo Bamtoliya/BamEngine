@@ -6,6 +6,7 @@
 #include "SelectionManager.h"
 #include "ResourceManager.h"
 
+#include "SceneFactory.h"
 #include "SceneManager.h"
 #include "Scene.h"
 #include "Layer.h"
@@ -827,46 +828,46 @@ void HierarchyPanel::DrawAddGameObjectButton(Scene* scene)
 	{
 		if (ImGui::MenuItem("Empty Object"))
 		{
-			CreateEmptyObject(scene);
+			SceneFactory::CreateEmptyObject(scene);
 		}
 
 		ImGui::Separator();
 
 		if (ImGui::MenuItem("Cube"))
 		{
-			CreatePrimitive(scene, L"Cube", L"CubeMesh");
+			SceneFactory::CreatePrimitive(scene, L"Cube", L"CubeMesh");
 		}
 
 		if (ImGui::MenuItem("Sphere"))
 		{
-			CreatePrimitive(scene, L"Sphere", L"Sphere");
+			SceneFactory::CreatePrimitive(scene, L"Sphere", L"Sphere");
 		}
 
 		if (ImGui::MenuItem("Quad"))
 		{
-			CreatePrimitive(scene, L"Quad", L"QuadMesh");
+			SceneFactory::CreatePrimitive(scene, L"Quad", L"QuadMesh");
 		}
 
 		if (ImGui::MenuItem("Plane"))
 		{
-			CreatePrimitive(scene, L"Plane", L"PlaneMesh");
+			SceneFactory::CreatePrimitive(scene, L"Plane", L"PlaneMesh");
 		}
 
 		if (ImGui::MenuItem("Sprite"))
 		{
-			CreateSpriteObject(scene);
+			SceneFactory::CreateSpriteObject(scene);
 		}
 
 		if (ImGui::MenuItem("Animation Object"))
 		{
-			CreateAnimatorObject(scene);
+			SceneFactory::CreateAnimatorObject(scene);
 		}
 
 		ImGui::Separator();
 
 		if (ImGui::MenuItem("Sky"))
 		{
-			CreateSky(scene);
+			SceneFactory::CreateSky(scene);
 		}
 
 		ImGui::Separator();
@@ -875,15 +876,15 @@ void HierarchyPanel::DrawAddGameObjectButton(Scene* scene)
 		{
 			if (ImGui::MenuItem("Directional Light"))
 			{
-				CreateDirectionalLight(scene);
+				SceneFactory::CreateDirectionalLight(scene);
 			}
 			if (ImGui::MenuItem("Point Light"))
 			{
-				CreatePointLight(scene);
+				SceneFactory::CreatePointLight(scene);
 			}
 			if (ImGui::MenuItem("Spot Light"))
 			{
-				CreateSpotLight(scene);
+				SceneFactory::CreateSpotLight(scene);
 			}
 			ImGui::EndMenu();
 		}
@@ -891,17 +892,31 @@ void HierarchyPanel::DrawAddGameObjectButton(Scene* scene)
 
 		if (ImGui::MenuItem("Camera"))
 		{
-			CreateCamera(scene);
+			SceneFactory::CreateCamera(scene);
 		}
 
 		ImGui::Separator();
 		if (ImGui::BeginMenu("UI"))
 		{
+			if (ImGui::MenuItem("Canvas"))
+			{
+				SceneFactory::CreateCanvas(scene);
+			}
 			if (ImGui::MenuItem("Image"))
 			{
-				CreateImage(scene);
+				SceneFactory::CreateImage(scene);
+			}
+			if (ImGui::MenuItem("Button"))
+			{
+				SceneFactory::CreateButton(scene);
 			}
 			ImGui::EndMenu();
+		}
+
+		ImGui::Separator();
+		if(ImGui::MenuItem("Event System"))
+		{
+			SceneFactory::CreateEventSystem(scene);
 		}
 		ImGui::EndPopup();
 	}
@@ -1154,167 +1169,4 @@ void HierarchyPanel::DrawGameObjectContextMenu(GameObject* gameObject)
 
 		ImGui::EndPopup();
 	}
-}
-
-void HierarchyPanel::CreateEmptyObject(Scene* scene)
-{
-	GameObject* newGameObject = GameObject::Create();
-	newGameObject->SetName(L"New GameObject");
-	scene->AddGameObject(newGameObject);
-	Safe_Release(newGameObject);
-}
-
-void HierarchyPanel::CreatePrimitive(Scene* scene, const wstring& name, const wstring& meshName)
-{
-	ResourceManager& resourceMgr = ResourceManager::Get();
-	GameObject* newGameObject = GameObject::Create();
-	newGameObject->AddComponent<Transform>();
-	newGameObject->SetName(L"New" + name);
-	newGameObject->AddComponent<MeshRenderer>();
-	newGameObject->AddComponent<MeshFilter>();
-	MeshFilter* meshFilter = newGameObject->GetComponent<MeshFilter>();
-	meshFilter->SetMeshHandle(resourceMgr.GetResourceHandle<Mesh>(meshName));
-	MeshRenderer* meshRenderer = newGameObject->GetComponent<MeshRenderer>();
-	meshRenderer->SetMaterial(resourceMgr.GetResourceHandle<Material>(L"Resources/Material/DefaultMaterial.bammat"));
-	newGameObject->AddComponent<BoxCollider>();
-	scene->AddGameObject(newGameObject);
-	Safe_Release(newGameObject);
-}
-
-void HierarchyPanel::CreateSpriteObject(Scene* scene)
-{
-	ResourceManager& resourceMgr = ResourceManager::Get();
-	GameObject* newGameObject = GameObject::Create();
-	newGameObject->SetName(L"New Sprite");
-	newGameObject->AddComponent<Transform>();
-	newGameObject->AddComponent<SpriteRenderer>();
-	SpriteRenderer* spriteRenderer = newGameObject->GetComponent<SpriteRenderer>();
-	spriteRenderer->SetMaterial(resourceMgr.GetResourceHandle<Material>(L"Resources/Material/SpriteMaterial.bammat"));
-	spriteRenderer->SetSprite(resourceMgr.GetResourceHandle<Sprite>(L"Resources/Texture/uv1.bamsprite"));
-
-	newGameObject->AddComponent<Box2DCollider>();
-	scene->AddGameObject(newGameObject);
-	Safe_Release(newGameObject);
-}
-
-void HierarchyPanel::CreateAnimatorObject(Scene* scene)
-{
-	ResourceManager& resourceMgr = ResourceManager::Get();
-	GameObject* newGameObject = GameObject::Create();
-	newGameObject->AddComponent<Transform>();
-	newGameObject->SetName(L"New Animation Object");
-	// 1. 3D 모델 렌더링을 위한 필수 컴포넌트
-	newGameObject->AddComponent<MeshFilter>();
-	newGameObject->AddComponent<SkinnedMeshRenderer>();
-
-	SkinnedMeshRenderer* skinnedMeshRenderer = newGameObject->GetComponent<SkinnedMeshRenderer>();
-	skinnedMeshRenderer->SetMaterial(resourceMgr.GetResourceHandle<Material>(L"Resources/Material/SkinningMaterial.bammat"));
-
-	// 2. 애니메이터 컴포넌트 부착 (스켈레톤과 애니메이션 제어용)
-	newGameObject->AddComponent<Animator>();
-	Animator* animator = newGameObject->GetComponent<Animator>();
-
-	// [테스트용 임시 코드] 스켈레톤과 애니메이션 로드 및 설정
-	// TODO: 실제 임포트하신 파일 경로로 변경해 주세요!
-	ResourceHandle<Skeleton> skeleton = resourceMgr.GetResourceHandle<Skeleton>(L"Resources/Model/TestBall_Skeleton.bamskel");
-	ResourceHandle<Animation> animation = resourceMgr.GetResourceHandle<Animation>(L"Resources/Model/TestBall_Armature_Anim_Bend.bamanim");
-	ResourceHandle<Animation> animation2 = resourceMgr.GetResourceHandle<Animation>(L"Resources/Model/TestBall_Armature_Anim_Jump.bamanim");
-
-	if (skeleton.IsValid() && animation.IsValid())
-	{
-		animator->SetSkeleton(skeleton);
-		animator->AddState(L"TestAnim", animation, true, 1.0f);
-		animator->AddState(L"TestAnim2", animation2, true, 1.0f);
-		animator->Play(L"TestAnim");
-	}
-
-	// (선택) 물리 충돌체
-	newGameObject->AddComponent<BoxCollider>();
-	// 3. 씬에 등록
-	scene->AddGameObject(newGameObject);
-	Safe_Release(newGameObject);
-}
-
-void HierarchyPanel::CreateCamera(Scene* scene)
-{
-	GameObject* newGameObject = GameObject::Create();
-	newGameObject->AddComponent<Transform>();
-	newGameObject->SetName(L"Camera");
-	newGameObject->AddComponent<Camera>();
-	scene->AddGameObject(newGameObject);
-	Safe_Release(newGameObject);
-}
-
-void HierarchyPanel::CreateDirectionalLight(Scene* scene)
-{
-	GameObject* newGameObject = GameObject::Create();
-	newGameObject->AddComponent<Transform>();
-	newGameObject->SetName(L"Directional Light");
-	tagLightSourceDesc lightDesc;
-	lightDesc.Type = ELightType::Directional;
-	lightDesc.Color = vec3(1.0f, 1.0f, 1.f);
-	newGameObject->AddComponent<LightSource>(&lightDesc);
-	scene->AddGameObject(newGameObject);
-	Safe_Release(newGameObject);
-}
-
-void HierarchyPanel::CreatePointLight(Scene* scene)
-{
-	GameObject* newGameObject = GameObject::Create();
-	newGameObject->AddComponent<Transform>();
-	newGameObject->SetName(L"Point Light");
-	tagLightSourceDesc lightDesc;
-	lightDesc.Type = ELightType::Point;
-	lightDesc.Color = vec3(1.0f, 1.0f, 1.f);
-	newGameObject->AddComponent<LightSource>(&lightDesc);
-	scene->AddGameObject(newGameObject);
-	Safe_Release(newGameObject);
-}
-
-void HierarchyPanel::CreateSpotLight(Scene* scene)
-{
-	GameObject* newGameObject = GameObject::Create();
-	newGameObject->AddComponent<Transform>();
-	newGameObject->SetName(L"Spot Light");
-	tagLightSourceDesc lightDesc;
-	lightDesc.Type = ELightType::Spot;
-	lightDesc.Color = vec3(1.0f, 1.0f, 1.f);
-	newGameObject->AddComponent<LightSource>(&lightDesc);
-	scene->AddGameObject(newGameObject);
-	Safe_Release(newGameObject);
-}
-
-void HierarchyPanel::CreateSky(Scene* scene)
-{
-	ResourceManager& resourceMgr = ResourceManager::Get();
-	GameObject* newGameObject = GameObject::Create();
-	newGameObject->AddComponent<Transform>();
-	newGameObject->SetName(L"Sky");
-
-	tagSkyRendererDesc skyRendererDesc;
-	newGameObject->AddComponent<SkyRenderer>();
-	newGameObject->AddComponent<SkyLight>();
-	SkyRenderer* skyRenderer = newGameObject->GetComponent<SkyRenderer>();
-	if (skyRenderer)
-	{
-		skyRenderer->SetMaterial(
-			resourceMgr.GetResourceHandle<Material>(L"Resources/Material/SkyMaterial.bammat"));
-	}
-
-	scene->AddGameObject(newGameObject);
-	Safe_Release(newGameObject);
-}
-
-void HierarchyPanel::CreateImage(Scene* scene)
-{
-	ResourceManager& resourceMgr = ResourceManager::Get();
-	GameObject* newGameObject = GameObject::Create();
-	newGameObject->SetName(L"New Image");
-	newGameObject->AddComponent<RectTransform>();
-	newGameObject->AddComponent<UIImage>();
-	UIImage* uiImage = newGameObject->GetComponent<UIImage>();
-	uiImage->SetMaterial(resourceMgr.GetResourceHandle<MaterialInterface>(L"Resources/Material/UIMaterial"));
-	uiImage->SetSprite(resourceMgr.GetResourceHandle<Sprite>(L"Resources/Texture/uv1.bamsprite.json"));
-	scene->AddGameObject(newGameObject);
-	Safe_Release(newGameObject);
 }

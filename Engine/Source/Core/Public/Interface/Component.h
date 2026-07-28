@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "Base.h"
 #include "ReflectionMacro.h"
@@ -63,7 +63,7 @@ public:
 	void SetOwner(GameObject* owner) { m_Owner = owner; }
 	void SetTag(const wstring& tag) { m_Tag = tag; }
 	virtual void SetActive(bool active)  override { m_Active = active; }
-	void SetDirty(bool dirty = true) { m_Dirty = dirty; }
+	virtual void SetDirty(bool dirty = true) { m_Dirty = dirty; }
 #pragma endregion
 
 #pragma region Save&Load

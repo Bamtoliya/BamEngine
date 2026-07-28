@@ -6,6 +6,9 @@
 
 BEGIN(Engine)
 
+class EventSystem;
+class UICanvas;
+
 struct tagSceneCreateDesc
 {
 	wstring name = L"Scene";
@@ -89,6 +92,14 @@ public:
 	void SetActive(bool active);
 #pragma endregion
 
+#pragma region System Management
+public:
+	class EventSystem* GetEventSystem() const { return m_EventSystem; }
+	void SetEventSystem(class EventSystem* sys) { m_EventSystem = sys; }
+	class UICanvas* GetRootCanvas() const { return m_RootCanvas; }
+	void SetRootCanvas(class UICanvas* canvas) { m_RootCanvas = canvas; }
+#pragma endregion
+
 #pragma region Save&Load
 public:
 	virtual void Serialize(class Archive& ar) override;
@@ -110,6 +121,9 @@ protected:
 	unordered_map<uint64, class GameObject*> m_GameObjectMap;
 
 	vector<class GameObject*> m_DeadGameObjects;
+
+	class EventSystem* m_EventSystem = { nullptr };
+	class UICanvas* m_RootCanvas = { nullptr };
 #pragma endregion
 };
 END

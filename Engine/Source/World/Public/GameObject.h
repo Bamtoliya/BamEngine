@@ -183,6 +183,9 @@ public:
 	void SetAllChildVisible(bool visible);
 	void SetAllChildActive(bool active);
 	bool IsVisibleInHierarchy() const;
+public:
+	bool IsDirty() const { return m_Dirty; }
+	virtual void SetDirty(bool dirty = true);
 #pragma endregion
 
 #pragma region Layer Management
@@ -236,6 +239,8 @@ protected:
 
 	PROPERTY()
 	vector<GameObject*> m_Childs = {};
+
+	bool m_Dirty = { false };
 #pragma endregion
 
 };

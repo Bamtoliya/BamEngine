@@ -1,7 +1,6 @@
-#pragma once
+﻿#pragma once
 
 #include "MeshRenderer.h"
-
 
 BEGIN(Engine)
 
@@ -31,7 +30,7 @@ public:
 
 #pragma region Variable
 private:
-	RHIBuffer* m_BoneSSBO = nullptr;
+	class RHIBuffer* m_BoneSSBO = nullptr;
 	uint32 m_LastBoneCount = 0;
 #pragma endregion
 };

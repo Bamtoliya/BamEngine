@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "SkinnedMeshRenderer.h"
 
@@ -67,7 +67,8 @@ EResult SkinnedMeshRenderer::Render(f32 dt, RenderPass* renderPass)
 
 	if (renderPass && renderPass->GetPassType() == ERenderPassType::Shadow)
 	{
-		material = ResourceManager::Get().GetResourceHandle<Material>(L"Resources/Material/ShadowDepthSkinningMaterial").Get();
+		auto shadowMatHandle = ResourceManager::Get().GetResourceHandle<Material>(L"Resources/Material/ShadowDepthSkinningMaterial");
+		material = shadowMatHandle.Get();
 		if (!material) return EResult::Success;
 	}
 	else

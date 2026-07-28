@@ -5,3 +5,4 @@
 #include "SceneViewportPanel.h"
 #include "EditorViewportPanel.h"
 #include "GameViewportPanel.h"
+#include "UIViewportPanel.h"

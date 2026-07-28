@@ -17,6 +17,7 @@
 
 #include "LightManager.h"
 #include "SerializationHelper.h"
+#include "Transform.h"
 
 
 #pragma region Constructor&Destructor

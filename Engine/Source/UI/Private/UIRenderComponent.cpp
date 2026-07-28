@@ -8,6 +8,7 @@
 #include "RenderPass.h"
 #include "ComponentRegistry.h"
 #include "Camera.h"
+#include "UICanvas.h"
 
 REGISTER_COMPONENT(UIRenderComponent)
 
@@ -37,13 +38,29 @@ void UIRenderComponent::LateUpdate(f32 dt)
     if (!(m_Active && m_Owner && m_Owner->IsActive() && m_Owner->IsVisible())) return;
 
     const auto& activePasses = Renderer::Get().GetActiveViewportCameras();
+
+    UICanvas* canvas = GetRootCanvas();
+    bool isWorldSpace = canvas && canvas->GetRenderMode() == ECanvasRenderMode::WorldSpace;
+
     for (const auto& passInfo : activePasses)
     {
-		if (!passInfo.Camera || !passInfo.RenderPass) continue;
+		if (!passInfo.RenderPass) continue;
+        const ERenderPassType passType = passInfo.RenderPass->GetPassType();
         const RenderPassID passID = passInfo.RenderPass->GetID();
-        if (passInfo.RenderPass->GetPassType() != ERenderPassType::UI) continue;
-		if ((passInfo.Camera->GetCullingMask() & m_VisibilityChannel) == 0) continue;
-        Renderer::Get().SubmitUI(this, passID);
+        if (isWorldSpace)
+        {
+            if (passType == ERenderPassType::Forward || passType == ERenderPassType::ForwardTransparent)
+            {
+				Renderer::Get().SubmitUI(this, passID);
+            }
+        }
+        else
+        {
+            if (passInfo.RenderPass->GetPassType() == ERenderPassType::UI)
+            {
+                Renderer::Get().SubmitUI(this, passID);
+            };
+        }        
     }
 }
 
@@ -88,4 +105,18 @@ EResult UIRenderComponent::BindPipeline(Mesh* mesh, MaterialInterface* material,
         return EResult::Fail;
     }
     return Renderer::Get().GetRHI()->BindPipeline(pipeline);
+}
+
+UICanvas* UIRenderComponent::GetRootCanvas() const
+{
+	// Traverse up the hierarchy to find the root canvas
+	GameObject* currentObject = m_Owner;
+	UICanvas* rootCanvas = nullptr;
+    while (currentObject)
+    {
+		UICanvas* canvas = currentObject->GetComponent<UICanvas>();
+		if (canvas) rootCanvas = canvas;
+		currentObject = currentObject->GetParent();
+    }
+    return rootCanvas;
 }

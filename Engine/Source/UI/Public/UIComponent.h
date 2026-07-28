@@ -13,12 +13,18 @@ class ENGINE_API UIComponent : public Component
 protected:
 	UIComponent() {}
 	virtual ~UIComponent() {}
-	EResult Initialize(void* arg = nullptr) override { return EResult::NotImplemented; }
+	EResult Initialize(void* arg = nullptr) override { EnsureRootCanvas(); return EResult::Success; }
 public:
 	static UIComponent* Create(void* arg = nullptr) { return nullptr; }
 	static Component* Clone(GameObject* owner, void* arg = nullptr) { return nullptr; }
 	virtual void Free() override { __super::Free(); }
 #pragma endregion 
+
+#pragma region Canvas Management
+public:
+	void EnsureRootCanvas();
+#pragma endregion
+
 
 #pragma region RectTransform
 public:

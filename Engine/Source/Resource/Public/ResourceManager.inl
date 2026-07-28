@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "ResourceManager.h"
 
 template<typename T, typename... Args>
@@ -96,7 +96,7 @@ ResourceHandle<T> ResourceManager::GetResourceHandle(const wstring& key)
 }
 
 template<typename T>
-const vector<Handle>& ResourceManager::GetResourceHandles()
+vector<Handle> ResourceManager::GetResourceHandles()
 {
 	return GetResourceHandles(T::GetStaticTypeInfo().ID);
 }

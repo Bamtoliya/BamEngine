@@ -7,7 +7,7 @@ BEGIN(Editor)
 class ToolBar
 {
 public:
-	void Draw();
+	void Draw(SDL_Window* window);
 	float GetPlayBarHeight() const;
 private:
 #pragma region File Menu
@@ -51,6 +51,12 @@ private:
 private:
     void DrawPlayControls();
 #pragma endregion
+
+#pragma region Window Control
+private:
+	void DrawWindowControls(SDL_Window* window);
+#pragma endregion
+
 
 
 

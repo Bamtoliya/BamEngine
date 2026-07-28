@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "DebugRenderer.h"
 #include "Renderer.h"
@@ -19,7 +19,10 @@ void DebugRenderer::Initialize(const wstring& prefix)
 	vsDesc.ShaderType = EShaderType::Vertex;
 	vsDesc.EntryPoint = "main";
 	rm.LoadResource<Shader>(&vsDesc);
-	rm.SaveToBinaryFile(rm.GetResourceHandle<Shader>(L"DebugLineVS").Get(), L"Resources/Shader/debugLine.vert.bamshader");
+	{
+		auto handle = rm.GetResourceHandle<Shader>(L"DebugLineVS");
+		rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/debugLine.vert.bamshader");
+	}
 
 	tagShaderDesc psDesc = {};
 	psDesc.Key = L"DebugLinePS";
@@ -28,7 +31,10 @@ void DebugRenderer::Initialize(const wstring& prefix)
 	psDesc.ShaderType = EShaderType::Pixel;
 	psDesc.EntryPoint = "main";
 	rm.LoadResource<Shader>(&psDesc);
-	rm.SaveToBinaryFile(rm.GetResourceHandle<Shader>(L"DebugLinePS").Get(), L"Resources/Shader/debugLine.frag.bamshader");
+	{
+		auto handle = rm.GetResourceHandle<Shader>(L"DebugLinePS");
+		rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/debugLine.frag.bamshader");
+	}
 
 	m_Vertices.reserve(2 * m_MaxLines);
 
@@ -74,8 +80,10 @@ void DebugRenderer::SubmitDebugDraw(Camera* camera, const wstring& colorRTName)
 			desc.CullMode = ECullMode::None;
 			desc.Topology = ETopology::LineList;
 
-			desc.VertexShader = rm.GetResourceHandle<Shader>(L"DebugLineVS").Get()->GetRHIShader();
-			desc.PixelShader = rm.GetResourceHandle<Shader>(L"DebugLinePS").Get()->GetRHIShader();
+			auto debugVSHandle = rm.GetResourceHandle<Shader>(L"DebugLineVS");
+			auto debugPSHandle = rm.GetResourceHandle<Shader>(L"DebugLinePS");
+			desc.VertexShader = debugVSHandle->GetRHIShader();
+			desc.PixelShader = debugPSHandle->GetRHIShader();
 			desc.InputLayouts.push_back(Engine::DebugVertex::Layout);
 
 			desc.DepthStencilState.DepthTestEnable = false;

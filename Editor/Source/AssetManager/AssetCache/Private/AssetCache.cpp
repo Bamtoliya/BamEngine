@@ -1,9 +1,10 @@
-﻿#pragma once
+#pragma once
 #include "AssetCache.h"
 #include <stb_image.h>
 #include "Renderer.h"
 #include "RHI.h"
 #include <shlobj.h> // Windows Shell API
+#include "AssetManager.h"
 
 IMPLEMENT_SINGLETON(AssetCache)
 
@@ -15,6 +16,45 @@ EResult AssetCache::Initialize(void* arg)
 void AssetCache::Free()
 {
 	ClearAll();
+}
+
+void AssetCache::Update()
+{
+	std::vector<ThumbnailUploadTask> tasks;
+	{
+		std::lock_guard lock(m_UploadMutex);
+		tasks = std::move(m_UploadTasks);
+	}
+
+	for (auto& task : tasks)
+	{
+		// 디코딩 실패 처리
+		if (task.Width == 0 || task.Height == 0)
+		{
+			m_ThumbnailCache[task.AssetPath] = nullptr;
+			m_LoadingPaths.erase(task.AssetPath);
+			continue;
+		}
+
+		tagRHITextureDesc desc = {};
+		desc.Width = task.Width;
+		desc.Height = task.Height;
+		desc.Data = task.Data.data();
+		desc.DataSize = (uint32)task.Data.size();
+
+		RHITexture* rhiTexture = Renderer::Get().GetRHI()->CreateTextureFromMemory(desc);
+		if (rhiTexture)
+		{
+			m_ThumbnailTextures[task.AssetPath] = rhiTexture;
+			m_ThumbnailCache[task.AssetPath] = (void*)(size_t)(rhiTexture->GetNativeHandle());
+		}
+		else
+		{
+			m_ThumbnailCache[task.AssetPath] = nullptr;
+		}
+		
+		m_LoadingPaths.erase(task.AssetPath);
+	}
 }
 #pragma endregion
 
@@ -28,23 +68,45 @@ void* AssetCache::GetThumbnail(const filesystem::path& assetPath)
     if (it != m_ThumbnailCache.end())
         return it->second;
 
-    // 2. 확장자에 따라 적절한 로더 호출
+    // 2. 이미 로딩 중이라면 더미(nullptr) 반환
+    if (m_LoadingPaths.count(pathStr))
+        return nullptr;
+
+    m_LoadingPaths.insert(pathStr);
+
+    // 3. 백그라운드 디코딩 태스크 예약
     std::string ext = assetPath.extension().string();
     for (auto& c : ext) c = tolower(c);
 
-    void* result = nullptr;
-    if (ext == ".png" || ext == ".jpg" || ext == ".tga" || ext == ".bmp")
-    {
-        result = LoadImageThumbnail(assetPath);
-    }
-    else if (ext == ".fbx" || ext == ".obj" || ext == ".gltf")
-    {
-        result = LoadModelThumbnail(assetPath);
-    }
+    AssetManager::Get().ExecuteAsync([this, pathStr, ext]() -> EResult {
+        std::optional<ThumbnailUploadTask> task;
+        if (ext == ".png" || ext == ".jpg" || ext == ".tga" || ext == ".bmp")
+        {
+            task = LoadImageThumbnail(pathStr);
+        }
+        else if (ext == ".fbx" || ext == ".obj" || ext == ".gltf")
+        {
+            task = LoadModelThumbnail(pathStr);
+        }
 
-    // 3. 결과 캐싱 (실패 시 nullptr 저장하여 중복 로드 방지)
-    m_ThumbnailCache[pathStr] = result;
-    return result;
+        if (task)
+        {
+            std::lock_guard lock(m_UploadMutex);
+            m_UploadTasks.push_back(std::move(task.value()));
+        }
+        else
+        {
+            // 실패 처리: 메인 쓰레드에서 nullptr 캐싱하도록 Width=0인 빈 태스크 전달
+            ThumbnailUploadTask failTask;
+            failTask.AssetPath = pathStr;
+            failTask.Width = 0;
+            std::lock_guard lock(m_UploadMutex);
+            m_UploadTasks.push_back(std::move(failTask));
+        }
+        return EResult::Success;
+    });
+
+    return nullptr;
 }
 
 void AssetCache::ClearCache(const filesystem::path& assetPath)
@@ -67,31 +129,24 @@ void AssetCache::ClearAll()
 	m_ThumbnailCache.clear();
 }
 
-void* AssetCache::LoadImageThumbnail(const filesystem::path& assetPath)
+std::optional<AssetCache::ThumbnailUploadTask> AssetCache::LoadImageThumbnail(const filesystem::path& assetPath)
 {
     int32 width, height, channels;
     stbi_uc* data = stbi_load(assetPath.string().c_str(), &width, &height, &channels, 4);
 
     if (data)
     {
-        tagRHITextureDesc desc = {};
-        desc.Width = width;
-        desc.Height = height;
-        desc.Data = data;
-        desc.DataSize = width * height * 4;
-
-        RHITexture* rhiTexture = Renderer::Get().GetRHI()->CreateTextureFromMemory(desc);
+        ThumbnailUploadTask task;
+        task.AssetPath = assetPath.string();
+        task.Width = width;
+        task.Height = height;
+        task.Data.assign(data, data + (width * height * 4));
         stbi_image_free(data);
-
-        if (rhiTexture)
-        {
-            m_ThumbnailTextures[assetPath.string()] = rhiTexture;
-            return (void*)(size_t)(rhiTexture->GetNativeHandle());
-        }
+        return task;
     }
-    return nullptr;
+    return std::nullopt;
 }
-void* AssetCache::LoadModelThumbnail(const filesystem::path& assetPath)
+std::optional<AssetCache::ThumbnailUploadTask> AssetCache::LoadModelThumbnail(const filesystem::path& assetPath)
 {
     HRESULT hr = CoInitialize(NULL);
     IShellItemImageFactory* imageFactory = nullptr;
@@ -132,20 +187,17 @@ void* AssetCache::LoadModelThumbnail(const filesystem::path& assetPath)
                 pixels[i + 3] = 255;
             }
 
-            tagRHITextureDesc desc = {};
-            desc.Width = width;
-            desc.Height = height;
-            desc.Data = pixels.data();
-            desc.DataSize = (uint32)pixels.size();
-
-            RHITexture* rhiTexture = Renderer::Get().GetRHI()->CreateTextureFromMemory(desc);
-            if (rhiTexture)
-            {
-                m_ThumbnailTextures[assetPath.string()] = rhiTexture;
-                return (void*)(size_t)(rhiTexture->GetNativeHandle());
-            }
+            ThumbnailUploadTask task;
+            task.AssetPath = assetPath.string();
+            task.Width = width;
+            task.Height = height;
+            task.Data = std::move(pixels);
+            
+            CoUninitialize();
+            return task;
         }
     }
-    return nullptr;
+    CoUninitialize();
+    return std::nullopt;
 }
 #pragma endregion

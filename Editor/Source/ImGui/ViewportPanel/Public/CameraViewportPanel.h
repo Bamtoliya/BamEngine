@@ -24,6 +24,7 @@ BEGIN(Editor)
 class InspectorPanel;
 class CameraViewportPanel : public BaseViewportPanel
 {
+protected:
 	using DESC = tagCameraViewportPanelDesc;
 #pragma region Constructor&Destructor
 public:
@@ -51,6 +52,7 @@ protected:
 #pragma region Draw Options Bar 
 protected:
 	void DrawCameraMenu();
+
 #pragma endregion
 
 #pragma region Camera Management

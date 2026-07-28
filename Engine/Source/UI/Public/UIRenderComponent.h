@@ -10,6 +10,7 @@ struct tagUIUBO
 	vec4 uvRegion;
 	vec2 tiling;
 	vec2 offset;
+	vec4 color;
 };
 
 BEGIN(Engine)
@@ -45,6 +46,19 @@ public:
 	MaterialInterface* GetMaterialInstance() const { return m_Material.Get(); }
 	void SetMaterial(const ResourceHandle<MaterialInterface>& material) { m_Material = material; }
 #pragma endregion
+
+#pragma region Canvas
+public:
+	class UICanvas* GetRootCanvas() const;
+#pragma endregion
+
+#pragma region Color Management
+public:
+	vec4 GetColor() const { return m_Color; }
+	void SetColor(const vec4& color) { m_Color = color; }
+#pragma endregion
+
+
 
 #pragma region Member Variable
 protected:

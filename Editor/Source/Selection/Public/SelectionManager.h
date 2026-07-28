@@ -28,6 +28,10 @@ public:
 	bool IsSelected(class GameObject* gameObject) const;
 	void AddToSelection(class GameObject* gameObject);
 	class GameObject* PickObjectByRay(const struct Ray& ray);
+public:
+	bool IsPrimarySelectionLocked() { return m_LockPrimarySeletion; }
+	void SetPrimarySelectionLock(bool lock = true) { m_LockPrimarySeletion = lock; }
+	void TogglePrimarySelectionLock() { m_LockPrimarySeletion = !m_LockPrimarySeletion; }
 #pragma endregion
 
 #pragma region Asset Selection
@@ -42,8 +46,8 @@ public:
 	filesystem::path GetSelectedAssetResource() const;
 #pragma endregion
 
-
 private:
+	bool m_LockPrimarySeletion = { false };
 	vector<class GameObject*> m_SelectedObjects;
 	filesystem::path m_LastSelectedAssetPath;
 	filesystem::path m_LastSelectedResourcePath;

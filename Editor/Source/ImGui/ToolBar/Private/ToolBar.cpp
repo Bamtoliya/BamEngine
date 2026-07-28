@@ -27,15 +27,21 @@
 #include "MeshFilter.h"
 #include "MeshRenderer.h"
 
-void ToolBar::Draw()
+void ToolBar::Draw(SDL_Window* window)
 {
 	if (ImGui::BeginMainMenuBar())
 	{
+		ImGui::SetCursorPos(ImVec2(8.0f, ImGui::GetCursorPosY())); // 좌측 여백
+		ImGui::Text(ICON_FA_CUBES " BamEngine");
+		ImGui::SameLine(0.0f, 15.0f); // 엔진 이름과 File 메뉴 사이 간격 띄우기
+
 		DrawFileMenu();
 		DrawEditMenu();
 		DrawSceneMenu();
 		DrawWindowMenu();
 		DrawHelpMenu();
+
+		DrawWindowControls(window);
 
 		ImGui::EndMainMenuBar();
 	}
@@ -442,4 +448,54 @@ void ToolBar::DrawPlayControls()
 	ImGui::PopID();
 }
 
+#pragma endregion
+
+#pragma region Window Controls
+void ToolBar::DrawWindowControls(SDL_Window* window)
+{
+	if (!window) return;
+
+	// 버튼 1개의 너비와 3개의 총 너비 계산
+	const float buttonWidth = 45.0f;
+	const float totalButtonAreaWidth = buttonWidth * 3.0f;
+
+	// 💡 우측 끝으로 커서 이동 (드래그 할 수 있는 빈 공간을 확보합니다)
+	ImGui::SameLine(ImGui::GetWindowWidth() - totalButtonAreaWidth);
+
+	// 타이틀바와 어울리도록 버튼 배경을 투명하게 만듭니다.
+	ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+	ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 0.0f); // 윈도우 버튼은 각져야 예쁨
+
+	ImVec2 btnSize(buttonWidth, ImGui::GetFrameHeight());
+
+	// [1] 최소화 버튼 (-)
+	if (ImGui::Button(ICON_FA_MINUS, btnSize))
+	{
+		SDL_MinimizeWindow(window);
+	}
+	ImGui::SameLine(0, 0); // 버튼 사이 간격 0
+
+	// [2] 최대화 / 창 모드 버튼 (ㅁ)
+	bool isMaximized = (SDL_GetWindowFlags(window) & SDL_WINDOW_MAXIMIZED) != 0;
+	if (ImGui::Button(isMaximized ? ICON_FA_WINDOW_RESTORE : ICON_FA_WINDOW_MAXIMIZE, btnSize))
+	{
+		if (isMaximized) SDL_RestoreWindow(window);
+		else SDL_MaximizeWindow(window);
+	}
+	ImGui::SameLine(0, 0);
+
+	// [3] 닫기 버튼 (X) - 마우스 올렸을 때만 붉은색
+	ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.9f, 0.1f, 0.1f, 1.0f));
+	ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.8f, 0.0f, 0.0f, 1.0f));
+	if (ImGui::Button(ICON_FA_XMARK, btnSize))
+	{
+		SDL_Event quitEvent;
+		quitEvent.type = SDL_EVENT_QUIT;
+		SDL_PushEvent(&quitEvent);
+	}
+	ImGui::PopStyleColor(2); // 닫기 버튼 색상 롤백
+
+	ImGui::PopStyleVar();
+	ImGui::PopStyleColor();
+}
 #pragma endregion

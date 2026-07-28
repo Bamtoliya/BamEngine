@@ -40,22 +40,27 @@ public:
 
 #pragma region Custom Draws
 protected:
-	virtual void DrawCustomViewport() override;
-private:
-protected:
-	void DrawImGuizmo();
-	void DrawImViewGuizmo();
-protected:
-	void DrawLightOverlay();
-	void DrawCameraOverlay();
-protected:
 	virtual void DrawCustomOptions() override;
+	virtual void DrawCustomViewport() override;
+#pragma endregion
+
+#pragma region Options Bar
 protected:
 	void DrawSceneRenderTargetMenu();
 	void DrawGizmoMenu();
 	void DrawDebugMenu();
 	void DrawPostProcessMenu();
 	void DrawRenderPassMenu();
+#pragma endregion
+
+#pragma region Overlay
+protected:
+	void DrawImGuizmo();
+	void DrawImViewGuizmo();
+protected:
+	void DrawLightOverlay();
+	void DrawCameraOverlay();
+	void DrawSelectionLocked();
 #pragma endregion
 
 #pragma region Resolution & Aspect
@@ -115,15 +120,14 @@ private:
 	vec2 m_InitialMousePos;
 
 #pragma region Guizmo 
-private:
+private://3D
 	ImGuizmo::OPERATION m_GizmoOperation = { ImGuizmo::OPERATION::TRANSLATE };
 	ImGuizmo::MODE m_GizmoMode = { ImGuizmo::MODE::LOCAL };
 	bool m_GizmoUseSnap = { false };
+	bool m_GizmoShowBounds = { false };
 	vec3 m_GizmoSnapTranslation = { 1.0f, 1.0f, 1.0f };
 	vec3 m_GizmoSnapRotation = { 15.0f, 15.0f, 15.0f };
 	vec3 m_GizmoSnapScale = { 0.1f, 0.1f, 0.1f };
-#pragma endregion
-
 #ifdef _DEBUG 
 protected:
 	DebugRenderer m_DebugRenderer;

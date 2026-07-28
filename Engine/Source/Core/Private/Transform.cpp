@@ -4,6 +4,7 @@
 #include "GameObject.h"
 #include "ComponentRegistry.h"
 #include "SerializationHelper.h"
+#include "RectTransform.h"
 
 REGISTER_COMPONENT(Transform)
 
@@ -179,6 +180,27 @@ mat4 Transform::CalculateEffectiveParentMatrix(Transform* parent)
 #pragma endregion
 
 #pragma region Setter
+
+void Transform::SetDirty(bool dirty)
+{
+	__super::SetDirty(dirty);
+	if (dirty && m_Owner)
+	{
+		for (GameObject* child : m_Owner->GetAllChilds())
+		{
+			if (Transform* childTransform = child->GetComponent<Transform>())
+			{
+				childTransform->SetDirty(dirty);
+				childTransform->UpdateLocalMatrix();
+				childTransform->UpdateWorldMatrix();
+			}
+			if (RectTransform* childRect = child->GetComponent<RectTransform>())
+			{
+				childRect->SetDirty(dirty);
+			}
+		}
+	}
+}
 
 void Transform::SetPosition(const vec3& position)
 {
