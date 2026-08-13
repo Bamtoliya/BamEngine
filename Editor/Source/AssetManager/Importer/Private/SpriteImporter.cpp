@@ -18,7 +18,7 @@ EResult SpriteImporter::Import(const filesystem::path& sourcePath, const filesys
 	filesystem::path outputPath = destDir.empty() ? sourcePath.parent_path() : destDir;
 	outputPath.replace_extension(L".bamsprite");
 
-	tagSpriteCreateDesc desc;
+	SpriteCreateDesc desc;
 	desc.TexturePath = sourcePath.wstring();
 	desc.Path = outputPath.wstring();
 	desc.Key = outputPath.wstring();

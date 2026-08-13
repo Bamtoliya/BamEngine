@@ -1,9 +1,10 @@
-﻿#pragma once
+#pragma once
 
 #include "reflection/core/ContainerInfo.h"
 #include "reflection/core/Metadata.h"
 #include "reflection/core/PropertyInfo.h"
 #include "reflection/runtime/PropertyAccessor.h"
+#include <entt/entt.hpp> // 필수!
 
 #define BEGIN_METADATA(TypeName, PropertyName) \
     static constexpr reflection::MetadataEntry TypeName##_##PropertyName##_Meta[] = {
@@ -88,3 +89,28 @@
         &reflection::PropertyCopy<decltype(TypeName::PropertyName)>, \
         &reflection::PropertyEqual<decltype(TypeName::PropertyName)> \
     },
+
+
+// meta<Type>() 대신 meta_factory<Type>{} 사용
+#define BEGIN_ENTT_REFLECT(ClassType) { entt::meta_factory<ClassType>{}.type(#ClassType)
+#define END_ENTT_REFLECT() ; }
+
+#define ENTT_PROPERTY(ClassType, PropName) \
+    .data< \
+        +[](ClassType& obj, const decltype(ClassType::PropName)& val) { obj.PropName = val; }, \
+        +[](const ClassType& obj) -> const decltype(ClassType::PropName)& { return obj.PropName; } \
+    >(#PropName)
+
+#define ENTT_PROPERTY_WITH_ATTR(ClassType, PropName, Attributes) \
+    .data< \
+        +[](ClassType& obj, const decltype(ClassType::PropName)& val) { obj.PropName = val; }, \
+        +[](const ClassType& obj) -> const decltype(ClassType::PropName)& { return obj.PropName; } \
+    >(#PropName).template custom<const char*>(Attributes)
+
+#define ENTT_FUNCTION(ClassType, FuncName) \
+    .func<&ClassType::FuncName>(#FuncName)
+
+#define BEGIN_ENTT_REFLECT_ENUM(EnumType) { entt::meta_factory<EnumType>{}.type(#EnumType)
+#define ENTT_ENUM_ENTRY(EnumType, EntryName) \
+    .data<EnumType::EntryName>(#EntryName)
+#define END_ENTT_REFLECT_ENUM() ; }

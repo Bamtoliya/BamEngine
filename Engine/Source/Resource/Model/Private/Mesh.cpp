@@ -114,15 +114,15 @@ EResult Mesh::Bind(uint32 slot)
 #pragma endregion
 
 #pragma region Getter
-static const tagInputLayoutDesc* s_StreamLayoutTable[] = {
+static const InputLayoutDesc* s_StreamLayoutTable[] = {
 	&VertexPosition::Layout,   // EMeshStream::Position = 0
 	&VertexMaterial::Layout,   // EMeshStream::Material = 1
 	&VertexSkinData::Layout,   // EMeshStream::SkinData = 2
 	nullptr                    // 여분 슬롯 (아직 미정의)
 };
-const vector<tagInputLayoutDesc> Mesh::GetInputLayoutDescs() const
+const vector<InputLayoutDesc> Mesh::GetInputLayoutDescs() const
 {
-	vector<tagInputLayoutDesc> result;
+	vector<InputLayoutDesc> result;
 	for (uint32 i = 0; i < (uint32)EMeshStream::Max; ++i)
 	{
 		// 해당 슬롯에 실제로 버퍼가 존재하고, 매핑 테이블에 레이아웃이 정의되어 있을 때만 추가
@@ -196,7 +196,7 @@ void Mesh::Serialize(Archive& ar)
 	Resource::Serialize(ar);
 
 	// 1. 헤더 구성
-	tagMeshBinaryHeader header = {};
+	MeshBinaryHeader header = {};
 	for (uint32 i = 0; i < (uint32)EMeshStream::Max; ++i)
 	{
 		header.StreamCounts[i] = m_StreamCounts[i];
@@ -209,7 +209,7 @@ void Mesh::Serialize(Archive& ar)
 	header.Flags = m_Flags;
 
 	// 2. 헤더를 통째로 바이너리 직렬화
-	ar.ProcessRaw("MeshHeader", &header, sizeof(tagMeshBinaryHeader));
+	ar.ProcessRaw("MeshHeader", &header, sizeof(MeshBinaryHeader));
 
 	// 3. 스트림별 원본 데이터 직렬화
 	for (uint32 i = 0; i < (uint32)EMeshStream::Max; ++i)
@@ -228,8 +228,8 @@ void Mesh::Deserialize(Archive& ar)
 	Resource::Deserialize(ar);
 
 	// 1. 헤더를 통째로 바이너리 역직렬화
-	tagMeshBinaryHeader header = {};
-	ar.ProcessRaw("MeshHeader", &header, sizeof(tagMeshBinaryHeader));
+	MeshBinaryHeader header = {};
+	ar.ProcessRaw("MeshHeader", &header, sizeof(MeshBinaryHeader));
 
 	// 2. 헤더에서 멤버로 복사
 	for (uint32 i = 0; i < (uint32)EMeshStream::Max; ++i)

@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "Component.h"
 #include "DynamicEvent.h"
@@ -15,7 +15,7 @@ class ENGINE_API EventSystem final : public Component
 #pragma region Constructor&Destructor
 protected:
 	EventSystem() {}
-	virtual ~EventSystem() = default;
+	public: virtual ~EventSystem() = default;
 	EResult Initialize(void* arg = nullptr);
 public:
 	static EventSystem* Create(void* arg = nullptr);

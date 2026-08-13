@@ -973,10 +973,10 @@ void SceneViewportPanel::SubmitLightingPass(Camera* camera)
 			RHISampler* sampler = smMgr.GetDefaultSampler();
 			wstring prefix = m_Name + L"_";
 
-			tagCameraBuffer camBuf = camera->GetCameraBuffer();
+			CameraBuffer camBuf = camera->GetCameraBuffer();
 			camBuf.time = dt;
-			rhi->BindConstantBuffer(&camBuf, sizeof(tagCameraBuffer), 0, EShaderType::Vertex);
-			rhi->BindConstantBuffer(&camBuf, sizeof(tagCameraBuffer), 0, EShaderType::Pixel);
+			rhi->BindConstantBuffer(&camBuf, sizeof(CameraBuffer), 0, EShaderType::Vertex);
+			rhi->BindConstantBuffer(&camBuf, sizeof(CameraBuffer), 0, EShaderType::Pixel);
 			rhi->BindTextureSampler(
 				rtMgr.GetRenderTarget(prefix + L"GBuffer_Diffuse")->GetTexture(),
 				sampler, 0);
@@ -998,8 +998,8 @@ void SceneViewportPanel::SubmitLightingPass(Camera* camera)
 			// Lighting 파이프라인 바인딩
 			{
 
-				tagCameraBuffer shadowCam = LightManager::Get().GetShadowCameraBuffer(0u);
-				tagLightShadowData shadowCamData = LightManager::Get().GetShadowData(0u);
+				CameraBuffer shadowCam = LightManager::Get().GetShadowCameraBuffer(0u);
+				LightShadowData shadowCamData = LightManager::Get().GetShadowData(0u);
 				rhi->BindConstantBuffer(&shadowCamData, sizeof(shadowCamData), 1, EShaderType::Pixel);
 			}
 			rhi->BindPipeline(m_LightingPipeline);

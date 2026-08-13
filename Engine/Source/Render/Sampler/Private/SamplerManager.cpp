@@ -7,7 +7,7 @@ IMPLEMENT_SINGLETON(SamplerManager)
 #pragma region Constructor&Destructor
 EResult SamplerManager::Initialize(void* arg)
 {
-	tagSamplerDesc defaultDesc;
+	SamplerDesc defaultDesc;
 	defaultDesc.MinFilter = ESamplerFilter::Linear;
 	defaultDesc.MagFilter = ESamplerFilter::Linear;
 	defaultDesc.MipFilter = ESamplerFilter::Linear;
@@ -20,7 +20,7 @@ EResult SamplerManager::Initialize(void* arg)
 	if (!m_DefaultSampler) return EResult::Fail;
 
 	// 자주 쓰이는 프리셋 추가
-	tagSamplerDesc linearClampDesc;
+	SamplerDesc linearClampDesc;
 	linearClampDesc.MinFilter = ESamplerFilter::Linear;
 	linearClampDesc.MagFilter = ESamplerFilter::Linear;
 	linearClampDesc.AddressU = ESamplerAddressMode::Clamp;
@@ -28,7 +28,7 @@ EResult SamplerManager::Initialize(void* arg)
 	linearClampDesc.AddressW = ESamplerAddressMode::Clamp;
 	GetOrCreateSampler(linearClampDesc);
 
-	tagSamplerDesc pointWrapDesc;
+	SamplerDesc pointWrapDesc;
 	pointWrapDesc.MinFilter = ESamplerFilter::Point;
 	pointWrapDesc.MagFilter = ESamplerFilter::Point;
 	pointWrapDesc.AddressU = ESamplerAddressMode::Wrap;
@@ -65,7 +65,7 @@ void SamplerManager::Free()
 #pragma endregion
 
 #pragma region Sampler Management
-RHISampler* SamplerManager::GetOrCreateSampler(const tagSamplerDesc& desc)
+RHISampler* SamplerManager::GetOrCreateSampler(const SamplerDesc& desc)
 {
 	auto it = m_Samplers.find(desc);
 	if(it != m_Samplers.end())

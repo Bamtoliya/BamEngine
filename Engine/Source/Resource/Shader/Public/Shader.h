@@ -3,7 +3,7 @@
 #include "Resource.h"
 #include "RHIShader.h"
 
-struct tagShaderDesc : public tagResourceCreateDesc {
+struct ShaderDesc : public ResourceCreateDesc {
 	EShaderType ShaderType = { EShaderType::Unknown };
 	string EntryPoint = { "main" };
 	wstring SpirvPath = {};
@@ -27,7 +27,7 @@ class ENGINE_API Shader final : public Resource
 {
 	REFLECT_CLASS()
 	DECLARE_RESOURCE(Shader)
-	using DESC = tagShaderDesc;
+	using DESC = ShaderDesc;
 #pragma region Constructor&Destructor
 private:
 	Shader() : Resource(EResourceType::Shader) {}

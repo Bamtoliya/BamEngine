@@ -64,7 +64,7 @@ EResult ModelImporter::Import(const filesystem::path& sourcePath, const filesyst
 		fmt::print("Error importing model: {}\n", importer.GetErrorString());
 		return EResult::Fail;
 	}
-	tagModelCreateDesc modelCreateDesc;
+	ModelCreateDesc modelCreateDesc;
 	filesystem::path outputDir = destDir.empty() ? sourcePath.parent_path() : destDir;
 	wstring sourceStem = sourcePath.stem().wstring();
 	unordered_map<wstring, uint32> nameCounts;
@@ -124,12 +124,12 @@ void ModelImporter::ProcessModelNode(
 	const wstring& sourceStem,
 	unordered_map<wstring, uint32>& nameCounts,
 	uint32& meshSerial,
-	tagModelCreateDesc& modelCreateDesc)
+	ModelCreateDesc& modelCreateDesc)
 {
 	ResourceManager& resourceManager = ResourceManager::Get();
 	for (uint32 i = 0; i < node->mNumMeshes; ++i)
 	{
-		tagMeshCreateDesc meshCreateInfo = {};
+		MeshCreateDesc meshCreateInfo = {};
 		const aiMesh* mesh = scene->mMeshes[node->mMeshes[i]];
 
 		// 분리된 배열로 받기
@@ -174,7 +174,7 @@ void ModelImporter::ProcessModelNode(
 void ModelImporter::ProcessMeshVertex(
 	const aiMesh* mesh,
 	const aiScene* scene,
-	tagMeshCreateDesc& meshCreateInfo,
+	MeshCreateDesc& meshCreateInfo,
 	vector<VertexPosition>& outPositions,
 	vector<VertexMaterial>& outMaterials)
 {
@@ -241,7 +241,7 @@ void ModelImporter::ProcessMeshSkinData(
 	const aiMesh* mesh,
 	const aiScene* scene,
 	Skeleton* skeleton,
-	tagMeshCreateDesc& meshCreateInfo,
+	MeshCreateDesc& meshCreateInfo,
 	vector<VertexSkinData>& outSkinData)
 {
 	(void)scene;
@@ -287,7 +287,7 @@ void ModelImporter::ProcessMeshSkinData(
 	};
 
 }
-void ModelImporter::ProcessMeshIndex(const aiMesh* mesh, const aiScene* scene, tagMeshCreateDesc& meshCreateInfo, vector<uint32>& outIndices)
+void ModelImporter::ProcessMeshIndex(const aiMesh* mesh, const aiScene* scene, MeshCreateDesc& meshCreateInfo, vector<uint32>& outIndices)
 {
 	(void)scene;
 	outIndices.clear();
@@ -308,7 +308,7 @@ void ModelImporter::ProcessSkeleton(
 	const aiScene* scene,
 	const filesystem::path& outputDir,
 	const wstring& sourceStem,
-	tagModelCreateDesc& modelCreateDesc)
+	ModelCreateDesc& modelCreateDesc)
 {
 	// 1. 전체 메쉬를 돌면서 뼈의 이름과 OffsetMatrix(역 바인드 포즈)를 수집합니다.
 	unordered_map<string, mat4> boneOffsetMap;
@@ -329,7 +329,7 @@ void ModelImporter::ProcessSkeleton(
 	// 뼈가 하나도 없다면 스켈레톤을 만들 필요가 없습니다.
 	if (boneOffsetMap.empty())
 		return;
-	tagSkeletonCreateDesc skeletonDesc;
+	SkeletonCreateDesc skeletonDesc;
 	// 2. DFS 재귀로 트리를 순회. (오타 수정: <auto& self -> auto& self)
 	// 부모를 push_back 한 뒤 자식을 재귀호출하므로, 무조건 부모 Index < 자식 Index 가 보장됩니다.
 	auto buildSkeletonTree = [&](auto& self, const aiNode* node, int32 parentIndex) -> void
@@ -373,7 +373,7 @@ void ModelImporter::ProcessAnimations(
 	const aiScene* scene,
 	const filesystem::path& outputDir,
 	const wstring& sourceStem,
-	tagModelCreateDesc& modelCreateDesc)
+	ModelCreateDesc& modelCreateDesc)
 {
 	ResourceManager& resourceManager = ResourceManager::Get();
 
@@ -381,7 +381,7 @@ void ModelImporter::ProcessAnimations(
 	{
 		const aiAnimation* aiAnim = scene->mAnimations[i];
 
-		tagAnimationCreateDesc animDesc = {};
+		AnimationCreateDesc animDesc = {};
 		animDesc.Duration = aiAnim->mDuration;
 		animDesc.TicksPerSecond = aiAnim->mTicksPerSecond != 0.0 ? aiAnim->mTicksPerSecond : 24.0f; // 기본값 방어 코드
 
@@ -449,11 +449,11 @@ void ModelImporter::ProcessMaterial(
 	const aiScene* scene,
 	const filesystem::path& outputDir,
 	const wstring& sourceStem,
-	tagModelCreateDesc& modelCreateDesc)
+	ModelCreateDesc& modelCreateDesc)
 {
 	ResourceManager& resourceManager = ResourceManager::Get();
 
-	tagMaterialDesc matDesc = {};
+	MaterialDesc matDesc = {};
 
 	// 머티리얼 이름 추출, 없으면 기본 인덱스
 	aiString matName;

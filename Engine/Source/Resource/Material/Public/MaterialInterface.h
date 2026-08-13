@@ -27,7 +27,7 @@ struct MaterialTextureBinding
 	bool hasCustomSampler = false;
 
 	PROPERTY(EDITABLE)
-	tagSamplerDesc samplerDesc = {};
+	SamplerDesc samplerDesc = {};
 
 	bool operator==(const MaterialTextureBinding& other) const = default;
 };
@@ -66,7 +66,7 @@ struct MaterialParameter
 };
 
 
-struct tagMaterialDesc : public tagResourceCreateDesc
+struct MaterialDesc : public ResourceCreateDesc
 {
 	ResourceHandle<Shader> VertexShaderHandle;
 	ResourceHandle<Shader> PixelShaderHandle;
@@ -85,11 +85,11 @@ class ENGINE_API MaterialInterface : public Resource
 	DECLARE_RESOURCE(MaterialInterface)
 #pragma region Constructor&Destructor
 protected:
-	using DESC = tagMaterialDesc;
+	using DESC = MaterialDesc;
 	MaterialInterface() : Resource(EResourceType::Material) {}
 	MaterialInterface(EResourceType type) : Resource(type) {}
-	virtual ~MaterialInterface() = default;
 public:
+	virtual ~MaterialInterface() = default;
 	virtual void Free() override;
 #pragma endregion
 
@@ -125,16 +125,16 @@ public:
 	void SetTextureBySlot(uint32 slot, const ResourceHandle<Texture>& texture);		
 	void SetTextureBinding(const string& name, uint32 slot, const ResourceHandle<Texture>& texture);
 
-	void SetSamplerDesc(const string& name, const tagSamplerDesc& desc);
-	void SetSamplerDescBySlot(uint32 slot, const tagSamplerDesc& desc);
+	void SetSamplerDesc(const string& name, const SamplerDesc& desc);
+	void SetSamplerDescBySlot(uint32 slot, const SamplerDesc& desc);
 
 	Texture* GetTexture(const string& name) const;
 	Texture* GetTextureBySlot(uint32 slot) const;
 	ResourceHandle<Texture> GetTextureHandle(const string& name) const;
 	ResourceHandle<Texture> GetTextureHandleBySlot(uint32 slot) const;
 
-	const tagSamplerDesc* GetSamplerDesc(const string& name) const;
-	const tagSamplerDesc* GetSamplerDescBySlot(uint32 slot) const;
+	const SamplerDesc* GetSamplerDesc(const string& name) const;
+	const SamplerDesc* GetSamplerDescBySlot(uint32 slot) const;
 
 	bool HasTextureBinding(const string& name) const;
 	bool HasTextureBindingBySlot(uint32 slot) const;

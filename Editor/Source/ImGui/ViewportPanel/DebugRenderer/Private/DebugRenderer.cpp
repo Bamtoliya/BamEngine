@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "DebugRenderer.h"
 #include "Renderer.h"
@@ -12,7 +12,7 @@ void DebugRenderer::Initialize(const wstring& prefix)
 {
 	ResourceManager& rm = ResourceManager::Get();
 
-	tagShaderDesc vsDesc = {};
+	ShaderDesc vsDesc = {};
 	vsDesc.Key = L"DebugLineVS";
 	vsDesc.Path = L"Resources/Shader/debugLine.vert.spv";
 	vsDesc.SpirvPath = L"Resources/Shader/debugLine.vert.spv";
@@ -24,7 +24,7 @@ void DebugRenderer::Initialize(const wstring& prefix)
 		rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/debugLine.vert.bamshader");
 	}
 
-	tagShaderDesc psDesc = {};
+	ShaderDesc psDesc = {};
 	psDesc.Key = L"DebugLinePS";
 	psDesc.Path = L"Resources/Shader/debugLine.frag.spv";
 	psDesc.SpirvPath = L"Resources/Shader/debugLine.frag.spv";
@@ -130,7 +130,7 @@ void DebugRenderer::RegisterColliderDebug(Camera* camera)
 	Scene* scene = SceneManager::Get().GetCurrentScene();
 	if (!scene) return;
 	// 카메라의 ViewProjection으로 프러스텀 추출
-	tagFrustum frustum = {};
+	Frustum frustum = {};
 	bool useFrustum = false;
 	if (camera)
 	{
@@ -146,7 +146,7 @@ void DebugRenderer::RegisterColliderDebug(Camera* camera)
 			auto* col = go->GetComponent<Collider>();
 			if (!col || !col->IsActive()) continue;
 			mat4 worldMatrix = go->GetTransform()->GetWorldMatrix();
-			tagColliderDesc desc = col->GetColliderDesc();
+			ColliderDesc desc = col->GetColliderDesc();
 			// 프러스텀 컬링: 콜라이더 AABB가 카메라 밖이면 스킵
 			if (useFrustum)
 			{

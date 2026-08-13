@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "Grid.h"
 #include "Mesh.h"
@@ -15,7 +15,7 @@ void Grid::Initialize(const wstring& prefix)
 void Grid::PrepareShaders()
 {
     ResourceManager& resourceManager = ResourceManager::Get();
-    tagShaderDesc gridVsDesc = {};
+    ShaderDesc gridVsDesc = {};
     gridVsDesc.Key = L"InfiniteGridVS";
     gridVsDesc.Path = L"Resources/Shader/infinite_grid.vert.spv";
     gridVsDesc.SpirvPath = L"Resources/Shader/infinite_grid.vert.spv";
@@ -27,7 +27,7 @@ void Grid::PrepareShaders()
         resourceManager.SaveToBinaryFile(handle.Get(), L"Resources/Shader/infinite_grid.vert.bamshader");
     }
 
-    tagShaderDesc grid2DPsDesc = {};
+    ShaderDesc grid2DPsDesc = {};
     grid2DPsDesc.Key = L"InfiniteGrid2DPS";
     grid2DPsDesc.Path = L"Resources/Shader/infinite_grid_2d.frag.spv";
     grid2DPsDesc.SpirvPath = L"Resources/Shader/infinite_grid_2d.frag.spv";
@@ -40,7 +40,7 @@ void Grid::PrepareShaders()
     }
 
 
-    tagShaderDesc grid3DPsDesc = {};
+    ShaderDesc grid3DPsDesc = {};
     grid3DPsDesc.Key = L"InfiniteGrid3DPS";
     grid3DPsDesc.Path = L"Resources/Shader/infinite_grid.frag.spv";
     grid3DPsDesc.SpirvPath = L"Resources/Shader/infinite_grid.frag.spv";

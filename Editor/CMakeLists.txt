@@ -1,4 +1,4 @@
-﻿project(Editor)
+project(Editor)
 
 include("${CMAKE_SOURCE_DIR}/Projects/ReflectionCMake/ReflectionBundles.cmake")
 
@@ -41,7 +41,7 @@ file(GLOB_RECURSE EDITOR_SOURCES CONFIGURE_DEPENDS "${EDITOR_SOURCE_DIR}/*.cpp")
 file(GLOB_RECURSE EDITOR_INLINE CONFIGURE_DEPENDS "${EDITOR_SOURCE_DIR}/*.inl") # 2. Engine처럼 .inl 지원 추가
 file(GLOB_RECURSE EDITOR_ALL_FILES CONFIGURE_DEPENDS "${EDITOR_SOURCE_DIR}/*")
 file(GLOB_RECURSE REFLECTION_CODEGEN_SOURCES CONFIGURE_DEPENDS
-    "${CMAKE_SOURCE_DIR}/Projects/ReflectionCodegen/*.py"
+    "${CMAKE_SOURCE_DIR}/Projects/ReflectionAST/*.py"
 )
 
 list(APPEND EDITOR_SOURCES "${EDITOR_GENERATED_SOURCE}")

@@ -2,7 +2,7 @@
 
 #include "Resource.h"
 
-struct tagScripteDesc : public tagResourceCreateDesc
+struct ScripteDesc : public ResourceCreateDesc
 {
 };
 
@@ -13,7 +13,7 @@ class Script : public Resource
 {
 	REFLECT_CLASS()
 	DECLARE_RESOURCE(Script)
-	using DESC = tagScripteDesc;
+	using DESC = ScripteDesc;
 
 #pragma region Constructor&Destructor
 private:

@@ -469,7 +469,7 @@ RHIPipeline* SDLGPURHI::CreatePipeline(const tagRHIPipelineDesc& desc)
 #pragma endregion
 
 #pragma region Sampler
-RHISampler* SDLGPURHI::CreateSampler(const tagSamplerDesc& desc)
+RHISampler* SDLGPURHI::CreateSampler(const SamplerDesc& desc)
 {
 	return SDLGPUSampler::Create(this, desc);
 }

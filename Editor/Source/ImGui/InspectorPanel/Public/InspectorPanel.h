@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "ImGuiInterface.h"
 #include "InspectorInterface.h"
@@ -13,7 +13,7 @@ public:
 	virtual void Free() override;
 	virtual void Draw() override;
 private:
-	bool DrawProperties(void* instance, const TypeInfo& typeInfo);
+	bool DrawProperties(entt::meta_any& instance, const entt::meta_type& type);
 public:
 	EResult SetSelectedGameObject(class GameObject* gameObject) { m_SelectedGameObject = gameObject; return EResult::Success; }
 

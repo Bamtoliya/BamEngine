@@ -11,7 +11,7 @@
 
 BEGIN(Engine)
 
-struct tagModelCreateDesc : public tagResourceCreateDesc
+struct ModelCreateDesc : public ResourceCreateDesc
 {
 	vector<ResourceHandle<Mesh>> Meshes;
 	vector<ResourceHandle<Material>> Materials;
@@ -24,12 +24,13 @@ class ENGINE_API Model : public Resource
 {
 	REFLECT_CLASS()
 	DECLARE_RESOURCE(Model)
-	using DESC = tagModelCreateDesc;
+	using DESC = ModelCreateDesc;
 #pragma region Constrcutor&Destructor
 private:
 	Model() : Resource(EResourceType::Model) {}
-	virtual ~Model() = default;
 	EResult Initialize(void* arg = nullptr);
+public:
+	virtual ~Model() = default;
 public:
 	static Model* Create(void* arg = nullptr);
 	virtual void Free() override;

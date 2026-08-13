@@ -9,15 +9,15 @@
 
 BEGIN(Engine)
 
-struct tagFrustumPlane
+struct FrustumPlane
 {
     vec3 Normal;
     f32  Distance;
 };
 
-struct tagFrustum
+struct Frustum
 {
-    tagFrustumPlane Planes[6]; // Left, Right, Bottom, Top, Near, Far
+    FrustumPlane Planes[6]; // Left, Right, Bottom, Top, Near, Far
 };
 
 class ENGINE_API FrustumCuller
@@ -26,7 +26,7 @@ public:
     // Gribb/Hartmann 방식으로 View-Projection 행렬에서 6개 평면을 추출합니다.
     // Vulkan NDC 기준: Z in [0,1] → near = row2, far = row3 - row2
     // GLM column-major: m[col][row] → row(i) = (m[0][i], m[1][i], m[2][i], m[3][i])
-    static tagFrustum ExtractFrustum(const mat4& viewProj)
+    static Frustum ExtractFrustum(const mat4& viewProj)
     {
         auto makeRow = [&](int i) -> vec4
             {
@@ -48,7 +48,7 @@ public:
             r3 - r2,  // Far   (Vulkan: Z <= 1)
         };
 
-        tagFrustum f;
+        Frustum f;
         for (int i = 0; i < 6; ++i)
         {
             const float len = glm::length(vec3(raw[i]));
@@ -94,9 +94,9 @@ public:
 
     // worldAABB가 프러스텀 내부에 (부분적으로라도) 존재하면 true를 반환합니다.
     // 판정 공식: dot(plane.Normal, positiveVertex) + plane.Distance >= 0 → 내부
-    static bool TestAABB(const tagFrustum& frustum, const AABB& worldAABB)
+    static bool TestAABB(const Frustum& frustum, const AABB& worldAABB)
     {
-        for (const tagFrustumPlane& plane : frustum.Planes)
+        for (const FrustumPlane& plane : frustum.Planes)
         {
             // 법선 방향으로 가장 멀리 있는 코너 (Positive Vertex)
             const vec3 pv =

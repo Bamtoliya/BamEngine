@@ -84,7 +84,7 @@ EResult UIImage::Render(f32 dt, RenderPass* renderPass)
 	if(!texture) return EResult::Fail;
 	RHITexture* rhiTexture = texture->GetRHITexture();
 	if(!rhiTexture) return EResult::Fail;
-	tagSamplerDesc pointWrapDesc;
+	SamplerDesc pointWrapDesc;
 	pointWrapDesc.MinFilter = ESamplerFilter::Point;
 	pointWrapDesc.MagFilter = ESamplerFilter::Point;
 	pointWrapDesc.AddressU = ESamplerAddressMode::Wrap;

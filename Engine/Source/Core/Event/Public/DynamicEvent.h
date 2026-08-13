@@ -3,7 +3,7 @@
 #include "Types.h"
 #include "Delegate.h"
 #include "Macro.h"
-#include "ReflectionMacro.h"
+#include "Reflection/ReflectionMacro.h"
 #include "EventInterface.h"
 
 BEGIN(Engine)

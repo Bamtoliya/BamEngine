@@ -12,13 +12,13 @@ enum class ESkyShape : uint8
 	Cube,
 };
 
-struct tagSkyRendererDesc : public tagComponentDesc
+struct SkyRendererDesc : public ComponentDesc
 {
 	ESkyShape SkyType;
 	wstring SkyTexturePath;
 };
 
-struct tagSkyAtmosphereDesc
+struct SkyAtmosphereDesc
 {
 	vec3  ZenithColor;    f32 _pad0;
 	vec3  HorizonColor;   f32 _pad1;
@@ -32,11 +32,11 @@ CLASS()
 class ENGINE_API SkyRenderer : public RenderComponent
 {
 	REFLECT_CLASS()
-	using DESC = tagSkyRendererDesc;
+	using DESC = SkyRendererDesc;
 #pragma region Constructor&Destructor
 private:
 	SkyRenderer() = default;
-	virtual ~SkyRenderer() = default;
+	public: virtual ~SkyRenderer() = default;
 	EResult Initialize(void* arg = nullptr) override;
 public:
 	static SkyRenderer* Create(void* arg = nullptr);
@@ -60,7 +60,7 @@ public:
 	f32         GetSunIntensity() const { return m_SunIntensity; }
 	f32         GetSkyIntensity() const { return m_SkyIntensity; }
 public:
-	tagSkyAtmosphereDesc BuildSkyAtmosphereDesc() const;
+	SkyAtmosphereDesc BuildSkyAtmosphereDesc() const;
 #pragma endregion
 
 

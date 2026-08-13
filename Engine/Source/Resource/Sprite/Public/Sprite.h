@@ -3,7 +3,7 @@
 #include "Texture.h"
 #include "ResourceHandle.h"
 
-struct tagSpriteCreateDesc : public tagResourceCreateDesc
+struct SpriteCreateDesc : public ResourceCreateDesc
 {
 	ResourceHandle<Texture> Texture;
 	wstring TexturePath = L"";
@@ -18,7 +18,7 @@ class ENGINE_API Sprite final : public Resource
 {
 	REFLECT_CLASS()
 	DECLARE_RESOURCE(Sprite)
-	using DESC = tagSpriteCreateDesc;
+	using DESC = SpriteCreateDesc;
 #pragma region Constructor&Destructor
 private:
 	Sprite() : Resource(EResourceType::Sprite) {}

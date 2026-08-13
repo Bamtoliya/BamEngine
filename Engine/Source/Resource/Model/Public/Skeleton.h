@@ -1,9 +1,9 @@
-#pragma once
+﻿#pragma once
 
 #include "Bone.h"
 #include "Resource.h"
 
-struct tagSkeletonCreateDesc : public tagResourceCreateDesc
+struct SkeletonCreateDesc : public ResourceCreateDesc
 {
 	vector<Bone> Bones;
 };
@@ -17,7 +17,7 @@ class ENGINE_API Skeleton : public Resource
 	DECLARE_RESOURCE(Skeleton)
 #pragma region Constructor&Destructor
 private:
-	using DESC = tagSkeletonCreateDesc;
+	using DESC = SkeletonCreateDesc;
 	Skeleton() : Resource(EResourceType::Skeleton) {}
 	virtual ~Skeleton() = default;
 	EResult Initialize(void* arg = nullptr);

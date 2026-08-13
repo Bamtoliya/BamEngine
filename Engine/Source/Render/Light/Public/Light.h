@@ -7,7 +7,7 @@
 // [0:5]   ELightFlags (CastShadow=0, Forward=1, Deferred=2, Volumetric=3, AffectDiffuse=4, AffectSpecular=5)
 // [24:25] ELightType  (Point=0, Directional=1, Spot=2)
 // [26:27] EAttenuationMode (Coefficients=0, InverseSquare=1, Disabled=2)
-struct tagGPULight
+struct GPULight
 {
 	vec3	Position;
 	f32		Intensity;
@@ -27,7 +27,7 @@ struct tagGPULight
 	f32		Pad1;
 };
 
-struct tagLightBufferHeader
+struct LightBufferHeader
 {
 	uint32	NumLights;
 	uint32	Padding[3];
@@ -40,7 +40,7 @@ inline uint32 PackLightFlags(uint32 flags, uint32 type, uint32 attenuationMode)
 		| ((attenuationMode & 0x3u) << 26u);
 }
 
-struct tagLightShadowData
+struct LightShadowData
 {
 	mat4 LightViewProjMatrix;
 	vec4 ShadowParams; // Bias, SlopeBias, NormalBias, ShadowMapIndex

@@ -1,20 +1,23 @@
-﻿#pragma once
+#pragma once
 
 #include "Archive.h"
-#include "ReflectionTypes.h"
+#include <entt/entt.hpp>
+#include <functional>
 
-BEGIN(Engine)
-
-class SerializationHelper
+namespace Engine
 {
-public:
-    static void SerializeReflectionProperties(Archive& ar, const TypeInfo* typeInfo, void* instance);
-
-    template<typename T>
-    static void SerializeStaticType(Archive& ar, T& instance)
+    class ENGINE_API SerializationHelper
     {
-        SerializeReflectionProperties(ar, &T::GetStaticTypeInfo(), &instance);
-    }
-};
+    public:
+        static void SerializeEnTT(Archive& ar, entt::meta_any& instance);
 
-END
+
+
+        template<typename T>
+        static void SerializeStaticType(Archive& ar, T& instance)
+        {
+            entt::meta_any meta_instance{ std::ref(instance) };
+            SerializeEnTT(ar, meta_instance);
+        }
+    };
+}

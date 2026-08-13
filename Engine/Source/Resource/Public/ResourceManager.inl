@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "ResourceManager.h"
 
 template<typename T, typename... Args>
@@ -13,7 +13,7 @@ ResourceHandle<T> ResourceManager::LoadResource(Args&&... args)
 	auto first = std::get<0>(std::forward_as_tuple(args...));
 
 	if constexpr (std::is_pointer_v<FirstArg> &&
-		std::is_base_of_v<tagResourceCreateDesc, std::remove_pointer_t<FirstArg>>)
+		std::is_base_of_v<ResourceCreateDesc, std::remove_pointer_t<FirstArg>>)
 	{
 		if (first)
 			pathStr = !first->Path.empty() ? first->Path : first->Key;
@@ -98,5 +98,5 @@ ResourceHandle<T> ResourceManager::GetResourceHandle(const wstring& key)
 template<typename T>
 vector<Handle> ResourceManager::GetResourceHandles()
 {
-	return GetResourceHandles(T::GetStaticTypeInfo().ID);
+	return GetResourceHandles(entt::type_hash<T>::value());
 }

@@ -123,7 +123,7 @@ EResult Renderer::Render(f32 dt)
 				}
 			}
 
-			tagCameraBuffer cameraBuffer = {};
+			CameraBuffer cameraBuffer = {};
 
 			if (passType == ERenderPassType::Shadow)
 			{
@@ -148,8 +148,8 @@ EResult Renderer::Render(f32 dt)
 				cameraBuffer.cameraPosition = vec3(0.f);
 			}
 			cameraBuffer.time = dt;
-			m_RHI->BindConstantBuffer(&cameraBuffer, sizeof(tagCameraBuffer), 0, EShaderType::Vertex);
-			m_RHI->BindConstantBuffer(&cameraBuffer, sizeof(tagCameraBuffer), 0, EShaderType::Pixel);
+			m_RHI->BindConstantBuffer(&cameraBuffer, sizeof(CameraBuffer), 0, EShaderType::Vertex);
+			m_RHI->BindConstantBuffer(&cameraBuffer, sizeof(CameraBuffer), 0, EShaderType::Pixel);
 
 			m_RHI->SetViewport(0, 0, rtWidth, rtHeight);
 
@@ -357,7 +357,7 @@ Camera* Renderer::GetViewportCamera(RenderPassID passID) const
 #pragma endregion
 
 #pragma region Frustum Culling
-bool Renderer::TryGetPassFrustum(RenderPassID passID, tagFrustum& outFrustum, bool& outIsShadow) const
+bool Renderer::TryGetPassFrustum(RenderPassID passID, Frustum& outFrustum, bool& outIsShadow) const
 {
 	const auto it = m_PassFrustums.find(passID);
 	if (it == m_PassFrustums.end())

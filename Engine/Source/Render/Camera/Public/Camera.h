@@ -1,9 +1,9 @@
 ﻿#pragma once
 
 #include "Component.h"
-#include "ReflectionMacro.h"
+#include "Reflection/ReflectionMacro.h"
 
-struct tagCameraBuffer
+struct CameraBuffer
 {
 	mat4 viewMatrix;
 	mat4 projMatrix;
@@ -12,7 +12,7 @@ struct tagCameraBuffer
 	float time;
 };
 
-struct tagCameraDesc : public tagComponentDesc
+struct CameraDesc : public ComponentDesc
 {
 	bool IsPerspective = { true };
 	f32 FOV = { 60.f };
@@ -28,7 +28,7 @@ CLASS()
 class ENGINE_API Camera final : public Component
 {
 	REFLECT_CLASS()
-	using DESC = tagCameraDesc;
+	using DESC = CameraDesc;
 #pragma region Constructor&Destructor
 private:
 	Camera() : Component{} {}
@@ -54,7 +54,7 @@ public:
 	const mat4& GetViewMatrixInv() const { return m_ViewMatrixInv; }
 	const mat4& GetProjMatrixInv() const { return m_ProjMatrixInv; }
 public:
-	tagCameraBuffer GetCameraBuffer() const;
+	CameraBuffer GetCameraBuffer() const;
 private:
 	void UpdateMatrix();
 #pragma endregion

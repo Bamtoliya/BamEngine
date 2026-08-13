@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "RenderComponent.h"
 #include "Mesh.h"
@@ -30,7 +30,7 @@ class ENGINE_API SpriteRenderer : public RenderComponent
 #pragma region Constructor&Destructor
 private:
 	SpriteRenderer() {}
-	virtual ~SpriteRenderer() = default;
+	public: virtual ~SpriteRenderer() = default;
 	virtual EResult Initialize(void* arg = nullptr);
 public:
 	static SpriteRenderer* Create(void* arg = nullptr);

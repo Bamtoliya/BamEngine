@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "imgui.h"
 #include "InspectorPanel.h"
 #include "SelectionManager.h"
@@ -10,9 +10,9 @@
 #include "ResourceManager.h"
 #include "Archives.h"
 #include "IconsFontAwesome7.h"
-#include "ReflectionTypes.h"
+#include "Reflection/ReflectionTypes.h"
 #include "InspectorHelper.h"
-#include "PropertyDrawer.h"
+#include "PropertyDrawerEnTT.h"
 #include "LocalizationManager.h"
 
 #include "Inspectors.h"
@@ -54,13 +54,23 @@ void InspectorPanel::Draw()
 	{
 		if (selectedObject)
 		{
-			DrawProperties(selectedObject, selectedObject->GetTypeInfo());
+			entt::meta_type type = entt::resolve(selectedObject->GetTypeID());
+			if (type)
+			{
+				entt::meta_any anyObj = type.from_void(selectedObject);
+				DrawProperties(anyObj, type);
+			}
 			const vector<Component*>& components = selectedObject->GetAllComponents();
 			for (Component* component : components)
 			{
-				if (DrawProperties(component, component->GetTypeInfo()))
+				entt::meta_type compType = entt::resolve(component->GetTypeID());
+				if (compType)
 				{
-					component->SetDirty();
+					entt::meta_any anyComp = compType.from_void(component);
+					if (DrawProperties(anyComp, compType))
+					{
+						component->SetDirty();
+					}
 				}
 			}
 
@@ -98,11 +108,23 @@ void InspectorPanel::Draw()
 	ImGui::End();
 }
 
-bool InspectorPanel::DrawProperties(void* instance, const TypeInfo& typeInfo)
+bool InspectorPanel::DrawProperties(entt::meta_any& instance, const entt::meta_type& type)
 {
 	bool anyChanged = false;
-	ImGui::PushID(instance);
-	bool opened = PropertyDrawer::DrawHeaderNode(instance, typeInfo);
+	
+	void* idPtr = nullptr;
+	if (auto* go = instance.try_cast<Engine::GameObject>()) idPtr = go;
+	else if (auto* comp = instance.try_cast<Engine::Component>()) idPtr = comp;
+	ImGui::PushID(idPtr);
+
+	bool opened = PropertyDrawerEnTT::DrawHeaderNode(instance, type);
+	if (opened)
+	{
+		anyChanged |= PropertyDrawerEnTT::DrawPropertyTable(instance, type);
+	}
+	
+	// Temporarily bypass original complex TypeInfo loop
+	/*
 	if (opened)
 	{
 		const TypeInfo* currentTypeInfo = &typeInfo;
@@ -159,15 +181,16 @@ bool InspectorPanel::DrawProperties(void* instance, const TypeInfo& typeInfo)
 				: reflection::Registry::Get().GetTypeByQualifiedName(currentTypeInfo->ParentQualifiedName);
 		}
 	}
+	*/
 
-	if (Component* component = dynamic_cast<Component*>(reinterpret_cast<Base*>(instance)))
+	if (Engine::Component* component = instance.try_cast<Engine::Component>())
 	{
-		if (RenderComponent* renderComponent = dynamic_cast<RenderComponent*>(component))
+		if (Engine::RenderComponent* renderComponent = dynamic_cast<Engine::RenderComponent*>(component))
 		{
 			ImGui::Spacing();
 			ImGui::Separator();
 			ImGui::Spacing();
-			DrawRenderComponentMaterialEditor(renderComponent);
+			this->DrawRenderComponentMaterialEditor(renderComponent);
 		}
 	}
 

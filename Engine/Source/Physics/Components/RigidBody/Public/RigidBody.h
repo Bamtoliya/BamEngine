@@ -1,11 +1,11 @@
 ﻿#pragma once
 
 #include "Component.h"
-#include "ReflectionMacro.h"
+#include "Reflection/ReflectionMacro.h"
 
 BEGIN(Engine)
 
-struct tagRigidBodyDesc : public tagComponentDesc
+struct RigidBodyDesc : public ComponentDesc
 {
     f32 Mass = 1.f;
     bool UseGravity = true;
@@ -19,12 +19,12 @@ CLASS()
 class ENGINE_API RigidBody : public Component
 {
     REFLECT_CLASS()
-        using DESC = tagRigidBodyDesc;
+        using DESC = RigidBodyDesc;
 
 #pragma region Constructor&Destructor
 private:
     RigidBody() = default;
-    virtual ~RigidBody() = default;
+    public: virtual ~RigidBody() = default;
     virtual EResult Initialize(void* arg = nullptr) override;
 public:
     static RigidBody* Create(void* arg = nullptr);

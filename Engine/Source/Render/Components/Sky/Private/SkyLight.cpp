@@ -101,9 +101,9 @@ void SkyLight::LateUpdate(f32 dt)
     __super::LateUpdate(dt);  // LightManager 제출
 }
 
-tagGPULight SkyLight::BuildGPULightDesc() const
+GPULight SkyLight::BuildGPULightDesc() const
 {
-    tagGPULight gpu = {};
+    GPULight gpu = {};
 
     // Color = ZenithColor (SkyRenderer에서 동기화된 값)
     gpu.Color = m_Color;

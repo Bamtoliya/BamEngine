@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "Transform.h"
 #include "GameObject.h"
@@ -414,7 +414,7 @@ void Transform::LookAt(const vec3& target, const vec3& up)
 #pragma region Save&Load
 void Transform::Serialize(Archive& ar)
 {
-	SerializationHelper::SerializeReflectionProperties(ar, &GetTypeInfo(), this);
+	SerializationHelper::SerializeStaticType(ar, *this);
 }
 #pragma endregion
 

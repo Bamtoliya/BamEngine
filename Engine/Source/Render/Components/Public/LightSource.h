@@ -37,7 +37,7 @@ enum class ELightFlags
 
 ENABLE_BITMASK_OPERATORS(ELightFlags)
 
-struct tagLightSourceDesc : public tagComponentDesc
+struct LightSourceDesc : public ComponentDesc
 {
 	ELightType Type = ELightType::Point;
 	vec3 Color = vec3(1.0f);
@@ -60,11 +60,11 @@ CLASS()
 class ENGINE_API LightSource : public Component
 {
 	REFLECT_CLASS()
-	using DESC = tagLightSourceDesc;
+	using DESC = LightSourceDesc;
 #pragma region Constructor&Destructor
 protected:
 	LightSource() {}
-	virtual ~LightSource() = default;
+	public: virtual ~LightSource() = default;
 	EResult Initialize(void* arg = nullptr) override;
 	EResult LateInitialize(void* arg = nullptr) override;
 public:
@@ -80,13 +80,13 @@ public:
 
 #pragma region GPU
 public:
-	virtual tagGPULight BuildGPULightDesc() const;
+	virtual GPULight BuildGPULightDesc() const;
 #pragma endregion
 
 #pragma region Shadow
 public:
-	tagCameraBuffer BuildShadowCameraBuffer() const;
-	tagLightShadowData BuildShadowData() const;
+	CameraBuffer BuildShadowCameraBuffer() const;
+	LightShadowData BuildShadowData() const;
 #pragma endregion
 
 

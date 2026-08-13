@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "Component.h"
 #include "EventInterface.h"
@@ -11,6 +11,7 @@ class ENGINE_API BaseRaycaster : public Component
 	REFLECT_CLASS()
 protected:
 	BaseRaycaster() {}
+public:
 	virtual ~BaseRaycaster() = default;
 	virtual EResult Initialize(void* arg = nullptr) override;
 public:

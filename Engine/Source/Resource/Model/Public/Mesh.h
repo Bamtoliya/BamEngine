@@ -28,7 +28,7 @@ enum class EMeshStream : uint32
 	Max = MAX_BUFFER_SLOTS // RHI.h에 정의된 4 사용
 };
 
-struct tagMeshStreamDesc
+struct MeshStreamDesc
 {
 	void* Data = nullptr;
 	uint32 Count = 0;
@@ -38,9 +38,9 @@ struct tagMeshStreamDesc
 
 ENABLE_BITMASK_OPERATORS(EMeshFlag);
 
-struct tagMeshCreateDesc : public tagResourceCreateDesc
+struct MeshCreateDesc : public ResourceCreateDesc
 {
-	tagMeshStreamDesc Streams[(uint32)EMeshStream::Max] = {};
+	MeshStreamDesc Streams[(uint32)EMeshStream::Max] = {};
 
 	void* IndexData = { nullptr };
 	uint32 IndexCount = { 0 };
@@ -53,7 +53,7 @@ struct tagMeshCreateDesc : public tagResourceCreateDesc
 };
 
 
-struct tagMeshBinaryHeader
+struct MeshBinaryHeader
 {
 	uint32 StreamCounts[(uint32)EMeshStream::Max] = { 0 };
 	uint32 StreamStrides[(uint32)EMeshStream::Max] = { 0 };
@@ -74,10 +74,11 @@ class ENGINE_API Mesh : public Resource
 	DECLARE_RESOURCE(Mesh)
 #pragma region Constructor&Destructor
 protected:
-	using DESC = tagMeshCreateDesc;
+	using DESC = MeshCreateDesc;
 	Mesh() : Resource(EResourceType::Mesh) {}
-	virtual ~Mesh() = default;
 	EResult Initialize(void* arg = nullptr);
+public:
+	virtual ~Mesh() = default;
 public:
 	static Mesh* Create(void* arg = nullptr);
 	virtual void Free() override;
@@ -104,7 +105,7 @@ public:
 public:
 	ETopology GetTopology() const { return m_Topology; }
 public:
-	virtual const vector<tagInputLayoutDesc> GetInputLayoutDescs() const;
+	virtual const vector<InputLayoutDesc> GetInputLayoutDescs() const;
 	bool IsDynamic() const { return HasFlag(m_Flags, EMeshFlag::Dynamic); }
 #pragma endregion
 

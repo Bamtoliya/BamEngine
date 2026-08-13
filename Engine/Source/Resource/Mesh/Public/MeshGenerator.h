@@ -4,7 +4,7 @@
 
 
 #pragma region Struct
-struct tagMeshGeneratorDesc : public tagComponentDesc
+struct tagMeshGeneratorDesc : public ComponentDesc
 {
 
 };

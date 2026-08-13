@@ -58,7 +58,7 @@ EResult ShaderImporter::Import(const filesystem::path& sourcePath, const filesys
     outputPath /= sourcePath.filename();
     outputPath.replace_extension(L".bamshader");
 
-    tagShaderDesc desc = {};
+    ShaderDesc desc = {};
     desc.Path = outputPath.wstring();
     desc.Key = outputPath.stem().wstring();
 

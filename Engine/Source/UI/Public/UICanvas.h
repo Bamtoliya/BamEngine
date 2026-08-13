@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "UIComponent.h"
 
@@ -34,10 +34,11 @@ class ENGINE_API UICanvas : public UIComponent
     REFLECT_CLASS()
 #pragma region Constructor&Destructor
 protected:
+protected:
     UICanvas() {}
-    virtual ~UICanvas() = default;
     virtual EResult Initialize(void* arg = nullptr) override;
 public:
+    virtual ~UICanvas() = default;
     static UICanvas* Create(void* arg = nullptr);
     virtual Component* Clone(GameObject* owner, void* arg = nullptr) override;
     virtual void Free() override;

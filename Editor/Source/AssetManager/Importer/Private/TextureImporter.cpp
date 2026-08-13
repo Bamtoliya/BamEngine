@@ -26,7 +26,7 @@ EResult TextureImporter::Import(const filesystem::path& sourcePath, const filesy
 	if (!compressor) return EResult::Fail;
 
 	std::vector<uint8> rawData;
-	Engine::tagTextureBinaryHeader texHeader;
+	Engine::TextureBinaryHeader texHeader;
 
 	// 2. 압축 수행 및 데이터 추출
 	bool bSuccess = compressor->GetRawCompressedData(sourcePath.wstring(), rawData, texHeader, desc->TargetFormat, desc->CompressFlags);

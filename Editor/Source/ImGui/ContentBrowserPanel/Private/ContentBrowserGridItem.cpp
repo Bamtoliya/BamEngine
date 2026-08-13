@@ -392,7 +392,7 @@ void ContentBrowserGridItem::ContextMenu_Material(const std::filesystem::path& p
 			auto baseHandle = Engine::ResourceManager::Get().GetResourceHandle<Engine::Material>(wBasePath);
 			if (baseHandle)
 			{
-				tagMaterialInstanceDesc desc = {};
+				MaterialInstanceDesc desc = {};
 				desc.BaseMaterialHandle = baseHandle;
 				desc.Key = std::filesystem::relative(instPath).wstring();
 				desc.Path = instPath.wstring();

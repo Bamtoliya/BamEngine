@@ -1,6 +1,6 @@
 ﻿#pragma once
 
-#include "ReflectionMacro.h"
+#include "Reflection/ReflectionMacro.h"
 
 namespace Engine 
 {
@@ -23,7 +23,7 @@ namespace Engine
     };
     
     STRUCT()
-    struct tagSamplerDesc
+    struct SamplerDesc
     {
         REFLECT_STRUCT()
     
@@ -51,7 +51,7 @@ namespace Engine
         PROPERTY(EDITABLE, COLOR)
         vec4 BorderColor = vec4(0.f);
 
-        bool operator==(const tagSamplerDesc& other) const
+        bool operator==(const SamplerDesc& other) const
         {
             return MinFilter == other.MinFilter
                 && MagFilter == other.MagFilter
@@ -69,9 +69,9 @@ namespace Engine
 }
 
 template<>
-struct hash<Engine::tagSamplerDesc>
+struct hash<Engine::SamplerDesc>
 {
-    size_t operator()(const Engine::tagSamplerDesc& desc) const
+    size_t operator()(const Engine::SamplerDesc& desc) const
     {
         size_t seed = 0;
 

@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "Animator.h"
 #include "ComponentRegistry.h"
 
@@ -44,7 +44,7 @@ void Animator::SetSkeleton(ResourceHandle<Skeleton> skeleton)
 
 void Animator::AddState(const wstring& stateName, ResourceHandle<Animation> clip, bool loop, f32 speed)
 {
-    tagAnimationState state;
+    AnimationState state;
     state.Name = stateName;
     state.Clip = clip;
     state.Loop = loop;

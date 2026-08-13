@@ -5,7 +5,7 @@
 
 BEGIN(Engine)
 STRUCT()
-struct ENGINE_API tagTextureBinaryHeader
+struct ENGINE_API TextureBinaryHeader
 {
 	REFLECT_STRUCT()
 
@@ -26,7 +26,7 @@ struct ENGINE_API tagTextureBinaryHeader
 	PROPERTY()
 	uint32 DataSize = 0;
 };
-struct tagTextureCreateDesc : public tagResourceCreateDesc
+struct TextureCreateDesc : public ResourceCreateDesc
 {
 };
 
@@ -35,15 +35,16 @@ class ENGINE_API Texture final : public Resource
 {
 	REFLECT_CLASS()
 	DECLARE_RESOURCE(Texture)
-	using DESC = tagTextureCreateDesc;
+	using DESC = TextureCreateDesc;
 #pragma region Constructor&Destructor
 private:
 	Texture() : Resource(EResourceType::Texture) {}
-	virtual ~Texture() = default;
 	EResult Initialize(void* arg = nullptr);
 public:
+	virtual ~Texture() = default;
+public:
 	static Texture* Create(void* arg = nullptr);
-	static Texture* Create(const tagTextureBinaryHeader& header, const vector<uint8>& pixelData, const wstring& key = L"");
+	static Texture* Create(const TextureBinaryHeader& header, const vector<uint8>& pixelData, const wstring& key = L"");
 	virtual void Free() override;
 #pragma endregion
 
@@ -85,7 +86,7 @@ private:
 	PROPERTY()
 	f32 m_PixelPerUnit = { DEFAULT_PPU };
 
-	tagTextureBinaryHeader m_CachedHeader; // Serialize 시 텍스처 헤더 정보를 저장하는 용도 (BinaryArchive에서만 사용)
+	TextureBinaryHeader m_CachedHeader; // Serialize 시 텍스처 헤더 정보를 저장하는 용도 (BinaryArchive에서만 사용)
 	vector<uint8> m_TempData; // Serialize 시 임시로 원본 텍스처 데이터를 저장하는 용도 (BinaryArchive에서만 사용)
 #pragma endregion
 };

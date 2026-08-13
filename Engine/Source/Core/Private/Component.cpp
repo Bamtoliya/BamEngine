@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "Component.h"
 #include "SerializationHelper.h"
 
@@ -25,7 +25,7 @@ void Component::Free()
 #pragma region Save&Load
 void Component::Serialize(Archive& ar)
 {
-	SerializationHelper::SerializeReflectionProperties(ar, &GetTypeInfo(), this);
+	SerializationHelper::SerializeStaticType(ar, *this);
 }
 void Component::Deserialize(Archive& ar)
 {

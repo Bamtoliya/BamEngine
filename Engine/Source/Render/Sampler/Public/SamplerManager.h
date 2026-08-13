@@ -20,14 +20,14 @@ public:
 
 #pragma region Sampler Management
 public:
-	RHISampler* GetOrCreateSampler(const tagSamplerDesc& desc);
+	RHISampler* GetOrCreateSampler(const SamplerDesc& desc);
 	RHISampler* GetDefaultSampler() const { return m_DefaultSampler; }
 	void SetDefaultSampler(RHISampler* defaultSampler) { m_DefaultSampler = defaultSampler; }
 #pragma endregion
 
 #pragma region Variable
 private:
-	unordered_map<tagSamplerDesc, RHISampler*> m_Samplers;
+	unordered_map<SamplerDesc, RHISampler*> m_Samplers;
 	RHISampler* m_DefaultSampler = { nullptr };
 	RHI* m_RHI = { nullptr };
 #pragma endregion

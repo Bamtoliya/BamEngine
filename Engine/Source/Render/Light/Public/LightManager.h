@@ -2,12 +2,13 @@
 
 #include "Base.h"
 #include "LightSource.h"
+#include "RHI.h"
 
 #define MAX_LIGHTS 32
 
 struct tagLightManagerDesc
 {
-	class RHI* RHI = { nullptr };
+	Engine::RHI* RHI = { nullptr };
 };
 
 BEGIN(Engine)
@@ -46,12 +47,12 @@ private:
 
 #pragma region Shadow
 public:
-	tagCameraBuffer GetShadowCameraBuffer(const LightSource* lightSource) const;
-	tagCameraBuffer GetShadowCameraBuffer(uint32 shadowLightIndex) const;
+	CameraBuffer GetShadowCameraBuffer(const LightSource* lightSource) const;
+	CameraBuffer GetShadowCameraBuffer(uint32 shadowLightIndex) const;
 	vector<LightSource*> GetShadowCastingLights() const;
 	
-	tagLightShadowData GetShadowData(const LightSource* lightSource) const;
-	tagLightShadowData GetShadowData(uint32 shadowLightIndex) const;
+	LightShadowData GetShadowData(const LightSource* lightSource) const;
+	LightShadowData GetShadowData(uint32 shadowLightIndex) const;
 #pragma endregion
 
 

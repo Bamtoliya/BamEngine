@@ -1,7 +1,7 @@
-#pragma once
+﻿#pragma once
 
 #include "Component.h"
-#include "ReflectionMacro.h"
+#include "Reflection/ReflectionMacro.h"
 
 BEGIN(Engine)
 
@@ -53,7 +53,7 @@ enum class ERotationMode : uint8
 #pragma region Struct
 
 STRUCT()
-struct tagTransformDesc : tagComponentDesc
+struct TransformDesc : ComponentDesc
 {
 	REFLECT_STRUCT()
 
@@ -75,12 +75,12 @@ class ENGINE_API Transform final : public Component
 {
 	REFLECT_CLASS()
 
-	using DESC = tagTransformDesc;
+	using DESC = TransformDesc;
 
 #pragma region Constructor&Destructor
 private:
 	Transform() : Component{} {}
-	virtual ~Transform() {}
+	public: virtual ~Transform() {}
 	virtual EResult Initialize(void* arg = nullptr) override;
 public:
 	static Component* Create(void* arg = nullptr);

@@ -1,25 +1,30 @@
 ﻿#pragma once
 
-#include "Base.h"
-#include "Component.h"
+#include "Engine_Includes.h"
+
 BEGIN(Engine)
-class ENGINE_API Entity : public Base
+
+// Forward declaration
+class Scene;
+
+class ENGINE_API Entity
 {
-#pragma region Constructor&Destructor
 protected:
 	Entity() {}
+	Entity(entt::entity handle) : m_EntityHandle(handle) {}
+	Entity(entt::entity handle, Scene* scene) : m_EntityHandle(handle), m_Scene(scene) {}
 	virtual ~Entity() {}
-	virtual EResult Initalize(void* arg = nullptr) { return EResult::Success; }
 public:
-	static Entity* Create(void* arg = nullptr);
-	virtual Entity* Clone(void* arg = nullptr) { return nullptr; }
-	virtual void Free() override {};
-#pragma endregion
-#pragma region Loop
-	virtual void	FixedUpdate(f32 dt) {};
-	virtual void	Update(f32 dt) {};
-	virtual void	LateUpdate(f32 dt) {};
-	virtual EResult	Render(f32 dt) { return EResult::Success; }
-#pragma endregion
+	static Entity* Create(entt::entity handle, Scene* scene) { return new Entity(handle, scene); }
+	template<typename T, typename... Args>
+	T& AddComponent(Args&&... args);
+	template<typename T>
+	T& GetComponent();
+
+	entt::entity GetEntityHandle() const { return m_EntityHandle; }
+private:
+	entt::entity m_EntityHandle = entt::null;
+	Scene* m_Scene = nullptr;
 };
+
 END

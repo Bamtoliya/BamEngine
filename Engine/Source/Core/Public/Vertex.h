@@ -2,7 +2,7 @@
 
 #include "Types.h"
 #include "RenderTypes.h"
-#include "ReflectionMacro.h"
+#include "Reflection/ReflectionMacro.h"
 
 namespace Engine
 {
@@ -65,13 +65,13 @@ namespace Engine
 		Half4,
 	};
 
-	struct tagVertexElementDesc
+	struct VertexElementDesc
 	{
 		uint32 Location = { 0 };
 		EVertexElementFormat Format = EVertexElementFormat::Float3;
 		uint32 Offset = { 0 };
 
-		bool operator==(const tagVertexElementDesc& other) const
+		bool operator==(const VertexElementDesc& other) const
 		{
 			return Location == other.Location &&
 				Format == other.Format &&
@@ -85,14 +85,14 @@ namespace Engine
 		PerInstance,
 	};
 
-	struct tagInputLayoutDesc
+	struct InputLayoutDesc
 	{
-		std::vector<tagVertexElementDesc> Elements;
+		std::vector<VertexElementDesc> Elements;
 		uint32 Stride = { 0 };
 		EVertexInputRate InputRate = EVertexInputRate::PerVertex;
 		uint32 InstanceDataStepRate = { 0 }; // PerInstance일 때, 인스턴스마다 데이터를 몇 개씩 건너뛸지 설정 (0이면 자동으로 1로 간주)
 
-		bool operator==(const tagInputLayoutDesc& other) const
+		bool operator==(const InputLayoutDesc& other) const
 		{
 			return Stride == other.Stride &&
 				Elements == other.Elements;
@@ -111,7 +111,7 @@ namespace Engine
 			: position(pos)
 		{
 		}
-		static const tagInputLayoutDesc Layout;
+		static const InputLayoutDesc Layout;
 	};
 
 	STRUCT()
@@ -132,14 +132,14 @@ namespace Engine
 		VertexMaterial(const glm::vec3& nor, const glm::vec2& uv, const glm::vec3& tan, const glm::vec3& bitan, const glm::vec4& col)
 			: normal(nor), texCoord(uv), tangent(tan), bitangent(bitan), color(col) {
 		}
-		static const tagInputLayoutDesc Layout;
+		static const InputLayoutDesc Layout;
 	};
 
 	struct VertexSkinData
 	{
 		glm::uvec4 boneIDs;
 		glm::vec4 weights;
-		static const tagInputLayoutDesc Layout;
+		static const InputLayoutDesc Layout;
 	};
 
 	STRUCT()
@@ -192,7 +192,7 @@ namespace Engine
 		{
 		}
 
-		static const tagInputLayoutDesc Layout;
+		static const InputLayoutDesc Layout;
 	};
 
 	struct Vertex2D
@@ -201,7 +201,7 @@ namespace Engine
 		glm::vec4 color = {};
 		glm::vec2 texCoord = {};
 
-		static const tagInputLayoutDesc Layout;
+		static const InputLayoutDesc Layout;
 	};
 
 
@@ -212,7 +212,7 @@ namespace Engine
 		vec3 position;
 		vec4 color;
 
-		static const tagInputLayoutDesc Layout;
+		static const InputLayoutDesc Layout;
 	};
 #endif
 	struct ENGINE_API SceneUBO

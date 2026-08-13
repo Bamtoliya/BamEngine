@@ -3,6 +3,7 @@
 #include "LightManager.h"
 #include "Light.h"
 #include "RHIBuffer.h"
+#include "RHI.h"
 
 IMPLEMENT_SINGLETON(LightManager)
 #pragma region Constructor&Destructor
@@ -86,13 +87,13 @@ EResult LightManager::UpdateLightBuffer()
 {
 	if (IsFailure(EnsureBuffer())) return EResult::Fail;
 
-	const uint32 headerSize = sizeof(tagLightBufferHeader);
-	const uint32 totalSize = headerSize + sizeof(tagGPULight) * MAX_LIGHTS;
+	const uint32 headerSize = sizeof(LightBufferHeader);
+	const uint32 totalSize = headerSize + sizeof(GPULight) * MAX_LIGHTS;
 
 	vector<uint8> data(totalSize, 0);
 
-	auto* header = reinterpret_cast<tagLightBufferHeader*>(data.data());
-	auto* gpuLights = reinterpret_cast<tagGPULight*>(data.data() + headerSize);
+	auto* header = reinterpret_cast<LightBufferHeader*>(data.data());
+	auto* gpuLights = reinterpret_cast<GPULight*>(data.data() + headerSize);
 
 	// 0개여도 NumLights = 0으로 정상 빌드 → 셰이더 루프 0회
 	const uint32 lightCount = static_cast<uint32>(
@@ -113,8 +114,8 @@ EResult LightManager::EnsureBuffer()
 
 	Safe_Release(m_LightBuffer);
 
-	const uint32 totalSize = sizeof(tagLightBufferHeader) + sizeof(tagGPULight) * MAX_LIGHTS;
-	m_LightBuffer = m_RHI->CreateBuffer(nullptr, totalSize, sizeof(tagGPULight), ERHIBufferType::Structured);
+	const uint32 totalSize = sizeof(LightBufferHeader) + sizeof(GPULight) * MAX_LIGHTS;
+	m_LightBuffer = m_RHI->CreateBuffer(nullptr, totalSize, sizeof(GPULight), ERHIBufferType::Structured);
 	if (!m_LightBuffer) return EResult::Fail;
 
 	m_LightCount = MAX_LIGHTS;
@@ -125,15 +126,15 @@ EResult LightManager::EnsureBuffer()
 
 	return EResult::Success;
 }
-tagCameraBuffer LightManager::GetShadowCameraBuffer(const LightSource* lightSource) const
+CameraBuffer LightManager::GetShadowCameraBuffer(const LightSource* lightSource) const
 {
-	return lightSource ? lightSource->BuildShadowCameraBuffer() : tagCameraBuffer();
+	return lightSource ? lightSource->BuildShadowCameraBuffer() : CameraBuffer();
 }
-tagCameraBuffer LightManager::GetShadowCameraBuffer(uint32 shadowLightIndex) const
+CameraBuffer LightManager::GetShadowCameraBuffer(uint32 shadowLightIndex) const
 {
 	auto shadowLights = GetShadowCastingLights();
 	if (shadowLightIndex >= shadowLights.size())
-		return tagCameraBuffer{}; // 빈 버퍼
+		return CameraBuffer{}; // 빈 버퍼
 
 	return GetShadowCameraBuffer(shadowLights[shadowLightIndex]);
 }
@@ -147,15 +148,15 @@ vector<LightSource*> LightManager::GetShadowCastingLights() const
 	}
 	return shadowCasters;
 }
-tagLightShadowData LightManager::GetShadowData(const LightSource* lightSource) const
+LightShadowData LightManager::GetShadowData(const LightSource* lightSource) const
 {
-	return lightSource ? lightSource->BuildShadowData() : tagLightShadowData();
+	return lightSource ? lightSource->BuildShadowData() : LightShadowData();
 }
-tagLightShadowData LightManager::GetShadowData(uint32 shadowLightIndex) const
+LightShadowData LightManager::GetShadowData(uint32 shadowLightIndex) const
 {
 	auto shadowLights = GetShadowCastingLights();
 	if (shadowLightIndex >= shadowLights.size())
-		return tagLightShadowData{}; // 빈 데이터
+		return LightShadowData{}; // 빈 데이터
 
 	return GetShadowData(shadowLights[shadowLightIndex]);
 }

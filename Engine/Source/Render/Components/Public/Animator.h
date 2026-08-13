@@ -11,7 +11,7 @@ BEGIN(Engine)
 // State Machine을 위한 간이 상태 구조체
 
 STRUCT()
-struct tagAnimationState
+struct AnimationState
 {
     REFLECT_STRUCT()
 
@@ -27,7 +27,7 @@ struct tagAnimationState
     PROPERTY(EDITABLE)
     f32 PlaybackSpeed = 1.0f;
 
-    bool operator==(const tagAnimationState& other) const = default;
+    bool operator==(const AnimationState& other) const = default;
 };
 
 CLASS()
@@ -38,7 +38,7 @@ class ENGINE_API Animator : public Component
 #pragma region Constructor&Destructor
 private:
     Animator() {}
-    virtual ~Animator() = default;
+    public: virtual ~Animator() = default;
     virtual EResult Initialize(void* arg = nullptr) override;
 public:
     static Animator* Create(void* arg = nullptr);
@@ -78,10 +78,10 @@ private:
     // State 관리 관련
 
     PROPERTY(EDITABLE)
-    unordered_map<wstring, tagAnimationState> m_States;
+    unordered_map<wstring, AnimationState> m_States;
 
 
-    tagAnimationState* m_CurrentState = nullptr;
+    AnimationState* m_CurrentState = nullptr;
 
     f32 m_CurrentTime = 0.0f;
 };

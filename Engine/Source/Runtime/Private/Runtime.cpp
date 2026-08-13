@@ -4,12 +4,18 @@
 
 IMPLEMENT_SINGLETON(Runtime)
 
+namespace Engine {
+	extern void RegisterReflection_EnTT();
+}
+
 #pragma region Constructor&Destructor
 EResult Runtime::Initialize(void* arg)
 {
 #if defined(_DEBUG)
 	_CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
 #endif
+
+	RegisterReflection_EnTT();
 
 	RUNTIMEDESC* pRuntimeDesc = reinterpret_cast<RUNTIMEDESC*>(arg);
 	tagRendererDesc RendererDesc = pRuntimeDesc->RendererDesc;

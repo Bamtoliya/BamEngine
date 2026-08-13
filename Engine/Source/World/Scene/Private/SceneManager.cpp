@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "SceneManager.h"
 #include "Archives.h"
@@ -83,7 +83,7 @@ EResult SceneManager::SaveScene(Archive& archive, const wstring& filePath)
 	if (!m_CurrentScene) return EResult::Fail;
 
 	string pathStr = WStrToStr(filePath);
-	if(archive.PushScope(m_CurrentScene->GetTypeInfo().QualifiedName.data()))
+	if(archive.PushScope(entt::resolve(m_CurrentScene->GetTypeID()).info().name().data()))
 	{
 		m_CurrentScene->Serialize(archive);
 		archive.PopScope();
@@ -109,7 +109,7 @@ EResult SceneManager::LoadScene(Archive& archive, const wstring& filePath)
 	Scene* newScene = Scene::Create();
 	if (!newScene) return EResult::Fail;
 	
-	if (archive.PushScope(newScene->GetTypeInfo().QualifiedName.data()))
+	if (archive.PushScope(entt::resolve(newScene->GetTypeID()).info().name().data()))
 	{
 		newScene->Deserialize(archive);
 		archive.PopScope();

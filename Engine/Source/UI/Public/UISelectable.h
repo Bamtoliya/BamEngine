@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "UIComponent.h"
 #include "UIRenderComponent.h"
@@ -26,8 +26,9 @@ class ENGINE_API UISelectable : public UIComponent,
 #pragma region Constructor&Destructor
 protected:
 	UISelectable() {}
-	virtual ~UISelectable() = default;
 	virtual EResult Initialize(void* arg = nullptr) override;
+public:
+	virtual ~UISelectable() = default;
 public:
 	static UISelectable* Create(void* arg = nullptr);
 	virtual Component* Clone(GameObject* owner, void* arg = nullptr) override;

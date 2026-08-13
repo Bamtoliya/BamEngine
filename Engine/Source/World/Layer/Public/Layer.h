@@ -1,8 +1,8 @@
-﻿#pragma once
+#pragma once
 
 #include "Base.h"
 #include "SerializableInterface.h"
-#include "ReflectionMacro.h"
+#include "Reflection/ReflectionMacro.h"
 #include "CommonInterface.h"
 
 BEGIN(Engine)
@@ -34,7 +34,7 @@ class ENGINE_API Layer : public Base, public ReflectableInterface, public Serial
 protected:
 	using DESC = tagLayerCreateDesc;
 	Layer() {}
-	virtual ~Layer() {}
+	public: virtual ~Layer() {}
 	EResult Initialize(void* arg = nullptr);
 public:
 	static Layer* Create(void* arg = nullptr);

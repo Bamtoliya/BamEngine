@@ -70,3 +70,9 @@ Resources/kenney_game-icons
 Resources/Model
 Resources/Fonts
 Gemini.md
+*.bamshader
+*.bamsprite
+*.bamtex
+*.bammatinst
+*.bammat
+Temp

@@ -1,7 +1,7 @@
-#pragma once
+﻿#pragma once
 
 #include "Base.h"
-#include "ReflectionMacro.h"
+#include "Reflection/ReflectionMacro.h"
 #include "SerializableInterface.h"
 #include "CommonInterface.h"
 #include "ReflectableInterface.h"
@@ -9,7 +9,7 @@
 BEGIN(Engine)
 #pragma region Struct
 STRUCT()
-struct ENGINE_API tagComponentDesc
+struct ENGINE_API ComponentDesc
 {
 	REFLECT_STRUCT()
 
@@ -30,9 +30,9 @@ CLASS()
 class ENGINE_API Component : public Base, public ReflectableInterface, public SerializableInterface, public ActiveInterface
 {
 	REFLECT_BASE()
-	using DESC = tagComponentDesc;
+	using DESC = ComponentDesc;
 #pragma region Constructor&Destructor
-protected:
+public:
 	Component() {}
 	virtual ~Component() {}
 	virtual EResult Initialize(void* arg = nullptr);	

@@ -53,7 +53,7 @@ public:
 public:
 	virtual RHIPipeline* CreatePipeline(const tagRHIPipelineDesc& desc) override;
 public:
-	virtual RHISampler* CreateSampler(const tagSamplerDesc& desc) override;
+	virtual RHISampler* CreateSampler(const SamplerDesc& desc) override;
 public:
 	virtual RHIShader* CreateShader(const tagRHIShaderDesc& desc) override;
 public:

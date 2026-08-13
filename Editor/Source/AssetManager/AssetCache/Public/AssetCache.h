@@ -18,6 +18,7 @@ private:
 	EResult Initialize(void* arg = nullptr);
 	virtual void Free() override;
 
+public:
 	void Update();
 #pragma endregion
 

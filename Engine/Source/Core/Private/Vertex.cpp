@@ -2,7 +2,7 @@
 
 #include "Vertex.h"
 
-const tagInputLayoutDesc VertexPosition::Layout =
+const InputLayoutDesc VertexPosition::Layout =
 {
 	{
 		{  0, EVertexElementFormat::Float3, offsetof(VertexPosition, position) },
@@ -12,7 +12,7 @@ const tagInputLayoutDesc VertexPosition::Layout =
 	0
 };
 
-const tagInputLayoutDesc VertexMaterial::Layout =
+const InputLayoutDesc VertexMaterial::Layout =
 {
 	{
 		{  0, EVertexElementFormat::Float3, offsetof(VertexMaterial, normal) },
@@ -26,7 +26,7 @@ const tagInputLayoutDesc VertexMaterial::Layout =
 	0
 };
 
-const tagInputLayoutDesc VertexSkinData::Layout =
+const InputLayoutDesc VertexSkinData::Layout =
 {
 	{
 		{ 0, EVertexElementFormat::UInt4, offsetof(VertexSkinData, boneIDs) },
@@ -37,7 +37,7 @@ const tagInputLayoutDesc VertexSkinData::Layout =
 	0
 };
 
-const tagInputLayoutDesc Vertex::Layout =
+const InputLayoutDesc Vertex::Layout =
 {
 	{
 		{  0, EVertexElementFormat::Float3, offsetof(Vertex, position) },
@@ -52,7 +52,7 @@ const tagInputLayoutDesc Vertex::Layout =
 	0
 };
 
-const tagInputLayoutDesc Vertex2D::Layout =
+const InputLayoutDesc Vertex2D::Layout =
 {
 	{
 		{ 0, EVertexElementFormat::Float3, offsetof(Vertex2D, position) },
@@ -65,7 +65,7 @@ const tagInputLayoutDesc Vertex2D::Layout =
 };
 
 #ifdef _DEBUG
-const tagInputLayoutDesc DebugVertex::Layout =
+const InputLayoutDesc DebugVertex::Layout =
 {
 	{
 		{ 0, EVertexElementFormat::Float3, offsetof(DebugVertex, position) },

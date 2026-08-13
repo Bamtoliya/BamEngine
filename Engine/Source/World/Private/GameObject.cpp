@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "GameObject.h"
 #include "Layer.h"
@@ -71,7 +71,7 @@ GameObject* GameObject::Clone(void* arg)
 		if (!comp)
 			continue;
 
-		if (comp->GetTypeInfo().ID == RunTimeHash("Engine::Transform"))
+		if (comp->GetTypeID() == entt::type_hash<Transform>::value())
 			continue;
 
 		Component* clonedComp = comp->Clone(instance, arg);
@@ -398,7 +398,7 @@ void GameObject::SetLayerIndex(uint32 layerIndex)
 #pragma region Save&Load
 void GameObject::Serialize(Archive& ar)
 {
-	SerializationHelper::SerializeReflectionProperties(ar, &GetTypeInfo(), this);
+	SerializationHelper::SerializeStaticType(ar, *this);
 }
 void GameObject::Deserialize(Archive& ar)
 {

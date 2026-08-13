@@ -112,9 +112,9 @@ void LightSource::LateUpdate(f32 dt)
 #pragma endregion
 
 #pragma region GPU
-tagGPULight LightSource::BuildGPULightDesc() const
+GPULight LightSource::BuildGPULightDesc() const
 {
-	tagGPULight out = {};
+	GPULight out = {};
 
 	if (!m_Active || !m_Owner || !m_Owner->IsActive())
 		return out;
@@ -148,9 +148,9 @@ tagGPULight LightSource::BuildGPULightDesc() const
 #pragma endregion
 
 #pragma region Shadow
-tagCameraBuffer LightSource::BuildShadowCameraBuffer() const
+CameraBuffer LightSource::BuildShadowCameraBuffer() const
 {
-	tagCameraBuffer buffer = {};
+	CameraBuffer buffer = {};
 	if (!m_Active || !m_Owner || !m_Owner->IsActive())
 		return buffer;
 	Transform* transform = m_Owner->GetTransform();
@@ -167,9 +167,9 @@ tagCameraBuffer LightSource::BuildShadowCameraBuffer() const
 	buffer.cameraPosition = position;
 	return buffer;
 }
-tagLightShadowData LightSource::BuildShadowData() const
+LightShadowData LightSource::BuildShadowData() const
 {
-	tagLightShadowData data = {};
+	LightShadowData data = {};
 	if (!m_Active || !m_Owner || !m_Owner->IsActive()) return data;
 	data.LightViewProjMatrix = BuildShadowCameraBuffer().viewProjMatrix;
 	data.ShadowParams = vec4(m_ShadowBias, m_ShadowSlopeBias, m_ShadowNormalBias, 0.0f);

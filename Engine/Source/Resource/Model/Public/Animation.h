@@ -43,7 +43,7 @@ struct AnimationTrack
 	}
 };
 
-struct tagAnimationCreateDesc : public tagResourceCreateDesc
+struct AnimationCreateDesc : public ResourceCreateDesc
 {
 	wstring Name;
 	f64 Duration = 0.0;
@@ -59,7 +59,7 @@ class ENGINE_API Animation : public Resource
 	DECLARE_RESOURCE(Animation)
 #pragma region Constructor&Destructor
 private:
-	using DESC = tagAnimationCreateDesc;
+	using DESC = AnimationCreateDesc;
 	Animation() : Resource(EResourceType::Animation) {}
 	virtual ~Animation() = default;
 	EResult Initialize(void* arg = nullptr);

@@ -2,7 +2,7 @@
 
 #include "MaterialInterface.h"
 
-struct tagMaterialInstanceDesc : public tagResourceCreateDesc
+struct MaterialInstanceDesc : public ResourceCreateDesc
 {
 	ResourceHandle<Material> BaseMaterialHandle;
 };
@@ -28,11 +28,11 @@ class ENGINE_API MaterialInstance : public MaterialInterface
 {
 	REFLECT_CLASS()
 	DECLARE_RESOURCE(MaterialInstance)
-	using DESC = tagMaterialInstanceDesc;
+	using DESC = MaterialInstanceDesc;
 #pragma region Constructor&Destructor
 private:
 	MaterialInstance() : MaterialInterface(EResourceType::MaterialInstance) {}
-	virtual ~MaterialInstance() = default;
+	public: virtual ~MaterialInstance() = default;
 	EResult Initialize(void* arg = nullptr);
 public:
 	static MaterialInstance* Create(void* arg = nullptr);

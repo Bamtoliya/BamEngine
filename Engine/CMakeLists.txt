@@ -1,4 +1,4 @@
-﻿project(Engine)
+project(Engine)
 
 find_package(fmt CONFIG REQUIRED)
 find_package(SDL3 CONFIG REQUIRED)
@@ -21,18 +21,23 @@ find_package(spirv_cross_c CONFIG REQUIRED)
 
 find_path(CPPCODEC_INCLUDE_DIRS "cppcodec/base64_rfc4648.hpp" REQUIRED)
 
-include("${CMAKE_SOURCE_DIR}/Projects/ReflectionCMake/ReflectionBundles.cmake")
+# [수정] 1. 구버전 리플렉션 번들 스크립트 인클루드 삭제
+# include("${CMAKE_SOURCE_DIR}/Projects/ReflectionCMake/ReflectionBundles.cmake")
 
 set(ENGINE_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Source")
 set(ENGINE_PCH_HEADER "${ENGINE_SOURCE_DIR}/Core/Public/Engine_Includes.h")
+
+# [수정] 2. 새로 생성되는 리플렉션 파일 경로로 변경
 set(GENERATED_SOURCE
-    "${CMAKE_CURRENT_SOURCE_DIR}/Source/Generated/EngineReflection.gen.cpp"
+    "${ENGINE_SOURCE_DIR}/Core/Reflection/Private/Reflection.gen.cpp"
 )
 
 file(GLOB_RECURSE ENGINE_HEADERS CONFIGURE_DEPENDS "${ENGINE_SOURCE_DIR}/*.h")
 file(GLOB_RECURSE ENGINE_SOURCES CONFIGURE_DEPENDS "${ENGINE_SOURCE_DIR}/*.cpp")
 file(GLOB_RECURSE ENGINE_INLINE CONFIGURE_DEPENDS "${ENGINE_SOURCE_DIR}/*.inl")
-file(GLOB_RECURSE REFLECTION_CODEGEN_SOURCES CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/Projects/ReflectionCodegen/*.py")
+
+# [수정] 3. 구버전 Codegen 폴더 대신 새로 만든 AST 폴더의 파이썬 파일들을 추적
+file(GLOB_RECURSE REFLECTION_AST_SOURCES CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/Projects/ReflectionAST/*.py")
 file(GLOB_RECURSE ALL_SOURCE_FILES CONFIGURE_DEPENDS "${ENGINE_SOURCE_DIR}/*")
 
 list(APPEND ENGINE_SOURCES "${GENERATED_SOURCE}")
@@ -69,8 +74,9 @@ if(MSVC)
     target_compile_options(Engine PRIVATE
         $<$<CONFIG:Debug>:/ZI>
         $<$<CONFIG:Debug>:/FS>
-        /Zc:preprocessor
+        #/Zc:preprocessor
         /MP
+        /bigobj
     )
 
     target_link_options(Engine PRIVATE
@@ -98,26 +104,26 @@ endforeach()
 
 add_custom_target(CompileShaders DEPENDS ${SPIRV_OUTPUTS})
 
-add_reflection_bundle(
-    TARGET Engine
-    MODULE Engine
-    SOURCE_ROOT "${ENGINE_SOURCE_DIR}"
-    OUTPUT_CPP "${GENERATED_SOURCE}"
-    DEPENDS
-        "${CMAKE_CURRENT_LIST_FILE}"
-        ${ENGINE_HEADERS}
-        ${REFLECTION_CODEGEN_SOURCES}
-    EXTRA_ARGS
-        --strip-namespace Engine
-        --namespace-fallback Engine
-        --resource-handle-template ResourceHandle
-    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+# [수정] 4. 기존 add_reflection_bundle 매크로 대신 새로운 AST 제너레이터를 호출하는 타겟 생성
+add_custom_command(
+    OUTPUT "${GENERATED_SOURCE}"
+    COMMAND python "${CMAKE_SOURCE_DIR}/Projects/ReflectionAST/main.py" --source-root "${ENGINE_SOURCE_DIR}" --output "${GENERATED_SOURCE}"
+    DEPENDS ${ENGINE_HEADERS} ${REFLECTION_AST_SOURCES}
+    COMMENT "Generating Reflection Data via AST..."
+    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/Projects/ReflectionAST"
 )
 
-add_dependencies(Engine CompileShaders)
+# [수정] 5. 쉐이더 컴파일과 더불어 리플렉션 코드 생성이 먼저 되도록 종속성 추가
+add_custom_target(GenerateReflectionAST DEPENDS "${GENERATED_SOURCE}")
+add_dependencies(Engine CompileShaders GenerateReflectionAST)
 
 set_target_properties(Engine PROPERTIES
-    UNITY_BUILD ON
+    UNITY_BUILD OFF
+)
+
+set_source_files_properties(
+    Source/ECS/XXX.cpp   # entt 사용 파일들
+    PROPERTIES SKIP_UNITY_BUILD_INCLUSION TRUE
 )
 
 target_compile_definitions(Engine PRIVATE

@@ -71,7 +71,7 @@ ENABLE_BITMASK_OPERATORS(ERectTransformFlags)
 #pragma endregion
 
 
-struct tagRectTransformCreateDesc : public tagComponentDesc
+struct tagRectTransformCreateDesc : public ComponentDesc
 {
 	vec2 Size = { 100.0f, 100.0f };
 	vec2 AnchorMin = { 0.5f, 0.5f };
@@ -91,7 +91,7 @@ class ENGINE_API RectTransform final : public Component
 #pragma region Constructor&Destructor
 private:
 	RectTransform() : Component{} {}
-	virtual ~RectTransform() {}
+	public: virtual ~RectTransform() {}
 	virtual EResult Initialize(void* arg = nullptr) override;
 public:
 	static Component* Create(void* arg = nullptr);

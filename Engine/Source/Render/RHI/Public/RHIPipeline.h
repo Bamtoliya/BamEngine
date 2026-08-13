@@ -32,7 +32,7 @@ struct tagRHIPipelineDesc
 
 	RHIDepthStencilState DepthStencilState;
 
-	vector<tagInputLayoutDesc> InputLayouts;
+	vector<InputLayoutDesc> InputLayouts;
 
 	bool operator==(const tagRHIPipelineDesc& other) const
 	{

@@ -1,7 +1,7 @@
 ﻿#pragma once
 
 #include "Base.h"
-#include "ReflectionMacro.h"
+#include "Reflection/ReflectionMacro.h"
 #include "SerializableInterface.h"
 #include "ReflectableInterface.h"
 
@@ -10,7 +10,7 @@ public: \
 	static ClassType* CreateEmpty() { return new ClassType(); } \
 private:
 
-struct tagResourceCreateDesc
+struct ResourceCreateDesc
 {
 	wstring		Key = L"";
 	wstring		Path = L"";
@@ -41,7 +41,7 @@ enum class EResourceType : uint32
 };
 
 STRUCT()
-struct ENGINE_API tagResourceBinaryHeader
+struct ENGINE_API ResourceBinaryHeader
 {
 	REFLECT_STRUCT()
 
@@ -54,7 +54,7 @@ struct ENGINE_API tagResourceBinaryHeader
 	PROPERTY()
 	uint32 Version = { 1 };
 
-	tagResourceBinaryHeader() = default;
+	ResourceBinaryHeader() = default;
 };
 
 
@@ -62,12 +62,12 @@ CLASS()
 class ENGINE_API Resource : public SerializableInterface, public ReflectableInterface
 {
 	REFLECT_BASE()
-	using DESC = tagResourceCreateDesc;
+	using DESC = ResourceCreateDesc;
 	friend class ResourceManager;
 #pragma region Constructor&Destructor
 protected:
  	Resource(EResourceType type) : m_ResourceType(type) {}
-	virtual ~Resource() = default;
+	public: virtual ~Resource() = default;
 	virtual EResult Initialize(void* arg = nullptr)
 	{
 		if (!arg) return EResult::InvalidArgument;

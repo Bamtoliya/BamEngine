@@ -1,13 +1,14 @@
-﻿#pragma once
+#pragma once
 
 #include "Base.h"
 #include "SerializableInterface.h"
-#include "ReflectionMacro.h"
+#include "Reflection/ReflectionMacro.h"
 
 BEGIN(Engine)
 
 class EventSystem;
 class UICanvas;
+class Entity;
 
 struct tagSceneCreateDesc
 {
@@ -30,7 +31,7 @@ class ENGINE_API Scene : public Base, public ReflectableInterface, public Serial
 protected:
 	using DESC = tagSceneCreateDesc;
 	Scene() {}
-	virtual ~Scene() {}
+	public: virtual ~Scene() {}
 	virtual EResult Initialize(void* arg = nullptr);
 public:
 	static Scene* Create(void* arg = nullptr);
@@ -86,6 +87,20 @@ public:
 	class GameObject* FindGameObject(uint64 id);
 #pragma endregion
 
+#pragma region Entity Management
+public:
+	Entity& CreateEntity();
+	template<typename T, typename... Args>
+	T& AddComponent(Entity& entity, Args&&... args);
+	template<typename T>
+	T& GetComponent(Entity& entity);
+	template<typename T>
+	bool HasComponent(Entity& entity);
+	template<typename T>
+	void RemoveComponent(Entity& entity);
+#pragma endregion
+
+
 #pragma region Flag Mangement
 public:
 	bool IsActive() const { return HasFlag(m_Flags, ESceneFlags::Active); }
@@ -109,6 +124,8 @@ public:
 
 #pragma region Variable
 protected:
+	entt::registry m_Registry;
+
 	PROPERTY()
 	ESceneFlags m_Flags = ESceneFlags::Active;
 

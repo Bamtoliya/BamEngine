@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include <fmt/core.h>
 #include <SDL3/SDL.h>
 #include "Application.h"
@@ -254,7 +254,7 @@ void Application::InitializeShaders()
 {
     ResourceManager& rm = ResourceManager::Get();
 
-    tagShaderDesc gbufferVsDesc = {};
+    ShaderDesc gbufferVsDesc = {};
     gbufferVsDesc.Key = L"Resources/Shader/GBufferVS";
     gbufferVsDesc.Path = L"Resources/Shader/gbuffer.vert.spv";
     gbufferVsDesc.SpirvPath = L"Resources/Shader/gbuffer.vert.spv";
@@ -265,7 +265,7 @@ void Application::InitializeShaders()
         rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/gbuffer.vert.bamshader");
     }
     rm.LoadFile(L"Resources/Shader/gbuffer.vert.bamshader");
-    tagShaderDesc gbufferPsDesc = {};
+    ShaderDesc gbufferPsDesc = {};
     gbufferPsDesc.Key = L"Resources/Shader/GBufferPS";
     gbufferPsDesc.Path = L"Resources/Shader/gbuffer.frag.spv";
     gbufferPsDesc.SpirvPath = L"Resources/Shader/gbuffer.frag.spv";
@@ -278,7 +278,7 @@ void Application::InitializeShaders()
     rm.LoadFile(L"Resources/Shader/gbuffer.frag.bamshader");
 
     // Fullscreen Quad VS
-    tagShaderDesc fsQuadVsDesc = {};
+    ShaderDesc fsQuadVsDesc = {};
     fsQuadVsDesc.Key = L"FullscreenQuadVS";
     fsQuadVsDesc.ShaderType = EShaderType::Vertex;
     fsQuadVsDesc.Path = L"Resources/Shader/fullscreen_quad.vert.spv";
@@ -292,7 +292,7 @@ void Application::InitializeShaders()
     rm.LoadFile(L"Resources/Shader/fullscreen_quad.vert.bamshader");
 
     // Lighting PS
-    tagShaderDesc lightingPsDesc = {};
+    ShaderDesc lightingPsDesc = {};
     lightingPsDesc.Key = L"LightingPS";
     lightingPsDesc.ShaderType = EShaderType::Pixel;
     lightingPsDesc.Path = L"Resources/Shader/lighting.frag.spv";
@@ -309,7 +309,7 @@ void Application::InitializeShaders()
     rm.LoadFile(L"Resources/Shader/lighting.frag.bamshader");
 
     // Shadow Depth VS (static mesh)
-    tagShaderDesc shadowDepthVsDesc = {};
+    ShaderDesc shadowDepthVsDesc = {};
     shadowDepthVsDesc.Key = L"ShadowDepthVS";
     shadowDepthVsDesc.ShaderType = EShaderType::Vertex;
     shadowDepthVsDesc.Path = L"Resources/Shader/shadow_depth.vert.spv";
@@ -323,7 +323,7 @@ void Application::InitializeShaders()
     rm.LoadFile(L"Resources/Shader/shadow_depth.vert.bamshader");
 
     // Shadow Depth VS (skinning)
-    tagShaderDesc shadowDepthSkinVsDesc = {};
+    ShaderDesc shadowDepthSkinVsDesc = {};
     shadowDepthSkinVsDesc.Key = L"ShadowDepthSkinningVS";
     shadowDepthSkinVsDesc.ShaderType = EShaderType::Vertex;
     shadowDepthSkinVsDesc.Path = L"Resources/Shader/shadow_depth_skinning.vert.spv";
@@ -338,7 +338,7 @@ void Application::InitializeShaders()
     rm.LoadFile(L"Resources/Shader/shadow_depth_skinning.vert.bamshader");
 
     // Shadow Depth PS (depth-only)
-    tagShaderDesc shadowDepthPsDesc = {};
+    ShaderDesc shadowDepthPsDesc = {};
     shadowDepthPsDesc.Key = L"ShadowDepthPS";
     shadowDepthPsDesc.ShaderType = EShaderType::Pixel;
     shadowDepthPsDesc.Path = L"Resources/Shader/shadow_depth.frag.spv";
@@ -353,7 +353,7 @@ void Application::InitializeShaders()
 
 
     // Viewport Channel PS
-    tagShaderDesc viewportChannelPsDesc = {};
+    ShaderDesc viewportChannelPsDesc = {};
     viewportChannelPsDesc.Key = L"ViewportChannelPS";
     viewportChannelPsDesc.ShaderType = EShaderType::Pixel;
     viewportChannelPsDesc.Path = L"Resources/Shader/viewport_channel.frag.spv";
@@ -369,7 +369,7 @@ void Application::InitializeShaders()
     rm.LoadFile(L"Resources/Shader/viewport_channel.frag.bamshader");
 
     // PostProcess PS
-    tagShaderDesc postProcessPsDesc = {};
+    ShaderDesc postProcessPsDesc = {};
     postProcessPsDesc.Key = L"PostProcessPS";
     postProcessPsDesc.ShaderType = EShaderType::Pixel;
     postProcessPsDesc.Path = L"Resources/Shader/postprocess.frag.spv";
@@ -385,7 +385,7 @@ void Application::InitializeShaders()
     rm.LoadFile(L"Resources/Shader/postprocess.frag.bamshader");
 
     // PostProcess - Tone Mapping PS
-    tagShaderDesc ppToneMappingPsDesc = {};
+    ShaderDesc ppToneMappingPsDesc = {};
     ppToneMappingPsDesc.Key = L"PostProcess_ToneMappingPS";
     ppToneMappingPsDesc.ShaderType = EShaderType::Pixel;
     ppToneMappingPsDesc.Path = L"Resources/Shader/postprocess_tonemapping.frag.spv";
@@ -402,7 +402,7 @@ void Application::InitializeShaders()
 
 
     // Sky VS
-    tagShaderDesc skyVSDesc = {};
+    ShaderDesc skyVSDesc = {};
     skyVSDesc.Key = L"SkyVS";
     skyVSDesc.ShaderType = EShaderType::Vertex;
     skyVSDesc.Path = L"Resources/Shader/sky.vert.spv";
@@ -417,7 +417,7 @@ void Application::InitializeShaders()
     rm.LoadFile(L"Resources/Shader/sky.vert.bamshader");
 
     // Skybox PS
-    tagShaderDesc skyPSDesc = {};
+    ShaderDesc skyPSDesc = {};
     skyPSDesc.Key = L"SkyboxPS";
     skyPSDesc.ShaderType = EShaderType::Pixel;
     skyPSDesc.Path = L"Resources/Shader/sky.frag.spv";
@@ -432,7 +432,7 @@ void Application::InitializeShaders()
     rm.LoadFile(L"Resources/Shader/sky.frag.bamshader");
 
     // UI VS
-    tagShaderDesc uiVSDesc = {};
+    ShaderDesc uiVSDesc = {};
     uiVSDesc.Key = L"UIVS";
     uiVSDesc.ShaderType = EShaderType::Vertex;
     uiVSDesc.Path = L"Resources/Shader/ui.vert.spv";
@@ -447,7 +447,7 @@ void Application::InitializeShaders()
     rm.LoadFile(L"Resources/Shader/ui.vert.bamshader");
 
     // UI PS
-    tagShaderDesc uiPSDesc = {};
+    ShaderDesc uiPSDesc = {};
     uiPSDesc.Key = L"UIPS";
     uiPSDesc.ShaderType = EShaderType::Pixel;
     uiPSDesc.Path = L"Resources/Shader/ui.frag.spv";
@@ -481,7 +481,7 @@ void Application::InitializeMeshes()
         };
         vector<uint32> indices = { 0, 1, 2, 0, 2, 3 };
 
-        tagMeshCreateDesc meshDesc = {};
+        MeshCreateDesc meshDesc = {};
         meshDesc.Streams[(uint32)EMeshStream::Position] = { positions.data(), (uint32)positions.size(), sizeof(VertexPosition) };
         meshDesc.Streams[(uint32)EMeshStream::Material] = { materials.data(), (uint32)materials.size(), sizeof(VertexMaterial) };
         meshDesc.IndexData = indices.data();
@@ -559,7 +559,7 @@ void Application::InitializeMeshes()
         }
 
         // 4. 새로운 Streams 배열 기반 Desc 구성
-        tagMeshCreateDesc meshDesc = {};
+        MeshCreateDesc meshDesc = {};
         meshDesc.Streams[(uint32)EMeshStream::Position] = { positions.data(), (uint32)positions.size(), sizeof(VertexPosition) };
         meshDesc.Streams[(uint32)EMeshStream::Material] = { materials.data(), (uint32)materials.size(), sizeof(VertexMaterial) };
         meshDesc.IndexData = indices.data();
@@ -578,7 +578,7 @@ void Application::InitializeMaterials()
     ResourceManager& resourceManager = ResourceManager::Get();
 #pragma region Basic Materials
 
-    //tagMaterialDesc defaultMaterialDesc = {};
+    //MaterialDesc defaultMaterialDesc = {};
     //defaultMaterialDesc.Key = L"Resources/Material/DefaultMaterial";
     //defaultMaterialDesc.VertexShaderHandle = resourceManager.GetResourceHandle<Shader>(L"Resources/Shader/default.vert.bamshader");
     //defaultMaterialDesc.PixelShaderHandle = resourceManager.GetResourceHandle<Shader>(L"Resources/Shader/default.frag.bamshader");
@@ -586,7 +586,7 @@ void Application::InitializeMaterials()
     //material->SetTextureBinding("Default", 0, resourceManager.GetResourceHandle<Texture>(L"Resources/Texture/magenta1x1.png"));
     //resourceManager.SaveToBinaryFile(material, L"Resources/Material/DefaultMaterial.bammat");
     //
-    tagMaterialDesc spriteMaterialDesc = {};
+    MaterialDesc spriteMaterialDesc = {};
     spriteMaterialDesc.Key = L"Resources/Material/SpriteMaterial";
     spriteMaterialDesc.VertexShaderHandle = resourceManager.GetResourceHandle<Shader>(L"Resources/Shader/sprite.vert.bamshader");
     spriteMaterialDesc.PixelShaderHandle = resourceManager.GetResourceHandle<Shader>(L"Resources/Shader/sprite.frag.bamshader");
@@ -596,7 +596,7 @@ void Application::InitializeMaterials()
     Material* spriteMaterial = resourceManager.LoadResource<Material>(&spriteMaterialDesc).Get();
     resourceManager.SaveToBinaryFile(spriteMaterial, L"Resources/Material/SpriteMaterial.bammat");
 
-    tagMaterialInstanceDesc spriteMaterialInstanceDesc = {};
+    MaterialInstanceDesc spriteMaterialInstanceDesc = {};
     spriteMaterialInstanceDesc.BaseMaterialHandle = resourceManager.GetResourceHandle<Material>(L"Resources/Material/SpriteMaterial.bammat");
     spriteMaterialInstanceDesc.Key = L"Resources/Material/SpriteMaterialInstance";
     ResourceHandle<MaterialInstance> spriteMaterialInstanceHandle = resourceManager.LoadResource<MaterialInstance>(&spriteMaterialInstanceDesc);
@@ -605,7 +605,7 @@ void Application::InitializeMaterials()
     //resourceManager.DestroyResource(spriteMaterialInstanceHandle.GetRawHandle());
 
 
-    tagShaderDesc defaultSkinningShaderDesc = {};
+    ShaderDesc defaultSkinningShaderDesc = {};
     defaultSkinningShaderDesc.Key = L"Resources/Shader/Skinning";
     defaultSkinningShaderDesc.Path = L"Resources/Shader/skinning.vert.spv";
     defaultSkinningShaderDesc.SpirvPath = L"Resources/Shader/skinning.vert.spv";
@@ -615,7 +615,7 @@ void Application::InitializeMaterials()
     resourceManager.SaveToBinaryFile(skinningShader, L"Resources/Shader/skinning.vert.bamshader");
     resourceManager.LoadFile(L"Resources/Shader/skinning.vert.bamshader");
 
-    tagMaterialDesc skinningMaterialDesc = {};
+    MaterialDesc skinningMaterialDesc = {};
     skinningMaterialDesc.Key = L"Resources/Material/SkinningMaterial";
     skinningMaterialDesc.VertexShaderHandle = resourceManager.GetResourceHandle<Shader>(L"Resources/Shader/skinning.vert.bamshader");
     skinningMaterialDesc.PixelShaderHandle = resourceManager.GetResourceHandle<Shader>(L"Resources/Shader/default.frag.bamshader");
@@ -626,7 +626,7 @@ void Application::InitializeMaterials()
     resourceManager.SaveToBinaryFile(skinningMaterial, L"Resources/Material/SkinningMaterial.bammat");
     resourceManager.LoadFile(L"Resources/Material/SkinningMaterial.bammat");
 
-    tagMaterialInstanceDesc skinningMaterialInstanceDesc = {};
+    MaterialInstanceDesc skinningMaterialInstanceDesc = {};
     skinningMaterialInstanceDesc.BaseMaterialHandle = resourceManager.GetResourceHandle<Material>(L"Resources/Material/SkinningMaterial.bammat");
     skinningMaterialInstanceDesc.Key = L"Resources/Material/SkinningMaterialInstance";
     MaterialInstance* skinningMaterialInstance = resourceManager.LoadResource<MaterialInstance>(&skinningMaterialInstanceDesc).Get();
@@ -635,7 +635,7 @@ void Application::InitializeMaterials()
 #pragma endregion
 
     // ── G-Buffer Material 생성 ──
-    tagMaterialDesc gbufferMatDesc = {};
+    MaterialDesc gbufferMatDesc = {};
     gbufferMatDesc.Key = L"Resources/Material/GBufferMaterial";
     gbufferMatDesc.VertexShaderHandle = resourceManager.GetResourceHandle<Shader>(
         L"Resources/Shader/gbuffer.vert.bamshader");
@@ -650,7 +650,7 @@ void Application::InitializeMaterials()
 
 
 	// ── Shadow Depth Material 생성 ──
-    tagMaterialDesc shadowDepthMatDesc = {};
+    MaterialDesc shadowDepthMatDesc = {};
     shadowDepthMatDesc.Key = L"Resources/Material/ShadowDepthMaterial";
     shadowDepthMatDesc.VertexShaderHandle = resourceManager.GetResourceHandle<Shader>(
         L"Resources/Shader/shadow_depth.vert.bamshader");
@@ -663,7 +663,7 @@ void Application::InitializeMaterials()
     resourceManager.SaveToBinaryFile(shadowDepthMat, L"Resources/Material/ShadowDepthMaterial.bammat");
 	resourceManager.LoadFile(L"Resources/Material/ShadowDepthMaterial.bammat");
 
-	tagMaterialDesc shadowDepthSkinMatDesc = {};
+	MaterialDesc shadowDepthSkinMatDesc = {};
     shadowDepthSkinMatDesc.Key = L"Resources/Material/ShadowDepthSkinningMaterial";
     shadowDepthSkinMatDesc.VertexShaderHandle = resourceManager.GetResourceHandle<Shader>(
         L"Resources/Shader/shadow_depth_skinning.vert.bamshader");
@@ -677,7 +677,7 @@ void Application::InitializeMaterials()
 
 
 	// ── Transparent Material 생성 ──
-	tagMaterialDesc transparentMatDesc = {};
+	MaterialDesc transparentMatDesc = {};
     transparentMatDesc.Key = L"Resources/Material/TransparentMaterial";
     transparentMatDesc.VertexShaderHandle = resourceManager.GetResourceHandle<Shader>(
         L"Resources/Shader/default.vert.bamshader");
@@ -691,7 +691,7 @@ void Application::InitializeMaterials()
 
 
 	// ── Sky Material 생성 ──
-	tagMaterialDesc skyMatDesc = {};
+	MaterialDesc skyMatDesc = {};
     skyMatDesc.Key = L"Resources/Material/SkyMaterial";
     skyMatDesc.VertexShaderHandle = resourceManager.GetResourceHandle<Shader>(
         L"Resources/Shader/sky.vert.bamshader");
@@ -705,7 +705,7 @@ void Application::InitializeMaterials()
 	resourceManager.SaveToBinaryFile(skyMat, L"Resources/Material/SkyMaterial.bammat");
 
     // ── UI Material 생성 ──
-    tagMaterialDesc uiMatDesc = {};
+    MaterialDesc uiMatDesc = {};
     uiMatDesc.Key = L"Resources/Material/UIMaterial";
     uiMatDesc.VertexShaderHandle = resourceManager.GetResourceHandle<Shader>(
         L"Resources/Shader/ui.vert.bamshader");
@@ -803,7 +803,7 @@ void Application::SnapshotScene()
     if (!scene) return;
 
     JsonArchive archive(EArchiveMode::Write);
-    if (archive.PushScope(scene->GetTypeInfo().QualifiedName.data()))
+    if (archive.PushScope(entt::resolve(scene->GetTypeID()).info().name().data()))
     {
         scene->Serialize(archive);
         archive.PopScope();
@@ -826,7 +826,7 @@ void Application::RestoreScene()
     Scene* newScene = Scene::Create();
     if (!newScene) return;
 
-    if (archive.PushScope(newScene->GetTypeInfo().QualifiedName.data()))
+    if (archive.PushScope(entt::resolve(newScene->GetTypeID()).info().name().data()))
     {
         newScene->Deserialize(archive);
         archive.PopScope();

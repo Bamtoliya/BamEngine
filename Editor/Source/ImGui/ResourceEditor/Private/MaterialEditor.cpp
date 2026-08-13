@@ -218,7 +218,7 @@ void MaterialEditor::Update(f32 dt)
 
     // 공통으로 쓸 카메라 세팅 함수
     auto setupCamera = [dt](RHI* rhi) {
-        tagCameraBuffer cb = {};
+        CameraBuffer cb = {};
         cb.viewMatrix = glm::lookAt(vec3(0.0f, 0.0f, -3.0f), vec3(0.0f), vec3(0.0f, 1.0f, 0.0f));
         cb.projMatrix = glm::perspective(glm::radians(60.0f), 1.0f, 0.1f, 100.0f);
         if (Renderer::Get().GetRHIType() == ERHIType::SDLGPU || Renderer::Get().GetRHIType() == ERHIType::Vulkan)
@@ -227,8 +227,8 @@ void MaterialEditor::Update(f32 dt)
         cb.cameraPosition = vec3(0.0f, 0.0f, -3.0f);
         cb.time = dt;
 
-        rhi->BindConstantBuffer(&cb, sizeof(tagCameraBuffer), 0, EShaderType::Vertex);
-        rhi->BindConstantBuffer(&cb, sizeof(tagCameraBuffer), 0, EShaderType::Pixel);
+        rhi->BindConstantBuffer(&cb, sizeof(CameraBuffer), 0, EShaderType::Vertex);
+        rhi->BindConstantBuffer(&cb, sizeof(CameraBuffer), 0, EShaderType::Pixel);
         };
 
     // [Pass 1] Geometry Pass: Sphere 구체를 그려 G-Buffer 5장 생성
@@ -468,21 +468,23 @@ void MaterialEditor::Draw()
 
     ImGui::Separator();
 
-    const TypeInfo& typeInfo = mat->GetTypeInfo();
-    ImGui::PushID(mat);
-
-    const bool opened = PropertyDrawer::DrawHeaderNode(mat, typeInfo);
-    if (opened)
+    if (const TypeInfo* typeInfo = reflection::Registry::Get().GetType(mat->GetTypeID()))
     {
-        const bool changed = DrawMaterialPropertiesWithPropertyDrawer(mat, typeInfo);
-        if (changed)
-        {
-            ImGui::Spacing();
-            ImGui::TextDisabled("Modified (not saved)");
-        }
-    }
+        ImGui::PushID(mat);
 
-    ImGui::PopID();
+        const bool opened = PropertyDrawer::DrawHeaderNode(mat, *typeInfo);
+        if (opened)
+        {
+            const bool changed = DrawMaterialPropertiesWithPropertyDrawer(mat, *typeInfo);
+            if (changed)
+            {
+                ImGui::Spacing();
+                ImGui::TextDisabled("Modified (not saved)");
+            }
+        }
+
+        ImGui::PopID();
+    }
     ImGui::End();
 }
 #pragma endregion

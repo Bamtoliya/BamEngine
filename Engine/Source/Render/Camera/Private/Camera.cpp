@@ -131,9 +131,9 @@ void Camera::UpdateMatrix()
 }
 
 #pragma region Matrix
-tagCameraBuffer Camera::GetCameraBuffer() const
+CameraBuffer Camera::GetCameraBuffer() const
 {
-	tagCameraBuffer buffer;
+	CameraBuffer buffer;
 	buffer.viewMatrix = m_ViewMatrix;
 	buffer.projMatrix = m_ProjMatrix;
 	buffer.viewProjMatrix = m_ProjMatrix * m_ViewMatrix;

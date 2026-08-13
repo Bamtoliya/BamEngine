@@ -4,7 +4,7 @@
 
 BEGIN(Engine)
 
-struct tagSkyLightDesc : public tagLightSourceDesc
+struct tagSkyLightDesc : public LightSourceDesc
 {
 	vec3 GroundColor = vec3(0.05f, 0.04f, 0.03f);
 	f32  IndirectIntensity = 0.5f;
@@ -18,7 +18,7 @@ class ENGINE_API SkyLight : public LightSource
 #pragma region Constructor&Destructor
 private:
 	SkyLight() = default;
-	virtual ~SkyLight() = default;
+	public: virtual ~SkyLight() = default;
 	EResult Initialize(void* arg = nullptr) override;
 public:
 	static SkyLight* Create(void* arg = nullptr);
@@ -34,7 +34,7 @@ public:
 
 #pragma region GPU
 public:
-	virtual tagGPULight BuildGPULightDesc() const override;
+	virtual GPULight BuildGPULightDesc() const override;
 #pragma endregion
 
 #pragma region Getter

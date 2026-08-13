@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "RHIResource.h"
 #include "ShaderReflection.h"
@@ -24,8 +24,8 @@ protected:
 	RHIShader() : RHIResource(ERHIResourceType::Shader) {}
 	RHIShader(RHI* rhi) : RHIResource(rhi, ERHIResourceType::Shader) {}
 	RHIShader(RHI* rhi, EShaderType shaderType) : RHIResource(rhi, ERHIResourceType::Shader), m_ShaderType(shaderType) {}
-	virtual ~RHIShader() = default;
 public:
+	virtual ~RHIShader() = default;
 	EShaderType GetShaderType() const { return m_ShaderType; }
 	const string& GetEntryPoint() const { return m_EntryPoint; }
 protected:

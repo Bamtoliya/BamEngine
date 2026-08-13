@@ -67,7 +67,7 @@ bool DirectXTexCompressor::CompressTexture(const std::wstring& inputFilePath, co
 	return SUCCEEDED(hr);
 }
 
-bool DirectXTexCompressor::GetRawCompressedData(const std::wstring& inputFilePath, std::vector<uint8>& outData, tagTextureBinaryHeader& outHeader, Engine::ETextureFormat targetFormat, ECompressFlags flags)
+bool DirectXTexCompressor::GetRawCompressedData(const std::wstring& inputFilePath, std::vector<uint8>& outData, TextureBinaryHeader& outHeader, Engine::ETextureFormat targetFormat, ECompressFlags flags)
 {
 	HRESULT hr;
 	DirectX::ScratchImage image;

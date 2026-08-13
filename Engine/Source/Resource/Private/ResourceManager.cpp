@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "ResourceManager.h"
 #include "Resources.h"
 #include "Archives.h"
@@ -123,7 +123,7 @@ void ResourceManager::RegisterExplicitLoader()
 {
 	auto textureLoader = [this](wstring key, wstring path) -> Handle
 		{
-			tagTextureCreateDesc desc;
+			TextureCreateDesc desc;
 			desc.Key = key;
 			desc.Path = key;
 			return this->LoadResource<Texture>(&desc).GetRawHandle();
@@ -131,7 +131,7 @@ void ResourceManager::RegisterExplicitLoader()
 
 	auto spriteLoader = [this](wstring key, wstring path) -> Handle
 		{
-			tagSpriteCreateDesc desc;
+			SpriteCreateDesc desc;
 			desc.Key = key;
 			desc.Path = key;
 			return this->LoadResource<Sprite>(&desc).GetRawHandle();
@@ -139,7 +139,7 @@ void ResourceManager::RegisterExplicitLoader()
 
 	auto materialLoader = [this](wstring key, wstring path) -> Handle
 		{
-			tagMaterialDesc desc;
+			MaterialDesc desc;
 			desc.Key = key;
 			desc.Path = key;
 			return this->LoadResource<Material>(&desc).GetRawHandle();
@@ -147,7 +147,7 @@ void ResourceManager::RegisterExplicitLoader()
 
 	auto materialInstanceLoader = [this](wstring key, wstring path) -> Handle
 		{
-			tagMaterialInstanceDesc desc;
+			MaterialInstanceDesc desc;
 			desc.Key = key;
 			desc.Path = key;
 			return this->LoadResource<MaterialInstance>(&desc).GetRawHandle();
@@ -156,7 +156,7 @@ void ResourceManager::RegisterExplicitLoader()
 
 	auto shaderLoader = [this](wstring key, wstring path) -> Handle
 		{
-			tagShaderDesc desc;
+			ShaderDesc desc;
 			desc.Key = key;
 			desc.Path = key;
 			return this->LoadResource<Shader>(&desc).GetRawHandle();
@@ -164,7 +164,7 @@ void ResourceManager::RegisterExplicitLoader()
 
 	auto meshLoader = [this](wstring key, wstring path) -> Handle
 		{
-			tagMeshCreateDesc desc;
+			MeshCreateDesc desc;
 			desc.Key = key;
 			desc.Path = key;
 			return this->LoadResource<Mesh>(&desc).GetRawHandle();
@@ -172,7 +172,7 @@ void ResourceManager::RegisterExplicitLoader()
 
 	auto skeletonLoader = [this](wstring key, wstring path) -> Handle
 		{
-			tagSkeletonCreateDesc desc;
+			SkeletonCreateDesc desc;
 			desc.Key = key;
 			desc.Path = key;
 			return this->LoadResource<Skeleton>(&desc).GetRawHandle();
@@ -180,7 +180,7 @@ void ResourceManager::RegisterExplicitLoader()
 
 	auto animationLoader = [this](wstring key, wstring path) -> Handle
 		{
-			tagAnimationCreateDesc desc;
+			AnimationCreateDesc desc;
 			desc.Key = key;
 			desc.Path = key;
 			return this->LoadResource<Animation>(&desc).GetRawHandle();
@@ -188,7 +188,7 @@ void ResourceManager::RegisterExplicitLoader()
 
 	auto modelLoader = [this](wstring key, wstring path) -> Handle
 		{
-			tagModelCreateDesc desc;
+			ModelCreateDesc desc;
 			desc.Key = key;
 			desc.Path = key;
 			return this->LoadResource<Model>(&desc).GetRawHandle();
@@ -402,7 +402,7 @@ Handle ResourceManager::AddResourceInternal(uint64 hash, Resource* resource)
 	Handle handle = AllocateSlot(resource);
 	m_HashToHandle[hash] = handle; // Map hash to handle
 
-	uint64 typeHash = resource->GetTypeInfo().ID;
+	uint64 typeHash = resource->GetTypeID();
 	m_TypeToHandles[typeHash].push_back(handle);
 	return handle;
 }
@@ -438,7 +438,7 @@ Resource* ResourceManager::FreeSlotInternal(uint32 slotIndex)
 		uint64 hash = RunTimeHash(resource->GetKey());
 		m_HashToHandle.erase(hash);
 
-		uint64 typeHash = resource->GetTypeInfo().ID;
+		uint64 typeHash = resource->GetTypeID();
 		auto& handles = m_TypeToHandles[typeHash];
 		Handle targetHandle(slotIndex, m_Resources[slotIndex].Generation);
 

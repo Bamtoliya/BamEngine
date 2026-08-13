@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "Layer.h"
 #include "GameObject.h"
@@ -208,7 +208,7 @@ void Layer::SetAllObjectActive(bool active)
 #pragma region Save& Load
 void Layer::Serialize(Archive& ar)
 {
-    SerializationHelper::SerializeReflectionProperties(ar, &GetTypeInfo(), this);
+    SerializationHelper::SerializeStaticType(ar, *this);
 }
 void Layer::Deserialize(Archive& ar)
 {

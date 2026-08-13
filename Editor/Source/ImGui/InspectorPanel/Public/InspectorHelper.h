@@ -1,7 +1,7 @@
 #pragma once
 
 #include "Editor_Includes.h"
-#include "ReflectionMetadataKeys.h"
+#include "Reflection/ReflectionMetadataKeys.h"
 #include "SerializationHelper.h"
 
 #include <reflection/runtime/Registry.h>

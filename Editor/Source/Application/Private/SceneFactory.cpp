@@ -102,7 +102,7 @@ void SceneFactory::CreateDirectionalLight(Scene* scene)
 	GameObject* newGameObject = GameObject::Create();
 	newGameObject->AddComponent<Transform>();
 	newGameObject->SetName(L"Directional Light");
-	tagLightSourceDesc lightDesc;
+	LightSourceDesc lightDesc;
 	lightDesc.Type = ELightType::Directional;
 	lightDesc.Color = vec3(1.0f, 1.0f, 1.f);
 	newGameObject->AddComponent<LightSource>(&lightDesc);
@@ -115,7 +115,7 @@ void SceneFactory::CreatePointLight(Scene* scene)
 	GameObject* newGameObject = GameObject::Create();
 	newGameObject->AddComponent<Transform>();
 	newGameObject->SetName(L"Point Light");
-	tagLightSourceDesc lightDesc;
+	LightSourceDesc lightDesc;
 	lightDesc.Type = ELightType::Point;
 	lightDesc.Color = vec3(1.0f, 1.0f, 1.f);
 	newGameObject->AddComponent<LightSource>(&lightDesc);
@@ -128,7 +128,7 @@ void SceneFactory::CreateSpotLight(Scene* scene)
 	GameObject* newGameObject = GameObject::Create();
 	newGameObject->AddComponent<Transform>();
 	newGameObject->SetName(L"Spot Light");
-	tagLightSourceDesc lightDesc;
+	LightSourceDesc lightDesc;
 	lightDesc.Type = ELightType::Spot;
 	lightDesc.Color = vec3(1.0f, 1.0f, 1.f);
 	newGameObject->AddComponent<LightSource>(&lightDesc);
@@ -143,7 +143,7 @@ void SceneFactory::CreateSky(Scene* scene)
 	newGameObject->AddComponent<Transform>();
 	newGameObject->SetName(L"Sky");
 
-	tagSkyRendererDesc skyRendererDesc;
+	SkyRendererDesc skyRendererDesc;
 	newGameObject->AddComponent<SkyRenderer>();
 	newGameObject->AddComponent<SkyLight>();
 	SkyRenderer* skyRenderer = newGameObject->GetComponent<SkyRenderer>();

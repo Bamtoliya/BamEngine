@@ -85,6 +85,10 @@ using namespace glm;
 #include <stb_image.h>
 
 #include <cppcodec/base64_rfc4648.hpp>
+
+//EnTT
+#include <entt/entt.hpp>
+
 #pragma endregion
 
 

@@ -76,7 +76,7 @@ public:
 
 #pragma region Frustum Culling
 public:
-	bool TryGetPassFrustum(RenderPassID passID, tagFrustum& outFrustum, bool& outIsShadow) const;
+	bool TryGetPassFrustum(RenderPassID passID, Frustum& outFrustum, bool& outIsShadow) const;
 #pragma endregion
 
 #pragma region Getter
@@ -103,7 +103,7 @@ private:
 private:
 	vector<tagViewportCameraInfo> m_ViewportCameras;
 private:
-	unordered_map<RenderPassID, tagFrustum> m_PassFrustums;
+	unordered_map<RenderPassID, Frustum> m_PassFrustums;
 	unordered_map<RenderPassID, bool>    m_PassFrustumIsShadow;
 #pragma endregion
 };

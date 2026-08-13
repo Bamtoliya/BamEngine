@@ -80,7 +80,7 @@ EResult UIRenderComponent::BindPipeline(Mesh* mesh, MaterialInterface* material,
     pipelineDesc.BlendState = material->GetBlendState();
     pipelineDesc.CullMode = material->GetCullMode();
     pipelineDesc.ColorAttachmentCount = renderPass->GetRenderTargetCount();
-    pipelineDesc.InputLayouts = mesh ? mesh->GetInputLayoutDescs() : std::vector<tagInputLayoutDesc>();
+    pipelineDesc.InputLayouts = mesh ? mesh->GetInputLayoutDescs() : std::vector<InputLayoutDesc>();
 
     for (uint32 i = 0; i < pipelineDesc.ColorAttachmentCount; ++i)
     {

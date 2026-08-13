@@ -1,7 +1,8 @@
-﻿#pragma once
+#pragma once
 
 #include "Scene.h"
 #include "Layer.h"
+#include "Entity.h"
 #include "GameObject.h"
 #include "SerializationHelper.h"
 #include "CollisionManager.h"
@@ -316,10 +317,41 @@ void Scene::SetActive(bool active)
 #pragma endregion
 
 
+#pragma region Entity Management
+Entity& Scene::CreateEntity()
+{
+	entt::entity entityHandle = m_Registry.create();
+	Entity* entity = Entity::Create(entityHandle, this);
+	return *entity;
+}
+
+template<typename T, typename... Args>
+T& Scene::AddComponent(Entity& entity, Args&&... args)
+{
+	return m_Registry.emplace<T>(entity.GetEntityHandle(), std::forward<Args>(args)...);
+}
+template<typename T>
+T& Scene::GetComponent(Entity& entity)
+{
+	return m_Registry.get<T>(entity.GetEntityHandle());
+}
+template<typename T>
+bool Scene::HasComponent(Entity& entity)
+{
+	return m_Registry.all_of<T>(entity.GetEntityHandle());
+}
+template<typename T>
+void Scene::RemoveComponent(Entity& entity)
+{
+	m_Registry.remove<T>(entity.GetEntityHandle());
+}
+#pragma endregion
+
+
 #pragma region Save&Load
 void Scene::Serialize(class Archive& ar)
 {
-	SerializationHelper::SerializeReflectionProperties(ar, &GetTypeInfo(), this);
+	SerializationHelper::SerializeStaticType(ar, *this);
 }
 void Scene::Deserialize(Archive& ar)
 {

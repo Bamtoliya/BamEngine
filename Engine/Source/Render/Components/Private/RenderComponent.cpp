@@ -77,7 +77,7 @@ void RenderComponent::LateUpdate(f32 dt)
 			if (!passInfo.RenderPass->IsAcceptsBlendMode(blendMode))
 				continue;
 
-			tagFrustum frustum;
+			Frustum frustum;
 			bool isShadow = false;
 			if (Renderer::Get().TryGetPassFrustum(passID, frustum, isShadow))
 			{
@@ -170,7 +170,7 @@ EResult RenderComponent::CreateDynamicMaterialInstance(uint32 index)
 	if (!baseMaterial)
 		return EResult::Fail;
 	// ResourceManager를 거치지 않고 직접 생성 (파일 없는 런타임 전용)
-	tagMaterialInstanceDesc desc = {};
+	MaterialInstanceDesc desc = {};
 	desc.BaseMaterialHandle = ResourceManager::Get().GetResourceHandle<Material>(baseMaterial->GetKey());
 	MaterialInstance* dynamicInst = MaterialInstance::Create(&desc);
 	if (!dynamicInst)
@@ -207,7 +207,7 @@ EResult RenderComponent::BindPipeline(Mesh* mesh, MaterialInterface* material, R
 	pipelineDesc.BlendState = material->GetBlendState();
 	pipelineDesc.CullMode = material->GetCullMode();
 	pipelineDesc.ColorAttachmentCount = renderPass->GetRenderTargetCount();
-	pipelineDesc.InputLayouts = mesh ? mesh->GetInputLayoutDescs() : std::vector<tagInputLayoutDesc>();
+	pipelineDesc.InputLayouts = mesh ? mesh->GetInputLayoutDescs() : std::vector<InputLayoutDesc>();
 
 	for (uint32 i = 0; i < pipelineDesc.ColorAttachmentCount; ++i)
 	{
@@ -240,7 +240,7 @@ EResult RenderComponent::BindPipeline(Mesh* mesh, MaterialInterface* material, R
 void RenderComponent::Serialize(Archive& ar)
 {
 	// 1) 기존 PROPERTY (m_Materials, m_DrawShadow 등) 직렬화
-	SerializationHelper::SerializeReflectionProperties(ar, &GetTypeInfo(), this);
+	SerializationHelper::SerializeStaticType(ar, *this);
 
 	// 2) DynamicInstances inline 직렬화
 	if (ar.IsWriting())
@@ -258,7 +258,7 @@ void RenderComponent::Serialize(Archive& ar)
 			ar.Process("baseKey", baseKey);
 
 			// MaterialInterface의 m_Parameters, m_TextureBindings 등 그대로 직렬화
-			SerializationHelper::SerializeReflectionProperties(ar, &MaterialInterface::GetStaticTypeInfo(), inst);
+			SerializationHelper::SerializeStaticType(ar, *inst);
 
 			ar.EndArrayElement();
 		}
@@ -282,12 +282,12 @@ void RenderComponent::Serialize(Archive& ar)
 
 			if (baseHandle)
 			{
-				tagMaterialInstanceDesc desc{};
+				MaterialInstanceDesc desc{};
 				desc.BaseMaterialHandle = baseHandle;
 				MaterialInstance* inst = MaterialInstance::Create(&desc);
 				if (inst)
 				{
-					SerializationHelper::SerializeReflectionProperties(ar, &MaterialInterface::GetStaticTypeInfo(), inst);
+					SerializationHelper::SerializeStaticType(ar, *inst);
 					m_DynamicInstances[slot] = inst;
 				}
 			}

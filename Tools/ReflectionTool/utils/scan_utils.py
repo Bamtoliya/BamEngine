@@ -36,7 +36,7 @@ def collect_header_files(source_root: str) -> list[tuple[str, str]]:
         for file_name in files:
             if not file_name.endswith(".h"):
                 continue
-            if file_name == "ReflectionMacro.h":
+            if file_name == "Reflection/ReflectionMacro.h":
                 continue
 
             filepath = os.path.join(root, file_name)

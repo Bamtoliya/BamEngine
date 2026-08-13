@@ -17,7 +17,7 @@ EResult Sprite::Initialize(void* arg)
 	}
 	else if (!desc->TexturePath.empty())
 	{
-		tagTextureCreateDesc texDesc;
+		TextureCreateDesc texDesc;
 		texDesc.Path = desc->TexturePath;
 		m_Texture = ResourceManager::Get().LoadResource<Texture>(&texDesc);
 	}

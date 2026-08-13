@@ -119,9 +119,9 @@ EResult SkyRenderer::Render(f32 dt, RenderPass* renderPass)
         return EResult::Fail;
 
     // ── SkyAtmosphereUBO: 대기 파라미터 (slot 3) ──
-	tagSkyAtmosphereDesc atmosphereUBO = BuildSkyAtmosphereDesc();
+	SkyAtmosphereDesc atmosphereUBO = BuildSkyAtmosphereDesc();
 
-    if (IsFailure(rhi->BindConstantBuffer((void*)&atmosphereUBO, sizeof(tagSkyAtmosphereDesc), 1, EShaderType::Pixel)))
+    if (IsFailure(rhi->BindConstantBuffer((void*)&atmosphereUBO, sizeof(SkyAtmosphereDesc), 1, EShaderType::Pixel)))
         return EResult::Fail;
 
     if (IsFailure(mesh->Bind(0)))
@@ -134,9 +134,9 @@ EResult SkyRenderer::Render(f32 dt, RenderPass* renderPass)
 #pragma endregion
 
 #pragma region Getter
-tagSkyAtmosphereDesc SkyRenderer::BuildSkyAtmosphereDesc() const
+SkyAtmosphereDesc SkyRenderer::BuildSkyAtmosphereDesc() const
 {
-    tagSkyAtmosphereDesc atmosphereDesc;
+    SkyAtmosphereDesc atmosphereDesc;
     atmosphereDesc.ZenithColor = m_ZenithColor;
     atmosphereDesc.HorizonColor = m_HorizonColor;
     atmosphereDesc.GroundColor = m_GroundColor;
@@ -202,7 +202,7 @@ EResult SkyRenderer::BuildSphereMesh()
         }
     }
 
-    tagMeshCreateDesc desc;
+    MeshCreateDesc desc;
     desc.Streams[(uint32)EMeshStream::Position] = { positions.data(), (uint32)positions.size(), sizeof(VertexPosition) };
     desc.Streams[(uint32)EMeshStream::Material] = { materials.data(), (uint32)materials.size(), sizeof(VertexMaterial) };
     desc.IndexData = indices.data();
@@ -263,7 +263,7 @@ EResult SkyRenderer::BuildCubeMesh()
         indices.push_back(base + 0); indices.push_back(base + 3); indices.push_back(base + 2);
     }
 
-    tagMeshCreateDesc desc;
+    MeshCreateDesc desc;
     desc.Streams[(uint32)EMeshStream::Position] = { positions.data(), (uint32)positions.size(), sizeof(VertexPosition) };
     desc.Streams[(uint32)EMeshStream::Material] = { materials.data(), (uint32)materials.size(), sizeof(VertexMaterial) };
     desc.IndexData = indices.data();

@@ -5,7 +5,7 @@
 
 void Resource::Serialize(Archive& ar)
 {
-    tagResourceBinaryHeader header;
+    ResourceBinaryHeader header;
     header.ResourceType = m_ResourceType;
     header.Version = m_Version;
 
@@ -15,7 +15,7 @@ void Resource::Serialize(Archive& ar)
         ar.PopScope();
     }
 
-    SerializationHelper::SerializeReflectionProperties(ar, &GetTypeInfo(), this);
+    SerializationHelper::SerializeStaticType(ar, *this);
 }
 
 void Resource::Deserialize(Archive& ar)
@@ -24,7 +24,7 @@ void Resource::Deserialize(Archive& ar)
     const wstring fallbackPath = m_Path;
     const EResourceType expectedType = m_ResourceType;
 
-    tagResourceBinaryHeader header;
+    ResourceBinaryHeader header;
 
     if (!ar.PushScope("AssetHeader"))
     {
@@ -52,7 +52,7 @@ void Resource::Deserialize(Archive& ar)
     m_ResourceType = header.ResourceType;
     m_Version = header.Version;
 
-    SerializationHelper::SerializeReflectionProperties(ar, &GetTypeInfo(), this);
+    SerializationHelper::SerializeStaticType(ar, *this);
 
     if (m_Path.empty())
     {

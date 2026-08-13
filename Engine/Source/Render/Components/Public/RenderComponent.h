@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "Component.h"
 #include "RenderTypes.h"
@@ -14,7 +14,7 @@ class ENGINE_API RenderComponent : public Component
 #pragma region Constructor&Destructor
 protected:
 	RenderComponent() {}
-	virtual ~RenderComponent() = default;
+	public: virtual ~RenderComponent() = default;
 	virtual EResult Initialize(void* arg = nullptr) override;
 public:
 	virtual void Free() override;

@@ -9,7 +9,6 @@ class ENGINE_API ComponentRegistry : public Base
 	DECLARE_SINGLETON(ComponentRegistry)
 
 	using CreateFunc = function<Component* (void*)>;
-	using ComponentDesc = tagComponentDesc;
 #pragma region Constructor&Destructor
 private:
 	ComponentRegistry() {}

@@ -1,7 +1,7 @@
 ﻿#pragma once
 
 #include "Archive.h"
-#include "ReflectionTypes.h"
+#include "Reflection/ReflectionTypes.h"
 #include "Resource.h"
 
 namespace Engine

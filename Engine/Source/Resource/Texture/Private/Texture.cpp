@@ -30,7 +30,7 @@ Texture* Texture::Create(void* arg)
 	return instance;
 }
 
-Texture* Texture::Create(const tagTextureBinaryHeader& header, const vector<uint8>& pixelData, const wstring& key)
+Texture* Texture::Create(const TextureBinaryHeader& header, const vector<uint8>& pixelData, const wstring& key)
 {
 	Texture* instance = new Texture();
 	instance->m_CachedHeader = header;

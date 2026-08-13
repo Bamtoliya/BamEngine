@@ -38,7 +38,7 @@ public:
 	const vec3 GetExtent() const { return m_Extents; }
 	const vec3 GetMin() const { return m_Center - m_Extents; }
 	const vec3 GetMax() const { return m_Center + m_Extents; }
-	virtual tagColliderDesc GetColliderDesc() const override { return tagColliderDesc{ m_Type, m_Center, m_Extents }; }
+	virtual ColliderDesc GetColliderDesc() const override { return ColliderDesc{ m_Type, m_Center, m_Extents }; }
 #pragma endregion
 
 #pragma region Bounds

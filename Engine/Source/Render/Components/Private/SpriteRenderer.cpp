@@ -105,7 +105,7 @@ EResult SpriteRenderer::SetSprite(const ResourceHandle<Sprite>& sprite)
 }
 EResult SpriteRenderer::SetSprite(const ResourceHandle<Texture>& texture)
 {
-	tagSpriteCreateDesc desc;
+	SpriteCreateDesc desc;
 	desc.Texture = texture;
 	TODO("이미 로드한 Texture 로부터 Sprite 리소스를 생성하게 만들어야함");
 	m_Sprite = ResourceManager::Get().LoadResource<Sprite>(&desc);
@@ -166,7 +166,7 @@ EResult SpriteRenderer::UpdateMesh()
 	m_Mesh = ResourceManager::Get().GetResourceHandle<Mesh>(L"QuadMesh");
 	if (!m_Mesh)
 	{
-		tagMeshCreateDesc desc;
+		MeshCreateDesc desc;
 
 		// Streams 배열에 직접 세팅
 		desc.Streams[(uint32)EMeshStream::Position] = { positions.data(), (uint32)positions.size(), sizeof(VertexPosition) };

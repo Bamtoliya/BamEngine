@@ -1,8 +1,8 @@
-﻿#pragma once
+#pragma once
 
 #include "Base.h"
 #include "Component.h"
-#include "ReflectionMacro.h"
+#include "Reflection/ReflectionMacro.h"
 #include "ComponentRegistry.h"
 #include "CommonInterface.h"
 
@@ -39,7 +39,7 @@ class ENGINE_API GameObject : public Base, public ReflectableInterface, public S
 
 	using DESC = tagGameObjectDesc;
 #pragma region Constructor&Destructor
-protected:
+public:
 	GameObject();
 	virtual ~GameObject() {}
 	virtual EResult Initialize(void* arg = nullptr);

@@ -17,7 +17,7 @@ void CameraViewportPanel::Initialize(void* arg)
 	}
 	else
 	{
-		tagCameraDesc cameraDesc;
+		CameraDesc cameraDesc;
 		cameraDesc.IsPerspective = desc->IsPerspective;
 		cameraDesc.Aspect = static_cast<f32>(desc->RenderTargetWidth) / static_cast<f32>(desc->RenderTargetHeight);
 		cameraDesc.OrthoSize = desc->RenderTargetHeight;

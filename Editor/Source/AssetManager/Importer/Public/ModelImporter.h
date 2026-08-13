@@ -88,41 +88,41 @@ private:
 		const wstring& sourceStem,
 		unordered_map<wstring, uint32>& nameCounts,
 		uint32& meshSerial,
-		tagModelCreateDesc& modelCreateDesc);
+		ModelCreateDesc& modelCreateDesc);
 	void ProcessMeshVertex(
 		const aiMesh*,
 		const aiScene*,
-		tagMeshCreateDesc&,
+		MeshCreateDesc&,
 		vector<VertexPosition>&,
 		vector<VertexMaterial>&);
 	void ProcessMeshSkinData(
 		const aiMesh* mesh,
 		const aiScene* scene,
 		Skeleton* skeleton,
-		tagMeshCreateDesc& meshCreateInfo,
+		MeshCreateDesc& meshCreateInfo,
 		vector<VertexSkinData>& outSkinData);
 	void ProcessMeshIndex(
 		const aiMesh* mesh,
 		const aiScene* scene,
-		tagMeshCreateDesc& meshCreateInfo,
+		MeshCreateDesc& meshCreateInfo,
 		vector<uint32>& outIndices);
 	void ProcessSkeleton(
 		const aiScene* scene,
 		const filesystem::path& outputDir,
 		const wstring& sourceStem,
-		tagModelCreateDesc& modelCreateDesc);
+		ModelCreateDesc& modelCreateDesc);
 	void ProcessAnimations(
 		const aiScene* scene,
 		const filesystem::path& outputDir,
 		const wstring& sourceStem,
-		tagModelCreateDesc& modelCreateDesc);
+		ModelCreateDesc& modelCreateDesc);
 	void ProcessMaterial(
 		const aiMaterial* aiMat,
 		uint32 matIndex,
 		const aiScene* scene,
 		const filesystem::path& outputDir,
 		const wstring& sourceStem,
-		tagModelCreateDesc& modelCreateDesc);
+		ModelCreateDesc& modelCreateDesc);
 
 #pragma region Member Variables
 private:
