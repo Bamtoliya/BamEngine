@@ -1,8 +1,8 @@
-#pragma once
+﻿#pragma once
 
 #include "UIComponent.h"
 #include "UIRenderComponent.h"
-#include "EventInterface.h"
+#include "Event.h"
 
 BEGIN(Engine)
 

@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "Base.h"
 #include "SerializableInterface.h"
@@ -10,7 +10,7 @@ class EventSystem;
 class UICanvas;
 class Entity;
 
-struct tagSceneCreateDesc
+struct SceneCreateDesc
 {
 	wstring name = L"Scene";
 };
@@ -18,7 +18,8 @@ struct tagSceneCreateDesc
 enum class ESceneFlags : uint8
 {
 	None = 0,
-	Active = 1 << 0,
+	Paused = 1 << 0,
+	Active = 1 << 1,
 };
 
 ENABLE_BITMASK_OPERATORS(ESceneFlags)
@@ -29,7 +30,7 @@ class ENGINE_API Scene : public Base, public ReflectableInterface, public Serial
 	REFLECT_BASE()
 #pragma region Constructor&Destructor
 protected:
-	using DESC = tagSceneCreateDesc;
+	using DESC = SceneCreateDesc;
 	Scene() {}
 	public: virtual ~Scene() {}
 	virtual EResult Initialize(void* arg = nullptr);
@@ -51,41 +52,41 @@ public:
 	const wstring& GetName() const { return m_Name; }
 #pragma endregion
 
-#pragma region Layer Management
-public:
-	EResult AddLayer(class Layer* layer);
-	EResult InsertLayer(uint32 layerIndex, class Layer* layer);
-	EResult CreateLayer(const wstring& layerName, uint32 layerIndex = -1);
-
-	EResult RemoveLayer(uint32 layerIndex);
-	EResult RemoveLayer(class Layer* layer);
-	EResult RemoveLayer(const wstring& layerName);
-
-	const vector<class Layer*>& GetAllLayers() const { return m_Layers; }
-
-	class Layer* FindLayer(uint32 layerIndex) const;
-	class Layer* FindLayer(const wstring& layerName) const;
-
-	EResult ReorderLayer(uint32 oldIndex, uint32 newIndex);
-	void SetLayerName(uint32 layerIndex, const wstring& name);
-
-private:
-	void UpdateLayerIndices(uint32 startIndex);
-#pragma endregion
-
-#pragma region Object Management
-public:
-	EResult AddGameObject(class GameObject* gameObject, uint32 layerIndex = -1);
-	class GameObject* CloneGameObject(class GameObject* gameObject);
-	EResult RemoveGameObject(class GameObject* gameObject);
-	EResult MoveGameObjectLayer(class GameObject* gameObject, uint32 targetLayerIndex);
-	EResult MoveGameObjectOrder(class GameObject* gameObject, int8 dir);
-	EResult RegisterDeadGameObject(class GameObject* gameObject);
-	EResult FlushDeadGameObjects();
-public:
-	class GameObject* FindGameObject(const wstring& name);
-	class GameObject* FindGameObject(uint64 id);
-#pragma endregion
+//#pragma region Layer Management
+//public:
+//	EResult AddLayer(class Layer* layer);
+//	EResult InsertLayer(uint32 layerIndex, class Layer* layer);
+//	EResult CreateLayer(const wstring& layerName, uint32 layerIndex = -1);
+//
+//	EResult RemoveLayer(uint32 layerIndex);
+//	EResult RemoveLayer(class Layer* layer);
+//	EResult RemoveLayer(const wstring& layerName);
+//
+//	const vector<class Layer*>& GetAllLayers() const { return m_Layers; }
+//
+//	class Layer* FindLayer(uint32 layerIndex) const;
+//	class Layer* FindLayer(const wstring& layerName) const;
+//
+//	EResult ReorderLayer(uint32 oldIndex, uint32 newIndex);
+//	void SetLayerName(uint32 layerIndex, const wstring& name);
+//
+//private:
+//	void UpdateLayerIndices(uint32 startIndex);
+//#pragma endregion
+//
+//#pragma region Object Management
+//public:
+//	EResult AddGameObject(class GameObject* gameObject, uint32 layerIndex = -1);
+//	class GameObject* CloneGameObject(class GameObject* gameObject);
+//	EResult RemoveGameObject(class GameObject* gameObject);
+//	EResult MoveGameObjectLayer(class GameObject* gameObject, uint32 targetLayerIndex);
+//	EResult MoveGameObjectOrder(class GameObject* gameObject, int8 dir);
+//	EResult RegisterDeadGameObject(class GameObject* gameObject);
+//	EResult FlushDeadGameObjects();
+//public:
+//	class GameObject* FindGameObject(const wstring& name);
+//	class GameObject* FindGameObject(uint64 id);
+//#pragma endregion
 
 #pragma region Entity Management
 public:
@@ -100,11 +101,13 @@ public:
 	void RemoveComponent(Entity& entity);
 #pragma endregion
 
-
 #pragma region Flag Mangement
 public:
 	bool IsActive() const { return HasFlag(m_Flags, ESceneFlags::Active); }
 	void SetActive(bool active);
+
+	bool IsPaused() const { return HasFlag(m_Flags, ESceneFlags::Paused); }
+	void SetPaused(bool paused);
 #pragma endregion
 
 #pragma region System Management
@@ -121,10 +124,9 @@ public:
 	virtual void Deserialize(class Archive& ar) override;
 #pragma endregion
 
-
 #pragma region Variable
 protected:
-	entt::registry m_Registry;
+	entt::registry m_LocalRegistry;
 
 	PROPERTY()
 	ESceneFlags m_Flags = ESceneFlags::Active;
@@ -132,12 +134,12 @@ protected:
 	PROPERTY()
 	wstring m_Name = { L"Scene" };
 
-	PROPERTY()
-	vector<class Layer*> m_Layers;
+	//PROPERTY()
+	//vector<class Layer*> m_Layers;
 
-	unordered_map<uint64, class GameObject*> m_GameObjectMap;
+	//unordered_map<uint64, class GameObject*> m_GameObjectMap;
 
-	vector<class GameObject*> m_DeadGameObjects;
+	//vector<class GameObject*> m_DeadGameObjects;
 
 	class EventSystem* m_EventSystem = { nullptr };
 	class UICanvas* m_RootCanvas = { nullptr };

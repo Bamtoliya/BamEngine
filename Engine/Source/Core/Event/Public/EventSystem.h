@@ -1,8 +1,8 @@
-#pragma once
+﻿#pragma once
 
 #include "Component.h"
 #include "DynamicEvent.h"
-#include "EventInterface.h"
+#include "Event.h"
 
 BEGIN(Engine)
 class BaseRaycaster;

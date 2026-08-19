@@ -3,7 +3,6 @@
 #include "Scene.h"
 
 BEGIN(Engine)
-
 enum class ESceneState : uint8
 {
 	Edit,
@@ -23,28 +22,35 @@ public:
 	virtual void Free() override;
 #pragma endregion
 
-#pragma region Loop
-public:
-	void FixedUpdate(f32 dt);
-	void Update(f32 dt);
-	void LateUpdate(f32 dt);
-#pragma endregion
+//#pragma region Loop
+//public:
+//	void FixedUpdate(f32 dt);
+//	void Update(f32 dt);
+//	void LateUpdate(f32 dt);
+//#pragma endregion
 
 #pragma region Scene Management
 public:
 	EResult OpenScene(Scene* newScene);
 	EResult CloseScene();
-	class Scene* GetCurrentScene() const { return m_CurrentScene; }
+	Scene* GetCurrentScene() const { return m_CurrentScene; }
 
 	EResult NewScene(void* arg = nullptr);
 	EResult SaveScene(class Archive& archive, const wstring& filePath);
 	EResult LoadScene(class Archive& archive, const wstring& filePath);
+
+	EResult AddScene(Scene* scene);
+	EResult RemoveScene(Scene* scene);
+
+	vector<Scene*> GetActiveScenes();
+	vector<Scene*> GetAllScenes() const { return m_Scenes; }
 #pragma endregion
 
 #pragma region Variable
 protected:
 	Scene* m_CurrentScene = { nullptr };
 	vector<Scene*> m_Scenes;
+	vector<Scene*> m_ActiveScenes;
 #pragma endregion
 
 };

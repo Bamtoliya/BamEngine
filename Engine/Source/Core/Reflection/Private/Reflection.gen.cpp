@@ -59,6 +59,15 @@ void RegisterReflection_EnTT()
 {
     using namespace entt::literals;
 
+    BEGIN_ENTT_REFLECT_ENUM(EEntityFlag)
+        ENTT_ENUM_ENTRY(EEntityFlag, None)
+        ENTT_ENUM_ENTRY(EEntityFlag, Active)
+        ENTT_ENUM_ENTRY(EEntityFlag, Visible)
+        ENTT_ENUM_ENTRY(EEntityFlag, Paused)
+        ENTT_ENUM_ENTRY(EEntityFlag, Dead)
+        ENTT_ENUM_ENTRY(EEntityFlag, Default)
+    END_ENTT_REFLECT_ENUM()
+
     BEGIN_ENTT_REFLECT_ENUM(EAlignment)
         ENTT_ENUM_ENTRY(EAlignment, TopLeft)
         ENTT_ENUM_ENTRY(EAlignment, TopCenter)
@@ -392,7 +401,33 @@ void RegisterReflection_EnTT()
         .ctor<>()
     END_ENTT_REFLECT()
 
+    BEGIN_ENTT_REFLECT(TagComponent)
+        .ctor<>()
+    END_ENTT_REFLECT()
+
+    BEGIN_ENTT_REFLECT(IDComponent)
+        .ctor<>()
+    END_ENTT_REFLECT()
+
+    BEGIN_ENTT_REFLECT(NameComponent)
+        .ctor<>()
+    END_ENTT_REFLECT()
+
+    BEGIN_ENTT_REFLECT(FlagComponent)
+        .ctor<>()
+    END_ENTT_REFLECT()
+
     BEGIN_ENTT_REFLECT(TransformComponent)
+        .ctor<>()
+        ENTT_PROPERTY_WITH_ATTR(TransformComponent, Rotation, "EDITABLE")
+        ENTT_PROPERTY_WITH_ATTR(TransformComponent, Scale, "EDITABLE")
+    END_ENTT_REFLECT()
+
+    BEGIN_ENTT_REFLECT(WorldTransformComponent)
+        .ctor<>()
+    END_ENTT_REFLECT()
+
+    BEGIN_ENTT_REFLECT(HierarchyComponent)
         .ctor<>()
     END_ENTT_REFLECT()
 
@@ -784,7 +819,6 @@ void RegisterReflection_EnTT()
         .ctor<>()
         ENTT_PROPERTY(Scene, m_Flags)
         ENTT_PROPERTY(Scene, m_Name)
-        ENTT_PROPERTY(Scene, m_Layers)
     END_ENTT_REFLECT()
 
 }

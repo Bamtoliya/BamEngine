@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "SceneManager.h"
 #include "Archives.h"
@@ -25,23 +25,23 @@ void SceneManager::Free()
 }
 #pragma endregion
 
-#pragma region Loop
-void SceneManager::FixedUpdate(f32 dt)
-{
-	if(m_CurrentScene)
-		m_CurrentScene->FixedUpdate(dt);
-}
-void SceneManager::Update(f32 dt)
-{
-	if(m_CurrentScene)
-		m_CurrentScene->Update(dt);
-}
-void SceneManager::LateUpdate(f32 dt)
-{
-	if(m_CurrentScene)
-		m_CurrentScene->LateUpdate(dt);
-}
-#pragma endregion
+//#pragma region Loop
+//void SceneManager::FixedUpdate(f32 dt)
+//{
+//	if(m_CurrentScene)
+//		m_CurrentScene->FixedUpdate(dt);
+//}
+//void SceneManager::Update(f32 dt)
+//{
+//	if(m_CurrentScene)
+//		m_CurrentScene->Update(dt);
+//}
+//void SceneManager::LateUpdate(f32 dt)
+//{
+//	if(m_CurrentScene)
+//		m_CurrentScene->LateUpdate(dt);
+//}
+//#pragma endregion
 
 
 #pragma region Scene Management
@@ -116,6 +116,37 @@ EResult SceneManager::LoadScene(Archive& archive, const wstring& filePath)
 	}
 
 	return OpenScene(newScene);
+}
+EResult SceneManager::AddScene(Scene* scene)
+{
+	if (!scene) return EResult::InvalidArgument;
+	m_Scenes.push_back(scene);
+	return EResult::Success;
+}
+EResult SceneManager::RemoveScene(Scene* scene)
+{
+	if (!scene) return EResult::InvalidArgument;
+	auto it = std::find(m_Scenes.begin(), m_Scenes.end(), scene);
+	if (it != m_Scenes.end())
+	{
+		m_Scenes.erase(it);
+		return EResult::Success;
+	}
+	return EResult::Fail;
+}
+vector<Scene*> SceneManager::GetActiveScenes()
+{
+	m_ActiveScenes.clear();
+
+	for (Scene* scene : m_Scenes)
+	{
+		if (scene && scene->IsActive())
+		{
+			m_ActiveScenes.push_back(scene);
+		}
+	}
+
+	return m_ActiveScenes;
 }
 #pragma endregion
 

@@ -1,8 +1,8 @@
 ﻿#pragma once
 #include "DynamicEvent.h"
 #include "SceneManager.h"
-#include "GameObject.h"
-#include "Component.h"
+//#include "GameObject.h"
+//#include "Component.h"
 
 void DynamicEvent::Invoke() const
 {

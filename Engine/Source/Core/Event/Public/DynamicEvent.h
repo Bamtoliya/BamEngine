@@ -4,7 +4,7 @@
 #include "Delegate.h"
 #include "Macro.h"
 #include "Reflection/ReflectionMacro.h"
-#include "EventInterface.h"
+#include "Event.h"
 
 BEGIN(Engine)
 struct EventParameter

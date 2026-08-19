@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "GameObject.h"
 #include "Layer.h"
@@ -337,7 +337,7 @@ void GameObject::SetDead(bool dead)
 		AddFlag(m_Flags, EObjectFlag::Dead);
 		SetActive(false);
 		SetVisible(false);
-		SceneManager::Get().GetCurrentScene()->RegisterDeadGameObject(this);
+		//SceneManager::Get().GetCurrentScene()->RegisterDeadGameObject(this);
 	}
 	else RemoveFlag(m_Flags, EObjectFlag::Dead);
 }
