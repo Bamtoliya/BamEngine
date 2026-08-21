@@ -2,7 +2,6 @@
 
 #include "Scene.h"
 //#include "Layer.h"
-#include "Entity.h"
 #include "GameObject.h"
 #include "SerializationHelper.h"
 #include "CollisionManager.h"
@@ -328,35 +327,7 @@ Entity& Scene::CreateEntity()
 {
 	entt::entity entityHandle = m_LocalRegistry.create();
 	Entity* entity = Entity::Create(entityHandle, this);
-	m_LocalRegistry.emplace<Engine::IDComponent>(entityHandle);
-	m_LocalRegistry.emplace<Engine::TagComponent>(entityHandle);
-	m_LocalRegistry.emplace<Engine::NameComponent>(entityHandle);
-	m_LocalRegistry.emplace<Engine::FlagComponent>(entityHandle);
-	m_LocalRegistry.emplace<Engine::TransformComponent>(entityHandle);
-	m_LocalRegistry.emplace<Engine::WorldTransformComponent>(entityHandle);
-	m_LocalRegistry.emplace<Engine::HierarchyComponent>(entityHandle);
 	return *entity;
-}
-
-template<typename T, typename... Args>
-T& Scene::AddComponent(Entity& entity, Args&&... args)
-{
-	return m_LocalRegistry.emplace<T>(entity.GetEntityHandle(), std::forward<Args>(args)...);
-}
-template<typename T>
-T& Scene::GetComponent(Entity& entity)
-{
-	return m_LocalRegistry.get<T>(entity.GetEntityHandle());
-}
-template<typename T>
-bool Scene::HasComponent(Entity& entity)
-{
-	return m_LocalRegistry.all_of<T>(entity.GetEntityHandle());
-}
-template<typename T>
-void Scene::RemoveComponent(Entity& entity)
-{
-	m_LocalRegistry.remove<T>(entity.GetEntityHandle());
 }
 #pragma endregion
 

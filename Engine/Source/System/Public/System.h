@@ -1,9 +1,10 @@
 ﻿#pragma once
 
-#include "Engine_Includes.h"
+#include "Base.h"
+#include "Scene.h"
 
 BEGIN(Engine)
-class ENGINE_API ISystem
+class ENGINE_API ISystem : public Base
 {
 public:
 	virtual ~ISystem() = default;
@@ -11,11 +12,11 @@ public:
 	virtual void OnAwake() {}
 	virtual void OnInitialize() {}
 
-	virtual void OnUpdate(entt::registry& registry, f32 dt) {}
-	virtual void OnFixedUpdate(entt::registry& registry, f32 dt) {}
-	virtual void OnLateUpdate(entt::registry& registry, f32 dt) {}
+	virtual void OnUpdate(entt::registry& registry, const vector<Scene*> activeScenes, f32 dt) {}
+	virtual void OnFixedUpdate(entt::registry& registry, const vector<Scene*> activeScenes, f32 dt) {}
+	virtual void OnLateUpdate(entt::registry& registry, const vector<Scene*> activeScenes, f32 dt) {}
 
-	virtual void OnRender(entt::registry& registry) {}
+	virtual void OnSubmit(entt::registry& registry, const vector<Scene*> activeScenes, f32 dt) {}
 
 	virtual void OnDestroy() {}
 	virtual void OnFree() {}

@@ -281,13 +281,13 @@ void HierarchyPanel::Draw()
 	{
 		DrawSceneTitle(currentScene);
 		
-		DrawAddGameObjectButton(currentScene);
+		//DrawAddGameObjectButton(currentScene);
 
-		const vector<Layer*>& layers = currentScene->GetAllLayers();
-		for (auto* layer : layers)
-		{
-			DrawLayerItem(currentScene, layer);
-		}
+		//const vector<Layer*>& layers = currentScene->GetAllLayers();
+		//for (auto* layer : layers)
+		//{
+		//	DrawLayerItem(currentScene, layer);
+		//}
 	}
 	else
 	{
@@ -304,7 +304,7 @@ void HierarchyPanel::Draw()
 	{
 		if (ImGui::MenuItem("Add Layer"))
 		{
-			currentScene->CreateLayer(L"New Layer");
+			//currentScene->CreateLayer(L"New Layer");
 		}
 		ImGui::EndPopup();
 	}
@@ -338,590 +338,592 @@ void HierarchyPanel::Draw()
 	ImGui::End();
 }
 
-void HierarchyPanel::DrawLayerItem(Scene* scene, Layer* layer)
-{
-	if (!layer) return;
-	uint32 layerIndex = layer->GetIndex();
-	ImGui::PushID(layerIndex);
-
-#pragma region Flag Check
-	bool hasAnyObjectActive = false;
-	bool hasAnyObjectVisible = false;
-	bool hasAllObjectActive = true;
-
-	const auto& layerObjects = layer->GetAllGameObjects();
-	if (layerObjects.empty())
-	{
-		hasAllObjectActive = false;
-	}
-	else
-	{
-		for (auto* obj : layerObjects)
-		{
-			if (obj->IsActive()) hasAnyObjectActive = true;
-			else hasAllObjectActive = false;
-			if (obj->IsVisible()) hasAnyObjectVisible = true;
-		}
-	}
-#pragma endregion
-
-#pragma region LayerIndex
-	ImGui::AlignTextToFramePadding();
-	ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
-	ImGui::Text("%02d", layerIndex);
-	ImGui::PopStyleColor();
-	ImGui::SameLine();
-#pragma endregion
-
-#pragma region Layer Name (Inline Input)
-	ImGuiTreeNodeFlags nodeFlags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_Framed;
-	bool layerOpen = DrawRenameBox(layer, nodeFlags, false, [&]()
-		{
-#pragma region Drag & Drop
-			if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceNoDisableHover))
-			{
-				// 현재 레이어 인덱스를 페이로드로 보냄
-				ImGui::SetDragDropPayload("LAYER_PAYLOAD", &layerIndex, sizeof(uint32));
-				ImGui::Text("Move Layer %d", layerIndex);
-				ImGui::EndDragDropSource();
-			}
-
-			if (ImGui::BeginDragDropTarget())
-			{
-#pragma region Layer Order
-				if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("LAYER_PAYLOAD"))
-				{
-					uint32 sourceLayerIndex = *(uint32*)payload->Data;
-
-					// Scene의 ReorderLayer 함수 호출 (Source -> Target 순서 변경)
-					if (sourceLayerIndex != layerIndex)
-					{
-						scene->ReorderLayer(sourceLayerIndex, layerIndex);
-					}
-				}
-#pragma endregion
-
-#pragma region Object
-				if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("GAMEOBJECT_PAYLOAD"))
-				{
-					GameObject* droppedObj = *(GameObject**)payload->Data;
-
-					if (droppedObj)
-					{
-						Safe_AddRef(droppedObj);
-						if (droppedObj->GetParent() != nullptr)
-						{
-							droppedObj->GetParent()->RemoveChild(droppedObj);
-							scene->AddGameObject(droppedObj, layerIndex);
-						}
-						else
-						{
-							scene->MoveGameObjectLayer(droppedObj, layerIndex);
-						}
-						Safe_Release(droppedObj);
-					}
-				}
-#pragma endregion
-
-				ImGui::EndDragDropTarget();
-			}
-#pragma endregion
-		});
-#pragma endregion
-
-#pragma region Checkboxes
-	if (m_RenamingId != (void*)GetNodeID(layer))
-	{
-
-		ImGui::SameLine();
-
-		// 1. 사이즈 및 위치 계산
-		float itemHeight = ImGui::GetFrameHeight();
-		float visibleBtnWidth = itemHeight;                  // Visible 버튼 너비
-		float activeBoxWidth = itemHeight;              // 체크박스는 보통 정사각형 (높이와 같음)
-		float spacing = itemHeight / 6.f;                           // 컨트롤 간 간격
-		float rightPadding = itemHeight / 2.f;                      // 윈도우 우측 여백
-		float windowWidth = ImGui::GetWindowContentRegionMax().x;
-
-		float activeBoxPos = windowWidth - (visibleBtnWidth * 3) - (spacing * 3) - activeBoxWidth - rightPadding;
-		ImGui::SetCursorPosX(activeBoxPos);
-
-		// 스타일 보정 (작은 화살표 버튼을 위해 패딩 조절)
-		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
-		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
-		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0)); // 배경 투명
-
-		// 1. 위로 이동 (Up Arrow)
-		ImGui::PushID("MoveUp");
-		// ArrowButton 대신 Button을 써서 크기를 강제함 (frameHeight)
-		if (ImGui::Button(ICON_FA_UP_LONG, ImVec2(visibleBtnWidth, itemHeight)))
-		{
-			SceneManager::Get().GetCurrentScene()->ReorderLayer(layerIndex, layerIndex - 1);
-		}
-		if (ImGui::IsItemHovered()) ImGui::SetTooltip("Move Up");
-		ImGui::PopID();
-
-		ImGui::SameLine(); // 간격 0
-
-		// 2. 아래로 이동 (Down)
-		ImGui::PushID("MoveDown");
-		if (ImGui::Button(ICON_FA_DOWN_LONG, ImVec2(visibleBtnWidth, itemHeight)))
-		{
-			SceneManager::Get().GetCurrentScene()->ReorderLayer(layerIndex, layerIndex + 1);
-		}
-		if (ImGui::IsItemHovered()) ImGui::SetTooltip("Move Down");
-		ImGui::PopID();
-
-		ImGui::PopStyleVar(2);   // FramePadding, ItemSpacing 복구
-		ImGui::PopStyleColor();  // Button Color 복구
-
-		ImGui::SameLine();
-
-		bool isLayerActive = hasAllObjectActive;
-		bool isMixedActive = hasAnyObjectActive && !hasAllObjectActive;
-
-		if (isMixedActive)
-		{
-			ImGui::PushItemFlag(ImGuiItemFlags_MixedValue, true);
-		}
-
-		if (ImGui::Checkbox("##LayerActive", &isLayerActive))
-		{
-			layer->SetActive(isLayerActive);
-			for (auto* obj : layerObjects)
-				obj->SetActive(isLayerActive);
-		}
-
-		if (isMixedActive)
-			ImGui::PopItemFlag();
-
-		if (ImGui::IsItemHovered()) ImGui::SetTooltip("Toggle Layer Active");
-
-		ImGui::SameLine();
-		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0)); // 투명 버튼
-
-		bool isVisible = layer->IsVisible();
-#ifdef ICON_FA_EYE
-		const char* visIcon = isVisible ? ICON_FA_EYE : ICON_FA_EYE_SLASH;
-#else
-		const char* visIcon = isVisible ? "(O)" : "(-)";
-#endif
-
-		if (ImGui::Button(visIcon, ImVec2(visibleBtnWidth, itemHeight)))
-		{
-			layer->SetVisible(!isVisible);
-			for (auto* obj : layerObjects)
-				obj->SetVisible(!isVisible);
-		}
-
-		if (ImGui::IsItemHovered()) ImGui::SetTooltip("Toggle Layer Visibility");
-
-		ImGui::PopStyleColor();
-	}
-#pragma endregion
-
-#pragma region Draw Objects
-	if (layerOpen)
-	{
-		const vector<GameObject*>& gameObjects = layer->GetAllGameObjects();
-		for (GameObject* gameObject : gameObjects)
-		{
-			if (!gameObject || gameObject->IsDead()) continue;
-			if (gameObject->GetParent() == nullptr)
-			{
-				DrawGameObjectNode(gameObject);
-			}
-		}
-		ImGui::TreePop();
-	}
-#pragma endregion
-	ImGui::PopID();
-}
-
-void HierarchyPanel::DrawGameObjectNode(class GameObject* gameObject)
-{
-	if (!gameObject || gameObject->IsDead()) return;
-	ImGui::PushID((void*)(uintptr_t)gameObject->GetID());
-	float fontSize = ImGui::GetFontSize();
-	ImGui::PushStyleVar(ImGuiStyleVar_IndentSpacing, fontSize);
-	ImGui::Indent();
-	
-	SelectionManager& selectionManager = SelectionManager::Get();
-	auto& selectionContext = selectionManager.GetSelectionContext();
-
-	bool isSelected = false;
-	for (auto* sel : selectionContext) {
-		if (sel == gameObject) { isSelected = true; break; }
-	}
-
-	ImGuiTreeNodeFlags nodeFlags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth;
-	nodeFlags |= ImGuiTreeNodeFlags_DrawLinesFull;
-	if (isSelected)
-		nodeFlags |= ImGuiTreeNodeFlags_Selected;
-
-	const vector<GameObject*>& children = gameObject->GetAllChilds();
-	if (children.empty())
-		nodeFlags |= ImGuiTreeNodeFlags_Bullet | ImGuiTreeNodeFlags_NoTreePushOnOpen;
-
-#pragma region Flag Check
-	bool hasAnyChildActive = false;
-	bool hasAnyChildVisible = false;
-	bool hasAllChildActive = true;
-
-	const auto& childObjects = gameObject->GetAllChilds();
-	if (childObjects.empty())
-	{
-		hasAnyChildActive = false;
-	}
-	else
-	{
-		for (auto* obj : childObjects)
-		{
-			if (obj->IsActive()) hasAnyChildActive = true;
-			else hasAllChildActive = false;
-			if (obj->IsVisible()) hasAnyChildVisible = true;
-		}
-	}
-#pragma endregion
-		
-#pragma region Namebox
-	bool opened = DrawRenameBox(gameObject, nodeFlags, isSelected, [&]()
-		{
-#pragma region Drap & Drop
-
-			if (ImGui::BeginDragDropSource())
-			{
-				ImGui::SetDragDropPayload("GAMEOBJECT_PAYLOAD", &gameObject, sizeof(GameObject*));
-				if (selectionManager.IsSelected(gameObject) && selectionManager.GetSelectionContext().size() > 1)
-				{
-					ImGui::Text("%s (+%d objects)", WStrToStr(gameObject->GetName()).c_str(), (int)selectionManager.GetSelectionContext().size() - 1);
-				}
-				else
-				{
-					ImGui::Text("%s", WStrToStr(gameObject->GetName()).c_str());
-				}
-
-				ImGui::EndDragDropSource();
-			}
-
-			if (ImGui::BeginDragDropTarget())
-			{
-				if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("GAMEOBJECT_PAYLOAD"))
-				{
-					GameObject* droppedObject = *(GameObject**)payload->Data;
-					vector<GameObject*> objectsToMove;
-
-					if (selectionManager.IsSelected(droppedObject))
-					{
-						objectsToMove = selectionManager.GetSelectionContext();
-					}
-					else
-					{
-						objectsToMove.push_back(droppedObject);
-					}
-
-					for (GameObject* obj : objectsToMove)
-					{
-						if (!obj || obj == gameObject) continue;
-						if (gameObject->IsDescendant(obj) || obj->GetParent() == gameObject) continue;
-
-						Safe_AddRef(obj);
-						if (obj->GetParent() == nullptr)
-						{
-							SceneManager::Get().GetCurrentScene()->RemoveGameObject(obj);
-						}
-						gameObject->AddChild(obj);
-						Safe_Release(obj);
-					}
-				}
-				ImGui::EndDragDropTarget();
-			}
-#pragma endregion
-		}, bind(&HierarchyPanel::DrawGameObjectContextMenu, this, gameObject));
-#pragma region Selection Control
-	if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
-    {
-        if (ImGui::GetIO().KeyCtrl)
-        {
-            // Ctrl 키 누른 상태: 토글 (기존 유지)
-            selectionManager.ToggleSelection(gameObject);
-        }
-        else
-        {
-            // Ctrl 키 없음
-            if (!isSelected)
-            {
-                // 선택되지 않은 녀석을 클릭함 -> 즉시 얘만 선택 (기존 선택 다 취소)
-                selectionContext.clear();
-                selectionContext.push_back(gameObject);
-            }
-            // ELSE: 이미 선택된 녀석을 클릭함 -> 아무것도 안 함 (드래그 준비 상태 유지)
-            // 여기서 selectionContext를 clear() 해버리면 멀티 셀렉션이 날아갑니다.
-        }
-    }
-
-    // [추가됨] 2. 마우스 뗐을 때 (MouseUp)
-    // 드래그를 하지 않고 그냥 클릭만 했다면, 이때 나머지 선택을 해제합니다.
-    if (ImGui::IsItemHovered() && MOUSE_BUTTON_UP(EMouseButton::Left))
-    {
-		// 드래그 중인지 체크
-        if (!ImGui::GetIO().KeyCtrl && !MOUSE_BUTTON_DRAGGING(EMouseButton::Left))
-        {
-            // Ctrl도 안 눌렀고, 드래그도 안 함 -> 단순 클릭으로 간주
-            // 이제서야 "나 말고 나머지 선택 해제"를 수행
-            if (isSelected) 
-            {
-                // 단, 현재 선택된 갯수가 1개보다 많을 때만 정리 (성능 최적화)
-                if (selectionContext.size() > 1)
-                {
-                    selectionContext.clear();
-                    selectionContext.push_back(gameObject);
-                }
-            }
-        }
-    }
-#pragma endregion
-	
-#pragma region Context Menu
-	
-	
-#pragma endregion
-
-	
-
-#pragma endregion
-
-#pragma region Checkboxes
-	if (m_RenamingId != (void*)GetNodeID(gameObject))
-	{
-		ImGui::SameLine();
-
-		// 1. 사이즈 및 위치 계산
-		float itemHeight = ImGui::GetFrameHeight();
-		float buttonSize = itemHeight;
-		float spacing = itemHeight / 6.f;                           // 컨트롤 간 간격
-		float rightPadding = itemHeight / 2.f;                      // 윈도우 우측 여백
-		float windowWidth = ImGui::GetWindowContentRegionMax().x;
-
-		float totalRightWidth = itemHeight + (buttonSize * 3) + (spacing * 3) + rightPadding;
-		float activeBoxPos = windowWidth - totalRightWidth;
-		ImGui::SetCursorPosX(activeBoxPos);
-
-		// 스타일 보정 (작은 화살표 버튼을 위해 패딩 조절)
-		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
-		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
-		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0)); // 배경 투명
-
-		// 1. 위로 이동 (Up Arrow)
-		ImGui::PushID("MoveUp");
-		// ArrowButton 대신 Button을 써서 크기를 강제함 (frameHeight)
-		if (ImGui::Button(ICON_FA_UP_LONG, ImVec2(buttonSize, itemHeight)))
-		{
-			GameObject* parent = gameObject->GetParent();
-			if (parent)
-			{
-				parent->MoveChild(gameObject, -1);
-			}
-			else
-			{
-				// [루트 객체 처리]
-				SceneManager::Get().GetCurrentScene()->MoveGameObjectOrder(gameObject, -1);
-			}
-		}
-		if (ImGui::IsItemHovered()) ImGui::SetTooltip("Move Up");
-		ImGui::PopID();
-
-		ImGui::SameLine(); // 간격 0
-
-		// 2. 아래로 이동 (Down)
-		ImGui::PushID("MoveDown");
-		if (ImGui::Button(ICON_FA_DOWN_LONG, ImVec2(buttonSize, itemHeight)))
-		{
-			GameObject* parent = gameObject->GetParent();
-			if (parent)
-			{
-				parent->MoveChild(gameObject, 1);
-			}
-			else
-			{
-				// [루트 객체 처리]
-				SceneManager::Get().GetCurrentScene()->MoveGameObjectOrder(gameObject, 1);
-			}
-		}
-		if (ImGui::IsItemHovered()) ImGui::SetTooltip("Move Down");
-		ImGui::PopID();
-
-		ImGui::PopStyleVar(2);   // FramePadding, ItemSpacing 복구
-		ImGui::PopStyleColor();  // Button Color 복구
-
-		ImGui::SameLine();
-
-		bool isObjectActive = hasAllChildActive;
-		bool isMixedActive = hasAnyChildActive && !hasAllChildActive;
-
-		if (isMixedActive)
-		{
-			ImGui::PushItemFlag(ImGuiItemFlags_MixedValue, true);
-		}
-
-		bool gameObjectActive = gameObject->IsActive();
-		if (ImGui::Checkbox("##ObjectActive", &gameObjectActive))
-		{
-			gameObject->SetActive(gameObjectActive);
-			gameObject->SetAllChildActive(gameObjectActive);
-		}
-
-		if (isMixedActive)
-			ImGui::PopItemFlag();
-
-		if (ImGui::IsItemHovered()) ImGui::SetTooltip("Toggle Object Active");
-
-		ImGui::SameLine();
-		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0)); // 투명 버튼
-
-		bool isVisible = gameObject->IsVisible();
-#ifdef ICON_FA_EYE
-		const char* visIcon = isVisible ? ICON_FA_EYE : ICON_FA_EYE_SLASH;
-#else
-		const char* visIcon = isVisible ? "(O)" : "(-)";
-#endif
-
-		if (ImGui::Button(visIcon, ImVec2(buttonSize, itemHeight)))
-		{
-			gameObject->SetVisible(!isVisible);
-			gameObject->SetAllChildVisible(!isVisible);
-		}
-
-		if (ImGui::IsItemHovered()) ImGui::SetTooltip("Toggle Object Visibility");
-
-		ImGui::PopStyleColor();
-	}
-#pragma endregion
-
-
-#pragma region Draw Child
-	if (opened && !children.empty())
-	{
-		for (GameObject* child : children)
-		{
-			if (!child || child->IsDead()) continue;
-			DrawGameObjectNode(child);
-		}
-		ImGui::TreePop();
-	}
-#pragma endregion
-	ImGui::Unindent();
-	ImGui::PopStyleVar(); // IndentSpacing Pop
-	ImGui::PopID();
-}
-
-void HierarchyPanel::DrawAddGameObjectButton(Scene* scene)
-{
-	string buttonText = LocalizationManager::Get().GetText("Hirarchy_AddGameObject");
-	if (ImGui::Button(buttonText.c_str(), ImVec2(-1, 0)))
-	{
-		ImGui::OpenPopup("AddGameObjectPopup");
-	}
-
-
-	if (ImGui::BeginPopup("AddGameObjectPopup"))
-	{
-		if (ImGui::MenuItem("Empty Object"))
-		{
-			SceneFactory::CreateEmptyObject(scene);
-		}
-
-		ImGui::Separator();
-
-		if (ImGui::MenuItem("Cube"))
-		{
-			SceneFactory::CreatePrimitive(scene, L"Cube", L"CubeMesh");
-		}
-
-		if (ImGui::MenuItem("Sphere"))
-		{
-			SceneFactory::CreatePrimitive(scene, L"Sphere", L"Sphere");
-		}
-
-		if (ImGui::MenuItem("Quad"))
-		{
-			SceneFactory::CreatePrimitive(scene, L"Quad", L"QuadMesh");
-		}
-
-		if (ImGui::MenuItem("Plane"))
-		{
-			SceneFactory::CreatePrimitive(scene, L"Plane", L"PlaneMesh");
-		}
-
-		if (ImGui::MenuItem("Sprite"))
-		{
-			SceneFactory::CreateSpriteObject(scene);
-		}
-
-		if (ImGui::MenuItem("Animation Object"))
-		{
-			SceneFactory::CreateAnimatorObject(scene);
-		}
-
-		ImGui::Separator();
-
-		if (ImGui::MenuItem("Sky"))
-		{
-			SceneFactory::CreateSky(scene);
-		}
-
-		ImGui::Separator();
-
-		if (ImGui::BeginMenu("Lights"))
-		{
-			if (ImGui::MenuItem("Directional Light"))
-			{
-				SceneFactory::CreateDirectionalLight(scene);
-			}
-			if (ImGui::MenuItem("Point Light"))
-			{
-				SceneFactory::CreatePointLight(scene);
-			}
-			if (ImGui::MenuItem("Spot Light"))
-			{
-				SceneFactory::CreateSpotLight(scene);
-			}
-			ImGui::EndMenu();
-		}
-		ImGui::Separator();
-
-		if (ImGui::MenuItem("Camera"))
-		{
-			SceneFactory::CreateCamera(scene);
-		}
-
-		ImGui::Separator();
-		if (ImGui::BeginMenu("UI"))
-		{
-			if (ImGui::MenuItem("Canvas"))
-			{
-				SceneFactory::CreateCanvas(scene);
-			}
-			if (ImGui::MenuItem("Image"))
-			{
-				SceneFactory::CreateImage(scene);
-			}
-			if (ImGui::MenuItem("Button"))
-			{
-				SceneFactory::CreateButton(scene);
-			}
-			ImGui::EndMenu();
-		}
-
-		ImGui::Separator();
-		if(ImGui::MenuItem("Event System"))
-		{
-			SceneFactory::CreateEventSystem(scene);
-		}
-		ImGui::EndPopup();
-	}
-	ImGui::Separator();
-}
+//void HierarchyPanel::DrawLayerItem(Scene* scene, Layer* layer)
+//{
+//	if (!layer) return;
+//	uint32 layerIndex = layer->GetIndex();
+//	ImGui::PushID(layerIndex);
+//
+//#pragma region Flag Check
+//	bool hasAnyObjectActive = false;
+//	bool hasAnyObjectVisible = false;
+//	bool hasAllObjectActive = true;
+//
+//	const auto& layerObjects = layer->GetAllGameObjects();
+//	if (layerObjects.empty())
+//	{
+//		hasAllObjectActive = false;
+//	}
+//	else
+//	{
+//		for (auto* obj : layerObjects)
+//		{
+//			if (obj->IsActive()) hasAnyObjectActive = true;
+//			else hasAllObjectActive = false;
+//			if (obj->IsVisible()) hasAnyObjectVisible = true;
+//		}
+//	}
+//#pragma endregion
+//
+//#pragma region LayerIndex
+//	ImGui::AlignTextToFramePadding();
+//	ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
+//	ImGui::Text("%02d", layerIndex);
+//	ImGui::PopStyleColor();
+//	ImGui::SameLine();
+//#pragma endregion
+//
+//#pragma region Layer Name (Inline Input)
+//	ImGuiTreeNodeFlags nodeFlags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_Framed;
+//	bool layerOpen = DrawRenameBox(layer, nodeFlags, false, [&]()
+//		{
+//#pragma region Drag & Drop
+//			if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceNoDisableHover))
+//			{
+//				// 현재 레이어 인덱스를 페이로드로 보냄
+//				ImGui::SetDragDropPayload("LAYER_PAYLOAD", &layerIndex, sizeof(uint32));
+//				ImGui::Text("Move Layer %d", layerIndex);
+//				ImGui::EndDragDropSource();
+//			}
+//
+//			if (ImGui::BeginDragDropTarget())
+//			{
+//#pragma region Layer Order
+//				if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("LAYER_PAYLOAD"))
+//				{
+//					uint32 sourceLayerIndex = *(uint32*)payload->Data;
+//
+//					// Scene의 ReorderLayer 함수 호출 (Source -> Target 순서 변경)
+//					if (sourceLayerIndex != layerIndex)
+//					{
+//						//scene->ReorderLayer(sourceLayerIndex, layerIndex);
+//					}
+//				}
+//#pragma endregion
+//
+//#pragma region Object
+//				if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("GAMEOBJECT_PAYLOAD"))
+//				{
+//					GameObject* droppedObj = *(GameObject**)payload->Data;
+//
+//					if (droppedObj)
+//					{
+//						Safe_AddRef(droppedObj);
+//						if (droppedObj->GetParent() != nullptr)
+//						{
+//							droppedObj->GetParent()->RemoveChild(droppedObj);
+//							//scene->AddGameObject(droppedObj, layerIndex);
+//						}
+//						else
+//						{
+//							//scene->MoveGameObjectLayer(droppedObj, layerIndex);
+//						}
+//						Safe_Release(droppedObj);
+//					}
+//				}
+//#pragma endregion
+//
+//				ImGui::EndDragDropTarget();
+//			}
+//#pragma endregion
+//		});
+//#pragma endregion
+//
+//#pragma region Checkboxes
+//	if (m_RenamingId != (void*)GetNodeID(layer))
+//	{
+//
+//		ImGui::SameLine();
+//
+//		// 1. 사이즈 및 위치 계산
+//		float itemHeight = ImGui::GetFrameHeight();
+//		float visibleBtnWidth = itemHeight;                  // Visible 버튼 너비
+//		float activeBoxWidth = itemHeight;              // 체크박스는 보통 정사각형 (높이와 같음)
+//		float spacing = itemHeight / 6.f;                           // 컨트롤 간 간격
+//		float rightPadding = itemHeight / 2.f;                      // 윈도우 우측 여백
+//		float windowWidth = ImGui::GetWindowContentRegionMax().x;
+//
+//		float activeBoxPos = windowWidth - (visibleBtnWidth * 3) - (spacing * 3) - activeBoxWidth - rightPadding;
+//		ImGui::SetCursorPosX(activeBoxPos);
+//
+//		// 스타일 보정 (작은 화살표 버튼을 위해 패딩 조절)
+//		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
+//		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
+//		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0)); // 배경 투명
+//
+//		// 1. 위로 이동 (Up Arrow)
+//		ImGui::PushID("MoveUp");
+//		// ArrowButton 대신 Button을 써서 크기를 강제함 (frameHeight)
+//		if (ImGui::Button(ICON_FA_UP_LONG, ImVec2(visibleBtnWidth, itemHeight)))
+//		{
+//			//SceneManager::Get().GetCurrentScene()->ReorderLayer(layerIndex, layerIndex - 1);
+//		}
+//		if (ImGui::IsItemHovered()) ImGui::SetTooltip("Move Up");
+//		ImGui::PopID();
+//
+//		ImGui::SameLine(); // 간격 0
+//
+//		// 2. 아래로 이동 (Down)
+//		ImGui::PushID("MoveDown");
+//		if (ImGui::Button(ICON_FA_DOWN_LONG, ImVec2(visibleBtnWidth, itemHeight)))
+//		{
+//			//SceneManager::Get().GetCurrentScene()->ReorderLayer(layerIndex, layerIndex + 1);
+//		}
+//		if (ImGui::IsItemHovered()) ImGui::SetTooltip("Move Down");
+//		ImGui::PopID();
+//
+//		ImGui::PopStyleVar(2);   // FramePadding, ItemSpacing 복구
+//		ImGui::PopStyleColor();  // Button Color 복구
+//
+//		ImGui::SameLine();
+//
+//		bool isLayerActive = hasAllObjectActive;
+//		bool isMixedActive = hasAnyObjectActive && !hasAllObjectActive;
+//
+//		if (isMixedActive)
+//		{
+//			ImGui::PushItemFlag(ImGuiItemFlags_MixedValue, true);
+//		}
+//
+//		if (ImGui::Checkbox("##LayerActive", &isLayerActive))
+//		{
+//			layer->SetActive(isLayerActive);
+//			for (auto* obj : layerObjects)
+//				obj->SetActive(isLayerActive);
+//		}
+//
+//		if (isMixedActive)
+//			ImGui::PopItemFlag();
+//
+//		if (ImGui::IsItemHovered()) ImGui::SetTooltip("Toggle Layer Active");
+//
+//		ImGui::SameLine();
+//		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0)); // 투명 버튼
+//
+//		bool isVisible = layer->IsVisible();
+//#ifdef ICON_FA_EYE
+//		const char* visIcon = isVisible ? ICON_FA_EYE : ICON_FA_EYE_SLASH;
+//#else
+//		const char* visIcon = isVisible ? "(O)" : "(-)";
+//#endif
+//
+//		if (ImGui::Button(visIcon, ImVec2(visibleBtnWidth, itemHeight)))
+//		{
+//			layer->SetVisible(!isVisible);
+//			for (auto* obj : layerObjects)
+//				obj->SetVisible(!isVisible);
+//		}
+//
+//		if (ImGui::IsItemHovered()) ImGui::SetTooltip("Toggle Layer Visibility");
+//
+//		ImGui::PopStyleColor();
+//	}
+//#pragma endregion
+//
+//#pragma region Draw Objects
+//	if (layerOpen)
+//	{
+//		const vector<GameObject*>& gameObjects = layer->GetAllGameObjects();
+//		for (GameObject* gameObject : gameObjects)
+//		{
+//			if (!gameObject || gameObject->IsDead()) continue;
+//			if (gameObject->GetParent() == nullptr)
+//			{
+//				DrawGameObjectNode(gameObject);
+//			}
+//		}
+//		ImGui::TreePop();
+//	}
+//#pragma endregion
+//	ImGui::PopID();
+//}
+//
+//void HierarchyPanel::DrawGameObjectNode(class GameObject* gameObject)
+//{
+//	if (!gameObject || gameObject->IsDead()) return;
+//	ImGui::PushID((void*)(uintptr_t)gameObject->GetID());
+//	float fontSize = ImGui::GetFontSize();
+//	ImGui::PushStyleVar(ImGuiStyleVar_IndentSpacing, fontSize);
+//	ImGui::Indent();
+//	
+//	SelectionManager& selectionManager = SelectionManager::Get();
+//	auto& selectionContext = selectionManager.GetSelectionContext();
+//
+//	bool isSelected = false;
+//	for (auto* sel : selectionContext) {
+//		if (sel == gameObject) { isSelected = true; break; }
+//	}
+//
+//	ImGuiTreeNodeFlags nodeFlags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth;
+//	nodeFlags |= ImGuiTreeNodeFlags_DrawLinesFull;
+//	if (isSelected)
+//		nodeFlags |= ImGuiTreeNodeFlags_Selected;
+//
+//	const vector<GameObject*>& children = gameObject->GetAllChilds();
+//	if (children.empty())
+//		nodeFlags |= ImGuiTreeNodeFlags_Bullet | ImGuiTreeNodeFlags_NoTreePushOnOpen;
+//
+//#pragma region Flag Check
+//	bool hasAnyChildActive = false;
+//	bool hasAnyChildVisible = false;
+//	bool hasAllChildActive = true;
+//
+//	const auto& childObjects = gameObject->GetAllChilds();
+//	if (childObjects.empty())
+//	{
+//		hasAnyChildActive = false;
+//	}
+//	else
+//	{
+//		for (auto* obj : childObjects)
+//		{
+//			if (obj->IsActive()) hasAnyChildActive = true;
+//			else hasAllChildActive = false;
+//			if (obj->IsVisible()) hasAnyChildVisible = true;
+//		}
+//	}
+//#pragma endregion
+//		
+//#pragma region Namebox
+//	bool opened = DrawRenameBox(gameObject, nodeFlags, isSelected, [&]()
+//		{
+//#pragma region Drap & Drop
+//
+//			if (ImGui::BeginDragDropSource())
+//			{
+//				ImGui::SetDragDropPayload("GAMEOBJECT_PAYLOAD", &gameObject, sizeof(GameObject*));
+//				if (selectionManager.IsSelected(gameObject) && selectionManager.GetSelectionContext().size() > 1)
+//				{
+//					ImGui::Text("%s (+%d objects)", WStrToStr(gameObject->GetName()).c_str(), (int)selectionManager.GetSelectionContext().size() - 1);
+//				}
+//				else
+//				{
+//					ImGui::Text("%s", WStrToStr(gameObject->GetName()).c_str());
+//				}
+//
+//				ImGui::EndDragDropSource();
+//			}
+//
+//			if (ImGui::BeginDragDropTarget())
+//			{
+//				if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("GAMEOBJECT_PAYLOAD"))
+//				{
+//					GameObject* droppedObject = *(GameObject**)payload->Data;
+//					vector<GameObject*> objectsToMove;
+//
+//					if (selectionManager.IsSelected(droppedObject))
+//					{
+//						objectsToMove = selectionManager.GetSelectionContext();
+//					}
+//					else
+//					{
+//						objectsToMove.push_back(droppedObject);
+//					}
+//
+//					for (GameObject* obj : objectsToMove)
+//					{
+//						if (!obj || obj == gameObject) continue;
+//						if (gameObject->IsDescendant(obj) || obj->GetParent() == gameObject) continue;
+//
+//						Safe_AddRef(obj);
+//						if (obj->GetParent() == nullptr)
+//						{
+//							//SceneManager::Get().GetCurrentScene()->RemoveGameObject(obj);
+//						}
+//						gameObject->AddChild(obj);
+//						Safe_Release(obj);
+//					}
+//				}
+//				ImGui::EndDragDropTarget();
+//			}
+//#pragma endregion
+//		}, bind(&HierarchyPanel::DrawGameObjectContextMenu, this, gameObject));
+//#pragma region Selection Control
+//	if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
+//    {
+//        if (ImGui::GetIO().KeyCtrl)
+//        {
+//            // Ctrl 키 누른 상태: 토글 (기존 유지)
+//            selectionManager.ToggleSelection(gameObject);
+//        }
+//        else
+//        {
+//            // Ctrl 키 없음
+//            if (!isSelected)
+//            {
+//                // 선택되지 않은 녀석을 클릭함 -> 즉시 얘만 선택 (기존 선택 다 취소)
+//                selectionContext.clear();
+//                selectionContext.push_back(gameObject);
+//            }
+//            // ELSE: 이미 선택된 녀석을 클릭함 -> 아무것도 안 함 (드래그 준비 상태 유지)
+//            // 여기서 selectionContext를 clear() 해버리면 멀티 셀렉션이 날아갑니다.
+//        }
+//    }
+//
+//    // [추가됨] 2. 마우스 뗐을 때 (MouseUp)
+//    // 드래그를 하지 않고 그냥 클릭만 했다면, 이때 나머지 선택을 해제합니다.
+//    if (ImGui::IsItemHovered() && MOUSE_BUTTON_UP(EMouseButton::Left))
+//    {
+//		// 드래그 중인지 체크
+//        if (!ImGui::GetIO().KeyCtrl && !MOUSE_BUTTON_DRAGGING(EMouseButton::Left))
+//        {
+//            // Ctrl도 안 눌렀고, 드래그도 안 함 -> 단순 클릭으로 간주
+//            // 이제서야 "나 말고 나머지 선택 해제"를 수행
+//            if (isSelected) 
+//            {
+//                // 단, 현재 선택된 갯수가 1개보다 많을 때만 정리 (성능 최적화)
+//                if (selectionContext.size() > 1)
+//                {
+//                    selectionContext.clear();
+//                    selectionContext.push_back(gameObject);
+//                }
+//            }
+//        }
+//    }
+//#pragma endregion
+//	
+//#pragma region Context Menu
+//	
+//	
+//#pragma endregion
+//
+//	
+//
+//#pragma endregion
+//
+//#pragma region Checkboxes
+//	if (m_RenamingId != (void*)GetNodeID(gameObject))
+//	{
+//		ImGui::SameLine();
+//
+//		// 1. 사이즈 및 위치 계산
+//		float itemHeight = ImGui::GetFrameHeight();
+//		float buttonSize = itemHeight;
+//		float spacing = itemHeight / 6.f;                           // 컨트롤 간 간격
+//		float rightPadding = itemHeight / 2.f;                      // 윈도우 우측 여백
+//		float windowWidth = ImGui::GetWindowContentRegionMax().x;
+//
+//		float totalRightWidth = itemHeight + (buttonSize * 3) + (spacing * 3) + rightPadding;
+//		float activeBoxPos = windowWidth - totalRightWidth;
+//		ImGui::SetCursorPosX(activeBoxPos);
+//
+//		// 스타일 보정 (작은 화살표 버튼을 위해 패딩 조절)
+//		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
+//		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
+//		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0)); // 배경 투명
+//
+//		// 1. 위로 이동 (Up Arrow)
+//		ImGui::PushID("MoveUp");
+//		// ArrowButton 대신 Button을 써서 크기를 강제함 (frameHeight)
+//		if (ImGui::Button(ICON_FA_UP_LONG, ImVec2(buttonSize, itemHeight)))
+//		{
+//			GameObject* parent = gameObject->GetParent();
+//			if (parent)
+//			{
+//				parent->MoveChild(gameObject, -1);
+//			}
+//			else
+//			{
+//				// [루트 객체 처리]
+//				//SceneManager::Get().GetCurrentScene()->MoveGameObjectOrder(gameObject, -1);
+//			}
+//		}
+//		if (ImGui::IsItemHovered()) ImGui::SetTooltip("Move Up");
+//		ImGui::PopID();
+//
+//		ImGui::SameLine(); // 간격 0
+//
+//		// 2. 아래로 이동 (Down)
+//		ImGui::PushID("MoveDown");
+//		if (ImGui::Button(ICON_FA_DOWN_LONG, ImVec2(buttonSize, itemHeight)))
+//		{
+//			GameObject* parent = gameObject->GetParent();
+//			if (parent)
+//			{
+//				parent->MoveChild(gameObject, 1);
+//			}
+//			else
+//			{
+//				// [루트 객체 처리]
+//				//SceneManager::Get().GetCurrentScene()->MoveGameObjectOrder(gameObject, 1);
+//			}
+//		}
+//		if (ImGui::IsItemHovered()) ImGui::SetTooltip("Move Down");
+//		ImGui::PopID();
+//
+//		ImGui::PopStyleVar(2);   // FramePadding, ItemSpacing 복구
+//		ImGui::PopStyleColor();  // Button Color 복구
+//
+//		ImGui::SameLine();
+//
+//		bool isObjectActive = hasAllChildActive;
+//		bool isMixedActive = hasAnyChildActive && !hasAllChildActive;
+//
+//		if (isMixedActive)
+//		{
+//			ImGui::PushItemFlag(ImGuiItemFlags_MixedValue, true);
+//		}
+//
+//		bool gameObjectActive = gameObject->IsActive();
+//		if (ImGui::Checkbox("##ObjectActive", &gameObjectActive))
+//		{
+//			gameObject->SetActive(gameObjectActive);
+//			gameObject->SetAllChildActive(gameObjectActive);
+//		}
+//
+//		if (isMixedActive)
+//			ImGui::PopItemFlag();
+//
+//		if (ImGui::IsItemHovered()) ImGui::SetTooltip("Toggle Object Active");
+//
+//		ImGui::SameLine();
+//		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0)); // 투명 버튼
+//
+//		bool isVisible = gameObject->IsVisible();
+//#ifdef ICON_FA_EYE
+//		const char* visIcon = isVisible ? ICON_FA_EYE : ICON_FA_EYE_SLASH;
+//#else
+//		const char* visIcon = isVisible ? "(O)" : "(-)";
+//#endif
+//
+//		if (ImGui::Button(visIcon, ImVec2(buttonSize, itemHeight)))
+//		{
+//			gameObject->SetVisible(!isVisible);
+//			gameObject->SetAllChildVisible(!isVisible);
+//		}
+//
+//		if (ImGui::IsItemHovered()) ImGui::SetTooltip("Toggle Object Visibility");
+//
+//		ImGui::PopStyleColor();
+//	}
+//#pragma endregion
+//
+//
+//#pragma region Draw Child
+//	if (opened && !children.empty())
+//	{
+//		for (GameObject* child : children)
+//		{
+//			if (!child || child->IsDead()) continue;
+//			DrawGameObjectNode(child);
+//		}
+//		ImGui::TreePop();
+//	}
+//#pragma endregion
+//	ImGui::Unindent();
+//	ImGui::PopStyleVar(); // IndentSpacing Pop
+//	ImGui::PopID();
+//}
+//
+//void HierarchyPanel::DrawAddGameObjectButton(Scene* scene)
+//{
+//	string buttonText = LocalizationManager::Get().GetText("Hirarchy_AddGameObject");
+//	if (ImGui::Button(buttonText.c_str(), ImVec2(-1, 0)))
+//	{
+//		ImGui::OpenPopup("AddGameObjectPopup");
+//	}
+//
+//	TODO("SceneFactory to EntityFactory");
+//
+//
+//	if (ImGui::BeginPopup("AddGameObjectPopup"))
+//	{
+//		if (ImGui::MenuItem("Empty Object"))
+//		{
+//			//SceneFactory::CreateEmptyObject(scene);
+//		}
+//
+//		ImGui::Separator();
+//
+//		if (ImGui::MenuItem("Cube"))
+//		{
+//			//SceneFactory::CreatePrimitive(scene, L"Cube", L"CubeMesh");
+//		}
+//
+//		if (ImGui::MenuItem("Sphere"))
+//		{
+//			//SceneFactory::CreatePrimitive(scene, L"Sphere", L"Sphere");
+//		}
+//
+//		if (ImGui::MenuItem("Quad"))
+//		{
+//			//SceneFactory::CreatePrimitive(scene, L"Quad", L"QuadMesh");
+//		}
+//
+//		if (ImGui::MenuItem("Plane"))
+//		{
+//			//SceneFactory::CreatePrimitive(scene, L"Plane", L"PlaneMesh");
+//		}
+//
+//		if (ImGui::MenuItem("Sprite"))
+//		{
+//			//SceneFactory::CreateSpriteObject(scene);
+//		}
+//
+//		if (ImGui::MenuItem("Animation Object"))
+//		{
+//			//SceneFactory::CreateAnimatorObject(scene);
+//		}
+//
+//		ImGui::Separator();
+//
+//		if (ImGui::MenuItem("Sky"))
+//		{
+//			//SceneFactory::CreateSky(scene);
+//		}
+//
+//		ImGui::Separator();
+//
+//		if (ImGui::BeginMenu("Lights"))
+//		{
+//			if (ImGui::MenuItem("Directional Light"))
+//			{
+//				//SceneFactory::CreateDirectionalLight(scene);
+//			}
+//			if (ImGui::MenuItem("Point Light"))
+//			{
+//				//SceneFactory::CreatePointLight(scene);
+//			}
+//			if (ImGui::MenuItem("Spot Light"))
+//			{
+//				//SceneFactory::CreateSpotLight(scene);
+//			}
+//			ImGui::EndMenu();
+//		}
+//		ImGui::Separator();
+//
+//		if (ImGui::MenuItem("Camera"))
+//		{
+//			//SceneFactory::CreateCamera(scene);
+//		}
+//
+//		ImGui::Separator();
+//		if (ImGui::BeginMenu("UI"))
+//		{
+//			if (ImGui::MenuItem("Canvas"))
+//			{
+//				//SceneFactory::CreateCanvas(scene);
+//			}
+//			if (ImGui::MenuItem("Image"))
+//			{
+//				//SceneFactory::CreateImage(scene);
+//			}
+//			if (ImGui::MenuItem("Button"))
+//			{
+//				//SceneFactory::CreateButton(scene);
+//			}
+//			ImGui::EndMenu();
+//		}
+//
+//		ImGui::Separator();
+//		if(ImGui::MenuItem("Event System"))
+//		{
+//			//SceneFactory::CreateEventSystem(scene);
+//		}
+//		ImGui::EndPopup();
+//	}
+//	ImGui::Separator();
+//}
 
 void HierarchyPanel::DrawSceneTitle(Scene* scene)
 {
@@ -1052,12 +1054,12 @@ void HierarchyPanel::DrawGameObjectContextMenu(GameObject* gameObject)
 #endif
 		{
 			// 선택된 모든 객체 복제 (Clone 함수 필요)
-			for (GameObject* obj : selectionContext)
-			{
-				GameObject* clonedObject = SceneManager::Get().GetCurrentScene()->CloneGameObject(obj);
-				if (clonedObject)
-					Safe_Release(clonedObject);
-			}
+			//for (GameObject* obj : selectionContext)
+			//{
+			//	GameObject* clonedObject = SceneManager::Get().GetCurrentScene()->CloneGameObject(obj);
+			//	if (clonedObject)
+			//		Safe_Release(clonedObject);
+			//}
 				
 		}
 
@@ -1127,7 +1129,7 @@ void HierarchyPanel::DrawGameObjectContextMenu(GameObject* gameObject)
 			desc.name = L"New GameObject";
 			GameObject* newObj = GameObject::Create(&desc);
 			gameObject->AddChild(newObj);
-			SceneManager::Get().GetCurrentScene()->AddGameObject(newObj);
+			//SceneManager::Get().GetCurrentScene()->AddGameObject(newObj);
 			newObj->Release(); // AddChild가 RefCount 올렸다면
 		}
 
@@ -1141,7 +1143,7 @@ void HierarchyPanel::DrawGameObjectContextMenu(GameObject* gameObject)
 					Safe_AddRef(obj);
 					// 부모 떼어내고 씬 루트로 이동
 					if (obj->GetParent()) obj->GetParent()->RemoveChild(obj);
-					SceneManager::Get().GetCurrentScene()->AddGameObject(obj, obj->GetLayerIndex());
+					//SceneManager::Get().GetCurrentScene()->AddGameObject(obj, obj->GetLayerIndex());
 					Safe_Release(obj);
 				}
 			}

@@ -8,7 +8,8 @@
 #include "ResourceManager.h"
 #include "PrototypeManager.h"
 
-#include "LayerManager.h"
+//#include "LayerManager.h"
+#include "SystemManager.h"
 #include "SceneManager.h"
 
 #include "Renderer.h"
@@ -74,8 +75,9 @@ private:
 	ResourceManager* m_ResourceManager = { nullptr };
 	PrototypeManager* m_PrototypeManager = { nullptr };
 private:
-	LayerManager* m_LayerManager = { nullptr };
+	//LayerManager* m_LayerManager = { nullptr };
 	SceneManager* m_SceneManager = { nullptr };
+	SystemManager* m_SystemManager = { nullptr };
 private:
 	ComponentRegistry* m_ComponentRegistry = { nullptr };
 private:

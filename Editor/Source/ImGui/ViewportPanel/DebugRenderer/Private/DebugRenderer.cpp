@@ -138,39 +138,39 @@ void DebugRenderer::RegisterColliderDebug(Camera* camera)
 		useFrustum = true;
 	}
 	const vec4 color = vec4(0.f, 1.f, 0.f, 1.f);
-	for (auto* layer : scene->GetAllLayers())
-	{
-		for (auto* go : layer->GetAllGameObjects())
-		{
-			if (!go || !go->IsActive()) continue;
-			auto* col = go->GetComponent<Collider>();
-			if (!col || !col->IsActive()) continue;
-			mat4 worldMatrix = go->GetTransform()->GetWorldMatrix();
-			ColliderDesc desc = col->GetColliderDesc();
-			// 프러스텀 컬링: 콜라이더 AABB가 카메라 밖이면 스킵
-			if (useFrustum)
-			{
-				AABB localAABB(desc.center - desc.extent, desc.center + desc.extent);
-				AABB worldAABB = FrustumCuller::TransformAABB(localAABB, worldMatrix);
-				if (!FrustumCuller::TestAABB(frustum, worldAABB))
-					continue;
-			}
-			switch (desc.type)
-			{
-			case EColliderType::Box:
-			case EColliderType::Box2D:
-				DrawBox(desc.center, desc.extent, color, worldMatrix);
-				break;
-			case EColliderType::Sphere:
-				DrawSphere(vec3(worldMatrix[3]) + desc.center, desc.extent.x, color);
-				break;
-			case EColliderType::Capsule:
-				break;
-			case EColliderType::Mesh:
-				break;
-			}
-		}
-	}
+	//for (auto* layer : scene->GetAllLayers())
+	//{
+	//	for (auto* go : layer->GetAllGameObjects())
+	//	{
+	//		if (!go || !go->IsActive()) continue;
+	//		auto* col = go->GetComponent<Collider>();
+	//		if (!col || !col->IsActive()) continue;
+	//		mat4 worldMatrix = go->GetTransform()->GetWorldMatrix();
+	//		ColliderDesc desc = col->GetColliderDesc();
+	//		// 프러스텀 컬링: 콜라이더 AABB가 카메라 밖이면 스킵
+	//		if (useFrustum)
+	//		{
+	//			AABB localAABB(desc.center - desc.extent, desc.center + desc.extent);
+	//			AABB worldAABB = FrustumCuller::TransformAABB(localAABB, worldMatrix);
+	//			if (!FrustumCuller::TestAABB(frustum, worldAABB))
+	//				continue;
+	//		}
+	//		switch (desc.type)
+	//		{
+	//		case EColliderType::Box:
+	//		case EColliderType::Box2D:
+	//			DrawBox(desc.center, desc.extent, color, worldMatrix);
+	//			break;
+	//		case EColliderType::Sphere:
+	//			DrawSphere(vec3(worldMatrix[3]) + desc.center, desc.extent.x, color);
+	//			break;
+	//		case EColliderType::Capsule:
+	//			break;
+	//		case EColliderType::Mesh:
+	//			break;
+	//		}
+	//	}
+	//}
 }
 
 #pragma region Draw Functions

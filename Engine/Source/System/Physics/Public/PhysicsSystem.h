@@ -13,7 +13,7 @@ public:
 	static PhysicsSystem* Create(void* arg = nullptr);
 
 public:
-	virtual void OnFixedUpdate(entt::registry& registry, f32 dt) override;
+	virtual void OnFixedUpdate(entt::registry& registry, const vector<Scene*> activeScenes, f32 dt) override;
 private:
 
 };

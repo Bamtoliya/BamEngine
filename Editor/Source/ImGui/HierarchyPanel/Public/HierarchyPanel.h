@@ -15,10 +15,10 @@ public:
 	virtual void Draw() override;
 	virtual void Free() override { __super::Free(); }
 private:
-	void DrawLayerItem(class Scene* scene, class Layer* layer);
-	void DrawGameObjectNode(class GameObject* gameObject);
+	//void DrawLayerItem(class Scene* scene, class Layer* layer);
+	//void DrawGameObjectNode(class GameObject* gameObject);
 
-	void DrawAddGameObjectButton(class Scene* currentScene);
+	//void DrawAddGameObjectButton(class Scene* currentScene);
 private:
 	void DrawSceneTitle(class Scene* scene);
 private:
@@ -28,7 +28,7 @@ private:
 						function<void()> onContextMenu = nullptr);
 private:
 	void DrawSceneContextMenu();
-	void DrawLayerContextMenu(class Layer* layer);
+	//void DrawLayerContextMenu(class Layer* layer);
 	void DrawGameObjectContextMenu(class GameObject* gameObject);
 
 #pragma region Variables

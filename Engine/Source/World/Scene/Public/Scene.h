@@ -3,12 +3,12 @@
 #include "Base.h"
 #include "SerializableInterface.h"
 #include "Reflection/ReflectionMacro.h"
+#include "Entity.h"
 
 BEGIN(Engine)
 
 class EventSystem;
 class UICanvas;
-class Entity;
 
 struct SceneCreateDesc
 {
@@ -90,15 +90,28 @@ public:
 
 #pragma region Entity Management
 public:
+	entt::registry& GetRegistry() { return m_LocalRegistry; }
 	Entity& CreateEntity();
 	template<typename T, typename... Args>
-	T& AddComponent(Entity& entity, Args&&... args);
+	T& AddComponent(Entity& entity, Args&&... args)
+	{
+		return m_LocalRegistry.emplace<T>(entity.GetEntityHandle(), std::forward<Args>(args)...);
+	}
 	template<typename T>
-	T& GetComponent(Entity& entity);
+	T& GetComponent(Entity& entity)
+	{
+		return m_LocalRegistry.get<T>(entity.GetEntityHandle());
+	}
 	template<typename T>
-	bool HasComponent(Entity& entity);
+	bool HasComponent(Entity& entity)
+	{
+		return m_LocalRegistry.all_of<T>(entity.GetEntityHandle());
+	}
 	template<typename T>
-	void RemoveComponent(Entity& entity);
+	void RemoveComponent(Entity& entity)
+	{
+		m_LocalRegistry.remove<T>(entity.GetEntityHandle());
+	}
 #pragma endregion
 
 #pragma region Flag Mangement
@@ -145,4 +158,6 @@ protected:
 	class UICanvas* m_RootCanvas = { nullptr };
 #pragma endregion
 };
+
+#
 END

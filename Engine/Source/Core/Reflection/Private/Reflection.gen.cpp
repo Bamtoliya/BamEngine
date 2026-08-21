@@ -14,6 +14,7 @@
 #include "Core/Public/Structs.h"
 #include "Core/Public/Transform.h"
 #include "Core/Public/Vertex.h"
+#include "Graph/Public/GraphComponent.h"
 #include "Physics/Components/Collider/Public/Box2DCollider.h"
 #include "Physics/Components/Collider/Public/BoxCollider.h"
 #include "Physics/Components/Collider/Public/Collider.h"
@@ -469,6 +470,10 @@ void RegisterReflection_EnTT()
         ENTT_PROPERTY(Component, m_Active)
         ENTT_PROPERTY(Component, m_Dirty)
         ENTT_PROPERTY(Component, m_Tag)
+    END_ENTT_REFLECT()
+
+    BEGIN_ENTT_REFLECT(GraphComponent)
+        .ctor<>()
     END_ENTT_REFLECT()
 
     BEGIN_ENTT_REFLECT(Box2DCollider)

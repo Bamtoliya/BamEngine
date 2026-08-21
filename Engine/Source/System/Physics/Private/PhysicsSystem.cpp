@@ -12,9 +12,15 @@ void PhysicsSystem::Free()
 
 PhysicsSystem* PhysicsSystem::Create(void* arg)
 {
-	return nullptr;
+	PhysicsSystem* instance = new PhysicsSystem();
+	if (instance->Initialize(arg) != EResult::Success)
+	{
+		Safe_Delete(instance);
+		return nullptr;
+	}
+	return instance;
 }
 
-void PhysicsSystem::OnFixedUpdate(entt::registry& registry, f32 dt)
+void PhysicsSystem::OnFixedUpdate(entt::registry& registry, const vector<Scene*> activeScenes, f32 dt)
 {
 }

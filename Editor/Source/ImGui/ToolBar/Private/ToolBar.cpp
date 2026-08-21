@@ -175,31 +175,31 @@ void ToolBar::NewScene()
 {
 	SceneManager::Get().NewScene();
 	Scene* currentScene = SceneManager::Get().GetCurrentScene();
-	if (currentScene)
-	{
-		currentScene->SetName(L"Untitled Scene");
-		currentScene->CreateLayer(L"Default");
+	//if (currentScene)
+	//{
+	//	currentScene->SetName(L"Untitled Scene");
+	//	currentScene->CreateLayer(L"Default");
 
-		GameObject* gameObject = GameObject::Create();
-		gameObject->SetName(L"Camera");
-		Camera* camera = static_cast<Camera*>(gameObject->AddComponent(L"Camera"));
-		CameraManager::Get().AddCamera(camera);
-		CameraManager::Get().SetMainCamera(camera);
-		currentScene->AddGameObject(gameObject);
-		Safe_Release(gameObject);
-
-
-		GameObject* plane = GameObject::Create();
-		plane->SetName(L"Plane");
-		MeshFilter* meshFilter = static_cast<MeshFilter*>(plane->AddComponent(L"MeshFilter"));
-		meshFilter->SetMeshHandle(ResourceManager::Get().GetResourceHandle<Mesh>(L"Resources/Mesh/Plane.bammesh"));
-		MeshRenderer* meshRenderer = static_cast<MeshRenderer*>(plane->AddComponent(L"MeshRenderer"));
-		meshRenderer->SetMaterial(ResourceManager::Get().GetResourceHandle<Material>(L"Resources/Material/DefaultMaterial.bammat"));
-		currentScene->AddGameObject(plane);
-		Safe_Release(plane);
+	//	GameObject* gameObject = GameObject::Create();
+	//	gameObject->SetName(L"Camera");
+	//	Camera* camera = static_cast<Camera*>(gameObject->AddComponent(L"Camera"));
+	//	CameraManager::Get().AddCamera(camera);
+	//	CameraManager::Get().SetMainCamera(camera);
+	//	currentScene->AddGameObject(gameObject);
+	//	Safe_Release(gameObject);
 
 
-	}
+	//	GameObject* plane = GameObject::Create();
+	//	plane->SetName(L"Plane");
+	//	MeshFilter* meshFilter = static_cast<MeshFilter*>(plane->AddComponent(L"MeshFilter"));
+	//	meshFilter->SetMeshHandle(ResourceManager::Get().GetResourceHandle<Mesh>(L"Resources/Mesh/Plane.bammesh"));
+	//	MeshRenderer* meshRenderer = static_cast<MeshRenderer*>(plane->AddComponent(L"MeshRenderer"));
+	//	meshRenderer->SetMaterial(ResourceManager::Get().GetResourceHandle<Material>(L"Resources/Material/DefaultMaterial.bammat"));
+	//	currentScene->AddGameObject(plane);
+	//	Safe_Release(plane);
+
+
+	//}
 }
 
 void ToolBar::SaveScene()

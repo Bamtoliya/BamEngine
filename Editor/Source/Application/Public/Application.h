@@ -35,6 +35,7 @@ public:
 private:
 	EResult InitializeWindow(const ApplicationCreateInfo& createInfo);
 	EResult InitializeRuntime(const ApplicationCreateInfo& createInfo);
+	EResult InitializeSystem();
 #pragma endregion
 
 #pragma region Localization

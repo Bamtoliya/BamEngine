@@ -36,10 +36,12 @@ EResult Runtime::Initialize(void* arg)
 	m_PrototypeManager = PrototypeManager::Create();
 	if (!m_PrototypeManager) return EResult::Fail;
 
-	m_LayerManager = LayerManager::Create();
-	if (!m_LayerManager) return EResult::Fail;
+	//m_LayerManager = LayerManager::Create();
+	//if (!m_LayerManager) return EResult::Fail;
 	m_SceneManager = SceneManager::Create();
 	if (!m_SceneManager) return EResult::Fail;
+	m_SystemManager = SystemManager::Create();
+	if (!m_SystemManager) return EResult::Fail;
 
 	m_LocalizationManager = LocalizationManager::Create();
 	if (!m_LocalizationManager) return EResult::Fail;
@@ -81,7 +83,8 @@ void Runtime::Free()
 
 	// ── 2. 씬 (Component가 Pipeline/Buffer 참조) ──
 	SceneManager::Destroy();
-	LayerManager::Destroy();
+	//LayerManager::Destroy();
+	SystemManager::Destroy();
 	PrototypeManager::Destroy();
 	CollisionManager::Destroy();
 
@@ -112,16 +115,17 @@ void Runtime::RunFrame(f32 dt)
 }
 void Runtime::FixedUpdate(f32 dt)
 {
-	SceneManager::Get().FixedUpdate(dt);
+	SystemManager::Get().FixedUpdate(m_GlobalRegistry, SceneManager::Get().GetActiveScenes(), dt);
+	
 }
 void Runtime::Update(f32 dt)
 {
 	InputManager::Get().Update(dt);
-	SceneManager::Get().Update(dt);
+	SystemManager::Get().Update(m_GlobalRegistry, SceneManager::Get().GetActiveScenes(), dt);
 }
 void Runtime::LateUpdate(f32 dt)
 {
-	SceneManager::Get().LateUpdate(dt);
+	SystemManager::Get().LateUpdate(m_GlobalRegistry, SceneManager::Get().GetActiveScenes(), dt);
 }
 EResult Runtime::Render(f32 dt)
 {
@@ -129,6 +133,8 @@ EResult Runtime::Render(f32 dt)
 	{
 		fmt::print(stderr, "Renderer BeginFrame Failed\n");
 	}
+
+	SystemManager::Get().Sumbit(m_GlobalRegistry, SceneManager::Get().GetActiveScenes(), dt);
 
 	if (IsFailure(Renderer::Get().Render(dt)))
 	{

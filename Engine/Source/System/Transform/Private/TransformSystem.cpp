@@ -13,15 +13,27 @@ void TransformSystem::Free()
 
 TransformSystem* TransformSystem::Create(void* arg)
 {
-	return nullptr;
+	TransformSystem* instance = new TransformSystem();
+	if (IsFailure(instance->Initialize(arg)))
+	{
+		instance->Free();
+		delete instance;
+		instance = nullptr;
+		return nullptr;
+	}
+	return instance;
 }
 
-void TransformSystem::OnUpdate(entt::registry& registry, f32 dt)
+void TransformSystem::OnLateUpdate(entt::registry& globalRegistry, const vector<Scene*> activeScenes, f32 dt)
 {
-	auto view = registry.view<TransformComponent>();
-	for (auto entity : view)
+	UpdateHierarchy(globalRegistry);
+
+	for (Scene* scene : activeScenes)
 	{
-		auto& transform = view.get<TransformComponent>(entity);
+		if (scene && !scene->IsPaused())
+		{
+			UpdateHierarchy(scene->GetRegistry());
+		}
 	}
 }
 

@@ -187,6 +187,11 @@ EResult Application::InitializeRuntime(const ApplicationCreateInfo& createInfo)
 
     return EResult::Success;
 }
+EResult Application::InitializeSystem()
+{
+	SystemManager::Get().AddSystem<TransformSystem>();
+    return EResult();
+}
 #pragma endregion
 
 #pragma region Localization
@@ -933,5 +938,4 @@ void Application::Test(f32 dt)
 {
     
 }
-
 END
