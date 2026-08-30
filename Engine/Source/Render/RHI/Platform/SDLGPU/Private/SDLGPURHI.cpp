@@ -18,14 +18,14 @@ EResult SDLGPURHI::Initialize(void* arg)
 	if (arg)
 	{
 		CAST_DESC
-		if (!desc->WindowHandle) return EResult::InvalidArgument;
+		if (!desc->windowHandle) return EResult::InvalidArgument;
 
-		m_Window = reinterpret_cast<SDL_Window*>(desc->WindowHandle);
+		m_Window = reinterpret_cast<SDL_Window*>(desc->windowHandle);
 
 		const char* backendName = nullptr;
 		SDL_GPUShaderFormat shaderFormat = 0; // SDL_GPU_SHADERFORMAT_INVALID 역할을 위해 0으로 초기화
 
-		switch (desc->BackendType)
+		switch (desc->backendType)
 		{
 		case EGraphicsBackend::Vulkan:
 			backendName = "vulkan";
@@ -69,11 +69,11 @@ EResult SDLGPURHI::Initialize(void* arg)
 			return EResult::Fail;
 		}
 
-		m_SwapChainHeight = desc->Height;
-		m_SwapChainWidth = desc->Width;
-		tagRHITextureDesc backBufferDesc = {};
-		backBufferDesc.Width = m_SwapChainWidth;
-		backBufferDesc.Height = m_SwapChainHeight;
+		m_SwapChainHeight = desc->height;
+		m_SwapChainWidth = desc->width;
+		RHITextureDesc backBufferDesc = {};
+		backBufferDesc.width = m_SwapChainWidth;
+		backBufferDesc.height = m_SwapChainHeight;
 
 		m_BackBuffer = SDLGPUTexture::Create(this, backBufferDesc, false);
 	}
@@ -171,11 +171,11 @@ EResult SDLGPURHI::EndFrame()
 #pragma region Buffer
 RHIBuffer* SDLGPURHI::CreateBuffer(void* data, uint32 size, uint32 stride, ERHIBufferType type)
 {
-	tagRHIBufferDesc desc = {};
-	desc.BufferType = type;
-	desc.Size = size;
-	desc.Stride = stride;
-	desc.InitialData = data;
+	RHIBufferDesc desc = {};
+	desc.bufferType = type;
+	desc.size = size;
+	desc.stride = stride;
+	desc.initialData = data;
 
 	SDLGPUBuffer* buffer = SDLGPUBuffer::Create(this, desc);
 	if (!buffer)
@@ -216,17 +216,17 @@ RHITexture* SDLGPURHI::CreateTextureFromFile(const char* filename)
 
 	uint32 dataSize = static_cast<uint32>(surface->pitch * surface->h);
 
-	tagRHITextureDesc desc = {};
-	desc.Width = width;
-	desc.Height = height;
-	desc.Depth = 1;
-	desc.ArraySize = 1;
-	desc.MipLevels = 1;
-	desc.SampleCount = Engine::ETextureSampleCount::TextureSampleCount1;
-	desc.Dimension = Engine::ETextureDimension::Texture2D;
-	desc.Format = Engine::ETextureFormat::R8G8B8A8_UNORM;
-	desc.Usage = Engine::ETextureUsage::Sampler;
-	desc.DataSize = dataSize;
+	RHITextureDesc desc = {};
+	desc.width = width;
+	desc.height = height;
+	desc.depth = 1;
+	desc.arraySize = 1;
+	desc.mipLevels = 1;
+	desc.sampleCount = Engine::ETextureSampleCount::TextureSampleCount1;
+	desc.dimension = Engine::ETextureDimension::Texture2D;
+	desc.format = Engine::ETextureFormat::R8G8B8A8_UNORM;
+	desc.usage = Engine::ETextureUsage::Sampler;
+	desc.dataSize = dataSize;
 
 	RHITexture* texture = CreateTexture(desc);
 
@@ -253,13 +253,18 @@ RHITexture* SDLGPURHI::CreateTextureFromFile(const wchar* filename)
 	return CreateTextureFromFile(WStrToStr(filename).c_str());
 }
 
-RHITexture* SDLGPURHI::CreateTextureFromMemory(const tagRHITextureDesc& desc)
+RHITexture* SDLGPURHI::CreateTexture(const RHITextureDesc& desc)
 {
-	RHITexture* texture = CreateTexture(desc);
+	RHITexture* texture = SDLGPUTexture::Create(this, desc);
 	if (!texture) return nullptr;
 
-	uint32 depthOrArraySize = desc.Dimension == ETextureDimension::Texture3D ? desc.Depth : desc.ArraySize;
-	if (IsFailure(UploadTextureData(static_cast<SDL_GPUTexture*>(texture->GetNativeHandle()), desc.Data, desc.DataSize, desc.Width, desc.Height, depthOrArraySize, desc.MipLevels)))
+	if (desc.data == nullptr || desc.dataSize == 0)
+	{
+		return texture;
+	}
+
+	uint32 depthOrArraySize = desc.dimension == ETextureDimension::Texture3D ? desc.depth : desc.arraySize;
+	if (IsFailure(UploadTextureData(static_cast<SDL_GPUTexture*>(texture->GetNativeHandle()), desc.data, desc.dataSize, desc.width, desc.height, depthOrArraySize, desc.mipLevels)))
 	{
 		Safe_Release(texture);
 		return nullptr;
@@ -291,39 +296,39 @@ RHITexture* SDLGPURHI::CreateTexture3D(void* data, uint32 width, uint32 height, 
 
 RHITexture* SDLGPURHI::CreateRenderTargetTexture(void* data, uint32 width, uint32 height, uint32 mipLevels, uint32 arraySize)
 {
-	tagRenderTargetDesc* rtDesc = reinterpret_cast<tagRenderTargetDesc*>(data);
-	tagRHITextureDesc desc = {};
-	desc.Format = rtDesc->Format;
-	desc.Dimension = rtDesc->TextureType;
-	desc.Width = width;
-	desc.Height = height;
-	desc.ArraySize = arraySize;
-	desc.MipLevels = mipLevels;
-	desc.Usage = Engine::ETextureUsage::RenderTarget | Engine::ETextureUsage::Sampler;
+	RenderTargetDesc* rtDesc = reinterpret_cast<RenderTargetDesc*>(data);
+	RHITextureDesc desc = {};
+	desc.format = rtDesc->format;
+	desc.dimension = rtDesc->dimension;
+	desc.width = width;
+	desc.height = height;
+	desc.arraySize = arraySize;
+	desc.mipLevels = mipLevels;
+	desc.usage = Engine::ETextureUsage::RenderTarget | Engine::ETextureUsage::Sampler;
 
 	return  CreateTexture(desc);
 }
 
 RHITexture* SDLGPURHI::CreateDepthStencilTexture(void* data, uint32 width, uint32 height, uint32 mipLevels, uint32 arraySize)
 {
-	tagRHITextureDesc desc = {};
+	RHITextureDesc desc = {};
 	if (data)
 	{
-		tagRenderTargetDesc* rtDesc = reinterpret_cast<tagRenderTargetDesc*>(data);
-		desc.Dimension = rtDesc->TextureType;
-		desc.Format = rtDesc->Format;
-		desc.Usage = rtDesc->Usage;
+		RenderTargetDesc* rtDesc = reinterpret_cast<RenderTargetDesc*>(data);
+		desc.dimension = rtDesc->dimension;
+		desc.format = rtDesc->format;
+		desc.usage = rtDesc->usage;
 	}
 	else
 	{
-		desc.Dimension = Engine::ETextureDimension::Texture2D;
-		desc.Format = Engine::ETextureFormat::D24_UNORM_S8_UINT;
-		desc.Usage = Engine::ETextureUsage::DepthStencilTarget | Engine::ETextureUsage::Sampler;
+		desc.dimension = Engine::ETextureDimension::Texture2D;
+		desc.format = Engine::ETextureFormat::D24_UNORM_S8_UINT;
+		desc.usage = Engine::ETextureUsage::DepthStencilTarget | Engine::ETextureUsage::Sampler;
 	}
-	desc.Width = width;
-	desc.Height = height;
-	desc.ArraySize = arraySize;
-	desc.MipLevels = mipLevels;
+	desc.width = width;
+	desc.height = height;
+	desc.arraySize = arraySize;
+	desc.mipLevels = mipLevels;
 
 	return CreateTexture(desc);
 }
@@ -340,14 +345,16 @@ RHITexture* SDLGPURHI::CreateTextureFromNativeHandle(void* nativeHandle)
 
 EResult SDLGPURHI::UploadTextureData(SDL_GPUTexture* texture, void* data, uint32 dataSize, uint32 width, uint32 height, uint32 depthOrArraySize, uint32 mipLevels)
 {
-	if (!texture || !data || dataSize == 0) return EResult::InvalidArgument;
+	if (!texture || !data || dataSize == 0)
+		return EResult::InvalidArgument;
 
 	SDL_GPUTransferBufferCreateInfo transferBufferInfo = {};
 	transferBufferInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
 	transferBufferInfo.size = dataSize;
 
 	SDL_GPUTransferBuffer* transferBuffer = SDL_CreateGPUTransferBuffer(m_Device, &transferBufferInfo);
-	if (!transferBuffer) return EResult::Fail;
+	if (!transferBuffer)
+		return EResult::Fail;
 
 	uint8* mappedData = static_cast<uint8*>(SDL_MapGPUTransferBuffer(m_Device, transferBuffer, false));
 	if(mappedData)
@@ -448,21 +455,10 @@ EResult SDLGPURHI::UploadBufferData(SDL_GPUBuffer* buffer, void* data, uint32 si
 	return EResult::Success;
 }
 
-RHITexture* SDLGPURHI::CreateTexture(const tagRHITextureDesc& desc)
-{
-	SDLGPUTexture* texture = SDLGPUTexture::Create(this, desc);
-	if (!texture)
-	{
-		Safe_Release(texture);
-		return nullptr;
-	}
-	return texture;
-}
-
 #pragma endregion
 
 #pragma region Pipeline
-RHIPipeline* SDLGPURHI::CreatePipeline(const tagRHIPipelineDesc& desc)
+RHIPipeline* SDLGPURHI::CreatePipeline(const RHIPipelineDesc& desc)
 {
 	return SDLGPUPipeline::Create(this, desc);
 }
@@ -473,17 +469,14 @@ RHISampler* SDLGPURHI::CreateSampler(const SamplerDesc& desc)
 {
 	return SDLGPUSampler::Create(this, desc);
 }
+#pragma endregion
 
 #pragma region Shader
-RHIShader* SDLGPURHI::CreateShader(const tagRHIShaderDesc& desc)
+RHIShader* SDLGPURHI::CreateShader(const RHIShaderDesc& desc)
 {
 	return SDLGPUShader::Create(this, desc);
 }
 #pragma endregion
-
-#pragma endregion
-
-
 #pragma endregion
 
 #pragma region Bind
@@ -595,6 +588,66 @@ EResult SDLGPURHI::BindRenderTargets(uint32 count, RHITexture** renderTargets, R
 	//
 	return EResult::Success;
 }
+EResult SDLGPURHI::BindShader(RHIShader* shader)
+{
+	//if (!shader) return EResult::InvalidArgument;
+	//m_CurrentShader = static_cast<RHIShader*>(shader);
+	return EResult::Success;
+}
+EResult SDLGPURHI::BindPipeline(RHIPipeline* pipeline)
+{
+	if (!pipeline)
+		return EResult::InvalidArgument;
+	m_CurrentPipeline = static_cast<RHIPipeline*>(pipeline);
+	SDL_BindGPUGraphicsPipeline(m_CurrentRenderPass, static_cast<SDL_GPUGraphicsPipeline*>(m_CurrentPipeline->GetNativeHandle()));
+	return EResult::Success;
+}
+EResult SDLGPURHI::BindConstantBuffer(void* arg, uint32 slot)
+{
+	if (!arg || !m_CurrentCommandBuffer) return EResult::InvalidArgument;
+
+	SDL_PushGPUVertexUniformData(m_CurrentCommandBuffer, slot, arg, sizeof(mat4));
+	SDL_PushGPUFragmentUniformData(m_CurrentCommandBuffer, slot, arg, sizeof(mat4));
+	return EResult::Success;
+}
+EResult SDLGPURHI::BindConstantBuffer(void* arg, uint32 size, uint32 slot, EShaderType type)
+{
+	if (!arg || !m_CurrentCommandBuffer) return EResult::InvalidArgument;
+	switch (type)
+	{
+	case EShaderType::Vertex:
+		SDL_PushGPUVertexUniformData(m_CurrentCommandBuffer, slot, arg, size);
+		break;
+	case EShaderType::Pixel:
+		SDL_PushGPUFragmentUniformData(m_CurrentCommandBuffer, slot, arg, size);
+		break;
+	case EShaderType::Compute:
+		SDL_PushGPUComputeUniformData(m_CurrentCommandBuffer, slot, arg, size);
+		break;
+	case EShaderType::Geometry:
+	case EShaderType::Hull:
+	case EShaderType::Domain:
+	case EShaderType::Unknown:
+	default:
+		break;
+	}
+	
+	return EResult::Success;
+}
+EResult SDLGPURHI::BindConstantRangeBuffer(void* arg, uint32 slot, uint32 offset, uint32 size)
+{
+	if (!arg || !m_CurrentCommandBuffer) return EResult::InvalidArgument;
+
+	uint8* dataPtr = static_cast<uint8*>(arg) + offset;
+
+	SDL_PushGPUVertexUniformData(m_CurrentCommandBuffer, slot, dataPtr, size);
+	SDL_PushGPUFragmentUniformData(m_CurrentCommandBuffer, slot, dataPtr, size);
+
+	return EResult::Success;
+}
+#pragma endregion
+
+#pragma region RenderPass
 EResult SDLGPURHI::BeginRenderPass(RenderPass* renderPass)
 {
 	if (m_CurrentRenderPass)
@@ -619,7 +672,7 @@ EResult SDLGPURHI::BeginRenderPass(RenderPass* renderPass)
 
 		targetCount = 1;
 	}
-	else if(targetCount > 0)
+	else if (targetCount > 0)
 	{
 		uint32 validCount = 0;
 		for (uint i = 0; i < targetCount; ++i)
@@ -683,7 +736,7 @@ EResult SDLGPURHI::BeginRenderPass(RenderPass* renderPass)
 	}
 
 	m_CurrentRenderPass = SDL_BeginGPURenderPass(m_CurrentCommandBuffer, colorTargetInfo, targetCount, bUseDepth ? &depthInfo : nullptr);
-	if(!m_CurrentRenderPass)
+	if (!m_CurrentRenderPass)
 	{
 		return EResult::Fail;
 	}
@@ -697,63 +750,6 @@ EResult SDLGPURHI::EndRenderPass()
 		return EResult::Success;
 	SDL_EndGPURenderPass(m_CurrentRenderPass);
 	m_CurrentRenderPass = nullptr;
-	return EResult::Success;
-}
-EResult SDLGPURHI::BindShader(RHIShader* shader)
-{
-	//if (!shader) return EResult::InvalidArgument;
-	//m_CurrentShader = static_cast<RHIShader*>(shader);
-	return EResult::Success;
-}
-EResult SDLGPURHI::BindPipeline(RHIPipeline* pipeline)
-{
-	if (!pipeline)
-		return EResult::InvalidArgument;
-	m_CurrentPipeline = static_cast<RHIPipeline*>(pipeline);
-	SDL_BindGPUGraphicsPipeline(m_CurrentRenderPass, static_cast<SDL_GPUGraphicsPipeline*>(m_CurrentPipeline->GetNativeHandle()));
-	return EResult::Success;
-}
-EResult SDLGPURHI::BindConstantBuffer(void* arg, uint32 slot)
-{
-	if (!arg || !m_CurrentCommandBuffer) return EResult::InvalidArgument;
-
-	SDL_PushGPUVertexUniformData(m_CurrentCommandBuffer, slot, arg, sizeof(mat4));
-	SDL_PushGPUFragmentUniformData(m_CurrentCommandBuffer, slot, arg, sizeof(mat4));
-	return EResult::Success;
-}
-EResult SDLGPURHI::BindConstantBuffer(void* arg, uint32 size, uint32 slot, EShaderType type)
-{
-	if (!arg || !m_CurrentCommandBuffer) return EResult::InvalidArgument;
-	switch (type)
-	{
-	case EShaderType::Vertex:
-		SDL_PushGPUVertexUniformData(m_CurrentCommandBuffer, slot, arg, size);
-		break;
-	case EShaderType::Pixel:
-		SDL_PushGPUFragmentUniformData(m_CurrentCommandBuffer, slot, arg, size);
-		break;
-	case EShaderType::Compute:
-		SDL_PushGPUComputeUniformData(m_CurrentCommandBuffer, slot, arg, size);
-		break;
-	case EShaderType::Geometry:
-	case EShaderType::Hull:
-	case EShaderType::Domain:
-	case EShaderType::Unknown:
-	default:
-		break;
-	}
-	
-	return EResult::Success;
-}
-EResult SDLGPURHI::BindConstantRangeBuffer(void* arg, uint32 slot, uint32 offset, uint32 size)
-{
-	if (!arg || !m_CurrentCommandBuffer) return EResult::InvalidArgument;
-
-	uint8* dataPtr = static_cast<uint8*>(arg) + offset;
-
-	SDL_PushGPUVertexUniformData(m_CurrentCommandBuffer, slot, dataPtr, size);
-	SDL_PushGPUFragmentUniformData(m_CurrentCommandBuffer, slot, dataPtr, size);
-
 	return EResult::Success;
 }
 #pragma endregion

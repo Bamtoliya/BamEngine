@@ -47,18 +47,18 @@ void TransformSystem::UpdateHierarchy(entt::registry& registry)
 		if (registry.any_of<HierarchyComponent>(entity))
 		{
 			auto& hierarchy = registry.get<HierarchyComponent>(entity);
-			if (hierarchy.Parent != entt::null)
+			if (hierarchy.parent != entt::null)
 				continue;
 		}
 		auto& transform = registry.get<TransformComponent>(entity);
 		auto& worldTransform = registry.get<WorldTransformComponent>(entity);
 		// 로컬 매트릭스 계산 (Translation * Rotation * Scale)
-		mat4 translation = glm::translate(mat4(1.0f), transform.Position);
-		mat4 rotation = glm::mat4_cast(transform.Rotation);
-		mat4 scale = glm::scale(mat4(1.0f), transform.Scale);
+		mat4 translation = glm::translate(mat4(1.0f), transform.position);
+		mat4 rotation = glm::mat4_cast(transform.rotation);
+		mat4 scale = glm::scale(mat4(1.0f), transform.scale);
 
 		mat4 localMatrix = translation * rotation * scale;
-		worldTransform.WorldMatrix = localMatrix;
+		worldTransform.worldMatrix = localMatrix;
 		// 자식들이 있다면 재귀적으로 갱신
 		UpdateChildWorldMatrix(registry, entity, localMatrix);
 	}
@@ -69,21 +69,21 @@ void TransformSystem::UpdateChildWorldMatrix(entt::registry& registry, entt::ent
 	if (!registry.any_of<HierarchyComponent>(entity))
 		return;
 	auto& hierarchy = registry.get<HierarchyComponent>(entity);
-	for (auto child : hierarchy.Children)
+	for (auto child : hierarchy.children)
 	{
 		if (registry.all_of<TransformComponent, WorldTransformComponent>(child))
 		{
 			auto& childTransform = registry.get<TransformComponent>(child);
 			auto& childWorldTransform = registry.get<WorldTransformComponent>(child);
 			// 자식의 로컬 매트릭스 계산
-			mat4 translation = glm::translate(mat4(1.0f), childTransform.Position);
-			mat4 rotation = glm::mat4_cast(childTransform.Rotation);
-			mat4 scale = glm::scale(mat4(1.0f), childTransform.Scale);
+			mat4 translation = glm::translate(mat4(1.0f), childTransform.position);
+			mat4 rotation = glm::mat4_cast(childTransform.rotation);
+			mat4 scale = glm::scale(mat4(1.0f), childTransform.scale);
 			mat4 localMatrix = translation * rotation * scale;
 			// 부모의 월드 매트릭스를 곱해 자신의 월드 매트릭스를 완성
-			childWorldTransform.WorldMatrix = parentWorldMatrix * localMatrix;
+			childWorldTransform.worldMatrix = parentWorldMatrix * localMatrix;
 			// 이 자식의 자식들(손주)도 재귀적으로 갱신
-			UpdateChildWorldMatrix(registry, child, childWorldTransform.WorldMatrix);
+			UpdateChildWorldMatrix(registry, child, childWorldTransform.worldMatrix);
 		}
 	}
 }

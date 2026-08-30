@@ -9,21 +9,21 @@ EResult Sprite::Initialize(void* arg)
 	if (IsFailure(__super::Initialize(arg))) return EResult::Fail;
 
 	CAST_DESC
-	if (desc->Texture)
+	if (desc->texture)
 	{
-		m_Texture = desc->Texture;
-		m_Key = desc->Texture->GetKey() + L"_Sprite";
-		m_Path = desc->Texture->GetPath() + L"_Sprite";
+		m_Texture = desc->texture;
+		m_Key = desc->texture->GetKey() + L"_Sprite";
+		m_Path = desc->texture->GetPath() + L"_Sprite";
 	}
-	else if (!desc->TexturePath.empty())
+	else if (!desc->texturePath.empty())
 	{
 		TextureCreateDesc texDesc;
-		texDesc.Path = desc->TexturePath;
+		texDesc.Path = desc->texturePath;
 		m_Texture = ResourceManager::Get().LoadResource<Texture>(&texDesc);
 	}
 	
-	m_Region = desc->Region;
-	m_Pivot = desc->Pivot;
+	m_Region = desc->region;
+	m_Pivot = desc->pivot;
 	return EResult::Success;
 }
 

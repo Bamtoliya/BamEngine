@@ -1,7 +1,7 @@
 ﻿#pragma once
 
 #include "Engine_Includes.h"
-#include "RHIDefinitions.h"
+#include "RHITypes.h"
 #include "RenderTypes.h"
 #include "Vertex.h"
 #include <SDL3/SDL_GPU.h>

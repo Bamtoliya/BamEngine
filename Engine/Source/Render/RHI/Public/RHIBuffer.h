@@ -12,19 +12,19 @@ enum class ERHIBufferType
 	Upload,
 };
 
-struct tagRHIBufferDesc
+struct RHIBufferDesc
 {
-	ERHIBufferType BufferType = ERHIBufferType::Vertex;
-	uint32 Size = 0;
-	uint32 Stride = 0;
-	void* InitialData = nullptr;
+	ERHIBufferType bufferType = ERHIBufferType::Vertex;
+	uint32 size = 0;
+	uint32 stride = 0;
+	void* initialData = nullptr;
 };
 
 BEGIN(Engine)
 class ENGINE_API RHIBuffer : public RHIResource
 {
 protected:
-	using DESC = tagRHIBufferDesc;
+	using DESC = RHIBufferDesc;
 	RHIBuffer(RHI* rhi, ERHIBufferType bufferType, uint32 size, uint32 stride) :
 		RHIResource(rhi, ERHIResourceType::Buffer),
 		m_BufferType{ bufferType },
@@ -33,9 +33,9 @@ protected:
 	}
 	RHIBuffer(RHI* rhi, DESC desc) :
 		RHIResource(rhi, ERHIResourceType::Buffer),
-		m_BufferType{ desc.BufferType },
-		m_Size{ desc.Size },
-		m_Stride{ desc.Stride }
+		m_BufferType{ desc.bufferType },
+		m_Size{ desc.size },
+		m_Stride{ desc.stride }
 	{
 	}
 	virtual ~RHIBuffer() = default;

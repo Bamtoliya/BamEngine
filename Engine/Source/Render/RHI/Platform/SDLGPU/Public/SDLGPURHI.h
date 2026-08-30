@@ -11,9 +11,9 @@ enum class EGraphicsBackend : uint8
 	Metal
 };
 
-struct tagSDLGPURHIDesc : public tagRHIDesc
+struct SDLGPURHIDesc : public RHIDesc
 {
-	EGraphicsBackend BackendType = EGraphicsBackend::Unknown;
+	EGraphicsBackend backendType = EGraphicsBackend::Unknown;
 };
 
 BEGIN(Engine)
@@ -21,7 +21,7 @@ class ENGINE_API SDLGPURHI final : public RHI
 {
 #pragma region Constructor&Destructor
 private:
-	using DESC = tagSDLGPURHIDesc;
+	using DESC = SDLGPURHIDesc;
 	SDLGPURHI() {}
 	virtual ~SDLGPURHI() = default;
 	virtual EResult Initialize(void* arg = nullptr) override;
@@ -43,7 +43,7 @@ public:
 public:
 	virtual RHITexture* CreateTextureFromFile(const char* filename) override;
 	virtual RHITexture* CreateTextureFromFile(const wchar* filename) override;
-	virtual RHITexture* CreateTextureFromMemory(const tagRHITextureDesc& desc) override;
+	virtual RHITexture* CreateTexture(const RHITextureDesc& desc) override;
 	virtual RHITexture* CreateTexture2D(void* data, uint32 width, uint32 height, uint32 mipLevels, uint32 arraySize) override;
 	virtual RHITexture* CreateTextureCube(void* data, uint32 size, uint32 mipLevels) override;
 	virtual RHITexture* CreateTexture3D(void* data, uint32 width, uint32 height, uint32 depth, uint32 mipLevels) override;
@@ -51,16 +51,14 @@ public:
 	virtual RHITexture* CreateDepthStencilTexture(void* data, uint32 width, uint32 height, uint32 mipLevels, uint32 arraySize) override;
 	virtual RHITexture* CreateTextureFromNativeHandle(void* nativeHandle) override;
 public:
-	virtual RHIPipeline* CreatePipeline(const tagRHIPipelineDesc& desc) override;
+	virtual RHIPipeline* CreatePipeline(const RHIPipelineDesc& desc) override;
 public:
 	virtual RHISampler* CreateSampler(const SamplerDesc& desc) override;
 public:
-	virtual RHIShader* CreateShader(const tagRHIShaderDesc& desc) override;
+	virtual RHIShader* CreateShader(const RHIShaderDesc& desc) override;
 public:
 	EResult UploadTextureData(SDL_GPUTexture* texture, void* data, uint32 dataSize, uint32 width, uint32 height, uint32 depthOrArraySize = 1, uint32 mipLevels = 1);
 	EResult UploadBufferData(SDL_GPUBuffer* buffer, void* data, uint32 size);
-private:
-	RHITexture* CreateTexture(const tagRHITextureDesc& desc);
 #pragma endregion
 
 #pragma region Bind Resources

@@ -2,7 +2,7 @@
 
 #include "RHIPipeline.h"
 
-struct tagPipelineManagerDesc
+struct PipelineManagerDesc
 {
 	RHI* rhi = { nullptr };
 };
@@ -11,7 +11,7 @@ BEGIN(Engine)
 class ENGINE_API PipelineManager : public Base
 {
 	DECLARE_SINGLETON(PipelineManager)
-	using DESC = tagPipelineManagerDesc;
+	using DESC = PipelineManagerDesc;
 #pragma region Constructor&Destructor
 private:
 	PipelineManager() {}
@@ -23,7 +23,7 @@ public:
 
 #pragma region Pipeline Management
 public:
-	RHIPipeline* GetOrCreatePipeline(const tagRHIPipelineDesc& desc);
+	RHIPipeline* GetOrCreatePipeline(const RHIPipelineDesc& desc);
 public:
 	void SetDefaultPipeline(RHIPipeline* pipeline) { m_DefaultPipeline = pipeline; }
 	RHIPipeline* GetDefaultPipeline() const { return m_DefaultPipeline; }
@@ -32,7 +32,7 @@ public:
 
 #pragma region Variable
 private:
-	unordered_map<tagRHIPipelineDesc, RHIPipeline*, hash<tagRHIPipelineDesc>> m_Pipelines;
+	unordered_map<RHIPipelineDesc, RHIPipeline*, hash<RHIPipelineDesc>> m_Pipelines;
 	//unordered_map<wstring, RHIPipeline*> m_Pipelines;
 	RHIPipeline* m_DefaultPipeline = { nullptr };
 	RHI* m_RHI = { nullptr };

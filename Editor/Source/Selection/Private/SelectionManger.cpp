@@ -77,7 +77,7 @@ GameObject* SelectionManager::PickObjectByRay(const Ray& ray)
 	HitResult hitResult;
 	if (CollisionManager::Get().Raycast(ray, hitResult))
 	{
-		GameObject* hitObject = static_cast<GameObject*>(hitResult.UserData);
+		GameObject* hitObject = static_cast<GameObject*>(hitResult.userData);
 		if (hitObject)
 		{
 			return hitObject;

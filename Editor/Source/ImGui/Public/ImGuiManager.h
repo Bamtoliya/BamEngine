@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "ImGuiInterface.h"
 #include "ToolBar.h"
@@ -101,6 +101,7 @@ private:
 	SDL_Window* m_Window = { nullptr };
 	class RHI* m_RHI = { nullptr };
 	ERHIType m_RHIType = ERHIType::Unknown;
+	struct ID3D12DescriptorHeap* m_ImGuiSrvDescHeap = nullptr;
 #pragma region ImGui
 private:
 	ToolBar m_ToolBar;

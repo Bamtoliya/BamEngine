@@ -6,9 +6,9 @@
 #include "RenderTypes.h"
 #include "RenderTarget.h"
 #include "FrustumCuller.h"
+#include "RenderCommands.h"
 
 BEGIN(Engine)
-
 enum class ERHIType
 {
 	Unknown,
@@ -18,23 +18,23 @@ enum class ERHIType
 	Metal			// LH, Z:[0,1], Y-UP Column-Major
 };
 
-struct tagRendererDesc
+struct RendererDesc
 {
-	ERHIType RHIType = ERHIType::Unknown;
-	tagRHIDesc* RHIDesc = {};
+	ERHIType rhiType = ERHIType::Unknown;
+	RHIDesc* rhiDesc = {};
 };
 
-struct tagViewportCameraInfo
+struct ViewportCameraInfo
 {
-	class Camera* Camera = { nullptr };
-	class RenderPass* RenderPass = { nullptr };
+	class Camera* camera = { nullptr };
+	class RenderPass* renderPass = { nullptr };
 };
 
 
 class ENGINE_API Renderer final : public Base
 {
 	DECLARE_SINGLETON(Renderer)
-	using DESC = tagRendererDesc;
+	using DESC = RendererDesc;
 	friend class Runtime;
 	using RenderDelegate = MulticastDelegate<f32>;
 	using CustomRenderCommand = function<EResult(f32, RenderPass*)>;
@@ -54,6 +54,10 @@ private:
 	EResult Render(f32 dt);
 	EResult RenderComponents(f32 dt, vector<class RenderComponent*> queue, ERenderSortType sortType, RenderPass* renderPass);
 	EResult RenderUIComponents(f32 dt, vector<class UIRenderComponent*> queue, ERenderSortType sortType, RenderPass* renderPass);
+private: //Entity Render
+	EResult RenderStatic(f32 dt, vector<StaticDrawCommand>& commands, ERenderSortType sortType, RenderPass* renderPass);
+	EResult RenderSkinned(f32 dt, vector<SkinnedDrawCommand>& commands, ERenderSortType sortType, RenderPass* renderPass);
+	EResult RenderSprite(f32 dt, vector<SpriteDrawCommand>& commands, ERenderSortType sortType, RenderPass* renderPass);
 #pragma endregion
 
 #pragma region Queue Management
@@ -64,6 +68,11 @@ public:
 	void SubmitCustomCommand(const CustomRenderCommand& command, RenderPassID passID);
 	void ClearRenderQueue(RenderPassID passID);
 	void ClearAllRenderQueues();
+public: //Entity Submit
+	void SubmitStatic(const StaticDrawCommand& command, RenderPassID passID);
+	void SubmitSkinned(const SkinnedDrawCommand& command, RenderPassID passID);
+	void SubmitSprite(const SpriteDrawCommand& command, RenderPassID passID);
+
 #pragma endregion
 
 #pragma region Viewport Camera Management
@@ -71,7 +80,7 @@ public:
 	void RegisterViewportCamera(Camera* camera, RenderPass* renderPass);
 	void UnregisterViewportCamera(RenderPassID passID);
 	Camera* GetViewportCamera(RenderPassID passID) const;
-	vector<tagViewportCameraInfo>& GetActiveViewportCameras() { return m_ViewportCameras; }
+	vector<ViewportCameraInfo>& GetActiveViewportCameras() { return m_ViewportCameras; }
 #pragma endregion
 
 #pragma region Frustum Culling
@@ -98,10 +107,15 @@ private:
 	map<RenderPassID, vector<class RenderComponent*>> m_RenderQueues;
 	map<RenderPassID, vector<class UIRenderComponent*>> m_UIRenderQueues;
 	map<RenderPassID, vector<CustomRenderCommand>> m_CustomRenderQueues;
+
+private: //ECS Based Render Queue
+	map<RenderPassID, vector<StaticDrawCommand>> m_StaticDrawCommands;
+	map<RenderPassID, vector<SkinnedDrawCommand>> m_SkinnedDrawCommands;
+	map<RenderPassID, vector<SpriteDrawCommand>> m_SpriteDrawCommands;
 private:
 	class RenderPassManager* m_RenderPassManager = { nullptr };
 private:
-	vector<tagViewportCameraInfo> m_ViewportCameras;
+	vector<ViewportCameraInfo> m_ViewportCameras;
 private:
 	unordered_map<RenderPassID, Frustum> m_PassFrustums;
 	unordered_map<RenderPassID, bool>    m_PassFrustumIsShadow;

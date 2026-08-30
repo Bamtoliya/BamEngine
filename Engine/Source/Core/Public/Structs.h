@@ -10,41 +10,41 @@ namespace Engine
 #pragma region Ray
 	struct ENGINE_API Ray
 	{
-		vec3 Origin;
-		vec3 Direction;
+		vec3 origin;
+		vec3 direction;
 
 		Ray() = default;
 		Ray(const vec3& origin, const vec3& direction)
-			: Origin(origin), Direction(direction) {
+			: origin(origin), direction(direction) {
 		}
 	};
 
 	struct ENGINE_API HitResult
 	{
-		vec3 Point;
-		vec3 Normal;
+		vec3 point;
+		vec3 normal;
 		union {
-			f32 Distance;
-			f32 PenetrationDepth;
+			f32 distance;
+			f32 denetrationDepth;
 		};
 
 		union
 		{
-			vec3 Extents;
-			vec3 Barycentric;
+			vec3 extents;
+			vec3 barycentric;
 		};
 		
-		void* UserData;
-		bool HasHit;
+		void* userData;
+		bool hasHit;
 
 		void Reset()
 		{
-			Point = vec3(0.f);
-			Normal = vec3(0.f);
-			Distance = 0.f;
-			Extents = vec3(0.f);
-			UserData = nullptr;
-			HasHit = false;
+			point = vec3(0.f);
+			normal = vec3(0.f);
+			distance = 0.f;
+			extents = vec3(0.f);
+			userData = nullptr;
+			hasHit = false;
 		}
 	};
 #pragma endregion
@@ -57,48 +57,48 @@ namespace Engine
 		REFLECT_STRUCT();
 
 		PROPERTY()
-		vec3 Min = {0.f, 0.f, 0.f};
+		vec3 min = {0.f, 0.f, 0.f};
 		PROPERTY()
-		vec3 Max = {0.f, 0.f, 0.f};
+		vec3 max = {0.f, 0.f, 0.f};
 		AABB() {}
 		AABB(const vec3& min, const vec3& max)
-			: Min(min), Max(max) {
+			: min(min), max(max) {
 		}
-		vec3 Center() const { return (Min + Max) * 0.5f; }
-		vec3 Extent() const { return (Max - Min) * 0.5f; }
+		vec3 Center() const { return (min + max) * 0.5f; }
+		vec3 Extent() const { return (max - min) * 0.5f; }
 	};
 
 	struct BoundingBox
 	{
-		vec3 Center;
-		vec3 Extent;
+		vec3 center;
+		vec3 extent;
 		BoundingBox() = default;
 		BoundingBox(const vec3& center, const vec3& extent)
-			: Center(center), Extent(extent) {
+			: center(center), extent(extent) {
 		}
 	};
 
 	struct BoundingSphere
 	{
-		vec3 Center;
-		float Radius;
+		vec3 center;
+		f32 radius;
 		BoundingSphere() = default;
-		BoundingSphere(const vec3& center, float radius)
-			: Center(center), Radius(radius) {
+		BoundingSphere(const vec3& center, f32 radius)
+			: center(center), radius(radius) {
 		}
 	};
 
 	struct Capsule
 	{
-		vec3 PointA;
-		vec3 PointB;
-		f32 Radius;
+		vec3 pointA;
+		vec3 pointB;
+		f32 radius;
 		Capsule() = default;
 		Capsule(const vec3& pointA, const vec3& pointB, f32 radius)
-			: PointA(pointA), PointB(pointB), Radius(radius) {
+			: pointA(pointA), pointB(pointB), radius(radius) {
 		}
-		vec3 Center() const { return (PointA + PointB) * 0.5f; }
-		f32 Height() const { return glm::distance(PointA, PointB); }
+		vec3 Center() const { return (pointA + pointB) * 0.5f; }
+		f32 Height() const { return glm::distance(pointA, pointB); }
 	};
 #pragma endregion
 
@@ -109,37 +109,37 @@ namespace Engine
 		REFLECT_STRUCT();
 
 		PROPERTY(EDITABLE)
-		f32 Left;
+		f32 left;
 		PROPERTY(EDITABLE)
-		f32 Top;
+		f32 top;
 		PROPERTY(EDITABLE)
-		f32 Width;
+		f32 width;
 		PROPERTY(EDITABLE)
-		f32	Height;
+		f32	height;
 
-		Rect() : Left(0), Top(0), Width(0), Height(0) {}
-		Rect(f32 l, f32 r, f32 w, f32 h) : Left(l), Top(r), Width(w), Height(h) {}
-		Rect(const vec4& vec) : Left(vec.x), Top(vec.y), Width(vec.z), Height(vec.w) {}
+		Rect() : left(0), top(0), width(0), height(0) {}
+		Rect(f32 l, f32 r, f32 w, f32 h) : left(l), top(r), width(w), height(h) {}
+		Rect(const vec4& vec) : left(vec.x), top(vec.y), width(vec.z), height(vec.w) {}
 
-		f32 Right() const { return Left + Width; }
-		f32 Bottom() const { return Top + Height; }
+		f32 Right() const { return left + width; }
+		f32 Bottom() const { return top + height; }
 
-		vec2 Center() const { return vec2(Left + Width * 0.5f, Top + Height * 0.5f); }
+		vec2 Center() const { return vec2(left + width * 0.5f, top + height * 0.5f); }
 
 		bool Contains(const vec2& point) const
 		{
-			return point.x >= Left && point.x <= Right() && point.y >= Top && point.y <= Bottom();
+			return point.x >= left && point.x <= Right() && point.y >= top && point.y <= Bottom();
 		}
 
 		bool Intersects(const Rect& other) const
 		{
-			return !(other.Left > Right() || other.Right() < Left || other.Top > Bottom() || other.Bottom() < Top);
+			return !(other.left > Right() || other.Right() < left || other.top > Bottom() || other.Bottom() < top);
 		}
 
-		operator vec4() const { return vec4(Left, Top, Width, Height); }
+		operator vec4() const { return vec4(left, top, width, height); }
 		bool operator==(const Rect& other) const
 		{
-			return Left == other.Left && Top == other.Top && Width == other.Width && Height == other.Height;
+			return left == other.left && top == other.top && width == other.width && height == other.height;
 		}
 
 	};

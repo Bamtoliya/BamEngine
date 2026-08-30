@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "Types.h"
 
@@ -23,7 +23,14 @@ namespace Engine
 
 	inline bool IsFailure(EResult result)
 	{
-		return result != EResult::Success;
+		if (result != EResult::Success)
+		{
+#if defined(_MSC_VER)
+			__debugbreak();
+#endif
+			return true;
+		}
+		return false;
 	}
 
 	inline const char* ResultToString(EResult result)

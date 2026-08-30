@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "AssetCache.h"
 #include <stb_image.h>
 #include "Renderer.h"
@@ -36,13 +36,13 @@ void AssetCache::Update()
 			continue;
 		}
 
-		tagRHITextureDesc desc = {};
-		desc.Width = task.Width;
-		desc.Height = task.Height;
-		desc.Data = task.Data.data();
-		desc.DataSize = (uint32)task.Data.size();
+		RHITextureDesc desc = {};
+		desc.width = task.Width;
+		desc.height = task.Height;
+		desc.data = task.Data.data();
+		desc.dataSize = (uint32)task.Data.size();
 
-		RHITexture* rhiTexture = Renderer::Get().GetRHI()->CreateTextureFromMemory(desc);
+		RHITexture* rhiTexture = Renderer::Get().GetRHI()->CreateTexture(desc);
 		if (rhiTexture)
 		{
 			m_ThumbnailTextures[task.AssetPath] = rhiTexture;

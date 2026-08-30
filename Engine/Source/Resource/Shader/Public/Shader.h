@@ -3,22 +3,44 @@
 #include "Resource.h"
 #include "RHIShader.h"
 
+STRUCT()
+struct ENGINE_API ShaderBinaryHeader
+{
+	REFLECT_STRUCT()
+
+	PROPERTY()
+	EShaderType shaderType = { EShaderType::Unknown };
+	PROPERTY()
+	string entryPoint = { "main" };
+	PROPERTY()
+	wstring spirvPath = {};
+
+	PROPERTY()
+	uint32 numSamplers = { 0 };
+	PROPERTY()
+	uint32 numStorageTextures = { 0 };
+	PROPERTY()
+	uint32 numStorageBuffers = { 0 };
+	PROPERTY()
+	uint32 numUniformBuffers = { 0 };
+};
+
 struct ShaderDesc : public ResourceCreateDesc {
-	EShaderType ShaderType = { EShaderType::Unknown };
-	string EntryPoint = { "main" };
-	wstring SpirvPath = {};
+	EShaderType shaderType = { EShaderType::Unknown };
+	string entryPoint = { "main" };
+	wstring spirvPath = {};
 
-	uint32 NumSamplers = { 0 };
-	uint32 NumStorageTextures = { 0 };
-	uint32 NumStorageBuffers = { 0 };
-	uint32 NumUniformBuffers = { 0 };
+	uint32 numSamplers = { 0 };
+	uint32 numStorageTextures = { 0 };
+	uint32 numStorageBuffers = { 0 };
+	uint32 numUniformBuffers = { 0 };
 
-	vector<ShaderResourceBindingInfo> UniformBuffers;
-	vector<ShaderResourceBindingInfo> StorageBuffers;
-	vector<ShaderResourceBindingInfo> Samplers;
-	vector<ShaderResourceBindingInfo> StorageTextures;
-	vector<ShaderInterfaceVariableInfo> StageInputs;
-	vector<ShaderInterfaceVariableInfo> StageOutputs;
+	vector<ShaderResourceBindingInfo> uniformBuffers;
+	vector<ShaderResourceBindingInfo> storageBuffers;
+	vector<ShaderResourceBindingInfo> samplers;
+	vector<ShaderResourceBindingInfo> storageTextures;
+	vector<ShaderInterfaceVariableInfo> stageInputs;
+	vector<ShaderInterfaceVariableInfo> stageOutputs;
 };
 
 BEGIN(Engine)
@@ -82,7 +104,7 @@ public:
 	const ShaderResourceBindingInfo* FindResource(uint32 set, uint32 binding) const;
 	const ShaderResourceBindingInfo* FindResource(uint32 location) const;
 	const ShaderResourceBindingInfo* FindResource(const string& name) const;
-	tagRHIShaderDesc BuildRHIShaderDesc() const;
+	RHIShaderDesc BuildRHIShaderDesc() const;
 #pragma endregion
 
 #pragma region Save&Load

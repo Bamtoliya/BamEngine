@@ -14,8 +14,8 @@ EResult SkyLight::Initialize(void* arg)
     if (arg)
     {
         CAST_DESC
-        m_GroundColor = desc->GroundColor;
-        m_IndirectIntensity = desc->IndirectIntensity;
+        m_GroundColor = desc->groundColor;
+        m_IndirectIntensity = desc->indirectIntensity;
     }
     return EResult::Success;
 }
@@ -64,8 +64,8 @@ Component* SkyLight::Clone(GameObject* owner, void* arg)
         desc.LightingLayerMask = m_LightingLayerMask;
         desc.Flags = m_Flags;
 
-        desc.GroundColor = m_GroundColor;
-        desc.IndirectIntensity = m_IndirectIntensity;
+        desc.groundColor = m_GroundColor;
+        desc.indirectIntensity = m_IndirectIntensity;
         if (IsFailure(instance->Initialize(&desc)))
         {
             Safe_Release(instance);

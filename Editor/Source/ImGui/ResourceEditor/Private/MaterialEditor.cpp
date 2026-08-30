@@ -107,49 +107,49 @@ void MaterialEditor::Initialize()
     for (int i = 0; i < 5; ++i)
     {
         m_GBufferNames[i] = prefix + gBufferDefs[i].suffix;
-        tagRenderTargetDesc rtDesc = {};
-        rtDesc.Name = m_GBufferNames[i];
-        rtDesc.Width = w;
-        rtDesc.Height = h;
-        rtDesc.Format = gBufferDefs[i].fmt;
-        rtDesc.BindFlag = ERenderTargetBindFlag::RTBF_ShaderResource | ERenderTargetBindFlag::RTBF_RenderTarget;
-		rtDesc.Usage = ETextureUsage::RenderTarget | ETextureUsage::Sampler;
+        RenderTargetDesc rtDesc = {};
+        rtDesc.name = m_GBufferNames[i];
+        rtDesc.width = w;
+        rtDesc.height = h;
+        rtDesc.format = gBufferDefs[i].fmt;
+        rtDesc.bindFlag = ERenderTargetBindFlag::RTBF_ShaderResource | ERenderTargetBindFlag::RTBF_RenderTarget;
+		rtDesc.usage = ETextureUsage::RenderTarget | ETextureUsage::Sampler;
         rtMgr.CreateRenderTarget(&rtDesc);
         gBufferNames.push_back(m_GBufferNames[i]);
     }
 
     // 2. Depth, Shadow(Dummy), FinalColor 렌더타겟 생성
     m_DepthName = prefix + L"Depth";
-    tagRenderTargetDesc depthDesc = {};
-    depthDesc.Name = m_DepthName;
-    depthDesc.Width = w;
-    depthDesc.Height = h;
-    depthDesc.Format = ETextureFormat::D24_UNORM_S8_UINT;
-    depthDesc.Type = ERenderTargetType::DepthStencil;
-    depthDesc.BindFlag = ERenderTargetBindFlag::RTBF_DepthStencil | ERenderTargetBindFlag::RTBF_ShaderResource;
-    depthDesc.Usage = ETextureUsage::DepthStencilTarget | ETextureUsage::Sampler;
+    RenderTargetDesc depthDesc = {};
+    depthDesc.name = m_DepthName;
+    depthDesc.width = w;
+    depthDesc.height = h;
+    depthDesc.format = ETextureFormat::D24_UNORM_S8_UINT;
+    depthDesc.type = ERenderTargetType::DepthStencil;
+    depthDesc.bindFlag = ERenderTargetBindFlag::RTBF_DepthStencil | ERenderTargetBindFlag::RTBF_ShaderResource;
+    depthDesc.usage = ETextureUsage::DepthStencilTarget | ETextureUsage::Sampler;
     rtMgr.CreateRenderTarget(&depthDesc);
 
     m_ShadowDepthName = prefix + L"ShadowDepth";
-    tagRenderTargetDesc shadowDesc = {};
-    shadowDesc.Name = m_ShadowDepthName;
-    shadowDesc.Width = w;
-    shadowDesc.Height = h;
-    shadowDesc.Format = ETextureFormat::D32_FLOAT;
-    shadowDesc.Type = ERenderTargetType::DepthStencil;
-    shadowDesc.BindFlag = ERenderTargetBindFlag::RTBF_DepthStencil | ERenderTargetBindFlag::RTBF_ShaderResource;
-    shadowDesc.Usage = ETextureUsage::DepthStencilTarget | ETextureUsage::Sampler;
+    RenderTargetDesc shadowDesc = {};
+    shadowDesc.name = m_ShadowDepthName;
+    shadowDesc.width = w;
+    shadowDesc.height = h;
+    shadowDesc.format = ETextureFormat::D32_FLOAT;
+    shadowDesc.type = ERenderTargetType::DepthStencil;
+    shadowDesc.bindFlag = ERenderTargetBindFlag::RTBF_DepthStencil | ERenderTargetBindFlag::RTBF_ShaderResource;
+    shadowDesc.usage = ETextureUsage::DepthStencilTarget | ETextureUsage::Sampler;
     rtMgr.CreateRenderTarget(&shadowDesc);
 
     m_FinalColorName = prefix + L"FinalColor";
-    tagRenderTargetDesc finalDesc = {};
-    finalDesc.Name = m_FinalColorName;
-    finalDesc.Width = w;
-    finalDesc.Height = h;
-    finalDesc.Format = ETextureFormat::R8G8B8A8_UNORM;
-    finalDesc.ClearColor = vec4(0.15f, 0.15f, 0.15f, 1.0f);
-    finalDesc.BindFlag = ERenderTargetBindFlag::RTBF_ShaderResource | ERenderTargetBindFlag::RTBF_RenderTarget;
-    finalDesc.Usage = ETextureUsage::RenderTarget | ETextureUsage::Sampler;
+    RenderTargetDesc finalDesc = {};
+    finalDesc.name = m_FinalColorName;
+    finalDesc.width = w;
+    finalDesc.height = h;
+    finalDesc.format = ETextureFormat::R8G8B8A8_UNORM;
+    finalDesc.clearColor = vec4(0.15f, 0.15f, 0.15f, 1.0f);
+    finalDesc.bindFlag = ERenderTargetBindFlag::RTBF_ShaderResource | ERenderTargetBindFlag::RTBF_RenderTarget;
+    finalDesc.usage = ETextureUsage::RenderTarget | ETextureUsage::Sampler;
     rtMgr.CreateRenderTarget(&finalDesc);
     m_FinalColorRT = rtMgr.GetRenderTarget(m_FinalColorName);
 
@@ -172,18 +172,18 @@ void MaterialEditor::Initialize()
 
     // 4. Lighting 파이프라인 생성 (ViewportPanel과 동일한 방식)
     ResourceManager& rm = ResourceManager::Get();
-    tagRHIPipelineDesc pipeDesc = {};
-    pipeDesc.PipelineType = EPipelineType::Graphics;
-    pipeDesc.VertexShader = rm.GetResourceHandle<Shader>(L"FullscreenQuadVS")->GetRHIShader();
-    pipeDesc.PixelShader = rm.GetResourceHandle<Shader>(L"LightingPS")->GetRHIShader();
-    pipeDesc.ColorAttachmentCount = 1;
-    pipeDesc.ColorAttachmentFormats[0] = ETextureFormat::R8G8B8A8_UNORM;
-    pipeDesc.DepthStencilAttachmentFormat = ETextureFormat::UNKNOWN;
-    pipeDesc.DepthStencilState.DepthTestEnable = false;
-    pipeDesc.DepthStencilState.DepthWriteEnable = false;
-    pipeDesc.Topology = ETopology::TriangleList;
-    pipeDesc.CullMode = ECullMode::None;
-    pipeDesc.BlendState = Engine::tagBlendState{};
+    RHIPipelineDesc pipeDesc = {};
+    pipeDesc.pipelineType = EPipelineType::Graphics;
+    pipeDesc.vertexShader = rm.GetResourceHandle<Shader>(L"FullscreenQuadVS")->GetRHIShader();
+    pipeDesc.pixelShader = rm.GetResourceHandle<Shader>(L"LightingPS")->GetRHIShader();
+    pipeDesc.colorAttachmentCount = 1;
+    pipeDesc.colorAttachmentFormats[0] = ETextureFormat::R8G8B8A8_UNORM;
+    pipeDesc.depthStencilAttachmentFormat = ETextureFormat::UNKNOWN;
+    pipeDesc.depthStencilState.depthTestEnable = false;
+    pipeDesc.depthStencilState.depthWriteEnable = false;
+    pipeDesc.topology = ETopology::TriangleList;
+    pipeDesc.cullMode = ECullMode::None;
+    pipeDesc.blendState = Engine::BlendState{};
     m_LightingPipeline = PipelineManager::Get().GetOrCreatePipeline(pipeDesc);
 }
 
@@ -249,25 +249,25 @@ void MaterialEditor::Update(f32 dt)
 
             if (IsFailure(mat->Bind(2))) return EResult::Fail;
 
-            tagRHIPipelineDesc pipeDesc = {};
-            pipeDesc.Topology = mesh->GetTopology();
-            pipeDesc.PipelineType = EPipelineType::Graphics;
-            pipeDesc.VertexShader = mat->GetVertexShader()->GetRHIShader();
-            pipeDesc.PixelShader = mat->GetPixelShader()->GetRHIShader();
-            pipeDesc.BlendState = mat->GetBlendState();
-            pipeDesc.CullMode = mat->GetCullMode();
-            pipeDesc.ColorAttachmentCount = 5; // 5개의 G-Buffer
+            RHIPipelineDesc pipeDesc = {};
+            pipeDesc.topology = mesh->GetTopology();
+            pipeDesc.pipelineType = EPipelineType::Graphics;
+            pipeDesc.vertexShader = mat->GetVertexShader()->GetRHIShader();
+            pipeDesc.pixelShader = mat->GetPixelShader()->GetRHIShader();
+            pipeDesc.blendState = mat->GetBlendState();
+            pipeDesc.cullMode = mat->GetCullMode();
+            pipeDesc.colorAttachmentCount = 5; // 5개의 G-Buffer
 
             auto& rtMgr = RenderTargetManager::Get();
             for (int i = 0; i < 5; ++i)
-                pipeDesc.ColorAttachmentFormats[i] = rtMgr.GetRenderTarget(m_GBufferNames[i])->GetFormat();
+                pipeDesc.colorAttachmentFormats[i] = rtMgr.GetRenderTarget(m_GBufferNames[i])->GetFormat();
 
-            pipeDesc.DepthStencilAttachmentFormat = rtMgr.GetRenderTarget(m_DepthName)->GetFormat();
-            pipeDesc.InputLayouts = mesh->GetInputLayoutDescs();
+            pipeDesc.depthStencilAttachmentFormat = rtMgr.GetRenderTarget(m_DepthName)->GetFormat();
+            pipeDesc.inputLayouts = mesh->GetInputLayoutDescs();
 
-            pipeDesc.DepthStencilState.DepthTestEnable = (mat->GetDepthMode() != EDepthMode::None);
-            pipeDesc.DepthStencilState.DepthWriteEnable = pipeDesc.DepthStencilState.DepthTestEnable && (mat->GetDepthMode() == EDepthMode::ReadWrite);
-            pipeDesc.DepthStencilState.DepthCompareOp = mat->GetDepthCompareOp();
+            pipeDesc.depthStencilState.depthTestEnable = (mat->GetDepthMode() != EDepthMode::None);
+            pipeDesc.depthStencilState.depthWriteEnable = pipeDesc.depthStencilState.depthTestEnable && (mat->GetDepthMode() == EDepthMode::ReadWrite);
+            pipeDesc.depthStencilState.depthCompareOp = mat->GetDepthCompareOp();
 
             RHIPipeline* pipeline = PipelineManager::Get().GetOrCreatePipeline(pipeDesc);
             if (!pipeline || IsFailure(rhi->BindPipeline(pipeline))) return EResult::Fail;

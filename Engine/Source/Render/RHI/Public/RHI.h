@@ -1,21 +1,22 @@
 ﻿#pragma once
 #include "Base.h"
+#include "RHITypes.h"
 #include "RenderTypes.h"
 #include "ShaderReflection.h"
 
-struct tagRHIDesc
+struct RHIDesc
 {
-    void* WindowHandle = { nullptr };
-    Engine::uint32 Width = { 0 };
-    Engine::uint32 Height = { 0 };
-    bool IsVSync = { true };
+    void* windowHandle = { nullptr };
+    Engine::uint32 width = { 0 };
+    Engine::uint32 height = { 0 };
+    bool isVSync = { true };
 };
 
-struct tagRHIBufferDesc;
-struct tagRHIShaderDesc;
-struct tagRHITextureDesc;
+struct RHIBufferDesc;
+struct RHIShaderDesc;
+struct RHITextureDesc;
 
-struct tagRHIPipelineDesc;
+struct RHIPipelineDesc;
 
 enum class ERHIBufferType;
 
@@ -31,7 +32,7 @@ class RenderPass;
 class ENGINE_API RHI : public Base
 {
 protected:
-	using DESC = tagRHIDesc;
+	using DESC = RHIDesc;
     RHI() {}
     virtual ~RHI() = default;
     virtual EResult Initialize(void* arg) BAM_PURE;
@@ -52,7 +53,7 @@ public:
 public:
     virtual RHITexture* CreateTextureFromFile(const char* filename) BAM_PURE;
     virtual RHITexture* CreateTextureFromFile(const wchar* filename) BAM_PURE;
-    virtual RHITexture* CreateTextureFromMemory(const tagRHITextureDesc& desc) BAM_PURE;
+    virtual RHITexture* CreateTexture(const RHITextureDesc& desc) BAM_PURE;
 	virtual RHITexture* CreateTexture2D(void* data, uint32 width, uint32 height, uint32 mipLevels, uint32 arraySize) BAM_PURE;
 	virtual RHITexture* CreateTextureCube(void* data, uint32 size, uint32 mipLevels) BAM_PURE;
 	virtual RHITexture* CreateTexture3D(void* data, uint32 width, uint32 height, uint32 depth, uint32 mipLevels) BAM_PURE;
@@ -60,11 +61,11 @@ public:
 	virtual RHITexture* CreateDepthStencilTexture(void* data, uint32 width, uint32 height, uint32 mipLevels, uint32 arraySize) BAM_PURE;
 	virtual RHITexture* CreateTextureFromNativeHandle(void* nativeHandle) BAM_PURE;
 public:
-    virtual RHIPipeline* CreatePipeline(const tagRHIPipelineDesc& desc) BAM_PURE;
+    virtual RHIPipeline* CreatePipeline(const RHIPipelineDesc& desc) BAM_PURE;
 public:
     virtual RHISampler* CreateSampler(const SamplerDesc& desc) BAM_PURE;
 public:
-	virtual RHIShader* CreateShader(const tagRHIShaderDesc& desc) BAM_PURE;
+	virtual RHIShader* CreateShader(const RHIShaderDesc& desc) BAM_PURE;
 #pragma endregion
 
 #pragma region Bind Resources
@@ -89,15 +90,16 @@ public:
     virtual EResult BindVertexStorageBuffers(uint32 firstSlot, RHIBuffer** storageBuffers, uint32 count);
     virtual EResult BindFragmentStorageBuffers(uint32 firstSlot, RHIBuffer** storageBuffers, uint32 count);
     virtual EResult BindComputeStorageBuffers(uint32 firstSlot, RHIBuffer** storageBuffers, uint32 count);
+#pragma endregion
 
+#pragma region RenderPass
 public:
     virtual EResult BeginRenderPass(RenderPass* renderPass) { return EResult::NotImplemented; }
+    virtual EResult EndRenderPass() { return EResult::NotImplemented; }
+    virtual EResult ClearRenderPass() { return EResult::NotImplemented; }
 #pragma endregion
 
 #pragma region Clear Resources
-public:
-	virtual EResult EndRenderPass() { return EResult::NotImplemented; }
-    virtual EResult ClearRenderPass() { return EResult::NotImplemented; }
     virtual EResult ClearRenderTarget(RHITexture* renderTarget, vec4 color) BAM_PURE;
 	virtual EResult ClearDepthStencil(RHITexture* depthStencil, f32 depth, uint8 stencil) BAM_PURE;
 #pragma endregion
@@ -148,14 +150,17 @@ protected:
 protected:
     uint32 m_SwapChainWidth = { 0 };
     uint32 m_SwapChainHeight = { 0 };
+
+	RHITexture* m_SwapChainBuffers[MAX_SWAPCHAIN_BUFFERS] = { nullptr };
+	uint32 m_SwapChainBufferCount = { 0 };
+	uint32 m_CurrentBackBufferIndex = { 0 };
+
 	RHITexture* m_BackBuffer = { nullptr };
 protected:
 	RHITexture* m_CurrentRenderTargets[MAX_RENDER_TARGET_COUNT] = {nullptr};
 	uint32 m_CurrentRenderTargetCount = { 0 };
 	RHITexture* m_CurrentDepthStencil = { nullptr };
 	RHITexture* m_CurrentTextures[MAX_TEXTURE_SLOTS] = { nullptr };
-
-
 
 protected:
 	RHIPipeline* m_CurrentPipeline = { nullptr };

@@ -3,7 +3,7 @@
 #include "Resource.h"
 #include "Shader.h"
 #include "Texture.h"
-#include "RHIDefinitions.h"
+#include "RHITypes.h"
 #include "ResourceHandle.h"
 #include "RHISampler.h"
 
@@ -149,7 +149,7 @@ public:
 
 #pragma region Pipeline
 public:
-	virtual tagBlendState GetBlendState();
+	virtual BlendState GetBlendState();
 	virtual EBlendMode GetBlendMode() const { return m_BlendMode; }
 	virtual ECullMode GetCullMode() const { return m_CullMode; }
 	virtual EFrontFace GetFrontFace() const { return m_FrontFace; }

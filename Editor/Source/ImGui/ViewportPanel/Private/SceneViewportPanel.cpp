@@ -118,7 +118,7 @@ void SceneViewportPanel::PrepareRenderTargetsAndPasses(uint32 width, uint32 heig
 #pragma region RenderTargets
 	auto& rtMgr = RenderTargetManager::Get();
 
-	tagRenderTargetDesc gbufferRTDescs[] =
+	RenderTargetDesc gbufferRTDescs[] =
 	{
 		//GBuffers
 		{ETextureFormat::R8G8B8A8_UNORM,		ETextureUsage::RenderTarget | ETextureUsage::Sampler,		ERenderTargetBindFlag::RTBF_RenderTarget | ERenderTargetBindFlag::RTBF_ShaderResource, ERenderTargetType::GBuffer,		ETextureDimension::Texture2D, width, height, vec4(0.f), L"GBuffer_Diffuse"},
@@ -139,9 +139,9 @@ void SceneViewportPanel::PrepareRenderTargetsAndPasses(uint32 width, uint32 heig
 
 	for (auto& rtDesc : gbufferRTDescs)
 	{
-		rtDesc.Name = prefix + rtDesc.Name;
+		rtDesc.name = prefix + rtDesc.name;
 		rtMgr.CreateRenderTarget(&rtDesc);
-		m_OwnedRTNames.push_back(rtDesc.Name);
+		m_OwnedRTNames.push_back(rtDesc.name);
 	}
 #pragma endregion
 
@@ -226,18 +226,18 @@ void SceneViewportPanel::PreparePipelines()
 {
 	ResourceManager& rm = ResourceManager::Get();
 	auto createPipe = [&](const wstring& psName) -> Engine::RHIPipeline* {
-		tagRHIPipelineDesc pd = {};
-		pd.PipelineType = EPipelineType::Graphics;
-		pd.VertexShader = rm.GetResourceHandle<Shader>(L"FullscreenQuadVS")->GetRHIShader();
-		pd.PixelShader = rm.GetResourceHandle<Shader>(psName)->GetRHIShader();
-		pd.ColorAttachmentCount = 1;
-		pd.ColorAttachmentFormats[0] = ETextureFormat::R8G8B8A8_UNORM;
-		pd.DepthStencilAttachmentFormat = ETextureFormat::UNKNOWN;
-		pd.DepthStencilState.DepthTestEnable = false;
-		pd.DepthStencilState.DepthWriteEnable = false;
-		pd.Topology = ETopology::TriangleList;
-		pd.CullMode = ECullMode::None;
-		pd.BlendState = tagBlendState{};
+		RHIPipelineDesc pd = {};
+		pd.pipelineType = EPipelineType::Graphics;
+		pd.vertexShader = rm.GetResourceHandle<Shader>(L"FullscreenQuadVS")->GetRHIShader();
+		pd.pixelShader = rm.GetResourceHandle<Shader>(psName)->GetRHIShader();
+		pd.colorAttachmentCount = 1;
+		pd.colorAttachmentFormats[0] = ETextureFormat::R8G8B8A8_UNORM;
+		pd.depthStencilAttachmentFormat = ETextureFormat::UNKNOWN;
+		pd.depthStencilState.depthTestEnable = false;
+		pd.depthStencilState.depthWriteEnable = false;
+		pd.topology = ETopology::TriangleList;
+		pd.cullMode = ECullMode::None;
+		pd.blendState = BlendState{};
 		return PipelineManager::Get().GetOrCreatePipeline(pd);
 		};
 
@@ -1104,13 +1104,13 @@ Engine::Ray SceneViewportPanel::ScreenPosToRay(const ImVec2& mousePos)
 	vec4 farPointWorld = invVP * farPointNDC;
 
 	Ray ray;
-	ray.Origin = vec3(nearPointWorld) / nearPointWorld.w;
+	ray.origin = vec3(nearPointWorld) / nearPointWorld.w;
 	//ray.Origin.x += m_RenderTarget->GetWidth() / 2.f;
 	//ray.Origin.y -= m_RenderTarget->GetHeight() / 2.f;
-	ray.Direction = glm::normalize(vec3(farPointWorld / farPointWorld.w) - ray.Origin);
+	ray.direction = glm::normalize(vec3(farPointWorld / farPointWorld.w) - ray.origin);
 
-	cout << "Ray Origin: " << ray.Origin.x << ", " << ray.Origin.y << ", " << ray.Origin.z << endl;
-	cout << "Ray Direction: " << ray.Direction.x << ", " << ray.Direction.y << ", " << ray.Direction.z << endl;
+	cout << "Ray Origin: " << ray.origin.x << ", " << ray.origin.y << ", " << ray.origin.z << endl;
+	cout << "Ray Direction: " << ray.direction.x << ", " << ray.direction.y << ", " << ray.direction.z << endl;
 
 	return ray;
 }

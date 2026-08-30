@@ -56,11 +56,11 @@ bool CollisionManager::Raycast(const Ray& ray, HitResult& outResult)
 		if (collider->Raycast(ray, tempResult))
 		{
 			hasHit = true;
-			if (tempResult.Distance < minDistance)
+			if (tempResult.distance < minDistance)
 			{
-				minDistance = tempResult.Distance;
+				minDistance = tempResult.distance;
 				outResult = tempResult;
-				outResult.UserData = collider->GetOwner();
+				outResult.userData = collider->GetOwner();
 			}
 		}
 	}
@@ -128,10 +128,10 @@ void CollisionManager::ResolveCollisions(f32 dt)
             if (!Collision::Intersects(localAABB_A, transformA->GetWorldMatrix(), localAABB_B, transformB->GetWorldMatrix(), hit))
                 continue;
 
-            if (hit.PenetrationDepth <= 0.f)
+            if (hit.denetrationDepth <= 0.f)
                 continue;
 
-            const vec3 correction = hit.Normal * hit.PenetrationDepth;
+            const vec3 correction = hit.normal * hit.denetrationDepth;
 
             const bool aMovable = (transformA->GetMobility() == EMobility::Movable);
             const bool bMovable = (transformB->GetMobility() == EMobility::Movable);
@@ -147,15 +147,15 @@ void CollisionManager::ResolveCollisions(f32 dt)
 				RigidBody* rbA = ownerA->GetComponent<RigidBody>();
 				if (rbA)
 				{
-					const f32 vnA = glm::dot(rbA->GetVelocity(), hit.Normal);
+					const f32 vnA = glm::dot(rbA->GetVelocity(), hit.normal);
 					if (vnA < 0.f)
-						rbA->SetVelocity(rbA->GetVelocity() - hit.Normal * vnA);
+						rbA->SetVelocity(rbA->GetVelocity() - hit.normal * vnA);
 				}
 
 				RigidBody* rbB = ownerB->GetComponent<RigidBody>();
 				if (rbB)
 				{
-					const vec3 normalB = -hit.Normal;
+					const vec3 normalB = -hit.normal;
 					const f32 vnB = glm::dot(rbB->GetVelocity(), normalB);
 					if (vnB < 0.f)
 						rbB->SetVelocity(rbB->GetVelocity() - normalB * vnB);
@@ -168,9 +168,9 @@ void CollisionManager::ResolveCollisions(f32 dt)
 				RigidBody* rbA = ownerA->GetComponent<RigidBody>();
 				if (rbA)
 				{
-					const f32 vnA = glm::dot(rbA->GetVelocity(), hit.Normal);
+					const f32 vnA = glm::dot(rbA->GetVelocity(), hit.normal);
 					if (vnA < 0.f)
-						rbA->SetVelocity(rbA->GetVelocity() - hit.Normal * vnA);
+						rbA->SetVelocity(rbA->GetVelocity() - hit.normal * vnA);
 				}
 			}
 			else
@@ -180,7 +180,7 @@ void CollisionManager::ResolveCollisions(f32 dt)
 				RigidBody* rbB = ownerB->GetComponent<RigidBody>();
 				if (rbB)
 				{
-					const vec3 normalB = -hit.Normal;
+					const vec3 normalB = -hit.normal;
 					const f32 vnB = glm::dot(rbB->GetVelocity(), normalB);
 					if (vnB < 0.f)
 						rbB->SetVelocity(rbB->GetVelocity() - normalB * vnB);

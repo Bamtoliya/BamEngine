@@ -5,68 +5,76 @@
 
 struct RHIDepthStencilState
 {
-	bool DepthTestEnable = true;
-	bool DepthWriteEnable = true;
-	ECompareOp DepthCompareOp = ECompareOp::Less;
-	bool StencilTestEnable = false;
+	bool depthTestEnable = true;
+	bool depthWriteEnable = true;
+	ECompareOp depthCompareOp = ECompareOp::Less;
+
+	bool stencilTestEnable = false;
+	uint8 stencilReadMask = 0xFF;
+	uint8 stencilWriteMask = 0xFF;
+
+	EStencilOp stencilFailOp = EStencilOp::Keep;
+	EStencilOp stencilDepthFailOp = EStencilOp::Keep;
+	EStencilOp stencilPassOp = EStencilOp::Keep;
+	ECompareOp stencilCompareOp = ECompareOp::Always;
 };
 
-struct tagRHIPipelineDesc
+struct RHIPipelineDesc
 {
-	EPipelineType PipelineType = EPipelineType::Graphics;
-	tagBlendState BlendState = {};
-	EFillMode FillMode =	EFillMode::Solid;
-	ECullMode CullMode =	ECullMode::Back;
-	EFrontFace FrontFace =	EFrontFace::Clockwise;
-	ETopology Topology =	ETopology::TriangleList;
-	class RHIShader* VertexShader = nullptr;
-	class RHIShader* PixelShader = nullptr;
-	class RHIShader* ComputeShader = nullptr;
-	class RHIShader* GeometryShader = nullptr;
-	class RHIShader* HullShader = nullptr;
-	class RHIShader* DomainShader = nullptr;
+	EPipelineType pipelineType = EPipelineType::Graphics;
+	BlendState blendState = {};
+	EFillMode fillMode =	EFillMode::Solid;
+	ECullMode cullMode =	ECullMode::Back;
+	EFrontFace frontFace =	EFrontFace::Clockwise;
+	ETopology topology =	ETopology::TriangleList;
+	class RHIShader* vertexShader = nullptr;
+	class RHIShader* pixelShader = nullptr;
+	class RHIShader* computeShader = nullptr;
+	class RHIShader* geometryShader = nullptr;
+	class RHIShader* hullShader = nullptr;
+	class RHIShader* domainShader = nullptr;
 
-	uint32 ColorAttachmentCount = 1;
-	ETextureFormat ColorAttachmentFormats[MAX_RENDER_TARGET_COUNT] = { ETextureFormat::R8G8B8A8_UNORM, };
-	ETextureFormat DepthStencilAttachmentFormat = ETextureFormat::D24_UNORM_S8_UINT;
+	uint32 colorAttachmentCount = 1;
+	ETextureFormat colorAttachmentFormats[MAX_RENDER_TARGET_COUNT] = { ETextureFormat::R8G8B8A8_UNORM, };
+	ETextureFormat depthStencilAttachmentFormat = ETextureFormat::D24_UNORM_S8_UINT;
 
-	RHIDepthStencilState DepthStencilState;
+	RHIDepthStencilState depthStencilState;
 
-	vector<InputLayoutDesc> InputLayouts;
+	vector<InputLayoutDesc> inputLayouts;
 
-	bool operator==(const tagRHIPipelineDesc& other) const
+	bool operator==(const RHIPipelineDesc& other) const
 	{
-		if (PipelineType != other.PipelineType) return false;
+		if (pipelineType != other.pipelineType) return false;
 
-		if (BlendState != other.BlendState) return false;
+		if (blendState != other.blendState) return false;
 
-		if (FillMode != other.FillMode) return false;
-		if (CullMode != other.CullMode) return false;
-		if (FrontFace != other.FrontFace) return false;
-		if (Topology != other.Topology) return false;
+		if (fillMode != other.fillMode) return false;
+		if (cullMode != other.cullMode) return false;
+		if (frontFace != other.frontFace) return false;
+		if (topology != other.topology) return false;
 
-		if (VertexShader != other.VertexShader) return false;
-		if (PixelShader != other.PixelShader) return false;
-		if (ComputeShader != other.ComputeShader) return false;
-		if (GeometryShader != other.GeometryShader) return false;
-		if (HullShader != other.HullShader) return false;
-		if (DomainShader != other.DomainShader) return false;
+		if (vertexShader != other.vertexShader) return false;
+		if (pixelShader != other.pixelShader) return false;
+		if (computeShader != other.computeShader) return false;
+		if (geometryShader != other.geometryShader) return false;
+		if (hullShader != other.hullShader) return false;
+		if (domainShader != other.domainShader) return false;
 
-		if (ColorAttachmentCount != other.ColorAttachmentCount) return false;
-		for (uint32 i = 0; i < ColorAttachmentCount; ++i)
+		if (colorAttachmentCount != other.colorAttachmentCount) return false;
+		for (uint32 i = 0; i < colorAttachmentCount; ++i)
 		{
-			if (ColorAttachmentFormats[i] != other.ColorAttachmentFormats[i]) return false;
+			if (colorAttachmentFormats[i] != other.colorAttachmentFormats[i]) return false;
 		}
 
-		if (DepthStencilAttachmentFormat != other.DepthStencilAttachmentFormat) return false;
+		if (depthStencilAttachmentFormat != other.depthStencilAttachmentFormat) return false;
 
-		if (DepthStencilState.DepthTestEnable != other.DepthStencilState.DepthTestEnable) return false;
-		if (DepthStencilState.DepthWriteEnable != other.DepthStencilState.DepthWriteEnable) return false;
+		if (depthStencilState.depthTestEnable != other.depthStencilState.depthTestEnable) return false;
+		if (depthStencilState.depthWriteEnable != other.depthStencilState.depthWriteEnable) return false;
 
-		if (InputLayouts.size() != other.InputLayouts.size()) return false;
-		for (size_t i = 0; i < InputLayouts.size(); ++i)
+		if (inputLayouts.size() != other.inputLayouts.size()) return false;
+		for (size_t i = 0; i < inputLayouts.size(); ++i)
 		{
-			if (!(InputLayouts[i] == other.InputLayouts[i])) return false;
+			if (!(inputLayouts[i] == other.inputLayouts[i])) return false;
 		}
 
 		return true;
@@ -74,52 +82,52 @@ struct tagRHIPipelineDesc
 };
 
 template<>
-struct hash<tagRHIPipelineDesc>
+struct hash<RHIPipelineDesc>
 {
-	size_t operator()(const tagRHIPipelineDesc& desc) const
+	size_t operator()(const RHIPipelineDesc& desc) const
 	{
 		size_t seed = 0;
 		// 주요 필드들을 해싱합니다.
 		// 주의: 구조체 패딩 이슈를 피하기 위해 멤버별로 해싱하는 것이 안전합니다.
-		HashCombine(seed, hash<int>()((int)desc.PipelineType));
+		HashCombine(seed, hash<int>()((int)desc.pipelineType));
 
-		HashCombine(seed, hash<bool>()(desc.BlendState.Enable));
-		HashCombine(seed, hash<bool>()(desc.BlendState.EnableColorWriteMask));
+		HashCombine(seed, hash<bool>()(desc.blendState.enable));
+		HashCombine(seed, hash<bool>()(desc.blendState.enableColorWriteMask));
 
-		HashCombine(seed, hash<int>()((int)desc.BlendState.SrcColor));
-		HashCombine(seed, hash<int>()((int)desc.BlendState.DstColor));
-		HashCombine(seed, hash<int>()((int)desc.BlendState.ColorBlendOp));
-		HashCombine(seed, hash<int>()((int)desc.BlendState.SrcAlpha));
-		HashCombine(seed, hash<int>()((int)desc.BlendState.DstAlpha));
-		HashCombine(seed, hash<int>()((int)desc.BlendState.AlphaBlendOp));
-		HashCombine(seed, hash<int>()((int)desc.BlendState.ColorWriteMask));
+		HashCombine(seed, hash<int>()((int)desc.blendState.srcColor));
+		HashCombine(seed, hash<int>()((int)desc.blendState.dstColor));
+		HashCombine(seed, hash<int>()((int)desc.blendState.colorBlendOp));
+		HashCombine(seed, hash<int>()((int)desc.blendState.srcAlpha));
+		HashCombine(seed, hash<int>()((int)desc.blendState.dstAlpha));
+		HashCombine(seed, hash<int>()((int)desc.blendState.alphaBlendOp));
+		HashCombine(seed, hash<int>()((int)desc.blendState.colorWriteMask));
 
 
-		HashCombine(seed, hash<int>()((int)desc.CullMode));
-		HashCombine(seed, hash<void*>()(desc.VertexShader));
-		HashCombine(seed, hash<void*>()(desc.PixelShader));
+		HashCombine(seed, hash<int>()((int)desc.cullMode));
+		HashCombine(seed, hash<void*>()(desc.vertexShader));
+		HashCombine(seed, hash<void*>()(desc.pixelShader));
 
 		// 포맷들도 해싱에 포함
-		HashCombine(seed, hash<int>()(desc.ColorAttachmentCount));
-		for (uint32 i = 0; i < desc.ColorAttachmentCount; ++i)
+		HashCombine(seed, hash<int>()(desc.colorAttachmentCount));
+		for (uint32 i = 0; i < desc.colorAttachmentCount; ++i)
 		{
-			HashCombine(seed, hash<int>()((int)desc.ColorAttachmentFormats[i]));
+			HashCombine(seed, hash<int>()((int)desc.colorAttachmentFormats[i]));
 		}
-		HashCombine(seed, hash<int>()((int)desc.DepthStencilAttachmentFormat));
+		HashCombine(seed, hash<int>()((int)desc.depthStencilAttachmentFormat));
 
 		// Depth State
-		HashCombine(seed, hash<bool>()(desc.DepthStencilState.DepthTestEnable));
-		HashCombine(seed, hash<bool>()(desc.DepthStencilState.DepthWriteEnable));
+		HashCombine(seed, hash<bool>()(desc.depthStencilState.depthTestEnable));
+		HashCombine(seed, hash<bool>()(desc.depthStencilState.depthWriteEnable));
 
-		HashCombine(seed, hash<size_t>()(desc.InputLayouts.size()));
-		for (const auto& layout : desc.InputLayouts)
+		HashCombine(seed, hash<size_t>()(desc.inputLayouts.size()));
+		for (const auto& layout : desc.inputLayouts)
 		{
-			HashCombine(seed, hash<uint32>()(layout.Stride));
-			for (const auto& attr : layout.Elements)
+			HashCombine(seed, hash<uint32>()(layout.stride));
+			for (const auto& attr : layout.elements)
 			{
-				HashCombine(seed, hash<uint32>()(attr.Location));
-				HashCombine(seed, hash<int>()((int)attr.Format));
-				HashCombine(seed, hash<uint32>()(attr.Offset));
+				HashCombine(seed, hash<uint32>()(attr.location));
+				HashCombine(seed, hash<int>()((int)attr.format));
+				HashCombine(seed, hash<uint32>()(attr.offset));
 			}
 		}
 
@@ -131,24 +139,24 @@ BEGIN(Engine)
 class ENGINE_API RHIPipeline abstract : public RHIResource
 {
 protected:
-	using DESC = tagRHIPipelineDesc;
+	using DESC = RHIPipelineDesc;
 	RHIPipeline(RHI* rhi) : RHIResource(rhi, ERHIResourceType::Pipeline) {}
 	RHIPipeline(RHI* rhi, const DESC& desc) : RHIResource(rhi, ERHIResourceType::Pipeline), m_Desc(desc) {}
 	virtual ~RHIPipeline() = default;
 public:
-	EPipelineType GetPipelineType() const { return m_Desc.PipelineType; }
-	tagBlendState GetBlendState() const { return m_Desc.BlendState; }
-	EFillMode GetFillMode() const { return m_Desc.FillMode; }
-	ECullMode GetCullMode() const { return m_Desc.CullMode; }
-	EFrontFace GetFrontFace() const { return m_Desc.FrontFace; }
-	ETopology GetTopology() const { return m_Desc.Topology; }
+	EPipelineType GetPipelineType() const { return m_Desc.pipelineType; }
+	BlendState GetBlendState() const { return m_Desc.blendState; }
+	EFillMode GetFillMode() const { return m_Desc.fillMode; }
+	ECullMode GetCullMode() const { return m_Desc.cullMode; }
+	EFrontFace GetFrontFace() const { return m_Desc.frontFace; }
+	ETopology GetTopology() const { return m_Desc.topology; }
 
-	void SetPipelineType(EPipelineType type) { m_Desc.PipelineType = type; }
-	void SetBlendState(const tagBlendState& blendState) { m_Desc.BlendState = blendState; }
-	void SetFillMode(EFillMode mode) { m_Desc.FillMode = mode; }
-	void SetCullMode(ECullMode mode) { m_Desc.CullMode = mode; }
-	void SetFrontFace(EFrontFace face) { m_Desc.FrontFace = face; }
-	void SetTopology(ETopology topology) { m_Desc.Topology = topology; }
+	void SetPipelineType(EPipelineType type) { m_Desc.pipelineType = type; }
+	void SetBlendState(const BlendState& blendState) { m_Desc.blendState = blendState; }
+	void SetFillMode(EFillMode mode) { m_Desc.fillMode = mode; }
+	void SetCullMode(ECullMode mode) { m_Desc.cullMode = mode; }
+	void SetFrontFace(EFrontFace face) { m_Desc.frontFace = face; }
+	void SetTopology(ETopology topology) { m_Desc.topology = topology; }
 protected:
 	DESC m_Desc;
 };

@@ -5,7 +5,7 @@
 const InputLayoutDesc VertexPosition::Layout =
 {
 	{
-		{  0, EVertexElementFormat::Float3, offsetof(VertexPosition, position) },
+		{ "POSITION",	0, 0, EVertexElementFormat::Float3, offsetof(VertexPosition, position)},
 	},
 	sizeof(VertexPosition),
 	EVertexInputRate::PerVertex,
@@ -15,11 +15,11 @@ const InputLayoutDesc VertexPosition::Layout =
 const InputLayoutDesc VertexMaterial::Layout =
 {
 	{
-		{  0, EVertexElementFormat::Float3, offsetof(VertexMaterial, normal) },
-		{  1, EVertexElementFormat::Float2, offsetof(VertexMaterial, texCoord) },
-		{  2, EVertexElementFormat::Float3, offsetof(VertexMaterial, tangent) },
-		{  3, EVertexElementFormat::Float3, offsetof(VertexMaterial, bitangent) },
-		{  4, EVertexElementFormat::Float4, offsetof(VertexMaterial, color) }
+		{ "NORMAL",		0, 0, EVertexElementFormat::Float3, offsetof(VertexMaterial, normal) },
+		{ "TEXCOORD",	0, 1, EVertexElementFormat::Float2, offsetof(VertexMaterial, texCoord) },
+		{ "TANGENT",	0, 2, EVertexElementFormat::Float3, offsetof(VertexMaterial, tangent) },
+		{ "BITANGENT",	0, 3, EVertexElementFormat::Float3, offsetof(VertexMaterial, bitangent) },
+		{ "COLOR",		0, 4, EVertexElementFormat::Float4, offsetof(VertexMaterial, color) }
 	},
 	sizeof(VertexMaterial),
 	EVertexInputRate::PerVertex,
@@ -29,8 +29,8 @@ const InputLayoutDesc VertexMaterial::Layout =
 const InputLayoutDesc VertexSkinData::Layout =
 {
 	{
-		{ 0, EVertexElementFormat::UInt4, offsetof(VertexSkinData, boneIDs) },
-		{ 1, EVertexElementFormat::Float4, offsetof(VertexSkinData, weights) }
+		{ "BONEIDS",	0, 0, EVertexElementFormat::UInt4, offsetof(VertexSkinData, boneIDs) },
+		{ "WEIGHTS",	0, 1, EVertexElementFormat::Float4, offsetof(VertexSkinData, weights) }
 	},
 	sizeof(VertexSkinData),
 	EVertexInputRate::PerVertex,
@@ -40,12 +40,12 @@ const InputLayoutDesc VertexSkinData::Layout =
 const InputLayoutDesc Vertex::Layout =
 {
 	{
-		{  0, EVertexElementFormat::Float3, offsetof(Vertex, position) },
-		{  1, EVertexElementFormat::Float3, offsetof(Vertex, normal) },
-		{  2, EVertexElementFormat::Float2, offsetof(Vertex, texCoord) },
-		{  3, EVertexElementFormat::Float3, offsetof(Vertex, tangent) },
-		{  4, EVertexElementFormat::Float3, offsetof(Vertex, bitangent) },
-		{  5, EVertexElementFormat::Float4, offsetof(Vertex, color) }
+		{ "POSITION",	0, 0, EVertexElementFormat::Float3, offsetof(Vertex, position) },
+		{ "NORMAL",		0, 1, EVertexElementFormat::Float3, offsetof(Vertex, normal) },
+		{ "TEXCOORD",	0, 2, EVertexElementFormat::Float2, offsetof(Vertex, texCoord) },
+		{ "TANGENT",	0, 3, EVertexElementFormat::Float3, offsetof(Vertex, tangent) },
+		{ "BITANGENT",	0, 4, EVertexElementFormat::Float3, offsetof(Vertex, bitangent) },
+		{ "COLOR",		0, 5, EVertexElementFormat::Float4, offsetof(Vertex, color) }
 	},
 	sizeof(Vertex),
 	EVertexInputRate::PerVertex,
@@ -55,9 +55,9 @@ const InputLayoutDesc Vertex::Layout =
 const InputLayoutDesc Vertex2D::Layout =
 {
 	{
-		{ 0, EVertexElementFormat::Float3, offsetof(Vertex2D, position) },
-		{ 1, EVertexElementFormat::Float4, offsetof(Vertex2D, color) },
-		{ 2, EVertexElementFormat::Float2, offsetof(Vertex2D, texCoord) }
+		{ "POSITION",	0, 0, EVertexElementFormat::Float3, offsetof(Vertex2D, position) },
+		{ "COLOR",		0, 1, EVertexElementFormat::Float4, offsetof(Vertex2D, color) },
+		{ "TEXCOORD",	0, 2, EVertexElementFormat::Float2, offsetof(Vertex2D, texCoord) }
 	},
 	sizeof(Vertex2D),
 	EVertexInputRate::PerVertex,
@@ -68,8 +68,8 @@ const InputLayoutDesc Vertex2D::Layout =
 const InputLayoutDesc DebugVertex::Layout =
 {
 	{
-		{ 0, EVertexElementFormat::Float3, offsetof(DebugVertex, position) },
-		{ 1, EVertexElementFormat::Float4, offsetof(DebugVertex, color) }
+		{ "POSITION",	0, 0, EVertexElementFormat::Float3, offsetof(DebugVertex, position) },
+		{ "COLOR",		0, 1, EVertexElementFormat::Float4, offsetof(DebugVertex, color) }
 	},
 	sizeof(DebugVertex),
 	EVertexInputRate::PerVertex,

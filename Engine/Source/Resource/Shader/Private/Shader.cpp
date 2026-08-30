@@ -10,25 +10,25 @@ EResult Shader::Initialize(void* arg)
 	if (IsFailure(__super::Initialize(arg))) return EResult::Fail;
 	CAST_DESC
 	
-	m_ShaderType = desc->ShaderType;
-	m_EntryPoint = desc->EntryPoint;
-	m_SpirvPath = desc->SpirvPath.empty() ? m_Path : desc->SpirvPath;
-	m_NumSamplers = desc->NumSamplers;
-	m_NumStorageTextures = desc->NumStorageTextures;
-	m_NumStorageBuffers = desc->NumStorageBuffers;
-	m_NumUniformBuffers = desc->NumUniformBuffers;
+	m_ShaderType = desc->shaderType;
+	m_EntryPoint = desc->entryPoint;
+	m_SpirvPath = desc->spirvPath.empty() ? m_Path : desc->spirvPath;
+	m_NumSamplers = desc->numSamplers;
+	m_NumStorageTextures = desc->numStorageTextures;
+	m_NumStorageBuffers = desc->numStorageBuffers;
+	m_NumUniformBuffers = desc->numUniformBuffers;
 
-	m_UniformBuffers = desc->UniformBuffers;
-	m_StorageBuffers = desc->StorageBuffers;
-	m_Samplers = desc->Samplers;
-	m_StorageTextures = desc->StorageTextures;
-	m_StageInputs = desc->StageInputs;
-	m_StageOutputs = desc->StageOutputs;
+	m_UniformBuffers = desc->uniformBuffers;
+	m_StorageBuffers = desc->storageBuffers;
+	m_Samplers = desc->samplers;
+	m_StorageTextures = desc->storageTextures;
+	m_StageInputs = desc->stageInputs;
+	m_StageOutputs = desc->stageOutputs;
 
 
 	RHI* rhi = Renderer::Get().GetRHI();
 	if (!rhi) return EResult::Fail;
-	tagRHIShaderDesc rhiShaderDesc = BuildRHIShaderDesc();
+	RHIShaderDesc rhiShaderDesc = BuildRHIShaderDesc();
 	m_RHIShader = rhi->CreateShader(rhiShaderDesc);
 
 	return m_RHIShader ? EResult::Success : EResult::Fail;
@@ -53,17 +53,17 @@ void Shader::Free()
 
 #pragma region Getter
 
-tagRHIShaderDesc Shader::BuildRHIShaderDesc() const
+RHIShaderDesc Shader::BuildRHIShaderDesc() const
 {
-	tagRHIShaderDesc desc;
-	desc.ShaderType = m_ShaderType;
-	desc.EntryPoint = m_EntryPoint;
-	desc.FilePath = m_SpirvPath;
+	RHIShaderDesc desc;
+	desc.shaderType = m_ShaderType;
+	desc.entryPoint = m_EntryPoint;
+	desc.filePath = m_SpirvPath;
 
-	desc.NumSamplers = m_NumSamplers;
-	desc.NumStorageTextures = m_NumStorageTextures;
-	desc.NumStorageBuffers = m_NumStorageBuffers;
-	desc.NumUniformBuffers = m_NumUniformBuffers;
+	desc.numSamplers = m_NumSamplers;
+	desc.numStorageTextures = m_NumStorageTextures;
+	desc.numStorageBuffers = m_NumStorageBuffers;
+	desc.numUniformBuffers = m_NumUniformBuffers;
 	return desc;
 }
 #pragma endregion
@@ -79,7 +79,7 @@ void Shader::Deserialize(Archive& ar)
 {
 	Resource::Deserialize(ar);
 
-	tagRHIShaderDesc desc = BuildRHIShaderDesc();
+	RHIShaderDesc desc = BuildRHIShaderDesc();
 	m_RHIShader = Renderer::Get().GetRHI()->CreateShader(desc);
 }
 #pragma endregion

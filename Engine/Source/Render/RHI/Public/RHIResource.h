@@ -3,7 +3,7 @@
 #include "Base.h"
 #include "RHI.h"
 #include "Structs.h"
-#include "RHIDefinitions.h"
+#include "RHITypes.h"
 #include "SerializableInterface.h"
 
 enum class ERHIResourceType

@@ -18,10 +18,11 @@ EResult Runtime::Initialize(void* arg)
 	RegisterReflection_EnTT();
 
 	RUNTIMEDESC* pRuntimeDesc = reinterpret_cast<RUNTIMEDESC*>(arg);
-	tagRendererDesc RendererDesc = pRuntimeDesc->RendererDesc;
+	RendererDesc RendererDesc = pRuntimeDesc->RendererDesc;
 
 	m_ReflectionRegistry = &reflection::Registry::Get();
-	if (!m_ReflectionRegistry) return EResult::Fail;
+	if (!m_ReflectionRegistry)
+		return EResult::Fail;
 
 	m_ComponentRegistry = ComponentRegistry::Create();
 	if (!m_ComponentRegistry) return EResult::Fail;
@@ -51,11 +52,12 @@ EResult Runtime::Initialize(void* arg)
 	m_RenderPassManager = RenderPassManager::Create();
 	if (!m_RenderPassManager) return EResult::Fail;
 	m_Renderer = Renderer::Create(&RendererDesc);
-	if (!m_Renderer) return EResult::Fail;
+	if (!m_Renderer)
+		return EResult::Fail;
 	m_CameraManager = CameraManager::Create();
 	if (!m_CameraManager) return EResult::Fail;
 
-	tagPipelineManagerDesc pipelineDesc = {};
+	PipelineManagerDesc pipelineDesc = {};
 	pipelineDesc.rhi = m_Renderer->GetRHI();
 	m_PipelineManager = PipelineManager::Create(&pipelineDesc);
 	if (!m_PipelineManager) return EResult::Fail;
@@ -67,7 +69,8 @@ EResult Runtime::Initialize(void* arg)
 	if (!m_LightManager) return EResult::Fail;
 
 	m_CollisionManager = CollisionManager::Create();
-	if (!m_CollisionManager) return EResult::Fail;
+	if (!m_CollisionManager)
+		return EResult::Fail;
 
 	m_LocalizationManager->LoadData();
 	return EResult::Success;
@@ -132,6 +135,7 @@ EResult Runtime::Render(f32 dt)
 	if (IsFailure(Renderer::Get().BeginFrame()))
 	{
 		fmt::print(stderr, "Renderer BeginFrame Failed\n");
+		return EResult::Fail;
 	}
 
 	SystemManager::Get().Sumbit(m_GlobalRegistry, SceneManager::Get().GetActiveScenes(), dt);
@@ -139,11 +143,13 @@ EResult Runtime::Render(f32 dt)
 	if (IsFailure(Renderer::Get().Render(dt)))
 	{
 		fmt::print(stderr, "Renderer Render Failed\n");
+		return EResult::Fail;
 	}
 
 	if (IsFailure(Renderer::Get().EndFrame()))
 	{
 		fmt::print(stderr, "Renderer EndFrame Failed\n");
+		return EResult::Fail;
 	}
 	m_LightManager->Update(dt);
 	return EResult::Success;

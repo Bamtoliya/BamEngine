@@ -22,7 +22,7 @@ struct TagComponent
 {
 	REFLECT_STRUCT()
 	PROPERTY(EDITABLE)
-	unordered_set<wstring> Tags;
+	unordered_set<wstring> tags;
 };
 
 STRUCT()
@@ -30,7 +30,7 @@ struct IDComponent
 {
 	REFLECT_STRUCT()
 	PROPERTY(READONLY)
-	uint64 ID = 0;
+	uint64 id = 0;
 };
 
 STRUCT()
@@ -38,7 +38,7 @@ struct NameComponent
 {
 	REFLECT_STRUCT()
 	PROPERTY(EDITABLE)
-	wstring Name = L"Entity";
+	wstring name = L"Entity";
 };
 
 STRUCT()
@@ -46,7 +46,7 @@ struct FlagComponent
 {
 	REFLECT_STRUCT()
 	PROPERTY(EDITABLE)
-	EEntityFlag Flags = EEntityFlag::Default;
+	EEntityFlag flags = EEntityFlag::Default;
 };
 
 STRUCT()
@@ -54,11 +54,11 @@ struct TransformComponent
 {
 	REFLECT_STRUCT()
 	PROPERTY(EDITABLE)
-	vec3 Position = { 0.0f, 0.0f, 0.0f };
+	vec3 position = { 0.0f, 0.0f, 0.0f };
 	PROPERTY(EDITABLE)
-	quat Rotation = { 0.0f, 0.0f, 0.0f, 1.0f };
+	quat rotation = { 0.0f, 0.0f, 0.0f, 1.0f };
 	PROPERTY(EDITABLE)
-	vec3 Scale = { 1.0f, 1.0f, 1.0f };
+	vec3 scale = { 1.0f, 1.0f, 1.0f };
 };
 
 STRUCT()
@@ -66,15 +66,15 @@ struct WorldTransformComponent
 {
 	REFLECT_STRUCT()
 	PROPERTY(READONLY)
-	mat4 WorldMatrix = mat4(1.0f);
+	mat4 worldMatrix = mat4(1.0f);
 };
 
 STRUCT()
 struct HierarchyComponent
 {
 	REFLECT_STRUCT()
-	entt::entity Parent = entt::null;
-	std::vector<entt::entity> Children;
+	entt::entity parent = entt::null;
+	std::vector<entt::entity> children;
 };
 
 END

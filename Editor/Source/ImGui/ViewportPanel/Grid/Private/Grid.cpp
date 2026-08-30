@@ -18,9 +18,9 @@ void Grid::PrepareShaders()
     ShaderDesc gridVsDesc = {};
     gridVsDesc.Key = L"InfiniteGridVS";
     gridVsDesc.Path = L"Resources/Shader/infinite_grid.vert.spv";
-    gridVsDesc.SpirvPath = L"Resources/Shader/infinite_grid.vert.spv";
-    gridVsDesc.ShaderType = EShaderType::Vertex;
-    gridVsDesc.EntryPoint = "main";
+    gridVsDesc.spirvPath = L"Resources/Shader/infinite_grid.vert.spv";
+    gridVsDesc.shaderType = EShaderType::Vertex;
+    gridVsDesc.entryPoint = "main";
     resourceManager.LoadResource<Shader>(&gridVsDesc);
     {
         auto handle = resourceManager.GetResourceHandle<Shader>(L"InfiniteGridVS");
@@ -30,9 +30,9 @@ void Grid::PrepareShaders()
     ShaderDesc grid2DPsDesc = {};
     grid2DPsDesc.Key = L"InfiniteGrid2DPS";
     grid2DPsDesc.Path = L"Resources/Shader/infinite_grid_2d.frag.spv";
-    grid2DPsDesc.SpirvPath = L"Resources/Shader/infinite_grid_2d.frag.spv";
-    grid2DPsDesc.ShaderType = EShaderType::Pixel;
-    grid2DPsDesc.EntryPoint = "main";
+    grid2DPsDesc.spirvPath = L"Resources/Shader/infinite_grid_2d.frag.spv";
+    grid2DPsDesc.shaderType = EShaderType::Pixel;
+    grid2DPsDesc.entryPoint = "main";
     resourceManager.LoadResource<Shader>(&grid2DPsDesc);
     {
         auto handle = resourceManager.GetResourceHandle<Shader>(L"InfiniteGrid2DPS");
@@ -43,9 +43,9 @@ void Grid::PrepareShaders()
     ShaderDesc grid3DPsDesc = {};
     grid3DPsDesc.Key = L"InfiniteGrid3DPS";
     grid3DPsDesc.Path = L"Resources/Shader/infinite_grid.frag.spv";
-    grid3DPsDesc.SpirvPath = L"Resources/Shader/infinite_grid.frag.spv";
-    grid3DPsDesc.ShaderType = EShaderType::Pixel;
-    grid3DPsDesc.EntryPoint = "main";
+    grid3DPsDesc.spirvPath = L"Resources/Shader/infinite_grid.frag.spv";
+    grid3DPsDesc.shaderType = EShaderType::Pixel;
+    grid3DPsDesc.entryPoint = "main";
     resourceManager.LoadResource<Shader>(&grid3DPsDesc);
     {
         auto handle = resourceManager.GetResourceHandle<Shader>(L"InfiniteGrid3DPS");
@@ -97,29 +97,29 @@ void Grid::SubmitGrid(Camera* camera, bool isOrthographic, const wstring& colorR
             if (!quadMesh) return EResult::Fail;
 
             // 매 프레임 RT 이름으로 포맷 조회 → pipelineDesc 구성
-            tagRHIPipelineDesc desc = {};
-            desc.PipelineType = EPipelineType::Graphics;
+            RHIPipelineDesc desc = {};
+            desc.pipelineType = EPipelineType::Graphics;
             auto gridVSHandle = ResourceManager::Get().GetResourceHandle<Shader>(L"InfiniteGridVS");
             auto gridPSHandle = ResourceManager::Get().GetResourceHandle<Shader>(
                 isOrthographic ? L"InfiniteGrid2DPS" : L"InfiniteGrid3DPS");
-            desc.VertexShader = gridVSHandle->GetRHIShader();
-            desc.PixelShader = gridPSHandle->GetRHIShader();
-            desc.BlendState = Engine::tagBlendState{EBlendMode::AlphaBlend};
-            desc.FillMode = EFillMode::Solid;
-            desc.CullMode = ECullMode::None;
-            desc.Topology = ETopology::TriangleList;
-            desc.InputLayouts = quadMesh->GetInputLayoutDescs();
+            desc.vertexShader = gridVSHandle->GetRHIShader();
+            desc.pixelShader = gridPSHandle->GetRHIShader();
+            desc.blendState = Engine::BlendState{EBlendMode::AlphaBlend};
+            desc.fillMode = EFillMode::Solid;
+            desc.cullMode = ECullMode::None;
+            desc.topology = ETopology::TriangleList;
+            desc.inputLayouts = quadMesh->GetInputLayoutDescs();
 
             auto* colorRT = RenderTargetManager::Get().GetRenderTarget(colorRTName);
             auto* depthRT = RenderTargetManager::Get().GetRenderTarget(depthStencilName);
 
-            desc.ColorAttachmentCount = colorRT ? 1 : 0;
-            desc.ColorAttachmentFormats[0] = colorRT ? colorRT->GetFormat() : ETextureFormat::R8G8B8A8_UNORM;
-            desc.DepthStencilAttachmentFormat = depthRT ? depthRT->GetFormat() : ETextureFormat::UNKNOWN;
+            desc.colorAttachmentCount = colorRT ? 1 : 0;
+            desc.colorAttachmentFormats[0] = colorRT ? colorRT->GetFormat() : ETextureFormat::R8G8B8A8_UNORM;
+            desc.depthStencilAttachmentFormat = depthRT ? depthRT->GetFormat() : ETextureFormat::UNKNOWN;
 
-            desc.DepthStencilState.DepthTestEnable = true;
-            desc.DepthStencilState.DepthWriteEnable = false;
-            desc.DepthStencilState.DepthCompareOp = isOrthographic ? ECompareOp::LessOrEqual : ECompareOp::Less;
+            desc.depthStencilState.depthTestEnable = true;
+            desc.depthStencilState.depthWriteEnable = false;
+            desc.depthStencilState.depthCompareOp = isOrthographic ? ECompareOp::LessOrEqual : ECompareOp::Less;
 
             // PipelineManager 캐시에서 조회 → 없을 때만 실제 생성
             RHIPipeline* pipeline = PipelineManager::Get().GetOrCreatePipeline(desc);

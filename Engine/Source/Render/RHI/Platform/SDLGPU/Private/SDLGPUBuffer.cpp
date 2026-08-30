@@ -10,7 +10,7 @@ EResult SDLGPUBuffer::Initialize(const DESC& desc)
 	SDL_GPUDevice* device = static_cast<SDL_GPUDevice*>(rhi->GetNativeRHI());
 
 	SDL_GPUBufferCreateInfo createInfo = {};
-	switch (desc.BufferType)
+	switch (desc.bufferType)
 	{
 	case ERHIBufferType::Vertex:
 		createInfo.usage = SDL_GPU_BUFFERUSAGE_VERTEX;
@@ -24,18 +24,18 @@ EResult SDLGPUBuffer::Initialize(const DESC& desc)
 	default:
 		break;
 	}
-	createInfo.size = desc.Size;
+	createInfo.size = desc.size;
 
-	m_Size = desc.Size;
-	m_Data.resize(desc.Size);
+	m_Size = desc.size;
+	m_Data.resize(desc.size);
 
 	m_GPUBuffer = SDL_CreateGPUBuffer(device, &createInfo);
 	if (!m_GPUBuffer) return EResult::Fail;
 
-	if (desc.InitialData)
+	if (desc.initialData)
 	{
-		memcpy(m_Data.data(), desc.InitialData, desc.Size);
-		rhi->UploadBufferData(m_GPUBuffer, desc.InitialData, desc.Size);
+		memcpy(m_Data.data(), desc.initialData, desc.size);
+		rhi->UploadBufferData(m_GPUBuffer, desc.initialData, desc.size);
 	}
 
 	return EResult::Success;

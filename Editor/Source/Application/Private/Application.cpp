@@ -7,6 +7,10 @@
 #include "SelectionManager.h"
 #include "AssetManager.h"
 
+
+#define RHI_TYPE ERHIType::DirectX12
+#define GRAPHICS_BACKEND EGraphicsBackend::Vulkan
+
 BEGIN(Editor)
 
 IMPLEMENT_SINGLETON(Application)
@@ -14,6 +18,7 @@ IMPLEMENT_SINGLETON(Application)
 #pragma region Constructor&Destructor
 EResult Application::Initialize(void* arg)
 {
+//    _CrtSetBreakAlloc(4243);
 	InitializeWindow(*(ApplicationCreateInfo*)arg);
 	InitializeRuntime(*(ApplicationCreateInfo*)arg);
 
@@ -58,7 +63,11 @@ void Application::Free()
     ImGuiManager::Destroy();
 	SelectionManager::Destroy();
 
-    if (m_Runtime) m_Runtime->Destroy();
+    if (m_Runtime)
+    {
+        m_Runtime->Destroy();
+        m_Runtime = nullptr;
+    }
 
     if(m_Window) SDL_DestroyWindow(m_Window);
     SDL_Quit();
@@ -76,6 +85,9 @@ EResult Application::InitializeWindow(const ApplicationCreateInfo& createInfo)
     }
 
     uint32 windowFlags = SDL_WINDOW_RESIZABLE | SDL_WINDOW_BORDERLESS | SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_VULKAN;
+
+    // SDL3에서 OS 기본 IME(한글 조합 등) 창을 띄우기 위한 힌트 설정
+    SDL_SetHint(SDL_HINT_IME_IMPLEMENTED_UI, "1");
 
     m_Window = SDL_CreateWindow(
         "BamEngine Editor", g_WindowWidth, g_WindowHeight,
@@ -143,47 +155,53 @@ EResult Application::InitializeWindow(const ApplicationCreateInfo& createInfo)
 EResult Application::InitializeRuntime(const ApplicationCreateInfo& createInfo)
 {
     RUNTIMEDESC runtimeDesc = {};
-    runtimeDesc.RendererDesc.RHIType = ERHIType::SDLGPU;
-    switch (runtimeDesc.RendererDesc.RHIType)
+    runtimeDesc.RendererDesc.rhiType = RHI_TYPE;
+    switch (runtimeDesc.RendererDesc.rhiType)
     {
     case ERHIType::SDLGPU:
     {
-        tagSDLGPURHIDesc sdlgpuDesc = {};
-        sdlgpuDesc.BackendType = EGraphicsBackend::Vulkan; // 원하는 그래픽 백엔드 설정
-        runtimeDesc.RendererDesc.RHIDesc = &sdlgpuDesc;
+        SDLGPURHIDesc sdlgpuDesc = {};
+        sdlgpuDesc.backendType = GRAPHICS_BACKEND; // 원하는 그래픽 백엔드 설정
+		sdlgpuDesc.windowHandle = m_Window;
+        runtimeDesc.RendererDesc.rhiDesc = &sdlgpuDesc;
         break;
     }
-    //case ERHITType::Vulkan:
+    //case ERHIType::Vulkan:
     //{
-    //    tagVulkanRHIDesc vulkanDesc = {};
-    //    runtimeDesc.RendererDesc.RHIDesc = &vulkanDesc;
+    //    VulkanRHIDesc vulkanDesc = {};
+    //    runtimeDesc.RendererDesc.rhiDesc = &vulkanDesc;
     //    break;
     //}
-    //case ERHITType::DirectX12:
+    case ERHIType::DirectX12:
+    {
+        DirectX12RHIDesc directX12Desc = {};
+        SDL_PropertiesID propertiesID = SDL_GetWindowProperties(m_Window);
+        HWND hwnd = (HWND)SDL_GetPointerProperty(propertiesID, SDL_PROP_WINDOW_WIN32_HWND_POINTER, NULL);
+        directX12Desc.windowHandle = hwnd;
+        runtimeDesc.RendererDesc.rhiDesc = &directX12Desc;
+        break;
+    }
+    //case ERHIType::Metal:
     //{
-    //    tagDirctX12RHIDesc dirctX12Desc = {};
-    //    runtimeDesc.RendererDesc.RHIDesc = &dirctX12Desc;
-    //    break;
-    //}
-    //case ERHITType::Metal:
-    //{
-    //    tagMetalRHIDesc metalDesc = {};
-    //    runtimeDesc.RendererDesc.RHIDesc = &metalDesc;
+    //    MetalRHIDesc metalDesc = {};
+    //    runtimeDesc.RendererDesc.rhiDesc = &metalDesc;
     //    break;
     //}
     default:
         break;
     }
-    runtimeDesc.RendererDesc.RHIDesc->WindowHandle = m_Window;
-    runtimeDesc.RendererDesc.RHIDesc->Width = g_WindowWidth;
-    runtimeDesc.RendererDesc.RHIDesc->Height = g_WindowHeight;
-    runtimeDesc.RendererDesc.RHIDesc->IsVSync = true;
+    
+    runtimeDesc.RendererDesc.rhiDesc->width = g_WindowWidth;
+    runtimeDesc.RendererDesc.rhiDesc->height = g_WindowHeight;
+    runtimeDesc.RendererDesc.rhiDesc->isVSync = true;
 
     m_Runtime = Runtime::Create(&runtimeDesc);
-    if (!m_Runtime) return EResult::Fail;
+    if (!m_Runtime)
+        return EResult::Fail;
 
     m_AssetManager = AssetManager::Create();
-    if (!m_AssetManager) return EResult::Fail;
+    if (!m_AssetManager)
+        return EResult::Fail;
 
     return EResult::Success;
 }
@@ -259,11 +277,45 @@ void Application::InitializeShaders()
 {
     ResourceManager& rm = ResourceManager::Get();
 
+	//ShaderDesc defaultVsDesc = {};
+	//defaultVsDesc.Key = L"Resources/Shader/DefaultVS";
+ //   defaultVsDesc.Path = L"Resources/Shader/default_vs.cso";
+ //   defaultVsDesc.shaderType = EShaderType::Vertex;
+ //   defaultVsDesc.entryPoint = "VSMain";
+	//rm.LoadResource<Shader>(&defaultVsDesc);
+	//{
+	//	auto handle = rm.GetResourceHandle<Shader>(defaultVsDesc.Key);
+	//	rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/default_vs.bamshader");
+	//}
+
+ //   ShaderDesc defaultPsDesc = {};
+ //   defaultPsDesc.Key = L"Resources/Shader/DefaultPS";
+ //   defaultPsDesc.Path = L"Resources/Shader/default_ps.cso";
+ //   defaultPsDesc.shaderType = EShaderType::Pixel;
+ //   defaultPsDesc.entryPoint = "PSMain";
+	//rm.LoadResource<Shader>(&defaultPsDesc);
+	//{
+	//	auto handle = rm.GetResourceHandle<Shader>(defaultPsDesc.Key);
+	//	rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/default_ps.bamshader");
+	//}
+
+    ShaderDesc defaultVsDesc = {};
+    defaultVsDesc.Key = L"Resources/Shader/GBufferVS";
+    defaultVsDesc.Path = L"Resources/Shader/gbuffer.vert.spv";
+    defaultVsDesc.spirvPath = L"Resources/Shader/gbuffer.vert.spv";
+    defaultVsDesc.shaderType = EShaderType::Vertex;
+    rm.LoadResource<Shader>(&defaultVsDesc);
+    {
+        auto handle = rm.GetResourceHandle<Shader>(defaultVsDesc.Key);
+        rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/gbuffer.vert.bamshader");
+    }
+    rm.LoadFile(L"Resources/Shader/gbuffer.vert.bamshader");
+
     ShaderDesc gbufferVsDesc = {};
     gbufferVsDesc.Key = L"Resources/Shader/GBufferVS";
     gbufferVsDesc.Path = L"Resources/Shader/gbuffer.vert.spv";
-    gbufferVsDesc.SpirvPath = L"Resources/Shader/gbuffer.vert.spv";
-    gbufferVsDesc.ShaderType = EShaderType::Vertex;
+    gbufferVsDesc.spirvPath = L"Resources/Shader/gbuffer.vert.spv";
+    gbufferVsDesc.shaderType = EShaderType::Vertex;
     rm.LoadResource<Shader>(&gbufferVsDesc);
     {
         auto handle = rm.GetResourceHandle<Shader>(gbufferVsDesc.Key);
@@ -273,8 +325,8 @@ void Application::InitializeShaders()
     ShaderDesc gbufferPsDesc = {};
     gbufferPsDesc.Key = L"Resources/Shader/GBufferPS";
     gbufferPsDesc.Path = L"Resources/Shader/gbuffer.frag.spv";
-    gbufferPsDesc.SpirvPath = L"Resources/Shader/gbuffer.frag.spv";
-    gbufferPsDesc.ShaderType = EShaderType::Pixel;
+    gbufferPsDesc.spirvPath = L"Resources/Shader/gbuffer.frag.spv";
+    gbufferPsDesc.shaderType = EShaderType::Pixel;
     rm.LoadResource<Shader>(&gbufferPsDesc);
     {
         auto handle = rm.GetResourceHandle<Shader>(gbufferPsDesc.Key);
@@ -285,10 +337,10 @@ void Application::InitializeShaders()
     // Fullscreen Quad VS
     ShaderDesc fsQuadVsDesc = {};
     fsQuadVsDesc.Key = L"FullscreenQuadVS";
-    fsQuadVsDesc.ShaderType = EShaderType::Vertex;
+    fsQuadVsDesc.shaderType = EShaderType::Vertex;
     fsQuadVsDesc.Path = L"Resources/Shader/fullscreen_quad.vert.spv";
-    fsQuadVsDesc.SpirvPath = L"Resources/Shader/fullscreen_quad.vert.spv";
-    fsQuadVsDesc.EntryPoint = "main";
+    fsQuadVsDesc.spirvPath = L"Resources/Shader/fullscreen_quad.vert.spv";
+    fsQuadVsDesc.entryPoint = "main";
     rm.LoadResource<Shader>(&fsQuadVsDesc);
     {
         auto handle = rm.GetResourceHandle<Shader>(fsQuadVsDesc.Key);
@@ -299,13 +351,13 @@ void Application::InitializeShaders()
     // Lighting PS
     ShaderDesc lightingPsDesc = {};
     lightingPsDesc.Key = L"LightingPS";
-    lightingPsDesc.ShaderType = EShaderType::Pixel;
+    lightingPsDesc.shaderType = EShaderType::Pixel;
     lightingPsDesc.Path = L"Resources/Shader/lighting.frag.spv";
-    lightingPsDesc.SpirvPath = L"Resources/Shader/lighting.frag.spv";
-    lightingPsDesc.EntryPoint = "main";
-    lightingPsDesc.NumSamplers = 6;
-    lightingPsDesc.NumStorageBuffers = 1;
-    lightingPsDesc.NumUniformBuffers = 2;
+    lightingPsDesc.spirvPath = L"Resources/Shader/lighting.frag.spv";
+    lightingPsDesc.entryPoint = "main";
+    lightingPsDesc.numSamplers = 6;
+    lightingPsDesc.numStorageBuffers = 1;
+    lightingPsDesc.numUniformBuffers = 2;
     rm.LoadResource<Shader>(&lightingPsDesc);
     {
         auto handle = rm.GetResourceHandle<Shader>(lightingPsDesc.Key);
@@ -316,10 +368,10 @@ void Application::InitializeShaders()
     // Shadow Depth VS (static mesh)
     ShaderDesc shadowDepthVsDesc = {};
     shadowDepthVsDesc.Key = L"ShadowDepthVS";
-    shadowDepthVsDesc.ShaderType = EShaderType::Vertex;
+    shadowDepthVsDesc.shaderType = EShaderType::Vertex;
     shadowDepthVsDesc.Path = L"Resources/Shader/shadow_depth.vert.spv";
-    shadowDepthVsDesc.SpirvPath = L"Resources/Shader/shadow_depth.vert.spv";
-    shadowDepthVsDesc.EntryPoint = "main";
+    shadowDepthVsDesc.spirvPath = L"Resources/Shader/shadow_depth.vert.spv";
+    shadowDepthVsDesc.entryPoint = "main";
     rm.LoadResource<Shader>(&shadowDepthVsDesc);
     {
         auto handle = rm.GetResourceHandle<Shader>(shadowDepthVsDesc.Key);
@@ -330,11 +382,11 @@ void Application::InitializeShaders()
     // Shadow Depth VS (skinning)
     ShaderDesc shadowDepthSkinVsDesc = {};
     shadowDepthSkinVsDesc.Key = L"ShadowDepthSkinningVS";
-    shadowDepthSkinVsDesc.ShaderType = EShaderType::Vertex;
+    shadowDepthSkinVsDesc.shaderType = EShaderType::Vertex;
     shadowDepthSkinVsDesc.Path = L"Resources/Shader/shadow_depth_skinning.vert.spv";
-    shadowDepthSkinVsDesc.SpirvPath = L"Resources/Shader/shadow_depth_skinning.vert.spv";
-    shadowDepthSkinVsDesc.EntryPoint = "main";
-    shadowDepthSkinVsDesc.NumStorageBuffers = 1;
+    shadowDepthSkinVsDesc.spirvPath = L"Resources/Shader/shadow_depth_skinning.vert.spv";
+    shadowDepthSkinVsDesc.entryPoint = "main";
+    shadowDepthSkinVsDesc.numStorageBuffers = 1;
     rm.LoadResource<Shader>(&shadowDepthSkinVsDesc);
     {
         auto handle = rm.GetResourceHandle<Shader>(shadowDepthSkinVsDesc.Key);
@@ -345,10 +397,10 @@ void Application::InitializeShaders()
     // Shadow Depth PS (depth-only)
     ShaderDesc shadowDepthPsDesc = {};
     shadowDepthPsDesc.Key = L"ShadowDepthPS";
-    shadowDepthPsDesc.ShaderType = EShaderType::Pixel;
+    shadowDepthPsDesc.shaderType = EShaderType::Pixel;
     shadowDepthPsDesc.Path = L"Resources/Shader/shadow_depth.frag.spv";
-    shadowDepthPsDesc.SpirvPath = L"Resources/Shader/shadow_depth.frag.spv";
-    shadowDepthPsDesc.EntryPoint = "main";
+    shadowDepthPsDesc.spirvPath = L"Resources/Shader/shadow_depth.frag.spv";
+    shadowDepthPsDesc.entryPoint = "main";
     rm.LoadResource<Shader>(&shadowDepthPsDesc);
     {
         auto handle = rm.GetResourceHandle<Shader>(shadowDepthPsDesc.Key);
@@ -360,12 +412,12 @@ void Application::InitializeShaders()
     // Viewport Channel PS
     ShaderDesc viewportChannelPsDesc = {};
     viewportChannelPsDesc.Key = L"ViewportChannelPS";
-    viewportChannelPsDesc.ShaderType = EShaderType::Pixel;
+    viewportChannelPsDesc.shaderType = EShaderType::Pixel;
     viewportChannelPsDesc.Path = L"Resources/Shader/viewport_channel.frag.spv";
-    viewportChannelPsDesc.SpirvPath = L"Resources/Shader/viewport_channel.frag.spv";
-    viewportChannelPsDesc.EntryPoint = "main";
-    viewportChannelPsDesc.NumSamplers = 1;
-    viewportChannelPsDesc.NumUniformBuffers = 1;
+    viewportChannelPsDesc.spirvPath = L"Resources/Shader/viewport_channel.frag.spv";
+    viewportChannelPsDesc.entryPoint = "main";
+    viewportChannelPsDesc.numSamplers = 1;
+    viewportChannelPsDesc.numUniformBuffers = 1;
     rm.LoadResource<Shader>(&viewportChannelPsDesc);
     {
         auto handle = rm.GetResourceHandle<Shader>(viewportChannelPsDesc.Key);
@@ -376,12 +428,12 @@ void Application::InitializeShaders()
     // PostProcess PS
     ShaderDesc postProcessPsDesc = {};
     postProcessPsDesc.Key = L"PostProcessPS";
-    postProcessPsDesc.ShaderType = EShaderType::Pixel;
+    postProcessPsDesc.shaderType = EShaderType::Pixel;
     postProcessPsDesc.Path = L"Resources/Shader/postprocess.frag.spv";
-    postProcessPsDesc.SpirvPath = L"Resources/Shader/postprocess.frag.spv";
-    postProcessPsDesc.EntryPoint = "main";
-    postProcessPsDesc.NumSamplers = 1;
-    postProcessPsDesc.NumUniformBuffers = 1;
+    postProcessPsDesc.spirvPath = L"Resources/Shader/postprocess.frag.spv";
+    postProcessPsDesc.entryPoint = "main";
+    postProcessPsDesc.numSamplers = 1;
+    postProcessPsDesc.numUniformBuffers = 1;
     rm.LoadResource<Shader>(&postProcessPsDesc);
     {
         auto handle = rm.GetResourceHandle<Shader>(postProcessPsDesc.Key);
@@ -392,12 +444,12 @@ void Application::InitializeShaders()
     // PostProcess - Tone Mapping PS
     ShaderDesc ppToneMappingPsDesc = {};
     ppToneMappingPsDesc.Key = L"PostProcess_ToneMappingPS";
-    ppToneMappingPsDesc.ShaderType = EShaderType::Pixel;
+    ppToneMappingPsDesc.shaderType = EShaderType::Pixel;
     ppToneMappingPsDesc.Path = L"Resources/Shader/postprocess_tonemapping.frag.spv";
-    ppToneMappingPsDesc.SpirvPath = L"Resources/Shader/postprocess_tonemapping.frag.spv";
-    ppToneMappingPsDesc.EntryPoint = "main";
-    ppToneMappingPsDesc.NumSamplers = 1;
-    ppToneMappingPsDesc.NumUniformBuffers = 1;
+    ppToneMappingPsDesc.spirvPath = L"Resources/Shader/postprocess_tonemapping.frag.spv";
+    ppToneMappingPsDesc.entryPoint = "main";
+    ppToneMappingPsDesc.numSamplers = 1;
+    ppToneMappingPsDesc.numUniformBuffers = 1;
     rm.LoadResource<Shader>(&ppToneMappingPsDesc);
     {
         auto handle = rm.GetResourceHandle<Shader>(ppToneMappingPsDesc.Key);
@@ -409,11 +461,11 @@ void Application::InitializeShaders()
     // Sky VS
     ShaderDesc skyVSDesc = {};
     skyVSDesc.Key = L"SkyVS";
-    skyVSDesc.ShaderType = EShaderType::Vertex;
+    skyVSDesc.shaderType = EShaderType::Vertex;
     skyVSDesc.Path = L"Resources/Shader/sky.vert.spv";
-    skyVSDesc.SpirvPath = L"Resources/Shader/sky.vert.spv";
-    skyVSDesc.EntryPoint = "main";
-    skyVSDesc.NumUniformBuffers = 1;
+    skyVSDesc.spirvPath = L"Resources/Shader/sky.vert.spv";
+    skyVSDesc.entryPoint = "main";
+    skyVSDesc.numUniformBuffers = 1;
     rm.LoadResource<Shader>(&skyVSDesc);
     {
         auto handle = rm.GetResourceHandle<Shader>(skyVSDesc.Key);
@@ -424,11 +476,11 @@ void Application::InitializeShaders()
     // Skybox PS
     ShaderDesc skyPSDesc = {};
     skyPSDesc.Key = L"SkyboxPS";
-    skyPSDesc.ShaderType = EShaderType::Pixel;
+    skyPSDesc.shaderType = EShaderType::Pixel;
     skyPSDesc.Path = L"Resources/Shader/sky.frag.spv";
-    skyPSDesc.SpirvPath = L"Resources/Shader/sky.frag.spv";
-    skyPSDesc.EntryPoint = "main";
-    skyPSDesc.NumUniformBuffers = 1;
+    skyPSDesc.spirvPath = L"Resources/Shader/sky.frag.spv";
+    skyPSDesc.entryPoint = "main";
+    skyPSDesc.numUniformBuffers = 1;
     rm.LoadResource<Shader>(&skyPSDesc);
     {
         auto handle = rm.GetResourceHandle<Shader>(skyPSDesc.Key);
@@ -439,11 +491,11 @@ void Application::InitializeShaders()
     // UI VS
     ShaderDesc uiVSDesc = {};
     uiVSDesc.Key = L"UIVS";
-    uiVSDesc.ShaderType = EShaderType::Vertex;
+    uiVSDesc.shaderType = EShaderType::Vertex;
     uiVSDesc.Path = L"Resources/Shader/ui.vert.spv";
-    uiVSDesc.SpirvPath = L"Resources/Shader/ui.vert.spv";
-    uiVSDesc.EntryPoint = "main";
-    uiVSDesc.NumUniformBuffers = 1;
+    uiVSDesc.spirvPath = L"Resources/Shader/ui.vert.spv";
+    uiVSDesc.entryPoint = "main";
+    uiVSDesc.numUniformBuffers = 1;
     rm.LoadResource<Shader>(&uiVSDesc);
     {
         auto handle = rm.GetResourceHandle<Shader>(uiVSDesc.Key);
@@ -454,11 +506,11 @@ void Application::InitializeShaders()
     // UI PS
     ShaderDesc uiPSDesc = {};
     uiPSDesc.Key = L"UIPS";
-    uiPSDesc.ShaderType = EShaderType::Pixel;
+    uiPSDesc.shaderType = EShaderType::Pixel;
     uiPSDesc.Path = L"Resources/Shader/ui.frag.spv";
-    uiPSDesc.SpirvPath = L"Resources/Shader/ui.frag.spv";
-    uiPSDesc.EntryPoint = "main";
-    uiPSDesc.NumUniformBuffers = 1;
+    uiPSDesc.spirvPath = L"Resources/Shader/ui.frag.spv";
+    uiPSDesc.entryPoint = "main";
+    uiPSDesc.numUniformBuffers = 1;
     rm.LoadResource<Shader>(&uiPSDesc);
     {
         auto handle = rm.GetResourceHandle<Shader>(uiPSDesc.Key);
@@ -583,14 +635,14 @@ void Application::InitializeMaterials()
     ResourceManager& resourceManager = ResourceManager::Get();
 #pragma region Basic Materials
 
-    //MaterialDesc defaultMaterialDesc = {};
-    //defaultMaterialDesc.Key = L"Resources/Material/DefaultMaterial";
-    //defaultMaterialDesc.VertexShaderHandle = resourceManager.GetResourceHandle<Shader>(L"Resources/Shader/default.vert.bamshader");
-    //defaultMaterialDesc.PixelShaderHandle = resourceManager.GetResourceHandle<Shader>(L"Resources/Shader/default.frag.bamshader");
-    //Material* material = resourceManager.LoadResource<Material>(&defaultMaterialDesc).Get();
-    //material->SetTextureBinding("Default", 0, resourceManager.GetResourceHandle<Texture>(L"Resources/Texture/magenta1x1.png"));
-    //resourceManager.SaveToBinaryFile(material, L"Resources/Material/DefaultMaterial.bammat");
-    //
+    MaterialDesc defaultMaterialDesc = {};
+    defaultMaterialDesc.Key = L"Resources/Material/DefaultMaterial";
+    defaultMaterialDesc.VertexShaderHandle = resourceManager.GetResourceHandle<Shader>(L"Resources/Shader/default.vert.bamshader");
+    defaultMaterialDesc.PixelShaderHandle = resourceManager.GetResourceHandle<Shader>(L"Resources/Shader/default.frag.bamshader");
+    Material* material = resourceManager.LoadResource<Material>(&defaultMaterialDesc).Get();
+    material->SetTextureBinding("Default", 0, resourceManager.GetResourceHandle<Texture>(L"Resources/Texture/magenta1x1.png"));
+    resourceManager.SaveToBinaryFile(material, L"Resources/Material/DefaultMaterial.bammat");
+    
     MaterialDesc spriteMaterialDesc = {};
     spriteMaterialDesc.Key = L"Resources/Material/SpriteMaterial";
     spriteMaterialDesc.VertexShaderHandle = resourceManager.GetResourceHandle<Shader>(L"Resources/Shader/sprite.vert.bamshader");
@@ -613,9 +665,9 @@ void Application::InitializeMaterials()
     ShaderDesc defaultSkinningShaderDesc = {};
     defaultSkinningShaderDesc.Key = L"Resources/Shader/Skinning";
     defaultSkinningShaderDesc.Path = L"Resources/Shader/skinning.vert.spv";
-    defaultSkinningShaderDesc.SpirvPath = L"Resources/Shader/skinning.vert.spv";
-    defaultSkinningShaderDesc.ShaderType = EShaderType::Vertex;
-    defaultSkinningShaderDesc.NumStorageBuffers = 1;
+    defaultSkinningShaderDesc.spirvPath = L"Resources/Shader/skinning.vert.spv";
+    defaultSkinningShaderDesc.shaderType = EShaderType::Vertex;
+    defaultSkinningShaderDesc.numStorageBuffers = 1;
     Shader* skinningShader = resourceManager.LoadResource<Shader>(&defaultSkinningShaderDesc).Get();
     resourceManager.SaveToBinaryFile(skinningShader, L"Resources/Shader/skinning.vert.bamshader");
     resourceManager.LoadFile(L"Resources/Shader/skinning.vert.bamshader");
@@ -734,11 +786,12 @@ void Application::IntializeRenderer()
     uint32 w = rhi->GetSwapChainWidth();
     uint32 h = rhi->GetSwapChainHeight();
     // ── 에디터 최종 출력용 RT (ImGui가 여기에 렌더) ──
-    tagRenderTargetDesc finalDesc = {};
-    finalDesc.Name = L"FinalColor";
-    finalDesc.Width = w;
-    finalDesc.Height = h;
-    finalDesc.BindFlag = ERenderTargetBindFlag::RTBF_ShaderResource
+    RenderTargetDesc finalDesc = {};
+    finalDesc.format = ETextureFormat::R8G8B8A8_UNORM;
+    finalDesc.name = L"FinalColor";
+    finalDesc.width = w;
+    finalDesc.height = h;
+    finalDesc.bindFlag = ERenderTargetBindFlag::RTBF_ShaderResource
         | ERenderTargetBindFlag::RTBF_RenderTarget;
     rtMgr.CreateRenderTarget(&finalDesc);
 
@@ -770,6 +823,7 @@ void Application::SubmitRenderPasses()
     //    }, m_LightingPassID);
 }
 #pragma endregion
+
 #pragma region PIE (Play In Editor)
 void Application::EnterPlayMode()
 {
@@ -932,10 +986,5 @@ void Application::UpdateTitle(f32 dt)
         std::string title = fmt::format("BamEngine Editor - FPS: {}", currentFPS);
         SDL_SetWindowTitle(m_Window, title.c_str());
     }
-}
-
-void Application::Test(f32 dt)
-{
-    
 }
 END

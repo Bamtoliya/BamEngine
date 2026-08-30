@@ -7,19 +7,19 @@ EResult RenderPass::Initialize(void* arg)
 {
 	if (!arg) return EResult::InvalidArgument;
 	CAST_DESC
-	m_Desc.Priority = desc->Priority;
+	m_Desc.priority = desc->priority;
 	m_Desc.ID = desc->ID;
-	m_Desc.Name = desc->Name;
-	m_Desc.DepthStencilName = desc->DepthStencilName;
-	m_Desc.RenderTargetNames = desc->RenderTargetNames;
-	m_Desc.SortType = desc->SortType;
-	m_Desc.LoadOperation = desc->LoadOperation;
-	m_Desc.StoreOperation = desc->StoreOperation;
-	m_Desc.StencilLoadOperation = desc->StencilLoadOperation;
-	m_Desc.StencilStoreOperation = desc->StencilStoreOperation;
-	m_Desc.OverrideClearColor = desc->OverrideClearColor;
-	m_Desc.PassType = desc->PassType;
-	m_Desc.AcceptedBlendModes = desc->AcceptedBlendModes;
+	m_Desc.name = desc->name;
+	m_Desc.depthStencilName = desc->depthStencilName;
+	m_Desc.renderTargetNames = desc->renderTargetNames;
+	m_Desc.sortType = desc->sortType;
+	m_Desc.loadOperation = desc->loadOperation;
+	m_Desc.storeOperation = desc->storeOperation;
+	m_Desc.stencilLoadOperation = desc->stencilLoadOperation;
+	m_Desc.stencilStoreOperation = desc->stencilStoreOperation;
+	m_Desc.overrideClearColor = desc->overrideClearColor;
+	m_Desc.passType = desc->passType;
+	m_Desc.acceptedBlendModes = desc->acceptedBlendModes;
 	return EResult::Success;
 }
 RenderPass* RenderPass::Create(void* arg)

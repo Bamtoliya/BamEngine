@@ -44,9 +44,9 @@ void UIRenderComponent::LateUpdate(f32 dt)
 
     for (const auto& passInfo : activePasses)
     {
-		if (!passInfo.RenderPass) continue;
-        const ERenderPassType passType = passInfo.RenderPass->GetPassType();
-        const RenderPassID passID = passInfo.RenderPass->GetID();
+		if (!passInfo.renderPass) continue;
+        const ERenderPassType passType = passInfo.renderPass->GetPassType();
+        const RenderPassID passID = passInfo.renderPass->GetID();
         if (isWorldSpace)
         {
             if (passType == ERenderPassType::Forward || passType == ERenderPassType::ForwardTransparent)
@@ -56,7 +56,7 @@ void UIRenderComponent::LateUpdate(f32 dt)
         }
         else
         {
-            if (passInfo.RenderPass->GetPassType() == ERenderPassType::UI)
+            if (passInfo.renderPass->GetPassType() == ERenderPassType::UI)
             {
                 Renderer::Get().SubmitUI(this, passID);
             };
@@ -71,30 +71,30 @@ EResult UIRenderComponent::Render(f32 dt, RenderPass* renderPass)
 
 EResult UIRenderComponent::BindPipeline(Mesh* mesh, MaterialInterface* material, RenderPass* renderPass)
 {
-    tagRHIPipelineDesc pipelineDesc = {};
-    pipelineDesc.Topology = mesh ? mesh->GetTopology() : ETopology::TriangleList;
-    pipelineDesc.PipelineType = EPipelineType::Graphics;
-    pipelineDesc.VertexShader = material->GetVertexShader()->GetRHIShader();
-    pipelineDesc.PixelShader = material->GetPixelShader()->GetRHIShader();
-    pipelineDesc.FrontFace = material->GetFrontFace();
-    pipelineDesc.BlendState = material->GetBlendState();
-    pipelineDesc.CullMode = material->GetCullMode();
-    pipelineDesc.ColorAttachmentCount = renderPass->GetRenderTargetCount();
-    pipelineDesc.InputLayouts = mesh ? mesh->GetInputLayoutDescs() : std::vector<InputLayoutDesc>();
+    RHIPipelineDesc pipelineDesc = {};
+    pipelineDesc.topology = mesh ? mesh->GetTopology() : ETopology::TriangleList;
+    pipelineDesc.pipelineType = EPipelineType::Graphics;
+    pipelineDesc.vertexShader = material->GetVertexShader()->GetRHIShader();
+    pipelineDesc.pixelShader = material->GetPixelShader()->GetRHIShader();
+    pipelineDesc.frontFace = material->GetFrontFace();
+    pipelineDesc.blendState = material->GetBlendState();
+    pipelineDesc.cullMode = material->GetCullMode();
+    pipelineDesc.colorAttachmentCount = renderPass->GetRenderTargetCount();
+    pipelineDesc.inputLayouts = mesh ? mesh->GetInputLayoutDescs() : std::vector<InputLayoutDesc>();
 
-    for (uint32 i = 0; i < pipelineDesc.ColorAttachmentCount; ++i)
+    for (uint32 i = 0; i < pipelineDesc.colorAttachmentCount; ++i)
     {
-        pipelineDesc.ColorAttachmentFormats[i] = RenderTargetManager::Get().GetRenderTarget(renderPass->GetRenderTargetName(i))->GetFormat();
+        pipelineDesc.colorAttachmentFormats[i] = RenderTargetManager::Get().GetRenderTarget(renderPass->GetRenderTargetName(i))->GetFormat();
     }
 
     wstring depthStencilName = renderPass->GetDepthStencilName();
-    pipelineDesc.DepthStencilAttachmentFormat = ETextureFormat::UNKNOWN;
+    pipelineDesc.depthStencilAttachmentFormat = ETextureFormat::UNKNOWN;
     if (!depthStencilName.empty())
-        pipelineDesc.DepthStencilAttachmentFormat = RenderTargetManager::Get().GetRenderTarget(depthStencilName)->GetFormat();
-    pipelineDesc.DepthStencilState.DepthTestEnable = (!renderPass->GetDepthStencilName().empty()) && (material->GetDepthMode() != EDepthMode::None);
-    pipelineDesc.DepthStencilState.DepthWriteEnable = pipelineDesc.DepthStencilState.DepthTestEnable && (material->GetDepthMode() == EDepthMode::ReadWrite);
+        pipelineDesc.depthStencilAttachmentFormat = RenderTargetManager::Get().GetRenderTarget(depthStencilName)->GetFormat();
+    pipelineDesc.depthStencilState.depthTestEnable = (!renderPass->GetDepthStencilName().empty()) && (material->GetDepthMode() != EDepthMode::None);
+    pipelineDesc.depthStencilState.depthWriteEnable = pipelineDesc.depthStencilState.depthTestEnable && (material->GetDepthMode() == EDepthMode::ReadWrite);
 
-    pipelineDesc.DepthStencilState.DepthCompareOp = material->GetDepthCompareOp();
+    pipelineDesc.depthStencilState.depthCompareOp = material->GetDepthCompareOp();
 
 
     PipelineManager& pipelineManager = PipelineManager::Get();

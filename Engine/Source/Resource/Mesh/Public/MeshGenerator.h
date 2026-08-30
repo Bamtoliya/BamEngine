@@ -4,7 +4,7 @@
 
 
 #pragma region Struct
-struct tagMeshGeneratorDesc : public ComponentDesc
+struct MeshGeneratorDesc : public ComponentDesc
 {
 
 };
@@ -15,7 +15,7 @@ BEGIN(Engine)
 
 class ENGINE_API MeshGenerator : public Component
 {
-	using DESC = tagMeshGeneratorDesc;
+	using DESC = MeshGeneratorDesc;
 #pragma region Constructor&Destructor
 protected:
 	MeshGenerator() {}

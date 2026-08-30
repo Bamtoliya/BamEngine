@@ -5,7 +5,7 @@
 BEGIN(Engine)
 class SDLGPUShader final : public RHIShader
 {
-	using DESC = tagRHIShaderDesc;
+	using DESC = RHIShaderDesc;
 #pragma region Constructor&Destructor
 private:
 	SDLGPUShader(RHI* rhi) : RHIShader{rhi} {}

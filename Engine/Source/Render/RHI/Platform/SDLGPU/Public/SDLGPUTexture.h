@@ -10,9 +10,9 @@ class SDLGPUTexture final : public RHITexture
 private:
 	SDLGPUTexture(SDLGPURHI* rhi) : RHITexture{ rhi } {}
 	virtual ~SDLGPUTexture() = default;
-	EResult Initialize(const tagRHITextureDesc& desc);
+	EResult Initialize(const RHITextureDesc& desc);
 public:
-	static SDLGPUTexture* Create(SDLGPURHI* rhi, const tagRHITextureDesc& desc = {}, bool isOwned = true);
+	static SDLGPUTexture* Create(SDLGPURHI* rhi, const RHITextureDesc& desc = {}, bool isOwned = true);
 	virtual void Free() override;
 #pragma endregion
 

@@ -5,20 +5,21 @@
 
 #pragma region Constructor&Destructor
 
-EResult SDLGPUTexture::Initialize(const tagRHITextureDesc& desc)
+EResult SDLGPUTexture::Initialize(const RHITextureDesc& desc)
 {
-	if (desc.Format == ETextureFormat::UNKNOWN || !m_IsOwned) return EResult::Success;
+	if (desc.format == ETextureFormat::UNKNOWN || !m_IsOwned) return EResult::Success;
 
-	m_Width = desc.Width;
-	m_Height = desc.Height;
-	m_Depth = desc.Depth;
-	m_MipLevels = desc.MipLevels;
-	m_ArraySize = desc.ArraySize;
+	m_Width = desc.width;
+	m_Height = desc.height;
+	m_Depth = desc.depth;
+	m_MipLevels = desc.mipLevels;
+	m_ArraySize = desc.arraySize;
 	
-	m_SampleCount = desc.SampleCount;
-	m_Format = desc.Format;
-	m_Dimension = desc.Dimension;
-	m_Usage = desc.Usage;
+	m_SampleCount = desc.sampleCount;
+	m_Format = desc.format;
+	m_Dimension = desc.dimension;
+	m_Usage = desc.usage;
+	m_sRGB = desc.sRGB;
 
 	SDL_GPUTextureCreateInfo createInfo{};
 	createInfo.width = m_Width;
@@ -36,7 +37,7 @@ EResult SDLGPUTexture::Initialize(const tagRHITextureDesc& desc)
 }
 
 
-SDLGPUTexture* SDLGPUTexture::Create(SDLGPURHI* rhi, const tagRHITextureDesc& desc, bool isOwned)
+SDLGPUTexture* SDLGPUTexture::Create(SDLGPURHI* rhi, const RHITextureDesc& desc, bool isOwned)
 {
 	SDLGPUTexture* Instance = new SDLGPUTexture(rhi);
 	Instance->m_IsOwned = isOwned;

@@ -304,9 +304,9 @@ void MaterialInterface::ClearTextureBindings()
 #pragma endregion
 
 #pragma region Getter
-tagBlendState MaterialInterface::GetBlendState()
+BlendState MaterialInterface::GetBlendState()
 {
-    return tagBlendState(m_BlendMode);
+    return BlendState(m_BlendMode);
 }
 #pragma endregion
 

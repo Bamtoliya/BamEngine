@@ -67,15 +67,22 @@ namespace Engine
 
 	struct VertexElementDesc
 	{
-		uint32 Location = { 0 };
-		EVertexElementFormat Format = EVertexElementFormat::Float3;
-		uint32 Offset = { 0 };
+		std::string semanticName = "TEXCOORD";
+		uint32 semanticIndex = { 0 };
+
+		uint32 location = { 0 };
+
+		EVertexElementFormat format = EVertexElementFormat::Float3;
+		uint32 offset = { 0 };
 
 		bool operator==(const VertexElementDesc& other) const
 		{
-			return Location == other.Location &&
-				Format == other.Format &&
-				Offset == other.Offset;
+			return
+				semanticName == other.semanticName &&
+				semanticIndex == other.semanticIndex &&
+				location == other.location &&
+				format == other.format &&
+				offset == other.offset;
 		}
 	};
 
@@ -87,15 +94,15 @@ namespace Engine
 
 	struct InputLayoutDesc
 	{
-		std::vector<VertexElementDesc> Elements;
-		uint32 Stride = { 0 };
-		EVertexInputRate InputRate = EVertexInputRate::PerVertex;
-		uint32 InstanceDataStepRate = { 0 }; // PerInstance일 때, 인스턴스마다 데이터를 몇 개씩 건너뛸지 설정 (0이면 자동으로 1로 간주)
+		std::vector<VertexElementDesc> elements;
+		uint32 stride = { 0 };
+		EVertexInputRate inputRate = EVertexInputRate::PerVertex;
+		uint32 instanceDataStepRate = { 0 }; // PerInstance일 때, 인스턴스마다 데이터를 몇 개씩 건너뛸지 설정 (0이면 자동으로 1로 간주)
 
 		bool operator==(const InputLayoutDesc& other) const
 		{
-			return Stride == other.Stride &&
-				Elements == other.Elements;
+			return stride == other.stride &&
+				elements == other.elements;
 		}
 	};
 

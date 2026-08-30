@@ -4,17 +4,17 @@
 
 BEGIN(Engine)
 
-struct tagSkyLightDesc : public LightSourceDesc
+struct SkyLightDesc : public LightSourceDesc
 {
-	vec3 GroundColor = vec3(0.05f, 0.04f, 0.03f);
-	f32  IndirectIntensity = 0.5f;
+	vec3 groundColor = vec3(0.05f, 0.04f, 0.03f);
+	f32  indirectIntensity = 0.5f;
 };
 
 CLASS()
 class ENGINE_API SkyLight : public LightSource
 {
 	REFLECT_CLASS()
-	using DESC = tagSkyLightDesc;
+	using DESC = SkyLightDesc;
 #pragma region Constructor&Destructor
 private:
 	SkyLight() = default;

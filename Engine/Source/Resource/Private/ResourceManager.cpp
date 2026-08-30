@@ -45,8 +45,8 @@ void ResourceManager::Free()
 		{
 			slot.Instance->Free();
 			delete slot.Instance;
+			slot.Instance = nullptr;
 		}
-		slot.Instance = nullptr;
 	}
 	m_Resources.clear();
 	m_FreeSlots.clear();

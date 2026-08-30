@@ -31,7 +31,7 @@ void UIViewportPanel::PrepareRenderTargetsAndPasses(uint32 width, uint32 height)
     wstring prefix = m_Name + L"_";
     m_UIColorRTName = prefix + L"UIColor";
 	m_VirtualCanvasRTName = prefix + L"VirtualCanvas";
-    tagRenderTargetDesc colorDesc = {
+    RenderTargetDesc colorDesc = {
         ETextureFormat::R8G8B8A8_UNORM,
         ETextureUsage::RenderTarget | ETextureUsage::Sampler,
         ERenderTargetBindFlag::RTBF_RenderTarget | ERenderTargetBindFlag::RTBF_ShaderResource,
@@ -43,7 +43,7 @@ void UIViewportPanel::PrepareRenderTargetsAndPasses(uint32 width, uint32 height)
     };
     RenderTargetManager::Get().CreateRenderTarget(&colorDesc);
 
-    tagRenderTargetDesc virtualCanvasDesc = {
+    RenderTargetDesc virtualCanvasDesc = {
         ETextureFormat::R8G8B8A8_UNORM, ETextureUsage::RenderTarget | ETextureUsage::Sampler,
         ERenderTargetBindFlag::RTBF_RenderTarget | ERenderTargetBindFlag::RTBF_ShaderResource,
         ERenderTargetType::Color, ETextureDimension::Texture2D,
@@ -599,13 +599,13 @@ Engine::Ray UIViewportPanel::ScreenPosToRay(const ImVec2& mousePos)
 	vec4 farPointWorld = invVP * farPointNDC;
 
 	Ray ray;
-	ray.Origin = vec3(nearPointWorld) / nearPointWorld.w;
+	ray.origin = vec3(nearPointWorld) / nearPointWorld.w;
 	//ray.Origin.x += m_RenderTarget->GetWidth() / 2.f;
 	//ray.Origin.y -= m_RenderTarget->GetHeight() / 2.f;
-	ray.Direction = glm::normalize(vec3(farPointWorld / farPointWorld.w) - ray.Origin);
+	ray.direction = glm::normalize(vec3(farPointWorld / farPointWorld.w) - ray.origin);
 
-	cout << "Ray Origin: " << ray.Origin.x << ", " << ray.Origin.y << ", " << ray.Origin.z << endl;
-	cout << "Ray Direction: " << ray.Direction.x << ", " << ray.Direction.y << ", " << ray.Direction.z << endl;
+	cout << "Ray Origin: " << ray.origin.x << ", " << ray.origin.y << ", " << ray.origin.z << endl;
+	cout << "Ray Direction: " << ray.direction.x << ", " << ray.direction.y << ", " << ray.direction.z << endl;
 
 	return ray;
 }

@@ -64,14 +64,14 @@ public:
     {
         const vec3 corners[8] =
         {
-            { localAABB.Min.x, localAABB.Min.y, localAABB.Min.z },
-            { localAABB.Max.x, localAABB.Min.y, localAABB.Min.z },
-            { localAABB.Min.x, localAABB.Max.y, localAABB.Min.z },
-            { localAABB.Max.x, localAABB.Max.y, localAABB.Min.z },
-            { localAABB.Min.x, localAABB.Min.y, localAABB.Max.z },
-            { localAABB.Max.x, localAABB.Min.y, localAABB.Max.z },
-            { localAABB.Min.x, localAABB.Max.y, localAABB.Max.z },
-            { localAABB.Max.x, localAABB.Max.y, localAABB.Max.z },
+            { localAABB.min.x, localAABB.min.y, localAABB.min.z },
+            { localAABB.max.x, localAABB.min.y, localAABB.min.z },
+            { localAABB.min.x, localAABB.max.y, localAABB.min.z },
+            { localAABB.max.x, localAABB.max.y, localAABB.min.z },
+            { localAABB.min.x, localAABB.min.y, localAABB.max.z },
+            { localAABB.max.x, localAABB.min.y, localAABB.max.z },
+            { localAABB.min.x, localAABB.max.y, localAABB.max.z },
+            { localAABB.max.x, localAABB.max.y, localAABB.max.z },
         };
 
         vec3 worldMin(FLT_MAX);
@@ -89,7 +89,7 @@ public:
     // Shadow Pass에서 큰 오브젝트의 그림자가 잘리는 것을 방지하기 위해 사용합니다.
     static AABB ExpandAABB(const AABB& aabb, float padding)
     {
-        return AABB(aabb.Min - vec3(padding), aabb.Max + vec3(padding));
+        return AABB(aabb.min - vec3(padding), aabb.max + vec3(padding));
     }
 
     // worldAABB가 프러스텀 내부에 (부분적으로라도) 존재하면 true를 반환합니다.
@@ -101,9 +101,9 @@ public:
             // 법선 방향으로 가장 멀리 있는 코너 (Positive Vertex)
             const vec3 pv =
             {
-                (plane.Normal.x >= 0.f) ? worldAABB.Max.x : worldAABB.Min.x,
-                (plane.Normal.y >= 0.f) ? worldAABB.Max.y : worldAABB.Min.y,
-                (plane.Normal.z >= 0.f) ? worldAABB.Max.z : worldAABB.Min.z,
+                (plane.Normal.x >= 0.f) ? worldAABB.max.x : worldAABB.min.x,
+                (plane.Normal.y >= 0.f) ? worldAABB.max.y : worldAABB.min.y,
+                (plane.Normal.z >= 0.f) ? worldAABB.max.z : worldAABB.min.z,
             };
 
             if (glm::dot(plane.Normal, pv) + plane.Distance < 0.f)

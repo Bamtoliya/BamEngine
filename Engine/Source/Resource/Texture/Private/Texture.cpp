@@ -4,6 +4,19 @@
 #include "Renderer.h"
 #include "ResourceManager.h"
 #include "SerializationHelper.h"
+#define STB_IMAGE_IMPLEMENTATION
+#include <stb_image.h>
+
+ETextureFormat ToTextureFormat(uint32 channels, bool sRGB)
+{
+	switch (channels)
+	{
+	case 1: return ETextureFormat::R8_UNORM;
+	case 2: return ETextureFormat::R8G8_UNORM;
+	case 4: return sRGB ? ETextureFormat::B8G8R8A8_UNORM_SRGB : ETextureFormat::R8G8B8A8_UNORM;
+	default: return ETextureFormat::UNKNOWN;
+	}
+}
 
 #pragma region Constructor&Destructor
 EResult Texture::Initialize(void* arg)
@@ -15,7 +28,38 @@ EResult Texture::Initialize(void* arg)
 
 	RHI* rhi = Renderer::Get().GetRHI();
 	if (!rhi) return EResult::Fail;
-	m_RHITexture = rhi->CreateTextureFromFile(m_Path.c_str());
+
+
+	std::string pathStr = std::filesystem::path(m_Path).string();
+
+	int32 width, height, originalChannels;
+    if (!stbi_info(pathStr.c_str(), &width, &height, &originalChannels))
+    {
+        fmt::print(stderr, "Failed to get texture info: {}\n", pathStr);
+        return EResult::Fail;
+    }
+
+    uint32 channels = (originalChannels == 3) ? 4 : originalChannels;
+	stbi_uc* pixels = stbi_load(pathStr.c_str(), &width, &height, &originalChannels, channels);
+
+    if (!pixels) return EResult::Fail;
+
+	RHITextureDesc txDesc = {};
+    txDesc.width = width;
+	txDesc.height = height;
+	txDesc.depth = 1;
+	txDesc.mipLevels = 1;
+	txDesc.arraySize = 1;
+	txDesc.format = ToTextureFormat(channels, desc->sRGB);
+	txDesc.dimension = desc->dimension;
+	txDesc.usage = desc->usage;
+	txDesc.sRGB = desc->sRGB;
+
+	txDesc.data = pixels;
+	txDesc.dataSize = width * height * 4;
+
+	m_RHITexture = rhi->CreateTexture(txDesc);
+    stbi_image_free(pixels);
 	return m_RHITexture ?  EResult::Success : EResult::Fail;
 }
 
@@ -65,15 +109,15 @@ void Texture::Serialize(Archive& ar)
 
     if (m_RHITexture)
     {
-        m_CachedHeader.Width = m_RHITexture->GetWidth();
-        m_CachedHeader.Height = m_RHITexture->GetHeight();
-        m_CachedHeader.Depth = m_RHITexture->GetDepth();
-        m_CachedHeader.MipLevels = m_RHITexture->GetMipLevels();
-        m_CachedHeader.ArraySize = m_RHITexture->GetArraySize();
-        m_CachedHeader.Format = m_RHITexture->GetFormat();
-        m_CachedHeader.Dimension = m_RHITexture->GetDimension();
+        m_CachedHeader.width = m_RHITexture->GetWidth();
+        m_CachedHeader.height = m_RHITexture->GetHeight();
+        m_CachedHeader.depth = m_RHITexture->GetDepth();
+        m_CachedHeader.mipLevels = m_RHITexture->GetMipLevels();
+        m_CachedHeader.arraySize = m_RHITexture->GetArraySize();
+        m_CachedHeader.format = m_RHITexture->GetFormat();
+        m_CachedHeader.dimension = m_RHITexture->GetDimension();
     }
-    m_CachedHeader.DataSize = static_cast<uint32>(m_TempData.size());
+    m_CachedHeader.dataSize = static_cast<uint32>(m_TempData.size());
 
     if (ar.PushScope("TextureHeader"))
     {
@@ -97,23 +141,23 @@ void Texture::Deserialize(Archive& ar)
         ar.PopScope();
     }
 
-    if (m_CachedHeader.DataSize > 0)
+    if (m_CachedHeader.dataSize > 0)
     {
-        std::vector<uint8> rawData(m_CachedHeader.DataSize);
+        std::vector<uint8> rawData(m_CachedHeader.dataSize);
         ar.ProcessRaw("PixelData", rawData.data(), rawData.size());
 
-        tagRHITextureDesc desc = {};
-        desc.Width = m_CachedHeader.Width;
-        desc.Height = m_CachedHeader.Height;
-        desc.Depth = m_CachedHeader.Depth;
-        desc.MipLevels = m_CachedHeader.MipLevels;
-        desc.ArraySize = m_CachedHeader.ArraySize;
-        desc.Format = m_CachedHeader.Format;
-        desc.Dimension = m_CachedHeader.Dimension;
-        desc.Data = rawData.data();
-        desc.DataSize = m_CachedHeader.DataSize;
+        RHITextureDesc desc = {};
+        desc.width = m_CachedHeader.width;
+        desc.height = m_CachedHeader.height;
+        desc.depth = m_CachedHeader.depth;
+        desc.mipLevels = m_CachedHeader.mipLevels;
+        desc.arraySize = m_CachedHeader.arraySize;
+        desc.format = m_CachedHeader.format;
+        desc.dimension = m_CachedHeader.dimension;
+        desc.data = rawData.data();
+        desc.dataSize = m_CachedHeader.dataSize;
 
         Safe_Release(m_RHITexture);
-        m_RHITexture = Renderer::Get().GetRHI()->CreateTextureFromMemory(desc);
+        m_RHITexture = Renderer::Get().GetRHI()->CreateTexture(desc);
     }
 }

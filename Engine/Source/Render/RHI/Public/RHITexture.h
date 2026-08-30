@@ -2,28 +2,30 @@
 
 #include "RHIResource.h"
 
-struct tagRHITextureDesc
+struct RHITextureDesc
 {
-	uint32	Width = 1;
-	uint32	Height = 1;
-	uint32	Depth = 1;
-	uint32 	MipLevels = 1;
-	uint32 	ArraySize = 1;
+	uint32	width = 1;
+	uint32	height = 1;
+	uint32	depth = 1;
+	uint32 	mipLevels = 1;
+	uint32 	arraySize = 1;
 
-	Engine::ETextureSampleCount SampleCount = Engine::ETextureSampleCount::TextureSampleCount1;
-	Engine::ETextureFormat Format = Engine::ETextureFormat::R8G8B8A8_UNORM;
-	Engine::ETextureDimension Dimension = Engine::ETextureDimension::Texture2D;
-	Engine::ETextureUsage Usage = Engine::ETextureUsage::Sampler;
+	Engine::ETextureSampleCount sampleCount = Engine::ETextureSampleCount::TextureSampleCount1;
+	Engine::ETextureFormat format = Engine::ETextureFormat::R8G8B8A8_UNORM;
+	Engine::ETextureDimension dimension = Engine::ETextureDimension::Texture2D;
+	Engine::ETextureUsage usage = Engine::ETextureUsage::Sampler;
 
-	void*		Data = nullptr;
-	uint32		DataSize = 0;
+	void*		data = nullptr;
+	uint32		dataSize = 0;
+
+	bool sRGB = false;
 };
 
 BEGIN(Engine)
 class ENGINE_API RHITexture : public RHIResource
 {
 protected:
-	using DESC = tagRHITextureDesc;
+	using DESC = RHITextureDesc;
 	RHITexture() : RHIResource(ERHIResourceType::Texture) {}
 	RHITexture(RHI* rhi) : RHIResource(rhi, ERHIResourceType::Texture) {}
 	RHITexture(uint32 width, uint32 height) : RHIResource(ERHIResourceType::Texture), m_Width(width), m_Height(height) {}
@@ -52,5 +54,7 @@ protected:
 	ETextureFormat		m_Format	= ETextureFormat::UNKNOWN;
 	ETextureDimension	m_Dimension = ETextureDimension::Texture2D;
 	ETextureUsage		m_Usage		= ETextureUsage::Sampler;
+
+	bool m_sRGB = false;
 };
 END

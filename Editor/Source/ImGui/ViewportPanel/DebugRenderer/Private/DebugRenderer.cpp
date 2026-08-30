@@ -15,9 +15,9 @@ void DebugRenderer::Initialize(const wstring& prefix)
 	ShaderDesc vsDesc = {};
 	vsDesc.Key = L"DebugLineVS";
 	vsDesc.Path = L"Resources/Shader/debugLine.vert.spv";
-	vsDesc.SpirvPath = L"Resources/Shader/debugLine.vert.spv";
-	vsDesc.ShaderType = EShaderType::Vertex;
-	vsDesc.EntryPoint = "main";
+	vsDesc.spirvPath = L"Resources/Shader/debugLine.vert.spv";
+	vsDesc.shaderType = EShaderType::Vertex;
+	vsDesc.entryPoint = "main";
 	rm.LoadResource<Shader>(&vsDesc);
 	{
 		auto handle = rm.GetResourceHandle<Shader>(L"DebugLineVS");
@@ -27,9 +27,9 @@ void DebugRenderer::Initialize(const wstring& prefix)
 	ShaderDesc psDesc = {};
 	psDesc.Key = L"DebugLinePS";
 	psDesc.Path = L"Resources/Shader/debugLine.frag.spv";
-	psDesc.SpirvPath = L"Resources/Shader/debugLine.frag.spv";
-	psDesc.ShaderType = EShaderType::Pixel;
-	psDesc.EntryPoint = "main";
+	psDesc.spirvPath = L"Resources/Shader/debugLine.frag.spv";
+	psDesc.shaderType = EShaderType::Pixel;
+	psDesc.entryPoint = "main";
 	rm.LoadResource<Shader>(&psDesc);
 	{
 		auto handle = rm.GetResourceHandle<Shader>(L"DebugLinePS");
@@ -73,28 +73,28 @@ void DebugRenderer::SubmitDebugDraw(Camera* camera, const wstring& colorRTName)
 			ResourceManager& rm = ResourceManager::Get();
 
 			// 파이프라인 디스크립터 (Grid와 동일한 방식으로 RenderPass에서 포맷 동적 매칭)
-			tagRHIPipelineDesc desc = {};
-			desc.PipelineType = EPipelineType::Graphics;
-			desc.BlendState = Engine::tagBlendState{};
-			desc.FillMode = EFillMode::Solid;
-			desc.CullMode = ECullMode::None;
-			desc.Topology = ETopology::LineList;
+			RHIPipelineDesc desc = {};
+			desc.pipelineType = EPipelineType::Graphics;
+			desc.blendState = Engine::BlendState{};
+			desc.fillMode = EFillMode::Solid;
+			desc.cullMode = ECullMode::None;
+			desc.topology = ETopology::LineList;
 
 			auto debugVSHandle = rm.GetResourceHandle<Shader>(L"DebugLineVS");
 			auto debugPSHandle = rm.GetResourceHandle<Shader>(L"DebugLinePS");
-			desc.VertexShader = debugVSHandle->GetRHIShader();
-			desc.PixelShader = debugPSHandle->GetRHIShader();
-			desc.InputLayouts.push_back(Engine::DebugVertex::Layout);
+			desc.vertexShader = debugVSHandle->GetRHIShader();
+			desc.pixelShader = debugPSHandle->GetRHIShader();
+			desc.inputLayouts.push_back(Engine::DebugVertex::Layout);
 
-			desc.DepthStencilState.DepthTestEnable = false;
-			desc.DepthStencilState.DepthWriteEnable = false;
-			desc.DepthStencilState.StencilTestEnable = false;
-			desc.DepthStencilState.DepthCompareOp = ECompareOp::Always;
+			desc.depthStencilState.depthTestEnable = false;
+			desc.depthStencilState.depthWriteEnable = false;
+			desc.depthStencilState.stencilTestEnable = false;
+			desc.depthStencilState.depthCompareOp = ECompareOp::Always;
 
-			desc.ColorAttachmentCount = pass->GetRenderTargetCount();
-			for (uint32 i = 0; i < desc.ColorAttachmentCount; ++i)
+			desc.colorAttachmentCount = pass->GetRenderTargetCount();
+			for (uint32 i = 0; i < desc.colorAttachmentCount; ++i)
 			{
-				desc.ColorAttachmentFormats[i] = Engine::RenderTargetManager::Get()
+				desc.colorAttachmentFormats[i] = Engine::RenderTargetManager::Get()
 					.GetRenderTarget(pass->GetRenderTargetName(i))->GetFormat();
 			}
 
@@ -102,12 +102,12 @@ void DebugRenderer::SubmitDebugDraw(Camera* camera, const wstring& colorRTName)
 			wstring depthStencilName = pass->GetDepthStencilName();
 			if (!depthStencilName.empty())
 			{
-				desc.DepthStencilAttachmentFormat = Engine::RenderTargetManager::Get()
+				desc.depthStencilAttachmentFormat = Engine::RenderTargetManager::Get()
 					.GetRenderTarget(depthStencilName)->GetFormat();
 			}
 			else
 			{
-				desc.DepthStencilAttachmentFormat = Engine::ETextureFormat::UNKNOWN;
+				desc.depthStencilAttachmentFormat = Engine::ETextureFormat::UNKNOWN;
 			}
 
 			RHIPipeline* pipeline = PipelineManager::Get().GetOrCreatePipeline(desc);
@@ -182,10 +182,10 @@ void DebugRenderer::DrawLine(const vec3& start, const vec3& end, const vec4& col
 
 void DebugRenderer::DrawRect(const Rect& rect, const vec4& color)
 {
-	DrawLine(vec3(rect.Left, rect.Top, 0.f), vec3(rect.Right(), rect.Top, 0.f), color);
-	DrawLine(vec3(rect.Right(), rect.Top, 0.f), vec3(rect.Right(), rect.Bottom(), 0.f), color);
-	DrawLine(vec3(rect.Right(), rect.Bottom(), 0.f), vec3(rect.Left, rect.Bottom(), 0.f), color);
-	DrawLine(vec3(rect.Left, rect.Bottom(), 0.f), vec3(rect.Left, rect.Top, 0.f), color);
+	DrawLine(vec3(rect.left, rect.top, 0.f), vec3(rect.Right(), rect.top, 0.f), color);
+	DrawLine(vec3(rect.Right(), rect.top, 0.f), vec3(rect.Right(), rect.Bottom(), 0.f), color);
+	DrawLine(vec3(rect.Right(), rect.Bottom(), 0.f), vec3(rect.left, rect.Bottom(), 0.f), color);
+	DrawLine(vec3(rect.left, rect.Bottom(), 0.f), vec3(rect.left, rect.top, 0.f), color);
 }
 
 void DebugRenderer::DrawBox(const vec3& center, const vec3& extent, const vec4& color, const mat4& transform)

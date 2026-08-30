@@ -10,24 +10,27 @@ struct ENGINE_API TextureBinaryHeader
 	REFLECT_STRUCT()
 
 	PROPERTY()
-	uint32 Width = 0;
+	uint32 width = 0;
 	PROPERTY()
-	uint32 Height = 0;
+	uint32 height = 0;
 	PROPERTY()
-	uint32 Depth = 0;
+	uint32 depth = 0;
 	PROPERTY()
-	uint32 MipLevels = 0;
+	uint32 mipLevels = 0;
 	PROPERTY()
-	uint32 ArraySize = 0;
+	uint32 arraySize = 0;
 	PROPERTY()
-	Engine::ETextureFormat Format = Engine::ETextureFormat::UNKNOWN;
+	Engine::ETextureFormat format = Engine::ETextureFormat::UNKNOWN;
 	PROPERTY()
-	Engine::ETextureDimension Dimension = Engine::ETextureDimension::Texture2D;
+	Engine::ETextureDimension dimension = Engine::ETextureDimension::Texture2D;
 	PROPERTY()
-	uint32 DataSize = 0;
+	uint32 dataSize = 0;
 };
 struct TextureCreateDesc : public ResourceCreateDesc
 {
+	Engine::ETextureDimension dimension = Engine::ETextureDimension::Texture2D;
+	Engine::ETextureUsage usage = Engine::ETextureUsage::Sampler;
+	bool sRGB = false;
 };
 
 CLASS()
@@ -71,7 +74,6 @@ public:
 	void SetTempData(const vector<uint8>& data) { m_TempData = data; }
 	void ClearTempData() { m_TempData.clear(); }
 #pragma endregion
-
 
 #pragma region Save&Load
 public:

@@ -106,7 +106,7 @@ EResult SpriteRenderer::SetSprite(const ResourceHandle<Sprite>& sprite)
 EResult SpriteRenderer::SetSprite(const ResourceHandle<Texture>& texture)
 {
 	SpriteCreateDesc desc;
-	desc.Texture = texture;
+	desc.texture = texture;
 	TODO("이미 로드한 Texture 로부터 Sprite 리소스를 생성하게 만들어야함");
 	m_Sprite = ResourceManager::Get().LoadResource<Sprite>(&desc);
 	
@@ -131,8 +131,8 @@ EResult SpriteRenderer::UpdateMesh()
 	vec2 pivot = m_Sprite->GetPivot();
 	Rect region = m_Sprite->GetRegion();
 
-	f32 worldWidth = region.Width / ppu;
-	f32 worldHeight = region.Height / ppu;
+	f32 worldWidth = region.width / ppu;
+	f32 worldHeight = region.height / ppu;
 
 	f32 xOffset = width * pivot.x;
 	f32 yOffset = height * pivot.y;

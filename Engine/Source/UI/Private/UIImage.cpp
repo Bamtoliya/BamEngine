@@ -94,22 +94,22 @@ EResult UIImage::Render(f32 dt, RenderPass* renderPass)
 	
 	Rect rect = m_SpriteHandle->GetRegion();
 	vec4 uvRegion = {};
-	uvRegion.x = rect.Left / texture->GetWorldWidth();
-	uvRegion.y = rect.Top / texture->GetWorldHeight();
+	uvRegion.x = rect.left / texture->GetWorldWidth();
+	uvRegion.y = rect.top / texture->GetWorldHeight();
 	uvRegion.z = rect.Right() / texture->GetWorldWidth();
 	uvRegion.w = rect.Bottom() / texture->GetWorldHeight();
 
 	RectTransform* rectTransform = GetRectTransform();
 	if (!rectTransform) return EResult::Fail;
 	
-	tagUIUBO uboData;
+	UIUBO uboData;
 	uboData.worldMatrix = rectTransform->GetMatrix();
 	uboData.uvRegion = uvRegion;
 	uboData.tiling = m_Tiling;
 	uboData.offset = m_Offset;
 	uboData.color = m_Color;
 	
-   if (IsFailure(rhi->BindConstantBuffer((void*)&uboData, sizeof(tagUIUBO), 1, EShaderType::Vertex)))
+   if (IsFailure(rhi->BindConstantBuffer((void*)&uboData, sizeof(UIUBO), 1, EShaderType::Vertex)))
        return EResult::Fail;
 
    if (IsFailure(rhi->BindTextureSampler(rhiTexture, sampler, 0)))

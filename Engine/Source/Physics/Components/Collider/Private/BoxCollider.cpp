@@ -78,7 +78,7 @@ bool BoxCollider::Raycast(const Ray& ray, HitResult& outResult)
 	mat4 worldMatrix = m_Owner ? m_Owner->GetTransform()->GetWorldMatrix() : mat4(1.0f);
 	if(Collision::Raycast(ray, GetBox(), worldMatrix, outResult))
 	{
-		outResult.UserData = m_Owner;
+		outResult.userData = m_Owner;
 		return true;
 	}
 	return false;

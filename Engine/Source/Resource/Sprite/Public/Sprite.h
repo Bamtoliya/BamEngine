@@ -5,10 +5,10 @@
 
 struct SpriteCreateDesc : public ResourceCreateDesc
 {
-	ResourceHandle<Texture> Texture;
-	wstring TexturePath = L"";
-	Engine::Rect Region = { 0.f, 0.f, 0.f, 0.f };
-	vec2 Pivot = { 0.5f, 0.5f };
+	ResourceHandle<Engine::Texture> texture;
+	wstring texturePath = L"";
+	Engine::Rect region = { 0.f, 0.f, 0.f, 0.f };
+	vec2 pivot = { 0.5f, 0.5f };
 };
 
 BEGIN(Engine)
@@ -44,6 +44,7 @@ public:
 public:
 	Rect GetRegion() const { return m_Region; }
 	EResult SetRegion(const Rect& region);
+	vec4 GetRegionUV() const { return vec4(m_Region); }
 #pragma endregion
 
 #pragma region Pivot Management
@@ -69,6 +70,10 @@ private:
 
 	PROPERTY(DEFAULT(vec2(0.5f, 0.5f)))
 	vec2 m_Pivot = { 0.5f, 0.5f };
+
+	PROPERTY(DEFAULT(100.f))
+	f32 m_PixelPerUnit = { DEFAULT_PPU };
+
 #pragma endregion
 };
 END

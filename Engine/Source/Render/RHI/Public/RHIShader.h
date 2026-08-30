@@ -1,20 +1,20 @@
-#pragma once
+﻿#pragma once
 
 #include "RHIResource.h"
 #include "ShaderReflection.h"
 
-struct tagRHIShaderDesc
+struct RHIShaderDesc
 {
-	EShaderType ShaderType = EShaderType::Unknown;
-	string EntryPoint = { "main" };
+	EShaderType shaderType = EShaderType::Unknown;
+	string entryPoint = { "main" };
 
-	wstring FilePath = { L"" };
-	vector<uint8> ShaderBytecode = {};
+	wstring filePath = { L"" };
+	vector<uint8> shaderBytecode = {};
 
-	uint32 NumSamplers;
-	uint32 NumStorageTextures;
-	uint32 NumStorageBuffers;
-	uint32 NumUniformBuffers;
+	uint32 numSamplers;
+	uint32 numStorageTextures;
+	uint32 numStorageBuffers;
+	uint32 numUniformBuffers;
 };
 
 BEGIN(Engine)
@@ -28,6 +28,7 @@ public:
 	virtual ~RHIShader() = default;
 	EShaderType GetShaderType() const { return m_ShaderType; }
 	const string& GetEntryPoint() const { return m_EntryPoint; }
+	const vector<uint8>& GetRawShaderBytecode() const { return m_ShaderBytecode; }
 protected:
 	PROPERTY()
 	EShaderType m_ShaderType = { EShaderType::Unknown };

@@ -62,16 +62,16 @@ EResult ShaderImporter::Import(const filesystem::path& sourcePath, const filesys
     desc.Path = outputPath.wstring();
     desc.Key = outputPath.stem().wstring();
 
-    desc.SpirvPath = sourcePath.wstring();
-    desc.EntryPoint = !info.DefaultEntryPoint.empty() ? info.DefaultEntryPoint : "main";
-    desc.ShaderType = (info.DefaultShaderType != EShaderType::Unknown)
+    desc.spirvPath = sourcePath.wstring();
+    desc.entryPoint = !info.DefaultEntryPoint.empty() ? info.DefaultEntryPoint : "main";
+    desc.shaderType = (info.DefaultShaderType != EShaderType::Unknown)
         ? info.DefaultShaderType
         : InferShaderTypeFromPath(sourcePath);
 
-    desc.NumSamplers = info.NumSamplers;
-    desc.NumStorageTextures = info.NumStorageTextures;
-    desc.NumStorageBuffers = info.NumStorageBuffers;
-    desc.NumUniformBuffers = info.NumUniformBuffers;
+    desc.numSamplers = info.NumSamplers;
+    desc.numStorageTextures = info.NumStorageTextures;
+    desc.numStorageBuffers = info.NumStorageBuffers;
+    desc.numUniformBuffers = info.NumUniformBuffers;
 
     Shader* shader = Shader::Create(&desc);
     if (!shader)

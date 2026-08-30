@@ -31,7 +31,7 @@ BEGIN(Engine)
 
 typedef struct tagRuntimeCreateInfo
 {
-	tagRendererDesc RendererDesc;
+	RendererDesc RendererDesc;
 } RUNTIMEDESC;
 
 class ENGINE_API Runtime : public Base

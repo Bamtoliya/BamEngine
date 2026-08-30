@@ -13,18 +13,18 @@ void ToneMapping::Initialize(const wstring& prefix)
 {
 	Engine::ResourceManager& rm = Engine::ResourceManager::Get();
 
-	tagRHIPipelineDesc pd = {};
-	pd.PipelineType = Engine::EPipelineType::Graphics;
-	pd.VertexShader = rm.GetResourceHandle<Engine::Shader>(L"FullscreenQuadVS")->GetRHIShader();
-	pd.PixelShader = rm.GetResourceHandle<Engine::Shader>(L"PostProcess_ToneMappingPS")->GetRHIShader();
-	pd.ColorAttachmentCount = 1;
-	pd.ColorAttachmentFormats[0] = Engine::ETextureFormat::R8G8B8A8_UNORM;
-	pd.DepthStencilAttachmentFormat = Engine::ETextureFormat::UNKNOWN;
-	pd.DepthStencilState.DepthTestEnable = false;
-	pd.DepthStencilState.DepthWriteEnable = false;
-	pd.Topology = Engine::ETopology::TriangleList;
-	pd.CullMode = Engine::ECullMode::None;
-	pd.BlendState = Engine::tagBlendState{};
+	RHIPipelineDesc pd = {};
+	pd.pipelineType = Engine::EPipelineType::Graphics;
+	pd.vertexShader = rm.GetResourceHandle<Engine::Shader>(L"FullscreenQuadVS")->GetRHIShader();
+	pd.pixelShader = rm.GetResourceHandle<Engine::Shader>(L"PostProcess_ToneMappingPS")->GetRHIShader();
+	pd.colorAttachmentCount = 1;
+	pd.colorAttachmentFormats[0] = Engine::ETextureFormat::R8G8B8A8_UNORM;
+	pd.depthStencilAttachmentFormat = Engine::ETextureFormat::UNKNOWN;
+	pd.depthStencilState.depthTestEnable = false;
+	pd.depthStencilState.depthWriteEnable = false;
+	pd.topology = Engine::ETopology::TriangleList;
+	pd.cullMode = Engine::ECullMode::None;
+	pd.blendState = Engine::BlendState{};
 
 	m_Pipeline = Engine::PipelineManager::Get().GetOrCreatePipeline(pd);
 

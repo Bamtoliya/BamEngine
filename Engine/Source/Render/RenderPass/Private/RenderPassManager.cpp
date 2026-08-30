@@ -29,20 +29,20 @@ RenderPassID RenderPassManager::RegisterRenderPass(const wstring& name, vector<w
 	vec4 overrideClearColor,
 	uint32 priority, ERenderSortType sortType, ERenderPassType passType, EBlendMode acceptedModes)
 {
-	tagRenderPassDesc newPass = {};
+	RenderPassDesc newPass = {};
 	newPass.ID = m_NextRenderPassID++;
-	newPass.Name = name;
-	newPass.RenderTargetNames = renderTargetNames;
-	newPass.DepthStencilName = depthstencilName;
-	newPass.Priority = priority;
-	newPass.SortType = sortType;
-	newPass.LoadOperation = loadOperation;
-	newPass.StoreOperation = storeOperation;
-	newPass.StencilLoadOperation = stencilLoadOperation;
-	newPass.StencilStoreOperation = stencilStoreOperation;
-	newPass.OverrideClearColor = overrideClearColor;
-	newPass.PassType = passType;
-	newPass.AcceptedBlendModes = acceptedModes;
+	newPass.name = name;
+	newPass.renderTargetNames = renderTargetNames;
+	newPass.depthStencilName = depthstencilName;
+	newPass.priority = priority;
+	newPass.sortType = sortType;
+	newPass.loadOperation = loadOperation;
+	newPass.storeOperation = storeOperation;
+	newPass.stencilLoadOperation = stencilLoadOperation;
+	newPass.stencilStoreOperation = stencilStoreOperation;
+	newPass.overrideClearColor = overrideClearColor;
+	newPass.passType = passType;
+	newPass.acceptedBlendModes = acceptedModes;
 
 	RenderPass* pass = RenderPass::Create(&newPass);
 	m_RenderPasses.push_back(pass);

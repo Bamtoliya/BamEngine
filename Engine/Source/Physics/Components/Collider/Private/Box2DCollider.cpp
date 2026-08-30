@@ -90,7 +90,7 @@ bool Box2DCollider::Raycast(const Ray& ray, HitResult& outResult)
 	const AABB localAABB = GetAABB2D();
 	if (Collision::Raycast(ray, localAABB, worldMatrix, outResult))
 	{
-		outResult.UserData = m_Owner;
+		outResult.userData = m_Owner;
 		return true;
 	}
 	return false;

@@ -25,7 +25,7 @@ void PipelineManager::Free()
 #pragma endregion
 
 #pragma region Pipeline Management
-RHIPipeline* PipelineManager::GetOrCreatePipeline(const tagRHIPipelineDesc& desc)
+RHIPipeline* PipelineManager::GetOrCreatePipeline(const RHIPipelineDesc& desc)
 {
 	auto it = m_Pipelines.find(desc);
 	if (it != m_Pipelines.end())

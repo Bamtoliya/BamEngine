@@ -7,6 +7,8 @@ find_package(Vulkan REQUIRED)
 find_package(stb REQUIRED)
 find_package(lz4 CONFIG REQUIRED)
 
+find_package(directx-headers CONFIG REQUIRED)
+
 find_package(glslang CONFIG REQUIRED)
 find_package(SPIRV-Tools CONFIG REQUIRED)
 find_package(SPIRV-Tools-opt CONFIG REQUIRED)
@@ -104,6 +106,26 @@ endforeach()
 
 add_custom_target(CompileShaders DEPENDS ${SPIRV_OUTPUTS})
 
+# 1. 올바른 Resources 폴더 경로(../) 지정
+set(SHADER_SOURCE_FILE "${CMAKE_CURRENT_SOURCE_DIR}/../Resources/Shader/default.hlsl")
+# 2. 런타임에 쉽게 로드하도록 결과물(.cso)도 Resources/Shader 폴더 안에 생성
+set(VS_OUTPUT_FILE "${CMAKE_CURRENT_SOURCE_DIR}/../Resources/Shader/default_vs.cso")
+set(PS_OUTPUT_FILE "${CMAKE_CURRENT_SOURCE_DIR}/../Resources/Shader/default_ps.cso")
+add_custom_command(
+    OUTPUT ${VS_OUTPUT_FILE}
+    COMMAND fxc.exe /T vs_5_0 /E VSMain /Fo ${VS_OUTPUT_FILE} ${SHADER_SOURCE_FILE}
+    DEPENDS ${SHADER_SOURCE_FILE}
+    COMMENT "Compiling Vertex Shader (HLSL)..."
+)
+add_custom_command(
+    OUTPUT ${PS_OUTPUT_FILE}
+    COMMAND fxc.exe /T ps_5_0 /E PSMain /Fo ${PS_OUTPUT_FILE} ${SHADER_SOURCE_FILE}
+    DEPENDS ${SHADER_SOURCE_FILE}
+    COMMENT "Compiling Pixel Shader (HLSL)..."
+)
+# 3. 이름 중복 방지를 위해 CompileHLSLShaders 로 명명
+add_custom_target(CompileHLSLShaders ALL DEPENDS ${VS_OUTPUT_FILE} ${PS_OUTPUT_FILE})
+
 # [수정] 4. 기존 add_reflection_bundle 매크로 대신 새로운 AST 제너레이터를 호출하는 타겟 생성
 add_custom_command(
     OUTPUT "${GENERATED_SOURCE}"
@@ -115,7 +137,7 @@ add_custom_command(
 
 # [수정] 5. 쉐이더 컴파일과 더불어 리플렉션 코드 생성이 먼저 되도록 종속성 추가
 add_custom_target(GenerateReflectionAST DEPENDS "${GENERATED_SOURCE}")
-add_dependencies(Engine CompileShaders GenerateReflectionAST)
+add_dependencies(Engine CompileShaders CompileHLSLShaders GenerateReflectionAST)
 
 set_target_properties(Engine PROPERTIES
     UNITY_BUILD OFF
@@ -148,8 +170,13 @@ target_link_libraries(Engine
         fmt::fmt
         SDL3::SDL3
         glm::glm
+        Microsoft::DirectX-Headers
         Vulkan::Vulkan
         glslang::glslang
         spirv-cross-c
         lz4::lz4
+        # --- DirectX 12 라이브러리 추가 ---
+        d3d12.lib
+        dxgi.lib
+        dxguid.lib
 )

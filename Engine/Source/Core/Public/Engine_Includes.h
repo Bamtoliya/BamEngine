@@ -79,10 +79,15 @@ using namespace glm;
 // Vulkan
 #include <vulkan/vulkan.h>
 
+// DirectX 12
+#include <directx/d3d12.h>
+#include <dxgi1_6.h>
+#include <wrl.h>
+using Microsoft::WRL::ComPtr;
+#include <directx/d3dx12.h>
+
 // Glaze
 #include <glaze/glaze.hpp>
-
-#include <stb_image.h>
 
 #include <cppcodec/base64_rfc4648.hpp>
 

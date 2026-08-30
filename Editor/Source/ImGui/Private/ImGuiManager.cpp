@@ -5,6 +5,7 @@
 #include "imgui_impl_sdl3.h"
 #include "imgui_impl_sdlrenderer3.h"
 #include "imgui_impl_sdlgpu3.h"
+#include "imgui_impl_dx12.h"
 #include "ImGuizmo.h"
 #pragma endregion
 
@@ -22,6 +23,8 @@
 #include "ContentBrowserPanel.h"
 
 #include "ResourceEditors.h"
+
+#include "DirectX12Texture.h"
 
 IMPLEMENT_SINGLETON(ImGuiManager)
 
@@ -119,11 +122,7 @@ EResult ImGuiManager::Initialize(void* arg)
 	}	
 
 	
-	
-	
-	
-	
-	CreateDefaultPanels();
+	//CreateDefaultPanels();
 	return EResult::Success;
 }
 
@@ -133,8 +132,10 @@ EResult ImGuiManager::InitializeImGui()
 	{
 	case ERHIType::SDLGPU:
 		return InitializeImGuiSDLGPU3();
+	case ERHIType::DirectX12:
+		return InitializeImGuiDirectX12();
 	default:
-		break;
+		return EResult::Fail;
 	}
 	return EResult::Success;
 }
@@ -145,8 +146,15 @@ void ImGuiManager::Free()
 	switch (m_RHIType)
 	{
 	case ERHIType::SDLGPU:
+	{
 		ShutdownImGuiSDLGPU3();
 		break;
+	}
+	case ERHIType::DirectX12:
+	{
+		ShutdownImGuiDirectX12();
+		break;
+	}
 	default:
 		break;
 	}
@@ -182,11 +190,10 @@ void ImGuiManager::Begin()
 		SDLGPU3Begin();
 		break;
 	case Engine::ERHIType::DirectX12:
+		DirectX12Begin();
 		break;
 	case Engine::ERHIType::Vulkan:
-		break;
 	case Engine::ERHIType::Metal:
-		break;
 	default:
 		break;
 	}
@@ -206,11 +213,10 @@ void ImGuiManager::End()
 		SDLGPU3End();
 		break;
 	case Engine::ERHIType::DirectX12:
+		DirectX12End();
 		break;
 	case Engine::ERHIType::Vulkan:
-		break;
 	case Engine::ERHIType::Metal:
-		break;
 	default:
 		break;
 	}
@@ -530,10 +536,97 @@ void ImGuiManager::ShutdownImGuiSDLGPU3()
 #pragma region DirectX12 Helper
 EResult ImGuiManager::InitializeImGuiDirectX12()
 {
-	return EResult();
+	if (!m_RHI) return EResult::Fail;
+
+	DirectX12RHI* dx12RHI = static_cast<DirectX12RHI*>(m_RHI);
+	ID3D12Device* device = static_cast<ID3D12Device*>(dx12RHI->GetNativeRHI());
+
+	if (!ImGui_ImplSDL3_InitForD3D(m_Window))
+	{
+		fmt::print(stderr, "ImGui_ImplSDL3_InitForD3D Failed\n");
+		return EResult::Fail;
+	}
+
+
+	D3D12_DESCRIPTOR_HEAP_DESC desc = {};
+	desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+	desc.NumDescriptors = 1;
+	desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+
+	if (FAILED(device->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&m_ImGuiSrvDescHeap))))
+	{
+		fmt::print(stderr, "Failed to create descriptor heap\n");
+		return EResult::Fail;
+	}
+
+	ImGui_ImplDX12_InitInfo initInfo = {};
+	initInfo.Device = device; 
+	initInfo.CommandQueue = dx12RHI->GetCommandQueue();
+	initInfo.NumFramesInFlight = 2; // 더블 버퍼링
+	initInfo.SrvDescriptorHeap = m_ImGuiSrvDescHeap;
+	initInfo.RTVFormat = DXGI_FORMAT_R8G8B8A8_UNORM; // 스왑체인 포맷
+	initInfo.DSVFormat = DXGI_FORMAT_UNKNOWN; // DSV는 사용하지 않음
+
+	initInfo.LegacySingleSrvCpuDescriptor = m_ImGuiSrvDescHeap->GetCPUDescriptorHandleForHeapStart();
+	initInfo.LegacySingleSrvGpuDescriptor = m_ImGuiSrvDescHeap->GetGPUDescriptorHandleForHeapStart();
+
+	// [Multi-Viewport 처리] 멀티 뷰포트 모드일 때 스왑체인 구성 설정
+
+	if (!ImGui_ImplDX12_Init(&initInfo))
+	{
+		fmt::print(stderr, "ImGui_ImplDX12_Init Failed\n");
+		return EResult::Fail;
+	}
+
+
+	return EResult::Success;
+}
+void ImGuiManager::DirectX12Begin()
+{
+	ImGui_ImplDX12_NewFrame();
+}
+void ImGuiManager::DirectX12End()
+{
+	DirectX12RHI* dx12RHI = static_cast<DirectX12RHI*>(m_RHI);
+	ID3D12GraphicsCommandList* commandList = dx12RHI->GetCommandList();
+
+	DirectX12Texture* backBuffer = static_cast<DirectX12Texture*>(m_RHI->GetBackBuffer());
+	if (backBuffer && backBuffer->GetCurrentState() != D3D12_RESOURCE_STATE_RENDER_TARGET)
+	{
+		D3D12_RESOURCE_BARRIER barrier = {};
+		barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+		barrier.Transition.pResource = static_cast<ID3D12Resource*>(backBuffer->GetNativeHandle());
+		barrier.Transition.StateBefore = backBuffer->GetCurrentState();
+		barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
+		barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+		commandList->ResourceBarrier(1, &barrier);
+		backBuffer->SetCurrentState(D3D12_RESOURCE_STATE_RENDER_TARGET);
+	}
+
+	D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = backBuffer->GetRTVHandle();
+	commandList->OMSetRenderTargets(1, &rtvHandle, FALSE, nullptr);
+
+	// ImGui용 Descriptor Heap 바인딩
+	ID3D12DescriptorHeap* heaps[] = { m_ImGuiSrvDescHeap };
+	commandList->SetDescriptorHeaps(1, heaps);
+	// ImGui 그리기 명령을 커맨드 리스트에 기록
+	ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), commandList);
+	// 다중 뷰포트(도킹 창 분리) 처리를 위한 업데이트 
+	ImGuiIO& io = ImGui::GetIO();
+	if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
+	{
+		ImGui::UpdatePlatformWindows();
+		ImGui::RenderPlatformWindowsDefault(nullptr, (void*)commandList);
+	}
 }
 void ImGuiManager::ShutdownImGuiDirectX12()
 {
+	ImGui_ImplDX12_Shutdown();
+	if (m_ImGuiSrvDescHeap)
+	{
+		m_ImGuiSrvDescHeap->Release();
+		m_ImGuiSrvDescHeap = nullptr;
+	}
 }
 #pragma endregion
 
@@ -546,7 +639,6 @@ void ImGuiManager::ShutdownImGuiVulkan()
 {
 }
 #pragma endregion
-
 
 #pragma region Metal Helper
 EResult ImGuiManager::InitializeImGuiMetal()

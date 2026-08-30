@@ -4,7 +4,7 @@
 #include "ResourceHandle.h"
 #include "MaterialInterface.h"
 
-struct tagUIUBO
+struct UIUBO
 {
 	mat4 worldMatrix;
 	vec4 uvRegion;

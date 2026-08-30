@@ -3,23 +3,23 @@
 #include "RHI.h"
 
 BEGIN(Engine)
-struct tagRenderTargetDesc
+struct RenderTargetDesc
 {
-	ETextureFormat				Format = ETextureFormat::UNKNOWN;
-	ETextureUsage				Usage = ETextureUsage::RenderTarget;
-	ERenderTargetBindFlag		BindFlag = ERenderTargetBindFlag::RTBF_None;
-	ERenderTargetType 			Type = ERenderTargetType::Color;
-	ETextureDimension			TextureType = ETextureDimension::Texture2D;
-	uint32						Width = 800;
-	uint32						Height = 600;
-	vec4						ClearColor = vec4(0.0f, 0.0f, 0.0f, 1.0f);
-	wstring						Name = L"RenderTarget";
+	ETextureFormat				format = ETextureFormat::UNKNOWN;
+	ETextureUsage				usage = ETextureUsage::RenderTarget;
+	ERenderTargetBindFlag		bindFlag = ERenderTargetBindFlag::RTBF_None;
+	ERenderTargetType 			type = ERenderTargetType::Color;
+	ETextureDimension			dimension = ETextureDimension::Texture2D;
+	uint32						width = 800;
+	uint32						height = 600;
+	vec4						clearColor = vec4(0.0f, 0.0f, 0.0f, 1.0f);
+	wstring						name = L"RenderTarget";
 };
 class ENGINE_API RenderTarget final : public Base
 {
 #pragma region Constructr&Destructor
 private:
-	using DESC = tagRenderTargetDesc;
+	using DESC = RenderTargetDesc;
 	RenderTarget() {}
 	virtual ~RenderTarget() = default;
 	EResult Initialize(void* arg = nullptr);
@@ -30,22 +30,22 @@ public:
 
 #pragma region Texture Management
 public:
-	uint32 GetWidth() const { return m_Desc.Width; }
-	uint32 GetHeight() const { return m_Desc.Height; }
+	uint32 GetWidth() const { return m_Desc.width; }
+	uint32 GetHeight() const { return m_Desc.height; }
 	RHITexture* GetTexture() const { return m_Texture; }
 	EResult Resize(uint32 width, uint32 height);
-	ETextureFormat GetFormat() const { return m_Desc.Format; }
-	ERenderTargetBindFlag GetBindFlag() const { return m_Desc.BindFlag; }
-	ETextureUsage GetUsage() const { return m_Desc.Usage; }
-	ERenderTargetType GetType() const { return m_Desc.Type; }
-	ETextureDimension GetTextureType() const { return m_Desc.TextureType; }
-	vec4 GetClearColor() const { return m_Desc.ClearColor; }
+	ETextureFormat GetFormat() const { return m_Desc.format; }
+	ERenderTargetBindFlag GetBindFlag() const { return m_Desc.bindFlag; }
+	ETextureUsage GetUsage() const { return m_Desc.usage; }
+	ERenderTargetType GetType() const { return m_Desc.type; }
+	ETextureDimension GetTextureDimension() const { return m_Desc.dimension; }
+	vec4 GetClearColor() const { return m_Desc.clearColor; }
 #pragma endregion
 
 #pragma region Name Management
 public:
-	const wstring& GetName() const { return m_Desc.Name; }
-	void SetName(const wstring& name) { m_Desc.Name = name; }
+	const wstring& GetName() const { return m_Desc.name; }
+	void SetName(const wstring& name) { m_Desc.name = name; }
 #pragma endregion
 
 

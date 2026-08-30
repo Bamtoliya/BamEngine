@@ -8,13 +8,13 @@ EResult SDLGPUShader::Initialize(const DESC& desc)
 {
     SDL_GPUDevice* device = static_cast<SDL_GPUDevice*>(m_RHI->GetNativeRHI());
 
-    m_ShaderType = desc.ShaderType;
-    m_EntryPoint = desc.EntryPoint;
-    m_ShaderBytecode = desc.ShaderBytecode;
+    m_ShaderType = desc.shaderType;
+    m_EntryPoint = desc.entryPoint;
+    m_ShaderBytecode = desc.shaderBytecode;
 
-    if (!desc.FilePath.empty())
+    if (!desc.filePath.empty())
     {
-        std::filesystem::path shaderPath(desc.FilePath);
+        std::filesystem::path shaderPath(desc.filePath);
 
         if (shaderPath.is_relative())
         {
@@ -28,7 +28,7 @@ EResult SDLGPUShader::Initialize(const DESC& desc)
         {
             fmt::print(stderr, "Shader open failed\n");
             fmt::print(stderr, "  project  : {}\n", std::filesystem::path(BAMENGINE_PROJECT_ROOT).string());
-            fmt::print(stderr, "  requested: {}\n", std::filesystem::path(desc.FilePath).string());
+            fmt::print(stderr, "  requested: {}\n", std::filesystem::path(desc.filePath).string());
             fmt::print(stderr, "  resolved : {}\n", shaderPath.string());
             return EResult::FileNotFound;
         }

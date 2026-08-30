@@ -23,6 +23,8 @@
 #include "Transform.h"
 #include "LightManager.h"
 
+#include "Texture.h"
+
 IMPLEMENT_SINGLETON(Renderer)
 
 #pragma region Constructor&Destructor
@@ -31,17 +33,21 @@ EResult Renderer::Initialize(void* arg)
 	if (!arg) return EResult::InvalidArgument;
 
 	CAST_DESC
-	m_RHIType = desc->RHIType;
+	m_RHIType = desc->rhiType;
 	switch (m_RHIType)
 	{
 	case ERHIType::SDLGPU:
-		m_RHI = SDLGPURHI::Create(desc->RHIDesc);
+		m_RHI = SDLGPURHI::Create(desc->rhiDesc);
+		break;
+	case ERHIType::DirectX12:
+		m_RHI = DirectX12RHI::Create(desc->rhiDesc);
 		break;
 	default:
 		return EResult::Fail;
 	}
 	
-	if (!m_RHI) return EResult::Fail;
+	if (!m_RHI)
+		return EResult::Fail;
 
 	return EResult::Success;
 }
@@ -55,7 +61,7 @@ void Renderer::Free()
 	if (m_RHI)
 	{
 		//순환참조 때문에 명시적으로 해제
-		m_RHI->Free();
+		//m_RHI->Free();
 		Safe_Release(m_RHI);
 	}
 }
@@ -80,8 +86,8 @@ EResult Renderer::Render(f32 dt)
 	uint32 rtHeight = m_RHI->GetSwapChainHeight();
 	for (const auto& viewportInfo : m_ViewportCameras)
 	{
-    	if (!viewportInfo.RenderPass) continue;
-    	jobsPerPass[viewportInfo.RenderPass->GetID()].push_back(viewportInfo.Camera);
+    	if (!viewportInfo.renderPass) continue;
+    	jobsPerPass[viewportInfo.renderPass->GetID()].push_back(viewportInfo.camera);
 	}
 
 	const vector<RenderPass*>& renderPasses = m_RenderPassManager->GetAllRenderPasses();
@@ -229,6 +235,61 @@ EResult Renderer::RenderUIComponents(f32 dt, vector<class UIRenderComponent*> qu
 	return EResult();
 }
 
+TODO("Renderer::RenderStatic, RenderSkinned, RenderSprite 함수에서 Material과 Mesh를 Bind하고 DrawIndexed 호출하는 부분을 RHI에 맞게 구현 필요")
+EResult Renderer::RenderStatic(f32 dt, vector<StaticDrawCommand>& commands, ERenderSortType sortType, RenderPass* renderPass)
+{
+	for (auto& command : commands)
+	{
+		if (command.mesh && command.material)
+		{
+			if (IsFailure(command.material->Bind(0)))
+				return EResult::Fail;
+			if (IsFailure(command.mesh->Bind(0)))
+				return EResult::Fail;
+			m_RHI->DrawIndexed(command.mesh->GetIndexCount());
+		}
+	}
+	return EResult();
+}
+
+EResult Renderer::RenderSkinned(f32 dt, vector<SkinnedDrawCommand>& commands, ERenderSortType sortType, RenderPass* renderPass)
+{
+	for (auto& command : commands)
+	{
+		if (command.mesh && command.material)
+		{
+			if (IsFailure(command.material->Bind(0)))
+				return EResult::Fail;
+			if (IsFailure(command.mesh->Bind(0)))
+				return EResult::Fail;
+			//m_RHI->BindConstantBuffer(command.pBoneMatrices, sizeof(mat4) * command.pMesh->GetBoneCount(), 1, EShaderType::Vertex);
+			m_RHI->DrawIndexed(command.mesh->GetIndexCount());
+		}
+	}
+	return EResult();
+}
+
+EResult Renderer::RenderSprite(f32 dt, vector<SpriteDrawCommand>& commands, ERenderSortType sortType, RenderPass* renderPass)
+{
+	for (auto& command : commands)
+	{
+		if (command.texture && command.material)
+		{
+			if(IsFailure(command.material->Bind(0)))
+				return EResult::Fail;
+			if(IsFailure(command.texture->Bind(0)))
+				return EResult::Fail;
+
+			if(command.mesh) command.mesh->Bind(0);
+			else TODO("Renderer::RenderSprite에서 Mesh가 없는 경우 처리 필요 일반 QUAD 메쉬 바인드");
+
+			m_RHI->BindConstantBuffer(&command.worldMatrix, sizeof(mat4), 1, EShaderType::Vertex);
+			m_RHI->DrawIndexed(command.mesh->GetIndexCount());
+		}
+	}
+	return EResult::Success;
+}
+
 EResult Renderer::EndFrame()
 {
 	if (m_RHI)
@@ -306,6 +367,20 @@ void Renderer::ClearAllRenderQueues()
 	}
 	m_CustomRenderQueues.clear();
 }
+
+//Entity Submit
+void Renderer::SubmitStatic(const StaticDrawCommand& command, RenderPassID passID)
+{
+	m_StaticDrawCommands[passID].push_back(command);
+}
+void Renderer::SubmitSkinned(const SkinnedDrawCommand& command, RenderPassID passID)
+{
+	m_SkinnedDrawCommands[passID].push_back(command);
+}
+void Renderer::SubmitSprite(const SpriteDrawCommand& command, RenderPassID passID)
+{
+	m_SpriteDrawCommands[passID].push_back(command);
+}
 #pragma endregion
 
 #pragma region Viewport Camera Management
@@ -340,16 +415,16 @@ void Renderer::RegisterViewportCamera(Camera* camera, RenderPass* renderPass)
 void Renderer::UnregisterViewportCamera(RenderPassID passID)
 {
 	m_ViewportCameras.erase(std::remove_if(m_ViewportCameras.begin(), m_ViewportCameras.end(),
-		[passID](const tagViewportCameraInfo& info) { return info.RenderPass->GetID() == passID; }), m_ViewportCameras.end());
+		[passID](const ViewportCameraInfo& info) { return info.renderPass->GetID() == passID; }), m_ViewportCameras.end());
 }
 
 Camera* Renderer::GetViewportCamera(RenderPassID passID) const
 {
 	for (const auto& info : m_ViewportCameras)
 	{
-		if (info.RenderPass->GetID() == passID)
+		if (info.renderPass->GetID() == passID)
 		{
-			return info.Camera;
+			return info.camera;
 		}
 	}
 	return nullptr;
