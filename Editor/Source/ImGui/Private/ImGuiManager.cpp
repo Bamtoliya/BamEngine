@@ -21,6 +21,7 @@
 #include "InspectorPanel.h"
 #include "HierarchyPanel.h"
 #include "ContentBrowserPanel.h"
+#include "ConsolePanel.h"
 
 #include "ResourceEditors.h"
 
@@ -363,6 +364,7 @@ EResult ImGuiManager::CreateDefaultPanels()
 	ContentBrowserPanel* contentBrowserPanel = new ContentBrowserPanel();
 	contentBrowserPanel->Initialize();
 	AddImGuiPanel(contentBrowserPanel);
+	AddImGuiPanel(new ConsolePanel());
 	CreateResourceEditors();
 	return EResult::Success;
 }

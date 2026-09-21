@@ -366,8 +366,18 @@ RHITexture* DirectX12RHI::CreateTexture(const RHITextureDesc& desc)
     dxDesc.nativeHandle = nullptr; // Ensure native handle is null for new texture creation
     dxDesc.rtvHandle.ptr = 0; // Reset RTV handle
     dxDesc.initialState = D3D12_RESOURCE_STATE_COMMON; // Set initial state
-    RHITexture* texture = DirectX12Texture::Create(this, dxDesc);
-    if (texture == nullptr) return nullptr;
+    DirectX12Texture* texture = DirectX12Texture::Create(this, dxDesc);
+    if (!texture)
+        return nullptr;
+
+    if (desc.data)
+    {
+        if (IsFailure(UploadTextureData(texture, desc)))
+        {
+            Safe_Release(texture);
+            return nullptr;
+        }
+    }
 
     return texture;
 }
@@ -375,6 +385,198 @@ RHITexture* DirectX12RHI::CreateTexture(const RHITextureDesc& desc)
 RHITexture* DirectX12RHI::CreateTextureFromNativeHandle(void* nativeHandle)
 {
     return nullptr;
+}
+
+EResult DirectX12RHI::UploadTextureData(RHITexture* texture, const RHITextureDesc& desc)
+{
+    if (!texture || !desc.data || !m_Device || !m_CommandQueue)
+        return EResult::InvalidArgument;
+
+    if (desc.format != ETextureFormat::R8G8B8A8_UNORM ||
+        desc.dimension != ETextureDimension::Texture2D ||
+        desc.mipLevels != 1 ||
+        desc.arraySize != 1 ||
+        desc.depth != 1 ||
+        desc.sampleCount != ETextureSampleCount::TextureSampleCount1 ||
+        desc.width == 0 ||
+        desc.height == 0)
+    {
+        return EResult::InvalidArgument;
+    }
+
+    const UINT64 sourceRowBytes = UINT64(desc.width) * 4;
+
+    if (sourceRowBytes > UINT64(desc.dataSize) / desc.height)
+        return EResult::InvalidArgument;
+
+    auto* dxTexture = static_cast<DirectX12Texture*>(texture);
+    auto* destination =
+        static_cast<ID3D12Resource*>(dxTexture->GetNativeHandle());
+
+    if (!destination)
+        return EResult::Fail;
+
+    // 1. 업로드 버퍼에 필요한 행 간격과 전체 크기
+    const D3D12_RESOURCE_DESC resourceDesc = destination->GetDesc();
+
+    D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint = {};
+    UINT rowCount = 0;
+    UINT64 rowBytes = 0;
+    UINT64 uploadBytes = 0;
+
+    m_Device->GetCopyableFootprints(
+        &resourceDesc, 0, 1, 0,
+        &footprint, &rowCount, &rowBytes, &uploadBytes);
+
+    if (rowCount != desc.height ||
+        rowBytes != sourceRowBytes ||
+        uploadBytes == 0)
+    {
+        return EResult::Fail;
+    }
+
+    // 2. CPU 쓰기가 가능한 업로드 버퍼
+    D3D12_HEAP_PROPERTIES heap = {};
+    heap.Type = D3D12_HEAP_TYPE_UPLOAD;
+    heap.CreationNodeMask = 1;
+    heap.VisibleNodeMask = 1;
+
+    D3D12_RESOURCE_DESC bufferDesc = {};
+    bufferDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+    bufferDesc.Width = uploadBytes;
+    bufferDesc.Height = 1;
+    bufferDesc.DepthOrArraySize = 1;
+    bufferDesc.MipLevels = 1;
+    bufferDesc.SampleDesc.Count = 1;
+    bufferDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+
+    ComPtr<ID3D12Resource> uploadBuffer;
+
+    if (FAILED(m_Device->CreateCommittedResource(
+        &heap,
+        D3D12_HEAP_FLAG_NONE,
+        &bufferDesc,
+        D3D12_RESOURCE_STATE_GENERIC_READ,
+        nullptr,
+        IID_PPV_ARGS(&uploadBuffer))))
+    {
+        return EResult::Fail;
+    }
+
+    // 3. CPU 픽셀 → 업로드 버퍼
+    void* mapped = nullptr;
+    D3D12_RANGE readRange = { 0, 0 };
+
+    if (FAILED(uploadBuffer->Map(0, &readRange, &mapped)))
+        return EResult::Fail;
+
+    auto* dst = static_cast<std::uint8_t*>(mapped) + footprint.Offset;
+    const auto* src = static_cast<const std::uint8_t*>(desc.data);
+
+    for (UINT y = 0; y < rowCount; ++y)
+    {
+        std::memcpy(
+            dst + SIZE_T(y) * footprint.Footprint.RowPitch,
+            src + SIZE_T(y) * static_cast<SIZE_T>(sourceRowBytes),
+            static_cast<SIZE_T>(sourceRowBytes));
+    }
+
+    uploadBuffer->Unmap(0, nullptr);
+
+    // 4. 프레임용 command list와 독립된 복사 명령 준비
+    ComPtr<ID3D12CommandAllocator> allocator;
+    ComPtr<ID3D12GraphicsCommandList> list;
+    ComPtr<ID3D12Fence> fence;
+
+    if (FAILED(m_Device->CreateCommandAllocator(
+        D3D12_COMMAND_LIST_TYPE_DIRECT,
+        IID_PPV_ARGS(&allocator))))
+    {
+        return EResult::Fail;
+    }
+
+    if (FAILED(m_Device->CreateCommandList(
+        0,
+        D3D12_COMMAND_LIST_TYPE_DIRECT,
+        allocator.Get(),
+        nullptr,
+        IID_PPV_ARGS(&list))))
+    {
+        return EResult::Fail;
+    }
+
+    if (FAILED(m_Device->CreateFence(
+        0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence))))
+    {
+        return EResult::Fail;
+    }
+
+    // 5. 텍스처를 복사 대상 상태로 전환
+    D3D12_RESOURCE_BARRIER barrier = {};
+    barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+    barrier.Transition.pResource = destination;
+    barrier.Transition.Subresource =
+        D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+
+    const auto previousState = dxTexture->GetCurrentState();
+
+    if (previousState != D3D12_RESOURCE_STATE_COPY_DEST)
+    {
+        barrier.Transition.StateBefore = previousState;
+        barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_DEST;
+        list->ResourceBarrier(1, &barrier);
+    }
+
+    // 6. 업로드 버퍼 → 텍스처
+    D3D12_TEXTURE_COPY_LOCATION source = {};
+    source.pResource = uploadBuffer.Get();
+    source.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+    source.PlacedFootprint = footprint;
+
+    D3D12_TEXTURE_COPY_LOCATION target = {};
+    target.pResource = destination;
+    target.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+    target.SubresourceIndex = 0;
+
+    list->CopyTextureRegion(&target, 0, 0, 0, &source, nullptr);
+
+    // 7. ImGui가 픽셀 셰이더에서 읽을 수 있도록 전환
+    barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
+    barrier.Transition.StateAfter =
+        D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+
+    list->ResourceBarrier(1, &barrier);
+
+    if (FAILED(list->Close()))
+        return EResult::Fail;
+
+    // 8. 실행 및 완료 대기
+    ID3D12CommandList* lists[] = { list.Get() };
+    m_CommandQueue->ExecuteCommandLists(1, lists);
+
+    // 제출 후 동기화 실패 시 자원을 해제하고 계속 진행하면 안 됩니다.
+    // 현재 예제는 치명적 오류로 처리합니다.
+    if (FAILED(m_CommandQueue->Signal(fence.Get(), 1)))
+    {
+        OutputDebugStringA("Texture upload: Signal failed.\n");
+        std::terminate();
+    }
+
+    // nullptr 이벤트: fence 값에 도달할 때까지 동기 대기
+    if (FAILED(fence->SetEventOnCompletion(1, nullptr)))
+    {
+        OutputDebugStringA("Texture upload: fence wait failed.\n");
+        std::terminate();
+    }
+
+    if (FAILED(m_Device->GetDeviceRemovedReason()))
+        return EResult::Fail;
+
+    dxTexture->SetCurrentState(
+        D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+
+    // GPU 완료 후 로컬 ComPtr들이 업로드 자원을 해제합니다.
+    return EResult::Success;
 }
 #pragma endregion
 

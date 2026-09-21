@@ -68,6 +68,7 @@ if(MSVC)
         $<$<CONFIG:Debug>:/FS>
         /MP
         /bigobj
+        /Zc:preprocessor
     )
     target_link_options(Engine PRIVATE
         $<$<CONFIG:Debug>:/INCREMENTAL>

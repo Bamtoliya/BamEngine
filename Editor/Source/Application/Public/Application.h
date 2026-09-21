@@ -37,6 +37,7 @@ private:
 	EResult InitializeRuntime(const ApplicationCreateInfo& createInfo);
 	EResult InitializeSystem();
 	EResult InitializeImGui();
+	EResult InitializeLogger();
 #pragma endregion
 
 #pragma region Localization

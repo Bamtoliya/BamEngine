@@ -106,6 +106,7 @@ using Microsoft::WRL::ComPtr;
 #include "Delegate.h"
 #include "EnumBit.h"
 #include "Handle.h"
+#include "Logger.h"
 #pragma endregion
 using namespace Engine;
 

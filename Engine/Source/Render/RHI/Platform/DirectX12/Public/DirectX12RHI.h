@@ -1,4 +1,4 @@
-#pragma once 
+﻿#pragma once 
 #include "RHI.h"
 #include "DirectX12Types.h"
 #include "DirectX12DescriptorAllocator.h"
@@ -42,9 +42,12 @@ public:
 	RHIPipeline* CreatePipeline(const RHIPipelineDesc& desc) override;
 	RHISampler* CreateSampler(const SamplerDesc& desc) override;
 	RHIShader* CreateShader(const RHIShaderDesc& desc) override;
+private:
+	EResult UploadTextureData(RHITexture* texture, const RHITextureDesc& desc);
 #pragma endregion
 
 #pragma region Bind Resources
+public:
 	EResult BindRenderTarget(RHITexture* renderTarget, RHITexture* depthStencil) override;
 	EResult BindTextureSampler(RHITexture* texture, RHISampler* sampler, uint32 slot) override;
 	EResult BindRenderTargets(uint32 count, RHITexture** renderTargets, RHITexture* depthStencil) override;
@@ -55,12 +58,14 @@ public:
 #pragma endregion
 
 #pragma region RenderPass
+public:
 	EResult BeginRenderPass(RenderPass* renderPass) override;
 	EResult EndRenderPass() override;
 	EResult ClearRenderPass() override;
 #pragma endregion
 
 #pragma region Clear Resources
+public:
 	EResult ClearRenderTarget(RHITexture* renderTarget, vec4 color) override;
 	EResult ClearDepthStencil(RHITexture* depthStencil, f32 depth, uint8 stencil) override;
 #pragma endregion
@@ -68,11 +73,14 @@ public:
 
 
 #pragma region Draw Call
+public:
 	EResult Draw(uint32 count) override;
 	EResult DrawIndexed(uint32 count) override;
 	EResult DrawIndexedInstanced() override;
 	EResult DrawTexture(RHITexture* texture) override;
 #pragma endregion
+
+public:
 	EResult SetClearColor(vec4 color) override;
 	EResult SetViewport(int32 x, int32 y, uint32 width, uint32 height) override;
 	virtual void* GetNativeRHI() const override { return m_Device.Get(); }

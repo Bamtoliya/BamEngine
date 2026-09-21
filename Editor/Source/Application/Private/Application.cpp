@@ -11,6 +11,7 @@
 #define RHI_TYPE ERHIType::DirectX12
 #define GRAPHICS_BACKEND EGraphicsBackend::Vulkan
 #define RESOURCE_PATH L"Resources/"
+#define LOG_PATH L"Logs/EngineLog.log"
 
 BEGIN(Editor)
 
@@ -20,6 +21,7 @@ IMPLEMENT_SINGLETON(Application)
 EResult Application::Initialize(void* arg)
 {
     //_CrtSetBreakAlloc(4253);
+    InitializeLogger();
 	InitializeWindow(*(ApplicationCreateInfo*)arg);
 	InitializeRuntime(*(ApplicationCreateInfo*)arg);
     IntializeRenderer();
@@ -43,6 +45,8 @@ void Application::Free()
 
     if(m_Window) SDL_DestroyWindow(m_Window);
     SDL_Quit();
+    BAM_LOG(Info, "Application", "Application shutdown finished");
+    Engine::Logger::Shutdown();
 }
 
 #pragma endregion
@@ -210,6 +214,16 @@ EResult Application::InitializeImGui()
         ImGuiManager::Get().End();
         });
 
+    return EResult::Success;
+}
+EResult Application::InitializeLogger()
+{
+	if (!Engine::Logger::Initialize(LOG_PATH))
+	{
+		fmt::print(stderr, "Logger Initialization Failed\n");
+		return EResult::Fail;
+	}
+    BAM_LOG(Info, "Application", "Logger initialization finished");
     return EResult::Success;
 }
 #pragma endregion
