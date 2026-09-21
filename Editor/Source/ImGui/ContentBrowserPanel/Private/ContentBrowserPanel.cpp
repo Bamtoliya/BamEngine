@@ -7,6 +7,7 @@
 #include "LocalizationManager.h"
 #include "AssetManager.h"
 #include "Archives.h"
+#include "ImGuiManager.h"
 
 using namespace std;
 
@@ -495,10 +496,10 @@ void ContentBrowserPanel::DrawGridItem(const filesystem::directory_entry& direct
 	auto relativePath = filesystem::relative(path, m_RootPath);
 	string filenameString = relativePath.filename().string();
 
-	void* thumbnailTexID = nullptr;
+	ImTextureID thumbnailTexID = NULL;
 	if (!directoryEntry.is_directory())
 	{
-		thumbnailTexID = AssetCache::Get().GetThumbnail(path);
+		thumbnailTexID = ImGuiManager::Get().GetImGuiTextureID(AssetCache::Get().GetThumbnail(path));
 		string ext = path.extension().string();
 	}
 

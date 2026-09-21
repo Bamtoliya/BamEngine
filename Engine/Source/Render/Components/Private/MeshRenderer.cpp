@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "MeshRenderer.h"
 
 #include "Material.h"
@@ -97,7 +97,7 @@ EResult MeshRenderer::Render(f32 dt, RenderPass* renderPass)
 	SceneUBO uboData;
 	uboData.worldMatrix = m_Owner->GetComponent<Transform>()->GetWorldMatrix();
 
-	if (IsFailure(rhi->BindConstantBuffer((void*)&uboData, sizeof(SceneUBO), 1, EShaderType::Vertex)))
+	if (IsFailure(rhi->BindConstantBuffer((void*)&uboData, sizeof(SceneUBO), 1)))
 		return EResult::Fail;
 
 	if (IsFailure(mesh->Bind(0)))

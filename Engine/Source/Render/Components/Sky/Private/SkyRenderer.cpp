@@ -115,13 +115,13 @@ EResult SkyRenderer::Render(f32 dt, RenderPass* renderPass)
     SceneUBO sceneUBO;
     sceneUBO.worldMatrix = glm::scale(mat4(1.0f), vec3(skyScale));
 
-    if (IsFailure(rhi->BindConstantBuffer((void*)&sceneUBO, sizeof(SceneUBO), 1, EShaderType::Vertex)))
+    if (IsFailure(rhi->BindConstantBuffer((void*)&sceneUBO, sizeof(SceneUBO), 1)))
         return EResult::Fail;
 
     // ── SkyAtmosphereUBO: 대기 파라미터 (slot 3) ──
 	SkyAtmosphereDesc atmosphereUBO = BuildSkyAtmosphereDesc();
 
-    if (IsFailure(rhi->BindConstantBuffer((void*)&atmosphereUBO, sizeof(SkyAtmosphereDesc), 1, EShaderType::Pixel)))
+    if (IsFailure(rhi->BindConstantBuffer((void*)&atmosphereUBO, sizeof(SkyAtmosphereDesc), 1)))
         return EResult::Fail;
 
     if (IsFailure(mesh->Bind(0)))

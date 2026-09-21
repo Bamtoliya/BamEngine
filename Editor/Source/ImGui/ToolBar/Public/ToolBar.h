@@ -66,7 +66,7 @@ private:
 	bool m_DisplaySettingsWindow = false;
 private:
 	bool m_ShowNewViewportPopup = false;
-	tagViewportPanelDesc m_newViewportDesc;
+	ViewportPanelDesc m_newViewportDesc;
 	char m_NewViewportNameBuf[256] = "Viewport";
 #pragma endregion
 

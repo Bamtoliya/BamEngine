@@ -109,7 +109,7 @@ EResult UIImage::Render(f32 dt, RenderPass* renderPass)
 	uboData.offset = m_Offset;
 	uboData.color = m_Color;
 	
-   if (IsFailure(rhi->BindConstantBuffer((void*)&uboData, sizeof(UIUBO), 1, EShaderType::Vertex)))
+   if (IsFailure(rhi->BindConstantBuffer((void*)&uboData, sizeof(UIUBO), 1)))
        return EResult::Fail;
 
    if (IsFailure(rhi->BindTextureSampler(rhiTexture, sampler, 0)))

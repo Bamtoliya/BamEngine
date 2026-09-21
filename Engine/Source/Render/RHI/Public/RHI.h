@@ -29,6 +29,15 @@ class RHITexture;
 class RHIPipeline;
 
 class RenderPass;
+
+// CBV 캐싱 상태를 기록하는 장부 구조체
+struct ConstantBufferBinding
+{
+    RHIBuffer* buffer = nullptr;         // 1번 방식: RHIBuffer 객체가 들어왔을 때
+    uint32     offset = 0;        // 2번 방식: 링 버퍼 내 복사된 데이터의 오프셋
+    bool       isDynamic = false;        // true면 링 버퍼(임시 데이터), false면 객체
+};
+
 class ENGINE_API RHI : public Base
 {
 protected:
@@ -54,11 +63,6 @@ public:
     virtual RHITexture* CreateTextureFromFile(const char* filename) BAM_PURE;
     virtual RHITexture* CreateTextureFromFile(const wchar* filename) BAM_PURE;
     virtual RHITexture* CreateTexture(const RHITextureDesc& desc) BAM_PURE;
-	virtual RHITexture* CreateTexture2D(void* data, uint32 width, uint32 height, uint32 mipLevels, uint32 arraySize) BAM_PURE;
-	virtual RHITexture* CreateTextureCube(void* data, uint32 size, uint32 mipLevels) BAM_PURE;
-	virtual RHITexture* CreateTexture3D(void* data, uint32 width, uint32 height, uint32 depth, uint32 mipLevels) BAM_PURE;
-	virtual RHITexture* CreateRenderTargetTexture(void* data, uint32 width, uint32 height, uint32 mipLevels, uint32 arraySize) BAM_PURE;
-	virtual RHITexture* CreateDepthStencilTexture(void* data, uint32 width, uint32 height, uint32 mipLevels, uint32 arraySize) BAM_PURE;
 	virtual RHITexture* CreateTextureFromNativeHandle(void* nativeHandle) BAM_PURE;
 public:
     virtual RHIPipeline* CreatePipeline(const RHIPipelineDesc& desc) BAM_PURE;
@@ -71,7 +75,7 @@ public:
 #pragma region Bind Resources
 public:
     virtual EResult BindRenderTarget(RHITexture* renderTarget, RHITexture* depthStencil) BAM_PURE;
-	virtual EResult BindTexture(RHITexture* texture, uint32 slot) BAM_PURE;
+	virtual EResult BindTexture(RHITexture* texture, uint32 slot);
     virtual EResult BindTextureSampler(RHITexture* texture, RHISampler* sampler, uint32 slot) BAM_PURE;
     virtual EResult BindRenderTargets(uint32 count, RHITexture** renderTargets, RHITexture* depthStencil) BAM_PURE;
 public:
@@ -83,13 +87,10 @@ public:
 public:
     virtual EResult BindVertexBuffers(uint32 firstSlot, RHIBuffer** vertexBuffers, uint32 count);
     virtual EResult BindIndexBuffer(RHIBuffer* indexBuffer);
-    virtual EResult BindConstantBuffer(void* arg, uint32 slot) BAM_PURE;
-    virtual EResult BindConstantBuffer(void* arg, uint32 size, uint32 slot, EShaderType type) { return EResult::NotImplemented; }
-    virtual EResult BindConstantRangeBuffer(void* arg, uint32 slot, uint32 offset, uint32 size) BAM_PURE;
-
-    virtual EResult BindVertexStorageBuffers(uint32 firstSlot, RHIBuffer** storageBuffers, uint32 count);
-    virtual EResult BindFragmentStorageBuffers(uint32 firstSlot, RHIBuffer** storageBuffers, uint32 count);
-    virtual EResult BindComputeStorageBuffers(uint32 firstSlot, RHIBuffer** storageBuffers, uint32 count);
+    virtual EResult BindConstantBuffer(RHIBuffer* buffer, uint32 slot);
+    virtual EResult BindConstantBuffer(const void* data, uint32 size, uint32 slot);
+    virtual EResult BindConstantRangeBuffer(void* arg, uint32 slot, uint32 offset, uint32 size);
+	virtual EResult BindStorageBuffer(RHIBuffer* buffer, uint32 slot);
 #pragma endregion
 
 #pragma region RenderPass
@@ -130,21 +131,23 @@ public:
 	virtual RenderPass* GetCurrentRenderPass() const { return m_CurrentRenderPass; }
 #pragma endregion
 
+protected:
+	EResult InitializeConstantBuffers();
+
 #pragma region Member Variable
-    
 protected:
     RHIBuffer* m_VertexBuffers[MAX_BUFFER_SLOTS] = {nullptr};
     uint32 m_NumVertexBuffersBound = { 0 };
     RHIBuffer* m_IndexBuffer = { nullptr };
 protected:
-    RHIBuffer* m_VertexStorageBuffers[MAX_STORAGE_BUFFERS] = { nullptr };
-    uint32 m_NumVertexStorageBuffersBound = { 0 };
-
-    RHIBuffer* m_FragmentStorageBuffers[MAX_STORAGE_BUFFERS] = { nullptr };
-    uint32 m_NumFragmentStorageBuffersBound = { 0 };
-
-    RHIBuffer* m_ComputeStorageBuffers[MAX_STORAGE_BUFFERS] = { nullptr };
-    uint32 m_NumComputeStorageBuffersBound = { 0 };
+    ConstantBufferBinding m_ConstantBuffers[MAX_CONSTANT_BUFFER_SLOTS];
+	RHITexture* m_CurrentTextures[MAX_TEXTURE_SLOTS] = { nullptr };
+	RHIBuffer*  m_StorageBuffers[MAX_STORAGE_BUFFERS] = { nullptr };
+protected:
+    static constexpr uint32 DYNAMIC_CONSTANT_BUFFER_SIZE = 1024 * 1024 * 4; // 4MB
+    RHIBuffer* m_DynamicConstantBuffers[MAX_SWAPCHAIN_BUFFERS] = { nullptr };
+    uint32     m_DynamicBufferCursor = 0;
+    uint32     m_ConstantBufferAlignment = 256;
 protected:
 	RHIShader* m_CurrentShader = { nullptr };
 protected:
@@ -160,8 +163,6 @@ protected:
 	RHITexture* m_CurrentRenderTargets[MAX_RENDER_TARGET_COUNT] = {nullptr};
 	uint32 m_CurrentRenderTargetCount = { 0 };
 	RHITexture* m_CurrentDepthStencil = { nullptr };
-	RHITexture* m_CurrentTextures[MAX_TEXTURE_SLOTS] = { nullptr };
-
 protected:
 	RHIPipeline* m_CurrentPipeline = { nullptr };
     RenderPass* m_CurrentRenderPass = { nullptr };

@@ -15,7 +15,7 @@
 
 #include "ImGuiManager.h"
 #include "Application.h"
-#include "RHI.h"
+#include "RHIs.h"
 
 #include "ViewportPanels.h"
 #include "InspectorPanel.h"
@@ -121,8 +121,7 @@ EResult ImGuiManager::Initialize(void* arg)
 		return EResult::Fail;
 	}	
 
-	
-	//CreateDefaultPanels();
+	CreateDefaultPanels();
 	return EResult::Success;
 }
 
@@ -142,7 +141,6 @@ EResult ImGuiManager::InitializeImGui()
 
 void ImGuiManager::Free()
 {
-	Safe_Release(m_RHI);
 	switch (m_RHIType)
 	{
 	case ERHIType::SDLGPU:
@@ -158,15 +156,16 @@ void ImGuiManager::Free()
 	default:
 		break;
 	}
+	
 
 	for (auto& panel : m_ImGuiPanels)
 	{
 		Safe_Release(panel);
 	}
 
-
 	ImGui_ImplSDL3_Shutdown();
 	ImGui::DestroyContext();
+	Safe_Release(m_RHI);
 }
 
 #pragma endregion
@@ -339,7 +338,7 @@ vector<ImGuiInterface*> ImGuiManager::GetImGuiPanels(const wstring& name)
 }
 EResult ImGuiManager::CreateDefaultPanels()
 {
-	tagSceneViewportPanelDesc scenePanelDesc;
+	SceneViewportPanelDesc scenePanelDesc;
 	scenePanelDesc.Name = L"Scene View";
 	scenePanelDesc.RenderTargetWidth = g_WindowWidth;
 	scenePanelDesc.RenderTargetHeight = g_WindowHeight;
@@ -349,7 +348,7 @@ EResult ImGuiManager::CreateDefaultPanels()
 	SceneViewportPanel* viewportPanel = new SceneViewportPanel();
 	viewportPanel->Initialize(&scenePanelDesc);
 	AddImGuiPanel(viewportPanel);
-	tagCameraViewportPanelDesc UIViewportPanelDesc;
+	CameraViewportPanelDesc UIViewportPanelDesc;
 	UIViewportPanelDesc.Name = L"UI View";
 	UIViewportPanelDesc.RenderTargetWidth = g_WindowWidth;
 	UIViewportPanelDesc.RenderTargetHeight = g_WindowHeight;
@@ -547,37 +546,74 @@ EResult ImGuiManager::InitializeImGuiDirectX12()
 		return EResult::Fail;
 	}
 
-
-	D3D12_DESCRIPTOR_HEAP_DESC desc = {};
-	desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-	desc.NumDescriptors = 1;
-	desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
-
-	if (FAILED(device->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&m_ImGuiSrvDescHeap))))
+	// [핵심] ImGui 전용 heap 생성 금지, 엔진 SRV heap 공유
+	auto* srvAllocator = dx12RHI->GetSRVAllocator();
+	if (!srvAllocator || !srvAllocator->GetHeap())
 	{
-		fmt::print(stderr, "Failed to create descriptor heap\n");
+		fmt::print(stderr, "DX12 SRV allocator/heap is null\n");
 		return EResult::Fail;
 	}
 
+	m_ImGuiSrvDescHeap = srvAllocator->GetHeap();
+	m_ImGuiOwnsSrvHeap = false;
+	m_ImGuiSrvDescriptorSize = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+	IM_ASSERT(m_ImGuiSrvDescriptorSize > 0);
+
 	ImGui_ImplDX12_InitInfo initInfo = {};
-	initInfo.Device = device; 
+	initInfo.Device = device;
 	initInfo.CommandQueue = dx12RHI->GetCommandQueue();
-	initInfo.NumFramesInFlight = 2; // 더블 버퍼링
+	initInfo.NumFramesInFlight = 2;
 	initInfo.SrvDescriptorHeap = m_ImGuiSrvDescHeap;
-	initInfo.RTVFormat = DXGI_FORMAT_R8G8B8A8_UNORM; // 스왑체인 포맷
-	initInfo.DSVFormat = DXGI_FORMAT_UNKNOWN; // DSV는 사용하지 않음
+	initInfo.RTVFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
+	initInfo.DSVFormat = DXGI_FORMAT_UNKNOWN;
+	initInfo.UserData = this;
 
-	initInfo.LegacySingleSrvCpuDescriptor = m_ImGuiSrvDescHeap->GetCPUDescriptorHandleForHeapStart();
-	initInfo.LegacySingleSrvGpuDescriptor = m_ImGuiSrvDescHeap->GetGPUDescriptorHandleForHeapStart();
+	initInfo.SrvDescriptorAllocFn = [](ImGui_ImplDX12_InitInfo* info, D3D12_CPU_DESCRIPTOR_HANDLE* out_cpu, D3D12_GPU_DESCRIPTOR_HANDLE* out_gpu)
+		{
+			ImGuiManager* self = static_cast<ImGuiManager*>(info->UserData);
+			IM_ASSERT(self && self->m_RHI);
 
-	// [Multi-Viewport 처리] 멀티 뷰포트 모드일 때 스왑체인 구성 설정
+			auto* dx12RHI = static_cast<DirectX12RHI*>(self->m_RHI);
+			auto* allocator = dx12RHI->GetSRVAllocator();
+			IM_ASSERT(allocator);
+
+			uint32 index = 0;
+			if (!allocator->Allocate(*out_cpu, index))
+			{
+				IM_ASSERT(false && "SRV allocator is out of descriptors.");
+				*out_cpu = {};
+				*out_gpu = {};
+				return;
+			}
+
+			*out_gpu = allocator->GetGPUHandle(index);
+		};
+
+	initInfo.SrvDescriptorFreeFn = [](ImGui_ImplDX12_InitInfo* info, D3D12_CPU_DESCRIPTOR_HANDLE cpu_desc, D3D12_GPU_DESCRIPTOR_HANDLE)
+		{
+			ImGuiManager* self = static_cast<ImGuiManager*>(info->UserData);
+			IM_ASSERT(self && self->m_RHI);
+
+			auto* dx12RHI = static_cast<DirectX12RHI*>(self->m_RHI);
+			auto* allocator = dx12RHI->GetSRVAllocator();
+			IM_ASSERT(allocator);
+
+			auto* heap = allocator->GetHeap();
+			D3D12_CPU_DESCRIPTOR_HANDLE start = heap->GetCPUDescriptorHandleForHeapStart();
+
+			if (cpu_desc.ptr < start.ptr || self->m_ImGuiSrvDescriptorSize == 0)
+				return;
+
+			SIZE_T delta = cpu_desc.ptr - start.ptr;
+			uint32 index = static_cast<uint32>(delta / self->m_ImGuiSrvDescriptorSize);
+			allocator->Free(index);
+		};
 
 	if (!ImGui_ImplDX12_Init(&initInfo))
 	{
 		fmt::print(stderr, "ImGui_ImplDX12_Init Failed\n");
 		return EResult::Fail;
 	}
-
 
 	return EResult::Success;
 }
@@ -622,11 +658,13 @@ void ImGuiManager::DirectX12End()
 void ImGuiManager::ShutdownImGuiDirectX12()
 {
 	ImGui_ImplDX12_Shutdown();
-	if (m_ImGuiSrvDescHeap)
+
+	// [핵심] 공유 heap은 소유권 없음 -> Release 금지
+	if (m_ImGuiOwnsSrvHeap && m_ImGuiSrvDescHeap)
 	{
 		m_ImGuiSrvDescHeap->Release();
-		m_ImGuiSrvDescHeap = nullptr;
 	}
+	m_ImGuiSrvDescHeap = nullptr;
 }
 #pragma endregion
 
@@ -647,5 +685,25 @@ EResult ImGuiManager::InitializeImGuiMetal()
 }
 void ImGuiManager::ShutdownImGuiMetal()
 {
+}
+#pragma endregion
+
+#pragma region Helper
+ImTextureID ImGuiManager::GetImGuiTextureID(const RHITexture* texture) const
+{
+	if (!texture) return ImTextureID();
+	switch (m_RHIType)
+	{
+	case ERHIType::SDLGPU:
+		return (ImTextureID)(texture->GetNativeHandle());
+	case ERHIType::DirectX12:
+	{
+		const DirectX12Texture* dx12Texture = static_cast<const DirectX12Texture*>(texture);
+		const D3D12_GPU_DESCRIPTOR_HANDLE srvHandle = (dx12Texture)->GetSRVGPUHandle();
+		return srvHandle.ptr;
+	}
+	default:
+		return ImTextureID();
+	}
 }
 #pragma endregion

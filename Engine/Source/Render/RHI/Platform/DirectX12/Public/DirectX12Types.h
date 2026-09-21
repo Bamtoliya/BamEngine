@@ -121,6 +121,38 @@ constexpr DXGI_FORMAT ToDXGIFormat(Engine::ETextureFormat format)
 	}
 }
 
+constexpr DXGI_FORMAT ToTypelessFormat(DXGI_FORMAT format)
+{
+	switch (format)
+	{
+	case DXGI_FORMAT_D32_FLOAT:             return DXGI_FORMAT_R32_TYPELESS;
+	case DXGI_FORMAT_D24_UNORM_S8_UINT:     return DXGI_FORMAT_R24G8_TYPELESS;
+	case DXGI_FORMAT_D16_UNORM:             return DXGI_FORMAT_R16_TYPELESS;
+	case DXGI_FORMAT_D32_FLOAT_S8X24_UINT:  return DXGI_FORMAT_R32G8X24_TYPELESS;
+	default:                                return format;
+	}
+}
+
+constexpr DXGI_FORMAT ToDepthSRVFormat(DXGI_FORMAT format)
+{
+	switch (format)
+	{
+	case DXGI_FORMAT_D32_FLOAT:             return DXGI_FORMAT_R32_FLOAT;
+	case DXGI_FORMAT_D24_UNORM_S8_UINT:     return DXGI_FORMAT_R24_UNORM_X8_TYPELESS;
+	case DXGI_FORMAT_D16_UNORM:             return DXGI_FORMAT_R16_UNORM;
+	case DXGI_FORMAT_D32_FLOAT_S8X24_UINT:  return DXGI_FORMAT_R32_FLOAT_X8X24_TYPELESS;
+	default:                                return format;
+	}
+}
+
+constexpr bool IsDepthFormat(DXGI_FORMAT format)
+{
+	return format == DXGI_FORMAT_D32_FLOAT
+		|| format == DXGI_FORMAT_D24_UNORM_S8_UINT
+		|| format == DXGI_FORMAT_D16_UNORM
+		|| format == DXGI_FORMAT_D32_FLOAT_S8X24_UINT;
+}
+
 
 constexpr D3D12_FILL_MODE ToD3D12FillMode(Engine::EFillMode fillMode)
 {

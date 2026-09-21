@@ -23,11 +23,14 @@ EResult DirectX12Shader::Initialize(const DESC& desc)
 		file.seekg(0, ios::beg);
 		file.read((char*)m_ShaderBytecode.data(), fileSize);
 		file.close();
+		fmt::print(stderr, "DX12 shader load: {}, size={}\n", WStrToStr(desc.filePath), fileSize);
 	}
 	else
 	{
 		return EResult::InvalidArgument;
 	}
+
+	
 
     return EResult::Success;
 }

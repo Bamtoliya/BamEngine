@@ -13,27 +13,25 @@ void DebugRenderer::Initialize(const wstring& prefix)
 	ResourceManager& rm = ResourceManager::Get();
 
 	ShaderDesc vsDesc = {};
-	vsDesc.Key = L"DebugLineVS";
-	vsDesc.Path = L"Resources/Shader/debugLine.vert.spv";
-	vsDesc.spirvPath = L"Resources/Shader/debugLine.vert.spv";
-	vsDesc.shaderType = EShaderType::Vertex;
-	vsDesc.entryPoint = "main";
-	rm.LoadResource<Shader>(&vsDesc);
 	{
-		auto handle = rm.GetResourceHandle<Shader>(L"DebugLineVS");
-		rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/debugLine.vert.bamshader");
+		vsDesc.Key			= L"DebugLineVS";
+		vsDesc.Path			= L"Resources/Shader/bin/dxil/debugLineVS.cso";
+		vsDesc.spirvPath	= L"Resources/Shader/bin/spirv/debugLineVS.spv";
+		vsDesc.shaderType = EShaderType::Vertex;
+		vsDesc.entryPoint = "main";
+		auto handle = rm.LoadResource<Shader>(&vsDesc);
+		//rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/debugLine.vert.bamshader");
 	}
 
 	ShaderDesc psDesc = {};
-	psDesc.Key = L"DebugLinePS";
-	psDesc.Path = L"Resources/Shader/debugLine.frag.spv";
-	psDesc.spirvPath = L"Resources/Shader/debugLine.frag.spv";
-	psDesc.shaderType = EShaderType::Pixel;
-	psDesc.entryPoint = "main";
-	rm.LoadResource<Shader>(&psDesc);
 	{
-		auto handle = rm.GetResourceHandle<Shader>(L"DebugLinePS");
-		rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/debugLine.frag.bamshader");
+		psDesc.Key			= L"DebugLinePS";
+		psDesc.Path			= L"Resources/Shader/bin/dxil/debugLinePS.cso";
+		psDesc.spirvPath	= L"Resources/Shader/bin/spirv/debugLinePS.spv";
+		psDesc.shaderType = EShaderType::Fragment;
+		psDesc.entryPoint = "main";
+		auto handle = rm.LoadResource<Shader>(&psDesc);
+		//rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/debugLine.frag.bamshader");
 	}
 
 	m_Vertices.reserve(2 * m_MaxLines);

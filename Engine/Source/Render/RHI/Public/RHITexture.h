@@ -4,11 +4,8 @@
 
 struct RHITextureDesc
 {
-	uint32	width = 1;
-	uint32	height = 1;
-	uint32	depth = 1;
-	uint32 	mipLevels = 1;
-	uint32 	arraySize = 1;
+	uint32	width = 1, height = 1, depth = 1;
+	uint32 	mipLevels = 1, arraySize = 1;
 
 	Engine::ETextureSampleCount sampleCount = Engine::ETextureSampleCount::TextureSampleCount1;
 	Engine::ETextureFormat format = Engine::ETextureFormat::R8G8B8A8_UNORM;
@@ -19,6 +16,10 @@ struct RHITextureDesc
 	uint32		dataSize = 0;
 
 	bool sRGB = false;
+
+	vec4 clearColor = vec4(0.0f, 0.0f, 0.0f, 1.0f);
+	f32 clearDepth = 1.0f;
+	uint8 clearStencil = 0;
 };
 
 BEGIN(Engine)
@@ -43,6 +44,28 @@ public:
 	ETextureDimension GetDimension() const { return m_Dimension; }
 	ETextureUsage GetUsage() const { return m_Usage; }
 
+	vec4 GetClearColor() const { return m_ClearColor; }
+	f32 GetClearDepth() const { return m_ClearDepth; }
+	uint8 GetClearStencil() const { return m_ClearStencil; }
+
+	DESC GetDesc() const
+	{
+		DESC desc = {};
+		desc.width = m_Width;
+		desc.height = m_Height;
+		desc.depth = m_Depth;
+		desc.mipLevels = m_MipLevels;
+		desc.arraySize = m_ArraySize;
+		desc.sampleCount = m_SampleCount;
+		desc.format = m_Format;
+		desc.dimension = m_Dimension;
+		desc.usage = m_Usage;
+		desc.sRGB = m_sRGB;
+		desc.clearColor = m_ClearColor;
+		desc.clearDepth = m_ClearDepth;
+		desc.clearStencil = m_ClearStencil;
+		return desc;
+	}
 protected:
 	uint32 m_Width			= { 0 };
 	uint32 m_Height			= { 0 };
@@ -56,5 +79,9 @@ protected:
 	ETextureUsage		m_Usage		= ETextureUsage::Sampler;
 
 	bool m_sRGB = false;
+
+	vec4	m_ClearColor	= { 0.0f, 0.0f, 0.0f, 1.0f };
+	f32		m_ClearDepth	= { 1.0f };
+	uint8	m_ClearStencil	= { 0 };
 };
 END

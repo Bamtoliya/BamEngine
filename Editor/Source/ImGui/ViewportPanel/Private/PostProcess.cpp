@@ -52,7 +52,7 @@ EResult ToneMapping::SubmitPass(f32 dt, Engine::RenderPassID passID, const wstri
 
 			auto* rhi = Engine::Renderer::Get().GetRHI();
 			rhi->BindTextureSampler(src->GetTexture(), Engine::SamplerManager::Get().GetDefaultSampler(), 0);
-			rhi->BindConstantBuffer(&m_Params, sizeof(m_Params), 0, EShaderType::Pixel);
+			rhi->BindConstantBuffer(&m_Params, sizeof(m_Params), 0);
 			rhi->BindPipeline(m_Pipeline);
 			return rhi->Draw(3);
 		}, passID);

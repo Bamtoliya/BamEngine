@@ -8,9 +8,25 @@
 void RHI::Free()
 {
 	for (auto& buffer : m_VertexBuffers) { Safe_Release(buffer); }
-	for (auto& buffer : m_VertexStorageBuffers) { Safe_Release(buffer); }
-	for (auto& buffer : m_FragmentStorageBuffers) { Safe_Release(buffer); }
-	for (auto& buffer : m_ComputeStorageBuffers) { Safe_Release(buffer); }
+	for (auto& texture : m_CurrentTextures)
+	{ Safe_Release(texture); }
+	for (auto& buffer : m_StorageBuffers)
+	{ 
+		Safe_Release(buffer); 
+	}
+
+	for (auto& cache : m_ConstantBuffers)
+	{
+		if (!cache.isDynamic && cache.buffer)
+		{
+			Safe_Release(cache.buffer);
+			cache.buffer = nullptr;
+		}
+	}
+
+	for (auto& buffer : m_DynamicConstantBuffers) { Safe_Release(buffer); }
+
+	for (auto& renderTarget : m_CurrentRenderTargets) { Safe_Release(renderTarget); }
 
 	Safe_Release(m_IndexBuffer);
 	Safe_Release(m_CurrentShader);
@@ -18,6 +34,27 @@ void RHI::Free()
 	Safe_Release(m_BackBuffer);
 }
 
+#pragma region Bind Resources
+#pragma region Texture
+EResult RHI::BindTexture(RHITexture* texture, uint32 slot)
+{
+	if (slot >= MAX_TEXTURE_SLOTS) return EResult::Fail;
+	if (!texture)
+	{
+		Safe_Release(m_CurrentTextures[slot]);
+		m_CurrentTextures[slot] = nullptr;
+		return EResult::Success;
+	}
+
+	if (m_CurrentTextures[slot] == texture) return EResult::Success;
+	if (m_CurrentTextures[slot]) Safe_Release(m_CurrentTextures[slot]);
+	m_CurrentTextures[slot] = texture;
+	Safe_AddRef(m_CurrentTextures[slot]);
+	return EResult::Success;
+}
+#pragma endregion
+
+#pragma region Buffer
 EResult RHI::BindVertexBuffers(uint32 firstSlot, RHIBuffer** vertexBuffers, uint32 count)
 {
 	if (!vertexBuffers || count == 0) return EResult::Fail;
@@ -41,44 +78,89 @@ EResult RHI::BindIndexBuffer(RHIBuffer* indexBuffer)
 	return EResult::Success;
 }
 
-EResult RHI::BindVertexStorageBuffers(uint32 firstSlot, RHIBuffer** storageBuffers, uint32 count)
+EResult RHI::BindConstantBuffer(RHIBuffer* buffer, uint32 slot)
 {
-	if (!storageBuffers || count == 0) return EResult::Fail;
-	for (uint32 i = 0; i < count; ++i)
+	if (slot >= MAX_CONSTANT_BUFFER_SLOTS) return EResult::Fail;
+
+	ConstantBufferBinding& state = m_ConstantBuffers[slot];
+
+	if (!state.isDynamic && state.buffer != buffer)
 	{
-		if (firstSlot + i >= MAX_BUFFER_SLOTS) break;
-		Safe_Release(m_VertexStorageBuffers[firstSlot + i]);
-		m_VertexStorageBuffers[firstSlot + i] = storageBuffers[i];
-		Safe_AddRef(m_VertexStorageBuffers[firstSlot + i]);
+		Safe_Release(state.buffer);
 	}
-	m_NumVertexStorageBuffersBound = std::max(m_NumVertexStorageBuffersBound, firstSlot + count);
+
+	state.buffer = buffer;
+	state.isDynamic = false;
+	state.offset = 0;
+
+	if (state.buffer)
+		Safe_AddRef(state.buffer);
+
 	return EResult::Success;
 }
 
-EResult RHI::BindFragmentStorageBuffers(uint32 firstSlot, RHIBuffer** storageBuffers, uint32 count)
+EResult RHI::BindConstantBuffer(const void* data, uint32 size, uint32 slot)
 {
-	if (!storageBuffers || count == 0) return EResult::Fail;
-	for (uint32 i = 0; i < count; ++i)
-	{	
-		if (firstSlot + i >= MAX_BUFFER_SLOTS) break;
-		Safe_Release(m_FragmentStorageBuffers[firstSlot + i]);
-		m_FragmentStorageBuffers[firstSlot + i] = storageBuffers[i];
-		Safe_AddRef(m_FragmentStorageBuffers[firstSlot + i]);
+	if (slot >= MAX_CONSTANT_BUFFER_SLOTS || !data || size == 0) return EResult::Fail;
+
+	uint32 alignedSize = (size + (m_ConstantBufferAlignment - 1)) & ~(m_ConstantBufferAlignment - 1);
+
+	if (m_DynamicBufferCursor + alignedSize > DYNAMIC_CONSTANT_BUFFER_SIZE) return EResult::Fail;
+
+	RHIBuffer* ringBuffer = m_DynamicConstantBuffers[m_CurrentBackBufferIndex];
+	if (!ringBuffer) return EResult::Fail;
+
+	void* mappedPtr = ringBuffer->GetMappedPointer();
+	if (!mappedPtr) return EResult::Fail;
+
+	memcpy(static_cast<uint8*>(mappedPtr) + m_DynamicBufferCursor, data, size);
+
+	ConstantBufferBinding& state = m_ConstantBuffers[slot];
+
+	if (!state.isDynamic && state.buffer)
+	{
+		Safe_Release(state.buffer);
 	}
-	m_NumFragmentStorageBuffersBound = std::max(m_NumFragmentStorageBuffersBound, firstSlot + count);
+
+	state.buffer = ringBuffer;
+	state.offset = m_DynamicBufferCursor;
+	state.isDynamic = true;
+
+	m_DynamicBufferCursor += alignedSize;
+
 	return EResult::Success;
 }
 
-EResult RHI::BindComputeStorageBuffers(uint32 firstSlot, RHIBuffer** storageBuffers, uint32 count)
+EResult RHI::BindConstantRangeBuffer(void* arg, uint32 slot, uint32 offset, uint32 size)
 {
-	if (!storageBuffers || count == 0) return EResult::Fail;
-	for (uint32 i = 0; i < count; ++i)
+	return EResult();
+}
+
+EResult RHI::BindStorageBuffer(RHIBuffer* buffer, uint32 slot)
+{
+	if (slot >= MAX_STORAGE_BUFFERS) return EResult::Fail;
+
+	if (m_StorageBuffers[slot] == buffer)
+		return EResult::Success;
+
+	Safe_Release(m_StorageBuffers[slot]);
+	m_StorageBuffers[slot] = buffer;
+	Safe_AddRef(m_StorageBuffers[slot]);
+
+	return EResult::Success;
+}
+
+#pragma endregion
+
+#pragma endregion
+
+EResult RHI::InitializeConstantBuffers()
+{
+	for (uint32 i = 0; i < m_SwapChainBufferCount; ++i)
 	{
-		if (firstSlot + i >= MAX_BUFFER_SLOTS) break;
-		Safe_Release(m_ComputeStorageBuffers[firstSlot + i]);
-		m_ComputeStorageBuffers[firstSlot + i] = storageBuffers[i];
-		Safe_AddRef(m_ComputeStorageBuffers[firstSlot + i]);
+		m_DynamicConstantBuffers[i] = CreateBuffer(nullptr, DYNAMIC_CONSTANT_BUFFER_SIZE, 0, ERHIBufferType::Upload);
+		if (!m_DynamicConstantBuffers[i])
+			return EResult::Fail;
 	}
-	m_NumComputeStorageBuffersBound = std::max(m_NumComputeStorageBuffersBound, firstSlot + count);
 	return EResult::Success;
 }

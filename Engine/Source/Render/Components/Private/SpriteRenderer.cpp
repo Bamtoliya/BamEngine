@@ -82,7 +82,7 @@ EResult SpriteRenderer::Render(f32 dt, RenderPass* renderPass)
 	SceneUBO uboData;
 	uboData.worldMatrix = m_Owner->GetComponent<Transform>()->GetWorldMatrix();
 
-	if(IsFailure(rhi->BindConstantBuffer((void*)&uboData, sizeof(SceneUBO), 1, EShaderType::Vertex)))
+	if(IsFailure(rhi->BindConstantBuffer((void*)&uboData, sizeof(SceneUBO), 1)))
 		return EResult::Fail;
 
 	if(IsFailure(m_Mesh->Bind(0)))

@@ -154,8 +154,8 @@ EResult Renderer::Render(f32 dt)
 				cameraBuffer.cameraPosition = vec3(0.f);
 			}
 			cameraBuffer.time = dt;
-			m_RHI->BindConstantBuffer(&cameraBuffer, sizeof(CameraBuffer), 0, EShaderType::Vertex);
-			m_RHI->BindConstantBuffer(&cameraBuffer, sizeof(CameraBuffer), 0, EShaderType::Pixel);
+			m_RHI->BindConstantBuffer(&cameraBuffer, sizeof(CameraBuffer), 0);
+			m_RHI->BindConstantBuffer(&cameraBuffer, sizeof(CameraBuffer), 0);
 
 			m_RHI->SetViewport(0, 0, rtWidth, rtHeight);
 
@@ -283,7 +283,7 @@ EResult Renderer::RenderSprite(f32 dt, vector<SpriteDrawCommand>& commands, ERen
 			if(command.mesh) command.mesh->Bind(0);
 			else TODO("Renderer::RenderSprite에서 Mesh가 없는 경우 처리 필요 일반 QUAD 메쉬 바인드");
 
-			m_RHI->BindConstantBuffer(&command.worldMatrix, sizeof(mat4), 1, EShaderType::Vertex);
+			m_RHI->BindConstantBuffer(&command.worldMatrix, sizeof(mat4), 1);
 			m_RHI->DrawIndexed(command.mesh->GetIndexCount());
 		}
 	}

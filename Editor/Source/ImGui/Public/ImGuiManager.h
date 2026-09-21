@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "ImGuiInterface.h"
 #include "ToolBar.h"
@@ -6,7 +6,7 @@
 
 BEGIN(Editor)
 
-struct tagImGuiManagerDesc
+struct ImGuiManagerDesc
 {
 	SDL_Window* Window = { nullptr };
 	class RHI* RHI = { nullptr };
@@ -15,7 +15,7 @@ struct tagImGuiManagerDesc
 class ImGuiManager final : public Base
 {
 	DECLARE_SINGLETON(ImGuiManager)
-	using DESC = tagImGuiManagerDesc;
+	using DESC = ImGuiManagerDesc;
 #pragma region Constructor&Destructor
 private:
 	ImGuiManager() {}
@@ -52,7 +52,6 @@ private:
 private:
 	EResult CreateResourceEditors();
 #pragma endregion
-
 
 #pragma region SDLGPU3
 private:
@@ -96,12 +95,25 @@ private:
 	void SetCustomStyle();
 #pragma endregion
 
+#pragma region Helper
+public:
+	ImTextureID GetImGuiTextureID(const class RHITexture* texture) const;
+#pragma endregion
+
 #pragma region Variables
 private:
 	SDL_Window* m_Window = { nullptr };
 	class RHI* m_RHI = { nullptr };
 	ERHIType m_RHIType = ERHIType::Unknown;
+
+#pragma region DirectX12
 	struct ID3D12DescriptorHeap* m_ImGuiSrvDescHeap = nullptr;
+	uint32 m_ImGuiSrvDescriptorSize = 0;
+	uint32 m_ImGuiSrvDescriptorCursor = 0;
+	uint32 m_ImGuiSrvDescriptorCapacity = 1024;
+	bool m_ImGuiOwnsSrvHeap = false; // 공유 heap이면 false
+#pragma endregion
+
 #pragma region ImGui
 private:
 	ToolBar m_ToolBar;
@@ -110,9 +122,6 @@ private:
 	vector<ImGuiInterface*> m_PendingRemovePanels;
 #pragma endregion
 #pragma endregion
-
-
-
 };
 
 END

@@ -1,55 +1,34 @@
-project(Editor)
+﻿project(Editor)
 
+# ==============================================================================
+# 1. CMake Modules & Dependencies
+# ==============================================================================
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/CMake")
+
+# 기존 구버전 리플렉션 매크로 로드
 include("${CMAKE_SOURCE_DIR}/Projects/ReflectionCMake/ReflectionBundles.cmake")
 
-find_package(Python3 COMPONENTS Interpreter REQUIRED)
-find_package(imgui CONFIG REQUIRED)
-find_package(imguizmo CONFIG REQUIRED)
-find_package(assimp CONFIG REQUIRED)
-find_package(efsw CONFIG REQUIRED)
+# 외부 라이브러리 및 Python 로드
+include(Dependencies)
 
+# ==============================================================================
+# 2. Source Files & Directories Setup
+# ==============================================================================
 set(EDITOR_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Source")
-
-# 1. Engine과 동일한 위치(Source/Generated)에 Reflection 파일이 생성되도록 경로 수정
 set(EDITOR_GENERATED_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/Source/Generated/EditorReflection.gen.cpp")
 
-set(LOCALIZATION_DIR "${CMAKE_SOURCE_DIR}/Resources/Data/Localization")
-set(LOCALIZATION_SCRIPT "${CMAKE_SOURCE_DIR}/Utility/CSVToJsonConverter/localizationcsvtojson.py")
-file(GLOB LOCALIZATION_CSV_FILES CONFIGURE_DEPENDS "${LOCALIZATION_DIR}/*.csv")
-
-set(LOCALIZATION_OUTPUTS
-    "${LOCALIZATION_DIR}/English.json"
-    "${LOCALIZATION_DIR}/Korean.json"
-)
-
-add_custom_command(
-    OUTPUT ${LOCALIZATION_OUTPUTS}
-    COMMAND ${Python3_EXECUTABLE} "${LOCALIZATION_SCRIPT}" --input "${LOCALIZATION_DIR}" --output "${LOCALIZATION_DIR}"
-    DEPENDS
-        "${LOCALIZATION_SCRIPT}"
-        ${LOCALIZATION_CSV_FILES}
-    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
-    COMMENT "Generating localization JSON files"
-)
-
-add_custom_target(GenerateLocalization ALL
-    DEPENDS ${LOCALIZATION_OUTPUTS}
-)
-
+# 모든 소스 파일 스캔
 file(GLOB_RECURSE EDITOR_HEADERS CONFIGURE_DEPENDS "${EDITOR_SOURCE_DIR}/*.h")
 file(GLOB_RECURSE EDITOR_SOURCES CONFIGURE_DEPENDS "${EDITOR_SOURCE_DIR}/*.cpp")
-file(GLOB_RECURSE EDITOR_INLINE CONFIGURE_DEPENDS "${EDITOR_SOURCE_DIR}/*.inl") # 2. Engine처럼 .inl 지원 추가
+file(GLOB_RECURSE EDITOR_INLINE CONFIGURE_DEPENDS "${EDITOR_SOURCE_DIR}/*.inl")
 file(GLOB_RECURSE EDITOR_ALL_FILES CONFIGURE_DEPENDS "${EDITOR_SOURCE_DIR}/*")
-file(GLOB_RECURSE REFLECTION_CODEGEN_SOURCES CONFIGURE_DEPENDS
-    "${CMAKE_SOURCE_DIR}/Projects/ReflectionAST/*.py"
-)
+file(GLOB_RECURSE REFLECTION_CODEGEN_SOURCES CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/Projects/ReflectionAST/*.py")
 
-list(APPEND EDITOR_SOURCES "${EDITOR_GENERATED_SOURCE}")
-list(APPEND EDITOR_SOURCES ${EDITOR_INLINE}) # .inl 파일 소스 그룹에 추가
-
-# Visual Studio 폴더 트리를 소스 디렉토리와 동일하게 구성
+# 소스 목록 취합 및 IDE 트리 구조 생성
+list(APPEND EDITOR_SOURCES "${EDITOR_GENERATED_SOURCE}" ${EDITOR_INLINE})
 source_group(TREE "${EDITOR_SOURCE_DIR}" FILES ${EDITOR_HEADERS} ${EDITOR_SOURCES})
 
+# Public 인클루드 디렉토리 추출
 set(EDITOR_PUBLIC_INCLUDE_DIRS "")
 foreach(FILE_PATH ${EDITOR_ALL_FILES})
     get_filename_component(DIR_PATH "${FILE_PATH}" DIRECTORY)
@@ -62,29 +41,38 @@ if(EDITOR_PUBLIC_INCLUDE_DIRS)
     list(REMOVE_DUPLICATES EDITOR_PUBLIC_INCLUDE_DIRS)
 endif()
 
+# ==============================================================================
+# 3. Main Target Creation
+# ==============================================================================
 add_executable(Editor
     ${EDITOR_HEADERS}
     ${EDITOR_SOURCES}
 )
 
-add_reflection_bundle(
-    TARGET Editor
-    MODULE Editor
-    SOURCE_ROOT "${EDITOR_SOURCE_DIR}"
-    OUTPUT_CPP "${EDITOR_GENERATED_SOURCE}"
-    DEPENDS
-        "${CMAKE_CURRENT_LIST_FILE}"
-        ${EDITOR_HEADERS}
-        ${REFLECTION_CODEGEN_SOURCES}
-    EXTRA_ARGS
-        --strip-namespace Editor
-        --strip-namespace Engine
-        --namespace-fallback Editor
-        --namespace-fallback Engine
-        --resource-handle-template ResourceHandle
-    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+# ==============================================================================
+# 4. Target Properties & Compilation Settings
+# ==============================================================================
+set_target_properties(Editor PROPERTIES
+    UNITY_BUILD ON
+    FOLDER "Applications"
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
 
+if(MSVC)
+    target_compile_options(Editor PRIVATE
+        $<$<CONFIG:Debug>:/ZI>
+        $<$<CONFIG:Debug>:/FS>
+        /Zc:preprocessor
+        /MP
+    )
+    target_link_options(Editor PRIVATE
+        $<$<CONFIG:Debug>:/INCREMENTAL>
+    )
+endif()
+
+# ==============================================================================
+# 5. Target Includes & Linking
+# ==============================================================================
 target_include_directories(Editor
     PUBLIC
         ${EDITOR_PUBLIC_INCLUDE_DIRS}
@@ -103,28 +91,12 @@ target_link_libraries(Editor
         efsw::efsw
 )
 
+# ==============================================================================
+# 6. Custom Build Steps (Reflection & Localization)
+# ==============================================================================
+# 로컬라이제이션 및 리플렉션 모듈 실행 (반드시 타겟 생성 이후에 와야 함)
+include(LocalizationBuild)
+include(ReflectionBuild)
+
+# 에디터 빌드 전 다국어 파일(JSON) 생성을 먼저 하도록 종속성 연결
 add_dependencies(Editor GenerateLocalization)
-
-# 3. Engine과 동일하게 MSVC 최적화 및 빌드 속도 향상 옵션 일치화
-if(MSVC)
-    set_target_properties(Editor PROPERTIES
-        VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
-    )
-    
-    target_compile_options(Editor PRIVATE
-        $<$<CONFIG:Debug>:/ZI>
-        $<$<CONFIG:Debug>:/FS>
-        /Zc:preprocessor
-        /MP
-    )
-
-    target_link_options(Editor PRIVATE
-        $<$<CONFIG:Debug>:/INCREMENTAL>
-    )
-endif()
-
-# 4. Engine처럼 Unity Build 활성화 (빌드 속도 향상)
-set_target_properties(Editor PROPERTIES
-    UNITY_BUILD ON
-    FOLDER "Applications"
-)

@@ -309,7 +309,7 @@ void ToolBar::DrawDisplaySettingsWindow()
 }
 void ToolBar::AddNewViewportPanel()
 {
-	m_newViewportDesc = tagViewportPanelDesc();
+	m_newViewportDesc = ViewportPanelDesc();
 	strcpy_s(m_NewViewportNameBuf, "New Viewport");
 	m_ShowNewViewportPopup = true;
 }

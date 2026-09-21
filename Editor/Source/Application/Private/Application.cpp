@@ -10,6 +10,7 @@
 
 #define RHI_TYPE ERHIType::DirectX12
 #define GRAPHICS_BACKEND EGraphicsBackend::Vulkan
+#define RESOURCE_PATH L"Resources/"
 
 BEGIN(Editor)
 
@@ -18,42 +19,13 @@ IMPLEMENT_SINGLETON(Application)
 #pragma region Constructor&Destructor
 EResult Application::Initialize(void* arg)
 {
-//    _CrtSetBreakAlloc(4243);
+    //_CrtSetBreakAlloc(4253);
 	InitializeWindow(*(ApplicationCreateInfo*)arg);
 	InitializeRuntime(*(ApplicationCreateInfo*)arg);
-
-	tagImGuiManagerDesc imguiDesc = {};
-	imguiDesc.Window = m_Window;
-    imguiDesc.RHI = Renderer::Get().GetRHI();
-
     IntializeRenderer();
     InitializeResources();
-
-    m_ImGuiManager = ImGuiManager::Create(&imguiDesc);
-    m_SelectionManager = SelectionManager::Create();
-    if (!m_ImGuiManager)
-    {
-        fmt::print(stderr, "ImGuiManager Creation Failed\n");
-		return EResult::Fail;
-    }
-
-
-    RenderPassID uiPassID = RenderPassManager::Get().RegisterRenderPass(
-        L"Editor UI",
-        {L"FinalColor"},
-        L"",
-        ERenderPassLoadOperation::RPLO_Load, ERenderPassStoreOperation::RPSO_Store,
-        ERenderPassLoadOperation::RPLO_Load, ERenderPassStoreOperation::RPSO_Store,
-        vec4(0.0f, 0.0f, 0.0f, -1.0f),
-        1000,
-        ERenderSortType::None);
-    DelegateHandle uiHandle = Renderer::Get().GetRenderPassDelegate(uiPassID).AddLambda([](f32 dt) {
-        ImGuiManager::Get().Begin();
-        ImGuiManager::Get().Draw();
-        ImGuiManager::Get().End();
-        });
+	InitializeImGui();
     InitializeLocalization();
-    
     return EResult::Success;
 }
 
@@ -210,6 +182,36 @@ EResult Application::InitializeSystem()
 	SystemManager::Get().AddSystem<TransformSystem>();
     return EResult();
 }
+EResult Application::InitializeImGui()
+{
+    ImGuiManagerDesc imguiDesc = {};
+    imguiDesc.Window = m_Window;
+    imguiDesc.RHI = Renderer::Get().GetRHI();
+    m_ImGuiManager = ImGuiManager::Create(&imguiDesc);
+    m_SelectionManager = SelectionManager::Create();
+    if (!m_ImGuiManager)
+    {
+        fmt::print(stderr, "ImGuiManager Creation Failed\n");
+        return EResult::Fail;
+    }
+
+    RenderPassID uiPassID = RenderPassManager::Get().RegisterRenderPass(
+        L"Editor UI",
+        { L"FinalColor" },
+        L"",
+        ERenderPassLoadOperation::RPLO_Load, ERenderPassStoreOperation::RPSO_Store,
+        ERenderPassLoadOperation::RPLO_Load, ERenderPassStoreOperation::RPSO_Store,
+        vec4(0.0f, 0.0f, 0.0f, -1.0f),
+        1000,
+        ERenderSortType::None);
+    DelegateHandle uiHandle = Renderer::Get().GetRenderPassDelegate(uiPassID).AddLambda([](f32 dt) {
+        ImGuiManager::Get().Begin();
+        ImGuiManager::Get().Draw();
+        ImGuiManager::Get().End();
+        });
+
+    return EResult::Success;
+}
 #pragma endregion
 
 #pragma region Localization
@@ -236,33 +238,33 @@ void Application::InitializeFiles()
     wstring resourcesToLoad[] =
     {
         //Texture
-        L"Resources/Texture/uv1.png",
-        L"Resources/Texture/white1x1.png",
-        L"Resources/Texture/black1x1.png",
-        L"Resources/Texture/magenta1x1.png",
-        L"Resources/Texture/green1x1.png",
-        L"Resources/Texture/blue1x1.png",
-        L"Resources/Texture/uv1.bamtex",
+        RESOURCE_PATH L"Texture/uv1.png",
+        RESOURCE_PATH L"Texture/white1x1.png",
+        RESOURCE_PATH L"Texture/black1x1.png",
+        RESOURCE_PATH L"Texture/magenta1x1.png",
+        RESOURCE_PATH L"Texture/green1x1.png",
+        RESOURCE_PATH L"Texture/blue1x1.png",
+        RESOURCE_PATH L"Texture/uv1.bamtex",
 
         ///Sprite
-        L"Resources/Texture/uv1.bamsprite",
-        L"Resources/Texture/uv1.bamsprite.json",
+        RESOURCE_PATH L"Texture/uv1.bamsprite",
+        RESOURCE_PATH L"Texture/uv1.bamsprite.json",
 
         //Shader
-        L"Resources/Shader/default.vert.bamshader",
-        L"Resources/Shader/default.frag.bamshader",
-        L"Resources/Shader/sprite.vert.bamshader",
-        L"Resources/Shader/sprite.frag.bamshader",
+        //RESOURCE_PATH L"Shader/bin/default.vert.bamshader",
+        //RESOURCE_PATH L"Shader/bin/default.frag.bamshader",
+        //RESOURCE_PATH L"Shader/bin/sprite.vert.bamshader",
+        //RESOURCE_PATH L"Shader/bin/sprite.frag.bamshader",
 
         //Material
-        L"Resources/Material/DefaultMaterial.bammat",
-        L"Resources/Material/SpriteMaterial.bammat",
+        RESOURCE_PATH L"Material/DefaultMaterial.bammat",
+        RESOURCE_PATH L"Material/SpriteMaterial.bammat",
 
         //MaterialInstance
-        L"Resources/Material/SpriteMaterial.bammatinst",
+        RESOURCE_PATH L"Material/SpriteMaterial.bammatinst",
 
         //Mesh
-        //L"Resources/Model/Cube2_Cube.bammesh",
+        //RESOURCE_PATH L"Model/Cube2_Cube.bammesh",
     };
 
     for (const auto& path : resourcesToLoad)
@@ -270,253 +272,262 @@ void Application::InitializeFiles()
         resourceManager.LoadFile(path);
     }
 
-    //resourceManager.SaveToJsonFile(resourceManager.GetResourceHandle<Sprite>(L"Resources/Texture/uv1.bamsprite").Get(), L"Resources/Texture/uv1.bamsprite.json");
+    //resourceManager.SaveToJsonFile(resourceManager.GetResourceHandle<Sprite>(RESOURCE_PATH L"Texture/uv1.bamsprite").Get(), RESOURCE_PATH L"Texture/uv1.bamsprite.json");
 }
 
 void Application::InitializeShaders()
 {
     ResourceManager& rm = ResourceManager::Get();
 
-	//ShaderDesc defaultVsDesc = {};
-	//defaultVsDesc.Key = L"Resources/Shader/DefaultVS";
- //   defaultVsDesc.Path = L"Resources/Shader/default_vs.cso";
- //   defaultVsDesc.shaderType = EShaderType::Vertex;
- //   defaultVsDesc.entryPoint = "VSMain";
-	//rm.LoadResource<Shader>(&defaultVsDesc);
-	//{
-	//	auto handle = rm.GetResourceHandle<Shader>(defaultVsDesc.Key);
-	//	rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/default_vs.bamshader");
-	//}
-
- //   ShaderDesc defaultPsDesc = {};
- //   defaultPsDesc.Key = L"Resources/Shader/DefaultPS";
- //   defaultPsDesc.Path = L"Resources/Shader/default_ps.cso";
- //   defaultPsDesc.shaderType = EShaderType::Pixel;
- //   defaultPsDesc.entryPoint = "PSMain";
-	//rm.LoadResource<Shader>(&defaultPsDesc);
-	//{
-	//	auto handle = rm.GetResourceHandle<Shader>(defaultPsDesc.Key);
-	//	rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/default_ps.bamshader");
-	//}
-
-    ShaderDesc defaultVsDesc = {};
-    defaultVsDesc.Key = L"Resources/Shader/GBufferVS";
-    defaultVsDesc.Path = L"Resources/Shader/gbuffer.vert.spv";
-    defaultVsDesc.spirvPath = L"Resources/Shader/gbuffer.vert.spv";
-    defaultVsDesc.shaderType = EShaderType::Vertex;
-    rm.LoadResource<Shader>(&defaultVsDesc);
+	ShaderDesc defaultVsDesc = {};
     {
-        auto handle = rm.GetResourceHandle<Shader>(defaultVsDesc.Key);
-        rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/gbuffer.vert.bamshader");
-    }
-    rm.LoadFile(L"Resources/Shader/gbuffer.vert.bamshader");
+	    defaultVsDesc.Key   = RESOURCE_PATH L"Shader/DefaultVS";
+        defaultVsDesc.Path  = RESOURCE_PATH L"Shader/bin/dxil/defaultVS.cso";
+        defaultVsDesc.shaderType = EShaderType::Vertex;
+        defaultVsDesc.entryPoint = "main";
+	    auto handle = rm.LoadResource<Shader>(&defaultVsDesc);
+	    //rm.SaveToBinaryFile(handle.Get(), RESOURCE_PATH L"Shader/default_vs.bamshader");
+	}
 
-    ShaderDesc gbufferVsDesc = {};
-    gbufferVsDesc.Key = L"Resources/Shader/GBufferVS";
-    gbufferVsDesc.Path = L"Resources/Shader/gbuffer.vert.spv";
-    gbufferVsDesc.spirvPath = L"Resources/Shader/gbuffer.vert.spv";
-    gbufferVsDesc.shaderType = EShaderType::Vertex;
-    rm.LoadResource<Shader>(&gbufferVsDesc);
+    ShaderDesc defaultPsDesc = {};
     {
-        auto handle = rm.GetResourceHandle<Shader>(gbufferVsDesc.Key);
-        rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/gbuffer.vert.bamshader");
-    }
-    rm.LoadFile(L"Resources/Shader/gbuffer.vert.bamshader");
-    ShaderDesc gbufferPsDesc = {};
-    gbufferPsDesc.Key = L"Resources/Shader/GBufferPS";
-    gbufferPsDesc.Path = L"Resources/Shader/gbuffer.frag.spv";
-    gbufferPsDesc.spirvPath = L"Resources/Shader/gbuffer.frag.spv";
-    gbufferPsDesc.shaderType = EShaderType::Pixel;
-    rm.LoadResource<Shader>(&gbufferPsDesc);
-    {
-        auto handle = rm.GetResourceHandle<Shader>(gbufferPsDesc.Key);
-        rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/gbuffer.frag.bamshader");
-    }
-    rm.LoadFile(L"Resources/Shader/gbuffer.frag.bamshader");
+        defaultPsDesc.Key   = RESOURCE_PATH L"Shader/DefaultPS";
+        defaultPsDesc.Path  = RESOURCE_PATH L"Shader/bin/dxil/defaultPS.cso";
+        defaultPsDesc.shaderType = EShaderType::Fragment;
+        defaultPsDesc.entryPoint = "main";
+	    auto handle = rm.LoadResource<Shader>(&defaultPsDesc);
+	    //rm.SaveToBinaryFile(handle.Get(), RESOURCE_PATH L"Shader/default_ps.bamshader");
+	}
+
+    //ShaderDesc defaultSkinningShaderDesc = {};
+    //{
+    //    defaultSkinningShaderDesc.Key = L"Resources/Shader/Skinning";
+    //    defaultSkinningShaderDesc.Path = L"Resources/Shader/skinning.vert.spv";
+    //    defaultSkinningShaderDesc.spirvPath = L"Resources/Shader/skinning.vert.spv";
+    //    defaultSkinningShaderDesc.shaderType = EShaderType::Vertex;
+    //    defaultSkinningShaderDesc.numStorageBuffers = 1;
+    //    auto handle = rm.LoadResource<Shader>(&defaultSkinningShaderDesc);
+    //}
+    
+    //rm.SaveToBinaryFile(skinningShader, L"Resources/Shader/skinning.vert.bamshader");
+    //rm.LoadFile(L"Resources/Shader/skinning.vert.bamshader");
+
+    //ShaderDesc defaultVsDesc = {};
+    //defaultVsDesc.Key = L"Resources/Shader/GBufferVS";
+    //defaultVsDesc.Path = L"Resources/Shader/gbuffer.vert.spv";
+    //defaultVsDesc.spirvPath = L"Resources/Shader/gbuffer.vert.spv";
+    //defaultVsDesc.shaderType = EShaderType::Vertex;
+    //rm.LoadResource<Shader>(&defaultVsDesc);
+    //{
+    //    auto handle = rm.GetResourceHandle<Shader>(defaultVsDesc.Key);
+    //    rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/gbuffer.vert.bamshader");
+    //}
+    //rm.LoadFile(L"Resources/Shader/gbuffer.vert.bamshader");
+
+    //ShaderDesc gbufferVsDesc = {};
+    //gbufferVsDesc.Key = L"Resources/Shader/GBufferVS";
+    //gbufferVsDesc.Path = L"Resources/Shader/gbuffer.vert.spv";
+    //gbufferVsDesc.spirvPath = L"Resources/Shader/gbuffer.vert.spv";
+    //gbufferVsDesc.shaderType = EShaderType::Vertex;
+    //rm.LoadResource<Shader>(&gbufferVsDesc);
+    //{
+    //    auto handle = rm.GetResourceHandle<Shader>(gbufferVsDesc.Key);
+    //    rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/gbuffer.vert.bamshader");
+    //}
+    //rm.LoadFile(L"Resources/Shader/gbuffer.vert.bamshader");
+    //ShaderDesc gbufferPsDesc = {};
+    //gbufferPsDesc.Key = L"Resources/Shader/GBufferPS";
+    //gbufferPsDesc.Path = L"Resources/Shader/gbuffer.frag.spv";
+    //gbufferPsDesc.spirvPath = L"Resources/Shader/gbuffer.frag.spv";
+    //gbufferPsDesc.shaderType = EShaderType::Pixel;
+    //rm.LoadResource<Shader>(&gbufferPsDesc);
+    //{
+    //    auto handle = rm.GetResourceHandle<Shader>(gbufferPsDesc.Key);
+    //    rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/gbuffer.frag.bamshader");
+    //}
+    //rm.LoadFile(L"Resources/Shader/gbuffer.frag.bamshader");
 
     // Fullscreen Quad VS
     ShaderDesc fsQuadVsDesc = {};
-    fsQuadVsDesc.Key = L"FullscreenQuadVS";
-    fsQuadVsDesc.shaderType = EShaderType::Vertex;
-    fsQuadVsDesc.Path = L"Resources/Shader/fullscreen_quad.vert.spv";
-    fsQuadVsDesc.spirvPath = L"Resources/Shader/fullscreen_quad.vert.spv";
-    fsQuadVsDesc.entryPoint = "main";
-    rm.LoadResource<Shader>(&fsQuadVsDesc);
     {
-        auto handle = rm.GetResourceHandle<Shader>(fsQuadVsDesc.Key);
+        fsQuadVsDesc.Key        = L"FullscreenQuadVS";
+        fsQuadVsDesc.Path       = RESOURCE_PATH L"Shader/bin/dxil/fullscreenQuadVS.cso";
+        //fsQuadVsDesc.spirvPath  = RESOURCE_PATH L"Shader/bin/spirv/fullscreenQuadVS.spv";
+        fsQuadVsDesc.shaderType = EShaderType::Vertex;
+        fsQuadVsDesc.entryPoint = "main";
+        auto handle = rm.LoadResource<Shader>(&fsQuadVsDesc);
         rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/fullscreen_quad.vert.bamshader");
+        //rm.LoadFile(L"Resources/Shader/fullscreen_quad.vert.bamshader");
     }
-    rm.LoadFile(L"Resources/Shader/fullscreen_quad.vert.bamshader");
-
+    
     // Lighting PS
     ShaderDesc lightingPsDesc = {};
-    lightingPsDesc.Key = L"LightingPS";
-    lightingPsDesc.shaderType = EShaderType::Pixel;
-    lightingPsDesc.Path = L"Resources/Shader/lighting.frag.spv";
-    lightingPsDesc.spirvPath = L"Resources/Shader/lighting.frag.spv";
-    lightingPsDesc.entryPoint = "main";
-    lightingPsDesc.numSamplers = 6;
-    lightingPsDesc.numStorageBuffers = 1;
-    lightingPsDesc.numUniformBuffers = 2;
-    rm.LoadResource<Shader>(&lightingPsDesc);
     {
-        auto handle = rm.GetResourceHandle<Shader>(lightingPsDesc.Key);
-        rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/lighting.frag.bamshader");
+        lightingPsDesc.Key          = L"LightingPS";
+        lightingPsDesc.Path         = RESOURCE_PATH L"Shader/bin/dxil/lightingPS.cso";
+        //lightingPsDesc.spirvPath = RESOURCE_PATH L"Shader/bin/spirv/lightingPS.spv";
+
+        lightingPsDesc.shaderType = EShaderType::Fragment;
+        lightingPsDesc.entryPoint = "main";
+        lightingPsDesc.numSamplers = 6;
+        lightingPsDesc.numStorageBuffers = 1;
+        lightingPsDesc.numUniformBuffers = 2;
+        auto handle = rm.LoadResource<Shader>(&lightingPsDesc);;
+        //rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/lighting.frag.bamshader");
+        //rm.LoadFile(L"Resources/Shader/lighting.frag.bamshader");
     }
-    rm.LoadFile(L"Resources/Shader/lighting.frag.bamshader");
+    
 
-    // Shadow Depth VS (static mesh)
-    ShaderDesc shadowDepthVsDesc = {};
-    shadowDepthVsDesc.Key = L"ShadowDepthVS";
-    shadowDepthVsDesc.shaderType = EShaderType::Vertex;
-    shadowDepthVsDesc.Path = L"Resources/Shader/shadow_depth.vert.spv";
-    shadowDepthVsDesc.spirvPath = L"Resources/Shader/shadow_depth.vert.spv";
-    shadowDepthVsDesc.entryPoint = "main";
-    rm.LoadResource<Shader>(&shadowDepthVsDesc);
-    {
-        auto handle = rm.GetResourceHandle<Shader>(shadowDepthVsDesc.Key);
-        rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/shadow_depth.vert.bamshader");
-    }
-    rm.LoadFile(L"Resources/Shader/shadow_depth.vert.bamshader");
+    //// Shadow Depth VS (static mesh)
+    //ShaderDesc shadowDepthVsDesc = {};
+    //shadowDepthVsDesc.Key = L"ShadowDepthVS";
+    //shadowDepthVsDesc.shaderType = EShaderType::Vertex;
+    //shadowDepthVsDesc.Path = L"Resources/Shader/shadow_depth.vert.spv";
+    //shadowDepthVsDesc.spirvPath = L"Resources/Shader/shadow_depth.vert.spv";
+    //shadowDepthVsDesc.entryPoint = "main";
+    //rm.LoadResource<Shader>(&shadowDepthVsDesc);
+    //{
+    //    auto handle = rm.GetResourceHandle<Shader>(shadowDepthVsDesc.Key);
+    //    rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/shadow_depth.vert.bamshader");
+    //}
+    //rm.LoadFile(L"Resources/Shader/shadow_depth.vert.bamshader");
 
-    // Shadow Depth VS (skinning)
-    ShaderDesc shadowDepthSkinVsDesc = {};
-    shadowDepthSkinVsDesc.Key = L"ShadowDepthSkinningVS";
-    shadowDepthSkinVsDesc.shaderType = EShaderType::Vertex;
-    shadowDepthSkinVsDesc.Path = L"Resources/Shader/shadow_depth_skinning.vert.spv";
-    shadowDepthSkinVsDesc.spirvPath = L"Resources/Shader/shadow_depth_skinning.vert.spv";
-    shadowDepthSkinVsDesc.entryPoint = "main";
-    shadowDepthSkinVsDesc.numStorageBuffers = 1;
-    rm.LoadResource<Shader>(&shadowDepthSkinVsDesc);
-    {
-        auto handle = rm.GetResourceHandle<Shader>(shadowDepthSkinVsDesc.Key);
-        rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/shadow_depth_skinning.vert.bamshader");
-    }
-    rm.LoadFile(L"Resources/Shader/shadow_depth_skinning.vert.bamshader");
+    //// Shadow Depth VS (skinning)
+    //ShaderDesc shadowDepthSkinVsDesc = {};
+    //shadowDepthSkinVsDesc.Key = L"ShadowDepthSkinningVS";
+    //shadowDepthSkinVsDesc.shaderType = EShaderType::Vertex;
+    //shadowDepthSkinVsDesc.Path = L"Resources/Shader/shadow_depth_skinning.vert.spv";
+    //shadowDepthSkinVsDesc.spirvPath = L"Resources/Shader/shadow_depth_skinning.vert.spv";
+    //shadowDepthSkinVsDesc.entryPoint = "main";
+    //shadowDepthSkinVsDesc.numStorageBuffers = 1;
+    //rm.LoadResource<Shader>(&shadowDepthSkinVsDesc);
+    //{
+    //    auto handle = rm.GetResourceHandle<Shader>(shadowDepthSkinVsDesc.Key);
+    //    rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/shadow_depth_skinning.vert.bamshader");
+    //}
+    //rm.LoadFile(L"Resources/Shader/shadow_depth_skinning.vert.bamshader");
 
-    // Shadow Depth PS (depth-only)
-    ShaderDesc shadowDepthPsDesc = {};
-    shadowDepthPsDesc.Key = L"ShadowDepthPS";
-    shadowDepthPsDesc.shaderType = EShaderType::Pixel;
-    shadowDepthPsDesc.Path = L"Resources/Shader/shadow_depth.frag.spv";
-    shadowDepthPsDesc.spirvPath = L"Resources/Shader/shadow_depth.frag.spv";
-    shadowDepthPsDesc.entryPoint = "main";
-    rm.LoadResource<Shader>(&shadowDepthPsDesc);
-    {
-        auto handle = rm.GetResourceHandle<Shader>(shadowDepthPsDesc.Key);
-        rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/shadow_depth.frag.bamshader");
-    }
-    rm.LoadFile(L"Resources/Shader/shadow_depth.frag.bamshader");
-
-
+    //// Shadow Depth PS (depth-only)
+    //ShaderDesc shadowDepthPsDesc = {};
+    //shadowDepthPsDesc.Key = L"ShadowDepthPS";
+    //shadowDepthPsDesc.shaderType = EShaderType::Pixel;
+    //shadowDepthPsDesc.Path = L"Resources/Shader/shadow_depth.frag.spv";
+    //shadowDepthPsDesc.spirvPath = L"Resources/Shader/shadow_depth.frag.spv";
+    //shadowDepthPsDesc.entryPoint = "main";
+    //rm.LoadResource<Shader>(&shadowDepthPsDesc);
+    //{
+    //    auto handle = rm.GetResourceHandle<Shader>(shadowDepthPsDesc.Key);
+    //    rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/shadow_depth.frag.bamshader");
+    //}
+    //rm.LoadFile(L"Resources/Shader/shadow_depth.frag.bamshader");
     // Viewport Channel PS
     ShaderDesc viewportChannelPsDesc = {};
-    viewportChannelPsDesc.Key = L"ViewportChannelPS";
-    viewportChannelPsDesc.shaderType = EShaderType::Pixel;
-    viewportChannelPsDesc.Path = L"Resources/Shader/viewport_channel.frag.spv";
-    viewportChannelPsDesc.spirvPath = L"Resources/Shader/viewport_channel.frag.spv";
-    viewportChannelPsDesc.entryPoint = "main";
-    viewportChannelPsDesc.numSamplers = 1;
-    viewportChannelPsDesc.numUniformBuffers = 1;
-    rm.LoadResource<Shader>(&viewportChannelPsDesc);
     {
-        auto handle = rm.GetResourceHandle<Shader>(viewportChannelPsDesc.Key);
-        rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/viewport_channel.frag.bamshader");
+        viewportChannelPsDesc.Key           = L"ViewportChannelPS";
+        viewportChannelPsDesc.Path          = RESOURCE_PATH L"Shader/bin/dxil/viewport_channelPS.cso";
+        //viewportChannelPsDesc.spirvPath   = RESOURCE_PATH L"Shader/bin/spirv/viewport_channelPS.spv";
+        viewportChannelPsDesc.shaderType = EShaderType::Fragment;
+        viewportChannelPsDesc.entryPoint = "main";
+        viewportChannelPsDesc.numSamplers = 1;
+        viewportChannelPsDesc.numUniformBuffers = 1;
+        auto handle = rm.LoadResource<Shader>(&viewportChannelPsDesc);
+        //rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/viewport_channel.frag.bamshader");
+        //rm.LoadFile(L"Resources/Shader/viewport_channel.frag.bamshader");
     }
-    rm.LoadFile(L"Resources/Shader/viewport_channel.frag.bamshader");
-
-    // PostProcess PS
-    ShaderDesc postProcessPsDesc = {};
-    postProcessPsDesc.Key = L"PostProcessPS";
-    postProcessPsDesc.shaderType = EShaderType::Pixel;
-    postProcessPsDesc.Path = L"Resources/Shader/postprocess.frag.spv";
-    postProcessPsDesc.spirvPath = L"Resources/Shader/postprocess.frag.spv";
-    postProcessPsDesc.entryPoint = "main";
-    postProcessPsDesc.numSamplers = 1;
-    postProcessPsDesc.numUniformBuffers = 1;
-    rm.LoadResource<Shader>(&postProcessPsDesc);
-    {
-        auto handle = rm.GetResourceHandle<Shader>(postProcessPsDesc.Key);
-        rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/postprocess.frag.bamshader");
-    }
-    rm.LoadFile(L"Resources/Shader/postprocess.frag.bamshader");
+    
+    //// PostProcess PS
+    //ShaderDesc postProcessPsDesc = {};
+    //postProcessPsDesc.Key = L"PostProcessPS";
+    //postProcessPsDesc.shaderType = EShaderType::Pixel;
+    //postProcessPsDesc.Path = L"Resources/Shader/postprocess.frag.spv";
+    //postProcessPsDesc.spirvPath = L"Resources/Shader/postprocess.frag.spv";
+    //postProcessPsDesc.entryPoint = "main";
+    //postProcessPsDesc.numSamplers = 1;
+    //postProcessPsDesc.numUniformBuffers = 1;
+    //rm.LoadResource<Shader>(&postProcessPsDesc);
+    //{
+    //    auto handle = rm.GetResourceHandle<Shader>(postProcessPsDesc.Key);
+    //    rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/postprocess.frag.bamshader");
+    //}
+    //rm.LoadFile(L"Resources/Shader/postprocess.frag.bamshader");
 
     // PostProcess - Tone Mapping PS
     ShaderDesc ppToneMappingPsDesc = {};
-    ppToneMappingPsDesc.Key = L"PostProcess_ToneMappingPS";
-    ppToneMappingPsDesc.shaderType = EShaderType::Pixel;
-    ppToneMappingPsDesc.Path = L"Resources/Shader/postprocess_tonemapping.frag.spv";
-    ppToneMappingPsDesc.spirvPath = L"Resources/Shader/postprocess_tonemapping.frag.spv";
-    ppToneMappingPsDesc.entryPoint = "main";
-    ppToneMappingPsDesc.numSamplers = 1;
-    ppToneMappingPsDesc.numUniformBuffers = 1;
-    rm.LoadResource<Shader>(&ppToneMappingPsDesc);
     {
-        auto handle = rm.GetResourceHandle<Shader>(ppToneMappingPsDesc.Key);
-        rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/postprocess_tonemapping.frag.bamshader");
+        ppToneMappingPsDesc.Key         = L"PostProcess_ToneMappingPS";
+        ppToneMappingPsDesc.Path        = RESOURCE_PATH L"Shader/bin/dxil/postprocess_tonemappingPS.cso";
+        //ppToneMappingPsDesc.spirvPath   = RESOURCE_PATH L"Shader/bin/spirv/postprocess_tonemappingPS.spv";
+
+        ppToneMappingPsDesc.shaderType = EShaderType::Fragment;
+
+        ppToneMappingPsDesc.entryPoint = "main";
+        ppToneMappingPsDesc.numSamplers = 1;
+        ppToneMappingPsDesc.numUniformBuffers = 1;
+        auto handle = rm.LoadResource<Shader>(&ppToneMappingPsDesc);
+        //rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/postprocess_tonemapping.frag.bamshader");
+        //rm.LoadFile(L"Resources/Shader/postprocess_tonemapping.frag.bamshader");
     }
-    rm.LoadFile(L"Resources/Shader/postprocess_tonemapping.frag.bamshader");
 
 
-    // Sky VS
-    ShaderDesc skyVSDesc = {};
-    skyVSDesc.Key = L"SkyVS";
-    skyVSDesc.shaderType = EShaderType::Vertex;
-    skyVSDesc.Path = L"Resources/Shader/sky.vert.spv";
-    skyVSDesc.spirvPath = L"Resources/Shader/sky.vert.spv";
-    skyVSDesc.entryPoint = "main";
-    skyVSDesc.numUniformBuffers = 1;
-    rm.LoadResource<Shader>(&skyVSDesc);
-    {
-        auto handle = rm.GetResourceHandle<Shader>(skyVSDesc.Key);
-        rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/sky.vert.bamshader");
-    }
-    rm.LoadFile(L"Resources/Shader/sky.vert.bamshader");
+    //// Sky VS
+    //ShaderDesc skyVSDesc = {};
+    //skyVSDesc.Key = L"SkyVS";
+    //skyVSDesc.shaderType = EShaderType::Vertex;
+    //skyVSDesc.Path = L"Resources/Shader/sky.vert.spv";
+    //skyVSDesc.spirvPath = L"Resources/Shader/sky.vert.spv";
+    //skyVSDesc.entryPoint = "main";
+    //skyVSDesc.numUniformBuffers = 1;
+    //rm.LoadResource<Shader>(&skyVSDesc);
+    //{
+    //    auto handle = rm.GetResourceHandle<Shader>(skyVSDesc.Key);
+    //    rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/sky.vert.bamshader");
+    //}
+    //rm.LoadFile(L"Resources/Shader/sky.vert.bamshader");
 
-    // Skybox PS
-    ShaderDesc skyPSDesc = {};
-    skyPSDesc.Key = L"SkyboxPS";
-    skyPSDesc.shaderType = EShaderType::Pixel;
-    skyPSDesc.Path = L"Resources/Shader/sky.frag.spv";
-    skyPSDesc.spirvPath = L"Resources/Shader/sky.frag.spv";
-    skyPSDesc.entryPoint = "main";
-    skyPSDesc.numUniformBuffers = 1;
-    rm.LoadResource<Shader>(&skyPSDesc);
-    {
-        auto handle = rm.GetResourceHandle<Shader>(skyPSDesc.Key);
-        rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/sky.frag.bamshader");
-    }
-    rm.LoadFile(L"Resources/Shader/sky.frag.bamshader");
+    //// Skybox PS
+    //ShaderDesc skyPSDesc = {};
+    //skyPSDesc.Key = L"SkyboxPS";
+    //skyPSDesc.shaderType = EShaderType::Pixel;
+    //skyPSDesc.Path = L"Resources/Shader/sky.frag.spv";
+    //skyPSDesc.spirvPath = L"Resources/Shader/sky.frag.spv";
+    //skyPSDesc.entryPoint = "main";
+    //skyPSDesc.numUniformBuffers = 1;
+    //rm.LoadResource<Shader>(&skyPSDesc);
+    //{
+    //    auto handle = rm.GetResourceHandle<Shader>(skyPSDesc.Key);
+    //    rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/sky.frag.bamshader");
+    //}
+    //rm.LoadFile(L"Resources/Shader/sky.frag.bamshader");
 
-    // UI VS
-    ShaderDesc uiVSDesc = {};
-    uiVSDesc.Key = L"UIVS";
-    uiVSDesc.shaderType = EShaderType::Vertex;
-    uiVSDesc.Path = L"Resources/Shader/ui.vert.spv";
-    uiVSDesc.spirvPath = L"Resources/Shader/ui.vert.spv";
-    uiVSDesc.entryPoint = "main";
-    uiVSDesc.numUniformBuffers = 1;
-    rm.LoadResource<Shader>(&uiVSDesc);
-    {
-        auto handle = rm.GetResourceHandle<Shader>(uiVSDesc.Key);
-        rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/ui.vert.bamshader");
-    }
-    rm.LoadFile(L"Resources/Shader/ui.vert.bamshader");
+    //// UI VS
+    //ShaderDesc uiVSDesc = {};
+    //uiVSDesc.Key = L"UIVS";
+    //uiVSDesc.shaderType = EShaderType::Vertex;
+    //uiVSDesc.Path = L"Resources/Shader/ui.vert.spv";
+    //uiVSDesc.spirvPath = L"Resources/Shader/ui.vert.spv";
+    //uiVSDesc.entryPoint = "main";
+    //uiVSDesc.numUniformBuffers = 1;
+    //rm.LoadResource<Shader>(&uiVSDesc);
+    //{
+    //    auto handle = rm.GetResourceHandle<Shader>(uiVSDesc.Key);
+    //    rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/ui.vert.bamshader");
+    //}
+    //rm.LoadFile(L"Resources/Shader/ui.vert.bamshader");
 
-    // UI PS
-    ShaderDesc uiPSDesc = {};
-    uiPSDesc.Key = L"UIPS";
-    uiPSDesc.shaderType = EShaderType::Pixel;
-    uiPSDesc.Path = L"Resources/Shader/ui.frag.spv";
-    uiPSDesc.spirvPath = L"Resources/Shader/ui.frag.spv";
-    uiPSDesc.entryPoint = "main";
-    uiPSDesc.numUniformBuffers = 1;
-    rm.LoadResource<Shader>(&uiPSDesc);
-    {
-        auto handle = rm.GetResourceHandle<Shader>(uiPSDesc.Key);
-        rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/ui.frag.bamshader");
-    }
-    rm.LoadFile(L"Resources/Shader/ui.frag.bamshader");
+    //// UI PS
+    //ShaderDesc uiPSDesc = {};
+    //uiPSDesc.Key = L"UIPS";
+    //uiPSDesc.shaderType = EShaderType::Pixel;
+    //uiPSDesc.Path = L"Resources/Shader/ui.frag.spv";
+    //uiPSDesc.spirvPath = L"Resources/Shader/ui.frag.spv";
+    //uiPSDesc.entryPoint = "main";
+    //uiPSDesc.numUniformBuffers = 1;
+    //rm.LoadResource<Shader>(&uiPSDesc);
+    //{
+    //    auto handle = rm.GetResourceHandle<Shader>(uiPSDesc.Key);
+    //    rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/ui.frag.bamshader");
+    //}
+    //rm.LoadFile(L"Resources/Shader/ui.frag.bamshader");
 }
 
 void Application::InitializeMeshes()
@@ -661,17 +672,6 @@ void Application::InitializeMaterials()
     resourceManager.SaveToBinaryFile(spriteMaterialInstance, L"Resources/Material/SpriteMaterial.bammatinst");
     //resourceManager.DestroyResource(spriteMaterialInstanceHandle.GetRawHandle());
 
-
-    ShaderDesc defaultSkinningShaderDesc = {};
-    defaultSkinningShaderDesc.Key = L"Resources/Shader/Skinning";
-    defaultSkinningShaderDesc.Path = L"Resources/Shader/skinning.vert.spv";
-    defaultSkinningShaderDesc.spirvPath = L"Resources/Shader/skinning.vert.spv";
-    defaultSkinningShaderDesc.shaderType = EShaderType::Vertex;
-    defaultSkinningShaderDesc.numStorageBuffers = 1;
-    Shader* skinningShader = resourceManager.LoadResource<Shader>(&defaultSkinningShaderDesc).Get();
-    resourceManager.SaveToBinaryFile(skinningShader, L"Resources/Shader/skinning.vert.bamshader");
-    resourceManager.LoadFile(L"Resources/Shader/skinning.vert.bamshader");
-
     MaterialDesc skinningMaterialDesc = {};
     skinningMaterialDesc.Key = L"Resources/Material/SkinningMaterial";
     skinningMaterialDesc.VertexShaderHandle = resourceManager.GetResourceHandle<Shader>(L"Resources/Shader/skinning.vert.bamshader");
@@ -787,12 +787,11 @@ void Application::IntializeRenderer()
     uint32 h = rhi->GetSwapChainHeight();
     // ── 에디터 최종 출력용 RT (ImGui가 여기에 렌더) ──
     RenderTargetDesc finalDesc = {};
-    finalDesc.format = ETextureFormat::R8G8B8A8_UNORM;
+    finalDesc.textureDesc.format = ETextureFormat::R8G8B8A8_UNORM;
     finalDesc.name = L"FinalColor";
-    finalDesc.width = w;
-    finalDesc.height = h;
-    finalDesc.bindFlag = ERenderTargetBindFlag::RTBF_ShaderResource
-        | ERenderTargetBindFlag::RTBF_RenderTarget;
+    finalDesc.textureDesc.width = w;
+    finalDesc.textureDesc.height = h;
+    finalDesc.textureDesc.usage = ETextureUsage::RenderTarget | ETextureUsage::Sampler;
     rtMgr.CreateRenderTarget(&finalDesc);
 
 }
@@ -818,7 +817,6 @@ void Application::SubmitRenderPasses()
     //        rhi->BindTextureSampler(
     //            rtMgr.GetRenderTarget(L"GBuffer_Position")->GetTexture(),
     //            sampler, 4);
-
     //        return EResult::Success;
     //    }, m_LightingPassID);
 }

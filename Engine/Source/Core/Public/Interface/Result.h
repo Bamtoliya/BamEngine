@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "Types.h"
 
@@ -25,7 +25,7 @@ namespace Engine
 	{
 		if (result != EResult::Success)
 		{
-#if defined(_MSC_VER)
+#if defined(_MSC_VER) && defined(_DEBUG)
 			__debugbreak();
 #endif
 			return true;

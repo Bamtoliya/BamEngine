@@ -1,4 +1,4 @@
-﻿#pragma once 
+#pragma once 
 #include "RHI.h"
 #include "DirectX12Types.h"
 #include "DirectX12DescriptorAllocator.h"
@@ -29,18 +29,16 @@ public:
 	EResult BeginFrame() override;
 	EResult EndFrame() override;
 #pragma region Create Resources
+public:
 	RHIBuffer* CreateBuffer(void* data, uint32 size, uint32 stride, ERHIBufferType type) override;
 	RHIBuffer* CreateVertexBuffer(void* data, uint32 size, uint32 stride) override;
 	RHIBuffer* CreateIndexBuffer(void* data, uint32 size, uint32 stride) override;
+public:
 	RHITexture* CreateTextureFromFile(const char* filename) override;
 	RHITexture* CreateTextureFromFile(const wchar* filename) override;
 	RHITexture* CreateTexture(const RHITextureDesc& desc) override;
-	RHITexture* CreateTexture2D(void* data, uint32 width, uint32 height, uint32 mipLevels, uint32 arraySize) override;
-	RHITexture* CreateTextureCube(void* data, uint32 size, uint32 mipLevels) override;
-	RHITexture* CreateTexture3D(void* data, uint32 width, uint32 height, uint32 depth, uint32 mipLevels) override;
-	RHITexture* CreateRenderTargetTexture(void* data, uint32 width, uint32 height, uint32 mipLevels, uint32 arraySize) override;
-	RHITexture* CreateDepthStencilTexture(void* data, uint32 width, uint32 height, uint32 mipLevels, uint32 arraySize) override;
 	RHITexture* CreateTextureFromNativeHandle(void* nativeHandle) override;
+public:
 	RHIPipeline* CreatePipeline(const RHIPipelineDesc& desc) override;
 	RHISampler* CreateSampler(const SamplerDesc& desc) override;
 	RHIShader* CreateShader(const RHIShaderDesc& desc) override;
@@ -48,13 +46,11 @@ public:
 
 #pragma region Bind Resources
 	EResult BindRenderTarget(RHITexture* renderTarget, RHITexture* depthStencil) override;
-	EResult BindTexture(RHITexture* texture, uint32 slot) override;
 	EResult BindTextureSampler(RHITexture* texture, RHISampler* sampler, uint32 slot) override;
 	EResult BindRenderTargets(uint32 count, RHITexture** renderTargets, RHITexture* depthStencil) override;
 	EResult BindShader(RHIShader* shader) override;
 	EResult BindPipeline(RHIPipeline* pipeline) override;
 	EResult BindSampler(RHISampler* sampler) override;
-	EResult BindConstantBuffer(void* arg, uint32 slot) override;
 	EResult BindConstantRangeBuffer(void* arg, uint32 slot, uint32 offset, uint32 size) override;
 #pragma endregion
 
@@ -105,10 +101,13 @@ private:
 
 	ComPtr<IDXGISwapChain3> m_SwapChain;
 
-	ComPtr<ID3D12DescriptorHeap> m_RTVHeap;
-	ComPtr<ID3D12DescriptorHeap> m_DSVHeap;
-	uint32 m_RTVDescriptorSize = 0;
-	uint32 m_DSVDescriptorSize = 0;
+	ComPtr<ID3D12DescriptorHeap> m_DynamicHeaps[MAX_SWAPCHAIN_BUFFERS];
+	uint32 m_DynamicHeapCursor = 0;
+
+	//ComPtr<ID3D12DescriptorHeap> m_RTVHeap;
+	//ComPtr<ID3D12DescriptorHeap> m_DSVHeap;
+	//uint32 m_RTVDescriptorSize = 0;
+	//uint32 m_DSVDescriptorSize = 0;
 
 	ComPtr<ID3D12Fence> m_Fence;
 	uint64 m_CurrentFenceValue = 0;

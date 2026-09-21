@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "SkinnedMeshRenderer.h"
 
@@ -83,7 +83,7 @@ EResult SkinnedMeshRenderer::Render(f32 dt, RenderPass* renderPass)
 	SceneUBO uboData;
 	uboData.worldMatrix = m_Owner->GetComponent<Transform>()->GetWorldMatrix();
 
-	if (IsFailure(rhi->BindConstantBuffer((void*)&uboData, sizeof(SceneUBO), 1, EShaderType::Vertex)))
+	if (IsFailure(rhi->BindConstantBuffer((void*)&uboData, sizeof(SceneUBO), 1)))
 		return EResult::Fail;
 
 	Animator* animator = m_Owner->GetComponent<Animator>();
@@ -125,7 +125,7 @@ EResult SkinnedMeshRenderer::Render(f32 dt, RenderPass* renderPass)
 		return EResult::Fail;
 
 	RHIBuffer* ssboToBind = m_BoneSSBO;
-	if (IsFailure(rhi->BindVertexStorageBuffers(0, &ssboToBind, 1)))
+	if (IsFailure(rhi->BindStorageBuffer(ssboToBind, 0)))
 	{
 		return EResult::Fail;
 	}

@@ -8,13 +8,13 @@
 
 BEGIN(Editor)
 
-struct tagSceneViewportPanelDesc : public tagCameraViewportPanelDesc
+struct SceneViewportPanelDesc : public CameraViewportPanelDesc
 {
 
 };
 class SceneViewportPanel : public CameraViewportPanel
 {
-	using DESC = tagSceneViewportPanelDesc;
+	using DESC = SceneViewportPanelDesc;
 #pragma region Constructor&Destructor
 public:
 	SceneViewportPanel() { m_Name = L"Scene Viewport"; }
@@ -87,7 +87,7 @@ private:
 
 #pragma region Member Variables
 private:
-	vector<tagViewportPassInfo> m_PassOptions;
+	vector<ViewportPassInfo> m_PassOptions;
 	//Render Passes & Render Targets
 	RenderPassID m_GeometryPassID = INVALID_PASS_ID;
 	RenderPassID m_LightingPassID = INVALID_PASS_ID;

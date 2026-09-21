@@ -45,6 +45,17 @@ enum class ERenderPassType : uint8
 	UI,
 };
 
+ENUM()
+enum class ERenderPassClearFlag : uint8
+{
+	None = 0,
+	Color = 1 << 0,
+	Depth = 1 << 1,
+	Stencil = 1 << 2,
+};
+
+ENABLE_BITMASK_OPERATORS(ERenderPassClearFlag)
+
 STRUCT()
 struct RenderPassDesc
 {
@@ -54,6 +65,7 @@ struct RenderPassDesc
 	wstring depthStencilName = { L"" };
 	std::vector<wstring> renderTargetNames;
 	ERenderSortType sortType = ERenderSortType::None;
+	ERenderPassClearFlag clearFlag = ERenderPassClearFlag::Color | ERenderPassClearFlag::Depth | ERenderPassClearFlag::Stencil;
 	ERenderPassLoadOperation loadOperation = ERenderPassLoadOperation::RPLO_Load;
 	ERenderPassStoreOperation storeOperation = ERenderPassStoreOperation::RPSO_Store;
 	ERenderPassLoadOperation stencilLoadOperation = ERenderPassLoadOperation::RPLO_Load;

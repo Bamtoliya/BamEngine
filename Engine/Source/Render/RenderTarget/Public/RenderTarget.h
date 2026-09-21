@@ -1,19 +1,15 @@
 ﻿#pragma once
 
 #include "RHI.h"
+#include "RHITexture.h"
 
 BEGIN(Engine)
 struct RenderTargetDesc
 {
-	ETextureFormat				format = ETextureFormat::UNKNOWN;
-	ETextureUsage				usage = ETextureUsage::RenderTarget;
-	ERenderTargetBindFlag		bindFlag = ERenderTargetBindFlag::RTBF_None;
-	ERenderTargetType 			type = ERenderTargetType::Color;
-	ETextureDimension			dimension = ETextureDimension::Texture2D;
-	uint32						width = 800;
-	uint32						height = 600;
-	vec4						clearColor = vec4(0.0f, 0.0f, 0.0f, 1.0f);
+	RHITextureDesc				textureDesc = {};
 	wstring						name = L"RenderTarget";
+	bool						fixedSize = false;
+	f32							sizeScale = 1.0f;
 };
 class ENGINE_API RenderTarget final : public Base
 {
@@ -30,30 +26,28 @@ public:
 
 #pragma region Texture Management
 public:
-	uint32 GetWidth() const { return m_Desc.width; }
-	uint32 GetHeight() const { return m_Desc.height; }
+	uint32 GetWidth() const { return m_Texture->GetWidth(); }
+	uint32 GetHeight() const { return m_Texture->GetHeight(); }
 	RHITexture* GetTexture() const { return m_Texture; }
 	EResult Resize(uint32 width, uint32 height);
-	ETextureFormat GetFormat() const { return m_Desc.format; }
-	ERenderTargetBindFlag GetBindFlag() const { return m_Desc.bindFlag; }
-	ETextureUsage GetUsage() const { return m_Desc.usage; }
-	ERenderTargetType GetType() const { return m_Desc.type; }
-	ETextureDimension GetTextureDimension() const { return m_Desc.dimension; }
-	vec4 GetClearColor() const { return m_Desc.clearColor; }
+	ETextureFormat GetFormat() const { return m_Texture->GetFormat(); }
+	ETextureUsage GetUsage() const { return m_Texture->GetUsage(); }
+	ETextureDimension GetTextureDimension() const { return m_Texture->GetDimension(); }
+	vec4 GetClearColor() const { return m_Texture->GetClearColor(); }
 #pragma endregion
 
 #pragma region Name Management
 public:
-	const wstring& GetName() const { return m_Desc.name; }
-	void SetName(const wstring& name) { m_Desc.name = name; }
+	const wstring& GetName() const { return m_Name; }
+	void SetName(const wstring& name) { m_Name = name; }
 #pragma endregion
-
-
 
 #pragma region Members
 private:
 	RHITexture* m_Texture = { nullptr };
-	DESC m_Desc;
+	wstring m_Name = { L"RenderTarget" };
+	bool m_FixedSize = { false };
+	f32 m_SizeScale = { 1.0f };
 #pragma endregion
 };
 END

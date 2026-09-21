@@ -10,14 +10,14 @@ enum class EViewportResolutionMode : uint8
 	Preset,     // 고정 프리셋 해상도
 	Custom,     // 사용자 입력 해상도
 };
-struct tagResolutionPreset
+struct ResolutionPreset
 {
 	const char* Name;
 	uint32 Width;
 	uint32 Height;
 };
 // 프리셋 테이블 (static constexpr)
-static constexpr tagResolutionPreset g_ResolutionPresets[] =
+static constexpr ResolutionPreset g_ResolutionPresets[] =
 {
 	{ "3840 x 2160 (4K UHD)",     3840, 2160 },
 	{ "2560 x 1440 (QHD)",        2560, 1440 },
@@ -39,7 +39,7 @@ enum class EAspectRatioMode : uint8
 	Ratio_9_16, // 세로 모드
 };
 
-struct tagViewportPanelDesc
+struct ViewportPanelDesc
 {
 	wstring Name = L"Viewport";
 	uint32 RenderTargetWidth = 1920;
@@ -50,7 +50,7 @@ BEGIN(Editor)
 
 class BaseViewportPanel : public ImGuiInterface
 {
-	using DESC = tagViewportPanelDesc;
+	using DESC = ViewportPanelDesc;
 #pragma region Constructor&Destructor
 public:
 	BaseViewportPanel() { m_Name = L"Base Viewport Panel"; }

@@ -1,4 +1,4 @@
-﻿#pragma once 
+#pragma once 
 
 #include "RHIBuffer.h"
 
@@ -30,6 +30,7 @@ public:
 
 public:
 	virtual void SetData(const void* data, uint32 size) override;
+	virtual void* GetMappedPointer() const override { return m_MappedData; }
 private:
 	ComPtr<ID3D12Resource> m_Buffer;
 	void* m_MappedData = nullptr;

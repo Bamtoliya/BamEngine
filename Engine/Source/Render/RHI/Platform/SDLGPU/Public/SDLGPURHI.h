@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "RHI.h"
 #include "SDLGPUTypes.h"
@@ -44,11 +44,6 @@ public:
 	virtual RHITexture* CreateTextureFromFile(const char* filename) override;
 	virtual RHITexture* CreateTextureFromFile(const wchar* filename) override;
 	virtual RHITexture* CreateTexture(const RHITextureDesc& desc) override;
-	virtual RHITexture* CreateTexture2D(void* data, uint32 width, uint32 height, uint32 mipLevels, uint32 arraySize) override;
-	virtual RHITexture* CreateTextureCube(void* data, uint32 size, uint32 mipLevels) override;
-	virtual RHITexture* CreateTexture3D(void* data, uint32 width, uint32 height, uint32 depth, uint32 mipLevels) override;
-	virtual RHITexture* CreateRenderTargetTexture(void* data, uint32 width, uint32 height, uint32 mipLevels, uint32 arraySize) override;
-	virtual RHITexture* CreateDepthStencilTexture(void* data, uint32 width, uint32 height, uint32 mipLevels, uint32 arraySize) override;
 	virtual RHITexture* CreateTextureFromNativeHandle(void* nativeHandle) override;
 public:
 	virtual RHIPipeline* CreatePipeline(const RHIPipelineDesc& desc) override;
@@ -64,7 +59,6 @@ public:
 #pragma region Bind Resources
 public:
 	virtual EResult BindRenderTarget(RHITexture* renderTarget, RHITexture* depthStencil)  override;
-	virtual EResult BindTexture(RHITexture* texture, uint32 slot) override;
 	virtual EResult BindTextureSampler(RHITexture* texture, RHISampler* sampler, uint32 slot) override;
 	virtual EResult BindRenderTargets(uint32 count, RHITexture** renderTargets, RHITexture* depthStencil) override;
 	
@@ -74,8 +68,6 @@ public:
 	virtual EResult BindPipeline(RHIPipeline* pipeline) override;
 public:
 	virtual EResult BindSampler(RHISampler* sampler) override { return EResult::NotImplemented; }
-	virtual EResult BindConstantBuffer(void* arg, uint32 slot) override;
-	virtual EResult BindConstantBuffer(void* arg, uint32 size, uint32 slot, EShaderType type) override;
 	virtual EResult BindConstantRangeBuffer(void* arg, uint32 slot, uint32 offset, uint32 size) override;
 #pragma endregion
 

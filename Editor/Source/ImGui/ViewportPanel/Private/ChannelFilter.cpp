@@ -63,14 +63,11 @@ void ChannelFilter::EnsureChannelPreviewRT(const wstring& sourceRTName)
     if (!dst)
     {
         RenderTargetDesc desc = {};
-        desc.format = ETextureFormat::R8G8B8A8_UNORM;
-        desc.usage = ETextureUsage::RenderTarget | ETextureUsage::Sampler;
-        desc.bindFlag = ERenderTargetBindFlag::RTBF_RenderTarget | ERenderTargetBindFlag::RTBF_ShaderResource;
-        desc.type = ERenderTargetType::Color;
-        desc.dimension = ETextureDimension::Texture2D;
-        desc.width = src->GetWidth();
-        desc.height = src->GetHeight();
-        desc.clearColor = vec4(0.f, 0.f, 0.f, 1.f);
+		desc.textureDesc.format = ETextureFormat::R8G8B8A8_UNORM;
+		desc.textureDesc.usage = ETextureUsage::RenderTarget | ETextureUsage::Sampler;
+        desc.textureDesc.width = src->GetWidth();
+        desc.textureDesc.height = src->GetHeight();
+        desc.textureDesc.clearColor = vec4(0.f, 0.f, 0.f, 1.f);
         desc.name = m_ChannelPreviewRTName;
         rtMgr.CreateRenderTarget(&desc);
         return;
@@ -119,7 +116,7 @@ void ChannelFilter::SubmitChannelPreviewPass(const wstring& sourceRTName, wstrin
             auto* rhi = Engine::Renderer::Get().GetRHI();
             ChannelViewData channelData = { capturedFlags };
 
-            rhi->BindConstantBuffer(&channelData, sizeof(ChannelViewData), 0, EShaderType::Pixel);
+            rhi->BindConstantBuffer(&channelData, sizeof(ChannelViewData), 0);
             rhi->BindTextureSampler(src->GetTexture(), Engine::SamplerManager::Get().GetDefaultSampler(), 0);
             rhi->BindPipeline(m_ChannelPreviewPipeline);
             return rhi->Draw(3);

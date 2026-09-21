@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "Editor_Includes.h"
 #include <mutex>
@@ -24,7 +24,7 @@ public:
 
 #pragma region Thumbnail Management
 public:
-	void* GetThumbnail(const filesystem::path& assetPath);
+	RHITexture* GetThumbnail(const filesystem::path& assetPath);
 
 	void ClearCache(const filesystem::path& assetPath);
 	void ClearAll();
@@ -32,7 +32,7 @@ public:
 private:
 	struct ThumbnailUploadTask {
 		std::string AssetPath;
-		int32 Width, Height;
+		int32 Width = 0, Height = 0;
 		std::vector<uint8_t> Data;
 	};
 
@@ -42,8 +42,7 @@ private:
 
 #pragma region Member Variables
 private:
-	unordered_map<string, void*> m_ThumbnailCache;
-	unordered_map<string, RHITexture*> m_ThumbnailTextures;
+	unordered_map<string, RHITexture*> m_ThumbnailCache;
 	std::unordered_set<std::string> m_LoadingPaths;
 	
 	std::mutex m_UploadMutex;

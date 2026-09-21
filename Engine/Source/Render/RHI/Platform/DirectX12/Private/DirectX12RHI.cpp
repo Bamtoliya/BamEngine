@@ -39,6 +39,16 @@ EResult DirectX12RHI::Initialize(void* arg)
     if (FAILED(D3D12CreateDevice(nullptr, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&m_Device))))
         return EResult::Fail;
 
+#if defined(_DEBUG)
+    ComPtr<ID3D12InfoQueue> infoQueue;
+    if (SUCCEEDED(m_Device.As(&infoQueue)))
+    {
+        infoQueue->SetBreakOnID(
+            D3D12_MESSAGE_ID_CLEARRENDERTARGETVIEW_MISMATCHINGCLEARVALUE,
+            TRUE);
+    }
+#endif
+
     m_RtvAllocator = new DirectX12DescriptorAllocator(m_Device.Get(), D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 256);
     m_DsvAllocator = new DirectX12DescriptorAllocator(m_Device.Get(), D3D12_DESCRIPTOR_HEAP_TYPE_DSV, 256);
     m_SrvAllocator = new DirectX12DescriptorAllocator(m_Device.Get(), D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 4096);
@@ -92,16 +102,16 @@ EResult DirectX12RHI::Initialize(void* arg)
 
 	m_CurrentBackBufferIndex = m_SwapChain->GetCurrentBackBufferIndex();
 
-	// Descriptor Heap 생성 (Render Target View)
-	D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc = {};
-	rtvHeapDesc.NumDescriptors = m_SwapChainBufferCount;
-	rtvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
-	rtvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
-	if (FAILED(m_Device->CreateDescriptorHeap(&rtvHeapDesc, IID_PPV_ARGS(&m_RTVHeap))))
-	{
-		return EResult::Fail;
-	}
-    m_RTVDescriptorSize = m_Device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+	//// Descriptor Heap 생성 (Render Target View)
+	//D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc = {};
+	//rtvHeapDesc.NumDescriptors = m_SwapChainBufferCount;
+	//rtvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
+	//rtvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+	//if (FAILED(m_Device->CreateDescriptorHeap(&rtvHeapDesc, IID_PPV_ARGS(&m_RTVHeap))))
+	//{
+	//	return EResult::Fail;
+	//}
+ //   m_RTVDescriptorSize = m_Device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
 
     // 
 
@@ -135,34 +145,61 @@ EResult DirectX12RHI::Initialize(void* arg)
     if (m_FenceEvent == nullptr)
         return EResult::Fail;
 
-
-    CD3DX12_DESCRIPTOR_RANGE ranges[4];
-    // 0번 테이블: 상수버퍼 (CBV) 여러 개
-    ranges[0].Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 0);
-    ranges[1].Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 1);
-    ranges[2].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 8, 0);
-    ranges[3].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER, 4, 0);
-    CD3DX12_ROOT_PARAMETER rootParameters[4];
-    rootParameters[0].InitAsDescriptorTable(1, &ranges[0], D3D12_SHADER_VISIBILITY_ALL);
-    rootParameters[1].InitAsDescriptorTable(1, &ranges[1], D3D12_SHADER_VISIBILITY_ALL);
-    rootParameters[2].InitAsDescriptorTable(1, &ranges[2], D3D12_SHADER_VISIBILITY_ALL);
-    rootParameters[3].InitAsDescriptorTable(1, &ranges[3], D3D12_SHADER_VISIBILITY_ALL);
-
-    CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc;
-    rootSigDesc.Init(_countof(rootParameters), rootParameters, 0, nullptr,
-        D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT); // 버텍스 인풋 허용 플래그!
-    ComPtr<ID3DBlob> signature;
-    ComPtr<ID3DBlob> error;
-    if (FAILED(D3D12SerializeRootSignature(&rootSigDesc, D3D_ROOT_SIGNATURE_VERSION_1, &signature, &error)))
     {
-        if (error) fmt::print(stderr, "루트 시그니처 오류: {}\n", (char*)error->GetBufferPointer());
-        return EResult::Fail;
-    }
-    if (FAILED(m_Device->CreateRootSignature(0, signature->GetBufferPointer(), signature->GetBufferSize(), IID_PPV_ARGS(&m_GlobalRootSignature))))
-    {
-        return EResult::Fail;
-    }
+        // SRV/Sampler는 여전히 Descriptor Table로 유지 (여러 개를 묶어서 바인딩)
+        CD3DX12_DESCRIPTOR_RANGE srvRanges[4];
+        srvRanges[0].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 16, 0, 1);     // Material SRV: t0-t15, space1
+        srvRanges[1].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER, 8, 0, 1);  // Material Sampler: s0-s7, space1
+        srvRanges[2].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0, 2);      // Object SRV: t0, space2
+        srvRanges[3].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 16, 0, 3);     // Pass SRV: t0-t15, space3
 
+        CD3DX12_ROOT_PARAMETER rootParameters[9];
+
+        // [0] Global CBV (b0, space0) — Root Descriptor (직접 GPU 주소 바인딩)
+        rootParameters[0].InitAsConstantBufferView(0, 0, D3D12_SHADER_VISIBILITY_ALL);
+
+        // [1] Material SRV Table (t0-t15, space1) — Descriptor Table
+        rootParameters[1].InitAsDescriptorTable(1, &srvRanges[0], D3D12_SHADER_VISIBILITY_PIXEL);
+
+        // [2] Material Sampler Table (s0-s7, space1) — Descriptor Table
+        rootParameters[2].InitAsDescriptorTable(1, &srvRanges[1], D3D12_SHADER_VISIBILITY_PIXEL);
+
+        // [3] Object CBV (b0, space2) — Root Descriptor
+        rootParameters[3].InitAsConstantBufferView(0, 2, D3D12_SHADER_VISIBILITY_VERTEX);
+
+        // [4] Object SRV Table (t0, space2) — Descriptor Table
+        rootParameters[4].InitAsDescriptorTable(1, &srvRanges[2], D3D12_SHADER_VISIBILITY_VERTEX);
+
+        // [5] Pass CBV #0 (b0, space3) — Root Descriptor
+        rootParameters[5].InitAsConstantBufferView(0, 3, D3D12_SHADER_VISIBILITY_ALL);
+
+        // [6] Pass CBV #1 (b1, space3) — Root Descriptor (기존 테이블에서 분리!)
+        rootParameters[6].InitAsConstantBufferView(1, 3, D3D12_SHADER_VISIBILITY_ALL);
+
+        // [7] Pass SRV Table (t0-t15, space3) — Descriptor Table
+        rootParameters[7].InitAsDescriptorTable(1, &srvRanges[3], D3D12_SHADER_VISIBILITY_ALL);
+
+        // [8] Pass Sampler Table (s0-s7, space3) — Descriptor Table (기존 7번 → 8번으로 이동)
+        // Note: 샘플러 range를 재사용하거나 별도 선언 필요
+        CD3DX12_DESCRIPTOR_RANGE passSamplerRange;
+        passSamplerRange.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER, 8, 0, 3);
+        rootParameters[8].InitAsDescriptorTable(1, &passSamplerRange, D3D12_SHADER_VISIBILITY_PIXEL);
+
+        CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc;
+        rootSigDesc.Init(_countof(rootParameters), rootParameters, 0, nullptr,
+            D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
+        ComPtr<ID3DBlob> signature;
+        ComPtr<ID3DBlob> error;
+        if (FAILED(D3D12SerializeRootSignature(&rootSigDesc, D3D_ROOT_SIGNATURE_VERSION_1, &signature, &error)))
+        {
+            if (error) fmt::print(stderr, "루트 시그니처 오류: {}\n", (char*)error->GetBufferPointer());
+            return EResult::Fail;
+        }
+        if (FAILED(m_Device->CreateRootSignature(0, signature->GetBufferPointer(), signature->GetBufferSize(), IID_PPV_ARGS(&m_GlobalRootSignature))))
+        {
+            return EResult::Fail;
+        }
+    }
 
     return EResult::Success;
 }
@@ -195,6 +232,12 @@ void DirectX12RHI::Free()
     delete m_SrvAllocator; m_SrvAllocator = nullptr;
 	delete m_SamplerAllocator; m_SamplerAllocator = nullptr;
 
+	if (m_FenceEvent)
+	{
+		CloseHandle(m_FenceEvent);
+		m_FenceEvent = nullptr;
+	}
+
     __super::Free();
 }
 #pragma endregion
@@ -209,12 +252,28 @@ EResult DirectX12RHI::BeginFrame()
 {
 	m_CurrentBackBufferIndex = m_SwapChain->GetCurrentBackBufferIndex();
 	m_BackBuffer = m_SwapChainBuffers[m_CurrentBackBufferIndex];
+	m_DynamicHeapCursor = 0;
+
+	// 다이내믹 CBV 링 버퍼 커서 초기화 (화이트보드 되감기)
+	m_DynamicBufferCursor = 0;
+	// 캐시 장부에서 동적 데이터(임시 구조체)만 초기화 (객체 바인딩은 유지)
+	for (auto& cache : m_ConstantBuffers)
+	{
+		if (cache.isDynamic)
+		{
+			cache.buffer = nullptr;
+			cache.offset = 0;
+			cache.isDynamic = false;
+		}
+	}
 
     if (FAILED(m_CommandAllocator->Reset()))
         return EResult::Fail;
 
     if (FAILED(m_CommandList->Reset(m_CommandAllocator.Get(), nullptr)))
         return EResult::Fail;
+
+    m_CommandList->SetGraphicsRootSignature(m_GlobalRootSignature.Get());
 
     ID3D12DescriptorHeap* heaps[] = { m_SrvAllocator->GetHeap(), m_SamplerAllocator->GetHeap() };
 
@@ -303,7 +362,6 @@ RHITexture* DirectX12RHI::CreateTextureFromFile(const wchar* filename)
 
 RHITexture* DirectX12RHI::CreateTexture(const RHITextureDesc& desc)
 {
-
     DirectX12TextureDesc dxDesc{ desc };
     dxDesc.nativeHandle = nullptr; // Ensure native handle is null for new texture creation
     dxDesc.rtvHandle.ptr = 0; // Reset RTV handle
@@ -311,34 +369,7 @@ RHITexture* DirectX12RHI::CreateTexture(const RHITextureDesc& desc)
     RHITexture* texture = DirectX12Texture::Create(this, dxDesc);
     if (texture == nullptr) return nullptr;
 
-
-
     return texture;
-}
-
-RHITexture* DirectX12RHI::CreateTexture2D(void* data, uint32 width, uint32 height, uint32 mipLevels, uint32 arraySize)
-{
-    return nullptr;
-}
-
-RHITexture* DirectX12RHI::CreateTextureCube(void* data, uint32 size, uint32 mipLevels)
-{
-    return nullptr;
-}
-
-RHITexture* DirectX12RHI::CreateTexture3D(void* data, uint32 width, uint32 height, uint32 depth, uint32 mipLevels)
-{
-    return nullptr;
-}
-
-RHITexture* DirectX12RHI::CreateRenderTargetTexture(void* data, uint32 width, uint32 height, uint32 mipLevels, uint32 arraySize)
-{
-    return nullptr;
-}
-
-RHITexture* DirectX12RHI::CreateDepthStencilTexture(void* data, uint32 width, uint32 height, uint32 mipLevels, uint32 arraySize)
-{
-    return nullptr;
 }
 
 RHITexture* DirectX12RHI::CreateTextureFromNativeHandle(void* nativeHandle)
@@ -350,7 +381,7 @@ RHITexture* DirectX12RHI::CreateTextureFromNativeHandle(void* nativeHandle)
 #pragma region Pipeline
 RHIPipeline* DirectX12RHI::CreatePipeline(const RHIPipelineDesc& desc)
 {
-    return nullptr;
+    return DirectX12Pipeline::Create(this, desc);
 }
 #pragma endregion
 
@@ -377,14 +408,6 @@ EResult DirectX12RHI::BindRenderTarget(RHITexture* renderTarget, RHITexture* dep
         return BindRenderTargets(0, &renderTarget, depthStencil);
     }
     return BindRenderTargets(1, &renderTarget, depthStencil);
-}
-
-EResult DirectX12RHI::BindTexture(RHITexture* texture, uint32 slot)
-{
-    if (!m_CommandList || !texture) return EResult::Fail;
-    DirectX12Texture* dxTexture = static_cast<DirectX12Texture*>(texture);
-    m_CommandList->SetGraphicsRootDescriptorTable(slot, dxTexture->GetSRVGPUHandle());
-    return EResult::Success;
 }
 
 EResult DirectX12RHI::BindTextureSampler(RHITexture* texture, RHISampler* sampler, uint32 slot)
@@ -466,18 +489,7 @@ EResult DirectX12RHI::BindSampler(RHISampler* sampler)
 
 	DirectX12Sampler* dxSampler = static_cast<DirectX12Sampler*>(sampler);
 
-    m_CommandList->SetGraphicsRootDescriptorTable(3, dxSampler->GetGPUHandle());
-    return EResult::Success;
-}
-
-EResult DirectX12RHI::BindConstantBuffer(void* arg, uint32 slot)
-{
-    if (!m_CommandList || !arg) return EResult::Fail;
-    // 버퍼 객체로 캐스팅
-    DirectX12Buffer* dxBuffer = static_cast<DirectX12Buffer*>(arg);
-    // 💡 팁: DX12는 CBV를 주차장(Heap)에 안 넣고 GPU 메모리 주소만으로 다이렉트로 꽂을 수 있습니다!
-    // (루트 시그니처 설계 시 CBV를 테이블이 아닌 Root Descriptor로 세팅했다는 가정 하에)
-    m_CommandList->SetGraphicsRootConstantBufferView(slot, static_cast<ID3D12Resource*>(dxBuffer->GetNativeHandle())->GetGPUVirtualAddress());
+    m_CommandList->SetGraphicsRootDescriptorTable(8, dxSampler->GetGPUHandle());
     return EResult::Success;
 }
 
@@ -519,27 +531,33 @@ EResult  DirectX12RHI::BeginRenderPass(RenderPass* renderPass)
     for (RHITexture* tex : renderTargets)
     {
         DirectX12Texture* dxTex = static_cast<DirectX12Texture*>(tex);
-        D3D12_RESOURCE_BARRIER barrier = {};
-        barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-		barrier.Transition.pResource = static_cast<ID3D12Resource*>(dxTex->GetNativeHandle());
-		barrier.Transition.StateBefore = dxTex->GetCurrentState();
-		barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
-		barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-		barriers.push_back(barrier);
-		dxTex->SetCurrentState(D3D12_RESOURCE_STATE_RENDER_TARGET);
+        if (dxTex->GetCurrentState() != D3D12_RESOURCE_STATE_RENDER_TARGET)
+        {
+            D3D12_RESOURCE_BARRIER barrier = {};
+            barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+            barrier.Transition.pResource = static_cast<ID3D12Resource*>(dxTex->GetNativeHandle());
+            barrier.Transition.StateBefore = dxTex->GetCurrentState();
+            barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
+            barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+            barriers.push_back(barrier);
+            dxTex->SetCurrentState(D3D12_RESOURCE_STATE_RENDER_TARGET);
+        }
     }
 
     if (depthTarget)
     {
         DirectX12Texture* dxDepth = static_cast<DirectX12Texture*>(depthTarget);
-        D3D12_RESOURCE_BARRIER barrier = {};
-        barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-		barrier.Transition.pResource = static_cast<ID3D12Resource*>(dxDepth->GetNativeHandle());
-		barrier.Transition.StateBefore = dxDepth->GetCurrentState();
-		barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_DEPTH_WRITE;
-		barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-		barriers.push_back(barrier);
-		dxDepth->SetCurrentState(D3D12_RESOURCE_STATE_DEPTH_WRITE);
+        if (dxDepth->GetCurrentState() != D3D12_RESOURCE_STATE_DEPTH_WRITE)
+        {
+            D3D12_RESOURCE_BARRIER barrier = {};
+            barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+            barrier.Transition.pResource = static_cast<ID3D12Resource*>(dxDepth->GetNativeHandle());
+            barrier.Transition.StateBefore = dxDepth->GetCurrentState();
+            barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_DEPTH_WRITE;
+            barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+            barriers.push_back(barrier);
+            dxDepth->SetCurrentState(D3D12_RESOURCE_STATE_DEPTH_WRITE);
+        }
     }
 
 	if (!barriers.empty())
@@ -553,11 +571,11 @@ EResult  DirectX12RHI::BeginRenderPass(RenderPass* renderPass)
     {
 		for (uint32 i = 0; i < renderTargets.size(); ++i)
 		{
-            vec4 clearColor = m_ClearColor;
 			RHITexture* tex = renderTargets[i];
+            vec4 clearColor = tex->GetClearColor();
 			if (renderPass->HasOverrideClearColor())
 				clearColor = renderPass->GetOverrideClearColor();
-			ClearRenderTarget(tex, vec4(1.0f, 0.f, 1.f, 1.f));
+			ClearRenderTarget(tex, clearColor);
 		}
     }
 
@@ -620,6 +638,20 @@ EResult DirectX12RHI::Draw(uint32 count)
 {
     if(!m_CommandList) return EResult::Fail;
 
+	if (m_VertexBuffers[0])
+	{
+		DirectX12Buffer* dxBuffer = static_cast<DirectX12Buffer*>(m_VertexBuffers[0]);
+		D3D12_VERTEX_BUFFER_VIEW vbView = dxBuffer->GetVertexBufferView();
+		m_CommandList->IASetVertexBuffers(0, 1, &vbView);
+	}
+
+    if (m_IndexBuffer)
+    {
+        DirectX12Buffer* dxBuffer = static_cast<DirectX12Buffer*>(m_IndexBuffer);
+		D3D12_INDEX_BUFFER_VIEW ibView = dxBuffer->GetIndexBufferView();
+		m_CommandList->IASetIndexBuffer(&ibView);
+    }
+
     m_CommandList->DrawInstanced(count, 1, 0, 0);
     return EResult();
 }
@@ -628,8 +660,54 @@ EResult DirectX12RHI::DrawIndexed(uint32 count)
 {
     if(!m_CommandList) return EResult::Fail;
 
+    if (m_VertexBuffers[0])
+    {
+        DirectX12Buffer* dxBuffer = static_cast<DirectX12Buffer*>(m_VertexBuffers[0]);
+        D3D12_VERTEX_BUFFER_VIEW vbView = dxBuffer->GetVertexBufferView();
+        m_CommandList->IASetVertexBuffers(0, 1, &vbView);
+    }
+
+    if (m_IndexBuffer)
+    {
+        DirectX12Buffer* dxBuffer = static_cast<DirectX12Buffer*>(m_IndexBuffer);
+        D3D12_INDEX_BUFFER_VIEW ibView = dxBuffer->GetIndexBufferView();
+        m_CommandList->IASetIndexBuffer(&ibView);
+    }
+
+    // CBV 슬롯 → 루트 파라미터 인덱스 매핑
+    // slot 0 = Global CBV  → Root Param 0
+    // slot 1 = Object CBV  → Root Param 3
+    // slot 2 = Pass CBV #0 → Root Param 5
+    // slot 3 = Pass CBV #1 → Root Param 6
+    static constexpr uint32 CBV_ROOT_PARAM_MAP[MAX_CONSTANT_BUFFER_SLOTS] = { 0, 3, 5, 6 };
+
+    for (uint32 slot = 0; slot < MAX_CONSTANT_BUFFER_SLOTS; ++slot)
+    {
+        ConstantBufferBinding& cache = m_ConstantBuffers[slot];
+        D3D12_GPU_VIRTUAL_ADDRESS gpuAddr = 0;
+
+        if (cache.isDynamic && cache.buffer)
+        {
+            // 임시 데이터: 링 버퍼의 GPU 기본 주소 + 오프셋
+            gpuAddr = static_cast<ID3D12Resource*>(cache.buffer->GetNativeHandle())->GetGPUVirtualAddress();
+            gpuAddr += cache.offset;
+        }
+        else if (!cache.isDynamic && cache.buffer)
+        {
+            // 영구 객체: 버퍼의 GPU 주소를 직접 가져옴
+            gpuAddr = static_cast<ID3D12Resource*>(cache.buffer->GetNativeHandle())->GetGPUVirtualAddress();
+        }
+
+        if (gpuAddr != 0)
+        {
+            m_CommandList->SetGraphicsRootConstantBufferView(CBV_ROOT_PARAM_MAP[slot], gpuAddr);
+        }
+    }
+
+    // TODO: SRV(텍스처) 다이내믹 힙 복사 및 바인딩 로직 (추후 구현)
+
     m_CommandList->DrawIndexedInstanced(count, 1, 0, 0, 0);
-    return EResult();
+    return EResult::Success;
 }
 
 EResult DirectX12RHI::DrawIndexedInstanced()
@@ -659,6 +737,8 @@ EResult DirectX12RHI::SetViewport(int32 x, int32 y, uint32 width, uint32 height)
     viewport.Height = static_cast<FLOAT>(height);
     viewport.MinDepth = 0.0f;
     viewport.MaxDepth = 1.0f;
+    D3D12_RECT scissor = { x, y, x + (LONG)width, y + (LONG)height };
     m_CommandList->RSSetViewports(1, &viewport);
+    m_CommandList->RSSetScissorRects(1, &scissor);
     return EResult::Success;
 }

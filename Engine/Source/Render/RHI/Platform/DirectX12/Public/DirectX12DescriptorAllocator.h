@@ -5,7 +5,7 @@
 #include <mutex>
 
 BEGIN(Engine)
-class DirectX12DescriptorAllocator final
+class ENGINE_API DirectX12DescriptorAllocator final
 {
 public:
 	DirectX12DescriptorAllocator(ID3D12Device* device, D3D12_DESCRIPTOR_HEAP_TYPE type, uint32 maxCount);

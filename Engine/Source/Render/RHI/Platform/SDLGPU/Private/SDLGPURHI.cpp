@@ -272,67 +272,6 @@ RHITexture* SDLGPURHI::CreateTexture(const RHITextureDesc& desc)
 	return texture;
 }
 
-RHITexture* SDLGPURHI::CreateTexture2D(void* data, uint32 width, uint32 height, uint32 mipLevels, uint32 arraySize)
-{
-	//SDLTexture* texture = new SDLTexture(width, height, mipLevels, arraySize);
-	//texture->m_Texture = SDL_CreateTexture(m_Renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_STATIC, width, height);
-	//
-	//if (texture->m_Texture && data)
-	//{
-	//	SDL_UpdateTexture(texture->m_Texture, nullptr, data, width * 4);
-	//}
-	return nullptr;
-}
-
-RHITexture* SDLGPURHI::CreateTextureCube(void* data, uint32 size, uint32 mipLevels)
-{
-	return nullptr;
-}
-
-RHITexture* SDLGPURHI::CreateTexture3D(void* data, uint32 width, uint32 height, uint32 depth, uint32 mipLevels)
-{
-	return nullptr;
-}
-
-RHITexture* SDLGPURHI::CreateRenderTargetTexture(void* data, uint32 width, uint32 height, uint32 mipLevels, uint32 arraySize)
-{
-	RenderTargetDesc* rtDesc = reinterpret_cast<RenderTargetDesc*>(data);
-	RHITextureDesc desc = {};
-	desc.format = rtDesc->format;
-	desc.dimension = rtDesc->dimension;
-	desc.width = width;
-	desc.height = height;
-	desc.arraySize = arraySize;
-	desc.mipLevels = mipLevels;
-	desc.usage = Engine::ETextureUsage::RenderTarget | Engine::ETextureUsage::Sampler;
-
-	return  CreateTexture(desc);
-}
-
-RHITexture* SDLGPURHI::CreateDepthStencilTexture(void* data, uint32 width, uint32 height, uint32 mipLevels, uint32 arraySize)
-{
-	RHITextureDesc desc = {};
-	if (data)
-	{
-		RenderTargetDesc* rtDesc = reinterpret_cast<RenderTargetDesc*>(data);
-		desc.dimension = rtDesc->dimension;
-		desc.format = rtDesc->format;
-		desc.usage = rtDesc->usage;
-	}
-	else
-	{
-		desc.dimension = Engine::ETextureDimension::Texture2D;
-		desc.format = Engine::ETextureFormat::D24_UNORM_S8_UINT;
-		desc.usage = Engine::ETextureUsage::DepthStencilTarget | Engine::ETextureUsage::Sampler;
-	}
-	desc.width = width;
-	desc.height = height;
-	desc.arraySize = arraySize;
-	desc.mipLevels = mipLevels;
-
-	return CreateTexture(desc);
-}
-
 RHITexture* SDLGPURHI::CreateTextureFromNativeHandle(void* nativeHandle)
 {
 	//if (!nativeHandle) return nullptr;
@@ -532,17 +471,6 @@ EResult SDLGPURHI::BindRenderTarget(RHITexture* renderTarget, RHITexture* depthS
 	m_CurrentRenderPass = SDL_BeginGPURenderPass(m_CurrentCommandBuffer, &colorTargetInfo, 1, depthInfoPtr);
 	return m_CurrentRenderPass ? EResult::Success : EResult::Fail;
 }
-EResult SDLGPURHI::BindTexture(RHITexture* texture, uint32 slot)
-{
-	//if (texture == nullptr)
-	//{
-	//	m_CurrentTextures[slot] = nullptr;
-	//	return EResult::Success;
-	//}
-	//
-	//m_CurrentTextures[slot] = texture;
-	return EResult::Success;
-}
 EResult SDLGPURHI::BindTextureSampler(RHITexture* texture, RHISampler* sampler, uint32 slot)
 {
 	if (!texture || !sampler || !m_CurrentRenderPass) return EResult::InvalidArgument;
@@ -600,38 +528,6 @@ EResult SDLGPURHI::BindPipeline(RHIPipeline* pipeline)
 		return EResult::InvalidArgument;
 	m_CurrentPipeline = static_cast<RHIPipeline*>(pipeline);
 	SDL_BindGPUGraphicsPipeline(m_CurrentRenderPass, static_cast<SDL_GPUGraphicsPipeline*>(m_CurrentPipeline->GetNativeHandle()));
-	return EResult::Success;
-}
-EResult SDLGPURHI::BindConstantBuffer(void* arg, uint32 slot)
-{
-	if (!arg || !m_CurrentCommandBuffer) return EResult::InvalidArgument;
-
-	SDL_PushGPUVertexUniformData(m_CurrentCommandBuffer, slot, arg, sizeof(mat4));
-	SDL_PushGPUFragmentUniformData(m_CurrentCommandBuffer, slot, arg, sizeof(mat4));
-	return EResult::Success;
-}
-EResult SDLGPURHI::BindConstantBuffer(void* arg, uint32 size, uint32 slot, EShaderType type)
-{
-	if (!arg || !m_CurrentCommandBuffer) return EResult::InvalidArgument;
-	switch (type)
-	{
-	case EShaderType::Vertex:
-		SDL_PushGPUVertexUniformData(m_CurrentCommandBuffer, slot, arg, size);
-		break;
-	case EShaderType::Pixel:
-		SDL_PushGPUFragmentUniformData(m_CurrentCommandBuffer, slot, arg, size);
-		break;
-	case EShaderType::Compute:
-		SDL_PushGPUComputeUniformData(m_CurrentCommandBuffer, slot, arg, size);
-		break;
-	case EShaderType::Geometry:
-	case EShaderType::Hull:
-	case EShaderType::Domain:
-	case EShaderType::Unknown:
-	default:
-		break;
-	}
-	
 	return EResult::Success;
 }
 EResult SDLGPURHI::BindConstantRangeBuffer(void* arg, uint32 slot, uint32 offset, uint32 size)
@@ -837,39 +733,26 @@ EResult SDLGPURHI::Draw(uint32 count)
 		SDL_BindGPUVertexBuffers(m_CurrentRenderPass, 0, vertexBindings, highestVBIndex);
 	}
 
-	// Vertex Storage Buffer Binding
-	SDL_GPUBuffer* vertexStorageBindings[MAX_STORAGE_BUFFERS] = { nullptr };
-	uint32 highestVStorageIndex = 0;
-	for (uint32 i = 0; i < m_NumVertexStorageBuffersBound; ++i)
+	SDL_GPUBuffer* storageBindings[MAX_STORAGE_BUFFERS] = { nullptr };
+	uint32 highestStorageIndex = 0;
+
+	for (uint32 i = 0; i < MAX_STORAGE_BUFFERS; ++i)
 	{
-		if (m_VertexStorageBuffers[i])
-		{
-			SDLGPUBuffer* sbuf = static_cast<SDLGPUBuffer*>(m_VertexStorageBuffers[i]);
-			vertexStorageBindings[i] = static_cast<SDL_GPUBuffer*>(sbuf->GetNativeHandle());
-			highestVStorageIndex = i + 1;
-		}
-	}
-	if (highestVStorageIndex > 0)
-	{
-		SDL_BindGPUVertexStorageBuffers(m_CurrentRenderPass, 0, vertexStorageBindings, highestVStorageIndex);
+		if (!m_StorageBuffers[i])
+			continue;
+
+		SDLGPUBuffer* sbuf = static_cast<SDLGPUBuffer*>(m_StorageBuffers[i]);
+		SDL_GPUBuffer* nativeBuffer = static_cast<SDL_GPUBuffer*>(sbuf->GetNativeHandle());
+		if (!nativeBuffer) return EResult::Fail;
+
+		storageBindings[i] = nativeBuffer;
+		highestStorageIndex = i + 1;
 	}
 
-	// Fragment Storage Buffer Binding
-	SDL_GPUBuffer* fragmentStorageBindings[MAX_STORAGE_BUFFERS] = { nullptr };
-	uint32 highestFStorageIndex = 0;
-	for (uint32 i = 0; i < m_NumFragmentStorageBuffersBound; ++i)
+	if (highestStorageIndex > 0)
 	{
-		if (m_FragmentStorageBuffers[i])
-		{
-			SDLGPUBuffer* sbuf = static_cast<SDLGPUBuffer*>(m_FragmentStorageBuffers[i]);
-			fragmentStorageBindings[i] = static_cast<SDL_GPUBuffer*>(sbuf->GetNativeHandle());
-			if (!fragmentStorageBindings[i]) return EResult::Fail;
-			highestFStorageIndex = i + 1;
-		}
-	}
-	if (highestFStorageIndex > 0)
-	{
-		SDL_BindGPUFragmentStorageBuffers(m_CurrentRenderPass, 0, fragmentStorageBindings, highestFStorageIndex);
+		SDL_BindGPUVertexStorageBuffers(m_CurrentRenderPass, 0, storageBindings, highestStorageIndex);
+		SDL_BindGPUFragmentStorageBuffers(m_CurrentRenderPass, 0, storageBindings, highestStorageIndex);
 	}
 
 	SDL_DrawGPUPrimitives(m_CurrentRenderPass, count, 1, 0, 0);
@@ -902,39 +785,26 @@ EResult SDLGPURHI::DrawIndexed(uint32 count)
 		SDL_BindGPUVertexBuffers(m_CurrentRenderPass, 0, vertexBindings, highestVBIndex);
 	}
 
-	// Vertex Storage Buffer Binding
-	SDL_GPUBuffer* vertexStorageBindings[MAX_STORAGE_BUFFERS] = { nullptr };
-	uint32 highestVStorageIndex = 0;
-	for (uint32 i = 0; i < m_NumVertexStorageBuffersBound; ++i)
+	SDL_GPUBuffer* storageBindings[MAX_STORAGE_BUFFERS] = { nullptr };
+	uint32 highestStorageIndex = 0;
+
+	for (uint32 i = 0; i < MAX_STORAGE_BUFFERS; ++i)
 	{
-		if (m_VertexStorageBuffers[i])
-		{
-			SDLGPUBuffer* sbuf = static_cast<SDLGPUBuffer*>(m_VertexStorageBuffers[i]);
-			vertexStorageBindings[i] = static_cast<SDL_GPUBuffer*>(sbuf->GetNativeHandle());
-			highestVStorageIndex = i + 1;
-		}
-	}
-	if (highestVStorageIndex > 0)
-	{
-		SDL_BindGPUVertexStorageBuffers(m_CurrentRenderPass, 0, vertexStorageBindings, highestVStorageIndex);
+		if (!m_StorageBuffers[i])
+			continue;
+
+		SDLGPUBuffer* sbuf = static_cast<SDLGPUBuffer*>(m_StorageBuffers[i]);
+		SDL_GPUBuffer* nativeBuffer = static_cast<SDL_GPUBuffer*>(sbuf->GetNativeHandle());
+		if (!nativeBuffer) return EResult::Fail;
+
+		storageBindings[i] = nativeBuffer;
+		highestStorageIndex = i + 1;
 	}
 
-	// Fragment Storage Buffer Binding
-	SDL_GPUBuffer* fragmentStorageBindings[MAX_STORAGE_BUFFERS] = { nullptr };
-	uint32 highestFStorageIndex = 0;
-	for (uint32 i = 0; i < m_NumFragmentStorageBuffersBound; ++i)
+	if (highestStorageIndex > 0)
 	{
-		if (m_FragmentStorageBuffers[i])
-		{
-			SDLGPUBuffer* sbuf = static_cast<SDLGPUBuffer*>(m_FragmentStorageBuffers[i]);
-			fragmentStorageBindings[i] = static_cast<SDL_GPUBuffer*>(sbuf->GetNativeHandle());
-			if (!fragmentStorageBindings[i]) return EResult::Fail;
-			highestFStorageIndex = i + 1;
-		}
-	}
-	if (highestFStorageIndex > 0)
-	{
-		SDL_BindGPUFragmentStorageBuffers(m_CurrentRenderPass, 0, fragmentStorageBindings, highestFStorageIndex);
+		SDL_BindGPUVertexStorageBuffers(m_CurrentRenderPass, 0, storageBindings, highestStorageIndex);
+		SDL_BindGPUFragmentStorageBuffers(m_CurrentRenderPass, 0, storageBindings, highestStorageIndex);
 	}
 
 	// Index Buffer Binding
@@ -954,7 +824,7 @@ EResult SDLGPURHI::DrawIndexed(uint32 count)
 		return EResult::InvalidArgument;
 	}
 	SDL_BindGPUIndexBuffer(m_CurrentRenderPass, &indexBinding, indexSize);
-	// 최종 DrawIndexed 슛
+	// 최종 DrawIndexed
 	SDL_DrawGPUIndexedPrimitives(m_CurrentRenderPass, count, 1, 0, 0, 0);
 
 	return EResult::Success;

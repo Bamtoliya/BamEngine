@@ -4,6 +4,7 @@
 #include "RectTransform.h"
 #include "SelectionManager.h"
 #include "UICanvas.h"
+#include "ImGuiManager.h"
 
 void UIViewportPanel::Initialize(void* arg)
 {
@@ -32,22 +33,22 @@ void UIViewportPanel::PrepareRenderTargetsAndPasses(uint32 width, uint32 height)
     m_UIColorRTName = prefix + L"UIColor";
 	m_VirtualCanvasRTName = prefix + L"VirtualCanvas";
     RenderTargetDesc colorDesc = {
-        ETextureFormat::R8G8B8A8_UNORM,
-        ETextureUsage::RenderTarget | ETextureUsage::Sampler,
-        ERenderTargetBindFlag::RTBF_RenderTarget | ERenderTargetBindFlag::RTBF_ShaderResource,
-        ERenderTargetType::Color,
-        ETextureDimension::Texture2D,
-        width, height,
-        vec4(0.f, 0.f, 0.f, 1.f),
-        m_UIColorRTName
+		.textureDesc = {
+            .width = width,
+            .height = height,
+			.usage = ETextureUsage::RenderTarget | ETextureUsage::Sampler,
+		},
+		.name = m_UIColorRTName
     };
     RenderTargetManager::Get().CreateRenderTarget(&colorDesc);
 
     RenderTargetDesc virtualCanvasDesc = {
-        ETextureFormat::R8G8B8A8_UNORM, ETextureUsage::RenderTarget | ETextureUsage::Sampler,
-        ERenderTargetBindFlag::RTBF_RenderTarget | ERenderTargetBindFlag::RTBF_ShaderResource,
-        ERenderTargetType::Color, ETextureDimension::Texture2D,
-        (uint32)m_UIDesignWidth, (uint32)m_UIDesignHeight, vec4(0.f, 0.f, 0.f, 0.f), m_VirtualCanvasRTName
+        .textureDesc = {
+            .width = (uint32)m_UIDesignWidth,
+            .height = (uint32)m_UIDesignHeight,
+            .usage = ETextureUsage::RenderTarget | ETextureUsage::Sampler,
+        },
+        .name = m_VirtualCanvasRTName
     };
     RenderTargetManager::Get().CreateRenderTarget(&virtualCanvasDesc);
 
@@ -57,14 +58,14 @@ void UIViewportPanel::PrepareRenderTargetsAndPasses(uint32 width, uint32 height)
 		prefix + L"UIOverlayPass", {}, L"",
 		ERenderPassLoadOperation::RPLO_Clear, ERenderPassStoreOperation::RPSO_Store,
 		ERenderPassLoadOperation::RPLO_Clear, ERenderPassStoreOperation::RPSO_Store,
-		vec4(0.f, 0.f, 0.f, 0.f), 200, ERenderSortType::FrontToBack, ERenderPassType::UI,
+		vec4(0.f, 0.f, 0.f, -1.f), 200, ERenderSortType::FrontToBack, ERenderPassType::UI,
 		EBlendMode::Opaque | EBlendMode::Masked | EBlendMode::AlphaBlend | EBlendMode::Additive | EBlendMode::NonPremultiplied);
 
     m_ClearPassID = rpMgr.RegisterRenderPass(
         prefix + L"ClearPass", {}, L"",
         ERenderPassLoadOperation::RPLO_Clear, ERenderPassStoreOperation::RPSO_Store,
         ERenderPassLoadOperation::RPLO_Clear, ERenderPassStoreOperation::RPSO_Store,
-        vec4(0.1f, 0.1f, 0.1f, 1.f), 10, ERenderSortType::None, ERenderPassType::Custom,
+        vec4(0.1f, 0.1f, 0.1f, -1.f), 10, ERenderSortType::None, ERenderPassType::Custom,
         EBlendMode::None);
 }
 
@@ -165,7 +166,7 @@ void UIViewportPanel::DrawCanvasOverlay()
     if (!valid) return;
     // 투영된 영역에 캔버스 이미지 출력
     dl->AddImageQuad(
-        (ImTextureID)canvasRT->GetTexture()->GetNativeHandle(),
+        ImGuiManager::Get().GetImGuiTextureID(canvasRT->GetTexture()),
         screenCorners[0], screenCorners[1], screenCorners[2], screenCorners[3]
     );
     // 캔버스 바운드 (외곽선) 그리기
@@ -514,6 +515,7 @@ void UIViewportPanel::SubmitUIOverlayPass(const wstring& currentRT)
     RenderPassManager::Get().GetRenderPassByID(m_UIOverlayPassID)->SetColorAttachments({ currentRT });
 }
 #pragma endregion
+
 #pragma region Inputs
 void UIViewportPanel::KeyboardInput()
 {

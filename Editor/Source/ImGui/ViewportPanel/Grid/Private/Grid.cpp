@@ -15,41 +15,39 @@ void Grid::Initialize(const wstring& prefix)
 void Grid::PrepareShaders()
 {
     ResourceManager& resourceManager = ResourceManager::Get();
+
     ShaderDesc gridVsDesc = {};
-    gridVsDesc.Key = L"InfiniteGridVS";
-    gridVsDesc.Path = L"Resources/Shader/infinite_grid.vert.spv";
-    gridVsDesc.spirvPath = L"Resources/Shader/infinite_grid.vert.spv";
-    gridVsDesc.shaderType = EShaderType::Vertex;
-    gridVsDesc.entryPoint = "main";
-    resourceManager.LoadResource<Shader>(&gridVsDesc);
     {
-        auto handle = resourceManager.GetResourceHandle<Shader>(L"InfiniteGridVS");
-        resourceManager.SaveToBinaryFile(handle.Get(), L"Resources/Shader/infinite_grid.vert.bamshader");
+        gridVsDesc.Key          = L"InfiniteGridVS";
+        gridVsDesc.Path         = L"Resources/Shader/bin/dxil/infiniteGridVS.cso";
+        //gridVsDesc.spirvPath    = L"Resources/Shader/bin/spirv/infinite_gridVS.spv";
+        gridVsDesc.shaderType = EShaderType::Vertex;
+        gridVsDesc.entryPoint = "main";
+        auto handle = resourceManager.LoadResource<Shader>(&gridVsDesc);
+        //resourceManager.SaveToBinaryFile(handle.Get(), L"Resources/Shader/infinite_grid.vert.bamshader");
     }
+    
 
     ShaderDesc grid2DPsDesc = {};
-    grid2DPsDesc.Key = L"InfiniteGrid2DPS";
-    grid2DPsDesc.Path = L"Resources/Shader/infinite_grid_2d.frag.spv";
-    grid2DPsDesc.spirvPath = L"Resources/Shader/infinite_grid_2d.frag.spv";
-    grid2DPsDesc.shaderType = EShaderType::Pixel;
-    grid2DPsDesc.entryPoint = "main";
-    resourceManager.LoadResource<Shader>(&grid2DPsDesc);
     {
-        auto handle = resourceManager.GetResourceHandle<Shader>(L"InfiniteGrid2DPS");
-        resourceManager.SaveToBinaryFile(handle.Get(), L"Resources/Shader/infinite_grid_2d.frag.bamshader");
+        grid2DPsDesc.Key        = L"InfiniteGrid2DPS";
+        grid2DPsDesc.Path       = L"Resources/Shader/bin/dxil/infiniteGrid2DPS.cso";
+        //grid2DPsDesc.spirvPath  = L"Resources/Shader/bin/spirv/infiniteGrid2DPS.spv";
+        grid2DPsDesc.shaderType = EShaderType::Fragment;
+        grid2DPsDesc.entryPoint = "main";
+        auto handle = resourceManager.LoadResource<Shader>(&grid2DPsDesc);
+        //resourceManager.SaveToBinaryFile(handle.Get(), L"Resources/Shader/infinite_grid_2d.frag.bamshader");
     }
 
-
     ShaderDesc grid3DPsDesc = {};
-    grid3DPsDesc.Key = L"InfiniteGrid3DPS";
-    grid3DPsDesc.Path = L"Resources/Shader/infinite_grid.frag.spv";
-    grid3DPsDesc.spirvPath = L"Resources/Shader/infinite_grid.frag.spv";
-    grid3DPsDesc.shaderType = EShaderType::Pixel;
-    grid3DPsDesc.entryPoint = "main";
-    resourceManager.LoadResource<Shader>(&grid3DPsDesc);
     {
-        auto handle = resourceManager.GetResourceHandle<Shader>(L"InfiniteGrid3DPS");
-        resourceManager.SaveToBinaryFile(handle.Get(), L"Resources/Shader/infinite_grid.frag.bamshader");
+        grid3DPsDesc.Key = L"InfiniteGrid3DPS";
+        grid3DPsDesc.Path = L"Resources/Shader/bin/dxil/infiniteGridPS.cso";
+        //grid3DPsDesc.spirvPath = L"Resources/Shader/bin/spirv/infiniteGridPS.spv";
+        grid3DPsDesc.shaderType = EShaderType::Fragment;
+        grid3DPsDesc.entryPoint = "main";
+        auto handle = resourceManager.LoadResource<Shader>(&grid3DPsDesc);
+        //resourceManager.SaveToBinaryFile(handle.Get(), L"Resources/Shader/infinite_grid.frag.bamshader");
     }
 }
 

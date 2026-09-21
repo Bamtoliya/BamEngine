@@ -9,7 +9,7 @@ enum class EViewportCameraType : uint8
 	Orthographic,
 };
 
-struct tagCameraViewportPanelDesc : tagViewportPanelDesc
+struct CameraViewportPanelDesc : ViewportPanelDesc
 {
 	EViewportCameraType CameraType = EViewportCameraType::Orthographic;
 	bool IsSceneCamera = false; // 씬 카메라로 사용할지 여부 (기본값: false)
@@ -25,7 +25,7 @@ class InspectorPanel;
 class CameraViewportPanel : public BaseViewportPanel
 {
 protected:
-	using DESC = tagCameraViewportPanelDesc;
+	using DESC = CameraViewportPanelDesc;
 #pragma region Constructor&Destructor
 public:
 	CameraViewportPanel() { m_Name = L"Viewport Panel with Camera"; };

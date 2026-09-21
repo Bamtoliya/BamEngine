@@ -81,7 +81,7 @@ EResult LightManager::Bind(uint32 slot)
 	if (IsFailure(UpdateLightBuffer())) return EResult::Fail;
 	if (!m_LightBuffer) return EResult::Fail;
 
-	return m_RHI->BindFragmentStorageBuffers(slot, &m_LightBuffer, 1);
+	return m_RHI->BindStorageBuffer(m_LightBuffer, slot);
 }
 EResult LightManager::UpdateLightBuffer()
 {

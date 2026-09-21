@@ -57,7 +57,7 @@ EResult SDLGPUShader::Initialize(const DESC& desc)
     case EShaderType::Vertex:
         createInfo.stage = SDL_GPU_SHADERSTAGE_VERTEX;
         break;
-    case EShaderType::Pixel:
+    case EShaderType::Fragment:
         createInfo.stage = SDL_GPU_SHADERSTAGE_FRAGMENT;
         break;
     case EShaderType::Compute:

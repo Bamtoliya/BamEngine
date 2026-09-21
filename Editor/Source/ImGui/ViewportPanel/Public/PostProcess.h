@@ -7,13 +7,13 @@ namespace
 {
 	static constexpr uint32 MAX_PP_PASSES = 16;
 
-	struct tagViewportPassInfo
+	struct ViewportPassInfo
 	{
 		wstring Name;
 		bool	Enabled;
 	};
 
-	struct tagPPEffect
+	struct PPEffect
 	{
 		wstring Name;
 		bool Enabled = false;
@@ -21,7 +21,7 @@ namespace
 		vector<uint8> Parameters;
 	};
 
-	struct tagToneMappingParams
+	struct ToneMappingParams
 	{
 		f32 exposure = 1.0f;
 		f32 gamma = 2.2f;
@@ -75,7 +75,7 @@ public:
 
 private:
 	Engine::RHIPipeline* m_Pipeline = nullptr;
-	tagToneMappingParams m_Params; // 기존 구조체 재활용 (추후 Engine쪽으로 옮겨도 됨)
+	ToneMappingParams m_Params; // 기존 구조체 재활용 (추후 Engine쪽으로 옮겨도 됨)
 };
 
 // -------------------------------------------------------------

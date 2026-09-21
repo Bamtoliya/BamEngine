@@ -121,20 +121,20 @@ void SceneViewportPanel::PrepareRenderTargetsAndPasses(uint32 width, uint32 heig
 	RenderTargetDesc gbufferRTDescs[] =
 	{
 		//GBuffers
-		{ETextureFormat::R8G8B8A8_UNORM,		ETextureUsage::RenderTarget | ETextureUsage::Sampler,		ERenderTargetBindFlag::RTBF_RenderTarget | ERenderTargetBindFlag::RTBF_ShaderResource, ERenderTargetType::GBuffer,		ETextureDimension::Texture2D, width, height, vec4(0.f), L"GBuffer_Diffuse"},
-		{ETextureFormat::R16G16B16A16_FLOAT,	ETextureUsage::RenderTarget | ETextureUsage::Sampler,		ERenderTargetBindFlag::RTBF_RenderTarget | ERenderTargetBindFlag::RTBF_ShaderResource, ERenderTargetType::GBuffer,		ETextureDimension::Texture2D, width, height, vec4(0.f), L"GBuffer_Normal"},
-		{ETextureFormat::R8G8B8A8_UNORM,		ETextureUsage::RenderTarget | ETextureUsage::Sampler,		ERenderTargetBindFlag::RTBF_RenderTarget | ERenderTargetBindFlag::RTBF_ShaderResource, ERenderTargetType::GBuffer,		ETextureDimension::Texture2D, width, height, vec4(0.f), L"GBuffer_PBR"},
-		{ETextureFormat::R8G8B8A8_UNORM,		ETextureUsage::RenderTarget | ETextureUsage::Sampler,		ERenderTargetBindFlag::RTBF_RenderTarget | ERenderTargetBindFlag::RTBF_ShaderResource, ERenderTargetType::GBuffer,		ETextureDimension::Texture2D, width, height, vec4(0.f), L"GBuffer_Emission"},
-		{ETextureFormat::R32G32B32A32_FLOAT,	ETextureUsage::RenderTarget | ETextureUsage::Sampler,		ERenderTargetBindFlag::RTBF_RenderTarget | ERenderTargetBindFlag::RTBF_ShaderResource, ERenderTargetType::GBuffer,		ETextureDimension::Texture2D, width, height, vec4(0.f), L"GBuffer_Position"},
+		{{width, height, 1, 1, 1, ETextureSampleCount::TextureSampleCount1, ETextureFormat::R8G8B8A8_UNORM, ETextureDimension::Texture2D, ETextureUsage::RenderTarget | ETextureUsage::Sampler, nullptr, 0, false, vec4(0.f)}, L"GBuffer_Diffuse"},
+		{{width, height, 1, 1, 1, ETextureSampleCount::TextureSampleCount1, ETextureFormat::R16G16B16A16_FLOAT, ETextureDimension::Texture2D, ETextureUsage::RenderTarget | ETextureUsage::Sampler, nullptr, 0, false, vec4(0.f)}, L"GBuffer_Normal"},
+		{{width, height, 1, 1, 1, ETextureSampleCount::TextureSampleCount1, ETextureFormat::R8G8B8A8_UNORM, ETextureDimension::Texture2D, ETextureUsage::RenderTarget | ETextureUsage::Sampler, nullptr, 0, false, vec4(0.f)}, L"GBuffer_PBR"},
+		{{width, height, 1, 1, 1, ETextureSampleCount::TextureSampleCount1, ETextureFormat::R8G8B8A8_UNORM, ETextureDimension::Texture2D, ETextureUsage::RenderTarget | ETextureUsage::Sampler, nullptr, 0, false, vec4(0.f)}, L"GBuffer_Emission"},
+		{{width, height, 1, 1, 1, ETextureSampleCount::TextureSampleCount1, ETextureFormat::R32G32B32A32_FLOAT, ETextureDimension::Texture2D, ETextureUsage::RenderTarget | ETextureUsage::Sampler, nullptr, 0, false, vec4(0.f)}, L"GBuffer_Position"},
 		//ShadowDepth
-		{ETextureFormat::D32_FLOAT,				ETextureUsage::DepthStencilTarget | ETextureUsage::Sampler, ERenderTargetBindFlag::RTBF_DepthStencil | ERenderTargetBindFlag::RTBF_ShaderResource, ERenderTargetType::DepthStencil, ETextureDimension::Texture2D, 4096, 4096, vec4(0.f), L"ShadowDepth"},
+		{{4096, 4096, 1, 1, 1, ETextureSampleCount::TextureSampleCount1, ETextureFormat::D32_FLOAT, ETextureDimension::Texture2D, ETextureUsage::DepthStencilTarget | ETextureUsage::Sampler, nullptr, 0, false, vec4(0.f)}, L"ShadowDepth"},
 		//Depth
-		{ETextureFormat::D24_UNORM_S8_UINT,		ETextureUsage::DepthStencilTarget | ETextureUsage::Sampler, ERenderTargetBindFlag::RTBF_DepthStencil | ERenderTargetBindFlag::RTBF_ShaderResource, ERenderTargetType::DepthStencil, ETextureDimension::Texture2D, width, height, vec4(0.f), L"Depth"},
+		{{4096, 4096, 1, 1, 1, ETextureSampleCount::TextureSampleCount1, ETextureFormat::D24_UNORM_S8_UINT, ETextureDimension::Texture2D, ETextureUsage::DepthStencilTarget | ETextureUsage::Sampler, nullptr, 0, false, vec4(0.f)}, L"Depth"},
 		//LightingColor
-		{ETextureFormat::R8G8B8A8_UNORM,		ETextureUsage::RenderTarget | ETextureUsage::Sampler,		ERenderTargetBindFlag::RTBF_RenderTarget | ERenderTargetBindFlag::RTBF_ShaderResource, ERenderTargetType::Color,		ETextureDimension::Texture2D, width, height, vec4(0.f, 0.f, 0.f, 1.f), L"LightingColor"},
+		{{width, height, 1, 1, 1, ETextureSampleCount::TextureSampleCount1, ETextureFormat::R8G8B8A8_UNORM, ETextureDimension::Texture2D, ETextureUsage::RenderTarget | ETextureUsage::Sampler, nullptr, 0, false, vec4(0.f, 0.f, 0.f, 1.f)}, L"LightingColor"},
 		//Ping-pong RTs
-		{ETextureFormat::R8G8B8A8_UNORM,		ETextureUsage::RenderTarget | ETextureUsage::Sampler,		ERenderTargetBindFlag::RTBF_RenderTarget | ERenderTargetBindFlag::RTBF_ShaderResource, ERenderTargetType::Color,		ETextureDimension::Texture2D, width, height, vec4(0.f, 0.f, 0.f, 1.f), L"PP_A"},
-		{ETextureFormat::R8G8B8A8_UNORM,		ETextureUsage::RenderTarget | ETextureUsage::Sampler,		ERenderTargetBindFlag::RTBF_RenderTarget | ERenderTargetBindFlag::RTBF_ShaderResource, ERenderTargetType::Color,		ETextureDimension::Texture2D, width, height, vec4(0.f, 0.f, 0.f, 1.f), L"PP_B"},
+		{{width, height, 1, 1, 1, ETextureSampleCount::TextureSampleCount1, ETextureFormat::R8G8B8A8_UNORM, ETextureDimension::Texture2D, ETextureUsage::RenderTarget | ETextureUsage::Sampler, nullptr, 0, false, vec4(0.f, 0.f, 0.f, 1.f)}, L"PP_A"},
+		{{width, height, 1, 1, 1, ETextureSampleCount::TextureSampleCount1, ETextureFormat::R8G8B8A8_UNORM, ETextureDimension::Texture2D, ETextureUsage::RenderTarget | ETextureUsage::Sampler, nullptr, 0, false, vec4(0.f, 0.f, 0.f, 1.f)}, L"PP_B"},
 	};
 
 	for (auto& rtDesc : gbufferRTDescs)
@@ -252,6 +252,7 @@ void SceneViewportPanel::Free()
 }
 #pragma endregion
 
+#pragma region Loop
 void SceneViewportPanel::Update(f32 dt)
 {
 	CalculateRenderResolution(m_PanelWidth, m_PanelHeight);
@@ -260,7 +261,7 @@ void SceneViewportPanel::Update(f32 dt)
 	{
 		m_OwnedCamera->HandleInput(dt);
 	}
-		
+
 
 	if (m_OwnedCamera)
 	{
@@ -316,9 +317,9 @@ void SceneViewportPanel::Draw()
 {
 	__super::Draw();
 }
+#pragma endregion
 
 #pragma region Custom Draws
-
 void SceneViewportPanel::DrawCustomOptions()
 {
 	DrawResolutionMenu();
@@ -975,8 +976,7 @@ void SceneViewportPanel::SubmitLightingPass(Camera* camera)
 
 			CameraBuffer camBuf = camera->GetCameraBuffer();
 			camBuf.time = dt;
-			rhi->BindConstantBuffer(&camBuf, sizeof(CameraBuffer), 0, EShaderType::Vertex);
-			rhi->BindConstantBuffer(&camBuf, sizeof(CameraBuffer), 0, EShaderType::Pixel);
+			rhi->BindConstantBuffer(&camBuf, sizeof(CameraBuffer), 0);
 			rhi->BindTextureSampler(
 				rtMgr.GetRenderTarget(prefix + L"GBuffer_Diffuse")->GetTexture(),
 				sampler, 0);
@@ -997,10 +997,9 @@ void SceneViewportPanel::SubmitLightingPass(Camera* camera)
 				sampler, 5);
 			// Lighting 파이프라인 바인딩
 			{
-
 				CameraBuffer shadowCam = LightManager::Get().GetShadowCameraBuffer(0u);
 				LightShadowData shadowCamData = LightManager::Get().GetShadowData(0u);
-				rhi->BindConstantBuffer(&shadowCamData, sizeof(shadowCamData), 1, EShaderType::Pixel);
+				rhi->BindConstantBuffer(&shadowCamData, sizeof(shadowCamData), 1);
 			}
 			rhi->BindPipeline(m_LightingPipeline);
 

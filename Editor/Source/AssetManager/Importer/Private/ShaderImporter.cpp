@@ -13,7 +13,7 @@ namespace
         const std::wstring shaderExt = sourcePath.stem().extension().wstring();
 
         if (shaderExt == L".vert") return EShaderType::Vertex;
-        if (shaderExt == L".frag") return EShaderType::Pixel;
+        if (shaderExt == L".frag") return EShaderType::Fragment;
         if (shaderExt == L".comp") return EShaderType::Compute;
         if (shaderExt == L".geom") return EShaderType::Geometry;
         if (shaderExt == L".tesc") return EShaderType::Hull;

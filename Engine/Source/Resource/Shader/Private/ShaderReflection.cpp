@@ -8,7 +8,7 @@ static EShaderType ToShaderType(SpvExecutionModel model)
     switch (model)
     {
     case SpvExecutionModelVertex: return EShaderType::Vertex;
-    case SpvExecutionModelFragment: return EShaderType::Pixel;
+    case SpvExecutionModelFragment: return EShaderType::Fragment;
     case SpvExecutionModelGLCompute: return EShaderType::Compute;
     case SpvExecutionModelGeometry: return EShaderType::Geometry;
     case SpvExecutionModelTessellationControl: return EShaderType::Hull;

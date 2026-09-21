@@ -135,8 +135,11 @@ CameraBuffer Camera::GetCameraBuffer() const
 {
 	CameraBuffer buffer;
 	buffer.viewMatrix = m_ViewMatrix;
+	buffer.invViewMatrix = m_ViewMatrixInv;
 	buffer.projMatrix = m_ProjMatrix;
+	buffer.invProjMatrix = m_ProjMatrixInv;
 	buffer.viewProjMatrix = m_ProjMatrix * m_ViewMatrix;
+	buffer.invViewProjMatrix = m_ProjMatrixInv * m_ViewMatrixInv;
 	if (m_Owner)
 		buffer.cameraPosition = m_Owner->GetComponent<Transform>()->GetWorldPosition();
 	return buffer;

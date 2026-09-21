@@ -31,10 +31,10 @@ class ENGINE_API RHIResource : public Base
 protected:
 	RHIResource(RHI* rhi) : m_RHI{ rhi } {}
 	RHIResource(ERHIResourceType type) : m_ResourceType{ type } {}
-	RHIResource(RHI* rhi, ERHIResourceType type) : m_RHI{ rhi }, m_ResourceType{ type } { Safe_AddRef(m_RHI); }
+	RHIResource(RHI* rhi, ERHIResourceType type) : m_RHI{ rhi }, m_ResourceType{ type } {}
 	virtual ~RHIResource() = default;
 public:
-	virtual void Free() override { Safe_Release(m_RHI); }
+	virtual void Free() override { m_RHI = nullptr; }
 public:
 	virtual EResult Bind(uint32 slot = 0) { return EResult::NotImplemented; }
 public:

@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "RHIResource.h"
 enum class ERHIBufferType
@@ -45,6 +45,7 @@ public:
 	ERHIBufferType GetBufferType() const { return m_BufferType; }
 	uint32 GetSize() const { return m_Size; }
 	uint32 GetStride() const { return m_Stride; }
+	virtual void* GetMappedPointer() const { return nullptr; }
 #pragma endregion
 
 #pragma region Setter

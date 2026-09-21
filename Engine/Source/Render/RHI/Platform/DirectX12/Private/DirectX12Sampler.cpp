@@ -30,6 +30,7 @@ EResult DirectX12Sampler::Initialize(const DESC& desc)
     samplerDesc.MaxLOD = D3D12_FLOAT32_MAX;
     // 3. 디바이스에 샘플러 굽기 (지정된 Handle 위치에 기록)
     device->CreateSampler(&samplerDesc, m_CPUHandle);
+    m_GPUHandle = dxRHI->GetSamplerAllocator()->GetGPUHandle(m_HeapIndex);
     return EResult::Success;
 }
 

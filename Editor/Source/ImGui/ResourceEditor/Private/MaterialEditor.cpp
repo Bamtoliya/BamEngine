@@ -96,60 +96,60 @@ void MaterialEditor::Initialize()
     wstring prefix = L"MatPreview_";
 
     // 1. G-Buffer 5종 생성
-    struct { const wchar_t* suffix; ETextureFormat fmt; } gBufferDefs[] = {
-        { L"GBuffer_Diffuse",  ETextureFormat::R8G8B8A8_UNORM },
-        { L"GBuffer_Normal",   ETextureFormat::R16G16B16A16_FLOAT },
-        { L"GBuffer_PBR",      ETextureFormat::R8G8B8A8_UNORM },
-        { L"GBuffer_Emission", ETextureFormat::R8G8B8A8_UNORM },
-        { L"GBuffer_Position", ETextureFormat::R32G32B32A32_FLOAT },
+    struct { const wchar_t* suffix; ETextureFormat fmt; ETextureUsage usage; } gBufferDefs[] = {
+        { L"GBuffer_Diffuse",  ETextureFormat::R8G8B8A8_UNORM, ETextureUsage::RenderTarget | ETextureUsage::Sampler },
+        { L"GBuffer_Normal",   ETextureFormat::R16G16B16A16_FLOAT, ETextureUsage::RenderTarget | ETextureUsage::Sampler },
+        { L"GBuffer_PBR",      ETextureFormat::R8G8B8A8_UNORM, ETextureUsage::RenderTarget | ETextureUsage::Sampler },
+        { L"GBuffer_Emission", ETextureFormat::R8G8B8A8_UNORM, ETextureUsage::RenderTarget | ETextureUsage::Sampler },
+        { L"GBuffer_Position", ETextureFormat::R32G32B32A32_FLOAT, ETextureUsage::RenderTarget | ETextureUsage::Sampler },
     };
     vector<wstring> gBufferNames;
-    for (int i = 0; i < 5; ++i)
+    int32 count = 0;
+    for (count = 0; count < 5; ++count)
     {
-        m_GBufferNames[i] = prefix + gBufferDefs[i].suffix;
+        m_GBufferNames[count] = prefix + gBufferDefs[count].suffix;
         RenderTargetDesc rtDesc = {};
-        rtDesc.name = m_GBufferNames[i];
-        rtDesc.width = w;
-        rtDesc.height = h;
-        rtDesc.format = gBufferDefs[i].fmt;
-        rtDesc.bindFlag = ERenderTargetBindFlag::RTBF_ShaderResource | ERenderTargetBindFlag::RTBF_RenderTarget;
-		rtDesc.usage = ETextureUsage::RenderTarget | ETextureUsage::Sampler;
+        rtDesc.name = m_GBufferNames[count];
+		RHITextureDesc& texDesc = rtDesc.textureDesc;
+		texDesc.width = w;
+		texDesc.height = h;
+		texDesc.format = gBufferDefs[count].fmt;
+		texDesc.usage = gBufferDefs[count].usage;
         rtMgr.CreateRenderTarget(&rtDesc);
-        gBufferNames.push_back(m_GBufferNames[i]);
+        gBufferNames.push_back(m_GBufferNames[count]);
     }
 
     // 2. Depth, Shadow(Dummy), FinalColor 렌더타겟 생성
     m_DepthName = prefix + L"Depth";
     RenderTargetDesc depthDesc = {};
     depthDesc.name = m_DepthName;
-    depthDesc.width = w;
-    depthDesc.height = h;
-    depthDesc.format = ETextureFormat::D24_UNORM_S8_UINT;
-    depthDesc.type = ERenderTargetType::DepthStencil;
-    depthDesc.bindFlag = ERenderTargetBindFlag::RTBF_DepthStencil | ERenderTargetBindFlag::RTBF_ShaderResource;
-    depthDesc.usage = ETextureUsage::DepthStencilTarget | ETextureUsage::Sampler;
+    depthDesc.textureDesc.width = w;
+    depthDesc.textureDesc.height = h;
+    depthDesc.textureDesc.format = ETextureFormat::D24_UNORM_S8_UINT;
+	depthDesc.textureDesc.usage = ETextureUsage::DepthStencilTarget | ETextureUsage::Sampler;
     rtMgr.CreateRenderTarget(&depthDesc);
 
     m_ShadowDepthName = prefix + L"ShadowDepth";
     RenderTargetDesc shadowDesc = {};
     shadowDesc.name = m_ShadowDepthName;
-    shadowDesc.width = w;
-    shadowDesc.height = h;
-    shadowDesc.format = ETextureFormat::D32_FLOAT;
-    shadowDesc.type = ERenderTargetType::DepthStencil;
-    shadowDesc.bindFlag = ERenderTargetBindFlag::RTBF_DepthStencil | ERenderTargetBindFlag::RTBF_ShaderResource;
-    shadowDesc.usage = ETextureUsage::DepthStencilTarget | ETextureUsage::Sampler;
+    shadowDesc.textureDesc.width = w;
+    shadowDesc.textureDesc.height = h;
+    shadowDesc.textureDesc.format = ETextureFormat::D32_FLOAT;
+    shadowDesc.textureDesc.usage = ETextureUsage::DepthStencilTarget | ETextureUsage::Sampler;
     rtMgr.CreateRenderTarget(&shadowDesc);
 
     m_FinalColorName = prefix + L"FinalColor";
     RenderTargetDesc finalDesc = {};
+	finalDesc.textureDesc.width = w;
+	finalDesc.textureDesc.height = h;
+	finalDesc.textureDesc.format = ETextureFormat::R8G8B8A8_UNORM;
+
     finalDesc.name = m_FinalColorName;
-    finalDesc.width = w;
-    finalDesc.height = h;
-    finalDesc.format = ETextureFormat::R8G8B8A8_UNORM;
-    finalDesc.clearColor = vec4(0.15f, 0.15f, 0.15f, 1.0f);
-    finalDesc.bindFlag = ERenderTargetBindFlag::RTBF_ShaderResource | ERenderTargetBindFlag::RTBF_RenderTarget;
-    finalDesc.usage = ETextureUsage::RenderTarget | ETextureUsage::Sampler;
+    finalDesc.textureDesc.width = w;
+    finalDesc.textureDesc.height = h;
+    finalDesc.textureDesc.format = ETextureFormat::R8G8B8A8_UNORM;
+    finalDesc.textureDesc.clearColor = vec4(0.15f, 0.15f, 0.15f, 1.0f);
+    finalDesc.textureDesc.usage = ETextureUsage::RenderTarget | ETextureUsage::Sampler;
     rtMgr.CreateRenderTarget(&finalDesc);
     m_FinalColorRT = rtMgr.GetRenderTarget(m_FinalColorName);
 
@@ -159,7 +159,7 @@ void MaterialEditor::Initialize()
         gBufferNames, m_DepthName,
         ERenderPassLoadOperation::RPLO_Clear, ERenderPassStoreOperation::RPSO_Store,
         ERenderPassLoadOperation::RPLO_Clear, ERenderPassStoreOperation::RPSO_Store,
-        vec4(0.f), 1000, ERenderSortType::None, ERenderPassType::Geometry
+        vec4(0.f, 0.f, 0.f, -1.f), 1000, ERenderSortType::None, ERenderPassType::Geometry
     );
 
     m_LightingPassID = rpMgr.RegisterRenderPass(
@@ -227,8 +227,8 @@ void MaterialEditor::Update(f32 dt)
         cb.cameraPosition = vec3(0.0f, 0.0f, -3.0f);
         cb.time = dt;
 
-        rhi->BindConstantBuffer(&cb, sizeof(CameraBuffer), 0, EShaderType::Vertex);
-        rhi->BindConstantBuffer(&cb, sizeof(CameraBuffer), 0, EShaderType::Pixel);
+        rhi->BindConstantBuffer(&cb, sizeof(CameraBuffer), 0);
+        rhi->BindConstantBuffer(&cb, sizeof(CameraBuffer), 0);
         };
 
     // [Pass 1] Geometry Pass: Sphere 구체를 그려 G-Buffer 5장 생성
@@ -245,7 +245,7 @@ void MaterialEditor::Update(f32 dt)
 
             struct SceneUBO { mat4 worldMatrix; };
             SceneUBO uboData = { glm::identity<mat4>() };
-            rhi->BindConstantBuffer(&uboData, sizeof(SceneUBO), 1, EShaderType::Vertex);
+            rhi->BindConstantBuffer(&uboData, sizeof(SceneUBO), 1);
 
             if (IsFailure(mat->Bind(2))) return EResult::Fail;
 
@@ -297,7 +297,7 @@ void MaterialEditor::Update(f32 dt)
 
             // 셰도우 데이터 빈 구조체 바인딩 (에러 방지용)
             struct tagLightShadowData { mat4 mat[4]; vec4 splits; } shadowData = {};
-            rhi->BindConstantBuffer(&shadowData, sizeof(shadowData), 1, EShaderType::Pixel);
+            rhi->BindConstantBuffer(&shadowData, sizeof(shadowData), 1);
 
             rhi->BindPipeline(m_LightingPipeline);
 

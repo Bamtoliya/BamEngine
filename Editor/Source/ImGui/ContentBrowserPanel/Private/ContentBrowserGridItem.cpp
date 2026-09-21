@@ -2,7 +2,7 @@
 #include "ContentBrowserGridItem.h"
 #include "SelectionManager.h"
 
-void ContentBrowserGridItem::Draw(const std::filesystem::directory_entry& directoryEntry, const std::filesystem::path& rootPath, void* thumbnailTexID, f32 thumbnailSize, f32 padding, std::filesystem::path& outRenamingPath, char* renameBuffer, size_t renameBufferSize, std::filesystem::path& currentDirectory, char* searchBuffer)
+void ContentBrowserGridItem::Draw(const std::filesystem::directory_entry& directoryEntry, const std::filesystem::path& rootPath, ImTextureID thumbnailTexID, f32 thumbnailSize, f32 padding, std::filesystem::path& outRenamingPath, char* renameBuffer, size_t renameBufferSize, std::filesystem::path& currentDirectory, char* searchBuffer)
 {
 	float filledSize = ImGui::GetContentRegionAvail().x;
 	const auto& path = directoryEntry.path();
@@ -47,7 +47,7 @@ void ContentBrowserGridItem::Draw(const std::filesystem::directory_entry& direct
 	ImGui::PopID();
 }
 
-void ContentBrowserGridItem::Thumbnail(const std::filesystem::directory_entry& directoryEntry, void* thumbnailTexID, f32 thumbnailSize, f32 padding)
+void ContentBrowserGridItem::Thumbnail(const std::filesystem::directory_entry& directoryEntry, ImTextureID thumbnailTexID, f32 thumbnailSize, f32 padding)
 {
 	std::string icon = ICON_FA_FILE;
 	ImVec4 typeColor = ImVec4(1.0f, 1.0f, 1.0f, 0.1f);
@@ -114,7 +114,7 @@ void ContentBrowserGridItem::Thumbnail(const std::filesystem::directory_entry& d
 
 	if (thumbnailTexID)
 	{
-		ImGui::ImageButton(buttonId.c_str(), (ImTextureID)thumbnailTexID, { thumbnailSize, thumbnailSize });
+		ImGui::ImageButton(buttonId.c_str(), thumbnailTexID, { thumbnailSize, thumbnailSize });
 	}
 	else
 	{

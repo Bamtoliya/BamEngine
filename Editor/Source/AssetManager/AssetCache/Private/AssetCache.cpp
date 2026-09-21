@@ -5,6 +5,7 @@
 #include "RHI.h"
 #include <shlobj.h> // Windows Shell API
 #include "AssetManager.h"
+#include "RHITexture.h"
 
 IMPLEMENT_SINGLETON(AssetCache)
 
@@ -43,23 +44,14 @@ void AssetCache::Update()
 		desc.dataSize = (uint32)task.Data.size();
 
 		RHITexture* rhiTexture = Renderer::Get().GetRHI()->CreateTexture(desc);
-		if (rhiTexture)
-		{
-			m_ThumbnailTextures[task.AssetPath] = rhiTexture;
-			m_ThumbnailCache[task.AssetPath] = (void*)(size_t)(rhiTexture->GetNativeHandle());
-		}
-		else
-		{
-			m_ThumbnailCache[task.AssetPath] = nullptr;
-		}
-		
+		m_ThumbnailCache.emplace(task.AssetPath, rhiTexture);	
 		m_LoadingPaths.erase(task.AssetPath);
 	}
 }
 #pragma endregion
 
 #pragma region Thumbnail Management
-void* AssetCache::GetThumbnail(const filesystem::path& assetPath)
+RHITexture* AssetCache::GetThumbnail(const filesystem::path& assetPath)
 {
     std::string pathStr = assetPath.string();
 
@@ -111,21 +103,20 @@ void* AssetCache::GetThumbnail(const filesystem::path& assetPath)
 
 void AssetCache::ClearCache(const filesystem::path& assetPath)
 {
-    std::string pathStr = assetPath.string();
-    if (m_ThumbnailTextures.count(pathStr))
-    {
-        Safe_Release(m_ThumbnailTextures[pathStr]);
-        m_ThumbnailTextures.erase(pathStr);
-    }
-    m_ThumbnailCache.erase(pathStr);
+    auto it = m_ThumbnailCache.find(assetPath.string());
+
+    if (it == m_ThumbnailCache.end())
+        return;
+
+    Safe_Release(it->second);
+    m_ThumbnailCache.erase(it);
 }
 void AssetCache::ClearAll()
 {
-	for (auto& [path, texture] : m_ThumbnailTextures)
+	for (auto& [path, texture] : m_ThumbnailCache)
 	{
 		Safe_Release(texture);
 	}
-	m_ThumbnailTextures.clear();
 	m_ThumbnailCache.clear();
 }
 

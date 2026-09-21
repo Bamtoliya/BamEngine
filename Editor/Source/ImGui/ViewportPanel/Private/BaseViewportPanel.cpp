@@ -6,6 +6,8 @@
 #include "SelectionManager.h"
 #include "InputManager.h"
 #include "ImViewGuizmo.h"
+#include "DirectX12Texture.h"
+#include "ImGuiManager.h"
 
 #pragma region Contructor&Destructor
 void BaseViewportPanel::Initialize(void* arg)
@@ -104,7 +106,21 @@ void BaseViewportPanel::DrawRenderTargetImage(const wstring& rtName)
 				m_ImageScreenPos,
 				ImVec2(m_ImageScreenPos.x + finalSize.x, m_ImageScreenPos.y + finalSize.y),
 				IM_COL32(50, 50, 50, 255));
-			ImTextureID textureID = (ImTextureID)texture->GetNativeHandle();
+			ImTextureID textureID = NULL;
+			textureID = ImGuiManager::Get().GetImGuiTextureID(texture);
+			//if (auto* dxTex = dynamic_cast<DirectX12Texture*>(texture))
+			//{
+			//	// DX12 + imgui_impl_dx12 규약: ImTextureID = GPU SRV handle.ptr
+			//	const D3D12_GPU_DESCRIPTOR_HANDLE gpu = dxTex->GetSRVGPUHandle();
+			//	IM_ASSERT(gpu.ptr != 0);
+			//	textureID = static_cast<ImTextureID>(gpu.ptr);
+			//}
+			//else
+			//{
+			//	// 다른 백엔드 fallback
+			//	textureID = (ImTextureID)texture->GetNativeHandle();
+			//}
+
 			ImGui::Image(textureID, finalSize);
 		}
 	}
@@ -212,7 +228,7 @@ void BaseViewportPanel::DrawRTItemContextMenu(const wstring& rtName)
 			while (ImGuiManager::Get().GetImGuiPanel(panelName))
 				panelName += L"_";
 
-			tagViewportPanelDesc desc;
+			ViewportPanelDesc desc;
 			desc.Name = panelName;
 			desc.RenderTargetWidth = m_RenderWidth;
 			desc.RenderTargetHeight = m_RenderHeight;

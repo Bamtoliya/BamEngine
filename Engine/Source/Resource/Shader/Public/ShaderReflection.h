@@ -5,7 +5,7 @@
 enum class EShaderType
 {
 	Vertex,
-	Pixel,
+	Fragment,
 	Compute,
 	Geometry,
 	Hull,

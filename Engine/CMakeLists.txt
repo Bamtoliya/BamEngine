@@ -1,57 +1,31 @@
 ﻿project(Engine)
 
-find_package(fmt CONFIG REQUIRED)
-find_package(SDL3 CONFIG REQUIRED)
-find_package(glm CONFIG REQUIRED)
-find_package(Vulkan REQUIRED)
-find_package(stb REQUIRED)
-find_package(lz4 CONFIG REQUIRED)
+# ==============================================================================
+# 1. CMake Modules & Dependencies (모듈 및 종속성 세팅)
+# ==============================================================================
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/CMake")
 
-find_package(directx-headers CONFIG REQUIRED)
+include(Dependencies)
 
-find_package(glslang CONFIG REQUIRED)
-find_package(SPIRV-Tools CONFIG REQUIRED)
-find_package(SPIRV-Tools-opt CONFIG REQUIRED)
-
-find_package(spirv_cross_core CONFIG REQUIRED)
-find_package(spirv_cross_glsl CONFIG REQUIRED)
-find_package(spirv_cross_hlsl CONFIG REQUIRED)
-find_package(spirv_cross_msl CONFIG REQUIRED)
-find_package(spirv_cross_cpp CONFIG REQUIRED)
-find_package(spirv_cross_reflect CONFIG REQUIRED)
-find_package(spirv_cross_c CONFIG REQUIRED)
-
-find_path(CPPCODEC_INCLUDE_DIRS "cppcodec/base64_rfc4648.hpp" REQUIRED)
-
-# [수정] 1. 구버전 리플렉션 번들 스크립트 인클루드 삭제
-# include("${CMAKE_SOURCE_DIR}/Projects/ReflectionCMake/ReflectionBundles.cmake")
-
+# ==============================================================================
+# 2. Source Files & Directories (소스 코드 및 경로 수집)
+# ==============================================================================
 set(ENGINE_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Source")
 set(ENGINE_PCH_HEADER "${ENGINE_SOURCE_DIR}/Core/Public/Engine_Includes.h")
+set(GENERATED_SOURCE "${ENGINE_SOURCE_DIR}/Core/Reflection/Private/Reflection.gen.cpp")
 
-# [수정] 2. 새로 생성되는 리플렉션 파일 경로로 변경
-set(GENERATED_SOURCE
-    "${ENGINE_SOURCE_DIR}/Core/Reflection/Private/Reflection.gen.cpp"
-)
-
+# 모든 파일 스캔 (GLOB_RECURSE)
 file(GLOB_RECURSE ENGINE_HEADERS CONFIGURE_DEPENDS "${ENGINE_SOURCE_DIR}/*.h")
 file(GLOB_RECURSE ENGINE_SOURCES CONFIGURE_DEPENDS "${ENGINE_SOURCE_DIR}/*.cpp")
 file(GLOB_RECURSE ENGINE_INLINE CONFIGURE_DEPENDS "${ENGINE_SOURCE_DIR}/*.inl")
-
-# [수정] 3. 구버전 Codegen 폴더 대신 새로 만든 AST 폴더의 파이썬 파일들을 추적
-file(GLOB_RECURSE REFLECTION_AST_SOURCES CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/Projects/ReflectionAST/*.py")
 file(GLOB_RECURSE ALL_SOURCE_FILES CONFIGURE_DEPENDS "${ENGINE_SOURCE_DIR}/*")
+file(GLOB_RECURSE REFLECTION_AST_SOURCES CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/Projects/ReflectionAST/*.py")
 
-list(APPEND ENGINE_SOURCES "${GENERATED_SOURCE}")
-list(APPEND ENGINE_SOURCES ${ENGINE_INLINE})
+# 소스 목록 취합 및 필터 폴더(Tree) 구조 생성
+list(APPEND ENGINE_SOURCES "${GENERATED_SOURCE}" ${ENGINE_INLINE})
 source_group(TREE "${ENGINE_SOURCE_DIR}" FILES ${ENGINE_HEADERS} ${ENGINE_SOURCES})
 
-set(SHADER_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../Resources/Shader")
-file(GLOB_RECURSE SHADER_SOURCES CONFIGURE_DEPENDS
-    "${SHADER_SOURCE_DIR}/*.vert"
-    "${SHADER_SOURCE_DIR}/*.frag"
-)
-
+# Public 인클루드 디렉토리 자동 추출 로직
 set(ENGINE_PUBLIC_INCLUDE_DIRS "")
 foreach(FILE_PATH ${ALL_SOURCE_FILES})
     get_filename_component(DIR_PATH "${FILE_PATH}" DIRECTORY)
@@ -64,95 +38,49 @@ if(ENGINE_PUBLIC_INCLUDE_DIRS)
     list(REMOVE_DUPLICATES ENGINE_PUBLIC_INCLUDE_DIRS)
 endif()
 
+# ==============================================================================
+# 3. Main Target Creation (엔진 라이브러리 타겟 생성)
+# ==============================================================================
 add_library(Engine SHARED
     ${ENGINE_HEADERS}
     ${ENGINE_SOURCES}
     $<TARGET_OBJECTS:ReflectionBamAdapterObjects>
- )
-
+)
 add_library(BamEngine::Engine ALIAS Engine)
 
-if(MSVC)
-    target_compile_options(Engine PRIVATE
-        $<$<CONFIG:Debug>:/ZI>
-        $<$<CONFIG:Debug>:/FS>
-        #/Zc:preprocessor
-        /MP
-        /bigobj
-    )
+# ==============================================================================
+# 4. Target Properties & Compile Options (타겟 속성 및 컴파일 플래그)
+# ==============================================================================
+# Unity Build 최적화 설정
+set_target_properties(Engine PROPERTIES UNITY_BUILD OFF)
+set_source_files_properties(Source/ECS/XXX.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION TRUE)
 
-    target_link_options(Engine PRIVATE
-        $<$<CONFIG:Debug>:/INCREMENTAL>
-    )
-endif()
-
-find_program(GLSLC glslc HINTS $ENV{VULKAN_SDK}/Bin)
-
-set(SPIRV_OUTPUTS "")
-foreach(SHADER ${SHADER_SOURCES})
-    get_filename_component(SHADER_DIR ${SHADER} DIRECTORY)
-    get_filename_component(SHADER_NAME ${SHADER} NAME)
-    set(SPIRV_OUTPUT "${SHADER_DIR}/${SHADER_NAME}.spv")
-
-    add_custom_command(
-        OUTPUT ${SPIRV_OUTPUT}
-        COMMAND ${GLSLC} ${SHADER} -o ${SPIRV_OUTPUT}
-        DEPENDS ${SHADER}
-        COMMENT "Compiling shader: ${SHADER_NAME} -> ${SHADER_NAME}.spv"
-    )
-
-    list(APPEND SPIRV_OUTPUTS ${SPIRV_OUTPUT})
-endforeach()
-
-add_custom_target(CompileShaders DEPENDS ${SPIRV_OUTPUTS})
-
-# 1. 올바른 Resources 폴더 경로(../) 지정
-set(SHADER_SOURCE_FILE "${CMAKE_CURRENT_SOURCE_DIR}/../Resources/Shader/default.hlsl")
-# 2. 런타임에 쉽게 로드하도록 결과물(.cso)도 Resources/Shader 폴더 안에 생성
-set(VS_OUTPUT_FILE "${CMAKE_CURRENT_SOURCE_DIR}/../Resources/Shader/default_vs.cso")
-set(PS_OUTPUT_FILE "${CMAKE_CURRENT_SOURCE_DIR}/../Resources/Shader/default_ps.cso")
-add_custom_command(
-    OUTPUT ${VS_OUTPUT_FILE}
-    COMMAND fxc.exe /T vs_5_0 /E VSMain /Fo ${VS_OUTPUT_FILE} ${SHADER_SOURCE_FILE}
-    DEPENDS ${SHADER_SOURCE_FILE}
-    COMMENT "Compiling Vertex Shader (HLSL)..."
-)
-add_custom_command(
-    OUTPUT ${PS_OUTPUT_FILE}
-    COMMAND fxc.exe /T ps_5_0 /E PSMain /Fo ${PS_OUTPUT_FILE} ${SHADER_SOURCE_FILE}
-    DEPENDS ${SHADER_SOURCE_FILE}
-    COMMENT "Compiling Pixel Shader (HLSL)..."
-)
-# 3. 이름 중복 방지를 위해 CompileHLSLShaders 로 명명
-add_custom_target(CompileHLSLShaders ALL DEPENDS ${VS_OUTPUT_FILE} ${PS_OUTPUT_FILE})
-
-# [수정] 4. 기존 add_reflection_bundle 매크로 대신 새로운 AST 제너레이터를 호출하는 타겟 생성
-add_custom_command(
-    OUTPUT "${GENERATED_SOURCE}"
-    COMMAND python "${CMAKE_SOURCE_DIR}/Projects/ReflectionAST/main.py" --source-root "${ENGINE_SOURCE_DIR}" --output "${GENERATED_SOURCE}"
-    DEPENDS ${ENGINE_HEADERS} ${REFLECTION_AST_SOURCES}
-    COMMENT "Generating Reflection Data via AST..."
-    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/Projects/ReflectionAST"
-)
-
-# [수정] 5. 쉐이더 컴파일과 더불어 리플렉션 코드 생성이 먼저 되도록 종속성 추가
-add_custom_target(GenerateReflectionAST DEPENDS "${GENERATED_SOURCE}")
-add_dependencies(Engine CompileShaders CompileHLSLShaders GenerateReflectionAST)
-
-set_target_properties(Engine PROPERTIES
-    UNITY_BUILD OFF
-)
-
-set_source_files_properties(
-    Source/ECS/XXX.cpp   # entt 사용 파일들
-    PROPERTIES SKIP_UNITY_BUILD_INCLUSION TRUE
-)
-
+# 컴파일 정의 (전처리기 매크로)
 target_compile_definitions(Engine PRIVATE
     ENGINE_EXPORTS
     BAMENGINE_PROJECT_ROOT="${CMAKE_SOURCE_DIR}"
 )
 
+# MSVC 전용 컴파일러 옵션
+if(MSVC)
+    target_compile_options(Engine PRIVATE
+        $<$<CONFIG:Debug>:/ZI>
+        $<$<CONFIG:Debug>:/FS>
+        /MP
+        /bigobj
+    )
+    target_link_options(Engine PRIVATE
+        $<$<CONFIG:Debug>:/INCREMENTAL>
+    )
+endif()
+
+# ==============================================================================
+# 5. Target Includes & Linking (헤더 참조 및 외부 라이브러리 링크)
+# ==============================================================================
+# 프리컴파일드 헤더(PCH) 적용
+target_precompile_headers(Engine PRIVATE ${ENGINE_PCH_HEADER})
+
+# 인클루드 디렉토리 연결
 target_include_directories(Engine
     PUBLIC
         ${ENGINE_PUBLIC_INCLUDE_DIRS}
@@ -161,8 +89,7 @@ target_include_directories(Engine
         ${ENGINE_SOURCE_DIR}
 )
 
-target_precompile_headers(Engine PRIVATE ${ENGINE_PCH_HEADER})
-
+# 외부 라이브러리 연결
 target_link_libraries(Engine
     PUBLIC
         Reflection::Core
@@ -175,8 +102,17 @@ target_link_libraries(Engine
         glslang::glslang
         spirv-cross-c
         lz4::lz4
-        # --- DirectX 12 라이브러리 추가 ---
         d3d12.lib
         dxgi.lib
         dxguid.lib
 )
+
+# ==============================================================================
+# 6. Custom Build Steps (커스텀 타겟 및 종속성 연결)
+# ==============================================================================
+# 외부 스크립트 모듈 실행 (타겟 생성)
+include(ShaderBuild)
+include(ReflectionBuild)
+
+# [가장 중요] 엔진 빌드 시작 '전'에 셰이더와 리플렉션 코드를 먼저 굽도록 종속성 강제
+add_dependencies(Engine CompileShaders GenerateReflectionAST)

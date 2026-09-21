@@ -9,7 +9,7 @@ class ContentBrowserGridItem
 public:
 	static void Draw(const std::filesystem::directory_entry& directoryEntry,
 		const std::filesystem::path& rootPath,
-		void* thumbnailTexID,
+		ImTextureID thumbnailTexID,
 		f32 thumbnailSize,
 		f32 padding,
 		std::filesystem::path& outRenamingPath,
@@ -19,7 +19,7 @@ public:
 		char* searchBuffer);
 
 private:
-	static void Thumbnail(const std::filesystem::directory_entry& directoryEntry, void* thumbnailTexID, f32 thumbnailSize, f32 padding);
+	static void Thumbnail(const std::filesystem::directory_entry& directoryEntry, ImTextureID thumbnailTexID, f32 thumbnailSize, f32 padding);
 	static void ContextMenu(const std::filesystem::path& path, std::filesystem::path& outRenamingPath, char* renameBuffer, size_t renameBufferSize);
 	static void ToolTip(const std::filesystem::directory_entry& directoryEntry);
 	static void DragAndDropTarget(const std::filesystem::path& relativePath);
