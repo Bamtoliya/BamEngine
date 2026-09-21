@@ -3,6 +3,7 @@
 #include "RHITypes.h"
 #include "RenderTypes.h"
 #include "ShaderReflection.h"
+#include "RHIFrameMetrics.h"
 
 struct RHIDesc
 {
@@ -131,6 +132,17 @@ public:
 	virtual RenderPass* GetCurrentRenderPass() const { return m_CurrentRenderPass; }
 #pragma endregion
 
+#pragma region Frame Metrics
+public:
+    void BeginMetricsFrame();
+	void EndMetricsFrame(bool renderSucceeded);
+	const RHIFrameMetrics& GetFrameMetrics() const { return m_CurrentFrameMetrics; }
+	const RHIFrameMetrics& GetLastFrameMetrics() const { return m_LastFrameMetrics; }
+protected:
+    void RecordDraw(uint32 vertexCount);
+	void RecordIndexedDraw(uint32 indexCount);
+#pragma endregion
+
 protected:
 	EResult InitializeConstantBuffers();
 
@@ -166,6 +178,9 @@ protected:
 protected:
 	RHIPipeline* m_CurrentPipeline = { nullptr };
     RenderPass* m_CurrentRenderPass = { nullptr };
+protected:
+	RHIFrameMetrics m_CurrentFrameMetrics = {};
+    RHIFrameMetrics m_LastFrameMetrics = {};
 #pragma endregion
 };
 

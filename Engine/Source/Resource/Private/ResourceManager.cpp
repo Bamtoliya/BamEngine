@@ -301,6 +301,45 @@ EResult ResourceManager::DestroyResource(Resource* resource)
 }
 #pragma endregion
 
+#pragma region Metrics
+ResourceMetrics ResourceManager::GetMetrics()
+{
+	ResourceMetrics metrics{};
+
+	std::shared_lock lock(m_PoolMutex);
+
+	metrics.TotalSlots =
+		static_cast<uint64>(m_Resources.size());
+
+	metrics.FreeSlots =
+		static_cast<uint64>(m_FreeSlots.size());
+
+	for (const auto& slot : m_Resources)
+	{
+		if (!slot.IsActive || !slot.Instance)
+			continue;
+
+		++metrics.ActiveResources;
+
+		const auto typeIndex = static_cast<std::size_t>(
+			slot.Instance->m_ResourceType);
+
+		if (typeIndex < metrics.CountsByType.size())
+		{
+			++metrics.CountsByType[typeIndex];
+		}
+		else
+		{
+			++metrics.CountsByType[
+				static_cast<std::size_t>(EResourceType::Unknown)];
+		}
+	}
+
+	return metrics;
+}
+#pragma endregion
+
+
 #pragma region Handle Management
 void ResourceManager::AddRefResource(const Handle& handle)
 {

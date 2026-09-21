@@ -1,14 +1,5 @@
 ﻿#pragma once
 
-#pragma region Imgui Header
-#include "imgui.h"
-#include "imgui_impl_sdl3.h"
-#include "imgui_impl_sdlrenderer3.h"
-#include "imgui_impl_sdlgpu3.h"
-#include "imgui_impl_dx12.h"
-#include "ImGuizmo.h"
-#pragma endregion
-
 #pragma region Third Library
 #include <fmt/core.h>
 #pragma endregion
@@ -22,10 +13,20 @@
 #include "HierarchyPanel.h"
 #include "ContentBrowserPanel.h"
 #include "ConsolePanel.h"
+#include "MetricsPanel.h"
 
 #include "ResourceEditors.h"
 
 #include "DirectX12Texture.h"
+
+#pragma region Imgui Header
+#include "imgui.h"
+#include "imgui_impl_sdl3.h"
+#include "imgui_impl_sdlrenderer3.h"
+#include "imgui_impl_sdlgpu3.h"
+#include "imgui_impl_dx12.h"
+#include "ImGuizmo.h"
+#pragma endregion
 
 IMPLEMENT_SINGLETON(ImGuiManager)
 
@@ -365,6 +366,7 @@ EResult ImGuiManager::CreateDefaultPanels()
 	contentBrowserPanel->Initialize();
 	AddImGuiPanel(contentBrowserPanel);
 	AddImGuiPanel(new ConsolePanel());
+	AddImGuiPanel(new MetricsPanel());
 	CreateResourceEditors();
 	return EResult::Success;
 }

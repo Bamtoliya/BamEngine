@@ -1,9 +1,10 @@
-#pragma once
+﻿#pragma once
 
 #include "Base.h"
 #include "Resources.h"
 #include "ResourceHandle.h"
 #include "Archives.h"
+#include "ResourceMetrics.h"
 
 BEGIN(Engine)
 
@@ -48,6 +49,12 @@ public:
 	EResult DestroyResource(const Handle& handle);
 	EResult DestroyResource(Resource* resource);
 #pragma endregion
+
+#pragma region Metric
+public:
+	ResourceMetrics GetMetrics();
+#pragma endregion
+
 
 #pragma region Handle Management
 public:

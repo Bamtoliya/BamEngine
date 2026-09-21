@@ -855,6 +855,7 @@ EResult DirectX12RHI::Draw(uint32 count)
     }
 
     m_CommandList->DrawInstanced(count, 1, 0, 0);
+    RecordDraw(count);
     return EResult();
 }
 
@@ -909,6 +910,7 @@ EResult DirectX12RHI::DrawIndexed(uint32 count)
     // TODO: SRV(텍스처) 다이내믹 힙 복사 및 바인딩 로직 (추후 구현)
 
     m_CommandList->DrawIndexedInstanced(count, 1, 0, 0, 0);
+    RecordIndexedDraw(count);
     return EResult::Success;
 }
 

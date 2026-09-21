@@ -132,26 +132,46 @@ void Runtime::LateUpdate(f32 dt)
 }
 EResult Runtime::Render(f32 dt)
 {
-	if (IsFailure(Renderer::Get().BeginFrame()))
-	{
-		fmt::print(stderr, "Renderer BeginFrame Failed\n");
+	auto& renderer = Renderer::Get();
+	auto* rhi = renderer.GetRHI();
+
+	if (!rhi)
 		return EResult::Fail;
+
+	rhi->BeginMetricsFrame();
+
+	// 실패로 일찍 반환할 때도 이번 렌더 시도의 통계를 확정합니다.
+	const auto finish = [rhi](EResult result)
+		{
+			rhi->EndMetricsFrame(result == EResult::Success);
+			return result;
+		};
+
+	if (IsFailure(renderer.BeginFrame()))
+	{
+		ENGINE_LOG_ERROR("Renderer BeginFrame failed");
+		return finish(EResult::Fail);
 	}
 
-	SystemManager::Get().Sumbit(m_GlobalRegistry, SceneManager::Get().GetActiveScenes(), dt);
+	SystemManager::Get().Sumbit(
+		m_GlobalRegistry,
+		SceneManager::Get().GetActiveScenes(),
+		dt);
 
-	if (IsFailure(Renderer::Get().Render(dt)))
+	if (IsFailure(renderer.Render(dt)))
 	{
-		fmt::print(stderr, "Renderer Render Failed\n");
-		return EResult::Fail;
+		ENGINE_LOG_ERROR("Renderer Render failed");
+		return finish(EResult::Fail);
 	}
 
-	if (IsFailure(Renderer::Get().EndFrame()))
+	if (IsFailure(renderer.EndFrame()))
 	{
-		fmt::print(stderr, "Renderer EndFrame Failed\n");
-		return EResult::Fail;
+		ENGINE_LOG_ERROR("Renderer EndFrame failed");
+		return finish(EResult::Fail);
 	}
+
 	m_LightManager->Update(dt);
-	return EResult::Success;
+
+	return finish(EResult::Success);
 }
 #pragma endregion

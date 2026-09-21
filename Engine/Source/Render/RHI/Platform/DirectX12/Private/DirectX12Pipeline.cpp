@@ -74,7 +74,7 @@ EResult DirectX12Pipeline::Initialize(const DESC& desc)
 			inputElementDesc.SemanticName = layoutDesc.elements[i].semanticName.c_str();
 			inputElementDesc.SemanticIndex = layoutDesc.elements[i].semanticIndex;
 			inputElementDesc.Format = ToDXGIFormat(layoutDesc.elements[i].format);
-			inputElementDesc.InputSlot = i;
+			inputElementDesc.InputSlot = slot;
 			inputElementDesc.AlignedByteOffset = layoutDesc.elements[i].offset;
 			inputElementDesc.InputSlotClass = ToD3D12InputClassification(layoutDesc.inputRate);
 			inputElementDesc.InstanceDataStepRate = layoutDesc.instanceDataStepRate;

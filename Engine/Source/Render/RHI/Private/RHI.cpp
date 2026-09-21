@@ -154,6 +154,30 @@ EResult RHI::BindStorageBuffer(RHIBuffer* buffer, uint32 slot)
 
 #pragma endregion
 
+void RHI::BeginMetricsFrame()
+{
+	m_CurrentFrameMetrics = {};
+}
+
+void RHI::EndMetricsFrame(bool renderSucceeded)
+{
+	m_CurrentFrameMetrics.RenderSucceeded = renderSucceeded;
+	m_CurrentFrameMetrics.Available = true;
+	m_LastFrameMetrics = m_CurrentFrameMetrics;
+}
+
+void RHI::RecordDraw(uint32 vertexCount)
+{
+	++m_CurrentFrameMetrics.DrawCalls;
+	m_CurrentFrameMetrics.SubmittedVertices += vertexCount;
+}
+
+void RHI::RecordIndexedDraw(uint32 indexCount)
+{
+	++m_CurrentFrameMetrics.IndexedDrawCalls;
+	m_CurrentFrameMetrics.SubmittedIndices += indexCount;
+}
+
 EResult RHI::InitializeConstantBuffers()
 {
 	for (uint32 i = 0; i < m_SwapChainBufferCount; ++i)
