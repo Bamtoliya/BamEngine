@@ -27,9 +27,15 @@ private:
 						function<void()> onDragDrop = nullptr,
 						function<void()> onContextMenu = nullptr);
 private:
-	void DrawSceneContextMenu();
+	void DrawSceneContextMenu(class Scene* scene);
+
+private:
 	//void DrawLayerContextMenu(class Layer* layer);
 	void DrawGameObjectContextMenu(class GameObject* gameObject);
+	void DrawGameObjectName(const wstring& name);
+
+private:
+	void DrawEntityContextMenu(class Entity* entity);
 
 #pragma region Variables
 private:

@@ -25,6 +25,9 @@
 
 #include "Texture.h"
 
+#include "Mesh.h"
+#include "MaterialInterface.h"
+
 IMPLEMENT_SINGLETON(Renderer)
 
 #pragma region Constructor&Destructor
@@ -155,9 +158,26 @@ EResult Renderer::Render(f32 dt)
 			}
 			cameraBuffer.time = dt;
 			m_RHI->BindConstantBuffer(&cameraBuffer, sizeof(CameraBuffer), 0);
-			m_RHI->BindConstantBuffer(&cameraBuffer, sizeof(CameraBuffer), 0);
 
 			m_RHI->SetViewport(0, 0, rtWidth, rtHeight);
+
+			auto meshIt = m_StaticDrawCommands.find(pass->GetID());
+
+			if (meshIt != m_StaticDrawCommands.end())
+			{
+				const EResult result = RenderMeshes(
+					dt,
+					meshIt->second,
+					pass->GetSortType(),
+					pass);
+
+				if (IsFailure(result))
+				{
+					ENGINE_LOG_ERROR(
+						"ECS mesh rendering failed. Pass ID: {}",
+						pass->GetID());
+				}
+			}
 
 			auto it = m_RenderQueues.find(pass->GetID());
 			if (it != m_RenderQueues.end())
@@ -235,24 +255,52 @@ EResult Renderer::RenderUIComponents(f32 dt, vector<class UIRenderComponent*> qu
 	return EResult();
 }
 
-TODO("Renderer::RenderStatic, RenderSkinned, RenderSprite 함수에서 Material과 Mesh를 Bind하고 DrawIndexed 호출하는 부분을 RHI에 맞게 구현 필요")
-EResult Renderer::RenderStatic(f32 dt, vector<StaticDrawCommand>& commands, ERenderSortType sortType, RenderPass* renderPass)
+TODO("Renderer::RenderMeshes, RenderSkinnedMeshes, RenderSprite 함수에서 Material과 Mesh를 Bind하고 DrawIndexed 호출하는 부분을 RHI에 맞게 구현 필요")
+EResult Renderer::RenderMeshes(f32 dt, vector<StaticDrawCommand>& commands, ERenderSortType sortType, RenderPass* renderPass)
 {
-	for (auto& command : commands)
+	(void)dt;
+	(void)sortType;
+
+	if (!m_RHI || !renderPass)
+		return EResult::Fail;
+
+	for (const auto& command : commands)
 	{
-		if (command.mesh && command.material)
+		Mesh* mesh = command.mesh;
+		MaterialInterface* material = command.material;
+
+		if (!mesh || !material)
+			return EResult::Fail;
+
+		if (IsFailure(BindMeshPipeline(mesh, material, renderPass)))
+			return EResult::Fail;
+
+		if (IsFailure(material->Bind(2)))
+			return EResult::Fail;
+
+		SceneUBO objectData = {};
+		objectData.worldMatrix = command.worldMatrix;
+
+		if (IsFailure(m_RHI->BindConstantBuffer(&objectData, sizeof(objectData), 1)))
 		{
-			if (IsFailure(command.material->Bind(0)))
-				return EResult::Fail;
-			if (IsFailure(command.mesh->Bind(0)))
-				return EResult::Fail;
-			m_RHI->DrawIndexed(command.mesh->GetIndexCount());
+			return EResult::Fail;
 		}
+
+		if (IsFailure(mesh->Bind(0)))
+			return EResult::Fail;
+
+		const EResult result = mesh->GetIndexBuffer()
+			? m_RHI->DrawIndexed(mesh->GetIndexCount())
+			: m_RHI->Draw(mesh->GetVertexCount());
+
+		if (IsFailure(result))
+			return result;
 	}
-	return EResult();
+
+	return EResult::Success;
 }
 
-EResult Renderer::RenderSkinned(f32 dt, vector<SkinnedDrawCommand>& commands, ERenderSortType sortType, RenderPass* renderPass)
+EResult Renderer::RenderSkinnedMeshes(f32 dt, vector<SkinnedDrawCommand>& commands, ERenderSortType sortType, RenderPass* renderPass)
 {
 	for (auto& command : commands)
 	{
@@ -310,6 +358,9 @@ EResult Renderer::EndFrame()
 	m_ViewportCameras.clear(); 
 	m_PassFrustums.clear();
 	m_PassFrustumIsShadow.clear();
+	m_StaticDrawCommands.clear();
+	m_SkinnedDrawCommands.clear();
+	m_SpriteDrawCommands.clear();
 	return EResult::Success;
 }
 #pragma endregion
@@ -352,6 +403,9 @@ void Renderer::ClearRenderQueue(RenderPassID passID)
 		customIt->second.clear();
 		m_CustomRenderQueues.erase(customIt);
 	}
+	m_StaticDrawCommands.erase(passID);
+	m_SkinnedDrawCommands.erase(passID);
+	m_SpriteDrawCommands.erase(passID);
 }
 
 void Renderer::ClearAllRenderQueues()
@@ -366,6 +420,9 @@ void Renderer::ClearAllRenderQueues()
 		pair.second.clear();
 	}
 	m_CustomRenderQueues.clear();
+	m_StaticDrawCommands.clear();
+	m_SkinnedDrawCommands.clear();
+	m_SpriteDrawCommands.clear();
 }
 
 //Entity Submit
@@ -441,5 +498,77 @@ bool Renderer::TryGetPassFrustum(RenderPassID passID, Frustum& outFrustum, bool&
 	outFrustum = it->second;
 	outIsShadow = m_PassFrustumIsShadow.at(passID);
 	return true;
+}
+
+#pragma endregion
+
+#pragma region Binding
+EResult Renderer::BindMeshPipeline(Mesh* mesh, MaterialInterface* material, RenderPass* renderPass) 
+{
+	if (!m_RHI || !mesh || !material || !renderPass)
+		return EResult::InvalidArgument;
+
+	Shader* vs = material->GetVertexShader();
+	Shader* ps = material->GetPixelShader();
+
+	if (!vs || !ps)
+		return EResult::InvalidArgument;
+
+	if (!vs->GetRHIShader() || !ps->GetRHIShader())
+		return EResult::InvalidArgument;
+
+	RHIPipelineDesc desc;
+	desc.pipelineType = EPipelineType::Graphics;
+	desc.topology = mesh->GetTopology();
+	desc.inputLayouts = mesh->GetInputLayoutDescs();
+
+	desc.vertexShader = vs->GetRHIShader();
+	desc.pixelShader = ps->GetRHIShader();
+
+	desc.frontFace = material->GetFrontFace();
+	desc.cullMode = material->GetCullMode();
+	desc.fillMode = material->GetFillMode();
+
+	desc.blendState = material->GetBlendState();
+
+	RenderTargetManager& rtManager = RenderTargetManager::Get();
+
+	desc.colorAttachmentCount = renderPass->GetRenderTargetCount();
+
+	if(desc.colorAttachmentCount > MAX_RENDER_TARGET_COUNT)
+		return EResult::InvalidArgument;
+
+	for (uint32 i = 0; i < desc.colorAttachmentCount; ++i)
+	{
+		const wstring& rtName = renderPass->GetRenderTargetName(i);
+		RenderTarget* rt = rtManager.GetRenderTarget(rtName);
+		if (!rt)
+			return EResult::InvalidArgument;
+		desc.colorAttachmentFormats[i] = rt->GetFormat();
+	}
+
+	desc.depthStencilAttachmentFormat = ETextureFormat::UNKNOWN;
+
+	const wstring depthStencilName = renderPass->GetDepthStencilName();
+	const bool hasDepthStencil = !depthStencilName.empty();
+
+	if (hasDepthStencil)
+	{
+		RenderTarget* ds = rtManager.GetRenderTarget(depthStencilName);
+		if (!ds)
+			return EResult::InvalidArgument;
+		desc.depthStencilAttachmentFormat = ds->GetFormat();
+	}
+
+	desc.depthStencilState.depthTestEnable = hasDepthStencil && material->GetDepthMode() != EDepthMode::None;
+	desc.depthStencilState.depthWriteEnable = hasDepthStencil && material->GetDepthMode() == EDepthMode::ReadWrite;
+	desc.depthStencilState.depthCompareOp = material->GetDepthCompareOp();
+
+	RHIPipeline* pipeline = PipelineManager::Get().GetOrCreatePipeline(desc);
+
+	if (!pipeline)
+		return EResult::Fail;
+	
+	return m_RHI->BindPipeline(pipeline);
 }
 #pragma endregion

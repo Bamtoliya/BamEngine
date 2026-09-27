@@ -13,6 +13,8 @@
 #include "GameObject.h"
 #include "Components.h"
 
+#include "EntityFactory.h"
+
 
 static bool CheckboxTristate(const char* label, bool* v, bool is_mixed)
 {
@@ -300,14 +302,7 @@ void HierarchyPanel::Draw()
 		}
 	}
 
-	if (ImGui::BeginPopupContextWindow("HierarchyContext", ImGuiPopupFlags_MouseButtonRight | ImGuiPopupFlags_NoOpenOverItems))
-	{
-		if (ImGui::MenuItem("Add Layer"))
-		{
-			//currentScene->CreateLayer(L"New Layer");
-		}
-		ImGui::EndPopup();
-	}
+	DrawSceneContextMenu(currentScene);
 	
 	if (MOUSE_BUTTON_DOWN(EMouseButton::Left) && ImGui::IsWindowHovered())
 	{
@@ -1006,6 +1001,23 @@ void HierarchyPanel::DrawSceneTitle(Scene* scene)
 	}
 
 	ImGui::Separator();
+}
+
+void HierarchyPanel::DrawSceneContextMenu(Scene* scene)
+{
+	if (ImGui::BeginPopupContextWindow("HierarchyContext", ImGuiPopupFlags_MouseButtonRight | ImGuiPopupFlags_NoOpenOverItems))
+	{
+		//if (ImGui::MenuItem("Add Layer"))
+		//{
+		//	//currentScene->CreateLayer(L"New Layer");
+		//}
+
+		if (ImGui::MenuItem("Add Entity"))
+		{
+			EntityFactory::CreateEmptyEntity(scene);
+		}
+		ImGui::EndPopup();
+	}
 }
 
 void HierarchyPanel::DrawGameObjectContextMenu(GameObject* gameObject)

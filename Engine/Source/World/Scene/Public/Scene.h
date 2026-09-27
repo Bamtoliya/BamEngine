@@ -92,6 +92,7 @@ public:
 public:
 	entt::registry& GetRegistry() { return m_LocalRegistry; }
 	Entity& CreateEntity();
+	Entity* FindEntity(entt::entity handle);
 	template<typename T, typename... Args>
 	T& AddComponent(Entity& entity, Args&&... args)
 	{
@@ -112,6 +113,7 @@ public:
 	{
 		m_LocalRegistry.remove<T>(entity.GetEntityHandle());
 	}
+	void ClearEntities();
 #pragma endregion
 
 #pragma region Flag Mangement
@@ -140,6 +142,8 @@ public:
 #pragma region Variable
 protected:
 	entt::registry m_LocalRegistry;
+
+	unordered_map<entt::entity, Entity*> m_EntityMap;
 
 	PROPERTY()
 	ESceneFlags m_Flags = ESceneFlags::Active;

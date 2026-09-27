@@ -13,8 +13,8 @@ protected:
 	Entity() {}
 	Entity(entt::entity handle) : m_EntityHandle(handle) {}
 	Entity(entt::entity handle, Scene* scene) : m_EntityHandle(handle), m_Scene(scene) {}
-	virtual ~Entity() {}
 public:
+	virtual ~Entity() = default;
 	static Entity* Create(entt::entity handle, Scene* scene) { return new Entity(handle, scene); }
 	template<typename T, typename... Args>
 	T& AddComponent(Args&&... args);

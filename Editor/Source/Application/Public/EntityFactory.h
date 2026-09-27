@@ -5,6 +5,7 @@
 BEGIN(Editor)
 class EntityFactory
 {
-	static void CreateEmptyEntity(class Scene* scene);
+public:
+	static Entity& CreateEmptyEntity(class Scene* scene, const wstring& name = L"Entity");
 };
 END

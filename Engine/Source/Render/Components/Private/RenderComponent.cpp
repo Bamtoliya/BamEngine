@@ -198,40 +198,7 @@ bool RenderComponent::HasDynamicMaterialInstance(uint32 index) const
 #pragma region Bind
 EResult RenderComponent::BindPipeline(Mesh* mesh, MaterialInterface* material, RenderPass* renderPass)
 {
-	RHIPipelineDesc pipelineDesc = {};
-	pipelineDesc.topology = mesh ? mesh->GetTopology() : ETopology::TriangleList;
-	pipelineDesc.pipelineType = EPipelineType::Graphics;
-	pipelineDesc.vertexShader = material->GetVertexShader()->GetRHIShader();
-	pipelineDesc.pixelShader = material->GetPixelShader()->GetRHIShader();
-	pipelineDesc.frontFace = material->GetFrontFace();
-	pipelineDesc.blendState = material->GetBlendState();
-	pipelineDesc.cullMode = material->GetCullMode();
-	pipelineDesc.colorAttachmentCount = renderPass->GetRenderTargetCount();
-	pipelineDesc.inputLayouts = mesh ? mesh->GetInputLayoutDescs() : std::vector<InputLayoutDesc>();
-
-	for (uint32 i = 0; i < pipelineDesc.colorAttachmentCount; ++i)
-	{
-		pipelineDesc.colorAttachmentFormats[i] = RenderTargetManager::Get().GetRenderTarget(renderPass->GetRenderTargetName(i))->GetFormat();
-	}
-
-	wstring depthStencilName = renderPass->GetDepthStencilName();
-	pipelineDesc.depthStencilAttachmentFormat = ETextureFormat::UNKNOWN;
-	if (!depthStencilName.empty())
-		pipelineDesc.depthStencilAttachmentFormat = RenderTargetManager::Get().GetRenderTarget(depthStencilName)->GetFormat();
-	pipelineDesc.depthStencilState.depthTestEnable = (!renderPass->GetDepthStencilName().empty()) && (material->GetDepthMode() != EDepthMode::None);
-	pipelineDesc.depthStencilState.depthWriteEnable = pipelineDesc.depthStencilState.depthTestEnable && (material->GetDepthMode() == EDepthMode::ReadWrite);
-
-	pipelineDesc.depthStencilState.depthCompareOp = material->GetDepthCompareOp();
-
-
-	PipelineManager& pipelineManager = PipelineManager::Get();
-	RHIPipeline* pipeline = pipelineManager.GetOrCreatePipeline(pipelineDesc);
-
-	if (!pipeline)
-	{
-		return EResult::Fail;
-	}
-	return Renderer::Get().GetRHI()->BindPipeline(pipeline);
+	return Renderer::Get().BindMeshPipeline(mesh, material, renderPass);
 }
 
 #pragma endregion

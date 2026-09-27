@@ -28,11 +28,15 @@ EResult Application::Initialize(void* arg)
     InitializeResources();
 	InitializeImGui();
     InitializeLocalization();
+	InitializeSystem();
     return EResult::Success;
 }
 
 void Application::Free()
 {
+    m_CommandHistory.OnHistoryChanged().Clear();
+    m_CommandHistory.Clear();
+
 	AssetManager::Destroy();
     ImGuiManager::Destroy();
 	SelectionManager::Destroy();
@@ -183,8 +187,15 @@ EResult Application::InitializeRuntime(const ApplicationCreateInfo& createInfo)
 }
 EResult Application::InitializeSystem()
 {
-	SystemManager::Get().AddSystem<TransformSystem>();
-    return EResult();
+	auto& systemManager = SystemManager::Get();
+
+	if(!systemManager.AddSystem<TransformSystem>())
+		return EResult::Fail;
+	if(!systemManager.AddSystem<MeshRenderSystem>())
+		return EResult::Fail;
+    if(!systemManager.AddSystem<SpriteRenderSystem>())
+		return EResult::Fail;
+    return EResult::Success;
 }
 EResult Application::InitializeImGui()
 {
@@ -841,6 +852,7 @@ void Application::EnterPlayMode()
 {
     if (m_PlayState != EPlayState::Edit) return;
 
+    m_CommandHistory.Clear();
     SnapshotScene();
     m_PlayState = EPlayState::Play;
     fmt::print("[PIE] Enter Play\n");
@@ -865,6 +877,7 @@ void Application::StopPlayMode()
 
     m_PlayState = EPlayState::Edit;
     RestoreScene();
+    m_CommandHistory.Clear();
     fmt::print("[PIE] Stopped — scene restored\n");
 }
 

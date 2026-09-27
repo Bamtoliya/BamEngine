@@ -5,6 +5,7 @@
 #include "SceneManager.h"
 #include "RenderPassManager.h"
 #include "ResourceManager.h"
+#include "AssetManager.h"
 
 void MetricsPanel::Draw()
 {
@@ -32,6 +33,9 @@ void MetricsPanel::Draw()
 
         ImGui::Separator();
         DrawResourceMetrics();
+
+        ImGui::Separator();
+        DrawAssetTaskMetrics();
     }
 
     ImGui::End();
@@ -41,6 +45,8 @@ void MetricsPanel::Update(f32 dt)
 {
     if (m_Paused)
         return;
+
+    m_AssetTaskMetrics = AssetManager::Get().GetTaskMetrics();
 
     UpdateResourceMetrics(dt);
 
@@ -389,4 +395,52 @@ void MetricsPanel::DrawResourceMetrics()
     }
 
     ImGui::TextDisabled("Refresh interval: 0.5 seconds");
+}
+
+void MetricsPanel::DrawAssetTaskMetrics()
+{
+    if (!ImGui::CollapsingHeader(
+        "Asset tasks",
+        ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        return;
+    }
+
+    const auto outstanding = fmt::format(
+        "Outstanding: {}",
+        m_AssetTaskMetrics.Outstanding);
+
+    const auto completed = fmt::format(
+        "Completed: {}",
+        m_AssetTaskMetrics.GetCompleted());
+
+    const auto succeeded = fmt::format(
+        "Succeeded: {}",
+        m_AssetTaskMetrics.Succeeded);
+
+    const auto failed = fmt::format(
+        "Failed: {}",
+        m_AssetTaskMetrics.Failed);
+
+    ImGui::TextUnformatted(outstanding.c_str());
+    ImGui::TextUnformatted(completed.c_str());
+    ImGui::TextUnformatted(succeeded.c_str());
+
+    if (m_AssetTaskMetrics.Failed > 0)
+    {
+        ImGui::PushStyleColor(
+            ImGuiCol_Text,
+            ImVec4(1.0f, 0.4f, 0.4f, 1.0f));
+    }
+
+    ImGui::TextUnformatted(failed.c_str());
+
+    if (m_AssetTaskMetrics.Failed > 0)
+        ImGui::PopStyleColor();
+
+    ImGui::PushTextWrapPos(0.0f);
+    ImGui::TextUnformatted(
+        "Outstanding includes running tasks and results "
+        "not yet collected. Counts cover registered async tasks.");
+    ImGui::PopTextWrapPos();
 }

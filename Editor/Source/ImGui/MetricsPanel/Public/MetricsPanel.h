@@ -3,6 +3,7 @@
 #include "ImGuiInterface.h"
 #include "RHIFrameMetrics.h"
 #include "ResourceMetrics.h"
+#include "AssetTaskMetrics.h"
 
 #define MAX_METRICS_HISTORY 240
 
@@ -27,6 +28,8 @@ private:
 
 	void UpdateResourceMetrics(f32 dt);
 	void DrawResourceMetrics();
+
+	void DrawAssetTaskMetrics();
 private:
 	array<f32, MAX_METRICS_HISTORY> m_FrameTimes{};
 
@@ -50,5 +53,7 @@ private:
 	Engine::ResourceMetrics m_ResourceMetrics{};
 
 	f32 m_ResourceRefreshElapsed = 0.5f;
+
+	AssetTaskMetrics m_AssetTaskMetrics{};
 };
 END

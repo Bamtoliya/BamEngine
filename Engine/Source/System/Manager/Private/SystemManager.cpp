@@ -6,11 +6,15 @@ IMPLEMENT_SINGLETON(SystemManager)
 
 EResult SystemManager::Initialize(void* arg)
 {
-	return EResult();
+	return EResult::Success;
 }
 
 void SystemManager::Free()
 {
+	for (ISystem* system : m_Systems)
+	{
+		Safe_Delete(system);
+	}
 }
 
 void SystemManager::FixedUpdate(entt::registry& registry, const vector<Scene*> activeScenes, f32 dt)

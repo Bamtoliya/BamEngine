@@ -55,8 +55,8 @@ private:
 	EResult RenderComponents(f32 dt, vector<class RenderComponent*> queue, ERenderSortType sortType, RenderPass* renderPass);
 	EResult RenderUIComponents(f32 dt, vector<class UIRenderComponent*> queue, ERenderSortType sortType, RenderPass* renderPass);
 private: //Entity Render
-	EResult RenderStatic(f32 dt, vector<StaticDrawCommand>& commands, ERenderSortType sortType, RenderPass* renderPass);
-	EResult RenderSkinned(f32 dt, vector<SkinnedDrawCommand>& commands, ERenderSortType sortType, RenderPass* renderPass);
+	EResult RenderMeshes(f32 dt, vector<StaticDrawCommand>& commands, ERenderSortType sortType, RenderPass* renderPass);
+	EResult RenderSkinnedMeshes(f32 dt, vector<SkinnedDrawCommand>& commands, ERenderSortType sortType, RenderPass* renderPass);
 	EResult RenderSprite(f32 dt, vector<SpriteDrawCommand>& commands, ERenderSortType sortType, RenderPass* renderPass);
 #pragma endregion
 
@@ -88,6 +88,11 @@ public:
 	bool TryGetPassFrustum(RenderPassID passID, Frustum& outFrustum, bool& outIsShadow) const;
 #pragma endregion
 
+#pragma region Binding
+public:
+	EResult BindMeshPipeline(class Mesh*, class MaterialInterface*, class RenderPass*);
+#pragma endregion
+
 #pragma region Getter
 public:
 	class RHI* GetRHI() const { return m_RHI; }
@@ -99,6 +104,9 @@ public:
 #pragma endregion
 
 
+
+
+
 #pragma region Variable
 private:
 	class RHI* m_RHI = { nullptr };
@@ -107,7 +115,6 @@ private:
 	map<RenderPassID, vector<class RenderComponent*>> m_RenderQueues;
 	map<RenderPassID, vector<class UIRenderComponent*>> m_UIRenderQueues;
 	map<RenderPassID, vector<CustomRenderCommand>> m_CustomRenderQueues;
-
 private: //ECS Based Render Queue
 	map<RenderPassID, vector<StaticDrawCommand>> m_StaticDrawCommands;
 	map<RenderPassID, vector<SkinnedDrawCommand>> m_SkinnedDrawCommands;

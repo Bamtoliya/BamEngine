@@ -32,6 +32,7 @@ Scene* Scene::Create(void* arg)
 
 void Scene::Free()
 {
+	ClearEntities();
 	//for (auto& layer : m_Layers)
 	//{
 	//	Safe_Release(layer);
@@ -308,6 +309,34 @@ void Scene::LateUpdate(f32 dt)
 //}
 //#pragma endregion
 
+#pragma region Entity Management
+Entity& Scene::CreateEntity()
+{
+	entt::entity entityHandle = m_LocalRegistry.create();
+	Entity* entity = Entity::Create(entityHandle, this);
+	m_EntityMap[entityHandle] = entity;
+	return *entity;
+}
+Entity* Scene::FindEntity(entt::entity handle)
+{
+	if (!m_LocalRegistry.valid(handle))
+		return nullptr;
+
+	auto it = m_EntityMap.find(handle);
+
+	return it != m_EntityMap.end() ? it->second : nullptr;
+}
+void Scene::ClearEntities()
+{
+	for (auto& pair : m_EntityMap)
+	{
+		Safe_Delete(pair.second);
+	}
+	m_EntityMap.clear();
+	m_LocalRegistry.clear();
+}
+#pragma endregion
+
 #pragma region Flag Management
 void Scene::SetActive(bool active)
 {
@@ -320,17 +349,6 @@ void Scene::SetPaused(bool paused)
 	else RemoveFlag(m_Flags, ESceneFlags::Paused);
 }
 #pragma endregion
-
-
-#pragma region Entity Management
-Entity& Scene::CreateEntity()
-{
-	entt::entity entityHandle = m_LocalRegistry.create();
-	Entity* entity = Entity::Create(entityHandle, this);
-	return *entity;
-}
-#pragma endregion
-
 
 #pragma region Save&Load
 void Scene::Serialize(class Archive& ar)

@@ -1,6 +1,8 @@
-#pragma once
+﻿#pragma once
 
 #include "AssetManager.h"
+#include "Logger.h"
+#include <exception>
 
 #pragma region Importer
 #include "SpriteImporter.h"
@@ -84,33 +86,62 @@ void AssetManager::Update(f32 dt)
 		}
 	}
 
-	// 2단계: 메인 쓰레드 단독으로 완료 상태 순회 및 정리 (락 불필요)
-	for (auto it = m_ActiveTasks.begin(); it != m_ActiveTasks.end(); )
+	Engine::uint64 succeededThisUpdate = 0;
+
+	for (auto it = m_ActiveTasks.begin();
+		it != m_ActiveTasks.end(); )
 	{
-		// wait_for(0초): 진동벨이 울렸는지 안 울렸는지만 즉시 체크 (블로킹 없음)
-		if (it->wait_for(std::chrono::seconds(0)) == std::future_status::ready)
+		if (it->wait_for(std::chrono::seconds(0)) !=
+			std::future_status::ready)
 		{
-			// ready 상태라면 작업이 끝난 것입니다!
-			EResult result = it->get(); // 결과를 가져옴과 동시에 future 객체 정리
+			++it;
+			continue;
+		}
 
-			if (IsFailure(result))
-			{
-				std::cerr << "[AssetManager] Async Import Failed." << std::endl;
-			}
-			else
-			{
-				std::cout << "[AssetManager] Async Import Success." << std::endl;
-				m_OnAsyncDelegate.Broadcast();
-			}
+		EResult result = EResult::Fail;
 
-			// 완료된 작업은 리스트에서 지웁니다.
-			it = m_ActiveTasks.erase(it);
+		// 비동기 작업에서 발생한 C++ 예외는 get()에서 다시 전달됩니다.
+		try
+		{
+			result = it->get();
+		}
+		catch (const std::exception& exception)
+		{
+			BAM_LOG(
+				Error,
+				"Asset",
+				"Async task threw an exception: {}",
+				exception.what());
+		}
+		catch (...)
+		{
+			BAM_LOG(
+				Error,
+				"Asset",
+				"Async task threw an unknown exception");
+		}
+
+		if (IsFailure(result))
+		{
+			++m_FailedTasks;
+			BAM_LOG(Error, "Asset", "Async task failed");
 		}
 		else
 		{
-			// 아직 작업 중이면 다음 작업 확인으로 넘어감
-			++it;
+			++m_SucceededTasks;
+			++succeededThisUpdate;
+
+			BAM_LOG(Info, "Asset", "Async task succeeded");
 		}
+
+		it = m_ActiveTasks.erase(it);
+	}
+
+	// 작업 목록을 순회한 뒤 알립니다.
+	// 성공한 작업마다 한 번 알리는 기존 동작은 유지합니다.
+	for (Engine::uint64 i = 0; i < succeededThisUpdate; ++i)
+	{
+		m_OnAsyncDelegate.Broadcast();
 	}
 }
 #pragma endregion
@@ -167,5 +198,29 @@ void AssetManager::ExportAsync(const filesystem::path& sourcePath, const filesys
 
 	std::lock_guard lock(m_PendingMutex);
 	m_PendingTasks.push_back(std::move(futureTask));
+}
+#pragma endregion
+
+
+#pragma region Metrics
+AssetTaskMetrics AssetManager::GetTaskMetrics() const
+{
+	// PendingTasks는 백그라운드에서도 추가하므로 잠금이 필요합니다.
+	std::lock_guard lock(m_PendingMutex);
+
+	AssetTaskMetrics metrics;
+	metrics.Outstanding =
+		static_cast<Engine::uint64>(m_ActiveTasks.size()) +
+		static_cast<Engine::uint64>(m_PendingTasks.size());
+
+	metrics.Succeeded = m_SucceededTasks;
+	metrics.Failed = m_FailedTasks;
+
+	return metrics;
+}
+
+size_t AssetManager::GetActiveTaskCount() const
+{
+	return static_cast<size_t>(GetTaskMetrics().Outstanding);
 }
 #pragma endregion

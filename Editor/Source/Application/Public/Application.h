@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "Editor_Includes.h"
+#include "CommandHistory.h"
 
 BEGIN(Editor)
 
@@ -77,6 +78,14 @@ private:
 	void RestoreScene();     // Stop 시 씬 복원
 #pragma endregion
 
+
+#pragma region Command History
+public:
+	CommandHistory& GetCommandHistory() { return m_CommandHistory; }
+	const CommandHistory& GetCommandHistory() const { return m_CommandHistory; }
+#pragma endregion
+
+
 public:
 	void Run(int argc, char* argv[]);
 	void Shutdown();
@@ -104,6 +113,8 @@ private:
 private:
 	EPlayState m_PlayState = EPlayState::Edit;
 	wstring m_SnapshotPath = L"Temp/__pie_snapshot__.json";
+private:
+	CommandHistory m_CommandHistory;
 };
 
 END

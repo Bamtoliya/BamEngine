@@ -16,11 +16,14 @@ EResult SceneManager::Initialize(void* arg)
 
 void SceneManager::Free()
 {
-	Safe_Release(m_CurrentScene);
+	m_CurrentScene = nullptr;
+	m_ActiveScenes.clear();
+
 	for (auto& scene : m_Scenes)
 	{
 		Safe_Release(scene);
 	}
+
 	m_Scenes.clear();
 }
 #pragma endregion
@@ -47,18 +50,32 @@ void SceneManager::Free()
 #pragma region Scene Management
 EResult SceneManager::OpenScene(Scene* newScene)
 {
-	if (!newScene) return EResult::Fail;
+	if (!newScene)
+		return EResult::InvalidArgument;
+
+	if (m_CurrentScene == newScene)
+		return EResult::Success;
+
+	if (IsFailure(CloseScene()))
+		return EResult::Fail;
+
+	if (IsFailure(AddScene(newScene)))
+		return EResult::Fail;
 
 	m_CurrentScene = newScene;
-
 	return EResult::Success;
 }
 EResult SceneManager::CloseScene()
 {
-	if (!m_CurrentScene) return EResult::Success;
+	if (!m_CurrentScene)
+		return EResult::Success;
 
-	Safe_Release(m_CurrentScene);
-	m_CurrentScene = nullptr;
+	Scene* closingScene = m_CurrentScene;
+	const EResult result = RemoveScene(closingScene);
+
+	if (IsFailure(result))
+		return result;
+
 	LightManager::Get().ClearLightSources();
 	CollisionManager::Get().ClearColliders();
 	CollisionManager::Get().ClearRigidBodies();
@@ -68,14 +85,17 @@ EResult SceneManager::CloseScene()
 }
 EResult SceneManager::NewScene(void* arg)
 {
-	CloseScene();	
 	Scene* newScene = Scene::Create(arg);
-	if (!newScene) return EResult::Fail;
 
-	m_CurrentScene = newScene;
-	m_Scenes.push_back(m_CurrentScene);
-	
-	return EResult::Success;
+	if (!newScene)
+		return EResult::Fail;
+
+	const EResult result = OpenScene(newScene);
+
+	if (IsFailure(result))
+		Safe_Release(newScene);
+
+	return result;
 }
 
 EResult SceneManager::SaveScene(Archive& archive, const wstring& filePath)
@@ -120,19 +140,30 @@ EResult SceneManager::LoadScene(Archive& archive, const wstring& filePath)
 EResult SceneManager::AddScene(Scene* scene)
 {
 	if (!scene) return EResult::InvalidArgument;
+
+	if (std::find(m_Scenes.begin(), m_Scenes.end(), scene) != m_Scenes.end())
+	{
+		return EResult::Success;
+	}
+
 	m_Scenes.push_back(scene);
 	return EResult::Success;
 }
 EResult SceneManager::RemoveScene(Scene* scene)
 {
-	if (!scene) return EResult::InvalidArgument;
 	auto it = std::find(m_Scenes.begin(), m_Scenes.end(), scene);
-	if (it != m_Scenes.end())
-	{
-		m_Scenes.erase(it);
-		return EResult::Success;
-	}
-	return EResult::Fail;
+
+	if (it == m_Scenes.end())
+		return EResult::Fail;
+
+	if (m_CurrentScene == scene)
+		m_CurrentScene = nullptr;
+
+	m_ActiveScenes.clear();
+	m_Scenes.erase(it);
+
+	Safe_Release(scene);
+	return EResult::Success;
 }
 vector<Scene*> SceneManager::GetActiveScenes()
 {
