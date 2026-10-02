@@ -1,0 +1,14 @@
+﻿{
+  "name": "temp-reflection",
+  "version-string": "0.1.0",
+  "dependencies": [
+    {
+      "name": "llvm",
+      "default-features": false,
+      "features": [
+        "clang",
+        "target-x86"
+      ]
+    }
+  ]
+}
