@@ -6,8 +6,10 @@
 #include <span>
 #include <string_view>
 #include <variant>
+#include <optional>
+#include <string>
 
-namespace reflection
+namespace legacy_reflection
 {
     using MetadataValue = std::variant<
         std::monostate,
@@ -84,4 +86,6 @@ namespace reflection
             return nullptr;
         }
     };
+
+	using MetadataView = std::span<const MetadataEntry>;
 }

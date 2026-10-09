@@ -76,7 +76,7 @@ namespace bam_reflection
     };
 
     using BamMetadataValue = std::variant<
-        reflection::MetadataValue,
+        legacy_reflection::MetadataValue,
         MetaRange,
         MetaColor,
         MetaEditCondition,
@@ -92,7 +92,7 @@ namespace bam_reflection
     struct BamMetadataEntry
     {
         uint64 KeyHash = 0;
-        BamMetadataValue Value{ reflection::MetadataValue{} };
+        BamMetadataValue Value{ legacy_reflection::MetadataValue{} };
 
         constexpr BamMetadataEntry() = default;
 
@@ -103,15 +103,15 @@ namespace bam_reflection
         }
     };
 
-#define BAM_NAME(text) bam_reflection::BamMetadataEntry{ reflection::CompileTimeHash("Name"), std::string_view(text) },
-#define BAM_TOOLTIP(text) bam_reflection::BamMetadataEntry{ reflection::CompileTimeHash("Tooltip"), std::string_view(text) },
-#define BAM_CATEGORY(text) bam_reflection::BamMetadataEntry{ reflection::CompileTimeHash("Category"), std::string_view(text) },
-#define BAM_RANGE(...) bam_reflection::BamMetadataEntry{ reflection::CompileTimeHash("Range"), bam_reflection::MetaRange{ __VA_ARGS__ } },
-#define BAM_COLOR(r, g, b, a) bam_reflection::BamMetadataEntry{ reflection::CompileTimeHash("Color"), bam_reflection::MetaColor{ vec4(r, g, b, a) } },
-#define BAM_EDITABLE bam_reflection::BamMetadataEntry{ reflection::CompileTimeHash("Editable"), true },
-#define BAM_NOSERIALIZE bam_reflection::BamMetadataEntry{ reflection::CompileTimeHash("NoSerialize"), true },
-#define BAM_READONLY bam_reflection::BamMetadataEntry{ reflection::CompileTimeHash("ReadOnly"), true },
-#define BAM_EDITCONDITION(condition_var, ...) bam_reflection::BamMetadataEntry{ reflection::CompileTimeHash("EditCondition"), bam_reflection::MetaEditCondition{ condition_var, __VA_ARGS__ } },
-#define BAM_DEFAULT(value) bam_reflection::BamMetadataEntry{ reflection::CompileTimeHash("Default"), std::string_view(#value) },
-#define BAM_ONCHANGED(...) bam_reflection::BamMetadataEntry{ reflection::CompileTimeHash("OnChanged"), bam_reflection::MetaOnChanged{ __VA_ARGS__ } },
+#define BAM_NAME(text) bam_reflection::BamMetadataEntry{ legacy_reflection::CompileTimeHash("Name"), std::string_view(text) },
+#define BAM_TOOLTIP(text) bam_reflection::BamMetadataEntry{ legacy_reflection::CompileTimeHash("Tooltip"), std::string_view(text) },
+#define BAM_CATEGORY(text) bam_reflection::BamMetadataEntry{ legacy_reflection::CompileTimeHash("Category"), std::string_view(text) },
+#define BAM_RANGE(...) bam_reflection::BamMetadataEntry{ legacy_reflection::CompileTimeHash("Range"), bam_reflection::MetaRange{ __VA_ARGS__ } },
+#define BAM_COLOR(r, g, b, a) bam_reflection::BamMetadataEntry{ legacy_reflection::CompileTimeHash("Color"), bam_reflection::MetaColor{ vec4(r, g, b, a) } },
+#define BAM_EDITABLE bam_reflection::BamMetadataEntry{ legacy_reflection::CompileTimeHash("Editable"), true },
+#define BAM_NOSERIALIZE bam_reflection::BamMetadataEntry{ legacy_reflection::CompileTimeHash("NoSerialize"), true },
+#define BAM_READONLY bam_reflection::BamMetadataEntry{ legacy_reflection::CompileTimeHash("ReadOnly"), true },
+#define BAM_EDITCONDITION(condition_var, ...) bam_reflection::BamMetadataEntry{ legacy_reflection::CompileTimeHash("EditCondition"), bam_reflection::MetaEditCondition{ condition_var, __VA_ARGS__ } },
+#define BAM_DEFAULT(value) bam_reflection::BamMetadataEntry{ legacy_reflection::CompileTimeHash("Default"), std::string_view(#value) },
+#define BAM_ONCHANGED(...) bam_reflection::BamMetadataEntry{ legacy_reflection::CompileTimeHash("OnChanged"), bam_reflection::MetaOnChanged{ __VA_ARGS__ } },
 }

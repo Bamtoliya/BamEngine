@@ -4,7 +4,7 @@
 #include <string>
 #include <string_view>
 
-namespace reflection
+namespace legacy_reflection
 {
     constexpr std::uint64_t CompileTimeHash(std::string_view text) noexcept
     {

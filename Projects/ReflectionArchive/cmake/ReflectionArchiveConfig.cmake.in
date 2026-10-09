@@ -1,0 +1,11 @@
+﻿@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+find_dependency(Reflection 0.1 CONFIG)
+find_dependency(Archive 0.1 CONFIG)
+
+include("${CMAKE_CURRENT_LIST_DIR}/ReflectionArchiveTargets.cmake")
+
+set(ReflectionArchive_Adapter_FOUND TRUE)
+check_required_components(ReflectionArchive)

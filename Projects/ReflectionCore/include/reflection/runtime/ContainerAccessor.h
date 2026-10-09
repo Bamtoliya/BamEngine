@@ -3,7 +3,7 @@
 #include <cstddef>
 #include <vector>
 
-namespace reflection
+namespace legacy_reflection
 {
     struct ContainerAccessor
     {

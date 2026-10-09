@@ -8,7 +8,7 @@
 #include <utility>
 #include <vector>
 
-namespace reflection
+namespace legacy_reflection
 {
     template<typename ContainerType, typename ElementType>
     struct LinearContainerAccessor

@@ -1,0 +1,9 @@
+﻿@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+find_dependency(glaze CONFIG)
+
+include("${CMAKE_CURRENT_LIST_DIR}/ArchiveTargets.cmake")
+
+set(Archive_Json_FOUND TRUE)
+check_required_components(Archive)

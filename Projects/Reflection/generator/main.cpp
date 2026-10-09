@@ -37,6 +37,7 @@
 #include <vector>
 #include <regex>
 #include <algorithm>
+#include <variant>
 #pragma endregion
 
 #pragma region metadata includes
@@ -53,8 +54,10 @@ namespace
     llvm::cl::opt<std::string> ModuleName("module", llvm::cl::desc("Module name used in Register_<module>"), llvm::cl::Required, llvm::cl::cat(ReflectionOptions));
     llvm::cl::list<std::string> HeaderPaths("header", llvm::cl::desc("Headers included by generated registration code"), llvm::cl::OneOrMore, llvm::cl::cat(ReflectionOptions));
     llvm::cl::opt<std::string> DepfilePath("depfile", llvm::cl::desc("Dependency file output path"), llvm::cl::init(""), llvm::cl::cat(ReflectionOptions));
+    llvm::cl::opt<std::string> TypeListMetadata("type-list-metadata", llvm::cl::desc("Boolean metadata key used to select listed types"), llvm::cl::init(""), llvm::cl::cat(ReflectionOptions));
 
     std::optional<std::string> GeneratedCode;
+    std::optional<std::string> GeneratedHeaderCode;
 
     class ReflectionDependencies final : public clang::DependencyCollector
     {
@@ -753,6 +756,24 @@ namespace
                 }
 
                 marker.Model->Metadata = std::move(parsed.Entries);
+
+                if (!TypeListMetadata.getValue().empty() &&
+                    std::holds_alternative<reflection_codegen::TypeDetails>(marker.Model->Details))
+                {
+                    for (const auto& entry : marker.Model->Metadata)
+                    {
+                        if (entry.Key == TypeListMetadata.getValue() &&
+                            !std::holds_alternative<bool>(entry.Value))
+                        {
+                            auto& diagnostics = context.getDiagnostics();
+
+                            const auto diagnosticID = diagnostics.getCustomDiagID(
+                                clang::DiagnosticsEngine::Error, "Type list metadata '%0' must be boolean");
+
+                            diagnostics.Report(marker.Location, diagnosticID) << entry.Key;
+                        }
+                    }
+                }
             }
 
             if (context.getDiagnostics().hasErrorOccurred())
@@ -795,8 +816,8 @@ namespace
             llvm::sys::path::replace_extension(generatedHeaderName, ".h");
 
             const std::vector<std::string> headers(HeaderPaths.begin(), HeaderPaths.end());
-            GeneratedCode = reflection_codegen::EmitRegistrationCpp(grouped.Unit, ModuleName.getValue(),
-                headers, generatedHeaderName.str().str());
+            GeneratedHeaderCode = reflection_codegen::EmitRegistrationHeader(grouped.Unit, ModuleName.getValue(),headers, TypeListMetadata.getValue());
+            GeneratedCode = reflection_codegen::EmitRegistrationCpp(grouped.Unit, ModuleName.getValue(), headers, generatedHeaderName.str().str());
 
             for (const ReflectionMarker& marker : m_markers)
             {
@@ -995,7 +1016,7 @@ int main(int argc, const char** argv)
         return result;
     }
 
-    if (!GeneratedCode)
+    if (!GeneratedCode || !GeneratedHeaderCode)
     {
         llvm::errs() << "No registration code was produced.\n";
         return 1;
@@ -1041,8 +1062,7 @@ int main(int argc, const char** argv)
     llvm::SmallString<256> generatedHeaderPath(OutputPath.getValue());
     llvm::sys::path::replace_extension(generatedHeaderPath, ".h");
 
-    const std::string generatedHeader = reflection_codegen::EmitRegistrationHeader(module);
-    if (!SaveGeneratedFile(generatedHeaderPath, generatedHeader))
+    if (!SaveGeneratedFile(generatedHeaderPath, *GeneratedHeaderCode))
     {
         return 1;
     }

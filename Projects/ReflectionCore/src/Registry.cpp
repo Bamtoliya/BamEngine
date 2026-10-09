@@ -2,7 +2,7 @@
 
 #include <new>
 
-namespace reflection
+namespace legacy_reflection
 {
     Registry& Registry::Get()
     {

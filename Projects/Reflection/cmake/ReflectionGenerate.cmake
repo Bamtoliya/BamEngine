@@ -3,7 +3,7 @@
 function(reflection_generate)
     cmake_parse_arguments(PARSE_ARGV 0 arg
         ""
-        "TARGET;MODULE;GENERATOR;RESOURCE_DIR;VISIBILITY"
+        "TARGET;MODULE;GENERATOR;RESOURCE_DIR;VISIBILITY;TYPE_LIST_METADATA;HEADER_INCLUDE_ROOT"
         "HEADERS;INCLUDE_DIRECTORIES;COMPILE_OPTIONS"
     )
 
@@ -113,10 +113,33 @@ function(reflection_generate)
     endforeach()
     list(REMOVE_DUPLICATES _header_paths)
 
+    if(arg_HEADER_INCLUDE_ROOT)
+        get_filename_component(_header_include_root "${arg_HEADER_INCLUDE_ROOT}" ABSOLUTE
+            BASE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+
+        if(NOT IS_DIRECTORY "${_header_include_root}")
+            message(FATAL_ERROR "HEADER_INCLUDE_ROOT must identify an existing directory")
+        endif()
+    endif()
+
     set(_header_arguments)
     set(_input_content "")
+
     foreach(_header IN LISTS _header_paths)
-        list(APPEND _header_arguments --header "${_header}")
+        set(_include_header "${_header}")
+
+        if(arg_HEADER_INCLUDE_ROOT)
+            file(RELATIVE_PATH _include_header "${_header_include_root}" "${_header}")
+
+            if(IS_ABSOLUTE "${_include_header}" OR _include_header MATCHES "^\\.\\./")
+                message(FATAL_ERROR "Header is outside HEADER_INCLUDE_ROOT: ${_header}")
+            endif()
+        endif()
+
+        # 생성 코드에 출력할 include 경로
+        list(APPEND _header_arguments --header "${_include_header}")
+
+        # Clang 분석용 입력은 절대 경로 유지
         string(APPEND _input_content "#include \"${_header}\"\n")
     endforeach()
 
@@ -128,6 +151,10 @@ function(reflection_generate)
             BASE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
         list(APPEND _include_arguments "-I${_absolute_include}")
     endforeach()
+
+    if(arg_HEADER_INCLUDE_ROOT)
+        list(APPEND _include_arguments "-I${_header_include_root}")
+    endif()
 
     set(_base_directory
         "${CMAKE_CURRENT_BINARY_DIR}/reflection/${arg_TARGET}/${arg_MODULE}")
@@ -146,6 +173,7 @@ function(reflection_generate)
 
         COMMAND "${_generator_command}"
             --module "${arg_MODULE}"
+            "--type-list-metadata=${arg_TYPE_LIST_METADATA}"
             ${_header_arguments}
             --output "${_generated_cpp}"
             --depfile "${_depfile}"
@@ -169,8 +197,13 @@ function(reflection_generate)
     )
 
     target_sources("${arg_TARGET}" PRIVATE "${_generated_cpp}" "${_generated_header}")
-     target_include_directories("${arg_TARGET}" ${arg_VISIBILITY}
+    set_source_files_properties("${_generated_cpp}" PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
+    target_include_directories("${arg_TARGET}" ${arg_VISIBILITY}
         "$<BUILD_INTERFACE:${_generated_directory}>")
+    if(arg_HEADER_INCLUDE_ROOT)
+        target_include_directories("${arg_TARGET}" ${arg_VISIBILITY}
+            "$<BUILD_INTERFACE:${_header_include_root}>")
+    endif()
     target_link_libraries("${arg_TARGET}" ${arg_VISIBILITY} Reflection::Runtime)
     set_property(TARGET "${arg_TARGET}" APPEND PROPERTY
         REFLECTION_MODULES "${arg_MODULE}")

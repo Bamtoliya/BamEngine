@@ -16,7 +16,7 @@ add_library(ReflectionBamAdapterObjects OBJECT
 )
 
 add_library(ReflectionBamAdapter INTERFACE)
-add_library(Reflection::BamAdapter ALIAS ReflectionBamAdapter)
+add_library(legacy_reflection::BamAdapter ALIAS ReflectionBamAdapter)
 
 target_include_directories(ReflectionBamAdapterObjects
     PUBLIC
@@ -57,13 +57,13 @@ endif()
 
 target_link_libraries(ReflectionBamAdapterObjects
     PUBLIC
-        Reflection::Core
+        legacy_reflection::Core
         glm::glm
 )
 
 target_link_libraries(ReflectionBamAdapter
     INTERFACE
-        Reflection::Core
+        legacy_reflection::Core
         glm::glm
 )
 

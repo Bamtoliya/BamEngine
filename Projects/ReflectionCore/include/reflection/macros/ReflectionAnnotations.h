@@ -1,20 +1,25 @@
-#pragma once
+﻿#pragma once
 
 #include "reflection/core/TypeInfo.h"
 #include "reflection/runtime/ReflectableInterface.h"
 
-#ifdef __clang__
-#define CLASS(...)       __attribute__((annotate("reflect_class:" #__VA_ARGS__)))
-#define STRUCT(...)      __attribute__((annotate("reflect_struct:" #__VA_ARGS__)))
-#define PROPERTY(...)    __attribute__((annotate("reflect_property:" #__VA_ARGS__)))
-#define FUNCTION(...)    __attribute__((annotate("reflect_function:" #__VA_ARGS__)))
-#define ENUM(...)        __attribute__((annotate("reflect_enum:" #__VA_ARGS__)))
-#else
-#define PROPERTY(...)
-#define CLASS()
-#define STRUCT()
+#define CLASS(...)
+#define STRUCT(...)
 #define ENUM(...)
+
+#if defined(__clang__)
+
+#define PROPERTY(...) \
+    __attribute__((annotate("reflect_property:" #__VA_ARGS__)))
+
+#define FUNCTION(...) \
+    __attribute__((annotate("reflect_function:" #__VA_ARGS__)))
+
+#else
+
+#define PROPERTY(...)
 #define FUNCTION(...)
+
 #endif
 
 namespace entt { template<std::size_t Len, std::size_t Align> class basic_any; }

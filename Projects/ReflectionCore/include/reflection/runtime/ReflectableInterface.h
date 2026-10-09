@@ -1,11 +1,11 @@
-#pragma once
+﻿#pragma once
 
 #include "reflection/core/TypeInfo.h"
 
 #include <type_traits>
 #include <entt/entt.hpp>
 
-namespace reflection
+namespace legacy_reflection
 {
     class ReflectableInterface
     {

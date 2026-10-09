@@ -22,3 +22,5 @@ namespace reflection::detail
 #define REFLECT_BODY() \
     template<typename T> \
     friend struct ::reflection::detail::TypeRegistration;
+
+#include <reflection/MetadataMacros.h>

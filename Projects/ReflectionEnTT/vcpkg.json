@@ -1,0 +1,5 @@
+{
+  "name": "reflection-entt",
+  "version-string": "0.1.0",
+  "dependencies": ["entt"]
+}

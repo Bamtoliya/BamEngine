@@ -30,7 +30,14 @@ namespace reflection
         InsertUnavailable,
         EraseUnavailable,
         EnumWriteUnavailable,
-        ValueOutOfRange
+        ValueOutOfRange,
+        NotMap,
+        KeyTypeMismatch,
+        KeyNotFound,
+        KeyAlreadyExists,
+        NotSet,
+        ElementNotFound,
+        ElementAlreadyExists
     };
 
     constexpr std::string_view ToString(PropertyAccessError error)
@@ -59,6 +66,13 @@ namespace reflection
         case PropertyAccessError::EraseUnavailable: return "EraseUnavailable";
         case PropertyAccessError::EnumWriteUnavailable: return "EnumWriteUnavailable";
         case PropertyAccessError::ValueOutOfRange: return "ValueOutOfRange";
+        case PropertyAccessError::NotMap: return "NotMap";
+        case PropertyAccessError::KeyTypeMismatch: return "KeyTypeMismatch";
+        case PropertyAccessError::KeyNotFound: return "KeyNotFound";
+        case PropertyAccessError::KeyAlreadyExists: return "KeyAlreadyExists";
+        case PropertyAccessError::NotSet: return "NotSet";
+        case PropertyAccessError::ElementNotFound: return "ElementNotFound";
+        case PropertyAccessError::ElementAlreadyExists: return "ElementAlreadyExists";
         }
 
         return "Unknown";

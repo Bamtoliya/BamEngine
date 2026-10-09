@@ -8,7 +8,7 @@
 #include <span>
 #include <string_view>
 
-namespace reflection
+namespace legacy_reflection
 {
     struct TypeInfo
     {

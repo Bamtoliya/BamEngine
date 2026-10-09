@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+﻿from dataclasses import dataclass, field
 from typing import List
 
 @dataclass
@@ -11,6 +11,10 @@ class PropertyInfo:
 class FunctionInfo:
     name: str
     attributes: str
+    return_type: str
+    parameter_types: List[str] = field(default_factory=list)
+    is_const: bool = False
+    is_static: bool = False
 
 @dataclass
 class EnumEntryInfo:
@@ -31,3 +35,4 @@ class ClassInfo:
     has_reflect_macro: bool = False
     properties: List[PropertyInfo] = field(default_factory=list)
     functions: List[FunctionInfo] = field(default_factory=list)
+    attributes: str = ""

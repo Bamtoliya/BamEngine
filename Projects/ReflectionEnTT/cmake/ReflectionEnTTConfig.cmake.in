@@ -1,0 +1,11 @@
+@PACKAGE_INIT@
+include(CMakeFindDependencyMacro)
+find_dependency(EnTT 3.16 CONFIG)
+if(EnTT_VERSION VERSION_GREATER_EQUAL 4)
+    set(ReflectionEnTT_FOUND FALSE)
+    set(ReflectionEnTT_NOT_FOUND_MESSAGE "ReflectionEnTT 0.1 supports EnTT 3.16.x")
+    return()
+endif()
+include("${CMAKE_CURRENT_LIST_DIR}/ReflectionEnTTTargets.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/ReflectionEnTTGenerate.cmake")
+check_required_components(ReflectionEnTT)

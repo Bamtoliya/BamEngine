@@ -279,8 +279,12 @@ Runtime 사용에는 LLVM·Clang 라이브러리가 필요하지 않습니다.
 Generator와 Clang resource 디렉터리는 빌드 중 헤더 분석에 사용합니다.
 
 설치된 라이브러리와 소비자는 아키텍처, 빌드 구성과 MSVC Runtime 설정을 맞춰야 합니다.
-현재 PackageCheck는 Windows x64, Release, `/MD` 조합을 검증합니다.
-Debug 또는 `/MT` 사용은 해당 설정으로 빌드한 Runtime을 별도로 준비해야 합니다.
+
+현재 로컬 Reflection 빌드는 CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded,
+즉 /MT를 사용합니다. 이번 PackageCheck도 Windows x64, Release, /MT로 구성합니다.
+
+다른 Runtime 설정이나 Debug 구성을 사용하려면
+해당 설정으로 Runtime과 소비자를 함께 빌드해야 합니다.
 
 ## 검증 프로젝트의 역할
 
@@ -468,7 +472,8 @@ union의 활성 멤버 선택과 관리도 호출자의 책임입니다.
 
 ## 벡터 접근과 편집
 
-현재 컨테이너 접근 API는 std::vector를 대상으로 연결합니다.
+아래 API와 연결 조건은 `std::vector`의 접근·편집에 대한 설명입니다.
+고정 배열, set, map의 지원 범위는 뒤의 각 항목에서 설명합니다.
 
 - `TryGetSize(object)`: 현재 크기 조회
 - `TryReadElement(object, index)`: 요소의 읽기 전용 ValueView
@@ -509,9 +514,13 @@ const 소유 객체를 통한 수정도 거부합니다.
 예를 들어 기본 생성이 불가능한 요소는 TryResize(object, 0)도 지원하지 않지만,
 TryClear()로 비울 수 있습니다.
 
-복사 지원 검사에서는 중첩 std::vector의 내부 요소도 확인합니다.
-다른 사용자 정의 템플릿의 생성자·대입 연산자 본문까지 분석해서
-컴파일 가능 여부를 보장하지는 않습니다.
+복사 지원 검사에서는 지원하는 STL 컨테이너의 내부 요소 타입도 확인합니다.
+대상은 `std::vector`, `std::array`, `std::set`, `std::unordered_set`,
+`std::map`, `std::unordered_map`입니다.
+
+이 판별이 중첩 컨테이너의 자동 순회나 자동 직렬화를 제공하는 것은 아닙니다.
+사용자 정의 타입의 생성자·대입 연산자 본문까지 분석하여
+컴파일 가능 여부를 보장하지도 않습니다.
 
 std::vector<bool>은 실제 bool 요소 주소를 제공하지 않으므로
 TryReadElement()와 TryWriteElement()를 지원하지 않습니다.
@@ -520,6 +529,104 @@ TryReadElement()와 TryWriteElement()를 지원하지 않습니다.
 TryAppend()와 TryInsert()는 읽기 전용 ValueView에서 값을 복사합니다.
 이동 전용 값을 소비하는 API는 제공하지 않습니다.
 이동 전용 요소도 TryErase()와 TryClear()로 제거할 수 있습니다.
+
+## 고정 배열 접근
+
+`std::array<T, N>` 프로퍼티는 다음 기능을 제공합니다.
+
+- `TryGetSize`: 고정 길이 조회
+- `TryReadElement`: 요소의 읽기 전용 ValueView
+- `TryWriteElement`: 복사 대입 가능한 요소 수정
+- `TryEditElementObject`: 클래스·union 요소의 ObjectView
+- `TryWriteEnumElement`: scoped enum 요소에 숫자 쓰기
+
+const 배열과 const 요소에는 수정 콜백을 연결하지 않습니다.
+const 소유 객체를 통한 수정도 거부합니다.
+
+고정 배열은 Resize, Clear, Append, Insert, Erase를 지원하지 않습니다.
+Clear를 요소 초기화 작업으로 해석하지 않습니다.
+
+`std::array<bool, N>`은 실제 bool 요소 주소를 제공하므로 요소 읽기·쓰기를 지원합니다.
+길이가 0인 배열도 컨테이너로 인식하지만, 모든 요소 인덱스는 범위를 벗어납니다.
+
+## Set 접근과 편집
+
+`std::set`과 `std::unordered_set` 프로퍼티는 다음 기능을 제공합니다.
+
+- `IsSet`: set 계열 여부 확인
+- `TryGetSize`: 요소 수 조회
+- `TryReadElement`: 순회 위치의 요소 읽기
+- `TryFindSetElement`: 값으로 요소 검색
+- `TryInsertSetElement`: 요소 복사 삽입
+- `TryEraseSetElement`: 값으로 요소 삭제
+- `TryClear`: 모든 요소 제거
+
+검색과 중복 판정은 컨테이너의 comparator 또는 hash·equality 정책을 따릅니다.
+이미 존재하는 값의 삽입은 ElementAlreadyExists,
+없는 값의 검색·삭제는 ElementNotFound를 반환합니다.
+
+set 요소는 수정 가능한 뷰를 제공하지 않습니다.
+값을 바꾸려면 기존 요소 삭제와 새 요소 삽입을 별도로 수행합니다.
+두 작업을 하나의 원자적 교체로 보장하지 않습니다.
+
+## Map 접근과 편집
+
+`std::map`과 `std::unordered_map` 프로퍼티는 다음 기능을 제공합니다.
+
+- `IsMap`: map 계열 여부 확인
+- `GetMapKeyType`, `GetMapValueType`: 키·값의 C++ 타입 조회
+- `TryReadMapKey`, `TryReadMapValue`: 순회 위치의 키·값 읽기
+- `TryFindMapValue`: 키로 값 검색
+- `TryWriteMapValue`: 기존 키의 값 수정
+- `TryEditMapValueObject`: 기존 클래스·union 값의 ObjectView
+- `TryInsertMapEntry`: 키·값 복사 삽입
+- `TryEraseMapEntry`: 키로 항목 삭제
+- `TryClear`: 모든 항목 제거
+
+키와 값의 타입은 등록된 타입과 정확히 일치해야 합니다.
+숫자나 문자열의 자동 변환을 제공하지 않습니다.
+
+TryWriteMapValue는 없는 키를 생성하지 않습니다.
+TryInsertMapEntry는 기존 키의 값을 덮어쓰지 않습니다.
+없는 키는 KeyNotFound, 중복 삽입은 KeyAlreadyExists를 반환합니다.
+
+키는 읽기 전용입니다.
+객체 값 편집은 해당 값의 수명이나 소유권을 관리하지 않습니다.
+
+## 컨테이너 전체 순회
+
+`TryForEachElement(object, visitor)`는 다음 형태의 콜백을 받습니다.
+
+`bool visitor(std::size_t index, const reflection::ValueView& value)`
+
+`TryForEachMapEntry(object, visitor)`는 다음 형태의 콜백을 받습니다.
+
+`bool visitor(std::size_t index, const reflection::ValueView& key,
+const reflection::ValueView& value)`
+
+true를 반환하면 계속 읽고, false를 반환하면 정상적으로 중단합니다.
+정상 중단도 PropertyAccessError::None을 반환합니다.
+빈 컨테이너에서는 콜백을 호출하지 않습니다.
+
+전달하는 뷰는 실제 요소를 빌려 읽으며, 요소를 복사하지 않습니다.
+읽기 전용 객체에서도 순회를 사용할 수 있습니다.
+콜백과 콜백 상태를 함수 반환 이후까지 보관하지 않습니다.
+
+콜백 실행 중 대상 컨테이너를 삽입·삭제·비우기·크기 변경하지 않습니다.
+외부 별칭을 통한 변경에도 같은 제약이 적용됩니다.
+
+map의 일반 요소 순회는 pair<const Key, Mapped>를 전달합니다.
+키와 값을 구분해서 사용하려면 TryForEachMapEntry를 사용합니다.
+
+map·set의 전체 순회는 반복자를 한 번 진행하므로 O(n)입니다.
+인덱스 접근을 반복하면 매번 begin부터 이동하므로 전체 탐색은 O(n²)가 됩니다.
+vector·array는 기존 인덱스 접근으로 O(n)에 순회합니다.
+
+unordered 컨테이너의 index는 현재 순회 순번입니다.
+항목의 영구 ID나 정렬 순서를 의미하지 않습니다.
+
+현재 vector<bool>은 요소 ValueView를 제공하지 않으므로
+TryForEachElement도 ElementUnavailable을 반환합니다.
 
 ## 접근 오류와 예외
 
@@ -660,6 +767,10 @@ scoped enum을 요소로 갖는 수정 가능한 `std::vector` 프로퍼티에�
 
 추가·삽입 후 기존 요소 뷰와 포인터는 벡터의 주소 무효화 규칙에 따라 다시 조회해야 합니다.
 
+scoped enum을 요소로 갖는 수정 가능한 `std::array`도
+TryWriteEnumElement로 기존 요소를 수정할 수 있습니다.
+고정 배열에는 enum 요소 추가·삽입 기능을 제공하지 않습니다.
+
 ### 비트 플래그 정책
 
 Reflection은 엔진의 비트 연산자나 플래그 정책에 의존하지 않습니다.
@@ -677,11 +788,14 @@ Registry를 파괴하거나 대입해 내용을 교체한 이후에는 기존 �
 프로퍼티와 함수의 대상 객체는 사용자가 소유합니다.
 객체 생성·삭제, 포인터 소유권, 직렬화, 에디터 UI는 제공하지 않습니다.
 
-등록된 중첩 객체와 벡터의 접근 경로를 제공합니다.
-전체 객체 그래프를 자동 순회하거나 포인터를 따라가지 않습니다.
+등록된 중첩 객체와 vector, array, set, unordered_set, map, unordered_map의
+접근 경로를 제공합니다.
+전체 객체 그래프를 자동 순회하거나 포인터를 따라가지는 않습니다.
 
 일반적인 템플릿 선언의 코드 생성, 상속 관계를 이용한 접근,
-객체 생성·소멸, 직렬화와 벡터 이외의 컨테이너 접근은
-현재 제공하는 기능 범위에 포함하지 않습니다.
+객체 생성·소멸과 포인터 소유권 관리는 현재 제공하지 않습니다.
+
+직렬화는 Reflection Runtime의 책임이 아닙니다.
+별도 Archive 모듈과 소비자 측 어댑터가 Reflection 정보를 사용하여 처리합니다.
 
 지원 범위는 공개 API, 콜백 연결 조건과 검증 예제를 기준으로 합니다.

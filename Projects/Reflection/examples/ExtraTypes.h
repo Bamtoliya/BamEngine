@@ -5,10 +5,10 @@
 
 namespace example::extra
 {
-    STRUCT(NAME("Counter"))
-        struct Counter
+    STRUCT(DISPLAY_NAME("Counter"))
+    struct Counter
     {
-        PROPERTY(NAME("Value"))
+        PROPERTY(DISPLAY_NAME("Value"))
             int Value = 3;
     };
 

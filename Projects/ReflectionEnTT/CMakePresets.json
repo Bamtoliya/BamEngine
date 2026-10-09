@@ -1,0 +1,32 @@
+{
+  "version": 6,
+  "configurePresets": [
+    {
+      "name": "windows-dev",
+      "displayName": "Windows / existing EnTT and LLVM 20",
+      "generator": "Visual Studio 18 2026",
+      "architecture": "x64",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "CMAKE_TOOLCHAIN_FILE": "",
+        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded",
+        "EnTT_DIR": "${sourceDir}/../../out/build/x64-debug/vcpkg_installed/x64-windows/share/entt",
+        "LLVM_DIR": "${sourceDir}/../Reflection/dependencies/llvm-20.1.8/lib/cmake/llvm",
+        "Clang_DIR": "${sourceDir}/../Reflection/dependencies/llvm-20.1.8/lib/cmake/clang",
+        "REFLECTION_ENTT_CLANG_RESOURCE_DIR": "${sourceDir}/../Reflection/dependencies/llvm-20.1.8/lib/clang/20",
+        "REFLECTION_ENTT_BUILD_GENERATOR": "ON",
+        "REFLECTION_ENTT_BUILD_EXAMPLES": "ON",
+        "REFLECTION_ENTT_BUILD_TESTS": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "windows-dev", "configurePreset": "windows-dev", "configuration": "Release" }
+  ],
+  "testPresets": [
+    {
+      "name": "windows-dev", "configurePreset": "windows-dev", "configuration": "Release",
+      "output": { "outputOnFailure": true }
+    }
+  ]
+}

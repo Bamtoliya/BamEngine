@@ -1,0 +1,5 @@
+cmake_minimum_required(VERSION 3.24)
+project(ReflectionEnTTPackageConsumer LANGUAGES CXX)
+find_package(ReflectionEnTT CONFIG REQUIRED)
+add_executable(ReflectionEnTTPackageConsumer main.cpp)
+reflection_entt_generate(TARGET ReflectionEnTTPackageConsumer MODULE Package HEADERS Types.h)

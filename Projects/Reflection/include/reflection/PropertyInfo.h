@@ -18,6 +18,8 @@
 #include <utility>
 #include <vector>
 #include <cstddef>
+#include <concepts>
+#include <functional>
 
 namespace reflection
 {
@@ -35,7 +37,11 @@ namespace reflection
         Array,
         Class,
         Union,
-        Vector
+        Vector,
+        Set,
+        UnorderedSet,
+        Map,
+		UnorderedMap
     };
 
     namespace detail
@@ -92,6 +98,16 @@ namespace reflection
             else if constexpr (VectorTraits<Value>::IsVector)
             {
                 return PropertyValueKind::Vector;
+            }
+            else if constexpr (SetTraits<Value>::IsSet)
+            {
+                return SetTraits<Value>::IsUnordered
+                    ? PropertyValueKind::UnorderedSet : PropertyValueKind::Set;
+            }
+            else if constexpr (MapTraits<Value>::IsMap)
+            {
+                return MapTraits<Value>::IsUnordered
+                    ? PropertyValueKind::UnorderedMap : PropertyValueKind::Map;
             }
             else if constexpr (std::is_class_v<Value>)
             {
@@ -706,8 +722,7 @@ namespace reflection
         }
 
         [[nodiscard]]
-        PropertyReadResult TryReadElement(
-            const ObjectView& object, std::size_t index) const
+        PropertyReadResult TryReadElement(const ObjectView& object, std::size_t index) const
         {
             using Error = PropertyAccessError;
 
@@ -733,6 +748,518 @@ namespace reflection
             }
 
             return { Error::None, m_container.ReadElement(container.Value.m_address, index) };
+        }
+
+        template<typename Visitor>
+            requires std::invocable<Visitor&, std::size_t, const ValueView&>&&
+        std::same_as<std::invoke_result_t<Visitor&, std::size_t, const ValueView&>, bool>
+            [[nodiscard]] PropertyAccessError TryForEachElement(const ObjectView& object, Visitor&& visitor) const
+        {
+            using Error = PropertyAccessError;
+
+            const auto container = TryReadValue(object);
+
+            if (!container)
+            {
+                return container.Error;
+            }
+
+            if (!IsContainer())
+            {
+                return Error::NotContainer;
+            }
+
+            if (m_container.ForEachElement != nullptr)
+            {
+                auto callback = [&visitor](std::size_t index, const ValueView& value) -> bool
+                    {
+                        return std::invoke(visitor, index, value);
+                    };
+
+                using Callback = decltype(callback);
+
+                const auto invoke = +[](void* context, std::size_t index, const ValueView& value) -> bool
+                    {
+                        return (*static_cast<Callback*>(context))(index, value);
+                    };
+
+                m_container.ForEachElement(container.Value.m_address, std::addressof(callback), invoke);
+                return Error::None;
+            }
+
+            if (m_container.ReadElement == nullptr)
+            {
+                return Error::ElementUnavailable;
+            }
+
+            const auto size = m_container.Size(container.Value.m_address);
+
+            for (std::size_t index = 0; index < size; ++index)
+            {
+                const auto value = m_container.ReadElement(container.Value.m_address, index);
+
+                if (!std::invoke(visitor, index, value))
+                {
+                    break;
+                }
+            }
+
+            return Error::None;
+        }
+
+        template<typename Visitor>
+            requires std::invocable<Visitor&, std::size_t, const ValueView&, const ValueView&>&&
+        std::same_as<std::invoke_result_t<Visitor&, std::size_t, const ValueView&, const ValueView&>, bool>
+            [[nodiscard]] PropertyAccessError TryForEachMapEntry(const ObjectView& object, Visitor&& visitor) const
+        {
+            using Error = PropertyAccessError;
+
+            const auto container = TryReadValue(object);
+
+            if (!container)
+            {
+                return container.Error;
+            }
+
+            if (!IsMap())
+            {
+                return Error::NotMap;
+            }
+
+            if (m_container.ForEachMapEntry == nullptr)
+            {
+                return Error::ElementUnavailable;
+            }
+
+            auto callback = [&visitor](std::size_t index, const ValueView& key, const ValueView& value) -> bool
+                {
+                    return std::invoke(visitor, index, key, value);
+                };
+
+            using Callback = decltype(callback);
+
+            const auto invoke = +[](void* context, std::size_t index,
+                const ValueView& key, const ValueView& value) -> bool
+                {
+                    return (*static_cast<Callback*>(context))(index, key, value);
+                };
+
+            m_container.ForEachMapEntry(container.Value.m_address, std::addressof(callback), invoke);
+            return Error::None;
+        }
+
+        [[nodiscard]] bool IsSet() const noexcept
+        {
+            return m_valueKind == PropertyValueKind::Set || m_valueKind == PropertyValueKind::UnorderedSet;
+        }
+
+        [[nodiscard]] bool CanInsertSetElement() const noexcept
+        {
+            return m_container.InsertSetElement != nullptr;
+        }
+
+        [[nodiscard]] bool CanEraseSetElement() const noexcept
+        {
+            return m_container.EraseSetElement != nullptr;
+        }
+
+        [[nodiscard]]
+        PropertyReadResult TryFindSetElement(const ObjectView& object, const ValueView& element) const
+        {
+            using Error = PropertyAccessError;
+
+            const auto container = TryReadValue(object);
+            if (!container)
+            {
+                return { container.Error, {} };
+            }
+
+            if (!element.IsValid())
+            {
+                return { Error::InvalidValue, {} };
+            }
+
+            if (!IsSet())
+            {
+                return { Error::NotSet, {} };
+            }
+
+            if (m_container.ElementType != element.GetCppType())
+            {
+                return { Error::ValueTypeMismatch, {} };
+            }
+
+            if (m_container.FindSetElement == nullptr)
+            {
+                return { Error::ElementUnavailable, {} };
+            }
+
+            auto found = m_container.FindSetElement(container.Value.m_address, element.m_address);
+            if (!found.IsValid())
+            {
+                return { Error::ElementNotFound, {} };
+            }
+
+            return { Error::None, found };
+        }
+
+        [[nodiscard]]
+        PropertyAccessError TryInsertSetElement(const ObjectView& object, const ValueView& element) const
+        {
+            using Error = PropertyAccessError;
+
+            const auto container = TryReadValue(object);
+            if (!container)
+            {
+                return container.Error;
+            }
+
+            if (!element.IsValid())
+            {
+                return Error::InvalidValue;
+            }
+
+            if (!IsSet())
+            {
+                return Error::NotSet;
+            }
+
+            if (m_container.ElementType != element.GetCppType())
+            {
+                return Error::ValueTypeMismatch;
+            }
+
+            if (object.m_writeAddress == nullptr)
+            {
+                return Error::ReadOnlyObject;
+            }
+
+            if (m_container.ReadOnly)
+            {
+                return Error::ReadOnlyProperty;
+            }
+
+            if (m_container.InsertSetElement == nullptr)
+            {
+                return Error::InsertUnavailable;
+            }
+
+            return m_container.InsertSetElement(object.m_writeAddress, element.m_address);
+        }
+
+        [[nodiscard]]
+        PropertyAccessError TryEraseSetElement(const ObjectView& object, const ValueView& element) const
+        {
+            using Error = PropertyAccessError;
+
+            const auto container = TryReadValue(object);
+            if (!container)
+            {
+                return container.Error;
+            }
+
+            if (!element.IsValid())
+            {
+                return Error::InvalidValue;
+            }
+
+            if (!IsSet())
+            {
+                return Error::NotSet;
+            }
+
+            if (m_container.ElementType != element.GetCppType())
+            {
+                return Error::ValueTypeMismatch;
+            }
+
+            if (object.m_writeAddress == nullptr)
+            {
+                return Error::ReadOnlyObject;
+            }
+
+            if (m_container.ReadOnly)
+            {
+                return Error::ReadOnlyProperty;
+            }
+
+            if (m_container.EraseSetElement == nullptr)
+            {
+                return Error::EraseUnavailable;
+            }
+
+            return m_container.EraseSetElement(object.m_writeAddress, element.m_address);
+        }
+
+        [[nodiscard]] bool IsMap() const noexcept
+        {
+            return m_container.ReadMapKey != nullptr && m_container.ReadMapValue != nullptr;
+        }
+
+        [[nodiscard]] std::type_index GetMapKeyType() const noexcept
+        {
+            return m_container.KeyType;
+        }
+
+        [[nodiscard]] std::type_index GetMapValueType() const noexcept
+        {
+            return m_container.MappedType;
+        }
+
+        [[nodiscard]] PropertyReadResult TryReadMapKey(const ObjectView& object, std::size_t index) const
+        {
+            return TryReadMapPart(object, index, true);
+        }
+
+        [[nodiscard]] PropertyReadResult TryReadMapValue(const ObjectView& object, std::size_t index) const
+        {
+            return TryReadMapPart(object, index, false);
+        }
+
+        [[nodiscard]] bool CanWriteMapValue() const noexcept
+        {
+            return m_container.WriteMapValue != nullptr;
+        }
+
+        [[nodiscard]]
+        PropertyReadResult TryFindMapValue(const ObjectView& object, const ValueView& key) const
+        {
+            using Error = PropertyAccessError;
+
+            const auto container = TryReadValue(object);
+            if (!container)
+            {
+                return { container.Error, {} };
+            }
+
+            if (!key.IsValid())
+            {
+                return { Error::InvalidValue, {} };
+            }
+
+            if (!IsMap())
+            {
+                return { Error::NotMap, {} };
+            }
+
+            if (m_container.KeyType != key.GetCppType())
+            {
+                return { Error::KeyTypeMismatch, {} };
+            }
+
+            if (m_container.FindMapValue == nullptr)
+            {
+                return { Error::ElementUnavailable, {} };
+            }
+
+            auto value = m_container.FindMapValue(container.Value.m_address, key.m_address);
+            if (!value.IsValid())
+            {
+                return { Error::KeyNotFound, {} };
+            }
+
+            return { Error::None, value };
+        }
+
+        [[nodiscard]] bool CanEditMapValueObject() const noexcept
+        {
+            return m_container.EditMapValueObject != nullptr;
+        }
+
+        [[nodiscard]]
+        PropertyObjectResult TryEditMapValueObject(const ObjectView& object, const ValueView& key) const
+        {
+            using Error = PropertyAccessError;
+
+            const auto container = TryReadValue(object);
+            if (!container)
+            {
+                return { container.Error, {} };
+            }
+
+            if (!key.IsValid())
+            {
+                return { Error::InvalidValue, {} };
+            }
+
+            if (!IsMap())
+            {
+                return { Error::NotMap, {} };
+            }
+
+            if (m_container.KeyType != key.GetCppType())
+            {
+                return { Error::KeyTypeMismatch, {} };
+            }
+
+            if (!m_container.ObjectMapped)
+            {
+                return { Error::ObjectUnavailable, {} };
+            }
+
+            if (object.m_writeAddress == nullptr)
+            {
+                return { Error::ReadOnlyObject, {} };
+            }
+
+            if (m_container.ReadOnly || m_container.EditMapValueObject == nullptr)
+            {
+                return { Error::ReadOnlyProperty, {} };
+            }
+
+            return m_container.EditMapValueObject(object.m_writeAddress, key.m_address);
+        }
+
+        [[nodiscard]]
+        PropertyAccessError TryWriteMapValue(const ObjectView& object, const ValueView& key, const ValueView& value) const
+        {
+            using Error = PropertyAccessError;
+
+            const auto container = TryReadValue(object);
+            if (!container)
+            {
+                return container.Error;
+            }
+
+            if (!key.IsValid() || !value.IsValid())
+            {
+                return Error::InvalidValue;
+            }
+
+            if (!IsMap())
+            {
+                return Error::NotMap;
+            }
+
+            if (m_container.KeyType != key.GetCppType())
+            {
+                return Error::KeyTypeMismatch;
+            }
+
+            if (m_container.MappedType != value.GetCppType())
+            {
+                return Error::ValueTypeMismatch;
+            }
+
+            if (object.m_writeAddress == nullptr)
+            {
+                return Error::ReadOnlyObject;
+            }
+
+            if (m_container.ReadOnly)
+            {
+                return Error::ReadOnlyProperty;
+            }
+
+            if (m_container.WriteMapValue == nullptr)
+            {
+                return Error::ElementWriteUnavailable;
+            }
+
+            return m_container.WriteMapValue(object.m_writeAddress, key.m_address, value.m_address);
+        }
+
+        [[nodiscard]] bool CanInsertMapEntry() const noexcept
+        {
+            return m_container.InsertMapEntry != nullptr;
+        }
+
+        [[nodiscard]] bool CanEraseMapEntry() const noexcept
+        {
+            return m_container.EraseMapEntry != nullptr;
+        }
+
+        [[nodiscard]] PropertyAccessError TryInsertMapEntry(
+            const ObjectView& object, const ValueView& key, const ValueView& value) const
+        {
+            using Error = PropertyAccessError;
+
+            const auto container = TryReadValue(object);
+            if (!container)
+            {
+                return container.Error;
+            }
+
+            if (!key.IsValid() || !value.IsValid())
+            {
+                return Error::InvalidValue;
+            }
+
+            if (!IsMap())
+            {
+                return Error::NotMap;
+            }
+
+            if (m_container.KeyType != key.GetCppType())
+            {
+                return Error::KeyTypeMismatch;
+            }
+
+            if (m_container.MappedType != value.GetCppType())
+            {
+                return Error::ValueTypeMismatch;
+            }
+
+            if (object.m_writeAddress == nullptr)
+            {
+                return Error::ReadOnlyObject;
+            }
+
+            if (m_container.ReadOnly)
+            {
+                return Error::ReadOnlyProperty;
+            }
+
+            if (m_container.InsertMapEntry == nullptr)
+            {
+                return Error::InsertUnavailable;
+            }
+
+            return m_container.InsertMapEntry(object.m_writeAddress, key.m_address, value.m_address);
+        }
+
+        [[nodiscard]]
+        PropertyAccessError TryEraseMapEntry(const ObjectView& object, const ValueView& key) const
+        {
+            using Error = PropertyAccessError;
+
+            const auto container = TryReadValue(object);
+            if (!container)
+            {
+                return container.Error;
+            }
+
+            if (!key.IsValid())
+            {
+                return Error::InvalidValue;
+            }
+
+            if (!IsMap())
+            {
+                return Error::NotMap;
+            }
+
+            if (m_container.KeyType != key.GetCppType())
+            {
+                return Error::KeyTypeMismatch;
+            }
+
+            if (object.m_writeAddress == nullptr)
+            {
+                return Error::ReadOnlyObject;
+            }
+
+            if (m_container.ReadOnly)
+            {
+                return Error::ReadOnlyProperty;
+            }
+
+            if (m_container.EraseMapEntry == nullptr)
+            {
+                return Error::EraseUnavailable;
+            }
+
+            return m_container.EraseMapEntry(object.m_writeAddress, key.m_address);
         }
 
         [[nodiscard]]
@@ -962,6 +1489,30 @@ namespace reflection
         }
 
     private:
+        PropertyReadResult TryReadMapPart(const ObjectView& object, std::size_t index, bool readKey) const
+        {
+            using Error = PropertyAccessError;
+            const auto container = TryReadValue(object);
+
+            if (!container)
+            {
+                return { container.Error, {} };
+            }
+
+            if (!IsMap())
+            {
+                return { Error::NotMap, {} };
+            }
+
+            if (index >= m_container.Size(container.Value.m_address))
+            {
+                return { Error::IndexOutOfRange, {} };
+            }
+
+            const auto read = readKey ? m_container.ReadMapKey : m_container.ReadMapValue;
+            return { Error::None, read(container.Value.m_address, index) };
+        }
+
         std::type_index m_ownerType{ typeid(void) };
         std::type_index m_valueType{ typeid(void) };
         PropertyValueKind m_valueKind = PropertyValueKind::Unknown;

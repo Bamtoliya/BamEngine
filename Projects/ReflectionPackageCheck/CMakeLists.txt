@@ -3,6 +3,13 @@ project(ReflectionPackageCheck LANGUAGES CXX)
 
 find_package(Reflection 0.1 CONFIG REQUIRED)
 
+get_target_property(_reflection_package_includes Reflection::Runtime INTERFACE_INCLUDE_DIRECTORIES)
+get_target_property(_reflection_package_runtime Reflection::Runtime IMPORTED_LOCATION_RELEASE)
+
+message(STATUS "Reflection package: ${Reflection_DIR}")
+message(STATUS "Reflection headers: ${_reflection_package_includes}")
+message(STATUS "Reflection runtime: ${_reflection_package_runtime}")
+
 if(NOT COMMAND reflection_generate)
     message(FATAL_ERROR "Installed package does not provide reflection_generate()")
 endif()

@@ -7,7 +7,7 @@
 #include <type_traits>
 #include <utility>
 
-namespace reflection
+namespace legacy_reflection
 {
     class PropertyAccessor
     {

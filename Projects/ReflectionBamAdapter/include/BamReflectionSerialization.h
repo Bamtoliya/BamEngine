@@ -46,15 +46,15 @@ namespace bam_reflection
         static void SetResourceHandleCallbacks(const ResourceHandleCallbacks& callbacks);
         static const ResourceHandleCallbacks& GetResourceHandleCallbacks();
 
-        static const reflection::TypeInfo* ResolveTypeInfo(std::string_view type_name);
+        static const legacy_reflection::TypeInfo* ResolveTypeInfo(std::string_view type_name);
 
         static void* CreateInstanceByQualifiedName(std::string_view qualified_name);
         static void DestroyInstanceByQualifiedName(std::string_view qualified_name, void* instance);
 
-        static void SerializeProperty(Engine::Archive& ar, void* instance, const reflection::PropertyInfo& property_info);
-        static void SerializeProperties(Engine::Archive& ar, void* instance, const reflection::TypeInfo& type_info);
+        static void SerializeProperty(Engine::Archive& ar, void* instance, const legacy_reflection::PropertyInfo& property_info);
+        static void SerializeProperties(Engine::Archive& ar, void* instance, const legacy_reflection::TypeInfo& type_info);
 
     private:
-        static void ProcessProperty(Engine::Archive& ar, const reflection::PropertyInfo& property_info, void* value_ptr);
+        static void ProcessProperty(Engine::Archive& ar, const legacy_reflection::PropertyInfo& property_info, void* value_ptr);
     };
 }

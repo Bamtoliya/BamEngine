@@ -6,7 +6,7 @@
 #include <span>
 #include <string_view>
 
-namespace reflection
+namespace legacy_reflection
 {
     using InvokeFunctionPtr = void* (*)(void* instance, void** args);
 

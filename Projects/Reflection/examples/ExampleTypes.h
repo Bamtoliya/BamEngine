@@ -6,11 +6,11 @@
 
 namespace example
 {
-    STRUCT(NAME("Movement Configuration"))
+    STRUCT(DISPLAY_NAME("Movement Configuration"))
     struct MovementSettings
     {
         PROPERTY(
-            NAME("Speed"),
+            DISPLAY_NAME("Speed"),
             CATEGORY("Movement"),
             EDITABLE,
             RANGE(0.0, 100.0),
@@ -19,7 +19,7 @@ namespace example
         float Speed = 10.0f;
     };
 
-    CLASS(NAME("Player"))
+    CLASS(DISPLAY_NAME("Player"))
     class Player
     {
         REFLECT_BODY()
@@ -80,11 +80,11 @@ namespace example
         }
 
     private:
-        PROPERTY(NAME("Position"))
+        PROPERTY(DISPLAY_NAME("Position"))
         float m_position = 0.0f;
     };
 
-    ENUM(NAME("Movement Mode"))
+    ENUM(DISPLAY_NAME("Movement Mode"))
         enum class MovementMode
     {
         Walk,

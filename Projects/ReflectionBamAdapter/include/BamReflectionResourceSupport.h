@@ -22,15 +22,15 @@ namespace bam_reflection
     inline constexpr bool IsResourceHandleV = IsResourceHandle<T>::value;
 
     template<typename T>
-    constexpr reflection::EPropertyType ResolveResourceHandlePropertyType()
+    constexpr legacy_reflection::EPropertyType ResolveResourceHandlePropertyType()
     {
         if constexpr (IsResourceHandleV<T>)
         {
-            return reflection::EPropertyType::ResourceHandle;
+            return legacy_reflection::EPropertyType::ResourceHandle;
         }
         else
         {
-            return reflection::EPropertyType::UserDefined;
+            return legacy_reflection::EPropertyType::UserDefined;
         }
     }
 }

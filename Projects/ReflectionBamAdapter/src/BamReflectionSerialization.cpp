@@ -19,8 +19,8 @@
 
 namespace
 {
-    constexpr std::uint64_t kNoSerializeHash = reflection::CompileTimeHash("NoSerialize");
-    constexpr std::uint64_t kTransientHash = reflection::CompileTimeHash("Transient");
+    constexpr std::uint64_t kNoSerializeHash = legacy_reflection::CompileTimeHash("NoSerialize");
+    constexpr std::uint64_t kTransientHash = legacy_reflection::CompileTimeHash("Transient");
 
     auto& ObjectInstantiatorSlot()
     {
@@ -69,14 +69,14 @@ namespace
         return result;
     }
 
-    bool ShouldSkipProperty(const reflection::PropertyInfo& property_info)
+    bool ShouldSkipProperty(const legacy_reflection::PropertyInfo& property_info)
     {
         return
-            reflection::MetadataEntry::Find(property_info.Metadata, kNoSerializeHash) != nullptr ||
-            reflection::MetadataEntry::Find(property_info.Metadata, kTransientHash) != nullptr;
+            legacy_reflection::MetadataEntry::Find(property_info.Metadata, kNoSerializeHash) != nullptr ||
+            legacy_reflection::MetadataEntry::Find(property_info.Metadata, kTransientHash) != nullptr;
     }
 
-    const reflection::TypeInfo* ResolveReflectionType(std::string_view type_name)
+    const legacy_reflection::TypeInfo* ResolveReflectionType(std::string_view type_name)
     {
         if (type_name.empty())
         {
@@ -89,11 +89,11 @@ namespace
             return nullptr;
         }
 
-        return reflection::Registry::Get().ResolveTypeName(normalized);
+        return legacy_reflection::Registry::Get().ResolveTypeName(normalized);
     }
 
-    const reflection::TypeInfo* ResolveDynamicObjectType(
-        const reflection::VariableInfo& variable_info,
+    const legacy_reflection::TypeInfo* ResolveDynamicObjectType(
+        const legacy_reflection::VariableInfo& variable_info,
         void* object_instance)
     {
         if (!object_instance)
@@ -101,7 +101,7 @@ namespace
             return nullptr;
         }
 
-        const reflection::TypeInfo* declared_type_info = ResolveReflectionType(variable_info.Name);
+        const legacy_reflection::TypeInfo* declared_type_info = ResolveReflectionType(variable_info.Name);
         if (!declared_type_info)
         {
             return nullptr;
@@ -115,14 +115,14 @@ namespace
         return declared_type_info;
     }
 
-    std::size_t GetKnownValueSize(const reflection::VariableInfo& variable_info, std::size_t explicit_size)
+    std::size_t GetKnownValueSize(const legacy_reflection::VariableInfo& variable_info, std::size_t explicit_size)
     {
         if (explicit_size != 0)
         {
             return explicit_size;
         }
 
-        using reflection::EPropertyType;
+        using legacy_reflection::EPropertyType;
 
         switch (variable_info.Type)
         {
@@ -166,11 +166,11 @@ namespace
     bool TrySerializeBuiltinValue(
         Engine::Archive& ar,
         std::string_view property_name,
-        const reflection::VariableInfo& variable_info,
+        const legacy_reflection::VariableInfo& variable_info,
         void* value_ptr,
         std::size_t enum_size)
     {
-        using reflection::EPropertyType;
+        using legacy_reflection::EPropertyType;
 
         switch (variable_info.Type)
         {
@@ -268,9 +268,9 @@ namespace
         return false;
     }
 
-    std::string KeyToString(reflection::EPropertyType type, const void* key_ptr)
+    std::string KeyToString(legacy_reflection::EPropertyType type, const void* key_ptr)
     {
-        using reflection::EPropertyType;
+        using legacy_reflection::EPropertyType;
 
         switch (type)
         {
@@ -314,9 +314,9 @@ namespace
     }
 
     template<typename TCallback>
-    void WithParsedKey(reflection::EPropertyType type, const std::string& key_string, TCallback&& callback)
+    void WithParsedKey(legacy_reflection::EPropertyType type, const std::string& key_string, TCallback&& callback)
     {
-        using reflection::EPropertyType;
+        using legacy_reflection::EPropertyType;
 
         switch (type)
         {
@@ -408,18 +408,18 @@ namespace
     void SerializeValue(
         Engine::Archive& ar,
         std::string_view property_name,
-        const reflection::VariableInfo& variable_info,
+        const legacy_reflection::VariableInfo& variable_info,
         void* value_ptr,
         std::size_t size,
-        const reflection::ContainerInfo* container_data);
+        const legacy_reflection::ContainerInfo* container_data);
 
     void SerializeStructValue(
         Engine::Archive& ar,
         std::string_view property_name,
-        const reflection::VariableInfo& variable_info,
+        const legacy_reflection::VariableInfo& variable_info,
         void* value_ptr)
     {
-        const reflection::TypeInfo* type_info = ResolveReflectionType(variable_info.Name);
+        const legacy_reflection::TypeInfo* type_info = ResolveReflectionType(variable_info.Name);
         if (!type_info)
         {
             return;
@@ -442,13 +442,13 @@ namespace
     void SerializeObjectValue(
         Engine::Archive& ar,
         std::string_view property_name,
-        const reflection::VariableInfo& variable_info,
+        const legacy_reflection::VariableInfo& variable_info,
         void* value_ptr)
     {
         void** object_storage = static_cast<void**>(value_ptr);
         const bool is_inline = property_name.empty();
 
-        const reflection::TypeInfo* declared_type_info = ResolveReflectionType(variable_info.Name);
+        const legacy_reflection::TypeInfo* declared_type_info = ResolveReflectionType(variable_info.Name);
 
         if (!is_inline && !ar.PushScope(property_name))
         {
@@ -462,7 +462,7 @@ namespace
         if (ar.IsWriting())
         {
             std::string actual_type_name;
-            const reflection::TypeInfo* actual_type_info = nullptr;
+            const legacy_reflection::TypeInfo* actual_type_info = nullptr;
 
             if (*object_storage)
             {
@@ -496,7 +496,7 @@ namespace
             }
             else
             {
-                const reflection::TypeInfo* actual_type_info = ResolveReflectionType(loaded_type_name);
+                const legacy_reflection::TypeInfo* actual_type_info = ResolveReflectionType(loaded_type_name);
                 if (!actual_type_info)
                 {
                     *object_storage = nullptr;
@@ -505,7 +505,7 @@ namespace
                 {
                     if (*object_storage)
                     {
-                        const reflection::TypeInfo* existing_type_info = ResolveDynamicObjectType(variable_info, *object_storage);
+                        const legacy_reflection::TypeInfo* existing_type_info = ResolveDynamicObjectType(variable_info, *object_storage);
                         if (!existing_type_info)
                         {
                             existing_type_info = declared_type_info;
@@ -560,7 +560,7 @@ namespace
         Engine::Archive& ar,
         std::string_view property_name,
         void* container_ptr,
-        const reflection::ContainerInfo* container_data)
+        const legacy_reflection::ContainerInfo* container_data)
     {
         if (!container_data || !container_data->Accessor)
         {
@@ -635,7 +635,7 @@ namespace
         Engine::Archive& ar,
         std::string_view property_name,
         void* container_ptr,
-        const reflection::ContainerInfo* container_data)
+        const legacy_reflection::ContainerInfo* container_data)
     {
         if (!container_data || !container_data->Accessor)
         {
@@ -649,7 +649,7 @@ namespace
             struct MapWriteContext
             {
                 Engine::Archive* Archive = nullptr;
-                const reflection::ContainerInfo* Container = nullptr;
+                const legacy_reflection::ContainerInfo* Container = nullptr;
             };
 
             MapWriteContext context{ &ar, container_data };
@@ -813,10 +813,10 @@ namespace
     void SerializeValue(
         Engine::Archive& ar,
         std::string_view property_name,
-        const reflection::VariableInfo& variable_info,
+        const legacy_reflection::VariableInfo& variable_info,
         void* value_ptr,
         std::size_t size,
-        const reflection::ContainerInfo* container_data)
+        const legacy_reflection::ContainerInfo* container_data)
     {
         if (!value_ptr)
         {
@@ -830,26 +830,26 @@ namespace
 
         switch (variable_info.Type)
         {
-        case reflection::EPropertyType::Object:
+        case legacy_reflection::EPropertyType::Object:
             SerializeObjectValue(ar, property_name, variable_info, value_ptr);
             return;
 
-        case reflection::EPropertyType::Struct:
-        case reflection::EPropertyType::UserDefined:
+        case legacy_reflection::EPropertyType::Struct:
+        case legacy_reflection::EPropertyType::UserDefined:
             SerializeStructValue(ar, property_name, variable_info, value_ptr);
             return;
 
-        case reflection::EPropertyType::Array:
-        case reflection::EPropertyType::List:
-        case reflection::EPropertyType::Set:
+        case legacy_reflection::EPropertyType::Array:
+        case legacy_reflection::EPropertyType::List:
+        case legacy_reflection::EPropertyType::Set:
             SerializeSequenceValue(ar, property_name, value_ptr, container_data);
             return;
 
-        case reflection::EPropertyType::Map:
+        case legacy_reflection::EPropertyType::Map:
             SerializeMapValue(ar, property_name, value_ptr, container_data);
             return;
 
-        case reflection::EPropertyType::ResourceHandle:
+        case legacy_reflection::EPropertyType::ResourceHandle:
             SerializeResourceHandleValue(ar, property_name, value_ptr, size);
             return;
 
@@ -883,32 +883,32 @@ namespace bam_reflection
         return ResourceHandleCallbacksSlot();
     }
 
-    const reflection::TypeInfo* ReflectionSerialization::ResolveTypeInfo(std::string_view type_name)
+    const legacy_reflection::TypeInfo* ReflectionSerialization::ResolveTypeInfo(std::string_view type_name)
     {
         return ResolveReflectionType(type_name);
     }
 
     void* ReflectionSerialization::CreateInstanceByQualifiedName(std::string_view qualified_name)
     {
-        return reflection::Registry::Get().CreateInstanceByQualifiedName(qualified_name);
+        return legacy_reflection::Registry::Get().CreateInstanceByQualifiedName(qualified_name);
     }
 
     void ReflectionSerialization::DestroyInstanceByQualifiedName(std::string_view qualified_name, void* instance)
     {
-        reflection::Registry::Get().DestroyInstanceByQualifiedName(qualified_name, instance);
+        legacy_reflection::Registry::Get().DestroyInstanceByQualifiedName(qualified_name, instance);
     }
 
     void ReflectionSerialization::SerializeProperty(
         Engine::Archive& ar,
         void* instance,
-        const reflection::PropertyInfo& property_info)
+        const legacy_reflection::PropertyInfo& property_info)
     {
         if (!instance || ShouldSkipProperty(property_info))
         {
             return;
         }
 
-        void* value_ptr = reflection::PropertyAccessor::GetValuePtr(instance, property_info);
+        void* value_ptr = legacy_reflection::PropertyAccessor::GetValuePtr(instance, property_info);
         if (!value_ptr)
         {
             return;
@@ -920,7 +920,7 @@ namespace bam_reflection
     void ReflectionSerialization::SerializeProperties(
         Engine::Archive& ar,
         void* instance,
-        const reflection::TypeInfo& type_info)
+        const legacy_reflection::TypeInfo& type_info)
     {
         if (!instance)
         {
@@ -929,13 +929,13 @@ namespace bam_reflection
 
         if (!type_info.ParentQualifiedName.empty())
         {
-            if (const reflection::TypeInfo* parent = reflection::Registry::Get().ResolveTypeName(type_info.ParentQualifiedName))
+            if (const legacy_reflection::TypeInfo* parent = legacy_reflection::Registry::Get().ResolveTypeName(type_info.ParentQualifiedName))
             {
                 SerializeProperties(ar, instance, *parent);
             }
         }
 
-        for (const reflection::PropertyInfo& property_info : type_info.Properties)
+        for (const legacy_reflection::PropertyInfo& property_info : type_info.Properties)
         {
             SerializeProperty(ar, instance, property_info);
         }
@@ -943,7 +943,7 @@ namespace bam_reflection
 
     void ReflectionSerialization::ProcessProperty(
         Engine::Archive& ar,
-        const reflection::PropertyInfo& property_info,
+        const legacy_reflection::PropertyInfo& property_info,
         void* value_ptr)
     {
         SerializeValue(

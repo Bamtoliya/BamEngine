@@ -11,7 +11,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace reflection
+namespace legacy_reflection
 {
     class REFLECTION_CORE_API Registry
     {

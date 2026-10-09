@@ -39,11 +39,7 @@ function(add_reflection_bundle)
     endif()
 
     if(NOT ARB_TOOL_ENTRY)
-        if(DEFINED REFLECTION_CODEGEN_ENTRY)
-            set(ARB_TOOL_ENTRY "${REFLECTION_CODEGEN_ENTRY}")
-        else()
-            message(FATAL_ERROR "add_reflection_bundle: TOOL_ENTRY not provided and REFLECTION_CODEGEN_ENTRY is not defined")
-        endif()
+        set(ARB_TOOL_ENTRY "${CMAKE_SOURCE_DIR}/Projects/ReflectionAST/main.py")
     endif()
 
     if(NOT ARB_PYTHON_EXECUTABLE)
@@ -64,6 +60,13 @@ function(add_reflection_bundle)
 
     string(MAKE_C_IDENTIFIER "${ARB_TARGET}_${ARB_MODULE}_Reflection" _bundle_target_name)
 
+    set(_reflection_include_file "${CMAKE_CURRENT_BINARY_DIR}/${_bundle_target_name}_includes_$<CONFIG>.txt")
+
+    file(GENERATE
+        OUTPUT "${_reflection_include_file}"
+        CONTENT "$<JOIN:$<TARGET_PROPERTY:${ARB_TARGET},INCLUDE_DIRECTORIES>,\n>\n"
+    )
+
     add_custom_command(
         OUTPUT "${ARB_OUTPUT_CPP}"
         COMMAND "${CMAKE_COMMAND}" -E make_directory "${_reflection_output_dir}"
@@ -71,10 +74,12 @@ function(add_reflection_bundle)
             --module "${ARB_MODULE}"
             --source-root "${ARB_SOURCE_ROOT}"
             --output "${ARB_OUTPUT_CPP}"
+            --include-dirs-file "${_reflection_include_file}"
             ${ARB_EXTRA_ARGS}
         WORKING_DIRECTORY "${ARB_WORKING_DIRECTORY}"
         DEPENDS
             "${ARB_TOOL_ENTRY}"
+            "${_reflection_include_file}"
             ${ARB_DEPENDS}
         COMMENT "Generating reflection bundle: ${ARB_MODULE} -> ${ARB_OUTPUT_CPP}"
         VERBATIM

@@ -6,7 +6,7 @@
 #include <type_traits>
 #include <utility>
 
-namespace reflection
+namespace legacy_reflection
 {
     template<typename Ret, typename Class, typename... Args>
     void* InvokeMemberFunction(Ret(Class::* fn)(Args...), void* instance, void** args)
@@ -62,10 +62,10 @@ namespace reflection
 }
 
 #define EMPTY_FUNCTIONS(TypeName) \
-    static constexpr std::span<const reflection::FunctionInfo> TypeName##_Functions{};
+    static constexpr std::span<const legacy_reflection::FunctionInfo> TypeName##_Functions{};
 
 #define DECLARE_FUNCTION_PARAMS(TypeName, FunctionName) \
-    static constexpr reflection::VariableInfo TypeName##_##FunctionName##_Params[] = {
+    static constexpr legacy_reflection::VariableInfo TypeName##_##FunctionName##_Params[] = {
 
 #define FUNCTION_PARAM(TypeNameLiteral, TypeEnumValue) \
     { TypeNameLiteral, TypeEnumValue, nullptr },
@@ -74,31 +74,31 @@ namespace reflection
     };
 
 #define BEGIN_FUNCTIONS(TypeName) \
-    static constexpr reflection::FunctionInfo TypeName##_Functions[] = {
+    static constexpr legacy_reflection::FunctionInfo TypeName##_Functions[] = {
 
 #define END_FUNCTIONS \
     };
 
 #define REFLECT_FUNCTION_EX(TypeName, OwnerQualifiedNameLiteral, FunctionName, ReturnTypeName, ReturnTypeEnum, ParamsSpan) \
     { \
-        reflection::CompileTimeHash(OwnerQualifiedNameLiteral "::" #FunctionName), \
+        legacy_reflection::CompileTimeHash(OwnerQualifiedNameLiteral "::" #FunctionName), \
         #FunctionName, \
         #FunctionName, \
         OwnerQualifiedNameLiteral, \
         { ReturnTypeName, ReturnTypeEnum, nullptr }, \
         ParamsSpan, \
-        &reflection::AutoThunk<&TypeName::FunctionName> \
+        &legacy_reflection::AutoThunk<&TypeName::FunctionName> \
     },
 
 #define REFLECT_FUNCTION_OVERLOAD_EX(TypeName, OwnerQualifiedNameLiteral, DisplayName, SignatureText, FunctionPtr, ReturnTypeName, ReturnTypeEnum, ParamsSpan) \
     { \
-        reflection::CompileTimeHash(OwnerQualifiedNameLiteral "::" SignatureText), \
+        legacy_reflection::CompileTimeHash(OwnerQualifiedNameLiteral "::" SignatureText), \
         DisplayName, \
         SignatureText, \
         OwnerQualifiedNameLiteral, \
         { ReturnTypeName, ReturnTypeEnum, nullptr }, \
         ParamsSpan, \
-        &reflection::AutoThunk<FunctionPtr> \
+        &legacy_reflection::AutoThunk<FunctionPtr> \
     },
 
 #define REFLECT_FUNCTION(TypeName, FunctionName, ReturnTypeName, ReturnTypeEnum, ParamsSpan) \
