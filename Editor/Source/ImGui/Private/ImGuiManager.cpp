@@ -14,6 +14,7 @@
 #include "ContentBrowserPanel.h"
 #include "ConsolePanel.h"
 #include "MetricsPanel.h"
+#include "ResourceManagerInspector.h"
 
 #include "ResourceEditors.h"
 
@@ -25,7 +26,12 @@
 #include "imgui_impl_sdlrenderer3.h"
 #include "imgui_impl_sdlgpu3.h"
 #include "imgui_impl_dx12.h"
+#pragma push_macro("COLOR")
+#undef COLOR
+
 #include "ImGuizmo.h"
+
+#pragma pop_macro("COLOR")
 #pragma endregion
 
 IMPLEMENT_SINGLETON(ImGuiManager)
@@ -33,16 +39,26 @@ IMPLEMENT_SINGLETON(ImGuiManager)
 #pragma region Constructor&Destructor
 EResult ImGuiManager::Initialize(void* arg)
 {
+	if (!arg) return EResult::InvalidArgument;
+
 	CAST_DESC
+	if (!desc->Window || !desc->RHI) return EResult::InvalidArgument;
+
+	auto fail = [this](const char* stage)
+	{
+		fmt::print(stderr, "ImGuiManager initialization failed: {}\n", stage);
+		Free();
+		return EResult::Fail;
+	};
+
 	m_Window = desc->Window;
 	m_RHI = desc->RHI;
 	Safe_AddRef(m_RHI);
 	m_RHIType = Renderer::Get().GetRHIType();
 
-	if (!m_Window || !m_RHI) return EResult::Fail;
-
 	IMGUI_CHECKVERSION();
-	ImGui::CreateContext();
+	m_ImGuiContext = ImGui::CreateContext();
+	if (!m_ImGuiContext) return fail("CreateContext");
 
 	ImGuiIO& io = ImGui::GetIO(); (void)io;
 	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
@@ -117,13 +133,12 @@ EResult ImGuiManager::Initialize(void* arg)
 		style.Colors[ImGuiCol_WindowBg].w = 1.0f;
 	}
 
-	if (IsFailure(InitializeImGui()))
-	{
-		fmt::print(stderr, "ImGuiManager InitializeImGui Failed\n");
-		return EResult::Fail;
-	}	
+	if (InitializeImGui() != EResult::Success)
+		return fail("InitializeImGui");
 
-	CreateDefaultPanels();
+	if (CreateDefaultPanels() != EResult::Success)
+		return fail("CreateDefaultPanels");
+
 	return EResult::Success;
 }
 
@@ -143,31 +158,56 @@ EResult ImGuiManager::InitializeImGui()
 
 void ImGuiManager::Free()
 {
-	switch (m_RHIType)
-	{
-	case ERHIType::SDLGPU:
-	{
-		ShutdownImGuiSDLGPU3();
-		break;
-	}
-	case ERHIType::DirectX12:
-	{
-		ShutdownImGuiDirectX12();
-		break;
-	}
-	default:
-		break;
-	}
-	
+	if (m_ImGuiContext)
+		ImGui::SetCurrentContext(m_ImGuiContext);
+
+	m_PendingRemovePanels.clear();
+
+	for (auto& panel : m_PendingAddPanels)
+		Safe_Release(panel);
+	m_PendingAddPanels.clear();
 
 	for (auto& panel : m_ImGuiPanels)
-	{
 		Safe_Release(panel);
+	m_ImGuiPanels.clear();
+
+	if (m_RendererBackendInitialized)
+	{
+		switch (m_RHIType)
+		{
+		case ERHIType::SDLGPU:
+			ShutdownImGuiSDLGPU3();
+			break;
+		case ERHIType::DirectX12:
+			ShutdownImGuiDirectX12();
+			break;
+		default:
+			break;
+		}
+		m_RendererBackendInitialized = false;
 	}
 
-	ImGui_ImplSDL3_Shutdown();
-	ImGui::DestroyContext();
+	if (m_PlatformBackendInitialized)
+	{
+		ImGui_ImplSDL3_Shutdown();
+		m_PlatformBackendInitialized = false;
+	}
+
+	if (m_ImGuiOwnsSrvHeap && m_ImGuiSrvDescHeap)
+		m_ImGuiSrvDescHeap->Release();
+	m_ImGuiSrvDescHeap = nullptr;
+	m_ImGuiOwnsSrvHeap = false;
+	m_ImGuiSrvDescriptorSize = 0;
+
+	if (m_ImGuiContext)
+	{
+		ImGui::DestroyContext(m_ImGuiContext);
+		m_ImGuiContext = nullptr;
+	}
+
 	Safe_Release(m_RHI);
+	m_Window = nullptr;
+	m_RHIType = ERHIType::Unknown;
 }
 
 #pragma endregion
@@ -367,6 +407,7 @@ EResult ImGuiManager::CreateDefaultPanels()
 	AddImGuiPanel(contentBrowserPanel);
 	AddImGuiPanel(new ConsolePanel());
 	AddImGuiPanel(new MetricsPanel());
+	AddImGuiPanel(new ResourceManagerInspector());
 	CreateResourceEditors();
 	return EResult::Success;
 }
@@ -477,6 +518,8 @@ EResult ImGuiManager::InitializeImGuiSDLGPU3()
 		return EResult::Fail;
 	}
 
+	m_PlatformBackendInitialized = true;
+
 	SDL_GPUTextureFormat swapchainFormat = SDL_GetGPUSwapchainTextureFormat(NativeRenderer, m_Window);
 
 	ImGui_ImplSDLGPU3_InitInfo initInfo = {};
@@ -492,8 +535,9 @@ EResult ImGuiManager::InitializeImGuiSDLGPU3()
 		fmt::print(stderr, "ImGui_ImplSDLGPU3_Init Failed\n");
 		return EResult::Fail;
 	}
+	m_RendererBackendInitialized = true;
 
-	return EResult();
+	return EResult::Success;
 }
 void ImGuiManager::SDLGPU3Begin()
 {
@@ -549,6 +593,8 @@ EResult ImGuiManager::InitializeImGuiDirectX12()
 		fmt::print(stderr, "ImGui_ImplSDL3_InitForD3D Failed\n");
 		return EResult::Fail;
 	}
+
+	m_PlatformBackendInitialized = true;
 
 	// [핵심] ImGui 전용 heap 생성 금지, 엔진 SRV heap 공유
 	auto* srvAllocator = dx12RHI->GetSRVAllocator();
@@ -619,6 +665,8 @@ EResult ImGuiManager::InitializeImGuiDirectX12()
 		return EResult::Fail;
 	}
 
+	m_RendererBackendInitialized = true;
+
 	return EResult::Success;
 }
 void ImGuiManager::DirectX12Begin()
@@ -662,13 +710,6 @@ void ImGuiManager::DirectX12End()
 void ImGuiManager::ShutdownImGuiDirectX12()
 {
 	ImGui_ImplDX12_Shutdown();
-
-	// [핵심] 공유 heap은 소유권 없음 -> Release 금지
-	if (m_ImGuiOwnsSrvHeap && m_ImGuiSrvDescHeap)
-	{
-		m_ImGuiSrvDescHeap->Release();
-	}
-	m_ImGuiSrvDescHeap = nullptr;
 }
 #pragma endregion
 

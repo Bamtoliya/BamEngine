@@ -78,6 +78,7 @@ void Shader::Serialize(Archive& ar)
 void Shader::Deserialize(Archive& ar)
 {
 	Resource::Deserialize(ar);
+	if (ar.HasError()) return;
 
 	RHIShaderDesc desc = BuildRHIShaderDesc();
 	m_RHIShader = Renderer::Get().GetRHI()->CreateShader(desc);

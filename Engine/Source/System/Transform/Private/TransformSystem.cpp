@@ -39,6 +39,16 @@ void TransformSystem::OnLateUpdate(entt::registry& globalRegistry, const vector<
 
 void TransformSystem::UpdateHierarchy(entt::registry& registry)
 {
+	auto transforms = registry.view<TransformComponent>();
+
+	for (auto entity : transforms)
+	{
+		auto& transform = transforms.get<TransformComponent>(entity);
+
+		// 실패한 회전 입력은 컴포넌트 내부에서 이전 상태로 복구합니다.
+		static_cast<void>(transform.SynchronizeRotation());
+	}
+
 	auto view = registry.view<TransformComponent, WorldTransformComponent>();
 
 	for (auto entity : view)
@@ -52,12 +62,7 @@ void TransformSystem::UpdateHierarchy(entt::registry& registry)
 		}
 		auto& transform = registry.get<TransformComponent>(entity);
 		auto& worldTransform = registry.get<WorldTransformComponent>(entity);
-		// 로컬 매트릭스 계산 (Translation * Rotation * Scale)
-		mat4 translation = glm::translate(mat4(1.0f), transform.position);
-		mat4 rotation = glm::mat4_cast(transform.rotation);
-		mat4 scale = glm::scale(mat4(1.0f), transform.scale);
-
-		mat4 localMatrix = translation * rotation * scale;
+		const mat4 localMatrix = transform.GetLocalMatrix();
 		worldTransform.worldMatrix = localMatrix;
 		// 자식들이 있다면 재귀적으로 갱신
 		UpdateChildWorldMatrix(registry, entity, localMatrix);
@@ -75,12 +80,7 @@ void TransformSystem::UpdateChildWorldMatrix(entt::registry& registry, entt::ent
 		{
 			auto& childTransform = registry.get<TransformComponent>(child);
 			auto& childWorldTransform = registry.get<WorldTransformComponent>(child);
-			// 자식의 로컬 매트릭스 계산
-			mat4 translation = glm::translate(mat4(1.0f), childTransform.position);
-			mat4 rotation = glm::mat4_cast(childTransform.rotation);
-			mat4 scale = glm::scale(mat4(1.0f), childTransform.scale);
-			mat4 localMatrix = translation * rotation * scale;
-			// 부모의 월드 매트릭스를 곱해 자신의 월드 매트릭스를 완성
+			const mat4 localMatrix = childTransform.GetLocalMatrix();
 			childWorldTransform.worldMatrix = parentWorldMatrix * localMatrix;
 			// 이 자식의 자식들(손주)도 재귀적으로 갱신
 			UpdateChildWorldMatrix(registry, child, childWorldTransform.worldMatrix);

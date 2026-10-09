@@ -2,6 +2,12 @@
 #include "ResourceManager.h"
 #include "Resources.h"
 #include "Archives.h"
+#include <reflection/runtime/Registry.h>
+#include <reflection/Registry.h>
+#include <type_traits>
+
+static_assert(!std::is_same_v<legacy_reflection::Registry, reflection::Registry>);
+static_assert(!std::is_same_v<legacy_reflection::TypeInfo, reflection::TypeInfo>);
 
 namespace
 {
@@ -24,6 +30,27 @@ namespace
 
 		return NormalizePath(relativePath.wstring());
 	}
+}
+
+void Engine::ResourceHandleAccess::AddRef(const Engine::Handle& handle)
+{
+	Engine::ResourceManager::Get().AddRefResource(handle);
+}
+
+void Engine::ResourceHandleAccess::Release(const Engine::Handle& handle)
+{
+	Engine::ResourceManager::Get().ReleaseResource(handle);
+}
+
+bool Engine::ResourceHandleAccess::IsValid(const Engine::Handle& handle)
+{
+	return Engine::ResourceManager::Get().IsValid(handle);
+}
+
+Engine::Resource* Engine::ResourceHandleAccess::Resolve(
+	const Engine::Handle& handle)
+{
+	return Engine::ResourceManager::Get().GetResource(handle);
 }
 
 IMPLEMENT_SINGLETON(ResourceManager)
@@ -82,8 +109,13 @@ Handle ResourceManager::LoadFile(const wstring& filePath)
 	if (!absolutePath.is_absolute())
 		absolutePath = fs::absolute(absolutePath);
 
+	const wstring relativePath = ToProjectRelativePath(absolutePath.wstring());
+
 	if (!fs::exists(absolutePath))
-		return Handle();
+	{
+		ENGINE_LOG_ERROR("Resource load failed: stage=file not found, key=\"{}\", path=\"{}\"", WStrToStr(relativePath), WStrToStr(absolutePath.wstring()));
+		return {};
+	}
 
 	auto ToLowerExt = [](wstring ext)
 		{
@@ -112,12 +144,11 @@ Handle ResourceManager::LoadFile(const wstring& filePath)
 	}
 
 	if (iter != m_LoaderRegistry.end())
-	{
-		const wstring relativePath = ToProjectRelativePath(absolutePath.wstring());
 		return iter->second(relativePath, absolutePath.wstring());
-	}
 
-	return Handle();
+	ENGINE_LOG_ERROR("Resource load failed: stage=loader not registered, key=\"{}\", path=\"{}\", extension=\"{}\"",
+		WStrToStr(relativePath), WStrToStr(absolutePath.wstring()), WStrToStr(logicalExtension));
+	return {};
 }
 void ResourceManager::RegisterExplicitLoader()
 {
@@ -259,7 +290,7 @@ vector<Handle> ResourceManager::GetResourceHandlesIncludingDerived(uint64 baseTy
 	const auto& baseHandles = GetResourceHandles(baseTypeID);
 	result.insert(result.end(), baseHandles.begin(), baseHandles.end());
 	// 2. 리플렉션에서 파생 타입 ID 목록을 가져와 각각의 핸들도 추가
-	const auto derivedIDs = reflection::Registry::Get().GetDerivedTypeIDs(baseTypeID);
+	const auto derivedIDs = legacy_reflection::Registry::Get().GetDerivedTypeIDs(baseTypeID);
 	for (uint64 derivedID : derivedIDs)
 	{
 		const auto& derivedHandles = GetResourceHandles(derivedID);
@@ -298,6 +329,36 @@ EResult ResourceManager::DestroyResource(Resource* resource)
 	}
 
 	return EResult::Success;
+}
+vector<ResourceDebugInfo> ResourceManager::GetDebugSnapshot()
+{
+	vector<ResourceDebugInfo> result;
+
+	std::shared_lock<std::shared_mutex> lock(m_PoolMutex);
+
+	result.reserve(m_Resources.size());
+
+	for (size_t index = 0; index < m_Resources.size(); ++index)
+	{
+		const ResourceSlot& slot = m_Resources[index];
+
+		if (!slot.IsActive || !slot.Instance)
+			continue;
+
+		ResourceDebugInfo info;
+		info.SlotIndex = static_cast<uint32>(index);
+		info.Generation = slot.Generation;
+		info.RefCount = slot.RefCount;
+
+		// ResourceManager는 Resource의 friend로 선언되어 있다.
+		info.Type = slot.Instance->m_ResourceType;
+		info.Key = slot.Instance->GetKey();
+		info.Path = slot.Instance->GetPath();
+
+		result.push_back(std::move(info));
+	}
+
+	return result;
 }
 #pragma endregion
 
@@ -338,7 +399,6 @@ ResourceMetrics ResourceManager::GetMetrics()
 	return metrics;
 }
 #pragma endregion
-
 
 #pragma region Handle Management
 void ResourceManager::AddRefResource(const Handle& handle)

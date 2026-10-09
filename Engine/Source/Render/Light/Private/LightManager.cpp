@@ -11,11 +11,15 @@ EResult LightManager::Initialize(void* arg)
 {
 	if (!arg) return EResult::InvalidArgument;
 	CAST_DESC
-		m_RHI = desc->RHI;
+	if (!desc->RHI) return EResult::InvalidArgument;
+	m_RHI = desc->RHI;
 	Safe_AddRef(m_RHI);
 
 	if (IsFailure(EnsureBuffer()))
+	{
+		Free();
 		return EResult::Fail;
+	}		
 
 	return EResult::Success;
 }

@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "Component.h"
 #include "RenderTypes.h"
@@ -22,7 +22,7 @@ public:
 #pragma region Render
 public:
 	virtual void LateUpdate(f32 dt) override;
-	virtual EResult Render(f32 dt, class RenderPass* renderPass = nullptr) { return EResult::NotImplemented; }
+	virtual EResult Render(f32 dt, class RenderPass* renderPass = nullptr) override { return EResult::NotImplemented; }
 #pragma endregion
 
 #pragma region Bounds
@@ -50,7 +50,7 @@ public:
 
 #pragma region Save&Load
 public:
-	void Serialize(Archive& ar);
+	void Serialize(Archive& ar) override;
 #pragma endregion
 
 

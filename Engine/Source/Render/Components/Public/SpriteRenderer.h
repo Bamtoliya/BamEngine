@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "RenderComponent.h"
 #include "Mesh.h"
@@ -31,7 +31,7 @@ class ENGINE_API SpriteRenderer : public RenderComponent
 private:
 	SpriteRenderer() {}
 	public: virtual ~SpriteRenderer() = default;
-	virtual EResult Initialize(void* arg = nullptr);
+	virtual EResult Initialize(void* arg = nullptr) override;
 public:
 	static SpriteRenderer* Create(void* arg = nullptr);
 	virtual Component* Clone(GameObject* owner, void* arg = nullptr) override;

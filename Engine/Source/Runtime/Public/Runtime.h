@@ -59,8 +59,6 @@ public:
 private:
 	entt::registry m_GlobalRegistry;
 private:
-	class reflection::Registry* m_ReflectionRegistry = { nullptr };
-private:
 	TimeManager* m_TimeManager = { nullptr };
 	InputManager* m_InputManager = { nullptr };
 private:

@@ -14,8 +14,8 @@ EResult RenderTarget::Initialize(void* arg)
 	m_FixedSize = desc->fixedSize;
 	m_SizeScale = desc->sizeScale;
 	RHI* rhi = Renderer::Get().GetRHI();
-	m_Texture = rhi->CreateTexture(desc->textureDesc);
-	return EResult::Success;
+    m_Texture = rhi->CreateTexture(desc->textureDesc);
+    return m_Texture ? EResult::Success : EResult::Fail;
 }
 
 RenderTarget* RenderTarget::Create(void* arg)
@@ -38,15 +38,29 @@ void RenderTarget::Free()
 #pragma region Texture Management
 EResult RenderTarget::Resize(uint32 width, uint32 height)
 {
-	if (m_Texture->GetWidth() == width && m_Texture->GetHeight() == height)
-		return EResult::Success;
-	RHITextureDesc desc = m_Texture->GetDesc();
-	desc.width = width;
-	desc.height = height;
-	Safe_Release(m_Texture);
-	RHI* rhi = Renderer::Get().GetRHI();
-	m_Texture = rhi->CreateTexture(desc);
-	return EResult::Success;
+    if (!m_Texture || width == 0 || height == 0)
+        return EResult::InvalidArgument;
+
+    if (m_Texture->GetWidth() == width && m_Texture->GetHeight() == height)
+        return EResult::Success;
+
+    RHI* rhi = Renderer::Get().GetRHI();
+    if (!rhi)
+        return EResult::Fail;
+
+    RHITextureDesc desc = m_Texture->GetDesc();
+    desc.width = width;
+    desc.height = height;
+
+    RHITexture* newTexture = rhi->CreateTexture(desc);
+    if (!newTexture)
+        return EResult::Fail;
+
+    RHITexture* oldTexture = m_Texture;
+    m_Texture = newTexture;
+    Safe_Release(oldTexture);
+
+    return EResult::Success;
 }
 #pragma endregion
 

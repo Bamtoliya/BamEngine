@@ -54,6 +54,16 @@ namespace Engine
 		return iRefCnt;
 	}
 
+	template<typename T>
+	void Safe_Destroy(T*& Instance)
+	{
+		if (Instance)
+		{
+			T::Destroy();
+			Instance = nullptr;
+		}
+	}
+
 	inline wstring StrToWStr(const string& str)
 	{
 		return std::filesystem::path((const char8_t*)str.c_str()).wstring();

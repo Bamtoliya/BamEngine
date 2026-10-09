@@ -23,7 +23,7 @@ class ENGINE_API Sprite final : public Resource
 private:
 	Sprite() : Resource(EResourceType::Sprite) {}
 	virtual ~Sprite() = default;
-	EResult Initialize(void* arg = nullptr);
+	EResult Initialize(void* arg = nullptr) override;
 public:
 	static Sprite* Create(void* arg = nullptr);
 	virtual void Free() override;
@@ -32,7 +32,7 @@ public:
 
 #pragma region Bind
 public:
-	EResult Bind(uint32 slot);
+	EResult Bind(uint32 slot) override;
 #pragma endregion
 
 #pragma region MyRegion

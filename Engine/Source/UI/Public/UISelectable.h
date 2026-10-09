@@ -65,13 +65,13 @@ public:
 protected:
 	PROPERTY(EDITABLE)
 	bool m_Interactable = { true };
-	PROPERTY(EDITABLE, COLOR())
+	PROPERTY(EDITABLE, COLOR)
 	vec4 m_NormalColor = { 1.f, 1.f, 1.f, 1.f };
-	PROPERTY(EDITABLE, COLOR())
+	PROPERTY(EDITABLE, COLOR)
 	vec4 m_HoveredColor = { 0.9f, 0.9f, 0.9f, 1.f };
-	PROPERTY(EDITABLE, COLOR())
+	PROPERTY(EDITABLE, COLOR)
 	vec4 m_PressedColor = { 0.7f, 0.7f, 0.7f, 1.f };
-	PROPERTY(EDITABLE, COLOR())
+	PROPERTY(EDITABLE, COLOR)
 	vec4 m_DisabledColor = { 0.5f, 0.5f, 0.5f, 0.5f };
 
 	ESelectionState m_CurrentState = { ESelectionState::Normal };

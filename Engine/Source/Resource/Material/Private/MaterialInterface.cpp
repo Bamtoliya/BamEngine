@@ -358,7 +358,8 @@ EResult MaterialInterface::Bind(uint32 slot)
 #pragma region Save&Load
 void MaterialInterface::Deserialize(Archive& ar) 
 {
-	Resource::Deserialize(ar);
+    Resource::Deserialize(ar);
+    if (ar.HasError()) return;
 
 	for (auto& binding : m_TextureBindings)
 	{

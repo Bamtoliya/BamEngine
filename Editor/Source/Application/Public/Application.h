@@ -75,7 +75,7 @@ public:
 	bool IsEditing() const { return m_PlayState == EPlayState::Edit; }
 private:
 	void SnapshotScene();    // Play 직전 씬 직렬화
-	void RestoreScene();     // Stop 시 씬 복원
+	EResult RestoreScene();     // Stop 시 씬 복원
 #pragma endregion
 
 
@@ -115,6 +115,9 @@ private:
 	wstring m_SnapshotPath = L"Temp/__pie_snapshot__.json";
 private:
 	CommandHistory m_CommandHistory;
+private:
+	bool m_SDLInitialized = false;
+	bool m_LoggerInitialized = false;
 };
 
 END

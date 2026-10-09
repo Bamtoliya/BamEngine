@@ -12,7 +12,9 @@ void MetricsPanel::Draw()
     if (!m_Open)
         return;
 
-    if (ImGui::Begin("Engine Metrics", &m_Open))
+    const string windowTitle = LOCAL("UI_ENGINE_METRICS_PANEL") + "###EngineMetricsPanel";
+
+    if (ImGui::Begin(windowTitle.c_str(), &m_Open))
     {
         m_Focused = ImGui::IsWindowFocused();
         m_Hovered = ImGui::IsWindowHovered();

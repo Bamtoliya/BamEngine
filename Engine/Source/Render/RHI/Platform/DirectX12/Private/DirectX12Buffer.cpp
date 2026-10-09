@@ -50,10 +50,14 @@ EResult DirectX12Buffer::Initialize(const DESC& desc)
 		return EResult::Fail;
 	}
 
-	if(heapProps.Type == D3D12_HEAP_TYPE_UPLOAD)
+	if (heapProps.Type == D3D12_HEAP_TYPE_UPLOAD)
 	{
-		D3D12_RANGE readRange = { 0, 0 }; // CPU에서 이 메모리를 읽지는 않을 것이라고 힌트 제공
-		m_Buffer->Map(0, &readRange, &m_MappedData);
+		D3D12_RANGE readRange = { 0, 0 };
+
+		if (FAILED(m_Buffer->Map(0, &readRange, &m_MappedData)))
+		{
+			return EResult::Fail;
+		}
 	}
 	// 초기 데이터(initialData)가 있다면 즉시 복사
 	if (desc.initialData != nullptr && m_MappedData != nullptr)

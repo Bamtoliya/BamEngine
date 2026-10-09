@@ -14,6 +14,7 @@
 #include "Components.h"
 
 #include "EntityFactory.h"
+#include "CoreComponents.h"
 
 
 static bool CheckboxTristate(const char* label, bool* v, bool is_mixed)
@@ -241,7 +242,9 @@ bool HierarchyPanel::DrawRenameBox(T* target, ImGuiTreeNodeFlags flags, bool isS
 void HierarchyPanel::Draw()
 {
 	if (!m_Open) return;
-	ImGui::Begin("Hierarchy");
+
+	const string windowTitle = LOCAL("UI_HIERARCHY") + "###HierarchyPanel";
+	ImGui::Begin(windowTitle.c_str());
 
 	SelectionManager& selectionMgr = SelectionManager::Get();
 
@@ -290,15 +293,20 @@ void HierarchyPanel::Draw()
 		//{
 		//	DrawLayerItem(currentScene, layer);
 		//}
+
+		DrawEntityHierarchy(currentScene);
 	}
 	else
 	{
-		ImGui::Text("No scene loaded.");
+		ImGui::Text(LOCAL_CSTR("UI_NO_SCENE_LOADED"));
 
-		if (ImGui::Button("Create New Scene"))
+		if (ImGui::Button(LOCAL_CSTR("UI_CREATE_NEW_SCENE")))
 		{
-			SceneManager::Get().NewScene();
-			SelectionManager::Get().ClearSelection();
+			const EResult result = SceneManager::Get().NewScene();
+			if (result == EResult::Success)
+				SelectionManager::Get().ClearSelection(true);
+			else
+				ENGINE_LOG_ERROR("Failed to create scene: {}", ResultToString(result));
 		}
 	}
 
@@ -1016,8 +1024,185 @@ void HierarchyPanel::DrawSceneContextMenu(Scene* scene)
 		{
 			EntityFactory::CreateEmptyEntity(scene);
 		}
+		if (ImGui::MenuItem("Add Primitive Entity"))
+		{
+			try
+			{
+				Entity& entity = EntityFactory::CreatePrimitiveEntity(scene, L"Cube", L"CubeMesh", L"Resources/Material/GBufferMaterial");
+				SelectionManager::Get().SetSelectedEntity(&entity);
+			}
+			catch (const std::exception& error)
+			{
+				ENGINE_LOG_ERROR("Failed to create Cube: {}", error.what());
+			}
+		}
+		if (ImGui::MenuItem("Add Sprite Entity"))
+		{
+			try
+			{
+				Entity& entity = EntityFactory::CreateSpriteEntity(scene, L"Sprite", L"Resources/Material/DefaultMaterial");
+				SelectionManager::Get().SetSelectedEntity(&entity);
+			}
+			catch (const std::exception& error)
+			{
+				ENGINE_LOG_ERROR("Failed to create Sprite: {}", error.what());
+			}
+		}
 		ImGui::EndPopup();
 	}
+}
+
+void HierarchyPanel::DrawEntityHierarchy(Scene* scene)
+{
+	if (!scene)
+		return;
+
+	auto& registry = scene->GetRegistry();
+	auto view = registry.view<NameComponent>();
+
+	bool hasRoot = false;
+
+	ImGui::PushID(scene);
+
+	for (entt::entity handle : view)
+	{
+		const auto* hierarchy =
+			registry.try_get<HierarchyComponent>(handle);
+
+		const bool hasDisplayableParent =
+			hierarchy &&
+			hierarchy->parent != entt::null &&
+			registry.valid(hierarchy->parent) &&
+			registry.all_of<NameComponent>(hierarchy->parent);
+
+		if (hasDisplayableParent)
+			continue;
+
+		Entity* entity = scene->FindEntity(handle);
+		if (!entity)
+			continue;
+
+		hasRoot = true;
+		DrawEntityNode(scene, *entity);
+	}
+
+	if (!hasRoot)
+		ImGui::TextDisabled("No root entities.");
+
+	ImGui::PopID();
+}
+
+void HierarchyPanel::DrawEntityNode(Scene* scene, Entity& entity)
+{
+	if (!scene)
+		return;
+
+	auto& registry = scene->GetRegistry();
+	const entt::entity handle = entity.GetEntityHandle();
+
+	if (!registry.valid(handle))
+		return;
+
+	const auto* name = registry.try_get<NameComponent>(handle);
+	if (!name)
+		return;
+
+	const auto* hierarchy =
+		registry.try_get<HierarchyComponent>(handle);
+
+	// 현재 노드의 유효한 자식 래퍼를 조회합니다.
+	const auto findDisplayableChild =
+		[&](entt::entity childHandle) -> Entity*
+		{
+			if (!registry.valid(childHandle) ||
+				!registry.all_of<NameComponent>(childHandle))
+			{
+				return nullptr;
+			}
+
+			const auto* childHierarchy =
+				registry.try_get<HierarchyComponent>(childHandle);
+
+			if (!childHierarchy || childHierarchy->parent != handle)
+				return nullptr;
+
+			return scene->FindEntity(childHandle);
+		};
+
+	bool hasChildren = false;
+
+	if (hierarchy)
+	{
+		for (entt::entity childHandle : hierarchy->children)
+		{
+			if (findDisplayableChild(childHandle))
+			{
+				hasChildren = true;
+				break;
+			}
+		}
+	}
+
+	auto& selectionManager = SelectionManager::Get();
+
+	ImGuiTreeNodeFlags flags =
+		ImGuiTreeNodeFlags_OpenOnArrow |
+		ImGuiTreeNodeFlags_SpanAvailWidth;
+
+	if (selectionManager.IsEntitySelected(&entity))
+	{
+		flags |= ImGuiTreeNodeFlags_Selected;
+	}
+
+	if (!hasChildren)
+	{
+		flags |= ImGuiTreeNodeFlags_Leaf |
+			ImGuiTreeNodeFlags_NoTreePushOnOpen;
+	}
+
+	const std::string label = WStrToStr(name->name);
+	const std::string id =
+		std::to_string(entt::to_integral(handle));
+
+	ImGui::PushID(id.c_str());
+
+	const bool opened = ImGui::TreeNodeEx(
+		"EntityNode",
+		flags,
+		"%s",
+		label.c_str());
+
+	if (ImGui::IsItemClicked(ImGuiMouseButton_Left) && !ImGui::IsItemToggledOpen())
+	{
+		if (ImGui::GetIO().KeyCtrl)
+		{
+			selectionManager.ToggleEntitySelection(&entity);
+		}
+		else
+		{
+			selectionManager.SetSelectedEntity(&entity);
+		}
+	}
+
+	if (opened && hasChildren)
+	{
+		for (entt::entity childHandle : hierarchy->children)
+		{
+			Entity* child = findDisplayableChild(childHandle);
+
+			if (child)
+				DrawEntityNode(scene, *child);
+		}
+
+		ImGui::TreePop();
+	}
+
+	ImGui::PopID();
+}
+
+void HierarchyPanel::DrawEntityName(const wstring& name, bool isSelected)
+{
+
 }
 
 void HierarchyPanel::DrawGameObjectContextMenu(GameObject* gameObject)

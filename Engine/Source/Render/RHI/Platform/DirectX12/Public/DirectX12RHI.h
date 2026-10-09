@@ -73,6 +73,8 @@ public:
 
 
 #pragma region Draw Call
+private:
+	EResult ApplyShaderResources();
 public:
 	EResult Draw(uint32 count) override;
 	EResult DrawIndexed(uint32 count) override;
@@ -123,6 +125,10 @@ private:
 
 	HWND m_WindowHandle = nullptr;
 	vec4 m_ClearColor = { 0.3f, 0.3f, 0.3f, 1.0f };
+
+	static constexpr uint32 SRV_TABLE_SIZE = MAX_TEXTURE_SLOTS;
+	static constexpr uint32 FRAME_SRV_DESCRIPTOR_COUNT = SRV_TABLE_SIZE * 1024;
+	uint32 m_SRVTableStartIndices[MAX_SWAPCHAIN_BUFFERS] = {};
 
 	DirectX12DescriptorAllocator* m_RtvAllocator = nullptr; // 렌더타겟용 주차장
 	DirectX12DescriptorAllocator* m_DsvAllocator = nullptr; // 뎁스용 주차장

@@ -20,7 +20,7 @@ private:
 	using DESC = SkeletonCreateDesc;
 	Skeleton() : Resource(EResourceType::Skeleton) {}
 	virtual ~Skeleton() = default;
-	EResult Initialize(void* arg = nullptr);
+	EResult Initialize(void* arg = nullptr) override;
 public:
 	static Skeleton* Create(void* arg = nullptr);
 	virtual void Free() override;

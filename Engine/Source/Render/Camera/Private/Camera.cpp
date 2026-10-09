@@ -133,15 +133,25 @@ void Camera::UpdateMatrix()
 #pragma region Matrix
 CameraBuffer Camera::GetCameraBuffer() const
 {
-	CameraBuffer buffer;
+	CameraBuffer buffer{};
+
 	buffer.viewMatrix = m_ViewMatrix;
 	buffer.invViewMatrix = m_ViewMatrixInv;
+
 	buffer.projMatrix = m_ProjMatrix;
 	buffer.invProjMatrix = m_ProjMatrixInv;
+
 	buffer.viewProjMatrix = m_ProjMatrix * m_ViewMatrix;
-	buffer.invViewProjMatrix = m_ProjMatrixInv * m_ViewMatrixInv;
+	buffer.invViewProjMatrix = m_ViewMatrixInv * m_ProjMatrixInv;
+
 	if (m_Owner)
-		buffer.cameraPosition = m_Owner->GetComponent<Transform>()->GetWorldPosition();
+	{
+		if (Transform* transform = m_Owner->GetComponent<Transform>())
+		{
+			buffer.cameraPosition = transform->GetWorldPosition();
+		}
+	}
+
 	return buffer;
 }
 #pragma endregion
@@ -150,11 +160,19 @@ CameraBuffer Camera::GetCameraBuffer() const
 #pragma region Main Camera
 void Camera::SetMainCamera(bool isMain)
 {
-	m_IsMainCamera = isMain;
+	CameraManager& manager = CameraManager::Get();
+
 	if (isMain)
-		CameraManager::Get().SetMainCamera(this);
-	else if (CameraManager::Get().GetMainCamera() == this)
-		CameraManager::Get().SetMainCamera(nullptr);
+	{
+		manager.SetMainCamera(this);
+		m_IsMainCamera = manager.GetMainCamera() == this;
+		return;
+	}
+
+	m_IsMainCamera = false;
+
+	if (manager.GetMainCamera() == this)
+		manager.SetMainCamera(nullptr);
 }
 #pragma endregion
 

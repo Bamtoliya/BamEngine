@@ -14,7 +14,7 @@ enum class EMeshFlag : uint8
 	HasNormal = 1 << 1,
 	HasTexCoord = 1 << 2,
 	HasTangent = 1 << 3,
-	HasBitangent = 1 << 4,
+	HasBinormal = 1 << 4,
 	HasColor = 1 << 5,
 	Dynamic = 1 << 6,
 	KeepRawData = 1 << 7,
@@ -76,7 +76,7 @@ class ENGINE_API Mesh : public Resource
 protected:
 	using DESC = MeshCreateDesc;
 	Mesh() : Resource(EResourceType::Mesh) {}
-	EResult Initialize(void* arg = nullptr);
+	EResult Initialize(void* arg = nullptr) override;
 public:
 	virtual ~Mesh() = default;
 public:
@@ -141,7 +141,7 @@ private:
 protected:
 	EMeshFlag m_Flags = { EMeshFlag::None };
 
-	PROPERTY(CATEGORY(L"PROP_INFORMATION"), READONLY)
+	PROPERTY(CATEGORY("PROP_INFORMATION"), READONLY)
 	ETopology m_Topology = { ETopology::TriangleList };
 
 	uint32 m_StreamCounts[(uint32)EMeshStream::Max] = { 0 };
@@ -150,14 +150,14 @@ protected:
 	vector<uint8> m_RawData[(uint32)EMeshStream::Max];
 
 	RHIBuffer* m_IndexBuffer = { nullptr };
-	PROPERTY(CATEGORY(L"PROP_INFORMATION"), READONLY)
+	PROPERTY(CATEGORY("PROP_INFORMATION"), READONLY)
 	uint32 m_IndexCount = { 0 };
 	uint32 m_IndexStride = { 0 };
 	vector<uint8> m_IndexRaw;
 
-	PROPERTY(CATEGORY(L"PROP_INFORMATION"), READONLY)
+	PROPERTY(CATEGORY("PROP_INFORMATION"), READONLY)
 	vec3 m_BoundingBoxMin = { 0.0f, 0.0f, 0.0f };
-	PROPERTY(CATEGORY(L"PROP_INFORMATION"), READONLY)
+	PROPERTY(CATEGORY("PROP_INFORMATION"), READONLY)
 	vec3 m_BoundingBoxMax = { 0.0f, 0.0f, 0.0f };
 
 	uint32 m_ActiveBufferCount = { 0 };

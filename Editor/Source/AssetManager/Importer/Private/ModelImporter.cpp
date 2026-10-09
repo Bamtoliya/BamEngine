@@ -209,7 +209,7 @@ void ModelImporter::ProcessMeshVertex(
 		if (mesh->HasTangentsAndBitangents())
 		{
 			mat.tangent = { mesh->mTangents[i].x,   mesh->mTangents[i].y,   mesh->mTangents[i].z };
-			mat.bitangent = { mesh->mBitangents[i].x, mesh->mBitangents[i].y, mesh->mBitangents[i].z };
+			mat.binormal = { mesh->mBitangents[i].x, mesh->mBitangents[i].y, mesh->mBitangents[i].z };
 		}
 
 		if (mesh->HasVertexColors(0))

@@ -19,7 +19,7 @@ public:
 	virtual Component* Clone(GameObject* owner, void* arg = nullptr) override;
 	virtual void Free() override;
 public:
-	virtual void Raycast(const PointerEventData& eventData, vector<RaycastResult>& outResults);
+	virtual void Raycast(const PointerEventData& eventData, vector<RaycastResult>& outResults) override;
 private:
 	void RaycastRecursive(GameObject* gameObject, const PointerEventData& eventData, vector<RaycastResult>& outResults, uint32 sortOrder);
 private:

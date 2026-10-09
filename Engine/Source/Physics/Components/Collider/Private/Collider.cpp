@@ -1,7 +1,7 @@
 ﻿#pragma once
 
 #include "Collider.h"
-
+#include "CollisionManager.h"
 
 #pragma region Constructor&Destructor
 EResult Collider::Initialize(void* arg)

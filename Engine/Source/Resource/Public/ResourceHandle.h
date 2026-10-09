@@ -5,7 +5,14 @@
 
 BEGIN(Engine)
 class Resource;
-class ResourceManager;
+
+namespace ResourceHandleAccess
+{
+	ENGINE_API void AddRef(const Handle& handle);
+	ENGINE_API void Release(const Handle& handle);
+	ENGINE_API bool IsValid(const Handle& handle);
+	ENGINE_API Resource* Resolve(const Handle& handle);
+}
 
 template<typename T>
 class ResourceHandle
@@ -63,3 +70,5 @@ private:
 	Handle m_Handle;
 };
 END
+
+#include "ResourceHandle.inl"

@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma  once
 
 #include "ImGuiManager.h"
 #include "ResourceEditorInterface.h"
@@ -10,7 +10,7 @@
 #include <new>
 
 
-#pragma region Vector Axis
+#pragma  region Vector Axis
 static vector<string> axisLabels = { "X", "Y", "Z", "W" };
 
 static map<string, ImVec4> buttonColors = {
@@ -26,9 +26,9 @@ static map<string, ImVec4> buttonHoverColors = {
 	{ "Z", ImVec4{ 0.2f, 0.3f, 0.9f, 1.0f } },
 	{ "W", ImVec4{ 0.6f, 0.6f, 0.6f, 1.0f } }
 };
-#pragma endregion
+#pragma  endregion
 
-#pragma region Default Value Resolver
+#pragma  region Default Value Resolver
 inline string_view GetLiteralArgs(string_view literal)
 {
 	const size_t l = literal.find('(');
@@ -300,9 +300,9 @@ inline uint32 GetMatrixDimension(const PropertyInfo& property)
 	if (IsMatrix4Property(property)) return 4;
 	return 0;
 }
-#pragma endregion
+#pragma  endregion
 
-#pragma region Container Helpers
+#pragma  region Container Helpers
 
 struct MapEntryView
 {
@@ -547,7 +547,7 @@ bool WithParsedContainerLiteral(string_view text, const VariableInfo& variableIn
 
 inline const TypeInfo* ResolveReflectedTypeInfo(string_view rawTypeName, const TypeInfo* ownerTypeInfo = nullptr)
 {
-	auto& registry = reflection::Registry::Get();
+	auto& registry = legacy_reflection::Registry::Get();
 
 	const string normalized = NormalizeReflectedTypeName(rawTypeName);
 	if (normalized.empty())
@@ -673,7 +673,7 @@ inline bool DrawReflectedTypeProperties(void* instance, const TypeInfo& typeInfo
 
 	if (!typeInfo.ParentQualifiedName.empty())
 	{
-		if (const TypeInfo* parentType = reflection::Registry::Get().GetTypeByQualifiedName(typeInfo.ParentQualifiedName))
+		if (const TypeInfo* parentType = legacy_reflection::Registry::Get().GetTypeByQualifiedName(typeInfo.ParentQualifiedName))
 		{
 			changed |= DrawReflectedTypeProperties(instance, *parentType, readOnly);
 		}
@@ -781,9 +781,9 @@ inline void CollectMapEntry(void* value, void* key, void* userData)
 	auto* entries = static_cast<vector<MapEntryView>*>(userData);
 	entries->push_back({ value, key });
 }
-#pragma endregion
+#pragma  endregion
 
-#pragma region Vector Lock Resolver
+#pragma  region Vector Lock Resolver
 enum class ETransformVectorGroup : uint8
 {
 	None,
@@ -844,7 +844,7 @@ inline void InitializeTransformLockMasksIfNeeded()
 	}
 
 	g_TransformLockMaskCache.Initialized = true;
-	const EnumInfo* enumInfo = reflection::Registry::Get().GetEnumByQualifiedName("Engine::ETransformFlag");
+	const EnumInfo* enumInfo = legacy_reflection::Registry::Get().GetEnumByQualifiedName("Engine::ETransformFlag");
 	if (!enumInfo)
 	{
 		return;
@@ -942,9 +942,9 @@ inline void SetEditorAxisLock(const void* instance, const TypeInfo& typeInfo, co
 	const uint64 key = MakeAxisLockKey(instance, typeInfo, property, axis);
 	g_EditorAxisLockState[key] = locked;
 }
-#pragma endregion
+#pragma  endregion
 
-#pragma region VarName & Label Sanitization
+#pragma  region VarName & Label Sanitization
 string PropertyDrawer::SanitizeVarName(const string& varName)
 {
 	string cleanName = varName;
@@ -975,18 +975,18 @@ string PropertyDrawer::SanitizeDisplayLabel(const TypeInfo& typeInfo, const Prop
 	}
 	return displayLabel;
 }
-#pragma endregion
+#pragma  endregion
 
-#pragma region Property Header Node
+#pragma  region Property Header Node
 bool PropertyDrawer::DrawHeaderNode(void* instance, const TypeInfo& typeInfo)
 {
 	ImGui::SetNextItemAllowOverlap();
 	bool opened = ImGui::CollapsingHeader(GetShortTypeName(typeInfo.QualifiedName).data(), ImGuiTreeNodeFlags_DefaultOpen);
 	ImGui::SameLine();
-	DrawCheckbox(dynamic_cast<ActiveInterface*>(reinterpret_cast<Base*>(instance)), typeInfo);
+	DrawCheckbox(dynamic_cast<IActive*>(reinterpret_cast<Base*>(instance)), typeInfo);
 	return opened;
 }
-void PropertyDrawer::DrawCheckbox(ActiveInterface* instance, const TypeInfo& typeInfo)
+void PropertyDrawer::DrawCheckbox(IActive* instance, const TypeInfo& typeInfo)
 {
 	if (!instance) return;
 
@@ -1005,7 +1005,7 @@ void PropertyDrawer::DrawCheckbox(ActiveInterface* instance, const TypeInfo& typ
 	}
 	ImGui::PopID();
 }
-#pragma endregion
+#pragma  endregion
 
 bool PropertyDrawer::DrawPropertyTable(void* instance, const TypeInfo& typeInfo, const vector<const Engine::PropertyInfo*>& props)
 {
@@ -1135,7 +1135,7 @@ bool PropertyDrawer::DrawProperty(void* instance, void* data, const TypeInfo& ty
 	return false;
 }
 
-#pragma region Property Variables
+#pragma  region Property Variables
 
 //Integer 타입(드래그로 값 조절)
 bool PropertyDrawer::DrawIntegerProperty(void* data, const TypeInfo& typeinfo, const PropertyInfo& property)
@@ -1357,17 +1357,17 @@ struct ContainerTempElement
 		{
 			if (info.Type == EPropertyType::String)
 			{
-#pragma push_macro("new")
+#pragma  push_macro("new")
 #undef new
 				new(Buffer.data()) string();
-#pragma pop_macro("new")
+#pragma  pop_macro("new")
 			}
 			else if (info.Type == EPropertyType::WString)
 			{
-#pragma push_macro("new")
+#pragma  push_macro("new")
 #undef new
 				new(Buffer.data()) wstring();
-#pragma pop_macro("new")
+#pragma  pop_macro("new")
 			}
 			else if (resolvedType && resolvedType->Create)
 			{
@@ -1682,7 +1682,7 @@ bool PropertyDrawer::DrawMapProperty(void* instance, void* data, const TypeInfo&
 
 
 //Vector 타입(Vector2, Vector3, Vector4, Quaternion) - 각 축마다 드래그로 값 조절 + 리셋 버튼 + 잠금 버튼
-#pragma region Vector
+#pragma  region Vector
 bool PropertyDrawer::DrawFloatInVector(string axis, f32& value, bool& lock, ImVec2 buttonSize, ImVec2 lockSize, f32 resetValue, f32 inputWidth)
 {
 	bool changed = false;
@@ -1809,7 +1809,7 @@ bool PropertyDrawer::DrawVectorProperty(void* instance, void* data, const TypeIn
 	return changed;
 }
 
-#pragma endregion
+#pragma  endregion
 
 //Color 타입(컬러 피커)
 bool PropertyDrawer::DrawColorProperty(void* data, const TypeInfo& typeinfo, const PropertyInfo& property)
@@ -2150,10 +2150,10 @@ bool PropertyDrawer::DrawResourceHandleProperty(void* data, const TypeInfo& type
 
 		const string normalizedTargetType = NormalizeReflectedTypeName(targetResourceType);
 
-		const Engine::TypeInfo* targetTypeInfo = reflection::Registry::Get().ResolveTypeName(normalizedTargetType);
+		const Engine::TypeInfo* targetTypeInfo = legacy_reflection::Registry::Get().ResolveTypeName(normalizedTargetType);
 		if (!targetTypeInfo && !normalizedTargetType.empty())
 		{
-			targetTypeInfo = reflection::Registry::Get().GetTypeByQualifiedName("Engine::" + normalizedTargetType);
+			targetTypeInfo = legacy_reflection::Registry::Get().GetTypeByQualifiedName("Engine::" + normalizedTargetType);
 		}
 
 		vector<Engine::Handle> collectedHandles;
@@ -2263,4 +2263,4 @@ bool PropertyDrawer::ApplyMouseWheelInput(T* value, T resetValue, float step, fl
 	}
 	return changed;
 }
-#pragma endregion
+#pragma  endregion

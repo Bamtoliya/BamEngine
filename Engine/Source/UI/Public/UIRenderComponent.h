@@ -32,7 +32,7 @@ public:
 #pragma region Loop
 public:
 	void LateUpdate(f32 dt) override;
-	EResult Render(f32 dt, class RenderPass* renderPass = nullptr);
+	EResult Render(f32 dt, class RenderPass* renderPass = nullptr) override;
 #pragma endregion
 
 #pragma region Bind
@@ -62,7 +62,7 @@ public:
 
 #pragma region Member Variable
 protected:
-	PROPERTY(EDITABLE, COLOR())
+	PROPERTY(EDITABLE, COLOR)
 	vec4 m_Color = { 1.f, 1.f, 1.f, 1.f };
 	PROPERTY(EDITABLE, CATEGORY("PROP_RENDER"))
 	uint32 m_VisibilityChannel = { 1 << 0 };

@@ -24,7 +24,10 @@ void RHI::Free()
 		}
 	}
 
-	for (auto& buffer : m_DynamicConstantBuffers) { Safe_Release(buffer); }
+	for (auto& buffer : m_DynamicConstantBuffers)
+	{ 
+		Safe_Release(buffer);
+	}
 
 	for (auto& renderTarget : m_CurrentRenderTargets) { Safe_Release(renderTarget); }
 

@@ -1,5 +1,8 @@
 ﻿#pragma once
+#include <cstddef>
+#include <functional>
 
+#include "Functions.h"
 #include "Reflection/ReflectionMacro.h"
 
 namespace Engine 
@@ -69,25 +72,23 @@ namespace Engine
 }
 
 template<>
-struct hash<Engine::SamplerDesc>
+struct std::hash<Engine::SamplerDesc>
 {
-    size_t operator()(const Engine::SamplerDesc& desc) const
+    std::size_t operator()(const Engine::SamplerDesc& desc) const
     {
-        size_t seed = 0;
+        std::size_t seed = 0;
 
-        HashCombine(seed, hash<int>()((int)desc.MinFilter));
-        HashCombine(seed, hash<int>()((int)desc.MagFilter));
-        HashCombine(seed, hash<int>()((int)desc.MipFilter));
-        HashCombine(seed, hash<int>()((int)desc.AddressU));
-        HashCombine(seed, hash<int>()((int)desc.AddressV));
-        HashCombine(seed, hash<int>()((int)desc.AddressW));
-        HashCombine(seed, hash<uint32>()(desc.MaxAnisotropy));
-
-
-        HashCombine(seed, hash<float>()(desc.BorderColor.x));
-        HashCombine(seed, hash<float>()(desc.BorderColor.y));
-        HashCombine(seed, hash<float>()(desc.BorderColor.z));
-        HashCombine(seed, hash<float>()(desc.BorderColor.w));
+        ::HashCombine(seed, std::hash<int>{}(static_cast<int>(desc.MinFilter)));
+        ::HashCombine(seed, std::hash<int>{}(static_cast<int>(desc.MagFilter)));
+        ::HashCombine(seed, std::hash<int>{}(static_cast<int>(desc.MipFilter)));
+        ::HashCombine(seed, std::hash<int>{}(static_cast<int>(desc.AddressU)));
+        ::HashCombine(seed, std::hash<int>{}(static_cast<int>(desc.AddressV)));
+        ::HashCombine(seed, std::hash<int>{}(static_cast<int>(desc.AddressW)));
+        ::HashCombine(seed, std::hash<Engine::uint32>{}(desc.MaxAnisotropy));
+        ::HashCombine(seed, std::hash<float>{}(desc.BorderColor.x));
+        ::HashCombine(seed, std::hash<float>{}(desc.BorderColor.y));
+        ::HashCombine(seed, std::hash<float>{}(desc.BorderColor.z));
+        ::HashCombine(seed, std::hash<float>{}(desc.BorderColor.w));
 
         return seed;
     }

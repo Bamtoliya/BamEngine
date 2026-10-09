@@ -23,7 +23,7 @@ public:
 	vector<class GameObject*>& GetSelectionContext();
 	class GameObject* GetPrimarySelection();
 	void ToggleSelection(class GameObject* gameObject);
-	void ClearSelection(); 
+	void ClearSelection(bool force = false);
 	void SetSelectedObject(class GameObject* gameObject);
 	bool IsSelected(class GameObject* gameObject) const;
 	void AddToSelection(class GameObject* gameObject);
@@ -33,6 +33,21 @@ public:
 	void SetPrimarySelectionLock(bool lock = true) { m_LockPrimarySeletion = lock; }
 	void TogglePrimarySelectionLock() { m_LockPrimarySeletion = !m_LockPrimarySeletion; }
 #pragma endregion
+
+
+#pragma region Entity Selection
+public:
+	vector<class Entity*>& GetSelectedEntities();
+	class Entity* GetPrimarySelectedEntity();
+	void ToggleEntitySelection(class Entity* entity);
+	void SetSelectedEntity(class Entity* entity);
+	bool IsEntitySelected(class Entity* entity) const;
+	void AddToEntitySelection(class Entity* entity);
+	class Entity* PickEntityByRay(const struct Ray& ray, float maxDistance);
+public:
+
+#pragma endregion
+
 
 #pragma region Asset Selection
 public:
@@ -49,6 +64,7 @@ public:
 private:
 	bool m_LockPrimarySeletion = { false };
 	vector<class GameObject*> m_SelectedObjects;
+	vector<class Entity*> m_SelectedEntities;
 	filesystem::path m_LastSelectedAssetPath;
 	filesystem::path m_LastSelectedResourcePath;
 };

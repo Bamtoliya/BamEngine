@@ -26,26 +26,38 @@ IMPLEMENT_SINGLETON(AssetManager);
 EResult AssetManager::Initialize(void* arg)
 {
 	m_Importers[".png"] = TextureImporter::Create();
+
 	m_Importers[".jpg"] = m_Importers[".png"];
+	Safe_AddRef(m_Importers[".jpg"]);
+
 	m_Importers[".tga"] = m_Importers[".png"];
+	Safe_AddRef(m_Importers[".tga"]);
+
 	m_Importers[".bmp"] = m_Importers[".png"];
+	Safe_AddRef(m_Importers[".bmp"]);
 
 	m_Importers[".bamtex"] = SpriteImporter::Create();
 
 	m_Importers[".fbx"] = ModelImporter::Create();
+
 	m_Importers[".obj"] = m_Importers[".fbx"];
+	Safe_AddRef(m_Importers[".obj"]);
+
 	m_Importers[".gltf"] = m_Importers[".fbx"];
+	Safe_AddRef(m_Importers[".gltf"]);
 
 	m_Importers[".anim"] = AnimationImporter::Create();
-
 	m_Importers[".spv"] = ShaderImporter::Create();
 
 	m_AssetCache = AssetCache::Create();
-	if (!m_AssetCache) return EResult::Fail;
+	if (!m_AssetCache)
+	{
+		RELEASE_MAP(m_Importers);
+		return EResult::Fail;
+	}
 
 	return EResult::Success;
 }
-
 void AssetManager::Free()
 {
 	for (auto& task : m_ActiveTasks)
@@ -63,6 +75,7 @@ void AssetManager::Free()
 	RELEASE_MAP(m_Exporters);
 	m_OnAsyncDelegate.Clear();
 	AssetCache::Destroy();
+	m_AssetCache = nullptr;
 }
 
 #pragma endregion

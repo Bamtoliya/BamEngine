@@ -63,11 +63,15 @@ void BaseViewportPanel::DrawCustomViewport()
 void BaseViewportPanel::DrawRenderTargetImage(const wstring& rtName)
 {
 	ImVec2 panelSize = ImGui::GetContentRegionAvail();
-	m_PanelWidth = glm::max((uint32)panelSize.x, (uint32)1);
-	m_PanelHeight = glm::max((uint32)panelSize.y, (uint32)1);
-	uint32 width = (uint32)panelSize.x;
-	uint32 height = (uint32)panelSize.y;
-	f32 panelAspectRatio = (f32)width / (f32)height;
+	panelSize.x = glm::max(panelSize.x, 1.0f);
+	panelSize.y = glm::max(panelSize.y, 1.0f);
+
+	m_PanelWidth = static_cast<uint32>(panelSize.x);
+	m_PanelHeight = static_cast<uint32>(panelSize.y);
+
+	uint32 width = m_PanelWidth;
+	uint32 height = m_PanelHeight;
+	f32 panelAspectRatio = static_cast<f32>(width) / static_cast<f32>(height);
 
 	RenderTarget* currentRT = RenderTargetManager::Get().GetRenderTarget(rtName);
 	if (currentRT)
@@ -143,7 +147,8 @@ void BaseViewportPanel::DrawCustomOptions()
 }
 void BaseViewportPanel::DrawRenderTargetMenu()
 {
-	if (ImGui::BeginMenu("RenderTarget"))
+	
+	if (ImGui::BeginMenu(LOCAL_CSTR("UI_RENDER_TARGET")))
 	{
 		if (ImGui::BeginMenu("All RenderTargets"))
 		{
@@ -306,7 +311,7 @@ void BaseViewportPanel::ResizeRenderTargets(uint32 width, uint32 height)
 
 void BaseViewportPanel::DrawResolutionMenu()
 {
-	if (ImGui::BeginMenu("Resolution"))
+	if (ImGui::BeginMenu(LOCAL_CSTR("UI_RESOLUTION")))
 	{
 		// --- Resolution Mode ---
 		if (ImGui::MenuItem("Free (Panel Size)", nullptr,

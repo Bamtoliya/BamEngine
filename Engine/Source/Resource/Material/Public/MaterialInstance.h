@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "MaterialInterface.h"
+#include "Material.h"
 
 struct MaterialInstanceDesc : public ResourceCreateDesc
 {
@@ -33,7 +34,7 @@ class ENGINE_API MaterialInstance : public MaterialInterface
 private:
 	MaterialInstance() : MaterialInterface(EResourceType::MaterialInstance) {}
 	public: virtual ~MaterialInstance() = default;
-	EResult Initialize(void* arg = nullptr);
+	EResult Initialize(void* arg = nullptr) override;
 public:
 	static MaterialInstance* Create(void* arg = nullptr);
 	static MaterialInstance* Create(const ResourceHandle<Material>& baseMaterial);
@@ -80,11 +81,11 @@ public:
 
 #pragma region Shader
 public:
-	virtual Shader* GetVertexShader() const;
-	virtual Shader* GetPixelShader() const;
+	virtual Shader* GetVertexShader() const override;
+	virtual Shader* GetPixelShader() const override;
 public:
-	virtual void SetVertexShaderHandle(const ResourceHandle<Shader>& shader);
-	virtual void SetPixelShaderHandle(const ResourceHandle<Shader>& shader);
+	virtual void SetVertexShaderHandle(const ResourceHandle<Shader>& shader) override;
+	virtual void SetPixelShaderHandle(const ResourceHandle<Shader>& shader) override;
 #pragma endregion
 
 #pragma region Variable

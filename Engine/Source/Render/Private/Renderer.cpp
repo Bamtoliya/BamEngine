@@ -27,6 +27,7 @@
 
 #include "Mesh.h"
 #include "MaterialInterface.h"
+#include "SamplerManager.h"
 
 IMPLEMENT_SINGLETON(Renderer)
 
@@ -157,7 +158,11 @@ EResult Renderer::Render(f32 dt)
 				cameraBuffer.cameraPosition = vec3(0.f);
 			}
 			cameraBuffer.time = dt;
-			m_RHI->BindConstantBuffer(&cameraBuffer, sizeof(CameraBuffer), 0);
+			if (IsFailure(m_RHI->BindConstantBuffer(&cameraBuffer, sizeof(CameraBuffer), 0)))
+			{
+				ENGINE_LOG_ERROR("Failed to bind camera constant buffer.");
+				return EResult::Fail;
+			}
 
 			m_RHI->SetViewport(0, 0, rtWidth, rtHeight);
 
@@ -175,6 +180,24 @@ EResult Renderer::Render(f32 dt)
 				{
 					ENGINE_LOG_ERROR(
 						"ECS mesh rendering failed. Pass ID: {}",
+						pass->GetID());
+				}
+			}
+
+			auto spriteIt = m_SpriteDrawCommands.find(pass->GetID());
+
+			if (spriteIt != m_SpriteDrawCommands.end())
+			{
+				const EResult result = RenderSprite(
+					dt,
+					spriteIt->second,
+					pass->GetSortType(),
+					pass);
+
+				if (IsFailure(result))
+				{
+					ENGINE_LOG_ERROR(
+						"ECS sprite rendering failed. Pass ID: {}",
 						pass->GetID());
 				}
 			}
@@ -317,24 +340,69 @@ EResult Renderer::RenderSkinnedMeshes(f32 dt, vector<SkinnedDrawCommand>& comman
 	return EResult();
 }
 
-EResult Renderer::RenderSprite(f32 dt, vector<SpriteDrawCommand>& commands, ERenderSortType sortType, RenderPass* renderPass)
+EResult Renderer::RenderSprite(
+	f32 dt,
+	vector<SpriteDrawCommand>& commands,
+	ERenderSortType sortType,
+	RenderPass* renderPass)
 {
-	for (auto& command : commands)
+	if (!m_RHI || !renderPass)
+		return EResult::Fail;
+
+	struct SpriteUBO
 	{
-		if (command.texture && command.material)
+		mat4 worldMatrix;
+		vec4 color;
+		vec4 uvTransform;
+	};
+
+	static_assert(offsetof(SpriteUBO, color) == 64);
+	static_assert(offsetof(SpriteUBO, uvTransform) == 80);
+	static_assert(sizeof(SpriteUBO) == 96);
+
+	RHISampler* sampler = SamplerManager::Get().GetDefaultSampler();
+
+	if (!sampler)
+		return EResult::Fail;
+
+	for (const auto& command : commands)
+	{
+		if (!command.mesh || !command.material || !command.texture)
+			return EResult::Fail;
+
+		RHITexture* texture = command.texture->GetRHITexture();
+
+		if (!texture || !command.mesh->GetIndexBuffer())
+			return EResult::Fail;
+
+		if (IsFailure(BindMeshPipeline(
+			command.mesh, command.material, renderPass)))
 		{
-			if(IsFailure(command.material->Bind(0)))
-				return EResult::Fail;
-			if(IsFailure(command.texture->Bind(0)))
-				return EResult::Fail;
-
-			if(command.mesh) command.mesh->Bind(0);
-			else TODO("Renderer::RenderSprite에서 Mesh가 없는 경우 처리 필요 일반 QUAD 메쉬 바인드");
-
-			m_RHI->BindConstantBuffer(&command.worldMatrix, sizeof(mat4), 1);
-			m_RHI->DrawIndexed(command.mesh->GetIndexCount());
+			return EResult::Fail;
 		}
+
+		// 이번 Sprite 셰이더의 t0는 Sprite 리소스가 제공합니다.
+		if (IsFailure(m_RHI->BindTextureSampler(texture, sampler, 0)))
+			return EResult::Fail;
+
+		SpriteUBO objectData{};
+		objectData.worldMatrix = command.worldMatrix;
+		objectData.color = command.color;
+		objectData.uvTransform = command.uvTransform;
+
+		if (IsFailure(m_RHI->BindConstantBuffer(
+			&objectData, sizeof(objectData), 1)))
+		{
+			return EResult::Fail;
+		}
+
+		if (IsFailure(command.mesh->Bind(0)))
+			return EResult::Fail;
+
+		if (IsFailure(m_RHI->DrawIndexed(command.mesh->GetIndexCount())))
+			return EResult::Fail;
 	}
+
 	return EResult::Success;
 }
 

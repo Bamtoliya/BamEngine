@@ -11,7 +11,7 @@ public:
 	DirectX12DescriptorAllocator(ID3D12Device* device, D3D12_DESCRIPTOR_HEAP_TYPE type, uint32 maxCount);
     ~DirectX12DescriptorAllocator();
 
-    bool Allocate(D3D12_CPU_DESCRIPTOR_HANDLE& outCPUHandle, uint32& outIndex);
+    bool Allocate(D3D12_CPU_DESCRIPTOR_HANDLE& outCPUHandle, uint32& outIndex, uint32 count = 1);
     void Free(uint32 index);
 
     ID3D12DescriptorHeap* GetHeap() const { return m_Heap.Get(); }

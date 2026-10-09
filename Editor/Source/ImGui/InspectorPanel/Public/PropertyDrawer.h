@@ -15,7 +15,7 @@ public:
 public:
 	static bool DrawHeaderNode(void* instance, const TypeInfo& typeInfo);
 private:
-	static void DrawCheckbox(ActiveInterface* instance, const TypeInfo& typeInfo);
+	static void DrawCheckbox(IActive* instance, const TypeInfo& typeInfo);
 #pragma endregion
 
 public:

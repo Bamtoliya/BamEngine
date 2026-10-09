@@ -8,11 +8,6 @@
 #include "AssetManager.h"
 
 
-#define RHI_TYPE ERHIType::DirectX12
-#define GRAPHICS_BACKEND EGraphicsBackend::Vulkan
-#define RESOURCE_PATH L"Resources/"
-#define LOG_PATH L"Logs/EngineLog.log"
-
 BEGIN(Editor)
 
 IMPLEMENT_SINGLETON(Application)
@@ -20,15 +15,45 @@ IMPLEMENT_SINGLETON(Application)
 #pragma region Constructor&Destructor
 EResult Application::Initialize(void* arg)
 {
-    //_CrtSetBreakAlloc(4253);
-    InitializeLogger();
-	InitializeWindow(*(ApplicationCreateInfo*)arg);
-	InitializeRuntime(*(ApplicationCreateInfo*)arg);
+    if (!arg)
+        return EResult::InvalidArgument;
+
+    const auto& createInfo = *static_cast<const ApplicationCreateInfo*>(arg);
+
+    EResult result = InitializeLogger();
+    if (result != EResult::Success)
+        return result;
+
+    m_LoggerInitialized = true;
+
+    const auto fail = [this](const char* stage, EResult result)
+        {
+            BAM_LOG(Error, "Application", "{} failed: {}", stage, ResultToString(result));
+            Free();
+            return result;
+        };
+
+    result = InitializeWindow(createInfo);
+    if (result != EResult::Success)
+        return fail("InitializeWindow", result);
+
+    result = InitializeRuntime(createInfo);
+    if (result != EResult::Success)
+        return fail("InitializeRuntime", result);
+
     IntializeRenderer();
     InitializeResources();
-	InitializeImGui();
+
+    result = InitializeImGui();
+    if (result != EResult::Success)
+        return fail("InitializeImGui", result);
+
     InitializeLocalization();
-	InitializeSystem();
+
+    result = InitializeSystem();
+    if (result != EResult::Success)
+        return fail("InitializeSystem", result);
+
     return EResult::Success;
 }
 
@@ -37,20 +62,48 @@ void Application::Free()
     m_CommandHistory.OnHistoryChanged().Clear();
     m_CommandHistory.Clear();
 
-	AssetManager::Destroy();
-    ImGuiManager::Destroy();
-	SelectionManager::Destroy();
+    if (m_AssetManager)
+    {
+        AssetManager::Destroy();
+        m_AssetManager = nullptr;
+    }
+
+    if (m_ImGuiManager)
+    {
+        ImGuiManager::Destroy();
+        m_ImGuiManager = nullptr;
+    }
+
+    if (m_SelectionManager)
+    {
+        SelectionManager::Destroy();
+        m_SelectionManager = nullptr;
+    }
 
     if (m_Runtime)
     {
-        m_Runtime->Destroy();
+        Runtime::Destroy();
         m_Runtime = nullptr;
     }
 
-    if(m_Window) SDL_DestroyWindow(m_Window);
-    SDL_Quit();
-    BAM_LOG(Info, "Application", "Application shutdown finished");
-    Engine::Logger::Shutdown();
+    if (m_Window)
+    {
+        SDL_DestroyWindow(m_Window);
+        m_Window = nullptr;
+    }
+
+    if (m_SDLInitialized)
+    {
+        SDL_Quit();
+        m_SDLInitialized = false;
+    }
+
+    if (m_LoggerInitialized)
+    {
+        BAM_LOG(Info, "Application", "Application cleanup finished");
+        Engine::Logger::Shutdown();
+        m_LoggerInitialized = false;
+    }
 }
 
 #pragma endregion
@@ -63,6 +116,8 @@ EResult Application::InitializeWindow(const ApplicationCreateInfo& createInfo)
         fmt::print(stderr, "SDL_Init Failed: {}\n", SDL_GetError());
         return EResult::Fail;
     }
+
+    m_SDLInitialized = true;
 
     uint32 windowFlags = SDL_WINDOW_RESIZABLE | SDL_WINDOW_BORDERLESS | SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_VULKAN;
 
@@ -132,45 +187,46 @@ EResult Application::InitializeWindow(const ApplicationCreateInfo& createInfo)
     }
     return EResult::Success;
 }
+
 EResult Application::InitializeRuntime(const ApplicationCreateInfo& createInfo)
 {
+    if (!m_Window)
+        return EResult::InvalidArgument;
+
     RUNTIMEDESC runtimeDesc = {};
+    SDLGPURHIDesc sdlgpuDesc = {};
+    DirectX12RHIDesc directX12Desc = {};
+
     runtimeDesc.RendererDesc.rhiType = RHI_TYPE;
+
     switch (runtimeDesc.RendererDesc.rhiType)
     {
     case ERHIType::SDLGPU:
     {
-        SDLGPURHIDesc sdlgpuDesc = {};
-        sdlgpuDesc.backendType = GRAPHICS_BACKEND; // 원하는 그래픽 백엔드 설정
-		sdlgpuDesc.windowHandle = m_Window;
+        sdlgpuDesc.backendType = GRAPHICS_BACKEND;
+        sdlgpuDesc.windowHandle = m_Window;
         runtimeDesc.RendererDesc.rhiDesc = &sdlgpuDesc;
         break;
     }
-    //case ERHIType::Vulkan:
-    //{
-    //    VulkanRHIDesc vulkanDesc = {};
-    //    runtimeDesc.RendererDesc.rhiDesc = &vulkanDesc;
-    //    break;
-    //}
     case ERHIType::DirectX12:
     {
-        DirectX12RHIDesc directX12Desc = {};
         SDL_PropertiesID propertiesID = SDL_GetWindowProperties(m_Window);
-        HWND hwnd = (HWND)SDL_GetPointerProperty(propertiesID, SDL_PROP_WINDOW_WIN32_HWND_POINTER, NULL);
+        if (!propertiesID)
+            return EResult::Fail;
+
+        HWND hwnd = static_cast<HWND>(
+            SDL_GetPointerProperty(propertiesID, SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr));
+        if (!hwnd)
+            return EResult::Fail;
+
         directX12Desc.windowHandle = hwnd;
         runtimeDesc.RendererDesc.rhiDesc = &directX12Desc;
         break;
     }
-    //case ERHIType::Metal:
-    //{
-    //    MetalRHIDesc metalDesc = {};
-    //    runtimeDesc.RendererDesc.rhiDesc = &metalDesc;
-    //    break;
-    //}
     default:
-        break;
+        return EResult::NotImplemented;
     }
-    
+
     runtimeDesc.RendererDesc.rhiDesc->width = g_WindowWidth;
     runtimeDesc.RendererDesc.rhiDesc->height = g_WindowHeight;
     runtimeDesc.RendererDesc.rhiDesc->isVSync = true;
@@ -185,6 +241,7 @@ EResult Application::InitializeRuntime(const ApplicationCreateInfo& createInfo)
 
     return EResult::Success;
 }
+
 EResult Application::InitializeSystem()
 {
 	auto& systemManager = SystemManager::Get();
@@ -195,6 +252,10 @@ EResult Application::InitializeSystem()
 		return EResult::Fail;
     if(!systemManager.AddSystem<SpriteRenderSystem>())
 		return EResult::Fail;
+    if (!systemManager.AddSystem<CameraSystem>())
+        return EResult::Fail;
+    if (!systemManager.AddSystem<LightSystem>())
+        return EResult::Fail;
     return EResult::Success;
 }
 EResult Application::InitializeImGui()
@@ -202,11 +263,18 @@ EResult Application::InitializeImGui()
     ImGuiManagerDesc imguiDesc = {};
     imguiDesc.Window = m_Window;
     imguiDesc.RHI = Renderer::Get().GetRHI();
+
     m_ImGuiManager = ImGuiManager::Create(&imguiDesc);
-    m_SelectionManager = SelectionManager::Create();
     if (!m_ImGuiManager)
     {
         fmt::print(stderr, "ImGuiManager Creation Failed\n");
+        return EResult::Fail;
+    }
+
+    m_SelectionManager = SelectionManager::Create();
+    if (!m_SelectionManager)
+    {
+        fmt::print(stderr, "SelectionManager Creation Failed\n");
         return EResult::Fail;
     }
 
@@ -323,6 +391,24 @@ void Application::InitializeShaders()
 	    auto handle = rm.LoadResource<Shader>(&defaultPsDesc);
 	    //rm.SaveToBinaryFile(handle.Get(), RESOURCE_PATH L"Shader/default_ps.bamshader");
 	}
+
+    ShaderDesc gbufferVsDesc = {};
+    {
+        gbufferVsDesc.Key = RESOURCE_PATH L"Shader/GBufferVS";
+        gbufferVsDesc.Path = RESOURCE_PATH L"Shader/bin/dxil/gbufferVS.cso";
+        gbufferVsDesc.shaderType = EShaderType::Vertex;
+        gbufferVsDesc.entryPoint = "main";
+        rm.LoadResource<Shader>(&gbufferVsDesc);
+    }
+
+    ShaderDesc gbufferPsDesc = {};
+    {
+        gbufferPsDesc.Key = RESOURCE_PATH L"Shader/GBufferPS";
+        gbufferPsDesc.Path = RESOURCE_PATH L"Shader/bin/dxil/gbufferPS.cso";
+        gbufferPsDesc.shaderType = EShaderType::Fragment;
+        gbufferPsDesc.entryPoint = "main";
+        rm.LoadResource<Shader>(&gbufferPsDesc);
+    }
 
     //ShaderDesc defaultSkinningShaderDesc = {};
     //{
@@ -553,6 +639,24 @@ void Application::InitializeShaders()
     //    rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/ui.frag.bamshader");
     //}
     //rm.LoadFile(L"Resources/Shader/ui.frag.bamshader");
+
+    ShaderDesc spriteVS{};
+    {
+        spriteVS.Key = RESOURCE_PATH L"Shader/GBufferSpriteVS";
+        spriteVS.Path = RESOURCE_PATH L"Shader/bin/dxil/gbufferSpriteVS.cso";
+        spriteVS.shaderType = EShaderType::Vertex;
+        spriteVS.entryPoint = "main";
+        rm.LoadResource<Shader>(&spriteVS);
+    }
+
+    ShaderDesc spritePS{};
+    {
+        spritePS.Key = RESOURCE_PATH L"Shader/GBufferSpritePS";
+        spritePS.Path = RESOURCE_PATH L"Shader/bin/dxil/gbufferSpritePS.cso";
+        spritePS.shaderType = EShaderType::Fragment;
+        spritePS.entryPoint = "main";
+        rm.LoadResource<Shader>(&spritePS);
+    }
 }
 
 void Application::InitializeMeshes()
@@ -634,7 +738,7 @@ void Application::InitializeMeshes()
             mat.normal = v.normal;
             mat.texCoord = v.texCoord;
             mat.tangent = v.tangent;
-            mat.bitangent = glm::cross(v.normal, v.tangent); // 자동 계산
+            mat.binormal = glm::cross(v.normal, v.tangent); // 자동 계산
             mat.color = vec4(1.0f);
             materials.push_back(mat);
 
@@ -673,21 +777,21 @@ void Application::InitializeMaterials()
 
     MaterialDesc defaultMaterialDesc = {};
     defaultMaterialDesc.Key = L"Resources/Material/DefaultMaterial";
-    defaultMaterialDesc.VertexShaderHandle = resourceManager.GetResourceHandle<Shader>(L"Resources/Shader/default.vert.bamshader");
-    defaultMaterialDesc.PixelShaderHandle = resourceManager.GetResourceHandle<Shader>(L"Resources/Shader/default.frag.bamshader");
+    defaultMaterialDesc.VertexShaderHandle = resourceManager.GetResourceHandle<Shader>(RESOURCE_PATH L"Shader/DefaultVS");
+    defaultMaterialDesc.PixelShaderHandle = resourceManager.GetResourceHandle<Shader>(RESOURCE_PATH L"Shader/DefaultPS");
     Material* material = resourceManager.LoadResource<Material>(&defaultMaterialDesc).Get();
-    material->SetTextureBinding("Default", 0, resourceManager.GetResourceHandle<Texture>(L"Resources/Texture/magenta1x1.png"));
-    resourceManager.SaveToBinaryFile(material, L"Resources/Material/DefaultMaterial.bammat");
+    material->SetTextureBinding("Default", 0, resourceManager.GetResourceHandle<Texture>(RESOURCE_PATH L"Texture/magenta1x1.png"));
+    resourceManager.SaveToBinaryFile(material, RESOURCE_PATH L"Material/DefaultMaterial.bammat");
     
     MaterialDesc spriteMaterialDesc = {};
-    spriteMaterialDesc.Key = L"Resources/Material/SpriteMaterial";
-    spriteMaterialDesc.VertexShaderHandle = resourceManager.GetResourceHandle<Shader>(L"Resources/Shader/sprite.vert.bamshader");
-    spriteMaterialDesc.PixelShaderHandle = resourceManager.GetResourceHandle<Shader>(L"Resources/Shader/sprite.frag.bamshader");
+    spriteMaterialDesc.Key = RESOURCE_PATH L"Material/SpriteMaterial";
+    spriteMaterialDesc.VertexShaderHandle = resourceManager.GetResourceHandle<Shader>(RESOURCE_PATH L"Shader/GBufferSpriteVS");
+    spriteMaterialDesc.PixelShaderHandle = resourceManager.GetResourceHandle<Shader>(RESOURCE_PATH L"Shader/GBufferSpritePS");
     spriteMaterialDesc.BlendMode = EBlendMode::AlphaBlend;
     spriteMaterialDesc.CullMode = ECullMode::None;
     spriteMaterialDesc.DepthMode = EDepthMode::ReadWrite;
     Material* spriteMaterial = resourceManager.LoadResource<Material>(&spriteMaterialDesc).Get();
-    resourceManager.SaveToBinaryFile(spriteMaterial, L"Resources/Material/SpriteMaterial.bammat");
+    resourceManager.SaveToBinaryFile(spriteMaterial, RESOURCE_PATH L"Material/SpriteMaterial.bammat");
 
     MaterialInstanceDesc spriteMaterialInstanceDesc = {};
     spriteMaterialInstanceDesc.BaseMaterialHandle = resourceManager.GetResourceHandle<Material>(L"Resources/Material/SpriteMaterial.bammat");
@@ -718,15 +822,14 @@ void Application::InitializeMaterials()
 
     // ── G-Buffer Material 생성 ──
     MaterialDesc gbufferMatDesc = {};
-    gbufferMatDesc.Key = L"Resources/Material/GBufferMaterial";
-    gbufferMatDesc.VertexShaderHandle = resourceManager.GetResourceHandle<Shader>(
-        L"Resources/Shader/gbuffer.vert.bamshader");
-    gbufferMatDesc.PixelShaderHandle = resourceManager.GetResourceHandle<Shader>(
-        L"Resources/Shader/gbuffer.frag.bamshader");
+    gbufferMatDesc.Key = RESOURCE_PATH L"Material/GBufferMaterial";
+    gbufferMatDesc.VertexShaderHandle = resourceManager.GetResourceHandle<Shader>(RESOURCE_PATH L"Shader/GBufferVS");
+    gbufferMatDesc.PixelShaderHandle = resourceManager.GetResourceHandle<Shader>(RESOURCE_PATH L"Shader/GBufferPS");
     gbufferMatDesc.BlendMode = EBlendMode::Opaque;
     gbufferMatDesc.CullMode = ECullMode::Back;
     gbufferMatDesc.DepthMode = EDepthMode::ReadWrite;
     Material* gbufferMat = resourceManager.LoadResource<Material>(&gbufferMatDesc).Get();
+    gbufferMat->SetTextureBinding("Diffuse", 0, resourceManager.GetResourceHandle<Texture>(RESOURCE_PATH L"Texture/white1x1.png"));
     resourceManager.SaveToBinaryFile(gbufferMat, L"Resources/Material/GBufferMaterial.bammat");
     resourceManager.LoadFile(L"Resources/Material/GBufferMaterial.bammat");
 
@@ -852,10 +955,7 @@ void Application::EnterPlayMode()
 {
     if (m_PlayState != EPlayState::Edit) return;
 
-    m_CommandHistory.Clear();
-    SnapshotScene();
-    m_PlayState = EPlayState::Play;
-    fmt::print("[PIE] Enter Play\n");
+    ENGINE_LOG_WARN("Play is unavailable until scene restoration is implemented.");
 }
 void Application::PausePlayMode()
 {
@@ -876,7 +976,14 @@ void Application::StopPlayMode()
     if (m_PlayState == EPlayState::Edit) return;
 
     m_PlayState = EPlayState::Edit;
-    RestoreScene();
+
+    const EResult result = RestoreScene();
+    if (result != EResult::Success)
+    {
+        ENGINE_LOG_WARN("[PIE] Stopped without restoring the scene: {}", ResultToString(result));
+        return;
+    }
+
     m_CommandHistory.Clear();
     fmt::print("[PIE] Stopped — scene restored\n");
 }
@@ -895,28 +1002,10 @@ void Application::SnapshotScene()
     archive.SaveToFile(WStrToStr(m_SnapshotPath));
 }
 
-void Application::RestoreScene()
+EResult Application::RestoreScene()
 {
-    SelectionManager::Get().ClearSelection();
-
-    JsonArchive archive(EArchiveMode::Read);
-    if (!archive.LoadFromFile(WStrToStr(m_SnapshotPath)))
-    {
-        fmt::print(stderr, "[PIE] Failed to load snapshot: {}\n", WStrToStr(m_SnapshotPath));
-        return;
-    }
-
-	SceneManager::Get().CloseScene();
-    Scene* newScene = Scene::Create();
-    if (!newScene) return;
-
-    if (archive.PushScope(entt::resolve(newScene->GetTypeID()).info().name().data()))
-    {
-        newScene->Deserialize(archive);
-        archive.PopScope();
-    }
-
-    SceneManager::Get().OpenScene(newScene);
+    // 복원이 구현되기 전에는 현재 씬과 선택 상태를 유지한다.
+    return EResult::NotImplemented;
 }
 #pragma endregion
 
@@ -941,15 +1030,31 @@ void Application::Run(int argc, char* argv[])
             }
             else if (event.type == SDL_EVENT_WINDOW_RESIZED || event.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED)
             {
-                uint32 newWidth = (uint32)event.window.data1;
-                uint32 newHeight = (uint32)event.window.data2;
-
-                if (newWidth <= 0 || newHeight <= 0)
+                if (event.window.windowID != SDL_GetWindowID(m_Window))
                     continue;
 
-                Renderer::Get().GetRHI()->Resize(newWidth, newHeight);
+                int pixelWidth = 0;
+                int pixelHeight = 0;
+                if (!SDL_GetWindowSizeInPixels(m_Window, &pixelWidth, &pixelHeight))
+                    continue;
+
+                if (pixelWidth <= 0 || pixelHeight <= 0)
+                    continue;
+
+                RHI* rhi = Renderer::Get().GetRHI();
+                const EResult result = rhi->Resize(static_cast<uint32>(pixelWidth), static_cast<uint32>(pixelHeight));
+
+                if (result != EResult::Success)
+                {
+                    ENGINE_LOG_ERROR("Window back buffer resize failed.");
+                    bIsRunning = false;
+                    break;
+                }
             }
         }
+
+        if (!bIsRunning)
+            break;
 
         timeManager.Update();
 		f32 dt = timeManager.GetDeltaTime();

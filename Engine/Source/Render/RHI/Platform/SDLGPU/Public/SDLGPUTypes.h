@@ -4,7 +4,7 @@
 #include "RHITypes.h"
 #include "RenderTypes.h"
 #include "Vertex.h"
-#include <SDL3/SDL_GPU.h>
+#include <SDL3/SDL_gpu.h>
 
 static const SDL_GPUTextureFormat SDL_GPUTextureFormats[] = {
     SDL_GPU_TEXTUREFORMAT_INVALID,

@@ -15,7 +15,7 @@ private:
 	virtual EResult Initialize(void* arg = nullptr) override;
 public:
 	static SkinnedMeshRenderer* Create(void* arg = nullptr);
-	virtual SkinnedMeshRenderer* Clone(GameObject* owner, void* arg = nullptr);
+	virtual SkinnedMeshRenderer* Clone(GameObject* owner, void* arg = nullptr) override;
 	virtual void Free() override;
 #pragma endregion
 

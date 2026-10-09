@@ -1,0 +1,33 @@
+﻿{
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "generator-x64",
+      "displayName": "Reflection Generator x64",
+      "generator": "Visual Studio 18 2026",
+      "architecture": {
+        "value": "x64",
+        "strategy": "set"
+      },
+      "binaryDir": "${sourceDir}/../../out/build/reflection-generator",
+      "installDir": "${sourceDir}/../../out/install/reflection-generator",
+      "cacheVariables": {
+        "CMAKE_CONFIGURATION_TYPES": "Release",
+        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded",
+        "REFLECTION_BUILD_GENERATOR": true,
+        "REFLECTION_BUILD_EXAMPLE": false,
+        "LLVM_DIR": "${sourceDir}/dependencies/llvm-20.1.8/lib/cmake/llvm",
+        "Clang_DIR": "${sourceDir}/dependencies/llvm-20.1.8/lib/cmake/clang"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "generator-release",
+      "displayName": "Generator Release",
+      "configurePreset": "generator-x64",
+      "configuration": "Release",
+      "targets": [ "ReflectionGenerator" ]
+    }
+  ]
+}

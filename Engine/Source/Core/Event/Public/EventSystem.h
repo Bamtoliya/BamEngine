@@ -16,7 +16,7 @@ class ENGINE_API EventSystem final : public Component
 protected:
 	EventSystem() {}
 	public: virtual ~EventSystem() = default;
-	EResult Initialize(void* arg = nullptr);
+	EResult Initialize(void* arg = nullptr) override;
 public:
 	static EventSystem* Create(void* arg = nullptr);
 	virtual Component* Clone(GameObject* owner, void* arg = nullptr) override;

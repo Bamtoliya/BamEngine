@@ -4,6 +4,9 @@
 #include "SerializableInterface.h"
 #include "Reflection/ReflectionMacro.h"
 #include "Entity.h"
+#include "TypeIdentityInterface.h"
+#include "Reflection/ComponentReflectionBindings.h"
+#include <utility>
 
 BEGIN(Engine)
 
@@ -25,7 +28,7 @@ enum class ESceneFlags : uint8
 ENABLE_BITMASK_OPERATORS(ESceneFlags)
 
 CLASS()
-class ENGINE_API Scene : public Base, public ReflectableInterface, public SerializableInterface
+class ENGINE_API Scene : public Base, public ITypeIdentity, public ISerializable
 {
 	REFLECT_BASE()
 #pragma region Constructor&Destructor
@@ -91,6 +94,41 @@ public:
 #pragma region Entity Management
 public:
 	entt::registry& GetRegistry() { return m_LocalRegistry; }
+	const entt::registry& GetRegistry() const { return m_LocalRegistry; }
+
+	template<typename Visitor>
+	[[nodiscard]]
+	ComponentVisitResult ForEachReflectedComponent(const Entity& entity, Visitor&& visitor)
+	{
+		if (m_ComponentReflectionBindings == nullptr)
+		{
+			return ComponentVisitResult::NotInitialized;
+		}
+
+		if (entity.GetScene() != this)
+		{
+			return ComponentVisitResult::InvalidEntity;
+		}
+
+		return m_ComponentReflectionBindings->ForEach(m_LocalRegistry, entity.GetEntityHandle(), std::forward<Visitor>(visitor));
+	}
+
+	template<typename Visitor>
+	[[nodiscard]]
+	ComponentVisitResult ForEachReflectedComponent(const Entity& entity, Visitor&& visitor) const
+	{
+		if (m_ComponentReflectionBindings == nullptr)
+		{
+			return ComponentVisitResult::NotInitialized;
+		}
+
+		if (entity.GetScene() != this)
+		{
+			return ComponentVisitResult::InvalidEntity;
+		}
+
+		return m_ComponentReflectionBindings->ForEach(m_LocalRegistry, entity.GetEntityHandle(), std::forward<Visitor>(visitor));
+	}
 	Entity& CreateEntity();
 	Entity* FindEntity(entt::entity handle);
 	template<typename T, typename... Args>
@@ -142,6 +180,7 @@ public:
 #pragma region Variable
 protected:
 	entt::registry m_LocalRegistry;
+	const ComponentReflectionBindings* m_ComponentReflectionBindings = nullptr;
 
 	unordered_map<entt::entity, Entity*> m_EntityMap;
 

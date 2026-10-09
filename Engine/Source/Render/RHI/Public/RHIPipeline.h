@@ -136,7 +136,7 @@ struct hash<RHIPipelineDesc>
 };
 
 BEGIN(Engine)
-class ENGINE_API RHIPipeline abstract : public RHIResource
+class ENGINE_API RHIPipeline : public RHIResource
 {
 protected:
 	using DESC = RHIPipelineDesc;

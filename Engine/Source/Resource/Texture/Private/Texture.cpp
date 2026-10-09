@@ -134,6 +134,7 @@ void Texture::Serialize(Archive& ar)
 void Texture::Deserialize(Archive& ar)
 {
     Resource::Deserialize(ar);
+    if (ar.HasError()) return;
 
     if (ar.PushScope("TextureHeader"))
     {

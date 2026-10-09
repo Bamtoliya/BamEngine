@@ -2,7 +2,6 @@
 #include "CoreComponents.h"
 #include "RenderComponents.h"
 #include "ResourceHandle.h"
-#include "ResourceHandle.inl"
 #include "Mesh.h"
 #include "MaterialInterface.h"
 #include "Renderer.h"

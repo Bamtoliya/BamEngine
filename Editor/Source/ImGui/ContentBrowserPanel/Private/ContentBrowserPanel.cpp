@@ -120,7 +120,8 @@ void ContentBrowserPanel::Draw()
 
 	if (!m_Open) return;
 
-	ImGui::Begin(WStrToStr(m_Name).c_str(), &m_Open);
+	const string windowTitle = LOCAL("UI_CONTENT_BROWSER") + "###ContentBrowserPanel";
+	ImGui::Begin(windowTitle.c_str(), &m_Open);
 
 	FileConfilictPopup();
 

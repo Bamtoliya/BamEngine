@@ -2,7 +2,6 @@
 
 #include "Component.h"
 #include "Structs.h"
-#include "CollisionManager.h"
 
 BEGIN(Engine)
 
@@ -38,7 +37,7 @@ protected:
 	Collider() = default;
 	Collider(EColliderType type) : m_Type(type) {}
 	public: virtual ~Collider() {}
-	virtual EResult Initialize(void* arg = nullptr);
+	virtual EResult Initialize(void* arg = nullptr) override;
 public:
 	virtual void Free() override;
 #pragma endregion

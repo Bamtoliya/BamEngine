@@ -12,24 +12,22 @@ include(Dependencies)
 # ==============================================================================
 set(ENGINE_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Source")
 set(ENGINE_PCH_HEADER "${ENGINE_SOURCE_DIR}/Core/Public/Engine_Includes.h")
-set(GENERATED_SOURCE "${ENGINE_SOURCE_DIR}/Core/Reflection/Private/Reflection.gen.cpp")
 
 # 모든 파일 스캔 (GLOB_RECURSE)
 file(GLOB_RECURSE ENGINE_HEADERS CONFIGURE_DEPENDS "${ENGINE_SOURCE_DIR}/*.h")
 file(GLOB_RECURSE ENGINE_SOURCES CONFIGURE_DEPENDS "${ENGINE_SOURCE_DIR}/*.cpp")
 file(GLOB_RECURSE ENGINE_INLINE CONFIGURE_DEPENDS "${ENGINE_SOURCE_DIR}/*.inl")
 file(GLOB_RECURSE ALL_SOURCE_FILES CONFIGURE_DEPENDS "${ENGINE_SOURCE_DIR}/*")
-file(GLOB_RECURSE REFLECTION_AST_SOURCES CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/Projects/ReflectionAST/*.py")
 
 # 소스 목록 취합 및 필터 폴더(Tree) 구조 생성
-list(APPEND ENGINE_SOURCES "${GENERATED_SOURCE}" ${ENGINE_INLINE})
+list(APPEND ENGINE_SOURCES ${ENGINE_INLINE})
 source_group(TREE "${ENGINE_SOURCE_DIR}" FILES ${ENGINE_HEADERS} ${ENGINE_SOURCES})
 
 # Public 인클루드 디렉토리 자동 추출 로직
 set(ENGINE_PUBLIC_INCLUDE_DIRS "")
 foreach(FILE_PATH ${ALL_SOURCE_FILES})
     get_filename_component(DIR_PATH "${FILE_PATH}" DIRECTORY)
-    if(DIR_PATH MATCHES "/Public$")
+    if(DIR_PATH MATCHES "/Public(/|$)" AND NOT DIR_PATH MATCHES "/Private(/|$)")
         list(APPEND ENGINE_PUBLIC_INCLUDE_DIRS "${DIR_PATH}")
     endif()
 endforeach()
@@ -44,7 +42,6 @@ endif()
 add_library(Engine SHARED
     ${ENGINE_HEADERS}
     ${ENGINE_SOURCES}
-    $<TARGET_OBJECTS:ReflectionBamAdapterObjects>
 )
 add_library(BamEngine::Engine ALIAS Engine)
 
@@ -61,6 +58,14 @@ target_compile_definitions(Engine PRIVATE
     BAMENGINE_PROJECT_ROOT="${CMAKE_SOURCE_DIR}"
 )
 
+set(_engine_glm_definitions
+    GLM_FORCE_DEPTH_ZERO_TO_ONE
+    GLM_FORCE_LEFT_HANDED
+    GLM_ENABLE_EXPERIMENTAL
+)
+
+target_compile_definitions(Engine PUBLIC ${_engine_glm_definitions})
+
 # MSVC 전용 컴파일러 옵션
 if(MSVC)
     target_compile_options(Engine PRIVATE
@@ -69,6 +74,7 @@ if(MSVC)
         /MP
         /bigobj
         /Zc:preprocessor
+        /utf-8
     )
     target_link_options(Engine PRIVATE
         $<$<CONFIG:Debug>:/INCREMENTAL>
@@ -94,7 +100,9 @@ target_include_directories(Engine
 target_link_libraries(Engine
     PUBLIC
         Reflection::Core
-        Reflection::BamAdapter
+        Reflection::Runtime
+        ReflectionArchive::Adapter
+        EnTT::EnTT
         fmt::fmt
         SDL3::SDL3
         glm::glm
@@ -109,11 +117,13 @@ target_link_libraries(Engine
 )
 
 # ==============================================================================
-# 6. Custom Build Steps (커스텀 타겟 및 종속성 연결)
+# 6. Custom Build Steps & Checks
 # ==============================================================================
-# 외부 스크립트 모듈 실행 (타겟 생성)
 include(ShaderBuild)
 include(ReflectionBuild)
 
-# [가장 중요] 엔진 빌드 시작 '전'에 셰이더와 리플렉션 코드를 먼저 굽도록 종속성 강제
-add_dependencies(Engine CompileShaders GenerateReflectionAST)
+add_dependencies(Engine CompileShaders)
+
+if(BAMENGINE_BUILD_REFLECTION_CHECK)
+    include(Checks)
+endif()

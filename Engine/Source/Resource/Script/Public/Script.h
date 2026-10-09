@@ -19,7 +19,7 @@ class Script : public Resource
 private:
 	Script() : Resource(EResourceType::Script) {}
 	virtual ~Script() = default;
-	EResult Initialize(void* arg = nullptr);
+	EResult Initialize(void* arg = nullptr) override;
 public:
 	static Script* Create(void* arg = nullptr);
 	virtual void Free() override;

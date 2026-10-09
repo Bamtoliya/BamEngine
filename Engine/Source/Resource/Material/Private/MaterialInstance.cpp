@@ -1,6 +1,5 @@
-#pragma once
+﻿#pragma once
 
-#include "Material.h"
 #include "MaterialInstance.h"
 #include "SamplerManager.h"
 #include "Renderer.h"
@@ -116,7 +115,6 @@ void MaterialInstance::SetBaseMaterial(const ResourceHandle<Material>& material)
 {
 	m_BaseMaterialHandle = material;
 }
-
 
 #pragma region Shader
 Shader* MaterialInstance::GetVertexShader() const

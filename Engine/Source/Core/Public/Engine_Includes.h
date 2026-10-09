@@ -67,9 +67,17 @@
 #include <SDL3/SDL.h>
 
 // GLM
+#ifndef GLM_FORCE_DEPTH_ZERO_TO_ONE
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
+#endif
+
+#ifndef GLM_FORCE_LEFT_HANDED
 #define GLM_FORCE_LEFT_HANDED
+#endif
+
+#ifndef GLM_ENABLE_EXPERIMENTAL
 #define GLM_ENABLE_EXPERIMENTAL
+#endif
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtx/matrix_decompose.hpp>
@@ -88,8 +96,6 @@ using Microsoft::WRL::ComPtr;
 
 // Glaze
 #include <glaze/glaze.hpp>
-
-#include <cppcodec/base64_rfc4648.hpp>
 
 //EnTT
 #include <entt/entt.hpp>

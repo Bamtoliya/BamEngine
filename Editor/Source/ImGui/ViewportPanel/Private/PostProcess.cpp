@@ -51,9 +51,13 @@ EResult ToneMapping::SubmitPass(f32 dt, Engine::RenderPassID passID, const wstri
 			if (!src || !src->GetTexture()) return EResult::Fail;
 
 			auto* rhi = Engine::Renderer::Get().GetRHI();
-			rhi->BindTextureSampler(src->GetTexture(), Engine::SamplerManager::Get().GetDefaultSampler(), 0);
-			rhi->BindConstantBuffer(&m_Params, sizeof(m_Params), 0);
-			rhi->BindPipeline(m_Pipeline);
+			auto* sampler = Engine::SamplerManager::Get().GetDefaultSampler();
+			if (IsFailure(rhi->BindTextureSampler(src->GetTexture(), sampler, MAX_MATERIAL_TEXTURE_SLOTS)))
+				return EResult::Fail;
+			if (IsFailure(rhi->BindConstantBuffer(&m_Params, sizeof(m_Params), 2)))
+				return EResult::Fail;
+			if(IsFailure(rhi->BindPipeline(m_Pipeline)))
+				return EResult::Fail;
 			return rhi->Draw(3);
 		}, passID);
 

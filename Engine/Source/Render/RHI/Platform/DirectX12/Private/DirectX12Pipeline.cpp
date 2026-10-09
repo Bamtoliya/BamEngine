@@ -95,14 +95,10 @@ EResult DirectX12Pipeline::Initialize(const DESC& desc)
 	psoDesc.SampleDesc.Quality = 0;
 	psoDesc.SampleMask = UINT_MAX;
 
-	ComPtr<ID3DBlob> errorBlob;
-	if (FAILED(dxDevice->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&m_Pipeline))))
+	const HRESULT hr = dxDevice->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&m_Pipeline));
+	if (FAILED(hr))
 	{
-		if (errorBlob)
-		{
-			fmt::print(stderr, "CreateGraphicsPipelineState failed: {}\n",
-				(char*)errorBlob->GetBufferPointer());
-		}
+		fmt::print(stderr, "CreateGraphicsPipelineState failed: HRESULT=0x{:08X}\n", static_cast<uint32>(hr));
 		return EResult::Fail;
 	}
 

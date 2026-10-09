@@ -4,10 +4,10 @@
 #include "Archive.h"
 
 BEGIN(Engine)
-class SerializableInterface
+class ISerializable
 {
 public:
-	virtual ~SerializableInterface() = default;
+	virtual ~ISerializable() = default;
 
 	virtual void Serialize(class Archive& ar) {}
 	virtual void Deserialize(class Archive& ar) {}

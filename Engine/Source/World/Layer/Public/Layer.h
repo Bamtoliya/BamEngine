@@ -1,9 +1,10 @@
-#pragma once
+﻿#pragma once
 
 #include "Base.h"
 #include "SerializableInterface.h"
 #include "Reflection/ReflectionMacro.h"
 #include "CommonInterface.h"
+#include "TypeIdentityInterface.h"
 
 BEGIN(Engine)
 
@@ -27,7 +28,7 @@ struct tagLayerCreateDesc
 #pragma endregion
  
 CLASS()
-class ENGINE_API Layer : public Base, public ReflectableInterface, public SerializableInterface, public ActiveInterface, public VisibleInterface
+class ENGINE_API Layer : public Base, public ITypeIdentity, public ISerializable, public IActive, public IVisible
 {
 	REFLECT_BASE()
 #pragma region Constructor&Destructor

@@ -1,5 +1,7 @@
 ﻿#pragma once
-#include "ResourceManager.h"
+#include "ResourceHandle.h"
+
+BEGIN(Engine)
 
 template<typename T>
 inline ResourceHandle<T>::ResourceHandle(Handle handle)
@@ -104,9 +106,7 @@ template<typename T>
 inline void ResourceHandle<T>::InternalAddRef()
 {
 	if (m_Handle.IsValid())
-	{
-		ResourceManager::Get().AddRefResource(m_Handle);
-	}
+		ResourceHandleAccess::AddRef(m_Handle);
 }
 
 template<typename T>
@@ -114,7 +114,7 @@ inline void ResourceHandle<T>::InternalRelease()
 {
 	if (m_Handle.IsValid())
 	{
-		ResourceManager::Get().ReleaseResource(m_Handle);
+		ResourceHandleAccess::Release(m_Handle);
 		m_Handle = Handle();
 	}
 }
@@ -122,10 +122,8 @@ inline void ResourceHandle<T>::InternalRelease()
 template<typename T>
 inline bool ResourceHandle<T>::IsValid() const
 {
-	if (!m_Handle.IsValid())
-		return false;
-
-	return ResourceManager::Get().IsValid(m_Handle);
+	return m_Handle.IsValid()
+		&& ResourceHandleAccess::IsValid(m_Handle);
 }
 
 template<typename T>
@@ -134,5 +132,6 @@ inline Resource* ResourceHandle<T>::GetUntyped() const
 	if (!m_Handle.IsValid())
 		return nullptr;
 
-	return ResourceManager::Get().GetResource(m_Handle);
+	return ResourceHandleAccess::Resolve(m_Handle);
 }
+END

@@ -2,7 +2,6 @@
 
 #include "Resource.h"
 #include "ResourceHandle.h"
-#include "ResourceHandle.inl"
 
 #include "Mesh.h"
 #include "Material.h"
@@ -28,9 +27,10 @@ class ENGINE_API Model : public Resource
 #pragma region Constrcutor&Destructor
 private:
 	Model() : Resource(EResourceType::Model) {}
-	EResult Initialize(void* arg = nullptr);
-public:
 	virtual ~Model() = default;
+	EResult Initialize(void* arg = nullptr) override;
+public:
+	
 public:
 	static Model* Create(void* arg = nullptr);
 	virtual void Free() override;

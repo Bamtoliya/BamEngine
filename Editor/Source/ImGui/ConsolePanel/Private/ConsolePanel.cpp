@@ -6,8 +6,10 @@ void ConsolePanel::Draw()
     if (!m_Open)
         return;
 
-    if (ImGui::Begin("Console", &m_Open))
+    const string windowTitle = LOCAL("UI_CONSOLE") + "###ConsolePanel";
+    if (ImGui::Begin(windowTitle.c_str(), &m_Open))
     {
+
         m_Focused = ImGui::IsWindowFocused();
         m_Hovered = ImGui::IsWindowHovered();
 

@@ -101,15 +101,21 @@ EResult DirectX12Texture::Initialize(const DESC& desc)
 
     if (HasFlag(m_Usage, ETextureUsage::RenderTarget))
     {
-        uint32 index = 0;
-        dxRHI->GetRTVAllocator()->Allocate(m_RTVHandle, index);
+        if (!dxRHI->GetRTVAllocator()->Allocate(m_RTVHandle, m_RTVDescriptorIndex))
+        {
+            fmt::print(stderr, "RTV descriptor allocation failed\n");
+            return EResult::OutOfMemory;
+        }
         dxDevice->CreateRenderTargetView(m_Texture.Get(), nullptr, m_RTVHandle);
     }
 
     if (HasFlag(m_Usage, ETextureUsage::DepthStencilTarget))
     {
-        uint32 index = 0;
-        dxRHI->GetDSVAllocator()->Allocate(m_DSVHandle, index);
+        if (!dxRHI->GetDSVAllocator()->Allocate(m_DSVHandle, m_DSVDescriptorIndex))
+        {
+            fmt::print(stderr, "DSV descriptor allocation failed\n");
+            return EResult::OutOfMemory;
+        }
 
         // DSV는 실제 depth 포맷 사용
         D3D12_DEPTH_STENCIL_VIEW_DESC dsvDesc = {};
@@ -121,8 +127,11 @@ EResult DirectX12Texture::Initialize(const DESC& desc)
 
     if (HasFlag(m_Usage, ETextureUsage::Sampler))
     {
-        uint32 index = 0;
-        dxRHI->GetSRVAllocator()->Allocate(m_SRVHandle, index);
+        if (!dxRHI->GetSRVAllocator()->Allocate(m_SRVHandle, m_SRVDescriptorIndex))
+        {
+            fmt::print(stderr, "SRV descriptor allocation failed\n");
+            return EResult::OutOfMemory;
+        }
 
         D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
         // [핵심 수정] Depth 텍스처는 SRV 전용 포맷으로 변환
@@ -157,7 +166,7 @@ EResult DirectX12Texture::Initialize(const DESC& desc)
         }
 
         dxDevice->CreateShaderResourceView(m_Texture.Get(), &srvDesc, m_SRVHandle);
-        m_SRVGPUHandle = dxRHI->GetSRVAllocator()->GetGPUHandle(index);
+        m_SRVGPUHandle = dxRHI->GetSRVAllocator()->GetGPUHandle(m_SRVDescriptorIndex);
     }
 
     return EResult::Success;
@@ -177,12 +186,31 @@ DirectX12Texture* DirectX12Texture::Create(DirectX12RHI* rhi, const DESC& desc, 
 
 void DirectX12Texture::Free()
 {
-	if (m_Texture && m_IsOwned)
-	{
-		m_Texture.Reset();
-	}
-	m_Texture = nullptr;
-	RHIResource::Free();
+    if (m_IsOwned && m_RHI)
+    {
+        auto* dxRHI = static_cast<DirectX12RHI*>(m_RHI);
+
+        if (m_RTVDescriptorIndex != INVALID_DESCRIPTOR_INDEX)
+            dxRHI->GetRTVAllocator()->Free(m_RTVDescriptorIndex);
+
+        if (m_DSVDescriptorIndex != INVALID_DESCRIPTOR_INDEX)
+            dxRHI->GetDSVAllocator()->Free(m_DSVDescriptorIndex);
+
+        if (m_SRVDescriptorIndex != INVALID_DESCRIPTOR_INDEX)
+            dxRHI->GetSRVAllocator()->Free(m_SRVDescriptorIndex);
+    }
+
+    m_RTVDescriptorIndex = INVALID_DESCRIPTOR_INDEX;
+    m_DSVDescriptorIndex = INVALID_DESCRIPTOR_INDEX;
+    m_SRVDescriptorIndex = INVALID_DESCRIPTOR_INDEX;
+
+    m_RTVHandle = {};
+    m_DSVHandle = {};
+    m_SRVHandle = {};
+    m_SRVGPUHandle = {};
+
+    m_Texture.Reset();
+    RHIResource::Free();
 }
 #pragma endregion
 

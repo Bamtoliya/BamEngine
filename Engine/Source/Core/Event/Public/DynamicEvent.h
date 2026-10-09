@@ -3,13 +3,14 @@
 #include "Types.h"
 #include "Delegate.h"
 #include "Macro.h"
+#include <reflection/core/ContainerInfo.h>
 #include "Reflection/ReflectionMacro.h"
 #include "Event.h"
 
 BEGIN(Engine)
 struct EventParameter
 {
-	reflection::EPropertyType Type;
+	legacy_reflection::EPropertyType Type;
 
 	int32 IntValue;
 	f32 FloatValue;

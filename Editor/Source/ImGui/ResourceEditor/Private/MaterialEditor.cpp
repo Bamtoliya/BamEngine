@@ -76,7 +76,7 @@ namespace
 
             currentTypeInfo = currentTypeInfo->ParentQualifiedName.empty()
                 ? nullptr
-                : reflection::Registry::Get().GetTypeByQualifiedName(currentTypeInfo->ParentQualifiedName);
+                : legacy_reflection::Registry::Get().GetTypeByQualifiedName(currentTypeInfo->ParentQualifiedName);
         }
 
         return anyChanged;
@@ -468,7 +468,7 @@ void MaterialEditor::Draw()
 
     ImGui::Separator();
 
-    if (const TypeInfo* typeInfo = reflection::Registry::Get().GetType(mat->GetTypeID()))
+    if (const TypeInfo* typeInfo = legacy_reflection::Registry::Get().GetType(mat->GetTypeID()))
     {
         ImGui::PushID(mat);
 

@@ -6,27 +6,19 @@
 #include "InputManager.h"
 #include "ImViewGuizmo.h"
 #include "RectTransform.h"
-#include "MeshFilter.h"
+
+#include "Entity.h"
+#include "Scene.h"
+#include "CoreComponents.h"
+#include "RenderComponents.h"
+#include "TransformSystem.h"
+#include "TransformPropertyEditor.h"
+
+#include <glm/gtc/type_ptr.hpp>
+#include <cmath>
+#include <string>
 
 #pragma region Helper
-static quat ExtractRotationQuat(const mat4& matrix)
-{
-	vec3 scale;
-	vec3 translation;
-	vec3 skew;
-	vec4 perspective;
-	quat rotation;
-
-	glm::decompose(matrix, scale, rotation, translation, skew, perspective);
-	return glm::normalize(rotation);
-}
-
-static vec3 ExtractDeltaEulerDegrees(const mat4& deltaMatrix)
-{
-	const quat deltaRotation = ExtractRotationQuat(deltaMatrix);
-	return glm::degrees(glm::eulerAngles(deltaRotation));
-}
-
 static bool WorldToViewportScreen(
 	const vec3& worldPos,
 	const mat4& viewProj,
@@ -348,7 +340,7 @@ void SceneViewportPanel::DrawCustomViewport()
 #pragma region Options Bar
 void SceneViewportPanel::DrawSceneRenderTargetMenu()
 {
-	if (ImGui::BeginMenu("RenderTarget"))
+	if (ImGui::BeginMenu(LOCAL_CSTR("UI_RENDER_TARGET")))
 	{
 		if (ImGui::MenuItem("FinalRT", nullptr, m_ShowFinalComposed))
 		{
@@ -416,7 +408,7 @@ void SceneViewportPanel::DrawSceneRenderTargetMenu()
 
 void SceneViewportPanel::DrawGizmoMenu()
 {
-	if (ImGui::BeginMenu("Gizmo"))
+	if (ImGui::BeginMenu(LOCAL_CSTR("UI_GIZMO")))
 	{
 		if (ImGui::MenuItem("Translate (W)", "Shift + 1", m_GizmoOperation == ImGuizmo::TRANSLATE))
 			m_GizmoOperation = ImGuizmo::TRANSLATE;
@@ -447,7 +439,7 @@ void SceneViewportPanel::DrawGizmoMenu()
 
 void SceneViewportPanel::DrawDebugMenu()
 {
-	if (ImGui::BeginMenu("Debug"))
+	if (ImGui::BeginMenu(LOCAL_CSTR("UI_DEBUG")))
 	{
 		ImGui::MenuItem("Show Grid", nullptr, m_Grid.GetVisible());
 		ImGui::MenuItem("Show Collider", nullptr, m_DebugRenderer.GetDrawCollidersPtr());
@@ -462,7 +454,7 @@ void SceneViewportPanel::DrawPostProcessMenu()
 
 void SceneViewportPanel::DrawRenderPassMenu()
 {
-	if (ImGui::BeginMenu("Passes"))
+	if (ImGui::BeginMenu(LOCAL_CSTR("UI_PASS")))
 	{
 		for (auto& pass : m_PassOptions)
 		{
@@ -493,91 +485,125 @@ void SceneViewportPanel::ResizeRenderTargets(uint32 width, uint32 height)
 #pragma region Overlay
 void SceneViewportPanel::DrawImGuizmo()
 {
-	GameObject* selectedObject = SelectionManager::Get().GetPrimarySelection();
-	if (!selectedObject) return;
+	Engine::Entity* selectedEntity = SelectionManager::Get().GetPrimarySelectedEntity();
 
-	Transform* transform = selectedObject->GetComponent<Transform>();
-	if (!transform) return;
-	Camera* camera = m_Camera;
+	if (selectedEntity == nullptr || m_Camera == nullptr ||
+		m_ImageSize.x <= 0.0f || m_ImageSize.y <= 0.0f)
+	{
+		return;
+	}
 
-	// 1. ImGuizmo 초기 설정
+	Engine::Scene* scene = selectedEntity->GetScene();
+
+	if (scene == nullptr)
+	{
+		return;
+	}
+
+	auto& world = scene->GetRegistry();
+	const entt::entity entity = selectedEntity->GetEntityHandle();
+
+	if (!world.valid(entity) ||
+		!world.all_of<Engine::TransformComponent, Engine::WorldTransformComponent>(entity))
+	{
+		return;
+	}
+
+	TransformEditMode editMode;
+
+	switch (m_GizmoOperation)
+	{
+	case ImGuizmo::TRANSLATE: editMode = TransformEditMode::Translation; break;
+	case ImGuizmo::ROTATE: editMode = TransformEditMode::Rotation; break;
+	case ImGuizmo::SCALE: editMode = TransformEditMode::Scale; break;
+	default: return;
+	}
+
+	// 일시정지 중에도 에디터에서 사용할 최신 계층 행렬을 계산합니다.
+	Engine::TransformSystem::UpdateHierarchy(world);
+
+	glm::mat4 worldMatrix = world.get<Engine::WorldTransformComponent>(entity).worldMatrix;
+	const double determinant = glm::determinant(glm::dmat4(worldMatrix));
+
+	if (!std::isfinite(determinant) || determinant == 0.0)
+	{
+		return;
+	}
+
+	const glm::mat4 viewMatrix = m_Camera->GetViewMatrix();
+	const glm::mat4 projectionMatrix = m_Camera->GetProjMatrix();
+
+	bool useSnap = m_GizmoUseSnap || ImGui::GetIO().KeyCtrl;
+	glm::vec3 snapValues = m_GizmoSnapTranslation;
+
+	if (editMode == TransformEditMode::Rotation)
+	{
+		snapValues = m_GizmoSnapRotation;
+	}
+	else if (editMode == TransformEditMode::Scale)
+	{
+		snapValues = m_GizmoSnapScale;
+	}
+
+	const auto* settings = TransformPropertyEditor::GetSettings(world, entity, editMode);
+
+	if (settings != nullptr && settings->SnapEnabled)
+	{
+		useSnap = true;
+		snapValues = glm::vec3(settings->SnapStep);
+	}
+
+	for (int axis = 0; axis < 3; ++axis)
+	{
+		if (!std::isfinite(snapValues[axis]) || snapValues[axis] <= 0.0f)
+		{
+			useSnap = false;
+		}
+	}
+
+	float bounds[6]{ -0.5f, -0.5f, -0.5f, 0.5f, 0.5f, 0.5f };
+
+	if (const auto* renderer = world.try_get<StaticMeshRendererComponent>(entity))
+	{
+		if (const auto* mesh = renderer->meshHandle.Get())
+		{
+			const glm::vec3 minimum = mesh->GetMin();
+			const glm::vec3 maximum = mesh->GetMax();
+
+			bounds[0] = minimum.x;
+			bounds[1] = minimum.y;
+			bounds[2] = minimum.z;
+			bounds[3] = maximum.x;
+			bounds[4] = maximum.y;
+			bounds[5] = maximum.z;
+		}
+	}
+
+	const bool showBounds = m_GizmoShowBounds && editMode == TransformEditMode::Scale;
+	const std::string entityId = std::to_string(entt::to_integral(entity));
+
+	ImGui::PushID(this);
+	ImGui::PushID(static_cast<const void*>(scene));
+	ImGui::PushID(entityId.c_str());
+
+	ImGuizmo::SetID(static_cast<int>(ImGui::GetID("EntityGizmo")));
 	ImGuizmo::SetOrthographic(IsOrthographic());
 	ImGuizmo::SetDrawlist();
 	ImGuizmo::SetRect(m_ImageScreenPos.x, m_ImageScreenPos.y, m_ImageSize.x, m_ImageSize.y);
-	ImGuizmo::SetID(ImGui::GetID(this));
 
-	// 2. 카메라 및 매트릭스 준비
-	mat4 projMatrix = camera->GetProjMatrix();
-	mat4 viewMatrix = camera->GetViewMatrix();
-	mat4 worldMatrix = transform->GetWorldMatrix();
-	mat4 deltaMatrix = glm::identity<mat4>();
+	const bool changed = ImGuizmo::Manipulate(glm::value_ptr(viewMatrix), glm::value_ptr(projectionMatrix),
+		m_GizmoOperation, m_GizmoMode, glm::value_ptr(worldMatrix), nullptr,
+		useSnap ? glm::value_ptr(snapValues) : nullptr, showBounds ? bounds : nullptr,
+		showBounds && useSnap ? glm::value_ptr(snapValues) : nullptr);
 
-	auto getLocalMatrix = [](GameObject* obj, const mat4& wMatrix) -> mat4 {
-		GameObject* parent = obj->GetParent();
-		if (parent && parent->GetTransform())
-			return glm::inverse(parent->GetTransform()->GetWorldMatrix()) * wMatrix;
-		return wMatrix;
-		};
-
-	// 3. 조작 전 로컬 값 백업
-	mat4 oldLocalMatrix = getLocalMatrix(selectedObject, worldMatrix);
-	quat oldLocalQuat = ExtractRotationQuat(oldLocalMatrix);
-
-	// 5. 스냅 설정
-	bool snap = m_GizmoUseSnap || ImGui::GetIO().KeyCtrl;
-	vec3 snapValues = m_GizmoSnapTranslation;
-	if (m_GizmoOperation == ImGuizmo::ROTATE) snapValues = m_GizmoSnapRotation;
-	else if (m_GizmoOperation == ImGuizmo::SCALE) snapValues = m_GizmoSnapScale;
-
-	// 6. 3D Bounds 설정 (추가된 부분)
-	f32 bounds[6] = { -0.5f, -0.5f, -0.5f, 0.5f, 0.5f, 0.5f };
-	f32 boundsSnap[3] = { m_GizmoSnapScale.x, m_GizmoSnapScale.y, m_GizmoSnapScale.z };
-	
-	if (auto* meshFilter = selectedObject->GetComponent<MeshFilter>()) {
-		vec3 boundsMin = meshFilter->GetMesh()->GetMin();
-		vec3 boundsMax = meshFilter->GetMesh()->GetMax();
-		bounds[0] = boundsMin.x;
-		bounds[1] = boundsMin.y;
-		bounds[2] = boundsMin.z;
-		bounds[3] = boundsMax.x;
-		bounds[4] = boundsMax.y;
-		bounds[5] = boundsMax.z;
-	}
-
-	// 7. 기즈모 조작 렌더링 (Bounds 파라미터 포함)
-	ImGuizmo::Manipulate(
-		glm::value_ptr(viewMatrix),
-		glm::value_ptr(projMatrix),
-		m_GizmoOperation,
-		m_GizmoMode,
-		glm::value_ptr(worldMatrix),
-		glm::value_ptr(deltaMatrix),
-		snap ? glm::value_ptr(snapValues) : nullptr,
-		m_GizmoShowBounds ? bounds : nullptr,           // 바운드 데이터 전달
-		snap ? boundsSnap : nullptr                     // 바운드 조절 시 스냅
-	);
-
-	if (ImGuizmo::IsUsing())
+	if (changed && !TransformPropertyEditor::ApplyWorldMatrix(world, entity, worldMatrix, editMode))
 	{
-		mat4 localMatrix = getLocalMatrix(selectedObject, worldMatrix);
-
-		if (m_GizmoOperation == ImGuizmo::ROTATE)
-		{
-			quat newLocalQuat = ExtractRotationQuat(localMatrix);
-			quat deltaLocalQuat = glm::inverse(oldLocalQuat) * newLocalQuat;
-			vec3 deltaEuler = glm::degrees(glm::eulerAngles(deltaLocalQuat));
-			transform->SetRotation(transform->GetLocalRotationEuler() + deltaEuler);
-		}
-		else
-		{
-			float matrixTranslation[3], matrixRotation[3], matrixScale[3];
-			ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(localMatrix), matrixTranslation, matrixRotation, matrixScale);
-
-			transform->SetPosition(glm::make_vec3(matrixTranslation));
-			// 바운드 조작 시 스케일 값이 변하므로 아래 코드가 중요하게 작용합니다.
-			transform->SetScale(glm::make_vec3(matrixScale));
-		}
+		ImGui::SetTooltip("Transform edit rejected: the result cannot be represented by local TRS.");
 	}
+
+	ImGui::PopID();
+	ImGui::PopID();
+	ImGui::PopID();
 }
 
 void SceneViewportPanel::DrawImViewGuizmo()
@@ -977,31 +1003,28 @@ void SceneViewportPanel::SubmitLightingPass(Camera* camera)
 			CameraBuffer camBuf = camera->GetCameraBuffer();
 			camBuf.time = dt;
 			rhi->BindConstantBuffer(&camBuf, sizeof(CameraBuffer), 0);
-			rhi->BindTextureSampler(
-				rtMgr.GetRenderTarget(prefix + L"GBuffer_Diffuse")->GetTexture(),
-				sampler, 0);
-			rhi->BindTextureSampler(
-				rtMgr.GetRenderTarget(prefix + L"GBuffer_Normal")->GetTexture(),
-				sampler, 1);
-			rhi->BindTextureSampler(
-				rtMgr.GetRenderTarget(prefix + L"GBuffer_PBR")->GetTexture(),
-				sampler, 2);
-			rhi->BindTextureSampler(
-				rtMgr.GetRenderTarget(prefix + L"GBuffer_Emission")->GetTexture(),
-				sampler, 3);
-			rhi->BindTextureSampler(
-				rtMgr.GetRenderTarget(prefix + L"GBuffer_Position")->GetTexture(),
-				sampler, 4);
-			rhi->BindTextureSampler(
-				rtMgr.GetRenderTarget(m_ShadowDepthName)->GetTexture(),
-				sampler, 5);
+			const wstring sourceNames[] = {
+				prefix + L"GBuffer_Diffuse", prefix + L"GBuffer_Normal", prefix + L"GBuffer_PBR",
+				prefix + L"GBuffer_Emission", prefix + L"GBuffer_Position", m_ShadowDepthName
+			};
+
+			for (uint32 i = 0; i < 6; ++i)
+			{
+				auto* source = rtMgr.GetRenderTarget(sourceNames[i]);
+				if (!source || !source->GetTexture()) return EResult::Fail;
+
+				if (IsFailure(rhi->BindTextureSampler(source->GetTexture(), sampler, MAX_MATERIAL_TEXTURE_SLOTS + i)))
+					return EResult::Fail;
+			}
 			// Lighting 파이프라인 바인딩
 			{
 				CameraBuffer shadowCam = LightManager::Get().GetShadowCameraBuffer(0u);
 				LightShadowData shadowCamData = LightManager::Get().GetShadowData(0u);
-				rhi->BindConstantBuffer(&shadowCamData, sizeof(shadowCamData), 1);
+				if (IsFailure(rhi->BindConstantBuffer(&shadowCamData, sizeof(shadowCamData), 3)))
+					return EResult::Fail;
 			}
-			rhi->BindPipeline(m_LightingPipeline);
+			if (IsFailure(rhi->BindPipeline(m_LightingPipeline)))
+				return EResult::Fail;
 
 			if (IsFailure(LightManager::Get().Bind(0)))
 			{
@@ -1045,7 +1068,10 @@ void SceneViewportPanel::KeyboardInput()
 void SceneViewportPanel::MouseInput()
 {
 	ImVec2 mousePos = ImGui::GetMousePos();
-	if (MOUSE_BUTTON_DOWN(Engine::EMouseButton::Left) && m_Focused && m_Hovered)
+	const bool gizmoCapturesMouse = ImGuizmo::IsOver() || ImGuizmo::IsUsing();
+	const bool entitySelected = SelectionManager::Get().GetPrimarySelectedEntity() != nullptr;
+
+	if (MOUSE_BUTTON_DOWN(Engine::EMouseButton::Left) && m_Focused && m_Hovered && !gizmoCapturesMouse && !entitySelected)
 	{
 		Ray mouseRay = ScreenPosToRay(mousePos);
 		SelectionManager& selectionManager = SelectionManager::Get();

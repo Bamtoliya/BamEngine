@@ -17,6 +17,14 @@ Engine::EResult EditorCamera::Initialize(void* arg)
 
 	CameraManager::Get().RemoveCamera(m_Camera);
 
+    if (m_Camera->GetIsPerspective())
+    {
+        m_Transform->SetPosition(Engine::vec3(0.0f, 4.0f, -8.0f));
+        m_Transform->LookAt(Engine::vec3(0.0f));
+
+        m_ControlRotation = m_Transform->GetLocalRotationEuler();
+    }
+
     return Engine::EResult::Success;
 }
 
@@ -84,7 +92,7 @@ void EditorCamera::HandleInput(Engine::f32 dt)
             {
                 Engine::vec3 pos = m_Transform->GetWorldPosition();
                 Engine::vec3 forward = m_Transform->GetForward();
-                pos -= forward * (mouseScrollDelta.y * m_ZoomSpeed3D);
+                pos += forward * (mouseScrollDelta.y * m_ZoomSpeed3D);
                 m_Transform->SetPosition(pos);
             }
         }

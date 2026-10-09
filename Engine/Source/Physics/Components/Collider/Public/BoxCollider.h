@@ -12,7 +12,7 @@ class ENGINE_API BoxCollider : public Collider
 private:
 	BoxCollider() : Collider(EColliderType::Box) {}
 	virtual ~BoxCollider() {}
-	EResult Initialize(void* arg = nullptr);
+	EResult Initialize(void* arg = nullptr) override;
 public:
 	EResult LateInitialize(void* arg = nullptr) override;
 	static BoxCollider* Create(void* arg = nullptr);
@@ -22,7 +22,7 @@ public:
 
 #pragma region Loop
 public:
-	virtual void LateUpdate(f32 dt);
+	virtual void LateUpdate(f32 dt) override;
 #pragma endregion
 
 

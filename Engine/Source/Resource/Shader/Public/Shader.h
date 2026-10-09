@@ -54,7 +54,7 @@ class ENGINE_API Shader final : public Resource
 private:
 	Shader() : Resource(EResourceType::Shader) {}
 	virtual ~Shader() = default;
-	EResult Initialize(void* arg = nullptr);
+	EResult Initialize(void* arg = nullptr) override;
 public:
 	static Shader* Create(void* arg = nullptr);
 	virtual void Free() override;

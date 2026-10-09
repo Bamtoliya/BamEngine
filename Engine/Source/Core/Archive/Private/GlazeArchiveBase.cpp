@@ -2,6 +2,7 @@
 
 #include "GlazeArchiveBase.h"
 #include "LZ4Compressor.h"
+#include <cppcodec/base64_rfc4648.hpp>
 
 #pragma region Scope
 bool GlazeArchiveBase::PushScope(string_view key)
@@ -11,7 +12,7 @@ bool GlazeArchiveBase::PushScope(string_view key)
 
 	if (IsWriting())
 	{
-		(*currentTop)[keyStr] = glz::json_t();
+		(*currentTop)[keyStr] = glz::generic();
 		m_ScopeStack.push(&(*currentTop)[keyStr]);
 		return true;
 	}
@@ -314,7 +315,7 @@ void GlazeArchiveBase::Process(string_view key, glm::vec2& v)
 
 	if (IsWriting())
 	{
-		(*currentTop)[keyStr] = glz::json_t::array_t{ v.x, v.y };
+		(*currentTop)[keyStr] = glz::generic::array_t{ v.x, v.y };
 	}
 	else if (IsReading() && currentTop->is_object())
 	{
@@ -339,7 +340,7 @@ void GlazeArchiveBase::Process(string_view key, glm::vec3& v)
 
 	if (IsWriting())
 	{
-		(*currentTop)[keyStr] = glz::json_t::array_t{ v.x, v.y, v.z };
+		(*currentTop)[keyStr] = glz::generic::array_t{ v.x, v.y, v.z };
 	}
 	else if (IsReading() && currentTop->is_object())
 	{
@@ -365,7 +366,7 @@ void GlazeArchiveBase::Process(string_view key, glm::vec4& v)
 
 	if (IsWriting())
 	{
-		(*currentTop)[keyStr] = glz::json_t::array_t{ v.x, v.y, v.z, v.w };
+		(*currentTop)[keyStr] = glz::generic::array_t{ v.x, v.y, v.z, v.w };
 	}
 	else if (IsReading() && currentTop->is_object())
 	{
@@ -392,7 +393,7 @@ void GlazeArchiveBase::Process(string_view key, glm::quat& v)
 
 	if (IsWriting())
 	{
-		(*currentTop)[keyStr] = glz::json_t::array_t{ v.x, v.y, v.z, v.w };
+		(*currentTop)[keyStr] = glz::generic::array_t{ v.x, v.y, v.z, v.w };
 	}
 	else if (IsReading() && currentTop->is_object())
 	{
@@ -419,7 +420,7 @@ void GlazeArchiveBase::Process(string_view key, glm::mat3& v)
 
 	if (IsWriting())
 	{
-		glz::json_t::array_t arr;
+		glz::generic::array_t arr;
 		for (int i = 0; i < 3; ++i)
 		{
 			for (int j = 0; j < 3; ++j)
@@ -458,7 +459,7 @@ void GlazeArchiveBase::Process(string_view key, glm::mat4& v)
 
 	if (IsWriting())
 	{
-		glz::json_t::array_t arr;
+		glz::generic::array_t arr;
 		for (int i = 0; i < 4; ++i)
 		{
 			for (int j = 0; j < 4; ++j)
@@ -620,7 +621,7 @@ size_t GlazeArchiveBase::BeginArray(string_view key)
 
 	if (IsWriting())
 	{
-		(*currentTop)[keyStr] = glz::json_t::array_t{};
+		(*currentTop)[keyStr] = glz::generic::array_t{};
 		m_ScopeStack.push(&(*currentTop)[keyStr]);
 		m_ArrayIndexStack.push(0);
 		return 0;
@@ -655,7 +656,7 @@ void GlazeArchiveBase::BeginArrayElement()
 
 	if (IsWriting())
 	{
-		currentArray->get_array().push_back(glz::json_t::object_t{});
+		currentArray->get_array().push_back(glz::generic::object_t{});
 		m_ScopeStack.push(&currentArray->get_array()[currentIndex]);
 	}
 	else
@@ -690,7 +691,7 @@ size_t GlazeArchiveBase::BeginMap(string_view key)
 
 	if (IsWriting())
 	{
-		(*currentTop)[keyStr] = glz::json_t::object_t{};
+		(*currentTop)[keyStr] = glz::generic::object_t{};
 		m_ScopeStack.push(&(*currentTop)[keyStr]);
 	}
 	else
@@ -725,7 +726,7 @@ void GlazeArchiveBase::BeginMapElement(string& outKey)
 
 	if (IsWriting())
 	{
-		(*currentMap)[outKey] = glz::json_t::object_t{};
+		(*currentMap)[outKey] = glz::generic::object_t{};
 		m_ScopeStack.push(&(*currentMap)[outKey]);
 	}
 	else

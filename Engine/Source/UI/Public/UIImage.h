@@ -1,10 +1,9 @@
-#pragma once
+﻿#pragma once
 
 #include "UIRenderComponent.h"
-
+#include "Sprite.h"
 
 BEGIN(Engine)
-class Sprite;
 CLASS()
 class ENGINE_API UIImage : public UIRenderComponent
 {
@@ -12,9 +11,8 @@ class ENGINE_API UIImage : public UIRenderComponent
 #pragma region Constructor & Destructor
 private:
 	UIImage() {}
-	virtual EResult Initialize(void* arg = nullptr);
-public:
 	virtual ~UIImage() = default;
+	virtual EResult Initialize(void* arg = nullptr) override;
 public:
 	static UIImage* Create(void* arg = nullptr);
 	virtual Component* Clone(GameObject* owner, void* arg = nullptr) override;

@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.16)
+﻿cmake_minimum_required(VERSION 3.21)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -19,9 +19,17 @@ endif()
 project(BamEngine)
 
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
+option(BAMENGINE_BUILD_REFLECTION_CHECK "Build Engine and Editor reflection integration checks" OFF)
 
 add_subdirectory(Projects/ReflectionCore)
-add_subdirectory(Projects/ReflectionBamAdapter)
+add_subdirectory(Projects/Reflection)
+
+set(ARCHIVE_BUILD_EXAMPLE OFF)
+add_subdirectory(Projects/Archive)
+
+if(NOT TARGET ReflectionArchive::Adapter)
+    add_subdirectory(Projects/ReflectionArchive)
+endif()
 
 add_subdirectory(Engine)
 

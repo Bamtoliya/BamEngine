@@ -21,6 +21,7 @@
     "directxtex",
     "lz4",
     "entt",
+    "directx-headers",
     {
       "name": "imgui",
       "features": [

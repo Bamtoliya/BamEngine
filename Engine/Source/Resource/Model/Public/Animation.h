@@ -62,7 +62,7 @@ private:
 	using DESC = AnimationCreateDesc;
 	Animation() : Resource(EResourceType::Animation) {}
 	virtual ~Animation() = default;
-	EResult Initialize(void* arg = nullptr);
+	EResult Initialize(void* arg = nullptr) override;
 public:
 	static Animation* Create(void* arg = nullptr);
 	virtual void Free() override;

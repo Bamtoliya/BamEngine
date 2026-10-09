@@ -26,14 +26,14 @@ namespace
 			ImGui::Spacing();
 
 			// 리플렉션 레지스트리에서 ENUM 메타데이터 조회
-			const reflection::EnumInfo* enumInfo = reflection::Registry::Get().GetEnumByQualifiedName(reflectionEnumName);
+			const legacy_reflection::EnumInfo* enumInfo = legacy_reflection::Registry::Get().GetEnumByQualifiedName(reflectionEnumName);
 
 			if (enumInfo)
 			{
 				// 2열 테이블로 깔끔하게 배치
 				if (ImGui::BeginTable("FlagsTable", 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp))
 				{
-					for (const reflection::EnumEntry& entry : enumInfo->Entries)
+					for (const legacy_reflection::EnumEntry& entry : enumInfo->Entries)
 					{
 						// "None"(0) 값은 체크박스로 그릴 의미가 없으므로 패스
 						if (entry.Value == 0) continue;

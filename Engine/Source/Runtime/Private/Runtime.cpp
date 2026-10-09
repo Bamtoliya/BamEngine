@@ -1,12 +1,8 @@
 ﻿#pragma once
 #include "Runtime.h"
-#include "reflection/runtime/Registry.h"
+#include "Logger.h"
 
 IMPLEMENT_SINGLETON(Runtime)
-
-namespace Engine {
-	extern void RegisterReflection_EnTT();
-}
 
 #pragma region Constructor&Destructor
 EResult Runtime::Initialize(void* arg)
@@ -15,95 +11,105 @@ EResult Runtime::Initialize(void* arg)
 	_CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
 #endif
 
-	RegisterReflection_EnTT();
+	if (!arg)
+		return EResult::InvalidArgument;
 
-	RUNTIMEDESC* pRuntimeDesc = reinterpret_cast<RUNTIMEDESC*>(arg);
-	RendererDesc RendererDesc = pRuntimeDesc->RendererDesc;
+	const auto* runtimeDesc = static_cast<const RUNTIMEDESC*>(arg);
+	if (!runtimeDesc->RendererDesc.rhiDesc)
+		return EResult::InvalidArgument;
 
-	m_ReflectionRegistry = &reflection::Registry::Get();
-	if (!m_ReflectionRegistry)
-		return EResult::Fail;
+	RendererDesc rendererDesc = runtimeDesc->RendererDesc;
+
+	const auto fail = [this](const char* stage)
+		{
+			BAM_LOG(Error, "Runtime", "{} creation failed", stage);
+			Free();
+			return EResult::Fail;
+		};
 
 	m_ComponentRegistry = ComponentRegistry::Create();
-	if (!m_ComponentRegistry) return EResult::Fail;
+	if (!m_ComponentRegistry) return fail("ComponentRegistry");
 
 	m_TimeManager = TimeManager::Create();
-	if (!m_TimeManager) return EResult::Fail;
+	if (!m_TimeManager) return fail("TimeManager");
+
 	m_InputManager = InputManager::Create();
-	if (!m_InputManager) return EResult::Fail;
+	if (!m_InputManager) return fail("InputManager");
 
 	m_ResourceManager = ResourceManager::Create();
-	if (!m_ResourceManager) return EResult::Fail;
-	m_PrototypeManager = PrototypeManager::Create();
-	if (!m_PrototypeManager) return EResult::Fail;
+	if (!m_ResourceManager) return fail("ResourceManager");
 
-	//m_LayerManager = LayerManager::Create();
-	//if (!m_LayerManager) return EResult::Fail;
+	m_PrototypeManager = PrototypeManager::Create();
+	if (!m_PrototypeManager) return fail("PrototypeManager");
+
 	m_SceneManager = SceneManager::Create();
-	if (!m_SceneManager) return EResult::Fail;
+	if (!m_SceneManager) return fail("SceneManager");
+
 	m_SystemManager = SystemManager::Create();
-	if (!m_SystemManager) return EResult::Fail;
+	if (!m_SystemManager) return fail("SystemManager");
 
 	m_LocalizationManager = LocalizationManager::Create();
-	if (!m_LocalizationManager) return EResult::Fail;
+	if (!m_LocalizationManager) return fail("LocalizationManager");
 
 	m_RenderTargetManager = RenderTargetManager::Create();
-	if (!m_RenderTargetManager) return EResult::Fail;
+	if (!m_RenderTargetManager) return fail("RenderTargetManager");
+
 	m_RenderPassManager = RenderPassManager::Create();
-	if (!m_RenderPassManager) return EResult::Fail;
-	m_Renderer = Renderer::Create(&RendererDesc);
-	if (!m_Renderer)
-		return EResult::Fail;
+	if (!m_RenderPassManager) return fail("RenderPassManager");
+
+	m_Renderer = Renderer::Create(&rendererDesc);
+	if (!m_Renderer) return fail("Renderer");
+
 	m_CameraManager = CameraManager::Create();
-	if (!m_CameraManager) return EResult::Fail;
+	if (!m_CameraManager) return fail("CameraManager");
 
 	PipelineManagerDesc pipelineDesc = {};
 	pipelineDesc.rhi = m_Renderer->GetRHI();
 	m_PipelineManager = PipelineManager::Create(&pipelineDesc);
-	if (!m_PipelineManager) return EResult::Fail;
+	if (!m_PipelineManager) return fail("PipelineManager");
+
 	m_SamplerManager = SamplerManager::Create(m_Renderer->GetRHI());
-	if (!m_SamplerManager) return EResult::Fail;
+	if (!m_SamplerManager) return fail("SamplerManager");
+
 	tagLightManagerDesc lightDesc = {};
 	lightDesc.RHI = m_Renderer->GetRHI();
 	m_LightManager = LightManager::Create(&lightDesc);
-	if (!m_LightManager) return EResult::Fail;
+	if (!m_LightManager) return fail("LightManager");
 
 	m_CollisionManager = CollisionManager::Create();
-	if (!m_CollisionManager)
-		return EResult::Fail;
+	if (!m_CollisionManager) return fail("CollisionManager");
 
-	m_LocalizationManager->LoadData();
 	return EResult::Success;
 }
 
 void Runtime::Free()
 {
+	
 	// ── 1. 게임 로직 (RHI 무관) ──
-	TimeManager::Destroy();
-	InputManager::Destroy();
-	LocalizationManager::Destroy();
-	ComponentRegistry::Destroy();
+	Safe_Destroy(m_TimeManager);
+	Safe_Destroy(m_InputManager);
+	Safe_Destroy(m_LocalizationManager);
+	Safe_Destroy(m_ComponentRegistry);
 
 	// ── 2. 씬 (Component가 Pipeline/Buffer 참조) ──
-	SceneManager::Destroy();
-	//LayerManager::Destroy();
-	SystemManager::Destroy();
-	PrototypeManager::Destroy();
-	CollisionManager::Destroy();
+	Safe_Destroy(m_SceneManager);
+	Safe_Destroy(m_SystemManager);
+	Safe_Destroy(m_PrototypeManager);
+	Safe_Destroy(m_CollisionManager);
 
 	// ── 3. 리소스 (RHI 리소스: Mesh, Texture, Shader) ──
-	CameraManager::Destroy();
-	ResourceManager::Destroy();
+	Safe_Destroy(m_CameraManager);
+	Safe_Destroy(m_ResourceManager);
 
 	// ── 4. 렌더링 인프라 (RHI 리소스) ──
-	LightManager::Destroy();
-	SamplerManager::Destroy();
-	PipelineManager::Destroy();
-	RenderTargetManager::Destroy();
-	RenderPassManager::Destroy();
+	Safe_Destroy(m_LightManager);
+	Safe_Destroy(m_SamplerManager);
+	Safe_Destroy(m_PipelineManager);
+	Safe_Destroy(m_RenderTargetManager);
+	Safe_Destroy(m_RenderPassManager);
 
 	// ── 5. RHI (GPU Device) — 가장 마지막 ──
-	Renderer::Destroy();
+	Safe_Destroy(m_Renderer);
 }
 #pragma endregion
 

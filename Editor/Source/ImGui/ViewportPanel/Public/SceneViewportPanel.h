@@ -4,7 +4,12 @@
 #include "DebugRenderer.h"
 #include "EditorCamera.h"
 #include "Grid.h"
+#pragma push_macro("COLOR")
+#undef COLOR
+
 #include "ImGuizmo.h"
+
+#pragma pop_macro("COLOR")
 
 BEGIN(Editor)
 

@@ -30,6 +30,12 @@ private:
 	void DrawSceneContextMenu(class Scene* scene);
 
 private:
+	void DrawEntityHierarchy(class Scene* scene);
+	void DrawEntityNode(class Scene* scene, class Entity& entity);
+	void DrawEntityName(const wstring& name, bool isSelected);
+	void DrawEntityRenameBox(class Entity* entity, bool isSelected);
+
+private:
 	//void DrawLayerContextMenu(class Layer* layer);
 	void DrawGameObjectContextMenu(class GameObject* gameObject);
 	void DrawGameObjectName(const wstring& name);

@@ -16,7 +16,7 @@ protected:
 	EResult Initialize(void* arg = nullptr) override { EnsureRootCanvas(); return EResult::Success; }
 public:
 	static UIComponent* Create(void* arg = nullptr) { return nullptr; }
-	static Component* Clone(GameObject* owner, void* arg = nullptr) { return nullptr; }
+	virtual Component* Clone(GameObject* owner, void* arg = nullptr) override { return nullptr; }
 	virtual void Free() override { __super::Free(); }
 #pragma endregion 
 

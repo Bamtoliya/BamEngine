@@ -188,26 +188,26 @@ protected:
 
 #pragma region Variable
 protected:
-	PROPERTY(EDITABLE, CATEGORY(L"Pipeline"))
+	PROPERTY(EDITABLE, CATEGORY("Pipeline"))
 	EBlendMode m_BlendMode = { EBlendMode::Opaque };
-	PROPERTY(EDITABLE, CATEGORY(L"Pipeline"))
+	PROPERTY(EDITABLE, CATEGORY("Pipeline"))
 	ECullMode m_CullMode = { ECullMode::Back };
-	PROPERTY(EDITABLE, CATEGORY(L"Pipeline"))
+	PROPERTY(EDITABLE, CATEGORY("Pipeline"))
 	EFrontFace m_FrontFace = { EFrontFace::Clockwise };
-	PROPERTY(EDITABLE, CATEGORY(L"Pipeline"))
+	PROPERTY(EDITABLE, CATEGORY("Pipeline"))
 	EFillMode m_FillMode = { EFillMode::Solid };
-	PROPERTY(EDITABLE, CATEGORY(L"Pipeline"))
+	PROPERTY(EDITABLE, CATEGORY("Pipeline"))
 	EDepthMode m_DepthMode = { EDepthMode::None };
-	PROPERTY(EDITABLE, CATEGORY(L"Pipeline"))
+	PROPERTY(EDITABLE, CATEGORY("Pipeline"))
 	ECompareOp m_DepthCompareOp = { ECompareOp::Less };
 
-	PROPERTY(EDITABLE, CATEGORY(L"Shader"))
+	PROPERTY(EDITABLE, CATEGORY("Shader"))
 	ResourceHandle<Shader> m_VertexShaderHandle;
 
-	PROPERTY(EDITABLE, CATEGORY(L"Shader"))
+	PROPERTY(EDITABLE, CATEGORY("Shader"))
 	ResourceHandle<Shader> m_PixelShaderHandle;
 
-	PROPERTY(EDITABLE, CATEGORY(L"Parameter"))
+	PROPERTY(EDITABLE, CATEGORY("Parameter"))
 	unordered_map<string, MaterialParameter> m_Parameters = {};
 
 	PROPERTY(EDITABLE, CATEGORY("Texture"))

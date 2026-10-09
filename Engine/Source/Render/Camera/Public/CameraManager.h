@@ -28,18 +28,7 @@ public:
 		if (m_MainCamera) return m_MainCamera;
 		else return m_Cameras.empty() ? nullptr : m_Cameras[0];
 	}
-	void SetMainCamera(Camera* camera)
-	{
-		
-		if(m_MainCamera != camera)
-		{
-			if(m_MainCamera)
-				m_MainCamera->SetMainCamera(false);
-			m_MainCamera = camera;
-			if(m_MainCamera)
-				m_MainCamera->SetMainCamera(true);
-		}
-	}
+	void SetMainCamera(Camera* camera);
 public:
 	const vector<Camera*>& GetCameras() const { return m_Cameras; }
 

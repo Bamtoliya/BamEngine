@@ -2,11 +2,12 @@
 #include "CoreComponents.h"
 #include "RenderComponents.h"
 #include "ResourceHandle.h"
-#include "ResourceHandle.inl"
 #include "Sprite.h"
 #include "Mesh.h"
 #include "MaterialInterface.h"
 #include "Renderer.h"
+#include "RenderPass.h"
+#include "Scene.h"
 
 
 IMPLEMENT_SINGLETON(SpriteRenderSystem)
@@ -22,63 +23,100 @@ void SpriteRenderSystem::Free()
 
 void SpriteRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*> activeScenes, f32 dt)
 {
-	for (Scene* scene : activeScenes)
-	{
-		auto view = scene->GetRegistry().view<SpriteRendererComponent, WorldTransformComponent, FlagComponent>();
-		for (auto [entity, spriteRenderer, worldTransform, flag] : view.each())
-		{
-			if(!HasFlag(flag.flags, EEntityFlag::Visible)) continue;
+    auto& renderer = Renderer::Get();
 
-			Sprite* pSprite = spriteRenderer.spriteHandle.Get();
-			if (!pSprite) continue;
+    vector<RenderPass*> geometryPasses;
 
-			Mesh* pMesh = nullptr;
-			if (spriteRenderer.drawMode == ESpriteDrawMode::Simple)
-			{
-				TODO("SpriteRendererComponent의 drawMode가 Simple일 때, pMesh를 어떻게 가져올지 결정해야함");
-				//pMesh = Renderer::Get().GetQuadMesh();
-			} 
-			else
-			{
-				pMesh = spriteRenderer.meshHandle.Get();
-			}
+    for (const auto& viewport : renderer.GetActiveViewportCameras())
+    {
+        RenderPass* pass = viewport.renderPass;
 
-			if (!pMesh) continue;
+        if (!pass || !viewport.camera ||
+            pass->GetPassType() != ERenderPassType::Geometry)
+        {
+            continue;
+        }
 
-			vec4 finalUV = pSprite->GetRegionUV();
+        if (std::find(geometryPasses.begin(), geometryPasses.end(), pass)
+            == geometryPasses.end())
+        {
+            geometryPasses.push_back(pass);
+        }
+    }
 
-			if (spriteRenderer.flipX)
-			{
-				finalUV.x = finalUV.z - finalUV.x;
-				finalUV.z *= -1.0f;
-			}
+    if (geometryPasses.empty())
+        return;
 
-			if (spriteRenderer.flipY)
-			{
-				finalUV.y = finalUV.w - finalUV.y;
-				finalUV.w *= -1.0f;
-			}
+    for (Scene* scene : activeScenes)
+    {
+        if (!scene)
+            continue;
 
-			finalUV.x += spriteRenderer.offset.x * finalUV.z;
-			finalUV.y += spriteRenderer.offset.y * finalUV.w;
-			finalUV.z *= spriteRenderer.tiling.x;
-			finalUV.w *= spriteRenderer.tiling.y;
+        auto view = scene->GetRegistry().view<
+            SpriteRendererComponent,
+            WorldTransformComponent,
+            FlagComponent>();
 
-			SpriteDrawCommand cmd;
-			cmd.texture = pSprite->GetTexture();
-			cmd.mesh = pMesh;
-			cmd.material = spriteRenderer.materialHandle.Get();
-			if (!cmd.material)
-			{
-				TODO("SpriteRendererComponent의 materialHandle이 없을 때, 기본 Material을 가져오는 로직 필요");
-				//cmd.material = Renderer::Get().GetDefaultMaterial();
-			}
+        for (auto [entity, spriteRenderer, worldTransform, flag] : view.each())
+        {
+            if (!HasFlag(flag.flags, EEntityFlag::Active) ||
+                !HasFlag(flag.flags, EEntityFlag::Visible) ||
+                HasFlag(flag.flags, EEntityFlag::Dead))
+            {
+                continue;
+            }
 
-			cmd.worldMatrix = worldTransform.worldMatrix;
-			cmd.color = spriteRenderer.color;
-			cmd.uvTransform = finalUV;
+            // 이번 단계에서는 Simple만 지원합니다.
+            if (spriteRenderer.drawMode != ESpriteDrawMode::Simple)
+                continue;
 
-			Renderer::Get().SubmitSprite(cmd, 0);
-		}
-	}
+            Sprite* sprite = spriteRenderer.spriteHandle.Get();
+            Mesh* mesh = spriteRenderer.meshHandle.Get();
+            MaterialInterface* material = spriteRenderer.materialHandle.Get();
+
+            if (!sprite || !mesh || !material)
+                continue;
+
+            Texture* texture = sprite->GetTexture();
+
+            if (!texture || !texture->GetRHITexture())
+                continue;
+
+            vec4 uv = sprite->GetUVTransform();
+
+            if (uv.z <= 0.f || uv.w <= 0.f)
+                continue;
+
+            uv.x += spriteRenderer.offset.x * uv.z;
+            uv.y += spriteRenderer.offset.y * uv.w;
+            uv.z *= spriteRenderer.tiling.x;
+            uv.w *= spriteRenderer.tiling.y;
+
+            if (spriteRenderer.flipX)
+            {
+                uv.x += uv.z;
+                uv.z = -uv.z;
+            }
+
+            if (spriteRenderer.flipY)
+            {
+                uv.y += uv.w;
+                uv.w = -uv.w;
+            }
+
+            SpriteDrawCommand command;
+            command.mesh = mesh;
+            command.texture = texture;
+            command.material = material;
+            command.worldMatrix = worldTransform.worldMatrix;
+            command.color = spriteRenderer.color;
+            command.uvTransform = uv;
+
+            for (RenderPass* pass : geometryPasses)
+            {
+                if (pass->IsAcceptsBlendMode(material->GetBlendMode()))
+                    renderer.SubmitSprite(command, pass->GetID());
+            }
+        }
+    }
 }

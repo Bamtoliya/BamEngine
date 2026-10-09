@@ -116,9 +116,16 @@ void ChannelFilter::SubmitChannelPreviewPass(const wstring& sourceRTName, wstrin
             auto* rhi = Engine::Renderer::Get().GetRHI();
             ChannelViewData channelData = { capturedFlags };
 
-            rhi->BindConstantBuffer(&channelData, sizeof(ChannelViewData), 0);
-            rhi->BindTextureSampler(src->GetTexture(), Engine::SamplerManager::Get().GetDefaultSampler(), 0);
-            rhi->BindPipeline(m_ChannelPreviewPipeline);
+            if (IsFailure(rhi->BindPipeline(m_ChannelPreviewPipeline)))
+                return EResult::Fail;
+
+            if (IsFailure(rhi->BindConstantBuffer(&channelData, sizeof(channelData), 2)))
+                return EResult::Fail;
+
+            auto* sampler = Engine::SamplerManager::Get().GetDefaultSampler();
+            if (IsFailure(rhi->BindTextureSampler(src->GetTexture(), sampler, MAX_MATERIAL_TEXTURE_SLOTS)))
+                return EResult::Fail;
+
             return rhi->Draw(3);
         },
         m_ChannelPreviewPassID);

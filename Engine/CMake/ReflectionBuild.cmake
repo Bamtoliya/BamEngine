@@ -1,12 +1,21 @@
-﻿# --- CMake/ReflectionBuild.cmake ---
+﻿get_target_property(_engine_glm_include_dirs glm::glm-header-only INTERFACE_INCLUDE_DIRECTORIES)
 
-add_custom_command(
-    OUTPUT "${GENERATED_SOURCE}"
-    COMMAND python "${CMAKE_SOURCE_DIR}/Projects/ReflectionAST/main.py" --source-root "${ENGINE_SOURCE_DIR}" --output "${GENERATED_SOURCE}"
-    DEPENDS ${ENGINE_HEADERS} ${REFLECTION_AST_SOURCES}
-    COMMENT "Generating Reflection Data via AST..."
-    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/Projects/ReflectionAST"
+set(_engine_reflection_options)
+foreach(_definition IN LISTS _engine_glm_definitions)
+    list(APPEND _engine_reflection_options "-D${_definition}")
+endforeach()
+
+file(GLOB_RECURSE ENGINE_COMPONENT_REFLECTION_HEADERS CONFIGURE_DEPENDS
+    "${ENGINE_SOURCE_DIR}/Core/Public/Components/*.h"
 )
 
-# [수정] 5. 쉐이더 컴파일과 더불어 리플렉션 코드 생성이 먼저 되도록 종속성 추가
-add_custom_target(GenerateReflectionAST DEPENDS "${GENERATED_SOURCE}")
+list(SORT ENGINE_COMPONENT_REFLECTION_HEADERS)
+
+reflection_generate(
+    TARGET Engine MODULE BamCoreComponents TYPE_LIST_METADATA Component
+    HEADERS ${ENGINE_COMPONENT_REFLECTION_HEADERS}
+    HEADER_INCLUDE_ROOT "${ENGINE_SOURCE_DIR}/Core/Public"
+    INCLUDE_DIRECTORIES ${ENGINE_PUBLIC_INCLUDE_DIRS} ${_engine_glm_include_dirs}
+    COMPILE_OPTIONS ${_engine_reflection_options}
+    VISIBILITY PRIVATE
+)

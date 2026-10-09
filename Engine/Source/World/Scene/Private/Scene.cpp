@@ -6,15 +6,24 @@
 #include "SerializationHelper.h"
 #include "CollisionManager.h"
 #include "CoreComponents.h"
+#include "Reflection/CoreComponentReflection.h"
 
 #pragma region Constructor&Destructor
 EResult Scene::Initialize(void* arg)
 {
+	m_ComponentReflectionBindings = GetCoreComponentReflectionBindings();
+
+	if (m_ComponentReflectionBindings == nullptr)
+	{
+		return EResult::Fail;
+	}
+
 	if (arg)
 	{
 		CAST_DESC
 		m_Name = desc->name;
 	}
+
 	return EResult::Success;
 }
 
@@ -33,6 +42,7 @@ Scene* Scene::Create(void* arg)
 void Scene::Free()
 {
 	ClearEntities();
+	m_ComponentReflectionBindings = nullptr;
 	//for (auto& layer : m_Layers)
 	//{
 	//	Safe_Release(layer);

@@ -226,6 +226,7 @@ void Mesh::Serialize(Archive& ar)
 void Mesh::Deserialize(Archive& ar)
 {
 	Resource::Deserialize(ar);
+	if (ar.HasError()) return;
 
 	// 1. 헤더를 통째로 바이너리 역직렬화
 	MeshBinaryHeader header = {};

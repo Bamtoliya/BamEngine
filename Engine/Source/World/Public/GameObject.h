@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "Base.h"
 #include "Component.h"
@@ -6,7 +6,7 @@
 #include "ComponentRegistry.h"
 #include "CommonInterface.h"
 
-#include "ReflectableInterface.h"
+#include "TypeIdentityInterface.h"
 
 
 #pragma region Struct
@@ -33,7 +33,7 @@ ENABLE_BITMASK_OPERATORS(EObjectFlag)
 
 class Transform;
 CLASS()
-class ENGINE_API GameObject : public Base, public ReflectableInterface, public SerializableInterface, public ActiveInterface, public VisibleInterface
+class ENGINE_API GameObject : public Base, public ITypeIdentity, public ISerializable, public IActive, public IVisible
 {
 	REFLECT_BASE()
 
@@ -223,18 +223,18 @@ protected:
 	PROPERTY(CATEGORY("PROP_INFORMATION"), READONLY)
 	uint32 m_LayerIndex = { static_cast<uint32>(-1) };
 
-	PROPERTY(EDITABLE, "PROP_NAME")
+	PROPERTY(EDITABLE, DISPLAY_NAME("PROP_NAME"))
 	wstring m_Name = { L"GameObject" };
 
-	PROPERTY(EDITABLE, "PROP_BITFLAG")
+	PROPERTY(EDITABLE, DISPLAY_NAME("PROP_BITFLAG"))
 	EObjectFlag m_Flags = { EObjectFlag::Default };
 
-	PROPERTY(EDITABLE, "PROP_TAGS")
+	PROPERTY(EDITABLE, DISPLAY_NAME("PROP_TAGS"))
 	unordered_set<wstring> m_TagSet = {};
 
 	GameObject* m_Parent = { nullptr };
 
-	PROPERTY(NAME("PROP_COMPONENTS"))
+	PROPERTY(DISPLAY_NAME("PROP_COMPONENTS"))
 	vector<Component*> m_Components = {};
 
 	PROPERTY()

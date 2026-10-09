@@ -1,7 +1,12 @@
-#pragma once
+﻿#pragma once
 
 #include "CameraViewportPanel.h"
+#pragma push_macro("COLOR")
+#undef COLOR
+
 #include "ImGuizmo.h"
+
+#pragma pop_macro("COLOR")
 #include "Grid.h"
 
 

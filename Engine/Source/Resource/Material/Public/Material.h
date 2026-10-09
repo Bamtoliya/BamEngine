@@ -13,7 +13,7 @@ class ENGINE_API Material : public MaterialInterface
 private:
 	Material() {}
 	virtual ~Material() = default;
-	EResult Initialize(void* arg = nullptr);
+	EResult Initialize(void* arg = nullptr) override;
 public:
 	static Material* Create(void* arg = nullptr);
 	virtual void Free() override;

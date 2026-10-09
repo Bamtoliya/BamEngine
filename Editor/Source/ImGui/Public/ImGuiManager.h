@@ -105,6 +105,9 @@ private:
 	SDL_Window* m_Window = { nullptr };
 	class RHI* m_RHI = { nullptr };
 	ERHIType m_RHIType = ERHIType::Unknown;
+	ImGuiContext* m_ImGuiContext = nullptr;
+	bool m_PlatformBackendInitialized = false;
+	bool m_RendererBackendInitialized = false;
 
 #pragma region DirectX12
 	struct ID3D12DescriptorHeap* m_ImGuiSrvDescHeap = nullptr;

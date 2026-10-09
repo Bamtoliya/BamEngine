@@ -5,11 +5,12 @@ using namespace Editor;
 
 int main(int argc, char* argv[])
 {
-	Application* app = Application::Create();
-	if (app)
-	{
-		app->Run(argc, argv);
-		Application::Destroy();
-	}
-	return 0;
+    ApplicationCreateInfo createInfo = {};
+    Application* app = Application::Create(&createInfo);
+    if (!app)
+        return 1;
+
+    app->Run(argc, argv);
+    Application::Destroy();
+    return 0;
 }

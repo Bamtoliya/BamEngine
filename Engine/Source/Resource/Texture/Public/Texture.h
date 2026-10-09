@@ -42,7 +42,7 @@ class ENGINE_API Texture final : public Resource
 #pragma region Constructor&Destructor
 private:
 	Texture() : Resource(EResourceType::Texture) {}
-	EResult Initialize(void* arg = nullptr);
+	EResult Initialize(void* arg = nullptr) override;
 public:
 	virtual ~Texture() = default;
 public:
@@ -77,8 +77,8 @@ public:
 
 #pragma region Save&Load
 public:
-	virtual void Serialize(Archive& ar);
-	virtual void Deserialize(Archive& ar);
+	virtual void Serialize(Archive& ar) override;
+	virtual void Deserialize(Archive& ar) override;
 #pragma endregion
 
 #pragma region Variable

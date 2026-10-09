@@ -9,7 +9,7 @@ namespace Engine
 	{
 	public:
 		using Archive::Process;
-		explicit GlazeArchiveBase(EArchiveMode mode) : Archive(mode) { m_Root = glz::json_t::object_t{}; m_ScopeStack.push(&m_Root); }
+		explicit GlazeArchiveBase(EArchiveMode mode) : Archive(mode) { m_Root = glz::generic::object_t{}; m_ScopeStack.push(&m_Root); }
 		virtual ~GlazeArchiveBase() = default;
 	public:
 		bool PushScope(string_view key) override;
@@ -51,12 +51,12 @@ namespace Engine
 		size_t GetScopeDepth() const override { return m_ScopeStack.size(); }
 
 	protected:
-		glz::json_t m_Root;
+		glz::generic m_Root;
 
 		std::stack<size_t> m_ArrayIndexStack;
 
-		std::stack<glz::json_t*> m_ScopeStack;
+		std::stack<glz::generic*> m_ScopeStack;
 
-		std::stack<glz::json_t::object_t::iterator> m_MapIteratorStack;
+		std::stack<glz::generic::object_t::iterator> m_MapIteratorStack;
 	};
 }

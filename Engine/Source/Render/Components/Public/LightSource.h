@@ -3,39 +3,9 @@
 #include "Component.h"
 #include "Light.h"
 #include "Camera.h"
+#include "Render/LightTypes.h"
 
 BEGIN(Engine)
-
-ENUM()
-enum class ELightType
-{
-	Point,
-	Directional,
-	Spot,
-	Sky
-};
-
-ENUM()
-enum class EAttenuationMode : uint8
-{
-	Coefficients,
-	InverseSquare,
-	Disabled
-};
-
-ENUM()
-enum class ELightFlags
-{
-	None = 0,
-	CastShadows = 1 << 0,
-	UseInForwardRendering = 1 << 1,
-	UseInDeferredRendering = 1 << 2,
-	Volumetric = 1 << 3,
-	AffectDiffuse = 1 << 4,
-	AffectSpecular = 1 << 5
-};
-
-ENABLE_BITMASK_OPERATORS(ELightFlags)
 
 struct LightSourceDesc : public ComponentDesc
 {

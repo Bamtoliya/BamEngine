@@ -1,0 +1,29 @@
+﻿Checks: '-*,readability-identifier-naming'
+HeaderFilterRegex: '(Engine|Editor)[/\\]Source[/\\]'
+
+CheckOptions:
+  # 멤버 변수: m_CamelCase 형식
+  - key: readability-identifier-naming.MemberCase
+    value: CamelCase
+  - key: readability-identifier-naming.MemberPrefix
+    value: m_
+
+  # 일반 지역 변수: camelCase
+  - key: readability-identifier-naming.VariableCase
+    value: camelCase
+
+  # 함수/메서드: CamelCase (PascalCase)
+  - key: readability-identifier-naming.FunctionCase
+    value: CamelCase
+
+  # 클래스/구조체: CamelCase
+  - key: readability-identifier-naming.ClassCase
+    value: CamelCase
+  - key: readability-identifier-naming.StructCase
+    value: CamelCase
+
+  # 열거형
+  - key: readability-identifier-naming.EnumCase
+    value: CamelCase
+  - key: readability-identifier-naming.EnumConstantCase
+    value: CamelCase

@@ -46,8 +46,8 @@ foreach(SHADER_FILE ${HLSL_SOURCES})
         # DX12 컴파일 (-T vs_6_0 -E main)
         add_custom_command(
             OUTPUT ${DXIL_OUT}
-            COMMAND ${DXC_COMPILER} -T vs_6_0 -E main -Fo ${DXIL_OUT} ${SHADER_FILE}
-            DEPENDS ${SHADER_FILE}
+            COMMAND ${DXC_COMPILER} -D _DX12_=1 -T vs_6_0 -E main -Fo ${DXIL_OUT} ${SHADER_FILE}
+            DEPENDS ${SHADER_FILE} "${CMAKE_CURRENT_LIST_FILE}"
             COMMENT "Compiling ${SHADER_NAME_WE} (DXIL, VS)..."
         )
         # Vulkan 컴파일 (-spirv -T vs_6_0 -E main)
@@ -69,8 +69,8 @@ foreach(SHADER_FILE ${HLSL_SOURCES})
         # DX12 컴파일 (-T ps_6_0 -E main)
         add_custom_command(
             OUTPUT ${DXIL_OUT}
-            COMMAND ${DXC_COMPILER} -T ps_6_0 -E main -Fo ${DXIL_OUT} ${SHADER_FILE}
-            DEPENDS ${SHADER_FILE}
+            COMMAND ${DXC_COMPILER} -D _DX12_=1 -T ps_6_0 -E main -Fo ${DXIL_OUT} ${SHADER_FILE}
+            DEPENDS ${SHADER_FILE} "${CMAKE_CURRENT_LIST_FILE}"
             COMMENT "Compiling ${SHADER_NAME_WE} (DXIL, PS)..."
         )
         # Vulkan 컴파일 (-spirv -T ps_6_0 -E main)

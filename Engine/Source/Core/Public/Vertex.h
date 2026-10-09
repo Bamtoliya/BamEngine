@@ -132,12 +132,12 @@ namespace Engine
 		PROPERTY()
 		glm::vec3 tangent = {};
 		PROPERTY()
-		glm::vec3 bitangent = {};
+		glm::vec3 binormal = {};
 		PROPERTY()
 		glm::vec4 color = { 1.f, 1.f, 1.f, 1.f };
 		VertexMaterial() = default;
-		VertexMaterial(const glm::vec3& nor, const glm::vec2& uv, const glm::vec3& tan, const glm::vec3& bitan, const glm::vec4& col)
-			: normal(nor), texCoord(uv), tangent(tan), bitangent(bitan), color(col) {
+		VertexMaterial(const glm::vec3& nor, const glm::vec2& uv, const glm::vec3& tan, const glm::vec3& binor, const glm::vec4& col)
+			: normal(nor), texCoord(uv), tangent(tan), binormal(binor), color(col) {
 		}
 		static const InputLayoutDesc Layout;
 	};
@@ -163,7 +163,7 @@ namespace Engine
 		PROPERTY()
 			glm::vec3 tangent = {};
 		PROPERTY()
-			glm::vec3 bitangent = {};
+			glm::vec3 binormal = {};
 		PROPERTY()
 			glm::vec4 color = { 1.f, 1.f, 1.f, 1.f };
 
@@ -193,9 +193,9 @@ namespace Engine
 			const glm::vec3& nor,
 			const glm::vec2& uv,
 			const glm::vec3& tan,
-			const glm::vec3& bitan,
+			const glm::vec3& binor,
 			const glm::vec4& col)
-			: position(pos), normal(nor), texCoord(uv), tangent(tan), bitangent(bitan), color(col)
+			: position(pos), normal(nor), texCoord(uv), tangent(tan), binormal(binor), color(col)
 		{
 		}
 

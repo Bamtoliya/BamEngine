@@ -5,6 +5,7 @@
 #include "LightManager.h"
 #include "CollisionManager.h"
 #include "CameraManager.h"
+#include <new>
 
 IMPLEMENT_SINGLETON(SceneManager)
 
@@ -50,17 +51,23 @@ void SceneManager::Free()
 #pragma region Scene Management
 EResult SceneManager::OpenScene(Scene* newScene)
 {
-	if (!newScene)
-		return EResult::InvalidArgument;
+	if (!newScene) return EResult::InvalidArgument;
+	if (m_CurrentScene == newScene) return EResult::Success;
 
-	if (m_CurrentScene == newScene)
-		return EResult::Success;
+	const bool alreadyRegistered = std::find(m_Scenes.begin(), m_Scenes.end(), newScene) != m_Scenes.end();
 
-	if (IsFailure(CloseScene()))
-		return EResult::Fail;
+	const EResult addResult = AddScene(newScene);
+	if (addResult != EResult::Success)
+		return addResult;
 
-	if (IsFailure(AddScene(newScene)))
-		return EResult::Fail;
+	const EResult closeResult = CloseScene();
+	if (closeResult != EResult::Success)
+	{
+		if (!alreadyRegistered)
+			RemoveScene(newScene);
+
+		return closeResult;
+	}
 
 	m_CurrentScene = newScene;
 	return EResult::Success;
@@ -73,7 +80,7 @@ EResult SceneManager::CloseScene()
 	Scene* closingScene = m_CurrentScene;
 	const EResult result = RemoveScene(closingScene);
 
-	if (IsFailure(result))
+	if (result != EResult::Success)
 		return result;
 
 	LightManager::Get().ClearLightSources();
@@ -83,17 +90,14 @@ EResult SceneManager::CloseScene()
 
 	return EResult::Success;
 }
+
 EResult SceneManager::NewScene(void* arg)
 {
 	Scene* newScene = Scene::Create(arg);
-
-	if (!newScene)
-		return EResult::Fail;
+	if (!newScene) return EResult::Fail;
 
 	const EResult result = OpenScene(newScene);
-
-	if (IsFailure(result))
-		Safe_Release(newScene);
+	Safe_Release(newScene);
 
 	return result;
 }
@@ -119,34 +123,30 @@ EResult SceneManager::SaveScene(Archive& archive, const wstring& filePath)
 
 EResult SceneManager::LoadScene(Archive& archive, const wstring& filePath)
 {
-	string pathStr = WStrToStr(filePath);
-	if (!archive.LoadFromFile(pathStr))
-	{
-		return EResult::Fail;
-	}
+	if (!archive.IsReading() || filePath.empty())
+		return EResult::InvalidArgument;
 
-	CloseScene();
-	Scene* newScene = Scene::Create();
-	if (!newScene) return EResult::Fail;
-	
-	if (archive.PushScope(entt::resolve(newScene->GetTypeID()).info().name().data()))
-	{
-		newScene->Deserialize(archive);
-		archive.PopScope();
-	}
-
-	return OpenScene(newScene);
+	// 엔티티 복원이 구현되기 전에는 기존 씬을 교체하지 않는다.
+	return EResult::NotImplemented;
 }
+
 EResult SceneManager::AddScene(Scene* scene)
 {
 	if (!scene) return EResult::InvalidArgument;
 
 	if (std::find(m_Scenes.begin(), m_Scenes.end(), scene) != m_Scenes.end())
-	{
 		return EResult::Success;
+
+	try
+	{
+		m_Scenes.push_back(scene);
+	}
+	catch (const std::bad_alloc&)
+	{
+		return EResult::OutOfMemory;
 	}
 
-	m_Scenes.push_back(scene);
+	Safe_AddRef(scene);
 	return EResult::Success;
 }
 EResult SceneManager::RemoveScene(Scene* scene)

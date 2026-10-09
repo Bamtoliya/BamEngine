@@ -95,7 +95,12 @@ namespace Engine
             return LoadFromFile(string(utf8_path.begin(), utf8_path.end()));
         }
 
+    public:
+        bool HasError() const { return m_HasError; }
+        void SetError() { m_HasError = true; }
+
     protected:
         EArchiveMode m_Mode;
+        bool m_HasError = false;
     };
 }

@@ -4,7 +4,6 @@
 #include "Animation.h"
 #include "Skeleton.h"
 #include "ResourceHandle.h"
-#include "ResourceHandle.inl"
 
 BEGIN(Engine)
 
@@ -46,7 +45,7 @@ public:
 #pragma endregion
 #pragma region Loop
 public:
-    virtual void Update(f32 dt); // 컴포넌트 업데이트 시 호출
+    virtual void Update(f32 dt) override;
 #pragma endregion
 
 public:

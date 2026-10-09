@@ -2,18 +2,7 @@
 
 #include "Component.h"
 #include "Reflection/ReflectionMacro.h"
-
-struct CameraBuffer
-{
-	mat4 viewMatrix;
-	mat4 invViewMatrix;
-	mat4 projMatrix;
-	mat4 invProjMatrix;
-	mat4 viewProjMatrix;
-	mat4 invViewProjMatrix;
-	vec3 cameraPosition;
-	float time;
-};
+#include "CameraBuffer.h"
 
 struct CameraDesc : public ComponentDesc
 {

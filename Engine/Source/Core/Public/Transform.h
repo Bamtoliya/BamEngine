@@ -186,13 +186,13 @@ private:
 	PROPERTY(EDITABLE, ONCHANGED("SetScale", "m_Scale"))
 	vec3 m_Scale = vec3(1.0f);
 
-	PROPERTY(NAME("PROP_LOCALMATRIX"), READONLY)
+	PROPERTY(DISPLAY_NAME("PROP_LOCALMATRIX"), READONLY)
 	mat4 m_LocalMatrix = glm::identity<mat4>();
 
-	PROPERTY(NAME("PROP_WORLDMATRIX"), READONLY)
+	PROPERTY(DISPLAY_NAME("PROP_WORLDMATRIX"), READONLY)
 	mat4 m_WorldMatrix = glm::identity<mat4>();
 
-	PROPERTY(EDITABLE, NAME("PROP_BITFLAG"))
+	PROPERTY(EDITABLE, DISPLAY_NAME("PROP_BITFLAG"))
 	ETransformFlag m_Flags = ETransformFlag::Default;
 #pragma endregion
 

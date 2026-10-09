@@ -5,6 +5,7 @@
 #include "ResourceHandle.h"
 #include "Archives.h"
 #include "ResourceMetrics.h"
+#include "Logger.h"
 
 BEGIN(Engine)
 
@@ -16,6 +17,19 @@ struct ResourceSlot
 	uint32 RefCount = { 0 };
 	bool IsActive = { false };
 };
+
+struct ResourceDebugInfo
+{
+	uint32 SlotIndex = 0;
+	uint32 Generation = 0;
+	uint32 RefCount = 0;
+
+	EResourceType Type = EResourceType::Unknown;
+
+	wstring Key;
+	wstring Path;
+};
+
 #pragma endregion
 
 class ENGINE_API ResourceManager : public Base
@@ -48,6 +62,8 @@ public:
 	void RegisterExplicitLoader();
 	EResult DestroyResource(const Handle& handle);
 	EResult DestroyResource(Resource* resource);
+public:
+	vector<ResourceDebugInfo> GetDebugSnapshot();
 #pragma endregion
 
 #pragma region Metric
@@ -96,6 +112,5 @@ private:
 #pragma endregion
 };
 
-#include "ResourceHandle.inl"
 #include "ResourceManager.inl"
 END

@@ -18,7 +18,7 @@ const InputLayoutDesc VertexMaterial::Layout =
 		{ "NORMAL",		0, 0, EVertexElementFormat::Float3, offsetof(VertexMaterial, normal) },
 		{ "TEXCOORD",	0, 1, EVertexElementFormat::Float2, offsetof(VertexMaterial, texCoord) },
 		{ "TANGENT",	0, 2, EVertexElementFormat::Float3, offsetof(VertexMaterial, tangent) },
-		{ "BITANGENT",	0, 3, EVertexElementFormat::Float3, offsetof(VertexMaterial, bitangent) },
+		{ "BINORMAL",	0, 3, EVertexElementFormat::Float3, offsetof(VertexMaterial, binormal) },
 		{ "COLOR",		0, 4, EVertexElementFormat::Float4, offsetof(VertexMaterial, color) }
 	},
 	sizeof(VertexMaterial),
@@ -44,7 +44,7 @@ const InputLayoutDesc Vertex::Layout =
 		{ "NORMAL",		0, 1, EVertexElementFormat::Float3, offsetof(Vertex, normal) },
 		{ "TEXCOORD",	0, 2, EVertexElementFormat::Float2, offsetof(Vertex, texCoord) },
 		{ "TANGENT",	0, 3, EVertexElementFormat::Float3, offsetof(Vertex, tangent) },
-		{ "BITANGENT",	0, 4, EVertexElementFormat::Float3, offsetof(Vertex, bitangent) },
+		{ "BINORMAL",	0, 4, EVertexElementFormat::Float3, offsetof(Vertex, binormal) },
 		{ "COLOR",		0, 5, EVertexElementFormat::Float4, offsetof(Vertex, color) }
 	},
 	sizeof(Vertex),

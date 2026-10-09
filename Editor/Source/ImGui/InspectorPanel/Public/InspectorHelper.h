@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "Editor_Includes.h"
 #include "Reflection/ReflectionMetadataKeys.h"
@@ -633,7 +633,7 @@ inline string GetTypeNamespace(string_view qualifiedName)
 
 inline const Engine::EnumInfo* ResolveEnumInfo(string_view rawTypeName, const Engine::TypeInfo* ownerTypeInfo = nullptr)
 {
-    auto& registry = reflection::Registry::Get();
+    auto& registry = legacy_reflection::Registry::Get();
 
     const string normalized = NormalizeReflectedTypeName(rawTypeName);
     if (normalized.empty())
@@ -785,7 +785,7 @@ inline const Engine::PropertyInfo* FindPropertyByName(const Engine::TypeInfo& ty
             break;
         }
 
-        current = reflection::Registry::Get().GetTypeByQualifiedName(current->ParentQualifiedName);
+        current = legacy_reflection::Registry::Get().GetTypeByQualifiedName(current->ParentQualifiedName);
     }
 
     return nullptr;
@@ -872,7 +872,7 @@ inline const Engine::FunctionInfo* FindOnChangedFunction(const Engine::TypeInfo&
             break;
         }
 
-        current = reflection::Registry::Get().GetTypeByQualifiedName(current->ParentQualifiedName);
+        current = legacy_reflection::Registry::Get().GetTypeByQualifiedName(current->ParentQualifiedName);
     }
 
     return nullptr;
@@ -988,7 +988,7 @@ inline bool CheckEditCondition(void* instance, const TypeInfo& typeInfo, std::sp
 
         if (editCondition->HasMaskLiteral)
         {
-            const Engine::EnumInfo* enumInfo = reflection::Registry::Get().GetEnumByQualifiedName(conditionProp->TypeInfo.Name);
+            const Engine::EnumInfo* enumInfo = legacy_reflection::Registry::Get().GetEnumByQualifiedName(conditionProp->TypeInfo.Name);
             if (enumInfo)
             {
                 if (!TryResolveEnumLiteral(editCondition->MaskLiteral, *enumInfo, mask))

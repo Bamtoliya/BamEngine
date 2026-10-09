@@ -83,24 +83,24 @@ float ToolBar::GetPlayBarHeight() const
 #pragma region FileMenu
 void ToolBar::DrawFileMenu()
 {
-	if (ImGui::BeginMenu("File"))
+	if (ImGui::BeginMenu(LOCAL_CSTR("UI_FILE")))
 	{
-		if (ImGui::MenuItem("Exit", "Alt+F4"))
+		if (ImGui::MenuItem(LOCAL_CSTR("UI_EXIT"), "Alt+F4"))
 		{
 			SDL_Event quit_event;
 			quit_event.type = SDL_EVENT_QUIT;
 			SDL_PushEvent(&quit_event);
 		}
-		if (ImGui::MenuItem("Import Asset", ""))
+		if (ImGui::MenuItem(LOCAL_CSTR("UI_IMPORT_ASSET"), ""))
 		{
 			ImportAsset();
 		}
-		if (ImGui::MenuItem("Load Resource", ""))
+		if (ImGui::MenuItem(LOCAL_CSTR("UI_LOAD_RESOURCE"), ""))
 		{
 			LoadResourceFile();
 		}
 
-		if (ImGui::MenuItem("Settings", ""))
+		if (ImGui::MenuItem(LOCAL_CSTR("UI_SETTINGS"), ""))
 		{
 
 		}
@@ -132,7 +132,7 @@ void ToolBar::LoadResourceFile()
 #pragma region EditMenu
 void ToolBar::DrawEditMenu()
 {
-	if (ImGui::BeginMenu("Edit"))
+	if (ImGui::BeginMenu(LOCAL_CSTR("UI_EDIT")))
 	{
 		ImGui::EndMenu();
 	}
@@ -143,29 +143,32 @@ void ToolBar::DrawEditMenu()
 #pragma region SceneMenu
 void ToolBar::DrawSceneMenu()
 {
-	if (ImGui::BeginMenu("Scene"))
+	if (ImGui::BeginMenu(LOCAL_CSTR("UI_SCENE")))
 	{
-		if (ImGui::MenuItem("New Scene", "Ctrl+N"))
+		if (ImGui::MenuItem(LOCAL_CSTR("UI_NEW_SCENE"), "Ctrl+N"))
 		{
-			SelectionManager::Get().ClearSelection();
+			//SelectionManager::Get().ClearSelection(true);
 			NewScene();
 		}
 
-		if (ImGui::MenuItem("Save Scene", "Ctrl+S"))
+		if (ImGui::MenuItem(LOCAL_CSTR("UI_SAVE_SCENE"), "Ctrl+S"))
 		{
 			SaveScene();
 		}
 
-		if (ImGui::MenuItem("Load Scene", "Ctrl+O"))
+		if (ImGui::MenuItem(LOCAL_CSTR("UI_LOAD_SCENE"), "Ctrl+O"))
 		{
-			SelectionManager::Get().ClearSelection();
+			//SelectionManager::Get().ClearSelection(true);
 			LoadScene();
 		}
 
-		if (ImGui::MenuItem("Close Scene"))
+		if (ImGui::MenuItem(LOCAL_CSTR("UI_CLOSE_SCENE")))
 		{
-			SelectionManager::Get().ClearSelection();
-			SceneManager::Get().CloseScene();
+			const EResult result = SceneManager::Get().CloseScene();
+			if (result == EResult::Success)
+				SelectionManager::Get().ClearSelection(true);
+			else
+				ENGINE_LOG_ERROR("Failed to close scene: {}", ResultToString(result));
 		}
 
 		ImGui::EndMenu();
@@ -173,33 +176,14 @@ void ToolBar::DrawSceneMenu()
 }
 void ToolBar::NewScene()
 {
-	SceneManager::Get().NewScene();
-	Scene* currentScene = SceneManager::Get().GetCurrentScene();
-	//if (currentScene)
-	//{
-	//	currentScene->SetName(L"Untitled Scene");
-	//	currentScene->CreateLayer(L"Default");
+	const EResult result = SceneManager::Get().NewScene();
+	if (result != EResult::Success)
+	{
+		ENGINE_LOG_ERROR("Failed to create scene: {}", ResultToString(result));
+		return;
+	}
 
-	//	GameObject* gameObject = GameObject::Create();
-	//	gameObject->SetName(L"Camera");
-	//	Camera* camera = static_cast<Camera*>(gameObject->AddComponent(L"Camera"));
-	//	CameraManager::Get().AddCamera(camera);
-	//	CameraManager::Get().SetMainCamera(camera);
-	//	currentScene->AddGameObject(gameObject);
-	//	Safe_Release(gameObject);
-
-
-	//	GameObject* plane = GameObject::Create();
-	//	plane->SetName(L"Plane");
-	//	MeshFilter* meshFilter = static_cast<MeshFilter*>(plane->AddComponent(L"MeshFilter"));
-	//	meshFilter->SetMeshHandle(ResourceManager::Get().GetResourceHandle<Mesh>(L"Resources/Mesh/Plane.bammesh"));
-	//	MeshRenderer* meshRenderer = static_cast<MeshRenderer*>(plane->AddComponent(L"MeshRenderer"));
-	//	meshRenderer->SetMaterial(ResourceManager::Get().GetResourceHandle<Material>(L"Resources/Material/DefaultMaterial.bammat"));
-	//	currentScene->AddGameObject(plane);
-	//	Safe_Release(plane);
-
-
-	//}
+	SelectionManager::Get().ClearSelection(true);
 }
 
 void ToolBar::SaveScene()
@@ -218,7 +202,21 @@ void ToolBar::LoadScene()
 		return;
 
 	JsonArchive archive(EArchiveMode::Read);
-	SceneManager::Get().LoadScene(archive, filePath);
+	const EResult result = SceneManager::Get().LoadScene(archive, filePath);
+
+	if (result == EResult::NotImplemented)
+	{
+		ENGINE_LOG_WARN("Scene loading is unavailable until scene restoration is implemented.");
+		return;
+	}
+
+	if (result != EResult::Success)
+	{
+		ENGINE_LOG_ERROR("Failed to load scene: {} ({})", WStrToStr(filePath), ResultToString(result));
+		return;
+	}
+
+	SelectionManager::Get().ClearSelection(true);
 }
 #pragma endregion
 
@@ -227,7 +225,7 @@ void ToolBar::LoadScene()
 
 void ToolBar::DrawWindowMenu()
 {
-	if (ImGui::BeginMenu("Window"))
+	if (ImGui::BeginMenu(LOCAL_CSTR("UI_WINDOW")))
 	{
 		if (ImGui::MenuItem("Display Settings"))
 		{
@@ -361,14 +359,13 @@ void ToolBar::DrawNewViewportPopup()
 #pragma region HelpMenu
 void ToolBar::DrawHelpMenu()
 {
-	if (ImGui::BeginMenu("Help"))
+	if (ImGui::BeginMenu(LOCAL_CSTR("UI_HELP")))
 	{
-		string buffer = LocalizationManager::Get().GetText("PROP_LANGUAGE");
-		if (ImGui::BeginMenu(buffer.c_str()))
+		if (ImGui::BeginMenu(LOCAL_CSTR("UI_LANGUAGE")))
 		{
-			if (ImGui::MenuItem("English"))
+			if (ImGui::MenuItem(LOCAL_CSTR("UI_ENGLISH")))
 				LocalizationManager::Get().SetCurrentLanguage(ELocalizationLanguage::English);
-			if (ImGui::MenuItem("Korean"))
+			if (ImGui::MenuItem(LOCAL_CSTR("UI_KOREAN")))
 				LocalizationManager::Get().SetCurrentLanguage(ELocalizationLanguage::Korean);
 			ImGui::EndMenu();
 		}

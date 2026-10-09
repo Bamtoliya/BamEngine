@@ -20,6 +20,14 @@ void Resource::Serialize(Archive& ar)
 
 void Resource::Deserialize(Archive& ar)
 {
+    if (ar.HasError()) return;
+
+    if (!ar.IsReading())
+    {
+        ar.SetError();
+        return;
+    }
+
     const wstring fallbackKey = m_Key;
     const wstring fallbackPath = m_Path;
     const EResourceType expectedType = m_ResourceType;
@@ -28,6 +36,7 @@ void Resource::Deserialize(Archive& ar)
 
     if (!ar.PushScope("AssetHeader"))
     {
+        ar.SetError();
         fmt::print(stderr, "Invalid asset file: Missing AssetHeader.\n");
         return;
     }
@@ -37,6 +46,7 @@ void Resource::Deserialize(Archive& ar)
 
     if (header.MagicNumber != ENGINE_ASSET_MAGIC)
     {
+        ar.SetError();
         fmt::print(stderr, "Invalid asset file: Magic number mismatch.\n");
         return;
     }
@@ -45,6 +55,7 @@ void Resource::Deserialize(Archive& ar)
         header.ResourceType != EResourceType::Unknown &&
         header.ResourceType != expectedType)
     {
+        ar.SetError();
         fmt::print(stderr, "Invalid asset file: Resource type mismatch.\n");
         return;
     }

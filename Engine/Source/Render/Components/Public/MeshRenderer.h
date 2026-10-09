@@ -16,13 +16,13 @@ protected:
 	virtual EResult Initialize(void* arg = nullptr) override;
 public:
 	static Component* Create(void* arg = nullptr);
-	virtual Component* Clone(GameObject* owner, void* arg = nullptr);
+	virtual Component* Clone(GameObject* owner, void* arg = nullptr) override;
 	virtual void Free() override;
 #pragma endregion
 
 #pragma region Render
 public:
-	virtual EResult	Render(f32 dt, RenderPass* renderPass = nullptr)override;
+	virtual EResult	Render(f32 dt, RenderPass* renderPass = nullptr) override;
 #pragma endregion
 
 #pragma region Bounds

@@ -153,7 +153,7 @@ public:
 
 #pragma region Member Variables
 private:
-	PROPERTY(NAME("PROP_POSITION"), EDITABLE, RANGE(), ONCHANGED("SetAnchoredPosition", "m_AnchoredPosition"))
+	PROPERTY(DISPLAY_NAME("PROP_POSITION"), EDITABLE, RANGE(), ONCHANGED("SetAnchoredPosition", "m_AnchoredPosition"))
 	vec2 m_AnchoredPosition = { 0.0f, 0.0f };
 
 	PROPERTY(EDITABLE, RANGE(), ONCHANGED("SetRotation", "m_Rotation"))
@@ -176,16 +176,16 @@ private:
 	PROPERTY(EDITABLE, ONCHANGED("SetFlags", "m_Flags"))
 	ERectTransformFlags m_Flags = { ERectTransformFlags::Default };
 
-	PROPERTY(NAME("PROP_MATRIX"), READONLY, NOSERIALIZE, CATEGORY("Details"))
+	PROPERTY(DISPLAY_NAME("PROP_MATRIX"), READONLY, NOSERIALIZE, CATEGORY("Details"))
 	mat4 m_Matrix = glm::identity<mat4>();
-	PROPERTY(NAME("PROP_WORLD_TRANSFORM"), READONLY, NOSERIALIZE, CATEGORY("Details"))
+	PROPERTY(DISPLAY_NAME("PROP_WORLD_TRANSFORM"), READONLY, NOSERIALIZE, CATEGORY("Details"))
 	mat4 m_WorldTransform = glm::identity<mat4>();
-	PROPERTY(NAME("PROP_ABSOLUTEPOSITION"), READONLY, NOSERIALIZE, CATEGORY("Details"))
+	PROPERTY(DISPLAY_NAME("PROP_ABSOLUTEPOSITION"), READONLY, NOSERIALIZE, CATEGORY("Details"))
 	vec2 m_AbsolutePosition = { 0.0f, 0.0f };
-	PROPERTY(NAME("PROP_ABSOLUTESIZE"), READONLY, NOSERIALIZE, CATEGORY("Details"))
+	PROPERTY(DISPLAY_NAME("PROP_ABSOLUTESIZE"), READONLY, NOSERIALIZE, CATEGORY("Details"))
 	vec2 m_AbsoluteSize = { 0.0f, 0.0f };
 
-	PROPERTY(NAME("PROP_RATIO"), READONLY, NOSERIALIZE, CATEGORY("Details"))
+	PROPERTY(DISPLAY_NAME("PROP_RATIO"), READONLY, NOSERIALIZE, CATEGORY("Details"))
 	f32 m_Ratio = { 1.f };
 #pragma endregion
 

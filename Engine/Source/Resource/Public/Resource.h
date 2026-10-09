@@ -3,7 +3,7 @@
 #include "Base.h"
 #include "Reflection/ReflectionMacro.h"
 #include "SerializableInterface.h"
-#include "ReflectableInterface.h"
+#include "TypeIdentityInterface.h"
 
 #define DECLARE_RESOURCE(ClassType) \
 public: \
@@ -59,7 +59,7 @@ struct ENGINE_API ResourceBinaryHeader
 
 
 CLASS()
-class ENGINE_API Resource : public SerializableInterface, public ReflectableInterface
+class ENGINE_API Resource : public ISerializable, public ITypeIdentity
 {
 	REFLECT_BASE()
 	using DESC = ResourceCreateDesc;

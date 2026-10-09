@@ -13,7 +13,7 @@ private:
 	EResult Initialize(void* arg = nullptr);
 public:
 	static TransformSystem* Create(void* arg = nullptr);
-	virtual void Free();
+	virtual void Free() override;
 public:
 	virtual void OnLateUpdate(entt::registry& globalRegistry, const vector<Scene*> activeScenes, f32 dt) override;
 	static void UpdateHierarchy(entt::registry& registry);

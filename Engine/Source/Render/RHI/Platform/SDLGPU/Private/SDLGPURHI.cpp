@@ -483,7 +483,8 @@ EResult SDLGPURHI::BindTextureSampler(RHITexture* texture, RHISampler* sampler, 
 	SDL_GPUTextureSamplerBinding binding = {};
 	binding.texture = static_cast<SDL_GPUTexture*>(nativeTexture);
 	binding.sampler = static_cast<SDL_GPUSampler*>(nativeSampler);
-	SDL_BindGPUFragmentSamplers(m_CurrentRenderPass, slot, &binding, 1);
+	const uint32 shaderSlot = slot >= MAX_MATERIAL_TEXTURE_SLOTS ? slot - MAX_MATERIAL_TEXTURE_SLOTS : slot;
+	SDL_BindGPUFragmentSamplers(m_CurrentRenderPass, shaderSlot, &binding, 1);
 	return EResult::Success;
 }
 EResult SDLGPURHI::BindRenderTargets(uint32 count, RHITexture** renderTargets, RHITexture* depthStencil)

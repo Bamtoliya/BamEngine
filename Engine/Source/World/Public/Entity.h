@@ -22,6 +22,7 @@ public:
 	T& GetComponent();
 
 	entt::entity GetEntityHandle() const { return m_EntityHandle; }
+	Scene* GetScene() const { return m_Scene; }
 private:
 	entt::entity m_EntityHandle = entt::null;
 	Scene* m_Scene = nullptr;

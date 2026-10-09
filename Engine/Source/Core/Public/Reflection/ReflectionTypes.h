@@ -11,18 +11,18 @@
 
 namespace Engine
 {
-    using EPropertyType = reflection::EPropertyType;
-    using VariableInfo = reflection::VariableInfo;
-    using ContainerInfo = reflection::ContainerInfo;
-    using ContainerAccessor = reflection::ContainerAccessor;
+    using EPropertyType = legacy_reflection::EPropertyType;
+    using VariableInfo = legacy_reflection::VariableInfo;
+    using ContainerInfo = legacy_reflection::ContainerInfo;
+    using ContainerAccessor = legacy_reflection::ContainerAccessor;
 
-    using MetadataValue = reflection::MetadataValue;
-    using MetadataEntry = reflection::MetadataEntry;
+    using MetadataValue = legacy_reflection::MetadataValue;
+    using MetadataEntry = legacy_reflection::MetadataEntry;
 
-    using EnumEntry = reflection::EnumEntry;
-    using EnumInfo = reflection::EnumInfo;
+    using EnumEntry = legacy_reflection::EnumEntry;
+    using EnumInfo = legacy_reflection::EnumInfo;
 
-    using FunctionInfo = reflection::FunctionInfo;
-    using PropertyInfo = reflection::PropertyInfo;
-    using TypeInfo = reflection::TypeInfo;
+    using FunctionInfo = legacy_reflection::FunctionInfo;
+    using PropertyInfo = legacy_reflection::PropertyInfo;
+    using TypeInfo = legacy_reflection::TypeInfo;
 }
