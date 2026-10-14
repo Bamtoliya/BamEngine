@@ -19,12 +19,8 @@ endif()
 project(BamEngine)
 
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
-option(BAMENGINE_BUILD_REFLECTION_CHECK "Build Engine and Editor reflection integration checks" OFF)
 
-add_subdirectory(Projects/ReflectionCore)
 add_subdirectory(Projects/Reflection)
-
-set(ARCHIVE_BUILD_EXAMPLE OFF)
 add_subdirectory(Projects/Archive)
 
 if(NOT TARGET ReflectionArchive::Adapter)
@@ -34,5 +30,6 @@ endif()
 add_subdirectory(Engine)
 
 add_subdirectory(Tools/TextureConverter)
+
 add_subdirectory(Editor)
 # add_subdirectory(Client)
