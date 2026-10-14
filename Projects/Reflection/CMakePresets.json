@@ -9,12 +9,11 @@
         "value": "x64",
         "strategy": "set"
       },
-      "binaryDir": "${sourceDir}/../../out/build/reflection-generator",
+      "binaryDir": "${sourceDir}/build",
       "installDir": "${sourceDir}/../../out/install/reflection-generator",
       "cacheVariables": {
         "CMAKE_CONFIGURATION_TYPES": "Release",
         "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded",
-        "REFLECTION_BUILD_GENERATOR": true,
         "REFLECTION_BUILD_EXAMPLE": false,
         "LLVM_DIR": "${sourceDir}/dependencies/llvm-20.1.8/lib/cmake/llvm",
         "Clang_DIR": "${sourceDir}/dependencies/llvm-20.1.8/lib/cmake/clang"

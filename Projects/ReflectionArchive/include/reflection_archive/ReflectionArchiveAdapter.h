@@ -1,6 +1,6 @@
 ﻿#pragma once
 
-#include <archive/GlazeArchiveBase.h>
+#include <archive/ArchiveInterface.h>
 #include <reflection/TypeInfo.h>
 #include <reflection/Registry.h>
 
@@ -50,11 +50,11 @@ namespace archive_reflection
 
     namespace detail
     {
-        inline archive::ArchiveResult WriteProperties(archive::GlazeArchiveBase& ar,
+        inline archive::ArchiveResult WriteProperties(archive::IArchive& ar,
             const reflection::TypeInfo& type, const reflection::ObjectView& object,
             const reflection::Registry* registry, const PropertyCodecs* codecs);
 
-        inline archive::ArchiveResult ReadProperties(archive::GlazeArchiveBase& ar,
+        inline archive::ArchiveResult ReadProperties(archive::IArchive& ar,
             const reflection::TypeInfo& type, const reflection::ObjectView& object,
             const reflection::Registry* registry, const PropertyCodecs* codecs);
 
@@ -86,7 +86,7 @@ namespace archive_reflection
         }
 
         template<typename T>
-        bool TryWriteScalar(archive::GlazeArchiveBase& ar, const reflection::PropertyInfo& property,
+        bool TryWriteScalar(archive::IArchive& ar, const reflection::PropertyInfo& property,
             const reflection::ValueView& value, archive::ArchiveResult& result)
         {
             const auto* typedValue = value.Get<T>();
@@ -101,7 +101,7 @@ namespace archive_reflection
         }
 
         template<typename... Types>
-        archive::ArchiveResult WriteScalar(archive::GlazeArchiveBase& ar,
+        archive::ArchiveResult WriteScalar(archive::IArchive& ar,
             const reflection::PropertyInfo& property, const reflection::ValueView& value)
         {
             archive::ArchiveResult result;
@@ -114,7 +114,7 @@ namespace archive_reflection
             return { archive::ArchiveErrorCode::UnsupportedType, property.Name };
         }
 
-        inline archive::ArchiveResult WriteEnum(archive::GlazeArchiveBase& ar,
+        inline archive::ArchiveResult WriteEnum(archive::IArchive& ar,
             const reflection::PropertyInfo& property, const reflection::ValueView& value,
             const reflection::Registry* registry)
         {
@@ -138,7 +138,7 @@ namespace archive_reflection
                 }, *number);
         }
 
-        inline archive::ArchiveResult ReadEnum(const archive::GlazeArchiveBase& ar,
+        inline archive::ArchiveResult ReadEnum(const archive::IArchive& ar,
             const reflection::PropertyInfo& property, const reflection::ObjectView& object,
             const reflection::Registry* registry)
         {
@@ -204,7 +204,7 @@ namespace archive_reflection
             return result;
         }
 
-        inline archive::ArchiveResult WriteNestedObject(archive::GlazeArchiveBase& ar,
+        inline archive::ArchiveResult WriteNestedObject(archive::IArchive& ar,
             const reflection::PropertyInfo& property, const reflection::ValueView& value,
             const reflection::Registry* registry, const PropertyCodecs* codecs)
         {
@@ -223,7 +223,7 @@ namespace archive_reflection
             }
 
             return ar.WriteObject(property.Name, nestedObject,
-                [&property, nestedType, registry, codecs](archive::GlazeArchiveBase& temporary,
+                [&property, nestedType, registry, codecs](archive::IArchive& temporary,
                     const reflection::ObjectView& source)
                 {
                     return WithParentField(
@@ -231,7 +231,7 @@ namespace archive_reflection
                 });
         }
 
-        inline archive::ArchiveResult ReadNestedObject(archive::GlazeArchiveBase& ar,
+        inline archive::ArchiveResult ReadNestedObject(archive::IArchive& ar,
             const reflection::PropertyInfo& property, const reflection::ObjectView& object,
             const reflection::Registry* registry, const PropertyCodecs* codecs)
         {
@@ -272,7 +272,7 @@ namespace archive_reflection
             return WithParentField(property.Name, endResult);
         }
 
-        inline archive::ArchiveResult WriteProperties(archive::GlazeArchiveBase& ar,
+        inline archive::ArchiveResult WriteProperties(archive::IArchive& ar,
             const reflection::TypeInfo& type, const reflection::ObjectView& object,
             const reflection::Registry* registry, const PropertyCodecs* codecs)
         {
@@ -341,7 +341,7 @@ namespace archive_reflection
         }
 
         template<typename T>
-        bool TryReadScalar(const archive::GlazeArchiveBase& ar, const reflection::PropertyInfo& property,
+        bool TryReadScalar(const archive::IArchive& ar, const reflection::PropertyInfo& property,
             const reflection::ObjectView& object, archive::ArchiveResult& result)
         {
             if (!property.IsValueType<T>())
@@ -361,7 +361,7 @@ namespace archive_reflection
         }
 
         template<typename... Types>
-        archive::ArchiveResult ReadScalar(const archive::GlazeArchiveBase& ar,
+        archive::ArchiveResult ReadScalar(const archive::IArchive& ar,
             const reflection::PropertyInfo& property, const reflection::ObjectView& object)
         {
             archive::ArchiveResult result;
@@ -374,7 +374,7 @@ namespace archive_reflection
             return { archive::ArchiveErrorCode::UnsupportedType, property.Name };
         }
 
-        inline archive::ArchiveResult ReadProperties(archive::GlazeArchiveBase& ar,
+        inline archive::ArchiveResult ReadProperties(archive::IArchive& ar,
             const reflection::TypeInfo& type, const reflection::ObjectView& object,
             const reflection::Registry* registry, const PropertyCodecs* codecs)
         {
@@ -466,7 +466,7 @@ namespace archive_reflection
     }
 
 
-    [[nodiscard]] inline archive::ArchiveResult WriteObject(archive::GlazeArchiveBase& ar,
+    [[nodiscard]] inline archive::ArchiveResult WriteObject(archive::IArchive& ar,
         std::string_view key, const reflection::TypeInfo& type, const reflection::ObjectView& object,
         const reflection::Registry* registry = nullptr, const PropertyCodecs* codecs = nullptr)
     {
@@ -476,7 +476,7 @@ namespace archive_reflection
         }
 
         return ar.WriteObject(key, object,
-            [&type, registry, codecs](archive::GlazeArchiveBase& temporary, const reflection::ObjectView& source)
+            [&type, registry, codecs](archive::IArchive& temporary, const reflection::ObjectView& source)
             {
                 return detail::WriteProperties(temporary, type, source, registry, codecs);
             });
@@ -486,7 +486,7 @@ namespace archive_reflection
         requires ((std::is_class_v<T> || std::is_union_v<T>) &&
     !std::is_const_v<T> && !std::is_volatile_v<T>&&
         std::copy_constructible<T>&& std::assignable_from<T&, T>)
-        [[nodiscard]] archive::ArchiveResult ReadObject(const archive::GlazeArchiveBase& ar,
+        [[nodiscard]] archive::ArchiveResult ReadObject(const archive::IArchive& ar,
             std::string_view key, const reflection::TypeInfo& type, T& object,
             const reflection::Registry* registry = nullptr, const PropertyCodecs* codecs = nullptr)
     {
@@ -496,7 +496,7 @@ namespace archive_reflection
         }
 
         return ar.ReadObject(key, object,
-            [&type, registry, codecs](archive::GlazeArchiveBase& temporary, T& candidate)
+            [&type, registry, codecs](archive::IArchive& temporary, T& candidate)
             {
                 return detail::ReadProperties(temporary, type, reflection::ObjectView::From(candidate), registry, codecs);
             });
@@ -520,22 +520,22 @@ namespace archive_reflection
         auto type = std::make_shared<const reflection::TypeInfo>(std::move(valueType));
 
         return codecs.Register<Map>(
-            [type, registry, valueCodecs](archive::GlazeArchiveBase& ar,
+            [type, registry, valueCodecs](archive::IArchive& ar,
                 std::string_view key, const Map& values) -> archive::ArchiveResult
             {
                 return ar.WriteObjectMap(key, values,
-                    [type, registry, valueCodecs](archive::GlazeArchiveBase& entry,
+                    [type, registry, valueCodecs](archive::IArchive& entry,
                         const Mapped& value) -> archive::ArchiveResult
                     {
                         return detail::WriteProperties(
                             entry, *type, reflection::ObjectView::From(value), registry, valueCodecs);
                     });
             },
-            [type, registry, valueCodecs](const archive::GlazeArchiveBase& ar,
+            [type, registry, valueCodecs](const archive::IArchive& ar,
                 std::string_view key, Map& values) -> archive::ArchiveResult
             {
                 return ar.ReadObjectMap(key, values,
-                    [type, registry, valueCodecs](archive::GlazeArchiveBase& entry,
+                    [type, registry, valueCodecs](archive::IArchive& entry,
                         Mapped& value) -> archive::ArchiveResult
                     {
                         return detail::ReadProperties(
@@ -560,22 +560,22 @@ namespace archive_reflection
         auto type = std::make_shared<const reflection::TypeInfo>(std::move(elementType));
 
         return codecs.Register<std::vector<T>>(
-            [type, registry, elementCodecs](archive::GlazeArchiveBase& ar,
+            [type, registry, elementCodecs](archive::IArchive& ar,
                 std::string_view key, const std::vector<T>& values) -> archive::ArchiveResult
             {
                 return ar.WriteObjectArray(key, values,
-                    [type, registry, elementCodecs](archive::GlazeArchiveBase& entry,
+                    [type, registry, elementCodecs](archive::IArchive& entry,
                         const T& value) -> archive::ArchiveResult
                     {
                         return detail::WriteProperties(
                             entry, *type, reflection::ObjectView::From(value), registry, elementCodecs);
                     });
             },
-            [type, registry, elementCodecs](const archive::GlazeArchiveBase& ar,
+            [type, registry, elementCodecs](const archive::IArchive& ar,
                 std::string_view key, std::vector<T>& values) -> archive::ArchiveResult
             {
                 return ar.ReadObjectArray(key, values,
-                    [type, registry, elementCodecs](archive::GlazeArchiveBase& entry,
+                    [type, registry, elementCodecs](archive::IArchive& entry,
                         T& value) -> archive::ArchiveResult
                     {
                         return detail::ReadProperties(

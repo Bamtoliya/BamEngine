@@ -1,6 +1,6 @@
 ﻿#pragma once
 
-#include <archive/GlazeArchiveBase.h>
+#include <archive/ArchiveInterface.h>
 #include <reflection/PropertyInfo.h>
 
 #include <concepts>
@@ -21,8 +21,8 @@ namespace archive_reflection
             requires (std::is_object_v<T> && !std::is_const_v<T> && !std::is_volatile_v<T>&&
         std::default_initializable<T>&& reflection::detail::SupportsPropertyCopyConstruction<T>::value)
             [[nodiscard]] bool Register(
-                std::function<archive::ArchiveResult(archive::GlazeArchiveBase&, std::string_view, const T&)> write,
-                std::function<archive::ArchiveResult(const archive::GlazeArchiveBase&, std::string_view, T&)> read)
+                std::function<archive::ArchiveResult(archive::IArchive&, std::string_view, const T&)> write,
+                std::function<archive::ArchiveResult(const archive::IArchive&, std::string_view, T&)> read)
         {
             if (!write || !read)
             {
@@ -31,7 +31,7 @@ namespace archive_reflection
 
             Codec codec;
 
-            codec.Write = [write = std::move(write)](archive::GlazeArchiveBase& ar, std::string_view key,
+            codec.Write = [write = std::move(write)](archive::IArchive& ar, std::string_view key,
                 const reflection::ValueView& value) -> archive::ArchiveResult
                 {
                     const auto* typedValue = value.Get<T>();
@@ -43,7 +43,7 @@ namespace archive_reflection
                     return write(ar, key, *typedValue);
                 };
 
-            codec.Read = [read = std::move(read)](const archive::GlazeArchiveBase& ar,
+            codec.Read = [read = std::move(read)](const archive::IArchive& ar,
                 const reflection::PropertyInfo& property, const reflection::ObjectView& object) -> archive::ArchiveResult
                 {
                     const auto* current = property.ReadFrom<T>(object);
@@ -74,7 +74,7 @@ namespace archive_reflection
         template<typename T>
             requires (std::is_object_v<T> && !std::is_const_v<T> && !std::is_volatile_v<T>&&
         std::default_initializable<T>&&
-            requires (archive::GlazeArchiveBase& writer, const archive::GlazeArchiveBase& reader,
+            requires (archive::IArchive& writer, const archive::IArchive& reader,
         std::string_view key, const T& source, T& destination)
         {
             { writer.WriteArray(key, source) } -> std::same_as<archive::ArchiveResult>;
@@ -83,11 +83,11 @@ namespace archive_reflection
             [[nodiscard]] bool RegisterArray()
         {
             return Register<T>(
-                [](archive::GlazeArchiveBase& ar, std::string_view key, const T& value) -> archive::ArchiveResult
+                [](archive::IArchive& ar, std::string_view key, const T& value) -> archive::ArchiveResult
                 {
                     return ar.WriteArray(key, value);
                 },
-                [](const archive::GlazeArchiveBase& ar, std::string_view key, T& value) -> archive::ArchiveResult
+                [](const archive::IArchive& ar, std::string_view key, T& value) -> archive::ArchiveResult
                 {
                     return ar.ReadArray(key, value);
                 });
@@ -98,17 +98,17 @@ namespace archive_reflection
         [[nodiscard]] bool RegisterMap()
         {
             return Register<T>(
-                [](archive::GlazeArchiveBase& ar, std::string_view key, const T& value) -> archive::ArchiveResult
+                [](archive::IArchive& ar, std::string_view key, const T& value) -> archive::ArchiveResult
                 {
                     return ar.WriteMap(key, value);
                 },
-                [](const archive::GlazeArchiveBase& ar, std::string_view key, T& value) -> archive::ArchiveResult
+                [](const archive::IArchive& ar, std::string_view key, T& value) -> archive::ArchiveResult
                 {
                     return ar.ReadMap(key, value);
                 });
         }
 
-        [[nodiscard]] std::optional<archive::ArchiveResult> WriteValue(archive::GlazeArchiveBase& ar,
+        [[nodiscard]] std::optional<archive::ArchiveResult> WriteValue(archive::IArchive& ar,
             std::string_view key, const reflection::ValueView& value) const
         {
             const auto found = m_codecs.find(value.GetCppType());
@@ -121,7 +121,7 @@ namespace archive_reflection
             return found->second.Write(ar, key, value);
         }
 
-        [[nodiscard]] std::optional<archive::ArchiveResult> ReadProperty(const archive::GlazeArchiveBase& ar,
+        [[nodiscard]] std::optional<archive::ArchiveResult> ReadProperty(const archive::IArchive& ar,
             const reflection::PropertyInfo& property, const reflection::ObjectView& object) const
         {
             const auto current = property.TryReadValue(object);
@@ -144,10 +144,10 @@ namespace archive_reflection
     private:
         struct Codec
         {
-            std::function<archive::ArchiveResult(archive::GlazeArchiveBase&,
+            std::function<archive::ArchiveResult(archive::IArchive&,
                 std::string_view, const reflection::ValueView&)> Write;
 
-            std::function<archive::ArchiveResult(const archive::GlazeArchiveBase&,
+            std::function<archive::ArchiveResult(const archive::IArchive&,
                 const reflection::PropertyInfo&, const reflection::ObjectView&)> Read;
         };
 

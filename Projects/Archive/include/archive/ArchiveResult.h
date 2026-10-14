@@ -16,7 +16,9 @@ namespace archive
         FileWriteFailed,
         InvalidOperation,
         IndexOutOfRange,
-        UnsupportedType
+        UnsupportedType,
+        InvalidDocument
+
     };
 
     struct ArchiveResult
