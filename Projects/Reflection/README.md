@@ -12,16 +12,21 @@
 - `generator`: 헤더 분석과 등록 코드 생성
 - `cmake/ReflectionGenerate.cmake`: 빌드 시 코드 생성 연결
 - `examples`: 기능과 실패 조건 검증
-- `../ReflectionConsumer`: 별도 소비자 프로젝트
+- [`../ReflectionConsumer`](../ReflectionConsumer): 소스 포함 방식의 별도 소비자 프로젝트
+- [`../ReflectionPackageCheck`](../ReflectionPackageCheck): 설치 패키지 방식의 별도 소비자 프로젝트
 
-기본 CMake 구성은 Runtime만 빌드합니다.
-Generator는 `REFLECTION_BUILD_GENERATOR=ON`,
-검증 예제는 `REFLECTION_BUILD_EXAMPLE=ON`으로 명시적으로 활성화합니다.
-예제를 빌드하려면 Generator와 대응하는 Clang resource 경로가 필요합니다.
+현재 소스 CMake 구성은 Reflection Runtime과 ReflectionGenerator 타깃을 함께 정의합니다.
+Generator를 제외하는 `REFLECTION_BUILD_GENERATOR` 옵션은 현재 제공하지 않습니다.
 
-Runtime은 LLVM에 의존하지 않습니다.
-Generator를 빌드할 때 LLVM·Clang 개발 라이브러리가 필요합니다.
-소비자는 미리 빌드된 Generator 실행 파일을 사용할 수 있습니다.
+`REFLECTION_BUILD_EXAMPLE=ON`으로 검증 예제를 활성화할 수 있습니다.
+예제의 코드 생성에는 Generator와 대응하는 Clang resource 디렉터리가 필요합니다.
+
+Runtime 자체는 LLVM에 의존하지 않습니다.
+다만 Reflection 소스를 `add_subdirectory()`로 포함하면
+Generator 구성도 실행되므로 LLVM·Clang 개발 라이브러리가 필요합니다.
+
+LLVM 의존성 없이 Runtime만 연결하려면 설치된 Reflection 패키지를 사용합니다.
+설치 패키지에는 Generator 실행 파일과 Clang resource 디렉터리가 포함되지 않습니다.
 
 ## 검증 환경
 
@@ -145,8 +150,8 @@ Reflection 소스 디렉터리를 프로젝트에 포함하고 생성 함수를 
 cmake_minimum_required(VERSION 3.21)
 project(MyApp LANGUAGES CXX)
 
-set(REFLECTION_BUILD_GENERATOR OFF)
 set(REFLECTION_BUILD_EXAMPLE OFF)
+set(REFLECTION_CLANG_RESOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../Reflection/dependencies/llvm-20.1.8/lib/clang/20")
 
 add_subdirectory(
     "${CMAKE_CURRENT_SOURCE_DIR}/../Reflection"
@@ -162,12 +167,23 @@ reflection_generate(
 )
 ```
 
-CMake 구성 시 다음 값을 지정합니다.
+`REFLECTION_CLANG_RESOURCE_DIR`에는 Generator와 대응하는 Clang resource 디렉터리를 지정합니다.
+위 예제는 소비자와 Reflection 디렉터리가 나란히 있는 배치를 가정합니다.
 
-- `REFLECTION_GENERATOR_EXECUTABLE`: 미리 빌드한 Generator 실행 파일
-- `REFLECTION_CLANG_RESOURCE_DIR`: 그 Generator와 대응하는 Clang resource 디렉터리
+현재 `cmake/ReflectionGenerator.cmake`는 Reflection 디렉터리의
+`dependencies/llvm-20.1.8/lib/cmake/llvm`과 `lib/cmake/clang`을 패키지 경로로 지정합니다.
+다른 SDK 배치를 사용하면 해당 스크립트의 경로도 조정해야 합니다.
 
-필요하면 생성 함수에서 직접 `GENERATOR`, `RESOURCE_DIR`을 지정할 수 있습니다.
+Generator는 다음 순서로 선택합니다.
+
+1. `reflection_generate()`의 `GENERATOR` 인자
+2. 현재 빌드에 정의된 `ReflectionGenerator` 타깃
+3. `REFLECTION_GENERATOR_EXECUTABLE`에 지정된 실행 파일
+
+소스 포함 방식에서는 ReflectionGenerator 타깃이 존재하므로 기본적으로 이를 사용합니다.
+외부 실행 파일을 우선 사용하려면 `GENERATOR` 인자로 직접 지정합니다.
+이 경우에도 현재 소스 구성의 LLVM·Clang 패키지 검색은 생략되지 않습니다.
+Clang resource 경로도 생성 함수의 `RESOURCE_DIR` 인자로 직접 지정할 수 있습니다.
 
 추가 분석 환경은 `INCLUDE_DIRECTORIES`, `COMPILE_OPTIONS`로 전달합니다.
 
@@ -188,7 +204,7 @@ reflection_generate(
 같은 타깃에 같은 MODULE 이름을 두 번 사용할 수 없습니다.
 같은 실행 파일에 포함되는 모듈 이름도 서로 다르게 지정해야 합니다.
 
-생성 파일은 빌드 디렉터리 아래에 배치됩니다.
+생성 파일은 생성 함수를 호출한 CMake 디렉터리의 빌드 디렉터리 아래에 배치됩니다.
 
 ```text
 reflection/<TARGET>/<MODULE>/<CONFIG>/<MODULE>.gen.cpp
@@ -197,11 +213,43 @@ reflection/<TARGET>/<MODULE>/<CONFIG>/<MODULE>.gen.d
 ```
 
 `.gen.cpp`는 등록 구현입니다.
-`.gen.h`는 등록 함수의 두 오버로드 선언입니다.
+`.gen.h`는 등록 함수의 두 오버로드 선언, 타입 등록 특수화와 타입 순회 템플릿을 포함합니다.
+분석 대상 헤더도 포함하므로 생성 헤더를 사용하는 소비자에게 해당 헤더의 의존성이 필요합니다.
 `.gen.d`는 간접 include를 포함한 의존 파일 목록이며,
 관련 헤더 변경 시 코드를 다시 생성하는 데 사용됩니다.
 
 생성 파일은 직접 수정하지 않습니다.
+
+### 생성 헤더의 타입 순회
+
+생성 헤더는 등록 함수 외에 컴파일 시점의 C++ 타입을 전달하는 순회 함수를 제공합니다.
+
+- `ForEach_<MODULE>_PropertyType(visitor)`
+	- 접근 가능한 프로퍼티의 소유 타입과 값 타입을 템플릿 인자로 전달합니다.
+	- 콜백 인자로 프로퍼티 이름을 전달합니다.
+	- 메타데이터 타입 목록 필터와 관계없이 모듈의 프로퍼티를 대상으로 합니다.
+
+- `ForEach_<MODULE>_Type(visitor)`
+	- `TYPE_LIST_METADATA`를 지정한 경우에만 생성합니다.
+	- 지정한 메타데이터 키의 값이 bool `true`인 타입만 대상으로 합니다.
+
+콜백이 false를 반환하면 순회를 중단하고 함수도 false를 반환합니다.
+끝까지 순회하면 true를 반환합니다.
+
+타입 순회 콜백은 `bool operator()<T>()`,
+프로퍼티 타입 순회 콜백은 `bool operator()<Owner, Value>(std::string_view name)` 형태입니다.
+TYPE_LIST_METADATA는 타입 순회 목록만 제한하며 Registry에 등록할 타입을 제한하지 않습니다.
+
+이 함수들은 Registry에 저장된 런타임 정보를 순회하는 API가 아닙니다.
+소비자가 실제 C++ 타입을 이용해 바인딩을 구성할 때 사용합니다.
+
+### 생성 include 경로
+
+`HEADER_INCLUDE_ROOT`를 지정하면 생성 코드의 입력 헤더 include를
+해당 디렉터리에 대한 상대 경로로 출력합니다.
+
+분석 대상 헤더는 모두 지정한 디렉터리 내부에 있어야 합니다.
+지정하지 않으면 입력 헤더의 절대 경로를 사용합니다.
 
 ### 라이브러리에서 등록 함수 공개
 
@@ -228,6 +276,7 @@ MyApp에서는 `App.gen.h`를 포함하고 `Register_App()`을 호출할 수 있
 
 생성 구현은 라이브러리에서 한 번만 컴파일합니다.
 생성 헤더의 자동 설치는 제공하지 않습니다.
+PUBLIC 지정이 Windows DLL 등록 함수의 export를 자동으로 처리하지는 않습니다.
 
 ## 설치된 패키지 연결
 
@@ -280,8 +329,11 @@ Generator와 Clang resource 디렉터리는 빌드 중 헤더 분석에 사용�
 
 설치된 라이브러리와 소비자는 아키텍처, 빌드 구성과 MSVC Runtime 설정을 맞춰야 합니다.
 
-현재 로컬 Reflection 빌드는 CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded,
-즉 /MT를 사용합니다. 이번 PackageCheck도 Windows x64, Release, /MT로 구성합니다.
+`generator-x64` 프리셋은 `CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded`로
+Windows x64 Release 빌드를 구성합니다.
+
+이 프리셋으로 빌드·설치한 정적 Runtime을 사용하면 소비자도 /MT 설정을 맞춰야 합니다.
+Reflection Runtime 타깃이 모든 소비자에게 /MT를 강제하는 것은 아닙니다.
 
 다른 Runtime 설정이나 Debug 구성을 사용하려면
 해당 설정으로 Runtime과 소비자를 함께 빌드해야 합니다.
@@ -308,6 +360,7 @@ PackageCheck는 검증용 프로젝트이며 최종 애플리케이션에 포함
 ```cpp
 #include <reflection/Reflection.h>
 #include "App.gen.h"
+#include <iostream>
 ```
 
 
@@ -796,6 +849,7 @@ Registry를 파괴하거나 대입해 내용을 교체한 이후에는 기존 �
 객체 생성·소멸과 포인터 소유권 관리는 현재 제공하지 않습니다.
 
 직렬화는 Reflection Runtime의 책임이 아닙니다.
-별도 Archive 모듈과 소비자 측 어댑터가 Reflection 정보를 사용하여 처리합니다.
+별도 [Archive](../Archive/README.md)와 [ReflectionArchive](../ReflectionArchive/README.md) 모듈이
+Reflection 정보를 사용하여 처리합니다.
 
 지원 범위는 공개 API, 콜백 연결 조건과 검증 예제를 기준으로 합니다.

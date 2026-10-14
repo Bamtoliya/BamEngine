@@ -1,21 +1,23 @@
 ﻿# Archive
 
-Glaze를 사용하는 C++23 JSON Archive 모듈입니다.
+Glaze를 사용하는 C++23 JSON / BEVE Archive 모듈입니다.
 Archive 코어는 엔진, 에디터, Reflection, GLM에 의존하지 않습니다.
 
 ## 구성과 의존성
 
-- `GlazeArchiveBase`: 값 변환, 객체·배열 접근, 파일 입출력
+- `IArchive`: 값·컨테이너·객체 직렬화와 문서·파일 입출력의 공통 인터페이스
+- `GlazeArchiveBase`: 공통 문서 저장소와 값 변환, 객체·배열 접근 구현
 - `JsonArchive`: JSON 문서 분석과 출력
+- `BeveArchive`: BEVE 바이너리 문서 분석과 출력
 - `ArchiveResult`: 오류 코드와 필드 위치
 - `Unicode`: wstring과 UTF-8 변환
 
 CMake 타깃은 `Archive::Json`입니다.
-공개 헤더와 Glaze 사용 조건을 전달하는 INTERFACE 라이브러리입니다.
-별도 Archive 정적 라이브러리를 생성하지 않습니다.
+현재 이름과 달리 JSON과 BEVE 구현을 함께 포함하는 정적 라이브러리입니다.
+공개 헤더, C++23 요구 조건과 Glaze 의존성을 소비자에게 전달합니다.
 
-현재 구현 형식은 JSON입니다.
-BEVE와 Binary 형식은 구현하지 않았습니다.
+기존 엔진의 BinaryArchive 형식은 제공하지 않습니다.
+BEVE 지원이 기존 Binary 파일과의 호환성을 의미하지는 않습니다.
 
 ## 기본 사용
 
@@ -57,8 +59,54 @@ int main()
 }
 ```
 
-문서의 최상위 값은 JSON 객체여야 합니다.
-파일 입출력에는 SaveToFile과 LoadFromFile을 사용합니다.
+## 문서 형식과 파일 입출력
+
+JSON과 BEVE는 같은 값·컨테이너·객체 API를 사용합니다.
+문서의 최상위 값은 객체여야 합니다.
+
+- JSON: `JsonArchive::Parse()` / `JsonArchive::ToJson()`
+- BEVE: `BeveArchive::Parse()` / `BeveArchive::ToBeve()`
+- 공통 문서 API: `IArchive::Decode()` / `IArchive::Encode()`
+- 공통 파일 API: `SaveToFile()` / `LoadFromFile()`
+
+```cpp
+#include <archive/BeveArchive.h>
+
+#include <string>
+
+int main()
+{
+    archive::BeveArchive writer;
+    if (!writer.Write("Level", 7))
+    {
+        return 1;
+    }
+
+    std::string bytes;
+    if (!writer.ToBeve(bytes))
+    {
+        return 2;
+    }
+
+    archive::BeveArchive reader;
+    int level = 0;
+    if (!reader.Parse(bytes) || !reader.Read("Level", level))
+    {
+        return 3;
+    }
+
+    return level == 7 ? 0 : 4;
+}
+```
+
+BEVE의 std::string 출력은 텍스트가 아닌 바이트 버퍼입니다.
+NUL을 포함할 수 있으므로 문자열 길이를 유지하여 전달해야 합니다.
+
+파일 확장자로 형식을 자동 선택하지 않습니다.
+생성한 Archive 객체의 형식에 따라 파일을 저장하고 읽습니다.
+
+객체 접근을 시작한 뒤 EndObject()로 닫지 않은 상태에서는
+문서 인코딩·디코딩과 파일 입출력을 수행할 수 없습니다.
 
 ## 값과 문자열
 
@@ -83,13 +131,14 @@ ReadArray는 다음 컨테이너를 대상으로 제공합니다.
 - std::set
 - std::unordered_set
 
-std::array 읽기는 JSON 배열 길이가 N과 정확히 일치해야 합니다.
+std::array 읽기는 저장된 배열 길이가 N과 정확히 일치해야 합니다.
 set 읽기는 중복 요소가 있으면 실패합니다.
 
 WriteMap과 ReadMap은 키와 값이 지원하는 스칼라 타입인
 std::map과 std::unordered_map을 처리합니다.
 
-map은 JSON 객체의 멤버 이름으로 키를 변환하지 않고 다음 형태로 저장합니다.
+map은 객체의 멤버 이름으로 키를 변환하지 않고 Key와 Value를 갖는 항목의 배열로 저장합니다.
+다음은 JSON으로 출력한 예입니다.
 
 ```json
 {
@@ -112,7 +161,7 @@ WriteObject와 ReadObject는 사용자 콜백으로 객체의 필드를 처리�
 WriteObjectArray와 ReadObjectArray는 기본 allocator의 vector<T>를 처리합니다.
 WriteObjectMap과 ReadObjectMap은 스칼라 키와 객체 값을 갖는 map을 처리합니다.
 
-객체 배열의 요소는 필드가 들어 있는 JSON 객체로 저장합니다.
+객체 배열의 요소는 필드가 들어 있는 객체로 저장합니다.
 객체 map의 항목은 Key와 객체 형태의 Value를 갖습니다.
 
 객체 컨테이너 읽기는 새 요소를 생성하여 컨테이너를 교체합니다.
@@ -137,35 +186,26 @@ ReadObject는 대상 객체를 복사하여 콜백을 실행한 뒤 성공할 �
 메모리 할당이나 사용자 타입·콜백의 예외를
 ArchiveResult로 변환하는 일반적인 예외 처리 계층은 제공하지 않습니다.
 
+메모리상의 임시 값 반영과 파일 저장의 원자성은 별개입니다.
+
+SaveToFile은 문서 인코딩이 성공한 뒤 대상 파일을 열어 기존 내용을 덮어씁니다.
+임시 파일 저장 후 교체하는 방식은 제공하지 않습니다.
+파일 쓰기 실패 시 기존 파일 내용의 보존을 보장하지 않습니다.
+
+사용자 타입의 대입이나 콜백에서 예외가 발생한 경우에도
+대상과 외부 상태의 완전한 복원을 보장하지 않습니다.
+
 ## Reflection과 GLM 연결
 
-ReflectionArchiveAdapter와 PropertyArchiveCodecs는 별도 ReflectionArchive 모듈이 제공합니다.
-소비자는 ReflectionArchive::Adapter 타깃을 연결합니다.
-Archive 코어의 설치 패키지에는 포함하지 않습니다.
+Reflection 기반 직렬화는 별도 [ReflectionArchive](../ReflectionArchive/README.md) 모듈이 제공합니다.
+소비자는 `ReflectionArchive::Adapter` 타깃을 연결합니다.
 
-GlmArchiveAdapter는 현재 엔진의 소비자 측 어댑터로 유지합니다.
+ReflectionArchiveAdapter와 PropertyArchiveCodecs는
+Archive 코어의 설치 패키지에 포함되지 않습니다.
+코덱 등록, 메타데이터 정책과 객체 복원 규칙은 ReflectionArchive 문서에서 설명합니다.
 
-PropertyCodecs의 RegisterArray<T>와 RegisterMap<T>에는
-전체 컨테이너 타입을 지정합니다.
-
-RegisterObjectArray<T>에는 vector의 요소 타입을 지정합니다.
-RegisterObjectMap<Map>에는 전체 map 타입을 지정합니다.
-두 객체 코덱에는 요소 또는 mapped 타입의 TypeInfo를 전달합니다.
-
-객체 코덱은 전달받은 TypeInfo를 복사하여 보관합니다.
-선택 인자인 Registry와 내부 요소 코덱은 빌려 사용하므로
-코덱 사용 중 살아 있어야 합니다.
-
-Reflection 어댑터가 해석하는 메타데이터는 다음과 같습니다.
-
-- `Serialize = false`: 저장·복원에서 제외
-- `Optional = true`: 필드 누락 허용
-
-DisplayName은 JSON 필드 이름을 변경하지 않습니다.
-JSON 필드 이름은 프로퍼티 이름을 사용합니다.
-
-Optional 필드가 빠졌을 때 일반 객체 읽기는 복사한 기존 값을 유지합니다.
-새 요소를 만드는 객체 컨테이너 읽기는 요소의 기본값을 유지합니다.
+GLM 지원은 엔진의 소비자 측 GlmArchiveAdapter로 제공합니다.
+Archive 코어가 GLM 타입을 직접 처리하지는 않습니다.
 
 ## CMake 연결
 
@@ -197,11 +237,25 @@ Archive::Json은 C++23 요구 조건을 소비자에게 전달합니다.
 
 ## 검증 예제
 
-- ArchiveExample: 코어 JSON, 파일, 값·컨테이너, 실패 조건
-- ArchiveReflectionExample: 수동 등록 Reflection과 어댑터 연결
-- ArchiveGeneratedReflectionExample: 생성 등록과 어댑터 연결
-- ArchiveGlmExample: GLM 어댑터 연결
-- ArchiveEngineComponentExample: 실제 엔진 컴포넌트의 생성 등록 연결
+- `ArchiveExample`: JSON / BEVE, 파일 입출력, 값·컨테이너와 실패 조건 검사
+- `ArchiveReflectionExample`: 수동 Reflection 등록과 어댑터 연결 검사
+- `ArchiveGeneratedReflectionExample`: 생성 Reflection 등록과 어댑터 연결 검사
+- `ArchiveGlmExample`: 소비자 측 GLM 어댑터 연결 검사
+- `ArchiveEngineComponentExample`: 실제 엔진 컴포넌트 헤더의 생성 등록과 직렬화 검사
+- [`examples/package-consumer`](examples/package-consumer): 설치된 Archive 패키지 연결 검사
 
-Reflection·GLM·엔진 예제는 선택적으로 활성화합니다.
-이 예제들이 엔진 전체의 새 Reflection 전환 완료를 의미하지는 않습니다.
+예제 활성화 옵션:
+
+- `ARCHIVE_BUILD_EXAMPLE`: 코어 예제
+- `ARCHIVE_BUILD_GLM_EXAMPLE`: GLM 예제
+- `ARCHIVE_BUILD_REFLECTION_EXAMPLE`: 수동 Reflection 예제
+- `ARCHIVE_BUILD_GENERATED_EXAMPLE`: 생성 Reflection 및 엔진 컴포넌트 예제
+
+생성 Reflection 및 엔진 컴포넌트 예제를 구성하려면
+ARCHIVE_BUILD_REFLECTION_EXAMPLE과 ARCHIVE_BUILD_GENERATED_EXAMPLE을 모두 켜야 합니다.
+
+현재 Reflection 예제 구성은 Reflection::Runtime 타깃이 없으면 Reflection 소스를 포함합니다.
+이 경우 LLVM·Clang SDK가 필요합니다.
+생성 예제에는 대응하는 Clang resource 디렉터리도 필요합니다.
+
+예제와 검사 코드가 존재한다는 사실이 현재 구성에서 실행 검증을 완료했다는 뜻은 아닙니다.
