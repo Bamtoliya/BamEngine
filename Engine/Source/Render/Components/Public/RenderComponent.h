@@ -48,12 +48,6 @@ public:
 	EResult BindPipeline(class Mesh* mesh, class MaterialInterface* material, class RenderPass* renderPass);
 #pragma endregion
 
-#pragma region Save&Load
-public:
-	void Serialize(Archive& ar) override;
-#pragma endregion
-
-
 #pragma region Variable
 protected:
 	PROPERTY(EDITABLE)

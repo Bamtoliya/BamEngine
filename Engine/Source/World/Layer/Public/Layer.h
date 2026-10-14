@@ -1,7 +1,6 @@
 ﻿#pragma once
 
 #include "Base.h"
-#include "SerializableInterface.h"
 #include "Reflection/ReflectionMacro.h"
 #include "CommonInterface.h"
 #include "TypeIdentityInterface.h"
@@ -28,7 +27,7 @@ struct tagLayerCreateDesc
 #pragma endregion
  
 CLASS()
-class ENGINE_API Layer : public Base, public ITypeIdentity, public ISerializable, public IActive, public IVisible
+class ENGINE_API Layer : public Base, public ITypeIdentity, public IActive, public IVisible
 {
 	REFLECT_BASE()
 #pragma region Constructor&Destructor
@@ -90,14 +89,6 @@ public:
 	void SetFlags(ELayerFlags flags) { m_Flags = flags; }
 public:
 #pragma endregion
-
-
-#pragma region Save&Load
-public:
-	void Serialize(class Archive& ar) override;
-	void Deserialize(class Archive& ar) override;
-#pragma endregion
-
 
 
 #pragma region Variable

@@ -6,6 +6,7 @@
 #include "ImGuiManager.h"
 #include "SelectionManager.h"
 #include "AssetManager.h"
+#include <archive/JsonArchive.h>
 
 
 BEGIN(Editor)
@@ -990,16 +991,14 @@ void Application::StopPlayMode()
 
 void Application::SnapshotScene()
 {
-    Scene* scene = SceneManager::Get().GetCurrentScene();
-    if (!scene) return;
+    if (!SceneManager::Get().GetCurrentScene())
+        return;
 
-    JsonArchive archive(EArchiveMode::Write);
-    if (archive.PushScope(entt::resolve(scene->GetTypeID()).info().name().data()))
-    {
-        scene->Serialize(archive);
-        archive.PopScope();
-    }
-    archive.SaveToFile(WStrToStr(m_SnapshotPath));
+    archive::JsonArchive ar;
+    const EResult result = SceneManager::Get().SaveScene(ar, m_SnapshotPath);
+
+    if (result != EResult::Success)
+        ENGINE_LOG_ERROR("Scene snapshot failed: {}", ResultToString(result));
 }
 
 EResult Application::RestoreScene()

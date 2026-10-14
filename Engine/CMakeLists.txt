@@ -99,7 +99,6 @@ target_include_directories(Engine
 # 외부 라이브러리 연결
 target_link_libraries(Engine
     PUBLIC
-        Reflection::Core
         Reflection::Runtime
         ReflectionArchive::Adapter
         EnTT::EnTT

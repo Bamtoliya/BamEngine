@@ -2,8 +2,8 @@
 
 #include "Base.h"
 #include "Reflection/ReflectionMacro.h"
-#include "SerializableInterface.h"
 #include "TypeIdentityInterface.h"
+#include <archive/ArchiveResult.h>
 
 #define DECLARE_RESOURCE(ClassType) \
 public: \
@@ -12,9 +12,13 @@ private:
 
 struct ResourceCreateDesc
 {
-	wstring		Key = L"";
-	wstring		Path = L"";
+	std::wstring		Key = L"";
+	std::wstring		Path = L"";
 };
+
+BEGIN(archive)
+class IArchive;
+END
 
 BEGIN(Engine)
 
@@ -59,7 +63,7 @@ struct ENGINE_API ResourceBinaryHeader
 
 
 CLASS()
-class ENGINE_API Resource : public ISerializable, public ITypeIdentity
+class ENGINE_API Resource : public ITypeIdentity
 {
 	REFLECT_BASE()
 	using DESC = ResourceCreateDesc;
@@ -103,11 +107,10 @@ public:
 	void SetPath(const wstring& path) { m_Path = path; }
 #pragma endregion
 
-
-#pragma region Save & Load
+#pragma region Save&Load
 public:
-	virtual void Serialize(Archive& ar) override;
-	virtual void Deserialize(Archive& ar) override;
+	[[nodiscard]] virtual archive::ArchiveResult WriteArchive(archive::IArchive& ar) const;
+	[[nodiscard]] virtual archive::ArchiveResult ReadArchive(const archive::IArchive& ar);
 #pragma endregion
 
 #pragma region Member Variables

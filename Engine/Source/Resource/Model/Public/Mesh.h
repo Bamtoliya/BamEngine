@@ -126,13 +126,6 @@ public:
 	vec3 GetExtents() const { return (m_BoundingBoxMax - m_BoundingBoxMin) * 0.5f; }
 #pragma endregion
 
-
-#pragma region Save&Load
-public:
-	virtual void Serialize(Archive& ar) override;
-	virtual void Deserialize(Archive& ar) override;
-#pragma endregion
-
 private:
 	// 캐싱된 버퍼 배열을 다시 구축하는 내부 헬퍼
 	void RebuildCachedBuffers();

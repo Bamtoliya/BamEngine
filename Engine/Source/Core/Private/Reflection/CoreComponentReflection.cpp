@@ -7,6 +7,7 @@
 #include "Components/TransformComponent.h"
 #include "Components/WorldTransformComponent.h"
 #include "BamCoreComponents.gen.h"
+#include <string_view>
 
 #include <iostream>
 
@@ -34,6 +35,24 @@ namespace
             {
                 return Bindings.Register<T>();
             });
+
+            if (Ready)
+            {
+                Ready = reflection_generated::ForEach_BamCoreComponents_PropertyType(
+                    [&]<typename Owner, typename Value>(std::string_view name)
+                {
+                    const auto* type = Registry.FindType<Owner>();
+                    const auto* property = type != nullptr ? type->FindProperty(name) : nullptr;
+
+                    if (property == nullptr || !property->IsValueType<Value>())
+                    {
+                        std::cerr << "Reflected property type mismatch: " << name << '\n';
+                        return false;
+                    }
+
+                    return true;
+                });
+            }
 
             if (!Ready)
             {

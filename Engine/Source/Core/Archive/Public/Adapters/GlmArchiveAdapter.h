@@ -1,6 +1,6 @@
 ﻿#pragma once
 
-#include <archive/GlazeArchiveBase.h>
+#include <archive/ArchiveInterface.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 
@@ -9,14 +9,12 @@
 
 namespace archive_glm
 {
-    [[nodiscard]] inline archive::ArchiveResult WriteVec3(
-        archive::GlazeArchiveBase& ar, std::string_view key, const glm::vec3& value)
+    [[nodiscard]] inline archive::ArchiveResult WriteVec3(archive::IArchive& ar, std::string_view key, const glm::vec3& value)
     {
         return ar.WriteArray(key, std::array<float, 3>{ value.x, value.y, value.z });
     }
 
-    [[nodiscard]] inline archive::ArchiveResult ReadVec3(
-        const archive::GlazeArchiveBase& ar, std::string_view key, glm::vec3& value)
+    [[nodiscard]] inline archive::ArchiveResult ReadVec3(const archive::IArchive& ar, std::string_view key, glm::vec3& value)
     {
         std::array<float, 3> components{};
         const auto result = ar.ReadArray(key, components);
@@ -30,14 +28,12 @@ namespace archive_glm
         return {};
     }
 
-    [[nodiscard]] inline archive::ArchiveResult WriteQuat(
-        archive::GlazeArchiveBase& ar, std::string_view key, const glm::quat& value)
+    [[nodiscard]] inline archive::ArchiveResult WriteQuat(archive::IArchive& ar, std::string_view key, const glm::quat& value)
     {
         return ar.WriteArray(key, std::array<float, 4>{ value.x, value.y, value.z, value.w });
     }
 
-    [[nodiscard]] inline archive::ArchiveResult ReadQuat(
-        const archive::GlazeArchiveBase& ar, std::string_view key, glm::quat& value)
+    [[nodiscard]] inline archive::ArchiveResult ReadQuat(const archive::IArchive& ar, std::string_view key, glm::quat& value)
     {
         std::array<float, 4> components{};
         const auto result = ar.ReadArray(key, components);
@@ -57,8 +53,7 @@ namespace archive_glm
         return {};
     }
 
-    [[nodiscard]] inline archive::ArchiveResult WriteMat4(
-        archive::GlazeArchiveBase& ar, std::string_view key, const glm::mat4& value)
+    [[nodiscard]] inline archive::ArchiveResult WriteMat4(archive::IArchive& ar, std::string_view key, const glm::mat4& value)
     {
         std::array<float, 16> components{};
 
@@ -73,8 +68,7 @@ namespace archive_glm
         return ar.WriteArray(key, components);
     }
 
-    [[nodiscard]] inline archive::ArchiveResult ReadMat4(
-        const archive::GlazeArchiveBase& ar, std::string_view key, glm::mat4& value)
+    [[nodiscard]] inline archive::ArchiveResult ReadMat4(const archive::IArchive& ar, std::string_view key, glm::mat4& value)
     {
         std::array<float, 16> components{};
         const auto result = ar.ReadArray(key, components);

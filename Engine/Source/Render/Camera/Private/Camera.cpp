@@ -175,12 +175,3 @@ void Camera::SetMainCamera(bool isMain)
 		manager.SetMainCamera(nullptr);
 }
 #pragma endregion
-
-#pragma region Save&Load
-void Camera::Deserialize(Archive& ar)
-{
-	CameraManager::Get().AddCamera(this);
-	if(m_IsMainCamera)
-		CameraManager::Get().SetMainCamera(this);
-}
-#pragma endregion

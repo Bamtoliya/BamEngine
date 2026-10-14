@@ -4,7 +4,6 @@
 #include "Layer.h"
 #include "SceneManager.h"
 #include "Transform.h"
-#include "SerializationHelper.h"
 
 static uint64 g_GameObjectIDCounter = 1;
 
@@ -391,31 +390,6 @@ void GameObject::SetLayerIndex(uint32 layerIndex)
 	for(auto& child : m_Childs)
 	{
 		child->SetLayerIndex(layerIndex);
-	}
-}
-#pragma endregion
-
-#pragma region Save&Load
-void GameObject::Serialize(Archive& ar)
-{
-	SerializationHelper::SerializeStaticType(ar, *this);
-}
-void GameObject::Deserialize(Archive& ar)
-{
-	for (const auto& comp : m_Components)
-	{
-		if (!comp) continue;
-
-		comp->SetOwner(this);
-		comp->SetDirty();
-		comp->Deserialize(ar);
-	}
-
-	for (const auto& child : m_Childs)
-	{
-		if (!child) continue;
-		child->SetParent(this);
-		child->Deserialize(ar);
 	}
 }
 #pragma endregion

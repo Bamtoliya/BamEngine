@@ -33,7 +33,7 @@ ENABLE_BITMASK_OPERATORS(EObjectFlag)
 
 class Transform;
 CLASS()
-class ENGINE_API GameObject : public Base, public ITypeIdentity, public ISerializable, public IActive, public IVisible
+class ENGINE_API GameObject : public Base, public ITypeIdentity, public IActive, public IVisible
 {
 	REFLECT_BASE()
 
@@ -201,16 +201,6 @@ public:
 public:
 	Transform* GetTransform();
 #pragma endregion
-
-
-#pragma region Save&Load
-public:
-	virtual void Serialize(Archive& ar) override;
-	virtual void Deserialize(Archive& ar) override;
-#pragma endregion
-
-
-
 
 #pragma region Variables
 protected:

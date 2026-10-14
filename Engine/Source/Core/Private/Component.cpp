@@ -1,6 +1,5 @@
-#pragma once
+﻿#pragma once
 #include "Component.h"
-#include "SerializationHelper.h"
 
 #pragma region Constructor&Destructor
 EResult Component::Initialize(void* arg)
@@ -21,15 +20,3 @@ void Component::Free()
 	Base::Free();
 }
 #pragma endregion
-
-#pragma region Save&Load
-void Component::Serialize(Archive& ar)
-{
-	SerializationHelper::SerializeStaticType(ar, *this);
-}
-void Component::Deserialize(Archive& ar)
-{
-	//SerializationHelper::SerializeReflectionProperties(ar, &GetTypeInfo(), this);
-}
-#pragma endregion
-

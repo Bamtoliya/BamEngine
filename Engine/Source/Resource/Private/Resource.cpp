@@ -1,80 +1,13 @@
 ﻿#pragma once
 
 #include "Resource.h"
-#include "SerializationHelper.h"
 
-void Resource::Serialize(Archive& ar)
+archive::ArchiveResult Resource::WriteArchive(archive::IArchive&) const
 {
-    ResourceBinaryHeader header;
-    header.ResourceType = m_ResourceType;
-    header.Version = m_Version;
-
-    if (ar.PushScope("AssetHeader"))
-    {
-        SerializationHelper::SerializeStaticType(ar, header);
-        ar.PopScope();
-    }
-
-    SerializationHelper::SerializeStaticType(ar, *this);
+	return { archive::ArchiveErrorCode::UnsupportedType, "Resource.WriteArchive" };
 }
 
-void Resource::Deserialize(Archive& ar)
+archive::ArchiveResult Resource::ReadArchive(const archive::IArchive&)
 {
-    if (ar.HasError()) return;
-
-    if (!ar.IsReading())
-    {
-        ar.SetError();
-        return;
-    }
-
-    const wstring fallbackKey = m_Key;
-    const wstring fallbackPath = m_Path;
-    const EResourceType expectedType = m_ResourceType;
-
-    ResourceBinaryHeader header;
-
-    if (!ar.PushScope("AssetHeader"))
-    {
-        ar.SetError();
-        fmt::print(stderr, "Invalid asset file: Missing AssetHeader.\n");
-        return;
-    }
-
-    SerializationHelper::SerializeStaticType(ar, header);
-    ar.PopScope();
-
-    if (header.MagicNumber != ENGINE_ASSET_MAGIC)
-    {
-        ar.SetError();
-        fmt::print(stderr, "Invalid asset file: Magic number mismatch.\n");
-        return;
-    }
-
-    if (expectedType != EResourceType::Unknown &&
-        header.ResourceType != EResourceType::Unknown &&
-        header.ResourceType != expectedType)
-    {
-        ar.SetError();
-        fmt::print(stderr, "Invalid asset file: Resource type mismatch.\n");
-        return;
-    }
-
-    m_ResourceType = header.ResourceType;
-    m_Version = header.Version;
-
-    SerializationHelper::SerializeStaticType(ar, *this);
-
-    if (m_Path.empty())
-    {
-        m_Path = fallbackPath;
-    }
-
-    if (m_Key.empty())
-    {
-        m_Key = fallbackKey.empty() ? m_Path : fallbackKey;
-    }
-
-    m_Path = NormalizePath(m_Path);
-    m_Key = NormalizePath(m_Key.empty() ? m_Path : m_Key);
+	return { archive::ArchiveErrorCode::UnsupportedType, "Resource.ReadArchive" };
 }

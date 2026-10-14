@@ -1,12 +1,16 @@
 ﻿#pragma once
 
 #include "Base.h"
-#include "SerializableInterface.h"
 #include "Reflection/ReflectionMacro.h"
 #include "Entity.h"
 #include "TypeIdentityInterface.h"
 #include "Reflection/ComponentReflectionBindings.h"
 #include <utility>
+#include <archive/ArchiveResult.h>
+
+BEGIN(archive)
+class IArchive;
+END
 
 BEGIN(Engine)
 
@@ -28,7 +32,7 @@ enum class ESceneFlags : uint8
 ENABLE_BITMASK_OPERATORS(ESceneFlags)
 
 CLASS()
-class ENGINE_API Scene : public Base, public ITypeIdentity, public ISerializable
+class ENGINE_API Scene : public Base, public ITypeIdentity
 {
 	REFLECT_BASE()
 #pragma region Constructor&Destructor
@@ -173,8 +177,8 @@ public:
 
 #pragma region Save&Load
 public:
-	virtual void Serialize(class Archive& ar) override;
-	virtual void Deserialize(class Archive& ar) override;
+	[[nodiscard]]
+	archive::ArchiveResult WriteArchive(archive::IArchive& ar) const;
 #pragma endregion
 
 #pragma region Variable

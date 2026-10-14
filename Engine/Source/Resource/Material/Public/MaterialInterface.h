@@ -176,9 +176,6 @@ public:
 
 
 #pragma region Save&Load
-public:
-	virtual void Deserialize(Archive& ar) override;
-
 protected:
 	void RebuildTextureBindingCache();
 	int32 FindTextureBindingIndexByName(const string& name) const;

@@ -107,13 +107,6 @@ public:
 	RHIShaderDesc BuildRHIShaderDesc() const;
 #pragma endregion
 
-#pragma region Save&Load
-public:
-	void Serialize(Archive& ar) override;
-	void Deserialize(Archive& ar) override;
-#pragma endregion
-
-
 #pragma region Member Variables
 private:
 	PROPERTY(READONLY)

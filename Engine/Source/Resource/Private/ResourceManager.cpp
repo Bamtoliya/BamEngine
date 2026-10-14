@@ -1,13 +1,8 @@
 ﻿#pragma once
 #include "ResourceManager.h"
 #include "Resources.h"
-#include "Archives.h"
-#include <reflection/runtime/Registry.h>
-#include <reflection/Registry.h>
 #include <type_traits>
 
-static_assert(!std::is_same_v<legacy_reflection::Registry, reflection::Registry>);
-static_assert(!std::is_same_v<legacy_reflection::TypeInfo, reflection::TypeInfo>);
 
 namespace
 {
@@ -128,13 +123,11 @@ Handle ResourceManager::LoadFile(const wstring& filePath)
 
 	// .bamshader.json 같은 이중 확장자 지원:
 	// 라우팅은 .bamshader 로더를 타고, 실제 로드는 원본 .json 경로를 유지한다.
-	if (extension == L".json")
+	if (extension == L".json" || extension == L".beve")
 	{
 		const wstring embeddedExtension = ToLowerExt(absolutePath.stem().extension().wstring());
 		if (embeddedExtension.rfind(L".bam", 0) == 0)
-		{
 			logicalExtension = embeddedExtension;
-		}
 	}
 
 	auto iter = m_LoaderRegistry.find(logicalExtension);
@@ -282,21 +275,6 @@ vector<Handle> ResourceManager::GetResourceHandles(uint64 typeHash)
 		return it->second; // 값 복사 반환 — 락 보호 하에 복사 완료
 	}
 	return {};
-}
-vector<Handle> ResourceManager::GetResourceHandlesIncludingDerived(uint64 baseTypeID)
-{
-	vector<Handle> result;
-	// 1. 기본 타입의 핸들들 추가
-	const auto& baseHandles = GetResourceHandles(baseTypeID);
-	result.insert(result.end(), baseHandles.begin(), baseHandles.end());
-	// 2. 리플렉션에서 파생 타입 ID 목록을 가져와 각각의 핸들도 추가
-	const auto derivedIDs = legacy_reflection::Registry::Get().GetDerivedTypeIDs(baseTypeID);
-	for (uint64 derivedID : derivedIDs)
-	{
-		const auto& derivedHandles = GetResourceHandles(derivedID);
-		result.insert(result.end(), derivedHandles.begin(), derivedHandles.end());
-	}
-	return result;
 }
 EResult ResourceManager::DestroyResource(Resource* resource)
 {
@@ -567,24 +545,57 @@ Resource* ResourceManager::FreeSlotInternal(uint32 slotIndex)
 #pragma region Save & Load 
 EResult ResourceManager::SaveToJsonFile(Resource* resource, const wstring& filePath)
 {
+	if (!resource || filePath.empty())
+		return EResult::InvalidArgument;
 
-	JsonArchive archive(EArchiveMode::Write);
-	resource->Serialize(archive);
-	return archive.SaveToFile(WStrToStr(filePath)) ? EResult::Success : EResult::Fail;
+	archive::JsonArchive ar;
+	auto result = resource->WriteArchive(ar);
+
+	if (result)
+		result = ar.SaveToFile(std::filesystem::path(filePath));
+
+	if (!result)
+	{
+		ENGINE_LOG_ERROR("JSON resource save failed: code={}, field={}, path={}",
+			static_cast<int>(result.Code), result.Field, WStrToStr(filePath));
+
+		return result.Code == archive::ArchiveErrorCode::UnsupportedType
+			? EResult::NotImplemented : EResult::Fail;
+	}
+
+	return EResult::Success;
 }
 
 EResult ResourceManager::SaveToBeveFile(Resource* resource, const wstring& filePath)
 {
-	BeveArchive archive(EArchiveMode::Write);
-	resource->Serialize(archive);
-	return archive.SaveToFile(WStrToStr(filePath)) ? EResult::Success : EResult::Fail;
+	if (!resource || filePath.empty())
+		return EResult::InvalidArgument;
+
+	archive::BeveArchive ar;
+	auto result = resource->WriteArchive(ar);
+
+	if (result)
+		result = ar.SaveToFile(std::filesystem::path(filePath));
+
+	if (!result)
+	{
+		ENGINE_LOG_ERROR("BEVE resource save failed: code={}, field={}, path={}",
+			static_cast<int>(result.Code), result.Field, WStrToStr(filePath));
+
+		return result.Code == archive::ArchiveErrorCode::UnsupportedType
+			? EResult::NotImplemented : EResult::Fail;
+	}
+
+	return EResult::Success;
 }
 
 EResult ResourceManager::SaveToBinaryFile(Resource* resource, const wstring& filePath)
 {
-	BinaryArchive archive(EArchiveMode::Write);
-	resource->Serialize(archive);
-	return archive.SaveToFile(WStrToStr(filePath)) ? EResult::Success : EResult::Fail;
+	if (!resource || filePath.empty())
+		return EResult::InvalidArgument;
+
+	ENGINE_LOG_WARN("Legacy binary resource saving is unavailable: {}", WStrToStr(filePath));
+	return EResult::NotImplemented;
 }
 
 Handle ResourceManager::LoadFromJsonFile(const wstring& filePath)
@@ -599,6 +610,7 @@ Handle ResourceManager::LoadFromBeveFile(const wstring& filePath)
 
 Handle ResourceManager::LoadFromBinaryFile(const wstring& filePath)
 {
-	return LoadFile(filePath);
+	ENGINE_LOG_WARN("Legacy binary resource loading is unavailable: {}", WStrToStr(filePath));
+	return {};
 }
 #pragma endregion

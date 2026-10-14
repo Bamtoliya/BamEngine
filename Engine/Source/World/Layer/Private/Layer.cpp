@@ -1,8 +1,7 @@
-#pragma once
+﻿#pragma once
 
 #include "Layer.h"
 #include "GameObject.h"
-#include "SerializationHelper.h"
 
 #pragma region Constructor&Destructor
 EResult Layer::Initialize(void* arg)
@@ -201,22 +200,5 @@ void Layer::SetAllObjectActive(bool active)
     {
         gameObject->SetActive(active);
     }
-}
-#pragma endregion
-
-
-#pragma region Save& Load
-void Layer::Serialize(Archive& ar)
-{
-    SerializationHelper::SerializeStaticType(ar, *this);
-}
-void Layer::Deserialize(Archive& ar)
-{
-	for (GameObject* gameObject : m_GameObjects)
-	{
-		if (!gameObject) continue;
-		gameObject->Deserialize(ar);
-		gameObject->SetLayerIndex(m_Index);
-	}
 }
 #pragma endregion

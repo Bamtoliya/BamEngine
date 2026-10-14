@@ -75,12 +75,6 @@ public:
 	void ClearTempData() { m_TempData.clear(); }
 #pragma endregion
 
-#pragma region Save&Load
-public:
-	virtual void Serialize(Archive& ar) override;
-	virtual void Deserialize(Archive& ar) override;
-#pragma endregion
-
 #pragma region Variable
 private:
 	class RHITexture* m_RHITexture = { nullptr };

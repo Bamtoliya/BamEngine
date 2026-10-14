@@ -6,7 +6,6 @@
 #include <stb_image.h>
 #include "LocalizationManager.h"
 #include "AssetManager.h"
-#include "Archives.h"
 #include "ImGuiManager.h"
 
 using namespace std;
@@ -737,12 +736,17 @@ void ContentBrowserPanel::OnExteranalDropped(const vector<string>& droppedFiles)
 }
 void ContentBrowserPanel::CreateEmptyMaterial(const filesystem::path& path)
 {
-	filesystem::path outputPath = path;
-	outputPath += "\\NewMaterial.bammat";
-	JsonArchive archive(EArchiveMode::Write);
+	const filesystem::path outputPath = path / L"NewMaterial.bammat.json";
 	Material* material = Engine::Material::CreateEmpty();
-	material->Serialize(archive);
-	archive.SaveToFile(outputPath.string());
-	ResourceManager::Get().DestroyResource(material);
+
+	if (!material)
+		return;
+
+	auto& resourceManager = ResourceManager::Get();
+	const EResult result = resourceManager.SaveToJsonFile(material, outputPath.wstring());
+	resourceManager.DestroyResource(material);
+
+	if (result != EResult::Success)
+		ENGINE_LOG_WARN("Material saving is unavailable: {}", ResultToString(result));
 }
 #pragma endregion

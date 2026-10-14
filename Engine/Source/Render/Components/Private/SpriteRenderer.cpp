@@ -197,12 +197,3 @@ EResult SpriteRenderer::UpdateMaterialInstance()
 	return EResult::Success;
 }
 #pragma endregion
-
-#pragma region Save&Load
-
-#pragma endregion
-
-void SpriteRenderer::Deserialize(Archive& ar)
-{
-	SetDirty();
-}

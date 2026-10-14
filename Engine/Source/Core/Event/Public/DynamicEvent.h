@@ -3,19 +3,14 @@
 #include "Types.h"
 #include "Delegate.h"
 #include "Macro.h"
-#include <reflection/core/ContainerInfo.h>
 #include "Reflection/ReflectionMacro.h"
 #include "Event.h"
+#include <variant>
 
 BEGIN(Engine)
 struct EventParameter
 {
-	legacy_reflection::EPropertyType Type;
-
-	int32 IntValue;
-	f32 FloatValue;
-	string StringValue;
-	bool BoolValue;
+	variant<int32, f32, string, bool> Value{ int32{0} };
 };
 
 struct EventBinding

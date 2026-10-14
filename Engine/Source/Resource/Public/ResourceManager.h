@@ -1,11 +1,12 @@
 ﻿#pragma once
 
-#include "Base.h"
 #include "Resources.h"
 #include "ResourceHandle.h"
-#include "Archives.h"
 #include "ResourceMetrics.h"
 #include "Logger.h"
+#include <archive/JsonArchive.h>
+#include <archive/BeveArchive.h>
+#include <cwctype>
 
 BEGIN(Engine)
 
@@ -55,7 +56,6 @@ public:
 	template<typename T>
 	vector<Handle> GetResourceHandles();
 	vector<Handle> GetResourceHandles(uint64 typeHash);
-	vector<Handle> GetResourceHandlesIncludingDerived(uint64 baseTypeID);
 public:
 	EResult ImportFolder(const wstring& folderPath);
 	Handle LoadFile(const wstring& filePath);

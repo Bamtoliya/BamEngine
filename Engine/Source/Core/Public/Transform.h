@@ -161,13 +161,6 @@ public:
 	void LookAt(const vec3& target, const vec3& up = glm::vec3(0, 1, 0));
 #pragma endregion
 
-
-#pragma region Save&Load
-public:
-	virtual void Serialize(Archive& ar) override;
-#pragma endregion
-
-
 #pragma region Variable
 private:
 

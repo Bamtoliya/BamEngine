@@ -417,11 +417,6 @@ EResult ImGuiManager::CreateResourceEditors()
 	textureEditor->Close();
 	AddImGuiPanel(textureEditor);
 
-	MaterialEditor* materialEditor = new MaterialEditor();
-	materialEditor->Initialize();
-	materialEditor->Close();
-	AddImGuiPanel(materialEditor);
-
 	ModelEditor* modelEditor = new ModelEditor();
 	modelEditor->Close();
 	AddImGuiPanel(modelEditor);

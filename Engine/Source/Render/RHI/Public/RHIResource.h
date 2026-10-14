@@ -4,7 +4,6 @@
 #include "RHI.h"
 #include "Structs.h"
 #include "RHITypes.h"
-#include "SerializableInterface.h"
 
 enum class ERHIResourceType
 {

@@ -21,7 +21,6 @@ class Camera;
 END
 
 BEGIN(Editor)
-class InspectorPanel;
 class CameraViewportPanel : public BaseViewportPanel
 {
 protected:
@@ -49,12 +48,6 @@ protected:
 	virtual void DrawCustomOptions() override;
 #pragma endregion
 
-#pragma region Draw Options Bar 
-protected:
-	void DrawCameraMenu();
-
-#pragma endregion
-
 #pragma region Camera Management
 public:
 	void SetCamera(Engine::Camera* camera) { m_Camera = camera; }
@@ -75,8 +68,6 @@ protected:
 	EditorCamera* m_OwnedCamera = { nullptr }; // 씬 카메라로 사용할 경우 할당
 	Engine::Camera* m_Camera = { nullptr };
 	bool m_OwnCamera = { false }; // true면 패널이 카메라를 소유, false면 외부에서 할당받은 카메라
-protected:
-	InspectorPanel* m_InspectorPanel = { nullptr };
 #pragma endregion
 };
 END

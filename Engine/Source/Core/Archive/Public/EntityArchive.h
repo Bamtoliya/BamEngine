@@ -11,7 +11,7 @@
 namespace Engine
 {
     [[nodiscard]] inline archive::ArchiveResult WriteEntityComponents(
-        archive::GlazeArchiveBase& ar, std::string_view key, const Scene& scene, const Entity& entity,
+        archive::IArchive& ar, std::string_view key, const Scene& scene, const Entity& entity,
         const archive_reflection::PropertyCodecs* codecs = nullptr)
     {
         const auto* registry = GetCoreComponentReflectionRegistry();
@@ -22,7 +22,7 @@ namespace Engine
         }
 
         return ar.WriteObject(key, entity,
-            [&scene, registry, codecs, key](archive::GlazeArchiveBase& temporary, const Entity& source)
+            [&scene, registry, codecs, key](archive::IArchive& temporary, const Entity& source)
             -> archive::ArchiveResult
             {
                 archive::ArchiveResult result;

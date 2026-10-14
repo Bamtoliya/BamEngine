@@ -16,7 +16,6 @@
 #include "GameObject.h"
 
 #include "LightManager.h"
-#include "SerializationHelper.h"
 #include "Transform.h"
 
 
@@ -201,67 +200,4 @@ EResult RenderComponent::BindPipeline(Mesh* mesh, MaterialInterface* material, R
 	return Renderer::Get().BindMeshPipeline(mesh, material, renderPass);
 }
 
-#pragma endregion
-
-#pragma region Save
-void RenderComponent::Serialize(Archive& ar)
-{
-	// 1) 기존 PROPERTY (m_Materials, m_DrawShadow 등) 직렬화
-	SerializationHelper::SerializeStaticType(ar, *this);
-
-	// 2) DynamicInstances inline 직렬화
-	if (ar.IsWriting())
-	{
-		ar.BeginArray("m_DynamicOverrides");
-		for (auto& [slotIdx, inst] : m_DynamicInstances)
-		{
-			if (!inst) continue;
-			ar.BeginArrayElement();
-
-			uint32 slot = slotIdx;
-			ar.Process("slot", slot);
-
-			wstring baseKey = inst->GetBaseMaterial() ? inst->GetBaseMaterial()->GetKey() : L"";
-			ar.Process("baseKey", baseKey);
-
-			// MaterialInterface의 m_Parameters, m_TextureBindings 등 그대로 직렬화
-			SerializationHelper::SerializeStaticType(ar, *inst);
-
-			ar.EndArrayElement();
-		}
-		ar.EndArray();
-	}
-	else
-	{
-		size_t count = ar.BeginArray("m_DynamicOverrides");
-		for (size_t i = 0; i < count; ++i)
-		{
-			ar.BeginArrayElement();
-
-			uint32 slot = 0;
-			ar.Process("slot", slot);
-
-			wstring baseKey;
-			ar.Process("baseKey", baseKey);
-
-			ResourceHandle<Material> baseHandle =
-				ResourceManager::Get().GetResourceHandle<Material>(baseKey);
-
-			if (baseHandle)
-			{
-				MaterialInstanceDesc desc{};
-				desc.BaseMaterialHandle = baseHandle;
-				MaterialInstance* inst = MaterialInstance::Create(&desc);
-				if (inst)
-				{
-					SerializationHelper::SerializeStaticType(ar, *inst);
-					m_DynamicInstances[slot] = inst;
-				}
-			}
-
-			ar.EndArrayElement();
-		}
-		ar.EndArray();
-	}
-}
 #pragma endregion

@@ -4,7 +4,6 @@
 #include <DirectXTex.h>
 #include "TextureImporter.h"
 #include "TextureCompressorInterface.h"
-#include "PropertyDrawer.h"
 #include "AssetManager.h"
 
 static Engine::ETextureFormat s_TargetFormat = Engine::ETextureFormat::BC1_RGBA_UNORM;

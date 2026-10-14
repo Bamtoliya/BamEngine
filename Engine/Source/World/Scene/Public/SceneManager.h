@@ -36,8 +36,8 @@ public:
 	Scene* GetCurrentScene() const { return m_CurrentScene; }
 
 	EResult NewScene(void* arg = nullptr);
-	EResult SaveScene(class Archive& archive, const wstring& filePath);
-	EResult LoadScene(class Archive& archive, const wstring& filePath);
+	EResult SaveScene(archive::IArchive& ar, const wstring& filePath);
+	EResult LoadScene(archive::IArchive& ar, const wstring& filePath);
 
 	EResult AddScene(Scene* scene);
 	EResult RemoveScene(Scene* scene);

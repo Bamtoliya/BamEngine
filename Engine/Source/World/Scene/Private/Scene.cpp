@@ -1,12 +1,11 @@
 ﻿#pragma once
 
 #include "Scene.h"
-//#include "Layer.h"
-#include "GameObject.h"
-#include "SerializationHelper.h"
 #include "CollisionManager.h"
 #include "CoreComponents.h"
 #include "Reflection/CoreComponentReflection.h"
+#include "EntityArchive.h"
+#include "Adapters/GlmArchiveAdapter.h"
 
 #pragma region Constructor&Destructor
 EResult Scene::Initialize(void* arg)
@@ -361,27 +360,57 @@ void Scene::SetPaused(bool paused)
 #pragma endregion
 
 #pragma region Save&Load
-void Scene::Serialize(class Archive& ar)
+archive::ArchiveResult Scene::WriteArchive(archive::IArchive& ar) const
 {
-	SerializationHelper::SerializeStaticType(ar, *this);
-}
-void Scene::Deserialize(Archive& ar)
-{
-	//m_GameObjectMap.clear();
-	//Serialize(ar);
+	archive_reflection::PropertyCodecs codecs;
 
-	//for (uint32 i = 0; i < m_Layers.size(); ++i)
-	//{
-	//	Layer* layer = m_Layers[i];
-	//	if (!layer) continue;
-	//	m_Layers[i]->SetIndex(i);
-	//	m_Layers[i]->Deserialize(ar);
+	if (!codecs.Register<glm::vec3>(archive_glm::WriteVec3, archive_glm::ReadVec3) ||
+		!codecs.Register<glm::quat>(archive_glm::WriteQuat, archive_glm::ReadQuat) ||
+		!codecs.RegisterArray<std::unordered_set<std::wstring>>())
+	{
+		return { archive::ArchiveErrorCode::InvalidOperation, "Scene.Codecs" };
+	}
 
-	//	for(GameObject* gameObject : layer->GetAllGameObjects())
-	//	{
-	//		if (!gameObject) continue;
-	//		m_GameObjectMap[gameObject->GetID()] = gameObject;
-	//	}
-	//}
+	std::vector<Entity> entities;
+	entities.reserve(m_EntityMap.size());
+
+	for (const auto& [handle, entity] : m_EntityMap)
+	{
+		if (entity == nullptr || entity->GetScene() != this ||
+			entity->GetEntityHandle() != handle || !m_LocalRegistry.valid(handle))
+		{
+			return { archive::ArchiveErrorCode::InvalidOperation, "Scene.Entities" };
+		}
+
+		entities.push_back(*entity);
+	}
+
+	return ar.WriteObject("Scene", *this,
+		[&entities, &codecs](archive::IArchive& destination, const Scene& scene) -> archive::ArchiveResult
+		{
+			auto result = destination.Write("Name", scene.m_Name);
+			if (!result)
+			{
+				return result;
+			}
+
+			result = destination.Write("Flags", scene.m_Flags);
+			if (!result)
+			{
+				return result;
+			}
+
+			return destination.WriteObjectArray("Entities", entities,
+				[&scene, &codecs](archive::IArchive& entry, const Entity& entity) -> archive::ArchiveResult
+				{
+					const auto result = entry.Write("Handle", entity.GetEntityHandle());
+					if (!result)
+					{
+						return result;
+					}
+
+					return WriteEntityComponents(entry, "Components", scene, entity, &codecs);
+				});
+		});
 }
 #pragma endregion

@@ -1,9 +1,8 @@
-#pragma once
+﻿#pragma once
 
 #include "Transform.h"
 #include "GameObject.h"
 #include "ComponentRegistry.h"
-#include "SerializationHelper.h"
 #include "RectTransform.h"
 
 REGISTER_COMPONENT(Transform)
@@ -410,11 +409,3 @@ void Transform::LookAt(const vec3& target, const vec3& up)
 	SetRotation(localRot);
 }
 #pragma endregion
-
-#pragma region Save&Load
-void Transform::Serialize(Archive& ar)
-{
-	SerializationHelper::SerializeStaticType(ar, *this);
-}
-#pragma endregion
-

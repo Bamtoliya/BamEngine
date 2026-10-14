@@ -17,7 +17,7 @@
 
 #include "Application.h"
 
-#include "Archives.h"
+#include <archive/JsonArchive.h>
 #include "FileDialogs.h"
 
 #include "SelectionManager.h"
@@ -192,8 +192,14 @@ void ToolBar::SaveScene()
 	if (!FileDialogs::SaveFileDialog(filePath, { {L"Scene Files (*.json)", L"*.json"} }, L"NewScene.json", L"json"))
 		return;
 
-	JsonArchive archive(EArchiveMode::Write);
-	SceneManager::Get().SaveScene(archive, filePath);
+	archive::JsonArchive ar;
+	const EResult result = SceneManager::Get().SaveScene(ar, filePath);
+
+	if (result != EResult::Success)
+	{
+		ENGINE_LOG_ERROR("Failed to save scene: {} ({})",
+			WStrToStr(filePath), ResultToString(result));
+	}
 }
 void ToolBar::LoadScene()
 {
@@ -201,8 +207,8 @@ void ToolBar::LoadScene()
 	if (!FileDialogs::OpenFileDialog(filePath, { {L"Scene Files (*.json)", L"*.json"} }))
 		return;
 
-	JsonArchive archive(EArchiveMode::Read);
-	const EResult result = SceneManager::Get().LoadScene(archive, filePath);
+	archive::JsonArchive ar;
+	const EResult result = SceneManager::Get().LoadScene(ar, filePath);
 
 	if (result == EResult::NotImplemented)
 	{

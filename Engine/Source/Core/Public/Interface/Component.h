@@ -2,7 +2,6 @@
 
 #include "Base.h"
 #include "Reflection/ReflectionMacro.h"
-#include "SerializableInterface.h"
 #include "CommonInterface.h"
 #include "TypeIdentityInterface.h"
 
@@ -27,7 +26,7 @@ struct ENGINE_API ComponentDesc
 class GameObject;
 
 CLASS()
-class ENGINE_API Component : public Base, public ITypeIdentity, public ISerializable, public IActive
+class ENGINE_API Component : public Base, public ITypeIdentity, public IActive
 {
 	REFLECT_BASE()
 	using DESC = ComponentDesc;
@@ -65,13 +64,6 @@ public:
 	virtual void SetActive(bool active)  override { m_Active = active; }
 	virtual void SetDirty(bool dirty = true) { m_Dirty = dirty; }
 #pragma endregion
-
-#pragma region Save&Load
-public:
-	virtual void Serialize(Archive& ar) override;
-	virtual void Deserialize(Archive& ar) override;
-#pragma endregion
-
 
 #pragma region Variable
 protected:

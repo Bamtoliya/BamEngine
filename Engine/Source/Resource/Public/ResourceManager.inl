@@ -39,62 +39,54 @@ ResourceHandle<T> ResourceManager::LoadResource(Args&&... args)
 	if (handle.IsValid())
 		return ResourceHandle<T>(handle);
 
-	// 이 아래의 기존 확장자별 로드 코드는 유지
-
 	std::filesystem::path fsPath(pathStr);
-	T* resource = nullptr;
-	std::string ext = fsPath.extension().string();
+	wstring extension = fsPath.extension().wstring();
+	std::transform(extension.begin(), extension.end(), extension.begin(), ::towlower);
 
-	// 3. 파일 확장자에 따른 로드 전략 분기
-	if (ext.find(".bam") != std::string::npos)
-	{
-		BinaryArchive archive(EArchiveMode::Read);
-		if (!archive.LoadFromFile(fsPath.string()))
-			return fail("binary file read");
-
-		resource = T::CreateEmpty();
-		if (!resource)
-			return fail("binary resource creation");
-
-		resource->Deserialize(archive);
-		if (archive.HasError())
+	const auto loadArchive = [&](archive::IArchive& ar) -> ResourceHandle<T>
 		{
-			resource->Free();
-			delete static_cast<Resource*>(resource);
-			return fail("binary resource deserialization");
-		}
+			auto result = ar.LoadFromFile(fsPath);
+			if (!result)
+				return fail("archive file read");
 
-		resource->SetKey(keyStr);
-		resource->SetPath(pathStr);
-	}
-	else if (ext.find(".json") != std::string::npos)
+			T* resource = T::CreateEmpty();
+			if (!resource)
+				return fail("archive resource creation");
+
+			result = resource->ReadArchive(ar);
+			if (!result)
+			{
+				ENGINE_LOG_ERROR("Resource archive read failed: code={}, field={}",
+					static_cast<int>(result.Code), result.Field);
+
+				resource->Free();
+				delete static_cast<Resource*>(resource);
+				return fail("archive resource deserialization");
+			}
+
+			resource->SetKey(keyStr);
+			resource->SetPath(pathStr);
+
+			const Handle resourceHandle = AddResourceInternal(hash, resource);
+			return ResourceHandle<T>(resourceHandle);
+		};
+
+	if (extension == L".json")
 	{
-		JsonArchive archive(EArchiveMode::Read);
-		if (!archive.LoadFromFile(fsPath.string()))
-			return fail("json file read");
-
-		resource = T::CreateEmpty();
-		if (!resource)
-			return fail("json resource creation");
-
-		resource->Deserialize(archive);
-		if (archive.HasError())
-		{
-			resource->Free();
-			delete static_cast<Resource*>(resource);
-			return fail("json resource deserialization");
-		}
-
-		resource->SetKey(keyStr);
-		resource->SetPath(pathStr);
+		archive::JsonArchive ar;
+		return loadArchive(ar);
 	}
-	else
+
+	if (extension == L".beve")
 	{
-		// 일반 소스 리소스 (png, fbx 등)
-		resource = T::Create(std::forward<Args>(args)...);
+		archive::BeveArchive ar;
+		return loadArchive(ar);
 	}
 
-	// 4. 신규 생성 및 등록
+	if (extension.rfind(L".bam", 0) == 0)
+		return fail("legacy binary archive is not supported");
+
+	T* resource = T::Create(std::forward<Args>(args)...);
 	if (!resource)
 		return fail("source resource creation");
 

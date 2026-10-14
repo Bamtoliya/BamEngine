@@ -13,7 +13,7 @@
 namespace Engine
 {
     template<typename T>
-    [[nodiscard]] archive::ArchiveResult WriteComponent(archive::GlazeArchiveBase& ar, std::string_view key,
+    [[nodiscard]] archive::ArchiveResult WriteComponent(archive::IArchive& ar, std::string_view key,
         const entt::registry& world, entt::entity entity, const reflection::Registry& reflectionRegistry,
         const archive_reflection::PropertyCodecs* codecs = nullptr)
     {
@@ -47,7 +47,7 @@ namespace Engine
     template<typename T>
         requires (std::default_initializable<T>&& std::copy_constructible<T>&& std::assignable_from<T&, T>)
     [[nodiscard]] archive::ArchiveResult ReadComponent(
-        const archive::GlazeArchiveBase& ar, std::string_view key, entt::registry& world, entt::entity entity,
+        const archive::IArchive& ar, std::string_view key, entt::registry& world, entt::entity entity,
         const reflection::Registry& reflectionRegistry, const archive_reflection::PropertyCodecs* codecs = nullptr,
         archive::ArchiveResult(*prepare)(T&) = nullptr)
     {

@@ -2,7 +2,6 @@
 #include "Mesh.h"
 #include "Renderer.h"
 #include "ResourceManager.h"
-#include "SerializationHelper.h"
 
 #pragma region Constructor&Destructor
 EResult Mesh::Initialize(void* arg)
@@ -185,105 +184,4 @@ void Mesh::RebuildCachedBuffers()
 			m_ActiveBufferCount = i + 1;
 	}
 }
-#pragma endregion
-
-#pragma region Save&Load
-
-static const char* s_StreamNames[] = { "PositionData", "MaterialData", "SkinData" };
-
-void Mesh::Serialize(Archive& ar)
-{
-	Resource::Serialize(ar);
-
-	// 1. 헤더 구성
-	MeshBinaryHeader header = {};
-	for (uint32 i = 0; i < (uint32)EMeshStream::Max; ++i)
-	{
-		header.StreamCounts[i] = m_StreamCounts[i];
-		header.StreamStrides[i] = m_StreamStrides[i];
-	}
-	header.IndexCount = m_IndexCount;
-	header.IndexStride = m_IndexStride;
-	header.BoundingBoxMin = m_BoundingBoxMin;
-	header.BoundingBoxMax = m_BoundingBoxMax;
-	header.Flags = m_Flags;
-
-	// 2. 헤더를 통째로 바이너리 직렬화
-	ar.ProcessRaw("MeshHeader", &header, sizeof(MeshBinaryHeader));
-
-	// 3. 스트림별 원본 데이터 직렬화
-	for (uint32 i = 0; i < (uint32)EMeshStream::Max; ++i)
-	{
-		if (m_RawData[i].size() > 0)
-			ar.ProcessRaw(s_StreamNames[i], m_RawData[i].data(), m_RawData[i].size());
-	}
-
-	// 4. 인덱스 데이터 직렬화
-	if (m_IndexRaw.size() > 0)
-		ar.ProcessRaw("IndexData", m_IndexRaw.data(), m_IndexRaw.size());
-}
-
-void Mesh::Deserialize(Archive& ar)
-{
-	Resource::Deserialize(ar);
-	if (ar.HasError()) return;
-
-	// 1. 헤더를 통째로 바이너리 역직렬화
-	MeshBinaryHeader header = {};
-	ar.ProcessRaw("MeshHeader", &header, sizeof(MeshBinaryHeader));
-
-	// 2. 헤더에서 멤버로 복사
-	for (uint32 i = 0; i < (uint32)EMeshStream::Max; ++i)
-	{
-		m_StreamCounts[i] = header.StreamCounts[i];
-		m_StreamStrides[i] = header.StreamStrides[i];
-	}
-	m_IndexCount = header.IndexCount;
-	m_IndexStride = header.IndexStride;
-	m_BoundingBoxMin = header.BoundingBoxMin;
-	m_BoundingBoxMax = header.BoundingBoxMax;
-	m_Flags = header.Flags;
-
-	// 3. 스트림별 원본 데이터 역직렬화
-	for (uint32 i = 0; i < (uint32)EMeshStream::Max; ++i)
-	{
-		uint32 bytes = m_StreamStrides[i] * m_StreamCounts[i];
-		if (bytes > 0)
-		{
-			m_RawData[i].resize(bytes);
-			ar.ProcessRaw(s_StreamNames[i], m_RawData[i].data(), m_RawData[i].size());
-		}
-	}
-
-	// 4. 인덱스 데이터 역직렬화
-	uint32 indexBytes = m_IndexStride * m_IndexCount;
-	if (indexBytes > 0)
-	{
-		m_IndexRaw.resize(indexBytes);
-		ar.ProcessRaw("IndexData", m_IndexRaw.data(), m_IndexRaw.size());
-	}
-
-	// 5. GPU 버퍼 재생성
-	RHI* rhi = Renderer::Get().GetRHI();
-	for (uint32 i = 0; i < (uint32)EMeshStream::Max; ++i)
-	{
-		if (m_RawData[i].size() > 0 && m_StreamCounts[i] > 0)
-		{
-			m_VertexBuffers[i] = rhi->CreateBuffer(
-				m_RawData[i].data(),
-				(uint32)m_RawData[i].size(),
-				m_StreamStrides[i],
-				ERHIBufferType::Vertex
-			);
-		}
-	}
-	if (m_IndexRaw.size() > 0 && m_IndexCount > 0)
-	{
-		m_IndexBuffer = rhi->CreateBuffer(m_IndexRaw.data(), indexBytes, m_IndexStride, ERHIBufferType::Index);
-	}
-
-	// 6. Bind용 캐싱 배열 구축
-	RebuildCachedBuffers();
-}
-
 #pragma endregion

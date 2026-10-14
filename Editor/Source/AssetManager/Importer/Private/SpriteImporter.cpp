@@ -1,7 +1,6 @@
 ﻿#pragma once
 
 #include "SpriteImporter.h"
-#include "SerializationHelper.h"
 #include "ResourceManager.h"
 #include "Sprite.h"
 
@@ -29,5 +28,5 @@ EResult SpriteImporter::Import(const filesystem::path& sourcePath, const filesys
 	EResult result = ResourceManager::Get().SaveToBinaryFile(sprite, outputPath.wstring());
 	ResourceManager::Get().DestroyResource(sprite); // 저장 후 임시 Sprite 객체 해제
 
-	return EResult::Success;
+	return result;
 }

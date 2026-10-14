@@ -320,10 +320,8 @@ void SceneViewportPanel::DrawCustomOptions()
 	DrawDebugMenu();
 	DrawPostProcessMenu();
 	DrawRenderPassMenu();
-	if (m_InspectorPanel) DrawCameraMenu();
 	DrawChannelViewButton();
 	DrawDimensionToggleButton();
-
 }
 
 void SceneViewportPanel::DrawCustomViewport()

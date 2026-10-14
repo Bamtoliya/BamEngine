@@ -354,21 +354,3 @@ EResult MaterialInterface::Bind(uint32 slot)
     return EResult::Success;
 }
 #pragma endregion
-
-#pragma region Save&Load
-void MaterialInterface::Deserialize(Archive& ar) 
-{
-    Resource::Deserialize(ar);
-    if (ar.HasError()) return;
-
-	for (auto& binding : m_TextureBindings)
-	{
-		if (binding.name.empty())
-		{
-			binding.name = std::to_string(binding.slot);
-		}
-	}
-
-	RebuildTextureBindingCache();
-}
-#pragma endregion

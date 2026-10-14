@@ -59,12 +59,6 @@ private:
 	EResult UpdateMaterialInstance();
 #pragma endregion
 
-#pragma region Save&Load
-public:
-	virtual void Deserialize(Archive& ar) override;
-#pragma endregion
-
-
 #pragma region Variable
 private:
 	PROPERTY(EDITABLE, DEFAULT(vec2(1.f, 1.f)))

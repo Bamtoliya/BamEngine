@@ -1,7 +1,7 @@
 ﻿#pragma once
 
 #include "SceneManager.h"
-#include "Archives.h"
+#include <archive/ArchiveInterface.h>
 #include "LightManager.h"
 #include "CollisionManager.h"
 #include "CameraManager.h"
@@ -102,31 +102,33 @@ EResult SceneManager::NewScene(void* arg)
 	return result;
 }
 
-EResult SceneManager::SaveScene(Archive& archive, const wstring& filePath)
+EResult SceneManager::SaveScene(archive::IArchive& ar, const wstring& filePath)
 {
-	if (!m_CurrentScene) return EResult::Fail;
-
-	string pathStr = WStrToStr(filePath);
-	if(archive.PushScope(entt::resolve(m_CurrentScene->GetTypeID()).info().name().data()))
-	{
-		m_CurrentScene->Serialize(archive);
-		archive.PopScope();
-	}
-
-	if (archive.SaveToFile(pathStr))
-	{
-		return EResult::Success;
-	}
-
-	return EResult::Fail;
-}
-
-EResult SceneManager::LoadScene(Archive& archive, const wstring& filePath)
-{
-	if (!archive.IsReading() || filePath.empty())
+	if (filePath.empty())
 		return EResult::InvalidArgument;
 
-	// 엔티티 복원이 구현되기 전에는 기존 씬을 교체하지 않는다.
+	if (!m_CurrentScene)
+		return EResult::Fail;
+
+	auto result = m_CurrentScene->WriteArchive(ar);
+	if (result)
+		result = ar.SaveToFile(std::filesystem::path(filePath));
+
+	if (!result)
+	{
+		ENGINE_LOG_ERROR("Scene save failed: code={}, field={}, path={}",
+			static_cast<int>(result.Code), result.Field, WStrToStr(filePath));
+		return EResult::Fail;
+	}
+
+	return EResult::Success;
+}
+
+EResult SceneManager::LoadScene(archive::IArchive&, const wstring& filePath)
+{
+	if (filePath.empty())
+		return EResult::InvalidArgument;
+
 	return EResult::NotImplemented;
 }
 

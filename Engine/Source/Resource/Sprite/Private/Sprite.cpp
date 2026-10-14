@@ -1,7 +1,6 @@
 ﻿#pragma once
 #include "Sprite.h"
 #include "ResourceManager.h"
-#include "SerializationHelper.h"
 
 #pragma region Constructor&Destructor
 EResult Sprite::Initialize(void* arg)

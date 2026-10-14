@@ -1,131 +1,36 @@
 ﻿#pragma once
-#include "imgui.h"
 #include "InspectorPanel.h"
 #include "SelectionManager.h"
-
-#include "GameObject.h"
-#include "Components.h"
-#include "Resources.h"
-#include "FileDialogs.h"
-#include "ResourceManager.h"
-#include "Archives.h"
-#include "IconsFontAwesome7.h"
-#include "Reflection/ReflectionTypes.h"
-#include "InspectorHelper.h"
-#include "PropertyDrawerEnTT.h"
 #include "LocalizationManager.h"
-
-#include "Inspectors.h"
-#include "ResourceEditors.h"
-#include "ImGuiManager.h"
-
 #include "Entity.h"
 #include "Scene.h"
 #include "Reflection/CoreComponentReflection.h"
 #include "ReflectionPropertyDrawer.h"
-#include "Components/TransformComponent.h"
 #include "TransformSystem.h"
-
 #include "CoreComponents.h"
 #include "RenderComponents.h"
 #include "PhysicsComponent.h"
-
-#pragma region Constructor&Destructor
-InspectorPanel::InspectorPanel()
-{
-	m_AssetInspectors.push_back(new TextureInspector());
-	//m_AssetInspectors.push_back(new SpriteInspector());
-	m_AssetInspectors.push_back(new ModelInspector());
-}
-
-void InspectorPanel::Free()
-{
-	__super::Free();
-	for (InspectorInterface* inspector : m_AssetInspectors)
-	{
-		delete inspector;
-	}
-	m_AssetInspectors.clear();
-}
-#pragma endregion
+#include "ResourceManager.h"
+#include "Texture.h"
 
 void InspectorPanel::Draw()
 {
 	if (!m_Open) return;
-	GameObject* selectedObject = SelectionManager::Get().GetPrimarySelection();
-	Entity* selectedEntity = SelectionManager::Get().GetPrimarySelectedEntity();
-	filesystem::path selectedAssetPath = SelectionManager::Get().GetSelectedAssetPath();
-	string windowTitle = LOCAL("UI_INSPECTOR");
-	string windowID = "InspectorPanel";
 
-	if (m_SelectedGameObject)
-	{
-		windowTitle += " - " + WStrToStr(m_SelectedGameObject->GetName());
-		windowID += "_" + to_string(m_SelectedGameObject->GetID());
-		selectedObject = m_SelectedGameObject;
-	}
+	const string windowTitle = LOCAL("UI_INSPECTOR") + "###InspectorPanel";
 
-	windowTitle += "###" + windowID;
-	
 	if (ImGui::Begin(windowTitle.c_str(), &m_Open))
 	{
-		if (selectedEntity != nullptr && m_SelectedGameObject == nullptr)
+		if (Engine::Entity* entity = SelectionManager::Get().GetPrimarySelectedEntity())
 		{
-			DrawEntityProperties(*selectedEntity);
-		}
-		else if (selectedObject)
-		{
-			entt::meta_type type = entt::resolve(selectedObject->GetTypeID());
-			if (type)
-			{
-				entt::meta_any anyObj = type.from_void(selectedObject);
-				DrawProperties(anyObj, type);
-			}
-			const vector<Component*>& components = selectedObject->GetAllComponents();
-			for (Component* component : components)
-			{
-				entt::meta_type compType = entt::resolve(component->GetTypeID());
-				if (compType)
-				{
-					entt::meta_any anyComp = compType.from_void(component);
-					if (DrawProperties(anyComp, compType))
-					{
-						component->SetDirty();
-					}
-				}
-			}
-
-			ImGui::Spacing();
-
-			DrawAddComponentButton();
-		}
-		else if (!selectedAssetPath.empty())
-		{
-
-			bool bIsSupported = false;
-			string assetName = selectedAssetPath.stem().string();
-			ImGui::Text(("Selected Asset: " + assetName).c_str());
-			for (InspectorInterface* inspector : m_AssetInspectors)
-			{
-				if (bIsSupported = inspector->IsSupported(selectedAssetPath))
-				{
-					inspector->OnInspectorGUI(selectedAssetPath);
-					break;
-				}
-			}
-
-			if (!bIsSupported)
-			{
-				ImGui::Text("Unsupported Asset File");
-				ImGui::Separator();
-				ImGui::Text("File: %s", selectedAssetPath.filename().string().c_str());
-			}
+			DrawEntityProperties(*entity);
 		}
 		else
 		{
-			ImGui::Text("No object selected.");
+			ImGui::TextDisabled("No Entity selected.");
 		}
 	}
+
 	ImGui::End();
 }
 
@@ -236,96 +141,6 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 	}
 }
 
-bool InspectorPanel::DrawProperties(entt::meta_any& instance, const entt::meta_type& type)
-{
-	bool anyChanged = false;
-	
-	void* idPtr = nullptr;
-	if (auto* go = instance.try_cast<Engine::GameObject>()) idPtr = go;
-	else if (auto* comp = instance.try_cast<Engine::Component>()) idPtr = comp;
-	ImGui::PushID(idPtr);
-
-	bool opened = PropertyDrawerEnTT::DrawHeaderNode(instance, type);
-	if (opened)
-	{
-		anyChanged |= PropertyDrawerEnTT::DrawPropertyTable(instance, type);
-	}
-	
-	// Temporarily bypass original complex TypeInfo loop
-	/*
-	if (opened)
-	{
-		const TypeInfo* currentTypeInfo = &typeInfo;
-		while (currentTypeInfo)
-		{
-			if (currentTypeInfo != &typeInfo)
-			{
-				ImGui::Spacing();
-				ImGui::Separator();
-				ImGui::Spacing();
-			}
-
-			unordered_map<string, std::vector<const Engine::PropertyInfo*>> categoryMap;
-			vector<const Engine::PropertyInfo*> defaultProps;
-
-			for (const auto& prop : currentTypeInfo->Properties)
-			{
-				if (!GetMetadataEditable(prop.Metadata))
-				{
-					continue;
-				}
-
-				string category = GetMetadataString(prop.Metadata, MetaCategoryHash);
-				if (!category.empty())
-				{
-					categoryMap[category].push_back(&prop);
-				}
-				else
-				{
-					defaultProps.push_back(&prop);
-				}
-			}
-
-			anyChanged |= PropertyDrawer::DrawPropertyTable(instance, *currentTypeInfo, defaultProps);
-
-			for (const auto& [category, props] : categoryMap)
-			{
-				ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.2f, 0.2f, 0.25f, 1.0f));
-				ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.25f, 0.25f, 0.3f, 1.0f));
-				ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0.15f, 0.15f, 0.2f, 1.0f));
-
-				string categoryName = category.empty() ? LOCAL("General") : LOCAL(category);
-				bool categoryOpened = ImGui::CollapsingHeader(categoryName.c_str(), ImGuiTreeNodeFlags_None);
-				ImGui::PopStyleColor(3);
-
-				if (categoryOpened)
-				{
-					anyChanged |= PropertyDrawer::DrawPropertyTable(instance, *currentTypeInfo, props);
-				}
-			}
-
-			currentTypeInfo = currentTypeInfo->ParentQualifiedName.empty()
-				? nullptr
-				: legacy_reflection::Registry::Get().GetTypeByQualifiedName(currentTypeInfo->ParentQualifiedName);
-		}
-	}
-	*/
-
-	if (Engine::Component* component = instance.try_cast<Engine::Component>())
-	{
-		if (Engine::RenderComponent* renderComponent = dynamic_cast<Engine::RenderComponent*>(component))
-		{
-			ImGui::Spacing();
-			ImGui::Separator();
-			ImGui::Spacing();
-			this->DrawRenderComponentMaterialEditor(renderComponent);
-		}
-	}
-
-	ImGui::PopID();
-	return anyChanged;
-}
-
 #pragma region Add Component
 namespace
 {
@@ -345,9 +160,9 @@ namespace
 			auto& world = scene.GetRegistry();
 			const entt::entity handle = entity.GetEntityHandle();
 
-			world.get_or_emplace<Engine::TransformComponent>(handle);
-			world.get_or_emplace<Engine::WorldTransformComponent>(handle);
-			world.get_or_emplace<Engine::FlagComponent>(handle);
+			static_cast<void>(world.get_or_emplace<Engine::TransformComponent>(handle));
+			static_cast<void>(world.get_or_emplace<Engine::WorldTransformComponent>(handle));
+			static_cast<void>(world.get_or_emplace<Engine::FlagComponent>(handle));
 
 			Engine::TransformSystem::UpdateHierarchy(world);
 		}
@@ -417,22 +232,6 @@ void InspectorPanel::DrawAddComponentPopup(Engine::Entity& entity)
 	}
 
 	ImGui::EndPopup();
-}
-void InspectorPanel::DrawAddComponentButton()
-{
-	if (ImGui::Button("Add Component"))
-	{
-		ImGui::OpenPopup("AddComponentPopup");
-	}
-	DrawAddComponentPopup();
-}
-void InspectorPanel::DrawAddComponentPopup()
-{
-	if (ImGui::BeginPopup("AddComponentPopup"))
-	{
-		ImGui::Text("Component List Placeholder");
-		ImGui::EndPopup();
-	}
 }
 #pragma endregion
 
@@ -536,28 +335,21 @@ namespace
 				changed = true;
 			}
 
-			const TypeInfo* texType =
-				legacy_reflection::Registry::Get().GetTypeByQualifiedName("Engine::Texture");
-			if (texType)
+			auto& resourceManager = ResourceManager::Get();
+
+			for (const Handle& h : resourceManager.GetResourceHandles<Texture>())
 			{
-				for (const Handle& h :
-					ResourceManager::Get().GetResourceHandlesIncludingDerived(texType->ID))
+				Texture* tex = dynamic_cast<Texture*>(resourceManager.GetResource(h));
+				if (!tex)
+					continue;
+
+				const string key = WStrToStr(tex->GetKey());
+				const bool selected = ioHandle && ioHandle.Get() == tex;
+
+				if (ImGui::Selectable(key.c_str(), selected))
 				{
-					Resource* res = ResourceManager::Get().GetResource(h);
-					Texture* tex = dynamic_cast<Texture*>(res);
-					if (!tex) continue;
-
-					const wstring keyW = tex->GetKey();
-					const string  key = WStrToStr(keyW);
-					bool sel = ioHandle && ioHandle.Get() &&
-						(ioHandle.Get()->GetKey() == keyW);
-
-					if (ImGui::Selectable(key.c_str(), sel))
-					{
-						ioHandle = ResourceManager::Get()
-							.GetResourceHandle<Texture>(keyW);
-						changed = true;
-					}
+					ioHandle = ResourceHandle<Texture>(h);
+					changed = true;
 				}
 			}
 			ImGui::EndPopup();
@@ -567,79 +359,4 @@ namespace
 		return changed;
 	}
 } // anonymous namespace
-
-
-
-void InspectorPanel::DrawRenderComponentMaterialEditor(RenderComponent* renderComponent)
-{
-	if (!renderComponent) return;
-	if (!ImGui::CollapsingHeader("Material Editor", ImGuiTreeNodeFlags_DefaultOpen))
-		return;
-
-	static unordered_map<RenderComponent*, int> s_SelectedSlot;
-	int& selectedSlot = s_SelectedSlot[renderComponent];
-	const uint32 slotCount = std::max(renderComponent->GetMaterialSlotCount(), 1u);
-	selectedSlot = std::clamp(selectedSlot, 0, static_cast<int>(slotCount) - 1);
-
-	string preview = "Slot " + to_string(selectedSlot);
-	if (ImGui::BeginCombo("Material Slot", preview.c_str()))
-	{
-		for (uint32 i = 0; i < slotCount; ++i)
-		{
-			bool sel = (selectedSlot == static_cast<int>(i));
-			if (ImGui::Selectable(("Slot " + to_string(i)).c_str(), sel))
-				selectedSlot = static_cast<int>(i);
-			if (sel) ImGui::SetItemDefaultFocus();
-		}
-		ImGui::EndCombo();
-	}
-
-	const uint32 slot = static_cast<uint32>(selectedSlot);
-	MaterialInterface* sharedMat = renderComponent->GetSharedMaterial(slot);
-	MaterialInterface* runtimeMat = renderComponent->GetMaterial(slot);
-
-	ImGui::Text("Shared: %s", sharedMat ? "Yes" : "No");
-	ImGui::SameLine();
-	ImGui::Text("Dynamic: %s", renderComponent->GetDynamicMaterialInstance(slot) ? "Yes" : "No");
-
-	MaterialInterface* targetMat = sharedMat ? sharedMat : runtimeMat;
-	if (!targetMat)
-	{
-		ImGui::TextDisabled("No material assigned.");
-		return;
-	}
-
-	const wstring targetKey = targetMat->GetKey();
-	if (targetKey.empty())
-	{
-		ImGui::TextDisabled("Runtime-only material has no asset key.");
-		return;
-	}
-
-	if (ImGui::Button(ICON_FA_UP_RIGHT_FROM_SQUARE " Open Resource Material Editor"))
-	{
-		filesystem::path assetPath(targetKey);
-		SelectionManager::Get().SetSelectedResource(assetPath);
-
-		for (ImGuiInterface* panel : ImGuiManager::Get().GetImGuiPanels())
-		{
-			ResourceEditorInterface* editor = dynamic_cast<ResourceEditorInterface*>(panel);
-			if (!editor) continue;
-
-			if (editor->IsSupported(assetPath))
-			{
-				editor->SetTargetResource(assetPath);
-
-				// MaterialEditor면 런타임 슬롯 컨텍스트 전달
-				if (MaterialEditor* matEditor = dynamic_cast<MaterialEditor*>(editor))
-				{
-					matEditor->SetRenderComponentContext(renderComponent, slot);
-				}
-
-				editor->Open();
-				break;
-			}
-		}
-	}
-}
 #pragma endregion

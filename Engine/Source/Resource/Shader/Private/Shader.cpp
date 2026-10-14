@@ -67,20 +67,3 @@ RHIShaderDesc Shader::BuildRHIShaderDesc() const
 	return desc;
 }
 #pragma endregion
-
-
-#pragma region Save&Load
-void Shader::Serialize(Archive& ar)
-{
-	Resource::Serialize(ar);
-}
-
-void Shader::Deserialize(Archive& ar)
-{
-	Resource::Deserialize(ar);
-	if (ar.HasError()) return;
-
-	RHIShaderDesc desc = BuildRHIShaderDesc();
-	m_RHIShader = Renderer::Get().GetRHI()->CreateShader(desc);
-}
-#pragma endregion

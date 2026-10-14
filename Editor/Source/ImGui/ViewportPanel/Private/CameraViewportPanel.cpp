@@ -2,7 +2,6 @@
 
 #include "CameraViewportPanel.h"
 #include "CameraManager.h"
-#include "InspectorPanel.h"
 
 #pragma region Constructor&Destructor
 void CameraViewportPanel::Initialize(void* arg)
@@ -27,15 +26,11 @@ void CameraViewportPanel::Initialize(void* arg)
 			m_OwnedCamera->SetName(m_Name + L"_Camera");
 			SetCamera(m_OwnedCamera->GetCamera());
 		}
-		m_InspectorPanel = new InspectorPanel();
-		m_InspectorPanel->SetSelectedGameObject(m_OwnedCamera);
-		m_InspectorPanel->Close();
 	}
 }
 
 void CameraViewportPanel::Free()
 {
-	Safe_Release(m_InspectorPanel);
 	Safe_Release(m_OwnedCamera);
 	m_Camera = nullptr;
 	BaseViewportPanel::Free();
@@ -71,8 +66,6 @@ void CameraViewportPanel::Update(f32 dt)
 void CameraViewportPanel::Draw()
 {
 	BaseViewportPanel::Draw();
-	if(m_InspectorPanel && m_InspectorPanel->IsOpen())
-		m_InspectorPanel->Draw();
 }
 
 #pragma endregion
@@ -86,18 +79,10 @@ void CameraViewportPanel::DrawCustomOptions()
 {
 	DrawResolutionMenu();
 	DrawRenderTargetMenu();
-	if (m_InspectorPanel) DrawCameraMenu();
 	DrawChannelViewButton();
 	DrawDimensionToggleButton();
 }
 #pragma endregion
-void CameraViewportPanel::DrawCameraMenu()
-{
-	if (ImGui::Button("Camera"))
-	{
-		m_InspectorPanel->ToggleOpen();
-	}
-}
 
 #pragma region Dimension 
 void CameraViewportPanel::DrawDimensionToggleButton()
