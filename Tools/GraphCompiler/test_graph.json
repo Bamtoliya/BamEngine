@@ -1,0 +1,14 @@
+{
+  "graph_name": "TestGraph",
+  "nodes": [
+    { "id": 1, "type": "Event_OnUpdate", "pins_out": ["dt"] },
+    { "id": 2, "type": "Math_Add", "pins_in": ["a", "b"], "pins_out": ["result"], "defaults": {"b": "10.0f"} },
+    { "id": 3, "type": "Print_Float", "pins_in": ["value"] }
+  ],
+  "links": [
+    { "from_node": 1, "from_pin": "dt", "to_node": 2, "to_pin": "a" },
+    { "from_node": 2, "from_pin": "result", "to_node": 3, "to_pin": "value" },
+    { "from_node": 1, "is_exec": true, "to_node": 2 },
+    { "from_node": 2, "is_exec": true, "to_node": 3 }
+  ]
+}
