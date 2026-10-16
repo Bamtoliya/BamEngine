@@ -99,7 +99,6 @@
 ,PROP_RAYCAST_TARGET,Raycast Target,
 ,PROP_RENDER,Render,
 ,PROP_RESOLUTION,Resolution,해상도
-,PROP_Z_INDEX,Z-Index,Z 순서
 ,PROP_RESTITUTION,Restitution,반발력
 ,PROP_REST_LENGTH,Rest Length,기준 거리
 ,PROP_ROTATION,Rotation,회전
@@ -122,13 +121,13 @@
 ,PROP_WORLDMATRIX,World Matrix,월드 매트릭스
 ,PROP_WORLD_MATRIX,World Matrix,월드 매트릭스
 ,PROP_WORLD_TRANSFORM,World Transform,월드 트랜스폼
+,PROP_Z_INDEX,Z-Index,Z 순서
 ,Parameter,,
 ,Pipeline,,
 ,Return the absolute value.,,
 ,STRUCT_BUTTON,Button,버튼
 ,STRUCT_CAMERA,Camera,카메라
 ,STRUCT_CANVAS,Canvas,캔버스
-,STRUCT_UI_RENDER_ORDER,UI Render Order,UI 렌더 순서
 ,STRUCT_COLLIDER,Collider,충돌체
 ,STRUCT_COLLIDER_2D,Collider 2D,2D 충돌체
 ,STRUCT_COLLIDER_SETTINGS,Collider Settings,충돌체 설정
@@ -149,6 +148,7 @@
 ,STRUCT_TAG,Tags,태그
 ,STRUCT_TRANSFORM,Transform,트랜스폼
 ,STRUCT_UI_INTERACTION_STATE,,
+,STRUCT_UI_RENDER_ORDER,UI Render Order,UI 렌더 순서
 ,STRUCT_WORLD_TRANSFORM,World Transform,월드 트랜스폼
 ,Shader,,
 ,Shadow,Shadow,그림자
