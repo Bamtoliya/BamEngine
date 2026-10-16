@@ -91,7 +91,7 @@ namespace reflection
             {
                 return PropertyValueKind::Pointer;
             }
-            else if constexpr (std::is_array_v<Value>)
+            else if constexpr (std::is_array_v<Value> || ArrayTraits<Value>::IsArray)
             {
                 return PropertyValueKind::Array;
             }
@@ -126,6 +126,9 @@ namespace reflection
 
     struct PropertyInfo;
 
+    template<typename Container>
+    PropertyInfo MakeContainerProperty(std::string name);
+
     template<auto Member>
     PropertyInfo MakeProperty(
         std::string name,
@@ -142,6 +145,30 @@ namespace reflection
         PropertyValueKind GetValueKind() const noexcept
         {
             return m_valueKind;
+        }
+
+        [[nodiscard]] std::type_index GetValueCppType() const noexcept { return m_valueType; }
+
+        [[nodiscard]] const PropertyInfo* GetElementContainerProperty() const
+        {
+            return m_container.ElementContainer != nullptr ? m_container.ElementContainer() : nullptr;
+        }
+
+        [[nodiscard]] const PropertyInfo* GetMapValueContainerProperty() const
+        {
+            return m_container.MappedContainer != nullptr ? m_container.MappedContainer() : nullptr;
+        }
+
+        // This conversion always produces a read-only view, including for mutable source values.
+        [[nodiscard]] ObjectView AsObject(const ValueView& value) const noexcept
+        {
+            ObjectView object;
+            if (m_objectValue && value.IsValid() && value.m_type == m_valueType)
+            {
+                object.m_type = value.m_type;
+                object.m_readAddress = value.m_address;
+            }
+            return object;
         }
 
         template<typename T>
@@ -541,6 +568,45 @@ namespace reflection
             return Error::None;
         }
 
+        [[nodiscard]] bool CanResetElements() const noexcept
+        {
+            return m_container.ResetElements != nullptr;
+        }
+
+        [[nodiscard]] PropertyAccessError TryResetElements(const ObjectView& object) const
+        {
+            using Error = PropertyAccessError;
+            const auto container = TryReadValue(object);
+
+            if (!container)
+            {
+                return container.Error;
+            }
+
+            if (!IsContainer())
+            {
+                return Error::NotContainer;
+            }
+
+            if (object.m_writeAddress == nullptr)
+            {
+                return Error::ReadOnlyObject;
+            }
+
+            if (m_container.ReadOnly)
+            {
+                return Error::ReadOnlyProperty;
+            }
+
+            if (m_container.ResetElements == nullptr)
+            {
+                return Error::ResetUnavailable;
+            }
+
+            m_container.ResetElements(object.m_writeAddress);
+            return Error::None;
+        }
+
         [[nodiscard]]
         bool CanAppend() const noexcept
         {
@@ -694,12 +760,18 @@ namespace reflection
         }
 
         template<typename T>
-            requires std::is_object_v<T>
+        requires std::is_object_v<T>
         [[nodiscard]]
         bool IsElementType() const noexcept
         {
             using Element = std::remove_cv_t<T>;
             return IsContainer() && m_container.ElementType == std::type_index(typeid(Element));
+        }
+
+        [[nodiscard]]
+        std::type_index GetElementCppType() const noexcept
+        {
+            return m_container.ElementType;
         }
 
         [[nodiscard]]
@@ -1164,6 +1236,60 @@ namespace reflection
             return m_container.InsertMapEntry != nullptr;
         }
 
+        [[nodiscard]] bool CanEmplaceMapValueObject() const noexcept
+        {
+            return m_container.EmplaceMapValueObject != nullptr;
+        }
+
+        [[nodiscard]] PropertyObjectResult TryEmplaceMapValueObject(
+            const ObjectView& object, const ValueView& key) const
+        {
+            using Error = PropertyAccessError;
+            const auto container = TryReadValue(object);
+
+            if (!container)
+            {
+                return { container.Error, {} };
+            }
+
+            if (!key.IsValid())
+            {
+                return { Error::InvalidValue, {} };
+            }
+
+            if (!IsMap())
+            {
+                return { Error::NotMap, {} };
+            }
+
+            if (m_container.KeyType != key.GetCppType())
+            {
+                return { Error::KeyTypeMismatch, {} };
+            }
+
+            if (!m_container.ObjectMapped)
+            {
+                return { Error::ObjectUnavailable, {} };
+            }
+
+            if (object.m_writeAddress == nullptr)
+            {
+                return { Error::ReadOnlyObject, {} };
+            }
+
+            if (m_container.ReadOnly)
+            {
+                return { Error::ReadOnlyProperty, {} };
+            }
+
+            if (m_container.EmplaceMapValueObject == nullptr)
+            {
+                return { Error::InsertUnavailable, {} };
+            }
+
+            return m_container.EmplaceMapValueObject(object.m_writeAddress, key.m_address);
+        }
+
         [[nodiscard]] bool CanEraseMapEntry() const noexcept
         {
             return m_container.EraseMapEntry != nullptr;
@@ -1530,6 +1656,9 @@ namespace reflection
             std::string typeName
         );
 
+        template<typename Container>
+        friend PropertyInfo MakeContainerProperty(std::string name);
+
         PropertyAccessStatus m_readStatus = PropertyAccessStatus::NotBound;
         PropertyAccessStatus m_writeStatus = PropertyAccessStatus::NotBound;
     };
@@ -1621,5 +1750,55 @@ namespace reflection
 
         property.m_container = detail::MakePropertyContainerAccess<Member, Owner>();
         return property;
+    }
+
+    // Describes a named container value. The ObjectView owner is the container itself.
+    template<typename Container>
+    PropertyInfo MakeContainerProperty(std::string name)
+    {
+        using Value = std::remove_cv_t<Container>;
+        static_assert(detail::VectorTraits<Value>::IsVector || detail::ArrayTraits<Value>::IsArray ||
+            detail::SetTraits<Value>::IsSet || detail::MapTraits<Value>::IsMap);
+        static_assert(!std::is_const_v<Container> && !std::is_volatile_v<Container>);
+
+        PropertyInfo property;
+        property.Name = std::move(name);
+        property.m_ownerType = std::type_index{ typeid(Value) };
+        property.m_valueType = property.m_ownerType;
+        property.m_valueKind = detail::GetPropertyValueKind<Value>();
+        property.m_objectValue = true;
+        property.m_read = +[](const void* object) { return object; };
+        property.m_editObject = +[](void* object) { return ObjectView::From(*static_cast<Value*>(object)); };
+        if constexpr (detail::SupportsPropertyCopyAssignment<Value>::value)
+        {
+            property.m_write = +[](void* object, const void* value)
+            {
+                *static_cast<Value*>(object) = *static_cast<const Value*>(value);
+            };
+        }
+        else
+        {
+            property.m_writeStatus = PropertyAccessStatus::NotAssignable;
+        }
+        property.m_container = detail::MakePropertyContainerAccess<nullptr, Value>();
+        return property;
+    }
+
+    namespace detail
+    {
+        template<typename T>
+        const PropertyInfo* GetContainerProperty()
+        {
+            if constexpr (VectorTraits<T>::IsVector || ArrayTraits<T>::IsArray ||
+                SetTraits<T>::IsSet || MapTraits<T>::IsMap)
+            {
+                static const auto property = MakeContainerProperty<T>("Value");
+                return &property;
+            }
+            else
+            {
+                return nullptr;
+            }
+        }
     }
 }

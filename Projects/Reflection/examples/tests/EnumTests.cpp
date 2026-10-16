@@ -12,8 +12,72 @@
 
 namespace reflection_tests
 {
+    namespace
+    {
+        bool CheckEnumValueVisits()
+        {
+            enum class Small : std::int8_t { Zero = 0 };
+            enum class Wide : std::uint64_t { Zero = 0 };
+            enum class Binary : bool { Off = false, On = true };
+            enum Legacy { Zero = 0 };
+            const auto small = reflection::EnumInfo::For<Small>("tests::Small");
+            const auto wide = reflection::EnumInfo::For<Wide>("tests::Wide");
+            const auto binary = reflection::EnumInfo::For<Binary>("tests::Binary");
+            const auto legacy = reflection::EnumInfo::For<Legacy>("tests::Legacy");
+            int calls = 0;
+            bool valid = false;
+
+            if (!small.IsUnderlyingSigned() || wide.IsUnderlyingSigned() || !small.CanVisitValue() ||
+                !small.TryVisitValue(reflection::EnumValue{ std::int64_t{ -128 } },
+                    [&](const reflection::ValueView& value)
+                    {
+                        ++calls;
+                        const auto* number = value.Get<Small>();
+                        valid = number != nullptr && static_cast<std::int8_t>(*number) == -128;
+                    }) || calls != 1 || !valid)
+            {
+                return false;
+            }
+
+            const auto count = [&](const reflection::ValueView&) { ++calls; };
+
+            if (small.TryVisitValue(reflection::EnumValue{ std::int64_t{ -129 } }, count) ||
+                small.TryVisitValue(reflection::EnumValue{ std::uint64_t{ 128 } }, count) ||
+                wide.TryVisitValue(reflection::EnumValue{ std::int64_t{ -1 } }, count) ||
+                binary.TryVisitValue(reflection::EnumValue{ std::uint64_t{ 2 } }, count) ||
+                legacy.CanVisitValue() || legacy.TryVisitValue(reflection::EnumValue{ std::int64_t{ 0 } }, count) ||
+                reflection::EnumInfo{}.TryVisitValue(reflection::EnumValue{ std::int64_t{ 0 } }, count) || calls != 1)
+            {
+                return false;
+            }
+
+            if (!wide.TryVisitValue(reflection::EnumValue{ (std::numeric_limits<std::uint64_t>::max)() },
+                [&](const reflection::ValueView& value)
+                {
+                    const auto* number = value.Get<Wide>();
+                    valid = number != nullptr &&
+                        static_cast<std::uint64_t>(*number) == (std::numeric_limits<std::uint64_t>::max)();
+                }) || !valid || !binary.TryVisitValue(reflection::EnumValue{ std::int64_t{ 1 } },
+                [&](const reflection::ValueView& value)
+                {
+                    const auto* number = value.Get<Binary>();
+                    valid = number != nullptr && *number == Binary::On;
+                }) || !valid)
+            {
+                return false;
+            }
+
+            return true;
+        }
+    }
+
     bool ValidateEnumRegistry()
     {
+        if (!CheckEnumValueVisits())
+        {
+            return false;
+        }
+
         reflection::Registry registry;
 
         reflection::EnumInfo enumeration;

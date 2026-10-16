@@ -1,14 +1,27 @@
 ﻿include_guard(GLOBAL)
 
 function(reflection_generate)
+    set(_single_value_arguments
+        TARGET MODULE GENERATOR RESOURCE_DIR VISIBILITY TYPE_LIST_METADATA CXX_STANDARD
+        HEADER_INCLUDE_ROOT OUTPUT_DIRECTORY REGISTRY_HEADER REGISTRY_TYPE
+    )
+
     cmake_parse_arguments(PARSE_ARGV 0 arg
         ""
-        "TARGET;MODULE;GENERATOR;RESOURCE_DIR;VISIBILITY;TYPE_LIST_METADATA;HEADER_INCLUDE_ROOT"
+        "${_single_value_arguments}"
         "HEADERS;INCLUDE_DIRECTORIES;COMPILE_OPTIONS"
     )
 
     if(arg_UNPARSED_ARGUMENTS OR arg_KEYWORDS_MISSING_VALUES)
         message(FATAL_ERROR "Invalid arguments to reflection_generate()")
+    endif()
+
+    if(NOT DEFINED arg_CXX_STANDARD)
+        set(arg_CXX_STANDARD 20)
+    endif()
+
+    if(NOT arg_CXX_STANDARD MATCHES "^(20|23)$")
+        message(FATAL_ERROR "CXX_STANDARD must be 20 or 23")
     endif()
 
     if(NOT DEFINED arg_VISIBILITY)
@@ -47,6 +60,42 @@ function(reflection_generate)
     get_target_property(_registered_modules "${arg_TARGET}" REFLECTION_MODULES)
     if(arg_MODULE IN_LIST _registered_modules)
         message(FATAL_ERROR "Module ${arg_MODULE} is already attached to ${arg_TARGET}")
+    endif()
+
+    set(_registry_arguments)
+    set(_registry_dependency)
+
+    if((arg_REGISTRY_HEADER AND NOT arg_REGISTRY_TYPE) OR
+       (arg_REGISTRY_TYPE AND NOT arg_REGISTRY_HEADER))
+        message(FATAL_ERROR "REGISTRY_HEADER and REGISTRY_TYPE must be provided together")
+    endif()
+
+    if(arg_REGISTRY_TYPE)
+        if(NOT arg_REGISTRY_TYPE MATCHES "^([A-Za-z_][A-Za-z0-9_]*::)*[A-Za-z_][A-Za-z0-9_]*$")
+            message(FATAL_ERROR "Invalid REGISTRY_TYPE: ${arg_REGISTRY_TYPE}")
+        endif()
+
+        get_target_property(_registry_owner "${arg_TARGET}" REFLECTION_REGISTRY_OWNER)
+        if(_registry_owner)
+            message(FATAL_ERROR "A registry bootstrap is already attached to ${arg_TARGET}")
+        endif()
+
+        get_filename_component(_registry_header "${arg_REGISTRY_HEADER}" ABSOLUTE
+            BASE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+
+        if(NOT EXISTS "${_registry_header}" OR IS_DIRECTORY "${_registry_header}")
+            message(FATAL_ERROR "Registry header does not exist: ${_registry_header}")
+        endif()
+
+        if(_registry_header MATCHES "[\"\r\n]")
+            message(FATAL_ERROR "Unsupported registry header path: ${_registry_header}")
+        endif()
+
+        list(APPEND _registry_arguments
+            --registry-header "${_registry_header}"
+            --registry-type "${arg_REGISTRY_TYPE}"
+        )
+        set(_registry_dependency "${_registry_header}")
     endif()
 
     if(arg_GENERATOR)
@@ -125,6 +174,10 @@ function(reflection_generate)
     set(_header_arguments)
     set(_input_content "")
 
+    if(arg_REGISTRY_TYPE)
+        string(APPEND _input_content "#include \"${_registry_header}\"\n")
+    endif()
+
     foreach(_header IN LISTS _header_paths)
         set(_include_header "${_header}")
 
@@ -143,8 +196,15 @@ function(reflection_generate)
         string(APPEND _input_content "#include \"${_header}\"\n")
     endforeach()
 
+    set(_target_includes "$<TARGET_PROPERTY:${arg_TARGET},INCLUDE_DIRECTORIES>")
+    set(_target_definitions "$<TARGET_PROPERTY:${arg_TARGET},COMPILE_DEFINITIONS>")
+
     set(_include_arguments
         "$<$<BOOL:${_runtime_includes}>:-I$<JOIN:${_runtime_includes},;-I>>"
+        "$<$<BOOL:${_target_includes}>:-I$<JOIN:${_target_includes},;-I>>"
+    )
+    set(_definition_arguments
+        "$<$<BOOL:${_target_definitions}>:-D$<JOIN:${_target_definitions},;-D>>"
     )
     foreach(_include IN LISTS arg_INCLUDE_DIRECTORIES)
         get_filename_component(_absolute_include "${_include}" ABSOLUTE
@@ -156,18 +216,25 @@ function(reflection_generate)
         list(APPEND _include_arguments "-I${_header_include_root}")
     endif()
 
-    set(_base_directory
-        "${CMAKE_CURRENT_BINARY_DIR}/reflection/${arg_TARGET}/${arg_MODULE}")
-    set(_generated_directory "${_base_directory}/$<CONFIG>")
+    set(_base_directory "${CMAKE_CURRENT_BINARY_DIR}/reflection/${arg_TARGET}/${arg_MODULE}")
+
+    if(arg_OUTPUT_DIRECTORY)
+        get_filename_component(_generated_directory "${arg_OUTPUT_DIRECTORY}" ABSOLUTE
+            BASE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+    else()
+        set(_generated_directory "${_base_directory}/$<CONFIG>")
+    endif()
+
     set(_input_cpp "${_base_directory}/ReflectionInput.cpp")
     set(_generated_cpp "${_generated_directory}/${arg_MODULE}.gen.cpp")
     set(_generated_header "${_generated_directory}/${arg_MODULE}.gen.h")
     set(_depfile "${_generated_directory}/${arg_MODULE}.gen.d")
+    set(_metadata_json "${_generated_directory}/${arg_MODULE}.gen.metadata.json")
 
     file(GENERATE OUTPUT "${_input_cpp}" CONTENT "${_input_content}")
 
     add_custom_command(
-        OUTPUT "${_generated_cpp}" "${_generated_header}"
+        OUTPUT "${_generated_cpp}" "${_generated_header}" "${_metadata_json}"
 
         COMMAND "${CMAKE_COMMAND}" -E make_directory "${_generated_directory}"
 
@@ -175,11 +242,13 @@ function(reflection_generate)
             --module "${arg_MODULE}"
             "--type-list-metadata=${arg_TYPE_LIST_METADATA}"
             ${_header_arguments}
+            ${_registry_arguments}
             --output "${_generated_cpp}"
             --depfile "${_depfile}"
             "${_input_cpp}"
             --
-            -std=c++20
+            "-std=c++${arg_CXX_STANDARD}"
+            "${_definition_arguments}"
             "${_include_arguments}"
             "-resource-dir=${_resource_dir}"
             ${arg_COMPILE_OPTIONS}
@@ -188,6 +257,7 @@ function(reflection_generate)
             ${_generator_dependency}
             "${_input_cpp}"
             ${_header_paths}
+            ${_registry_dependency}
 
         DEPFILE "${_depfile}"
         WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
@@ -207,4 +277,10 @@ function(reflection_generate)
     target_link_libraries("${arg_TARGET}" ${arg_VISIBILITY} Reflection::Runtime)
     set_property(TARGET "${arg_TARGET}" APPEND PROPERTY
         REFLECTION_MODULES "${arg_MODULE}")
-endfunction()   
+    set_property(TARGET "${arg_TARGET}" APPEND PROPERTY
+        REFLECTION_METADATA_FILES "${_metadata_json}")
+
+    if(arg_REGISTRY_TYPE)
+        set_property(TARGET "${arg_TARGET}" PROPERTY REFLECTION_REGISTRY_OWNER "${arg_REGISTRY_TYPE}")
+    endif()
+endfunction()

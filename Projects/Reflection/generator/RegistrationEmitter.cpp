@@ -197,6 +197,7 @@ namespace reflection_codegen
 
             output << "        function.Name = " << EmitString(function.Name) << ";\n"
                 << "        function.ReturnType = " << EmitString(details.ReturnType) << ";\n"
+                << "        function.CanonicalReturnType = " << EmitString(details.CanonicalReturnType) << ";\n"
                 << "        function.Signature = " << EmitString(details.Signature) << ";\n"
                 << "        function.IsStaticMember = "
                 << (details.IsStaticMember ? "true" : "false") << ";\n"
@@ -434,6 +435,25 @@ namespace reflection_codegen
                 type.Declaration.Metadata, type.Declaration.QualifiedName
             );
 
+            for (const auto& base : typeDetails.BaseTypes)
+            {
+                const auto& owner = type.Declaration.QualifiedName;
+                output << "        type.Bases.push_back(reflection::BaseInfo::";
+                if (base.Access == AccessKind::Public)
+                {
+                    output << "For<::" << owner << ", ::" << base.TypeName << ">(";
+                }
+                else
+                {
+                    output << "Bind<::" << owner << ", ::" << base.TypeName << ",\n"
+                        << "            [](const ::" << owner << "& object) -> const ::" << base.TypeName
+                        << "& { return static_cast<const ::" << base.TypeName << "&>(object); },\n"
+                        << "            [](::" << owner << "& object) -> ::" << base.TypeName
+                        << "& { return static_cast<::" << base.TypeName << "&>(object); }>(";
+                }
+                output << EmitString(base.TypeName) << ", " << (base.IsVirtual ? "true" : "false") << "));\n";
+            }
+
             for (const DeclarationModel& property : type.Properties)
             {
                 const auto& details =
@@ -627,6 +647,20 @@ namespace reflection_codegen
             << "    reflection::RegistrationResult failure;\n"
             << "    return Register_" << moduleName << "(registry, failure);\n"
             << "}\n"
+            << "}\n";
+
+        return output.str();
+    }
+
+    std::string EmitRegistryBootstrap(std::string_view moduleName, std::string_view registryHeader, std::string_view registryType)
+    {
+        std::ostringstream output;
+
+        output << "\n#include \"" << registryHeader << "\"\n\n"
+            << "bool " << registryType << "::RegisterGeneratedTypes("
+            << "reflection::Registry& registry, reflection::RegistrationResult& failure)\n"
+            << "{\n"
+            << "    return reflection_generated::Register_" << moduleName << "(registry, failure);\n"
             << "}\n";
 
         return output.str();

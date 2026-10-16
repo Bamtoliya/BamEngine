@@ -1,7 +1,26 @@
 ﻿cmake_minimum_required(VERSION 3.21)
 project(ReflectionPackageCheck LANGUAGES CXX)
 
-find_package(Reflection 0.1 CONFIG REQUIRED)
+include(CTest)
+option(REFLECTION_PACKAGE_CHECK_GENERATED "Build the generated registration package consumer" ON)
+
+find_package(Reflection 0.1 CONFIG REQUIRED COMPONENTS Runtime)
+
+add_executable(ReflectionRuntimePackageCheck RuntimeMain.cpp)
+target_link_libraries(ReflectionRuntimePackageCheck PRIVATE Reflection::Runtime)
+set_target_properties(ReflectionRuntimePackageCheck PROPERTIES CXX_EXTENSIONS OFF)
+
+if(MSVC)
+    target_compile_options(ReflectionRuntimePackageCheck PRIVATE /utf-8)
+endif()
+
+if(BUILD_TESTING)
+    add_test(NAME ReflectionRuntimePackageCheck COMMAND ReflectionRuntimePackageCheck)
+endif()
+
+if(NOT REFLECTION_PACKAGE_CHECK_GENERATED)
+    return()
+endif()
 
 get_target_property(_reflection_package_includes Reflection::Runtime INTERFACE_INCLUDE_DIRECTORIES)
 get_target_property(_reflection_package_runtime Reflection::Runtime IMPORTED_LOCATION_RELEASE)
@@ -34,3 +53,7 @@ reflection_generate(
 )
 
 target_link_libraries(ReflectionPackageCheck PRIVATE PackageReflection)
+
+if(BUILD_TESTING)
+    add_test(NAME ReflectionPackageCheck COMMAND ReflectionPackageCheck)
+endif()

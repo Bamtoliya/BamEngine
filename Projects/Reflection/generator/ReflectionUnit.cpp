@@ -36,6 +36,16 @@ namespace reflection_codegen
                 continue;
             }
 
+            const auto& typeDetails = std::get<TypeDetails>(declaration.Details);
+            for (const auto& base : typeDetails.BaseTypes)
+            {
+                if (base.Access != AccessKind::Public && !typeDetails.HasRegistrationFriend)
+                {
+                    fail(index, "Non-public base requires REFLECT_BODY(): " + declaration.QualifiedName);
+                    return result;
+                }
+            }
+
             const std::size_t typeIndex = result.Unit.Types.size();
 
             if (!typeIndices.emplace(

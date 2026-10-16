@@ -6,6 +6,16 @@
 등록용 C++ 파일을 생성합니다. 애플리케이션은 생성된 등록 함수를
 호출해 자신이 소유한 Registry에 정보를 등록합니다.
 
+## 시작하기
+
+- 저장 형식과 무관한 타입 정보·멤버 접근만 필요하면 `Reflection::Runtime`을 연결합니다.
+- 수동 등록은 Generator 없이 사용할 수 있습니다. 소스 구성에서는 `REFLECTION_BUILD_GENERATOR=OFF`로 선택합니다.
+- 어노테이션 등록은 Generator와 대응하는 Clang resource 디렉터리가 필요합니다.
+- 등록 멤버의 자동 저장·복원은 [ReflectionArchive](../ReflectionArchive/README.md)가 담당합니다.
+
+[공통 빌드 가이드](../../Docs/ReflectionArchiveBuild.md)에 Release 빌드·설치·외부 소비자 검증 명령을 모았습니다.
+이 README의 어노테이션·CMake 연결·접근 API 설명은 사용할 기능에 따라 참조합니다.
+
 ## 구성
 
 - `include/reflection`, `src`: 런타임 정보, 등록, 프로퍼티 접근, 함수 호출
@@ -15,30 +25,40 @@
 - [`../ReflectionConsumer`](../ReflectionConsumer): 소스 포함 방식의 별도 소비자 프로젝트
 - [`../ReflectionPackageCheck`](../ReflectionPackageCheck): 설치 패키지 방식의 별도 소비자 프로젝트
 
-현재 소스 CMake 구성은 Reflection Runtime과 ReflectionGenerator 타깃을 함께 정의합니다.
-Generator를 제외하는 `REFLECTION_BUILD_GENERATOR` 옵션은 현재 제공하지 않습니다.
+소스 CMake 구성은 기본적으로 Reflection Runtime과 ReflectionGenerator 타깃을 함께 정의합니다.
+`REFLECTION_BUILD_GENERATOR=OFF`로 구성하면 Runtime만 빌드하며 LLVM·Clang 패키지를 검색하지 않습니다.
 
 `REFLECTION_BUILD_EXAMPLE=ON`으로 검증 예제를 활성화할 수 있습니다.
 예제의 코드 생성에는 Generator와 대응하는 Clang resource 디렉터리가 필요합니다.
+최상위 구성에서 BUILD_TESTING=ON이면 ReflectionExample을 CTest에 등록합니다.
+add_subdirectory로 포함할 때는 상위 프로젝트에서 include(CTest)를 호출합니다.
 
 Runtime 자체는 LLVM에 의존하지 않습니다.
-다만 Reflection 소스를 `add_subdirectory()`로 포함하면
-Generator 구성도 실행되므로 LLVM·Clang 개발 라이브러리가 필요합니다.
+Generator를 빌드할 때만 LLVM·Clang 개발 라이브러리가 필요합니다.
 
-LLVM 의존성 없이 Runtime만 연결하려면 설치된 Reflection 패키지를 사용합니다.
+LLVM 의존성 없이 Runtime만 연결하려면 위 옵션을 끄거나 설치된 Reflection 패키지를 사용합니다.
 설치 패키지에는 Generator 실행 파일과 Clang resource 디렉터리가 포함되지 않습니다.
+
+설치 Runtime은 `find_package(Reflection CONFIG REQUIRED COMPONENTS Runtime)`으로 선택할 수 있습니다.
+[`../ReflectionPackageCheck`](../ReflectionPackageCheck)는 기본적으로 Runtime 단독 소비자와 생성 등록 소비자를 빌드합니다.
+`REFLECTION_PACKAGE_CHECK_GENERATED=OFF`이면 외부 Generator 없이 Runtime만 연결하는 소비자를 검증합니다.
+이 구성은 상속 변환·중첩 컨테이너 접근·const 검사를 수행하며 Archive와 LLVM을 요구하지 않습니다.
+BUILD_TESTING=ON일 때 선택된 소비자들을 CTest로 실행할 수 있습니다.
 
 ## 검증 환경
 
 - Windows x64
 - Visual Studio 18 2026
 - LLVM·Clang 20.1.8
-- CMake 3.21 이상
+- CMake 4.2.3 사용, 최소 요구 버전 3.21
 - C++20, RTTI 사용
+- Debug·Release 모듈 및 설치 소비자 실행 검증
 
 LLVM 20에서 기존 예제와 별도 소비자 프로젝트의 실행을 확인했습니다.
 소비자에서는 `<string>`을 포함한 헤더 분석과 `std::string` 프로퍼티의
 읽기·쓰기를 확인했습니다.
+구성별 검사 결과와 Release Generator 검증은
+[공통 빌드 가이드의 실행 기록](../../Docs/ReflectionArchiveBuild.md#실행-검증-기록)에 정리되어 있습니다.
 
 다른 운영체제와 도구 조합은 아직 검증하지 않았습니다.
 
@@ -170,9 +190,10 @@ reflection_generate(
 `REFLECTION_CLANG_RESOURCE_DIR`에는 Generator와 대응하는 Clang resource 디렉터리를 지정합니다.
 위 예제는 소비자와 Reflection 디렉터리가 나란히 있는 배치를 가정합니다.
 
-현재 `cmake/ReflectionGenerator.cmake`는 Reflection 디렉터리의
-`dependencies/llvm-20.1.8/lib/cmake/llvm`과 `lib/cmake/clang`을 패키지 경로로 지정합니다.
-다른 SDK 배치를 사용하면 해당 스크립트의 경로도 조정해야 합니다.
+Generator 빌드는 소비자가 지정한 `LLVM_DIR`과 `Clang_DIR`을 우선 사용합니다.
+지정하지 않았고 Reflection 디렉터리의 `dependencies/llvm-20.1.8/lib/cmake`에
+패키지가 있으면 해당 SDK를 기본 경로로 사용합니다.
+다른 SDK는 CMake 구성 인자로 지정할 수 있으며 스크립트를 수정할 필요가 없습니다.
 
 Generator는 다음 순서로 선택합니다.
 
@@ -180,9 +201,10 @@ Generator는 다음 순서로 선택합니다.
 2. 현재 빌드에 정의된 `ReflectionGenerator` 타깃
 3. `REFLECTION_GENERATOR_EXECUTABLE`에 지정된 실행 파일
 
-소스 포함 방식에서는 ReflectionGenerator 타깃이 존재하므로 기본적으로 이를 사용합니다.
+소스 포함 방식에서 Generator 빌드를 켜면 ReflectionGenerator 타깃을 기본적으로 사용합니다.
 외부 실행 파일을 우선 사용하려면 `GENERATOR` 인자로 직접 지정합니다.
-이 경우에도 현재 소스 구성의 LLVM·Clang 패키지 검색은 생략되지 않습니다.
+외부 Generator를 사용하고 SDK 검색도 생략하려면 `REFLECTION_BUILD_GENERATOR=OFF`로 구성합니다.
+이때 `GENERATOR` 인자 또는 `REFLECTION_GENERATOR_EXECUTABLE`로 실행 파일을 제공해야 합니다.
 Clang resource 경로도 생성 함수의 `RESOURCE_DIR` 인자로 직접 지정할 수 있습니다.
 
 추가 분석 환경은 `INCLUDE_DIRECTORIES`, `COMPILE_OPTIONS`로 전달합니다.
@@ -296,7 +318,7 @@ Reflection 소스를 소비자 프로젝트에 포함하지 않고,
 cmake_minimum_required(VERSION 3.21)
 project(MyApp LANGUAGES CXX)
 
-find_package(Reflection 0.1 CONFIG REQUIRED)
+find_package(Reflection 0.1 CONFIG REQUIRED COMPONENTS Runtime)
 
 add_executable(MyApp main.cpp)
 
@@ -318,7 +340,7 @@ CMake 구성 시 다음 값을 지정합니다.
 Runtime만 사용하고 코드 생성은 별도로 처리하는 프로젝트에서는 다음처럼 연결합니다.
 
 ```cmake
-find_package(Reflection 0.1 CONFIG REQUIRED)
+find_package(Reflection 0.1 CONFIG REQUIRED COMPONENTS Runtime)
 
 add_executable(MyApp main.cpp)
 target_link_libraries(MyApp PRIVATE Reflection::Runtime)
@@ -337,6 +359,10 @@ Reflection Runtime 타깃이 모든 소비자에게 /MT를 강제하는 것은 �
 
 다른 Runtime 설정이나 Debug 구성을 사용하려면
 해당 설정으로 Runtime과 소비자를 함께 빌드해야 합니다.
+공통 빌드 가이드의 Release 검증은 모듈과 소비자에 `MultiThreadedDLL`(`/MD`)을 명시합니다.
+Generator는 별도 실행 파일이므로 사용하는 LLVM SDK의 Runtime 설정을 따를 수 있습니다.
+설치 패키지는 Generator를 실행 파일로 호출하며 LLVM 라이브러리를 소비자에게 링크하지 않습니다.
+Archive와 함께 설치할 때는 Debug와 Release 설치 경로를 분리합니다.
 
 ## 검증 프로젝트의 역할
 
@@ -413,7 +439,9 @@ if (speed != nullptr)
 반환 포인터의 수명은 대상 객체와 멤버의 수명에 달려 있습니다.
 
 소유 객체와 값의 자료형이 일치해야 합니다.
-상속 관계나 숫자형·포인터형의 자동 변환은 지원하지 않습니다.
+PropertyInfo가 상속 관계를 암묵적으로 변환하지는 않습니다.
+기반 멤버에 접근할 때는 BaseInfo::AsBase()로 소유 타입에 맞는 뷰를 먼저 만듭니다.
+숫자형·포인터형의 자동 변환은 지원하지 않습니다.
 
 - const 멤버: 읽기 가능, 쓰기 불가
 - 대입 불가능한 멤버: 읽기 가능, 쓰기 불가
@@ -499,8 +527,36 @@ Registry는 이름 외에도 실제 C++ 타입과 뷰를 이용한 조회를 제
 타입 식별에는 RTTI를 사용하며, 이를 파일 저장용 식별자로 사용하지 않습니다.
 
 조회는 뷰에 저장된 타입을 기준으로 합니다.
-상속 관계를 따라 변환하거나 동적 타입을 자동으로 찾아주지 않습니다.
+Registry 조회가 상속 관계를 따라 변환하거나 동적 타입을 자동으로 찾아주지는 않습니다.
 포인터 값의 뷰로 대상 객체의 타입 정보를 자동 조회하지도 않습니다.
+
+## 기반 클래스 접근
+
+TypeInfo::Bases는 선언된 직접 기반 타입의 BaseInfo 목록입니다.
+생성기는 기반 타입의 실제 C++ 타입, 이름, virtual 여부와 객체 변환 콜백을 연결합니다.
+각 기반 타입의 TypeInfo도 별도로 등록해야 해당 멤버를 조회할 수 있습니다.
+기반 타입의 등록 순서는 강제하지 않습니다. 기반 등록 누락은 실제 사용 시 확인합니다.
+
+BaseInfo::AsBase(object)는 정확한 파생 타입의 ObjectView를 기반 부분 객체의 뷰로 변환합니다.
+잘못된 객체 타입, 유효하지 않은 뷰 또는 미지원 변환에는 유효하지 않은 뷰를 반환합니다.
+실제 C++ 상속 변환을 사용하므로 다중·가상 상속의 주소 조정도 적용합니다.
+const 뷰를 변환한 결과는 읽기 전용이며 객체의 수명과 소유권은 바꾸지 않습니다.
+다단계 상속에서는 각 직접 기반 관계를 차례로 따라갑니다.
+
+public이고 모호하지 않은 관계는 수동 등록에서도 `BaseInfo::For<Derived, Base>("Base")`로 연결합니다.
+private·protected 상속은 파생 타입의 REFLECT_BODY()가 필요합니다.
+생성된 friend가 BaseInfo::Bind에 타입이 확인된 변환 콜백을 제공하며,
+권한이 없으면 생성 단계에서 오류로 거부합니다.
+수동 Bind의 콜백도 입력 객체의 실제 기반 부분 객체를 참조해야 합니다.
+기본 For에서 접근할 수 없거나 모호한 관계는 CanCast()가 false인 정보가 됩니다.
+Registry는 연결되지 않은 변환·잘못된 소유 타입을 InvalidBase, 같은 기반 관계의 중복을 DuplicateBase로 거부합니다.
+
+TypeInfo::FindProperty()와 FindFunction()은 해당 타입에 직접 등록된 멤버만 찾습니다.
+기반 멤버는 Registry에서 기반 TypeInfo를 찾고 AsBase()로 변환한 뷰로 사용합니다.
+ObjectView::RefersToSameObject()는 두 유효한 뷰의 타입과 실제 객체 주소가 같은지 확인합니다.
+읽기 전용 여부가 달라도 같은 객체를 가리키면 true입니다.
+
+기반 포인터·참조에서 실제 파생 타입을 알아내는 기능과 downcast는 제공하지 않습니다.
 
 ## 중첩 객체 접근
 
@@ -571,9 +627,21 @@ TryClear()로 비울 수 있습니다.
 대상은 `std::vector`, `std::array`, `std::set`, `std::unordered_set`,
 `std::map`, `std::unordered_map`입니다.
 
-이 판별이 중첩 컨테이너의 자동 순회나 자동 직렬화를 제공하는 것은 아닙니다.
+복사 가능 여부 판별과 재귀 접근 정보는 별개입니다.
 사용자 정의 타입의 생성자·대입 연산자 본문까지 분석하여
 컴파일 가능 여부를 보장하지도 않습니다.
+
+`GetElementContainerProperty()`와 `GetMapValueContainerProperty()`는 지원 STL 컨테이너인
+요소 또는 mapped 값의 접근 정보를 반환하며, 그 밖의 타입에는 nullptr를 반환합니다.
+반환한 PropertyInfo는 내부 컨테이너 자체를 소유 객체로 사용합니다.
+`TryEditElementObject()` 또는 `TryEditMapValueObject()`의 ObjectView로 내부 요소를 편집할 수 있습니다.
+이 정보는 타입별로 공유하며 정적 수명을 갖습니다. Name은 `Value`인 접근용 이름이며 등록된 멤버가 아닙니다.
+필드 이름을 바꾸어 사용하려면 PropertyInfo를 복사한 뒤 Name을 지정합니다.
+
+`MakeContainerProperty<Container>(name)`은 독립 컨테이너 값에도 같은 접근 정보를 만듭니다.
+`PropertyInfo::AsObject(value)`는 프로퍼티의 실제 값 타입과 일치하는 클래스·union 값만
+읽기 전용 ObjectView로 변환합니다. const 접근을 수정 가능한 접근으로 승격하지 않습니다.
+저장 형식과 재귀 직렬화 정책은 ReflectionArchive에서 처리합니다.
 
 std::vector<bool>은 실제 bool 요소 주소를 제공하지 않으므로
 TryReadElement()와 TryWriteElement()를 지원하지 않습니다.
@@ -592,12 +660,20 @@ TryAppend()와 TryInsert()는 읽기 전용 ValueView에서 값을 복사합니�
 - `TryWriteElement`: 복사 대입 가능한 요소 수정
 - `TryEditElementObject`: 클래스·union 요소의 ObjectView
 - `TryWriteEnumElement`: scoped enum 요소에 숫자 쓰기
+- `CanResetElements`, `TryResetElements`: 길이를 유지하며 기본 생성한 배열 값으로 복사 대입
 
 const 배열과 const 요소에는 수정 콜백을 연결하지 않습니다.
 const 소유 객체를 통한 수정도 거부합니다.
 
 고정 배열은 Resize, Clear, Append, Insert, Erase를 지원하지 않습니다.
 Clear를 요소 초기화 작업으로 해석하지 않습니다.
+
+TryResetElements는 `std::array<T, N>` 자체의 기본 생성과 복사 대입을 지원할 때 연결합니다.
+배열을 `std::array<T, N>{}`로 초기화한 값과 같게 하며, 소유 클래스의 멤버 초기화식을 다시 실행하지 않습니다.
+예를 들어 `{9, 11}`로 선언한 int 배열은 `{0, 0}`이 됩니다. 객체 요소는 해당 타입의 기본값을 따릅니다.
+변수 길이 컨테이너에는 이 기능을 연결하지 않으며 미지원 컨테이너는 ResetUnavailable을 반환합니다.
+길이 0인 배열은 실제 요소를 만들지 않으므로 요소의 기본 생성자가 없어도 배열 자체의 초기화를 지원할 수 있습니다.
+직접 호출하면 즉시 반영합니다. 사용자 생성자·대입 연산자의 예외나 외부 부작용을 되돌리지는 않습니다.
 
 `std::array<bool, N>`은 실제 bool 요소 주소를 제공하므로 요소 읽기·쓰기를 지원합니다.
 길이가 0인 배열도 컨테이너로 인식하지만, 모든 요소 인덱스는 범위를 벗어납니다.
@@ -632,6 +708,7 @@ set 요소는 수정 가능한 뷰를 제공하지 않습니다.
 - `TryFindMapValue`: 키로 값 검색
 - `TryWriteMapValue`: 기존 키의 값 수정
 - `TryEditMapValueObject`: 기존 클래스·union 값의 ObjectView
+- `CanEmplaceMapValueObject`, `TryEmplaceMapValueObject`: 새 키의 클래스·union 값을 기본 생성하고 ObjectView 반환
 - `TryInsertMapEntry`: 키·값 복사 삽입
 - `TryEraseMapEntry`: 키로 항목 삭제
 - `TryClear`: 모든 항목 제거
@@ -642,6 +719,13 @@ set 요소는 수정 가능한 뷰를 제공하지 않습니다.
 TryWriteMapValue는 없는 키를 생성하지 않습니다.
 TryInsertMapEntry는 기존 키의 값을 덮어쓰지 않습니다.
 없는 키는 KeyNotFound, 중복 삽입은 KeyAlreadyExists를 반환합니다.
+
+TryEmplaceMapValueObject도 기존 키의 값을 덮어쓰지 않습니다.
+키 복사와 값의 기본 생성을 지원할 때만 콜백을 연결하며, const 프로퍼티나 const 소유 객체는 수정하지 않습니다.
+스칼라 값은 ObjectUnavailable, 기본 생성 불가능한 객체 값은 InsertUnavailable을 반환합니다.
+컨테이너 최대 크기를 넘는 삽입은 SizeOutOfRange를 반환합니다.
+성공하면 항목이 즉시 생성됩니다. 이후 ObjectView를 사용하는 코드의 실패를 이 API가 되돌리지는 않습니다.
+반환된 뷰의 수명은 map 내부 값의 수명을 따릅니다.
 
 키는 읽기 전용입니다.
 객체 값 편집은 해당 값의 수명이나 소유권을 관리하지 않습니다.
@@ -744,9 +828,11 @@ if (setter != nullptr && setter->CanInvoke())
 - `InvokeValue<Result>`: 스칼라 값을 반환하는 멤버 함수
 - `InvokeWithoutObject`: void를 반환하는 정적·자유 함수
 - `InvokeValueWithoutObject<Result>`: 스칼라 값을 반환하는 정적·자유 함수
+- `InvokeDynamicWithoutObject`: 스칼라 값·숫자 std::array 인자를 받는 정적·자유 함수의 동적 호출
 
 스칼라는 숫자, enum, 포인터 등을 포함합니다.
-문자열·사용자 정의 객체의 값 반환과 참조 반환은 현재 지원하지 않습니다.
+문자열·일반 사용자 정의 객체의 값 반환과 참조 반환은 현재 지원하지 않습니다.
+정적·자유 함수의 숫자 `std::array<T, N>` 반환은 동적 호출 API에서 지원합니다.
 
 참조 매개변수, 가변 인자, noexcept를 포함한 예외 명세,
 ref-qualified 멤버 함수 등은 현재 호출 바인딩 대상에서 제외합니다.
@@ -757,7 +843,15 @@ ref-qualified 멤버 함수 등은 현재 호출 바인딩 대상에서 제외�
 
 인자와 반환 자료형은 저장된 함수 포인터 타입과 일치해야 합니다.
 자동 변환은 제공하지 않습니다.
-호출된 사용자 함수에서 발생한 예외는 그대로 전달됩니다.
+타입 지정 호출 API에서는 사용자 함수의 예외를 그대로 전달합니다.
+
+동적 호출은 `CanInvokeDynamicWithoutObject()`로 별도 확인합니다.
+`std::span<const std::any>`로 값을 전달하며 개수와 네이티브 자료형을 정확히 검사합니다.
+`GetParameterCppTypes()`와 `GetReturnCppType()`은 이 바인딩의 실제 C++ 타입을 제공합니다.
+`DynamicInvocationResult`는 반환값을 `std::any`로 소유하고, 인자 오류와 사용자 예외를 Error/Message로 보고합니다.
+void 반환은 성공하면서 Value가 비어 있습니다. 멤버 함수와 일반 클래스 값 인자는 아직 동적 호출하지 않습니다.
+기존 `CanInvoke()`의 타입 지정 호출 지원 여부와 동적 호출 가능 여부를 혼동하지 않아야 합니다.
+생성기의 ReturnType은 원래 표기이고 CanonicalReturnType은 별칭을 해석한 표기입니다.
 
 시그니처 표기는 Generator 출력으로 확인합니다.
 현재 인자가 없는 const 멤버 함수의 예시는 `float (void) const`입니다.
@@ -784,6 +878,21 @@ signed와 unsigned 값도 숫자 자체를 비교하므로 `int64_t{1}`과 `uint
 같은 값의 열거자가 여러 개이면 등록 순서상 첫 번째 항목을 반환합니다.
 일치하는 열거자가 없으면 `nullptr`를 반환합니다.
 `ReadValue()`는 열거자 목록에 없는 enum 값도 읽을 수 있습니다.
+
+### 숫자를 원래 enum 타입으로 변환
+
+`EnumInfo::TryVisitValue(EnumValue, visitor)`는 숫자를 기반 타입 범위 안에서 scoped enum으로 변환하고,
+임시 enum의 읽기 전용 ValueView로 `void(const ValueView&)` 콜백을 한 번 호출합니다.
+지원 여부는 `CanVisitValue()`, 기반 타입의 부호는 `IsUnderlyingSigned()`로 조회합니다.
+이 정보와 변환 콜백은 `EnumInfo::For<T>()`가 연결하며 Generator의 등록 코드도 같은 API를 사용합니다.
+
+기반 타입 범위를 벗어난 값과 변환 바인딩이 없는 정보는 false를 반환하고 콜백을 호출하지 않습니다.
+bool 기반 enum은 숫자 0과 1만 허용합니다. 일반 enum에는 변환 바인딩을 연결하지 않습니다.
+등록 열거자 목록에 없는 값이나 비트 조합도 표현 범위 안이면 허용합니다.
+
+임시 값과 ValueView는 콜백이 끝나면 사용할 수 없습니다.
+콜백 안에서 필요한 값을 복사하거나 컨테이너에 삽입해야 하며, 뷰나 요소 주소를 보관하지 않습니다.
+사용자 콜백의 예외와 외부 부작용은 호출자에게 그대로 전달됩니다.
 
 ### 프로퍼티 숫자 쓰기
 
@@ -845,7 +954,7 @@ Registry를 파괴하거나 대입해 내용을 교체한 이후에는 기존 �
 접근 경로를 제공합니다.
 전체 객체 그래프를 자동 순회하거나 포인터를 따라가지는 않습니다.
 
-일반적인 템플릿 선언의 코드 생성, 상속 관계를 이용한 접근,
+일반적인 템플릿 선언의 코드 생성, 동적 파생 타입의 식별과 downcast,
 객체 생성·소멸과 포인터 소유권 관리는 현재 제공하지 않습니다.
 
 직렬화는 Reflection Runtime의 책임이 아닙니다.

@@ -17,4 +17,6 @@ namespace example::extra
     {
         return value * 2;
     }
+    FUNCTION()
+    inline bool InvertBool(bool value) { return !value; }
 }

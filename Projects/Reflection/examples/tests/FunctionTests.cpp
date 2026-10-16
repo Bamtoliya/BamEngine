@@ -425,6 +425,13 @@ namespace reflection_tests
             return false;
         }
 
+        const auto* invert = registry.FindFreeFunction("example::extra::InvertBool", "bool (bool)");
+        if (!invert || invert->CanonicalReturnType != "bool" || invert->Parameters.size() != 1 ||
+            invert->Parameters.front().TypeName != "bool") return false;
+        const auto yes = invert->InvokeValueWithoutObject<bool>(false);
+        const auto no = invert->InvokeValueWithoutObject<bool>(true);
+        if (!yes || !*yes || !no || *no) return false;
+
         const auto* floatAdd =
             registry.FindFreeFunction("example::Add", "float (float, float)");
         const auto* intAdd =

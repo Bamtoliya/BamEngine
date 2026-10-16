@@ -6,11 +6,133 @@
 
 #include <iostream>
 #include <string_view>
+#include <array>
+#include <map>
+#include <vector>
+#include <utility>
 
 namespace reflection_tests
 {
+    namespace
+    {
+        bool CheckNestedContainerAccess()
+        {
+            using Error = reflection::PropertyAccessError;
+            struct Owner
+            {
+                std::vector<std::vector<int>> Values{ { 1, 2 } };
+                std::map<int, std::vector<int>> Mapped{ { 7, { 3 } } };
+                const std::vector<std::vector<int>> ReadOnly{ { 4 } };
+            };
+            Owner source;
+            const auto property = reflection::MakeProperty<&Owner::Values>("Values", "Values");
+            const auto mapped = reflection::MakeProperty<&Owner::Mapped>("Mapped", "Mapped");
+            const auto readOnly = reflection::MakeProperty<&Owner::ReadOnly>("ReadOnly", "ReadOnly");
+            const auto* child = property.GetElementContainerProperty();
+            const auto* mappedChild = mapped.GetMapValueContainerProperty();
+            const auto object = reflection::ObjectView::From(source);
+            if (child == nullptr || mappedChild == nullptr || child != mappedChild ||
+                child->GetElementContainerProperty() != nullptr || child->GetMapValueContainerProperty() != nullptr)
+            {
+                return false;
+            }
+            const auto value = property.TryReadElement(object, 0);
+            if (!value)
+            {
+                return false;
+            }
+            const auto constChild = child->AsObject(value.Value);
+            const int inserted = 9;
+            const auto insertedValue = reflection::ValueView::From(inserted);
+            const auto mutableChild = property.TryEditElementObject(object, 0);
+            if (!constChild.IsReadOnly() || child->TryGetSize(constChild).Size != 2 ||
+                child->TryAppend(constChild, insertedValue) != Error::ReadOnlyObject ||
+                !mutableChild || child->TryAppend(mutableChild.Object, insertedValue) != Error::None ||
+                source.Values[0] != std::vector<int>{ 1, 2, 9 })
+            {
+                return false;
+            }
+            const auto mapValue = mapped.TryEditMapValueObject(
+                object, reflection::ValueView::From(source.Mapped.begin()->first));
+            const auto readOnlyValue = readOnly.TryReadElement(object, 0);
+            return mapValue && mappedChild->TryClear(mapValue.Object) == Error::None && source.Mapped.at(7).empty() &&
+                readOnlyValue && child->AsObject(readOnlyValue.Value).IsReadOnly() &&
+                !readOnly.TryEditElementObject(object, 0) && !child->AsObject(insertedValue).IsValid() &&
+                child->TryGetSize(object).Error == Error::OwnerTypeMismatch;
+        }
+
+        bool CheckFixedArrayReset()
+        {
+            struct Element
+            {
+                int Value = 7;
+                Element() = default;
+                Element(const Element&) = default;
+                Element(Element&&) = delete;
+                Element& operator=(const Element&) = default;
+                Element& operator=(Element&&) = delete;
+            };
+
+            struct NoDefault
+            {
+                explicit NoDefault(int value) : Value(value) {}
+                int Value;
+            };
+
+            struct Arrays
+            {
+                std::array<Element, 2> Values{};
+                std::array<int, 2> Numbers{ 9, 11 };
+                const std::array<Element, 1> ReadOnly{};
+                std::array<NoDefault, 1> Constructed{ NoDefault{ 13 } };
+                std::array<NoDefault, 0> Empty{};
+                std::vector<int> Dynamic{ 1, 2 };
+                int Scalar = 3;
+            };
+
+            using Error = reflection::PropertyAccessError;
+            const auto values = reflection::MakeProperty<&Arrays::Values>("Values", "Values");
+            const auto numbers = reflection::MakeProperty<&Arrays::Numbers>("Numbers", "Numbers");
+            const auto readOnly = reflection::MakeProperty<&Arrays::ReadOnly>("ReadOnly", "ReadOnly");
+            const auto constructed = reflection::MakeProperty<&Arrays::Constructed>("Constructed", "Constructed");
+            const auto empty = reflection::MakeProperty<&Arrays::Empty>("Empty", "Empty");
+            const auto dynamic = reflection::MakeProperty<&Arrays::Dynamic>("Dynamic", "Dynamic");
+            const auto scalar = reflection::MakeProperty<&Arrays::Scalar>("Scalar", "Scalar");
+            Arrays source;
+            source.Values[0].Value = 99;
+            const auto object = reflection::ObjectView::From(source);
+
+            if (!values.CanResetElements() || values.TryResetElements(object) != Error::None ||
+                source.Values[0].Value != 7 || source.Values[1].Value != 7 || source.Values.size() != 2 ||
+                !numbers.CanResetElements() || numbers.TryResetElements(object) != Error::None ||
+                source.Numbers != std::array<int, 2>{ 0, 0 } ||
+                !empty.CanResetElements() || empty.TryResetElements(object) != Error::None)
+            {
+                return false;
+            }
+
+            const auto constObject = reflection::ObjectView::From(std::as_const(source));
+            const auto otherObject = reflection::ObjectView::From(source.Values);
+            return values.TryResetElements({}) == Error::InvalidObject &&
+                values.TryResetElements(otherObject) == Error::OwnerTypeMismatch &&
+                values.TryResetElements(constObject) == Error::ReadOnlyObject &&
+                !readOnly.CanResetElements() && readOnly.TryResetElements(object) == Error::ReadOnlyProperty &&
+                !constructed.CanResetElements() && constructed.TryResetElements(object) == Error::ResetUnavailable &&
+                source.Constructed[0].Value == 13 &&
+                !dynamic.CanResetElements() && dynamic.TryResetElements(object) == Error::ResetUnavailable &&
+                source.Dynamic == std::vector<int>{ 1, 2 } &&
+                scalar.TryResetElements(object) == Error::NotContainer &&
+                reflection::ToString(Error::ResetUnavailable) == "ResetUnavailable";
+        }
+    }
+
     bool ValidatePropertyDiagnostics()
     {
+        if (!CheckFixedArrayReset() || !CheckNestedContainerAccess())
+        {
+            return false;
+        }
+
         using Status = reflection::PropertyAccessStatus;
 
         reflection::Registry registry;

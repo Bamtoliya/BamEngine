@@ -15,8 +15,16 @@
 #include <unordered_map>
 #include <array>
 
+namespace reflection
+{
+    struct PropertyInfo;
+}
+
 namespace reflection::detail
 {
+    template<typename T>
+    const PropertyInfo* GetContainerProperty();
+
     struct PropertyContainerAccess
     {
         using ElementVisitor = bool (*)(void*, std::size_t, const ValueView&);
@@ -28,6 +36,8 @@ namespace reflection::detail
         bool ReadOnly = false;
         bool ObjectElement = false;
         bool ObjectMapped = false;
+        const PropertyInfo* (*ElementContainer)() = nullptr;
+        const PropertyInfo* (*MappedContainer)() = nullptr;
 
         // 읽기 콜백은 컨테이너 주소를 받습니다.
         std::size_t(*Size)(const void*) = nullptr;
@@ -45,6 +55,7 @@ namespace reflection::detail
         void (*WriteElement)(void*, std::size_t, const void*) = nullptr;
         PropertyAccessError(*WriteMapValue)(void*, const void*, const void*) = nullptr;
         PropertyObjectResult(*EditMapValueObject)(void*, const void*) = nullptr;
+        PropertyObjectResult(*EmplaceMapValueObject)(void*, const void*) = nullptr;
         PropertyAccessError(*InsertMapEntry)(void*, const void*, const void*) = nullptr;
         PropertyAccessError(*EraseMapEntry)(void*, const void*) = nullptr;
         PropertyAccessError(*InsertSetElement)(void*, const void*) = nullptr;
@@ -54,6 +65,7 @@ namespace reflection::detail
 
         PropertyAccessError(*Resize)(void*, std::size_t) = nullptr;
         void (*Clear)(void*) = nullptr;
+        void (*ResetElements)(void*) = nullptr;
         PropertyAccessError(*Append)(void*, const void*) = nullptr;
         PropertyAccessError(*AppendEnumElement)(void*, const EnumValue&) = nullptr;
         PropertyAccessError(*Insert)(void*, std::size_t, const void*) = nullptr;

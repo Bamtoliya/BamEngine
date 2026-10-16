@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <reflection/detail/PropertyContainerAccess.h>
 #include <reflection/detail/EnumValueConversion.h>
@@ -10,10 +10,24 @@
 
 namespace reflection::detail
 {
+    // nullptr binds access to a container value itself rather than an owner's member.
+    template<auto Member, typename Owner>
+    decltype(auto) GetPropertyContainerValue(Owner& owner)
+    {
+        if constexpr (std::is_null_pointer_v<decltype(Member)>)
+        {
+            return (owner);
+        }
+        else
+        {
+            return (owner.*Member);
+        }
+    }
+
     template<auto Member, typename Owner>
     PropertyContainerAccess MakePropertyContainerAccess()
     {
-        using MemberValue = std::remove_reference_t<decltype(std::declval<Owner&>().*Member)>;
+        using MemberValue = std::remove_reference_t<decltype(GetPropertyContainerValue<Member>(std::declval<Owner&>()))>;
         using Value = std::remove_cv_t<MemberValue>;
 
         static_assert(!std::is_volatile_v<MemberValue>, "Volatile properties are not supported");
@@ -27,6 +41,7 @@ namespace reflection::detail
             access.ElementType = std::type_index(typeid(Element));
             access.ReadOnly = std::is_const_v<MemberValue>;
             access.ObjectElement = std::is_class_v<Element> || std::is_union_v<Element>;
+            access.ElementContainer = &GetContainerProperty<std::remove_cv_t<Element>>;
 
             access.Size = +[](const void* value) -> std::size_t
                 {
@@ -40,7 +55,7 @@ namespace reflection::detail
                 access.EditElementObject = +[](void* object, std::size_t index) -> ObjectView
                     {
                         auto* owner = static_cast<Owner*>(object);
-                        auto& container = owner->*Member;
+                        auto& container = GetPropertyContainerValue<Member>(*owner);
                         return ObjectView::From(container[index]);
                     };
             }
@@ -51,7 +66,7 @@ namespace reflection::detail
                 access.Resize = +[](void* object, std::size_t size) -> PropertyAccessError
                     {
                         auto* owner = static_cast<Owner*>(object);
-                        auto& container = owner->*Member;
+                        auto& container = GetPropertyContainerValue<Member>(*owner);
 
                         if (size > container.max_size())
                         {
@@ -68,7 +83,7 @@ namespace reflection::detail
                 access.Clear = +[](void* object)
                     {
                         auto* owner = static_cast<Owner*>(object);
-                        auto& container = owner->*Member;
+                        auto& container = GetPropertyContainerValue<Member>(*owner);
                         container.clear();
                     };
             }
@@ -79,7 +94,7 @@ namespace reflection::detail
                 access.Append = +[](void* object, const void* value) -> PropertyAccessError
                     {
                         auto* owner = static_cast<Owner*>(object);
-                        auto& container = owner->*Member;
+                        auto& container = GetPropertyContainerValue<Member>(*owner);
 
                         if (container.size() >= container.max_size())
                         {
@@ -99,7 +114,7 @@ namespace reflection::detail
                 access.Insert = +[](void* object, std::size_t index, const void* value) -> PropertyAccessError
                     {
                         auto* owner = static_cast<Owner*>(object);
-                        auto& container = owner->*Member;
+                        auto& container = GetPropertyContainerValue<Member>(*owner);
 
                         if (container.size() >= container.max_size())
                         {
@@ -122,7 +137,7 @@ namespace reflection::detail
                 access.Erase = +[](void* object, std::size_t index)
                     {
                         auto* owner = static_cast<Owner*>(object);
-                        auto& container = owner->*Member;
+                        auto& container = GetPropertyContainerValue<Member>(*owner);
 
                         using Difference = typename Value::difference_type;
                         const auto position = container.begin() + static_cast<Difference>(index);
@@ -147,7 +162,7 @@ namespace reflection::detail
                             }
 
                             auto* owner = static_cast<Owner*>(object);
-                            auto& container = owner->*Member;
+                            auto& container = GetPropertyContainerValue<Member>(*owner);
                             container[index] = *converted;
                             return PropertyAccessError::None;
                         };
@@ -162,7 +177,7 @@ namespace reflection::detail
                             }
 
                             auto* owner = static_cast<Owner*>(object);
-                            auto& container = owner->*Member;
+                            auto& container = GetPropertyContainerValue<Member>(*owner);
 
                             if (container.size() >= container.max_size())
                             {
@@ -183,7 +198,7 @@ namespace reflection::detail
                             }
 
                             auto* owner = static_cast<Owner*>(object);
-                            auto& container = owner->*Member;
+                            auto& container = GetPropertyContainerValue<Member>(*owner);
 
                             if (container.size() >= container.max_size())
                             {
@@ -212,7 +227,7 @@ namespace reflection::detail
                     access.WriteElement = +[](void* object, std::size_t index, const void* value)
                         {
                             auto* owner = static_cast<Owner*>(object);
-                            auto& container = owner->*Member;
+                            auto& container = GetPropertyContainerValue<Member>(*owner);
                             container[index] = *static_cast<const Element*>(value);
                         };
                 }
@@ -227,6 +242,7 @@ namespace reflection::detail
             access.ElementType = std::type_index{ typeid(Element) };
             access.ReadOnly = std::is_const_v<MemberValue> || std::is_const_v<Element>;
             access.ObjectElement = std::is_class_v<Element> || std::is_union_v<Element>;
+            access.ElementContainer = &GetContainerProperty<std::remove_cv_t<Element>>;
 
             access.Size = +[](const void* value) -> std::size_t
                 {
@@ -241,12 +257,22 @@ namespace reflection::detail
 
             if constexpr (!std::is_const_v<MemberValue> && !std::is_const_v<Element>)
             {
+                if constexpr (std::is_default_constructible_v<Value> && SupportsPropertyCopyAssignment<Value>::value)
+                {
+                    access.ResetElements = +[](void* object)
+                        {
+                            auto* owner = static_cast<Owner*>(object);
+                            const Value defaults{};
+                            (GetPropertyContainerValue<Member>(*owner)) = defaults;
+                        };
+                }
+
                 if constexpr (SupportsPropertyCopyAssignment<Element>::value)
                 {
                     access.WriteElement = +[](void* object, std::size_t index, const void* value)
                         {
                             auto* owner = static_cast<Owner*>(object);
-                            auto& container = owner->*Member;
+                            auto& container = GetPropertyContainerValue<Member>(*owner);
                             container[index] = *static_cast<const Element*>(value);
                         };
                 }
@@ -256,7 +282,7 @@ namespace reflection::detail
                     access.EditElementObject = +[](void* object, std::size_t index) -> ObjectView
                         {
                             auto* owner = static_cast<Owner*>(object);
-                            return ObjectView::From((owner->*Member)[index]);
+                            return ObjectView::From((GetPropertyContainerValue<Member>(*owner))[index]);
                         };
                 }
 
@@ -277,7 +303,7 @@ namespace reflection::detail
                                 }
 
                                 auto* owner = static_cast<Owner*>(object);
-                                (owner->*Member)[index] = *converted;
+                                (GetPropertyContainerValue<Member>(*owner))[index] = *converted;
                                 return PropertyAccessError::None;
                             };
                     }
@@ -291,6 +317,7 @@ namespace reflection::detail
                 access.ElementType = std::type_index(typeid(Element));
                 access.ReadOnly = std::is_const_v<MemberValue>;
                 access.ObjectElement = std::is_class_v<Element> || std::is_union_v<Element>;
+                access.ElementContainer = &GetContainerProperty<std::remove_cv_t<Element>>;
 
                 access.Size = +[](const void* value) -> std::size_t
                     {
@@ -323,13 +350,13 @@ namespace reflection::detail
                     access.Clear = +[](void* object)
                         {
                             auto* owner = static_cast<Owner*>(object);
-                            (owner->*Member).clear();
+                            (GetPropertyContainerValue<Member>(*owner)).clear();
                         };
 
                     access.EraseSetElement = +[](void* object, const void* element) -> PropertyAccessError
                         {
                             auto* owner = static_cast<Owner*>(object);
-                            auto& container = owner->*Member;
+                            auto& container = GetPropertyContainerValue<Member>(*owner);
                             const auto position = container.find(*static_cast<const Element*>(element));
 
                             if (position == container.end())
@@ -346,7 +373,7 @@ namespace reflection::detail
                         access.InsertSetElement = +[](void* object, const void* element) -> PropertyAccessError
                             {
                                 auto* owner = static_cast<Owner*>(object);
-                                auto& container = owner->*Member;
+                                auto& container = GetPropertyContainerValue<Member>(*owner);
                                 const auto& typedElement = *static_cast<const Element*>(element);
 
                                 if (container.size() >= container.max_size())
@@ -376,6 +403,7 @@ namespace reflection::detail
             access.MappedType = std::type_index(typeid(Mapped));
             access.ReadOnly = std::is_const_v<MemberValue>;
             access.ObjectMapped = std::is_class_v<Mapped> || std::is_union_v<Mapped>;
+            access.MappedContainer = &GetContainerProperty<std::remove_cv_t<Mapped>>;
 
             access.Size = +[](const void* value) -> std::size_t
                 {
@@ -427,7 +455,7 @@ namespace reflection::detail
                     access.EditMapValueObject = +[](void* object, const void* key) -> PropertyObjectResult
                         {
                             auto* owner = static_cast<Owner*>(object);
-                            auto& container = owner->*Member;
+                            auto& container = GetPropertyContainerValue<Member>(*owner);
                             const auto position = container.find(*static_cast<const Key*>(key));
 
                             if (position == container.end())
@@ -437,18 +465,48 @@ namespace reflection::detail
 
                             return { PropertyAccessError::None, ObjectView::From(position->second) };
                         };
+
+                    if constexpr (SupportsPropertyCopyConstruction<Key>::value &&
+                        std::is_default_constructible_v<Mapped>)
+                    {
+                        access.EmplaceMapValueObject = +[](void* object, const void* key) -> PropertyObjectResult
+                            {
+                                auto* owner = static_cast<Owner*>(object);
+                                auto& container = GetPropertyContainerValue<Member>(*owner);
+                                const auto& typedKey = *static_cast<const Key*>(key);
+
+                                if (container.find(typedKey) != container.end())
+                                {
+                                    return { PropertyAccessError::KeyAlreadyExists, {} };
+                                }
+
+                                if (container.size() >= container.max_size())
+                                {
+                                    return { PropertyAccessError::SizeOutOfRange, {} };
+                                }
+
+                                const auto [position, inserted] = container.try_emplace(typedKey);
+
+                                if (!inserted)
+                                {
+                                    return { PropertyAccessError::KeyAlreadyExists, {} };
+                                }
+
+                                return { PropertyAccessError::None, ObjectView::From(position->second) };
+                            };
+                    }
                 }
 
                 access.Clear = +[](void* object)
                     {
                         auto* owner = static_cast<Owner*>(object);
-                        (owner->*Member).clear();
+                        (GetPropertyContainerValue<Member>(*owner)).clear();
                     };
 
                 access.EraseMapEntry = +[](void* object, const void* key) -> PropertyAccessError
                     {
                         auto* owner = static_cast<Owner*>(object);
-                        auto& container = owner->*Member;
+                        auto& container = GetPropertyContainerValue<Member>(*owner);
                         const auto position = container.find(*static_cast<const Key*>(key));
 
                         if (position == container.end())
@@ -466,7 +524,7 @@ namespace reflection::detail
                     access.InsertMapEntry = +[](void* object, const void* key, const void* value) -> PropertyAccessError
                         {
                             auto* owner = static_cast<Owner*>(object);
-                            auto& container = owner->*Member;
+                            auto& container = GetPropertyContainerValue<Member>(*owner);
                             const auto& typedKey = *static_cast<const Key*>(key);
 
                             if (container.size() >= container.max_size())
@@ -489,7 +547,7 @@ namespace reflection::detail
                     access.WriteMapValue = +[](void* object, const void* key, const void* value) -> PropertyAccessError
                         {
                             auto* owner = static_cast<Owner*>(object);
-                            auto& container = owner->*Member;
+                            auto& container = GetPropertyContainerValue<Member>(*owner);
                             const auto position = container.find(*static_cast<const Key*>(key));
 
                             if (position == container.end())

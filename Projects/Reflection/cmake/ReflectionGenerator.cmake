@@ -1,5 +1,12 @@
-﻿set(LLVM_DIR "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/llvm-20.1.8/lib/cmake/llvm")
-set(Clang_DIR "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/llvm-20.1.8/lib/cmake/clang")
+﻿set(_reflection_bundled_cmake "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/llvm-20.1.8/lib/cmake")
+
+if(NOT LLVM_DIR AND EXISTS "${_reflection_bundled_cmake}/llvm/LLVMConfig.cmake")
+    set(LLVM_DIR "${_reflection_bundled_cmake}/llvm")
+endif()
+
+if(NOT Clang_DIR AND EXISTS "${_reflection_bundled_cmake}/clang/ClangConfig.cmake")
+    set(Clang_DIR "${_reflection_bundled_cmake}/clang")
+endif()
 
 # Generator
 find_package(LLVM CONFIG REQUIRED)

@@ -27,6 +27,9 @@ namespace reflection
         [[nodiscard]]
         const MetadataValue* Find(std::string_view key) const;
 
+        [[nodiscard]]
+        const std::vector<MetadataEntry>& GetEntries() const noexcept { return m_entries; }
+
     private:
         std::vector<MetadataEntry> m_entries;
     };

@@ -16,6 +16,7 @@ namespace reflection_tests
 
     // Registry
     bool ValidateRegistry();
+    bool ValidateInheritance();
     bool ValidateRegistrationDiagnostics();
     bool ValidateAtomicRegistration();
 

@@ -11,9 +11,16 @@
 #include <unordered_map>
 #include <type_traits>
 #include <typeindex>
+#include <vector>
 
 namespace reflection
 {
+    struct FreeFunctionView
+    {
+        std::string_view QualifiedName;
+        const FunctionInfo* Function = nullptr;
+    };
+
     class Registry
     {
     public:
@@ -34,6 +41,10 @@ namespace reflection
 
         [[nodiscard]]
         const FunctionInfo* FindFreeFunction(std::string_view qualifiedName, std::string_view signature) const;
+
+        // Sorted snapshots of borrowed descriptors. Do not retain across registry replacement/destruction.
+        [[nodiscard]] std::vector<const TypeInfo*> GetTypes() const;
+        [[nodiscard]] std::vector<FreeFunctionView> GetFreeFunctions() const;
 
         [[nodiscard]]
         const TypeInfo* FindType(std::type_index cppType) const;

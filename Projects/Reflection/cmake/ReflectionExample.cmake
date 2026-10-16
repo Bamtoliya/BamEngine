@@ -34,4 +34,11 @@ if(REFLECTION_BUILD_EXAMPLE)
         HEADERS examples/FailureTypes.h
     )
 
+    if(BUILD_TESTING)
+        set(_reflection_test_directory "${CMAKE_CURRENT_BINARY_DIR}/tests/ReflectionExample")
+        file(MAKE_DIRECTORY "${_reflection_test_directory}")
+        add_test(NAME ReflectionExample COMMAND ReflectionExample)
+        set_tests_properties(ReflectionExample PROPERTIES WORKING_DIRECTORY "${_reflection_test_directory}")
+    endif()
+
 endif()

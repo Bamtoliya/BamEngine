@@ -191,10 +191,16 @@ namespace reflection_codegen
                 number += digits;
                 ++position;
 
+                const bool isFloating = digits.find_first_of(".eE") != std::string::npos;
+                if (isFloating && number.find_last_of("fFlL") == number.size() - 1)
+                {
+                    number.pop_back();
+                }
+
                 const char* begin = number.data();
                 const char* end = begin + number.size();
 
-                if (digits.find_first_of(".eE") != std::string::npos)
+                if (isFloating)
                 {
                     double parsed = 0.0;
 

@@ -9,11 +9,74 @@
 #include <utility>
 #include <vector>
 #include <optional>
+#include <array>
+#include <span>
+#include <typeindex>
+#include <exception>
 
 namespace reflection
 {
+    enum class DynamicInvocationError { None, NotBound, ArgumentCount, ArgumentType, Exception };
+
+    struct DynamicInvocationResult
+    {
+        DynamicInvocationError Error = DynamicInvocationError::None;
+        std::any Value;
+        std::string Message;
+        bool Succeeded() const noexcept { return Error == DynamicInvocationError::None; }
+    };
+
     namespace detail
     {
+        template<typename T> struct NumericArrayResult : std::false_type {};
+        template<typename T, std::size_t N>
+        struct NumericArrayResult<std::array<T, N>>
+            : std::bool_constant<std::is_arithmetic_v<T> && !std::is_const_v<T> && !std::is_volatile_v<T>> {};
+
+        template<typename T> struct DynamicFreeBinding { static constexpr bool Supported = false; };
+        template<typename Result, typename... Args>
+        struct DynamicFreeBinding<Result(*)(Args...)>
+        {
+            static constexpr bool Supported =
+                ((std::is_scalar_v<Args> || NumericArrayResult<Args>::value) && ...);
+
+            template<auto Function, std::size_t... I>
+            static DynamicInvocationResult Call(std::span<const std::any> args, std::index_sequence<I...>)
+            {
+                if (args.size() != sizeof...(Args))
+                    return { DynamicInvocationError::ArgumentCount, {}, "Argument count mismatch." };
+                if (!(std::any_cast<std::remove_cv_t<Args>>(&args[I]) && ...))
+                    return { DynamicInvocationError::ArgumentType, {}, "Argument type mismatch." };
+                try
+                {
+                    if constexpr (std::is_void_v<Result>)
+                    {
+                        Function(*std::any_cast<std::remove_cv_t<Args>>(&args[I])...);
+                        return {};
+                    }
+                    else
+                        return { DynamicInvocationError::None,
+                            Function(*std::any_cast<std::remove_cv_t<Args>>(&args[I])...), {} };
+                }
+                catch (const std::exception& error)
+                {
+                    return { DynamicInvocationError::Exception, {}, error.what() };
+                }
+                catch (...)
+                {
+                    return { DynamicInvocationError::Exception, {}, "Native function threw an unknown exception." };
+                }
+            }
+
+            template<auto Function>
+            static DynamicInvocationResult Invoke(std::span<const std::any> args)
+            {
+                return Call<Function>(args, std::index_sequence_for<Args...>{});
+            }
+            static std::vector<std::type_index> Parameters() { return { typeid(std::remove_cv_t<Args>)... }; }
+            static std::type_index ReturnType() { return typeid(Result); }
+        };
+
         template<typename T>
         struct SupportedMember : std::false_type
         {
@@ -50,7 +113,7 @@ namespace reflection
         struct SupportedCallable<Result(*)(Args...)>
             : std::bool_constant<
             (std::is_void_v<Result> ||
-                (std::is_scalar_v<Result> &&
+                ((std::is_scalar_v<Result> || NumericArrayResult<Result>::value) &&
                     !std::is_const_v<Result> && !std::is_volatile_v<Result>)) &&
             (!std::is_reference_v<Args> && ...)>
         {
@@ -80,6 +143,17 @@ namespace reflection
 
         std::vector<ParameterInfo> Parameters;
         reflection::Metadata Metadata;
+        // Keep source spelling in ReturnType; consumers may use the resolved type for bindings.
+        std::string CanonicalReturnType;
+
+        [[nodiscard]] bool CanInvokeDynamicWithoutObject() const noexcept { return m_dynamicInvoke != nullptr; }
+        [[nodiscard]] const std::vector<std::type_index>& GetParameterCppTypes() const { return m_parameterTypes; }
+        [[nodiscard]] std::type_index GetReturnCppType() const { return m_returnType; }
+        [[nodiscard]] DynamicInvocationResult InvokeDynamicWithoutObject(std::span<const std::any> args) const
+        {
+            return m_dynamicInvoke ? m_dynamicInvoke(args) :
+                DynamicInvocationResult{ DynamicInvocationError::NotBound, {}, "Dynamic free/static binding unavailable." };
+        }
 
         [[nodiscard]]
         bool CanInvoke() const
@@ -231,6 +305,9 @@ namespace reflection
 
     private:
         std::any m_callable;
+        DynamicInvocationResult (*m_dynamicInvoke)(std::span<const std::any>) = nullptr;
+        std::vector<std::type_index> m_parameterTypes;
+        std::type_index m_returnType{ typeid(void) };
         
         InvocationBindingStatus m_bindingStatus = InvocationBindingStatus::NotBound;
 
@@ -250,6 +327,13 @@ namespace reflection
 
         FunctionInfo function;
         function.m_callable = Member;
+        using Dynamic = detail::DynamicFreeBinding<decltype(Member)>;
+        if constexpr (Dynamic::Supported)
+        {
+            function.m_dynamicInvoke = &Dynamic::template Invoke<Member>;
+            function.m_parameterTypes = Dynamic::Parameters();
+            function.m_returnType = Dynamic::ReturnType();
+        }
         return function;
     }
 }

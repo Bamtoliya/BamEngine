@@ -17,11 +17,18 @@ namespace reflection_codegen
         Private
     };
 
+    struct BaseDetails
+    {
+        std::string TypeName;
+        AccessKind Access = AccessKind::Public;
+        bool IsVirtual = false;
+    };
+
     struct TypeDetails
     {
         bool IsStruct = false;
         bool IsAbstract = false;
-        std::vector<std::string> BaseTypes;
+        std::vector<BaseDetails> BaseTypes;
         bool HasRegistrationFriend = false;
     };
 

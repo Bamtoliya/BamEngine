@@ -5,6 +5,7 @@
 #include <reflection/PropertyInfo.h>
 #include <reflection/ObjectView.h>
 #include <reflection/ValueView.h>
+#include <reflection/BaseInfo.h>
 
 #include <string>
 #include <string_view>
@@ -21,6 +22,7 @@ namespace reflection
         std::vector<PropertyInfo> Properties;
         std::vector<FunctionInfo> Functions;
         reflection::Metadata Metadata;
+        std::vector<BaseInfo> Bases;
 
         template<typename T>
             requires (std::is_class_v<T> || std::is_union_v<T>)

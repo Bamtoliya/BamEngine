@@ -24,7 +24,9 @@ namespace reflection
         DuplicateMetadata,
         InvalidMergeSource,
         DuplicateCppType,
-        DuplicateCppEnum
+        DuplicateCppEnum,
+        InvalidBase,
+        DuplicateBase
     };
 
     constexpr std::string_view ToString(RegistrationError error)
@@ -49,6 +51,8 @@ namespace reflection
         case RegistrationError::InvalidMergeSource: return "InvalidMergeSource";
         case RegistrationError::DuplicateCppType: return "DuplicateCppType";
         case RegistrationError::DuplicateCppEnum: return "DuplicateCppEnum";
+        case RegistrationError::InvalidBase: return "InvalidBase";
+        case RegistrationError::DuplicateBase: return "DuplicateBase";
         }
 
         return "Unknown";

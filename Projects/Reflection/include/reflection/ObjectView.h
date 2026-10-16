@@ -8,6 +8,7 @@ namespace reflection
 {
     struct PropertyInfo;
     struct TypeInfo;
+    class BaseInfo;
 
     class ObjectView
     {
@@ -56,6 +57,11 @@ namespace reflection
             return m_type;
         }
 
+        [[nodiscard]] bool RefersToSameObject(const ObjectView& other) const noexcept
+        {
+            return IsValid() && other.IsValid() && m_type == other.m_type && m_readAddress == other.m_readAddress;
+        }
+
         template<typename T>
             requires (std::is_class_v<T> || std::is_union_v<T>)
         [[nodiscard]]
@@ -72,5 +78,6 @@ namespace reflection
 
         friend struct PropertyInfo;
         friend struct TypeInfo;
+        friend class BaseInfo;
     };
 }

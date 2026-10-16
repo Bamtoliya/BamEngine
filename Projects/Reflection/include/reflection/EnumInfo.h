@@ -3,6 +3,7 @@
 #include <reflection/Metadata.h>
 #include <reflection/ValueView.h>
 #include <reflection/EnumValue.h>
+#include <reflection/detail/EnumValueConversion.h>
 
 #include <optional>
 #include <cstdint>
@@ -13,6 +14,9 @@
 #include <type_traits>
 #include <typeindex>
 #include <utility>
+#include <concepts>
+#include <functional>
+#include <memory>
 
 namespace reflection
 {
@@ -45,6 +49,7 @@ namespace reflection
             info.QualifiedName = std::move(qualifiedName);
             info.m_cppType = std::type_index(typeid(Type));
             info.IsScoped = !std::is_convertible_v<Type, Underlying>;
+            info.m_underlyingIsSigned = std::is_signed_v<Underlying>;
             info.m_readValue = +[](const ValueView& value) -> EnumValue
                 {
                     const auto number = static_cast<Underlying>(*value.Get<Type>());
@@ -59,6 +64,22 @@ namespace reflection
                     }
                 };
 
+            if constexpr (!std::is_convertible_v<Type, Underlying>)
+            {
+                info.m_visitValue = +[](const EnumValue& number, void* context, ValueVisitor visitor) -> bool
+                    {
+                        const auto converted = detail::ConvertEnumValue<Type>(number);
+
+                        if (!converted)
+                        {
+                            return false;
+                        }
+
+                        visitor(context, ValueView::From(*converted));
+                        return true;
+                    };
+            }
+
             return info;
         }
 
@@ -72,6 +93,36 @@ namespace reflection
         bool CanReadValue() const noexcept
         {
             return m_readValue != nullptr;
+        }
+
+        [[nodiscard]] bool IsUnderlyingSigned() const noexcept
+        {
+            return m_underlyingIsSigned;
+        }
+
+        [[nodiscard]] bool CanVisitValue() const noexcept
+        {
+            return m_visitValue != nullptr;
+        }
+
+        template<typename Visitor>
+            requires std::invocable<Visitor&, const ValueView&> &&
+                std::same_as<std::invoke_result_t<Visitor&, const ValueView&>, void>
+        [[nodiscard]] bool TryVisitValue(const EnumValue& number, Visitor&& visitor) const
+        {
+            if (m_visitValue == nullptr)
+            {
+                return false;
+            }
+
+            auto callback = [&visitor](const ValueView& value) { std::invoke(visitor, value); };
+            using Callback = decltype(callback);
+            const auto invoke = +[](void* context, const ValueView& value)
+                {
+                    (*static_cast<Callback*>(context))(value);
+                };
+
+            return m_visitValue(number, std::addressof(callback), invoke);
         }
 
         [[nodiscard]]
@@ -121,7 +172,10 @@ namespace reflection
         }
 
     private:
+        using ValueVisitor = void (*)(void*, const ValueView&);
         std::type_index m_cppType{ typeid(void) };
+        bool m_underlyingIsSigned = false;
         EnumValue(*m_readValue)(const ValueView&) = nullptr;
+        bool (*m_visitValue)(const EnumValue&, void*, ValueVisitor) = nullptr;
     };
 }

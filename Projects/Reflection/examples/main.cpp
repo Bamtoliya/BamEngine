@@ -21,6 +21,7 @@ int main()
     const Check checks[]
     {
         { reflection_tests::ValidateRegistry, "Registry checks failed.", 9 },
+        { reflection_tests::ValidateInheritance, "Inheritance access checks failed.", 21 },
         { reflection_tests::ValidateEnumRegistry, "Enum registry checks failed.", 10 },
         { reflection_tests::ValidateGeneratedEnums, "Generated enum checks failed.", 11 },
         { reflection_tests::ValidateGeneratedFunctions, "Generated function checks failed.", 12 },

@@ -37,7 +37,8 @@ namespace reflection
         KeyAlreadyExists,
         NotSet,
         ElementNotFound,
-        ElementAlreadyExists
+        ElementAlreadyExists,
+        ResetUnavailable
     };
 
     constexpr std::string_view ToString(PropertyAccessError error)
@@ -73,6 +74,7 @@ namespace reflection
         case PropertyAccessError::NotSet: return "NotSet";
         case PropertyAccessError::ElementNotFound: return "ElementNotFound";
         case PropertyAccessError::ElementAlreadyExists: return "ElementAlreadyExists";
+        case PropertyAccessError::ResetUnavailable: return "ResetUnavailable";
         }
 
         return "Unknown";

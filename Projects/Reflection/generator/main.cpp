@@ -14,6 +14,7 @@
 #include <clang/AST/ASTConsumer.h>
 #include <clang/AST/ASTContext.h>
 #include <clang/AST/DeclCXX.h>
+#include <clang/AST/DeclTemplate.h>
 #include <clang/AST/RecursiveASTVisitor.h>
 #include <clang/AST/DeclFriend.h>
 #pragma endregion
@@ -26,6 +27,7 @@
 #include <llvm/ADT/SmallString.h>
 #include <llvm/Support/FileSystem.h>
 #include <llvm/Support/Path.h>
+#include <llvm/Support/JSON.h>
 #pragma endregion
 
 #pragma region std includes
@@ -55,9 +57,12 @@ namespace
     llvm::cl::list<std::string> HeaderPaths("header", llvm::cl::desc("Headers included by generated registration code"), llvm::cl::OneOrMore, llvm::cl::cat(ReflectionOptions));
     llvm::cl::opt<std::string> DepfilePath("depfile", llvm::cl::desc("Dependency file output path"), llvm::cl::init(""), llvm::cl::cat(ReflectionOptions));
     llvm::cl::opt<std::string> TypeListMetadata("type-list-metadata", llvm::cl::desc("Boolean metadata key used to select listed types"), llvm::cl::init(""), llvm::cl::cat(ReflectionOptions));
+    llvm::cl::opt<std::string> RegistryHeader("registry-header", llvm::cl::desc("Header declaring the registry owner"), llvm::cl::init(""), llvm::cl::cat(ReflectionOptions));
+    llvm::cl::opt<std::string> RegistryType("registry-type", llvm::cl::desc("Qualified registry owner type"), llvm::cl::init(""), llvm::cl::cat(ReflectionOptions));
 
     std::optional<std::string> GeneratedCode;
     std::optional<std::string> GeneratedHeaderCode;
+    std::optional<std::string> GeneratedMetadata;
 
     class ReflectionDependencies final : public clang::DependencyCollector
     {
@@ -145,6 +150,37 @@ namespace
         std::vector<clang::Token> MetadataTokens;
         std::optional<reflection_codegen::DeclarationModel> Model;
     };
+
+    std::string EmitMetadataManifest(const std::vector<ReflectionMarker>& markers)
+    {
+        llvm::json::Array entries;
+
+        for (const ReflectionMarker& marker : markers)
+        {
+            for (const reflection::MetadataEntry& metadata : marker.Model->Metadata)
+            {
+                llvm::json::Object entry;
+                entry["Owner"] = marker.Model->QualifiedName;
+                entry["Kind"] = marker.Kind;
+                entry["Metadata"] = metadata.Key;
+                entry["Value"] = std::visit(
+                    [](const auto& value) { return llvm::json::Value(value); }, metadata.Value);
+                entry["File"] = marker.File;
+                entry["Line"] = marker.Line;
+                entries.push_back(std::move(entry));
+            }
+        }
+
+        llvm::json::Object document;
+        document["Version"] = 1;
+        document["Module"] = ModuleName.getValue();
+        document["Entries"] = std::move(entries);
+
+        std::string result;
+        llvm::raw_string_ostream output(result);
+        output << llvm::json::Value(std::move(document)) << '\n';
+        return result;
+    }
 
     class ReflectionCallbacks final : public clang::PPCallbacks
     {
@@ -292,6 +328,14 @@ namespace
                     continue;
                 }
 
+                // An elaborated field type (class Object* value) visits its forward
+                // declaration before the field, with the same source location.
+                const auto* tag = llvm::dyn_cast<clang::TagDecl>(declaration);
+                if (marker.Kind == "PROPERTY" && tag != nullptr && !tag->isThisDeclarationADefinition())
+                {
+                    continue;
+                }
+
                 marker.Handled = true;
 
                 if (!MatchesKind(marker.Kind, declaration))
@@ -327,6 +371,9 @@ namespace
         {
             using namespace reflection_codegen;
 
+            // Preserve existing signature spelling while emitting the C++ bool keyword.
+            clang::PrintingPolicy printingPolicy(clang::LangOptions{});
+            printingPolicy.Bool = true;
             DeclarationModel model;
             model.Name = declaration->getNameAsString();
             model.QualifiedName =
@@ -375,9 +422,13 @@ namespace
 
                 for (const clang::CXXBaseSpecifier& base : record->bases())
                 {
-                    details.BaseTypes.push_back(
-                        base.getType().getCanonicalType().getAsString()
-                    );
+                    auto policy = record->getASTContext().getPrintingPolicy();
+                    policy.SuppressTagKeyword = true;
+                    const auto access = base.getAccessSpecifier();
+                    const auto kind = access == clang::AS_private ? AccessKind::Private
+                        : access == clang::AS_protected ? AccessKind::Protected : AccessKind::Public;
+                    details.BaseTypes.push_back(BaseDetails{
+                        base.getType().getCanonicalType().getAsString(policy), kind, base.isVirtual() });
                 }
 
                 model.Details = std::move(details);
@@ -390,10 +441,10 @@ namespace
                 details.OwnerType =
                     field->getParent()->getQualifiedNameAsString();
 
-                details.TypeName = field->getType().getAsString();
+                details.TypeName = field->getType().getAsString(printingPolicy);
 
                 details.CanonicalTypeName =
-                    field->getType().getCanonicalType().getAsString();
+                    field->getType().getCanonicalType().getAsString(printingPolicy);
 
                 details.IsBitField = field->isBitField();
                 details.IsReference = field->getType()->isReferenceType();
@@ -409,9 +460,9 @@ namespace
                 FunctionDetails details;
                 const clang::QualType returnType = function->getReturnType();
 
-                details.ReturnType = returnType.getAsString();
-                details.CanonicalReturnType = returnType.getCanonicalType().getAsString();
-                details.Signature = function->getType().getCanonicalType().getAsString();
+                details.ReturnType = returnType.getAsString(printingPolicy);
+                details.CanonicalReturnType = returnType.getCanonicalType().getAsString(printingPolicy);
+                details.Signature = function->getType().getCanonicalType().getAsString(printingPolicy);
 
                 if (const auto* method = llvm::dyn_cast<clang::CXXMethodDecl>(function))
                 {
@@ -423,9 +474,25 @@ namespace
                 const auto* prototype =
                     function->getType()->getAs<clang::FunctionProtoType>();
 
+                bool numericArray = false;
+                if (details.OwnerType.empty() || details.IsStaticMember)
+                {
+                    const auto* record = returnType->getAsCXXRecordDecl();
+                    const auto* specialization = llvm::dyn_cast_or_null<clang::ClassTemplateSpecializationDecl>(record);
+                    if (specialization &&
+                        specialization->getSpecializedTemplate()->getQualifiedNameAsString() == "std::array")
+                    {
+                        const auto& arguments = specialization->getTemplateArgs();
+                        numericArray = arguments.size() == 2 &&
+                            arguments[0].getKind() == clang::TemplateArgument::Type &&
+                            arguments[0].getAsType()->isArithmeticType() &&
+                            !arguments[0].getAsType().isConstQualified() &&
+                            !arguments[0].getAsType().isVolatileQualified();
+                    }
+                }
                 const bool supportsReturn =
                     returnType->isVoidType() ||
-                    (returnType->isScalarType() &&
+                    ((returnType->isScalarType() || numericArray) &&
                         !returnType.isConstQualified() && !returnType.isVolatileQualified());
 
                 if (llvm::isa<clang::CXXConstructorDecl>(function) ||
@@ -477,8 +544,8 @@ namespace
 
                     details.Parameters.push_back(ParameterDetails{
                         parameter->getNameAsString(),
-                        parameter->getType().getAsString(),
-                        parameter->getType().getCanonicalType().getAsString()
+                        parameter->getType().getAsString(printingPolicy),
+                        parameter->getType().getCanonicalType().getAsString(printingPolicy)
                         });
                 }
 
@@ -495,7 +562,7 @@ namespace
                 EnumDetails details;
                 details.IsScoped = enumDeclaration->isScoped();
                 details.IsUnsigned = underlyingType->isUnsignedIntegerType();
-                details.UnderlyingType = underlyingType.getAsString();
+                details.UnderlyingType = underlyingType.getAsString(printingPolicy);
 
                 for (const clang::EnumConstantDecl* entry :
                     enumDeclaration->enumerators())
@@ -615,9 +682,9 @@ namespace
                         << (details.HasRegistrationFriend ? "true" : "false")
                         << '\n';
 
-                    for (const std::string& base : details.BaseTypes)
+                    for (const auto& base : details.BaseTypes)
                     {
-                        llvm::outs() << "  Base: " << base << '\n';
+                        llvm::outs() << "  Base: " << base.TypeName << '\n';
                     }
                 }
                 else if constexpr (std::is_same_v<T, PropertyDetails>)
@@ -677,16 +744,12 @@ namespace
     class ReflectionConsumer final : public clang::ASTConsumer
     {
     public:
-        explicit ReflectionConsumer(
-            std::vector<ReflectionMarker>& markers
-        )
+        explicit ReflectionConsumer(std::vector<ReflectionMarker>& markers)
             : m_markers(markers)
         {
         }
 
-        void HandleTranslationUnit(
-            clang::ASTContext& context
-        ) override
+        void HandleTranslationUnit(clang::ASTContext& context) override
         {
             if (context.getDiagnostics().hasErrorOccurred())
             {
@@ -818,6 +881,17 @@ namespace
             const std::vector<std::string> headers(HeaderPaths.begin(), HeaderPaths.end());
             GeneratedHeaderCode = reflection_codegen::EmitRegistrationHeader(grouped.Unit, ModuleName.getValue(),headers, TypeListMetadata.getValue());
             GeneratedCode = reflection_codegen::EmitRegistrationCpp(grouped.Unit, ModuleName.getValue(), headers, generatedHeaderName.str().str());
+
+            if (!RegistryType.getValue().empty())
+            {
+                std::string registryHeader = RegistryHeader.getValue();
+                std::replace(registryHeader.begin(), registryHeader.end(), '\\', '/');
+
+                *GeneratedCode += reflection_codegen::EmitRegistryBootstrap(
+                    ModuleName.getValue(), registryHeader, RegistryType.getValue());
+            }
+
+            GeneratedMetadata = EmitMetadataManifest(m_markers);
 
             for (const ReflectionMarker& marker : m_markers)
             {
@@ -991,6 +1065,29 @@ int main(int argc, const char** argv)
         }
     }
 
+    if (RegistryHeader.getValue().empty() != RegistryType.getValue().empty())
+    {
+        llvm::errs() << "--registry-header and --registry-type must be provided together.\n";
+        return 1;
+    }
+
+    if (!RegistryType.getValue().empty())
+    {
+        const std::regex qualifiedType{ "([A-Za-z_][A-Za-z0-9_]*::)*[A-Za-z_][A-Za-z0-9_]*" };
+
+        if (!std::regex_match(RegistryType.getValue(), qualifiedType))
+        {
+            llvm::errs() << "Invalid registry type.\n";
+            return 1;
+        }
+
+        if (RegistryHeader.getValue().find_first_of("\"\r\n") != std::string::npos)
+        {
+            llvm::errs() << "Invalid registry header path.\n";
+            return 1;
+        }
+    }
+
     if (OutputPath.getValue().find_first_of("\"\r\n") != std::string::npos)
     {
         llvm::errs() << "Output path must not contain quotes or line breaks.\n";
@@ -1016,9 +1113,9 @@ int main(int argc, const char** argv)
         return result;
     }
 
-    if (!GeneratedCode || !GeneratedHeaderCode)
+    if (!GeneratedCode || !GeneratedHeaderCode || !GeneratedMetadata)
     {
-        llvm::errs() << "No registration code was produced.\n";
+        llvm::errs() << "No registration code or metadata was produced.\n";
         return 1;
     }
 
@@ -1058,6 +1155,16 @@ int main(int argc, const char** argv)
 
         llvm::outs() << "Dependencies: " << DepfilePath.getValue() << '\n';
     }
+
+    llvm::SmallString<256> metadataPath(OutputPath.getValue());
+    llvm::sys::path::replace_extension(metadataPath, ".metadata.json");
+
+    if (!SaveGeneratedFile(metadataPath, *GeneratedMetadata))
+    {
+        return 1;
+    }
+
+    llvm::outs() << "Generated metadata: " << metadataPath << '\n';
 
     llvm::SmallString<256> generatedHeaderPath(OutputPath.getValue());
     llvm::sys::path::replace_extension(generatedHeaderPath, ".h");

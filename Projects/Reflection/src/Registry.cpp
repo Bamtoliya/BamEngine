@@ -1,11 +1,39 @@
 ﻿#include <reflection/Registry.h>
 
+#include <algorithm>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
 
 namespace reflection
 {
+    std::vector<const TypeInfo*> Registry::GetTypes() const
+    {
+        std::vector<const TypeInfo*> types;
+        types.reserve(m_types.size());
+        for (const auto& [name, type] : m_types)
+            types.push_back(&type);
+        std::sort(types.begin(), types.end(), [](const auto* a, const auto* b)
+        {
+            return a->QualifiedName < b->QualifiedName;
+        });
+        return types;
+    }
+
+    std::vector<FreeFunctionView> Registry::GetFreeFunctions() const
+    {
+        std::vector<FreeFunctionView> functions;
+        for (const auto& [name, overloads] : m_freeFunctions)
+            for (const auto& [signature, function] : overloads)
+                functions.push_back({ name, &function });
+        std::sort(functions.begin(), functions.end(), [](const auto& a, const auto& b)
+        {
+            return a.QualifiedName != b.QualifiedName ? a.QualifiedName < b.QualifiedName :
+                a.Function->Signature < b.Function->Signature;
+        });
+        return functions;
+    }
+
     namespace
     {
         RegistrationResult ValidateFunction(
@@ -51,6 +79,20 @@ namespace reflection
         if (FindType(type.GetCppType()) != nullptr)
         {
             return { RegistrationError::DuplicateCppType, type.QualifiedName, {} };
+        }
+
+        std::unordered_set<std::type_index> baseTypes;
+        for (const BaseInfo& base : type.Bases)
+        {
+            if (base.TypeName.empty() || base.GetDerivedCppType() != type.GetCppType() || !base.CanCast() ||
+                base.GetBaseCppType() == std::type_index{ typeid(void) } || base.GetBaseCppType() == type.GetCppType())
+            {
+                return { RegistrationError::InvalidBase, type.QualifiedName, base.TypeName };
+            }
+            if (!baseTypes.insert(base.GetBaseCppType()).second)
+            {
+                return { RegistrationError::DuplicateBase, type.QualifiedName, base.TypeName };
+            }
         }
 
         std::unordered_set<std::string> propertyNames;
