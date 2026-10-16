@@ -7,6 +7,7 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/CMake")
 
 # 외부 라이브러리 및 Python 로드
 include(Dependencies)
+include(NodeEditor)
 
 # ==============================================================================
 # 2. Source Files & Directories Setup
@@ -81,6 +82,7 @@ target_link_libraries(Editor
         BamEngine::Engine
         TextureConverter
         imgui::imgui
+        imnodes
         imguizmo::imguizmo
         assimp::assimp
         efsw::efsw

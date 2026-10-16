@@ -6,6 +6,8 @@
 
 #include "ImGuiManager.h"
 #include "Application.h"
+#include "SceneManager.h"
+#include "SelectionManager.h"
 #include "RHIs.h"
 
 #include "ViewportPanels.h"
@@ -14,6 +16,7 @@
 #include "ContentBrowserPanel.h"
 #include "ConsolePanel.h"
 #include "MetricsPanel.h"
+#include "GraphPanel.h"
 #include "ResourceManagerInspector.h"
 
 #include "ResourceEditors.h"
@@ -278,7 +281,11 @@ void ImGuiManager::ProcessEvent(const SDL_Event* event)
 #pragma region DrawUI
 void ImGuiManager::Draw()
 {
+	auto& history = Application::Get().GetEditHistory();
+	history.Synchronize(SceneManager::Get().GetCurrentScene(), Application::Get().IsEditing());
+	history.BeginFrame();
 	MainDockspace();
+	history.Synchronize(SceneManager::Get().GetCurrentScene(), Application::Get().IsEditing());
 
 	ImGui::ShowDemoWindow(nullptr); // 데모 윈도우 (테스트용, 나중에 제거)
 
@@ -301,6 +308,19 @@ void ImGuiManager::Draw()
 	}
 	m_PendingRemovePanels.clear();
 	ImGui::ShowMetricsWindow();
+	if (!ImGui::IsAnyItemActive() && !ImGuizmo::IsUsing() && !ImGui::IsMouseDown(ImGuiMouseButton_Left))
+	{
+		history.Flush();
+		const auto& io = ImGui::GetIO();
+		if (history.ShortcutsAllowed() && !io.WantTextInput && io.KeyCtrl && !io.KeyAlt)
+		{
+			if (ImGui::IsKeyPressed(ImGuiKey_Z, false))
+			{
+				if (io.KeyShift) history.Redo(); else history.Undo();
+			}
+			else if (ImGui::IsKeyPressed(ImGuiKey_Y, false)) history.Redo();
+		}
+	}
 }
 
 void ImGuiManager::MainDockspace()
@@ -390,13 +410,10 @@ EResult ImGuiManager::CreateDefaultPanels()
 	SceneViewportPanel* viewportPanel = new SceneViewportPanel();
 	viewportPanel->Initialize(&scenePanelDesc);
 	AddImGuiPanel(viewportPanel);
-	CameraViewportPanelDesc UIViewportPanelDesc;
+	ViewportPanelDesc UIViewportPanelDesc;
 	UIViewportPanelDesc.Name = L"UI View";
 	UIViewportPanelDesc.RenderTargetWidth = g_WindowWidth;
 	UIViewportPanelDesc.RenderTargetHeight = g_WindowHeight;
-	UIViewportPanelDesc.IsSceneCamera = false;
-	UIViewportPanelDesc.IsPerspective = false;
-	UIViewportPanelDesc.CameraType = EViewportCameraType::Orthographic;
 	UIViewportPanel* uiViewportPanel = new UIViewportPanel();
 	uiViewportPanel->Initialize(&UIViewportPanelDesc);
 	AddImGuiPanel(uiViewportPanel);
@@ -407,6 +424,7 @@ EResult ImGuiManager::CreateDefaultPanels()
 	AddImGuiPanel(contentBrowserPanel);
 	AddImGuiPanel(new ConsolePanel());
 	AddImGuiPanel(new MetricsPanel());
+	AddImGuiPanel(new GraphPanel());
 	AddImGuiPanel(new ResourceManagerInspector());
 	CreateResourceEditors();
 	return EResult::Success;
