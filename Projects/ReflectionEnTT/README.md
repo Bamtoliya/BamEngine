@@ -4,6 +4,13 @@
 엔진·에디터·GameObject·GetTypeID()·리플렉션 기반 클래스가 필요하지 않습니다.
 기존 엔진과 Reflection 프로젝트의 파일/빌드 연결은 변경하지 않았습니다.
 
+## 목적과 검증 범위
+
+ReflectionEnTT는 Reflection·Archive·ReflectionArchive 완성 후 같은 조건에서 성능을 비교하기 위한 별도 구현입니다.
+비교 기준은 [개발 지침](../../Docs/ReflectionArchiveGuidelines.md#6-reflectionentt의-목적)을 따릅니다.
+세 모듈의 [공통 빌드 가이드](../../Docs/ReflectionArchiveBuild.md)에 기록한 Debug·Release 결과에는 ReflectionEnTT를 포함하지 않습니다.
+ReflectionEnTT 자체의 빌드·검증 절차는 아래에서 설명합니다.
+
 ## 구조
 
 - Clang 전처리기: 사용자 매크로를 확장하고 META 토큰을 수집합니다.

@@ -11,3 +11,5 @@ add_executable(ArchiveGlmExample examples/GlmExample.cpp ${_archive_glm_test_sou
 target_include_directories(ArchiveGlmExample PRIVATE "${_engine_archive_public}")
 target_link_libraries(ArchiveGlmExample PRIVATE Archive::Json glm::glm-header-only)
 set_target_properties(ArchiveGlmExample PROPERTIES CXX_EXTENSIONS OFF UNITY_BUILD OFF)
+
+archive_add_example_test(ArchiveGlmExample)

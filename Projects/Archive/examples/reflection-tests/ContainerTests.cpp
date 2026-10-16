@@ -33,16 +33,6 @@ namespace archive_reflection_tests
 
     int CheckContainerArchive(const std::filesystem::path& directory)
     {
-        archive_reflection::PropertyCodecs codecs;
-
-        if (!codecs.RegisterArray<std::vector<std::int32_t>>() ||
-            !codecs.RegisterArray<std::vector<bool>>() ||
-            !codecs.RegisterArray<std::array<double, 2>>() ||
-            !codecs.RegisterArray<std::unordered_set<std::wstring>>())
-        {
-            return Fail("Container codec registration failed.");
-        }
-
         auto type = reflection::TypeInfo::For<ContainerSettings>("example::ContainerSettings");
         type.Properties.push_back(reflection::MakeProperty<&ContainerSettings::Level>("Level", "std::int32_t"));
         type.Properties.push_back(
@@ -58,7 +48,7 @@ namespace archive_reflection_tests
         archive::JsonArchive writer;
 
         if (!archive_reflection::WriteObject(
-            writer, "Containers", type, reflection::ObjectView::From(source), nullptr, &codecs))
+            writer, "Containers", type, reflection::ObjectView::From(source)))
         {
             return Fail("Reflected container writing failed.");
         }
@@ -73,10 +63,28 @@ namespace archive_reflection_tests
         restored.Tags = { L"Before" };
 
         if (!writer.SaveToFile(path) || !reader.LoadFromFile(path) ||
-            !archive_reflection::ReadObject(reader, "Containers", type, restored, nullptr, &codecs) ||
+            !archive_reflection::ReadObject(reader, "Containers", type, restored) ||
             !SameContainers(restored, source))
         {
             return Fail("Reflected container round-trip failed.");
+        }
+
+        ContainerSettings emptySource = source;
+        emptySource.Values.clear();
+        emptySource.Flags.clear();
+
+        archive::JsonArchive emptyWriter;
+        archive::JsonArchive emptyReader;
+        std::string emptyDocument;
+        ContainerSettings emptyRestored = source;
+
+        if (!archive_reflection::WriteObject(emptyWriter, "Containers", type,
+            reflection::ObjectView::From(emptySource)) ||
+            !emptyWriter.ToJson(emptyDocument) || !emptyReader.Parse(emptyDocument) ||
+            !archive_reflection::ReadObject(emptyReader, "Containers", type, emptyRestored) ||
+            !SameContainers(emptyRestored, emptySource))
+        {
+            return Fail("Automatic empty vector round-trip failed.");
         }
 
         using Code = archive::ArchiveErrorCode;
@@ -89,6 +97,14 @@ namespace archive_reflection_tests
         };
 
         const FailureCase failures[] = {
+            {
+                R"({"Containers":{"Level":99}})",
+                "Values", Code::MissingField
+            },
+            {
+                R"({"Containers":{"Level":99,"Values":[1,"bad"]}})",
+                "Values", Code::InvalidValue
+            },
             {
                 R"({"Containers":{"Level":99,"Values":[1,2147483648]}})",
                 "Values", Code::InvalidValue
@@ -123,7 +139,7 @@ namespace archive_reflection_tests
 
             ContainerSettings unchanged = source;
             const auto result = archive_reflection::ReadObject(
-                failureReader, "Containers", type, unchanged, nullptr, &codecs);
+                failureReader, "Containers", type, unchanged);
 
             if (result.Code != failure.Expected || result.Field != failure.Field ||
                 !SameContainers(unchanged, source))
@@ -146,7 +162,7 @@ namespace archive_reflection_tests
         invalid.Samples[1] = std::numeric_limits<double>::infinity();
 
         const auto result = archive_reflection::WriteObject(
-            writer, "Containers", type, reflection::ObjectView::From(invalid), nullptr, &codecs);
+            writer, "Containers", type, reflection::ObjectView::From(invalid));
 
         std::string afterFailure;
 

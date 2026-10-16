@@ -1,4 +1,4 @@
-#include "TestSupport.h"
+﻿#include "TestSupport.h"
 #include "../GeneratedArchiveTypes.h"
 #include "ArchiveDemo.gen.h"
 
@@ -33,19 +33,12 @@ namespace archive_generated_tests
             return Fail("Generated profile lookup failed.");
         }
 
-        archive_reflection::PropertyCodecs codecs;
-
-        if (!codecs.RegisterArray<std::unordered_set<std::wstring>>())
-        {
-            return Fail("Generated archive codec registration failed.");
-        }
-
         generated_archive::Profile source;
         source.SetScore(42);
         archive::JsonArchive writer;
 
         if (!archive_reflection::WriteObject(
-            writer, "Profile", *type, reflection::ObjectView::From(source), &registry, &codecs))
+            writer, "Profile", *type, reflection::ObjectView::From(source), &registry))
         {
             return Fail("Generated reflected writing failed.");
         }
@@ -66,7 +59,7 @@ namespace archive_generated_tests
         expected.Options.CachedSpeed = 123.0f;
 
         if (!writer.SaveToFile(path) || !reader.LoadFromFile(path) ||
-            !archive_reflection::ReadObject(reader, "Profile", *type, restored, &registry, &codecs) ||
+            !archive_reflection::ReadObject(reader, "Profile", *type, restored, &registry) ||
             !SameProfile(restored, expected))
         {
             return Fail("Generated reflected round-trip failed.");
@@ -97,7 +90,7 @@ namespace archive_generated_tests
         restored.Options.Retries = 77;
 
         if (!legacyReader.Parse(legacyJson) ||
-            !archive_reflection::ReadObject(legacyReader, "Profile", *type, restored, &registry, &codecs) ||
+            !archive_reflection::ReadObject(legacyReader, "Profile", *type, restored, &registry) ||
             restored.Name != L"Legacy" || restored.Options.Title != L"Old" ||
             restored.Options.Speed != 10.0f || restored.Options.CachedSpeed != 123.0f ||
             restored.Options.Retries != 77 || !restored.Tags.empty() ||
@@ -115,7 +108,7 @@ namespace archive_generated_tests
 
         const auto beforeFailure = restored;
         const auto failure = archive_reflection::ReadObject(
-            failureReader, "Profile", *type, restored, &registry, &codecs);
+            failureReader, "Profile", *type, restored, &registry);
 
         if (failure.Code != archive::ArchiveErrorCode::InvalidValue ||
             failure.Field != "Options.Title" || !SameProfile(restored, beforeFailure))

@@ -17,6 +17,8 @@ namespace archive_reflection
     class PropertyCodecs
     {
     public:
+        [[nodiscard]] bool HasCodec(std::type_index type) const { return m_codecs.contains(type); }
+
         template<typename T>
             requires (std::is_object_v<T> && !std::is_const_v<T> && !std::is_volatile_v<T>&&
         std::default_initializable<T>&& reflection::detail::SupportsPropertyCopyConstruction<T>::value)

@@ -45,3 +45,5 @@ reflection_generate(
     INCLUDE_DIRECTORIES "${_engine_core_public}" ${_engine_glm_include_dirs}
     COMPILE_OPTIONS ${_engine_glm_parser_options}
 )
+
+archive_add_example_test(ArchiveEngineComponentExample)

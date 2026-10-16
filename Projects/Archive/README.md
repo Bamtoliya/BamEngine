@@ -3,6 +3,15 @@
 Glaze를 사용하는 C++23 JSON / BEVE Archive 모듈입니다.
 Archive 코어는 엔진, 에디터, Reflection, GLM에 의존하지 않습니다.
 
+## 시작하기
+
+- 이 모듈만 사용하면 값·객체를 Archive API로 직접 저장·복원합니다.
+- 등록한 멤버를 자동으로 처리하려면 [ReflectionArchive](../ReflectionArchive/README.md)를 사용합니다.
+- [공통 빌드 가이드](../../Docs/ReflectionArchiveBuild.md)에 Release 빌드, CTest, 설치와 외부 소비자 명령을 모았습니다.
+
+Archive에는 C++23 컴파일러와 Glaze의 CMake 패키지가 필요합니다.
+코어만 빌드할 때는 LLVM·Clang SDK와 Generator가 필요하지 않습니다.
+
 ## 구성과 의존성
 
 - `IArchive`: 값·컨테이너·객체 직렬화와 문서·파일 입출력의 공통 인터페이스
@@ -154,6 +163,8 @@ unordered 컨테이너의 항목 출력 순서는 보장하지 않습니다.
 
 컨테이너를 지원한다는 것은 임의의 중첩 STL 구성을
 자동 직렬화한다는 의미가 아닙니다.
+등록 멤버의 지원 컨테이너 조합을 자동 처리하는 범위는
+[ReflectionArchive의 타입 처리](../ReflectionArchive/README.md#타입-처리)에 정리되어 있습니다.
 
 ## 사용자 정의 객체
 
@@ -161,16 +172,34 @@ WriteObject와 ReadObject는 사용자 콜백으로 객체의 필드를 처리�
 WriteObjectArray와 ReadObjectArray는 기본 allocator의 vector<T>를 처리합니다.
 WriteObjectMap과 ReadObjectMap은 스칼라 키와 객체 값을 갖는 map을 처리합니다.
 
+타입이 지워진 컨테이너를 연결할 때는 `WriteObjectArray(key, size, callback)`과
+`ReadObjectArray(key, callback)`을 사용합니다. 콜백은 `(IArchive&, std::size_t index)`를 받습니다.
+Archive는 요소 문서와 오류 경로를 처리하고 컨테이너의 생성·수정은 호출자가 담당합니다.
+이 읽기 오버로드는 콜백이 수정한 외부 컨테이너를 되돌리지 않습니다.
+기존 vector 오버로드는 임시 vector를 완성한 후 대상에 반영합니다.
+
 객체 배열의 요소는 필드가 들어 있는 객체로 저장합니다.
 객체 map의 항목은 Key와 객체 형태의 Value를 갖습니다.
 
-객체 컨테이너 읽기는 새 요소를 생성하여 컨테이너를 교체합니다.
+컨테이너를 받는 객체 읽기 오버로드는 새 요소를 생성하여 컨테이너를 교체합니다.
 기존 같은 인덱스나 키의 객체를 수정하는 방식이 아닙니다.
 콜백에서 생략한 필드는 새 요소의 기본값을 유지합니다.
 
 객체 배열 콜백 오류에는 `Steps[1].Speed`,
 객체 map 콜백 오류에는 `Settings[1].Value.Speed`처럼 요소 위치를 붙입니다.
 스칼라 배열의 오류 위치는 현재 필드 이름 단위입니다.
+
+배열 원소가 배열이나 스칼라 등 임의의 값인 경우에는
+`WriteArrayElements(key, size, callback)`과 `ReadArrayElements(key, callback)`을 사용합니다.
+콜백은 `(IArchive& temporary, std::string_view valueKey, std::size_t index)`를 받습니다.
+쓰기 콜백은 전달받은 valueKey에 값 하나만 쓰고 객체 깊이를 0으로 복구해야 합니다.
+추가 필드, 값 누락과 닫지 않은 객체는 InvalidOperation입니다.
+임시 필드명은 저장 문서에 추가되지 않으므로 배열의 배열은 `[[1, 2], []]` 형태를 유지합니다.
+읽기 콜백에도 원소 하나의 독립 문서를 전달하며 객체 깊이의 균형을 검사합니다.
+오류의 임시 필드명은 `Matrix[1][2]` 같은 실제 배열 경로로 바꿉니다.
+쓰기 실패는 기존 문서를 보존하며, 콜백이 바꾼 외부 객체·상태는 되돌리지 않습니다.
+사용자 IArchive 백엔드는 새 protected 배열 훅을 구현해야 이 기능을 사용할 수 있습니다.
+기본 훅은 UnsupportedType을 반환합니다. 기존 객체 배열 API는 그대로 사용할 수 있습니다.
 
 ## 실패와 반영 범위
 
@@ -179,6 +208,9 @@ Code는 오류 종류, Field는 오류가 발생한 필드 위치입니다.
 
 Parse와 컨테이너 읽기·쓰기는 임시 값을 준비한 후 성공할 때 반영합니다.
 ReadObject는 대상 객체를 복사하여 콜백을 실행한 뒤 성공할 때 대입합니다.
+최종 반영은 복사 대입을 지원하면 const 복사본에서 복사 대입하고, 그 밖의 기존 지원 타입은 이동 대입합니다.
+가상 상속의 기본 이동 대입이 공유 기반 객체를 여러 번 이동하여 문자열·컨테이너를 비우는 경로를 피합니다.
+최종 복사 대입에 따른 추가 복사 비용은 있을 수 있으며 성능 비교는 수행하지 않았습니다.
 
 객체 복사가 포인터나 공유 자원까지 독립 복사하는 것은 아닙니다.
 콜백이 외부 상태를 변경하면 그 변경은 Archive가 되돌리지 않습니다.
@@ -234,6 +266,10 @@ target_link_libraries(MyApp PRIVATE Archive::Json)
 
 두 방식 모두 Glaze의 CMake 패키지를 찾을 수 있어야 합니다.
 Archive::Json은 C++23 요구 조건을 소비자에게 전달합니다.
+구성 시 CMAKE_PREFIX_PATH에 Glaze 설치 경로를 지정합니다.
+설치 패키지 방식이면 Archive 설치 경로도 함께 지정합니다.
+정적 라이브러리와 소비자의 아키텍처·빌드 구성·MSVC Runtime 설정을 맞춰야 합니다.
+현재 Archive 설치 라이브러리는 구성별 하위 폴더를 사용하지 않으므로 Debug와 Release는 별도 경로에 설치합니다.
 
 ## 검증 예제
 
@@ -249,13 +285,35 @@ Archive::Json은 C++23 요구 조건을 소비자에게 전달합니다.
 - `ARCHIVE_BUILD_EXAMPLE`: 코어 예제
 - `ARCHIVE_BUILD_GLM_EXAMPLE`: GLM 예제
 - `ARCHIVE_BUILD_REFLECTION_EXAMPLE`: 수동 Reflection 예제
-- `ARCHIVE_BUILD_GENERATED_EXAMPLE`: 생성 Reflection 및 엔진 컴포넌트 예제
+- `ARCHIVE_BUILD_GENERATED_EXAMPLE`: 생성 Reflection 예제
+- `ARCHIVE_BUILD_ENGINE_COMPONENT_EXAMPLE`: 엔진 컴포넌트 소비자 예제
 
-생성 Reflection 및 엔진 컴포넌트 예제를 구성하려면
-ARCHIVE_BUILD_REFLECTION_EXAMPLE과 ARCHIVE_BUILD_GENERATED_EXAMPLE을 모두 켜야 합니다.
+각 옵션은 독립적으로 선택합니다. 생성 예제를 켜기 위해 수동 등록 예제를 함께 켤 필요는 없습니다.
+기본값은 모두 OFF이며, 엔진 컴포넌트 예제는 해당 옵션을 명시적으로 켰을 때만 구성합니다.
+GLM·엔진 컴포넌트 예제는 저장소의 엔진 어댑터를 사용하는 소비자 예제입니다.
+코어·수동 등록·생성 등록 예제만 선택하면 Engine 헤더, GLM과 EnTT를 요구하지 않습니다.
 
 현재 Reflection 예제 구성은 Reflection::Runtime 타깃이 없으면 Reflection 소스를 포함합니다.
-이 경우 LLVM·Clang SDK가 필요합니다.
+이때 ReflectionGenerator 빌드가 켜져 있으면 LLVM·Clang SDK가 필요합니다.
+수동 등록 예제만 사용하면 `REFLECTION_BUILD_GENERATOR=OFF`로 SDK 검색을 생략할 수 있습니다.
 생성 예제에는 대응하는 Clang resource 디렉터리도 필요합니다.
+Generator 빌드를 끈 생성 예제에는 외부 Generator 실행 파일도 제공해야 합니다.
 
-예제와 검사 코드가 존재한다는 사실이 현재 구성에서 실행 검증을 완료했다는 뜻은 아닙니다.
+Archive를 최상위 프로젝트로 구성하면 CTest와 BUILD_TESTING 옵션을 제공합니다.
+BUILD_TESTING이 ON이면 활성화한 예제들이 테스트로 등록됩니다.
+Reflection 검증 예제도 함께 켜면 같은 CTest 실행에 포함됩니다.
+각 모듈 검증 프로그램은 빌드 디렉터리의 개별 작업 폴더에서 실행하여 출력 파일을 분리합니다.
+상위 프로젝트가 add_subdirectory로 포함하는 경우에는 상위에서 include(CTest)를 호출합니다.
+
+```powershell
+cmake --build out/build/archive-check --config Release
+ctest --test-dir out/build/archive-check -C Release --output-on-failure --no-tests=error
+```
+
+위 명령은 필요한 예제 옵션과 의존 경로를 지정해 구성한 빌드 디렉터리를 전제로 합니다.
+설치 패키지 소비자도 CTest로 실행할 수 있습니다.
+최초 구성부터 설치 소비자 검사까지의 명령은 [공통 빌드 가이드](../../Docs/ReflectionArchiveBuild.md)를 따릅니다.
+
+Windows x64의 독립 모듈·설치 소비자 Debug·Release 실행 결과는
+[공통 빌드 가이드의 실행 기록](../../Docs/ReflectionArchiveBuild.md#실행-검증-기록)에 정리되어 있습니다.
+엔진·GLM 예제의 검증 여부는 독립 모듈 결과와 구분합니다.

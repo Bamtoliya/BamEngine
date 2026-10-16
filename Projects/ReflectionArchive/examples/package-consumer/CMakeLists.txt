@@ -2,6 +2,8 @@
 
 project(ReflectionArchivePackageConsumer LANGUAGES CXX)
 
+include(CTest)
+
 find_package(ReflectionArchive 0.1 CONFIG REQUIRED COMPONENTS Adapter)
 
 add_executable(ReflectionArchivePackageConsumer main.cpp)
@@ -9,9 +11,11 @@ target_link_libraries(ReflectionArchivePackageConsumer PRIVATE ReflectionArchive
 
 set_target_properties(ReflectionArchivePackageConsumer PROPERTIES CXX_EXTENSIONS OFF)
 
-message(STATUS "ReflectionArchive package: ${ReflectionArchive_DIR}")
-message(STATUS "Reflection package: ${Reflection_DIR}")
-message(STATUS "Archive package: ${Archive_DIR}")
+reflection_generate(
+    TARGET ReflectionArchivePackageConsumer MODULE ArchiveConsumer HEADERS ConsumerTypes.h
+    HEADER_INCLUDE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}"
+)
 
-enable_testing()
-add_test(NAME ReflectionArchivePackageConsumer COMMAND ReflectionArchivePackageConsumer)
+if(BUILD_TESTING)
+    add_test(NAME ReflectionArchivePackageConsumer COMMAND ReflectionArchivePackageConsumer)
+endif()

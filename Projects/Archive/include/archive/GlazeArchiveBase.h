@@ -28,6 +28,11 @@ namespace archive
     protected:
         using Value = glz::generic_u64;
 
+        ArchiveResult WriteArrayElementValues(std::string_view key, std::size_t size,
+            const ArrayElementCallback& writeElement) override;
+        ArchiveResult ReadArrayElementValues(std::string_view key,
+            const ArrayElementCallback& readElement) const override;
+
         virtual ArchiveResult EncodeDocument(std::string& document) const = 0;
         virtual ArchiveResult DecodeDocument(std::string_view document) = 0;
         ArchiveResult WriteValue(std::string_view key, const ArchiveScalarValue& value) override;

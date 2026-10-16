@@ -68,14 +68,6 @@ namespace archive_reflection_tests
         type.Properties.push_back(sorted);
         type.Properties.push_back(tags);
 
-        archive_reflection::PropertyCodecs codecs;
-
-        if (!codecs.RegisterArray<std::set<std::int32_t>>() ||
-            !codecs.RegisterArray<std::unordered_set<std::wstring>>())
-        {
-            return Fail("Set codec registration failed.");
-        }
-
         archive::JsonArchive writer;
         archive::JsonArchive reader;
         SetSettings restored;
@@ -83,13 +75,30 @@ namespace archive_reflection_tests
         restored.Tags = { L"Before" };
 
         if (!archive_reflection::WriteObject(
-            writer, "Sets", type, reflection::ObjectView::From(source), nullptr, &codecs) ||
+            writer, "Sets", type, reflection::ObjectView::From(source)) ||
             !writer.SaveToFile(directory / "reflection-sets.json") ||
             !reader.LoadFromFile(directory / "reflection-sets.json") ||
-            !archive_reflection::ReadObject(reader, "Sets", type, restored, nullptr, &codecs) ||
+            !archive_reflection::ReadObject(reader, "Sets", type, restored) ||
             restored.Sorted != source.Sorted || restored.Tags != source.Tags)
         {
             return Fail("Reflected set round-trip failed.");
+        }
+
+        SetSettings emptySource;
+        emptySource.Sorted.clear();
+        emptySource.Tags.clear();
+
+        archive::JsonArchive emptyWriter;
+        archive::JsonArchive emptyReader;
+        std::string emptyDocument;
+        SetSettings emptyRestored = source;
+
+        if (!archive_reflection::WriteObject(emptyWriter, "Sets", type, reflection::ObjectView::From(emptySource)) ||
+            !emptyWriter.ToJson(emptyDocument) || !emptyReader.Parse(emptyDocument) ||
+            !archive_reflection::ReadObject(emptyReader, "Sets", type, emptyRestored) ||
+            !emptyRestored.Sorted.empty() || !emptyRestored.Tags.empty())
+        {
+            return Fail("Automatic empty set round-trip failed.");
         }
 
         struct FailureCase
@@ -115,7 +124,7 @@ namespace archive_reflection_tests
 
             SetSettings unchanged = source;
             const auto result = archive_reflection::ReadObject(
-                failureReader, "Sets", type, unchanged, nullptr, &codecs);
+                failureReader, "Sets", type, unchanged);
 
             if (result.Code != archive::ArchiveErrorCode::InvalidValue || result.Field != failure.Field ||
                 unchanged.Sorted != source.Sorted || unchanged.Tags != source.Tags)
@@ -212,6 +221,7 @@ namespace archive_reflection_tests
         {
             return Fail("Const set mutation capabilities were bound.");
         }
+
 
         struct FailureCase
         {

@@ -171,24 +171,14 @@ namespace archive_generated_tests
             return Fail("Generated container editing did not update the stored values.");
         }
 
-        archive_reflection::PropertyCodecs codecs;
-        if (!codecs.RegisterMap<std::map<std::int64_t, std::wstring>>() ||
-            !codecs.RegisterMap<std::unordered_map<std::wstring, std::uint64_t>>() ||
-            !codecs.RegisterArray<std::set<std::int32_t>>() ||
-            !archive_reflection::RegisterObjectMap<SettingsMap>(codecs, *settingsType, &registry) ||
-            !archive_reflection::RegisterObjectMap<NamedSettingsMap>(codecs, *settingsType, &registry))
-        {
-            return Fail("Generated container codec registration failed.");
-        }
-
         archive::JsonArchive writer;
         archive::JsonArchive reader;
         Profile restored;
 
-        if (!archive_reflection::WriteObject(writer, "Containers", *type, object, &registry, &codecs) ||
+        if (!archive_reflection::WriteObject(writer, "Containers", *type, object, &registry) ||
             !writer.SaveToFile(directory / "reflection-generated-containers.json") ||
             !reader.LoadFromFile(directory / "reflection-generated-containers.json") ||
-            !archive_reflection::ReadObject(reader, "Containers", *type, restored, &registry, &codecs) ||
+            !archive_reflection::ReadObject(reader, "Containers", *type, restored, &registry) ||
             !SameContainerProfile(restored, source))
         {
             return Fail("Generated container archive round-trip failed.");
@@ -227,7 +217,7 @@ namespace archive_generated_tests
 
         const auto beforeReadFailure = restored;
         const auto readFailure = archive_reflection::ReadObject(
-            failureReader, "Containers", *type, restored, &registry, &codecs);
+            failureReader, "Containers", *type, restored, &registry);
 
         if (readFailure.Code != Code::InvalidValue ||
             readFailure.Field != "m_settings[1].Value.Speed" ||
@@ -254,7 +244,7 @@ namespace archive_generated_tests
         }
 
         const auto writeFailure = archive_reflection::WriteObject(
-            writer, "Containers", *type, invalidObject, &registry, &codecs);
+            writer, "Containers", *type, invalidObject, &registry);
         std::string afterWriteFailure;
 
         if (writeFailure.Code != Code::InvalidValue ||
@@ -262,6 +252,31 @@ namespace archive_generated_tests
             !writer.ToJson(afterWriteFailure) || afterWriteFailure != beforeWriteFailure)
         {
             return Fail("Failed generated container writing changed the document.");
+        }
+
+        archive_reflection::PropertyCodecs codecs;
+        archive::JsonArchive explicitWriter;
+        Profile explicitRestored;
+
+        if (!codecs.RegisterMap<std::map<std::int64_t, std::wstring>>() ||
+            !codecs.RegisterMap<std::unordered_map<std::wstring, std::uint64_t>>() ||
+            !archive_reflection::RegisterObjectMap<SettingsMap>(codecs, *settingsType, &registry) ||
+            !archive_reflection::RegisterObjectMap<NamedSettingsMap>(codecs, *settingsType, &registry) ||
+            !archive_reflection::WriteObject(explicitWriter, "Containers", *type, object, &registry, &codecs) ||
+            !archive_reflection::ReadObject(reader, "Containers", *type, explicitRestored, &registry, &codecs) ||
+            !SameContainerProfile(explicitRestored, source))
+        {
+            return Fail("Explicit map codec compatibility failed.");
+        }
+
+        std::string explicitDocument;
+        archive::JsonArchive explicitReader;
+
+        if (!explicitWriter.Encode(explicitDocument) || !explicitReader.Decode(explicitDocument) ||
+            !archive_reflection::ReadObject(explicitReader, "Containers", *type, explicitRestored, &registry) ||
+            !SameContainerProfile(explicitRestored, source))
+        {
+            return Fail("Automatic reading of an explicit map codec document failed.");
         }
 
         std::cout << "Generated container binding checks passed.\n";

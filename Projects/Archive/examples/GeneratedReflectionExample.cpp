@@ -27,8 +27,13 @@ int main()
 
     if (archive_generated_tests::CheckGeneratedProfile(registry, directory) != 0 ||
         archive_generated_tests::CheckGeneratedContainers(registry, directory) != 0 ||
+        archive_generated_tests::CheckAutomaticMaps(registry) != 0 ||
+        archive_generated_tests::CheckEnumContainers(registry) != 0 ||
         archive_generated_tests::CheckGeneratedObjectArray(registry, directory) != 0 ||
         archive_generated_tests::CheckGeneratedFixedArray(registry, directory) != 0 ||
+        archive_generated_tests::CheckFixedObjectArrays(registry) != 0 ||
+        archive_generated_tests::CheckNestedContainers(registry) != 0 ||
+        archive_generated_tests::CheckInheritedObjects(registry) != 0 ||
         archive_generated_tests::CheckGeneratedContainerTraversal(registry) != 0)
     {
         return 1;

@@ -3,14 +3,18 @@
 #include "ArchiveDemo.gen.h"
 
 #include <archive/JsonArchive.h>
+#include <archive/BeveArchive.h>
 #include <reflection/Reflection.h>
 #include <reflection_archive/ReflectionArchiveAdapter.h>
 
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <iostream>
 #include <limits>
 #include <string>
+#include <string_view>
+#include <vector>
 
 namespace archive_generated_tests
 {
@@ -97,21 +101,14 @@ namespace archive_generated_tests
             return Fail("Generated object array binding produced incorrect values.");
         }
 
-        archive_reflection::PropertyCodecs codecs;
-
-        if (!archive_reflection::RegisterObjectArray<Settings>(codecs, *elementType, &registry))
-        {
-            return Fail("Generated object array codec registration failed.");
-        }
-
         archive::JsonArchive writer;
         archive::JsonArchive reader;
         Profile restored;
         const auto path = directory / "reflection-generated-object-array.json";
 
-        if (!archive_reflection::WriteObject(writer, "Sequence", *type, object, &registry, &codecs) ||
+        if (!archive_reflection::WriteObject(writer, "Sequence", *type, object, &registry) ||
             !writer.SaveToFile(path) || !reader.LoadFromFile(path) ||
-            !archive_reflection::ReadObject(reader, "Sequence", *type, restored, &registry, &codecs) ||
+            !archive_reflection::ReadObject(reader, "Sequence", *type, restored, &registry) ||
             !same(source, restored))
         {
             return Fail("Generated object array round-trip failed.");
@@ -146,7 +143,7 @@ namespace archive_generated_tests
 
         const auto beforeReadFailure = restored;
         const auto readFailure = archive_reflection::ReadObject(
-            failureReader, "Sequence", *type, restored, &registry, &codecs);
+            failureReader, "Sequence", *type, restored, &registry);
 
         if (readFailure.Code != Code::InvalidValue || readFailure.Field != "m_steps[1].Speed" ||
             !same(restored, beforeReadFailure))
@@ -172,7 +169,7 @@ namespace archive_generated_tests
         }
 
         const auto writeFailure = archive_reflection::WriteObject(
-            writer, "Sequence", *type, invalidObject, &registry, &codecs);
+            writer, "Sequence", *type, invalidObject, &registry);
         std::string afterWriteFailure;
 
         if (writeFailure.Code != Code::InvalidValue || writeFailure.Field != "m_steps[1].Speed" ||
@@ -182,10 +179,19 @@ namespace archive_generated_tests
         }
 
         archive::JsonArchive replacementReader;
+        const auto restoredElement = steps->TryEditElementObject(reflection::ObjectView::From(restored), 0);
+        const auto* retries = elementType->FindProperty("Retries");
+        const std::int32_t oldRetries = 77;
+
+        if (!restoredElement || retries == nullptr ||
+            retries->TryWriteValue(restoredElement.Object, Value::From(oldRetries)) != Error::None)
+        {
+            return Fail("Cannot prepare existing optional object array field.");
+        }
 
         if (!replacementReader.Parse(R"({"Sequence":{"m_steps":[{"Title":"Legacy","Speed":10}]}})") ||
             !archive_reflection::ReadObject(
-                replacementReader, "Sequence", *type, restored, &registry, &codecs))
+                replacementReader, "Sequence", *type, restored, &registry))
         {
             return Fail("Generated object array replacement failed.");
         }
@@ -201,10 +207,129 @@ namespace archive_generated_tests
 
         if (!replacementReader.Parse(R"({"Sequence":{"m_steps":[]}})") ||
             !archive_reflection::ReadObject(
-                replacementReader, "Sequence", *type, restored, &registry, &codecs) ||
+                replacementReader, "Sequence", *type, restored, &registry) ||
             !restored.GetSteps().empty())
         {
             return Fail("Generated empty object array replacement failed.");
+        }
+
+        const auto checkRoundTrip = [&]<typename Archive>(const Profile& expected)
+        {
+            Archive output;
+            Archive input;
+            std::string encoded;
+            Profile actual = source;
+
+            return archive_reflection::WriteObject(output, "Sequence", *type,
+                reflection::ObjectView::From(expected), &registry) && output.Encode(encoded) && input.Decode(encoded) &&
+                archive_reflection::ReadObject(input, "Sequence", *type, actual, &registry) && same(expected, actual);
+        };
+
+        if (!checkRoundTrip.operator()<archive::JsonArchive>(source) ||
+            !checkRoundTrip.operator()<archive::BeveArchive>(source) ||
+            !checkRoundTrip.operator()<archive::JsonArchive>(restored) ||
+            !checkRoundTrip.operator()<archive::BeveArchive>(restored))
+        {
+            return Fail("Automatic object array JSON/BEVE or empty round-trip failed.");
+        }
+
+        struct InvalidInput
+        {
+            std::string_view Json;
+            Code ExpectedCode;
+            std::string_view Field;
+        };
+
+        const InvalidInput invalidInputs[]{
+            { R"({"Sequence":{}})", Code::MissingField, "m_steps" },
+            { R"({"Sequence":{"m_steps":{}}})", Code::InvalidValue, "m_steps" },
+            { R"({"Sequence":{"m_steps":[7]}})", Code::InvalidValue, "m_steps[0]" },
+            { R"({"Sequence":{"m_steps":[{"Speed":5}]}})", Code::MissingField, "m_steps[0].Title" }
+        };
+
+        for (const auto& input : invalidInputs)
+        {
+            Profile destination = source;
+
+            if (!failureReader.Parse(input.Json))
+            {
+                return Fail("Cannot prepare invalid automatic object array input.");
+            }
+
+            const auto result = archive_reflection::ReadObject(
+                failureReader, "Sequence", *type, destination, &registry);
+
+            if (result.Code != input.ExpectedCode || result.Field != input.Field || !same(source, destination))
+            {
+                return Fail("Automatic object array failure path or destination preservation failed.");
+            }
+        }
+
+        const reflection::Registry missingElementRegistry;
+
+        for (const auto* lookup : { static_cast<const reflection::Registry*>(nullptr), &missingElementRegistry })
+        {
+            for (const auto* value : { &source, &restored })
+            {
+                const auto result = archive_reflection::WriteObject(
+                    writer, "Sequence", *type, reflection::ObjectView::From(*value), lookup);
+
+                if (result.Code != Code::UnsupportedType || result.Field != "m_steps" ||
+                    !writer.ToJson(afterWriteFailure) || afterWriteFailure != beforeWriteFailure)
+                {
+                    return Fail("Missing object array registration changed the document or accepted an empty array.");
+                }
+            }
+
+            for (const auto* input : { &reader, &replacementReader })
+            {
+                Profile destination = source;
+                const auto result = archive_reflection::ReadObject(*input, "Sequence", *type, destination, lookup);
+
+                if (result.Code != Code::UnsupportedType || result.Field != "m_steps" || !same(source, destination))
+                {
+                    return Fail("Missing object array registration changed the destination.");
+                }
+            }
+        }
+
+        archive_reflection::PropertyCodecs codecs;
+        Profile explicitRestored;
+
+        if (!archive_reflection::RegisterObjectArray<Settings>(codecs, *elementType, &registry) ||
+            !archive_reflection::WriteObject(writer, "Sequence", *type, object, &registry, &codecs) ||
+            !archive_reflection::ReadObject(reader, "Sequence", *type, explicitRestored, &registry, &codecs) ||
+            !same(source, explicitRestored))
+        {
+            return Fail("Explicit object array codec compatibility failed.");
+        }
+
+        archive_reflection::PropertyCodecs rejectingCodecs;
+
+        if (!rejectingCodecs.Register<std::vector<Settings>>(
+            [](archive::IArchive&, std::string_view key, const std::vector<Settings>&) -> archive::ArchiveResult
+            {
+                return { Code::UnsupportedType, std::string{ key } };
+            },
+            [](const archive::IArchive&, std::string_view key, std::vector<Settings>&) -> archive::ArchiveResult
+            {
+                return { Code::UnsupportedType, std::string{ key } };
+            }))
+        {
+            return Fail("Cannot register rejecting object array codec.");
+        }
+
+        Profile destination = source;
+        const auto rejectedWrite = archive_reflection::WriteObject(
+            writer, "Sequence", *type, object, &registry, &rejectingCodecs);
+        const auto rejectedRead = archive_reflection::ReadObject(
+            reader, "Sequence", *type, destination, &registry, &rejectingCodecs);
+
+        if (rejectedWrite.Code != Code::UnsupportedType || rejectedWrite.Field != "m_steps" ||
+            rejectedRead.Code != Code::UnsupportedType || rejectedRead.Field != "m_steps" ||
+            !same(source, destination) || !writer.ToJson(afterWriteFailure) || afterWriteFailure != beforeWriteFailure)
+        {
+            return Fail("An explicit object array codec failure fell through to automatic serialization.");
         }
 
         std::cout << "Generated object array binding checks passed.\n";

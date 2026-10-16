@@ -19,6 +19,7 @@ namespace archive_tests
     // Array
     int CheckDynamicArrays();
     int CheckFixedArrays();
+    int CheckArrayElements();
 
     //Map
     int CheckCommonScalarMaps();
@@ -35,6 +36,7 @@ namespace archive_tests
     int CheckObjectNavigation();
     int CheckObjectArrays();
     int CheckSingleObjects();
+    int CheckObjectCommit();
 
     //ScalarFile
     int CheckScalarFile();

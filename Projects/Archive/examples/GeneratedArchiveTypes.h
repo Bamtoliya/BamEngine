@@ -25,6 +25,29 @@ namespace generated_archive
         Active = 1
     };
 
+    ENUM()
+        enum class SignedMode : std::int8_t
+    {
+        Minimum = -128,
+        Idle = 0,
+        Maximum = 127
+    };
+
+    ENUM()
+        enum class WideFlags : std::uint64_t
+    {
+        None = 0,
+        High = std::uint64_t{ 1 } << 63,
+        All = (std::numeric_limits<std::uint64_t>::max)()
+    };
+
+    ENUM()
+        enum class BinaryState : bool
+    {
+        Off = false,
+        On = true
+    };
+
     STRUCT()
         struct Settings
     {
@@ -39,6 +62,8 @@ namespace generated_archive
 
         PROPERTY(ARCHIVE_OPTIONAL)
             std::int32_t Retries = 3;
+
+        bool operator==(const Settings&) const = default;
     };
 
     CLASS()
@@ -72,6 +97,46 @@ namespace generated_archive
     private:
         PROPERTY()
             std::int32_t m_score = 7;
+    };
+
+    STRUCT()
+        struct EnumContainerProfile
+    {
+        PROPERTY()
+            std::vector<SignedMode> Modes{ SignedMode::Minimum, SignedMode::Maximum };
+
+        PROPERTY()
+            std::array<State, 2> Fixed{ State::Idle, State::Active };
+
+        PROPERTY()
+            std::array<State, 0> Empty{};
+
+        PROPERTY()
+            std::set<State> Ordered{ State::Idle, State::Active };
+
+        PROPERTY()
+            std::unordered_set<WideFlags> Bits{ WideFlags::High, WideFlags::All };
+
+        PROPERTY()
+            std::vector<BinaryState> Binary{ BinaryState::Off, BinaryState::On };
+
+        PROPERTY()
+            std::map<SignedMode, State> Pairs{ { SignedMode::Minimum, State::Active } };
+
+        PROPERTY()
+            std::unordered_map<State, SignedMode> Reverse{ { State::Active, SignedMode::Maximum } };
+
+        PROPERTY()
+            std::map<WideFlags, WideFlags> WidePairs{ { WideFlags::All, WideFlags::High } };
+
+        PROPERTY()
+            std::map<std::wstring, State> ByName{ { L"상태 \U0001F600", State::Active } };
+
+        PROPERTY()
+            std::map<State, std::wstring> Labels{ { State::Active, L"이동" } };
+
+        PROPERTY()
+            std::map<State, Settings> Objects{ { State::Active, Settings{} } };
     };
 
     CLASS(ARCHIVE_LABEL("Container Profile"))
@@ -138,7 +203,7 @@ namespace generated_archive
         PROPERTY()
             std::array<std::int32_t, 0> Empty{};
 
-        PROPERTY(ARCHIVE_TRANSIENT)
+        PROPERTY()
             std::array<Settings, 2> Objects{};
 
         const std::array<float, 3>& GetSamples() const
@@ -149,6 +214,49 @@ namespace generated_archive
     private:
         PROPERTY()
             std::array<float, 3> m_samples{ 10.0f, 20.0f, 30.0f };
+    };
+
+    STRUCT()
+        struct ObjectArrayProfile
+    {
+        PROPERTY()
+            std::array<Settings, 2> Values{};
+
+        PROPERTY()
+            std::array<Settings, 0> Empty{};
+    };
+
+    STRUCT()
+        struct NestedContainerProfile
+    {
+        PROPERTY()
+            std::vector<std::vector<std::int32_t>> Matrix{ { 1, 2 }, {}, { 3 } };
+
+        PROPERTY()
+            std::array<std::vector<float>, 2> FixedRows{ std::vector<float>{ 1, 2 }, std::vector<float>{} };
+
+        PROPERTY()
+            std::map<std::string, std::vector<Settings>> Objects{ { "Steps", { Settings{} } } };
+
+        PROPERTY()
+            std::vector<std::array<State, 2>> EnumGroups{ { State::Idle, State::Active } };
+
+        PROPERTY()
+            std::vector<std::map<State, std::vector<Settings>>> MapGroups{ { { State::Active, { Settings{} } } } };
+
+        PROPERTY()
+            std::vector<std::set<std::string>> Tags{ { "A", "B" }, {} };
+
+        PROPERTY()
+            std::vector<std::vector<bool>> Masks{ { true, false }, {} };
+
+        PROPERTY()
+            std::vector<std::vector<std::vector<std::int32_t>>> Deep{ { { 1, 2 }, {} }, {} };
+
+        PROPERTY()
+            std::array<std::vector<Settings>, 0> Empty{};
+
+        bool operator==(const NestedContainerProfile&) const = default;
     };
 
     STRUCT()

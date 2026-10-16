@@ -15,6 +15,7 @@
 #include <unordered_set>
 #include <functional>
 #include <optional>
+#include <utility>
 
 namespace archive
 {
@@ -22,6 +23,14 @@ namespace archive
     {
     public:
         virtual ~IArchive() = default;
+
+        // Callbacks operate on one isolated value using the supplied field name.
+        // A writer must produce exactly that field and leave object depth at zero.
+        using ArrayElementCallback = std::function<ArchiveResult(IArchive&, std::string_view, std::size_t)>;
+        [[nodiscard]] ArchiveResult WriteArrayElements(std::string_view key, std::size_t size,
+            const ArrayElementCallback& writeElement);
+        [[nodiscard]] ArchiveResult ReadArrayElements(std::string_view key,
+            const ArrayElementCallback& readElement) const;
 
 #pragma region Write
         template<ArchiveScalar T>
@@ -115,6 +124,30 @@ namespace archive
                     if (temporary.GetObjectDepth() != 0)
                     {
                         return { ArchiveErrorCode::InvalidOperation, std::string{ key } };
+                    }
+
+                    return {};
+                });
+        }
+        template<typename Writer>
+        requires std::invocable<Writer&, IArchive&, std::size_t>
+        [[nodiscard]] ArchiveResult WriteObjectArray(std::string_view key, std::size_t size, Writer&& writeElement)
+        {
+            return WriteObjectArrayValues(key, size,
+                [&writeElement, key](IArchive& temporary, std::size_t index) -> ArchiveResult
+                {
+                    const auto path = std::string{ key } + "[" + std::to_string(index) + "]";
+                    auto result = std::invoke(writeElement, temporary, index);
+
+                    if (!result)
+                    {
+                        result.Field = path + (result.Field.empty() ? "" : "." + result.Field);
+                        return result;
+                    }
+
+                    if (temporary.GetObjectDepth() != 0)
+                    {
+                        return { ArchiveErrorCode::InvalidOperation, path };
                     }
 
                     return {};
@@ -475,8 +508,41 @@ namespace archive
                 return result;
             }
 
-            value = std::move(*candidate);
+            if constexpr (std::is_copy_assignable_v<T>)
+            {
+                // Implicit move assignment can move from a shared virtual base more than once.
+                value = std::as_const(*candidate);
+            }
+            else
+            {
+                value = std::move(*candidate);
+            }
             return {};
+        }
+
+        template<typename Reader>
+            requires std::invocable<Reader&, IArchive&, std::size_t>
+        [[nodiscard]] ArchiveResult ReadObjectArray(std::string_view key, Reader&& readElement) const
+        {
+            return ReadObjectArrayValues(key,
+                [&readElement, key](IArchive& temporary, std::size_t index) -> ArchiveResult
+                {
+                    const auto path = std::string{ key } + "[" + std::to_string(index) + "]";
+                    auto result = std::invoke(readElement, temporary, index);
+
+                    if (!result)
+                    {
+                        result.Field = path + (result.Field.empty() ? "" : "." + result.Field);
+                        return result;
+                    }
+
+                    if (temporary.GetObjectDepth() != 0)
+                    {
+                        return { ArchiveErrorCode::InvalidOperation, path };
+                    }
+
+                    return {};
+                });
         }
 
         template<typename T, typename Reader>
@@ -636,6 +702,11 @@ namespace archive
         [[nodiscard]] virtual ArchiveResult GetMapSize(std::string_view key, std::size_t& size) const = 0;
 
     protected:
+        // Existing custom backends can opt into arrays of arbitrary values independently.
+        virtual ArchiveResult WriteArrayElementValues(std::string_view key, std::size_t,
+            const ArrayElementCallback&) { return { ArchiveErrorCode::UnsupportedType, std::string{ key } }; }
+        virtual ArchiveResult ReadArrayElementValues(std::string_view key,
+            const ArrayElementCallback&) const { return { ArchiveErrorCode::UnsupportedType, std::string{ key } }; }
         virtual ArchiveResult EncodeDocument(std::string& document) const = 0;
         // 파싱 실패나 잘못된 루트 형식은 InvalidDocument로 반환한다.
         // 실패 시 기존 문서와 탐색 경로를 보존한다.

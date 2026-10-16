@@ -2,6 +2,66 @@
 
 namespace archive
 {
+    namespace
+    {
+        ArchiveResult ArrayElementResult(std::string_view key, std::size_t index,
+            std::string_view valueKey, ArchiveResult result)
+        {
+            if (!result)
+            {
+                const auto path = std::string{ key } + "[" + std::to_string(index) + "]";
+                if (result.Field == valueKey || (result.Field.starts_with(valueKey) &&
+                    result.Field.size() > valueKey.size() &&
+                    (result.Field[valueKey.size()] == '.' || result.Field[valueKey.size()] == '[')))
+                {
+                    result.Field = path + result.Field.substr(valueKey.size());
+                }
+                else
+                {
+                    result.Field = path + (result.Field.empty() ? "" : "." + result.Field);
+                }
+            }
+            return result;
+        }
+    }
+
+    ArchiveResult IArchive::WriteArrayElements(std::string_view key, std::size_t size,
+        const ArrayElementCallback& writeElement)
+    {
+        if (!writeElement)
+        {
+            return { ArchiveErrorCode::InvalidOperation, std::string{ key } };
+        }
+        return WriteArrayElementValues(key, size,
+            [&](IArchive& temporary, std::string_view valueKey, std::size_t index)
+            {
+                auto result = writeElement(temporary, valueKey, index);
+                if (result && temporary.GetObjectDepth() != 0)
+                {
+                    result = { ArchiveErrorCode::InvalidOperation, {} };
+                }
+                return ArrayElementResult(key, index, valueKey, result);
+            });
+    }
+
+    ArchiveResult IArchive::ReadArrayElements(std::string_view key, const ArrayElementCallback& readElement) const
+    {
+        if (!readElement)
+        {
+            return { ArchiveErrorCode::InvalidOperation, std::string{ key } };
+        }
+        return ReadArrayElementValues(key,
+            [&](IArchive& temporary, std::string_view valueKey, std::size_t index)
+            {
+                auto result = readElement(temporary, valueKey, index);
+                if (result && temporary.GetObjectDepth() != 0)
+                {
+                    result = { ArchiveErrorCode::InvalidOperation, {} };
+                }
+                return ArrayElementResult(key, index, valueKey, result);
+            });
+    }
+
     ArchiveResult IArchive::Encode(std::string& document) const
     {
         if (GetObjectDepth() != 0)

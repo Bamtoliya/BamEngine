@@ -9,6 +9,7 @@ int main()
     const Check checks[]
     {
         archive_tests::CheckCommonDocuments,
+        archive_tests::CheckArrayElements,
         archive_tests::CheckBeveArchive,
         archive_tests::CheckCommonObjectMaps,
         archive_tests::CheckCommonScalarMaps,
@@ -25,6 +26,7 @@ int main()
         archive_tests::CheckObjectArrays,
         archive_tests::CheckObjectArrayFile,
         archive_tests::CheckSingleObjects,
+        archive_tests::CheckObjectCommit,
         archive_tests::CheckSingleObjectFile,
 
         archive_tests::CheckEnumValues,

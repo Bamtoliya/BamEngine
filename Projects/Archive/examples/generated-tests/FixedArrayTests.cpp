@@ -127,49 +127,71 @@ namespace archive_generated_tests
             return Fail("Generated fixed array exposed structural mutation.");
         }
 
-        archive_reflection::PropertyCodecs codecs;
-
-        if (!codecs.RegisterArray<std::array<float, 3>>() ||
-            !codecs.RegisterArray<std::array<bool, 2>>() ||
-            !codecs.RegisterArray<std::array<State, 2>>() ||
-            !codecs.RegisterArray<std::array<std::int32_t, 0>>())
-        {
-            return Fail("Generated fixed array codec registration failed.");
-        }
-
         archive::JsonArchive writer;
         archive::JsonArchive reader;
         Profile restored;
         restored.Objects[0].Speed = 123.0f;
         auto expected = source;
-        expected.Objects[0].Speed = 123.0f;
         const auto path = directory / "reflection-generated-fixed-array.json";
 
-        if (!archive_reflection::WriteObject(writer, "Fixed", *type, object, &registry, &codecs) ||
+        if (!archive_reflection::WriteObject(writer, "Fixed", *type, object, &registry) ||
             !writer.SaveToFile(path) || !reader.LoadFromFile(path) ||
-            !archive_reflection::ReadObject(reader, "Fixed", *type, restored, &registry, &codecs) ||
+            !archive_reflection::ReadObject(reader, "Fixed", *type, restored, &registry) ||
             !same(restored, expected))
         {
             return Fail("Generated fixed array archive round-trip failed.");
         }
 
-        archive::JsonArchive failureReader;
-        const std::string failureJson =
-            R"({"Fixed":{"Flags":[false,false],"States":[0,0],"Empty":[],"m_samples":[1,2]}})";
-
-        if (!failureReader.Parse(failureJson))
+        struct FailureCase
         {
-            return Fail("Cannot prepare generated fixed array reading failure.");
-        }
+            const char* Json;
+            const char* Field;
+        };
 
-        const auto beforeFailure = restored;
-        const auto failure = archive_reflection::ReadObject(
-            failureReader, "Fixed", *type, restored, &registry, &codecs);
+        const FailureCase failures[] = {
+            {
+                R"({"Fixed":{"Flags":[false,false],"States":[0,0],"Empty":[],)"
+                R"("Objects":[{"Title":"A","Speed":1},{"Title":"B","Speed":2}],"m_samples":[1,2]}})",
+                "m_samples"
+            },
+            {
+                R"({"Fixed":{"Flags":[false,false],"States":[0,0],"Empty":[],)"
+                R"("Objects":[{"Title":"A","Speed":1},{"Title":"B","Speed":2}],"m_samples":[1,2,3,4]}})",
+                "m_samples"
+            },
+            {
+                R"({"Fixed":{"Flags":[false,false],"States":[0,0],"Empty":[],)"
+                R"("Objects":[{"Title":"A","Speed":1},{"Title":"B","Speed":2}],"m_samples":[1,"bad",3]}})",
+                "m_samples"
+            },
+            {
+                R"({"Fixed":{"Flags":[false,false],"States":[0,0],"Empty":[1],"m_samples":[1,2,3]}})",
+                "Empty"
+            },
+            {
+                R"({"Fixed":{"Flags":[true,1]}})",
+                "Flags"
+            }
+        };
 
-        if (failure.Code != archive::ArchiveErrorCode::InvalidValue ||
-            failure.Field != "m_samples" || !same(restored, beforeFailure))
+        for (const auto& failure : failures)
         {
-            return Fail("Invalid fixed array length changed the destination.");
+            archive::JsonArchive failureReader;
+
+            if (!failureReader.Parse(failure.Json))
+            {
+                return Fail("Cannot prepare generated fixed array reading failure.");
+            }
+
+            const auto beforeFailure = restored;
+            const auto result = archive_reflection::ReadObject(
+                failureReader, "Fixed", *type, restored, &registry);
+
+            if (result.Code != archive::ArchiveErrorCode::InvalidValue ||
+                result.Field != failure.Field || !same(restored, beforeFailure))
+            {
+                return Fail("Invalid fixed array reading changed the destination.");
+            }
         }
 
         std::cout << "Generated fixed array access checks passed.\n";

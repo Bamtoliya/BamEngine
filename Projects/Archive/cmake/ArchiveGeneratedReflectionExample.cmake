@@ -7,4 +7,7 @@ add_executable(ArchiveGeneratedReflectionExample examples/GeneratedReflectionExa
 target_link_libraries(ArchiveGeneratedReflectionExample PRIVATE ReflectionArchive::Adapter)
 set_target_properties(ArchiveGeneratedReflectionExample PROPERTIES CXX_EXTENSIONS OFF UNITY_BUILD OFF)
 
-reflection_generate(TARGET ArchiveGeneratedReflectionExample MODULE ArchiveDemo HEADERS examples/GeneratedArchiveTypes.h)
+reflection_generate(TARGET ArchiveGeneratedReflectionExample MODULE ArchiveDemo
+    HEADERS examples/GeneratedArchiveTypes.h examples/GeneratedInheritanceTypes.h)
+
+archive_add_example_test(ArchiveGeneratedReflectionExample)

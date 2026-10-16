@@ -493,6 +493,79 @@ namespace archive
         object->insert_or_assign(std::string{ key }, std::move(candidate));
         return {};
     }
+
+    ArchiveResult GlazeArchiveBase::WriteArrayElementValues(std::string_view key, std::size_t size,
+        const ArrayElementCallback& writeElement)
+    {
+        if (!FindObject(m_Root, m_ObjectPath))
+        {
+            return { ArchiveErrorCode::InvalidOperation, std::string{ key } };
+        }
+
+        Value candidate;
+        candidate.data = Value::array_t{};
+        auto& elements = candidate.get_array();
+        if (size > elements.max_size())
+        {
+            return InvalidValue(key);
+        }
+        elements.reserve(size);
+        for (std::size_t index = 0; index < size; ++index)
+        {
+            ObjectArchive temporary;
+            const auto result = writeElement(temporary, "Value", index);
+            if (!result)
+            {
+                return result;
+            }
+            auto& fields = temporary.m_Root.get_object();
+            const auto found = fields.find("Value");
+            if (fields.size() != 1 || found == fields.end())
+            {
+                return { ArchiveErrorCode::InvalidOperation, std::string{ key } + "[" + std::to_string(index) + "]" };
+            }
+            elements.push_back(std::move(found->second));
+        }
+
+        auto* object = FindObject(m_Root, m_ObjectPath);
+        if (!object)
+        {
+            return { ArchiveErrorCode::InvalidOperation, std::string{ key } };
+        }
+        object->insert_or_assign(std::string{ key }, std::move(candidate));
+        return {};
+    }
+
+    ArchiveResult GlazeArchiveBase::ReadArrayElementValues(std::string_view key,
+        const ArrayElementCallback& readElement) const
+    {
+        const auto* object = FindObject(m_Root, m_ObjectPath);
+        if (!object)
+        {
+            return { ArchiveErrorCode::InvalidOperation, std::string{ key } };
+        }
+        const auto found = object->find(key);
+        if (found == object->end())
+        {
+            return { ArchiveErrorCode::MissingField, std::string{ key } };
+        }
+        const auto* elements = found->second.get_if<Value::array_t>();
+        if (!elements)
+        {
+            return InvalidValue(key);
+        }
+        for (std::size_t index = 0; index < elements->size(); ++index)
+        {
+            ObjectArchive temporary;
+            temporary.m_Root.get_object().insert_or_assign("Value", (*elements)[index]);
+            const auto result = readElement(temporary, "Value", index);
+            if (!result)
+            {
+                return result;
+            }
+        }
+        return {};
+    }
     ArchiveResult GlazeArchiveBase::WriteObjectMapValues(std::string_view key, std::size_t size, ArchiveScalarType,
         const ObjectMapKeyWriter& writeKey, const ObjectArrayWriter& writeValue)
     {

@@ -22,7 +22,7 @@ namespace archive_reflection_tests
         struct UnsupportedSettings
         {
             float Speed = 99.0f;
-            std::vector<std::int32_t> Values{ 1, 2, 3 };
+            std::vector<long double> Values{ 1.0L, 2.0L, 3.0L };
         };
     }
 
@@ -82,7 +82,7 @@ namespace archive_reflection_tests
         auto unsupportedType = reflection::TypeInfo::For<UnsupportedSettings>("example::UnsupportedSettings");
         unsupportedType.Properties.push_back(reflection::MakeProperty<&UnsupportedSettings::Speed>("Speed", "float"));
         unsupportedType.Properties.push_back(
-            reflection::MakeProperty<&UnsupportedSettings::Values>("Values", "std::vector<std::int32_t>"));
+            reflection::MakeProperty<&UnsupportedSettings::Values>("Values", "std::vector<long double>"));
 
         const UnsupportedSettings unsupported;
         auto result = archive_reflection::WriteObject(
