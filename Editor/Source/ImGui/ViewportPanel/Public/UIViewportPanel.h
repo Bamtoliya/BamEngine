@@ -1,149 +1,85 @@
-﻿#pragma once
+#pragma once
 
-#include "CameraViewportPanel.h"
-#pragma push_macro("COLOR")
-#undef COLOR
+#include "BaseViewportPanel.h"
+#include "CanvasView2D.h"
+#include "UILayout.h"
+#include "UIEventSystem.h"
+#include <optional>
 
-#include "ImGuizmo.h"
-
-#pragma pop_macro("COLOR")
-#include "Grid.h"
-
-
-enum class E2DGuizmoHandle {
-	None, Body,
-	TopLeft, TopCenter, TopRight,
-	MiddleLeft, MiddleRight,
-	BottomLeft, BottomCenter, BottomRight,
-	Rotate
-};
-
-BEGIN(Engine)
-class UICanvas;
-class GameObject;
-END
-
-BEGIN(Editor)
-class UIViewportPanel : public CameraViewportPanel
+namespace Editor
 {
-#pragma region Constructor&Destructor
-public:
-	UIViewportPanel() { m_Name = L"UI Viewport Panel"; };
-	virtual ~UIViewportPanel() = default;
-public:
-	virtual void Initialize(void* arg = nullptr);
-public:
-	virtual void Free();
-#pragma endregion
+    class UIViewportPanel : public BaseViewportPanel
+    {
+    public:
+        UIViewportPanel() { m_Name = L"UI View"; }
+        void Initialize(void* arg = nullptr) override;
+        void Free() override;
+        void Update(f32 dt) override;
+        void Draw() override;
 
-#pragma region Prepare
-private:
-	void PrepareRenderTargetsAndPasses(uint32 width, uint32 height);
-#pragma endregion
+    protected:
+        void DrawCustomOptions() override;
+        void DrawCustomViewport() override;
 
-#pragma region Loop
-public:
-	virtual void Update(f32 dt) override;
-public:
-	void Draw();
-#pragma endregion
+    private:
+        void SetTarget(Engine::Scene* scene, entt::entity canvas);
+        void ResolveTarget();
+        bool HasTarget() const;
+        void DrawCanvasMenu();
+        void DrawOrderMenu();
+        void SetZIndex(entt::entity entity, std::int32_t zIndex);
+        void DrawGrid(ImDrawList* drawList);
+        void DrawSelection(ImDrawList* drawList);
+        void HandleInput(bool hovered);
+        void HandleInteraction(bool hovered);
+        void ApplyPendingEdit();
+        const Engine::UIElementLayout* FindLayout(entt::entity entity) const;
 
-#pragma region Custom Draws
-protected:
-	virtual void DrawCustomViewport() override;
-	virtual void DrawCustomOptions() override;
-#pragma endregion
+        CanvasView2D m_View;
+        Engine::Scene* m_TargetScene = nullptr;
+        entt::entity m_TargetCanvas = entt::null;
+        uint64 m_TargetCanvasId = 0;
+        vec2 m_CanvasSize{ 1920.0f, 1080.0f };
+        wstring m_CanvasRTName;
+        wstring m_CanvasToDraw;
+        RenderPassID m_UIOverlayPassID = INVALID_PASS_ID;
+        std::vector<Engine::UIElementLayout> m_Layouts;
+        bool m_LayoutValid = false;
+        bool m_PreviewReady = false;
+        Engine::Entity* m_LastSelection = nullptr;
+        bool m_FitPending = true;
+        bool m_ShowGrid = true;
+        bool m_ShowSafeArea = true;
+        bool m_ShowAnchors = true;
+        bool m_GridSnap = true;
+        bool m_PixelSnap = false;
+        float m_GridStep = 10.0f;
+        bool m_Panning = false;
+        bool m_InteractionPreview = false;
+        bool m_InteractionUpdated = false;
+        std::unique_ptr<Engine::UIEventSystem> m_Interaction;
+        std::string m_LastUIEvent;
+        uint64 m_ClickCount = 0;
 
-#pragma region Viewport
-protected:
-	void ClampViewOffset();
-#pragma endregion
-
-
-#pragma region Options Bar
-protected:
-	void DrawGizmoMenu();
-	void DrawLayoutMenu();
-#pragma endregion
-
-#pragma region Overlays
-private:
-	void DrawCanvasBounds(ImDrawList* drawList, float displayRTWidth, float displayRTHeight, const mat4& view, const mat4& proj);
-private:
-	void DrawSelectionLocked();
-	void DrawUIPreviewOverlay();
-	void DrawUIPreviewMenu();
-	void Draw2DGuizmo();
-	void DrawDebugMenu();
-	void DrawCanvasOverlay();
-#pragma endregion
-
-#pragma region Resolution & Aspect
-protected:
-	virtual void ResizeRenderTargets(uint32 width, uint32 height) override;
-#pragma endregion
-
-#pragma region Rendering
-protected:
-	void SubmitUIOverlayPass(const wstring& currentRT);
-#pragma endregion
-
-#pragma region Inputs
-private:
-	void KeyboardInput();
-	void MouseInput();
-private:
-	Engine::Ray ScreenPosToRay(const ImVec2& mousePos);
-#pragma endregion
-
-#pragma region Canvas
-private:
-	class UICanvas* FindCanvasFromObject(class GameObject* object) const;
-	class UICanvas* ResolveTargetCanvas() const;
-	void SyncCanvasLayoutOverride();
-	void ClearCanvasLayoutOverride();
-#pragma endregion
-
-
-#pragma region Member Variable
-private:
-	wstring m_UIColorRTName;
-	wstring m_VirtualCanvasRTName;
-	wstring m_CanvasToDraw; // 실제로 그려지는 캔버스 (UI Preview용 가상 캔버스)
-private:
-	Grid m_Grid;
-	bool m_ShowGrid = true;
-
-	bool m_EnableUIPreview = true;
-	int32 m_UIDesignWidth = 1920;
-	int32 m_UIDesignHeight = 1080;
-	bool m_ShowSafeArea = true;
-	float m_UISafeMarginX = 0.05f;
-	float m_UISafeMarginY = 0.05f;
-private:
-	vec2 m_InitialMousePos;
-private:
-	RenderPassID m_UIOverlayPassID = INVALID_PASS_ID;
-	RenderPassID m_ClearPassID = INVALID_PASS_ID;
-private://Guizmo
-	ImGuizmo::OPERATION m_GizmoOperation = { ImGuizmo::OPERATION::TRANSLATE };
-	ImGuizmo::MODE m_GizmoMode = { ImGuizmo::MODE::LOCAL };
-	bool m_GizmoUseSnap = { false };
-	vec3 m_GizmoSnapTranslation = { 1.0f, 1.0f, 1.0f };
-	vec3 m_GizmoSnapRotation = { 15.0f, 15.0f, 15.0f };
-	vec3 m_GizmoSnapScale = { 0.1f, 0.1f, 0.1f };
-
-	E2DGuizmoHandle m_ActiveHandle2D = E2DGuizmoHandle::None;
-	bool            m_IsDragging2D = false;
-private:
-	bool   m_IsPanning = false;
-	ImVec2 m_PanStartMouse = ImVec2(0.0f, 0.0f);
-	vec3   m_PanStartCameraPos = vec3(0.0f, 0.0f, 0.0f);
-private:
-	class UICanvas* m_TargetCanvas = nullptr;
-	uint64 m_LayoutOwnerToken = 0;
-	bool m_AutoBindSelectedCanvas = true;
-
-#pragma endregion
-};
-END
+        enum class DragMode { None, Move, Resize };
+        struct DragState
+        {
+            DragMode mode = DragMode::None;
+            entt::entity entity = entt::null;
+            uint64 id = 0;
+            vec2 mouseStart{ 0.0f };
+            Engine::RectTransformComponent start;
+            Engine::UIElementLayout layout;
+        };
+        struct PendingEdit
+        {
+            entt::entity entity = entt::null;
+            uint64 id = 0;
+            Engine::RectTransformComponent before;
+            Engine::RectTransformComponent after;
+        };
+        DragState m_Drag;
+        std::optional<PendingEdit> m_PendingEdit;
+        uint64 m_HistoryRevision = 0;
+    };
+}

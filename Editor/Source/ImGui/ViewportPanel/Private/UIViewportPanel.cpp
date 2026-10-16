@@ -1,671 +1,677 @@
-﻿#pragma once
-
 #include "UIViewportPanel.h"
-#include "RectTransform.h"
+#include "Application.h"
+#include "SceneManager.h"
+#include "CoreComponents.h"
 #include "SelectionManager.h"
-#include "UICanvas.h"
+#include "EntityFactory.h"
 #include "ImGuiManager.h"
+#include "RenderTargetManager.h"
+#include "RenderPassManager.h"
+#include "Renderer.h"
+#include <limits>
 
-void UIViewportPanel::Initialize(void* arg)
+namespace
 {
-	__super::Initialize(arg);
-	CAST_DESC;
-	SetOrthographic();
-	PrepareRenderTargetsAndPasses(desc->RenderTargetWidth, desc->RenderTargetHeight);
-	m_Grid.Initialize(m_Name);
-
-    m_SelectedRTName = m_UIColorRTName;
-    m_DisplayRTName = m_UIColorRTName;
-
-    m_LayoutOwnerToken = static_cast<uint64>(reinterpret_cast<uintptr_t>(this));
-}
-
-void UIViewportPanel::Free()
-{
-    __super::Free();
-    ClearCanvasLayoutOverride();
-	m_Grid.Free();
-}
-
-void UIViewportPanel::PrepareRenderTargetsAndPasses(uint32 width, uint32 height)
-{
-    wstring prefix = m_Name + L"_";
-    m_UIColorRTName = prefix + L"UIColor";
-	m_VirtualCanvasRTName = prefix + L"VirtualCanvas";
-    RenderTargetDesc colorDesc = {
-		.textureDesc = {
-            .width = width,
-            .height = height,
-			.usage = ETextureUsage::RenderTarget | ETextureUsage::Sampler,
-		},
-		.name = m_UIColorRTName
-    };
-    RenderTargetManager::Get().CreateRenderTarget(&colorDesc);
-
-    RenderTargetDesc virtualCanvasDesc = {
-        .textureDesc = {
-            .width = (uint32)m_UIDesignWidth,
-            .height = (uint32)m_UIDesignHeight,
-            .usage = ETextureUsage::RenderTarget | ETextureUsage::Sampler,
-        },
-        .name = m_VirtualCanvasRTName
-    };
-    RenderTargetManager::Get().CreateRenderTarget(&virtualCanvasDesc);
-
-	auto& rpMgr = RenderPassManager::Get();
-	
-	m_UIOverlayPassID = rpMgr.RegisterRenderPass(
-		prefix + L"UIOverlayPass", {}, L"",
-		ERenderPassLoadOperation::RPLO_Clear, ERenderPassStoreOperation::RPSO_Store,
-		ERenderPassLoadOperation::RPLO_Clear, ERenderPassStoreOperation::RPSO_Store,
-		vec4(0.f, 0.f, 0.f, -1.f), 200, ERenderSortType::FrontToBack, ERenderPassType::UI,
-		EBlendMode::Opaque | EBlendMode::Masked | EBlendMode::AlphaBlend | EBlendMode::Additive | EBlendMode::NonPremultiplied);
-
-    m_ClearPassID = rpMgr.RegisterRenderPass(
-        prefix + L"ClearPass", {}, L"",
-        ERenderPassLoadOperation::RPLO_Clear, ERenderPassStoreOperation::RPSO_Store,
-        ERenderPassLoadOperation::RPLO_Clear, ERenderPassStoreOperation::RPSO_Store,
-        vec4(0.1f, 0.1f, 0.1f, -1.f), 10, ERenderSortType::None, ERenderPassType::Custom,
-        EBlendMode::None);
-}
-
-void UIViewportPanel::Update(f32 dt)
-{
-	CalculateRenderResolution(m_PanelWidth, m_PanelHeight);
-
-	//if (m_OwnedCamera && m_Focused && m_Hovered)
-	//{
-	//	m_OwnedCamera->HandleInput(dt);
-	//}
-
-	if (m_OwnedCamera)
-	{
-		m_OwnedCamera->FixedUpdate(dt);
-		m_OwnedCamera->Update(dt);
-		m_OwnedCamera->LateUpdate(dt);
-	}
-
-    RenderPassManager& rpMgr = RenderPassManager::Get();
-    Renderer& renderer = Renderer::Get();
-    renderer.RegisterViewportCamera(nullptr, rpMgr.GetRenderPassByID(m_UIOverlayPassID));
-
-    // 2. UI 렌더링 지시 (Virtual Canvas에 쓰기)
-    SubmitUIOverlayPass(m_VirtualCanvasRTName); 
-    
-    // 3. 배경 RT 설정 및 명시적 클리어, 그리드 렌더링
-    m_DisplayRTName = m_UIColorRTName; // 배경은 항상 그리드가 있는 컬러 RT
-    
-    rpMgr.GetRenderPassByID(m_ClearPassID)->SetColorAttachments({ m_DisplayRTName });
-    renderer.SubmitCustomCommand([](f32, RenderPass*) { return EResult::Success; }, m_ClearPassID);
-
-    if (*m_Grid.GetVisible())
+    ImVec2 ImPoint(const glm::vec2& point) { return ImVec2(point.x, point.y); }
+    glm::vec2 Point(const ImVec2& point) { return glm::vec2(point.x, point.y); }
+    bool SameRect(const Engine::RectTransformComponent& left, const Engine::RectTransformComponent& right)
     {
-        m_Grid.SubmitGrid(m_Camera, IsOrthographic(), m_DisplayRTName, L"");
+        return left.anchorMin == right.anchorMin && left.anchorMax == right.anchorMax &&
+            left.anchoredPosition == right.anchoredPosition && left.sizeDelta == right.sizeDelta &&
+            left.pivot == right.pivot && left.scale == right.scale && left.rotation == right.rotation;
     }
+    const char* UIPointerEventName(Engine::EUIPointerEventType type)
+    {
+        switch (type)
+        {
+        case Engine::EUIPointerEventType::Enter: return "Enter";
+        case Engine::EUIPointerEventType::Exit: return "Exit";
+        case Engine::EUIPointerEventType::Down: return "Down";
+        case Engine::EUIPointerEventType::Up: return "Up";
+        case Engine::EUIPointerEventType::Click: return "Click";
+        default: return "Cancel";
+        }
+    }
+}
 
-    // 4. [핵심] 채널 필터를 Virtual Canvas 전용으로 동작하게 만듭니다.
-    m_CanvasToDraw = m_VirtualCanvasRTName;
+void Editor::UIViewportPanel::Initialize(void* arg)
+{
+    BaseViewportPanel::Initialize(arg);
+    m_CanvasRTName = m_Name + L"_VirtualCanvas";
+    RenderTargetDesc desc{};
+    desc.name = m_CanvasRTName;
+    desc.textureDesc.width = static_cast<uint32>(m_CanvasSize.x);
+    desc.textureDesc.height = static_cast<uint32>(m_CanvasSize.y);
+    desc.textureDesc.usage = ETextureUsage::RenderTarget | ETextureUsage::Sampler;
+    desc.textureDesc.clearColor = vec4(0.14f, 0.15f, 0.17f, 1.0f);
+    RenderTargetManager::Get().CreateRenderTarget(&desc);
+    m_UIOverlayPassID = RenderPassManager::Get().RegisterRenderPass(m_Name + L"_UIOverlayPass", { m_CanvasRTName }, L"",
+        ERenderPassLoadOperation::RPLO_Clear, ERenderPassStoreOperation::RPSO_Store,
+        ERenderPassLoadOperation::RPLO_Clear, ERenderPassStoreOperation::RPSO_Store,
+        vec4(0.0f, 0.0f, 0.0f, -1.0f), 200, ERenderSortType::None, ERenderPassType::UI,
+        EBlendMode::Opaque | EBlendMode::Masked | EBlendMode::AlphaBlend | EBlendMode::NonPremultiplied);
+    m_SelectedRTName = m_CanvasRTName;
+}
+
+void Editor::UIViewportPanel::Free()
+{
+    SetTarget(nullptr, entt::null);
+    Renderer::Get().ClearRenderQueue(m_UIOverlayPassID);
+    Renderer::Get().UnregisterViewportCamera(m_UIOverlayPassID);
+    BaseViewportPanel::Free();
+}
+
+bool Editor::UIViewportPanel::HasTarget() const
+{
+    if (!m_TargetScene) return false;
+    const auto active = SceneManager::Get().GetActiveScenes();
+    if (std::find(active.begin(), active.end(), m_TargetScene) == active.end()) return false;
+    const auto& world = m_TargetScene->GetRegistry();
+    const auto* id = world.valid(m_TargetCanvas) ? world.try_get<IDComponent>(m_TargetCanvas) : nullptr;
+    return id && id->id == m_TargetCanvasId && world.all_of<CanvasComponent>(m_TargetCanvas);
+}
+
+void Editor::UIViewportPanel::SetTarget(Scene* scene, entt::entity canvas)
+{
+    if (scene == m_TargetScene && canvas == m_TargetCanvas && HasTarget()) return;
+    if (m_Interaction) m_Interaction->Cancel();
+    m_Interaction.reset(); // Clears transient state while its retained scene is still alive.
+    if (m_TargetScene && m_TargetScene != scene && !HasTarget())
+    {
+        auto& selection = SelectionManager::Get();
+        for (const auto entity : m_TargetScene->GetRegistry().view<IDComponent>())
+            if (selection.IsEntitySelected(m_TargetScene->FindEntity(entity)))
+            {
+                selection.ClearSelection(true);
+                break;
+            }
+    }
+    Safe_AddRef(scene);
+    Safe_Release(m_TargetScene);
+    m_TargetScene = scene;
+    m_TargetCanvas = canvas;
+    const auto* id = scene && scene->GetRegistry().valid(canvas) ?
+        scene->GetRegistry().try_get<IDComponent>(canvas) : nullptr;
+    m_TargetCanvasId = id ? id->id : 0;
+    if (scene && id)
+    {
+        m_Interaction = std::make_unique<UIEventSystem>(*scene, canvas);
+        m_Interaction->OnPointerEvent().AddLambda([this](const UIPointerEvent& event)
+        {
+            m_LastUIEvent = std::string(UIPointerEventName(event.type)) + " | Entity " + std::to_string(event.targetId);
+            if (event.type == EUIPointerEventType::Click) ++m_ClickCount;
+        });
+    }
+    m_LastUIEvent.clear();
+    m_ClickCount = 0;
+    m_Drag = {};
+    m_PendingEdit.reset();
+    m_Layouts.clear();
+    m_PreviewReady = false;
+    m_FitPending = true;
+}
+
+void Editor::UIViewportPanel::ResolveTarget()
+{
+    if (m_TargetScene && !HasTarget()) SetTarget(nullptr, entt::null);
+    Entity* selected = SelectionManager::Get().GetPrimarySelectedEntity();
+    if (selected && selected != m_LastSelection)
+    {
+        // Compare wrappers from live registries before dereferencing a possibly stale selection pointer.
+        for (Scene* scene : SceneManager::Get().GetActiveScenes())
+        {
+            for (const auto entity : scene->GetRegistry().view<IDComponent>())
+            {
+                if (scene->FindEntity(entity) != selected) continue;
+                const auto canvas = UILayout::FindCanvas(scene->GetRegistry(), entity);
+                if (canvas != entt::null) SetTarget(scene, canvas);
+                break;
+            }
+        }
+    }
+    m_LastSelection = selected;
+    if (HasTarget()) return;
+    Scene* scene = SceneManager::Get().GetCurrentScene();
+    if (!scene || !scene->IsActive()) return;
+    entt::entity first = entt::null;
+    uint64 firstId = UINT64_MAX;
+    for (auto [entity, canvas, id] : scene->GetRegistry().view<CanvasComponent, IDComponent>().each())
+        if (id.id < firstId) { first = entity; firstId = id.id; }
+    if (first != entt::null) SetTarget(scene, first);
+}
+
+void Editor::UIViewportPanel::Update(f32 dt)
+{
+    ApplyPendingEdit();
+    ResolveTarget();
+    if (m_Interaction && (!m_Open || !m_InteractionPreview || !HasTarget())) m_Interaction->Cancel();
+    if (!m_Open) { m_Drag = {}; m_Panning = false; return; }
+    if (HasTarget())
+    {
+        const auto& canvas = m_TargetScene->GetRegistry().get<CanvasComponent>(m_TargetCanvas);
+        if (UILayout::IsValid(canvas) && m_CanvasSize != canvas.referenceResolution)
+        {
+            m_CanvasSize = canvas.referenceResolution;
+            m_FitPending = true;
+            m_Drag = {};
+            if (m_Interaction) m_Interaction->Cancel();
+        }
+    }
+    auto* target = RenderTargetManager::Get().GetRenderTarget(m_CanvasRTName);
+    if (!target) return;
+    const auto width = static_cast<uint32>(m_CanvasSize.x);
+    const auto height = static_cast<uint32>(m_CanvasSize.y);
+    if (target->GetWidth() != width || target->GetHeight() != height)
+    {
+        if (target->Resize(width, height) != EResult::Success) { m_PreviewReady = false; return; }
+    }
+    auto* pass = RenderPassManager::Get().GetRenderPassByID(m_UIOverlayPassID);
+    Renderer::Get().RegisterUICanvas(HasTarget() ? m_TargetScene : nullptr, m_TargetCanvas, pass);
+    m_CanvasToDraw = m_CanvasRTName;
     if (m_ChannelView != EViewportChannelView::RGBA)
     {
         m_ChannelFilter.SetChannelView(m_ChannelView);
-        m_ChannelFilter.SubmitChannelPreviewPass(m_VirtualCanvasRTName, m_CanvasToDraw);
+        m_ChannelFilter.SubmitChannelPreviewPass(m_CanvasRTName, m_CanvasToDraw);
     }
-
-    SyncCanvasLayoutOverride();
-
-    KeyboardInput();
-    MouseInput();
+    m_PreviewReady = true;
 }
 
-void UIViewportPanel::Draw()
+void Editor::UIViewportPanel::Draw()
 {
-	__super::Draw();
+    m_InteractionUpdated = false;
+    BaseViewportPanel::Draw();
+    if (!m_InteractionUpdated && m_Interaction) m_Interaction->Cancel();
 }
 
-#pragma region Custom Draws
-void UIViewportPanel::DrawCustomViewport()
+void Editor::UIViewportPanel::DrawCustomOptions()
 {
-    BaseViewportPanel::DrawRenderTargetImage(m_DisplayRTName);
-    DrawCanvasOverlay();
-    Draw2DGuizmo();
-    DrawSelectionLocked();
-}
-
-void UIViewportPanel::DrawCustomOptions()
-{
-    DrawResolutionMenu();
-    DrawLayoutMenu();
-	DrawGizmoMenu();
-    DrawDebugMenu();
-    DrawChannelViewButton();
-}
-void UIViewportPanel::DrawCanvasOverlay()
-{
-    RenderTarget* canvasRT = RenderTargetManager::Get().GetRenderTarget(m_CanvasToDraw);
-    if (!canvasRT || !canvasRT->GetTexture() || !m_Camera) return;
-    mat4 view = m_Camera->GetViewMatrix();
-    mat4 proj = m_Camera->GetProjMatrix();
-    ImDrawList* dl = ImGui::GetWindowDrawList();
-    // 캔버스 4개의 꼭짓점 월드 좌표 (0,0 에서 우측 하단으로 전개되게끔 Y축 음수화)
-    vec4 canvasCorners[4] = {
-        vec4(0.0f, 0.0f, 0.0f, 1.0f),
-        vec4((f32)m_UIDesignWidth, 0.0f, 0.0f, 1.0f),
-        vec4((f32)m_UIDesignWidth, -(f32)m_UIDesignHeight, 0.0f, 1.0f),
-        vec4(0.0f, -(f32)m_UIDesignHeight, 0.0f, 1.0f)
-    };
-    ImVec2 screenCorners[4];
-    bool valid = true;
-    for (int i = 0; i < 4; ++i)
+    DrawCanvasMenu();
+    DrawOrderMenu();
+    if (ImGui::Checkbox("Interact", &m_InteractionPreview))
     {
-        vec4 clipPt = proj * view * canvasCorners[i];
-        if (std::abs(clipPt.w) < 1e-6f) { valid = false; break; }
-        vec3 ndcPt = vec3(clipPt) / clipPt.w;
-        screenCorners[i].x = m_ImageScreenPos.x + (ndcPt.x * 0.5f + 0.5f) * m_ImageSize.x;
-        screenCorners[i].y = m_ImageScreenPos.y + (1.0f - (ndcPt.y * 0.5f + 0.5f)) * m_ImageSize.y;
+        m_Drag = {};
+        m_PendingEdit.reset();
+        m_Panning = false;
+        if (m_Interaction) m_Interaction->Cancel();
     }
-    if (!valid) return;
-    // 투영된 영역에 캔버스 이미지 출력
-    dl->AddImageQuad(
-        ImGuiManager::Get().GetImGuiTextureID(canvasRT->GetTexture()),
-        screenCorners[0], screenCorners[1], screenCorners[2], screenCorners[3]
-    );
-    // 캔버스 바운드 (외곽선) 그리기
-    const ImU32 canvasLineColor = IM_COL32(200, 200, 200, 180);
-    dl->AddQuad(screenCorners[0], screenCorners[1], screenCorners[2], screenCorners[3], canvasLineColor, 2.0f);
-
-    // 해상도 텍스트 표시
-    char resText[32];
-    snprintf(resText, sizeof(resText), "Canvas (%dx%d)", m_UIDesignWidth, m_UIDesignHeight);
-    ImVec2 textSize = ImGui::CalcTextSize(resText);
-    dl->AddText(ImVec2(screenCorners[0].x + 5.0f, screenCorners[0].y - textSize.y - 2.0f), canvasLineColor, resText);
-}
-#pragma endregion
-
-#pragma region Options Bar
-void UIViewportPanel::DrawGizmoMenu()
-{
-	if (ImGui::BeginMenu("Gizmo"))
-	{
-		if (ImGui::MenuItem("Translate (W)", "Shift + 1", m_GizmoOperation == ImGuizmo::TRANSLATE))
-			m_GizmoOperation = ImGuizmo::TRANSLATE;
-		if (ImGui::MenuItem("Rotate (E)", "Shift + 2", m_GizmoOperation == ImGuizmo::ROTATE))
-			m_GizmoOperation = ImGuizmo::ROTATE;
-		if (ImGui::MenuItem("Scale (R)", "Shift + 3", m_GizmoOperation == ImGuizmo::SCALE))
-			m_GizmoOperation = ImGuizmo::SCALE;
-		ImGui::Separator();
-		if (ImGui::MenuItem("Local", nullptr, m_GizmoMode == ImGuizmo::LOCAL))
-			m_GizmoMode = ImGuizmo::LOCAL;
-		if (ImGui::MenuItem("World", nullptr, m_GizmoMode == ImGuizmo::WORLD))
-			m_GizmoMode = ImGuizmo::WORLD;
-
-		ImGui::Separator();
-		if (ImGui::MenuItem("Snap to Grid", nullptr, m_GizmoUseSnap))
-			m_GizmoUseSnap = !m_GizmoUseSnap;
-		if (m_GizmoUseSnap)
-		{
-			ImGui::InputFloat3("Snap Translation", glm::value_ptr(m_GizmoSnapTranslation));
-			ImGui::InputFloat3("Snap Rotation", glm::value_ptr(m_GizmoSnapRotation));
-			ImGui::InputFloat3("Snap Scale", glm::value_ptr(m_GizmoSnapScale));
-		}
-		ImGui::EndMenu();
-	}
-}
-void UIViewportPanel::DrawLayoutMenu()
-{
-    if (ImGui::BeginMenu("Canvas Layout Resolution"))
+    if (ImGui::Button("Fit")) m_FitPending = true;
+    if (ImGui::Button("100%"))
     {
-        for (uint32 i = 0; i < g_PresetCount; ++i)
-        {
-            bool selected = (m_UIDesignWidth == (int32)g_ResolutionPresets[i].Width && m_UIDesignHeight == (int32)g_ResolutionPresets[i].Height);
-            if (ImGui::MenuItem(g_ResolutionPresets[i].Name, nullptr, selected))
+        m_View.zoom = 1.0f;
+        m_View.center = m_CanvasSize * 0.5f;
+        if (m_Interaction) m_Interaction->Cancel();
+    }
+    ImGui::Text("%.0f%%", m_View.zoom * 100.0f);
+    if (ImGui::BeginMenu("Snap"))
+    {
+        if (ImGui::Checkbox("Grid", &m_GridSnap) && m_GridSnap) m_PixelSnap = false;
+        if (ImGui::Checkbox("Pixel", &m_PixelSnap) && m_PixelSnap) m_GridSnap = false;
+        ImGui::InputFloat("Grid step (px)", &m_GridStep);
+        if (!std::isfinite(m_GridStep) || m_GridStep <= 0.0f) m_GridStep = 10.0f;
+        m_GridStep = std::clamp(m_GridStep, 0.25f, 4096.0f);
+        ImGui::TextDisabled("Hold Alt to bypass snapping.");
+        ImGui::EndMenu();
+    }
+    if (ImGui::BeginMenu("View"))
+    {
+        ImGui::Checkbox("Grid", &m_ShowGrid);
+        ImGui::Checkbox("Safe area (5% guide)", &m_ShowSafeArea);
+        ImGui::Checkbox("Anchors", &m_ShowAnchors);
+        ImGui::EndMenu();
+    }
+    if (ImGui::BeginMenu("Channels"))
+    {
+        for (const auto& item : { std::pair{ "RGBA", EViewportChannelView::RGBA },
+            std::pair{ "R", EViewportChannelView::R }, std::pair{ "G", EViewportChannelView::G },
+            std::pair{ "B", EViewportChannelView::B }, std::pair{ "A", EViewportChannelView::A } })
+            if (ImGui::MenuItem(item.first, nullptr, m_ChannelView == item.second)) m_ChannelView = item.second;
+        ImGui::EndMenu();
+    }
+}
+
+void Editor::UIViewportPanel::DrawOrderMenu()
+{
+    if (!ImGui::BeginMenu("Order")) return;
+    entt::entity selected = entt::null;
+    auto& history = Application::Get().GetEditHistory();
+    if (HasTarget())
+    {
+        auto& world = m_TargetScene->GetRegistry();
+        auto* primary = SelectionManager::Get().GetPrimarySelectedEntity();
+        for (const auto entity : world.view<IDComponent>())
+            if (m_TargetScene->FindEntity(entity) == primary &&
+                UILayout::FindCanvas(world, entity) == m_TargetCanvas)
             {
-                m_UIDesignWidth = (int32)g_ResolutionPresets[i].Width;
-                m_UIDesignHeight = (int32)g_ResolutionPresets[i].Height;
-                auto* rt = RenderTargetManager::Get().GetRenderTarget(m_VirtualCanvasRTName);
-                if (rt) rt->Resize(m_UIDesignWidth, m_UIDesignHeight);
+                selected = entity;
+                break;
             }
-        }
-        
-        ImGui::Separator();
-        
-        bool isCustom = true;
-        for (uint32 i = 0; i < g_PresetCount; ++i) {
-            if (m_UIDesignWidth == (int32)g_ResolutionPresets[i].Width && m_UIDesignHeight == (int32)g_ResolutionPresets[i].Height) {
-                isCustom = false; break;
-            }
-        }
+    }
+    if (selected == entt::null)
+    {
+        ImGui::TextDisabled("Select a UI element or Canvas.");
+        ImGui::EndMenu();
+        return;
+    }
+    auto& world = m_TargetScene->GetRegistry();
+    const bool canEdit = history.Enabled() && !m_InteractionPreview &&
+        !SelectionManager::Get().IsPrimarySelectionLocked();
+    ImGui::BeginDisabled(!canEdit);
+    int value = UILayout::GetZIndex(world, selected);
+    if (ImGui::InputInt("Z-Index", &value, 0, 0) && canEdit) SetZIndex(selected, value);
+    const auto current = UILayout::GetZIndex(world, selected);
+    constexpr auto minimum = (std::numeric_limits<std::int32_t>::min)();
+    constexpr auto maximum = (std::numeric_limits<std::int32_t>::max)();
+    if (ImGui::MenuItem("Z +1", nullptr, false, current < maximum)) SetZIndex(selected, current + 1);
+    if (ImGui::MenuItem("Z -1", nullptr, false, current > minimum)) SetZIndex(selected, current - 1);
+    auto lowest = current;
+    auto highest = current;
+    std::size_t peers = 0;
+    const auto includePeer = [&](entt::entity entity)
+    {
+        if (entity == selected || !world.valid(entity)) return;
+        const auto order = UILayout::GetZIndex(world, entity);
+        lowest = std::min(lowest, order);
+        highest = std::max(highest, order);
+        ++peers;
+    };
+    if (selected == m_TargetCanvas)
+    {
+        for (const auto entity : world.view<CanvasComponent, IDComponent>()) includePeer(entity);
+    }
+    else if (const auto* link = world.try_get<HierarchyComponent>(selected))
+    {
+        if (world.valid(link->parent))
+            if (const auto* parent = world.try_get<HierarchyComponent>(link->parent))
+                for (const auto entity : parent->children) includePeer(entity);
+    }
+    ImGui::Separator();
+    if (ImGui::MenuItem("Bring to Front", nullptr, false, peers > 0 && highest < maximum))
+        SetZIndex(selected, highest + 1);
+    if (ImGui::MenuItem("Send to Back", nullptr, false, peers > 0 && lowest > minimum))
+        SetZIndex(selected, lowest - 1);
+    ImGui::EndDisabled();
+    ImGui::TextDisabled(selected == m_TargetCanvas ? "Canvas order within this scene." :
+        "Higher Z renders later among siblings. Children stay with their parent.");
+    ImGui::EndMenu();
+}
 
-        if (ImGui::MenuItem("Custom...", nullptr, isCustom)) {}
-        
-        int w = m_UIDesignWidth;
-        int h = m_UIDesignHeight;
+void Editor::UIViewportPanel::SetZIndex(entt::entity entity, std::int32_t zIndex)
+{
+    if (!HasTarget() || m_InteractionPreview || SelectionManager::Get().IsPrimarySelectionLocked()) return;
+    auto& history = Application::Get().GetEditHistory();
+    auto& world = m_TargetScene->GetRegistry();
+    if (!history.Enabled() || !world.valid(entity) || UILayout::FindCanvas(world, entity) != m_TargetCanvas ||
+        UILayout::GetZIndex(world, entity) == zIndex) return;
+    const std::array targets{ entity };
+    auto before = SceneEditSnapshot::Capture(*m_TargetScene, targets);
+    if (!before) return;
+    world.get_or_emplace<UIRenderOrderComponent>(entity).zIndex = zIndex;
+    history.Record(std::move(before), SceneEditSnapshot::Capture(*m_TargetScene, targets), "UI_HISTORY_UI_ORDER", true);
+    m_Drag = {};
+    m_PendingEdit.reset();
+    if (m_Interaction) m_Interaction->Cancel();
+}
+
+void Editor::UIViewportPanel::DrawCanvasMenu()
+{
+    if (!ImGui::BeginMenu("Canvas")) return;
+    auto* current = SceneManager::Get().GetCurrentScene();
+    if (ImGui::MenuItem("New Canvas", nullptr, false, current != nullptr))
+    {
+        auto& canvas = EntityFactory::CreateCanvasEntity(current);
+        SetTarget(current, canvas.GetEntityHandle());
+        SelectionManager::Get().SetSelectedEntity(&canvas);
+    }
+    if (ImGui::MenuItem("Add Image", nullptr, false, HasTarget()))
+    {
+        Entity* parent = m_TargetScene->FindEntity(m_TargetCanvas);
+        for (const auto& layout : m_Layouts)
+            if (m_TargetScene->FindEntity(layout.entity) == SelectionManager::Get().GetPrimarySelectedEntity())
+                parent = m_TargetScene->FindEntity(layout.entity);
+        if (parent)
+            SelectionManager::Get().SetSelectedEntity(&EntityFactory::CreateUIImageEntity(m_TargetScene, *parent));
+    }
+    if (ImGui::MenuItem("Add Button", nullptr, false, HasTarget()))
+    {
+        Entity* parent = m_TargetScene->FindEntity(m_TargetCanvas);
+        for (const auto& layout : m_Layouts)
+            if (m_TargetScene->FindEntity(layout.entity) == SelectionManager::Get().GetPrimarySelectedEntity())
+                parent = m_TargetScene->FindEntity(layout.entity);
+        if (parent)
+            SelectionManager::Get().SetSelectedEntity(&EntityFactory::CreateUIButtonEntity(m_TargetScene, *parent));
+    }
+    ImGui::Separator();
+    for (Scene* scene : SceneManager::Get().GetActiveScenes())
+    {
+        for (auto [entity, canvas, id] : scene->GetRegistry().view<CanvasComponent, IDComponent>().each())
+        {
+            const auto* name = scene->GetRegistry().try_get<NameComponent>(entity);
+            const auto label = WStrToStr(scene->GetName()) + "/" + (name ? WStrToStr(name->name) : "Canvas") +
+                "##" + std::to_string(reinterpret_cast<uintptr_t>(scene)) + ":" + std::to_string(id.id);
+            if (ImGui::MenuItem(label.c_str(), nullptr, scene == m_TargetScene && entity == m_TargetCanvas))
+                SetTarget(scene, entity);
+        }
+    }
+    if (HasTarget())
+    {
+        auto& history = Application::Get().GetEditHistory();
+        const std::array targets{ m_TargetCanvas };
+        auto before = history.Enabled() ? SceneEditSnapshot::Capture(*m_TargetScene, targets) : SceneEditSnapshot{};
         bool changed = false;
-        if (ImGui::InputInt("Width", &w, 1, 100)) changed = true;
-        if (ImGui::InputInt("Height", &h, 1, 100)) changed = true;
-
-        if (changed)
+        auto& canvas = m_TargetScene->GetRegistry().get<CanvasComponent>(m_TargetCanvas);
+        const auto size = UILayout::IsValid(canvas) ? canvas.referenceResolution : m_CanvasSize;
+        int resolution[] = { int(size.x), int(size.y) };
+        if (ImGui::InputInt2("Resolution", resolution))
         {
-            m_UIDesignWidth = glm::clamp(w, 64, 7680);
-            m_UIDesignHeight = glm::clamp(h, 64, 4320);
-            auto* rt = RenderTargetManager::Get().GetRenderTarget(m_VirtualCanvasRTName);
-            if (rt) rt->Resize(m_UIDesignWidth, m_UIDesignHeight);
-        }
-
-        ImGui::EndMenu();
-    }
-}
-void UIViewportPanel::DrawDebugMenu()
-{
-    if (ImGui::BeginMenu("Debug"))
-    {
-        ImGui::MenuItem("Show Grid", nullptr, m_Grid.GetVisible());
-        ImGui::EndMenu();
-    }
-}
-void UIViewportPanel::ResizeRenderTargets(uint32 width, uint32 height)
-{
-    auto& rtMgr = RenderTargetManager::Get();
-    RenderTarget* rt = rtMgr.GetRenderTarget(m_UIColorRTName);
-    rt->Resize(width, height);
-
-    if (m_Camera)
-        m_Camera->SetAspect(static_cast<f32>(width) / static_cast<f32>(height));
-
-    // Base: ChannelFilter RT 리사이즈
-    BaseViewportPanel::ResizeRenderTargets(width, height);
-}
-#pragma endregion
-
-#pragma region Overlay
-
-void UIViewportPanel::DrawSelectionLocked()
-{
-	// 선택 잠금 상태인지 확인
-	if (SelectionManager::Get().IsPrimarySelectionLocked())
-	{
-		ImDrawList* drawList = ImGui::GetWindowDrawList();
-		if (!drawList) return;
-		// ─── 1. 위치 계산 (좌측 하단) ───
-		float padding = 15.0f; // 여백
-		float fontSize = ImGui::GetFontSize();
-
-		// 위치: 이미지 왼쪽 끝 + 패딩, 이미지 아래쪽 끝 - 패딩 - 글자 높이
-		ImVec2 textPos = ImVec2(
-			m_ImageScreenPos.x + padding,
-			m_ImageScreenPos.y + m_ImageSize.y - padding - fontSize
-		);
-		// ─── 2. 가독성을 위한 그림자/배경 (선택 사항) ───
-		// 검은색 그림자를 살짝 깔아주면 밝은 배경에서도 잘 보입니다.
-		drawList->AddText(ImVec2(textPos.x + 1, textPos.y + 1), IM_COL32(0, 0, 0, 200), "Selection Locked");
-		// ─── 3. 초록색 텍스트 출력 ───
-		// 밝은 초록색 (Green)
-		ImU32 textColor = IM_COL32(50, 255, 50, 255);
-		drawList->AddText(textPos, textColor, "Selection Locked");
-	}
-}
-
-void UIViewportPanel::Draw2DGuizmo()
-{
-    GameObject* selectedObject = SelectionManager::Get().GetPrimarySelection();
-    if (!selectedObject) return;
-
-    RectTransform* transform = selectedObject->GetComponent<RectTransform>();
-    if (!transform) return;
-
-    ImDrawList* drawList = ImGui::GetWindowDrawList();
-    if (!drawList || m_ImageSize.x <= 0 || m_ImageSize.y <= 0) return;
-
-    // ─── 1. ImGuizmo 설정 ───
-    ImGuizmo::SetOrthographic(true);
-    ImGuizmo::SetDrawlist();
-    ImGuizmo::SetRect(m_ImageScreenPos.x, m_ImageScreenPos.y, m_ImageSize.x, m_ImageSize.y);
-    ImGuizmo::SetID(ImGui::GetID("2DGuizmo"));
-
-    // ─── 2. 프로젝션 & 뷰 행렬 (진짜 카메라 사용!) ───
-    mat4 viewMatrix = m_Camera->GetViewMatrix();
-    mat4 projMatrix = m_Camera->GetProjMatrix();
-
-    // ─── 3. 행렬 준비 ───
-    mat4 oldWorldTransform = transform->GetWorldTransform();
-
-    // 1) UI 월드 트랜스폼 데이터 추출 (2D)
-    vec2 uiPos = vec2(oldWorldTransform[3]);
-    float uiRot = atan2(oldWorldTransform[0][1], oldWorldTransform[0][0]);
-    vec2 uiScale = vec2(glm::length(vec3(oldWorldTransform[0])), glm::length(vec3(oldWorldTransform[1])));
-
-    // 2) Standard 3D 매트릭스로 변환 (Y 위치 반전, 회전 반전)
-    // UI의 Y-Down 좌표계를 EditorCamera의 Y-Up 좌표계에 맞춥니다.
-    mat4 stdWorldMatrix = glm::translate(glm::identity<mat4>(), vec3(uiPos.x, -uiPos.y, 0.0f));
-    stdWorldMatrix = glm::rotate(stdWorldMatrix, -uiRot, vec3(0.0f, 0.0f, 1.0f));
-    stdWorldMatrix = glm::scale(stdWorldMatrix, vec3(uiScale.x, uiScale.y, 1.0f));
-
-    // 스냅 설정
-    bool useSnap = m_GizmoUseSnap || ImGui::GetIO().KeyCtrl;
-    vec3 snapValues = m_GizmoSnapTranslation;
-    if (m_GizmoOperation == ImGuizmo::ROTATE) snapValues = m_GizmoSnapRotation;
-    else if (m_GizmoOperation == ImGuizmo::SCALE) snapValues = m_GizmoSnapScale;
-
-    // ─── 4. ImGuizmo 조작 ───
-    mat4 deltaMatrix = glm::identity<mat4>();
-    ImGuizmo::Manipulate(
-        glm::value_ptr(viewMatrix),
-        glm::value_ptr(projMatrix),
-        m_GizmoOperation,
-        ImGuizmo::LOCAL,
-        glm::value_ptr(stdWorldMatrix),
-        glm::value_ptr(deltaMatrix),
-        useSnap ? glm::value_ptr(snapValues) : nullptr
-    );
-
-    // ─── 5. Delta 기반 데이터 반영 ───
-    if (ImGuizmo::IsUsing())
-    {
-        ERectTransformFlags flags = transform->GetFlags();
-
-        // 1) 조작된 stdWorldMatrix에서 데이터 추출
-        vec2 newStdPos = vec2(stdWorldMatrix[3]);
-        float newStdRot = atan2(stdWorldMatrix[0][1], stdWorldMatrix[0][0]);
-        vec2 newStdScale = vec2(glm::length(vec3(stdWorldMatrix[0])), glm::length(vec3(stdWorldMatrix[1])));
-
-        // 2) 다시 UI 공간(Y-Down)으로 복원
-        vec2 newUiPos = vec2(newStdPos.x, -newStdPos.y);
-        float newUiRot = -newStdRot;
-        vec2 newUiScale = newStdScale;
-
-        // [이동] Translation 차이 = AnchoredPosition 변화량
-        vec2 posDelta = newUiPos - uiPos;
-        if (glm::length(posDelta) > 0.0001f)
-        {
-            vec2 nextPos = transform->GetAnchoredPosition();
-            if (!(flags & ERectTransformFlags::LockPositionX)) nextPos.x += posDelta.x;
-            if (!(flags & ERectTransformFlags::LockPositionY)) nextPos.y += posDelta.y;
-            transform->SetAnchoredPosition(nextPos);
-        }
-
-        // [회전] Z축 각도 차이
-        float rotDelta = glm::degrees(newUiRot - uiRot);
-        while (rotDelta > 180.0f) rotDelta -= 360.0f;
-        while (rotDelta < -180.0f) rotDelta += 360.0f;
-
-        if (glm::abs(rotDelta) > 0.001f)
-        {
-            if (!(flags & ERectTransformFlags::LockRotation))
-                transform->SetRotation(transform->GetRotation() + rotDelta);
-        }
-
-        // [스케일] Scale 차이
-        if (uiScale.x > 0.0001f && uiScale.y > 0.0001f)
-        {
-            vec2 scaleRatio = newUiScale / uiScale;
-            if (glm::abs(scaleRatio.x - 1.0f) > 0.0001f || glm::abs(scaleRatio.y - 1.0f) > 0.0001f)
+            CanvasComponent candidate = canvas;
+            candidate.referenceResolution = vec2(resolution[0], resolution[1]);
+            if (before && UILayout::IsValid(candidate) && candidate.referenceResolution != canvas.referenceResolution)
             {
-                vec2 nextScale = transform->GetScale();
-                if (!(flags & ERectTransformFlags::LockScale)) {
-                    nextScale.x *= scaleRatio.x;
-                    nextScale.y *= scaleRatio.y;
+                canvas = candidate;
+                m_PreviewReady = false;
+                changed = true;
+            }
+        }
+        for (const auto& preset : g_ResolutionPresets)
+            if (ImGui::MenuItem(preset.Name))
+            {
+                if (before && canvas.referenceResolution != vec2(preset.Width, preset.Height))
+                {
+                    canvas.referenceResolution = vec2(preset.Width, preset.Height);
+                    m_PreviewReady = false;
+                    changed = true;
                 }
-                transform->SetScale(nextScale);
+            }
+        if (changed)
+            history.Record(std::move(before), SceneEditSnapshot::Capture(*m_TargetScene, targets),
+                "UI_HISTORY_CANVAS", true);
+    }
+    ImGui::EndMenu();
+}
+
+void Editor::UIViewportPanel::DrawCustomViewport()
+{
+    Application::Get().GetEditHistory().AllowShortcuts(ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows));
+    const ImVec2 origin = ImGui::GetCursorScreenPos();
+    const ImVec2 available = ImGui::GetContentRegionAvail();
+    if (available.x < 1.0f || available.y < 1.0f) return;
+    m_ImageScreenPos = origin;
+    m_ImageSize = available;
+    m_View.viewportOrigin = Point(origin);
+    if (m_View.viewportSize != Point(available))
+    {
+        m_Drag = {};
+        if (m_Interaction) m_Interaction->Cancel();
+    }
+    m_View.viewportSize = Point(available);
+    if (m_FitPending)
+    {
+        m_View.Fit(m_CanvasSize);
+        m_FitPending = false;
+        if (m_Interaction) m_Interaction->Cancel();
+    }
+    ImGui::InvisibleButton("##UIWorkspace", available,
+        ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonMiddle);
+    m_Hovered = ImGui::IsItemHovered();
+    m_Focused = ImGui::IsWindowFocused();
+    m_Layouts.clear();
+    m_LayoutValid = HasTarget() && m_PreviewReady &&
+        UILayout::Build(m_TargetScene->GetRegistry(), m_TargetCanvas, m_Layouts);
+    HandleInput(m_Hovered);
+    auto* drawList = ImGui::GetWindowDrawList();
+    const ImVec2 end(origin.x + available.x, origin.y + available.y);
+    drawList->PushClipRect(origin, end, true);
+    drawList->AddRectFilled(origin, end, IM_COL32(27, 29, 33, 255));
+    const ImVec2 topLeft = ImPoint(m_View.ToScreen(vec2(0.0f)));
+    const ImVec2 bottomRight = ImPoint(m_View.ToScreen(m_CanvasSize));
+    auto* target = RenderTargetManager::Get().GetRenderTarget(m_CanvasToDraw);
+    if (target && target->GetTexture() && m_PreviewReady)
+        drawList->AddImage(ImGuiManager::Get().GetImGuiTextureID(target->GetTexture()), topLeft, bottomRight);
+    if (m_ShowGrid) DrawGrid(drawList);
+    drawList->AddRect(topLeft, bottomRight, IM_COL32(170, 185, 205, 255), 0.0f, 0, 1.5f);
+    char label[80];
+    snprintf(label, sizeof(label), "Canvas %.0f x %.0f | %.0f%%", m_CanvasSize.x, m_CanvasSize.y, m_View.zoom * 100.0f);
+    drawList->AddText(ImVec2(topLeft.x + 4.0f, topLeft.y - ImGui::GetFontSize() - 5.0f), IM_COL32_WHITE, label);
+    if (m_ShowSafeArea)
+        drawList->AddRect(ImPoint(m_View.ToScreen(m_CanvasSize * 0.05f)),
+            ImPoint(m_View.ToScreen(m_CanvasSize * 0.95f)), IM_COL32(100, 200, 170, 100));
+    if (!m_InteractionPreview) DrawSelection(drawList);
+    else
+    {
+        const auto status = "Interact | Clicks: " + std::to_string(m_ClickCount) + " | " + m_LastUIEvent;
+        drawList->AddText(ImVec2(origin.x + 12.0f, end.y - 26.0f), IM_COL32(100, 230, 170, 255), status.c_str());
+    }
+    if (!HasTarget() || !m_LayoutValid)
+        drawList->AddText(ImVec2(origin.x + 12.0f, origin.y + 12.0f), IM_COL32(240, 190, 100, 255),
+            !HasTarget() ? "Create a Canvas from the Canvas menu in an open scene." :
+                "Canvas layout is invalid or awaiting render.");
+    if (!m_InteractionPreview && SelectionManager::Get().IsPrimarySelectionLocked())
+        drawList->AddText(ImVec2(origin.x + 12.0f, end.y - 26.0f), IM_COL32(100, 240, 140, 255), "Selection Locked");
+    drawList->PopClipRect();
+}
+
+void Editor::UIViewportPanel::DrawGrid(ImDrawList* drawList)
+{
+    float step = m_GridStep;
+    while (step * m_View.zoom < 12.0f) step *= 2.0f;
+    const auto minimum = m_View.ToCanvas(m_View.viewportOrigin);
+    const auto maximum = m_View.ToCanvas(m_View.viewportOrigin + m_View.viewportSize);
+    const auto first = glm::floor(minimum / step);
+    for (int axis = 0; axis < 2; ++axis)
+    {
+        for (int line = 0; line < 2048; ++line)
+        {
+            const float index = first[axis] + line;
+            const float coordinate = index * step;
+            if (coordinate > maximum[axis]) break;
+            auto begin = minimum;
+            auto end = maximum;
+            begin[axis] = end[axis] = coordinate;
+            const bool major = std::fmod(index, 5.0f) == 0.0f;
+            drawList->AddLine(ImPoint(m_View.ToScreen(begin)), ImPoint(m_View.ToScreen(end)),
+                major ? IM_COL32(125, 140, 160, 75) : IM_COL32(110, 125, 145, 35));
+        }
+    }
+}
+
+const Engine::UIElementLayout* Editor::UIViewportPanel::FindLayout(entt::entity entity) const
+{
+    const auto found = std::find_if(m_Layouts.begin(), m_Layouts.end(),
+        [entity](const auto& layout) { return layout.entity == entity; });
+    return found == m_Layouts.end() ? nullptr : &*found;
+}
+
+void Editor::UIViewportPanel::DrawSelection(ImDrawList* drawList)
+{
+    if (!m_LayoutValid || !HasTarget()) return;
+    auto& selection = SelectionManager::Get();
+    const auto& selected = selection.GetSelectedEntities();
+    const vec2 corners[] = { { 0.0f, 0.0f }, { 1.0f, 0.0f }, { 1.0f, 1.0f }, { 0.0f, 1.0f } };
+    for (const auto& layout : m_Layouts)
+    {
+        auto* wrapper = m_TargetScene->FindEntity(layout.entity);
+        if (std::find(selected.begin(), selected.end(), wrapper) == selected.end()) continue;
+        ImVec2 screen[4];
+        for (int corner = 0; corner < 4; ++corner)
+            screen[corner] = ImPoint(m_View.ToScreen(vec2(layout.renderMatrix * vec4(corners[corner], 0.0f, 1.0f))));
+        drawList->AddQuad(screen[0], screen[1], screen[2], screen[3], IM_COL32(70, 180, 255, 255), 2.0f);
+        const auto pivot = m_View.ToScreen(vec2(layout.worldTransform[3]));
+        drawList->AddCircle(ImPoint(pivot), 4.0f, IM_COL32(255, 210, 80, 255), 12, 2.0f);
+        if (wrapper != selection.GetPrimarySelectedEntity()) continue;
+        if (!selection.IsPrimarySelectionLocked())
+            drawList->AddRectFilled(ImVec2(screen[2].x - 5.0f, screen[2].y - 5.0f),
+                ImVec2(screen[2].x + 5.0f, screen[2].y + 5.0f), IM_COL32(80, 190, 255, 255));
+        if (m_ShowAnchors)
+        {
+            const auto& rect = m_TargetScene->GetRegistry().get<RectTransformComponent>(layout.entity);
+            for (const auto anchor : { rect.anchorMin, rect.anchorMax })
+            {
+                const auto local = layout.parentSize * (anchor - layout.parentPivot);
+                const auto point = m_View.ToScreen(vec2(layout.parentTransform * vec4(local, 0.0f, 1.0f)));
+                drawList->AddLine(ImVec2(point.x - 5.0f, point.y), ImVec2(point.x + 5.0f, point.y),
+                    IM_COL32(100, 230, 170, 230), 1.5f);
+                drawList->AddLine(ImVec2(point.x, point.y - 5.0f), ImVec2(point.x, point.y + 5.0f),
+                    IM_COL32(100, 230, 170, 230), 1.5f);
             }
         }
     }
-
-    // ─── 6. 커스텀 비주얼: 피벗 마커 ───
-    auto ToScreen = [&](const vec2& rtPos) -> ImVec2 {
-        vec4 clipPt = projMatrix * viewMatrix * vec4(rtPos.x, -rtPos.y, 0.0f, 1.0f);
-        if (std::abs(clipPt.w) < 1e-6f) return ImVec2(-9999, -9999);
-        vec3 ndcPt = vec3(clipPt) / clipPt.w;
-        return ImVec2(
-            m_ImageScreenPos.x + (ndcPt.x * 0.5f + 0.5f) * m_ImageSize.x,
-            m_ImageScreenPos.y + (1.0f - (ndcPt.y * 0.5f + 0.5f)) * m_ImageSize.y
-        );
-    };
-
-    // AbsolutePosition = WorldTransform의 Translation = 피벗의 월드 좌표
-    vec2 pivotWorld = transform->GetAbsolutePosition();
-    ImVec2 screenPivot = ToScreen(pivotWorld);
-
-    // 피벗 십자 마커 (노란색)
-    drawList->AddCircle(screenPivot, 7.0f, IM_COL32(255, 200, 50, 255), 0, 2.0f);
-    drawList->AddCircleFilled(screenPivot, 2.5f, IM_COL32(255, 200, 50, 255));
-    drawList->AddLine(ImVec2(screenPivot.x - 9, screenPivot.y), ImVec2(screenPivot.x + 9, screenPivot.y), IM_COL32(255, 200, 50, 255), 1.5f);
-    drawList->AddLine(ImVec2(screenPivot.x, screenPivot.y - 9), ImVec2(screenPivot.x, screenPivot.y + 9), IM_COL32(255, 200, 50, 255), 1.5f);
 }
 
-void UIViewportPanel::DrawCanvasBounds(ImDrawList* drawList, float displayRTWidth, float displayRTHeight, const mat4& view, const mat4& proj)
+void Editor::UIViewportPanel::HandleInput(bool hovered)
 {
-    // 1. 카메라 매트릭스를 기반으로 RT 공간(실제 해상도)을 화면 이미지 크기로 매핑
-    const vec2 displayRTToImage(m_ImageSize.x / displayRTWidth, m_ImageSize.y / displayRTHeight);
-    const mat4 rtToImageM = glm::scale(glm::identity<mat4>(), vec3(displayRTToImage, 1.0f));
-
-    // Canvas(RT) 영역의 4개 꼭짓점 정의 (원점 0,0 기반으로 폭, 높이만큼)
-    vec4 canvasCorners[4] = {
-        vec4(0.0f, 0.0f, 0.0f, 1.0f),
-        vec4(displayRTWidth, 0.0f, 0.0f, 1.0f),
-        vec4(displayRTWidth, displayRTHeight, 0.0f, 1.0f),
-        vec4(0.0f, displayRTHeight, 0.0f, 1.0f)
-    };
-
-    // 2. 화면 좌표계로 변환 (기즈모 그릴 때 썼던 로직과 동일)
-    ImVec2 screenCorners[4];
-    bool valid = true;
-
-    for (int i = 0; i < 4; ++i)
+    const auto mouse = Point(ImGui::GetMousePos());
+    auto& io = ImGui::GetIO();
+    if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Middle) && m_Drag.mode == DragMode::None) m_Panning = true;
+    if (!ImGui::IsMouseDown(ImGuiMouseButton_Middle) || !m_Focused) m_Panning = false;
+    if (m_Panning)
     {
-        // RT 크기를 이미지 스케일로 맞춘 뒤 proj/view 적용
-        vec4 clipPt = proj * view * rtToImageM * canvasCorners[i];
-        if (std::abs(clipPt.w) < 1e-6f) { valid = false; break; }
-
-        vec3 ndcPt = vec3(clipPt) / clipPt.w;
-        // NDC를 윈도우 스크린 좌표로 변환
-        screenCorners[i].x = m_ImageScreenPos.x + (ndcPt.x * 0.5f + 0.5f) * m_ImageSize.x;
-        screenCorners[i].y = m_ImageScreenPos.y + (1.0f - (ndcPt.y * 0.5f + 0.5f)) * m_ImageSize.y;
+        if (m_Interaction) m_Interaction->Cancel();
+        m_View.Pan(Point(io.MouseDelta));
     }
-
-    if (!valid) return;
-
-    // 3. 캔버스 외곽선 렌더링 (하얀색 반투명 또는 회색 점선 효과)
-    // 외곽선 색상 (예: UMG 스타일의 약간 어두운 흰색/회색)
-    const ImU32 canvasLineColor = IM_COL32(200, 200, 200, 180);
-    const float canvasLineThickness = 2.0f;
-
-    // 사각형 그리기
-    drawList->AddQuad(screenCorners[0], screenCorners[1], screenCorners[2], screenCorners[3], canvasLineColor, canvasLineThickness);
-
-    // 모서리 강조 마커 (옵션 - Unity 캔버스처럼 네 귀퉁이에 작은 기호 표시)
-    const float cornerSize = 10.0f;
-    const float cornerThick = 2.0f;
-    const ImU32 cornerColor = IM_COL32(255, 255, 255, 220);
-
-    // Top-Left (0)
-    drawList->AddLine(screenCorners[0], ImVec2(screenCorners[0].x + cornerSize, screenCorners[0].y), cornerColor, cornerThick);
-    drawList->AddLine(screenCorners[0], ImVec2(screenCorners[0].x, screenCorners[0].y + cornerSize), cornerColor, cornerThick);
-    // Top-Right (1)
-    drawList->AddLine(screenCorners[1], ImVec2(screenCorners[1].x - cornerSize, screenCorners[1].y), cornerColor, cornerThick);
-    drawList->AddLine(screenCorners[1], ImVec2(screenCorners[1].x, screenCorners[1].y + cornerSize), cornerColor, cornerThick);
-    // Bottom-Right (2)
-    drawList->AddLine(screenCorners[2], ImVec2(screenCorners[2].x - cornerSize, screenCorners[2].y), cornerColor, cornerThick);
-    drawList->AddLine(screenCorners[2], ImVec2(screenCorners[2].x, screenCorners[2].y - cornerSize), cornerColor, cornerThick);
-    // Bottom-Left (3)
-    drawList->AddLine(screenCorners[3], ImVec2(screenCorners[3].x + cornerSize, screenCorners[3].y), cornerColor, cornerThick);
-    drawList->AddLine(screenCorners[3], ImVec2(screenCorners[3].x, screenCorners[3].y - cornerSize), cornerColor, cornerThick);
-
-
-    // 4. (추가) 캔버스 바깥 영역 어둡게 처리 (Passepartout 효과)
-    // 사용자가 UI 요소가 잘리는 영역을 명확히 인지하게 함
-    ImVec2 winMin = m_ImageScreenPos;
-    ImVec2 winMax = ImVec2(m_ImageScreenPos.x + m_ImageSize.x, m_ImageScreenPos.y + m_ImageSize.y);
-    const ImU32 dimColor = IM_COL32(0, 0, 0, 150); // 어두운 오버레이 색상
-
-    // 상, 하, 좌, 우 4개의 렉트로 분할하여 어둡게 처리
-    drawList->AddRectFilled(winMin, ImVec2(winMax.x, screenCorners[0].y), dimColor); // Top
-    drawList->AddRectFilled(ImVec2(winMin.x, screenCorners[2].y), winMax, dimColor); // Bottom
-    drawList->AddRectFilled(ImVec2(winMin.x, screenCorners[0].y), ImVec2(screenCorners[0].x, screenCorners[2].y), dimColor); // Left
-    drawList->AddRectFilled(ImVec2(screenCorners[1].x, screenCorners[0].y), ImVec2(winMax.x, screenCorners[2].y), dimColor); // Right
-
-    // 해상도 텍스트 표시 (예: 1920x1080)
-    char resText[32];
-    snprintf(resText, sizeof(resText), "Canvas (%.0fx%.0f)", displayRTWidth, displayRTHeight);
-    ImVec2 textSize = ImGui::CalcTextSize(resText);
-    ImVec2 textPos = ImVec2(screenCorners[0].x + 5.0f, screenCorners[0].y - textSize.y - 2.0f);
-    drawList->AddText(textPos, canvasLineColor, resText);
-}
-
-void UIViewportPanel::SubmitUIOverlayPass(const wstring& currentRT)
-{
-    RenderPassManager::Get().GetRenderPassByID(m_UIOverlayPassID)->SetColorAttachments({ currentRT });
-}
-#pragma endregion
-
-#pragma region Inputs
-void UIViewportPanel::KeyboardInput()
-{
-	if (KEY_PRESSED(EKeyCode::LShift))
-	{
-		if (KEY_DOWN("1")) m_GizmoOperation = ImGuizmo::OPERATION::TRANSLATE;
-		if (KEY_DOWN("2")) m_GizmoOperation = ImGuizmo::OPERATION::ROTATE;
-		if (KEY_DOWN("3")) m_GizmoOperation = ImGuizmo::OPERATION::SCALE;
-		if (KEY_DOWN(EKeyCode::L)) SelectionManager::Get().TogglePrimarySelectionLock();
-	}
-}
-
-void UIViewportPanel::MouseInput()
-{
-
-    if (m_Hovered)
+    if (hovered && !m_Panning && m_Drag.mode == DragMode::None && io.MouseWheel != 0.0f)
     {
-        InputManager::Get().SetViewportRect(vec4(m_ImageScreenPos.x, m_ImageScreenPos.y, m_ImageSize.x, m_ImageSize.y));
-        InputManager::Get().SetTargetResolution(vec2((f32)m_UIDesignWidth, (f32)m_UIDesignHeight));
+        if (m_Interaction) m_Interaction->Cancel();
+        m_View.ZoomAt(mouse, std::pow(1.15f, io.MouseWheel));
     }
-
-    const ImVec2 mouse = ImGui::GetMousePos();
-    const bool imageHovered =
-        (mouse.x >= m_ImageScreenPos.x) && (mouse.y >= m_ImageScreenPos.y) &&
-        (mouse.x <= m_ImageScreenPos.x + m_ImageSize.x) && (mouse.y <= m_ImageScreenPos.y + m_ImageSize.y);
-
-    if (!m_Focused || !m_Camera || !m_OwnedCamera->GetTransform()) return;
-
-    // 1) 휠 줌 (진짜 카메라 Ortho Size 조절)
-    const float wheel = InputManager::Get().GetMouseScrollDelta().y;
-    if (imageHovered && std::abs(wheel) > 0.0001f)
+    if (hovered && ImGui::IsKeyPressed(ImGuiKey_F) && !io.WantTextInput && m_Drag.mode == DragMode::None)
     {
-        const float zoomStep = KEY_PRESSED(EKeyCode::LShift) ? 2.0f : 0.5f;
-        float currentOrthoSize = m_Camera->GetOrthoSize();
-        // OrthoSize가 작아질수록 줌인(확대), 커질수록 줌아웃(축소)
-        float newOrthoSize = glm::max(currentOrthoSize - (wheel * zoomStep), 0.1f);
-        m_Camera->SetOrthoSize(newOrthoSize);
+        if (m_Interaction) m_Interaction->Cancel();
+        m_View.Fit(m_CanvasSize);
     }
-
-    // 2) MMB 팬 (진짜 카메라 이동)
-    if (imageHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Middle))
+    if (m_InteractionPreview) { m_Drag = {}; HandleInteraction(hovered); return; }
+    if (!m_LayoutValid || !HasTarget()) { m_Drag = {}; return; }
+    auto& selection = SelectionManager::Get();
+    if (selection.IsPrimarySelectionLocked()) { m_Drag = {}; return; }
+    auto& world = m_TargetScene->GetRegistry();
+    const auto canvasPoint = m_View.ToCanvas(mouse);
+    if (m_Drag.mode == DragMode::None && hovered && !m_Panning && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
     {
-        m_IsPanning = true;
-        m_PanStartMouse = mouse;
-        m_PanStartCameraPos = m_OwnedCamera->GetTransform()->GetWorldPosition();
-    }
-    if (m_IsPanning && ImGui::IsMouseDown(ImGuiMouseButton_Middle))
-    {
-        ImVec2 delta(mouse.x - m_PanStartMouse.x, mouse.y - m_PanStartMouse.y);
-
-        // OrthoSize에 비례해서 마우스 드래그 거리를 월드 이동 거리로 환산
-        // (현재 창 높이의 절반이 OrthoSize와 매칭됨)
-        float moveFactor = m_Camera->GetOrthoSize() / (m_PanelHeight * 0.5f);
-
-        // 드래그 방향과 카메라 이동 방향은 반대 (-delta)
-        vec3 newCamPos = m_PanStartCameraPos;
-        newCamPos.x -= delta.x * moveFactor;
-        newCamPos.y += delta.y * moveFactor; // 2D Ortho에서 화면 위쪽이 +Y
-
-        m_OwnedCamera->GetTransform()->SetPosition(newCamPos);
-    }
-    if (m_IsPanning && ImGui::IsMouseReleased(ImGuiMouseButton_Middle))
-    {
-        m_IsPanning = false;
-    }
-}
-Engine::Ray UIViewportPanel::ScreenPosToRay(const ImVec2& mousePos)
-{
-	f32 localX = mousePos.x - m_ImageScreenPos.x;
-	f32 localY = mousePos.y - m_ImageScreenPos.y;
-
-	f32 ndcX = (localX / m_ImageSize.x) * 2.0f - 1.0f;
-	f32 ndcY = 1.0f - (localY / m_ImageSize.y) * 2.0f;
-	mat4 projInvMatrix = m_Camera->GetProjMatrixInv();
-	mat4 viewInvMatrix = m_Camera->GetViewMatrixInv();
-
-	mat4 invVP = viewInvMatrix * projInvMatrix;
-
-	vec4 nearPointNDC = vec4(ndcX, ndcY, -1.0f, 1.0f);
-	vec4 farPointNDC = vec4(ndcX, ndcY, 1.0f, 1.0f);
-
-	vec4 nearPointWorld = invVP * nearPointNDC;
-	vec4 farPointWorld = invVP * farPointNDC;
-
-	Ray ray;
-	ray.origin = vec3(nearPointWorld) / nearPointWorld.w;
-	//ray.Origin.x += m_RenderTarget->GetWidth() / 2.f;
-	//ray.Origin.y -= m_RenderTarget->GetHeight() / 2.f;
-	ray.direction = glm::normalize(vec3(farPointWorld / farPointWorld.w) - ray.origin);
-
-	cout << "Ray Origin: " << ray.origin.x << ", " << ray.origin.y << ", " << ray.origin.z << endl;
-	cout << "Ray Direction: " << ray.direction.x << ", " << ray.direction.y << ", " << ray.direction.z << endl;
-
-	return ray;
-}
-#pragma endregion
-
-#pragma region Canvas
-
-UICanvas* UIViewportPanel::FindCanvasFromObject(GameObject* object) const
-{
-    GameObject* cur = object;
-    while (cur)
-    {
-        if (UICanvas* canvas = cur->GetComponent<UICanvas>())
-            return canvas;
-        cur = cur->GetParent();
-    }
-    return nullptr;
-}
-
-UICanvas* UIViewportPanel::ResolveTargetCanvas() const
-{
-    if (!m_AutoBindSelectedCanvas)
-        return m_TargetCanvas;
-
-    GameObject* selected = SelectionManager::Get().GetPrimarySelection();
-    if (!selected)
-        return nullptr;
-
-    return FindCanvasFromObject(selected);
-}
-
-void UIViewportPanel::ClearCanvasLayoutOverride()
-{
-    if (m_TargetCanvas)
-    {
-        m_TargetCanvas->ClearExternalLayoutSize(m_LayoutOwnerToken);
-        m_TargetCanvas = nullptr;
-    }
-}
-
-void UIViewportPanel::SyncCanvasLayoutOverride()
-{
-    Engine::UICanvas* resolved = ResolveTargetCanvas();
-    if (resolved != m_TargetCanvas)
-    {
-        if (m_TargetCanvas)
-            m_TargetCanvas->ClearExternalLayoutSize(m_LayoutOwnerToken);
-        m_TargetCanvas = resolved;
-        if (m_TargetCanvas)
+        const UIElementLayout* hit = nullptr;
+        bool resize = false;
+        for (const auto& layout : m_Layouts)
         {
-            m_TargetCanvas->SetLayoutRoot(true);
-            m_TargetCanvas->SetLayoutSource(ECanvasLayoutSource::ExternalOverride);
+            if (m_TargetScene->FindEntity(layout.entity) != selection.GetPrimarySelectedEntity()) continue;
+            const auto handle = m_View.ToScreen(vec2(layout.renderMatrix * vec4(1.0f, 1.0f, 0.0f, 1.0f)));
+            if (glm::length(handle - mouse) <= 8.0f) { hit = &layout; resize = true; break; }
         }
+        if (!hit && canvasPoint.x >= 0.0f && canvasPoint.y >= 0.0f &&
+            canvasPoint.x < m_CanvasSize.x && canvasPoint.y < m_CanvasSize.y)
+        {
+            for (auto it = m_Layouts.rbegin(); it != m_Layouts.rend(); ++it)
+            {
+                const auto* image = world.try_get<UIImageComponent>(it->entity);
+                if (image && image->color.a > 0.0f && UILayout::Contains(*it, canvasPoint)) { hit = &*it; break; }
+            }
+        }
+        auto* wrapper = hit ? m_TargetScene->FindEntity(hit->entity) : nullptr;
+        if (io.KeyCtrl)
+        {
+            if (wrapper) selection.ToggleEntitySelection(wrapper);
+            return;
+        }
+        if (!wrapper) { selection.ClearSelection(); return; }
+        selection.SetSelectedEntity(wrapper);
+        const auto* id = world.try_get<IDComponent>(hit->entity);
+        if (!id) return;
+        m_Drag.mode = resize ? DragMode::Resize : DragMode::Move;
+        m_Drag.entity = hit->entity;
+        m_Drag.id = id->id;
+        m_Drag.mouseStart = canvasPoint;
+        m_Drag.start = world.get<RectTransformComponent>(hit->entity);
+        m_Drag.layout = *hit;
     }
-    if (!m_TargetCanvas) return;
-
-    // 패널 해상도(m_RenderWidth) 대신 고정된 디자인 해상도를 캔버스에 주입
-    const vec2 layoutSize(static_cast<f32>(m_UIDesignWidth), static_cast<f32>(m_UIDesignHeight));
-    m_TargetCanvas->SetExternalLayoutSize(layoutSize, m_LayoutOwnerToken);
+    if (m_Drag.mode == DragMode::None) return;
+    const auto* id = world.valid(m_Drag.entity) ? world.try_get<IDComponent>(m_Drag.entity) : nullptr;
+    const auto* layout = FindLayout(m_Drag.entity);
+    if (!id || id->id != m_Drag.id || !layout || layout->parentTransform != m_Drag.layout.parentTransform || !m_Focused)
+    {
+        m_Drag = {};
+        return;
+    }
+    if (ImGui::IsKeyPressed(ImGuiKey_Escape))
+    {
+        m_PendingEdit = PendingEdit{ m_Drag.entity, m_Drag.id,
+            world.get<RectTransformComponent>(m_Drag.entity), m_Drag.start };
+        m_Drag = {};
+        return;
+    }
+    if (!ImGui::IsMouseDown(ImGuiMouseButton_Left)) { m_Drag = {}; return; }
+    if (!ImGui::IsMouseDragging(ImGuiMouseButton_Left, 3.0f)) return;
+    const float step = io.KeyAlt ? 0.0f : m_PixelSnap ? 1.0f : m_GridSnap ? m_GridStep : 0.0f;
+    auto candidate = m_Drag.start;
+    const auto delta = canvasPoint - m_Drag.mouseStart;
+    const float parentDeterminant = glm::determinant(m_Drag.layout.parentTransform);
+    if (!std::isfinite(parentDeterminant) || parentDeterminant == 0.0f) return;
+    if (m_Drag.mode == DragMode::Move)
+    {
+        const vec2 startPivot(m_Drag.layout.worldTransform[3]);
+        const auto desiredPivot = CanvasView2D::Snap(startPivot + delta, step);
+        const auto parentDelta = vec2(glm::inverse(m_Drag.layout.parentTransform) *
+            vec4(desiredPivot - startPivot, 0.0f, 0.0f));
+        candidate.anchoredPosition += parentDelta;
+    }
+    else
+    {
+        const float determinant = glm::determinant(m_Drag.layout.worldTransform);
+        if (!std::isfinite(determinant) || determinant == 0.0f) return;
+        const auto localDelta = vec2(glm::inverse(m_Drag.layout.worldTransform) * vec4(delta, 0.0f, 0.0f));
+        const auto size = glm::max(CanvasView2D::Snap(m_Drag.layout.size + localDelta, step), vec2(1.0f));
+        const auto sizeDelta = size - m_Drag.layout.size;
+        candidate.sizeDelta += sizeDelta;
+        const auto rotationScale = glm::rotate(mat4(1.0f), glm::radians(candidate.rotation), vec3(0.0f, 0.0f, 1.0f)) *
+            glm::scale(mat4(1.0f), vec3(candidate.scale, 1.0f));
+        candidate.anchoredPosition += vec2(rotationScale * vec4(sizeDelta * candidate.pivot, 0.0f, 0.0f));
+    }
+    if (UILayout::IsValid(candidate))
+        m_PendingEdit = PendingEdit{ m_Drag.entity, m_Drag.id,
+            world.get<RectTransformComponent>(m_Drag.entity), candidate };
 }
-#pragma endregion
+
+void Editor::UIViewportPanel::HandleInteraction(bool hovered)
+{
+    m_InteractionUpdated = true;
+    if (!m_Interaction) return;
+    if (!m_LayoutValid || !HasTarget() || m_Panning || ImGui::IsKeyPressed(ImGuiKey_Escape))
+    {
+        m_Interaction->Cancel();
+        return;
+    }
+    UIPointerInput input;
+    input.position = m_View.ToCanvas(Point(ImGui::GetMousePos()));
+    input.insideViewport = hovered;
+    input.focused = m_Focused && !ImGui::GetIO().AppFocusLost;
+    input.held = ImGui::IsMouseDown(ImGuiMouseButton_Left);
+    input.down = ImGui::IsMouseClicked(ImGuiMouseButton_Left);
+    input.up = ImGui::IsMouseReleased(ImGuiMouseButton_Left);
+    m_Interaction->Update(input);
+}
+
+void Editor::UIViewportPanel::ApplyPendingEdit()
+{
+    auto& history = Application::Get().GetEditHistory();
+    if (m_HistoryRevision != history.Revision())
+    {
+        m_HistoryRevision = history.Revision();
+        m_PendingEdit.reset();
+        m_Drag = {};
+        m_InteractionUpdated = false;
+        if (m_Interaction) m_Interaction->Cancel();
+    }
+    if (!m_PendingEdit) return;
+    const auto edit = *m_PendingEdit;
+    m_PendingEdit.reset();
+    if (!HasTarget() || SelectionManager::Get().IsPrimarySelectionLocked()) { m_Drag = {}; return; }
+    auto& world = m_TargetScene->GetRegistry();
+    const auto* id = world.valid(edit.entity) ? world.try_get<IDComponent>(edit.entity) : nullptr;
+    auto* current = id ? world.try_get<RectTransformComponent>(edit.entity) : nullptr;
+    if (!id || id->id != edit.id || !current || !SameRect(*current, edit.before) ||
+        UILayout::FindCanvas(world, edit.entity) != m_TargetCanvas) { m_Drag = {}; return; }
+    if (!history.Enabled() || SameRect(edit.before, edit.after)) return;
+    const std::array targets{ edit.entity };
+    auto before = SceneEditSnapshot::Capture(*m_TargetScene, targets);
+    if (!before) { m_Drag = {}; return; }
+    *current = edit.after;
+    std::vector<UIElementLayout> layouts;
+    if (!UILayout::Build(world, m_TargetCanvas, layouts)) { *current = edit.before; m_Drag = {}; }
+    else history.Record(std::move(before), SceneEditSnapshot::Capture(*m_TargetScene, targets), "UI_HISTORY_UI", true);
+}
