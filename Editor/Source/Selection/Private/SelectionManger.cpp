@@ -9,6 +9,8 @@
 #include "TransformSystem.h"
 #include "Mesh.h"
 #include "MaterialInterface.h"
+#include "Sprite.h"
+#include "PickingMath.h"
 
 #include <algorithm>
 #include <cmath>
@@ -24,6 +26,7 @@ EResult SelectionManager::Initialize(void* arg)
 void SelectionManager::Free()
 {
 	m_SelectedObjects.clear();
+	m_SelectedEntities.clear();
 }
 #pragma endregion
 
@@ -111,7 +114,8 @@ Entity* SelectionManager::GetPrimarySelectedEntity()
 
 void SelectionManager::ToggleEntitySelection(Entity* entity)
 {
-	if (m_LockPrimarySeletion) return;
+	if (m_LockPrimarySeletion || !entity) return;
+	m_SelectedObjects.clear();
 	auto it = std::find(m_SelectedEntities.begin(), m_SelectedEntities.end(), entity);
 	if (it != m_SelectedEntities.end())
 	{
@@ -149,8 +153,45 @@ void SelectionManager::AddToEntitySelection(Entity* entity)
 
 Entity* SelectionManager::PickEntityByRay(const struct Ray& ray, float maxDistance)
 {
-	TODO("Implement entity picking by raycasting. This may involve checking for collisions with entities in the scene and returning the closest hit entity.");
-	return nullptr;
+	if (!std::isfinite(maxDistance) || maxDistance < 0.0f) return nullptr;
+	Entity* closest = nullptr;
+	float closestDistance = maxDistance;
+	for (Scene* scene : SceneManager::Get().GetActiveScenes())
+	{
+		if (!scene) continue;
+		auto& world = scene->GetRegistry();
+		TransformSystem::UpdateHierarchy(world);
+		for (auto [entity, transform, flag] : world.view<WorldTransformComponent, FlagComponent>().each())
+		{
+			if (!HasFlag(flag.flags, EEntityFlag::Active) || !HasFlag(flag.flags, EEntityFlag::Visible) ||
+				HasFlag(flag.flags, EEntityFlag::Dead)) continue;
+			Entity* candidate = scene->FindEntity(entity);
+			if (!candidate) continue;
+			const auto testMesh = [&](Mesh* mesh, const mat4& matrix)
+			{
+				if (!mesh) return;
+				float distance = 0.0f;
+				if (PickingMath::RaycastBounds(ray, AABB(mesh->GetMin(), mesh->GetMax()), matrix,
+					closestDistance, distance) && (!closest || distance < closestDistance))
+				{
+					closest = candidate;
+					closestDistance = distance;
+				}
+			};
+			if (const auto* renderer = world.try_get<StaticMeshRendererComponent>(entity))
+			{
+				if (renderer->materialHandle.Get()) testMesh(renderer->meshHandle.Get(), transform.worldMatrix);
+			}
+			if (const auto* renderer = world.try_get<SpriteRendererComponent>(entity))
+			{
+				mat4 quadMatrix;
+				if (renderer->drawMode == ESpriteDrawMode::Simple && renderer->spriteHandle.Get() &&
+					renderer->materialHandle.Get() && renderer->spriteHandle.Get()->TryGetQuadMatrix(quadMatrix))
+					testMesh(renderer->meshHandle.Get(), transform.worldMatrix * quadMatrix);
+			}
+		}
+	}
+	return closest;
 }
 
 #pragma endregion

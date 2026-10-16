@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "CameraViewportPanel.h"
 #include "DebugRenderer.h"
@@ -12,6 +12,12 @@
 #pragma pop_macro("COLOR")
 
 BEGIN(Editor)
+
+enum class EScenePickingMode : uint8
+{
+	GPUId,
+	RayBounds,
+};
 
 struct SceneViewportPanelDesc : public CameraViewportPanelDesc
 {
@@ -56,6 +62,7 @@ protected:
 	void DrawDebugMenu();
 	void DrawPostProcessMenu();
 	void DrawRenderPassMenu();
+	void DrawPickingMenu();
 #pragma endregion
 
 #pragma region Overlay
@@ -86,8 +93,10 @@ private:
 	void KeyboardInput();
 private:
 	void MouseInput();
+	void CapturePickingRequest(bool imageHovered);
+	void ProcessPickingRequest();
 private:
-	Engine::Ray ScreenPosToRay(const ImVec2& mousePos);
+	bool ScreenPosToRay(const ImVec2& mousePos, Engine::Ray& ray, float& maxDistance);
 #pragma endregion
 
 #pragma region Member Variables
@@ -123,6 +132,20 @@ private:
 	bool m_ShowGrid = { true };
 private:
 	vec2 m_InitialMousePos;
+	EScenePickingMode m_PickingMode = EScenePickingMode::GPUId;
+	struct PickingRequest
+	{
+		bool pending = false;
+		bool toggle = false;
+		EScenePickingMode mode = EScenePickingMode::GPUId;
+		vec2 uv = vec2(0.0f);
+		Engine::Ray ray{};
+		float maxDistance = 0.0f;
+		uint64 frameSerial = 0;
+		uint32 width = 0;
+		uint32 height = 0;
+	};
+	PickingRequest m_PickingRequest;
 
 #pragma region Guizmo 
 private://3D
@@ -136,9 +159,10 @@ private://3D
 #ifdef _DEBUG 
 protected:
 	DebugRenderer m_DebugRenderer;
+#endif // _DEBUG
+protected:
 	bool m_ShowLightOverlay = { true };
 	bool m_ShowCameraOverlay = { true };
-#endif // _DEBUG
 #pragma endregion
 };
 END

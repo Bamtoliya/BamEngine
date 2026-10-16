@@ -1,9 +1,11 @@
-﻿#pragma once
+#pragma once
 
 #include "Editor_Includes.h"
 #include "RenderPass.h"
 #include "Vertex.h"
 
+
+#ifdef _DEBUG
 BEGIN(Editor)
 class DebugRenderer : public Base
 {
@@ -38,3 +40,4 @@ private:
 	RenderPassID m_RenderPassID = { INVALID_PASS_ID };
 };
 END
+#endif

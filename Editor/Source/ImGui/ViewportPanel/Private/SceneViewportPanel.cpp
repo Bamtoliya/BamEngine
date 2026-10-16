@@ -1,6 +1,7 @@
-﻿#pragma once
+#pragma once
 
 #include "SceneViewportPanel.h"
+#include "Application.h"
 #include "RenderTargetManager.h"
 #include "SelectionManager.h"
 #include "InputManager.h"
@@ -13,6 +14,7 @@
 #include "RenderComponents.h"
 #include "TransformSystem.h"
 #include "TransformPropertyEditor.h"
+#include "PickingMath.h"
 
 #include <glm/gtc/type_ptr.hpp>
 #include <cmath>
@@ -121,7 +123,7 @@ void SceneViewportPanel::PrepareRenderTargetsAndPasses(uint32 width, uint32 heig
 		//ShadowDepth
 		{{4096, 4096, 1, 1, 1, ETextureSampleCount::TextureSampleCount1, ETextureFormat::D32_FLOAT, ETextureDimension::Texture2D, ETextureUsage::DepthStencilTarget | ETextureUsage::Sampler, nullptr, 0, false, vec4(0.f)}, L"ShadowDepth"},
 		//Depth
-		{{4096, 4096, 1, 1, 1, ETextureSampleCount::TextureSampleCount1, ETextureFormat::D24_UNORM_S8_UINT, ETextureDimension::Texture2D, ETextureUsage::DepthStencilTarget | ETextureUsage::Sampler, nullptr, 0, false, vec4(0.f)}, L"Depth"},
+		{{width, height, 1, 1, 1, ETextureSampleCount::TextureSampleCount1, ETextureFormat::D24_UNORM_S8_UINT, ETextureDimension::Texture2D, ETextureUsage::DepthStencilTarget | ETextureUsage::Sampler, nullptr, 0, false, vec4(0.f)}, L"Depth"},
 		//LightingColor
 		{{width, height, 1, 1, 1, ETextureSampleCount::TextureSampleCount1, ETextureFormat::R8G8B8A8_UNORM, ETextureDimension::Texture2D, ETextureUsage::RenderTarget | ETextureUsage::Sampler, nullptr, 0, false, vec4(0.f, 0.f, 0.f, 1.f)}, L"LightingColor"},
 		//Ping-pong RTs
@@ -239,7 +241,10 @@ void SceneViewportPanel::Free()
 {
 	__super::Free();
 	m_Grid.Free();
+
+#ifdef _DEBUG
 	m_DebugRenderer.Free();
+#endif
 	m_PostProcessChain.Free();
 }
 #pragma endregion
@@ -247,6 +252,8 @@ void SceneViewportPanel::Free()
 #pragma region Loop
 void SceneViewportPanel::Update(f32 dt)
 {
+	// Download the clicked frame before resizing/replacing its render targets.
+	ProcessPickingRequest();
 	CalculateRenderResolution(m_PanelWidth, m_PanelHeight);
 
 	if (m_OwnedCamera && m_Focused && m_Hovered)
@@ -320,18 +327,36 @@ void SceneViewportPanel::DrawCustomOptions()
 	DrawDebugMenu();
 	DrawPostProcessMenu();
 	DrawRenderPassMenu();
+	DrawPickingMenu();
 	DrawChannelViewButton();
 	DrawDimensionToggleButton();
 }
 
 void SceneViewportPanel::DrawCustomViewport()
 {
+    Application::Get().GetEditHistory().AllowShortcuts(ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows));
 	BaseViewportPanel::DrawCustomViewport();
+	const bool imageHovered = ImGui::IsItemHovered();
 	DrawImGuizmo();
 	DrawImViewGuizmo();
 	DrawLightOverlay();
 	DrawCameraOverlay();
 	DrawSelectionLocked();
+	CapturePickingRequest(imageHovered);
+}
+
+void SceneViewportPanel::DrawPickingMenu()
+{
+	if (ImGui::BeginMenu("Picking"))
+	{
+		if (ImGui::MenuItem("GPU ID", nullptr, m_PickingMode == EScenePickingMode::GPUId))
+			m_PickingMode = EScenePickingMode::GPUId;
+		if (ImGui::MenuItem("Ray bounds (broad phase)", nullptr, m_PickingMode == EScenePickingMode::RayBounds))
+			m_PickingMode = EScenePickingMode::RayBounds;
+		if (ImGui::IsItemHovered())
+			ImGui::SetTooltip("Tests mesh bounds. Triangle surfaces and sprite transparency are not tested.");
+		ImGui::EndMenu();
+	}
 }
 #pragma endregion
 
@@ -440,7 +465,9 @@ void SceneViewportPanel::DrawDebugMenu()
 	if (ImGui::BeginMenu(LOCAL_CSTR("UI_DEBUG")))
 	{
 		ImGui::MenuItem("Show Grid", nullptr, m_Grid.GetVisible());
+#ifdef _DEBUG
 		ImGui::MenuItem("Show Collider", nullptr, m_DebugRenderer.GetDrawCollidersPtr());
+#endif
 		ImGui::EndMenu();
 	}
 }
@@ -589,14 +616,20 @@ void SceneViewportPanel::DrawImGuizmo()
 	ImGuizmo::SetDrawlist();
 	ImGuizmo::SetRect(m_ImageScreenPos.x, m_ImageScreenPos.y, m_ImageSize.x, m_ImageSize.y);
 
-	const bool changed = ImGuizmo::Manipulate(glm::value_ptr(viewMatrix), glm::value_ptr(projectionMatrix),
+	auto& history = Application::Get().GetEditHistory();
+	const std::array targets{ entity };
+	auto before = history.Enabled() ? SceneEditSnapshot::Capture(*scene, targets) : SceneEditSnapshot{};
+	const bool operationLocked = TransformPropertyEditor::IsLocked(world, entity, editMode);
+	const bool changed = !operationLocked && ImGuizmo::Manipulate(glm::value_ptr(viewMatrix), glm::value_ptr(projectionMatrix),
 		m_GizmoOperation, m_GizmoMode, glm::value_ptr(worldMatrix), nullptr,
 		useSnap ? glm::value_ptr(snapValues) : nullptr, showBounds ? bounds : nullptr,
 		showBounds && useSnap ? glm::value_ptr(snapValues) : nullptr);
 
-	if (changed && !TransformPropertyEditor::ApplyWorldMatrix(world, entity, worldMatrix, editMode))
+	if (changed && history.Enabled() && before)
 	{
-		ImGui::SetTooltip("Transform edit rejected: the result cannot be represented by local TRS.");
+		if (TransformPropertyEditor::ApplyWorldMatrix(world, entity, worldMatrix, editMode))
+			history.Record(std::move(before), SceneEditSnapshot::Capture(*scene, targets), "UI_HISTORY_TRANSFORM", true);
+		else ImGui::SetTooltip("Transform edit rejected: the result cannot be represented by local TRS.");
 	}
 
 	ImGui::PopID();
@@ -1065,32 +1098,6 @@ void SceneViewportPanel::KeyboardInput()
 }
 void SceneViewportPanel::MouseInput()
 {
-	ImVec2 mousePos = ImGui::GetMousePos();
-	const bool gizmoCapturesMouse = ImGuizmo::IsOver() || ImGuizmo::IsUsing();
-	const bool entitySelected = SelectionManager::Get().GetPrimarySelectedEntity() != nullptr;
-
-	if (MOUSE_BUTTON_DOWN(Engine::EMouseButton::Left) && m_Focused && m_Hovered && !gizmoCapturesMouse && !entitySelected)
-	{
-		Ray mouseRay = ScreenPosToRay(mousePos);
-		SelectionManager& selectionManager = SelectionManager::Get();
-		GameObject* pickedObject = selectionManager.PickObjectByRay(mouseRay);
-		if (pickedObject)
-		{
-			if (KEY_PRESSED(EKeyCode::LCtrl))
-			{
-				selectionManager.ToggleSelection(pickedObject);
-			}
-			else
-			{
-				selectionManager.SetSelectedObject(pickedObject);
-			}
-		}
-		else
-		{
-			selectionManager.ClearSelection();
-		}
-	}
-
 	SDL_Window* window = static_cast<SDL_Window*>(Renderer::Get().GetRHI()->GetWindowHandle());
 
 	if (MOUSE_BUTTON_DOWN("right"))
@@ -1108,33 +1115,81 @@ void SceneViewportPanel::MouseInput()
 		SDL_WarpMouseInWindow(window, (int)m_InitialMousePos.x, (int)m_InitialMousePos.y);
 	}
 }
-Engine::Ray SceneViewportPanel::ScreenPosToRay(const ImVec2& mousePos)
+void SceneViewportPanel::CapturePickingRequest(bool imageHovered)
 {
-	f32 localX = mousePos.x - m_ImageScreenPos.x;
-	f32 localY = mousePos.y - m_ImageScreenPos.y;
+	if (!imageHovered || !ImGui::IsMouseClicked(ImGuiMouseButton_Left) || !ImGui::IsWindowHovered() ||
+		ImGui::IsAnyItemActive() || ImGuizmo::IsOver() || ImGuizmo::IsUsing() ||
+		ImViewGuizmo::IsOver() || ImViewGuizmo::IsUsing() ||
+		ImGui::IsMouseDown(ImGuiMouseButton_Right) || SelectionManager::Get().IsPrimarySelectionLocked()) return;
+	const ImVec2 mouse = ImGui::GetMousePos();
+	vec2 uv;
+	if (!PickingMath::TryGetViewportUV(vec2(mouse.x, mouse.y), vec2(m_ImageScreenPos.x, m_ImageScreenPos.y),
+		vec2(m_ImageSize.x, m_ImageSize.y), uv)) return;
+	auto* target = RenderTargetManager::Get().GetRenderTarget(m_Name + L"_GBuffer_Position");
+	if (!target || !target->GetTexture()) return;
+	PickingRequest request;
+	request.toggle = ImGui::GetIO().KeyCtrl;
+	request.mode = m_PickingMode;
+	request.uv = uv;
+	request.frameSerial = Renderer::Get().GetPickingFrameSerial();
+	request.width = target->GetWidth();
+	request.height = target->GetHeight();
+	if (request.mode == EScenePickingMode::RayBounds && !ScreenPosToRay(mouse, request.ray, request.maxDistance))
+		return;
+	request.pending = true;
+	m_PickingRequest = request;
+}
 
-	f32 ndcX = (localX / m_ImageSize.x) * 2.0f - 1.0f;
-	f32 ndcY = 1.0f - (localY / m_ImageSize.y) * 2.0f;
-	mat4 projInvMatrix = m_Camera->GetProjMatrixInv();
-	mat4 viewInvMatrix = m_Camera->GetViewMatrixInv();
+void SceneViewportPanel::ProcessPickingRequest()
+{
+	if (!m_PickingRequest.pending) return;
+	const PickingRequest request = m_PickingRequest;
+	m_PickingRequest.pending = false;
+	auto& selection = SelectionManager::Get();
+	if (selection.IsPrimarySelectionLocked()) return;
+	Entity* picked = nullptr;
+	if (request.mode == EScenePickingMode::GPUId)
+	{
+		auto& renderer = Renderer::Get();
+		if (request.frameSerial != renderer.GetCompletedPickingFrameSerial() ||
+			!renderer.HasPickingPass(m_GeometryPassID)) return;
+		auto* target = RenderTargetManager::Get().GetRenderTarget(m_Name + L"_GBuffer_Position");
+		if (!target || !target->GetTexture() || target->GetWidth() != request.width ||
+			target->GetHeight() != request.height || request.width == 0 || request.height == 0) return;
+		const uint32 x = glm::min(static_cast<uint32>(request.uv.x * request.width), request.width - 1);
+		const uint32 y = glm::min(static_cast<uint32>(request.uv.y * request.height), request.height - 1);
+		vec4 pixel(0.0f);
+		if (renderer.GetRHI()->ReadTexturePixel(target->GetTexture(), x, y, pixel) != EResult::Success)
+		{
+			ENGINE_LOG_ERROR("Scene viewport ID picking: pixel download failed.");
+			return;
+		}
+		if (!std::isfinite(pixel.a) || pixel.a < 0.0f || pixel.a > 16777215.0f || std::floor(pixel.a) != pixel.a)
+			return;
+		picked = renderer.ResolvePickingEntity(static_cast<uint32>(pixel.a));
+		// An obsolete ID is not a background click; preserve the current selection.
+		if (pixel.a != 0.0f && !picked) return;
+	}
+	else
+	{
+		picked = selection.PickEntityByRay(request.ray, request.maxDistance);
+	}
+	if (request.toggle)
+	{
+		if (picked) selection.ToggleEntitySelection(picked);
+	}
+	else
+	{
+		selection.SetSelectedEntity(picked);
+	}
+}
 
-	mat4 invVP = viewInvMatrix * projInvMatrix;
-
-	vec4 nearPointNDC = vec4(ndcX, ndcY, -1.0f, 1.0f);
-	vec4 farPointNDC = vec4(ndcX, ndcY, 1.0f, 1.0f);
-
-	vec4 nearPointWorld = invVP * nearPointNDC;
-	vec4 farPointWorld = invVP * farPointNDC;
-
-	Ray ray;
-	ray.origin = vec3(nearPointWorld) / nearPointWorld.w;
-	//ray.Origin.x += m_RenderTarget->GetWidth() / 2.f;
-	//ray.Origin.y -= m_RenderTarget->GetHeight() / 2.f;
-	ray.direction = glm::normalize(vec3(farPointWorld / farPointWorld.w) - ray.origin);
-
-	cout << "Ray Origin: " << ray.origin.x << ", " << ray.origin.y << ", " << ray.origin.z << endl;
-	cout << "Ray Direction: " << ray.direction.x << ", " << ray.direction.y << ", " << ray.direction.z << endl;
-
-	return ray;
+bool SceneViewportPanel::ScreenPosToRay(const ImVec2& mousePos, Engine::Ray& ray, float& maxDistance)
+{
+	if (!m_Camera) return false;
+	vec2 uv;
+	if (!PickingMath::TryGetViewportUV(vec2(mousePos.x, mousePos.y), vec2(m_ImageScreenPos.x, m_ImageScreenPos.y),
+		vec2(m_ImageSize.x, m_ImageSize.y), uv)) return false;
+	return PickingMath::TryBuildRay(m_Camera->GetViewMatrixInv() * m_Camera->GetProjMatrixInv(), uv, ray, &maxDistance);
 }
 #pragma endregion

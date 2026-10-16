@@ -43,6 +43,7 @@ public:
 	void SetSelectedEntity(class Entity* entity);
 	bool IsEntitySelected(class Entity* entity) const;
 	void AddToEntitySelection(class Entity* entity);
+	// Mesh-bounds broad phase; triangle and sprite-alpha tests are future narrow phases.
 	class Entity* PickEntityByRay(const struct Ray& ray, float maxDistance);
 public:
 
