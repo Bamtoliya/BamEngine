@@ -12,20 +12,20 @@ enum class EViewportResolutionMode : uint8
 };
 struct ResolutionPreset
 {
-	const char* Name;
+	const char* NameKey;
 	uint32 Width;
 	uint32 Height;
 };
 // 프리셋 테이블 (static constexpr)
 static constexpr ResolutionPreset g_ResolutionPresets[] =
 {
-	{ "3840 x 2160 (4K UHD)",     3840, 2160 },
-	{ "2560 x 1440 (QHD)",        2560, 1440 },
-	{ "1920 x 1080 (FHD)",        1920, 1080 },
-	{ "1280 x 720  (HD)",         1280,  720 },
-	{ "854  x 480  (SD)",          854,  480 },
-	{ "1170 x 2532 (iPhone 14)",  1170, 2532 },
-	{ "1080 x 1920 (Portrait FHD)", 1080, 1920 },
+	{ "Viewport.Resolution4K",     3840, 2160 },
+	{ "Viewport.ResolutionQHD",        2560, 1440 },
+	{ "Viewport.ResolutionFHD",        1920, 1080 },
+	{ "Viewport.ResolutionHD",         1280,  720 },
+	{ "Viewport.ResolutionSD",          854,  480 },
+	{ "Viewport.ResolutionIPhone",  1170, 2532 },
+	{ "Viewport.ResolutionPortrait", 1080, 1920 },
 };
 static constexpr uint32 g_PresetCount = sizeof(g_ResolutionPresets) / sizeof(g_ResolutionPresets[0]);
 enum class EAspectRatioMode : uint8
@@ -42,6 +42,7 @@ enum class EAspectRatioMode : uint8
 struct ViewportPanelDesc
 {
 	wstring Name = L"Viewport";
+	string DisplayNameKey;
 	uint32 RenderTargetWidth = 1920;
 	uint32 RenderTargetHeight = 1080;
 };
@@ -65,6 +66,7 @@ public:
 	virtual void Update(f32 dt) override;
 public:
 	void Draw();
+	string GetDisplayName() const override;
 
 
 
@@ -84,7 +86,7 @@ protected:
 	virtual void DrawCustomOptions();
 protected:
 	void DrawRenderTargetMenu();
-	void DrawChannelViewButton();
+	void DrawChannelViewButton(float rightReservedWidth = 0.0f);
 protected:
 	void DrawRTItemContextMenu(const wstring& rtName);
 #pragma endregion
@@ -103,6 +105,8 @@ protected: //Viewport Display
 	ChannelFilter m_ChannelFilter;
 	EViewportChannelView m_ChannelView = EViewportChannelView::RGBA;
 
+	string m_WindowID;
+	bool m_IsRenderTargetViewer = false;
 	wstring m_SelectedRTName;
 	wstring m_DisplayRTName;
 protected:

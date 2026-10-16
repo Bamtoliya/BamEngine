@@ -93,7 +93,7 @@ static void ResolveConflict(const FileDropConflict& conflict, int action)
 
 EResult ContentBrowserPanel::Initialize(void* arg)
 {
-	m_Name = L"Content Browser";
+	m_Name = L"Content Browser"; m_DisplayNameKey = "UI_CONTENT_BROWSER";
 	filesystem::path resourcePath = filesystem::current_path();
 	resourcePath.append("Resources");
 	m_RootPath = resourcePath;
@@ -113,7 +113,8 @@ void ContentBrowserPanel::Draw()
 	size_t activeTasks = AssetManager::Get().GetActiveTaskCount();
 	if (activeTasks > 0)
 	{
-		ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), ICON_FA_ARROW_ROTATE_RIGHT " Importing %d Asset(s) in background...", (int)activeTasks);
+		ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "%s",
+			(ICON_FA_ARROW_ROTATE_RIGHT " " + LOCAL_FMT("ContentBrowser.Importing", (int)activeTasks)).c_str());
 		ImGui::Separator();
 	}
 
@@ -134,8 +135,8 @@ void ContentBrowserPanel::Draw()
 
 	if (ImGui::BeginTable("ContentBrowserTableLayout", 2, tableFlags))
 	{
-		ImGui::TableSetupColumn("Folders", ImGuiTableColumnFlags_WidthFixed, 250.0f);
-		ImGui::TableSetupColumn("Files", ImGuiTableColumnFlags_WidthStretch);
+		ImGui::TableSetupColumn(LOCAL_LABEL("ContentBrowser.Folders").c_str(), ImGuiTableColumnFlags_WidthFixed, 250.0f);
+		ImGui::TableSetupColumn(LOCAL_LABEL("ContentBrowser.Files").c_str(), ImGuiTableColumnFlags_WidthStretch);
 
 		ImGui::TableNextRow();
 
@@ -230,7 +231,7 @@ void ContentBrowserPanel::TreeViewContextMenu(const filesystem::path& path)
 	{
 		m_CurrentDirectory = path; // 메뉴를 열 때 해당 디렉토리를 선택 상태로 만듦
 
-		if (ImGui::MenuItem(ICON_FA_PLUS " New Folder"))
+		if (ImGui::MenuItem((ICON_FA_PLUS " " + LOCAL_LABEL("EditorCommon.NewFolder")).c_str()))
 		{
 			filesystem::path newFolderPath = path / "NewFolder";
 			int suffix = 1;
@@ -241,7 +242,7 @@ void ContentBrowserPanel::TreeViewContextMenu(const filesystem::path& path)
 			filesystem::create_directory(newFolderPath);
 		}
 
-		if (ImGui::MenuItem(ICON_FA_PEN " Rename", "F2"))
+		if (ImGui::MenuItem((ICON_FA_PEN " " + LOCAL_LABEL("EditorCommon.Rename")).c_str(), "F2"))
 		{
 			m_RenamingPath = path;
 			strncpy(m_RenameBuffer, filename.c_str(), sizeof(m_RenameBuffer));
@@ -249,20 +250,21 @@ void ContentBrowserPanel::TreeViewContextMenu(const filesystem::path& path)
 
 		ImGui::Separator();
 
-		if (ImGui::MenuItem(ICON_FA_FOLDER_OPEN " Show in Explorer"))
+		if (ImGui::MenuItem((ICON_FA_FOLDER_OPEN " " + LOCAL_LABEL("EditorCommon.ShowInExplorer")).c_str()))
 		{
 			// Windows 전용 명령 (ShellExecute)
 			ShellExecuteA(NULL, "open", path.string().c_str(), NULL, NULL, SW_SHOWNORMAL);
 		}
 
-		if (ImGui::MenuItem(ICON_FA_COPY " Copy Path"))
+		if (ImGui::MenuItem((ICON_FA_COPY " " + LOCAL_LABEL("EditorCommon.CopyPath")).c_str()))
 		{
 			ImGui::SetClipboardText(path.string().c_str());
 		}
 
 		ImGui::Separator();
 
-		if (ImGui::MenuItem(ICON_FA_TRASH " Delete", nullptr, false, path != m_RootPath))
+		if (ImGui::MenuItem((ICON_FA_TRASH " " + LOCAL_LABEL("EditorCommon.Delete")).c_str(), nullptr, false,
+			path != m_RootPath))
 		{
 			// 루트가 아닐 때만 삭제 가능 (실제 삭제 시 모달 팝업 권장)
 			// filesystem::remove_all(path);
@@ -319,9 +321,9 @@ void ContentBrowserPanel::GridViewContextMenu(const filesystem::path& path)
 {
 	if (ImGui::BeginPopupContextWindow("GridContextMenu", ImGuiPopupFlags_MouseButtonRight | ImGuiPopupFlags_NoOpenOverItems))
 	{
-		if (ImGui::BeginMenu(ICON_FA_PLUS " Create"))
+		if (ImGui::BeginMenu((ICON_FA_PLUS " " + LOCAL_LABEL("EditorCommon.Create")).c_str()))
 		{
-			if (ImGui::MenuItem(ICON_FA_FOLDER " New Folder"))
+			if (ImGui::MenuItem((ICON_FA_FOLDER " " + LOCAL_LABEL("EditorCommon.NewFolder")).c_str()))
 			{
 				filesystem::path newFolderPath = m_CurrentDirectory / "NewFolder";
 				int suffix = 1;
@@ -332,7 +334,7 @@ void ContentBrowserPanel::GridViewContextMenu(const filesystem::path& path)
 				filesystem::create_directory(newFolderPath);
 			}
 
-			if (ImGui::MenuItem(ICON_FA_GLOBE " Create Empty Material"))
+			if (ImGui::MenuItem((ICON_FA_GLOBE " " + LOCAL_LABEL("ContentBrowser.CreateEmptyMaterial")).c_str()))
 			{
 				CreateEmptyMaterial(m_CurrentDirectory);
 			}
@@ -343,7 +345,7 @@ void ContentBrowserPanel::GridViewContextMenu(const filesystem::path& path)
 
 		ImGui::Separator();
 
-		if (ImGui::MenuItem(ICON_FA_FOLDER_OPEN " Show in Explorer"))
+		if (ImGui::MenuItem((ICON_FA_FOLDER_OPEN " " + LOCAL_LABEL("EditorCommon.ShowInExplorer")).c_str()))
 		{
 			// Windows 전용 명령 (ShellExecute)
 			ShellExecuteA(NULL, "open", path.string().c_str(), NULL, NULL, SW_SHOWNORMAL);
@@ -403,7 +405,7 @@ void ContentBrowserPanel::AddressBar()
 
 	for (size_t i = 0; i < nodes.size(); ++i)
 	{
-		std::string name = (i == 0) ? "Assets" : nodes[i].filename().string();
+		std::string name = (i == 0) ? LOCAL("ContentBrowser.Assets") : nodes[i].filename().string();
 		name += "###" + std::to_string(static_cast<int>(i));
 
 		// 경로의 폴더 이름을 클릭하면 해당 경로로 즉시 이동
@@ -432,16 +434,19 @@ void ContentBrowserPanel::AddressBar()
 bool ContentBrowserPanel::SearchBar()
 {
 	ImGui::SetNextItemWidth(150.f);
-	return ImGui::InputTextWithHint("##SearchBar", ICON_FA_MAGNIFYING_GLASS " Search...", m_SearchBuffer, sizeof(m_SearchBuffer), ImGuiInputTextFlags_EnterReturnsTrue);
+	return ImGui::InputTextWithHint("##SearchBar",
+		(ICON_FA_MAGNIFYING_GLASS " " + LOCAL("EditorCommon.Search")).c_str(), m_SearchBuffer, sizeof(m_SearchBuffer),
+		ImGuiInputTextFlags_EnterReturnsTrue);
 }
 
 void ContentBrowserPanel::ContentFilter()
 {
-	const char* filterNames[] = { "Texture", "Model", "Material", "Shader", "Data" };
-	int filterCount = IM_ARRAYSIZE(filterNames);
+	const char* filterKeys[] = { "ResourceType.Texture", "ResourceType.Model", "ResourceType.Material",
+		"ResourceType.Shader", "ContentBrowser.Data" };
+	int filterCount = IM_ARRAYSIZE(filterKeys);
 
 	// 콤보박스 타이틀 설정 로직
-	std::string previewText = "All";
+	std::string previewText = LOCAL("EditorCommon.All");
 	if (m_FilterMask != 0)
 	{
 		int activeCount = 0;
@@ -451,7 +456,7 @@ void ContentBrowserPanel::ContentFilter()
 			if (m_FilterMask & (1 << i))
 			{
 				if (activeCount > 0) activeNames += ", ";
-				activeNames += filterNames[i];
+				activeNames += LOCAL(filterKeys[i]);
 				activeCount++;
 			}
 		}
@@ -459,7 +464,7 @@ void ContentBrowserPanel::ContentFilter()
 		if (activeCount == 1)
 			previewText = activeNames;
 		else if (activeCount > 1)
-			previewText = "Multiple (" + std::to_string(activeCount) + ")";
+			previewText = LOCAL_FMT("ContentBrowser.Multiple", activeCount);
 	}
 
 	ImGui::SetNextItemWidth(100.f);
@@ -467,7 +472,7 @@ void ContentBrowserPanel::ContentFilter()
 	{
 		// "All" 항목 (마스크 초기화)
 		bool allSelected = (m_FilterMask == 0);
-		if (ImGui::Selectable("All", allSelected))
+		if (ImGui::Selectable(LOCAL_LABEL("EditorCommon.All").c_str(), allSelected))
 		{
 			m_FilterMask = 0;
 		}
@@ -477,7 +482,7 @@ void ContentBrowserPanel::ContentFilter()
 		for (int i = 0; i < filterCount; ++i)
 		{
 			bool isSelected = (m_FilterMask & (1 << i)) != 0;
-			if (ImGui::Checkbox(filterNames[i], &isSelected))
+			if (ImGui::Checkbox(LOCAL_LABEL(filterKeys[i]).c_str(), &isSelected))
 			{
 				if (isSelected)
 					m_FilterMask |= (1 << i);
@@ -617,7 +622,7 @@ void ContentBrowserPanel::DrawGrid(bool enterPressed)
 void ContentBrowserPanel::FileConfilictPopup()
 {
 	LocalizationManager& localizationManager = LocalizationManager::Get();
-	string popupTitle = localizationManager.GetText("ContentBrowser.FileConflictPopup");
+	const string popupTitle = LOCAL_LABEL("ContentBrowser.FileConflictPopup");
 	if(m_OpenConflictPopup)
 	{
 		ImGui::OpenPopup(popupTitle.c_str());

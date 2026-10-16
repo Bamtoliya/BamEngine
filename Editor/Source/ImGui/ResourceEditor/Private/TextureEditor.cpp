@@ -10,7 +10,8 @@ bool TextureEditor::IsSupported(const std::filesystem::path& assetPath) const
 void TextureEditor::Draw()
 {
     if (!m_Open) return;
-    std::string title = "Texture Editor - " + m_TargetResourcePath.filename().string();
+    const string title = GetDisplayName() + " - " + m_TargetResourcePath.filename().string() +
+        "###" + WStrToStr(m_Name);
     if (ImGui::Begin(title.c_str(), &m_Open))
     {
         // 기존 TextureInspector::OnInspectorGUI 내용 이식

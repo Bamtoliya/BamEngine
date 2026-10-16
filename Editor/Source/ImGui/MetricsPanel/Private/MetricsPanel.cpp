@@ -90,14 +90,14 @@ void MetricsPanel::Update(f32 dt)
 
 void MetricsPanel::DrawToolbar()
 {
-    ImGui::Checkbox("Pause capture", &m_Paused);
+    ImGui::Checkbox(LOCAL_LABEL("Metrics.PauseCapture").c_str(), &m_Paused);
 
     if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("Freeze metrics only; the engine keeps running.");
+        ImGui::SetTooltip("%s", LOCAL_CSTR("Metrics.PauseHint"));
 
     ImGui::SameLine();
 
-    if (ImGui::Button("Reset history"))
+    if (ImGui::Button(LOCAL_LABEL("Metrics.ResetHistory").c_str()))
         ResetHistory();
 }
 
@@ -105,14 +105,14 @@ void MetricsPanel::DrawFrameSummary()
 {
     if (m_SampleCount == 0)
     {
-        ImGui::TextDisabled("No frame samples.");
+        ImGui::TextDisabled("%s", LOCAL_CSTR("Metrics.NoSamples"));
         return;
     }
 
     const f32 averageFPS =
         m_AverageMs > 0.0f ? 1000.0f / m_AverageMs : 0.0f;
 
-    ImGui::Text("Average FPS: %.1f", averageFPS);
+    ImGui::Text("%s", LOCAL_FMT("Metrics.AverageFPS", averageFPS).c_str());
 
     if (ImGui::BeginTable(
         "FrameStatistics",
@@ -121,25 +121,25 @@ void MetricsPanel::DrawFrameSummary()
     {
         ImGui::TableNextRow();
         ImGui::TableNextColumn();
-        ImGui::TextUnformatted("Current frame");
+        ImGui::TextUnformatted(LOCAL_CSTR("Metrics.CurrentFrame"));
         ImGui::TableNextColumn();
         ImGui::Text("%.3f ms", m_CurrentMs);
 
         ImGui::TableNextRow();
         ImGui::TableNextColumn();
-        ImGui::TextUnformatted("Average");
+        ImGui::TextUnformatted(LOCAL_CSTR("Metrics.Average"));
         ImGui::TableNextColumn();
         ImGui::Text("%.3f ms", m_AverageMs);
 
         ImGui::TableNextRow();
         ImGui::TableNextColumn();
-        ImGui::TextUnformatted("Minimum");
+        ImGui::TextUnformatted(LOCAL_CSTR("Metrics.Minimum"));
         ImGui::TableNextColumn();
         ImGui::Text("%.3f ms", m_MinMs);
 
         ImGui::TableNextRow();
         ImGui::TableNextColumn();
-        ImGui::TextUnformatted("Maximum");
+        ImGui::TextUnformatted(LOCAL_CSTR("Metrics.Maximum"));
         ImGui::TableNextColumn();
         ImGui::Text("%.3f ms", m_MaxMs);
 
@@ -148,14 +148,11 @@ void MetricsPanel::DrawFrameSummary()
 
     if (m_TargetFPS > 0)
     {
-        ImGui::Text(
-            "FPS cap: %u  (%.3f ms)",
-            m_TargetFPS,
-            1000.0 / static_cast<f64>(m_TargetFPS));
+        ImGui::Text("%s", LOCAL_FMT("Metrics.FPSCap", m_TargetFPS, 1000.0 / static_cast<f64>(m_TargetFPS)).c_str());
     }
     else
     {
-        ImGui::TextUnformatted("FPS cap: Unlimited");
+        ImGui::TextUnformatted(LOCAL_CSTR("Metrics.FPSUnlimited"));
     }
 }
 
@@ -174,75 +171,52 @@ void MetricsPanel::DrawFrameGraph()
     const f32 scaleMax =
         m_MaxMs > 30.0f ? m_MaxMs * 1.1f : 33.333f;
 
-    ImGui::PlotLines(
-        "##FrameTimeHistory",
-        m_FrameTimes.data(),
-        static_cast<int32>(m_SampleCount),
-        offset,
-        "Frame interval (ms)",
-        0.0f,
-        scaleMax,
-        ImVec2(ImGui::GetContentRegionAvail().x, 130.0f));
+    ImGui::PlotLines("##FrameTimeHistory", m_FrameTimes.data(), static_cast<int32>(m_SampleCount), offset,
+        LOCAL_CSTR("Metrics.FrameInterval"), 0.0f, scaleMax, ImVec2(ImGui::GetContentRegionAvail().x, 130.0f));
 
-    ImGui::Text(
-        "Recent %d frames",
-        static_cast<int32>(m_SampleCount));
+    ImGui::Text("%s", LOCAL_FMT("Metrics.RecentFrames", static_cast<int32>(m_SampleCount)).c_str());
 
     ImGui::PushTextWrapPos(0.0f);
-    ImGui::TextUnformatted(
-        "Includes frame limiting and waits. "
-        "This is not CPU or GPU execution time.");
+    ImGui::TextUnformatted(LOCAL_CSTR("Metrics.FrameTimeHint"));
     ImGui::PopTextWrapPos();
 }
 
 void MetricsPanel::DrawEngineStatus()
 {
-    ImGui::TextUnformatted("Engine state");
+    ImGui::TextUnformatted(LOCAL_CSTR("Metrics.EngineState"));
 
-    const auto text = fmt::format(
-        "Active scenes: {}", m_ActiveSceneCount);
+    const auto text = LOCAL_FMT("Metrics.ActiveScenes", m_ActiveSceneCount);
 
     ImGui::TextUnformatted(text.c_str());
 
-    const auto text2 = fmt::format(
-        "Registered render passes: {}", m_RegisteredPassCount);
+    const auto text2 = LOCAL_FMT("Metrics.RegisteredPasses", m_RegisteredPassCount);
 
     ImGui::TextUnformatted(text2.c_str());
 }
 
 void MetricsPanel::DrawRenderMetrics()
 {
-    ImGui::TextUnformatted("RHI draw commands — previous frame");
+    ImGui::TextUnformatted(LOCAL_CSTR("Metrics.RHIDraws"));
 
     if (!m_RenderMetrics.Available)
     {
-        ImGui::TextDisabled("No completed capture.");
+        ImGui::TextDisabled("%s", LOCAL_CSTR("Metrics.NoCapture"));
         return;
     }
 
     if (!m_RenderMetrics.RenderSucceeded)
     {
-        ImGui::TextColored(
-            ImVec4(1.0f, 0.5f, 0.2f, 1.0f),
-            "Render failed: partial counts");
+        ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.2f, 1.0f), "%s", LOCAL_CSTR("Metrics.RenderFailed"));
     }
 
-    const auto drawCalls = fmt::format(
-        "Draw calls: {}",
-        m_RenderMetrics.GetTotalDrawCalls());
+    const auto drawCalls = LOCAL_FMT("Metrics.DrawCalls", m_RenderMetrics.GetTotalDrawCalls());
 
-    const auto breakdown = fmt::format(
-        "Non-indexed: {} / Indexed: {}",
-        m_RenderMetrics.DrawCalls,
+    const auto breakdown = LOCAL_FMT("Metrics.DrawBreakdown", m_RenderMetrics.DrawCalls,
         m_RenderMetrics.IndexedDrawCalls);
 
-    const auto vertices = fmt::format(
-        "Submitted vertices (non-indexed): {}",
-        m_RenderMetrics.SubmittedVertices);
+    const auto vertices = LOCAL_FMT("Metrics.Vertices", m_RenderMetrics.SubmittedVertices);
 
-    const auto indices = fmt::format(
-        "Submitted indices: {}",
-        m_RenderMetrics.SubmittedIndices);
+    const auto indices = LOCAL_FMT("Metrics.Indices", m_RenderMetrics.SubmittedIndices);
 
     ImGui::TextUnformatted(drawCalls.c_str());
     ImGui::TextUnformatted(breakdown.c_str());
@@ -250,9 +224,7 @@ void MetricsPanel::DrawRenderMetrics()
     ImGui::PushTextWrapPos(0.0f);
     ImGui::TextUnformatted(vertices.c_str());
     ImGui::TextUnformatted(indices.c_str());
-    ImGui::TextUnformatted(
-        "Counts engine RHI draws. Excludes direct ImGui backend "
-        "draws and texture blits.");
+    ImGui::TextUnformatted(LOCAL_CSTR("Metrics.DrawHint"));
     ImGui::PopTextWrapPos();
 }
 
@@ -321,43 +293,27 @@ void MetricsPanel::UpdateResourceMetrics(f32 dt)
 
 void MetricsPanel::DrawResourceMetrics()
 {
-    if (!ImGui::CollapsingHeader(
-        "Resources",
-        ImGuiTreeNodeFlags_DefaultOpen))
+    if (!ImGui::CollapsingHeader(LOCAL_LABEL("Metrics.Resources").c_str(), ImGuiTreeNodeFlags_DefaultOpen))
     {
         return;
     }
 
-    const auto summary = fmt::format(
-        "Loaded: {}   Slots: {}   Reusable: {}",
-        m_ResourceMetrics.ActiveResources,
-        m_ResourceMetrics.TotalSlots,
-        m_ResourceMetrics.FreeSlots);
+    const auto summary = LOCAL_FMT("Metrics.ResourceSummary", m_ResourceMetrics.ActiveResources,
+        m_ResourceMetrics.TotalSlots, m_ResourceMetrics.FreeSlots);
 
     ImGui::PushTextWrapPos(0.0f);
     ImGui::TextUnformatted(summary.c_str());
     ImGui::PopTextWrapPos();
 
-    static constexpr const char* typeNames[] = {
-        "Unknown",
-        "Texture",
-        "Sprite",
-        "Material",
-        "Material Instance",
-        "Shader",
-        "Mesh",
-        "Model",
-        "Animation",
-        "Audio Clip",
-        "Skeleton",
-        "Prefab",
-        "Script",
-        "Scene",
-        "Save"
+    static constexpr const char* typeKeys[] = {
+        "ResourceType.Unknown", "ResourceType.Texture", "ResourceType.Sprite", "ResourceType.Material",
+        "ResourceType.MaterialInstance", "ResourceType.Shader", "ResourceType.Mesh", "ResourceType.Model",
+        "ResourceType.Animation", "ResourceType.AudioClip", "ResourceType.Skeleton", "ResourceType.Prefab",
+        "ResourceType.Script", "ResourceType.Scene", "ResourceType.Save"
     };
 
     static_assert(
-        IM_ARRAYSIZE(typeNames) ==
+        IM_ARRAYSIZE(typeKeys) ==
         Engine::ResourceMetrics::TypeCount);
 
     if (ImGui::BeginTable(
@@ -367,8 +323,8 @@ void MetricsPanel::DrawResourceMetrics()
         ImGuiTableFlags_BordersInnerH |
         ImGuiTableFlags_SizingStretchProp))
     {
-        ImGui::TableSetupColumn("Type");
-        ImGui::TableSetupColumn("Count");
+        ImGui::TableSetupColumn(LOCAL_LABEL("Metrics.Type").c_str());
+        ImGui::TableSetupColumn(LOCAL_LABEL("Metrics.Count").c_str());
         ImGui::TableHeadersRow();
 
         for (std::size_t i = 0;
@@ -385,7 +341,7 @@ void MetricsPanel::DrawResourceMetrics()
             ImGui::TableNextRow();
 
             ImGui::TableNextColumn();
-            ImGui::TextUnformatted(typeNames[i]);
+            ImGui::TextUnformatted(LOCAL_CSTR(typeKeys[i]));
 
             ImGui::TableNextColumn();
 
@@ -396,33 +352,23 @@ void MetricsPanel::DrawResourceMetrics()
         ImGui::EndTable();
     }
 
-    ImGui::TextDisabled("Refresh interval: 0.5 seconds");
+    ImGui::TextDisabled("%s", LOCAL_CSTR("Metrics.RefreshInterval"));
 }
 
 void MetricsPanel::DrawAssetTaskMetrics()
 {
-    if (!ImGui::CollapsingHeader(
-        "Asset tasks",
-        ImGuiTreeNodeFlags_DefaultOpen))
+    if (!ImGui::CollapsingHeader(LOCAL_LABEL("Metrics.AssetTasks").c_str(), ImGuiTreeNodeFlags_DefaultOpen))
     {
         return;
     }
 
-    const auto outstanding = fmt::format(
-        "Outstanding: {}",
-        m_AssetTaskMetrics.Outstanding);
+    const auto outstanding = LOCAL_FMT("Metrics.Outstanding", m_AssetTaskMetrics.Outstanding);
 
-    const auto completed = fmt::format(
-        "Completed: {}",
-        m_AssetTaskMetrics.GetCompleted());
+    const auto completed = LOCAL_FMT("Metrics.Completed", m_AssetTaskMetrics.GetCompleted());
 
-    const auto succeeded = fmt::format(
-        "Succeeded: {}",
-        m_AssetTaskMetrics.Succeeded);
+    const auto succeeded = LOCAL_FMT("Metrics.Succeeded", m_AssetTaskMetrics.Succeeded);
 
-    const auto failed = fmt::format(
-        "Failed: {}",
-        m_AssetTaskMetrics.Failed);
+    const auto failed = LOCAL_FMT("Metrics.Failed", m_AssetTaskMetrics.Failed);
 
     ImGui::TextUnformatted(outstanding.c_str());
     ImGui::TextUnformatted(completed.c_str());
@@ -441,8 +387,6 @@ void MetricsPanel::DrawAssetTaskMetrics()
         ImGui::PopStyleColor();
 
     ImGui::PushTextWrapPos(0.0f);
-    ImGui::TextUnformatted(
-        "Outstanding includes running tasks and results "
-        "not yet collected. Counts cover registered async tasks.");
+    ImGui::TextUnformatted(LOCAL_CSTR("Metrics.TaskHint"));
     ImGui::PopTextWrapPos();
 }

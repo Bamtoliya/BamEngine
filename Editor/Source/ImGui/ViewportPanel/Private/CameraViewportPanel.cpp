@@ -79,7 +79,7 @@ void CameraViewportPanel::DrawCustomOptions()
 {
 	DrawResolutionMenu();
 	DrawRenderTargetMenu();
-	DrawChannelViewButton();
+	DrawChannelViewButton(30.0f * 2.0f + 8.0f);
 	DrawDimensionToggleButton();
 }
 #pragma endregion

@@ -50,6 +50,7 @@ public:
 
 public:
 	const wstring& GetName() const { return m_Name; }
+	virtual string GetDisplayName() const { return WStrToStr(m_Name); }
 	bool IsEnabled() const { return m_Enabled; }
 	void SetEnabled(bool enable) { m_Enabled = enable; }
 	void Toggle() { m_Enabled = !m_Enabled; }
@@ -65,6 +66,7 @@ class ToneMapping : public PostProcess
 {
 public:
 	ToneMapping() : PostProcess(L"Tone Mapping (ACES)") {}
+	string GetDisplayName() const override { return LOCAL("PostProcess.ToneMapping"); }
 	virtual ~ToneMapping() = default;
 
 public:

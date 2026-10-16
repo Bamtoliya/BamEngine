@@ -2,6 +2,7 @@
 
 
 #include "Runtime.h"
+#include "LocalizationManager.h"
 
 namespace Editor
 {

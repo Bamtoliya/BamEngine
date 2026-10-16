@@ -9,7 +9,7 @@ BEGIN(Editor)
 class ConsolePanel : public ImGuiInterface
 {
 public:
-	ConsolePanel() { m_Name = L"Console"; };
+	ConsolePanel() { m_Name = L"Console"; m_DisplayNameKey = "UI_CONSOLE"; };
 	virtual ~ConsolePanel() = default;
 	virtual void Draw() override;
 	virtual void Update(f32 dt) override;

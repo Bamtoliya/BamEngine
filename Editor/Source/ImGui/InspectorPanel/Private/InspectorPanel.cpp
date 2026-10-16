@@ -34,7 +34,7 @@ void InspectorPanel::Draw()
 		}
 		else
 		{
-			ImGui::TextDisabled("No Entity selected.");
+			ImGui::TextDisabled("%s", (LOCAL("Inspector.NoSelection")).c_str());
 		}
 	}
 
@@ -53,7 +53,7 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 
 	if (scene == nullptr)
 	{
-		ImGui::TextDisabled("Entity has no Scene.");
+		ImGui::TextDisabled("%s", (LOCAL("Inspector.NoScene")).c_str());
 		return;
 	}
 
@@ -62,7 +62,7 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 
 	if (!world.valid(handle))
 	{
-		ImGui::TextDisabled("Entity is no longer available.");
+		ImGui::TextDisabled("%s", (LOCAL("Inspector.EntityUnavailable")).c_str());
 		return;
 	}
 
@@ -71,7 +71,7 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 	const auto* registry = Engine::ReflectionRegistry::IsCreated() ?
 		&Engine::ReflectionRegistry::Get().GetRegistry() : nullptr;
 
-	ImGui::TextUnformatted("Components");
+	ImGui::TextUnformatted(LOCAL_CSTR("Inspector.Components"));
 	ImGui::Separator();
 	const std::string entityId = std::to_string(entt::to_integral(entity.GetEntityHandle()));
 
@@ -127,7 +127,7 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 				// 기존 코드의 직접 대입을 표시 전에 반영합니다.
 				if (!transform->SynchronizeRotation())
 				{
-					ImGui::TextDisabled("Invalid rotation was restored.");
+					ImGui::TextDisabled("%s", (LOCAL("Inspector.RotationRestored")).c_str());
 				}
 
 				refreshWorldMatrices |= transform->rotation != previousRotation ||
@@ -157,7 +157,7 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 					registry, &componentSettings)) return false;
 				if (!Engine::UILayout::IsValid(candidate))
 				{
-					ImGui::TextDisabled("Invalid UI layout values were rejected.");
+					ImGui::TextDisabled("%s", (LOCAL("Inspector.LayoutRejected")).c_str());
 					return false;
 				}
 				const T previous = current;
@@ -167,7 +167,7 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 				if (canvas != entt::null && !Engine::UILayout::Build(world, canvas, layouts))
 				{
 					current = previous;
-					ImGui::TextDisabled("The edit would invalidate the canvas layout.");
+					ImGui::TextDisabled("%s", (LOCAL("Inspector.CanvasInvalidated")).c_str());
 					return false;
 				}
 				return true;
@@ -198,7 +198,7 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 				// Reflection의 Euler 대입을 공통 회전 API로 연결합니다.
 				if (!transform->SynchronizeRotation())
 				{
-					ImGui::TextDisabled("Invalid rotation input was rejected.");
+					ImGui::TextDisabled("%s", (LOCAL("Inspector.RotationRejected")).c_str());
 				}
 
 				// 위치와 크기 편집도 월드 행렬에 반영합니다.
@@ -222,15 +222,15 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 
 	if (result == Engine::ComponentVisitResult::InvalidEntity)
 	{
-		ImGui::TextDisabled("Entity is no longer available.");
+		ImGui::TextDisabled("%s", (LOCAL("Inspector.EntityUnavailable")).c_str());
 	}
 	else if (result == Engine::ComponentVisitResult::NotInitialized)
 	{
-		ImGui::TextDisabled("Component reflection is unavailable.");
+		ImGui::TextDisabled("%s", (LOCAL("Inspector.ReflectionUnavailable")).c_str());
 	}
 	else if (componentCount == 0)
 	{
-		ImGui::TextDisabled("No reflected components.");
+		ImGui::TextDisabled("%s", (LOCAL("Inspector.NoReflectedComponents")).c_str());
 	}
 }
 
@@ -263,7 +263,7 @@ void InspectorPanel::DrawAddComponentPopup(Engine::Entity& entity)
 
     if (!Engine::ReflectionRegistry::IsCreated())
     {
-        ImGui::TextDisabled("Component registration is unavailable.");
+        ImGui::TextDisabled("%s", (LOCAL("Inspector.RegistrationUnavailable")).c_str());
         ImGui::EndPopup();
         return;
     }

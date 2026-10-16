@@ -8,7 +8,7 @@
 #pragma region Constructor&Destructor
 GraphPanel::GraphPanel()
 {
-	m_Name = L"Graph";
+	m_Name = L"Graph"; m_DisplayNameKey = "GraphPanel.Title";
 	m_LastDiagnostic = m_Registry.RegisterBuiltins();
 	m_Ready = m_LastDiagnostic.Succeeded();
 	if (m_Ready && ReflectionRegistry::IsCreated())
@@ -68,8 +68,8 @@ void GraphPanel::Draw()
 			ImGui::PushID(static_cast<int>(m_Domain));
 			if (ImGui::BeginTable("##GraphWorkspace", 2, ImGuiTableFlags_Resizable, ImVec2(0.0f, height)))
 			{
-				ImGui::TableSetupColumn("Canvas", ImGuiTableColumnFlags_WidthStretch, 3.0f);
-				ImGui::TableSetupColumn("Properties", ImGuiTableColumnFlags_WidthStretch, 1.0f);
+				ImGui::TableSetupColumn(LOCAL_LABEL("GraphPanel.Canvas").c_str(), ImGuiTableColumnFlags_WidthStretch, 3.0f);
+				ImGui::TableSetupColumn(LOCAL_LABEL("GraphPanel.Properties").c_str(), ImGuiTableColumnFlags_WidthStretch, 1.0f);
 				ImGui::TableNextColumn();
 				DrawCanvas(height);
 				ImGui::TableNextColumn();
@@ -186,16 +186,19 @@ void GraphPanel::DrawNodeMenu()
 	for (const auto& candidate : m_NodeCandidates)
 	{
 		const auto* definition = m_Registry.Find(candidate.Type);
-		if (!definition || !MatchesGraphNodeSearch(*definition, candidate, m_NodeSearch)) continue;
-		any = true;
-		const auto& name = definition->DisplayName.empty() ? candidate.Type : definition->DisplayName;
-		std::string label = definition->Category.empty() ? name : definition->Category + " / " + name;
+		if (!definition) continue;
+		const string name = definition->DisplayName.empty() ? candidate.Type : LOCAL(definition->DisplayName);
+		string label = definition->Category.empty() ? name : LOCAL(definition->Category) + " / " + name;
 		if (!candidate.Pin.empty())
 		{
 			const auto* pin = m_Registry.FindPin(candidate.Type, candidate.Pin);
 			if (!pin) continue;
-			label += " / " + (pin->DisplayName.empty() ? pin->Key : pin->DisplayName);
+			label += " / " + (pin->DisplayName.empty() ? pin->Key : LOCAL(pin->DisplayName));
 		}
+		const string searchText = label + " " + LOCAL(definition->Tooltip);
+		if (!MatchesGraphNodeSearch(*definition, candidate, m_NodeSearch, searchText)) continue;
+		any = true;
+		label += "###Candidate";
 		ImGui::PushID(candidate.Type.c_str());
 		ImGui::PushID(candidate.Pin.c_str());
 		if (ImGui::Selectable(label.c_str(), false, ImGuiSelectableFlags_NoAutoClosePopups) && AddNode(candidate))
@@ -205,7 +208,7 @@ void GraphPanel::DrawNodeMenu()
 			ImGui::BeginTooltip();
 			ImGui::TextUnformatted(candidate.Type.c_str());
 			if (!candidate.Pin.empty()) ImGui::TextUnformatted(candidate.Pin.c_str());
-			if (!definition->Tooltip.empty()) ImGui::TextUnformatted(definition->Tooltip.c_str());
+			if (!definition->Tooltip.empty()) ImGui::TextUnformatted(LOCAL_CSTR(definition->Tooltip));
 			ImGui::EndTooltip();
 		}
 		ImGui::PopID();
@@ -231,7 +234,7 @@ void GraphPanel::DrawProperties()
 		ImGui::TextDisabled("ID: %llu", static_cast<unsigned long long>(node->Id));
 		const auto* definition = m_Registry.Find(node->Type);
 		if (!definition) return;
-		if (!definition->Tooltip.empty()) ImGui::TextWrapped("%s", definition->Tooltip.c_str());
+		if (!definition->Tooltip.empty()) ImGui::TextWrapped("%s", LOCAL_CSTR(definition->Tooltip));
 		ImGui::PushID(std::to_string(node->Id).c_str());
 		for (const auto& pin : definition->Pins)
 		{
@@ -274,7 +277,7 @@ void GraphPanel::DrawInputValue(const GraphNode& node, const GraphPin& pin)
 
 	ImGui::PushID(FindPinId(reference));
 	ImGui::Separator();
-	ImGui::TextUnformatted((pin.DisplayName.empty() ? pin.Key : pin.DisplayName).c_str());
+	ImGui::TextUnformatted((pin.DisplayName.empty() ? pin.Key : LOCAL(pin.DisplayName)).c_str());
 	if (connected) ImGui::TextDisabled("%s", LOCAL_CSTR("GraphPanel.Connected"));
 	if (pin.Type == EGraphPinType::Object)
 	{
@@ -332,7 +335,7 @@ void GraphPanel::DrawDiagnostics()
 	{
 		const string location = fmt::format("{} / {}", diagnostic.Node, diagnostic.Pin);
 		ImGui::TextColored(ImVec4(1.0f, 0.55f, 0.35f, 1.0f), "%s", location.c_str());
-		ImGui::TextWrapped("%s", diagnostic.Message.c_str());
+		ImGui::TextWrapped("%s", LOCAL_CSTR(diagnostic.Message));
 	}
 }
 
@@ -341,7 +344,7 @@ void GraphPanel::DrawStatus()
 	if (!m_LastDiagnostic.Succeeded())
 	{
 		const string message = fmt::format("{} / {}: {}", m_LastDiagnostic.Node,
-			m_LastDiagnostic.Pin, m_LastDiagnostic.Message);
+			m_LastDiagnostic.Pin, LOCAL(m_LastDiagnostic.Message));
 		ImGui::TextColored(ImVec4(1.0f, 0.45f, 0.35f, 1.0f), "%s", message.c_str());
 		if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", message.c_str());
 	}
@@ -383,7 +386,7 @@ GraphDiagnostic GraphPanel::RegisterReflectionNodes(const reflection::Registry& 
 	const auto merged = combined.TryMerge(std::move(incoming));
 	if (!merged.Succeeded())
 		return { EGraphError::InvalidDefinition, 0, {}, 0,
-			"Reflection source conflict: " + merged.Owner + "::" + merged.Member };
+			LOCAL_FMT("GraphPanel.ReflectionConflict", merged.Owner, merged.Member) };
 	auto result = RegisterReflectedGraphNodes(m_Registry, registry);
 	m_LastDiagnostic = result;
 	if (result.Succeeded())

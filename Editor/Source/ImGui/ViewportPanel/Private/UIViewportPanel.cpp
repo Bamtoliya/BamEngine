@@ -1,4 +1,4 @@
-#include "UIViewportPanel.h"
+﻿#include "UIViewportPanel.h"
 #include "Application.h"
 #include "SceneManager.h"
 #include "CoreComponents.h"
@@ -20,16 +20,16 @@ namespace
             left.anchoredPosition == right.anchoredPosition && left.sizeDelta == right.sizeDelta &&
             left.pivot == right.pivot && left.scale == right.scale && left.rotation == right.rotation;
     }
-    const char* UIPointerEventName(Engine::EUIPointerEventType type)
+    const char* UIPointerEventKey(Engine::EUIPointerEventType type)
     {
         switch (type)
         {
-        case Engine::EUIPointerEventType::Enter: return "Enter";
-        case Engine::EUIPointerEventType::Exit: return "Exit";
-        case Engine::EUIPointerEventType::Down: return "Down";
-        case Engine::EUIPointerEventType::Up: return "Up";
-        case Engine::EUIPointerEventType::Click: return "Click";
-        default: return "Cancel";
+        case Engine::EUIPointerEventType::Enter: return "Viewport.PointerEnter";
+        case Engine::EUIPointerEventType::Exit: return "Viewport.PointerExit";
+        case Engine::EUIPointerEventType::Down: return "Viewport.PointerDown";
+        case Engine::EUIPointerEventType::Up: return "Viewport.PointerUp";
+        case Engine::EUIPointerEventType::Click: return "Viewport.PointerClick";
+        default: return "Viewport.PointerCancel";
         }
     }
 }
@@ -98,11 +98,12 @@ void Editor::UIViewportPanel::SetTarget(Scene* scene, entt::entity canvas)
         m_Interaction = std::make_unique<UIEventSystem>(*scene, canvas);
         m_Interaction->OnPointerEvent().AddLambda([this](const UIPointerEvent& event)
         {
-            m_LastUIEvent = std::string(UIPointerEventName(event.type)) + " | Entity " + std::to_string(event.targetId);
+            m_LastUIEvent = event.type;
+            m_LastUIEventTarget = event.targetId;
             if (event.type == EUIPointerEventType::Click) ++m_ClickCount;
         });
     }
-    m_LastUIEvent.clear();
+    m_LastUIEvent.reset();
     m_ClickCount = 0;
     m_Drag = {};
     m_PendingEdit.reset();
@@ -187,14 +188,14 @@ void Editor::UIViewportPanel::DrawCustomOptions()
 {
     DrawCanvasMenu();
     DrawOrderMenu();
-    if (ImGui::Checkbox("Interact", &m_InteractionPreview))
+    if (ImGui::Checkbox(LOCAL_LABEL("Viewport.Interact").c_str(), &m_InteractionPreview))
     {
         m_Drag = {};
         m_PendingEdit.reset();
         m_Panning = false;
         if (m_Interaction) m_Interaction->Cancel();
     }
-    if (ImGui::Button("Fit")) m_FitPending = true;
+    if (ImGui::Button(LOCAL_LABEL("Viewport.Fit").c_str())) m_FitPending = true;
     if (ImGui::Button("100%"))
     {
         m_View.zoom = 1.0f;
@@ -202,36 +203,29 @@ void Editor::UIViewportPanel::DrawCustomOptions()
         if (m_Interaction) m_Interaction->Cancel();
     }
     ImGui::Text("%.0f%%", m_View.zoom * 100.0f);
-    if (ImGui::BeginMenu("Snap"))
+    if (ImGui::BeginMenu(LOCAL_LABEL("Viewport.Snap").c_str()))
     {
-        if (ImGui::Checkbox("Grid", &m_GridSnap) && m_GridSnap) m_PixelSnap = false;
-        if (ImGui::Checkbox("Pixel", &m_PixelSnap) && m_PixelSnap) m_GridSnap = false;
-        ImGui::InputFloat("Grid step (px)", &m_GridStep);
+        if (ImGui::Checkbox(LOCAL_LABEL("Viewport.Grid").c_str(), &m_GridSnap) && m_GridSnap) m_PixelSnap = false;
+        if (ImGui::Checkbox(LOCAL_LABEL("Viewport.Pixel").c_str(), &m_PixelSnap) && m_PixelSnap) m_GridSnap = false;
+        ImGui::InputFloat(LOCAL_LABEL("Viewport.GridStep").c_str(), &m_GridStep);
         if (!std::isfinite(m_GridStep) || m_GridStep <= 0.0f) m_GridStep = 10.0f;
         m_GridStep = std::clamp(m_GridStep, 0.25f, 4096.0f);
-        ImGui::TextDisabled("Hold Alt to bypass snapping.");
+        ImGui::TextDisabled("%s", LOCAL_CSTR("Viewport.BypassSnap"));
         ImGui::EndMenu();
     }
-    if (ImGui::BeginMenu("View"))
+    if (ImGui::BeginMenu(LOCAL_LABEL("Viewport.View").c_str()))
     {
-        ImGui::Checkbox("Grid", &m_ShowGrid);
-        ImGui::Checkbox("Safe area (5% guide)", &m_ShowSafeArea);
-        ImGui::Checkbox("Anchors", &m_ShowAnchors);
+        ImGui::Checkbox(LOCAL_LABEL("Viewport.Grid").c_str(), &m_ShowGrid);
+        ImGui::Checkbox(LOCAL_LABEL("Viewport.SafeArea").c_str(), &m_ShowSafeArea);
+        ImGui::Checkbox(LOCAL_LABEL("Viewport.Anchors").c_str(), &m_ShowAnchors);
         ImGui::EndMenu();
     }
-    if (ImGui::BeginMenu("Channels"))
-    {
-        for (const auto& item : { std::pair{ "RGBA", EViewportChannelView::RGBA },
-            std::pair{ "R", EViewportChannelView::R }, std::pair{ "G", EViewportChannelView::G },
-            std::pair{ "B", EViewportChannelView::B }, std::pair{ "A", EViewportChannelView::A } })
-            if (ImGui::MenuItem(item.first, nullptr, m_ChannelView == item.second)) m_ChannelView = item.second;
-        ImGui::EndMenu();
-    }
+    DrawChannelViewButton();
 }
 
 void Editor::UIViewportPanel::DrawOrderMenu()
 {
-    if (!ImGui::BeginMenu("Order")) return;
+    if (!ImGui::BeginMenu(LOCAL_LABEL("Viewport.Order").c_str())) return;
     entt::entity selected = entt::null;
     auto& history = Application::Get().GetEditHistory();
     if (HasTarget())
@@ -248,7 +242,7 @@ void Editor::UIViewportPanel::DrawOrderMenu()
     }
     if (selected == entt::null)
     {
-        ImGui::TextDisabled("Select a UI element or Canvas.");
+        ImGui::TextDisabled("%s", LOCAL_CSTR("Viewport.OrderSelectionHint"));
         ImGui::EndMenu();
         return;
     }
@@ -257,12 +251,14 @@ void Editor::UIViewportPanel::DrawOrderMenu()
         !SelectionManager::Get().IsPrimarySelectionLocked();
     ImGui::BeginDisabled(!canEdit);
     int value = UILayout::GetZIndex(world, selected);
-    if (ImGui::InputInt("Z-Index", &value, 0, 0) && canEdit) SetZIndex(selected, value);
+    if (ImGui::InputInt(LOCAL_LABEL("Viewport.ZIndex").c_str(), &value, 0, 0) && canEdit) SetZIndex(selected, value);
     const auto current = UILayout::GetZIndex(world, selected);
     constexpr auto minimum = (std::numeric_limits<std::int32_t>::min)();
     constexpr auto maximum = (std::numeric_limits<std::int32_t>::max)();
-    if (ImGui::MenuItem("Z +1", nullptr, false, current < maximum)) SetZIndex(selected, current + 1);
-    if (ImGui::MenuItem("Z -1", nullptr, false, current > minimum)) SetZIndex(selected, current - 1);
+    if (ImGui::MenuItem(LOCAL_LABEL("Viewport.IncreaseZ").c_str(), nullptr, false,
+        current < maximum)) SetZIndex(selected, current + 1);
+    if (ImGui::MenuItem(LOCAL_LABEL("Viewport.DecreaseZ").c_str(), nullptr, false,
+        current > minimum)) SetZIndex(selected, current - 1);
     auto lowest = current;
     auto highest = current;
     std::size_t peers = 0;
@@ -285,13 +281,13 @@ void Editor::UIViewportPanel::DrawOrderMenu()
                 for (const auto entity : parent->children) includePeer(entity);
     }
     ImGui::Separator();
-    if (ImGui::MenuItem("Bring to Front", nullptr, false, peers > 0 && highest < maximum))
+    if (ImGui::MenuItem(LOCAL_LABEL("Viewport.BringToFront").c_str(), nullptr, false, peers > 0 && highest < maximum))
         SetZIndex(selected, highest + 1);
-    if (ImGui::MenuItem("Send to Back", nullptr, false, peers > 0 && lowest > minimum))
+    if (ImGui::MenuItem(LOCAL_LABEL("Viewport.SendToBack").c_str(), nullptr, false, peers > 0 && lowest > minimum))
         SetZIndex(selected, lowest - 1);
     ImGui::EndDisabled();
-    ImGui::TextDisabled(selected == m_TargetCanvas ? "Canvas order within this scene." :
-        "Higher Z renders later among siblings. Children stay with their parent.");
+    const char* hintKey = selected == m_TargetCanvas ? "Viewport.CanvasOrderHint" : "Viewport.ElementOrderHint";
+    ImGui::TextDisabled("%s", LOCAL_CSTR(hintKey));
     ImGui::EndMenu();
 }
 
@@ -314,15 +310,15 @@ void Editor::UIViewportPanel::SetZIndex(entt::entity entity, std::int32_t zIndex
 
 void Editor::UIViewportPanel::DrawCanvasMenu()
 {
-    if (!ImGui::BeginMenu("Canvas")) return;
+    if (!ImGui::BeginMenu(LOCAL_LABEL("Viewport.Canvas").c_str())) return;
     auto* current = SceneManager::Get().GetCurrentScene();
-    if (ImGui::MenuItem("New Canvas", nullptr, false, current != nullptr))
+    if (ImGui::MenuItem(LOCAL_LABEL("Viewport.NewCanvas").c_str(), nullptr, false, current != nullptr))
     {
         auto& canvas = EntityFactory::CreateCanvasEntity(current);
         SetTarget(current, canvas.GetEntityHandle());
         SelectionManager::Get().SetSelectedEntity(&canvas);
     }
-    if (ImGui::MenuItem("Add Image", nullptr, false, HasTarget()))
+    if (ImGui::MenuItem(LOCAL_LABEL("Viewport.AddImage").c_str(), nullptr, false, HasTarget()))
     {
         Entity* parent = m_TargetScene->FindEntity(m_TargetCanvas);
         for (const auto& layout : m_Layouts)
@@ -331,7 +327,7 @@ void Editor::UIViewportPanel::DrawCanvasMenu()
         if (parent)
             SelectionManager::Get().SetSelectedEntity(&EntityFactory::CreateUIImageEntity(m_TargetScene, *parent));
     }
-    if (ImGui::MenuItem("Add Button", nullptr, false, HasTarget()))
+    if (ImGui::MenuItem(LOCAL_LABEL("Viewport.AddButton").c_str(), nullptr, false, HasTarget()))
     {
         Entity* parent = m_TargetScene->FindEntity(m_TargetCanvas);
         for (const auto& layout : m_Layouts)
@@ -346,7 +342,8 @@ void Editor::UIViewportPanel::DrawCanvasMenu()
         for (auto [entity, canvas, id] : scene->GetRegistry().view<CanvasComponent, IDComponent>().each())
         {
             const auto* name = scene->GetRegistry().try_get<NameComponent>(entity);
-            const auto label = WStrToStr(scene->GetName()) + "/" + (name ? WStrToStr(name->name) : "Canvas") +
+            const auto label =
+                WStrToStr(scene->GetName()) + "/" + (name ? WStrToStr(name->name) : LOCAL("Viewport.Canvas")) +
                 "##" + std::to_string(reinterpret_cast<uintptr_t>(scene)) + ":" + std::to_string(id.id);
             if (ImGui::MenuItem(label.c_str(), nullptr, scene == m_TargetScene && entity == m_TargetCanvas))
                 SetTarget(scene, entity);
@@ -361,7 +358,7 @@ void Editor::UIViewportPanel::DrawCanvasMenu()
         auto& canvas = m_TargetScene->GetRegistry().get<CanvasComponent>(m_TargetCanvas);
         const auto size = UILayout::IsValid(canvas) ? canvas.referenceResolution : m_CanvasSize;
         int resolution[] = { int(size.x), int(size.y) };
-        if (ImGui::InputInt2("Resolution", resolution))
+        if (ImGui::InputInt2(LOCAL_LABEL("UI_RESOLUTION").c_str(), resolution))
         {
             CanvasComponent candidate = canvas;
             candidate.referenceResolution = vec2(resolution[0], resolution[1]);
@@ -373,7 +370,7 @@ void Editor::UIViewportPanel::DrawCanvasMenu()
             }
         }
         for (const auto& preset : g_ResolutionPresets)
-            if (ImGui::MenuItem(preset.Name))
+            if (ImGui::MenuItem(LOCAL_LABEL(preset.NameKey).c_str()))
             {
                 if (before && canvas.referenceResolution != vec2(preset.Width, preset.Height))
                 {
@@ -429,24 +426,25 @@ void Editor::UIViewportPanel::DrawCustomViewport()
         drawList->AddImage(ImGuiManager::Get().GetImGuiTextureID(target->GetTexture()), topLeft, bottomRight);
     if (m_ShowGrid) DrawGrid(drawList);
     drawList->AddRect(topLeft, bottomRight, IM_COL32(170, 185, 205, 255), 0.0f, 0, 1.5f);
-    char label[80];
-    snprintf(label, sizeof(label), "Canvas %.0f x %.0f | %.0f%%", m_CanvasSize.x, m_CanvasSize.y, m_View.zoom * 100.0f);
-    drawList->AddText(ImVec2(topLeft.x + 4.0f, topLeft.y - ImGui::GetFontSize() - 5.0f), IM_COL32_WHITE, label);
+    const string label = LOCAL_FMT("Viewport.CanvasSize", m_CanvasSize.x, m_CanvasSize.y, m_View.zoom * 100.0f);
+    drawList->AddText(ImVec2(topLeft.x + 4.0f, topLeft.y - ImGui::GetFontSize() - 5.0f), IM_COL32_WHITE, label.c_str());
     if (m_ShowSafeArea)
         drawList->AddRect(ImPoint(m_View.ToScreen(m_CanvasSize * 0.05f)),
             ImPoint(m_View.ToScreen(m_CanvasSize * 0.95f)), IM_COL32(100, 200, 170, 100));
     if (!m_InteractionPreview) DrawSelection(drawList);
     else
     {
-        const auto status = "Interact | Clicks: " + std::to_string(m_ClickCount) + " | " + m_LastUIEvent;
+        const string eventText = m_LastUIEvent ?
+            LOCAL_FMT("Viewport.PointerEvent", LOCAL(UIPointerEventKey(*m_LastUIEvent)), m_LastUIEventTarget) : "";
+        const string status = LOCAL_FMT("Viewport.InteractionStatus", m_ClickCount, eventText);
         drawList->AddText(ImVec2(origin.x + 12.0f, end.y - 26.0f), IM_COL32(100, 230, 170, 255), status.c_str());
     }
     if (!HasTarget() || !m_LayoutValid)
         drawList->AddText(ImVec2(origin.x + 12.0f, origin.y + 12.0f), IM_COL32(240, 190, 100, 255),
-            !HasTarget() ? "Create a Canvas from the Canvas menu in an open scene." :
-                "Canvas layout is invalid or awaiting render.");
+            !HasTarget() ? LOCAL_CSTR("Viewport.CreateCanvasHint") : LOCAL_CSTR("Viewport.CanvasUnavailable"));
     if (!m_InteractionPreview && SelectionManager::Get().IsPrimarySelectionLocked())
-        drawList->AddText(ImVec2(origin.x + 12.0f, end.y - 26.0f), IM_COL32(100, 240, 140, 255), "Selection Locked");
+        drawList->AddText(ImVec2(origin.x + 12.0f, end.y - 26.0f), IM_COL32(100, 240, 140, 255),
+            LOCAL_CSTR("Viewport.SelectionLocked"));
     drawList->PopClipRect();
 }
 

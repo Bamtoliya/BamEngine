@@ -6,7 +6,7 @@ BEGIN(Editor)
 class ShaderEditor final : public ResourceEditorInterface
 {
 public:
-	ShaderEditor() { m_Name = L"Shader Editor"; }
+	ShaderEditor() { m_Name = L"Shader Editor"; m_DisplayNameKey = "ResourceEditor.ShaderTitle"; }
 	virtual ~ShaderEditor() = default;
 public:
 	virtual bool IsSupported(const std::filesystem::path& assetPath) const override;

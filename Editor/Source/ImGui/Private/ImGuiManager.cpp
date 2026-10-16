@@ -402,6 +402,7 @@ EResult ImGuiManager::CreateDefaultPanels()
 {
 	SceneViewportPanelDesc scenePanelDesc;
 	scenePanelDesc.Name = L"Scene View";
+	scenePanelDesc.DisplayNameKey = "Viewport.SceneTitle";
 	scenePanelDesc.RenderTargetWidth = g_WindowWidth;
 	scenePanelDesc.RenderTargetHeight = g_WindowHeight;
 	scenePanelDesc.IsSceneCamera = false;
@@ -412,6 +413,7 @@ EResult ImGuiManager::CreateDefaultPanels()
 	AddImGuiPanel(viewportPanel);
 	ViewportPanelDesc UIViewportPanelDesc;
 	UIViewportPanelDesc.Name = L"UI View";
+	UIViewportPanelDesc.DisplayNameKey = "Viewport.UITitle";
 	UIViewportPanelDesc.RenderTargetWidth = g_WindowWidth;
 	UIViewportPanelDesc.RenderTargetHeight = g_WindowHeight;
 	UIViewportPanel* uiViewportPanel = new UIViewportPanel();

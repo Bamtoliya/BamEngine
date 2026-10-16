@@ -58,7 +58,8 @@ namespace Editor
         bool m_InteractionPreview = false;
         bool m_InteractionUpdated = false;
         std::unique_ptr<Engine::UIEventSystem> m_Interaction;
-        std::string m_LastUIEvent;
+        std::optional<Engine::EUIPointerEventType> m_LastUIEvent;
+        uint64 m_LastUIEventTarget = 0;
         uint64 m_ClickCount = 0;
 
         enum class DragMode { None, Move, Resize };

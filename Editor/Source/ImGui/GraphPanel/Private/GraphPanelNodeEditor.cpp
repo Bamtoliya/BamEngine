@@ -142,11 +142,11 @@ void GraphPanel::DrawNode(const GraphNode& node)
 	const auto* definition = m_Registry.Find(node.Type);
 	const auto found = GetDocument().Nodes.find(node.Id);
 	if (!definition || found == GetDocument().Nodes.end()) return;
-	const auto& name = definition->DisplayName.empty() ? node.Type : definition->DisplayName;
+	const string name = definition->DisplayName.empty() ? node.Type : LOCAL(definition->DisplayName);
 	float width = std::max(200.0f, ImGui::CalcTextSize(name.c_str()).x);
 	for (const auto& pin : definition->Pins)
 	{
-		width = std::max(width, ImGui::CalcTextSize((pin.DisplayName.empty() ? pin.Key : pin.DisplayName).c_str()).x);
+		width = std::max(width, ImGui::CalcTextSize((pin.DisplayName.empty() ? pin.Key : LOCAL(pin.DisplayName)).c_str()).x);
 		if (pin.Type == EGraphPinType::Float2 || pin.Type == EGraphPinType::Float3 || pin.Type == EGraphPinType::Float4)
 			width = std::max(width, ImGui::GetFontSize() * 20.0f);
 	}
@@ -165,7 +165,7 @@ void GraphPanel::DrawNode(const GraphNode& node)
 	ImNodes::BeginNodeTitleBar();
 	ImGui::TextUnformatted(name.c_str());
 	if (ImGui::IsItemHovered() && !definition->Tooltip.empty())
-		ImGui::SetTooltip("%s", definition->Tooltip.c_str());
+		ImGui::SetTooltip("%s", LOCAL_CSTR(definition->Tooltip));
 	ImGui::Dummy(ImVec2(width, 0.0f));
 	ImNodes::EndNodeTitleBar();
 	for (const auto& pin : definition->Pins)
@@ -178,7 +178,7 @@ void GraphPanel::DrawNode(const GraphNode& node)
 		ImNodes::PushColorStyle(ImNodesCol_PinHovered, PinColor(pin.Type));
 		if (input) ImNodes::BeginInputAttribute(id, shape);
 		else ImNodes::BeginOutputAttribute(id, shape);
-		const auto& label = pin.DisplayName.empty() ? pin.Key : pin.DisplayName;
+		const string label = pin.DisplayName.empty() ? pin.Key : LOCAL(pin.DisplayName);
 		const float indent = input ? 0.0f : std::max(0.0f, width - ImGui::CalcTextSize(label.c_str()).x);
 		if (indent > 0.0f) ImGui::Indent(indent);
 		ImGui::TextUnformatted(label.c_str());
@@ -271,7 +271,7 @@ void GraphPanel::HandleConnections(const ImVec2& origin, bool canvasHovered)
 		GraphPinReference from, to;
 		GetConnectionPins(m_DragPin, second, from, to);
 		const auto result = document.Data.CanConnect(m_Registry, from, to);
-		if (!result.Succeeded()) ImGui::SetTooltip("%s", result.Message.c_str());
+		if (!result.Succeeded()) ImGui::SetTooltip("%s", LOCAL_CSTR(result.Message));
 	}
 	else if (m_DragPin == 0 && ImNodes::IsPinHovered(&second))
 	{
@@ -340,7 +340,7 @@ bool GraphPanel::ReserveEditorIds(std::size_t count)
 	const auto next = GetDocument().NextId;
 	const auto maximum = static_cast<std::uint64_t>(std::numeric_limits<int>::max());
 	if (next > maximum || count > maximum - next + 1)
-		return ApplyResult({ EGraphError::IdExhausted, 0, {}, 0, "Node editor ID space is exhausted." });
+		return ApplyResult({ EGraphError::IdExhausted, 0, {}, 0, "GraphPanel.IdExhausted" });
 	return true;
 }
 

@@ -7,7 +7,7 @@ BEGIN(Editor)
 
 ResourceManagerInspector::ResourceManagerInspector()
 {
-    m_Name = L"Resource Manager";
+    m_Name = L"Resource Manager"; m_DisplayNameKey = "UI_RESOURCE_MANGER_INSPECTOR";
 }
 
 void ResourceManagerInspector::Update(f32 dt)
@@ -69,11 +69,13 @@ void ResourceManagerInspector::Refresh()
 
 void ResourceManagerInspector::RebuildVisibleRows()
 {
+    m_FilterLanguage = LocalizationManager::Get().GetCurrentLanguage();
     m_VisibleRows.clear();
 
     for (size_t index = 0; index < m_Rows.size(); ++index)
     {
-        if (m_Filter.PassFilter(m_Rows[index].SearchText.c_str()))
+        const string searchText = m_Rows[index].SearchText + " " + LOCAL("ResourceType." + m_Rows[index].Type);
+        if (m_Filter.PassFilter(searchText.c_str()))
             m_VisibleRows.push_back(index);
     }
 }
@@ -89,13 +91,11 @@ void ResourceManagerInspector::Draw()
     {
         if (!m_HasSnapshot)
             Refresh();
+        if (m_FilterLanguage != LocalizationManager::Get().GetCurrentLanguage()) RebuildVisibleRows();
 
         DrawToolbar();
 
-        ImGui::Text(
-            "Showing %zu / %zu registered resources",
-            m_VisibleRows.size(),
-            m_Rows.size());
+        ImGui::Text("%s", LOCAL_FMT("ResourceInspector.Showing", m_VisibleRows.size(), m_Rows.size()).c_str());
 
         DrawTable();
     }
@@ -105,22 +105,19 @@ void ResourceManagerInspector::Draw()
 
 void ResourceManagerInspector::DrawToolbar()
 {
-    if (ImGui::Button("Refresh"))
+    if (ImGui::Button(LOCAL_LABEL("EditorCommon.Refresh").c_str()))
         Refresh();
 
     ImGui::SameLine();
-    ImGui::Checkbox("Auto", &m_AutoRefresh);
+    ImGui::Checkbox(LOCAL_LABEL("ResourceInspector.Auto").c_str(), &m_AutoRefresh);
 
     if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("Refresh every 0.5 seconds");
+        ImGui::SetTooltip("%s", LOCAL_CSTR("ResourceInspector.RefreshHint"));
 
     ImGui::SameLine();
     ImGui::SetNextItemWidth(-FLT_MIN);
 
-    if (ImGui::InputTextWithHint(
-        "##ResourceSearch",
-        "Search type, key or path...",
-        m_Filter.InputBuf,
+    if (ImGui::InputTextWithHint("##ResourceSearch", LOCAL_CSTR("ResourceInspector.Search"), m_Filter.InputBuf,
         IM_ARRAYSIZE(m_Filter.InputBuf)))
     {
         m_Filter.Build();
@@ -148,17 +145,13 @@ void ResourceManagerInspector::DrawTable()
 
     ImGui::TableSetupScrollFreeze(0, 1);
 
-    ImGui::TableSetupColumn(
-        "Type", ImGuiTableColumnFlags_WidthFixed, 110.0f);
+    ImGui::TableSetupColumn(LOCAL_LABEL("ResourceInspector.Type").c_str(), ImGuiTableColumnFlags_WidthFixed, 110.0f);
 
-    ImGui::TableSetupColumn(
-        "Key", ImGuiTableColumnFlags_WidthStretch, 1.0f);
+    ImGui::TableSetupColumn(LOCAL_LABEL("ResourceInspector.Key").c_str(), ImGuiTableColumnFlags_WidthStretch, 1.0f);
 
-    ImGui::TableSetupColumn(
-        "Path", ImGuiTableColumnFlags_WidthStretch, 1.5f);
+    ImGui::TableSetupColumn(LOCAL_LABEL("ResourceInspector.Path").c_str(), ImGuiTableColumnFlags_WidthStretch, 1.5f);
 
-    ImGui::TableSetupColumn(
-        "Refs", ImGuiTableColumnFlags_WidthFixed, 55.0f);
+    ImGui::TableSetupColumn(LOCAL_LABEL("ResourceInspector.Refs").c_str(), ImGuiTableColumnFlags_WidthFixed, 55.0f);
 
     ImGui::TableHeadersRow();
 
@@ -188,7 +181,7 @@ void ResourceManagerInspector::DrawRow(const ResourceRow& row)
     ImGui::TableNextRow();
 
     ImGui::TableSetColumnIndex(0);
-    ImGui::TextUnformatted(row.Type.c_str());
+    ImGui::TextUnformatted(LOCAL_CSTR("ResourceType." + row.Type));
 
     ImGui::TableSetColumnIndex(1);
 
@@ -203,38 +196,35 @@ void ResourceManagerInspector::DrawRow(const ResourceRow& row)
     ImGui::GetWindowDrawList()->AddText(
         textPosition,
         ImGui::GetColorU32(ImGuiCol_Text),
-        row.Key.empty() ? "(empty key)" : row.Key.c_str());
+        row.Key.empty() ? LOCAL_CSTR("ResourceInspector.EmptyKey") : row.Key.c_str());
 
     if (ImGui::IsItemHovered())
     {
         ImGui::BeginTooltip();
 
-        ImGui::TextUnformatted("Key:");
+        ImGui::TextUnformatted(LOCAL_CSTR("ResourceInspector.KeyCaption"));
         ImGui::TextUnformatted(row.Key.c_str());
 
         ImGui::Separator();
 
-        ImGui::TextUnformatted("Path:");
+        ImGui::TextUnformatted(LOCAL_CSTR("ResourceInspector.PathCaption"));
         ImGui::TextUnformatted(
-            row.Path.empty() ? "(no path recorded)" : row.Path.c_str());
+            row.Path.empty() ? LOCAL_CSTR("ResourceInspector.NoPath") : row.Path.c_str());
 
         ImGui::Separator();
 
-        ImGui::Text(
-            "Slot: %u / Generation: %u",
-            static_cast<unsigned>(row.SlotIndex),
-            static_cast<unsigned>(row.Generation));
+        ImGui::Text("%s", LOCAL_FMT("ResourceInspector.Slot", static_cast<unsigned>(row.SlotIndex),
+            static_cast<unsigned>(row.Generation)).c_str());
 
         ImGui::EndTooltip();
     }
 
     if (ImGui::BeginPopupContextItem("ResourceActions"))
     {
-        if (ImGui::MenuItem("Copy Key"))
+        if (ImGui::MenuItem(LOCAL_LABEL("ResourceInspector.CopyKey").c_str()))
             ImGui::SetClipboardText(row.Key.c_str());
 
-        if (ImGui::MenuItem(
-            "Copy Path", nullptr, false, !row.Path.empty()))
+        if (ImGui::MenuItem(LOCAL_LABEL("EditorCommon.CopyPath").c_str(), nullptr, false, !row.Path.empty()))
         {
             ImGui::SetClipboardText(row.Path.c_str());
         }
@@ -256,7 +246,7 @@ void ResourceManagerInspector::DrawTextCell(
 {
     if (text.empty())
     {
-        ImGui::TextDisabled("(none)");
+        ImGui::TextDisabled("%s", LOCAL_CSTR("ResourceInspector.None"));
         return;
     }
 

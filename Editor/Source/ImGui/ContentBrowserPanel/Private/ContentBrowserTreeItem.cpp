@@ -41,7 +41,7 @@ bool ContentBrowserTreeItem::DrawNode(
 
 	bool isRenaming = (outRenamingPath == path);
 	std::string label = isRenaming ? "" : (icon + " " + filename);
-	if (path == rootPath && !isRenaming) label = ICON_FA_DATABASE " Assets";
+	if (path == rootPath && !isRenaming) label = ICON_FA_DATABASE " " + LOCAL("ContentBrowser.Assets");
 
 	// 트리 노드 렌더링
 	bool opened = ImGui::TreeNodeEx((void*)std::hash<std::string>{}(path.string()), baseFlags, "%s", label.c_str());
@@ -73,7 +73,7 @@ void ContentBrowserTreeItem::ContextMenu(const std::filesystem::path& path, cons
 	{
 		currentDirectory = path;
 
-		if (ImGui::MenuItem(ICON_FA_PLUS " New Folder"))
+		if (ImGui::MenuItem((ICON_FA_PLUS " " + LOCAL_LABEL("EditorCommon.NewFolder")).c_str()))
 		{
 			std::filesystem::path newFolderPath = path / "NewFolder";
 			int suffix = 1;
@@ -84,7 +84,7 @@ void ContentBrowserTreeItem::ContextMenu(const std::filesystem::path& path, cons
 			std::filesystem::create_directory(newFolderPath);
 		}
 
-		if (ImGui::MenuItem(ICON_FA_PEN " Rename", "F2"))
+		if (ImGui::MenuItem((ICON_FA_PEN " " + LOCAL_LABEL("EditorCommon.Rename")).c_str(), "F2"))
 		{
 			outRenamingPath = path;
 			strncpy(renameBuffer, filename.c_str(), renameBufferSize);
@@ -92,19 +92,20 @@ void ContentBrowserTreeItem::ContextMenu(const std::filesystem::path& path, cons
 
 		ImGui::Separator();
 
-		if (ImGui::MenuItem(ICON_FA_FOLDER_OPEN " Show in Explorer"))
+		if (ImGui::MenuItem((ICON_FA_FOLDER_OPEN " " + LOCAL_LABEL("EditorCommon.ShowInExplorer")).c_str()))
 		{
 			ShellExecuteA(NULL, "open", path.string().c_str(), NULL, NULL, SW_SHOWNORMAL);
 		}
 
-		if (ImGui::MenuItem(ICON_FA_COPY " Copy Path"))
+		if (ImGui::MenuItem((ICON_FA_COPY " " + LOCAL_LABEL("EditorCommon.CopyPath")).c_str()))
 		{
 			ImGui::SetClipboardText(path.string().c_str());
 		}
 
 		ImGui::Separator();
 
-		if (ImGui::MenuItem(ICON_FA_TRASH " Delete", nullptr, false, path != rootPath))
+		if (ImGui::MenuItem((ICON_FA_TRASH " " + LOCAL_LABEL("EditorCommon.Delete")).c_str(), nullptr, false,
+			path != rootPath))
 		{
 			// TODO: 삭제 로직
 			TODO("TreeItem ContextMenu 삭제 로직 만들어야함")

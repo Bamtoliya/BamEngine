@@ -1,6 +1,7 @@
 #include "PropertyDrawerEnTT.h"
 #include "ImGuiManager.h"
 #include <glm/glm.hpp>
+#include <cstring>
 #include <glm/gtc/type_ptr.hpp>
 
 BEGIN(Editor)
@@ -9,7 +10,8 @@ bool PropertyDrawerEnTT::DrawHeaderNode(entt::meta_any& instance, const entt::me
 {
     const char* typeName = type.info().name().data();
     // Simplified header node for EnTT
-    bool isOpen = ImGui::CollapsingHeader(typeName, ImGuiTreeNodeFlags_DefaultOpen);
+    const string header = LOCAL(typeName) + "###" + typeName;
+    bool isOpen = ImGui::CollapsingHeader(header.c_str(), ImGuiTreeNodeFlags_DefaultOpen);
     return isOpen;
 }
 
@@ -19,8 +21,8 @@ bool PropertyDrawerEnTT::DrawPropertyTable(entt::meta_any& instance, const entt:
     
     if (ImGui::BeginTable("PropertyTable", 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_Resizable))
     {
-        ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, 100.0f);
-        ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+        ImGui::TableSetupColumn(LOCAL_LABEL("EditorCommon.Name").c_str(), ImGuiTableColumnFlags_WidthFixed, 100.0f);
+        ImGui::TableSetupColumn(LOCAL_LABEL("UI_VALUE").c_str(), ImGuiTableColumnFlags_WidthStretch);
 
         for (auto [id, data] : type.data())
         {
@@ -35,7 +37,10 @@ bool PropertyDrawerEnTT::DrawPropertyTable(entt::meta_any& instance, const entt:
                 propName = "UnknownProperty";
             }
             ImGui::AlignTextToFramePadding();
-            ImGui::Text("%s", propName);
+            const string displayName = std::strcmp(propName, "UnknownProperty") == 0 ?
+                LOCAL("Inspector.UnknownProperty") : std::strcmp(propName, "Unknown") == 0 ?
+                LOCAL("EditorCommon.Unknown") : LOCAL(propName);
+            ImGui::TextUnformatted(displayName.c_str());
             
             ImGui::TableSetColumnIndex(1);
             ImGui::PushID(propName);
@@ -128,7 +133,7 @@ bool PropertyDrawerEnTT::DrawProperty(entt::meta_any& instance, const entt::meta
     }
     else
     {
-        ImGui::Text("Unsupported type");
+        ImGui::Text("%s", LOCAL_CSTR("Inspector.UnsupportedType"));
     }
 
     return changed;

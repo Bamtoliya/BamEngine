@@ -20,11 +20,16 @@ public:
 	void Close() { m_Open = false; }
 public:
 	const wstring& GetName() const { return m_Name; }
-	void SetName(const wstring& name) { m_Name = name; }
+	void SetName(const wstring& name) { m_Name = name; m_DisplayNameKey.clear(); }
+	virtual string GetDisplayName() const
+	{
+		return m_DisplayNameKey.empty() ? WStrToStr(m_Name) : LOCAL(m_DisplayNameKey);
+	}
 protected:
 	bool m_Open = true;
 	bool m_Focused = false;
 	bool m_Hovered = false;
 	wstring m_Name = L"ImGui Panel";
+	string m_DisplayNameKey;
 };
 END

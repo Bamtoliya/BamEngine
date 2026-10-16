@@ -25,7 +25,7 @@ inline Engine::GraphDiagnostic AddGraphNodeCandidate(Engine::Graph& graph, const
 	{
 		const auto* node = graph.FindNode(source.Node);
 		const auto* pin = node ? registry.FindPin(node->Type, source.Pin) : nullptr;
-		if (!pin) return { Engine::EGraphError::PinNotFound, source.Node, source.Pin, 0, "Source pin is unavailable." };
+		if (!pin) return { Engine::EGraphError::PinNotFound, source.Node, source.Pin, 0, "GraphPanel.SourceUnavailable" };
 		const Engine::GraphPinReference target{ result.Node, candidate.Pin };
 		const bool output = pin->Direction == Engine::EGraphPinDirection::Output;
 		auto connection = pending.Connect(registry, output ? source : target, output ? target : source);
@@ -34,7 +34,7 @@ inline Engine::GraphDiagnostic AddGraphNodeCandidate(Engine::Graph& graph, const
 	}
 	else if (!candidate.Pin.empty())
 	{
-		return { Engine::EGraphError::PinNotFound, 0, candidate.Pin, 0, "A connection candidate requires a source pin." };
+		return { Engine::EGraphError::PinNotFound, 0, candidate.Pin, 0, "GraphPanel.SourceRequired" };
 	}
 	graph = std::move(pending);
 	return result;
@@ -73,7 +73,7 @@ inline std::vector<GraphNodeCandidate> FindGraphNodeCandidates(const Engine::Gra
 }
 
 inline bool MatchesGraphNodeSearch(const Engine::GraphNodeDefinition& definition,
-	const GraphNodeCandidate& candidate, std::string_view search)
+	const GraphNodeCandidate& candidate, std::string_view search, std::string_view localizedText = {})
 {
 	const auto fold = [](unsigned char value)
 	{
@@ -95,7 +95,7 @@ inline bool MatchesGraphNodeSearch(const Engine::GraphNodeDefinition& definition
 		const auto end = search.find_first_of(" \t\r\n");
 		const auto word = search.substr(0, end);
 		if (!contains(definition.Type, word) && !contains(definition.DisplayName, word) &&
-			!contains(definition.Category, word) && !contains(definition.Tooltip, word) &&
+			!contains(definition.Category, word) && !contains(definition.Tooltip, word) && !contains(localizedText, word) &&
 			!(pin && (contains(pin->Key, word) || contains(pin->DisplayName, word)))) return false;
 		if (end == std::string_view::npos) break;
 		search.remove_prefix(end);

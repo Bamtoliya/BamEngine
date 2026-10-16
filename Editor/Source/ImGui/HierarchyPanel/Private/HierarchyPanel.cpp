@@ -233,7 +233,7 @@ bool HierarchyPanel::DrawRenameBox(T* target, ImGuiTreeNodeFlags flags, bool isS
 		strcpy_s(m_RenameBuffer, name.c_str()); // 이름 복사
 	}
 
-	if (ImGui::IsItemHovered()) ImGui::SetTooltip("Rename Scene");
+	if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("Hierarchy.RenameScene"));
 
 	ImGui::PopStyleColor(3);
 	
@@ -917,7 +917,7 @@ void HierarchyPanel::DrawSceneTitle(Scene* scene)
 
 		// (선택 사항) 폰트를 키워서 강조
 		// ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]); 
-		ImGui::Text("Scene: %s", sceneName.c_str());
+		ImGui::Text("%s", LOCAL_FMT("Hierarchy.SceneName", sceneName.c_str()).c_str());
 		// ImGui::PopFont();
 
 		ImGui::SameLine();
@@ -942,7 +942,7 @@ void HierarchyPanel::DrawSceneTitle(Scene* scene)
 			strcpy_s(m_RenameBuffer, sceneName.c_str()); // 이름 복사
 		}
 
-		if (ImGui::IsItemHovered()) ImGui::SetTooltip("Rename Scene");
+		if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("Hierarchy.RenameScene"));
 
 		ImGui::PopStyleColor(3);
 	}
@@ -959,13 +959,13 @@ void HierarchyPanel::DrawSceneContextMenu(Scene* scene)
 		//	//currentScene->CreateLayer(L"New Layer");
 		//}
 
-		if (ImGui::MenuItem("Add Entity"))
+		if (ImGui::MenuItem(LOCAL_LABEL("Hierarchy.AddEntity").c_str()))
 		{
 			EntityFactory::CreateEmptyEntity(scene);
 		}
-		if (ImGui::MenuItem("Add UI Canvas"))
+		if (ImGui::MenuItem(LOCAL_LABEL("Hierarchy.AddCanvas").c_str()))
 			SelectionManager::Get().SetSelectedEntity(&EntityFactory::CreateCanvasEntity(scene));
-		if (ImGui::MenuItem("Add Primitive Entity"))
+		if (ImGui::MenuItem(LOCAL_LABEL("Hierarchy.AddPrimitive").c_str()))
 		{
 			try
 			{
@@ -977,7 +977,7 @@ void HierarchyPanel::DrawSceneContextMenu(Scene* scene)
 				ENGINE_LOG_ERROR("Failed to create Cube: {}", error.what());
 			}
 		}
-		if (ImGui::MenuItem("Add Sprite Entity"))
+		if (ImGui::MenuItem(LOCAL_LABEL("Hierarchy.AddSprite").c_str()))
 		{
 			try
 			{
@@ -1027,13 +1027,8 @@ void HierarchyPanel::DrawEntityHierarchy(Scene* scene)
                 history.Record(std::move(before), SceneEditSnapshot::Capture(*scene), "UI_HISTORY_DELETE");
         }
     }
-    const auto text = [](const char* key, const char* fallback)
-    {
-        auto value = LocalizationManager::Get().GetText(std::string(key));
-        return value.empty() || value == key ? std::string(fallback) : value;
-    };
     if (action.RejectedDrop)
-        m_HierarchyMessage = text("UI_HIERARCHY_BAD_DROP", "This entity is no longer in the current scene.");
+        m_HierarchyMessage = "UI_HIERARCHY_BAD_DROP";
     if (action.Move)
     {
         auto& history = Application::Get().GetEditHistory();
@@ -1052,19 +1047,19 @@ void HierarchyPanel::DrawEntityHierarchy(Scene* scene)
             [[fallthrough]];
         case EntityReparentResult::Unchanged: m_HierarchyMessage.clear(); break;
         case EntityReparentResult::Cycle:
-            m_HierarchyMessage = text("UI_HIERARCHY_CYCLE", "An entity cannot be parented to itself or its descendants.");
+            m_HierarchyMessage = "UI_HIERARCHY_CYCLE";
             break;
         case EntityReparentResult::InvalidTransform:
-            m_HierarchyMessage = text("UI_HIERARCHY_TRANSFORM", "Cannot preserve the world transform under this parent.");
+            m_HierarchyMessage = "UI_HIERARCHY_TRANSFORM";
             break;
         case EntityReparentResult::DepthLimit:
-            m_HierarchyMessage = text("UI_HIERARCHY_DEPTH", "The hierarchy would exceed its depth limit."); break;
+            m_HierarchyMessage = "UI_HIERARCHY_DEPTH"; break;
         default:
-            m_HierarchyMessage = text("UI_HIERARCHY_EDIT_FAILED", "The hierarchy is invalid; no changes were made."); break;
+            m_HierarchyMessage = "UI_HIERARCHY_EDIT_FAILED"; break;
         }
-        if (editLocked) m_HierarchyMessage = text("UI_TRANSFORM_UNLOCK_REPARENT", "Unlock the transform before reparenting.");
+        if (editLocked) m_HierarchyMessage = "UI_TRANSFORM_UNLOCK_REPARENT";
     }
-    if (!m_HierarchyMessage.empty()) ImGui::TextDisabled("%s", m_HierarchyMessage.c_str());
+    if (!m_HierarchyMessage.empty()) ImGui::TextDisabled("%s", LOCAL_CSTR(m_HierarchyMessage));
 }
 
 void HierarchyPanel::DrawEntityName(const wstring& name, bool isSelected)
@@ -1089,7 +1084,7 @@ void HierarchyPanel::DrawGameObjectContextMenu(GameObject* gameObject)
 		}
 
 		// 헤더 (이름 표시)
-		ImGui::TextDisabled("Action: %s", WStrToStr(gameObject->GetName()).c_str());
+		ImGui::TextDisabled("%s", LOCAL_FMT("Hierarchy.Action", WStrToStr(gameObject->GetName()).c_str()).c_str());
 		ImGui::Separator();
 
 		// =========================================================
@@ -1100,9 +1095,9 @@ void HierarchyPanel::DrawGameObjectContextMenu(GameObject* gameObject)
 		if (selectionContext.size() == 1)
 		{
 #ifdef ICON_FA_PEN
-			if (ImGui::MenuItem(ICON_FA_PEN "  Rename", "F2"))
+			if (ImGui::MenuItem((ICON_FA_PEN " " + LOCAL_LABEL("EditorCommon.Rename")).c_str(), "F2"))
 #else
-			if (ImGui::MenuItem("Rename", "F2"))
+			if (ImGui::MenuItem(LOCAL_LABEL("EditorCommon.Rename").c_str(), "F2"))
 #endif
 			{
 				m_RenamingId = (void*)GetNodeID(gameObject); // 리네임 트리거
@@ -1112,9 +1107,9 @@ void HierarchyPanel::DrawGameObjectContextMenu(GameObject* gameObject)
 
 		// [복제] - 다중 선택 지원
 #ifdef ICON_FA_COPY
-		if (ImGui::MenuItem(ICON_FA_COPY "  Duplicate", "Ctrl+D"))
+		if (ImGui::MenuItem((ICON_FA_COPY " " + LOCAL_LABEL("Hierarchy.Duplicate")).c_str(), "Ctrl+D"))
 #else
-		if (ImGui::MenuItem("Duplicate", "Ctrl+D"))
+		if (ImGui::MenuItem(LOCAL_LABEL("Hierarchy.Duplicate").c_str(), "Ctrl+D"))
 #endif
 		{
 			// 선택된 모든 객체 복제 (Clone 함수 필요)
@@ -1129,9 +1124,9 @@ void HierarchyPanel::DrawGameObjectContextMenu(GameObject* gameObject)
 
 		// [삭제] - 다중 선택 지원
 #ifdef ICON_FA_TRASH
-		if (ImGui::MenuItem(ICON_FA_TRASH "  Delete", "Del"))
+		if (ImGui::MenuItem((ICON_FA_TRASH " " + LOCAL_LABEL("EditorCommon.Delete")).c_str(), "Del"))
 #else
-		if (ImGui::MenuItem("Delete", "Del"))
+		if (ImGui::MenuItem(LOCAL_LABEL("EditorCommon.Delete").c_str(), "Del"))
 #endif
 		{
 			// 선택된 모든 객체 삭제 예약
@@ -1150,7 +1145,7 @@ void HierarchyPanel::DrawGameObjectContextMenu(GameObject* gameObject)
 
 		// [활성화 토글]
 		bool isCurrentActive = gameObject->IsActive();
-		if (ImGui::MenuItem("Is Active", nullptr, isCurrentActive))
+		if (ImGui::MenuItem(LOCAL_LABEL("Hierarchy.Active").c_str(), nullptr, isCurrentActive))
 		{
 			bool newState = !isCurrentActive;
 			// 다중 선택 시 모두 같은 상태로 변경
@@ -1163,9 +1158,9 @@ void HierarchyPanel::DrawGameObjectContextMenu(GameObject* gameObject)
 		// [가시성 토글]
 		bool isCurrentVisible = gameObject->IsVisible();
 #ifdef ICON_FA_EYE
-		if (ImGui::MenuItem(ICON_FA_EYE "  Visible", nullptr, isCurrentVisible))
+		if (ImGui::MenuItem((ICON_FA_EYE " " + LOCAL_LABEL("Hierarchy.Visible")).c_str(), nullptr, isCurrentVisible))
 #else
-		if (ImGui::MenuItem("Visible", nullptr, isCurrentVisible))
+		if (ImGui::MenuItem(LOCAL_LABEL("Hierarchy.Visible").c_str(), nullptr, isCurrentVisible))
 #endif
 		{
 			bool newState = !isCurrentVisible;
@@ -1183,9 +1178,9 @@ void HierarchyPanel::DrawGameObjectContextMenu(GameObject* gameObject)
 
 		// [자식 생성] - 여기에 빈 오브젝트 추가
 #ifdef ICON_FA_PLUS
-		if (ImGui::MenuItem(ICON_FA_PLUS "  Create Child Empty"))
+		if (ImGui::MenuItem((ICON_FA_PLUS " " + LOCAL_LABEL("Hierarchy.CreateChild")).c_str()))
 #else
-		if (ImGui::MenuItem("Create Child Empty"))
+		if (ImGui::MenuItem(LOCAL_LABEL("Hierarchy.CreateChild").c_str()))
 #endif
 		{
 			// 새 게임오브젝트 생성 로직 (엔진 구현에 맞게 수정 필요)
@@ -1200,7 +1195,7 @@ void HierarchyPanel::DrawGameObjectContextMenu(GameObject* gameObject)
 		// [루트로 이동] - 부모가 있는 경우에만 표시
 		if (gameObject->GetParent() != nullptr)
 		{
-			if (ImGui::MenuItem("Move to Root"))
+			if (ImGui::MenuItem(LOCAL_LABEL("Hierarchy.MoveToRoot").c_str()))
 			{
 				for (GameObject* obj : selectionContext)
 				{

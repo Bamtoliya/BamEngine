@@ -43,6 +43,7 @@ private:
 
     ImGuiTextFilter m_Filter;
 
+    ELocalizationLanguage m_FilterLanguage = ELocalizationLanguage::Max;
     bool m_AutoRefresh = true;
     bool m_HasSnapshot = false;
     float m_RefreshElapsed = 0.0f;

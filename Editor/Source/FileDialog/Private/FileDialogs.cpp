@@ -56,7 +56,7 @@ vector<wchar> FileDialogs::FilterBuffer(const vector<FileDialogFilter>& filters)
 
 	if (filters.empty())
 	{
-		constexpr wstring_view allFilesFilter = L"All Files (*.*)\0*.*\0";
+		const wstring allFilesFilter = StrToWStr(LOCAL("FileDialog.AllFiles"));
 		constexpr wstring_view pattern = L"*.*";
 		buffer.insert(buffer.end(), allFilesFilter.begin(), allFilesFilter.end());
 		buffer.push_back(L'\0');

@@ -11,7 +11,7 @@ BEGIN(Editor)
 class MetricsPanel : public ImGuiInterface
 {
 public:
-	MetricsPanel() { m_Name = L"Metrics"; }
+	MetricsPanel() { m_Name = L"Metrics"; m_DisplayNameKey = "UI_ENGINE_METRICS_PANEL"; }
 	virtual ~MetricsPanel() override = default;
 	virtual void Draw() override;
 	virtual void Update(f32 dt) override;

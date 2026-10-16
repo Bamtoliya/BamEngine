@@ -10,10 +10,11 @@ bool ModelEditor::IsSupported(const std::filesystem::path& assetPath) const
 void ModelEditor::Draw()
 {
     if (!m_Open) return;
-    std::string title = "Model Editor - " + m_TargetResourcePath.filename().string();
+    const string title = GetDisplayName() + " - " + m_TargetResourcePath.filename().string() +
+        "###" + WStrToStr(m_Name);
     if (ImGui::Begin(title.c_str(), &m_Open))
     {
-        ImGui::Text("Target: %s", m_TargetResourcePath.string().c_str());
+        ImGui::Text("%s", LOCAL_FMT("ResourceEditor.Target", m_TargetResourcePath.string().c_str()).c_str());
     }
     ImGui::End();
 }

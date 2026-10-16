@@ -10,7 +10,7 @@ BEGIN(Editor)
 class HierarchyPanel : public ImGuiInterface
 {
 public:
-	HierarchyPanel() { m_Name = L"Hierarchy Panel"; }
+	HierarchyPanel() { m_Name = L"Hierarchy Panel"; m_DisplayNameKey = "UI_HIERARCHY"; }
 	virtual ~HierarchyPanel() = default;
 public:
 	virtual void Draw() override;

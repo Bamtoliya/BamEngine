@@ -348,7 +348,7 @@ namespace
 		if (error != reflection::PropertyAccessError::None)
 		{
 			const auto message = reflection::ToString(error);
-			ImGui::TextDisabled("Write failed: %.*s", static_cast<int>(message.size()), message.data());
+			ImGui::TextDisabled("%s", LOCAL_FMT("Inspector.WriteFailed", message).c_str());
 			return false;
 		}
 
@@ -468,7 +468,7 @@ namespace Editor
 
 			if (ImGui::IsItemHovered())
 			{
-				ImGui::SetTooltip("Reset %s to %.3f", axisNames[axis], resetValue);
+				ImGui::SetTooltip("%s", LOCAL_FMT("Inspector.AxisReset", axisNames[axis], resetValue).c_str());
 			}
 
 			ImGui::PopStyleColor(3);
@@ -553,7 +553,8 @@ namespace Editor
 
 			if (ImGui::IsItemHovered())
 			{
-				ImGui::SetTooltip(locked ? "Unlock %s" : "Lock %s", axisNames[axis]);
+				const char* tooltipKey = locked ? "Inspector.UnlockAxis" : "Inspector.LockAxis";
+				ImGui::SetTooltip("%s", LOCAL_FMT(tooltipKey, axisNames[axis]).c_str());
 			}
 
 			if (candidate != current)
@@ -570,22 +571,22 @@ namespace Editor
 
 		if (ImGui::BeginPopupContextItem("VectorSettings", ImGuiPopupFlags_MouseButtonRight))
 		{
-			ImGui::TextUnformatted("Edit settings");
+			ImGui::TextUnformatted(LOCAL_CSTR("Inspector.EditSettings"));
 			ImGui::Separator();
 
-			ImGui::Checkbox("Snap", &snapEnabled);
+			ImGui::Checkbox(LOCAL_LABEL("Inspector.Snap").c_str(), &snapEnabled);
 
 			float editedStep = snapStep;
-			if (ImGui::InputFloat("Snap step", &editedStep) &&
+			if (ImGui::InputFloat(LOCAL_LABEL("Inspector.SnapStep").c_str(), &editedStep) &&
 				std::isfinite(editedStep) && editedStep > 0.0f)
 			{
 				snapStep = editedStep;
 			}
 
 			ImGui::Separator();
-			ImGui::TextDisabled("Wheel: change value");
-			ImGui::TextDisabled("Shift + wheel: x10");
-			ImGui::TextDisabled("Axis button / middle click: reset");
+			ImGui::TextDisabled("%s", LOCAL_CSTR("Inspector.WheelHint"));
+			ImGui::TextDisabled("%s", LOCAL_CSTR("Inspector.FastWheelHint"));
+			ImGui::TextDisabled("%s", LOCAL_CSTR("Inspector.AxisResetHint"));
 
 			ImGui::EndPopup();
 		}

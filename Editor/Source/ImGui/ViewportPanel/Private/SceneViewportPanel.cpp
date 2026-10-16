@@ -328,7 +328,7 @@ void SceneViewportPanel::DrawCustomOptions()
 	DrawPostProcessMenu();
 	DrawRenderPassMenu();
 	DrawPickingMenu();
-	DrawChannelViewButton();
+	DrawChannelViewButton(30.0f * 2.0f + 8.0f);
 	DrawDimensionToggleButton();
 }
 
@@ -347,14 +347,15 @@ void SceneViewportPanel::DrawCustomViewport()
 
 void SceneViewportPanel::DrawPickingMenu()
 {
-	if (ImGui::BeginMenu("Picking"))
+	if (ImGui::BeginMenu(LOCAL_LABEL("Viewport.Picking").c_str()))
 	{
-		if (ImGui::MenuItem("GPU ID", nullptr, m_PickingMode == EScenePickingMode::GPUId))
+		if (ImGui::MenuItem(LOCAL_LABEL("Viewport.GPUId").c_str(), nullptr, m_PickingMode == EScenePickingMode::GPUId))
 			m_PickingMode = EScenePickingMode::GPUId;
-		if (ImGui::MenuItem("Ray bounds (broad phase)", nullptr, m_PickingMode == EScenePickingMode::RayBounds))
+		if (ImGui::MenuItem(LOCAL_LABEL("Viewport.RayBounds").c_str(), nullptr,
+			m_PickingMode == EScenePickingMode::RayBounds))
 			m_PickingMode = EScenePickingMode::RayBounds;
 		if (ImGui::IsItemHovered())
-			ImGui::SetTooltip("Tests mesh bounds. Triangle surfaces and sprite transparency are not tested.");
+			ImGui::SetTooltip("%s", LOCAL_CSTR("Viewport.RayBoundsHint"));
 		ImGui::EndMenu();
 	}
 }
@@ -365,7 +366,7 @@ void SceneViewportPanel::DrawSceneRenderTargetMenu()
 {
 	if (ImGui::BeginMenu(LOCAL_CSTR("UI_RENDER_TARGET")))
 	{
-		if (ImGui::MenuItem("FinalRT", nullptr, m_ShowFinalComposed))
+		if (ImGui::MenuItem(LOCAL_LABEL("Viewport.FinalOutput").c_str(), nullptr, m_ShowFinalComposed))
 		{
 			m_ShowFinalComposed = true;
 			m_Grid.Show();
@@ -388,9 +389,9 @@ void SceneViewportPanel::DrawSceneRenderTargetMenu()
 				currentIdx = i;
 		}
 		// 현재 선택이 OwnedRT가 아니면 "Other" 표시
-		const char* preview = currentIdx < shortLabels.size()
-			? shortLabels[currentIdx].c_str() : "Other";
-		if (ImGui::BeginCombo("##RTSelect", preview))
+		const string preview = currentIdx < shortLabels.size()
+			? shortLabels[currentIdx] : LOCAL("EditorCommon.Other");
+		if (ImGui::BeginCombo("##RTSelect", preview.c_str()))
 		{
 			for (int i = 0; i < shortLabels.size(); ++i)
 			{
@@ -408,7 +409,7 @@ void SceneViewportPanel::DrawSceneRenderTargetMenu()
 			ImGui::EndCombo();
 		}
 		// ── 2. 접힌 메뉴: 전체 RT (풀 이름) ──
-		if (ImGui::BeginMenu("All RenderTargets"))
+		if (ImGui::BeginMenu(LOCAL_LABEL("Viewport.AllRenderTargets").c_str()))
 		{
 			auto allNames = RenderTargetManager::Get().GetAllRenderTargetNames();
 			for (const auto& name : allNames)
@@ -433,28 +434,28 @@ void SceneViewportPanel::DrawGizmoMenu()
 {
 	if (ImGui::BeginMenu(LOCAL_CSTR("UI_GIZMO")))
 	{
-		if (ImGui::MenuItem("Translate (W)", "Shift + 1", m_GizmoOperation == ImGuizmo::TRANSLATE))
+		if (ImGui::MenuItem(LOCAL_LABEL("Viewport.Translate").c_str(), "Shift + 1", m_GizmoOperation == ImGuizmo::TRANSLATE))
 			m_GizmoOperation = ImGuizmo::TRANSLATE;
-		if (ImGui::MenuItem("Rotate (E)", "Shift + 2", m_GizmoOperation == ImGuizmo::ROTATE))
+		if (ImGui::MenuItem(LOCAL_LABEL("Viewport.Rotate").c_str(), "Shift + 2", m_GizmoOperation == ImGuizmo::ROTATE))
 			m_GizmoOperation = ImGuizmo::ROTATE;
-		if (ImGui::MenuItem("Scale (R)", "Shift + 3", m_GizmoOperation == ImGuizmo::SCALE))
+		if (ImGui::MenuItem(LOCAL_LABEL("Viewport.ScaleOperation").c_str(), "Shift + 3", m_GizmoOperation == ImGuizmo::SCALE))
 			m_GizmoOperation = ImGuizmo::SCALE;
 		ImGui::Separator();
-		if (ImGui::MenuItem("Local", nullptr, m_GizmoMode == ImGuizmo::LOCAL))
+		if (ImGui::MenuItem(LOCAL_LABEL("Viewport.Local").c_str(), nullptr, m_GizmoMode == ImGuizmo::LOCAL))
 			m_GizmoMode = ImGuizmo::LOCAL;
-		if (ImGui::MenuItem("World", nullptr, m_GizmoMode == ImGuizmo::WORLD))
+		if (ImGui::MenuItem(LOCAL_LABEL("Viewport.World").c_str(), nullptr, m_GizmoMode == ImGuizmo::WORLD))
 			m_GizmoMode = ImGuizmo::WORLD;
 
 		ImGui::Separator();
-		if (ImGui::MenuItem("Snap to Grid", nullptr, m_GizmoUseSnap))
+		if (ImGui::MenuItem(LOCAL_LABEL("Viewport.SnapToGrid").c_str(), nullptr, m_GizmoUseSnap))
 			m_GizmoUseSnap = !m_GizmoUseSnap;
-		if (ImGui::MenuItem("Show Bounds", nullptr, m_GizmoShowBounds))
+		if (ImGui::MenuItem(LOCAL_LABEL("Viewport.ShowBounds").c_str(), nullptr, m_GizmoShowBounds))
 			m_GizmoShowBounds = !m_GizmoShowBounds;
 		if (m_GizmoUseSnap)
 		{
-			ImGui::InputFloat3("Snap Translation", glm::value_ptr(m_GizmoSnapTranslation));
-			ImGui::InputFloat3("Snap Rotation", glm::value_ptr(m_GizmoSnapRotation));
-			ImGui::InputFloat3("Snap Scale", glm::value_ptr(m_GizmoSnapScale));
+			ImGui::InputFloat3(LOCAL_LABEL("Viewport.SnapTranslation").c_str(), glm::value_ptr(m_GizmoSnapTranslation));
+			ImGui::InputFloat3(LOCAL_LABEL("Viewport.SnapRotation").c_str(), glm::value_ptr(m_GizmoSnapRotation));
+			ImGui::InputFloat3(LOCAL_LABEL("Viewport.SnapScale").c_str(), glm::value_ptr(m_GizmoSnapScale));
 		}
 		ImGui::EndMenu();
 	}
@@ -464,9 +465,9 @@ void SceneViewportPanel::DrawDebugMenu()
 {
 	if (ImGui::BeginMenu(LOCAL_CSTR("UI_DEBUG")))
 	{
-		ImGui::MenuItem("Show Grid", nullptr, m_Grid.GetVisible());
+		ImGui::MenuItem(LOCAL_LABEL("Viewport.ShowGrid").c_str(), nullptr, m_Grid.GetVisible());
 #ifdef _DEBUG
-		ImGui::MenuItem("Show Collider", nullptr, m_DebugRenderer.GetDrawCollidersPtr());
+		ImGui::MenuItem(LOCAL_LABEL("Viewport.ShowCollider").c_str(), nullptr, m_DebugRenderer.GetDrawCollidersPtr());
 #endif
 		ImGui::EndMenu();
 	}
@@ -629,7 +630,7 @@ void SceneViewportPanel::DrawImGuizmo()
 	{
 		if (TransformPropertyEditor::ApplyWorldMatrix(world, entity, worldMatrix, editMode))
 			history.Record(std::move(before), SceneEditSnapshot::Capture(*scene, targets), "UI_HISTORY_TRANSFORM", true);
-		else ImGui::SetTooltip("Transform edit rejected: the result cannot be represented by local TRS.");
+		else ImGui::SetTooltip("%s", LOCAL_CSTR("Viewport.TransformRejected"));
 	}
 
 	ImGui::PopID();
@@ -1010,11 +1011,12 @@ void SceneViewportPanel::DrawSelectionLocked()
 		);
 		// ─── 2. 가독성을 위한 그림자/배경 (선택 사항) ───
 		// 검은색 그림자를 살짝 깔아주면 밝은 배경에서도 잘 보입니다.
-		drawList->AddText(ImVec2(textPos.x + 1, textPos.y + 1), IM_COL32(0, 0, 0, 200), "Selection Locked");
+		drawList->AddText(ImVec2(textPos.x + 1, textPos.y + 1), IM_COL32(0, 0, 0, 200),
+			LOCAL_CSTR("Viewport.SelectionLocked"));
 		// ─── 3. 초록색 텍스트 출력 ───
 		// 밝은 초록색 (Green)
 		ImU32 textColor = IM_COL32(50, 255, 50, 255);
-		drawList->AddText(textPos, textColor, "Selection Locked");
+		drawList->AddText(textPos, textColor, LOCAL_CSTR("Viewport.SelectionLocked"));
 	}
 }
 #pragma endregion

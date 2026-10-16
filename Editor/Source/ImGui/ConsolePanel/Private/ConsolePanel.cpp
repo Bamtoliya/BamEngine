@@ -75,7 +75,7 @@ void ConsolePanel::DrawOptions()
         ClearLog();
 
     if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("Clear console history");
+        ImGui::SetTooltip("%s", LOCAL_CSTR("Console.ClearHistory"));
 
     ImGui::SameLine();
 
@@ -105,8 +105,8 @@ void ConsolePanel::DrawOptions()
         ImGui::SetTooltip(
             "%s",
             m_AutoScroll
-            ? "Auto-scroll: ON"
-            : "Auto-scroll: OFF");
+            ? LOCAL_CSTR("Console.AutoScrollOn")
+            : LOCAL_CSTR("Console.AutoScrollOff"));
     }
 
     ImGui::SameLine();
@@ -124,19 +124,16 @@ void ConsolePanel::DrawLevelFilter()
             ++selectedCount;
     }
 
-    const auto preview = fmt::format(
-        "Levels ({}/{})",
-        selectedCount,
-        m_ShowLevels.size());
+    const auto preview = LOCAL_FMT("Console.Levels", selectedCount, m_ShowLevels.size());
 
     if (ImGui::BeginCombo("##LogLevels", preview.c_str()))
     {
-        if (ImGui::Button("All"))
+        if (ImGui::Button(LOCAL_LABEL("EditorCommon.All").c_str()))
             m_ShowLevels.fill(true);
 
         ImGui::SameLine();
 
-        if (ImGui::Button("None"))
+        if (ImGui::Button(LOCAL_LABEL("EditorCommon.None").c_str()))
             m_ShowLevels.fill(false);
 
         ImGui::Separator();
@@ -149,7 +146,7 @@ void ConsolePanel::DrawLevelFilter()
                 ImGuiCol_Text, LevelColor(level));
 
             ImGui::Checkbox(
-                LevelName(level), &m_ShowLevels[i]);
+                LOCAL_LABEL("Console.Level." + std::string(LevelName(level))).c_str(), &m_ShowLevels[i]);
 
             ImGui::PopStyleColor();
         }
@@ -162,10 +159,7 @@ void ConsolePanel::DrawSearch()
 {
     ImGui::SetNextItemWidth(-1.0f);
 
-    if (ImGui::InputTextWithHint(
-        "##ConsoleSearch",
-        "Search...",
-        m_Filter.InputBuf,
+    if (ImGui::InputTextWithHint("##ConsoleSearch", LOCAL_CSTR("EditorCommon.Search"), m_Filter.InputBuf,
         IM_ARRAYSIZE(m_Filter.InputBuf)))
     {
         m_Filter.Build();
@@ -174,11 +168,7 @@ void ConsolePanel::DrawSearch()
 
 void ConsolePanel::DrawStatus()
 {
-    const auto status = fmt::format(
-        "Visible: {} / {}   Dropped: {}   Expired: {}",
-        m_VisibleIndices.size(),
-        m_Items.size(),
-        m_DroppedCount,
+    const auto status = LOCAL_FMT("Console.Status", m_VisibleIndices.size(), m_Items.size(), m_DroppedCount,
         m_EvictedCount);
 
     // 패널이 좁아지면 상태 텍스트는 줄바꿈합니다.
@@ -253,7 +243,7 @@ void ConsolePanel::DrawLogItem(const ConsoleItem& item)
         item.Entry.Line);
 
     ImGui::TextUnformatted(source.c_str());
-    ImGui::TextUnformatted("Right-click to copy message");
+    ImGui::TextUnformatted(LOCAL_CSTR("Console.CopyHint"));
 
     ImGui::PopTextWrapPos();
     ImGui::EndTooltip();

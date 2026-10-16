@@ -2,6 +2,7 @@
 
 #include "ImGuiInterface.h"
 #include "Graph.h"
+#include "GraphNodePalette.h"
 #include "GraphReflection.h"
 #include "GraphExecutor.h"
 
@@ -57,6 +58,8 @@ private:
 	void UpdateExecution();
 	void InvalidateExecution();
 	static std::string TraceValueText(const Engine::GraphValue& value);
+	const Engine::GraphValue* FindObservedValue(const Engine::GraphPinReference& pin) const;
+	void PrepareNodeMenu(Engine::GraphPinReference source = {});
 	void DrawNodeMenu();
 	void DrawProperties();
 	void DrawInputValue(const Engine::GraphNode& node, const Engine::GraphPin& pin);
@@ -72,8 +75,9 @@ private:
 	void SuspendDocument();
 	void DrawCanvas(float height);
 	void DrawNode(const Engine::GraphNode& node);
+	void DrawPinValue(const Engine::GraphNode& node, const Engine::GraphPin& pin, float width);
 	void DrawLinks();
-	void HandleConnections();
+	void HandleConnections(const ImVec2& origin, bool canvasHovered);
 	void ReadSelection();
 	bool ReserveEditorIds(std::size_t count);
 	int FindPinId(const Engine::GraphPinReference& pin) const;
@@ -87,7 +91,7 @@ private:
 private:
 	GraphDocument& GetDocument();
 	const GraphDocument& GetDocument() const;
-	void AddNode(const std::string& type);
+	bool AddNode(const GraphNodeCandidate& candidate);
 	void DeleteSelection();
 	void RefreshValidation();
 	bool ApplyResult(Engine::GraphDiagnostic result);
@@ -115,6 +119,13 @@ private:
 
 	ImVec2 m_AddPosition = { 40.0f, 40.0f };
 	int m_DragPin = 0;
+	Engine::GraphPinReference m_AddSource;
+	std::vector<GraphNodeCandidate> m_NodeCandidates;
+	char m_NodeSearch[256] = {};
+	bool m_NodeMenuActive = false;
+	bool m_FocusNodeSearch = false;
+	bool m_OpenNodePopup = false;
+	std::unordered_map<Engine::GraphNodeId, std::unordered_map<std::string, Engine::GraphValue>> m_ObservedValues;
 #pragma endregion
 };
 

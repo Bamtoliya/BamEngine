@@ -67,10 +67,10 @@ EResult ToneMapping::SubmitPass(f32 dt, Engine::RenderPassID passID, const wstri
 void ToneMapping::DrawImGuiOptions()
 {
 	ImGui::SetNextItemWidth(160.f);
-	ImGui::SliderFloat("Exposure", &m_Params.exposure, 0.1f, 5.0f, "%.2f");
+	ImGui::SliderFloat(LOCAL_LABEL("PostProcess.Exposure").c_str(), &m_Params.exposure, 0.1f, 5.0f, "%.2f");
 	ImGui::SetNextItemWidth(160.f);
-	ImGui::SliderFloat("Gamma", &m_Params.gamma, 1.0f, 3.0f, "%.2f");
-	if (ImGui::Button("Reset", ImVec2(-1, 0)))
+	ImGui::SliderFloat(LOCAL_LABEL("PostProcess.Gamma").c_str(), &m_Params.gamma, 1.0f, 3.0f, "%.2f");
+	if (ImGui::Button(LOCAL_LABEL("EditorCommon.Reset").c_str(), ImVec2(-1, 0)))
 	{
 		m_Params.exposure = 1.0f;
 		m_Params.gamma = 2.2f;
@@ -121,14 +121,14 @@ void PostProcessChain::ExecuteChain(f32 dt, const std::vector<Engine::RenderPass
 
 void PostProcessChain::DrawImGuiMenu()
 {
-	if (ImGui::BeginMenu("Post FX"))
+	if (ImGui::BeginMenu(LOCAL_LABEL("UI_POST_FX").c_str()))
 	{
-		ImGui::SeparatorText("Effects");
+		ImGui::SeparatorText(LOCAL_CSTR("PostProcess.Effects"));
 
 		for (int i = 0; i < (int)m_Effects.size(); ++i)
 		{
 			auto* effect = m_Effects[i];
-			string effectName = WStrToStr(effect->GetName());
+			const string effectName = effect->GetDisplayName();
 			string checkboxID = "##PPEnabled_" + std::to_string(i);
 
 			bool enabled = effect->IsEnabled();
@@ -140,7 +140,8 @@ void PostProcessChain::DrawImGuiMenu()
 
 			if (enabled)
 			{
-				if (ImGui::BeginMenu(effectName.c_str()))
+				const string menuLabel = effectName + "###PP_" + std::to_string(i);
+				if (ImGui::BeginMenu(menuLabel.c_str()))
 				{
 					effect->DrawImGuiOptions();
 					ImGui::EndMenu();

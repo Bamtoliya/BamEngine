@@ -13,7 +13,7 @@ BEGIN(Editor)
 class InspectorPanel final : public ImGuiInterface
 {
 public:
-    InspectorPanel() = default;
+    InspectorPanel() { m_Name = L"Inspector"; m_DisplayNameKey = "UI_INSPECTOR"; }
     virtual ~InspectorPanel() = default;
 
     void Draw() override;

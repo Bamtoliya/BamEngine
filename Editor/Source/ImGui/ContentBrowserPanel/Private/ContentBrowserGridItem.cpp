@@ -130,13 +130,13 @@ void ContentBrowserGridItem::ContextMenu(const std::filesystem::path& path, std:
 	std::string filenameString = path.filename().string();
 	if (ImGui::BeginPopupContextItem())
 	{
-		if (ImGui::MenuItem(ICON_FA_PEN " Rename", "F2"))
+		if (ImGui::MenuItem((ICON_FA_PEN " " + LOCAL_LABEL("EditorCommon.Rename")).c_str(), "F2"))
 		{
 			outRenamingPath = path;
 			strncpy(renameBuffer, filenameString.c_str(), renameBufferSize);
 		}
 
-		if (ImGui::MenuItem(ICON_FA_COPY " Copy Path", "Ctrl+C"))
+		if (ImGui::MenuItem((ICON_FA_COPY " " + LOCAL_LABEL("EditorCommon.CopyPath")).c_str(), "Ctrl+C"))
 		{
 			ImGui::SetClipboardText(path.string().c_str());
 		}
@@ -161,7 +161,7 @@ void ContentBrowserGridItem::ContextMenu(const std::filesystem::path& path, std:
 
 		ImGui::Separator();
 
-		if (ImGui::MenuItem(ICON_FA_TRASH " Delete"))
+		if (ImGui::MenuItem((ICON_FA_TRASH " " + LOCAL_LABEL("EditorCommon.Delete")).c_str()))
 		{
 			// TODO: 삭제 로직
 			TODO("GridItem Context Menu 삭제 로직 만들어야함")
@@ -189,23 +189,23 @@ void ContentBrowserGridItem::ToolTip(const std::filesystem::directory_entry& dir
 
 		if (directoryEntry.is_directory())
 		{
-			ImGui::Text("Type: Folder");
+			ImGui::Text("%s", LOCAL_CSTR("ContentBrowser.FolderType"));
 		}
 		else
 		{
 			std::string ext = path.extension().string();
 			for (auto& c : ext) c = tolower(c);
-			ImGui::Text("Type: %s File", ext.c_str());
+			ImGui::Text("%s", LOCAL_FMT("ContentBrowser.FileType", ext.c_str()).c_str());
 
 			try
 			{
 				uintmax_t fileSize = std::filesystem::file_size(path);
 				if (fileSize < 1024)
-					ImGui::Text("Size: %ju Bytes", fileSize);
+					ImGui::Text("%s", LOCAL_FMT("ContentBrowser.SizeBytes", fileSize).c_str());
 				else if (fileSize < 1024 * 1024)
-					ImGui::Text("Size: %ju KB", fileSize / 1024);
+					ImGui::Text("%s", LOCAL_FMT("ContentBrowser.SizeKB", fileSize / 1024).c_str());
 				else
-					ImGui::Text("Size: %.2f MB", (float)fileSize / (1024.0f * 1024.0f));
+					ImGui::Text("%s", LOCAL_FMT("ContentBrowser.SizeMB", (float)fileSize / (1024.0f * 1024.0f)).c_str());
 			}
 			catch (...) {}
 		}
@@ -283,7 +283,7 @@ void ContentBrowserGridItem::DrawNameBox(const std::filesystem::directory_entry&
 	std::string typeStr = "";
 	if (directoryEntry.is_directory())
 	{
-		typeStr = "Folder";
+		typeStr = LOCAL("ContentBrowser.Folder");
 	}
 	else
 	{
@@ -355,7 +355,7 @@ void ContentBrowserGridItem::ContextMenu_Material(const std::filesystem::path& p
 	// .bammat 전용: Material Instance 생성
 	if (ext == ".bammat")
 	{
-		if (ImGui::MenuItem(ICON_FA_CLONE " Create Material Instance"))
+		if (ImGui::MenuItem((ICON_FA_CLONE " " + LOCAL_LABEL("ContentBrowser.CreateMaterialInstance")).c_str()))
 		{
 			std::filesystem::path instPath = path;
 			instPath.replace_extension(".bammatinst");
@@ -386,7 +386,7 @@ void ContentBrowserGridItem::ContextMenu_Material(const std::filesystem::path& p
 	// .bammatinst 전용: Base Material 열기 등
 	if (ext == ".bammatinst")
 	{
-		if (ImGui::MenuItem(ICON_FA_LINK " Open Base Material"))
+		if (ImGui::MenuItem((ICON_FA_LINK " " + LOCAL_LABEL("ContentBrowser.OpenBaseMaterial")).c_str()))
 		{
 			// TODO: Base Material 파일로 포커스 이동
 		}

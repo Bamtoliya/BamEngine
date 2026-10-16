@@ -111,7 +111,7 @@ void ToolBar::DrawFileMenu()
 void ToolBar::ImportAsset()
 {
 	wstring filePath;
-	if (!FileDialogs::OpenFileDialog(filePath, { {L"Asset Files", L""}}, filePath))
+	if (!FileDialogs::OpenFileDialog(filePath, { {StrToWStr(LOCAL("FileDialog.AssetFiles")), L""}}, filePath))
 		return;
 	AssetManager::Get().Import(filePath, filePath);
 	//static_cast<ContentBrowserPanel*>(ImGuiManager::Get().GetImGuiPanel(L"Content Browser"))->RequestRefresh();
@@ -120,7 +120,7 @@ void ToolBar::ImportAsset()
 void ToolBar::LoadResourceFile()
 {
 	wstring filePath;
-	if (!FileDialogs::OpenFileDialog(filePath, { {L"Resource Files", L""} }, filePath))
+	if (!FileDialogs::OpenFileDialog(filePath, { {StrToWStr(LOCAL("FileDialog.ResourceFiles")), L""} }, filePath))
 		return;
 	ResourceManager::Get().LoadFile(filePath);
 }
@@ -202,7 +202,8 @@ void ToolBar::NewScene()
 void ToolBar::SaveScene()
 {
 	wstring filePath;
-	if (!FileDialogs::SaveFileDialog(filePath, { {L"Scene Files (*.json)", L"*.json"} }, L"NewScene.json", L"json"))
+	if (!FileDialogs::SaveFileDialog(filePath, { {StrToWStr(LOCAL("FileDialog.SceneFiles")), L"*.json"} },
+		L"NewScene.json", L"json"))
 		return;
 
 	archive::JsonArchive ar;
@@ -217,7 +218,7 @@ void ToolBar::SaveScene()
 void ToolBar::LoadScene()
 {
 	wstring filePath;
-	if (!FileDialogs::OpenFileDialog(filePath, { {L"Scene Files (*.json)", L"*.json"} }))
+	if (!FileDialogs::OpenFileDialog(filePath, { {StrToWStr(LOCAL("FileDialog.SceneFiles")), L"*.json"} }))
 		return;
 
 	archive::JsonArchive ar;
@@ -241,29 +242,32 @@ void ToolBar::DrawWindowMenu()
 {
 	if (ImGui::BeginMenu(LOCAL_CSTR("UI_WINDOW")))
 	{
-		if (ImGui::MenuItem("Display Settings"))
+		if (ImGui::MenuItem(LOCAL_LABEL("ToolBar.DisplaySettings").c_str()))
 		{
 			m_DisplaySettingsWindow = !m_DisplaySettingsWindow;
 		}
 
-		if (ImGui::MenuItem("New Viewport Panel"))
+		if (ImGui::MenuItem(LOCAL_LABEL("ToolBar.NewViewportPanel").c_str()))
 		{
 			AddNewViewportPanel();
 		}
 
 		ImGui::Separator();
 
-		if (ImGui::BeginMenu("Panels"))
+		if (ImGui::BeginMenu(LOCAL_LABEL("ToolBar.Panels").c_str()))
 		{
 			const auto& panels = ImGuiManager::Get().GetImGuiPanels();
 
 			for (const auto& panel : panels)
 			{
 				bool IsOpen = panel->IsOpen();
-				if (ImGui::MenuItem(WStrToStr(panel->GetName()).c_str(), nullptr, &IsOpen))
+				ImGui::PushID(panel);
+				const string label = panel->GetDisplayName() + "###Panel";
+				if (ImGui::MenuItem(label.c_str(), nullptr, &IsOpen))
 				{
 					panel->SetOpen(IsOpen);
 				}
+				ImGui::PopID();
 			}
 
 
@@ -279,7 +283,7 @@ void ToolBar::DrawWindowMenu()
 }
 void ToolBar::DrawDisplaySettingsWindow()
 {
-	if (ImGui::Begin("Display Settings", &m_DisplaySettingsWindow)) // 창 이름
+	if (ImGui::Begin(LOCAL_LABEL("ToolBar.DisplaySettings").c_str(), &m_DisplaySettingsWindow)) // 창 이름
 	{
 		static int width = g_WindowWidth;
 		static int height = g_WindowHeight;
@@ -288,13 +292,13 @@ void ToolBar::DrawDisplaySettingsWindow()
 		// 현재 상태 가져오기 (처음 한 번만 동기화하거나, 매번 갱신하거나 선택)
 		// 여기서는 UI 조작 값을 우선하도록 단순화했습니다.
 
-		ImGui::Text("Resolution");
-		ImGui::InputInt("Width", &width);
-		ImGui::InputInt("Height", &height);
+		ImGui::Text("%s", LOCAL_CSTR("UI_RESOLUTION"));
+		ImGui::InputInt(LOCAL_LABEL("EditorCommon.Width").c_str(), &width);
+		ImGui::InputInt(LOCAL_LABEL("EditorCommon.Height").c_str(), &height);
 
-		ImGui::Checkbox("Fullscreen", &isFullscreen);
+		ImGui::Checkbox(LOCAL_LABEL("ToolBar.Fullscreen").c_str(), &isFullscreen);
 
-		if (ImGui::Button("Apply Resolution"))
+		if (ImGui::Button(LOCAL_LABEL("ToolBar.ApplyResolution").c_str()))
 		{
 			// 실제 적용
 			Application::Get().SetResolution(width, height, isFullscreen);
@@ -304,7 +308,7 @@ void ToolBar::DrawDisplaySettingsWindow()
 
 		// [옵션] UI 스케일 조절 (4K 모니터 대응용)
 		static float uiScale = 1.0f;
-		if (ImGui::DragFloat("UI Scale", &uiScale, 0.01f, 0.5f, 3.0f))
+		if (ImGui::DragFloat(LOCAL_LABEL("ToolBar.UIScale").c_str(), &uiScale, 0.01f, 0.5f, 3.0f))
 		{
 			ImGui::GetIO().FontGlobalScale = uiScale; // 간단한 스케일링 방법
 		}
@@ -312,7 +316,7 @@ void ToolBar::DrawDisplaySettingsWindow()
 		ImGui::Separator();
 		static int32 targetFPS = TimeManager::Get().GetTargetFPS();
 		ImGui::DragInt("FPS", &targetFPS);
-		if (ImGui::Button("Apply FPS"))
+		if (ImGui::Button(LOCAL_LABEL("ToolBar.ApplyFPS").c_str()))
 		{
 			TimeManager::Get().SetTargetFPS(targetFPS);
 		}
@@ -322,7 +326,7 @@ void ToolBar::DrawDisplaySettingsWindow()
 void ToolBar::AddNewViewportPanel()
 {
 	m_newViewportDesc = ViewportPanelDesc();
-	strcpy_s(m_NewViewportNameBuf, "New Viewport");
+	strcpy_s(m_NewViewportNameBuf, LOCAL_CSTR("Viewport.NewName"));
 	m_ShowNewViewportPopup = true;
 }
 void ToolBar::DrawNewViewportPopup()
@@ -334,9 +338,9 @@ void ToolBar::DrawNewViewportPopup()
 	}
 	if (ImGui::BeginPopup("NewViewportPopup"))
 	{
-		ImGui::InputText("Name", m_NewViewportNameBuf, sizeof(m_NewViewportNameBuf));
-		ImGui::InputInt("Width", (int*)&m_newViewportDesc.RenderTargetWidth);
-		ImGui::InputInt("Height", (int*)&m_newViewportDesc.RenderTargetHeight);
+		ImGui::InputText(LOCAL_LABEL("EditorCommon.Name").c_str(), m_NewViewportNameBuf, sizeof(m_NewViewportNameBuf));
+		ImGui::InputInt(LOCAL_LABEL("EditorCommon.Width").c_str(), (int*)&m_newViewportDesc.RenderTargetWidth);
+		ImGui::InputInt(LOCAL_LABEL("EditorCommon.Height").c_str(), (int*)&m_newViewportDesc.RenderTargetHeight);
 		const char* cameraTypes[] = { "Perspective", "Orthographic" };
 		//int currentCameraType = (int)m_newViewportDesc.CameraType;
 		//if (ImGui::Combo("Camera Type", &currentCameraType, cameraTypes, IM_ARRAYSIZE(cameraTypes)))
@@ -349,7 +353,7 @@ void ToolBar::DrawNewViewportPopup()
 		//{
 		//	m_newViewportDesc.ViewportMode = (EViewportMode)currentViewportMode;
 		//}
-		if (ImGui::Button("Create"))
+		if (ImGui::Button(LOCAL_LABEL("EditorCommon.Create").c_str()))
 		{
 			m_newViewportDesc.Name = StrToWStr(m_NewViewportNameBuf);
 			BaseViewportPanel* newPanel = new BaseViewportPanel();
@@ -358,7 +362,7 @@ void ToolBar::DrawNewViewportPopup()
 			ImGui::CloseCurrentPopup();
 		}
 		ImGui::SameLine();
-		if (ImGui::Button("Cancel"))
+		if (ImGui::Button(LOCAL_LABEL("EditorCommon.Cancel").c_str()))
 		{
 			ImGui::CloseCurrentPopup();
 		}
@@ -426,7 +430,7 @@ void ToolBar::DrawPlayControls()
 	if (ImGui::Button(ICON_FA_PLAY, ImVec2(btnWidth, 0)))
 		app.EnterPlayMode();
 	if (state != EPlayState::Edit) ImGui::EndDisabled();
-	if (ImGui::IsItemHovered()) ImGui::SetTooltip("Play (Enter PIE)");
+	if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("ToolBar.PlayTooltip"));
 	ImGui::PopID();
 
 	ImGui::SameLine();
@@ -437,13 +441,13 @@ void ToolBar::DrawPlayControls()
 	{
 		if (ImGui::Button(ICON_FA_PLAY, ImVec2(btnWidth, 0)))
 			app.ResumePlayMode();
-		if (ImGui::IsItemHovered()) ImGui::SetTooltip("Resume: 게임 로직 재개");
+		if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("ToolBar.ResumeTooltip"));
 	}
 	else
 	{
 		if (ImGui::Button(ICON_FA_PAUSE, ImVec2(btnWidth, 0)))
 			app.PausePlayMode();
-		if (ImGui::IsItemHovered()) ImGui::SetTooltip("Pause: 게임 정지, 에디터 조작 가능");
+		if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("ToolBar.PauseTooltip"));
 	}
 	if (state == EPlayState::Edit) ImGui::EndDisabled();
 	ImGui::PopID();
@@ -455,7 +459,7 @@ void ToolBar::DrawPlayControls()
 	if (ImGui::Button(ICON_FA_STOP, ImVec2(btnWidth, 0)))
 		app.StopPlayMode();
 	if (state == EPlayState::Edit) ImGui::EndDisabled();
-	if (ImGui::IsItemHovered()) ImGui::SetTooltip("Stop (restore scene)");
+	if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("ToolBar.StopTooltip"));
 	ImGui::PopID();
 }
 

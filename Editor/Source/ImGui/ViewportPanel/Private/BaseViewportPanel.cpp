@@ -15,6 +15,8 @@ void BaseViewportPanel::Initialize(void* arg)
 	if (!arg) return;
 	CAST_DESC
 	m_Name = desc->Name;
+	m_DisplayNameKey = desc->DisplayNameKey;
+	m_WindowID = WStrToStr(m_Name);
 	m_ChannelFilter.Initialize(m_Name);
 	m_SelectedRTName = L"";
 }
@@ -27,7 +29,7 @@ void BaseViewportPanel::Free()
 void BaseViewportPanel::Update(f32 dt)
 {
 	CalculateRenderResolution(m_PanelWidth, m_PanelHeight);
-	m_Name = m_SelectedRTName + L" Viewer";
+	m_IsRenderTargetViewer = true;
 	m_DisplayRTName = m_SelectedRTName;
 	if (m_ChannelView != EViewportChannelView::RGBA)
 	{
@@ -36,13 +38,19 @@ void BaseViewportPanel::Update(f32 dt)
 	}
 }
 
+string BaseViewportPanel::GetDisplayName() const
+{
+	return m_IsRenderTargetViewer ? LOCAL_FMT("Viewport.ViewerTitle", WStrToStr(m_SelectedRTName)) :
+		ImGuiInterface::GetDisplayName();
+}
+
 void BaseViewportPanel::Draw()
 {
 	if (!m_Open) return;
 	ImGui::PushID(this);
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
 	ImGuiWindowFlags window_flags = ImGuiWindowFlags_MenuBar;
-	string windowID = WStrToStr(m_Name);
+	const string windowID = GetDisplayName() + "###" + m_WindowID;
 	if (ImGui::Begin(windowID.c_str(), &m_Open, window_flags))
 	{
 		DrawOptionsBar();
@@ -150,7 +158,7 @@ void BaseViewportPanel::DrawRenderTargetMenu()
 	
 	if (ImGui::BeginMenu(LOCAL_CSTR("UI_RENDER_TARGET")))
 	{
-		if (ImGui::BeginMenu("All RenderTargets"))
+		if (ImGui::BeginMenu(LOCAL_LABEL("Viewport.AllRenderTargets").c_str()))
 		{
 			auto allNames = RenderTargetManager::Get().GetAllRenderTargetNames();
 			for (const auto& name : allNames)
@@ -168,18 +176,15 @@ void BaseViewportPanel::DrawRenderTargetMenu()
 		ImGui::EndMenu();
 	}
 }
-void BaseViewportPanel::DrawChannelViewButton()
+void BaseViewportPanel::DrawChannelViewButton(float rightReservedWidth)
 {
 	const ImVec2 buttonSize(28.0f, 0.0f);
 	const float buttonSpacing = 0.0f;
-	const float groupGapToDimension = 8.0f;
 	const float rightPadding = 10.0f;
 
-	const float dimensionGroupWidth = 30.0f * 2.0f;
 	const float channelGroupWidth = buttonSize.x * 4.0f + buttonSpacing * 3.0f;
 
-	ImGui::SameLine(
-		ImGui::GetWindowWidth() - dimensionGroupWidth - groupGapToDimension - channelGroupWidth - rightPadding);
+	ImGui::SameLine(ImGui::GetWindowWidth() - rightReservedWidth - channelGroupWidth - rightPadding);
 
 	auto toggleFlag = [this](EViewportChannelView flag)
 		{
@@ -225,7 +230,7 @@ void BaseViewportPanel::DrawRTItemContextMenu(const wstring& rtName)
 	string popupID = "##RTCtx_" + WStrToStr(rtName);
 	if (ImGui::BeginPopupContextItem(popupID.c_str()))
 	{
-		string label = "Open \"" + WStrToStr(rtName) + "\" in new viewport";
+		const string label = LOCAL_FMT("Viewport.OpenInViewport", WStrToStr(rtName));
 		if (ImGui::MenuItem(label.c_str()))
 		{
 			// 중복 이름 방지: 이미 같은 이름 패널이 있으면 번호 붙임
@@ -314,7 +319,7 @@ void BaseViewportPanel::DrawResolutionMenu()
 	if (ImGui::BeginMenu(LOCAL_CSTR("UI_RESOLUTION")))
 	{
 		// --- Resolution Mode ---
-		if (ImGui::MenuItem("Free (Panel Size)", nullptr,
+		if (ImGui::MenuItem(LOCAL_LABEL("Viewport.FreePanelSize").c_str(), nullptr,
 			m_ResolutionMode == EViewportResolutionMode::Free))
 			m_ResolutionMode = EViewportResolutionMode::Free;
 		ImGui::Separator();
@@ -323,7 +328,7 @@ void BaseViewportPanel::DrawResolutionMenu()
 		{
 			bool selected = (m_ResolutionMode == EViewportResolutionMode::Preset
 				&& m_PresetIndex == (int32)i);
-			if (ImGui::MenuItem(g_ResolutionPresets[i].Name, nullptr, selected))
+			if (ImGui::MenuItem(LOCAL_LABEL(g_ResolutionPresets[i].NameKey).c_str(), nullptr, selected))
 			{
 				m_ResolutionMode = EViewportResolutionMode::Preset;
 				m_PresetIndex = i;
@@ -332,25 +337,25 @@ void BaseViewportPanel::DrawResolutionMenu()
 		ImGui::Separator();
 		// --- Custom ---
 		bool isCustom = (m_ResolutionMode == EViewportResolutionMode::Custom);
-		if (ImGui::MenuItem("Custom...", nullptr, isCustom))
+		if (ImGui::MenuItem(LOCAL_LABEL("Viewport.Custom").c_str(), nullptr, isCustom))
 			m_ResolutionMode = EViewportResolutionMode::Custom;
 		if (isCustom)
 		{
-			ImGui::InputInt("Width", &m_CustomWidth, 1, 100);
-			ImGui::InputInt("Height", &m_CustomHeight, 1, 100);
+			ImGui::InputInt(LOCAL_LABEL("EditorCommon.Width").c_str(), &m_CustomWidth, 1, 100);
+			ImGui::InputInt(LOCAL_LABEL("EditorCommon.Height").c_str(), &m_CustomHeight, 1, 100);
 			m_CustomWidth = glm::clamp(m_CustomWidth, 64, 7680);
 			m_CustomHeight = glm::clamp(m_CustomHeight, 64, 4320);
 		}
 		ImGui::Separator();
 		// --- Aspect Ratio ---
-		if (ImGui::BeginMenu("Aspect Ratio"))
+		if (ImGui::BeginMenu(LOCAL_LABEL("Viewport.AspectRatio").c_str()))
 		{
 			auto ratioItem = [&](const char* label, EAspectRatioMode mode)
 				{
 					if (ImGui::MenuItem(label, nullptr, m_AspectRatioMode == mode))
 						m_AspectRatioMode = mode;
 				};
-			ratioItem("Free", EAspectRatioMode::Free);
+			ratioItem(LOCAL_LABEL("Viewport.FreeAspect").c_str(), EAspectRatioMode::Free);
 			ratioItem("16:9", EAspectRatioMode::Ratio_16_9);
 			ratioItem("16:10", EAspectRatioMode::Ratio_16_10);
 			ratioItem("4:3", EAspectRatioMode::Ratio_4_3);
@@ -361,9 +366,9 @@ void BaseViewportPanel::DrawResolutionMenu()
 		}
 		// --- 현재 해상도 표시 ---
 		ImGui::Separator();
-		ImGui::Text("Render: %u x %u", m_RenderWidth, m_RenderHeight);
+		ImGui::Text("%s", LOCAL_FMT("Viewport.RenderSize", m_RenderWidth, m_RenderHeight).c_str());
 		float scale = (float)m_RenderWidth / (float)m_PanelWidth * 100.f;
-		ImGui::Text("Scale: %.0f%%", scale);
+		ImGui::Text("%s", LOCAL_FMT("Viewport.Scale", scale).c_str());
 		ImGui::EndMenu();
 	}
 }

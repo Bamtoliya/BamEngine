@@ -84,6 +84,9 @@
 ,UI_HIERARCHY_TRANSFORM,Cannot preserve the world transform under this parent.,이 부모에서는 현재 월드 변환을 유지할 수 없습니다.
 ,UI_HIERARCHY_DEPTH,The hierarchy would exceed its depth limit.,계층의 최대 깊이를 초과합니다.
 ,UI_HIERARCHY_EDIT_FAILED,The hierarchy is invalid; no changes were made.,계층 관계가 올바르지 않아 변경하지 않았습니다.
+,UI_VALUE_UNAVAILABLE,Value unavailable,값을 읽을 수 없습니다.
+,UI_ELEMENT_COUNT,{} elements,요소 {}개
+,UI_SIZE_UNAVAILABLE,Size unavailable,크기를 읽을 수 없습니다.
 Transform,Hirarchy_AddGameObject,Add GameObject,게임 오브젝트 추가+
 ,Position,Position,위치
 ,Rotation,Rotation,회전
@@ -149,3 +152,278 @@ GraphPanel,Title,Graph,그래프
 ,TraceIteration,Iteration,반복
 ,TraceError,Error,오류
 ,PreviewScope,Logic preview uses an execution snapshot. Editing resets it. Click a trace to pause and inspect.,로직 복사본을 실행합니다. 편집하면 실행 상태가 초기화됩니다. 기록을 클릭하면 일시정지하고 위치와 값을 확인할 수 있습니다.
+EditorCommon,Width,Width,너비
+EditorCommon,Height,Height,높이
+EditorCommon,Name,Name,이름
+EditorCommon,Create,Create,생성
+EditorCommon,Cancel,Cancel,취소
+EditorCommon,Reset,Reset,초기화
+EditorCommon,Refresh,Refresh,새로고침
+EditorCommon,All,All,전체
+EditorCommon,None,None,없음
+EditorCommon,Other,Other,기타
+EditorCommon,Unknown,Unknown,알 수 없음
+EditorCommon,Rename,Rename,이름 변경
+EditorCommon,Delete,Delete,삭제
+EditorCommon,CopyPath,Copy Path,경로 복사
+EditorCommon,ShowInExplorer,Show in Explorer,탐색기에서 보기
+EditorCommon,NewFolder,New Folder,새 폴더
+EditorCommon,Search,Search...,검색...
+ResourceType,Texture,Texture,텍스처
+ResourceType,Sprite,Sprite,스프라이트
+ResourceType,Material,Material,머티리얼
+ResourceType,MaterialInstance,MaterialInstance,머티리얼 인스턴스
+ResourceType,Shader,Shader,셰이더
+ResourceType,Mesh,Mesh,메시
+ResourceType,Model,Model,모델
+ResourceType,Animation,Animation,애니메이션
+ResourceType,AudioClip,AudioClip,오디오 클립
+ResourceType,Skeleton,Skeleton,스켈레톤
+ResourceType,Prefab,Prefab,프리팹
+ResourceType,Script,Script,스크립트
+ResourceType,Scene,Scene,씬
+ResourceType,Save,Save,저장 데이터
+ToolBar,DisplaySettings,Display Settings,화면 설정
+ToolBar,NewViewportPanel,New Viewport Panel,새 뷰포트 패널
+ToolBar,Panels,Panels,패널
+ToolBar,Fullscreen,Fullscreen,전체 화면
+ToolBar,ApplyResolution,Apply Resolution,해상도 적용
+ToolBar,UIScale,UI Scale,UI 배율
+ToolBar,ApplyFPS,Apply FPS,FPS 적용
+ToolBar,PlayTooltip,Play (Enter PIE),재생 (PIE 시작)
+ToolBar,ResumeTooltip,Resume: 게임 로직 재개,계속: 게임 로직 재개
+ToolBar,PauseTooltip,"Pause: 게임 정지, 에디터 조작 가능","일시정지: 게임 정지, 에디터 조작 가능"
+ToolBar,StopTooltip,Stop (restore scene),중지 (씬 복원)
+Viewport,AllRenderTargets,All RenderTargets,모든 렌더 타깃
+Viewport,FreePanelSize,Free (Panel Size),패널 크기에 맞춤
+Viewport,Custom,Custom...,사용자 지정...
+Viewport,AspectRatio,Aspect Ratio,종횡비
+Viewport,RenderSize,Render: {} x {},렌더링: {} x {}
+Viewport,Scale,Scale: {:.0f}%,배율: {:.0f}%
+Viewport,Picking,Picking,선택 판정
+Viewport,GPUId,GPU ID,GPU ID
+Viewport,RayBounds,Ray bounds (broad phase),광선과 경계 검사 (넓은 단계)
+Viewport,RayBoundsHint,Tests mesh bounds. Triangle surfaces and sprite transparency are not tested.,메시 경계를 검사합니다. 삼각형 표면과 스프라이트 투명도는 검사하지 않습니다.
+Viewport,FinalOutput,FinalRT,최종 출력
+Viewport,Translate,Translate (W),이동 (W)
+Viewport,Rotate,Rotate (E),회전 (E)
+Viewport,ScaleOperation,Scale (R),크기 (R)
+Viewport,Local,Local,로컬
+Viewport,World,World,월드
+Viewport,SnapToGrid,Snap to Grid,격자에 맞추기
+Viewport,ShowBounds,Show Bounds,경계 표시
+Viewport,SnapTranslation,Snap Translation,이동 스냅 간격
+Viewport,SnapRotation,Snap Rotation,회전 스냅 간격
+Viewport,SnapScale,Snap Scale,크기 스냅 간격
+Viewport,ShowGrid,Show Grid,격자 표시
+Viewport,ShowCollider,Show Collider,콜라이더 표시
+Viewport,TransformRejected,Transform edit rejected: the result cannot be represented by local TRS.,변환 편집을 거부했습니다. 결과를 로컬 이동·회전·크기로 표현할 수 없습니다.
+Viewport,Interact,Interact,상호작용
+Viewport,Fit,Fit,화면에 맞춤
+Viewport,Snap,Snap,스냅
+Viewport,Grid,Grid,격자
+Viewport,Pixel,Pixel,픽셀
+Viewport,GridStep,Grid step (px),격자 간격 (px)
+Viewport,BypassSnap,Hold Alt to bypass snapping.,Alt를 누르면 스냅을 일시 해제합니다.
+Viewport,View,View,보기
+Viewport,SafeArea,Safe area (5% guide),안전 영역 (5% 가이드)
+Viewport,Anchors,Anchors,앵커
+Viewport,Channels,Channels,채널
+Viewport,Canvas,Canvas,캔버스
+Viewport,NewCanvas,New Canvas,새 캔버스
+Viewport,AddImage,Add Image,이미지 추가
+Viewport,AddButton,Add Button,버튼 추가
+PostProcess,Exposure,Exposure,노출
+PostProcess,Gamma,Gamma,감마
+PostProcess,Effects,Effects,효과
+Inspector,NoSelection,No Entity selected.,선택된 엔티티가 없습니다.
+Inspector,NoScene,Entity has no Scene.,엔티티에 씬이 없습니다.
+Inspector,EntityUnavailable,Entity is no longer available.,엔티티를 더 이상 사용할 수 없습니다.
+Inspector,Components,Components,컴포넌트
+Inspector,RotationRestored,Invalid rotation was restored.,잘못된 회전값을 이전 값으로 복원했습니다.
+Inspector,LayoutRejected,Invalid UI layout values were rejected.,잘못된 UI 레이아웃 값은 반영하지 않았습니다.
+Inspector,CanvasInvalidated,The edit would invalidate the canvas layout.,이 편집은 캔버스 레이아웃을 무효화하므로 적용할 수 없습니다.
+Inspector,RotationRejected,Invalid rotation input was rejected.,잘못된 회전 입력은 반영하지 않았습니다.
+Inspector,ReflectionUnavailable,Component reflection is unavailable.,컴포넌트 리플렉션을 사용할 수 없습니다.
+Inspector,NoReflectedComponents,No reflected components.,리플렉션에 등록된 컴포넌트가 없습니다.
+Inspector,RegistrationUnavailable,Component registration is unavailable.,컴포넌트 등록 정보를 사용할 수 없습니다.
+Inspector,AxisReset,Reset {} to {:.3f},{}축을 {:.3f}(으)로 초기화
+Inspector,EditSettings,Edit settings,편집 설정
+Inspector,Snap,Snap,스냅
+Inspector,SnapStep,Snap step,스냅 간격
+Inspector,WheelHint,Wheel: change value,휠: 값 변경
+Inspector,FastWheelHint,Shift + wheel: x10,Shift + 휠: 10배 간격으로 변경
+Inspector,AxisResetHint,Axis button / middle click: reset,축 버튼 / 가운데 클릭: 초기화
+Inspector,UnsupportedType,Unsupported type,지원하지 않는 자료형
+TextureInspector,Title,Texture Inspector,텍스처 인스펙터
+TextureInspector,FileName,File Name: {},파일 이름: {}
+TextureInspector,Resolution,Resolution: {} x {},해상도: {} x {}
+TextureInspector,MipLevels,Mip Levels: {},밉 레벨: {}
+TextureInspector,Dimension,Dimension: {},차원: {}
+TextureInspector,MetadataFailed,Failed to load metadata!,메타데이터를 불러오지 못했습니다.
+TextureInspector,ImportSettings,Import Settings,임포트 설정
+TextureInspector,TargetFormat,Target Format,대상 포맷
+TextureInspector,CompressionFlags,Compression Flags:,압축 옵션:
+TextureInspector,SpriteGeneration,Sprite Generation,스프라이트 생성
+TextureInspector,AutoSprite,Auto-Generate Sprite (.bamsprite),스프라이트 자동 생성 (.bamsprite)
+TextureInspector,Importing,Importing... Please wait,임포트 중... 잠시 기다려 주세요
+TextureInspector,Import,Import / Re-Compress,임포트 / 다시 압축
+TextureInspector,ImportResult,Import Result,임포트 결과
+TextureInspector,SpriteConverted,Texture & Sprite have been successfully converted asynchronously!,텍스처와 스프라이트의 비동기 변환이 완료되었습니다.
+TextureInspector,TextureConverted,Texture has been successfully converted to .bamtex asynchronously!,텍스처를 .bamtex로 비동기 변환했습니다.
+EditorCommon,OK,OK,확인
+ContentBrowser,Importing,Importing {} Asset(s) in background...,백그라운드에서 에셋 {}개를 임포트하고 있습니다...
+ContentBrowser,Folders,Folders,폴더
+ContentBrowser,Files,Files,파일
+ContentBrowser,CreateEmptyMaterial,Create Empty Material,빈 머티리얼 생성
+ContentBrowser,FolderType,Type: Folder,종류: 폴더
+ContentBrowser,FileType,Type: {} File,종류: {} 파일
+ContentBrowser,SizeBytes,Size: {} Bytes,크기: {} 바이트
+ContentBrowser,SizeKB,Size: {} KB,크기: {} KB
+ContentBrowser,SizeMB,Size: {:.2f} MB,크기: {:.2f} MB
+ContentBrowser,CreateMaterialInstance,Create Material Instance,머티리얼 인스턴스 생성
+ContentBrowser,OpenBaseMaterial,Open Base Material,기본 머티리얼 열기
+Hierarchy,RenameScene,Rename Scene,씬 이름 변경
+Hierarchy,SceneName,Scene: {},씬: {}
+Hierarchy,AddEntity,Add Entity,엔티티 추가
+Hierarchy,AddCanvas,Add UI Canvas,UI 캔버스 추가
+Hierarchy,AddPrimitive,Add Primitive Entity,기본 도형 엔티티 추가
+Hierarchy,AddSprite,Add Sprite Entity,스프라이트 엔티티 추가
+Hierarchy,Action,Action: {},작업 대상: {}
+Hierarchy,Duplicate,Duplicate,복제
+Hierarchy,Active,Is Active,활성화
+Hierarchy,Visible,Visible,표시
+Hierarchy,CreateChild,Create Child Empty,빈 자식 생성
+Hierarchy,MoveToRoot,Move to Root,루트로 이동
+Console,ClearHistory,Clear console history,콘솔 기록 지우기
+Console,Levels,Levels ({}/{}),로그 수준 ({}/{})
+Console,Status,Visible: {} / {}   Dropped: {}   Expired: {},표시: {} / {}   수집 누락: {}   오래된 항목 제거: {}
+Console,CopyHint,Right-click to copy message,우클릭하면 메시지를 복사합니다.
+Metrics,PauseCapture,Pause capture,수집 일시정지
+Metrics,PauseHint,Freeze metrics only; the engine keeps running.,통계 수집만 멈춥니다. 엔진은 계속 실행됩니다.
+Metrics,ResetHistory,Reset history,기록 초기화
+Metrics,NoSamples,No frame samples.,수집한 프레임이 없습니다.
+Metrics,AverageFPS,Average FPS: {:.1f},평균 FPS: {:.1f}
+Metrics,CurrentFrame,Current frame,현재 프레임
+Metrics,Average,Average,평균
+Metrics,Minimum,Minimum,최소
+Metrics,Maximum,Maximum,최대
+Metrics,FPSCap,FPS cap: {}  ({:.3f} ms),FPS 제한: {}  ({:.3f} ms)
+Metrics,FPSUnlimited,FPS cap: Unlimited,FPS 제한: 무제한
+Metrics,FrameInterval,Frame interval (ms),프레임 간격 (ms)
+Metrics,RecentFrames,Recent {} frames,최근 {}개 프레임
+Metrics,FrameTimeHint,Includes frame limiting and waits. This is not CPU or GPU execution time.,프레임 제한과 대기 시간을 포함합니다. CPU나 GPU 실행 시간이 아닙니다.
+Metrics,EngineState,Engine state,엔진 상태
+Metrics,ActiveScenes,Active scenes: {},활성 씬: {}
+Metrics,RegisteredPasses,Registered render passes: {},등록된 렌더 패스: {}
+Metrics,RHIDraws,RHI draw commands — previous frame,RHI 그리기 명령 — 이전 프레임
+Metrics,NoCapture,No completed capture.,완료된 수집 결과가 없습니다.
+Metrics,RenderFailed,Render failed: partial counts,렌더링 실패: 일부 집계만 표시합니다
+Metrics,DrawCalls,Draw calls: {},그리기 호출: {}
+Metrics,DrawBreakdown,Non-indexed: {} / Indexed: {},인덱스 미사용: {} / 인덱스 사용: {}
+Metrics,Vertices,Submitted vertices (non-indexed): {},제출한 정점 (인덱스 미사용): {}
+Metrics,Indices,Submitted indices: {},제출한 인덱스: {}
+Metrics,DrawHint,Counts engine RHI draws. Excludes direct ImGui backend draws and texture blits.,엔진의 RHI 그리기를 집계합니다. ImGui 백엔드의 직접 그리기와 텍스처 블릿은 제외합니다.
+Metrics,Resources,Resources,리소스
+Metrics,ResourceSummary,Loaded: {}   Slots: {}   Reusable: {},로딩됨: {}   슬롯: {}   재사용 가능: {}
+Metrics,Type,Type,종류
+Metrics,Count,Count,개수
+Metrics,RefreshInterval,Refresh interval: 0.5 seconds,갱신 간격: 0.5초
+Metrics,AssetTasks,Asset tasks,에셋 작업
+Metrics,Outstanding,Outstanding: {},미수집·실행 중: {}
+Metrics,Completed,Completed: {},완료: {}
+Metrics,Succeeded,Succeeded: {},성공: {}
+Metrics,Failed,Failed: {},실패: {}
+Metrics,TaskHint,Outstanding includes running tasks and results not yet collected. Counts cover registered async tasks.,미수집·실행 중에는 실행 중인 작업과 아직 수집하지 않은 결과가 포함됩니다. 등록된 비동기 작업을 집계합니다.
+ResourceInspector,Showing,Showing {} / {} registered resources,등록된 리소스 {} / {}개 표시
+ResourceInspector,Auto,Auto,자동 갱신
+ResourceInspector,RefreshHint,Refresh every 0.5 seconds,0.5초마다 갱신합니다
+ResourceInspector,Search,"Search type, key or path...",종류·키·경로 검색...
+ResourceInspector,Type,Type,종류
+ResourceInspector,Key,Key,키
+ResourceInspector,Path,Path,경로
+ResourceInspector,Refs,Refs,참조 수
+ResourceInspector,KeyCaption,Key:,키:
+ResourceInspector,PathCaption,Path:,경로:
+ResourceInspector,Slot,Slot: {} / Generation: {},슬롯: {} / 세대: {}
+ResourceInspector,CopyKey,Copy Key,키 복사
+ResourceInspector,None,(none),(없음)
+ResourceEditor,Target,Target: {},대상: {}
+Viewport,SceneTitle,Scene View,씬 뷰
+Viewport,UITitle,UI View,UI 뷰
+Viewport,ViewerTitle,{} Viewer,{} 뷰어
+Viewport,OpenInViewport,"Open ""{}"" in new viewport","""{}""을(를) 새 뷰포트에서 열기"
+Viewport,NewName,New Viewport,새 뷰포트
+ResourceEditor,TextureTitle,Texture Editor,텍스처 편집기
+ResourceEditor,ModelTitle,Model Editor,모델 편집기
+ResourceEditor,ShaderTitle,Shader Editor,셰이더 편집기
+ResourceEditor,SpriteTitle,Sprite Editor,스프라이트 편집기
+PostProcess,ToneMapping,Tone Mapping (ACES),톤 매핑 (ACES)
+FileDialog,AssetFiles,Asset Files,에셋 파일
+FileDialog,ResourceFiles,Resource Files,리소스 파일
+FileDialog,SceneFiles,Scene Files (*.json),씬 파일 (*.json)
+FileDialog,AllFiles,All Files (*.*),모든 파일 (*.*)
+Viewport,FreeAspect,Free,자유 비율
+ContentBrowser,Assets,Assets,에셋
+ContentBrowser,Data,Data,데이터
+ContentBrowser,Multiple,Multiple ({}),여러 종류 ({})
+ContentBrowser,Folder,Folder,폴더
+Console,AutoScrollOn,Auto-scroll: ON,자동 스크롤: 켜짐
+Console,AutoScrollOff,Auto-scroll: OFF,자동 스크롤: 꺼짐
+Console.Level,Trace,Trace,추적
+Console.Level,Info,Info,정보
+Console.Level,Warn,Warn,경고
+Console.Level,Error,Error,오류
+Console.Level,Fatal,Fatal,치명적 오류
+Console.Level,Unknown,Unknown,알 수 없음
+ResourceType,Unknown,Unknown,알 수 없음
+ResourceInspector,EmptyKey,(empty key),(빈 키)
+ResourceInspector,NoPath,(no path recorded),(기록된 경로 없음)
+Inspector,WriteFailed,Write failed: {},쓰기 실패: {}
+Inspector,UnlockAxis,Unlock {},{}축 잠금 해제
+Inspector,LockAxis,Lock {},{}축 잠금
+TextureInspector,BC4,BC4 (Grayscale),BC4 (회색조)
+TextureInspector,BC5,BC5 (Normal),BC5 (노멀)
+TextureInspector,BC7,BC7 (High Quality),BC7 (고품질)
+TextureInspector,GenerateMipMaps,Generate MipMaps,밉맵 생성
+TextureInspector,HighQuality,High Quality (Parallel),고품질 (병렬)
+TextureInspector,UseGPU,Use GPU Compression,GPU 압축 사용
+TextureInspector,SRGB,SRGB Color Space,sRGB 색 공간
+TextureInspector,FlipY,Flip Y Axis,Y축 뒤집기
+TextureInspector,PremultiplyAlpha,Premultiply Alpha,알파 미리 곱하기
+TextureInspector,NormalMap,Normal Map Mode,노멀 맵 모드
+GraphPanel,Canvas,Canvas,캔버스
+GraphPanel,Properties,Properties,속성
+GraphPanel,SourceUnavailable,Source pin is unavailable.,연결 시작 핀을 사용할 수 없습니다.
+GraphPanel,SourceRequired,A connection candidate requires a source pin.,연결 후보에는 시작 핀이 필요합니다.
+GraphPanel,IdExhausted,Node editor ID space is exhausted.,노드 편집기의 ID 공간이 소진되었습니다.
+Viewport,Order,Order,표시 순서
+Viewport,OrderSelectionHint,Select a UI element or Canvas.,UI 요소나 캔버스를 선택하세요.
+Viewport,ZIndex,Z-Index,Z 순서
+Viewport,IncreaseZ,Z +1,Z 순서 +1
+Viewport,DecreaseZ,Z -1,Z 순서 -1
+Viewport,BringToFront,Bring to Front,맨 앞으로
+Viewport,SendToBack,Send to Back,맨 뒤로
+Viewport,CanvasOrderHint,Canvas order within this scene.,이 씬 안에서의 캔버스 표시 순서입니다.
+Viewport,ElementOrderHint,Higher Z renders later among siblings. Children stay with their parent.,형제 중 Z 값이 클수록 나중에 그려집니다. 자식은 부모와 함께 표시됩니다.
+Inspector,UnknownProperty,Unknown property,알 수 없는 속성
+Viewport,SelectionLocked,Selection Locked,선택 잠김
+Viewport,CreateCanvasHint,Create a Canvas from the Canvas menu in an open scene.,열린 씬에서 캔버스 메뉴를 통해 캔버스를 생성하세요.
+Viewport,CanvasUnavailable,Canvas layout is invalid or awaiting render.,캔버스 레이아웃이 올바르지 않거나 렌더링을 기다리고 있습니다.
+Viewport,PointerEnter,Enter,진입
+Viewport,PointerExit,Exit,벗어남
+Viewport,PointerDown,Down,누름
+Viewport,PointerUp,Up,놓음
+Viewport,PointerClick,Click,클릭
+Viewport,PointerCancel,Cancel,취소
+Viewport,Resolution4K,3840 x 2160 (4K UHD),3840 x 2160 (4K UHD)
+Viewport,ResolutionQHD,2560 x 1440 (QHD),2560 x 1440 (QHD)
+Viewport,ResolutionFHD,1920 x 1080 (FHD),1920 x 1080 (FHD)
+Viewport,ResolutionHD,1280 x 720 (HD),1280 x 720 (HD)
+Viewport,ResolutionSD,854 x 480 (SD),854 x 480 (SD)
+Viewport,ResolutionIPhone,1170 x 2532 (iPhone 14),1170 x 2532 (iPhone 14)
+Viewport,ResolutionPortrait,1080 x 1920 (Portrait FHD),1080 x 1920 (세로 FHD)
+GraphPanel,ReflectionConflict,Reflection source conflict: {}::{},리플렉션 소스 충돌: {}::{}
+Viewport,CanvasSize,Canvas {:.0f} x {:.0f} | {:.0f}%,캔버스 {:.0f} x {:.0f} | {:.0f}%
+Viewport,InteractionStatus,Interact | Clicks: {} | {},상호작용 | 클릭 수: {} | {}
+Viewport,PointerEvent,{} | Entity {},{} | 엔티티 {}
