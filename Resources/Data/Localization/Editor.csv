@@ -1,14 +1,91 @@
 ﻿Group,Key,English,Korean
-,PROP_NAME,Name,이름
-,PROP_ID,ID,ID
-,PROP_LANGUAGE,Language,언어
-,PROP_TAGS,Tags,태그
-,PROP_LOCALMATRIX,Local Matrix,로컬 매트릭스
-,PROP_WORLDMATRIX,World Matrix,월드 매트릭스
-,PROP_BITFLAG,BitFlag,비트 플래그
-,PROP_INFORMATION,Information,정보
-,Hirarchy_AddGameObject,Add GameObject,게임 오브젝트 추가+
-Transform,Position,Position,위치
+,UI_ADD_COMPONENT,Add Component,컴포넌트 추가
+,UI_PROPERTY,Property,속성
+,UI_VALUE,Value,값
+,UI_RESOLUTION,Resolution,해상도
+,UI_RENDER_TARGET,Render Target,렌더 타겟
+,UI_GIZMO,Gizmo,기즈모
+,UI_TRANSFORM_LOCK_ALL,Lock Transform Editing,Transform 편집 전체 잠금
+,UI_TRANSFORM_LOCK_POSITION,Lock Position,위치 잠금
+,UI_TRANSFORM_LOCK_ROTATION,Lock Rotation,회전 잠금
+,UI_TRANSFORM_LOCK_SCALE,Lock Scale,크기 잠금
+,UI_TRANSFORM_REJECTED,Transform change rejected. Current pose was preserved.,Transform 변경을 적용할 수 없어 현재 자세를 유지합니다.
+,UI_TRANSFORM_UNLOCK_REPARENT,Unlock the transform before changing its parent.,부모를 변경하려면 Transform 편집 잠금을 해제하세요.
+,Engine::ETransformAbsolute.None,Inherit All,전체 상속
+,Engine::ETransformAbsolute.Position,Absolute Position,위치 독립
+,Engine::ETransformAbsolute.Rotation,Absolute Rotation,회전 독립
+,Engine::ETransformAbsolute.Scale,Absolute Scale,크기 독립
+,Engine::ETransformAbsolute.All,Independent Transform,Transform 전체 독립
+,UI_POST_FX,Post FX,후처리
+,UI_PASS,Passes,패스
+,UI_DEBUG,Debug,디버그
+,UI_CAMERA,Camera,카메라
+,,,
+,UI_FILE,File,파일
+,UI_EDIT,Edit,수정
+,UI_UNDO,Undo,실행 취소
+,UI_REDO,Redo,다시 실행
+,UI_DELETE_ENTITY,Delete entity and children,엔티티와 자식 삭제
+,UI_HISTORY_PROPERTIES,Properties,속성 편집
+,UI_HISTORY_TRANSFORM,Transform,변환
+,UI_HISTORY_COMPONENT,Add component,컴포넌트 추가
+,UI_HISTORY_REPARENT,Change parent,부모 변경
+,UI_HISTORY_CREATE,Create entity,엔티티 생성
+,UI_HISTORY_DELETE,Delete entity,엔티티 삭제
+,UI_HISTORY_RENAME,Rename scene,씬 이름 변경
+,UI_HISTORY_CANVAS,Canvas resolution,캔버스 해상도
+,UI_HISTORY_UI,UI transform,UI 변환
+,UI_HISTORY_UI_ORDER,UI render order,UI 렌더 순서
+,UI_HISTORY_CAPTURE_FAILED,History cleared because the change could not be captured.,변경을 기록할 수 없어 이전 이력을 비웠습니다.
+,UI_HISTORY_REPLAY_FAILED,The target or hierarchy changed. History position was preserved.,대상이나 계층이 바뀌어 복원하지 못했습니다. 이력 위치는 유지합니다.
+,UI_SCENE,Scene,씬
+,UI_WINDOW,Window,창
+,UI_HELP,Help,도움
+,UI_EXIT,Exit,종료
+,UI_IMPORT_ASSET,Import Asset,애셋 임포트
+,UI_LOAD_RESOURCE,Load Resource,리소스 로드
+,UI_SETTINGS,Settings,설정
+,UI_NEW_SCENE,New Scene,새 씬
+,UI_SAVE_SCENE,Save Scene,씬 저장하기
+,UI_LOAD_SCENE,Load Scene,씬 불러오기
+,UI_CLOSE_SCENE,Close Scene,씬 종료하기
+,UI_CONSOLE,Console,콘솔
+,UI_CONTENT_BROWSER,Content Browser,콘텐츠 브라우저
+,UI_HIERARCHY,Hierarchy,계층
+,UI_LANGUAGE,Language,언어
+,UI_KOREAN,Korean,한국어
+,UI_ENGLISH,English,English
+,UI_INSPECTOR,Inspector,인스펙터
+,UI_CREATE_NEW_SCENE,Create New Scene,새 씬 생성하기
+,UI_NO_SCENE_LOADED,No Scene Loaded,로드된 씬이 없습니다.
+,UI_RESOURCE_MANGER_INSPECTOR,Resource Manager,리소스 매니저
+,UI_ENGINE_METRICS_PANEL,Engine Metrics,엔진 통계
+,,,
+,,,
+,,,
+,,,
+,,,
+,,,
+,,,
+,,,
+,,,
+,,,
+,UI_GENERAL,General,일반
+,UI_RESOURCE_NONE,None (drop a resource),없음 (리소스를 놓으세요)
+,UI_RESOURCE_CLEAR,Clear,연결 해제
+,UI_RESOURCE_REJECTED,Resource type mismatch or load failed.,리소스 종류가 다르거나 불러오지 못했습니다.
+,UI_INVALID_PROPERTY,Invalid value was rejected.,유효하지 않은 값은 반영하지 않았습니다.
+,UI_ADD_VALUE,Add value,값 추가
+,UI_HIERARCHY_INVALID,Invalid hierarchy links; shown without repair.,잘못된 계층 관계가 있습니다. 원본을 유지한 채 표시합니다.
+,UI_HIERARCHY_EMPTY,No entities.,엔티티가 없습니다.
+,UI_HIERARCHY_ROOT_DROP,Drop here to move to root,여기에 놓으면 루트로 이동합니다
+,UI_HIERARCHY_BAD_DROP,This entity is no longer in the current scene.,현재 씬에 없는 엔티티입니다.
+,UI_HIERARCHY_CYCLE,An entity cannot be parented to itself or its descendants.,자신이나 자손을 부모로 지정할 수 없습니다.
+,UI_HIERARCHY_TRANSFORM,Cannot preserve the world transform under this parent.,이 부모에서는 현재 월드 변환을 유지할 수 없습니다.
+,UI_HIERARCHY_DEPTH,The hierarchy would exceed its depth limit.,계층의 최대 깊이를 초과합니다.
+,UI_HIERARCHY_EDIT_FAILED,The hierarchy is invalid; no changes were made.,계층 관계가 올바르지 않아 변경하지 않았습니다.
+Transform,Hirarchy_AddGameObject,Add GameObject,게임 오브젝트 추가+
+,Position,Position,위치
 ,Rotation,Rotation,회전
 ,Scale,Scale,크기
 ,EulerRotation,Euler Rotation,회전(각도)
@@ -19,3 +96,56 @@ ContentBrowser,Cancel,Cancel,취소
 ,ApplyToAll,Apply To All,전체적용
 ,FileConflictMessage,A file with the same name already exists in the destination.\nWhat would you like to do?,대상 위치에 이미 동일한 이름의 항목이 존재합니다:
 ,FileConflictPopup,File Conflict,파일 충돌
+GraphPanel,Title,Graph,그래프
+,Logic,Logic,로직
+,Shader,Shader,셰이더
+,AddNode,Add node,노드 추가
+,SearchNodes,Search nodes or categories...,노드 이름·분류 검색...
+,NoMatchingNodes,No compatible nodes match the search.,조건에 맞는 노드가 없습니다.
+,ConnectFrom,Connect from output,출력 핀에서 연결
+,ConnectTo,Connect to input,입력 핀으로 연결
+,RequiredValue,Required input - set a value or connect a pin.,필수 입력 - 값을 지정하거나 핀을 연결하세요.
+,NoObservedValue,Not observed,관측값 없음
+,Validate,Validate,검사
+,ResetView,Reset view,화면 초기화
+,Delete,Delete,삭제
+,Connection,Connection,연결
+,Disconnect,Disconnect,연결 해제
+,SelectHint,Select a node or connection to edit it.,편집할 노드나 연결을 선택하세요.
+,MultipleSelection,Multiple items selected. Delete removes all selected items.,여러 항목을 선택했습니다. 삭제하면 선택한 항목을 모두 제거합니다.
+,Connected,Connected - source takes precedence,연결됨 - 연결된 소스를 사용합니다
+,ObjectLinkOnly,Requires a matching object output connection.,일치하는 객체 타입의 출력 핀을 연결해야 합니다.
+,UseValue,Use value,값 지정
+,ResetValue,Reset to definition,정의의 기본값으로 복원
+,Validation,Validation,검사 결과
+,Valid,No structural errors. Execution is not checked.,구조 오류가 없습니다. 실행 여부는 검사하지 않습니다.
+,SessionOnly,Session only - Logic preview is available. Saving is not available.,현재 세션에서 로직 실행을 미리 볼 수 있습니다. 저장은 아직 지원하지 않습니다.
+,Controls,Drag pins to empty space to search nodes | Middle drag to pan | Ctrl for multiple selection,핀을 빈 곳에 놓아 노드 검색 | 가운데 버튼으로 화면 이동 | Ctrl로 다중 선택
+,Empty,Add a node from the toolbar or the right-click menu.,상단 버튼이나 우클릭 메뉴에서 노드를 추가하세요.
+,NoEntry,Add a Start or Update event.,Start 또는 Update 이벤트를 추가하세요.
+,Run,Run / Resume,실행 / 계속
+,Pause,Pause,일시정지
+,Step,Step,한 단계
+,Stop,Stop,중지
+,ResetInstance,Reset instance,실행 상태 초기화
+,ExecutionTrace,Execution trace,실행 추적
+,Idle,Idle,실행 전
+,Paused,Paused,일시정지
+,Running,Running,실행 중
+,Completed,Completed,실행 완료
+,Stopped,Stopped,중지됨
+,Failed,Failed,실행 실패
+,RemainingBudget,Remaining budget,남은 실행 예산
+,Result,Last result,마지막 결과
+,LastObserved,Last observed value,마지막 관측값
+,StepInterval,Task interval (seconds),작업 간격(초)
+,EventDelta,Update delta (seconds),Update 시간 간격(초)
+,TaskBudget,Tasks per event,이벤트당 실행 예산
+,FollowTrace,Follow latest trace,최신 흐름 따라가기
+,TraceEnter,Enter,진입
+,TraceLeave,Leave,복귀
+,TraceLink,Link,연결 통과
+,TraceValue,Value,값
+,TraceIteration,Iteration,반복
+,TraceError,Error,오류
+,PreviewScope,Logic preview uses an execution snapshot. Editing resets it. Click a trace to pause and inspect.,로직 복사본을 실행합니다. 편집하면 실행 상태가 초기화됩니다. 기록을 클릭하면 일시정지하고 위치와 값을 확인할 수 있습니다.

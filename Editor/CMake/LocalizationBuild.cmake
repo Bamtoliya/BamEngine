@@ -20,3 +20,4 @@ add_custom_command(
 )
 
 add_custom_target(GenerateLocalization ALL DEPENDS ${LOCALIZATION_OUTPUTS})
+add_dependencies(GenerateLocalization ExportReflectionLocalization)

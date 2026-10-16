@@ -18,6 +18,9 @@ endif()
 
 project(BamEngine)
 
+include(CTest)
+option(BAMENGINE_BUILD_REFLECTION_CHECK "Build engine and editor reflection integration checks" OFF)
+
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
 add_subdirectory(Projects/Reflection)

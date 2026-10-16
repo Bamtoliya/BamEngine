@@ -120,9 +120,15 @@ target_link_libraries(Engine
 # ==============================================================================
 include(ShaderBuild)
 include(ReflectionBuild)
+include(LocalizationExport)
 
 add_dependencies(Engine CompileShaders)
 
 if(BAMENGINE_BUILD_REFLECTION_CHECK)
     include(Checks)
+endif()
+
+option(BAMENGINE_BUILD_GRAPH_CHECK "Build graph document and connection validation check" OFF)
+if(BAMENGINE_BUILD_GRAPH_CHECK)
+    include(GraphChecks)
 endif()
