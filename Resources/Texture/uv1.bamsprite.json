@@ -1,0 +1,25 @@
+{
+   "AssetHeader": {
+      "MagicNumber": "6072351289621954882",
+      "ResourceType": 2,
+      "Version": 0
+   },
+   "m_Key": "Resources/Texture/uv1.bamsprite",
+   "m_Path": "Resources/Texture/uv1.bamsprite",
+   "m_Pivot": [
+      0.5,
+      0.5
+   ],
+   "m_Region": {
+      "Height": 128,
+      "Left": 0,
+      "Top": 0,
+      "Width": 128
+   },
+   "m_ResourceType": 2,
+   "m_Texture": {
+      "AssetKey": "Resources/Texture/uv1.bamtex",
+      "AssetPath": "Resources/Texture/uv1.bamtex"
+   },
+   "m_Version": 0
+}

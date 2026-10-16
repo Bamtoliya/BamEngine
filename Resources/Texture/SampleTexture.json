@@ -1,0 +1,22 @@
+{
+   "AssetHeader": {
+      "MagicNumber": 6072351289621955000,
+      "ResourceType": 1,
+      "Version": 0
+   },
+   "TextureHeader": {
+      "ArraySize": 1,
+      "DataSize": 0,
+      "Depth": 1,
+      "Dimension": 1,
+      "Format": 4,
+      "Height": 1024,
+      "MipLevels": 1,
+      "Width": 1024
+   },
+   "m_Path": "Resources/Texture/uv1.png",
+   "m_PixelPerUnit": 1,
+   "m_ResourceType": 1,
+   "m_Tag": "SampleTexture",
+   "m_Version": 0
+}

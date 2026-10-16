@@ -1,0 +1,466 @@
+{
+   "Engine::Scene": {
+      "m_Flags": 1,
+      "m_Layers": [
+         {
+            "__Type__": "Engine::Layer",
+            "m_DeadGameObjects": [],
+            "m_Flags": 3,
+            "m_GameObjects": [
+               {
+                  "__Type__": "Engine::GameObject",
+                  "m_Childs": [],
+                  "m_Components": [
+                     {
+                        "__Type__": "Engine::Transform",
+                        "m_Active": true,
+                        "m_Dirty": false,
+                        "m_EulerRotation": [
+                           0,
+                           0,
+                           0
+                        ],
+                        "m_Flags": 7,
+                        "m_LocalMatrix": [
+                           1,
+                           0,
+                           0,
+                           0,
+                           0,
+                           1,
+                           0,
+                           0,
+                           0,
+                           0,
+                           1,
+                           0,
+                           0,
+                           0,
+                           0,
+                           1
+                        ],
+                        "m_Position": [
+                           0,
+                           0,
+                           0
+                        ],
+                        "m_Rotation": [
+                           0,
+                           0,
+                           0,
+                           1
+                        ],
+                        "m_RotationMode": 0,
+                        "m_Scale": [
+                           1,
+                           1,
+                           1
+                        ],
+                        "m_Tag": "",
+                        "m_WorldMatrix": [
+                           1,
+                           0,
+                           0,
+                           0,
+                           0,
+                           1,
+                           0,
+                           0,
+                           0,
+                           0,
+                           1,
+                           0,
+                           0,
+                           0,
+                           0,
+                           1
+                        ]
+                     },
+                     {
+                        "__Type__": "Engine::Camera",
+                        "m_Active": true,
+                        "m_Aspect": 1.7769999504089355,
+                        "m_Dirty": false,
+                        "m_FOV": 60,
+                        "m_Far": 1000,
+                        "m_IsPerspective": true,
+                        "m_Near": 0.10000000149011612,
+                        "m_OrthoSize": 10,
+                        "m_ProjMatrix": [
+                           1,
+                           0,
+                           0,
+                           0,
+                           0,
+                           1,
+                           0,
+                           0,
+                           0,
+                           0,
+                           1,
+                           0,
+                           0,
+                           0,
+                           0,
+                           1
+                        ],
+                        "m_Tag": "",
+                        "m_ViewMatrix": [
+                           1,
+                           0,
+                           0,
+                           0,
+                           0,
+                           1,
+                           0,
+                           0,
+                           0,
+                           0,
+                           1,
+                           0,
+                           0,
+                           0,
+                           0,
+                           1
+                        ]
+                     }
+                  ],
+                  "m_Flags": 3,
+                  "m_Index": 0,
+                  "m_LayerIndex": 0,
+                  "m_Name": "Camera",
+                  "m_TagSet": []
+               },
+               {
+                  "__Type__": "Engine::GameObject",
+                  "m_Childs": [],
+                  "m_Components": [
+                     {
+                        "__Type__": "Engine::Transform",
+                        "m_Active": true,
+                        "m_Dirty": false,
+                        "m_EulerRotation": [
+                           0,
+                           0,
+                           0
+                        ],
+                        "m_Flags": 7,
+                        "m_LocalMatrix": [
+                           1,
+                           0,
+                           0,
+                           0,
+                           0,
+                           1,
+                           0,
+                           0,
+                           0,
+                           0,
+                           1,
+                           0,
+                           0,
+                           0,
+                           0,
+                           1
+                        ],
+                        "m_Position": [
+                           0,
+                           0,
+                           0
+                        ],
+                        "m_Rotation": [
+                           0,
+                           0,
+                           0,
+                           1
+                        ],
+                        "m_RotationMode": 0,
+                        "m_Scale": [
+                           1,
+                           1,
+                           1
+                        ],
+                        "m_Tag": "",
+                        "m_WorldMatrix": [
+                           1,
+                           0,
+                           0,
+                           0,
+                           0,
+                           1,
+                           0,
+                           0,
+                           0,
+                           0,
+                           1,
+                           0,
+                           0,
+                           0,
+                           0,
+                           1
+                        ]
+                     },
+                     {
+                        "__Type__": "Engine::MeshFilter",
+                        "m_Active": true,
+                        "m_Dirty": false,
+                        "m_MeshHandle": {
+                           "AssetKey": "",
+                           "AssetPath": ""
+                        },
+                        "m_Tag": ""
+                     },
+                     {
+                        "__Type__": "Engine::MeshRenderer",
+                        "m_Active": true,
+                        "m_Dirty": false,
+                        "m_DrawShadow": false,
+                        "m_Materials": [
+                           {
+                              "AssetKey": "Resources/Material/DefaultMaterial.bammat",
+                              "AssetPath": "Resources/Material/DefaultMaterial.bammat"
+                           }
+                        ],
+                        "m_ReceiveShadow": false,
+                        "m_RenderPassID": 4294967295,
+                        "m_Tag": ""
+                     }
+                  ],
+                  "m_Flags": 8,
+                  "m_Index": 1,
+                  "m_LayerIndex": 0,
+                  "m_Name": "Plane",
+                  "m_TagSet": []
+               },
+               {
+                  "__Type__": "Engine::GameObject",
+                  "m_Childs": [],
+                  "m_Components": [
+                     {
+                        "__Type__": "Engine::Transform",
+                        "m_Active": true,
+                        "m_Dirty": false,
+                        "m_EulerRotation": [
+                           0,
+                           0,
+                           0
+                        ],
+                        "m_Flags": 7,
+                        "m_LocalMatrix": [
+                           1,
+                           0,
+                           0,
+                           0,
+                           0,
+                           1,
+                           0,
+                           0,
+                           0,
+                           0,
+                           1,
+                           0,
+                           0,
+                           1.0099999904632568,
+                           0,
+                           1
+                        ],
+                        "m_Position": [
+                           0,
+                           1.0099999904632568,
+                           0
+                        ],
+                        "m_Rotation": [
+                           0,
+                           0,
+                           0,
+                           1
+                        ],
+                        "m_RotationMode": 0,
+                        "m_Scale": [
+                           1,
+                           1,
+                           1
+                        ],
+                        "m_Tag": "",
+                        "m_WorldMatrix": [
+                           1,
+                           0,
+                           0,
+                           0,
+                           0,
+                           1,
+                           0,
+                           0,
+                           0,
+                           0,
+                           1,
+                           0,
+                           0,
+                           1.0099999904632568,
+                           0,
+                           1
+                        ]
+                     },
+                     {
+                        "__Type__": "Engine::MeshRenderer",
+                        "m_Active": true,
+                        "m_Dirty": false,
+                        "m_DrawShadow": false,
+                        "m_Materials": [
+                           {
+                              "AssetKey": "Resources/Material/GBufferMaterial.bammat",
+                              "AssetPath": "Resources/Material/GBufferMaterial.bammat"
+                           }
+                        ],
+                        "m_ReceiveShadow": false,
+                        "m_RenderPassID": 0,
+                        "m_Tag": ""
+                     },
+                     {
+                        "__Type__": "Engine::MeshFilter",
+                        "m_Active": true,
+                        "m_Dirty": false,
+                        "m_MeshHandle": {
+                           "AssetKey": "CubeMesh",
+                           "AssetPath": ""
+                        },
+                        "m_Tag": ""
+                     },
+                     {
+                        "__Type__": "Engine::BoxCollider",
+                        "m_Active": true,
+                        "m_Center": [
+                           0,
+                           0,
+                           0
+                        ],
+                        "m_Dirty": false,
+                        "m_DrawCollider": true,
+                        "m_Extents": [
+                           1,
+                           1,
+                           1
+                        ],
+                        "m_Tag": "",
+                        "m_Type": 0
+                     }
+                  ],
+                  "m_Flags": 3,
+                  "m_Index": 2,
+                  "m_LayerIndex": 0,
+                  "m_Name": "NewCube",
+                  "m_TagSet": []
+               },
+               {
+                  "__Type__": "Engine::GameObject",
+                  "m_Childs": [],
+                  "m_Components": [
+                     {
+                        "__Type__": "Engine::Transform",
+                        "m_Active": true,
+                        "m_Dirty": false,
+                        "m_EulerRotation": [
+                           -37.099998474121094,
+                           51.20000076293945,
+                           0
+                        ],
+                        "m_Flags": 7,
+                        "m_LocalMatrix": [
+                           0.6266038417816162,
+                           1.4901161193847656E-8,
+                           -0.7793378829956055,
+                           0,
+                           -0.47010284662246704,
+                           0.7975839376449585,
+                           -0.3779723644256592,
+                           0,
+                           0.6215873956680298,
+                           0.6032079458236694,
+                           0.4997691512107849,
+                           0,
+                           0,
+                           55,
+                           0,
+                           1
+                        ],
+                        "m_Position": [
+                           0,
+                           55,
+                           0
+                        ],
+                        "m_Rotation": [
+                           -0.2869018614292145,
+                           0.40963733196258545,
+                           0.1374603509902954,
+                           0.8549790382385254
+                        ],
+                        "m_RotationMode": 0,
+                        "m_Scale": [
+                           1,
+                           1,
+                           1
+                        ],
+                        "m_Tag": "",
+                        "m_WorldMatrix": [
+                           0.6266038417816162,
+                           1.4901161193847656E-8,
+                           -0.7793378829956055,
+                           0,
+                           -0.47010284662246704,
+                           0.7975839376449585,
+                           -0.3779723644256592,
+                           0,
+                           0.6215873956680298,
+                           0.6032079458236694,
+                           0.4997691512107849,
+                           0,
+                           0,
+                           55,
+                           0,
+                           1
+                        ]
+                     },
+                     {
+                        "__Type__": "Engine::LightSource",
+                        "m_Active": true,
+                        "m_AttenuationCoefficients": [
+                           1,
+                           0.09000000357627869,
+                           0.03200000151991844
+                        ],
+                        "m_AttenuationMode": 0,
+                        "m_Color": [
+                           1,
+                           1,
+                           1
+                        ],
+                        "m_Dirty": false,
+                        "m_Flags": 52,
+                        "m_Intensity": 1,
+                        "m_LightingLayerMask": 4294967295,
+                        "m_Range": 10,
+                        "m_ShadowBias": 0.0020000000949949026,
+                        "m_ShadowNormalBias": 0.009999999776482582,
+                        "m_ShadowRange": 50,
+                        "m_ShadowSlopeBias": 0.5,
+                        "m_SpotFalloffExponent": 1,
+                        "m_SpotInnerAngle": 15,
+                        "m_SpotOuterAngle": 30,
+                        "m_Tag": "",
+                        "m_Type": 1
+                     }
+                  ],
+                  "m_Flags": 3,
+                  "m_Index": 3,
+                  "m_LayerIndex": 0,
+                  "m_Name": "Directional Light",
+                  "m_TagSet": []
+               }
+            ],
+            "m_Index": 0,
+            "m_Name": "Default"
+         }
+      ],
+      "m_Name": "Untitled Scene"
+   }
+}

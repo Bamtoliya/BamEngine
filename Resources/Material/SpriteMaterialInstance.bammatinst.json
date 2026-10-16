@@ -1,0 +1,31 @@
+{
+   "AssetHeader": {
+      "MagicNumber": 6072351289621955000,
+      "ResourceType": 4,
+      "Version": 0
+   },
+   "m_BaseMaterialHandle": {
+      "AssetKey": "Resources/Material/SpriteMaterial.bammat",
+      "AssetPath": "Resources/Material/SpriteMaterial.bammat"
+   },
+   "m_BlendMode": 0,
+   "m_CullMode": 2,
+   "m_DepthCompareOp": 1,
+   "m_DepthMode": 0,
+   "m_FillMode": 1,
+   "m_Key": "Resources/Material/SpriteMaterialInstance",
+   "m_OverrideFlags": 0,
+   "m_Parameters": {},
+   "m_Path": "",
+   "m_PixelShaderHandle": {
+      "AssetKey": "",
+      "AssetPath": ""
+   },
+   "m_ResourceType": 4,
+   "m_TextureBindings": [],
+   "m_Version": 0,
+   "m_VertexShaderHandle": {
+      "AssetKey": "",
+      "AssetPath": ""
+   }
+}

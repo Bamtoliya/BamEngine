@@ -1,0 +1,18 @@
+{
+   "AssetHeader": {
+      "MagicNumber": 6072351289621955000,
+      "ResourceType": 1,
+      "Version": 1
+   },
+   "PixelData": "//8AAAAAAAD/////AAAAAA==",
+   "TextureHeader": {
+      "ArraySize": 1,
+      "DataSize": 16,
+      "Depth": 1,
+      "Dimension": 1,
+      "Format": 15,
+      "Height": 1,
+      "MipLevels": 1,
+      "Width": 1
+   }
+}

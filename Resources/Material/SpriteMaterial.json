@@ -1,0 +1,34 @@
+{
+  "m_BlendMode": 1,
+  "m_CullMode": 0,
+  "m_DepthCompareOp": 1,
+  "m_DepthMode": 2,
+  "m_FillMode": 1,
+  "m_Parameters": {},
+  "m_Path": "",
+  "m_PixelShader": {
+    "__Type__": "Shader",
+    "m_Path": "Resources/Shader/default.frag.spv",
+    "m_RHIShader": {
+      "__Type__": "RHIShader",
+      "m_EntryPoint": "main",
+      "m_ShaderType": 1
+    },
+    "m_Tag": "DefaultPS",
+    "m_Version": 0
+  },
+  "m_Tag": "SpriteMaterial",
+  "m_TextureSlots": {},
+  "m_Version": 0,
+  "m_VertexShader": {
+    "__Type__": "Shader",
+    "m_Path": "Resources/Shader/default.vert.spv",
+    "m_RHIShader": {
+      "__Type__": "RHIShader",
+      "m_EntryPoint": "main",
+      "m_ShaderType": 0
+    },
+    "m_Tag": "DefaultVS",
+    "m_Version": 0
+  }
+}

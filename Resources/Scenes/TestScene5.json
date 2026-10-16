@@ -1,0 +1,1205 @@
+{
+   "Engine::Scene": {
+      "m_Flags": 1,
+      "m_Layers": [
+         {
+            "__Type__": "Engine::Layer",
+            "m_DeadGameObjects": [],
+            "m_Flags": 3,
+            "m_GameObjects": [
+               {
+                  "__Type__": "Engine::GameObject",
+                  "m_Childs": [],
+                  "m_Components": [
+                     {
+                        "__Type__": "Engine::Transform",
+                        "m_Active": true,
+                        "m_Dirty": false,
+                        "m_EulerRotation": [
+                           46.099998474121094,
+                           0,
+                           0
+                        ],
+                        "m_Flags": 7,
+                        "m_LocalMatrix": [
+                           1,
+                           0,
+                           0,
+                           0,
+                           0,
+                           0.6934017539024353,
+                           0.7205510139465332,
+                           0,
+                           0,
+                           -0.7205504179000854,
+                           0.6934012174606323,
+                           0,
+                           -0.050981760025024414,
+                           7.667475700378418,
+                           -3.592834711074829,
+                           1
+                        ],
+                        "m_Position": [
+                           -0.050981760025024414,
+                           7.667475700378418,
+                           -3.592834711074829
+                        ],
+                        "m_Rotation": [
+                           0.3915342688560486,
+                           0,
+                           0,
+                           0.9201635122299194
+                        ],
+                        "m_RotationMode": 0,
+                        "m_Scale": [
+                           1,
+                           0.9999998807907104,
+                           0.9999991059303284
+                        ],
+                        "m_Tag": "",
+                        "m_WorldMatrix": [
+                           1,
+                           0,
+                           0,
+                           0,
+                           0,
+                           0.6934017539024353,
+                           0.7205510139465332,
+                           0,
+                           0,
+                           -0.7205504179000854,
+                           0.6934012174606323,
+                           0,
+                           -0.050981760025024414,
+                           7.667475700378418,
+                           -3.592834711074829,
+                           1
+                        ]
+                     },
+                     {
+                        "__Type__": "Engine::LightSource",
+                        "m_Active": true,
+                        "m_AttenuationCoefficients": [
+                           1,
+                           0.09000000357627869,
+                           0.03200000151991844
+                        ],
+                        "m_AttenuationMode": 0,
+                        "m_Color": [
+                           1,
+                           1,
+                           1
+                        ],
+                        "m_Dirty": true,
+                        "m_Flags": 53,
+                        "m_Intensity": 2,
+                        "m_LightingLayerMask": 4294967295,
+                        "m_Range": 10,
+                        "m_ShadowBias": 0.5,
+                        "m_ShadowNormalBias": 1.4901161193847656E-8,
+                        "m_ShadowRange": 5.000032424926758,
+                        "m_ShadowSlopeBias": 0,
+                        "m_SpotFalloffExponent": 1,
+                        "m_SpotInnerAngle": 15,
+                        "m_SpotOuterAngle": 30,
+                        "m_Tag": "",
+                        "m_Type": 1
+                     }
+                  ],
+                  "m_Flags": 3,
+                  "m_Index": 0,
+                  "m_LayerIndex": 0,
+                  "m_Name": "Directional Light",
+                  "m_TagSet": []
+               },
+               {
+                  "__Type__": "Engine::GameObject",
+                  "m_Childs": [],
+                  "m_Components": [
+                     {
+                        "__Type__": "Engine::Transform",
+                        "m_Active": true,
+                        "m_Dirty": false,
+                        "m_EulerRotation": [
+                           -30,
+                           180,
+                           0
+                        ],
+                        "m_Flags": 7,
+                        "m_LocalMatrix": [
+                           -0.9999998807907104,
+                           0,
+                           8.742277657347586E-8,
+                           0,
+                           4.371138828673793E-8,
+                           0.8660253882408142,
+                           0.5,
+                           0,
+                           -7.571034643660823E-8,
+                           0.5,
+                           -0.8660253286361694,
+                           0,
+                           0,
+                           10,
+                           -15,
+                           1
+                        ],
+                        "m_Position": [
+                           0,
+                           10,
+                           -15
+                        ],
+                        "m_Rotation": [
+                           1.1313339598473249E-8,
+                           0.9659258127212524,
+                           0.258819043636322,
+                           -4.222195926217864E-8
+                        ],
+                        "m_RotationMode": 0,
+                        "m_Scale": [
+                           1,
+                           1,
+                           1
+                        ],
+                        "m_Tag": "",
+                        "m_WorldMatrix": [
+                           -0.9999998807907104,
+                           0,
+                           8.742277657347586E-8,
+                           0,
+                           4.371138828673793E-8,
+                           0.8660253882408142,
+                           0.5,
+                           0,
+                           -7.571034643660823E-8,
+                           0.5,
+                           -0.8660253286361694,
+                           0,
+                           0,
+                           10,
+                           -15,
+                           1
+                        ]
+                     },
+                     {
+                        "__Type__": "Engine::Camera",
+                        "m_Active": true,
+                        "m_Aspect": 1.7769999504089355,
+                        "m_Dirty": true,
+                        "m_FOV": 60,
+                        "m_Far": 1000,
+                        "m_IsMainCamera": false,
+                        "m_IsPerspective": true,
+                        "m_Near": 0.10000000149011612,
+                        "m_OrthoSize": 10,
+                        "m_ProjMatrix": [
+                           0.9747050404548645,
+                           0,
+                           0,
+                           0,
+                           0,
+                           1.732050895690918,
+                           0,
+                           0,
+                           0,
+                           0,
+                           -1.0001999139785767,
+                           -1,
+                           0,
+                           0,
+                           -0.20002000033855438,
+                           0
+                        ],
+                        "m_Tag": "",
+                        "m_ViewMatrix": [
+                           -1.0000001192092896,
+                           4.3711398944878965E-8,
+                           -7.57103677528903E-8,
+                           -0,
+                           -3.552714525833448E-15,
+                           0.8660253882408142,
+                           0.5000000596046448,
+                           0,
+                           8.742279788975793E-8,
+                           0.5000000596046448,
+                           -0.866025447845459,
+                           -0,
+                           0.000001311342089138634,
+                           -1.160253643989563,
+                           -17.99038314819336,
+                           1
+                        ]
+                     }
+                  ],
+                  "m_Flags": 3,
+                  "m_Index": 1,
+                  "m_LayerIndex": 0,
+                  "m_Name": "Camera",
+                  "m_TagSet": []
+               },
+               {
+                  "__Type__": "Engine::GameObject",
+                  "m_Childs": [],
+                  "m_Components": [
+                     {
+                        "__Type__": "Engine::Transform",
+                        "m_Active": true,
+                        "m_Dirty": false,
+                        "m_EulerRotation": [
+                           0,
+                           0,
+                           0
+                        ],
+                        "m_Flags": 7,
+                        "m_LocalMatrix": [
+                           1,
+                           0,
+                           0,
+                           0,
+                           0,
+                           1,
+                           0,
+                           0,
+                           0,
+                           0,
+                           1,
+                           0,
+                           2.8981246948242188,
+                           1.5521544218063354,
+                           0,
+                           1
+                        ],
+                        "m_Position": [
+                           2.8981246948242188,
+                           1.5521544218063354,
+                           0
+                        ],
+                        "m_Rotation": [
+                           0,
+                           0,
+                           0,
+                           1
+                        ],
+                        "m_RotationMode": 0,
+                        "m_Scale": [
+                           1,
+                           1,
+                           1
+                        ],
+                        "m_Tag": "",
+                        "m_WorldMatrix": [
+                           1,
+                           0,
+                           0,
+                           0,
+                           0,
+                           1,
+                           0,
+                           0,
+                           0,
+                           0,
+                           1,
+                           0,
+                           2.8981246948242188,
+                           1.5521544218063354,
+                           0,
+                           1
+                        ]
+                     },
+                     {
+                        "__Type__": "Engine::MeshRenderer",
+                        "m_Active": true,
+                        "m_Dirty": false,
+                        "m_DrawShadow": true,
+                        "m_Materials": [
+                           {
+                              "AssetKey": "Resources/Material/GBufferMaterial",
+                              "AssetPath": ""
+                           }
+                        ],
+                        "m_ReceiveShadow": false,
+                        "m_RenderPassID": 0,
+                        "m_Tag": ""
+                     },
+                     {
+                        "__Type__": "Engine::MeshFilter",
+                        "m_Active": true,
+                        "m_Dirty": true,
+                        "m_MeshHandle": {
+                           "AssetKey": "Resources/Model/Cube2_Cube.001.bammesh",
+                           "AssetPath": "Resources/Model/Cube2_Cube.001.bammesh"
+                        },
+                        "m_Tag": ""
+                     },
+                     {
+                        "__Type__": "Engine::BoxCollider",
+                        "m_Active": true,
+                        "m_Center": [
+                           0,
+                           0,
+                           0
+                        ],
+                        "m_Dirty": true,
+                        "m_DrawCollider": false,
+                        "m_Extents": [
+                           1,
+                           1,
+                           1
+                        ],
+                        "m_Tag": "",
+                        "m_Type": 0
+                     }
+                  ],
+                  "m_Flags": 3,
+                  "m_Index": 2,
+                  "m_LayerIndex": 0,
+                  "m_Name": "NewCube",
+                  "m_TagSet": []
+               },
+               {
+                  "__Type__": "Engine::GameObject",
+                  "m_Childs": [],
+                  "m_Components": [
+                     {
+                        "__Type__": "Engine::Transform",
+                        "m_Active": true,
+                        "m_Dirty": false,
+                        "m_EulerRotation": [
+                           0,
+                           0,
+                           0
+                        ],
+                        "m_Flags": 7,
+                        "m_LocalMatrix": [
+                           1,
+                           0,
+                           0,
+                           0,
+                           0,
+                           1,
+                           0,
+                           0,
+                           0,
+                           0,
+                           1,
+                           0,
+                           0,
+                           1.2760772705078125,
+                           0,
+                           1
+                        ],
+                        "m_Position": [
+                           0,
+                           1.2760772705078125,
+                           0
+                        ],
+                        "m_Rotation": [
+                           0,
+                           0,
+                           0,
+                           1
+                        ],
+                        "m_RotationMode": 0,
+                        "m_Scale": [
+                           1,
+                           1,
+                           1
+                        ],
+                        "m_Tag": "",
+                        "m_WorldMatrix": [
+                           1,
+                           0,
+                           0,
+                           0,
+                           0,
+                           1,
+                           0,
+                           0,
+                           0,
+                           0,
+                           1,
+                           0,
+                           0,
+                           1.2760772705078125,
+                           0,
+                           1
+                        ]
+                     },
+                     {
+                        "__Type__": "Engine::MeshRenderer",
+                        "m_Active": true,
+                        "m_Dirty": false,
+                        "m_DrawShadow": true,
+                        "m_Materials": [
+                           {
+                              "AssetKey": "Resources/Material/GBufferMaterial",
+                              "AssetPath": ""
+                           }
+                        ],
+                        "m_ReceiveShadow": false,
+                        "m_RenderPassID": 0,
+                        "m_Tag": ""
+                     },
+                     {
+                        "__Type__": "Engine::MeshFilter",
+                        "m_Active": true,
+                        "m_Dirty": true,
+                        "m_MeshHandle": {
+                           "AssetKey": "Resources/Model/UVSphere_Sphere.001.bammesh",
+                           "AssetPath": "Resources/Model/UVSphere_Sphere.001.bammesh"
+                        },
+                        "m_Tag": ""
+                     },
+                     {
+                        "__Type__": "Engine::BoxCollider",
+                        "m_Active": true,
+                        "m_Center": [
+                           0,
+                           0,
+                           0
+                        ],
+                        "m_Dirty": true,
+                        "m_DrawCollider": true,
+                        "m_Extents": [
+                           1,
+                           1,
+                           1
+                        ],
+                        "m_Tag": "",
+                        "m_Type": 0
+                     }
+                  ],
+                  "m_Flags": 3,
+                  "m_Index": 3,
+                  "m_LayerIndex": 0,
+                  "m_Name": "Sphere",
+                  "m_TagSet": []
+               },
+               {
+                  "__Type__": "Engine::GameObject",
+                  "m_Childs": [
+                     {
+                        "__Type__": "Engine::GameObject",
+                        "m_Childs": [],
+                        "m_Components": [
+                           {
+                              "__Type__": "Engine::Transform",
+                              "m_Active": true,
+                              "m_Dirty": false,
+                              "m_EulerRotation": [
+                                 -90,
+                                 0,
+                                 0
+                              ],
+                              "m_Flags": 7,
+                              "m_LocalMatrix": [
+                                 10,
+                                 0,
+                                 0,
+                                 0,
+                                 0,
+                                 5.960464477539062E-7,
+                                 -9.999999046325684,
+                                 0,
+                                 0,
+                                 0.9999999403953552,
+                                 5.960464477539063E-8,
+                                 0,
+                                 0,
+                                 -0.9654632806777954,
+                                 0,
+                                 1
+                              ],
+                              "m_Position": [
+                                 0,
+                                 -0.9654632806777954,
+                                 0
+                              ],
+                              "m_Rotation": [
+                                 -0.7071067690849304,
+                                 0,
+                                 0,
+                                 0.7071067690849304
+                              ],
+                              "m_RotationMode": 0,
+                              "m_Scale": [
+                                 10,
+                                 10,
+                                 1
+                              ],
+                              "m_Tag": "",
+                              "m_WorldMatrix": [
+                                 10,
+                                 0,
+                                 0,
+                                 0,
+                                 0,
+                                 5.960464477539062E-7,
+                                 -9.999999046325684,
+                                 0,
+                                 0,
+                                 0.9999999403953552,
+                                 5.960464477539063E-8,
+                                 0,
+                                 0,
+                                 -0.9654632806777954,
+                                 0,
+                                 1
+                              ]
+                           },
+                           {
+                              "__Type__": "Engine::MeshRenderer",
+                              "m_Active": true,
+                              "m_Dirty": false,
+                              "m_DrawShadow": false,
+                              "m_Materials": [
+                                 {
+                                    "AssetKey": "Resources/Material/GBufferMaterial",
+                                    "AssetPath": ""
+                                 }
+                              ],
+                              "m_ReceiveShadow": false,
+                              "m_RenderPassID": 0,
+                              "m_Tag": ""
+                           },
+                           {
+                              "__Type__": "Engine::MeshFilter",
+                              "m_Active": true,
+                              "m_Dirty": true,
+                              "m_MeshHandle": {
+                                 "AssetKey": "Resources/Model/Plane_Plane.bammesh",
+                                 "AssetPath": "Resources/Model/Plane_Plane.bammesh"
+                              },
+                              "m_Tag": ""
+                           },
+                           {
+                              "__Type__": "Engine::BoxCollider",
+                              "m_Active": true,
+                              "m_Center": [
+                                 0,
+                                 0,
+                                 0
+                              ],
+                              "m_Dirty": true,
+                              "m_DrawCollider": true,
+                              "m_Extents": [
+                                 1,
+                                 1,
+                                 1
+                              ],
+                              "m_Tag": "",
+                              "m_Type": 0
+                           }
+                        ],
+                        "m_Flags": 3,
+                        "m_Index": 0,
+                        "m_LayerIndex": 0,
+                        "m_Name": "Floor",
+                        "m_TagSet": []
+                     },
+                     {
+                        "__Type__": "Engine::GameObject",
+                        "m_Childs": [],
+                        "m_Components": [
+                           {
+                              "__Type__": "Engine::Transform",
+                              "m_Active": true,
+                              "m_Dirty": false,
+                              "m_EulerRotation": [
+                                 -90,
+                                 0,
+                                 90
+                              ],
+                              "m_Flags": 7,
+                              "m_LocalMatrix": [
+                                 0.0000011920928955078125,
+                                 9.999999046325684,
+                                 0,
+                                 0,
+                                 0,
+                                 0.0000011920867564185755,
+                                 -9.999947547912598,
+                                 0,
+                                 -0.9999966621398926,
+                                 0,
+                                 1.1920890585770394E-7,
+                                 0,
+                                 10.499969482421875,
+                                 10.138038635253906,
+                                 0,
+                                 1
+                              ],
+                              "m_Position": [
+                                 10.499969482421875,
+                                 10.138038635253906,
+                                 0
+                              ],
+                              "m_Rotation": [
+                                 -0.4999999701976776,
+                                 -0.4999999701976776,
+                                 0.4999999701976776,
+                                 0.4999999701976776
+                              ],
+                              "m_RotationMode": 0,
+                              "m_Scale": [
+                                 10,
+                                 9.999948501586914,
+                                 0.9999967813491821
+                              ],
+                              "m_Tag": "",
+                              "m_WorldMatrix": [
+                                 0.0000011920928955078125,
+                                 9.999999046325684,
+                                 0,
+                                 0,
+                                 0,
+                                 0.0000011920867564185755,
+                                 -9.999947547912598,
+                                 0,
+                                 -0.9999966621398926,
+                                 0,
+                                 1.1920890585770394E-7,
+                                 0,
+                                 10.499969482421875,
+                                 10.138038635253906,
+                                 0,
+                                 1
+                              ]
+                           },
+                           {
+                              "__Type__": "Engine::MeshRenderer",
+                              "m_Active": true,
+                              "m_Dirty": false,
+                              "m_DrawShadow": false,
+                              "m_Materials": [
+                                 {
+                                    "AssetKey": "Resources/Material/GBufferMaterial",
+                                    "AssetPath": ""
+                                 }
+                              ],
+                              "m_ReceiveShadow": false,
+                              "m_RenderPassID": 0,
+                              "m_Tag": ""
+                           },
+                           {
+                              "__Type__": "Engine::MeshFilter",
+                              "m_Active": true,
+                              "m_Dirty": true,
+                              "m_MeshHandle": {
+                                 "AssetKey": "Resources/Model/Plane_Plane.bammesh",
+                                 "AssetPath": "Resources/Model/Plane_Plane.bammesh"
+                              },
+                              "m_Tag": ""
+                           },
+                           {
+                              "__Type__": "Engine::BoxCollider",
+                              "m_Active": true,
+                              "m_Center": [
+                                 0,
+                                 0,
+                                 0
+                              ],
+                              "m_Dirty": true,
+                              "m_DrawCollider": false,
+                              "m_Extents": [
+                                 1,
+                                 1,
+                                 1
+                              ],
+                              "m_Tag": "",
+                              "m_Type": 0
+                           }
+                        ],
+                        "m_Flags": 3,
+                        "m_Index": 1,
+                        "m_LayerIndex": 0,
+                        "m_Name": "+XWall",
+                        "m_TagSet": []
+                     },
+                     {
+                        "__Type__": "Engine::GameObject",
+                        "m_Childs": [],
+                        "m_Components": [
+                           {
+                              "__Type__": "Engine::Transform",
+                              "m_Active": true,
+                              "m_Dirty": false,
+                              "m_EulerRotation": [
+                                 90,
+                                 0,
+                                 90
+                              ],
+                              "m_Flags": 7,
+                              "m_LocalMatrix": [
+                                 0.0000011920928955078125,
+                                 9.999999046325684,
+                                 0,
+                                 0,
+                                 0,
+                                 0.0000011920928955078125,
+                                 9.999999046325684,
+                                 0,
+                                 0.9999998807907104,
+                                 0,
+                                 1.1920928955078125E-7,
+                                 0,
+                                 -10,
+                                 10.069019317626953,
+                                 -0.4999971389770508,
+                                 1
+                              ],
+                              "m_Position": [
+                                 -10,
+                                 10.069019317626953,
+                                 -0.4999971389770508
+                              ],
+                              "m_Rotation": [
+                                 0.4999999701976776,
+                                 0.4999999701976776,
+                                 0.4999999701976776,
+                                 0.4999999701976776
+                              ],
+                              "m_RotationMode": 0,
+                              "m_Scale": [
+                                 10,
+                                 10,
+                                 1
+                              ],
+                              "m_Tag": "",
+                              "m_WorldMatrix": [
+                                 0.0000011920928955078125,
+                                 9.999999046325684,
+                                 0,
+                                 0,
+                                 0,
+                                 0.0000011920928955078125,
+                                 9.999999046325684,
+                                 0,
+                                 0.9999998807907104,
+                                 0,
+                                 1.1920928955078125E-7,
+                                 0,
+                                 -10,
+                                 10.069019317626953,
+                                 -0.4999971389770508,
+                                 1
+                              ]
+                           },
+                           {
+                              "__Type__": "Engine::MeshRenderer",
+                              "m_Active": true,
+                              "m_Dirty": false,
+                              "m_DrawShadow": false,
+                              "m_Materials": [
+                                 {
+                                    "AssetKey": "Resources/Material/GBufferMaterial",
+                                    "AssetPath": ""
+                                 }
+                              ],
+                              "m_ReceiveShadow": false,
+                              "m_RenderPassID": 0,
+                              "m_Tag": ""
+                           },
+                           {
+                              "__Type__": "Engine::MeshFilter",
+                              "m_Active": true,
+                              "m_Dirty": true,
+                              "m_MeshHandle": {
+                                 "AssetKey": "Resources/Model/Plane_Plane.bammesh",
+                                 "AssetPath": "Resources/Model/Plane_Plane.bammesh"
+                              },
+                              "m_Tag": ""
+                           },
+                           {
+                              "__Type__": "Engine::BoxCollider",
+                              "m_Active": true,
+                              "m_Center": [
+                                 0,
+                                 0,
+                                 0
+                              ],
+                              "m_Dirty": true,
+                              "m_DrawCollider": false,
+                              "m_Extents": [
+                                 1,
+                                 1,
+                                 1
+                              ],
+                              "m_Tag": "",
+                              "m_Type": 0
+                           }
+                        ],
+                        "m_Flags": 3,
+                        "m_Index": 2,
+                        "m_LayerIndex": 0,
+                        "m_Name": "-XWall",
+                        "m_TagSet": []
+                     },
+                     {
+                        "__Type__": "Engine::GameObject",
+                        "m_Childs": [],
+                        "m_Components": [
+                           {
+                              "__Type__": "Engine::Transform",
+                              "m_Active": true,
+                              "m_Dirty": false,
+                              "m_EulerRotation": [
+                                 180,
+                                 0,
+                                 90
+                              ],
+                              "m_Flags": 7,
+                              "m_LocalMatrix": [
+                                 5.960431508356123E-7,
+                                 9.999943733215332,
+                                 0,
+                                 0,
+                                 9.999943733215332,
+                                 5.960431508356123E-7,
+                                 -8.74222905622446E-7,
+                                 0,
+                                 -8.742217261215046E-8,
+                                 0,
+                                 -0.9999929666519165,
+                                 0,
+                                 -0.4999699592590332,
+                                 10.0344820022583,
+                                 10.499996185302734,
+                                 1
+                              ],
+                              "m_Position": [
+                                 -0.4999699592590332,
+                                 10.0344820022583,
+                                 10.499996185302734
+                              ],
+                              "m_Rotation": [
+                                 0.7071067690849304,
+                                 0.7071067690849304,
+                                 -3.0908619663705394E-8,
+                                 -3.0908619663705394E-8
+                              ],
+                              "m_RotationMode": 0,
+                              "m_Scale": [
+                                 9.999944686889648,
+                                 9.999944686889648,
+                                 0.999993085861206
+                              ],
+                              "m_Tag": "",
+                              "m_WorldMatrix": [
+                                 5.960431508356123E-7,
+                                 9.999943733215332,
+                                 0,
+                                 0,
+                                 9.999943733215332,
+                                 5.960431508356123E-7,
+                                 -8.74222905622446E-7,
+                                 0,
+                                 -8.742217261215046E-8,
+                                 0,
+                                 -0.9999929666519165,
+                                 0,
+                                 -0.4999699592590332,
+                                 10.0344820022583,
+                                 10.499996185302734,
+                                 1
+                              ]
+                           },
+                           {
+                              "__Type__": "Engine::MeshRenderer",
+                              "m_Active": true,
+                              "m_Dirty": false,
+                              "m_DrawShadow": false,
+                              "m_Materials": [
+                                 {
+                                    "AssetKey": "Resources/Material/GBufferMaterial.bammat",
+                                    "AssetPath": "Resources/Material/GBufferMaterial.bammat"
+                                 }
+                              ],
+                              "m_ReceiveShadow": false,
+                              "m_RenderPassID": 0,
+                              "m_Tag": ""
+                           },
+                           {
+                              "__Type__": "Engine::MeshFilter",
+                              "m_Active": true,
+                              "m_Dirty": true,
+                              "m_MeshHandle": {
+                                 "AssetKey": "Resources/Model/Plane_Plane.bammesh",
+                                 "AssetPath": "Resources/Model/Plane_Plane.bammesh"
+                              },
+                              "m_Tag": ""
+                           },
+                           {
+                              "__Type__": "Engine::BoxCollider",
+                              "m_Active": true,
+                              "m_Center": [
+                                 0,
+                                 0,
+                                 0
+                              ],
+                              "m_Dirty": true,
+                              "m_DrawCollider": false,
+                              "m_Extents": [
+                                 1,
+                                 1,
+                                 1
+                              ],
+                              "m_Tag": "",
+                              "m_Type": 0
+                           }
+                        ],
+                        "m_Flags": 3,
+                        "m_Index": 3,
+                        "m_LayerIndex": 0,
+                        "m_Name": "+ZWall",
+                        "m_TagSet": []
+                     }
+                  ],
+                  "m_Components": [
+                     {
+                        "__Type__": "Engine::Transform",
+                        "m_Active": true,
+                        "m_Dirty": false,
+                        "m_EulerRotation": [
+                           0,
+                           0,
+                           0
+                        ],
+                        "m_Flags": 7,
+                        "m_LocalMatrix": [
+                           1,
+                           0,
+                           0,
+                           0,
+                           0,
+                           1,
+                           0,
+                           0,
+                           0,
+                           0,
+                           1,
+                           0,
+                           0,
+                           0,
+                           0,
+                           1
+                        ],
+                        "m_Position": [
+                           0,
+                           0,
+                           0
+                        ],
+                        "m_Rotation": [
+                           0,
+                           0,
+                           0,
+                           1
+                        ],
+                        "m_RotationMode": 0,
+                        "m_Scale": [
+                           1,
+                           1,
+                           1
+                        ],
+                        "m_Tag": "",
+                        "m_WorldMatrix": [
+                           1,
+                           0,
+                           0,
+                           0,
+                           0,
+                           1,
+                           0,
+                           0,
+                           0,
+                           0,
+                           1,
+                           0,
+                           0,
+                           0,
+                           0,
+                           1
+                        ]
+                     }
+                  ],
+                  "m_Flags": 3,
+                  "m_Index": 4,
+                  "m_LayerIndex": 0,
+                  "m_Name": "Room",
+                  "m_TagSet": []
+               },
+               {
+                  "__Type__": "Engine::GameObject",
+                  "m_Childs": [],
+                  "m_Components": [
+                     {
+                        "__Type__": "Engine::Transform",
+                        "m_Active": true,
+                        "m_Dirty": false,
+                        "m_EulerRotation": [
+                           0,
+                           0,
+                           0
+                        ],
+                        "m_Flags": 7,
+                        "m_LocalMatrix": [
+                           1,
+                           0,
+                           0,
+                           0,
+                           0,
+                           1,
+                           0,
+                           0,
+                           0,
+                           0,
+                           1,
+                           0,
+                           0,
+                           7.325709819793701,
+                           0,
+                           1
+                        ],
+                        "m_Position": [
+                           0,
+                           7.325709819793701,
+                           0
+                        ],
+                        "m_Rotation": [
+                           0,
+                           0,
+                           0,
+                           1
+                        ],
+                        "m_RotationMode": 0,
+                        "m_Scale": [
+                           1,
+                           1,
+                           1
+                        ],
+                        "m_Tag": "",
+                        "m_WorldMatrix": [
+                           1,
+                           0,
+                           0,
+                           0,
+                           0,
+                           1,
+                           0,
+                           0,
+                           0,
+                           0,
+                           1,
+                           0,
+                           0,
+                           7.325709819793701,
+                           0,
+                           1
+                        ]
+                     },
+                     {
+                        "__Type__": "Engine::SkyRenderer",
+                        "m_Active": true,
+                        "m_Dirty": true,
+                        "m_DrawShadow": false,
+                        "m_GroundColor": [
+                           0.18000000715255737,
+                           0.12999999523162842,
+                           0.07999999821186066
+                        ],
+                        "m_HorizonBlend": 0.30000001192092896,
+                        "m_HorizonColor": [
+                           0.550000011920929,
+                           0.75,
+                           0.949999988079071
+                        ],
+                        "m_Materials": [
+                           {
+                              "AssetKey": "Resources/Material/SkyMaterial",
+                              "AssetPath": ""
+                           }
+                        ],
+                        "m_Mesh": {
+                           "AssetKey": "__SkyMesh_Sphere__",
+                           "AssetPath": ""
+                        },
+                        "m_ReceiveShadow": false,
+                        "m_RenderPassID": 0,
+                        "m_Shape": 0,
+                        "m_SkyIntensity": 1,
+                        "m_SphereSlices": 32,
+                        "m_SphereStacks": 16,
+                        "m_SunColor": [
+                           1,
+                           0.8999999761581421,
+                           0.699999988079071
+                        ],
+                        "m_SunDirection": [
+                           0,
+                           0,
+                           1
+                        ],
+                        "m_SunIntensity": 10,
+                        "m_SunSize": 0.019999999552965164,
+                        "m_Tag": "",
+                        "m_ZenithColor": [
+                           0.07999999821186066,
+                           0.3499999940395355,
+                           0.8500000238418579
+                        ]
+                     },
+                     {
+                        "__Type__": "Engine::SkyLight",
+                        "m_Active": true,
+                        "m_AttenuationCoefficients": [
+                           1,
+                           0.09000000357627869,
+                           0.03200000151991844
+                        ],
+                        "m_AttenuationMode": 0,
+                        "m_Color": [
+                           0.07999999821186066,
+                           0.3499999940395355,
+                           0.8500000238418579
+                        ],
+                        "m_Direction": [
+                           0,
+                           0,
+                           1
+                        ],
+                        "m_Dirty": true,
+                        "m_Flags": 52,
+                        "m_GroundColor": [
+                           0.05000000074505806,
+                           0.03999999910593033,
+                           0.029999999329447746
+                        ],
+                        "m_IndirectIntensity": 0.20000001788139343,
+                        "m_Intensity": 1,
+                        "m_LightingLayerMask": 4294967295,
+                        "m_Range": 10,
+                        "m_ShadowBias": 0.0020000000949949026,
+                        "m_ShadowNormalBias": 0.009999999776482582,
+                        "m_ShadowRange": 50,
+                        "m_ShadowSlopeBias": 0.5,
+                        "m_SpotFalloffExponent": 1,
+                        "m_SpotInnerAngle": 15,
+                        "m_SpotOuterAngle": 30,
+                        "m_Tag": "",
+                        "m_Type": 3
+                     }
+                  ],
+                  "m_Flags": 3,
+                  "m_Index": 5,
+                  "m_LayerIndex": 0,
+                  "m_Name": "Sky",
+                  "m_TagSet": []
+               }
+            ],
+            "m_Index": 0,
+            "m_Name": "Default"
+         }
+      ],
+      "m_Name": "Untitled Scene"
+   }
+}

@@ -1,0 +1,26 @@
+{
+   "AssetHeader": {
+      "MagicNumber": 6072351289621955000,
+      "ResourceType": 3,
+      "Version": 0
+   },
+   "m_BlendMode": 1,
+   "m_CullMode": 0,
+   "m_DepthCompareOp": 1,
+   "m_DepthMode": 2,
+   "m_FillMode": 1,
+   "m_Key": "SpriteMaterial",
+   "m_Parameters": {},
+   "m_Path": "",
+   "m_PixelShaderHandle": {
+      "AssetKey": "DefaultPS",
+      "AssetPath": "Resources/Shader/default.frag.spv"
+   },
+   "m_ResourceType": 3,
+   "m_TextureSlots": {},
+   "m_Version": 0,
+   "m_VertexShaderHandle": {
+      "AssetKey": "DefaultVS",
+      "AssetPath": "Resources/Shader/default.vert.spv"
+   }
+}

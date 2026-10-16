@@ -1,0 +1,32 @@
+{
+   "Scene": {
+      "m_Flags": 1,
+      "m_Layers": [
+         {
+            "__Type__": "Layer",
+            "m_DeadGameObjects": [],
+            "m_Flags": 3,
+            "m_GameObjects": [],
+            "m_Index": 0,
+            "m_Name": "Default"
+         },
+         {
+            "__Type__": "Layer",
+            "m_DeadGameObjects": [],
+            "m_Flags": 3,
+            "m_GameObjects": [],
+            "m_Index": 1,
+            "m_Name": "Second Layer"
+         },
+         {
+            "__Type__": "Layer",
+            "m_DeadGameObjects": [],
+            "m_Flags": 3,
+            "m_GameObjects": [],
+            "m_Index": 2,
+            "m_Name": "Third Layer"
+         }
+      ],
+      "m_Name": "Untitled Scene"
+   }
+}
