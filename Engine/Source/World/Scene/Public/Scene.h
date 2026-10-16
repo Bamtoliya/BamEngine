@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "Base.h"
 #include "Reflection/ReflectionMacro.h"
@@ -169,6 +169,9 @@ public:
 	[[nodiscard]]
 	archive::ArchiveResult WriteArchive(archive::IArchive& ar) const;
 	[[nodiscard]] static archive::ArchiveResult CreateFromArchive(const archive::IArchive& ar, Scene*& scene);
+	[[nodiscard]] archive::ArchiveResult WritePrefabArchive(archive::IArchive& ar, const Entity& rootEntity) const;
+	[[nodiscard]] archive::ArchiveResult InstantiatePrefabArchive(
+		const archive::IArchive& ar, Entity*& outRootEntity, Entity* parent = nullptr);
 #pragma endregion
 
 #pragma region Variable

@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "Scene.h"
 
@@ -39,6 +39,9 @@ public:
 	EResult NewScene(void* arg = nullptr);
 	EResult SaveScene(archive::IArchive& ar, const wstring& filePath);
 	EResult LoadScene(archive::IArchive& ar, const wstring& filePath);
+	EResult SavePrefab(archive::IArchive& ar, const wstring& filePath, const Entity& rootEntity);
+	EResult InstantiatePrefab(archive::IArchive& ar, const wstring& filePath,
+		Entity*& outRootEntity, Entity* parent = nullptr);
 
 	EResult AddScene(Scene* scene);
 	EResult RemoveScene(Scene* scene);

@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "ResourceManager.h"
 
 template<typename T, typename... Args>
@@ -100,8 +100,11 @@ ResourceHandle<T> ResourceManager::AddResource(const wstring_view& key, T* resou
 	static_assert(is_base_of_v<Resource, T>, "T must be derived from Resource");
 	if (!resource) return ResourceHandle<T>();
 
-	uint64 hash = RunTimeHash(key);
-	resource->SetKey(key.data());
+	const wstring normalizedKey = NormalizePath(wstring(key));
+	uint64 hash = RunTimeHash(normalizedKey);
+	resource->SetKey(normalizedKey);
+	if (resource->GetPath().empty())
+		resource->SetPath(normalizedKey);
 
 	return ResourceHandle<T>(AddResourceInternal(hash, resource));
 }
@@ -109,7 +112,7 @@ ResourceHandle<T> ResourceManager::AddResource(const wstring_view& key, T* resou
 template <typename T>
 ResourceHandle<T> ResourceManager::GetResourceHandle(const wstring& key)
 {
-	uint64 hash = RunTimeHash(key);
+	uint64 hash = RunTimeHash(NormalizePath(key));
 	return ResourceHandle<T>(FindHandle(hash));
 }
 

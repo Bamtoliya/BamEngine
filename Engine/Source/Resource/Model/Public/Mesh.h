@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "RHIBuffer.h"
 #include "Resource.h"
@@ -49,7 +49,7 @@ struct MeshCreateDesc : public ResourceCreateDesc
 	vec3 BoundingBoxMin = { 0.0f, 0.0f, 0.0f };
 	vec3 BoundingBoxMax = { 0.0f, 0.0f, 0.0f };
 
-	EMeshFlag Flags = { EMeshFlag::None };
+	EMeshFlag Flags = { EMeshFlag::KeepRawData };
 };
 
 
@@ -95,6 +95,9 @@ public:
 	RHIBuffer* GetStreamBuffer(EMeshStream stream) const { return m_VertexBuffers[(uint32)stream]; }
 	uint32 GetStreamCount(EMeshStream stream) const { return m_StreamCounts[(uint32)stream]; }
 	uint32 GetStreamStride(EMeshStream stream) const { return m_StreamStrides[(uint32)stream]; }
+	const vector<uint8>& GetRawStreamData(EMeshStream stream) const { return m_RawData[(uint32)stream]; }
+	const vector<uint8>& GetRawIndexData() const { return m_IndexRaw; }
+	uint32 GetIndexStride() const { return m_IndexStride; }
 	RHIBuffer* GetPositionBuffer() const { return GetStreamBuffer(EMeshStream::Position); }
 	RHIBuffer* GetMaterialBuffer() const { return GetStreamBuffer(EMeshStream::Material); }
 	RHIBuffer* GetSkinDataBuffer() const { return GetStreamBuffer(EMeshStream::SkinData); }
@@ -126,26 +129,37 @@ public:
 	vec3 GetExtents() const { return (m_BoundingBoxMax - m_BoundingBoxMin) * 0.5f; }
 #pragma endregion
 
+#pragma region Save&Load
+protected:
+	EResult OnPostLoad() override;
+#pragma endregion
+
 private:
 	// 캐싱된 버퍼 배열을 다시 구축하는 내부 헬퍼
 	void RebuildCachedBuffers();
 
 #pragma region Variable
 protected:
+	PROPERTY(READONLY)
 	EMeshFlag m_Flags = { EMeshFlag::None };
 
 	PROPERTY(CATEGORY("PROP_INFORMATION"), READONLY)
 	ETopology m_Topology = { ETopology::TriangleList };
 
-	uint32 m_StreamCounts[(uint32)EMeshStream::Max] = { 0 };
-	uint32 m_StreamStrides[(uint32)EMeshStream::Max] = { 0 };
+	PROPERTY(READONLY)
+	std::array<uint32, (uint32)EMeshStream::Max> m_StreamCounts = {};
+	PROPERTY(READONLY)
+	std::array<uint32, (uint32)EMeshStream::Max> m_StreamStrides = {};
 	RHIBuffer* m_VertexBuffers[(uint32)EMeshStream::Max] = { nullptr };
-	vector<uint8> m_RawData[(uint32)EMeshStream::Max];
+	PROPERTY(READONLY)
+	std::array<vector<uint8>, (uint32)EMeshStream::Max> m_RawData = {};
 
 	RHIBuffer* m_IndexBuffer = { nullptr };
 	PROPERTY(CATEGORY("PROP_INFORMATION"), READONLY)
 	uint32 m_IndexCount = { 0 };
+	PROPERTY(READONLY)
 	uint32 m_IndexStride = { 0 };
+	PROPERTY(READONLY)
 	vector<uint8> m_IndexRaw;
 
 	PROPERTY(CATEGORY("PROP_INFORMATION"), READONLY)

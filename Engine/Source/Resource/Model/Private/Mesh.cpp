@@ -1,7 +1,8 @@
-﻿#pragma once
+#pragma once
 #include "Mesh.h"
 #include "Renderer.h"
 #include "ResourceManager.h"
+#include <archive/ArchiveInterface.h>
 
 #pragma region Constructor&Destructor
 EResult Mesh::Initialize(void* arg)
@@ -9,7 +10,7 @@ EResult Mesh::Initialize(void* arg)
 	if (IsFailure(__super::Initialize(arg))) return EResult::Fail;
 	CAST_DESC
 
-		RHI* rhi = Renderer::Get().GetRHI();
+	RHI* rhi = Renderer::IsCreated() ? Renderer::Get().GetRHI() : nullptr;
 
 	// 1. 모든 버텍스 스트림을 루프 하나로 처리
 	for (uint32 i = 0; i < (uint32)EMeshStream::Max; ++i)
@@ -18,7 +19,7 @@ EResult Mesh::Initialize(void* arg)
 		m_StreamCounts[i] = stream.Count;
 		m_StreamStrides[i] = stream.Stride;
 
-		if (stream.Data && stream.Count > 0 && stream.Stride > 0)
+		if (stream.Data && stream.Count > 0 && stream.Stride > 0 && rhi)
 		{
 			uint32 totalSize = stream.Stride * stream.Count;
 			m_VertexBuffers[i] = rhi->CreateBuffer(stream.Data, totalSize, stream.Stride, ERHIBufferType::Vertex);
@@ -29,7 +30,7 @@ EResult Mesh::Initialize(void* arg)
 	// 2. Index Buffer 생성
 	m_IndexCount = desc->IndexCount;
 	m_IndexStride = desc->IndexStride;
-	if (desc->IndexData && m_IndexCount > 0)
+	if (desc->IndexData && m_IndexCount > 0 && rhi)
 	{
 		uint32 totalSize = desc->IndexStride * m_IndexCount;
 		m_IndexBuffer = rhi->CreateBuffer(desc->IndexData, totalSize, desc->IndexStride, ERHIBufferType::Index);
@@ -39,27 +40,24 @@ EResult Mesh::Initialize(void* arg)
 	// 3. Bounding Box & Flags
 	m_BoundingBoxMin = desc->BoundingBoxMin;
 	m_BoundingBoxMax = desc->BoundingBoxMax;
-	m_Flags = desc->Flags;
+	m_Flags = desc->Flags | EMeshFlag::KeepRawData;
 
-	// 4. 원본 데이터 보존 (KeepRawData 플래그)
-	if (HasFlag(m_Flags, EMeshFlag::KeepRawData))
+	// 4. 원본 데이터 보존 (직렬화 및 재로드를 위해 보존)
+	for (uint32 i = 0; i < (uint32)EMeshStream::Max; ++i)
 	{
-		for (uint32 i = 0; i < (uint32)EMeshStream::Max; ++i)
+		const auto& stream = desc->Streams[i];
+		if (stream.Data && stream.Count > 0 && stream.Stride > 0)
 		{
-			const auto& stream = desc->Streams[i];
-			if (stream.Data && stream.Count > 0)
-			{
-				uint32 bytes = stream.Stride * stream.Count;
-				m_RawData[i].resize(bytes);
-				memcpy(m_RawData[i].data(), stream.Data, bytes);
-			}
+			uint32 bytes = stream.Stride * stream.Count;
+			m_RawData[i].resize(bytes);
+			memcpy(m_RawData[i].data(), stream.Data, bytes);
 		}
-		if (desc->IndexData && m_IndexCount > 0)
-		{
-			uint32 bytes = m_IndexStride * m_IndexCount;
-			m_IndexRaw.resize(bytes);
-			memcpy(m_IndexRaw.data(), desc->IndexData, bytes);
-		}
+	}
+	if (desc->IndexData && m_IndexCount > 0 && m_IndexStride > 0)
+	{
+		uint32 bytes = m_IndexStride * m_IndexCount;
+		m_IndexRaw.resize(bytes);
+		memcpy(m_IndexRaw.data(), desc->IndexData, bytes);
 	}
 
 	// 5. Bind용 캐싱 배열 구축
@@ -141,32 +139,87 @@ EResult Mesh::SetStreamBuffer(EMeshStream stream, void* data, uint32 count, uint
 	uint32 idx = (uint32)stream;
 	if (idx >= (uint32)EMeshStream::Max || !data || count == 0) return EResult::InvalidArgument;
 
-	RHI* rhi = Renderer::Get().GetRHI();
 	uint32 totalSize = stride * count;
-
-	// 기존 버퍼가 있으면 해제 후 재생성
-	Safe_Release(m_VertexBuffers[idx]);
-	m_VertexBuffers[idx] = rhi->CreateBuffer(data, totalSize, stride, ERHIBufferType::Vertex);
+	m_RawData[idx].resize(totalSize);
+	memcpy(m_RawData[idx].data(), data, totalSize);
 	m_StreamCounts[idx] = count;
 	m_StreamStrides[idx] = stride;
 
+	Safe_Release(m_VertexBuffers[idx]);
+	RHI* rhi = Renderer::IsCreated() ? Renderer::Get().GetRHI() : nullptr;
+	if (rhi)
+	{
+		m_VertexBuffers[idx] = rhi->CreateBuffer(data, totalSize, stride, ERHIBufferType::Vertex);
+		if (!m_VertexBuffers[idx]) return EResult::Fail;
+	}
+
 	RebuildCachedBuffers();
-	return m_VertexBuffers[idx] ? EResult::Success : EResult::Fail;
+	return EResult::Success;
 }
 
 EResult Mesh::SetIndexBuffer(void* data, uint32 indexCount, uint32 stride)
 {
 	if (!data || indexCount == 0) return EResult::InvalidArgument;
 
-	RHI* rhi = Renderer::Get().GetRHI();
 	uint32 totalSize = stride * indexCount;
-
-	Safe_Release(m_IndexBuffer);
-	m_IndexBuffer = rhi->CreateBuffer(data, totalSize, stride, ERHIBufferType::Index);
+	m_IndexRaw.resize(totalSize);
+	memcpy(m_IndexRaw.data(), data, totalSize);
 	m_IndexCount = indexCount;
 	m_IndexStride = stride;
 
-	return m_IndexBuffer ? EResult::Success : EResult::Fail;
+	Safe_Release(m_IndexBuffer);
+	RHI* rhi = Renderer::IsCreated() ? Renderer::Get().GetRHI() : nullptr;
+	if (rhi)
+	{
+		m_IndexBuffer = rhi->CreateBuffer(data, totalSize, stride, ERHIBufferType::Index);
+		if (!m_IndexBuffer) return EResult::Fail;
+	}
+
+	return EResult::Success;
+}
+#pragma endregion
+
+#pragma region Save&Load
+EResult Mesh::OnPostLoad()
+{
+	for (uint32 i = 0; i < (uint32)EMeshStream::Max; ++i)
+	{
+		const uint64 expectedBytes = static_cast<uint64>(m_StreamCounts[i]) * m_StreamStrides[i];
+		if (m_RawData[i].size() != expectedBytes)
+			return EResult::Fail;
+	}
+
+	const uint64 expectedIndexBytes = static_cast<uint64>(m_IndexCount) * m_IndexStride;
+	if (m_IndexRaw.size() != expectedIndexBytes)
+		return EResult::Fail;
+
+	for (auto& buffer : m_VertexBuffers)
+		Safe_Release(buffer);
+	Safe_Release(m_IndexBuffer);
+
+	m_Flags = m_Flags | EMeshFlag::KeepRawData;
+	RHI* rhi = Renderer::IsCreated() ? Renderer::Get().GetRHI() : nullptr;
+	for (uint32 i = 0; i < (uint32)EMeshStream::Max; ++i)
+	{
+		if (rhi && !m_RawData[i].empty() && m_StreamStrides[i] > 0)
+		{
+			m_VertexBuffers[i] = rhi->CreateBuffer(
+				m_RawData[i].data(), static_cast<uint32>(m_RawData[i].size()), m_StreamStrides[i], ERHIBufferType::Vertex);
+			if (!m_VertexBuffers[i])
+				return EResult::Fail;
+		}
+	}
+
+	if (rhi && !m_IndexRaw.empty() && m_IndexStride > 0)
+	{
+		m_IndexBuffer = rhi->CreateBuffer(
+			m_IndexRaw.data(), static_cast<uint32>(m_IndexRaw.size()), m_IndexStride, ERHIBufferType::Index);
+		if (!m_IndexBuffer)
+			return EResult::Fail;
+	}
+
+	RebuildCachedBuffers();
+	return EResult::Success;
 }
 #pragma endregion
 

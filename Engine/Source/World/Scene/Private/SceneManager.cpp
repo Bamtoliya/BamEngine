@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "SceneManager.h"
 #include <archive/ArchiveInterface.h>
@@ -145,6 +145,51 @@ EResult SceneManager::LoadScene(archive::IArchive& ar, const wstring& filePath)
 	const EResult openResult = OpenScene(candidate);
 	Safe_Release(candidate);
 	return openResult;
+}
+
+EResult SceneManager::SavePrefab(archive::IArchive& ar, const wstring& filePath, const Entity& rootEntity)
+{
+	if (filePath.empty())
+		return EResult::InvalidArgument;
+
+	if (!m_CurrentScene)
+		return EResult::Fail;
+
+	auto result = m_CurrentScene->WritePrefabArchive(ar, rootEntity);
+	if (result)
+		result = ar.SaveToFile(std::filesystem::path(filePath));
+
+	if (!result)
+	{
+		ENGINE_LOG_ERROR("Prefab save failed: code={}, field={}, path={}",
+			static_cast<int>(result.Code), result.Field, WStrToStr(filePath));
+		return EResult::Fail;
+	}
+
+	return EResult::Success;
+}
+
+EResult SceneManager::InstantiatePrefab(
+	archive::IArchive& ar, const wstring& filePath, Entity*& outRootEntity, Entity* parent)
+{
+	if (filePath.empty() || outRootEntity != nullptr)
+		return EResult::InvalidArgument;
+
+	if (!m_CurrentScene)
+		return EResult::Fail;
+
+	auto result = ar.LoadFromFile(std::filesystem::path(filePath));
+	if (result)
+		result = m_CurrentScene->InstantiatePrefabArchive(ar, outRootEntity, parent);
+
+	if (!result)
+	{
+		ENGINE_LOG_ERROR("Prefab load failed: code={}, field={}, path={}",
+			static_cast<int>(result.Code), result.Field, WStrToStr(filePath));
+		return EResult::Fail;
+	}
+
+	return EResult::Success;
 }
 
 EResult SceneManager::AddScene(Scene* scene)

@@ -32,6 +32,11 @@
         "sdl3-renderer-binding",
         "sdlgpu3-binding"
       ]
+    },
+    {
+      "name": "qtbase",
+      "default-features": false,
+      "features": [ "widgets" ]
     }
   ]
 }

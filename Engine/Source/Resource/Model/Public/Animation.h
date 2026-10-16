@@ -1,38 +1,63 @@
-﻿#pragma once
+#pragma once
 
 #include "Base.h"
 #include "Resource.h"
 
+STRUCT()
 struct Keyframe
 {
-	f64 Time;
+	REFLECT_STRUCT()
+
+	PROPERTY()
+	f64 Time = 0.0;
+
 	bool operator==(const Keyframe& other) const {
 		return Time == other.Time;
 	}
 };
 
+STRUCT()
 struct VectorKeyframe : public Keyframe
 {
-	vec3 Value;
+	REFLECT_STRUCT()
+
+	PROPERTY()
+	vec3 Value = vec3(0.0f);
+
 	bool operator==(const VectorKeyframe& other) const {
 		return Time == other.Time && Value == other.Value;
 	}
 };
 
+STRUCT()
 struct QuaternionKeyframe : public Keyframe
 {
-	quat Value;
+	REFLECT_STRUCT()
+
+	PROPERTY()
+	quat Value = glm::identity<quat>();
+
 	bool operator==(const QuaternionKeyframe& other) const {
 		return Time == other.Time &&
-			Value == Value;
+			Value == other.Value;
 	}
 };
 
+STRUCT()
 struct AnimationTrack
 {
+	REFLECT_STRUCT()
+
+	PROPERTY()
 	wstring TargetBoneName;
+
+	PROPERTY()
 	vector<VectorKeyframe> PositionKeyframes;
+
+	PROPERTY()
 	vector<QuaternionKeyframe> RotationKeyframes;
+
+	PROPERTY()
 	vector<VectorKeyframe> ScaleKeyframes;
 
 	bool operator==(const AnimationTrack& other) const {

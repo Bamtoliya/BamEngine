@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "MaterialInterface.h"
 #include "SamplerManager.h"
 #include "ResourceManager.h"
@@ -52,6 +52,12 @@ int32 MaterialInterface::FindTextureBindingIndexBySlot(uint32 slot) const
         return static_cast<int32>(it->second);
     }
     return -1;
+}
+
+EResult MaterialInterface::OnPostLoad()
+{
+    RebuildTextureBindingCache();
+    return EResult::Success;
 }
 #pragma endregion
 

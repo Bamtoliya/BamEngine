@@ -98,3 +98,5 @@ add_dependencies(Editor GenerateLocalization)
 if(BAMENGINE_BUILD_REFLECTION_CHECK)
     include(Checks)
 endif()
+
+include(QtBuild)

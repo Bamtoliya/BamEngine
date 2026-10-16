@@ -1,14 +1,23 @@
-﻿#pragma once
+#pragma once
 
 #include "Base.h"
 #include "Reflection/ReflectionMacro.h"
 #include "TypeIdentityInterface.h"
 #include <archive/ArchiveResult.h>
+#include <reflection/ObjectView.h>
 #include "ResourceBinaryHeader.h"
 
 #define DECLARE_RESOURCE(ClassType) \
 public: \
 	static ClassType* CreateEmpty() { return new ClassType(); } \
+	[[nodiscard]] reflection::ObjectView GetReflectedObjectView() noexcept override \
+	{ \
+		return reflection::ObjectView::From(*this); \
+	} \
+	[[nodiscard]] reflection::ObjectView GetReflectedObjectView() const noexcept override \
+	{ \
+		return reflection::ObjectView::From(*this); \
+	} \
 private:
 
 struct ResourceCreateDesc
@@ -70,10 +79,19 @@ public:
 
 #pragma region Save&Load
 public:
+	[[nodiscard]] virtual reflection::ObjectView GetReflectedObjectView() noexcept
+	{
+		return reflection::ObjectView::From(*this);
+	}
+	[[nodiscard]] virtual reflection::ObjectView GetReflectedObjectView() const noexcept
+	{
+		return reflection::ObjectView::From(*this);
+	}
 	[[nodiscard]] virtual archive::ArchiveResult WriteArchive(archive::IArchive& ar) const;
 	[[nodiscard]] virtual archive::ArchiveResult ReadArchive(const archive::IArchive& ar);
 protected:
 	[[nodiscard]] virtual uint32 GetArchiveFormatVersion() const noexcept { return 0; }
+	virtual EResult OnPostLoad() { return EResult::Success; }
 #pragma endregion
 
 #pragma region Member Variables

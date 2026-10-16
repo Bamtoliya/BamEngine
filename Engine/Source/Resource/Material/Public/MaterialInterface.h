@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "Resource.h"
 #include "Shader.h"
@@ -177,6 +177,7 @@ public:
 
 #pragma region Save&Load
 protected:
+	EResult OnPostLoad() override;
 	void RebuildTextureBindingCache();
 	int32 FindTextureBindingIndexByName(const string& name) const;
 	int32 FindTextureBindingIndexBySlot(uint32 slot) const;

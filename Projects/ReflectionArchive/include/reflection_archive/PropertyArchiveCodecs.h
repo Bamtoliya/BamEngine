@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <archive/ArchiveInterface.h>
 #include <reflection/PropertyInfo.h>
@@ -17,6 +17,8 @@ namespace archive_reflection
     class PropertyCodecs
     {
     public:
+        using ValueVisitor = std::function<archive::ArchiveResult(const reflection::ValueView&)>;
+
         [[nodiscard]] bool HasCodec(std::type_index type) const { return m_codecs.contains(type); }
 
         template<typename T>
@@ -43,6 +45,24 @@ namespace archive_reflection
                     }
 
                     return write(ar, key, *typedValue);
+                };
+
+            codec.ReadValue = [read](const archive::IArchive& ar,
+                std::string_view key, const ValueVisitor& visitor) -> archive::ArchiveResult
+                {
+                    if (!visitor)
+                    {
+                        return { archive::ArchiveErrorCode::InvalidOperation, std::string{ key } };
+                    }
+
+                    T value{};
+                    const auto result = read(ar, key, value);
+                    if (!result)
+                    {
+                        return result;
+                    }
+
+                    return visitor(reflection::ValueView::From(value));
                 };
 
             codec.Read = [read = std::move(read)](const archive::IArchive& ar,
@@ -123,6 +143,19 @@ namespace archive_reflection
             return found->second.Write(ar, key, value);
         }
 
+        [[nodiscard]] std::optional<archive::ArchiveResult> ReadValue(const archive::IArchive& ar,
+            std::string_view key, std::type_index type, const ValueVisitor& visitor) const
+        {
+            const auto found = m_codecs.find(type);
+
+            if (found == m_codecs.end())
+            {
+                return std::nullopt;
+            }
+
+            return found->second.ReadValue(ar, key, visitor);
+        }
+
         [[nodiscard]] std::optional<archive::ArchiveResult> ReadProperty(const archive::IArchive& ar,
             const reflection::PropertyInfo& property, const reflection::ObjectView& object) const
         {
@@ -148,6 +181,9 @@ namespace archive_reflection
         {
             std::function<archive::ArchiveResult(archive::IArchive&,
                 std::string_view, const reflection::ValueView&)> Write;
+
+            std::function<archive::ArchiveResult(const archive::IArchive&,
+                std::string_view, const ValueVisitor&)> ReadValue;
 
             std::function<archive::ArchiveResult(const archive::IArchive&,
                 const reflection::PropertyInfo&, const reflection::ObjectView&)> Read;

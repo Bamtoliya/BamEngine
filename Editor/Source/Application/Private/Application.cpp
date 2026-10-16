@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include <fmt/core.h>
 #include <SDL3/SDL.h>
 #include "Application.h"
@@ -365,35 +365,15 @@ void Application::InitializeFiles()
         RESOURCE_PATH L"Texture/magenta1x1.png",
         RESOURCE_PATH L"Texture/green1x1.png",
         RESOURCE_PATH L"Texture/blue1x1.png",
-        RESOURCE_PATH L"Texture/uv1.bamtex",
 
         ///Sprite
-        RESOURCE_PATH L"Texture/uv1.bamsprite",
         RESOURCE_PATH L"Texture/uv1.bamsprite.json",
-
-        //Shader
-        //RESOURCE_PATH L"Shader/bin/default.vert.bamshader",
-        //RESOURCE_PATH L"Shader/bin/default.frag.bamshader",
-        //RESOURCE_PATH L"Shader/bin/sprite.vert.bamshader",
-        //RESOURCE_PATH L"Shader/bin/sprite.frag.bamshader",
-
-        //Material
-        RESOURCE_PATH L"Material/DefaultMaterial.bammat",
-        RESOURCE_PATH L"Material/SpriteMaterial.bammat",
-
-        //MaterialInstance
-        RESOURCE_PATH L"Material/SpriteMaterial.bammatinst",
-
-        //Mesh
-        //RESOURCE_PATH L"Model/Cube2_Cube.bammesh",
     };
 
     for (const auto& path : resourcesToLoad)
     {
         resourceManager.LoadFile(path);
     }
-
-    //resourceManager.SaveToJsonFile(resourceManager.GetResourceHandle<Sprite>(RESOURCE_PATH L"Texture/uv1.bamsprite").Get(), RESOURCE_PATH L"Texture/uv1.bamsprite.json");
 }
 
 void Application::InitializeShaders()
@@ -495,8 +475,7 @@ void Application::InitializeShaders()
         fsQuadVsDesc.shaderType = EShaderType::Vertex;
         fsQuadVsDesc.entryPoint = "main";
         auto handle = rm.LoadResource<Shader>(&fsQuadVsDesc);
-        rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/fullscreen_quad.vert.bamshader");
-        //rm.LoadFile(L"Resources/Shader/fullscreen_quad.vert.bamshader");
+        rm.SaveToJsonFile(handle.Get(), L"Resources/Shader/fullscreen_quad.vert.bamshader.json");
     }
     
     // Lighting PS
@@ -822,7 +801,7 @@ void Application::InitializeMaterials()
     defaultMaterialDesc.PixelShaderHandle = resourceManager.GetResourceHandle<Shader>(RESOURCE_PATH L"Shader/DefaultPS");
     Material* material = resourceManager.LoadResource<Material>(&defaultMaterialDesc).Get();
     material->SetTextureBinding("Default", 0, resourceManager.GetResourceHandle<Texture>(RESOURCE_PATH L"Texture/magenta1x1.png"));
-    resourceManager.SaveToBinaryFile(material, RESOURCE_PATH L"Material/DefaultMaterial.bammat");
+    resourceManager.SaveToJsonFile(material, RESOURCE_PATH L"Material/DefaultMaterial.bammat.json");
     
     MaterialDesc spriteMaterialDesc = {};
     spriteMaterialDesc.Key = RESOURCE_PATH L"Material/SpriteMaterial";
@@ -833,15 +812,14 @@ void Application::InitializeMaterials()
     spriteMaterialDesc.CullMode = ECullMode::None;
     spriteMaterialDesc.DepthMode = EDepthMode::ReadWrite;
     Material* spriteMaterial = resourceManager.LoadResource<Material>(&spriteMaterialDesc).Get();
-    resourceManager.SaveToBinaryFile(spriteMaterial, RESOURCE_PATH L"Material/SpriteMaterial.bammat");
+    resourceManager.SaveToJsonFile(spriteMaterial, RESOURCE_PATH L"Material/SpriteMaterial.bammat.json");
 
     MaterialInstanceDesc spriteMaterialInstanceDesc = {};
-    spriteMaterialInstanceDesc.BaseMaterialHandle = resourceManager.GetResourceHandle<Material>(L"Resources/Material/SpriteMaterial.bammat");
+    spriteMaterialInstanceDesc.BaseMaterialHandle = resourceManager.GetResourceHandle<Material>(RESOURCE_PATH L"Material/SpriteMaterial");
     spriteMaterialInstanceDesc.Key = L"Resources/Material/SpriteMaterialInstance";
     ResourceHandle<MaterialInstance> spriteMaterialInstanceHandle = resourceManager.LoadResource<MaterialInstance>(&spriteMaterialInstanceDesc);
     MaterialInstance* spriteMaterialInstance = spriteMaterialInstanceHandle.Get();
-    resourceManager.SaveToBinaryFile(spriteMaterialInstance, L"Resources/Material/SpriteMaterial.bammatinst");
-    //resourceManager.DestroyResource(spriteMaterialInstanceHandle.GetRawHandle());
+    resourceManager.SaveToJsonFile(spriteMaterialInstance, L"Resources/Material/SpriteMaterialInstance.bammatinst.json");
 
     MaterialDesc skinningMaterialDesc = {};
     skinningMaterialDesc.Key = L"Resources/Material/SkinningMaterial";
@@ -850,16 +828,12 @@ void Application::InitializeMaterials()
     skinningMaterialDesc.BlendMode = EBlendMode::AlphaBlend;
     skinningMaterialDesc.CullMode = ECullMode::None;
     skinningMaterialDesc.DepthMode = EDepthMode::ReadWrite;
-    Material* skinningMaterial = resourceManager.LoadResource<Material>(&skinningMaterialDesc).Get();
-    resourceManager.SaveToBinaryFile(skinningMaterial, L"Resources/Material/SkinningMaterial.bammat");
-    resourceManager.LoadFile(L"Resources/Material/SkinningMaterial.bammat");
+    resourceManager.LoadResource<Material>(&skinningMaterialDesc);
 
     MaterialInstanceDesc skinningMaterialInstanceDesc = {};
-    skinningMaterialInstanceDesc.BaseMaterialHandle = resourceManager.GetResourceHandle<Material>(L"Resources/Material/SkinningMaterial.bammat");
+    skinningMaterialInstanceDesc.BaseMaterialHandle = resourceManager.GetResourceHandle<Material>(L"Resources/Material/SkinningMaterial");
     skinningMaterialInstanceDesc.Key = L"Resources/Material/SkinningMaterialInstance";
-    MaterialInstance* skinningMaterialInstance = resourceManager.LoadResource<MaterialInstance>(&skinningMaterialInstanceDesc).Get();
-    resourceManager.SaveToBinaryFile(skinningMaterialInstance, L"Resources/Material/SkinningMaterial.bammatinst");
-    resourceManager.LoadFile(L"Resources/Material/SkinningMaterial.bammatinst");
+    resourceManager.LoadResource<MaterialInstance>(&skinningMaterialInstanceDesc);
 #pragma endregion
 
     // ── G-Buffer Material 생성 ──
@@ -872,8 +846,7 @@ void Application::InitializeMaterials()
     gbufferMatDesc.DepthMode = EDepthMode::ReadWrite;
     Material* gbufferMat = resourceManager.LoadResource<Material>(&gbufferMatDesc).Get();
     gbufferMat->SetTextureBinding("Diffuse", 0, resourceManager.GetResourceHandle<Texture>(RESOURCE_PATH L"Texture/white1x1.png"));
-    resourceManager.SaveToBinaryFile(gbufferMat, L"Resources/Material/GBufferMaterial.bammat");
-    resourceManager.LoadFile(L"Resources/Material/GBufferMaterial.bammat");
+    resourceManager.SaveToJsonFile(gbufferMat, L"Resources/Material/GBufferMaterial.bammat.json");
 
 
 	// ── Shadow Depth Material 생성 ──
@@ -886,9 +859,7 @@ void Application::InitializeMaterials()
     shadowDepthMatDesc.BlendMode = EBlendMode::Opaque;
     shadowDepthMatDesc.CullMode = ECullMode::Front;
     shadowDepthMatDesc.DepthMode = EDepthMode::ReadWrite;
-    Material* shadowDepthMat = resourceManager.LoadResource<Material>(&shadowDepthMatDesc).Get();
-    resourceManager.SaveToBinaryFile(shadowDepthMat, L"Resources/Material/ShadowDepthMaterial.bammat");
-	resourceManager.LoadFile(L"Resources/Material/ShadowDepthMaterial.bammat");
+    resourceManager.LoadResource<Material>(&shadowDepthMatDesc);
 
 	MaterialDesc shadowDepthSkinMatDesc = {};
     shadowDepthSkinMatDesc.Key = L"Resources/Material/ShadowDepthSkinningMaterial";
@@ -899,22 +870,21 @@ void Application::InitializeMaterials()
     shadowDepthSkinMatDesc.BlendMode = EBlendMode::Opaque;
     shadowDepthSkinMatDesc.CullMode = ECullMode::Front;
     shadowDepthSkinMatDesc.DepthMode = EDepthMode::ReadWrite;
-    Material* shadowDepthSkinMat = resourceManager.LoadResource<Material>(&shadowDepthSkinMatDesc).Get();
-	resourceManager.SaveToBinaryFile(shadowDepthSkinMat, L"Resources/Material/ShadowDepthSkinningMaterial.bammat");
+    resourceManager.LoadResource<Material>(&shadowDepthSkinMatDesc);
 
 
 	// ── Transparent Material 생성 ──
 	MaterialDesc transparentMatDesc = {};
     transparentMatDesc.Key = L"Resources/Material/TransparentMaterial";
     transparentMatDesc.VertexShaderHandle = resourceManager.GetResourceHandle<Shader>(
-        L"Resources/Shader/default.vert.bamshader");
+        RESOURCE_PATH L"Shader/DefaultVS");
     transparentMatDesc.PixelShaderHandle = resourceManager.GetResourceHandle<Shader>(
-        L"Resources/Shader/default.frag.bamshader");
+        RESOURCE_PATH L"Shader/DefaultPS");
     transparentMatDesc.BlendMode = EBlendMode::AlphaBlend;
     transparentMatDesc.CullMode = ECullMode::None;
     transparentMatDesc.DepthMode = EDepthMode::ReadOnly;
 	Material* transparentMat = resourceManager.LoadResource<Material>(&transparentMatDesc).Get();
-	resourceManager.SaveToBinaryFile(transparentMat, L"Resources/Material/TransparentMaterial.bammat");
+	resourceManager.SaveToJsonFile(transparentMat, L"Resources/Material/TransparentMaterial.bammat.json");
 
 
 	// ── Sky Material 생성 ──
@@ -928,8 +898,7 @@ void Application::InitializeMaterials()
     skyMatDesc.CullMode = ECullMode::None; // 뒤집힌 큐브이므로 Front 면을 카울링
 	skyMatDesc.DepthMode = EDepthMode::ReadOnly; // 깊이 테스트는 하지만 쓰지는 않음'
 	skyMatDesc.DepthCompareOp = ECompareOp::LessOrEqual;
-    Material* skyMat = resourceManager.LoadResource<Material>(&skyMatDesc).Get();
-	resourceManager.SaveToBinaryFile(skyMat, L"Resources/Material/SkyMaterial.bammat");
+    resourceManager.LoadResource<Material>(&skyMatDesc);
 
     // ── UI Material 생성 ──
     MaterialDesc uiMatDesc = {};
@@ -943,7 +912,7 @@ void Application::InitializeMaterials()
     uiMatDesc.DepthMode = EDepthMode::None;
     uiMatDesc.DepthCompareOp = ECompareOp::LessOrEqual;
     Material* uiMat = resourceManager.LoadResource<Material>(&uiMatDesc).Get();
-    resourceManager.SaveToBinaryFile(uiMat, L"Resources/Material/UIMaterial.bammat");
+    resourceManager.SaveToJsonFile(uiMat, L"Resources/Material/UIMaterial.bammat.json");
 }
 
 #pragma endregion

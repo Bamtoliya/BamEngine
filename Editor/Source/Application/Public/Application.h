@@ -39,6 +39,7 @@ private:
 	EResult InitializeRuntime(const ApplicationCreateInfo& createInfo);
 	EResult InitializeSystem();
 	EResult InitializeImGui();
+	EResult InitializeQt(const ApplicationCreateInfo& createInfo);
 	EResult InitializeLogger();
 #pragma endregion
 

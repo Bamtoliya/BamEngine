@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "ResourceManager.h"
 #include "Resources.h"
 #include <type_traits>
@@ -236,6 +236,7 @@ void ResourceManager::RegisterExplicitLoader()
 
 	m_LoaderRegistry[L".bammesh"] = meshLoader;
 
+	m_LoaderRegistry[L".bamskel"] = skeletonLoader;
 	m_LoaderRegistry[L".bamskeleton"] = skeletonLoader;
 
 	m_LoaderRegistry[L".bamanim"] = animationLoader;
@@ -512,7 +513,7 @@ Resource* ResourceManager::FreeSlotInternal(uint32 slotIndex)
 	Resource* resource = m_Resources[slotIndex].Instance;
 	if(resource)
 	{
-		uint64 hash = RunTimeHash(resource->GetKey());
+		uint64 hash = RunTimeHash(NormalizePath(resource->GetKey()));
 		m_HashToHandle.erase(hash);
 
 		uint64 typeHash = resource->GetTypeID();

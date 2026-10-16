@@ -324,4 +324,262 @@ archive::ArchiveResult Scene::CreateFromArchive(const archive::IArchive& ar, Sce
     return {};
 }
 
+archive::ArchiveResult Scene::WritePrefabArchive(archive::IArchive& ar, const Entity& rootEntity) const
+{
+    if (!ReflectionRegistry::IsCreated() || !MatchesStorage<IDComponent>(m_LocalRegistry) ||
+        !MatchesStorage<HierarchyComponent>(m_LocalRegistry))
+        return { archive::ArchiveErrorCode::InvalidOperation, "Prefab" };
+
+    const entt::entity rootHandle = rootEntity.GetEntityHandle();
+    if (rootEntity.GetScene() != this || !m_LocalRegistry.valid(rootHandle) ||
+        m_EntityMap.find(rootHandle) == m_EntityMap.end())
+        return { archive::ArchiveErrorCode::InvalidOperation, "Prefab.Root" };
+
+    std::vector<SceneEntityRecord> entities;
+    std::unordered_map<entt::entity, uint64> subtreeIds;
+    std::vector<std::pair<entt::entity, std::size_t>> stack{ { rootHandle, 1 } };
+
+    while (!stack.empty())
+    {
+        const auto [current, depth] = stack.back();
+        stack.pop_back();
+        if (depth > MaxHierarchyDepth || !m_LocalRegistry.valid(current) ||
+            m_EntityMap.find(current) == m_EntityMap.end())
+            return { archive::ArchiveErrorCode::InvalidValue, "Prefab.Hierarchy" };
+
+        const auto* identity = m_LocalRegistry.try_get<IDComponent>(current);
+        if (identity == nullptr || identity->id == 0)
+            return { archive::ArchiveErrorCode::InvalidValue, EntityField(entities.size(), "Id") };
+
+        const uint64 localId = static_cast<uint64>(entities.size() + 1);
+        if (!subtreeIds.emplace(current, localId).second)
+            return { archive::ArchiveErrorCode::InvalidValue, "Prefab.Hierarchy" };
+
+        SceneEntityRecord record;
+        record.Id = localId;
+        record.Handle = current;
+        entities.push_back(std::move(record));
+
+        if (const auto* hierarchy = m_LocalRegistry.try_get<HierarchyComponent>(current))
+        {
+            for (auto it = hierarchy->children.rbegin(); it != hierarchy->children.rend(); ++it)
+                stack.emplace_back(*it, depth + 1);
+        }
+    }
+
+    for (std::size_t i = 0; i < entities.size(); ++i)
+    {
+        auto& entity = entities[i];
+        if (const auto* hierarchy = m_LocalRegistry.try_get<HierarchyComponent>(entity.Handle))
+        {
+            entity.HasHierarchy = (i > 0) || !hierarchy->children.empty();
+            if (i > 0)
+            {
+                const auto parent = subtreeIds.find(hierarchy->parent);
+                if (parent == subtreeIds.end())
+                    return { archive::ArchiveErrorCode::InvalidValue, EntityField(i, "Hierarchy.Parent") };
+                entity.Parent = parent->second;
+            }
+            for (const auto childHandle : hierarchy->children)
+            {
+                const auto child = subtreeIds.find(childHandle);
+                if (child == subtreeIds.end())
+                    return { archive::ArchiveErrorCode::InvalidValue, EntityField(i, "Hierarchy.Children") };
+                entity.Children.push_back(child->second);
+            }
+        }
+        auto result = CollectComponents(m_LocalRegistry, entity);
+        if (!result)
+        {
+            result.Field = EntityField(i, "Components") + "." + result.Field;
+            return result;
+        }
+    }
+
+    auto result = ValidateHierarchy(entities, m_LocalRegistry);
+    if (!result) return result;
+
+    return ar.WriteObject("Prefab", entities, [&](archive::IArchive& object, const auto&) -> archive::ArchiveResult
+    {
+        auto written = object.Write("Version", SceneArchiveVersion);
+        if (written) written = object.Write("RootId", uint64(1));
+        if (!written) return written;
+        return object.WriteObjectArray("Entities", entities, [&](archive::IArchive& value, const auto& entity)
+            -> archive::ArchiveResult
+        {
+            auto field = value.Write("Id", entity.Id);
+            if (!field) return field;
+            if (entity.HasHierarchy)
+            {
+                field = value.WriteObject("Hierarchy", entity, [](archive::IArchive& relation, const auto& record)
+                    -> archive::ArchiveResult
+                {
+                    auto link = relation.Write("Parent", record.Parent);
+                    if (link) link = relation.WriteArray("Children", record.Children);
+                    return link;
+                });
+                if (!field) return field;
+            }
+            return value.WriteObjectArray("Components", entity.Components,
+                [&](archive::IArchive& component, const auto* entry) -> archive::ArchiveResult
+            {
+                auto data = component.Write("Type", entry->ReflectionType->QualifiedName);
+                if (data) data = ReflectionRegistry::Get().WriteComponent(
+                    component, "Data", m_LocalRegistry, entity.Handle, entry->Type);
+                return data;
+            });
+        });
+    });
+}
+
+archive::ArchiveResult Scene::InstantiatePrefabArchive(
+    const archive::IArchive& ar, Entity*& outRootEntity, Entity* parent)
+{
+    if (outRootEntity != nullptr || !ReflectionRegistry::IsCreated() || ar.GetObjectDepth() != 0 ||
+        !MatchesStorage<IDComponent>(m_LocalRegistry) || !MatchesStorage<HierarchyComponent>(m_LocalRegistry))
+        return { archive::ArchiveErrorCode::InvalidOperation, "Prefab" };
+
+    if (parent != nullptr && (parent->GetScene() != this || !m_LocalRegistry.valid(parent->GetEntityHandle()) ||
+        m_EntityMap.find(parent->GetEntityHandle()) == m_EntityMap.end()))
+        return { archive::ArchiveErrorCode::InvalidOperation, "Prefab.Parent" };
+
+    std::unique_ptr<Scene, SceneDeleter> staging(Scene::Create());
+    if (staging == nullptr)
+        return { archive::ArchiveErrorCode::InvalidOperation, "Prefab" };
+
+    std::vector<SceneEntityRecord> entities;
+    std::unordered_set<uint64> ids;
+    uint64 rootId = 0;
+    bool unused = false;
+    auto result = ar.ReadObject("Prefab", unused, [&](archive::IArchive& object, bool&) -> archive::ArchiveResult
+    {
+        uint32 version = 0;
+        auto field = object.Read("Version", version);
+        if (!field) return field;
+        if (version != SceneArchiveVersion)
+            return { archive::ArchiveErrorCode::InvalidValue, "Version" };
+        field = object.Read("RootId", rootId);
+        if (!field) return field;
+        if (rootId == 0)
+            return { archive::ArchiveErrorCode::InvalidValue, "RootId" };
+        return object.ReadObjectArray("Entities", [&](archive::IArchive& value, std::size_t)
+            -> archive::ArchiveResult
+        {
+            SceneEntityRecord entity;
+            auto data = value.Read("Id", entity.Id);
+            if (!data) return data;
+            if (entity.Id == 0 || !ids.insert(entity.Id).second)
+                return { archive::ArchiveErrorCode::InvalidValue, "Id" };
+            entity.Handle = staging->CreateEntity().GetEntityHandle();
+            staging->m_LocalRegistry.get<IDComponent>(entity.Handle).id = entity.Id;
+            data = value.HasField("Hierarchy", entity.HasHierarchy);
+            if (!data) return data;
+            if (entity.HasHierarchy)
+            {
+                bool relation = false;
+                data = value.ReadObject("Hierarchy", relation, [&](archive::IArchive& hierarchy, bool&)
+                    -> archive::ArchiveResult
+                {
+                    auto link = hierarchy.Read("Parent", entity.Parent);
+                    if (link) link = hierarchy.ReadArray("Children", entity.Children);
+                    return link;
+                });
+                if (!data) return data;
+            }
+            data = ReadComponents(value, staging->m_LocalRegistry, entity.Handle);
+            if (data) entities.push_back(std::move(entity));
+            return data;
+        });
+    });
+    if (!result) return result;
+    if (entities.empty())
+        return { archive::ArchiveErrorCode::InvalidValue, "Entities" };
+
+    result = ValidateHierarchy(entities, staging->m_LocalRegistry);
+    if (!result) return result;
+
+    std::size_t rootIndex = entities.size();
+    for (std::size_t i = 0; i < entities.size(); ++i)
+    {
+        if (entities[i].Id == rootId)
+            rootIndex = i;
+        else if (entities[i].Parent == 0)
+            return { archive::ArchiveErrorCode::InvalidValue, EntityField(i, "Hierarchy.Parent") };
+    }
+    if (rootIndex == entities.size() || entities[rootIndex].Parent != 0)
+        return { archive::ArchiveErrorCode::InvalidValue, "RootId" };
+
+    for (auto&& [storageId, storage] : staging->m_LocalRegistry.storage())
+    {
+        if (storageId == entt::type_hash<IDComponent>::value() ||
+            storageId == entt::type_hash<HierarchyComponent>::value())
+            continue;
+        const auto* entry = ReflectionRegistry::Get().FindComponent(storageId);
+        if (entry == nullptr || !entry->MatchesStorage(m_LocalRegistry))
+            return { archive::ArchiveErrorCode::InvalidOperation, "Prefab.Storage" };
+    }
+
+    const uint64 savedNextId = m_NextEntityId;
+    std::vector<Entity*> createdEntities;
+    createdEntities.reserve(entities.size());
+    std::unordered_map<uint64, Entity*> prefabToLive;
+
+    const auto rollback = [&]()
+    {
+        for (auto it = createdEntities.rbegin(); it != createdEntities.rend(); ++it)
+            static_cast<void>(DestroyEntity(**it));
+        m_NextEntityId = savedNextId;
+    };
+
+    for (const auto& record : entities)
+    {
+        Entity& live = CreateEntity();
+        createdEntities.push_back(&live);
+        prefabToLive.emplace(record.Id, &live);
+        const entt::entity liveHandle = live.GetEntityHandle();
+        for (auto&& [storageId, storage] : staging->m_LocalRegistry.storage())
+        {
+            if (!storage.contains(record.Handle) || storageId == entt::type_hash<IDComponent>::value() ||
+                storageId == entt::type_hash<HierarchyComponent>::value())
+                continue;
+            const auto* entry = ReflectionRegistry::Get().FindComponent(storageId);
+            if (entry == nullptr || !entry->Copy(staging->m_LocalRegistry, record.Handle, m_LocalRegistry, liveHandle))
+            {
+                rollback();
+                return { archive::ArchiveErrorCode::InvalidOperation, "Prefab.Copy" };
+            }
+        }
+    }
+
+    for (const auto& record : entities)
+    {
+        if (!record.HasHierarchy) continue;
+        const entt::entity liveHandle = prefabToLive.at(record.Id)->GetEntityHandle();
+        auto& hierarchy = m_LocalRegistry.emplace<HierarchyComponent>(liveHandle);
+        if (record.Parent != 0)
+            hierarchy.parent = prefabToLive.at(record.Parent)->GetEntityHandle();
+        for (const uint64 childId : record.Children)
+            hierarchy.children.push_back(prefabToLive.at(childId)->GetEntityHandle());
+    }
+
+    Entity* liveRoot = prefabToLive.at(rootId);
+    if (parent != nullptr)
+    {
+        const auto reparentResult = ReparentEntity(*liveRoot, parent);
+        if (reparentResult != EntityReparentResult::Success && reparentResult != EntityReparentResult::Unchanged)
+        {
+            rollback();
+            return { archive::ArchiveErrorCode::InvalidValue, "Prefab.Parent" };
+        }
+    }
+    else if (!TransformSystem::UpdateHierarchy(m_LocalRegistry))
+    {
+        rollback();
+        return { archive::ArchiveErrorCode::InvalidValue, "Entities.Transform" };
+    }
+
+    outRootEntity = liveRoot;
+    return {};
+}
+
 END

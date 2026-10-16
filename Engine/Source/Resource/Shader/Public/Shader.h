@@ -1,4 +1,4 @@
-﻿#pragma once 
+#pragma once 
 
 #include "Resource.h"
 #include "RHIShader.h"
@@ -105,6 +105,8 @@ public:
 	const ShaderResourceBindingInfo* FindResource(uint32 location) const;
 	const ShaderResourceBindingInfo* FindResource(const string& name) const;
 	RHIShaderDesc BuildRHIShaderDesc() const;
+protected:
+	EResult OnPostLoad() override;
 #pragma endregion
 
 #pragma region Member Variables

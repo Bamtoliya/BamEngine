@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "Skeleton.h"
 
@@ -57,5 +57,15 @@ wstring Skeleton::GetBoneName(uint32 boneIndex) const
 		return m_Bones[boneIndex].Name;
 	}
 	return L"";
+}
+
+EResult Skeleton::OnPostLoad()
+{
+	m_BoneMap.clear();
+	for (uint32 i = 0; i < m_Bones.size(); ++i)
+	{
+		m_BoneMap[m_Bones[i].Name] = i;
+	}
+	return EResult::Success;
 }
 #pragma endregion

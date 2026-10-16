@@ -63,11 +63,77 @@ namespace
             return value.HasValidAbsoluteFlags() && value.SetLocalPosition(value.position) && value.SetLocalScale(value.scale) &&
                 value.RestoreLocalRotation(value.rotation, value.eulerRotation);
         }
+        else if constexpr (std::is_same_v<T, Engine::ColliderComponent> || std::is_same_v<T, Engine::Collider2DComponent>)
+        {
+            return value.SetOffset(value.GetOffset()) && value.SetSettings(value.GetSettings()) &&
+                value.SetShape(value.GetShape());
+        }
         else if constexpr (requires { value.InvalidateCache(); })
         {
             value.InvalidateCache();
         }
         return true;
+    }
+
+    template<typename Variant>
+    archive::ArchiveResult WriteShapeVariant(archive::IArchive& ar, std::string_view key, const Variant& value,
+        const reflection::Registry& registry, const archive_reflection::PropertyCodecs& codecs)
+    {
+        return ar.WriteObject(key, value, [&](archive::IArchive& object, const Variant& current) -> archive::ArchiveResult
+        {
+            return std::visit([&](const auto& alt) -> archive::ArchiveResult
+            {
+                using Alt = std::decay_t<decltype(alt)>;
+                if (!alt.HasValidParameters())
+                    return { archive::ArchiveErrorCode::InvalidValue, std::string(key) };
+                const auto* type = registry.FindType<Alt>();
+                if (type == nullptr)
+                    return { archive::ArchiveErrorCode::UnsupportedType, std::string(key) };
+                auto res = object.Write("ShapeType", static_cast<uint8>(Alt::Type));
+                if (res) res = archive_reflection::WriteObject(object, "ShapeData", *type,
+                    reflection::ObjectView::From(alt), &registry, &codecs);
+                return res;
+            }, current);
+        });
+    }
+
+    template<typename Alt, typename Variant>
+    bool TryReadShapeAlternative(archive::IArchive& object, uint8 shapeType, Variant& candidate,
+        const reflection::Registry& registry, const archive_reflection::PropertyCodecs& codecs, archive::ArchiveResult& result)
+    {
+        if (shapeType != static_cast<uint8>(Alt::Type))
+            return false;
+        const auto* type = registry.FindType<Alt>();
+        if (type == nullptr)
+        {
+            result = { archive::ArchiveErrorCode::UnsupportedType, "ShapeData" };
+            return true;
+        }
+        Alt alt{};
+        result = archive_reflection::ReadObject(object, "ShapeData", *type, alt, &registry, &codecs);
+        if (result && !alt.HasValidParameters())
+            result = { archive::ArchiveErrorCode::InvalidValue, "ShapeData" };
+        if (result)
+            candidate = std::move(alt);
+        return true;
+    }
+
+    template<typename Variant, typename... Alts>
+    archive::ArchiveResult ReadShapeVariant(const archive::IArchive& ar, std::string_view key, Variant& value,
+        const reflection::Registry& registry, const archive_reflection::PropertyCodecs& codecs)
+    {
+        Variant candidate = value;
+        const auto result = ar.ReadObject(key, candidate, [&](archive::IArchive& object, Variant& target) -> archive::ArchiveResult
+        {
+            uint8 shapeType = 0;
+            auto res = object.Read("ShapeType", shapeType);
+            if (!res) return res;
+            if ((TryReadShapeAlternative<Alts>(object, shapeType, target, registry, codecs, res) || ...))
+                return res;
+            return { archive::ArchiveErrorCode::InvalidValue, "ShapeType" };
+        });
+        if (result) value = std::move(candidate);
+        return result;
     }
 
     template<typename T>
@@ -191,16 +257,40 @@ IMPLEMENT_SINGLETON(ReflectionRegistry)
 
 EResult ReflectionRegistry::Initialize(void*)
 {
+    const bool registeredHandles = reflection_generated::ForEach_BamEngine_PropertyType(
+        [this]<typename Owner, typename Value>(std::string_view)
+        {
+            return archive_resource::DiscoveredHandleRegistration<Owner>::Register(m_Codecs) &&
+                archive_resource::DiscoveredHandleRegistration<Value>::Register(m_Codecs);
+        });
+
     if (!RegisterGeneratedTypes(m_Registry, m_RegistrationResult) || !RegisterComponentOperations() ||
+        !registeredHandles ||
         !m_Codecs.Register<glm::vec2>(archive_glm::WriteVec2, archive_glm::ReadVec2) ||
-        !m_Codecs.Register<glm::vec4>(archive_glm::WriteVec4, archive_glm::ReadVec4) ||
-        !m_Codecs.Register<ResourceHandle<Sprite>>(
-            archive_resource::WriteHandle<Sprite>, archive_resource::ReadHandle<Sprite>) ||
-        !m_Codecs.Register<ResourceHandle<MaterialInterface>>(
-            archive_resource::WriteHandle<MaterialInterface>, archive_resource::ReadHandle<MaterialInterface>) ||
         !m_Codecs.Register<glm::vec3>(archive_glm::WriteVec3, archive_glm::ReadVec3) ||
+        !m_Codecs.Register<glm::vec4>(archive_glm::WriteVec4, archive_glm::ReadVec4) ||
         !m_Codecs.Register<glm::quat>(archive_glm::WriteQuat, archive_glm::ReadQuat) ||
-        !m_Codecs.Register<glm::mat4>(archive_glm::WriteMat4, archive_glm::ReadMat4))
+        !m_Codecs.Register<glm::mat4>(archive_glm::WriteMat4, archive_glm::ReadMat4) ||
+        !m_Codecs.Register<ColliderShape>(
+            [this](archive::IArchive& ar, std::string_view key, const ColliderShape& value)
+            {
+                return WriteShapeVariant(ar, key, value, m_Registry, m_Codecs);
+            },
+            [this](const archive::IArchive& ar, std::string_view key, ColliderShape& value)
+            {
+                return ReadShapeVariant<ColliderShape, BoxShape, SphereShape, CapsuleShape, MeshShape>(
+                    ar, key, value, m_Registry, m_Codecs);
+            }) ||
+        !m_Codecs.Register<Collider2DShape>(
+            [this](archive::IArchive& ar, std::string_view key, const Collider2DShape& value)
+            {
+                return WriteShapeVariant(ar, key, value, m_Registry, m_Codecs);
+            },
+            [this](const archive::IArchive& ar, std::string_view key, Collider2DShape& value)
+            {
+                return ReadShapeVariant<Collider2DShape, Box2DShape, Circle2DShape, Capsule2DShape>(
+                    ar, key, value, m_Registry, m_Codecs);
+            }))
     {
         std::cerr << "Engine reflection initialization failed: "
             << reflection::ToString(m_RegistrationResult.Error)

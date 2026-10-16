@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "Shader.h"
 #include "Renderer.h"
@@ -26,8 +26,8 @@ EResult Shader::Initialize(void* arg)
 	m_StageOutputs = desc->stageOutputs;
 
 
-	RHI* rhi = Renderer::Get().GetRHI();
-	if (!rhi) return EResult::Fail;
+	RHI* rhi = Renderer::IsCreated() ? Renderer::Get().GetRHI() : nullptr;
+	if (!rhi) return EResult::Success;
 	RHIShaderDesc rhiShaderDesc = BuildRHIShaderDesc();
 	m_RHIShader = rhi->CreateShader(rhiShaderDesc);
 
@@ -58,12 +58,27 @@ RHIShaderDesc Shader::BuildRHIShaderDesc() const
 	RHIShaderDesc desc;
 	desc.shaderType = m_ShaderType;
 	desc.entryPoint = m_EntryPoint;
-	desc.filePath = m_SpirvPath;
+	desc.filePath = m_SpirvPath.empty() ? m_Path : m_SpirvPath;
 
 	desc.numSamplers = m_NumSamplers;
 	desc.numStorageTextures = m_NumStorageTextures;
 	desc.numStorageBuffers = m_NumStorageBuffers;
 	desc.numUniformBuffers = m_NumUniformBuffers;
 	return desc;
+}
+
+EResult Shader::OnPostLoad()
+{
+	Safe_Release(m_RHIShader);
+	if (m_SpirvPath.empty())
+		m_SpirvPath = m_Path;
+	RHI* rhi = Renderer::IsCreated() ? Renderer::Get().GetRHI() : nullptr;
+	if (rhi)
+	{
+		m_RHIShader = rhi->CreateShader(BuildRHIShaderDesc());
+		if (!m_RHIShader)
+			return EResult::Fail;
+	}
+	return EResult::Success;
 }
 #pragma endregion

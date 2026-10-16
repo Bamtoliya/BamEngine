@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <archive/ArchiveInterface.h>
 #include <reflection/TypeInfo.h>
@@ -75,19 +75,37 @@ namespace archive_reflection
             const reflection::PropertyInfo& property, const reflection::ObjectView& object,
             const reflection::Registry* registry, const PropertyCodecs* codecs)
         {
+            const auto size = property.TryGetSize(object);
+
+            if (!size)
+            {
+                return { archive::ArchiveErrorCode::InvalidOperation, property.Name };
+            }
+
+            if (codecs != nullptr && codecs->HasCodec(property.GetElementCppType()))
+            {
+                return ar.WriteArrayElements(property.Name, size.Size,
+                    [&property, &object, codecs](archive::IArchive& entry,
+                        std::string_view key, std::size_t index) -> archive::ArchiveResult
+                    {
+                        const auto element = property.TryReadElement(object, index);
+                        if (!element)
+                        {
+                            return { archive::ArchiveErrorCode::InvalidOperation, {} };
+                        }
+
+                        const auto custom = codecs->WriteValue(entry, key, element.Value);
+                        return custom.value_or(archive::ArchiveResult{
+                            archive::ArchiveErrorCode::UnsupportedType, property.Name });
+                    });
+            }
+
             const auto* elementType = registry != nullptr
                 ? registry->FindType(property.GetElementCppType()) : nullptr;
 
             if (elementType == nullptr)
             {
                 return { archive::ArchiveErrorCode::UnsupportedType, property.Name };
-            }
-
-            const auto size = property.TryGetSize(object);
-
-            if (!size)
-            {
-                return { archive::ArchiveErrorCode::InvalidOperation, property.Name };
             }
 
             return ar.WriteObjectArray(property.Name, size.Size,
@@ -117,7 +135,7 @@ namespace archive_reflection
         {
             const bool fixed = property.GetValueKind() == reflection::PropertyValueKind::Array;
 
-            if (!property.CanEditElementObject() ||
+            if ((!property.CanEditElementObject() && !property.CanWriteElement()) ||
                 (fixed ? !property.CanResetElements() : (!property.CanClear() || !property.CanResize())))
             {
                 return { archive::ArchiveErrorCode::InvalidOperation, property.Name };
@@ -174,10 +192,39 @@ namespace archive_reflection
             const reflection::PropertyInfo& property, const reflection::ObjectView& object,
             const reflection::Registry* registry, const PropertyCodecs* codecs)
         {
+            if (codecs != nullptr && codecs->HasCodec(property.GetElementCppType()))
+            {
+                if (!property.CanWriteElement())
+                {
+                    return { archive::ArchiveErrorCode::InvalidOperation, property.Name };
+                }
+
+                const auto prepared = PrepareSequence(ar, property, object);
+                if (!prepared)
+                {
+                    return prepared;
+                }
+
+                return ar.ReadArrayElements(property.Name,
+                    [&property, &object, codecs](archive::IArchive& entry,
+                        std::string_view key, std::size_t index) -> archive::ArchiveResult
+                    {
+                        const auto custom = codecs->ReadValue(entry, key, property.GetElementCppType(),
+                            [&](const reflection::ValueView& value) -> archive::ArchiveResult
+                            {
+                                return property.TryWriteElement(object, index, value) == reflection::PropertyAccessError::None
+                                    ? archive::ArchiveResult{}
+                                    : archive::ArchiveResult{ archive::ArchiveErrorCode::InvalidOperation, property.Name };
+                            });
+                        return custom.value_or(archive::ArchiveResult{
+                            archive::ArchiveErrorCode::UnsupportedType, property.Name });
+                    });
+            }
+
             const auto* elementType = registry != nullptr
                 ? registry->FindType(property.GetElementCppType()) : nullptr;
 
-            if (elementType == nullptr)
+            if (elementType == nullptr || !property.CanEditElementObject())
             {
                 return { archive::ArchiveErrorCode::UnsupportedType, property.Name };
             }
@@ -749,6 +796,7 @@ namespace archive_reflection
                 const auto* nested = property.GetMapValueContainerProperty();
                 return nested != nullptr ? IsAutomaticContainerSupported(*nested, registry, codecs)
                     : IsMapScalarType(property.GetMapValueType(), registry) ||
+                    (codecs != nullptr && codecs->HasCodec(property.GetMapValueType())) ||
                     (registry != nullptr && registry->FindType(property.GetMapValueType()) != nullptr);
             }
             const bool sequence = property.GetValueKind() == reflection::PropertyValueKind::Vector ||
@@ -774,6 +822,7 @@ namespace archive_reflection
                 return checked && supported;
             }
             return FindSupportedEnum(registry, property.GetElementCppType()) != nullptr ||
+                (sequence && codecs != nullptr && codecs->HasCodec(property.GetElementCppType())) ||
                 (sequence && registry != nullptr && registry->FindType(property.GetElementCppType()) != nullptr);
         }
 
@@ -839,11 +888,12 @@ namespace archive_reflection
             const reflection::Registry* registry, const PropertyCodecs* codecs)
         {
             const bool scalarValue = IsMapScalarType(property.GetMapValueType(), registry);
+            const bool codecValue = !scalarValue && codecs != nullptr && codecs->HasCodec(property.GetMapValueType());
             const auto* valueType = registry != nullptr ? registry->FindType(property.GetMapValueType()) : nullptr;
             const auto* container = property.GetMapValueContainerProperty();
 
             if (!IsMapScalarType(property.GetMapKeyType(), registry) ||
-                (!scalarValue && valueType == nullptr && container == nullptr) ||
+                (!scalarValue && !codecValue && valueType == nullptr && container == nullptr) ||
                 (container != nullptr && !IsAutomaticContainerSupported(*container, registry, codecs)))
             {
                 return { archive::ArchiveErrorCode::UnsupportedType, property.Name };
@@ -871,7 +921,8 @@ namespace archive_reflection
             }
 
             return ar.WriteObjectArray(property.Name, entries.size(),
-                [&entries, scalarValue, valueType, container, registry, codecs](archive::IArchive& entry, std::size_t index)
+                [&entries, scalarValue, codecValue, valueType, container, registry, codecs](
+                    archive::IArchive& entry, std::size_t index) -> archive::ArchiveResult
                 {
                     const auto& [key, value] = entries[index];
                     const auto keyResult = WriteMapScalar(entry, "Key", key, registry);
@@ -884,6 +935,12 @@ namespace archive_reflection
                     if (scalarValue)
                     {
                         return WriteMapScalar(entry, "Value", value, registry);
+                    }
+
+                    if (codecValue)
+                    {
+                        return codecs->WriteValue(entry, "Value", value).value_or(
+                            archive::ArchiveResult{ archive::ArchiveErrorCode::UnsupportedType, "Value" });
                     }
 
                     if (container != nullptr)
@@ -913,18 +970,19 @@ namespace archive_reflection
             const reflection::Registry* registry, const PropertyCodecs* codecs)
         {
             const bool scalarValue = IsMapScalarType(property.GetMapValueType(), registry);
+            const bool codecValue = !scalarValue && codecs != nullptr && codecs->HasCodec(property.GetMapValueType());
             const auto* valueType = registry != nullptr ? registry->FindType(property.GetMapValueType()) : nullptr;
             const auto* container = property.GetMapValueContainerProperty();
 
             if (!IsMapScalarType(property.GetMapKeyType(), registry) ||
-                (!scalarValue && valueType == nullptr && container == nullptr) ||
+                (!scalarValue && !codecValue && valueType == nullptr && container == nullptr) ||
                 (container != nullptr && !IsAutomaticContainerSupported(*container, registry, codecs)))
             {
                 return { archive::ArchiveErrorCode::UnsupportedType, property.Name };
             }
 
             if (!property.CanClear() ||
-                (scalarValue ? !property.CanInsertMapEntry() : !property.CanEmplaceMapValueObject()))
+                ((scalarValue || codecValue) ? !property.CanInsertMapEntry() : !property.CanEmplaceMapValueObject()))
             {
                 return { archive::ArchiveErrorCode::InvalidOperation, property.Name };
             }
@@ -946,6 +1004,16 @@ namespace archive_reflection
                                     {
                                         return MapInsertionResult(property.TryInsertMapEntry(object, keyView, value));
                                     });
+                            }
+
+                            if (codecValue)
+                            {
+                                return codecs->ReadValue(entry, "Value", property.GetMapValueType(),
+                                    [&](const reflection::ValueView& value)
+                                    {
+                                        return MapInsertionResult(property.TryInsertMapEntry(object, keyView, value));
+                                    }).value_or(archive::ArchiveResult{
+                                        archive::ArchiveErrorCode::UnsupportedType, "Value" });
                             }
 
                             if (container != nullptr)
