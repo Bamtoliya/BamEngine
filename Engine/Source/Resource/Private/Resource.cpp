@@ -1,13 +1,12 @@
-﻿#pragma once
+﻿#include "Resource.h"
+#include <reflection_archive/ReflectionArchiveAdapter.h>
 
-#include "Resource.h"
-
-archive::ArchiveResult Resource::WriteArchive(archive::IArchive&) const
+archive::ArchiveResult Resource::WriteArchive(archive::IArchive& ar) const
 {
-	return { archive::ArchiveErrorCode::UnsupportedType, "Resource.WriteArchive" };
+	return archive::ArchiveResult{ archive::ArchiveErrorCode::UnsupportedType, "Resource.WriteArchive" };
 }
 
-archive::ArchiveResult Resource::ReadArchive(const archive::IArchive&)
+archive::ArchiveResult Resource::ReadArchive(const archive::IArchive& ar)
 {
-	return { archive::ArchiveErrorCode::UnsupportedType, "Resource.ReadArchive" };
+	return archive::ArchiveResult{ archive::ArchiveErrorCode::UnsupportedType, "Resource.ReadArchive" };
 }

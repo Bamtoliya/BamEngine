@@ -2,6 +2,7 @@
 
 #include "RHIResource.h"
 #include "ShaderReflection.h"
+#include <reflection/Annotations.h>
 
 struct RHIShaderDesc
 {
@@ -18,8 +19,10 @@ struct RHIShaderDesc
 };
 
 BEGIN(Engine)
+CLASS()
 class ENGINE_API RHIShader : public RHIResource
 {
+	REFLECT_BODY()
 protected:
 	RHIShader() : RHIResource(ERHIResourceType::Shader) {}
 	RHIShader(RHI* rhi) : RHIResource(rhi, ERHIResourceType::Shader) {}

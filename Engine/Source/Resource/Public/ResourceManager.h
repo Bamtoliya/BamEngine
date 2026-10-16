@@ -43,6 +43,7 @@ private:
 	EResult Initialize(void* arg = nullptr);
 public:
 	virtual void Free() override;
+	static bool IsCreated() noexcept { return m_instance != nullptr; }
 #pragma endregion
 
 #pragma region Resource Management

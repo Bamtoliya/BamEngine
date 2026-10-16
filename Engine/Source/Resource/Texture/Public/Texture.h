@@ -1,31 +1,10 @@
 ﻿#pragma once
 
 #include "RHITexture.h"
+#include "TextureBinaryHeader.h"
 #include "Resource.h"
 
 BEGIN(Engine)
-STRUCT()
-struct ENGINE_API TextureBinaryHeader
-{
-	REFLECT_STRUCT()
-
-	PROPERTY()
-	uint32 width = 0;
-	PROPERTY()
-	uint32 height = 0;
-	PROPERTY()
-	uint32 depth = 0;
-	PROPERTY()
-	uint32 mipLevels = 0;
-	PROPERTY()
-	uint32 arraySize = 0;
-	PROPERTY()
-	Engine::ETextureFormat format = Engine::ETextureFormat::UNKNOWN;
-	PROPERTY()
-	Engine::ETextureDimension dimension = Engine::ETextureDimension::Texture2D;
-	PROPERTY()
-	uint32 dataSize = 0;
-};
 struct TextureCreateDesc : public ResourceCreateDesc
 {
 	Engine::ETextureDimension dimension = Engine::ETextureDimension::Texture2D;
@@ -75,6 +54,14 @@ public:
 	void ClearTempData() { m_TempData.clear(); }
 #pragma endregion
 
+#pragma region Save&Load
+public:
+	[[nodiscard]] archive::ArchiveResult WriteArchive(archive::IArchive& ar) const override;
+	[[nodiscard]] archive::ArchiveResult ReadArchive(const archive::IArchive& ar) override;
+private:
+	[[nodiscard]] uint32 GetArchiveFormatVersion() const noexcept override { return 1; }
+#pragma endregion
+
 #pragma region Variable
 private:
 	class RHITexture* m_RHITexture = { nullptr };
@@ -82,8 +69,8 @@ private:
 	PROPERTY()
 	f32 m_PixelPerUnit = { DEFAULT_PPU };
 
-	TextureBinaryHeader m_CachedHeader; // Serialize 시 텍스처 헤더 정보를 저장하는 용도 (BinaryArchive에서만 사용)
-	vector<uint8> m_TempData; // Serialize 시 임시로 원본 텍스처 데이터를 저장하는 용도 (BinaryArchive에서만 사용)
+	TextureBinaryHeader m_CachedHeader; // 보관한 CPU 픽셀의 형식과 크기
+	vector<uint8> m_TempData; // 저장과 재로드에 사용할 CPU 픽셀
 #pragma endregion
 };
 END

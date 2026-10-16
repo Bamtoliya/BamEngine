@@ -108,34 +108,34 @@ bool DirectXTexCompressor::GetRawCompressedData(const std::wstring& inputFilePat
 	// 4. 추출된 데이터를 바탕으로 Header 구성
 	const DirectX::TexMetadata& meta = currentImage->GetMetadata();
 
-	outHeader.Width = static_cast<uint32>(meta.width);
-	outHeader.Height = static_cast<uint32>(meta.height);
-	outHeader.Depth = static_cast<uint32>(meta.depth);
-	outHeader.MipLevels = static_cast<uint32>(meta.mipLevels);
-	outHeader.ArraySize = static_cast<uint32>(meta.arraySize);
-	outHeader.Format = targetFormat;
+	outHeader.width = static_cast<uint32>(meta.width);
+	outHeader.height = static_cast<uint32>(meta.height);
+	outHeader.depth = static_cast<uint32>(meta.depth);
+	outHeader.mipLevels = static_cast<uint32>(meta.mipLevels);
+	outHeader.arraySize = static_cast<uint32>(meta.arraySize);
+	outHeader.format = targetFormat;
 
 	// Dimension 판단 (1D, 2D, 3D, Cube)
 	switch (meta.dimension)
 	{
 	case DirectX::TEX_DIMENSION_TEXTURE1D:
-		outHeader.Dimension = Engine::ETextureDimension::Texture1D;
+		outHeader.dimension = Engine::ETextureDimension::Texture1D;
 		break;
 	case DirectX::TEX_DIMENSION_TEXTURE2D:
-		outHeader.Dimension = meta.IsCubemap() ? Engine::ETextureDimension::TextureCube : Engine::ETextureDimension::Texture2D;
+		outHeader.dimension = meta.IsCubemap() ? Engine::ETextureDimension::TextureCube : Engine::ETextureDimension::Texture2D;
 		break;
 	case DirectX::TEX_DIMENSION_TEXTURE3D:
-		outHeader.Dimension = Engine::ETextureDimension::Texture3D;
+		outHeader.dimension = Engine::ETextureDimension::Texture3D;
 		break;
 	default:
 		break;
 	}
 
-	outHeader.DataSize = static_cast<uint32>(currentImage->GetPixelsSize());
+	outHeader.dataSize = static_cast<uint32>(currentImage->GetPixelsSize());
 
 	// 5. Raw 픽셀 데이터를 outData 벡터에 복사
 	const uint8_t* pPixels = currentImage->GetPixels();
-	outData.assign(pPixels, pPixels + outHeader.DataSize);
+	outData.assign(pPixels, pPixels + outHeader.dataSize);
 
 	return true;
 }

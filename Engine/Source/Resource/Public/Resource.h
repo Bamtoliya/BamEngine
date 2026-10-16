@@ -4,6 +4,7 @@
 #include "Reflection/ReflectionMacro.h"
 #include "TypeIdentityInterface.h"
 #include <archive/ArchiveResult.h>
+#include "ResourceBinaryHeader.h"
 
 #define DECLARE_RESOURCE(ClassType) \
 public: \
@@ -21,46 +22,6 @@ class IArchive;
 END
 
 BEGIN(Engine)
-
-inline constexpr uint64 ENGINE_ASSET_MAGIC = 0x54455353414D4142;
-
-ENUM()
-enum class EResourceType : uint32
-{
-	Unknown = 0,
-	Texture,
-	Sprite,
-	Material,
-	MaterialInstance,
-	Shader,
-	Mesh,
-	Model,
-	Animation,
-	AudioClip,
-	Skeleton,
-	Prefab,
-	Script,
-	Scene,
-	Save,
-};
-
-STRUCT()
-struct ENGINE_API ResourceBinaryHeader
-{
-	REFLECT_STRUCT()
-
-	PROPERTY()
-	uint64 MagicNumber = { ENGINE_ASSET_MAGIC };
-
-	PROPERTY()
-	EResourceType ResourceType = { EResourceType::Unknown };
-
-	PROPERTY()
-	uint32 Version = { 1 };
-
-	ResourceBinaryHeader() = default;
-};
-
 
 CLASS()
 class ENGINE_API Resource : public ITypeIdentity
@@ -111,6 +72,8 @@ public:
 public:
 	[[nodiscard]] virtual archive::ArchiveResult WriteArchive(archive::IArchive& ar) const;
 	[[nodiscard]] virtual archive::ArchiveResult ReadArchive(const archive::IArchive& ar);
+protected:
+	[[nodiscard]] virtual uint32 GetArchiveFormatVersion() const noexcept { return 0; }
 #pragma endregion
 
 #pragma region Member Variables
