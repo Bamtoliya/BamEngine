@@ -1,0 +1,15 @@
+﻿# 1. 루트의 모든 파일과 폴더를 무시합니다.
+/*
+
+# 2. 컨텍스트에 포함할 특정 폴더나 파일 앞에 느낌표(!)를 붙여 제외 처리를 취소합니다.
+!/Editor/
+!/Engine/
+!/Tools/
+!/Utility/
+!/Client/
+!/ThirdParty/
+!/Client/
+!/Server/
+
+# 만약 루트에 있는 특정 파일도 포함하고 싶다면 아래와 같이 추가합니다.
+!CMakeLists.txt

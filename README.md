@@ -101,7 +101,8 @@ Docs/Images/editor-main.png
 - **월드/오브젝트 시스템**: `GameObject`, `ComponentRegistry` 기반 컴포넌트 관리
 - **리소스 시스템**: `ResourceManager`, `ResourceHandle<T>`를 통한 안전한 리소스 참조 관리
 - **기본 물리/충돌 구성**: Collider/RigidBody 계열 컴포넌트 및 충돌 매니저 구조
-- **직렬화 지원**: Json / Binary / Beve 저장/로드 경로 제공
+- **직렬화 지원**: 공통 `IArchive` 인터페이스를 통한 JSON / BEVE 저장·로드 API 제공
+- **Reflection 연동**: 생성된 컴포넌트 메타데이터를 Inspector와 컴포넌트 직렬화에서 활용
 
 ### 2) 에디터 (`Editor`)
 
@@ -118,7 +119,9 @@ Docs/Images/editor-main.png
 
 ### 3) 코드 생성/도구 체인
 
-- `ReflectionCore`, `ReflectionCodegen`, `ReflectionBamAdapter`를 통한 리플렉션 코드 자동 생성
+- **Reflection Generator**: LLVM/Clang 전처리기와 AST를 이용해 어노테이션이 있는 헤더를 분석하고 등록용 C++ 코드 생성
+- **CMake 통합**: `reflection_generate()`로 코드 생성과 대상 타깃의 컴파일 연결
+- **ReflectionArchive**: Reflection 메타데이터와 Archive의 직렬화 API 연결
 - `Tools/TextureConverter`를 통한 텍스처 변환 지원
 
 ---
@@ -191,6 +194,16 @@ Docs/Images/editor-main.png
 
 ### 3) UI 시스템 (Canvas / RectTransform / Pivot)
 
+- **ECS UI 편집기 기반**
+	- `Core/Public/Components/UI`의 CanvasComponent / RectTransformComponent / UIImageComponent
+	- Engine UILayout과 UIRenderSystem을 사용한 캔버스 이미지 렌더링
+	- UI View에서 Canvas/Image 생성, 화면 영역·그리드 표시, 팬·줌, 선택·이동·크기 조절과 스냅
+	- 사용법·검증 상태·현재 제한: [UIEditorFoundation.md](Docs/UIEditorFoundation.md)
+	- UI 버튼·포인터 이벤트와 Interact 미리보기: [UIInteraction.md](Docs/UIInteraction.md)
+	- Z-Index와 앞/뒤 배치, 그리기·선택 순서: [UIRenderOrder.md](Docs/UIRenderOrder.md)
+
+아래 항목은 기존 GameObject UI 구현이다. ECS 편집기는 위의 새 데이터 경로를 사용한다.
+
 - **UICanvas 정책 기반 레이아웃**
 	- RenderMode: ScreenSpace / WorldSpace / ScreenSpaceCamera
 	- LayoutSource: InheritParent / ReferenceResolution / ExternalOverride
@@ -201,8 +214,7 @@ Docs/Images/editor-main.png
 - **에디터 UI 뷰포트 합성 기술**
 	- VirtualCanvas RenderTarget에 UI를 먼저 렌더링
 	- 최종 뷰포트 이미지에 Canvas Overlay를 AddImageQuad로 합성
-	- 질문하신 "Pivot Canvas inside Image Canvas" 요구는 현재 구조에서
-		`RectTransform Pivot + UIViewport VirtualCanvas 오버레이` 방식으로 구현되어 있습니다.
+	- 기존 VirtualCanvas 오버레이는 ECS 캔버스 편집 경로로 전환되었다.
 
 ### 4) 에디터 기술 (ImGui 툴 프레임워크)
 
@@ -215,24 +227,49 @@ Docs/Images/editor-main.png
 
 ### 5) Reflection 시스템 (Core + Codegen + Adapter)
 
-- **ReflectionCore (C++)**
-	- TypeInfo / PropertyInfo / FunctionInfo / EnumInfo / Registry
-	- `CLASS/STRUCT/PROPERTY/ENUM/FUNCTION` 어노테이션 매크로 체계
-- **ReflectionCodegen (Python)**
-	- 헤더 파싱 -> 모듈별 `*.gen.cpp` 자동 생성
-	- 중복 심볼 검증 및 타입/프로퍼티/함수 메타데이터 생성
-- **ReflectionBamAdapter**
-	- 엔진 직렬화 경로와 Reflection 메타데이터 연결
-	- 리소스 핸들/객체 생성 콜백 등 런타임 통합 계층
+- **Reflection Runtime — `Projects/Reflection`**
+	- 엔진·에디터에 의존하지 않는 C++20 리플렉션 모듈
+	- `Registry`, `TypeInfo`, `PropertyInfo`, `FunctionInfo`, `EnumInfo` 제공
+	- `ObjectView`와 `ValueView`를 통한 객체·값 접근
+	- 프로퍼티 접근, 함수 호출, enum 정보와 지원하는 STL 컨테이너 접근 제공
+	- 사용자 정의 메타데이터를 저장하며, 편집·직렬화 정책은 소비자가 해석
+
+- **Reflection Generator**
+	- `CLASS`, `STRUCT`, `PROPERTY`, `FUNCTION`, `ENUM` 어노테이션 분석
+	- LLVM/Clang 전처리기와 AST를 이용해 선언과 메타데이터 수집
+	- 모듈별 `*.gen.cpp`, `*.gen.h`와 의존성 파일 `*.gen.d` 생성
+	- 생성된 등록 함수를 호출해 소비자가 소유한 Registry에 정보 등록
+
+- **엔진·에디터 연결**
+	- 코어 컴포넌트 헤더에서 `BamCoreComponents` 모듈 생성
+	- `ComponentReflectionBindings`로 Reflection 타입과 EnTT 컴포넌트 접근 연결
+	- Inspector에서 엔티티의 등록된 컴포넌트를 순회하고 프로퍼티 편집
+
+- **ReflectionArchive — `Projects/ReflectionArchive`**
+	- `ReflectionArchive::Adapter` 타깃으로 Reflection과 Archive 연결
+	- 프로퍼티 메타데이터와 타입별 코덱을 이용해 저장·복원 처리
+	- GLM 등 소비자 전용 타입의 직렬화는 별도 어댑터로 연결
 
 ### 6) 리소스/직렬화/압축 파이프라인
 
 - **리소스 타입**: Texture, Shader, Material, Mesh, Skeleton, Sprite 등
-- **직렬화 경로**: JsonArchive / BinaryArchive / BeveArchive
-- **데이터 처리 기술**
-	- `glaze` 기반 JSON 처리
-	- `lz4` 기반 압축/해제
-	- Reflection 기반 속성 직렬화 보조
+
+- **Archive — `Projects/Archive`**
+	- 엔진·에디터·Reflection·GLM에 의존하지 않는 C++23 직렬화 모듈
+	- 공통 `IArchive` 인터페이스와 `GlazeArchiveBase` 기반 구현
+	- `JsonArchive`: JSON 문서 분석과 출력
+	- `BeveArchive`: BEVE 바이너리 문서 분석과 출력
+	- `ArchiveResult`: 오류 코드와 오류가 발생한 필드 위치 제공
+	- 스칼라, 문자열, enum, 지원하는 STL 컨테이너와 콜백 기반 객체 직렬화
+	- CMake 타깃 `Archive::Json`은 JSON과 BEVE 구현을 포함하는 정적 라이브러리
+
+- **엔진 연결**
+	- 리소스의 `WriteArchive()` / `ReadArchive()`로 데이터 저장·복원
+	- ResourceManager에서 `.json`과 `.beve` 리소스 로드
+	- Reflection 기반 컴포넌트 저장·복원과 엔티티 컴포넌트 저장 경로 제공
+	- 기존 Binary 리소스 저장·로드 경로는 현재 지원하지 않음
+
+- **압축**: `lz4` 기반 압축·해제
 
 ### 7) 콘텐츠 제작/임포트 파이프라인
 
@@ -275,10 +312,9 @@ BamEngine/
 │     ├─ Selection/
 │     └─ Generated/
 ├─ Projects/
-│  ├─ ReflectionCore/
-│  ├─ ReflectionCodegen/
-│  ├─ ReflectionBamAdapter/
-│  └─ ReflectionCMake/
+│  ├─ Reflection/           # Runtime, LLVM/Clang 기반 Generator, CMake 생성 함수
+│  ├─ Archive/              # 공통 Archive API와 JSON / BEVE 구현
+│  └─ ReflectionArchive/    # Reflection과 Archive 연결 어댑터
 ├─ Tools/
 │  └─ TextureConverter/
 ├─ Resources/               # 셰이더/로컬라이제이션/기본 리소스
@@ -291,19 +327,29 @@ BamEngine/
 
 ### 요구사항
 
-- Windows (현재 프리셋 기준)
-- Visual Studio (MSVC C++ 툴체인)
-- CMake 3.16+
-- Python 3.x (Reflection/Localization 스크립트 실행)
+- Windows (현재 Windows 프리셋 기준)
+- Visual Studio 18 2026 및 MSVC C++ 툴체인
+- CMake 3.21 이상 (프로젝트 선언 기준)
+- C++23 지원 컴파일러
+	- Reflection Runtime과 Generator는 C++20 사용
+	- Archive와 ReflectionArchive는 C++23 요구
+- LLVM/Clang 20.1.8 개발 라이브러리와 대응하는 Clang resource 디렉터리
+- Python 3.x (Localization 스크립트 실행)
 - Vulkan SDK (`glslc` 필요)
 
 ### 사전 확인
 
-`CMakePresets.json`에 아래 항목이 하드코딩되어 있습니다.
+현재 빌드 설정은 다음 경로를 사용합니다.
 
-- `CMAKE_TOOLCHAIN_FILE`: `I:/vcpkg/scripts/buildsystems/vcpkg.cmake`
+- `CMakePresets.json`
+	- `CMAKE_TOOLCHAIN_FILE`: `I:/vcpkg/scripts/buildsystems/vcpkg.cmake`
+	- `REFLECTION_CLANG_RESOURCE_DIR`: `${sourceDir}/Projects/Reflection/dependencies/llvm-20.1.8/lib/clang/20`
+- `Projects/Reflection/cmake/ReflectionGenerator.cmake`
+	- LLVM 패키지: `Projects/Reflection/dependencies/llvm-20.1.8/lib/cmake/llvm`
+	- Clang 패키지: `Projects/Reflection/dependencies/llvm-20.1.8/lib/cmake/clang`
 
-환경에 맞게 경로를 수정해야 합니다.
+다른 개발 환경에서는 vcpkg와 LLVM/Clang SDK 경로를 확인하고 조정해야 합니다.
+현재 Windows 프리셋의 생성기는 `Visual Studio 18 2026`입니다.
 
 ---
 
@@ -344,21 +390,42 @@ Get-ChildItem -Path .\out\build\x64-debug -Recurse -Filter Editor*.exe
 
 ## Reflection 코드 생성
 
-- CMake 단계에서 `add_reflection_bundle(...)`로 엔진/에디터 반사 코드 생성
-- 생성 파일
-	- `Engine/Source/Generated/EngineReflection.gen.cpp`
-	- `Editor/Source/Generated/EditorReflection.gen.cpp`
-- 관련 프로젝트
-	- `Projects/ReflectionCore`
-	- `Projects/ReflectionCodegen`
-	- `Projects/ReflectionBamAdapter`
+엔진은 `Engine/CMake/ReflectionBuild.cmake`에서 `reflection_generate()`를 호출합니다.
+분석 대상은 `Engine/Source/Core/Public/Components/*.h`이며,
+생성 모듈 이름은 `BamCoreComponents`입니다.
+
+생성 파일은 소스 디렉터리가 아닌 빌드 디렉터리에 배치됩니다.
+`x64-debug` 프리셋의 Debug 구성에서는 다음 경로를 사용합니다.
+
+```text
+out/build/x64-debug/Engine/reflection/Engine/BamCoreComponents/Debug/
+├─ BamCoreComponents.gen.cpp
+├─ BamCoreComponents.gen.h
+└─ BamCoreComponents.gen.d
+```
+
+생성된 C++ 파일은 Engine 타깃에 포함되어 컴파일됩니다.
+엔진은 `reflection_generated::Register_BamCoreComponents()`를 호출해
+Registry에 정보를 등록하고, 생성된 타입 목록으로 컴포넌트 바인딩을 구성합니다.
+
+에디터 Inspector는 엔진이 제공하는 Registry와 컴포넌트 바인딩을 사용합니다.
+현재 Editor 타깃은 별도의 Reflection 코드 생성 단계를 실행하지 않습니다.
+
+관련 모듈:
+
+- `Projects/Reflection`: Runtime과 Generator
+- `Projects/Archive`: JSON / BEVE 직렬화
+- `Projects/ReflectionArchive`: Reflection 기반 직렬화 어댑터
 
 ---
 
 ## 현재 상태
 
 - 본 저장소는 **WIP(Work In Progress)** 상태입니다.
-- 렌더링/에디터/리소스/리플렉션 파이프라인을 중심으로 지속 확장 중입니다.
+- 새 Reflection Runtime과 Generator가 엔진 코어 컴포넌트 및 에디터 Inspector에 연결되어 있습니다.
+- Archive의 JSON / BEVE 구현과 Reflection 기반 컴포넌트 직렬화 경로가 있습니다.
+- 씬 저장 경로는 구현되어 있으며, 씬 로드와 플레이 종료 후 씬 복원은 아직 미구현입니다.
+- 기존 Binary 리소스 직렬화 경로는 현재 지원하지 않습니다.
 
 ---
 
