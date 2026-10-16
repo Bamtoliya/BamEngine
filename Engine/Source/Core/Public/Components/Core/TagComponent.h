@@ -7,7 +7,7 @@
 
 namespace Engine
 {
-    STRUCT(COMPONENT, DISPLAY_NAME("STRUCT_TAG"), CATEGORY("Core"))
+    STRUCT(COMPONENT, DISPLAY_NAME("STRUCT_TAG"), CATEGORY("CATEGORY_CORE"))
     struct TagComponent
     {
         REFLECT_BODY()

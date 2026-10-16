@@ -1,17 +1,19 @@
-﻿#include "Scene.h"
-#include "Components/NameComponent.h"
-#include "Components/TransformComponent.h"
-#include "Reflection/CoreComponentReflection.h"
-#include "ComponentArchive.h"
+#include "Scene.h"
+#include "Components/Core/NameComponent.h"
+#include "Components/Core/TransformComponent.h"
+#include "Reflection/ReflectionRegistry.h"
 #include <archive/JsonArchive.h>
+#include <archive/BeveArchive.h>
+#include "CoreComponents.h"
+#include "RenderComponents.h"
+#include "PhysicsComponent.h"
 
 #include <iostream>
 #include <memory>
 #include <string>
 #include <cmath>
 
-#include "EntityArchive.h"
-#include "Components/WorldTransformComponent.h"
+#include "Components/Core/WorldTransformComponent.h"
 #include "Adapters/GlmArchiveAdapter.h"
 
 namespace
@@ -181,6 +183,137 @@ namespace
     }
 }
 
+namespace
+{
+    int CheckUnifiedRegistry(const Engine::ReflectionRegistry& registry)
+    {
+        const auto* camera = registry.FindComponent(std::type_index(typeid(Engine::CameraComponent)));
+        const auto* rigidBody = registry.FindComponent(std::type_index(typeid(Engine::RigidBodyComponent)));
+        const auto* identity = registry.FindComponent(std::type_index(typeid(Engine::IDComponent)));
+        const auto* worldTransform = registry.FindComponent(std::type_index(typeid(Engine::WorldTransformComponent)));
+        if (camera == nullptr || camera->ReflectionType == nullptr || rigidBody == nullptr ||
+            identity == nullptr || identity->UserAddable || worldTransform == nullptr || worldTransform->UserAddable)
+            return Fail("Unified component registration lost a built-in operation or policy.");
+
+        for (const auto& entry : registry.GetComponentEntries())
+        {
+            if (entry.ReflectionType != registry.GetRegistry().FindType(entry.Type))
+                return Fail("Component reflection points outside the owning registry.");
+        }
+
+        entt::registry first;
+        entt::registry second;
+        const auto entity = first.create();
+        const auto other = second.create();
+        if (!camera->TryAdd(first, entity) || camera->TryAdd(first, entity) || camera->TryAdd(first, entt::null) ||
+            !first.all_of<Engine::CameraComponent, Engine::TransformComponent,
+                Engine::WorldTransformComponent, Engine::FlagComponent>(entity) || camera->Has(second, other))
+            return Fail("Unified component addition lost dependencies, guards or world isolation.");
+
+        const auto view = registry.GetComponentObject(std::as_const(first), camera->StorageId, entity);
+        if (!view.Is<Engine::CameraComponent>() || !view.IsReadOnly() ||
+            !registry.GetComponentObject(first, camera->StorageId, entity).Is<Engine::CameraComponent>())
+            return Fail("Unified component object access failed.");
+
+        const auto bodyEntity = first.create();
+        if (!rigidBody->TryAdd(first, bodyEntity))
+            return Fail("Rigid body addition failed.");
+        struct UnregisteredStorage { int Value = 0; };
+        first.emplace<UnregisteredStorage>(bodyEntity);
+        archive::JsonArchive bodyWriter;
+        std::string before;
+        std::string after;
+        if (!bodyWriter.Write("Keep", 17) || !bodyWriter.ToJson(before))
+            return Fail("Unregistered storage test setup failed.");
+        const auto bodyResult = registry.WriteComponents(bodyWriter, "Components", first, bodyEntity);
+        if (bodyResult.Code != archive::ArchiveErrorCode::UnsupportedType ||
+            !bodyWriter.ToJson(after) || after != before)
+            return Fail("Unsupported component serialization silently succeeded or changed the document.");
+
+        const auto* transform = registry.FindComponent(std::type_index(typeid(Engine::TransformComponent)));
+        if (transform == nullptr)
+            return Fail("Transform operation binding is missing.");
+        entt::registry aliased;
+        const auto aliasEntity = aliased.create();
+        aliased.storage<Engine::NameComponent>(transform->StorageId).emplace(aliasEntity);
+        if (transform->TryAdd(aliased, aliasEntity) ||
+            registry.GetComponentObject(aliased, transform->StorageId, aliasEntity).IsValid())
+            return Fail("A mismatched EnTT storage was treated as Transform.");
+
+        archive::JsonArchive missing;
+        const auto aliasWrite = registry.WriteComponent<Engine::TransformComponent>(
+            missing, "Transform", aliased, aliasEntity);
+        if (aliasWrite.Code != archive::ArchiveErrorCode::InvalidOperation)
+            return Fail("Mismatched storage writing was not rejected before typed access.");
+        const auto aliasResult = registry.ReadComponent<Engine::TransformComponent>(
+            missing, "Transform", aliased, aliasEntity);
+        if (aliasResult.Code != archive::ArchiveErrorCode::InvalidOperation)
+            return Fail("Mismatched storage was not rejected before typed access.");
+
+        const auto stopped = registry.ForEachComponent(first, entity,
+            [](const reflection::TypeInfo&, const reflection::ObjectView&) { return false; });
+        if (stopped != Engine::ComponentVisitResult::Stopped)
+            return Fail("Component visitor stop was ignored.");
+        return 0;
+    }
+
+    template<typename Archive>
+    int CheckTransformArchive(const Engine::ReflectionRegistry& registry)
+    {
+        entt::registry sourceWorld;
+        const auto sourceEntity = sourceWorld.create();
+        auto& source = sourceWorld.emplace<Engine::TransformComponent>(sourceEntity);
+        if (!source.SetLocalPosition(glm::vec3(3.0f, -2.0f, 7.0f)) ||
+            !source.SetLocalScale(glm::vec3(-1.0f, 0.0f, 2.0f)) ||
+            !source.SetEulerRotation(glm::vec3(25.0f, 450.0f, -35.0f)))
+            return Fail("Transform archive setup failed.");
+
+        Archive writer;
+        Archive reader;
+        std::string document;
+        if (!registry.WriteComponent<Engine::TransformComponent>(writer, "Transform", sourceWorld, sourceEntity) ||
+            !writer.Encode(document) || !reader.Decode(document))
+            return Fail("Transform writing with engine-owned GLM codecs failed.");
+
+        entt::registry restoredWorld;
+        const auto restoredEntity = restoredWorld.create();
+        if (!registry.ReadComponent<Engine::TransformComponent>(reader, "Transform", restoredWorld, restoredEntity) ||
+            !restoredWorld.all_of<Engine::TransformComponent, Engine::WorldTransformComponent,
+                Engine::FlagComponent>(restoredEntity))
+            return Fail("Transform restoration did not create its required components.");
+
+        auto& restored = restoredWorld.get<Engine::TransformComponent>(restoredEntity);
+        if (restored.position != source.position || restored.scale != source.scale ||
+            restored.eulerRotation != source.eulerRotation || !SameOrientation(restored.rotation, source.rotation) ||
+            !restored.SynchronizeRotation() || restored.eulerRotation != source.eulerRotation)
+            return Fail("Transform restoration lost values or rotation cache consistency.");
+
+        archive::JsonArchive invalid;
+        if (!invalid.Parse(R"({"Transform":{"position":[1,2,3],"rotation":[0,0,0,0],)"
+            R"("eulerRotation":[0,90,0],"scale":[1,1,1]}})"))
+            return Fail("Invalid quaternion test setup failed.");
+        const auto previous = restored;
+        const auto previousMatrix = restoredWorld.get<Engine::WorldTransformComponent>(restoredEntity).worldMatrix;
+        const auto rejected = registry.ReadComponent<Engine::TransformComponent>(
+            invalid, "Transform", restoredWorld, restoredEntity);
+        if (rejected.Code != archive::ArchiveErrorCode::InvalidValue ||
+            restored.position != previous.position || restored.scale != previous.scale ||
+            restored.rotation != previous.rotation || restored.eulerRotation != previous.eulerRotation ||
+            restoredWorld.get<Engine::WorldTransformComponent>(restoredEntity).worldMatrix != previousMatrix)
+            return Fail("Invalid Transform changed the existing component or world matrix.");
+
+        const auto emptyEntity = restoredWorld.create();
+        const auto emptyRejected = registry.ReadComponent<Engine::TransformComponent>(
+            invalid, "Transform", restoredWorld, emptyEntity);
+        if (emptyRejected.Code != archive::ArchiveErrorCode::InvalidValue ||
+            restoredWorld.any_of<Engine::TransformComponent, Engine::WorldTransformComponent,
+                Engine::FlagComponent>(emptyEntity))
+            return Fail("Invalid Transform created component dependencies.");
+
+        return 0;
+    }
+}
+
 int main()
 {
     if (CheckTransformRotation() != 0)
@@ -191,13 +324,23 @@ int main()
     using VisitResult = Engine::ComponentVisitResult;
     using AccessError = reflection::PropertyAccessError;
 
-    const auto* registry = Engine::GetCoreComponentReflectionRegistry();
+    struct ReflectionLifetime
+    {
+        ~ReflectionLifetime() { Engine::ReflectionRegistry::Destroy(); }
+    } lifetime;
+    const auto* engineRegistry = Engine::ReflectionRegistry::Create();
+    const auto* registry = engineRegistry != nullptr ? &engineRegistry->GetRegistry() : nullptr;
 
     if (registry == nullptr || registry->FindType<Engine::NameComponent>() == nullptr ||
         registry->FindType<Engine::TransformComponent>() == nullptr)
     {
         return Fail("Engine core reflection lookup failed.");
     }
+
+    if (CheckUnifiedRegistry(*engineRegistry) != 0 ||
+        CheckTransformArchive<archive::JsonArchive>(*engineRegistry) != 0 ||
+        CheckTransformArchive<archive::BeveArchive>(*engineRegistry) != 0)
+        return 1;
 
     std::unique_ptr<Engine::Scene, SceneDeleter> scene{ Engine::Scene::Create() };
     std::unique_ptr<Engine::Scene, SceneDeleter> otherScene{ Engine::Scene::Create() };
@@ -246,7 +389,9 @@ int main()
             return valid;
         });
 
-    if (edited != VisitResult::Completed || !valid || visited != 2 ||
+    if (edited != VisitResult::Completed || !valid || visited != 3 ||
+        !scene->HasComponent<Engine::IDComponent>(entity) ||
+        scene->GetComponent<Engine::IDComponent>(entity).id == 0 ||
         scene->GetComponent<Engine::NameComponent>(entity).name != expectedName)
     {
         return Fail("Scene reflected editing failed.");
@@ -273,7 +418,7 @@ int main()
             return valid;
         });
 
-    if (readOnly != VisitResult::Completed || !valid || visited != 2)
+    if (readOnly != VisitResult::Completed || !valid || visited != 3)
     {
         return Fail("Scene const reflection access failed.");
     }
@@ -297,8 +442,8 @@ int main()
     archive::JsonArchive writer;
     std::string document;
 
-    const auto writeResult = Engine::WriteComponent<Engine::NameComponent>(
-        writer, "Name", constScene.GetRegistry(), entity.GetEntityHandle(), *registry);
+    const auto writeResult = engineRegistry->WriteComponent<Engine::NameComponent>(
+        writer, "Name", constScene.GetRegistry(), entity.GetEntityHandle());
 
     if (!writeResult || !writer.ToJson(document))
     {
@@ -312,8 +457,8 @@ int main()
         return Fail("Scene NameComponent document parsing failed.");
     }
 
-    auto readResult = Engine::ReadComponent<Engine::NameComponent>(
-        reader, "Name", otherScene->GetRegistry(), foreignEntity.GetEntityHandle(), *registry);
+    auto readResult = engineRegistry->ReadComponent<Engine::NameComponent>(
+        reader, "Name", otherScene->GetRegistry(), foreignEntity.GetEntityHandle());
 
     auto& restoredName = otherScene->GetComponent<Engine::NameComponent>(foreignEntity);
 
@@ -330,8 +475,8 @@ int main()
         return Fail("Scene invalid-name document parsing failed.");
     }
 
-    readResult = Engine::ReadComponent<Engine::NameComponent>(
-        invalidReader, "Name", otherScene->GetRegistry(), foreignEntity.GetEntityHandle(), *registry);
+    readResult = engineRegistry->ReadComponent<Engine::NameComponent>(
+        invalidReader, "Name", otherScene->GetRegistry(), foreignEntity.GetEntityHandle());
 
     if (readResult.Code != archive::ArchiveErrorCode::InvalidValue ||
         readResult.Field != "name" || restoredName.name != beforeName)
@@ -346,8 +491,8 @@ int main()
         return Fail("Scene missing-name document parsing failed.");
     }
 
-    readResult = Engine::ReadComponent<Engine::NameComponent>(
-        missingReader, "Name", otherScene->GetRegistry(), foreignEntity.GetEntityHandle(), *registry);
+    readResult = engineRegistry->ReadComponent<Engine::NameComponent>(
+        missingReader, "Name", otherScene->GetRegistry(), foreignEntity.GetEntityHandle());
 
     if (readResult.Code != archive::ArchiveErrorCode::MissingField ||
         readResult.Field != "name" || restoredName.name != beforeName)
@@ -357,8 +502,8 @@ int main()
 
     auto& emptyEntity = otherScene->CreateEntity();
 
-    readResult = Engine::ReadComponent<Engine::NameComponent>(
-        invalidReader, "Name", otherScene->GetRegistry(), emptyEntity.GetEntityHandle(), *registry);
+    readResult = engineRegistry->ReadComponent<Engine::NameComponent>(
+        invalidReader, "Name", otherScene->GetRegistry(), emptyEntity.GetEntityHandle());
 
     if (readResult.Code != archive::ArchiveErrorCode::InvalidValue ||
         otherScene->HasComponent<Engine::NameComponent>(emptyEntity))
@@ -366,8 +511,8 @@ int main()
         return Fail("Invalid data created a component.");
     }
 
-    readResult = Engine::ReadComponent<Engine::NameComponent>(
-        missingReader, "Name", otherScene->GetRegistry(), emptyEntity.GetEntityHandle(), *registry);
+    readResult = engineRegistry->ReadComponent<Engine::NameComponent>(
+        missingReader, "Name", otherScene->GetRegistry(), emptyEntity.GetEntityHandle());
 
     if (readResult.Code != archive::ArchiveErrorCode::MissingField ||
         otherScene->HasComponent<Engine::NameComponent>(emptyEntity))
@@ -375,24 +520,27 @@ int main()
         return Fail("Missing data created a component.");
     }
 
-    const auto rejectPreparedName = +[](Engine::NameComponent& candidate) -> archive::ArchiveResult
+    archive_reflection::PropertyCodecs rejectingCodecs;
+    if (!rejectingCodecs.Register<std::wstring>(
+        [](archive::IArchive& ar, std::string_view key, const std::wstring& value) { return ar.Write(key, value); },
+        [](const archive::IArchive&, std::string_view key, std::wstring& value) -> archive::ArchiveResult
         {
-            candidate.name = L"Rejected";
-            return { archive::ArchiveErrorCode::InvalidValue, "name" };
-        };
+            value = L"Rejected";
+            return { archive::ArchiveErrorCode::InvalidValue, std::string(key) };
+        }))
+        return Fail("Rejecting codec registration failed.");
 
-    readResult = Engine::ReadComponent<Engine::NameComponent>(
-        reader, "Name", otherScene->GetRegistry(), emptyEntity.GetEntityHandle(), *registry,
-        nullptr, rejectPreparedName);
+    readResult = engineRegistry->ReadComponent<Engine::NameComponent>(
+        reader, "Name", otherScene->GetRegistry(), emptyEntity.GetEntityHandle(), &rejectingCodecs);
 
     if (readResult.Code != archive::ArchiveErrorCode::InvalidValue ||
         otherScene->HasComponent<Engine::NameComponent>(emptyEntity))
     {
-        return Fail("Failed preparation created a component.");
+        return Fail("A failed codec created a component.");
     }
 
-    readResult = Engine::ReadComponent<Engine::NameComponent>(
-        reader, "Name", otherScene->GetRegistry(), emptyEntity.GetEntityHandle(), *registry);
+    readResult = engineRegistry->ReadComponent<Engine::NameComponent>(
+        reader, "Name", otherScene->GetRegistry(), emptyEntity.GetEntityHandle());
 
     if (!readResult || !otherScene->HasComponent<Engine::NameComponent>(emptyEntity))
     {
@@ -406,8 +554,8 @@ int main()
 
     std::cout << "Scene NameComponent creation checks passed.\n";
 
-    readResult = Engine::ReadComponent<Engine::NameComponent>(
-        reader, "Name", otherScene->GetRegistry(), entt::null, *registry);
+    readResult = engineRegistry->ReadComponent<Engine::NameComponent>(
+        reader, "Name", otherScene->GetRegistry(), entt::null);
 
     if (readResult.Code != archive::ArchiveErrorCode::InvalidOperation)
     {
@@ -434,7 +582,8 @@ int main()
     archive::JsonArchive entityWriter;
     std::string entityDocument;
 
-    if (!Engine::WriteEntityComponents(entityWriter, "Components", constScene, entity, &codecs) ||
+    if (!engineRegistry->WriteComponents(
+        entityWriter, "Components", constScene.GetRegistry(), entity.GetEntityHandle(), &codecs) ||
         !entityWriter.ToJson(entityDocument))
     {
         return Fail("Entity component writing failed.");
@@ -470,7 +619,9 @@ int main()
         return Fail("Entity component serialization policy failed.");
     }
 
-    const auto failedWrite = Engine::WriteEntityComponents(entityWriter, "Components", constScene, entity);
+    const archive_reflection::PropertyCodecs emptyCodecs;
+    const auto failedWrite = engineRegistry->WriteComponents(
+        entityWriter, "Components", constScene.GetRegistry(), entity.GetEntityHandle(), &emptyCodecs);
     std::string afterFailure;
 
     if (failedWrite.Code != archive::ArchiveErrorCode::UnsupportedType ||
@@ -479,13 +630,13 @@ int main()
         return Fail("Entity component failed-write rollback failed.");
     }
 
-    const auto foreignWrite = Engine::WriteEntityComponents(
-        entityWriter, "Components", constScene, foreignEntity, &codecs);
+    const auto invalidWrite = engineRegistry->WriteComponents(
+        entityWriter, "Components", constScene.GetRegistry(), entt::null, &codecs);
 
-    if (foreignWrite.Code != archive::ArchiveErrorCode::InvalidOperation ||
+    if (invalidWrite.Code != archive::ArchiveErrorCode::InvalidOperation ||
         !entityWriter.ToJson(afterFailure) || afterFailure != entityDocument)
     {
-        return Fail("Entity component foreign-scene guard failed.");
+        return Fail("Entity component invalid-entity guard failed.");
     }
 
     std::cout << "Entity component archive checks passed.\n";

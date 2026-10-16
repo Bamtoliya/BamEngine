@@ -1,6 +1,6 @@
 ﻿#include "CameraSystem.h"
 #include "Components/Render/CameraComponent.h"
-#include "Components/WorldTransformComponent.h"
+#include "Components/Core/WorldTransformComponent.h"
 
 #include <glm/ext/matrix_clip_space.hpp>
 #include <cmath>

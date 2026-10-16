@@ -14,6 +14,7 @@ private:
 	EResult Initialize(void* arg = nullptr);
 public:
 	virtual void Free() override;
+	static bool IsCreated() noexcept { return m_instance != nullptr; }
 public:
 	EResult AddCollider(class Collider* collider);
 	EResult RemoveCollider(class Collider* collider);

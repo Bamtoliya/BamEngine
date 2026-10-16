@@ -83,10 +83,13 @@ EResult SceneManager::CloseScene()
 	if (result != EResult::Success)
 		return result;
 
-	LightManager::Get().ClearLightSources();
-	CollisionManager::Get().ClearColliders();
-	CollisionManager::Get().ClearRigidBodies();
-	CameraManager::Get().ClearCameras();
+	if (LightManager::IsCreated()) LightManager::Get().ClearLightSources();
+	if (CollisionManager::IsCreated())
+	{
+		CollisionManager::Get().ClearColliders();
+		CollisionManager::Get().ClearRigidBodies();
+	}
+	if (CameraManager::IsCreated()) CameraManager::Get().ClearCameras();
 
 	return EResult::Success;
 }
@@ -124,12 +127,24 @@ EResult SceneManager::SaveScene(archive::IArchive& ar, const wstring& filePath)
 	return EResult::Success;
 }
 
-EResult SceneManager::LoadScene(archive::IArchive&, const wstring& filePath)
+EResult SceneManager::LoadScene(archive::IArchive& ar, const wstring& filePath)
 {
 	if (filePath.empty())
 		return EResult::InvalidArgument;
 
-	return EResult::NotImplemented;
+	Scene* candidate = nullptr;
+	auto result = ar.LoadFromFile(std::filesystem::path(filePath));
+	if (result) result = Scene::CreateFromArchive(ar, candidate);
+	if (!result)
+	{
+		ENGINE_LOG_ERROR("Scene load failed: code={}, field={}, path={}",
+			static_cast<int>(result.Code), result.Field, WStrToStr(filePath));
+		return EResult::Fail;
+	}
+
+	const EResult openResult = OpenScene(candidate);
+	Safe_Release(candidate);
+	return openResult;
 }
 
 EResult SceneManager::AddScene(Scene* scene)

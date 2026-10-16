@@ -25,6 +25,7 @@
 #include "CameraManager.h"
 
 #include "CollisionManager.h"
+#include "ReflectionRegistry.h"
 
 
 BEGIN(Engine)
@@ -59,6 +60,8 @@ public:
 private:
 	entt::registry m_GlobalRegistry;
 private:
+	ReflectionRegistry* m_ReflectionRegistry = { nullptr };
+private:
 	TimeManager* m_TimeManager = { nullptr };
 	InputManager* m_InputManager = { nullptr };
 private:
@@ -82,7 +85,6 @@ private:
 	LocalizationManager* m_LocalizationManager = { nullptr };
 private:
 	CollisionManager* m_CollisionManager = { nullptr };
-private:
 #pragma endregion
 };
 

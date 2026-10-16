@@ -4,7 +4,7 @@
 #include "Reflection/ReflectionMacro.h"
 #include "Entity.h"
 #include "TypeIdentityInterface.h"
-#include "Reflection/ComponentReflectionBindings.h"
+#include "Reflection/ReflectionRegistry.h"
 #include <utility>
 #include <archive/ArchiveResult.h>
 
@@ -13,6 +13,8 @@ class IArchive;
 END
 
 BEGIN(Engine)
+
+enum class EntityReparentResult { Success, Unchanged, InvalidEntity, InvalidHierarchy, Cycle, InvalidTransform, DepthLimit };
 
 class EventSystem;
 class UICanvas;
@@ -99,42 +101,12 @@ public:
 public:
 	entt::registry& GetRegistry() { return m_LocalRegistry; }
 	const entt::registry& GetRegistry() const { return m_LocalRegistry; }
-
-	template<typename Visitor>
-	[[nodiscard]]
-	ComponentVisitResult ForEachReflectedComponent(const Entity& entity, Visitor&& visitor)
-	{
-		if (m_ComponentReflectionBindings == nullptr)
-		{
-			return ComponentVisitResult::NotInitialized;
-		}
-
-		if (entity.GetScene() != this)
-		{
-			return ComponentVisitResult::InvalidEntity;
-		}
-
-		return m_ComponentReflectionBindings->ForEach(m_LocalRegistry, entity.GetEntityHandle(), std::forward<Visitor>(visitor));
-	}
-
-	template<typename Visitor>
-	[[nodiscard]]
-	ComponentVisitResult ForEachReflectedComponent(const Entity& entity, Visitor&& visitor) const
-	{
-		if (m_ComponentReflectionBindings == nullptr)
-		{
-			return ComponentVisitResult::NotInitialized;
-		}
-
-		if (entity.GetScene() != this)
-		{
-			return ComponentVisitResult::InvalidEntity;
-		}
-
-		return m_ComponentReflectionBindings->ForEach(m_LocalRegistry, entity.GetEntityHandle(), std::forward<Visitor>(visitor));
-	}
 	Entity& CreateEntity();
+	[[nodiscard]] bool DestroyEntity(Entity& entity);
+	[[nodiscard]] EntityReparentResult ReparentEntity(Entity& child, Entity* parent = nullptr);
 	Entity* FindEntity(entt::entity handle);
+	Entity* FindEntityById(uint64 id);
+	const Entity* FindEntityById(uint64 id) const;
 	template<typename T, typename... Args>
 	T& AddComponent(Entity& entity, Args&&... args)
 	{
@@ -156,6 +128,23 @@ public:
 		m_LocalRegistry.remove<T>(entity.GetEntityHandle());
 	}
 	void ClearEntities();
+	[[nodiscard]] ComponentVisitResult ForEachReflectedComponent(Entity& entity, const ComponentVisitor& visitor)
+	{
+		if (entity.GetScene() != this || !m_LocalRegistry.valid(entity.GetEntityHandle()))
+			return ComponentVisitResult::InvalidEntity;
+		if (!ReflectionRegistry::IsCreated())
+			return ComponentVisitResult::NotInitialized;
+		return ReflectionRegistry::Get().ForEachComponent(m_LocalRegistry, entity.GetEntityHandle(), visitor);
+	}
+	[[nodiscard]] ComponentVisitResult ForEachReflectedComponent(const Entity& entity,
+		const ComponentVisitor& visitor) const
+	{
+		if (entity.GetScene() != this || !m_LocalRegistry.valid(entity.GetEntityHandle()))
+			return ComponentVisitResult::InvalidEntity;
+		if (!ReflectionRegistry::IsCreated())
+			return ComponentVisitResult::NotInitialized;
+		return ReflectionRegistry::Get().ForEachComponent(m_LocalRegistry, entity.GetEntityHandle(), visitor);
+	}
 #pragma endregion
 
 #pragma region Flag Mangement
@@ -179,14 +168,15 @@ public:
 public:
 	[[nodiscard]]
 	archive::ArchiveResult WriteArchive(archive::IArchive& ar) const;
+	[[nodiscard]] static archive::ArchiveResult CreateFromArchive(const archive::IArchive& ar, Scene*& scene);
 #pragma endregion
 
 #pragma region Variable
 protected:
 	entt::registry m_LocalRegistry;
-	const ComponentReflectionBindings* m_ComponentReflectionBindings = nullptr;
 
 	unordered_map<entt::entity, Entity*> m_EntityMap;
+	uint64 m_NextEntityId = 1;
 
 	PROPERTY()
 	ESceneFlags m_Flags = ESceneFlags::Active;

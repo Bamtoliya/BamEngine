@@ -4,19 +4,20 @@
 #include "Types.h"
 #include "CameraBuffer.h"
 #include <optional>
+#include "ComponentAnnotations.h"
 
 namespace Engine
 {
 	class CameraSystem;
 
-	ENUM()
+	ENUM(DISPLAY_NAME("ENUM_CAMERA_TYPE"))
 	enum class ECameraType
 	{
 		Perspective,
 		Orthographic
 	};
 
-	STRUCT()
+	STRUCT(COMPONENT, DISPLAY_NAME("STRUCT_CAMERA"), CATEGORY("CATEGORY_RENDER"))
 	struct CameraComponent
 	{
 		REFLECT_BODY()

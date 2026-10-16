@@ -1,5 +1,7 @@
 ﻿#pragma once
 
+#include "Reflection/ComponentAnnotations.h"
+
 #include "ColliderSettings.h"
 
 #include <cmath>
@@ -23,6 +25,7 @@ namespace Engine
         static constexpr ECollider2DShapeType Type = ECollider2DShapeType::Box;
 
         // 로컬 공간의 전체 크기.
+        PROPERTY(EDITABLE, DISPLAY_NAME("PROP_SIZE"))
         vec2 Size = vec2(1.f);
 
         bool HasValidParameters() const
@@ -37,6 +40,7 @@ namespace Engine
         REFLECT_BODY()
         static constexpr ECollider2DShapeType Type = ECollider2DShapeType::Circle;
 
+        PROPERTY(EDITABLE, DISPLAY_NAME("PROP_RADIUS"))
         f32 Radius = 0.5f;
 
         bool HasValidParameters() const
@@ -51,9 +55,11 @@ namespace Engine
         REFLECT_BODY()
         static constexpr ECollider2DShapeType Type = ECollider2DShapeType::Capsule;
 
+        PROPERTY(EDITABLE, DISPLAY_NAME("PROP_RADIUS"))
         f32 Radius = 0.5f;
 
         // 양 끝 반원을 포함하는 전체 높이. 로컬 Y축을 사용합니다.
+        PROPERTY(EDITABLE, DISPLAY_NAME("PROP_HEIGHT"))
         f32 Height = 2.f;
 
         bool HasValidParameters() const
@@ -65,7 +71,7 @@ namespace Engine
 
     using Collider2DShape = std::variant<Box2DShape, Circle2DShape, Capsule2DShape>;
 
-    STRUCT()
+    STRUCT(COMPONENT, DISPLAY_NAME("STRUCT_COLLIDER_2D"), CATEGORY("CATEGORY_PHYSICS_2D"))
     struct Collider2DComponent
     {
 		REFLECT_BODY()
@@ -128,10 +134,14 @@ namespace Engine
         void ClearDirty() { m_Dirty = false; }
 
     private:
+        PROPERTY(EDITABLE, DISPLAY_NAME("PROP_OFFSET"))
         vec2 m_Offset = vec2(0.f);
-        PROPERTY()
+        PROPERTY(EDITABLE, DISPLAY_NAME("PROP_SETTINGS"))
         ColliderSettings m_Settings;
+        PROPERTY(EDITABLE, DISPLAY_NAME("PROP_SHAPE"))
         Collider2DShape m_Shape = Box2DShape{};
+
+		PROPERTY(READONLY, NOSERIALIZE, DISPLAY_NAME("PROP_DIRTY"))
         bool m_Dirty = true;
     };
 }

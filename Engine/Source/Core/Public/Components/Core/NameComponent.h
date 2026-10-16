@@ -5,7 +5,7 @@
 
 namespace Engine
 {
-    STRUCT(COMPONENT, DISPLAY_NAME("STRUCT_NAME"), CATEGORY("Core"))
+    STRUCT(COMPONENT, DISPLAY_NAME("STRUCT_NAME"), CATEGORY("CATEGORY_CORE"))
     struct NameComponent
     {
         REFLECT_BODY()

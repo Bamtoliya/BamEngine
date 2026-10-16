@@ -3,22 +3,10 @@
 #include "Engine_Includes.h"
 #include "Reflection/ReflectionMacro.h"
 
-#include "Components/NameComponent.h"
-#include "Components/TagComponent.h"
-#include "Components/IDComponent.h"
-#include "Components/FlagComponent.h"
-#include "Components/TransformComponent.h"
-#include "Components/WorldTransformComponent.h"
-
-BEGIN(Engine)
-
-STRUCT()
-struct HierarchyComponent
-{
-    REFLECT_STRUCT()
-
-        entt::entity parent = entt::null;
-    std::vector<entt::entity> children;
-};
-
-END
+#include "Components/Core/NameComponent.h"
+#include "Components/Core/TagComponent.h"
+#include "Components/Core/IDComponent.h"
+#include "Components/Core/FlagComponent.h"
+#include "Components/Core/TransformComponent.h"
+#include "Components/Core/WorldTransformComponent.h"
+#include "Components/Core/HierarchyComponent.h"

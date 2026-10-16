@@ -6,8 +6,8 @@
 
 namespace Engine
 {
-	ENUM()
-		enum class ELightType
+	ENUM(DISPLAY_NAME("ENUM_LIGHT_TYPE"))
+	enum class ELightType
 	{
 		Point = 0,
 		Directional = 1,
@@ -15,15 +15,15 @@ namespace Engine
 		Sky = 3
 	};
 
-	ENUM()
-		enum class EAttenuationMode : uint8
+	ENUM(DISPLAY_NAME("ENUM_ATTENUATION_MODE"))
+	enum class EAttenuationMode : uint8
 	{
 		Coefficients = 0,
 		InverseSquare = 1,
 		Disabled = 2
 	};
 
-	ENUM(META("Bitmask", true))
+	ENUM(BITMASK, DISPLAY_NAME("ENUM_LIGHT_FLAGS"))
 		enum class ELightFlags
 	{
 		None = 0,

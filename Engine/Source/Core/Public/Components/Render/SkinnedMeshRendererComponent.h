@@ -1,6 +1,6 @@
 ﻿#pragma once
 
-#include <reflection/Annotations.h>
+#include "Reflection/ComponentAnnotations.h"
 #include "ResourceHandle.h"
 
 namespace Engine
@@ -9,18 +9,18 @@ namespace Engine
 	class MaterialInterface;
 	class Skeleton;
 
-	STRUCT()
+	STRUCT(COMPONENT, DISPLAY_NAME("STRUCT_SKINNED_MESH_RENDERER"), CATEGORY("CATEGORY_RENDER"))
 	struct SkinnedMeshRendererComponent
 	{
 		REFLECT_BODY()
 
-		PROPERTY()
+		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_MESH_HANDLE"))
 		ResourceHandle<Mesh> meshHandle;
-		PROPERTY()
+		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_MATERIAL_HANDLE"))
 		ResourceHandle<MaterialInterface> materialHandle;
-		PROPERTY()
+		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_SKELETON_HANDLE"))
 		ResourceHandle<Skeleton> skeletonHandle;
-		PROPERTY()
+		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_CAST_SHADOW"))
 		bool castShadow = true;
 	};
 }

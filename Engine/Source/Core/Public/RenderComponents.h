@@ -1,7 +1,7 @@
 ﻿#pragma once
 
-#include "Render/CameraComponent.h"
-#include "Render/LightComponent.h"
-#include "Render/SpriteRendererComponent.h"
-#include "Render/StaticMeshRendererComponent.h"
-#include "Render/SkinnedMeshRendererComponent.h"
+#include "Components/Render/CameraComponent.h"
+#include "Components/Render/LightComponent.h"
+#include "Components/Render/SpriteRendererComponent.h"
+#include "Components/Render/StaticMeshRendererComponent.h"
+#include "Components/Render/SkinnedMeshRendererComponent.h"

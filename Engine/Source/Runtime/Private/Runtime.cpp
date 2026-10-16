@@ -27,6 +27,9 @@ EResult Runtime::Initialize(void* arg)
 			return EResult::Fail;
 		};
 
+	m_ReflectionRegistry = ReflectionRegistry::Create();
+	if (!m_ReflectionRegistry) return fail("ReflectionRegistry");
+
 	m_ComponentRegistry = ComponentRegistry::Create();
 	if (!m_ComponentRegistry) return fail("ComponentRegistry");
 
@@ -84,6 +87,12 @@ EResult Runtime::Initialize(void* arg)
 
 void Runtime::Free()
 {
+	// Frame snapshots/commands retain scenes and UI assets; release them before their managers.
+	if (m_Renderer)
+	{
+		m_Renderer->ClearPickingState();
+		m_Renderer->ClearAllRenderQueues();
+	}
 	
 	// ── 1. 게임 로직 (RHI 무관) ──
 	Safe_Destroy(m_TimeManager);
@@ -110,6 +119,9 @@ void Runtime::Free()
 
 	// ── 5. RHI (GPU Device) — 가장 마지막 ──
 	Safe_Destroy(m_Renderer);
+
+	// ── 6. Reflection ──
+	Safe_Destroy(m_ReflectionRegistry);
 }
 #pragma endregion
 

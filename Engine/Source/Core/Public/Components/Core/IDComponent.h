@@ -6,7 +6,7 @@
 
 namespace Engine
 {
-    STRUCT(COMPONENT, DISPLAY_NAME("STRUCT_ID"), CATEGORY("Core"))
+    STRUCT(COMPONENT, DISPLAY_NAME("STRUCT_ID"), CATEGORY("CATEGORY_CORE"))
     struct IDComponent
     {
         REFLECT_BODY()

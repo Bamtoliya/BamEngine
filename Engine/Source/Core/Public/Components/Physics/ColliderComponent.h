@@ -1,5 +1,7 @@
 ﻿#pragma once
 
+#include "Reflection/ComponentAnnotations.h"
+
 #include <reflection/Annotations.h>
 #include "ColliderSettings.h"
 
@@ -30,6 +32,7 @@ namespace Engine
         static constexpr EColliderShapeType Type = EColliderShapeType::Box;
 
         // 로컬 공간의 전체 크기.
+        PROPERTY(EDITABLE, DISPLAY_NAME("PROP_SIZE"))
         vec3 Size = vec3(1.f);
 
         bool HasValidParameters() const
@@ -42,8 +45,10 @@ namespace Engine
     STRUCT()
     struct SphereShape
     {
+        REFLECT_BODY()
         static constexpr EColliderShapeType Type = EColliderShapeType::Sphere;
 
+        PROPERTY(EDITABLE, DISPLAY_NAME("PROP_RADIUS"))
         f32 Radius = 0.5f;
 
         bool HasValidParameters() const
@@ -55,11 +60,14 @@ namespace Engine
     STRUCT()
     struct CapsuleShape
     {
+        REFLECT_BODY()
         static constexpr EColliderShapeType Type = EColliderShapeType::Capsule;
 
+        PROPERTY(EDITABLE, DISPLAY_NAME("PROP_RADIUS"))
         f32 Radius = 0.5f;
 
         // 양 끝 반구를 포함하는 전체 높이. 로컬 Y축을 사용합니다.
+        PROPERTY(EDITABLE, DISPLAY_NAME("PROP_HEIGHT"))
         f32 Height = 2.f;
 
         bool HasValidParameters() const
@@ -72,8 +80,10 @@ namespace Engine
     STRUCT()
     struct MeshShape
     {
+        REFLECT_BODY()
         static constexpr EColliderShapeType Type = EColliderShapeType::Mesh;
 
+        PROPERTY(EDITABLE, DISPLAY_NAME("PROP_MESH_HANDLE"))
         ResourceHandle<Mesh> MeshHandle;
 
         // Mesh 미지정도 허용합니다. 물리 처리 시에는 유효한 리소스가 필요합니다.
@@ -84,7 +94,7 @@ namespace Engine
 
     using ColliderShape = std::variant<BoxShape, SphereShape, CapsuleShape, MeshShape>;
 
-    STRUCT()
+    STRUCT(COMPONENT, DISPLAY_NAME("STRUCT_COLLIDER"), CATEGORY("CATEGORY_PHYSICS_3D"))
     struct ColliderComponent
     {
         REFLECT_BODY()
@@ -147,9 +157,14 @@ namespace Engine
         void ClearDirty() { m_Dirty = false; }
 
     private:
+        PROPERTY(EDITABLE, DISPLAY_NAME("PROP_OFFSET"))
         vec3 m_Offset = vec3(0.f);
+        PROPERTY(EDITABLE, DISPLAY_NAME("PROP_SETTINGS"))
         ColliderSettings m_Settings;
+        PROPERTY(EDITABLE, DISPLAY_NAME("PROP_SHAPE"))
         ColliderShape m_Shape = BoxShape{};
+
+		PROPERTY(READONLY, NOSERIALIZE, DISPLAY_NAME("PROP_DIRTY"))
         bool m_Dirty = true;
     };
 }

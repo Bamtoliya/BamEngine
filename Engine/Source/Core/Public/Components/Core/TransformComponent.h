@@ -1,17 +1,30 @@
 ﻿#pragma once
 
 #include "Reflection/ComponentAnnotations.h"
+#include "Interface/EnumBit.h"
 
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
 #include <algorithm>
+#include <cstdint>
 #include <cmath>
 
 namespace Engine
 {
-    STRUCT(COMPONENT, DISPLAY_NAME("STRUCT_TRANSFORM"), CATEGORY("Core"))
+    ENUM(BITMASK, DISPLAY_NAME("ENUM_TRANSFORM_ABSOLUTE"))
+    enum class ETransformAbsolute : uint8_t
+    {
+        None = 0,
+        Position = 1 << 0,
+        Rotation = 1 << 1,
+        Scale = 1 << 2,
+        All = Position | Rotation | Scale
+    };
+    ENABLE_BITMASK_OPERATORS(ETransformAbsolute)
+
+    STRUCT(COMPONENT, DISPLAY_NAME("STRUCT_TRANSFORM"), CATEGORY("CATEGORY_CORE"))
     struct TransformComponent
     {
         REFLECT_BODY()
@@ -27,6 +40,15 @@ namespace Engine
 
         PROPERTY(EDITABLE, DISPLAY_NAME("PROP_SCALE"), RESET_VALUE(1.0), STEP(0.01), SNAP_STEP(0.1))
         glm::vec3 scale{ 1.0f };
+
+        // Flagged channels use world values; the hierarchy relationship itself is unchanged.
+        PROPERTY(EDITABLE, ALLOW_MISSING, DISPLAY_NAME("PROP_TRANSFORM_ABSOLUTE"))
+        ETransformAbsolute absolute = ETransformAbsolute::None;
+
+        [[nodiscard]] bool HasValidAbsoluteFlags() const
+        {
+            return (static_cast<uint8_t>(absolute) & ~static_cast<uint8_t>(ETransformAbsolute::All)) == 0;
+        }
 
         [[nodiscard]]
         bool SetLocalPosition(const glm::vec3& value)
@@ -56,7 +78,12 @@ namespace Engine
         [[nodiscard]]
         bool TranslateLocal(const glm::vec3& delta)
         {
-            if (!IsFinite(delta) || !SynchronizeRotation())
+            const auto bits = static_cast<uint8_t>(absolute);
+            const bool positionWorld = (bits & static_cast<uint8_t>(ETransformAbsolute::Position)) != 0;
+            const bool rotationWorld = (bits & static_cast<uint8_t>(ETransformAbsolute::Rotation)) != 0;
+            // A component alone cannot convert between mismatched parent/world channel frames.
+            if (positionWorld != rotationWorld || !HasValidAbsoluteFlags() ||
+                !IsFinite(delta) || !SynchronizeRotation())
             {
                 return false;
             }
@@ -67,7 +94,8 @@ namespace Engine
         [[nodiscard]]
         bool TranslateParentSpace(const glm::vec3& delta)
         {
-            if (!IsFinite(delta))
+            if ((static_cast<uint8_t>(absolute) & static_cast<uint8_t>(ETransformAbsolute::Position)) != 0 ||
+                !HasValidAbsoluteFlags() || !IsFinite(delta))
             {
                 return false;
             }

@@ -19,6 +19,7 @@ protected:
 	virtual ~SceneManager() {}
 	EResult Initialize(void* arg = nullptr);
 public:
+	static bool IsCreated() noexcept { return m_instance != nullptr; }
 	virtual void Free() override;
 #pragma endregion
 

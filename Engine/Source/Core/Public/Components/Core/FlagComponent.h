@@ -8,7 +8,7 @@
 
 namespace Engine
 {
-    ENUM(BITMASK)
+    ENUM(BITMASK, DISPLAY_NAME("ENUM_ENTITY_FLAG"))
     enum class EEntityFlag : std::uint8_t
     {
         None = 0,
@@ -21,7 +21,7 @@ namespace Engine
 
     ENABLE_BITMASK_OPERATORS(EEntityFlag)
 
-    STRUCT(COMPONENT, DISPLAY_NAME("STRUCT_FLAG"), CATEGORY("Core"))
+    STRUCT(COMPONENT, DISPLAY_NAME("STRUCT_FLAG"), CATEGORY("CATEGORY_CORE"))
     struct FlagComponent
     {
         REFLECT_BODY()

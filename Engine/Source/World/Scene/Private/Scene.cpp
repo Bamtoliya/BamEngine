@@ -1,22 +1,14 @@
-﻿#pragma once
+#pragma once
 
 #include "Scene.h"
 #include "CollisionManager.h"
 #include "CoreComponents.h"
-#include "Reflection/CoreComponentReflection.h"
-#include "EntityArchive.h"
 #include "Adapters/GlmArchiveAdapter.h"
+#include <limits>
 
 #pragma region Constructor&Destructor
 EResult Scene::Initialize(void* arg)
 {
-	m_ComponentReflectionBindings = GetCoreComponentReflectionBindings();
-
-	if (m_ComponentReflectionBindings == nullptr)
-	{
-		return EResult::Fail;
-	}
-
 	if (arg)
 	{
 		CAST_DESC
@@ -41,7 +33,6 @@ Scene* Scene::Create(void* arg)
 void Scene::Free()
 {
 	ClearEntities();
-	m_ComponentReflectionBindings = nullptr;
 	//for (auto& layer : m_Layers)
 	//{
 	//	Safe_Release(layer);
@@ -321,7 +312,12 @@ void Scene::LateUpdate(f32 dt)
 #pragma region Entity Management
 Entity& Scene::CreateEntity()
 {
+	while (FindEntityById(m_NextEntityId) != nullptr)
+		m_NextEntityId = m_NextEntityId == (std::numeric_limits<uint64>::max)() ? 1 : m_NextEntityId + 1;
+	const uint64 id = m_NextEntityId;
+	m_NextEntityId = id == (std::numeric_limits<uint64>::max)() ? 1 : id + 1;
 	entt::entity entityHandle = m_LocalRegistry.create();
+	m_LocalRegistry.emplace<IDComponent>(entityHandle, id);
 	Entity* entity = Entity::Create(entityHandle, this);
 	m_EntityMap[entityHandle] = entity;
 	return *entity;
@@ -335,6 +331,80 @@ Entity* Scene::FindEntity(entt::entity handle)
 
 	return it != m_EntityMap.end() ? it->second : nullptr;
 }
+bool Scene::DestroyEntity(Entity& entity)
+{
+	if (entity.GetScene() != this || FindEntity(entity.GetEntityHandle()) != &entity) return false;
+	std::vector<entt::entity> pending{ entity.GetEntityHandle() }, removal;
+	while (!pending.empty())
+	{
+		const auto current = pending.back();
+		pending.pop_back();
+		if (!FindEntity(current) || std::ranges::find(removal, current) != removal.end()) return false;
+		removal.push_back(current);
+		if (const auto* link = m_LocalRegistry.try_get<HierarchyComponent>(current))
+		{
+			for (const auto child : link->children)
+			{
+				const auto* childLink = m_LocalRegistry.valid(child) ?
+					m_LocalRegistry.try_get<HierarchyComponent>(child) : nullptr;
+				if (!childLink || childLink->parent != current) return false;
+				pending.push_back(child);
+			}
+		}
+	}
+	for (auto [other, link] : m_LocalRegistry.view<HierarchyComponent>().each())
+	{
+		if (std::ranges::find(removal, other) != removal.end()) continue;
+		if (std::ranges::find(removal, link.parent) != removal.end()) return false;
+	}
+	std::vector<std::pair<const reflection::PropertyInfo*, reflection::ObjectView>> references;
+	if (ReflectionRegistry::IsCreated())
+		for (const auto& entry : ReflectionRegistry::Get().GetComponentEntries())
+		{
+			if (!entry.ReflectionType || !entry.MatchesStorage(m_LocalRegistry)) continue;
+			for (auto [handle] : m_LocalRegistry.storage<entt::entity>().each())
+			{
+				if (!entry.Has(m_LocalRegistry, handle) || std::ranges::find(removal, handle) != removal.end()) continue;
+				const auto object = entry.Edit(m_LocalRegistry, handle);
+				for (const auto& property : entry.ReflectionType->Properties)
+				{
+					if (property.GetValueCppType() != std::type_index(typeid(entt::entity))) continue;
+					const auto* reference = property.ReadValue(object).Get<entt::entity>();
+					if (!reference || std::ranges::find(removal, *reference) == removal.end()) continue;
+					if (!property.CanWrite() || object.IsReadOnly()) return false;
+					references.emplace_back(&property, object);
+				}
+			}
+		}
+	const entt::entity cleared = entt::null;
+	for (const auto& [property, object] : references)
+		if (!property->WriteValue(object, reflection::ValueView::From(cleared))) return false;
+	for (auto [other, link] : m_LocalRegistry.view<HierarchyComponent>().each())
+		std::erase_if(link.children, [&](auto child) { return std::ranges::find(removal, child) != removal.end(); });
+	for (const auto handle : removal)
+	{
+		Entity* wrapper = m_EntityMap.at(handle);
+		m_EntityMap.erase(handle);
+		m_LocalRegistry.destroy(handle);
+		delete wrapper;
+	}
+	return true;
+}
+Entity* Scene::FindEntityById(uint64 id)
+{
+	return const_cast<Entity*>(std::as_const(*this).FindEntityById(id));
+}
+const Entity* Scene::FindEntityById(uint64 id) const
+{
+	if (id == 0) return nullptr;
+	for (auto [handle, idComponent] : m_LocalRegistry.view<const IDComponent>().each())
+	{
+		if (idComponent.id != id) continue;
+		const auto found = m_EntityMap.find(handle);
+		if (found != m_EntityMap.end()) return found->second;
+	}
+	return nullptr;
+}
 void Scene::ClearEntities()
 {
 	for (auto& pair : m_EntityMap)
@@ -343,6 +413,7 @@ void Scene::ClearEntities()
 	}
 	m_EntityMap.clear();
 	m_LocalRegistry.clear();
+	m_NextEntityId = 1;
 }
 #pragma endregion
 
@@ -356,61 +427,5 @@ void Scene::SetPaused(bool paused)
 {
 	if (paused) AddFlag(m_Flags, ESceneFlags::Paused);
 	else RemoveFlag(m_Flags, ESceneFlags::Paused);
-}
-#pragma endregion
-
-#pragma region Save&Load
-archive::ArchiveResult Scene::WriteArchive(archive::IArchive& ar) const
-{
-	archive_reflection::PropertyCodecs codecs;
-
-	if (!codecs.Register<glm::vec3>(archive_glm::WriteVec3, archive_glm::ReadVec3) ||
-		!codecs.Register<glm::quat>(archive_glm::WriteQuat, archive_glm::ReadQuat) ||
-		!codecs.RegisterArray<std::unordered_set<std::wstring>>())
-	{
-		return { archive::ArchiveErrorCode::InvalidOperation, "Scene.Codecs" };
-	}
-
-	std::vector<Entity> entities;
-	entities.reserve(m_EntityMap.size());
-
-	for (const auto& [handle, entity] : m_EntityMap)
-	{
-		if (entity == nullptr || entity->GetScene() != this ||
-			entity->GetEntityHandle() != handle || !m_LocalRegistry.valid(handle))
-		{
-			return { archive::ArchiveErrorCode::InvalidOperation, "Scene.Entities" };
-		}
-
-		entities.push_back(*entity);
-	}
-
-	return ar.WriteObject("Scene", *this,
-		[&entities, &codecs](archive::IArchive& destination, const Scene& scene) -> archive::ArchiveResult
-		{
-			auto result = destination.Write("Name", scene.m_Name);
-			if (!result)
-			{
-				return result;
-			}
-
-			result = destination.Write("Flags", scene.m_Flags);
-			if (!result)
-			{
-				return result;
-			}
-
-			return destination.WriteObjectArray("Entities", entities,
-				[&scene, &codecs](archive::IArchive& entry, const Entity& entity) -> archive::ArchiveResult
-				{
-					const auto result = entry.Write("Handle", entity.GetEntityHandle());
-					if (!result)
-					{
-						return result;
-					}
-
-					return WriteEntityComponents(entry, "Components", scene, entity, &codecs);
-				});
-		});
 }
 #pragma endregion

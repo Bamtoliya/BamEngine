@@ -1,7 +1,7 @@
 ﻿#include "LightSystem.h"
 #include "Components/Render/LightComponent.h"
-#include "Components/WorldTransformComponent.h"
-#include "Components/FlagComponent.h"
+#include "Components/Core/WorldTransformComponent.h"
+#include "Components/Core/FlagComponent.h"
 
 #include <glm/ext/matrix_clip_space.hpp>
 #include <glm/ext/matrix_transform.hpp>

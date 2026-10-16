@@ -3,7 +3,7 @@
 #include "Component.h"
 #include "Light.h"
 #include "Camera.h"
-#include "Render/LightTypes.h"
+#include "LightTypes.h"
 
 BEGIN(Engine)
 
