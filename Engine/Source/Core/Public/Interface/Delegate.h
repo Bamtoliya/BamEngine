@@ -2,10 +2,15 @@
 
 #include <vector>
 #include <functional>
+#include <algorithm>
+#include <memory>
+#include <cstdint>
+#include <stdexcept>
+#include <utility>
 using namespace std;
 namespace Engine
 {
-using DelegateHandle = uint64;
+using DelegateHandle = std::uint64_t;
 
 template<typename RetVal, typename... ParamTypes>
 class Delegate
@@ -53,13 +58,13 @@ private:
 	struct Listener
 	{
 		DelegateHandle Handle;
-		FunctionType Function;
+		std::shared_ptr<FunctionType> Function;
 	};
 public:
 	DelegateHandle Add(FunctionType func)
 	{
 		DelegateHandle newHandle = ++m_CurrentHandle;
-		m_Listeners.push_back({ newHandle, func });
+		m_Listeners.push_back({ newHandle, std::make_shared<FunctionType>(std::move(func)) });
 		return newHandle;
 	}
 
@@ -82,9 +87,13 @@ public:
 
 	void Broadcast(ParamTypes... args) const
 	{
-		for (const auto& listener : m_Listeners)
+		// Hold the callable alive even if it disconnects itself. New subscriptions run on the next broadcast.
+		const auto snapshot = m_Listeners;
+		for (const auto& listener : snapshot)
 		{
-			listener.Function(args...);
+			const bool connected = std::ranges::any_of(m_Listeners,
+				[&](const Listener& current) { return current.Handle == listener.Handle; });
+			if (connected && listener.Function && *listener.Function) (*listener.Function)(args...);
 		}
 	}
 
