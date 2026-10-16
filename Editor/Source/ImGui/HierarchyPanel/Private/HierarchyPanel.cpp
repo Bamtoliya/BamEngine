@@ -1,6 +1,8 @@
 ﻿#pragma once
 
 #include "HierarchyPanel.h"
+#include "Application.h"
+#include "TransformPropertyEditor.h"
 
 #include "ImGuiManager.h"
 #include "SelectionManager.h"
@@ -241,104 +243,39 @@ bool HierarchyPanel::DrawRenameBox(T* target, ImGuiTreeNodeFlags flags, bool isS
 
 void HierarchyPanel::Draw()
 {
-	if (!m_Open) return;
-
-	const string windowTitle = LOCAL("UI_HIERARCHY") + "###HierarchyPanel";
-	ImGui::Begin(windowTitle.c_str());
-
-	SelectionManager& selectionMgr = SelectionManager::Get();
-
-	if (ImGui::IsWindowHovered() && !ImGui::IsAnyItemHovered() && MOUSE_BUTTON_DOWN(EMouseButton::Left))
-	{
-		m_IsBoxSelecting = true;
-		m_BoxStartPos = ImGui::GetMousePos();
-		m_BoxSelectionCandidates.clear(); // 임시 후보군 초기화
-
-		// Shift나 Ctrl이 없으면 기존 선택 다 비우기 (SelectionManager 활용)
-		if (!KEY_PRESSED(EKeyCode::LShift) && !KEY_PRESSED(EKeyCode::RShift) && !KEY_PRESSED(EKeyCode::LCtrl) && !KEY_PRESSED(EKeyCode::RCtrl))
-		{
-			selectionMgr.ClearSelection();
-		}
-	}
-
-	// (2) 드래그 중 업데이트
-	if (m_IsBoxSelecting)
-	{
-		m_BoxEndPos = ImGui::GetMousePos();
-
-		// 마우스를 뗐을 때 (확정)
-		
-		if (MOUSE_BUTTON_UP(EMouseButton::Left))
-		{
-			m_IsBoxSelecting = false;
-
-			// [핵심] 임시 후보군들을 실제 SelectionManager에 등록
-			for (GameObject* obj : m_BoxSelectionCandidates)
-			{
-				selectionMgr.AddToSelection(obj);
-			}
-			m_BoxSelectionCandidates.clear();
-		}
-	}
-	
-	Scene* currentScene = SceneManager::Get().GetCurrentScene();
-	if (currentScene)
-	{
-		DrawSceneTitle(currentScene);
-		
-		//DrawAddGameObjectButton(currentScene);
-
-		//const vector<Layer*>& layers = currentScene->GetAllLayers();
-		//for (auto* layer : layers)
-		//{
-		//	DrawLayerItem(currentScene, layer);
-		//}
-
-		DrawEntityHierarchy(currentScene);
-	}
-	else
-	{
-		ImGui::Text(LOCAL_CSTR("UI_NO_SCENE_LOADED"));
-
-		if (ImGui::Button(LOCAL_CSTR("UI_CREATE_NEW_SCENE")))
-		{
-			const EResult result = SceneManager::Get().NewScene();
-			if (result == EResult::Success)
-				SelectionManager::Get().ClearSelection(true);
-			else
-				ENGINE_LOG_ERROR("Failed to create scene: {}", ResultToString(result));
-		}
-	}
-
-	DrawSceneContextMenu(currentScene);
-	
-	if (MOUSE_BUTTON_DOWN(EMouseButton::Left) && ImGui::IsWindowHovered())
-	{
-		if (!ImGui::IsAnyItemHovered())
-		{
-			SelectionManager::Get().ClearSelection();
-		}
-	}
-	else
-	{
-		// ... (씬 없을 때 처리) ...
-	}
-
-	if (m_IsBoxSelecting)
-	{
-		// 드래그 박스 좌표 계산 (Min, Max)
-		ImVec2 p_min = ImVec2(std::min(m_BoxStartPos.x, m_BoxEndPos.x), std::min(m_BoxStartPos.y, m_BoxEndPos.y));
-		ImVec2 p_max = ImVec2(std::max(m_BoxStartPos.x, m_BoxEndPos.x), std::max(m_BoxStartPos.y, m_BoxEndPos.y));
-
-		ImDrawList* drawList = ImGui::GetWindowDrawList();
-
-		// 반투명 파란색 채우기
-		drawList->AddRectFilled(p_min, p_max, IM_COL32(0, 130, 255, 50));
-		// 외곽선
-		drawList->AddRect(p_min, p_max, IM_COL32(0, 130, 255, 255));
-	}
-
-	ImGui::End();
+    m_EntityTree.ReleaseFinishedDrag();
+    if (!m_Open) return;
+    const string windowTitle = LOCAL("UI_HIERARCHY") + "###HierarchyPanel";
+    if (!ImGui::Begin(windowTitle.c_str(), &m_Open))
+    {
+        ImGui::End();
+        return;
+    }
+    Scene* currentScene = SceneManager::IsCreated() ? SceneManager::Get().GetCurrentScene() : nullptr;
+    Application::Get().GetEditHistory().AllowShortcuts(ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows));
+    if (currentScene)
+    {
+        DrawSceneTitle(currentScene);
+        DrawEntityHierarchy(currentScene);
+        DrawSceneContextMenu(currentScene);
+    }
+    else
+    {
+        m_LastHierarchyScene = nullptr;
+        m_LastHierarchyPrimary = entt::null;
+        m_HierarchyMessage.clear();
+        ImGui::TextUnformatted(LOCAL_CSTR("UI_NO_SCENE_LOADED"));
+        if (SceneManager::IsCreated() && ImGui::Button(LOCAL_CSTR("UI_CREATE_NEW_SCENE")))
+        {
+            const EResult result = SceneManager::Get().NewScene();
+            if (result == EResult::Success) SelectionManager::Get().ClearSelection(true);
+            else ENGINE_LOG_ERROR("Failed to create scene: {}", ResultToString(result));
+        }
+    }
+    if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && ImGui::IsWindowHovered() &&
+        !ImGui::IsAnyItemHovered() && !ImGui::GetIO().KeyCtrl)
+        SelectionManager::Get().ClearSelection();
+    ImGui::End();
 }
 
 //void HierarchyPanel::DrawLayerItem(Scene* scene, Layer* layer)
@@ -957,18 +894,20 @@ void HierarchyPanel::DrawSceneTitle(Scene* scene)
 		}
 
 		// InputText 그리기
-		if (ImGui::InputText("##RenameScene", m_RenameBuffer, sizeof(m_RenameBuffer), ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll))
+		const bool accepted = ImGui::InputText("##RenameScene", m_RenameBuffer, sizeof(m_RenameBuffer),
+			ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll);
+		if (KEY_DOWN(EKeyCode::Escape))
 		{
-			scene->SetName(StrToWStr(m_RenameBuffer));
-			m_RenamingId = nullptr; // 종료
-		}
-		else if (ImGui::IsItemDeactivated())
-		{
-			scene->SetName(StrToWStr(m_RenameBuffer));
 			m_RenamingId = nullptr;
 		}
-		else if (KEY_DOWN(EKeyCode::Escape))
+		else if (accepted || ImGui::IsItemDeactivated())
 		{
+			const auto name = StrToWStr(m_RenameBuffer);
+			if (scene->GetName() != name && Application::Get().GetEditHistory().Enabled())
+			{
+				SceneEditScope edit(Application::Get().GetEditHistory(), *scene, "UI_HISTORY_RENAME");
+				scene->SetName(name);
+			}
 			m_RenamingId = nullptr;
 		}
 	}
@@ -1024,6 +963,8 @@ void HierarchyPanel::DrawSceneContextMenu(Scene* scene)
 		{
 			EntityFactory::CreateEmptyEntity(scene);
 		}
+		if (ImGui::MenuItem("Add UI Canvas"))
+			SelectionManager::Get().SetSelectedEntity(&EntityFactory::CreateCanvasEntity(scene));
 		if (ImGui::MenuItem("Add Primitive Entity"))
 		{
 			try
@@ -1040,7 +981,7 @@ void HierarchyPanel::DrawSceneContextMenu(Scene* scene)
 		{
 			try
 			{
-				Entity& entity = EntityFactory::CreateSpriteEntity(scene, L"Sprite", L"Resources/Material/DefaultMaterial");
+				Entity& entity = EntityFactory::CreateSpriteEntity(scene, L"Sprite", L"Resources/Material/SpriteMaterial");
 				SelectionManager::Get().SetSelectedEntity(&entity);
 			}
 			catch (const std::exception& error)
@@ -1054,150 +995,76 @@ void HierarchyPanel::DrawSceneContextMenu(Scene* scene)
 
 void HierarchyPanel::DrawEntityHierarchy(Scene* scene)
 {
-	if (!scene)
-		return;
-
-	auto& registry = scene->GetRegistry();
-	auto view = registry.view<NameComponent>();
-
-	bool hasRoot = false;
-
-	ImGui::PushID(scene);
-
-	for (entt::entity handle : view)
-	{
-		const auto* hierarchy =
-			registry.try_get<HierarchyComponent>(handle);
-
-		const bool hasDisplayableParent =
-			hierarchy &&
-			hierarchy->parent != entt::null &&
-			registry.valid(hierarchy->parent) &&
-			registry.all_of<NameComponent>(hierarchy->parent);
-
-		if (hasDisplayableParent)
-			continue;
-
-		Entity* entity = scene->FindEntity(handle);
-		if (!entity)
-			continue;
-
-		hasRoot = true;
-		DrawEntityNode(scene, *entity);
-	}
-
-	if (!hasRoot)
-		ImGui::TextDisabled("No root entities.");
-
-	ImGui::PopID();
-}
-
-void HierarchyPanel::DrawEntityNode(Scene* scene, Entity& entity)
-{
-	if (!scene)
-		return;
-
-	auto& registry = scene->GetRegistry();
-	const entt::entity handle = entity.GetEntityHandle();
-
-	if (!registry.valid(handle))
-		return;
-
-	const auto* name = registry.try_get<NameComponent>(handle);
-	if (!name)
-		return;
-
-	const auto* hierarchy =
-		registry.try_get<HierarchyComponent>(handle);
-
-	// 현재 노드의 유효한 자식 래퍼를 조회합니다.
-	const auto findDisplayableChild =
-		[&](entt::entity childHandle) -> Entity*
-		{
-			if (!registry.valid(childHandle) ||
-				!registry.all_of<NameComponent>(childHandle))
-			{
-				return nullptr;
-			}
-
-			const auto* childHierarchy =
-				registry.try_get<HierarchyComponent>(childHandle);
-
-			if (!childHierarchy || childHierarchy->parent != handle)
-				return nullptr;
-
-			return scene->FindEntity(childHandle);
-		};
-
-	bool hasChildren = false;
-
-	if (hierarchy)
-	{
-		for (entt::entity childHandle : hierarchy->children)
-		{
-			if (findDisplayableChild(childHandle))
-			{
-				hasChildren = true;
-				break;
-			}
-		}
-	}
-
-	auto& selectionManager = SelectionManager::Get();
-
-	ImGuiTreeNodeFlags flags =
-		ImGuiTreeNodeFlags_OpenOnArrow |
-		ImGuiTreeNodeFlags_SpanAvailWidth;
-
-	if (selectionManager.IsEntitySelected(&entity))
-	{
-		flags |= ImGuiTreeNodeFlags_Selected;
-	}
-
-	if (!hasChildren)
-	{
-		flags |= ImGuiTreeNodeFlags_Leaf |
-			ImGuiTreeNodeFlags_NoTreePushOnOpen;
-	}
-
-	const std::string label = WStrToStr(name->name);
-	const std::string id =
-		std::to_string(entt::to_integral(handle));
-
-	ImGui::PushID(id.c_str());
-
-	const bool opened = ImGui::TreeNodeEx(
-		"EntityNode",
-		flags,
-		"%s",
-		label.c_str());
-
-	if (ImGui::IsItemClicked(ImGuiMouseButton_Left) && !ImGui::IsItemToggledOpen())
-	{
-		if (ImGui::GetIO().KeyCtrl)
-		{
-			selectionManager.ToggleEntitySelection(&entity);
-		}
-		else
-		{
-			selectionManager.SetSelectedEntity(&entity);
-		}
-	}
-
-	if (opened && hasChildren)
-	{
-		for (entt::entity childHandle : hierarchy->children)
-		{
-			Entity* child = findDisplayableChild(childHandle);
-
-			if (child)
-				DrawEntityNode(scene, *child);
-		}
-
-		ImGui::TreePop();
-	}
-
-	ImGui::PopID();
+    if (!scene) return;
+    auto& selection = SelectionManager::Get();
+    std::vector<entt::entity> selected;
+    for (auto* entity : selection.GetSelectedEntities())
+        if (entity && entity->GetScene() == scene) selected.push_back(entity->GetEntityHandle());
+    const auto primary = selected.empty() ? entt::null : selected.back();
+    const bool changedScene = m_LastHierarchyScene != scene;
+    const auto reveal = m_RevealEntity != entt::null ? m_RevealEntity :
+        changedScene || primary != m_LastHierarchyPrimary ? primary : entt::null;
+    if (changedScene) m_HierarchyMessage.clear();
+    m_LastHierarchyScene = scene;
+    m_LastHierarchyPrimary = primary;
+    m_RevealEntity = entt::null;
+    const auto action = m_EntityTree.Draw(*scene, selected, reveal, selection.IsPrimarySelectionLocked());
+    if (action.Clicked != entt::null)
+    {
+        auto* entity = scene->FindEntity(action.Clicked);
+        if (action.Toggle) selection.ToggleEntitySelection(entity);
+        else selection.SetSelectedEntity(entity);
+    }
+    if (action.Delete != entt::null)
+    {
+        auto& history = Application::Get().GetEditHistory();
+        auto before = history.Enabled() ? SceneEditSnapshot::Capture(*scene) : SceneEditSnapshot{};
+        auto* entity = scene->FindEntity(action.Delete);
+        if (before && entity)
+        {
+            selection.ClearSelection(true);
+            if (scene->DestroyEntity(*entity))
+                history.Record(std::move(before), SceneEditSnapshot::Capture(*scene), "UI_HISTORY_DELETE");
+        }
+    }
+    const auto text = [](const char* key, const char* fallback)
+    {
+        auto value = LocalizationManager::Get().GetText(std::string(key));
+        return value.empty() || value == key ? std::string(fallback) : value;
+    };
+    if (action.RejectedDrop)
+        m_HierarchyMessage = text("UI_HIERARCHY_BAD_DROP", "This entity is no longer in the current scene.");
+    if (action.Move)
+    {
+        auto& history = Application::Get().GetEditHistory();
+        auto before = history.Enabled() ? SceneEditSnapshot::Capture(*scene) : SceneEditSnapshot{};
+        auto* child = scene->FindEntity(action.Move->Child);
+        auto* parent = scene->FindEntity(action.Move->Parent);
+        const bool editLocked = child && TransformPropertyEditor::HasAnyLock(
+            scene->GetRegistry(), child->GetEntityHandle());
+        const auto result = !editLocked && before && child && (parent || action.Move->Parent == entt::null) ?
+            scene->ReparentEntity(*child, parent) : EntityReparentResult::InvalidEntity;
+        switch (result)
+        {
+        case EntityReparentResult::Success:
+            history.Record(std::move(before), SceneEditSnapshot::Capture(*scene), "UI_HISTORY_REPARENT");
+            m_RevealEntity = action.Move->Child;
+            [[fallthrough]];
+        case EntityReparentResult::Unchanged: m_HierarchyMessage.clear(); break;
+        case EntityReparentResult::Cycle:
+            m_HierarchyMessage = text("UI_HIERARCHY_CYCLE", "An entity cannot be parented to itself or its descendants.");
+            break;
+        case EntityReparentResult::InvalidTransform:
+            m_HierarchyMessage = text("UI_HIERARCHY_TRANSFORM", "Cannot preserve the world transform under this parent.");
+            break;
+        case EntityReparentResult::DepthLimit:
+            m_HierarchyMessage = text("UI_HIERARCHY_DEPTH", "The hierarchy would exceed its depth limit."); break;
+        default:
+            m_HierarchyMessage = text("UI_HIERARCHY_EDIT_FAILED", "The hierarchy is invalid; no changes were made."); break;
+        }
+        if (editLocked) m_HierarchyMessage = text("UI_TRANSFORM_UNLOCK_REPARENT", "Unlock the transform before reparenting.");
+    }
+    if (!m_HierarchyMessage.empty()) ImGui::TextDisabled("%s", m_HierarchyMessage.c_str());
 }
 
 void HierarchyPanel::DrawEntityName(const wstring& name, bool isSelected)

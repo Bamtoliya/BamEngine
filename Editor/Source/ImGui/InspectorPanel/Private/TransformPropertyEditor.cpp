@@ -1,7 +1,7 @@
 ﻿#include "TransformPropertyEditor.h"
 #include "CoreComponents.h"
 #include "TransformSystem.h"
-#include "Reflection/CoreComponentReflection.h"
+#include "Reflection/ReflectionRegistry.h"
 
 #include <reflection/Registry.h>
 
@@ -89,6 +89,7 @@ namespace
     {
         if (settings != nullptr)
         {
+            if (settings->Locked) return current;
             for (int axis = 0; axis < 3; ++axis)
             {
                 if (settings->LockedAxes[axis])
@@ -113,7 +114,8 @@ namespace Editor
         }
 
         const char* propertyName = GetTransformEditorPropertyName(mode);
-        const auto* registry = Engine::GetCoreComponentReflectionRegistry();
+        const auto* registry = Engine::ReflectionRegistry::IsCreated() ?
+            &Engine::ReflectionRegistry::Get().GetRegistry() : nullptr;
         const auto* type = registry != nullptr ? registry->FindType<Engine::TransformComponent>() : nullptr;
         const auto* property = type != nullptr && propertyName != nullptr ?
             type->FindProperty(propertyName) : nullptr;
@@ -123,7 +125,7 @@ namespace Editor
             return nullptr;
         }
 
-        auto& state = world.get_or_emplace<ReflectionEntityEditState>(entity);
+        auto& state = GetReflectionEntityEditState(world, entity);
         auto& settings = state.Components[type->QualifiedName].Vectors[propertyName];
 
         if (!std::isfinite(settings.SnapStep) || settings.SnapStep <= 0.0f)
@@ -162,25 +164,13 @@ namespace Editor
                 return std::nullopt;
             }
 
-            const auto* parentTransform = world.try_get<Engine::WorldTransformComponent>(parent);
-
-            if (parentTransform == nullptr)
-            {
-                return std::nullopt;
-            }
-
-            parentWorld = glm::dmat4(parentTransform->worldMatrix);
+            glm::mat4 calculated;
+            if (!Engine::TransformSystem::TryGetWorldMatrix(world, parent, calculated)) return std::nullopt;
+            parentWorld = glm::dmat4(calculated);
         }
-
-        const double determinant = glm::determinant(parentWorld);
-
-        if (!IsFiniteTransformEditorMatrix(parentWorld) ||
-            !std::isfinite(determinant) || determinant == 0.0)
-        {
-            return std::nullopt;
-        }
-
-        const glm::dmat4 localMatrix = glm::inverse(parentWorld) * desiredWorld;
+        glm::dmat4 localMatrix;
+        if (!Engine::TransformSystem::TryGetLocalMatrix(glm::mat4(parentWorld), source->absolute,
+            worldMatrix, localMatrix)) return std::nullopt;
 
         if (!IsFiniteTransformEditorMatrix(localMatrix))
         {
@@ -265,8 +255,10 @@ namespace Editor
 
         const glm::dmat4 rebuiltLocal(candidate.GetLocalMatrix());
 
+        glm::mat4 rebuiltWorld;
         if (!TransformEditorMatricesMatch(rebuiltLocal, localMatrix) ||
-            !TransformEditorMatricesMatch(parentWorld * rebuiltLocal, desiredWorld))
+            !Engine::TransformSystem::TryComposeWorld(candidate, glm::mat4(parentWorld), rebuiltWorld) ||
+            !TransformEditorMatricesMatch(glm::dmat4(rebuiltWorld), desiredWorld))
         {
             return std::nullopt;
         }
@@ -278,15 +270,32 @@ namespace Editor
         const glm::mat4& worldMatrix, TransformEditMode mode)
     {
         auto converted = TryConvertWorldMatrix(world, entity, worldMatrix, mode);
+        return converted && ApplyCandidate(world, entity, *converted);
+    }
 
-        if (!converted)
+    bool TransformPropertyEditor::IsLocked(entt::registry& world, entt::entity entity, TransformEditMode mode)
+    {
+        const auto* settings = GetSettings(world, entity, mode);
+        return settings && settings->Locked;
+    }
+
+    bool TransformPropertyEditor::HasAnyLock(entt::registry& world, entt::entity entity)
+    {
+        return IsLocked(world, entity, TransformEditMode::Translation) ||
+            IsLocked(world, entity, TransformEditMode::Rotation) || IsLocked(world, entity, TransformEditMode::Scale);
+    }
+
+    bool TransformPropertyEditor::ApplyCandidate(entt::registry& world, entt::entity entity,
+        Engine::TransformComponent candidate)
+    {
+        const auto* source = world.valid(entity) ? world.try_get<Engine::TransformComponent>(entity) : nullptr;
+        if (!source || !candidate.HasValidAbsoluteFlags()) return false;
+        const auto current = *source;
+        if (candidate.absolute != current.absolute)
         {
-            return false;
+            if (HasAnyLock(world, entity)) return false;
+            return Engine::TransformSystem::TryCommitTransform(world, entity, candidate);
         }
-
-        auto& current = world.get<Engine::TransformComponent>(entity);
-        auto& candidate = *converted;
-
         const auto* positionSettings = GetSettings(world, entity, TransformEditMode::Translation);
         const auto* rotationSettings = GetSettings(world, entity, TransformEditMode::Rotation);
         const auto* scaleSettings = GetSettings(world, entity, TransformEditMode::Scale);
@@ -294,11 +303,11 @@ namespace Editor
         candidate.position = PreserveTransformEditorLockedAxes(current.position, candidate.position, positionSettings);
         candidate.scale = PreserveTransformEditorLockedAxes(current.scale, candidate.scale, scaleSettings);
 
-        if (mode == TransformEditMode::Rotation && rotationSettings != nullptr)
+        if (rotationSettings != nullptr)
         {
             const auto& locks = rotationSettings->LockedAxes;
 
-            if (locks[0] && locks[1] && locks[2])
+            if (rotationSettings->Locked || (locks[0] && locks[1] && locks[2]))
             {
                 // 회전 전체가 잠겼으면 Quaternion과 Hint를 그대로 보존합니다.
                 const glm::vec3 position = candidate.position;
@@ -326,8 +335,6 @@ namespace Editor
             return true;
         }
 
-        current = candidate;
-        Engine::TransformSystem::UpdateHierarchy(world);
-        return true;
+        return Engine::TransformSystem::TryCommitTransform(world, entity, candidate);
     }
 }

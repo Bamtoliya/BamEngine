@@ -1,17 +1,23 @@
-﻿#pragma once
+#pragma once
 #include "InspectorPanel.h"
+#include "Application.h"
 #include "SelectionManager.h"
 #include "LocalizationManager.h"
 #include "Entity.h"
 #include "Scene.h"
-#include "Reflection/CoreComponentReflection.h"
 #include "ReflectionPropertyDrawer.h"
+#include "ReflectionInspectorSupport.h"
 #include "TransformSystem.h"
+#include "TransformPropertyEditor.h"
 #include "CoreComponents.h"
 #include "RenderComponents.h"
 #include "PhysicsComponent.h"
 #include "ResourceManager.h"
 #include "Texture.h"
+#include "UILayout.h"
+#include <algorithm>
+#include <string_view>
+#include <vector>
 
 void InspectorPanel::Draw()
 {
@@ -21,6 +27,7 @@ void InspectorPanel::Draw()
 
 	if (ImGui::Begin(windowTitle.c_str(), &m_Open))
 	{
+		Application::Get().GetEditHistory().AllowShortcuts(ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows));
 		if (Engine::Entity* entity = SelectionManager::Get().GetPrimarySelectedEntity())
 		{
 			DrawEntityProperties(*entity);
@@ -59,9 +66,10 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 		return;
 	}
 
-	auto& entityEditState = world.get_or_emplace<ReflectionEntityEditState>(handle);
+	auto& entityEditState = GetReflectionEntityEditState(world, handle);
 
-	const auto* registry = Engine::GetCoreComponentReflectionRegistry();
+	const auto* registry = Engine::ReflectionRegistry::IsCreated() ?
+		&Engine::ReflectionRegistry::Get().GetRegistry() : nullptr;
 
 	ImGui::TextUnformatted("Components");
 	ImGui::Separator();
@@ -72,10 +80,36 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 
 	std::size_t componentCount = 0;
 	bool refreshWorldMatrices = false;
+	bool anyChanged = false;
+	const std::array targets{ handle };
+	auto& history = Application::Get().GetEditHistory();
+	auto before = history.Enabled() ? SceneEditSnapshot::Capture(*scene, targets) : SceneEditSnapshot{};
+	const auto* transformType = registry ? registry->FindType<Engine::TransformComponent>() : nullptr;
+	if (transformType && world.all_of<Engine::TransformComponent>(handle))
+	{
+		auto& settings = entityEditState.Components[transformType->QualifiedName];
+		auto& positionLock = settings.Vectors["position"].Locked;
+		auto& rotationLock = settings.Vectors["eulerRotation"].Locked;
+		auto& scaleLock = settings.Vectors["scale"].Locked;
+		bool all = positionLock && rotationLock && scaleLock;
+		ImGui::BeginDisabled(!history.Enabled());
+		if (ImGui::Checkbox(LOCAL("UI_TRANSFORM_LOCK_ALL").c_str(), &all))
+			positionLock = rotationLock = scaleLock = all;
+		ImGui::Checkbox(LOCAL("UI_TRANSFORM_LOCK_POSITION").c_str(), &positionLock);
+		ImGui::SameLine();
+		ImGui::Checkbox(LOCAL("UI_TRANSFORM_LOCK_ROTATION").c_str(), &rotationLock);
+		ImGui::SameLine();
+		ImGui::Checkbox(LOCAL("UI_TRANSFORM_LOCK_SCALE").c_str(), &scaleLock);
+		ImGui::EndDisabled();
+		if (positionLock || rotationLock || scaleLock) settings.ReadOnlyProperties.insert("absolute");
+		else settings.ReadOnlyProperties.erase("absolute");
+	}
+	ImGui::BeginDisabled(!history.Enabled() || !before);
 
 	const auto result = scene->ForEachReflectedComponent(entity,
 		[&](const reflection::TypeInfo& type, const reflection::ObjectView& object)
 		{
+			if (!ReflectionPropertyDrawer::IsVisible(type)) return true;
 			++componentCount;
 
 			Engine::TransformComponent* transform = nullptr;
@@ -101,7 +135,63 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 			}
 
 			auto& componentSettings = entityEditState.Components[type.QualifiedName];
-			const bool changed = ReflectionPropertyDrawer::DrawObject(type, object, registry, &componentSettings);
+			bool changed = false;
+			const auto drawCollider = [&]<typename T>()
+			{
+				auto& current = world.get<T>(handle);
+				T candidate = current;
+				if (!ReflectionPropertyDrawer::DrawObject(type, reflection::ObjectView::From(candidate),
+					registry, &componentSettings)) return false;
+				if (!TryCommitInspectorCollider(current, std::move(candidate)))
+				{
+					ImGui::TextDisabled("%s", LocalizeInspectorText("UI_INVALID_PROPERTY").c_str());
+					return false;
+				}
+				return true;
+			};
+			const auto drawUI = [&]<typename T>()
+			{
+				auto& current = world.get<T>(handle);
+				T candidate = current;
+				if (!ReflectionPropertyDrawer::DrawObject(type, reflection::ObjectView::From(candidate),
+					registry, &componentSettings)) return false;
+				if (!Engine::UILayout::IsValid(candidate))
+				{
+					ImGui::TextDisabled("Invalid UI layout values were rejected.");
+					return false;
+				}
+				const T previous = current;
+				current = candidate;
+				const auto canvas = Engine::UILayout::FindCanvas(world, handle);
+				std::vector<Engine::UIElementLayout> layouts;
+				if (canvas != entt::null && !Engine::UILayout::Build(world, canvas, layouts))
+				{
+					current = previous;
+					ImGui::TextDisabled("The edit would invalidate the canvas layout.");
+					return false;
+				}
+				return true;
+			};
+			if (transform)
+			{
+				auto candidate = *transform;
+				if (ReflectionPropertyDrawer::DrawObject(type, reflection::ObjectView::From(candidate),
+					registry, &componentSettings))
+				{
+					changed = TransformPropertyEditor::ApplyCandidate(world, handle, candidate);
+					if (!changed) ImGui::TextDisabled("%s", LOCAL("UI_TRANSFORM_REJECTED").c_str());
+				}
+			}
+			else if (object.Is<Engine::CanvasComponent>()) changed = drawUI.operator()<Engine::CanvasComponent>();
+			else if (object.Is<Engine::RectTransformComponent>()) changed = drawUI.operator()<Engine::RectTransformComponent>();
+			else if (object.Is<Engine::UIImageComponent>()) changed = drawUI.operator()<Engine::UIImageComponent>();
+			else if (object.Is<Engine::UIButtonComponent>()) changed = drawUI.operator()<Engine::UIButtonComponent>();
+			else if (object.Is<Engine::ColliderComponent>()) changed = drawCollider.operator()<Engine::ColliderComponent>();
+			else if (object.Is<Engine::Collider2DComponent>()) changed = drawCollider.operator()<Engine::Collider2DComponent>();
+			else changed = ReflectionPropertyDrawer::DrawObject(type, object, registry, &componentSettings);
+			if (changed && object.Is<Engine::CameraComponent>()) world.get<Engine::CameraComponent>(handle).InvalidateCache();
+			if (changed && object.Is<Engine::LightComponent>()) world.get<Engine::LightComponent>(handle).InvalidateCache();
+			anyChanged |= changed;
 
 			if (changed && transform != nullptr)
 			{
@@ -118,6 +208,7 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 			return true;
 		});
 	DrawAddComponentButton(entity);
+	ImGui::EndDisabled();
 
 	ImGui::PopID();
 	ImGui::PopID();
@@ -126,6 +217,8 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 	{
 		Engine::TransformSystem::UpdateHierarchy(scene->GetRegistry());
 	}
+	if (anyChanged)
+		history.Record(std::move(before), SceneEditSnapshot::Capture(*scene, targets), "UI_HISTORY_PROPERTIES", true);
 
 	if (result == Engine::ComponentVisitResult::InvalidEntity)
 	{
@@ -142,35 +235,6 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 }
 
 #pragma region Add Component
-namespace
-{
-	template<typename T>
-	void DrawEntityAddComponentMenuItem(Engine::Scene& scene, Engine::Entity& entity,
-		const char* label, bool requiresTransform = false)
-	{
-		const bool exists = scene.HasComponent<T>(entity);
-
-		if (!ImGui::MenuItem(label, nullptr, exists, !exists))
-			return;
-
-		scene.AddComponent<T>(entity);
-
-		if (requiresTransform)
-		{
-			auto& world = scene.GetRegistry();
-			const entt::entity handle = entity.GetEntityHandle();
-
-			static_cast<void>(world.get_or_emplace<Engine::TransformComponent>(handle));
-			static_cast<void>(world.get_or_emplace<Engine::WorldTransformComponent>(handle));
-			static_cast<void>(world.get_or_emplace<Engine::FlagComponent>(handle));
-
-			Engine::TransformSystem::UpdateHierarchy(world);
-		}
-
-		ImGui::CloseCurrentPopup();
-	}
-}
-
 void InspectorPanel::DrawAddComponentButton(Engine::Entity& entity)
 {
 	Engine::Scene* scene = entity.GetScene();
@@ -178,7 +242,8 @@ void InspectorPanel::DrawAddComponentButton(Engine::Entity& entity)
 	if (scene == nullptr || !scene->GetRegistry().valid(entity.GetEntityHandle()))
 		return;
 
-	if (ImGui::Button(LOCAL("UI_ADD_COMPONENT").c_str()))
+	const ImVec2 buttonSize(ImGui::GetContentRegionAvail().x, 0.0f);
+	if (ImGui::Button(LOCAL("UI_ADD_COMPONENT").c_str(), buttonSize))
 	{
 		ImGui::OpenPopup("EntityAddComponentPopup");
 	}
@@ -196,167 +261,61 @@ void InspectorPanel::DrawAddComponentPopup(Engine::Entity& entity)
 	if (!ImGui::BeginPopup("EntityAddComponentPopup"))
 		return;
 
-	if (ImGui::BeginMenu("Core"))
-	{
-		DrawEntityAddComponentMenuItem<Engine::NameComponent>(*scene, entity, "Name");
-		DrawEntityAddComponentMenuItem<Engine::TagComponent>(*scene, entity, "Tag");
-		DrawEntityAddComponentMenuItem<Engine::FlagComponent>(*scene, entity, "Flags");
-		DrawEntityAddComponentMenuItem<Engine::TransformComponent>(*scene, entity, "Transform", true);
-		ImGui::EndMenu();
-	}
+    if (!Engine::ReflectionRegistry::IsCreated())
+    {
+        ImGui::TextDisabled("Component registration is unavailable.");
+        ImGui::EndPopup();
+        return;
+    }
 
-	if (ImGui::BeginMenu("Rendering"))
-	{
-		DrawEntityAddComponentMenuItem<Engine::CameraComponent>(*scene, entity, "Camera", true);
-		DrawEntityAddComponentMenuItem<Engine::LightComponent>(*scene, entity, "Light", true);
-		DrawEntityAddComponentMenuItem<Engine::StaticMeshRendererComponent>(*scene, entity, "Static Mesh Renderer", true);
-		DrawEntityAddComponentMenuItem<Engine::SpriteRendererComponent>(*scene, entity, "Sprite Renderer", true);
-		DrawEntityAddComponentMenuItem<Engine::SkinnedMeshRendererComponent>(*scene, entity, "Skinned Mesh Renderer", true);
-		ImGui::EndMenu();
-	}
+    const auto entries = Engine::ReflectionRegistry::Get().GetComponentEntries();
+    const auto isVisible = [](const auto& entry)
+    {
+        return entry.UserAddable && (entry.ReflectionType == nullptr ||
+            ReflectionPropertyDrawer::IsVisible(*entry.ReflectionType));
+    };
+    std::vector<std::string_view> categories;
+    for (const auto& entry : entries)
+    {
+        if (isVisible(entry) && std::ranges::find(categories, entry.Category) == categories.end())
+            categories.push_back(entry.Category);
+    }
 
-	if (ImGui::BeginMenu("Physics 3D"))
-	{
-		DrawEntityAddComponentMenuItem<Engine::RigidBodyComponent>(*scene, entity, "Rigid Body", true);
-		DrawEntityAddComponentMenuItem<Engine::ColliderComponent>(*scene, entity, "Collider", true);
-		DrawEntityAddComponentMenuItem<Engine::JointComponent>(*scene, entity, "Joint", true);
-		ImGui::EndMenu();
-	}
-
-	if (ImGui::BeginMenu("Physics 2D"))
-	{
-		DrawEntityAddComponentMenuItem<Engine::RigidBody2DComponent>(*scene, entity, "Rigid Body 2D", true);
-		DrawEntityAddComponentMenuItem<Engine::Collider2DComponent>(*scene, entity, "Collider 2D", true);
-		DrawEntityAddComponentMenuItem<Engine::Joint2DComponent>(*scene, entity, "Joint 2D", true);
-		ImGui::EndMenu();
-	}
+    for (const auto category : categories)
+    {
+        ImGui::PushID(std::string(category).c_str());
+        const std::string label = LocalizeInspectorText(std::string(category));
+        if (!ImGui::BeginMenu(label.c_str()))
+        {
+            ImGui::PopID();
+            continue;
+        }
+        for (const auto& entry : entries)
+        {
+            if (!isVisible(entry) || entry.Category != category)
+                continue;
+            auto& world = scene->GetRegistry();
+            const auto handle = entity.GetEntityHandle();
+            const bool exists = entry.Has(world, handle);
+            const std::string entryLabel = LocalizeInspectorText(entry.Name);
+            ImGui::PushID(std::string(entry.StorageTypeName).c_str());
+            if (ImGui::MenuItem(entryLabel.c_str(), nullptr, exists, !exists))
+            {
+                auto& history = Application::Get().GetEditHistory();
+                const std::array targets{ handle };
+                auto before = SceneEditSnapshot::Capture(*scene, targets);
+                if (before && entry.TryAdd(world, handle))
+                {
+                    history.Record(std::move(before), SceneEditSnapshot::Capture(*scene, targets), "UI_HISTORY_COMPONENT");
+                    ImGui::CloseCurrentPopup();
+                }
+            }
+            ImGui::PopID();
+        }
+        ImGui::EndMenu();
+        ImGui::PopID();
+    }
 
 	ImGui::EndPopup();
 }
-#pragma endregion
-
-#pragma region Component
-namespace
-{
-	// ---------- Sampler 콤보 ----------
-	static bool DrawSamplerFilterCombo(const char* id, Engine::ESamplerFilter& value)
-	{
-		const char* labels[] = { "Point", "Linear", "Anisotropic" };
-		int cur = static_cast<int>(value);
-		bool changed = false;
-		ImGui::PushID(id);
-		if (ImGui::BeginCombo("##Filter", labels[cur]))
-		{
-			for (int i = 0; i < 3; ++i)
-			{
-				bool sel = (cur == i);
-				if (ImGui::Selectable(labels[i], sel))
-				{
-					value = static_cast<Engine::ESamplerFilter>(i);
-					changed = true;
-				}
-			}
-			ImGui::EndCombo();
-		}
-		ImGui::PopID();
-		return changed;
-	}
-
-	static bool DrawSamplerAddressCombo(const char* id, Engine::ESamplerAddressMode& value)
-	{
-		const char* labels[] = { "Wrap", "Mirror", "Clamp", "Border", "MirrorOnce" };
-		int cur = static_cast<int>(value);
-		bool changed = false;
-		ImGui::PushID(id);
-		if (ImGui::BeginCombo("##Addr", labels[cur]))
-		{
-			for (int i = 0; i < 5; ++i)
-			{
-				bool sel = (cur == i);
-				if (ImGui::Selectable(labels[i], sel))
-				{
-					value = static_cast<Engine::ESamplerAddressMode>(i);
-					changed = true;
-				}
-			}
-			ImGui::EndCombo();
-		}
-		ImGui::PopID();
-		return changed;
-	}
-
-	// ---------- Texture 피커 (DnD 지원) ----------
-	static bool DrawTextureHandlePicker(const char* id,
-		Engine::ResourceHandle<Engine::Texture>& ioHandle)
-	{
-		using namespace Engine;
-		bool changed = false;
-		ImGui::PushID(id);
-
-		string currentLabel = "None";
-		if (ioHandle && ioHandle.Get())
-			currentLabel = WStrToStr(ioHandle.Get()->GetKey());
-
-		const float pickerButtonWidth = 32.0f;
-		const float avail = ImGui::GetContentRegionAvail().x;
-		ImGui::SetNextItemWidth(avail - pickerButtonWidth - ImGui::GetStyle().ItemSpacing.x);
-		ImGui::InputText("##TexName", (char*)currentLabel.c_str(),
-			currentLabel.size() + 1, ImGuiInputTextFlags_ReadOnly);
-
-		// 드래그드롭 수락
-		if (ImGui::BeginDragDropTarget())
-		{
-			if (const ImGuiPayload* payload =
-				ImGui::AcceptDragDropPayload("CONTENT_ITEM_Texture"))
-			{
-				const wchar_t* path = static_cast<const wchar_t*>(payload->Data);
-				if (path)
-				{
-					Handle h = ResourceManager::Get().LoadFile(wstring(path));
-					if (h.IsValid())
-					{
-						ioHandle = ResourceHandle<Texture>(h);
-						changed = true;
-					}
-				}
-			}
-			ImGui::EndDragDropTarget();
-		}
-
-		ImGui::SameLine();
-		if (ImGui::Button(ICON_FA_BULLSEYE, ImVec2(pickerButtonWidth, 0.0f)))
-			ImGui::OpenPopup("TexturePickerPopup");
-
-		if (ImGui::BeginPopup("TexturePickerPopup"))
-		{
-			if (ImGui::Selectable("None (Clear)", !ioHandle))
-			{
-				ioHandle = ResourceHandle<Texture>();
-				changed = true;
-			}
-
-			auto& resourceManager = ResourceManager::Get();
-
-			for (const Handle& h : resourceManager.GetResourceHandles<Texture>())
-			{
-				Texture* tex = dynamic_cast<Texture*>(resourceManager.GetResource(h));
-				if (!tex)
-					continue;
-
-				const string key = WStrToStr(tex->GetKey());
-				const bool selected = ioHandle && ioHandle.Get() == tex;
-
-				if (ImGui::Selectable(key.c_str(), selected))
-				{
-					ioHandle = ResourceHandle<Texture>(h);
-					changed = true;
-				}
-			}
-			ImGui::EndPopup();
-		}
-
-		ImGui::PopID();
-		return changed;
-	}
-} // anonymous namespace
 #pragma endregion

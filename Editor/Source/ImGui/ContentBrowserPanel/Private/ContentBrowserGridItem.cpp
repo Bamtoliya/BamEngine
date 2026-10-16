@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "ContentBrowserGridItem.h"
 #include "SelectionManager.h"
 
@@ -225,29 +225,7 @@ void ContentBrowserGridItem::DragAndDropTarget(const std::filesystem::path& rela
 			wPath.c_str(),
 			(wPath.length() + 1) * sizeof(wchar_t));
 
-		// 확장자로 리소스 타입을 결정해 전용 페이로드 추가 발행
-		std::string ext = relativePath.extension().string();
-		for (auto& c : ext) c = tolower(c);
-
-		const char* typedPayload = nullptr;
-		if (ext == ".bamtex" || ext == ".png" || ext == ".jpg" || ext == ".jpeg")
-			typedPayload = "CONTENT_ITEM_Texture";
-		else if (ext == ".bammat")
-			typedPayload = "CONTENT_ITEM_Material";
-		else if (ext == ".bammatinst")
-			typedPayload = "CONTENT_ITEM_MaterialInstance";
-		else if (ext == ".bammesh")
-			typedPayload = "CONTENT_ITEM_Mesh";
-		else if (ext == ".bamshader")
-			typedPayload = "CONTENT_ITEM_Shader";
-
-		if (typedPayload)
-		{
-			ImGui::SetDragDropPayload(
-				typedPayload,
-				wPath.c_str(),
-				(wPath.length() + 1) * sizeof(wchar_t));
-		}
+		// One payload per drag; the receiver validates the resolved resource type.
 
 		ImGui::Text("%s", relativePath.filename().string().c_str());
 		ImGui::EndDragDropSource();

@@ -18,6 +18,7 @@ namespace Editor
     class ReflectionPropertyDrawer
     {
     public:
+        static bool IsVisible(const reflection::TypeInfo& type);
         static bool DrawObject(const reflection::TypeInfo& type, const reflection::ObjectView& object, const reflection::Registry* registry = nullptr, ReflectionObjectEditSettings* editSettings = nullptr);
         static bool DrawPropertyTable(const reflection::TypeInfo& type, const reflection::ObjectView& object, const reflection::Registry* registry = nullptr, ReflectionObjectEditSettings* editSettings = nullptr);
         static bool DrawValue(const reflection::PropertyInfo& property, const reflection::ObjectView& object, const reflection::Registry* registry = nullptr, ReflectionObjectEditSettings* editSettings = nullptr);

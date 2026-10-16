@@ -1,7 +1,7 @@
 ﻿#pragma once
 
 #include "ReflectionEditState.h"
-#include "Components/TransformComponent.h"
+#include "Components/Core/TransformComponent.h"
 
 #include <entt/entity/registry.hpp>
 #include <optional>
@@ -11,6 +11,9 @@ namespace Editor
     class TransformPropertyEditor
     {
     public:
+        static bool IsLocked(entt::registry& world, entt::entity entity, TransformEditMode mode);
+        static bool HasAnyLock(entt::registry& world, entt::entity entity);
+        static bool ApplyCandidate(entt::registry& world, entt::entity entity, Engine::TransformComponent candidate);
         static ReflectionVectorEditSettings* GetSettings(entt::registry& world,
             entt::entity entity, TransformEditMode mode);
 

@@ -1,4 +1,7 @@
-﻿#include "TransformPropertyEditor.h"
+#include "TransformPropertyEditor.h"
+#include "Reflection/ReflectionRegistry.h"
+#include <archive/JsonArchive.h>
+#include <utility>
 #include "CoreComponents.h"
 #include "TransformSystem.h"
 
@@ -71,9 +74,54 @@ namespace
 
 int main()
 {
+    struct ReflectionLifetime
+    {
+        ~ReflectionLifetime() { Engine::ReflectionRegistry::Destroy(); }
+    } lifetime;
+    if (Engine::ReflectionRegistry::Create() == nullptr)
+        return FailTransformEditorCheck("Engine reflection initialization failed.");
+
     if (CheckTransformEditorAngleBoundary() != 0)
     {
         return 1;
+    }
+
+
+    {
+        auto& registry = Engine::ReflectionRegistry::Get();
+        const auto* transform = registry.FindComponent(std::type_index(typeid(Engine::TransformComponent)));
+        entt::registry editable;
+        entt::registry other;
+        const auto entity = editable.create();
+        const auto otherEntity = other.create();
+        if (transform == nullptr || !transform->TryAdd(editable, entity) ||
+            !transform->TryAdd(other, otherEntity))
+            return FailTransformEditorCheck("Editor context test setup failed.");
+
+        auto* settings = Editor::TransformPropertyEditor::GetSettings(
+            editable, entity, Editor::TransformEditMode::Translation);
+        if (settings == nullptr)
+            return FailTransformEditorCheck("Editor context settings lookup failed.");
+        settings->LockedAxes[0] = true;
+        const auto* isolated = Editor::TransformPropertyEditor::GetSettings(
+            other, otherEntity, Editor::TransformEditMode::Translation);
+        if (isolated == nullptr || isolated->LockedAxes[0] ||
+            std::as_const(editable).storage<Editor::ReflectionEntityEditState>() != nullptr)
+            return FailTransformEditorCheck("Editor state leaked between worlds or into component storage.");
+
+        archive::JsonArchive writer;
+        if (!registry.WriteComponents(writer, "Components", editable, entity))
+            return FailTransformEditorCheck("Editor settings prevented component serialization.");
+
+        static_cast<void>(editable.destroy(entity));
+        const auto replacement = editable.create();
+        if (!transform->TryAdd(editable, replacement))
+            return FailTransformEditorCheck("Replacement entity setup failed.");
+        const auto* replacementSettings = Editor::TransformPropertyEditor::GetSettings(
+            editable, replacement, Editor::TransformEditMode::Translation);
+        if (replacementSettings == nullptr || replacementSettings->LockedAxes[0] ||
+            editable.ctx().get<Editor::ReflectionSceneEditState>().Entities.size() != 1)
+            return FailTransformEditorCheck("Destroyed entity retained editor settings.");
     }
 
     entt::registry world;

@@ -5,6 +5,7 @@
 #include "Runtime.h"
 #include "ImGuiManager.h"
 #include "SelectionManager.h"
+#include "CoreComponents.h"
 #include "AssetManager.h"
 #include <archive/JsonArchive.h>
 
@@ -60,8 +61,11 @@ EResult Application::Initialize(void* arg)
 
 void Application::Free()
 {
-    m_CommandHistory.OnHistoryChanged().Clear();
-    m_CommandHistory.Clear();
+    m_EditHistory.BeforeReplay = {};
+    m_EditHistory.AfterReplay = {};
+    m_HistorySelection.clear();
+    m_EditHistory.Commands().OnHistoryChanged().Clear();
+    m_EditHistory.Clear();
 
     if (m_AssetManager)
     {
@@ -257,6 +261,8 @@ EResult Application::InitializeSystem()
         return EResult::Fail;
     if (!systemManager.AddSystem<LightSystem>())
         return EResult::Fail;
+    if (!systemManager.AddSystem<UIRenderSystem>())
+        return EResult::Fail;
     return EResult::Success;
 }
 EResult Application::InitializeImGui()
@@ -273,6 +279,27 @@ EResult Application::InitializeImGui()
     }
 
     m_SelectionManager = SelectionManager::Create();
+    m_EditHistory.BeforeReplay = [this]
+    {
+        m_HistorySelection.clear();
+        for (auto* entity : m_SelectionManager->GetSelectedEntities())
+        {
+            if (!entity || !entity->GetScene()) continue;
+            auto* scene = entity->GetScene();
+            const auto* id = scene->GetRegistry().try_get<Engine::IDComponent>(entity->GetEntityHandle());
+            if (id) m_HistorySelection.emplace_back(scene, id->id);
+        }
+        m_SelectionManager->ClearSelection(true);
+    };
+    m_EditHistory.AfterReplay = [this]
+    {
+        const bool locked = m_SelectionManager->IsPrimarySelectionLocked();
+        m_SelectionManager->SetPrimarySelectionLock(false);
+        for (const auto& [scene, id] : m_HistorySelection)
+            if (auto* entity = scene->FindEntityById(id)) m_SelectionManager->AddToEntitySelection(entity);
+        m_SelectionManager->SetPrimarySelectionLock(locked);
+        m_HistorySelection.clear();
+    };
     if (!m_SelectionManager)
     {
         fmt::print(stderr, "SelectionManager Creation Failed\n");
@@ -641,6 +668,19 @@ void Application::InitializeShaders()
     //}
     //rm.LoadFile(L"Resources/Shader/ui.frag.bamshader");
 
+    for (const auto& stage : { std::pair{ L"UIVS", EShaderType::Vertex }, std::pair{ L"UIPS", EShaderType::Fragment } })
+    {
+        ShaderDesc uiShader{};
+        uiShader.Key = RESOURCE_PATH L"Shader/" + std::wstring(stage.first);
+        uiShader.Path = stage.second == EShaderType::Vertex ? RESOURCE_PATH L"Shader/bin/dxil/uiVS.cso" :
+            RESOURCE_PATH L"Shader/bin/dxil/uiPS.cso";
+        if (Renderer::Get().GetRHIType() == ERHIType::SDLGPU)
+            uiShader.Path = stage.second == EShaderType::Vertex ? RESOURCE_PATH L"Shader/bin/spirv/uiVS.spv" :
+                RESOURCE_PATH L"Shader/bin/spirv/uiPS.spv";
+        uiShader.shaderType = stage.second;
+        uiShader.entryPoint = "main";
+        rm.LoadResource<Shader>(&uiShader);
+    }
     ShaderDesc spriteVS{};
     {
         spriteVS.Key = RESOURCE_PATH L"Shader/GBufferSpriteVS";
@@ -788,7 +828,8 @@ void Application::InitializeMaterials()
     spriteMaterialDesc.Key = RESOURCE_PATH L"Material/SpriteMaterial";
     spriteMaterialDesc.VertexShaderHandle = resourceManager.GetResourceHandle<Shader>(RESOURCE_PATH L"Shader/GBufferSpriteVS");
     spriteMaterialDesc.PixelShaderHandle = resourceManager.GetResourceHandle<Shader>(RESOURCE_PATH L"Shader/GBufferSpritePS");
-    spriteMaterialDesc.BlendMode = EBlendMode::AlphaBlend;
+    // The GBuffer sprite path uses alpha cutout; blending would also corrupt its picking ID.
+    spriteMaterialDesc.BlendMode = EBlendMode::Masked;
     spriteMaterialDesc.CullMode = ECullMode::None;
     spriteMaterialDesc.DepthMode = EDepthMode::ReadWrite;
     Material* spriteMaterial = resourceManager.LoadResource<Material>(&spriteMaterialDesc).Get();
@@ -894,10 +935,10 @@ void Application::InitializeMaterials()
     MaterialDesc uiMatDesc = {};
     uiMatDesc.Key = L"Resources/Material/UIMaterial";
     uiMatDesc.VertexShaderHandle = resourceManager.GetResourceHandle<Shader>(
-        L"Resources/Shader/ui.vert.bamshader");
+        L"Resources/Shader/UIVS");
     uiMatDesc.PixelShaderHandle = resourceManager.GetResourceHandle<Shader>(
-        L"Resources/Shader/ui.frag.bamshader");
-    uiMatDesc.BlendMode = EBlendMode::AlphaBlend;
+        L"Resources/Shader/UIPS");
+    uiMatDesc.BlendMode = EBlendMode::NonPremultiplied;
     uiMatDesc.CullMode = ECullMode::None;
     uiMatDesc.DepthMode = EDepthMode::None;
     uiMatDesc.DepthCompareOp = ECompareOp::LessOrEqual;
@@ -985,7 +1026,7 @@ void Application::StopPlayMode()
         return;
     }
 
-    m_CommandHistory.Clear();
+    m_EditHistory.Clear();
     fmt::print("[PIE] Stopped — scene restored\n");
 }
 

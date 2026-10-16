@@ -134,6 +134,19 @@ void ToolBar::DrawEditMenu()
 {
 	if (ImGui::BeginMenu(LOCAL_CSTR("UI_EDIT")))
 	{
+		auto& history = Application::Get().GetEditHistory();
+		history.Flush();
+		const auto localized = [](const std::string& key)
+		{
+			auto text = LocalizationManager::Get().GetText(key);
+			return text.empty() ? key : text;
+		};
+		std::string undo = localized("UI_UNDO"), redo = localized("UI_REDO");
+		if (!history.Commands().UndoLabel().empty()) undo += " " + localized(history.Commands().UndoLabel());
+		if (!history.Commands().RedoLabel().empty()) redo += " " + localized(history.Commands().RedoLabel());
+		if (ImGui::MenuItem(undo.c_str(), "Ctrl+Z", false, history.CanUndo())) history.Undo();
+		if (ImGui::MenuItem(redo.c_str(), "Ctrl+Y / Ctrl+Shift+Z", false, history.CanRedo())) history.Redo();
+        if (!history.Error().empty()) ImGui::TextWrapped("%s", localized(history.Error()).c_str());
 		ImGui::EndMenu();
 	}
 }
@@ -210,12 +223,6 @@ void ToolBar::LoadScene()
 	archive::JsonArchive ar;
 	const EResult result = SceneManager::Get().LoadScene(ar, filePath);
 
-	if (result == EResult::NotImplemented)
-	{
-		ENGINE_LOG_WARN("Scene loading is unavailable until scene restoration is implemented.");
-		return;
-	}
-
 	if (result != EResult::Success)
 	{
 		ENGINE_LOG_ERROR("Failed to load scene: {} ({})", WStrToStr(filePath), ResultToString(result));
@@ -223,6 +230,7 @@ void ToolBar::LoadScene()
 	}
 
 	SelectionManager::Get().ClearSelection(true);
+	Application::Get().GetEditHistory().Clear();
 }
 #pragma endregion
 

@@ -1,7 +1,8 @@
 ﻿#pragma once
 
 #include "Editor_Includes.h"
-#include "CommandHistory.h"
+#include "SceneEditHistory.h"
+#include "Editor_Includes.h"
 
 BEGIN(Editor)
 
@@ -81,8 +82,9 @@ private:
 
 #pragma region Command History
 public:
-	CommandHistory& GetCommandHistory() { return m_CommandHistory; }
-	const CommandHistory& GetCommandHistory() const { return m_CommandHistory; }
+	CommandHistory& GetCommandHistory() { return m_EditHistory.Commands(); }
+	const CommandHistory& GetCommandHistory() const { return m_EditHistory.Commands(); }
+	SceneEditHistory& GetEditHistory() { return m_EditHistory; }
 #pragma endregion
 
 
@@ -114,7 +116,8 @@ private:
 	EPlayState m_PlayState = EPlayState::Edit;
 	wstring m_SnapshotPath = L"Temp/__pie_snapshot__.json";
 private:
-	CommandHistory m_CommandHistory;
+	SceneEditHistory m_EditHistory;
+	std::vector<std::pair<Engine::Scene*, uint64>> m_HistorySelection;
 private:
 	bool m_SDLInitialized = false;
 	bool m_LoggerInitialized = false;

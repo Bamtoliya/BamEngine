@@ -3,6 +3,7 @@
 #include "Base.h"
 #include "ImGuiInterface.h"
 #include "Editor_Includes.h"
+#include "EntityHierarchyView.h"
 
 BEGIN(Editor)
 
@@ -13,7 +14,7 @@ public:
 	virtual ~HierarchyPanel() = default;
 public:
 	virtual void Draw() override;
-	virtual void Free() override { __super::Free(); }
+	virtual void Free() override { m_EntityTree.ResetDrag(); __super::Free(); }
 private:
 	//void DrawLayerItem(class Scene* scene, class Layer* layer);
 	//void DrawGameObjectNode(class GameObject* gameObject);
@@ -31,7 +32,7 @@ private:
 
 private:
 	void DrawEntityHierarchy(class Scene* scene);
-	void DrawEntityNode(class Scene* scene, class Entity& entity);
+
 	void DrawEntityName(const wstring& name, bool isSelected);
 	void DrawEntityRenameBox(class Entity* entity, bool isSelected);
 
@@ -45,6 +46,11 @@ private:
 
 #pragma region Variables
 private:
+	EntityHierarchyView m_EntityTree;
+	Engine::Scene* m_LastHierarchyScene = nullptr;
+	entt::entity m_LastHierarchyPrimary = entt::null;
+	entt::entity m_RevealEntity = entt::null;
+	std::string m_HierarchyMessage;
 	void* m_RenamingId = { nullptr };
 	char m_RenameBuffer[256] = "";
 private:

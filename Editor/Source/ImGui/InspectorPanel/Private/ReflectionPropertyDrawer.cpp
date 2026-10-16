@@ -16,6 +16,210 @@
 #include <cmath>
 #include "Editor_Macros.h"
 #include "LocalizationManager.h"
+#include "ReflectionInspectorSupport.h"
+#include "PhysicsComponent.h"
+#include <imgui_stdlib.h>
+#include <archive/Unicode.h>
+#include <limits>
+
+namespace
+{
+    bool DrawInspectorText(std::string& value)
+    {
+        return ImGui::InputText("##Value", &value);
+    }
+
+    bool DrawInspectorText(std::wstring& value)
+    {
+        std::string text;
+        if (!archive::detail::WideToUtf8(value, text)) return false;
+        if (!ImGui::InputText("##Value", &text)) return false;
+        return archive::detail::Utf8ToWide(text, value);
+    }
+
+    template<typename Matrix>
+    bool DrawInspectorMatrix(Matrix& value)
+    {
+        bool changed = false;
+        for (int column = 0; column < value.length(); ++column)
+        {
+            ImGui::PushID(column);
+            changed |= ImGui::DragScalarN("##Column", ImGuiDataType_Float, glm::value_ptr(value[column]),
+                value[column].length(), 0.01f);
+            ImGui::PopID();
+            for (int row = 0; row < value[column].length(); ++row)
+                if (!std::isfinite(value[column][row])) return false;
+        }
+        return changed;
+    }
+
+    template<typename T>
+    bool DrawResourcePicker(Engine::ResourceHandle<T>& value, bool canEdit)
+    {
+        auto& manager = Engine::ResourceManager::Get();
+        auto* current = manager.GetResource(value.GetRawHandle());
+        const auto label = current != nullptr ? Engine::WStrToStr(current->GetKey()) :
+            Editor::LocalizeInspectorText("UI_RESOURCE_NONE");
+        bool changed = false;
+        bool failed = ImGui::GetStateStorage()->GetBool(ImGui::GetID("DropFailed"), false);
+        ImGui::BeginDisabled(!canEdit);
+        const auto button = label + "###ResourcePicker";
+        if (ImGui::Button(button.c_str(), ImVec2(-1.0f, 0.0f))) ImGui::OpenPopup("ResourceChoices");
+        if (canEdit && ImGui::BeginDragDropTarget())
+        {
+            if (const auto* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM"))
+            {
+                const auto path = Editor::DecodeInspectorResourcePath(payload->Data, payload->DataSize);
+                const auto handle = path ? manager.LoadFile(*path) : Engine::Handle{};
+                changed = Editor::TryAssignInspectorResource(value, handle);
+                failed = !changed;
+            }
+            ImGui::EndDragDropTarget();
+        }
+        if (ImGui::BeginPopup("ResourceChoices"))
+        {
+            if (ImGui::Selectable(Editor::LocalizeInspectorText("UI_RESOURCE_CLEAR").c_str()))
+            {
+                value.Reset();
+                changed = true;
+                failed = false;
+            }
+            for (const auto& entry : manager.GetDebugSnapshot())
+            {
+                const auto handle = manager.FindHandleByKey(entry.Key);
+                if (dynamic_cast<T*>(manager.GetResource(handle)) == nullptr) continue;
+                const auto text = Engine::WStrToStr(entry.Key);
+                ImGui::PushID(text.c_str());
+                if (ImGui::Selectable(text.c_str(), handle == value.GetRawHandle()))
+                {
+                    changed = Editor::TryAssignInspectorResource(value, handle);
+                    failed = !changed;
+                }
+                ImGui::PopID();
+            }
+            ImGui::EndPopup();
+        }
+        ImGui::EndDisabled();
+        ImGui::GetStateStorage()->SetBool(ImGui::GetID("DropFailed"), failed);
+        if (failed) ImGui::TextDisabled("%s", Editor::LocalizeInspectorText("UI_RESOURCE_REJECTED").c_str());
+        return changed;
+    }
+
+    bool DrawInspectorEnum(const reflection::PropertyInfo& property, const reflection::ObjectView& object,
+        const reflection::EnumInfo& enumeration, const reflection::ValueView& current, bool canEdit)
+    {
+        const auto value = enumeration.ReadValue(current);
+        if (!value) return false;
+        const auto bits = std::visit([](auto number) { return static_cast<std::uint64_t>(number); }, *value);
+        auto candidate = bits;
+        const auto* entry = enumeration.FindEntryByValue(*value);
+        const auto enumText = [&](const std::string& name)
+        {
+            const auto key = enumeration.QualifiedName + "." + name;
+            const auto localized = Editor::LocalizeInspectorText(key);
+            return localized == key ? Editor::LocalizeInspectorText(name) : localized;
+        };
+        std::string label = entry ? enumText(entry->Name) : std::to_string(bits);
+        const auto* metadata = enumeration.Metadata.Find("Bitmask");
+        const auto* flag = metadata ? std::get_if<bool>(metadata) : nullptr;
+        if (!entry && flag && *flag)
+        {
+            label.clear();
+            std::uint64_t covered = 0;
+            for (const auto& item : enumeration.Entries)
+            {
+                const auto mask = std::visit([](auto number) { return static_cast<std::uint64_t>(number); }, item.Value);
+                if (!mask || (mask & (mask - 1)) || (bits & mask) != mask) continue;
+                if (!label.empty()) label += " | ";
+                label += enumText(item.Name);
+                covered |= mask;
+            }
+            if (covered != bits || label.empty())
+            {
+                if (!label.empty()) label += " | ";
+                label += std::to_string(bits & ~covered);
+            }
+        }
+        bool changed = false;
+        ImGui::BeginDisabled(!canEdit);
+        if (ImGui::BeginCombo("##Value", label.c_str()))
+        {
+            for (const auto& item : enumeration.Entries)
+            {
+                const auto mask = std::visit([](auto number) { return static_cast<std::uint64_t>(number); },
+                    item.Value);
+                bool selected = flag && *flag ? (mask == 0 ? candidate == 0 : (candidate & mask) == mask) :
+                    candidate == mask;
+                const auto text = enumText(item.Name);
+                ImGui::PushID(item.Name.c_str());
+                if (flag && *flag)
+                {
+                    if (ImGui::Checkbox(text.c_str(), &selected))
+                    {
+                        candidate = mask == 0 ? 0 : selected ? candidate | mask : candidate & ~mask;
+                        changed = true;
+                    }
+                }
+                else if (ImGui::Selectable(text.c_str(), selected)) { candidate = mask; changed = true; }
+                ImGui::PopID();
+            }
+            ImGui::EndCombo();
+        }
+        ImGui::EndDisabled();
+        if (!canEdit || !changed || bits == candidate) return false;
+        const reflection::EnumValue edited = std::holds_alternative<std::int64_t>(*value) ?
+            reflection::EnumValue(static_cast<std::int64_t>(candidate)) : reflection::EnumValue(candidate);
+        return property.TryWriteEnumValue(object, edited) == reflection::PropertyAccessError::None;
+    }
+
+    template<typename Variant, std::size_t Index = 0>
+    void SelectInspectorVariant(Variant& value, std::size_t index)
+    {
+        if constexpr (Index < std::variant_size_v<Variant>)
+        {
+            if (index == Index) value.template emplace<Index>();
+            else SelectInspectorVariant<Variant, Index + 1>(value, index);
+        }
+    }
+
+    template<typename Variant>
+    bool DrawColliderShape(Variant& value, const reflection::Registry* registry)
+    {
+        if (registry == nullptr || value.valueless_by_exception()) return false;
+        const auto name = std::visit([&](const auto& shape)
+        {
+            const auto* type = registry->FindType<std::decay_t<decltype(shape)>>();
+            return type ? Editor::InspectorMetadataText(type->Metadata, "DisplayName", type->QualifiedName) : "?";
+        }, value);
+        bool changed = false;
+        if (ImGui::BeginCombo("##Shape", Editor::LocalizeInspectorText(name).c_str()))
+        {
+            [&]<std::size_t... I>(std::index_sequence<I...>)
+            {
+                ([&]
+                {
+                    const auto* type = registry->FindType<std::variant_alternative_t<I, Variant>>();
+                    const auto key = type ? Editor::InspectorMetadataText(type->Metadata, "DisplayName",
+                        type->QualifiedName) : std::to_string(I);
+                    const auto label = Editor::LocalizeInspectorText(key);
+                    if (ImGui::Selectable(label.c_str(), value.index() == I))
+                    {
+                        SelectInspectorVariant(value, I);
+                        changed = true;
+                    }
+                }(), ...);
+            }(std::make_index_sequence<std::variant_size_v<Variant>>{});
+            ImGui::EndCombo();
+        }
+        changed |= std::visit([&](auto& shape)
+        {
+            const auto* type = registry->FindType<std::decay_t<decltype(shape)>>();
+            return type && Editor::ReflectionPropertyDrawer::DrawPropertyTable(
+                *type, reflection::ObjectView::From(shape), registry);
+        }, value);
+        return changed;
+    }
+}
 
 namespace
 {
@@ -29,7 +233,7 @@ namespace
 			return fallback;
 		}
 
-		return LOCAL(*key);
+		return Editor::LocalizeInspectorText(*key);
 	}
 
 	std::string FormatReflectionDrawerValue(const reflection::ValueView& value, const reflection::Registry* registry)
@@ -37,6 +241,8 @@ namespace
 		if (const auto* text = value.Get<std::string>()) return *text;
 		if (const auto* text = value.Get<std::wstring>()) return Engine::WStrToStr(*text);
 		if (const auto* number = value.Get<bool>()) return *number ? "true" : "false";
+		if (const auto* entity = value.Get<entt::entity>())
+			return *entity == entt::null ? "null" : std::to_string(entt::to_integral(*entity));
 		if (const auto* number = value.Get<std::int64_t>()) return std::to_string(*number);
 		if (const auto* number = value.Get<std::uint64_t>()) return std::to_string(*number);
 		if (const auto* number = value.Get<float>()) return fmt::format("{}", *number);
@@ -127,6 +333,15 @@ namespace
 		{
 			return false;
 		}
+		if constexpr (std::is_floating_point_v<T>)
+		{
+			if (!std::isfinite(candidate)) return false;
+			const auto minimum = GetReflectionDrawerNumberMetadata(property.Metadata, "RangeMin",
+				-static_cast<double>((std::numeric_limits<T>::max)()));
+			const auto maximum = GetReflectionDrawerNumberMetadata(property.Metadata, "RangeMax",
+				static_cast<double>((std::numeric_limits<T>::max)()));
+			if (minimum <= maximum) candidate = static_cast<T>(std::clamp(static_cast<double>(candidate), minimum, maximum));
+		}
 
 		const auto error = property.TryWriteValue(object, reflection::ValueView::From(candidate));
 
@@ -167,7 +382,7 @@ namespace Editor
 			ImVec4(0.5f, 0.5f, 0.5f, 1.0f)
 		};
 
-		ImGui::PushID(componentCount == 3 ? "Vector3" : "Vector4");
+		ImGui::PushID(componentCount);
 
 		ImGuiStorage* storage = ImGui::GetStateStorage();
 		const ImGuiID snapEnabledId = ImGui::GetID("SnapEnabled");
@@ -402,9 +617,16 @@ namespace Editor
 		return DrawVectorComponents(metadata, std::span<float>(glm::value_ptr(value), 4), editSettings);
 	}
 
+	bool ReflectionPropertyDrawer::IsVisible(const reflection::TypeInfo& type)
+	{
+		return GetReflectionDrawerBoolMetadata(type.Metadata, "Visible", true);
+	}
+
 	bool ReflectionPropertyDrawer::DrawObject(const reflection::TypeInfo& type, const reflection::ObjectView& object,
 		const reflection::Registry* registry, ReflectionObjectEditSettings* editSettings)
 	{
+		if (!IsVisible(type)) return false;
+
 		ImGui::PushID(type.QualifiedName.c_str());
 
 		const std::string displayName = GetReflectionDrawerDisplayName(type.Metadata, type.QualifiedName);
@@ -425,42 +647,63 @@ namespace Editor
 		const reflection::ObjectView& object, const reflection::Registry* registry,
 		ReflectionObjectEditSettings* editSettings)
 	{
+		if (!IsVisible(type)) return false;
+
 		ImGui::PushID(type.QualifiedName.c_str());
 
-		const auto flags = ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_RowBg |
-			ImGuiTableFlags_Resizable | ImGuiTableFlags_SizingStretchProp;
+		const auto flags = ImGuiTableFlags_Resizable | ImGuiTableFlags_SizingStretchProp;
 
 		bool changed = false;
 
-		if (ImGui::BeginTable("Properties", 2, flags))
+		std::vector<std::string> categories;
+		for (const auto& property : type.Properties)
 		{
-			ImGui::TableSetupColumn(LOCAL("UI_PROPERTY").c_str(), ImGuiTableColumnFlags_WidthStretch, 0.25f);
-			ImGui::TableSetupColumn(LOCAL("UI_VALUE").c_str(), ImGuiTableColumnFlags_WidthStretch, 0.75f);
-			ImGui::TableHeadersRow();
-
-			for (const auto& property : type.Properties)
+			if (!GetReflectionDrawerBoolMetadata(property.Metadata, "Visible", true)) continue;
+			const auto category = InspectorMetadataText(property.Metadata, "Category", "UI_GENERAL");
+			if (std::ranges::find(categories, category) == categories.end()) categories.push_back(category);
+		}
+		for (const auto& category : categories)
+		{
+			ImGui::PushID(category.c_str());
+			const auto categoryLabel = LocalizeInspectorText(category) + "###PropertyCategory";
+			const auto categoryFlags = ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_SpanAvailWidth;
+			if (!ImGui::TreeNodeEx(categoryLabel.c_str(), categoryFlags))
 			{
-				if (!GetReflectionDrawerBoolMetadata(property.Metadata, "Visible", true))
-				{
-					continue;
-				}
-
-				const std::string displayName = GetReflectionDrawerDisplayName(property.Metadata, property.Name);
-
-				ImGui::TableNextRow();
-				ImGui::TableSetColumnIndex(0);
-				ImGui::TextUnformatted(displayName.data(), displayName.data() + displayName.size());
-
-				if (ImGui::IsItemHovered())
-				{
-					ImGui::SetTooltip("%s", property.TypeName.c_str());
-				}
-
-				ImGui::TableSetColumnIndex(1);
-				changed |= DrawValue(property, object, registry, editSettings);
+				ImGui::PopID();
+				continue;
 			}
+			if (ImGui::BeginTable("Properties", 2, flags))
+			{
+				ImGui::TableSetupColumn("##Property", ImGuiTableColumnFlags_WidthStretch, 0.25f);
+				ImGui::TableSetupColumn("##Value", ImGuiTableColumnFlags_WidthStretch, 0.75f);
 
-			ImGui::EndTable();
+				for (const auto& property : type.Properties)
+				{
+					if (InspectorMetadataText(property.Metadata, "Category", "UI_GENERAL") != category) continue;
+					if (!GetReflectionDrawerBoolMetadata(property.Metadata, "Visible", true))
+					{
+						continue;
+					}
+
+					const std::string displayName = GetReflectionDrawerDisplayName(property.Metadata, property.Name);
+
+					ImGui::TableNextRow();
+					ImGui::TableSetColumnIndex(0);
+					ImGui::TextUnformatted(displayName.data(), displayName.data() + displayName.size());
+
+					if (ImGui::IsItemHovered())
+					{
+						ImGui::SetTooltip("%s", property.TypeName.c_str());
+					}
+
+					ImGui::TableSetColumnIndex(1);
+					changed |= DrawValue(property, object, registry, editSettings);
+				}
+
+				ImGui::EndTable();
+			}
+			ImGui::TreePop();
+			ImGui::PopID();
 		}
 
 		ImGui::PopID();
@@ -482,23 +725,33 @@ namespace Editor
 			return false;
 		}
 
-		if (property.IsContainer())
-		{
-			const auto size = property.TryGetSize(object);
-			const std::string preview = size ? LOCAL_FMT("UI_ELEMENT_COUNT", size.Size) : LOCAL("UI_SIZE_UNAVAILABLE");
-
-			ImGui::TextUnformatted(preview.data(), preview.data() + preview.size());
-			ImGui::PopID();
-			return false;
-		}
-
 		const bool editable = GetReflectionDrawerBoolMetadata(property.Metadata, "Editable", false);
-		const bool readOnly = GetReflectionDrawerBoolMetadata(property.Metadata, "ReadOnly", false);
+		bool readOnly = GetReflectionDrawerBoolMetadata(property.Metadata, "ReadOnly", false);
+		if (editSettings)
+		{
+			const auto vector = editSettings->Vectors.find(property.Name);
+			readOnly |= editSettings->ReadOnlyProperties.contains(property.Name) ||
+				(vector != editSettings->Vectors.end() && vector->second.Locked);
+		}
 		const bool canEdit = editable && !readOnly && property.CanWrite() && !object.IsReadOnly();
 
 		bool changed = false;
 
-		if (const auto* current = read.Value.Get<bool>())
+		if (const auto* enumeration = registry ? registry->FindEnum(read.Value) : nullptr)
+		{
+			changed = DrawInspectorEnum(property, object, *enumeration, read.Value, canEdit);
+		}
+		else if (const auto* current = read.Value.Get<std::string>())
+		{
+			changed = DrawReflectionPropertyEditor(property, object, *current, canEdit,
+				[](std::string& candidate) { return DrawInspectorText(candidate); });
+		}
+		else if (const auto* current = read.Value.Get<std::wstring>())
+		{
+			changed = DrawReflectionPropertyEditor(property, object, *current, canEdit,
+				[](std::wstring& candidate) { return DrawInspectorText(candidate); });
+		}
+		else if (const auto* current = read.Value.Get<bool>())
 		{
 			changed = DrawReflectionPropertyEditor(property, object, *current, canEdit,
 				[](bool& candidate)
@@ -506,6 +759,14 @@ namespace Editor
 					return ImGui::Checkbox("##Value", &candidate);
 				});
 		}
+		else if (const auto* current = read.Value.Get<std::int8_t>())
+			changed = DrawReflectionScalarProperty(property, object, *current, canEdit, ImGuiDataType_S8);
+		else if (const auto* current = read.Value.Get<std::uint8_t>())
+			changed = DrawReflectionScalarProperty(property, object, *current, canEdit, ImGuiDataType_U8);
+		else if (const auto* current = read.Value.Get<std::int16_t>())
+			changed = DrawReflectionScalarProperty(property, object, *current, canEdit, ImGuiDataType_S16);
+		else if (const auto* current = read.Value.Get<std::uint16_t>())
+			changed = DrawReflectionScalarProperty(property, object, *current, canEdit, ImGuiDataType_U16);
 		else if (const auto* current = read.Value.Get<std::int32_t>())
 		{
 			changed = DrawReflectionScalarProperty(property, object, *current, canEdit, ImGuiDataType_S32);
@@ -530,6 +791,13 @@ namespace Editor
 		{
 			changed = DrawReflectionScalarProperty(property, object, *current, canEdit, ImGuiDataType_Double);
 		}
+		else if (const auto* current = read.Value.Get<glm::vec2>())
+		{
+			auto* settings = editSettings ? &editSettings->Vectors[property.Name] : nullptr;
+			changed = DrawReflectionPropertyEditor(property, object, *current, canEdit,
+				[&](glm::vec2& candidate)
+				{ return DrawVectorComponents(property.Metadata, { glm::value_ptr(candidate), 2 }, settings); });
+		}
 		else if (const auto* current = read.Value.Get<glm::vec3>())
 		{
 			auto* vectorSettings = editSettings != nullptr ? &editSettings->Vectors[property.Name] : nullptr;
@@ -537,7 +805,8 @@ namespace Editor
 			changed = DrawReflectionPropertyEditor(property, object, *current, canEdit,
 				[&property, vectorSettings](glm::vec3& candidate)
 				{
-					return DrawVector3(property.Metadata, candidate, vectorSettings);
+					return property.Metadata.Find("Color") ? ImGui::ColorEdit3("##Value", glm::value_ptr(candidate)) :
+						DrawVector3(property.Metadata, candidate, vectorSettings);
 				});
 		}
 		else if (const auto* current = read.Value.Get<glm::vec4>())
@@ -547,8 +816,101 @@ namespace Editor
 			changed = DrawReflectionPropertyEditor(property, object, *current, canEdit,
 				[&property, vectorSettings](glm::vec4& candidate)
 				{
-					return DrawVector4(property.Metadata, candidate, vectorSettings);
+					return property.Metadata.Find("Color") ? ImGui::ColorEdit4("##Value", glm::value_ptr(candidate)) :
+						DrawVector4(property.Metadata, candidate, vectorSettings);
 				});
+		}
+		else if (const auto* current = read.Value.Get<glm::mat3>())
+			changed = DrawReflectionPropertyEditor(property, object, *current, canEdit,
+				[](glm::mat3& candidate) { return DrawInspectorMatrix(candidate); });
+		else if (const auto* current = read.Value.Get<glm::mat4>())
+			changed = DrawReflectionPropertyEditor(property, object, *current, canEdit,
+				[](glm::mat4& candidate) { return DrawInspectorMatrix(candidate); });
+		else if (const auto* current = read.Value.Get<glm::quat>())
+		{
+			changed = DrawReflectionPropertyEditor(property, object, *current, canEdit, [](glm::quat& candidate)
+			{
+				if (!ImGui::DragFloat4("##Value", glm::value_ptr(candidate), 0.01f)) return false;
+				const float length = glm::length(candidate);
+				if (!std::isfinite(length) || length < 1.0e-6f) return false;
+				candidate /= length;
+				return true;
+			});
+		}
+#define INSPECTOR_RESOURCE(Type) \
+		else if (const auto* current = read.Value.Get<Engine::ResourceHandle<Engine::Type>>()) \
+		{ \
+			changed = DrawReflectionPropertyEditor(property, object, *current, canEdit, \
+				[&](auto& candidate) { return DrawResourcePicker(candidate, canEdit); }); \
+		}
+		INSPECTOR_RESOURCE(Texture)
+		INSPECTOR_RESOURCE(Sprite)
+		INSPECTOR_RESOURCE(Mesh)
+		INSPECTOR_RESOURCE(Material)
+		INSPECTOR_RESOURCE(MaterialInstance)
+		INSPECTOR_RESOURCE(MaterialInterface)
+		INSPECTOR_RESOURCE(Skeleton)
+		INSPECTOR_RESOURCE(Shader)
+		INSPECTOR_RESOURCE(Animation)
+#undef INSPECTOR_RESOURCE
+		else if (read.Value.Is<Engine::ColliderShape>() || read.Value.Is<Engine::Collider2DShape>())
+		{
+			ImGui::BeginDisabled(!canEdit);
+			const auto edit = [&]<typename T>()
+			{
+				auto candidate = *read.Value.Get<T>();
+				if (!DrawColliderShape(candidate, registry) || !canEdit) return false;
+				return property.TryWriteValue(object, reflection::ValueView::From(candidate)) ==
+					reflection::PropertyAccessError::None;
+			};
+			changed = read.Value.Is<Engine::ColliderShape>() ? edit.operator()<Engine::ColliderShape>() :
+				edit.operator()<Engine::Collider2DShape>();
+			ImGui::EndDisabled();
+		}
+		else if (const auto* tags = read.Value.Get<std::unordered_set<std::wstring>>())
+		{
+			std::vector<std::wstring> ordered(tags->begin(), tags->end());
+			std::sort(ordered.begin(), ordered.end());
+			ImGui::BeginDisabled(!canEdit);
+			std::optional<std::wstring> removed;
+			for (const auto& tag : ordered)
+			{
+				ImGui::PushID(Engine::WStrToStr(tag).c_str());
+				ImGui::TextUnformatted(Engine::WStrToStr(tag).c_str());
+				ImGui::SameLine();
+				if (ImGui::SmallButton("X")) removed = tag;
+				ImGui::PopID();
+			}
+			if (ImGui::Button(LocalizeInspectorText("UI_ADD_VALUE").c_str())) ImGui::OpenPopup("AddTag");
+			if (ImGui::BeginPopup("AddTag"))
+			{
+				// Normal Inspector calls store input per entity and component in world.ctx().
+				std::string temporary;
+				auto& text = editSettings ? editSettings->TextBuffers[property.Name] : temporary;
+				if (ImGui::InputText("##NewTag", &text, ImGuiInputTextFlags_EnterReturnsTrue) && canEdit)
+				{
+					std::wstring tag;
+					if (!text.empty() && archive::detail::Utf8ToWide(text, tag))
+						changed = property.TryInsertSetElement(object, reflection::ValueView::From(tag)) ==
+							reflection::PropertyAccessError::None;
+					if (changed) { text.clear(); ImGui::CloseCurrentPopup(); }
+				}
+				ImGui::EndPopup();
+			}
+			if (canEdit && removed) changed |= property.TryEraseSetElement(object,
+				reflection::ValueView::From(*removed)) == reflection::PropertyAccessError::None;
+			ImGui::EndDisabled();
+		}
+		else if (const auto* nested = registry ? registry->FindType(read.Value) : nullptr)
+		{
+			const auto view = canEdit ? property.TryEditObject(object).Object : nested->AsObject(read.Value);
+			changed = view.IsValid() && DrawPropertyTable(*nested, view, registry, nullptr);
+		}
+		else if (property.IsContainer())
+		{
+			const auto size = property.TryGetSize(object);
+			const auto preview = size ? LOCAL_FMT("UI_ELEMENT_COUNT", size.Size) : LOCAL("UI_SIZE_UNAVAILABLE");
+			ImGui::TextDisabled("%s", preview.c_str());
 		}
 		else
 		{

@@ -2,9 +2,9 @@
 
 #include "Scene.h"
 #include "Entity.h"
-#include "Components/NameComponent.h"
-#include "Components/TransformComponent.h"
-#include "Components/WorldTransformComponent.h"
+#include "Components/Core/NameComponent.h"
+#include "Components/Core/TransformComponent.h"
+#include "Components/Core/WorldTransformComponent.h"
 #include "TransformSystem.h"
 #include "CameraSystem.h"
 
