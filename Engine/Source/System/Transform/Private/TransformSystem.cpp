@@ -199,6 +199,10 @@ bool TransformSystem::TryCommitTransform(entt::registry& registry, entt::entity 
         !candidate.SetLocalPosition(candidate.position) || !candidate.SetLocalScale(candidate.scale)) return false;
     if (candidate.absolute != current->absolute)
     {
+        auto canonical = *current;
+        if (!canonical.SynchronizeRotation() || candidate.position != canonical.position ||
+            candidate.scale != canonical.scale || candidate.rotation != canonical.rotation ||
+            candidate.eulerRotation != canonical.eulerRotation) return false;
         glm::mat4 desired, parent(1.0f), rebuilt;
         const auto* link = registry.try_get<HierarchyComponent>(entity);
         if (!TryGetWorldMatrix(registry, entity, desired) ||

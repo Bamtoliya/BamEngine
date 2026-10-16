@@ -103,6 +103,7 @@ namespace Engine
             return SetLocalPosition(position + delta);
         }
 
+        // Stored TRS only. Absolute channel composition is handled by TransformSystem.
         // rotation에 직접 대입했다면 먼저 SynchronizeRotation()을 호출해야 합니다.
         [[nodiscard]]
         glm::mat4 GetLocalMatrix() const
