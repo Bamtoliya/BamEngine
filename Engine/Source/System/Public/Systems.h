@@ -5,3 +5,4 @@
 #include "SpriteRenderSystem.h"
 #include "CameraSystem.h"
 #include "LightSystem.h"
+#include "UIRenderSystem.h"

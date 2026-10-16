@@ -1,6 +1,9 @@
 ﻿#include "DirectX12Pipeline.h"
 #include "DirectX12RHI.h"
 #include "DirectX12Shader.h"
+#include "Logger.h"
+#include <directx/d3d12sdklayers.h>
+#include <cstddef>
 
 #pragma region Constructor & Destructor
 EResult DirectX12Pipeline::Initialize(const DESC& desc)
@@ -95,10 +98,28 @@ EResult DirectX12Pipeline::Initialize(const DESC& desc)
 	psoDesc.SampleDesc.Quality = 0;
 	psoDesc.SampleMask = UINT_MAX;
 
+	ComPtr<ID3D12InfoQueue> infoQueue;
+	dxDevice->QueryInterface(IID_PPV_ARGS(&infoQueue));
+	const UINT64 firstMessage = infoQueue ? infoQueue->GetNumStoredMessagesAllowedByRetrievalFilter() : 0;
 	const HRESULT hr = dxDevice->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&m_Pipeline));
 	if (FAILED(hr))
 	{
-		fmt::print(stderr, "CreateGraphicsPipelineState failed: HRESULT=0x{:08X}\n", static_cast<uint32>(hr));
+		ENGINE_LOG_ERROR("CreateGraphicsPipelineState failed: HRESULT=0x{:08X}, VS bytes={}, PS bytes={}, RTs={}",
+			static_cast<uint32>(hr), psoDesc.VS.BytecodeLength, psoDesc.PS.BytecodeLength, psoDesc.NumRenderTargets);
+		if (infoQueue)
+		{
+			const UINT64 count = infoQueue->GetNumStoredMessagesAllowedByRetrievalFilter();
+			for (UINT64 index = firstMessage; index < count; ++index)
+			{
+				SIZE_T bytes = 0;
+				if (FAILED(infoQueue->GetMessage(index, nullptr, &bytes)) || bytes < sizeof(D3D12_MESSAGE)) continue;
+				std::vector<std::max_align_t> storage((bytes + sizeof(std::max_align_t) - 1) / sizeof(std::max_align_t));
+				auto* message = reinterpret_cast<D3D12_MESSAGE*>(storage.data());
+				if (SUCCEEDED(infoQueue->GetMessage(index, message, &bytes)))
+					ENGINE_LOG_ERROR("D3D12 PSO validation (id={}): {}", static_cast<uint32>(message->ID),
+						message->pDescription ? message->pDescription : "");
+			}
+		}
 		return EResult::Fail;
 	}
 
@@ -110,7 +131,7 @@ DirectX12Pipeline* DirectX12Pipeline::Create(RHI* rhi, const DESC& desc)
 	DirectX12Pipeline* instance = new DirectX12Pipeline(rhi, desc);
 	if (IsFailure(instance->Initialize(desc)))
 	{
-		delete instance;
+		Safe_Release(instance);
 		return nullptr;
 	}
 	return instance;

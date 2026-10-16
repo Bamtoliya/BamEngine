@@ -146,6 +146,7 @@ EResult SDLGPURHI::BeginFrame()
 
 EResult SDLGPURHI::EndFrame()
 {
+	EResult result = EResult::Fail;
 	if (m_CurrentRenderPass)
 	{
 		SDL_EndGPURenderPass(m_CurrentRenderPass);
@@ -154,7 +155,7 @@ EResult SDLGPURHI::EndFrame()
 
 	if (m_CurrentCommandBuffer)
 	{
-		SDL_SubmitGPUCommandBuffer(m_CurrentCommandBuffer);
+		result = SDL_SubmitGPUCommandBuffer(m_CurrentCommandBuffer) ? EResult::Success : EResult::Fail;
 		m_CurrentCommandBuffer = nullptr;
 	}
 
@@ -163,7 +164,7 @@ EResult SDLGPURHI::EndFrame()
 		m_BackBuffer->SetNativeHandle(nullptr);
 	}
 	
-	return EResult::Success;
+	return result;
 }
 #pragma endregion
 
@@ -709,6 +710,64 @@ EResult SDLGPURHI::SetViewport(int32 x, int32 y, uint32 width, uint32 height)
 #pragma endregion
 
 #pragma region Draw
+EResult SDLGPURHI::ReadTexturePixel(RHITexture* texture, uint32 x, uint32 y, vec4& pixel)
+{
+	if (!m_Device || m_CurrentCommandBuffer || !texture || !texture->GetNativeHandle() ||
+		texture->GetFormat() != ETextureFormat::R32G32B32A32_FLOAT ||
+		texture->GetSampleCount() != ETextureSampleCount::TextureSampleCount1 ||
+		x >= texture->GetWidth() || y >= texture->GetHeight()) return EResult::InvalidArgument;
+
+	// One 256-byte row also satisfies D3D12's transfer row-pitch alignment.
+	SDL_GPUTransferBufferCreateInfo info{};
+	info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_DOWNLOAD;
+	info.size = 256;
+	SDL_GPUTransferBuffer* transfer = SDL_CreateGPUTransferBuffer(m_Device, &info);
+	if (!transfer) return EResult::Fail;
+	SDL_GPUCommandBuffer* command = SDL_AcquireGPUCommandBuffer(m_Device);
+	if (!command)
+	{
+		SDL_ReleaseGPUTransferBuffer(m_Device, transfer);
+		return EResult::Fail;
+	}
+	SDL_GPUCopyPass* copy = SDL_BeginGPUCopyPass(command);
+	if (!copy)
+	{
+		SDL_CancelGPUCommandBuffer(command);
+		SDL_ReleaseGPUTransferBuffer(m_Device, transfer);
+		return EResult::Fail;
+	}
+	SDL_GPUTextureRegion source{};
+	source.texture = static_cast<SDL_GPUTexture*>(texture->GetNativeHandle());
+	source.x = x;
+	source.y = y;
+	source.w = source.h = source.d = 1;
+	SDL_GPUTextureTransferInfo destination{};
+	destination.transfer_buffer = transfer;
+	destination.pixels_per_row = 16;
+	destination.rows_per_layer = 1;
+	SDL_DownloadFromGPUTexture(copy, &source, &destination);
+	SDL_EndGPUCopyPass(copy);
+	SDL_GPUFence* fence = SDL_SubmitGPUCommandBufferAndAcquireFence(command);
+	if (!fence)
+	{
+		SDL_ReleaseGPUTransferBuffer(m_Device, transfer);
+		return EResult::Fail;
+	}
+	EResult result = EResult::Fail;
+	if (SDL_WaitForGPUFences(m_Device, true, &fence, 1))
+	{
+		if (void* data = SDL_MapGPUTransferBuffer(m_Device, transfer, false))
+		{
+			memcpy(&pixel, data, sizeof(float) * 4);
+			SDL_UnmapGPUTransferBuffer(m_Device, transfer);
+			result = EResult::Success;
+		}
+	}
+	SDL_ReleaseGPUFence(m_Device, fence);
+	SDL_ReleaseGPUTransferBuffer(m_Device, transfer);
+	return result;
+}
+
 EResult SDLGPURHI::Draw(uint32 count)
 {
 	if (!m_Device || !m_CurrentRenderPass) return EResult::Fail;

@@ -38,6 +38,8 @@ public:
 #pragma region MyRegion
 public:
 	vec4 GetUVTransform();
+	f32 GetPixelPerUnit() const { return m_PixelPerUnit; }
+	bool TryGetQuadMatrix(mat4& matrix) const;
 #pragma endregion
 
 #pragma region Region Management

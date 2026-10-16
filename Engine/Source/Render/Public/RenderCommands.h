@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "Engine_Includes.h"
+#include "ResourceHandle.h"
 BEGIN(Engine)
 
 struct RenderObjectId
@@ -15,6 +16,7 @@ struct StaticDrawCommand
 	class MaterialInterface* material = { nullptr };
 	mat4 worldMatrix = { glm::identity<mat4>() };
 	RenderObjectId objectId{};
+	uint32 pickingId = 0;
 };
 
 struct SkinnedDrawCommand
@@ -35,5 +37,16 @@ struct SpriteDrawCommand
 	glm::vec4 color = { 1.0f, 1.0f, 1.0f, 1.0f };
 	glm::vec4 uvTransform = { 0.0f, 0.0f, 1.0f, 1.0f };
 	RenderObjectId objectId{};
+	uint32 pickingId = 0;
+};
+
+struct UIImageDrawCommand
+{
+	ResourceHandle<class Texture> textureHandle;
+	ResourceHandle<class MaterialInterface> materialHandle;
+	mat4 worldMatrix{ 1.0f };
+	vec4 color{ 1.0f };
+	vec4 uvTransform{ 0.0f, 0.0f, 1.0f, 1.0f };
+	vec2 canvasSize{ 1920.0f, 1080.0f };
 };
 END

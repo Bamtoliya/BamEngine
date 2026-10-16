@@ -105,12 +105,15 @@ void SpriteRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>
             }
 
             SpriteDrawCommand command;
+            mat4 quadMatrix;
+            if (!sprite->TryGetQuadMatrix(quadMatrix)) continue;
             command.mesh = mesh;
             command.texture = texture;
             command.material = material;
-            command.worldMatrix = worldTransform.worldMatrix;
+            command.worldMatrix = worldTransform.worldMatrix * quadMatrix;
             command.color = spriteRenderer.color;
             command.uvTransform = uv;
+            command.pickingId = renderer.RegisterPickingEntity(scene, entity);
 
             for (RenderPass* pass : geometryPasses)
             {

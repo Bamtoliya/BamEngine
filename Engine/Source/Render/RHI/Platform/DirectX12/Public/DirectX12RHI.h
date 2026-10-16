@@ -80,6 +80,7 @@ public:
 	EResult DrawIndexed(uint32 count) override;
 	EResult DrawIndexedInstanced() override;
 	EResult DrawTexture(RHITexture* texture) override;
+	EResult ReadTexturePixel(RHITexture* texture, uint32 x, uint32 y, vec4& pixel) override;
 #pragma endregion
 
 public:
@@ -121,6 +122,7 @@ private:
 
 	ComPtr<ID3D12Fence> m_Fence;
 	uint64 m_CurrentFenceValue = 0;
+	bool m_FrameRecording = false;
 	HANDLE m_FenceEvent = nullptr;
 
 	HWND m_WindowHandle = nullptr;

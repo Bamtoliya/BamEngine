@@ -225,6 +225,9 @@ namespace Engine
 	struct ENGINE_API SceneUBO
 	{
 		mat4 worldMatrix;
+		vec4 pickingData = vec4(0.0f); // x: frame-local ID, exactly representable up to 2^24 - 1
 	};
+	static_assert(offsetof(SceneUBO, pickingData) == 64);
+	static_assert(sizeof(SceneUBO) == 80);
 #pragma endregion
 }

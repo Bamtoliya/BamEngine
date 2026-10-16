@@ -1,6 +1,7 @@
 ﻿#pragma once
 #include "Sprite.h"
 #include "ResourceManager.h"
+#include <cmath>
 
 #pragma region Constructor&Destructor
 EResult Sprite::Initialize(void* arg)
@@ -72,6 +73,24 @@ vec4 Sprite::GetUVTransform()
 		m_Region.top / height,
 		m_Region.width / width,
 		m_Region.height / height);
+}
+
+bool Sprite::TryGetQuadMatrix(mat4& matrix) const
+{
+	const Texture* texture = m_Texture.Get();
+	const RHITexture* rhiTexture = texture ? texture->GetRHITexture() : nullptr;
+	if (!rhiTexture || !std::isfinite(m_PixelPerUnit) || m_PixelPerUnit <= 0.0f ||
+		!std::isfinite(m_Pivot.x) || !std::isfinite(m_Pivot.y)) return false;
+	const vec2 pixels = m_Region.width == 0.0f && m_Region.height == 0.0f ?
+		vec2(rhiTexture->GetWidth(), rhiTexture->GetHeight()) : vec2(m_Region.width, m_Region.height);
+	if (!std::isfinite(pixels.x) || !std::isfinite(pixels.y) || pixels.x <= 0.0f || pixels.y <= 0.0f) return false;
+	const vec2 size = pixels / m_PixelPerUnit;
+	const vec2 offset = (vec2(0.5f) - m_Pivot) * size;
+	if (!std::isfinite(size.x) || !std::isfinite(size.y) || !std::isfinite(offset.x) || !std::isfinite(offset.y))
+		return false;
+	// The shared QuadMesh is [-1, 1]. Pivot is measured from the bottom-left in world sprite space.
+	matrix = glm::translate(mat4(1.0f), vec3(offset, 0.0f)) * glm::scale(mat4(1.0f), vec3(size * 0.5f, 1.0f));
+	return true;
 }
 #pragma endregion
 

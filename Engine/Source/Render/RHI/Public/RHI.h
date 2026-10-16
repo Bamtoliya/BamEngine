@@ -113,6 +113,11 @@ public:
     virtual EResult DrawIndexedInstanced() BAM_PURE;
     virtual EResult DrawTexture(RHITexture* texture) BAM_PURE;
     virtual EResult BlitTexture(class RHITexture* src, class RHITexture* dst) { return EResult::NotImplemented; }
+    // Synchronous single-pixel download from a submitted RGBA32F texture, outside frame recording.
+    virtual EResult ReadTexturePixel(RHITexture* texture, uint32 x, uint32 y, vec4& pixel)
+    {
+        return EResult::NotImplemented;
+    }
 #pragma endregion
 
 #pragma region Setter

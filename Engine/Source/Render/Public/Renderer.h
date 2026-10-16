@@ -28,6 +28,9 @@ struct ViewportCameraInfo
 {
 	class Camera* camera = { nullptr };
 	class RenderPass* renderPass = { nullptr };
+	class Scene* uiScene = nullptr;
+	entt::entity uiCanvas = entt::null;
+	bool filterUICanvas = false;
 };
 
 
@@ -58,6 +61,7 @@ private: //Entity Render
 	EResult RenderMeshes(f32 dt, vector<StaticDrawCommand>& commands, ERenderSortType sortType, RenderPass* renderPass);
 	EResult RenderSkinnedMeshes(f32 dt, vector<SkinnedDrawCommand>& commands, ERenderSortType sortType, RenderPass* renderPass);
 	EResult RenderSprite(f32 dt, vector<SpriteDrawCommand>& commands, ERenderSortType sortType, RenderPass* renderPass);
+	EResult RenderUIImages(const vector<UIImageDrawCommand>& commands, RenderPass* renderPass);
 #pragma endregion
 
 #pragma region Queue Management
@@ -72,12 +76,14 @@ public: //Entity Submit
 	void SubmitStatic(const StaticDrawCommand& command, RenderPassID passID);
 	void SubmitSkinned(const SkinnedDrawCommand& command, RenderPassID passID);
 	void SubmitSprite(const SpriteDrawCommand& command, RenderPassID passID);
+	void SubmitUIImage(const UIImageDrawCommand& command, RenderPassID passID);
 
 #pragma endregion
 
 #pragma region Viewport Camera Management
 public:
 	void RegisterViewportCamera(Camera* camera, RenderPass* renderPass);
+	void RegisterUICanvas(class Scene* scene, entt::entity canvas, RenderPass* renderPass);
 	void UnregisterViewportCamera(RenderPassID passID);
 	Camera* GetViewportCamera(RenderPassID passID) const;
 	vector<ViewportCameraInfo>& GetActiveViewportCameras() { return m_ViewportCameras; }
@@ -95,6 +101,13 @@ public:
 
 #pragma region Getter
 public:
+	// IDs belong to one rendered frame; zero means no selectable entity.
+	uint32 RegisterPickingEntity(class Scene* scene, entt::entity entity);
+	class Entity* ResolvePickingEntity(uint32 pickingId) const;
+	void ClearPickingState();
+	bool HasPickingPass(RenderPassID passID) const { return m_CompletedPickingPasses.contains(passID); }
+	uint64 GetPickingFrameSerial() const { return m_PickingFrameSerial; }
+	uint64 GetCompletedPickingFrameSerial() const { return m_CompletedPickingFrameSerial; }
 	class RHI* GetRHI() const { return m_RHI; }
 	RenderDelegate& GetRenderPassDelegate(RenderPassID passID)
 	{
@@ -109,6 +122,20 @@ public:
 
 #pragma region Variable
 private:
+	struct PickingTarget
+	{
+		class Scene* scene = nullptr;
+		entt::entity entity = entt::null;
+		uint64 persistentId = 0;
+	};
+	void ClearPickingTargets(vector<PickingTarget>& targets);
+	vector<PickingTarget> m_PickingTargets;
+	vector<PickingTarget> m_CompletedPickingTargets;
+	unordered_map<class Scene*, unordered_map<entt::entity, uint32>> m_PickingIds;
+	unordered_set<RenderPassID> m_PickingPasses;
+	unordered_set<RenderPassID> m_CompletedPickingPasses;
+	uint64 m_PickingFrameSerial = 0;
+	uint64 m_CompletedPickingFrameSerial = 0;
 	class RHI* m_RHI = { nullptr };
 	ERHIType m_RHIType = ERHIType::Unknown;
 	map<RenderPassID, RenderDelegate> m_RenderPassDelegates;
@@ -119,6 +146,7 @@ private: //ECS Based Render Queue
 	map<RenderPassID, vector<StaticDrawCommand>> m_StaticDrawCommands;
 	map<RenderPassID, vector<SkinnedDrawCommand>> m_SkinnedDrawCommands;
 	map<RenderPassID, vector<SpriteDrawCommand>> m_SpriteDrawCommands;
+	map<RenderPassID, vector<UIImageDrawCommand>> m_UIImageDrawCommands;
 private:
 	class RenderPassManager* m_RenderPassManager = { nullptr };
 private:

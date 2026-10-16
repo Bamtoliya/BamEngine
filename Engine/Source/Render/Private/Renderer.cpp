@@ -28,6 +28,8 @@
 #include "Mesh.h"
 #include "MaterialInterface.h"
 #include "SamplerManager.h"
+#include "SceneManager.h"
+#include "CoreComponents.h"
 
 IMPLEMENT_SINGLETON(Renderer)
 
@@ -58,6 +60,7 @@ EResult Renderer::Initialize(void* arg)
 
 void Renderer::Free()
 {	
+	ClearPickingState();
 	m_RenderPassManager = nullptr;
 	//Safe_Release(m_SceneBuffer);
 	//Safe_Release(m_DepthBuffer);
@@ -74,6 +77,10 @@ void Renderer::Free()
 #pragma region Render Management	
 EResult Renderer::BeginFrame()
 {
+	++m_PickingFrameSerial;
+	ClearPickingTargets(m_PickingTargets);
+	m_PickingIds.clear();
+	m_PickingPasses.clear();
 	if (!m_RenderPassManager)
 		m_RenderPassManager = &RenderPassManager::Get();
 	if (m_RHI)
@@ -111,6 +118,7 @@ EResult Renderer::Render(f32 dt)
 
 		for (Camera* cam : cameras)
 		{
+			bool pickingPassSucceeded = true;
 			if (IsFailure(m_RHI->BeginRenderPass(pass)))
 				continue;
 
@@ -178,6 +186,7 @@ EResult Renderer::Render(f32 dt)
 
 				if (IsFailure(result))
 				{
+					pickingPassSucceeded = false;
 					ENGINE_LOG_ERROR(
 						"ECS mesh rendering failed. Pass ID: {}",
 						pass->GetID());
@@ -196,6 +205,7 @@ EResult Renderer::Render(f32 dt)
 
 				if (IsFailure(result))
 				{
+					pickingPassSucceeded = false;
 					ENGINE_LOG_ERROR(
 						"ECS sprite rendering failed. Pass ID: {}",
 						pass->GetID());
@@ -207,6 +217,11 @@ EResult Renderer::Render(f32 dt)
 				RenderComponents(dt, it->second, pass->GetSortType(), pass);
 
 			auto uiIt = m_UIRenderQueues.find(pass->GetID());
+			if (const auto images = m_UIImageDrawCommands.find(pass->GetID()); images != m_UIImageDrawCommands.end())
+			{
+				if (IsFailure(RenderUIImages(images->second, pass)))
+					ENGINE_LOG_ERROR("ECS UI image rendering failed. Pass ID: {}", pass->GetID());
+			}
 			if (uiIt != m_UIRenderQueues.end())
 				RenderUIComponents(dt, uiIt->second, pass->GetSortType(), pass);
 			
@@ -217,7 +232,9 @@ EResult Renderer::Render(f32 dt)
 					command(dt, pass);
 			}
 
-			m_RHI->EndRenderPass();
+			if (IsFailure(m_RHI->EndRenderPass())) pickingPassSucceeded = false;
+			if (passType == ERenderPassType::Geometry && pickingPassSucceeded)
+				m_PickingPasses.insert(pass->GetID());
 		}
 
 		GetRenderPassDelegate(pass->GetID()).Broadcast(dt);
@@ -303,6 +320,7 @@ EResult Renderer::RenderMeshes(f32 dt, vector<StaticDrawCommand>& commands, ERen
 
 		SceneUBO objectData = {};
 		objectData.worldMatrix = command.worldMatrix;
+		objectData.pickingData.x = static_cast<float>(command.pickingId);
 
 		if (IsFailure(m_RHI->BindConstantBuffer(&objectData, sizeof(objectData), 1)))
 		{
@@ -354,11 +372,13 @@ EResult Renderer::RenderSprite(
 		mat4 worldMatrix;
 		vec4 color;
 		vec4 uvTransform;
+		vec4 pickingData;
 	};
 
 	static_assert(offsetof(SpriteUBO, color) == 64);
 	static_assert(offsetof(SpriteUBO, uvTransform) == 80);
-	static_assert(sizeof(SpriteUBO) == 96);
+	static_assert(offsetof(SpriteUBO, pickingData) == 96);
+	static_assert(sizeof(SpriteUBO) == 112);
 
 	RHISampler* sampler = SamplerManager::Get().GetDefaultSampler();
 
@@ -389,6 +409,7 @@ EResult Renderer::RenderSprite(
 		objectData.worldMatrix = command.worldMatrix;
 		objectData.color = command.color;
 		objectData.uvTransform = command.uvTransform;
+		objectData.pickingData = vec4(static_cast<float>(command.pickingId), 0.0f, 0.0f, 0.0f);
 
 		if (IsFailure(m_RHI->BindConstantBuffer(
 			&objectData, sizeof(objectData), 1)))
@@ -406,13 +427,80 @@ EResult Renderer::RenderSprite(
 	return EResult::Success;
 }
 
+EResult Renderer::RenderUIImages(const vector<UIImageDrawCommand>& commands, RenderPass* renderPass)
+{
+	if (!m_RHI || !renderPass) return EResult::Fail;
+	struct ImageUBO
+	{
+		mat4 worldMatrix;
+		vec4 uvRect;
+		vec2 tiling;
+		vec2 offset;
+		vec4 color;
+	};
+	static_assert(sizeof(ImageUBO) == 112);
+	static_assert(offsetof(ImageUBO, color) == 96);
+	auto* sampler = SamplerManager::Get().GetDefaultSampler();
+	if (!sampler) return EResult::Fail;
+	for (const auto& command : commands)
+	{
+		Texture* texture = command.textureHandle.Get();
+		MaterialInterface* material = command.materialHandle.Get();
+		if (!texture || !material || !texture->GetRHITexture() ||
+			command.canvasSize.x <= 0.0f || command.canvasSize.y <= 0.0f) return EResult::InvalidArgument;
+		if (IsFailure(BindMeshPipeline(nullptr, material, renderPass))) return EResult::Fail;
+		CameraBuffer camera{};
+		camera.viewMatrix = camera.invViewMatrix = mat4(1.0f);
+		camera.projMatrix = glm::ortho(0.0f, command.canvasSize.x, command.canvasSize.y, 0.0f, -1.0f, 1.0f);
+		camera.invProjMatrix = glm::inverse(camera.projMatrix);
+		camera.viewProjMatrix = camera.projMatrix;
+		camera.invViewProjMatrix = camera.invProjMatrix;
+		ImageUBO data{};
+		data.worldMatrix = command.worldMatrix;
+		data.uvRect = vec4(vec2(command.uvTransform),
+			vec2(command.uvTransform) + vec2(command.uvTransform.z, command.uvTransform.w));
+		data.tiling = vec2(1.0f);
+		data.color = command.color;
+		if (IsFailure(m_RHI->BindConstantBuffer(&camera, sizeof(camera), 0)) ||
+			IsFailure(m_RHI->BindConstantBuffer(&data, sizeof(data), 1)) ||
+			IsFailure(m_RHI->BindTextureSampler(texture->GetRHITexture(), sampler, 0)) ||
+			IsFailure(m_RHI->Draw(6))) return EResult::Fail;
+	}
+	// Restore the pass projection for legacy UI components drawn afterwards.
+	if (renderPass->GetRenderTargetCount() > 0)
+	{
+		if (auto* target = RenderTargetManager::Get().GetRenderTarget(renderPass->GetRenderTargetName(0)))
+		{
+			CameraBuffer camera{};
+			camera.viewMatrix = camera.invViewMatrix = mat4(1.0f);
+			camera.projMatrix = glm::ortho(0.0f, float(target->GetWidth()),
+				float(target->GetHeight()), 0.0f, -1.0f, 1.0f);
+			camera.invProjMatrix = glm::inverse(camera.projMatrix);
+			camera.viewProjMatrix = camera.projMatrix;
+			camera.invViewProjMatrix = camera.invProjMatrix;
+			return m_RHI->BindConstantBuffer(&camera, sizeof(camera), 0);
+		}
+	}
+	return EResult::Success;
+}
+
 EResult Renderer::EndFrame()
 {
+	EResult frameResult = EResult::Fail;
 	if (m_RHI)
 	{
 		m_RHI->BindRenderTarget(nullptr, nullptr);
 		m_RHI->SetViewport(0, 0, m_RHI->GetSwapChainWidth(), m_RHI->GetSwapChainHeight());
-		m_RHI->EndFrame();
+		frameResult = m_RHI->EndFrame();
+	}
+	ClearPickingTargets(m_CompletedPickingTargets);
+	m_CompletedPickingPasses.clear();
+	m_CompletedPickingFrameSerial = 0;
+	if (IsSuccess(frameResult))
+	{
+		m_CompletedPickingTargets.swap(m_PickingTargets);
+		m_CompletedPickingPasses.swap(m_PickingPasses);
+		m_CompletedPickingFrameSerial = m_PickingFrameSerial;
 	}
 
 	for (auto& pair : m_RenderQueues)
@@ -429,9 +517,58 @@ EResult Renderer::EndFrame()
 	m_StaticDrawCommands.clear();
 	m_SkinnedDrawCommands.clear();
 	m_SpriteDrawCommands.clear();
-	return EResult::Success;
+	m_UIImageDrawCommands.clear();
+	return frameResult;
 }
 #pragma endregion
+
+void Renderer::ClearPickingTargets(vector<PickingTarget>& targets)
+{
+	for (auto& target : targets)
+		Safe_Release(target.scene);
+	targets.clear();
+}
+
+void Renderer::ClearPickingState()
+{
+	ClearPickingTargets(m_PickingTargets);
+	ClearPickingTargets(m_CompletedPickingTargets);
+	m_PickingIds.clear();
+	m_PickingPasses.clear();
+	m_CompletedPickingPasses.clear();
+	m_CompletedPickingFrameSerial = 0;
+}
+
+uint32 Renderer::RegisterPickingEntity(Scene* scene, entt::entity entity)
+{
+	if (!scene || !scene->GetRegistry().valid(entity)) return 0;
+	const auto* id = scene->GetRegistry().try_get<IDComponent>(entity);
+	if (!id || id->id == 0) return 0;
+	auto& ids = m_PickingIds[scene];
+	if (const auto found = ids.find(entity); found != ids.end()) return found->second;
+	// Float32 can represent every integer in this range without rounding.
+	if (m_PickingTargets.size() >= 0x00ffffffu) return 0;
+	m_PickingTargets.push_back({ scene, entity, id->id });
+	Safe_AddRef(scene);
+	const uint32 pickingId = static_cast<uint32>(m_PickingTargets.size());
+	ids.emplace(entity, pickingId);
+	return pickingId;
+}
+
+Entity* Renderer::ResolvePickingEntity(uint32 pickingId) const
+{
+	if (pickingId == 0 || pickingId > m_CompletedPickingTargets.size()) return nullptr;
+	const auto& target = m_CompletedPickingTargets[pickingId - 1];
+	const auto scenes = SceneManager::Get().GetActiveScenes();
+	if (std::find(scenes.begin(), scenes.end(), target.scene) == scenes.end()) return nullptr;
+	const auto& world = target.scene->GetRegistry();
+	if (!world.valid(target.entity)) return nullptr;
+	const auto* id = world.try_get<IDComponent>(target.entity);
+	const auto* flag = world.try_get<FlagComponent>(target.entity);
+	if (!id || id->id != target.persistentId || !flag || !HasFlag(flag->flags, EEntityFlag::Active) ||
+		!HasFlag(flag->flags, EEntityFlag::Visible) || HasFlag(flag->flags, EEntityFlag::Dead)) return nullptr;
+	return target.scene->FindEntity(target.entity);
+}
 
 #pragma region Queue Management
 void Renderer::Submit(class RenderComponent* component, RenderPassID passID)
@@ -474,6 +611,7 @@ void Renderer::ClearRenderQueue(RenderPassID passID)
 	m_StaticDrawCommands.erase(passID);
 	m_SkinnedDrawCommands.erase(passID);
 	m_SpriteDrawCommands.erase(passID);
+	m_UIImageDrawCommands.erase(passID);
 }
 
 void Renderer::ClearAllRenderQueues()
@@ -491,6 +629,7 @@ void Renderer::ClearAllRenderQueues()
 	m_StaticDrawCommands.clear();
 	m_SkinnedDrawCommands.clear();
 	m_SpriteDrawCommands.clear();
+	m_UIImageDrawCommands.clear();
 }
 
 //Entity Submit
@@ -505,6 +644,11 @@ void Renderer::SubmitSkinned(const SkinnedDrawCommand& command, RenderPassID pas
 void Renderer::SubmitSprite(const SpriteDrawCommand& command, RenderPassID passID)
 {
 	m_SpriteDrawCommands[passID].push_back(command);
+}
+
+void Renderer::SubmitUIImage(const UIImageDrawCommand& command, RenderPassID passID)
+{
+	m_UIImageDrawCommands[passID].push_back(command);
 }
 #pragma endregion
 
@@ -535,6 +679,11 @@ void Renderer::RegisterViewportCamera(Camera* camera, RenderPass* renderPass)
 			camera->GetCameraBuffer().viewProjMatrix);
 		m_PassFrustumIsShadow[passID] = false;
 	}
+}
+
+void Renderer::RegisterUICanvas(Scene* scene, entt::entity canvas, RenderPass* renderPass)
+{
+	if (renderPass) m_ViewportCameras.push_back({ nullptr, renderPass, scene, canvas, true });
 }
 
 void Renderer::UnregisterViewportCamera(RenderPassID passID)
@@ -573,7 +722,7 @@ bool Renderer::TryGetPassFrustum(RenderPassID passID, Frustum& outFrustum, bool&
 #pragma region Binding
 EResult Renderer::BindMeshPipeline(Mesh* mesh, MaterialInterface* material, RenderPass* renderPass) 
 {
-	if (!m_RHI || !mesh || !material || !renderPass)
+	if (!m_RHI || !material || !renderPass)
 		return EResult::InvalidArgument;
 
 	Shader* vs = material->GetVertexShader();
@@ -587,8 +736,8 @@ EResult Renderer::BindMeshPipeline(Mesh* mesh, MaterialInterface* material, Rend
 
 	RHIPipelineDesc desc;
 	desc.pipelineType = EPipelineType::Graphics;
-	desc.topology = mesh->GetTopology();
-	desc.inputLayouts = mesh->GetInputLayoutDescs();
+	desc.topology = mesh ? mesh->GetTopology() : ETopology::TriangleList;
+	if (mesh) desc.inputLayouts = mesh->GetInputLayoutDescs();
 
 	desc.vertexShader = vs->GetRHIShader();
 	desc.pixelShader = ps->GetRHIShader();

@@ -45,6 +45,8 @@ void UIRenderComponent::LateUpdate(f32 dt)
     for (const auto& passInfo : activePasses)
     {
 		if (!passInfo.renderPass) continue;
+        // An ECS canvas preview must only contain the selected ECS hierarchy.
+        if (passInfo.filterUICanvas) continue;
         const ERenderPassType passType = passInfo.renderPass->GetPassType();
         const RenderPassID passID = passInfo.renderPass->GetID();
         if (isWorldSpace)

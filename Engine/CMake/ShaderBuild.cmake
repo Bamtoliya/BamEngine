@@ -36,6 +36,10 @@ foreach(SHADER_FILE ${HLSL_SOURCES})
     file(MAKE_DIRECTORY "${SPIRV_OUT_DIR}")
     # 파일 이름을 대문자로 변환하여 비교 준비
     string(TOUPPER "${SHADER_NAME_WE}" UPPER_NAME)
+    set(_shader_dependencies "${SHADER_FILE}")
+    if(UPPER_NAME STREQUAL "UIVS" OR UPPER_NAME STREQUAL "UIPS")
+        list(APPEND _shader_dependencies "${SHADER_SOURCE_DIR}/hlsl/uiCommon.hlsli")
+    endif()
     if(UPPER_NAME MATCHES "VS$" OR UPPER_NAME MATCHES "_VS$")
         # ---------------------------------------------------------
         # [ 파일명 끝이 VS 인 경우 -> Vertex Shader 로 컴파일 ]
@@ -47,14 +51,14 @@ foreach(SHADER_FILE ${HLSL_SOURCES})
         add_custom_command(
             OUTPUT ${DXIL_OUT}
             COMMAND ${DXC_COMPILER} -D _DX12_=1 -T vs_6_0 -E main -Fo ${DXIL_OUT} ${SHADER_FILE}
-            DEPENDS ${SHADER_FILE} "${CMAKE_CURRENT_LIST_FILE}"
+            DEPENDS ${_shader_dependencies} "${CMAKE_CURRENT_LIST_FILE}"
             COMMENT "Compiling ${SHADER_NAME_WE} (DXIL, VS)..."
         )
         # Vulkan 컴파일 (-spirv -T vs_6_0 -E main)
         add_custom_command(
             OUTPUT ${SPIRV_OUT}
             COMMAND ${DXC_COMPILER} -spirv -T vs_6_0 -E main -Fo ${SPIRV_OUT} ${SHADER_FILE}
-            DEPENDS ${SHADER_FILE}
+            DEPENDS ${_shader_dependencies}
             COMMENT "Compiling ${SHADER_NAME_WE} (SPIR-V, VS)..."
         )
         list(APPEND ALL_SHADER_OUTPUTS ${DXIL_OUT} ${SPIRV_OUT})
@@ -70,14 +74,14 @@ foreach(SHADER_FILE ${HLSL_SOURCES})
         add_custom_command(
             OUTPUT ${DXIL_OUT}
             COMMAND ${DXC_COMPILER} -D _DX12_=1 -T ps_6_0 -E main -Fo ${DXIL_OUT} ${SHADER_FILE}
-            DEPENDS ${SHADER_FILE} "${CMAKE_CURRENT_LIST_FILE}"
+            DEPENDS ${_shader_dependencies} "${CMAKE_CURRENT_LIST_FILE}"
             COMMENT "Compiling ${SHADER_NAME_WE} (DXIL, PS)..."
         )
         # Vulkan 컴파일 (-spirv -T ps_6_0 -E main)
         add_custom_command(
             OUTPUT ${SPIRV_OUT}
             COMMAND ${DXC_COMPILER} -spirv -T ps_6_0 -E main -Fo ${SPIRV_OUT} ${SHADER_FILE}
-            DEPENDS ${SHADER_FILE}
+            DEPENDS ${_shader_dependencies}
             COMMENT "Compiling ${SHADER_NAME_WE} (SPIR-V, PS)..."
         )
         list(APPEND ALL_SHADER_OUTPUTS ${DXIL_OUT} ${SPIRV_OUT})

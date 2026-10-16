@@ -87,6 +87,7 @@ void MeshRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*> a
             command.mesh = mesh;
             command.material = material;
             command.worldMatrix = worldTransform.worldMatrix;
+            command.pickingId = renderer.RegisterPickingEntity(scene, entity);
 
             for (RenderPass* pass : geometryPasses)
             {
