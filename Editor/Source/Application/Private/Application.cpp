@@ -9,6 +9,7 @@
 #include "AssetManager.h"
 #include <archive/JsonArchive.h>
 #include "Systems.h"
+#include "PIEManager.h"
 
 BEGIN(Editor)
 
@@ -83,6 +84,12 @@ void Application::Free()
     {
         SelectionManager::Destroy();
         m_SelectionManager = nullptr;
+    }
+
+    if (m_PIEManager)
+    {
+        PIEManager::Destroy();
+        m_PIEManager = nullptr;
     }
 
     if (m_Runtime)
@@ -281,6 +288,7 @@ EResult Application::InitializeImGui()
     }
 
     m_SelectionManager = SelectionManager::Create();
+    m_PIEManager = PIEManager::Create();
     m_EditHistory.BeforeReplay = [this]
     {
         m_HistorySelection.clear();
@@ -1015,63 +1023,6 @@ void Application::SubmitRenderPasses()
 }
 #pragma endregion
 
-#pragma region PIE (Play In Editor)
-void Application::EnterPlayMode()
-{
-    if (m_PlayState != EPlayState::Edit) return;
-
-    ENGINE_LOG_WARN("Play is unavailable until scene restoration is implemented.");
-}
-void Application::PausePlayMode()
-{
-    if (m_PlayState != EPlayState::Play) return;
-
-    m_PlayState = EPlayState::Pause;
-    fmt::print("[PIE] Paused\n");
-}
-void Application::ResumePlayMode()
-{
-    if (m_PlayState != EPlayState::Pause) return;
-
-    m_PlayState = EPlayState::Play;
-    fmt::print("[PIE] Resumed\n");
-}
-void Application::StopPlayMode()
-{
-    if (m_PlayState == EPlayState::Edit) return;
-
-    m_PlayState = EPlayState::Edit;
-
-    const EResult result = RestoreScene();
-    if (result != EResult::Success)
-    {
-        ENGINE_LOG_WARN("[PIE] Stopped without restoring the scene: {}", ResultToString(result));
-        return;
-    }
-
-    m_EditHistory.Clear();
-    fmt::print("[PIE] Stopped — scene restored\n");
-}
-
-void Application::SnapshotScene()
-{
-    if (!SceneManager::Get().GetCurrentScene())
-        return;
-
-    archive::JsonArchive ar;
-    const EResult result = SceneManager::Get().SaveScene(ar, m_SnapshotPath);
-
-    if (result != EResult::Success)
-        ENGINE_LOG_ERROR("Scene snapshot failed: {}", ResultToString(result));
-}
-
-EResult Application::RestoreScene()
-{
-    // 복원이 구현되기 전에는 현재 씬과 선택 상태를 유지한다.
-    return EResult::NotImplemented;
-}
-#pragma endregion
-
 void Application::Run(int argc, char* argv[])
 {
     bool bIsRunning = true;
@@ -1125,7 +1076,8 @@ void Application::Run(int argc, char* argv[])
         ImGuiManager::Get().Update(dt);
         m_AssetManager->Update(dt);
 
-        if (m_PlayState == EPlayState::Play)
+        // 기존: if (m_PlayState == EPlayState::Play)
+        if (PIEManager::Get().IsPlaying())
         {
             m_Runtime->FixedUpdate(dt);
             m_Runtime->Update(dt);

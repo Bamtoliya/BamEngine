@@ -2,7 +2,6 @@
 
 #include "Editor_Includes.h"
 #include "SceneEditHistory.h"
-#include "Editor_Includes.h"
 
 BEGIN(Editor)
 
@@ -12,13 +11,6 @@ struct ApplicationCreateInfo
 	uint32 width = 1280;
 	uint32 height = 720;
 	const char* AppName = "BamEngine Editor";
-};
-
-enum class EPlayState : uint8
-{
-	Edit,
-	Play,
-	Pause,
 };
 
 class Application final : public Base
@@ -63,24 +55,6 @@ private:
 	void SubmitRenderPasses();
 #pragma endregion
 
-
-#pragma region PIE(Play In Editor)
-public:
-	void EnterPlayMode();
-	void PausePlayMode();
-	void ResumePlayMode();
-	void StopPlayMode();
-
-	EPlayState GetPlayState() const { return m_PlayState; }
-	bool IsPlaying() const { return m_PlayState == EPlayState::Play; }
-	bool IsPaused() const { return m_PlayState == EPlayState::Pause; }
-	bool IsEditing() const { return m_PlayState == EPlayState::Edit; }
-private:
-	void SnapshotScene();    // Play 직전 씬 직렬화
-	EResult RestoreScene();     // Stop 시 씬 복원
-#pragma endregion
-
-
 #pragma region Command History
 public:
 	CommandHistory& GetCommandHistory() { return m_EditHistory.Commands(); }
@@ -101,6 +75,7 @@ private:
 	class Runtime* m_Runtime = { nullptr };
 	class ImGuiManager* m_ImGuiManager = { nullptr };
 	class SelectionManager* m_SelectionManager = { nullptr };
+	class PIEManager* m_PIEManager = { nullptr };
 	struct SDL_Window* m_Window = { nullptr };
 	class RHI* m_RHI = { nullptr };
 private:
@@ -113,9 +88,6 @@ private:
 	RenderPassID m_GemetryPassID		= INVALID_PASS_ID;
 	RenderPassID m_FowardPassID			= INVALID_PASS_ID;
 	RenderPassID m_PostProcessPassID	= INVALID_PASS_ID;
-private:
-	EPlayState m_PlayState = EPlayState::Edit;
-	wstring m_SnapshotPath = L"Temp/__pie_snapshot__.json";
 private:
 	SceneEditHistory m_EditHistory;
 	std::vector<std::pair<Engine::Scene*, uint64>> m_HistorySelection;

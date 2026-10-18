@@ -9,6 +9,7 @@
 #include "SceneManager.h"
 #include "SelectionManager.h"
 #include "RHIs.h"
+#include "PIEManager.h"
 
 #include "ViewportPanels.h"
 #include "InspectorPanel.h"
@@ -282,10 +283,11 @@ void ImGuiManager::ProcessEvent(const SDL_Event* event)
 void ImGuiManager::Draw()
 {
 	auto& history = Application::Get().GetEditHistory();
-	history.Synchronize(SceneManager::Get().GetCurrentScene(), Application::Get().IsEditing());
+	auto& pieManager = PIEManager::Get();
+	history.Synchronize(SceneManager::Get().GetCurrentScene(), PIEManager::Get().CanEdit());
 	history.BeginFrame();
 	MainDockspace();
-	history.Synchronize(SceneManager::Get().GetCurrentScene(), Application::Get().IsEditing());
+	history.Synchronize(SceneManager::Get().GetCurrentScene(), PIEManager::Get().CanEdit());
 
 	ImGui::ShowDemoWindow(nullptr); // 데모 윈도우 (테스트용, 나중에 제거)
 

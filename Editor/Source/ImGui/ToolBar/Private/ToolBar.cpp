@@ -22,6 +22,8 @@
 #include "AssetManager.h"
 #include "ContentBrowserPanel.h"
 
+#include "PIEManager.h"
+
 void ToolBar::Draw(SDL_Window* window)
 {
 	if (ImGui::BeginMainMenuBar())
@@ -392,56 +394,47 @@ void ToolBar::DrawHelpMenu()
 
 void ToolBar::DrawPlayControls()
 {
-	Application& app = Application::Get();
-	EPlayState state = app.GetPlayState();
+	PIEManager& pie = PIEManager::Get();
+	EPlayState state = pie.GetState();
 
 	const float btnWidth = 60.f;
 	const float spacing = ImGui::GetStyle().ItemSpacing.x;
 
-	// ── Pause 상태 시각화: 배경색 변경 ──────────────────────────────────
 	if (state == EPlayState::Pause)
 	{
 		ImDrawList* drawList = ImGui::GetWindowDrawList();
 		ImVec2 windowPos = ImGui::GetWindowPos();
 		ImVec2 windowSize = ImGui::GetWindowSize();
-
-		// 주황색 배경 (Pause 상태 강조)
-		ImU32 pauseColor = ImGui::GetColorU32(ImVec4(1.0f, 0.8f, 0.2f, 0.3f)); // RGBA
-		drawList->AddRectFilled(
-			windowPos,
-			ImVec2(windowPos.x + windowSize.x, windowPos.y + windowSize.y),
-			pauseColor);
+		ImU32 pauseColor = ImGui::GetColorU32(ImVec4(1.0f, 0.8f, 0.2f, 0.3f));
+		drawList->AddRectFilled(windowPos, ImVec2(windowPos.x + windowSize.x, windowPos.y + windowSize.y), pauseColor);
 	}
-	// ─────────────────────────────────────────────────────────────────────
 
 	float totalWidth = btnWidth * 3.0f + spacing * 2.0f;
 	float startX = (ImGui::GetWindowWidth() - totalWidth) * 0.5f;
 	if (startX < 0.0f) startX = 0.0f;
 	ImGui::SetCursorPosX(startX);
 
-	// ── ▶ Play (Edit 상태일 때만 활성) ───────────────
+	// ▶ Play
 	ImGui::PushID("PlayBtn");
 	if (state != EPlayState::Edit) ImGui::BeginDisabled();
-	if (ImGui::Button(ICON_FA_PLAY, ImVec2(btnWidth, 0)))
-		app.EnterPlayMode();
+	if (ImGui::Button(ICON_FA_PLAY, ImVec2(btnWidth, 0))) pie.StartPlay();
 	if (state != EPlayState::Edit) ImGui::EndDisabled();
 	if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("ToolBar.PlayTooltip"));
 	ImGui::PopID();
 
 	ImGui::SameLine();
 
+	// ⏸ Pause / Resume
 	ImGui::PushID("PauseResumeBtn");
 	if (state == EPlayState::Edit) ImGui::BeginDisabled();
 	if (state == EPlayState::Pause)
 	{
-		if (ImGui::Button(ICON_FA_PLAY, ImVec2(btnWidth, 0)))
-			app.ResumePlayMode();
+		if (ImGui::Button(ICON_FA_PLAY, ImVec2(btnWidth, 0))) pie.Resume();
 		if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("ToolBar.ResumeTooltip"));
 	}
 	else
 	{
-		if (ImGui::Button(ICON_FA_PAUSE, ImVec2(btnWidth, 0)))
-			app.PausePlayMode();
+		if (ImGui::Button(ICON_FA_PAUSE, ImVec2(btnWidth, 0))) pie.Pause();
 		if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("ToolBar.PauseTooltip"));
 	}
 	if (state == EPlayState::Edit) ImGui::EndDisabled();
@@ -449,10 +442,10 @@ void ToolBar::DrawPlayControls()
 
 	ImGui::SameLine();
 
+	// ■ Stop
 	ImGui::PushID("StopBtn");
 	if (state == EPlayState::Edit) ImGui::BeginDisabled();
-	if (ImGui::Button(ICON_FA_STOP, ImVec2(btnWidth, 0)))
-		app.StopPlayMode();
+	if (ImGui::Button(ICON_FA_STOP, ImVec2(btnWidth, 0))) pie.Stop();
 	if (state == EPlayState::Edit) ImGui::EndDisabled();
 	if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("ToolBar.StopTooltip"));
 	ImGui::PopID();

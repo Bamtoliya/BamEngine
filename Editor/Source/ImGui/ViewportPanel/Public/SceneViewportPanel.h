@@ -100,6 +100,7 @@ private:
 #pragma endregion
 
 private:
+	std::optional<CameraBuffer> FindActiveSceneCameraBuffer();
 	SkyAtmosphereData BuildSkyAtmosphereData();
 
 #pragma region Member Variables

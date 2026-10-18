@@ -16,6 +16,7 @@
 #include "TransformSystem.h"
 #include "TransformPropertyEditor.h"
 #include "PickingManager.h"
+#include "PIEManager.h"
 
 #include <glm/gtc/type_ptr.hpp>
 #include <cmath>
@@ -257,7 +258,10 @@ void SceneViewportPanel::Update(f32 dt)
 	ProcessPickingRequest();
 	CalculateRenderResolution(m_PanelWidth, m_PanelHeight);
 
-	if (m_CameraController && m_Focused && m_Hovered)
+	const bool isPIE = PIEManager::Get().IsPlaying() || PIEManager::Get().IsPaused();
+
+	// 1. 에디터 카메라 입력: PIE 실행 중에는 에디터 카메라 이동을 차단
+	if (!isPIE && m_CameraController && m_Focused && m_Hovered)
 		m_CameraController->HandleInput(dt);
 
 	if (m_CameraController)
@@ -267,7 +271,13 @@ void SceneViewportPanel::Update(f32 dt)
 		m_CameraController->RefreshMatrices();
 	}
 
-	const std::optional<CameraBuffer> cameraBuffer = m_CameraController ? m_CameraController->GetCameraBuffer() : std::nullopt;
+	// 2. 카메라 버퍼 결정: PIE 중이면 씬 카메라 우선, 없으면 에디터 카메라로 폴백
+	std::optional<CameraBuffer> cameraBuffer;
+	if (isPIE)
+		cameraBuffer = FindActiveSceneCameraBuffer();
+
+	if (!cameraBuffer.has_value() && m_CameraController)
+		cameraBuffer = m_CameraController->GetCameraBuffer();
 
 	RenderPassManager& rpMgr = RenderPassManager::Get();
 	Renderer& renderer = Renderer::Get();
@@ -562,7 +572,11 @@ void SceneViewportPanel::DrawImGuizmo()
 		return;
 	}
 
-	optional<CameraBuffer> cameraBuffer = m_CameraController->GetCameraBuffer();
+	const bool isPIE = PIEManager::Get().IsPlaying() || PIEManager::Get().IsPaused();
+	std::optional<CameraBuffer> cameraBuffer;
+	if (isPIE) cameraBuffer = FindActiveSceneCameraBuffer();
+	if (!cameraBuffer.has_value() && m_CameraController)
+		cameraBuffer = m_CameraController->GetCameraBuffer();
 
 	if (!cameraBuffer)
 	{
@@ -1275,6 +1289,40 @@ Entity* SceneViewportPanel::PickOverlayEntity(const ImVec2& mousePos) const
 	return closestEntity;
 }
 #pragma endregion
+
+std::optional<CameraBuffer> SceneViewportPanel::FindActiveSceneCameraBuffer()
+{
+	Scene* activeScene = SceneManager::Get().GetCurrentScene();
+	if (!activeScene) return std::nullopt;
+
+	auto& registry = activeScene->GetRegistry();
+	auto view = registry.view<CameraComponent, WorldTransformComponent, FlagComponent>();
+
+	CameraComponent* targetCamera = nullptr;
+	for (auto entity : view)
+	{
+		const auto& flag = view.get<FlagComponent>(entity);
+		if (!HasFlag(flag.flags, EEntityFlag::Active)) continue;
+
+		auto& cam = view.get<CameraComponent>(entity);
+		if (cam.IsMainCamera)
+		{
+			targetCamera = &cam;
+			break;
+		}
+		if (!targetCamera) targetCamera = &cam; // 메인 지정이 없으면 첫 번째 활성 카메라 보관
+	}
+
+	if (!targetCamera) return std::nullopt;
+
+	// 뷰포트 종횡비에 맞게 카메라 버퍼 갱신
+	if (m_RenderHeight > 0)
+	{
+		targetCamera->AspectRatio = static_cast<f32>(m_RenderWidth) / static_cast<f32>(m_RenderHeight);
+		CameraSystem::UpdateCameras(registry);
+	}
+	return targetCamera->GetCameraBuffer();
+}
 
 SkyAtmosphereData SceneViewportPanel::BuildSkyAtmosphereData()
 {
