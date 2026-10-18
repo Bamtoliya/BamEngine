@@ -275,6 +275,7 @@ EditorCommon,OK,OK,확인
 ContentBrowser,Importing,Importing {} Asset(s) in background...,백그라운드에서 에셋 {}개를 임포트하고 있습니다...
 ContentBrowser,Folders,Folders,폴더
 ContentBrowser,Files,Files,파일
+ContentBrowser,CreateSprite,Create Sprite,스프라이트 생성
 ContentBrowser,CreateEmptyMaterial,Create Empty Material,빈 머티리얼 생성
 ContentBrowser,FolderType,Type: Folder,종류: 폴더
 ContentBrowser,FileType,Type: {} File,종류: {} 파일
@@ -289,6 +290,7 @@ Hierarchy,AddEntity,Add Entity,엔티티 추가
 Hierarchy,AddCanvas,Add UI Canvas,UI 캔버스 추가
 Hierarchy,AddPrimitive,Add Primitive Entity,기본 도형 엔티티 추가
 Hierarchy,AddSprite,Add Sprite Entity,스프라이트 엔티티 추가
+Hierarchy,AddLight,Add Light Entity,라이트 엔티티 추가
 Hierarchy,Action,Action: {},작업 대상: {}
 Hierarchy,Duplicate,Duplicate,복제
 Hierarchy,Active,Is Active,활성화
