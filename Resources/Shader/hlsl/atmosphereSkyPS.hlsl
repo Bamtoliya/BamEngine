@@ -7,6 +7,11 @@ struct PS_INPUT
     float3 Direction    : TEXCOORD0;
 };
 
+// ── 3D 볼륨 텍스처 및 2D 웨더 맵 바인딩 (Material 영역: space1) ──
+Texture3D<float4> baseShapeTex   : register(t0, space1);
+Texture2D<float4> weatherMapTex  : register(t1, space1);
+SamplerState      cloudSampler   : register(s0, space1);
+
 struct SkyAtmosphereData
 {
     float3 ZenithColor;     float _pad0;
@@ -16,13 +21,7 @@ struct SkyAtmosphereData
     float3 SunColor;        float SunIntensity;
     float SkyIntensity;     float SunSize;      float2 _pad3;
 
-    float CloudCoverage;
-    float CloudDensity;
-    float CloudSpeed;
-    float CloudAltitude;
-
-    uint EnableClouds;
-    float3 _pad4;
+    VolumetricCloudData Cloud;
 };
 
 ConstantBuffer<SkyAtmosphereData> sky : register(b1, space3);
@@ -166,8 +165,9 @@ float4 main(PS_INPUT input) : SV_TARGET
     color *= skyIntensity;
 
     float4 clouds = RenderCloudLayer(
-        rayOrigin, rayDir, sunDir, sunColor, commonData.Time,
-        PLANET_RADIUS, sky.CloudAltitude, sky.CloudCoverage, sky.CloudDensity, sky.CloudSpeed, sky.EnableClouds);
+        rayOrigin, rayDir, sunDir, sunColor, sunIntensity, skyIntensity, commonData.Time,
+        PLANET_RADIUS, sky.Cloud, hitPlanet, tPlanet0,
+        baseShapeTex, weatherMapTex, cloudSampler);
     color = lerp(color, clouds.rgb, clouds.a);
 
     // ACES 근사 톤매핑 (HDR -> LDR)

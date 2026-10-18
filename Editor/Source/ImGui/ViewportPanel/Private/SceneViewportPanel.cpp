@@ -13,6 +13,8 @@
 #include "Scene.h"
 #include "CoreComponents.h"
 #include "RenderComponents.h"
+#include "CloudTextureGenerator.h"
+#include "Components/Render/VolumetricCloudComponent.h"
 #include "TransformSystem.h"
 #include "TransformPropertyEditor.h"
 #include "PickingManager.h"
@@ -289,8 +291,31 @@ void SceneViewportPanel::Update(f32 dt)
 		// ForwardPass에 최신 대기/태양광 데이터를 패스 상수로 주입
 		if (auto* forwardPass = rpMgr.GetRenderPassByID(m_ForwardPassID))
 		{
+			// 3D 클라우드 텍스처가 아직 리소스 매니저에 없다면 1회 생성하여 SkyMaterial에 바인딩
+			auto& rm = ResourceManager::Get();
+			auto shapeHandle = rm.GetResourceHandle<Texture>(L"Resources/Texture/CloudBaseShape3D");
+			if (!shapeHandle.IsValid())
+			{
+				if (auto* rhi = Renderer::Get().GetRHI())
+				{
+					RHITexture* rhiShape = CloudTextureGenerator::CreateBaseShapeTexture(rhi, 64);
+					RHITexture* rhiWeather = CloudTextureGenerator::CreateWeatherMapTexture(rhi, 256);
+					Texture* shapeTex = Texture::CreateFromRHITexture(rhiShape, L"Resources/Texture/CloudBaseShape3D");
+					Texture* weatherTex = Texture::CreateFromRHITexture(rhiWeather, L"Resources/Texture/CloudWeatherMap2D");
+					shapeHandle = rm.AddResource<Texture>(L"Resources/Texture/CloudBaseShape3D", shapeTex);
+					auto weatherHandle = rm.AddResource<Texture>(L"Resources/Texture/CloudWeatherMap2D", weatherTex);
+
+					auto skyMatHandle = rm.GetResourceHandle<Material>(RESOURCE_PATH L"Material/SkyMaterial");
+					if (auto* skyMat = skyMatHandle.Get())
+					{
+						skyMat->SetTextureBinding("CloudBaseShape3D", 0, shapeHandle);
+						skyMat->SetTextureBinding("CloudWeatherMap2D", 1, weatherHandle);
+					}
+				}
+			}
+
 			SkyAtmosphereData skyData = BuildSkyAtmosphereData();
-			forwardPass->SetPassConstantStruct(3, skyData); // slot 3 (b1, space3)에 설정!
+			forwardPass->SetPassConstantStruct(3, skyData); // slot 3 (b1, space3)
 		}
 		renderer.RegisterViewportCamera(*cameraBuffer, rpMgr.GetRenderPassByID(m_ForwardPassID));
 		renderer.RegisterViewportCamera(*cameraBuffer, rpMgr.GetRenderPassByID(m_ForwardTransparentPassID));
@@ -1334,13 +1359,12 @@ SkyAtmosphereData SceneViewportPanel::BuildSkyAtmosphereData()
 		if (!scene) continue;
 		auto& registry = scene->GetRegistry();
 
-		// 1. SkyAtmosphereComponent 검색 및 시간대 계산
+		// 1. SkyAtmosphereComponent 검색 및 태양광/대기 산란 계산
 		auto skyView = registry.view<SkyAtmosphereComponent>();
 		for (auto [e, sky] : skyView.each())
 		{
 			if (!sky.IsEnabled) continue;
 
-			// 실시간 시간 흐름 처리 (1초당 24 / DayCycleDuration 시간 전진)
 			if (sky.EnableTimeProgression && sky.DayCycleDuration > 0.1f)
 			{
 				f32 dt = ImGui::GetIO().DeltaTime;
@@ -1348,7 +1372,6 @@ SkyAtmosphereData SceneViewportPanel::BuildSkyAtmosphereData()
 				if (sky.TimeOfDay < 0.0f) sky.TimeOfDay += 24.0f;
 			}
 
-			// 시간대(TimeOfDay)와 위도(Latitude) 기반 태양 방향(To-Sun) 계산
 			f32 hourAngle = (sky.TimeOfDay - 12.0f) * (glm::pi<float>() / 12.0f);
 			f32 latRad = glm::radians(sky.Latitude);
 			vec3 toSun = glm::normalize(vec3(std::sin(hourAngle), std::cos(hourAngle) * std::cos(latRad), -std::cos(hourAngle) * std::sin(latRad)));
@@ -1363,13 +1386,13 @@ SkyAtmosphereData SceneViewportPanel::BuildSkyAtmosphereData()
 			skyData.SunColor = sky.CustomSunColor;
 			skyData.SunIntensity = sky.CustomSunIntensity;
 
-			skyData.CloudCoverage = sky.CloudCoverage;
-			skyData.CloudDensity = sky.CloudDensity;
-			skyData.CloudSpeed = sky.CloudSpeed;
-			skyData.CloudAltitude = sky.CloudAltitude;
-			skyData.EnableClouds = sky.EnableClouds ? 1u : 0u;
+			// SkyAtmosphere의 기본 구름 설정을 초기값으로 반영
+			skyData.Cloud.EnableClouds = sky.EnableClouds ? 1u : 0u;
+			skyData.Cloud.CloudCoverage = sky.CloudCoverage;
+			skyData.Cloud.CloudDensity = sky.CloudDensity;
+			skyData.Cloud.LayerBottomAltitude = sky.CloudAltitude;
+			skyData.Cloud.WindSpeed = sky.CloudSpeed * 100.0f;
 
-			// Directional Light가 존재하고 AutoSync가 켜져 있으면 라이트 회전도 동기화
 			if (sky.AutoSyncDirectionalLight)
 			{
 				auto lightView = registry.view<LightComponent, TransformComponent>();
@@ -1377,7 +1400,6 @@ SkyAtmosphereData SceneViewportPanel::BuildSkyAtmosphereData()
 				{
 					if (light.IsEnabled && light.LightType == ELightType::Directional)
 					{
-						// 태양 광선 Forward = -ToSun
 						vec3 forward = -toSun;
 						f32 pitch = glm::degrees(std::asin(-forward.y));
 						f32 yaw = glm::degrees(std::atan2(forward.x, forward.z));
@@ -1390,7 +1412,29 @@ SkyAtmosphereData SceneViewportPanel::BuildSkyAtmosphereData()
 					}
 				}
 			}
-			return skyData;
+			break; // 조기 return 대신 break로 루프 탈출
+		}
+
+		// 2. 씬에 전용 VolumetricCloudComponent가 있으면 상세 설정으로 덮어쓰기
+		auto cloudView = registry.view<VolumetricCloudComponent>();
+		for (auto [ce, cloud] : cloudView.each())
+		{
+			skyData.Cloud.EnableClouds = cloud.IsEnabled ? 1u : 0u;
+			skyData.Cloud.LayerBottomAltitude = cloud.LayerBottomAltitude;
+			skyData.Cloud.LayerHeight = cloud.LayerHeight;
+			skyData.Cloud.TracingMaxDistance = cloud.TracingMaxDistance;
+			skyData.Cloud.CloudCoverage = cloud.CloudCoverage;
+			skyData.Cloud.CloudDensity = cloud.CloudDensity;
+			skyData.Cloud.WeatherScale = 1.0f / std::max(cloud.WeatherMapSize, 100.0f);
+			skyData.Cloud.ShapeScale = 1.0f / std::max(cloud.ShapeNoiseSize, 50.0f);
+			skyData.Cloud.DetailScale = 1.0f / std::max(cloud.DetailNoiseSize, 10.0f);
+			skyData.Cloud.WindDirection = cloud.WindDirection;
+			skyData.Cloud.WindSpeed = cloud.WindSpeed;
+			skyData.Cloud.MorphSpeed = cloud.MorphSpeed;
+			skyData.Cloud.CloudAlbedo = cloud.CloudAlbedo;
+			skyData.Cloud.ExtinctionFactor = cloud.ExtinctionFactor;
+			skyData.Cloud.PowderExtinction = cloud.PowderExtinction;
+			break;
 		}
 	}
 	return skyData;

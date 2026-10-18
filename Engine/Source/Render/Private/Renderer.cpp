@@ -25,6 +25,8 @@
 #include "CoreComponents.h"
 #include "PickingManager.h"
 
+#include "TimeManager.h"
+
 IMPLEMENT_SINGLETON(Renderer)
 
 #pragma region Constructor&Destructor
@@ -157,7 +159,8 @@ EResult Renderer::Render(f32 dt)
 				cameraBuffer.viewProjMatrix = glm::identity<mat4>();
 				cameraBuffer.cameraPosition = vec3(0.f);
 			}
-			cameraBuffer.time = dt;
+			//cameraBuffer.time = dt;
+			cameraBuffer.time = static_cast<f32>(TimeManager::Get().GetTotalTime());
 			if (IsFailure(m_RHI->BindConstantBuffer(&cameraBuffer, sizeof(CameraBuffer), 0)))
 			{
 				ENGINE_LOG_ERROR("Failed to bind camera constant buffer.");

@@ -1,12 +1,12 @@
 ﻿#pragma once
 
 #include "Reflection/ComponentAnnotations.h"
+#include "Components/Render/VolumetricCloudComponent.h"
 #include "Types.h"
 
 namespace Engine
 {
-    // HLSL register(b1, space3)와 1:1로 일치하는 96바이트 GPU 구조체
-        // HLSL register(b1, space3)와 1:1로 일치하는 128바이트 GPU 구조체
+    // HLSL register(b1, space3)와 1:1로 일치하는 128바이트 GPU 구조체
     struct SkyAtmosphereData
     {
         vec3 ZenithColor{ 0.18f, 0.42f, 0.85f };  float _pad0 = 0.0f;
@@ -24,8 +24,11 @@ namespace Engine
 
         uint32 EnableClouds = 1u;
         vec3 _pad4{ 0.0f };
+
+        // ── 볼류메트릭 클라우드 데이터 (128바이트) ──
+        VolumetricCloudData Cloud{};
     };
-    static_assert(sizeof(SkyAtmosphereData) == 128, "SkyAtmosphereData size must be 128 bytes");
+    static_assert(sizeof(SkyAtmosphereData) == 256, "SkyAtmosphereData size must be 256 bytes");
 
     STRUCT(COMPONENT, DISPLAY_NAME("STRUCT_SKY_ATMOSPHERE"), CATEGORY("CATEGORY_RENDER"))
     struct SkyAtmosphereComponent

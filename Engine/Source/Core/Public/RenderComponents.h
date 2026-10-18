@@ -7,3 +7,4 @@
 #include "Components/Render/SkinnedMeshRendererComponent.h"
 #include "Components/Render/SkyAtmosphereComponent.h"
 #include "Components/Render/FogComponent.h"
+#include "Components/Render/VolumetricCloudComponent.h"
