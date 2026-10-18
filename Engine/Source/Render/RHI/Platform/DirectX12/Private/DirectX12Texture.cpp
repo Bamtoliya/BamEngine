@@ -44,7 +44,8 @@ EResult DirectX12Texture::Initialize(const DESC& desc)
     resourceDesc.Height = m_Height;
     resourceDesc.Dimension = ToD3D12ResourceDimension(m_Dimension);
     resourceDesc.Alignment = 0;
-    resourceDesc.DepthOrArraySize = static_cast<UINT16>(m_ArraySize);
+    resourceDesc.DepthOrArraySize = static_cast<UINT16>(
+        m_Dimension == ETextureDimension::Texture3D ? m_Depth : m_ArraySize);
     resourceDesc.MipLevels = static_cast<UINT16>(m_MipLevels);
     // [핵심 수정] DSV+SRV 동시 사용 시 Typeless 포맷으로 리소스 생성
     resourceDesc.Format = (isDepth && needsSRV)

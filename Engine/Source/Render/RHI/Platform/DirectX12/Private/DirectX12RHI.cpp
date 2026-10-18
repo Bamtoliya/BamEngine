@@ -595,11 +595,14 @@ EResult DirectX12RHI::UploadTextureData(RHITexture* texture, const RHITextureDes
     if (!texture || !desc.data || !m_Device || !m_CommandQueue)
         return EResult::InvalidArgument;
 
+    const bool is3D = (desc.dimension == ETextureDimension::Texture3D);
+    const uint32 depth = is3D ? desc.depth : 1;
+
     if (desc.format != ETextureFormat::R8G8B8A8_UNORM ||
-        desc.dimension != ETextureDimension::Texture2D ||
+        (desc.dimension != ETextureDimension::Texture2D && !is3D) ||
         desc.mipLevels != 1 ||
         desc.arraySize != 1 ||
-        desc.depth != 1 ||
+        depth == 0 ||
         desc.sampleCount != ETextureSampleCount::TextureSampleCount1 ||
         desc.width == 0 ||
         desc.height == 0)
@@ -608,13 +611,13 @@ EResult DirectX12RHI::UploadTextureData(RHITexture* texture, const RHITextureDes
     }
 
     const UINT64 sourceRowBytes = UINT64(desc.width) * 4;
+    const UINT64 sourceSliceBytes = sourceRowBytes * desc.height;
 
-    if (sourceRowBytes > UINT64(desc.dataSize) / desc.height)
+    if (sourceSliceBytes * depth > UINT64(desc.dataSize))
         return EResult::InvalidArgument;
 
     auto* dxTexture = static_cast<DirectX12Texture*>(texture);
-    auto* destination =
-        static_cast<ID3D12Resource*>(dxTexture->GetNativeHandle());
+    auto* destination = static_cast<ID3D12Resource*>(dxTexture->GetNativeHandle());
 
     if (!destination)
         return EResult::Fail;
@@ -666,7 +669,7 @@ EResult DirectX12RHI::UploadTextureData(RHITexture* texture, const RHITextureDes
         return EResult::Fail;
     }
 
-    // 3. CPU 픽셀 → 업로드 버퍼
+    // 3. CPU 픽셀 → 업로드 버퍼 (3D 슬라이스 루프 지원)
     void* mapped = nullptr;
     D3D12_RANGE readRange = { 0, 0 };
 
@@ -675,13 +678,21 @@ EResult DirectX12RHI::UploadTextureData(RHITexture* texture, const RHITextureDes
 
     auto* dst = static_cast<std::uint8_t*>(mapped) + footprint.Offset;
     const auto* src = static_cast<const std::uint8_t*>(desc.data);
+    const SIZE_T slicePitchDst = SIZE_T(footprint.Footprint.RowPitch) * footprint.Footprint.Height;
+    const SIZE_T slicePitchSrc = SIZE_T(sourceRowBytes) * desc.height;
 
-    for (UINT y = 0; y < rowCount; ++y)
+    for (UINT z = 0; z < depth; ++z)
     {
-        std::memcpy(
-            dst + SIZE_T(y) * footprint.Footprint.RowPitch,
-            src + SIZE_T(y) * static_cast<SIZE_T>(sourceRowBytes),
-            static_cast<SIZE_T>(sourceRowBytes));
+        auto* dstSlice = dst + z * slicePitchDst;
+        const auto* srcSlice = src + z * slicePitchSrc;
+
+        for (UINT y = 0; y < rowCount; ++y)
+        {
+            std::memcpy(
+                dstSlice + SIZE_T(y) * footprint.Footprint.RowPitch,
+                srcSlice + SIZE_T(y) * static_cast<SIZE_T>(sourceRowBytes),
+                static_cast<SIZE_T>(sourceRowBytes));
+        }
     }
 
     uploadBuffer->Unmap(0, nullptr);
@@ -1146,10 +1157,14 @@ EResult DirectX12RHI::ApplyShaderResources()
         if (!resource) return EResult::Fail;
 
         const auto resourceDesc = resource->GetDesc();
-        if (resourceDesc.Dimension != D3D12_RESOURCE_DIMENSION_TEXTURE2D ||
-            resourceDesc.DepthOrArraySize != 1 || resourceDesc.SampleDesc.Count != 1)
+        const bool isTex2D = (resourceDesc.Dimension == D3D12_RESOURCE_DIMENSION_TEXTURE2D &&
+            resourceDesc.DepthOrArraySize == 1 && resourceDesc.SampleDesc.Count == 1);
+        const bool isTex3D = (resourceDesc.Dimension == D3D12_RESOURCE_DIMENSION_TEXTURE3D &&
+            resourceDesc.SampleDesc.Count == 1);
+
+        if (!isTex2D && !isTex3D)
         {
-            ENGINE_LOG_ERROR("SRV binding currently supports single-sample Texture2D inputs.");
+            ENGINE_LOG_ERROR("SRV binding supports single-sample Texture2D and Texture3D inputs.");
             return EResult::NotImplemented;
         }
 
@@ -1168,7 +1183,16 @@ EResult DirectX12RHI::ApplyShaderResources()
 
         const DXGI_FORMAT format = ToDXGIFormat(texture->GetFormat());
         view.Format = IsDepthFormat(format) ? ToDepthSRVFormat(format) : resourceDesc.Format;
-        view.Texture2D.MipLevels = resourceDesc.MipLevels;
+        if (isTex3D)
+        {
+            view.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE3D;
+            view.Texture3D.MipLevels = resourceDesc.MipLevels;
+        }
+        else
+        {
+            view.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+            view.Texture2D.MipLevels = resourceDesc.MipLevels;
+        }
 
         resources[slot] = resource;
         samplingTextures[slot] = texture;

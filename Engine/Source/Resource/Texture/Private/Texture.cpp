@@ -141,6 +141,23 @@ Texture* Texture::Create(const TextureBinaryHeader& header, const vector<uint8>&
 	return instance;
 }
 
+Texture* Texture::CreateFromRHITexture(RHITexture* rhiTexture, const wstring& key)
+{
+	if (!rhiTexture) return nullptr;
+	Texture* instance = new Texture();
+	instance->m_RHITexture = rhiTexture;
+	instance->m_CachedHeader.width = rhiTexture->GetWidth();
+	instance->m_CachedHeader.height = rhiTexture->GetHeight();
+	instance->m_CachedHeader.depth = rhiTexture->GetDepth();
+	instance->m_CachedHeader.format = rhiTexture->GetFormat();
+	instance->m_CachedHeader.dimension = rhiTexture->GetDimension();
+	if (!key.empty())
+	{
+		instance->m_Key = NormalizePath(key);
+		instance->m_Path = NormalizePath(key);
+	}
+	return instance;
+}
 void Texture::Free()
 {
 	Safe_Release(m_RHITexture);
