@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <archive/ArchiveInterface.h>
 #include <reflection/TypeInfo.h>
@@ -315,7 +315,8 @@ namespace archive_reflection
                 const auto* baseType = registry != nullptr ? registry->FindType(base.GetBaseCppType()) : nullptr;
                 if (baseType == nullptr)
                 {
-                    return { archive::ArchiveErrorCode::UnsupportedType, base.TypeName };
+                    // ITypeIdentity 등 리플렉션 대상이 아닌 순수 인터페이스/기반 클래스는 프로퍼티 수집을 건너뜁니다.
+                    continue;
                 }
                 const auto result = CollectProperties(*baseType, baseObject, registry, traversal);
                 if (!result)
