@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "Resource.h"
 #include "Shader.h"
@@ -12,7 +12,7 @@ BEGIN(Engine)
 STRUCT()
 struct MaterialTextureBinding
 {
-	REFLECT_STRUCT()
+	REFLECT_BODY()
 
 	PROPERTY(EDITABLE)
 	uint32 slot = 0;
@@ -47,17 +47,20 @@ enum class EMaterialParameterType
 STRUCT()
 struct MaterialParameter
 {
-	REFLECT_STRUCT()
+	REFLECT_BODY()
 
 	PROPERTY()
 	EMaterialParameterType type = EMaterialParameterType::Float;
 
 	PROPERTY()
+	uint32 offset = 0;
+
+	PROPERTY()
 	vector<uint8> data;
 
 	MaterialParameter() = default;
-	MaterialParameter(EMaterialParameterType t, const void* ptr, size_t size)
-		: type(t), data(size)
+	MaterialParameter(EMaterialParameterType t, const void* ptr, size_t size, uint32 inOffset = 0)
+		: type(t), offset(inOffset), data(size)
 	{
 		memcpy(data.data(), ptr, size);
 	}

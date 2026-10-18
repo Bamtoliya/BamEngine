@@ -8,9 +8,15 @@
 namespace Engine
 {
 #pragma region Ray
+
+	STRUCT(DISPLAY_NAME("STRUCT_RAY"), CATEGORY("CATEGORY_RAY"))
 	struct ENGINE_API Ray
 	{
+		REFLECT_BODY()
+
+		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_ORIGIN"))
 		vec3 origin;
+		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_DIRECTION"))
 		vec3 direction;
 
 		Ray() = default;
@@ -51,14 +57,14 @@ namespace Engine
 
 #pragma region Bounds
 
-	STRUCT()
+	STRUCT(DISPLAY_NAME("STRUCT_AABB"), CATEGORY("CATEGORY_BOUNDS"))
 	struct ENGINE_API AABB
 	{
-		REFLECT_STRUCT();
+		REFLECT_BODY()
 
-		PROPERTY()
+		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_MIN"))
 		vec3 min = {0.f, 0.f, 0.f};
-		PROPERTY()
+		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_MAX"))
 		vec3 max = {0.f, 0.f, 0.f};
 		AABB() {}
 		AABB(const vec3& min, const vec3& max)
@@ -88,10 +94,15 @@ namespace Engine
 		}
 	};
 
+	STRUCT(DISPLAY_NAME("STRUCT_CAPSULE"), CATEGORY("CATEGORY_BOUNDS"))
 	struct Capsule
 	{
+		REFLECT_BODY()
+		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_POINT_A"))
 		vec3 pointA;
+		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_POINT_B"))
 		vec3 pointB;
+		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_RADIUS"))
 		f32 radius;
 		Capsule() = default;
 		Capsule(const vec3& pointA, const vec3& pointB, f32 radius)
@@ -103,18 +114,18 @@ namespace Engine
 #pragma endregion
 
 #pragma region Rect
-	STRUCT()
+	STRUCT(DISPLAY_NAME("STRUCT_RECT"), CATEGORY("CATEGORY_RECT"))
 	struct ENGINE_API Rect
 	{
-		REFLECT_STRUCT();
+		REFLECT_BODY()
 
-		PROPERTY(EDITABLE)
+		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_LEFT"), CATEGORY("CATEGORY_RECT"))
 		f32 left;
-		PROPERTY(EDITABLE)
+		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_TOP"), CATEGORY("CATEGORY_RECT"))
 		f32 top;
-		PROPERTY(EDITABLE)
+		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_WIDTH"), CATEGORY("CATEGORY_RECT"))
 		f32 width;
-		PROPERTY(EDITABLE)
+		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_HEIGHT"), CATEGORY("CATEGORY_RECT"))
 		f32	height;
 
 		Rect() : left(0), top(0), width(0), height(0) {}

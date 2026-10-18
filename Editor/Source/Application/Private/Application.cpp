@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include <fmt/core.h>
 #include <SDL3/SDL.h>
 #include "Application.h"
@@ -8,7 +8,7 @@
 #include "CoreComponents.h"
 #include "AssetManager.h"
 #include <archive/JsonArchive.h>
-
+#include "Systems.h"
 
 BEGIN(Editor)
 
@@ -262,6 +262,8 @@ EResult Application::InitializeSystem()
     if (!systemManager.AddSystem<LightSystem>())
         return EResult::Fail;
     if (!systemManager.AddSystem<UIRenderSystem>())
+        return EResult::Fail;
+    if (!systemManager.AddSystem<AudioSystem>())
         return EResult::Fail;
     return EResult::Success;
 }
@@ -587,35 +589,20 @@ void Application::InitializeShaders()
     }
 
 
-    //// Sky VS
-    //ShaderDesc skyVSDesc = {};
-    //skyVSDesc.Key = L"SkyVS";
-    //skyVSDesc.shaderType = EShaderType::Vertex;
-    //skyVSDesc.Path = L"Resources/Shader/sky.vert.spv";
-    //skyVSDesc.spirvPath = L"Resources/Shader/sky.vert.spv";
-    //skyVSDesc.entryPoint = "main";
-    //skyVSDesc.numUniformBuffers = 1;
-    //rm.LoadResource<Shader>(&skyVSDesc);
-    //{
-    //    auto handle = rm.GetResourceHandle<Shader>(skyVSDesc.Key);
-    //    rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/sky.vert.bamshader");
-    //}
-    //rm.LoadFile(L"Resources/Shader/sky.vert.bamshader");
+    // ── Sky Shaders ──
+    ShaderDesc skyVsDesc = {};
+    skyVsDesc.Key = RESOURCE_PATH L"Shader/SkyVS";
+    skyVsDesc.Path = RESOURCE_PATH L"Shader/bin/dxil/skyVS.cso";
+    skyVsDesc.shaderType = EShaderType::Vertex;
+    skyVsDesc.entryPoint = "main";
+    rm.LoadResource<Shader>(&skyVsDesc);
 
-    //// Skybox PS
-    //ShaderDesc skyPSDesc = {};
-    //skyPSDesc.Key = L"SkyboxPS";
-    //skyPSDesc.shaderType = EShaderType::Pixel;
-    //skyPSDesc.Path = L"Resources/Shader/sky.frag.spv";
-    //skyPSDesc.spirvPath = L"Resources/Shader/sky.frag.spv";
-    //skyPSDesc.entryPoint = "main";
-    //skyPSDesc.numUniformBuffers = 1;
-    //rm.LoadResource<Shader>(&skyPSDesc);
-    //{
-    //    auto handle = rm.GetResourceHandle<Shader>(skyPSDesc.Key);
-    //    rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/sky.frag.bamshader");
-    //}
-    //rm.LoadFile(L"Resources/Shader/sky.frag.bamshader");
+    ShaderDesc skyPsDesc = {};
+    skyPsDesc.Key = RESOURCE_PATH L"Shader/SkyPS";
+    skyPsDesc.Path = RESOURCE_PATH L"Shader/bin/dxil/atmosphereSkyPS.cso";
+    skyPsDesc.shaderType = EShaderType::Fragment;
+    skyPsDesc.entryPoint = "main";
+    rm.LoadResource<Shader>(&skyPsDesc);
 
     //// UI VS
     //ShaderDesc uiVSDesc = {};
@@ -788,6 +775,74 @@ void Application::InitializeMeshes()
         resourceManager.AddResource<Mesh>(L"CubeMesh", Mesh::Create(&meshDesc));
     }
 #pragma endregion
+#pragma region Sphere
+    {
+        const uint32 slices = 24;
+        const uint32 stacks = 16;
+        const float radius = 1.0f;
+
+        vector<VertexPosition> positions;
+        vector<VertexMaterial> materials;
+        vector<uint32> indices;
+
+        for (uint32 i = 0; i <= stacks; ++i)
+        {
+            float phi = glm::pi<float>() * static_cast<float>(i) / static_cast<float>(stacks);
+            float y = radius * std::cos(phi);
+            float rSin = radius * std::sin(phi);
+
+            for (uint32 j = 0; j <= slices; ++j)
+            {
+                float theta = 2.0f * glm::pi<float>() * static_cast<float>(j) / static_cast<float>(slices);
+                float x = rSin * std::cos(theta);
+                float z = rSin * std::sin(theta);
+
+                vec3 pos(x, y, z);
+                vec3 normal = glm::normalize(pos);
+                vec2 uv(static_cast<float>(j) / static_cast<float>(slices), static_cast<float>(i) / static_cast<float>(stacks));
+                vec3 tangent = glm::normalize(vec3(-std::sin(theta), 0.0f, std::cos(theta)));
+                vec3 binormal = glm::cross(normal, tangent);
+
+                positions.push_back({ pos });
+                VertexMaterial mat{};
+                mat.normal = normal;
+                mat.texCoord = uv;
+                mat.tangent = tangent;
+                mat.binormal = binormal;
+                mat.color = vec4(1.0f);
+                materials.push_back(mat);
+            }
+        }
+
+        for (uint32 i = 0; i < stacks; ++i)
+        {
+            for (uint32 j = 0; j < slices; ++j)
+            {
+                uint32 first = i * (slices + 1) + j;
+                uint32 second = first + slices + 1;
+
+                indices.push_back(first);
+                indices.push_back(second);
+                indices.push_back(first + 1);
+
+                indices.push_back(second);
+                indices.push_back(second + 1);
+                indices.push_back(first + 1);
+            }
+        }
+
+        MeshCreateDesc sphereDesc = {};
+        sphereDesc.Streams[(uint32)EMeshStream::Position] = { positions.data(), static_cast<uint32>(positions.size()), sizeof(VertexPosition) };
+        sphereDesc.Streams[(uint32)EMeshStream::Material] = { materials.data(), static_cast<uint32>(materials.size()), sizeof(VertexMaterial) };
+        sphereDesc.IndexData = indices.data();
+        sphereDesc.IndexCount = static_cast<uint32>(indices.size());
+        sphereDesc.IndexStride = sizeof(uint32);
+        sphereDesc.BoundingBoxMin = vec3(-radius);
+        sphereDesc.BoundingBoxMax = vec3(radius);
+
+        resourceManager.AddResource<Mesh>(L"SphereMesh", Mesh::Create(&sphereDesc));
+    }
+#pragma endregion
 }
 
 void Application::InitializeMaterials()
@@ -887,18 +942,17 @@ void Application::InitializeMaterials()
 	resourceManager.SaveToJsonFile(transparentMat, L"Resources/Material/TransparentMaterial.bammat.json");
 
 
-	// ── Sky Material 생성 ──
-	MaterialDesc skyMatDesc = {};
-    skyMatDesc.Key = L"Resources/Material/SkyMaterial";
-    skyMatDesc.VertexShaderHandle = resourceManager.GetResourceHandle<Shader>(
-        L"Resources/Shader/sky.vert.bamshader");
-    skyMatDesc.PixelShaderHandle = resourceManager.GetResourceHandle<Shader>(
-        L"Resources/Shader/sky.frag.bamshader");
-    skyMatDesc.BlendMode = EBlendMode::Forward;
-    skyMatDesc.CullMode = ECullMode::None; // 뒤집힌 큐브이므로 Front 면을 카울링
-	skyMatDesc.DepthMode = EDepthMode::ReadOnly; // 깊이 테스트는 하지만 쓰지는 않음'
-	skyMatDesc.DepthCompareOp = ECompareOp::LessOrEqual;
-    resourceManager.LoadResource<Material>(&skyMatDesc);
+    // ── Sky Material 생성 ──
+    MaterialDesc skyMatDesc = {};
+    skyMatDesc.Key = RESOURCE_PATH L"Material/SkyMaterial";
+    skyMatDesc.VertexShaderHandle = resourceManager.GetResourceHandle<Shader>(RESOURCE_PATH L"Shader/SkyVS");
+    skyMatDesc.PixelShaderHandle = resourceManager.GetResourceHandle<Shader>(RESOURCE_PATH L"Shader/SkyPS");
+    skyMatDesc.BlendMode = EBlendMode::Forward; // ForwardPass에서만 렌더링되도록 보장
+    skyMatDesc.CullMode = ECullMode::None;
+    skyMatDesc.DepthMode = EDepthMode::ReadOnly;
+    skyMatDesc.DepthCompareOp = ECompareOp::LessOrEqual;
+    Material* skyMat = resourceManager.LoadResource<Material>(&skyMatDesc).Get();
+    resourceManager.SaveToJsonFile(skyMat, RESOURCE_PATH L"Material/SkyMaterial.bammat.json");
 
     // ── UI Material 생성 ──
     MaterialDesc uiMatDesc = {};

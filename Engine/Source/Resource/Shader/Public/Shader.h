@@ -1,4 +1,4 @@
-#pragma once 
+﻿#pragma once 
 
 #include "Resource.h"
 #include "RHIShader.h"
@@ -6,7 +6,7 @@
 STRUCT()
 struct ENGINE_API ShaderBinaryHeader
 {
-	REFLECT_STRUCT()
+	REFLECT_BODY()
 
 	PROPERTY()
 	EShaderType shaderType = { EShaderType::Unknown };

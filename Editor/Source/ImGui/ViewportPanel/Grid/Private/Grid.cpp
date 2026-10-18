@@ -67,7 +67,7 @@ void Grid::Free()
 
 }
 
-void Grid::SubmitGrid(Camera* camera, bool isOrthographic, const wstring& colorRTName, const wstring& depthStencilName)
+void Grid::SubmitGrid(const CameraBuffer& cameraBuffer, bool isOrthographic, const wstring& colorRTName, const wstring& depthStencilName)
 {
     if (m_GridPassID == INVALID_PASS_ID)
         return;
@@ -80,7 +80,7 @@ void Grid::SubmitGrid(Camera* camera, bool isOrthographic, const wstring& colorR
     if (!depthStencilName.empty())
         pass->SetDepthStencilAttachment(depthStencilName);
 
-    Renderer::Get().RegisterViewportCamera(camera, pass);
+    Renderer::Get().RegisterViewportCamera(cameraBuffer, pass);
 
     // 람다의 매개변수로 RenderPass* 가 넘어오는 것을 적극 활용합니다!
     Renderer::Get().SubmitCustomCommand(

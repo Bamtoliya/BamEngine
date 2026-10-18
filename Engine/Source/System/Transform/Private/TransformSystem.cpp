@@ -1,4 +1,4 @@
-#include "TransformSystem.h"
+﻿#include "TransformSystem.h"
 #include "CoreComponents.h"
 #include <glm/gtx/matrix_decompose.hpp>
 #include <unordered_map>
@@ -70,9 +70,15 @@ void TransformSystem::Free() {}
 TransformSystem* TransformSystem::Create(void* arg)
 {
     auto* instance = new TransformSystem();
-    if (IsFailure(instance->Initialize(arg))) { instance->Free(); delete instance; return nullptr; }
+    if (IsFailure(instance->Initialize(arg)))
+    {
+        instance->Free();
+        delete instance;
+        return nullptr;
+    }
     return instance;
 }
+
 
 void TransformSystem::OnLateUpdate(entt::registry& globalRegistry, const vector<Scene*> activeScenes, f32)
 {

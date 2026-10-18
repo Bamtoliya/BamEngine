@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "LocalizationManager.h"
 #include "ResourceManager.h"
@@ -48,8 +48,44 @@ namespace Editor
     bool TryAssignInspectorResource(Engine::ResourceHandle<T>& destination, const Engine::Handle& handle)
     {
         auto& manager = Engine::ResourceManager::Get();
-        if (!handle.IsValid() || dynamic_cast<T*>(manager.GetResource(handle)) == nullptr) return false;
-        destination = Engine::ResourceHandle<T>(handle);
-        return true;
+        if (!handle.IsValid()) return false;
+
+        // 1. 기본 타입 매칭
+        if (dynamic_cast<T*>(manager.GetResource(handle)) != nullptr)
+        {
+            destination = Engine::ResourceHandle<T>(handle);
+            return true;
+        }
+
+        // 2. Texture -> Sprite 드롭 자동 처리
+        if constexpr (std::is_same_v<T, Engine::Sprite>)
+        {
+            if (auto* texture = dynamic_cast<Engine::Texture*>(manager.GetResource(handle)))
+            {
+                std::filesystem::path texPath(texture->GetPath());
+                std::filesystem::path spritePath = texPath.parent_path() / (texPath.stem().string() + ".bamsprite.json");
+
+                // 이미 .bamsprite.json이 디스크에 있거나 로드되어 있다면 그것을 사용
+                auto spriteHandle = manager.GetResourceHandle<Engine::Sprite>(spritePath.wstring());
+                if (!spriteHandle)
+                {
+                    // 없다면 텍스처 기반으로 생성 후 json 저장
+                    SpriteCreateDesc desc = {};
+                    desc.texture = Engine::ResourceHandle<Engine::Texture>(handle);
+                    desc.Key = spritePath.wstring();
+                    desc.Path = spritePath.wstring();
+                    spriteHandle = manager.LoadResource<Engine::Sprite>(&desc);
+                    if (spriteHandle) manager.SaveToJsonFile(spriteHandle.Get(), spritePath.wstring());
+                }
+
+                if (spriteHandle)
+                {
+                    destination = spriteHandle;
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 }

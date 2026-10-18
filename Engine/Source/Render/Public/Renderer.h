@@ -7,6 +7,8 @@
 #include "RenderTarget.h"
 #include "FrustumCuller.h"
 #include "RenderCommands.h"
+#include "CameraBuffer.h"
+#include "Components/Render/SkyAtmosphereComponent.h"
 
 BEGIN(Engine)
 enum class ERHIType
@@ -26,7 +28,8 @@ struct RendererDesc
 
 struct ViewportCameraInfo
 {
-	class Camera* camera = { nullptr };
+	CameraBuffer cameraBuffer;
+	bool hasCamera = false;
 	class RenderPass* renderPass = { nullptr };
 	class Scene* uiScene = nullptr;
 	entt::entity uiCanvas = entt::null;
@@ -55,8 +58,6 @@ private:
 	EResult BeginFrame();
 	EResult EndFrame();
 	EResult Render(f32 dt);
-	EResult RenderComponents(f32 dt, vector<class RenderComponent*> queue, ERenderSortType sortType, RenderPass* renderPass);
-	EResult RenderUIComponents(f32 dt, vector<class UIRenderComponent*> queue, ERenderSortType sortType, RenderPass* renderPass);
 private: //Entity Render
 	EResult RenderMeshes(f32 dt, vector<StaticDrawCommand>& commands, ERenderSortType sortType, RenderPass* renderPass);
 	EResult RenderSkinnedMeshes(f32 dt, vector<SkinnedDrawCommand>& commands, ERenderSortType sortType, RenderPass* renderPass);
@@ -66,9 +67,6 @@ private: //Entity Render
 
 #pragma region Queue Management
 public:
-	void Submit(class RenderComponent* component, RenderPassID passID);
-	void SubmitAllPass(class RenderComponent* component);
-	void SubmitUI(class UIRenderComponent* uiRenderer, RenderPassID passID);
 	void SubmitCustomCommand(const CustomRenderCommand& command, RenderPassID passID);
 	void ClearRenderQueue(RenderPassID passID);
 	void ClearAllRenderQueues();
@@ -82,10 +80,10 @@ public: //Entity Submit
 
 #pragma region Viewport Camera Management
 public:
-	void RegisterViewportCamera(Camera* camera, RenderPass* renderPass);
+	void RegisterViewportCamera(const CameraBuffer& cameraBuffer, RenderPass* renderPass);
+	void RegisterViewportCamera(RenderPass* renderPass);
 	void RegisterUICanvas(class Scene* scene, entt::entity canvas, RenderPass* renderPass);
 	void UnregisterViewportCamera(RenderPassID passID);
-	Camera* GetViewportCamera(RenderPassID passID) const;
 	vector<ViewportCameraInfo>& GetActiveViewportCameras() { return m_ViewportCameras; }
 #pragma endregion
 
@@ -101,13 +99,6 @@ public:
 
 #pragma region Getter
 public:
-	// IDs belong to one rendered frame; zero means no selectable entity.
-	uint32 RegisterPickingEntity(class Scene* scene, entt::entity entity);
-	class Entity* ResolvePickingEntity(uint32 pickingId) const;
-	void ClearPickingState();
-	bool HasPickingPass(RenderPassID passID) const { return m_CompletedPickingPasses.contains(passID); }
-	uint64 GetPickingFrameSerial() const { return m_PickingFrameSerial; }
-	uint64 GetCompletedPickingFrameSerial() const { return m_CompletedPickingFrameSerial; }
 	class RHI* GetRHI() const { return m_RHI; }
 	RenderDelegate& GetRenderPassDelegate(RenderPassID passID)
 	{
@@ -116,31 +107,11 @@ public:
 	ERHIType GetRHIType() const { return m_RHIType; }
 #pragma endregion
 
-
-
-
-
 #pragma region Variable
 private:
-	struct PickingTarget
-	{
-		class Scene* scene = nullptr;
-		entt::entity entity = entt::null;
-		uint64 persistentId = 0;
-	};
-	void ClearPickingTargets(vector<PickingTarget>& targets);
-	vector<PickingTarget> m_PickingTargets;
-	vector<PickingTarget> m_CompletedPickingTargets;
-	unordered_map<class Scene*, unordered_map<entt::entity, uint32>> m_PickingIds;
-	unordered_set<RenderPassID> m_PickingPasses;
-	unordered_set<RenderPassID> m_CompletedPickingPasses;
-	uint64 m_PickingFrameSerial = 0;
-	uint64 m_CompletedPickingFrameSerial = 0;
 	class RHI* m_RHI = { nullptr };
 	ERHIType m_RHIType = ERHIType::Unknown;
 	map<RenderPassID, RenderDelegate> m_RenderPassDelegates;
-	map<RenderPassID, vector<class RenderComponent*>> m_RenderQueues;
-	map<RenderPassID, vector<class UIRenderComponent*>> m_UIRenderQueues;
 	map<RenderPassID, vector<CustomRenderCommand>> m_CustomRenderQueues;
 private: //ECS Based Render Queue
 	map<RenderPassID, vector<StaticDrawCommand>> m_StaticDrawCommands;

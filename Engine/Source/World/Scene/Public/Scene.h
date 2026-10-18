@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "Base.h"
 #include "Reflection/ReflectionMacro.h"
@@ -61,42 +61,6 @@ public:
 	const wstring& GetName() const { return m_Name; }
 #pragma endregion
 
-//#pragma region Layer Management
-//public:
-//	EResult AddLayer(class Layer* layer);
-//	EResult InsertLayer(uint32 layerIndex, class Layer* layer);
-//	EResult CreateLayer(const wstring& layerName, uint32 layerIndex = -1);
-//
-//	EResult RemoveLayer(uint32 layerIndex);
-//	EResult RemoveLayer(class Layer* layer);
-//	EResult RemoveLayer(const wstring& layerName);
-//
-//	const vector<class Layer*>& GetAllLayers() const { return m_Layers; }
-//
-//	class Layer* FindLayer(uint32 layerIndex) const;
-//	class Layer* FindLayer(const wstring& layerName) const;
-//
-//	EResult ReorderLayer(uint32 oldIndex, uint32 newIndex);
-//	void SetLayerName(uint32 layerIndex, const wstring& name);
-//
-//private:
-//	void UpdateLayerIndices(uint32 startIndex);
-//#pragma endregion
-//
-//#pragma region Object Management
-//public:
-//	EResult AddGameObject(class GameObject* gameObject, uint32 layerIndex = -1);
-//	class GameObject* CloneGameObject(class GameObject* gameObject);
-//	EResult RemoveGameObject(class GameObject* gameObject);
-//	EResult MoveGameObjectLayer(class GameObject* gameObject, uint32 targetLayerIndex);
-//	EResult MoveGameObjectOrder(class GameObject* gameObject, int8 dir);
-//	EResult RegisterDeadGameObject(class GameObject* gameObject);
-//	EResult FlushDeadGameObjects();
-//public:
-//	class GameObject* FindGameObject(const wstring& name);
-//	class GameObject* FindGameObject(uint64 id);
-//#pragma endregion
-
 #pragma region Entity Management
 public:
 	entt::registry& GetRegistry() { return m_LocalRegistry; }
@@ -106,6 +70,7 @@ public:
 	[[nodiscard]] EntityReparentResult ReparentEntity(Entity& child, Entity* parent = nullptr);
 	Entity* FindEntity(entt::entity handle);
 	Entity* FindEntityById(uint64 id);
+	[[nodiscard]] bool MoveSiblingOrder(entt::entity entity, int direction); // -1: 위로, +1: 아래로
 	const Entity* FindEntityById(uint64 id) const;
 	template<typename T, typename... Args>
 	T& AddComponent(Entity& entity, Args&&... args)
@@ -154,6 +119,8 @@ public:
 
 	bool IsPaused() const { return HasFlag(m_Flags, ESceneFlags::Paused); }
 	void SetPaused(bool paused);
+
+	void UpdateHierarchyFlags();
 #pragma endregion
 
 #pragma region System Management
@@ -170,8 +137,7 @@ public:
 	archive::ArchiveResult WriteArchive(archive::IArchive& ar) const;
 	[[nodiscard]] static archive::ArchiveResult CreateFromArchive(const archive::IArchive& ar, Scene*& scene);
 	[[nodiscard]] archive::ArchiveResult WritePrefabArchive(archive::IArchive& ar, const Entity& rootEntity) const;
-	[[nodiscard]] archive::ArchiveResult InstantiatePrefabArchive(
-		const archive::IArchive& ar, Entity*& outRootEntity, Entity* parent = nullptr);
+	[[nodiscard]] archive::ArchiveResult InstantiatePrefabArchive(const archive::IArchive& ar, Entity*& outRootEntity, Entity* parent = nullptr);
 #pragma endregion
 
 #pragma region Variable
@@ -186,13 +152,6 @@ protected:
 
 	PROPERTY()
 	wstring m_Name = { L"Scene" };
-
-	//PROPERTY()
-	//vector<class Layer*> m_Layers;
-
-	//unordered_map<uint64, class GameObject*> m_GameObjectMap;
-
-	//vector<class GameObject*> m_DeadGameObjects;
 
 	class EventSystem* m_EventSystem = { nullptr };
 	class UICanvas* m_RootCanvas = { nullptr };

@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "ResourceManager.h"
 #include "Resources.h"
 #include <type_traits>
@@ -218,6 +218,14 @@ void ResourceManager::RegisterExplicitLoader()
 			return this->LoadResource<Model>(&desc).GetRawHandle();
 		};
 
+	auto audioLoader = [this](wstring key, wstring path) -> Handle
+		{
+			AudioClipCreateDesc desc;
+			desc.Key = key;
+			desc.Path = key;
+			return this->LoadResource<AudioClip>(&desc).GetRawHandle();
+		};
+
 	m_LoaderRegistry[L".png"] = textureLoader;
 	m_LoaderRegistry[L".jpg"] = textureLoader;
 	m_LoaderRegistry[L".bmp"] = textureLoader;
@@ -242,6 +250,10 @@ void ResourceManager::RegisterExplicitLoader()
 	m_LoaderRegistry[L".bamanim"] = animationLoader;
 
 	m_LoaderRegistry[L".bammodel"] = modelLoader;
+
+	m_LoaderRegistry[L".wav"] = audioLoader;
+	m_LoaderRegistry[L".mp3"] = audioLoader;
+	m_LoaderRegistry[L".ogg"] = audioLoader;
 }
 EResult ResourceManager::DestroyResource(const Handle& handle)
 {

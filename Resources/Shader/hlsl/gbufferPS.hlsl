@@ -1,3 +1,5 @@
+#include "shading_flags.hlsli"
+
 struct PS_INPUT
 {
 	float4 Position : SV_POSITION;
@@ -25,9 +27,10 @@ PS_OUTPUT main(PS_INPUT input)
 {
 	PS_OUTPUT output;
 	float4 diffuse = diffuseMap.Sample(diffuseSampler, input.TexCoord) * input.Color;
+	uint defaultMeshFlags = FLAG_RECEIVE_SHADOWS | FLAG_RECEIVE_DECALS | FLAG_APPLY_SSAO;
 
 	output.Diffuse = diffuse;
-	output.Normal = float4(input.Normal * 0.5f + 0.5f, 0.0f);
+	output.Normal = float4(input.Normal * 0.5f + 0.5f, PackShadingData(SHADING_MODEL_DEFAULT_LIT, defaultMeshFlags));
 	output.PBR = float4(0.5f, 0.0f, 0.5f, 1.0f);
 	output.Emission = float4(0.0f, 0.0f, 0.0f, 0.0f);
 	output.Position = float4(input.WorldPos, input.PickingId);

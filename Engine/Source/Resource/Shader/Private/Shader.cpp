@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "Shader.h"
 #include "Renderer.h"
@@ -58,7 +58,10 @@ RHIShaderDesc Shader::BuildRHIShaderDesc() const
 	RHIShaderDesc desc;
 	desc.shaderType = m_ShaderType;
 	desc.entryPoint = m_EntryPoint;
-	desc.filePath = m_SpirvPath.empty() ? m_Path : m_SpirvPath;
+	const bool useDxil = Renderer::IsCreated() && Renderer::Get().GetRHIType() == ERHIType::DirectX12;
+	desc.filePath = useDxil
+		? (m_Path.empty() ? m_SpirvPath : m_Path)
+		: (m_SpirvPath.empty() ? m_Path : m_SpirvPath);
 
 	desc.numSamplers = m_NumSamplers;
 	desc.numStorageTextures = m_NumStorageTextures;

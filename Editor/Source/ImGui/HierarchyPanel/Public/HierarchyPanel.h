@@ -16,11 +16,6 @@ public:
 	virtual void Draw() override;
 	virtual void Free() override { m_EntityTree.ResetDrag(); __super::Free(); }
 private:
-	//void DrawLayerItem(class Scene* scene, class Layer* layer);
-	//void DrawGameObjectNode(class GameObject* gameObject);
-
-	//void DrawAddGameObjectButton(class Scene* currentScene);
-private:
 	void DrawSceneTitle(class Scene* scene);
 private:
 	template<typename T>
@@ -32,15 +27,8 @@ private:
 
 private:
 	void DrawEntityHierarchy(class Scene* scene);
-
 	void DrawEntityName(const wstring& name, bool isSelected);
 	void DrawEntityRenameBox(class Entity* entity, bool isSelected);
-
-private:
-	//void DrawLayerContextMenu(class Layer* layer);
-	void DrawGameObjectContextMenu(class GameObject* gameObject);
-	void DrawGameObjectName(const wstring& name);
-
 private:
 	void DrawEntityContextMenu(class Entity* entity);
 
@@ -53,13 +41,11 @@ private:
 	std::string m_HierarchyMessage;
 	void* m_RenamingId = { nullptr };
 	char m_RenameBuffer[256] = "";
+	char m_SearchFilter[128] = "";
 private:
 	bool m_IsBoxSelecting = false;      // 현재 박스 선택 중인가?
 	ImVec2 m_BoxStartPos = { 0, 0 };    // 드래그 시작 위치 (스크린 좌표)
 	ImVec2 m_BoxEndPos = { 0, 0 };      // 드래그 현재 위치 (스크린 좌표)
-
-	// 박스 선택 중일 때 임시로 선택될 객체들을 담을 리스트 (매 프레임 갱신)
-	std::vector<class GameObject*> m_BoxSelectionCandidates;
 #pragma endregion
 };
 END

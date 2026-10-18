@@ -28,5 +28,15 @@ namespace Engine
 
         PROPERTY(EDITABLE, DISPLAY_NAME("PROP_FLAG"))
         EEntityFlag flags = EEntityFlag::Default;
+
+        PROPERTY(READONLY, TRANSIENT, DISPLAY_NAME("PROP_EFFECTIVE_FLAG"))
+        EEntityFlag effectiveFlags = EEntityFlag::Default;
+        bool IsActive() const { return HasFlag(flags, EEntityFlag::Active); }
+        bool IsVisible() const { return HasFlag(flags, EEntityFlag::Visible); }
+        bool IsActiveInHierarchy() const { return HasFlag(effectiveFlags, EEntityFlag::Active); }
+        bool IsVisibleInHierarchy() const { return HasFlag(effectiveFlags, EEntityFlag::Visible); }
+        void SetActive(bool active) { if (active) flags |= EEntityFlag::Active; else flags &= ~EEntityFlag::Active; }
+        void SetVisible(bool visible) { if (visible) flags |= EEntityFlag::Visible; else flags &= ~EEntityFlag::Visible; }
+        void ToggleVisible() { flags ^= EEntityFlag::Visible; }
     };
 }

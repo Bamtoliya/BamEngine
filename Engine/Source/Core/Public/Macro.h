@@ -17,8 +17,9 @@ public:													\
 	static ClassName* Create(void* arg = nullptr);		\
 	static ClassName& Get();							\
 	static int32_t Destroy();							\
+	static bool IsCreated() noexcept { return m_instance != nullptr; } \
 private:												\
-	static ClassName* m_instance;		
+	static ClassName* m_instance;
 
 #define IMPLEMENT_SINGLETON(ClassName)					\
 ClassName* ClassName::m_instance = nullptr;				\

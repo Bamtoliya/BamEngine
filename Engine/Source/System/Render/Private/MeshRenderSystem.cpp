@@ -6,8 +6,7 @@
 #include "MaterialInterface.h"
 #include "Renderer.h"
 #include "RenderPass.h"
-
-IMPLEMENT_SINGLETON(MeshRenderSystem)
+#include "PickingManager.h"
 
 EResult MeshRenderSystem::Initialize(void* arg)
 {
@@ -18,84 +17,66 @@ void MeshRenderSystem::Free()
 {
 }
 
+MeshRenderSystem* MeshRenderSystem::Create(void* arg)
+{
+	auto* instance = new MeshRenderSystem();
+	if (IsFailure(instance->Initialize(arg)))
+	{
+		instance->Free();
+		delete instance;
+		return nullptr;
+	}
+	return instance;
+}
+
 void MeshRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*> activeScenes, f32 dt)
 {
-	TODO("MeshRenderSystem::OnSubmit 구현 필요");
-	(void)registry;
-	(void)activeScenes;
-	(void)dt;
-
     auto& renderer = Renderer::Get();
-
-    // 현재 뷰포트에 등록된 Geometry 패스만 수집합니다.
-    vector<RenderPass*> geometryPasses;
+    vector<RenderPass*> targetPasses;
 
     for (const auto& viewport : renderer.GetActiveViewportCameras())
     {
         RenderPass* pass = viewport.renderPass;
+        if (!pass || !viewport.hasCamera) continue;
 
-        if (!pass || !viewport.camera)
-            continue;
-
-        if (pass->GetPassType() != ERenderPassType::Geometry)
-            continue;
-
-        // 같은 패스가 중복 등록되어도 명령은 한 번만 제출합니다.
-        if (std::find(
-            geometryPasses.begin(),
-            geometryPasses.end(),
-            pass) == geometryPasses.end())
+        const ERenderPassType passType = pass->GetPassType();
+        // Geometry(G-Buffer)와 Forward(스카이박스 등) 패스만 수집합니다.
+        if (passType == ERenderPassType::Geometry || passType == ERenderPassType::Forward)
         {
-            geometryPasses.push_back(pass);
+            if (std::find(targetPasses.begin(), targetPasses.end(), pass) == targetPasses.end())
+                targetPasses.push_back(pass);
         }
     }
 
-    if (geometryPasses.empty())
+    if (targetPasses.empty())
         return;
 
     for (Scene* scene : activeScenes)
     {
-        if (!scene)
-            continue;
+        if (!scene) continue;
 
-        auto view = scene->GetRegistry().view<
-            StaticMeshRendererComponent,
-            WorldTransformComponent,
-            FlagComponent>();
-
-        for (auto [entity, meshRenderer, worldTransform, flag]
-            : view.each())
+        auto view = scene->GetRegistry().view<StaticMeshRendererComponent, WorldTransformComponent, FlagComponent>();
+        for (auto [entity, meshRenderer, worldTransform, flag] : view.each())
         {
-            (void)entity;
-
-            if (!HasFlag(flag.flags, EEntityFlag::Active) ||
-                !HasFlag(flag.flags, EEntityFlag::Visible) ||
-                HasFlag(flag.flags, EEntityFlag::Dead))
-            {
-                continue;
-            }
+            if (!flag.IsActiveInHierarchy() || !flag.IsVisibleInHierarchy() || HasFlag(flag.effectiveFlags, EEntityFlag::Dead)) continue;
 
             Mesh* mesh = meshRenderer.meshHandle.Get();
-            MaterialInterface* material =
-                meshRenderer.materialHandle.Get();
-
-            // 비동기 로딩 중이거나 리소스가 없으면 제출하지 않습니다.
-            if (!mesh || !material)
-                continue;
+            MaterialInterface* material = meshRenderer.materialHandle.Get();
+            if (!mesh || !material) continue;
 
             StaticDrawCommand command;
             command.mesh = mesh;
             command.material = material;
             command.worldMatrix = worldTransform.worldMatrix;
-            command.pickingId = renderer.RegisterPickingEntity(scene, entity);
+            command.pickingId = PickingManager::Get().RegisterPickingEntity(scene, entity);
 
-            for (RenderPass* pass : geometryPasses)
+            for (RenderPass* pass : targetPasses)
             {
-                if (!pass->IsAcceptsBlendMode(
-                    material->GetBlendMode()))
-                {
+                // 패스의 허용 BlendMode 검사:
+                // GeometryPass -> Opaque/Masked (GBuffer)
+                // ForwardPass  -> Forward (SkyMaterial)
+                if (!pass->IsAcceptsBlendMode(material->GetBlendMode()))
                     continue;
-                }
 
                 renderer.SubmitStatic(command, pass->GetID());
             }

@@ -8,20 +8,20 @@ IMPLEMENT_SINGLETON(TimeManager)
 #pragma region Constructor&Destructor
 EResult TimeManager::Initialize(void* arg)
 {
-	m_LastTime = std::chrono::steady_clock::now();
-	m_DeltaTime = 0.0f;
-	m_TotalTime = 0.0;
+    m_LastTime = std::chrono::steady_clock::now();
+    m_DeltaTime = 0.0f;
+    m_TotalTime = 0.0;
 
-	m_TargetFPS = 60;
-	m_FixedStep = 1.0f / static_cast<f32>(m_TargetFPS);
+    m_TargetFPS = 0;
+    m_FixedStep = 1.0f / 60.0f;
 
-	m_AccTime = 0.0;
+    m_AccTime = 0.0;
 
-	m_FPS = 0;
-	m_FrameCount = 0;
-	m_FPSTimer = 0.0;
+    m_FPS = 0;
+    m_FrameCount = 0;
+    m_FPSTimer = 0.0;
 
-	return EResult::Success;
+    return EResult::Success;
 }
 
 void TimeManager::Free()
@@ -34,24 +34,13 @@ void TimeManager::Update()
 {
     auto currentTime = std::chrono::steady_clock::now();
     f32 elapsedTime = std::chrono::duration<f32>(currentTime - m_LastTime).count();
-
     if (m_TargetFPS > 0)
     {
-        f32 targetFrameTime = 1.0f / static_cast<f32>(m_TargetFPS);
-
-        while (elapsedTime < targetFrameTime)
+        const f32 targetFrameTime = 1.0f / static_cast<f32>(m_TargetFPS);
+        if (elapsedTime < targetFrameTime)
         {
-            f32 sleepTime = targetFrameTime - elapsedTime;
-
-            if (sleepTime > 0.002f)
-            {
-                std::this_thread::sleep_for(std::chrono::milliseconds(1));
-            }
-            else
-            {
-                std::this_thread::yield();
-            }
-
+            const auto sleepDuration = std::chrono::duration<f32>(targetFrameTime - elapsedTime);
+            std::this_thread::sleep_for(sleepDuration);
             currentTime = std::chrono::steady_clock::now();
             elapsedTime = std::chrono::duration<f32>(currentTime - m_LastTime).count();
         }

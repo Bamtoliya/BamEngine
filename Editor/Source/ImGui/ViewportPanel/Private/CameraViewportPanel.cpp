@@ -1,7 +1,7 @@
 ﻿#pragma once
 
 #include "CameraViewportPanel.h"
-#include "CameraManager.h"
+#include "EditorCameraController.h"
 
 #pragma region Constructor&Destructor
 void CameraViewportPanel::Initialize(void* arg)
@@ -10,52 +10,36 @@ void CameraViewportPanel::Initialize(void* arg)
 	__super::Initialize(arg);
 	CAST_DESC
 
-	if (desc->IsSceneCamera)
-	{
-		SetCamera(Engine::CameraManager::Get().GetMainCamera());
-	}
-	else
-	{
-		CameraDesc cameraDesc;
-		cameraDesc.IsPerspective = desc->IsPerspective;
-		cameraDesc.Aspect = static_cast<f32>(desc->RenderTargetWidth) / static_cast<f32>(desc->RenderTargetHeight);
-		cameraDesc.OrthoSize = desc->RenderTargetHeight;
-		m_OwnedCamera = EditorCamera::Create(&cameraDesc);
-		if (m_OwnedCamera)
-		{
-			m_OwnedCamera->SetName(m_Name + L"_Camera");
-			SetCamera(m_OwnedCamera->GetCamera());
-		}
-	}
+	Engine::CameraComponent cameraSettings{};
+	cameraSettings.CameraType = desc->IsPerspective ? Engine::ECameraType::Perspective : Engine::ECameraType::Orthographic;
+	cameraSettings.AspectRatio = static_cast<f32>(desc->RenderTargetWidth) / static_cast<f32>(desc->RenderTargetHeight);
+	cameraSettings.OrthographicSize = static_cast<f32>(desc->RenderTargetHeight);
+
+	m_CameraController = EditorCameraController::Create(m_Name + L"_Camera", cameraSettings);
+	m_OwnCamera = (m_CameraController != nullptr);
 }
 
 void CameraViewportPanel::Free()
 {
-	Safe_Release(m_OwnedCamera);
-	m_Camera = nullptr;
+	Safe_Release(m_CameraController);
+	m_CameraController = nullptr;
 	BaseViewportPanel::Free();
 }
 #pragma endregion
-
 
 #pragma region Loop
 void CameraViewportPanel::Update(f32 dt)
 {
 	CalculateRenderResolution(m_PanelWidth, m_PanelHeight);
 
-	if (m_OwnedCamera && m_Focused)
-		m_OwnedCamera->HandleInput(dt);
+	if (m_CameraController && m_Focused)
+		m_CameraController->HandleInput(dt);
 
-	if (m_OwnedCamera)
+	if (m_CameraController && m_RenderHeight > 0)
 	{
-		m_OwnedCamera->FixedUpdate(dt);
-		m_OwnedCamera->Update(dt);
-		m_OwnedCamera->LateUpdate(dt);
+		m_CameraController->SetAspectRatio(static_cast<f32>(m_RenderWidth) / static_cast<f32>(m_RenderHeight));
+		m_CameraController->RefreshMatrices();
 	}
-
-	if (m_Camera && m_RenderHeight > 0)
-		m_Camera->SetAspect(
-			static_cast<f32>(m_RenderWidth) / static_cast<f32>(m_RenderHeight));
 
 	if (m_ChannelView != EViewportChannelView::RGBA)
 	{
@@ -63,11 +47,11 @@ void CameraViewportPanel::Update(f32 dt)
 		m_ChannelFilter.SubmitChannelPreviewPass(m_SelectedRTName, m_DisplayRTName);
 	}
 }
+
 void CameraViewportPanel::Draw()
 {
 	BaseViewportPanel::Draw();
 }
-
 #pragma endregion
 
 #pragma region Custom Draws
@@ -75,6 +59,7 @@ void CameraViewportPanel::DrawCustomViewport()
 {
 	DrawRenderTargetImage(m_DisplayRTName);
 }
+
 void CameraViewportPanel::DrawCustomOptions()
 {
 	DrawResolutionMenu();
@@ -84,51 +69,62 @@ void CameraViewportPanel::DrawCustomOptions()
 }
 #pragma endregion
 
+#pragma region Camera Management
+bool CameraViewportPanel::IsPerspective() const
+{
+	return m_CameraController != nullptr && m_CameraController->IsPerspective();
+}
+
+bool CameraViewportPanel::IsOrthographic() const
+{
+	return m_CameraController != nullptr && m_CameraController->IsOrthographic();
+}
+
+void CameraViewportPanel::SetPerspective(bool perspective)
+{
+	if (m_CameraController != nullptr)
+		m_CameraController->SetPerspective(perspective);
+}
+
+void CameraViewportPanel::SetOrthographic(bool orthographic)
+{
+	if (m_CameraController != nullptr)
+		m_CameraController->SetOrthographic(orthographic);
+}
+#pragma endregion
+
 #pragma region Dimension 
 void CameraViewportPanel::DrawDimensionToggleButton()
 {
-	// 1. 버튼 크기 및 그룹 전체 너비 계산
-	ImVec2 buttonSize(30.0f, 0.0f); // 너비 30px 고정 (텍스트에 맞춰 조절 가능)
+	ImVec2 buttonSize(30.0f, 0.0f);
 	float groupWidth = buttonSize.x * 2.0f;
-	float rightPadding = 10.0f; // 우측 여백
+	float rightPadding = 10.0f;
 
-	// 2. 커서를 우측 끝으로 이동 (윈도우 너비 - 그룹 너비 - 여백)
 	ImGui::SameLine(ImGui::GetWindowWidth() - groupWidth - rightPadding);
 
-	// 3. 스타일 적용: 간격 제거 및 각진 모서리 (토글 느낌)
 	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 0.0f));
-	ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 0.0f); // 네모난 버튼
+	ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 0.0f);
 
-	// 4. [2D 버튼] 그리기
-	// 활성화 상태(2D)면 'Active' 색상, 아니면 기본 배경보다 어두운 색상 사용
 	if (IsOrthographic())
 		ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyle().Colors[ImGuiCol_ButtonActive]);
 	else
 		ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyle().Colors[ImGuiCol_FrameBg]);
 
 	if (ImGui::Button("2D", buttonSize))
-	{
 		SetOrthographic();
-	}
-	ImGui::PopStyleColor(); // 색상 복구
+	ImGui::PopStyleColor();
 
-	ImGui::SameLine(); // 옆에 바로 붙이기
+	ImGui::SameLine();
 
-	// 5. [3D 버튼] 그리기
-	// 비활성화 상태(!2D)면 'Active' 색상
 	if (IsPerspective())
 		ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyle().Colors[ImGuiCol_ButtonActive]);
 	else
 		ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyle().Colors[ImGuiCol_FrameBg]);
 
 	if (ImGui::Button("3D", buttonSize))
-	{
 		SetPerspective();
-	}
-	ImGui::PopStyleColor(); // 색상 복구
+	ImGui::PopStyleColor();
 
-	// 6. 스타일 복구
-	ImGui::PopStyleVar(2); // ItemSpacing, FrameRounding
+	ImGui::PopStyleVar(2);
 }
 #pragma endregion
-

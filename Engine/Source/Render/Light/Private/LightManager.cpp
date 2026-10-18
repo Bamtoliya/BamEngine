@@ -4,6 +4,9 @@
 #include "Light.h"
 #include "RHIBuffer.h"
 #include "RHI.h"
+#include "SceneManager.h"
+#include "Scene.h"
+#include "Components/Render/LightComponent.h"
 
 IMPLEMENT_SINGLETON(LightManager)
 #pragma region Constructor&Destructor
@@ -27,11 +30,6 @@ EResult LightManager::Initialize(void* arg)
 void LightManager::Free()
 {
 	__super::Free();
-	for (LightSource* lightSource : m_LightSources)
-	{
-		Safe_Release(lightSource);
-	}
-	m_LightSources.clear();
 	Safe_Release(m_LightBuffer);
 	Safe_Release(m_RHI);
 }
@@ -40,40 +38,6 @@ void LightManager::Free()
 #pragma region Loop
 void LightManager::Update(f32 dt)
 {
-	ClearLightSources();
-}
-#pragma endregion
-
-#pragma region Light Management
-EResult LightManager::AddLightSource(LightSource* lightSource)
-{
-	if (!lightSource) return EResult::InvalidArgument;
-	Safe_AddRef(lightSource);
-	m_LightSources.push_back(lightSource);
-	return EResult::Success;
-}
-
-EResult LightManager::RemoveLightSource(LightSource* lightSource)
-{
-	if (!lightSource) return EResult::InvalidArgument;
-	auto it = std::find(m_LightSources.begin(), m_LightSources.end(), lightSource);
-	if (it != m_LightSources.end())
-	{
-		Safe_Release(*it);
-		m_LightSources.erase(it);
-		return EResult::Success;
-	}
-	return EResult::Fail;
-}
-
-EResult LightManager::ClearLightSources()
-{
-	for (LightSource* lightSource : m_LightSources)
-	{
-		Safe_Release(lightSource);
-	}
-	m_LightSources.clear();
-	return EResult::Success;
 }
 #pragma endregion
 
@@ -87,6 +51,7 @@ EResult LightManager::Bind(uint32 slot)
 
 	return m_RHI->BindStorageBuffer(m_LightBuffer, slot);
 }
+
 EResult LightManager::UpdateLightBuffer()
 {
 	if (IsFailure(EnsureBuffer())) return EResult::Fail;
@@ -99,14 +64,38 @@ EResult LightManager::UpdateLightBuffer()
 	auto* header = reinterpret_cast<LightBufferHeader*>(data.data());
 	auto* gpuLights = reinterpret_cast<GPULight*>(data.data() + headerSize);
 
-	// 0개여도 NumLights = 0으로 정상 빌드 → 셰이더 루프 0회
-	const uint32 lightCount = static_cast<uint32>(
-		glm::min(static_cast<int>(m_LightSources.size()), MAX_LIGHTS));
-	header->NumLights = lightCount;
+	uint32 currentLightIndex = 0;
+	m_ShadowCameraBuffers.clear();
+	m_ShadowData.clear();
 
-	for (uint32 i = 0; i < lightCount; ++i)
-		gpuLights[i] = m_LightSources[i]->BuildGPULightDesc();
+	// ECS Scene의 LightComponent 수집
+	if (SceneManager::IsCreated())
+	{
+		for (Scene* scene : SceneManager::Get().GetActiveScenes())
+		{
+			if (!scene) continue;
+			auto view = scene->GetRegistry().view<LightComponent>();
+			for (auto entity : view)
+			{
+				if (currentLightIndex >= MAX_LIGHTS) break;
+				const auto& light = view.get<LightComponent>(entity);
+				if (auto optGpuLight = light.GetGPULightDesc())
+				{
+					gpuLights[currentLightIndex++] = optGpuLight.value();
+				}
+				if (auto optShadowCam = light.GetShadowCameraBuffer())
+				{
+					m_ShadowCameraBuffers.push_back(optShadowCam.value());
+				}
+				if (auto optShadowData = light.GetShadowData())
+				{
+					m_ShadowData.push_back(optShadowData.value());
+				}
+			}
+		}
+	}
 
+	header->NumLights = currentLightIndex;
 	m_LightBuffer->SetData(data.data(), totalSize);
 	return EResult::Success;
 }
@@ -130,39 +119,18 @@ EResult LightManager::EnsureBuffer()
 
 	return EResult::Success;
 }
-CameraBuffer LightManager::GetShadowCameraBuffer(const LightSource* lightSource) const
-{
-	return lightSource ? lightSource->BuildShadowCameraBuffer() : CameraBuffer();
-}
 CameraBuffer LightManager::GetShadowCameraBuffer(uint32 shadowLightIndex) const
 {
-	auto shadowLights = GetShadowCastingLights();
-	if (shadowLightIndex >= shadowLights.size())
-		return CameraBuffer{}; // 빈 버퍼
-
-	return GetShadowCameraBuffer(shadowLights[shadowLightIndex]);
-}
-vector<LightSource*> LightManager::GetShadowCastingLights() const
-{
-	vector<LightSource*> shadowCasters;
-	for (auto* light : m_LightSources)
+	if (shadowLightIndex < m_ShadowCameraBuffers.size())
 	{
-		if (HasFlag(light->GetFlags(), ELightFlags::CastShadows))
-			shadowCasters.push_back(light);
+		return m_ShadowCameraBuffers[shadowLightIndex];
 	}
-	return shadowCasters;
-}
-LightShadowData LightManager::GetShadowData(const LightSource* lightSource) const
-{
-	return lightSource ? lightSource->BuildShadowData() : LightShadowData();
 }
 LightShadowData LightManager::GetShadowData(uint32 shadowLightIndex) const
 {
-	auto shadowLights = GetShadowCastingLights();
-	if (shadowLightIndex >= shadowLights.size())
-		return LightShadowData{}; // 빈 데이터
-
-	return GetShadowData(shadowLights[shadowLightIndex]);
+	if (shadowLightIndex < m_ShadowData.size())
+	{
+		return m_ShadowData[shadowLightIndex];
+	}
 }
-
 #pragma endregion

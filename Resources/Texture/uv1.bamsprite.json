@@ -18,8 +18,9 @@
    },
    "m_ResourceType": 2,
    "m_Texture": {
-      "AssetKey": "Resources/Texture/uv1.bamtex",
-      "AssetPath": "Resources/Texture/uv1.bamtex"
+      "Null": false,
+      "AssetKey": "Resources/Texture/uv1.png",
+      "AssetPath": "Resources/Texture/uv1.png"
    },
    "m_Version": 0
 }

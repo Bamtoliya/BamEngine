@@ -9,8 +9,6 @@
 
 #include <reflection/Annotations.h>
 
-#define REFLECT_STRUCT() REFLECT_BODY()
-
 #define REFLECT_CLASS() \
     REFLECT_BODY() \
     DECLARE_TYPE_ID()

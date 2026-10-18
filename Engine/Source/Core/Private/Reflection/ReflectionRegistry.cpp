@@ -1,4 +1,4 @@
-#include "ReflectionRegistry.h"
+﻿#include "ReflectionRegistry.h"
 #include "BamEngine.gen.h"
 #include "CoreComponents.h"
 #include "Resources.h"
@@ -207,6 +207,14 @@ namespace
         entry.Edit = &ComponentObject<T, entt::registry>;
         entry.View = &ComponentObject<T, const entt::registry>;
         entry.Read = &ReadComponentValue<T>;
+        if constexpr (std::is_default_constructible_v<T>)
+        {
+            entry.Default = []() -> reflection::ObjectView
+                {
+                    static const T s_Default{};
+                    return reflection::ObjectView::From(s_Default);
+                };
+        }
         entry.Copy = [](const entt::registry& source, entt::entity from, entt::registry& target, entt::entity to)
         {
             if constexpr (std::is_copy_constructible_v<T> && std::is_copy_assignable_v<T>)
@@ -331,6 +339,7 @@ bool ReflectionRegistry::RegisterComponentOperations()
     append.template operator()<Collider2DComponent>(
         "Collider 2D", "Physics 2D", &AddSpatialComponent<Collider2DComponent>);
     append.template operator()<Joint2DComponent>("Joint 2D", "Physics 2D", &AddSpatialComponent<Joint2DComponent>);
+    append.template operator()<SkyAtmosphereComponent>("Sky Atmosphere", "Rendering", &AddSpatialComponent<SkyAtmosphereComponent>);
 
     const bool generated = reflection_generated::ForEach_BamEngine_Type([&]<typename T>()
     {
@@ -381,8 +390,6 @@ void ReflectionRegistry::Free()
     m_Registry = reflection::Registry{};
 }
 
-bool ReflectionRegistry::IsCreated() noexcept { return m_instance != nullptr; }
-
 const ComponentReflectionEntry* ReflectionRegistry::FindComponent(std::type_index type) const
 {
     for (const auto& entry : m_Components)
@@ -421,6 +428,16 @@ reflection::ObjectView ReflectionRegistry::GetComponentObject(const entt::regist
     return entry != nullptr ? entry->View(world, entity) : reflection::ObjectView{};
 }
 
+reflection::ObjectView ReflectionRegistry::GetDefaultComponentObject(entt::id_type storageId) const
+{
+    const auto* entry = FindComponent(storageId);
+    return (entry != nullptr && entry->Default != nullptr) ? entry->Default() : reflection::ObjectView{};
+}
+reflection::ObjectView ReflectionRegistry::GetDefaultComponentObject(const reflection::TypeInfo& type) const
+{
+    const auto* entry = FindComponent(type.GetCppType());
+    return (entry != nullptr && entry->Default != nullptr) ? entry->Default() : reflection::ObjectView{};
+}
 ComponentVisitResult ReflectionRegistry::ForEachComponent(entt::registry& world,
     entt::entity entity, const ComponentVisitor& visitor) const
 {

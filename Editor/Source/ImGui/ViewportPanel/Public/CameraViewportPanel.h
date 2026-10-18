@@ -1,7 +1,6 @@
 ﻿#pragma once
 
 #include "BaseViewportPanel.h"
-#include "EditorCamera.h"
 
 enum class EViewportCameraType : uint8
 {
@@ -16,11 +15,8 @@ struct CameraViewportPanelDesc : ViewportPanelDesc
 	bool IsPerspective = false; // 카메라 초기 투영 모드 (기본값: Orthographic)
 };
 
-BEGIN(Engine)
-class Camera;
-END
-
 BEGIN(Editor)
+class EditorCameraController;
 class CameraViewportPanel : public BaseViewportPanel
 {
 protected:
@@ -50,12 +46,10 @@ protected:
 
 #pragma region Camera Management
 public:
-	void SetCamera(Engine::Camera* camera) { m_Camera = camera; }
-public:
-	bool IsPerspective() const { return m_Camera->GetIsPerspective(); }
-	bool IsOrthographic() const { return m_Camera->GetIsOrthographic(); }
-	void SetPerspective(bool perspective = true) { m_Camera->SetPerspective(perspective); }
-	void SetOrthographic(bool orthographic = true) { m_Camera->SetOrthographic(orthographic); }
+	bool IsPerspective() const;
+	bool IsOrthographic() const;
+	void SetPerspective(bool perspective = true);
+	void SetOrthographic(bool orthographic = true);
 #pragma endregion
 
 #pragma region Dimension
@@ -65,8 +59,7 @@ protected:
 
 #pragma region Member Variable
 protected:
-	EditorCamera* m_OwnedCamera = { nullptr }; // 씬 카메라로 사용할 경우 할당
-	Engine::Camera* m_Camera = { nullptr };
+	EditorCameraController* m_CameraController = { nullptr };
 	bool m_OwnCamera = { false }; // true면 패널이 카메라를 소유, false면 외부에서 할당받은 카메라
 #pragma endregion
 };

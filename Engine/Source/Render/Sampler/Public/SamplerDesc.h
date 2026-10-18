@@ -28,7 +28,7 @@ namespace Engine
     STRUCT()
     struct SamplerDesc
     {
-        REFLECT_STRUCT()
+        REFLECT_BODY()
     
         PROPERTY(EDITABLE)
         ESamplerFilter MinFilter = ESamplerFilter::Linear;

@@ -7,7 +7,7 @@
 STRUCT()
 struct ENGINE_API Bone
 {
-	REFLECT_STRUCT()
+	REFLECT_BODY()
 
 	PROPERTY()
 	Engine::wstring Name;

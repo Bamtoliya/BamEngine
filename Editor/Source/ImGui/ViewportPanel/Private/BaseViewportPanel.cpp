@@ -2,7 +2,6 @@
 
 #include "BaseViewportPanel.h"
 #include "RenderTargetManager.h"
-#include "CameraManager.h"
 #include "SelectionManager.h"
 #include "InputManager.h"
 #include "ImViewGuizmo.h"

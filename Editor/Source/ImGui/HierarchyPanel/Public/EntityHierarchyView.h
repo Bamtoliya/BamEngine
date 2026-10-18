@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <entt/entity/entity.hpp>
 #include <span>
@@ -7,6 +7,7 @@
 #include <vector>
 #include <optional>
 #include <cstdint>
+#include <string_view>
 
 namespace Engine { class Scene; }
 
@@ -30,6 +31,8 @@ namespace Editor
     {
         entt::entity Clicked = entt::null;
         entt::entity Delete = entt::null;
+        entt::entity MoveUp = entt::null;
+        entt::entity MoveDown = entt::null;
         bool Toggle = false;
         bool RejectedDrop = false;
         std::optional<EntityHierarchyMove> Move;
@@ -45,8 +48,7 @@ namespace Editor
         ~EntityHierarchyView();
         EntityHierarchyView(const EntityHierarchyView&) = delete;
         EntityHierarchyView& operator=(const EntityHierarchyView&) = delete;
-        EntityHierarchyAction Draw(Engine::Scene& scene, std::span<const entt::entity> selected,
-            entt::entity reveal = entt::null, bool locked = false);
+        EntityHierarchyAction Draw(Engine::Scene& scene, std::span<const entt::entity> selected, entt::entity reveal = entt::null, bool locked = false, std::string_view filter = {});
         void ReleaseFinishedDrag();
         void ResetDrag();
     private:

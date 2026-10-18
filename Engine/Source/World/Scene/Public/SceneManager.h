@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "Scene.h"
 
@@ -19,16 +19,8 @@ protected:
 	virtual ~SceneManager() {}
 	EResult Initialize(void* arg = nullptr);
 public:
-	static bool IsCreated() noexcept { return m_instance != nullptr; }
 	virtual void Free() override;
 #pragma endregion
-
-//#pragma region Loop
-//public:
-//	void FixedUpdate(f32 dt);
-//	void Update(f32 dt);
-//	void LateUpdate(f32 dt);
-//#pragma endregion
 
 #pragma region Scene Management
 public:

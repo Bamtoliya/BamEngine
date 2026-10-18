@@ -1,4 +1,4 @@
-#include "UILayout.h"
+﻿#include "UILayout.h"
 #include "CoreComponents.h"
 #include <cmath>
 #include <unordered_set>
@@ -18,8 +18,7 @@ namespace
     bool Visible(const entt::registry& world, entt::entity entity)
     {
         const auto* flag = world.try_get<Engine::FlagComponent>(entity);
-        return flag && HasFlag(flag->flags, Engine::EEntityFlag::Active) &&
-            HasFlag(flag->flags, Engine::EEntityFlag::Visible) && !HasFlag(flag->flags, Engine::EEntityFlag::Dead);
+        return flag && flag->IsActiveInHierarchy() && flag->IsVisibleInHierarchy() && !HasFlag(flag->effectiveFlags, Engine::EEntityFlag::Dead);
     }
 }
 

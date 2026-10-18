@@ -10,7 +10,6 @@
 #include "ResourceManager.h"
 #include "UILayout.h"
 #include <stdexcept>
-
 Entity& EntityFactory::CreateCanvasEntity(Scene* scene, const wstring& name)
 {
 	if (!scene) throw std::invalid_argument("Canvas creation requires a scene.");
@@ -62,41 +61,20 @@ Entity& EntityFactory::CreateEmptyEntity(Scene* scene, const wstring& name)
 {
 	SceneEditScope edit(Application::Get().GetEditHistory(), *scene, "UI_HISTORY_CREATE");
 	Entity& entity = scene->CreateEntity();
+	scene->AddComponent<HierarchyComponent>(entity);
 	scene->AddComponent<NameComponent>(entity, name);
-
-
 	scene->AddComponent<FlagComponent>(entity, EEntityFlag::Default);
-
 	auto& transform = scene->AddComponent<TransformComponent>(entity);
 	transform.position = vec3(0.0f, 0.0f, 0.0f);
 	transform.rotation = quat(1.0f, 0.0f, 0.0f, 0.0f);
 	transform.scale = vec3(1.0f, 1.0f, 1.0f);
-
-	auto& worldTransform = scene->AddComponent<WorldTransformComponent>(entity, glm::identity<mat4>());
-
-	scene->AddComponent<HierarchyComponent>(entity);
-
+	scene->AddComponent<WorldTransformComponent>(entity, glm::identity<mat4>());
 	return entity;
 }
 
 Entity& EntityFactory::CreatePrimitiveEntity(Scene* scene, const wstring& name, const wstring& meshKey, const wstring& materialKey)
 {
-	SceneEditScope edit(Application::Get().GetEditHistory(), *scene, "UI_HISTORY_CREATE");
-	Entity& entity = scene->CreateEntity();
-	scene->AddComponent<NameComponent>(entity, name);
-
-
-	scene->AddComponent<FlagComponent>(entity, EEntityFlag::Default);
-
-	auto& transform = scene->AddComponent<TransformComponent>(entity);
-	transform.position = vec3(0.0f, 0.0f, 0.0f);
-	transform.rotation = quat(1.0f, 0.0f, 0.0f, 0.0f);
-	transform.scale = vec3(1.0f, 1.0f, 1.0f);
-
-	auto& worldTransform = scene->AddComponent<WorldTransformComponent>(entity, glm::identity<mat4>());
-
-	scene->AddComponent<HierarchyComponent>(entity);
-
+	Entity& entity = CreateEmptyEntity(scene, name);
 	ResourceManager& resourceManager = ResourceManager::Get();
 	ResourceHandle<Mesh> meshHandle = resourceManager.GetResourceHandle<Mesh>(meshKey);
 	ResourceHandle<Material> materialHandle = resourceManager.GetResourceHandle<Material>(materialKey);
@@ -112,28 +90,60 @@ Entity& EntityFactory::CreatePrimitiveEntity(Scene* scene, const wstring& name, 
 
 Entity& EntityFactory::CreateSpriteEntity(Scene* scene, const wstring& name, const wstring& materialKey)
 {
-	SceneEditScope edit(Application::Get().GetEditHistory(), *scene, "UI_HISTORY_CREATE");
-	Entity& entity = scene->CreateEntity();
-	scene->AddComponent<NameComponent>(entity, name);
-
-
-	scene->AddComponent<FlagComponent>(entity, EEntityFlag::Default);
-
-	auto& transform = scene->AddComponent<TransformComponent>(entity);
-	transform.position = vec3(0.0f, 0.0f, 0.0f);
-	transform.rotation = quat(1.0f, 0.0f, 0.0f, 0.0f);
-	transform.scale = vec3(1.0f, 1.0f, 1.0f);
-
-	auto& worldTransform = scene->AddComponent<WorldTransformComponent>(entity, glm::identity<mat4>());
-
-	scene->AddComponent<HierarchyComponent>(entity);
+	Entity& entity = CreateEmptyEntity(scene, name);
 
 	ResourceManager& resourceManager = ResourceManager::Get();
 
-	ResourceHandle<Sprite> spriteHandle = resourceManager.GetResourceHandle<Sprite>(RESOURCE_PATH L"Texture/uv1.png");
+	ResourceHandle<Sprite> spriteHandle = resourceManager.GetResourceHandle<Sprite>(RESOURCE_PATH L"Texture/uv1.bamsprite.json");
 	ResourceHandle<Mesh> meshHandle = resourceManager.GetResourceHandle<Mesh>(L"QuadMesh");
 	ResourceHandle<Material> materialHandle = resourceManager.GetResourceHandle<Material>(materialKey);
 
+	if (!spriteHandle || !meshHandle || !materialHandle)
+	{
+		ENGINE_LOG_ERROR("Failed to create sprite entity: Missing resources. Sprite: {}, Mesh: {}, Material: {}",
+			spriteHandle ? "OK" : "Missing", meshHandle ? "OK" : "Missing", materialHandle ? "OK" : "Missing");
+	}
+
 	scene->AddComponent<SpriteRendererComponent>(entity, spriteHandle, meshHandle, materialHandle);
+	return entity;
+}
+
+Entity& EntityFactory::CreateLightEntity(Scene* scene, const wstring& name, const wstring& lightType)
+{
+	Entity& entity = CreateEmptyEntity(scene, name);
+	scene->AddComponent<LightComponent>(entity);
+	if (lightType == L"Directional")
+	{
+		auto& light = scene->GetComponent<LightComponent>(entity);
+		light.LightType = ELightType::Directional;
+		light.Color = vec3(1.0f, 0.95f, 0.85f); // 따뜻한 햇빛
+		light.Intensity = 1.2f;
+		light.Flags = ELightFlags::UseInDeferredRendering | ELightFlags::AffectDiffuse | ELightFlags::AffectSpecular | ELightFlags::CastShadows;
+		light.ShadowRange = 50.0f;
+		light.ShadowBias = 0.002f;
+	}
+	else if (lightType == L"Point")
+	{
+		scene->GetComponent<LightComponent>(entity).LightType = ELightType::Point;
+	}
+	else if (lightType == L"Spot")
+	{
+		scene->GetComponent<LightComponent>(entity).LightType = ELightType::Spot;
+	}
+	else if (lightType == L"Sky")
+	{
+		auto& light = scene->GetComponent<LightComponent>(entity);
+		light.LightType = ELightType::Sky;
+		light.Color = vec3(0.35f, 0.55f, 0.85f);       // 하늘 천정(Zenith) 색상
+		light.GroundColor = vec3(0.1f, 0.08f, 0.05f); // 지표면 반사 앰비언트
+		light.IndirectIntensity = 0.8f;
+		light.Intensity = 1.0f;
+		light.Flags = ELightFlags::UseInDeferredRendering | ELightFlags::AffectDiffuse;
+	}
+	else
+	{
+		ENGINE_LOG_WARN("Unknown light type: {}. Defaulting to Point light.", WStrToStr(lightType));
+		scene->GetComponent<LightComponent>(entity).LightType = ELightType::Point;
+	}
 	return entity;
 }

@@ -49,9 +49,25 @@ namespace
 
 BEGIN(Engine)
 
-CameraSystem* CameraSystem::Create()
+EResult CameraSystem::Initialize(void* arg)
 {
-	return new CameraSystem();
+	(void)arg;
+	return EResult::Success;
+}
+
+CameraSystem* CameraSystem::Create(void* arg)
+{
+	CameraSystem* instance = new CameraSystem();
+	if (IsFailure(instance->Initialize(arg)))
+	{
+		Safe_Release(instance);
+		return nullptr;
+	}
+	return instance;
+}
+
+void CameraSystem::Free()
+{
 }
 
 void CameraSystem::OnLateUpdate(entt::registry& globalRegistry, const vector<Scene*> activeScenes, f32 dt)

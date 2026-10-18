@@ -7,6 +7,8 @@ BEGIN(Engine)
 class ENGINE_API PhysicsSystem : public ISystem
 {
 private:
+	PhysicsSystem() {}
+	virtual ~PhysicsSystem() = default;
 	EResult Initialize(void* arg = nullptr);
 	virtual void Free();
 public:

@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "ContentBrowserGridItem.h"
 #include "SelectionManager.h"
 
@@ -6,7 +6,7 @@ void ContentBrowserGridItem::Draw(const std::filesystem::directory_entry& direct
 {
 	float filledSize = ImGui::GetContentRegionAvail().x;
 	const auto& path = directoryEntry.path();
-	auto relativePath = std::filesystem::relative(path, rootPath);
+	auto relativePath = path.lexically_relative(rootPath);
 	std::filesystem::path payloadPath = rootPath.filename() / relativePath;
 
 	ImGui::PushID(path.string().c_str());
@@ -153,10 +153,10 @@ void ContentBrowserGridItem::ContextMenu(const std::filesystem::path& path, std:
 			{
 				ContextMenu_Model(path);
 			}
-			// else if (ext == ".png" || ext == ".jpg" || ext == ".tga")
-			// {
-			//     ContextMenu_Texture(path);
-			// }
+			else if (ext == ".png" || ext == ".jpg" || ext == ".tga" || ext == ".jpeg" || ext == ".bmp")
+			{
+			    ContextMenu_Texture(path);
+			}
 		}
 
 		ImGui::Separator();
@@ -395,4 +395,48 @@ void ContentBrowserGridItem::ContextMenu_Material(const std::filesystem::path& p
 
 void ContentBrowserGridItem::ContextMenu_Model(const std::filesystem::path& path)
 {
+}
+
+void ContentBrowserGridItem::ContextMenu_Texture(const std::filesystem::path& path)
+{
+	ImGui::Separator();
+	if (ImGui::MenuItem((ICON_FA_IMAGE " " + LOCAL_LABEL("ContentBrowser.CreateSprite")).c_str()))
+	{
+		// 1. 중복 없는 .bamsprite.json 경로 결정
+		std::filesystem::path spritePath = path.parent_path() / (path.stem().string() + ".bamsprite.json");
+		int suffix = 1;
+		while (std::filesystem::exists(spritePath))
+		{
+			spritePath = path.parent_path() / (path.stem().string() + "_" + std::to_string(suffix) + ".bamsprite.json");
+			++suffix;
+		}
+
+		std::wstring relTexPath = std::filesystem::relative(path).wstring();
+		auto& rm = Engine::ResourceManager::Get();
+		auto texHandle = rm.LoadFile(relTexPath);
+
+		if (texHandle.IsValid())
+		{
+			// 2. 텍스처를 래핑하는 임시 Sprite 객체 생성
+			SpriteCreateDesc desc = {};
+			desc.texture = static_cast<Engine::ResourceHandle<Engine::Texture>>(texHandle);
+			desc.Key = std::filesystem::relative(spritePath).wstring();
+			desc.Path = spritePath.wstring();
+			desc.pivot = vec2(0.5f, 0.5f);
+			desc.region = Rect(0.f, 0.f, 0.f, 0.f);
+
+			Engine::Sprite* newSprite = Engine::Sprite::Create(&desc);
+			if (newSprite)
+			{
+				// 3. 디스크에 .bamsprite.json 파일로 먼저 저장
+				if (rm.SaveToJsonFile(newSprite, spritePath.wstring()) == EResult::Success)
+				{
+					// 4. 저장된 파일을 ResourceManager에 정식 로드 등록
+					rm.LoadFile(std::filesystem::relative(spritePath).wstring());
+					ENGINE_LOG_INFO("Successfully created sprite: {}", spritePath.string());
+				}
+				rm.DestroyResource(newSprite); // 임시 객체 해제
+			}
+		}
+	}
 }

@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "InspectorPanel.h"
 #include "Application.h"
 #include "SelectionManager.h"
@@ -12,6 +12,7 @@
 #include "CoreComponents.h"
 #include "RenderComponents.h"
 #include "PhysicsComponent.h"
+#include "AudioComponents.h"
 #include "ResourceManager.h"
 #include "Texture.h"
 #include "UILayout.h"
@@ -188,6 +189,26 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 			else if (object.Is<Engine::UIButtonComponent>()) changed = drawUI.operator()<Engine::UIButtonComponent>();
 			else if (object.Is<Engine::ColliderComponent>()) changed = drawCollider.operator()<Engine::ColliderComponent>();
 			else if (object.Is<Engine::Collider2DComponent>()) changed = drawCollider.operator()<Engine::Collider2DComponent>();
+			else if (object.Is<Engine::AudioSourceComponent>())
+			{
+				changed = ReflectionPropertyDrawer::DrawObject(type, object, registry, &componentSettings);
+				auto& audioSource = world.get<Engine::AudioSourceComponent>(handle);
+				ImGui::Spacing();
+				if (audioSource.IsPlaying())
+				{
+					ImGui::TextColored(ImVec4(0.2f, 0.9f, 0.2f, 1.f), "Playing...");
+					ImGui::SameLine();
+					if (ImGui::Button(LOCAL("UI_STOP").empty() ? "Stop" : LOCAL("UI_STOP").c_str())) audioSource.Stop();
+					ImGui::SameLine();
+					if (ImGui::Button(LOCAL("UI_PAUSE").empty() ? "Pause" : LOCAL("UI_PAUSE").c_str())) audioSource.Pause();
+				}
+				else
+				{
+					ImGui::TextDisabled("Stopped");
+					ImGui::SameLine();
+					if (ImGui::Button(LOCAL("UI_PLAY").empty() ? "Play" : LOCAL("UI_PLAY").c_str())) audioSource.Play();
+				}
+			}
 			else changed = ReflectionPropertyDrawer::DrawObject(type, object, registry, &componentSettings);
 			if (changed && object.Is<Engine::CameraComponent>()) world.get<Engine::CameraComponent>(handle).InvalidateCache();
 			if (changed && object.Is<Engine::LightComponent>()) world.get<Engine::LightComponent>(handle).InvalidateCache();

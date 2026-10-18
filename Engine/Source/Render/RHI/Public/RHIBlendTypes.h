@@ -67,7 +67,7 @@ ENABLE_BITMASK_OPERATORS(EColorChannel)
 STRUCT()
 struct BlendState
 {
-	REFLECT_STRUCT()
+	REFLECT_BODY()
 
 	PROPERTY(EDITABLE)
 	EBlendFactor srcColor = EBlendFactor::One;

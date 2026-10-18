@@ -1,4 +1,4 @@
-#ifdef _DEBUG
+﻿#ifdef _DEBUG
 #pragma once
 
 #include "DebugRenderer.h"
@@ -6,8 +6,11 @@
 #include "ResourceManager.h"
 #include "PipelineManager.h"
 #include "RenderTargetManager.h"
-#include "Layer.h"
-#include "GameObject.h"
+#include "SceneManager.h"
+#include "CoreComponents.h"
+#include "PhysicsComponent.h"
+#include "TransformSystem.h"
+#include "Mesh.h"
 
 void DebugRenderer::Initialize(const wstring& prefix)
 {
@@ -55,13 +58,13 @@ void DebugRenderer::Free()
 	Safe_Release(m_VertexBuffer);
 }
 
-void DebugRenderer::SubmitDebugDraw(Camera* camera, const wstring& colorRTName)
+void DebugRenderer::SubmitDebugDraw(const CameraBuffer& cameraBuffer, const wstring& colorRTName)
 {
-	RegisterColliderDebug(camera);
-	if (m_Vertices.empty() || !camera || colorRTName.empty()) return;
+	RegisterColliderDebug(cameraBuffer);
+	if (m_Vertices.empty() || colorRTName.empty()) return;
 	RenderPass* pass = Engine::RenderPassManager::Get().GetRenderPassByID(m_RenderPassID);
 	pass->SetColorAttachments({ colorRTName });
-	Renderer::Get().RegisterViewportCamera(camera, pass);
+	Renderer::Get().RegisterViewportCamera(cameraBuffer, pass);
 
 	Engine::Renderer::Get().SubmitCustomCommand(
 		[this](f32 dt, Engine::RenderPass* pass)->EResult
@@ -81,6 +84,11 @@ void DebugRenderer::SubmitDebugDraw(Camera* camera, const wstring& colorRTName)
 
 			auto debugVSHandle = rm.GetResourceHandle<Shader>(L"DebugLineVS");
 			auto debugPSHandle = rm.GetResourceHandle<Shader>(L"DebugLinePS");
+			if (!debugVSHandle || !debugPSHandle)
+			{
+				m_Vertices.clear();
+				return EResult::Fail;
+			}
 			desc.vertexShader = debugVSHandle->GetRHIShader();
 			desc.pixelShader = debugPSHandle->GetRHIShader();
 			desc.inputLayouts.push_back(Engine::DebugVertex::Layout);
@@ -111,7 +119,10 @@ void DebugRenderer::SubmitDebugDraw(Camera* camera, const wstring& colorRTName)
 
 			RHIPipeline* pipeline = PipelineManager::Get().GetOrCreatePipeline(desc);
 			if (!pipeline || IsFailure(rhi->BindPipeline(pipeline)))
+			{
+				m_Vertices.clear();
 				return EResult::Fail;
+			}
 
 			m_VertexBuffer->SetData(m_Vertices.data(), (uint32)m_Vertices.size() * sizeof(DebugVertex));
 
@@ -124,57 +135,134 @@ void DebugRenderer::SubmitDebugDraw(Camera* camera, const wstring& colorRTName)
 		}, m_RenderPassID);
 }
 
-void DebugRenderer::RegisterColliderDebug(Camera* camera)
+void DebugRenderer::RegisterColliderDebug(const CameraBuffer& cameraBuffer)
 {
 	Scene* scene = SceneManager::Get().GetCurrentScene();
 	if (!scene) return;
-	// 카메라의 ViewProjection으로 프러스텀 추출
-	Frustum frustum = {};
-	bool useFrustum = false;
-	if (camera)
+	auto& registry = scene->GetRegistry();
+	TransformSystem::UpdateHierarchy(registry);
+	const Frustum frustum = FrustumCuller::ExtractFrustum(cameraBuffer.viewProjMatrix);
+	const auto isVisibleInFrustum = [&](const vec3& localCenter, const vec3& localExtent, const mat4& worldMatrix)
+		{
+			const AABB localAABB(localCenter - localExtent, localCenter + localExtent);
+			const AABB worldAABB = FrustumCuller::TransformAABB(localAABB, worldMatrix);
+			return FrustumCuller::TestAABB(frustum, worldAABB);
+		};
+	const auto drawCircleXY = [&](const vec3& localCenter, f32 radius, const vec4& color, const mat4& worldMatrix)
+		{
+			constexpr uint32 segments = 32;
+			const f32 step = glm::two_pi<f32>() / static_cast<f32>(segments);
+			for (uint32 i = 0; i < segments; ++i)
+			{
+				const f32 a0 = step * static_cast<f32>(i);
+				const f32 a1 = step * static_cast<f32>(i + 1);
+				const vec3 p0 = localCenter + vec3(std::cos(a0) * radius, std::sin(a0) * radius, 0.f);
+				const vec3 p1 = localCenter + vec3(std::cos(a1) * radius, std::sin(a1) * radius, 0.f);
+				DrawLine(vec3(worldMatrix * vec4(p0, 1.f)), vec3(worldMatrix * vec4(p1, 1.f)), color);
+			}
+		};
+	for (auto [entity, collider, tr, flag] : registry.view<ColliderComponent, WorldTransformComponent, FlagComponent>().each())
 	{
-		frustum = FrustumCuller::ExtractFrustum(camera->GetCameraBuffer().viewProjMatrix);
-		useFrustum = true;
+		if (!HasFlag(flag.flags, EEntityFlag::Active) || HasFlag(flag.flags, EEntityFlag::Dead)) continue;
+		const auto& settings = collider.GetSettings();
+		if (!settings.Enabled) continue;
+		const vec4 color = settings.IsTrigger ? vec4(0.f, 1.f, 1.f, 1.f) : vec4(0.f, 1.f, 0.f, 1.f);
+		const vec3 offset = collider.GetOffset();
+		const mat4& worldMatrix = tr.worldMatrix;
+		const f32 maxScale = glm::max(glm::max(glm::length(vec3(worldMatrix[0])), glm::length(vec3(worldMatrix[1]))),
+			glm::length(vec3(worldMatrix[2])));
+		std::visit([&](const auto& shape)
+			{
+				using ShapeType = std::decay_t<decltype(shape)>;
+				if constexpr (std::is_same_v<ShapeType, BoxShape>)
+				{
+					const vec3 extent = shape.Size * 0.5f;
+					if (isVisibleInFrustum(offset, extent, worldMatrix))
+						DrawBox(offset, extent, color, worldMatrix);
+				}
+				else if constexpr (std::is_same_v<ShapeType, SphereShape>)
+				{
+					const vec3 extent(shape.Radius);
+					if (isVisibleInFrustum(offset, extent, worldMatrix))
+						DrawSphere(vec3(worldMatrix * vec4(offset, 1.f)), shape.Radius * maxScale, color);
+				}
+				else if constexpr (std::is_same_v<ShapeType, CapsuleShape>)
+				{
+					const f32 halfHeight = shape.Height * 0.5f;
+					const vec3 extent(shape.Radius, halfHeight, shape.Radius);
+					if (!isVisibleInFrustum(offset, extent, worldMatrix)) return;
+					const f32 halfSegment = glm::max(0.f, halfHeight - shape.Radius);
+					const vec3 topLocal = offset + vec3(0.f, halfSegment, 0.f);
+					const vec3 bottomLocal = offset - vec3(0.f, halfSegment, 0.f);
+					DrawSphere(vec3(worldMatrix * vec4(topLocal, 1.f)), shape.Radius * maxScale, color);
+					DrawSphere(vec3(worldMatrix * vec4(bottomLocal, 1.f)), shape.Radius * maxScale, color);
+					const vec3 sideOffsets[4] = {
+						vec3(shape.Radius, 0.f, 0.f), vec3(-shape.Radius, 0.f, 0.f),
+						vec3(0.f, 0.f, shape.Radius), vec3(0.f, 0.f, -shape.Radius)
+					};
+					for (const vec3& side : sideOffsets)
+					{
+						DrawLine(vec3(worldMatrix * vec4(topLocal + side, 1.f)),
+							vec3(worldMatrix * vec4(bottomLocal + side, 1.f)), color);
+					}
+				}
+				else if constexpr (std::is_same_v<ShapeType, MeshShape>)
+				{
+					if (const Mesh* mesh = shape.MeshHandle.Get())
+					{
+						const vec3 center = offset + mesh->GetCenter();
+						const vec3 extent = mesh->GetExtents();
+						if (isVisibleInFrustum(center, extent, worldMatrix))
+							DrawBox(center, extent, color, worldMatrix);
+					}
+				}
+			}, collider.GetShape());
 	}
-	const vec4 color = vec4(0.f, 1.f, 0.f, 1.f);
-	//for (auto* layer : scene->GetAllLayers())
-	//{
-	//	for (auto* go : layer->GetAllGameObjects())
-	//	{
-	//		if (!go || !go->IsActive()) continue;
-	//		auto* col = go->GetComponent<Collider>();
-	//		if (!col || !col->IsActive()) continue;
-	//		mat4 worldMatrix = go->GetTransform()->GetWorldMatrix();
-	//		ColliderDesc desc = col->GetColliderDesc();
-	//		// 프러스텀 컬링: 콜라이더 AABB가 카메라 밖이면 스킵
-	//		if (useFrustum)
-	//		{
-	//			AABB localAABB(desc.center - desc.extent, desc.center + desc.extent);
-	//			AABB worldAABB = FrustumCuller::TransformAABB(localAABB, worldMatrix);
-	//			if (!FrustumCuller::TestAABB(frustum, worldAABB))
-	//				continue;
-	//		}
-	//		switch (desc.type)
-	//		{
-	//		case EColliderType::Box:
-	//		case EColliderType::Box2D:
-	//			DrawBox(desc.center, desc.extent, color, worldMatrix);
-	//			break;
-	//		case EColliderType::Sphere:
-	//			DrawSphere(vec3(worldMatrix[3]) + desc.center, desc.extent.x, color);
-	//			break;
-	//		case EColliderType::Capsule:
-	//			break;
-	//		case EColliderType::Mesh:
-	//			break;
-	//		}
-	//	}
-	//}
+	for (auto [entity, collider2D, tr, flag] : registry.view<Collider2DComponent, WorldTransformComponent, FlagComponent>().each())
+	{
+		if (!HasFlag(flag.flags, EEntityFlag::Active) || HasFlag(flag.flags, EEntityFlag::Dead)) continue;
+		const auto& settings = collider2D.GetSettings();
+		if (!settings.Enabled) continue;
+		const vec4 color = settings.IsTrigger ? vec4(0.f, 1.f, 1.f, 1.f) : vec4(0.f, 1.f, 0.f, 1.f);
+		const vec3 offset(collider2D.GetOffset(), 0.f);
+		const mat4& worldMatrix = tr.worldMatrix;
+		std::visit([&](const auto& shape)
+			{
+				using ShapeType = std::decay_t<decltype(shape)>;
+				if constexpr (std::is_same_v<ShapeType, Box2DShape>)
+				{
+					const vec3 extent(shape.Size * 0.5f, 0.f);
+					if (isVisibleInFrustum(offset, extent, worldMatrix))
+						DrawBox(offset, extent, color, worldMatrix);
+				}
+				else if constexpr (std::is_same_v<ShapeType, Circle2DShape>)
+				{
+					const vec3 extent(shape.Radius, shape.Radius, 0.f);
+					if (isVisibleInFrustum(offset, extent, worldMatrix))
+						drawCircleXY(offset, shape.Radius, color, worldMatrix);
+				}
+				else if constexpr (std::is_same_v<ShapeType, Capsule2DShape>)
+				{
+					const f32 halfHeight = shape.Height * 0.5f;
+					const vec3 extent(shape.Radius, halfHeight, 0.f);
+					if (!isVisibleInFrustum(offset, extent, worldMatrix)) return;
+					const f32 halfSegment = glm::max(0.f, halfHeight - shape.Radius);
+					const vec3 topLocal = offset + vec3(0.f, halfSegment, 0.f);
+					const vec3 bottomLocal = offset - vec3(0.f, halfSegment, 0.f);
+					drawCircleXY(topLocal, shape.Radius, color, worldMatrix);
+					drawCircleXY(bottomLocal, shape.Radius, color, worldMatrix);
+					DrawLine(vec3(worldMatrix * vec4(topLocal + vec3(shape.Radius, 0.f, 0.f), 1.f)),
+						vec3(worldMatrix * vec4(bottomLocal + vec3(shape.Radius, 0.f, 0.f), 1.f)), color);
+					DrawLine(vec3(worldMatrix * vec4(topLocal - vec3(shape.Radius, 0.f, 0.f), 1.f)),
+						vec3(worldMatrix * vec4(bottomLocal - vec3(shape.Radius, 0.f, 0.f), 1.f)), color);
+				}
+			}, collider2D.GetShape());
+	}
 }
-
 #pragma region Draw Functions
 void DebugRenderer::DrawLine(const vec3& start, const vec3& end, const vec4& color)
 {
+	if (m_Vertices.size() + 2 > 2 * static_cast<sizet>(m_MaxLines)) return;
 	m_Vertices.push_back({ start, color });
 	m_Vertices.push_back({ end, color });
 }

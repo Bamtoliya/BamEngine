@@ -25,7 +25,7 @@ struct EventBinding
 CLASS()
 class ENGINE_API DynamicEvent
 {
-	REFLECT_STRUCT()
+	REFLECT_BODY()
 public:
 	void Invoke() const;
 	EResult AddEvent(const string& componentTypeName, const string& methodName)

@@ -1,6 +1,6 @@
 ﻿#pragma once
 
-#include <reflection/Annotations.h>
+#include "Reflection/ComponentAnnotations.h"
 #include "Types.h"
 #include "Components/Render/LightTypes.h"
 #include "Light.h"

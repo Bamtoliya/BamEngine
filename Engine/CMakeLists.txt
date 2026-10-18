@@ -94,6 +94,7 @@ target_include_directories(Engine
         ${CPPCODEC_INCLUDE_DIRS}
     PRIVATE
         ${ENGINE_SOURCE_DIR}
+        "${CMAKE_SOURCE_DIR}/ThirdParty/FMOD/inc"
 )
 
 # 외부 라이브러리 연결
@@ -113,6 +114,8 @@ target_link_libraries(Engine
         d3d12.lib
         dxgi.lib
         dxguid.lib
+        $<$<CONFIG:Debug>:${CMAKE_SOURCE_DIR}/ThirdParty/FMOD/lib/x64/fmodL_vc.lib>
+        $<$<NOT:$<CONFIG:Debug>>:${CMAKE_SOURCE_DIR}/ThirdParty/FMOD/lib/x64/fmod_vc.lib>
 )
 
 # ==============================================================================
@@ -132,3 +135,13 @@ option(BAMENGINE_BUILD_GRAPH_CHECK "Build graph document and connection validati
 if(BAMENGINE_BUILD_GRAPH_CHECK)
     include(GraphChecks)
 endif()
+
+# ==============================================================================
+# 7. Post-Build FMOD DLL Copy
+# ==============================================================================
+add_custom_command(TARGET Engine POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "$<IF:$<CONFIG:Debug>,${CMAKE_SOURCE_DIR}/ThirdParty/FMOD/lib/x64/fmodL.dll,${CMAKE_SOURCE_DIR}/ThirdParty/FMOD/lib/x64/fmod.dll>"
+        "$<TARGET_FILE_DIR:Engine>/"
+    COMMENT "Copying FMOD runtime DLL to target output directory"
+)

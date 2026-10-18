@@ -1,12 +1,12 @@
 ﻿#pragma once
 
-#include "Base.h"
-#include "LightSource.h"
 #include "RHI.h"
+#include "Light.h"
+#include "CameraBuffer.h"
 
 #define MAX_LIGHTS 32
 
-struct tagLightManagerDesc
+struct LightManagerDesc
 {
 	Engine::RHI* RHI = { nullptr };
 };
@@ -15,7 +15,7 @@ BEGIN(Engine)
 class ENGINE_API LightManager : public Base
 {
 	DECLARE_SINGLETON(LightManager)
-	using DESC = tagLightManagerDesc;
+	using DESC = LightManagerDesc;
 #pragma region Constructor&Destructor
 private:
 	LightManager() {}
@@ -23,7 +23,6 @@ private:
 	EResult Initialize(void* arg = nullptr);
 public:
 	virtual void Free() override;
-	static bool IsCreated() noexcept { return m_instance != nullptr; }
 #pragma endregion
 
 
@@ -35,35 +34,26 @@ public:
 
 #pragma region Light Management
 public:
-	EResult AddLightSource(LightSource* lightSource);
-	EResult RemoveLightSource(LightSource* lightSource);
-	const vector<LightSource*>& GetLightSources() const { return m_LightSources; }
-	EResult ClearLightSources();
-public:
 	EResult Bind(uint32 slot);
-private:
 	EResult UpdateLightBuffer();
+private:
 	EResult EnsureBuffer();
 #pragma endregion
 
 #pragma region Shadow
 public:
-	CameraBuffer GetShadowCameraBuffer(const LightSource* lightSource) const;
-	CameraBuffer GetShadowCameraBuffer(uint32 shadowLightIndex) const;
-	vector<LightSource*> GetShadowCastingLights() const;
-	
-	LightShadowData GetShadowData(const LightSource* lightSource) const;
-	LightShadowData GetShadowData(uint32 shadowLightIndex) const;
+	bool HasShadowCastingLights() const { return !m_ShadowCameraBuffers.empty(); }
+	CameraBuffer GetShadowCameraBuffer(uint32 shadowLightIndex = 0) const;
+	LightShadowData GetShadowData(uint32 shadowLightIndex = 0) const;
 #pragma endregion
 
-
 #pragma region Member Variables
-private:
-	vector<LightSource*> m_LightSources;
 private:
 	class RHIBuffer* m_LightBuffer = { nullptr };
 	uint32 m_LightCount = { 0 };
 	bool m_BufferDirty = { false };
+	vector<CameraBuffer> m_ShadowCameraBuffers;
+	vector<LightShadowData> m_ShadowData;
 private:
 	RHI* m_RHI = { nullptr };
 #pragma endregion

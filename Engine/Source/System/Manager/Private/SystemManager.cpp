@@ -13,7 +13,7 @@ void SystemManager::Free()
 {
 	for (ISystem* system : m_Systems)
 	{
-		Safe_Delete(system);
+		Safe_Release(system);
 	}
 }
 

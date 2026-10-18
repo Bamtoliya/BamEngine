@@ -1,8 +1,7 @@
-#pragma once
+﻿#pragma once
 
 #include "CameraViewportPanel.h"
 #include "DebugRenderer.h"
-#include "EditorCamera.h"
 #include "Grid.h"
 #pragma push_macro("COLOR")
 #undef COLOR
@@ -83,7 +82,7 @@ protected:
 
 #pragma region Render Passes
 private:
-	void SubmitLightingPass(class Camera* camera);
+	void SubmitLightingPass(const CameraBuffer& cameraBuffer);
 	void SubmitPostProcessPass(f32 dt, uint32& slot, std::wstring& currentRT);
 	void SubmitUIOverlayPass(const wstring& currentRT);
 #pragma endregion
@@ -97,7 +96,11 @@ private:
 	void ProcessPickingRequest();
 private:
 	bool ScreenPosToRay(const ImVec2& mousePos, Engine::Ray& ray, float& maxDistance);
+	class Entity* PickOverlayEntity(const ImVec2& mousePos) const;
 #pragma endregion
+
+private:
+	SkyAtmosphereData BuildSkyAtmosphereData();
 
 #pragma region Member Variables
 private:

@@ -1,4 +1,4 @@
-﻿#include <QApplication>
+#include <QApplication>
 #include <QDockWidget>
 #include <QLabel>
 #include <QMainWindow>
@@ -6,6 +6,8 @@
 #include <QTreeWidgetItem>
 
 #include "QtManager.h"
+
+using namespace Editor;
 
 
 IMPLEMENT_SINGLETON(QtManager)

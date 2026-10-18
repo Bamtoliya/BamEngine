@@ -3,7 +3,8 @@
 
 EResult PhysicsSystem::Initialize(void* arg)
 {
-	return EResult();
+	(void)arg;
+	return EResult::Success;
 }
 
 void PhysicsSystem::Free()
@@ -13,9 +14,9 @@ void PhysicsSystem::Free()
 PhysicsSystem* PhysicsSystem::Create(void* arg)
 {
 	PhysicsSystem* instance = new PhysicsSystem();
-	if (instance->Initialize(arg) != EResult::Success)
+	if (IsFailure(instance->Initialize(arg)))
 	{
-		Safe_Delete(instance);
+		Safe_Release(instance);
 		return nullptr;
 	}
 	return instance;

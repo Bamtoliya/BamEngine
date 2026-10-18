@@ -294,25 +294,16 @@ namespace
 	double GetReflectionDrawerNumberMetadata(const reflection::Metadata& metadata, const char* key, double fallback)
 	{
 		const auto* value = metadata.Find(key);
-
-		if (value == nullptr)
-		{
-			return fallback;
-		}
+		if (value == nullptr) return fallback;
 
 		double result = fallback;
-
-		if (const auto* number = std::get_if<double>(value))
+		if (const auto* number = std::get_if<double>(value)) result = *number;
+		else if (const auto* number = std::get_if<std::int64_t>(value)) result = static_cast<double>(*number);
+		else if (const auto* number = std::get_if<std::uint64_t>(value)) result = static_cast<double>(*number);
+		else if (const auto* text = std::get_if<std::string>(value))
 		{
-			result = *number;
-		}
-		else if (const auto* number = std::get_if<std::int64_t>(value))
-		{
-			result = static_cast<double>(*number);
-		}
-		else if (const auto* number = std::get_if<std::uint64_t>(value))
-		{
-			result = static_cast<double>(*number);
+			try { result = std::stod(*text); }
+			catch (...) { result = fallback; }
 		}
 
 		return std::isfinite(result) ? result : fallback;
@@ -359,10 +350,69 @@ namespace
 	bool DrawReflectionScalarProperty(const reflection::PropertyInfo& property, const reflection::ObjectView& object,
 		const T& current, bool canEdit, ImGuiDataType dataType)
 	{
-		return DrawReflectionPropertyEditor(property, object, current, canEdit,
-			[dataType](T& candidate)
+		const bool isFloating = std::is_floating_point_v<T>;
+		const double defaultStep = isFloating ? 0.05 : 1.0;
+		const float dragSpeed = static_cast<float>(GetReflectionDrawerNumberMetadata(property.Metadata, "Step", defaultStep));
+
+		const bool hasMin = property.Metadata.Find("RangeMin") != nullptr;
+		const bool hasMax = property.Metadata.Find("RangeMax") != nullptr;
+		const bool isSlider = GetReflectionDrawerBoolMetadata(property.Metadata, "Slider", false);
+
+		T minVal = (std::numeric_limits<T>::lowest)();
+		T maxVal = (std::numeric_limits<T>::max)();
+
+		if (hasMin) minVal = static_cast<T>(GetReflectionDrawerNumberMetadata(property.Metadata, "RangeMin", static_cast<double>(minVal)));
+		if (hasMax) maxVal = static_cast<T>(GetReflectionDrawerNumberMetadata(property.Metadata, "RangeMax", static_cast<double>(maxVal)));
+
+		const void* pMin = hasMin ? &minVal : nullptr;
+		const void* pMax = hasMax ? &maxVal : nullptr;
+		const char* format = isFloating ? "%.3f" : nullptr;
+
+		// [리셋 값 조회]: ResetValue 우선, 없으면 Default 확인, 둘 다 없으면 0.0
+		T resetValue = T{};
+		bool hasReset = false;
+		// 1. 컴포넌트의 CDO에서 C++ 코드 기본값(= 1.2f 등)을 먼저 읽어옴
+				// 1. 컴포넌트의 CDO에서 C++ 코드 기본값(= 1.2f 등)을 먼저 읽어옴
+		auto& reg = Engine::ReflectionRegistry::Get();
+		if (const auto* type = reg.GetRegistry().FindType(object))
+		{
+			const auto defaultObject = reg.GetDefaultComponentObject(*type);
+			if (defaultObject.IsValid())
 			{
-				return ImGui::InputScalar("##Value", dataType, &candidate);
+				const auto readDefault = property.TryReadValue(defaultObject);
+				if (readDefault.Succeeded() && readDefault.Value.Is<T>())
+				{
+					resetValue = *readDefault.Value.Get<T>();
+					hasReset = true;
+				}
+			}
+		}
+		// 2. 만약 CDO 조회가 안 되었고 RESET_VALUE/DEFAULT 매크로가 있다면 메타데이터 사용
+		if (!hasReset && (property.Metadata.Find("ResetValue") || property.Metadata.Find("Default")))
+		{
+			resetValue = static_cast<T>(GetReflectionDrawerNumberMetadata(property.Metadata, "ResetValue",
+				GetReflectionDrawerNumberMetadata(property.Metadata, "Default", 0.0)));
+			hasReset = true;
+		}
+		return DrawReflectionPropertyEditor(property, object, current, canEdit,
+			[=, &current](T& candidate)
+			{
+				bool changed = false;
+				if (isSlider && pMin != nullptr && pMax != nullptr)
+					changed = ImGui::SliderScalar("##Value", dataType, &candidate, &minVal, &maxVal, format);
+				else
+					changed = ImGui::DragScalar("##Value", dataType, &candidate, dragSpeed, pMin, pMax, format);
+				// 우클릭 시 "Reset to Default" 메뉴 제공
+				if (hasReset && ImGui::BeginPopupContextItem("ScalarSettings", ImGuiPopupFlags_MouseButtonRight))
+				{
+					if (ImGui::MenuItem("Reset to Default", nullptr, false, candidate != resetValue))
+					{
+						candidate = resetValue;
+						changed = true;
+					}
+					ImGui::EndPopup();
+				}
+				return changed;
 			});
 	}
 }

@@ -1,12 +1,13 @@
-#pragma once
+﻿#pragma once
 
 #include "SceneViewportPanel.h"
+#include "EditorCameraController.h"
 #include "Application.h"
 #include "RenderTargetManager.h"
 #include "SelectionManager.h"
 #include "InputManager.h"
 #include "ImViewGuizmo.h"
-#include "RectTransform.h"
+#include "SceneManager.h"
 
 #include "Entity.h"
 #include "Scene.h"
@@ -14,7 +15,7 @@
 #include "RenderComponents.h"
 #include "TransformSystem.h"
 #include "TransformPropertyEditor.h"
-#include "PickingMath.h"
+#include "PickingManager.h"
 
 #include <glm/gtc/type_ptr.hpp>
 #include <cmath>
@@ -256,32 +257,39 @@ void SceneViewportPanel::Update(f32 dt)
 	ProcessPickingRequest();
 	CalculateRenderResolution(m_PanelWidth, m_PanelHeight);
 
-	if (m_OwnedCamera && m_Focused && m_Hovered)
+	if (m_CameraController && m_Focused && m_Hovered)
+		m_CameraController->HandleInput(dt);
+
+	if (m_CameraController)
 	{
-		m_OwnedCamera->HandleInput(dt);
+		if (m_RenderHeight > 0)
+			m_CameraController->SetAspectRatio(static_cast<f32>(m_RenderWidth) / static_cast<f32>(m_RenderHeight));
+		m_CameraController->RefreshMatrices();
 	}
 
-
-	if (m_OwnedCamera)
-	{
-		m_OwnedCamera->FixedUpdate(dt);
-		m_OwnedCamera->Update(dt);
-		m_OwnedCamera->LateUpdate(dt);
-	}
+	const std::optional<CameraBuffer> cameraBuffer = m_CameraController ? m_CameraController->GetCameraBuffer() : std::nullopt;
 
 	RenderPassManager& rpMgr = RenderPassManager::Get();
 	Renderer& renderer = Renderer::Get();
-	renderer.RegisterViewportCamera(nullptr, rpMgr.GetRenderPassByID(m_ShadowPassID));
-	renderer.RegisterViewportCamera(m_Camera, rpMgr.GetRenderPassByID(m_GeometryPassID));
-	renderer.RegisterViewportCamera(m_Camera, rpMgr.GetRenderPassByID(m_ForwardPassID));
-	renderer.RegisterViewportCamera(m_Camera, rpMgr.GetRenderPassByID(m_ForwardTransparentPassID));
-	renderer.RegisterViewportCamera(nullptr, rpMgr.GetRenderPassByID(m_UIOverlayPassID));
+	renderer.RegisterViewportCamera(rpMgr.GetRenderPassByID(m_ShadowPassID));
+	if (cameraBuffer.has_value())
+	{
+		renderer.RegisterViewportCamera(*cameraBuffer, rpMgr.GetRenderPassByID(m_GeometryPassID));
 
-	SubmitLightingPass(m_Camera);
+		// ForwardPass에 최신 대기/태양광 데이터를 패스 상수로 주입
+		if (auto* forwardPass = rpMgr.GetRenderPassByID(m_ForwardPassID))
+		{
+			SkyAtmosphereData skyData = BuildSkyAtmosphereData();
+			forwardPass->SetPassConstantStruct(3, skyData); // slot 3 (b1, space3)에 설정!
+		}
+		renderer.RegisterViewportCamera(*cameraBuffer, rpMgr.GetRenderPassByID(m_ForwardPassID));
+		renderer.RegisterViewportCamera(*cameraBuffer, rpMgr.GetRenderPassByID(m_ForwardTransparentPassID));
+		SubmitLightingPass(*cameraBuffer);
+	}
+	renderer.RegisterViewportCamera(rpMgr.GetRenderPassByID(m_UIOverlayPassID));
 
 	uint32 ppSlot = 0;
 	wstring currentRT = m_LightingColorName;
-	// 체인 순차 실행 (currentRT와 ppSlot이 함수들을 거치며 갱신됨)
 	SubmitPostProcessPass(dt, ppSlot, currentRT);
 	SubmitUIOverlayPass(currentRT);
 
@@ -296,16 +304,12 @@ void SceneViewportPanel::Update(f32 dt)
 		m_ChannelFilter.SubmitChannelPreviewPass(m_DisplayRTName, m_DisplayRTName);
 	}
 
-	if (*m_Grid.GetVisible())
-	{
-		m_Grid.SubmitGrid(m_Camera, IsOrthographic(), m_DisplayRTName, m_OwnedRTNames[6]);
-	}
+	if (cameraBuffer.has_value() && *m_Grid.GetVisible())
+		m_Grid.SubmitGrid(*cameraBuffer, IsOrthographic(), m_DisplayRTName, m_OwnedRTNames[6]);
 
 #ifdef _DEBUG
-	if (*m_DebugRenderer.GetDrawCollidersPtr())
-	{
-		m_DebugRenderer.SubmitDebugDraw(m_Camera, m_DisplayRTName);
-	}
+	if (cameraBuffer.has_value() && *m_DebugRenderer.GetDrawCollidersPtr())
+		m_DebugRenderer.SubmitDebugDraw(*cameraBuffer, m_DisplayRTName);
 #endif
 
 	KeyboardInput();
@@ -500,10 +504,12 @@ void SceneViewportPanel::ResizeRenderTargets(uint32 width, uint32 height)
 			rt->Resize(width, height);
 	}
 
-	if (m_Camera)
-		m_Camera->SetAspect(static_cast<f32>(width) / static_cast<f32>(height));
+	if (m_CameraController && height > 0)
+	{
+		m_CameraController->SetAspectRatio(static_cast<f32>(width) / static_cast<f32>(height));
+		m_CameraController->RefreshMatrices();
+	}
 
-	// Base: ChannelFilter RT 리사이즈
 	BaseViewportPanel::ResizeRenderTargets(width, height);
 }
 #pragma endregion
@@ -513,7 +519,7 @@ void SceneViewportPanel::DrawImGuizmo()
 {
 	Engine::Entity* selectedEntity = SelectionManager::Get().GetPrimarySelectedEntity();
 
-	if (selectedEntity == nullptr || m_Camera == nullptr ||
+	if (selectedEntity == nullptr || m_CameraController == nullptr ||
 		m_ImageSize.x <= 0.0f || m_ImageSize.y <= 0.0f)
 	{
 		return;
@@ -556,8 +562,15 @@ void SceneViewportPanel::DrawImGuizmo()
 		return;
 	}
 
-	const glm::mat4 viewMatrix = m_Camera->GetViewMatrix();
-	const glm::mat4 projectionMatrix = m_Camera->GetProjMatrix();
+	optional<CameraBuffer> cameraBuffer = m_CameraController->GetCameraBuffer();
+
+	if (!cameraBuffer)
+	{
+		return;
+	}
+
+	const glm::mat4 viewMatrix = cameraBuffer->viewMatrix;
+	const glm::mat4 projectionMatrix = cameraBuffer->projMatrix;
 
 	bool useSnap = m_GizmoUseSnap || ImGui::GetIO().KeyCtrl;
 	glm::vec3 snapValues = m_GizmoSnapTranslation;
@@ -640,13 +653,10 @@ void SceneViewportPanel::DrawImGuizmo()
 
 void SceneViewportPanel::DrawImViewGuizmo()
 {
-	if (!m_OwnedCamera || !m_Camera)
+	if (!m_CameraController || m_ImageSize.x <= 0.0f || m_ImageSize.y <= 0.0f)
 		return;
 
-	if (m_ImageSize.x <= 0.0f || m_ImageSize.y <= 0.0f)
-		return;
-
-	Transform* cameraTransform = m_OwnedCamera->GetTransform();
+	TransformComponent* cameraTransform = m_CameraController->GetTransformComponent();
 	if (!cameraTransform)
 		return;
 
@@ -660,92 +670,73 @@ void SceneViewportPanel::DrawImViewGuizmo()
 	const float padding = 6.0f;
 	const float buttonSpacing = 4.0f;
 
-	const ImVec2 gizmoPos(
-		m_ImageScreenPos.x + m_ImageSize.x - gizmoDiameter * 0.5f,
-		m_ImageScreenPos.y + gizmoDiameter * 0.5f);
+	const ImVec2 gizmoPos(m_ImageScreenPos.x + m_ImageSize.x - gizmoDiameter * 0.5f, m_ImageScreenPos.y + gizmoDiameter * 0.5f);
+	const ImVec2 dollyPos(gizmoPos.x - gizmoDiameter * 0.5f - buttonDiameter * 0.5f - buttonSpacing, m_ImageScreenPos.y + buttonDiameter * 0.5f - padding);
+	const ImVec2 panPos(dollyPos.x - buttonDiameter - buttonSpacing, dollyPos.y);
 
-	const ImVec2 dollyPos(
-		gizmoPos.x - gizmoDiameter * 0.5f - buttonDiameter * 0.5f - buttonSpacing,
-		m_ImageScreenPos.y + buttonDiameter * 0.5f - padding);
-
-	const ImVec2 panPos(
-		dollyPos.x - buttonDiameter - buttonSpacing,
-		dollyPos.y);
-
-	vec3 cameraPos = cameraTransform->GetWorldPosition();
-	quat cameraRot = cameraTransform->GetWorldRotationQuat();
-
+	vec3 cameraPos = cameraTransform->position;
+	quat cameraRot = cameraTransform->rotation;
 	vec3 pivot = cameraPos + (cameraRot * vec3(0.0f, 0.0f, 1.0f)) * 5.0f;
 
-	if (GameObject* selectedObject = SelectionManager::Get().GetPrimarySelection())
+	if (Entity* selectedEntity = SelectionManager::Get().GetPrimarySelectedEntity())
 	{
-		if (Transform* selectedTransform = selectedObject->GetTransform())
+		if (Scene* scene = selectedEntity->GetScene())
 		{
-			pivot = selectedTransform->GetWorldPosition();
+			auto& registry = scene->GetRegistry();
+			const entt::entity handle = selectedEntity->GetEntityHandle();
+			if (registry.valid(handle))
+			{
+				if (const auto* worldTransform = registry.try_get<WorldTransformComponent>(handle))
+					pivot = vec3(worldTransform->worldMatrix[3]);
+			}
 		}
 	}
 
 	bool cameraChanged = false;
-
-	cameraChanged |= ImViewGuizmo::Rotate(
-		cameraPos,
-		cameraRot,
-		pivot,
-		gizmoPos,
-		0.0125f);
-
-	cameraChanged |= ImViewGuizmo::Dolly(
-		cameraPos,
-		cameraRot,
-		dollyPos,
-		0.05f);
-
-	cameraChanged |= ImViewGuizmo::Pan(
-		cameraPos,
-		cameraRot,
-		panPos,
-		0.01f);
+	cameraChanged |= ImViewGuizmo::Rotate(cameraPos, cameraRot, pivot, gizmoPos, 0.0125f);
+	cameraChanged |= ImViewGuizmo::Dolly(cameraPos, cameraRot, dollyPos, 0.05f);
+	cameraChanged |= ImViewGuizmo::Pan(cameraPos, cameraRot, panPos, 0.01f);
 
 	if (cameraChanged)
 	{
-		cameraTransform->SetPosition(cameraPos);
-		cameraTransform->SetRotation(cameraRot);
+		static_cast<void>(cameraTransform->SetLocalPosition(cameraPos));
+		static_cast<void>(cameraTransform->SetLocalRotation(cameraRot));
+		m_CameraController->SyncControlRotationFromTransform();
+		m_CameraController->RefreshMatrices();
 	}
 }
 
 void SceneViewportPanel::DrawLightOverlay()
 {
-	if (!m_ShowLightOverlay || !m_OwnedCamera || !m_OwnedCamera->GetCamera())
+	if (!m_ShowLightOverlay || !m_CameraController)
+		return;
+
+	const std::optional<CameraBuffer> cameraBuffer = m_CameraController->GetCameraBuffer();
+	if (!cameraBuffer.has_value())
 		return;
 
 	ImDrawList* drawList = ImGui::GetWindowDrawList();
 	if (!drawList)
 		return;
 
-	Camera* camera = m_Camera;
-	if (!camera)
+	const mat4 viewProj = cameraBuffer->viewProjMatrix;
+	const vec3 cameraPos = cameraBuffer->cameraPosition;
+
+	Scene* activeScene = SceneManager::Get().GetCurrentScene();
+	if (!activeScene)
 		return;
 
-	const mat4 viewProj = camera->GetProjMatrix() * camera->GetViewMatrix();
-	const vec3 cameraPos = camera->GetCameraBuffer().cameraPosition;
-
-	const auto& lights = LightManager::Get().GetLightSources();
-	for (LightSource* light : lights)
+	auto view = activeScene->GetRegistry().view<LightComponent, WorldTransformComponent, FlagComponent>();
+	for (auto entity : view)
 	{
-		if (!light || !light->IsActive())
+		const auto& light = view.get<LightComponent>(entity);
+		const auto& tr = view.get<WorldTransformComponent>(entity);
+		const auto& flag = view.get<FlagComponent>(entity);
+		if (!light.IsEnabled || !HasFlag(flag.flags, EEntityFlag::Active))
 			continue;
 
-		GameObject* owner = light->GetOwner();
-		if (!owner || !owner->IsActive())
-			continue;
-
-		Transform* tr = owner->GetTransform();
-		if (!tr)
-			continue;
-
-		vec3 worldPos = tr->GetWorldPosition();
-
-		vec3 forward = tr->GetForward();
+		vec3 worldPos = vec3(tr.worldMatrix[3]);
+		vec3 forward = vec3(tr.worldMatrix[2]);
 		if (glm::dot(forward, forward) < 0.000001f)
 			forward = vec3(0.0f, 0.0f, 1.0f);
 		else
@@ -760,7 +751,7 @@ void SceneViewportPanel::DrawLightOverlay()
 		bool drawDir = false;
 		float dirLen = 1.5f;
 
-		switch (light->GetType())
+		switch (light.LightType)
 		{
 		case ELightType::Directional:
 			color = IM_COL32(255, 180, 0, 255);
@@ -779,7 +770,7 @@ void SceneViewportPanel::DrawLightOverlay()
 			lightIcon = ICON_FA_CLOUD_SUN;
 			drawDir = true;
 			dirLen = 3.0f;
-			forward *= -1;
+			forward *= -1.0f;
 			break;
 		case ELightType::Point:
 		default:
@@ -790,20 +781,15 @@ void SceneViewportPanel::DrawLightOverlay()
 			break;
 		}
 
-		// distance-based scale
 		const float dist = glm::length(worldPos - cameraPos);
-
-		// 원하는 감도에 맞게 조절
 		const float nearDist = 2.0f;
 		const float farDist = 40.0f;
-		const float nearScale = 1.9f; // 가까울 때 크게
-		const float farScale = 0.75f; // 멀 때 작게
+		const float nearScale = 1.9f;
+		const float farScale = 0.75f;
 
-		float t = (dist - nearDist) / (farDist - nearDist);
-		t = glm::clamp(t, 0.0f, 1.0f);
+		const float t = glm::clamp((dist - nearDist) / (farDist - nearDist), 0.0f, 1.0f);
 		const float distanceScale = glm::mix(nearScale, farScale, t);
 
-		// 배경 링 + 아이콘
 		ImFont* font = ImGui::GetFont();
 		const float iconFontSize = ImGui::GetFontSize() * 1.8f * distanceScale;
 		const ImVec2 iconSize = font->CalcTextSizeA(iconFontSize, FLT_MAX, 0.0f, lightIcon);
@@ -814,17 +800,11 @@ void SceneViewportPanel::DrawLightOverlay()
 
 		drawList->AddCircleFilled(screenPos, fillRadius, IM_COL32(0, 0, 0, 140));
 		drawList->AddCircle(screenPos, strokeRadius, color, 0, ringThickness);
-		drawList->AddText(
-			font,
-			iconFontSize,
-			ImVec2(screenPos.x - iconSize.x * 0.5f, screenPos.y - iconSize.y * 0.5f),
-			color,
-			lightIcon);
+		drawList->AddText(font, iconFontSize, ImVec2(screenPos.x - iconSize.x * 0.5f, screenPos.y - iconSize.y * 0.5f), color, lightIcon);
 
 		if (!drawDir)
 			continue;
 
-		// 방향 길이도 거리 기반으로 살짝 반영
 		const float dirLenScaled = dirLen * glm::mix(0.9f, 1.35f, distanceScale);
 		ImVec2 tipScreen;
 		vec3 tipWorld = worldPos + forward * dirLenScaled;
@@ -846,10 +826,8 @@ void SceneViewportPanel::DrawLightOverlay()
 			const float headW = 4.0f * distanceScale;
 
 			ImVec2 a = tipScreen;
-			ImVec2 b(tipScreen.x - d.x * headLen + n.x * headW,
-				tipScreen.y - d.y * headLen + n.y * headW);
-			ImVec2 c(tipScreen.x - d.x * headLen - n.x * headW,
-				tipScreen.y - d.y * headLen - n.y * headW);
+			ImVec2 b(tipScreen.x - d.x * headLen + n.x * headW, tipScreen.y - d.y * headLen + n.y * headW);
+			ImVec2 c(tipScreen.x - d.x * headLen - n.x * headW, tipScreen.y - d.y * headLen - n.y * headW);
 
 			drawList->AddTriangleFilled(a, b, c, color);
 		}
@@ -858,52 +836,47 @@ void SceneViewportPanel::DrawLightOverlay()
 
 void SceneViewportPanel::DrawCameraOverlay()
 {
-	if (!m_ShowCameraOverlay || !m_OwnedCamera || !m_OwnedCamera->GetCamera())
+	if (!m_ShowCameraOverlay || !m_CameraController)
+		return;
+
+	const std::optional<CameraBuffer> cameraBuffer = m_CameraController->GetCameraBuffer();
+	if (!cameraBuffer.has_value())
 		return;
 
 	ImDrawList* drawList = ImGui::GetWindowDrawList();
 	if (!drawList)
 		return;
 
-	if (!m_Camera)
+	Scene* activeScene = SceneManager::Get().GetCurrentScene();
+	if (!activeScene)
 		return;
 
-	const mat4 editorViewProj = m_Camera->GetProjMatrix() * m_Camera->GetViewMatrix();
-	const vec3 editorCameraPos = m_Camera->GetCameraBuffer().cameraPosition;
+	const mat4 editorViewProj = cameraBuffer->viewProjMatrix;
+	const vec3 editorCameraPos = cameraBuffer->cameraPosition;
 
 	const ImU32 cameraColor = IM_COL32(90, 210, 255, 255);
 	const ImU32 frustumColor = IM_COL32(90, 210, 255, 200);
 	const char* cameraIcon = ICON_FA_CAMERA;
 
-	const auto& cameras = CameraManager::Get().GetCameras();
-	for (Camera* targetCamera : cameras)
+	auto view = activeScene->GetRegistry().view<CameraComponent, WorldTransformComponent, FlagComponent>();
+	for (auto entity : view)
 	{
-		if (!targetCamera || targetCamera == m_Camera || !targetCamera->IsActive())
+		const auto& targetCamera = view.get<CameraComponent>(entity);
+		const auto& tr = view.get<WorldTransformComponent>(entity);
+		const auto& flag = view.get<FlagComponent>(entity);
+		if (!HasFlag(flag.flags, EEntityFlag::Active))
 			continue;
 
-		if (targetCamera == m_Camera)
-			continue;
-
-		GameObject* owner = targetCamera->GetOwner();
-		if (!owner || !owner->IsActive())
-			continue;
-
-		Transform* transform = owner->GetTransform();
-		if (!transform)
-			continue;
-
-		const vec3 worldPos = transform->GetWorldPosition();
+		const vec3 worldPos = vec3(tr.worldMatrix[3]);
 		ImVec2 screenPos;
 		if (!WorldToViewportScreen(worldPos, editorViewProj, m_ImageScreenPos, m_ImageSize, screenPos))
 			continue;
 
-		// ── 거리 기반 스케일 (아이콘 크기) ──────────────────────
 		const float dist = glm::length(worldPos - editorCameraPos);
-		float t = glm::clamp((dist - 2.0f) / (40.0f - 2.0f), 0.0f, 1.0f);
+		const float t = glm::clamp((dist - 2.0f) / (40.0f - 2.0f), 0.0f, 1.0f);
 		const float distanceScale = glm::mix(1.9f, 0.75f, t);
 		const float lineThickness = glm::max(1.5f, 1.8f * distanceScale);
 
-		// ── 카메라 아이콘 ────────────────────────────────────────
 		ImFont* font = ImGui::GetFont();
 		const float iconFontSize = ImGui::GetFontSize() * 1.7f * distanceScale;
 		const ImVec2 iconSize = font->CalcTextSizeA(iconFontSize, FLT_MAX, 0.0f, cameraIcon);
@@ -912,30 +885,24 @@ void SceneViewportPanel::DrawCameraOverlay()
 
 		drawList->AddCircleFilled(screenPos, fillRadius, IM_COL32(0, 0, 0, 140));
 		drawList->AddCircle(screenPos, strokeRadius, cameraColor, 0, lineThickness);
-		drawList->AddText(
-			font, iconFontSize,
-			ImVec2(screenPos.x - iconSize.x * 0.5f, screenPos.y - iconSize.y * 0.5f),
-			cameraColor, cameraIcon);
+		drawList->AddText(font, iconFontSize, ImVec2(screenPos.x - iconSize.x * 0.5f, screenPos.y - iconSize.y * 0.5f), cameraColor, cameraIcon);
 
-		// ── Frustum 직접 계산 ─────────────────────────────────────
-		// 에디터 카메라와의 거리에 비례해 displayFar를 결정.
-		// 너무 멀면 작아지지 않도록 min(실제Far, 에디터거리 * 0.5)로 클램프.
-		const float actualFar = targetCamera->GetCameraBuffer().projMatrix[3][2]; // 사용 안 함
 		const float displayNear = 0.5f;
 		const float displayFar = glm::clamp(dist * 0.5f, 2.0f, 20.0f);
 
-		const vec3 forward = glm::normalize(-transform->GetForward());
-		const vec3 right = glm::normalize(transform->GetRight());
-		const vec3 up = glm::normalize(transform->GetUp());
+		vec3 right = vec3(tr.worldMatrix[0]);
+		vec3 up = vec3(tr.worldMatrix[1]);
+		vec3 forward = vec3(tr.worldMatrix[2]);
+		right = glm::dot(right, right) > 1e-6f ? glm::normalize(right) : vec3(1.0f, 0.0f, 0.0f);
+		up = glm::dot(up, up) > 1e-6f ? glm::normalize(up) : vec3(0.0f, 1.0f, 0.0f);
+		forward = glm::dot(forward, forward) > 1e-6f ? glm::normalize(forward) : vec3(0.0f, 0.0f, 1.0f);
 
-		const bool isPerspective = targetCamera->GetIsPerspective();
+		const float aspect = (std::isfinite(targetCamera.AspectRatio) && targetCamera.AspectRatio > 0.0f) ? targetCamera.AspectRatio : (16.0f / 9.0f);
+		float nearHalfH = 0.0f, nearHalfW = 0.0f, farHalfH = 0.0f, farHalfW = 0.0f;
 
-		// near/far 평면의 하프 크기 계산
-		float nearHalfH, nearHalfW, farHalfH, farHalfW;
-		if (isPerspective)
+		if (targetCamera.CameraType == ECameraType::Perspective)
 		{
-			const float fovRad = glm::radians(targetCamera->GetFOV());
-			const float aspect = 16.0f / 9.0f; // 고정 aspect — Camera에 GetAspect()가 있으면 교체
+			const float fovRad = glm::radians(targetCamera.FOV);
 			nearHalfH = glm::tan(fovRad * 0.5f) * displayNear;
 			nearHalfW = nearHalfH * aspect;
 			farHalfH = glm::tan(fovRad * 0.5f) * displayFar;
@@ -943,9 +910,8 @@ void SceneViewportPanel::DrawCameraOverlay()
 		}
 		else
 		{
-			// Ortho: OrthoSize가 절반 높이
-			const float orthoH = targetCamera->GetOrthoSize();
-			const float orthoW = orthoH * (16.0f / 9.0f);
+			const float orthoH = targetCamera.OrthographicSize * 0.5f;
+			const float orthoW = orthoH * aspect;
 			nearHalfH = farHalfH = orthoH;
 			nearHalfW = farHalfW = orthoW;
 		}
@@ -953,40 +919,30 @@ void SceneViewportPanel::DrawCameraOverlay()
 		const vec3 nearCenter = worldPos + forward * displayNear;
 		const vec3 farCenter = worldPos + forward * displayFar;
 
-		// 8 코너
 		const vec3 corners[8] =
 		{
-			nearCenter - right * nearHalfW - up * nearHalfH, // near BL
-			nearCenter + right * nearHalfW - up * nearHalfH, // near BR
-			nearCenter + right * nearHalfW + up * nearHalfH, // near TR
-			nearCenter - right * nearHalfW + up * nearHalfH, // near TL
-			farCenter - right * farHalfW - up * farHalfH,  // far  BL
-			farCenter + right * farHalfW - up * farHalfH,  // far  BR
-			farCenter + right * farHalfW + up * farHalfH,  // far  TR
-			farCenter - right * farHalfW + up * farHalfH,  // far  TL
+			nearCenter - right * nearHalfW - up * nearHalfH,
+			nearCenter + right * nearHalfW - up * nearHalfH,
+			nearCenter + right * nearHalfW + up * nearHalfH,
+			nearCenter - right * nearHalfW + up * nearHalfH,
+			farCenter - right * farHalfW - up * farHalfH,
+			farCenter + right * farHalfW - up * farHalfH,
+			farCenter + right * farHalfW + up * farHalfH,
+			farCenter - right * farHalfW + up * farHalfH,
 		};
 
 		const int edges[12][2] =
 		{
-			{ 0, 1 }, { 1, 2 }, { 2, 3 }, { 3, 0 }, // near rect
-			{ 4, 5 }, { 5, 6 }, { 6, 7 }, { 7, 4 }, // far  rect
-			{ 0, 4 }, { 1, 5 }, { 2, 6 }, { 3, 7 }, // connecting
+			{ 0, 1 }, { 1, 2 }, { 2, 3 }, { 3, 0 },
+			{ 4, 5 }, { 5, 6 }, { 6, 7 }, { 7, 4 },
+			{ 0, 4 }, { 1, 5 }, { 2, 6 }, { 3, 7 },
 		};
 
 		for (int i = 0; i < 12; ++i)
 		{
-			DrawViewportLineIfVisible(
-				drawList,
-				corners[edges[i][0]],
-				corners[edges[i][1]],
-				editorViewProj,
-				m_ImageScreenPos,
-				m_ImageSize,
-				frustumColor,
-				lineThickness);
+			DrawViewportLineIfVisible(drawList, corners[edges[i][0]], corners[edges[i][1]], editorViewProj, m_ImageScreenPos, m_ImageSize, frustumColor, lineThickness);
 		}
 
-		// 카메라 아이콘 → far 중심 방향선
 		ImVec2 farCenterScreen;
 		if (WorldToViewportScreen(farCenter, editorViewProj, m_ImageScreenPos, m_ImageSize, farCenterScreen))
 			drawList->AddLine(screenPos, farCenterScreen, cameraColor, lineThickness);
@@ -1022,10 +978,10 @@ void SceneViewportPanel::DrawSelectionLocked()
 #pragma endregion
 
 #pragma region Rendering
-void SceneViewportPanel::SubmitLightingPass(Camera* camera)
+void SceneViewportPanel::SubmitLightingPass(const CameraBuffer& cameraBuffer)
 {
 	Renderer::Get().SubmitCustomCommand(
-		[this, camera](f32 dt, RenderPass* pass) -> EResult
+		[this, cameraBuffer](f32 dt, RenderPass* pass) -> EResult
 		{
 			auto* rhi = Renderer::Get().GetRHI();
 			auto& rtMgr = RenderTargetManager::Get();
@@ -1033,13 +989,53 @@ void SceneViewportPanel::SubmitLightingPass(Camera* camera)
 			RHISampler* sampler = smMgr.GetDefaultSampler();
 			wstring prefix = m_Name + L"_";
 
-			CameraBuffer camBuf = camera->GetCameraBuffer();
+			CameraBuffer camBuf = cameraBuffer;
 			camBuf.time = dt;
 			rhi->BindConstantBuffer(&camBuf, sizeof(CameraBuffer), 0);
 			const wstring sourceNames[] = {
 				prefix + L"GBuffer_Diffuse", prefix + L"GBuffer_Normal", prefix + L"GBuffer_PBR",
 				prefix + L"GBuffer_Emission", prefix + L"GBuffer_Position", m_ShadowDepthName
 			};
+
+			// Fog 상수 버퍼 바인딩 (slot 2 -> register(b0, space3))
+			FogData fogData{};
+			fogData.FogEnabled = 0u;
+
+			if (Scene* activeScene = SceneManager::Get().GetCurrentScene())
+			{
+				auto fogView = activeScene->GetRegistry().view<FogComponent>();
+				for (auto [e, fog] : fogView.each())
+				{
+					if (!fog.IsEnabled) continue;
+
+					fogData.FogEnabled = 1u;
+					fogData.FogType = static_cast<uint32>(fog.FogType);
+					fogData.FogColor = fog.FogColor;
+					fogData.FogDensity = fog.FogDensity;
+					fogData.FogHeight = fog.FogHeight;
+					fogData.FogHeightFalloff = fog.FogHeightFalloff;
+					fogData.FogStartDistance = fog.FogStartDistance;
+					fogData.FogEndDistance = fog.FogEndDistance;
+					fogData.FogMaxOpacity = fog.FogMaxOpacity;
+
+					if (fog.AutoSyncAtmosphere)
+					{
+						auto skyView = activeScene->GetRegistry().view<SkyAtmosphereComponent>();
+						for (auto [se, sky] : skyView.each())
+						{
+							if (sky.IsEnabled)
+							{
+								fogData.FogColor = glm::mix(fog.FogColor, sky.HorizonColor, 0.65f);
+								break;
+							}
+						}
+					}
+					break;
+				}
+			}
+
+			if (IsFailure(rhi->BindConstantBuffer(&fogData, sizeof(fogData), 2)))
+				return EResult::Fail;
 
 			for (uint32 i = 0; i < 6; ++i)
 			{
@@ -1125,15 +1121,25 @@ void SceneViewportPanel::CapturePickingRequest(bool imageHovered)
 		ImGui::IsMouseDown(ImGuiMouseButton_Right) || SelectionManager::Get().IsPrimarySelectionLocked()) return;
 	const ImVec2 mouse = ImGui::GetMousePos();
 	vec2 uv;
-	if (!PickingMath::TryGetViewportUV(vec2(mouse.x, mouse.y), vec2(m_ImageScreenPos.x, m_ImageScreenPos.y),
+	if (!PickingManager::TryGetViewportUV(vec2(mouse.x, mouse.y), vec2(m_ImageScreenPos.x, m_ImageScreenPos.y),
 		vec2(m_ImageSize.x, m_ImageSize.y), uv)) return;
+	if (Entity* overlayEntity = PickOverlayEntity(mouse))
+	{
+		m_PickingRequest.pending = false;
+		auto& selection = SelectionManager::Get();
+		if (ImGui::GetIO().KeyCtrl)
+			selection.ToggleEntitySelection(overlayEntity);
+		else
+			selection.SetSelectedEntity(overlayEntity);
+		return;
+	}
 	auto* target = RenderTargetManager::Get().GetRenderTarget(m_Name + L"_GBuffer_Position");
 	if (!target || !target->GetTexture()) return;
 	PickingRequest request;
 	request.toggle = ImGui::GetIO().KeyCtrl;
 	request.mode = m_PickingMode;
 	request.uv = uv;
-	request.frameSerial = Renderer::Get().GetPickingFrameSerial();
+	request.frameSerial = PickingManager::Get().GetPickingFrameSerial();
 	request.width = target->GetWidth();
 	request.height = target->GetHeight();
 	if (request.mode == EScenePickingMode::RayBounds && !ScreenPosToRay(mouse, request.ray, request.maxDistance))
@@ -1149,32 +1155,31 @@ void SceneViewportPanel::ProcessPickingRequest()
 	m_PickingRequest.pending = false;
 	auto& selection = SelectionManager::Get();
 	if (selection.IsPrimarySelectionLocked()) return;
+	auto& picking = PickingManager::Get();
 	Entity* picked = nullptr;
 	if (request.mode == EScenePickingMode::GPUId)
 	{
-		auto& renderer = Renderer::Get();
-		if (request.frameSerial != renderer.GetCompletedPickingFrameSerial() ||
-			!renderer.HasPickingPass(m_GeometryPassID)) return;
+		if (request.frameSerial != picking.GetCompletedPickingFrameSerial() ||
+			!picking.HasPickingPass(m_GeometryPassID)) return;
 		auto* target = RenderTargetManager::Get().GetRenderTarget(m_Name + L"_GBuffer_Position");
 		if (!target || !target->GetTexture() || target->GetWidth() != request.width ||
 			target->GetHeight() != request.height || request.width == 0 || request.height == 0) return;
 		const uint32 x = glm::min(static_cast<uint32>(request.uv.x * request.width), request.width - 1);
 		const uint32 y = glm::min(static_cast<uint32>(request.uv.y * request.height), request.height - 1);
 		vec4 pixel(0.0f);
-		if (renderer.GetRHI()->ReadTexturePixel(target->GetTexture(), x, y, pixel) != EResult::Success)
+		if (Renderer::Get().GetRHI()->ReadTexturePixel(target->GetTexture(), x, y, pixel) != EResult::Success)
 		{
 			ENGINE_LOG_ERROR("Scene viewport ID picking: pixel download failed.");
 			return;
 		}
 		if (!std::isfinite(pixel.a) || pixel.a < 0.0f || pixel.a > 16777215.0f || std::floor(pixel.a) != pixel.a)
 			return;
-		picked = renderer.ResolvePickingEntity(static_cast<uint32>(pixel.a));
-		// An obsolete ID is not a background click; preserve the current selection.
+		picked = picking.ResolvePickingEntity(static_cast<uint32>(pixel.a));
 		if (pixel.a != 0.0f && !picked) return;
 	}
 	else
 	{
-		picked = selection.PickEntityByRay(request.ray, request.maxDistance);
+		picked = picking.PickEntityByRay(request.ray, request.maxDistance);
 	}
 	if (request.toggle)
 	{
@@ -1188,10 +1193,157 @@ void SceneViewportPanel::ProcessPickingRequest()
 
 bool SceneViewportPanel::ScreenPosToRay(const ImVec2& mousePos, Engine::Ray& ray, float& maxDistance)
 {
-	if (!m_Camera) return false;
+	if (!m_CameraController) return false;
+	const std::optional<CameraBuffer> cameraBuffer = m_CameraController->GetCameraBuffer();
+	if (!cameraBuffer.has_value()) return false;
 	vec2 uv;
-	if (!PickingMath::TryGetViewportUV(vec2(mousePos.x, mousePos.y), vec2(m_ImageScreenPos.x, m_ImageScreenPos.y),
+	if (!PickingManager::TryGetViewportUV(vec2(mousePos.x, mousePos.y), vec2(m_ImageScreenPos.x, m_ImageScreenPos.y),
 		vec2(m_ImageSize.x, m_ImageSize.y), uv)) return false;
-	return PickingMath::TryBuildRay(m_Camera->GetViewMatrixInv() * m_Camera->GetProjMatrixInv(), uv, ray, &maxDistance);
+	return PickingManager::TryBuildRay(cameraBuffer->invViewProjMatrix, uv, ray, &maxDistance);
+}
+Entity* SceneViewportPanel::PickOverlayEntity(const ImVec2& mousePos) const
+{
+	if ((!m_ShowLightOverlay && !m_ShowCameraOverlay) || !m_CameraController) return nullptr;
+	const std::optional<CameraBuffer> cameraBuffer = m_CameraController->GetCameraBuffer();
+	if (!cameraBuffer.has_value()) return nullptr;
+	Scene* activeScene = SceneManager::Get().GetCurrentScene();
+	if (!activeScene) return nullptr;
+	ImFont* font = ImGui::GetFont();
+	if (!font) return nullptr;
+	const mat4 viewProj = cameraBuffer->viewProjMatrix;
+	const vec3 cameraPos = cameraBuffer->cameraPosition;
+	const float baseFontSize = ImGui::GetFontSize();
+	auto& registry = activeScene->GetRegistry();
+	Entity* closestEntity = nullptr;
+	float closestCameraDist = FLT_MAX;
+	const auto testOverlayIcon = [&](entt::entity handle, const mat4& worldMatrix, const char* icon, float fontScale)
+		{
+			const vec3 worldPos = vec3(worldMatrix[3]);
+			ImVec2 screenPos{};
+			if (!WorldToViewportScreen(worldPos, viewProj, m_ImageScreenPos, m_ImageSize, screenPos)) return;
+			const float dist = glm::length(worldPos - cameraPos);
+			const float t = glm::clamp((dist - 2.0f) / (40.0f - 2.0f), 0.0f, 1.0f);
+			const float distanceScale = glm::mix(1.9f, 0.75f, t);
+			const float iconFontSize = baseFontSize * fontScale * distanceScale;
+			const ImVec2 iconSize = font->CalcTextSizeA(iconFontSize, FLT_MAX, 0.0f, icon);
+			const float strokeRadius = glm::max(iconSize.x, iconSize.y) * 0.5f + 6.0f;
+			const float dx = mousePos.x - screenPos.x;
+			const float dy = mousePos.y - screenPos.y;
+			if ((dx * dx + dy * dy) <= (strokeRadius * strokeRadius) && dist < closestCameraDist)
+			{
+				if (Entity* candidate = activeScene->FindEntity(handle))
+				{
+					closestEntity = candidate;
+					closestCameraDist = dist;
+				}
+			}
+		};
+	if (m_ShowLightOverlay)
+	{
+		auto view = registry.view<LightComponent, WorldTransformComponent, FlagComponent>();
+		for (auto entity : view)
+		{
+			const auto& light = view.get<LightComponent>(entity);
+			const auto& tr = view.get<WorldTransformComponent>(entity);
+			const auto& flag = view.get<FlagComponent>(entity);
+			if (!light.IsEnabled || !HasFlag(flag.flags, EEntityFlag::Active) || HasFlag(flag.flags, EEntityFlag::Dead))
+				continue;
+			const char* lightIcon = ICON_FA_LIGHTBULB;
+			switch (light.LightType)
+			{
+			case ELightType::Directional: lightIcon = ICON_FA_SUN; break;
+			case ELightType::Spot: lightIcon = ICON_FA_LOCATION_DOT; break;
+			case ELightType::Sky: lightIcon = ICON_FA_CLOUD_SUN; break;
+			case ELightType::Point:
+			default: lightIcon = ICON_FA_LIGHTBULB; break;
+			}
+			testOverlayIcon(entity, tr.worldMatrix, lightIcon, 1.8f);
+		}
+	}
+	if (m_ShowCameraOverlay)
+	{
+		auto view = registry.view<CameraComponent, WorldTransformComponent, FlagComponent>();
+		for (auto entity : view)
+		{
+			const auto& tr = view.get<WorldTransformComponent>(entity);
+			const auto& flag = view.get<FlagComponent>(entity);
+			if (!HasFlag(flag.flags, EEntityFlag::Active) || HasFlag(flag.flags, EEntityFlag::Dead))
+				continue;
+			testOverlayIcon(entity, tr.worldMatrix, ICON_FA_CAMERA, 1.7f);
+		}
+	}
+	return closestEntity;
 }
 #pragma endregion
+
+SkyAtmosphereData SceneViewportPanel::BuildSkyAtmosphereData()
+{
+	SkyAtmosphereData skyData{};
+	if (!SceneManager::IsCreated()) return skyData;
+
+	for (Scene* scene : SceneManager::Get().GetActiveScenes())
+	{
+		if (!scene) continue;
+		auto& registry = scene->GetRegistry();
+
+		// 1. SkyAtmosphereComponent 검색 및 시간대 계산
+		auto skyView = registry.view<SkyAtmosphereComponent>();
+		for (auto [e, sky] : skyView.each())
+		{
+			if (!sky.IsEnabled) continue;
+
+			// 실시간 시간 흐름 처리 (1초당 24 / DayCycleDuration 시간 전진)
+			if (sky.EnableTimeProgression && sky.DayCycleDuration > 0.1f)
+			{
+				f32 dt = ImGui::GetIO().DeltaTime;
+				sky.TimeOfDay = std::fmod(sky.TimeOfDay + (24.0f / sky.DayCycleDuration) * dt, 24.0f);
+				if (sky.TimeOfDay < 0.0f) sky.TimeOfDay += 24.0f;
+			}
+
+			// 시간대(TimeOfDay)와 위도(Latitude) 기반 태양 방향(To-Sun) 계산
+			f32 hourAngle = (sky.TimeOfDay - 12.0f) * (glm::pi<float>() / 12.0f);
+			f32 latRad = glm::radians(sky.Latitude);
+			vec3 toSun = glm::normalize(vec3(std::sin(hourAngle), std::cos(hourAngle) * std::cos(latRad), -std::cos(hourAngle) * std::sin(latRad)));
+
+			skyData.SunDirection = toSun;
+			skyData.ZenithColor = sky.ZenithColor;
+			skyData.HorizonColor = sky.HorizonColor;
+			skyData.GroundColor = sky.GroundColor;
+			skyData.HorizonBlend = sky.HorizonBlend;
+			skyData.SkyIntensity = sky.SkyIntensity;
+			skyData.SunSize = sky.SunSize;
+			skyData.SunColor = sky.CustomSunColor;
+			skyData.SunIntensity = sky.CustomSunIntensity;
+
+			skyData.CloudCoverage = sky.CloudCoverage;
+			skyData.CloudDensity = sky.CloudDensity;
+			skyData.CloudSpeed = sky.CloudSpeed;
+			skyData.CloudAltitude = sky.CloudAltitude;
+			skyData.EnableClouds = sky.EnableClouds ? 1u : 0u;
+
+			// Directional Light가 존재하고 AutoSync가 켜져 있으면 라이트 회전도 동기화
+			if (sky.AutoSyncDirectionalLight)
+			{
+				auto lightView = registry.view<LightComponent, TransformComponent>();
+				for (auto [le, light, tr] : lightView.each())
+				{
+					if (light.IsEnabled && light.LightType == ELightType::Directional)
+					{
+						// 태양 광선 Forward = -ToSun
+						vec3 forward = -toSun;
+						f32 pitch = glm::degrees(std::asin(-forward.y));
+						f32 yaw = glm::degrees(std::atan2(forward.x, forward.z));
+						tr.eulerRotation = vec3(pitch, yaw, 0.0f);
+						tr.rotation = glm::quat(glm::radians(tr.eulerRotation));
+
+						skyData.SunColor = light.Color;
+						skyData.SunIntensity = light.Intensity;
+						break;
+					}
+				}
+			}
+			return skyData;
+		}
+	}
+	return skyData;
+}

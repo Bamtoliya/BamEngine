@@ -30,7 +30,7 @@ enum class EResourceType : uint32
 STRUCT()
 struct ENGINE_API ResourceBinaryHeader
 {
-	REFLECT_STRUCT()
+	REFLECT_BODY()
 
 	PROPERTY()
 	uint64 MagicNumber = ENGINE_ASSET_MAGIC;

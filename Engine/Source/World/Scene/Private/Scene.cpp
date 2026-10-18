@@ -1,7 +1,6 @@
-#pragma once
+﻿#pragma once
 
 #include "Scene.h"
-#include "CollisionManager.h"
 #include "CoreComponents.h"
 #include "Adapters/GlmArchiveAdapter.h"
 #include <limits>
@@ -33,11 +32,6 @@ Scene* Scene::Create(void* arg)
 void Scene::Free()
 {
 	ClearEntities();
-	//for (auto& layer : m_Layers)
-	//{
-	//	Safe_Release(layer);
-	//}
-	//m_Layers.clear();
 }
 #pragma endregion
 
@@ -45,269 +39,19 @@ void Scene::Free()
 void Scene::FixedUpdate(f32 dt)
 {
 	if (!IsActive()) return;
-	//for (auto& layer : m_Layers)
-	//{
-	//	layer->FixedUpdate(dt);
-	//}
-	CollisionManager::Get().ResolveCollisions(dt);
 }
 
 void Scene::Update(f32 dt)
 {
 	if (!IsActive()) return;
-	//for (auto& layer : m_Layers)
-	//{
-	//	layer->Update(dt);
-	//}
-
-	//FlushDeadGameObjects();
+	UpdateHierarchyFlags();
 }
 
 void Scene::LateUpdate(f32 dt)
 {
 	if (!IsActive()) return;
-	//for (auto& layer : m_Layers)
-	//{
-	//	layer->LateUpdate(dt);
-	//}
 }
 #pragma endregion
-
-//#pragma region Layer Management
-//EResult Scene::AddLayer(class Layer* layer)
-//{
-//	if (!layer) return EResult::InvalidArgument;
-//
-//	if (find(m_Layers.begin(), m_Layers.end(), layer) != m_Layers.end())
-//		return EResult::AlreadyInitialized;
-//
-//	m_Layers.push_back(layer);
-//	layer->SetIndex(static_cast<uint32>(m_Layers.size() - 1));
-//	return EResult::Success;
-//}
-//
-//EResult Scene::InsertLayer(uint32 layerIndex, class Layer* layer)
-//{
-//	if (!layer) return EResult::InvalidArgument;
-//
-//	if (layerIndex > m_Layers.size())
-//		return AddLayer(layer);
-//
-//	m_Layers.insert(m_Layers.begin() + layerIndex, layer);
-//	UpdateLayerIndices(layerIndex);
-//	return EResult::Success;
-//}
-//
-//EResult Scene::CreateLayer(const wstring& layerName, uint32 layerIndex)
-//{
-//	tagLayerCreateDesc layerCreateDesc{ layerIndex, layerName };
-//	Layer* newLayer = Layer::Create(&layerCreateDesc);
-//	if (!newLayer) return EResult::Fail;
-//
-//	if (layerIndex != static_cast<uint32>(-1))
-//	{
-//		return InsertLayer(layerIndex, newLayer);
-//	}
-//	else
-//	{
-//		return AddLayer(newLayer);
-//	}
-//
-//	return EResult::Success;
-//}
-//
-//EResult Scene::RemoveLayer(uint32 layerIndex)
-//{
-//	if (layerIndex >= m_Layers.size()) return EResult::InvalidArgument;
-//
-//	Layer* targetLayer = m_Layers[layerIndex];
-//
-//	Safe_Release(targetLayer);
-//	m_Layers.erase(m_Layers.begin() + layerIndex);
-//	UpdateLayerIndices(layerIndex);
-//	return EResult::Success;
-//}
-//
-//EResult Scene::RemoveLayer(class Layer* layer)
-//{
-//	if (!layer) return EResult::InvalidArgument;
-//	auto it = find(m_Layers.begin(), m_Layers.end(), layer);
-//	if (it == m_Layers.end()) return EResult::Fail;
-//	uint32 index = static_cast<uint32>(std::distance(m_Layers.begin(), it));
-//	return RemoveLayer(index);
-//}
-//
-//EResult Scene::RemoveLayer(const wstring& layerName)
-//{
-//	Layer* layer = FindLayer(layerName);
-//	if (!layer) return EResult::Fail;
-//	return RemoveLayer(layer);
-//}
-//
-//Layer* Scene::FindLayer(uint32 layerIndex) const
-//{
-//	if (layerIndex >= m_Layers.size()) return nullptr;
-//	return m_Layers[layerIndex];
-//}
-//
-//Layer* Scene::FindLayer(const wstring& layerName) const
-//{
-//	for (auto& layer : m_Layers)
-//	{
-//		if (layer->GetName() == layerName)
-//			return layer;
-//	}
-//	return nullptr;
-//}
-//
-//void Scene::UpdateLayerIndices(uint32 startIndex)
-//{
-//	for (uint32 i = startIndex; i < m_Layers.size(); ++i)
-//	{
-//		m_Layers[i]->SetIndex(i);
-//	}
-//}
-//
-//EResult Scene::ReorderLayer(uint32 oldIndex, uint32 newIndex)
-//{
-//	if (oldIndex == newIndex) return EResult::Success;
-//	if (oldIndex >= m_Layers.size() || newIndex >= m_Layers.size())	return EResult::InvalidArgument;
-//	Layer* layer = m_Layers[oldIndex];
-//	m_Layers.erase(m_Layers.begin() + oldIndex);
-//	m_Layers.insert(m_Layers.begin() + newIndex, layer);
-//	uint32 startIndex = std::min(oldIndex, newIndex);
-//	UpdateLayerIndices(startIndex);
-//	return EResult::Success;
-//}
-//
-//void Scene::SetLayerName(uint32 layerIndex, const wstring& name)
-//{
-//	if (layerIndex < m_Layers.size())
-//		m_Layers[layerIndex]->SetName(name);
-//}
-//#pragma endregion
-//
-//#pragma region Object Management
-//EResult Scene::AddGameObject(class GameObject* gameObject, uint32 layerIndex)
-//{
-//	if (!gameObject || m_Layers.empty()) return EResult::InvalidArgument;
-//	if (layerIndex >= m_Layers.size()) layerIndex = 0;
-//	m_GameObjectMap[gameObject->GetID()] = gameObject;
-//	if (gameObject->GetParent())
-//	{
-//		return EResult::Success;
-//	}
-//	if (IsFailure(m_Layers[layerIndex]->AddGameObject(gameObject)))
-//		return EResult::Fail;
-//	
-//	return EResult::Success;
-//}
-//
-//GameObject* Scene::CloneGameObject(GameObject* gameObject)
-//{
-//	if (!gameObject || m_Layers.empty()) return nullptr;
-//	uint32 layerIndex = gameObject->GetLayerIndex();
-//	GameObject* clonedObject = gameObject->Clone();
-//	if (!clonedObject)
-//	{
-//		Safe_Release(clonedObject);
-//		return nullptr;
-//	}
-//	m_GameObjectMap[clonedObject->GetID()] = clonedObject;
-//	if (IsFailure(m_Layers[layerIndex]->AddGameObject(clonedObject)))
-//	{
-//		Safe_Release(clonedObject);
-//		return nullptr;
-//	}
-//	return clonedObject;
-//}
-//
-//EResult Scene::RemoveGameObject(class GameObject* gameObject)
-//{
-//	if (!gameObject || m_Layers.empty()) return EResult::InvalidArgument;
-//	uint32 layerIndex = gameObject->GetLayerIndex();
-//	if (layerIndex >= m_Layers.size()) return EResult::InvalidArgument;
-//	return m_Layers[layerIndex]->RemoveGameObject(gameObject);
-//}
-//
-//EResult Scene::MoveGameObjectLayer(class GameObject* gameObject, uint32 targetLayerIndex)
-//{
-//	if (!gameObject) return EResult::InvalidArgument;
-//	if (targetLayerIndex >= m_Layers.size()) return EResult::InvalidArgument;
-//
-//	uint32 currentLayerIndex = gameObject->GetLayerIndex();
-//	if (currentLayerIndex == targetLayerIndex) return EResult::Success;
-//
-//	Safe_AddRef(gameObject);
-//
-//	Layer* currentLayer = FindLayer(currentLayerIndex);
-//	Layer* targetLayer = FindLayer(targetLayerIndex);
-//
-//	currentLayer->RemoveGameObject(gameObject);
-//	targetLayer->AddGameObject(gameObject);
-//
-//	Safe_Release(gameObject);
-//	return EResult::Success;
-//}
-//
-//EResult Scene::MoveGameObjectOrder(class GameObject* gameObject, int8 dir)
-//{
-//	if (!gameObject) return EResult::InvalidArgument;
-//
-//	Layer* layer = FindLayer(gameObject->GetLayerIndex());
-//	if(layer)
-//		return layer->MoveGameObject(gameObject, dir);
-//	return EResult::Fail;
-//}
-//
-//EResult Scene::RegisterDeadGameObject(class GameObject* gameObject)
-//{
-//	if (!gameObject) return EResult::InvalidArgument;
-//	m_DeadGameObjects.push_back(gameObject);
-//	return EResult::Success;
-//}
-//
-//EResult Scene::FlushDeadGameObjects()
-//{
-//	for (auto& deadObject : m_DeadGameObjects)
-//	{
-//		if (deadObject == nullptr || !deadObject->IsDead()) continue;
-//		uint32 layerIndex = deadObject->GetLayerIndex();
-//		m_GameObjectMap.erase(deadObject->GetID());
-//		if (GameObject* parent = deadObject->GetParent())
-//		{
-//			parent->RemoveChild(deadObject);
-//		}
-//		else if(layerIndex < m_Layers.size())
-//		{
-//			m_Layers[layerIndex]->RemoveDeadGameObject(deadObject);
-//		}
-//	}
-//	m_DeadGameObjects.clear();
-//	return EResult::Success;
-//}
-//
-//GameObject* Scene::FindGameObject(const wstring& name)
-//{
-//	for (auto& layer : m_Layers)
-//	{
-//		GameObject* gameObject = layer->FindGameObject(name);
-//		if (gameObject)
-//			return gameObject;
-//	}
-//	return nullptr;
-//}
-//
-//GameObject* Scene::FindGameObject(uint64 id)
-//{
-//	auto it = m_GameObjectMap.find(id);
-//	if (it != m_GameObjectMap.end())
-//	{
-//		return it->second;
-//	}
-//	return nullptr;
-//}
-//#pragma endregion
 
 #pragma region Entity Management
 Entity& Scene::CreateEntity()
@@ -405,6 +149,26 @@ const Entity* Scene::FindEntityById(uint64 id) const
 	}
 	return nullptr;
 }
+bool Engine::Scene::MoveSiblingOrder(entt::entity entity, int direction)
+{
+	if (!m_LocalRegistry.valid(entity) || (direction != -1 && direction != 1)) return false;
+	const auto* link = m_LocalRegistry.try_get<HierarchyComponent>(entity);
+	if (!link || link->parent == entt::null) return false;
+
+	auto* parentLink = m_LocalRegistry.try_get<HierarchyComponent>(link->parent);
+	if (!parentLink) return false;
+
+	auto& siblings = parentLink->children;
+	auto it = std::find(siblings.begin(), siblings.end(), entity);
+	if (it == siblings.end()) return false;
+
+	const auto index = std::distance(siblings.begin(), it);
+	const auto targetIndex = index + direction;
+	if (targetIndex < 0 || targetIndex >= static_cast<std::ptrdiff_t>(siblings.size())) return false;
+
+	std::swap(siblings[index], siblings[targetIndex]);
+	return true;
+}
 void Scene::ClearEntities()
 {
 	for (auto& pair : m_EntityMap)
@@ -427,5 +191,40 @@ void Scene::SetPaused(bool paused)
 {
 	if (paused) AddFlag(m_Flags, ESceneFlags::Paused);
 	else RemoveFlag(m_Flags, ESceneFlags::Paused);
+}
+void Engine::Scene::UpdateHierarchyFlags()
+{
+	auto& world = m_LocalRegistry;
+	std::unordered_set<entt::entity> visited;
+
+	const auto propagate = [&](auto&& self, entt::entity entity, EEntityFlag parentEffective) -> void
+		{
+			if (!world.valid(entity) || !visited.insert(entity).second) return;
+			auto* flagComp = world.try_get<FlagComponent>(entity);
+			EEntityFlag currentEffective = flagComp ? flagComp->flags : EEntityFlag::Default;
+
+			if (parentEffective != EEntityFlag::None)
+			{
+				const bool parentActive = HasFlag(parentEffective, EEntityFlag::Active);
+				const bool parentVisible = HasFlag(parentEffective, EEntityFlag::Visible) && parentActive;
+				const bool parentDead = HasFlag(parentEffective, EEntityFlag::Dead);
+
+				if (!parentActive) RemoveFlag(currentEffective, EEntityFlag::Active);
+				if (!parentVisible) RemoveFlag(currentEffective, EEntityFlag::Visible);
+				if (parentDead) AddFlag(currentEffective, EEntityFlag::Dead);
+			}
+
+			if (flagComp) flagComp->effectiveFlags = currentEffective;
+
+			if (const auto* link = world.try_get<HierarchyComponent>(entity))
+				for (const auto child : link->children) self(self, child, currentEffective);
+		};
+
+	// 1. 루트 엔티티(부모가 없는 엔티티)부터 하향식으로 전파
+	for (const auto entity : world.view<FlagComponent>())
+	{
+		const auto* link = world.try_get<HierarchyComponent>(entity);
+		if (!link || link->parent == entt::null) propagate(propagate, entity, EEntityFlag::None);
+	}
 }
 #pragma endregion

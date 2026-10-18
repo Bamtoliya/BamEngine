@@ -1,6 +1,5 @@
 ﻿#pragma once
 
-#include "Base.h"
 #include "Editor_Includes.h"
 
 BEGIN(Editor)
@@ -17,36 +16,21 @@ private:
 	virtual void Free() override;
 #pragma endregion
 
-
-#pragma region Object Selection
-public:
-	vector<class GameObject*>& GetSelectionContext();
-	class GameObject* GetPrimarySelection();
-	void ToggleSelection(class GameObject* gameObject);
-	void ClearSelection(bool force = false);
-	void SetSelectedObject(class GameObject* gameObject);
-	bool IsSelected(class GameObject* gameObject) const;
-	void AddToSelection(class GameObject* gameObject);
-	class GameObject* PickObjectByRay(const struct Ray& ray);
-public:
-	bool IsPrimarySelectionLocked() { return m_LockPrimarySeletion; }
-	void SetPrimarySelectionLock(bool lock = true) { m_LockPrimarySeletion = lock; }
-	void TogglePrimarySelectionLock() { m_LockPrimarySeletion = !m_LockPrimarySeletion; }
-#pragma endregion
-
-
 #pragma region Entity Selection
 public:
 	vector<class Entity*>& GetSelectedEntities();
 	class Entity* GetPrimarySelectedEntity();
-	void ToggleEntitySelection(class Entity* entity);
+	void ToggleSelection(class Entity* entity);
+	void ToggleEntitySelection(class Entity* entity) { ToggleSelection(entity); }
 	void SetSelectedEntity(class Entity* entity);
 	bool IsEntitySelected(class Entity* entity) const;
-	void AddToEntitySelection(class Entity* entity);
-	// Mesh-bounds broad phase; triangle and sprite-alpha tests are future narrow phases.
-	class Entity* PickEntityByRay(const struct Ray& ray, float maxDistance);
+	void AddToSelection(class Entity* entity);
+	void AddToEntitySelection(class Entity* entity) { AddToSelection(entity); }
+	void ClearSelection(bool force = false);
 public:
-
+	bool IsPrimarySelectionLocked() { return m_LockPrimarySeletion; }
+	void SetPrimarySelectionLock(bool lock = true) { m_LockPrimarySeletion = lock; }
+	void TogglePrimarySelectionLock() { m_LockPrimarySeletion = !m_LockPrimarySeletion; }
 #pragma endregion
 
 
@@ -64,7 +48,6 @@ public:
 
 private:
 	bool m_LockPrimarySeletion = { false };
-	vector<class GameObject*> m_SelectedObjects;
 	vector<class Entity*> m_SelectedEntities;
 	filesystem::path m_LastSelectedAssetPath;
 	filesystem::path m_LastSelectedResourcePath;

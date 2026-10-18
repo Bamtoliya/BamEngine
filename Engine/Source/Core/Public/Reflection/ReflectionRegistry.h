@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "Types.h"
 #include "Base.h"
@@ -35,6 +35,7 @@ struct ComponentReflectionEntry
     AddFunc Add = nullptr;
     reflection::ObjectView (*Edit)(entt::registry&, entt::entity) = nullptr;
     reflection::ObjectView (*View)(const entt::registry&, entt::entity) = nullptr;
+    reflection::ObjectView(*Default)() = nullptr;
     ReadFunc Read = nullptr;
     bool (*Copy)(const entt::registry&, entt::entity, entt::registry&, entt::entity) = nullptr;
     void (*Remove)(entt::registry&, entt::entity) = nullptr;
@@ -67,24 +68,23 @@ public:
     void Free() override;
 
     [[nodiscard]] const reflection::Registry& GetRegistry() const noexcept { return m_Registry; }
+    [[nodiscard]] const archive_reflection::PropertyCodecs& GetPropertyCodecs() const noexcept { return m_Codecs; }
     [[nodiscard]] const reflection::RegistrationResult& GetRegistrationResult() const noexcept
     {
         return m_RegistrationResult;
     }
-    [[nodiscard]] static bool IsCreated() noexcept;
     [[nodiscard]] std::span<const ComponentReflectionEntry> GetComponentEntries() const { return m_Components; }
     [[nodiscard]] const ComponentReflectionEntry* FindComponent(std::type_index type) const;
     [[nodiscard]] const ComponentReflectionEntry* FindComponent(entt::id_type storageId) const;
     [[nodiscard]] const ComponentReflectionEntry* FindComponent(std::string_view qualifiedName) const;
 
-    [[nodiscard]] reflection::ObjectView GetComponentObject(entt::registry& world,
-        entt::id_type storageId, entt::entity entity) const;
-    [[nodiscard]] reflection::ObjectView GetComponentObject(const entt::registry& world,
-        entt::id_type storageId, entt::entity entity) const;
-    [[nodiscard]] ComponentVisitResult ForEachComponent(entt::registry& world,
-        entt::entity entity, const ComponentVisitor& visitor) const;
-    [[nodiscard]] ComponentVisitResult ForEachComponent(const entt::registry& world,
-        entt::entity entity, const ComponentVisitor& visitor) const;
+    [[nodiscard]] reflection::ObjectView GetComponentObject(entt::registry& world, entt::id_type storageId, entt::entity entity) const;
+    [[nodiscard]] reflection::ObjectView GetComponentObject(const entt::registry& world, entt::id_type storageId, entt::entity entity) const;
+    [[nodiscard]] ComponentVisitResult ForEachComponent(entt::registry& world, entt::entity entity, const ComponentVisitor& visitor) const;
+    [[nodiscard]] ComponentVisitResult ForEachComponent(const entt::registry& world, entt::entity entity, const ComponentVisitor& visitor) const;
+
+    [[nodiscard]] reflection::ObjectView GetDefaultComponentObject(entt::id_type storageId) const;
+    [[nodiscard]] reflection::ObjectView GetDefaultComponentObject(const reflection::TypeInfo& type) const;
 
     [[nodiscard]] archive::ArchiveResult WriteComponent(archive::IArchive& ar, std::string_view key,
         const entt::registry& world, entt::entity entity, std::type_index type,

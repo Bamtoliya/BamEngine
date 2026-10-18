@@ -1,35 +1,29 @@
 ﻿#pragma once
 
 #include "Renderer.h"
+//RHI
 #include "RHI.h"
-
 #include "SDLGPURHI.h"
-
-#include "ResourceManager.h"
-
-#include "PipelineManager.h"
+//Rendering
 #include "RenderPassManager.h"
 #include "RenderTargetManager.h"
-#include "RenderComponent.h"
-#include "UIRenderComponent.h"
-
+//Pipeline
 #include "RHIPipeline.h"
-
-#include "GameObject.h"
-
+#include "PipelineManager.h"
+//Resource
+#include "ResourceManager.h"
+#include "Mesh.h"
 #include "Shader.h"
-#include "Camera.h"
+#include "Texture.h"
+#include "MaterialInterface.h"
 
-#include "Transform.h"
+//Light
 #include "LightManager.h"
 
-#include "Texture.h"
-
-#include "Mesh.h"
-#include "MaterialInterface.h"
 #include "SamplerManager.h"
 #include "SceneManager.h"
 #include "CoreComponents.h"
+#include "PickingManager.h"
 
 IMPLEMENT_SINGLETON(Renderer)
 
@@ -60,15 +54,10 @@ EResult Renderer::Initialize(void* arg)
 
 void Renderer::Free()
 {	
-	ClearPickingState();
 	m_RenderPassManager = nullptr;
-	//Safe_Release(m_SceneBuffer);
-	//Safe_Release(m_DepthBuffer);
 
 	if (m_RHI)
 	{
-		//순환참조 때문에 명시적으로 해제
-		//m_RHI->Free();
 		Safe_Release(m_RHI);
 	}
 }
@@ -77,10 +66,6 @@ void Renderer::Free()
 #pragma region Render Management	
 EResult Renderer::BeginFrame()
 {
-	++m_PickingFrameSerial;
-	ClearPickingTargets(m_PickingTargets);
-	m_PickingIds.clear();
-	m_PickingPasses.clear();
 	if (!m_RenderPassManager)
 		m_RenderPassManager = &RenderPassManager::Get();
 	if (m_RHI)
@@ -92,13 +77,21 @@ EResult Renderer::BeginFrame()
 
 EResult Renderer::Render(f32 dt)
 {
-	unordered_map<RenderPassID, vector<Camera*>> jobsPerPass;
+	LightManager::Get().UpdateLightBuffer();
+
+	struct ViewportJob
+	{
+		CameraBuffer cameraBuffer = {};
+		bool hasCamera = false;
+	};
+
+	unordered_map<RenderPassID, vector<ViewportJob>> jobsPerPass;
 	uint32 rtWidth = m_RHI->GetSwapChainWidth();
 	uint32 rtHeight = m_RHI->GetSwapChainHeight();
 	for (const auto& viewportInfo : m_ViewportCameras)
 	{
-    	if (!viewportInfo.renderPass) continue;
-    	jobsPerPass[viewportInfo.renderPass->GetID()].push_back(viewportInfo.camera);
+		if (!viewportInfo.renderPass) continue;
+		jobsPerPass[viewportInfo.renderPass->GetID()].push_back({ viewportInfo.cameraBuffer, viewportInfo.hasCamera });
 	}
 
 	const vector<RenderPass*>& renderPasses = m_RenderPassManager->GetAllRenderPasses();
@@ -106,19 +99,18 @@ EResult Renderer::Render(f32 dt)
 	for (const auto& pass : renderPasses)
 	{
 		const ERenderPassType passType = pass->GetPassType();
-		if (passType == ERenderPassType::Shadow && LightManager::Get().GetShadowCastingLights().empty())
+		if (passType == ERenderPassType::Shadow && !LightManager::Get().HasShadowCastingLights())
 			continue;
 		auto jobsIt = jobsPerPass.find(pass->GetID());
 
-		vector<Camera*> cameras;
+		vector<ViewportJob> jobs;
 		if (jobsIt != jobsPerPass.end())
-			cameras = jobsIt->second;
+			jobs = jobsIt->second;
 		else
-			cameras.push_back(nullptr);
+			jobs.push_back(ViewportJob{});
 
-		for (Camera* cam : cameras)
+		for (const auto& job : jobs)
 		{
-			bool pickingPassSucceeded = true;
 			if (IsFailure(m_RHI->BeginRenderPass(pass)))
 				continue;
 
@@ -154,9 +146,9 @@ EResult Renderer::Render(f32 dt)
 				cameraBuffer.viewProjMatrix = cameraBuffer.projMatrix * cameraBuffer.viewMatrix;
 				cameraBuffer.cameraPosition = vec3(0.f);
 			}
-			else if (cam)
+			else if (job.hasCamera)
 			{
-				cameraBuffer = cam->GetCameraBuffer();
+				cameraBuffer = job.cameraBuffer;
 			}
 			else
 			{
@@ -170,6 +162,17 @@ EResult Renderer::Render(f32 dt)
 			{
 				ENGINE_LOG_ERROR("Failed to bind camera constant buffer.");
 				return EResult::Fail;
+			}
+
+			for (const auto& [slot, buffer] : pass->GetAllPassConstants())
+			{
+				if (!buffer.empty())
+				{
+					if (IsFailure(m_RHI->BindConstantBuffer(buffer.data(), static_cast<uint32>(buffer.size()), slot)))
+					{
+						ENGINE_LOG_ERROR("Failed to bind pass constant buffer. Slot: {}, Pass ID: {}", slot, pass->GetID());
+					}
+				}
 			}
 
 			m_RHI->SetViewport(0, 0, rtWidth, rtHeight);
@@ -186,7 +189,6 @@ EResult Renderer::Render(f32 dt)
 
 				if (IsFailure(result))
 				{
-					pickingPassSucceeded = false;
 					ENGINE_LOG_ERROR(
 						"ECS mesh rendering failed. Pass ID: {}",
 						pass->GetID());
@@ -205,25 +207,17 @@ EResult Renderer::Render(f32 dt)
 
 				if (IsFailure(result))
 				{
-					pickingPassSucceeded = false;
 					ENGINE_LOG_ERROR(
 						"ECS sprite rendering failed. Pass ID: {}",
 						pass->GetID());
 				}
 			}
 
-			auto it = m_RenderQueues.find(pass->GetID());
-			if (it != m_RenderQueues.end())
-				RenderComponents(dt, it->second, pass->GetSortType(), pass);
-
-			auto uiIt = m_UIRenderQueues.find(pass->GetID());
 			if (const auto images = m_UIImageDrawCommands.find(pass->GetID()); images != m_UIImageDrawCommands.end())
 			{
 				if (IsFailure(RenderUIImages(images->second, pass)))
 					ENGINE_LOG_ERROR("ECS UI image rendering failed. Pass ID: {}", pass->GetID());
 			}
-			if (uiIt != m_UIRenderQueues.end())
-				RenderUIComponents(dt, uiIt->second, pass->GetSortType(), pass);
 			
 			auto customIt = m_CustomRenderQueues.find(pass->GetID());
 			if (customIt != m_CustomRenderQueues.end())
@@ -232,67 +226,15 @@ EResult Renderer::Render(f32 dt)
 					command(dt, pass);
 			}
 
-			if (IsFailure(m_RHI->EndRenderPass())) pickingPassSucceeded = false;
-			if (passType == ERenderPassType::Geometry && pickingPassSucceeded)
-				m_PickingPasses.insert(pass->GetID());
+			if (IsFailure(m_RHI->EndRenderPass()))
+				return EResult::Fail;
+			if (passType == ERenderPassType::Geometry) 
+				PickingManager::Get().MarkPickingPass(pass->GetID());
 		}
-
 		GetRenderPassDelegate(pass->GetID()).Broadcast(dt);
 	}
 
 	return EResult::Success;
-}
-
-EResult Renderer::RenderComponents(f32 dt, vector<class RenderComponent*> queue, ERenderSortType sortType, RenderPass* renderPass)
-{
-	if (sortType != ERenderSortType::None && !queue.empty())
-	{
-		const Camera* cam = GetViewportCamera(renderPass->GetID());
-		const vec3 camPos = cam ? cam->GetCameraBuffer().cameraPosition : vec3(0.f);
-
-		const bool bBackToFront = (sortType == ERenderSortType::BackToFront);
-
-		std::sort(queue.begin(), queue.end(),
-			[&camPos, bBackToFront](const RenderComponent* a, const RenderComponent* b)
-			{
-				Transform* ta = a->GetOwner()->GetComponent<Transform>();
-				Transform* tb = b->GetOwner()->GetComponent<Transform>();
-				if (!ta || !tb) return false;
-				const float da = glm::distance2(vec3(ta->GetWorldMatrix()[3]), camPos);
-				const float db = glm::distance2(vec3(tb->GetWorldMatrix()[3]), camPos);
-				return bBackToFront ? (da > db) : (da < db);
-			});
-	}
-
-	for (auto* component : queue)
-	{
-		if (component)
-		{
-			if (IsFailure(component->Render(dt, renderPass)))
-			{
-				ENGINE_LOG_ERROR("Component Render Failed! Component Name: {0}", WStrToStr(component->GetOwner()->GetName()));
-				continue;
-			}
-		}
-	}
-	return EResult::Success;
-}
-
-EResult Renderer::RenderUIComponents(f32 dt, vector<class UIRenderComponent*> queue, ERenderSortType sortType, RenderPass* renderPass)
-{
-
-	for (auto* component : queue)
-	{
-		if (component)
-		{
-			if (IsFailure(component->Render(dt, renderPass)))
-			{
-				ENGINE_LOG_ERROR("UI Component Render Failed! Component Name: {0}", WStrToStr(component->GetOwner()->GetName()));
-				continue;
-			}
-		}
-	}
-	return EResult();
 }
 
 TODO("Renderer::RenderMeshes, RenderSkinnedMeshes, RenderSprite 함수에서 Material과 Mesh를 Bind하고 DrawIndexed 호출하는 부분을 RHI에 맞게 구현 필요")
@@ -493,23 +435,7 @@ EResult Renderer::EndFrame()
 		m_RHI->SetViewport(0, 0, m_RHI->GetSwapChainWidth(), m_RHI->GetSwapChainHeight());
 		frameResult = m_RHI->EndFrame();
 	}
-	ClearPickingTargets(m_CompletedPickingTargets);
-	m_CompletedPickingPasses.clear();
-	m_CompletedPickingFrameSerial = 0;
-	if (IsSuccess(frameResult))
-	{
-		m_CompletedPickingTargets.swap(m_PickingTargets);
-		m_CompletedPickingPasses.swap(m_PickingPasses);
-		m_CompletedPickingFrameSerial = m_PickingFrameSerial;
-	}
 
-	for (auto& pair : m_RenderQueues)
-	{
-		RELEASE_VECTOR(pair.second);
-	}
-
-	m_RenderQueues.clear();
-	m_UIRenderQueues.clear();
 	m_CustomRenderQueues.clear();
 	m_ViewportCameras.clear(); 
 	m_PassFrustums.clear();
@@ -522,73 +448,7 @@ EResult Renderer::EndFrame()
 }
 #pragma endregion
 
-void Renderer::ClearPickingTargets(vector<PickingTarget>& targets)
-{
-	for (auto& target : targets)
-		Safe_Release(target.scene);
-	targets.clear();
-}
-
-void Renderer::ClearPickingState()
-{
-	ClearPickingTargets(m_PickingTargets);
-	ClearPickingTargets(m_CompletedPickingTargets);
-	m_PickingIds.clear();
-	m_PickingPasses.clear();
-	m_CompletedPickingPasses.clear();
-	m_CompletedPickingFrameSerial = 0;
-}
-
-uint32 Renderer::RegisterPickingEntity(Scene* scene, entt::entity entity)
-{
-	if (!scene || !scene->GetRegistry().valid(entity)) return 0;
-	const auto* id = scene->GetRegistry().try_get<IDComponent>(entity);
-	if (!id || id->id == 0) return 0;
-	auto& ids = m_PickingIds[scene];
-	if (const auto found = ids.find(entity); found != ids.end()) return found->second;
-	// Float32 can represent every integer in this range without rounding.
-	if (m_PickingTargets.size() >= 0x00ffffffu) return 0;
-	m_PickingTargets.push_back({ scene, entity, id->id });
-	Safe_AddRef(scene);
-	const uint32 pickingId = static_cast<uint32>(m_PickingTargets.size());
-	ids.emplace(entity, pickingId);
-	return pickingId;
-}
-
-Entity* Renderer::ResolvePickingEntity(uint32 pickingId) const
-{
-	if (pickingId == 0 || pickingId > m_CompletedPickingTargets.size()) return nullptr;
-	const auto& target = m_CompletedPickingTargets[pickingId - 1];
-	const auto scenes = SceneManager::Get().GetActiveScenes();
-	if (std::find(scenes.begin(), scenes.end(), target.scene) == scenes.end()) return nullptr;
-	const auto& world = target.scene->GetRegistry();
-	if (!world.valid(target.entity)) return nullptr;
-	const auto* id = world.try_get<IDComponent>(target.entity);
-	const auto* flag = world.try_get<FlagComponent>(target.entity);
-	if (!id || id->id != target.persistentId || !flag || !HasFlag(flag->flags, EEntityFlag::Active) ||
-		!HasFlag(flag->flags, EEntityFlag::Visible) || HasFlag(flag->flags, EEntityFlag::Dead)) return nullptr;
-	return target.scene->FindEntity(target.entity);
-}
-
 #pragma region Queue Management
-void Renderer::Submit(class RenderComponent* component, RenderPassID passID)
-{
-	Safe_AddRef(component);
-	m_RenderQueues[passID].push_back(component);
-}
-void Renderer::SubmitAllPass(RenderComponent* component)
-{
-	for (auto& pair : m_RenderPassManager->GetAllRenderPasses())
-	{
-		m_RenderQueues[pair->GetID()].push_back(component);
-		Safe_AddRef(component);
-	}
-}
-void Renderer::SubmitUI(UIRenderComponent* uiRenderer, RenderPassID passID)
-{
-	Safe_AddRef(uiRenderer);
-	m_UIRenderQueues[passID].push_back(uiRenderer);
-}
 void Renderer::SubmitCustomCommand(const CustomRenderCommand& command, RenderPassID passID)
 {
 	m_CustomRenderQueues[passID].push_back(command);
@@ -596,12 +456,6 @@ void Renderer::SubmitCustomCommand(const CustomRenderCommand& command, RenderPas
 
 void Renderer::ClearRenderQueue(RenderPassID passID)
 {
-	auto it = m_RenderQueues.find(passID);
-	if (it != m_RenderQueues.end())
-	{
-		RELEASE_VECTOR(it->second);
-		m_RenderQueues.erase(it);
-	}
 	auto customIt = m_CustomRenderQueues.find(passID);
 	if (customIt != m_CustomRenderQueues.end())
 	{
@@ -616,11 +470,6 @@ void Renderer::ClearRenderQueue(RenderPassID passID)
 
 void Renderer::ClearAllRenderQueues()
 {
-	for (auto& pair : m_RenderQueues)
-	{
-		RELEASE_VECTOR(pair.second);
-	}
-	m_RenderQueues.clear();
 	for (auto& pair : m_CustomRenderQueues)
 	{
 		pair.second.clear();
@@ -654,54 +503,52 @@ void Renderer::SubmitUIImage(const UIImageDrawCommand& command, RenderPassID pas
 
 #pragma region Viewport Camera Management
 
-void Renderer::RegisterViewportCamera(Camera* camera, RenderPass* renderPass)
+void Renderer::RegisterViewportCamera(const CameraBuffer& cameraBuffer, RenderPass* renderPass)
 {
-	m_ViewportCameras.push_back({ camera, renderPass });
+	m_ViewportCameras.push_back({ cameraBuffer, true, renderPass });
 	if (!renderPass) return;
 
 	const RenderPassID passID = renderPass->GetID();
-	const bool isShadow = (renderPass->GetPassType() == ERenderPassType::Shadow);
-
-	if (isShadow)
+	if (renderPass->GetPassType() == ERenderPassType::Shadow)
 	{
-		// Shadow Pass: 라이트의 View-Projection 기준으로 프러스텀 생성
-		if (!LightManager::Get().GetShadowCastingLights().empty())
+		if (LightManager::Get().HasShadowCastingLights())
 		{
-			m_PassFrustums[passID] = FrustumCuller::ExtractFrustum(
-				LightManager::Get().GetShadowCameraBuffer(uint32(0)).viewProjMatrix);
+			m_PassFrustums[passID] = FrustumCuller::ExtractFrustum(LightManager::Get().GetShadowCameraBuffer(uint32(0)).viewProjMatrix);
 			m_PassFrustumIsShadow[passID] = true;
 		}
 	}
-	else if (camera)
+	else
 	{
-		// 일반 Pass: 카메라의 View-Projection 기준으로 프러스텀 생성
-		m_PassFrustums[passID] = FrustumCuller::ExtractFrustum(
-			camera->GetCameraBuffer().viewProjMatrix);
+		m_PassFrustums[passID] = FrustumCuller::ExtractFrustum(cameraBuffer.viewProjMatrix);
 		m_PassFrustumIsShadow[passID] = false;
+	}
+}
+
+void Renderer::RegisterViewportCamera(RenderPass* renderPass)
+{
+	m_ViewportCameras.push_back({ {}, false, renderPass });
+	if (!renderPass) return;
+
+	const RenderPassID passID = renderPass->GetID();
+	if (renderPass->GetPassType() == ERenderPassType::Shadow)
+	{
+		if (LightManager::Get().HasShadowCastingLights())
+		{
+			m_PassFrustums[passID] = FrustumCuller::ExtractFrustum(LightManager::Get().GetShadowCameraBuffer(uint32(0)).viewProjMatrix);
+			m_PassFrustumIsShadow[passID] = true;
+		}
 	}
 }
 
 void Renderer::RegisterUICanvas(Scene* scene, entt::entity canvas, RenderPass* renderPass)
 {
-	if (renderPass) m_ViewportCameras.push_back({ nullptr, renderPass, scene, canvas, true });
+	if (renderPass) m_ViewportCameras.push_back({ {}, false, renderPass, scene, canvas, true });
 }
 
 void Renderer::UnregisterViewportCamera(RenderPassID passID)
 {
 	m_ViewportCameras.erase(std::remove_if(m_ViewportCameras.begin(), m_ViewportCameras.end(),
 		[passID](const ViewportCameraInfo& info) { return info.renderPass->GetID() == passID; }), m_ViewportCameras.end());
-}
-
-Camera* Renderer::GetViewportCamera(RenderPassID passID) const
-{
-	for (const auto& info : m_ViewportCameras)
-	{
-		if (info.renderPass->GetID() == passID)
-		{
-			return info.camera;
-		}
-	}
-	return nullptr;
 }
 #pragma endregion
 

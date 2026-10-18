@@ -1,0 +1,29 @@
+{
+    "AssetHeader": {
+        "MagicNumber": 6072351289621954882,
+        "ResourceType": 3,
+        "Version": 0
+    },
+    "m_BlendMode": 2,
+    "m_CullMode": 0,
+    "m_DepthCompareOp": 1,
+    "m_DepthMode": 1,
+    "m_FillMode": 1,
+    "m_FrontFace": 0,
+    "m_Key": "Resources/Material/TransparentMaterial",
+    "m_Parameters": [],
+    "m_Path": "",
+    "m_PixelShaderHandle": {
+        "AssetKey": "Resources/Shader/DefaultPS",
+        "AssetPath": "Resources/Shader/bin/dxil/defaultPS.cso",
+        "Null": false
+    },
+    "m_ResourceType": 3,
+    "m_TextureBindings": [],
+    "m_Version": 0,
+    "m_VertexShaderHandle": {
+        "AssetKey": "Resources/Shader/DefaultVS",
+        "AssetPath": "Resources/Shader/bin/dxil/defaultVS.cso",
+        "Null": false
+    }
+}

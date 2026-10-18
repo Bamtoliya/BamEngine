@@ -110,7 +110,7 @@ namespace Engine
 	STRUCT()
 	struct ENGINE_API VertexPosition
 	{
-		REFLECT_STRUCT();
+		REFLECT_BODY();
 		PROPERTY()
 		glm::vec3 position = {};
 		VertexPosition() = default;
@@ -124,7 +124,7 @@ namespace Engine
 	STRUCT()
 	struct ENGINE_API VertexMaterial
 	{
-		REFLECT_STRUCT();
+		REFLECT_BODY();
 		PROPERTY()
 		glm::vec3 normal = {};
 		PROPERTY()
@@ -152,7 +152,7 @@ namespace Engine
 	STRUCT()
 		struct ENGINE_API Vertex
 	{
-		REFLECT_STRUCT();
+		REFLECT_BODY();
 
 		PROPERTY()
 			glm::vec3 position = {};

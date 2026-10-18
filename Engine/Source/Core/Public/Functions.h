@@ -130,9 +130,16 @@ namespace Engine
 		}
 		return hash;
 	}
+
+	template<glm::length_t L, typename T, glm::qualifier Q>
+	inline bool IsFinite(const glm::vec<L, T, Q>& v)
+	{
+		return !glm::any(glm::isnan(v)) && !glm::any(glm::isinf(v));
+	}
 }
 
 inline void HashCombine(std::size_t& seed, std::size_t value)
 {
 	seed ^= value + 0x9e3779b9 + (seed << 6) + (seed >> 2);
 }
+

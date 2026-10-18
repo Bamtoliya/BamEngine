@@ -1,4 +1,4 @@
-#include "Scene.h"
+﻿#include "Scene.h"
 #include "SceneManager.h"
 #include "CoreComponents.h"
 #include "PhysicsComponent.h"
@@ -10,6 +10,7 @@
 #include <archive/JsonArchive.h>
 #include <archive/BeveArchive.h>
 
+#include <cstring>
 #include <fstream>
 #include <iostream>
 #include <limits>
@@ -49,6 +50,21 @@ namespace
     {
         for (int i = 0; i < 4; ++i)
             if (glm::length(left[i] - right[i]) > 1.0e-4f) return false;
+        return true;
+    }
+
+    bool TryGetFloatParameter(const Engine::MaterialInterface* material, const char* name, float& outValue)
+    {
+        if (material == nullptr)
+            return false;
+
+        const auto& parameters = material->GetParameters();
+        const auto iter = parameters.find(name);
+        if (iter == parameters.end() || iter->second.type != Engine::EMaterialParameterType::Float ||
+            iter->second.data.size() < sizeof(float))
+            return false;
+
+        std::memcpy(&outValue, iter->second.data.data(), sizeof(float));
         return true;
     }
 
@@ -344,18 +360,18 @@ namespace
         meshDesc.IndexStride = sizeof(uint32);
         meshDesc.BoundingBoxMin = { -1.0f, -2.0f, -3.0f };
         meshDesc.BoundingBoxMax = { 4.0f, 5.0f, 6.0f };
-        auto meshHandle = rm.CreateResource<Engine::Mesh>(&meshDesc);
+        auto meshHandle = rm.LoadResource<Engine::Mesh>(&meshDesc);
         if (!meshHandle.IsValid() || Engine::IsFailure(rm.SaveToJsonFile(meshHandle.Get(), L"test-mesh.bammesh.json")))
             return Fail("Mesh creation or JSON archive save failed.");
 
         ShaderDesc vsDesc{};
         vsDesc.Key = L"test-vs.bamshader.json";
         vsDesc.Path = L"test-vs.bamshader.json";
-        vsDesc.shaderType = Engine::EShaderType::Vertex;
+        vsDesc.shaderType = EShaderType::Vertex;
         vsDesc.entryPoint = "VSMain";
         vsDesc.spirvPath = L"Shaders/TestVS.spv";
         vsDesc.numUniformBuffers = 2;
-        auto vsHandle = rm.CreateResource<Engine::Shader>(&vsDesc);
+        auto vsHandle = rm.LoadResource<Engine::Shader>(&vsDesc);
         if (!vsHandle.IsValid() || Engine::IsFailure(rm.SaveToJsonFile(vsHandle.Get(), L"test-vs.bamshader.json")))
             return Fail("Shader creation or JSON archive save failed.");
 
@@ -364,17 +380,17 @@ namespace
         matDesc.Path = L"test-mat.bammaterial.json";
         matDesc.VertexShaderHandle = vsHandle;
         matDesc.CullMode = Engine::ECullMode::None;
-        auto matHandle = rm.CreateResource<Engine::Material>(&matDesc);
+        auto matHandle = rm.LoadResource<Engine::Material>(&matDesc);
         if (!matHandle.IsValid()) return Fail("Material creation failed.");
         matHandle->SetFloat("Roughness", 0.75f);
         if (Engine::IsFailure(rm.SaveToJsonFile(matHandle.Get(), L"test-mat.bammaterial.json")))
             return Fail("Material JSON archive save failed.");
 
-        Engine::MaterialInstanceDesc miDesc{};
+        MaterialInstanceDesc miDesc{};
         miDesc.Key = L"test-mi.bammatinst.json";
         miDesc.Path = L"test-mi.bammatinst.json";
-        miDesc.ParentMaterial = matHandle;
-        auto miHandle = rm.CreateResource<Engine::MaterialInstance>(&miDesc);
+        miDesc.BaseMaterialHandle = matHandle;
+        auto miHandle = rm.LoadResource<Engine::MaterialInstance>(&miDesc);
         if (!miHandle.IsValid()) return Fail("MaterialInstance creation failed.");
         miHandle->SetFloat("Roughness", 0.25f);
         if (Engine::IsFailure(rm.SaveToJsonFile(miHandle.Get(), L"test-mi.bammatinst.json")))
@@ -387,7 +403,7 @@ namespace
         rootBone.Name = L"RootBone";
         rootBone.ParentIndex = -1;
         skelDesc.Bones.push_back(rootBone);
-        auto skelHandle = rm.CreateResource<Engine::Skeleton>(&skelDesc);
+        auto skelHandle = rm.LoadResource<Engine::Skeleton>(&skelDesc);
         if (!skelHandle.IsValid() || Engine::IsFailure(rm.SaveToJsonFile(skelHandle.Get(), L"test-skel.bamskel.json")))
             return Fail("Skeleton creation or JSON archive save failed.");
 
@@ -396,11 +412,11 @@ namespace
         animDesc.Path = L"test-anim.bamanim.json";
         animDesc.Duration = 2.5f;
         animDesc.TicksPerSecond = 30.0f;
-        Engine::AnimationTrack track{};
-        track.BoneName = L"RootBone";
-        track.PositionKeys.push_back({ 0.5f, { 1.0f, 2.0f, 3.0f } });
+        AnimationTrack track{};
+        track.TargetBoneName = L"RootBone";
+        track.PositionKeyframes.push_back({ 0.5, { 1.0f, 2.0f, 3.0f } });
         animDesc.Tracks.push_back(track);
-        auto animHandle = rm.CreateResource<Engine::Animation>(&animDesc);
+        auto animHandle = rm.LoadResource<Engine::Animation>(&animDesc);
         if (!animHandle.IsValid() || Engine::IsFailure(rm.SaveToJsonFile(animHandle.Get(), L"test-anim.bamanim.json")))
             return Fail("Animation creation or JSON archive save failed.");
 
@@ -411,7 +427,7 @@ namespace
         modelDesc.Materials = { matHandle };
         modelDesc.Skeleton = skelHandle;
         modelDesc.Animations = { animHandle };
-        auto modelHandle = rm.CreateResource<Engine::Model>(&modelDesc);
+        auto modelHandle = rm.LoadResource<Engine::Model>(&modelDesc);
         if (!modelHandle.IsValid() || Engine::IsFailure(rm.SaveToJsonFile(modelHandle.Get(), L"test-model.bammodel.json")))
             return Fail("Model creation or JSON archive save failed.");
 
@@ -429,8 +445,7 @@ namespace
 
         auto& collider = world.emplace<Engine::ColliderComponent>(entity);
         Engine::MeshShape meshShape{};
-        meshShape.MeshAsset = meshHandle;
-        meshShape.Convex = true;
+        meshShape.MeshHandle = meshHandle;
         if (!collider.SetShape(meshShape)) return Fail("Failed to set ColliderComponent MeshShape.");
 
         archive::JsonArchive sceneWriter;
@@ -448,16 +463,25 @@ namespace
         staticRenderer = {};
         skinnedRenderer = {};
         collider = {};
-        rm.Clear();
+        rm.Free();
 
-        auto reloadedModel = rm.LoadResource<Engine::Model>(L"test-model.bammodel.json");
-        if (!reloadedModel.IsValid() || reloadedModel->GetMeshCount() != 1 ||
-            reloadedModel->GetMaterialCount() != 1 || reloadedModel->GetAnimationCount() != 1 ||
-            !reloadedModel->GetSkeleton().IsValid() ||
-            reloadedModel->GetSkeleton()->GetBoneIndex(L"RootBone") != 0 ||
-            reloadedModel->GetMesh(0)->GetVertexCount() != 3 ||
-            reloadedModel->GetMesh(0)->GetIndexCount() != 3 ||
-            reloadedModel->GetMaterial(0)->GetFloat("Roughness") != 0.75f)
+        ModelCreateDesc reloadedModelDesc{};
+        reloadedModelDesc.Key = L"test-model.bammodel.json";
+        reloadedModelDesc.Path = L"test-model.bammodel.json";
+        auto reloadedModel = rm.LoadResource<Engine::Model>(&reloadedModelDesc);
+        const auto reloadedMeshes = reloadedModel.IsValid() ? reloadedModel->GetMeshes() : vector<ResourceHandle<Engine::Mesh>>{};
+        const auto reloadedMaterials = reloadedModel.IsValid() ? reloadedModel->GetMaterials() : vector<ResourceHandle<Engine::Material>>{};
+        const auto reloadedAnimations = reloadedModel.IsValid() ? reloadedModel->GetAnimations() : vector<ResourceHandle<Engine::Animation>>{};
+        const auto reloadedSkeleton = reloadedModel.IsValid() ? reloadedModel->GetSkeleton() : ResourceHandle<Engine::Skeleton>{};
+        float reloadedRoughness = 0.0f;
+        if (!reloadedModel.IsValid() || reloadedMeshes.size() != 1 ||
+            reloadedMaterials.size() != 1 || reloadedAnimations.size() != 1 ||
+            !reloadedSkeleton.IsValid() || reloadedSkeleton->GetBoneIndex(L"RootBone") != 0 ||
+            !reloadedMeshes[0].IsValid() || reloadedMeshes[0]->GetVertexCount() != 3 ||
+            reloadedMeshes[0]->GetIndexCount() != 3 ||
+            !reloadedMaterials[0].IsValid() ||
+            !TryGetFloatParameter(reloadedMaterials[0].Get(), "Roughness", reloadedRoughness) ||
+            reloadedRoughness != 0.75f)
             return Fail("Reloaded Model or its dependent Mesh/Material/Skeleton/Animation resources did not match.");
 
         archive::JsonArchive sceneReader;
@@ -475,12 +499,13 @@ namespace
         const auto& restoredSkinned = restoredWorld.get<Engine::SkinnedMeshRendererComponent>(restoredHandle);
         const auto& restoredCollider = restoredWorld.get<Engine::ColliderComponent>(restoredHandle);
         const auto* restoredShape = std::get_if<Engine::MeshShape>(&restoredCollider.GetShape());
+        float restoredRoughness = 0.0f;
         if (!restoredStatic.meshHandle.IsValid() || !restoredStatic.materialHandle.IsValid() ||
             restoredStatic.meshHandle->GetVertexCount() != 3 ||
-            restoredStatic.materialHandle->GetFloat("Roughness") != 0.25f ||
-            !restoredSkinned.skeletonHandle.IsValid() ||
+            !TryGetFloatParameter(restoredStatic.materialHandle.Get(), "Roughness", restoredRoughness) ||
+            restoredRoughness != 0.25f || !restoredSkinned.skeletonHandle.IsValid() ||
             restoredSkinned.skeletonHandle->GetBoneIndex(L"RootBone") != 0 ||
-            restoredShape == nullptr || !restoredShape->MeshAsset.IsValid() || !restoredShape->Convex)
+            restoredShape == nullptr || !restoredShape->MeshHandle.IsValid())
             return Fail("Restored scene ResourceHandle components did not preserve referenced assets.");
         return true;
     }
@@ -492,18 +517,23 @@ namespace
         if (manager.OpenScene(scene.get()) != Engine::EResult::Success)
             return Fail("Failed to open scene for prefab check.");
 
-        const auto rootHandle = scene->FindEntityById(RootId)->GetEntityHandle();
+        Engine::Entity* rootEntity = scene->FindEntityById(RootId);
+        if (rootEntity == nullptr)
+            return Fail("Root entity not found for prefab check.");
+        const auto rootHandle = rootEntity->GetEntityHandle();
+
         archive::JsonArchive prefabWriter;
-        if (manager.SavePrefab(rootHandle, prefabWriter, L"actor.bamprefab.json") != Engine::EResult::Success)
+        if (manager.SavePrefab(prefabWriter, L"actor.bamprefab.json", *rootEntity) != Engine::EResult::Success)
             return Fail("SavePrefab failed.");
 
         archive::JsonArchive prefabReader;
-        entt::entity instantiatedRoot = entt::null;
+        Engine::Entity* instantiatedRootEntity = nullptr;
         if (manager.InstantiatePrefab(
-                prefabReader, L"actor.bamprefab.json", instantiatedRoot, rootHandle) != Engine::EResult::Success ||
-            instantiatedRoot == entt::null || instantiatedRoot == rootHandle)
+                prefabReader, L"actor.bamprefab.json", instantiatedRootEntity, rootEntity) != Engine::EResult::Success ||
+            instantiatedRootEntity == nullptr || instantiatedRootEntity->GetEntityHandle() == rootHandle)
             return Fail("InstantiatePrefab failed.");
 
+        const auto instantiatedRoot = instantiatedRootEntity->GetEntityHandle();
         auto& world = scene->GetRegistry();
         const auto newRootId = world.get<Engine::IDComponent>(instantiatedRoot).id;
         if (newRootId == 0 || newRootId == RootId || newRootId == FirstChildId || newRootId == SecondChildId)
@@ -525,9 +555,9 @@ namespace
         if (!badPrefab.Decode(R"({"Prefab":{"Version":1,"RootId":1,"Entities":[)"
             R"({"Id":1,"Components":[{"Type":"UnknownComponent","Data":{}}]}]}})"))
             return Fail("Failed to decode malformed prefab test JSON.");
-        entt::entity failedRoot = entt::null;
+        Engine::Entity* failedRoot = nullptr;
         if (scene->InstantiatePrefabArchive(badPrefab, failedRoot).Code != archive::ArchiveErrorCode::UnsupportedType ||
-            failedRoot != entt::null || world.storage<Engine::IDComponent>().size() != countBefore)
+            failedRoot != nullptr || world.storage<Engine::IDComponent>().size() != countBefore)
             return Fail("Failed prefab instantiation did not roll back created entities.");
         return true;
     }

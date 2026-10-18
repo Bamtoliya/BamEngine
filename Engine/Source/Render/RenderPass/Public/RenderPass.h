@@ -57,9 +57,32 @@ public:
 	void SetAcceptedBlendModes(EBlendMode blendModes) { m_Desc.acceptedBlendModes = blendModes; }
 #pragma endregion
 
+#pragma region Pass Constant Buffer Interface
+public:
+	// 임의의 슬롯(slot 2, slot 3 등)에 범용 패스 상수 데이터를 바인딩 설정
+	void SetPassConstant(uint32 slot, const void* data, uint32 size)
+	{
+		if (!data || size == 0) return;
+		auto& buf = m_PassConstants[slot];
+		buf.assign(reinterpret_cast<const uint8*>(data), reinterpret_cast<const uint8*>(data) + size);
+	}
+
+	template<typename T>
+	void SetPassConstantStruct(uint32 slot, const T& data)
+	{
+		SetPassConstant(slot, &data, sizeof(T));
+	}
+
+	void ClearPassConstant(uint32 slot) { m_PassConstants.erase(slot); }
+	void ClearAllPassConstants() { m_PassConstants.clear(); }
+	bool HasPassConstant(uint32 slot) const { return m_PassConstants.find(slot) != m_PassConstants.end(); }
+	const unordered_map<uint32, vector<uint8>>& GetAllPassConstants() const { return m_PassConstants; }
+#pragma endregion
+
 #pragma region Variable
 private:
 	DESC m_Desc;
+	unordered_map<uint32, vector<uint8>> m_PassConstants;
 #pragma endregion
 };
 END

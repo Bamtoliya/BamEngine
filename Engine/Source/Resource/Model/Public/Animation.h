@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "Base.h"
 #include "Resource.h"
@@ -6,7 +6,7 @@
 STRUCT()
 struct Keyframe
 {
-	REFLECT_STRUCT()
+	REFLECT_BODY()
 
 	PROPERTY()
 	f64 Time = 0.0;
@@ -19,7 +19,7 @@ struct Keyframe
 STRUCT()
 struct VectorKeyframe : public Keyframe
 {
-	REFLECT_STRUCT()
+	REFLECT_BODY()
 
 	PROPERTY()
 	vec3 Value = vec3(0.0f);
@@ -32,7 +32,7 @@ struct VectorKeyframe : public Keyframe
 STRUCT()
 struct QuaternionKeyframe : public Keyframe
 {
-	REFLECT_STRUCT()
+	REFLECT_BODY()
 
 	PROPERTY()
 	quat Value = glm::identity<quat>();
@@ -46,7 +46,7 @@ struct QuaternionKeyframe : public Keyframe
 STRUCT()
 struct AnimationTrack
 {
-	REFLECT_STRUCT()
+	REFLECT_BODY()
 
 	PROPERTY()
 	wstring TargetBoneName;

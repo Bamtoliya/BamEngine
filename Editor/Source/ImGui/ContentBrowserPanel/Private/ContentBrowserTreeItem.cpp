@@ -20,7 +20,7 @@ bool ContentBrowserTreeItem::DrawNode(
 	if (needToExpand)
 	{
 		try {
-			auto rel = std::filesystem::relative(currentDirectory, path);
+			auto rel = currentDirectory.lexically_relative(path);
 			bool isAncestor = !rel.empty() && rel.string().find("..") == std::string::npos;
 			if (isAncestor)
 			{

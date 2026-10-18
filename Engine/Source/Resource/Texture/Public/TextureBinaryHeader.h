@@ -9,7 +9,7 @@ BEGIN(Engine)
 STRUCT()
 struct ENGINE_API TextureBinaryHeader
 {
-	REFLECT_STRUCT()
+	REFLECT_BODY()
 
 	PROPERTY()
 	uint32 width = 0;

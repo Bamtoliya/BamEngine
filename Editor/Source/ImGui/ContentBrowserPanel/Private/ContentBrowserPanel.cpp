@@ -45,12 +45,12 @@ static bool StringContainsCaseInsensitive(const string& str, const string& subSt
 	return (it != wStr.end());
 }
 
-static bool PassesFilter(const filesystem::path& path, uint32 filterMask)
+static bool PassesFilter(const filesystem::directory_entry& entry, uint32 filterMask)
 {
 	if (filterMask == 0) return true; // 아무것도 선택하지 않거나 "All"인 경우 모두 표시
-	if (filesystem::is_directory(path)) return true; // 폴더는 무조건 표시
+	if (entry.is_directory()) return true; // 폴더는 무조건 표시
 
-	string ext = path.extension().string();
+	string ext = entry.path().extension().string();
 	for (auto& c : ext) c = tolower(c); // 소문자로 변환
 
 	// 선택된 각 카테고리의 비트가 켜져있는지 확인하고 해당 확장자면 true 반환
@@ -177,24 +177,17 @@ void ContentBrowserPanel::Free()
 #pragma region TreeView
 void ContentBrowserPanel::DrawDirectoryTree(const filesystem::path& path)
 {
-	bool hasChildDirectory = false;
+	vector<filesystem::path> childDirectories;
 	std::error_code ec;
-	auto dirIt = filesystem::directory_iterator(path, ec);
-	if (!ec)
+	for (const auto& directoryEntry : filesystem::directory_iterator(path, ec))
 	{
-		for (auto& directoryEntry : filesystem::directory_iterator(path))
-		{
-			if (directoryEntry.is_directory())
-			{
-				hasChildDirectory = true;
-				break;
-			}
-		}
+		if (!ec && directoryEntry.is_directory(ec))
+			childDirectories.push_back(directoryEntry.path());
 	}
 
-	bool isSelected = (m_CurrentDirectory == path);
+	const bool hasChildDirectory = !childDirectories.empty();
+	const bool isSelected = (m_CurrentDirectory == path);
 
-	// 분리한 TreeItem 클래스에 노드 렌더링 위임
 	bool shouldDrawChildren = ContentBrowserTreeItem::DrawNode(
 		path,
 		m_RootPath,
@@ -207,19 +200,10 @@ void ContentBrowserPanel::DrawDirectoryTree(const filesystem::path& path)
 		m_CurrentDirectory
 	);
 
-	// 노드가 열렸고 자식 디렉토리가 있다면 재귀 호출
 	if (shouldDrawChildren)
 	{
-		std::error_code childEc;
-		auto childIt = std::filesystem::directory_iterator(path, childEc);
-		if (!childEc)
-		{
-			for (auto& entry : childIt)
-			{
-				if (entry.is_directory())
-					DrawDirectoryTree(entry.path());
-			}
-		}
+		for (const auto& childPath : childDirectories)
+			DrawDirectoryTree(childPath);
 		ImGui::TreePop();
 	}
 }
@@ -498,14 +482,11 @@ void ContentBrowserPanel::ContentFilter()
 void ContentBrowserPanel::DrawGridItem(const filesystem::directory_entry& directoryEntry)
 {
 	const auto& path = directoryEntry.path();
-	auto relativePath = filesystem::relative(path, m_RootPath);
-	string filenameString = relativePath.filename().string();
 
 	ImTextureID thumbnailTexID = NULL;
 	if (!directoryEntry.is_directory())
 	{
 		thumbnailTexID = ImGuiManager::Get().GetImGuiTextureID(AssetCache::Get().GetThumbnail(path));
-		string ext = path.extension().string();
 	}
 
 	ContentBrowserGridItem::Draw(
@@ -600,7 +581,7 @@ void ContentBrowserPanel::DrawGrid(bool enterPressed)
 		{
 			for (auto& directoryEntry : m_SearchResults)
 			{
-				if (!PassesFilter(directoryEntry.path(), m_FilterMask)) continue;
+				if (!PassesFilter(directoryEntry, m_FilterMask)) continue;
 				ImGui::TableNextColumn();
 				DrawGridItem(directoryEntry);
 			}
@@ -609,7 +590,7 @@ void ContentBrowserPanel::DrawGrid(bool enterPressed)
 		{
 			for (auto& directoryEntry : m_CachedEntries)
 			{
-				if (!PassesFilter(directoryEntry.path(), m_FilterMask)) continue;
+				if (!PassesFilter(directoryEntry, m_FilterMask)) continue;
 				ImGui::TableNextColumn();
 				DrawGridItem(directoryEntry);
 			}

@@ -1,5 +1,7 @@
 #include "common.hlsli"
 #include "light.hlsli"
+#include "shading_flags.hlsli"
+#include "fog.hlsli"
 
 struct PS_INPUT
 {
@@ -164,61 +166,87 @@ float3 CalcLight(Light light, float3 worldPosition, float3 normal, float3 viewDi
 	return result;
 }
 
+// Resources/Shader/hlsl/lightingPS.hlsl
+
 float4 main(PS_INPUT input) : SV_TARGET
 {
-	float4 diffuseSample = gDiffuse.Sample(gBufferSampler, input.TexCoord);
-	if (diffuseSample.a < 0.1f) discard;
+    int3 pixelCoord = int3(input.Position.xy, 0);
 
-	float3 normal = normalize(gNormal.Sample(gBufferSampler, input.TexCoord).rgb * 2.0f - 1.0f);
-	float4 pbr = gPBR.Sample(gBufferSampler, input.TexCoord);
-	float3 emission = gEmission.Sample(gBufferSampler, input.TexCoord).rgb;
-	float3 worldPosition = gPosition.Sample(gBufferSampler, input.TexCoord).rgb;
-	float roughness = max(pbr.r, 0.04f);
-	float metallic = pbr.g;
-	float ambientOcclusion = pbr.a;
-	float3 albedo = diffuseSample.rgb;
-	float3 viewDirection = normalize(commonData.CameraPos - worldPosition);
-	float3 f0 = lerp(float3(0.04f, 0.04f, 0.04f), albedo, metallic);
-	float3 directLighting = float3(0.0f, 0.0f, 0.0f);
-	float3 skyAmbient = float3(0.0f, 0.0f, 0.0f);
-	bool hasSkyLight = false;
-	bool consumedShadowMap = false;
-	uint numLights = gLightBuffer.Load(0u);
+    float4 diffuseSample = gDiffuse.Load(pixelCoord);
+    if (diffuseSample.a < 0.01f)
+        discard;
 
-	for (uint lightIndex = 0u; lightIndex < numLights; ++lightIndex)
-	{
-		Light light = LoadLight(lightIndex);
-		if (!HasLightFlag(light.PackedFlags, LIGHT_FLAG_USE_IN_DEFERRED)) continue;
+    float4 normalSample = gNormal.Load(pixelCoord);
+    uint packedData = UnpackShadingData(normalSample.a);
+    uint shadingModel = packedData & SHADING_MODEL_MASK;
+    bool receiveShadow = (packedData & FLAG_RECEIVE_SHADOWS) != 0u;
 
-		uint lightType = GetLightType(light.PackedFlags);
-		if (lightType == LIGHT_TYPE_SKY)
-		{
-			hasSkyLight = true;
-			if (!HasLightFlag(light.PackedFlags, LIGHT_FLAG_AFFECT_DIFFUSE)) continue;
+    float3 albedo = diffuseSample.rgb;
+    float3 emission = gEmission.Load(pixelCoord).rgb;
 
-			float hemiT = saturate(dot(normal, normalize(light.Direction)) * 0.5f + 0.5f);
-			float3 zenith = max(light.Color, float3(0.0f, 0.0f, 0.0f));
-			float3 ground = max(light.AttenuationCoeff, float3(0.0f, 0.0f, 0.0f));
-			float3 hemiColor = lerp(ground, zenith, hemiT);
-			float indirect = max(light.Range, 0.0f) * max(light.Intensity, 0.0f);
-			skyAmbient += hemiColor * albedo * indirect;
-			continue;
-		}
+	// [진단 & Unlit 처리]: 스프라이트는 원본 텍스처 색상 그대로 출력
+    if (shadingModel == SHADING_MODEL_UNLIT)
+    {
+		// [TEST]: 만약 분기 진입 여부를 눈으로 확인하고 싶다면 아래 주석을 켜보세요 (형광 초록으로 출력됨)
+		// return float4(0.0f, 1.0f, 0.0f, 1.0f);
 
-		float shadowFactor = 1.0f;
-		if (!consumedShadowMap && HasLightFlag(light.PackedFlags, LIGHT_FLAG_CAST_SHADOWS))
-		{
-			shadowFactor = CalcShadowFactor(light, worldPosition, normal);
-			consumedShadowMap = true;
-		}
+        return float4(albedo + emission, diffuseSample.a);
+    }
 
-		directLighting += CalcLight(light, worldPosition, normal, viewDirection, albedo, roughness, metallic, f0) * shadowFactor;
-	}
+    float3 normal = normalize(normalSample.rgb * 2.0f - 1.0f);
+    float4 pbr = gPBR.Load(pixelCoord);
+    float3 worldPosition = gPosition.Load(pixelCoord).rgb;
+    float roughness = max(pbr.r, 0.04f);
+    float metallic = pbr.g;
+    float ambientOcclusion = pbr.a;
+    float3 viewDirection = normalize(commonData.CameraPos - worldPosition);
+    float3 f0 = lerp(float3(0.04f, 0.04f, 0.04f), albedo, metallic);
+    float3 directLighting = float3(0.0f, 0.0f, 0.0f);
+    float3 skyAmbient = float3(0.0f, 0.0f, 0.0f);
+    bool hasSkyLight = false;
+    bool consumedShadowMap = false;
+    uint numLights = gLightBuffer.Load(0u);
 
-	float3 ambient = hasSkyLight ? skyAmbient * ambientOcclusion : float3(0.03f, 0.03f, 0.03f) * albedo * ambientOcclusion;
-	float3 color = ambient + directLighting + emission;
-	color = color / (color + 1.0f);
-	color = pow(color, 1.0f / 2.2f);
+    for (uint lightIndex = 0u; lightIndex < numLights; ++lightIndex)
+    {
+        Light light = LoadLight(lightIndex);
+        if (!HasLightFlag(light.PackedFlags, LIGHT_FLAG_USE_IN_DEFERRED))
+            continue;
 
-	return float4(color, diffuseSample.a);
+        uint lightType = GetLightType(light.PackedFlags);
+        if (lightType == LIGHT_TYPE_SKY)
+        {
+            hasSkyLight = true;
+            if (!HasLightFlag(light.PackedFlags, LIGHT_FLAG_AFFECT_DIFFUSE))
+                continue;
+
+            float hemiT = saturate(dot(normal, normalize(light.Direction)) * 0.5f + 0.5f);
+            float3 zenith = max(light.Color, float3(0.0f, 0.0f, 0.0f));
+            float3 ground = max(light.AttenuationCoeff, float3(0.0f, 0.0f, 0.0f));
+            float3 hemiColor = lerp(ground, zenith, hemiT);
+            float indirect = max(light.Range, 0.0f) * max(light.Intensity, 0.0f);
+            skyAmbient += hemiColor * albedo * indirect;
+            continue;
+        }
+
+        float shadowFactor = 1.0f;
+        if (receiveShadow && !consumedShadowMap && HasLightFlag(light.PackedFlags, LIGHT_FLAG_CAST_SHADOWS))
+        {
+            shadowFactor = CalcShadowFactor(light, worldPosition, normal);
+            consumedShadowMap = true;
+        }
+
+        directLighting += CalcLight(light, worldPosition, normal, viewDirection, albedo, roughness, metallic, f0) * shadowFactor;
+    }
+
+    float3 ambient = hasSkyLight ? skyAmbient * ambientOcclusion : float3(0.03f, 0.03f, 0.03f) * albedo * ambientOcclusion;
+    float3 color = ambient + directLighting + emission;
+
+    float4 fog = CalculateFog(worldPosition, commonData.CameraPos);
+    color = lerp(color, fog.rgb, fog.a);
+
+    color = color / (color + 1.0f);
+    color = pow(color, 1.0f / 2.2f);
+
+    return float4(color, diffuseSample.a);
 }

@@ -1,6 +1,7 @@
 ﻿#pragma once
 
-#include "Collider.h"
+#include "Macro.h"
+#include "Structs.h"
 
 BEGIN(Engine)
 
@@ -8,8 +9,10 @@ class ENGINE_API Collision
 {
 public:
 	static bool Raycast(const Ray& ray, const Rect& rect, HitResult& outHitResult);
-	static bool Raycast(const Ray& ray, const AABB& aabb, HitResult& outHitResult);
-	static bool Raycast(const Ray& ray, const AABB& aabb, const mat4& worldMatrix, HitResult& outHitResult);
+	static bool Raycast(const Ray& ray, const AABB& aabb, HitResult& outHitResult, f32 maxDistance = FLT_MAX);
+	static bool Raycast(const Ray& ray, const AABB& aabb, const mat4& worldMatrix, HitResult& outHitResult, f32 maxDistance = FLT_MAX);
+	static bool Raycast(const Ray& ray, const vec3& v0, const vec3& v1, const vec3& v2, HitResult& outHitResult, f32 maxDistance = FLT_MAX);
+	static bool Raycast(const Ray& ray, const class Mesh& mesh, const mat4& worldMatrix, HitResult& outHitResult, f32 maxDistance = FLT_MAX);
 	static bool Raycast(const Ray& ray, const BoundingSphere& sphere, HitResult& outHitResult);
 public:
 	static bool Contains(const Rect& rect, const vec2& point);

@@ -60,9 +60,25 @@ namespace
 
 BEGIN(Engine)
 
-LightSystem* LightSystem::Create()
+EResult LightSystem::Initialize(void* arg)
 {
-	return new LightSystem();
+	(void)arg;
+	return EResult::Success;
+}
+
+LightSystem* LightSystem::Create(void* arg)
+{
+	LightSystem* instance = new LightSystem();
+	if (IsFailure(instance->Initialize(arg)))
+	{
+		Safe_Release(instance);
+		return nullptr;
+	}
+	return instance;
+}
+
+void LightSystem::Free()
+{
 }
 
 void LightSystem::OnLateUpdate(entt::registry& globalRegistry, const vector<Scene*> activeScenes, f32 dt)
@@ -90,8 +106,7 @@ void LightSystem::UpdateLights(entt::registry& registry)
 
 		if (const auto* flag = registry.try_get<FlagComponent>(entity))
 		{
-			if (!HasFlag(flag->flags, EEntityFlag::Active) || HasFlag(flag->flags, EEntityFlag::Dead))
-				continue;
+			if (!flag->IsActiveInHierarchy() || HasFlag(flag->effectiveFlags, EEntityFlag::Dead)) continue;
 		}
 
 		const auto* transform = registry.try_get<WorldTransformComponent>(entity);

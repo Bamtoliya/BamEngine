@@ -15,7 +15,7 @@ struct VS_OUTPUT
 VS_OUTPUT main(VS_INPUT input)
 {
     VS_OUTPUT output;
-    output.Position = mul(float4(input.Position, 1.0f), commonData.ViewProjection);
+    output.Position = mul(commonData.ViewProjection, float4(input.Position, 1.0f));
     output.Color = input.Color;
     return output;
 }

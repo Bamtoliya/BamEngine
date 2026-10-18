@@ -30,20 +30,17 @@ EResult Runtime::Initialize(void* arg)
 	m_ReflectionRegistry = ReflectionRegistry::Create();
 	if (!m_ReflectionRegistry) return fail("ReflectionRegistry");
 
-	m_ComponentRegistry = ComponentRegistry::Create();
-	if (!m_ComponentRegistry) return fail("ComponentRegistry");
-
 	m_TimeManager = TimeManager::Create();
 	if (!m_TimeManager) return fail("TimeManager");
 
 	m_InputManager = InputManager::Create();
 	if (!m_InputManager) return fail("InputManager");
 
+	m_AudioManager = AudioManager::Create();
+	if (!m_AudioManager) return fail("AudioManager");
+
 	m_ResourceManager = ResourceManager::Create();
 	if (!m_ResourceManager) return fail("ResourceManager");
-
-	m_PrototypeManager = PrototypeManager::Create();
-	if (!m_PrototypeManager) return fail("PrototypeManager");
 
 	m_SceneManager = SceneManager::Create();
 	if (!m_SceneManager) return fail("SceneManager");
@@ -63,9 +60,6 @@ EResult Runtime::Initialize(void* arg)
 	m_Renderer = Renderer::Create(&rendererDesc);
 	if (!m_Renderer) return fail("Renderer");
 
-	m_CameraManager = CameraManager::Create();
-	if (!m_CameraManager) return fail("CameraManager");
-
 	PipelineManagerDesc pipelineDesc = {};
 	pipelineDesc.rhi = m_Renderer->GetRHI();
 	m_PipelineManager = PipelineManager::Create(&pipelineDesc);
@@ -74,13 +68,13 @@ EResult Runtime::Initialize(void* arg)
 	m_SamplerManager = SamplerManager::Create(m_Renderer->GetRHI());
 	if (!m_SamplerManager) return fail("SamplerManager");
 
-	tagLightManagerDesc lightDesc = {};
+	LightManagerDesc lightDesc = {};
 	lightDesc.RHI = m_Renderer->GetRHI();
 	m_LightManager = LightManager::Create(&lightDesc);
 	if (!m_LightManager) return fail("LightManager");
 
-	m_CollisionManager = CollisionManager::Create();
-	if (!m_CollisionManager) return fail("CollisionManager");
+	m_PickingManager = PickingManager::Create();
+	if (!m_PickingManager) return fail("PickingManager");
 
 	return EResult::Success;
 }
@@ -90,7 +84,6 @@ void Runtime::Free()
 	// Frame snapshots/commands retain scenes and UI assets; release them before their managers.
 	if (m_Renderer)
 	{
-		m_Renderer->ClearPickingState();
 		m_Renderer->ClearAllRenderQueues();
 	}
 	
@@ -98,16 +91,14 @@ void Runtime::Free()
 	Safe_Destroy(m_TimeManager);
 	Safe_Destroy(m_InputManager);
 	Safe_Destroy(m_LocalizationManager);
-	Safe_Destroy(m_ComponentRegistry);
+	Safe_Destroy(m_PickingManager);
+	Safe_Destroy(m_AudioManager);
 
 	// ── 2. 씬 (Component가 Pipeline/Buffer 참조) ──
 	Safe_Destroy(m_SceneManager);
 	Safe_Destroy(m_SystemManager);
-	Safe_Destroy(m_PrototypeManager);
-	Safe_Destroy(m_CollisionManager);
 
 	// ── 3. 리소스 (RHI 리소스: Mesh, Texture, Shader) ──
-	Safe_Destroy(m_CameraManager);
 	Safe_Destroy(m_ResourceManager);
 
 	// ── 4. 렌더링 인프라 (RHI 리소스) ──
@@ -142,6 +133,8 @@ void Runtime::FixedUpdate(f32 dt)
 void Runtime::Update(f32 dt)
 {
 	InputManager::Get().Update(dt);
+	AudioManager::Get().Update(dt);
+
 	SystemManager::Get().Update(m_GlobalRegistry, SceneManager::Get().GetActiveScenes(), dt);
 }
 void Runtime::LateUpdate(f32 dt)
@@ -151,17 +144,21 @@ void Runtime::LateUpdate(f32 dt)
 EResult Runtime::Render(f32 dt)
 {
 	auto& renderer = Renderer::Get();
+	auto& picking = PickingManager::Get();
 	auto* rhi = renderer.GetRHI();
 
 	if (!rhi)
 		return EResult::Fail;
 
 	rhi->BeginMetricsFrame();
+	picking.BeginFrame();
 
 	// 실패로 일찍 반환할 때도 이번 렌더 시도의 통계를 확정합니다.
-	const auto finish = [rhi](EResult result)
+	const auto finish = [&rhi, &picking](EResult result)
 		{
+			picking.EndFrame(result == EResult::Success);
 			rhi->EndMetricsFrame(result == EResult::Success);
+			
 			return result;
 		};
 
@@ -171,10 +168,7 @@ EResult Runtime::Render(f32 dt)
 		return finish(EResult::Fail);
 	}
 
-	SystemManager::Get().Sumbit(
-		m_GlobalRegistry,
-		SceneManager::Get().GetActiveScenes(),
-		dt);
+	SystemManager::Get().Sumbit(m_GlobalRegistry, SceneManager::Get().GetActiveScenes(), dt);
 
 	if (IsFailure(renderer.Render(dt)))
 	{

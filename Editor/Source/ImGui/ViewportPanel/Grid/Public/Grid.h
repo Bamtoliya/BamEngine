@@ -15,7 +15,7 @@ private:
 	void PrepareRenderPass(const wstring& prefix);
 public:
 	void Free();
-	void SubmitGrid(class Camera* camera, bool isOrthographic, const wstring& colorRTName, const wstring& depthStencilName);
+	void SubmitGrid(const CameraBuffer& cameraBuffer, bool isOrthographic, const wstring& colorRTName, const wstring& depthStencilName);
 public:
 	bool* GetVisible() { return &m_Visible; }
 	void Show() { m_Visible = true; }

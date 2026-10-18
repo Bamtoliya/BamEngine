@@ -1,10 +1,8 @@
-#pragma once
+﻿#pragma once
 
 #include "SceneManager.h"
 #include <archive/ArchiveInterface.h>
 #include "LightManager.h"
-#include "CollisionManager.h"
-#include "CameraManager.h"
 #include <new>
 
 IMPLEMENT_SINGLETON(SceneManager)
@@ -82,14 +80,6 @@ EResult SceneManager::CloseScene()
 
 	if (result != EResult::Success)
 		return result;
-
-	if (LightManager::IsCreated()) LightManager::Get().ClearLightSources();
-	if (CollisionManager::IsCreated())
-	{
-		CollisionManager::Get().ClearColliders();
-		CollisionManager::Get().ClearRigidBodies();
-	}
-	if (CameraManager::IsCreated()) CameraManager::Get().ClearCameras();
 
 	return EResult::Success;
 }

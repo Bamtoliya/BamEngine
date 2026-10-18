@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "Editor_Includes.h"
 #include "RenderPass.h"
@@ -15,9 +15,9 @@ public:
 public:
 	void Initialize(const wstring& prefix);
 	void Free();
-	void SubmitDebugDraw(class Camera* camera, const wstring& colorRTName);
+	void SubmitDebugDraw(const CameraBuffer& cameraBuffer, const wstring& colorRTName);
 private:
-	void RegisterColliderDebug(class Camera*);
+	void RegisterColliderDebug(const CameraBuffer& cameraBuffer);
 public:
 	void DrawLine(const vec3& start, const vec3& end, const vec4& color);
 	void DrawRect(const Engine::Rect& rect, const vec4& color);

@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "Mesh.h"
 #include "Renderer.h"
 #include "ResourceManager.h"
@@ -40,6 +40,23 @@ EResult Mesh::Initialize(void* arg)
 	// 3. Bounding Box & Flags
 	m_BoundingBoxMin = desc->BoundingBoxMin;
 	m_BoundingBoxMax = desc->BoundingBoxMax;
+	const auto& posStream = desc->Streams[(uint32)EMeshStream::Position];
+	if (m_BoundingBoxMin == vec3(0.0f) && m_BoundingBoxMax == vec3(0.0f) &&
+		posStream.Data && posStream.Count > 0 && posStream.Stride >= sizeof(vec3))
+	{
+		vec3 minBound(FLT_MAX);
+		vec3 maxBound(-FLT_MAX);
+		const uint8* rawPos = static_cast<const uint8*>(posStream.Data);
+		for (uint32 i = 0; i < posStream.Count; ++i)
+		{
+			vec3 pos{};
+			memcpy(&pos, rawPos + static_cast<sizet>(i) * posStream.Stride, sizeof(vec3));
+			minBound = glm::min(minBound, pos);
+			maxBound = glm::max(maxBound, pos);
+		}
+		m_BoundingBoxMin = minBound;
+		m_BoundingBoxMax = maxBound;
+	}
 	m_Flags = desc->Flags | EMeshFlag::KeepRawData;
 
 	// 4. 원본 데이터 보존 (직렬화 및 재로드를 위해 보존)

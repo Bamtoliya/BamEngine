@@ -5,8 +5,6 @@
 
 #include "Scene.h"
 #include "SceneManager.h"
-#include "GameObject.h"
-#include "Transform.h"
 
 #include "LocalizationManager.h"
 
@@ -23,9 +21,6 @@
 #include "SelectionManager.h"
 #include "AssetManager.h"
 #include "ContentBrowserPanel.h"
-
-#include "MeshFilter.h"
-#include "MeshRenderer.h"
 
 void ToolBar::Draw(SDL_Window* window)
 {

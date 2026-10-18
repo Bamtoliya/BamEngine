@@ -1,36 +1,24 @@
 ﻿#pragma once
 
 #include "Base.h"
-
+#include "Renderer.h"
 #include "TimeManager.h"
 #include "InputManager.h"
-
 #include "ResourceManager.h"
-#include "PrototypeManager.h"
-
-//#include "LayerManager.h"
 #include "SystemManager.h"
 #include "SceneManager.h"
-
-#include "Renderer.h"
 #include "RenderPassManager.h"
 #include "RenderTargetManager.h"
 #include "PipelineManager.h"
 #include "SamplerManager.h"
 #include "LightManager.h"
-
-#include "ComponentRegistry.h"
-
 #include "LocalizationManager.h"
-#include "CameraManager.h"
-
-#include "CollisionManager.h"
 #include "ReflectionRegistry.h"
-
+#include "PickingManager.h"
+#include "AudioManager.h"
 
 BEGIN(Engine)
-
-typedef struct tagRuntimeCreateInfo
+typedef struct RuntimeCreateInfo
 {
 	RendererDesc RendererDesc;
 } RUNTIMEDESC;
@@ -59,32 +47,21 @@ public:
 #pragma region Variables
 private:
 	entt::registry m_GlobalRegistry;
-private:
 	ReflectionRegistry* m_ReflectionRegistry = { nullptr };
-private:
 	TimeManager* m_TimeManager = { nullptr };
 	InputManager* m_InputManager = { nullptr };
-private:
 	Renderer* m_Renderer = { nullptr };
 	RenderPassManager* m_RenderPassManager = { nullptr };
 	RenderTargetManager* m_RenderTargetManager = { nullptr };
 	PipelineManager* m_PipelineManager = { nullptr };
 	SamplerManager* m_SamplerManager = { nullptr };
-	CameraManager* m_CameraManager = { nullptr };
 	LightManager* m_LightManager = { nullptr };
-private:
 	ResourceManager* m_ResourceManager = { nullptr };
-	PrototypeManager* m_PrototypeManager = { nullptr };
-private:
-	//LayerManager* m_LayerManager = { nullptr };
 	SceneManager* m_SceneManager = { nullptr };
 	SystemManager* m_SystemManager = { nullptr };
-private:
-	ComponentRegistry* m_ComponentRegistry = { nullptr };
-private:
 	LocalizationManager* m_LocalizationManager = { nullptr };
-private:
-	CollisionManager* m_CollisionManager = { nullptr };
+	PickingManager* m_PickingManager = { nullptr };
+	AudioManager* m_AudioManager = { nullptr };
 #pragma endregion
 };
 
