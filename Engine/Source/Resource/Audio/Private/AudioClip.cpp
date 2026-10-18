@@ -37,7 +37,7 @@ EResult AudioClip::Initialize(void* arg)
 	}
 
 	FMOD_MODE mode = FMOD_DEFAULT;
-	mode |= (m_Is3D ? FMOD_3D : FMOD_2D);
+	mode |= (m_Is3D ? (FMOD_3D | FMOD_3D_LINEARROLLOFF) : FMOD_2D);
 	mode |= (m_IsLoop ? FMOD_LOOP_NORMAL : FMOD_LOOP_OFF);
 	mode |= (m_IsStream ? FMOD_CREATESTREAM : FMOD_CREATESAMPLE);
 

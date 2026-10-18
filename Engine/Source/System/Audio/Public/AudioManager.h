@@ -44,6 +44,7 @@ public:
 	FMOD::ChannelGroup* GetBGMGroup() const { return m_BGMGroup; }
 	FMOD::ChannelGroup* GetSFXGroup() const { return m_SFXGroup; }
 
+	void StopAllSounds();
 private:
 	FMOD::System* m_System = { nullptr };
 	FMOD::ChannelGroup* m_MasterGroup = { nullptr };

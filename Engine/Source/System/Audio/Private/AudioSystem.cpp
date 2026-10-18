@@ -1,8 +1,10 @@
 ﻿#include "AudioSystem.h"
 #include "AudioManager.h"
 #include "AudioComponents.h"
+#include "Components/Core/TransformComponent.h"
 #include "Components/Core/WorldTransformComponent.h"
 #include <fmod.hpp>
+#include <fmod_errors.h>
 
 EResult AudioSystem::Initialize(void* arg)
 {
@@ -32,7 +34,7 @@ void AudioSystem::OnLateUpdate(entt::registry& globalRegistry, const vector<Scen
 
 	for (Scene* scene : activeScenes)
 	{
-		if (scene != nullptr && !scene->IsPaused())
+		if (scene != nullptr)
 		{
 			UpdateListeners(scene->GetRegistry());
 			UpdateSources(scene->GetRegistry());
@@ -40,21 +42,38 @@ void AudioSystem::OnLateUpdate(entt::registry& globalRegistry, const vector<Scen
 	}
 }
 
+namespace
+{
+	vec3 g_LastListenerPos{ 0.f };
+	bool g_HasActiveListener = false;
+}
+
 void AudioSystem::UpdateListeners(entt::registry& registry)
 {
 	FMOD::System* fmodSystem = AudioManager::Get().GetFMODSystem();
 	if (!fmodSystem) return;
 
-	auto view = registry.view<AudioListenerComponent, WorldTransformComponent>();
+	auto view = registry.view<AudioListenerComponent>();
 	for (auto entity : view)
 	{
-		const auto& [listener, worldTransform] = view.get<AudioListenerComponent, WorldTransformComponent>(entity);
+		const auto& listener = view.get<AudioListenerComponent>(entity);
 		if (!listener.isActive) continue;
 
-		const mat4& worldMatrix = worldTransform.worldMatrix;
-		vec3 pos = vec3(worldMatrix[3]);
-		vec3 forward = glm::length(vec3(worldMatrix[2])) > 0.f ? glm::normalize(vec3(worldMatrix[2])) : vec3(0.f, 0.f, 1.f);
-		vec3 up = glm::length(vec3(worldMatrix[1])) > 0.f ? glm::normalize(vec3(worldMatrix[1])) : vec3(0.f, 1.f, 0.f);
+		vec3 pos(0.f);
+		vec3 forward(0.f, 0.f, 1.f);
+		vec3 up(0.f, 1.f, 0.f);
+
+		if (const auto* worldTransform = registry.try_get<WorldTransformComponent>(entity))
+		{
+			const mat4& m = worldTransform->worldMatrix;
+			pos = vec3(m[3]);
+			if (glm::length(vec3(m[2])) > 0.001f) forward = glm::normalize(vec3(m[2]));
+			if (glm::length(vec3(m[1])) > 0.001f) up = glm::normalize(vec3(m[1]));
+		}
+		else if (const auto* localTransform = registry.try_get<TransformComponent>(entity))
+		{
+			pos = localTransform->position;
+		}
 
 		FMOD_VECTOR fPos = { pos.x, pos.y, pos.z };
 		FMOD_VECTOR fVel = { 0.f, 0.f, 0.f };
@@ -62,7 +81,9 @@ void AudioSystem::UpdateListeners(entt::registry& registry)
 		FMOD_VECTOR fUp = { up.x, up.y, up.z };
 
 		fmodSystem->set3DListenerAttributes(0, &fPos, &fVel, &fFwd, &fUp);
-		break; // 주 청취자 1개만 적용
+		g_LastListenerPos = pos;
+		g_HasActiveListener = true;
+		break;
 	}
 }
 
@@ -76,8 +97,16 @@ void AudioSystem::UpdateSources(entt::registry& registry)
 	{
 		auto& source = view.get<AudioSourceComponent>(entity);
 
-		const auto* worldTransform = registry.try_get<WorldTransformComponent>(entity);
-		vec3 pos = worldTransform ? vec3(worldTransform->worldMatrix[3]) : vec3(0.f);
+		vec3 pos(0.f);
+		if (const auto* worldTransform = registry.try_get<WorldTransformComponent>(entity))
+		{
+			pos = vec3(worldTransform->worldMatrix[3]);
+		}
+		else if (const auto* localTransform = registry.try_get<TransformComponent>(entity))
+		{
+			pos = localTransform->position;
+		}
+
 		FMOD_VECTOR fPos = { pos.x, pos.y, pos.z };
 		FMOD_VECTOR fVel = { 0.f, 0.f, 0.f };
 
@@ -112,10 +141,18 @@ void AudioSystem::UpdateSources(entt::registry& registry)
 		if (source.m_PlayRequested)
 		{
 			source.m_PlayRequested = false;
-			if (source.clip.IsValid())
+			if (!source.clip.IsValid())
+			{
+				BAM_LOG(Warn, "AudioSystem", "Cannot play AudioSource: AudioClip is not assigned");
+			}
+			else
 			{
 				AudioClip* clipRes = source.clip.Get();
-				if (clipRes && clipRes->GetFMODSound())
+				if (!clipRes || !clipRes->GetFMODSound())
+				{
+					BAM_LOG(Warn, "AudioSystem", "Cannot play AudioSource: FMOD Sound is null");
+				}
+				else
 				{
 					if (source.m_Channel) source.m_Channel->stop();
 
@@ -129,9 +166,10 @@ void AudioSystem::UpdateSources(entt::registry& registry)
 
 						if (source.is3D)
 						{
-							source.m_Channel->setMode(FMOD_3D);
+							source.m_Channel->setMode(FMOD_3D | FMOD_3D_LINEARROLLOFF);
 							source.m_Channel->set3DAttributes(&fPos, &fVel);
 							source.m_Channel->set3DMinMaxDistance(source.minDistance, source.maxDistance);
+							source.m_Channel->set3DSpread(0.f); // 스테레오 음원도 3D 포인트 점음원으로 강제 수렴
 						}
 						else
 						{
@@ -140,6 +178,14 @@ void AudioSystem::UpdateSources(entt::registry& registry)
 
 						source.m_Channel->setPaused(false);
 						source.m_IsPlaying = true;
+
+						f32 dist = glm::distance(pos, g_LastListenerPos);
+						BAM_LOG(Info, "AudioSystem", "Playing 3D Audio! Listener: ({:.1f}, {:.1f}, {:.1f}), Source: ({:.1f}, {:.1f}, {:.1f}), Distance: {:.1f} (Max: {:.1f})",
+							g_LastListenerPos.x, g_LastListenerPos.y, g_LastListenerPos.z, pos.x, pos.y, pos.z, dist, source.maxDistance);
+					}
+					else
+					{
+						BAM_LOG(Error, "AudioSystem", "Failed to play sound: {}", FMOD_ErrorString(res));
 					}
 				}
 			}

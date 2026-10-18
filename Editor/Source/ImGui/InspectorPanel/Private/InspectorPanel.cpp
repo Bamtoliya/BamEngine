@@ -198,15 +198,15 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 				{
 					ImGui::TextColored(ImVec4(0.2f, 0.9f, 0.2f, 1.f), "Playing...");
 					ImGui::SameLine();
-					if (ImGui::Button(LOCAL("UI_STOP").empty() ? "Stop" : LOCAL("UI_STOP").c_str())) audioSource.Stop();
+					if (ImGui::Button("Stop##AudioSource")) audioSource.Stop();
 					ImGui::SameLine();
-					if (ImGui::Button(LOCAL("UI_PAUSE").empty() ? "Pause" : LOCAL("UI_PAUSE").c_str())) audioSource.Pause();
+					if (ImGui::Button("Pause##AudioSource")) audioSource.Pause();
 				}
 				else
 				{
 					ImGui::TextDisabled("Stopped");
 					ImGui::SameLine();
-					if (ImGui::Button(LOCAL("UI_PLAY").empty() ? "Play" : LOCAL("UI_PLAY").c_str())) audioSource.Play();
+					if (ImGui::Button("Play##AudioSource")) audioSource.Play();
 				}
 			}
 			else changed = ReflectionPropertyDrawer::DrawObject(type, object, registry, &componentSettings);

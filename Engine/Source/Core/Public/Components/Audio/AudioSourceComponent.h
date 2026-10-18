@@ -16,6 +16,11 @@ namespace Engine
 	STRUCT(COMPONENT, DISPLAY_NAME("STRUCT_AUDIO_SOURCE"), CATEGORY("CATEGORY_AUDIO"))
 	struct AudioSourceComponent
 	{
+	public:
+		~AudioSourceComponent()
+		{
+			Stop();
+		}
 		REFLECT_BODY()
 
 		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_AUDIO_CLIP"))

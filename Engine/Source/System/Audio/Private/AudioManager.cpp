@@ -96,3 +96,11 @@ void AudioManager::SetSFXVolume(f32 volume)
 	m_SFXVolume = std::clamp(volume, 0.f, 1.f);
 	if (m_SFXGroup) m_SFXGroup->setVolume(m_SFXVolume);
 }
+
+void AudioManager::StopAllSounds()
+{
+	if (m_MasterGroup)
+	{
+		m_MasterGroup->stop();
+	}
+}

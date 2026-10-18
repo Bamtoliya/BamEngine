@@ -903,6 +903,7 @@ namespace Editor
 		INSPECTOR_RESOURCE(Skeleton)
 		INSPECTOR_RESOURCE(Shader)
 		INSPECTOR_RESOURCE(Animation)
+		INSPECTOR_RESOURCE(AudioClip)
 #undef INSPECTOR_RESOURCE
 		else if (read.Value.Is<Engine::ColliderShape>() || read.Value.Is<Engine::Collider2DShape>())
 		{
