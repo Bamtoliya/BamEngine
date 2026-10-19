@@ -21,3 +21,13 @@ add_custom_command(
 
 add_custom_target(GenerateLocalization ALL DEPENDS ${LOCALIZATION_OUTPUTS})
 add_dependencies(GenerateLocalization ExportReflectionLocalization)
+
+# --- 다국어 및 UI 하드코딩 정적 감사 타깃 ---
+set(LOCALIZATION_AUDIT_SCRIPT "${CMAKE_SOURCE_DIR}/Utility/LocalizationAuditor/audit_localization.py")
+
+add_custom_target(AuditLocalization
+    COMMAND ${Python3_EXECUTABLE} "${LOCALIZATION_AUDIT_SCRIPT}" --root "${CMAKE_SOURCE_DIR}"
+    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    COMMENT "Auditing localization keys and hardcoded UI strings"
+    VERBATIM
+)
