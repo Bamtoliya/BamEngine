@@ -47,145 +47,227 @@ float HenyeyGreensteinPhase(float cosAngle, float g)
 }
 
 // 언리얼 적운(Cumulus) 전형의 높이별 그래디언트
+// 언리얼 적운(Cumulus) 전형의 높이별 그래디언트 (밑면 평평, 윗면 둥근 돔)
 float CumulusHeightGradient(float h, float cloudTop)
 {
-    float baseCut = smoothstep(0.0f, 0.12f, h);
-    float topRound = smoothstep(cloudTop, cloudTop * 0.70f, h);
+    float baseCut = smoothstep(0.0f, 0.15f, h);
+    float topRound = 1.0f - smoothstep(cloudTop * 0.65f, cloudTop, h);
     return baseCut * topRound;
 }
 
-// ── 3D 텍스처 및 2D 웨더 맵 기반 초고속 볼륨 밀도 샘플링 ──
+// ── 3D 텍스처 및 2D 웨더 맵 기반 볼륨 밀도 샘플링 ──
 float SampleCloudDensity(
     float3 pos, float layerBottom, float layerTop,
-    VolumetricCloudData cloud, float3 windOffset,
+    VolumetricCloudData cloud, float3 windOffset, float time,
     Texture3D<float4> baseShapeTex, Texture2D<float4> weatherMapTex, SamplerState smp)
 {
     float dist = length(pos);
     float h = saturate((dist - layerBottom) / (layerTop - layerBottom));
     if (h <= 0.005f || h >= 0.995f) return 0.0f;
 
-    // 1. 2D Weather Map 샘플링 (거시적 구름 군집과 시원한 빈 하늘의 분포)
-    float2 weatherUV = (pos.xz + windOffset.xz * 0.2f) * cloud.WeatherScale;
+    float3 relPos = float3(pos.x, dist - layerBottom, pos.z);
+
+    // Weather, 형태, 디테일이 같은 바람을 따라 이동한다.
+    float3 advectedPos = relPos - windOffset;
+    float3 shapeCoord = advectedPos * cloud.ShapeScale;
+
+    // 큰 형태를 직접 이동시키지 않고, 변형에 사용하는 저주파 필드를 변화시킨다.
+    float phase = time * cloud.MorphSpeed;
+    float3 evolutionCoord = shapeCoord * 0.25f + phase * float3(0.11f, 0.07f, 0.13f);
+    float4 evolution = baseShapeTex.SampleLevel(smp, evolutionCoord, 0);
+
+    float2 weatherUV = advectedPos.xz * cloud.WeatherScale;
     float4 weather = weatherMapTex.SampleLevel(smp, weatherUV, 0);
 
-    float localCoverage = weather.r * cloud.CloudCoverage;
-    if (localCoverage <= 0.02f) return 0.0f; // 맑은 하늘 구역은 즉시 스킵!
+    // 공간마다 다른 커버리지 변화로 생성·소멸을 유도한다.
+    float growth = (evolution.r - 0.5f) * 0.5f;
+    float localCoverage = saturate(weather.r * (cloud.CloudCoverage * 1.6f) + growth);
+    if (cloud.CloudCoverage <= 0.0f || localCoverage <= 0.04f) return 0.0f;
 
-    // 2. 적운 높이 그래디언트 (웨더 맵 G 채널로 구름 꼭대기 고도 조절)
-    float cloudTop = max(weather.g, 0.45f);
+    float cloudTop = max(weather.g, 0.5f);
     float heightGrad = CumulusHeightGradient(h, cloudTop);
     if (heightGrad <= 0.001f) return 0.0f;
 
-    // 3. 3D Base Shape 텍스처 샘플링 (하드웨어 삼선형 보간)
-    // R: Perlin-Worley 기본 덩어리, GBA: Worley 거품 디테일
-    float3 shapeCoord = (pos + windOffset) * cloud.ShapeScale;
-    float4 baseNoise = baseShapeTex.SampleLevel(smp, shapeCoord, 0);
+    // 위치마다 다른 변위로 윤곽을 변형한다.
+    float3 warp = (evolution.gba - 0.5f) * 0.15f;
+    float baseNoise = baseShapeTex.SampleLevel(smp, shapeCoord + warp, 0).r;
 
-    // 언리얼 방식: Base Shape(R)에 고주파 Worley 거품(G, B, A)을 에로전 침식
-    float worleyErosion = baseNoise.g * 0.625f + baseNoise.b * 0.25f + baseNoise.a * 0.125f;
-    float cloudVal = baseNoise.r - (1.0f - worleyErosion) * 0.35f;
+    float baseShape = baseNoise * heightGrad;
+    float threshold = saturate(1.0f - localCoverage);
+    float cloudShape = saturate((baseShape - threshold * 0.45f) / max(1.0f - threshold * 0.45f, 0.01f));
+    if (cloudShape <= 0.0f) return 0.0f;
 
-    // 4. 로컬 커버리지와 임계값 결합
-    float threshold = saturate(1.0f - localCoverage * 1.35f);
-    float cloudShape = saturate((cloudVal - threshold) / max(1.0f - threshold, 0.001f));
+    float3 detailCoord = advectedPos * cloud.DetailScale + warp * 2.0f;
+    float3 detailNoise = baseShapeTex.SampleLevel(smp, detailCoord, 0).gba;
 
-    return cloudShape * heightGrad * cloud.CloudDensity * weather.b;
+    float worley = dot(detailNoise, float3(0.625f, 0.25f, 0.125f));
+    cloudShape = saturate(cloudShape - (1.0f - worley) * 0.20f * (1.0f - cloudShape));
+
+    return cloudShape * cloud.CloudDensity;
+}
+
+float2 ComputeCloudSunTransmittance(
+    float3 pos, float3 sunDir, float planetRadius, float layerBottom, float layerTop, float extinctionCoeff,
+    VolumetricCloudData cloud, float3 windOffset, float time,
+    Texture3D<float4> baseShapeTex, Texture2D<float4> weatherMapTex, SamplerState smp)
+{
+    const float MULTIPLE_EXTINCTION_SCALE = 0.5f;
+
+    float tPlanet0, tPlanet1;
+    if (IntersectSphere(pos, sunDir, planetRadius, tPlanet0, tPlanet1) && tPlanet0 > 0.0f)
+        return float2(0.0f, 0.0f);
+
+    float tTop0, tTop1;
+    if (!IntersectSphere(pos, sunDir, layerTop, tTop0, tTop1) || tTop1 <= 0.0f)
+        return float2(1.0f, 1.0f);
+
+    float tStart = max(tTop0, 0.0f);
+    float firstEnd = tTop1;
+    float secondStart = tTop1;
+
+    float tBottom0, tBottom1;
+    if (IntersectSphere(pos, sunDir, layerBottom, tBottom0, tBottom1) &&
+        tBottom1 > tStart && tBottom0 < tTop1)
+    {
+        firstEnd = clamp(tBottom0, tStart, tTop1);
+        secondStart = clamp(tBottom1, tStart, tTop1);
+    }
+
+    float firstLength = firstEnd - tStart;
+    float pathLength = firstLength + (tTop1 - secondStart);
+    if (pathLength <= 0.0f || extinctionCoeff <= 0.0f) return float2(1.0f, 1.0f);
+
+    const float TARGET_LIGHT_STEP_LENGTH = 350.0f;
+    const int MIN_LIGHT_STEPS = 4;
+    const int MAX_LIGHT_STEPS = 8;
+
+    int lightSteps = clamp(int(ceil(pathLength / TARGET_LIGHT_STEP_LENGTH)), MIN_LIGHT_STEPS, MAX_LIGHT_STEPS);
+    float opticalDepth = 0.0f;
+
+    for (int j = 0; j < lightSteps; ++j)
+    {
+        float u0 = float(j) / float(lightSteps);
+        float u1 = float(j + 1) / float(lightSteps);
+        float s0 = pathLength * u0 * u0;
+        float s1 = pathLength * u1 * u1;
+        float s = (s0 + s1) * 0.5f;
+
+        float t = s < firstLength ? tStart + s : secondStart + (s - firstLength);
+        float3 lightPos = pos + sunDir * t;
+        float density = SampleCloudDensity(
+            lightPos, layerBottom, layerTop, cloud, windOffset, time, baseShapeTex, weatherMapTex, smp);
+
+        opticalDepth += density * extinctionCoeff * (s1 - s0);
+
+        // 감쇠가 약한 다중 산란 항까지 충분히 작아졌을 때 종료한다.
+        if (opticalDepth * MULTIPLE_EXTINCTION_SCALE >= 8.0f)
+            return float2(0.0f, 0.0f);
+    }
+
+    // x: 단일 산란용 투과율, y: 다중 산란 근사용 투과율
+    return exp(-opticalDepth * float2(1.0f, MULTIPLE_EXTINCTION_SCALE));
 }
 
 // ── 언리얼 엔진 규격의 볼류메트릭 클라우드 레이마칭 ──
 float4 RenderCloudLayer(
     float3 rayOrigin, float3 rayDir, float3 sunDir, float3 sunColor, float sunIntensity, float skyIntensity,
-    float time, float planetRadius, VolumetricCloudData cloud,
+    float time, float planetRadius, VolumetricCloudData cloud, float2 pixelPosition,
     bool hitPlanet, float tPlanet0,
     Texture3D<float4> baseShapeTex, Texture2D<float4> weatherMapTex, SamplerState smp)
 {
-    if (cloud.EnableClouds == 0u || cloud.CloudCoverage <= 0.01f || cloud.CloudDensity <= 0.001f)
+    if (cloud.EnableClouds == 0u || cloud.CloudCoverage <= 0.0f || cloud.CloudDensity <= 0.0f ||
+        cloud.LayerHeight <= 0.0f || cloud.TracingMaxDistance <= 0.0f)
+    {
         return float4(0.0f, 0.0f, 0.0f, 0.0f);
+    }
 
     float layerBottom = planetRadius + cloud.LayerBottomAltitude;
-    float layerTop    = layerBottom + cloud.LayerHeight;
+    float layerTop = layerBottom + cloud.LayerHeight;
 
-    float tBottom0, tBottom1;
+    // 바깥 구체에서 카메라 앞쪽에 존재하는 구간을 구한다.
     float tTop0, tTop1;
-    bool hitBottom = IntersectSphere(rayOrigin, rayDir, layerBottom, tBottom0, tBottom1);
-    bool hitTop    = IntersectSphere(rayOrigin, rayDir, layerTop, tTop0, tTop1);
+    if (!IntersectSphere(rayOrigin, rayDir, layerTop, tTop0, tTop1) || tTop1 <= 0.0f)
+        return float4(0.0f, 0.0f, 0.0f, 0.0f);
 
-    float tStart = -1.0f;
-    float tEnd   = -1.0f;
-    float camDist = length(rayOrigin);
+    float tStart = max(tTop0, 0.0f);
+    float tEnd = tTop1;
 
-    if (camDist < layerBottom) // 지상 관측자
+    // 안쪽 구체를 제외하여 가장 가까운 연속 구름 구간을 선택한다.
+    float tBottom0, tBottom1;
+    if (IntersectSphere(rayOrigin, rayDir, layerBottom, tBottom0, tBottom1) && tBottom1 > tStart)
     {
-        if (rayDir.y <= 0.01f) return float4(0.0f, 0.0f, 0.0f, 0.0f);
-        if (!hitBottom || !hitTop) return float4(0.0f, 0.0f, 0.0f, 0.0f);
-        tStart = max(tBottom1, 0.0f);
-        tEnd   = max(tTop1, 0.0f);
-    }
-    else if (camDist > layerTop) // 우주/고고도 관측자
-    {
-        if (!hitTop || tTop0 <= 0.0f) return float4(0.0f, 0.0f, 0.0f, 0.0f);
-        tStart = tTop0;
-        tEnd = (hitBottom && tBottom0 > 0.0f) ? tBottom0 : tTop1;
-    }
-    else // 구름층 내부
-    {
-        tStart = 0.0f;
-        tEnd = (hitTop && tTop1 > 0.0f) ? tTop1 : 10000.0f;
+        if (tBottom0 > tStart)
+        {
+            // 구름층 위 또는 내부에서 안쪽 구체로 들어가는 경우
+            tEnd = min(tEnd, tBottom0);
+        }
+        else
+        {
+            // 구름층 아래에서 안쪽 구체를 빠져나오는 경우
+            tStart = max(tStart, tBottom1);
+        }
     }
 
-    if (tStart >= tEnd || tEnd <= 0.0f) return float4(0.0f, 0.0f, 0.0f, 0.0f);
-
+    // 행성 표면 뒤에 있는 구름 구간을 제외한다.
     if (hitPlanet && tPlanet0 > 0.0f)
-    {
-        if (tStart > tPlanet0) return float4(0.0f, 0.0f, 0.0f, 0.0f);
         tEnd = min(tEnd, tPlanet0);
-    }
 
-    // 최대 추적 거리 제한
     tEnd = min(tEnd, tStart + cloud.TracingMaxDistance);
 
-    const int MARCH_STEPS = 24; // 하드웨어 텍스처 가속으로 스텝 수를 24로 상향!
+    if (tEnd <= tStart)
+        return float4(0.0f, 0.0f, 0.0f, 0.0f);
+
+    const float TARGET_STEP_LENGTH = 25.0f;
+    const int MIN_MARCH_STEPS = 64;
+    const int MAX_MARCH_STEPS = 192;
+
     float rayLength = tEnd - tStart;
-    float stepSize = rayLength / float(MARCH_STEPS);
+    int marchSteps = clamp(int(ceil(rayLength / TARGET_STEP_LENGTH)), MIN_MARCH_STEPS, MAX_MARCH_STEPS);
+    float stepSize = rayLength / float(marchSteps);
+    float jitter = frac(52.9829189f * frac(dot(floor(pixelPosition), float2(0.06711056f, 0.00583715f))));
 
     float cosAngle = dot(rayDir, sunDir);
     float phase = lerp(HenyeyGreensteinPhase(cosAngle, 0.76f), HenyeyGreensteinPhase(cosAngle, -0.2f), 0.30f);
+    float multiplePhase = lerp(HenyeyGreensteinPhase(cosAngle, 0.38f), HenyeyGreensteinPhase(cosAngle, -0.1f), 0.30f);
+    const float MULTIPLE_SCATTERING_STRENGTH = 0.35f;
 
     float transmittance = 1.0f;
     float3 cloudScattering = float3(0.0f, 0.0f, 0.0f);
 
     float3 sunLight = sunColor * (sunIntensity * 24.0f) * cloud.CloudAlbedo;
-    float3 ambientLight = float3(0.38f, 0.46f, 0.60f) * (skyIntensity * 4.5f) * cloud.CloudAlbedo;
-    float extinctionCoeff = cloud.CloudDensity * cloud.ExtinctionFactor * 0.015f;
+    float3 ambientLight = float3(0.38f, 0.46f, 0.60f) * (skyIntensity * 0.75f) * cloud.CloudAlbedo;
+    float extinctionCoeff = max(cloud.ExtinctionFactor, 0.0f) * 0.004f;
 
     // 바람 이동 벡터
-    float3 windOffset = cloud.WindDirection * (time * cloud.WindSpeed);
+    float windLength = length(cloud.WindDirection);
+    float3 windDirection = cloud.WindDirection / max(windLength, 0.0001f);
+    float3 windOffset = windDirection * (time * cloud.WindSpeed);
 
-    for (int i = 0; i < MARCH_STEPS; ++i)
+    for (int i = 0; i < marchSteps; ++i)
     {
-        float t = tStart + (float(i) + 0.5f) * stepSize;
+          float t = tStart + (float(i) + jitter) * stepSize;
         float3 pos = rayOrigin + rayDir * t;
 
-        float sampleDensity = SampleCloudDensity(pos, layerBottom, layerTop, cloud, windOffset, baseShapeTex, weatherMapTex, smp);
+                float sampleDensity = SampleCloudDensity(pos, layerBottom, layerTop, cloud, windOffset, time, baseShapeTex, weatherMapTex, smp);
         if (sampleDensity <= 0.001f) continue;
 
         // 태양광 투과 레이마칭 (3 스텝)
-        float lightOptDepth = 0.0f;
-        float lightStepSize = 250.0f;
-        for (int j = 0; j < 3; ++j)
-        {
-            float3 lPos = pos + sunDir * ((float(j) + 0.5f) * lightStepSize);
-            lightOptDepth += SampleCloudDensity(lPos, layerBottom, layerTop, cloud, windOffset, baseShapeTex, weatherMapTex, smp) * lightStepSize;
-        }
+        float2 lightTransmittance = ComputeCloudSunTransmittance(
+            pos, sunDir, planetRadius, layerBottom, layerTop, extinctionCoeff,
+            cloud, windOffset, time, baseShapeTex, weatherMapTex, smp);
 
-        float lightTransmittance = exp(-lightOptDepth * extinctionCoeff * 1.6f);
-        float powderSugar = 1.0f - exp(-sampleDensity * stepSize * cloud.PowderExtinction * 0.05f);
-        float3 stepLight = sunLight * (lightTransmittance * phase * (1.0f + powderSugar)) + ambientLight * (1.0f - lightTransmittance * 0.5f);
+        float powderSugar = 1.0f - exp(-sampleDensity * max(cloud.PowderExtinction, 0.0f) * 1.25f);
+        float3 singleScattering = sunLight * (lightTransmittance.x * phase * (1.0f + powderSugar));
 
-        // 산란광 및 투과율 누적
+        float multipleWeight = MULTIPLE_SCATTERING_STRENGTH * (1.0f - lightTransmittance.x);
+        float3 multipleScattering = sunLight * cloud.CloudAlbedo *
+            (lightTransmittance.y * multiplePhase * multipleWeight);
+
+        float3 stepLight = singleScattering + multipleScattering + ambientLight;
+        // 산란광 및 투과율 누적 (Beer-Lambert Law)
         float stepExtinction = sampleDensity * extinctionCoeff * stepSize;
         float stepTransmittance = exp(-stepExtinction);
-        cloudScattering += stepLight * (sampleDensity * (1.0f - stepTransmittance)) * transmittance;
+        cloudScattering += stepLight * (1.0f - stepTransmittance) * transmittance;
         transmittance *= stepTransmittance;
 
         if (transmittance < 0.01f) break;

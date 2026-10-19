@@ -6,7 +6,7 @@
 
 namespace Engine
 {
-    // HLSL register(b1, space3)와 1:1로 일치하는 128바이트 GPU 구조체
+    // HLSL register(b1, space3)와 메모리 배치가 일치하는 256바이트 GPU 구조체
     struct SkyAtmosphereData
     {
         vec3 ZenithColor{ 0.18f, 0.42f, 0.85f };  float _pad0 = 0.0f;
@@ -29,6 +29,7 @@ namespace Engine
         VolumetricCloudData Cloud{};
     };
     static_assert(sizeof(SkyAtmosphereData) == 256, "SkyAtmosphereData size must be 256 bytes");
+    static_assert(offsetof(SkyAtmosphereData, Cloud) == 128, "SkyAtmosphereData::Cloud offset must be 128 bytes");
 
     STRUCT(COMPONENT, DISPLAY_NAME("STRUCT_SKY_ATMOSPHERE"), CATEGORY("CATEGORY_RENDER"))
     struct SkyAtmosphereComponent

@@ -21,9 +21,17 @@ struct SkyAtmosphereData
     float3 SunColor;        float SunIntensity;
     float SkyIntensity;     float SunSize;      float2 _pad3;
 
+    // CPU 구조체에 남아 있는 기존 구름 설정과 배치를 일치시킨다.
+    float CloudCoverage;
+    float CloudDensity;
+    float CloudSpeed;
+    float CloudAltitude;
+
+    uint EnableClouds;
+    float3 _pad4;
+
     VolumetricCloudData Cloud;
 };
-
 ConstantBuffer<SkyAtmosphereData> sky : register(b1, space3);
 
 static const float PI = 3.14159265359f;
@@ -75,11 +83,11 @@ float4 main(PS_INPUT input) : SV_TARGET
     float sunSize = sky.SunSize > 0.001f ? sky.SunSize : 0.035f;
     float3 groundColor = length(sky.GroundColor) > 0.001f ? sky.GroundColor : float3(0.12f, 0.10f, 0.09f);
 
-    // 카메라 Y 고도 매핑 (에디터 단위 1 유닛 = 100m로 스케일하여 Y=600 이상 올라가면 대기권 돌파 및 우주/행성 곡률 노출)
-    float altitude = max(commonData.CameraPos.y * 100.0f, 10.0f);
-    float3 rayOrigin = float3(0.0f, PLANET_RADIUS + altitude, 0.0f);
-    float3 planetCenter = float3(commonData.CameraPos.x, -PLANET_RADIUS, commonData.CameraPos.z);
-    // float3 rayOrigin = float3(0.0f, PLANET_RADIUS + altitude, 0.0f); // 중복 제거
+    // 월드 좌표는 미터 단위이며, 월드 원점은 행성 표면에 놓인다.
+    float3 planetCenter = float3(0.0f, -PLANET_RADIUS, 0.0f);
+
+    // 구체 교차 함수는 중심이 원점인 좌표를 받으므로 행성 기준으로 변환한다.
+    float3 rayOrigin = commonData.CameraPos - planetCenter;
 
     float tAtmos0, tAtmos1;
     if (!RaySphereIntersect(rayOrigin, rayDir, ATMOS_RADIUS, tAtmos0, tAtmos1) || tAtmos1 <= 0.0f)
@@ -92,9 +100,8 @@ float4 main(PS_INPUT input) : SV_TARGET
     float tEnd = hitPlanet && tPlanet0 > 0.0f ? tPlanet0 : tAtmos1;
     float rayLength = max(tEnd - tStart, 0.0f);
 
-    const int VIEW_SAMPLES = 16;
+    const int VIEW_SAMPLES = 64;
     const int SUN_SAMPLES = 4;
-    float stepSize = rayLength / float(VIEW_SAMPLES);
 
     float3 opticalDepthRayleigh = 0.0f;
     float3 opticalDepthMie = 0.0f;
@@ -103,11 +110,29 @@ float4 main(PS_INPUT input) : SV_TARGET
     float cosAngle = dot(rayDir, sunDir);
     float phaseR = PhaseRayleigh(cosAngle);
     float phaseM = PhaseMie(cosAngle, MIE_G);
+    const bool ENABLE_CLOUD_ATMOSPHERE_SHADOW = true;
+
+    float cloudLayerBottom = PLANET_RADIUS + sky.Cloud.LayerBottomAltitude;
+    float cloudLayerTop = cloudLayerBottom + sky.Cloud.LayerHeight;
+    float cloudExtinctionCoeff = max(sky.Cloud.ExtinctionFactor, 0.0f) * 0.004f;
+
+    bool cloudShadowEnabled = ENABLE_CLOUD_ATMOSPHERE_SHADOW &&
+        sky.Cloud.EnableClouds != 0u && sky.Cloud.CloudCoverage > 0.0f && sky.Cloud.CloudDensity > 0.0f &&
+        sky.Cloud.LayerHeight > 0.0f && sky.Cloud.TracingMaxDistance > 0.0f && cloudExtinctionCoeff > 0.0f;
+
+    float cloudWindLength = length(sky.Cloud.WindDirection);
+    float3 cloudWindDirection = sky.Cloud.WindDirection / max(cloudWindLength, 0.0001f);
+    float3 cloudWindOffset = cloudWindDirection * (commonData.Time * sky.Cloud.WindSpeed);
 
     // 시선 광선을 따라 레이마칭
     for (int i = 0; i < VIEW_SAMPLES; ++i)
     {
-        float t = tStart + (float(i) + 0.5f) * stepSize;
+        float u0 = float(i) / float(VIEW_SAMPLES);
+        float u1 = float(i + 1) / float(VIEW_SAMPLES);
+        float intervalStart = tStart + rayLength * u0 * u0;
+        float intervalEnd = tStart + rayLength * u1 * u1;
+        float stepSize = intervalEnd - intervalStart;
+        float t = (intervalStart + intervalEnd) * 0.5f;
         float3 samplePos = rayOrigin + rayDir * t;
         float sampleHeight = max(length(samplePos) - PLANET_RADIUS, 0.0f);
 
@@ -139,7 +164,18 @@ float4 main(PS_INPUT input) : SV_TARGET
                                      BETA_MIE * 1.11f * (opticalDepthMie + sunOptDepthM);
             float3 transmittance = exp(-totalExtinction);
 
-            inScatteredLight += (densityR * BETA_RAYLEIGH * phaseR + densityM * BETA_MIE * phaseM) * transmittance;
+            float cloudSunTransmittance = 1.0f;
+            if (cloudShadowEnabled)
+            {
+                float2 cloudLightTransmittance = ComputeCloudSunTransmittance(
+                    samplePos, sunDir, PLANET_RADIUS, cloudLayerBottom, cloudLayerTop, cloudExtinctionCoeff,
+                    sky.Cloud, cloudWindOffset, commonData.Time, baseShapeTex, weatherMapTex, cloudSampler);
+
+                cloudSunTransmittance = cloudLightTransmittance.x;
+            }
+
+            float3 scattering = densityR * BETA_RAYLEIGH * phaseR + densityM * BETA_MIE * phaseM;
+            inScatteredLight += scattering * transmittance * cloudSunTransmittance;
         }
     }
 
@@ -166,8 +202,9 @@ float4 main(PS_INPUT input) : SV_TARGET
 
     float4 clouds = RenderCloudLayer(
         rayOrigin, rayDir, sunDir, sunColor, sunIntensity, skyIntensity, commonData.Time,
-        PLANET_RADIUS, sky.Cloud, hitPlanet, tPlanet0,
+        PLANET_RADIUS, sky.Cloud, input.Position.xy, hitPlanet, tPlanet0,
         baseShapeTex, weatherMapTex, cloudSampler);
+
     color = lerp(color, clouds.rgb, clouds.a);
 
     // ACES 근사 톤매핑 (HDR -> LDR)
