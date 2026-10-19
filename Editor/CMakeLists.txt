@@ -59,6 +59,7 @@ if(MSVC)
         $<$<CONFIG:Debug>:/ZI>
         $<$<CONFIG:Debug>:/FS>
         /Zc:preprocessor
+        /utf-8
         /MP
     )
     target_link_options(Editor PRIVATE

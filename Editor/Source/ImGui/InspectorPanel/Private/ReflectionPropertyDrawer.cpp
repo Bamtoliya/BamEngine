@@ -16,6 +16,7 @@
 #include <cmath>
 #include "Editor_Macros.h"
 #include "LocalizationManager.h"
+#include "Reflection/ReflectionRegistry.h"
 #include "ReflectionInspectorSupport.h"
 #include "PhysicsComponent.h"
 #include <imgui_stdlib.h>
@@ -741,10 +742,36 @@ namespace Editor
 					ImGui::TableNextRow();
 					ImGui::TableSetColumnIndex(0);
 					ImGui::TextUnformatted(displayName.data(), displayName.data() + displayName.size());
-
 					if (ImGui::IsItemHovered())
-					{
 						ImGui::SetTooltip("%s", property.TypeName.c_str());
+
+					// [방안 B]: Transform의 벡터 속성(Position, Rotation, Scale) 라벨 우측에 자물쇠 아이콘 배치
+					if (editSettings != nullptr && (editSettings->Vectors.contains(property.Name) || type.QualifiedName == "Engine::TransformComponent"))
+					{
+						auto& vectorSettings = editSettings->Vectors[property.Name];
+						const char* lockIcon = vectorSettings.Locked ? ICON_FA_LOCK : ICON_FA_LOCK_OPEN;
+						const float btnWidth = ImGui::GetFrameHeight() * 0.85f;
+
+						ImGui::SameLine();
+						const float avail = ImGui::GetContentRegionAvail().x;
+						if (avail > btnWidth)
+							ImGui::SetCursorPosX(ImGui::GetCursorPosX() + avail - btnWidth);
+
+						ImGui::PushID(property.Name.c_str());
+						const bool wasLocked = vectorSettings.Locked;
+						if (wasLocked) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.4f, 0.1f, 0.8f));
+
+						if (ImGui::SmallButton(lockIcon))
+						{
+							vectorSettings.Locked = !vectorSettings.Locked;
+							if (vectorSettings.Locked) editSettings->ReadOnlyProperties.insert(property.Name);
+							else editSettings->ReadOnlyProperties.erase(property.Name);
+						}
+
+						if (wasLocked) ImGui::PopStyleColor();
+						if (ImGui::IsItemHovered())
+							ImGui::SetTooltip("%s", vectorSettings.Locked ? "Unlock property" : "Lock property");
+						ImGui::PopID();
 					}
 
 					ImGui::TableSetColumnIndex(1);

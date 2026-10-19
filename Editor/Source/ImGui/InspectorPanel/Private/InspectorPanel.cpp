@@ -20,26 +20,162 @@
 #include <string_view>
 #include <vector>
 
+InspectorPanel::InspectorPanel(uint32 panelId) : m_PanelId(panelId)
+{
+	m_Name = panelId == 0 ? L"Inspector" : L"Inspector " + std::to_wstring(panelId + 1);
+	m_DisplayNameKey = "UI_INSPECTOR";
+}
+
 void InspectorPanel::Draw()
 {
 	if (!m_Open) return;
 
-	const string windowTitle = LOCAL("UI_INSPECTOR") + "###InspectorPanel";
+	const string windowTitle = m_PanelId == 0 ?
+		LOCAL("UI_INSPECTOR") + "###InspectorPanel" :
+		fmt::format("{} #{}###InspectorPanel_{}", LOCAL("UI_INSPECTOR"), m_PanelId + 1, m_PanelId);
 
 	if (ImGui::Begin(windowTitle.c_str(), &m_Open))
 	{
 		Application::Get().GetEditHistory().AllowShortcuts(ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows));
-		if (Engine::Entity* entity = SelectionManager::Get().GetPrimarySelectedEntity())
+
+		// 1. 타깃 엔티티 결정
+		Engine::Entity* targetEntity = nullptr;
+		Engine::Scene* currentScene = SceneManager::Get().GetCurrentScene();
+
+		if (m_IsLocked && currentScene && m_LockedEntityId != 0)
 		{
-			DrawEntityProperties(*entity);
+			targetEntity = currentScene->FindEntityById(m_LockedEntityId);
+			if (!targetEntity)
+			{
+				m_IsLocked = false;
+				m_LockedEntityId = 0;
+			}
 		}
-		else
+		if (!m_IsLocked)
+			targetEntity = SelectionManager::Get().GetPrimarySelectedEntity();
+
+		// 2. 상단 고정 헤더 바 (Sticky Header: 스크롤되지 않음)
+		DrawHeaderBar(targetEntity);
+
+		// 3. 스크롤 가능한 본문 영역 (ImGui::BeginChild)
+		if (ImGui::BeginChild("InspectorPropertiesScrollArea", ImVec2(0, 0), false, ImGuiWindowFlags_None))
 		{
-			ImGui::TextDisabled("%s", (LOCAL("Inspector.NoSelection")).c_str());
+			if (targetEntity != nullptr)
+			{
+				const uint64 entityHandleId = static_cast<uint64>(targetEntity->GetEntityHandle());
+
+				// 엔티티가 바뀔 때 스크롤 복원
+				if (m_CurrentDisplayId != entityHandleId)
+				{
+					if (m_CurrentDisplayId != 0)
+						m_EntityScrollMap[m_CurrentDisplayId] = ImGui::GetScrollY();
+
+					if (auto it = m_EntityScrollMap.find(entityHandleId); it != m_EntityScrollMap.end())
+						ImGui::SetScrollY(it->second);
+					else
+						ImGui::SetScrollY(m_LastScrollY);
+
+					m_CurrentDisplayId = entityHandleId;
+				}
+
+				DrawEntityProperties(*targetEntity);
+				m_LastScrollY = ImGui::GetScrollY();
+			}
+			else
+			{
+				m_CurrentDisplayId = 0;
+			}
 		}
+		ImGui::EndChild();
 	}
 
 	ImGui::End();
+}
+
+void InspectorPanel::DrawHeaderBar(Engine::Entity* currentEntity)
+{
+	const char* lockIcon = m_IsLocked ? ICON_FA_LOCK : ICON_FA_LOCK_OPEN;
+	const float btnSize = ImGui::GetFrameHeight();
+	const float spacing = ImGui::GetStyle().ItemSpacing.x;
+
+	if (currentEntity != nullptr && currentEntity->GetScene() != nullptr)
+	{
+		auto& world = currentEntity->GetScene()->GetRegistry();
+		const auto handle = currentEntity->GetEntityHandle();
+
+		// 1. 활성/비활성 체크박스 (FlagComponent)
+		if (auto* flag = world.try_get<Engine::FlagComponent>(handle))
+		{
+			bool active = flag->IsActive();
+			if (ImGui::Checkbox("##EntityActive", &active))
+				flag->SetActive(active);
+			if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", "Active State");
+			ImGui::SameLine();
+		}
+
+		// 2. 우측 자물쇠 및 ID 영역 크기 미리 계산
+		uint64 entityIdNum = 0;
+		if (const auto* idComp = world.try_get<Engine::IDComponent>(handle))
+			entityIdNum = idComp->id;
+
+		const std::string idText = fmt::format("ID: {}", entityIdNum);
+		const float idTextWidth = ImGui::CalcTextSize(idText.c_str()).x;
+		const float rightReservedWidth = btnSize + spacing + idTextWidth + spacing;
+		const float availWidth = ImGui::GetContentRegionAvail().x;
+		const float nameInputWidth = std::max(60.0f, availWidth - rightReservedWidth);
+
+		// 3. 엔티티 이름 입력 필드 (NameComponent)
+		if (auto* nameComp = world.try_get<Engine::NameComponent>(handle))
+		{
+			std::string nameStr = Engine::WStrToStr(nameComp->name);
+			char nameBuf[128];
+			strncpy_s(nameBuf, nameStr.c_str(), sizeof(nameBuf));
+
+			ImGui::SetNextItemWidth(nameInputWidth);
+			if (ImGui::InputText("##EntityName", nameBuf, sizeof(nameBuf)))
+				nameComp->name = Engine::StrToWStr(nameBuf);
+			ImGui::SameLine();
+		}
+
+		// 4. ID 표시 (버튼 높이와 세로 정렬 맞춤 + SameLine 추가)
+		ImGui::AlignTextToFramePadding();
+		ImGui::TextDisabled("%s", idText.c_str());
+		ImGui::SameLine();
+	}
+	else
+	{
+		ImGui::AlignTextToFramePadding();
+		ImGui::TextDisabled("%s", LOCAL_CSTR("Inspector.NoSelection"));
+		ImGui::SameLine();
+	}
+
+	// 5. 우측 끝 자물쇠 버튼
+	const float finalAvail = ImGui::GetContentRegionAvail().x;
+	if (finalAvail > btnSize)
+		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + finalAvail - btnSize);
+
+	const bool wasLocked = m_IsLocked;
+	if (wasLocked) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.4f, 0.1f, 0.8f));
+
+	if (ImGui::Button(lockIcon, ImVec2(btnSize, btnSize)))
+	{
+		m_IsLocked = !m_IsLocked;
+		if (m_IsLocked && currentEntity && currentEntity->GetScene())
+		{
+			if (const auto* id = currentEntity->GetScene()->GetRegistry().try_get<Engine::IDComponent>(currentEntity->GetEntityHandle()))
+				m_LockedEntityId = id->id;
+		}
+		else
+		{
+			m_LockedEntityId = 0;
+		}
+	}
+
+	if (wasLocked) ImGui::PopStyleColor();
+	if (ImGui::IsItemHovered())
+		ImGui::SetTooltip("%s", m_IsLocked ? "Locked to current entity" : "Unlocked (follows selection)");
+
+	ImGui::Separator();
 }
 
 EResult InspectorPanel::SetSelectedEntity(Engine::Entity* entity)
@@ -85,32 +221,15 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 	const std::array targets{ handle };
 	auto& history = Application::Get().GetEditHistory();
 	auto before = history.Enabled() ? SceneEditSnapshot::Capture(*scene, targets) : SceneEditSnapshot{};
-	const auto* transformType = registry ? registry->FindType<Engine::TransformComponent>() : nullptr;
-	if (transformType && world.all_of<Engine::TransformComponent>(handle))
-	{
-		auto& settings = entityEditState.Components[transformType->QualifiedName];
-		auto& positionLock = settings.Vectors["position"].Locked;
-		auto& rotationLock = settings.Vectors["eulerRotation"].Locked;
-		auto& scaleLock = settings.Vectors["scale"].Locked;
-		bool all = positionLock && rotationLock && scaleLock;
-		ImGui::BeginDisabled(!history.Enabled());
-		if (ImGui::Checkbox(LOCAL("UI_TRANSFORM_LOCK_ALL").c_str(), &all))
-			positionLock = rotationLock = scaleLock = all;
-		ImGui::Checkbox(LOCAL("UI_TRANSFORM_LOCK_POSITION").c_str(), &positionLock);
-		ImGui::SameLine();
-		ImGui::Checkbox(LOCAL("UI_TRANSFORM_LOCK_ROTATION").c_str(), &rotationLock);
-		ImGui::SameLine();
-		ImGui::Checkbox(LOCAL("UI_TRANSFORM_LOCK_SCALE").c_str(), &scaleLock);
-		ImGui::EndDisabled();
-		if (positionLock || rotationLock || scaleLock) settings.ReadOnlyProperties.insert("absolute");
-		else settings.ReadOnlyProperties.erase("absolute");
-	}
 	ImGui::BeginDisabled(!history.Enabled() || !before);
 
 	const auto result = scene->ForEachReflectedComponent(entity,
 		[&](const reflection::TypeInfo& type, const reflection::ObjectView& object)
 		{
 			if (!ReflectionPropertyDrawer::IsVisible(type)) return true;
+			// NameComponent와 IDComponent는 최상단 Sticky Header에 고정되어 있으므로 아래 목록에서는 제외
+			if (object.Is<Engine::NameComponent>() || object.Is<Engine::IDComponent>())
+				return true;
 			++componentCount;
 
 			Engine::TransformComponent* transform = nullptr;
