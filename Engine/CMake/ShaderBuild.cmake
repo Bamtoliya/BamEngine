@@ -24,6 +24,7 @@ message(STATUS "디버그 - 최종적으로 찾은 DXC_COMPILER 경로: '${DXC_C
 # 2. 셰이더 소스 폴더 세팅 (.hlsl 파일만 자동 스캔)
 set(SHADER_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../Resources/Shader")
 file(GLOB_RECURSE HLSL_SOURCES CONFIGURE_DEPENDS "${SHADER_SOURCE_DIR}/*.hlsl")
+file(GLOB_RECURSE HLSL_INCLUDES CONFIGURE_DEPENDS "${SHADER_SOURCE_DIR}/*.hlsli")
 set(ALL_SHADER_OUTPUTS "")
 # 3. 모든 .hlsl 파일을 순회
 foreach(SHADER_FILE ${HLSL_SOURCES})
@@ -36,10 +37,7 @@ foreach(SHADER_FILE ${HLSL_SOURCES})
     file(MAKE_DIRECTORY "${SPIRV_OUT_DIR}")
     # 파일 이름을 대문자로 변환하여 비교 준비
     string(TOUPPER "${SHADER_NAME_WE}" UPPER_NAME)
-    set(_shader_dependencies "${SHADER_FILE}")
-    if(UPPER_NAME STREQUAL "UIVS" OR UPPER_NAME STREQUAL "UIPS")
-        list(APPEND _shader_dependencies "${SHADER_SOURCE_DIR}/hlsl/uiCommon.hlsli")
-    endif()
+    set(_shader_dependencies "${SHADER_FILE}" ${HLSL_INCLUDES})
     if(UPPER_NAME MATCHES "VS$" OR UPPER_NAME MATCHES "_VS$")
         # ---------------------------------------------------------
         # [ 파일명 끝이 VS 인 경우 -> Vertex Shader 로 컴파일 ]

@@ -894,15 +894,16 @@ EResult DirectX12RHI::BindShader(RHIShader* shader)
 
 EResult DirectX12RHI::BindPipeline(RHIPipeline* pipeline)
 {
-    if(!m_CommandList || !pipeline)
+    if (!m_CommandList || !pipeline)
         return EResult::Fail;
 
-	ID3D12PipelineState* pipelineState = static_cast<ID3D12PipelineState*>(pipeline->GetNativeHandle());
+    ID3D12PipelineState* pipelineState = static_cast<ID3D12PipelineState*>(pipeline->GetNativeHandle());
+    if (!pipelineState)
+        return EResult::Fail;
+
     m_CommandList->SetPipelineState(pipelineState);
-
-	D3D_PRIMITIVE_TOPOLOGY dxTopo = ToD3D12PrimitiveTopology(pipeline->GetTopology());
+    D3D_PRIMITIVE_TOPOLOGY dxTopo = ToD3D12PrimitiveTopology(pipeline->GetTopology());
     m_CommandList->IASetPrimitiveTopology(dxTopo);
-
     return EResult::Success;
 }
 

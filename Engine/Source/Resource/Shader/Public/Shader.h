@@ -63,6 +63,7 @@ public:
 #pragma region RHI
 public:
 	RHIShader* GetRHIShader() const { return m_RHIShader; }
+	EResult UpdateBytecode(const vector<uint8>& newBytecode);
 #pragma endregion
 
 

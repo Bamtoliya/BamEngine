@@ -18,11 +18,15 @@ public:
 	virtual void Free() override;
 #pragma endregion
 public:
+	virtual EResult Rebuild() override;
 	virtual void* GetNativeHandle() const override { return m_Pipeline.Get(); }
 	virtual void SetNativeHandle(void* nativeHandle) override
 	{
 		m_Pipeline = static_cast<ID3D12PipelineState*>(nativeHandle);
 	}
+private:
+	// 공통 D3D12 PSO 생성 로직
+	EResult CreatePipelineState();
 private:
 	ComPtr<ID3D12PipelineState> m_Pipeline;
 };

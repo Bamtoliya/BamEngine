@@ -157,6 +157,8 @@ public:
 	void SetCullMode(ECullMode mode) { m_Desc.cullMode = mode; }
 	void SetFrontFace(EFrontFace face) { m_Desc.frontFace = face; }
 	void SetTopology(ETopology topology) { m_Desc.topology = topology; }
+public:
+	virtual EResult Rebuild() { return EResult::NotImplemented; }
 protected:
 	DESC m_Desc;
 };

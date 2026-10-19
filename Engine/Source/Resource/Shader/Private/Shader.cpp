@@ -3,6 +3,8 @@
 #include "Shader.h"
 #include "Renderer.h"
 #include "RHIShader.h"
+#include "Logger.h"
+#include "PipelineManager.h"
 
 #pragma region Constructor&Destructor
 EResult Shader::Initialize(void* arg)
@@ -48,6 +50,23 @@ Shader* Shader::Create(void* arg)
 void Shader::Free()
 {
 	Safe_Release(m_RHIShader);
+}
+#pragma endregion
+
+#pragma region RHI
+
+EResult Shader::UpdateBytecode(const vector<uint8>& newBytecode)
+{
+	if (newBytecode.empty() || !m_RHIShader) return EResult::InvalidArgument;
+
+	// 1. 기존 RHIShader의 포인터를 유지한 채 바이트코드만 갱신
+	m_RHIShader->UpdateBytecode(newBytecode);
+
+	// 2. 이 RHIShader를 참조하는 모든 파이프라인의 내부 D3D12 PSO만 실시간 Rebuild
+	PipelineManager::Get().RebuildPipelinesWithShader(m_RHIShader);
+
+	IncreaseVersion();
+	return EResult::Success;
 }
 #pragma endregion
 

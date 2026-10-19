@@ -32,6 +32,7 @@ public:
 	EShaderType GetShaderType() const { return m_ShaderType; }
 	const string& GetEntryPoint() const { return m_EntryPoint; }
 	const vector<uint8>& GetRawShaderBytecode() const { return m_ShaderBytecode; }
+	virtual void UpdateBytecode(const vector<uint8>& bytecode) { m_ShaderBytecode = bytecode; }
 protected:
 	PROPERTY()
 	EShaderType m_ShaderType = { EShaderType::Unknown };

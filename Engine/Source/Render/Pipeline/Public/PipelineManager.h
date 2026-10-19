@@ -24,6 +24,8 @@ public:
 #pragma region Pipeline Management
 public:
 	RHIPipeline* GetOrCreatePipeline(const RHIPipelineDesc& desc);
+	void RebuildPipelinesWithShader(RHIShader* shader);
+	void ClearPipelineCache();
 public:
 	void SetDefaultPipeline(RHIPipeline* pipeline) { m_DefaultPipeline = pipeline; }
 	RHIPipeline* GetDefaultPipeline() const { return m_DefaultPipeline; }

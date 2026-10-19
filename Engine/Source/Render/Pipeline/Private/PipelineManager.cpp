@@ -39,4 +39,26 @@ RHIPipeline* PipelineManager::GetOrCreatePipeline(const RHIPipelineDesc& desc)
 	}
 	return pipeline;
 }
+
+void PipelineManager::RebuildPipelinesWithShader(RHIShader* shader)
+{
+	if (!shader) return;
+	for (auto& [desc, pipeline] : m_Pipelines)
+	{
+		if (desc.vertexShader == shader || desc.pixelShader == shader ||
+			desc.computeShader == shader || desc.geometryShader == shader ||
+			desc.hullShader == shader || desc.domainShader == shader)
+		{
+			if (pipeline)
+			{
+				pipeline->Rebuild();
+			}
+		}
+	}
+}
+
+void PipelineManager::ClearPipelineCache()
+{
+	RELEASE_MAP(m_Pipelines);
+}
 #pragma endregion
