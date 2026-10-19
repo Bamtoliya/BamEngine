@@ -452,6 +452,30 @@ void HierarchyPanel::DrawEntityHierarchy(Scene* scene)
 			m_RevealEntity = target;
 		}
 	}
+	if (action.ToggleVisible != entt::null)
+	{
+		auto* flagComp = scene->GetRegistry().try_get<Engine::FlagComponent>(action.ToggleVisible);
+		if (flagComp)
+		{
+			auto& history = Application::Get().GetEditHistory();
+			auto before = history.Enabled() ? SceneEditSnapshot::Capture(*scene) : SceneEditSnapshot{};
+			flagComp->ToggleVisible();
+			scene->UpdateHierarchyFlags();
+			if (before) history.Record(std::move(before), SceneEditSnapshot::Capture(*scene), "UI_HISTORY_PROPERTY");
+		}
+	}
+	if (action.ToggleActive != entt::null)
+	{
+		auto* flagComp = scene->GetRegistry().try_get<Engine::FlagComponent>(action.ToggleActive);
+		if (flagComp)
+		{
+			auto& history = Application::Get().GetEditHistory();
+			auto before = history.Enabled() ? SceneEditSnapshot::Capture(*scene) : SceneEditSnapshot{};
+			flagComp->SetActive(!flagComp->IsActive());
+			scene->UpdateHierarchyFlags();
+			if (before) history.Record(std::move(before), SceneEditSnapshot::Capture(*scene), "UI_HISTORY_PROPERTY");
+		}
+	}
     if (action.RejectedDrop)
         m_HierarchyMessage = "UI_HIERARCHY_BAD_DROP";
     if (action.Move)

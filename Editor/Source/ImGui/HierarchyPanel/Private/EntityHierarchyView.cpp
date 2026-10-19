@@ -8,7 +8,6 @@
 #include <imgui.h>
 #include <algorithm>
 #include <cstring>
-#include "Application.h"
 #include "IconsFontAwesome7.h"
 
 namespace
@@ -304,13 +303,10 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
                     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
                     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(1, 1, 1, 0.15f));
 
+                    // 눈알 아이콘 버튼 (가시성 토글)
                     if (ImGui::Button(eyeIcon, ImVec2(itemSize, itemSize)))
                     {
-                        auto& history = Application::Get().GetEditHistory();
-                        auto before = history.Enabled() ? SceneEditSnapshot::Capture(scene) : SceneEditSnapshot{};
-                        flagComp->ToggleVisible();
-                        scene.UpdateHierarchyFlags();
-                        if (before) history.Record(std::move(before), SceneEditSnapshot::Capture(scene), "UI_HISTORY_PROPERTY");
+                        action.ToggleVisible = entity;
                     }
                     if (ImGui::IsItemHovered())
                         ImGui::SetTooltip(!effectiveVisible && localVisible ? "Hidden by parent hierarchy." : "Toggle Visibility");
@@ -322,11 +318,7 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
                     bool localActive = flagComp->IsActive();
                     if (ImGui::Checkbox("##EntityActive", &localActive))
                     {
-                        auto& history = Application::Get().GetEditHistory();
-                        auto before = history.Enabled() ? SceneEditSnapshot::Capture(scene) : SceneEditSnapshot{};
-                        flagComp->SetActive(localActive);
-                        scene.UpdateHierarchyFlags();
-                        if (before) history.Record(std::move(before), SceneEditSnapshot::Capture(scene), "UI_HISTORY_PROPERTY");
+                        action.ToggleActive = entity;
                     }
                     if (ImGui::IsItemHovered())
                         ImGui::SetTooltip(!effectiveActive && localActive ? "Deactivated by parent hierarchy." : "Toggle Active");
