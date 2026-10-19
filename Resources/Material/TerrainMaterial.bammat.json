@@ -1,0 +1,65 @@
+{
+    "AssetHeader": {
+        "MagicNumber": 6072351289621954882,
+        "ResourceType": 3,
+        "Version": 0
+    },
+    "m_BlendMode": 1,
+    "m_CullMode": 0,
+    "m_DepthCompareOp": 1,
+    "m_DepthMode": 2,
+    "m_FillMode": 1,
+    "m_FrontFace": 0,
+    "m_Key": "Resources/Material/TerrainMaterial",
+    "m_Parameters": [],
+    "m_PassShaders": [
+        {
+            "passType": 3,
+            "pixelShader": {
+                "AssetKey": "Resources/Shader/ShadowDepthPS",
+                "AssetPath": "Resources/Shader/bin/dxil/shadowDepthPS.cso",
+                "Null": false
+            },
+            "vertexShader": {
+                "AssetKey": "Resources/Shader/ShadowDepthVS",
+                "AssetPath": "Resources/Shader/bin/dxil/shadowDepthVS.cso",
+                "Null": false
+            }
+        }
+    ],
+    "m_Path": "",
+    "m_PixelShaderHandle": {
+        "AssetKey": "Resources/Shader/GBufferPS",
+        "AssetPath": "Resources/Shader/bin/dxil/gbufferPS.cso",
+        "Null": false
+    },
+    "m_ResourceType": 3,
+    "m_TextureBindings": [
+        {
+            "hasCustomSampler": false,
+            "name": "Diffuse",
+            "samplerDesc": {
+                "AddressU": 0,
+                "AddressV": 0,
+                "AddressW": 0,
+                "BorderColor": [0, 0, 0, 0],
+                "MagFilter": 1,
+                "MaxAnisotropy": 1,
+                "MinFilter": 1,
+                "MipFilter": 1
+            },
+            "slot": 0,
+            "texture": {
+                "AssetKey": "Resources/Texture/white1x1.png",
+                "AssetPath": "Resources/Texture/white1x1.png",
+                "Null": false
+            }
+        }
+    ],
+    "m_Version": 0,
+    "m_VertexShaderHandle": {
+        "AssetKey": "Resources/Shader/TerrainVS",
+        "AssetPath": "Resources/Shader/bin/dxil/terrainVS.cso",
+        "Null": false
+    }
+}

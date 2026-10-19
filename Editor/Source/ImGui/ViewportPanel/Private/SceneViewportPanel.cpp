@@ -27,6 +27,11 @@
 #include <cmath>
 #include <string>
 
+#include "TerrainEditor.h"
+#include "TerrainComponent.h"
+#include "TerrainUtility.h"
+#include "Collision.h"
+
 #pragma region Helper
 struct LightingPassData
 {
@@ -396,6 +401,7 @@ void SceneViewportPanel::DrawCustomViewport()
 	DrawCameraOverlay();
 	DrawSelectionLocked();
 	CapturePickingRequest(imageHovered);
+	HandleTerrainSculpting(imageHovered);
 }
 
 void SceneViewportPanel::DrawPickingMenu()
@@ -1199,6 +1205,7 @@ void SceneViewportPanel::MouseInput()
 }
 void SceneViewportPanel::CapturePickingRequest(bool imageHovered)
 {
+	if (TerrainEditor::Get() && TerrainEditor::Get()->IsSculptingActive()) return;
 	if (!imageHovered || !InputManager::Get().IsMouseButtonDown(EMouseButton::Left) || !ImGui::IsWindowHovered() ||
 		ImGui::IsAnyItemActive() || ImGuizmo::IsOver() || ImGuizmo::IsUsing() ||
 		ImViewGuizmo::IsOver() || ImViewGuizmo::IsUsing() ||
@@ -1495,4 +1502,62 @@ SkyAtmosphereData SceneViewportPanel::BuildSkyAtmosphereData()
 		}
 	}
 	return skyData;
+}
+
+void SceneViewportPanel::HandleTerrainSculpting(bool imageHovered)
+{
+	auto* terrainEditor = TerrainEditor::Get();
+	if (!terrainEditor || !terrainEditor->IsSculptingActive() || !imageHovered) return;
+
+	Scene* activeScene = SceneManager::Get().GetCurrentScene();
+	Entity* targetEntity = terrainEditor->GetTargetTerrainEntity();
+	if (!activeScene || !targetEntity || targetEntity->GetScene() != activeScene) return;
+
+	auto& registry = activeScene->GetRegistry();
+	auto* terrain = registry.try_get<Engine::TerrainComponent>(targetEntity->GetEntityHandle());
+	auto* transform = registry.try_get<Engine::WorldTransformComponent>(targetEntity->GetEntityHandle());
+	if (!terrain || !transform) return;
+
+	Engine::Ray ray;
+	float maxDist = 1000.0f;
+	const auto screenMouse = InputManager::Get().GetScreenMousePosition();
+	const ImVec2 mousePos(screenMouse.x, screenMouse.y);
+	if (!ScreenPosToRay(mousePos, ray, maxDist)) return;
+
+	// 엔진 표준 Collision::Raycast 및 HitResult 활용
+	Engine::HitResult hitResult;
+	if (!Engine::Collision::Raycast(ray, *terrain, transform->worldMatrix, hitResult, maxDist))
+		return;
+
+	// 1. 브러시 영향 범위 원형 기즈모 그리기 (32각 와이어프레임 링)
+	const std::optional<CameraBuffer> cameraBuffer = GetActiveCameraBuffer();
+	if (cameraBuffer.has_value())
+	{
+		ImDrawList* drawList = ImGui::GetWindowDrawList();
+		const float radius = terrainEditor->GetBrushParams().Radius;
+		const int segments = 32;
+		ImVec2 prevScreenPos{};
+		bool hasPrev = false;
+
+		for (int i = 0; i <= segments; ++i)
+		{
+			const float angle = (static_cast<float>(i) / static_cast<float>(segments)) * 6.2831853f;
+			const glm::vec3 circleWorldPos = hitResult.point + glm::vec3(std::cos(angle) * radius, 0.0f, std::sin(angle) * radius);
+			ImVec2 screenPos{};
+			if (WorldToViewportScreen(circleWorldPos, cameraBuffer->viewProjMatrix, m_ImageScreenPos, m_ImageSize, screenPos))
+			{
+				if (hasPrev) drawList->AddLine(prevScreenPos, screenPos, IM_COL32(50, 220, 100, 255), 2.0f);
+				prevScreenPos = screenPos;
+				hasPrev = true;
+			}
+			else hasPrev = false;
+		}
+	}
+
+	// 2. 마우스 좌클릭 드래그 시 실시간 지형 변형 (스컬프팅)
+	if (InputManager::Get().IsMouseButtonPressed(EMouseButton::Left) && !ImGuizmo::IsUsing() && !InputManager::Get().IsMouseButtonPressed(EMouseButton::Right))
+	{
+		const float dt = TimeManager::Get().GetDeltaTime();
+		Engine::TerrainUtility::ApplyBrush(*terrain, hitResult.point, transform->worldMatrix, terrainEditor->GetBrushParams(), dt);
+	}
 }

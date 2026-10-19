@@ -29,7 +29,10 @@ namespace Engine
 
 		// 런타임 GPU 리소스
 		ResourceHandle<Mesh> GridMesh;
+
+		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_MATERIAL_HANDLE"))
 		ResourceHandle<Material> TerrainMaterial;
+
 		std::shared_ptr<RHITexture> HeightmapTexture;
 
 		// CPU 높이 데이터 (가로 Resolution x 세로 Resolution)

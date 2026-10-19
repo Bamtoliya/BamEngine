@@ -8,6 +8,7 @@
 #include "PickingManager.h"
 #include "RHI.h"
 #include "RHITexture.h"
+#include "Texture.h"
 
 EResult TerrainSystem::Initialize(void* arg)
 {
@@ -35,7 +36,7 @@ void TerrainSystem::EnsureTerrainResources(Scene* scene, entt::entity entity, Te
 {
 	if (!scene) return;
 
-	// 1. GridMesh 동적 생성 및 핸들 할당
+	// 1. GridMesh 동적 생성 및 핸들 할당 (터레인 고유 그리드 메시는 시스템이 관리)
 	if (!terrain.GridMesh.IsValid())
 	{
 		Mesh* mesh = TerrainUtility::CreateGridMesh(terrain.Width, terrain.Length, terrain.Resolution);
@@ -52,7 +53,18 @@ void TerrainSystem::EnsureTerrainResources(Scene* scene, entt::entity entity, Te
 	const uint32 totalVertexCount = vertexAxisCount * vertexAxisCount;
 	if (terrain.HeightData.size() != totalVertexCount)
 	{
-		terrain.HeightData.assign(totalVertexCount, 0.0f);
+		terrain.HeightData.resize(totalVertexCount);
+		const float center = static_cast<float>(terrain.Resolution) * 0.5f;
+		for (uint32 z = 0; z < vertexAxisCount; ++z)
+		{
+			for (uint32 x = 0; x < vertexAxisCount; ++x)
+			{
+				const float dx = (static_cast<float>(x) - center) / center;
+				const float dz = (static_cast<float>(z) - center) / center;
+				const float distSq = dx * dx + dz * dz;
+				terrain.HeightData[z * vertexAxisCount + x] = std::max(0.0f, 1.0f - distSq);
+			}
+		}
 		terrain.IsDirty = true;
 	}
 
@@ -74,7 +86,47 @@ void TerrainSystem::EnsureTerrainResources(Scene* scene, entt::entity entity, Te
 		{
 			terrain.HeightmapTexture = std::shared_ptr<RHITexture>(rawTexture, [](RHITexture* p) { Safe_Release(p); });
 			terrain.IsDirty = false;
+
+			const uint64 entityId = static_cast<uint64>(entt::to_integral(entity));
+			const std::wstring texKey = L"Runtime_TerrainHeightmap_" + std::to_wstring(entityId);
+			Texture* heightmapTex = Texture::CreateFromRHITexture(rawTexture, texKey);
+			ResourceManager::Get().AddResource<Texture>(texKey, heightmapTex);
 		}
+	}
+
+	// 4. 머티리얼과 높이맵 텍스처가 모두 준비되었을 때 머티리얼의 Slot 1에 높이맵 바인딩 보장
+	if (terrain.TerrainMaterial.IsValid() && terrain.HeightmapTexture)
+	{
+		const uint64 entityId = static_cast<uint64>(entt::to_integral(entity));
+		const std::wstring texKey = L"Runtime_TerrainHeightmap_" + std::to_wstring(entityId);
+		auto heightmapHandle = ResourceManager::Get().GetResourceHandle<Texture>(texKey);
+		if (heightmapHandle.IsValid())
+		{
+			terrain.TerrainMaterial->SetTextureBinding("HeightMap", 1, heightmapHandle);
+		}
+	}
+}
+
+void TerrainSystem::UpdateTerrainHeightmap(TerrainComponent& terrain)
+{
+	if (!terrain.IsDirty || !terrain.HeightmapTexture) return;
+
+	RHI* rhi = Renderer::Get().GetRHI();
+	if (!rhi) return;
+
+	const uint32 vertexAxisCount = terrain.Resolution + 1;
+	RHITextureDesc desc{};
+	desc.width = vertexAxisCount;
+	desc.height = vertexAxisCount;
+	desc.format = ETextureFormat::R32_FLOAT;
+	desc.dimension = ETextureDimension::Texture2D;
+	desc.usage = ETextureUsage::Sampler;
+	desc.data = terrain.HeightData.data();
+	desc.dataSize = static_cast<uint32>(terrain.HeightData.size() * sizeof(f32));
+
+	if (IsSuccess(rhi->UploadTextureData(terrain.HeightmapTexture.get(), desc)))
+	{
+		terrain.IsDirty = false;
 	}
 }
 
@@ -133,6 +185,9 @@ void TerrainSystem::OnSubmit(entt::registry& registry, const vector<Scene*> acti
 		auto view = scene->GetRegistry().view<TerrainComponent, WorldTransformComponent, FlagComponent>();
 		for (auto [entity, terrain, worldTransform, flag] : view.each())
 		{
+			EnsureTerrainResources(scene, entity, terrain);
+			UpdateTerrainHeightmap(terrain);
+
 			if (!flag.IsActiveInHierarchy() || !flag.IsVisibleInHierarchy() || HasFlag(flag.effectiveFlags, EEntityFlag::Dead)) continue;
 
 			Mesh* mesh = terrain.GridMesh.Get();

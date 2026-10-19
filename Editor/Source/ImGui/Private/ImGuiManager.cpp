@@ -22,6 +22,7 @@
 #include "ResourceManagerInspector.h"
 
 #include "ResourceEditors.h"
+#include "TerrainEditor.h"
 
 #include "DirectX12Texture.h"
 
@@ -432,6 +433,7 @@ EResult ImGuiManager::CreateDefaultPanels()
 	AddImGuiPanel(new MetricsPanel());
 	AddImGuiPanel(new GraphPanel());
 	AddImGuiPanel(new ResourceManagerInspector());
+	AddImGuiPanel(new TerrainEditor());
 	CreateResourceEditors();
 	return EResult::Success;
 }

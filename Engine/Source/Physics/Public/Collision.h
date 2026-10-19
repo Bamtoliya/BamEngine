@@ -14,6 +14,7 @@ public:
 	static bool Raycast(const Ray& ray, const vec3& v0, const vec3& v1, const vec3& v2, HitResult& outHitResult, f32 maxDistance = FLT_MAX);
 	static bool Raycast(const Ray& ray, const class Mesh& mesh, const mat4& worldMatrix, HitResult& outHitResult, f32 maxDistance = FLT_MAX);
 	static bool Raycast(const Ray& ray, const BoundingSphere& sphere, HitResult& outHitResult);
+	static bool Raycast(const Ray& ray, const TerrainComponent& terrain, const mat4& worldMatrix, HitResult& outHitResult, f32 maxDistance = FLT_MAX);
 public:
 	static bool Contains(const Rect& rect, const vec2& point);
 	static bool Contains(const AABB& aabb, const vec3& point);

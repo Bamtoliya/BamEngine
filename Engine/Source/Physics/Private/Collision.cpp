@@ -1,5 +1,6 @@
 ﻿#pragma once
 
+#include "TerrainComponent.h"
 #include "Collision.h"
 #include "Mesh.h"
 #include <cstring>
@@ -266,6 +267,100 @@ bool Collision::Raycast(const Ray& ray, const BoundingSphere& sphere, HitResult&
 	outHitResult.normal = glm::normalize(outHitResult.point - sphere.center);
 
 	return true;
+}
+
+bool Collision::Raycast(const Ray& ray, const TerrainComponent& terrain, const mat4& worldMatrix, HitResult& outHitResult, f32 maxDistance)
+{
+	outHitResult.Reset();
+	if (terrain.HeightData.empty() || terrain.Resolution == 0 || terrain.Width <= 0.0f || terrain.Length <= 0.0f)
+		return false;
+	// 1. Ray를 터레인의 로컬 공간으로 역변환
+	const mat4 invWorld = glm::inverse(worldMatrix);
+	const vec3 localOrigin = vec3(invWorld * vec4(ray.origin, 1.0f));
+	const vec3 localDir = glm::normalize(vec3(invWorld * vec4(ray.direction, 0.0f)));
+	const float halfW = terrain.Width * 0.5f;
+	const float halfL = terrain.Length * 0.5f;
+	const vec3 boxMin(-halfW, 0.0f, -halfL);
+	const vec3 boxMax(halfW, terrain.MaxHeight, halfL);
+	// 2. 터레인 바운딩 박스(AABB) 교차 구간 [tNear, tFar]
+	float tNear = 0.0f;
+	float tFar = maxDistance;
+	for (int i = 0; i < 3; ++i)
+	{
+		if (std::abs(localDir[i]) < 1e-6f)
+		{
+			if (localOrigin[i] < boxMin[i] || localOrigin[i] > boxMax[i]) return false;
+		}
+		else
+		{
+			float t1 = (boxMin[i] - localOrigin[i]) / localDir[i];
+			float t2 = (boxMax[i] - localOrigin[i]) / localDir[i];
+			if (t1 > t2) std::swap(t1, t2);
+			tNear = std::max(tNear, t1);
+			tFar = std::min(tFar, t2);
+			if (tNear > tFar) return false;
+		}
+	}
+	if (tFar < 0.0f) return false;
+	tNear = std::max(tNear, 0.0f);
+	const uint32 vertexAxisCount = terrain.Resolution + 1;
+	auto sampleHeight = [&](float lx, float lz) -> float
+		{
+			float u = glm::clamp((lx + halfW) / terrain.Width, 0.0f, 1.0f);
+			float v = glm::clamp((lz + halfL) / terrain.Length, 0.0f, 1.0f);
+			float fx = u * static_cast<float>(terrain.Resolution);
+			float fz = v * static_cast<float>(terrain.Resolution);
+			uint32 x0 = glm::min(static_cast<uint32>(fx), terrain.Resolution);
+			uint32 z0 = glm::min(static_cast<uint32>(fz), terrain.Resolution);
+			uint32 x1 = glm::min(x0 + 1, terrain.Resolution);
+			uint32 z1 = glm::min(z0 + 1, terrain.Resolution);
+			float tx = fx - static_cast<float>(x0);
+			float tz = fz - static_cast<float>(z0);
+			float h00 = terrain.HeightData[z0 * vertexAxisCount + x0];
+			float h10 = terrain.HeightData[z0 * vertexAxisCount + x1];
+			float h01 = terrain.HeightData[z1 * vertexAxisCount + x0];
+			float h11 = terrain.HeightData[z1 * vertexAxisCount + x1];
+			return glm::mix(glm::mix(h00, h10, tx), glm::mix(h01, h11, tx), tz) * terrain.MaxHeight;
+		};
+	// 3. 레이마칭 + 이진 탐색으로 표면 교차점 및 법선 계산
+	const int steps = 64;
+	const float dt = (tFar - tNear) / static_cast<float>(steps);
+	float t = tNear;
+	float prevDiff = localOrigin.y + localDir.y * t - sampleHeight(localOrigin.x + localDir.x * t, localOrigin.z + localDir.z * t);
+	for (int i = 1; i <= steps; ++i)
+	{
+		t = tNear + dt * static_cast<float>(i);
+		vec3 pos = localOrigin + localDir * t;
+		float currentDiff = pos.y - sampleHeight(pos.x, pos.z);
+		if (prevDiff * currentDiff <= 0.0f)
+		{
+			float tA = t - dt;
+			float tB = t;
+			for (int b = 0; b < 8; ++b)
+			{
+				float tMid = (tA + tB) * 0.5f;
+				vec3 midPos = localOrigin + localDir * tMid;
+				if ((midPos.y - sampleHeight(midPos.x, midPos.z)) * prevDiff <= 0.0f) tB = tMid;
+				else tA = tMid;
+			}
+			vec3 hitLocal = localOrigin + localDir * ((tA + tB) * 0.5f);
+			vec3 hitWorld = vec3(worldMatrix * vec4(hitLocal, 1.0f));
+			const float delta = terrain.Width / static_cast<float>(terrain.Resolution);
+			float hL = sampleHeight(hitLocal.x - delta, hitLocal.z);
+			float hR = sampleHeight(hitLocal.x + delta, hitLocal.z);
+			float hD = sampleHeight(hitLocal.x, hitLocal.z - delta);
+			float hU = sampleHeight(hitLocal.x, hitLocal.z + delta);
+			vec3 localNormal = glm::normalize(vec3(hL - hR, 2.0f * delta, hD - hU));
+			vec3 worldNormal = glm::normalize(mat3(worldMatrix) * localNormal);
+			outHitResult.hasHit = true;
+			outHitResult.point = hitWorld;
+			outHitResult.normal = worldNormal;
+			outHitResult.distance = glm::length(hitWorld - ray.origin);
+			return true;
+		}
+		prevDiff = currentDiff;
+	}
+	return false;
 }
 #pragma endregion
 

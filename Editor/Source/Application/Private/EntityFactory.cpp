@@ -147,3 +147,11 @@ Entity& EntityFactory::CreateLightEntity(Scene* scene, const wstring& name, cons
 	}
 	return entity;
 }
+
+Entity& EntityFactory::CreateTerrainEntity(Scene* scene, const wstring& name)
+{
+	Entity& entity = CreateEmptyEntity(scene, name);
+	auto& terrain = scene->AddComponent<TerrainComponent>(entity);
+	terrain.TerrainMaterial = ResourceManager::Get().GetResourceHandle<Material>(RESOURCE_PATH L"Material/TerrainMaterial");
+	return entity;
+}

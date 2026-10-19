@@ -103,6 +103,7 @@ private:
 	std::optional<CameraBuffer> GetActiveCameraBuffer();
 	std::optional<CameraBuffer> FindActiveSceneCameraBuffer();
 	SkyAtmosphereData BuildSkyAtmosphereData();
+	void HandleTerrainSculpting(bool imageHovered);
 
 #pragma region Member Variables
 private:

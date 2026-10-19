@@ -403,6 +403,18 @@ void HierarchyPanel::DrawSceneContextMenu(Scene* scene)
 
 			ImGui::EndMenu();
 		}
+		if (ImGui::MenuItem(LOCAL_LABEL("Hierarchy.AddTerrain").c_str()))
+		{
+			try
+			{
+				Entity& entity = EntityFactory::CreateTerrainEntity(scene, L"Terrain");
+				SelectionManager::Get().SetSelectedEntity(&entity);
+			}
+			catch (const std::exception& error)
+			{
+				ENGINE_LOG_ERROR("Failed to create Terrain: {}", error.what());
+			}
+		}
 
 		ImGui::EndPopup();
 	}

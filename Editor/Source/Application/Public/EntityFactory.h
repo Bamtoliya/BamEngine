@@ -13,5 +13,6 @@ public:
 	static Entity& CreatePrimitiveEntity(class Scene* scene, const wstring& name = L"Primitive", const wstring& meshKey = L"", const wstring& materialKey = L"");
 	static Entity& CreateSpriteEntity(class Scene* scene, const wstring& name = L"Sprite", const wstring& materialKey = L"");
 	static Entity& CreateLightEntity(class Scene* scene, const wstring& name = L"Light", const wstring& lightType = L"Point");
+	static Entity& CreateTerrainEntity(class Scene* scene, const wstring& name = L"Terrain");
 };
 END

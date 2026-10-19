@@ -453,7 +453,6 @@ void Application::InitializeShaders()
         gbufferPsDesc.entryPoint = "main";
         rm.LoadResource<Shader>(&gbufferPsDesc);
     }
-
     ShaderDesc previewPsDesc = {};
     {
         previewPsDesc.Key = RESOURCE_PATH L"Shader/MaterialPreviewPS";
@@ -708,6 +707,17 @@ void Application::InitializeShaders()
         spritePS.entryPoint = "main";
         rm.LoadResource<Shader>(&spritePS);
     }
+
+    ShaderDesc terrainVSDesc = {};
+    {
+        terrainVSDesc.Key = RESOURCE_PATH L"Shader/TerrainVS";
+        terrainVSDesc.Path = RESOURCE_PATH L"Shader/bin/dxil/terrainVS.cso";
+        if (Renderer::Get().GetRHIType() == ERHIType::SDLGPU)
+            terrainVSDesc.Path = RESOURCE_PATH L"Shader/bin/spirv/terrainVS.spv";
+        terrainVSDesc.shaderType = EShaderType::Vertex;
+        terrainVSDesc.entryPoint = "main";
+        rm.LoadResource<Shader>(&terrainVSDesc);
+    }
 }
 
 void Application::InitializeMeshes()
@@ -957,6 +967,23 @@ void Application::InitializeMaterials()
         resourceManager.GetResourceHandle<Shader>(RESOURCE_PATH L"Shader/ShadowDepthPS")
     );
     resourceManager.SaveToJsonFile(gbufferMat, L"Resources/Material/GBufferMaterial.bammat.json");
+
+    // ── Terrain Material 생성 ──
+    MaterialDesc terrainMatDesc = {};
+    terrainMatDesc.Key = RESOURCE_PATH L"Material/TerrainMaterial";
+    terrainMatDesc.VertexShaderHandle = resourceManager.GetResourceHandle<Shader>(RESOURCE_PATH L"Shader/TerrainVS");
+    terrainMatDesc.PixelShaderHandle = resourceManager.GetResourceHandle<Shader>(RESOURCE_PATH L"Shader/GBufferPS");
+    terrainMatDesc.BlendMode = EBlendMode::Opaque;
+    terrainMatDesc.CullMode = ECullMode::None;
+    terrainMatDesc.DepthMode = EDepthMode::ReadWrite;
+    Material* terrainMat = resourceManager.LoadResource<Material>(&terrainMatDesc).Get();
+    terrainMat->SetTextureBinding("Diffuse", 0, resourceManager.GetResourceHandle<Texture>(RESOURCE_PATH L"Texture/white1x1.png"));
+    terrainMat->SetPassShader(
+        ERenderPassType::Shadow,
+        resourceManager.GetResourceHandle<Shader>(RESOURCE_PATH L"Shader/ShadowDepthVS"),
+        resourceManager.GetResourceHandle<Shader>(RESOURCE_PATH L"Shader/ShadowDepthPS")
+    );
+    resourceManager.SaveToJsonFile(terrainMat, L"Resources/Material/TerrainMaterial.bammat.json");
 
 
 	// ── Shadow Depth Material 생성 ──

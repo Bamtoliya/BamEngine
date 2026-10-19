@@ -868,3 +868,39 @@ Use this as the primary execution list until a playable 2D vertical slice is com
   연결 개수, 검색과 실패 시 데이터·ID 보존 검사를 작성하고 Editor 검사 구성에 등록했다.
   소스·선언/호출부·번역 키·공백을 정적으로 확인했다. 빌드·CTest·실제 UI 조작은 실행하지 않았다.
   사용자 실행 명령과 수동 확인 항목은 Docs/GraphPanel.md에 기록했다.
+
+## 2026-10-20 — 로캘·입력 점검과 기능별 진행 상태 정리
+
+- 작업 전부터 존재하던 그림자 아틀라스, 리소스 재로딩·변환, 머티리얼 미리보기,
+  계층 컨트롤과 지형 조형 변경을 포함해 기능별 커밋으로 정리했다.
+  이 기능들의 전체 동작을 새로 구현하거나 모두 수동 검증한 것은 아니다.
+- Engine·Editor 소스의 표시 문자열, 리플렉션 이름·분류·툴팁, 간접 번역 키와
+  그래프 기본 진단을 점검했다. 기존 HEAD 대비 번역 키 208개를 추가한 상태이며,
+  영어·한국어 JSON에는 Test.csv를 포함해 각각 972개 키가 있다.
+  CSV와 JSON 일치, 빈 번역·중복 키와 번역 서식 인자의 일치를 확인했다.
+- 지형 조형 패널, 머티리얼 미리보기·파이프라인 선택 항목, 재로딩 알림,
+  계층 이력·검색 문구를 번역했다. 머티리얼 블렌드 모드의 비트 값과
+  콤보 인덱스를 명시적으로 대응시켜 선택 항목과 실제 설정이 다르던 문제도 수정했다.
+  그래프 진단은 Editor 표시 경계에서 번역하며 노드·핀 식별자와 미등록 외부 오류는 보존한다.
+- 키·마우스 상태, 이동량, 휠과 보조 키 조회를 InputManager로 통일했다.
+  ImGui의 포커스·호버·활성 위젯 판정과 UI 백엔드 이벤트 전달은 계속 사용한다.
+  분리된 패널에는 화면 좌표를 사용하고, 런타임의 창 내부 좌표 API도 유지한다.
+  입력을 에디터 갱신 전에 한 번 샘플링하고 PIE에서 같은 샘플을 재사용한다.
+  짧은 입력의 누름·해제 이벤트, 양쪽 보조 키, 다섯 번째 마우스 버튼,
+  드래그 임계값과 상대 마우스 이동 처리를 보완했다.
+- LocalizationAuditor는 여러 줄·조건식 UI 호출, 툴팁, 알림과 간접 키도 검사한다.
+  CSV 그룹 상속을 변환기와 맞추고 잘못된 단축 키 별칭을 제거했다.
+  AuditLocalization 타깃은 하드코딩 문자열도 실패로 처리하도록 엄격 모드를 사용한다.
+- 검증 환경: Windows x64, Visual Studio 18 2026 / MSVC 19.51, Debug,
+  `out/build/x64-debug`. Engine·Editor와 관련 검사 실행 파일 빌드 및
+  AuditLocalization 성공. 검사 대상 소스 404개에서 누락 키·빈 번역·검사 대상
+  하드코딩 UI 문자열은 0건이었다. 이 정적 검사가 임의의 동적 문자열까지 보장하지는 않는다.
+- 관련 CTest 6개 통과: InputManagerCheck, HierarchyEditorCheck,
+  ReflectionInspectorCheck, GraphMessageLocalizationCheck,
+  LocalizationAuditUtility, ReflectionLocalizationUtility.
+  LocalizationAuditUtility의 단위 검사 7개도 통과했다.
+  검사 로그는 `Temp/build_locale_input.log`, `Temp/test_locale_input.log`에 있다.
+- 실제 Editor 창의 GPU 출력, 분리 창·DPI·상대 마우스 모드 전환,
+  지형 브러시 조작과 핫 리로드의 실패 복구는 이번에 수동 확인하지 않았다.
+  지형 조형의 Undo/Redo 연결 역시 이번 로캘·입력 점검에서 추가하지 않았다.
+  생성물, 외부 의존성, 개인 설정과 실험용 씬·에셋은 커밋에서 제외했다.
