@@ -39,9 +39,16 @@ target_include_directories(GraphPaletteCheck PRIVATE "${EDITOR_SOURCE_DIR}/ImGui
 target_link_libraries(GraphPaletteCheck PRIVATE BamEngine::Engine)
 set_target_properties(GraphPaletteCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
 
+add_executable(GraphMessageLocalizationCheck examples/GraphMessageLocalizationCheck.cpp)
+target_include_directories(GraphMessageLocalizationCheck PRIVATE "${EDITOR_SOURCE_DIR}/ImGui/GraphPanel/Public")
+target_link_libraries(GraphMessageLocalizationCheck PRIVATE BamEngine::Engine)
+add_dependencies(GraphMessageLocalizationCheck GenerateLocalization)
+set_target_properties(GraphMessageLocalizationCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
+
 add_executable(HierarchyEditorCheck examples/HierarchyEditorCheck.cpp
     Source/ImGui/HierarchyPanel/Private/EntityHierarchyView.cpp)
 target_include_directories(HierarchyEditorCheck PRIVATE "${EDITOR_SOURCE_DIR}/ImGui/HierarchyPanel/Public")
+target_include_directories(HierarchyEditorCheck PRIVATE "${CMAKE_SOURCE_DIR}/ThirdParty")
 target_link_libraries(HierarchyEditorCheck PRIVATE BamEngine::Engine imgui::imgui)
 target_precompile_headers(HierarchyEditorCheck PRIVATE
     "${CMAKE_SOURCE_DIR}/Engine/Source/Core/Public/Engine_Includes.h")
@@ -59,6 +66,8 @@ set_target_properties(ReflectionInspectorCheck PROPERTIES UNITY_BUILD OFF FOLDER
 set_target_properties(TransformEditorCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
 
 if(BUILD_TESTING)
+    add_test(NAME GraphMessageLocalizationCheck COMMAND GraphMessageLocalizationCheck)
+    set_tests_properties(GraphMessageLocalizationCheck PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
     add_test(NAME TransformInheritanceCheck COMMAND TransformInheritanceCheck)
     add_test(NAME GraphPaletteCheck COMMAND GraphPaletteCheck)
     add_test(NAME EditorHistoryCheck COMMAND EditorHistoryCheck)
@@ -71,6 +80,7 @@ if(BUILD_TESTING)
 endif()
 
 if(MSVC)
+    target_compile_options(GraphMessageLocalizationCheck PRIVATE /utf-8)
     target_compile_options(TransformInheritanceCheck PRIVATE /utf-8)
     target_compile_options(GraphPaletteCheck PRIVATE /utf-8)
     target_compile_options(EditorHistoryCheck PRIVATE /utf-8)

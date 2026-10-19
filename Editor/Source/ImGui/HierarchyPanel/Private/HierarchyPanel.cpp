@@ -197,7 +197,7 @@ void HierarchyPanel::Draw()
 		if (hasFilter)
 		{
 			ImGui::SameLine();
-			if (ImGui::Button("X##ClearHierarchySearch", ImVec2(clearButtonSize, clearButtonSize)))
+			if (ImGui::Button(ICON_FA_XMARK "##ClearHierarchySearch", ImVec2(clearButtonSize, clearButtonSize)))
 				m_SearchFilter[0] = '\0';
 		}
 		ImGui::Spacing();

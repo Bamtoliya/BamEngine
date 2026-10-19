@@ -26,8 +26,14 @@ add_dependencies(GenerateLocalization ExportReflectionLocalization)
 set(LOCALIZATION_AUDIT_SCRIPT "${CMAKE_SOURCE_DIR}/Utility/LocalizationAuditor/audit_localization.py")
 
 add_custom_target(AuditLocalization
-    COMMAND ${Python3_EXECUTABLE} "${LOCALIZATION_AUDIT_SCRIPT}" --root "${CMAKE_SOURCE_DIR}"
+    COMMAND ${Python3_EXECUTABLE} "${LOCALIZATION_AUDIT_SCRIPT}" --root "${CMAKE_SOURCE_DIR}" --strict
     WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
     COMMENT "Auditing localization keys and hardcoded UI strings"
     VERBATIM
 )
+
+if(BUILD_TESTING)
+    add_test(NAME LocalizationAuditUtility
+        COMMAND "${Python3_EXECUTABLE}" -B -m unittest discover
+            -s "${CMAKE_SOURCE_DIR}/Utility/LocalizationAuditor" -p "test_*.py" -v)
+endif()

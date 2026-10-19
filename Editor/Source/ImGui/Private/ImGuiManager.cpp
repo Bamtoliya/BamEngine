@@ -350,7 +350,7 @@ void ImGuiManager::MainDockspace()
 	//window_flags |= ImGuiWindowFlags_MenuBar;
 
 	// 메인 독스페이스 컨테이너 시작
-	ImGui::Begin("MainDockSpace", nullptr, window_flags);
+	ImGui::Begin("##MainDockSpace", nullptr, window_flags);
 
 	// 스타일 복구
 	ImGui::PopStyleVar(3);

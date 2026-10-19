@@ -1,4 +1,9 @@
 Group,Key,English,Korean
+,UI_HISTORY_REORDER,Reorder Entities,엔티티 순서 변경
+,UI_HISTORY_PROPERTY,Edit Property,속성 편집
+,UI_HIERARCHY_NO_MATCH,No matching entities found.,일치하는 엔티티가 없습니다.
+,UI_HIERARCHY_MOVE_UP,Move Up,위로 이동
+,UI_HIERARCHY_MOVE_DOWN,Move Down,아래로 이동
 ,UI_ADD_COMPONENT,Add Component,컴포넌트 추가
 ,UI_PROPERTY,Property,속성
 ,UI_VALUE,Value,값
@@ -288,6 +293,7 @@ Hierarchy,AddEntity,Add Entity,엔티티 추가
 Hierarchy,AddCanvas,Add UI Canvas,UI 캔버스 추가
 Hierarchy,AddPrimitive,Add Primitive Entity,기본 도형 엔티티 추가
 Hierarchy,AddSprite,Add Sprite Entity,스프라이트 엔티티 추가
+Hierarchy,AddTerrain,Terrain,터레인
 Hierarchy,AddLight,Add Light Entity,라이트 엔티티 추가
 Hierarchy,Action,Action: {},작업 대상: {}
 Hierarchy,Duplicate,Duplicate,복제
@@ -494,3 +500,95 @@ Hierarchy,AddSkyLight,Sky Light,스카이 라이트
 Inspector,MoveUp,Move Up,위로 이동
 Inspector,MoveDown,Move Down,아래로 이동
 Inspector,RemoveComponent,Remove Component,컴포넌트 제거
+ContentBrowser,BakeToBinary,Bake to Binary,바이너리로 변환
+ContentBrowser,ExportToJson,Export to JSON,JSON으로 내보내기
+ContentBrowser,ReloadMaterial,Reload Material,머티리얼 다시 불러오기
+ContentBrowser,ReloadMesh,Reload Mesh,메시 다시 불러오기
+ContentBrowser,Reimport,Reimport,다시 임포트
+ContentBrowser,ReloadTexture,Reload Texture,텍스처 다시 불러오기
+ContentBrowser,RecompileAllShaders,Recompile All Shaders,모든 셰이더 다시 컴파일
+ContentBrowser,RecompileShader,Recompile Shader,셰이더 다시 컴파일
+TerrainEditor,NoScene,No active scene.,활성 씬이 없습니다.
+TerrainEditor,NoSelection,No terrain selected. Select a Terrain entity in Hierarchy.,계층 패널에서 지형 엔티티를 선택하세요.
+TerrainEditor,SculptOn,Sculpting: ON (Click to Disable),지형 조형: 켜짐 (클릭하여 끄기)
+TerrainEditor,SculptOff,Sculpting: OFF (Click to Enable),지형 조형: 꺼짐 (클릭하여 켜기)
+TerrainEditor,BrushMode,Brush Mode,브러시 모드
+TerrainEditor,Raise,Raise,올리기
+TerrainEditor,Lower,Lower,내리기
+TerrainEditor,Smooth,Smooth,부드럽게
+TerrainEditor,Flatten,Flatten,평탄화
+TerrainEditor,Radius,Radius,반경
+TerrainEditor,Strength,Strength,강도
+TerrainEditor,Falloff,Falloff,감쇠
+TerrainEditor,TargetHeight,Target Height,목표 높이
+TerrainEditor,Target,Target: {},대상: {}
+TerrainEditor,DefaultName,Terrain,지형
+MaterialPreview,Sphere,Sphere,구체
+MaterialPreview,Cube,Cube,큐브
+MaterialPreview,Plane,Plane,평면
+MaterialPreview,Navigation,L-Drag: Orbit | R-Drag+WASD: Fly | M-Drag: Pan | Wheel: Zoom | [F]: Reset,왼쪽 드래그: 궤도 회전 | 오른쪽 드래그+WASD: 이동 | 가운데 드래그: 화면 이동 | 휠: 확대/축소 | F: 초기화
+Notification,MaterialReloaded,Material Reloaded,머티리얼을 다시 불러왔습니다
+Notification,MaterialNotLoaded,Material Not Loaded,메모리에 로드된 머티리얼이 없습니다
+Notification,InstanceCreated,Instance Created,인스턴스를 생성했습니다
+Notification,OpenBaseMaterial,Open Base Material,기본 머티리얼 열기
+Notification,BaseMaterialNotFound,Base Material Not Found,기본 머티리얼을 찾을 수 없습니다
+Notification,MeshReloaded,Mesh Reloaded,메시를 다시 불러왔습니다
+Notification,MeshNotLoaded,Mesh Not Loaded,메모리에 로드된 메시가 없습니다
+Notification,ModelReimported,Model Reimported,모델을 다시 임포트했습니다
+Notification,ReimportFailed,Reimport Failed,다시 임포트하지 못했습니다
+Notification,TextureReloaded,Texture Reloaded,텍스처를 다시 불러왔습니다
+Notification,TextureNotLoaded,Texture Not Loaded,메모리에 로드된 텍스처가 없습니다
+Notification,BakeFailed,Bake Failed,바이너리 변환 실패
+Notification,BakeSucceeded,Bake to Binary Success,바이너리 변환 성공
+Notification,ExportFailed,Export Failed,내보내기 실패
+Notification,ExportSucceeded,Export to JSON Success,JSON 내보내기 성공
+Notification,TextureHotReloaded,Texture Hot-Swapped,텍스처 핫 리로드 완료
+Notification,MaterialHotReloaded,Material Hot-Swapped,머티리얼 핫 리로드 완료
+Notification,MeshHotReloaded,Mesh Hot-Swapped,메시 핫 리로드 완료
+Notification,LocalizationReloaded,Localization Hot-Reloaded,번역 데이터 핫 리로드 완료
+Notification,ShaderCompileError,Shader Compile Error,셰이더 컴파일 오류
+Notification,ShaderHotReloaded,Shader Hot-Swapped,셰이더 핫 리로드 완료
+Notification,ReloadedFile,{} reloaded.,{} 파일을 다시 불러왔습니다.
+Notification,InactiveFile,{} is not currently active in memory.,{} 파일이 현재 메모리에 로드되어 있지 않습니다.
+Notification,ReimportedFile,{} reimported successfully.,{} 파일을 다시 임포트했습니다.
+Notification,ReimportFailedFile,Failed to reimport {}.,{} 파일을 다시 임포트하지 못했습니다.
+Notification,CreatedFile,{} created.,{} 파일을 생성했습니다.
+Notification,JsonLoadFailed,Failed to load JSON resource: {},JSON 리소스를 불러오지 못했습니다: {}
+Notification,BinaryLoadFailed,Failed to load binary resource: {},바이너리 리소스를 불러오지 못했습니다: {}
+Notification,BinarySaveFailed,Failed to save binary resource: {},바이너리 리소스를 저장하지 못했습니다: {}
+Notification,JsonSaveFailed,Failed to save JSON resource: {},JSON 리소스를 저장하지 못했습니다: {}
+ToolBar,TargetFPS,Target FPS,목표 프레임 속도
+TerrainEditor,Title,Terrain Editor,지형 편집기
+ToolBar,ModuleReload,Hot Reload,핫 리로드
+MaterialOption,Opaque,Opaque,불투명
+MaterialOption,Masked,Masked,마스크
+MaterialOption,Translucent,Translucent,반투명
+MaterialOption,Additive,Additive,가산
+MaterialOption,None,None,없음
+MaterialOption,Front,Front,앞면
+MaterialOption,Back,Back,뒷면
+MaterialOption,Solid,Solid,채움
+MaterialOption,Wireframe,Wireframe,와이어프레임
+MaterialOption,ReadOnly,ReadOnly,읽기 전용
+MaterialOption,ReadWrite,ReadWrite,읽기 및 쓰기
+MaterialOption,Never,Never,항상 실패
+MaterialOption,Less,Less,작음
+MaterialOption,Equal,Equal,같음
+MaterialOption,LessEqual,LessEqual,작거나 같음
+MaterialOption,Greater,Greater,큼
+MaterialOption,NotEqual,NotEqual,다름
+MaterialOption,GreaterEqual,GreaterEqual,크거나 같음
+MaterialOption,Always,Always,항상 통과
+MaterialOption,Custom,Custom,사용자 정의
+MaterialOption,Geometry,Geometry,지오메트리
+MaterialOption,Lighting,Lighting,조명
+MaterialOption,Shadow,Shadow,그림자
+MaterialOption,Forward,Forward,포워드
+MaterialOption,ForwardTransparent,ForwardTransparent,포워드 투명
+MaterialOption,PostProcess,PostProcess,후처리
+MaterialOption,UI,UI,사용자 인터페이스
+MaterialOption,Unknown,Unknown,알 수 없음
+MaterialEditor,NoResource,(None),(없음)
+MaterialEditor,EmptyResourceKey,(Empty),(빈 키)
+MaterialOption,NonPremultiplied,Non-premultiplied Alpha,비사전 곱 알파
+MaterialOption,Decal,Decal,데칼

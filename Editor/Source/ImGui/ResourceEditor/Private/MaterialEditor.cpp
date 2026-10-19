@@ -8,6 +8,16 @@
 
 namespace
 {
+	template<size_t N>
+	bool LocalizedCombo(const char* label, int* selected, const char* (&keys)[N])
+	{
+		std::array<std::string, N> labels;
+		std::array<const char*, N> items;
+		for (size_t i = 0; i < N; ++i) labels[i] = LOCAL(keys[i]);
+		for (size_t i = 0; i < N; ++i) items[i] = labels[i].c_str();
+		return ImGui::Combo(label, selected, items.data(), static_cast<int>(N));
+	}
+
 	std::string ToLowerStr(std::string str)
 	{
 		for (char& c : str) c = static_cast<char>(tolower(c));
@@ -16,9 +26,9 @@ namespace
 
 	std::string GetResourceDisplayName(const Engine::Resource* res)
 	{
-		if (!res) return "(None)";
+		if (!res) return LOCAL("MaterialEditor.NoResource");
 		const std::wstring& key = res->GetKey();
-		if (key.empty()) return "(Empty)";
+		if (key.empty()) return LOCAL("MaterialEditor.EmptyResourceKey");
 		return std::filesystem::path(key).filename().string();
 	}
 }
@@ -144,18 +154,25 @@ void MaterialEditor::DrawPipelineSettings()
 	}
 
 	// Blend Mode
-	int blendIdx = static_cast<int>(m_Material->GetBlendMode());
-	const char* blendModes[] = { "Opaque", "Masked", "Translucent", "Additive" };
-	if (ImGui::Combo(LOCAL_LABEL("MaterialEditor.BlendMode").c_str(), &blendIdx, blendModes, IM_ARRAYSIZE(blendModes)))
+	constexpr Engine::EBlendMode blendValues[]{ Engine::EBlendMode::Opaque, Engine::EBlendMode::Masked,
+		Engine::EBlendMode::AlphaBlend, Engine::EBlendMode::Additive, Engine::EBlendMode::None,
+		Engine::EBlendMode::NonPremultiplied, Engine::EBlendMode::Forward, Engine::EBlendMode::Decal };
+	const char* blendModes[]{ "MaterialOption.Opaque", "MaterialOption.Masked", "MaterialOption.Translucent",
+		"MaterialOption.Additive", "MaterialOption.None", "MaterialOption.NonPremultiplied",
+		"MaterialOption.Forward", "MaterialOption.Decal" };
+	int blendIdx = -1;
+	for (int i = 0; i < IM_ARRAYSIZE(blendValues); ++i)
+		if (blendValues[i] == m_Material->GetBlendMode()) blendIdx = i;
+	if (LocalizedCombo(LOCAL_LABEL("MaterialEditor.BlendMode").c_str(), &blendIdx, blendModes))
 	{
-		m_Material->SetBlendMode(static_cast<Engine::EBlendMode>(blendIdx));
+		m_Material->SetBlendMode(blendValues[blendIdx]);
 		m_IsDirty = true;
 	}
 
 	// Cull Mode
 	int cullIdx = static_cast<int>(m_Material->GetCullMode());
-	const char* cullModes[] = { "None", "Front", "Back" };
-	if (ImGui::Combo(LOCAL_LABEL("MaterialEditor.CullMode").c_str(), &cullIdx, cullModes, IM_ARRAYSIZE(cullModes)))
+	const char* cullModes[] = { "MaterialOption.None", "MaterialOption.Front", "MaterialOption.Back" };
+	if (LocalizedCombo(LOCAL_LABEL("MaterialEditor.CullMode").c_str(), &cullIdx, cullModes))
 	{
 		m_Material->SetCullMode(static_cast<Engine::ECullMode>(cullIdx));
 		m_IsDirty = true;
@@ -163,8 +180,8 @@ void MaterialEditor::DrawPipelineSettings()
 
 	// Fill Mode
 	int fillIdx = static_cast<int>(m_Material->GetFillMode());
-	const char* fillModes[] = { "Solid", "Wireframe" };
-	if (ImGui::Combo(LOCAL_LABEL("MaterialEditor.FillMode").c_str(), &fillIdx, fillModes, IM_ARRAYSIZE(fillModes)))
+	const char* fillModes[] = { "MaterialOption.Solid", "MaterialOption.Wireframe" };
+	if (LocalizedCombo(LOCAL_LABEL("MaterialEditor.FillMode").c_str(), &fillIdx, fillModes))
 	{
 		m_Material->SetFillMode(static_cast<Engine::EFillMode>(fillIdx));
 		m_IsDirty = true;
@@ -172,8 +189,8 @@ void MaterialEditor::DrawPipelineSettings()
 
 	// Depth Mode
 	int depthIdx = static_cast<int>(m_Material->GetDepthMode());
-	const char* depthModes[] = { "None", "ReadOnly", "ReadWrite" };
-	if (ImGui::Combo(LOCAL_LABEL("MaterialEditor.DepthMode").c_str(), &depthIdx, depthModes, IM_ARRAYSIZE(depthModes)))
+	const char* depthModes[] = { "MaterialOption.None", "MaterialOption.ReadOnly", "MaterialOption.ReadWrite" };
+	if (LocalizedCombo(LOCAL_LABEL("MaterialEditor.DepthMode").c_str(), &depthIdx, depthModes))
 	{
 		m_Material->SetDepthMode(static_cast<Engine::EDepthMode>(depthIdx));
 		m_IsDirty = true;
@@ -181,8 +198,8 @@ void MaterialEditor::DrawPipelineSettings()
 
 	// Depth Compare Op
 	int opIdx = static_cast<int>(m_Material->GetDepthCompareOp());
-	const char* compareOps[] = { "Never", "Less", "Equal", "LessEqual", "Greater", "NotEqual", "GreaterEqual", "Always" };
-	if (ImGui::Combo(LOCAL_LABEL("MaterialEditor.DepthCompareOp").c_str(), &opIdx, compareOps, IM_ARRAYSIZE(compareOps)))
+	const char* compareOps[] = { "MaterialOption.Never", "MaterialOption.Less", "MaterialOption.Equal", "MaterialOption.LessEqual", "MaterialOption.Greater", "MaterialOption.NotEqual", "MaterialOption.GreaterEqual", "MaterialOption.Always" };
+	if (LocalizedCombo(LOCAL_LABEL("MaterialEditor.DepthCompareOp").c_str(), &opIdx, compareOps))
 	{
 		m_Material->SetDepthCompareOp(static_cast<Engine::ECompareOp>(opIdx));
 		m_IsDirty = true;
@@ -240,7 +257,7 @@ void MaterialEditor::DrawShaderSettings()
 	ImGui::TextDisabled("%s", LOCAL_CSTR("MaterialEditor.PassSpecificShaders"));
 
 	const char* passTypeNames[] = {
-		"Custom", "Geometry", "Lighting", "Shadow", "Forward", "ForwardTransparent", "PostProcess", "UI"
+		"MaterialOption.Custom", "MaterialOption.Geometry", "MaterialOption.Lighting", "MaterialOption.Shadow", "MaterialOption.Forward", "MaterialOption.ForwardTransparent", "MaterialOption.PostProcess", "MaterialOption.UI"
 	};
 
 	const auto& passShaders = m_Material->GetPassShaders();
@@ -263,8 +280,9 @@ void MaterialEditor::DrawShaderSettings()
 			// Column 0: Pass Type
 			ImGui::TableSetColumnIndex(0);
 			int typeIdx = static_cast<int>(passShader.passType);
-			const char* typeName = (typeIdx >= 0 && typeIdx < IM_ARRAYSIZE(passTypeNames)) ? passTypeNames[typeIdx] : "Unknown";
-			ImGui::Text("%s", typeName);
+			const std::string typeName = (typeIdx >= 0 && typeIdx < IM_ARRAYSIZE(passTypeNames))
+				? LOCAL(passTypeNames[typeIdx]) : LOCAL("MaterialOption.Unknown");
+			ImGui::Text("%s", typeName.c_str());
 
 			// Column 1: Pass Vertex Shader
 			ImGui::TableSetColumnIndex(1);
@@ -298,7 +316,7 @@ void MaterialEditor::DrawShaderSettings()
 	ImGui::Spacing();
 	ImGui::PushID("NewPassControl");
 	ImGui::SetNextItemWidth(140.0f);
-	ImGui::Combo("##NewPassType", &m_NewPassTypeIndex, passTypeNames, IM_ARRAYSIZE(passTypeNames));
+	LocalizedCombo("##NewPassType", &m_NewPassTypeIndex, passTypeNames);
 	ImGui::SameLine();
 	if (ImGui::Button((ICON_FA_PLUS " " + LOCAL("MaterialEditor.AddPassShader")).c_str()))
 	{

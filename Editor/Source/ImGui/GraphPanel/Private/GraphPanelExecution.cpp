@@ -1,4 +1,5 @@
 #include "GraphPanel.h"
+#include "GraphMessageLocalization.h"
 #include "LocalizationManager.h"
 #include <algorithm>
 #include <cmath>
@@ -181,7 +182,7 @@ void GraphPanel::DrawExecutionTrace()
 		{
 			const string label = fmt::format("{} {} #{} {} {} {}###Trace{}", event.Sequence,
 				LOCAL(kinds[static_cast<int>(event.Kind)]), event.Node, event.Pin,
-				TraceValueText(event.Value), event.Message, event.Sequence);
+				TraceValueText(event.Value), LocalizeGraphMessage(event.Message), event.Sequence);
 			if (ImGui::Selectable(label.c_str(), m_SelectedTrace == event.Sequence))
 			{
 				m_Executor.Pause();

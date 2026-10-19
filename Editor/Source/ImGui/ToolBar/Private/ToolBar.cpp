@@ -315,7 +315,7 @@ void ToolBar::DrawDisplaySettingsWindow()
 
 		ImGui::Separator();
 		static int32 targetFPS = TimeManager::Get().GetTargetFPS();
-		ImGui::DragInt("FPS", &targetFPS);
+		ImGui::DragInt(LOCAL_LABEL("ToolBar.TargetFPS").c_str(), &targetFPS);
 		if (ImGui::Button(LOCAL_LABEL("ToolBar.ApplyFPS").c_str()))
 		{
 			TimeManager::Get().SetTargetFPS(targetFPS);
@@ -456,7 +456,7 @@ void ToolBar::DrawPlayControls()
 	ImGui::SameLine(0.0f, 15.0f); // 재생 제어 버튼들과 간격 띄우기
 	// ■ Hot Reload
 	ImGui::PushID("HotReloadBtn");
-	if (ImGui::Button(ICON_FA_ARROWS_ROTATE " Hot Reload", ImVec2(100.0f, 0)))
+	if (ImGui::Button((ICON_FA_ARROWS_ROTATE " " + LOCAL_LABEL("ToolBar.ModuleReload")).c_str(), ImVec2(100.0f, 0)))
 	{
 		ModuleHotReloadManager::Get().ReloadModule();
 	}

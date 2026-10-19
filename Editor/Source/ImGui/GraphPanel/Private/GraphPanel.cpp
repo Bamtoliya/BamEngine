@@ -1,4 +1,5 @@
 #include "GraphPanel.h"
+#include "GraphMessageLocalization.h"
 #include "LocalizationManager.h"
 #include "ReflectionRegistry.h"
 #include <imnodes.h>
@@ -335,7 +336,7 @@ void GraphPanel::DrawDiagnostics()
 	{
 		const string location = fmt::format("{} / {}", diagnostic.Node, diagnostic.Pin);
 		ImGui::TextColored(ImVec4(1.0f, 0.55f, 0.35f, 1.0f), "%s", location.c_str());
-		ImGui::TextWrapped("%s", LOCAL_CSTR(diagnostic.Message));
+		ImGui::TextWrapped("%s", LocalizeGraphMessage(diagnostic.Message).c_str());
 	}
 }
 
@@ -344,7 +345,7 @@ void GraphPanel::DrawStatus()
 	if (!m_LastDiagnostic.Succeeded())
 	{
 		const string message = fmt::format("{} / {}: {}", m_LastDiagnostic.Node,
-			m_LastDiagnostic.Pin, LOCAL(m_LastDiagnostic.Message));
+			m_LastDiagnostic.Pin, LocalizeGraphMessage(m_LastDiagnostic.Message));
 		ImGui::TextColored(ImVec4(1.0f, 0.45f, 0.35f, 1.0f), "%s", message.c_str());
 		if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", message.c_str());
 	}

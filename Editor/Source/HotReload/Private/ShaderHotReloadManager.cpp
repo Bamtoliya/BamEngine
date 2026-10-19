@@ -155,7 +155,7 @@ void ShaderHotReloadManager::ProcessModifiedFile(const std::filesystem::path& hl
 		ENGINE_LOG_ERROR("[Shader Hot Reload] Failed to compile '{}':\n{}",
 			hlslPath.filename().string(), result.ErrorMessage);
 		// 빨간색 에러 토스트 등록 (8초간 유지)
-		AddNotification("Shader Compile Error", hlslPath.filename().string() + ":\n" + result.ErrorMessage, true, 8.0f);
+		AddNotification(LOCAL("Notification.ShaderCompileError"), hlslPath.filename().string() + ":\n" + result.ErrorMessage, true, 8.0f);
 		return;
 	}
 
@@ -193,7 +193,7 @@ void ShaderHotReloadManager::ProcessModifiedFile(const std::filesystem::path& hl
 				ENGINE_LOG_INFO("[Shader Hot Reload] Hot-swapped: {} (Key: {}, {} bytes)",
 					hlslPath.filename().string(), WStrToStr(shader->GetKey()), result.Bytecode.size());
 				// 초록색 성공 토스트 등록 (3초간 유지)
-				AddNotification("Shader Hot-Swapped", hlslPath.filename().string() + " reloaded.", false, 3.0f);
+				AddNotification(LOCAL("Notification.ShaderHotReloaded"), LOCAL_FMT("Notification.ReloadedFile", hlslPath.filename().string()), false, 3.0f);
 			}
 		}
 	}

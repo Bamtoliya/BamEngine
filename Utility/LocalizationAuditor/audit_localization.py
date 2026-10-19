@@ -7,7 +7,7 @@ BamEngine 다국어(Localization) 및 리플렉션 키 정적 감사 도구
 검사 기능:
 1. 누락 키 (Missing Keys): 코드에서 LOCAL(...) / DISPLAY_NAME 등으로 불렀으나 CSV에 없는 키
 2. 미번역 항목 (Untranslated): CSV에 키는 있으나 English 또는 Korean이 비어있는 행
-3. 하드코딩된 UI (Hardcoded UI): Editor 코드에서 LOCAL을 거치지 않고 직접 작성된 ImGui 문자열
+3. 하드코딩된 UI (Hardcoded UI): Engine·Editor의 ImGui 표시 문자열과 알림 제목·본문
 4. 고아 키 (Orphan Keys, 옵션): CSV에 존재하지만 소스코드 어디에서도 사용되지 않는 키
 """
 
@@ -16,28 +16,88 @@ import sys
 import re
 import csv
 import argparse
+from itertools import chain
 from pathlib import Path
 
 # 정규식 패턴 정의
-RE_LOCAL = re.compile(r'\b(LOCAL|LOCAL_CSTR|LOCAL_LABEL|LOCAL_FMT|LocalizeInspectorText)\s*\(\s*"([^"]+)"')
-RE_REFL = re.compile(r'\b(DISPLAY_NAME|CATEGORY)\s*\(\s*"([^"]+)"')
-RE_IMGUI = re.compile(r'\bImGui::(Text|TextUnformatted|TextColored|TextDisabled|Button|SmallButton|Checkbox|MenuItem|BeginMenu|CollapsingHeader)\s*\(\s*"([^"]*)"')
+RE_LOCAL = re.compile(r'(?<![:\w])(LOCAL|LOCAL_CSTR|LOCAL_LABEL|LOCAL_FMT|LocalizeInspectorText|GetText|Text)\s*\(\s*"([^"]+)"')
+RE_REFL = re.compile(r'\b(DISPLAY_NAME|CATEGORY|TOOLTIP)\s*\(\s*"([^"]+)"')
+RE_CPP_TOKEN = re.compile(r'"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'|//[^\n]*|/\*[\s\S]*?\*/')
+RE_IMGUI = re.compile(r'\bImGui::(Text\w*|BulletText|Button|SmallButton|Checkbox|MenuItem|BeginMenu|'
+    r'Begin|BeginPopupModal|BeginCombo|CollapsingHeader|Selectable|RadioButton|TableSetupColumn|'
+    r'Slider\w*|Drag(?:Float|Int|Scalar)\w*|Input\w*|ColorEdit\w*|Set(?:Item)?Tooltip)\s*\(')
+RE_PRINTF = re.compile(r'%(?:[-+ #0]*\d*(?:\.\d+)?(?:hh|ll|[hlzjtL])?[a-zA-Z]|%)')
+RE_NOTIFICATION = re.compile(r'\b(AddNotification)\s*\(')
+
+
+def strip_comments(source: str) -> str:
+    return RE_CPP_TOKEN.sub(lambda m: re.sub(r'[^\n]', ' ', m[0]) if m[0].startswith(('//', '/*')) else m[0], source)
+
+
+def call_arguments(source: str, start: int):
+    """Read arguments after an opening parenthesis, including multiline/nested expressions."""
+    args, depth, begin, pos = [], 0, start, start
+    while pos < len(source):
+        token = RE_CPP_TOKEN.match(source, pos)
+        if token:
+            pos = token.end()
+            continue
+        char = source[pos]
+        if char in '([{':
+            depth += 1
+        elif char == ')' and depth == 0:
+            args.append(source[begin:pos])
+            return args
+        elif char in ')]}':
+            depth -= 1
+        elif char == ',' and depth == 0:
+            args.append(source[begin:pos])
+            begin = pos + 1
+        pos += 1
+    return args
+
+
+def find_hardcoded_ui(source: str):
+    source = strip_comments(source)
+    for match in chain(RE_IMGUI.finditer(source), RE_NOTIFICATION.finditer(source)):
+        name = match[1]
+        args = call_arguments(source, match.end())
+        indices = (0, 1) if name == 'AddNotification' else (1,) if name == 'TextColored' else (0,)
+        for index in indices:
+            if len(args) > index:
+                for text in hardcoded_literals(args[index]):
+                    yield source.count('\n', 0, match.start()) + 1, name, text
+
+
+def hardcoded_literals(expression: str):
+    # Remove localized subexpressions, but still inspect other ternary branches.
+    localized = re.compile(r'\b(?:LOCAL\w*|LocalizeInspectorText|GetText|Text)\s*\(')
+    while wrapped := localized.search(expression):
+        nested = call_arguments(expression, wrapped.end())
+        length = sum(len(arg) for arg in nested) + max(len(nested) - 1, 0) + 1
+        expression = expression[:wrapped.start()] + expression[wrapped.end() + length:]
+    for literal in re.finditer(r'"((?:\\.|[^"\\])*)"', expression):
+        text = literal[1]
+        if not is_ignored_imgui_literal(text):
+            yield text
 
 # ImGui 호출 중 하드코딩 검사에서 제외할 특수 문자열들
 IGNORED_IMGUI_STRINGS = {
     "", "##", "%s", "##Value", "##Shape", "##Column", "##Clear", "X", "2D", "3D", "100%", ">",
-    "---", ": ", ", ", "/", "+", "-", "?", ".", "...", "...###"
+    "---", ": ", ", ", "/", "+", "-", "?", ".", "...", "...###", "BamEngine", "Y", "Z", "ms"
 }
 
 def is_ignored_imgui_literal(text: str) -> bool:
-    s = text.strip()
+    s = re.sub(r'\\[nrt]', '', text.split('##', 1)[0]).strip()
     if not s or s in IGNORED_IMGUI_STRINGS:
         return True
     if s.startswith("##") or s.startswith("###"):
         return True
-    if s.startswith("%"):  # 서식 문자열 ("%s", "%.2f", "%llu" 등)
+    if not re.search(r'[a-zA-Z가-힣]', RE_PRINTF.sub('', s)):
         return True
-    if "ID: %" in s:  # 디버그 포맷 문자열
+    if s.startswith("ID: %"):
+        return True
+    if RE_PRINTF.sub('', s).strip() in IGNORED_IMGUI_STRINGS:
         return True
     if s.startswith("ICON_"):  # FontAwesome 매크로
         return True
@@ -53,10 +113,11 @@ def load_csv_catalog(file_path: Path):
     with open(file_path, "r", encoding="utf-8-sig") as f:
         reader = csv.reader(f)
         header = next(reader, None)
+        group = ""
         for line_no, row in enumerate(reader, start=2):
             if not row or len(row) < 2:
                 continue
-            group = row[0].strip()
+            group = row[0].strip() or group
             key = row[1].strip()
             en = row[2].strip() if len(row) > 2 else ""
             ko = row[3].strip() if len(row) > 3 else ""
@@ -66,8 +127,6 @@ def load_csv_catalog(file_path: Path):
 
             full_key = f"{group}.{key}" if group else key
             catalog[full_key] = (en, ko, file_path.name, line_no)
-            if group:
-                catalog[key] = (en, ko, file_path.name, line_no)
 
             if not en or not ko:
                 empty_entries.append((file_path.name, line_no, full_key, en, ko))
@@ -92,6 +151,7 @@ def audit_project(root_dir: Path, check_orphans: bool = False, strict: bool = Fa
     cat_editor, empty_editor = load_csv_catalog(editor_csv)
 
     combined_catalog = {**cat_engine, **cat_editor}
+    catalog_groups = {key.split('.', 1)[0] for key in combined_catalog if '.' in key}
     all_empty = empty_engine + empty_editor
 
     missing_keys = []
@@ -118,7 +178,8 @@ def audit_project(root_dir: Path, check_orphans: bool = False, strict: bool = Fa
 
                 try:
                     with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-                        lines = f.readlines()
+                        source = strip_comments(f.read())
+                        lines = source.splitlines()
                 except Exception:
                     continue
 
@@ -140,15 +201,24 @@ def audit_project(root_dir: Path, check_orphans: bool = False, strict: bool = Fa
                         if key not in combined_catalog:
                             missing_keys.append((rel_path, line_idx, macro_fn, key))
 
-                    # 3. ImGui 직접 하드코딩 검사 (Editor 디렉토리 위주)
-                    if "Editor" in rel_path.parts:
-                        if "LOCAL" in line or "LocalizeInspectorText" in line:
-                            continue
-                        for match in RE_IMGUI.finditer(line):
-                            fn_name = match.group(1)
-                            lit_text = match.group(2)
-                            if not is_ignored_imgui_literal(lit_text):
-                                hardcoded_ui.append((rel_path, line_idx, fn_name, lit_text))
+                # Engine UI must follow the same catalog policy as Editor UI.
+                for line_idx, fn_name, lit_text in find_hardcoded_ui(source):
+                    hardcoded_ui.append((rel_path, line_idx, fn_name, lit_text))
+
+                # Keys also arrive through arrays, display-name fields and graph diagnostics.
+                for token in RE_CPP_TOKEN.finditer(source):
+                    if not token[0].startswith('"'):
+                        continue
+                    key = token[0][1:-1].strip()
+                    indirect_key = key.startswith('UI_') or ('Editor' in rel_path.parts and bool(
+                        re.fullmatch(r'\w+\.[A-Z]\w*', key)) and key.split('.', 1)[0] in catalog_groups)
+                    graph_message = 'Graph' in rel_path.parts and 'Engine' in rel_path.parts and bool(
+                        re.match(r'[A-Z][A-Za-z0-9_]*(?:\s|\()', key))
+                    if not (indirect_key or graph_message) or key in referenced_keys:
+                        continue
+                    referenced_keys.add(key)
+                    if key not in combined_catalog and not is_dynamic_prefix_matched(key, combined_catalog):
+                        missing_keys.append((rel_path, source.count('\n', 0, token.start()) + 1, 'Indirect', key))
 
     # 결과 리포트 출력
     print("=" * 80)
@@ -186,10 +256,11 @@ def audit_project(root_dir: Path, check_orphans: bool = False, strict: bool = Fa
         print(f"[?] HARDCODED UI STRINGS DETECTED ({len(hardcoded_ui)} locations):")
         print("    Consider wrapping with LOCAL_LABEL or LOCAL_CSTR:")
         for fpath, lno, fn, text in hardcoded_ui:
-            print(f"    - {fpath}:{lno} [ImGui::{fn}] -> \"{text}\"")
+            call = fn if fn == 'AddNotification' else f'ImGui::{fn}'
+            print(f"    - {fpath}:{lno} [{call}] -> \"{text}\"")
         print()
     else:
-        print("[V] Hardcoded UI Strings: None (All editor UI uses localization)")
+        print("[V] Hardcoded UI Strings: None in checked UI calls")
 
     # 4. 고아 키 검사 (옵션)
     if check_orphans:

@@ -1,4 +1,5 @@
 #include "GraphPanel.h"
+#include "GraphMessageLocalization.h"
 #include "InputManager.h"
 #include "LocalizationManager.h"
 #include <imnodes.h>
@@ -272,7 +273,7 @@ void GraphPanel::HandleConnections(const ImVec2& origin, bool canvasHovered)
 		GraphPinReference from, to;
 		GetConnectionPins(m_DragPin, second, from, to);
 		const auto result = document.Data.CanConnect(m_Registry, from, to);
-		if (!result.Succeeded()) ImGui::SetTooltip("%s", LOCAL_CSTR(result.Message));
+		if (!result.Succeeded()) ImGui::SetTooltip("%s", LocalizeGraphMessage(result.Message).c_str());
 	}
 	else if (m_DragPin == 0 && ImNodes::IsPinHovered(&second))
 	{
