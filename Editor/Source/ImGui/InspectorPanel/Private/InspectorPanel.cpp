@@ -109,7 +109,7 @@ void InspectorPanel::DrawHeaderBar(Engine::Entity* currentEntity)
 			bool active = flag->IsActive();
 			if (ImGui::Checkbox("##EntityActive", &active))
 				flag->SetActive(active);
-			if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", "Active State");
+			if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("Inspector.ActiveStateTooltip"));
 			ImGui::SameLine();
 		}
 
@@ -173,7 +173,7 @@ void InspectorPanel::DrawHeaderBar(Engine::Entity* currentEntity)
 
 	if (wasLocked) ImGui::PopStyleColor();
 	if (ImGui::IsItemHovered())
-		ImGui::SetTooltip("%s", m_IsLocked ? "Locked to current entity" : "Unlocked (follows selection)");
+		ImGui::SetTooltip("%s", m_IsLocked ? LOCAL_CSTR("Inspector.LockedTooltip") : LOCAL_CSTR("Inspector.UnlockedTooltip"));
 
 	ImGui::Separator();
 }
@@ -223,130 +223,180 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 	auto before = history.Enabled() ? SceneEditSnapshot::Capture(*scene, targets) : SceneEditSnapshot{};
 	ImGui::BeginDisabled(!history.Enabled() || !before);
 
+	struct ReflectedItem
+	{
+		const reflection::TypeInfo* type = nullptr;
+		reflection::ObjectView object;
+	};
+	std::vector<ReflectedItem> items;
+
 	const auto result = scene->ForEachReflectedComponent(entity,
 		[&](const reflection::TypeInfo& type, const reflection::ObjectView& object)
 		{
 			if (!ReflectionPropertyDrawer::IsVisible(type)) return true;
-			// NameComponent와 IDComponent는 최상단 Sticky Header에 고정되어 있으므로 아래 목록에서는 제외
-			if (object.Is<Engine::NameComponent>() || object.Is<Engine::IDComponent>())
-				return true;
-			++componentCount;
-
-			Engine::TransformComponent* transform = nullptr;
-
-			if (object.Is<Engine::TransformComponent>() && !object.IsReadOnly())
-			{
-				transform = scene->GetRegistry().try_get<Engine::TransformComponent>(entity.GetEntityHandle());
-			}
-
-			if (transform != nullptr)
-			{
-				const glm::quat previousRotation = transform->rotation;
-				const glm::vec3 previousEuler = transform->eulerRotation;
-
-				// 기존 코드의 직접 대입을 표시 전에 반영합니다.
-				if (!transform->SynchronizeRotation())
-				{
-					ImGui::TextDisabled("%s", (LOCAL("Inspector.RotationRestored")).c_str());
-				}
-
-				refreshWorldMatrices |= transform->rotation != previousRotation ||
-					transform->eulerRotation != previousEuler;
-			}
-
-			auto& componentSettings = entityEditState.Components[type.QualifiedName];
-			bool changed = false;
-			const auto drawCollider = [&]<typename T>()
-			{
-				auto& current = world.get<T>(handle);
-				T candidate = current;
-				if (!ReflectionPropertyDrawer::DrawObject(type, reflection::ObjectView::From(candidate),
-					registry, &componentSettings)) return false;
-				if (!TryCommitInspectorCollider(current, std::move(candidate)))
-				{
-					ImGui::TextDisabled("%s", LocalizeInspectorText("UI_INVALID_PROPERTY").c_str());
-					return false;
-				}
-				return true;
-			};
-			const auto drawUI = [&]<typename T>()
-			{
-				auto& current = world.get<T>(handle);
-				T candidate = current;
-				if (!ReflectionPropertyDrawer::DrawObject(type, reflection::ObjectView::From(candidate),
-					registry, &componentSettings)) return false;
-				if (!Engine::UILayout::IsValid(candidate))
-				{
-					ImGui::TextDisabled("%s", (LOCAL("Inspector.LayoutRejected")).c_str());
-					return false;
-				}
-				const T previous = current;
-				current = candidate;
-				const auto canvas = Engine::UILayout::FindCanvas(world, handle);
-				std::vector<Engine::UIElementLayout> layouts;
-				if (canvas != entt::null && !Engine::UILayout::Build(world, canvas, layouts))
-				{
-					current = previous;
-					ImGui::TextDisabled("%s", (LOCAL("Inspector.CanvasInvalidated")).c_str());
-					return false;
-				}
-				return true;
-			};
-			if (transform)
-			{
-				auto candidate = *transform;
-				if (ReflectionPropertyDrawer::DrawObject(type, reflection::ObjectView::From(candidate),
-					registry, &componentSettings))
-				{
-					changed = TransformPropertyEditor::ApplyCandidate(world, handle, candidate);
-					if (!changed) ImGui::TextDisabled("%s", LOCAL("UI_TRANSFORM_REJECTED").c_str());
-				}
-			}
-			else if (object.Is<Engine::CanvasComponent>()) changed = drawUI.operator()<Engine::CanvasComponent>();
-			else if (object.Is<Engine::RectTransformComponent>()) changed = drawUI.operator()<Engine::RectTransformComponent>();
-			else if (object.Is<Engine::UIImageComponent>()) changed = drawUI.operator()<Engine::UIImageComponent>();
-			else if (object.Is<Engine::UIButtonComponent>()) changed = drawUI.operator()<Engine::UIButtonComponent>();
-			else if (object.Is<Engine::ColliderComponent>()) changed = drawCollider.operator()<Engine::ColliderComponent>();
-			else if (object.Is<Engine::Collider2DComponent>()) changed = drawCollider.operator()<Engine::Collider2DComponent>();
-			else if (object.Is<Engine::AudioSourceComponent>())
-			{
-				changed = ReflectionPropertyDrawer::DrawObject(type, object, registry, &componentSettings);
-				auto& audioSource = world.get<Engine::AudioSourceComponent>(handle);
-				ImGui::Spacing();
-				if (audioSource.IsPlaying())
-				{
-					ImGui::TextColored(ImVec4(0.2f, 0.9f, 0.2f, 1.f), "Playing...");
-					ImGui::SameLine();
-					if (ImGui::Button("Stop##AudioSource")) audioSource.Stop();
-					ImGui::SameLine();
-					if (ImGui::Button("Pause##AudioSource")) audioSource.Pause();
-				}
-				else
-				{
-					ImGui::TextDisabled("Stopped");
-					ImGui::SameLine();
-					if (ImGui::Button("Play##AudioSource")) audioSource.Play();
-				}
-			}
-			else changed = ReflectionPropertyDrawer::DrawObject(type, object, registry, &componentSettings);
-			if (changed && object.Is<Engine::CameraComponent>()) world.get<Engine::CameraComponent>(handle).InvalidateCache();
-			if (changed && object.Is<Engine::LightComponent>()) world.get<Engine::LightComponent>(handle).InvalidateCache();
-			anyChanged |= changed;
-
-			if (changed && transform != nullptr)
-			{
-				// Reflection의 Euler 대입을 공통 회전 API로 연결합니다.
-				if (!transform->SynchronizeRotation())
-				{
-					ImGui::TextDisabled("%s", (LOCAL("Inspector.RotationRejected")).c_str());
-				}
-
-				// 위치와 크기 편집도 월드 행렬에 반영합니다.
-				refreshWorldMatrices = true;
-			}
-
+			if (object.Is<Engine::NameComponent>() || object.Is<Engine::IDComponent>()) return true;
+			items.push_back({ &type, object });
 			return true;
 		});
+
+	// 엔티티의 컴포넌트 표시 순서(ComponentOrder) 동기화 및 정렬
+	auto& order = entityEditState.ComponentOrder;
+	std::erase_if(order, [&](const std::string& name)
+		{
+			return std::ranges::none_of(items, [&](const auto& item) { return item.type->QualifiedName == name; });
+		});
+	for (const auto& item : items)
+	{
+		if (std::ranges::find(order, item.type->QualifiedName) == order.end())
+			order.push_back(item.type->QualifiedName);
+	}
+	std::ranges::sort(items, [&](const auto& a, const auto& b)
+		{
+			const auto itA = std::ranges::find(order, a.type->QualifiedName);
+			const auto itB = std::ranges::find(order, b.type->QualifiedName);
+			return itA < itB;
+		});
+
+	std::string componentToRemove;
+	for (std::size_t i = 0; i < items.size(); ++i)
+	{
+		const auto& [typePtr, object] = items[i];
+		const auto& type = *typePtr;
+		++componentCount;
+
+		// 헤더바에서만 띄울 컨텍스트 메뉴 람다 정의
+		auto drawHeaderMenu = [&]()
+			{
+				const bool isRemovable = !object.Is<Engine::TransformComponent>();
+				if (ImGui::MenuItem(LOCAL_LABEL("Inspector.MoveUp").c_str(), nullptr, false, i > 0))
+				{
+					std::swap(order[i], order[i - 1]);
+				}
+				if (ImGui::MenuItem(LOCAL_LABEL("Inspector.MoveDown").c_str(), nullptr, false, i + 1 < items.size()))
+				{
+					std::swap(order[i], order[i + 1]);
+				}
+				ImGui::Separator();
+				if (ImGui::MenuItem(LOCAL_LABEL("Inspector.RemoveComponent").c_str(), nullptr, false, isRemovable))
+				{
+					componentToRemove = type.QualifiedName;
+				}
+			};
+
+		Engine::TransformComponent* transform = nullptr;
+		if (object.Is<Engine::TransformComponent>() && !object.IsReadOnly())
+			transform = scene->GetRegistry().try_get<Engine::TransformComponent>(handle);
+
+		if (transform != nullptr)
+		{
+			const glm::quat previousRotation = transform->rotation;
+			const glm::vec3 previousEuler = transform->eulerRotation;
+			if (!transform->SynchronizeRotation())
+				ImGui::TextDisabled("%s", (LOCAL("Inspector.RotationRestored")).c_str());
+			refreshWorldMatrices |= transform->rotation != previousRotation || transform->eulerRotation != previousEuler;
+		}
+
+		auto& componentSettings = entityEditState.Components[type.QualifiedName];
+		bool changed = false;
+
+		const auto drawCollider = [&]<typename T>()
+		{
+			auto& current = world.get<T>(handle);
+			T candidate = current;
+			if (!ReflectionPropertyDrawer::DrawObject(type, reflection::ObjectView::From(candidate),
+				registry, &componentSettings, drawHeaderMenu)) return false;
+			if (!TryCommitInspectorCollider(current, std::move(candidate)))
+			{
+				ImGui::TextDisabled("%s", LocalizeInspectorText("UI_INVALID_PROPERTY").c_str());
+				return false;
+			}
+			return true;
+		};
+		const auto drawUI = [&]<typename T>()
+		{
+			auto& current = world.get<T>(handle);
+			T candidate = current;
+			if (!ReflectionPropertyDrawer::DrawObject(type, reflection::ObjectView::From(candidate),
+				registry, &componentSettings, drawHeaderMenu)) return false;
+			if (!Engine::UILayout::IsValid(candidate))
+			{
+				ImGui::TextDisabled("%s", (LOCAL("Inspector.LayoutRejected")).c_str());
+				return false;
+			}
+			const T previous = current;
+			current = candidate;
+			const auto canvas = Engine::UILayout::FindCanvas(world, handle);
+			std::vector<Engine::UIElementLayout> layouts;
+			if (canvas != entt::null && !Engine::UILayout::Build(world, canvas, layouts))
+			{
+				current = previous;
+				ImGui::TextDisabled("%s", (LOCAL("Inspector.CanvasInvalidated")).c_str());
+				return false;
+			}
+			return true;
+		};
+
+		if (transform)
+		{
+			auto candidate = *transform;
+			if (ReflectionPropertyDrawer::DrawObject(type, reflection::ObjectView::From(candidate),
+				registry, &componentSettings, drawHeaderMenu))
+			{
+				changed = TransformPropertyEditor::ApplyCandidate(world, handle, candidate);
+				if (!changed) ImGui::TextDisabled("%s", LOCAL("UI_TRANSFORM_REJECTED").c_str());
+			}
+		}
+		else if (object.Is<Engine::CanvasComponent>()) changed = drawUI.operator() < Engine::CanvasComponent > ();
+		else if (object.Is<Engine::RectTransformComponent>()) changed = drawUI.operator() < Engine::RectTransformComponent > ();
+		else if (object.Is<Engine::UIImageComponent>()) changed = drawUI.operator() < Engine::UIImageComponent > ();
+		else if (object.Is<Engine::UIButtonComponent>()) changed = drawUI.operator() < Engine::UIButtonComponent > ();
+		else if (object.Is<Engine::ColliderComponent>()) changed = drawCollider.operator() < Engine::ColliderComponent > ();
+		else if (object.Is<Engine::Collider2DComponent>()) changed = drawCollider.operator() < Engine::Collider2DComponent > ();
+		else if (object.Is<Engine::AudioSourceComponent>())
+		{
+			changed = ReflectionPropertyDrawer::DrawObject(type, object, registry, &componentSettings);
+			auto& audioSource = world.get<Engine::AudioSourceComponent>(handle);
+			ImGui::Spacing();
+			if (audioSource.IsPlaying())
+			{
+				ImGui::TextColored(ImVec4(0.2f, 0.9f, 0.2f, 1.f), "%s", LOCAL_CSTR("UI_AUDIO_PLAYING"));
+				ImGui::SameLine();
+				if (ImGui::Button(LOCAL_LABEL("UI_STOP").c_str())) audioSource.Stop();
+				ImGui::SameLine();
+				if (ImGui::Button(LOCAL_LABEL("UI_PAUSE").c_str())) audioSource.Pause();
+			}
+			else
+			{
+				ImGui::TextDisabled("%s", LOCAL_CSTR("UI_AUDIO_STOPPED"));
+				ImGui::SameLine();
+				if (ImGui::Button(LOCAL_LABEL("UI_PLAY").c_str())) audioSource.Play();
+			}
+		}
+		else changed = ReflectionPropertyDrawer::DrawObject(type, object, registry, &componentSettings, drawHeaderMenu);
+
+		// **주의**: 기존에 이 자리에 있던 `if (ImGui::BeginPopupContextItem(popupId.c_str())) { ... }` 블록은 완전히 지웁니다!
+
+		if (changed && object.Is<Engine::CameraComponent>()) world.get<Engine::CameraComponent>(handle).InvalidateCache();
+		if (changed && object.Is<Engine::LightComponent>()) world.get<Engine::LightComponent>(handle).InvalidateCache();
+		anyChanged |= changed;
+
+		if (changed && transform != nullptr)
+		{
+			if (!transform->SynchronizeRotation()) ImGui::TextDisabled("%s", (LOCAL("Inspector.RotationRejected")).c_str());
+			refreshWorldMatrices = true;
+		}
+	}
+
+	// 컴포넌트 삭제 실행 (Undo/Redo 지원)
+	if (!componentToRemove.empty())
+	{
+		const auto* entry = Engine::ReflectionRegistry::Get().FindComponent(componentToRemove);
+		if (entry && entry->Remove)
+		{
+			entry->Remove(world, handle);
+			anyChanged = true;
+		}
+	}
 	DrawAddComponentButton(entity);
 	ImGui::EndDisabled();
 

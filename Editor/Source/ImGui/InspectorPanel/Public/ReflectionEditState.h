@@ -36,6 +36,7 @@ namespace Editor
     struct ReflectionEntityEditState
     {
         std::unordered_map<std::string, ReflectionObjectEditSettings> Components;
+        std::vector<std::string> ComponentOrder; // 인스펙터 표시 순서 (QualifiedName 목록)
     };
 
     struct ReflectionSceneEditState

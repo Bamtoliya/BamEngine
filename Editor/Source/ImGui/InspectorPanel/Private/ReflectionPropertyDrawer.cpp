@@ -23,6 +23,7 @@
 #include <archive/Unicode.h>
 #include <limits>
 
+
 namespace
 {
     bool DrawInspectorText(std::string& value)
@@ -114,12 +115,13 @@ namespace
         const auto bits = std::visit([](auto number) { return static_cast<std::uint64_t>(number); }, *value);
         auto candidate = bits;
         const auto* entry = enumeration.FindEntryByValue(*value);
-        const auto enumText = [&](const std::string& name)
-        {
-            const auto key = enumeration.QualifiedName + "." + name;
-            const auto localized = Editor::LocalizeInspectorText(key);
-            return localized == key ? Editor::LocalizeInspectorText(name) : localized;
-        };
+		const auto enumText = [&](const std::string& name)
+		{
+			const auto key = enumeration.QualifiedName + "." + name;
+			const auto localized = Editor::LocalizeInspectorText(key);
+			// QualifiedName.Name 키가 등록되어 있으면 해당 번역을 쓰고, 없으면 C++ 식별자 이름(name)을 그대로 반환
+			return localized == key ? name : localized;
+		};
         std::string label = entry ? enumText(entry->Name) : std::to_string(bits);
         const auto* metadata = enumeration.Metadata.Find("Bitmask");
         const auto* flag = metadata ? std::get_if<bool>(metadata) : nullptr;
@@ -367,7 +369,7 @@ namespace
 
 		const void* pMin = hasMin ? &minVal : nullptr;
 		const void* pMax = hasMax ? &maxVal : nullptr;
-		const char* format = isFloating ? "%.3f" : nullptr;
+		const char* format = isFloating ? (dragSpeed < 0.001f ? "%.4f" : "%.3f") : nullptr;
 
 		// [리셋 값 조회]: ResetValue 우선, 없으면 Default 확인, 둘 다 없으면 0.0
 		T resetValue = T{};
@@ -406,7 +408,7 @@ namespace
 				// 우클릭 시 "Reset to Default" 메뉴 제공
 				if (hasReset && ImGui::BeginPopupContextItem("ScalarSettings", ImGuiPopupFlags_MouseButtonRight))
 				{
-					if (ImGui::MenuItem("Reset to Default", nullptr, false, candidate != resetValue))
+					if (ImGui::MenuItem(LOCAL_CSTR("UI_RESET_TO_DEFAULT"), nullptr, false, candidate != resetValue))
 					{
 						candidate = resetValue;
 						changed = true;
@@ -415,6 +417,79 @@ namespace
 				}
 				return changed;
 			});
+	}
+}
+
+namespace
+{
+	std::string_view TrimCondition(std::string_view str)
+	{
+		const auto start = str.find_first_not_of(" \t\r\n");
+		if (start == std::string_view::npos) return {};
+		const auto end = str.find_last_not_of(" \t\r\n");
+		return str.substr(start, end - start + 1);
+	}
+
+	bool EvaluateEditCondition(const reflection::PropertyInfo& property, const reflection::TypeInfo& type,
+		const reflection::ObjectView& object, const reflection::Registry* registry)
+	{
+		const auto* meta = property.Metadata.Find("EditCondition");
+		const auto* condStr = meta ? std::get_if<std::string>(meta) : nullptr;
+		if (!condStr || condStr->empty()) return true;
+
+		std::string_view cond = *condStr;
+		std::string_view left, right;
+		bool isEquals = true;
+
+		if (const auto pos = cond.find("=="); pos != std::string_view::npos)
+		{
+			left = TrimCondition(cond.substr(0, pos));
+			right = TrimCondition(cond.substr(pos + 2));
+			isEquals = true;
+		}
+		else if (const auto pos = cond.find("!="); pos != std::string_view::npos)
+		{
+			left = TrimCondition(cond.substr(0, pos));
+			right = TrimCondition(cond.substr(pos + 2));
+			isEquals = false;
+		}
+		else
+		{
+			// "IsEnabled" 또는 "!IsEnabled" 단일 bool 조건식
+			bool negate = false;
+			if (cond.starts_with('!')) { negate = true; cond = cond.substr(1); }
+			const auto* targetProp = type.FindProperty(TrimCondition(cond));
+			if (!targetProp) return true;
+			const auto read = targetProp->TryReadValue(object);
+			if (!read) return true;
+			const auto* bVal = read.Value.Get<bool>();
+			return bVal ? (*bVal != negate) : true;
+		}
+
+		const auto* targetProp = type.FindProperty(left);
+		if (!targetProp) return true;
+		const auto read = targetProp->TryReadValue(object);
+		if (!read) return true;
+
+		// ELightType::Spot 같은 형태에서 식별자("Spot")만 추출
+		if (const auto colon = right.rfind("::"); colon != std::string_view::npos) right = right.substr(colon + 2);
+
+		bool matches = false;
+		if (const auto* enumeration = registry ? registry->FindEnum(read.Value) : nullptr)
+		{
+			const auto currentVal = enumeration->ReadValue(read.Value);
+			const auto* entry = enumeration->FindEntry(right);
+			if (currentVal && entry)
+			{
+				matches = std::visit([](auto a, auto b) { return std::cmp_equal(a, b); }, entry->Value, *currentVal);
+			}
+		}
+		else if (const auto* bVal = read.Value.Get<bool>())
+		{
+			matches = (*bVal == (right == "true" || right == "1"));
+		}
+
+		return isEquals ? matches : !matches;
 	}
 }
 
@@ -675,7 +750,8 @@ namespace Editor
 	}
 
 	bool ReflectionPropertyDrawer::DrawObject(const reflection::TypeInfo& type, const reflection::ObjectView& object,
-		const reflection::Registry* registry, ReflectionObjectEditSettings* editSettings)
+		const reflection::Registry* registry, ReflectionObjectEditSettings* editSettings,
+		std::function<void()> onHeaderContextMenu)
 	{
 		if (!IsVisible(type)) return false;
 
@@ -685,8 +761,16 @@ namespace Editor
 		bool changed = false;
 
 		const std::string headerLabel = displayName + "###ObjectHeader";
+		const bool open = ImGui::CollapsingHeader(headerLabel.c_str(), ImGuiTreeNodeFlags_DefaultOpen);
 
-		if (ImGui::CollapsingHeader(headerLabel.c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+		// [중요] CollapsingHeader 바로 직후에 호출해야 헤더바에만 정확히 우클릭 메뉴가 바인딩됩니다.
+		if (onHeaderContextMenu && ImGui::BeginPopupContextItem("##HeaderContextMenu"))
+		{
+			onHeaderContextMenu();
+			ImGui::EndPopup();
+		}
+
+		if (open)
 		{
 			changed = DrawPropertyTable(type, object, registry, editSettings);
 		}
@@ -711,6 +795,7 @@ namespace Editor
 		for (const auto& property : type.Properties)
 		{
 			if (!GetReflectionDrawerBoolMetadata(property.Metadata, "Visible", true)) continue;
+			if (!EvaluateEditCondition(property, type, object, registry)) continue; // 추가: 조건 거짓이면 카테고리 집계 제외
 			const auto category = InspectorMetadataText(property.Metadata, "Category", "UI_GENERAL");
 			if (std::ranges::find(categories, category) == categories.end()) categories.push_back(category);
 		}
@@ -732,10 +817,8 @@ namespace Editor
 				for (const auto& property : type.Properties)
 				{
 					if (InspectorMetadataText(property.Metadata, "Category", "UI_GENERAL") != category) continue;
-					if (!GetReflectionDrawerBoolMetadata(property.Metadata, "Visible", true))
-					{
-						continue;
-					}
+					if (!GetReflectionDrawerBoolMetadata(property.Metadata, "Visible", true)) continue;
+					if (!EvaluateEditCondition(property, type, object, registry)) continue; // 추가: 조건 거짓이면 행(Row) 생성 생략
 
 					const std::string displayName = GetReflectionDrawerDisplayName(property.Metadata, property.Name);
 
@@ -770,7 +853,7 @@ namespace Editor
 
 						if (wasLocked) ImGui::PopStyleColor();
 						if (ImGui::IsItemHovered())
-							ImGui::SetTooltip("%s", vectorSettings.Locked ? "Unlock property" : "Lock property");
+							ImGui::SetTooltip("%s", vectorSettings.Locked ? LOCAL_CSTR("Inspector.UnlockProperty") : LOCAL_CSTR("Inspector.LockProperty"));
 						ImGui::PopID();
 					}
 
