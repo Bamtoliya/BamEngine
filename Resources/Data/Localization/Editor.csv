@@ -1,4 +1,4 @@
-﻿Group,Key,English,Korean
+Group,Key,English,Korean
 ,UI_ADD_COMPONENT,Add Component,컴포넌트 추가
 ,UI_PROPERTY,Property,속성
 ,UI_VALUE,Value,값
@@ -20,7 +20,6 @@
 ,UI_PASS,Passes,패스
 ,UI_DEBUG,Debug,디버그
 ,UI_CAMERA,Camera,카메라
-,,,
 ,UI_FILE,File,파일
 ,UI_EDIT,Edit,수정
 ,UI_UNDO,Undo,실행 취소
@@ -60,16 +59,13 @@
 ,UI_NO_SCENE_LOADED,No Scene Loaded,로드된 씬이 없습니다.
 ,UI_RESOURCE_MANGER_INSPECTOR,Resource Manager,리소스 매니저
 ,UI_ENGINE_METRICS_PANEL,Engine Metrics,엔진 통계
-,,,
-,,,
-,,,
-,,,
-,,,
-,,,
-,,,
-,,,
-,,,
-,,,
+,UI_PLAY,Play,재생
+,UI_STOP,Stop,정지
+,UI_PAUSE,Pause,일시정지
+,UI_RESUME,Resume,재개
+,UI_AUDIO,Audio,오디오
+,UI_AUDIO_PLAYING,Playing...,재생 중...
+,UI_AUDIO_STOPPED,Stopped,정지됨
 ,UI_GENERAL,General,일반
 ,UI_RESOURCE_NONE,None (drop a resource),없음 (리소스를 놓으세요)
 ,UI_RESOURCE_CLEAR,Clear,연결 해제
@@ -429,3 +425,12 @@ GraphPanel,ReflectionConflict,Reflection source conflict: {}::{},리플렉션 �
 Viewport,CanvasSize,Canvas {:.0f} x {:.0f} | {:.0f}%,캔버스 {:.0f} x {:.0f} | {:.0f}%
 Viewport,InteractionStatus,Interact | Clicks: {} | {},상호작용 | 클릭 수: {} | {}
 Viewport,PointerEvent,{} | Entity {},{} | 엔티티 {}
+Viewport,CameraTransform,Camera Transform,카메라 트랜스폼
+Viewport,CameraPosition,Position,위치
+Viewport,CameraRotation,Rotation,회전
+Viewport,CameraOptics,Camera Optics,카메라 광학
+Viewport,CameraFOV,FOV,시야각 (FOV)
+Viewport,CameraOrthographicSize,Size,직교 크기
+Viewport,CameraSpeed,Move Speed,이동 속도
+Viewport,CameraResetOrigin,Reset to Origin,원점으로 리셋
+Viewport,CameraTopView,Top View,상단 뷰 (Top)
