@@ -40,7 +40,8 @@ public:
 public:
 	void RunFrame(f32 dt);
 	void FixedUpdate(f32 dt);
-	void Update(f32 dt);
+	// Hosts may sample input before editor updates and reuse that snapshot for simulation.
+	void Update(f32 dt, bool updateInput = true);
 	void LateUpdate(f32 dt);
 	EResult Render(f32 dt);
 #pragma endregion

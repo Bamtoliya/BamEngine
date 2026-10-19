@@ -622,7 +622,7 @@ void SceneViewportPanel::DrawImGuizmo()
 	const glm::mat4 viewMatrix = cameraBuffer->viewMatrix;
 	const glm::mat4 projectionMatrix = cameraBuffer->projMatrix;
 
-	bool useSnap = m_GizmoUseSnap || ImGui::GetIO().KeyCtrl;
+	bool useSnap = m_GizmoUseSnap || InputManager::Get().IsCtrlPressed();
 	glm::vec3 snapValues = m_GizmoSnapTranslation;
 
 	if (editMode == TransformEditMode::Rotation)
@@ -1199,11 +1199,12 @@ void SceneViewportPanel::MouseInput()
 }
 void SceneViewportPanel::CapturePickingRequest(bool imageHovered)
 {
-	if (!imageHovered || !ImGui::IsMouseClicked(ImGuiMouseButton_Left) || !ImGui::IsWindowHovered() ||
+	if (!imageHovered || !InputManager::Get().IsMouseButtonDown(EMouseButton::Left) || !ImGui::IsWindowHovered() ||
 		ImGui::IsAnyItemActive() || ImGuizmo::IsOver() || ImGuizmo::IsUsing() ||
 		ImViewGuizmo::IsOver() || ImViewGuizmo::IsUsing() ||
-		ImGui::IsMouseDown(ImGuiMouseButton_Right) || SelectionManager::Get().IsPrimarySelectionLocked()) return;
-	const ImVec2 mouse = ImGui::GetMousePos();
+		InputManager::Get().IsMouseButtonPressed(EMouseButton::Right) || SelectionManager::Get().IsPrimarySelectionLocked()) return;
+	const auto screenMouse = InputManager::Get().GetScreenMousePosition();
+	const ImVec2 mouse(screenMouse.x, screenMouse.y);
 	vec2 uv;
 	if (!PickingManager::TryGetViewportUV(vec2(mouse.x, mouse.y), vec2(m_ImageScreenPos.x, m_ImageScreenPos.y),
 		vec2(m_ImageSize.x, m_ImageSize.y), uv)) return;
@@ -1211,7 +1212,7 @@ void SceneViewportPanel::CapturePickingRequest(bool imageHovered)
 	{
 		m_PickingRequest.pending = false;
 		auto& selection = SelectionManager::Get();
-		if (ImGui::GetIO().KeyCtrl)
+		if (InputManager::Get().IsCtrlPressed())
 			selection.ToggleEntitySelection(overlayEntity);
 		else
 			selection.SetSelectedEntity(overlayEntity);
@@ -1220,7 +1221,7 @@ void SceneViewportPanel::CapturePickingRequest(bool imageHovered)
 	auto* target = RenderTargetManager::Get().GetRenderTarget(m_Name + L"_GBuffer_Position");
 	if (!target || !target->GetTexture()) return;
 	PickingRequest request;
-	request.toggle = ImGui::GetIO().KeyCtrl;
+	request.toggle = InputManager::Get().IsCtrlPressed();
 	request.mode = m_PickingMode;
 	request.uv = uv;
 	request.frameSerial = PickingManager::Get().GetPickingFrameSerial();

@@ -1,4 +1,5 @@
 ﻿#include "ReflectionPropertyDrawer.h"
+#include "InputManager.h"
 #include "Functions.h"
 
 #include "IconsFontAwesome7.h"
@@ -606,23 +607,22 @@ namespace Editor
 
 			const bool active = ImGui::IsItemActive();
 			const bool hovered = ImGui::IsItemHovered();
-			const ImGuiIO& io = ImGui::GetIO();
 
 			if (!locked && hovered)
 			{
 				// Window의 스크롤 대신 이 입력칸이 휠을 사용합니다.
 				ImGui::SetItemKeyOwner(ImGuiKey_MouseWheelY);
 
-				if (io.MouseWheel != 0.0f)
+				if (InputManager::Get().GetMouseScrollDeltaY() != 0.0f)
 				{
 					const float wheelStep = snapEnabled ? snapStep : dragSpeed;
-					const float multiplier = io.KeyShift ? 10.0f : 1.0f;
+					const float multiplier = InputManager::Get().IsShiftPressed() ? 10.0f : 1.0f;
 
-					rawValue += io.MouseWheel * wheelStep * multiplier;
+					rawValue += InputManager::Get().GetMouseScrollDeltaY() * wheelStep * multiplier;
 					requested = true;
 				}
 
-				if (ImGui::IsMouseClicked(ImGuiMouseButton_Middle))
+				if (InputManager::Get().IsMouseButtonDown(EMouseButton::Middle))
 				{
 					resetRequested = true;
 				}

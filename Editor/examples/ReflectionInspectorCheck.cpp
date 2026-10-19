@@ -1,6 +1,7 @@
 #include "Engine_Includes.h"
 #include "ReflectionInspectorSupport.h"
 #include "ReflectionPropertyDrawer.h"
+#include "InputManager.h"
 #include "Reflection/ReflectionRegistry.h"
 #include "CoreComponents.h"
 #include "RenderComponents.h"
@@ -19,6 +20,7 @@ namespace
             Engine::ReflectionRegistry::Destroy();
             Engine::ResourceManager::Destroy();
             Engine::LocalizationManager::Destroy();
+            Engine::InputManager::Destroy();
         }
     };
 
@@ -331,7 +333,7 @@ int main()
 {
     Scope scope;
     if (!Engine::LocalizationManager::Create() || !Engine::ResourceManager::Create() ||
-        !Engine::ReflectionRegistry::Create()) return 1;
+        !Engine::ReflectionRegistry::Create() || !Engine::InputManager::Create()) return 1;
     if (!CheckPayloads() || !CheckResourceTypes() || !CheckColliderValidation() ||
         !CheckJointArchiveBoundary() || !CheckDrawers()) return 1;
     std::cout << "Inspector resource, reflection, validation, and draw checks passed.\n";

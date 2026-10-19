@@ -25,6 +25,7 @@ struct MouseStateData
 	f32 LastDownTime = -1.0f;
 	vec2 DownPosition = vec2(0.f);
 	bool IsDragging = false;
+	f32 MaxDragDistance = 0.0f;
 };
 
 BEGIN(Engine)
@@ -54,6 +55,9 @@ public:
 	bool IsKeyButtonDown(const string& key);
 	bool IsKeyButtonUp(const string& key);
 	bool IsKeyButtonPressed(const string& key);
+	bool IsCtrlPressed() { return IsKeyButtonPressed(EKeyCode::LCtrl) || IsKeyButtonPressed(EKeyCode::RCtrl); }
+	bool IsShiftPressed() { return IsKeyButtonPressed(EKeyCode::LShift) || IsKeyButtonPressed(EKeyCode::RShift); }
+	bool IsAltPressed() { return IsKeyButtonPressed(EKeyCode::LAlt) || IsKeyButtonPressed(EKeyCode::RAlt); }
 #pragma endregion
 
 #pragma region Mouse
@@ -63,7 +67,7 @@ public:
 	bool IsMouseButtonPressed(EMouseButton button);
 
 	bool IsMouseButtonDoubleClicked(EMouseButton button);
-	bool IsMouseButtonDragging(EMouseButton button);
+	bool IsMouseButtonDragging(EMouseButton button, f32 threshold = 3.0f);
 public:
 	bool IsMouseButtonDown(const string& key);
 	bool IsMouseButtonUp(const string& key);
@@ -72,7 +76,9 @@ public:
 	bool IsMouseButtonDoubleClicked(const string& key);
 	bool IsMouseButtonDragging(const string& key);
 public:
+	// Window-local coordinates for runtime viewports; desktop coordinates for detached editor panels.
 	vec2 GetMousePosition() const { return m_MousePosition; }
+	vec2 GetScreenMousePosition() const { return m_ScreenMousePosition; }
 	vec2 GetMouseDelta() const { return m_MouseDelta; }
 	vec2 GetMouseScrollDelta() const { return m_MouseScrollDelta; }
 	f32 GetMouseScrollDeltaX() const { return m_MouseScrollDelta.x; }
@@ -99,13 +105,18 @@ public:
 
 #pragma region Member Variables
 private:
-	array<uint8, SDL_SCANCODE_COUNT> m_CurrentKeyStates;
-	array<uint8, SDL_SCANCODE_COUNT> m_PreviousKeyStates;
+	array<uint8, SDL_SCANCODE_COUNT> m_CurrentKeyStates{};
+	array<uint8, SDL_SCANCODE_COUNT> m_PreviousKeyStates{};
+	array<bool, SDL_SCANCODE_COUNT> m_KeyDownEvents{}, m_KeyUpEvents{};
+	array<bool, SDL_SCANCODE_COUNT> m_PendingKeyDown{}, m_PendingKeyUp{};
 
-	array<uint8, static_cast<uint32>(EMouseButton::Count)> m_CurrentMouseButtonStates;
-	array<uint8, static_cast<uint32>(EMouseButton::Count)> m_PreviousMouseButtonStates;
+	array<uint8, static_cast<uint32>(EMouseButton::Count)> m_CurrentMouseButtonStates{};
+	array<uint8, static_cast<uint32>(EMouseButton::Count)> m_PreviousMouseButtonStates{};
+	array<bool, static_cast<uint32>(EMouseButton::Count)> m_MouseDownEvents{}, m_MouseUpEvents{};
+	array<bool, static_cast<uint32>(EMouseButton::Count)> m_PendingMouseDown{}, m_PendingMouseUp{};
 
 	vec2 m_MousePosition = vec2(0.f);
+	vec2 m_ScreenMousePosition = vec2(0.f);
 	vec2 m_MouseDelta = vec2(0.f);
 
 	vec2 m_AccmulatedMouseScrollDelta = vec2(0.f);

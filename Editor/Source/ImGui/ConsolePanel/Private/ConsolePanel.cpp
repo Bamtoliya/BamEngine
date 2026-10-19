@@ -1,4 +1,5 @@
 ﻿#include "ConsolePanel.h"
+#include "InputManager.h"
 
 #pragma region Loop
 void ConsolePanel::Draw()
@@ -228,7 +229,7 @@ void ConsolePanel::DrawLogItem(const ConsoleItem& item)
     if (!ImGui::IsItemHovered())
         return;
 
-    if (ImGui::IsMouseClicked(ImGuiMouseButton_Right))
+    if (InputManager::Get().IsMouseButtonDown(EMouseButton::Right))
         ImGui::SetClipboardText(item.Entry.Message.c_str());
 
     ImGui::BeginTooltip();

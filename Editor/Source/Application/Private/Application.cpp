@@ -1109,6 +1109,7 @@ void Application::Run(int argc, char* argv[])
         timeManager.Update();
 		f32 dt = timeManager.GetDeltaTime();
 		UpdateTitle(dt);
+        InputManager::Get().Update(dt);
         ImGuiManager::Get().Update(dt);
         m_AssetManager->Update(dt);
         ModuleHotReloadManager::Get().Update();
@@ -1119,12 +1120,11 @@ void Application::Run(int argc, char* argv[])
         if (PIEManager::Get().IsPlaying())
         {
             m_Runtime->FixedUpdate(dt);
-            m_Runtime->Update(dt);
+            m_Runtime->Update(dt, false);
             m_Runtime->LateUpdate(dt);
         }
         else
         {
-            InputManager::Get().Update(dt);
             m_Runtime->LateUpdate(dt);
         }
 		m_Runtime->Render(dt);

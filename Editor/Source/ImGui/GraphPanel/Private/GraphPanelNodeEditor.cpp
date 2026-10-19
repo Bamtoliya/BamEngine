@@ -1,4 +1,5 @@
 #include "GraphPanel.h"
+#include "InputManager.h"
 #include "LocalizationManager.h"
 #include <imnodes.h>
 #include <algorithm>
@@ -89,10 +90,10 @@ void GraphPanel::DrawCanvas(float height)
 		ReadSelection();
 		const bool menuOpen = m_OpenNodePopup || ImGui::IsPopupOpen("##AddGraphNode") ||
 			ImGui::IsPopupOpen("##GraphCanvasMenu");
-		if (focused && !menuOpen && !ImGui::GetIO().WantTextInput && ImGui::IsKeyPressed(ImGuiKey_Delete, false))
+		if (focused && !menuOpen && !ImGui::GetIO().WantTextInput && InputManager::Get().IsKeyButtonDown(EKeyCode::Delete))
 			DeleteSelection();
 
-		if (hovered && ImGui::IsMouseReleased(ImGuiMouseButton_Right))
+		if (hovered && InputManager::Get().IsMouseButtonUp(EMouseButton::Right))
 		{
 			int id = 0;
 			ImNodes::ClearNodeSelection();
@@ -100,7 +101,7 @@ void GraphPanel::DrawCanvas(float height)
 			if (ImNodes::IsNodeHovered(&id)) ImNodes::SelectNode(id);
 			else if (ImNodes::IsLinkHovered(&id)) ImNodes::SelectLink(id);
 			ReadSelection();
-			const auto mouse = ImGui::GetIO().MousePos;
+			const auto mouse = InputManager::Get().GetScreenMousePosition();
 			const auto pan = ImNodes::EditorContextGetPanning();
 			m_AddPosition = ImVec2(mouse.x - origin.x - pan.x, mouse.y - origin.y - pan.y);
 			PrepareNodeMenu();
@@ -303,21 +304,21 @@ void GraphPanel::HandleConnections(const ImVec2& origin, bool canvasHovered)
 		m_DragPin = 0;
 	}
 	int hovered = 0;
-	if (ImNodes::IsLinkDropped(&first, false) && ImGui::IsMouseReleased(ImGuiMouseButton_Left) &&
-		canvasHovered && !ImGui::IsKeyDown(ImGuiKey_Escape) &&
+	if (ImNodes::IsLinkDropped(&first, false) && InputManager::Get().IsMouseButtonUp(EMouseButton::Left) &&
+		canvasHovered && !InputManager::Get().IsKeyButtonPressed(EKeyCode::Escape) &&
 		!ImNodes::IsNodeHovered(&hovered) && !ImNodes::IsPinHovered(&hovered) && !ImNodes::IsLinkHovered(&hovered))
 	{
 		const auto source = document.Pins.find(first);
 		if (source != document.Pins.end())
 		{
-			const auto mouse = ImGui::GetIO().MousePos;
+			const auto mouse = InputManager::Get().GetScreenMousePosition();
 			const auto pan = ImNodes::EditorContextGetPanning();
 			m_AddPosition = ImVec2(mouse.x - origin.x - pan.x, mouse.y - origin.y - pan.y);
 			PrepareNodeMenu(source->second);
 			m_OpenNodePopup = true;
 		}
 	}
-	if (ImNodes::IsLinkDropped() || !ImGui::IsMouseDown(ImGuiMouseButton_Left)) m_DragPin = 0;
+	if (ImNodes::IsLinkDropped() || !InputManager::Get().IsMouseButtonPressed(EMouseButton::Left)) m_DragPin = 0;
 }
 
 void GraphPanel::ReadSelection()

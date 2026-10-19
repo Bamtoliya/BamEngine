@@ -10,7 +10,11 @@ target_link_libraries(UILayoutCheck PRIVATE BamEngine::Engine)
 add_executable(UIInteractionCheck examples/UIInteractionCheck.cpp)
 target_link_libraries(UIInteractionCheck PRIVATE BamEngine::Engine)
 
+add_executable(InputManagerCheck examples/InputManagerCheck.cpp)
+target_link_libraries(InputManagerCheck PRIVATE BamEngine::Engine)
+
 if(BUILD_TESTING)
+    add_test(NAME InputManagerCheck COMMAND InputManagerCheck)
     add_test(NAME UIInteractionCheck COMMAND UIInteractionCheck)
     add_test(NAME UILayoutCheck COMMAND UILayoutCheck)
     add_test(NAME SceneReflectionCheck COMMAND SceneReflectionCheck)

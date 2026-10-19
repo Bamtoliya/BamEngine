@@ -135,9 +135,9 @@ void Runtime::FixedUpdate(f32 dt)
 	SystemManager::Get().FixedUpdate(m_GlobalRegistry, SceneManager::Get().GetActiveScenes(), dt);
 	
 }
-void Runtime::Update(f32 dt)
+void Runtime::Update(f32 dt, bool updateInput)
 {
-	InputManager::Get().Update(dt);
+	if (updateInput) InputManager::Get().Update(dt);
 	AudioManager::Get().Update(dt);
 
 	SystemManager::Get().Update(m_GlobalRegistry, SceneManager::Get().GetActiveScenes(), dt);

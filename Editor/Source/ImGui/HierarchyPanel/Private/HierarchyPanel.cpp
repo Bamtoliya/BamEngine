@@ -1,4 +1,5 @@
 ﻿#pragma once
+#include "InputManager.h"
 
 #include "HierarchyPanel.h"
 #include "Application.h"
@@ -217,8 +218,8 @@ void HierarchyPanel::Draw()
             else ENGINE_LOG_ERROR("Failed to create scene: {}", ResultToString(result));
         }
     }
-    if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && ImGui::IsWindowHovered() &&
-        !ImGui::IsAnyItemHovered() && !ImGui::GetIO().KeyCtrl)
+    if (InputManager::Get().IsMouseButtonDown(EMouseButton::Left) && ImGui::IsWindowHovered() &&
+        !ImGui::IsAnyItemHovered() && !InputManager::Get().IsCtrlPressed())
         SelectionManager::Get().ClearSelection();
     ImGui::End();
 }

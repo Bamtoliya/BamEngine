@@ -1,4 +1,5 @@
 ﻿#pragma once
+#include "InputManager.h"
 
 #pragma region Third Library
 #include <fmt/core.h>
@@ -311,17 +312,17 @@ void ImGuiManager::Draw()
 	}
 	m_PendingRemovePanels.clear();
 	ImGui::ShowMetricsWindow();
-	if (!ImGui::IsAnyItemActive() && !ImGuizmo::IsUsing() && !ImGui::IsMouseDown(ImGuiMouseButton_Left))
+	if (!ImGui::IsAnyItemActive() && !ImGuizmo::IsUsing() && !InputManager::Get().IsMouseButtonPressed(EMouseButton::Left))
 	{
 		history.Flush();
 		const auto& io = ImGui::GetIO();
-		if (history.ShortcutsAllowed() && !io.WantTextInput && io.KeyCtrl && !io.KeyAlt)
+		if (history.ShortcutsAllowed() && !io.WantTextInput && InputManager::Get().IsCtrlPressed() && !InputManager::Get().IsAltPressed())
 		{
-			if (ImGui::IsKeyPressed(ImGuiKey_Z, false))
+			if (InputManager::Get().IsKeyButtonDown(EKeyCode::Z))
 			{
-				if (io.KeyShift) history.Redo(); else history.Undo();
+				if (InputManager::Get().IsShiftPressed()) history.Redo(); else history.Undo();
 			}
-			else if (ImGui::IsKeyPressed(ImGuiKey_Y, false)) history.Redo();
+			else if (InputManager::Get().IsKeyButtonDown(EKeyCode::Y)) history.Redo();
 		}
 	}
 }

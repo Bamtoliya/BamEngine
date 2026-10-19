@@ -1,4 +1,5 @@
 ﻿#include "UIViewportPanel.h"
+#include "InputManager.h"
 #include "Application.h"
 #include "SceneManager.h"
 #include "CoreComponents.h"
@@ -517,21 +518,21 @@ void Editor::UIViewportPanel::DrawSelection(ImDrawList* drawList)
 
 void Editor::UIViewportPanel::HandleInput(bool hovered)
 {
-    const auto mouse = Point(ImGui::GetMousePos());
+    const auto mouse = InputManager::Get().GetScreenMousePosition();
     auto& io = ImGui::GetIO();
-    if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Middle) && m_Drag.mode == DragMode::None) m_Panning = true;
-    if (!ImGui::IsMouseDown(ImGuiMouseButton_Middle) || !m_Focused) m_Panning = false;
+    if (hovered && InputManager::Get().IsMouseButtonDown(EMouseButton::Middle) && m_Drag.mode == DragMode::None) m_Panning = true;
+    if (!InputManager::Get().IsMouseButtonPressed(EMouseButton::Middle) || !m_Focused) m_Panning = false;
     if (m_Panning)
     {
         if (m_Interaction) m_Interaction->Cancel();
-        m_View.Pan(Point(io.MouseDelta));
+        m_View.Pan(InputManager::Get().GetMouseDelta());
     }
-    if (hovered && !m_Panning && m_Drag.mode == DragMode::None && io.MouseWheel != 0.0f)
+    if (hovered && !m_Panning && m_Drag.mode == DragMode::None && InputManager::Get().GetMouseScrollDeltaY() != 0.0f)
     {
         if (m_Interaction) m_Interaction->Cancel();
-        m_View.ZoomAt(mouse, std::pow(1.15f, io.MouseWheel));
+        m_View.ZoomAt(mouse, std::pow(1.15f, InputManager::Get().GetMouseScrollDeltaY()));
     }
-    if (hovered && ImGui::IsKeyPressed(ImGuiKey_F) && !io.WantTextInput && m_Drag.mode == DragMode::None)
+    if (hovered && InputManager::Get().IsKeyButtonDown(EKeyCode::F) && !io.WantTextInput && m_Drag.mode == DragMode::None)
     {
         if (m_Interaction) m_Interaction->Cancel();
         m_View.Fit(m_CanvasSize);
@@ -542,7 +543,7 @@ void Editor::UIViewportPanel::HandleInput(bool hovered)
     if (selection.IsPrimarySelectionLocked()) { m_Drag = {}; return; }
     auto& world = m_TargetScene->GetRegistry();
     const auto canvasPoint = m_View.ToCanvas(mouse);
-    if (m_Drag.mode == DragMode::None && hovered && !m_Panning && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+    if (m_Drag.mode == DragMode::None && hovered && !m_Panning && InputManager::Get().IsMouseButtonDown(EMouseButton::Left))
     {
         const UIElementLayout* hit = nullptr;
         bool resize = false;
@@ -562,7 +563,7 @@ void Editor::UIViewportPanel::HandleInput(bool hovered)
             }
         }
         auto* wrapper = hit ? m_TargetScene->FindEntity(hit->entity) : nullptr;
-        if (io.KeyCtrl)
+        if (InputManager::Get().IsCtrlPressed())
         {
             if (wrapper) selection.ToggleEntitySelection(wrapper);
             return;
@@ -586,16 +587,16 @@ void Editor::UIViewportPanel::HandleInput(bool hovered)
         m_Drag = {};
         return;
     }
-    if (ImGui::IsKeyPressed(ImGuiKey_Escape))
+    if (InputManager::Get().IsKeyButtonDown(EKeyCode::Escape))
     {
         m_PendingEdit = PendingEdit{ m_Drag.entity, m_Drag.id,
             world.get<RectTransformComponent>(m_Drag.entity), m_Drag.start };
         m_Drag = {};
         return;
     }
-    if (!ImGui::IsMouseDown(ImGuiMouseButton_Left)) { m_Drag = {}; return; }
-    if (!ImGui::IsMouseDragging(ImGuiMouseButton_Left, 3.0f)) return;
-    const float step = io.KeyAlt ? 0.0f : m_PixelSnap ? 1.0f : m_GridSnap ? m_GridStep : 0.0f;
+    if (!InputManager::Get().IsMouseButtonPressed(EMouseButton::Left)) { m_Drag = {}; return; }
+    if (!InputManager::Get().IsMouseButtonDragging(EMouseButton::Left, 3.0f)) return;
+    const float step = InputManager::Get().IsAltPressed() ? 0.0f : m_PixelSnap ? 1.0f : m_GridSnap ? m_GridStep : 0.0f;
     auto candidate = m_Drag.start;
     const auto delta = canvasPoint - m_Drag.mouseStart;
     const float parentDeterminant = glm::determinant(m_Drag.layout.parentTransform);
@@ -629,18 +630,18 @@ void Editor::UIViewportPanel::HandleInteraction(bool hovered)
 {
     m_InteractionUpdated = true;
     if (!m_Interaction) return;
-    if (!m_LayoutValid || !HasTarget() || m_Panning || ImGui::IsKeyPressed(ImGuiKey_Escape))
+    if (!m_LayoutValid || !HasTarget() || m_Panning || InputManager::Get().IsKeyButtonDown(EKeyCode::Escape))
     {
         m_Interaction->Cancel();
         return;
     }
     UIPointerInput input;
-    input.position = m_View.ToCanvas(Point(ImGui::GetMousePos()));
+    input.position = m_View.ToCanvas(InputManager::Get().GetScreenMousePosition());
     input.insideViewport = hovered;
     input.focused = m_Focused && !ImGui::GetIO().AppFocusLost;
-    input.held = ImGui::IsMouseDown(ImGuiMouseButton_Left);
-    input.down = ImGui::IsMouseClicked(ImGuiMouseButton_Left);
-    input.up = ImGui::IsMouseReleased(ImGuiMouseButton_Left);
+    input.held = InputManager::Get().IsMouseButtonPressed(EMouseButton::Left);
+    input.down = InputManager::Get().IsMouseButtonDown(EMouseButton::Left);
+    input.up = InputManager::Get().IsMouseButtonUp(EMouseButton::Left);
     m_Interaction->Update(input);
 }
 

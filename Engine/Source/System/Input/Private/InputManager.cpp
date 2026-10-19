@@ -22,6 +22,15 @@ void InputManager::Update(f32 dt)
 	m_CurrentTime += dt;
 	m_PreviousKeyStates = m_CurrentKeyStates;
 	m_PreviousMouseButtonStates = m_CurrentMouseButtonStates;
+	// Preserve taps that begin and end between two frame snapshots.
+	m_KeyDownEvents = m_PendingKeyDown;
+	m_KeyUpEvents = m_PendingKeyUp;
+	m_MouseDownEvents = m_PendingMouseDown;
+	m_MouseUpEvents = m_PendingMouseUp;
+	m_PendingKeyDown.fill(false);
+	m_PendingKeyUp.fill(false);
+	m_PendingMouseDown.fill(false);
+	m_PendingMouseUp.fill(false);
 
 	int32 sdlNumKeys;
 	const bool* sdlKeyStates = SDL_GetKeyboardState(&sdlNumKeys);
@@ -44,8 +53,10 @@ void InputManager::Update(f32 dt)
 	f32 mouseX, mouseY;
 	uint32 mouseMask = SDL_GetMouseState(&mouseX, &mouseY);
 	vec2 newMousePosition = vec2(mouseX, mouseY);
+	vec2 screenMousePosition;
+	SDL_GetGlobalMouseState(&screenMousePosition.x, &screenMousePosition.y);
 
-	for (uint32 i = 1; i < static_cast<uint32>(EMouseButton::Count); ++i)
+	for (uint32 i = 1; i <= static_cast<uint32>(EMouseButton::Count); ++i)
 	{
 		EMouseButton engineButton = SDLButtonToEngineMouseButton(i);
 		if (engineButton != EMouseButton::Count)
@@ -59,8 +70,8 @@ void InputManager::Update(f32 dt)
 	{
 		m_CurrentDoubleClicks[i] = false; // 매 프레임 초기화
 
-		bool isDownNow = m_CurrentMouseButtonStates[i] && !m_PreviousMouseButtonStates[i];
-		bool isUpNow = !m_CurrentMouseButtonStates[i] && m_PreviousMouseButtonStates[i];
+		bool isDownNow = IsMouseButtonDown(static_cast<EMouseButton>(i));
+		bool isUpNow = IsMouseButtonUp(static_cast<EMouseButton>(i));
 		bool isPressed = m_CurrentMouseButtonStates[i];
 
 		if (isDownNow)
@@ -78,16 +89,20 @@ void InputManager::Update(f32 dt)
 			}
 
 			// 눌린 위치 기록 (드래그 기준점)
-			m_MouseButtonStatesData[i].DownPosition = newMousePosition;
+			m_MouseButtonStatesData[i].DownPosition = screenMousePosition;
+			m_MouseButtonStatesData[i].MaxDragDistance = 0.0f;
+			m_MouseButtonStatesData[i].IsDragging = false;
 		}
 
 		// [드래그 체크]
 		if (isPressed)
 		{
+			m_MouseButtonStatesData[i].MaxDragDistance = std::max(m_MouseButtonStatesData[i].MaxDragDistance,
+				glm::distance(screenMousePosition, m_MouseButtonStatesData[i].DownPosition));
 			if (!m_MouseButtonStatesData[i].IsDragging)
 			{
 				// 누른 위치로부터 임계값 이상 멀어졌다면 드래그 시작
-				if (glm::distance(newMousePosition, m_MouseButtonStatesData[i].DownPosition) >= m_DragThreshold)
+				if (m_MouseButtonStatesData[i].MaxDragDistance >= m_DragThreshold)
 				{
 					m_MouseButtonStatesData[i].IsDragging = true;
 				}
@@ -100,7 +115,10 @@ void InputManager::Update(f32 dt)
 		}
 	}
 
-	m_MouseDelta = newMousePosition - m_MousePosition;
+	m_MouseDelta = screenMousePosition - m_ScreenMousePosition;
+	if (SDL_Window* window = SDL_GetMouseFocus(); window && SDL_GetWindowRelativeMouseMode(window))
+		SDL_GetRelativeMouseState(&m_MouseDelta.x, &m_MouseDelta.y);
+	m_ScreenMousePosition = screenMousePosition;
 	m_MousePosition = newMousePosition;
 	m_MouseScrollDelta = m_AccmulatedMouseScrollDelta;
 	m_AccmulatedMouseScrollDelta = vec2(0.f);
@@ -115,7 +133,7 @@ bool InputManager::IsKeyButtonDown(EKeyCode key)
 	{
 		return false;
 	}
-	return m_CurrentKeyStates[keyIndex] && !m_PreviousKeyStates[keyIndex];
+	return m_KeyDownEvents[keyIndex] || (m_CurrentKeyStates[keyIndex] && !m_PreviousKeyStates[keyIndex]);
 }
 bool InputManager::IsKeyButtonUp(EKeyCode key)
 {
@@ -124,7 +142,7 @@ bool InputManager::IsKeyButtonUp(EKeyCode key)
 	{
 		return false;
 	}
-	return !m_CurrentKeyStates[keyIndex] && m_PreviousKeyStates[keyIndex];
+	return m_KeyUpEvents[keyIndex] || (!m_CurrentKeyStates[keyIndex] && m_PreviousKeyStates[keyIndex]);
 }
 bool InputManager::IsKeyButtonPressed(EKeyCode key)
 {
@@ -138,32 +156,17 @@ bool InputManager::IsKeyButtonPressed(EKeyCode key)
 
 bool InputManager::IsKeyButtonDown(const string& key)
 {
-	uint32 keyIndex = static_cast<uint32>(StringToEngineKeyCode(key));
-	if (keyIndex >= SDL_SCANCODE_COUNT)
-	{
-		return false;
-	}
-	return m_CurrentKeyStates[keyIndex] && !m_PreviousKeyStates[keyIndex];
+	return IsKeyButtonDown(StringToEngineKeyCode(key));
 }
 
 bool InputManager::IsKeyButtonUp(const string& key)
 {
-	uint32 keyIndex = static_cast<uint32>(StringToEngineKeyCode(key));
-	if (keyIndex >= SDL_SCANCODE_COUNT)
-	{
-		return false;
-	}
-	return !m_CurrentKeyStates[keyIndex] && m_PreviousKeyStates[keyIndex];
+	return IsKeyButtonUp(StringToEngineKeyCode(key));
 }
 
 bool InputManager::IsKeyButtonPressed(const string& key)
 {
-	uint32 keyIndex = static_cast<uint32>(StringToEngineKeyCode(key));
-	if (keyIndex >= SDL_SCANCODE_COUNT)
-	{
-		return false;
-	}
-	return m_CurrentKeyStates[keyIndex];
+	return IsKeyButtonPressed(StringToEngineKeyCode(key));
 }
 
 #pragma endregion
@@ -176,7 +179,7 @@ bool InputManager::IsMouseButtonDown(EMouseButton button)
 	{
 		return false;
 	}
-	return m_CurrentMouseButtonStates[buttonIndex] && !m_PreviousMouseButtonStates[buttonIndex];
+	return m_MouseDownEvents[buttonIndex] || (m_CurrentMouseButtonStates[buttonIndex] && !m_PreviousMouseButtonStates[buttonIndex]);
 }
 bool InputManager::IsMouseButtonUp(EMouseButton button)
 {
@@ -185,7 +188,7 @@ bool InputManager::IsMouseButtonUp(EMouseButton button)
 	{
 		return false;
 	}
-	return !m_CurrentMouseButtonStates[buttonIndex] && m_PreviousMouseButtonStates[buttonIndex];
+	return m_MouseUpEvents[buttonIndex] || (!m_CurrentMouseButtonStates[buttonIndex] && m_PreviousMouseButtonStates[buttonIndex]);
 }
 bool InputManager::IsMouseButtonPressed(EMouseButton button)
 {
@@ -202,11 +205,13 @@ bool InputManager::IsMouseButtonDoubleClicked(EMouseButton button)
 	if (buttonIndex >= static_cast<uint32>(EMouseButton::Count)) return false;
 	return m_CurrentDoubleClicks[buttonIndex];
 }
-bool InputManager::IsMouseButtonDragging(EMouseButton button)
+bool InputManager::IsMouseButtonDragging(EMouseButton button, f32 threshold)
 {
 	uint32 buttonIndex = static_cast<uint32>(button);
 	if (buttonIndex >= static_cast<uint32>(EMouseButton::Count)) return false;
-	return m_MouseButtonStatesData[buttonIndex].IsDragging;
+	if (!m_CurrentMouseButtonStates[buttonIndex]) return false;
+	if (threshold == m_DragThreshold) return m_MouseButtonStatesData[buttonIndex].IsDragging;
+	return m_MouseButtonStatesData[buttonIndex].MaxDragDistance >= threshold;
 }
 bool InputManager::IsMouseButtonDown(const string& key)
 {
@@ -230,6 +235,26 @@ bool InputManager::IsMouseButtonDragging(const string& key)
 }
 void InputManager::ProcessEvent(const SDL_Event& event)
 {
+	if (event.type == SDL_EVENT_KEY_DOWN || event.type == SDL_EVENT_KEY_UP)
+	{
+		const auto key = SDLKeyToEngineKeyCode(event.key.scancode);
+		if (key != EKeyCode::Unknown && !event.key.repeat)
+		{
+			const auto index = static_cast<uint32>(key);
+			if (event.type == SDL_EVENT_KEY_DOWN) m_PendingKeyDown[index] = true;
+			else m_PendingKeyUp[index] = true;
+		}
+	}
+	else if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN || event.type == SDL_EVENT_MOUSE_BUTTON_UP)
+	{
+		const auto button = SDLButtonToEngineMouseButton(event.button.button);
+		if (button != EMouseButton::Count)
+		{
+			const auto index = static_cast<uint32>(button);
+			if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN) m_PendingMouseDown[index] = true;
+			else m_PendingMouseUp[index] = true;
+		}
+	}
 	if (event.type == SDL_EVENT_MOUSE_WHEEL)
 	{
 		m_AccmulatedMouseScrollDelta.x += static_cast<f32>(event.wheel.x);

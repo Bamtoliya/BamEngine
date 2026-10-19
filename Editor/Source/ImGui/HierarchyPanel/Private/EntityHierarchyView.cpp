@@ -1,4 +1,5 @@
 ﻿#include "EntityHierarchyView.h"
+#include "InputManager.h"
 #include "Scene.h"
 #include "CoreComponents.h"
 #include "RenderComponents.h"
@@ -242,7 +243,7 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
             if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen() && !locked)
             {
                 action.Clicked = entity;
-                action.Toggle = ImGui::GetIO().KeyCtrl;
+                action.Toggle = Engine::InputManager::Get().IsCtrlPressed();
             }
             if (entity == reveal) ImGui::SetScrollHereY();
             if (tree.Invalid.contains(entity) && ImGui::IsItemHovered())

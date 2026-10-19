@@ -1,4 +1,5 @@
 ﻿#pragma once
+#include "InputManager.h"
 #include "ContentBrowserPanel.h"
 #include "ContentBrowserGridItem.h"
 #include "ContentBrowserTreeItem.h"
@@ -282,9 +283,9 @@ void ContentBrowserPanel::DrawDirectoryGrid()
 
 	if (ImGui::BeginChild("GridArea", ImVec2(0, 0), false))
 	{
-		if (ImGui::IsWindowHovered() && ImGui::GetIO().KeyCtrl)
+		if (ImGui::IsWindowHovered() && InputManager::Get().IsCtrlPressed())
 		{
-			float wheel = ImGui::GetIO().MouseWheel;
+			float wheel = InputManager::Get().GetMouseScrollDeltaY();
 			if (wheel != 0.0f)
 			{
 				m_ThumbnailSize += wheel * 10.0f; // 스크롤 민감도

@@ -4,6 +4,7 @@
 #include "CoreComponents.h"
 #include "TransformSystem.h"
 #include "LocalizationManager.h"
+#include "InputManager.h"
 #include <archive/JsonArchive.h>
 #include <imgui.h>
 #include <iostream>
@@ -259,9 +260,11 @@ namespace
 
 int main()
 {
-    if (!Engine::LocalizationManager::Create() || !Engine::ReflectionRegistry::Create()) return 1;
+    if (!Engine::LocalizationManager::Create() || !Engine::ReflectionRegistry::Create() ||
+        !Engine::InputManager::Create()) return 1;
     const bool passed = CheckMoves() && CheckInvalidAndDepth() && CheckTree() && CheckTreeInput();
     Engine::ReflectionRegistry::Destroy();
     Engine::LocalizationManager::Destroy();
+    Engine::InputManager::Destroy();
     return passed ? 0 : 1;
 }
