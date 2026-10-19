@@ -340,6 +340,7 @@ bool ReflectionRegistry::RegisterComponentOperations()
         "Collider 2D", "Physics 2D", &AddSpatialComponent<Collider2DComponent>);
     append.template operator()<Joint2DComponent>("Joint 2D", "Physics 2D", &AddSpatialComponent<Joint2DComponent>);
     append.template operator()<SkyAtmosphereComponent>("Sky Atmosphere", "Rendering", &AddSpatialComponent<SkyAtmosphereComponent>);
+    append.template operator()<TerrainComponent>("Terrain", "Rendering", &AddSpatialComponent<TerrainComponent>);
 
     const bool generated = reflection_generated::ForEach_BamEngine_Type([&]<typename T>()
     {

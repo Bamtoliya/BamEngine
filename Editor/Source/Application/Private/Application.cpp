@@ -12,6 +12,7 @@
 #include "PIEManager.h"
 #include "HotReloadManager.h"
 #include "ShaderHotReloadManager.h"
+#include "TerrainUtility.h"
 
 BEGIN(Editor)
 
@@ -291,6 +292,8 @@ EResult Application::InitializeSystem()
     if (!systemManager.AddSystem<UIRenderSystem>())
         return EResult::Fail;
     if (!systemManager.AddSystem<AudioSystem>())
+        return EResult::Fail;
+    if (!systemManager.AddSystem<TerrainSystem>())
         return EResult::Fail;
     return EResult::Success;
 }
@@ -870,6 +873,12 @@ void Application::InitializeMeshes()
         resourceManager.AddResource<Mesh>(L"SphereMesh", Mesh::Create(&sphereDesc));
     }
 #pragma endregion
+
+#pragma region Terrain
+    Mesh* gridMesh = TerrainUtility::CreateGridMesh(128.0f, 128.0f, 128);
+    ResourceManager::Get().AddResource<Mesh>(L"TerrainGridMesh", gridMesh);
+#pragma endregion
+
 }
 
 void Application::InitializeMaterials()

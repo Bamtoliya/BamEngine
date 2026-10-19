@@ -60,6 +60,8 @@ namespace
             return { ICON_FA_IMAGE, ImVec4(0.45f, 0.9f, 0.5f, 1.0f) }; // 녹색 (2D 스프라이트)
         if (world.all_of<Engine::CanvasComponent>(entity) || world.all_of<Engine::RectTransformComponent>(entity))
             return { ICON_FA_WINDOW_MAXIMIZE, ImVec4(0.85f, 0.55f, 1.0f, 1.0f) }; // 보라색 (UI 요소)
+        if (world.all_of<Engine::TerrainComponent>(entity))
+            return { ICON_FA_MOUNTAIN, ImVec4(0.35f, 0.85f, 0.45f, 1.0f) }; // 연두색 (터레인/지형)
         if (hasChildren)
             return { ICON_FA_FOLDER, ImVec4(0.92f, 0.82f, 0.55f, 1.0f) }; // 따뜻한 베이지 (폴더/그룹)
 
