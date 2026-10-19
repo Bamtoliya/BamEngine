@@ -71,11 +71,15 @@ EResult LightManager::UpdateLightBuffer()
 	// ECS Scene의 LightComponent 수집
 	if (SceneManager::IsCreated())
 	{
+		m_ShadowCameraBuffers.clear();
+		m_ShadowData.clear();
+		m_HasSpotShadow = false;
+		m_SpotShadowParams = vec4(0.0f);
 		for (Scene* scene : SceneManager::Get().GetActiveScenes())
 		{
 			if (!scene) continue;
 			auto view = scene->GetRegistry().view<LightComponent>();
-			for (auto entity : view)
+			for (const auto entity : view)
 			{
 				if (currentLightIndex >= MAX_LIGHTS) break;
 				const auto& light = view.get<LightComponent>(entity);
@@ -83,13 +87,29 @@ EResult LightManager::UpdateLightBuffer()
 				{
 					gpuLights[currentLightIndex++] = optGpuLight.value();
 				}
-				if (auto optShadowCam = light.GetShadowCameraBuffer())
+				if (light.LightType == ELightType::Directional)
 				{
-					m_ShadowCameraBuffers.push_back(optShadowCam.value());
+					if (auto optShadowData = light.GetShadowData())
+					{
+						std::array<CameraBuffer, MAX_SHADOW_CASCADES> cascadeCams{};
+						for (uint32 c = 0; c < MAX_SHADOW_CASCADES; ++c)
+						{
+							if (auto optShadowCam = light.GetShadowCameraBuffer(c))
+								cascadeCams[c] = optShadowCam.value();
+						}
+						m_ShadowCameraBuffers.push_back(cascadeCams);
+						m_ShadowData.push_back(optShadowData.value());
+					}
 				}
-				if (auto optShadowData = light.GetShadowData())
+				else if (light.LightType == ELightType::Spot && !m_HasSpotShadow && HasFlag(light.Flags, ELightFlags::CastShadows))
 				{
-					m_ShadowData.push_back(optShadowData.value());
+					if (auto optCam = light.GetShadowCameraBuffer(0))
+					{
+						m_SpotShadowCameraBuffer = optCam.value();
+						m_SpotShadowViewProj = optCam.value().viewProjMatrix;
+						m_SpotShadowParams = light.GetShadowParams();
+						m_HasSpotShadow = true;
+					}
 				}
 			}
 		}
@@ -119,18 +139,21 @@ EResult LightManager::EnsureBuffer()
 
 	return EResult::Success;
 }
-CameraBuffer LightManager::GetShadowCameraBuffer(uint32 shadowLightIndex) const
+CameraBuffer LightManager::GetShadowCameraBuffer(uint32 cascadeIndex, uint32 lightIndex) const
 {
-	if (shadowLightIndex < m_ShadowCameraBuffers.size())
-	{
-		return m_ShadowCameraBuffers[shadowLightIndex];
-	}
+	if (lightIndex < m_ShadowCameraBuffers.size() && cascadeIndex < MAX_SHADOW_CASCADES)
+		return m_ShadowCameraBuffers[lightIndex][cascadeIndex];
+	return CameraBuffer{};
 }
-LightShadowData LightManager::GetShadowData(uint32 shadowLightIndex) const
+
+LightShadowData LightManager::GetShadowData(uint32 lightIndex) const
 {
-	if (shadowLightIndex < m_ShadowData.size())
-	{
-		return m_ShadowData[shadowLightIndex];
-	}
+	LightShadowData data{};
+	if (lightIndex < m_ShadowData.size())
+		data = m_ShadowData[lightIndex];
+
+	data.SpotViewProjMatrix = m_SpotShadowViewProj;
+	data.SpotShadowParams = m_SpotShadowParams;
+	return data;
 }
 #pragma endregion

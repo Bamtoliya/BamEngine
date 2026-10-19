@@ -42,9 +42,11 @@ private:
 
 #pragma region Shadow
 public:
-	bool HasShadowCastingLights() const { return !m_ShadowCameraBuffers.empty(); }
-	CameraBuffer GetShadowCameraBuffer(uint32 shadowLightIndex = 0) const;
-	LightShadowData GetShadowData(uint32 shadowLightIndex = 0) const;
+	bool HasShadowCastingLights() const { return !m_ShadowCameraBuffers.empty() || m_HasSpotShadow; }
+	bool HasSpotShadow() const { return m_HasSpotShadow; }
+	CameraBuffer GetShadowCameraBuffer(uint32 cascadeIndex = 0, uint32 lightIndex = 0) const;
+	CameraBuffer GetSpotShadowCameraBuffer() const { return m_SpotShadowCameraBuffer; }
+	LightShadowData GetShadowData(uint32 lightIndex = 0) const;
 #pragma endregion
 
 #pragma region Member Variables
@@ -52,8 +54,13 @@ private:
 	class RHIBuffer* m_LightBuffer = { nullptr };
 	uint32 m_LightCount = { 0 };
 	bool m_BufferDirty = { false };
-	vector<CameraBuffer> m_ShadowCameraBuffers;
+	vector<std::array<CameraBuffer, MAX_SHADOW_CASCADES>> m_ShadowCameraBuffers;
 	vector<LightShadowData> m_ShadowData;
+
+	CameraBuffer m_SpotShadowCameraBuffer{};
+	mat4 m_SpotShadowViewProj{ 1.0f };
+	vec4 m_SpotShadowParams{ 0.0f };
+	bool m_HasSpotShadow = false;
 private:
 	RHI* m_RHI = { nullptr };
 #pragma endregion

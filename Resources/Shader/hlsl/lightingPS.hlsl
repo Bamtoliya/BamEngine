@@ -12,11 +12,17 @@ struct PS_INPUT
 
 struct ShadowData
 {
-	float4x4 LightViewProjection;
+	float4x4 LightViewProjections[3];
+	float4 CascadeSplits;
 	float BaseBias;
 	float SlopeBias;
 	float NormalBias;
 	float _pad;
+	float4x4 SpotViewProjection;
+	float SpotBaseBias;
+	float SpotSlopeBias;
+	float SpotNormalBias;
+	float HasSpotShadow;
 };
 
 struct LightingPassData
@@ -138,7 +144,7 @@ float InterleavedGradientNoise(float2 screenPos)
 	return frac(magic.z * frac(dot(screenPos, magic.xy)));
 }
 
-bool FindBlocker(float3 projCoord, float depthBias, float2 searchRadius, float2x2 rot, out float avgBlockerDepth)
+bool FindBlocker(float3 projCoord, float depthBias, float2 searchRadius, float2x2 rot, float2 minUV, float2 maxUV, out float avgBlockerDepth)
 {
 	int blockerCount = 0;
 	float blockerDepthSum = 0.0f;
@@ -147,7 +153,8 @@ bool FindBlocker(float3 projCoord, float depthBias, float2 searchRadius, float2x
 	for (int i = 0; i < 8; ++i)
 	{
 		float2 offset = mul(rot, VOGEL_DISK_16[i * 2]) * searchRadius;
-		float sampleDepth = gShadowDepth.SampleLevel(gBufferSampler, projCoord.xy + offset, 0).r;
+		float2 sampleUV = clamp(projCoord.xy + offset, minUV, maxUV);
+		float sampleDepth = gShadowDepth.SampleLevel(gBufferSampler, sampleUV, 0).r;
 		if (sampleDepth < projCoord.z - depthBias)
 		{
 			blockerDepthSum += sampleDepth;
@@ -165,6 +172,92 @@ bool FindBlocker(float3 projCoord, float depthBias, float2 searchRadius, float2x
 	return true;
 }
 
+// ── 캐스케이드 디버그 시각화 매크로 (1로 설정 시 영역별 RGB 틴트 출력) ──
+#define DEBUG_CASCADE_COLORS 0
+
+// 단일 캐스케이드에 대한 PCSS + Vogel Disk 16-Tap 샘플링
+float EvaluateCascadeShadow(uint cascadeIndex, float3 biasedWorldPos, float depthBias, float2 screenPos, float2x2 rot, float2 texelSize)
+{
+	float4 lightClip = mul(gLightingData.Shadow.LightViewProjections[cascadeIndex], float4(biasedWorldPos, 1.0f));
+	float3 projection = lightClip.xyz / max(lightClip.w, 0.0001f);
+	projection.xy = projection.xy * 0.5f + 0.5f;
+	projection.y = 1.0f - projection.y;
+
+	if (projection.x < 0.0f || projection.x > 1.0f || projection.y < 0.0f || projection.y > 1.0f || projection.z > 1.0f)
+	{
+		return 1.0f;
+	}
+
+	float2 atlasOffset = float2((cascadeIndex % 2) * 0.5f, (cascadeIndex / 2) * 0.5f);
+	float2 atlasUV = projection.xy * 0.5f + atlasOffset;
+	float3 atlasProj = float3(atlasUV, projection.z);
+
+	float2 minUV = atlasOffset + texelSize * 1.5f;
+	float2 maxUV = atlasOffset + 0.5f - texelSize * 1.5f;
+
+	const float lightSizeUV = 0.0175f;
+	float2 searchRadius = texelSize * 8.0f;
+	float avgBlockerDepth = 0.0f;
+
+	if (!FindBlocker(atlasProj, depthBias, searchRadius, rot, minUV, maxUV, avgBlockerDepth))
+	{
+		return 1.0f;
+	}
+
+	float penumbraRatio = saturate((projection.z - avgBlockerDepth) / max(avgBlockerDepth, 0.0001f));
+	float filterRadiusScale = clamp(penumbraRatio * lightSizeUV, texelSize.x * 1.2f, texelSize.x * 8.0f);
+	float2 filterRadius = float2(filterRadiusScale, filterRadiusScale);
+
+	float visibility = 0.0f;
+	for (int i = 0; i < 16; ++i)
+	{
+		float2 sampleOffset = mul(rot, VOGEL_DISK_16[i]) * filterRadius;
+		float2 sampleUV = clamp(atlasProj.xy + sampleOffset, minUV, maxUV);
+		float closestDepth = gShadowDepth.Sample(gBufferSampler, sampleUV).r;
+		visibility += (projection.z - depthBias <= closestDepth) ? 1.0f : 0.0f;
+	}
+
+	return visibility / 16.0f;
+}
+
+float3 GetCascadeDebugColor(float3 worldPosition)
+{
+	float viewDepth = mul(commonData.View, float4(worldPosition, 1.0f)).z;
+	if (viewDepth > gLightingData.Shadow.CascadeSplits.z)
+		return float3(1.0f, 1.0f, 1.0f);
+
+	const float3 colors[3] = {
+		float3(1.0f, 0.3f, 0.3f), // Cascade 0: 빨강
+		float3(0.3f, 1.0f, 0.3f), // Cascade 1: 초록
+		float3(0.3f, 0.5f, 1.0f)  // Cascade 2: 파랑
+	};
+
+	const float blendBandRatio = 0.15f;
+	uint primaryCascade = 0;
+	float splitDist = gLightingData.Shadow.CascadeSplits.x;
+
+	if (viewDepth > gLightingData.Shadow.CascadeSplits.y)
+	{
+		primaryCascade = 2;
+		splitDist = gLightingData.Shadow.CascadeSplits.z;
+	}
+	else if (viewDepth > gLightingData.Shadow.CascadeSplits.x)
+	{
+		primaryCascade = 1;
+		splitDist = gLightingData.Shadow.CascadeSplits.y;
+	}
+
+	float3 color = colors[primaryCascade];
+	float blendStart = splitDist * (1.0f - blendBandRatio);
+
+	if (primaryCascade < 2 && viewDepth > blendStart)
+	{
+		float blendFactor = saturate((viewDepth - blendStart) / (splitDist - blendStart));
+		color = lerp(color, colors[primaryCascade + 1], blendFactor);
+	}
+	return color;
+}
+
 float CalcShadowFactor(Light light, float3 worldPosition, float3 normal, float2 screenPos)
 {
 	if (!HasLightFlag(light.PackedFlags, LIGHT_FLAG_CAST_SHADOWS) ||
@@ -179,14 +272,11 @@ float CalcShadowFactor(Light light, float3 worldPosition, float3 normal, float2 
 	float depthBias = gLightingData.Shadow.BaseBias + gLightingData.Shadow.SlopeBias * sinTheta;
 	float3 biasedWorldPosition = worldPosition + normal * gLightingData.Shadow.NormalBias;
 
-	float4 lightClip = mul(gLightingData.Shadow.LightViewProjection, float4(biasedWorldPosition, 1.0f));
-	float3 projection = lightClip.xyz / max(lightClip.w, 0.0001f);
-	projection.xy = projection.xy * 0.5f + 0.5f;
-	projection.y = 1.0f - projection.y;
-
-	if (projection.x < 0.0f || projection.x > 1.0f || projection.y < 0.0f || projection.y > 1.0f || projection.z > 1.0f)
+	// 카메라 뷰 공간 깊이(View Z)를 기준으로 캐스케이드 선택
+	float viewDepth = mul(commonData.View, float4(worldPosition, 1.0f)).z;
+	if (viewDepth > gLightingData.Shadow.CascadeSplits.z)
 	{
-		return 1.0f;
+		return 1.0f; // 최대 그림자 거리 초과 시 그림자 생략
 	}
 
 	uint shadowWidth;
@@ -194,33 +284,113 @@ float CalcShadowFactor(Light light, float3 worldPosition, float3 normal, float2 
 	gShadowDepth.GetDimensions(shadowWidth, shadowHeight);
 	float2 texelSize = 1.0f / float2(shadowWidth, shadowHeight);
 
+	float randomAngle = InterleavedGradientNoise(screenPos) * 6.2831853f;
+	float sinA, cosA;
+	sincos(randomAngle, sinA, cosA);
+	float2x2 rot = float2x2(cosA, -sinA, sinA, cosA);
+
+	// 주 캐스케이드 및 전환 경계선 계산
+	const float blendBandRatio = 0.15f; // 경계선 직전 15% 구간에서 블렌딩
+	uint primaryCascade = 0;
+	float splitDist = gLightingData.Shadow.CascadeSplits.x;
+
+	if (viewDepth > gLightingData.Shadow.CascadeSplits.y)
+	{
+		primaryCascade = 2;
+		splitDist = gLightingData.Shadow.CascadeSplits.z;
+	}
+	else if (viewDepth > gLightingData.Shadow.CascadeSplits.x)
+	{
+		primaryCascade = 1;
+		splitDist = gLightingData.Shadow.CascadeSplits.y;
+	}
+
+	float blendStart = splitDist * (1.0f - blendBandRatio);
+	float shadow = EvaluateCascadeShadow(primaryCascade, biasedWorldPosition, depthBias, screenPos, rot, texelSize);
+
+	// 1) 다음 캐스케이드와의 경계선 블렌딩 (Cascade 0 -> 1, Cascade 1 -> 2)
+	if (primaryCascade < 2 && viewDepth > blendStart)
+	{
+		float blendFactor = saturate((viewDepth - blendStart) / (splitDist - blendStart));
+		float nextShadow = EvaluateCascadeShadow(primaryCascade + 1, biasedWorldPosition, depthBias, screenPos, rot, texelSize);
+		shadow = lerp(shadow, nextShadow, blendFactor);
+	}
+	// 2) 마지막 캐스케이드(원거리)에서의 최대 거리 페이드아웃 (Fade-out to Light)
+	else if (primaryCascade == 2 && viewDepth > blendStart)
+	{
+		float fadeFactor = saturate((splitDist - viewDepth) / (splitDist - blendStart));
+		shadow = lerp(1.0f, shadow, fadeFactor);
+	}
+
+	return shadow;
+}
+
+float CalcSpotShadowFactor(Light light, float3 worldPosition, float3 normal, float2 screenPos)
+{
+	if (!HasLightFlag(light.PackedFlags, LIGHT_FLAG_CAST_SHADOWS) ||
+		GetLightType(light.PackedFlags) != LIGHT_TYPE_SPOT ||
+		gLightingData.Shadow.HasSpotShadow < 0.5f)
+	{
+		return 1.0f;
+	}
+
+	float3 toLight = light.Position - worldPosition;
+	float distToLight = length(toLight);
+	if (distToLight > light.Range || distToLight <= 0.001f)
+	{
+		return 1.0f;
+	}
+
+	float3 lightDirection = toLight / distToLight;
+	float cosTheta = saturate(dot(normal, lightDirection));
+	float sinTheta = sqrt(max(1.0f - cosTheta * cosTheta, 0.0f));
+	float depthBias = gLightingData.Shadow.SpotBaseBias + gLightingData.Shadow.SpotSlopeBias * sinTheta;
+	float3 biasedWorldPosition = worldPosition + normal * gLightingData.Shadow.SpotNormalBias;
+
+	// 스팟 라이트 원근 클립 공간 변환
+	float4 lightClip = mul(gLightingData.Shadow.SpotViewProjection, float4(biasedWorldPosition, 1.0f));
+	if (lightClip.w <= 0.001f)
+	{
+		return 1.0f; // 광원 뒤쪽
+	}
+
+	float3 projection = lightClip.xyz / lightClip.w;
+	projection.xy = projection.xy * 0.5f + 0.5f;
+	projection.y = 1.0f - projection.y;
+
+	// 원근 투영 절두체(Frustum) 경계 검사
+	if (projection.x < 0.0f || projection.x > 1.0f || projection.y < 0.0f || projection.y > 1.0f || projection.z < 0.0f || projection.z > 1.0f)
+	{
+		return 1.0f;
+	}
+
+	uint shadowWidth, shadowHeight;
+	gShadowDepth.GetDimensions(shadowWidth, shadowHeight);
+	float2 texelSize = 1.0f / float2(shadowWidth, shadowHeight);
+
+	// 우하단 사분면 (0.5, 0.5) 아틀라스 매핑
+	float2 atlasOffset = float2(0.5f, 0.5f);
+	float2 atlasUV = projection.xy * 0.5f + atlasOffset;
+	float3 atlasProj = float3(atlasUV, projection.z);
+
+	// 아틀라스 우하단 사분면 경계 클램핑 (사분면 침범 방지)
+	float2 minUV = atlasOffset + texelSize * 1.5f;
+	float2 maxUV = float2(1.0f, 1.0f) - texelSize * 1.5f;
+
 	// 픽셀별 무작위 회전각 계산
 	float randomAngle = InterleavedGradientNoise(screenPos) * 6.2831853f;
 	float sinA, cosA;
 	sincos(randomAngle, sinA, cosA);
 	float2x2 rot = float2x2(cosA, -sinA, sinA, cosA);
 
-	// [PCSS 1단계: Blocker Search]
-	const float lightSizeUV = 0.035f; // 광원의 겉보기 크기 (반그림자 확산 계수)
-	float2 searchRadius = texelSize * 8.0f;
-	float avgBlockerDepth = 0.0f;
-
-	if (!FindBlocker(projection, depthBias, searchRadius, rot, avgBlockerDepth))
-	{
-		return 1.0f; // 차폐물이 전혀 없음 -> 즉각 조기 종료 (GPU 절약)
-	}
-
-	// [PCSS 2단계: Penumbra Estimation (차폐물-수광부 거리에 따른 반경 결정)]
-	float penumbraRatio = saturate((projection.z - avgBlockerDepth) / max(avgBlockerDepth, 0.0001f));
-	float filterRadiusScale = clamp(penumbraRatio * lightSizeUV, texelSize.x * 1.2f, texelSize.x * 10.0f);
-	float2 filterRadius = float2(filterRadiusScale, filterRadiusScale);
-
-	// [PCSS 3단계: Filtering (거리 맞춤형 16-Tap Vogel Disk PCF)]
+	// 16-Tap Vogel Disk PCF 필터링
+	float2 filterRadius = texelSize * 2.5f;
 	float visibility = 0.0f;
 	for (int i = 0; i < 16; ++i)
 	{
 		float2 sampleOffset = mul(rot, VOGEL_DISK_16[i]) * filterRadius;
-		float closestDepth = gShadowDepth.Sample(gBufferSampler, projection.xy + sampleOffset).r;
+		float2 sampleUV = clamp(atlasProj.xy + sampleOffset, minUV, maxUV);
+		float closestDepth = gShadowDepth.Sample(gBufferSampler, sampleUV).r;
 		visibility += (projection.z - depthBias <= closestDepth) ? 1.0f : 0.0f;
 	}
 
@@ -420,7 +590,7 @@ float4 main(PS_INPUT input) : SV_TARGET
             continue;
         }
 
-		        float shadowFactor = 1.0f;
+		float shadowFactor = 1.0f;
         if (receiveShadow && !consumedShadowMap && lightType == LIGHT_TYPE_DIRECTIONAL && HasLightFlag(light.PackedFlags, LIGHT_FLAG_CAST_SHADOWS))
         {
             float3 lightDir = normalize(-light.Direction);
@@ -429,10 +599,15 @@ float4 main(PS_INPUT input) : SV_TARGET
             shadowFactor = min(mainShadow, contactShadow);
             consumedShadowMap = true;
         }
-		if (receiveShadow && lightIndex == cloudSunLightIndex)
-		{
-			shadowFactor *= CalcCloudShadowFactor(worldPosition);
-		}
+        else if (receiveShadow && lightType == LIGHT_TYPE_SPOT && HasLightFlag(light.PackedFlags, LIGHT_FLAG_CAST_SHADOWS))
+        {
+            shadowFactor = CalcSpotShadowFactor(light, worldPosition, normal, input.Position.xy);
+        }
+
+        if (receiveShadow && lightIndex == cloudSunLightIndex)
+        {
+            shadowFactor *= CalcCloudShadowFactor(worldPosition);
+        }
 
         directLighting += CalcLight(light, worldPosition, normal, viewDirection, albedo, roughness, metallic, f0) * shadowFactor;
     }
@@ -442,6 +617,10 @@ float4 main(PS_INPUT input) : SV_TARGET
 
     float4 fog = CalculateFog(worldPosition, commonData.CameraPos);
     color = lerp(color, fog.rgb, fog.a);
+
+#if DEBUG_CASCADE_COLORS
+    color *= GetCascadeDebugColor(worldPosition);
+#endif
 
     color = color / (color + 1.0f);
     color = pow(color, 1.0f / 2.2f);

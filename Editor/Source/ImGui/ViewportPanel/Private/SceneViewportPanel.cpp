@@ -36,11 +36,11 @@ struct LightingPassData
 	f32 PlanetRadius = 6360000.0f;
 };
 
-static_assert(sizeof(LightingPassData) == 224);
+static_assert(sizeof(LightingPassData) == 448);
 static_assert(offsetof(LightingPassData, Shadow) == 0);
-static_assert(offsetof(LightingPassData, Cloud) == 80);
-static_assert(offsetof(LightingPassData, SunDirection) == 208);
-static_assert(offsetof(LightingPassData, PlanetRadius) == 220);
+static_assert(offsetof(LightingPassData, Cloud) == 304);
+static_assert(offsetof(LightingPassData, SunDirection) == 432);
+static_assert(offsetof(LightingPassData, PlanetRadius) == 444);
 
 static bool WorldToViewportScreen(
 	const vec3& worldPos,

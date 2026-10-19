@@ -2,6 +2,8 @@
 #include "Components/Render/LightComponent.h"
 #include "Components/Core/WorldTransformComponent.h"
 #include "Components/Core/FlagComponent.h"
+#include "Renderer.h"
+#include "RenderPass.h"
 
 #include <glm/ext/matrix_clip_space.hpp>
 #include <glm/ext/matrix_transform.hpp>
@@ -174,35 +176,158 @@ void LightSystem::UpdateLights(entt::registry& registry)
 		if (wantsDirectionalShadow && validShadowSettings)
 		{
 			vec3 up(0.f, 1.f, 0.f);
+			if (std::abs(glm::dot(direction, up)) > 0.999f) up = vec3(1.f, 0.f, 0.f);
 
-			// 광원 방향과 Up이 평행하면 lookAt 행렬을 만들 수 없습니다.
-			if (std::abs(glm::dot(direction, up)) > 0.999f)
-				up = vec3(1.f, 0.f, 0.f);
-
-			CameraBuffer shadow{};
-			shadow.viewMatrix = glm::lookAtLH(position, position + direction, up);
-			shadow.invViewMatrix = glm::inverse(shadow.viewMatrix);
-
-			const f32 range = light.ShadowRange;
-			shadow.projMatrix = glm::orthoLH_ZO(-range, range, -range, range, -range, range * 2.f);
-			shadow.invProjMatrix = glm::inverse(shadow.projMatrix);
-			shadow.viewProjMatrix = shadow.projMatrix * shadow.viewMatrix;
-			shadow.invViewProjMatrix = shadow.invViewMatrix * shadow.invProjMatrix;
-
-			const bool validMatrices = IsFiniteLightMatrix(shadow.viewMatrix) &&
-				IsFiniteLightMatrix(shadow.invViewMatrix) && IsFiniteLightMatrix(shadow.projMatrix) &&
-				IsFiniteLightMatrix(shadow.invProjMatrix) && IsFiniteLightMatrix(shadow.viewProjMatrix) &&
-				IsFiniteLightMatrix(shadow.invViewProjMatrix);
-
-			if (validMatrices)
+			// 메인 뷰포트 카메라 찾기
+			const CameraBuffer* mainCam = nullptr;
+			for (const auto& vp : Renderer::Get().GetActiveViewportCameras())
 			{
-				light.m_ShadowViewMatrix = shadow.viewMatrix;
-				light.m_ShadowViewMatrixInv = shadow.invViewMatrix;
-				light.m_ShadowProjMatrix = shadow.projMatrix;
-				light.m_ShadowProjMatrixInv = shadow.invProjMatrix;
-				light.m_ShadowViewProjMatrix = shadow.viewProjMatrix;
-				light.m_ShadowViewProjMatrixInv = shadow.invViewProjMatrix;
+				if (vp.hasCamera && vp.renderPass && vp.renderPass->GetPassType() == ERenderPassType::Geometry)
+				{
+					mainCam = &vp.cameraBuffer;
+					break;
+				}
+			}
+
+			// 캐스케이드 분할 거리 계산 (기본 빨강 범위를 25m로 확장하고 CascadeSplitLambda로 비율 조절)
+			const f32 nearZ = 0.1f;
+			const f32 maxDist = glm::clamp(light.ShadowMaxDistance, 20.0f, 500.0f);
+			const f32 lambda = glm::clamp(light.CascadeSplitLambda, 0.1f, 1.0f);
+			const f32 exponent = glm::mix(1.0f, 1.6f, lambda); // lambda=0.5일 때 약 25m, 60m 분할
+
+			f32 cascadeSplits[MAX_SHADOW_CASCADES + 1];
+			cascadeSplits[0] = nearZ;
+			for (uint32 i = 1; i <= MAX_SHADOW_CASCADES; ++i)
+			{
+				const f32 ratio = static_cast<f32>(i) / static_cast<f32>(MAX_SHADOW_CASCADES);
+				cascadeSplits[i] = nearZ + (maxDist - nearZ) * std::pow(ratio, exponent);
+			}
+
+			light.m_CascadeSplits = vec4(cascadeSplits[1], cascadeSplits[2], cascadeSplits[3], 0.0f);
+			bool allCascadesValid = true;
+
+			for (uint32 c = 0; c < MAX_SHADOW_CASCADES; ++c)
+			{
+				const f32 splitNear = cascadeSplits[c];
+				const f32 splitFar = cascadeSplits[c + 1];
+
+				vec3 frustumCorners[8];
+				if (mainCam && mainCam->projMatrix[1][1] != 0.0f && mainCam->projMatrix[0][0] != 0.0f)
+				{
+					const f32 tanHalfFovY = 1.0f / mainCam->projMatrix[1][1];
+					const f32 aspect = mainCam->projMatrix[1][1] / mainCam->projMatrix[0][0];
+
+					const f32 xNear = splitNear * tanHalfFovY * aspect;
+					const f32 yNear = splitNear * tanHalfFovY;
+					const f32 xFar = splitFar * tanHalfFovY * aspect;
+					const f32 yFar = splitFar * tanHalfFovY;
+
+					const vec3 cornersVS[8] = {
+						vec3(-xNear,  yNear, splitNear), vec3(xNear,  yNear, splitNear),
+						vec3(xNear, -yNear, splitNear), vec3(-xNear, -yNear, splitNear),
+						vec3(-xFar,   yFar, splitFar),  vec3(xFar,   yFar, splitFar),
+						vec3(xFar,  -yFar, splitFar),  vec3(-xFar,  -yFar, splitFar)
+					};
+
+					for (int i = 0; i < 8; ++i)
+					{
+						const vec4 worldCorner = mainCam->invViewMatrix * vec4(cornersVS[i], 1.0f);
+						frustumCorners[i] = vec3(worldCorner) / worldCorner.w;
+					}
+				}
+				else
+				{
+					// 카메라 정보가 없는 경우 광원 위치 기준 폴백
+					const f32 r = light.ShadowRange * (float(c + 1) / float(MAX_SHADOW_CASCADES));
+					for (int i = 0; i < 8; ++i) frustumCorners[i] = position + vec3((i & 1 ? r : -r), (i & 2 ? r : -r), (i & 4 ? r : -r));
+				}
+
+				// 외접 구 바운딩 계산 (카메라 회전 시 섀도우 지글거림 방지)
+				vec3 center(0.0f);
+				for (int i = 0; i < 8; ++i) center += frustumCorners[i];
+				center /= 8.0f;
+
+				f32 radius = 0.0f;
+				for (int i = 0; i < 8; ++i) radius = glm::max(radius, glm::length(frustumCorners[i] - center));
+				radius = std::ceil(radius * 16.0f) / 16.0f;
+
+				// 광원 뷰 행렬
+				const vec3 lightPos = center - direction * radius;
+				mat4 shadowView = glm::lookAtLH(lightPos, center, up);
+
+				// 텍셀 스냅핑 (카메라 이동 시 가장자리 떨림 제거)
+				const f32 shadowMapRes = 2048.0f;
+				const f32 worldUnitsPerTexel = (radius * 2.0f) / shadowMapRes;
+				vec4 centerLS = shadowView * vec4(center, 1.0f);
+				centerLS.x = std::floor(centerLS.x / worldUnitsPerTexel) * worldUnitsPerTexel;
+				centerLS.y = std::floor(centerLS.y / worldUnitsPerTexel) * worldUnitsPerTexel;
+				center = vec3(glm::inverse(shadowView) * centerLS);
+				shadowView = glm::lookAtLH(center - direction * radius, center, up);
+
+				// 직교 투영 행렬 (Near: 0, Far: radius * 2)
+				const mat4 shadowProj = glm::orthoLH_ZO(-radius, radius, -radius, radius, 0.0f, radius * 2.0f);
+				const mat4 shadowViewProj = shadowProj * shadowView;
+
+				if (!IsFiniteLightMatrix(shadowViewProj))
+				{
+					allCascadesValid = false;
+					break;
+				}
+
+				CameraBuffer camBuf{};
+				camBuf.viewMatrix = shadowView;
+				camBuf.invViewMatrix = glm::inverse(shadowView);
+				camBuf.projMatrix = shadowProj;
+				camBuf.invProjMatrix = glm::inverse(shadowProj);
+				camBuf.viewProjMatrix = shadowViewProj;
+				camBuf.invViewProjMatrix = glm::inverse(shadowViewProj);
+				camBuf.cameraPosition = center - direction * radius;
+
+				light.m_ShadowCameraBuffers[c] = camBuf;
+				light.m_ShadowViewProjMatrices[c] = shadowViewProj;
+			}
+
+			if (allCascadesValid)
+			{
 				light.m_ShadowParams = vec4(light.ShadowBias, light.ShadowSlopeBias, light.ShadowNormalBias, 0.f);
+				light.m_IsShadowCacheValid = true;
+				effectiveFlags |= ELightFlags::CastShadows;
+			}
+		} // <── 1. 여기서 Directional Light 블록을 완전히 닫아줍니다!
+
+		// ── 2. Spot Light Shadow (Perspective) 독립 블록 ──
+		const bool wantsSpotShadow = light.LightType == ELightType::Spot &&
+			HasFlag(light.Flags, ELightFlags::CastShadows);
+
+		if (wantsSpotShadow && validShadowSettings)
+		{
+			vec3 up(0.f, 1.f, 0.f);
+			if (std::abs(glm::dot(direction, up)) > 0.999f) up = vec3(1.f, 0.f, 0.f);
+
+			const f32 innerAngle = glm::clamp(light.SpotInnerAngle, 0.f, 89.f);
+			const f32 outerAngle = glm::clamp(light.SpotOuterAngle, innerAngle, 89.f);
+			const f32 fov = glm::clamp(glm::radians(outerAngle * 2.0f), glm::radians(1.0f), glm::radians(179.0f));
+			const f32 nearZ = 0.05f;
+			const f32 farZ = glm::max(light.Range, 0.1f);
+
+			const mat4 spotView = glm::lookAtLH(position, position + direction, up);
+			const mat4 spotProj = glm::perspectiveLH_ZO(fov, 1.0f, nearZ, farZ);
+			const mat4 spotViewProj = spotProj * spotView;
+
+			if (IsFiniteLightMatrix(spotViewProj))
+			{
+				CameraBuffer camBuf{};
+				camBuf.viewMatrix = spotView;
+				camBuf.invViewMatrix = glm::inverse(spotView);
+				camBuf.projMatrix = spotProj;
+				camBuf.invProjMatrix = glm::inverse(spotProj);
+				camBuf.viewProjMatrix = spotViewProj;
+				camBuf.invViewProjMatrix = glm::inverse(spotViewProj);
+				camBuf.cameraPosition = position;
+
+				light.m_ShadowCameraBuffers[0] = camBuf;
+				light.m_ShadowViewProjMatrices[0] = spotViewProj;
+				light.m_ShadowParams = vec4(light.ShadowBias, light.ShadowSlopeBias, light.ShadowNormalBias, 1.0f);
 				light.m_IsShadowCacheValid = true;
 				effectiveFlags |= ELightFlags::CastShadows;
 			}

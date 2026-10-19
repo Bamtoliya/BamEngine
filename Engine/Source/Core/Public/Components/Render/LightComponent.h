@@ -63,6 +63,12 @@ namespace Engine
 		PROPERTY(EDITABLE, CATEGORY("CATEGORY_SHADOW"), DISPLAY_NAME("PROP_SHADOW_NORMAL_BIAS"), RANGE(0.0f, 0.5f, 0.005f))
 		f32 ShadowNormalBias = 0.01f;
 
+		PROPERTY(EDITABLE, ALLOW_MISSING, CATEGORY("CATEGORY_SHADOW"), DISPLAY_NAME("PROP_SHADOW_MAX_DISTANCE"), RANGE(10.0f, 500.0f, 1.0f))
+		f32 ShadowMaxDistance = 100.f;
+
+		PROPERTY(EDITABLE, ALLOW_MISSING, CATEGORY("CATEGORY_SHADOW"), DISPLAY_NAME("PROP_CASCADE_SPLIT_LAMBDA"), RANGE(0.1f, 1.0f, 0.05f))
+		f32 CascadeSplitLambda = 0.75f;
+
 		PROPERTY(EDITABLE, COLOR_PROPERTY, CATEGORY("CATEGORY_SKY"), DISPLAY_NAME("PROP_GROUND_COLOR"))
 		vec3 GroundColor{ 0.05f, 0.04f, 0.03f };
 
@@ -86,21 +92,11 @@ namespace Engine
 		}
 
 		[[nodiscard]]
-		std::optional<CameraBuffer> GetShadowCameraBuffer() const
+		std::optional<CameraBuffer> GetShadowCameraBuffer(uint32 cascadeIndex = 0) const
 		{
-			if (!m_IsCacheValid || !m_IsShadowCacheValid)
+			if (!m_IsCacheValid || !m_IsShadowCacheValid || cascadeIndex >= MAX_SHADOW_CASCADES)
 				return std::nullopt;
-
-			CameraBuffer buffer{};
-			buffer.viewMatrix = m_ShadowViewMatrix;
-			buffer.invViewMatrix = m_ShadowViewMatrixInv;
-			buffer.projMatrix = m_ShadowProjMatrix;
-			buffer.invProjMatrix = m_ShadowProjMatrixInv;
-			buffer.viewProjMatrix = m_ShadowViewProjMatrix;
-			buffer.invViewProjMatrix = m_ShadowViewProjMatrixInv;
-			buffer.cameraPosition = m_GPULight.Position;
-			buffer.time = 0.f;
-			return buffer;
+			return m_ShadowCameraBuffers[cascadeIndex];
 		}
 
 		[[nodiscard]]
@@ -110,10 +106,15 @@ namespace Engine
 				return std::nullopt;
 
 			LightShadowData data{};
-			data.LightViewProjMatrix = m_ShadowViewProjMatrix;
+			for (uint32 i = 0; i < MAX_SHADOW_CASCADES; ++i)
+				data.LightViewProjMatrices[i] = m_ShadowViewProjMatrices[i];
+			data.CascadeSplits = m_CascadeSplits;
 			data.ShadowParams = m_ShadowParams;
 			return data;
 		}
+
+		[[nodiscard]]
+		vec4 GetShadowParams() const { return m_ShadowParams; }
 
 	private:
 		friend class LightSystem;
@@ -121,12 +122,9 @@ namespace Engine
 		// 계산 결과는 리플렉션 기반 저장·편집 대상에서 제외합니다.
 		GPULight m_GPULight{};
 
-		mat4 m_ShadowViewMatrix{ 1.f };
-		mat4 m_ShadowViewMatrixInv{ 1.f };
-		mat4 m_ShadowProjMatrix{ 1.f };
-		mat4 m_ShadowProjMatrixInv{ 1.f };
-		mat4 m_ShadowViewProjMatrix{ 1.f };
-		mat4 m_ShadowViewProjMatrixInv{ 1.f };
+		mat4 m_ShadowViewProjMatrices[MAX_SHADOW_CASCADES]{ mat4(1.f), mat4(1.f), mat4(1.f) };
+		CameraBuffer m_ShadowCameraBuffers[MAX_SHADOW_CASCADES]{};
+		vec4 m_CascadeSplits{ 10.0f, 35.0f, 100.0f, 0.0f };
 		vec4 m_ShadowParams{ 0.f };
 
 		bool m_IsCacheValid = false;

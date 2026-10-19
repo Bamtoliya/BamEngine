@@ -38,12 +38,11 @@ public:
 	RHITexture* CreateTextureFromFile(const wchar* filename) override;
 	RHITexture* CreateTexture(const RHITextureDesc& desc) override;
 	RHITexture* CreateTextureFromNativeHandle(void* nativeHandle) override;
+	EResult UploadTextureData(RHITexture* texture, const RHITextureDesc& desc) override;
 public:
 	RHIPipeline* CreatePipeline(const RHIPipelineDesc& desc) override;
 	RHISampler* CreateSampler(const SamplerDesc& desc) override;
 	RHIShader* CreateShader(const RHIShaderDesc& desc) override;
-private:
-	EResult UploadTextureData(RHITexture* texture, const RHITextureDesc& desc);
 #pragma endregion
 
 #pragma region Bind Resources

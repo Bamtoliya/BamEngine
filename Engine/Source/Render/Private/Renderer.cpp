@@ -135,91 +135,121 @@ EResult Renderer::Render(f32 dt)
 				}
 			}
 
-			CameraBuffer cameraBuffer = {};
-
+			// ── Shadow Pass: 2x2 Atlas 분할 다중 캐스케이드 렌더링 ──
 			if (passType == ERenderPassType::Shadow)
 			{
-				cameraBuffer = LightManager::Get().GetShadowCameraBuffer(uint32(0));
-			}
-			else if (passType == ERenderPassType::UI)
-			{
-				cameraBuffer.viewMatrix = glm::identity<mat4>();
-				cameraBuffer.projMatrix = glm::ortho(0.0f, static_cast<f32>(rtWidth), static_cast<f32>(rtHeight), 0.0f, -1.0f, 1.0f);
-				cameraBuffer.viewProjMatrix = cameraBuffer.projMatrix * cameraBuffer.viewMatrix;
-				cameraBuffer.cameraPosition = vec3(0.f);
-			}
-			else if (job.hasCamera)
-			{
-				cameraBuffer = job.cameraBuffer;
-			}
-			else
-			{
-				cameraBuffer.viewMatrix = glm::identity<mat4>();
-				cameraBuffer.projMatrix = glm::identity<mat4>();
-				cameraBuffer.viewProjMatrix = glm::identity<mat4>();
-				cameraBuffer.cameraPosition = vec3(0.f);
-			}
-			//cameraBuffer.time = dt;
-			cameraBuffer.time = static_cast<f32>(TimeManager::Get().GetTotalTime());
-			if (IsFailure(m_RHI->BindConstantBuffer(&cameraBuffer, sizeof(CameraBuffer), 0)))
-			{
-				ENGINE_LOG_ERROR("Failed to bind camera constant buffer.");
-				return EResult::Fail;
-			}
+				const uint32 halfW = rtWidth / 2;
+				const uint32 halfH = rtHeight / 2;
 
-			for (const auto& [slot, buffer] : pass->GetAllPassConstants())
-			{
-				if (!buffer.empty())
+				for (const auto& [slot, buffer] : pass->GetAllPassConstants())
 				{
-					if (IsFailure(m_RHI->BindConstantBuffer(buffer.data(), static_cast<uint32>(buffer.size()), slot)))
+					if (!buffer.empty())
 					{
-						ENGINE_LOG_ERROR("Failed to bind pass constant buffer. Slot: {}, Pass ID: {}", slot, pass->GetID());
+						if (IsFailure(m_RHI->BindConstantBuffer(buffer.data(), static_cast<uint32>(buffer.size()), slot)))
+							ENGINE_LOG_ERROR("Failed to bind pass constant buffer. Slot: {}, Pass ID: {}", slot, pass->GetID());
+					}
+				}
+
+				auto meshIt = m_StaticDrawCommands.find(pass->GetID());
+				if (meshIt != m_StaticDrawCommands.end())
+				{
+					// 1) Directional Light CSM (사분면 0, 1, 2)
+					for (uint32 c = 0; c < MAX_SHADOW_CASCADES; ++c)
+					{
+						CameraBuffer cascadeCam = LightManager::Get().GetShadowCameraBuffer(c);
+						cascadeCam.time = static_cast<f32>(TimeManager::Get().GetTotalTime());
+						if (IsFailure(m_RHI->BindConstantBuffer(&cascadeCam, sizeof(CameraBuffer), 0)))
+						{
+							ENGINE_LOG_ERROR("Failed to bind shadow cascade camera buffer. Cascade: {}", c);
+							return EResult::Fail;
+						}
+
+						const int32 vpX = static_cast<int32>((c % 2) * halfW);
+						const int32 vpY = static_cast<int32>((c / 2) * halfH);
+						m_RHI->SetViewport(vpX, vpY, halfW, halfH);
+
+						const EResult result = RenderMeshes(dt, meshIt->second, pass->GetSortType(), pass);
+						if (IsFailure(result))
+							ENGINE_LOG_ERROR("Shadow mesh rendering failed for cascade: {}", c);
+					}
+
+					// 2) Spot Light Shadow (우하단 사분면: halfW, halfH)
+					if (LightManager::Get().HasSpotShadow())
+					{
+						CameraBuffer spotCam = LightManager::Get().GetSpotShadowCameraBuffer();
+						spotCam.time = static_cast<f32>(TimeManager::Get().GetTotalTime());
+						if (IsSuccess(m_RHI->BindConstantBuffer(&spotCam, sizeof(CameraBuffer), 0)))
+						{
+							m_RHI->SetViewport(static_cast<int32>(halfW), static_cast<int32>(halfH), halfW, halfH);
+							const EResult result = RenderMeshes(dt, meshIt->second, pass->GetSortType(), pass);
+							if (IsFailure(result))
+								ENGINE_LOG_ERROR("Spot shadow mesh rendering failed.");
+						}
 					}
 				}
 			}
-
-			m_RHI->SetViewport(0, 0, rtWidth, rtHeight);
-
-			auto meshIt = m_StaticDrawCommands.find(pass->GetID());
-
-			if (meshIt != m_StaticDrawCommands.end())
+			else
 			{
-				const EResult result = RenderMeshes(
-					dt,
-					meshIt->second,
-					pass->GetSortType(),
-					pass);
+				CameraBuffer cameraBuffer = {};
 
-				if (IsFailure(result))
+				if (passType == ERenderPassType::UI)
 				{
-					ENGINE_LOG_ERROR(
-						"ECS mesh rendering failed. Pass ID: {}",
-						pass->GetID());
+					cameraBuffer.viewMatrix = glm::identity<mat4>();
+					cameraBuffer.projMatrix = glm::ortho(0.0f, static_cast<f32>(rtWidth), static_cast<f32>(rtHeight), 0.0f, -1.0f, 1.0f);
+					cameraBuffer.viewProjMatrix = cameraBuffer.projMatrix * cameraBuffer.viewMatrix;
+					cameraBuffer.cameraPosition = vec3(0.f);
 				}
-			}
-
-			auto spriteIt = m_SpriteDrawCommands.find(pass->GetID());
-
-			if (spriteIt != m_SpriteDrawCommands.end())
-			{
-				const EResult result = RenderSprite(
-					dt,
-					spriteIt->second,
-					pass->GetSortType(),
-					pass);
-
-				if (IsFailure(result))
+				else if (job.hasCamera)
 				{
-					ENGINE_LOG_ERROR(
-						"ECS sprite rendering failed. Pass ID: {}",
-						pass->GetID());
+					cameraBuffer = job.cameraBuffer;
 				}
-			}
+				else
+				{
+					cameraBuffer.viewMatrix = glm::identity<mat4>();
+					cameraBuffer.projMatrix = glm::identity<mat4>();
+					cameraBuffer.viewProjMatrix = glm::identity<mat4>();
+					cameraBuffer.cameraPosition = vec3(0.f);
+				}
 
-			if (const auto images = m_UIImageDrawCommands.find(pass->GetID()); images != m_UIImageDrawCommands.end())
-			{
-				if (IsFailure(RenderUIImages(images->second, pass)))
-					ENGINE_LOG_ERROR("ECS UI image rendering failed. Pass ID: {}", pass->GetID());
+				cameraBuffer.time = static_cast<f32>(TimeManager::Get().GetTotalTime());
+				if (IsFailure(m_RHI->BindConstantBuffer(&cameraBuffer, sizeof(CameraBuffer), 0)))
+				{
+					ENGINE_LOG_ERROR("Failed to bind camera constant buffer.");
+					return EResult::Fail;
+				}
+
+				for (const auto& [slot, buffer] : pass->GetAllPassConstants())
+				{
+					if (!buffer.empty())
+					{
+						if (IsFailure(m_RHI->BindConstantBuffer(buffer.data(), static_cast<uint32>(buffer.size()), slot)))
+							ENGINE_LOG_ERROR("Failed to bind pass constant buffer. Slot: {}, Pass ID: {}", slot, pass->GetID());
+					}
+				}
+
+				m_RHI->SetViewport(0, 0, rtWidth, rtHeight);
+
+				auto meshIt = m_StaticDrawCommands.find(pass->GetID());
+				if (meshIt != m_StaticDrawCommands.end())
+				{
+					const EResult result = RenderMeshes(dt, meshIt->second, pass->GetSortType(), pass);
+					if (IsFailure(result))
+						ENGINE_LOG_ERROR("ECS mesh rendering failed. Pass ID: {}", pass->GetID());
+				}
+
+				auto spriteIt = m_SpriteDrawCommands.find(pass->GetID());
+				if (spriteIt != m_SpriteDrawCommands.end())
+				{
+					const EResult result = RenderSprite(dt, spriteIt->second, pass->GetSortType(), pass);
+					if (IsFailure(result))
+						ENGINE_LOG_ERROR("ECS sprite rendering failed. Pass ID: {}", pass->GetID());
+				}
+
+				if (const auto images = m_UIImageDrawCommands.find(pass->GetID()); images != m_UIImageDrawCommands.end())
+				{
+					if (IsFailure(RenderUIImages(images->second, pass)))
+						ENGINE_LOG_ERROR("ECS UI image rendering failed. Pass ID: {}", pass->GetID());
+				}
 			}
 			
 			auto customIt = m_CustomRenderQueues.find(pass->GetID());

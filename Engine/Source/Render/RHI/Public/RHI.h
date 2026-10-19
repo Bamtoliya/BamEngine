@@ -65,6 +65,7 @@ public:
     virtual RHITexture* CreateTextureFromFile(const wchar* filename) BAM_PURE;
     virtual RHITexture* CreateTexture(const RHITextureDesc& desc) BAM_PURE;
 	virtual RHITexture* CreateTextureFromNativeHandle(void* nativeHandle) BAM_PURE;
+    virtual EResult UploadTextureData(RHITexture* texture, const RHITextureDesc& desc) { return EResult::NotImplemented; }
 public:
     virtual RHIPipeline* CreatePipeline(const RHIPipelineDesc& desc) BAM_PURE;
 public:

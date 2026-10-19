@@ -188,10 +188,10 @@ EResult DirectX12RHI::Initialize(void* arg)
         rootParameters[0].InitAsConstantBufferView(0, 0, D3D12_SHADER_VISIBILITY_ALL);
 
         // [1] Material SRV Table (t0-t15, space1) — Descriptor Table
-        rootParameters[1].InitAsDescriptorTable(1, &srvRanges[0], D3D12_SHADER_VISIBILITY_PIXEL);
+        rootParameters[1].InitAsDescriptorTable(1, &srvRanges[0], D3D12_SHADER_VISIBILITY_ALL);
 
         // [2] Material Sampler Table (s0-s7, space1) — Descriptor Table
-        rootParameters[2].InitAsDescriptorTable(1, &srvRanges[1], D3D12_SHADER_VISIBILITY_PIXEL);
+        rootParameters[2].InitAsDescriptorTable(1, &srvRanges[1], D3D12_SHADER_VISIBILITY_ALL);
 
         // [3] Object CBV (b0, space2) — Root Descriptor
         rootParameters[3].InitAsConstantBufferView(0, 2, D3D12_SHADER_VISIBILITY_VERTEX);
@@ -598,7 +598,8 @@ EResult DirectX12RHI::UploadTextureData(RHITexture* texture, const RHITextureDes
     const bool is3D = (desc.dimension == ETextureDimension::Texture3D);
     const uint32 depth = is3D ? desc.depth : 1;
 
-    if (desc.format != ETextureFormat::R8G8B8A8_UNORM ||
+    const bool isSupportedFormat = (desc.format == ETextureFormat::R8G8B8A8_UNORM || desc.format == ETextureFormat::R32_FLOAT);
+    if (!isSupportedFormat ||
         (desc.dimension != ETextureDimension::Texture2D && !is3D) ||
         desc.mipLevels != 1 ||
         desc.arraySize != 1 ||
@@ -754,10 +755,9 @@ EResult DirectX12RHI::UploadTextureData(RHITexture* texture, const RHITextureDes
 
     list->CopyTextureRegion(&target, 0, 0, 0, &source, nullptr);
 
-    // 7. ImGui가 픽셀 셰이더에서 읽을 수 있도록 전환
+    // 7. 셰이더(VS/PS)에서 읽을 수 있도록 전환
     barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
-    barrier.Transition.StateAfter =
-        D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+    barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE;
 
     list->ResourceBarrier(1, &barrier);
 
@@ -768,15 +768,12 @@ EResult DirectX12RHI::UploadTextureData(RHITexture* texture, const RHITextureDes
     ID3D12CommandList* lists[] = { list.Get() };
     m_CommandQueue->ExecuteCommandLists(1, lists);
 
-    // 제출 후 동기화 실패 시 자원을 해제하고 계속 진행하면 안 됩니다.
-    // 현재 예제는 치명적 오류로 처리합니다.
     if (FAILED(m_CommandQueue->Signal(fence.Get(), 1)))
     {
         OutputDebugStringA("Texture upload: Signal failed.\n");
         std::terminate();
     }
 
-    // nullptr 이벤트: fence 값에 도달할 때까지 동기 대기
     if (FAILED(fence->SetEventOnCompletion(1, nullptr)))
     {
         OutputDebugStringA("Texture upload: fence wait failed.\n");
@@ -786,10 +783,8 @@ EResult DirectX12RHI::UploadTextureData(RHITexture* texture, const RHITextureDes
     if (FAILED(m_Device->GetDeviceRemovedReason()))
         return EResult::Fail;
 
-    dxTexture->SetCurrentState(
-        D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+    dxTexture->SetCurrentState(D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE);
 
-    // GPU 완료 후 로컬 ComPtr들이 업로드 자원을 해제합니다.
     return EResult::Success;
 }
 #pragma endregion
