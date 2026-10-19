@@ -12,6 +12,7 @@
     "m_FrontFace": 0,
     "m_Key": "Resources/Material/TransparentMaterial",
     "m_Parameters": [],
+    "m_PassShaders": [],
     "m_Path": "",
     "m_PixelShaderHandle": {
         "AssetKey": "Resources/Shader/DefaultPS",

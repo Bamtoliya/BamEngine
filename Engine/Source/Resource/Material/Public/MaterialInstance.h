@@ -81,8 +81,8 @@ public:
 
 #pragma region Shader
 public:
-	virtual Shader* GetVertexShader() const override;
-	virtual Shader* GetPixelShader() const override;
+	virtual Shader* GetVertexShader(ERenderPassType passType = ERenderPassType::Geometry) const override;
+	virtual Shader* GetPixelShader(ERenderPassType passType = ERenderPassType::Geometry) const override;
 public:
 	virtual void SetVertexShaderHandle(const ResourceHandle<Shader>& shader) override;
 	virtual void SetPixelShaderHandle(const ResourceHandle<Shader>& shader) override;

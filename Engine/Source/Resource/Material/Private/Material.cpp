@@ -15,12 +15,17 @@ EResult Material::Initialize(void* arg)
 	m_VertexShaderHandle = desc->VertexShaderHandle;
 	m_PixelShaderHandle = desc->PixelShaderHandle;
 
+	for (const auto& passDesc : desc->PassShaders)
+	{
+		SetPassShader(passDesc.PassType, passDesc.VertexShaderHandle, passDesc.PixelShaderHandle);
+	}
+
 	m_BlendMode = desc->BlendMode;
 	m_CullMode = desc->CullMode;
 	m_FillMode = desc->FillMode;
 	m_DepthMode = desc->DepthMode;
 	m_DepthCompareOp = desc->DepthCompareOp;
-	
+
 	return EResult::Success;
 }
 Material* Material::Create(void* arg)

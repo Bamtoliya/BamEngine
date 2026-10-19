@@ -14,5 +14,6 @@ ConstantBuffer<ObjectData> ubo : register(b0, space2);
 
 float4 main(VS_INPUT input) : SV_POSITION
 {
-    return mul(mul(float4(input.Position, 1.0f), ubo.WorldMatrix), commonData.ViewProjection);
+    float4 worldPosition = mul(ubo.WorldMatrix, float4(input.Position, 1.0f));
+    return mul(commonData.ViewProjection, worldPosition);
 }

@@ -6,6 +6,8 @@
 #include "RHITypes.h"
 #include "ResourceHandle.h"
 #include "RHISampler.h"
+#include "RenderPassTypes.h"
+#include <optional>
 
 BEGIN(Engine)
 
@@ -30,6 +32,25 @@ struct MaterialTextureBinding
 	SamplerDesc samplerDesc = {};
 
 	bool operator==(const MaterialTextureBinding& other) const = default;
+};
+
+STRUCT()
+struct MaterialPassShader
+{
+	REFLECT_BODY()
+	PROPERTY(EDITABLE)
+	ERenderPassType passType = ERenderPassType::Geometry;
+	PROPERTY(EDITABLE)
+	ResourceHandle<Shader> vertexShader;
+	PROPERTY(EDITABLE)
+	ResourceHandle<Shader> pixelShader;
+	bool operator==(const MaterialPassShader& other) const = default;
+};
+struct MaterialPassShaderDesc
+{
+	ERenderPassType PassType = ERenderPassType::Geometry;
+	ResourceHandle<Shader> VertexShaderHandle;
+	ResourceHandle<Shader> PixelShaderHandle;
 };
 
 ENUM()
@@ -73,6 +94,7 @@ struct MaterialDesc : public ResourceCreateDesc
 {
 	ResourceHandle<Shader> VertexShaderHandle;
 	ResourceHandle<Shader> PixelShaderHandle;
+	vector<MaterialPassShaderDesc> PassShaders = {};
 	EBlendMode BlendMode = EBlendMode::Opaque;
 	ECullMode CullMode = ECullMode::Back;
 	EFillMode FillMode = EFillMode::Solid;
@@ -94,6 +116,7 @@ protected:
 public:
 	virtual ~MaterialInterface() = default;
 	virtual void Free() override;
+	virtual EResult Reload(const std::filesystem::path& filePath = {});
 #pragma endregion
 
 #pragma region Bind
@@ -170,13 +193,16 @@ public:
 
 #pragma region Shader
 public:
-	virtual Shader* GetVertexShader() const { return m_VertexShaderHandle.Get(); }
-	virtual Shader* GetPixelShader() const { return m_PixelShaderHandle.Get(); }
+	virtual Shader* GetVertexShader(ERenderPassType passType = ERenderPassType::Geometry) const;
+	virtual Shader* GetPixelShader(ERenderPassType passType = ERenderPassType::Geometry) const;
 public:
 	virtual void SetVertexShaderHandle(const ResourceHandle<Shader>& shader) { m_VertexShaderHandle = shader; }
 	virtual void SetPixelShaderHandle(const ResourceHandle<Shader>& shader) { m_PixelShaderHandle = shader; }
+	void SetPassShader(ERenderPassType passType, const ResourceHandle<Shader>& vs, const ResourceHandle<Shader>& ps = {});
+	bool HasPassShader(ERenderPassType passType) const;
+	void RemovePassShader(ERenderPassType passType);
+	const vector<MaterialPassShader>& GetPassShaders() const { return m_PassShaders; }
 #pragma endregion
-
 
 #pragma region Save&Load
 protected:
@@ -189,30 +215,33 @@ protected:
 
 #pragma region Variable
 protected:
-	PROPERTY(EDITABLE, CATEGORY("Pipeline"))
+	PROPERTY(EDITABLE, CATEGORY("CATEGORY_PIPELINE"), DISPLAY_NAME("PROP_BLEND_MODE"))
 	EBlendMode m_BlendMode = { EBlendMode::Opaque };
-	PROPERTY(EDITABLE, CATEGORY("Pipeline"))
+	PROPERTY(EDITABLE, CATEGORY("CATEGORY_PIPELINE"), DISPLAY_NAME("PROP_CULL_MODE"))
 	ECullMode m_CullMode = { ECullMode::Back };
-	PROPERTY(EDITABLE, CATEGORY("Pipeline"))
+	PROPERTY(EDITABLE, CATEGORY("CATEGORY_PIPELINE"), DISPLAY_NAME("PROP_FRONT_FACE"))
 	EFrontFace m_FrontFace = { EFrontFace::Clockwise };
-	PROPERTY(EDITABLE, CATEGORY("Pipeline"))
+	PROPERTY(EDITABLE, CATEGORY("CATEGORY_PIPELINE"), DISPLAY_NAME("PROP_FILL_MODE"))
 	EFillMode m_FillMode = { EFillMode::Solid };
-	PROPERTY(EDITABLE, CATEGORY("Pipeline"))
+	PROPERTY(EDITABLE, CATEGORY("CATEGORY_PIPELINE"), DISPLAY_NAME("PROP_DEPTH_MODE"))
 	EDepthMode m_DepthMode = { EDepthMode::None };
-	PROPERTY(EDITABLE, CATEGORY("Pipeline"))
+	PROPERTY(EDITABLE, CATEGORY("CATEGORY_PIPELINE"), DISPLAY_NAME("PROP_DEPTH_COMPARE_OP"))
 	ECompareOp m_DepthCompareOp = { ECompareOp::Less };
 
-	PROPERTY(EDITABLE, CATEGORY("Shader"))
+	PROPERTY(EDITABLE, CATEGORY("CATEGORY_SHADER"), DISPLAY_NAME("PROP_VERTEX_SHADER_HANDLE"))
 	ResourceHandle<Shader> m_VertexShaderHandle;
 
-	PROPERTY(EDITABLE, CATEGORY("Shader"))
+	PROPERTY(EDITABLE, CATEGORY("CATEGORY_SHADER"), DISPLAY_NAME("PROP_PIXEL_SHADER_HANDLE"))
 	ResourceHandle<Shader> m_PixelShaderHandle;
 
-	PROPERTY(EDITABLE, CATEGORY("Parameter"))
+	PROPERTY(EDITABLE, CATEGORY("CATEGORY_PARAMETER"), DISPLAY_NAME("PROP_PARAMETERS"))
 	unordered_map<string, MaterialParameter> m_Parameters = {};
 
-	PROPERTY(EDITABLE, CATEGORY("Texture"))
+	PROPERTY(EDITABLE, CATEGORY("CATEGORY_TEXTURE"), DISPLAY_NAME("PROP_TEXTURE_BINDINGS"))
 	vector<MaterialTextureBinding> m_TextureBindings = {};
+
+	PROPERTY(EDITABLE, CATEGORY("CATEGORY_SHADER"), DISPLAY_NAME("PROP_PASS_SHADERS"))
+	vector<MaterialPassShader> m_PassShaders = {};
 
 private:
 	unordered_map<string, uint32> m_TextureNameToIndex = {};

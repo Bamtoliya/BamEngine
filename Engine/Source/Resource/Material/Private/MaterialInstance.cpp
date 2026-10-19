@@ -117,18 +117,20 @@ void MaterialInstance::SetBaseMaterial(const ResourceHandle<Material>& material)
 }
 
 #pragma region Shader
-Shader* MaterialInstance::GetVertexShader() const
+Shader* MaterialInstance::GetVertexShader(ERenderPassType passType) const
 {
-	if (m_VertexShaderHandle)
-		return m_VertexShaderHandle.Get();
-	return m_BaseMaterialHandle.Get() ? m_BaseMaterialHandle.Get()->GetVertexShader() : nullptr;
+	if (HasPassShader(passType) || (passType == ERenderPassType::Geometry && m_VertexShaderHandle))
+		return MaterialInterface::GetVertexShader(passType);
+
+	return m_BaseMaterialHandle ? m_BaseMaterialHandle.Get()->GetVertexShader(passType) : nullptr;
 }
 
-Shader* MaterialInstance::GetPixelShader() const
+Shader* MaterialInstance::GetPixelShader(ERenderPassType passType) const
 {
-	if (m_PixelShaderHandle)
-		return m_PixelShaderHandle.Get();
-	return m_BaseMaterialHandle ? m_BaseMaterialHandle.Get()->GetPixelShader() : nullptr;
+	if (HasPassShader(passType) || (passType == ERenderPassType::Geometry && m_PixelShaderHandle))
+		return MaterialInterface::GetPixelShader(passType);
+
+	return m_BaseMaterialHandle ? m_BaseMaterialHandle.Get()->GetPixelShader(passType) : nullptr;
 }
 
 void MaterialInstance::SetVertexShaderHandle(const ResourceHandle<Shader>& shader)

@@ -575,8 +575,9 @@ EResult Renderer::BindMeshPipeline(Mesh* mesh, MaterialInterface* material, Rend
 	if (!m_RHI || !material || !renderPass)
 		return EResult::InvalidArgument;
 
-	Shader* vs = material->GetVertexShader();
-	Shader* ps = material->GetPixelShader();
+	const ERenderPassType passType = renderPass->GetPassType();
+	Shader* vs = material->GetVertexShader(passType);
+	Shader* ps = material->GetPixelShader(passType);
 
 	if (!vs || !ps)
 		return EResult::InvalidArgument;

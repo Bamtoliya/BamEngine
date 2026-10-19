@@ -3,10 +3,11 @@
 #include "RenderComponents.h"
 #include "ResourceHandle.h"
 #include "Mesh.h"
-#include "MaterialInterface.h"
+#include "Material.h"
 #include "Renderer.h"
 #include "RenderPass.h"
 #include "PickingManager.h"
+#include "ResourceManager.h"
 
 EResult MeshRenderSystem::Initialize(void* arg)
 {
@@ -37,15 +38,19 @@ void MeshRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*> a
     for (const auto& viewport : renderer.GetActiveViewportCameras())
     {
         RenderPass* pass = viewport.renderPass;
-        if (!pass || !viewport.hasCamera) continue;
+        if (!pass) continue;
 
         const ERenderPassType passType = pass->GetPassType();
-        // Geometry(G-Buffer)와 Forward(스카이박스 등) 패스만 수집합니다.
-        if (passType == ERenderPassType::Geometry || passType == ERenderPassType::Forward)
-        {
-            if (std::find(targetPasses.begin(), targetPasses.end(), pass) == targetPasses.end())
-                targetPasses.push_back(pass);
-        }
+        const bool isShadowPass = passType == ERenderPassType::Shadow;
+
+        // Shadow 패스의 카메라는 Renderer에서 광원 카메라로 설정한다.
+        if (!isShadowPass && !viewport.hasCamera) continue;
+
+        if (passType != ERenderPassType::Geometry && passType != ERenderPassType::Forward && !isShadowPass)
+            continue;
+
+        if (std::find(targetPasses.begin(), targetPasses.end(), pass) == targetPasses.end())
+            targetPasses.push_back(pass);
     }
 
     if (targetPasses.empty())
@@ -72,6 +77,8 @@ void MeshRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*> a
 
             for (RenderPass* pass : targetPasses)
             {
+                if (pass->GetPassType() == ERenderPassType::Shadow && !meshRenderer.castShadow)
+                    continue;
                 // 패스의 허용 BlendMode 검사:
                 // GeometryPass -> Opaque/Masked (GBuffer)
                 // ForwardPass  -> Forward (SkyMaterial)

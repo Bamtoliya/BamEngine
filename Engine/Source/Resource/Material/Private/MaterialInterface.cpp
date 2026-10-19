@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "MaterialInterface.h"
 #include "SamplerManager.h"
 #include "ResourceManager.h"
@@ -11,6 +11,39 @@ void MaterialInterface::Free()
 	m_TextureNameToIndex.clear();
 	m_TextureSlotToIndex.clear();
 	m_Parameters.clear();
+}
+
+EResult MaterialInterface::Reload(const std::filesystem::path& filePath)
+{
+    std::filesystem::path targetPath = filePath;
+    if (targetPath.empty())
+    {
+        targetPath = m_Path.empty() ? std::filesystem::path(m_Key) : std::filesystem::path(m_Path);
+        if (targetPath.extension() != ".json")
+        {
+            targetPath += ".json";
+        }
+    }
+    std::error_code ec;
+    if (!std::filesystem::exists(targetPath, ec))
+        return EResult::FileNotFound;
+    archive::JsonArchive ar;
+    auto result = ar.LoadFromFile(targetPath);
+    if (!result)
+    {
+        ENGINE_LOG_ERROR("[Material Hot Reload] Failed to load JSON archive: {}", targetPath.string());
+        return EResult::Fail;
+    }
+    result = ReadArchive(ar);
+    if (!result)
+    {
+        ENGINE_LOG_ERROR("[Material Hot Reload] Failed to read archive data: {}", targetPath.string());
+        return EResult::Fail;
+    }
+    OnPostLoad();
+    IncreaseVersion();
+    ENGINE_LOG_INFO("[Material Hot Reload] Successfully reloaded: {}", targetPath.string());
+    return EResult::Success;
 }
 #pragma endregion
 
@@ -308,6 +341,58 @@ void MaterialInterface::ClearTextureBindings()
     m_TextureSlotToIndex.clear();
 }
 #pragma endregion
+
+#pragma region Shader
+Shader* MaterialInterface::GetVertexShader(ERenderPassType passType) const
+{
+    for (const auto& binding : m_PassShaders)
+    {
+        if (binding.passType == passType && binding.vertexShader.IsValid())
+            return binding.vertexShader.Get();
+    }
+    return m_VertexShaderHandle.Get();
+}
+
+Shader* MaterialInterface::GetPixelShader(ERenderPassType passType) const
+{
+    for (const auto& binding : m_PassShaders)
+    {
+        if (binding.passType == passType)
+            return binding.pixelShader.Get();
+    }
+    return m_PixelShaderHandle.Get();
+}
+
+void MaterialInterface::SetPassShader(ERenderPassType passType, const ResourceHandle<Shader>& vs, const ResourceHandle<Shader>& ps)
+{
+    for (auto& binding : m_PassShaders)
+    {
+        if (binding.passType == passType)
+        {
+            binding.vertexShader = vs;
+            binding.pixelShader = ps;
+            return;
+        }
+    }
+    m_PassShaders.push_back({ passType, vs, ps });
+}
+
+bool MaterialInterface::HasPassShader(ERenderPassType passType) const
+{
+    for (const auto& binding : m_PassShaders)
+    {
+        if (binding.passType == passType)
+            return true;
+    }
+    return false;
+}
+
+void MaterialInterface::RemovePassShader(ERenderPassType passType)
+{
+    std::erase_if(m_PassShaders, [passType](const MaterialPassShader& item) { return item.passType == passType; });
+}
+#pragma endregion
+
 
 #pragma region Getter
 BlendState MaterialInterface::GetBlendState()

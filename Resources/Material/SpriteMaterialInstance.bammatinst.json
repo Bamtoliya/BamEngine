@@ -18,6 +18,7 @@
     "m_Key": "Resources/Material/SpriteMaterialInstance",
     "m_OverrideFlags": 0,
     "m_Parameters": [],
+    "m_PassShaders": [],
     "m_Path": "",
     "m_PixelShaderHandle": {
         "Null": true
