@@ -363,7 +363,9 @@ void SceneViewportPanel::DrawCustomOptions()
 	DrawPostProcessMenu();
 	DrawRenderPassMenu();
 	DrawPickingMenu();
-	DrawChannelViewButton(30.0f * 2.0f + 8.0f);
+	const float dimGroupWidth = (ImGui::GetFrameHeight() * 1.1f) * 2.0f;
+	const float groupSpacing = ImGui::GetStyle().ItemSpacing.x;
+	DrawChannelViewButton(dimGroupWidth + groupSpacing);
 	DrawDimensionToggleButton();
 }
 

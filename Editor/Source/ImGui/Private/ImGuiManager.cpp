@@ -129,6 +129,7 @@ EResult ImGuiManager::Initialize(void* arg)
 
 	// [2. 스타일 적용 함수 호출]
 	SetCustomStyle();
+	m_BaseStyle = ImGui::GetStyle();
 
 	ImGuiStyle& style = ImGui::GetStyle();
 	if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
@@ -459,6 +460,14 @@ EResult ImGuiManager::CreateResourceEditors()
 #pragma endregion
 
 #pragma region Style
+void ImGuiManager::SetUIScale(float scale)
+{
+	m_UIScale = std::clamp(scale, 0.5f, 3.0f);
+	ImGuiStyle& style = ImGui::GetStyle();
+	style = m_BaseStyle;               // 원본 스타일로 초기화
+	style.ScaleAllSizes(m_UIScale);    // 여백, 패딩, 핸들 크기 등 모든 위젯 수치 일괄 스케일링
+	ImGui::GetIO().FontGlobalScale = m_UIScale; // 폰트 배율 동기화
+}
 void ImGuiManager::SetCustomStyle()
 {
 	ImGuiStyle& style = ImGui::GetStyle();

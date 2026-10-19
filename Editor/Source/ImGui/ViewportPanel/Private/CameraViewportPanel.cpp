@@ -67,7 +67,9 @@ void CameraViewportPanel::DrawCustomOptions()
 	DrawResolutionMenu();
 	DrawRenderTargetMenu();
 	DrawCameraMenu();
-	DrawChannelViewButton(30.0f * 2.0f + 8.0f);
+	const float dimGroupWidth = (ImGui::GetFrameHeight() * 1.1f) * 2.0f;
+	const float groupSpacing = ImGui::GetStyle().ItemSpacing.x;
+	DrawChannelViewButton(dimGroupWidth + groupSpacing);
 	DrawDimensionToggleButton();
 }
 void CameraViewportPanel::DrawCameraMenu()
@@ -176,9 +178,10 @@ void CameraViewportPanel::SetOrthographic(bool orthographic)
 #pragma region Dimension 
 void CameraViewportPanel::DrawDimensionToggleButton()
 {
-	ImVec2 buttonSize(30.0f, 0.0f);
-	float groupWidth = buttonSize.x * 2.0f;
-	float rightPadding = 10.0f;
+	const float btnHeight = ImGui::GetFrameHeight();
+	const ImVec2 buttonSize(btnHeight * 1.1f, btnHeight);
+	const float groupWidth = buttonSize.x * 2.0f;
+	const float rightPadding = ImGui::GetStyle().WindowPadding.x;
 
 	ImGui::SameLine(ImGui::GetWindowWidth() - groupWidth - rightPadding);
 

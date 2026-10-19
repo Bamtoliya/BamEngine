@@ -307,10 +307,10 @@ void ToolBar::DrawDisplaySettingsWindow()
 		ImGui::Separator();
 
 		// [옵션] UI 스케일 조절 (4K 모니터 대응용)
-		static float uiScale = 1.0f;
-		if (ImGui::DragFloat(LOCAL_LABEL("ToolBar.UIScale").c_str(), &uiScale, 0.01f, 0.5f, 3.0f))
+		float uiScale = ImGuiManager::Get().GetUIScale();
+		if (ImGui::DragFloat(LOCAL_LABEL("ToolBar.UIScale").c_str(), &uiScale, 0.01f, 0.5f, 3.0f, "%.2fx"))
 		{
-			ImGui::GetIO().FontGlobalScale = uiScale; // 간단한 스케일링 방법
+			ImGuiManager::Get().SetUIScale(uiScale);
 		}
 
 		ImGui::Separator();

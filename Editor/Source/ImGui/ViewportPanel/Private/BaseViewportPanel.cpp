@@ -177,19 +177,18 @@ void BaseViewportPanel::DrawRenderTargetMenu()
 }
 void BaseViewportPanel::DrawChannelViewButton(float rightReservedWidth)
 {
-	const ImVec2 buttonSize(28.0f, 0.0f);
+	const float btnHeight = ImGui::GetFrameHeight();
+	const ImVec2 buttonSize(btnHeight, btnHeight);
 	const float buttonSpacing = 0.0f;
-	const float rightPadding = 10.0f;
+	const float rightPadding = ImGui::GetStyle().WindowPadding.x;
 
 	const float channelGroupWidth = buttonSize.x * 4.0f + buttonSpacing * 3.0f;
-
 	ImGui::SameLine(ImGui::GetWindowWidth() - rightReservedWidth - channelGroupWidth - rightPadding);
 
 	auto toggleFlag = [this](EViewportChannelView flag)
 		{
 			const uint8 current = static_cast<uint8>(m_ChannelView);
 			const uint8 bit = static_cast<uint8>(flag);
-
 			if ((current & bit) != 0)
 				m_ChannelView = static_cast<EViewportChannelView>(current & ~bit);
 			else
@@ -199,7 +198,6 @@ void BaseViewportPanel::DrawChannelViewButton(float rightReservedWidth)
 	auto drawToggleButton = [&](const char* label, EViewportChannelView flag, const ImVec4& activeColor)
 		{
 			const bool isActive = HasFlag(m_ChannelView, flag);
-
 			if (isActive)
 				ImGui::PushStyleColor(ImGuiCol_Button, activeColor);
 			else

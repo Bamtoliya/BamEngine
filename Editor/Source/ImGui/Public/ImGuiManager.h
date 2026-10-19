@@ -91,6 +91,9 @@ private:
 #pragma endregion
 
 #pragma region Style
+public:
+	void SetUIScale(float scale);
+	[[nodiscard]] float GetUIScale() const { return m_UIScale; }
 private:
 	void SetCustomStyle();
 #pragma endregion
@@ -123,6 +126,8 @@ private:
 	vector<ImGuiInterface*> m_ImGuiPanels;
 	vector<ImGuiInterface*> m_PendingAddPanels;
 	vector<ImGuiInterface*> m_PendingRemovePanels;
+	ImGuiStyle m_BaseStyle{};
+	float m_UIScale = 1.0f;
 #pragma endregion
 #pragma endregion
 };
