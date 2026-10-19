@@ -23,6 +23,8 @@
 #include "ContentBrowserPanel.h"
 
 #include "PIEManager.h"
+#include "HotReloadManager.h"
+#include "ShaderHotReloadManager.h"
 
 void ToolBar::Draw(SDL_Window* window)
 {
@@ -449,6 +451,37 @@ void ToolBar::DrawPlayControls()
 	if (state == EPlayState::Edit) ImGui::EndDisabled();
 	if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("ToolBar.StopTooltip"));
 	ImGui::PopID();
+
+	ImGui::SameLine(0.0f, 15.0f); // 재생 제어 버튼들과 간격 띄우기
+	// ■ Hot Reload
+	ImGui::PushID("HotReloadBtn");
+	if (ImGui::Button(ICON_FA_ARROWS_ROTATE " Hot Reload", ImVec2(100.0f, 0)))
+	{
+		HotReloadManager::Get().ReloadModule();
+	}
+	if (ImGui::IsItemHovered())
+	{
+		ImGui::SetTooltip("Reload GameModule DLL (Version: %u)", HotReloadManager::Get().GetState());
+	}
+	ImGui::PopID();
+
+	ImGui::SameLine(0.0f, 5.0f);
+	ImGui::Checkbox("Auto", &HotReloadManager::Get().GetAutoReloadRef());
+	if (ImGui::IsItemHovered())
+	{
+		ImGui::SetTooltip("Automatically reload when GameModule.dll is compiled");
+	}
+
+	ImGui::SameLine();
+	// 셰이더 전체 재컴파일 및 핫스왑 버튼
+	if (ImGui::Button("Shader Reload"))
+	{
+		ShaderHotReloadManager::Get().RequestRecompileAll();
+	}
+	if (ImGui::IsItemHovered())
+	{
+		ImGui::SetTooltip("Recompile & Hot-Swap All Shaders (Resources/Shader/hlsl)");
+	}
 }
 
 #pragma endregion

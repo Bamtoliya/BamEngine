@@ -10,6 +10,8 @@
 #include <archive/JsonArchive.h>
 #include "Systems.h"
 #include "PIEManager.h"
+#include "HotReloadManager.h"
+#include "ShaderHotReloadManager.h"
 
 BEGIN(Editor)
 
@@ -57,6 +59,21 @@ EResult Application::Initialize(void* arg)
     if (result != EResult::Success)
         return fail("InitializeSystem", result);
 
+    HotReloadManager::Create();
+    ShaderHotReloadManager::Create();
+    // Editor.exe 실행 파일과 같은 디렉터리에 있는 GameModule.dll 로드
+    wchar_t exePathBuf[MAX_PATH] = {};
+    GetModuleFileNameW(nullptr, exePathBuf, MAX_PATH);
+    const std::filesystem::path exeDir = std::filesystem::path(exePathBuf).parent_path();
+    const std::filesystem::path modulePath = exeDir / L"GameModule.dll";
+    if (std::filesystem::exists(modulePath))
+    {
+        HotReloadManager::Get().LoadModule(modulePath);
+    }
+    else
+    {
+        BAM_LOG(Warn, "HotReload", "GameModule.dll not found at: {}", modulePath.string());
+    }
     return EResult::Success;
 }
 
@@ -91,6 +108,9 @@ void Application::Free()
         PIEManager::Destroy();
         m_PIEManager = nullptr;
     }
+
+    ShaderHotReloadManager::Destroy();
+    HotReloadManager::Destroy();
 
     if (m_Runtime)
     {
@@ -1075,6 +1095,8 @@ void Application::Run(int argc, char* argv[])
 		UpdateTitle(dt);
         ImGuiManager::Get().Update(dt);
         m_AssetManager->Update(dt);
+        HotReloadManager::Get().Update();
+        ShaderHotReloadManager::Get().Update();
 
         // 기존: if (m_PlayState == EPlayState::Play)
         if (PIEManager::Get().IsPlaying())
