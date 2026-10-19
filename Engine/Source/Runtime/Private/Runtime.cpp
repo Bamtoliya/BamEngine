@@ -30,6 +30,9 @@ EResult Runtime::Initialize(void* arg)
 	m_ReflectionRegistry = ReflectionRegistry::Create();
 	if (!m_ReflectionRegistry) return fail("ReflectionRegistry");
 
+	m_ModuleManager = ModuleManager::Create();
+	if (!m_ModuleManager) return fail("ModuleManager");
+
 	m_TimeManager = TimeManager::Create();
 	if (!m_TimeManager) return fail("TimeManager");
 
@@ -86,6 +89,8 @@ void Runtime::Free()
 	{
 		m_Renderer->ClearAllRenderQueues();
 	}
+
+	Safe_Destroy(m_ModuleManager);
 	
 	// ── 1. 게임 로직 (RHI 무관) ──
 	Safe_Destroy(m_TimeManager);

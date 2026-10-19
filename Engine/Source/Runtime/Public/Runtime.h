@@ -16,6 +16,7 @@
 #include "ReflectionRegistry.h"
 #include "PickingManager.h"
 #include "AudioManager.h"
+#include "ModuleManager.h"
 
 BEGIN(Engine)
 typedef struct RuntimeCreateInfo
@@ -62,6 +63,7 @@ private:
 	LocalizationManager* m_LocalizationManager = { nullptr };
 	PickingManager* m_PickingManager = { nullptr };
 	AudioManager* m_AudioManager = { nullptr };
+	ModuleManager* m_ModuleManager = { nullptr };
 #pragma endregion
 };
 
