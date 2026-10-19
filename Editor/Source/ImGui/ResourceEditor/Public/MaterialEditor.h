@@ -2,6 +2,7 @@
 
 #include "ResourceEditorInterface.h"
 #include "MaterialInterface.h"
+#include "MaterialPreviewRenderer.h"
 #include <string>
 
 BEGIN(Engine)
@@ -18,6 +19,7 @@ public:
 public:
 	virtual bool IsSupported(const std::filesystem::path& assetPath) const override;
 	virtual void SetTargetResource(const std::filesystem::path& assetPath) override;
+	virtual void Update(f32 dt) override; // 렌더 패스 실행 전 커맨드 사전 제출용
 	virtual void Draw() override;
 
 private:
@@ -40,7 +42,9 @@ private:
 	char m_NewTextureSlotName[128] = "";
 	int m_NewTextureSlotNumber = 0;
 
-	// 새 패스 셰이더 추가용 선택 인덱스 (기본: Shadow)
 	int m_NewPassTypeIndex = 3;
+
+	// 3D 머티리얼 프리뷰 렌더러
+	MaterialPreviewRenderer m_PreviewRenderer;
 };
 END

@@ -27,6 +27,11 @@ namespace
         return text.empty() || text == key ? fallback : text;
     }
 
+    std::string Text(const char* key)
+    {
+        return Engine::LocalizationManager::Get().GetText(std::string(key));
+    }
+
     std::string EntityName(Engine::Scene& scene, entt::entity entity)
     {
         const auto& world = scene.GetRegistry();
@@ -209,7 +214,8 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
             }
 
             const auto& children = tree.Children.at(entity);
-            auto flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick | ImGuiTreeNodeFlags_SpanAvailWidth;
+            auto flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick |
+                ImGuiTreeNodeFlags_SpanFullWidth | ImGuiTreeNodeFlags_FramePadding;
             if (std::ranges::find(selected, entity) != selected.end()) flags |= ImGuiTreeNodeFlags_Selected;
             if (children.empty()) flags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
             ImGui::PushID(std::to_string(entt::to_integral(entity)).c_str());
@@ -286,19 +292,20 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
                 ImGui::EndPopup();
             }
 
-            // --- 2. 우측 정렬 컨트롤: Active 체크박스 & Visible 눈알 아이콘 ---
+            // --- 2. 우측 정렬 컨트롤: Active & Visible 토글 아이콘 버튼 ---
             if (!locked && flagComp)
             {
                 const float itemSize = ImGui::GetFrameHeight();
-                const float rightPadding = 12.0f;
-                const float controlsWidth = (itemSize * 2.0f) + ImGui::GetStyle().ItemSpacing.x + rightPadding;
+                const float spacing = ImGui::GetStyle().ItemSpacing.x;
+                const float rightPadding = ImGui::GetStyle().WindowPadding.x;
+                const float controlsWidth = (itemSize * 2.0f) + spacing + rightPadding;
                 const float alignX = ImGui::GetWindowContentRegionMax().x - controlsWidth;
 
                 if (alignX > ImGui::GetCursorPosX())
                 {
                     ImGui::SameLine(alignX);
 
-                    // 눈알 아이콘 버튼 (가시성 토글)
+                    // 1) 가시성(Visible) 눈알 아이콘 버튼
                     const bool localVisible = flagComp->IsVisible();
                     const char* eyeIcon = localVisible ? ICON_FA_EYE : ICON_FA_EYE_SLASH;
                     if (!effectiveVisible && localVisible) ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.5f, 0.5f, 0.5f));
@@ -306,25 +313,33 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
                     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
                     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(1, 1, 1, 0.15f));
 
-                    // 눈알 아이콘 버튼 (가시성 토글)
                     if (ImGui::Button(eyeIcon, ImVec2(itemSize, itemSize)))
                     {
                         action.ToggleVisible = entity;
                     }
                     if (ImGui::IsItemHovered())
-                        ImGui::SetTooltip("%s", !effectiveVisible && localVisible ? LOCAL_CSTR("Hierarchy.HiddenByParent") : LOCAL_CSTR("Hierarchy.ToggleVisibility"));
+                        ImGui::SetTooltip("%s", Text(!effectiveVisible && localVisible ?
+                            "Hierarchy.HiddenByParent" : "Hierarchy.ToggleVisibility").c_str());
                     ImGui::PopStyleColor(3);
 
-                    ImGui::SameLine();
+                    ImGui::SameLine(0.0f, spacing);
 
-                    // 활성화 체크박스 (Active 토글)
-                    bool localActive = flagComp->IsActive();
-                    if (ImGui::Checkbox("##EntityActive", &localActive))
+                    // 2) 활성화(Active) 체크 아이콘 버튼 (체크박스 대신 동일 규격 아이콘 버튼으로 통일)
+                    const bool localActive = flagComp->IsActive();
+                    const char* activeIcon = ICON_FA_CHECK;
+                    if (!effectiveActive && localActive) ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.5f, 0.5f, 0.5f));
+                    else ImGui::PushStyleColor(ImGuiCol_Text, localActive ? ImGui::GetStyle().Colors[ImGuiCol_CheckMark] : ImVec4(0.35f, 0.35f, 0.35f, 1));
+                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+                    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(1, 1, 1, 0.15f));
+
+                    if (ImGui::Button(activeIcon, ImVec2(itemSize, itemSize)))
                     {
                         action.ToggleActive = entity;
                     }
                     if (ImGui::IsItemHovered())
-                        ImGui::SetTooltip("%s", !effectiveActive && localActive ? LOCAL_CSTR("Hierarchy.DeactivatedByParent") : LOCAL_CSTR("Hierarchy.ToggleActive"));
+                        ImGui::SetTooltip("%s", Text(!effectiveActive && localActive ?
+                            "Hierarchy.DeactivatedByParent" : "Hierarchy.ToggleActive").c_str());
+                    ImGui::PopStyleColor(3);
                 }
             }
             if (opened && !children.empty())
@@ -337,7 +352,9 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
     if (!tree.Invalid.empty())
         ImGui::TextDisabled("%s",
             Text("UI_HIERARCHY_INVALID", "Invalid hierarchy links; shown without repair.").c_str());
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(ImGui::GetStyle().ItemSpacing.x, 0.0f));
     for (const auto root : tree.Roots) draw(draw, root);
+    ImGui::PopStyleVar();
 
     if (isFiltering && matchingEntities.empty())
         ImGui::TextDisabled("%s", Text("UI_HIERARCHY_NO_MATCH", "No matching entities found.").c_str());

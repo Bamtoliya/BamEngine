@@ -37,6 +37,7 @@ MaterialEditor::MaterialEditor()
 {
 	m_Name = L"Material Editor";
 	m_DisplayNameKey = "ResourceEditor.MaterialTitle";
+	m_PreviewRenderer.Initialize(512, 512);
 }
 
 bool MaterialEditor::IsSupported(const std::filesystem::path& assetPath) const
@@ -67,12 +68,22 @@ void MaterialEditor::SetTargetResource(const std::filesystem::path& assetPath)
 	m_Material = m_MaterialHandle.Get();
 }
 
+void MaterialEditor::Update(f32 dt)
+{
+	// Renderer::Render()가 실행되기 전에 미리 프리뷰 드로우 커맨드와 카메라를 제출
+	if (m_Open && m_Material)
+	{
+		m_PreviewRenderer.Submit(m_Material, dt);
+	}
+}
+
+// MaterialEditor.cpp -> MaterialEditor::Draw() 전체 교체
 void MaterialEditor::Draw()
 {
 	if (!m_Open) return;
 
 	const std::string title = GetDisplayName() + " - " + m_TargetResourcePath.filename().string() + "###" + WStrToStr(m_Name);
-	ImGui::SetNextWindowSize(ImVec2(520.0f, 650.0f), ImGuiCond_FirstUseEver);
+	ImGui::SetNextWindowSize(ImVec2(1000.0f, 650.0f), ImGuiCond_FirstUseEver);
 
 	if (ImGui::Begin(title.c_str(), &m_Open))
 	{
@@ -85,11 +96,33 @@ void MaterialEditor::Draw()
 			return;
 		}
 
+		// 상단 메인 툴바 (저장 버튼 등)
 		DrawToolbar();
-		DrawPipelineSettings();
-		DrawShaderSettings();
-		DrawTextureBindings();
-		DrawParameters();
+		ImGui::Separator();
+
+		// 좌우 2분할 레이아웃 계산 (좌측 뷰포트 55%, 우측 디테일 패널 45%)
+		const float availWidth = ImGui::GetContentRegionAvail().x;
+		const float viewportWidth = std::max(availWidth * 0.55f, 320.0f);
+
+		// ── [좌측 영역] 3D 머티리얼 뷰포트 (자체 마우스 조작, 부모 스크롤 차단) ──
+		ImGuiWindowFlags vpFlags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
+		if (ImGui::BeginChild("##MaterialViewportPane", ImVec2(viewportWidth, 0.0f), true, vpFlags))
+		{
+			m_PreviewRenderer.DrawUI(m_Material);
+		}
+		ImGui::EndChild();
+
+		ImGui::SameLine();
+
+		// ── [우측 영역] 머티리얼 프로퍼티 & 파라미터 디테일 패널 (독립 세로 스크롤) ──
+		if (ImGui::BeginChild("##MaterialDetailsPane", ImVec2(0.0f, 0.0f), true))
+		{
+			DrawPipelineSettings();
+			DrawShaderSettings();
+			DrawTextureBindings();
+			DrawParameters();
+		}
+		ImGui::EndChild();
 	}
 	ImGui::End();
 }

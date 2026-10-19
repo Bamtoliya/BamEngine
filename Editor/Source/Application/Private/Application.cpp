@@ -454,6 +454,17 @@ void Application::InitializeShaders()
         rm.LoadResource<Shader>(&gbufferPsDesc);
     }
 
+    ShaderDesc previewPsDesc = {};
+    {
+        previewPsDesc.Key = RESOURCE_PATH L"Shader/MaterialPreviewPS";
+        previewPsDesc.Path = RESOURCE_PATH L"Shader/bin/dxil/materialPreviewPS.cso";
+        if (Renderer::Get().GetRHIType() == ERHIType::SDLGPU)
+            previewPsDesc.Path = RESOURCE_PATH L"Shader/bin/spirv/materialPreviewPS.spv";
+        previewPsDesc.shaderType = EShaderType::Fragment;
+        previewPsDesc.entryPoint = "main";
+        rm.LoadResource<Shader>(&previewPsDesc);
+    }
+
     //ShaderDesc defaultSkinningShaderDesc = {};
     //{
     //    defaultSkinningShaderDesc.Key = L"Resources/Shader/Skinning";
