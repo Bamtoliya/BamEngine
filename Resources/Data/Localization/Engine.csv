@@ -2,20 +2,35 @@
 ,Abs (Float),Abs (Float),절댓값 (Float)
 ,Anchor,Anchor,앵커
 ,Angles use radians.,Angles use radians.,각도는 라디안 단위를 사용합니다.
-,Atmosphere,Atmosphere,대기
-,Atmosphere Sync,Atmosphere Sync,대기 동기화
 ,CATEGORY_ANCHOR,Anchor,앵커
+,CATEGORY_ATMOSPHERE,Atmosphere,대기
+,CATEGORY_ATMOSPHERE_SYNC,Atmosphere Sync,대기 동기화
 ,CATEGORY_AUDIO,Audio,오디오
 ,CATEGORY_BOUNDS,Bounds,경계
+,CATEGORY_CLOUDS,Clouds,구름
+,CATEGORY_CLOUD_SHAPE,Cloud Shape,구름 형태
 ,CATEGORY_CORE,Core,기본
+,CATEGORY_FOG_COLOR,Fog Color,안개 색상
+,CATEGORY_FOG_PARAMETERS,Fog Parameters,안개 매개변수
+,CATEGORY_FOG_PLACEMENT,Fog Placement,안개 배치
+,CATEGORY_LAYER_PLACEMENT,Layer Placement,구름층 배치
+,CATEGORY_LIGHTING,Lighting,조명
+,CATEGORY_PARAMETER,Parameter,매개변수
 ,CATEGORY_PHYSICS_2D,Physics 2D,2D 물리
 ,CATEGORY_PHYSICS_3D,Physics 3D,3D 물리
+,CATEGORY_PIPELINE,Pipeline,파이프라인
 ,CATEGORY_RAY,Ray,광선
 ,CATEGORY_RECT,Rect,사각 영역
 ,CATEGORY_RENDER,Rendering,렌더링
+,CATEGORY_SHADER,Shader,셰이더
+,CATEGORY_SHADOW,Shadow,그림자
+,CATEGORY_SKY,Sky,하늘
+,CATEGORY_SKY_COLOR,Sky Color,하늘 색상
+,CATEGORY_SUN_DISC,Sun Disc,태양 원반
+,CATEGORY_TEXTURE,Texture,텍스처
+,CATEGORY_TIME_OF_DAY,Time of Day,하루 시간
 ,CATEGORY_UI,UI,UI
-,Cloud Shape,Cloud Shape,구름 형태
-,Clouds,Clouds,구름
+,CATEGORY_WIND_EVOLUTION,Wind & Evolution,바람 및 대류
 ,DETAIL,Detail,세부 정보
 ,Details,Details,세부 정보
 ,ENUM_ATTENUATION_MODE,Attenuation Mode,감쇠 모드
@@ -25,12 +40,7 @@
 ,ENUM_LIGHT_FLAGS,Light Flags,조명 플래그
 ,ENUM_LIGHT_TYPE,Light Type,조명 타입
 ,ENUM_TRANSFORM_ABSOLUTE,Absolute Transform Channels,월드 기준 Transform 채널
-,Fog Color,Fog Color,안개 색상
-,Fog Parameters,Fog Parameters,안개 매개변수
-,Fog Placement,Fog Placement,안개 배치
-,Layer Placement,Layer Placement,구름층 배치
 ,Layout,Layout,레이아웃
-,Lighting,Lighting,조명
 ,Logic/Bool,Logic/Bool,논리/Bool
 ,Math/Float,Math/Float,수학/Float
 ,Math/Int,Math/Int,수학/Int
@@ -55,6 +65,7 @@
 ,PROP_AUTO_SYNC_DIRECTIONAL_LIGHT,Auto Sync Directional Light,디렉셔널 라이트 자동 동기화
 ,PROP_BILLBOARD_MODE,Billboard Mode,빌보드 모드
 ,PROP_BITFLAG,BitFlag,비트 플래그
+,PROP_BLEND_MODE,Blend Mode,블렌드 모드
 ,PROP_BODY_TYPE,Body Type,강체 종류
 ,PROP_BONE,Bone,본
 ,PROP_CAMERA_TYPE,Camera Type,카메라 타입
@@ -70,8 +81,11 @@
 ,PROP_CONNECTED_ENTITY,Connected Entity,연결 엔티티
 ,PROP_CONNECTED_LOCAL_ANCHOR,Connected Anchor,연결 앵커
 ,PROP_COVERAGE,Cloud Coverage,구름 커버리지
+,PROP_CULL_MODE,Cull Mode,컬링 모드
 ,PROP_DAY_DURATION,Day Duration (s),하루 길이(초)
 ,PROP_DENSITY,Cloud Density,구름 밀도
+,PROP_DEPTH_COMPARE_OP,Depth Compare Op,깊이 비교 연산
+,PROP_DEPTH_MODE,Depth Mode,깊이 모드
 ,PROP_DETAIL_SIZE,Detail Noise Size,디테일 노이즈 크기
 ,PROP_DIRECTION,Direction,방향
 ,PROP_DIRTY,Dirty,갱신 필요
@@ -85,6 +99,7 @@
 ,PROP_EULER_ROTATION,EulerRotation,회전(각도)
 ,PROP_EXTINCTION,Extinction Factor,빛 흡수 계수
 ,PROP_FAR_PLANE,Far Plane,원거리 평면
+,PROP_FILL_MODE,Fill Mode,채우기 모드
 ,PROP_FLAG,Flags,상태
 ,PROP_FLAGS,Flags,상태
 ,PROP_FLIPX,FlipX,X 반전
@@ -100,6 +115,7 @@
 ,PROP_FOV,Field of View,시야각
 ,PROP_FREEZE_ROTATION,Freeze Rotation,회전 고정
 ,PROP_FRICTION,Friction,마찰
+,PROP_FRONT_FACE,Front Face,전면 방향
 ,PROP_GRAVITY_SCALE,Gravity Scale,중력 배율
 ,PROP_GROUND_COLOR,Ground Color,지면 색상
 ,PROP_HEIGHT,Height,높이
@@ -120,6 +136,7 @@
 ,PROP_LAYER_BOTTOM,Layer Bottom Altitude,구름 시작 고도
 ,PROP_LAYER_HEIGHT,Layer Height,구름층 두께
 ,PROP_LEFT,Left,좌측
+,PROP_LENGTH,Length,길이
 ,PROP_LIGHTING_LAYER_MASK,Lighting Layer Mask,조명 레이어 마스크
 ,PROP_LIGHT_TYPE,Light Type,빛 타입
 ,PROP_LINEAR_DAMPING,Linear Damping,선형 감쇠
@@ -133,6 +150,7 @@
 ,PROP_MATRIX,Matrix,매트릭스
 ,PROP_MAX,Max,최댓값
 ,PROP_MAX_DISTANCE,Max Distance,최대 감쇠 거리
+,PROP_MAX_HEIGHT,Max Height,최대 높이
 ,PROP_MESH_HANDLE,Mesh Handle,메쉬 핸들
 ,PROP_MIN,Min,최솟값
 ,PROP_MIN_DISTANCE,Min Distance,최소 감쇠 거리
@@ -143,8 +161,12 @@
 ,PROP_OFFSET,Offset,오프셋
 ,PROP_ORIGIN,Origin,원점
 ,PROP_ORTHOGRAPHIC_SIZE,Orthographic Size,직교 투영 크기
+,PROP_PARAMETERS,Parameters,매개변수
+,PROP_PASS_SHADERS,Pass Shaders,패스별 셰이더
 ,PROP_PITCH,Pitch,피치
 ,PROP_PIVOT,Pivot,피벗
+,PROP_PIXEL_SHADER,Pixel Shader,픽셀 셰이더
+,PROP_PIXEL_SHADER_HANDLE,Pixel Shader Handle,픽셀 셰이더 핸들
 ,PROP_PLAY_ON_AWAKE,Play On Awake,시작 시 자동 재생
 ,PROP_POINT_A,Point A,시작점 A
 ,PROP_POINT_B,Point B,끝점 B
@@ -180,10 +202,13 @@
 ,PROP_SUN_LATITUDE,Sun Latitude,태양 위도
 ,PROP_SUN_SIZE,Sun Size,태양 크기
 ,PROP_TAGS,Tags,태그
+,PROP_TEXTURE_BINDINGS,Texture Bindings,텍스처 바인딩
 ,PROP_TILING,Tiling,반복
 ,PROP_TIME_OF_DAY,Time of Day,하루 시간
 ,PROP_TOP,Top,상단
 ,PROP_TRANSFORM_ABSOLUTE,World Channels (Ignore Parent),월드 기준 채널 (부모 상속 해제)
+,PROP_VERTEX_SHADER,Vertex Shader,버텍스 셰이더
+,PROP_VERTEX_SHADER_HANDLE,Vertex Shader Handle,버텍스 셰이더 핸들
 ,PROP_VOLUME,Volume,볼륨
 ,PROP_WEATHER_SIZE,Weather Map Size,웨더 맵 군집 크기
 ,PROP_WIDTH,Width,너비
@@ -226,6 +251,7 @@
 ,STRUCT_SPRITE_RENDERER,Sprite Renderer,스프라이트 렌더러
 ,STRUCT_STATIC_MESH_RENDERER,Static Mesh Renderer,정적 메쉬 렌더러
 ,STRUCT_TAG,Tags,태그
+,STRUCT_TERRAIN,Terrain,지형
 ,STRUCT_TRANSFORM,Transform,트랜스폼
 ,STRUCT_UI_INTERACTION_STATE,UI Interaction State,UI 상호작용 상태
 ,STRUCT_UI_RENDER_ORDER,UI Render Order,UI 렌더 순서
@@ -235,13 +261,9 @@
 ,Shadow,Shadow,그림자
 ,Shape,Shape,형상
 ,Sky,Sky,하늘
-,Sky Color,Sky Color,하늘 색상
 ,Spot Inner Angle (Degrees),Spot Inner Angle (Degrees),스포트 내부 각도(도)
 ,Spot Outer Angle (Degrees),Spot Outer Angle (Degrees),스포트 외부 각도(도)
 ,Sun,Sun,태양
-,Sun Disc,Sun Disc,태양 원반
 ,Texture,Texture,텍스처
-,Time of Day,Time of Day,하루 시간
 ,UI,UI,UI
-,Wind & Evolution,Wind & Evolution,바람 및 대류
 ,Xor,Xor,XOR

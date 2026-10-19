@@ -83,71 +83,73 @@ Group,Key,English,Korean
 ,UI_VALUE_UNAVAILABLE,Value unavailable,값을 읽을 수 없습니다.
 ,UI_ELEMENT_COUNT,{} elements,요소 {}개
 ,UI_SIZE_UNAVAILABLE,Size unavailable,크기를 읽을 수 없습니다.
+,UI_RESET_TO_DEFAULT,Reset to Default,기본값으로 재설정
+,UI_VALUE_PREVIEW_UNAVAILABLE,Value preview unavailable,값 미리보기를 사용할 수 없습니다
 Transform,Hirarchy_AddGameObject,Add GameObject,게임 오브젝트 추가+
-,Position,Position,위치
-,Rotation,Rotation,회전
-,Scale,Scale,크기
-,EulerRotation,Euler Rotation,회전(각도)
+Transform,Position,Position,위치
+Transform,Rotation,Rotation,회전
+Transform,Scale,Scale,크기
+Transform,EulerRotation,Euler Rotation,회전(각도)
 ContentBrowser,Cancel,Cancel,취소
-,Overwrite,OverWrite,덮어쓰기
-,CreateCopy,Create Copy,복사본 생성
-,Skip,Skip,건너뛰기
-,ApplyToAll,Apply To All,전체적용
-,FileConflictMessage,A file with the same name already exists in the destination.\nWhat would you like to do?,대상 위치에 이미 동일한 이름의 항목이 존재합니다:
-,FileConflictPopup,File Conflict,파일 충돌
+ContentBrowser,Overwrite,OverWrite,덮어쓰기
+ContentBrowser,CreateCopy,Create Copy,복사본 생성
+ContentBrowser,Skip,Skip,건너뛰기
+ContentBrowser,ApplyToAll,Apply To All,전체적용
+ContentBrowser,FileConflictMessage,A file with the same name already exists in the destination.\nWhat would you like to do?,대상 위치에 이미 동일한 이름의 항목이 존재합니다:
+ContentBrowser,FileConflictPopup,File Conflict,파일 충돌
 GraphPanel,Title,Graph,그래프
-,Logic,Logic,로직
-,Shader,Shader,셰이더
-,AddNode,Add node,노드 추가
-,SearchNodes,Search nodes or categories...,노드 이름·분류 검색...
-,NoMatchingNodes,No compatible nodes match the search.,조건에 맞는 노드가 없습니다.
-,ConnectFrom,Connect from output,출력 핀에서 연결
-,ConnectTo,Connect to input,입력 핀으로 연결
-,RequiredValue,Required input - set a value or connect a pin.,필수 입력 - 값을 지정하거나 핀을 연결하세요.
-,NoObservedValue,Not observed,관측값 없음
-,Validate,Validate,검사
-,ResetView,Reset view,화면 초기화
-,Delete,Delete,삭제
-,Connection,Connection,연결
-,Disconnect,Disconnect,연결 해제
-,SelectHint,Select a node or connection to edit it.,편집할 노드나 연결을 선택하세요.
-,MultipleSelection,Multiple items selected. Delete removes all selected items.,여러 항목을 선택했습니다. 삭제하면 선택한 항목을 모두 제거합니다.
-,Connected,Connected - source takes precedence,연결됨 - 연결된 소스를 사용합니다
-,ObjectLinkOnly,Requires a matching object output connection.,일치하는 객체 타입의 출력 핀을 연결해야 합니다.
-,UseValue,Use value,값 지정
-,ResetValue,Reset to definition,정의의 기본값으로 복원
-,Validation,Validation,검사 결과
-,Valid,No structural errors. Execution is not checked.,구조 오류가 없습니다. 실행 여부는 검사하지 않습니다.
-,SessionOnly,Session only - Logic preview is available. Saving is not available.,현재 세션에서 로직 실행을 미리 볼 수 있습니다. 저장은 아직 지원하지 않습니다.
-,Controls,Drag pins to empty space to search nodes | Middle drag to pan | Ctrl for multiple selection,핀을 빈 곳에 놓아 노드 검색 | 가운데 버튼으로 화면 이동 | Ctrl로 다중 선택
-,Empty,Add a node from the toolbar or the right-click menu.,상단 버튼이나 우클릭 메뉴에서 노드를 추가하세요.
-,NoEntry,Add a Start or Update event.,Start 또는 Update 이벤트를 추가하세요.
-,Run,Run / Resume,실행 / 계속
-,Pause,Pause,일시정지
-,Step,Step,한 단계
-,Stop,Stop,중지
-,ResetInstance,Reset instance,실행 상태 초기화
-,ExecutionTrace,Execution trace,실행 추적
-,Idle,Idle,실행 전
-,Paused,Paused,일시정지
-,Running,Running,실행 중
-,Completed,Completed,실행 완료
-,Stopped,Stopped,중지됨
-,Failed,Failed,실행 실패
-,RemainingBudget,Remaining budget,남은 실행 예산
-,Result,Last result,마지막 결과
-,LastObserved,Last observed value,마지막 관측값
-,StepInterval,Task interval (seconds),작업 간격(초)
-,EventDelta,Update delta (seconds),Update 시간 간격(초)
-,TaskBudget,Tasks per event,이벤트당 실행 예산
-,FollowTrace,Follow latest trace,최신 흐름 따라가기
-,TraceEnter,Enter,진입
-,TraceLeave,Leave,복귀
-,TraceLink,Link,연결 통과
-,TraceValue,Value,값
-,TraceIteration,Iteration,반복
-,TraceError,Error,오류
-,PreviewScope,Logic preview uses an execution snapshot. Editing resets it. Click a trace to pause and inspect.,로직 복사본을 실행합니다. 편집하면 실행 상태가 초기화됩니다. 기록을 클릭하면 일시정지하고 위치와 값을 확인할 수 있습니다.
+GraphPanel,Logic,Logic,로직
+GraphPanel,Shader,Shader,셰이더
+GraphPanel,AddNode,Add node,노드 추가
+GraphPanel,SearchNodes,Search nodes or categories...,노드 이름·분류 검색...
+GraphPanel,NoMatchingNodes,No compatible nodes match the search.,조건에 맞는 노드가 없습니다.
+GraphPanel,ConnectFrom,Connect from output,출력 핀에서 연결
+GraphPanel,ConnectTo,Connect to input,입력 핀으로 연결
+GraphPanel,RequiredValue,Required input - set a value or connect a pin.,필수 입력 - 값을 지정하거나 핀을 연결하세요.
+GraphPanel,NoObservedValue,Not observed,관측값 없음
+GraphPanel,Validate,Validate,검사
+GraphPanel,ResetView,Reset view,화면 초기화
+GraphPanel,Delete,Delete,삭제
+GraphPanel,Connection,Connection,연결
+GraphPanel,Disconnect,Disconnect,연결 해제
+GraphPanel,SelectHint,Select a node or connection to edit it.,편집할 노드나 연결을 선택하세요.
+GraphPanel,MultipleSelection,Multiple items selected. Delete removes all selected items.,여러 항목을 선택했습니다. 삭제하면 선택한 항목을 모두 제거합니다.
+GraphPanel,Connected,Connected - source takes precedence,연결됨 - 연결된 소스를 사용합니다
+GraphPanel,ObjectLinkOnly,Requires a matching object output connection.,일치하는 객체 타입의 출력 핀을 연결해야 합니다.
+GraphPanel,UseValue,Use value,값 지정
+GraphPanel,ResetValue,Reset to definition,정의의 기본값으로 복원
+GraphPanel,Validation,Validation,검사 결과
+GraphPanel,Valid,No structural errors. Execution is not checked.,구조 오류가 없습니다. 실행 여부는 검사하지 않습니다.
+GraphPanel,SessionOnly,Session only - Logic preview is available. Saving is not available.,현재 세션에서 로직 실행을 미리 볼 수 있습니다. 저장은 아직 지원하지 않습니다.
+GraphPanel,Controls,Drag pins to empty space to search nodes | Middle drag to pan | Ctrl for multiple selection,핀을 빈 곳에 놓아 노드 검색 | 가운데 버튼으로 화면 이동 | Ctrl로 다중 선택
+GraphPanel,Empty,Add a node from the toolbar or the right-click menu.,상단 버튼이나 우클릭 메뉴에서 노드를 추가하세요.
+GraphPanel,NoEntry,Add a Start or Update event.,Start 또는 Update 이벤트를 추가하세요.
+GraphPanel,Run,Run / Resume,실행 / 계속
+GraphPanel,Pause,Pause,일시정지
+GraphPanel,Step,Step,한 단계
+GraphPanel,Stop,Stop,중지
+GraphPanel,ResetInstance,Reset instance,실행 상태 초기화
+GraphPanel,ExecutionTrace,Execution trace,실행 추적
+GraphPanel,Idle,Idle,실행 전
+GraphPanel,Paused,Paused,일시정지
+GraphPanel,Running,Running,실행 중
+GraphPanel,Completed,Completed,실행 완료
+GraphPanel,Stopped,Stopped,중지됨
+GraphPanel,Failed,Failed,실행 실패
+GraphPanel,RemainingBudget,Remaining budget,남은 실행 예산
+GraphPanel,Result,Last result,마지막 결과
+GraphPanel,LastObserved,Last observed value,마지막 관측값
+GraphPanel,StepInterval,Task interval (seconds),작업 간격(초)
+GraphPanel,EventDelta,Update delta (seconds),Update 시간 간격(초)
+GraphPanel,TaskBudget,Tasks per event,이벤트당 실행 예산
+GraphPanel,FollowTrace,Follow latest trace,최신 흐름 따라가기
+GraphPanel,TraceEnter,Enter,진입
+GraphPanel,TraceLeave,Leave,복귀
+GraphPanel,TraceLink,Link,연결 통과
+GraphPanel,TraceValue,Value,값
+GraphPanel,TraceIteration,Iteration,반복
+GraphPanel,TraceError,Error,오류
+GraphPanel,PreviewScope,Logic preview uses an execution snapshot. Editing resets it. Click a trace to pause and inspect.,로직 복사본을 실행합니다. 편집하면 실행 상태가 초기화됩니다. 기록을 클릭하면 일시정지하고 위치와 값을 확인할 수 있습니다.
 EditorCommon,Width,Width,너비
 EditorCommon,Height,Height,높이
 EditorCommon,Name,Name,이름
@@ -434,3 +436,61 @@ Viewport,CameraOrthographicSize,Size,직교 크기
 Viewport,CameraSpeed,Move Speed,이동 속도
 Viewport,CameraResetOrigin,Reset to Origin,원점으로 리셋
 Viewport,CameraTopView,Top View,상단 뷰 (Top)
+ToolBar,AutoReload,Auto,자동
+ToolBar,ShaderReload,Shader Reload,셰이더 리로드
+ToolBar,ReloadModuleTooltip,Reload GameModule DLL (Version: {}),GameModule DLL 다시 로드 (버전: {})
+ToolBar,AutoReloadTooltip,Automatically reload when GameModule.dll is compiled,GameModule.dll 컴파일 시 자동 다시 로드
+ToolBar,ShaderReloadTooltip,Recompile & Hot-Swap All Shaders,모든 셰이더 재컴파일 및 핫스왑
+Inspector,ActiveStateTooltip,Active State,활성 상태
+Inspector,LockedTooltip,Locked to current entity,현재 엔티티에 고정
+Inspector,UnlockedTooltip,Unlocked (follows selection),고정 해제 (선택 대상 추적)
+Inspector,LockProperty,Lock property,속성 편집 잠금
+Inspector,UnlockProperty,Unlock property,속성 편집 잠금 해제
+Hierarchy,HiddenByParent,Hidden by parent hierarchy.,부모 계층에 의해 숨겨짐
+Hierarchy,ToggleVisibility,Toggle Visibility,표시 여부 전환
+Hierarchy,DeactivatedByParent,Deactivated by parent hierarchy.,부모 계층에 의해 비활성화됨
+Hierarchy,ToggleActive,Toggle Active,활성 여부 전환
+MaterialEditor,PipelineSettings,Pipeline Settings,파이프라인 설정
+MaterialEditor,Parameters,Parameters,매개변수
+MaterialEditor,UnsupportedType,Unsupported Type,지원되지 않는 타입
+ResourceEditor,MaterialTitle,Material Editor,머티리얼 편집기
+MaterialEditor,LoadFailed,Failed to load material resource: {},머티리얼 리소스를 로드할 수 없습니다: {}
+MaterialEditor,Retry,Retry,다시 시도
+MaterialEditor,Save,Save,저장
+MaterialEditor,Revert,Revert,되돌리기
+MaterialEditor,Modified,Modified,수정됨
+MaterialEditor,BaseMaterial,Base Material: {},기본 머티리얼: {}
+MaterialEditor,BlendMode,Blend Mode,블렌드 모드
+MaterialEditor,CullMode,Cull Mode,컬링 모드
+MaterialEditor,FillMode,Fill Mode,채우기 모드
+MaterialEditor,DepthMode,Depth Mode,깊이 모드
+MaterialEditor,DepthCompareOp,Depth Compare Op,깊이 비교 연산
+MaterialEditor,ShaderSettings,Shader Settings,셰이더 설정
+MaterialEditor,DefaultShaders,--- Default Shaders ---,--- 기본 셰이더 ---
+MaterialEditor,DefaultVS,Default VS,기본 정점 셰이더
+MaterialEditor,DefaultPS,Default PS,기본 픽셀 셰이더
+MaterialEditor,PassSpecificShaders,--- Pass Specific Shaders ---,--- 패스별 셰이더 ---
+MaterialEditor,PassType,Pass Type,패스 종류
+MaterialEditor,VertexShader,Vertex Shader,정점 셰이더
+MaterialEditor,PixelShader,Pixel Shader,픽셀 셰이더
+MaterialEditor,DropShader,(Drop Shader),(셰이더 드래그 & 드롭)
+MaterialEditor,AddPassShader,Add Pass Shader,패스 셰이더 추가
+MaterialEditor,TextureBindings,Texture Bindings,텍스처 바인딩
+MaterialEditor,Slot,Slot,슬롯
+MaterialEditor,Name,Name,이름
+MaterialEditor,Preview,Preview,미리보기
+MaterialEditor,TextureDragDrop,Texture (Drag & Drop),텍스처 (드래그 & 드롭)
+MaterialEditor,DropTexture,(Drop texture here),(여기에 텍스처 드래그 & 드롭)
+MaterialEditor,AddBinding,Add Binding,바인딩 추가
+MaterialEditor,SlotNameHint,Slot Name,슬롯 이름
+MaterialEditor,Value,Value,값
+MaterialEditor,ParamNameHint,Param Name,파라미터 이름
+MaterialEditor,AddParam,Add Param,파라미터 추가
+Hierarchy,Light,Light,라이트
+Hierarchy,AddDirectionalLight,Directional Light,디렉셔널 라이트
+Hierarchy,AddPointLight,Point Light,포인트 라이트
+Hierarchy,AddSpotLight,Spot Light,스포트 라이트
+Hierarchy,AddSkyLight,Sky Light,스카이 라이트
+Inspector,MoveUp,Move Up,위로 이동
+Inspector,MoveDown,Move Down,아래로 이동
+Inspector,RemoveComponent,Remove Component,컴포넌트 제거

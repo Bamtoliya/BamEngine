@@ -311,7 +311,7 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
                         action.ToggleVisible = entity;
                     }
                     if (ImGui::IsItemHovered())
-                        ImGui::SetTooltip(!effectiveVisible && localVisible ? "Hidden by parent hierarchy." : "Toggle Visibility");
+                        ImGui::SetTooltip("%s", !effectiveVisible && localVisible ? LOCAL_CSTR("Hierarchy.HiddenByParent") : LOCAL_CSTR("Hierarchy.ToggleVisibility"));
                     ImGui::PopStyleColor(3);
 
                     ImGui::SameLine();
@@ -323,7 +323,7 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
                         action.ToggleActive = entity;
                     }
                     if (ImGui::IsItemHovered())
-                        ImGui::SetTooltip(!effectiveActive && localActive ? "Deactivated by parent hierarchy." : "Toggle Active");
+                        ImGui::SetTooltip("%s", !effectiveActive && localActive ? LOCAL_CSTR("Hierarchy.DeactivatedByParent") : LOCAL_CSTR("Hierarchy.ToggleActive"));
                 }
             }
             if (opened && !children.empty())
