@@ -274,12 +274,7 @@ void SceneViewportPanel::Update(f32 dt)
 	}
 
 	// 2. 카메라 버퍼 결정: PIE 중이면 씬 카메라 우선, 없으면 에디터 카메라로 폴백
-	std::optional<CameraBuffer> cameraBuffer;
-	if (isPIE)
-		cameraBuffer = FindActiveSceneCameraBuffer();
-
-	if (!cameraBuffer.has_value() && m_CameraController)
-		cameraBuffer = m_CameraController->GetCameraBuffer();
+	const std::optional<CameraBuffer> cameraBuffer = GetActiveCameraBuffer();
 
 	RenderPassManager& rpMgr = RenderPassManager::Get();
 	Renderer& renderer = Renderer::Get();
@@ -362,6 +357,7 @@ void SceneViewportPanel::DrawCustomOptions()
 {
 	DrawResolutionMenu();
 	DrawSceneRenderTargetMenu();
+	DrawCameraMenu();
 	DrawGizmoMenu();
 	DrawDebugMenu();
 	DrawPostProcessMenu();
@@ -598,10 +594,7 @@ void SceneViewportPanel::DrawImGuizmo()
 	}
 
 	const bool isPIE = PIEManager::Get().IsPlaying() || PIEManager::Get().IsPaused();
-	std::optional<CameraBuffer> cameraBuffer;
-	if (isPIE) cameraBuffer = FindActiveSceneCameraBuffer();
-	if (!cameraBuffer.has_value() && m_CameraController)
-		cameraBuffer = m_CameraController->GetCameraBuffer();
+	const std::optional<CameraBuffer> cameraBuffer = GetActiveCameraBuffer();
 
 	if (!cameraBuffer)
 	{
@@ -692,6 +685,8 @@ void SceneViewportPanel::DrawImGuizmo()
 
 void SceneViewportPanel::DrawImViewGuizmo()
 {
+	if (PIEManager::Get().IsPlaying() || PIEManager::Get().IsPaused()) return;
+
 	if (!m_CameraController || m_ImageSize.x <= 0.0f || m_ImageSize.y <= 0.0f)
 		return;
 
@@ -750,7 +745,7 @@ void SceneViewportPanel::DrawLightOverlay()
 	if (!m_ShowLightOverlay || !m_CameraController)
 		return;
 
-	const std::optional<CameraBuffer> cameraBuffer = m_CameraController->GetCameraBuffer();
+	const std::optional<CameraBuffer> cameraBuffer = GetActiveCameraBuffer();
 	if (!cameraBuffer.has_value())
 		return;
 
@@ -878,7 +873,7 @@ void SceneViewportPanel::DrawCameraOverlay()
 	if (!m_ShowCameraOverlay || !m_CameraController)
 		return;
 
-	const std::optional<CameraBuffer> cameraBuffer = m_CameraController->GetCameraBuffer();
+	const std::optional<CameraBuffer> cameraBuffer = GetActiveCameraBuffer();
 	if (!cameraBuffer.has_value())
 		return;
 
@@ -892,6 +887,7 @@ void SceneViewportPanel::DrawCameraOverlay()
 
 	const mat4 editorViewProj = cameraBuffer->viewProjMatrix;
 	const vec3 editorCameraPos = cameraBuffer->cameraPosition;
+	const bool isPIE = PIEManager::Get().IsPlaying() || PIEManager::Get().IsPaused();
 
 	const ImU32 cameraColor = IM_COL32(90, 210, 255, 255);
 	const ImU32 frustumColor = IM_COL32(90, 210, 255, 200);
@@ -900,11 +896,12 @@ void SceneViewportPanel::DrawCameraOverlay()
 	auto view = activeScene->GetRegistry().view<CameraComponent, WorldTransformComponent, FlagComponent>();
 	for (auto entity : view)
 	{
-		const auto& targetCamera = view.get<CameraComponent>(entity);
+		const auto& camera = view.get<CameraComponent>(entity);
 		const auto& tr = view.get<WorldTransformComponent>(entity);
 		const auto& flag = view.get<FlagComponent>(entity);
 		if (!HasFlag(flag.flags, EEntityFlag::Active))
 			continue;
+		if (isPIE && camera.IsMainCamera) continue;
 
 		const vec3 worldPos = vec3(tr.worldMatrix[3]);
 		ImVec2 screenPos;
@@ -936,12 +933,12 @@ void SceneViewportPanel::DrawCameraOverlay()
 		up = glm::dot(up, up) > 1e-6f ? glm::normalize(up) : vec3(0.0f, 1.0f, 0.0f);
 		forward = glm::dot(forward, forward) > 1e-6f ? glm::normalize(forward) : vec3(0.0f, 0.0f, 1.0f);
 
-		const float aspect = (std::isfinite(targetCamera.AspectRatio) && targetCamera.AspectRatio > 0.0f) ? targetCamera.AspectRatio : (16.0f / 9.0f);
+		const float aspect = (std::isfinite(camera.AspectRatio) && camera.AspectRatio > 0.0f) ? camera.AspectRatio : (16.0f / 9.0f);
 		float nearHalfH = 0.0f, nearHalfW = 0.0f, farHalfH = 0.0f, farHalfW = 0.0f;
 
-		if (targetCamera.CameraType == ECameraType::Perspective)
+		if (camera.CameraType == ECameraType::Perspective)
 		{
-			const float fovRad = glm::radians(targetCamera.FOV);
+			const float fovRad = glm::radians(camera.FOV);
 			nearHalfH = glm::tan(fovRad * 0.5f) * displayNear;
 			nearHalfW = nearHalfH * aspect;
 			farHalfH = glm::tan(fovRad * 0.5f) * displayFar;
@@ -949,7 +946,7 @@ void SceneViewportPanel::DrawCameraOverlay()
 		}
 		else
 		{
-			const float orthoH = targetCamera.OrthographicSize * 0.5f;
+			const float orthoH = camera.OrthographicSize * 0.5f;
 			const float orthoW = orthoH * aspect;
 			nearHalfH = farHalfH = orthoH;
 			nearHalfW = farHalfW = orthoW;
@@ -1233,7 +1230,7 @@ void SceneViewportPanel::ProcessPickingRequest()
 bool SceneViewportPanel::ScreenPosToRay(const ImVec2& mousePos, Engine::Ray& ray, float& maxDistance)
 {
 	if (!m_CameraController) return false;
-	const std::optional<CameraBuffer> cameraBuffer = m_CameraController->GetCameraBuffer();
+	const std::optional<CameraBuffer> cameraBuffer = GetActiveCameraBuffer();
 	if (!cameraBuffer.has_value()) return false;
 	vec2 uv;
 	if (!PickingManager::TryGetViewportUV(vec2(mousePos.x, mousePos.y), vec2(m_ImageScreenPos.x, m_ImageScreenPos.y),
@@ -1243,7 +1240,7 @@ bool SceneViewportPanel::ScreenPosToRay(const ImVec2& mousePos, Engine::Ray& ray
 Entity* SceneViewportPanel::PickOverlayEntity(const ImVec2& mousePos) const
 {
 	if ((!m_ShowLightOverlay && !m_ShowCameraOverlay) || !m_CameraController) return nullptr;
-	const std::optional<CameraBuffer> cameraBuffer = m_CameraController->GetCameraBuffer();
+	const std::optional<CameraBuffer> cameraBuffer = const_cast<SceneViewportPanel*>(this)->GetActiveCameraBuffer();
 	if (!cameraBuffer.has_value()) return nullptr;
 	Scene* activeScene = SceneManager::Get().GetCurrentScene();
 	if (!activeScene) return nullptr;
@@ -1314,6 +1311,17 @@ Entity* SceneViewportPanel::PickOverlayEntity(const ImVec2& mousePos) const
 	return closestEntity;
 }
 #pragma endregion
+
+std::optional<CameraBuffer> SceneViewportPanel::GetActiveCameraBuffer()
+{
+	const bool isPIE = PIEManager::Get().IsPlaying() || PIEManager::Get().IsPaused();
+	if (isPIE)
+	{
+		auto sceneBuffer = FindActiveSceneCameraBuffer();
+		if (sceneBuffer.has_value()) return sceneBuffer;
+	}
+	return m_CameraController ? m_CameraController->GetCameraBuffer() : std::nullopt;
+}
 
 std::optional<CameraBuffer> SceneViewportPanel::FindActiveSceneCameraBuffer()
 {

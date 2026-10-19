@@ -43,6 +43,8 @@ public:
     bool SetAspectRatio(Engine::f32 aspectRatio);
     void RefreshMatrices();
 
+    Engine::f32 GetCameraSpeed() const { return m_CameraSpeed; }
+    void SetCameraSpeed(Engine::f32 speed) { m_CameraSpeed = std::max(speed, 1.0f); }
     void IncreaseCameraSpeed() { m_CameraSpeed += 1.0f; }
     void DecreaseCameraSpeed() { m_CameraSpeed = std::max(m_CameraSpeed - 1.0f, 1.0f); }
     void SetZoomSpeed3D(Engine::f32 speed) { m_ZoomSpeed3D = speed; }

@@ -42,6 +42,7 @@ public:
 protected:
 	virtual void DrawCustomViewport() override;
 	virtual void DrawCustomOptions() override;
+	void DrawCameraMenu();
 #pragma endregion
 
 #pragma region Camera Management
