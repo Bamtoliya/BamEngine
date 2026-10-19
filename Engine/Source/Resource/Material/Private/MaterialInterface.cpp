@@ -17,29 +17,51 @@ EResult MaterialInterface::Reload(const std::filesystem::path& filePath)
 {
     std::filesystem::path targetPath = filePath;
     if (targetPath.empty())
-    {
         targetPath = m_Path.empty() ? std::filesystem::path(m_Key) : std::filesystem::path(m_Path);
-        if (targetPath.extension() != ".json")
-        {
-            targetPath += ".json";
-        }
-    }
+
     std::error_code ec;
     if (!std::filesystem::exists(targetPath, ec))
-        return EResult::FileNotFound;
-    archive::JsonArchive ar;
-    auto result = ar.LoadFromFile(targetPath);
-    if (!result)
     {
-        ENGINE_LOG_ERROR("[Material Hot Reload] Failed to load JSON archive: {}", targetPath.string());
-        return EResult::Fail;
+        if (std::filesystem::exists(targetPath.string() + ".json", ec))
+            targetPath = targetPath.string() + ".json";
+        else
+            return EResult::FileNotFound;
     }
-    result = ReadArchive(ar);
+
+    archive::ArchiveResult result;
+    std::string ext = targetPath.extension().string();
+    for (char& c : ext) c = static_cast<char>(tolower(c));
+
+    if (ext == ".json")
+    {
+        archive::JsonArchive ar;
+        result = ar.LoadFromFile(targetPath);
+        if (!result)
+        {
+            ENGINE_LOG_ERROR("[Material Hot Reload] Failed to load JSON archive: {}", targetPath.string());
+            return EResult::Fail;
+        }
+        result = ReadArchive(ar);
+    }
+    else
+    {
+        // .beve, .bammat, .bammatinst 등 BEVE 바이너리 아카이브 포맷
+        archive::BeveArchive ar;
+        result = ar.LoadFromFile(targetPath);
+        if (!result)
+        {
+            ENGINE_LOG_ERROR("[Material Hot Reload] Failed to load binary archive: {}", targetPath.string());
+            return EResult::Fail;
+        }
+        result = ReadArchive(ar);
+    }
+
     if (!result)
     {
         ENGINE_LOG_ERROR("[Material Hot Reload] Failed to read archive data: {}", targetPath.string());
         return EResult::Fail;
     }
+
     OnPostLoad();
     IncreaseVersion();
     ENGINE_LOG_INFO("[Material Hot Reload] Successfully reloaded: {}", targetPath.string());
@@ -117,8 +139,6 @@ template int32 MaterialInterface::GetParameter<int32>(const string&) const;
 template bool MaterialInterface::GetParameter<bool>(const string&) const;
 template mat4 MaterialInterface::GetParameter<mat4>(const string&) const;
 #pragma endregion
-
-
 
 #pragma region Texture Binding Interface
 void MaterialInterface::SetTexture(const string& name, const ResourceHandle<Texture>& texture)
@@ -392,7 +412,6 @@ void MaterialInterface::RemovePassShader(ERenderPassType passType)
     std::erase_if(m_PassShaders, [passType](const MaterialPassShader& item) { return item.passType == passType; });
 }
 #pragma endregion
-
 
 #pragma region Getter
 BlendState MaterialInterface::GetBlendState()

@@ -4,6 +4,7 @@
 #include "ResourceManager.h"
 #include "Texture.h"
 #include "Material.h"
+#include "Mesh.h"
 #include "MaterialInstance.h"
 #include "Logger.h"
 #include <windows.h>
@@ -25,6 +26,12 @@ namespace
 		return filename.ends_with(".bammat.json") || filename.ends_with(".bammatinst.json") ||
 			filename.ends_with(".bammat") || filename.ends_with(".bammatinst");
 	}
+	bool IsSupportedMeshExtension(const std::filesystem::path& path)
+	{
+		std::string filename = path.filename().string();
+		for (char& c : filename) c = static_cast<char>(tolower(c));
+		return filename.ends_with(".bammesh") || filename.ends_with(".bammesh.json");
+	}
 	bool IsSupportedLocalizationExtension(const std::filesystem::path& path)
 	{
 		std::string filename = path.filename().string();
@@ -43,7 +50,8 @@ namespace
 				std::filesystem::path fullPath = std::filesystem::path(dir) / filename;
 				std::string ext = fullPath.extension().string();
 				for (char& c : ext) c = static_cast<char>(tolower(c));
-				if (IsSupportedImageExtension(ext) || IsSupportedMaterialExtension(fullPath) || IsSupportedLocalizationExtension(fullPath))
+				if (IsSupportedImageExtension(ext) || IsSupportedMaterialExtension(fullPath) ||
+					IsSupportedMeshExtension(fullPath) || IsSupportedLocalizationExtension(fullPath))
 				{
 					m_Manager->NotifyFileModified(fullPath);
 				}
@@ -148,6 +156,10 @@ void AssetHotReloadManager::Update()
 		{
 			ProcessModifiedMaterial(file);
 		}
+		else if (IsSupportedMeshExtension(file))
+		{
+			ProcessModifiedMesh(file);
+		}
 		else if (IsSupportedLocalizationExtension(file))
 		{
 			ProcessModifiedLocalization(file);
@@ -186,8 +198,8 @@ void AssetHotReloadManager::ProcessModifiedTexture(const std::filesystem::path& 
 			{
 				reloadedAny = true;
 				// 방금 만든 우측 하단 토스트 알림 연동!
-				ShaderHotReloadManager::Get().AddNotification("Texture Hot-Swapped",
-					texturePath.filename().string() + " reloaded.", false, 3.0f);
+				ShaderHotReloadManager::Get().AddNotification(LOCAL("Notification.TextureHotReloaded"),
+					LOCAL_FMT("Notification.ReloadedFile", texturePath.filename().string()), false, 3.0f);
 			}
 		}
 	}
@@ -222,8 +234,8 @@ void AssetHotReloadManager::ProcessModifiedMaterial(const std::filesystem::path&
 			{
 				if (IsSuccess(mat->Reload(materialPath)))
 				{
-					ShaderHotReloadManager::Get().AddNotification("Material Hot-Swapped",
-						materialPath.filename().string() + " reloaded.", false, 3.0f);
+					ShaderHotReloadManager::Get().AddNotification(LOCAL("Notification.MaterialHotReloaded"),
+						LOCAL_FMT("Notification.ReloadedFile", materialPath.filename().string()), false, 3.0f);
 				}
 			}
 		}
@@ -252,7 +264,40 @@ void AssetHotReloadManager::ProcessModifiedLocalization(const std::filesystem::p
 	if (IsSuccess(Engine::LocalizationManager::Get().ReloadData()))
 	{
 		ENGINE_LOG_INFO("[HotReload] Localization reloaded: {}", locPath.filename().string());
-		ShaderHotReloadManager::Get().AddNotification("Localization Hot-Reloaded",
-			locPath.filename().string() + " reloaded.", false, 3.0f);
+		ShaderHotReloadManager::Get().AddNotification(LOCAL("Notification.LocalizationReloaded"),
+			LOCAL_FMT("Notification.ReloadedFile", locPath.filename().string()), false, 3.0f);
+	}
+}
+
+void AssetHotReloadManager::ProcessModifiedMesh(const std::filesystem::path& meshPath)
+{
+	Engine::ResourceManager& rm = Engine::ResourceManager::Get();
+	auto meshHandles = rm.GetResourceHandles<Engine::Mesh>();
+
+	std::string targetStem = meshPath.stem().string();
+	for (char& c : targetStem) c = static_cast<char>(tolower(c));
+	if (targetStem.ends_with(".bammesh")) targetStem = targetStem.substr(0, targetStem.length() - 8);
+
+	for (const auto& handle : meshHandles)
+	{
+		auto* mesh = static_cast<Engine::Mesh*>(rm.GetResource(handle));
+		if (!mesh) continue;
+
+		std::string keyStem = std::filesystem::path(mesh->GetKey()).stem().string();
+		for (char& c : keyStem) c = static_cast<char>(tolower(c));
+		if (keyStem.ends_with(".bammesh")) keyStem = keyStem.substr(0, keyStem.length() - 8);
+
+		std::string fileStem = std::filesystem::path(mesh->GetPath()).stem().string();
+		for (char& c : fileStem) c = static_cast<char>(tolower(c));
+		if (fileStem.ends_with(".bammesh")) fileStem = fileStem.substr(0, fileStem.length() - 8);
+
+		if (keyStem == targetStem || fileStem == targetStem)
+		{
+			if (IsSuccess(mesh->Reload(meshPath)))
+			{
+				ShaderHotReloadManager::Get().AddNotification(LOCAL("Notification.MeshHotReloaded"),
+					LOCAL_FMT("Notification.ReloadedFile", meshPath.filename().string()), false, 3.0f);
+			}
+		}
 	}
 }

@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "Base.h"
 #include "Reflection/ReflectionMacro.h"
@@ -89,6 +89,8 @@ public:
 	}
 	[[nodiscard]] virtual archive::ArchiveResult WriteArchive(archive::IArchive& ar) const;
 	[[nodiscard]] virtual archive::ArchiveResult ReadArchive(const archive::IArchive& ar);
+	// [Hot Reload]: 디스크 파일로부터 리소스를 인플레이스 핫스왑합니다.기본 구현은 리플렉션 아카이브를 로드합니다.
+	virtual EResult Reload(const std::filesystem::path & filePath = {});
 protected:
 	[[nodiscard]] virtual uint32 GetArchiveFormatVersion() const noexcept { return 0; }
 	virtual EResult OnPostLoad() { return EResult::Success; }

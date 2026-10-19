@@ -604,11 +604,7 @@ EResult ResourceManager::SaveToBeveFile(Resource* resource, const wstring& fileP
 
 EResult ResourceManager::SaveToBinaryFile(Resource* resource, const wstring& filePath)
 {
-	if (!resource || filePath.empty())
-		return EResult::InvalidArgument;
-
-	ENGINE_LOG_WARN("Legacy binary resource saving is unavailable: {}", WStrToStr(filePath));
-	return EResult::NotImplemented;
+	return SaveToBeveFile(resource, filePath);
 }
 
 Handle ResourceManager::LoadFromJsonFile(const wstring& filePath)

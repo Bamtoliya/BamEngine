@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "RHIBuffer.h"
 #include "Resource.h"
@@ -130,6 +130,8 @@ public:
 #pragma endregion
 
 #pragma region Save&Load
+public:
+	EResult Reload(const std::filesystem::path& filePath = {}) override;
 protected:
 	EResult OnPostLoad() override;
 #pragma endregion

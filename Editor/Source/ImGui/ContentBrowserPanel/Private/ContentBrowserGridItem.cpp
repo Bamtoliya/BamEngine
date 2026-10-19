@@ -3,6 +3,62 @@
 #include "ResourceEditorInterface.h"
 #include "ContentBrowserGridItem.h"
 #include "SelectionManager.h"
+#include "ShaderHotReloadManager.h"
+#include "ModelImporter.h"
+#include "Mesh.h"
+#include <archive/JsonArchive.h>
+#include <archive/BeveArchive.h>
+
+namespace
+{
+	Engine::EResourceType PeekResourceType(const std::filesystem::path& path)
+	{
+		std::string ext = path.extension().string();
+		for (char& c : ext) c = static_cast<char>(tolower(c));
+
+		Engine::ResourceBinaryHeader header;
+		archive::ArchiveResult res;
+
+		if (ext == ".json")
+		{
+			archive::JsonArchive ar;
+			if (!ar.LoadFromFile(path)) return Engine::EResourceType::Unknown;
+			res = ar.ReadObject("AssetHeader", header, [](archive::IArchive& fields, Engine::ResourceBinaryHeader& h) {
+				fields.Read("ResourceType", h.ResourceType);
+				return archive::ArchiveResult{};
+				});
+		}
+		else
+		{
+			archive::BeveArchive ar;
+			if (!ar.LoadFromFile(path)) return Engine::EResourceType::Unknown;
+			res = ar.ReadObject("AssetHeader", header, [](archive::IArchive& fields, Engine::ResourceBinaryHeader& h) {
+				fields.Read("ResourceType", h.ResourceType);
+				return archive::ArchiveResult{};
+				});
+		}
+
+		return res ? header.ResourceType : Engine::EResourceType::Unknown;
+	}
+
+	const char* GetBinaryExtension(Engine::EResourceType type)
+	{
+		using namespace Engine;
+		switch (type)
+		{
+		case EResourceType::Material:         return ".bammat";
+		case EResourceType::MaterialInstance: return ".bammatinst";
+		case EResourceType::Mesh:             return ".bammesh";
+		case EResourceType::Sprite:           return ".bamsprite";
+		case EResourceType::Skeleton:         return ".bamskel";
+		case EResourceType::Animation:        return ".bamanim";
+		case EResourceType::Model:            return ".bammodel";
+		case EResourceType::Texture:          return ".bamtex";
+		case EResourceType::Shader:           return ".bamshader";
+		default:                              return ".beve";
+		}
+	}
+}
 
 void ContentBrowserGridItem::Draw(const std::filesystem::directory_entry& directoryEntry, const std::filesystem::path& rootPath, ImTextureID thumbnailTexID, f32 thumbnailSize, f32 padding, std::filesystem::path& outRenamingPath, char* renameBuffer, size_t renameBufferSize, std::filesystem::path& currentDirectory, char* searchBuffer)
 {
@@ -95,7 +151,12 @@ void ContentBrowserGridItem::Thumbnail(const std::filesystem::directory_entry& d
 		else if (ext == ".hlsl" || ext == ".glsl")
 		{
 			icon = ICON_FA_CODE;
-			typeColor = ImVec4(0.7f, 0.3f, 0.9f, 0.4f);
+			typeColor = ImVec4(0.7f, 0.3f, 0.9f, 0.4f); // 쉐이더 본체: 퍼플
+		}
+		else if (ext == ".hlsli")
+		{
+			icon = ICON_FA_FILE_CODE;
+			typeColor = ImVec4(0.25f, 0.6f, 0.85f, 0.4f); // 인클루드 헤더: 스카이블루
 		}
 		else if (ext == ".csv" || ext == ".json")
 		{
@@ -140,7 +201,8 @@ void ContentBrowserGridItem::Thumbnail(const std::filesystem::directory_entry& d
 	ImGui::PopStyleColor(3);
 }
 
-void ContentBrowserGridItem::ContextMenu(const std::filesystem::path& path, std::filesystem::path& outRenamingPath, char* renameBuffer, size_t renameBufferSize)
+void ContentBrowserGridItem::ContextMenu(const std::filesystem::path& path,
+	std::filesystem::path& outRenamingPath, char* renameBuffer, size_t renameBufferSize)
 {
 	std::string filenameString = path.filename().string();
 	if (ImGui::BeginPopupContextItem())
@@ -156,21 +218,70 @@ void ContentBrowserGridItem::ContextMenu(const std::filesystem::path& path, std:
 			ImGui::SetClipboardText(path.string().c_str());
 		}
 
+		if (ImGui::MenuItem((ICON_FA_FOLDER_OPEN " " + LOCAL_LABEL("EditorCommon.ShowInExplorer")).c_str()))
+		{
+			if (std::filesystem::is_directory(path))
+				ShellExecuteA(NULL, "open", path.string().c_str(), NULL, NULL, SW_SHOWNORMAL);
+			else
+			{
+				std::string param = "/select,\"" + path.string() + "\"";
+				ShellExecuteA(NULL, "open", "explorer.exe", param.c_str(), NULL, SW_SHOWNORMAL);
+			}
+		}
+
 		if (!std::filesystem::is_directory(path))
 		{
-			std::string ext = path.extension().string();
-			for (auto& c : ext) c = tolower(c);
-			if (ext == ".bammat" || ext == ".bammatinst")
+			std::string filename = path.filename().string();
+			for (auto& c : filename) c = static_cast<char>(tolower(c));
+
+			Engine::EResourceType peekedType = Engine::EResourceType::Unknown;
+			if (filename.ends_with(".json") || filename.ends_with(".beve"))
+				peekedType = PeekResourceType(path);
+			if (filename.ends_with(".bammat") || filename.ends_with(".bammatinst") ||
+				peekedType == Engine::EResourceType::Material ||
+				peekedType == Engine::EResourceType::MaterialInstance)
 			{
 				ContextMenu_Material(path);
 			}
-			else if (ext == ".fbx" || ext == ".obj" || ext == ".gltf")
+			else if (filename.ends_with(".fbx") || filename.ends_with(".obj") ||
+				filename.ends_with(".gltf") || filename.ends_with(".bammesh") ||
+				peekedType == Engine::EResourceType::Mesh)
 			{
 				ContextMenu_Model(path);
 			}
-			else if (ext == ".png" || ext == ".jpg" || ext == ".tga" || ext == ".jpeg" || ext == ".bmp")
+			else if (filename.ends_with(".png") || filename.ends_with(".jpg") ||
+				filename.ends_with(".tga") || filename.ends_with(".jpeg") || filename.ends_with(".bmp"))
 			{
-			    ContextMenu_Texture(path);
+				ContextMenu_Texture(path);
+			}
+			else if (filename.ends_with(".hlsl") || filename.ends_with(".vert") ||
+				filename.ends_with(".frag") || filename.ends_with(".comp") || filename.ends_with(".hlsli"))
+			{
+				ContextMenu_Shader(path);
+			}
+		}
+
+		// JSON <-> Binary 변환 메뉴
+		if (!std::filesystem::is_directory(path))
+		{
+			std::string filename = path.filename().string();
+			for (auto& c : filename) c = static_cast<char>(tolower(c));
+
+			if (filename.ends_with(".json"))
+			{
+				ImGui::Separator();
+				if (ImGui::MenuItem((ICON_FA_FILE_EXPORT " " + LOCAL_LABEL("ContentBrowser.BakeToBinary")).c_str()))
+				{
+					ConvertJsonToBinary(path);
+				}
+			}
+			else if (filename.find(".bam") != std::string::npos || filename.ends_with(".beve"))
+			{
+				ImGui::Separator();
+				if (ImGui::MenuItem((ICON_FA_FILE_CODE " " + LOCAL_LABEL("ContentBrowser.ExportToJson")).c_str()))
+				{
+					ConvertBinaryToJson(path);
+				}
 			}
 		}
 
@@ -178,8 +289,14 @@ void ContentBrowserGridItem::ContextMenu(const std::filesystem::path& path, std:
 
 		if (ImGui::MenuItem((ICON_FA_TRASH " " + LOCAL_LABEL("EditorCommon.Delete")).c_str()))
 		{
-			// TODO: 삭제 로직
-			TODO("GridItem Context Menu 삭제 로직 만들어야함")
+			std::error_code ec;
+			if (std::filesystem::is_directory(path))
+				std::filesystem::remove_all(path, ec);
+			else
+				std::filesystem::remove(path, ec);
+
+			if (ec) ENGINE_LOG_ERROR("Failed to delete asset {}: {}", path.string(), ec.message());
+			else ENGINE_LOG_INFO("Deleted asset: {}", path.string());
 		}
 
 		ImGui::EndPopup();
@@ -380,57 +497,269 @@ void ContentBrowserGridItem::DrawNameBox(const std::filesystem::directory_entry&
 
 void ContentBrowserGridItem::ContextMenu_Material(const std::filesystem::path& path)
 {
-	std::string ext = path.extension().string();
-	for (auto& c : ext) c = tolower(c);
+	std::string filename = path.filename().string();
+	for (auto& c : filename) c = static_cast<char>(tolower(c));
+
+	const bool isInstance = filename.ends_with(".bammatinst") || filename.ends_with(".bammatinst.json");
+	const bool isBaseMat = !isInstance;
+
 	ImGui::Separator();
-	// .bammat 전용: Material Instance 생성
-	if (ext == ".bammat")
+
+	// 1. 수동 Reload Material 메뉴 (공통)
+	if (ImGui::MenuItem((ICON_FA_ROTATE " " + LOCAL_LABEL("ContentBrowser.ReloadMaterial")).c_str()))
+	{
+		Engine::ResourceManager& rm = Engine::ResourceManager::Get();
+		std::string targetStem = path.stem().string();
+		for (char& c : targetStem) c = static_cast<char>(tolower(c));
+		if (targetStem.ends_with(".bammat")) targetStem = targetStem.substr(0, targetStem.length() - 7);
+		if (targetStem.ends_with(".bammatinst")) targetStem = targetStem.substr(0, targetStem.length() - 11);
+
+		bool reloaded = false;
+		auto tryReload = [&](const auto& handles) {
+			for (const auto& handle : handles)
+			{
+				auto* mat = static_cast<Engine::MaterialInterface*>(rm.GetResource(handle));
+				if (!mat) continue;
+
+				std::string keyStem = std::filesystem::path(mat->GetKey()).stem().string();
+				for (char& c : keyStem) c = static_cast<char>(tolower(c));
+				if (keyStem.ends_with(".bammat")) keyStem = keyStem.substr(0, keyStem.length() - 7);
+				if (keyStem.ends_with(".bammatinst")) keyStem = keyStem.substr(0, keyStem.length() - 11);
+
+				std::string fileStem = std::filesystem::path(mat->GetPath()).stem().string();
+				for (char& c : fileStem) c = static_cast<char>(tolower(c));
+				if (fileStem.ends_with(".bammat")) fileStem = fileStem.substr(0, fileStem.length() - 7);
+				if (fileStem.ends_with(".bammatinst")) fileStem = fileStem.substr(0, fileStem.length() - 11);
+
+				if (keyStem == targetStem || fileStem == targetStem)
+				{
+					if (IsSuccess(mat->Reload(path)))
+					{
+						reloaded = true;
+						ShaderHotReloadManager::Get().AddNotification(LOCAL("Notification.MaterialReloaded"),
+							LOCAL_FMT("Notification.ReloadedFile", path.filename().string()), false, 3.0f);
+					}
+				}
+			}
+			};
+
+		tryReload(rm.GetResourceHandles<Engine::Material>());
+		tryReload(rm.GetResourceHandles<Engine::MaterialInstance>());
+
+		if (!reloaded)
+		{
+			ShaderHotReloadManager::Get().AddNotification(LOCAL("Notification.MaterialNotLoaded"),
+				LOCAL_FMT("Notification.InactiveFile", path.filename().string()), true, 3.0f);
+		}
+	}
+
+	// 2. Base Material 전용: Material Instance (.bammatinst.json) 생성
+	if (isBaseMat)
 	{
 		if (ImGui::MenuItem((ICON_FA_CLONE " " + LOCAL_LABEL("ContentBrowser.CreateMaterialInstance")).c_str()))
 		{
-			std::filesystem::path instPath = path;
-			instPath.replace_extension(".bammatinst");
+			std::string baseStem = path.stem().string();
+			if (baseStem.ends_with(".bammat")) baseStem = baseStem.substr(0, baseStem.length() - 7);
+
+			std::filesystem::path instPath = path.parent_path() / (baseStem + ".bammatinst.json");
 			int suffix = 1;
 			while (std::filesystem::exists(instPath))
 			{
 				instPath = path.parent_path() /
-					(path.stem().string() + "_" + std::to_string(suffix) + ".bammatinst");
-				++suffix;
+					(baseStem + "_" + std::to_string(suffix++) + ".bammatinst.json");
 			}
-			std::wstring wBasePath = std::filesystem::relative(path).wstring();
-			auto baseHandle = Engine::ResourceManager::Get().GetResourceHandle<Engine::Material>(wBasePath);
-			if (baseHandle)
+
+			auto& rm = Engine::ResourceManager::Get();
+			std::wstring relBasePath = std::filesystem::relative(path).wstring();
+			auto baseHandle = rm.GetResourceHandle<Engine::Material>(relBasePath);
+			if (!baseHandle.IsValid())
+			{
+				baseHandle = static_cast<Engine::ResourceHandle<Engine::Material>>(rm.LoadFile(relBasePath));
+			}
+
+			if (baseHandle.IsValid())
 			{
 				MaterialInstanceDesc desc = {};
 				desc.BaseMaterialHandle = baseHandle;
 				desc.Key = std::filesystem::relative(instPath).wstring();
 				desc.Path = instPath.wstring();
-				auto instHandle = Engine::ResourceManager::Get().LoadResource<Engine::MaterialInstance>(&desc);
+				auto instHandle = rm.LoadResource<Engine::MaterialInstance>(&desc);
 				if (instHandle)
 				{
-					Engine::ResourceManager::Get().SaveToBinaryFile(instHandle.Get(), instPath.wstring());
-					ENGINE_LOG_INFO("Created Material Instance: {}", instPath.string());
+					rm.SaveToJsonFile(instHandle.Get(), instPath.wstring());
+					ENGINE_LOG_INFO("Created Material Instance (JSON): {}", instPath.string());
+					ShaderHotReloadManager::Get().AddNotification(LOCAL("Notification.InstanceCreated"),
+						instPath.filename().string(), false, 3.0f);
 				}
 			}
 		}
 	}
-	// .bammatinst 전용: Base Material 열기 등
-	if (ext == ".bammatinst")
+
+	// 3. Material Instance 전용: Base Material 열기
+	if (isInstance)
 	{
 		if (ImGui::MenuItem((ICON_FA_LINK " " + LOCAL_LABEL("ContentBrowser.OpenBaseMaterial")).c_str()))
 		{
-			// TODO: Base Material 파일로 포커스 이동
+			auto& rm = Engine::ResourceManager::Get();
+			std::wstring relPath = std::filesystem::relative(path).wstring();
+			auto instHandle = rm.GetResourceHandle<Engine::MaterialInstance>(relPath);
+			if (!instHandle.IsValid())
+			{
+				instHandle = static_cast<Engine::ResourceHandle<Engine::MaterialInstance>>(rm.LoadFile(relPath));
+			}
+
+			if (instHandle.IsValid() && instHandle.Get() && instHandle.Get()->GetBaseMaterial())
+			{
+				std::filesystem::path baseMatPath = instHandle.Get()->GetBaseMaterial()->GetPath();
+				if (baseMatPath.empty())
+					baseMatPath = instHandle.Get()->GetBaseMaterial()->GetKey();
+
+				// 디스크에 .bammat.json 파일이 존재하는지 우선 탐색
+				if (!std::filesystem::exists(baseMatPath))
+				{
+					if (std::filesystem::exists(baseMatPath.string() + ".bammat.json"))
+						baseMatPath = baseMatPath.string() + ".bammat.json";
+					else if (std::filesystem::exists(baseMatPath.string() + ".json"))
+						baseMatPath = baseMatPath.string() + ".json";
+				}
+
+				if (std::filesystem::exists(baseMatPath))
+				{
+					SelectionManager::Get().SetSelectedAsset(baseMatPath);
+					for (auto* panel : ImGuiManager::Get().GetImGuiPanels())
+					{
+						if (auto* resEditor = dynamic_cast<ResourceEditorInterface*>(panel))
+						{
+							if (resEditor->IsSupported(baseMatPath))
+							{
+								resEditor->SetTargetResource(baseMatPath);
+								resEditor->Open();
+								break;
+							}
+						}
+					}
+					ShaderHotReloadManager::Get().AddNotification(LOCAL("Notification.OpenBaseMaterial"),
+						baseMatPath.filename().string(), false, 2.0f);
+				}
+				else
+				{
+					ShaderHotReloadManager::Get().AddNotification(LOCAL("Notification.BaseMaterialNotFound"),
+						baseMatPath.string(), true, 3.0f);
+				}
+			}
 		}
 	}
 }
 
 void ContentBrowserGridItem::ContextMenu_Model(const std::filesystem::path& path)
 {
+	std::string ext = path.extension().string();
+	for (auto& c : ext) c = static_cast<char>(tolower(c));
+
+	ImGui::Separator();
+
+	if (ext == ".bammesh")
+	{
+		if (ImGui::MenuItem((ICON_FA_ROTATE " " + LOCAL_LABEL("ContentBrowser.ReloadMesh")).c_str()))
+		{
+			Engine::ResourceManager& rm = Engine::ResourceManager::Get();
+			auto meshHandles = rm.GetResourceHandles<Engine::Mesh>();
+
+			std::string targetStem = path.stem().string();
+			for (char& c : targetStem) c = static_cast<char>(tolower(c));
+			if (targetStem.ends_with(".bammesh")) targetStem = targetStem.substr(0, targetStem.length() - 8);
+
+			bool reloaded = false;
+			for (const auto& handle : meshHandles)
+			{
+				auto* mesh = static_cast<Engine::Mesh*>(rm.GetResource(handle));
+				if (!mesh) continue;
+
+				std::string keyStem = std::filesystem::path(mesh->GetKey()).stem().string();
+				for (char& c : keyStem) c = static_cast<char>(tolower(c));
+				if (keyStem.ends_with(".bammesh")) keyStem = keyStem.substr(0, keyStem.length() - 8);
+
+				std::string fileStem = std::filesystem::path(mesh->GetPath()).stem().string();
+				for (char& c : fileStem) c = static_cast<char>(tolower(c));
+				if (fileStem.ends_with(".bammesh")) fileStem = fileStem.substr(0, fileStem.length() - 8);
+
+				if (keyStem == targetStem || fileStem == targetStem)
+				{
+					if (IsSuccess(mesh->Reload(path)))
+					{
+						reloaded = true;
+						ShaderHotReloadManager::Get().AddNotification(LOCAL("Notification.MeshReloaded"),
+							LOCAL_FMT("Notification.ReloadedFile", path.filename().string()), false, 3.0f);
+					}
+				}
+			}
+			if (!reloaded)
+			{
+				ShaderHotReloadManager::Get().AddNotification(LOCAL("Notification.MeshNotLoaded"),
+					LOCAL_FMT("Notification.InactiveFile", path.filename().string()), true, 3.0f);
+			}
+		}
+	}
+	else if (ext == ".fbx" || ext == ".obj" || ext == ".gltf")
+	{
+		if (ImGui::MenuItem((ICON_FA_FILE_IMPORT " " + LOCAL_LABEL("ContentBrowser.Reimport")).c_str()))
+		{
+			ModelImporter* importer = ModelImporter::Create();
+			if (importer)
+			{
+				tagModelImportDesc desc = {};
+				const EResult res = importer->Import(path, path.parent_path(), &desc);
+				Safe_Release(importer);
+
+				if (IsSuccess(res))
+				{
+					ShaderHotReloadManager::Get().AddNotification(LOCAL("Notification.ModelReimported"),
+						LOCAL_FMT("Notification.ReimportedFile", path.filename().string()), false, 3.0f);
+				}
+				else
+				{
+					ShaderHotReloadManager::Get().AddNotification(LOCAL("Notification.ReimportFailed"),
+						LOCAL_FMT("Notification.ReimportFailedFile", path.filename().string()), true, 3.0f);
+				}
+			}
+		}
+	}
 }
 
 void ContentBrowserGridItem::ContextMenu_Texture(const std::filesystem::path& path)
 {
 	ImGui::Separator();
+	if (ImGui::MenuItem((ICON_FA_ROTATE " " + LOCAL_LABEL("ContentBrowser.ReloadTexture")).c_str()))
+	{
+		Engine::ResourceManager& rm = Engine::ResourceManager::Get();
+		auto texHandles = rm.GetResourceHandles<Engine::Texture>();
+		std::string targetStem = path.stem().string();
+		for (char& c : targetStem) c = static_cast<char>(tolower(c));
+		bool reloaded = false;
+		for (const auto& handle : texHandles)
+		{
+			auto* tex = static_cast<Engine::Texture*>(rm.GetResource(handle));
+			if (!tex) continue;
+			std::string keyStem = std::filesystem::path(tex->GetKey()).stem().string();
+			for (char& c : keyStem) c = static_cast<char>(tolower(c));
+			std::string fileStem = std::filesystem::path(tex->GetPath()).stem().string();
+			for (char& c : fileStem) c = static_cast<char>(tolower(c));
+			if (keyStem == targetStem || fileStem == targetStem)
+			{
+				if (IsSuccess(tex->Reload(path)))
+				{
+					reloaded = true;
+					ShaderHotReloadManager::Get().AddNotification(LOCAL("Notification.TextureReloaded"),
+						LOCAL_FMT("Notification.ReloadedFile", path.filename().string()), false, 3.0f);
+				}
+			}
+		}
+		if (!reloaded)
+		{
+			ShaderHotReloadManager::Get().AddNotification(LOCAL("Notification.TextureNotLoaded"),
+				LOCAL_FMT("Notification.InactiveFile", path.filename().string()), true, 3.0f);
+		}
+	}
 	if (ImGui::MenuItem((ICON_FA_IMAGE " " + LOCAL_LABEL("ContentBrowser.CreateSprite")).c_str()))
 	{
 		// 1. 중복 없는 .bamsprite.json 경로 결정
@@ -470,4 +799,98 @@ void ContentBrowserGridItem::ContextMenu_Texture(const std::filesystem::path& pa
 			}
 		}
 	}
+}
+
+void ContentBrowserGridItem::ContextMenu_Shader(const std::filesystem::path& path)
+{
+	std::string ext = path.extension().string();
+	for (auto& c : ext) c = static_cast<char>(tolower(c));
+
+	ImGui::Separator();
+
+	if (ext == ".hlsli")
+	{
+		if (ImGui::MenuItem((ICON_FA_ROTATE " " + LOCAL_LABEL("ContentBrowser.RecompileAllShaders")).c_str()))
+		{
+			ShaderHotReloadManager::Get().RequestRecompileAll();
+		}
+	}
+	else
+	{
+		if (ImGui::MenuItem((ICON_FA_CODE " " + LOCAL_LABEL("ContentBrowser.RecompileShader")).c_str()))
+		{
+			ShaderHotReloadManager::Get().RecompileFile(path);
+		}
+	}
+}
+
+bool ContentBrowserGridItem::ConvertJsonToBinary(const std::filesystem::path& path)
+{
+	// 1. 파일 헤더로부터 실제 리소스 타입 감지 (파일명 무관)
+	Engine::EResourceType assetType = PeekResourceType(path);
+
+	// 2. 해당 타입에 맞는 표준 바이너리 확장자 결정
+	std::string binExt = GetBinaryExtension(assetType);
+
+	// 3. 출력 경로 결정 (Wood.json -> Wood.bammat, foo.bammat.json -> foo.bammat)
+	std::string baseStem = path.stem().string();
+	if (baseStem.ends_with(binExt))
+		baseStem = baseStem.substr(0, baseStem.length() - binExt.length());
+
+	std::filesystem::path outPath = path.parent_path() / (baseStem + binExt);
+
+	auto& rm = Engine::ResourceManager::Get();
+	std::wstring relPath = std::filesystem::relative(path).wstring();
+	Engine::Handle handle = rm.LoadFile(relPath);
+	Engine::Resource* res = rm.GetResource(handle);
+	if (!res)
+	{
+		ShaderHotReloadManager::Get().AddNotification(LOCAL("Notification.BakeFailed"),
+			LOCAL_FMT("Notification.JsonLoadFailed", path.filename().string()), true, 3.0f);
+		return false;
+	}
+
+	const EResult result = rm.SaveToBeveFile(res, outPath.wstring());
+	if (IsSuccess(result))
+	{
+		ShaderHotReloadManager::Get().AddNotification(LOCAL("Notification.BakeSucceeded"),
+			LOCAL_FMT("Notification.CreatedFile", outPath.filename().string()), false, 3.0f);
+		ENGINE_LOG_INFO("[Asset Baking] Baked {} (Type: {}) -> {}",
+			path.string(), static_cast<uint32>(assetType), outPath.string());
+		return true;
+	}
+
+	ShaderHotReloadManager::Get().AddNotification(LOCAL("Notification.BakeFailed"),
+		LOCAL_FMT("Notification.BinarySaveFailed", outPath.filename().string()), true, 3.0f);
+	return false;
+}
+
+bool ContentBrowserGridItem::ConvertBinaryToJson(const std::filesystem::path& path)
+{
+	std::filesystem::path outPath = path.parent_path() / (path.filename().string() + ".json");
+
+	auto& rm = Engine::ResourceManager::Get();
+	std::wstring relPath = std::filesystem::relative(path).wstring();
+	Engine::Handle handle = rm.LoadFile(relPath);
+	Engine::Resource* res = rm.GetResource(handle);
+	if (!res)
+	{
+		ShaderHotReloadManager::Get().AddNotification(LOCAL("Notification.ExportFailed"),
+			LOCAL_FMT("Notification.BinaryLoadFailed", path.filename().string()), true, 3.0f);
+		return false;
+	}
+
+	const EResult result = rm.SaveToJsonFile(res, outPath.wstring());
+	if (IsSuccess(result))
+	{
+		ShaderHotReloadManager::Get().AddNotification(LOCAL("Notification.ExportSucceeded"),
+			LOCAL_FMT("Notification.CreatedFile", outPath.filename().string()), false, 3.0f);
+		ENGINE_LOG_INFO("[Asset Export] Successfully exported binary to JSON: {} -> {}",
+			path.string(), outPath.string());
+		return true;
+	}
+
+	ShaderHotReloadManager::Get().AddNotification(LOCAL("Notification.ExportFailed"),
+		LOCAL_FMT("Notification.JsonSaveFailed", outPath.filename().string()), true, 3.0f);
+	return false;
 }

@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "ResourceManager.h"
 
 template<typename T, typename... Args>
@@ -77,14 +77,11 @@ ResourceHandle<T> ResourceManager::LoadResource(Args&&... args)
 		return loadArchive(ar);
 	}
 
-	if (extension == L".beve")
+	if (extension == L".beve" || extension.rfind(L".bam", 0) == 0)
 	{
 		archive::BeveArchive ar;
 		return loadArchive(ar);
 	}
-
-	if (extension.rfind(L".bam", 0) == 0)
-		return fail("legacy binary archive is not supported");
 
 	T* resource = T::Create(std::forward<Args>(args)...);
 	if (!resource)

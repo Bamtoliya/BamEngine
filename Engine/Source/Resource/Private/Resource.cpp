@@ -1,6 +1,9 @@
-#include "Resource.h"
+﻿#include "Resource.h"
 #include "Reflection/ReflectionRegistry.h"
 #include <reflection_archive/ReflectionArchiveAdapter.h>
+#include <archive/JsonArchive.h>
+#include <archive/BeveArchive.h>
+#include "Logger.h"
 
 namespace
 {
@@ -113,4 +116,42 @@ archive::ArchiveResult Resource::ReadArchive(const archive::IArchive& ar)
 	if (IsFailure(OnPostLoad()))
 		return { archive::ArchiveErrorCode::InvalidValue, "Resource.OnPostLoad" };
 	return {};
+}
+EResult Resource::Reload(const std::filesystem::path& filePath)
+{
+	std::filesystem::path targetPath = filePath;
+	if (targetPath.empty())
+		targetPath = m_Path.empty() ? std::filesystem::path(m_Key) : std::filesystem::path(m_Path);
+
+	std::error_code ec;
+	if (!std::filesystem::exists(targetPath, ec))
+		return EResult::FileNotFound;
+
+	archive::ArchiveResult result;
+	std::string ext = targetPath.extension().string();
+	for (char& c : ext) c = static_cast<char>(tolower(c));
+
+	if (ext == ".json")
+	{
+		archive::JsonArchive ar;
+		result = ar.LoadFromFile(targetPath);
+		if (result) result = ReadArchive(ar);
+	}
+	else
+	{
+		// .beve 또는 엔진 바이너리 아카이브(.bammesh, .bammat 등)
+		archive::BeveArchive ar;
+		result = ar.LoadFromFile(targetPath);
+		if (result) result = ReadArchive(ar);
+	}
+
+	if (!result)
+	{
+		ENGINE_LOG_ERROR("[Resource Hot Reload] Failed to reload: stage=read, path={}", targetPath.string());
+		return EResult::Fail;
+	}
+
+	IncreaseVersion();
+	ENGINE_LOG_INFO("[Resource Hot Reload] Successfully reloaded: {}", targetPath.string());
+	return EResult::Success;
 }

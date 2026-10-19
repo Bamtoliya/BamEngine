@@ -197,6 +197,54 @@ EResult Mesh::SetIndexBuffer(void* data, uint32 indexCount, uint32 stride)
 #pragma endregion
 
 #pragma region Save&Load
+EResult Mesh::Reload(const std::filesystem::path& filePath)
+{
+	std::filesystem::path targetPath = filePath;
+	if (targetPath.empty())
+		targetPath = m_Path.empty() ? std::filesystem::path(m_Key) : std::filesystem::path(m_Path);
+
+	std::error_code ec;
+	if (!std::filesystem::exists(targetPath, ec))
+		return EResult::FileNotFound;
+
+	archive::ArchiveResult result;
+	std::string ext = targetPath.extension().string();
+	for (char& c : ext) c = static_cast<char>(tolower(c));
+
+	if (ext == ".json")
+	{
+		archive::JsonArchive ar;
+		result = ar.LoadFromFile(targetPath);
+		if (!result)
+		{
+			ENGINE_LOG_ERROR("[Mesh Hot Reload] Failed to load JSON archive: {}", targetPath.string());
+			return EResult::Fail;
+		}
+		result = ReadArchive(ar);
+	}
+	else
+	{
+		// .beve 또는 .bammesh 바이너리 아카이브 포맷
+		archive::BeveArchive ar;
+		result = ar.LoadFromFile(targetPath);
+		if (!result)
+		{
+			ENGINE_LOG_ERROR("[Mesh Hot Reload] Failed to load binary archive: {}", targetPath.string());
+			return EResult::Fail;
+		}
+		result = ReadArchive(ar);
+	}
+
+	if (!result)
+	{
+		ENGINE_LOG_ERROR("[Mesh Hot Reload] Failed to read archive data: {}", targetPath.string());
+		return EResult::Fail;
+	}
+
+	IncreaseVersion();
+	ENGINE_LOG_INFO("[Mesh Hot Reload] Successfully reloaded mesh: {}", targetPath.string());
+	return EResult::Success;
+}
 EResult Mesh::OnPostLoad()
 {
 	for (uint32 i = 0; i < (uint32)EMeshStream::Max; ++i)

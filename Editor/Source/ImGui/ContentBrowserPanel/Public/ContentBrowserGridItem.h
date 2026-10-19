@@ -32,6 +32,8 @@ private:
 	static void ContextMenu_Material(const std::filesystem::path& path);
 	static void ContextMenu_Model(const std::filesystem::path& path);
 	static void ContextMenu_Texture(const std::filesystem::path& path);
-	// static void ContextMenu_Shader(const std::filesystem::path& path);
+	static void ContextMenu_Shader(const std::filesystem::path& path);
+	static bool ConvertJsonToBinary(const std::filesystem::path& path);
+	static bool ConvertBinaryToJson(const std::filesystem::path& path);
 };
 END

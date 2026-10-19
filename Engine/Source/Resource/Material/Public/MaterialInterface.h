@@ -116,7 +116,7 @@ protected:
 public:
 	virtual ~MaterialInterface() = default;
 	virtual void Free() override;
-	virtual EResult Reload(const std::filesystem::path& filePath = {});
+	virtual EResult Reload(const std::filesystem::path& filePath = {}) override;
 #pragma endregion
 
 #pragma region Bind

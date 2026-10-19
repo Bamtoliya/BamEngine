@@ -35,6 +35,7 @@ public:
 	void Update();
 	void RequestRecompileAll() { m_PendingRecompileAll = true; }
 	void RecompileAll();
+	void RecompileFile(const std::filesystem::path& hlslPath) { ProcessModifiedFile(hlslPath); }
 	void NotifyFileModified(const std::filesystem::path& filePath);
 
 	// ImGui 렌더링 루프에서 호출할 우측 하단 토스트 알림 창
