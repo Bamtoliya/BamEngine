@@ -1,4 +1,6 @@
 ﻿#pragma once
+#include "ImGuiManager.h"
+#include "ResourceEditorInterface.h"
 #include "ContentBrowserGridItem.h"
 #include "SelectionManager.h"
 
@@ -18,6 +20,7 @@ void ContentBrowserGridItem::Draw(const std::filesystem::directory_entry& direct
 	DragAndDropTarget(payloadPath);
 
 	// 썸네일 위에서 더블클릭 시 폴더 이동
+		// 썸네일 위에서 더블클릭 시 폴더 이동 또는 리소스 에디터 오픈
 	if (ImGui::IsItemHovered())
 	{
 		if (MOUSE_BUTTON_DOUBLE_CLICK(EMouseButton::Left))
@@ -30,6 +33,18 @@ void ContentBrowserGridItem::Draw(const std::filesystem::directory_entry& direct
 			else
 			{
 				SelectionManager::Get().SetSelectedAsset(path);
+				for (auto* panel : ImGuiManager::Get().GetImGuiPanels())
+				{
+					if (auto* resEditor = dynamic_cast<ResourceEditorInterface*>(panel))
+					{
+						if (resEditor->IsSupported(path))
+						{
+							resEditor->SetTargetResource(path);
+							resEditor->Open();
+							break;
+						}
+					}
+				}
 			}
 		}
 	}
@@ -343,6 +358,22 @@ void ContentBrowserGridItem::DrawNameBox(const std::filesystem::directory_entry&
 		{
 			currentDirectory /= path.filename();
 			if (searchBuffer) searchBuffer[0] = '\0';
+		}
+		else
+		{
+			SelectionManager::Get().SetSelectedAsset(path);
+			for (auto* panel : ImGuiManager::Get().GetImGuiPanels())
+			{
+				if (auto* resEditor = dynamic_cast<ResourceEditorInterface*>(panel))
+				{
+					if (resEditor->IsSupported(path))
+					{
+						resEditor->SetTargetResource(path);
+						resEditor->Open();
+						break;
+					}
+				}
+			}
 		}
 	}
 }

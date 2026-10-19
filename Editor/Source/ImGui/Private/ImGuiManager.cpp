@@ -450,6 +450,10 @@ EResult ImGuiManager::CreateResourceEditors()
 	SpriteEditor* spriteEditor = new SpriteEditor();
 	spriteEditor->Close();
 	AddImGuiPanel(spriteEditor);
+
+	MaterialEditor* materialEditor = new MaterialEditor();
+	materialEditor->Close();
+	AddImGuiPanel(materialEditor);
 	return EResult::Success;
 }
 #pragma endregion
