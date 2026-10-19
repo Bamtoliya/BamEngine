@@ -32,6 +32,7 @@ public:
 #pragma region Data Management
 public:
 	EResult LoadData();
+	EResult ReloadData();
 
 	EResult RegisterLocalizationData(const wstring& filePath);
 	string GetText(const string& key) const;

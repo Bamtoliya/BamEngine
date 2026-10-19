@@ -29,6 +29,8 @@ public:
 	static Texture* Create(const TextureBinaryHeader& header, const vector<uint8>& pixelData, const wstring& key = L"");
 	static Texture* CreateFromRHITexture(RHITexture* rhiTexture, const wstring& key = L"");
 	virtual void Free() override;
+public:
+	EResult Reload();
 #pragma endregion
 
 #pragma region Bind

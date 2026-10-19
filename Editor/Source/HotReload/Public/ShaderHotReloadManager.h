@@ -12,6 +12,14 @@
 
 BEGIN(Editor)
 
+struct ShaderNotification
+{
+	std::string Title;
+	std::string Message;
+	bool IsError = false;
+	float RemainingTime = 5.0f;
+};
+
 class ShaderHotReloadManager final : public Base
 {
 	DECLARE_SINGLETON(ShaderHotReloadManager)
@@ -24,16 +32,14 @@ private:
 public:
 	void Free() override;
 
-	// 매 프레임 메인 루프에서 변경 큐를 디바운스 확인 후 컴파일 & 핫스왑
 	void Update();
-
-	// UI 버튼 등에서 호출하는 안전한 비동기 재컴파일 요청 (다음 프레임 렌더 시작 전 실행)
 	void RequestRecompileAll() { m_PendingRecompileAll = true; }
-
-	// 전체 셰이더 일괄 재컴파일 및 핫스왑 (툴바 버튼 또는 .hlsli 수정 시)
 	void RecompileAll();
-
 	void NotifyFileModified(const std::filesystem::path& filePath);
+
+	// ImGui 렌더링 루프에서 호출할 우측 하단 토스트 알림 창
+	void DrawNotificationUI();
+	void AddNotification(const std::string& title, const std::string& msg, bool isError, float duration = 5.0f);
 
 	[[nodiscard]] bool IsAutoReloadEnabled() const { return m_AutoReload; }
 	void SetAutoReload(bool enable) { m_AutoReload = enable; }
@@ -54,6 +60,8 @@ private:
 	std::mutex m_QueueMutex;
 	std::unordered_map<std::string, std::chrono::steady_clock::time_point> m_PendingFiles;
 	bool m_AutoReload = true;
+
+	std::vector<ShaderNotification> m_Notifications;
 };
 
 END

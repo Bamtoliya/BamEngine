@@ -11,13 +11,13 @@ BEGIN(Editor)
 
 enum class EHotReloadState : uint8 { Idle, Reloading, Failed };
 
-class HotReloadManager final : public Base
+class ModuleHotReloadManager final : public Base
 {
-    DECLARE_SINGLETON(HotReloadManager)
+    DECLARE_SINGLETON(ModuleHotReloadManager)
 
 private:
-    HotReloadManager() = default;
-    virtual ~HotReloadManager() = default;
+    ModuleHotReloadManager() = default;
+    virtual ~ModuleHotReloadManager() = default;
     EResult Initialize(void* arg = nullptr);
 
 public:
@@ -33,6 +33,7 @@ public:
     [[nodiscard]] bool IsLoaded() const { return m_CurrentModule != nullptr; }
     [[nodiscard]] EHotReloadState GetState() const { return m_State; }
     [[nodiscard]] Engine::IModule* GetModule() const { return m_CurrentModule; }
+    [[nodiscard]] uint32 GetReloadIndex() const { return m_ReloadIndex; }
     [[nodiscard]] const std::filesystem::path& GetOriginalDllPath() const { return m_OriginalDllPath; }
 
     [[nodiscard]] bool IsAutoReloadEnabled() const { return m_AutoReload; }

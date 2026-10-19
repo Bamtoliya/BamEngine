@@ -1,12 +1,12 @@
-﻿#include "HotReloadManager.h"
+﻿#include "ModuleHotReloadManager.h"
 #include <chrono>
 #include <thread>
 
 // efsw 파일 이벤트 리스너
-class HotReloadFileListener final : public efsw::FileWatchListener
+class ModuleHotReloadFileListener final : public efsw::FileWatchListener
 {
 public:
-    explicit HotReloadFileListener(HotReloadManager* manager, std::string targetFilename)
+    explicit ModuleHotReloadFileListener(ModuleHotReloadManager* manager, std::string targetFilename)
         : m_Manager(manager), m_TargetFilename(std::move(targetFilename)) {
     }
 
@@ -20,13 +20,13 @@ public:
     }
 
 private:
-    HotReloadManager* m_Manager = nullptr;
+    ModuleHotReloadManager* m_Manager = nullptr;
     std::string m_TargetFilename;
 };
 
-IMPLEMENT_SINGLETON(HotReloadManager)
+IMPLEMENT_SINGLETON(ModuleHotReloadManager)
 
-EResult HotReloadManager::Initialize(void* arg)
+EResult ModuleHotReloadManager::Initialize(void* arg)
 {
     std::error_code ec;
     std::filesystem::create_directories(m_ShadowDirectory, ec);
@@ -34,20 +34,20 @@ EResult HotReloadManager::Initialize(void* arg)
     return EResult::Success;
 }
 
-void HotReloadManager::Free()
+void ModuleHotReloadManager::Free()
 {
     StopWatching();
     UnloadModule();
     CleanupShadowCopies();
 }
 
-void HotReloadManager::NotifyFileModified()
+void ModuleHotReloadManager::NotifyFileModified()
 {
     m_LastModifiedTime = std::chrono::steady_clock::now();
     m_PendingAutoReload = true;
 }
 
-void HotReloadManager::Update()
+void ModuleHotReloadManager::Update()
 {
     if (!m_AutoReload || !m_PendingAutoReload || m_State == EHotReloadState::Reloading)
         return;
@@ -63,7 +63,7 @@ void HotReloadManager::Update()
     }
 }
 
-void HotReloadManager::StartWatching(const std::filesystem::path& dllPath)
+void ModuleHotReloadManager::StartWatching(const std::filesystem::path& dllPath)
 {
     StopWatching();
 
@@ -71,14 +71,14 @@ void HotReloadManager::StartWatching(const std::filesystem::path& dllPath)
     const std::filesystem::path watchDir = dllPath.parent_path();
 
     m_FileWatcher = new efsw::FileWatcher();
-    m_FileListener = new HotReloadFileListener(this, m_WatchedFileName);
+    m_FileListener = new ModuleHotReloadFileListener(this, m_WatchedFileName);
     m_WatchID = m_FileWatcher->addWatch(watchDir.string(), m_FileListener, false);
     m_FileWatcher->watch();
 
     ENGINE_LOG_INFO("[HotReload] Watching for changes: {}", dllPath.string());
 }
 
-void HotReloadManager::StopWatching()
+void ModuleHotReloadManager::StopWatching()
 {
     if (m_FileWatcher)
     {
@@ -94,7 +94,7 @@ void HotReloadManager::StopWatching()
     m_WatchID = 0;
 }
 
-std::filesystem::path HotReloadManager::CreateShadowCopy(const std::filesystem::path& srcDllPath)
+std::filesystem::path ModuleHotReloadManager::CreateShadowCopy(const std::filesystem::path& srcDllPath)
 {
     std::error_code ec;
     if (!std::filesystem::exists(srcDllPath, ec))
@@ -146,7 +146,7 @@ std::filesystem::path HotReloadManager::CreateShadowCopy(const std::filesystem::
     return destDll;
 }
 
-EResult HotReloadManager::LoadModule(const std::filesystem::path& dllPath)
+EResult ModuleHotReloadManager::LoadModule(const std::filesystem::path& dllPath)
 {
     if (m_CurrentModule != nullptr)
         return EResult::AlreadyInitialized;
@@ -193,7 +193,7 @@ EResult HotReloadManager::LoadModule(const std::filesystem::path& dllPath)
     return EResult::Success;
 }
 
-EResult HotReloadManager::UnloadModule()
+EResult ModuleHotReloadManager::UnloadModule()
 {
     if (!m_CurrentModule && !m_ModuleHandle)
         return EResult::Success;
@@ -223,7 +223,7 @@ EResult HotReloadManager::UnloadModule()
     return EResult::Success;
 }
 
-EResult HotReloadManager::ReloadModule()
+EResult ModuleHotReloadManager::ReloadModule()
 {
     if (m_OriginalDllPath.empty())
         return EResult::AlreadyInitialized;
@@ -252,7 +252,7 @@ EResult HotReloadManager::ReloadModule()
     return EResult::Success;
 }
 
-void HotReloadManager::CleanupShadowCopies()
+void ModuleHotReloadManager::CleanupShadowCopies()
 {
     std::error_code ec;
     if (!std::filesystem::exists(m_ShadowDirectory, ec)) return;

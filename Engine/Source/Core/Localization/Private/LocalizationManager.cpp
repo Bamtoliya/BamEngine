@@ -69,6 +69,15 @@ EResult LocalizationManager::LoadData()
 	return EResult::Success;
 }
 
+EResult LocalizationManager::ReloadData()
+{
+	for (auto& dataMap : m_LocalizationData)
+	{
+		dataMap.clear();
+	}
+	return LoadData();
+}
+
 
 EResult LocalizationManager::RegisterLocalizationData(const wstring& filePath)
 {

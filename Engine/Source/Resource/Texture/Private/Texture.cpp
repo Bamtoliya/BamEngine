@@ -162,6 +162,68 @@ void Texture::Free()
 {
 	Safe_Release(m_RHITexture);
 }
+EResult Texture::Reload()
+{
+	if (m_Path.empty()) return EResult::InvalidArgument;
+
+	RHI* rhi = Renderer::Get().GetRHI();
+	if (!rhi) return EResult::Fail;
+
+	const std::string path = std::filesystem::path(m_Path).string();
+	int width = 0;
+	int height = 0;
+	int originalChannels = 0;
+
+	std::unique_ptr<stbi_uc, decltype(&stbi_image_free)> pixels(
+		stbi_load(path.c_str(), &width, &height, &originalChannels, STBI_rgb_alpha), stbi_image_free);
+
+	if (!pixels || width <= 0 || height <= 0)
+	{
+		ENGINE_LOG_ERROR("[Texture Hot Reload] Failed to read image file: {}", path);
+		return EResult::Fail;
+	}
+
+	TextureBinaryHeader header;
+	header.width = static_cast<uint32>(width);
+	header.height = static_cast<uint32>(height);
+	header.depth = 1;
+	header.mipLevels = 1;
+	header.arraySize = 1;
+	header.format = ETextureFormat::R8G8B8A8_UNORM;
+	header.dimension = ETextureDimension::Texture2D;
+
+	uint32 byteCount = 0;
+	if (!ValidateTextureHeader(header, m_PixelPerUnit, byteCount))
+		return EResult::InvalidArgument;
+
+	header.dataSize = byteCount;
+	vector<uint8> pixelData(pixels.get(), pixels.get() + byteCount);
+
+	RHITextureDesc textureDesc;
+	textureDesc.width = header.width;
+	textureDesc.height = header.height;
+	textureDesc.format = header.format;
+	textureDesc.dimension = header.dimension;
+	textureDesc.usage = ETextureUsage::Sampler;
+	textureDesc.data = pixelData.data();
+	textureDesc.dataSize = byteCount;
+
+	RHITexture* newTexture = rhi->CreateTexture(textureDesc);
+	if (!newTexture)
+	{
+		ENGINE_LOG_ERROR("[Texture Hot Reload] Failed to create GPU texture: {}", path);
+		return EResult::Fail;
+	}
+
+	Safe_Release(m_RHITexture);
+	m_RHITexture = newTexture;
+	m_CachedHeader = header;
+	m_TempData = std::move(pixelData);
+	IncreaseVersion();
+
+	ENGINE_LOG_INFO("[Texture Hot Reload] Successfully reloaded: {} ({}x{})", path, width, height);
+	return EResult::Success;
+}
 #pragma endregion
 
 #pragma region Bind
