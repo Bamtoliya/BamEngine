@@ -93,12 +93,17 @@ float4 main(PS_INPUT input) : SV_TARGET
     if (!RaySphereIntersect(rayOrigin, rayDir, ATMOS_RADIUS, tAtmos0, tAtmos1) || tAtmos1 <= 0.0f)
         return float4(0.0f, 0.0f, 0.0f, 1.0f);
 
-    float tPlanet0, tPlanet1;
-    bool hitPlanet = RaySphereIntersect(rayOrigin, rayDir, PLANET_RADIUS, tPlanet0, tPlanet1) && tPlanet1 > 0.0f;
+    float tPlanet0;
+    bool hitPlanet = GetPlanetGroundHitDistance(rayOrigin, rayDir, PLANET_RADIUS, tPlanet0);
 
     float tStart = max(tAtmos0, 0.0f);
-    float tEnd = hitPlanet && tPlanet0 > 0.0f ? tPlanet0 : tAtmos1;
-    float rayLength = max(tEnd - tStart, 0.0f);
+    float tEnd = hitPlanet ? min(tAtmos1, tPlanet0) : tAtmos1;
+
+    // 지표 내부 또는 표면에서 지표 안쪽을 보는 경우에는 추적하지 않는다.
+    if (tEnd <= tStart)
+        return float4(groundColor * skyIntensity * 0.2f, 1.0f);
+
+    float rayLength = tEnd - tStart;
 
     const int VIEW_SAMPLES = 64;
     const int SUN_SAMPLES = 4;
@@ -143,8 +148,8 @@ float4 main(PS_INPUT input) : SV_TARGET
 
         float tSun0, tSun1;
         RaySphereIntersect(samplePos, sunDir, ATMOS_RADIUS, tSun0, tSun1);
-        float tPlanetSun0, tPlanetSun1;
-        bool inEarthShadow = RaySphereIntersect(samplePos, sunDir, PLANET_RADIUS, tPlanetSun0, tPlanetSun1) && tPlanetSun1 > 0.0f && tPlanetSun0 > 10.0f;
+        float groundSunDistance;
+        bool inEarthShadow = GetPlanetGroundHitDistance(samplePos, sunDir, PLANET_RADIUS, groundSunDistance);
 
         if (!inEarthShadow)
         {
@@ -183,7 +188,7 @@ float4 main(PS_INPUT input) : SV_TARGET
     float3 color = inScatteredLight * sunRadiance;
 
     // 지표면에 닿았을 경우 대지 색상과 대기 감쇠 합성
-    if (hitPlanet && tPlanet0 > 0.0f)
+    if (hitPlanet)
     {
         float3 groundExtinction = exp(-(BETA_RAYLEIGH * opticalDepthRayleigh + BETA_MIE * 1.11f * opticalDepthMie));
         float groundLight = saturate(dot(normalize(rayOrigin + rayDir * tPlanet0), sunDir));

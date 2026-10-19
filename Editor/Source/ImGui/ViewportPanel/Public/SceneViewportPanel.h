@@ -82,7 +82,7 @@ protected:
 
 #pragma region Render Passes
 private:
-	void SubmitLightingPass(const CameraBuffer& cameraBuffer);
+	void SubmitLightingPass(const CameraBuffer& cameraBuffer, const SkyAtmosphereData& skyData);
 	void SubmitPostProcessPass(f32 dt, uint32& slot, std::wstring& currentRT);
 	void SubmitUIOverlayPass(const wstring& currentRT);
 #pragma endregion

@@ -14,6 +14,9 @@
 #include "CoreComponents.h"
 #include "RenderComponents.h"
 #include "CloudTextureGenerator.h"
+#include "Light.h"
+#include "TimeManager.h"
+#include "Components/Render/SkyAtmosphereComponent.h"
 #include "Components/Render/VolumetricCloudComponent.h"
 #include "TransformSystem.h"
 #include "TransformPropertyEditor.h"
@@ -25,6 +28,20 @@
 #include <string>
 
 #pragma region Helper
+struct LightingPassData
+{
+	LightShadowData Shadow{};
+	VolumetricCloudData Cloud{};
+	vec3 SunDirection{ 0.0f, 1.0f, 0.0f };
+	f32 PlanetRadius = 6360000.0f;
+};
+
+static_assert(sizeof(LightingPassData) == 224);
+static_assert(offsetof(LightingPassData, Shadow) == 0);
+static_assert(offsetof(LightingPassData, Cloud) == 80);
+static_assert(offsetof(LightingPassData, SunDirection) == 208);
+static_assert(offsetof(LightingPassData, PlanetRadius) == 220);
+
 static bool WorldToViewportScreen(
 	const vec3& worldPos,
 	const mat4& viewProj,
@@ -282,6 +299,7 @@ void SceneViewportPanel::Update(f32 dt)
 	if (cameraBuffer.has_value())
 	{
 		renderer.RegisterViewportCamera(*cameraBuffer, rpMgr.GetRenderPassByID(m_GeometryPassID));
+		const SkyAtmosphereData skyData = BuildSkyAtmosphereData();
 
 		// ForwardPass에 최신 대기/태양광 데이터를 패스 상수로 주입
 		if (auto* forwardPass = rpMgr.GetRenderPassByID(m_ForwardPassID))
@@ -308,13 +326,11 @@ void SceneViewportPanel::Update(f32 dt)
 					}
 				}
 			}
-
-			SkyAtmosphereData skyData = BuildSkyAtmosphereData();
 			forwardPass->SetPassConstantStruct(3, skyData); // slot 3 (b1, space3)
 		}
 		renderer.RegisterViewportCamera(*cameraBuffer, rpMgr.GetRenderPassByID(m_ForwardPassID));
 		renderer.RegisterViewportCamera(*cameraBuffer, rpMgr.GetRenderPassByID(m_ForwardTransparentPassID));
-		SubmitLightingPass(*cameraBuffer);
+		SubmitLightingPass(*cameraBuffer, skyData);
 	}
 	renderer.RegisterViewportCamera(rpMgr.GetRenderPassByID(m_UIOverlayPassID));
 
@@ -1016,10 +1032,10 @@ void SceneViewportPanel::DrawSelectionLocked()
 #pragma endregion
 
 #pragma region Rendering
-void SceneViewportPanel::SubmitLightingPass(const CameraBuffer& cameraBuffer)
+void SceneViewportPanel::SubmitLightingPass(const CameraBuffer& cameraBuffer, const SkyAtmosphereData& skyData)
 {
 	Renderer::Get().SubmitCustomCommand(
-		[this, cameraBuffer](f32 dt, RenderPass* pass) -> EResult
+		[this, cameraBuffer, skyData](f32 dt, RenderPass* pass) -> EResult
 		{
 			auto* rhi = Renderer::Get().GetRHI();
 			auto& rtMgr = RenderTargetManager::Get();
@@ -1028,8 +1044,10 @@ void SceneViewportPanel::SubmitLightingPass(const CameraBuffer& cameraBuffer)
 			wstring prefix = m_Name + L"_";
 
 			CameraBuffer camBuf = cameraBuffer;
-			camBuf.time = dt;
-			rhi->BindConstantBuffer(&camBuf, sizeof(CameraBuffer), 0);
+			camBuf.time = static_cast<f32>(TimeManager::Get().GetTotalTime());
+
+			if (IsFailure(rhi->BindConstantBuffer(&camBuf, sizeof(CameraBuffer), 0)))
+				return EResult::Fail;
 			const wstring sourceNames[] = {
 				prefix + L"GBuffer_Diffuse", prefix + L"GBuffer_Normal", prefix + L"GBuffer_PBR",
 				prefix + L"GBuffer_Emission", prefix + L"GBuffer_Position", m_ShadowDepthName
@@ -1084,20 +1102,48 @@ void SceneViewportPanel::SubmitLightingPass(const CameraBuffer& cameraBuffer)
 					return EResult::Fail;
 			}
 			// Lighting 파이프라인 바인딩
-			{
-				CameraBuffer shadowCam = LightManager::Get().GetShadowCameraBuffer(0u);
-				LightShadowData shadowCamData = LightManager::Get().GetShadowData(0u);
-				if (IsFailure(rhi->BindConstantBuffer(&shadowCamData, sizeof(shadowCamData), 3)))
-					return EResult::Fail;
-			}
 			if (IsFailure(rhi->BindPipeline(m_LightingPipeline)))
 				return EResult::Fail;
 
-			if (IsFailure(LightManager::Get().Bind(0)))
+			auto& lightManager = LightManager::Get();
+			if (IsFailure(lightManager.Bind(0)))
 			{
 				fmt::print(stderr, "LightManager::Bind failed\n");
 				return EResult::Fail;
 			}
+
+			LightingPassData lightingData{};
+			if (lightManager.HasShadowCastingLights())
+				lightingData.Shadow = lightManager.GetShadowData(0u);
+
+			lightingData.Cloud = skyData.Cloud;
+			lightingData.SunDirection = skyData.SunDirection;
+
+			auto& rm = ResourceManager::Get();
+			auto shapeHandle = rm.GetResourceHandle<Texture>(L"Resources/Texture/CloudBaseShape3D");
+			auto weatherHandle = rm.GetResourceHandle<Texture>(L"Resources/Texture/CloudWeatherMap2D");
+
+			auto* shapeTexture = shapeHandle.Get();
+			auto* weatherTexture = weatherHandle.Get();
+			if (!shapeTexture || !weatherTexture)
+			{
+				fmt::print(stderr, "Cloud shadow textures are missing\n");
+				return EResult::Fail;
+			}
+
+			auto* shapeRHI = shapeTexture->GetRHITexture();
+			auto* weatherRHI = weatherTexture->GetRHITexture();
+			if (!shapeRHI || !weatherRHI)
+				return EResult::Fail;
+
+			if (IsFailure(rhi->BindTextureSampler(shapeRHI, sampler, 0)))
+				return EResult::Fail;
+
+			if (IsFailure(rhi->BindTextureSampler(weatherRHI, sampler, 1)))
+				return EResult::Fail;
+
+			if (IsFailure(rhi->BindConstantBuffer(&lightingData, sizeof(lightingData), 3)))
+				return EResult::Fail;
 
 			if (IsFailure(rhi->Draw(3)))
 			{

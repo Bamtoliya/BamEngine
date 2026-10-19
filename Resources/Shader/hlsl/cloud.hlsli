@@ -40,6 +40,32 @@ bool IntersectSphere(float3 rayOrigin, float3 rayDir, float sphereRadius, out fl
     return true;
 }
 
+// 대기·구름의 기준 반지름에 대한 불투명 지표의 상대 고도.
+// 씬에서 사용할 최저 카메라·지형 높이보다 낮게 설정한다.
+static const float PLANET_GROUND_ALTITUDE = -1000.0f;
+
+bool GetPlanetGroundHitDistance(float3 rayOrigin, float3 rayDir, float planetRadius, out float hitDistance)
+{
+    hitDistance = 0.0f;
+    float groundRadius = planetRadius + PLANET_GROUND_ALTITUDE;
+
+    // 불투명 지표 내부에서는 모든 방향이 차폐된다.
+    if (length(rayOrigin) < groundRadius)
+        return true;
+
+    // 구체 밖에서 바깥쪽으로 향하는 광선은 지표에 진입하지 않는다.
+    if (dot(rayOrigin, rayDir) >= 0.0f)
+        return false;
+
+    float t0, t1;
+    if (!IntersectSphere(rayOrigin, rayDir, groundRadius, t0, t1) || t1 <= 0.0f)
+        return false;
+
+    // 표면에서 안쪽으로 향하는 경우의 t0 == 0도 유효한 차폐다.
+    hitDistance = max(t0, 0.0f);
+    return true;
+}
+
 float HenyeyGreensteinPhase(float cosAngle, float g)
 {
     float g2 = g * g;
@@ -113,8 +139,8 @@ float2 ComputeCloudSunTransmittance(
 {
     const float MULTIPLE_EXTINCTION_SCALE = 0.5f;
 
-    float tPlanet0, tPlanet1;
-    if (IntersectSphere(pos, sunDir, planetRadius, tPlanet0, tPlanet1) && tPlanet0 > 0.0f)
+    float groundHitDistance;
+    if (GetPlanetGroundHitDistance(pos, sunDir, planetRadius, groundHitDistance))
         return float2(0.0f, 0.0f);
 
     float tTop0, tTop1;
@@ -209,7 +235,7 @@ float4 RenderCloudLayer(
     }
 
     // 행성 표면 뒤에 있는 구름 구간을 제외한다.
-    if (hitPlanet && tPlanet0 > 0.0f)
+    if (hitPlanet)
         tEnd = min(tEnd, tPlanet0);
 
     tEnd = min(tEnd, tStart + cloud.TracingMaxDistance);
