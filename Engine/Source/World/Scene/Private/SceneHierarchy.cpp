@@ -1,17 +1,16 @@
-#include "Scene.h"
+﻿#include "Scene.h"
 #include "CoreComponents.h"
 #include "TransformSystem.h"
 #include "UIComponents.h"
 #include <glm/gtx/matrix_decompose.hpp>
-#include <unordered_set>
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <optional>
 
 namespace
 {
     constexpr std::size_t MaxDepth = 256;
-
     bool Finite(const glm::dmat4& value)
     {
         for (int c = 0; c < 4; ++c)
@@ -19,7 +18,6 @@ namespace
                 if (!std::isfinite(value[c][r])) return false;
         return true;
     }
-
     bool Matches(const glm::dmat4& left, const glm::dmat4& right)
     {
         for (int c = 0; c < 4; ++c)
@@ -28,7 +26,6 @@ namespace
                     1.0e-4 * std::max({ 1.0, std::abs(left[c][r]), std::abs(right[c][r]) })) return false;
         return Finite(left) && Finite(right);
     }
-
     // Validate runtime links before passing the graph to recursive TransformSystem traversal.
     bool ValidHierarchy(Engine::Scene& scene)
     {
@@ -53,20 +50,26 @@ namespace
                 const auto& siblings = world.get<Engine::HierarchyComponent>(relation.parent).children;
                 if (std::count(siblings.begin(), siblings.end(), entity) != 1) return false;
             }
-            std::unordered_set<entt::entity> children;
-            for (const auto child : relation.children)
+            const auto& childList = relation.children;
+            for (std::size_t i = 0; i < childList.size(); ++i)
             {
+                const auto child = childList[i];
                 const auto* childRelation = world.valid(child) ?
                     world.try_get<Engine::HierarchyComponent>(child) : nullptr;
-                if (!childRelation || childRelation->parent != entity || !children.insert(child).second)
+                const bool duplicate = std::find(childList.begin(), childList.begin() + static_cast<std::ptrdiff_t>(i), child) !=
+                    childList.begin() + static_cast<std::ptrdiff_t>(i);
+                if (!childRelation || childRelation->parent != entity || duplicate)
                     return false;
             }
-            std::unordered_set<entt::entity> chain;
+            std::array<entt::entity, MaxDepth> chain{};
+            std::size_t depth = 0;
             auto current = entity;
             while (current != entt::null)
             {
-                if (!world.valid(current) || !chain.insert(current).second || chain.size() > MaxDepth)
+                const bool cycle = std::find(chain.begin(), chain.begin() + depth, current) != chain.begin() + depth;
+                if (!world.valid(current) || cycle || depth >= MaxDepth)
                     return false;
+                chain[depth++] = current;
                 const auto* link = world.try_get<Engine::HierarchyComponent>(current);
                 current = link ? link->parent : entt::null;
             }

@@ -8,6 +8,7 @@
 #include "Functions.h"
 #include <imgui.h>
 #include <algorithm>
+#include <array>
 #include <cstring>
 #include "IconsFontAwesome7.h"
 
@@ -79,21 +80,34 @@ Editor::EntityHierarchyTree Editor::BuildEntityHierarchyTree(Engine::Scene& scen
 {
     EntityHierarchyTree tree;
     const auto& world = scene.GetRegistry();
-    std::vector<entt::entity> entities;
+    std::vector<std::pair<std::uint64_t, entt::entity>> sortedEntities;
     if (const auto* storage = world.storage<entt::entity>())
+    {
+        sortedEntities.reserve(storage->size());
         for (auto [entity] : storage->each())
-            if (scene.FindEntity(entity)) entities.push_back(entity);
-    const auto identity = [&](entt::entity entity)
+        {
+            if (!scene.FindEntity(entity)) continue;
+            const auto* id = world.try_get<Engine::IDComponent>(entity);
+            const auto key = id ? id->id : static_cast<std::uint64_t>(entt::to_integral(entity));
+            sortedEntities.emplace_back(key, entity);
+        }
+    }
+    std::sort(sortedEntities.begin(), sortedEntities.end(), [](const auto& left, const auto& right)
+        {
+            if (left.first != right.first) return left.first < right.first;
+            return entt::to_integral(left.second) < entt::to_integral(right.second);
+        });
+
+    std::vector<entt::entity> entities;
+    entities.reserve(sortedEntities.size());
+    tree.Parents.reserve(sortedEntities.size());
+    tree.Children.reserve(sortedEntities.size());
+    for (const auto& [key, entity] : sortedEntities)
     {
-        const auto* id = world.try_get<Engine::IDComponent>(entity);
-        return id ? id->id : static_cast<std::uint64_t>(entt::to_integral(entity));
-    };
-    std::sort(entities.begin(), entities.end(), [&](auto left, auto right)
-    {
-        if (identity(left) != identity(right)) return identity(left) < identity(right);
-        return entt::to_integral(left) < entt::to_integral(right);
-    });
-    for (const auto entity : entities) tree.Parents.emplace(entity, entt::null);
+        entities.push_back(entity);
+        tree.Parents.emplace(entity, entt::null);
+    }
+
     for (const auto entity : entities)
     {
         const auto* relation = world.try_get<Engine::HierarchyComponent>(entity);
@@ -107,26 +121,32 @@ Editor::EntityHierarchyTree Editor::BuildEntityHierarchyTree(Engine::Scene& scen
                 tree.Parents[entity] = parent;
             else tree.Invalid.insert(entity);
         }
-        std::unordered_set<entt::entity> unique;
-        for (const auto child : relation->children)
+        const auto& childList = relation->children;
+        for (std::size_t i = 0; i < childList.size(); ++i)
         {
+            const auto child = childList[i];
             const auto* link = tree.Parents.contains(child) ?
                 world.try_get<Engine::HierarchyComponent>(child) : nullptr;
-            if (!link || link->parent != entity || !unique.insert(child).second) tree.Invalid.insert(entity);
+            const bool duplicate = std::find(childList.begin(), childList.begin() + static_cast<std::ptrdiff_t>(i), child) !=
+                childList.begin() + static_cast<std::ptrdiff_t>(i);
+            if (!link || link->parent != entity || duplicate) tree.Invalid.insert(entity);
         }
     }
     // Break invalid edges in the view only. All entities remain visible; component data is never repaired here.
     for (const auto entity : entities)
     {
-        std::unordered_set<entt::entity> chain;
+        std::array<entt::entity, 256> chain{};
+        std::size_t depth = 0;
         for (auto current = entity; current != entt::null; current = tree.Parents.at(current))
         {
-            if (!chain.insert(current).second || chain.size() > 256)
+            const bool cycle = std::find(chain.begin(), chain.begin() + depth, current) != chain.begin() + depth;
+            if (cycle || depth >= chain.size())
             {
                 tree.Parents[entity] = entt::null;
                 tree.Invalid.insert(entity);
                 break;
             }
+            chain[depth++] = current;
         }
     }
     for (const auto entity : entities)
@@ -218,7 +238,7 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
                 ImGuiTreeNodeFlags_SpanFullWidth | ImGuiTreeNodeFlags_FramePadding;
             if (std::ranges::find(selected, entity) != selected.end()) flags |= ImGuiTreeNodeFlags_Selected;
             if (children.empty()) flags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
-            ImGui::PushID(std::to_string(entt::to_integral(entity)).c_str());
+            ImGui::PushID(static_cast<int>(entt::to_integral(entity)));
 
             // 조상이거나, 검색 중 일치 자식을 가진 부모 노드는 자동으로 펼침
             if (ancestors.contains(entity) || (isFiltering && visibleInSearch.contains(entity) && !matchingEntities.contains(entity)))

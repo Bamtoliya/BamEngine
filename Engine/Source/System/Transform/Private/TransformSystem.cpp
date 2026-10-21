@@ -1,8 +1,8 @@
 ﻿#include "TransformSystem.h"
 #include "CoreComponents.h"
 #include <glm/gtx/matrix_decompose.hpp>
-#include <unordered_map>
-#include <unordered_set>
+#include <array>
+#include <algorithm>
 
 namespace
 {
@@ -142,59 +142,95 @@ bool TransformSystem::TryAssignLocalMatrix(TransformComponent& candidate, const 
 
 bool TransformSystem::TryGetWorldMatrix(const entt::registry& registry, entt::entity entity, glm::mat4& matrix)
 {
-    std::vector<entt::entity> chain;
-    std::unordered_set<entt::entity> visited;
+    std::array<entt::entity, 256> chain{};
+    std::size_t chainLen = 0;
     for (auto current = entity; current != entt::null;)
     {
-        if (!registry.valid(current) || !registry.all_of<TransformComponent>(current) ||
-            !visited.insert(current).second || visited.size() > 256) return false;
-        chain.push_back(current);
+        if (!registry.valid(current) || !registry.all_of<TransformComponent>(current) || chainLen >= 256 ||
+            std::find(chain.begin(), chain.begin() + chainLen, current) != chain.begin() + chainLen) return false;
+        chain[chainLen++] = current;
         const auto* link = registry.try_get<HierarchyComponent>(current);
         current = link ? link->parent : entt::null;
     }
     glm::mat4 result(1.0f);
-    for (auto it = chain.rbegin(); it != chain.rend(); ++it)
-        if (!TryComposeWorld(registry.get<TransformComponent>(*it), result, result)) return false;
+    for (std::size_t k = chainLen; k > 0; --k)
+        if (!TryComposeWorld(registry.get<TransformComponent>(chain[k - 1]), result, result)) return false;
     matrix = result;
     return true;
 }
 
 bool TransformSystem::UpdateHierarchy(entt::registry& registry)
 {
-    std::unordered_map<entt::entity, TransformComponent> values;
-    for (const auto entity : registry.view<TransformComponent>())
+    const auto* storage = std::as_const(registry).storage<TransformComponent>();
+    if (!storage || storage->empty()) return true;
+    enum class VisitState : std::uint8_t { Unvisited = 0, Visiting = 1, Resolved = 2 };
+    struct Node
     {
-        auto value = registry.get<TransformComponent>(entity);
-        static_cast<void>(value.SynchronizeRotation());
-        values.emplace(entity, value);
+        entt::entity Entity = entt::null;
+        TransformComponent Transform{};
+        glm::mat4 World{ 1.0f };
+        std::size_t Depth = 0;
+        VisitState State = VisitState::Unvisited;
+    };
+    const std::size_t count = storage->size();
+    thread_local std::vector<Node> nodes;
+    nodes.assign(count, Node{});
+    for (auto [entity, transform] : registry.view<TransformComponent>().each())
+    {
+        const std::size_t idx = storage->index(entity);
+        nodes[idx].Entity = entity;
+        nodes[idx].Transform = transform;
+        static_cast<void>(nodes[idx].Transform.SynchronizeRotation());
     }
-    struct Resolved { glm::mat4 World{ 1.0f }; std::size_t Depth = 0; };
-    std::unordered_map<entt::entity, Resolved> resolved;
-    for (const auto& [entity, transform] : values)
+    std::array<std::size_t, 256> chain{};
+    for (std::size_t i = 0; i < count; ++i)
     {
-        if (resolved.contains(entity)) continue;
-        std::vector<entt::entity> chain;
-        std::unordered_set<entt::entity> visited;
-        auto current = entity;
-        while (current != entt::null && !resolved.contains(current))
+        if (nodes[i].State == VisitState::Resolved) continue;
+        std::size_t chainLen = 0;
+        entt::entity current = nodes[i].Entity;
+        std::size_t currentIdx = i;
+        while (true)
         {
-            if (!values.contains(current) || !visited.insert(current).second || chain.size() >= 256) return false;
-            chain.push_back(current);
+            if (chainLen >= 256) return false;
+            nodes[currentIdx].State = VisitState::Visiting;
+            chain[chainLen++] = currentIdx;
             const auto* link = registry.try_get<HierarchyComponent>(current);
-            current = link ? link->parent : entt::null;
+            const entt::entity parent = link ? link->parent : entt::null;
+            if (parent == entt::null)
+            {
+                current = entt::null;
+                break;
+            }
+            if (!storage->contains(parent)) return false;
+            const std::size_t parentIdx = storage->index(parent);
+            if (nodes[parentIdx].State == VisitState::Visiting) return false;
+            if (nodes[parentIdx].State == VisitState::Resolved)
+            {
+                current = parent;
+                currentIdx = parentIdx;
+                break;
+            }
+            current = parent;
+            currentIdx = parentIdx;
         }
-        Resolved parent = current == entt::null ? Resolved{} : resolved.at(current);
-        if (parent.Depth + chain.size() > 256) return false;
-        for (auto it = chain.rbegin(); it != chain.rend(); ++it)
+        glm::mat4 parentWorld = (current == entt::null) ? glm::mat4(1.0f) : nodes[currentIdx].World;
+        std::size_t depth = (current == entt::null) ? 0 : nodes[currentIdx].Depth;
+        if (depth + chainLen > 256) return false;
+        for (std::size_t k = chainLen; k > 0; --k)
         {
-            if (!TryComposeWorld(values.at(*it), parent.World, parent.World)) return false;
-            ++parent.Depth;
-            resolved.emplace(*it, parent);
+            const std::size_t idx = chain[k - 1];
+            if (!TryComposeWorld(nodes[idx].Transform, parentWorld, parentWorld)) return false;
+            nodes[idx].World = parentWorld;
+            nodes[idx].Depth = ++depth;
+            nodes[idx].State = VisitState::Resolved;
         }
     }
-    for (const auto& [entity, value] : values) registry.get<TransformComponent>(entity) = value;
-    for (const auto& [entity, value] : resolved)
-        if (auto* cache = registry.try_get<WorldTransformComponent>(entity)) cache->worldMatrix = value.World;
+    for (const auto& node : nodes)
+    {
+        registry.get<TransformComponent>(node.Entity) = node.Transform;
+        if (auto* cache = registry.try_get<WorldTransformComponent>(node.Entity))
+            cache->worldMatrix = node.World;
+    }
     return true;
 }
 

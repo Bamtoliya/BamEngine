@@ -101,12 +101,12 @@ void Mesh::Free()
 		Safe_Release(buffer);
 	}
 	Safe_Release(m_IndexBuffer);
-
 	for (auto& raw : m_RawData)
 	{
 		raw.clear();
 	}
 	m_IndexRaw.clear();
+	m_CachedInputLayouts.clear();
 }
 #pragma endregion
 
@@ -134,18 +134,9 @@ static const InputLayoutDesc* s_StreamLayoutTable[] = {
 	&VertexSkinData::Layout,   // EMeshStream::SkinData = 2
 	nullptr                    // 여분 슬롯 (아직 미정의)
 };
-const vector<InputLayoutDesc> Mesh::GetInputLayoutDescs() const
+const vector<InputLayoutDesc>& Mesh::GetInputLayoutDescs() const
 {
-	vector<InputLayoutDesc> result;
-	for (uint32 i = 0; i < (uint32)EMeshStream::Max; ++i)
-	{
-		// 해당 슬롯에 실제로 버퍼가 존재하고, 매핑 테이블에 레이아웃이 정의되어 있을 때만 추가
-		if (m_VertexBuffers[i] && s_StreamLayoutTable[i])
-		{
-			result.push_back(*s_StreamLayoutTable[i]);
-		}
-	}
-	return result;
+	return m_CachedInputLayouts;
 }
 #pragma endregion
 
@@ -291,15 +282,16 @@ EResult Mesh::OnPostLoad()
 #pragma region Internal
 void Mesh::RebuildCachedBuffers()
 {
-	// m_VertexBuffers 배열에서 nullptr이 아닌 마지막 인덱스를 찾아서
-	// SDL_BindGPUVertexBuffers에 넘길 개수를 확정합니다.
-	// 중간에 빈 슬롯이 있어도 SDL_GPU는 순서대로 슬롯 바인딩하므로,
-	// "가장 높은 활성 슬롯 + 1"이 넘길 개수입니다.
 	m_ActiveBufferCount = 0;
+	m_CachedInputLayouts.clear();
 	for (uint32 i = 0; i < (uint32)EMeshStream::Max; ++i)
 	{
 		if (m_VertexBuffers[i])
+		{
 			m_ActiveBufferCount = i + 1;
+			if (s_StreamLayoutTable[i])
+				m_CachedInputLayouts.push_back(*s_StreamLayoutTable[i]);
+		}
 	}
 }
 #pragma endregion

@@ -192,14 +192,22 @@ void Scene::SetPaused(bool paused)
 	if (paused) AddFlag(m_Flags, ESceneFlags::Paused);
 	else RemoveFlag(m_Flags, ESceneFlags::Paused);
 }
-void Engine::Scene::UpdateHierarchyFlags()
+void Scene::UpdateHierarchyFlags()
 {
 	auto& world = m_LocalRegistry;
-	std::unordered_set<entt::entity> visited;
+	const auto* entityStorage = std::as_const(world).storage<entt::entity>();
+	if (!entityStorage || entityStorage->empty()) return;
+
+	thread_local std::vector<std::uint8_t> visited;
+	visited.assign(entityStorage->size(), 0);
 
 	const auto propagate = [&](auto&& self, entt::entity entity, EEntityFlag parentEffective) -> void
 		{
-			if (!world.valid(entity) || !visited.insert(entity).second) return;
+			if (!entityStorage->contains(entity)) return;
+			const auto idx = entityStorage->index(entity);
+			if (visited[idx]) return;
+			visited[idx] = 1;
+
 			auto* flagComp = world.try_get<FlagComponent>(entity);
 			EEntityFlag currentEffective = flagComp ? flagComp->flags : EEntityFlag::Default;
 

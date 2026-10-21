@@ -108,7 +108,7 @@ public:
 public:
 	ETopology GetTopology() const { return m_Topology; }
 public:
-	virtual const vector<InputLayoutDesc> GetInputLayoutDescs() const;
+	virtual const vector<InputLayoutDesc>& GetInputLayoutDescs() const;
 	bool IsDynamic() const { return HasFlag(m_Flags, EMeshFlag::Dynamic); }
 #pragma endregion
 
@@ -170,6 +170,7 @@ protected:
 	vec3 m_BoundingBoxMax = { 0.0f, 0.0f, 0.0f };
 
 	uint32 m_ActiveBufferCount = { 0 };
+	vector<InputLayoutDesc> m_CachedInputLayouts;
 #pragma endregion
 };
 END
