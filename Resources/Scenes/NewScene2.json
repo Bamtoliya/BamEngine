@@ -1,0 +1,49 @@
+{
+    "Scene": {
+        "Active": true,
+        "Entities": [
+            {
+                "Components": [
+                    {
+                        "Data": {
+                            "flags": 3
+                        },
+                        "Type": "Engine::FlagComponent"
+                    },
+                    {
+                        "Data": {
+                            "name": "Terrain"
+                        },
+                        "Type": "Engine::NameComponent"
+                    },
+                    {
+                        "Data": {
+                            "Length": 128,
+                            "MaxHeight": 30,
+                            "Resolution": 128,
+                            "Width": 128
+                        },
+                        "Type": "Engine::TerrainComponent"
+                    },
+                    {
+                        "Data": {
+                            "absolute": 0,
+                            "eulerRotation": [0, 0, 0],
+                            "position": [0, 0, 0],
+                            "rotation": [0, 0, 0, 1],
+                            "scale": [1, 1, 1]
+                        },
+                        "Type": "Engine::TransformComponent"
+                    }
+                ],
+                "Hierarchy": {
+                    "Children": [],
+                    "Parent": 0
+                },
+                "Id": 1
+            }
+        ],
+        "Name": "Scene",
+        "Version": 1
+    }
+}

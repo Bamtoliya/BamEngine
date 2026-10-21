@@ -1,0 +1,1022 @@
+{
+    "Scene": {
+        "Active": true,
+        "Entities": [
+            {
+                "Components": [
+                    {
+                        "Data": {
+                            "AspectRatio": 1.7776999473571777,
+                            "CameraType": 0,
+                            "FOV": 60,
+                            "FarPlane": 1000,
+                            "IsMainCamera": false,
+                            "NearPlane": 0.10000000149011612,
+                            "OrthographicSize": 10
+                        },
+                        "Type": "Engine::CameraComponent"
+                    },
+                    {
+                        "Data": {
+                            "flags": 3
+                        },
+                        "Type": "Engine::FlagComponent"
+                    },
+                    {
+                        "Data": {
+                            "name": "Main Camera"
+                        },
+                        "Type": "Engine::NameComponent"
+                    },
+                    {
+                        "Data": {
+                            "absolute": 0,
+                            "eulerRotation": [21.999582290649414, 0, 0],
+                            "position": [0, 8, -18],
+                            "rotation": [0.19080542027950287, 0, 0, 0.981627881526947],
+                            "scale": [1, 1, 1]
+                        },
+                        "Type": "Engine::TransformComponent"
+                    }
+                ],
+                "Hierarchy": {
+                    "Children": [],
+                    "Parent": 0
+                },
+                "Id": 1
+            },
+            {
+                "Components": [
+                    {
+                        "Data": {
+                            "flags": 3
+                        },
+                        "Type": "Engine::FlagComponent"
+                    },
+                                        {
+                        "Data": {
+                            "AttenuationCoefficients": [1, 0.09000000357627869, 0.03200000151991844],
+                            "AttenuationMode": 0,
+                            "CascadeSplitLambda": 0.75,
+                            "Color": [1, 0.949999988079071, 0.8500000238418579],
+                            "Flags": 61,
+                            "GroundColor": [0.05000000074505806, 0.03999999910593033, 0.029999999329447746],
+                            "IndirectIntensity": 0.5,
+                            "Intensity": 1.2,
+                            "IsEnabled": true,
+                            "LightType": 1,
+                            "LightingLayerMask": 4294967295,
+                            "Range": 50,
+                            "ShadowBias": 0.0010000000474974513,
+                            "ShadowMaxDistance": 100,
+                            "ShadowNormalBias": 0.009999999776482582,
+                            "ShadowRange": 50,
+                            "ShadowSlopeBias": 0.004999999888241291,
+                            "SpotFalloffExponent": 1,
+                            "SpotInnerAngle": 15,
+                            "SpotOuterAngle": 30
+                        },
+                        "Type": "Engine::LightComponent"
+                    },
+                    {
+                        "Data": {
+                            "name": "Key Directional Light"
+                        },
+                        "Type": "Engine::NameComponent"
+                    },
+                    {
+                        "Data": {
+                            "absolute": 0,
+                            "eulerRotation": [45.000003814697266, 0, 0],
+                            "position": [0, 15, -10],
+                            "rotation": [0.3826834559440613, 0, 0, 0.9238795042037964],
+                            "scale": [1, 1, 1]
+                        },
+                        "Type": "Engine::TransformComponent"
+                    }
+                ],
+                "Hierarchy": {
+                    "Children": [],
+                    "Parent": 18
+                },
+                "Id": 2
+            },
+            {
+                "Components": [
+                    {
+                        "Data": {
+                            "flags": 3
+                        },
+                        "Type": "Engine::FlagComponent"
+                    },
+                    {
+                        "Data": {
+                            "AttenuationCoefficients": [1, 0.09000000357627869, 0.03200000151991844],
+                            "AttenuationMode": 0,
+                            "CascadeSplitLambda": 0.75,
+                            "Color": [0.3499999940395355, 0.550000011920929, 1],
+                            "Flags": 53,
+                            "GroundColor": [0.05000000074505806, 0.03999999910593033, 0.029999999329447746],
+                            "IndirectIntensity": 0.5,
+                            "Intensity": 2.0,
+                            "IsEnabled": true,
+                            "LightType": 0,
+                            "LightingLayerMask": 4294967295,
+                            "Range": 25,
+                            "ShadowBias": 0.0010000000474974513,
+                            "ShadowMaxDistance": 100,
+                            "ShadowNormalBias": 0.009999999776482582,
+                            "ShadowRange": 50,
+                            "ShadowSlopeBias": 0.004999999888241291,
+                            "SpotFalloffExponent": 1,
+                            "SpotInnerAngle": 15,
+                            "SpotOuterAngle": 30
+                        },
+                        "Type": "Engine::LightComponent"
+                    },
+                    {
+                        "Data": {
+                            "name": "Fill Point Light"
+                        },
+                        "Type": "Engine::NameComponent"
+                    },
+                    {
+                        "Data": {
+                            "absolute": 0,
+                            "eulerRotation": [0, 0, 0],
+                            "position": [-8, 6, 4],
+                            "rotation": [0, 0, 0, 1],
+                            "scale": [1, 1, 1]
+                        },
+                        "Type": "Engine::TransformComponent"
+                    }
+                ],
+                "Hierarchy": {
+                    "Children": [],
+                    "Parent": 18
+                },
+                "Id": 3
+            },
+            {
+                "Components": [
+                    {
+                        "Data": {
+                            "flags": 3
+                        },
+                        "Type": "Engine::FlagComponent"
+                    },
+                    {
+                        "Data": {
+                            "AttenuationCoefficients": [1, 0.09000000357627869, 0.03200000151991844],
+                            "AttenuationMode": 2,
+                            "CascadeSplitLambda": 0.75,
+                            "Color": [0.5, 0.6499999761581421, 0.8500000238418579],
+                            "Flags": 52,
+                            "GroundColor": [0.07999999821186066, 0.07000000029802322, 0.05999999865889549],
+                            "IndirectIntensity": 0.2,
+                            "Intensity": 0.4,
+                            "IsEnabled": true,
+                            "LightType": 3,
+                            "LightingLayerMask": 4294967295,
+                            "Range": 10,
+                            "ShadowBias": 0.0020000000949949026,
+                            "ShadowMaxDistance": 100,
+                            "ShadowNormalBias": 0.009999999776482582,
+                            "ShadowRange": 50,
+                            "ShadowSlopeBias": 0.5,
+                            "SpotFalloffExponent": 1,
+                            "SpotInnerAngle": 15,
+                            "SpotOuterAngle": 30
+                        },
+                        "Type": "Engine::LightComponent"
+                    },
+                    {
+                        "Data": {
+                            "name": "Sky Light"
+                        },
+                        "Type": "Engine::NameComponent"
+                    },
+                    {
+                        "Data": {
+                            "absolute": 0,
+                            "eulerRotation": [0, 0, 0],
+                            "position": [0, 0, 0],
+                            "rotation": [0, 0, 0, 1],
+                            "scale": [1, 1, 1]
+                        },
+                        "Type": "Engine::TransformComponent"
+                    }
+                ],
+                "Hierarchy": {
+                    "Children": [],
+                    "Parent": 18
+                },
+                "Id": 4
+            },
+            {
+                "Components": [
+                    {
+                        "Data": {
+                            "flags": 3
+                        },
+                        "Type": "Engine::FlagComponent"
+                    },
+                    {
+                        "Data": {
+                            "name": "Floor Panel"
+                        },
+                        "Type": "Engine::NameComponent"
+                    },
+                    {
+                        "Data": {
+                            "castShadow": false,
+                            "materialHandle": {
+                                "AssetKey": "Resources/Material/GBufferMaterial",
+                                "AssetPath": "",
+                                "Null": false
+                            },
+                            "meshHandle": {
+                                "AssetKey": "CubeMesh",
+                                "AssetPath": "CubeMesh",
+                                "Null": false
+                            }
+                        },
+                        "Type": "Engine::StaticMeshRendererComponent"
+                    },
+                    {
+                        "Data": {
+                            "absolute": 0,
+                            "eulerRotation": [0, 0, 0],
+                            "position": [0, -0.10000000149011612, -2.801788568496704],
+                            "rotation": [0, 0, 0, 1],
+                            "scale": [35, 0.20000000298023224, 35]
+                        },
+                        "Type": "Engine::TransformComponent"
+                    }
+                ],
+                "Hierarchy": {
+                    "Children": [],
+                    "Parent": 0
+                },
+                "Id": 5
+            },
+            {
+                "Components": [
+                    {
+                        "Data": {
+                            "flags": 3
+                        },
+                        "Type": "Engine::FlagComponent"
+                    },
+                    {
+                        "Data": {
+                            "name": "Terrain Platform Base"
+                        },
+                        "Type": "Engine::NameComponent"
+                    },
+                    {
+                        "Data": {
+                            "castShadow": true,
+                            "materialHandle": {
+                                "AssetKey": "Resources/Material/GBufferMaterial",
+                                "AssetPath": "",
+                                "Null": false
+                            },
+                            "meshHandle": {
+                                "AssetKey": "CubeMesh",
+                                "AssetPath": "CubeMesh",
+                                "Null": false
+                            }
+                        },
+                        "Type": "Engine::StaticMeshRendererComponent"
+                    },
+                    {
+                        "Data": {
+                            "absolute": 0,
+                            "eulerRotation": [0, 14.99769401550293, 0],
+                            "position": [8, 0.5, 6],
+                            "rotation": [0, 0.1305062472820282, 0, 0.9914475083351135],
+                            "scale": [10, 1, 8]
+                        },
+                        "Type": "Engine::TransformComponent"
+                    }
+                ],
+                "Hierarchy": {
+                    "Children": [],
+                    "Parent": 0
+                },
+                "Id": 6
+            },
+            {
+                "Components": [
+                    {
+                        "Data": {
+                            "flags": 3
+                        },
+                        "Type": "Engine::FlagComponent"
+                    },
+                    {
+                        "Data": {
+                            "name": "Terrain Platform Top"
+                        },
+                        "Type": "Engine::NameComponent"
+                    },
+                    {
+                        "Data": {
+                            "castShadow": true,
+                            "materialHandle": {
+                                "AssetKey": "Resources/Material/GBufferMaterial",
+                                "AssetPath": "",
+                                "Null": false
+                            },
+                            "meshHandle": {
+                                "AssetKey": "CubeMesh",
+                                "AssetPath": "CubeMesh",
+                                "Null": false
+                            }
+                        },
+                        "Type": "Engine::StaticMeshRendererComponent"
+                    },
+                    {
+                        "Data": {
+                            "absolute": 0,
+                            "eulerRotation": [0, 19.994718551635742, 0],
+                            "position": [10, 1.5, 7],
+                            "rotation": [0, 0.17360278964042664, 0, 0.984815776348114],
+                            "scale": [5, 1, 5]
+                        },
+                        "Type": "Engine::TransformComponent"
+                    }
+                ],
+                "Hierarchy": {
+                    "Children": [],
+                    "Parent": 0
+                },
+                "Id": 7
+            },
+            {
+                "Components": [
+                    {
+                        "Data": {
+                            "flags": 3
+                        },
+                        "Type": "Engine::FlagComponent"
+                    },
+                    {
+                        "Data": {
+                            "name": "Back Wall"
+                        },
+                        "Type": "Engine::NameComponent"
+                    },
+                    {
+                        "Data": {
+                            "castShadow": true,
+                            "materialHandle": {
+                                "AssetKey": "Resources/Material/GBufferMaterial",
+                                "AssetPath": "",
+                                "Null": false
+                            },
+                            "meshHandle": {
+                                "AssetKey": "CubeMesh",
+                                "AssetPath": "CubeMesh",
+                                "Null": false
+                            }
+                        },
+                        "Type": "Engine::StaticMeshRendererComponent"
+                    },
+                    {
+                        "Data": {
+                            "absolute": 0,
+                            "eulerRotation": [0, 0, 0],
+                            "position": [0, 5, 15],
+                            "rotation": [0, 0, 0, 1],
+                            "scale": [35, 10, 0.5]
+                        },
+                        "Type": "Engine::TransformComponent"
+                    }
+                ],
+                "Hierarchy": {
+                    "Children": [],
+                    "Parent": 0
+                },
+                "Id": 8
+            },
+            {
+                "Components": [
+                    {
+                        "Data": {
+                            "flags": 3
+                        },
+                        "Type": "Engine::FlagComponent"
+                    },
+                    {
+                        "Data": {
+                            "name": "Shadow Slit Pillar A"
+                        },
+                        "Type": "Engine::NameComponent"
+                    },
+                    {
+                        "Data": {
+                            "castShadow": true,
+                            "materialHandle": {
+                                "AssetKey": "Resources/Material/GBufferMaterial",
+                                "AssetPath": "",
+                                "Null": false
+                            },
+                            "meshHandle": {
+                                "AssetKey": "CubeMesh",
+                                "AssetPath": "CubeMesh",
+                                "Null": false
+                            }
+                        },
+                        "Type": "Engine::StaticMeshRendererComponent"
+                    },
+                    {
+                        "Data": {
+                            "absolute": 0,
+                            "eulerRotation": [0, -24.995468139648438, 0],
+                            "position": [-3, 3, -1],
+                            "rotation": [0, -0.21640101075172424, 0, 0.9763045907020569],
+                            "scale": [1, 6, 2]
+                        },
+                        "Type": "Engine::TransformComponent"
+                    }
+                ],
+                "Hierarchy": {
+                    "Children": [],
+                    "Parent": 0
+                },
+                "Id": 9
+            },
+            {
+                "Components": [
+                    {
+                        "Data": {
+                            "flags": 3
+                        },
+                        "Type": "Engine::FlagComponent"
+                    },
+                    {
+                        "Data": {
+                            "name": "Shadow Slit Pillar B"
+                        },
+                        "Type": "Engine::NameComponent"
+                    },
+                    {
+                        "Data": {
+                            "castShadow": true,
+                            "materialHandle": {
+                                "AssetKey": "Resources/Material/GBufferMaterial",
+                                "AssetPath": "",
+                                "Null": false
+                            },
+                            "meshHandle": {
+                                "AssetKey": "CubeMesh",
+                                "AssetPath": "CubeMesh",
+                                "Null": false
+                            }
+                        },
+                        "Type": "Engine::StaticMeshRendererComponent"
+                    },
+                    {
+                        "Data": {
+                            "absolute": 0,
+                            "eulerRotation": [0, -24.995468139648438, 0],
+                            "position": [-1, 3, 2],
+                            "rotation": [0, -0.21640101075172424, 0, 0.9763045907020569],
+                            "scale": [1, 6, 2]
+                        },
+                        "Type": "Engine::TransformComponent"
+                    }
+                ],
+                "Hierarchy": {
+                    "Children": [],
+                    "Parent": 0
+                },
+                "Id": 10
+            },
+            {
+                "Components": [
+                    {
+                        "Data": {
+                            "flags": 3
+                        },
+                        "Type": "Engine::FlagComponent"
+                    },
+                    {
+                        "Data": {
+                            "name": "Rotated Box"
+                        },
+                        "Type": "Engine::NameComponent"
+                    },
+                    {
+                        "Data": {
+                            "castShadow": true,
+                            "materialHandle": {
+                                "AssetKey": "Resources/Material/GBufferMaterial",
+                                "AssetPath": "",
+                                "Null": false
+                            },
+                            "meshHandle": {
+                                "AssetKey": "CubeMesh",
+                                "AssetPath": "CubeMesh",
+                                "Null": false
+                            }
+                        },
+                        "Type": "Engine::StaticMeshRendererComponent"
+                    },
+                    {
+                        "Data": {
+                            "absolute": 0,
+                            "eulerRotation": [0, 35, 0],
+                            "position": [-5, 1.25, 6],
+                            "rotation": [0, 0.3007054030895233, 0, 0.953717052936554],
+                            "scale": [2.5, 2.5, 2.5]
+                        },
+                        "Type": "Engine::TransformComponent"
+                    }
+                ],
+                "Hierarchy": {
+                    "Children": [],
+                    "Parent": 0
+                },
+                "Id": 11
+            },
+            {
+                "Components": [
+                    {
+                        "Data": {
+                            "flags": 3
+                        },
+                        "Type": "Engine::FlagComponent"
+                    },
+                    {
+                        "Data": {
+                            "name": "Pedestal Box"
+                        },
+                        "Type": "Engine::NameComponent"
+                    },
+                    {
+                        "Data": {
+                            "castShadow": true,
+                            "materialHandle": {
+                                "AssetKey": "Resources/Material/GBufferMaterial",
+                                "AssetPath": "",
+                                "Null": false
+                            },
+                            "meshHandle": {
+                                "AssetKey": "CubeMesh",
+                                "AssetPath": "CubeMesh",
+                                "Null": false
+                            }
+                        },
+                        "Type": "Engine::StaticMeshRendererComponent"
+                    },
+                    {
+                        "Data": {
+                            "absolute": 0,
+                            "eulerRotation": [0, -14.99769401550293, 0],
+                            "position": [3, 1.5, 0],
+                            "rotation": [0, -0.1305062472820282, 0, 0.9914475083351135],
+                            "scale": [3, 3, 3]
+                        },
+                        "Type": "Engine::TransformComponent"
+                    }
+                ],
+                "Hierarchy": {
+                    "Children": [],
+                    "Parent": 0
+                },
+                "Id": 12
+            },
+            {
+                "Components": [
+                    {
+                        "Data": {
+                            "flags": 3
+                        },
+                        "Type": "Engine::FlagComponent"
+                    },
+                    {
+                        "Data": {
+                            "name": "Large Floor Sphere"
+                        },
+                        "Type": "Engine::NameComponent"
+                    },
+                    {
+                        "Data": {
+                            "castShadow": true,
+                            "materialHandle": {
+                                "AssetKey": "Resources/Material/GBufferMaterial",
+                                "AssetPath": "",
+                                "Null": false
+                            },
+                            "meshHandle": {
+                                "AssetKey": "SphereMesh",
+                                "AssetPath": "SphereMesh",
+                                "Null": false
+                            }
+                        },
+                        "Type": "Engine::StaticMeshRendererComponent"
+                    },
+                    {
+                        "Data": {
+                            "absolute": 0,
+                            "eulerRotation": [0, 0, 0],
+                            "position": [-2, 1.5, -9.558938026428223],
+                            "rotation": [0, 0, 0, 1],
+                            "scale": [1.5, 1.5, 1.5]
+                        },
+                        "Type": "Engine::TransformComponent"
+                    }
+                ],
+                "Hierarchy": {
+                    "Children": [],
+                    "Parent": 0
+                },
+                "Id": 13
+            },
+            {
+                "Components": [
+                    {
+                        "Data": {
+                            "flags": 3
+                        },
+                        "Type": "Engine::FlagComponent"
+                    },
+                    {
+                        "Data": {
+                            "name": "Sphere on Pedestal"
+                        },
+                        "Type": "Engine::NameComponent"
+                    },
+                    {
+                        "Data": {
+                            "castShadow": true,
+                            "materialHandle": {
+                                "AssetKey": "Resources/Material/GBufferMaterial",
+                                "AssetPath": "",
+                                "Null": false
+                            },
+                            "meshHandle": {
+                                "AssetKey": "SphereMesh",
+                                "AssetPath": "SphereMesh",
+                                "Null": false
+                            }
+                        },
+                        "Type": "Engine::StaticMeshRendererComponent"
+                    },
+                    {
+                        "Data": {
+                            "absolute": 0,
+                            "eulerRotation": [0, 0, 0],
+                            "position": [3, 4, 0],
+                            "rotation": [0, 0, 0, 1],
+                            "scale": [1, 1, 1]
+                        },
+                        "Type": "Engine::TransformComponent"
+                    }
+                ],
+                "Hierarchy": {
+                    "Children": [],
+                    "Parent": 0
+                },
+                "Id": 14
+            },
+            {
+                "Components": [
+                    {
+                        "Data": {
+                            "flags": 3
+                        },
+                        "Type": "Engine::FlagComponent"
+                    },
+                    {
+                        "Data": {
+                            "name": "Floating Sphere"
+                        },
+                        "Type": "Engine::NameComponent"
+                    },
+                    {
+                        "Data": {
+                            "castShadow": true,
+                            "materialHandle": {
+                                "AssetKey": "Resources/Material/GBufferMaterial",
+                                "AssetPath": "",
+                                "Null": false
+                            },
+                            "meshHandle": {
+                                "AssetKey": "SphereMesh",
+                                "AssetPath": "SphereMesh",
+                                "Null": false
+                            }
+                        },
+                        "Type": "Engine::StaticMeshRendererComponent"
+                    },
+                    {
+                        "Data": {
+                            "absolute": 0,
+                            "eulerRotation": [0, 0, 0],
+                            "position": [0, 5, 5],
+                            "rotation": [0, 0, 0, 1],
+                            "scale": [1.2000000476837158, 1.2000000476837158, 1.2000000476837158]
+                        },
+                        "Type": "Engine::TransformComponent"
+                    }
+                ],
+                "Hierarchy": {
+                    "Children": [],
+                    "Parent": 0
+                },
+                "Id": 15
+            },
+            {
+                "Components": [
+                    {
+                        "Data": {
+                            "flags": 3
+                        },
+                        "Type": "Engine::FlagComponent"
+                    },
+                    {
+                        "Data": {
+                            "name": "Terrain Sphere"
+                        },
+                        "Type": "Engine::NameComponent"
+                    },
+                    {
+                        "Data": {
+                            "castShadow": true,
+                            "materialHandle": {
+                                "AssetKey": "Resources/Material/GBufferMaterial",
+                                "AssetPath": "",
+                                "Null": false
+                            },
+                            "meshHandle": {
+                                "AssetKey": "SphereMesh",
+                                "AssetPath": "SphereMesh",
+                                "Null": false
+                            }
+                        },
+                        "Type": "Engine::StaticMeshRendererComponent"
+                    },
+                    {
+                        "Data": {
+                            "absolute": 0,
+                            "eulerRotation": [0, 0, 0],
+                            "position": [10, 2.700000047683716, 7],
+                            "rotation": [0, 0, 0, 1],
+                            "scale": [0.699999988079071, 0.699999988079071, 0.699999988079071]
+                        },
+                        "Type": "Engine::TransformComponent"
+                    }
+                ],
+                "Hierarchy": {
+                    "Children": [],
+                    "Parent": 0
+                },
+                "Id": 16
+            },
+            {
+                "Components": [
+                    {
+                        "Data": {
+                            "flags": 3
+                        },
+                        "Type": "Engine::FlagComponent"
+                    },
+                    {
+                        "Data": {
+                            "AutoSyncAtmosphere": true,
+                            "FogColor": [0.699999988079071, 0.8199999928474426, 0.949999988079071],
+                            "FogDensity": 0.019999999552965164,
+                            "FogEndDistance": 150,
+                            "FogHeight": 0,
+                            "FogHeightFalloff": 0.15000000596046448,
+                            "FogMaxOpacity": 1,
+                            "FogStartDistance": 5,
+                            "FogType": 2,
+                            "IsEnabled": true
+                        },
+                        "Type": "Engine::FogComponent"
+                    },
+                    {
+                        "Data": {
+                            "name": "Skybox Sphere"
+                        },
+                        "Type": "Engine::NameComponent"
+                    },
+                                        {
+                        "Data": {
+                            "AutoSyncDirectionalLight": true,
+                            "CloudAltitude": 2500,
+                            "CloudCoverage": 0.44999998807907104,
+                            "CloudDensity": 0.800000011920929,
+                            "CloudSpeed": 0.029999999329447746,
+                            "CustomSunColor": [1, 0.7868397831916809, 0.6949806809425354],
+                            "CustomSunIntensity": 1,
+                            "DayCycleDuration": 120,
+                            "EnableClouds": false,
+                            "EnableTimeProgression": false,
+                            "GroundColor": [0.15000000596046448, 0.12999999523162842, 0.11999999731779099],
+                            "HorizonBlend": 1,
+                            "HorizonColor": [0.699999988079071, 0.8199999928474426, 0.949999988079071],
+                            "IsEnabled": true,
+                            "Latitude": 45,
+                            "SkyIntensity": 1.0,
+                            "SunSize": 0.03500000014901161,
+                            "TimeOfDay": 12,
+                            "ZenithColor": [0, 0.35820937156677246, 1]
+                        },
+                        "Type": "Engine::SkyAtmosphereComponent"
+                    },
+                    {
+                        "Data": {
+                            "castShadow": false,
+                            "materialHandle": {
+                                "AssetKey": "Resources/Material/SkyMaterial",
+                                "AssetPath": "",
+                                "Null": false
+                            },
+                            "meshHandle": {
+                                "AssetKey": "SphereMesh",
+                                "AssetPath": "SphereMesh",
+                                "Null": false
+                            }
+                        },
+                        "Type": "Engine::StaticMeshRendererComponent"
+                    },
+                    {
+                        "Data": {
+                            "absolute": 0,
+                            "eulerRotation": [0, 0, 0],
+                            "position": [0, 0, 0],
+                            "rotation": [0, 0, 0, 1],
+                            "scale": [500, 500, 500]
+                        },
+                        "Type": "Engine::TransformComponent"
+                    },
+                    {
+                        "Data": {
+                            "CloudAlbedo": [1, 1, 1],
+                            "CloudCoverage": 0.2,
+                            "CloudDensity": 0.5,
+                            "DetailNoiseSize": 150,
+                            "ExtinctionFactor": 1,
+                            "IsEnabled": false,
+                            "LayerBottomAltitude": 1500,
+                            "LayerHeight": 2500,
+                            "MorphSpeed": 0.05000000074505806,
+                            "PowderExtinction": 0.5,
+                            "ShapeNoiseSize": 1500,
+                            "TracingMaxDistance": 50000,
+                            "WeatherMapSize": 25000,
+                            "WindDirection": [1, 0, 0.30000001192092896],
+                            "WindSpeed": 8
+                        },
+                        "Type": "Engine::VolumetricCloudComponent"
+                    }
+                ],
+                "Hierarchy": {
+                    "Children": [],
+                    "Parent": 0
+                },
+                "Id": 17
+            },
+            {
+                "Components": [
+                    {
+                        "Data": {
+                            "flags": 3
+                        },
+                        "Type": "Engine::FlagComponent"
+                    },
+                    {
+                        "Data": {
+                            "name": "Light"
+                        },
+                        "Type": "Engine::NameComponent"
+                    },
+                    {
+                        "Data": {
+                            "absolute": 0,
+                            "eulerRotation": [0, 0, 0],
+                            "position": [0, 0, 0],
+                            "rotation": [0, 0, 0, 1],
+                            "scale": [1, 1, 1]
+                        },
+                        "Type": "Engine::TransformComponent"
+                    }
+                ],
+                "Hierarchy": {
+                    "Children": [2, 3, 4, 20],
+                    "Parent": 0
+                },
+                "Id": 18
+            },
+            {
+                "Components": [
+                    {
+                        "Data": {
+                            "flags": 3
+                        },
+                        "Type": "Engine::FlagComponent"
+                    },
+                    {
+                        "Data": {
+                            "name": "Terrain"
+                        },
+                        "Type": "Engine::NameComponent"
+                    },
+                    {
+                        "Data": {
+                            "Length": 128,
+                            "MaxHeight": 30,
+                            "Resolution": 128,
+                            "TerrainMaterial": {
+                                "AssetKey": "Resources/Material/TerrainMaterial",
+                                "AssetPath": "",
+                                "Null": false
+                            },
+                            "Width": 128
+                        },
+                        "Type": "Engine::TerrainComponent"
+                    },
+                    {
+                        "Data": {
+                            "absolute": 0,
+                            "eulerRotation": [0, 0, 0],
+                            "position": [98.07950592041016, -7.450580596923828E-9, 0],
+                            "rotation": [0, 0, 0, 1],
+                            "scale": [1, 1, 1]
+                        },
+                        "Type": "Engine::TransformComponent"
+                    }
+                ],
+                "Hierarchy": {
+                    "Children": [],
+                    "Parent": 0
+                },
+                "Id": 19
+            },
+            {
+                "Components": [
+                    {
+                        "Data": {
+                            "flags": 3
+                        },
+                        "Type": "Engine::FlagComponent"
+                    },
+                    {
+                        "Data": {
+                            "AttenuationCoefficients": [1, 0.09000000357627869, 0.03200000151991844],
+                            "AttenuationMode": 0,
+                            "CascadeSplitLambda": 0.75,
+                            "Color": [1, 1, 1],
+                            "Flags": 53,
+                            "GroundColor": [0.05000000074505806, 0.03999999910593033, 0.029999999329447746],
+                            "IndirectIntensity": 0.5,
+                            "Intensity": 3.5,
+                            "IsEnabled": true,
+                            "LightType": 2,
+                            "LightingLayerMask": 4294967295,
+                            "Range": 30.0,
+                            "ShadowBias": 0.0010000000474974513,
+                            "ShadowMaxDistance": 100,
+                            "ShadowNormalBias": 0.009999999776482582,
+                            "ShadowRange": 50,
+                            "ShadowSlopeBias": 0.004999999888241291,
+                            "SpotFalloffExponent": 1,
+                            "SpotInnerAngle": 15,
+                            "SpotOuterAngle": 30
+                        },
+                        "Type": "Engine::LightComponent"
+                    },
+                    {
+                        "Data": {
+                            "name": "Spot Light"
+                        },
+                        "Type": "Engine::NameComponent"
+                    },
+                    {
+                        "Data": {
+                            "absolute": 0,
+                            "eulerRotation": [65.5, -58, -31],
+                            "position": [1.876208782196045, 3.8989880084991455, -11.097314834594727],
+                            "rotation": [0.3469740152359009, -0.5193573832511902, 0.0561533123254776, 0.7789247632026672],
+                            "scale": [1, 1, 1]
+                        },
+                        "Type": "Engine::TransformComponent"
+                    }
+                ],
+                "Hierarchy": {
+                    "Children": [],
+                    "Parent": 18
+                },
+                "Id": 20
+            }
+        ],
+        "Name": "RaytracingScene",
+        "Version": 1
+    }
+}

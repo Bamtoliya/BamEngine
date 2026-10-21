@@ -36,4 +36,4 @@ add_subdirectory(Tools/TextureConverter)
 
 add_subdirectory(Editor)
 add_subdirectory(Projects/GameModule)
-# add_subdirectory(Client)
+add_subdirectory(Client)
