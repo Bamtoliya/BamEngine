@@ -592,3 +592,18 @@ MaterialEditor,NoResource,(None),(없음)
 MaterialEditor,EmptyResourceKey,(Empty),(빈 키)
 MaterialOption,NonPremultiplied,Non-premultiplied Alpha,비사전 곱 알파
 MaterialOption,Decal,Decal,데칼
+Shortcuts,Title,Keyboard Shortcuts,단축키 설정
+Shortcuts,Search,Search Shortcuts...,단축키 검색...
+Shortcuts,ResetAll,Reset All to Default,모두 기본값으로 복원
+Shortcuts,ColAction,Action,명령
+Shortcuts,ColCategory,Category,분류
+Shortcuts,ColShortcut,Shortcut,단축키
+Shortcuts,ColReset,Reset,복원
+Shortcuts,PressKey,Press any key...,키 입력 대기 중...
+Shortcuts,Reset,Reset,초기화
+Viewport,GameTitle,Game,게임
+TerrainEditor,HeightmapFile,Heightmap File,하이트맵 파일
+TerrainEditor,ImportHeightmap,Import Heightmap,하이트맵 임포트
+TerrainEditor,ExportHeightmap,Export Heightmap,하이트맵 익스포트
+TerrainEditor,ResetTerrain,Reset Terrain,지형 초기화
+TerrainEditor,Sculpt,Sculpt,조각
