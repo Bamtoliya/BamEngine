@@ -333,6 +333,61 @@ void LightSystem::UpdateLights(entt::registry& registry)
 			}
 		}
 
+		// ── 3. Point Light Shadow (Omnidirectional 6-Face Cubemap) ──
+		const bool wantsPointShadow = light.LightType == ELightType::Point &&
+			HasFlag(light.Flags, ELightFlags::CastShadows);
+
+		if (wantsPointShadow && validShadowSettings)
+		{
+			// DirectX LH 큐브맵 규격 6개 축 방향 및 업 벡터 (+X, -X, +Y, -Y, +Z, -Z)
+			static const vec3 cubeDirections[6] = {
+				vec3(1.f,  0.f,  0.f), vec3(-1.f,  0.f,  0.f),
+				vec3(0.f,  1.f,  0.f), vec3(0.f, -1.f,  0.f),
+				vec3(0.f,  0.f,  1.f), vec3(0.f,  0.f, -1.f)
+			};
+			static const vec3 cubeUps[6] = {
+				vec3(0.f, 1.f,  0.f), vec3(0.f, 1.f, 0.f),
+				vec3(0.f, 0.f, -1.f), vec3(0.f, 0.f, 1.f),
+				vec3(0.f, 1.f,  0.f), vec3(0.f, 1.f, 0.f)
+			};
+
+			const f32 nearZ = 0.05f;
+			const f32 farZ = glm::max(light.Range, 0.1f);
+			const mat4 pointProj = glm::perspectiveLH_ZO(glm::radians(90.0f), 1.0f, nearZ, farZ);
+
+			bool allFacesValid = true;
+			for (uint32 f = 0; f < 6; ++f)
+			{
+				const mat4 pointView = glm::lookAtLH(position, position + cubeDirections[f], cubeUps[f]);
+				const mat4 pointViewProj = pointProj * pointView;
+
+				if (!IsFiniteLightMatrix(pointViewProj))
+				{
+					allFacesValid = false;
+					break;
+				}
+
+				CameraBuffer camBuf{};
+				camBuf.viewMatrix = pointView;
+				camBuf.invViewMatrix = glm::inverse(pointView);
+				camBuf.projMatrix = pointProj;
+				camBuf.invProjMatrix = glm::inverse(pointProj);
+				camBuf.viewProjMatrix = pointViewProj;
+				camBuf.invViewProjMatrix = glm::inverse(pointViewProj);
+				camBuf.cameraPosition = position;
+
+				light.m_PointShadowCameraBuffers[f] = camBuf;
+				light.m_PointShadowViewProjMatrices[f] = pointViewProj;
+			}
+
+			if (allFacesValid)
+			{
+				light.m_ShadowParams = vec4(light.ShadowBias, light.ShadowSlopeBias, light.ShadowNormalBias, 1.0f);
+				light.m_IsShadowCacheValid = true;
+				effectiveFlags |= ELightFlags::CastShadows;
+			}
+		}
+
 		result.PackedFlags = PackLightFlags(
 			static_cast<uint32>(effectiveFlags), static_cast<uint32>(light.LightType),
 			static_cast<uint32>(effectiveAttenuation));

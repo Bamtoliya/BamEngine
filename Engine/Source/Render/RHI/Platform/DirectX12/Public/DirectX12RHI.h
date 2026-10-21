@@ -48,6 +48,7 @@ public:
 #pragma region Bind Resources
 public:
 	EResult BindRenderTarget(RHITexture* renderTarget, RHITexture* depthStencil) override;
+	EResult BindDepthSlice(RHITexture* depthStencil, uint32 sliceIndex) override;
 	EResult BindTextureSampler(RHITexture* texture, RHISampler* sampler, uint32 slot) override;
 	EResult BindRenderTargets(uint32 count, RHITexture** renderTargets, RHITexture* depthStencil) override;
 	EResult BindShader(RHIShader* shader) override;
@@ -67,6 +68,7 @@ public:
 public:
 	EResult ClearRenderTarget(RHITexture* renderTarget, vec4 color) override;
 	EResult ClearDepthStencil(RHITexture* depthStencil, f32 depth, uint8 stencil) override;
+	EResult ClearDepthSlice(RHITexture* depthStencil, uint32 sliceIndex, f32 depth, uint8 stencil) override;
 #pragma endregion
 
 

@@ -3,6 +3,7 @@
 #include "CameraViewportPanel.h"
 #include "DebugRenderer.h"
 #include "Grid.h"
+#include "SceneEditHistory.h"
 #pragma push_macro("COLOR")
 #undef COLOR
 
@@ -113,12 +114,14 @@ private:
 	RenderPassID m_LightingPassID = INVALID_PASS_ID;
 	RenderPassID m_DebugPassID = INVALID_PASS_ID;
 	RenderPassID m_ShadowPassID = INVALID_PASS_ID;
+	RenderPassID m_PointShadowPassID = INVALID_PASS_ID;
 	RenderPassID m_ForwardPassID = INVALID_PASS_ID;
 	RenderPassID m_ForwardTransparentPassID = INVALID_PASS_ID;
 	RenderPassID m_ChannelPreviewPassID = INVALID_PASS_ID;
 	RenderPassID m_UIOverlayPassID = INVALID_PASS_ID;
 
 	wstring m_ShadowDepthName;
+	wstring m_PointShadowDepthName;
 	wstring m_LightingColorName;
 
 	vector<wstring> m_OwnedRTNames;
@@ -169,6 +172,10 @@ protected:
 protected:
 	bool m_ShowLightOverlay = { true };
 	bool m_ShowCameraOverlay = { true };
+private:
+	SceneEditSnapshot m_SculptBeforeSnapshot{};
+	bool m_IsSculptStrokeActive = false;
+	bool m_SculptModified = false;
 #pragma endregion
 };
 END

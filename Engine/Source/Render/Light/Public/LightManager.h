@@ -42,10 +42,12 @@ private:
 
 #pragma region Shadow
 public:
-	bool HasShadowCastingLights() const { return !m_ShadowCameraBuffers.empty() || m_HasSpotShadow; }
+	bool HasShadowCastingLights() const { return !m_ShadowCameraBuffers.empty() || m_HasSpotShadow || m_HasPointShadow; }
 	bool HasSpotShadow() const { return m_HasSpotShadow; }
+	bool HasPointShadow() const { return m_HasPointShadow; }
 	CameraBuffer GetShadowCameraBuffer(uint32 cascadeIndex = 0, uint32 lightIndex = 0) const;
 	CameraBuffer GetSpotShadowCameraBuffer() const { return m_SpotShadowCameraBuffer; }
+	CameraBuffer GetPointShadowCameraBuffer(uint32 faceIndex = 0) const;
 	LightShadowData GetShadowData(uint32 lightIndex = 0) const;
 #pragma endregion
 
@@ -53,7 +55,7 @@ public:
 private:
 	class RHIBuffer* m_LightBuffer = { nullptr };
 	uint32 m_LightCount = { 0 };
-	bool m_BufferDirty = { false };
+	bool m_BufferDirty = { true };
 	vector<std::array<CameraBuffer, MAX_SHADOW_CASCADES>> m_ShadowCameraBuffers;
 	vector<LightShadowData> m_ShadowData;
 
@@ -61,6 +63,11 @@ private:
 	mat4 m_SpotShadowViewProj{ 1.0f };
 	vec4 m_SpotShadowParams{ 0.0f };
 	bool m_HasSpotShadow = false;
+
+	CameraBuffer m_PointShadowCameraBuffers[6]{};
+	vec4 m_PointShadowParams{ 0.0f };
+	vec4 m_PointShadowPosRange{ 0.0f };
+	bool m_HasPointShadow = false;
 private:
 	RHI* m_RHI = { nullptr };
 #pragma endregion

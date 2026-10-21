@@ -31,6 +31,7 @@
 #include "TerrainComponent.h"
 #include "TerrainUtility.h"
 #include "Collision.h"
+#include "SceneEditHistory.h"
 
 #pragma region Helper
 struct LightingPassData
@@ -41,11 +42,11 @@ struct LightingPassData
 	f32 PlanetRadius = 6360000.0f;
 };
 
-static_assert(sizeof(LightingPassData) == 448);
+static_assert(sizeof(LightingPassData) == 480);
 static_assert(offsetof(LightingPassData, Shadow) == 0);
-static_assert(offsetof(LightingPassData, Cloud) == 304);
-static_assert(offsetof(LightingPassData, SunDirection) == 432);
-static_assert(offsetof(LightingPassData, PlanetRadius) == 444);
+static_assert(offsetof(LightingPassData, Cloud) == 336);
+static_assert(offsetof(LightingPassData, SunDirection) == 464);
+static_assert(offsetof(LightingPassData, PlanetRadius) == 476);
 
 static bool WorldToViewportScreen(
 	const vec3& worldPos,
@@ -150,7 +151,7 @@ void SceneViewportPanel::PrepareRenderTargetsAndPasses(uint32 width, uint32 heig
 		{{4096, 4096, 1, 1, 1, ETextureSampleCount::TextureSampleCount1, ETextureFormat::D32_FLOAT, ETextureDimension::Texture2D, ETextureUsage::DepthStencilTarget | ETextureUsage::Sampler, nullptr, 0, false, vec4(0.f)}, L"ShadowDepth"},
 		//Depth
 		{{width, height, 1, 1, 1, ETextureSampleCount::TextureSampleCount1, ETextureFormat::D24_UNORM_S8_UINT, ETextureDimension::Texture2D, ETextureUsage::DepthStencilTarget | ETextureUsage::Sampler, nullptr, 0, false, vec4(0.f)}, L"Depth"},
-		//LightingColor
+		//LightingColor (원래 인덱스 7번으로 복구)
 		{{width, height, 1, 1, 1, ETextureSampleCount::TextureSampleCount1, ETextureFormat::R8G8B8A8_UNORM, ETextureDimension::Texture2D, ETextureUsage::RenderTarget | ETextureUsage::Sampler, nullptr, 0, false, vec4(0.f, 0.f, 0.f, 1.f)}, L"LightingColor"},
 		//Ping-pong RTs
 		{{width, height, 1, 1, 1, ETextureSampleCount::TextureSampleCount1, ETextureFormat::R8G8B8A8_UNORM, ETextureDimension::Texture2D, ETextureUsage::RenderTarget | ETextureUsage::Sampler, nullptr, 0, false, vec4(0.f, 0.f, 0.f, 1.f)}, L"PP_A"},
@@ -163,6 +164,18 @@ void SceneViewportPanel::PrepareRenderTargetsAndPasses(uint32 width, uint32 heig
 		rtMgr.CreateRenderTarget(&rtDesc);
 		m_OwnedRTNames.push_back(rtDesc.name);
 	}
+
+	// ── PointShadowDepth는 기존 인덱스를 건드리지 않도록 루프 뒤에서 별도 생성 ──
+	m_PointShadowDepthName = prefix + L"PointShadowDepth";
+	RenderTargetDesc pointShadowDesc = {
+		{1024, 1024, 1, 1, 6, ETextureSampleCount::TextureSampleCount1, ETextureFormat::D32_FLOAT, ETextureDimension::TextureCube, ETextureUsage::DepthStencilTarget | ETextureUsage::Sampler, nullptr, 0, false, vec4(0.f)},
+		m_PointShadowDepthName
+	};
+	rtMgr.CreateRenderTarget(&pointShadowDesc);
+	m_OwnedRTNames.push_back(m_PointShadowDepthName);
+#pragma endregion
+#pragma endregion
+
 #pragma endregion
 
 #pragma region RenderPasses
@@ -176,6 +189,12 @@ void SceneViewportPanel::PrepareRenderTargetsAndPasses(uint32 width, uint32 heig
 	auto& rpMgr = RenderPassManager::Get();
 	m_ShadowPassID = rpMgr.RegisterRenderPass(
 		prefix + L"ShadowPass", {}, m_ShadowDepthName,
+		ERenderPassLoadOperation::RPLO_Clear, ERenderPassStoreOperation::RPSO_Store,
+		ERenderPassLoadOperation::RPLO_Clear, ERenderPassStoreOperation::RPSO_Store,
+		vec4(0.0f, 0.0f, 0.0f, -1.0f), 0, ERenderSortType::FrontToBack, ERenderPassType::Shadow, EBlendMode::Opaque | EBlendMode::Masked);
+
+	m_PointShadowPassID = rpMgr.RegisterRenderPass(
+		prefix + L"PointShadowPass", {}, m_PointShadowDepthName,
 		ERenderPassLoadOperation::RPLO_Clear, ERenderPassStoreOperation::RPSO_Store,
 		ERenderPassLoadOperation::RPLO_Clear, ERenderPassStoreOperation::RPSO_Store,
 		vec4(0.0f, 0.0f, 0.0f, -1.0f), 0, ERenderSortType::FrontToBack, ERenderPassType::Shadow, EBlendMode::Opaque | EBlendMode::Masked);
@@ -237,6 +256,8 @@ void SceneViewportPanel::PrepareRenderTargetsAndPasses(uint32 width, uint32 heig
 
 	m_PassOptions = {
 		{ L"Shadow",            true  },
+		{ L"PointShadow",       true  },
+		{ L"Geometry",          true  },
 		{ L"Lighting",          true  },
 		{ L"ForwardTransparent",true  },
 		{ L"UIOverlay",         true  },
@@ -301,6 +322,7 @@ void SceneViewportPanel::Update(f32 dt)
 	RenderPassManager& rpMgr = RenderPassManager::Get();
 	Renderer& renderer = Renderer::Get();
 	renderer.RegisterViewportCamera(rpMgr.GetRenderPassByID(m_ShadowPassID));
+	renderer.RegisterViewportCamera(rpMgr.GetRenderPassByID(m_PointShadowPassID));
 	if (cameraBuffer.has_value())
 	{
 		renderer.RegisterViewportCamera(*cameraBuffer, rpMgr.GetRenderPassByID(m_GeometryPassID));
@@ -309,10 +331,12 @@ void SceneViewportPanel::Update(f32 dt)
 		// ForwardPass에 최신 대기/태양광 데이터를 패스 상수로 주입
 		if (auto* forwardPass = rpMgr.GetRenderPassByID(m_ForwardPassID))
 		{
-			// 3D 클라우드 텍스처가 아직 리소스 매니저에 없다면 1회 생성하여 SkyMaterial에 바인딩
 			auto& rm = ResourceManager::Get();
 			auto shapeHandle = rm.GetResourceHandle<Texture>(L"Resources/Texture/CloudBaseShape3D");
-			if (!shapeHandle.IsValid())
+			auto weatherHandle = rm.GetResourceHandle<Texture>(L"Resources/Texture/CloudWeatherMap2D");
+
+			// 1. 3D 클라우드 텍스처와 웨더 맵 텍스처가 없으면 생성하여 리소스 매니저에 등록
+			if (!shapeHandle.IsValid() || !weatherHandle.IsValid())
 			{
 				if (auto* rhi = Renderer::Get().GetRHI())
 				{
@@ -321,16 +345,27 @@ void SceneViewportPanel::Update(f32 dt)
 					Texture* shapeTex = Texture::CreateFromRHITexture(rhiShape, L"Resources/Texture/CloudBaseShape3D");
 					Texture* weatherTex = Texture::CreateFromRHITexture(rhiWeather, L"Resources/Texture/CloudWeatherMap2D");
 					shapeHandle = rm.AddResource<Texture>(L"Resources/Texture/CloudBaseShape3D", shapeTex);
-					auto weatherHandle = rm.AddResource<Texture>(L"Resources/Texture/CloudWeatherMap2D", weatherTex);
-
-					auto skyMatHandle = rm.GetResourceHandle<Material>(RESOURCE_PATH L"Material/SkyMaterial");
-					if (auto* skyMat = skyMatHandle.Get())
-					{
-						skyMat->SetTextureBinding("CloudBaseShape3D", 0, shapeHandle);
-						skyMat->SetTextureBinding("CloudWeatherMap2D", 1, weatherHandle);
-					}
+					weatherHandle = rm.AddResource<Texture>(L"Resources/Texture/CloudWeatherMap2D", weatherTex);
 				}
 			}
+
+			// 2. SkyMaterial을 확장자 포함/미포함 두 키 모두로 안전하게 탐색
+			auto skyMatHandle = rm.GetResourceHandle<Material>(RESOURCE_PATH L"Material/SkyMaterial.bammat.json");
+			if (!skyMatHandle.IsValid())
+			{
+				skyMatHandle = rm.GetResourceHandle<Material>(RESOURCE_PATH L"Material/SkyMaterial");
+			}
+
+			// 3. SkyMaterial에 구름 텍스처 바인딩 보장 (슬롯 0: 3D Shape, 슬롯 1: 2D WeatherMap)
+			if (auto* skyMat = skyMatHandle.Get())
+			{
+				if (shapeHandle.IsValid() && weatherHandle.IsValid())
+				{
+					skyMat->SetTextureBinding("CloudBaseShape3D", 0, shapeHandle);
+					skyMat->SetTextureBinding("CloudWeatherMap2D", 1, weatherHandle);
+				}
+			}
+
 			forwardPass->SetPassConstantStruct(3, skyData); // slot 3 (b1, space3)
 		}
 		renderer.RegisterViewportCamera(*cameraBuffer, rpMgr.GetRenderPassByID(m_ForwardPassID));
@@ -554,17 +589,17 @@ void SceneViewportPanel::ResizeRenderTargets(uint32 width, uint32 height)
 	auto& rtMgr = RenderTargetManager::Get();
 	for (const auto& name : m_OwnedRTNames)
 	{
-		if (name == m_ShadowDepthName) continue;
+		// 섀도우 맵(Directional 및 Point Light 큐브맵)은 고정 해상도이므로 뷰포트 리사이즈에서 제외
+		if (name == m_ShadowDepthName || name == m_PointShadowDepthName)
+			continue;
 		if (auto* rt = rtMgr.GetRenderTarget(name))
 			rt->Resize(width, height);
 	}
-
 	if (m_CameraController && height > 0)
 	{
 		m_CameraController->SetAspectRatio(static_cast<f32>(width) / static_cast<f32>(height));
 		m_CameraController->RefreshMatrices();
 	}
-
 	BaseViewportPanel::ResizeRenderTargets(width, height);
 }
 #pragma endregion
@@ -1107,6 +1142,16 @@ void SceneViewportPanel::SubmitLightingPass(const CameraBuffer& cameraBuffer, co
 				if (IsFailure(rhi->BindTextureSampler(source->GetTexture(), sampler, MAX_MATERIAL_TEXTURE_SLOTS + i)))
 					return EResult::Fail;
 			}
+
+			// Point Light TextureCube 바인딩 (slot: MAX_MATERIAL_TEXTURE_SLOTS + 7 -> register(t7, space3))
+			if (auto* pointShadowRT = rtMgr.GetRenderTarget(m_PointShadowDepthName))
+			{
+				if (auto* pointShadowTex = pointShadowRT->GetTexture())
+				{
+					if (IsFailure(rhi->BindTextureSampler(pointShadowTex, sampler, MAX_MATERIAL_TEXTURE_SLOTS + 7)))
+						return EResult::Fail;
+				}
+			}
 			// Lighting 파이프라인 바인딩
 			if (IsFailure(rhi->BindPipeline(m_LightingPipeline)))
 				return EResult::Fail;
@@ -1507,11 +1552,29 @@ SkyAtmosphereData SceneViewportPanel::BuildSkyAtmosphereData()
 void SceneViewportPanel::HandleTerrainSculpting(bool imageHovered)
 {
 	auto* terrainEditor = TerrainEditor::Get();
-	if (!terrainEditor || !terrainEditor->IsSculptingActive() || !imageHovered) return;
+	const bool canSculpt = terrainEditor && terrainEditor->IsSculptingActive() && imageHovered;
 
 	Scene* activeScene = SceneManager::Get().GetCurrentScene();
-	Entity* targetEntity = terrainEditor->GetTargetTerrainEntity();
-	if (!activeScene || !targetEntity || targetEntity->GetScene() != activeScene) return;
+	Entity* targetEntity = terrainEditor ? terrainEditor->GetTargetTerrainEntity() : nullptr;
+
+	// 1. 마우스 좌클릭을 떼었을 때 (Stroke 종료): Undo/Redo 히스토리에 단일 작업으로 등록
+	if (m_IsSculptStrokeActive && !InputManager::Get().IsMouseButtonPressed(EMouseButton::Left))
+	{
+		if (m_SculptModified && activeScene && targetEntity && targetEntity->GetScene() == activeScene)
+		{
+			const std::array targets{ targetEntity->GetEntityHandle() };
+			SceneEditSnapshot after = SceneEditSnapshot::Capture(*activeScene, targets);
+			Application::Get().GetEditHistory().Record(m_SculptBeforeSnapshot, after, LOCAL("TerrainEditor.Sculpt"));
+		}
+		m_IsSculptStrokeActive = false;
+		m_SculptModified = false;
+		m_SculptBeforeSnapshot = {};
+	}
+
+	if (!canSculpt || !activeScene || !targetEntity || targetEntity->GetScene() != activeScene)
+	{
+		return;
+	}
 
 	auto& registry = activeScene->GetRegistry();
 	auto* terrain = registry.try_get<Engine::TerrainComponent>(targetEntity->GetEntityHandle());
@@ -1524,12 +1587,11 @@ void SceneViewportPanel::HandleTerrainSculpting(bool imageHovered)
 	const ImVec2 mousePos(screenMouse.x, screenMouse.y);
 	if (!ScreenPosToRay(mousePos, ray, maxDist)) return;
 
-	// 엔진 표준 Collision::Raycast 및 HitResult 활용
 	Engine::HitResult hitResult;
 	if (!Engine::Collision::Raycast(ray, *terrain, transform->worldMatrix, hitResult, maxDist))
 		return;
 
-	// 1. 브러시 영향 범위 원형 기즈모 그리기 (32각 와이어프레임 링)
+	// 2. 브러시 영향 범위 원형 기즈모 그리기 (32각 와이어프레임 링)
 	const std::optional<CameraBuffer> cameraBuffer = GetActiveCameraBuffer();
 	if (cameraBuffer.has_value())
 	{
@@ -1554,10 +1616,22 @@ void SceneViewportPanel::HandleTerrainSculpting(bool imageHovered)
 		}
 	}
 
-	// 2. 마우스 좌클릭 드래그 시 실시간 지형 변형 (스컬프팅)
-	if (InputManager::Get().IsMouseButtonPressed(EMouseButton::Left) && !ImGuizmo::IsUsing() && !InputManager::Get().IsMouseButtonPressed(EMouseButton::Right))
+	// 3. 마우스 좌클릭 시작: 변경 전 스냅샷 캡처
+	if (InputManager::Get().IsMouseButtonDown(EMouseButton::Left) && !ImGuizmo::IsUsing() && !InputManager::Get().IsMouseButtonPressed(EMouseButton::Right))
+	{
+		const std::array targets{ targetEntity->GetEntityHandle() };
+		m_SculptBeforeSnapshot = SceneEditSnapshot::Capture(*activeScene, targets);
+		m_IsSculptStrokeActive = true;
+		m_SculptModified = false;
+	}
+
+	// 4. 마우스 좌클릭 드래그 중: 실시간 지형 변형
+	if (m_IsSculptStrokeActive && InputManager::Get().IsMouseButtonPressed(EMouseButton::Left) && !ImGuizmo::IsUsing())
 	{
 		const float dt = TimeManager::Get().GetDeltaTime();
-		Engine::TerrainUtility::ApplyBrush(*terrain, hitResult.point, transform->worldMatrix, terrainEditor->GetBrushParams(), dt);
+		if (Engine::TerrainUtility::ApplyBrush(*terrain, hitResult.point, transform->worldMatrix, terrainEditor->GetBrushParams(), dt))
+		{
+			m_SculptModified = true;
+		}
 	}
 }

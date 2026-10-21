@@ -44,7 +44,12 @@ public:
 	D3D12_GPU_DESCRIPTOR_HANDLE GetSRVGPUHandle() const { return m_SRVGPUHandle; }
 	void SetSRVGPUHandle(D3D12_GPU_DESCRIPTOR_HANDLE handle) { m_SRVGPUHandle = handle; }
 	
-	D3D12_CPU_DESCRIPTOR_HANDLE GetDSVHandle() const { return m_DSVHandle; }
+	D3D12_CPU_DESCRIPTOR_HANDLE GetDSVHandle(uint32 slice = 0) const
+	{
+		if (m_Dimension == ETextureDimension::TextureCube && slice < 6)
+			return m_CubeDSVHandles[slice];
+		return m_DSVHandle;
+	}
 	void SetDSVHandle(D3D12_CPU_DESCRIPTOR_HANDLE handle) { m_DSVHandle = handle; }
 #pragma endregion
 
@@ -66,6 +71,9 @@ private:
 	uint32 m_RTVDescriptorIndex = INVALID_DESCRIPTOR_INDEX;
 	uint32 m_DSVDescriptorIndex = INVALID_DESCRIPTOR_INDEX;
 	uint32 m_SRVDescriptorIndex = INVALID_DESCRIPTOR_INDEX;
+
+	uint32 m_CubeDSVDescriptorIndices[6] = { INVALID_DESCRIPTOR_INDEX, INVALID_DESCRIPTOR_INDEX, INVALID_DESCRIPTOR_INDEX, INVALID_DESCRIPTOR_INDEX, INVALID_DESCRIPTOR_INDEX, INVALID_DESCRIPTOR_INDEX };
+	D3D12_CPU_DESCRIPTOR_HANDLE m_CubeDSVHandles[6] = {};
 
 	D3D12_CPU_DESCRIPTOR_HANDLE m_RTVHandle = { 0 };
 	D3D12_CPU_DESCRIPTOR_HANDLE m_SRVHandle = { 0 };

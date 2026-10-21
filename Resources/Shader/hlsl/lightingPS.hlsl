@@ -23,6 +23,12 @@ struct ShadowData
 	float SpotSlopeBias;
 	float SpotNormalBias;
 	float HasSpotShadow;
+	float PointBaseBias;
+	float PointSlopeBias;
+	float PointNormalBias;
+	float HasPointShadow;
+	float3 PointLightPos;
+	float PointLightRange;
 };
 
 struct LightingPassData
@@ -40,6 +46,7 @@ Texture2D gEmission : register(t3, space3);
 Texture2D gPosition : register(t4, space3);
 Texture2D gShadowDepth : register(t5, space3);
 ByteAddressBuffer gLightBuffer : register(t6, space3);
+TextureCube gPointShadowDepth : register(t7, space3);
 
 SamplerState gBufferSampler : register(s0, space3);
 ConstantBuffer<LightingPassData> gLightingData : register(b1, space3);
@@ -397,6 +404,58 @@ float CalcSpotShadowFactor(Light light, float3 worldPosition, float3 normal, flo
 	return visibility / 16.0f;
 }
 
+static const float3 CUBE_SAMPLE_OFFSETS[20] = {
+	float3( 1,  1,  1), float3( 1, -1,  1), float3(-1, -1,  1), float3(-1,  1,  1),
+	float3( 1,  1, -1), float3( 1, -1, -1), float3(-1, -1, -1), float3(-1,  1, -1),
+	float3( 1,  1,  0), float3( 1, -1,  0), float3(-1, -1,  0), float3(-1,  1,  0),
+	float3( 1,  0,  1), float3(-1,  0,  1), float3( 1,  0, -1), float3(-1,  0, -1),
+	float3( 0,  1,  1), float3( 0, -1,  1), float3( 0, -1, -1), float3( 0,  1, -1)
+};
+
+float CalcPointShadowFactor(Light light, float3 worldPosition, float3 normal, float2 screenPos)
+{
+	if (!HasLightFlag(light.PackedFlags, LIGHT_FLAG_CAST_SHADOWS) ||
+		GetLightType(light.PackedFlags) != LIGHT_TYPE_POINT ||
+		gLightingData.Shadow.HasPointShadow < 0.5f)
+	{
+		return 1.0f;
+	}
+
+	float3 toLight = gLightingData.Shadow.PointLightPos - worldPosition;
+	float currentDist = length(toLight);
+	float farZ = gLightingData.Shadow.PointLightRange;
+
+	if (currentDist >= farZ || currentDist <= 0.001f)
+	{
+		return 1.0f;
+	}
+
+	float3 lightDir = toLight / currentDist;
+	float cosTheta = saturate(dot(normal, lightDir));
+	float sinTheta = sqrt(max(1.0f - cosTheta * cosTheta, 0.0f));
+	// 비선형 원근 뎁스에 맞추어 기본 바이어스를 0.0008f로 정밀화
+	float depthBias = 0.0008f + 0.0015f * sinTheta;
+	float3 biasedWorldPos = worldPosition + normal * 0.005f;
+	float3 dirFromLight = biasedWorldPos - gLightingData.Shadow.PointLightPos;
+	float zView = max(abs(dirFromLight.x), max(abs(dirFromLight.y), abs(dirFromLight.z)));
+	const float nearZ = 0.05f;
+	if (zView <= nearZ)
+	{
+		return 1.0f;
+	}
+	float projZ = (farZ / (farZ - nearZ)) * (1.0f - (nearZ / zView));
+	// 20-Tap PCF 필터링
+	float diskRadius = (1.0f + (currentDist / farZ)) / 80.0f;
+	float visibility = 0.0f;
+	[unroll(20)]
+	for (int i = 0; i < 20; ++i)
+	{
+		float3 sampleDir = dirFromLight + CUBE_SAMPLE_OFFSETS[i] * diskRadius;
+		float closestDepth = gPointShadowDepth.Sample(gBufferSampler, sampleDir).r;
+		visibility += (projZ - depthBias <= closestDepth) ? 1.0f : 0.0f;
+	}
+	return visibility / 20.0f;
+}
 float CalcContactShadow(float3 worldPosition, float3 normal, float3 lightDirection, float2 screenPos)
 {
 	const float maxDistance = 0.12f; // 최대 12cm (초근접 접촉부에 집중)
@@ -603,6 +662,10 @@ float4 main(PS_INPUT input) : SV_TARGET
         {
             shadowFactor = CalcSpotShadowFactor(light, worldPosition, normal, input.Position.xy);
         }
+		else if (receiveShadow && lightType == LIGHT_TYPE_POINT && HasLightFlag(light.PackedFlags, LIGHT_FLAG_CAST_SHADOWS))
+        {
+            shadowFactor = CalcPointShadowFactor(light, worldPosition, normal, input.Position.xy);
+        }
 
         if (receiveShadow && lightIndex == cloudSunLightIndex)
         {
@@ -614,16 +677,12 @@ float4 main(PS_INPUT input) : SV_TARGET
 
     float3 ambient = hasSkyLight ? skyAmbient * ambientOcclusion : float3(0.03f, 0.03f, 0.03f) * albedo * ambientOcclusion;
     float3 color = ambient + directLighting + emission;
-
     float4 fog = CalculateFog(worldPosition, commonData.CameraPos);
     color = lerp(color, fog.rgb, fog.a);
-
 #if DEBUG_CASCADE_COLORS
     color *= GetCascadeDebugColor(worldPosition);
 #endif
-
     color = color / (color + 1.0f);
     color = pow(color, 1.0f / 2.2f);
-
     return float4(color, diffuseSample.a);
 }

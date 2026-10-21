@@ -410,12 +410,13 @@ EResult DirectX12RHI::BeginFrame()
     if (FAILED(m_CommandList->Reset(m_CommandAllocator.Get(), nullptr)))
         return EResult::Fail;
 
+    m_CurrentPipeline = nullptr;
     m_CommandList->SetGraphicsRootSignature(m_GlobalRootSignature.Get());
 
     ID3D12DescriptorHeap* heaps[] = { m_SrvAllocator->GetHeap(), m_SamplerAllocator->GetHeap() };
 
     m_CommandList->SetDescriptorHeaps(_countof(heaps), heaps);
-	m_FrameRecording = true;
+    m_FrameRecording = true;
 
     return EResult::Success;
 }
@@ -821,6 +822,15 @@ EResult DirectX12RHI::BindRenderTarget(RHITexture* renderTarget, RHITexture* dep
     return BindRenderTargets(1, &renderTarget, depthStencil);
 }
 
+EResult DirectX12RHI::BindDepthSlice(RHITexture* depthStencil, uint32 sliceIndex)
+{
+    if (!m_CommandList || !depthStencil) return EResult::Fail;
+    DirectX12Texture* dxDepthStencil = static_cast<DirectX12Texture*>(depthStencil);
+    D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle = dxDepthStencil->GetDSVHandle(sliceIndex);
+    m_CommandList->OMSetRenderTargets(0, nullptr, FALSE, &dsvHandle);
+    return EResult::Success;
+}
+
 EResult DirectX12RHI::BindTextureSampler(RHITexture* texture, RHISampler* sampler, uint32 slot)
 {
     if (!m_CommandList || !texture || !sampler || slot >= MAX_TEXTURE_SLOTS)
@@ -841,44 +851,38 @@ EResult DirectX12RHI::BindTextureSampler(RHITexture* texture, RHISampler* sample
 EResult DirectX12RHI::BindRenderTargets(uint32 count, RHITexture** renderTargets, RHITexture* depthStencil)
 {
     if (!m_CommandList) return EResult::Fail;
-
+    if (count > MAX_RENDER_TARGET_COUNT) return EResult::InvalidArgument;
     //Clear RenderTarget
     if (count == 0 || renderTargets == nullptr)
     {
         D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle = {};
         D3D12_CPU_DESCRIPTOR_HANDLE* pDsvHandle = nullptr;
-
         if (depthStencil)
         {
             DirectX12Texture* dxDepthStencil = static_cast<DirectX12Texture*>(depthStencil);
             pDsvHandle = &dsvHandle;
             dsvHandle = dxDepthStencil->GetDSVHandle();
         }
-
         m_CommandList->OMSetRenderTargets(0, nullptr, FALSE, pDsvHandle);
         return EResult::Success;
     }
-
-	vector<D3D12_CPU_DESCRIPTOR_HANDLE> rtvHandles(count);
+    D3D12_CPU_DESCRIPTOR_HANDLE rtvHandles[MAX_RENDER_TARGET_COUNT] = {};
     for (uint32 i = 0; i < count; ++i)
     {
-		DirectX12Texture* dxTex = static_cast<DirectX12Texture*>(renderTargets[i]);
-		rtvHandles[i] = dxTex->GetRTVHandle();
+        DirectX12Texture* dxTex = static_cast<DirectX12Texture*>(renderTargets[i]);
+        rtvHandles[i] = dxTex->GetRTVHandle();
     }
-
-	D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle = {};
-	if (depthStencil)
-	{
-		DirectX12Texture* dxDepthStencil = static_cast<DirectX12Texture*>(depthStencil);
-		dsvHandle = dxDepthStencil->GetDSVHandle();
-	}
-
-	m_CommandList->OMSetRenderTargets(
+    D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle = {};
+    if (depthStencil)
+    {
+        DirectX12Texture* dxDepthStencil = static_cast<DirectX12Texture*>(depthStencil);
+        dsvHandle = dxDepthStencil->GetDSVHandle();
+    }
+    m_CommandList->OMSetRenderTargets(
         count,
-        rtvHandles.data(),
+        rtvHandles,
         FALSE,
         depthStencil ? &dsvHandle : nullptr);
-
     return EResult::Success;
 }
 
@@ -886,33 +890,29 @@ EResult DirectX12RHI::BindShader(RHIShader* shader)
 {
     return EResult::Success;
 }
-
 EResult DirectX12RHI::BindPipeline(RHIPipeline* pipeline)
 {
     if (!m_CommandList || !pipeline)
         return EResult::Fail;
-
+    if (m_CurrentPipeline == pipeline)
+        return EResult::Success;
     ID3D12PipelineState* pipelineState = static_cast<ID3D12PipelineState*>(pipeline->GetNativeHandle());
     if (!pipelineState)
         return EResult::Fail;
-
     m_CommandList->SetPipelineState(pipelineState);
     D3D_PRIMITIVE_TOPOLOGY dxTopo = ToD3D12PrimitiveTopology(pipeline->GetTopology());
     m_CommandList->IASetPrimitiveTopology(dxTopo);
+    m_CurrentPipeline = pipeline;
     return EResult::Success;
 }
-
 EResult DirectX12RHI::BindSampler(RHISampler* sampler)
 {
-	if (!m_CommandList || !sampler)
-		return EResult::Fail;
-
-	DirectX12Sampler* dxSampler = static_cast<DirectX12Sampler*>(sampler);
-
+    if (!m_CommandList || !sampler)
+        return EResult::Fail;
+    DirectX12Sampler* dxSampler = static_cast<DirectX12Sampler*>(sampler);
     m_CommandList->SetGraphicsRootDescriptorTable(8, dxSampler->GetGPUHandle());
     return EResult::Success;
 }
-
 EResult DirectX12RHI::BindConstantRangeBuffer(void* arg, uint32 slot, uint32 offset, uint32 size)
 {
     return EResult();
@@ -922,94 +922,90 @@ EResult DirectX12RHI::BindConstantRangeBuffer(void* arg, uint32 slot, uint32 off
 #pragma region RenderPass
 EResult  DirectX12RHI::BeginRenderPass(RenderPass* renderPass)
 {
-	if (!m_CommandList || !renderPass) return EResult::Fail;
-
+    if (!m_CommandList || !renderPass) return EResult::Fail;
     for (uint32 slot = 0; slot < MAX_TEXTURE_SLOTS; ++slot)
     {
         if (IsFailure(BindTexture(nullptr, slot)))
             return EResult::Fail;
     }
-
-    vector<RHITexture*> renderTargets;
-	RHITexture* depthTarget = nullptr;
+    RHITexture* renderTargets[MAX_RENDER_TARGET_COUNT] = {};
+    uint32 renderTargetCount = 0;
+    RHITexture* depthTarget = nullptr;
     const uint32 requestedRenderTargetCount = renderPass->GetRenderTargetCount();
-
+    if (requestedRenderTargetCount > MAX_RENDER_TARGET_COUNT)
+        return EResult::InvalidArgument;
     if (requestedRenderTargetCount == 0 && renderPass->GetDepthStencilName().empty())
     {
-        renderTargets.push_back(m_BackBuffer);
+        if (m_BackBuffer) renderTargets[renderTargetCount++] = m_BackBuffer;
     }
     else
     {
-		for (uint32 i = 0; i < requestedRenderTargetCount; ++i)
-		{
-			RenderTarget* rt = RenderTargetManager::Get().GetRenderTarget(renderPass->GetRenderTargetName(i));
-			if (rt && rt->GetTexture()) renderTargets.push_back(rt->GetTexture());
-		}
+        for (uint32 i = 0; i < requestedRenderTargetCount; ++i)
+        {
+            RenderTarget* rt = RenderTargetManager::Get().GetRenderTarget(renderPass->GetRenderTargetName(i));
+            if (rt && rt->GetTexture()) renderTargets[renderTargetCount++] = rt->GetTexture();
+        }
     }
-
     if (!renderPass->GetDepthStencilName().empty())
     {
-		RenderTarget* ds = RenderTargetManager::Get().GetRenderTarget(renderPass->GetDepthStencilName());
-        if(ds && ds->GetTexture()) depthTarget = ds->GetTexture();
+        RenderTarget* ds = RenderTargetManager::Get().GetRenderTarget(renderPass->GetDepthStencilName());
+        if (ds && ds->GetTexture()) depthTarget = ds->GetTexture();
     }
-
-	vector<D3D12_RESOURCE_BARRIER> barriers;
-    for (RHITexture* tex : renderTargets)
+    D3D12_RESOURCE_BARRIER barriers[MAX_RENDER_TARGET_COUNT + 1] = {};
+    uint32 barrierCount = 0;
+    for (uint32 i = 0; i < renderTargetCount; ++i)
     {
-        DirectX12Texture* dxTex = static_cast<DirectX12Texture*>(tex);
+        DirectX12Texture* dxTex = static_cast<DirectX12Texture*>(renderTargets[i]);
         if (dxTex->GetCurrentState() != D3D12_RESOURCE_STATE_RENDER_TARGET)
         {
-            D3D12_RESOURCE_BARRIER barrier = {};
+            D3D12_RESOURCE_BARRIER& barrier = barriers[barrierCount++];
             barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
             barrier.Transition.pResource = static_cast<ID3D12Resource*>(dxTex->GetNativeHandle());
             barrier.Transition.StateBefore = dxTex->GetCurrentState();
             barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
             barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-            barriers.push_back(barrier);
             dxTex->SetCurrentState(D3D12_RESOURCE_STATE_RENDER_TARGET);
         }
     }
-
     if (depthTarget)
     {
         DirectX12Texture* dxDepth = static_cast<DirectX12Texture*>(depthTarget);
         if (dxDepth->GetCurrentState() != D3D12_RESOURCE_STATE_DEPTH_WRITE)
         {
-            D3D12_RESOURCE_BARRIER barrier = {};
+            D3D12_RESOURCE_BARRIER& barrier = barriers[barrierCount++];
             barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
             barrier.Transition.pResource = static_cast<ID3D12Resource*>(dxDepth->GetNativeHandle());
             barrier.Transition.StateBefore = dxDepth->GetCurrentState();
             barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_DEPTH_WRITE;
             barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-            barriers.push_back(barrier);
             dxDepth->SetCurrentState(D3D12_RESOURCE_STATE_DEPTH_WRITE);
         }
     }
-
-	if (!barriers.empty())
-	{
-		m_CommandList->ResourceBarrier(static_cast<UINT>(barriers.size()), barriers.data());
-	}
-
-	BindRenderTargets(static_cast<uint32>(renderTargets.size()), renderTargets.data(), depthTarget);
-
+    if (barrierCount > 0)
+    {
+        m_CommandList->ResourceBarrier(barrierCount, barriers);
+    }
+    const EResult bindResult = BindRenderTargets(renderTargetCount, renderTargets, depthTarget);
+    if (IsFailure(bindResult))
+    {
+        ENGINE_LOG_ERROR("BeginRenderPass: BindRenderTargets failed for pass: {}", renderPass->GetID());
+        return bindResult;
+    }
     if (renderPass->GetLoadOperation() == ERenderPassLoadOperation::RPLO_Clear)
     {
-		for (uint32 i = 0; i < renderTargets.size(); ++i)
-		{
-			RHITexture* tex = renderTargets[i];
+        for (uint32 i = 0; i < renderTargetCount; ++i)
+        {
+            RHITexture* tex = renderTargets[i];
             vec4 clearColor = tex->GetClearColor();
-			if (renderPass->HasOverrideClearColor())
-				clearColor = renderPass->GetOverrideClearColor();
-			ClearRenderTarget(tex, clearColor);
-		}
+            if (renderPass->HasOverrideClearColor())
+                clearColor = renderPass->GetOverrideClearColor();
+            ClearRenderTarget(tex, clearColor);
+        }
     }
-
-	if (depthTarget && renderPass->GetStencilLoadOperation() == ERenderPassLoadOperation::RPLO_Clear)
-	{
-		ClearDepthStencil(depthTarget, 1.0f, 0);
-	}
-
+    if (depthTarget && renderPass->GetStencilLoadOperation() == ERenderPassLoadOperation::RPLO_Clear)
+    {
+        ClearDepthStencil(depthTarget, 1.0f, 0);
+    }
     m_CurrentRenderPass = renderPass;
     return EResult::Success;
 }
@@ -1017,38 +1013,30 @@ EResult DirectX12RHI::EndRenderPass()
 {
     if (!m_CommandList) return EResult::Fail;
     if (!m_CurrentRenderPass) return EResult::Success;
-
     if (IsFailure(BindRenderTarget(nullptr, nullptr)))
         return EResult::Fail;
-
-    vector<D3D12_RESOURCE_BARRIER> barriers;
-
-    for (uint32 i = 0; i < m_CurrentRenderPass->GetRenderTargetCount(); ++i)
+    D3D12_RESOURCE_BARRIER barriers[MAX_RENDER_TARGET_COUNT] = {};
+    uint32 barrierCount = 0;
+    const uint32 rtCount = std::min<uint32>(m_CurrentRenderPass->GetRenderTargetCount(), MAX_RENDER_TARGET_COUNT);
+    for (uint32 i = 0; i < rtCount; ++i)
     {
         const wstring& name = m_CurrentRenderPass->GetRenderTargetName(i);
         RenderTarget* rt = RenderTargetManager::Get().GetRenderTarget(name);
         if (!rt || !rt->GetTexture()) return EResult::Fail;
-
         auto* texture = static_cast<DirectX12Texture*>(rt->GetTexture());
         if (!HasFlag(texture->GetUsage(), ETextureUsage::Sampler)) continue;
-
         const D3D12_RESOURCE_STATES before = texture->GetCurrentState();
         if ((before & D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE) != 0) continue;
-
-        D3D12_RESOURCE_BARRIER barrier = {};
+        D3D12_RESOURCE_BARRIER& barrier = barriers[barrierCount++];
         barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
         barrier.Transition.pResource = static_cast<ID3D12Resource*>(texture->GetNativeHandle());
         barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
         barrier.Transition.StateBefore = before;
         barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
-        barriers.push_back(barrier);
-
         texture->SetCurrentState(D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
     }
-
-    if (!barriers.empty())
-        m_CommandList->ResourceBarrier(static_cast<UINT>(barriers.size()), barriers.data());
-
+    if (barrierCount > 0)
+        m_CommandList->ResourceBarrier(barrierCount, barriers);
     m_CurrentRenderPass = nullptr;
     return EResult::Success;
 }
@@ -1074,8 +1062,36 @@ EResult DirectX12RHI::ClearDepthStencil(RHITexture* depthStencil, f32 depth, uin
 {
     if (!m_CommandList || !depthStencil) return EResult::Fail;
     DirectX12Texture* dxTex = static_cast<DirectX12Texture*>(depthStencil);
+    const DXGI_FORMAT format = ToDXGIFormat(dxTex->GetFormat());
+    const D3D12_CLEAR_FLAGS clearFlags = (format == DXGI_FORMAT_D24_UNORM_S8_UINT)
+        ? (D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL)
+        : D3D12_CLEAR_FLAG_DEPTH;
+
+    if (dxTex->GetDimension() == ETextureDimension::TextureCube)
+    {
+        for (uint32 slice = 0; slice < 6; ++slice)
+        {
+            D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle = dxTex->GetDSVHandle(slice);
+            m_CommandList->ClearDepthStencilView(dsvHandle, clearFlags, depth, stencil, 0, nullptr);
+        }
+        return EResult::Success;
+    }
+
     D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle = dxTex->GetDSVHandle();
-    m_CommandList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, depth, stencil, 0, nullptr);
+    m_CommandList->ClearDepthStencilView(dsvHandle, clearFlags, depth, stencil, 0, nullptr);
+    return EResult::Success;
+}
+
+EResult DirectX12RHI::ClearDepthSlice(RHITexture* depthStencil, uint32 sliceIndex, f32 depth, uint8 stencil)
+{
+    if (!m_CommandList || !depthStencil) return EResult::Fail;
+    DirectX12Texture* dxTex = static_cast<DirectX12Texture*>(depthStencil);
+    D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle = dxTex->GetDSVHandle(sliceIndex);
+    const DXGI_FORMAT format = ToDXGIFormat(dxTex->GetFormat());
+    const D3D12_CLEAR_FLAGS clearFlags = (format == DXGI_FORMAT_D24_UNORM_S8_UINT)
+        ? (D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL)
+        : D3D12_CLEAR_FLAG_DEPTH;
+    m_CommandList->ClearDepthStencilView(dsvHandle, clearFlags, depth, stencil, 0, nullptr);
     return EResult::Success;
 }
 #pragma endregion
@@ -1153,14 +1169,15 @@ EResult DirectX12RHI::ApplyShaderResources()
         if (!resource) return EResult::Fail;
 
         const auto resourceDesc = resource->GetDesc();
-        const bool isTex2D = (resourceDesc.Dimension == D3D12_RESOURCE_DIMENSION_TEXTURE2D &&
-            resourceDesc.DepthOrArraySize == 1 && resourceDesc.SampleDesc.Count == 1);
-        const bool isTex3D = (resourceDesc.Dimension == D3D12_RESOURCE_DIMENSION_TEXTURE3D &&
-            resourceDesc.SampleDesc.Count == 1);
+        const bool isTexCube = (texture->GetDimension() == Engine::ETextureDimension::TextureCube)
+            || (resourceDesc.Dimension == D3D12_RESOURCE_DIMENSION_TEXTURE2D && resourceDesc.DepthOrArraySize == 6);
+        const bool isTex2D = (resourceDesc.Dimension == D3D12_RESOURCE_DIMENSION_TEXTURE2D
+            && resourceDesc.DepthOrArraySize == 1 && resourceDesc.SampleDesc.Count == 1);
+        const bool isTex3D = (resourceDesc.Dimension == D3D12_RESOURCE_DIMENSION_TEXTURE3D && resourceDesc.SampleDesc.Count == 1);
 
-        if (!isTex2D && !isTex3D)
+        if (!isTex2D && !isTex3D && !isTexCube)
         {
-            ENGINE_LOG_ERROR("SRV binding supports single-sample Texture2D and Texture3D inputs.");
+            ENGINE_LOG_ERROR("SRV binding supports single-sample Texture2D, Texture3D, and TextureCube inputs.");
             return EResult::NotImplemented;
         }
 
@@ -1183,6 +1200,13 @@ EResult DirectX12RHI::ApplyShaderResources()
         {
             view.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE3D;
             view.Texture3D.MipLevels = resourceDesc.MipLevels;
+        }
+        else if (isTexCube)
+        {
+            view.ViewDimension = D3D12_SRV_DIMENSION_TEXTURECUBE;
+            view.TextureCube.MipLevels = resourceDesc.MipLevels;
+            view.TextureCube.MostDetailedMip = 0;
+            view.TextureCube.ResourceMinLODClamp = 0.0f;
         }
         else
         {

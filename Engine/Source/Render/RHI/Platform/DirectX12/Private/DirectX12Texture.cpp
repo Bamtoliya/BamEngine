@@ -112,18 +112,40 @@ EResult DirectX12Texture::Initialize(const DESC& desc)
 
     if (HasFlag(m_Usage, ETextureUsage::DepthStencilTarget))
     {
-        if (!dxRHI->GetDSVAllocator()->Allocate(m_DSVHandle, m_DSVDescriptorIndex))
+        if (m_Dimension == ETextureDimension::TextureCube)
         {
-            fmt::print(stderr, "DSV descriptor allocation failed\n");
-            return EResult::OutOfMemory;
+            for (uint32 face = 0; face < 6; ++face)
+            {
+                if (!dxRHI->GetDSVAllocator()->Allocate(m_CubeDSVHandles[face], m_CubeDSVDescriptorIndices[face]))
+                {
+                    fmt::print(stderr, "Cube DSV descriptor allocation failed for face {}\n", face);
+                    return EResult::OutOfMemory;
+                }
+                D3D12_DEPTH_STENCIL_VIEW_DESC dsvDesc = {};
+                dsvDesc.Format = dxgiFormat;
+                dsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2DARRAY;
+                dsvDesc.Flags = D3D12_DSV_FLAG_NONE;
+                dsvDesc.Texture2DArray.MipSlice = 0;
+                dsvDesc.Texture2DArray.FirstArraySlice = face;
+                dsvDesc.Texture2DArray.ArraySize = 1;
+                dxDevice->CreateDepthStencilView(m_Texture.Get(), &dsvDesc, m_CubeDSVHandles[face]);
+            }
+            m_DSVHandle = m_CubeDSVHandles[0];
         }
+        else
+        {
+            if (!dxRHI->GetDSVAllocator()->Allocate(m_DSVHandle, m_DSVDescriptorIndex))
+            {
+                fmt::print(stderr, "DSV descriptor allocation failed\n");
+                return EResult::OutOfMemory;
+            }
 
-        // DSV는 실제 depth 포맷 사용
-        D3D12_DEPTH_STENCIL_VIEW_DESC dsvDesc = {};
-        dsvDesc.Format = dxgiFormat;
-        dsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
-        dsvDesc.Flags = D3D12_DSV_FLAG_NONE;
-        dxDevice->CreateDepthStencilView(m_Texture.Get(), &dsvDesc, m_DSVHandle);
+            D3D12_DEPTH_STENCIL_VIEW_DESC dsvDesc = {};
+            dsvDesc.Format = dxgiFormat;
+            dsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
+            dsvDesc.Flags = D3D12_DSV_FLAG_NONE;
+            dxDevice->CreateDepthStencilView(m_Texture.Get(), &dsvDesc, m_DSVHandle);
+        }
     }
 
     if (HasFlag(m_Usage, ETextureUsage::Sampler))
@@ -199,6 +221,22 @@ void DirectX12Texture::Free()
 
         if (m_SRVDescriptorIndex != INVALID_DESCRIPTOR_INDEX)
             dxRHI->GetSRVAllocator()->Free(m_SRVDescriptorIndex);
+
+        if (m_Dimension == ETextureDimension::TextureCube)
+        {
+            for (uint32 face = 0; face < 6; ++face)
+            {
+                if (m_CubeDSVDescriptorIndices[face] != INVALID_DESCRIPTOR_INDEX)
+                {
+                    dxRHI->GetDSVAllocator()->Free(m_CubeDSVDescriptorIndices[face]);
+                    m_CubeDSVDescriptorIndices[face] = INVALID_DESCRIPTOR_INDEX;
+                }
+            }
+        }
+        else if (m_DSVDescriptorIndex != INVALID_DESCRIPTOR_INDEX)
+        {
+            dxRHI->GetDSVAllocator()->Free(m_DSVDescriptorIndex);
+        }
     }
 
     m_RTVDescriptorIndex = INVALID_DESCRIPTOR_INDEX;

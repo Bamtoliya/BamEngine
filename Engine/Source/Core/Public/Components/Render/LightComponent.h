@@ -116,11 +116,22 @@ namespace Engine
 		[[nodiscard]]
 		vec4 GetShadowParams() const { return m_ShadowParams; }
 
+		[[nodiscard]]
+		std::optional<CameraBuffer> GetPointShadowCameraBuffer(uint32 faceIndex) const
+		{
+			if (!m_IsCacheValid || !m_IsShadowCacheValid || faceIndex >= 6)
+				return std::nullopt;
+			return m_PointShadowCameraBuffers[faceIndex];
+		}
+
 	private:
 		friend class LightSystem;
 
 		// 계산 결과는 리플렉션 기반 저장·편집 대상에서 제외합니다.
 		GPULight m_GPULight{};
+
+		CameraBuffer m_PointShadowCameraBuffers[6]{};
+		mat4 m_PointShadowViewProjMatrices[6]{};
 
 		mat4 m_ShadowViewProjMatrices[MAX_SHADOW_CASCADES]{ mat4(1.f), mat4(1.f), mat4(1.f) };
 		CameraBuffer m_ShadowCameraBuffers[MAX_SHADOW_CASCADES]{};

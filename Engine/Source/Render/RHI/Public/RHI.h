@@ -77,6 +77,7 @@ public:
 #pragma region Bind Resources
 public:
     virtual EResult BindRenderTarget(RHITexture* renderTarget, RHITexture* depthStencil) BAM_PURE;
+    virtual EResult BindDepthSlice(RHITexture* depthStencil, uint32 sliceIndex) { return EResult::NotImplemented; }
 	virtual EResult BindTexture(RHITexture* texture, uint32 slot);
     virtual EResult BindTextureSampler(RHITexture* texture, RHISampler* sampler, uint32 slot) BAM_PURE;
     virtual EResult BindRenderTargets(uint32 count, RHITexture** renderTargets, RHITexture* depthStencil) BAM_PURE;
@@ -105,6 +106,7 @@ public:
 #pragma region Clear Resources
     virtual EResult ClearRenderTarget(RHITexture* renderTarget, vec4 color) BAM_PURE;
 	virtual EResult ClearDepthStencil(RHITexture* depthStencil, f32 depth, uint8 stencil) BAM_PURE;
+    virtual EResult ClearDepthSlice(RHITexture* depthStencil, uint32 sliceIndex, f32 depth, uint8 stencil) { return EResult::NotImplemented; }
 #pragma endregion
 
 #pragma region Draw

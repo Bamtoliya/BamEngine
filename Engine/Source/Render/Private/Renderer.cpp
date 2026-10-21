@@ -103,13 +103,9 @@ EResult Renderer::Render(f32 dt)
 		const ERenderPassType passType = pass->GetPassType();
 		if (passType == ERenderPassType::Shadow && !LightManager::Get().HasShadowCastingLights())
 			continue;
+		static const vector<ViewportJob> s_DefaultJobs = { ViewportJob{} };
 		auto jobsIt = jobsPerPass.find(pass->GetID());
-
-		vector<ViewportJob> jobs;
-		if (jobsIt != jobsPerPass.end())
-			jobs = jobsIt->second;
-		else
-			jobs.push_back(ViewportJob{});
+		const vector<ViewportJob>& jobs = (jobsIt != jobsPerPass.end()) ? jobsIt->second : s_DefaultJobs;
 
 		for (const auto& job : jobs)
 		{
@@ -135,12 +131,9 @@ EResult Renderer::Render(f32 dt)
 				}
 			}
 
-			// ── Shadow Pass: 2x2 Atlas 분할 다중 캐스케이드 렌더링 ──
+			// ── Shadow Pass: Directional/Spot Atlas 또는 Point CubeMap ──
 			if (passType == ERenderPassType::Shadow)
 			{
-				const uint32 halfW = rtWidth / 2;
-				const uint32 halfH = rtHeight / 2;
-
 				for (const auto& [slot, buffer] : pass->GetAllPassConstants())
 				{
 					if (!buffer.empty())
@@ -150,40 +143,76 @@ EResult Renderer::Render(f32 dt)
 					}
 				}
 
+				RenderTarget* depthRT = pass->GetDepthStencilName().empty() ? nullptr :
+					RenderTargetManager::Get().GetRenderTarget(pass->GetDepthStencilName());
+				const bool isCubeShadow = (depthRT && depthRT->GetTexture() &&
+					depthRT->GetTexture()->GetDimension() == ETextureDimension::TextureCube);
+
 				auto meshIt = m_StaticDrawCommands.find(pass->GetID());
 				if (meshIt != m_StaticDrawCommands.end())
 				{
-					// 1) Directional Light CSM (사분면 0, 1, 2)
-					for (uint32 c = 0; c < MAX_SHADOW_CASCADES; ++c)
+					if (isCubeShadow)
 					{
-						CameraBuffer cascadeCam = LightManager::Get().GetShadowCameraBuffer(c);
-						cascadeCam.time = static_cast<f32>(TimeManager::Get().GetTotalTime());
-						if (IsFailure(m_RHI->BindConstantBuffer(&cascadeCam, sizeof(CameraBuffer), 0)))
+						// ── Point Light: 6면 큐브맵 개별 슬라이스 순회 렌더링 ──
+						if (LightManager::Get().HasPointShadow())
 						{
-							ENGINE_LOG_ERROR("Failed to bind shadow cascade camera buffer. Cascade: {}", c);
-							return EResult::Fail;
+							for (uint32 face = 0; face < 6; ++face)
+							{
+								m_RHI->BindDepthSlice(depthRT->GetTexture(), face);
+								m_RHI->ClearDepthSlice(depthRT->GetTexture(), face, 1.0f, 0);
+								m_RHI->SetViewport(0, 0, rtWidth, rtHeight);
+
+								CameraBuffer faceCam = LightManager::Get().GetPointShadowCameraBuffer(face);
+								faceCam.time = static_cast<f32>(TimeManager::Get().GetTotalTime());
+								if (IsFailure(m_RHI->BindConstantBuffer(&faceCam, sizeof(CameraBuffer), 0)))
+								{
+									ENGINE_LOG_ERROR("Failed to bind point shadow face camera buffer. Face: {}", face);
+									return EResult::Fail;
+								}
+
+								const EResult result = RenderMeshes(dt, meshIt->second, pass->GetSortType(), pass);
+								if (IsFailure(result))
+									ENGINE_LOG_ERROR("Point shadow mesh rendering failed for face: {}", face);
+							}
 						}
-
-						const int32 vpX = static_cast<int32>((c % 2) * halfW);
-						const int32 vpY = static_cast<int32>((c / 2) * halfH);
-						m_RHI->SetViewport(vpX, vpY, halfW, halfH);
-
-						const EResult result = RenderMeshes(dt, meshIt->second, pass->GetSortType(), pass);
-						if (IsFailure(result))
-							ENGINE_LOG_ERROR("Shadow mesh rendering failed for cascade: {}", c);
 					}
-
-					// 2) Spot Light Shadow (우하단 사분면: halfW, halfH)
-					if (LightManager::Get().HasSpotShadow())
+					else
 					{
-						CameraBuffer spotCam = LightManager::Get().GetSpotShadowCameraBuffer();
-						spotCam.time = static_cast<f32>(TimeManager::Get().GetTotalTime());
-						if (IsSuccess(m_RHI->BindConstantBuffer(&spotCam, sizeof(CameraBuffer), 0)))
+						const uint32 halfW = rtWidth / 2;
+						const uint32 halfH = rtHeight / 2;
+
+						// 1) Directional Light CSM (사분면 0, 1, 2)
+						for (uint32 c = 0; c < MAX_SHADOW_CASCADES; ++c)
 						{
-							m_RHI->SetViewport(static_cast<int32>(halfW), static_cast<int32>(halfH), halfW, halfH);
+							CameraBuffer cascadeCam = LightManager::Get().GetShadowCameraBuffer(c);
+							cascadeCam.time = static_cast<f32>(TimeManager::Get().GetTotalTime());
+							if (IsFailure(m_RHI->BindConstantBuffer(&cascadeCam, sizeof(CameraBuffer), 0)))
+							{
+								ENGINE_LOG_ERROR("Failed to bind shadow cascade camera buffer. Cascade: {}", c);
+								return EResult::Fail;
+							}
+
+							const int32 vpX = static_cast<int32>((c % 2) * halfW);
+							const int32 vpY = static_cast<int32>((c / 2) * halfH);
+							m_RHI->SetViewport(vpX, vpY, halfW, halfH);
+
 							const EResult result = RenderMeshes(dt, meshIt->second, pass->GetSortType(), pass);
 							if (IsFailure(result))
-								ENGINE_LOG_ERROR("Spot shadow mesh rendering failed.");
+								ENGINE_LOG_ERROR("Shadow mesh rendering failed for cascade: {}", c);
+						}
+
+						// 2) Spot Light Shadow (우하단 사분면: halfW, halfH)
+						if (LightManager::Get().HasSpotShadow())
+						{
+							CameraBuffer spotCam = LightManager::Get().GetSpotShadowCameraBuffer();
+							spotCam.time = static_cast<f32>(TimeManager::Get().GetTotalTime());
+							if (IsSuccess(m_RHI->BindConstantBuffer(&spotCam, sizeof(CameraBuffer), 0)))
+							{
+								m_RHI->SetViewport(static_cast<int32>(halfW), static_cast<int32>(halfH), halfW, halfH);
+								const EResult result = RenderMeshes(dt, meshIt->second, pass->GetSortType(), pass);
+								if (IsFailure(result))
+									ENGINE_LOG_ERROR("Spot shadow mesh rendering failed.");
+							}
 						}
 					}
 				}
@@ -274,10 +303,21 @@ TODO("Renderer::RenderMeshes, RenderSkinnedMeshes, RenderSprite 함수에서 Mat
 EResult Renderer::RenderMeshes(f32 dt, vector<StaticDrawCommand>& commands, ERenderSortType sortType, RenderPass* renderPass)
 {
 	(void)dt;
-	(void)sortType;
 
 	if (!m_RHI || !renderPass)
 		return EResult::Fail;
+
+	if (commands.size() > 1 && sortType != ERenderSortType::BackToFront)
+	{
+		std::sort(commands.begin(), commands.end(), [](const StaticDrawCommand& a, const StaticDrawCommand& b)
+			{
+				if (a.material != b.material) return a.material < b.material;
+				return a.mesh < b.mesh;
+			});
+	}
+
+	MaterialInterface* lastMaterial = nullptr;
+	Mesh* lastMesh = nullptr;
 
 	for (const auto& command : commands)
 	{
@@ -287,23 +327,32 @@ EResult Renderer::RenderMeshes(f32 dt, vector<StaticDrawCommand>& commands, ERen
 		if (!mesh || !material)
 			return EResult::Fail;
 
-		if (IsFailure(BindMeshPipeline(mesh, material, renderPass)))
-			return EResult::Fail;
+		if (material != lastMaterial || mesh != lastMesh)
+		{
+			if (IsFailure(BindMeshPipeline(mesh, material, renderPass)))
+				return EResult::Fail;
+		}
 
-		if (IsFailure(material->Bind(2)))
-			return EResult::Fail;
+		if (material != lastMaterial)
+		{
+			if (IsFailure(material->Bind(2)))
+				return EResult::Fail;
+			lastMaterial = material;
+		}
 
 		SceneUBO objectData = {};
 		objectData.worldMatrix = command.worldMatrix;
 		objectData.pickingData.x = static_cast<float>(command.pickingId);
 
 		if (IsFailure(m_RHI->BindConstantBuffer(&objectData, sizeof(objectData), 1)))
-		{
 			return EResult::Fail;
-		}
 
-		if (IsFailure(mesh->Bind(0)))
-			return EResult::Fail;
+		if (mesh != lastMesh)
+		{
+			if (IsFailure(mesh->Bind(0)))
+				return EResult::Fail;
+			lastMesh = mesh;
+		}
 
 		const EResult result = mesh->GetIndexBuffer()
 			? m_RHI->DrawIndexed(mesh->GetIndexCount())
@@ -469,14 +518,15 @@ EResult Renderer::EndFrame()
 		frameResult = m_RHI->EndFrame();
 	}
 
-	m_CustomRenderQueues.clear();
-	m_ViewportCameras.clear(); 
+	for (auto& [passID, queue] : m_CustomRenderQueues) queue.clear();
+	for (auto& [passID, queue] : m_StaticDrawCommands) queue.clear();
+	for (auto& [passID, queue] : m_SkinnedDrawCommands) queue.clear();
+	for (auto& [passID, queue] : m_SpriteDrawCommands) queue.clear();
+	for (auto& [passID, queue] : m_UIImageDrawCommands) queue.clear();
+
+	m_ViewportCameras.clear();
 	m_PassFrustums.clear();
 	m_PassFrustumIsShadow.clear();
-	m_StaticDrawCommands.clear();
-	m_SkinnedDrawCommands.clear();
-	m_SpriteDrawCommands.clear();
-	m_UIImageDrawCommands.clear();
 	return frameResult;
 }
 #pragma endregion

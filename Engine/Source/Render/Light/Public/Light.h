@@ -49,6 +49,8 @@ struct LightShadowData
 	Engine::vec4 ShadowParams;                               // Bias, SlopeBias, NormalBias, Unused (16바이트)
 	Engine::mat4 SpotViewProjMatrix{ Engine::mat4(1.0f) };   // 스팟 라이트 뷰투영 행렬 (64바이트)
 	Engine::vec4 SpotShadowParams{ 0.0f };                   // Bias, SlopeBias, NormalBias, HasSpotShadow (16바이트)
+	Engine::vec4 PointShadowParams{ 0.0f };                  // Bias, SlopeBias, NormalBias, HasPointShadow (16바이트)
+	Engine::vec4 PointShadowPosRange{ 0.0f };                // xyz: 광원 위치, w: 최대 유효 사거리 (16바이트)
 };
 
 // lightingPS.hlsl의 데이터 크기와 필드 위치를 확인합니다.
@@ -56,4 +58,4 @@ static_assert(sizeof(GPULight) == 80);
 static_assert(offsetof(GPULight, PackedFlags) == 44);
 static_assert(offsetof(GPULight, SpotInnerCos) == 64);
 static_assert(sizeof(LightBufferHeader) == 16);
-static_assert(sizeof(LightShadowData) == 304);
+static_assert(sizeof(LightShadowData) == 336);

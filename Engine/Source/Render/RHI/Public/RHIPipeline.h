@@ -45,7 +45,6 @@ struct RHIPipelineDesc
 	bool operator==(const RHIPipelineDesc& other) const
 	{
 		if (pipelineType != other.pipelineType) return false;
-
 		if (blendState != other.blendState) return false;
 
 		if (fillMode != other.fillMode) return false;
@@ -70,6 +69,14 @@ struct RHIPipelineDesc
 
 		if (depthStencilState.depthTestEnable != other.depthStencilState.depthTestEnable) return false;
 		if (depthStencilState.depthWriteEnable != other.depthStencilState.depthWriteEnable) return false;
+		if (depthStencilState.depthCompareOp != other.depthStencilState.depthCompareOp) return false;
+		if (depthStencilState.stencilTestEnable != other.depthStencilState.stencilTestEnable) return false;
+		if (depthStencilState.stencilReadMask != other.depthStencilState.stencilReadMask) return false;
+		if (depthStencilState.stencilWriteMask != other.depthStencilState.stencilWriteMask) return false;
+		if (depthStencilState.stencilFailOp != other.depthStencilState.stencilFailOp) return false;
+		if (depthStencilState.stencilDepthFailOp != other.depthStencilState.stencilDepthFailOp) return false;
+		if (depthStencilState.stencilPassOp != other.depthStencilState.stencilPassOp) return false;
+		if (depthStencilState.stencilCompareOp != other.depthStencilState.stencilCompareOp) return false;
 
 		if (inputLayouts.size() != other.inputLayouts.size()) return false;
 		for (size_t i = 0; i < inputLayouts.size(); ++i)
@@ -87,13 +94,10 @@ struct hash<RHIPipelineDesc>
 	size_t operator()(const RHIPipelineDesc& desc) const
 	{
 		size_t seed = 0;
-		// 주요 필드들을 해싱합니다.
-		// 주의: 구조체 패딩 이슈를 피하기 위해 멤버별로 해싱하는 것이 안전합니다.
 		HashCombine(seed, hash<int>()((int)desc.pipelineType));
 
 		HashCombine(seed, hash<bool>()(desc.blendState.enable));
 		HashCombine(seed, hash<bool>()(desc.blendState.enableColorWriteMask));
-
 		HashCombine(seed, hash<int>()((int)desc.blendState.srcColor));
 		HashCombine(seed, hash<int>()((int)desc.blendState.dstColor));
 		HashCombine(seed, hash<int>()((int)desc.blendState.colorBlendOp));
@@ -102,12 +106,13 @@ struct hash<RHIPipelineDesc>
 		HashCombine(seed, hash<int>()((int)desc.blendState.alphaBlendOp));
 		HashCombine(seed, hash<int>()((int)desc.blendState.colorWriteMask));
 
-
+		HashCombine(seed, hash<int>()((int)desc.fillMode));
 		HashCombine(seed, hash<int>()((int)desc.cullMode));
+		HashCombine(seed, hash<int>()((int)desc.frontFace));
+		HashCombine(seed, hash<int>()((int)desc.topology));
 		HashCombine(seed, hash<void*>()(desc.vertexShader));
 		HashCombine(seed, hash<void*>()(desc.pixelShader));
 
-		// 포맷들도 해싱에 포함
 		HashCombine(seed, hash<int>()(desc.colorAttachmentCount));
 		for (uint32 i = 0; i < desc.colorAttachmentCount; ++i)
 		{
@@ -115,9 +120,10 @@ struct hash<RHIPipelineDesc>
 		}
 		HashCombine(seed, hash<int>()((int)desc.depthStencilAttachmentFormat));
 
-		// Depth State
 		HashCombine(seed, hash<bool>()(desc.depthStencilState.depthTestEnable));
 		HashCombine(seed, hash<bool>()(desc.depthStencilState.depthWriteEnable));
+		HashCombine(seed, hash<int>()((int)desc.depthStencilState.depthCompareOp));
+		HashCombine(seed, hash<bool>()(desc.depthStencilState.stencilTestEnable));
 
 		HashCombine(seed, hash<size_t>()(desc.inputLayouts.size()));
 		for (const auto& layout : desc.inputLayouts)
