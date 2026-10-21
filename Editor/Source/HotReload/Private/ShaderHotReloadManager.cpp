@@ -4,11 +4,78 @@
 #include "Renderer.h"
 #include "Logger.h"
 #include <windows.h>
+#include <fstream>
+#include <unordered_set>
 
 IMPLEMENT_SINGLETON(ShaderHotReloadManager)
 
 namespace
 {
+	std::string ToLowerCopy(std::string value)
+	{
+		for (char& c : value) c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
+		return value;
+	}
+
+	std::string NormalizePathKey(const std::filesystem::path& path)
+	{
+		return ToLowerCopy(path.lexically_normal().generic_string());
+	}
+
+	std::vector<std::filesystem::path> ExtractIncludedFiles(const std::filesystem::path& shaderFile)
+	{
+		std::vector<std::filesystem::path> includes;
+		std::ifstream stream(shaderFile);
+		if (!stream.is_open()) return includes;
+
+		const std::filesystem::path parentDir = shaderFile.parent_path();
+		std::string line;
+		while (std::getline(stream, line))
+		{
+			const size_t firstNonSpace = line.find_first_not_of(" \t");
+			if (firstNonSpace == std::string::npos || line[firstNonSpace] != '#') continue;
+
+			const size_t includePos = line.find("include", firstNonSpace + 1);
+			if (includePos == std::string::npos) continue;
+			if (line.find_first_not_of(" \t", firstNonSpace + 1) != includePos) continue;
+
+			const size_t firstQuote = line.find('"', includePos + 7);
+			if (firstQuote == std::string::npos) continue;
+			const size_t secondQuote = line.find('"', firstQuote + 1);
+			if (secondQuote == std::string::npos || secondQuote <= firstQuote + 1) continue;
+
+			const std::string relativeInclude = line.substr(firstQuote + 1, secondQuote - firstQuote - 1);
+			includes.push_back((parentDir / relativeInclude).lexically_normal());
+		}
+		return includes;
+	}
+
+	bool DependsOnAnyHeader(const std::filesystem::path& hlslPath, const std::unordered_set<std::string>& modifiedHeaderKeys)
+	{
+		std::unordered_set<std::string> visited;
+		std::vector<std::filesystem::path> queue = { hlslPath };
+		visited.insert(NormalizePathKey(hlslPath));
+
+		while (!queue.empty())
+		{
+			const std::filesystem::path current = queue.back();
+			queue.pop_back();
+
+			for (const std::filesystem::path& incPath : ExtractIncludedFiles(current))
+			{
+				const std::string key = NormalizePathKey(incPath);
+				if (modifiedHeaderKeys.contains(key)) return true;
+
+				std::error_code ec;
+				if (std::filesystem::exists(incPath, ec) && visited.insert(key).second)
+				{
+					queue.push_back(incPath);
+				}
+			}
+		}
+		return false;
+	}
+
 	class ShaderFileListener : public efsw::FileWatchListener
 	{
 	public:
@@ -19,8 +86,7 @@ namespace
 			if (action == efsw::Actions::Modified || action == efsw::Actions::Add)
 			{
 				std::filesystem::path fullPath = std::filesystem::path(dir) / filename;
-				std::string ext = fullPath.extension().string();
-				for (char& c : ext) c = static_cast<char>(tolower(c));
+				std::string ext = ToLowerCopy(fullPath.extension().string());
 				if (ext == ".hlsl" || ext == ".hlsli")
 				{
 					m_Manager->NotifyFileModified(fullPath);
@@ -104,8 +170,9 @@ void ShaderHotReloadManager::Update()
 	if (m_PendingFiles.empty()) return;
 
 	const auto now = std::chrono::steady_clock::now();
-	std::vector<std::filesystem::path> readyFiles;
-	bool hasHeaderModified = false;
+	std::vector<std::filesystem::path> targetHlslFiles;
+	std::unordered_set<std::string> targetHlslKeys;
+	std::unordered_set<std::string> modifiedHeaderKeys;
 
 	{
 		std::lock_guard<std::mutex> lock(m_QueueMutex);
@@ -114,10 +181,16 @@ void ShaderHotReloadManager::Update()
 			if (std::chrono::duration_cast<std::chrono::milliseconds>(now - it->second).count() >= 300)
 			{
 				std::filesystem::path p(it->first);
-				std::string ext = p.extension().string();
-				for (char& c : ext) c = static_cast<char>(tolower(c));
-				if (ext == ".hlsli") hasHeaderModified = true;
-				readyFiles.push_back(p);
+				const std::string ext = ToLowerCopy(p.extension().string());
+				if (ext == ".hlsli")
+				{
+					modifiedHeaderKeys.insert(NormalizePathKey(p));
+				}
+				else if (ext == ".hlsl")
+				{
+					if (targetHlslKeys.insert(NormalizePathKey(p)).second)
+						targetHlslFiles.push_back(p);
+				}
 				it = m_PendingFiles.erase(it);
 			}
 			else
@@ -127,14 +200,30 @@ void ShaderHotReloadManager::Update()
 		}
 	}
 
-	if (hasHeaderModified)
+	if (!modifiedHeaderKeys.empty())
 	{
-		ENGINE_LOG_INFO("[Shader Hot Reload] Shared header modified (.hlsli). Recompiling all shaders...");
-		RecompileAll();
-		return;
+		std::error_code ec;
+		if (std::filesystem::exists(m_WatchDirectory, ec))
+		{
+			for (const auto& entry : std::filesystem::directory_iterator(m_WatchDirectory, ec))
+			{
+				if (!entry.is_regular_file(ec) || ToLowerCopy(entry.path().extension().string()) != ".hlsl")
+					continue;
+
+				const std::string hlslKey = NormalizePathKey(entry.path());
+				if (targetHlslKeys.contains(hlslKey)) continue;
+
+				if (DependsOnAnyHeader(entry.path(), modifiedHeaderKeys))
+				{
+					targetHlslKeys.insert(hlslKey);
+					targetHlslFiles.push_back(entry.path());
+				}
+			}
+		}
+		ENGINE_LOG_INFO("[Shader Hot Reload] Shared header modified (.hlsli). Recompiling {} affected shader(s)...", targetHlslFiles.size());
 	}
 
-	for (const auto& file : readyFiles)
+	for (const auto& file : targetHlslFiles)
 	{
 		ProcessModifiedFile(file);
 	}

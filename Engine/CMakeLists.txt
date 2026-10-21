@@ -17,7 +17,6 @@ set(ENGINE_PCH_HEADER "${ENGINE_SOURCE_DIR}/Core/Public/Engine_Includes.h")
 file(GLOB_RECURSE ENGINE_HEADERS CONFIGURE_DEPENDS "${ENGINE_SOURCE_DIR}/*.h")
 file(GLOB_RECURSE ENGINE_SOURCES CONFIGURE_DEPENDS "${ENGINE_SOURCE_DIR}/*.cpp")
 file(GLOB_RECURSE ENGINE_INLINE CONFIGURE_DEPENDS "${ENGINE_SOURCE_DIR}/*.inl")
-file(GLOB_RECURSE ALL_SOURCE_FILES CONFIGURE_DEPENDS "${ENGINE_SOURCE_DIR}/*")
 
 # 소스 목록 취합 및 필터 폴더(Tree) 구조 생성
 list(APPEND ENGINE_SOURCES ${ENGINE_INLINE})
@@ -25,7 +24,7 @@ source_group(TREE "${ENGINE_SOURCE_DIR}" FILES ${ENGINE_HEADERS} ${ENGINE_SOURCE
 
 # Public 인클루드 디렉토리 자동 추출 로직
 set(ENGINE_PUBLIC_INCLUDE_DIRS "")
-foreach(FILE_PATH ${ALL_SOURCE_FILES})
+foreach(FILE_PATH ${ENGINE_HEADERS} ${ENGINE_INLINE})
     get_filename_component(DIR_PATH "${FILE_PATH}" DIRECTORY)
     if(DIR_PATH MATCHES "/Public(/|$)" AND NOT DIR_PATH MATCHES "/Private(/|$)")
         list(APPEND ENGINE_PUBLIC_INCLUDE_DIRS "${DIR_PATH}")
@@ -50,7 +49,6 @@ add_library(BamEngine::Engine ALIAS Engine)
 # ==============================================================================
 # Unity Build 최적화 설정
 set_target_properties(Engine PROPERTIES UNITY_BUILD OFF)
-set_source_files_properties(Source/ECS/XXX.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION TRUE)
 
 # 컴파일 정의 (전처리기 매크로)
 target_compile_definitions(Engine PRIVATE
