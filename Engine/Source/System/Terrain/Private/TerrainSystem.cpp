@@ -105,6 +105,49 @@ void TerrainSystem::EnsureTerrainResources(Scene* scene, entt::entity entity, Te
 			terrain.TerrainMaterial->SetTextureBinding("HeightMap", 1, heightmapHandle);
 		}
 	}
+
+	// EnsureTerrainResources 내 스플랫 맵 생성 부분
+	if (rhi && !terrain.SplatmapTexture)
+	{
+		const uint32 totalVertexCount = vertexAxisCount * vertexAxisCount;
+		if (terrain.SplatData.size() != totalVertexCount * 4)
+		{
+			terrain.SplatData.assign(totalVertexCount * 4, 0);
+			for (uint32 i = 0; i < totalVertexCount; ++i)
+				terrain.SplatData[i * 4 + 0] = 255; // 기본 잔디
+		}
+
+		RHITextureDesc desc{};
+		desc.width = vertexAxisCount;
+		desc.height = vertexAxisCount;
+		desc.format = ETextureFormat::R8G8B8A8_UNORM;
+		desc.dimension = ETextureDimension::Texture2D;
+		desc.usage = ETextureUsage::Sampler;
+		desc.data = terrain.SplatData.data();
+		desc.dataSize = static_cast<uint32>(terrain.SplatData.size());
+
+		RHITexture* rawTexture = rhi->CreateTexture(desc);
+		if (rawTexture)
+		{
+			terrain.SplatmapTexture = std::shared_ptr<RHITexture>(rawTexture, [](RHITexture* p) { Safe_Release(p); });
+			terrain.IsSplatDirty = false;
+
+			const uint64 entityId = static_cast<uint64>(entt::to_integral(entity));
+			const std::wstring texKey = L"Runtime_TerrainSplatmap_" + std::to_wstring(entityId);
+			Texture* splatTex = Texture::CreateFromRHITexture(rawTexture, texKey);
+			ResourceManager::Get().AddResource<Texture>(texKey, splatTex);
+		}
+	}
+
+	// 머티리얼 바인딩 보장 (Slot 4에 SplatMap 바인딩)
+	if (terrain.TerrainMaterial.IsValid() && terrain.SplatmapTexture)
+	{
+		const uint64 entityId = static_cast<uint64>(entt::to_integral(entity));
+		const std::wstring texKey = L"Runtime_TerrainSplatmap_" + std::to_wstring(entityId);
+		auto splatHandle = ResourceManager::Get().GetResourceHandle<Texture>(texKey);
+		if (splatHandle.IsValid())
+			terrain.TerrainMaterial->SetTextureBinding("SplatMap", 4, splatHandle);
+	}
 }
 
 void TerrainSystem::UpdateTerrainHeightmap(TerrainComponent& terrain)
@@ -187,6 +230,7 @@ void TerrainSystem::OnSubmit(entt::registry& registry, const vector<Scene*> acti
 		{
 			EnsureTerrainResources(scene, entity, terrain);
 			UpdateTerrainHeightmap(terrain);
+			UpdateTerrainSplatmap(terrain);
 
 			if (!flag.IsActiveInHierarchy() || !flag.IsVisibleInHierarchy() || HasFlag(flag.effectiveFlags, EEntityFlag::Dead)) continue;
 
@@ -207,4 +251,22 @@ void TerrainSystem::OnSubmit(entt::registry& registry, const vector<Scene*> acti
 			}
 		}
 	}
+}
+
+void TerrainSystem::UpdateTerrainSplatmap(TerrainComponent& terrain)
+{
+	if (!terrain.IsSplatDirty || !terrain.SplatmapTexture) return;
+	RHI* rhi = Renderer::Get().GetRHI();
+	if (!rhi) return;
+	const uint32 vertexAxisCount = terrain.Resolution + 1;
+	RHITextureDesc desc{};
+	desc.width = vertexAxisCount;
+	desc.height = vertexAxisCount;
+	desc.format = ETextureFormat::R8G8B8A8_UNORM;
+	desc.dimension = ETextureDimension::Texture2D;
+	desc.usage = ETextureUsage::Sampler;
+	desc.data = terrain.SplatData.data();
+	desc.dataSize = static_cast<uint32>(terrain.SplatData.size());
+	if (IsSuccess(rhi->UploadTextureData(terrain.SplatmapTexture.get(), desc)))
+		terrain.IsSplatDirty = false;
 }

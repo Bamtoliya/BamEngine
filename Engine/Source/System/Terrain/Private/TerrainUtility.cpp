@@ -4,6 +4,10 @@
 #include "TerrainComponent.h"
 #include <algorithm>
 #include <cmath>
+#include <stb_image.h>
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include <stb_image_write.h>
+#include <filesystem>
 
 Mesh* TerrainUtility::CreateGridMesh(float width, float length, uint32 resolution)
 {
@@ -160,4 +164,136 @@ bool TerrainUtility::ApplyBrush(TerrainComponent& terrain, const glm::vec3& hitW
 	}
 	if (modified) terrain.IsDirty = true;
 	return modified;
+}
+
+bool TerrainUtility::LoadHeightmapFromFile(TerrainComponent& terrain, const std::wstring& filePath)
+{
+	if (terrain.Resolution == 0) return false;
+
+	const std::string u8Path = std::filesystem::path(filePath).string();
+	int imgW = 0;
+	int imgH = 0;
+	int channels = 0;
+	// 1채널(그레이스케일)로 강제 변환하여 로드
+	unsigned char* pixels = stbi_load(u8Path.c_str(), &imgW, &imgH, &channels, 1);
+	if (!pixels || imgW <= 0 || imgH <= 0)
+	{
+		if (pixels) stbi_image_free(pixels);
+		return false;
+	}
+
+	const uint32 vertexAxisCount = terrain.Resolution + 1;
+	terrain.HeightData.resize(vertexAxisCount * vertexAxisCount);
+
+	// 이미지 해상도와 터레인 정점 그리드가 달라도 바이리니어(Bilinear) 샘플링으로 매끄럽게 리샘플링
+	for (uint32 z = 0; z < vertexAxisCount; ++z)
+	{
+		const float v = static_cast<float>(z) / static_cast<float>(vertexAxisCount - 1);
+		const float srcY = v * static_cast<float>(imgH - 1);
+		const int y0 = glm::clamp(static_cast<int>(srcY), 0, imgH - 1);
+		const int y1 = glm::clamp(y0 + 1, 0, imgH - 1);
+		const float ty = srcY - static_cast<float>(y0);
+
+		for (uint32 x = 0; x < vertexAxisCount; ++x)
+		{
+			const float u = static_cast<float>(x) / static_cast<float>(vertexAxisCount - 1);
+			const float srcX = u * static_cast<float>(imgW - 1);
+			const int x0 = glm::clamp(static_cast<int>(srcX), 0, imgW - 1);
+			const int x1 = glm::clamp(x0 + 1, 0, imgW - 1);
+			const float tx = srcX - static_cast<float>(x0);
+
+			const float p00 = static_cast<float>(pixels[y0 * imgW + x0]) / 255.0f;
+			const float p10 = static_cast<float>(pixels[y0 * imgW + x1]) / 255.0f;
+			const float p01 = static_cast<float>(pixels[y1 * imgW + x0]) / 255.0f;
+			const float p11 = static_cast<float>(pixels[y1 * imgW + x1]) / 255.0f;
+
+			const float val = glm::mix(glm::mix(p00, p10, tx), glm::mix(p01, p11, tx), ty);
+			terrain.HeightData[z * vertexAxisCount + x] = val;
+		}
+	}
+
+	stbi_image_free(pixels);
+	terrain.IsDirty = true;
+	return true;
+}
+
+bool TerrainUtility::SaveHeightmapToFile(const TerrainComponent& terrain, const std::wstring& filePath)
+{
+	if (terrain.HeightData.empty() || terrain.Resolution == 0) return false;
+
+	const uint32 vertexAxisCount = terrain.Resolution + 1;
+	std::vector<unsigned char> outPixels(vertexAxisCount * vertexAxisCount);
+
+	for (size_t i = 0; i < terrain.HeightData.size(); ++i)
+	{
+		outPixels[i] = static_cast<unsigned char>(glm::clamp(terrain.HeightData[i], 0.0f, 1.0f) * 255.0f);
+	}
+
+	const std::string u8Path = std::filesystem::path(filePath).string();
+	const int result = stbi_write_png(u8Path.c_str(), vertexAxisCount, vertexAxisCount, 1, outPixels.data(), vertexAxisCount);
+	return result != 0;
+}
+
+void TerrainUtility::ApplyPaint(TerrainComponent& terrain, const vec3& hitPoint, uint32 targetLayer, f32 radius, f32 intensity, f32 falloff)
+{
+	if (radius <= 0.0f || intensity <= 0.0f || targetLayer >= 4) return;
+
+	const uint32 vertexAxisCount = terrain.Resolution + 1;
+	const uint32 totalVertexCount = vertexAxisCount * vertexAxisCount;
+	if (terrain.SplatData.size() != totalVertexCount * 4)
+	{
+		terrain.SplatData.assign(totalVertexCount * 4, 0);
+		// 기본적으로 Layer 0(잔디)을 255로 초기화
+		for (uint32 i = 0; i < totalVertexCount; ++i)
+			terrain.SplatData[i * 4 + 0] = 255;
+		terrain.IsSplatDirty = true;
+	}
+
+	const float halfW = terrain.Width * 0.5f;
+	const float halfL = terrain.Length * 0.5f;
+	const float localX = hitPoint.x + halfW;
+	const float localZ = hitPoint.z + halfL;
+
+	const float stepX = terrain.Width / static_cast<float>(terrain.Resolution);
+	const float stepZ = terrain.Length / static_cast<float>(terrain.Resolution);
+
+	const int32 minX = std::clamp(static_cast<int32>(std::floor((localX - radius) / stepX)), 0, static_cast<int32>(terrain.Resolution));
+	const int32 maxX = std::clamp(static_cast<int32>(std::ceil((localX + radius) / stepX)), 0, static_cast<int32>(terrain.Resolution));
+	const int32 minZ = std::clamp(static_cast<int32>(std::floor((localZ - radius) / stepZ)), 0, static_cast<int32>(terrain.Resolution));
+	const int32 maxZ = std::clamp(static_cast<int32>(std::ceil((localZ + radius) / stepZ)), 0, static_cast<int32>(terrain.Resolution));
+
+	for (int32 z = minZ; z <= maxZ; ++z)
+	{
+		for (int32 x = minX; x <= maxX; ++x)
+		{
+			const float vx = static_cast<float>(x) * stepX - halfW;
+			const float vz = static_cast<float>(z) * stepZ - halfL;
+			const float dist = std::sqrt((vx - hitPoint.x) * (vx - hitPoint.x) + (vz - hitPoint.z) * (vz - hitPoint.z));
+			if (dist > radius) continue;
+
+			const float t = dist / radius;
+			const float factor = std::pow(std::clamp(1.0f - t, 0.0f, 1.0f), std::max(0.01f, falloff));
+			const float delta = intensity * factor * 255.0f;
+
+			const uint32 pixelIndex = (z * vertexAxisCount + x) * 4;
+			float weights[4] = {
+				static_cast<float>(terrain.SplatData[pixelIndex + 0]),
+				static_cast<float>(terrain.SplatData[pixelIndex + 1]),
+				static_cast<float>(terrain.SplatData[pixelIndex + 2]),
+				static_cast<float>(terrain.SplatData[pixelIndex + 3])
+			};
+
+			weights[targetLayer] = std::clamp(weights[targetLayer] + delta, 0.0f, 255.0f);
+
+			// 레이어들의 합이 255를 유지하도록 정규화
+			float sum = weights[0] + weights[1] + weights[2] + weights[3];
+			if (sum > 0.0f)
+			{
+				for (int i = 0; i < 4; ++i)
+					terrain.SplatData[pixelIndex + i] = static_cast<uint8>(std::clamp((weights[i] / sum) * 255.0f, 0.0f, 255.0f));
+			}
+		}
+	}
+
+	terrain.IsSplatDirty = true;
 }

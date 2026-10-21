@@ -29,8 +29,8 @@
     ],
     "m_Path": "",
     "m_PixelShaderHandle": {
-        "AssetKey": "Resources/Shader/GBufferPS",
-        "AssetPath": "Resources/Shader/bin/dxil/gbufferPS.cso",
+        "AssetKey": "Resources/Shader/TerrainPS",
+        "AssetPath": "Resources/Shader/bin/dxil/terrainPS.cso",
         "Null": false
     },
     "m_ResourceType": 3,
@@ -49,6 +49,46 @@
                 "MipFilter": 1
             },
             "slot": 0,
+            "texture": {
+                "AssetKey": "Resources/Texture/white1x1.png",
+                "AssetPath": "Resources/Texture/white1x1.png",
+                "Null": false
+            }
+        },
+        {
+            "hasCustomSampler": false,
+            "name": "RockDiffuse",
+            "samplerDesc": {
+                "AddressU": 0,
+                "AddressV": 0,
+                "AddressW": 0,
+                "BorderColor": [0, 0, 0, 0],
+                "MagFilter": 1,
+                "MaxAnisotropy": 1,
+                "MinFilter": 1,
+                "MipFilter": 1
+            },
+            "slot": 2,
+            "texture": {
+                "AssetKey": "Resources/Texture/white1x1.png",
+                "AssetPath": "Resources/Texture/white1x1.png",
+                "Null": false
+            }
+        },
+        {
+            "hasCustomSampler": false,
+            "name": "DirtDiffuse",
+            "samplerDesc": {
+                "AddressU": 0,
+                "AddressV": 0,
+                "AddressW": 0,
+                "BorderColor": [0, 0, 0, 0],
+                "MagFilter": 1,
+                "MaxAnisotropy": 1,
+                "MinFilter": 1,
+                "MipFilter": 1
+            },
+            "slot": 3,
             "texture": {
                 "AssetKey": "Resources/Texture/white1x1.png",
                 "AssetPath": "Resources/Texture/white1x1.png",

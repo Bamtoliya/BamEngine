@@ -27,16 +27,17 @@ namespace Engine
 		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_RESOLUTION"))
 		uint32 Resolution = 128; // 그리드 가로/세로 분할 수
 
-		// 런타임 GPU 리소스
-		ResourceHandle<Mesh> GridMesh;
-
 		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_MATERIAL_HANDLE"))
 		ResourceHandle<Material> TerrainMaterial;
 
-		std::shared_ptr<RHITexture> HeightmapTexture;
-
-		// CPU 높이 데이터 (가로 Resolution x 세로 Resolution)
-		std::vector<f32> HeightData;
+		// ── 런타임 GPU/CPU 리소스 (직렬화 제외) ──
+		ResourceHandle<Mesh> GridMesh = {};
+		std::vector<f32> HeightData = {};
+		std::shared_ptr<RHITexture> HeightmapTexture = nullptr;
 		bool IsDirty = false;
+		// ── 스플랫 맵 (4채널 레이어 가중치: R=잔디, G=암석, B=흙, A=자갈) ──
+		std::vector<uint8> SplatData = {}; // (Resolution + 1)^2 * 4 바이트 (RGBA)
+		std::shared_ptr<RHITexture> SplatmapTexture = nullptr;
+		bool IsSplatDirty = false;
 	};
 }

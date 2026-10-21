@@ -21,5 +21,6 @@ public:
 private:
 	void EnsureTerrainResources(class Scene* scene, entt::entity entity, struct TerrainComponent& terrain);
 	void UpdateTerrainHeightmap(TerrainComponent& terrain);
+	void UpdateTerrainSplatmap(TerrainComponent& terrain);
 };
 END

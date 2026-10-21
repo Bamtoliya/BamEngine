@@ -6,6 +6,7 @@
 #include "CoreComponents.h"
 #include "Scene.h"
 #include "imgui.h"
+#include "FileDialogs.h"
 
 TerrainEditor* TerrainEditor::s_Instance = nullptr;
 
@@ -100,6 +101,43 @@ void TerrainEditor::Draw()
 		{
 			const float maxHeight = terrainComp->MaxHeight;
 			ImGui::SliderFloat(LOCAL_LABEL("TerrainEditor.TargetHeight").c_str(), &m_BrushParams.TargetHeight, 0.0f, maxHeight, "%.1f m");
+		}
+		ImGui::Spacing();
+		ImGui::Separator();
+		ImGui::TextUnformatted(LOCAL_CSTR("TerrainEditor.HeightmapFile"));
+
+		// 높이맵 가져오기 (Import)
+		if (ImGui::Button(LOCAL_LABEL("TerrainEditor.ImportHeightmap").c_str(), ImVec2(-1.0f, 26.0f)))
+		{
+			std::wstring openPath;
+			const std::vector<FileDialogFilter> filters = {
+				{ L"Image Files", L"*.png;*.jpg;*.jpeg;*.bmp;*.tga;*.hdr" },
+				{ L"All Files", L"*.*" }
+			};
+			if (FileDialogs::OpenFileDialog(openPath, filters))
+			{
+				Engine::TerrainUtility::LoadHeightmapFromFile(*terrainComp, openPath);
+			}
+		}
+
+		// 높이맵 내보내기 / 저장 (Export / Bake)
+		if (ImGui::Button(LOCAL_LABEL("TerrainEditor.ExportHeightmap").c_str(), ImVec2(-1.0f, 26.0f)))
+		{
+			std::wstring savePath;
+			const std::vector<FileDialogFilter> filters = {
+				{ L"PNG Image (*.png)", L"*.png" }
+			};
+			if (FileDialogs::SaveFileDialog(savePath, filters, L"Terrain_Heightmap", L"png"))
+			{
+				Engine::TerrainUtility::SaveHeightmapToFile(*terrainComp, savePath);
+			}
+		}
+
+		// 지형 평탄화 초기화 (Reset)
+		if (ImGui::Button(LOCAL_LABEL("TerrainEditor.ResetTerrain").c_str(), ImVec2(-1.0f, 26.0f)))
+		{
+			std::fill(terrainComp->HeightData.begin(), terrainComp->HeightData.end(), 0.0f);
+			terrainComp->IsDirty = true;
 		}
 	}
 	ImGui::End();
