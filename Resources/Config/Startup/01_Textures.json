@@ -1,0 +1,11 @@
+{
+    "Textures": [
+        "Resources/Texture/white1x1.png",
+        "Resources/Texture/black1x1.png",
+        "Resources/Texture/magenta1x1.png",
+        "Resources/Texture/green1x1.png",
+        "Resources/Texture/blue1x1.png",
+        "Resources/Texture/uv1.png",
+        "Resources/Texture/uv1.bamsprite.json"
+    ]
+}

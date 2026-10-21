@@ -1,0 +1,9 @@
+{
+    "Pipeline": [
+        { "Step": 1, "Category": "Textures",          "Config": "Resources/Config/Startup/01_Textures.json" },
+        { "Step": 2, "Category": "Shaders",           "Config": "Resources/Config/Startup/02_Shaders.json" },
+        { "Step": 3, "Category": "Meshes",            "Config": "Resources/Config/Startup/03_Meshes.json" },
+        { "Step": 4, "Category": "Materials",         "Config": "Resources/Config/Startup/04_Materials.json" },
+        { "Step": 5, "Category": "MaterialInstances", "Config": "Resources/Config/Startup/05_MaterialInstances.json" }
+    ]
+}

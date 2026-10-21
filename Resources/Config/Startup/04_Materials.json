@@ -1,0 +1,11 @@
+{
+    "Materials": [
+        "Resources/Material/DefaultMaterial.bammat.json",
+        "Resources/Material/GBufferMaterial.bammat.json",
+        "Resources/Material/SpriteMaterial.bammat.json",
+        "Resources/Material/SkyMaterial.bammat.json",
+        "Resources/Material/TerrainMaterial.bammat.json",
+        "Resources/Material/TransparentMaterial.bammat.json",
+        "Resources/Material/UIMaterial.bammat.json"
+    ]
+}

@@ -94,6 +94,7 @@ public:
 	EResult SaveToJsonFile(Resource* resource, const wstring& filePath);
 	EResult SaveToBeveFile(Resource* resource, const wstring& filePath);
 	EResult SaveToBinaryFile(Resource* resource, const wstring& filePath);
+	EResult SaveAllRegisteredResources(bool saveAsBinary = true);
 public:
 	Handle LoadFromJsonFile(const wstring& filePath);
 	Handle LoadFromBeveFile(const wstring& filePath);

@@ -1,0 +1,145 @@
+{
+    "Shaders": [
+        {
+            "Key": "Resources/Shader/DefaultVS",
+            "DxilPath": "Resources/Shader/bin/dxil/defaultVS.cso",
+            "SpirvPath": "Resources/Shader/bin/spirv/defaultVS.spv",
+            "Type": "Vertex",
+            "EntryPoint": "main"
+        },
+        {
+            "Key": "Resources/Shader/DefaultPS",
+            "DxilPath": "Resources/Shader/bin/dxil/defaultPS.cso",
+            "SpirvPath": "Resources/Shader/bin/spirv/defaultPS.spv",
+            "Type": "Fragment",
+            "EntryPoint": "main"
+        },
+        {
+            "Key": "Resources/Shader/GBufferVS",
+            "DxilPath": "Resources/Shader/bin/dxil/gbufferVS.cso",
+            "SpirvPath": "Resources/Shader/bin/spirv/gbufferVS.spv",
+            "Type": "Vertex",
+            "EntryPoint": "main"
+        },
+        {
+            "Key": "Resources/Shader/GBufferPS",
+            "DxilPath": "Resources/Shader/bin/dxil/gbufferPS.cso",
+            "SpirvPath": "Resources/Shader/bin/spirv/gbufferPS.spv",
+            "Type": "Fragment",
+            "EntryPoint": "main"
+        },
+        {
+            "Key": "Resources/Shader/MaterialPreviewPS",
+            "DxilPath": "Resources/Shader/bin/dxil/materialPreviewPS.cso",
+            "SpirvPath": "Resources/Shader/bin/spirv/materialPreviewPS.spv",
+            "Type": "Fragment",
+            "EntryPoint": "main"
+        },
+        {
+            "Key": "FullscreenQuadVS",
+            "DxilPath": "Resources/Shader/bin/dxil/fullscreenQuadVS.cso",
+            "SpirvPath": "Resources/Shader/bin/spirv/fullscreenQuadVS.spv",
+            "Type": "Vertex",
+            "EntryPoint": "main"
+        },
+        {
+            "Key": "LightingPS",
+            "DxilPath": "Resources/Shader/bin/dxil/lightingPS.cso",
+            "SpirvPath": "Resources/Shader/bin/spirv/lightingPS.spv",
+            "Type": "Fragment",
+            "EntryPoint": "main",
+            "Samplers": 6,
+            "StorageBuffers": 1,
+            "UniformBuffers": 2
+        },
+        {
+            "Key": "Resources/Shader/ShadowDepthVS",
+            "DxilPath": "Resources/Shader/bin/dxil/shadowDepthVS.cso",
+            "SpirvPath": "Resources/Shader/bin/spirv/shadowDepthVS.spv",
+            "Type": "Vertex",
+            "EntryPoint": "main",
+            "UniformBuffers": 2
+        },
+        {
+            "Key": "Resources/Shader/ShadowDepthPS",
+            "DxilPath": "Resources/Shader/bin/dxil/shadowDepthPS.cso",
+            "SpirvPath": "Resources/Shader/bin/spirv/shadowDepthPS.spv",
+            "Type": "Fragment",
+            "EntryPoint": "main"
+        },
+        {
+            "Key": "ViewportChannelPS",
+            "DxilPath": "Resources/Shader/bin/dxil/viewport_channelPS.cso",
+            "SpirvPath": "Resources/Shader/bin/spirv/viewport_channelPS.spv",
+            "Type": "Fragment",
+            "EntryPoint": "main",
+            "Samplers": 1,
+            "UniformBuffers": 1
+        },
+        {
+            "Key": "PostProcess_ToneMappingPS",
+            "DxilPath": "Resources/Shader/bin/dxil/postprocess_tonemappingPS.cso",
+            "SpirvPath": "Resources/Shader/bin/spirv/postprocess_tonemappingPS.spv",
+            "Type": "Fragment",
+            "EntryPoint": "main",
+            "Samplers": 1,
+            "UniformBuffers": 1
+        },
+        {
+            "Key": "Resources/Shader/SkyVS",
+            "DxilPath": "Resources/Shader/bin/dxil/skyVS.cso",
+            "SpirvPath": "Resources/Shader/bin/spirv/skyVS.spv",
+            "Type": "Vertex",
+            "EntryPoint": "main"
+        },
+        {
+            "Key": "Resources/Shader/SkyPS",
+            "DxilPath": "Resources/Shader/bin/dxil/atmosphereSkyPS.cso",
+            "SpirvPath": "Resources/Shader/bin/spirv/atmosphereSkyPS.spv",
+            "Type": "Fragment",
+            "EntryPoint": "main"
+        },
+        {
+            "Key": "Resources/Shader/UIVS",
+            "DxilPath": "Resources/Shader/bin/dxil/uiVS.cso",
+            "SpirvPath": "Resources/Shader/bin/spirv/uiVS.spv",
+            "Type": "Vertex",
+            "EntryPoint": "main"
+        },
+        {
+            "Key": "Resources/Shader/UIPS",
+            "DxilPath": "Resources/Shader/bin/dxil/uiPS.cso",
+            "SpirvPath": "Resources/Shader/bin/spirv/uiPS.spv",
+            "Type": "Fragment",
+            "EntryPoint": "main"
+        },
+        {
+            "Key": "Resources/Shader/GBufferSpriteVS",
+            "DxilPath": "Resources/Shader/bin/dxil/gbufferSpriteVS.cso",
+            "SpirvPath": "Resources/Shader/bin/spirv/gbufferSpriteVS.spv",
+            "Type": "Vertex",
+            "EntryPoint": "main"
+        },
+        {
+            "Key": "Resources/Shader/GBufferSpritePS",
+            "DxilPath": "Resources/Shader/bin/dxil/gbufferSpritePS.cso",
+            "SpirvPath": "Resources/Shader/bin/spirv/gbufferSpritePS.spv",
+            "Type": "Fragment",
+            "EntryPoint": "main"
+        },
+        {
+            "Key": "Resources/Shader/TerrainVS",
+            "DxilPath": "Resources/Shader/bin/dxil/terrainVS.cso",
+            "SpirvPath": "Resources/Shader/bin/spirv/terrainVS.spv",
+            "Type": "Vertex",
+            "EntryPoint": "main"
+        },
+        {
+            "Key": "Resources/Shader/TerrainPS",
+            "DxilPath": "Resources/Shader/bin/dxil/terrainPS.cso",
+            "SpirvPath": "Resources/Shader/bin/spirv/terrainPS.spv",
+            "Type": "Fragment",
+            "EntryPoint": "main"
+        }
+    ]
+}

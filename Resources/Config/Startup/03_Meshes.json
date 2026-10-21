@@ -1,0 +1,8 @@
+{
+    "Meshes": [
+        "Resources/Model/Cube2_Cube.001.bammesh",
+        "Resources/Model/Plane_Plane.bammesh",
+        "Resources/Model/TestBall_Sphere.001.bammesh",
+        "Resources/Model/UVSphere_Sphere.001.bammesh"
+    ]
+}

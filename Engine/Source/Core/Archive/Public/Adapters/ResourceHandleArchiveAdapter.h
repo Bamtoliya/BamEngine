@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "ResourceManager.h"
 #include <archive/ArchiveInterface.h>
@@ -22,6 +22,22 @@ namespace archive_resource
             handle = manager.FindHandleByKey(assetPath);
             if (manager.IsValid(handle)) return handle;
         }
+
+        static const std::array<std::wstring_view, 10> candidateExtensions = {
+            L".bammat.json", L".bammat",
+            L".bammatinst.json", L".bammatinst",
+            L".bamsprite.json", L".bamsprite",
+            L".bammesh.json", L".bammesh",
+            L".json", L".beve"
+        };
+
+        // 1. 이미 로드된 리소스 중 확장자가 붙은 키 탐색
+        for (const auto& ext : candidateExtensions)
+        {
+            handle = manager.FindHandleByKey(assetKey + std::wstring(ext));
+            if (manager.IsValid(handle)) return handle;
+        }
+
         const std::filesystem::path keyPath(assetKey);
         const std::wstring keyExt = keyPath.extension().wstring();
         if (keyExt.rfind(L".bam", 0) == 0)
@@ -37,6 +53,8 @@ namespace archive_resource
             handle = manager.FindHandleByKey(assetKey + L".beve");
             if (manager.IsValid(handle)) return handle;
         }
+
+        // 2. assetPath가 있으면 파일 로드 시도
         if (!assetPath.empty())
         {
             const std::filesystem::path fsPath(assetPath);
@@ -49,7 +67,20 @@ namespace archive_resource
                     return manager.LoadFile(assetPath + L".beve");
             }
             handle = manager.LoadFile(assetPath);
+            if (manager.IsValid(handle)) return handle;
         }
+
+        // 3. assetPath가 비어있고 assetKey만 있을 때, 디스크 파일 탐색 및 자동 로드
+        for (const auto& ext : candidateExtensions)
+        {
+            const std::wstring candidatePath = assetKey + std::wstring(ext);
+            if (std::filesystem::exists(candidatePath))
+            {
+                handle = manager.LoadFile(candidatePath);
+                if (manager.IsValid(handle)) return handle;
+            }
+        }
+
         return handle;
     }
 

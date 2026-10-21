@@ -1,0 +1,24 @@
+{
+    "AssetHeader": {
+        "MagicNumber": 6072351289621954882,
+        "ResourceType": 2,
+        "Version": 0
+    },
+    "m_Key": "Resources/Texture/uv1_1.bamsprite.json",
+    "m_Path": "I:/BamtoliyaGithub/BamEngine/Resources/Texture/uv1_1.bamsprite.json",
+    "m_Pivot": [0.5, 0.5],
+    "m_PixelPerUnit": 1,
+    "m_Region": {
+        "height": 0,
+        "left": 0,
+        "top": 0,
+        "width": 0
+    },
+    "m_ResourceType": 2,
+    "m_Texture": {
+        "AssetKey": "Resources/Texture/uv1.png",
+        "AssetPath": "Resources/Texture/uv1.png",
+        "Null": false
+    },
+    "m_Version": 0
+}

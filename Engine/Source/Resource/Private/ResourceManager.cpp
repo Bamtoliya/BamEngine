@@ -6,6 +6,23 @@
 
 namespace
 {
+	static const wchar_t* GetResourceBinaryExtension(Engine::EResourceType type)
+	{
+		switch (type)
+		{
+		case Engine::EResourceType::Material:         return L".bammat";
+		case Engine::EResourceType::MaterialInstance: return L".bammatinst";
+		case Engine::EResourceType::Mesh:             return L".bammesh";
+		case Engine::EResourceType::Sprite:           return L".bamsprite";
+		case Engine::EResourceType::Skeleton:         return L".bamskel";
+		case Engine::EResourceType::Animation:        return L".bamanim";
+		case Engine::EResourceType::Model:            return L".bammodel";
+		case Engine::EResourceType::Texture:          return L".bamtex";
+		case Engine::EResourceType::Shader:           return L".bamshader";
+		default:                                      return L".beve";
+		}
+	}
+
 	std::wstring ToProjectRelativePath(const std::wstring& inputPath)
 	{
 		namespace fs = std::filesystem;
@@ -605,6 +622,45 @@ EResult ResourceManager::SaveToBeveFile(Resource* resource, const wstring& fileP
 EResult ResourceManager::SaveToBinaryFile(Resource* resource, const wstring& filePath)
 {
 	return SaveToBeveFile(resource, filePath);
+}
+
+Engine::EResult Engine::ResourceManager::SaveAllRegisteredResources(bool saveAsBinary)
+{
+	std::shared_lock<std::shared_mutex> lock(m_PoolMutex);
+	uint32 savedCount = 0;
+	for (size_t index = 0; index < m_Resources.size(); ++index)
+	{
+		const ResourceSlot& slot = m_Resources[index];
+		if (!slot.IsActive || !slot.Instance) continue;
+		Resource* res = slot.Instance;
+		std::wstring key = res->GetKey();
+		if (key.empty()) continue;
+		std::filesystem::path outPath(key);
+		if (saveAsBinary)
+		{
+			// 기존 .json 제거 후 바이너리 전용 확장자로 치환
+			if (outPath.extension() == ".json") outPath.replace_extension();
+			outPath += GetResourceBinaryExtension(res->m_ResourceType);
+		}
+		else
+		{
+			if (outPath.extension() != ".json") outPath += L".json";
+		}
+		// 부모 디렉터리가 없으면 자동 생성
+		if (outPath.has_parent_path())
+		{
+			std::error_code ec;
+			std::filesystem::create_directories(outPath.parent_path(), ec);
+		}
+		EResult result = saveAsBinary ? SaveToBeveFile(res, outPath.wstring()) : SaveToJsonFile(res, outPath.wstring());
+		if (result == EResult::Success)
+		{
+			savedCount++;
+		}
+	}
+	ENGINE_LOG_INFO("[ResourceManager] Batch save completed: {} resources saved (Format: {}).",
+		savedCount, saveAsBinary ? "Binary(BEVE)" : "JSON");
+	return EResult::Success;
 }
 
 Handle ResourceManager::LoadFromJsonFile(const wstring& filePath)
