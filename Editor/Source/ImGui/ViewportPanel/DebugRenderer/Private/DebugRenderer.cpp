@@ -61,7 +61,7 @@ void DebugRenderer::Free()
 void DebugRenderer::SubmitDebugDraw(const CameraBuffer& cameraBuffer, const wstring& colorRTName)
 {
 	RegisterColliderDebug(cameraBuffer);
-	if (m_Vertices.empty() || colorRTName.empty()) return;
+	if (m_Vertices.empty() || colorRTName.empty() || !m_VertexBuffer) return;
 	RenderPass* pass = Engine::RenderPassManager::Get().GetRenderPassByID(m_RenderPassID);
 	pass->SetColorAttachments({ colorRTName });
 	Renderer::Get().RegisterViewportCamera(cameraBuffer, pass);
@@ -69,7 +69,7 @@ void DebugRenderer::SubmitDebugDraw(const CameraBuffer& cameraBuffer, const wstr
 	Engine::Renderer::Get().SubmitCustomCommand(
 		[this](f32 dt, Engine::RenderPass* pass)->EResult
 		{
-			if (m_Vertices.empty()) return EResult::Success;
+			if (m_Vertices.empty() || !m_VertexBuffer) return EResult::Success;
 
 			Engine::RHI* rhi = Engine::Renderer::Get().GetRHI();
 			ResourceManager& rm = ResourceManager::Get();

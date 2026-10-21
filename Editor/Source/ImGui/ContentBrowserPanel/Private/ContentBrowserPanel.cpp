@@ -90,8 +90,6 @@ static void ResolveConflict(const FileDropConflict& conflict, int action)
 	catch (...) {}
 }
 
-
-
 EResult ContentBrowserPanel::Initialize(void* arg)
 {
 	m_Name = L"Content Browser"; m_DisplayNameKey = "UI_CONTENT_BROWSER";
@@ -102,6 +100,10 @@ EResult ContentBrowserPanel::Initialize(void* arg)
 	m_LastDirectory = m_CurrentDirectory;
 	m_NeedToExpandTree = true;
 	memset(m_SearchBuffer, 0, sizeof(m_SearchBuffer));
+	m_FileWatcher = new efsw::FileWatcher();
+	m_FileListener = new ContentBrowserFileListener(&m_NeedsCacheRefresh);
+	m_WatchID = m_FileWatcher->addWatch(m_RootPath.string(), m_FileListener, true);
+	m_FileWatcher->watch();
 	AssetManager::Get().GetAsyncDelegate().AddLambda([this]() {
 		RequestRefresh();
 		});
@@ -118,57 +120,46 @@ void ContentBrowserPanel::Draw()
 			(ICON_FA_ARROW_ROTATE_RIGHT " " + LOCAL_FMT("ContentBrowser.Importing", (int)activeTasks)).c_str());
 		ImGui::Separator();
 	}
-
 	if (!m_Open) return;
-
 	const string windowTitle = LOCAL("UI_CONTENT_BROWSER") + "###ContentBrowserPanel";
 	ImGui::Begin(windowTitle.c_str(), &m_Open);
-
 	FileConfilictPopup();
-
 	if (m_CurrentDirectory != m_LastDirectory)
 	{
 		m_NeedToExpandTree = true;
 		m_LastDirectory = m_CurrentDirectory;
 	}
-
+	RefreshCacheIfNeeded();
 	static ImGuiTableFlags tableFlags = ImGuiTableFlags_Resizable | ImGuiTableFlags_ContextMenuInBody | ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV;
-
 	if (ImGui::BeginTable("ContentBrowserTableLayout", 2, tableFlags))
 	{
 		ImGui::TableSetupColumn(LOCAL_LABEL("ContentBrowser.Folders").c_str(), ImGuiTableColumnFlags_WidthFixed, 250.0f);
 		ImGui::TableSetupColumn(LOCAL_LABEL("ContentBrowser.Files").c_str(), ImGuiTableColumnFlags_WidthStretch);
-
 		ImGui::TableNextRow();
-
 		ImGui::TableNextColumn();
 		ImGui::BeginChild("TreeArea", ImVec2(0, 0), false);
 		DrawDirectoryTree(m_RootPath);
 		ImGui::EndChild();
-
 		ImGui::TableNextColumn();
 		DrawDirectoryGrid();
-
 		ImGui::EndTable();
 	}
 	if (ImGui::IsWindowAppearing()) m_NeedToExpandTree = true;
 	ImGui::End();
 	m_NeedToExpandTree = false;
 }
-
 void ContentBrowserPanel::ProcessEvent(const SDL_Event* event)
 {
-	if(event->type == SDL_EVENT_DROP_FILE)
+	if (event->type == SDL_EVENT_DROP_FILE)
 	{
 		const char* droppedFile = event->drop.data;
-		if(droppedFile)
+		if (droppedFile)
 		{
 			vector<string> droppedFiles = { droppedFile };
 			OnExteranalDropped(droppedFiles);
 		}
 	}
 }
-
 void ContentBrowserPanel::Free()
 {
 	Safe_Delete(m_FileListener);
@@ -178,17 +169,21 @@ void ContentBrowserPanel::Free()
 #pragma region TreeView
 void ContentBrowserPanel::DrawDirectoryTree(const filesystem::path& path)
 {
-	vector<filesystem::path> childDirectories;
-	std::error_code ec;
-	for (const auto& directoryEntry : filesystem::directory_iterator(path, ec))
+	auto it = m_CachedSubdirectories.find(path);
+	if (it == m_CachedSubdirectories.end())
 	{
-		if (!ec && directoryEntry.is_directory(ec))
-			childDirectories.push_back(directoryEntry.path());
+		vector<filesystem::path> subDirs;
+		std::error_code ec;
+		for (const auto& directoryEntry : filesystem::directory_iterator(path, ec))
+		{
+			if (!ec && directoryEntry.is_directory(ec))
+				subDirs.push_back(directoryEntry.path());
+		}
+		it = m_CachedSubdirectories.emplace(path, std::move(subDirs)).first;
 	}
-
+	const vector<filesystem::path>& childDirectories = it->second;
 	const bool hasChildDirectory = !childDirectories.empty();
 	const bool isSelected = (m_CurrentDirectory == path);
-
 	bool shouldDrawChildren = ContentBrowserTreeItem::DrawNode(
 		path,
 		m_RootPath,
@@ -200,7 +195,6 @@ void ContentBrowserPanel::DrawDirectoryTree(const filesystem::path& path)
 		sizeof(m_RenameBuffer),
 		m_CurrentDirectory
 	);
-
 	if (shouldDrawChildren)
 	{
 		for (const auto& childPath : childDirectories)
@@ -510,50 +504,6 @@ void ContentBrowserPanel::DrawGrid(bool enterPressed)
 	f32 panelWidth = ImGui::GetContentRegionAvail().x;
 	int32 columnCount = static_cast<int>(panelWidth / cellSize);
 	if (columnCount < 1) columnCount = 1;
-
-	bool needsCacheRefresh = false;
-
-	if (m_LastWatchedDirectory != m_CurrentDirectory)
-	{
-		m_LastWatchedDirectory = m_CurrentDirectory;
-		needsCacheRefresh = true;
-		if (!m_FileWatcher)
-		{
-			m_FileWatcher = new efsw::FileWatcher();
-			m_FileListener = new ContentBrowserFileListener(&m_NeedsCacheRefresh);
-			m_FileWatcher->watch();
-		}
-
-		if(m_WatchID > 0)
-			m_FileWatcher->removeWatch(m_WatchID);
-
-		const string& watchPath = m_CurrentDirectory.string();
-		m_WatchID = m_FileWatcher->addWatch(watchPath, m_FileListener, false);
-	}
-	else if (m_NeedsCacheRefresh.exchange(false))
-	{
-		needsCacheRefresh = true;
-	}
-
-	if(needsCacheRefresh)
-	{
-		m_CachedEntries.clear();
-		std::error_code ec;
-		if (std::filesystem::exists(m_CurrentDirectory, ec))
-		{
-			for (auto& directoryEntry : filesystem::directory_iterator(m_CurrentDirectory, ec))
-			{
-				m_CachedEntries.push_back(directoryEntry);
-			}
-		}
-		else
-		{
-			// 현재 디렉토리가 외부에서 통째로 날아갔다면 루트 에셋 폴더로 강제 복귀
-			m_CurrentDirectory = m_RootPath;
-			m_LastWatchedDirectory = ""; // 다음 프레임에 Watcher 재설정을 유도
-		}
-	}
-
 	if (ImGui::BeginTable("ContentBrowserTable", columnCount))
 	{
 		string searchStr(m_SearchBuffer);
@@ -667,6 +617,40 @@ void ContentBrowserPanel::FileConfilictPopup()
 #pragma endregion
 
 #pragma region Helper
+void ContentBrowserPanel::RefreshCacheIfNeeded()
+{
+	const bool fileSystemChanged = m_NeedsCacheRefresh.exchange(false);
+	const bool directoryChanged = (m_LastWatchedDirectory != m_CurrentDirectory);
+
+	if (fileSystemChanged)
+	{
+		m_CachedSubdirectories.clear();
+	}
+
+	if (!fileSystemChanged && !directoryChanged)
+	{
+		return;
+	}
+
+	m_LastWatchedDirectory = m_CurrentDirectory;
+	m_CachedEntries.clear();
+
+	std::error_code ec;
+	if (std::filesystem::exists(m_CurrentDirectory, ec))
+	{
+		for (auto& directoryEntry : filesystem::directory_iterator(m_CurrentDirectory, ec))
+		{
+			m_CachedEntries.push_back(directoryEntry);
+		}
+	}
+	else
+	{
+		// 현재 디렉토리가 외부에서 통째로 날아갔다면 루트 에셋 폴더로 강제 복귀
+		m_CurrentDirectory = m_RootPath;
+		m_LastWatchedDirectory.clear();
+		m_CachedSubdirectories.clear();
+	}
+}
 void ContentBrowserPanel::OnExteranalDropped(const vector<string>& droppedFiles)
 {
 	for (const string& filepathStr : droppedFiles)

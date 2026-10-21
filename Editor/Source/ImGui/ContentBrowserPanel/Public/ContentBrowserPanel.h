@@ -3,6 +3,7 @@
 #include "Editor_Includes.h"
 #include "ImGuiInterface.h"
 #include <filesystem>
+#include <map>
 #include <unordered_map>
 #include <efsw/efsw.hpp>
 
@@ -65,6 +66,7 @@ private:
 #pragma endregion
 #pragma region Helper Functions
 private:
+	void RefreshCacheIfNeeded();
 	void OnExteranalDropped(const vector<string>& droppedFiles);
 private:
 	void DrawRename(const filesystem::path& path);
@@ -91,23 +93,18 @@ private:
 	uint32 m_FilterMask = 0;
 	string m_LastSearchString;
 	vector<filesystem::directory_entry> m_SearchResults;
-
 private:
+	map<filesystem::path, vector<filesystem::path>> m_CachedSubdirectories;
 	vector<filesystem::directory_entry> m_CachedEntries;
 	filesystem::path m_LastWatchedDirectory;
-	efsw::FileWatcher* m_FileWatcher;
-	efsw::WatchID m_WatchID;
-	class ContentBrowserFileListener* m_FileListener;
+	efsw::FileWatcher* m_FileWatcher = nullptr;
+	efsw::WatchID m_WatchID = 0;
+	class ContentBrowserFileListener* m_FileListener = nullptr;
 	atomic<bool> m_NeedsCacheRefresh = { false };
-
 private:
 	bool m_OpenConflictPopup = false;
 	bool m_ApplyToAllConflicts = false;
-	vector< FileDropConflict> m_PendingConflicts;
-
-private:
-	//inline static unordered_map<string, void*> m_ThumbnailCache;
-	//inline static unordered_map<string, RHITexture*> m_ThumbnailTextures;
+	vector<FileDropConflict> m_PendingConflicts;
 #pragma endregion
 };
 END

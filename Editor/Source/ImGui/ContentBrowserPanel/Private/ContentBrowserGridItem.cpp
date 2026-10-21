@@ -8,6 +8,8 @@
 #include "Mesh.h"
 #include <archive/JsonArchive.h>
 #include <archive/BeveArchive.h>
+#include "SceneManager.h"
+#include "Application.h"
 
 namespace
 {
@@ -24,8 +26,7 @@ namespace
 			archive::JsonArchive ar;
 			if (!ar.LoadFromFile(path)) return Engine::EResourceType::Unknown;
 			res = ar.ReadObject("AssetHeader", header, [](archive::IArchive& fields, Engine::ResourceBinaryHeader& h) {
-				fields.Read("ResourceType", h.ResourceType);
-				return archive::ArchiveResult{};
+				return fields.Read("ResourceType", h.ResourceType);
 				});
 		}
 		else
@@ -33,12 +34,45 @@ namespace
 			archive::BeveArchive ar;
 			if (!ar.LoadFromFile(path)) return Engine::EResourceType::Unknown;
 			res = ar.ReadObject("AssetHeader", header, [](archive::IArchive& fields, Engine::ResourceBinaryHeader& h) {
-				fields.Read("ResourceType", h.ResourceType);
-				return archive::ArchiveResult{};
+				return fields.Read("ResourceType", h.ResourceType);
 				});
 		}
 
 		return res ? header.ResourceType : Engine::EResourceType::Unknown;
+	}
+
+	bool IsSceneFile(const std::filesystem::path& path)
+	{
+		std::string ext = path.extension().string();
+		for (char& c : ext) c = static_cast<char>(tolower(c));
+		if (ext != ".json") return false;
+
+		std::string stem = path.stem().string();
+		for (char& c : stem) c = static_cast<char>(tolower(c));
+		if (stem.ends_with(".scene") || stem.ends_with(".bamscene")) return true;
+
+		// 일반 .json 파일인 경우 루트의 "Scene" 키 존재 여부 확인
+		archive::JsonArchive ar;
+		if (!ar.LoadFromFile(path)) return false;
+
+		bool hasScene = false;
+		return ar.HasField("Scene", hasScene) && hasScene;
+	}
+
+	bool OpenSceneFromFile(const std::filesystem::path& path)
+	{
+		archive::JsonArchive ar;
+		const Engine::EResult result = Engine::SceneManager::Get().LoadScene(ar, path.wstring());
+		if (result != Engine::EResult::Success)
+		{
+			ENGINE_LOG_ERROR("Failed to load scene: {} ({})", path.string(), Engine::ResultToString(result));
+			return false;
+		}
+
+		Editor::SelectionManager::Get().ClearSelection(true);
+		Editor::Application::Get().GetEditHistory().Clear();
+		ENGINE_LOG_INFO("Successfully loaded scene from ContentBrowser: {}", path.string());
+		return true;
 	}
 
 	const char* GetBinaryExtension(Engine::EResourceType type)
@@ -58,6 +92,41 @@ namespace
 		default:                              return ".beve";
 		}
 	}
+
+	void HandleItemDoubleClick(const std::filesystem::directory_entry& directoryEntry,
+		std::filesystem::path& currentDirectory, char* searchBuffer)
+	{
+		const auto& path = directoryEntry.path();
+
+		if (directoryEntry.is_directory())
+		{
+			currentDirectory /= path.filename();
+			if (searchBuffer) searchBuffer[0] = '\0';
+			return;
+		}
+
+		// 1. Scene JSON 파일 더블클릭 시 씬 로드
+		if (IsSceneFile(path))
+		{
+			OpenSceneFromFile(path);
+			return;
+		}
+
+		// 2. 일반 리소스 에디터 오픈
+		Editor::SelectionManager::Get().SetSelectedAsset(path);
+		for (auto* panel : Editor::ImGuiManager::Get().GetImGuiPanels())
+		{
+			if (auto* resEditor = dynamic_cast<Editor::ResourceEditorInterface*>(panel))
+			{
+				if (resEditor->IsSupported(path))
+				{
+					resEditor->SetTargetResource(path);
+					resEditor->Open();
+					break;
+				}
+			}
+		}
+	}
 }
 
 void ContentBrowserGridItem::Draw(const std::filesystem::directory_entry& directoryEntry, const std::filesystem::path& rootPath, ImTextureID thumbnailTexID, f32 thumbnailSize, f32 padding, std::filesystem::path& outRenamingPath, char* renameBuffer, size_t renameBufferSize, std::filesystem::path& currentDirectory, char* searchBuffer)
@@ -75,34 +144,10 @@ void ContentBrowserGridItem::Draw(const std::filesystem::directory_entry& direct
 	ContextMenu(path, outRenamingPath, renameBuffer, renameBufferSize);
 	DragAndDropTarget(payloadPath);
 
-	// 썸네일 위에서 더블클릭 시 폴더 이동
-		// 썸네일 위에서 더블클릭 시 폴더 이동 또는 리소스 에디터 오픈
-	if (ImGui::IsItemHovered())
+	// 썸네일 위에서 더블클릭 시 처리
+	if (ImGui::IsItemHovered() && MOUSE_BUTTON_DOUBLE_CLICK(EMouseButton::Left))
 	{
-		if (MOUSE_BUTTON_DOUBLE_CLICK(EMouseButton::Left))
-		{
-			if (directoryEntry.is_directory())
-			{
-				currentDirectory /= path.filename();
-				if (searchBuffer) searchBuffer[0] = '\0';
-			}
-			else
-			{
-				SelectionManager::Get().SetSelectedAsset(path);
-				for (auto* panel : ImGuiManager::Get().GetImGuiPanels())
-				{
-					if (auto* resEditor = dynamic_cast<ResourceEditorInterface*>(panel))
-					{
-						if (resEditor->IsSupported(path))
-						{
-							resEditor->SetTargetResource(path);
-							resEditor->Open();
-							break;
-						}
-					}
-				}
-			}
-		}
+		HandleItemDoubleClick(directoryEntry, currentDirectory, searchBuffer);
 	}
 
 	// 2. 이름 변경 중인지 확인 후 하단 UI 분기
@@ -258,6 +303,15 @@ void ContentBrowserGridItem::ContextMenu(const std::filesystem::path& path,
 				filename.ends_with(".frag") || filename.ends_with(".comp") || filename.ends_with(".hlsli"))
 			{
 				ContextMenu_Shader(path);
+			}
+		}
+
+		if (!std::filesystem::is_directory(path) && IsSceneFile(path))
+		{
+			ImGui::Separator();
+			if (ImGui::MenuItem((ICON_FA_FOLDER_OPEN " " + LOCAL_LABEL("UI_LOAD_SCENE")).c_str()))
+			{
+				OpenSceneFromFile(path);
 			}
 		}
 
@@ -469,29 +523,10 @@ void ContentBrowserGridItem::DrawNameBox(const std::filesystem::directory_entry&
 	ImGui::SetCursorScreenPos(boxMin);
 	ImGui::Dummy(ImVec2(boxWidth, boxHeight));
 
+	// 네임 박스 위에서 더블클릭 시 처리
 	if (ImGui::IsItemHovered() && MOUSE_BUTTON_DOUBLE_CLICK(EMouseButton::Left))
 	{
-		if (directoryEntry.is_directory())
-		{
-			currentDirectory /= path.filename();
-			if (searchBuffer) searchBuffer[0] = '\0';
-		}
-		else
-		{
-			SelectionManager::Get().SetSelectedAsset(path);
-			for (auto* panel : ImGuiManager::Get().GetImGuiPanels())
-			{
-				if (auto* resEditor = dynamic_cast<ResourceEditorInterface*>(panel))
-				{
-					if (resEditor->IsSupported(path))
-					{
-						resEditor->SetTargetResource(path);
-						resEditor->Open();
-						break;
-					}
-				}
-			}
-		}
+		HandleItemDoubleClick(directoryEntry, currentDirectory, searchBuffer);
 	}
 }
 

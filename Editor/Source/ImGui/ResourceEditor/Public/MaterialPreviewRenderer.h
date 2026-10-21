@@ -4,14 +4,11 @@
 #include "ResourceHandle.h"
 #include "Mesh.h"
 #include "MaterialInterface.h"
-#include "RenderTarget.h"
-#include "RenderPass.h"
+#include "ViewportDeferredPipeline.h"
 
 BEGIN(Engine)
-class Mesh;
-class MaterialInterface;
-class RenderTarget;
-class RenderPass;
+class Scene;
+class Entity;
 END
 
 BEGIN(Editor)
@@ -30,37 +27,40 @@ public:
 	MaterialPreviewRenderer() = default;
 	~MaterialPreviewRenderer();
 
-	void Initialize(uint32 width = 256, uint32 height = 256);
+	void Initialize(uint32 width = 512, uint32 height = 512);
 	void Free();
 
-	// 매 프레임 프리뷰 렌더링 커맨드 제출
+	// 매 프레임 프리뷰 씬 업데이트 및 파이프라인 제출
 	void Submit(Engine::MaterialInterface* material, f32 dt);
 
-	// ImGui에 프리뷰 뷰포트 및 컨트롤 UI 그리기
+	// ImGui 뷰포트 UI 및 조작 렌더링
 	void DrawUI(Engine::MaterialInterface* material);
 
 	[[nodiscard]] Engine::RHITexture* GetPreviewRHITexture() const;
 
 private:
-	void LoadPreviewMeshes();
+	void SetupPreviewScene();
+	void UpdatePreviewMesh(Engine::MaterialInterface* material);
 
 private:
-	uint32 m_Width = 256;
-	uint32 m_Height = 256;
+	uint32 m_Width = 512;
+	uint32 m_Height = 512;
 
-	Engine::RenderTarget* m_ColorRT = nullptr;
-	Engine::RenderTarget* m_DepthRT = nullptr;
-	Engine::RenderPass* m_RenderPass = nullptr;
-	Engine::RenderPassID m_RenderPassID = 0;
+	// 독립 뷰포트 디퍼드 파이프라인
+	ViewportDeferredPipeline m_Pipeline;
 
-	// 프리뷰 메쉬들
+	// 프리뷰 전용 독립 씬 및 엔티티
+	Engine::Scene* m_PreviewScene = nullptr;
+	entt::entity m_MeshEntity = entt::null;
+	entt::entity m_LightEntity = entt::null;
+
+	// 프리뷰 메쉬 핸들
 	Engine::ResourceHandle<Engine::Mesh> m_SphereMesh;
 	Engine::ResourceHandle<Engine::Mesh> m_CubeMesh;
 	Engine::ResourceHandle<Engine::Mesh> m_PlaneMesh;
 	EPreviewMeshType m_CurrentMeshType = EPreviewMeshType::Sphere;
 
-private:
-	// Camera 속성
+	// 카메라 속성
 	vec3 m_Target = vec3(0.0f);
 	f32 m_Yaw = 0.5f;
 	f32 m_Pitch = 0.25f;
