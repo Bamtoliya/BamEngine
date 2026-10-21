@@ -1,5 +1,6 @@
 ﻿#pragma once
 #include "InputManager.h"
+#include "ShortcutManager.h"
 
 #pragma region Third Library
 #include <fmt/core.h>
@@ -20,9 +21,12 @@
 #include "MetricsPanel.h"
 #include "GraphPanel.h"
 #include "ResourceManagerInspector.h"
+#include "ShortcutSettingsPanel.h"
+#include "EditorActionRegistry.h"
 
 #include "ResourceEditors.h"
 #include "TerrainEditor.h"
+
 
 #include "DirectX12Texture.h"
 
@@ -145,6 +149,8 @@ EResult ImGuiManager::Initialize(void* arg)
 
 	if (CreateDefaultPanels() != EResult::Success)
 		return fail("CreateDefaultPanels");
+
+	EditorActionRegistry::RegisterAll();
 
 	return EResult::Success;
 }
@@ -313,18 +319,11 @@ void ImGuiManager::Draw()
 	}
 	m_PendingRemovePanels.clear();
 	ImGui::ShowMetricsWindow();
-	if (!ImGui::IsAnyItemActive() && !ImGuizmo::IsUsing() && !InputManager::Get().IsMouseButtonPressed(EMouseButton::Left))
+	if(!ImGui::IsAnyItemActive() && !ImGuizmo::IsUsing() && !InputManager::Get().IsMouseButtonPressed(EMouseButton::Left))
 	{
 		history.Flush();
-		const auto& io = ImGui::GetIO();
-		if (history.ShortcutsAllowed() && !io.WantTextInput && InputManager::Get().IsCtrlPressed() && !InputManager::Get().IsAltPressed())
-		{
-			if (InputManager::Get().IsKeyButtonDown(EKeyCode::Z))
-			{
-				if (InputManager::Get().IsShiftPressed()) history.Redo(); else history.Undo();
-			}
-			else if (InputManager::Get().IsKeyButtonDown(EKeyCode::Y)) history.Redo();
-		}
+		const bool suppressed = ImGui::GetIO().WantTextInput;
+		ShortcutManager::Get().ProcessShortcuts(EShortcutContext::Global, suppressed);
 	}
 }
 
@@ -424,11 +423,20 @@ EResult ImGuiManager::CreateDefaultPanels()
 	UIViewportPanel* uiViewportPanel = new UIViewportPanel();
 	uiViewportPanel->Initialize(&UIViewportPanelDesc);
 	AddImGuiPanel(uiViewportPanel);
+	GameViewportPanelDesc gamePanelDesc;
+	gamePanelDesc.Name = L"Game View";
+	gamePanelDesc.DisplayNameKey = "Viewport.GameTitle";
+	gamePanelDesc.RenderTargetWidth = g_WindowWidth;
+	gamePanelDesc.RenderTargetHeight = g_WindowHeight;
+	GameViewportPanel* gameViewportPanel = new GameViewportPanel();
+	gameViewportPanel->Initialize(&gamePanelDesc);
+	AddImGuiPanel(gameViewportPanel);
 	AddImGuiPanel(new InspectorPanel());
 	AddImGuiPanel(new HierarchyPanel());
 	ContentBrowserPanel* contentBrowserPanel = new ContentBrowserPanel();
 	contentBrowserPanel->Initialize();
 	AddImGuiPanel(contentBrowserPanel);
+	AddImGuiPanel(new ShortcutSettingsPanel());
 	AddImGuiPanel(new ConsolePanel());
 	AddImGuiPanel(new MetricsPanel());
 	AddImGuiPanel(new GraphPanel());

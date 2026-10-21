@@ -10,3 +10,17 @@
 #define GRAPHICS_BACKEND EGraphicsBackend::Vulkan
 #define RESOURCE_PATH L"Resources/"
 #define LOG_PATH L"Logs/EngineLog.log"
+
+// Configuration Paths
+#define CONFIG_PATH "Resources/Config/"
+#define STARTUP_MANIFEST_PATH "Resources/Config/Startup/StartupManifest.json"
+#define STARTUP_CONFIG_DIR "Resources/Config/Startup/"
+
+#define ACTION_MENU_ITEM(label, actionId) \
+    do { \
+        auto& _sm = ShortcutManager::Get(); \
+        if (ImGui::MenuItem((label), _sm.GetShortcutHint(actionId), false, _sm.CanExecuteAction(actionId))) \
+        { \
+            _sm.ExecuteAction(actionId); \
+        } \
+    } while (0)

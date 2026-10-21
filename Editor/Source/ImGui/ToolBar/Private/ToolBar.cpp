@@ -5,6 +5,7 @@
 
 #include "Scene.h"
 #include "SceneManager.h"
+#include "ShortcutManager.h"
 
 #include "LocalizationManager.h"
 
@@ -134,19 +135,14 @@ void ToolBar::DrawEditMenu()
 {
 	if (ImGui::BeginMenu(LOCAL_CSTR("UI_EDIT")))
 	{
-		auto& history = Application::Get().GetEditHistory();
-		history.Flush();
-		const auto localized = [](const std::string& key)
+		ACTION_MENU_ITEM(LOCAL_CSTR("UI_UNDO"), "Edit.Undo");
+		ACTION_MENU_ITEM(LOCAL_CSTR("UI_REDO"), "Edit.Redo");
+		ImGui::Separator();
+		if (ImGui::MenuItem(LOCAL_CSTR("Shortcuts.Title")))
 		{
-			auto text = LocalizationManager::Get().GetText(key);
-			return text.empty() ? key : text;
-		};
-		std::string undo = localized("UI_UNDO"), redo = localized("UI_REDO");
-		if (!history.Commands().UndoLabel().empty()) undo += " " + localized(history.Commands().UndoLabel());
-		if (!history.Commands().RedoLabel().empty()) redo += " " + localized(history.Commands().RedoLabel());
-		if (ImGui::MenuItem(undo.c_str(), "Ctrl+Z", false, history.CanUndo())) history.Undo();
-		if (ImGui::MenuItem(redo.c_str(), "Ctrl+Y / Ctrl+Shift+Z", false, history.CanRedo())) history.Redo();
-        if (!history.Error().empty()) ImGui::TextWrapped("%s", localized(history.Error()).c_str());
+			if (auto* panel = ImGuiManager::Get().GetImGuiPanel(L"ShortcutSettings"))
+				panel->Open();
+		}
 		ImGui::EndMenu();
 	}
 }
@@ -158,23 +154,10 @@ void ToolBar::DrawSceneMenu()
 {
 	if (ImGui::BeginMenu(LOCAL_CSTR("UI_SCENE")))
 	{
-		if (ImGui::MenuItem(LOCAL_CSTR("UI_NEW_SCENE"), "Ctrl+N"))
-		{
-			//SelectionManager::Get().ClearSelection(true);
-			NewScene();
-		}
-
-		if (ImGui::MenuItem(LOCAL_CSTR("UI_SAVE_SCENE"), "Ctrl+S"))
-		{
-			SaveScene();
-		}
-
-		if (ImGui::MenuItem(LOCAL_CSTR("UI_LOAD_SCENE"), "Ctrl+O"))
-		{
-			//SelectionManager::Get().ClearSelection(true);
-			LoadScene();
-		}
-
+		ACTION_MENU_ITEM(LOCAL_CSTR("UI_NEW_SCENE"), "File.NewScene");
+		ACTION_MENU_ITEM(LOCAL_CSTR("UI_SAVE_SCENE"), "File.SaveScene");
+		ACTION_MENU_ITEM(LOCAL_CSTR("UI_LOAD_SCENE"), "File.LoadScene");
+		ImGui::Separator();
 		if (ImGui::MenuItem(LOCAL_CSTR("UI_CLOSE_SCENE")))
 		{
 			const EResult result = SceneManager::Get().CloseScene();
@@ -183,7 +166,6 @@ void ToolBar::DrawSceneMenu()
 			else
 				ENGINE_LOG_ERROR("Failed to close scene: {}", ResultToString(result));
 		}
-
 		ImGui::EndMenu();
 	}
 }

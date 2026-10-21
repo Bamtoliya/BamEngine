@@ -14,6 +14,9 @@
 #include "ShaderHotReloadManager.h"
 #include "AssetHotReloadManager.h"
 #include "TerrainUtility.h"
+#include "TerrainComponent.h" 
+#include "StartupResourceLoader.h"
+#include "ShortcutManager.h"
 
 BEGIN(Editor)
 
@@ -48,6 +51,7 @@ EResult Application::Initialize(void* arg)
     if (result != EResult::Success)
         return fail("InitializeRuntime", result);
 
+    ShortcutManager::Create();
     IntializeRenderer();
     InitializeResources();
 
@@ -77,6 +81,7 @@ EResult Application::Initialize(void* arg)
     {
         BAM_LOG(Warn, "HotReload", "GameModule.dll not found at: {}", modulePath.string());
     }
+    ShortcutManager::Get().LoadFromFile();
     return EResult::Success;
 }
 
@@ -115,6 +120,8 @@ void Application::Free()
     AssetHotReloadManager::Destroy();
     ShaderHotReloadManager::Destroy();
     ModuleHotReloadManager::Destroy();
+    ShortcutManager::Get().SaveToFile();
+    ShortcutManager::Destroy();
 
     if (m_Runtime)
     {
@@ -328,14 +335,22 @@ EResult Application::InitializeImGui()
         m_SelectionManager->ClearSelection(true);
     };
     m_EditHistory.AfterReplay = [this]
-    {
-        const bool locked = m_SelectionManager->IsPrimarySelectionLocked();
-        m_SelectionManager->SetPrimarySelectionLock(false);
-        for (const auto& [scene, id] : m_HistorySelection)
-            if (auto* entity = scene->FindEntityById(id)) m_SelectionManager->AddToEntitySelection(entity);
-        m_SelectionManager->SetPrimarySelectionLock(locked);
-        m_HistorySelection.clear();
-    };
+        {
+            const bool locked = m_SelectionManager->IsPrimarySelectionLocked();
+            m_SelectionManager->SetPrimarySelectionLock(false);
+            for (const auto& [scene, id] : m_HistorySelection)
+                if (auto* entity = scene->FindEntityById(id)) m_SelectionManager->AddToEntitySelection(entity);
+            m_SelectionManager->SetPrimarySelectionLock(locked);
+            m_HistorySelection.clear();
+
+            // Undo / Redo 후 복원된 터레인의 GPU 높이맵 동기화 보장
+            for (auto* scene : SceneManager::Get().GetActiveScenes())
+            {
+                if (!scene) continue;
+                for (auto [entity, terrain] : scene->GetRegistry().view<Engine::TerrainComponent>().each())
+                    terrain.IsDirty = true;
+            }
+        };
     if (!m_SelectionManager)
     {
         fmt::print(stderr, "SelectionManager Creation Failed\n");
@@ -383,10 +398,8 @@ void Application::InitializeLocalization()
 #pragma region Resources
 void Application::InitializeResources()
 {
-    InitializeFiles();
-    InitializeShaders();
     InitializeMeshes();
-    InitializeMaterials();
+    StartupResourceLoader::LoadPipeline(STARTUP_MANIFEST_PATH);
 }
 
 void Application::InitializeFiles()
@@ -718,6 +731,17 @@ void Application::InitializeShaders()
         terrainVSDesc.entryPoint = "main";
         rm.LoadResource<Shader>(&terrainVSDesc);
     }
+
+    ShaderDesc terrainPSDesc = {};
+    {
+        terrainPSDesc.Key = RESOURCE_PATH L"Shader/TerrainPS";
+        terrainPSDesc.Path = RESOURCE_PATH L"Shader/bin/dxil/terrainPS.cso";
+        if (Renderer::Get().GetRHIType() == ERHIType::SDLGPU)
+            terrainPSDesc.Path = RESOURCE_PATH L"Shader/bin/spirv/terrainPS.spv";
+        terrainPSDesc.shaderType = EShaderType::Fragment;
+        terrainPSDesc.entryPoint = "main";
+        rm.LoadResource<Shader>(&terrainPSDesc);
+    }
 }
 
 void Application::InitializeMeshes()
@@ -972,12 +996,14 @@ void Application::InitializeMaterials()
     MaterialDesc terrainMatDesc = {};
     terrainMatDesc.Key = RESOURCE_PATH L"Material/TerrainMaterial";
     terrainMatDesc.VertexShaderHandle = resourceManager.GetResourceHandle<Shader>(RESOURCE_PATH L"Shader/TerrainVS");
-    terrainMatDesc.PixelShaderHandle = resourceManager.GetResourceHandle<Shader>(RESOURCE_PATH L"Shader/GBufferPS");
+    terrainMatDesc.PixelShaderHandle = resourceManager.GetResourceHandle<Shader>(RESOURCE_PATH L"Shader/TerrainPS"); // <-- TerrainPS로 교체
     terrainMatDesc.BlendMode = EBlendMode::Opaque;
     terrainMatDesc.CullMode = ECullMode::None;
     terrainMatDesc.DepthMode = EDepthMode::ReadWrite;
     Material* terrainMat = resourceManager.LoadResource<Material>(&terrainMatDesc).Get();
     terrainMat->SetTextureBinding("Diffuse", 0, resourceManager.GetResourceHandle<Texture>(RESOURCE_PATH L"Texture/white1x1.png"));
+    terrainMat->SetTextureBinding("RockDiffuse", 2, resourceManager.GetResourceHandle<Texture>(RESOURCE_PATH L"Texture/white1x1.png"));
+    terrainMat->SetTextureBinding("DirtDiffuse", 3, resourceManager.GetResourceHandle<Texture>(RESOURCE_PATH L"Texture/white1x1.png"));
     terrainMat->SetPassShader(
         ERenderPassType::Shadow,
         resourceManager.GetResourceHandle<Shader>(RESOURCE_PATH L"Shader/ShadowDepthVS"),

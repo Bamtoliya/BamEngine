@@ -26,10 +26,10 @@ private:
 #pragma region Scene Menu
 private:
 	void DrawSceneMenu();
-private:
-	void NewScene();
-	void SaveScene();
-	void LoadScene();
+public:
+	static void NewScene();
+	static void SaveScene();
+	static void LoadScene();
 #pragma endregion
 
 #pragma region Window Menu

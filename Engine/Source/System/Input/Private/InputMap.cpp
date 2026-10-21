@@ -212,6 +212,65 @@ EKeyCode StringToEngineKeyCode(const string& keyString)
 
     return EKeyCode::Unknown;
 }
+const char* EngineKeyCodeToString(EKeyCode key)
+{
+    switch (key)
+    {
+    case EKeyCode::A: return "A"; case EKeyCode::B: return "B"; case EKeyCode::C: return "C";
+    case EKeyCode::D: return "D"; case EKeyCode::E: return "E"; case EKeyCode::F: return "F";
+    case EKeyCode::G: return "G"; case EKeyCode::H: return "H"; case EKeyCode::I: return "I";
+    case EKeyCode::J: return "J"; case EKeyCode::K: return "K"; case EKeyCode::L: return "L";
+    case EKeyCode::M: return "M"; case EKeyCode::N: return "N"; case EKeyCode::O: return "O";
+    case EKeyCode::P: return "P"; case EKeyCode::Q: return "Q"; case EKeyCode::R: return "R";
+    case EKeyCode::S: return "S"; case EKeyCode::T: return "T"; case EKeyCode::U: return "U";
+    case EKeyCode::V: return "V"; case EKeyCode::W: return "W"; case EKeyCode::X: return "X";
+    case EKeyCode::Y: return "Y"; case EKeyCode::Z: return "Z";
+
+    case EKeyCode::Num0: return "0"; case EKeyCode::Num1: return "1"; case EKeyCode::Num2: return "2";
+    case EKeyCode::Num3: return "3"; case EKeyCode::Num4: return "4"; case EKeyCode::Num5: return "5";
+    case EKeyCode::Num6: return "6"; case EKeyCode::Num7: return "7"; case EKeyCode::Num8: return "8";
+    case EKeyCode::Num9: return "9";
+
+    case EKeyCode::Numpad0: return "Numpad0"; case EKeyCode::Numpad1: return "Numpad1";
+    case EKeyCode::Numpad2: return "Numpad2"; case EKeyCode::Numpad3: return "Numpad3";
+    case EKeyCode::Numpad4: return "Numpad4"; case EKeyCode::Numpad5: return "Numpad5";
+    case EKeyCode::Numpad6: return "Numpad6"; case EKeyCode::Numpad7: return "Numpad7";
+    case EKeyCode::Numpad8: return "Numpad8"; case EKeyCode::Numpad9: return "Numpad9";
+    case EKeyCode::NumpadAdd: return "Numpad+"; case EKeyCode::NumpadSubtract: return "Numpad-";
+    case EKeyCode::NumpadMultiply: return "Numpad*"; case EKeyCode::NumpadDivide: return "Numpad/";
+    case EKeyCode::NumpadEnter: return "NumpadEnter";
+
+    case EKeyCode::F1: return "F1"; case EKeyCode::F2: return "F2"; case EKeyCode::F3: return "F3";
+    case EKeyCode::F4: return "F4"; case EKeyCode::F5: return "F5"; case EKeyCode::F6: return "F6";
+    case EKeyCode::F7: return "F7"; case EKeyCode::F8: return "F8"; case EKeyCode::F9: return "F9";
+    case EKeyCode::F10: return "F10"; case EKeyCode::F11: return "F11"; case EKeyCode::F12: return "F12";
+
+    case EKeyCode::Escape: return "Escape"; case EKeyCode::Enter: return "Enter";
+    case EKeyCode::Space: return "Space"; case EKeyCode::Backspace: return "Backspace";
+    case EKeyCode::Tab: return "Tab"; case EKeyCode::CapsLock: return "CapsLock";
+
+    case EKeyCode::Up: return "Up"; case EKeyCode::Down: return "Down";
+    case EKeyCode::Left: return "Left"; case EKeyCode::Right: return "Right";
+
+    case EKeyCode::Insert: return "Insert"; case EKeyCode::Delete: return "Delete";
+    case EKeyCode::Home: return "Home"; case EKeyCode::End: return "End";
+    case EKeyCode::PageUp: return "PageUp"; case EKeyCode::PageDown: return "PageDown";
+    case EKeyCode::PrintScreen: return "PrintScreen";
+
+    case EKeyCode::Equals: return "="; case EKeyCode::Minus: return "-";
+    case EKeyCode::Semicolon: return ";"; case EKeyCode::Apostrophe: return "'";
+    case EKeyCode::Comma: return ","; case EKeyCode::Period: return ".";
+    case EKeyCode::Slash: return "/"; case EKeyCode::Backslash: return "\\";
+    case EKeyCode::GraveAccent: return "`";
+    case EKeyCode::LeftBracket: return "["; case EKeyCode::RightBracket: return "]";
+
+    case EKeyCode::LShift: return "LShift"; case EKeyCode::RShift: return "RShift";
+    case EKeyCode::LCtrl: return "LCtrl"; case EKeyCode::RCtrl: return "RCtrl";
+    case EKeyCode::LAlt: return "LAlt"; case EKeyCode::RAlt: return "RAlt";
+
+    default: return "Unknown";
+    }
+}
 EMouseButton SDLButtonToEngineMouseButton(uint8 sdlButton)
 {
     switch (sdlButton)
