@@ -1,11 +1,12 @@
 ﻿#include "ModuleManager.h"
 #include "Logger.h"
+#include "Functions.h"
 
 IMPLEMENT_SINGLETON(ModuleManager)
 
 EResult ModuleManager::Initialize(void* arg)
 {
-    BAM_LOG(Info, "ModuleManager", "ModuleManager initialized.");
+    BAM_LOG(Info, "Engine","ModuleManager", "ModuleManager initialized.");
     return EResult::Success;
 }
 
@@ -21,14 +22,14 @@ EResult ModuleManager::LoadModule(const std::wstring& moduleName, const std::fil
 
     if (m_Modules.find(moduleName) != m_Modules.end())
     {
-        BAM_LOG(Warn, "ModuleManager", "Module already loaded: {}", std::string(moduleName.begin(), moduleName.end()));
+        BAM_LOG(Warn, "Engine","ModuleManager", "Module already loaded: {}", WStrToStr(moduleName));
         return EResult::AlreadyInitialized;
     }
 
     std::error_code ec;
     if (!std::filesystem::exists(dllPath, ec))
     {
-        BAM_LOG(Error, "ModuleManager", "DLL file not found: {}", dllPath.string());
+        BAM_LOG(Error, "Engine","ModuleManager", "DLL file not found: {}", dllPath.string());
         return EResult::FileNotFound;
     }
 
@@ -36,7 +37,7 @@ EResult ModuleManager::LoadModule(const std::wstring& moduleName, const std::fil
     if (!hModule)
     {
         const DWORD error = GetLastError();
-        BAM_LOG(Error, "ModuleManager", "LoadLibraryW failed (code={}): {}", error, dllPath.string());
+        BAM_LOG(Error, "Engine","ModuleManager", "LoadLibraryW failed (code={}): {}", error, dllPath.string());
         return EResult::Fail;
     }
 
@@ -45,7 +46,7 @@ EResult ModuleManager::LoadModule(const std::wstring& moduleName, const std::fil
 
     if (!createFunc || !destroyFunc)
     {
-        BAM_LOG(Error, "ModuleManager", "Entry point functions not found in: {}", dllPath.string());
+        BAM_LOG(Error, "Engine","ModuleManager", "Entry point functions not found in: {}", dllPath.string());
         FreeLibrary(hModule);
         return EResult::Fail;
     }
@@ -53,7 +54,7 @@ EResult ModuleManager::LoadModule(const std::wstring& moduleName, const std::fil
     IModule* instance = createFunc();
     if (!instance)
     {
-        BAM_LOG(Error, "ModuleManager", "CreateModule returned nullptr.");
+        BAM_LOG(Error, "Engine","ModuleManager", "CreateModule returned nullptr.");
         FreeLibrary(hModule);
         return EResult::Fail;
     }
@@ -69,8 +70,8 @@ EResult ModuleManager::LoadModule(const std::wstring& moduleName, const std::fil
     info.DestroyFunc = destroyFunc;
 
     m_Modules.emplace(moduleName, std::move(info));
-    BAM_LOG(Info, "ModuleManager", "Module loaded: {} (from {})",
-        std::string(moduleName.begin(), moduleName.end()), dllPath.string());
+    BAM_LOG(Info, "Engine","ModuleManager", "Module loaded: {} (from {})",
+        WStrToStr(moduleName), dllPath.string());
 
     return EResult::Success;
 }
@@ -97,7 +98,7 @@ EResult ModuleManager::UnloadModule(const std::wstring& moduleName)
         info.Handle = nullptr;
     }
 
-    BAM_LOG(Info, "ModuleManager", "Module unloaded: {}", std::string(moduleName.begin(), moduleName.end()));
+    BAM_LOG(Info, "Engine","ModuleManager", "Module unloaded: {}", WStrToStr(moduleName));
     m_Modules.erase(it);
 
     return EResult::Success;
@@ -109,7 +110,7 @@ EResult ModuleManager::ReloadModule(const std::wstring& moduleName, const std::f
     if (it == m_Modules.end())
         return EResult::Fail;
 
-    BAM_LOG(Info, "ModuleManager", "Reloading module: {}", std::string(moduleName.begin(), moduleName.end()));
+    BAM_LOG(Info, "Engine","ModuleManager", "Reloading module: {}", WStrToStr(moduleName));
 
     // 1. 핫리로드 전처리 훅
     if (it->second.Instance)
@@ -122,7 +123,7 @@ EResult ModuleManager::ReloadModule(const std::wstring& moduleName, const std::f
     const EResult loadResult = LoadModule(moduleName, newDllPath);
     if (loadResult != EResult::Success)
     {
-        BAM_LOG(Error, "ModuleManager", "Failed to reload module: {}", ResultToString(loadResult));
+        BAM_LOG(Error, "Engine","ModuleManager", "Failed to reload module: {}", ResultToString(loadResult));
         return loadResult;
     }
 
@@ -130,8 +131,8 @@ EResult ModuleManager::ReloadModule(const std::wstring& moduleName, const std::f
     auto newIt = m_Modules.find(moduleName);
     if (newIt != m_Modules.end() && newIt->second.Instance)
         newIt->second.Instance->OnPostHotReload();
-
-    BAM_LOG(Info, "ModuleManager", "Module reload completed: {}", std::string(moduleName.begin(), moduleName.end()));
+                
+    BAM_LOG(Info, "Engine","ModuleManager", "Module reload completed: {}", WStrToStr(moduleName));
     return EResult::Success;
 }
 

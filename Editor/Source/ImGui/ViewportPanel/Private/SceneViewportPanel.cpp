@@ -6,7 +6,7 @@
 #include "RenderTargetManager.h"
 #include "SelectionManager.h"
 #include "InputManager.h"
-#include "ImViewGuizmo.h"
+#include "ImViewGuizmoCompat.h"
 #include "SceneManager.h"
 
 #include "Entity.h"
@@ -1306,7 +1306,7 @@ void SceneViewportPanel::ProcessPickingRequest()
 		vec4 pixel(0.0f);
 		if (Renderer::Get().GetRHI()->ReadTexturePixel(target->GetTexture(), x, y, pixel) != EResult::Success)
 		{
-			ENGINE_LOG_ERROR("Scene viewport ID picking: pixel download failed.");
+			EDITOR_LOG_ERROR("Scene viewport ID picking: pixel download failed.");
 			return;
 		}
 		if (!std::isfinite(pixel.a) || pixel.a < 0.0f || pixel.a > 16777215.0f || std::floor(pixel.a) != pixel.a)

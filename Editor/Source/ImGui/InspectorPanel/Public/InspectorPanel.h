@@ -4,9 +4,14 @@
 #include "ImGuiInterface.h"
 #include "ReflectionEditState.h"
 #include <unordered_map>
+#include <cstddef>
+#include <span>
+#include <entt/entity/entity.hpp>
 
 BEGIN(Engine)
 class Entity;
+class Scene;
+struct ComponentReflectionEntry;
 END
 
 BEGIN(Editor)
@@ -23,7 +28,11 @@ public:
     void SetLocked(bool locked) { m_IsLocked = locked; }
 
 private:
-    void DrawHeaderBar(Engine::Entity* currentEntity);
+    void DrawHeaderBar(Engine::Entity* currentEntity, std::size_t selectionCount);
+    void DrawCommonComponents(Engine::Scene& scene, std::span<const entt::entity> entities);
+    void DrawCommonTransformVector(Engine::Scene& scene, std::span<const entt::entity> entities, TransformEditMode mode);
+    void DrawCommonFlags(Engine::Scene& scene, std::span<const entt::entity> entities);
+    void DrawCommonReflectedProperties(Engine::Scene& scene, std::span<const entt::entity> entities, const Engine::ComponentReflectionEntry& entry);
     void DrawEntityProperties(Engine::Entity& entity);
     void DrawAddComponentButton(Engine::Entity& entity);
     void DrawAddComponentPopup(Engine::Entity& entity);

@@ -79,15 +79,14 @@ EResult Renderer::BeginFrame()
 
 EResult Renderer::Render(f32 dt)
 {
-	LightManager::Get().UpdateLightBuffer();
+	const EResult lightResult = LightManager::Get().UpdateLightBuffer();
+	if (IsFailure(lightResult))
+		return lightResult;
 
-	struct ViewportJob
-	{
-		CameraBuffer cameraBuffer = {};
-		bool hasCamera = false;
-	};
+	auto& jobsPerPass = m_ViewportJobsPerPass;
+	for (auto& [passID, jobs] : jobsPerPass)
+		jobs.clear();
 
-	unordered_map<RenderPassID, vector<ViewportJob>> jobsPerPass;
 	uint32 rtWidth = m_RHI->GetSwapChainWidth();
 	uint32 rtHeight = m_RHI->GetSwapChainHeight();
 	for (const auto& viewportInfo : m_ViewportCameras)
@@ -103,14 +102,31 @@ EResult Renderer::Render(f32 dt)
 		const ERenderPassType passType = pass->GetPassType();
 		if (passType == ERenderPassType::Shadow && !LightManager::Get().HasShadowCastingLights())
 			continue;
+		auto staticIt = m_StaticDrawCommands.find(pass->GetID());
+		if (staticIt != m_StaticDrawCommands.end() && staticIt->second.size() > 1 &&
+			pass->GetSortType() != ERenderSortType::BackToFront)
+		{
+			auto& commands = staticIt->second;
+			std::sort(commands.begin(), commands.end(), [](const StaticDrawCommand& a, const StaticDrawCommand& b)
+				{
+					if (a.material != b.material)
+						return std::less<MaterialInterface*>{}(a.material, b.material);
+					return std::less<Mesh*>{}(a.mesh, b.mesh);
+				});
+		}
 		static const vector<ViewportJob> s_DefaultJobs = { ViewportJob{} };
 		auto jobsIt = jobsPerPass.find(pass->GetID());
-		const vector<ViewportJob>& jobs = (jobsIt != jobsPerPass.end()) ? jobsIt->second : s_DefaultJobs;
+		const bool hasJobs = jobsIt != jobsPerPass.end() && !jobsIt->second.empty();
+		const vector<ViewportJob>& jobs = hasJobs ? jobsIt->second : s_DefaultJobs;
 
 		for (const auto& job : jobs)
 		{
-			if (IsFailure(m_RHI->BeginRenderPass(pass)))
-				continue;
+			const EResult beginResult = m_RHI->BeginRenderPass(pass);
+			if (IsFailure(beginResult))
+			{
+				ENGINE_LOG_ERROR("BeginRenderPass failed. Pass ID: {}", pass->GetID());
+				return beginResult;
+			}
 
 			if (pass->GetRenderTargetCount() > 0)
 			{
@@ -136,10 +152,14 @@ EResult Renderer::Render(f32 dt)
 			{
 				for (const auto& [slot, buffer] : pass->GetAllPassConstants())
 				{
-					if (!buffer.empty())
+					if (buffer.empty()) continue;
+
+					const EResult result = m_RHI->BindConstantBuffer(
+						buffer.data(), static_cast<uint32>(buffer.size()), slot);
+					if (IsFailure(result))
 					{
-						if (IsFailure(m_RHI->BindConstantBuffer(buffer.data(), static_cast<uint32>(buffer.size()), slot)))
-							ENGINE_LOG_ERROR("Failed to bind pass constant buffer. Slot: {}, Pass ID: {}", slot, pass->GetID());
+						ENGINE_LOG_ERROR("Failed to bind pass constant buffer. Slot: {}, Pass ID: {}", slot, pass->GetID());
+						return result;
 					}
 				}
 
@@ -158,9 +178,13 @@ EResult Renderer::Render(f32 dt)
 						{
 							for (uint32 face = 0; face < 6; ++face)
 							{
-								m_RHI->BindDepthSlice(depthRT->GetTexture(), face);
-								m_RHI->ClearDepthSlice(depthRT->GetTexture(), face, 1.0f, 0);
-								m_RHI->SetViewport(0, 0, rtWidth, rtHeight);
+								if (IsFailure(m_RHI->BindDepthSlice(depthRT->GetTexture(), face)) ||
+									IsFailure(m_RHI->ClearDepthSlice(depthRT->GetTexture(), face, 1.0f, 0)) ||
+									IsFailure(m_RHI->SetViewport(0, 0, rtWidth, rtHeight)))
+								{
+									ENGINE_LOG_ERROR("Failed to prepare point shadow face. Face: {}", face);
+									return EResult::Fail;
+								}
 
 								CameraBuffer faceCam = LightManager::Get().GetPointShadowCameraBuffer(face);
 								faceCam.time = static_cast<f32>(TimeManager::Get().GetTotalTime());
@@ -170,9 +194,13 @@ EResult Renderer::Render(f32 dt)
 									return EResult::Fail;
 								}
 
-								const EResult result = RenderMeshes(dt, meshIt->second, pass->GetSortType(), pass);
+								const Frustum faceFrustum = FrustumCuller::ExtractFrustum(faceCam.viewProjMatrix);
+								const EResult result = RenderMeshes(meshIt->second, pass, &faceFrustum);
 								if (IsFailure(result))
+								{
 									ENGINE_LOG_ERROR("Point shadow mesh rendering failed for face: {}", face);
+									return result;
+								}
 							}
 						}
 					}
@@ -194,11 +222,20 @@ EResult Renderer::Render(f32 dt)
 
 							const int32 vpX = static_cast<int32>((c % 2) * halfW);
 							const int32 vpY = static_cast<int32>((c / 2) * halfH);
-							m_RHI->SetViewport(vpX, vpY, halfW, halfH);
+							const EResult viewportResult = m_RHI->SetViewport(vpX, vpY, halfW, halfH);
+							if (IsFailure(viewportResult))
+							{
+								ENGINE_LOG_ERROR("Failed to set shadow cascade viewport. Cascade: {}", c);
+								return viewportResult;
+							}
 
-							const EResult result = RenderMeshes(dt, meshIt->second, pass->GetSortType(), pass);
+							const Frustum cascadeFrustum = FrustumCuller::ExtractFrustum(cascadeCam.viewProjMatrix);
+							const EResult result = RenderMeshes(meshIt->second, pass, &cascadeFrustum);
 							if (IsFailure(result))
+							{
 								ENGINE_LOG_ERROR("Shadow mesh rendering failed for cascade: {}", c);
+								return result;
+							}
 						}
 
 						// 2) Spot Light Shadow (우하단 사분면: halfW, halfH)
@@ -206,12 +243,28 @@ EResult Renderer::Render(f32 dt)
 						{
 							CameraBuffer spotCam = LightManager::Get().GetSpotShadowCameraBuffer();
 							spotCam.time = static_cast<f32>(TimeManager::Get().GetTotalTime());
-							if (IsSuccess(m_RHI->BindConstantBuffer(&spotCam, sizeof(CameraBuffer), 0)))
+
+							const EResult cameraResult = m_RHI->BindConstantBuffer(&spotCam, sizeof(CameraBuffer), 0);
+							if (IsFailure(cameraResult))
 							{
-								m_RHI->SetViewport(static_cast<int32>(halfW), static_cast<int32>(halfH), halfW, halfH);
-								const EResult result = RenderMeshes(dt, meshIt->second, pass->GetSortType(), pass);
-								if (IsFailure(result))
-									ENGINE_LOG_ERROR("Spot shadow mesh rendering failed.");
+								ENGINE_LOG_ERROR("Failed to bind spot shadow camera buffer.");
+								return cameraResult;
+							}
+
+							const EResult viewportResult = m_RHI->SetViewport(
+								static_cast<int32>(halfW), static_cast<int32>(halfH), halfW, halfH);
+							if (IsFailure(viewportResult))
+							{
+								ENGINE_LOG_ERROR("Failed to set spot shadow viewport.");
+								return viewportResult;
+							}
+
+							const Frustum spotFrustum = FrustumCuller::ExtractFrustum(spotCam.viewProjMatrix);
+							const EResult result = RenderMeshes(meshIt->second, pass, &spotFrustum);
+							if (IsFailure(result))
+							{
+								ENGINE_LOG_ERROR("Spot shadow mesh rendering failed.");
+								return result;
 							}
 						}
 					}
@@ -249,21 +302,40 @@ EResult Renderer::Render(f32 dt)
 
 				for (const auto& [slot, buffer] : pass->GetAllPassConstants())
 				{
-					if (!buffer.empty())
+					if (buffer.empty()) continue;
+
+					const EResult result = m_RHI->BindConstantBuffer(buffer.data(), static_cast<uint32>(buffer.size()), slot);
+					if (IsFailure(result))
 					{
-						if (IsFailure(m_RHI->BindConstantBuffer(buffer.data(), static_cast<uint32>(buffer.size()), slot)))
-							ENGINE_LOG_ERROR("Failed to bind pass constant buffer. Slot: {}, Pass ID: {}", slot, pass->GetID());
+						ENGINE_LOG_ERROR("Failed to bind pass constant buffer. Slot: {}, Pass ID: {}", slot, pass->GetID());
+						return result;
 					}
 				}
-
-				m_RHI->SetViewport(0, 0, rtWidth, rtHeight);
+				const EResult viewportResult = m_RHI->SetViewport(0, 0, rtWidth, rtHeight);
+				if (IsFailure(viewportResult))
+				{
+					ENGINE_LOG_ERROR("Failed to set viewport. Pass ID: {}", pass->GetID());
+					return viewportResult;
+				}
 
 				auto meshIt = m_StaticDrawCommands.find(pass->GetID());
 				if (meshIt != m_StaticDrawCommands.end())
 				{
-					const EResult result = RenderMeshes(dt, meshIt->second, pass->GetSortType(), pass);
+					Frustum frustum{};
+					const Frustum* activeFrustum = nullptr;
+
+					if (passType == ERenderPassType::Geometry && job.hasCamera)
+					{
+						frustum = FrustumCuller::ExtractFrustum(cameraBuffer.viewProjMatrix);
+						activeFrustum = &frustum;
+					}
+
+					const EResult result = RenderMeshes(meshIt->second, pass, activeFrustum);
 					if (IsFailure(result))
+					{
 						ENGINE_LOG_ERROR("ECS mesh rendering failed. Pass ID: {}", pass->GetID());
+						return result;
+					}
 				}
 
 				auto spriteIt = m_SpriteDrawCommands.find(pass->GetID());
@@ -271,13 +343,20 @@ EResult Renderer::Render(f32 dt)
 				{
 					const EResult result = RenderSprite(dt, spriteIt->second, pass->GetSortType(), pass);
 					if (IsFailure(result))
+					{
 						ENGINE_LOG_ERROR("ECS sprite rendering failed. Pass ID: {}", pass->GetID());
+						return result;
+					}
 				}
 
 				if (const auto images = m_UIImageDrawCommands.find(pass->GetID()); images != m_UIImageDrawCommands.end())
 				{
-					if (IsFailure(RenderUIImages(images->second, pass)))
+					const EResult result = RenderUIImages(images->second, pass);
+					if (IsFailure(result))
+					{
 						ENGINE_LOG_ERROR("ECS UI image rendering failed. Pass ID: {}", pass->GetID());
+						return result;
+					}
 				}
 			}
 			
@@ -285,7 +364,11 @@ EResult Renderer::Render(f32 dt)
 			if (customIt != m_CustomRenderQueues.end())
 			{
 				for (const auto& command : customIt->second)
-					command(dt, pass);
+				{
+					const EResult result = command(dt, pass);
+					if (IsFailure(result))
+						return result;
+				}
 			}
 
 			if (IsFailure(m_RHI->EndRenderPass()))
@@ -300,22 +383,21 @@ EResult Renderer::Render(f32 dt)
 }
 
 TODO("Renderer::RenderMeshes, RenderSkinnedMeshes, RenderSprite 함수에서 Material과 Mesh를 Bind하고 DrawIndexed 호출하는 부분을 RHI에 맞게 구현 필요")
-EResult Renderer::RenderMeshes(f32 dt, vector<StaticDrawCommand>& commands, ERenderSortType sortType, RenderPass* renderPass)
+EResult Renderer::RenderMeshes(const vector<StaticDrawCommand>& commands, RenderPass* renderPass,
+	const Frustum* frustum)
 {
-	(void)dt;
-
 	if (!m_RHI || !renderPass)
 		return EResult::Fail;
 
-	if (commands.size() > 1 && sortType != ERenderSortType::BackToFront)
-	{
-		std::sort(commands.begin(), commands.end(), [](const StaticDrawCommand& a, const StaticDrawCommand& b)
-			{
-				if (a.material != b.material) return a.material < b.material;
-				return a.mesh < b.mesh;
-			});
-	}
+	if (commands.empty())
+		return EResult::Success;
 
+	RHIPipelineDesc pipelineDesc;
+	const EResult prepareResult = PreparePassPipelineDesc(renderPass, pipelineDesc);
+	if (IsFailure(prepareResult))
+		return prepareResult;
+
+	const ERenderPassType passType = renderPass->GetPassType();
 	MaterialInterface* lastMaterial = nullptr;
 	Mesh* lastMesh = nullptr;
 
@@ -327,9 +409,12 @@ EResult Renderer::RenderMeshes(f32 dt, vector<StaticDrawCommand>& commands, ERen
 		if (!mesh || !material)
 			return EResult::Fail;
 
+		if (frustum && command.worldBounds && !FrustumCuller::TestAABB(*frustum, *command.worldBounds))
+			continue;
+
 		if (material != lastMaterial || mesh != lastMesh)
 		{
-			if (IsFailure(BindMeshPipeline(mesh, material, renderPass)))
+			if (IsFailure(BindMeshPipeline(mesh, material, passType, pipelineDesc)))
 				return EResult::Fail;
 		}
 
@@ -382,14 +467,20 @@ EResult Renderer::RenderSkinnedMeshes(f32 dt, vector<SkinnedDrawCommand>& comman
 	return EResult();
 }
 
-EResult Renderer::RenderSprite(
-	f32 dt,
-	vector<SpriteDrawCommand>& commands,
-	ERenderSortType sortType,
-	RenderPass* renderPass)
+EResult Renderer::RenderSprite(f32 dt, vector<SpriteDrawCommand>& commands, ERenderSortType sortType, RenderPass* renderPass)
 {
 	if (!m_RHI || !renderPass)
 		return EResult::Fail;
+
+	if (commands.empty())
+		return EResult::Success;
+
+	RHIPipelineDesc pipelineDesc;
+	const EResult prepareResult = PreparePassPipelineDesc(renderPass, pipelineDesc);
+	if (IsFailure(prepareResult))
+		return prepareResult;
+
+	const ERenderPassType passType = renderPass->GetPassType();
 
 	struct SpriteUBO
 	{
@@ -409,6 +500,9 @@ EResult Renderer::RenderSprite(
 	if (!sampler)
 		return EResult::Fail;
 
+	MaterialInterface* lastMaterial = nullptr;
+	Mesh* lastMesh = nullptr;
+
 	for (const auto& command : commands)
 	{
 		if (!command.mesh || !command.material || !command.texture)
@@ -419,10 +513,12 @@ EResult Renderer::RenderSprite(
 		if (!texture || !command.mesh->GetIndexBuffer())
 			return EResult::Fail;
 
-		if (IsFailure(BindMeshPipeline(
-			command.mesh, command.material, renderPass)))
+		if (command.material != lastMaterial || command.mesh != lastMesh)
 		{
-			return EResult::Fail;
+			if (IsFailure(BindMeshPipeline(command.mesh, command.material, passType, pipelineDesc)))
+				return EResult::Fail;
+
+			lastMaterial = command.material;
 		}
 
 		// 이번 Sprite 셰이더의 t0는 Sprite 리소스가 제공합니다.
@@ -441,8 +537,13 @@ EResult Renderer::RenderSprite(
 			return EResult::Fail;
 		}
 
-		if (IsFailure(command.mesh->Bind(0)))
-			return EResult::Fail;
+		if (command.mesh != lastMesh)
+		{
+			if (IsFailure(command.mesh->Bind(0)))
+				return EResult::Fail;
+
+			lastMesh = command.mesh;
+		}
 
 		if (IsFailure(m_RHI->DrawIndexed(command.mesh->GetIndexCount())))
 			return EResult::Fail;
@@ -466,27 +567,51 @@ EResult Renderer::RenderUIImages(const vector<UIImageDrawCommand>& commands, Ren
 	static_assert(offsetof(ImageUBO, color) == 96);
 	auto* sampler = SamplerManager::Get().GetDefaultSampler();
 	if (!sampler) return EResult::Fail;
+	RHIPipelineDesc pipelineDesc;
+	if (!commands.empty())
+	{
+		const EResult prepareResult = PreparePassPipelineDesc(renderPass, pipelineDesc);
+		if (IsFailure(prepareResult))
+			return prepareResult;
+	}
+
+	const ERenderPassType passType = renderPass->GetPassType();
+	MaterialInterface* lastMaterial = nullptr;
+	vec2 lastCanvasSize(0.0f);
 	for (const auto& command : commands)
 	{
 		Texture* texture = command.textureHandle.Get();
 		MaterialInterface* material = command.materialHandle.Get();
 		if (!texture || !material || !texture->GetRHITexture() ||
 			command.canvasSize.x <= 0.0f || command.canvasSize.y <= 0.0f) return EResult::InvalidArgument;
-		if (IsFailure(BindMeshPipeline(nullptr, material, renderPass))) return EResult::Fail;
-		CameraBuffer camera{};
-		camera.viewMatrix = camera.invViewMatrix = mat4(1.0f);
-		camera.projMatrix = glm::ortho(0.0f, command.canvasSize.x, command.canvasSize.y, 0.0f, -1.0f, 1.0f);
-		camera.invProjMatrix = glm::inverse(camera.projMatrix);
-		camera.viewProjMatrix = camera.projMatrix;
-		camera.invViewProjMatrix = camera.invProjMatrix;
+		if (material != lastMaterial)
+		{
+			if (IsFailure(BindMeshPipeline(nullptr, material, passType, pipelineDesc)))
+				return EResult::Fail;
+
+			lastMaterial = material;
+		}
+		if (command.canvasSize != lastCanvasSize)
+		{
+			CameraBuffer camera{};
+			camera.viewMatrix = camera.invViewMatrix = mat4(1.0f);
+			camera.projMatrix = glm::ortho(0.0f, command.canvasSize.x, command.canvasSize.y, 0.0f, -1.0f, 1.0f);
+			camera.invProjMatrix = glm::inverse(camera.projMatrix);
+			camera.viewProjMatrix = camera.projMatrix;
+			camera.invViewProjMatrix = camera.invProjMatrix;
+
+			if (IsFailure(m_RHI->BindConstantBuffer(&camera, sizeof(camera), 0)))
+				return EResult::Fail;
+
+			lastCanvasSize = command.canvasSize;
+		}
 		ImageUBO data{};
 		data.worldMatrix = command.worldMatrix;
 		data.uvRect = vec4(vec2(command.uvTransform),
 			vec2(command.uvTransform) + vec2(command.uvTransform.z, command.uvTransform.w));
 		data.tiling = vec2(1.0f);
 		data.color = command.color;
-		if (IsFailure(m_RHI->BindConstantBuffer(&camera, sizeof(camera), 0)) ||
-			IsFailure(m_RHI->BindConstantBuffer(&data, sizeof(data), 1)) ||
+		if (IsFailure(m_RHI->BindConstantBuffer(&data, sizeof(data), 1)) ||
 			IsFailure(m_RHI->BindTextureSampler(texture->GetRHITexture(), sampler, 0)) ||
 			IsFailure(m_RHI->Draw(6))) return EResult::Fail;
 	}
@@ -508,25 +633,29 @@ EResult Renderer::RenderUIImages(const vector<UIImageDrawCommand>& commands, Ren
 	return EResult::Success;
 }
 
-EResult Renderer::EndFrame()
+void Renderer::ClearFrameQueues()
 {
-	EResult frameResult = EResult::Fail;
-	if (m_RHI)
-	{
-		m_RHI->BindRenderTarget(nullptr, nullptr);
-		m_RHI->SetViewport(0, 0, m_RHI->GetSwapChainWidth(), m_RHI->GetSwapChainHeight());
-		frameResult = m_RHI->EndFrame();
-	}
-
 	for (auto& [passID, queue] : m_CustomRenderQueues) queue.clear();
 	for (auto& [passID, queue] : m_StaticDrawCommands) queue.clear();
 	for (auto& [passID, queue] : m_SkinnedDrawCommands) queue.clear();
 	for (auto& [passID, queue] : m_SpriteDrawCommands) queue.clear();
 	for (auto& [passID, queue] : m_UIImageDrawCommands) queue.clear();
+	for (auto& [passID, jobs] : m_ViewportJobsPerPass) jobs.clear();
 
 	m_ViewportCameras.clear();
-	m_PassFrustums.clear();
-	m_PassFrustumIsShadow.clear();
+}
+
+EResult Renderer::EndFrame()
+{
+	EResult frameResult = EResult::Fail;
+	if (m_RHI)
+	{
+		frameResult = m_RHI->EndRenderPass();
+		if (IsSuccess(frameResult))
+			frameResult = m_RHI->EndFrame();
+	}
+
+	ClearFrameQueues();
 	return frameResult;
 }
 #pragma endregion
@@ -549,6 +678,7 @@ void Renderer::ClearRenderQueue(RenderPassID passID)
 	m_SkinnedDrawCommands.erase(passID);
 	m_SpriteDrawCommands.erase(passID);
 	m_UIImageDrawCommands.erase(passID);
+	m_ViewportJobsPerPass.erase(passID);
 }
 
 void Renderer::ClearAllRenderQueues()
@@ -562,6 +692,7 @@ void Renderer::ClearAllRenderQueues()
 	m_SkinnedDrawCommands.clear();
 	m_SpriteDrawCommands.clear();
 	m_UIImageDrawCommands.clear();
+	m_ViewportJobsPerPass.clear();
 }
 
 //Entity Submit
@@ -588,39 +719,14 @@ void Renderer::SubmitUIImage(const UIImageDrawCommand& command, RenderPassID pas
 
 void Renderer::RegisterViewportCamera(const CameraBuffer& cameraBuffer, RenderPass* renderPass)
 {
-	m_ViewportCameras.push_back({ cameraBuffer, true, renderPass });
 	if (!renderPass) return;
-
-	const RenderPassID passID = renderPass->GetID();
-	if (renderPass->GetPassType() == ERenderPassType::Shadow)
-	{
-		if (LightManager::Get().HasShadowCastingLights())
-		{
-			m_PassFrustums[passID] = FrustumCuller::ExtractFrustum(LightManager::Get().GetShadowCameraBuffer(uint32(0)).viewProjMatrix);
-			m_PassFrustumIsShadow[passID] = true;
-		}
-	}
-	else
-	{
-		m_PassFrustums[passID] = FrustumCuller::ExtractFrustum(cameraBuffer.viewProjMatrix);
-		m_PassFrustumIsShadow[passID] = false;
-	}
+	m_ViewportCameras.push_back({ cameraBuffer, true, renderPass });
 }
 
 void Renderer::RegisterViewportCamera(RenderPass* renderPass)
 {
-	m_ViewportCameras.push_back({ {}, false, renderPass });
 	if (!renderPass) return;
-
-	const RenderPassID passID = renderPass->GetID();
-	if (renderPass->GetPassType() == ERenderPassType::Shadow)
-	{
-		if (LightManager::Get().HasShadowCastingLights())
-		{
-			m_PassFrustums[passID] = FrustumCuller::ExtractFrustum(LightManager::Get().GetShadowCameraBuffer(uint32(0)).viewProjMatrix);
-			m_PassFrustumIsShadow[passID] = true;
-		}
-	}
+	m_ViewportCameras.push_back({ {}, false, renderPass });
 }
 
 void Renderer::RegisterUICanvas(Scene* scene, entt::entity canvas, RenderPass* renderPass)
@@ -635,88 +741,121 @@ void Renderer::UnregisterViewportCamera(RenderPassID passID)
 }
 #pragma endregion
 
-#pragma region Frustum Culling
-bool Renderer::TryGetPassFrustum(RenderPassID passID, Frustum& outFrustum, bool& outIsShadow) const
-{
-	const auto it = m_PassFrustums.find(passID);
-	if (it == m_PassFrustums.end())
-		return false;
-
-	outFrustum = it->second;
-	outIsShadow = m_PassFrustumIsShadow.at(passID);
-	return true;
-}
-
-#pragma endregion
-
 #pragma region Binding
-EResult Renderer::BindMeshPipeline(Mesh* mesh, MaterialInterface* material, RenderPass* renderPass) 
+EResult Renderer::PreparePassPipelineDesc(RenderPass* renderPass, RHIPipelineDesc& desc)
 {
-	if (!m_RHI || !material || !renderPass)
+	if (!renderPass)
 		return EResult::InvalidArgument;
 
-	const ERenderPassType passType = renderPass->GetPassType();
-	Shader* vs = material->GetVertexShader(passType);
-	Shader* ps = material->GetPixelShader(passType);
-
-	if (!vs || !ps)
-		return EResult::InvalidArgument;
-
-	if (!vs->GetRHIShader() || !ps->GetRHIShader())
-		return EResult::InvalidArgument;
-
-	RHIPipelineDesc desc;
-	desc.pipelineType = EPipelineType::Graphics;
-	desc.topology = mesh ? mesh->GetTopology() : ETopology::TriangleList;
-	if (mesh) desc.inputLayouts = mesh->GetInputLayoutDescs();
-
-	desc.vertexShader = vs->GetRHIShader();
-	desc.pixelShader = ps->GetRHIShader();
-
-	desc.frontFace = material->GetFrontFace();
-	desc.cullMode = material->GetCullMode();
-	desc.fillMode = material->GetFillMode();
-
-	desc.blendState = material->GetBlendState();
-
-	RenderTargetManager& rtManager = RenderTargetManager::Get();
-
+	desc = RHIPipelineDesc{};
 	desc.colorAttachmentCount = renderPass->GetRenderTargetCount();
 
-	if(desc.colorAttachmentCount > MAX_RENDER_TARGET_COUNT)
+	if (desc.colorAttachmentCount > MAX_RENDER_TARGET_COUNT)
 		return EResult::InvalidArgument;
+
+	auto& rtManager = RenderTargetManager::Get();
 
 	for (uint32 i = 0; i < desc.colorAttachmentCount; ++i)
 	{
-		const wstring& rtName = renderPass->GetRenderTargetName(i);
-		RenderTarget* rt = rtManager.GetRenderTarget(rtName);
+		RenderTarget* rt = rtManager.GetRenderTarget(renderPass->GetRenderTargetName(i));
 		if (!rt)
 			return EResult::InvalidArgument;
+
 		desc.colorAttachmentFormats[i] = rt->GetFormat();
 	}
 
 	desc.depthStencilAttachmentFormat = ETextureFormat::UNKNOWN;
 
-	const wstring depthStencilName = renderPass->GetDepthStencilName();
-	const bool hasDepthStencil = !depthStencilName.empty();
-
-	if (hasDepthStencil)
+	const wstring& depthStencilName = renderPass->GetDepthStencilName();
+	if (!depthStencilName.empty())
 	{
 		RenderTarget* ds = rtManager.GetRenderTarget(depthStencilName);
 		if (!ds)
 			return EResult::InvalidArgument;
+
 		desc.depthStencilAttachmentFormat = ds->GetFormat();
 	}
 
+	return EResult::Success;
+}
+
+EResult Renderer::PrepareMeshPipelineDesc(Mesh* mesh, MaterialInterface* material,
+	ERenderPassType passType, RHIPipelineDesc& desc)
+{
+	if (!m_RHI || !material)
+		return EResult::InvalidArgument;
+
+	Shader* vs = material->GetVertexShader(passType);
+	Shader* ps = material->GetPixelShader(passType);
+
+	if (!vs || !ps || !vs->GetRHIShader() || !ps->GetRHIShader())
+		return EResult::InvalidArgument;
+
+	desc.pipelineType = EPipelineType::Graphics;
+	desc.topology = mesh ? mesh->GetTopology() : ETopology::TriangleList;
+
+	if (mesh)
+	{
+		const auto& inputLayouts = mesh->GetInputLayoutDescs();
+		if (desc.inputLayouts != inputLayouts)
+			desc.inputLayouts = inputLayouts;
+	}
+	else
+	{
+		desc.inputLayouts.clear();
+	}
+
+	desc.vertexShader = vs->GetRHIShader();
+	desc.pixelShader = ps->GetRHIShader();
+	desc.frontFace = material->GetFrontFace();
+	desc.cullMode = material->GetCullMode();
+	desc.fillMode = material->GetFillMode();
+	desc.blendState = material->GetBlendState();
+
+	const bool hasDepthStencil = desc.depthStencilAttachmentFormat != ETextureFormat::UNKNOWN;
 	desc.depthStencilState.depthTestEnable = hasDepthStencil && material->GetDepthMode() != EDepthMode::None;
 	desc.depthStencilState.depthWriteEnable = hasDepthStencil && material->GetDepthMode() == EDepthMode::ReadWrite;
 	desc.depthStencilState.depthCompareOp = material->GetDepthCompareOp();
 
-	RHIPipeline* pipeline = PipelineManager::Get().GetOrCreatePipeline(desc);
+	return EResult::Success;
+}
 
-	if (!pipeline)
-		return EResult::Fail;
-	
+EResult Renderer::BindMeshPipeline(Mesh* mesh, MaterialInterface* material,
+	ERenderPassType passType, RHIPipelineDesc& desc)
+{
+	const auto result = PrepareMeshPipelineDesc(mesh, material, passType, desc);
+	if (IsFailure(result)) return result;
+
+	auto* pipeline = PipelineManager::Get().GetOrCreatePipeline(desc);
+	if (!pipeline) return EResult::Fail;
+
 	return m_RHI->BindPipeline(pipeline);
+}
+
+EResult Renderer::ValidateMeshMaterial(Mesh* mesh, MaterialInterface* material, RenderPass* renderPass)
+{
+	if (!m_RHI || !mesh || !material || !renderPass || !PipelineManager::IsCreated())
+		return EResult::InvalidArgument;
+
+	RHIPipelineDesc desc;
+	auto result = PreparePassPipelineDesc(renderPass, desc);
+	if (IsFailure(result)) return result;
+
+	result = PrepareMeshPipelineDesc(mesh, material, renderPass->GetPassType(), desc);
+	if (IsFailure(result)) return result;
+
+	return PipelineManager::Get().GetOrCreatePipeline(desc) ? EResult::Success : EResult::Fail;
+}
+
+EResult Renderer::BindMeshPipeline(Mesh* mesh, MaterialInterface* material, RenderPass* renderPass)
+{
+	if (!m_RHI || !material || !renderPass)
+		return EResult::InvalidArgument;
+
+	RHIPipelineDesc desc;
+	const auto result = PreparePassPipelineDesc(renderPass, desc);
+	if (IsFailure(result)) return result;
+
+	return BindMeshPipeline(mesh, material, renderPass->GetPassType(), desc);
 }
 #pragma endregion

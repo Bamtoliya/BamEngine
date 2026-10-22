@@ -30,3 +30,15 @@ if(MSVC)
     target_compile_options(SceneReflectionCheck PRIVATE /utf-8)
     target_compile_options(SceneArchiveCheck PRIVATE /utf-8)
 endif()
+
+add_executable(TerrainDataCheck examples/TerrainDataCheck.cpp)
+target_link_libraries(TerrainDataCheck PRIVATE BamEngine::Engine)
+set_target_properties(TerrainDataCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
+
+if(MSVC)
+    target_compile_options(TerrainDataCheck PRIVATE /utf-8 /Zc:preprocessor)
+endif()
+
+if(BUILD_TESTING)
+    add_test(NAME TerrainDataCheck COMMAND TerrainDataCheck)
+endif()

@@ -5,6 +5,14 @@
 #include <reflection/Metadata.h>
 #include <cstring>
 #include <optional>
+#include <reflection/PropertyInfo.h>
+#include <cmath>
+#include <span>
+#include <type_traits>
+#include <vector>
+#include <reflection/EnumInfo.h>
+#include <utility>
+#include <variant>
 
 namespace Editor
 {
@@ -87,5 +95,133 @@ namespace Editor
         }
 
         return false;
+    }
+
+    struct InspectorBatchWriteResult
+    {
+        bool Changed = false;
+        bool Failed = false;
+    };
+
+    // 편집 허용 조건과 컴포넌트별 검증은 호출자가 처리합니다.
+    template<typename T>
+        requires (std::is_same_v<T, bool> || std::is_same_v<T, float>)
+    InspectorBatchWriteResult TryWriteCommonInspectorValue(const reflection::PropertyInfo& property,
+        std::span<const reflection::ObjectView> objects, T candidate)
+    {
+        if (objects.empty() || !property.IsValueType<T>() || !property.CanWrite())
+            return { false, true };
+
+        if constexpr (std::is_same_v<T, float>)
+        {
+            if (!std::isfinite(candidate)) return { false, true };
+        }
+
+        std::vector<T> previous;
+        previous.reserve(objects.size());
+
+        // 모든 대상의 접근 가능 여부를 확인한 뒤 쓰기를 시작합니다.
+        for (const auto& object : objects)
+        {
+            if (object.IsReadOnly()) return { false, true };
+
+            const auto read = property.TryReadValue(object);
+            const auto* current = read.Value.Get<T>();
+            if (!read || !current) return { false, true };
+
+            previous.push_back(*current);
+        }
+
+        bool changed = false;
+
+        for (std::size_t i = 0; i < objects.size(); ++i)
+        {
+            // vector<bool>의 프록시를 ValueView에 전달하지 않도록 실제 값으로 복사합니다.
+            const T original = previous[i];
+            if (original == candidate) continue;
+
+            const auto error = property.TryWriteValue(objects[i], reflection::ValueView::From(candidate));
+            if (error != reflection::PropertyAccessError::None)
+            {
+                bool restored = true;
+
+                for (std::size_t j = 0; j < i; ++j)
+                {
+                    const T backup = previous[j];
+                    if (backup == candidate) continue;
+
+                    if (property.TryWriteValue(objects[j], reflection::ValueView::From(backup)) !=
+                        reflection::PropertyAccessError::None)
+                    {
+                        restored = false;
+                    }
+                }
+
+                return { !restored, true };
+            }
+
+            changed = true;
+        }
+
+        return { changed, false };
+    }
+
+    inline InspectorBatchWriteResult TryWriteCommonInspectorEnumValue(const reflection::PropertyInfo& property,
+        const reflection::EnumInfo& enumeration, std::span<const reflection::ObjectView> objects,
+        const reflection::EnumValue& candidate)
+    {
+        if (objects.empty() || !property.CanWrite() || !property.CanWriteEnumValue() ||
+            property.GetValueCppType() != enumeration.GetCppType() || !enumeration.FindEntryByValue(candidate))
+        {
+            return { false, true };
+        }
+
+        const auto same = [](const reflection::EnumValue& left, const reflection::EnumValue& right)
+            {
+                return std::visit([](auto a, auto b) { return std::cmp_equal(a, b); }, left, right);
+            };
+
+        std::vector<reflection::EnumValue> previous;
+        previous.reserve(objects.size());
+
+        // 모든 대상의 타입과 접근 가능 여부를 먼저 확인합니다.
+        for (const auto& object : objects)
+        {
+            if (object.IsReadOnly()) return { false, true };
+
+            const auto read = property.TryReadValue(object);
+            if (!read) return { false, true };
+
+            const auto current = enumeration.ReadValue(read.Value);
+            if (!current) return { false, true };
+
+            previous.push_back(*current);
+        }
+
+        bool changed = false;
+
+        for (std::size_t i = 0; i < objects.size(); ++i)
+        {
+            if (same(previous[i], candidate)) continue;
+
+            if (property.TryWriteEnumValue(objects[i], candidate) != reflection::PropertyAccessError::None)
+            {
+                bool restored = true;
+
+                for (std::size_t j = 0; j < i; ++j)
+                {
+                    if (same(previous[j], candidate)) continue;
+
+                    if (property.TryWriteEnumValue(objects[j], previous[j]) != reflection::PropertyAccessError::None)
+                        restored = false;
+                }
+
+                return { !restored, true };
+            }
+
+            changed = true;
+        }
+
+        return { changed, false };
     }
 }

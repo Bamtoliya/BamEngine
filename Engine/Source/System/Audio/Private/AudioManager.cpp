@@ -9,7 +9,7 @@ IMPLEMENT_SINGLETON(AudioManager)
 	do { \
 		FMOD_RESULT _res = (expr); \
 		if (_res != FMOD_OK) { \
-			BAM_LOG(Error, "AudioManager", "FMOD Error ({}) {}: {}", static_cast<int>(_res), #expr, FMOD_ErrorString(_res)); \
+			BAM_LOG(Error, "Engine","AudioManager", "FMOD Error ({}) {}: {}", static_cast<int>(_res), #expr, FMOD_ErrorString(_res)); \
 		} \
 	} while (0)
 
@@ -18,7 +18,7 @@ EResult AudioManager::Initialize(void* arg)
 	FMOD_RESULT result = FMOD::System_Create(&m_System);
 	if (result != FMOD_OK || !m_System)
 	{
-		BAM_LOG(Error, "AudioManager", "Failed to create FMOD System: {}", FMOD_ErrorString(result));
+		BAM_LOG(Error, "Engine","AudioManager", "Failed to create FMOD System: {}", FMOD_ErrorString(result));
 		return EResult::Fail;
 	}
 
@@ -26,7 +26,7 @@ EResult AudioManager::Initialize(void* arg)
 	result = m_System->init(512, FMOD_INIT_NORMAL, nullptr);
 	if (result != FMOD_OK)
 	{
-		BAM_LOG(Error, "AudioManager", "Failed to initialize FMOD System: {}", FMOD_ErrorString(result));
+		BAM_LOG(Error, "Engine","AudioManager", "Failed to initialize FMOD System: {}", FMOD_ErrorString(result));
 		m_System->release();
 		m_System = nullptr;
 		return EResult::Fail;
@@ -40,7 +40,7 @@ EResult AudioManager::Initialize(void* arg)
 	if (m_MasterGroup && m_BGMGroup) FMOD_CHECK(m_MasterGroup->addGroup(m_BGMGroup));
 	if (m_MasterGroup && m_SFXGroup) FMOD_CHECK(m_MasterGroup->addGroup(m_SFXGroup));
 
-	BAM_LOG(Info, "AudioManager", "FMOD Audio System successfully initialized");
+	BAM_LOG(Info, "Engine","AudioManager", "FMOD Audio System successfully initialized");
 	return EResult::Success;
 }
 
@@ -55,7 +55,7 @@ void AudioManager::Free()
 		m_System->close();
 		m_System->release();
 		m_System = nullptr;
-		BAM_LOG(Info, "AudioManager", "FMOD Audio System released");
+		BAM_LOG(Info, "Engine","AudioManager", "FMOD Audio System released");
 	}
 }
 

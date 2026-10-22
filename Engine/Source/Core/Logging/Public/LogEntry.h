@@ -22,7 +22,8 @@ namespace Engine
         std::chrono::system_clock::time_point Timestamp{};
         ELogLevel Level = ELogLevel::Info;
 
-        // 큐에 보관하므로 문자열을 직접 소유합니다.
+        // 큐에서 보관하므로 문자열을 직접 소유합니다.
+        std::string Source;
         std::string Category;
         std::string Message;
         std::string FileName;

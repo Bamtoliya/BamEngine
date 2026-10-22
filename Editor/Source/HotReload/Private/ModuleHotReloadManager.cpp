@@ -58,7 +58,7 @@ void ModuleHotReloadManager::Update()
     if (elapsed >= 250)
     {
         m_PendingAutoReload = false;
-        ENGINE_LOG_INFO("[HotReload] Auto-reload triggered by file change!");
+        EDITOR_LOG_INFO("[HotReload] Auto-reload triggered by file change!");
         ReloadModule();
     }
 }
@@ -75,7 +75,7 @@ void ModuleHotReloadManager::StartWatching(const std::filesystem::path& dllPath)
     m_WatchID = m_FileWatcher->addWatch(watchDir.string(), m_FileListener, false);
     m_FileWatcher->watch();
 
-    ENGINE_LOG_INFO("[HotReload] Watching for changes: {}", dllPath.string());
+    EDITOR_LOG_INFO("[HotReload] Watching for changes: {}", dllPath.string());
 }
 
 void ModuleHotReloadManager::StopWatching()
@@ -99,7 +99,7 @@ std::filesystem::path ModuleHotReloadManager::CreateShadowCopy(const std::filesy
     std::error_code ec;
     if (!std::filesystem::exists(srcDllPath, ec))
     {
-        ENGINE_LOG_ERROR("[HotReload] Original module not found: {}", srcDllPath.string());
+        EDITOR_LOG_ERROR("[HotReload] Original module not found: {}", srcDllPath.string());
         return {};
     }
 
@@ -120,7 +120,7 @@ std::filesystem::path ModuleHotReloadManager::CreateShadowCopy(const std::filesy
 
     if (!fileReady)
     {
-        ENGINE_LOG_ERROR("[HotReload] DLL file is locked by compiler/linker: {}", srcDllPath.string());
+        EDITOR_LOG_ERROR("[HotReload] DLL file is locked by compiler/linker: {}", srcDllPath.string());
         return {};
     }
 
@@ -131,7 +131,7 @@ std::filesystem::path ModuleHotReloadManager::CreateShadowCopy(const std::filesy
     std::filesystem::copy_file(srcDllPath, destDll, std::filesystem::copy_options::overwrite_existing, ec);
     if (ec)
     {
-        ENGINE_LOG_ERROR("[HotReload] Failed to copy shadow DLL: {}", ec.message());
+        EDITOR_LOG_ERROR("[HotReload] Failed to copy shadow DLL: {}", ec.message());
         return {};
     }
 
@@ -160,7 +160,7 @@ EResult ModuleHotReloadManager::LoadModule(const std::filesystem::path& dllPath)
     if (!m_ModuleHandle)
     {
         const DWORD err = GetLastError();
-        ENGINE_LOG_ERROR("[HotReload] LoadLibraryW failed (code={}): {}", err, m_CurrentShadowDllPath.string());
+        EDITOR_LOG_ERROR("[HotReload] LoadLibraryW failed (code={}): {}", err, m_CurrentShadowDllPath.string());
         return EResult::Fail;
     }
 
@@ -169,7 +169,7 @@ EResult ModuleHotReloadManager::LoadModule(const std::filesystem::path& dllPath)
 
     if (!createFunc || !m_DestroyFunc)
     {
-        ENGINE_LOG_ERROR("[HotReload] Failed to find module entry functions in: {}", m_CurrentShadowDllPath.string());
+        EDITOR_LOG_ERROR("[HotReload] Failed to find module entry functions in: {}", m_CurrentShadowDllPath.string());
         FreeLibrary(m_ModuleHandle);
         m_ModuleHandle = nullptr;
         return EResult::Fail;
@@ -178,14 +178,14 @@ EResult ModuleHotReloadManager::LoadModule(const std::filesystem::path& dllPath)
     m_CurrentModule = createFunc();
     if (!m_CurrentModule)
     {
-        ENGINE_LOG_ERROR("[HotReload] CreateModule returned nullptr.");
+        EDITOR_LOG_ERROR("[HotReload] CreateModule returned nullptr.");
         FreeLibrary(m_ModuleHandle);
         m_ModuleHandle = nullptr;
         return EResult::Fail;
     }
 
     m_CurrentModule->OnLoad();
-    ENGINE_LOG_INFO("[HotReload] Successfully loaded game module: {}", m_CurrentShadowDllPath.string());
+    EDITOR_LOG_INFO("[HotReload] Successfully loaded game module: {}", m_CurrentShadowDllPath.string());
 
     // 성공적으로 로드되면 해당 DLL 디렉터리 감시 시작
     StartWatching(m_OriginalDllPath);
@@ -229,7 +229,7 @@ EResult ModuleHotReloadManager::ReloadModule()
         return EResult::AlreadyInitialized;
 
     m_State = EHotReloadState::Reloading;
-    ENGINE_LOG_INFO("[HotReload] Reloading module: {}", m_OriginalDllPath.string());
+    EDITOR_LOG_INFO("[HotReload] Reloading module: {}", m_OriginalDllPath.string());
 
     if (m_CurrentModule)
         m_CurrentModule->OnPreHotReload();
@@ -240,7 +240,7 @@ EResult ModuleHotReloadManager::ReloadModule()
     if (result != EResult::Success)
     {
         m_State = EHotReloadState::Failed;
-        ENGINE_LOG_ERROR("[HotReload] Reload failed: {}", ResultToString(result));
+        EDITOR_LOG_ERROR("[HotReload] Reload failed: {}", ResultToString(result));
         return result;
     }
 
@@ -248,7 +248,7 @@ EResult ModuleHotReloadManager::ReloadModule()
         m_CurrentModule->OnPostHotReload();
 
     m_State = EHotReloadState::Idle;
-    ENGINE_LOG_INFO("[HotReload] Module reloaded successfully (Version: {})", m_ReloadIndex);
+    EDITOR_LOG_INFO("[HotReload] Module reloaded successfully (Version: {})", m_ReloadIndex);
     return EResult::Success;
 }
 

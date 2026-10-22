@@ -1,6 +1,7 @@
-#pragma once
+﻿#pragma once
 
 #include "GraphTypes.h"
+#include <reflection/Annotations.h>
 
 namespace Engine
 {
@@ -16,9 +17,13 @@ struct GraphPin
 	std::string DisplayName;
 };
 
+STRUCT()
 struct GraphPinReference
 {
+	PROPERTY()
 	GraphNodeId Node = 0;
+
+	PROPERTY()
 	std::string Pin;
 
 	bool operator==(const GraphPinReference&) const = default;

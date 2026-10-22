@@ -1,15 +1,20 @@
-#pragma once
+﻿#pragma once
 
 #include "ImGuiInterface.h"
 #include "Graph.h"
 #include "GraphNodePalette.h"
 #include "GraphReflection.h"
 #include "GraphExecutor.h"
+#include "GraphFile.h"
+#include <filesystem>
+#include "ShaderCompiler.h"
+#include <memory>
+#include "Material.h"
 
 struct ImNodesContext;
 
 BEGIN(Editor)
-
+class GraphShaderPreview;
 class GraphPanel : public ImGuiInterface
 {
 public:
@@ -31,11 +36,29 @@ private:
 		std::unordered_map<std::string, int> Pins;
 	};
 
+	struct ShaderBuildState
+	{
+		std::string Source;
+		Engine::ShaderCompileResult LastGood;
+		Engine::ERHIType LastTarget = Engine::ERHIType::Unknown;
+		std::string StatusKey = "GraphPanel.ShaderIdle";
+		std::string Details;
+		bool SourceCurrent = false;
+		std::shared_ptr<GraphShaderPreview> Preview;
+		std::string MaterialSource;
+		Engine::ShaderCompileResult MaterialLastGood;
+		bool MaterialCurrent = false;
+		Engine::ResourceHandle<Engine::Material> RuntimeMaterial;
+		std::filesystem::path RuntimeMaterialArtifact;
+	};
+
 	struct GraphDocument
 	{
 		explicit GraphDocument(Engine::EGraphDomain domain) : Data(domain) {}
 
 		Engine::Graph Data;
+		std::filesystem::path FilePath;
+		Engine::GraphFileResult FileResult;
 		ImNodesContext* Context = nullptr;
 		std::unordered_map<Engine::GraphNodeId, NodeView> Nodes;
 		std::unordered_map<int, Engine::GraphPinReference> Pins;
@@ -47,11 +70,16 @@ private:
 		Engine::GraphNodeId PendingSelection = 0;
 		bool ResetContext = false;
 		bool RestoreSelection = false;
+		ShaderBuildState ShaderBuild;
 	};
 
 #pragma region DrawUI
 private:
 	void DrawToolbar();
+	void DrawFileToolbar();
+	void SaveDocument(bool saveAs);
+	void OpenDocument();
+	Engine::GraphDiagnostic BuildDocumentViews(GraphDocument& document);
 	void DrawExecutionToolbar();
 	void DrawExecutionTrace();
 	void BeginExecution();
@@ -67,6 +95,18 @@ private:
 	void DrawStatus();
 	static bool DrawValue(Engine::EGraphPinType type, Engine::GraphValue& value);
 	static Engine::GraphValue MakeDefaultValue(Engine::EGraphPinType type);
+private:
+	void DrawShaderToolbar();
+	void DrawShaderBuildDetails();
+	void DrawShaderPreview();
+	bool GenerateShaderSource();
+	bool CompileShaderGraph(Engine::ERHIType target);
+	void BuildShaderPreview();
+	void InvalidateShaderBuild();
+	void CompileMaterialShader();
+	void DrawMaterialShaderDetails();
+	void CreateRuntimeMaterial();
+	void DrawRuntimeMaterialDetails();
 #pragma endregion
 
 #pragma region NodeEditor

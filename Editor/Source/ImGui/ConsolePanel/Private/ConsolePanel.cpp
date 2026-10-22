@@ -1,5 +1,6 @@
 ﻿#include "ConsolePanel.h"
 #include "InputManager.h"
+#include <set>
 
 #pragma region Loop
 void ConsolePanel::Draw()
@@ -15,6 +16,9 @@ void ConsolePanel::Draw()
         m_Hovered = ImGui::IsWindowHovered();
 
         DrawOptions();
+
+        ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * 0.4f);
+        DrawSourceFilter();
         ImGui::SameLine();
         DrawSearch();
 
@@ -156,6 +160,43 @@ void ConsolePanel::DrawLevelFilter()
     }
 }
 
+void ConsolePanel::DrawSourceFilter()
+{
+    std::string preview = LOCAL("Console.AllSources");
+    if (m_SourceFilter.has_value())
+        preview = m_SourceFilter->empty() ? LOCAL("Console.EmptySource") : *m_SourceFilter;
+
+    if (!ImGui::BeginCombo("##LogSources", preview.c_str()))
+        return;
+
+    if (ImGui::Selectable(LOCAL_LABEL("Console.AllSources").c_str(), !m_SourceFilter.has_value()))
+        m_SourceFilter.reset();
+
+    ImGui::Separator();
+
+    std::set<std::string> sources;
+    for (const auto& item : m_Items)
+        sources.insert(item.Entry.Source);
+
+    // 해당 주체의 로그가 기록에서 사라져도 현재 선택은 유지합니다.
+    if (m_SourceFilter.has_value())
+        sources.insert(*m_SourceFilter);
+
+    for (const auto& source : sources)
+    {
+        const bool selected = m_SourceFilter.has_value() && *m_SourceFilter == source;
+        const std::string displayName = source.empty() ? LOCAL("Console.EmptySource") : source;
+        const std::string label = displayName + "###SourceOption";
+
+        ImGui::PushID(source.c_str());
+        if (ImGui::Selectable(label.c_str(), selected))
+            m_SourceFilter = source;
+        ImGui::PopID();
+    }
+
+    ImGui::EndCombo();
+}
+
 void ConsolePanel::DrawSearch()
 {
     ImGui::SetNextItemWidth(-1.0f);
@@ -259,14 +300,13 @@ void ConsolePanel::RebuildVisibleIndices()
     for (std::size_t i = 0; i < m_Items.size(); ++i)
     {
         const auto& item = m_Items[i];
-        const auto levelIndex =
-            static_cast<std::size_t>(item.Entry.Level);
+        const auto levelIndex = static_cast<std::size_t>(item.Entry.Level);
 
-        if (levelIndex >= m_ShowLevels.size() ||
-            !m_ShowLevels[levelIndex])
-        {
+        if (levelIndex >= m_ShowLevels.size() || !m_ShowLevels[levelIndex])
             continue;
-        }
+
+        if (m_SourceFilter.has_value() && item.Entry.Source != *m_SourceFilter)
+            continue;
 
         if (!m_Filter.PassFilter(item.DisplayText.c_str()))
             continue;
@@ -298,13 +338,8 @@ std::string ConsolePanel::BuildDisplayText(
             timeText, sizeof(timeText), "%H:%M:%S", &localTime);
     }
 
-    auto text = fmt::format(
-        "[{}.{:03}] [{}] [{}] {}",
-        timeText,
-        milliseconds,
-        LevelName(entry.Level),
-        entry.Category,
-        entry.Message);
+    auto text = fmt::format("[{}.{:03}] [{}] [{}] [{}] {}",
+        timeText, milliseconds, LevelName(entry.Level), entry.Source, entry.Category, entry.Message);
 
     // 리스트는 고정 높이 한 줄로 표시합니다.
     // 원본 메시지의 줄바꿈은 Entry에 그대로 남아 있습니다.

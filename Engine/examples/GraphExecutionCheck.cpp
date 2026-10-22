@@ -1,4 +1,4 @@
-#include "GraphExecutor.h"
+﻿#include "GraphExecutor.h"
 #include "GraphReflection.h"
 #include "GraphExecutionCheck.gen.h"
 #include <algorithm>
@@ -6,6 +6,8 @@
 #include <iostream>
 #include <limits>
 #include <stdexcept>
+#include "TransformSystem.h"
+#include "Components/Core/TransformComponent.h"
 
 namespace
 {
@@ -159,6 +161,50 @@ void CheckMathGraph(const GraphRegistry& registry, const reflection::Registry& r
 		if (event.Kind == EGraphTraceKind::Link && event.Link != 0) sawLink = true;
 	}
 	Expect(enteredYes && !enteredNo && sawLink, "Trace did not reflect the chosen execution path.");
+}
+
+void CheckUpdateMovement(const GraphRegistry& registry)
+{
+	Graph graph(EGraphDomain::Logic);
+	const auto update = Add(graph, registry, "Event.Update");
+	const auto multiply = Add(graph, registry, "Math.MultiplyFloat");
+	const auto result = Add(graph, registry, "Logic.FloatResult");
+
+	Accept(graph.SetInputValue(registry, { multiply, "b" }, 2.0f));
+	Link(graph, registry, update, "exec", result, "exec");
+	Link(graph, registry, update, "delta", multiply, "a");
+	Link(graph, registry, multiply, "result", result, "value");
+
+	GraphExecutor executor;
+	Accept(executor.Load(graph, registry));
+
+	entt::registry entities;
+	const auto entity = entities.create();
+	entities.emplace<TransformComponent>(entity);
+
+	auto move = [&](float delta)
+		{
+			Accept(executor.Begin(update, delta));
+			Drain(executor);
+			Expect(executor.GetState() == EGraphExecutionState::Completed, executor.GetDiagnostic().Message);
+
+			const auto* distance = std::get_if<float>(&executor.GetResult());
+			Expect(distance != nullptr, "Movement graph did not produce a float.");
+
+			auto candidate = entities.get<TransformComponent>(entity);
+			const auto position = candidate.position + glm::vec3(*distance, 0.0f, 0.0f);
+			Expect(candidate.SetLocalPosition(position), "Movement produced an invalid position.");
+			Expect(TransformSystem::TryCommitTransform(entities, entity, candidate), "Transform commit failed.");
+		};
+
+	move(0.5f);
+	Expect(entities.get<TransformComponent>(entity).position.x == 1.0f, "First movement was incorrect.");
+
+	move(0.25f);
+	Expect(entities.get<TransformComponent>(entity).position.x == 1.5f, "Movement did not accumulate.");
+
+	move(0.0f);
+	Expect(entities.get<TransformComponent>(entity).position.x == 1.5f, "Zero delta changed the position.");
 }
 
 void CheckLoops(const GraphRegistry& registry, const reflection::Registry& reflection)
@@ -391,6 +437,7 @@ int main()
 		CheckMath();
 		CheckNativeInvocation(reflection);
 		CheckMathGraph(registry, reflection);
+		CheckUpdateMovement(registry);
 		CheckLoops(registry, reflection);
 		CheckStateAndSequence(registry);
 		CheckGateFlipFlopAndStop(registry);

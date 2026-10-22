@@ -129,6 +129,8 @@ struct hash<RHIPipelineDesc>
 		for (const auto& layout : desc.inputLayouts)
 		{
 			HashCombine(seed, hash<uint32>()(layout.stride));
+			HashCombine(seed, hash<int>()((int)layout.inputRate));
+			HashCombine(seed, hash<uint32>()(layout.instanceDataStepRate));
 			for (const auto& attr : layout.elements)
 			{
 				HashCombine(seed, hash<uint32>()(attr.location));

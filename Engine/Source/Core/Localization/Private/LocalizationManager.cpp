@@ -13,7 +13,6 @@ EResult LocalizationManager::Initialize(void* arg)
 }
 #pragma endregion
 
-
 #pragma region Data Management
 EResult LocalizationManager::LoadData()
 {
@@ -86,31 +85,47 @@ EResult LocalizationManager::RegisterLocalizationData(const wstring& filePath)
 	return EResult::Success;
 }
 
-string LocalizationManager::GetText(const string& key) const
+const string* LocalizationManager::FindText(std::string_view key) const
 {
-	if (key.empty()) return "";
+	if (key.empty()) return nullptr;
+
 	int index = static_cast<int>(m_CurrentLanguage);
 	auto it = m_LocalizationData[index].find(key);
 	if (it != m_LocalizationData[index].end())
-	{
-		return it->second;
-	}
+		return &it->second;
 
 	if (m_CurrentLanguage != ELocalizationLanguage::English)
 	{
 		index = static_cast<int>(ELocalizationLanguage::English);
 		it = m_LocalizationData[index].find(key);
 		if (it != m_LocalizationData[index].end())
-		{
-			return it->second;
-		}
+			return &it->second;
 	}
 
-	return key;
+	return nullptr;
 }
+
+string LocalizationManager::GetText(std::string_view key) const
+{
+	if (const string* text = FindText(key))
+		return *text;
+
+	return string(key);
+}
+
 string LocalizationManager::GetText(const wstring& key) const
 {
 	return GetText(WStrToStr(key));
+}
+
+LocalizedText LocalizationManager::GetTextForDisplay(std::string_view key) const
+{
+	return LocalizedText(FindText(key), key);
+}
+
+LocalizedText LocalizationManager::GetTextForDisplay(const wstring& key) const
+{
+	return GetTextForDisplay(WStrToStr(key));
 }
 
 EResult LocalizationManager::AddText(ELocalizationLanguage lang, const string& key, const string& text)

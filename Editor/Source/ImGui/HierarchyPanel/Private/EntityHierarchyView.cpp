@@ -11,6 +11,7 @@
 #include <array>
 #include <cstring>
 #include "IconsFontAwesome7.h"
+#include <fmt/format.h>
 
 namespace
 {
@@ -33,13 +34,42 @@ namespace
         return Engine::LocalizationManager::Get().GetText(std::string(key));
     }
 
-    std::string EntityName(Engine::Scene& scene, entt::entity entity)
+    struct CachedEntityText
     {
-        const auto& world = scene.GetRegistry();
-        const auto* name = world.try_get<Engine::NameComponent>(entity);
-        if (name && !name->name.empty()) return Engine::WStrToStr(name->name);
-        const auto* id = world.try_get<Engine::IDComponent>(entity);
-        return "Entity " + std::to_string(id ? id->id : entt::to_integral(entity));
+        std::wstring Source;
+        std::string Name;
+        std::string FallbackFormat;
+        std::string Label;
+        std::string Icon;
+        std::uint64_t PersistentId = 0;
+        std::size_t ChildCount = 0;
+        bool NameReady = false;
+        bool LabelReady = false;
+    };
+
+    struct HierarchyTextCache
+    {
+        std::unordered_map<entt::entity, CachedEntityText> Entries;
+    };
+
+    const std::string& EntityLabel(Engine::Scene& scene, entt::entity entity,
+        std::string_view icon, std::size_t childCount)
+    {
+        const auto& name = Editor::GetEntityHierarchyName(scene, entity);
+        auto& entry = scene.GetRegistry().ctx().emplace<HierarchyTextCache>().Entries.at(entity);
+        if (!entry.LabelReady || entry.Icon != icon || entry.ChildCount != childCount)
+        {
+            std::string label(icon);
+            label += " ";
+            label += name;
+            if (childCount != 0) label += " (" + std::to_string(childCount) + ")";
+
+            entry.Label = std::move(label);
+            entry.Icon.assign(icon);
+            entry.ChildCount = childCount;
+            entry.LabelReady = true;
+        }
+        return entry.Label;
     }
 
     bool ContainsIgnoreCase(std::string_view source, std::string_view target)
@@ -74,6 +104,45 @@ namespace
 
         return { ICON_FA_CIRCLE, ImVec4(0.65f, 0.65f, 0.65f, 0.8f) }; // 회색 (기본 빈 엔티티)
     }
+}
+
+const std::string& Editor::GetEntityHierarchyName(Engine::Scene& scene, entt::entity entity)
+{
+    static const std::string empty;
+    auto& world = scene.GetRegistry();
+    if (!world.valid(entity) || !scene.FindEntity(entity)) return empty;
+
+    const auto* name = world.try_get<Engine::NameComponent>(entity);
+    const std::wstring_view source = name ? std::wstring_view(name->name) : std::wstring_view{};
+    const auto* id = world.try_get<Engine::IDComponent>(entity);
+    const std::uint64_t persistentId = id ? id->id : entt::to_integral(entity);
+    auto& entry = world.ctx().emplace<HierarchyTextCache>().Entries[entity];
+    bool changed = !entry.NameReady || entry.PersistentId != persistentId || entry.Source != source;
+
+    if (source.empty())
+    {
+        const auto format = Engine::LocalizationManager::Get().GetTextForDisplay("Hierarchy.EntityFallback");
+        if (changed || entry.FallbackFormat != format.c_str())
+        {
+            entry.Name = fmt::format(fmt::runtime(format.c_str()), persistentId);
+            entry.FallbackFormat = format.c_str();
+            changed = true;
+        }
+    }
+    else if (changed)
+    {
+        entry.Name = Engine::WStrToStr(name->name);
+        entry.FallbackFormat.clear();
+    }
+
+    if (changed)
+    {
+        entry.Source.assign(source);
+        entry.PersistentId = persistentId;
+        entry.NameReady = true;
+        entry.LabelReady = false;
+    }
+    return entry.Name;
 }
 
 Editor::EntityHierarchyTree Editor::BuildEntityHierarchyTree(Engine::Scene& scene)
@@ -160,6 +229,84 @@ Editor::EntityHierarchyTree Editor::BuildEntityHierarchyTree(Engine::Scene& scen
     return tree;
 }
 
+const Editor::EntityHierarchyTree& Editor::GetEntityHierarchyTree(Engine::Scene& scene)
+{
+    struct Source
+    {
+        entt::entity Entity = entt::null;
+        std::uint64_t Order = 0;
+        bool HasHierarchy = false;
+        entt::entity Parent = entt::null;
+        std::vector<entt::entity> Children;
+    };
+    struct Cache
+    {
+        EntityHierarchyTree Tree;
+        std::vector<Source> Sources;
+        bool Valid = false;
+    };
+
+    auto& world = scene.GetRegistry();
+    auto& cache = world.ctx().emplace<Cache>();
+    const auto* storage = std::as_const(world).storage<entt::entity>();
+
+    const auto unchanged = [&]() -> bool
+        {
+            if (!cache.Valid) return false;
+            std::size_t index = 0;
+            if (storage)
+            {
+                for (auto [entity] : storage->each())
+                {
+                    if (!scene.FindEntity(entity)) continue;
+                    if (index >= cache.Sources.size()) return false;
+
+                    const auto& previous = cache.Sources[index++];
+                    const auto* id = world.try_get<Engine::IDComponent>(entity);
+                    const auto order = id ? id->id : static_cast<std::uint64_t>(entt::to_integral(entity));
+                    const auto* link = world.try_get<Engine::HierarchyComponent>(entity);
+                    if (previous.Entity != entity || previous.Order != order ||
+                        previous.HasHierarchy != (link != nullptr))
+                        return false;
+                    if (link && (previous.Parent != link->parent || previous.Children != link->children))
+                        return false;
+                }
+            }
+            return index == cache.Sources.size();
+        };
+
+    if (unchanged()) return cache.Tree;
+
+    std::vector<Source> sources;
+    if (storage)
+    {
+        sources.reserve(storage->size());
+        for (auto [entity] : storage->each())
+        {
+            if (!scene.FindEntity(entity)) continue;
+
+            Source source;
+            source.Entity = entity;
+            const auto* id = world.try_get<Engine::IDComponent>(entity);
+            source.Order = id ? id->id : static_cast<std::uint64_t>(entt::to_integral(entity));
+            const auto* link = world.try_get<Engine::HierarchyComponent>(entity);
+            source.HasHierarchy = link != nullptr;
+            if (link)
+            {
+                source.Parent = link->parent;
+                source.Children = link->children;
+            }
+            sources.push_back(std::move(source));
+        }
+    }
+
+    auto tree = BuildEntityHierarchyTree(scene);
+    cache.Tree = std::move(tree);
+    cache.Sources = std::move(sources);
+    cache.Valid = true;
+    return cache.Tree;
+}
+
 Editor::EntityHierarchyView::~EntityHierarchyView() { ResetDrag(); }
 
 void Editor::EntityHierarchyView::ResetDrag()
@@ -179,8 +326,10 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
 {
     ReleaseFinishedDrag();
     scene.UpdateHierarchyFlags();
-    const auto tree = BuildEntityHierarchyTree(scene);
+    const auto& tree = GetEntityHierarchyTree(scene);
     auto& world = scene.GetRegistry();
+    auto& textCache = world.ctx().emplace<HierarchyTextCache>();
+    std::erase_if(textCache.Entries, [&](const auto& item) { return !tree.Parents.contains(item.first); });
     EntityHierarchyAction action;
 
     // --- 검색 필터링 및 조상 노드 수집 ---
@@ -191,7 +340,7 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
     {
         for (const auto& [entity, parent] : tree.Parents)
         {
-            if (ContainsIgnoreCase(EntityName(scene, entity), filter))
+            if (ContainsIgnoreCase(GetEntityHierarchyName(scene, entity), filter))
             {
                 matchingEntities.insert(entity);
                 visibleInSearch.insert(entity);
@@ -224,6 +373,7 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
         {
             // 검색 필터 적용: 검색 중일 때 일치 노드나 그 조상이 아니면 표시하지 않음
             if (isFiltering && !visibleInSearch.contains(entity)) return;
+            action.VisibleEntities.push_back(entity);
 
             // [방안 2] 교차 줄무늬 배경 (홀수 행마다 은은한 음영 추가)
             if ((rowIndex++ % 2) == 1)
@@ -259,8 +409,7 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
             else ImGui::PushStyleColor(ImGuiCol_Text, visual.Color); // 타입별 고유 색상
 
             // 레이블: [아이콘] [이름] (자식이 있으면 자식 개수 뱃지 추가)
-            std::string label = std::string(visual.Icon) + " " + EntityName(scene, entity);
-            if (!children.empty()) label += " (" + std::to_string(children.size()) + ")";
+            const auto& label = EntityLabel(scene, entity, visual.Icon, children.size());
 
             ImGui::SetNextItemAllowOverlap();
             const bool opened = ImGui::TreeNodeEx("EntityNode", flags, "%s", label.c_str());
@@ -268,8 +417,10 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
 
             if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen() && !locked)
             {
+                auto& input = Engine::InputManager::Get();
                 action.Clicked = entity;
-                action.Toggle = Engine::InputManager::Get().IsCtrlPressed();
+                action.Toggle = input.IsCtrlPressed();
+                action.Range = input.IsShiftPressed();
             }
             if (entity == reveal) ImGui::SetScrollHereY();
             if (tree.Invalid.contains(entity) && ImGui::IsItemHovered())

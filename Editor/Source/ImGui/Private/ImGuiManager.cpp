@@ -26,6 +26,7 @@
 
 #include "ResourceEditors.h"
 #include "TerrainEditor.h"
+#include <exception>
 
 
 #include "DirectX12Texture.h"
@@ -653,7 +654,7 @@ EResult ImGuiManager::InitializeImGuiDirectX12()
 	ImGui_ImplDX12_InitInfo initInfo = {};
 	initInfo.Device = device;
 	initInfo.CommandQueue = dx12RHI->GetCommandQueue();
-	initInfo.NumFramesInFlight = 2;
+	initInfo.NumFramesInFlight = static_cast<int>(m_RHI->GetFrameResourceCount());;
 	initInfo.SrvDescriptorHeap = m_ImGuiSrvDescHeap;
 	initInfo.RTVFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
 	initInfo.DSVFormat = DXGI_FORMAT_UNKNOWN;
@@ -697,7 +698,7 @@ EResult ImGuiManager::InitializeImGuiDirectX12()
 
 			SIZE_T delta = cpu_desc.ptr - start.ptr;
 			uint32 index = static_cast<uint32>(delta / self->m_ImGuiSrvDescriptorSize);
-			allocator->Free(index);
+			dx12RHI->DeferDescriptorFree(allocator, index);
 		};
 
 	if (!ImGui_ImplDX12_Init(&initInfo))
@@ -750,6 +751,13 @@ void ImGuiManager::DirectX12End()
 }
 void ImGuiManager::ShutdownImGuiDirectX12()
 {
+	auto* dxRHI = static_cast<Engine::DirectX12RHI*>(m_RHI);
+	if (!dxRHI || Engine::IsFailure(dxRHI->WaitForGPU()))
+	{
+		fmt::print(stderr, "GPU synchronization failed before ImGui DX12 shutdown.\n");
+		std::terminate();
+	}
+
 	ImGui_ImplDX12_Shutdown();
 }
 #pragma endregion

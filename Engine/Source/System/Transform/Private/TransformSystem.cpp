@@ -3,6 +3,8 @@
 #include <glm/gtx/matrix_decompose.hpp>
 #include <array>
 #include <algorithm>
+#include <optional>
+#include <utility>
 
 namespace
 {
@@ -90,20 +92,28 @@ void TransformSystem::OnLateUpdate(entt::registry& globalRegistry, const vector<
 
 bool TransformSystem::TryComposeWorld(const TransformComponent& transform, const glm::mat4& parent, glm::mat4& matrix)
 {
-    auto candidate = transform;
-    static_cast<void>(candidate.SynchronizeRotation());
+    std::optional<TransformComponent> candidate;
+    if (!transform.IsRotationSynchronized())
+    {
+        candidate = transform;
+        static_cast<void>(candidate->SynchronizeRotation());
+    }
+    const auto& value = candidate ? *candidate : transform;
+
     glm::dmat4 left, right;
-    if (!Factors(glm::dmat4(parent), candidate.absolute, left, right)) return false;
-    auto result = left * glm::dmat4(candidate.GetLocalMatrix()) * right;
-    result[3] = Has(candidate.absolute, ETransformAbsolute::Position) ?
-        glm::dvec4(candidate.position, 1.0) : glm::dmat4(parent) * glm::dvec4(candidate.position, 1.0);
+    if (!Factors(glm::dmat4(parent), value.absolute, left, right)) return false;
+
+    auto result = left * glm::dmat4(value.GetLocalMatrix()) * right;
+    result[3] = Has(value.absolute, ETransformAbsolute::Position) ?
+        glm::dvec4(value.position, 1.0) : glm::dmat4(parent) * glm::dvec4(value.position, 1.0);
+
     if (!Affine(result) || !Finite(glm::dmat4(glm::mat4(result)))) return false;
+
     matrix = glm::mat4(result);
     return true;
 }
 
-bool TransformSystem::TryGetLocalMatrix(const glm::mat4& parent, ETransformAbsolute flags,
-    const glm::mat4& desiredWorld, glm::dmat4& local)
+bool TransformSystem::TryGetLocalMatrix(const glm::mat4& parent, ETransformAbsolute flags, const glm::mat4& desiredWorld, glm::dmat4& local)
 {
     glm::dmat4 left, right;
     const glm::dmat4 parentMatrix(parent), desired(desiredWorld);
@@ -154,7 +164,26 @@ bool TransformSystem::TryGetWorldMatrix(const entt::registry& registry, entt::en
     }
     glm::mat4 result(1.0f);
     for (std::size_t k = chainLen; k > 0; --k)
-        if (!TryComposeWorld(registry.get<TransformComponent>(chain[k - 1]), result, result)) return false;
+    {
+        const auto current = chain[k - 1];
+        const auto& source = registry.get<TransformComponent>(current);
+        std::optional<TransformComponent> candidate;
+        if (!source.IsRotationSynchronized())
+        {
+            candidate = source;
+            static_cast<void>(candidate->SynchronizeRotation());
+        }
+        const auto& transform = candidate ? *candidate : source;
+
+        glm::mat4 next;
+        const auto* cache = registry.try_get<WorldTransformComponent>(current);
+        if (!cache || !cache->TryReuseWorld(transform, result, next))
+        {
+            if (!TryComposeWorld(transform, result, next)) return false;
+        }
+        result = next;
+    }
+
     matrix = result;
     return true;
 }
@@ -167,20 +196,76 @@ bool TransformSystem::UpdateHierarchy(entt::registry& registry)
     struct Node
     {
         entt::entity Entity = entt::null;
-        TransformComponent Transform{};
+        const TransformComponent* Source = nullptr;
+        std::optional<TransformComponent> PendingTransform;
         glm::mat4 World{ 1.0f };
+        glm::mat4 ParentWorld{ 1.0f };
         std::size_t Depth = 0;
         VisitState State = VisitState::Unvisited;
+        bool Recomputed = false;
+
+        const TransformComponent& GetTransform() const
+        {
+            return PendingTransform ? *PendingTransform : *Source;
+        }
     };
     const std::size_t count = storage->size();
+    struct HierarchyState
+    {
+        std::vector<std::pair<entt::entity, entt::entity>> Links;
+        bool Valid = false;
+    };
+
+    auto& hierarchyState = registry.ctx().emplace<HierarchyState>();
+    const auto canReuseHierarchy = [&]() -> bool
+        {
+            if (!hierarchyState.Valid || hierarchyState.Links.size() != count) return false;
+
+            for (auto [entity, transform] : registry.view<TransformComponent>().each())
+            {
+                const auto* link = registry.try_get<HierarchyComponent>(entity);
+                const auto parent = link ? link->parent : entt::null;
+                const auto& previous = hierarchyState.Links[storage->index(entity)];
+                if (previous.first != entity || previous.second != parent || !transform.IsRotationSynchronized())
+                    return false;
+
+                const auto* cache = registry.try_get<WorldTransformComponent>(entity);
+                if (!cache) return false;
+
+                glm::mat4 parentWorld(1.0f);
+                if (parent != entt::null)
+                {
+                    if (!registry.valid(parent)) return false;
+                    const auto* parentCache = registry.try_get<WorldTransformComponent>(parent);
+                    if (!parentCache) return false;
+                    parentWorld = parentCache->worldMatrix;
+                }
+
+                glm::mat4 cachedWorld;
+                if (!cache->TryReuseWorld(transform, parentWorld, cachedWorld) || cache->worldMatrix != cachedWorld)
+                    return false;
+            }
+            return true;
+        };
+
+    if (canReuseHierarchy()) return true;
     thread_local std::vector<Node> nodes;
-    nodes.assign(count, Node{});
+    nodes.resize(count);
     for (auto [entity, transform] : registry.view<TransformComponent>().each())
     {
-        const std::size_t idx = storage->index(entity);
-        nodes[idx].Entity = entity;
-        nodes[idx].Transform = transform;
-        static_cast<void>(nodes[idx].Transform.SynchronizeRotation());
+        auto& node = nodes[storage->index(entity)];
+        node.Entity = entity;
+        node.Source = &transform;
+        node.PendingTransform.reset();
+        node.Depth = 0;
+        node.State = VisitState::Unvisited;
+        node.Recomputed = false;
+
+        if (!transform.IsRotationSynchronized())
+        {
+            node.PendingTransform = transform;
+            static_cast<void>(node.PendingTransform->SynchronizeRotation());
+        }
     }
     std::array<std::size_t, 256> chain{};
     for (std::size_t i = 0; i < count; ++i)
@@ -219,18 +304,42 @@ bool TransformSystem::UpdateHierarchy(entt::registry& registry)
         for (std::size_t k = chainLen; k > 0; --k)
         {
             const std::size_t idx = chain[k - 1];
-            if (!TryComposeWorld(nodes[idx].Transform, parentWorld, parentWorld)) return false;
-            nodes[idx].World = parentWorld;
-            nodes[idx].Depth = ++depth;
-            nodes[idx].State = VisitState::Resolved;
+            auto& node = nodes[idx];
+            const auto& transform = node.GetTransform();
+            const auto* cache = registry.try_get<WorldTransformComponent>(node.Entity);
+            if (!cache || !cache->TryReuseWorld(transform, parentWorld, node.World))
+            {
+                node.ParentWorld = parentWorld;
+                if (!TryComposeWorld(transform, parentWorld, node.World)) return false;
+                node.Recomputed = true;
+            }
+            parentWorld = node.World;
+            node.Depth = ++depth;
+            node.State = VisitState::Resolved;
         }
     }
-    for (const auto& node : nodes)
+    hierarchyState.Valid = false;
+    hierarchyState.Links.resize(count);
+
+    for (std::size_t i = 0; i < count; ++i)
     {
-        registry.get<TransformComponent>(node.Entity) = node.Transform;
+        const auto& node = nodes[i];
+        if (node.PendingTransform)
+            registry.get<TransformComponent>(node.Entity) = *node.PendingTransform;
+
         if (auto* cache = registry.try_get<WorldTransformComponent>(node.Entity))
-            cache->worldMatrix = node.World;
+        {
+            if (node.Recomputed)
+                cache->CommitWorld(node.GetTransform(), node.ParentWorld, node.World);
+            else if (cache->worldMatrix != node.World)
+                cache->worldMatrix = node.World;
+        }
+
+        const auto* link = registry.try_get<HierarchyComponent>(node.Entity);
+        hierarchyState.Links[i] = { node.Entity, link ? link->parent : entt::null };
     }
+
+    hierarchyState.Valid = true;
     return true;
 }
 

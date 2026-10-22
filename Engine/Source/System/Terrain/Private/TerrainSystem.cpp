@@ -89,8 +89,19 @@ void TerrainSystem::EnsureTerrainResources(Scene* scene, entt::entity entity, Te
 
 			const uint64 entityId = static_cast<uint64>(entt::to_integral(entity));
 			const std::wstring texKey = L"Runtime_TerrainHeightmap_" + std::to_wstring(entityId);
+			Safe_AddRef(rawTexture);
 			Texture* heightmapTex = Texture::CreateFromRHITexture(rawTexture, texKey);
-			ResourceManager::Get().AddResource<Texture>(texKey, heightmapTex);
+			auto heightmapHandle = ResourceManager::Get().AddResource<Texture>(texKey, heightmapTex);
+			Texture* registered = heightmapHandle.Get();
+			RHITexture* registeredTexture = registered ? registered->GetRHITexture() : nullptr;
+
+			if (registeredTexture && registeredTexture != terrain.HeightmapTexture.get())
+			{
+				Safe_AddRef(registeredTexture);
+				terrain.HeightmapTexture = std::shared_ptr<RHITexture>(
+					registeredTexture, [](RHITexture* p) { Safe_Release(p); });
+				terrain.IsDirty = true;
+			}
 		}
 	}
 
@@ -134,8 +145,19 @@ void TerrainSystem::EnsureTerrainResources(Scene* scene, entt::entity entity, Te
 
 			const uint64 entityId = static_cast<uint64>(entt::to_integral(entity));
 			const std::wstring texKey = L"Runtime_TerrainSplatmap_" + std::to_wstring(entityId);
+			Safe_AddRef(rawTexture);
 			Texture* splatTex = Texture::CreateFromRHITexture(rawTexture, texKey);
-			ResourceManager::Get().AddResource<Texture>(texKey, splatTex);
+			auto splatHandle = ResourceManager::Get().AddResource<Texture>(texKey, splatTex);
+			Texture* registered = splatHandle.Get();
+			RHITexture* registeredTexture = registered ? registered->GetRHITexture() : nullptr;
+
+			if (registeredTexture && registeredTexture != terrain.SplatmapTexture.get())
+			{
+				Safe_AddRef(registeredTexture);
+				terrain.SplatmapTexture = std::shared_ptr<RHITexture>(
+					registeredTexture, [](RHITexture* p) { Safe_Release(p); });
+				terrain.IsSplatDirty = true;
+			}
 		}
 	}
 
@@ -185,12 +207,6 @@ void TerrainSystem::OnUpdate(entt::registry& registry, const vector<Scene*> acti
 		for (auto [entity, terrain] : view.each())
 		{
 			EnsureTerrainResources(scene, entity, terrain);
-
-			if (terrain.IsDirty && terrain.HeightmapTexture)
-			{
-				// TODO: 에디터 브러시로 편집된 높이 데이터를 GPU로 전송하는 로직 연결 예정
-				terrain.IsDirty = false;
-			}
 		}
 	}
 }

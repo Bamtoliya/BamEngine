@@ -212,6 +212,7 @@ void DirectX12Texture::Free()
     if (m_IsOwned && m_RHI)
     {
         auto* dxRHI = static_cast<DirectX12RHI*>(m_RHI);
+        dxRHI->DeferRelease(m_Texture.Get());
 
         if (m_RTVDescriptorIndex != INVALID_DESCRIPTOR_INDEX)
             dxRHI->GetRTVAllocator()->Free(m_RTVDescriptorIndex);
@@ -219,23 +220,14 @@ void DirectX12Texture::Free()
         if (m_DSVDescriptorIndex != INVALID_DESCRIPTOR_INDEX)
             dxRHI->GetDSVAllocator()->Free(m_DSVDescriptorIndex);
 
-        if (m_SRVDescriptorIndex != INVALID_DESCRIPTOR_INDEX)
-            dxRHI->GetSRVAllocator()->Free(m_SRVDescriptorIndex);
+        dxRHI->DeferDescriptorFree(dxRHI->GetSRVAllocator(), m_SRVDescriptorIndex);
 
-        if (m_Dimension == ETextureDimension::TextureCube)
+        for (auto& index : m_CubeDSVDescriptorIndices)
         {
-            for (uint32 face = 0; face < 6; ++face)
-            {
-                if (m_CubeDSVDescriptorIndices[face] != INVALID_DESCRIPTOR_INDEX)
-                {
-                    dxRHI->GetDSVAllocator()->Free(m_CubeDSVDescriptorIndices[face]);
-                    m_CubeDSVDescriptorIndices[face] = INVALID_DESCRIPTOR_INDEX;
-                }
-            }
-        }
-        else if (m_DSVDescriptorIndex != INVALID_DESCRIPTOR_INDEX)
-        {
-            dxRHI->GetDSVAllocator()->Free(m_DSVDescriptorIndex);
+            if (index != INVALID_DESCRIPTOR_INDEX)
+                dxRHI->GetDSVAllocator()->Free(index);
+
+            index = INVALID_DESCRIPTOR_INDEX;
         }
     }
 
@@ -247,6 +239,9 @@ void DirectX12Texture::Free()
     m_DSVHandle = {};
     m_SRVHandle = {};
     m_SRVGPUHandle = {};
+
+    for (auto& handle : m_CubeDSVHandles)
+        handle = {};
 
     m_Texture.Reset();
     RHIResource::Free();

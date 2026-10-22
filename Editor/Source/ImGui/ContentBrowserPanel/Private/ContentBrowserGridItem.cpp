@@ -65,13 +65,13 @@ namespace
 		const Engine::EResult result = Engine::SceneManager::Get().LoadScene(ar, path.wstring());
 		if (result != Engine::EResult::Success)
 		{
-			ENGINE_LOG_ERROR("Failed to load scene: {} ({})", path.string(), Engine::ResultToString(result));
+			EDITOR_LOG_ERROR("Failed to load scene: {} ({})", path.string(), Engine::ResultToString(result));
 			return false;
 		}
 
 		Editor::SelectionManager::Get().ClearSelection(true);
 		Editor::Application::Get().GetEditHistory().Clear();
-		ENGINE_LOG_INFO("Successfully loaded scene from ContentBrowser: {}", path.string());
+		EDITOR_LOG_INFO("Successfully loaded scene from ContentBrowser: {}", path.string());
 		return true;
 	}
 
@@ -349,8 +349,8 @@ void ContentBrowserGridItem::ContextMenu(const std::filesystem::path& path,
 			else
 				std::filesystem::remove(path, ec);
 
-			if (ec) ENGINE_LOG_ERROR("Failed to delete asset {}: {}", path.string(), ec.message());
-			else ENGINE_LOG_INFO("Deleted asset: {}", path.string());
+			if (ec) EDITOR_LOG_ERROR("Failed to delete asset {}: {}", path.string(), ec.message());
+			else EDITOR_LOG_INFO("Deleted asset: {}", path.string());
 		}
 
 		ImGui::EndPopup();
@@ -622,7 +622,7 @@ void ContentBrowserGridItem::ContextMenu_Material(const std::filesystem::path& p
 				if (instHandle)
 				{
 					rm.SaveToJsonFile(instHandle.Get(), instPath.wstring());
-					ENGINE_LOG_INFO("Created Material Instance (JSON): {}", instPath.string());
+					EDITOR_LOG_INFO("Created Material Instance (JSON): {}", instPath.string());
 					ShaderHotReloadManager::Get().AddNotification(LOCAL("Notification.InstanceCreated"),
 						instPath.filename().string(), false, 3.0f);
 				}
@@ -828,7 +828,7 @@ void ContentBrowserGridItem::ContextMenu_Texture(const std::filesystem::path& pa
 				{
 					// 4. 저장된 파일을 ResourceManager에 정식 로드 등록
 					rm.LoadFile(std::filesystem::relative(spritePath).wstring());
-					ENGINE_LOG_INFO("Successfully created sprite: {}", spritePath.string());
+					EDITOR_LOG_INFO("Successfully created sprite: {}", spritePath.string());
 				}
 				rm.DestroyResource(newSprite); // 임시 객체 해제
 			}
@@ -890,7 +890,7 @@ bool ContentBrowserGridItem::ConvertJsonToBinary(const std::filesystem::path& pa
 	{
 		ShaderHotReloadManager::Get().AddNotification(LOCAL("Notification.BakeSucceeded"),
 			LOCAL_FMT("Notification.CreatedFile", outPath.filename().string()), false, 3.0f);
-		ENGINE_LOG_INFO("[Asset Baking] Baked {} (Type: {}) -> {}",
+		EDITOR_LOG_INFO("[Asset Baking] Baked {} (Type: {}) -> {}",
 			path.string(), static_cast<uint32>(assetType), outPath.string());
 		return true;
 	}
@@ -920,7 +920,7 @@ bool ContentBrowserGridItem::ConvertBinaryToJson(const std::filesystem::path& pa
 	{
 		ShaderHotReloadManager::Get().AddNotification(LOCAL("Notification.ExportSucceeded"),
 			LOCAL_FMT("Notification.CreatedFile", outPath.filename().string()), false, 3.0f);
-		ENGINE_LOG_INFO("[Asset Export] Successfully exported binary to JSON: {} -> {}",
+		EDITOR_LOG_INFO("[Asset Export] Successfully exported binary to JSON: {} -> {}",
 			path.string(), outPath.string());
 		return true;
 	}

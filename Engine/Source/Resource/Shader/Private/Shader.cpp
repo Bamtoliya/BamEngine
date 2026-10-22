@@ -6,6 +6,15 @@
 #include "Logger.h"
 #include "PipelineManager.h"
 
+#pragma push_macro("new")
+#undef new
+
+#include <algorithm>
+#include <cwctype>
+#include <filesystem>
+
+#pragma pop_macro("new")
+
 #pragma region Constructor&Destructor
 EResult Shader::Initialize(void* arg)
 {
@@ -14,7 +23,9 @@ EResult Shader::Initialize(void* arg)
 	
 	m_ShaderType = desc->shaderType;
 	m_EntryPoint = desc->entryPoint;
-	m_SpirvPath = desc->spirvPath.empty() ? m_Path : desc->spirvPath;
+	m_DxilPath = desc->dxilPath;
+	m_SpirvPath = desc->spirvPath;
+	ResolveLegacyBinaryPaths();
 	m_NumSamplers = desc->numSamplers;
 	m_NumStorageTextures = desc->numStorageTextures;
 	m_NumStorageBuffers = desc->numStorageBuffers;
@@ -77,10 +88,9 @@ RHIShaderDesc Shader::BuildRHIShaderDesc() const
 	RHIShaderDesc desc;
 	desc.shaderType = m_ShaderType;
 	desc.entryPoint = m_EntryPoint;
+
 	const bool useDxil = Renderer::IsCreated() && Renderer::Get().GetRHIType() == ERHIType::DirectX12;
-	desc.filePath = useDxil
-		? (m_Path.empty() ? m_SpirvPath : m_Path)
-		: (m_SpirvPath.empty() ? m_Path : m_SpirvPath);
+	desc.filePath = useDxil ? m_DxilPath : m_SpirvPath;
 
 	desc.numSamplers = m_NumSamplers;
 	desc.numStorageTextures = m_NumStorageTextures;
@@ -92,15 +102,29 @@ RHIShaderDesc Shader::BuildRHIShaderDesc() const
 EResult Shader::OnPostLoad()
 {
 	Safe_Release(m_RHIShader);
-	if (m_SpirvPath.empty())
-		m_SpirvPath = m_Path;
+	ResolveLegacyBinaryPaths();
+
 	RHI* rhi = Renderer::IsCreated() ? Renderer::Get().GetRHI() : nullptr;
-	if (rhi)
-	{
-		m_RHIShader = rhi->CreateShader(BuildRHIShaderDesc());
-		if (!m_RHIShader)
-			return EResult::Fail;
-	}
-	return EResult::Success;
+	if (!rhi)
+		return EResult::Success;
+
+	m_RHIShader = rhi->CreateShader(BuildRHIShaderDesc());
+	return m_RHIShader ? EResult::Success : EResult::Fail;
+}
+
+#pragma endregion
+
+#pragma region MyRegion
+void Shader::ResolveLegacyBinaryPaths()
+{
+	std::wstring extension = std::filesystem::path(m_Path).extension().wstring();
+	std::transform(extension.begin(), extension.end(), extension.begin(),
+		[](wchar_t value) { return static_cast<wchar_t>(std::towlower(value)); });
+
+	if (m_DxilPath.empty() && (extension == L".cso" || extension == L".dxil"))
+		m_DxilPath = m_Path;
+
+	if (m_SpirvPath.empty() && extension == L".spv")
+		m_SpirvPath = m_Path;
 }
 #pragma endregion

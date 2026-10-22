@@ -10,7 +10,7 @@
     "m_DepthMode": 2,
     "m_FillMode": 1,
     "m_FrontFace": 0,
-    "m_Key": "Resources/Material/GBufferMaterial",
+    "m_Key": "Resources/Material/GBufferMaterial.bammat.json",
     "m_Parameters": [],
     "m_PassShaders": [
         {
@@ -27,7 +27,7 @@
             }
         }
     ],
-    "m_Path": "",
+    "m_Path": "Resources/Material/GBufferMaterial.bammat.json",
     "m_PixelShaderHandle": {
         "AssetKey": "Resources/Shader/GBufferPS",
         "AssetPath": "Resources/Shader/bin/dxil/gbufferPS.cso",
@@ -56,7 +56,6 @@
             }
         }
     ],
-    "m_Version": 0,
     "m_VertexShaderHandle": {
         "AssetKey": "Resources/Shader/GBufferVS",
         "AssetPath": "Resources/Shader/bin/dxil/gbufferVS.cso",

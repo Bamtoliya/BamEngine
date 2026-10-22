@@ -213,6 +213,11 @@ namespace Engine
             return ApplyRotation(axis, deltaDegrees, false);
         }
 
+        [[nodiscard]] bool IsRotationSynchronized() const
+        {
+            return eulerRotation == m_SynchronizedEuler && rotation == m_SynchronizedRotation;
+        }
+
         // Reflection 등 기존의 직접 멤버 대입을 연결하는 호환 경로입니다.
         [[nodiscard]]
         bool SynchronizeRotation()

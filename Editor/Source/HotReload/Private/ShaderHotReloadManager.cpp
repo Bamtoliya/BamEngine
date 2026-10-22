@@ -124,7 +124,7 @@ EResult ShaderHotReloadManager::Initialize(void* arg)
 	std::error_code ec;
 	if (!std::filesystem::exists(m_WatchDirectory, ec))
 	{
-		ENGINE_LOG_WARN("[Shader Hot Reload] Shader directory does not exist: {}", m_WatchDirectory.string());
+		EDITOR_LOG_WARN("[Shader Hot Reload] Shader directory does not exist: {}", m_WatchDirectory.string());
 		return EResult::Success;
 	}
 
@@ -133,7 +133,7 @@ EResult ShaderHotReloadManager::Initialize(void* arg)
 	m_WatchID = m_FileWatcher->addWatch(m_WatchDirectory.string(), m_FileListener, true);
 	m_FileWatcher->watch();
 
-	ENGINE_LOG_INFO("[Shader Hot Reload] Watching directory: {}", m_WatchDirectory.string());
+	EDITOR_LOG_INFO("[Shader Hot Reload] Watching directory: {}", m_WatchDirectory.string());
 	return EResult::Success;
 }
 
@@ -162,7 +162,7 @@ void ShaderHotReloadManager::Update()
 	// UI 버튼 등에서 요청된 전체 재컴파일을 렌더링 전 안전한 유휴 시점에 실행
 	if (m_PendingRecompileAll.exchange(false))
 	{
-		ENGINE_LOG_INFO("[Shader Hot Reload] Safe tick: Recompiling all shaders...");
+		EDITOR_LOG_INFO("[Shader Hot Reload] Safe tick: Recompiling all shaders...");
 		RecompileAll();
 		return;
 	}
@@ -220,7 +220,7 @@ void ShaderHotReloadManager::Update()
 				}
 			}
 		}
-		ENGINE_LOG_INFO("[Shader Hot Reload] Shared header modified (.hlsli). Recompiling {} affected shader(s)...", targetHlslFiles.size());
+		EDITOR_LOG_INFO("[Shader Hot Reload] Shared header modified (.hlsli). Recompiling {} affected shader(s)...", targetHlslFiles.size());
 	}
 
 	for (const auto& file : targetHlslFiles)
@@ -241,7 +241,7 @@ void ShaderHotReloadManager::ProcessModifiedFile(const std::filesystem::path& hl
 	const Engine::ShaderCompileResult result = Engine::ShaderCompiler::Compile(hlslPath, shaderType, rhiType);
 	if (!result.Success)
 	{
-		ENGINE_LOG_ERROR("[Shader Hot Reload] Failed to compile '{}':\n{}",
+		EDITOR_LOG_ERROR("[Shader Hot Reload] Failed to compile '{}':\n{}",
 			hlslPath.filename().string(), result.ErrorMessage);
 		// 빨간색 에러 토스트 등록 (8초간 유지)
 		AddNotification(LOCAL("Notification.ShaderCompileError"), hlslPath.filename().string() + ":\n" + result.ErrorMessage, true, 8.0f);
@@ -261,7 +261,9 @@ void ShaderHotReloadManager::ProcessModifiedFile(const std::filesystem::path& hl
 		if (!shader) continue;
 
 		std::filesystem::path resKeyPath = shader->GetKey();
-		std::filesystem::path resFilePath = shader->GetPath();
+		std::filesystem::path resFilePath = rhiType == Engine::ERHIType::DirectX12
+			? shader->GetDxilPath()
+			: shader->GetSpirvPath();
 
 		std::string keyStem = resKeyPath.stem().string();
 		for (char& c : keyStem) c = static_cast<char>(tolower(c));
@@ -269,7 +271,7 @@ void ShaderHotReloadManager::ProcessModifiedFile(const std::filesystem::path& hl
 		std::string fileStem = resFilePath.stem().string();
 		for (char& c : fileStem) c = static_cast<char>(tolower(c));
 
-		// 실제 파일 경로(Path)가 지정되어 있으면 파일명 매칭을 최우선으로 검사
+		// 현재 백엔드의 바이너리 파일명을 우선 사용한다.
 		const bool isMatch = !fileStem.empty()
 			? (fileStem == targetStem)
 			: (keyStem == targetStem);
@@ -279,7 +281,7 @@ void ShaderHotReloadManager::ProcessModifiedFile(const std::filesystem::path& hl
 			if (IsSuccess(shader->UpdateBytecode(result.Bytecode)))
 			{
 				reloadedAny = true;
-				ENGINE_LOG_INFO("[Shader Hot Reload] Hot-swapped: {} (Key: {}, {} bytes)",
+				EDITOR_LOG_INFO("[Shader Hot Reload] Hot-swapped: {} (Key: {}, {} bytes)",
 					hlslPath.filename().string(), WStrToStr(shader->GetKey()), result.Bytecode.size());
 				// 초록색 성공 토스트 등록 (3초간 유지)
 				AddNotification(LOCAL("Notification.ShaderHotReloaded"), LOCAL_FMT("Notification.ReloadedFile", hlslPath.filename().string()), false, 3.0f);
@@ -289,7 +291,7 @@ void ShaderHotReloadManager::ProcessModifiedFile(const std::filesystem::path& hl
 
 	if (!reloadedAny)
 	{
-		ENGINE_LOG_INFO("[Shader Hot Reload] Compiled {} ({} bytes), output saved to disk.",
+		EDITOR_LOG_INFO("[Shader Hot Reload] Compiled {} ({} bytes), output saved to disk.",
 			hlslPath.filename().string(), result.Bytecode.size());
 	}
 }

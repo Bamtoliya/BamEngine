@@ -5,9 +5,34 @@
 #include <algorithm>
 #include <cmath>
 #include <stb_image.h>
+#include <cstddef>
+#include <limits>
+
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <stb_image_write.h>
 #include <filesystem>
+
+namespace
+{
+	bool TryGetHeightmapSize(uint32 resolution, uint32& axisCount, std::size_t& sampleCount)
+	{
+		if (resolution == 0) return false;
+
+		const uint64 axis = static_cast<uint64>(resolution) + 1;
+		const uint64 maxSamples = (std::numeric_limits<uint32>::max)() / sizeof(f32);
+		if (axis > maxSamples / axis) return false;
+
+		axisCount = static_cast<uint32>(axis);
+		sampleCount = static_cast<std::size_t>(axis * axis);
+		return true;
+	}
+
+	bool TryGetHeightDataLayout(const Engine::TerrainComponent& terrain, uint32& axisCount, std::size_t& sampleCount)
+	{
+		return TryGetHeightmapSize(terrain.Resolution, axisCount, sampleCount) &&
+			terrain.HeightData.size() == sampleCount;
+	}
+}
 
 Mesh* TerrainUtility::CreateGridMesh(float width, float length, uint32 resolution)
 {
@@ -89,7 +114,10 @@ Mesh* TerrainUtility::CreateGridMesh(float width, float length, uint32 resolutio
 
 bool TerrainUtility::ApplyBrush(TerrainComponent& terrain, const glm::vec3& hitWorldPos, const glm::mat4& worldMatrix, const TerrainBrushParams& params, float dt)
 {
-	if (terrain.HeightData.empty() || terrain.Resolution == 0 || terrain.MaxHeight <= 0.0001f || params.Radius <= 0.0001f)
+	uint32 vertexAxisCount = 0;
+	std::size_t sampleCount = 0;
+	if (!TryGetHeightDataLayout(terrain, vertexAxisCount, sampleCount) ||
+		terrain.MaxHeight <= 0.0001f || params.Radius <= 0.0001f)
 		return false;
 	// 1. 월드 좌표를 터레인 로컬 좌표계로 역변환
 	const glm::mat4 invWorld = glm::inverse(worldMatrix);
@@ -98,7 +126,6 @@ bool TerrainUtility::ApplyBrush(TerrainComponent& terrain, const glm::vec3& hitW
 	const float halfLength = terrain.Length * 0.5f;
 	if (localPos.x < -halfWidth || localPos.x > halfWidth || localPos.z < -halfLength || localPos.z > halfLength)
 		return false;
-	const uint32 vertexAxisCount = terrain.Resolution + 1;
 	const float radius = params.Radius;
 	// 2. 영향받는 사각 영역(AABB) 정점 인덱스 산출 (전체 순회 방지 최적화)
 	const float uMin = glm::clamp((localPos.x - radius + halfWidth) / terrain.Width, 0.0f, 1.0f);
@@ -219,19 +246,21 @@ bool TerrainUtility::LoadHeightmapFromFile(TerrainComponent& terrain, const std:
 
 bool TerrainUtility::SaveHeightmapToFile(const TerrainComponent& terrain, const std::wstring& filePath)
 {
-	if (terrain.HeightData.empty() || terrain.Resolution == 0) return false;
+	uint32 vertexAxisCount = 0;
+	std::size_t sampleCount = 0;
+	if (!TryGetHeightDataLayout(terrain, vertexAxisCount, sampleCount)) return false;
 
-	const uint32 vertexAxisCount = terrain.Resolution + 1;
-	std::vector<unsigned char> outPixels(vertexAxisCount * vertexAxisCount);
-
-	for (size_t i = 0; i < terrain.HeightData.size(); ++i)
+	std::vector<unsigned char> outPixels(sampleCount);
+	for (std::size_t i = 0; i < sampleCount; ++i)
 	{
-		outPixels[i] = static_cast<unsigned char>(glm::clamp(terrain.HeightData[i], 0.0f, 1.0f) * 255.0f);
+		const f32 height = terrain.HeightData[i];
+		if (!std::isfinite(height)) return false;
+		outPixels[i] = static_cast<unsigned char>(glm::clamp(height, 0.0f, 1.0f) * 255.0f);
 	}
 
 	const std::string u8Path = std::filesystem::path(filePath).string();
-	const int result = stbi_write_png(u8Path.c_str(), vertexAxisCount, vertexAxisCount, 1, outPixels.data(), vertexAxisCount);
-	return result != 0;
+	const int side = static_cast<int>(vertexAxisCount);
+	return stbi_write_png(u8Path.c_str(), side, side, 1, outPixels.data(), side) != 0;
 }
 
 void TerrainUtility::ApplyPaint(TerrainComponent& terrain, const vec3& hitPoint, uint32 targetLayer, f32 radius, f32 intensity, f32 falloff)
@@ -296,4 +325,50 @@ void TerrainUtility::ApplyPaint(TerrainComponent& terrain, const vec3& hitPoint,
 	}
 
 	terrain.IsSplatDirty = true;
+}
+
+bool TerrainUtility::ResampleHeightData(const std::vector<f32>& source, uint32 sourceResolution,
+	uint32 targetResolution, std::vector<f32>& result)
+{
+	uint32 sourceAxis = 0;
+	uint32 targetAxis = 0;
+	std::size_t sourceCount = 0;
+	std::size_t targetCount = 0;
+
+	if (!TryGetHeightmapSize(sourceResolution, sourceAxis, sourceCount) ||
+		!TryGetHeightmapSize(targetResolution, targetAxis, targetCount) ||
+		source.size() != sourceCount)
+		return false;
+
+	if (std::any_of(source.begin(), source.end(), [](f32 value) { return !std::isfinite(value); }))
+		return false;
+
+	std::vector<f32> candidate(targetCount);
+	for (uint32 z = 0; z < targetAxis; ++z)
+	{
+		const f64 sourceZ = static_cast<f64>(z) * sourceResolution / targetResolution;
+		const uint32 z0 = static_cast<uint32>(sourceZ);
+		const uint32 z1 = std::min(z0 + 1, sourceResolution);
+		const f64 tz = sourceZ - z0;
+		const std::size_t row0 = static_cast<std::size_t>(z0) * sourceAxis;
+		const std::size_t row1 = static_cast<std::size_t>(z1) * sourceAxis;
+
+		for (uint32 x = 0; x < targetAxis; ++x)
+		{
+			const f64 sourceX = static_cast<f64>(x) * sourceResolution / targetResolution;
+			const uint32 x0 = static_cast<uint32>(sourceX);
+			const uint32 x1 = std::min(x0 + 1, sourceResolution);
+			const f64 tx = sourceX - x0;
+
+			const f64 top = source[row0 + x0] * (1.0 - tx) + source[row0 + x1] * tx;
+			const f64 bottom = source[row1 + x0] * (1.0 - tx) + source[row1 + x1] * tx;
+			const f32 height = static_cast<f32>(top * (1.0 - tz) + bottom * tz);
+			if (!std::isfinite(height)) return false;
+
+			candidate[static_cast<std::size_t>(z) * targetAxis + x] = height;
+		}
+	}
+
+	result.swap(candidate);
+	return true;
 }

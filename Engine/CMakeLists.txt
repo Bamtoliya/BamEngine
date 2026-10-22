@@ -48,7 +48,7 @@ add_library(BamEngine::Engine ALIAS Engine)
 # 4. Target Properties & Compile Options (타겟 속성 및 컴파일 플래그)
 # ==============================================================================
 # Unity Build 최적화 설정
-set_target_properties(Engine PROPERTIES UNITY_BUILD OFF)
+set_target_properties(Engine PROPERTIES UNITY_BUILD ON)
 
 # 컴파일 정의 (전처리기 매크로)
 target_compile_definitions(Engine PRIVATE

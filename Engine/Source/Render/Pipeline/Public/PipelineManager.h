@@ -35,9 +35,10 @@ public:
 #pragma region Variable
 private:
 	unordered_map<RHIPipelineDesc, RHIPipeline*, hash<RHIPipelineDesc>> m_Pipelines;
-	//unordered_map<wstring, RHIPipeline*> m_Pipelines;
 	RHIPipeline* m_DefaultPipeline = { nullptr };
 	RHI* m_RHI = { nullptr };
+	const RHIPipelineDesc* m_LastPipelineDesc = nullptr;
+	RHIPipeline* m_LastPipeline = nullptr;
 #pragma endregion
 
 

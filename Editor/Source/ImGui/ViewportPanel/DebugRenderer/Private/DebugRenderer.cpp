@@ -40,12 +40,6 @@ void DebugRenderer::Initialize(const wstring& prefix)
 
 	m_Vertices.reserve(2 * m_MaxLines);
 
-	m_VertexBuffer = Engine::Renderer::Get().GetRHI()->CreateBuffer(
-		nullptr,
-		2 * m_MaxLines * sizeof(DebugVertex),
-		sizeof(DebugVertex),
-		ERHIBufferType::Vertex);
-
 	m_RenderPassID = Engine::RenderPassManager::Get().RegisterRenderPass(
 		prefix + L"_DebugPass", {}, L"",
 		ERenderPassLoadOperation::RPLO_Load, ERenderPassStoreOperation::RPSO_Store,
@@ -55,13 +49,16 @@ void DebugRenderer::Initialize(const wstring& prefix)
 
 void DebugRenderer::Free()
 {
-	Safe_Release(m_VertexBuffer);
+	for (auto& buffer : m_VertexBuffers)
+		Safe_Release(buffer);
+
+	m_Vertices.clear();
 }
 
 void DebugRenderer::SubmitDebugDraw(const CameraBuffer& cameraBuffer, const wstring& colorRTName)
 {
 	RegisterColliderDebug(cameraBuffer);
-	if (m_Vertices.empty() || colorRTName.empty() || !m_VertexBuffer) return;
+	if (m_Vertices.empty() || colorRTName.empty()) return;
 	RenderPass* pass = Engine::RenderPassManager::Get().GetRenderPassByID(m_RenderPassID);
 	pass->SetColorAttachments({ colorRTName });
 	Renderer::Get().RegisterViewportCamera(cameraBuffer, pass);
@@ -69,9 +66,35 @@ void DebugRenderer::SubmitDebugDraw(const CameraBuffer& cameraBuffer, const wstr
 	Engine::Renderer::Get().SubmitCustomCommand(
 		[this](f32 dt, Engine::RenderPass* pass)->EResult
 		{
-			if (m_Vertices.empty() || !m_VertexBuffer) return EResult::Success;
+			if (m_Vertices.empty()) return EResult::Success;
 
 			Engine::RHI* rhi = Engine::Renderer::Get().GetRHI();
+			if (!rhi)
+			{
+				m_Vertices.clear();
+				return EResult::Fail;
+			}
+
+			const uint32 frameCount = rhi->GetFrameResourceCount();
+			const uint32 frameIndex = rhi->GetFrameResourceIndex();
+			if (frameCount > MAX_SWAPCHAIN_BUFFERS || frameIndex >= frameCount)
+			{
+				m_Vertices.clear();
+				return EResult::Fail;
+			}
+
+			auto& vertexBuffer = m_VertexBuffers[frameIndex];
+			if (!vertexBuffer)
+			{
+				const uint32 bufferSize = 2 * m_MaxLines * static_cast<uint32>(sizeof(DebugVertex));
+				vertexBuffer = rhi->CreateBuffer(nullptr, bufferSize, sizeof(DebugVertex), ERHIBufferType::Vertex);
+				if (!vertexBuffer)
+				{
+					m_Vertices.clear();
+					return EResult::Fail;
+				}
+			}
+
 			ResourceManager& rm = ResourceManager::Get();
 
 			// 파이프라인 디스크립터 (Grid와 동일한 방식으로 RenderPass에서 포맷 동적 매칭)
@@ -124,12 +147,18 @@ void DebugRenderer::SubmitDebugDraw(const CameraBuffer& cameraBuffer, const wstr
 				return EResult::Fail;
 			}
 
-			m_VertexBuffer->SetData(m_Vertices.data(), (uint32)m_Vertices.size() * sizeof(DebugVertex));
+			const uint32 vertexCount = static_cast<uint32>(m_Vertices.size());
+			const uint32 dataSize = vertexCount * static_cast<uint32>(sizeof(DebugVertex));
+			vertexBuffer->SetData(m_Vertices.data(), dataSize);
 
-			RHIBuffer* buffers[1] = { m_VertexBuffer };
-			rhi->BindVertexBuffers(0, buffers, 1);
+			RHIBuffer* buffers[1] = { vertexBuffer };
+			if (IsFailure(rhi->BindVertexBuffers(0, buffers, 1)))
+			{
+				m_Vertices.clear();
+				return EResult::Fail;
+			}
 
-			EResult res = rhi->Draw((uint32)m_Vertices.size());
+			const EResult res = rhi->Draw(vertexCount);
 			m_Vertices.clear();
 			return res;
 		}, m_RenderPassID);

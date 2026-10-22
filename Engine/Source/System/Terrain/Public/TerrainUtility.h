@@ -36,6 +36,8 @@ public:
 	static bool SaveHeightmapToFile(const TerrainComponent& terrain, const std::wstring& filePath);
 	// 지형 표면에 텍스처 레이어(0~3) 페인팅
 	static void ApplyPaint(TerrainComponent& terrain, const vec3& hitPoint, uint32 targetLayer, f32 radius, f32 intensity, f32 falloff);
+
+	static bool ResampleHeightData(const std::vector<f32>& source, uint32 sourceResolution, uint32 targetResolution, std::vector<f32>& result);
 };
 
 END

@@ -122,29 +122,28 @@ void AssetManager::Update(f32 dt)
 		{
 			BAM_LOG(
 				Error,
-				"Asset",
+				"Editor", "Asset",
 				"Async task threw an exception: {}",
 				exception.what());
 		}
 		catch (...)
 		{
 			BAM_LOG(
-				Error,
-				"Asset",
+				Error, "Editor", "Asset",
 				"Async task threw an unknown exception");
 		}
 
 		if (IsFailure(result))
 		{
 			++m_FailedTasks;
-			BAM_LOG(Error, "Asset", "Async task failed");
+			BAM_LOG(Error, "Editor", "Asset", "Async task failed");
 		}
 		else
 		{
 			++m_SucceededTasks;
 			++succeededThisUpdate;
 
-			BAM_LOG(Info, "Asset", "Async task succeeded");
+			BAM_LOG(Info, "Editor", "Asset", "Async task succeeded");
 		}
 
 		it = m_ActiveTasks.erase(it);

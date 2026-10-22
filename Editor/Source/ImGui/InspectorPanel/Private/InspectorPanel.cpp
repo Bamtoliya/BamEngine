@@ -19,6 +19,12 @@
 #include <algorithm>
 #include <string_view>
 #include <vector>
+#include "ReflectionRegistry.h"
+#include <imgui_internal.h>
+#include <utility>
+#include <variant>
+#include <charconv>
+#include <cstring>
 
 InspectorPanel::InspectorPanel(uint32 panelId) : m_PanelId(panelId)
 {
@@ -51,16 +57,38 @@ void InspectorPanel::Draw()
 				m_LockedEntityId = 0;
 			}
 		}
-		if (!m_IsLocked)
-			targetEntity = SelectionManager::Get().GetPrimarySelectedEntity();
+		std::vector<entt::entity> targets;
+		if (!m_IsLocked && currentScene)
+		{
+			const auto& world = currentScene->GetRegistry();
+			for (auto* entity : SelectionManager::Get().GetSelectedEntities())
+			{
+				if (!entity || entity->GetScene() != currentScene) continue;
 
-		// 2. 상단 고정 헤더 바 (Sticky Header: 스크롤되지 않음)
-		DrawHeaderBar(targetEntity);
+				const auto handle = entity->GetEntityHandle();
+				if (!world.valid(handle) || currentScene->FindEntity(handle) != entity) continue;
+				if (std::find(targets.begin(), targets.end(), handle) == targets.end())
+					targets.push_back(handle);
+			}
+		}
+
+		if (!m_IsLocked)
+			targetEntity = targets.empty() ? nullptr : currentScene->FindEntity(targets.back());
+
+		DrawHeaderBar(targetEntity, targets.size());
 
 		// 3. 스크롤 가능한 본문 영역 (ImGui::BeginChild)
 		if (ImGui::BeginChild("InspectorPropertiesScrollArea", ImVec2(0, 0), false, ImGuiWindowFlags_None))
 		{
-			if (targetEntity != nullptr)
+			if (targets.size() > 1)
+			{
+				if (m_CurrentDisplayId != 0)
+					m_EntityScrollMap[m_CurrentDisplayId] = ImGui::GetScrollY();
+
+				m_CurrentDisplayId = 0;
+				DrawCommonComponents(*currentScene, targets);
+			}
+			else if (targetEntity != nullptr)
 			{
 				const uint64 entityHandleId = static_cast<uint64>(targetEntity->GetEntityHandle());
 
@@ -92,13 +120,19 @@ void InspectorPanel::Draw()
 	ImGui::End();
 }
 
-void InspectorPanel::DrawHeaderBar(Engine::Entity* currentEntity)
+void InspectorPanel::DrawHeaderBar(Engine::Entity* currentEntity, std::size_t selectionCount)
 {
 	const char* lockIcon = m_IsLocked ? ICON_FA_LOCK : ICON_FA_LOCK_OPEN;
 	const float btnSize = ImGui::GetFrameHeight();
 	const float spacing = ImGui::GetStyle().ItemSpacing.x;
 
-	if (currentEntity != nullptr && currentEntity->GetScene() != nullptr)
+	if (selectionCount > 1)
+	{
+		ImGui::AlignTextToFramePadding();
+		ImGui::TextUnformatted(LOCAL_FMT("Inspector.MultipleSelection", selectionCount).c_str());
+		ImGui::SameLine();
+	}
+	else if (currentEntity != nullptr && currentEntity->GetScene() != nullptr)
 	{
 		auto& world = currentEntity->GetScene()->GetRegistry();
 		const auto handle = currentEntity->GetEntityHandle();
@@ -176,6 +210,356 @@ void InspectorPanel::DrawHeaderBar(Engine::Entity* currentEntity)
 		ImGui::SetTooltip("%s", m_IsLocked ? LOCAL_CSTR("Inspector.LockedTooltip") : LOCAL_CSTR("Inspector.UnlockedTooltip"));
 
 	ImGui::Separator();
+}
+
+void InspectorPanel::DrawCommonComponents(Engine::Scene& scene, std::span<const entt::entity> entities)
+{
+	ImGui::TextUnformatted(LOCAL_CSTR("Inspector.CommonComponents"));
+	ImGui::Separator();
+
+	if (!Engine::ReflectionRegistry::IsCreated())
+	{
+		ImGui::TextDisabled("%s", LOCAL_CSTR("Inspector.ReflectionUnavailable"));
+		return;
+	}
+
+	const auto& world = scene.GetRegistry();
+	const auto entries = Engine::ReflectionRegistry::Get().GetComponentEntries();
+	std::size_t commonCount = 0;
+
+	for (const auto& entry : entries)
+	{
+		if (!entry.ReflectionType || !entry.Has) continue;
+		if (!ReflectionPropertyDrawer::IsVisible(*entry.ReflectionType)) continue;
+
+		if (entry.Type == std::type_index(typeid(Engine::NameComponent)) ||
+			entry.Type == std::type_index(typeid(Engine::IDComponent))) continue;
+
+		const bool common = std::all_of(entities.begin(), entities.end(), [&](entt::entity entity)
+			{
+				return entry.Has(world, entity);
+			});
+		if (!common) continue;
+
+		const auto label = LocalizeInspectorText(entry.Name);
+		ImGui::BulletText("%s", label.c_str());
+
+		if (entry.Type == std::type_index(typeid(Engine::FlagComponent)))
+		{
+			ImGui::PushID(entry.ReflectionType->QualifiedName.c_str());
+			DrawCommonFlags(scene, entities);
+			ImGui::PopID();
+		}
+		else if (entry.Type == std::type_index(typeid(Engine::TransformComponent)))
+		{
+			ImGui::PushID(entry.ReflectionType->QualifiedName.c_str());
+			DrawCommonTransformVector(scene, entities, TransformEditMode::Translation);
+			DrawCommonTransformVector(scene, entities, TransformEditMode::Rotation);
+			DrawCommonTransformVector(scene, entities, TransformEditMode::Scale);
+			ImGui::PopID();
+		}
+		else
+		{
+			DrawCommonReflectedProperties(scene, entities, entry);
+		}
+
+		++commonCount;
+	}
+
+	if (commonCount == 0)
+		ImGui::TextDisabled("%s", LOCAL_CSTR("Inspector.NoCommonComponents"));
+}
+void InspectorPanel::DrawCommonTransformVector(Engine::Scene& scene, std::span<const entt::entity> entities, TransformEditMode mode)
+{
+	using Transform = Engine::TransformComponent;
+	if (entities.empty()) return;
+
+	glm::vec3 Transform::* member = nullptr;
+	const char* labelKey = nullptr;
+	const char* hintKey = nullptr;
+
+	switch (mode)
+	{
+	case TransformEditMode::Translation:
+		member = &Transform::position;
+		labelKey = "PROP_POSITION";
+		hintKey = "Inspector.MultiPositionHint";
+		break;
+	case TransformEditMode::Rotation:
+		member = &Transform::eulerRotation;
+		labelKey = "PROP_EULER_ROTATION";
+		hintKey = "Inspector.MultiRotationHint";
+		break;
+	case TransformEditMode::Scale:
+		member = &Transform::scale;
+		labelKey = "PROP_SCALE";
+		hintKey = "Inspector.MultiScaleHint";
+		break;
+	default:
+		return;
+	}
+
+	auto& world = scene.GetRegistry();
+	auto& history = Application::Get().GetEditHistory();
+	std::string selectionId = std::to_string(history.Revision());
+
+	for (const auto entity : entities)
+	{
+		const auto* identity = world.try_get<Engine::IDComponent>(entity);
+		if (!identity || identity->id == 0)
+		{
+			ImGui::TextDisabled("%s", LOCAL_CSTR("Inspector.MultiEditUnavailable"));
+			return;
+		}
+		selectionId += "/" + std::to_string(identity->id);
+	}
+
+	ImGui::PushID(static_cast<const void*>(&scene));
+	ImGui::PushID(selectionId.c_str());
+	ImGui::PushID(static_cast<int>(mode));
+	ImGui::TextUnformatted(LOCAL_CSTR(labelKey));
+	ImGui::TextWrapped("%s", LOCAL_CSTR(hintKey));
+
+	constexpr const char* axes[] = { "X", "Y", "Z" };
+	for (int axis = 0; axis < 3; ++axis)
+	{
+		ImGui::PushID(axis);
+
+		const float first = (world.get<Transform>(entities.front()).*member)[axis];
+		const bool mixed = std::any_of(entities.begin(), entities.end(), [&](entt::entity entity)
+			{
+				return (world.get<Transform>(entity).*member)[axis] != first;
+			});
+
+		char buffer[64]{};
+		if (!mixed)
+		{
+			const auto text = fmt::format("{:.9g}", first);
+			std::copy(text.begin(), text.end(), buffer);
+		}
+
+		const auto settings = TransformPropertyEditor::GetCommonAxisSettings(world, entities, mode, axis);
+		const bool canEdit = history.Enabled() && settings.has_value();
+		auto* storage = ImGui::GetStateStorage();
+		const ImGuiID errorId = ImGui::GetID("Error");
+
+		ImGui::TextUnformatted(axes[axis]);
+		ImGui::SameLine();
+		ImGui::SetNextItemWidth(-1.0f);
+		ImGui::BeginDisabled(!canEdit);
+
+		const auto flags = ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll |
+			ImGuiInputTextFlags_CharsScientific;
+		const bool requested = ImGui::InputTextWithHint("##Value", LOCAL_CSTR("Inspector.MixedValues"),
+			buffer, sizeof(buffer), flags);
+
+		if (!settings && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+			ImGui::SetTooltip("%s", LOCAL_CSTR("Inspector.MultiTransformPolicyHint"));
+
+		ImGui::EndDisabled();
+
+		if (canEdit && requested)
+		{
+			storage->SetInt(errorId, 0);
+			const char* begin = buffer;
+			const char* end = buffer + std::strlen(buffer);
+			if (begin != end && *begin == '+') ++begin;
+
+			float value = 0.0f;
+			const auto parsed = std::from_chars(begin, end, value);
+
+			if (parsed.ec != std::errc{} || parsed.ptr != end)
+			{
+				storage->SetInt(errorId, 1);
+			}
+			else
+			{
+				auto before = SceneEditSnapshot::Capture(scene, entities);
+				if (!before)
+				{
+					storage->SetInt(errorId, 2);
+				}
+				else
+				{
+					const auto result = TransformPropertyEditor::SetVectorAxis(world, entities, mode, axis, value);
+					if (result == TransformBatchResult::Rejected)
+						storage->SetInt(errorId, 1);
+					else if (result == TransformBatchResult::Changed)
+						history.Record(std::move(before), SceneEditSnapshot::Capture(scene, entities),
+							"UI_HISTORY_TRANSFORM");
+				}
+			}
+		}
+
+		const int error = storage->GetInt(errorId, 0);
+		if (error == 1) ImGui::TextDisabled("%s", LOCAL_CSTR("Inspector.MultiTransformRejected"));
+		if (error == 2) ImGui::TextDisabled("%s", LOCAL_CSTR("Inspector.MultiEditUnavailable"));
+
+		ImGui::PopID();
+	}
+
+	ImGui::PopID();
+	ImGui::PopID();
+	ImGui::PopID();
+}
+void InspectorPanel::DrawCommonFlags(Engine::Scene& scene, std::span<const entt::entity> entities)
+{
+	using Flag = Engine::FlagComponent;
+	if (entities.empty()) return;
+
+	auto& world = scene.GetRegistry();
+	const auto* type = Engine::ReflectionRegistry::Get().GetRegistry().FindType<Flag>();
+	const auto* property = type ? type->FindProperty("flags") : nullptr;
+	if (!property) return;
+
+	const auto metadataBool = [&](const char* key, bool fallback)
+		{
+			const auto* metadata = property->Metadata.Find(key);
+			const auto* value = metadata ? std::get_if<bool>(metadata) : nullptr;
+			return value ? *value : fallback;
+		};
+
+	const bool editable = property->CanWrite() && metadataBool("Editable", false) &&
+		!metadataBool("ReadOnly", false);
+
+	const bool locked = std::any_of(entities.begin(), entities.end(), [&](entt::entity entity)
+		{
+			const auto& settings = GetReflectionEntityEditState(world, entity).Components[type->QualifiedName];
+			const auto vector = settings.Vectors.find(property->Name);
+			return settings.ReadOnlyProperties.contains(property->Name) ||
+				(vector != settings.Vectors.end() && vector->second.Locked);
+		});
+
+	auto& history = Application::Get().GetEditHistory();
+	auto before = history.Enabled() ? SceneEditSnapshot::Capture(scene, entities) : SceneEditSnapshot{};
+
+	ImGui::TextWrapped("%s", LOCAL_CSTR("Inspector.LocalFlagsHint"));
+
+	const auto drawFlag = [&](const char* labelKey, const char* widgetId, auto getter, auto setter)
+		{
+			const bool first = (world.get<Flag>(entities.front()).*getter)();
+			const bool mixed = std::any_of(entities.begin(), entities.end(), [&](entt::entity entity)
+				{
+					return (world.get<Flag>(entity).*getter)() != first;
+				});
+
+			bool value = mixed ? false : first;
+			const bool canEdit = history.Enabled() && before && editable && !locked;
+
+			ImGui::PushID(widgetId);
+			ImGui::BeginDisabled(!canEdit);
+			ImGui::PushItemFlag(ImGuiItemFlags_MixedValue, mixed);
+			const bool requested = ImGui::Checkbox(LOCAL_LABEL(labelKey).c_str(), &value);
+			ImGui::PopItemFlag();
+
+			if (mixed && ImGui::IsItemHovered())
+				ImGui::SetTooltip("%s", LOCAL_CSTR("Inspector.MixedFlagsHint"));
+
+			ImGui::EndDisabled();
+			ImGui::PopID();
+
+			if (!canEdit || !requested) return;
+
+			for (const auto entity : entities)
+			{
+				auto& flag = world.get<Flag>(entity);
+				(flag.*setter)(value);
+			}
+
+			scene.UpdateHierarchyFlags();
+
+			auto after = SceneEditSnapshot::Capture(scene, entities);
+			history.Record(before, after, "UI_HISTORY_PROPERTY");
+			before = std::move(after);
+		};
+
+	drawFlag("Hierarchy.Active", "Active", &Flag::IsActive, &Flag::SetActive);
+	drawFlag("Hierarchy.Visible", "Visible", &Flag::IsVisible, &Flag::SetVisible);
+
+	if (history.Enabled() && !before)
+		ImGui::TextDisabled("%s", LOCAL_CSTR("Inspector.MultiEditUnavailable"));
+}
+
+void InspectorPanel::DrawCommonReflectedProperties(Engine::Scene& scene, std::span<const entt::entity> entities,
+	const Engine::ComponentReflectionEntry& entry)
+{
+	if (entities.empty() || !entry.ReflectionType || !entry.Edit || !entry.Has) return;
+	const auto& type = *entry.ReflectionType;
+
+	const bool allowFloats =
+		entry.Type != std::type_index(typeid(Engine::CanvasComponent)) &&
+		entry.Type != std::type_index(typeid(Engine::RectTransformComponent)) &&
+		entry.Type != std::type_index(typeid(Engine::UIImageComponent)) &&
+		entry.Type != std::type_index(typeid(Engine::UIButtonComponent)) &&
+		entry.Type != std::type_index(typeid(Engine::ColliderComponent)) &&
+		entry.Type != std::type_index(typeid(Engine::Collider2DComponent));
+
+	const bool hasFloats = std::any_of(type.Properties.begin(), type.Properties.end(), [](const auto& property)
+		{
+			return property.template IsValueType<float>();
+		});
+	if (!allowFloats && hasFloats)
+		ImGui::TextDisabled("%s", LOCAL_CSTR("Inspector.MultiFloatValidationRequired"));
+
+	if (std::none_of(type.Properties.begin(), type.Properties.end(), [&](const auto& property)
+		{
+			return property.template IsValueType<bool>() || (allowFloats && property.template IsValueType<float>());
+		})) return;
+
+	auto& world = scene.GetRegistry();
+	if (!entry.MatchesStorage(world)) return;
+
+	auto& history = Application::Get().GetEditHistory();
+	std::string selectionId = std::to_string(history.Revision());
+	std::vector<reflection::ObjectView> objects;
+	std::vector<const ReflectionObjectEditSettings*> settings;
+
+	for (const auto entity : entities)
+	{
+		if (!world.valid(entity) || !entry.Has(world, entity)) return;
+		const auto* identity = world.try_get<Engine::IDComponent>(entity);
+		if (!identity || identity->id == 0) return;
+
+		objects.push_back(entry.Edit(world, entity));
+		settings.push_back(&GetReflectionEntityEditState(world, entity).Components[type.QualifiedName]);
+		selectionId += "/" + std::to_string(identity->id);
+	}
+
+	auto before = history.Enabled() ? SceneEditSnapshot::Capture(scene, entities) : SceneEditSnapshot{};
+
+	ImGui::PushID(static_cast<const void*>(&scene));
+	ImGui::PushID(selectionId.c_str());
+	ImGui::PushID(type.QualifiedName.c_str());
+	ImGui::BeginDisabled(!history.Enabled() || !before);
+
+	bool changed = ReflectionPropertyDrawer::DrawCommonBoolProperties(type, objects,
+		&Engine::ReflectionRegistry::Get().GetRegistry(), settings);
+
+	if (allowFloats)
+	{
+		changed |= ReflectionPropertyDrawer::DrawCommonFloatProperties(type, objects,
+			&Engine::ReflectionRegistry::Get().GetRegistry(), settings);
+	}
+
+	ImGui::EndDisabled();
+	ImGui::PopID();
+	ImGui::PopID();
+	ImGui::PopID();
+
+	if (history.Enabled() && !before)
+		ImGui::TextDisabled("%s", LOCAL_CSTR("Inspector.MultiEditUnavailable"));
+
+	if (!changed) return;
+
+	for (const auto entity : entities)
+	{
+		if (entry.Type == std::type_index(typeid(Engine::CameraComponent)))
+			world.get<Engine::CameraComponent>(entity).InvalidateCache();
+		if (entry.Type == std::type_index(typeid(Engine::LightComponent)))
+			world.get<Engine::LightComponent>(entity).InvalidateCache();
+	}
+
+	history.Record(std::move(before), SceneEditSnapshot::Capture(scene, entities), "UI_HISTORY_PROPERTY");
 }
 
 EResult InspectorPanel::SetSelectedEntity(Engine::Entity* entity)

@@ -80,15 +80,23 @@ uint32 PickingManager::RegisterPickingEntity(Scene* scene, entt::entity entity)
 Entity* PickingManager::ResolvePickingEntity(uint32 pickingId) const
 {
 	if (pickingId == 0 || pickingId > m_CompletedPickingTargets.size()) return nullptr;
+
 	const auto& target = m_CompletedPickingTargets[pickingId - 1];
 	const auto scenes = SceneManager::Get().GetActiveScenes();
 	if (std::find(scenes.begin(), scenes.end(), target.scene) == scenes.end()) return nullptr;
+
 	const auto& world = target.scene->GetRegistry();
 	if (!world.valid(target.entity)) return nullptr;
+
 	const auto* id = world.try_get<IDComponent>(target.entity);
+	if (!id || id->id != target.persistentId) return nullptr;
+
+	target.scene->UpdateHierarchyFlags();
+
 	const auto* flag = world.try_get<FlagComponent>(target.entity);
-	if (!id || id->id != target.persistentId || !flag || !HasFlag(flag->flags, EEntityFlag::Active) ||
-		!HasFlag(flag->flags, EEntityFlag::Visible) || HasFlag(flag->flags, EEntityFlag::Dead)) return nullptr;
+	if (!flag || !flag->IsActiveInHierarchy() || !flag->IsVisibleInHierarchy() ||
+		HasFlag(flag->effectiveFlags, EEntityFlag::Dead)) return nullptr;
+
 	return target.scene->FindEntity(target.entity);
 }
 
@@ -131,11 +139,12 @@ Entity* PickingManager::PickEntityByRay(const Ray& ray, f32 maxDistance, HitResu
 	{
 		if (!scene) continue;
 		auto& world = scene->GetRegistry();
-		TransformSystem::UpdateHierarchy(world);
+		if (!TransformSystem::UpdateHierarchy(world)) continue;
+		scene->UpdateHierarchyFlags();
 		for (auto [entity, transform, flag] : world.view<WorldTransformComponent, FlagComponent>().each())
 		{
-			if (!HasFlag(flag.flags, EEntityFlag::Active) || !HasFlag(flag.flags, EEntityFlag::Visible) ||
-				HasFlag(flag.flags, EEntityFlag::Dead)) continue;
+			if (!flag.IsActiveInHierarchy() || !flag.IsVisibleInHierarchy() ||
+				HasFlag(flag.effectiveFlags, EEntityFlag::Dead)) continue;
 			Entity* candidate = scene->FindEntity(entity);
 			if (!candidate) continue;
 

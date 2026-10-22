@@ -81,11 +81,14 @@ DirectX12Buffer* DirectX12Buffer::Create(RHI* rhi, const DESC& desc)
 void DirectX12Buffer::Free()
 {
 	if (m_Buffer && m_MappedData)
-	{
 		m_Buffer->Unmap(0, nullptr);
-		m_MappedData = nullptr;
-	};
-	m_Buffer = nullptr;
+
+	m_MappedData = nullptr;
+
+	if (m_RHI)
+		static_cast<DirectX12RHI*>(m_RHI)->DeferRelease(m_Buffer.Get());
+
+	m_Buffer.Reset();
 	__super::Free();
 }
 

@@ -138,6 +138,8 @@ public:
     uint32 GetSwapChainWidth() { return m_SwapChainWidth; }
     uint32 GetSwapChainHeight() { return m_SwapChainHeight; }
 	virtual RenderPass* GetCurrentRenderPass() const { return m_CurrentRenderPass; }
+    uint32 GetFrameResourceCount() const { return m_SwapChainBufferCount > 0 ? m_SwapChainBufferCount : 1; }
+    uint32 GetFrameResourceIndex() const { return m_CurrentBackBufferIndex; }
 #pragma endregion
 
 #pragma region Frame Metrics

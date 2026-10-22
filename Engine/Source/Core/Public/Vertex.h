@@ -102,6 +102,8 @@ namespace Engine
 		bool operator==(const InputLayoutDesc& other) const
 		{
 			return stride == other.stride &&
+				inputRate == other.inputRate &&
+				instanceDataStepRate == other.instanceDataStepRate &&
 				elements == other.elements;
 		}
 	};

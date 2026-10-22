@@ -1,9 +1,10 @@
-#pragma once
+﻿#pragma once
 
 #include <array>
 #include <cstdint>
 #include <string>
 #include <variant>
+#include <reflection/Annotations.h>
 
 namespace Engine
 {
@@ -11,7 +12,13 @@ namespace Engine
 using GraphNodeId = std::uint64_t;
 using GraphLinkId = std::uint64_t;
 
-enum class EGraphDomain { Logic, Shader };
+ENUM()
+enum class EGraphDomain
+{
+	Logic = 0,
+	Shader = 1
+};
+
 enum class EGraphPinDirection { Input, Output };
 enum class EGraphPinType { Execution, Bool, Int, Float, Float2, Float3, Float4, Object };
 
@@ -40,7 +47,12 @@ enum class EGraphError
 	UnsupportedExecution,
 	InvalidExecutionState,
 	ExecutionFailed,
-	ExecutionLimit
+	ExecutionLimit,
+	UnsupportedVersion,
+	InvalidDocument,
+	DuplicateNodeId,
+	DuplicateLinkId,
+	UnsupportedCompilation
 };
 
 // Successful AddNode/Connect return their new ID in Node/Link respectively.

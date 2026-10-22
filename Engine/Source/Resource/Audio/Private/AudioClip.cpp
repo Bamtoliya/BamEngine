@@ -24,7 +24,7 @@ EResult AudioClip::Initialize(void* arg)
 	FMOD::System* fmodSystem = AudioManager::Get().GetFMODSystem();
 	if (!fmodSystem)
 	{
-		BAM_LOG(Error, "AudioClip", "AudioManager's FMOD System is null");
+		BAM_LOG(Error, "Engine","AudioClip", "AudioManager's FMOD System is null");
 		return EResult::Fail;
 	}
 
@@ -55,7 +55,7 @@ EResult AudioClip::Initialize(void* arg)
 
 	if (result != FMOD_OK || !m_Sound)
 	{
-		BAM_LOG(Error, "AudioClip", "Failed to load sound: {} ({})", narrowPath, FMOD_ErrorString(result));
+		BAM_LOG(Error, "Engine","AudioClip", "Failed to load sound: {} ({})", narrowPath, FMOD_ErrorString(result));
 		return EResult::Fail;
 	}
 

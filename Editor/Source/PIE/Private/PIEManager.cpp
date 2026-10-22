@@ -17,26 +17,26 @@ void PIEManager::StartPlay()
     const EResult snapResult = SnapshotScene();
     if (snapResult != EResult::Success)
     {
-        ENGINE_LOG_ERROR("[PIE] Start failed: Could not snapshot scene.");
+        EDITOR_LOG_ERROR("[PIE] Start failed: Could not snapshot scene.");
         return;
     }
     // 2. 플레이 상태로 전이
     m_State = EPlayState::Play;
-    ENGINE_LOG_INFO("[PIE] Started Play Mode");
+    EDITOR_LOG_INFO("[PIE] Started Play Mode");
 }
 
 void PIEManager::Pause()
 {
     if (m_State != EPlayState::Play) return;
     m_State = EPlayState::Pause;
-    ENGINE_LOG_INFO("[PIE] Paused");
+    EDITOR_LOG_INFO("[PIE] Paused");
 }
 
 void PIEManager::Resume()
 {
     if (m_State != EPlayState::Pause) return;
     m_State = EPlayState::Play;
-    ENGINE_LOG_INFO("[PIE] Resumed");
+    EDITOR_LOG_INFO("[PIE] Resumed");
 }
 
 void PIEManager::Stop()
@@ -51,12 +51,12 @@ void PIEManager::Stop()
     const EResult restoreResult = RestoreScene();
     if (restoreResult != EResult::Success)
     {
-        ENGINE_LOG_WARN("[PIE] Stopped without restoring scene: {}", ResultToString(restoreResult));
+        EDITOR_LOG_WARN("[PIE] Stopped without restoring scene: {}", ResultToString(restoreResult));
         return;
     }
     // 3. 에디트 히스토리(Undo/Redo) 초기화
     Application::Get().GetEditHistory().Clear();
-    ENGINE_LOG_INFO("[PIE] Stopped — scene restored");
+    EDITOR_LOG_INFO("[PIE] Stopped — scene restored");
 }
 
 EResult PIEManager::SnapshotScene()
@@ -67,7 +67,7 @@ EResult PIEManager::SnapshotScene()
     archive::JsonArchive ar;
     const EResult result = SceneManager::Get().SaveScene(ar, m_SnapshotPath);
     if (result != EResult::Success)
-        ENGINE_LOG_ERROR("[PIE] Scene snapshot failed: {}", ResultToString(result));
+        EDITOR_LOG_ERROR("[PIE] Scene snapshot failed: {}", ResultToString(result));
     return result;
 }
 

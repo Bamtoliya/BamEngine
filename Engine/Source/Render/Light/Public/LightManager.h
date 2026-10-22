@@ -53,9 +53,8 @@ public:
 
 #pragma region Member Variables
 private:
-	class RHIBuffer* m_LightBuffer = { nullptr };
-	uint32 m_LightCount = { 0 };
-	bool m_BufferDirty = { true };
+	class RHIBuffer* m_LightBuffers[MAX_SWAPCHAIN_BUFFERS] = {};
+	bool m_BufferDirty[MAX_SWAPCHAIN_BUFFERS] = {};
 	vector<std::array<CameraBuffer, MAX_SHADOW_CASCADES>> m_ShadowCameraBuffers;
 	vector<LightShadowData> m_ShadowData;
 

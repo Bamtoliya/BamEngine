@@ -22,7 +22,7 @@ EResult Runtime::Initialize(void* arg)
 
 	const auto fail = [this](const char* stage)
 		{
-			BAM_LOG(Error, "Runtime", "{} creation failed", stage);
+			BAM_LOG(Error, "Engine","Runtime", "{} creation failed", stage);
 			Free();
 			return EResult::Fail;
 		};
@@ -167,25 +167,30 @@ EResult Runtime::Render(f32 dt)
 			return result;
 		};
 
-	if (IsFailure(renderer.BeginFrame()))
+	const EResult beginResult = renderer.BeginFrame();
+	if (IsFailure(beginResult))
 	{
 		ENGINE_LOG_ERROR("Renderer BeginFrame failed");
-		return finish(EResult::Fail);
+		renderer.ClearFrameQueues();
+		return finish(beginResult);
 	}
 
 	SystemManager::Get().Sumbit(m_GlobalRegistry, SceneManager::Get().GetActiveScenes(), dt);
 
-	if (IsFailure(renderer.Render(dt)))
-	{
-		ENGINE_LOG_ERROR("Renderer Render failed");
-		return finish(EResult::Fail);
-	}
+	const EResult renderResult = renderer.Render(dt);
+	const EResult endResult = renderer.EndFrame();
 
-	if (IsFailure(renderer.EndFrame()))
+	if (IsFailure(renderResult))
+		ENGINE_LOG_ERROR("Renderer Render failed");
+
+	if (IsFailure(endResult))
 	{
 		ENGINE_LOG_ERROR("Renderer EndFrame failed");
-		return finish(EResult::Fail);
+		return finish(endResult);
 	}
+
+	if (renderResult != EResult::Success)
+		return finish(renderResult);
 
 	m_LightManager->Update(dt);
 

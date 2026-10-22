@@ -2,6 +2,8 @@
 #include "Logger.h"
 #include <fstream>
 #include <cstdlib>
+#include <cstdint>
+#include <limits>
 
 BEGIN(Engine)
 
@@ -139,10 +141,32 @@ ShaderCompileResult ShaderCompiler::Compile(
         return result;
     }
 
-    const size_t fileSize = static_cast<size_t>(outFile.tellg());
-    result.Bytecode.resize(fileSize);
+    const auto length = static_cast<std::streamoff>(outFile.tellg());
+    if (length <= 0)
+    {
+        result.ErrorMessage = "Compiled output file is empty or unreadable: " + WStrToStr(outPath.wstring());
+        return result;
+    }
+
+    const auto fileSize = static_cast<std::uintmax_t>(length);
+    if (fileSize > result.Bytecode.max_size() ||
+        fileSize > static_cast<std::uintmax_t>(std::numeric_limits<std::streamsize>::max()))
+    {
+        result.ErrorMessage = "Compiled output file is too large: " + WStrToStr(outPath.wstring());
+        return result;
+    }
+
+    result.Bytecode.resize(static_cast<std::size_t>(fileSize));
     outFile.seekg(0, std::ios::beg);
     outFile.read(reinterpret_cast<char*>(result.Bytecode.data()), static_cast<std::streamsize>(fileSize));
+
+    if (!outFile || outFile.gcount() != static_cast<std::streamsize>(fileSize))
+    {
+        result.Bytecode.clear();
+        result.ErrorMessage = "Compiled output file could not be read completely: " + WStrToStr(outPath.wstring());
+        return result;
+    }
+
     outFile.close();
 
     result.Success = true;

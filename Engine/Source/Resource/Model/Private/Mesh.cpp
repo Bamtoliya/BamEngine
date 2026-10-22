@@ -3,6 +3,12 @@
 #include "Renderer.h"
 #include "ResourceManager.h"
 #include <archive/ArchiveInterface.h>
+#include <algorithm>
+#include <cfloat>
+#include <cmath>
+#include <cstring>
+#include <utility>
+#include <limits>
 
 #pragma region Constructor&Destructor
 EResult Mesh::Initialize(void* arg)
@@ -11,6 +17,28 @@ EResult Mesh::Initialize(void* arg)
 	CAST_DESC
 
 	RHI* rhi = Renderer::IsCreated() ? Renderer::Get().GetRHI() : nullptr;
+
+	for (uint32 i = 0; i < static_cast<uint32>(EMeshStream::Max); ++i)
+	{
+		const auto& stream = desc->Streams[i];
+		if (stream.Count == 0) continue;
+
+		if (!stream.Data || stream.Stride == 0)
+			return EResult::InvalidArgument;
+		if (stream.Count > std::numeric_limits<uint32>::max() / stream.Stride)
+			return EResult::InvalidArgument;
+		if (i == static_cast<uint32>(EMeshStream::Position) && stream.Stride < sizeof(vec3))
+			return EResult::InvalidArgument;
+	}
+
+	if (desc->IndexCount > 0)
+	{
+		if (!desc->IndexData ||
+			(desc->IndexStride != sizeof(uint16) && desc->IndexStride != sizeof(uint32)))
+			return EResult::InvalidArgument;
+		if (desc->IndexCount > std::numeric_limits<uint32>::max() / desc->IndexStride)
+			return EResult::InvalidArgument;
+	}
 
 	// 1. 모든 버텍스 스트림을 루프 하나로 처리
 	for (uint32 i = 0; i < (uint32)EMeshStream::Max; ++i)
@@ -86,8 +114,9 @@ EResult Mesh::Initialize(void* arg)
 Mesh* Mesh::Create(void* arg)
 {
 	Mesh* instance = new Mesh();
-	if (IsFailure(instance->Initialize(arg)))
+	if (instance->Initialize(arg) != EResult::Success)
 	{
+		instance->Free();
 		delete instance;
 		return nullptr;
 	}
@@ -96,6 +125,9 @@ Mesh* Mesh::Create(void* arg)
 
 void Mesh::Free()
 {
+	++m_GeometryVersion;
+	m_RaycastBVH = {};
+	m_RaycastBVHVersion = 0;
 	for (auto& buffer : m_VertexBuffers)
 	{
 		Safe_Release(buffer);
@@ -138,27 +170,188 @@ const vector<InputLayoutDesc>& Mesh::GetInputLayoutDescs() const
 {
 	return m_CachedInputLayouts;
 }
-#pragma endregion
+const MeshRaycastBVH& Mesh::GetRaycastBVH() const
+{
+	if (m_RaycastBVHVersion == m_GeometryVersion) return m_RaycastBVH;
 
+	MeshRaycastBVH result;
+	const auto publish = [&]() -> const MeshRaycastBVH&
+		{
+			m_RaycastBVH = std::move(result);
+			m_RaycastBVHVersion = m_GeometryVersion;
+			return m_RaycastBVH;
+		};
+
+	if (m_Topology != ETopology::TriangleList) return publish();
+
+	const uint32 vertexCount = GetStreamCount(EMeshStream::Position);
+	const uint32 vertexStride = GetStreamStride(EMeshStream::Position);
+	const auto& positions = GetRawStreamData(EMeshStream::Position);
+	if (vertexCount < 3 || vertexStride < sizeof(vec3) ||
+		positions.size() < static_cast<uint64>(vertexCount) * vertexStride)
+		return publish();
+
+	const bool indexed = m_IndexCount > 0 || !m_IndexRaw.empty();
+	if (indexed && (m_IndexCount < 3 ||
+		(m_IndexStride != sizeof(uint16) && m_IndexStride != sizeof(uint32)) ||
+		m_IndexRaw.size() < static_cast<uint64>(m_IndexCount) * m_IndexStride))
+		return publish();
+
+	const auto readPosition = [&](uint32 index) -> vec3
+		{
+			vec3 position{};
+			std::memcpy(&position, positions.data() + static_cast<sizet>(index) * vertexStride, sizeof(vec3));
+			return position;
+		};
+	const auto readIndex = [&](uint32 index) -> uint32
+		{
+			if (!indexed) return index;
+			if (m_IndexStride == sizeof(uint32))
+			{
+				uint32 value = 0;
+				std::memcpy(&value, m_IndexRaw.data() + static_cast<sizet>(index) * sizeof(uint32), sizeof(uint32));
+				return value;
+			}
+			uint16 value = 0;
+			std::memcpy(&value, m_IndexRaw.data() + static_cast<sizet>(index) * sizeof(uint16), sizeof(uint16));
+			return value;
+		};
+	const auto finite = [](const vec3& value)
+		{
+			return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
+		};
+
+	struct Primitive
+	{
+		MeshRaycastTriangle Triangle;
+		vec3 Min;
+		vec3 Max;
+		vec3 Center;
+	};
+	const uint32 triangleCount = (indexed ? m_IndexCount : vertexCount) / 3;
+	vector<Primitive> primitives;
+	primitives.reserve(triangleCount);
+
+	for (uint32 triangle = 0; triangle < triangleCount; ++triangle)
+	{
+		const uint32 first = triangle * 3;
+		const uint32 i0 = readIndex(first), i1 = readIndex(first + 1), i2 = readIndex(first + 2);
+		if (i0 >= vertexCount || i1 >= vertexCount || i2 >= vertexCount) continue;
+
+		const vec3 a = readPosition(i0), b = readPosition(i1), c = readPosition(i2);
+		if (!finite(a) || !finite(b) || !finite(c)) continue;
+
+		Primitive primitive;
+		primitive.Triangle = { { i0, i1, i2 }, triangle };
+		primitive.Min = glm::min(a, glm::min(b, c));
+		primitive.Max = glm::max(a, glm::max(b, c));
+		primitive.Center = vec3((glm::dvec3(a) + glm::dvec3(b) + glm::dvec3(c)) / 3.0);
+		primitives.push_back(primitive);
+	}
+	if (primitives.empty()) return publish();
+
+	result.Nodes.reserve(primitives.size() / 2 + 1);
+	const auto build = [&](auto&& self, uint32 first, uint32 count) -> uint32
+		{
+			MeshRaycastNode node;
+			node.BoundsMin = vec3(FLT_MAX);
+			node.BoundsMax = vec3(-FLT_MAX);
+			node.First = first;
+			node.Count = count;
+			for (uint32 i = first; i < first + count; ++i)
+			{
+				node.BoundsMin = glm::min(node.BoundsMin, primitives[i].Min);
+				node.BoundsMax = glm::max(node.BoundsMax, primitives[i].Max);
+			}
+
+			const uint32 nodeIndex = static_cast<uint32>(result.Nodes.size());
+			result.Nodes.push_back(node);
+			if (count <= 8) return nodeIndex;
+
+			const glm::dvec3 extent = glm::dvec3(node.BoundsMax) - glm::dvec3(node.BoundsMin);
+			int axis = extent.y > extent.x ? 1 : 0;
+			if (extent.z > extent[axis]) axis = 2;
+
+			const uint32 leftCount = count / 2;
+			const auto begin = primitives.begin() + first;
+			std::nth_element(begin, begin + leftCount, begin + count,
+				[axis](const Primitive& a, const Primitive& b)
+				{
+					if (a.Center[axis] != b.Center[axis]) return a.Center[axis] < b.Center[axis];
+					return a.Triangle.SourceIndex < b.Triangle.SourceIndex;
+				});
+
+			const uint32 left = self(self, first, leftCount);
+			const uint32 right = self(self, first + leftCount, count - leftCount);
+			result.Nodes[nodeIndex].Left = left;
+			result.Nodes[nodeIndex].Right = right;
+			result.Nodes[nodeIndex].Count = 0;
+			return nodeIndex;
+		};
+
+	build(build, 0, static_cast<uint32>(primitives.size()));
+	result.Triangles.reserve(primitives.size());
+	for (const auto& primitive : primitives)
+		result.Triangles.push_back(primitive.Triangle);
+
+	return publish();
+}
+#pragma endregion
 
 #pragma region Setter
 EResult Mesh::SetStreamBuffer(EMeshStream stream, void* data, uint32 count, uint32 stride)
 {
-	uint32 idx = (uint32)stream;
-	if (idx >= (uint32)EMeshStream::Max || !data || count == 0) return EResult::InvalidArgument;
+	const uint32 idx = static_cast<uint32>(stream);
+	if (idx >= static_cast<uint32>(EMeshStream::Max) || !data || count == 0 || stride == 0)
+		return EResult::InvalidArgument;
+	if (count > std::numeric_limits<uint32>::max() / stride)
+		return EResult::InvalidArgument;
 
-	uint32 totalSize = stride * count;
-	m_RawData[idx].resize(totalSize);
-	memcpy(m_RawData[idx].data(), data, totalSize);
-	m_StreamCounts[idx] = count;
-	m_StreamStrides[idx] = stride;
+	const bool positionStream = stream == EMeshStream::Position;
+	if (positionStream && stride < sizeof(vec3))
+		return EResult::InvalidArgument;
 
-	Safe_Release(m_VertexBuffers[idx]);
+	const uint32 totalSize = stride * count;
+	vector<uint8> raw(totalSize);
+	std::memcpy(raw.data(), data, totalSize);
+
+	vec3 minBound = m_BoundingBoxMin;
+	vec3 maxBound = m_BoundingBoxMax;
+	if (positionStream)
+	{
+		minBound = vec3(FLT_MAX);
+		maxBound = vec3(-FLT_MAX);
+		for (uint32 i = 0; i < count; ++i)
+		{
+			vec3 position{};
+			std::memcpy(&position, raw.data() + static_cast<sizet>(i) * stride, sizeof(vec3));
+			if (!std::isfinite(position.x) || !std::isfinite(position.y) || !std::isfinite(position.z))
+				return EResult::InvalidArgument;
+
+			minBound = glm::min(minBound, position);
+			maxBound = glm::max(maxBound, position);
+		}
+	}
+
+	RHIBuffer* buffer = nullptr;
 	RHI* rhi = Renderer::IsCreated() ? Renderer::Get().GetRHI() : nullptr;
 	if (rhi)
 	{
-		m_VertexBuffers[idx] = rhi->CreateBuffer(data, totalSize, stride, ERHIBufferType::Vertex);
-		if (!m_VertexBuffers[idx]) return EResult::Fail;
+		buffer = rhi->CreateBuffer(raw.data(), totalSize, stride, ERHIBufferType::Vertex);
+		if (!buffer) return EResult::Fail;
+	}
+
+	Safe_Release(m_VertexBuffers[idx]);
+	m_VertexBuffers[idx] = buffer;
+	m_RawData[idx] = std::move(raw);
+	m_StreamCounts[idx] = count;
+	m_StreamStrides[idx] = stride;
+
+	if (positionStream)
+	{
+		m_BoundingBoxMin = minBound;
+		m_BoundingBoxMax = maxBound;
+		++m_GeometryVersion;
 	}
 
 	RebuildCachedBuffers();
@@ -167,27 +360,75 @@ EResult Mesh::SetStreamBuffer(EMeshStream stream, void* data, uint32 count, uint
 
 EResult Mesh::SetIndexBuffer(void* data, uint32 indexCount, uint32 stride)
 {
-	if (!data || indexCount == 0) return EResult::InvalidArgument;
+	if (!data || indexCount == 0 || (stride != sizeof(uint16) && stride != sizeof(uint32)))
+		return EResult::InvalidArgument;
+	if (indexCount > std::numeric_limits<uint32>::max() / stride)
+		return EResult::InvalidArgument;
 
-	uint32 totalSize = stride * indexCount;
-	m_IndexRaw.resize(totalSize);
-	memcpy(m_IndexRaw.data(), data, totalSize);
-	m_IndexCount = indexCount;
-	m_IndexStride = stride;
+	const uint32 totalSize = stride * indexCount;
+	vector<uint8> raw(totalSize);
+	std::memcpy(raw.data(), data, totalSize);
 
-	Safe_Release(m_IndexBuffer);
+	RHIBuffer* buffer = nullptr;
 	RHI* rhi = Renderer::IsCreated() ? Renderer::Get().GetRHI() : nullptr;
 	if (rhi)
 	{
-		m_IndexBuffer = rhi->CreateBuffer(data, totalSize, stride, ERHIBufferType::Index);
-		if (!m_IndexBuffer) return EResult::Fail;
+		buffer = rhi->CreateBuffer(raw.data(), totalSize, stride, ERHIBufferType::Index);
+		if (!buffer) return EResult::Fail;
 	}
+
+	Safe_Release(m_IndexBuffer);
+	m_IndexBuffer = buffer;
+	m_IndexRaw = std::move(raw);
+	m_IndexCount = indexCount;
+	m_IndexStride = stride;
+	++m_GeometryVersion;
 
 	return EResult::Success;
 }
 #pragma endregion
 
 #pragma region Save&Load
+archive::ArchiveResult Mesh::ReadArchive(const archive::IArchive& ar)
+{
+	Mesh candidate(*this);
+
+	// 복사된 GPU 포인터의 소유권은 원본에 남긴다.
+	for (auto& buffer : candidate.m_VertexBuffers) buffer = nullptr;
+	candidate.m_IndexBuffer = nullptr;
+
+	struct CandidateCleanup
+	{
+		Mesh& Value;
+		~CandidateCleanup() { Value.Free(); }
+	} cleanup{ candidate };
+
+	const auto result = candidate.Resource::ReadArchive(ar);
+	if (!result) return result;
+
+	using std::swap;
+	swap(m_Version, candidate.m_Version);
+	swap(m_ResourceType, candidate.m_ResourceType);
+	swap(m_Key, candidate.m_Key);
+	swap(m_Path, candidate.m_Path);
+	swap(m_Flags, candidate.m_Flags);
+	swap(m_Topology, candidate.m_Topology);
+	swap(m_StreamCounts, candidate.m_StreamCounts);
+	swap(m_StreamStrides, candidate.m_StreamStrides);
+	swap(m_RawData, candidate.m_RawData);
+	swap(m_VertexBuffers, candidate.m_VertexBuffers);
+	swap(m_IndexCount, candidate.m_IndexCount);
+	swap(m_IndexStride, candidate.m_IndexStride);
+	swap(m_IndexRaw, candidate.m_IndexRaw);
+	swap(m_IndexBuffer, candidate.m_IndexBuffer);
+	swap(m_BoundingBoxMin, candidate.m_BoundingBoxMin);
+	swap(m_BoundingBoxMax, candidate.m_BoundingBoxMax);
+	swap(m_ActiveBufferCount, candidate.m_ActiveBufferCount);
+	swap(m_CachedInputLayouts, candidate.m_CachedInputLayouts);
+
+	++m_GeometryVersion;
+	return {};
+}
 EResult Mesh::Reload(const std::filesystem::path& filePath)
 {
 	std::filesystem::path targetPath = filePath;
@@ -238,15 +479,29 @@ EResult Mesh::Reload(const std::filesystem::path& filePath)
 }
 EResult Mesh::OnPostLoad()
 {
-	for (uint32 i = 0; i < (uint32)EMeshStream::Max; ++i)
+	for (uint32 i = 0; i < static_cast<uint32>(EMeshStream::Max); ++i)
 	{
-		const uint64 expectedBytes = static_cast<uint64>(m_StreamCounts[i]) * m_StreamStrides[i];
-		if (m_RawData[i].size() != expectedBytes)
+		const uint32 count = m_StreamCounts[i];
+		const uint32 stride = m_StreamStrides[i];
+
+		if (count > 0)
+		{
+			if (stride == 0)
+				return EResult::Fail;
+			if (i == static_cast<uint32>(EMeshStream::Position) && stride < sizeof(vec3))
+				return EResult::Fail;
+		}
+
+		const uint64 expectedBytes = static_cast<uint64>(count) * stride;
+		if (expectedBytes > std::numeric_limits<uint32>::max() || m_RawData[i].size() != expectedBytes)
 			return EResult::Fail;
 	}
 
+	if (m_IndexCount > 0 && m_IndexStride != sizeof(uint16) && m_IndexStride != sizeof(uint32))
+		return EResult::Fail;
+
 	const uint64 expectedIndexBytes = static_cast<uint64>(m_IndexCount) * m_IndexStride;
-	if (m_IndexRaw.size() != expectedIndexBytes)
+	if (expectedIndexBytes > std::numeric_limits<uint32>::max() || m_IndexRaw.size() != expectedIndexBytes)
 		return EResult::Fail;
 
 	for (auto& buffer : m_VertexBuffers)

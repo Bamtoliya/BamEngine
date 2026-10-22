@@ -27,6 +27,9 @@ namespace Editor
         // 호출자가 객체와 프로퍼티를 구분하는 ImGui ID를 설정해야 합니다.
         static bool DrawVector3(const reflection::Metadata& metadata, glm::vec3& value, ReflectionVectorEditSettings* editSettings = nullptr);
         static bool DrawVector4(const reflection::Metadata& metadata, glm::vec4& value, ReflectionVectorEditSettings* editSettings = nullptr);
+
+        static bool DrawCommonBoolProperties(const reflection::TypeInfo& type, std::span<const reflection::ObjectView> objects, const reflection::Registry* registry = nullptr, std::span<const ReflectionObjectEditSettings* const> editSettings = {});
+        static bool DrawCommonFloatProperties(const reflection::TypeInfo& type, std::span<const reflection::ObjectView> objects, const reflection::Registry* registry = nullptr, std::span<const ReflectionObjectEditSettings* const> editSettings = {});
     private:
         static bool DrawVectorComponents(const reflection::Metadata& metadata, std::span<float> value, ReflectionVectorEditSettings* editSettings);
     };

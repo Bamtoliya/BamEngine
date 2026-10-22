@@ -28,6 +28,7 @@ struct ENGINE_API ShaderBinaryHeader
 struct ShaderDesc : public ResourceCreateDesc {
 	EShaderType shaderType = { EShaderType::Unknown };
 	string entryPoint = { "main" };
+	wstring dxilPath = {};
 	wstring spirvPath = {};
 
 	uint32 numSamplers = { 0 };
@@ -76,6 +77,7 @@ public:
 public:
 	EShaderType GetShaderType() const { return m_ShaderType; }
 	const string& GetEntryPoint() const { return m_EntryPoint; }
+	const wstring& GetDxilPath() const { return m_DxilPath; }
 	const wstring& GetSpirvPath() const { return m_SpirvPath; }
 
 	uint32 GetNumSamplers() const { return m_NumSamplers; }
@@ -110,10 +112,18 @@ protected:
 	EResult OnPostLoad() override;
 #pragma endregion
 
+#pragma region MyRegion
+private:
+	void ResolveLegacyBinaryPaths();
+#pragma endregion
+
+
 #pragma region Member Variables
 private:
 	PROPERTY(READONLY)
 	EShaderType m_ShaderType = { EShaderType::Unknown };
+	PROPERTY(READONLY)
+	wstring m_DxilPath = {};
 	PROPERTY(READONLY)
 	wstring m_SpirvPath = {};
 	PROPERTY()

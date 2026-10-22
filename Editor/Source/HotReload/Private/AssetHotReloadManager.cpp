@@ -88,7 +88,7 @@ EResult AssetHotReloadManager::Initialize(void* arg)
 	std::error_code ec;
 	if (!std::filesystem::exists(m_WatchDirectory, ec))
 	{
-		ENGINE_LOG_WARN("[Texture Hot Reload] Resources directory does not exist: {}", m_WatchDirectory.string());
+		EDITOR_LOG_WARN("[Texture Hot Reload] Resources directory does not exist: {}", m_WatchDirectory.string());
 		return EResult::Success;
 	}
 
@@ -97,7 +97,7 @@ EResult AssetHotReloadManager::Initialize(void* arg)
 	m_WatchID = m_FileWatcher->addWatch(m_WatchDirectory.string(), m_FileListener, true);
 	m_FileWatcher->watch();
 
-	ENGINE_LOG_INFO("[Texture Hot Reload] Watching directory: {}", m_WatchDirectory.string());
+	EDITOR_LOG_INFO("[Texture Hot Reload] Watching directory: {}", m_WatchDirectory.string());
 	return EResult::Success;
 }
 
@@ -263,7 +263,7 @@ void AssetHotReloadManager::ProcessModifiedLocalization(const std::filesystem::p
 
 	if (IsSuccess(Engine::LocalizationManager::Get().ReloadData()))
 	{
-		ENGINE_LOG_INFO("[HotReload] Localization reloaded: {}", locPath.filename().string());
+		EDITOR_LOG_INFO("[HotReload] Localization reloaded: {}", locPath.filename().string());
 		ShaderHotReloadManager::Get().AddNotification(LOCAL("Notification.LocalizationReloaded"),
 			LOCAL_FMT("Notification.ReloadedFile", locPath.filename().string()), false, 3.0f);
 	}

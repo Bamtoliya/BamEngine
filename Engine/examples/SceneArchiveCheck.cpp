@@ -15,6 +15,8 @@
 #include <iostream>
 #include <limits>
 #include <memory>
+#include "Collision.h"
+#include <cmath>
 
 namespace
 {
@@ -360,7 +362,7 @@ namespace
         meshDesc.IndexStride = sizeof(uint32);
         meshDesc.BoundingBoxMin = { -1.0f, -2.0f, -3.0f };
         meshDesc.BoundingBoxMax = { 4.0f, 5.0f, 6.0f };
-        auto meshHandle = rm.LoadResource<Engine::Mesh>(&meshDesc);
+        auto meshHandle = rm.AddResource<Engine::Mesh>(meshDesc.Key, Engine::Mesh::Create(&meshDesc));
         if (!meshHandle.IsValid() || Engine::IsFailure(rm.SaveToJsonFile(meshHandle.Get(), L"test-mesh.bammesh.json")))
             return Fail("Mesh creation or JSON archive save failed.");
 
@@ -371,26 +373,26 @@ namespace
         vsDesc.entryPoint = "VSMain";
         vsDesc.spirvPath = L"Shaders/TestVS.spv";
         vsDesc.numUniformBuffers = 2;
-        auto vsHandle = rm.LoadResource<Engine::Shader>(&vsDesc);
+        auto vsHandle = rm.AddResource<Engine::Shader>(vsDesc.Key, Engine::Shader::Create(&vsDesc));
         if (!vsHandle.IsValid() || Engine::IsFailure(rm.SaveToJsonFile(vsHandle.Get(), L"test-vs.bamshader.json")))
             return Fail("Shader creation or JSON archive save failed.");
 
         Engine::MaterialDesc matDesc{};
-        matDesc.Key = L"test-mat.bammaterial.json";
-        matDesc.Path = L"test-mat.bammaterial.json";
+        matDesc.Key = L"test-mat.bammat.json";
+        matDesc.Path = L"test-mat.bammat.json";
         matDesc.VertexShaderHandle = vsHandle;
         matDesc.CullMode = Engine::ECullMode::None;
-        auto matHandle = rm.LoadResource<Engine::Material>(&matDesc);
+        auto matHandle = rm.AddResource<Engine::Material>(matDesc.Key, Engine::Material::Create(&matDesc));
         if (!matHandle.IsValid()) return Fail("Material creation failed.");
         matHandle->SetFloat("Roughness", 0.75f);
-        if (Engine::IsFailure(rm.SaveToJsonFile(matHandle.Get(), L"test-mat.bammaterial.json")))
+        if (rm.SaveToJsonFile(matHandle.Get(), L"test-mat.bammat.json") != Engine::EResult::Success)
             return Fail("Material JSON archive save failed.");
 
         MaterialInstanceDesc miDesc{};
         miDesc.Key = L"test-mi.bammatinst.json";
         miDesc.Path = L"test-mi.bammatinst.json";
         miDesc.BaseMaterialHandle = matHandle;
-        auto miHandle = rm.LoadResource<Engine::MaterialInstance>(&miDesc);
+        auto miHandle = rm.AddResource<Engine::MaterialInstance>(miDesc.Key, Engine::MaterialInstance::Create(&miDesc));
         if (!miHandle.IsValid()) return Fail("MaterialInstance creation failed.");
         miHandle->SetFloat("Roughness", 0.25f);
         if (Engine::IsFailure(rm.SaveToJsonFile(miHandle.Get(), L"test-mi.bammatinst.json")))
@@ -403,7 +405,7 @@ namespace
         rootBone.Name = L"RootBone";
         rootBone.ParentIndex = -1;
         skelDesc.Bones.push_back(rootBone);
-        auto skelHandle = rm.LoadResource<Engine::Skeleton>(&skelDesc);
+        auto skelHandle = rm.AddResource<Engine::Skeleton>(skelDesc.Key, Engine::Skeleton::Create(&skelDesc));
         if (!skelHandle.IsValid() || Engine::IsFailure(rm.SaveToJsonFile(skelHandle.Get(), L"test-skel.bamskel.json")))
             return Fail("Skeleton creation or JSON archive save failed.");
 
@@ -416,7 +418,7 @@ namespace
         track.TargetBoneName = L"RootBone";
         track.PositionKeyframes.push_back({ 0.5, { 1.0f, 2.0f, 3.0f } });
         animDesc.Tracks.push_back(track);
-        auto animHandle = rm.LoadResource<Engine::Animation>(&animDesc);
+        auto animHandle = rm.AddResource<Engine::Animation>(animDesc.Key, Engine::Animation::Create(&animDesc));
         if (!animHandle.IsValid() || Engine::IsFailure(rm.SaveToJsonFile(animHandle.Get(), L"test-anim.bamanim.json")))
             return Fail("Animation creation or JSON archive save failed.");
 
@@ -427,7 +429,7 @@ namespace
         modelDesc.Materials = { matHandle };
         modelDesc.Skeleton = skelHandle;
         modelDesc.Animations = { animHandle };
-        auto modelHandle = rm.LoadResource<Engine::Model>(&modelDesc);
+        auto modelHandle = rm.AddResource<Engine::Model>(modelDesc.Key, Engine::Model::Create(&modelDesc));
         if (!modelHandle.IsValid() || Engine::IsFailure(rm.SaveToJsonFile(modelHandle.Get(), L"test-model.bammodel.json")))
             return Fail("Model creation or JSON archive save failed.");
 
@@ -510,6 +512,195 @@ namespace
         return true;
     }
 
+    bool CheckShaderBinaryPaths()
+    {
+        auto& manager = Engine::ResourceManager::Get();
+        const std::wstring assetPath = L"shader-path-round-trip.bamshader.json";
+
+        ShaderDesc desc{};
+        desc.Key = L"shader-path-round-trip";
+        desc.Path = L"Shaders/GraphMaterialPS.cso";
+        desc.spirvPath = L"Shaders/GraphMaterialPS.spv";
+        desc.shaderType = EShaderType::Fragment;
+
+        const auto releaseResource = [](Engine::Resource* resource)
+            {
+                if (resource)
+                {
+                    resource->Free();
+                    delete resource;
+                }
+            };
+
+        auto* shader = Engine::Shader::Create(&desc);
+        std::unique_ptr<Engine::Resource, decltype(releaseResource)> source(shader, releaseResource);
+        if (!shader || shader->GetDxilPath() != desc.Path || shader->GetSpirvPath() != desc.spirvPath)
+            return Fail("Shader binary path initialization failed.");
+
+        if (Engine::IsFailure(manager.SaveToJsonFile(source.get(), assetPath)))
+            return Fail("Initial shader archive save failed.");
+
+        ShaderDesc loadDesc{};
+        loadDesc.Key = assetPath;
+        loadDesc.Path = assetPath;
+
+        for (int attempt = 0; attempt < 3; ++attempt)
+        {
+            auto loaded = manager.LoadResource<Engine::Shader>(&loadDesc);
+            if (!loaded.IsValid())
+                return Fail("Shader archive load failed.");
+
+            if (loaded->GetPath() != assetPath || loaded->GetDxilPath() != desc.Path ||
+                loaded->GetSpirvPath() != desc.spirvPath)
+                return Fail("Shader asset and binary paths were not preserved.");
+
+            if (Engine::IsFailure(manager.SaveToJsonFile(loaded.Get(), assetPath)))
+                return Fail("Shader archive resave failed.");
+
+            const auto handle = loaded.GetRawHandle();
+            loaded.Reset();
+
+            if (Engine::IsFailure(manager.DestroyResource(handle)))
+                return Fail("Shader test resource cleanup failed.");
+        }
+
+        return true;
+    }
+
+    bool CheckMeshArchiveValidation()
+    {
+        Engine::VertexPosition positions[3] = {
+            { { 0.0f, 0.0f, 0.0f } }, { { 1.0f, 0.0f, 0.0f } }, { { 0.0f, 1.0f, 0.0f } }
+        };
+        Engine::uint32 indices[3] = { 0, 1, 2 };
+        constexpr auto positionSlot = static_cast<Engine::uint32>(Engine::EMeshStream::Position);
+        constexpr auto streamCount = static_cast<std::size_t>(Engine::EMeshStream::Max);
+
+        Engine::MeshCreateDesc desc{};
+        desc.Streams[positionSlot] = { positions, 3, sizeof(Engine::VertexPosition) };
+        desc.IndexData = indices;
+        desc.IndexCount = 3;
+        desc.IndexStride = sizeof(Engine::uint32);
+
+        auto* source = Engine::Mesh::Create(&desc);
+        if (!source) return Fail("Mesh archive validation setup failed.");
+
+        const auto rejects = [&](bool invalidIndex) -> bool
+            {
+                archive::JsonArchive ar;
+                std::string before, after;
+                const auto geometryVersion = source->GetGeometryVersion();
+                if (!source->WriteArchive(ar) || !ar.Encode(before)) return false;
+
+                if (invalidIndex)
+                {
+                    if (!ar.Write("m_IndexCount", Engine::uint32{ 4 }) ||
+                        !ar.Write("m_IndexStride", Engine::uint32{ 3 })) return false;
+                }
+                else
+                {
+                    std::array<Engine::uint32, streamCount> counts{};
+                    std::array<Engine::uint32, streamCount> strides{};
+                    counts[positionSlot] = static_cast<Engine::uint32>(sizeof(positions) / sizeof(float));
+                    strides[positionSlot] = sizeof(float);
+                    if (!ar.WriteArray("m_StreamCounts", counts) ||
+                        !ar.WriteArray("m_StreamStrides", strides)) return false;
+                }
+
+                const auto result = source->ReadArchive(ar);
+                archive::JsonArchive preserved;
+                return result.Code == archive::ArchiveErrorCode::InvalidValue &&
+                    result.Field == "Resource.OnPostLoad" &&
+                    source->GetGeometryVersion() == geometryVersion &&
+                    source->WriteArchive(preserved) && preserved.Encode(after) && before == after;
+            };
+
+        bool ok = rejects(true) && rejects(false);
+
+        const glm::mat4 identity(1.0f);
+        const Engine::Ray oldRay({ 0.25f, 0.25f, -5.0f }, { 0.0f, 0.0f, 1.0f });
+        const Engine::Ray newRay({ 10.25f, 0.25f, -5.0f }, { 0.0f, 0.0f, 1.0f });
+        Engine::HitResult hit{};
+
+        // 재로드 전에 기존 위치의 BVH를 만든다.
+        ok = ok && Engine::Collision::Raycast(oldRay, *source, identity, hit, 20.0f) &&
+            std::abs(hit.distance - 5.0f) < 0.001f;
+
+        for (auto& vertex : positions) vertex.position += glm::vec3(10.0f, 0.0f, 2.0f);
+
+        auto* replacement = Engine::Mesh::Create(&desc);
+        if (!replacement)
+        {
+            source->Free();
+            delete source;
+            return Fail("Replacement mesh creation failed.");
+        }
+
+        archive::JsonArchive incoming;
+        const auto written = replacement->WriteArchive(incoming);
+        replacement->Free();
+        delete replacement;
+
+        const auto previousVersion = source->GetGeometryVersion();
+        ok = ok && written && source->ReadArchive(incoming) &&
+            source->GetGeometryVersion() == previousVersion + 1 &&
+            glm::length(source->GetMin() - glm::vec3(10.0f, 0.0f, 2.0f)) < 0.001f &&
+            glm::length(source->GetMax() - glm::vec3(11.0f, 1.0f, 2.0f)) < 0.001f;
+
+        ok = ok && !Engine::Collision::Raycast(oldRay, *source, identity, hit, 20.0f) &&
+            Engine::Collision::Raycast(newRay, *source, identity, hit, 20.0f) &&
+            std::abs(hit.distance - 7.0f) < 0.001f;
+
+        // 성공한 재로드 이후에도 잘못된 입력으로 현재 상태가 손상되지 않아야 한다.
+        ok = ok && rejects(true) && rejects(false);
+
+        source->Free();
+        delete source;
+        return ok || Fail("Mesh archive rollback, commit, or BVH refresh failed.");
+    }
+
+    bool CheckResourceRuntimeVersion()
+    {
+        Engine::MeshCreateDesc desc{};
+        auto* mesh = Engine::Mesh::Create(&desc);
+        if (!mesh) return Fail("Runtime version test setup failed.");
+
+        mesh->IncreaseVersion();
+        mesh->IncreaseVersion();
+
+        archive::JsonArchive ar;
+        bool hasVersion = true;
+        bool ok = mesh->WriteArchive(ar) &&
+            ar.HasField("m_Version", hasVersion) && !hasVersion;
+
+        const wchar_t* path = L"runtime-version.bammesh.json";
+
+        // 이전 형식의 파일에 남아 있는 실행 버전을 재현한다.
+        ok = ok && ar.Write("m_Version", Engine::uint32{ 0 }) && ar.SaveToFile(path);
+
+        Engine::uint32 expectedVersion = mesh->GetVersion();
+        for (int i = 0; ok && i < 2; ++i)
+        {
+            ++expectedVersion;
+            ok = mesh->Reload(path) == Engine::EResult::Success &&
+                mesh->GetVersion() == expectedVersion;
+        }
+
+        // 실패한 리로드에서는 두 버전 모두 유지되어야 한다.
+        ok = ok && ar.Write("m_IndexCount", Engine::uint32{ 1 }) &&
+            ar.Write("m_IndexStride", Engine::uint32{ 3 }) && ar.SaveToFile(path);
+
+        const auto previousVersion = mesh->GetVersion();
+        const auto previousGeometryVersion = mesh->GetGeometryVersion();
+        ok = ok && mesh->Reload(path) != Engine::EResult::Success &&
+            mesh->GetVersion() == previousVersion &&
+            mesh->GetGeometryVersion() == previousGeometryVersion;
+
+        mesh->Free();
+        delete mesh;
+        return ok || Fail("Resource runtime version serialization or reload handling failed.");
+    }
+
     bool CheckPrefabRoundTrip()
     {
         auto scene = MakeScene();
@@ -576,6 +767,7 @@ int main()
     if (!CheckFileRoundTrip<archive::JsonArchive>(L"round-trip.json") ||
         !CheckFileRoundTrip<archive::BeveArchive>(L"round-trip.beve") ||
         !CheckManagerAndWriteFailure() || !CheckEmptyScene() || !CheckHierarchyDepthAndIds() ||
+        !CheckResourceRuntimeVersion() || !CheckShaderBinaryPaths() || !CheckMeshArchiveValidation() ||
         !CheckResourcesAndHandlesRoundTrip() || !CheckPrefabRoundTrip())
         return 1;
     std::cout << "Scene file, persistent ID, hierarchy, resource handle, resource archive, and prefab checks passed.\n";

@@ -30,7 +30,10 @@ EResult LightManager::Initialize(void* arg)
 void LightManager::Free()
 {
 	__super::Free();
-	Safe_Release(m_LightBuffer);
+
+	for (auto& buffer : m_LightBuffers)
+		Safe_Release(buffer);
+
 	Safe_Release(m_RHI);
 }
 #pragma endregion
@@ -39,24 +42,29 @@ void LightManager::Free()
 void LightManager::Update(f32 dt)
 {
 	(void)dt;
-	m_BufferDirty = true;
+
+	for (auto& dirty : m_BufferDirty)
+		dirty = true;
 }
 #pragma endregion
 
 #pragma region GPU
 EResult LightManager::Bind(uint32 slot)
 {
-	if (!m_RHI) return EResult::Fail;
 	if (IsFailure(EnsureBuffer())) return EResult::Fail;
-	if (m_BufferDirty && IsFailure(UpdateLightBuffer())) return EResult::Fail;
-	if (!m_LightBuffer) return EResult::Fail;
 
-	return m_RHI->BindStorageBuffer(m_LightBuffer, slot);
+	const uint32 frameIndex = m_RHI->GetFrameResourceIndex();
+	if (m_BufferDirty[frameIndex] && IsFailure(UpdateLightBuffer()))
+		return EResult::Fail;
+
+	return m_RHI->BindStorageBuffer(m_LightBuffers[frameIndex], slot);
 }
 
 EResult LightManager::UpdateLightBuffer()
 {
 	if (IsFailure(EnsureBuffer())) return EResult::Fail;
+
+	const uint32 frameIndex = m_RHI->GetFrameResourceIndex();
 
 	constexpr uint32 headerSize = sizeof(LightBufferHeader);
 	constexpr uint32 totalSize = headerSize + sizeof(GPULight) * MAX_LIGHTS;
@@ -145,28 +153,31 @@ EResult LightManager::UpdateLightBuffer()
 	}
 
 	header->NumLights = currentLightIndex;
-	m_LightBuffer->SetData(data.data(), totalSize);
-	m_BufferDirty = false;
+	m_LightBuffers[frameIndex]->SetData(data.data(), totalSize);
+	m_BufferDirty[frameIndex] = false;
 	return EResult::Success;
 }
 EResult LightManager::EnsureBuffer()
 {
-	// 이미 할당된 크기가 충분하면 재생성 생략
-	if (m_LightBuffer && m_LightCount >= MAX_LIGHTS)
-		return EResult::Success;
+	if (!m_RHI) return EResult::Fail;
 
-	Safe_Release(m_LightBuffer);
+	const uint32 frameCount = m_RHI->GetFrameResourceCount();
+	const uint32 frameIndex = m_RHI->GetFrameResourceIndex();
+	if (frameCount == 0 || frameCount > MAX_SWAPCHAIN_BUFFERS || frameIndex >= frameCount)
+		return EResult::Fail;
 
 	constexpr uint32 totalSize = sizeof(LightBufferHeader) + sizeof(GPULight) * MAX_LIGHTS;
-	m_LightBuffer = m_RHI->CreateBuffer(nullptr, totalSize, sizeof(GPULight), ERHIBufferType::Structured);
-	if (!m_LightBuffer) return EResult::Fail;
 
-	m_LightCount = MAX_LIGHTS;
+	for (uint32 i = 0; i < frameCount; ++i)
+	{
+		if (m_LightBuffers[i]) continue;
 
-	// 초기 데이터: NumLights = 0 으로 클리어
-	std::array<uint8, totalSize> zeros{};
-	m_LightBuffer->SetData(zeros.data(), totalSize);
-	m_BufferDirty = true;
+		std::array<uint8, totalSize> zeros{};
+		m_LightBuffers[i] = m_RHI->CreateBuffer(zeros.data(), totalSize, sizeof(GPULight), ERHIBufferType::Structured);
+		if (!m_LightBuffers[i]) return EResult::Fail;
+
+		m_BufferDirty[i] = true;
+	}
 
 	return EResult::Success;
 }

@@ -30,6 +30,6 @@ public:
 private:
 	D3D12_CPU_DESCRIPTOR_HANDLE m_CPUHandle = {};
 	D3D12_GPU_DESCRIPTOR_HANDLE m_GPUHandle = {};
-	uint32 m_HeapIndex = 0;
+	uint32 m_HeapIndex = UINT32_MAX;
 };
 END

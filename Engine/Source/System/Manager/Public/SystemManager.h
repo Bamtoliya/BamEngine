@@ -47,6 +47,8 @@ inline T* SystemManager::AddSystem(Args && ...args)
 		return static_cast<T*>(m_SystemMap[typeId]);
 	}
 	T* newSystem = T::Create(std::forward<Args>(args)...);
+	if (!newSystem) return nullptr;
+
 	m_Systems.push_back(newSystem);
 	m_SystemMap[typeId] = newSystem;
 	return newSystem;

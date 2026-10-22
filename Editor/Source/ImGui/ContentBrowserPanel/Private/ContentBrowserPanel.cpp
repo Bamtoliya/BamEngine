@@ -718,6 +718,6 @@ void ContentBrowserPanel::CreateEmptyMaterial(const filesystem::path& path)
 	resourceManager.DestroyResource(material);
 
 	if (result != EResult::Success)
-		ENGINE_LOG_WARN("Material saving is unavailable: {}", ResultToString(result));
+		EDITOR_LOG_WARN("Material saving is unavailable: {}", ResultToString(result));
 }
 #pragma endregion

@@ -4,6 +4,9 @@
 #include "Collision.h"
 #include "Mesh.h"
 #include <cstring>
+#include <algorithm>
+#include <cmath>
+#include <limits>
 
 
 #pragma region Raycasts
@@ -150,92 +153,143 @@ bool Collision::Raycast(const Ray& ray, const vec3& v0, const vec3& v1, const ve
 bool Collision::Raycast(const Ray& ray, const Mesh& mesh, const mat4& worldMatrix, HitResult& outHitResult, f32 maxDistance)
 {
 	outHitResult.Reset();
-	if (mesh.GetTopology() != ETopology::TriangleList)
+	if (mesh.GetTopology() != ETopology::TriangleList ||
+		!IsFinite(ray.origin) || !IsFinite(ray.direction) ||
+		!std::isfinite(maxDistance) || maxDistance < 0.0f)
 		return false;
+
 	const uint32 vertexCount = mesh.GetStreamCount(EMeshStream::Position);
 	const uint32 vertexStride = mesh.GetStreamStride(EMeshStream::Position);
-	const vector<uint8>& rawPositions = mesh.GetRawStreamData(EMeshStream::Position);
+	const auto& rawPositions = mesh.GetRawStreamData(EMeshStream::Position);
 	if (vertexCount < 3 || vertexStride < sizeof(vec3) ||
 		rawPositions.size() < static_cast<uint64>(vertexCount) * vertexStride)
 		return false;
-	HitResult boundsHit{};
-	if (!Raycast(ray, AABB(mesh.GetMin(), mesh.GetMax()), worldMatrix, boundsHit, maxDistance))
-		return false;
+
 	const f32 worldDirLength = glm::length(ray.direction);
 	const f32 determinant = glm::determinant(worldMatrix);
-	if (!std::isfinite(worldDirLength) || worldDirLength <= 0.0f || !std::isfinite(determinant) || determinant == 0.0f)
+	if (!std::isfinite(worldDirLength) || worldDirLength <= 0.0f ||
+		!std::isfinite(determinant) || determinant == 0.0f)
 		return false;
+
 	const vec3 worldDir = ray.direction / worldDirLength;
 	const mat4 invWorld = glm::inverse(worldMatrix);
 	const vec3 localOrigin = vec3(invWorld * vec4(ray.origin, 1.0f));
 	const vec3 localDirVector = vec3(invWorld * vec4(worldDir, 0.0f));
 	const f32 localDirLength = glm::length(localDirVector);
-	if (!IsFinite(localOrigin) || !IsFinite(localDirVector) || !std::isfinite(localDirLength) || localDirLength <= 0.0f)
+	if (!IsFinite(localOrigin) || !IsFinite(localDirVector) ||
+		!std::isfinite(localDirLength) || localDirLength <= 0.0f)
 		return false;
+
+	const auto& bvh = mesh.GetRaycastBVH();
+	if (bvh.Nodes.empty()) return false;
+
 	const Ray localRay(localOrigin, localDirVector / localDirLength);
 	f32 closestLocalDistance = maxDistance * localDirLength;
-	if (!std::isfinite(closestLocalDistance))
-		closestLocalDistance = FLT_MAX;
+	if (!std::isfinite(closestLocalDistance)) closestLocalDistance = FLT_MAX;
+
 	const auto readPosition = [&](uint32 index) -> vec3
 		{
-			vec3 pos{};
-			std::memcpy(&pos, rawPositions.data() + static_cast<sizet>(index) * vertexStride, sizeof(vec3));
-			return pos;
+			vec3 position{};
+			std::memcpy(&position, rawPositions.data() + static_cast<sizet>(index) * vertexStride, sizeof(vec3));
+			return position;
 		};
-	bool hasHit = false;
-	HitResult bestLocalHit{};
-	const auto testTriangle = [&](uint32 i0, uint32 i1, uint32 i2)
+
+	// 노드 검사만 보수적으로 넓힙니다. 실제 삼각형 검사는 정확한 거리 제한을 사용합니다.
+	const double tolerance = 8.0 * std::numeric_limits<f32>::epsilon();
+	const auto distanceLimit = [&]() -> double
 		{
-			if (i0 >= vertexCount || i1 >= vertexCount || i2 >= vertexCount) return;
-			HitResult triHit{};
-			if (Raycast(localRay, readPosition(i0), readPosition(i1), readPosition(i2), triHit, closestLocalDistance))
-			{
-				closestLocalDistance = triHit.distance;
-				bestLocalHit = triHit;
-				hasHit = true;
-			}
+			const double distance = closestLocalDistance;
+			return distance + tolerance * std::max(1.0, distance);
 		};
-	const uint32 indexCount = mesh.GetIndexCount();
-	const uint32 indexStride = mesh.GetIndexStride();
-	const vector<uint8>& rawIndices = mesh.GetRawIndexData();
-	if (indexCount > 0 || !rawIndices.empty())
-	{
-		if (indexCount < 3 || (indexStride != sizeof(uint16) && indexStride != sizeof(uint32)) ||
-			rawIndices.size() < static_cast<uint64>(indexCount) * indexStride)
-			return false;
-		const auto readIndex = [&](uint32 idx) -> uint32
+	const auto intersectNode = [&](uint32 index, double& entry) -> bool
+		{
+			const auto& node = bvh.Nodes[index];
+			double enter = 0.0;
+			double exit = distanceLimit();
+			for (int axis = 0; axis < 3; ++axis)
 			{
-				if (indexStride == sizeof(uint32))
+				const double origin = localRay.origin[axis];
+				const double direction = localRay.direction[axis];
+				const double lower = node.BoundsMin[axis];
+				const double upper = node.BoundsMax[axis];
+				const double padding = tolerance * std::max({ 1.0, std::abs(lower), std::abs(upper) });
+				if (direction == 0.0)
 				{
-					uint32 value = 0;
-					std::memcpy(&value, rawIndices.data() + static_cast<sizet>(idx) * sizeof(uint32), sizeof(uint32));
-					return value;
+					if (origin < lower - padding || origin > upper + padding) return false;
+					continue;
 				}
-				uint16 value = 0;
-				std::memcpy(&value, rawIndices.data() + static_cast<sizet>(idx) * sizeof(uint16), sizeof(uint16));
-				return value;
-			};
-		for (uint32 i = 0; i + 2 < indexCount; i += 3)
-			testTriangle(readIndex(i), readIndex(i + 1), readIndex(i + 2));
-	}
-	else
-	{
-		for (uint32 i = 0; i + 2 < vertexCount; i += 3)
-			testTriangle(i, i + 1, i + 2);
-	}
-	if (!hasHit)
-		return false;
+
+				double first = (lower - padding - origin) / direction;
+				double second = (upper + padding - origin) / direction;
+				if (first > second) std::swap(first, second);
+				enter = std::max(enter, first);
+				exit = std::min(exit, second);
+				if (enter > exit) return false;
+			}
+			entry = enter;
+			return true;
+		};
+
+	bool hasHit = false;
+	uint32 bestSourceIndex = 0;
+	HitResult bestLocalHit{};
+	const auto visit = [&](auto&& self, uint32 index, double entry) -> void
+		{
+			if (entry > distanceLimit()) return;
+			const auto& node = bvh.Nodes[index];
+			if (node.Count > 0)
+			{
+				for (uint32 i = node.First; i < node.First + node.Count; ++i)
+				{
+					const auto& triangle = bvh.Triangles[i];
+					HitResult hit{};
+					if (!Raycast(localRay, readPosition(triangle.Indices[0]), readPosition(triangle.Indices[1]),
+						readPosition(triangle.Indices[2]), hit, closestLocalDistance))
+						continue;
+
+					if (!hasHit || hit.distance < closestLocalDistance ||
+						(hit.distance == closestLocalDistance && triangle.SourceIndex > bestSourceIndex))
+					{
+						hasHit = true;
+						closestLocalDistance = hit.distance;
+						bestSourceIndex = triangle.SourceIndex;
+						bestLocalHit = hit;
+					}
+				}
+				return;
+			}
+
+			uint32 left = node.Left, right = node.Right;
+			double leftEntry = 0.0, rightEntry = 0.0;
+			const bool hasLeft = intersectNode(left, leftEntry);
+			const bool hasRight = intersectNode(right, rightEntry);
+			if (hasLeft && hasRight && rightEntry < leftEntry)
+			{
+				std::swap(left, right);
+				std::swap(leftEntry, rightEntry);
+			}
+			if (hasLeft) self(self, left, leftEntry);
+			if (hasRight) self(self, right, rightEntry);
+		};
+
+	double rootEntry = 0.0;
+	if (!intersectNode(0, rootEntry)) return false;
+	visit(visit, 0, rootEntry);
+	if (!hasHit) return false;
+
 	const f32 worldDistance = bestLocalHit.distance / localDirLength;
 	if (!std::isfinite(worldDistance) || worldDistance < 0.0f || worldDistance > maxDistance)
 		return false;
+
 	outHitResult.hasHit = true;
 	outHitResult.distance = worldDistance;
 	outHitResult.point = ray.origin + worldDir * worldDistance;
 	outHitResult.barycentric = bestLocalHit.barycentric;
-	const f32 sign = (determinant < 0.0f) ? -1.0f : 1.0f;
+	const f32 sign = determinant < 0.0f ? -1.0f : 1.0f;
 	const vec3 worldNormal = vec3(glm::transpose(invWorld) * vec4(bestLocalHit.normal * sign, 0.0f));
 	const f32 normalLength = glm::length(worldNormal);
-	outHitResult.normal = (std::isfinite(normalLength) && normalLength > 0.0f) ? (worldNormal / normalLength) : bestLocalHit.normal;
+	outHitResult.normal = std::isfinite(normalLength) && normalLength > 0.0f ?
+		worldNormal / normalLength : bestLocalHit.normal;
 	return true;
 }
 

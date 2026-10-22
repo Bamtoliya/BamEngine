@@ -68,7 +68,7 @@ Entity& EntityFactory::CreateEmptyEntity(Scene* scene, const wstring& name)
 	transform.position = vec3(0.0f, 0.0f, 0.0f);
 	transform.rotation = quat(1.0f, 0.0f, 0.0f, 0.0f);
 	transform.scale = vec3(1.0f, 1.0f, 1.0f);
-	scene->AddComponent<WorldTransformComponent>(entity, glm::identity<mat4>());
+	scene->AddComponent<WorldTransformComponent>(entity);
 	return entity;
 }
 
@@ -80,7 +80,7 @@ Entity& EntityFactory::CreatePrimitiveEntity(Scene* scene, const wstring& name, 
 	ResourceHandle<Material> materialHandle = resourceManager.GetResourceHandle<Material>(materialKey);
 	if(!meshHandle || !materialHandle)
 	{
-		ENGINE_LOG_INFO("Failed to create primitive entity: Mesh or Material not found. MeshKey: {}, MaterialKey: {}", WStrToStr(meshKey), WStrToStr(materialKey));
+		EDITOR_LOG_INFO("Failed to create primitive entity: Mesh or Material not found. MeshKey: {}, MaterialKey: {}", WStrToStr(meshKey), WStrToStr(materialKey));
 		return entity;
 	}
 	scene->AddComponent<StaticMeshRendererComponent>(entity, meshHandle, materialHandle);
@@ -100,7 +100,7 @@ Entity& EntityFactory::CreateSpriteEntity(Scene* scene, const wstring& name, con
 
 	if (!spriteHandle || !meshHandle || !materialHandle)
 	{
-		ENGINE_LOG_ERROR("Failed to create sprite entity: Missing resources. Sprite: {}, Mesh: {}, Material: {}",
+		EDITOR_LOG_ERROR("Failed to create sprite entity: Missing resources. Sprite: {}, Mesh: {}, Material: {}",
 			spriteHandle ? "OK" : "Missing", meshHandle ? "OK" : "Missing", materialHandle ? "OK" : "Missing");
 	}
 
@@ -142,7 +142,7 @@ Entity& EntityFactory::CreateLightEntity(Scene* scene, const wstring& name, cons
 	}
 	else
 	{
-		ENGINE_LOG_WARN("Unknown light type: {}. Defaulting to Point light.", WStrToStr(lightType));
+		EDITOR_LOG_WARN("Unknown light type: {}. Defaulting to Point light.", WStrToStr(lightType));
 		scene->GetComponent<LightComponent>(entity).LightType = ELightType::Point;
 	}
 	return entity;

@@ -2,6 +2,7 @@
 #include "RHI.h"
 #include "DirectX12Types.h"
 #include "DirectX12DescriptorAllocator.h"
+#include <vector>
 
 struct DirectX12RHIDesc : public RHIDesc
 {
@@ -53,6 +54,11 @@ public:
 	EResult BindRenderTargets(uint32 count, RHITexture** renderTargets, RHITexture* depthStencil) override;
 	EResult BindShader(RHIShader* shader) override;
 	EResult BindPipeline(RHIPipeline* pipeline) override;
+	void InvalidatePipelineBinding(const RHIPipeline* pipeline)
+	{
+		if (m_CurrentPipeline == pipeline)
+			m_CurrentPipeline = nullptr;
+	}
 	EResult BindSampler(RHISampler* sampler) override;
 	EResult BindConstantRangeBuffer(void* arg, uint32 slot, uint32 offset, uint32 size) override;
 #pragma endregion
@@ -70,6 +76,18 @@ public:
 	EResult ClearDepthStencil(RHITexture* depthStencil, f32 depth, uint8 stencil) override;
 	EResult ClearDepthSlice(RHITexture* depthStencil, uint32 sliceIndex, f32 depth, uint8 stencil) override;
 #pragma endregion
+
+#pragma region MyRegion
+public:
+	void DeferRelease(ID3D12Object* object);
+	ENGINE_API void DeferDescriptorFree(DirectX12DescriptorAllocator* allocator, uint32 index);
+	ENGINE_API EResult WaitForGPU();
+private:
+	EResult SignalFence(uint64& fenceValue);
+	EResult WaitForFence(uint64 fenceValue);
+	void CollectDeferredReleases();
+#pragma endregion
+
 
 
 
@@ -108,7 +126,7 @@ private:
 	ComPtr<ID3D12Device> m_Device;
 
 	ComPtr<ID3D12CommandQueue> m_CommandQueue;
-	ComPtr<ID3D12CommandAllocator> m_CommandAllocator;
+	ComPtr<ID3D12CommandAllocator> m_CommandAllocators[MAX_SWAPCHAIN_BUFFERS];
 	ComPtr<ID3D12GraphicsCommandList> m_CommandList;
 
 	ComPtr<IDXGISwapChain3> m_SwapChain;
@@ -116,14 +134,11 @@ private:
 	ComPtr<ID3D12DescriptorHeap> m_DynamicHeaps[MAX_SWAPCHAIN_BUFFERS];
 	uint32 m_DynamicHeapCursor = 0;
 
-	//ComPtr<ID3D12DescriptorHeap> m_RTVHeap;
-	//ComPtr<ID3D12DescriptorHeap> m_DSVHeap;
-	//uint32 m_RTVDescriptorSize = 0;
-	//uint32 m_DSVDescriptorSize = 0;
-
 	ComPtr<ID3D12Fence> m_Fence;
 	uint64 m_CurrentFenceValue = 0;
+	uint64 m_FrameFenceValues[MAX_SWAPCHAIN_BUFFERS] = {};
 	bool m_FrameRecording = false;
+	bool m_FrameFailed = false;
 	HANDLE m_FenceEvent = nullptr;
 
 	HWND m_WindowHandle = nullptr;
@@ -139,5 +154,14 @@ private:
 	DirectX12DescriptorAllocator* m_SamplerAllocator = nullptr; // 샘플러용 주차장
 
 	ComPtr<ID3D12RootSignature> m_GlobalRootSignature = nullptr;
+
+	struct DeferredReleaseEntry
+	{
+		uint64 fenceValue = 0;
+		ComPtr<ID3D12Object> object;
+		DirectX12DescriptorAllocator* descriptorAllocator = nullptr;
+		uint32 descriptorIndex = UINT32_MAX;
+	};
+	std::vector<DeferredReleaseEntry> m_DeferredReleases;
 };
 END

@@ -37,6 +37,7 @@ private:
 	EntityHierarchyView m_EntityTree;
 	Engine::Scene* m_LastHierarchyScene = nullptr;
 	entt::entity m_LastHierarchyPrimary = entt::null;
+	uint64 m_RangeAnchorId = 0;
 	entt::entity m_RevealEntity = entt::null;
 	std::string m_HierarchyMessage;
 	void* m_RenamingId = { nullptr };

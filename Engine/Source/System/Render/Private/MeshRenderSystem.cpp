@@ -8,6 +8,7 @@
 #include "RenderPass.h"
 #include "PickingManager.h"
 #include "ResourceManager.h"
+#include "FrustumCuller.h"
 
 EResult MeshRenderSystem::Initialize(void* arg)
 {
@@ -73,6 +74,13 @@ void MeshRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*> a
             command.mesh = mesh;
             command.material = material;
             command.worldMatrix = worldTransform.worldMatrix;
+
+            if (!mesh->IsDynamic())
+            {
+                const AABB localBounds(mesh->GetMin(), mesh->GetMax());
+                command.worldBounds = FrustumCuller::TransformAABB(localBounds, command.worldMatrix);
+            }
+
             command.pickingId = PickingManager::Get().RegisterPickingEntity(scene, entity);
 
             for (RenderPass* pass : targetPasses)

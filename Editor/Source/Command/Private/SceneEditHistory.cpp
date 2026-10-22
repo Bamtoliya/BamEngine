@@ -1,4 +1,4 @@
-#include "SceneEditHistory.h"
+﻿#include "SceneEditHistory.h"
 #include "Scene.h"
 #include "CoreComponents.h"
 #include "RenderComponents.h"
@@ -344,7 +344,9 @@ bool Editor::SceneEditSnapshot::Restore() const
             for (auto& [type, component] : settings.Components) component.TextBuffers.clear();
     }
     if (m_Data->Whole) scene.SetName(m_Data->Name);
-    return Engine::TransformSystem::UpdateHierarchy(world);
+    if (!Engine::TransformSystem::UpdateHierarchy(world)) return false;
+    scene.UpdateHierarchyFlags();
+    return true;
 }
 
 class Editor::SceneEditHistory::Change final : public EditorCommand

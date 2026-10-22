@@ -3,6 +3,8 @@
 #include "Editor_Includes.h"
 #include "RenderPass.h"
 #include "Vertex.h"
+#include "RHIBuffer.h"
+#include "RenderTargetTypes.h"
 
 
 #ifdef _DEBUG
@@ -34,7 +36,7 @@ public:
 
 private:
 	vector<Engine::DebugVertex> m_Vertices;
-	class RHIBuffer* m_VertexBuffer = { nullptr };
+	Engine::RHIBuffer* m_VertexBuffers[MAX_SWAPCHAIN_BUFFERS] = {};
 	bool m_DrawColliders = { false };
 	uint32 m_MaxLines = 1000;
 	RenderPassID m_RenderPassID = { INVALID_PASS_ID };

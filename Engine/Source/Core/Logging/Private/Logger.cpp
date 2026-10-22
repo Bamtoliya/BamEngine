@@ -118,7 +118,7 @@ ENGINE_API LogBatch Logger::DrainPendingEntries()
     return batch;
 }
 
-ENGINE_API void Logger::Write(ELogLevel level, string_view category, string_view message, source_location location)
+ENGINE_API void Logger::Write(ELogLevel level, std::string_view source, std::string_view category, std::string_view message, std::source_location location)
 {
     auto& state = GetLoggerState();
 
@@ -130,6 +130,7 @@ ENGINE_API void Logger::Write(ELogLevel level, string_view category, string_view
     Engine::LogEntry entry;
     entry.Timestamp = now;
     entry.Level = level;
+    entry.Source = std::string(source);
     entry.Category = std::string(category);
     entry.Message = std::string(message);
     entry.FileName = location.file_name();
@@ -171,16 +172,9 @@ ENGINE_API void Logger::Write(ELogLevel level, string_view category, string_view
     threadId << std::this_thread::get_id();
 
     const auto line = fmt::format(
-        "[{:%Y-%m-%d %H:%M:%S}.{:03}]"
-        "[{}][{}][Thread:{}] {} ({}:{})\n",
-        localTime,
-        milliseconds,
-        GetLevelName(level),
-        category,
-        threadId.str(),
-        message,
-        location.file_name(),
-        location.line());
+        "[{:%Y-%m-%d %H:%M:%S}.{:03}][{}][{}][{}][Thread:{}] {} ({}:{})\n",
+        localTime, milliseconds, GetLevelName(level), source, category,
+        threadId.str(), message, location.file_name(), location.line());
 
     // 첫 버전은 모든 레벨을 stderr로 모아 출력 순서를 유지합니다.
     std::fwrite(line.data(), 1, line.size(), stderr);

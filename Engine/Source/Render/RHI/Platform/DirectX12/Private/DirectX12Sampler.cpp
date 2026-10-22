@@ -49,11 +49,12 @@ void DirectX12Sampler::Free()
 {
     if (m_RHI)
     {
-		DirectX12RHI* dxRHI = static_cast<DirectX12RHI*>(m_RHI);
-		if (dxRHI->GetSamplerAllocator())
-		{
-			dxRHI->GetSamplerAllocator()->Free(m_HeapIndex);
-		}
+        auto* dxRHI = static_cast<DirectX12RHI*>(m_RHI);
+        dxRHI->DeferDescriptorFree(dxRHI->GetSamplerAllocator(), m_HeapIndex);
     }
+
+    m_HeapIndex = UINT32_MAX;
+    m_CPUHandle = {};
+    m_GPUHandle = {};
     __super::Free();
 }

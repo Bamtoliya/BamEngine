@@ -1,4 +1,11 @@
 Group,Key,English,Korean
+,Unsupported graph data version.,Unsupported graph data version.,지원하지 않는 그래프 데이터 버전입니다.
+,Node ID must be non-zero.,Node ID must be non-zero.,노드 ID는 0일 수 없습니다.
+,Duplicate node ID.,Duplicate node ID.,노드 ID가 중복되었습니다.
+,Next node ID must exceed existing node IDs.,Next node ID must exceed existing node IDs.,다음 노드 ID는 기존 노드 ID보다 커야 합니다.
+,Link ID must be non-zero.,Link ID must be non-zero.,연결 ID는 0일 수 없습니다.
+,Duplicate link ID.,Duplicate link ID.,연결 ID가 중복되었습니다.
+,Next link ID must exceed existing link IDs.,Next link ID must exceed existing link IDs.,다음 연결 ID는 기존 연결 ID보다 커야 합니다.
 ,UI_HISTORY_REORDER,Reorder Entities,엔티티 순서 변경
 ,UI_HISTORY_PROPERTY,Edit Property,속성 편집
 ,UI_HIERARCHY_NO_MATCH,No matching entities found.,일치하는 엔티티가 없습니다.
@@ -607,3 +614,88 @@ TerrainEditor,ImportHeightmap,Import Heightmap,하이트맵 임포트
 TerrainEditor,ExportHeightmap,Export Heightmap,하이트맵 익스포트
 TerrainEditor,ResetTerrain,Reset Terrain,지형 초기화
 TerrainEditor,Sculpt,Sculpt,조각
+Console,AllSources,All sources,모든 발생 주체
+Console,EmptySource,Unspecified source,발생 주체 미지정
+Inspector,MultipleSelection,{} entities selected,{}개 엔티티 선택
+Inspector,CommonComponents,Common Components,공통 컴포넌트
+Inspector,NoCommonComponents,No common components to display.,표시할 공통 컴포넌트가 없습니다.
+Inspector,LocalFlagsHint,Edits local flags. Parent hierarchy may still disable or hide an entity.,자체 상태를 편집합니다. 부모 계층에 의해 비활성화되거나 숨겨질 수 있습니다.
+Inspector,MixedFlagsHint,Values differ. Click to turn this option on for all selected entities.,값이 서로 다릅니다. 클릭하면 선택된 모든 엔티티에서 이 항목을 켭니다.
+Inspector,MultiEditUnavailable,Bulk editing is unavailable because its history could not be captured.,편집 이력을 구성할 수 없어 일괄 편집을 사용할 수 없습니다.
+Inspector,MixedValues,Multiple values,서로 다른 값
+Inspector,MultiPositionHint,Press Enter to set only this axis. Position uses parent space or world space when position inheritance is disabled.,Enter로 편집한 축만 적용합니다. 위치는 부모 기준이며 위치 독립 설정이면 월드 기준입니다.
+Inspector,MultiTransformPolicyHint,Use matching inheritance and snap settings. Unlock the edited axis on every selected entity.,선택 대상의 해당 변환 상속 설정과 스냅 설정을 맞추고 모든 대상에서 편집할 축의 잠금을 해제하세요.
+Inspector,MultiTransformRejected,Transform edit rejected. Previous values were preserved.,변환을 적용할 수 없어 이전 값을 유지합니다.
+Inspector,MultiScaleHint,Press Enter to set only this scale axis. Zero and negative values are allowed when the hierarchy remains valid.,Enter로 편집한 크기 축만 적용합니다. 계층이 유효하면 0과 음수도 사용할 수 있습니다.
+Inspector,MultiRotationHint,Press Enter to set one Euler angle in degrees. The entered angle and other Euler axis values are preserved.,Enter로 도 단위 Euler 각도를 설정합니다. 입력한 누적 각도와 나머지 축 값은 유지합니다.
+GraphPanel,Save,Save,저장
+GraphPanel,SaveAs,Save As...,다른 이름으로 저장...
+GraphPanel,NoFile,No file path selected.,저장 경로가 지정되지 않았습니다.
+GraphPanel,FilePath,File: {0},파일: {0}
+GraphPanel,SaveScope,Save includes nodes and connections and input values. Node layout is not saved.,노드·연결·입력값을 저장합니다. 노드 배치는 저장하지 않습니다.
+GraphPanel,FileFailed,Graph file operation failed at stage: {0}. Hover for details.,그래프 파일 처리 실패: {0}. 마우스를 올리면 상세 내용을 확인할 수 있습니다.
+GraphPanel,FileStageUnknown,Unknown,알 수 없음
+GraphPanel,FileStageValidate,Graph validation,그래프 검증
+GraphPanel,FileStageSerialize,Serialization,직렬화
+GraphPanel,FileStageRead,File reading,파일 읽기
+GraphPanel,FileStageDeserialize,Deserialization,역직렬화
+GraphPanel,FileStageWrite,Temporary file writing,임시 파일 쓰기
+GraphPanel,FileStageReplace,Destination file replacement,대상 파일 교체
+GraphPanel,ArchiveErrorDetail,Archive error {0} / Field: {1},아카이브 오류 {0} / 필드: {1}
+GraphPanel,GraphErrorDetail,Graph error {0} / Node: {1} / Pin: {2} / {3},그래프 오류 {0} / 노드: {1} / 핀: {2} / {3}
+GraphPanel,SystemErrorDetail,System error {0}: {1},시스템 오류 {0}: {1}
+FileDialog,GraphFiles,Graph Files (*.json),그래프 파일 (*.json)
+GraphPanel,Open,Open...,불러오기...
+GraphPanel,ConfirmOpen,Replace Current Graph,현재 그래프 교체
+GraphPanel,ReplaceWarning,The current graph will be replaced. Unsaved changes will be lost.,현재 그래프를 교체합니다. 저장하지 않은 변경 내용은 사라집니다.
+GraphPanel,ReplaceCurrent,Continue,계속
+GraphPanel,FileDomainMismatch,The file domain differs from the current tab. Select the matching domain tab and try again.,파일의 도메인이 현재 탭과 다릅니다. 해당 도메인 탭을 선택한 뒤 다시 불러오세요.
+GraphPanel,UnregisteredNode,The node type is not registered.,등록되지 않은 노드 유형입니다.
+Inspector,MultiPropertyWriteFailed,Could not apply this property to every selected entity.,선택 대상 전체에 이 속성을 적용하지 못했습니다.
+Inspector,MultiFloatHint,Press Enter to apply this value to all selected entities. Registered ranges are enforced.,Enter로 선택 대상 전체에 값을 적용합니다. 등록된 범위 밖의 값은 범위에 맞춰 보정합니다.
+Inspector,MultiFloatValidationRequired,Bulk numeric editing requires component validation and is not available here yet.,이 컴포넌트의 숫자 일괄 편집은 별도 검증 연결이 필요하여 아직 지원하지 않습니다.
+GraphPanel,GenerateHlsl,Generate HLSL,HLSL 생성
+GraphPanel,CheckDxil,Check DXIL,DXIL 검사
+GraphPanel,CheckSpirv,Check SPIR-V,SPIR-V 검사
+GraphPanel,ShaderBuild,Shader Build,셰이더 생성·컴파일
+GraphPanel,ShaderIdle,Generate HLSL or run a compilation check.,HLSL을 생성하거나 컴파일 검사를 실행하세요.
+GraphPanel,ShaderChanged,The graph changed. Regenerate or compile to update the result.,그래프가 변경되었습니다. 다시 생성하거나 컴파일하세요.
+GraphPanel,ShaderGenerationFailed,Shader generation failed. See the graph diagnostic.,셰이더 생성에 실패했습니다. 그래프 진단을 확인하세요.
+GraphPanel,ShaderSourceReady,HLSL source was generated.,HLSL 소스를 생성했습니다.
+GraphPanel,ShaderCompilePassed,The compilation check passed.,컴파일 검사를 통과했습니다.
+GraphPanel,ShaderCompileFailed,The compilation check failed. See the details below.,컴파일 검사에 실패했습니다. 아래 상세 내용을 확인하세요.
+GraphPanel,ShaderCompileOnly,Compile to check the shader or build a DirectX12 color preview.,셰이더를 컴파일 검사하거나 DirectX12 색상 미리보기를 생성하세요.
+GraphPanel,ShaderLastGood,Last successful compilation: {0} / {1} bytes,마지막 성공 결과: {0} / {1}바이트
+GraphPanel,ShaderArtifact,Output: {0},출력 파일: {0}
+GraphPanel,GeneratedHlsl,Generated HLSL,HLSL 생성 결과
+GraphPanel,ShaderOldSource,This source is from an earlier graph state.,현재 표시된 소스는 이전 그래프 상태에서 생성되었습니다.
+GraphPanel,PreviewShader,Preview Shader,셰이더 미리보기
+GraphPanel,ShaderPreviewReady,The GPU preview is ready.,GPU 미리보기를 생성했습니다.
+GraphPanel,ShaderPreviewFailed,Could not replace the preview. Any previous preview is retained.,미리보기를 교체하지 못했습니다. 이전 미리보기가 있으면 유지합니다.
+GraphPanel,ShaderPreviewUnavailable,Shader preview currently requires an active DirectX12 renderer.,현재 셰이더 미리보기에는 활성 DirectX12 렌더러가 필요합니다.
+GraphPanel,ShaderPreviewVertexMissing,The fullscreen vertex shader is unavailable.,전체 화면 정점 셰이더를 사용할 수 없습니다.
+GraphPanel,ShaderPreviewShaderFailed,Could not create the GPU pixel shader.,GPU 픽셀 셰이더를 생성하지 못했습니다.
+GraphPanel,ShaderPreviewPipelineFailed,Could not create the preview pipeline. Check the engine log.,미리보기 파이프라인을 생성하지 못했습니다. 엔진 로그를 확인하세요.
+GraphPanel,ShaderPreviewTargetFailed,Could not create a unique preview render target.,미리보기 전용 렌더 타깃을 생성하지 못했습니다.
+GraphPanel,ShaderPreviewPassFailed,Could not create the preview render pass.,미리보기 렌더 패스를 생성하지 못했습니다.
+GraphPanel,ShaderPreviewDrawFailed,Could not render or display the shader preview.,셰이더 미리보기를 렌더링하거나 표시하지 못했습니다.
+GraphPanel,ShaderPreviewOld,This preview was built from an earlier graph state.,이 미리보기는 이전 그래프 상태에서 생성되었습니다.
+GraphPanel,CheckMaterialDxil,Check Material DXIL,머티리얼 DXIL 검사
+GraphPanel,MaterialShaderBuild,Material Shader,머티리얼 셰이더
+GraphPanel,MaterialShaderReady,Material shader compilation passed.,머티리얼 셰이더 컴파일을 통과했습니다.
+GraphPanel,MaterialShaderFailed,Material shader compilation failed. Any previous successful result is retained.,머티리얼 셰이더 컴파일에 실패했습니다. 이전 성공 결과가 있으면 유지합니다.
+GraphPanel,MaterialShaderScope,Unlit GBuffer shader for a material geometry pass.,머티리얼 지오메트리 패스용 Unlit GBuffer 셰이더입니다.
+GraphPanel,MaterialShaderOld,This is the last successful material result. Run the check again to validate the current state.,마지막으로 성공한 머티리얼 결과입니다. 현재 상태를 확인하려면 다시 검사하세요.
+GraphPanel,CreateRuntimeMaterial,Create Session Material,세션 머티리얼 생성
+GraphPanel,RuntimeMaterialReady,The session material is ready. Assign it in the Inspector.,세션 머티리얼을 생성했습니다. Inspector에서 할당하세요.
+GraphPanel,RuntimeMaterialFailed,Material creation failed. Any previous material is retained.,머티리얼 생성에 실패했습니다. 이전 머티리얼이 있으면 유지합니다.
+GraphPanel,RuntimeMaterialUnavailable,Material creation requires DirectX12 and initialized rendering resources.,머티리얼 생성에는 DirectX12와 초기화된 렌더링 리소스가 필요합니다.
+GraphPanel,RuntimeMaterialDependencies,A required mesh or shader or texture or sampler is unavailable.,필요한 메시 또는 셰이더 또는 텍스처 또는 샘플러를 사용할 수 없습니다.
+GraphPanel,RuntimeMaterialPassMissing,An active GBuffer geometry pass is required. Open a scene viewport and check its camera.,활성 GBuffer 지오메트리 패스가 필요합니다. 씬 뷰포트를 열고 카메라를 확인하세요.
+GraphPanel,RuntimeMaterialCollision,The generated resource key is already in use.,생성할 리소스 키가 이미 사용 중입니다.
+GraphPanel,RuntimeMaterialResourceFailed,Could not create resources matching the compiled material shader.,컴파일된 머티리얼 셰이더와 일치하는 리소스를 생성하지 못했습니다.
+GraphPanel,RuntimeMaterialPipelineFailed,Material pipeline validation failed. Check the engine log.,머티리얼 파이프라인 검사에 실패했습니다. 엔진 로그를 확인하세요.
+GraphPanel,RuntimeMaterialScope,Session only. Assign this material in the Inspector; it cannot be restored after restarting.,세션용입니다. Inspector에서 할당할 수 있으며 재시작 후에는 복원되지 않습니다.
+GraphPanel,RuntimeMaterialKey,Created material: {0},생성된 머티리얼: {0}
+GraphPanel,RuntimeMaterialOld,This is an earlier result. Create another material and select its new entry to apply the current graph.,이전 생성 결과입니다. 현재 그래프를 적용하려면 머티리얼을 다시 생성하고 새 항목을 선택하세요.
+Hierarchy,EntityFallback,Entity {},엔티티 {}

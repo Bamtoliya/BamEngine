@@ -1,10 +1,13 @@
-#include "GraphPanel.h"
+﻿#include "GraphPanel.h"
 #include "GraphMessageLocalization.h"
 #include "LocalizationManager.h"
 #include "ReflectionRegistry.h"
 #include <imnodes.h>
 #include <algorithm>
 #include <utility>
+#include "FileDialogs.h"
+#include <limits>
+#include <memory>
 
 #pragma region Constructor&Destructor
 GraphPanel::GraphPanel()
@@ -32,6 +35,7 @@ void GraphPanel::Free()
 	{
 		if (document->Context) ImNodes::DestroyContext(document->Context);
 		document->Context = nullptr;
+		document->ShaderBuild = {};
 	}
 	m_Ready = false;
 	__super::Free();
@@ -50,6 +54,12 @@ void GraphPanel::Draw()
 	}
 
 	auto* previousContext = ImNodes::GetCurrentContext();
+	GraphDocument* previousDocument = nullptr;
+	for (auto* document : { &m_Logic, &m_Shader })
+	{
+		if (previousContext && previousContext == document->Context)
+			previousDocument = document;
+	}
 	const string windowTitle = LOCAL("GraphPanel.Title") + "###GraphPanel";
 	ImGui::SetNextWindowSize(ImVec2(1000.0f, 650.0f), ImGuiCond_FirstUseEver);
 	if (ImGui::Begin(windowTitle.c_str(), &m_Open))
@@ -60,6 +70,8 @@ void GraphPanel::Draw()
 		{
 			ActivateDocument();
 			DrawToolbar();
+			DrawFileToolbar();
+			DrawShaderToolbar();
 			DrawExecutionToolbar();
 			UpdateExecution();
 			ImGui::Separator();
@@ -81,6 +93,7 @@ void GraphPanel::Draw()
 					DrawDiagnostics();
 					ImGui::Separator();
 					DrawExecutionTrace();
+					DrawShaderBuildDetails();
 				}
 				ImGui::EndChild();
 				ImGui::EndTable();
@@ -101,7 +114,7 @@ void GraphPanel::Draw()
 		m_Hovered = false;
 	}
 	ImGui::End();
-	ImNodes::SetCurrentContext(previousContext);
+	ImNodes::SetCurrentContext(previousDocument ? previousDocument->Context : previousContext);
 }
 #pragma endregion
 
@@ -145,6 +158,274 @@ void GraphPanel::DrawToolbar()
 	ImGui::BeginDisabled(GetDocument().SelectedNodes.empty() && GetDocument().SelectedLinks.empty());
 	if (ImGui::Button(LOCAL_CSTR("GraphPanel.Delete"))) DeleteSelection();
 	ImGui::EndDisabled();
+}
+
+void GraphPanel::SaveDocument(bool saveAs)
+{
+	auto& document = GetDocument();
+	auto path = document.FilePath;
+
+	if (saveAs || path.empty())
+	{
+		const std::wstring defaultName = path.empty()
+			? (m_Domain == EGraphDomain::Logic ? L"LogicGraph.json" : L"ShaderGraph.json")
+			: path.filename().wstring();
+
+		std::wstring selectedPath;
+		const std::vector<FileDialogFilter> filters{
+			{ StrToWStr(LOCAL("FileDialog.GraphFiles")), L"*.json" }
+		};
+
+		if (!FileDialogs::SaveFileDialog(selectedPath, filters, defaultName, L"json")) return;
+		path = std::filesystem::path(selectedPath);
+	}
+
+	if (!ReflectionRegistry::IsCreated())
+	{
+		document.FileResult = {
+			EGraphFileStage::Serialize,
+			{ archive::ArchiveErrorCode::UnsupportedType, "ReflectionRegistry" }
+		};
+		return;
+	}
+
+	const auto& reflection = ReflectionRegistry::Get();
+	document.FileResult = SaveGraphJson(path, document.Data, m_Registry,
+		reflection.GetRegistry(), reflection.GetPropertyCodecs());
+
+	if (document.FileResult.Succeeded()) document.FilePath = std::move(path);
+}
+
+void GraphPanel::OpenDocument()
+{
+	std::wstring selectedPath;
+	const std::vector<FileDialogFilter> filters{
+		{ StrToWStr(LOCAL("FileDialog.GraphFiles")), L"*.json" }
+	};
+
+	if (!FileDialogs::OpenFileDialog(selectedPath, filters)) return;
+
+	auto& document = GetDocument();
+	if (!ReflectionRegistry::IsCreated())
+	{
+		document.FileResult = {
+			EGraphFileStage::Deserialize,
+			{ archive::ArchiveErrorCode::UnsupportedType, "ReflectionRegistry" }
+		};
+		return;
+	}
+
+	GraphDocument candidate(m_Domain);
+	candidate.FilePath = std::filesystem::path(selectedPath);
+
+	const auto& reflection = ReflectionRegistry::Get();
+	const auto loaded = LoadGraphJson(candidate.FilePath, candidate.Data, m_Registry,
+		reflection.GetRegistry(), reflection.GetPropertyCodecs());
+
+	if (!loaded.Succeeded())
+	{
+		document.FileResult = loaded;
+		return;
+	}
+
+	if (candidate.Data.GetDomain() != m_Domain)
+	{
+		document.FileResult = {
+			EGraphFileStage::Validate, {},
+			{ EGraphError::UnsupportedDomain, 0, {}, 0, "GraphPanel.FileDomainMismatch" }
+		};
+		return;
+	}
+
+	const auto views = BuildDocumentViews(candidate);
+	if (!views.Succeeded())
+	{
+		document.FileResult = { EGraphFileStage::Validate, {}, views };
+		return;
+	}
+
+	candidate.Diagnostics = candidate.Data.Validate(m_Registry);
+
+	std::unique_ptr<ImNodesContext, decltype(&ImNodes::DestroyContext)> freshContext(
+		ImNodes::CreateContext(), &ImNodes::DestroyContext);
+	ImNodes::SetCurrentContext(freshContext.get());
+
+	std::size_t index = 0;
+	for (const auto& node : candidate.Data.GetNodes())
+	{
+		const float x = 40.0f + static_cast<float>(index % 3) * 420.0f;
+		const float y = 40.0f + static_cast<float>(index / 3) * 360.0f;
+		ImNodes::SetNodeGridSpacePos(candidate.Nodes.at(node.Id).Id, ImVec2(x, y));
+		++index;
+	}
+
+	if (m_Domain == EGraphDomain::Logic)
+	{
+		InvalidateExecution();
+		m_EntryNode = 0;
+	}
+
+	std::swap(document, candidate);
+	document.Context = freshContext.release();
+	if (candidate.Context) ImNodes::DestroyContext(candidate.Context);
+
+	m_LastDiagnostic = {};
+	m_AddPosition = ImVec2(40.0f, 40.0f);
+	m_DragPin = 0;
+	m_AddSource = {};
+	m_NodeCandidates.clear();
+	m_NodeSearch[0] = '\0';
+	m_NodeMenuActive = false;
+	m_FocusNodeSearch = false;
+	m_OpenNodePopup = false;
+}
+
+GraphDiagnostic GraphPanel::BuildDocumentViews(GraphDocument& document)
+{
+	document.Nodes.clear();
+	document.Pins.clear();
+	document.Links.clear();
+	document.NextId = 1;
+
+	const auto maximum = static_cast<std::uint64_t>(std::numeric_limits<int>::max());
+	const auto allocateId = [&]() -> int
+		{
+			if (document.NextId > maximum) return 0;
+			return static_cast<int>(document.NextId++);
+		};
+
+	for (const auto& node : document.Data.GetNodes())
+	{
+		const auto* definition = m_Registry.Find(node.Type);
+		if (!definition)
+		{
+			return { EGraphError::InvalidDefinition, node.Id, {}, 0,
+				"GraphPanel.UnregisteredNode" };
+		}
+
+		NodeView view;
+		view.Id = allocateId();
+		if (view.Id == 0)
+			return { EGraphError::IdExhausted, node.Id, {}, 0, "GraphPanel.IdExhausted" };
+
+		for (const auto& pin : definition->Pins)
+		{
+			const int pinId = allocateId();
+			if (pinId == 0)
+				return { EGraphError::IdExhausted, node.Id, pin.Key, 0, "GraphPanel.IdExhausted" };
+
+			view.Pins.emplace(pin.Key, pinId);
+			document.Pins.emplace(pinId, GraphPinReference{ node.Id, pin.Key });
+		}
+
+		document.Nodes.emplace(node.Id, std::move(view));
+	}
+
+	for (const auto& link : document.Data.GetLinks())
+	{
+		const int linkId = allocateId();
+		if (linkId == 0)
+			return { EGraphError::IdExhausted, 0, {}, link.Id, "GraphPanel.IdExhausted" };
+
+		document.Links.emplace(link.Id, linkId);
+	}
+
+	return {};
+}
+
+void GraphPanel::DrawFileToolbar()
+{
+	if (ImGui::Button(LOCAL_LABEL("GraphPanel.Save").c_str())) SaveDocument(false);
+	ImGui::SameLine();
+	if (ImGui::Button(LOCAL_LABEL("GraphPanel.SaveAs").c_str())) SaveDocument(true);
+
+	const auto& document = GetDocument();
+
+	ImGui::SameLine();
+	if (ImGui::Button(LOCAL_LABEL("GraphPanel.Open").c_str()))
+	{
+		if (GetDocument().Data.GetNodes().empty())
+			OpenDocument();
+		else
+			ImGui::OpenPopup(LOCAL_LABEL("GraphPanel.ConfirmOpen").c_str());
+	}
+
+	bool openRequested = false;
+	if (ImGui::BeginPopupModal(LOCAL_LABEL("GraphPanel.ConfirmOpen").c_str(),
+		nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+	{
+		ImGui::TextWrapped("%s", LOCAL_CSTR("GraphPanel.ReplaceWarning"));
+
+		if (ImGui::Button(LOCAL_LABEL("GraphPanel.ReplaceCurrent").c_str()))
+		{
+			ImGui::CloseCurrentPopup();
+			openRequested = true;
+		}
+
+		ImGui::SameLine();
+		if (ImGui::Button(LOCAL_LABEL("EditorCommon.Cancel").c_str()))
+			ImGui::CloseCurrentPopup();
+
+		ImGui::EndPopup();
+	}
+
+	if (openRequested) OpenDocument();
+
+	ImGui::SameLine();
+
+	const std::string pathText = document.FilePath.empty()
+		? LOCAL("GraphPanel.NoFile")
+		: LOCAL_FMT("GraphPanel.FilePath", WStrToStr(document.FilePath.wstring()));
+
+	ImGui::TextDisabled("%s", pathText.c_str());
+	if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", pathText.c_str());
+
+	const auto& result = document.FileResult;
+	if (result.Succeeded()) return;
+
+	const char* stageKey = "GraphPanel.FileStageUnknown";
+	switch (result.Stage)
+	{
+	case EGraphFileStage::Validate: stageKey = "GraphPanel.FileStageValidate"; break;
+	case EGraphFileStage::Serialize: stageKey = "GraphPanel.FileStageSerialize"; break;
+	case EGraphFileStage::Read: stageKey = "GraphPanel.FileStageRead"; break;
+	case EGraphFileStage::Deserialize: stageKey = "GraphPanel.FileStageDeserialize"; break;
+	case EGraphFileStage::Write: stageKey = "GraphPanel.FileStageWrite"; break;
+	case EGraphFileStage::Replace: stageKey = "GraphPanel.FileStageReplace"; break;
+	default: break;
+	}
+
+	const auto message = LOCAL_FMT("GraphPanel.FileFailed", LOCAL(stageKey));
+	ImGui::TextColored(ImVec4(1.0f, 0.45f, 0.35f, 1.0f), "%s", message.c_str());
+
+	if (ImGui::IsItemHovered())
+	{
+		ImGui::BeginTooltip();
+
+		if (!result.ArchiveError)
+		{
+			const auto detail = LOCAL_FMT("GraphPanel.ArchiveErrorDetail",
+				static_cast<int>(result.ArchiveError.Code), result.ArchiveError.Field);
+			ImGui::TextWrapped("%s", detail.c_str());
+		}
+
+		if (!result.GraphError.Succeeded())
+		{
+			const auto detail = LOCAL_FMT("GraphPanel.GraphErrorDetail",
+				static_cast<int>(result.GraphError.Code), result.GraphError.Node,
+				result.GraphError.Pin, LocalizeGraphMessage(result.GraphError.Message));
+			ImGui::TextWrapped("%s", detail.c_str());
+		}
+
+		if (result.SystemError)
+		{
+			const auto detail = LOCAL_FMT("GraphPanel.SystemErrorDetail",
+				result.SystemError.value(), result.SystemError.message());
+			ImGui::TextWrapped("%s", detail.c_str());
+		}
+
+		ImGui::EndTooltip();
+	}
 }
 
 void GraphPanel::PrepareNodeMenu(GraphPinReference source)
@@ -351,7 +632,7 @@ void GraphPanel::DrawStatus()
 	}
 	else
 	{
-		ImGui::TextDisabled("%s", LOCAL_CSTR("GraphPanel.SessionOnly"));
+		ImGui::TextDisabled("%s", LOCAL_CSTR("GraphPanel.SaveScope"));
 	}
 	ImGui::TextDisabled("%s", LOCAL_CSTR("GraphPanel.Controls"));
 }
@@ -465,7 +746,10 @@ bool GraphPanel::ApplyResult(GraphDiagnostic result)
 {
 	m_LastDiagnostic = std::move(result);
 	if (!m_LastDiagnostic.Succeeded()) return false;
-	if (m_Domain == EGraphDomain::Logic) InvalidateExecution();
+	if (m_Domain == EGraphDomain::Logic)
+		InvalidateExecution();
+	else
+		InvalidateShaderBuild();
 	RefreshValidation();
 	return true;
 }

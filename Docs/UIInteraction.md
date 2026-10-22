@@ -148,5 +148,5 @@ cmake --build out/build/x64-debug --config Debug --target CompileShaders Editor
 ```
 
 다시 실행해 Canvas → Add Button을 확인한다. 수정 후 컴파일·PSO 생성 성공과 화면 표시는 아직 검증하지 않았다.
-여전히 실패하면 Logs/EngineLog.log의 CreateGraphicsPipelineState HRESULT와 D3D12 PSO validation을 확인한다.
+여전히 실패하면 Logs/Editor.log의 CreateGraphicsPipelineState HRESULT와 D3D12 PSO validation을 확인한다.
 Debug layer가 활성화된 실행에서는 해당 PSO 생성 호출 중 발생한 상세 검증 메시지를 로그에 함께 기록한다.

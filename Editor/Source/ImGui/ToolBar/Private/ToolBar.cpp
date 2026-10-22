@@ -164,7 +164,7 @@ void ToolBar::DrawSceneMenu()
 			if (result == EResult::Success)
 				SelectionManager::Get().ClearSelection(true);
 			else
-				ENGINE_LOG_ERROR("Failed to close scene: {}", ResultToString(result));
+				EDITOR_LOG_ERROR("Failed to close scene: {}", ResultToString(result));
 		}
 		ImGui::EndMenu();
 	}
@@ -174,7 +174,7 @@ void ToolBar::NewScene()
 	const EResult result = SceneManager::Get().NewScene();
 	if (result != EResult::Success)
 	{
-		ENGINE_LOG_ERROR("Failed to create scene: {}", ResultToString(result));
+		EDITOR_LOG_ERROR("Failed to create scene: {}", ResultToString(result));
 		return;
 	}
 
@@ -193,7 +193,7 @@ void ToolBar::SaveScene()
 
 	if (result != EResult::Success)
 	{
-		ENGINE_LOG_ERROR("Failed to save scene: {} ({})",
+		EDITOR_LOG_ERROR("Failed to save scene: {} ({})",
 			WStrToStr(filePath), ResultToString(result));
 	}
 }
@@ -208,7 +208,7 @@ void ToolBar::LoadScene()
 
 	if (result != EResult::Success)
 	{
-		ENGINE_LOG_ERROR("Failed to load scene: {} ({})", WStrToStr(filePath), ResultToString(result));
+		EDITOR_LOG_ERROR("Failed to load scene: {} ({})", WStrToStr(filePath), ResultToString(result));
 		return;
 	}
 

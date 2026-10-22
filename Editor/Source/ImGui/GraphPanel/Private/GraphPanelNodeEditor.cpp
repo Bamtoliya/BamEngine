@@ -1,4 +1,4 @@
-#include "GraphPanel.h"
+﻿#include "GraphPanel.h"
 #include "GraphMessageLocalization.h"
 #include "InputManager.h"
 #include "LocalizationManager.h"
@@ -144,11 +144,15 @@ void GraphPanel::DrawNode(const GraphNode& node)
 	const auto* definition = m_Registry.Find(node.Type);
 	const auto found = GetDocument().Nodes.find(node.Id);
 	if (!definition || found == GetDocument().Nodes.end()) return;
-	const string name = definition->DisplayName.empty() ? node.Type : LOCAL(definition->DisplayName);
-	float width = std::max(200.0f, ImGui::CalcTextSize(name.c_str()).x);
+	auto& localization = LocalizationManager::Get();
+	const auto nameText = localization.GetTextForDisplay(definition->DisplayName);
+	const char* name = definition->DisplayName.empty() ? node.Type.c_str() : nameText.c_str();
+	float width = std::max(200.0f, ImGui::CalcTextSize(name).x);
 	for (const auto& pin : definition->Pins)
 	{
-		width = std::max(width, ImGui::CalcTextSize((pin.DisplayName.empty() ? pin.Key : LOCAL(pin.DisplayName)).c_str()).x);
+		const auto pinText = localization.GetTextForDisplay(pin.DisplayName);
+		const char* pinLabel = pin.DisplayName.empty() ? pin.Key.c_str() : pinText.c_str();
+		width = std::max(width, ImGui::CalcTextSize(pinLabel).x);
 		if (pin.Type == EGraphPinType::Float2 || pin.Type == EGraphPinType::Float3 || pin.Type == EGraphPinType::Float4)
 			width = std::max(width, ImGui::GetFontSize() * 20.0f);
 	}
@@ -165,7 +169,7 @@ void GraphPanel::DrawNode(const GraphNode& node)
 	}
 	ImNodes::BeginNode(found->second.Id);
 	ImNodes::BeginNodeTitleBar();
-	ImGui::TextUnformatted(name.c_str());
+	ImGui::TextUnformatted(name);
 	if (ImGui::IsItemHovered() && !definition->Tooltip.empty())
 		ImGui::SetTooltip("%s", LOCAL_CSTR(definition->Tooltip));
 	ImGui::Dummy(ImVec2(width, 0.0f));
@@ -180,10 +184,11 @@ void GraphPanel::DrawNode(const GraphNode& node)
 		ImNodes::PushColorStyle(ImNodesCol_PinHovered, PinColor(pin.Type));
 		if (input) ImNodes::BeginInputAttribute(id, shape);
 		else ImNodes::BeginOutputAttribute(id, shape);
-		const string label = pin.DisplayName.empty() ? pin.Key : LOCAL(pin.DisplayName);
-		const float indent = input ? 0.0f : std::max(0.0f, width - ImGui::CalcTextSize(label.c_str()).x);
+		const auto labelText = localization.GetTextForDisplay(pin.DisplayName);
+		const char* label = pin.DisplayName.empty() ? pin.Key.c_str() : labelText.c_str();
+		const float indent = input ? 0.0f : std::max(0.0f, width - ImGui::CalcTextSize(label).x);
 		if (indent > 0.0f) ImGui::Indent(indent);
-		ImGui::TextUnformatted(label.c_str());
+		ImGui::TextUnformatted(label);
 		if (indent > 0.0f) ImGui::Unindent(indent);
 		DrawPinValue(node, pin, width);
 		if (input) ImNodes::EndInputAttribute();

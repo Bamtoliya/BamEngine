@@ -14,6 +14,7 @@
 
 #include "EntityFactory.h"
 #include "CoreComponents.h"
+#include <algorithm>
 
 
 static bool CheckboxTristate(const char* label, bool* v, bool is_mixed)
@@ -209,13 +210,14 @@ void HierarchyPanel::Draw()
     {
         m_LastHierarchyScene = nullptr;
         m_LastHierarchyPrimary = entt::null;
+		m_RangeAnchorId = 0;
         m_HierarchyMessage.clear();
         ImGui::TextUnformatted(LOCAL_CSTR("UI_NO_SCENE_LOADED"));
         if (SceneManager::IsCreated() && ImGui::Button(LOCAL_CSTR("UI_CREATE_NEW_SCENE")))
         {
             const EResult result = SceneManager::Get().NewScene();
             if (result == EResult::Success) SelectionManager::Get().ClearSelection();
-            else ENGINE_LOG_ERROR("Failed to create scene: {}", ResultToString(result));
+            else EDITOR_LOG_ERROR("Failed to create scene: {}", ResultToString(result));
         }
     }
     if (InputManager::Get().IsMouseButtonDown(EMouseButton::Left) && ImGui::IsWindowHovered() &&
@@ -328,7 +330,7 @@ void HierarchyPanel::DrawSceneContextMenu(Scene* scene)
 			}
 			catch (const std::exception& error)
 			{
-				ENGINE_LOG_ERROR("Failed to create Cube: {}", error.what());
+				EDITOR_LOG_ERROR("Failed to create Cube: {}", error.what());
 			}
 		}
 		if (ImGui::MenuItem(LOCAL_LABEL("Hierarchy.AddSprite").c_str()))
@@ -340,7 +342,7 @@ void HierarchyPanel::DrawSceneContextMenu(Scene* scene)
 			}
 			catch (const std::exception& error)
 			{
-				ENGINE_LOG_ERROR("Failed to create Sprite: {}", error.what());
+				EDITOR_LOG_ERROR("Failed to create Sprite: {}", error.what());
 			}
 		}
 		if (ImGui::BeginMenu(LOCAL_LABEL("Hierarchy.Light").c_str()))
@@ -354,7 +356,7 @@ void HierarchyPanel::DrawSceneContextMenu(Scene* scene)
 				}
 				catch (const std::exception& error)
 				{
-					ENGINE_LOG_ERROR("Failed to create Directional Light: {}", error.what());
+					EDITOR_LOG_ERROR("Failed to create Directional Light: {}", error.what());
 				}
 
 			}
@@ -368,7 +370,7 @@ void HierarchyPanel::DrawSceneContextMenu(Scene* scene)
 				}
 				catch (const std::exception& error)
 				{
-					ENGINE_LOG_ERROR("Failed to create Point Light: {}", error.what());
+					EDITOR_LOG_ERROR("Failed to create Point Light: {}", error.what());
 				}
 
 			}
@@ -382,7 +384,7 @@ void HierarchyPanel::DrawSceneContextMenu(Scene* scene)
 				}
 				catch (const std::exception& error)
 				{
-					ENGINE_LOG_ERROR("Failed to create Spot Light: {}", error.what());
+					EDITOR_LOG_ERROR("Failed to create Spot Light: {}", error.what());
 				}
 
 			}
@@ -396,7 +398,7 @@ void HierarchyPanel::DrawSceneContextMenu(Scene* scene)
 				}
 				catch (const std::exception& error)
 				{
-					ENGINE_LOG_ERROR("Failed to create Sky Light: {}", error.what());
+					EDITOR_LOG_ERROR("Failed to create Sky Light: {}", error.what());
 				}
 
 			}
@@ -412,7 +414,7 @@ void HierarchyPanel::DrawSceneContextMenu(Scene* scene)
 			}
 			catch (const std::exception& error)
 			{
-				ENGINE_LOG_ERROR("Failed to create Terrain: {}", error.what());
+				EDITOR_LOG_ERROR("Failed to create Terrain: {}", error.what());
 			}
 		}
 
@@ -430,17 +432,54 @@ void HierarchyPanel::DrawEntityHierarchy(Scene* scene)
     const bool changedScene = m_LastHierarchyScene != scene;
     const auto reveal = m_RevealEntity != entt::null ? m_RevealEntity :
         changedScene || primary != m_LastHierarchyPrimary ? primary : entt::null;
-    if (changedScene) m_HierarchyMessage.clear();
+	if (changedScene)
+	{
+		m_HierarchyMessage.clear();
+		m_RangeAnchorId = 0;
+	}
+	if (selected.empty()) m_RangeAnchorId = 0;
     m_LastHierarchyScene = scene;
     m_LastHierarchyPrimary = primary;
     m_RevealEntity = entt::null;
 	const auto action = m_EntityTree.Draw(*scene, selected, reveal, selection.IsPrimarySelectionLocked(), m_SearchFilter);
-    if (action.Clicked != entt::null)
-    {
-        auto* entity = scene->FindEntity(action.Clicked);
-        if (action.Toggle) selection.ToggleEntitySelection(entity);
-        else selection.SetSelectedEntity(entity);
-    }
+	if (action.Clicked != entt::null && !selection.IsPrimarySelectionLocked())
+	{
+		auto* entity = scene->FindEntity(action.Clicked);
+		if (entity)
+		{
+			bool appliedRange = false;
+			auto* anchor = m_RangeAnchorId != 0 ? scene->FindEntityById(m_RangeAnchorId) : nullptr;
+
+			if (action.Range && anchor && selection.IsEntitySelected(anchor))
+			{
+				const auto& rows = action.VisibleEntities;
+				const auto first = std::find(rows.begin(), rows.end(), anchor->GetEntityHandle());
+				const auto last = std::find(rows.begin(), rows.end(), action.Clicked);
+
+				if (first != rows.end() && last != rows.end())
+				{
+					if (!action.Toggle) selection.ClearSelection();
+
+					const int step = first <= last ? 1 : -1;
+					for (auto it = first;; it += step)
+					{
+						selection.AddToEntitySelection(scene->FindEntity(*it));
+						if (it == last) break;
+					}
+					appliedRange = true;
+				}
+			}
+
+			if (!appliedRange)
+			{
+				if (action.Toggle) selection.ToggleEntitySelection(entity);
+				else selection.SetSelectedEntity(entity);
+
+				const auto* id = scene->GetRegistry().try_get<Engine::IDComponent>(action.Clicked);
+				m_RangeAnchorId = id && selection.IsEntitySelected(entity) ? id->id : 0;
+			}
+		}
+	}
     if (action.Delete != entt::null)
     {
         auto& history = Application::Get().GetEditHistory();

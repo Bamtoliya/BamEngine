@@ -2,6 +2,8 @@
 
 #include "Engine_Includes.h"
 #include "ResourceHandle.h"
+#include "Structs.h"
+#include <optional>
 BEGIN(Engine)
 
 struct RenderObjectId
@@ -17,6 +19,7 @@ struct StaticDrawCommand
 	mat4 worldMatrix = { glm::identity<mat4>() };
 	RenderObjectId objectId{};
 	uint32 pickingId = 0;
+	std::optional<AABB> worldBounds{};
 };
 
 struct SkinnedDrawCommand

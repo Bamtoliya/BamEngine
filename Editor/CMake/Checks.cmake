@@ -29,6 +29,10 @@ target_include_directories(PickingMathCheck PRIVATE "${EDITOR_SOURCE_DIR}/Select
 target_link_libraries(PickingMathCheck PRIVATE BamEngine::Engine)
 set_target_properties(PickingMathCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
 
+add_executable(PickingBVHBenchmark examples/PickingBVHBenchmark.cpp)
+target_link_libraries(PickingBVHBenchmark PRIVATE BamEngine::Engine)
+set_target_properties(PickingBVHBenchmark PROPERTIES UNITY_BUILD OFF FOLDER "Benchmarks")
+
 add_executable(CanvasViewCheck examples/CanvasViewCheck.cpp)
 target_include_directories(CanvasViewCheck PRIVATE "${EDITOR_SOURCE_DIR}/ImGui/ViewportPanel/Public")
 target_link_libraries(CanvasViewCheck PRIVATE BamEngine::Engine)

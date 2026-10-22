@@ -76,25 +76,25 @@ bool Editor::StartupResourceLoader::LoadPipeline(const std::filesystem::path& ma
 	std::string content;
 	if (!ReadJsonFile(manifestPath, content))
 	{
-		ENGINE_LOG_ERROR("[StartupLoader] Failed to open manifest: {}", manifestPath.string());
+		EDITOR_LOG_ERROR("[StartupLoader] Failed to open manifest: {}", manifestPath.string());
 		return false;
 	}
 
 	StartupManifestConfig manifest;
 	if (glz::read_json(manifest, content))
 	{
-		ENGINE_LOG_ERROR("[StartupLoader] Manifest JSON parse error: {}", manifestPath.string());
+		EDITOR_LOG_ERROR("[StartupLoader] Manifest JSON parse error: {}", manifestPath.string());
 		return false;
 	}
 
-	ENGINE_LOG_INFO("[StartupLoader] Starting resource preload pipeline...");
+	EDITOR_LOG_INFO("[StartupLoader] Starting resource preload pipeline...");
 
 	for (const auto& step : manifest.Pipeline)
 	{
 		std::filesystem::path configPath = step.Config;
 		if (!std::filesystem::exists(configPath))
 		{
-			ENGINE_LOG_WARN("[StartupLoader] Config file not found for {}: {}", step.Category, step.Config);
+			EDITOR_LOG_WARN("[StartupLoader] Config file not found for {}: {}", step.Category, step.Config);
 			continue;
 		}
 
@@ -105,7 +105,7 @@ bool Editor::StartupResourceLoader::LoadPipeline(const std::filesystem::path& ma
 		else if (step.Category == "MaterialInstances") LoadMaterialInstances(configPath);
 	}
 
-	ENGINE_LOG_INFO("[StartupLoader] Preload pipeline completed successfully.");
+	EDITOR_LOG_INFO("[StartupLoader] Preload pipeline completed successfully.");
 	return true;
 }
 

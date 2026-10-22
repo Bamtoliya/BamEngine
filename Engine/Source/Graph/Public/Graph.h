@@ -1,5 +1,6 @@
 ﻿#pragma once
 
+#include "GraphData.h"
 #include "GraphLink.h"
 #include "GraphRegistry.h"
 #include <span>
@@ -27,6 +28,8 @@ public:
 	[[nodiscard]] GraphDiagnostic SetInputValue(const GraphRegistry& registry, GraphPinReference input, GraphValue value);
 	[[nodiscard]] GraphDiagnostic ResetInputValue(const GraphRegistry& registry, GraphPinReference input);
 	[[nodiscard]] std::vector<GraphDiagnostic> Validate(const GraphRegistry& registry) const;
+	GraphData ExportData() const;
+	[[nodiscard]] GraphDiagnostic ImportData(const GraphRegistry& registry, const GraphData& data);
 
 private:
 	GraphDiagnostic ResolvePin(const GraphRegistry& registry, const GraphPinReference& ref, const GraphPin*& pin) const;

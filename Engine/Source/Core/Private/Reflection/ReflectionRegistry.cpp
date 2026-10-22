@@ -8,6 +8,7 @@
 #include "UIComponents.h"
 #include "Adapters/GlmArchiveAdapter.h"
 #include "Adapters/ResourceHandleArchiveAdapter.h"
+#include "Adapters/GraphValueArchiveAdapter.h"
 
 #include <reflection_archive/ReflectionArchiveAdapter.h>
 #include <entt/core/type_info.hpp>
@@ -274,6 +275,7 @@ EResult ReflectionRegistry::Initialize(void*)
 
     if (!RegisterGeneratedTypes(m_Registry, m_RegistrationResult) || !RegisterComponentOperations() ||
         !registeredHandles ||
+        !archive_graph::RegisterValueCodec(m_Codecs) ||
         !m_Codecs.Register<glm::vec2>(archive_glm::WriteVec2, archive_glm::ReadVec2) ||
         !m_Codecs.Register<glm::vec3>(archive_glm::WriteVec3, archive_glm::ReadVec3) ||
         !m_Codecs.Register<glm::vec4>(archive_glm::WriteVec4, archive_glm::ReadVec4) ||

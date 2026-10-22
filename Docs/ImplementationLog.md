@@ -904,3 +904,21 @@ Use this as the primary execution list until a playable 2D vertical slice is com
   지형 브러시 조작과 핫 리로드의 실패 복구는 이번에 수동 확인하지 않았다.
   지형 조형의 Undo/Redo 연결 역시 이번 로캘·입력 점검에서 추가하지 않았다.
   생성물, 외부 의존성, 개인 설정과 실험용 씬·에셋은 커밋에서 제외했다.
+
+## 2026-10-22 — 실행 프로그램별 로그 파일과 발생 주체 구분
+
+- Editor는 `Logs/Editor.log`, Client는 `Logs/Client.log`에 기록한다.
+  경로는 각 프로세스의 작업 디렉터리를 기준으로 해석한다.
+- 공통 Logger를 유지하고 `Source`와 `Category`를 별도 필드로 전달한다.
+  각 실행 파일에는 해당 실행에서 발생한 Engine 로그도 함께 기록한다.
+  별도 Client 프로세스의 로그를 Editor Console로 전달하는 기능은 포함하지 않는다.
+- Console은 발생 주체·레벨·검색 조건을 모두 만족하는 로그를 표시한다.
+  발생 주체 필터의 기본값은 전체이며 파일 출력에는 영향을 주지 않는다.
+  선택 목록은 보관 중인 로그에서 만들고, 선택한 주체의 로그가 사라지거나
+  기록을 지워도 현재 선택은 유지한다.
+- 필터 안내 문구의 영어·한국어 로캘 키를 Editor.csv에 추가했다.
+  UIInteraction.md의 에디터 진단 로그 경로를 `Logs/Editor.log`로 갱신했다.
+- 정적 확인: Source 필드 전달, 파일·Console 출력 서식, 필터 연결,
+  Client의 로그 인자와 CSV 키 등록을 확인했다.
+- 실행 검증: 이번 로그 변경의 빌드·로캘 검사·실제 UI 동작은 미확인이다.
+  기존 Editor.log에는 이전 출력 형식이 남아 있어 최신 변경의 실행 근거로 사용하지 않는다.

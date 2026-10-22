@@ -113,7 +113,7 @@ archive::ArchiveResult Resource::ReadArchive(const archive::IArchive& ar)
 		m_Key = NormalizePath(m_Key);
 	if (!m_Path.empty())
 		m_Path = NormalizePath(m_Path);
-	if (IsFailure(OnPostLoad()))
+	if (OnPostLoad() != EResult::Success)
 		return { archive::ArchiveErrorCode::InvalidValue, "Resource.OnPostLoad" };
 	return {};
 }

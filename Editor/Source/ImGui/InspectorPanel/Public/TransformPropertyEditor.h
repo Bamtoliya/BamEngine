@@ -5,9 +5,11 @@
 
 #include <entt/entity/registry.hpp>
 #include <optional>
+#include <span>
 
 namespace Editor
 {
+    enum class TransformBatchResult { Rejected, Unchanged, Changed };
     class TransformPropertyEditor
     {
     public:
@@ -16,6 +18,11 @@ namespace Editor
         static bool ApplyCandidate(entt::registry& world, entt::entity entity, Engine::TransformComponent candidate);
         static ReflectionVectorEditSettings* GetSettings(entt::registry& world,
             entt::entity entity, TransformEditMode mode);
+
+        static std::optional<ReflectionVectorEditSettings> GetCommonAxisSettings(entt::registry& world,
+            std::span<const entt::entity> entities, TransformEditMode mode, int axis);
+        static TransformBatchResult SetVectorAxis(entt::registry& world, std::span<const entt::entity> entities,
+            TransformEditMode mode, int axis, float value);
 
         // 호출 전에 TransformSystem::UpdateHierarchy()로 부모 행렬을 갱신해야 합니다.
         // 원본을 수정하지 않고 편집 후보를 반환합니다.

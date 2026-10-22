@@ -18,7 +18,8 @@ namespace
     bool Visible(const entt::registry& world, entt::entity entity)
     {
         const auto* flag = world.try_get<Engine::FlagComponent>(entity);
-        return flag && flag->IsActiveInHierarchy() && flag->IsVisibleInHierarchy() && !HasFlag(flag->effectiveFlags, Engine::EEntityFlag::Dead);
+        return flag && flag->IsActive() && flag->IsVisible() &&
+            !HasFlag(flag->flags, Engine::EEntityFlag::Dead);
     }
 }
 

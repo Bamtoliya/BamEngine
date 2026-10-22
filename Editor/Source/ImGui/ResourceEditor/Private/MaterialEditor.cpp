@@ -5,16 +5,25 @@
 #include "ImGuiManager.h"
 #include "Logger.h"
 #include <algorithm>
+#include "LocalizationManager.h"
+#include <array>
+#include <optional>
 
 namespace
 {
 	template<size_t N>
 	bool LocalizedCombo(const char* label, int* selected, const char* (&keys)[N])
 	{
-		std::array<std::string, N> labels;
-		std::array<const char*, N> items;
-		for (size_t i = 0; i < N; ++i) labels[i] = LOCAL(keys[i]);
-		for (size_t i = 0; i < N; ++i) items[i] = labels[i].c_str();
+		std::array<std::optional<Engine::LocalizedText>, N> labels;
+		std::array<const char*, N> items{};
+		auto& localization = Engine::LocalizationManager::Get();
+
+		for (size_t i = 0; i < N; ++i)
+		{
+			labels[i].emplace(localization.GetTextForDisplay(keys[i]));
+			items[i] = labels[i]->c_str();
+		}
+
 		return ImGui::Combo(label, selected, items.data(), static_cast<int>(N));
 	}
 
@@ -143,11 +152,11 @@ void MaterialEditor::DrawToolbar()
 		if (result == EResult::Success)
 		{
 			m_IsDirty = false;
-			ENGINE_LOG_INFO("Material saved: {}", pathStr);
+			EDITOR_LOG_INFO("Material saved: {}", pathStr);
 		}
 		else
 		{
-			ENGINE_LOG_ERROR("Failed to save material: {}", pathStr);
+			EDITOR_LOG_ERROR("Failed to save material: {}", pathStr);
 		}
 	}
 
@@ -157,7 +166,7 @@ void MaterialEditor::DrawToolbar()
 		if (m_Material->Reload(m_TargetResourcePath) == EResult::Success)
 		{
 			m_IsDirty = false;
-			ENGINE_LOG_INFO("Material reverted: {}", m_TargetResourcePath.string());
+			EDITOR_LOG_INFO("Material reverted: {}", m_TargetResourcePath.string());
 		}
 	}
 

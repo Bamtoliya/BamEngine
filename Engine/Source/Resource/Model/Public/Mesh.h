@@ -67,6 +67,28 @@ struct MeshBinaryHeader
 	EMeshFlag Flags = { EMeshFlag::None };
 };
 
+struct MeshRaycastTriangle
+{
+	uint32 Indices[3] = {};
+	uint32 SourceIndex = 0;
+};
+
+struct MeshRaycastNode
+{
+	vec3 BoundsMin{ 0.0f };
+	vec3 BoundsMax{ 0.0f };
+	uint32 First = 0;
+	uint32 Count = 0;
+	uint32 Left = 0;
+	uint32 Right = 0;
+};
+
+struct MeshRaycastBVH
+{
+	vector<MeshRaycastTriangle> Triangles;
+	vector<MeshRaycastNode> Nodes;
+};
+
 CLASS()
 class ENGINE_API Mesh : public Resource
 {
@@ -107,9 +129,11 @@ public:
 	uint32 GetActiveBufferCount() const { return m_ActiveBufferCount; }
 public:
 	ETopology GetTopology() const { return m_Topology; }
+	uint64 GetGeometryVersion() const { return m_GeometryVersion; }
 public:
 	virtual const vector<InputLayoutDesc>& GetInputLayoutDescs() const;
 	bool IsDynamic() const { return HasFlag(m_Flags, EMeshFlag::Dynamic); }
+	const MeshRaycastBVH& GetRaycastBVH() const;
 #pragma endregion
 
 #pragma region Setter
@@ -117,7 +141,12 @@ public:
 	EResult SetStreamBuffer(EMeshStream stream, void* data, uint32 count, uint32 stride);
 	EResult SetIndexBuffer(void* data, uint32 indexCount, uint32 stride);
 public:
-	void SetTopology(ETopology topology) { m_Topology = topology; }
+	void SetTopology(ETopology topology)
+	{
+		if (m_Topology == topology) return;
+		++m_GeometryVersion;
+		m_Topology = topology;
+	}
 #pragma endregion
 
 
@@ -131,6 +160,7 @@ public:
 
 #pragma region Save&Load
 public:
+	[[nodiscard]] archive::ArchiveResult ReadArchive(const archive::IArchive& ar) override;
 	EResult Reload(const std::filesystem::path& filePath = {}) override;
 protected:
 	EResult OnPostLoad() override;
@@ -139,6 +169,9 @@ protected:
 private:
 	// 캐싱된 버퍼 배열을 다시 구축하는 내부 헬퍼
 	void RebuildCachedBuffers();
+	uint64 m_GeometryVersion = 1;
+	mutable MeshRaycastBVH m_RaycastBVH;
+	mutable uint64 m_RaycastBVHVersion = 0;
 
 #pragma region Variable
 protected:

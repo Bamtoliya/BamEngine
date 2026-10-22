@@ -1,4 +1,4 @@
-#include "Engine_Includes.h"
+﻿#include "Engine_Includes.h"
 #include "EntityHierarchyView.h"
 #include "Scene.h"
 #include "CoreComponents.h"
@@ -33,6 +33,54 @@ namespace
             for (int r = 0; r < 4; ++r)
                 if (!std::isfinite(a[c][r]) || !std::isfinite(b[c][r]) ||
                     std::abs(a[c][r] - b[c][r]) > 0.001f) return false;
+        return true;
+    }
+    bool CheckNameCache()
+    {
+        auto& localization = Engine::LocalizationManager::Get();
+        struct RestoreLanguage
+        {
+            Engine::LocalizationManager& Manager;
+            ELocalizationLanguage Language;
+            ~RestoreLanguage() { Manager.SetCurrentLanguage(Language); }
+        } restore{ localization, localization.GetCurrentLanguage() };
+
+        localization.AddText(ELocalizationLanguage::English, "Hierarchy.EntityFallback", "Entity {}");
+        localization.AddText(ELocalizationLanguage::Korean, "Hierarchy.EntityFallback", "엔티티 {}");
+        localization.SetCurrentLanguage(ELocalizationLanguage::English);
+
+        ScenePtr scene(Engine::Scene::Create());
+        auto& entity = Add(*scene, {}, L"첫 이름");
+        const auto handle = entity.GetEntityHandle();
+        auto& world = scene->GetRegistry();
+
+        if (Editor::GetEntityHierarchyName(*scene, handle) != "첫 이름")
+            return Fail("Unicode hierarchy name was not converted.");
+
+        world.get<Engine::NameComponent>(handle).name = L"Renamed";
+        if (Editor::GetEntityHierarchyName(*scene, handle) != "Renamed")
+            return Fail("Direct name editing did not invalidate the cache.");
+
+        world.get<Engine::NameComponent>(handle).name.clear();
+        const auto suffix = " " + std::to_string(world.get<Engine::IDComponent>(handle).id);
+        if (Editor::GetEntityHierarchyName(*scene, handle) != "Entity" + suffix)
+            return Fail("An empty name did not use the localized fallback.");
+
+        world.remove<Engine::NameComponent>(handle);
+        localization.SetCurrentLanguage(ELocalizationLanguage::Korean);
+        if (Editor::GetEntityHierarchyName(*scene, handle) != "엔티티" + suffix)
+            return Fail("Language switching left a stale fallback.");
+
+        localization.AddText(ELocalizationLanguage::Korean, "Hierarchy.EntityFallback", "개체 {}");
+        if (Editor::GetEntityHierarchyName(*scene, handle) != "개체" + suffix)
+            return Fail("Updating translation data left a stale fallback.");
+
+        ScenePtr other(Engine::Scene::Create());
+        const auto otherHandle = Add(*other, {}, L"Other scene").GetEntityHandle();
+        if (Editor::GetEntityHierarchyName(*other, otherHandle) != "Other scene" ||
+            Editor::GetEntityHierarchyName(*scene, handle) != "개체" + suffix)
+            return Fail("Hierarchy name caches leaked between scenes.");
+
         return true;
     }
     bool CheckMoves()
@@ -231,29 +279,46 @@ namespace
         auto& second = Add(*scene);
         auto& world = scene->GetRegistry();
         const auto p = parent.GetEntityHandle(), a = first.GetEntityHandle(), b = second.GetEntityHandle();
+
         world.remove<Engine::NameComponent>(a);
         world.get<Engine::HierarchyComponent>(p).children = { b, a };
         world.get<Engine::HierarchyComponent>(a).parent = p;
         world.get<Engine::HierarchyComponent>(b).parent = p;
         const auto raw = world.create();
         world.emplace<Engine::NameComponent>(raw, L"Unwrapped");
-        auto tree = Editor::BuildEntityHierarchyTree(*scene);
+
+        auto tree = Editor::GetEntityHierarchyTree(*scene);
+        tree = Editor::GetEntityHierarchyTree(*scene);
         if (tree.Roots != std::vector{ p } || tree.Children.at(p) != std::vector{ b, a } ||
             tree.Parents.contains(raw) || !tree.Parents.contains(a))
             return Fail("Tree lost child order, nameless entities, or scene ownership.");
+
+        // 순서 변경 검사는 정상 계층에서 수행합니다.
+        world.get<Engine::HierarchyComponent>(p).children = { a, b };
+        tree = Editor::GetEntityHierarchyTree(*scene);
+        if (tree.Children.at(p) != std::vector{ a, b })
+            return Fail("Cached tree ignored child order changes.");
+
+        // 순환 계층을 만든 뒤 표시용 트리를 확정합니다.
         world.get<Engine::HierarchyComponent>(p).parent = b;
         world.get<Engine::HierarchyComponent>(b).children = { p };
-        tree = Editor::BuildEntityHierarchyTree(*scene);
+        tree = Editor::GetEntityHierarchyTree(*scene);
+
         std::unordered_set<entt::entity> visited;
         const auto visit = [&](auto&& self, entt::entity entity) -> bool
-        {
-            if (!visited.insert(entity).second) return false;
-            for (const auto child : tree.Children.at(entity)) if (!self(self, child)) return false;
-            return true;
-        };
-        for (const auto root : tree.Roots) if (!visit(visit, root)) return Fail("View contains a cycle.");
+            {
+                if (!visited.insert(entity).second) return false;
+                for (const auto child : tree.Children.at(entity))
+                    if (!self(self, child)) return false;
+                return true;
+            };
+
+        for (const auto root : tree.Roots)
+            if (!visit(visit, root)) return Fail("View contains a cycle.");
+
         if (visited.size() != 3 || tree.Invalid.empty() || world.get<Engine::HierarchyComponent>(p).parent != b)
             return Fail("Invalid relations hid entities or mutated the source.");
+
         return true;
     }
 }
@@ -262,7 +327,8 @@ int main()
 {
     if (!Engine::LocalizationManager::Create() || !Engine::ReflectionRegistry::Create() ||
         !Engine::InputManager::Create()) return 1;
-    const bool passed = CheckMoves() && CheckInvalidAndDepth() && CheckTree() && CheckTreeInput();
+    const bool passed = CheckMoves() && CheckInvalidAndDepth() && CheckTree() &&
+        CheckNameCache() && CheckTreeInput();
     Engine::ReflectionRegistry::Destroy();
     Engine::LocalizationManager::Destroy();
     Engine::InputManager::Destroy();

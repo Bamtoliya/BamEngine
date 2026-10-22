@@ -17,7 +17,7 @@ EResult PipelineManager::Initialize(void* arg)
 }
 void PipelineManager::Free()
 {
-	RELEASE_MAP(m_Pipelines);
+	ClearPipelineCache();
 	Safe_Release(m_DefaultPipeline);
 	Safe_Release(m_RHI);
 	__super::Free();
@@ -27,17 +27,25 @@ void PipelineManager::Free()
 #pragma region Pipeline Management
 RHIPipeline* PipelineManager::GetOrCreatePipeline(const RHIPipelineDesc& desc)
 {
+	if (!m_RHI) return nullptr;
+
+	if (m_LastPipelineDesc && m_LastPipeline && *m_LastPipelineDesc == desc)
+		return m_LastPipeline;
+
 	auto it = m_Pipelines.find(desc);
-	if (it != m_Pipelines.end())
+	if (it == m_Pipelines.end())
 	{
-		return it->second;
+		RHIPipeline* pipeline = m_RHI->CreatePipeline(desc);
+		if (!pipeline) return nullptr;
+
+		const auto [entry, inserted] = m_Pipelines.emplace(desc, pipeline);
+		if (!inserted) Safe_Release(pipeline);
+		it = entry;
 	}
-	RHIPipeline* pipeline = m_RHI->CreatePipeline(desc);
-	if (pipeline)
-	{
-		m_Pipelines[desc] = pipeline;
-	}
-	return pipeline;
+
+	m_LastPipelineDesc = &it->first;
+	m_LastPipeline = it->second;
+	return m_LastPipeline;
 }
 
 void PipelineManager::RebuildPipelinesWithShader(RHIShader* shader)
@@ -59,6 +67,8 @@ void PipelineManager::RebuildPipelinesWithShader(RHIShader* shader)
 
 void PipelineManager::ClearPipelineCache()
 {
+	m_LastPipelineDesc = nullptr;
+	m_LastPipeline = nullptr;
 	RELEASE_MAP(m_Pipelines);
 }
 #pragma endregion

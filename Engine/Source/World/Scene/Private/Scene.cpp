@@ -201,7 +201,7 @@ void Scene::UpdateHierarchyFlags()
 	thread_local std::vector<std::uint8_t> visited;
 	visited.assign(entityStorage->size(), 0);
 
-	const auto propagate = [&](auto&& self, entt::entity entity, EEntityFlag parentEffective) -> void
+	const auto propagate = [&](auto&& self, entt::entity entity, EEntityFlag parentEffective, bool hasParent) -> void
 		{
 			if (!entityStorage->contains(entity)) return;
 			const auto idx = entityStorage->index(entity);
@@ -211,7 +211,7 @@ void Scene::UpdateHierarchyFlags()
 			auto* flagComp = world.try_get<FlagComponent>(entity);
 			EEntityFlag currentEffective = flagComp ? flagComp->flags : EEntityFlag::Default;
 
-			if (parentEffective != EEntityFlag::None)
+			if (hasParent)
 			{
 				const bool parentActive = HasFlag(parentEffective, EEntityFlag::Active);
 				const bool parentVisible = HasFlag(parentEffective, EEntityFlag::Visible) && parentActive;
@@ -225,14 +225,14 @@ void Scene::UpdateHierarchyFlags()
 			if (flagComp) flagComp->effectiveFlags = currentEffective;
 
 			if (const auto* link = world.try_get<HierarchyComponent>(entity))
-				for (const auto child : link->children) self(self, child, currentEffective);
+				for (const auto child : link->children) self(self, child, currentEffective, true);
 		};
 
 	// 1. 루트 엔티티(부모가 없는 엔티티)부터 하향식으로 전파
 	for (const auto entity : world.view<FlagComponent>())
 	{
 		const auto* link = world.try_get<HierarchyComponent>(entity);
-		if (!link || link->parent == entt::null) propagate(propagate, entity, EEntityFlag::None);
+		if (!link || link->parent == entt::null) propagate(propagate, entity, EEntityFlag::None, false);
 	}
 }
 #pragma endregion

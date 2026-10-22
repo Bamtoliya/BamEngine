@@ -143,14 +143,14 @@ void AudioSystem::UpdateSources(entt::registry& registry)
 			source.m_PlayRequested = false;
 			if (!source.clip.IsValid())
 			{
-				BAM_LOG(Warn, "AudioSystem", "Cannot play AudioSource: AudioClip is not assigned");
+				BAM_LOG(Warn, "Engine","AudioSystem", "Cannot play AudioSource: AudioClip is not assigned");
 			}
 			else
 			{
 				AudioClip* clipRes = source.clip.Get();
 				if (!clipRes || !clipRes->GetFMODSound())
 				{
-					BAM_LOG(Warn, "AudioSystem", "Cannot play AudioSource: FMOD Sound is null");
+					BAM_LOG(Warn, "Engine","AudioSystem", "Cannot play AudioSource: FMOD Sound is null");
 				}
 				else
 				{
@@ -180,12 +180,12 @@ void AudioSystem::UpdateSources(entt::registry& registry)
 						source.m_IsPlaying = true;
 
 						f32 dist = glm::distance(pos, g_LastListenerPos);
-						BAM_LOG(Info, "AudioSystem", "Playing 3D Audio! Listener: ({:.1f}, {:.1f}, {:.1f}), Source: ({:.1f}, {:.1f}, {:.1f}), Distance: {:.1f} (Max: {:.1f})",
+						BAM_LOG(Info, "Engine","AudioSystem", "Playing 3D Audio! Listener: ({:.1f}, {:.1f}, {:.1f}), Source: ({:.1f}, {:.1f}, {:.1f}), Distance: {:.1f} (Max: {:.1f})",
 							g_LastListenerPos.x, g_LastListenerPos.y, g_LastListenerPos.z, pos.x, pos.y, pos.z, dist, source.maxDistance);
 					}
 					else
 					{
-						BAM_LOG(Error, "AudioSystem", "Failed to play sound: {}", FMOD_ErrorString(res));
+						BAM_LOG(Error, "Engine","AudioSystem", "Failed to play sound: {}", FMOD_ErrorString(res));
 					}
 				}
 			}

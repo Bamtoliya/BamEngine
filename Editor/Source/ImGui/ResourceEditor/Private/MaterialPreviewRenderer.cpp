@@ -177,15 +177,18 @@ void MaterialPreviewRenderer::DrawUI(Engine::MaterialInterface* material)
 	if (!texID) return;
 
 	// 1. 상단 뷰포트 툴바
-	if (ImGui::Button(m_CurrentMeshType == EPreviewMeshType::Sphere ? "[Sphere]" : "Sphere"))
+	if (ImGui::RadioButton(LOCAL_LABEL("MaterialPreview.Sphere").c_str(), m_CurrentMeshType == EPreviewMeshType::Sphere))
 		m_CurrentMeshType = EPreviewMeshType::Sphere;
 	ImGui::SameLine();
-	if (ImGui::Button(m_CurrentMeshType == EPreviewMeshType::Cube ? "[Cube]" : "Cube"))
+
+	if (ImGui::RadioButton(LOCAL_LABEL("MaterialPreview.Cube").c_str(), m_CurrentMeshType == EPreviewMeshType::Cube))
 		m_CurrentMeshType = EPreviewMeshType::Cube;
 	ImGui::SameLine();
-	if (ImGui::Button(m_CurrentMeshType == EPreviewMeshType::Plane ? "[Plane]" : "Plane"))
+
+	if (ImGui::RadioButton(LOCAL_LABEL("MaterialPreview.Plane").c_str(), m_CurrentMeshType == EPreviewMeshType::Plane))
 		m_CurrentMeshType = EPreviewMeshType::Plane;
 	ImGui::SameLine();
+
 	if (ImGui::Button(m_AutoRotate ? ICON_FA_PAUSE : ICON_FA_PLAY))
 		m_AutoRotate = !m_AutoRotate;
 	ImGui::SameLine();
@@ -283,7 +286,7 @@ void MaterialPreviewRenderer::DrawUI(Engine::MaterialInterface* material)
 			m_AutoRotate = true;
 		}
 
-		ImGui::SetTooltip("L-Drag: Orbit | R-Drag+WASD: Fly | M-Drag: Pan | Wheel: Zoom | [F]: Reset");
+		ImGui::SetTooltip("%s", LOCAL_CSTR("MaterialPreview.Navigation"));
 	}
 }
 

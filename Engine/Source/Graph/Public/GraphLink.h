@@ -1,15 +1,22 @@
-#pragma once
+﻿#pragma once
 
 #include "GraphPin.h"
+#include <reflection/Annotations.h>
 
 namespace Engine
 {
 
-struct GraphLink
-{
-	GraphLinkId Id = 0;
-	GraphPinReference From;
-	GraphPinReference To;
-};
+	STRUCT()
+	struct GraphLink
+	{
+		PROPERTY()
+		GraphLinkId Id = 0;
+
+		PROPERTY()
+		GraphPinReference From;
+
+		PROPERTY()
+		GraphPinReference To;
+	};
 
 }

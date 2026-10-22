@@ -4,7 +4,6 @@
 #include "RenderTargetManager.h"
 #include "SelectionManager.h"
 #include "InputManager.h"
-#include "ImViewGuizmo.h"
 #include "DirectX12Texture.h"
 #include "ImGuiManager.h"
 

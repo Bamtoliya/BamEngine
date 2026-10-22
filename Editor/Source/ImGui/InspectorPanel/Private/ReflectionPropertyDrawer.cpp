@@ -23,6 +23,13 @@
 #include <imgui_stdlib.h>
 #include <archive/Unicode.h>
 #include <limits>
+#include <charconv>
+#include <cstring>
+#include <vector>
+#pragma push_macro("new")
+#undef new
+#include <imgui_internal.h>
+#pragma pop_macro("new")
 
 
 namespace
@@ -494,6 +501,168 @@ namespace
 	}
 }
 
+namespace
+{
+	template<typename T>
+	bool DrawCommonPrimitiveProperties(const reflection::TypeInfo& type,
+		std::span<const reflection::ObjectView> objects, const reflection::Registry* registry,
+		std::span<const Editor::ReflectionObjectEditSettings* const> editSettings)
+	{
+		if (objects.empty() || !Editor::ReflectionPropertyDrawer::IsVisible(type)) return false;
+		if (!editSettings.empty() && editSettings.size() != objects.size()) return false;
+
+		bool changed = false;
+		ImGui::PushID(type.QualifiedName.c_str());
+
+		for (const auto& property : type.Properties)
+		{
+			if (!property.IsValueType<T>()) continue;
+			if (!GetReflectionDrawerBoolMetadata(property.Metadata, "Visible", true)) continue;
+
+			const bool applicable = std::all_of(objects.begin(), objects.end(), [&](const auto& object)
+				{
+					return EvaluateEditCondition(property, type, object, registry);
+				});
+			if (!applicable) continue;
+
+			ImGui::PushID(property.Name.c_str());
+			const auto label = GetReflectionDrawerDisplayName(property.Metadata, property.Name);
+			bool canEdit = property.CanWrite() &&
+				GetReflectionDrawerBoolMetadata(property.Metadata, "Editable", false) &&
+				!GetReflectionDrawerBoolMetadata(property.Metadata, "ReadOnly", false);
+
+			std::vector<T> previous;
+			previous.reserve(objects.size());
+			bool readable = true;
+
+			for (std::size_t i = 0; i < objects.size(); ++i)
+			{
+				const auto read = property.TryReadValue(objects[i]);
+				const auto* value = read.Value.Get<T>();
+				if (!read || !value)
+				{
+					readable = false;
+					break;
+				}
+
+				previous.push_back(*value);
+				canEdit &= !objects[i].IsReadOnly();
+
+				const auto* settings = editSettings.empty() ? nullptr : editSettings[i];
+				if (settings)
+				{
+					const auto vector = settings->Vectors.find(property.Name);
+					canEdit &= !settings->ReadOnlyProperties.contains(property.Name) &&
+						(vector == settings->Vectors.end() || !vector->second.Locked);
+				}
+			}
+
+			if (!readable)
+			{
+				ImGui::TextUnformatted(label.c_str());
+				ImGui::SameLine();
+				ImGui::TextDisabled("%s", LOCAL_CSTR("UI_VALUE_UNAVAILABLE"));
+				ImGui::PopID();
+				continue;
+			}
+
+			const T first = previous.front();
+			const bool mixed = std::any_of(previous.begin(), previous.end(), [&](T value)
+				{
+					return value != first;
+				});
+
+			T candidate = first;
+			bool requested = false;
+			bool validInput = true;
+			const auto widgetLabel = label + "###Value";
+
+			ImGui::BeginDisabled(!canEdit);
+			if constexpr (std::is_same_v<T, bool>)
+			{
+				if (mixed) candidate = false;
+
+				ImGui::PushItemFlag(ImGuiItemFlags_MixedValue, mixed);
+				requested = ImGui::Checkbox(widgetLabel.c_str(), &candidate);
+				ImGui::PopItemFlag();
+
+				if (mixed && ImGui::IsItemHovered())
+					ImGui::SetTooltip("%s", LOCAL_CSTR("Inspector.MixedFlagsHint"));
+			}
+			else
+			{
+				char buffer[64]{};
+				if (!mixed)
+				{
+					const auto text = fmt::format("{:.9g}", first);
+					std::copy(text.begin(), text.end(), buffer);
+				}
+
+				const auto flags = ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll |
+					ImGuiInputTextFlags_CharsScientific;
+				requested = ImGui::InputTextWithHint(widgetLabel.c_str(), LOCAL_CSTR("Inspector.MixedValues"),
+					buffer, sizeof(buffer), flags);
+
+				if (ImGui::IsItemHovered())
+					ImGui::SetTooltip("%s", LOCAL_CSTR("Inspector.MultiFloatHint"));
+
+				if (requested && canEdit)
+				{
+					const char* begin = buffer;
+					const char* end = buffer + std::strlen(buffer);
+					if (*begin == '+') ++begin;
+
+					validInput = begin != end && !(buffer[0] == '+' && *begin == '-');
+					if (validInput)
+					{
+						const auto parsed = std::from_chars(begin, end, candidate, std::chars_format::general);
+						validInput = parsed.ec == std::errc{} && parsed.ptr == end && std::isfinite(candidate);
+					}
+
+					const double limit = static_cast<double>((std::numeric_limits<float>::max)());
+					const double minimum = std::max(-limit,
+						GetReflectionDrawerNumberMetadata(property.Metadata, "RangeMin", -limit));
+					const double maximum = std::min(limit,
+						GetReflectionDrawerNumberMetadata(property.Metadata, "RangeMax", limit));
+
+					validInput &= minimum <= maximum;
+					if (validInput)
+						candidate = static_cast<float>(std::clamp(static_cast<double>(candidate), minimum, maximum));
+				}
+			}
+			ImGui::EndDisabled();
+
+			auto* storage = ImGui::GetStateStorage();
+			const ImGuiID errorId = ImGui::GetID("CommonError");
+
+			if (canEdit && requested)
+			{
+				if (!validInput)
+				{
+					storage->SetInt(errorId, 1);
+				}
+				else
+				{
+					const auto result = Editor::TryWriteCommonInspectorValue(property, objects, candidate);
+					storage->SetInt(errorId, result.Failed ? 2 : 0);
+					changed |= result.Changed;
+				}
+			}
+
+			const int error = storage->GetInt(errorId, 0);
+			if (error == 1)
+				ImGui::TextDisabled("%s", LOCAL_CSTR("UI_INVALID_PROPERTY"));
+			else if (error == 2)
+				ImGui::TextDisabled("%s", LOCAL_CSTR("Inspector.MultiPropertyWriteFailed"));
+
+			ImGui::PopID();
+		}
+
+		ImGui::PopID();
+		return changed;
+	}
+}
+
 namespace Editor
 {
 	bool ReflectionPropertyDrawer::DrawVectorComponents(const reflection::Metadata& metadata, std::span<float> value, ReflectionVectorEditSettings* editSettings)
@@ -742,6 +911,20 @@ namespace Editor
 		ReflectionVectorEditSettings* editSettings)
 	{
 		return DrawVectorComponents(metadata, std::span<float>(glm::value_ptr(value), 4), editSettings);
+	}
+
+	bool ReflectionPropertyDrawer::DrawCommonBoolProperties(const reflection::TypeInfo& type,
+		std::span<const reflection::ObjectView> objects, const reflection::Registry* registry,
+		std::span<const ReflectionObjectEditSettings* const> editSettings)
+	{
+		return DrawCommonPrimitiveProperties<bool>(type, objects, registry, editSettings);
+	}
+
+	bool ReflectionPropertyDrawer::DrawCommonFloatProperties(const reflection::TypeInfo& type,
+		std::span<const reflection::ObjectView> objects, const reflection::Registry* registry,
+		std::span<const ReflectionObjectEditSettings* const> editSettings)
+	{
+		return DrawCommonPrimitiveProperties<float>(type, objects, registry, editSettings);
 	}
 
 	bool ReflectionPropertyDrawer::IsVisible(const reflection::TypeInfo& type)

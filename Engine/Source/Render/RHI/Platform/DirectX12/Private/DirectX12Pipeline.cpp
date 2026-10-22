@@ -26,7 +26,14 @@ DirectX12Pipeline* DirectX12Pipeline::Create(RHI* rhi, const DESC& desc)
 
 void DirectX12Pipeline::Free()
 {
-	m_Pipeline = nullptr;
+	if (m_RHI)
+	{
+		auto* dxRHI = static_cast<DirectX12RHI*>(m_RHI);
+		dxRHI->DeferRelease(m_Pipeline.Get());
+		dxRHI->InvalidatePipelineBinding(this);
+	}
+
+	m_Pipeline.Reset();
 	Safe_Release(m_Desc.vertexShader);
 	Safe_Release(m_Desc.pixelShader);
 	__super::Free();
@@ -34,8 +41,17 @@ void DirectX12Pipeline::Free()
 
 EResult DirectX12Pipeline::Rebuild()
 {
-	m_Pipeline = nullptr;
 	return CreatePipelineState();
+}
+void DirectX12Pipeline::SetNativeHandle(void* nativeHandle)
+{
+	auto* pipelineState = static_cast<ID3D12PipelineState*>(nativeHandle);
+	if (m_Pipeline.Get() == pipelineState) return;
+
+	auto* dxRHI = static_cast<DirectX12RHI*>(m_RHI);
+	dxRHI->DeferRelease(m_Pipeline.Get());
+	m_Pipeline = pipelineState;
+	dxRHI->InvalidatePipelineBinding(this);
 }
 #pragma endregion
 
@@ -126,7 +142,8 @@ EResult DirectX12Pipeline::CreatePipelineState()
 	ComPtr<ID3D12InfoQueue> infoQueue;
 	dxDevice->QueryInterface(IID_PPV_ARGS(&infoQueue));
 	const UINT64 firstMessage = infoQueue ? infoQueue->GetNumStoredMessagesAllowedByRetrievalFilter() : 0;
-	const HRESULT hr = dxDevice->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&m_Pipeline));
+	ComPtr<ID3D12PipelineState> newPipeline;
+	const HRESULT hr = dxDevice->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&newPipeline));
 	if (FAILED(hr))
 	{
 		ENGINE_LOG_ERROR("CreateGraphicsPipelineState failed: HRESULT=0x{:08X}, VS bytes={}, PS bytes={}, RTs={}",
@@ -148,6 +165,9 @@ EResult DirectX12Pipeline::CreatePipelineState()
 		return EResult::Fail;
 	}
 
+	dxRHI->DeferRelease(m_Pipeline.Get());
+	m_Pipeline.Swap(newPipeline);
+	dxRHI->InvalidatePipelineBinding(this);
 	return EResult::Success;
 }
 #pragma endregion

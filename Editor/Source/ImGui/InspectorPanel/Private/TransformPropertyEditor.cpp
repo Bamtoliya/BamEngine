@@ -9,6 +9,8 @@
 #include <cmath>
 #include <cstdint>
 #include <variant>
+#include <limits>
+#include <vector>
 
 namespace
 {
@@ -101,6 +103,19 @@ namespace
 
         return candidate;
     }
+
+    using TransformVectorMember = glm::vec3 Engine::TransformComponent::*;
+
+    TransformVectorMember GetTransformEditorVectorMember(Editor::TransformEditMode mode)
+    {
+        switch (mode)
+        {
+        case Editor::TransformEditMode::Translation: return &Engine::TransformComponent::position;
+        case Editor::TransformEditMode::Scale: return &Engine::TransformComponent::scale;
+        case Editor::TransformEditMode::Rotation: return &Engine::TransformComponent::eulerRotation;
+        default: return nullptr;
+        }
+    }
 }
 
 namespace Editor
@@ -134,6 +149,138 @@ namespace Editor
         }
 
         return &settings;
+    }
+
+    std::optional<ReflectionVectorEditSettings> TransformPropertyEditor::GetCommonAxisSettings(
+        entt::registry& world, std::span<const entt::entity> entities, TransformEditMode mode, int axis)
+    {
+        const auto member = GetTransformEditorVectorMember(mode);
+        if (!member || entities.empty() || axis < 0 || axis >= 3 ||
+            !Engine::ReflectionRegistry::IsCreated()) return {};
+
+        const auto& registry = Engine::ReflectionRegistry::Get().GetRegistry();
+        const auto* type = registry.FindType<Engine::TransformComponent>();
+        const auto* property = type ? type->FindProperty(GetTransformEditorPropertyName(mode)) : nullptr;
+        if (!property || !property->CanWrite()) return {};
+
+        const auto metadataBool = [&](const char* key, bool fallback)
+            {
+                const auto* metadata = property->Metadata.Find(key);
+                const auto* value = metadata ? std::get_if<bool>(metadata) : nullptr;
+                return value ? *value : fallback;
+            };
+
+        if (!metadataBool("Editable", false) || metadataBool("ReadOnly", false) ||
+            !metadataBool("Visible", true)) return {};
+
+        Engine::ETransformAbsolute channel = Engine::ETransformAbsolute::None;
+        switch (mode)
+        {
+        case TransformEditMode::Translation: channel = Engine::ETransformAbsolute::Position; break;
+        case TransformEditMode::Rotation: channel = Engine::ETransformAbsolute::Rotation; break;
+        case TransformEditMode::Scale: channel = Engine::ETransformAbsolute::Scale; break;
+        default: return {};
+        }
+
+        ReflectionVectorEditSettings common;
+        unsigned firstSpace = 0;
+        bool initialized = false;
+
+        for (const auto entity : entities)
+        {
+            if (!world.valid(entity)) return {};
+            const auto* transform = world.try_get<Engine::TransformComponent>(entity);
+            if (!transform || !transform->HasValidAbsoluteFlags()) return {};
+            if (mode == TransformEditMode::Rotation && !transform->IsRotationSynchronized()) return {};
+
+            const auto* settings = GetSettings(world, entity, mode);
+            if (!settings || settings->Locked || settings->LockedAxes[axis]) return {};
+
+            const auto& component = GetReflectionEntityEditState(world, entity).Components[type->QualifiedName];
+            if (component.ReadOnlyProperties.contains(property->Name)) return {};
+
+            const unsigned space = static_cast<unsigned>(transform->absolute) & static_cast<unsigned>(channel);
+
+            if (!initialized)
+            {
+                common = *settings;
+                firstSpace = space;
+                initialized = true;
+            }
+            else if (space != firstSpace || settings->SnapEnabled != common.SnapEnabled ||
+                (common.SnapEnabled && settings->SnapStep != common.SnapStep))
+            {
+                return {};
+            }
+        }
+
+        return common;
+    }
+
+    TransformBatchResult TransformPropertyEditor::SetVectorAxis(entt::registry& world,
+        std::span<const entt::entity> entities, TransformEditMode mode, int axis, float value)
+    {
+        using Transform = Engine::TransformComponent;
+        const auto member = GetTransformEditorVectorMember(mode);
+        const auto settings = GetCommonAxisSettings(world, entities, mode, axis);
+        if (!member || !settings || !std::isfinite(value)) return TransformBatchResult::Rejected;
+
+        double adjusted = value;
+        if (settings->SnapEnabled)
+        {
+            const double step = settings->SnapStep;
+            if (!std::isfinite(step) || step <= 0.0) return TransformBatchResult::Rejected;
+            adjusted = std::round(adjusted / step) * step;
+        }
+
+        if (!std::isfinite(adjusted) ||
+            std::abs(adjusted) > (std::numeric_limits<float>::max)()) return TransformBatchResult::Rejected;
+
+        value = static_cast<float>(adjusted);
+        std::vector<Transform> previous;
+        std::vector<Transform> candidates;
+        previous.reserve(entities.size());
+        candidates.reserve(entities.size());
+        bool changed = false;
+
+        for (const auto entity : entities)
+        {
+            const auto& current = world.get<Transform>(entity);
+            auto candidate = current;
+
+            if ((current.*member)[axis] != value)
+            {
+                auto vector = current.*member;
+                vector[axis] = value;
+                bool valid = false;
+
+                switch (mode)
+                {
+                case TransformEditMode::Translation: valid = candidate.SetLocalPosition(vector); break;
+                case TransformEditMode::Rotation: valid = candidate.SetEulerRotation(vector); break;
+                case TransformEditMode::Scale: valid = candidate.SetLocalScale(vector); break;
+                default: return TransformBatchResult::Rejected;
+                }
+
+                if (!valid) return TransformBatchResult::Rejected;
+                changed = true;
+            }
+
+            previous.push_back(current);
+            candidates.push_back(candidate);
+        }
+
+        if (!changed) return TransformBatchResult::Unchanged;
+
+        for (std::size_t i = 0; i < entities.size(); ++i)
+            world.get<Transform>(entities[i]) = candidates[i];
+
+        if (Engine::TransformSystem::UpdateHierarchy(world)) return TransformBatchResult::Changed;
+
+        for (std::size_t i = 0; i < entities.size(); ++i)
+            world.get<Transform>(entities[i]) = previous[i];
+
+        return TransformBatchResult::Rejected;
     }
 
     std::optional<Engine::TransformComponent> TransformPropertyEditor::TryConvertWorldMatrix(

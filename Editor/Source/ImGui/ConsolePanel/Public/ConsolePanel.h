@@ -2,6 +2,7 @@
 
 #include "ImGuiInterface.h"
 #include "LogEntry.h"
+#include <optional>
 
 #define MAX_CONSOLE_ITEMS 1000
 
@@ -23,6 +24,7 @@ private:
 
 	void DrawOptions();
 	void DrawLevelFilter();
+	void DrawSourceFilter();
 
 	void DrawSearch();
 	void DrawStatus();
@@ -48,6 +50,6 @@ private:
 	uint64 m_DroppedCount = 0;
 	uint64 m_EvictedCount = 0;
 
-
+	std::optional<std::string> m_SourceFilter;
 };
 END

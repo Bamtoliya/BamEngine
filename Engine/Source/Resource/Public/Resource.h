@@ -98,7 +98,7 @@ protected:
 
 #pragma region Member Variables
 protected:
-	PROPERTY(READONLY)
+	PROPERTY(READONLY, TRANSIENT)
 	uint32 m_Version = { 0 };
 
 	PROPERTY(READONLY)

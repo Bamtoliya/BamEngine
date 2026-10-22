@@ -10,6 +10,8 @@
 #include "CameraBuffer.h"
 #include "Components/Render/SkyAtmosphereComponent.h"
 
+struct RHIPipelineDesc;
+
 BEGIN(Engine)
 enum class ERHIType
 {
@@ -36,7 +38,6 @@ struct ViewportCameraInfo
 	bool filterUICanvas = false;
 };
 
-
 class ENGINE_API Renderer final : public Base
 {
 	DECLARE_SINGLETON(Renderer)
@@ -59,10 +60,11 @@ private:
 	EResult EndFrame();
 	EResult Render(f32 dt);
 private: //Entity Render
-	EResult RenderMeshes(f32 dt, vector<StaticDrawCommand>& commands, ERenderSortType sortType, RenderPass* renderPass);
+	EResult RenderMeshes(const vector<StaticDrawCommand>& commands, RenderPass* renderPass, const Frustum* frustum = nullptr);
 	EResult RenderSkinnedMeshes(f32 dt, vector<SkinnedDrawCommand>& commands, ERenderSortType sortType, RenderPass* renderPass);
 	EResult RenderSprite(f32 dt, vector<SpriteDrawCommand>& commands, ERenderSortType sortType, RenderPass* renderPass);
 	EResult RenderUIImages(const vector<UIImageDrawCommand>& commands, RenderPass* renderPass);
+	void ClearFrameQueues();
 #pragma endregion
 
 #pragma region Queue Management
@@ -87,14 +89,14 @@ public:
 	vector<ViewportCameraInfo>& GetActiveViewportCameras() { return m_ViewportCameras; }
 #pragma endregion
 
-#pragma region Frustum Culling
-public:
-	bool TryGetPassFrustum(RenderPassID passID, Frustum& outFrustum, bool& outIsShadow) const;
-#pragma endregion
-
 #pragma region Binding
+private:
+	EResult PreparePassPipelineDesc(RenderPass* renderPass, RHIPipelineDesc& desc);
+	EResult BindMeshPipeline(Mesh* mesh, MaterialInterface* material, ERenderPassType passType, RHIPipelineDesc& desc);
+	EResult PrepareMeshPipelineDesc(Mesh* mesh, MaterialInterface* material, ERenderPassType passType, RHIPipelineDesc& desc);
 public:
 	EResult BindMeshPipeline(class Mesh*, class MaterialInterface*, class RenderPass*);
+	EResult ValidateMeshMaterial(Mesh* mesh, MaterialInterface* material, RenderPass* renderPass);
 #pragma endregion
 
 #pragma region Getter
@@ -121,10 +123,14 @@ private: //ECS Based Render Queue
 private:
 	class RenderPassManager* m_RenderPassManager = { nullptr };
 private:
+	struct ViewportJob
+	{
+		CameraBuffer cameraBuffer = {};
+		bool hasCamera = false;
+	};
+
 	vector<ViewportCameraInfo> m_ViewportCameras;
-private:
-	unordered_map<RenderPassID, Frustum> m_PassFrustums;
-	unordered_map<RenderPassID, bool>    m_PassFrustumIsShadow;
+	unordered_map<RenderPassID, vector<ViewportJob>> m_ViewportJobsPerPass;
 #pragma endregion
 };
 END

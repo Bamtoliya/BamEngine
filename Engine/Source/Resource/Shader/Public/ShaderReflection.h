@@ -1,7 +1,9 @@
 ﻿#pragma once
 
 #include "Engine_Includes.h"
+#include <reflection/Annotations.h>
 
+ENUM()
 enum class EShaderType
 {
 	Vertex,

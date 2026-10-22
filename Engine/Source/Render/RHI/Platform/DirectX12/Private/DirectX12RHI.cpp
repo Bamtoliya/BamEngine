@@ -8,6 +8,9 @@
 #include "RenderTargetManager.h"
 #include "RenderPass.h"
 #include <cstring>
+#include <algorithm>
+#include <cstdint>
+#include <exception>
 
 #pragma region Constructor&Destructor
 EResult DirectX12RHI::Initialize(void* arg)
@@ -44,9 +47,9 @@ EResult DirectX12RHI::Initialize(void* arg)
     ComPtr<ID3D12InfoQueue> infoQueue;
     if (SUCCEEDED(m_Device.As(&infoQueue)))
     {
-        infoQueue->SetBreakOnID(
-            D3D12_MESSAGE_ID_CLEARRENDERTARGETVIEW_MISMATCHINGCLEARVALUE,
-            TRUE);
+        infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_CORRUPTION, TRUE);
+        infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_ERROR, TRUE);
+        infoQueue->SetBreakOnID(D3D12_MESSAGE_ID_CLEARRENDERTARGETVIEW_MISMATCHINGCLEARVALUE, TRUE);
     }
 #endif
 
@@ -83,11 +86,16 @@ EResult DirectX12RHI::Initialize(void* arg)
         return EResult::Fail;
 
 	// Command Allocator 생성
-    if (FAILED(m_Device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&m_CommandAllocator))))
-        return EResult::Fail;
+    for (uint32 i = 0; i < m_SwapChainBufferCount; ++i)
+    {
+        if (FAILED(m_Device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,
+            IID_PPV_ARGS(&m_CommandAllocators[i]))))
+            return EResult::Fail;
+    }
 
 	// Command List 생성
-    if (FAILED(m_Device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, m_CommandAllocator.Get(), nullptr, IID_PPV_ARGS(&m_CommandList))))
+    if (FAILED(m_Device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT,
+        m_CommandAllocators[0].Get(), nullptr, IID_PPV_ARGS(&m_CommandList))))
         return EResult::Fail;
 
     if (FAILED(m_CommandList->Close()))
@@ -169,7 +177,7 @@ EResult DirectX12RHI::Initialize(void* arg)
     // 9. 동기화용 Fence 생성
     if (FAILED(m_Device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&m_Fence))))
         return EResult::Fail;
-    m_CurrentFenceValue = 1;
+    m_CurrentFenceValue = 0;
     m_FenceEvent = CreateEventEx(nullptr, FALSE, FALSE, EVENT_ALL_ACCESS);
     if (m_FenceEvent == nullptr)
         return EResult::Fail;
@@ -256,6 +264,12 @@ DirectX12RHI* DirectX12RHI::Create(void* arg)
 
 void DirectX12RHI::Free()
 {
+    if (m_CommandQueue && m_Fence && IsFailure(WaitForGPU()))
+    {
+        ENGINE_LOG_ERROR("GPU synchronization failed during DirectX12RHI shutdown.");
+        std::terminate();
+    }
+
     // 백버퍼 배열 원소를 가리키는 비소유 포인터입니다.
     m_BackBuffer = nullptr;
 
@@ -266,6 +280,12 @@ void DirectX12RHI::Free()
     {
         Safe_Release(backBuffer);
         backBuffer = nullptr;
+    }
+
+    if (!m_DeferredReleases.empty() && IsFailure(WaitForGPU()))
+    {
+        ENGINE_LOG_ERROR("Deferred resource synchronization failed during DirectX12RHI shutdown.");
+        std::terminate();
     }
 
     Safe_Delete(m_RtvAllocator);
@@ -289,7 +309,7 @@ EResult DirectX12RHI::Resize(uint32 width, uint32 height)
     if (!m_Device || !m_SwapChain || !m_CommandQueue || !m_Fence || !m_FenceEvent)
         return EResult::Fail;
 
-    if (!m_CommandAllocator || !m_CommandList || m_CurrentRenderPass)
+    if (!m_CommandList || m_FrameFailed || m_FrameRecording || m_CurrentRenderPass)
         return EResult::Fail;
 
     if (m_SwapChainBufferCount == 0 || m_SwapChainBufferCount > MAX_SWAPCHAIN_BUFFERS)
@@ -302,25 +322,18 @@ EResult DirectX12RHI::Resize(uint32 width, uint32 height)
     if (FAILED(m_SwapChain->GetDesc1(&swapChainDesc)))
         return EResult::Fail;
 
-    // 기존 백버퍼를 사용하는 GPU 작업이 끝날 때까지 대기합니다.
-    const uint64 fenceValue = ++m_CurrentFenceValue;
-    if (FAILED(m_CommandQueue->Signal(m_Fence.Get(), fenceValue)))
+    if (IsFailure(WaitForGPU()))
         return EResult::Fail;
 
-    if (m_Fence->GetCompletedValue() < fenceValue)
+    // 완료된 이전 프레임의 명령 기록도 비웁니다.
+    for (uint32 i = 0; i < m_SwapChainBufferCount; ++i)
     {
-        if (FAILED(m_Fence->SetEventOnCompletion(fenceValue, m_FenceEvent)))
-            return EResult::Fail;
-
-        if (::WaitForSingleObject(m_FenceEvent, INFINITE) != WAIT_OBJECT_0)
+        auto& allocator = m_CommandAllocators[i];
+        if (!allocator || FAILED(allocator->Reset()))
             return EResult::Fail;
     }
 
-    // 완료된 이전 프레임의 명령 기록도 비웁니다.
-    if (FAILED(m_CommandAllocator->Reset()))
-        return EResult::Fail;
-
-    if (FAILED(m_CommandList->Reset(m_CommandAllocator.Get(), nullptr)))
+    if (FAILED(m_CommandList->Reset(m_CommandAllocators[0].Get(), nullptr)))
         return EResult::Fail;
 
     if (FAILED(m_CommandList->Close()))
@@ -387,7 +400,17 @@ EResult DirectX12RHI::Resize(uint32 width, uint32 height)
 #pragma region Frame
 EResult DirectX12RHI::BeginFrame()
 {
+    if (m_FrameFailed || m_FrameRecording || m_CurrentRenderPass)
+        return EResult::Fail;
 	m_CurrentBackBufferIndex = m_SwapChain->GetCurrentBackBufferIndex();
+    if (m_CurrentBackBufferIndex >= m_SwapChainBufferCount || m_CurrentBackBufferIndex >= MAX_SWAPCHAIN_BUFFERS)
+        return EResult::Fail;
+    const EResult waitResult = WaitForFence(m_FrameFenceValues[m_CurrentBackBufferIndex]);
+    if (IsFailure(waitResult))
+    {
+        m_FrameFailed = true;
+        return waitResult;
+    }
 	m_BackBuffer = m_SwapChainBuffers[m_CurrentBackBufferIndex];
 	m_DynamicHeapCursor = 0;
 
@@ -404,10 +427,11 @@ EResult DirectX12RHI::BeginFrame()
 		}
 	}
 
-    if (FAILED(m_CommandAllocator->Reset()))
+    auto& allocator = m_CommandAllocators[m_CurrentBackBufferIndex];
+    if (!allocator || FAILED(allocator->Reset()))
         return EResult::Fail;
 
-    if (FAILED(m_CommandList->Reset(m_CommandAllocator.Get(), nullptr)))
+    if (FAILED(m_CommandList->Reset(allocator.Get(), nullptr)))
         return EResult::Fail;
 
     m_CurrentPipeline = nullptr;
@@ -423,8 +447,10 @@ EResult DirectX12RHI::BeginFrame()
 
 EResult DirectX12RHI::EndFrame()
 {
+    if (m_FrameFailed || !m_FrameRecording)
+        return EResult::Fail;
 
-	DirectX12Texture* dxBackBuffer = static_cast<DirectX12Texture*>(m_BackBuffer);
+    auto* dxBackBuffer = static_cast<DirectX12Texture*>(m_BackBuffer);
     if (dxBackBuffer && dxBackBuffer->GetCurrentState() == D3D12_RESOURCE_STATE_RENDER_TARGET)
     {
         D3D12_RESOURCE_BARRIER barrier = {};
@@ -437,30 +463,45 @@ EResult DirectX12RHI::EndFrame()
         dxBackBuffer->SetCurrentState(D3D12_RESOURCE_STATE_PRESENT);
     }
 
-    if (FAILED(m_CommandList->Close()))
-        return EResult::Fail;
-
-    ID3D12CommandList* ppCommandLists[] = { m_CommandList.Get() };
-	m_FrameRecording = false;
-    m_CommandQueue->ExecuteCommandLists(_countof(ppCommandLists), ppCommandLists);
-
-    if (FAILED(m_SwapChain->Present(1, 0)))
-        return EResult::Fail;
-
-
-    TODO("Fence를 이용한 GPU 동기화 구현 필요. 현재는 CPU가 GPU보다 빨리 진행될 수 있음. Fence를 사용하여 GPU가 작업을 완료할 때까지 기다리도록 구현해야 함.");
-    TODO("멀티스레드 성능을 높이기 위해 비동기로 짜야함");
-    const uint64 fenceValue = ++m_CurrentFenceValue;
-    if (FAILED(m_CommandQueue->Signal(m_Fence.Get(), fenceValue)))
-        return EResult::Fail;
-
-    if (m_Fence->GetCompletedValue() < fenceValue)
+    const HRESULT closeResult = m_CommandList->Close();
+    if (FAILED(closeResult))
     {
-        if (FAILED(m_Fence->SetEventOnCompletion(fenceValue, m_FenceEvent)))
-            return EResult::Fail;
-        ::WaitForSingleObject(m_FenceEvent, INFINITE);
+        m_FrameFailed = true;
+        ENGINE_LOG_ERROR("Command list Close failed: HRESULT=0x{:08X}", static_cast<uint32>(closeResult));
+        return EResult::Fail;
     }
 
+    ID3D12CommandList* commandLists[] = { m_CommandList.Get() };
+    m_FrameRecording = false;
+    m_CommandQueue->ExecuteCommandLists(_countof(commandLists), commandLists);
+
+    const HRESULT presentResult = m_SwapChain->Present(1, 0);
+    if (FAILED(presentResult))
+        ENGINE_LOG_ERROR("Present failed: HRESULT=0x{:08X}", static_cast<uint32>(presentResult));
+
+    uint64 frameFenceValue = 0;
+    const EResult signalResult = SignalFence(frameFenceValue);
+    if (IsFailure(signalResult))
+    {
+        m_FrameFailed = true;
+        return signalResult;
+    }
+
+    m_FrameFenceValues[m_CurrentBackBufferIndex] = frameFenceValue;
+
+    if (FAILED(presentResult))
+    {
+        const EResult waitResult = WaitForFence(frameFenceValue);
+        if (IsFailure(waitResult))
+        {
+            m_FrameFailed = true;
+            return waitResult;
+        }
+
+        return EResult::Fail;
+    }
+
+    CollectDeferredReleases();
     return EResult::Success;
 }
 #pragma endregion
@@ -1095,6 +1136,93 @@ EResult DirectX12RHI::ClearDepthSlice(RHITexture* depthStencil, uint32 sliceInde
     return EResult::Success;
 }
 #pragma endregion
+#pragma region MyRegion
+void DirectX12RHI::DeferRelease(ID3D12Object* object)
+{
+    if (!object) return;
+
+    m_DeferredReleases.emplace_back();
+    auto& entry = m_DeferredReleases.back();
+    entry.fenceValue = m_CurrentFenceValue + 1;
+    entry.object = object;
+}
+
+void DirectX12RHI::DeferDescriptorFree(DirectX12DescriptorAllocator* allocator, uint32 index)
+{
+    if (!allocator || index == UINT32_MAX) return;
+
+    m_DeferredReleases.emplace_back();
+    auto& entry = m_DeferredReleases.back();
+    entry.fenceValue = m_CurrentFenceValue + 1;
+    entry.descriptorAllocator = allocator;
+    entry.descriptorIndex = index;
+}
+
+EResult DirectX12RHI::SignalFence(uint64& fenceValue)
+{
+    if (!m_CommandQueue || !m_Fence) return EResult::Fail;
+
+    const uint64 nextValue = m_CurrentFenceValue + 1;
+    if (FAILED(m_CommandQueue->Signal(m_Fence.Get(), nextValue)))
+        return EResult::Fail;
+
+    m_CurrentFenceValue = nextValue;
+    fenceValue = nextValue;
+    return EResult::Success;
+}
+
+EResult DirectX12RHI::WaitForFence(uint64 fenceValue)
+{
+    if (!m_Fence) return EResult::Fail;
+
+    uint64 completedValue = m_Fence->GetCompletedValue();
+    if (completedValue == UINT64_MAX) return EResult::Fail;
+
+    if (completedValue < fenceValue)
+    {
+        if (FAILED(m_Fence->SetEventOnCompletion(fenceValue, m_FenceEvent)))
+            return EResult::Fail;
+
+        if (m_FenceEvent && ::WaitForSingleObject(m_FenceEvent, INFINITE) != WAIT_OBJECT_0)
+            return EResult::Fail;
+
+        completedValue = m_Fence->GetCompletedValue();
+        if (completedValue == UINT64_MAX || completedValue < fenceValue)
+            return EResult::Fail;
+    }
+
+    CollectDeferredReleases();
+    return EResult::Success;
+}
+
+EResult DirectX12RHI::WaitForGPU()
+{
+    uint64 fenceValue = 0;
+    const EResult result = SignalFence(fenceValue);
+    if (IsFailure(result)) return result;
+
+    return WaitForFence(fenceValue);
+}
+
+void DirectX12RHI::CollectDeferredReleases()
+{
+    if (!m_Fence) return;
+
+    const uint64 completedValue = m_Fence->GetCompletedValue();
+    if (completedValue == UINT64_MAX) return;
+
+    std::erase_if(m_DeferredReleases, [completedValue](const DeferredReleaseEntry& entry)
+        {
+            if (entry.fenceValue > completedValue) return false;
+
+            if (entry.descriptorAllocator)
+                entry.descriptorAllocator->Free(entry.descriptorIndex);
+
+            return true;
+        });
+}
+#pragma endregion
+
 
 #pragma region Draw Call
 EResult DirectX12RHI::ApplyShaderResources()

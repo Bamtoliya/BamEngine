@@ -38,7 +38,7 @@ EResult Application::Initialize(void* arg)
 
     const auto fail = [this](const char* stage, EResult result)
         {
-            BAM_LOG(Error, "Application", "{} failed: {}", stage, ResultToString(result));
+            BAM_LOG(Error, "Editor", "Application", "{} failed: {}", stage, ResultToString(result));
             Free();
             return result;
         };
@@ -79,7 +79,7 @@ EResult Application::Initialize(void* arg)
     }
     else
     {
-        BAM_LOG(Warn, "HotReload", "GameModule.dll not found at: {}", modulePath.string());
+        BAM_LOG(Warn, "Editor", "HotReload", "GameModule.dll not found at: {}", modulePath.string());
     }
     ShortcutManager::Get().LoadFromFile();
     return EResult::Success;
@@ -143,7 +143,7 @@ void Application::Free()
 
     if (m_LoggerInitialized)
     {
-        BAM_LOG(Info, "Application", "Application cleanup finished");
+        BAM_LOG(Info, "Editor", "Application", "Application cleanup finished");
         Engine::Logger::Shutdown();
         m_LoggerInitialized = false;
     }
@@ -381,7 +381,7 @@ EResult Application::InitializeLogger()
 		fmt::print(stderr, "Logger Initialization Failed\n");
 		return EResult::Fail;
 	}
-    BAM_LOG(Info, "Application", "Logger initialization finished");
+    BAM_LOG(Info, "Editor", "Application", "Logger initialization finished");
     return EResult::Success;
 }
 #pragma endregion
@@ -1160,7 +1160,7 @@ void Application::Run(int argc, char* argv[])
 
                 if (result != EResult::Success)
                 {
-                    ENGINE_LOG_ERROR("Window back buffer resize failed.");
+                    EDITOR_LOG_ERROR("Window back buffer resize failed.");
                     bIsRunning = false;
                     break;
                 }

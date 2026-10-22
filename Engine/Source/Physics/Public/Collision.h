@@ -5,6 +5,8 @@
 
 BEGIN(Engine)
 
+struct TerrainComponent;
+
 class ENGINE_API Collision
 {
 public:

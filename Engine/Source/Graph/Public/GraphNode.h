@@ -3,6 +3,7 @@
 #include "GraphPin.h"
 #include <unordered_map>
 #include <vector>
+#include <reflection/Annotations.h>
 
 namespace Engine
 {
@@ -29,10 +30,16 @@ struct GraphNodeDefinition
 	GraphReflectionSource Reflection;
 };
 
+STRUCT()
 struct GraphNode
 {
+	PROPERTY()
 	GraphNodeId Id = 0;
+
+	PROPERTY()
 	std::string Type;
+
+	PROPERTY()
 	std::unordered_map<std::string, GraphValue> InputValues;
 };
 

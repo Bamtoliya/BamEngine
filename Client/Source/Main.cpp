@@ -43,7 +43,7 @@ public:
 
         if (!SDL_Init(SDL_INIT_VIDEO))
         {
-            BAM_LOG(Error, "Client", "SDL_Init failed: {}", SDL_GetError());
+            BAM_LOG(Error, "Client", "Application", "SDL_Init failed: {}", SDL_GetError());
             return EResult::Fail;
         }
 
@@ -52,7 +52,7 @@ public:
 
         if (!m_Window)
         {
-            BAM_LOG(Error, "Client", "SDL_CreateWindow failed: {}", SDL_GetError());
+            BAM_LOG(Error, "Client", "Application", "SDL_CreateWindow failed: {}", SDL_GetError());
             return EResult::Fail;
         }
 
@@ -88,9 +88,10 @@ public:
 
         InitializeRenderPasses();
         LoadGameModule();
-        LoadStartupScene();
+        if (IsFailure(LoadStartupScene()))
+            return EResult::Fail;
 
-        BAM_LOG(Info, "Client", "Client initialization finished successfully");
+        BAM_LOG(Info, "Client", "Application", "Client initialization finished successfully");
         return EResult::Success;
     }
 
@@ -193,28 +194,36 @@ private:
         const std::filesystem::path exeDir = std::filesystem::path(exePathBuf).parent_path();
         const std::filesystem::path modulePath = exeDir / L"GameModule.dll";
 
-        if (std::filesystem::exists(modulePath))
-            ModuleManager::Get().LoadModule(modulePath.wstring());
-        else
-            BAM_LOG(Warn, "Client", "GameModule.dll not found at: {}", modulePath.string());
+        if (!std::filesystem::exists(modulePath))
+        {
+            BAM_LOG(Warn, "Client", "Module", "GameModule.dll not found at: {}", modulePath.string());
+            return;
+        }
+
+        const EResult result = ModuleManager::Get().LoadModule(L"GameModule", modulePath);
+        if (IsFailure(result))
+            BAM_LOG(Error, "Client", "Module", "Failed to load GameModule: {}", ResultToString(result));
     }
 
-    void LoadStartupScene()
+    EResult LoadStartupScene()
     {
-        const std::wstring scenePath = L"Resources/Scenes/NewScene2.json";
-        if (std::filesystem::exists(scenePath))
+        const std::filesystem::path scenePath = L"Resources/Scenes/NewScene2.json";
+        if (!std::filesystem::exists(scenePath))
         {
-            archive::JsonArchive ar;
-            const EResult result = SceneManager::Get().LoadScene(ar, scenePath);
-            if (result == EResult::Success)
-                BAM_LOG(Info, "Client", "Loaded startup scene: {}", std::string(scenePath.begin(), scenePath.end()))
-            else
-                BAM_LOG(Error, "Client", "Failed to load scene: {}", ResultToString(result));
+            BAM_LOG(Error, "Client", "Startup", "Startup scene file does not exist: {}", scenePath.string());
+            return EResult::Fail;
         }
-        else
+
+        archive::JsonArchive ar;
+        const EResult result = SceneManager::Get().LoadScene(ar, scenePath.wstring());
+        if (result != EResult::Success)
         {
-            BAM_LOG(Warn, "Client", "Startup scene file does not exist: {}", std::string(scenePath.begin(), scenePath.end()));
+            BAM_LOG(Error, "Client", "Startup", "Failed to load startup scene: {}", ResultToString(result));
+            return result;
         }
+
+        BAM_LOG(Info, "Client", "Startup", "Loaded startup scene: {}", scenePath.string());
+        return EResult::Success;
     }
 
     void UpdateViewportCamera()
@@ -230,21 +239,13 @@ private:
 
         for (auto entity : cameraView)
         {
-            const auto& camera = cameraView.get<CameraComponent>(entity);
-            if (camera.m_IsCacheValid)
-            {
-                CameraBuffer cameraBuffer = {};
-                cameraBuffer.viewMatrix = camera.m_ViewMatrix;
-                cameraBuffer.projMatrix = camera.m_ProjMatrix;
-                cameraBuffer.viewProjMatrix = camera.m_ViewProjMatrix;
-                cameraBuffer.invViewMatrix = camera.m_ViewMatrixInv;
-                cameraBuffer.invProjMatrix = camera.m_ProjMatrixInv;
-                cameraBuffer.invViewProjMatrix = camera.m_ViewProjMatrixInv;
-                cameraBuffer.cameraPosition = camera.m_CameraPosition;
-
-                Renderer::Get().RegisterViewportCamera(cameraBuffer, renderPass);
-                return;
-            }
+            const std::optional<CameraBuffer> optBuffer = cameraView.get<CameraComponent>(entity).GetCameraBuffer();
+            if (!optBuffer.has_value())
+                continue;
+            CameraBuffer cameraBuffer = optBuffer.value();
+            cameraBuffer.time = static_cast<f32>(TimeManager::Get().GetTotalTime());
+            Renderer::Get().RegisterViewportCamera(cameraBuffer, renderPass);
+            return;
         }
     }
 
