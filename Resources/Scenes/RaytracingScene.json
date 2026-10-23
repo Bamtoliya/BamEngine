@@ -6,7 +6,7 @@
                 "Components": [
                     {
                         "Data": {
-                            "AspectRatio": 1.7776999473571777,
+                            "AspectRatio": 1.7777777910232544,
                             "CameraType": 0,
                             "FOV": 60,
                             "FarPlane": 1000,
@@ -53,7 +53,7 @@
                         },
                         "Type": "Engine::FlagComponent"
                     },
-                                        {
+                    {
                         "Data": {
                             "AttenuationCoefficients": [1, 0.09000000357627869, 0.03200000151991844],
                             "AttenuationMode": 0,
@@ -62,7 +62,7 @@
                             "Flags": 61,
                             "GroundColor": [0.05000000074505806, 0.03999999910593033, 0.029999999329447746],
                             "IndirectIntensity": 0.5,
-                            "Intensity": 1.2,
+                            "Intensity": 1.2000000476837158,
                             "IsEnabled": true,
                             "LightType": 1,
                             "LightingLayerMask": 4294967295,
@@ -118,7 +118,7 @@
                             "Flags": 53,
                             "GroundColor": [0.05000000074505806, 0.03999999910593033, 0.029999999329447746],
                             "IndirectIntensity": 0.5,
-                            "Intensity": 2.0,
+                            "Intensity": 2,
                             "IsEnabled": true,
                             "LightType": 0,
                             "LightingLayerMask": 4294967295,
@@ -173,8 +173,8 @@
                             "Color": [0.5, 0.6499999761581421, 0.8500000238418579],
                             "Flags": 52,
                             "GroundColor": [0.07999999821186066, 0.07000000029802322, 0.05999999865889549],
-                            "IndirectIntensity": 0.2,
-                            "Intensity": 0.4,
+                            "IndirectIntensity": 0.20000000298023224,
+                            "Intensity": 0.4000000059604645,
                             "IsEnabled": true,
                             "LightType": 3,
                             "LightingLayerMask": 4294967295,
@@ -231,8 +231,8 @@
                         "Data": {
                             "castShadow": false,
                             "materialHandle": {
-                                "AssetKey": "Resources/Material/GBufferMaterial",
-                                "AssetPath": "",
+                                "AssetKey": "Resources/Material/GBufferMaterial.bammat.json",
+                                "AssetPath": "Resources/Material/GBufferMaterial.bammat.json",
                                 "Null": false
                             },
                             "meshHandle": {
@@ -278,8 +278,8 @@
                         "Data": {
                             "castShadow": true,
                             "materialHandle": {
-                                "AssetKey": "Resources/Material/GBufferMaterial",
-                                "AssetPath": "",
+                                "AssetKey": "Resources/Material/GBufferMaterial.bammat.json",
+                                "AssetPath": "Resources/Material/GBufferMaterial.bammat.json",
                                 "Null": false
                             },
                             "meshHandle": {
@@ -325,8 +325,8 @@
                         "Data": {
                             "castShadow": true,
                             "materialHandle": {
-                                "AssetKey": "Resources/Material/GBufferMaterial",
-                                "AssetPath": "",
+                                "AssetKey": "Resources/Material/GBufferMaterial.bammat.json",
+                                "AssetPath": "Resources/Material/GBufferMaterial.bammat.json",
                                 "Null": false
                             },
                             "meshHandle": {
@@ -372,8 +372,8 @@
                         "Data": {
                             "castShadow": true,
                             "materialHandle": {
-                                "AssetKey": "Resources/Material/GBufferMaterial",
-                                "AssetPath": "",
+                                "AssetKey": "Resources/Material/GBufferMaterial.bammat.json",
+                                "AssetPath": "Resources/Material/GBufferMaterial.bammat.json",
                                 "Null": false
                             },
                             "meshHandle": {
@@ -419,8 +419,8 @@
                         "Data": {
                             "castShadow": true,
                             "materialHandle": {
-                                "AssetKey": "Resources/Material/GBufferMaterial",
-                                "AssetPath": "",
+                                "AssetKey": "Resources/Material/GBufferMaterial.bammat.json",
+                                "AssetPath": "Resources/Material/GBufferMaterial.bammat.json",
                                 "Null": false
                             },
                             "meshHandle": {
@@ -466,8 +466,8 @@
                         "Data": {
                             "castShadow": true,
                             "materialHandle": {
-                                "AssetKey": "Resources/Material/GBufferMaterial",
-                                "AssetPath": "",
+                                "AssetKey": "Resources/Material/GBufferMaterial.bammat.json",
+                                "AssetPath": "Resources/Material/GBufferMaterial.bammat.json",
                                 "Null": false
                             },
                             "meshHandle": {
@@ -513,8 +513,8 @@
                         "Data": {
                             "castShadow": true,
                             "materialHandle": {
-                                "AssetKey": "Resources/Material/GBufferMaterial",
-                                "AssetPath": "",
+                                "AssetKey": "Resources/Material/GBufferMaterial.bammat.json",
+                                "AssetPath": "Resources/Material/GBufferMaterial.bammat.json",
                                 "Null": false
                             },
                             "meshHandle": {
@@ -560,8 +560,8 @@
                         "Data": {
                             "castShadow": true,
                             "materialHandle": {
-                                "AssetKey": "Resources/Material/GBufferMaterial",
-                                "AssetPath": "",
+                                "AssetKey": "Resources/Material/GBufferMaterial.bammat.json",
+                                "AssetPath": "Resources/Material/GBufferMaterial.bammat.json",
                                 "Null": false
                             },
                             "meshHandle": {
@@ -607,8 +607,8 @@
                         "Data": {
                             "castShadow": true,
                             "materialHandle": {
-                                "AssetKey": "Resources/Material/GBufferMaterial",
-                                "AssetPath": "",
+                                "AssetKey": "Resources/Material/GBufferMaterial.bammat.json",
+                                "AssetPath": "Resources/Material/GBufferMaterial.bammat.json",
                                 "Null": false
                             },
                             "meshHandle": {
@@ -654,8 +654,8 @@
                         "Data": {
                             "castShadow": true,
                             "materialHandle": {
-                                "AssetKey": "Resources/Material/GBufferMaterial",
-                                "AssetPath": "",
+                                "AssetKey": "Resources/Material/GBufferMaterial.bammat.json",
+                                "AssetPath": "Resources/Material/GBufferMaterial.bammat.json",
                                 "Null": false
                             },
                             "meshHandle": {
@@ -701,8 +701,8 @@
                         "Data": {
                             "castShadow": true,
                             "materialHandle": {
-                                "AssetKey": "Resources/Material/GBufferMaterial",
-                                "AssetPath": "",
+                                "AssetKey": "Resources/Material/GBufferMaterial.bammat.json",
+                                "AssetPath": "Resources/Material/GBufferMaterial.bammat.json",
                                 "Null": false
                             },
                             "meshHandle": {
@@ -748,8 +748,8 @@
                         "Data": {
                             "castShadow": true,
                             "materialHandle": {
-                                "AssetKey": "Resources/Material/GBufferMaterial",
-                                "AssetPath": "",
+                                "AssetKey": "Resources/Material/GBufferMaterial.bammat.json",
+                                "AssetPath": "Resources/Material/GBufferMaterial.bammat.json",
                                 "Null": false
                             },
                             "meshHandle": {
@@ -806,7 +806,7 @@
                         },
                         "Type": "Engine::NameComponent"
                     },
-                                        {
+                    {
                         "Data": {
                             "AutoSyncDirectionalLight": true,
                             "CloudAltitude": 2500,
@@ -823,7 +823,7 @@
                             "HorizonColor": [0.699999988079071, 0.8199999928474426, 0.949999988079071],
                             "IsEnabled": true,
                             "Latitude": 45,
-                            "SkyIntensity": 1.0,
+                            "SkyIntensity": 1,
                             "SunSize": 0.03500000014901161,
                             "TimeOfDay": 12,
                             "ZenithColor": [0, 0.35820937156677246, 1]
@@ -834,8 +834,8 @@
                         "Data": {
                             "castShadow": false,
                             "materialHandle": {
-                                "AssetKey": "Resources/Material/SkyMaterial",
-                                "AssetPath": "",
+                                "AssetKey": "Resources/Material/SkyMaterial.bammat.json",
+                                "AssetPath": "Resources/Material/SkyMaterial.bammat.json",
                                 "Null": false
                             },
                             "meshHandle": {
@@ -859,7 +859,7 @@
                     {
                         "Data": {
                             "CloudAlbedo": [1, 1, 1],
-                            "CloudCoverage": 0.2,
+                            "CloudCoverage": 0.20000000298023224,
                             "CloudDensity": 0.5,
                             "DetailNoiseSize": 150,
                             "ExtinctionFactor": 1,
@@ -934,8 +934,8 @@
                             "MaxHeight": 30,
                             "Resolution": 128,
                             "TerrainMaterial": {
-                                "AssetKey": "Resources/Material/TerrainMaterial",
-                                "AssetPath": "",
+                                "AssetKey": "Resources/Material/TerrainMaterial.bammat.json",
+                                "AssetPath": "Resources/Material/TerrainMaterial.bammat.json",
                                 "Null": false
                             },
                             "Width": 128
@@ -980,7 +980,7 @@
                             "IsEnabled": true,
                             "LightType": 2,
                             "LightingLayerMask": 4294967295,
-                            "Range": 30.0,
+                            "Range": 30,
                             "ShadowBias": 0.0010000000474974513,
                             "ShadowMaxDistance": 100,
                             "ShadowNormalBias": 0.009999999776482582,
