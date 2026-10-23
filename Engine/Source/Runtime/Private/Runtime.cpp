@@ -144,7 +144,15 @@ void Runtime::Update(f32 dt, bool updateInput)
 }
 void Runtime::LateUpdate(f32 dt)
 {
-	SystemManager::Get().LateUpdate(m_GlobalRegistry, SceneManager::Get().GetActiveScenes(), dt);
+	const auto activeScenes = SceneManager::Get().GetActiveScenes();
+
+	for (Scene* scene : activeScenes)
+	{
+		if (scene)
+			scene->UpdateHierarchyFlags();
+	}
+
+	SystemManager::Get().LateUpdate(m_GlobalRegistry, activeScenes, dt);
 }
 EResult Runtime::Render(f32 dt)
 {

@@ -111,6 +111,12 @@ static void DrawViewportLineIfVisible(
 
 	drawList->AddLine(screenStart, screenEnd, color, thickness);
 }
+
+static bool IsSceneOverlayVisible(const Engine::FlagComponent& flag)
+{
+	return flag.IsActiveInHierarchy() && flag.IsVisibleInHierarchy() &&
+		!HasFlag(flag.effectiveFlags, Engine::EEntityFlag::Dead);
+}
 #pragma endregion
 
 #pragma region Contructor&Destructor
@@ -427,9 +433,13 @@ void SceneViewportPanel::DrawCustomOptions()
 
 void SceneViewportPanel::DrawCustomViewport()
 {
-    Application::Get().GetEditHistory().AllowShortcuts(ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows));
+	Application::Get().GetEditHistory().AllowShortcuts(ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows));
 	BaseViewportPanel::DrawCustomViewport();
 	const bool imageHovered = ImGui::IsItemHovered();
+
+	if (Scene* scene = SceneManager::Get().GetCurrentScene())
+		scene->UpdateHierarchyFlags();
+
 	DrawImGuizmo();
 	DrawImViewGuizmo();
 	DrawLightOverlay();
@@ -825,7 +835,7 @@ void SceneViewportPanel::DrawLightOverlay()
 		const auto& light = view.get<LightComponent>(entity);
 		const auto& tr = view.get<WorldTransformComponent>(entity);
 		const auto& flag = view.get<FlagComponent>(entity);
-		if (!light.IsEnabled || !HasFlag(flag.flags, EEntityFlag::Active))
+		if (!light.IsEnabled || !IsSceneOverlayVisible(flag))
 			continue;
 
 		vec3 worldPos = vec3(tr.worldMatrix[3]);
@@ -958,7 +968,7 @@ void SceneViewportPanel::DrawCameraOverlay()
 		const auto& camera = view.get<CameraComponent>(entity);
 		const auto& tr = view.get<WorldTransformComponent>(entity);
 		const auto& flag = view.get<FlagComponent>(entity);
-		if (!HasFlag(flag.flags, EEntityFlag::Active))
+		if (!IsSceneOverlayVisible(flag))
 			continue;
 		if (isPIE && camera.IsMainCamera) continue;
 
@@ -1383,7 +1393,7 @@ Entity* SceneViewportPanel::PickOverlayEntity(const ImVec2& mousePos) const
 			const auto& light = view.get<LightComponent>(entity);
 			const auto& tr = view.get<WorldTransformComponent>(entity);
 			const auto& flag = view.get<FlagComponent>(entity);
-			if (!light.IsEnabled || !HasFlag(flag.flags, EEntityFlag::Active) || HasFlag(flag.flags, EEntityFlag::Dead))
+			if (!light.IsEnabled || !IsSceneOverlayVisible(flag))
 				continue;
 			const char* lightIcon = ICON_FA_LIGHTBULB;
 			switch (light.LightType)
@@ -1404,7 +1414,7 @@ Entity* SceneViewportPanel::PickOverlayEntity(const ImVec2& mousePos) const
 		{
 			const auto& tr = view.get<WorldTransformComponent>(entity);
 			const auto& flag = view.get<FlagComponent>(entity);
-			if (!HasFlag(flag.flags, EEntityFlag::Active) || HasFlag(flag.flags, EEntityFlag::Dead))
+			if (!IsSceneOverlayVisible(flag))
 				continue;
 			testOverlayIcon(entity, tr.worldMatrix, ICON_FA_CAMERA, 1.7f);
 		}
@@ -1426,36 +1436,48 @@ std::optional<CameraBuffer> SceneViewportPanel::GetActiveCameraBuffer()
 
 std::optional<CameraBuffer> SceneViewportPanel::FindActiveSceneCameraBuffer()
 {
-	Scene* activeScene = SceneManager::Get().GetCurrentScene();
+	if (m_RenderWidth == 0 || m_RenderHeight == 0)
+		return std::nullopt;
+
+	Engine::Scene* activeScene = Engine::SceneManager::Get().GetCurrentScene();
 	if (!activeScene) return std::nullopt;
 
+	activeScene->UpdateHierarchyFlags();
+
 	auto& registry = activeScene->GetRegistry();
-	auto view = registry.view<CameraComponent, WorldTransformComponent, FlagComponent>();
+	auto view = registry.view<Engine::CameraComponent, Engine::WorldTransformComponent, Engine::FlagComponent>();
+	const f32 aspectRatio = static_cast<f32>(m_RenderWidth) / static_cast<f32>(m_RenderHeight);
 
-	CameraComponent* targetCamera = nullptr;
-	for (auto entity : view)
+	// 메인 카메라를 먼저 검사하고, 실패하면 일반 카메라를 검사합니다.
+	for (int pass = 0; pass < 2; ++pass)
 	{
-		const auto& flag = view.get<FlagComponent>(entity);
-		if (!HasFlag(flag.flags, EEntityFlag::Active)) continue;
+		const bool requireMainCamera = pass == 0;
 
-		auto& cam = view.get<CameraComponent>(entity);
-		if (cam.IsMainCamera)
+		for (const auto entity : view)
 		{
-			targetCamera = &cam;
-			break;
+			auto& camera = view.get<Engine::CameraComponent>(entity);
+			if (camera.IsMainCamera != requireMainCamera)
+				continue;
+
+			const auto& flag = view.get<Engine::FlagComponent>(entity);
+			if (!flag.IsActiveInHierarchy() ||
+				Engine::HasFlag(flag.effectiveFlags, Engine::EEntityFlag::Dead))
+				continue;
+
+			const f32 previousAspectRatio = camera.AspectRatio;
+			camera.AspectRatio = aspectRatio;
+
+			if (!Engine::CameraSystem::UpdateCamera(registry, entity))
+			{
+				camera.AspectRatio = previousAspectRatio;
+				continue;
+			}
+
+			return camera.GetCameraBuffer();
 		}
-		if (!targetCamera) targetCamera = &cam; // 메인 지정이 없으면 첫 번째 활성 카메라 보관
 	}
 
-	if (!targetCamera) return std::nullopt;
-
-	// 뷰포트 종횡비에 맞게 카메라 버퍼 갱신
-	if (m_RenderHeight > 0)
-	{
-		targetCamera->AspectRatio = static_cast<f32>(m_RenderWidth) / static_cast<f32>(m_RenderHeight);
-		CameraSystem::UpdateCameras(registry);
-	}
-	return targetCamera->GetCameraBuffer();
+	return std::nullopt;
 }
 
 SkyAtmosphereData SceneViewportPanel::BuildSkyAtmosphereData()
