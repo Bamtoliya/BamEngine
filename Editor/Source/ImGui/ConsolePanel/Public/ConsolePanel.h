@@ -20,6 +20,16 @@ private:
 		LogEntry Entry;
 		std::string DisplayText;
 	};
+	struct ConsoleRow
+	{
+		std::size_t ItemIndex = 0;
+		std::uint32_t RepeatCount = 1;
+		bool CountCapped = false;
+	};
+
+	static constexpr std::uint32_t MaxRepeatCount = 999;
+	static_assert(MaxRepeatCount > 0);
+
 	void ClearLog();
 
 	void DrawOptions();
@@ -30,9 +40,8 @@ private:
 	void DrawStatus();
 
 	void DrawLog();
-	void DrawLogItem(const ConsoleItem& item);
-	
-	void RebuildVisibleIndices();
+	void DrawLogItem(const ConsoleRow& row);
+	void RebuildVisibleRows();
 
 private:
 	static std::string BuildDisplayText(const LogEntry& entry);
@@ -41,7 +50,8 @@ private:
 private:
 	deque<ConsoleItem> m_Items;
 	ImGuiTextFilter m_Filter;
-	std::vector<int> m_VisibleIndices;
+	std::vector<ConsoleRow> m_VisibleRows;
+	bool m_CollapseDuplicates = true;
 	bool m_AutoScroll = true;
 	bool m_ScrollToBottom = false;
 	bool m_HasNewEntries = false;

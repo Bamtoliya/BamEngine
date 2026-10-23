@@ -1,6 +1,9 @@
 ﻿#include "ConsolePanel.h"
 #include "InputManager.h"
 #include <set>
+#include <map>
+#include <string_view>
+#include <tuple>
 
 #pragma region Loop
 void ConsolePanel::Draw()
@@ -22,7 +25,7 @@ void ConsolePanel::Draw()
         ImGui::SameLine();
         DrawSearch();
 
-        RebuildVisibleIndices();
+        RebuildVisibleRows();
         DrawStatus();
 
         ImGui::Separator();
@@ -62,7 +65,7 @@ void ConsolePanel::Update(Engine::f32 /*dt*/)
 void ConsolePanel::ClearLog()
 {
     m_Items.clear();
-    m_VisibleIndices.clear();
+    m_VisibleRows.clear();
 
     m_DroppedCount = 0;
     m_EvictedCount = 0;
@@ -117,6 +120,8 @@ void ConsolePanel::DrawOptions()
     ImGui::SameLine();
     ImGui::SetNextItemWidth(ImGui::GetFontSize() * 8.0f);
     DrawLevelFilter();
+    ImGui::SameLine();
+    ImGui::Checkbox(LOCAL_LABEL("Console.CollapseDuplicates").c_str(), &m_CollapseDuplicates);
 }
 
 void ConsolePanel::DrawLevelFilter()
@@ -210,8 +215,7 @@ void ConsolePanel::DrawSearch()
 
 void ConsolePanel::DrawStatus()
 {
-    const auto status = LOCAL_FMT("Console.Status", m_VisibleIndices.size(), m_Items.size(), m_DroppedCount,
-        m_EvictedCount);
+    const auto status = LOCAL_FMT("Console.Status", m_VisibleRows.size(), m_Items.size(), m_DroppedCount, m_EvictedCount);
 
     // 패널이 좁아지면 상태 텍스트는 줄바꿈합니다.
     ImGui::PushTextWrapPos(0.0f);
@@ -221,32 +225,20 @@ void ConsolePanel::DrawStatus()
 
 void ConsolePanel::DrawLog()
 {
-    if (ImGui::BeginChild(
-        "ConsoleLogList",
-        ImVec2(0, 0),
-        false,
-        ImGuiWindowFlags_HorizontalScrollbar))
+    if (ImGui::BeginChild("ConsoleLogList", ImVec2(0, 0), false, ImGuiWindowFlags_HorizontalScrollbar))
     {
-        const bool wasAtBottom =
-            ImGui::GetScrollY() >= ImGui::GetScrollMaxY() - 1.0f;
+        const bool wasAtBottom = ImGui::GetScrollY() >= ImGui::GetScrollMaxY() - 1.0f;
 
         ImGuiListClipper clipper;
-        clipper.Begin(
-            static_cast<int>(m_VisibleIndices.size()),
-            ImGui::GetTextLineHeightWithSpacing());
+        clipper.Begin(static_cast<int>(m_VisibleRows.size()), ImGui::GetTextLineHeightWithSpacing());
 
         while (clipper.Step())
         {
-            for (int row = clipper.DisplayStart;
-                row < clipper.DisplayEnd;
-                ++row)
-            {
-                DrawLogItem(m_Items[m_VisibleIndices[row]]);
-            }
+            for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; ++row)
+                DrawLogItem(m_VisibleRows[row]);
         }
 
-        const bool followNewEntries =
-            m_AutoScroll && m_HasNewEntries && wasAtBottom;
+        const bool followNewEntries = m_AutoScroll && m_HasNewEntries && wasAtBottom;
 
         if (m_ScrollToBottom || followNewEntries)
             ImGui::SetScrollHereY(1.0f);
@@ -258,12 +250,21 @@ void ConsolePanel::DrawLog()
     ImGui::EndChild();
 }
 
-void ConsolePanel::DrawLogItem(const ConsoleItem& item)
+void ConsolePanel::DrawLogItem(const ConsoleRow& row)
 {
-    ImGui::PushStyleColor(
-        ImGuiCol_Text, LevelColor(item.Entry.Level));
+    const auto& item = m_Items[row.ItemIndex];
 
-    ImGui::TextUnformatted(item.DisplayText.c_str());
+    ImGui::PushStyleColor(ImGuiCol_Text, LevelColor(item.Entry.Level));
+
+    if (m_CollapseDuplicates && (row.RepeatCount > 1 || row.CountCapped))
+    {
+        const auto text = fmt::format("[×{}{}] {}", row.RepeatCount, row.CountCapped ? "+" : "", item.DisplayText);
+        ImGui::TextUnformatted(text.c_str());
+    }
+    else
+    {
+        ImGui::TextUnformatted(item.DisplayText.c_str());
+    }
 
     ImGui::PopStyleColor();
 
@@ -279,11 +280,7 @@ void ConsolePanel::DrawLogItem(const ConsoleItem& item)
     ImGui::TextUnformatted(item.Entry.Message.c_str());
     ImGui::Separator();
 
-    const auto source = fmt::format(
-        "{}:{}",
-        item.Entry.FileName,
-        item.Entry.Line);
-
+    const auto source = fmt::format("{}:{}", item.Entry.FileName, item.Entry.Line);
     ImGui::TextUnformatted(source.c_str());
     ImGui::TextUnformatted(LOCAL_CSTR("Console.CopyHint"));
 
@@ -291,32 +288,55 @@ void ConsolePanel::DrawLogItem(const ConsoleItem& item)
     ImGui::EndTooltip();
 }
 
-
-void ConsolePanel::RebuildVisibleIndices()
+void ConsolePanel::RebuildVisibleRows()
 {
-    m_VisibleIndices.clear();
-    m_VisibleIndices.reserve(m_Items.size());
+    m_VisibleRows.clear();
+    m_VisibleRows.reserve(m_Items.size());
+
+    using GroupKey = std::tuple<Engine::ELogLevel, std::string_view, std::string_view,
+        std::string_view, std::string_view, std::uint_least32_t>;
+
+    std::map<GroupKey, std::size_t> groups;
 
     for (std::size_t i = 0; i < m_Items.size(); ++i)
     {
         const auto& item = m_Items[i];
-        const auto levelIndex = static_cast<std::size_t>(item.Entry.Level);
+        const auto& entry = item.Entry;
+        const auto levelIndex = static_cast<std::size_t>(entry.Level);
 
         if (levelIndex >= m_ShowLevels.size() || !m_ShowLevels[levelIndex])
             continue;
 
-        if (m_SourceFilter.has_value() && item.Entry.Source != *m_SourceFilter)
+        if (m_SourceFilter.has_value() && entry.Source != *m_SourceFilter)
             continue;
 
         if (!m_Filter.PassFilter(item.DisplayText.c_str()))
             continue;
 
-        m_VisibleIndices.push_back(static_cast<int>(i));
+        if (!m_CollapseDuplicates)
+        {
+            m_VisibleRows.push_back({ i });
+            continue;
+        }
+
+        GroupKey key{ entry.Level, entry.Source, entry.Category, entry.Message, entry.FileName, entry.Line };
+        const auto [it, inserted] = groups.try_emplace(key, m_VisibleRows.size());
+
+        if (inserted)
+        {
+            m_VisibleRows.push_back({ i });
+            continue;
+        }
+
+        auto& row = m_VisibleRows[it->second];
+        if (row.RepeatCount < MaxRepeatCount)
+            ++row.RepeatCount;
+        else
+            row.CountCapped = true;
     }
 }
 
-std::string ConsolePanel::BuildDisplayText(
-    const Engine::LogEntry& entry)
+std::string ConsolePanel::BuildDisplayText(const Engine::LogEntry& entry)
 {
     const auto seconds =
         std::chrono::time_point_cast<std::chrono::seconds>(
