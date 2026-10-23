@@ -22,6 +22,7 @@
 ,CATEGORY_LAYER_PLACEMENT,Layer Placement,구름층 배치
 ,CATEGORY_LIGHTING,Lighting,조명
 ,CATEGORY_PARAMETER,Parameter,매개변수
+,CATEGORY_PHYSICS,Physics,물리
 ,CATEGORY_PHYSICS_2D,Physics 2D,2D 물리
 ,CATEGORY_PHYSICS_3D,Physics 3D,3D 물리
 ,CATEGORY_PIPELINE,Pipeline,파이프라인
@@ -319,10 +320,13 @@
 ,STRUCT_AABB,AABB,축 정렬 경계 상자(AABB)
 ,STRUCT_AUDIO_LISTENER,Audio Listener,오디오 리스너
 ,STRUCT_AUDIO_SOURCE,Audio Source,오디오 소스
+,STRUCT_BOX_2D,Box 2D,2D 상자
 ,STRUCT_BUTTON,Button,버튼
 ,STRUCT_CAMERA,Camera,카메라
 ,STRUCT_CANVAS,Canvas,캔버스
 ,STRUCT_CAPSULE,Capsule,캡슐
+,STRUCT_CAPSULE_2D,Capsule 2D,2D 캡슐
+,STRUCT_CIRCLE_2D,Circle 2D,2D 원
 ,STRUCT_COLLIDER,Collider,충돌체
 ,STRUCT_COLLIDER_2D,Collider 2D,2D 충돌체
 ,STRUCT_COLLIDER_SETTINGS,Collider Settings,충돌체 설정

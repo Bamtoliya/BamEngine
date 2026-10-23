@@ -310,7 +310,7 @@ Hierarchy,CreateChild,Create Child Empty,빈 자식 생성
 Hierarchy,MoveToRoot,Move to Root,루트로 이동
 Console,ClearHistory,Clear console history,콘솔 기록 지우기
 Console,Levels,Levels ({}/{}),로그 수준 ({}/{})
-Console,Status,Visible: {} / {}   Dropped: {}   Expired: {},표시: {} / {}   수집 누락: {}   오래된 항목 제거: {}
+Console,Status,Rows: {}   Stored logs: {}   Dropped: {}   Expired: {},표시 행: {}   보관 로그: {}   수집 누락: {}   오래된 항목 제거: {}
 Console,CopyHint,Right-click to copy message,우클릭하면 메시지를 복사합니다.
 Metrics,PauseCapture,Pause capture,수집 일시정지
 Metrics,PauseHint,Freeze metrics only; the engine keeps running.,통계 수집만 멈춥니다. 엔진은 계속 실행됩니다.
@@ -699,3 +699,5 @@ GraphPanel,RuntimeMaterialScope,Session only. Assign this material in the Inspec
 GraphPanel,RuntimeMaterialKey,Created material: {0},생성된 머티리얼: {0}
 GraphPanel,RuntimeMaterialOld,This is an earlier result. Create another material and select its new entry to apply the current graph.,이전 생성 결과입니다. 현재 그래프를 적용하려면 머티리얼을 다시 생성하고 새 항목을 선택하세요.
 Hierarchy,EntityFallback,Entity {},엔티티 {}
+Console,CollapseDuplicates,Collapse duplicates,중복 묶기
+Viewport,NoUsableCamera,No usable active camera in the scene.,씬에 사용할 수 있는 활성 카메라가 없습니다.
