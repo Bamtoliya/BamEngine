@@ -18,7 +18,7 @@ namespace Engine
         Capsule
     };
 
-    STRUCT()
+    STRUCT(DISPLAY_NAME("STRUCT_BOX_2D"), CATEGORY("CATEGORY_PHYSICS"))
     struct Box2DShape
     {
 		REFLECT_BODY()
@@ -34,7 +34,7 @@ namespace Engine
         }
     };
 
-    STRUCT()
+    STRUCT(DISPLAY_NAME("STRUCT_CIRCLE_2D"), CATEGORY("CATEGORY_PHYSICS_2D"))
     struct Circle2DShape
     {
         REFLECT_BODY()
@@ -49,7 +49,7 @@ namespace Engine
         }
     };
 
-    STRUCT()
+    STRUCT(DISPLAY_NAME("STRUCT_CAPSULE_2D"), CATEGORY("CATEGORY_PHYSICS_2D"))
     struct Capsule2DShape
     {
         REFLECT_BODY()

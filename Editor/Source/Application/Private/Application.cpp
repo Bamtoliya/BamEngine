@@ -306,6 +306,8 @@ EResult Application::InitializeSystem()
         return EResult::Fail;
     if (!systemManager.AddSystem<TerrainSystem>())
         return EResult::Fail;
+	if (!systemManager.AddSystem<PhysicsSystem>())
+		return EResult::Fail;
     return EResult::Success;
 }
 EResult Application::InitializeImGui()
@@ -1181,15 +1183,20 @@ void Application::Run(int argc, char* argv[])
         ShaderHotReloadManager::Get().Update();
         AssetHotReloadManager::Get().Update();
 
-        // 기존: if (m_PlayState == EPlayState::Play)
         if (PIEManager::Get().IsPlaying())
         {
-            m_Runtime->FixedUpdate(dt);
+            while (timeManager.IsFixedUpdateReady())
+                m_Runtime->FixedUpdate(timeManager.GetFixedStep());
+
             m_Runtime->Update(dt, false);
             m_Runtime->LateUpdate(dt);
         }
         else
         {
+            while (timeManager.IsFixedUpdateReady())
+            {
+            }
+
             m_Runtime->LateUpdate(dt);
         }
 		m_Runtime->Render(dt);

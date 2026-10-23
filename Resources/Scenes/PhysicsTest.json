@@ -1,0 +1,236 @@
+{
+    "Scene": {
+        "Active": true,
+        "Entities": [
+            {
+                "Components": [
+                    {
+                        "Data": {
+                            "m_Offset": [0, 0],
+                            "m_Settings": {
+                                "CollisionLayer": 1,
+                                "CollisionMask": 4294967295,
+                                "Enabled": true,
+                                "Friction": 0.5,
+                                "IsTrigger": false,
+                                "Restitution": 0
+                            },
+                            "m_Shape": {
+                                "ShapeData": {
+                                    "Size": [1, 1]
+                                },
+                                "ShapeType": 0
+                            }
+                        },
+                        "Type": "Engine::Collider2DComponent"
+                    },
+                    {
+                        "Data": {
+                            "flags": 3
+                        },
+                        "Type": "Engine::FlagComponent"
+                    },
+                    {
+                        "Data": {
+                            "name": "Entity"
+                        },
+                        "Type": "Engine::NameComponent"
+                    },
+                    {
+                        "Data": {
+                            "AngularDamping": 0,
+                            "AngularVelocity": 0,
+                            "BodyType": 0,
+                            "FreezeRotation": false,
+                            "GravityScale": 1,
+                            "LinearDamping": 0,
+                            "LinearVelocity": [0, 0],
+                            "Mass": 1
+                        },
+                        "Type": "Engine::RigidBody2DComponent"
+                    },
+                    {
+                        "Data": {
+                            "castShadow": true,
+                            "materialHandle": {
+                                "AssetKey": "Resources/Material/GBufferMaterial.bammat.json",
+                                "AssetPath": "Resources/Material/GBufferMaterial.bammat.json",
+                                "Null": false
+                            },
+                            "meshHandle": {
+                                "AssetKey": "CubeMesh",
+                                "AssetPath": "CubeMesh",
+                                "Null": false
+                            }
+                        },
+                        "Type": "Engine::StaticMeshRendererComponent"
+                    },
+                    {
+                        "Data": {
+                            "absolute": 0,
+                            "eulerRotation": [0, 0, 0],
+                            "position": [0, 0, 0],
+                            "rotation": [0, 0, 0, 1],
+                            "scale": [1, 1, 1]
+                        },
+                        "Type": "Engine::TransformComponent"
+                    }
+                ],
+                "Hierarchy": {
+                    "Children": [],
+                    "Parent": 0
+                },
+                "Id": 2
+            },
+            {
+                "Components": [
+                    {
+                        "Data": {
+                            "m_Offset": [0, 0],
+                            "m_Settings": {
+                                "CollisionLayer": 1,
+                                "CollisionMask": 4294967295,
+                                "Enabled": true,
+                                "Friction": 0.5,
+                                "IsTrigger": false,
+                                "Restitution": 0
+                            },
+                            "m_Shape": {
+                                "ShapeData": {
+                                    "Size": [1, 1]
+                                },
+                                "ShapeType": 0
+                            }
+                        },
+                        "Type": "Engine::Collider2DComponent"
+                    },
+                    {
+                        "Data": {
+                            "flags": 3
+                        },
+                        "Type": "Engine::FlagComponent"
+                    },
+                    {
+                        "Data": {
+                            "name": "Entity"
+                        },
+                        "Type": "Engine::NameComponent"
+                    },
+                    {
+                        "Data": {
+                            "AngularDamping": 0,
+                            "AngularVelocity": 0,
+                            "BodyType": 0,
+                            "FreezeRotation": false,
+                            "GravityScale": 1,
+                            "LinearDamping": 0,
+                            "LinearVelocity": [0, 0],
+                            "Mass": 1
+                        },
+                        "Type": "Engine::RigidBody2DComponent"
+                    },
+                    {
+                        "Data": {
+                            "castShadow": true,
+                            "materialHandle": {
+                                "AssetKey": "Resources/Material/GBufferMaterial.bammat.json",
+                                "AssetPath": "Resources/Material/GBufferMaterial.bammat.json",
+                                "Null": false
+                            },
+                            "meshHandle": {
+                                "AssetKey": "CubeMesh",
+                                "AssetPath": "CubeMesh",
+                                "Null": false
+                            }
+                        },
+                        "Type": "Engine::StaticMeshRendererComponent"
+                    },
+                    {
+                        "Data": {
+                            "absolute": 0,
+                            "eulerRotation": [0, 0, 0],
+                            "position": [-4.075860023498535, 0, 0],
+                            "rotation": [0, 0, 0, 1],
+                            "scale": [1, 1, 1]
+                        },
+                        "Type": "Engine::TransformComponent"
+                    }
+                ],
+                "Hierarchy": {
+                    "Children": [],
+                    "Parent": 0
+                },
+                "Id": 3
+            },
+            {
+                "Components": [
+                    {
+                        "Data": {
+                            "m_Offset": [0, 0],
+                            "m_Settings": {
+                                "CollisionLayer": 1,
+                                "CollisionMask": 4294967295,
+                                "Enabled": true,
+                                "Friction": 0.5,
+                                "IsTrigger": false,
+                                "Restitution": 0
+                            },
+                            "m_Shape": {
+                                "ShapeData": {
+                                    "Size": [10, 1]
+                                },
+                                "ShapeType": 0
+                            }
+                        },
+                        "Type": "Engine::Collider2DComponent"
+                    },
+                    {
+                        "Data": {
+                            "flags": 3
+                        },
+                        "Type": "Engine::FlagComponent"
+                    },
+                    {
+                        "Data": {
+                            "name": "Floor"
+                        },
+                        "Type": "Engine::NameComponent"
+                    },
+                    {
+                        "Data": {
+                            "castShadow": true,
+                            "materialHandle": {
+                                "AssetKey": "Resources/Material/GBufferMaterial.bammat.json",
+                                "AssetPath": "Resources/Material/GBufferMaterial.bammat.json",
+                                "Null": false
+                            },
+                            "meshHandle": {
+                                "AssetKey": "CubeMesh",
+                                "AssetPath": "CubeMesh",
+                                "Null": false
+                            }
+                        },
+                        "Type": "Engine::StaticMeshRendererComponent"
+                    },
+                    {
+                        "Data": {
+                            "absolute": 0,
+                            "eulerRotation": [0, 0, 0],
+                            "position": [0, -1.5907553434371948, 0],
+                            "rotation": [0, 0, 0, 1],
+                            "scale": [1, 1, 1]
+                        },
+                        "Type": "Engine::TransformComponent"
+                    }
+                ],
+                "Hierarchy": {
+                    "Children": [],
+                    "Parent": 0
+                },
+                "Id": 4
+            }
+        ],
+        "Name": "Scene",
+        "Version": 1
+    }
+}

@@ -418,7 +418,6 @@ bool Collision::Raycast(const Ray& ray, const TerrainComponent& terrain, const m
 }
 #pragma endregion
 
-
 #pragma region Contains
 bool Collision::Contains(const Rect& rect, const vec2& point)
 {
@@ -454,31 +453,48 @@ bool Collision::Intersects(const Rect& a, const Rect& b)
 
 bool Collision::Intersects(const Rect& a, const Rect& b, HitResult& outHitResult)
 {
-	if (!Intersects(a, b))
-	{
-		outHitResult.Reset();
+	outHitResult.Reset();
+
+	const auto isValid = [](const Rect& rect)
+		{
+			return std::isfinite(rect.left) && std::isfinite(rect.top) &&
+				std::isfinite(rect.width) && std::isfinite(rect.height) &&
+				std::isfinite(rect.Right()) && std::isfinite(rect.Bottom()) &&
+				rect.width > 0.f && rect.height > 0.f;
+		};
+
+	if (!isValid(a) || !isValid(b) || !Intersects(a, b))
 		return false;
-	}
 
-	f32 xOverlap = glm::min(a.Right(), b.Right()) - glm::max(a.left, b.left);
-	f32 yOverlap = glm::min(a.Bottom(), b.Bottom()) - glm::max(a.top, b.top);
+	const f32 moveLeft = a.Right() - b.left;
+	const f32 moveRight = b.Right() - a.left;
+	const f32 moveDown = a.Bottom() - b.top;
+	const f32 moveUp = b.Bottom() - a.top;
 
-	outHitResult.hasHit = true;
-	vec2 aCenter = a.Center();
-	vec2 bCenter = b.Center();
-	if (xOverlap < yOverlap)
+	const f32 depthX = glm::min(moveLeft, moveRight);
+	const f32 depthY = glm::min(moveDown, moveUp);
+	if (!std::isfinite(depthX) || !std::isfinite(depthY))
+		return false;
+
+	const vec2 overlapMin(glm::max(a.left, b.left), glm::max(a.top, b.top));
+	const vec2 overlapMax(glm::min(a.Right(), b.Right()), glm::min(a.Bottom(), b.Bottom()));
+	const vec2 halfSize = (overlapMax - overlapMin) * 0.5f;
+
+	outHitResult.point = vec3(overlapMin + halfSize, 0.f);
+	outHitResult.extents = vec3(halfSize, 0.f);
+
+	if (depthX < depthY)
 	{
-		outHitResult.distance = xOverlap;
-		outHitResult.normal = (aCenter.x < bCenter.x) ? vec3(-1, 0, 0) : vec3(1, 0, 0);
-		outHitResult.point = vec3((aCenter.x + bCenter.x) * 0.5f, aCenter.y, 0);
+		outHitResult.denetrationDepth = depthX;
+		outHitResult.normal = moveLeft < moveRight ? vec3(-1.f, 0.f, 0.f) : vec3(1.f, 0.f, 0.f);
 	}
 	else
 	{
-		outHitResult.distance = yOverlap;
-		outHitResult.normal = (aCenter.y < bCenter.y) ? vec3(0, -1, 0) : vec3(0, 1, 0);
-		outHitResult.point = vec3(aCenter.x, (aCenter.y + bCenter.y) * 0.5f, 0);
+		outHitResult.denetrationDepth = depthY;
+		outHitResult.normal = moveDown < moveUp ? vec3(0.f, -1.f, 0.f) : vec3(0.f, 1.f, 0.f);
 	}
 
+	outHitResult.hasHit = true;
 	return true;
 }
 
@@ -711,4 +727,3 @@ bool Collision::Sweep(const BoundingSphere& sphere, const vec3& direction, f32 d
 	return false;
 }
 #pragma endregion
-
