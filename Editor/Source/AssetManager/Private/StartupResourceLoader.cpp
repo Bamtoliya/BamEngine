@@ -6,6 +6,8 @@
 #include <glaze/glaze.hpp>
 #include <fstream>
 #include <sstream>
+#include <string_view>
+#include <vector>
 
 namespace Editor::StartupConfig
 {
@@ -67,143 +69,163 @@ namespace Editor::StartupConfig
 		outContent = buffer.str();
 		return true;
 	}
+
+	static bool LoadFiles(const std::vector<std::string>& paths, std::string_view category)
+	{
+		bool success = true;
+		auto& resourceManager = Engine::ResourceManager::Get();
+
+		for (const auto& path : paths)
+		{
+			if (!resourceManager.LoadFile(std::filesystem::path(path).wstring()).IsValid())
+			{
+				EDITOR_LOG_ERROR("[StartupLoader] Failed to load {} resource: {}", category, path);
+				success = false;
+			}
+		}
+
+		return success;
+	}
+
+	template<typename T>
+	static bool ReadManifest(const std::filesystem::path& path, std::string_view category, T& manifest)
+	{
+		std::string content;
+		if (!ReadJsonFile(path, content))
+		{
+			EDITOR_LOG_ERROR("[StartupLoader] Failed to read {} manifest: {}", category, path.string());
+			return false;
+		}
+
+		if (glz::read_json(manifest, content))
+		{
+			EDITOR_LOG_ERROR("[StartupLoader] Failed to parse {} manifest: {}", category, path.string());
+			return false;
+		}
+
+		return true;
+	}
 }
 
 using namespace Editor::StartupConfig;
 
 bool Editor::StartupResourceLoader::LoadPipeline(const std::filesystem::path& manifestPath)
 {
-	std::string content;
-	if (!ReadJsonFile(manifestPath, content))
-	{
-		EDITOR_LOG_ERROR("[StartupLoader] Failed to open manifest: {}", manifestPath.string());
-		return false;
-	}
-
 	StartupManifestConfig manifest;
-	if (glz::read_json(manifest, content))
-	{
-		EDITOR_LOG_ERROR("[StartupLoader] Manifest JSON parse error: {}", manifestPath.string());
+	if (!ReadManifest(manifestPath, "pipeline", manifest))
 		return false;
-	}
 
 	EDITOR_LOG_INFO("[StartupLoader] Starting resource preload pipeline...");
 
+	bool success = true;
 	for (const auto& step : manifest.Pipeline)
 	{
-		std::filesystem::path configPath = step.Config;
+		const std::filesystem::path configPath = step.Config;
+		bool stepSuccess = false;
+
 		if (!std::filesystem::exists(configPath))
 		{
-			EDITOR_LOG_WARN("[StartupLoader] Config file not found for {}: {}", step.Category, step.Config);
+			EDITOR_LOG_ERROR("[StartupLoader] Config file not found for {}: {}", step.Category, step.Config);
+			success = false;
 			continue;
 		}
 
-		if (step.Category == "Textures") LoadTextures(configPath);
-		else if (step.Category == "Shaders") LoadShaders(configPath);
-		else if (step.Category == "Meshes") LoadMeshes(configPath);
-		else if (step.Category == "Materials") LoadMaterials(configPath);
-		else if (step.Category == "MaterialInstances") LoadMaterialInstances(configPath);
+		if (step.Category == "Textures") stepSuccess = LoadTextures(configPath);
+		else if (step.Category == "Shaders") stepSuccess = LoadShaders(configPath);
+		else if (step.Category == "Meshes") stepSuccess = LoadMeshes(configPath);
+		else if (step.Category == "Materials") stepSuccess = LoadMaterials(configPath);
+		else if (step.Category == "MaterialInstances") stepSuccess = LoadMaterialInstances(configPath);
+		else
+		{
+			EDITOR_LOG_ERROR("[StartupLoader] Unknown pipeline category: {}", step.Category);
+			success = false;
+			continue;
+		}
+
+		if (!stepSuccess)
+		{
+			EDITOR_LOG_ERROR("[StartupLoader] Pipeline step failed: category={}, config={}",
+				step.Category, step.Config);
+			success = false;
+		}
 	}
 
-	EDITOR_LOG_INFO("[StartupLoader] Preload pipeline completed successfully.");
-	return true;
+	if (success)
+		EDITOR_LOG_INFO("[StartupLoader] Preload pipeline completed successfully.");
+	else
+		EDITOR_LOG_ERROR("[StartupLoader] Resource preload pipeline failed.");
+
+	return success;
 }
 
 bool Editor::StartupResourceLoader::LoadTextures(const std::filesystem::path& configPath)
 {
-	std::string content;
-	if (!ReadJsonFile(configPath, content)) return false;
-
 	TextureManifestConfig manifest;
-	if (glz::read_json(manifest, content)) return false;
+	if (!ReadManifest(configPath, "Textures", manifest))
+		return false;
 
-	auto& rm = Engine::ResourceManager::Get();
-	for (const auto& pathStr : manifest.Textures)
-	{
-		rm.LoadFile(std::filesystem::path(pathStr).wstring());
-	}
-	return true;
+	return LoadFiles(manifest.Textures, "Textures");
 }
 
 bool Editor::StartupResourceLoader::LoadShaders(const std::filesystem::path& configPath)
 {
-	std::string content;
-	if (!ReadJsonFile(configPath, content)) return false;
-
 	ShaderManifestConfig manifest;
-	if (glz::read_json(manifest, content)) return false;
+	if (!ReadManifest(configPath, "Shaders", manifest))
+		return false;
 
 	const bool isSdlGpu = Engine::Renderer::IsCreated() &&
 		Engine::Renderer::Get().GetRHIType() == Engine::ERHIType::SDLGPU;
-
-	auto& rm = Engine::ResourceManager::Get();
+	auto& resourceManager = Engine::ResourceManager::Get();
+	bool success = true;
 
 	for (const auto& item : manifest.Shaders)
 	{
 		ShaderDesc desc = {};
 		desc.Key = std::filesystem::path(item.Key).wstring();
 
-		std::string pathStr = isSdlGpu ? item.SpirvPath : item.DxilPath;
-		if (pathStr.empty()) pathStr = item.DxilPath;
-		desc.Path = std::filesystem::path(pathStr).wstring();
-
+		std::string path = isSdlGpu ? item.SpirvPath : item.DxilPath;
+		if (path.empty()) path = item.DxilPath;
+		desc.Path = std::filesystem::path(path).wstring();
 		desc.shaderType = (item.Type == "Fragment" || item.Type == "Pixel")
 			? EShaderType::Fragment : EShaderType::Vertex;
-
 		desc.entryPoint = item.EntryPoint.empty() ? "main" : item.EntryPoint;
 		desc.numSamplers = item.Samplers;
 		desc.numStorageBuffers = item.StorageBuffers;
 		desc.numUniformBuffers = item.UniformBuffers;
 
-		rm.LoadResource<Engine::Shader>(&desc);
+		if (!resourceManager.LoadResource<Engine::Shader>(&desc))
+		{
+			EDITOR_LOG_ERROR("[StartupLoader] Failed to load shader: key={}, path={}", item.Key, path);
+			success = false;
+		}
 	}
-	return true;
+
+	return success;
 }
 
 bool Editor::StartupResourceLoader::LoadMeshes(const std::filesystem::path& configPath)
 {
-	std::string content;
-	if (!ReadJsonFile(configPath, content)) return false;
-
 	MeshManifestConfig manifest;
-	if (glz::read_json(manifest, content)) return false;
+	if (!ReadManifest(configPath, "Meshes", manifest))
+		return false;
 
-	auto& rm = Engine::ResourceManager::Get();
-	for (const auto& pathStr : manifest.Meshes)
-	{
-		rm.LoadFile(std::filesystem::path(pathStr).wstring());
-	}
-	return true;
+	return LoadFiles(manifest.Meshes, "Meshes");
 }
 
 bool Editor::StartupResourceLoader::LoadMaterials(const std::filesystem::path& configPath)
 {
-	std::string content;
-	if (!ReadJsonFile(configPath, content)) return false;
-
 	MaterialManifestConfig manifest;
-	if (glz::read_json(manifest, content)) return false;
+	if (!ReadManifest(configPath, "Materials", manifest))
+		return false;
 
-	auto& rm = Engine::ResourceManager::Get();
-	for (const auto& pathStr : manifest.Materials)
-	{
-		rm.LoadFile(std::filesystem::path(pathStr).wstring());
-	}
-	return true;
+	return LoadFiles(manifest.Materials, "Materials");
 }
 
 bool Editor::StartupResourceLoader::LoadMaterialInstances(const std::filesystem::path& configPath)
 {
-	std::string content;
-	if (!ReadJsonFile(configPath, content)) return false;
-
 	MaterialInstanceManifestConfig manifest;
-	if (glz::read_json(manifest, content)) return false;
+	if (!ReadManifest(configPath, "MaterialInstances", manifest))
+		return false;
 
-	auto& rm = Engine::ResourceManager::Get();
-	for (const auto& pathStr : manifest.MaterialInstances)
-	{
-		rm.LoadFile(std::filesystem::path(pathStr).wstring());
-	}
-	return true;
+	return LoadFiles(manifest.MaterialInstances, "MaterialInstances");
 }

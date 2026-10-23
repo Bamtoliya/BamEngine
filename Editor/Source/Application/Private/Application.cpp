@@ -53,7 +53,8 @@ EResult Application::Initialize(void* arg)
 
     ShortcutManager::Create();
     IntializeRenderer();
-    InitializeResources();
+    if (!InitializeResources())
+        return fail("InitializeResources", EResult::Fail);
 
     result = InitializeImGui();
     if (result != EResult::Success)
@@ -396,10 +397,10 @@ void Application::InitializeLocalization()
 #pragma endregion
 
 #pragma region Resources
-void Application::InitializeResources()
+bool Application::InitializeResources()
 {
     InitializeMeshes();
-    StartupResourceLoader::LoadPipeline(STARTUP_MANIFEST_PATH);
+    return StartupResourceLoader::LoadPipeline(STARTUP_MANIFEST_PATH);
 }
 
 void Application::InitializeFiles()

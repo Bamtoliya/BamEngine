@@ -42,7 +42,7 @@ private:
 
 #pragma region Test Prepare
 private:
-	void InitializeResources();
+	bool InitializeResources();
 	void InitializeFiles();
 	void InitializeShaders();
 	void InitializeMeshes();
