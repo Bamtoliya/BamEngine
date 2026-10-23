@@ -31,7 +31,7 @@ SpriteRenderSystem* SpriteRenderSystem::Create(void* arg)
 	return instance;
 }
 
-void SpriteRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*> activeScenes, f32 dt)
+void SpriteRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& activeScenes, f32 dt)
 {
     auto& renderer = Renderer::Get();
 

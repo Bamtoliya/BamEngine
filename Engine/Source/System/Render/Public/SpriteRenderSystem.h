@@ -13,6 +13,6 @@ public:
 	static SpriteRenderSystem* Create(void* arg = nullptr);
 	virtual void Free() override;
 public:
-	virtual void OnSubmit(entt::registry& registry, const vector<Scene*> activeScenes, f32 dt) override;
+	virtual void OnSubmit(entt::registry& registry, const vector<Scene*>& activeScenes, f32 dt) override;
 };
 END

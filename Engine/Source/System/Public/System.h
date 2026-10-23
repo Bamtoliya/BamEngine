@@ -12,11 +12,11 @@ public:
 	virtual void OnAwake() {}
 	virtual void OnInitialize() {}
 
-	virtual void OnUpdate(entt::registry& registry, const vector<Scene*> activeScenes, f32 dt) {}
-	virtual void OnFixedUpdate(entt::registry& registry, const vector<Scene*> activeScenes, f32 dt) {}
-	virtual void OnLateUpdate(entt::registry& registry, const vector<Scene*> activeScenes, f32 dt) {}
+	virtual void OnUpdate(entt::registry& registry, const vector<Scene*>& activeScenes, f32 dt) {}
+	virtual void OnFixedUpdate(entt::registry& registry, const vector<Scene*>& activeScenes, f32 dt) {}
+	virtual void OnLateUpdate(entt::registry& registry, const vector<Scene*>& activeScenes, f32 dt) {}
 
-	virtual void OnSubmit(entt::registry& registry, const vector<Scene*> activeScenes, f32 dt) {}
+	virtual void OnSubmit(entt::registry& registry, const vector<Scene*>& activeScenes, f32 dt) {}
 
 	virtual void OnDestroy() {}
 	virtual void OnFree() {}

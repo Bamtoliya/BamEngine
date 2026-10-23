@@ -27,7 +27,7 @@ class SpinSystem final : public Engine::ISystem
 public:
     static SpinSystem* Create() { return new SpinSystem(); }
 
-    void OnUpdate(entt::registry& globalRegistry, const std::vector<Engine::Scene*> activeScenes, f32 dt) override
+    void OnUpdate(entt::registry& globalRegistry, const std::vector<Scene*>& activeScenes, f32 dt) override
     {
         // 초당 회전 각도 (도 단위)
         constexpr f32 rotateSpeed = 60.0f;
@@ -75,7 +75,7 @@ namespace
 			}
 		}
 
-		void OnUpdate(entt::registry&, const std::vector<Scene*> activeScenes, f32 dt) override
+		void OnUpdate(entt::registry&, const std::vector<Scene*>& activeScenes, f32 dt) override
 		{
 			RefreshScene();
 			if (!m_Scene || m_Scene->IsPaused() || !std::isfinite(dt) || dt < 0.0f) return;
@@ -143,7 +143,7 @@ namespace
 			}
 		}
 
-		void OnLateUpdate(entt::registry&, const std::vector<Scene*>, f32) override
+		void OnLateUpdate(entt::registry&, const std::vector<Scene*>&, f32) override
 		{
 			RefreshScene();
 		}

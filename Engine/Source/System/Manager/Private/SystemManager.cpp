@@ -17,7 +17,7 @@ void SystemManager::Free()
 	}
 }
 
-void SystemManager::FixedUpdate(entt::registry& registry, const vector<Scene*> activeScenes, f32 dt)
+void SystemManager::FixedUpdate(entt::registry& registry, const vector<Scene*>& activeScenes, f32 dt)
 {
 	for (ISystem* system : m_Systems)
 	{
@@ -26,7 +26,7 @@ void SystemManager::FixedUpdate(entt::registry& registry, const vector<Scene*> a
 	}
 }
 
-void SystemManager::Update(entt::registry& registry, const vector<Scene*> activeScenes, f32 dt)
+void SystemManager::Update(entt::registry& registry, const vector<Scene*>& activeScenes, f32 dt)
 {
 	for (ISystem* system : m_Systems)
 	{
@@ -35,7 +35,7 @@ void SystemManager::Update(entt::registry& registry, const vector<Scene*> active
 	}
 }
 
-void SystemManager::LateUpdate(entt::registry& registry, const vector<Scene*> activeScenes, f32 dt)
+void SystemManager::LateUpdate(entt::registry& registry, const vector<Scene*>& activeScenes, f32 dt)
 {
 	for (ISystem* system : m_Systems)
 	{
@@ -44,7 +44,7 @@ void SystemManager::LateUpdate(entt::registry& registry, const vector<Scene*> ac
 	}
 }
 
-void SystemManager::Sumbit(entt::registry& registry, const vector<Scene*> activeScenes, f32 dt)
+void SystemManager::Sumbit(entt::registry& registry, const vector<Scene*>& activeScenes, f32 dt)
 {
 	for (ISystem* system : m_Systems)
 	{

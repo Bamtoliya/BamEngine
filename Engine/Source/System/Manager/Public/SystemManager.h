@@ -14,10 +14,10 @@ protected:
 public:
 	virtual void Free();
 public:
-	void FixedUpdate(entt::registry& registry, const vector<Scene*> activeScenes, f32 dt);
-	void Update(entt::registry& registry, const vector<Scene*> activeScenes, f32 dt);
-	void LateUpdate(entt::registry& registry, const vector<Scene*> activeScenes, f32 dt);
-	void Sumbit(entt::registry& registry, const vector<Scene*> activeScenes, f32 dt);
+	void FixedUpdate(entt::registry& registry, const vector<Scene*>& activeScenes, f32 dt);
+	void Update(entt::registry& registry, const vector<Scene*>& activeScenes, f32 dt);
+	void LateUpdate(entt::registry& registry, const vector<Scene*>& activeScenes, f32 dt);
+	void Sumbit(entt::registry& registry, const vector<Scene*>& activeScenes, f32 dt);
 public:
 	template<typename T, typename... Args>
 	T* AddSystem(Args&&... args);

@@ -83,7 +83,7 @@ void LightSystem::Free()
 {
 }
 
-void LightSystem::OnLateUpdate(entt::registry& globalRegistry, const vector<Scene*> activeScenes, f32 dt)
+void LightSystem::OnLateUpdate(entt::registry& globalRegistry, const vector<Scene*>& activeScenes, f32 dt)
 {
 	UpdateLights(globalRegistry);
 

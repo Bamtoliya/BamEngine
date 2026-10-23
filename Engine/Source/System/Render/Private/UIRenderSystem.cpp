@@ -1,4 +1,4 @@
-#include "UIRenderSystem.h"
+﻿#include "UIRenderSystem.h"
 #include "UILayout.h"
 #include "UIEventSystem.h"
 #include "Renderer.h"
@@ -10,7 +10,7 @@
 #include <cmath>
 #include <unordered_set>
 
-void Engine::UIRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*> activeScenes, f32 dt)
+void Engine::UIRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& activeScenes, f32 dt)
 {
     auto& renderer = Renderer::Get();
     std::unordered_set<RenderPassID> submitted;

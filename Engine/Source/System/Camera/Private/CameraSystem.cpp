@@ -70,7 +70,7 @@ void CameraSystem::Free()
 {
 }
 
-void CameraSystem::OnLateUpdate(entt::registry& globalRegistry, const vector<Scene*> activeScenes, f32 dt)
+void CameraSystem::OnLateUpdate(entt::registry& globalRegistry, const vector<Scene*>& activeScenes, f32 dt)
 {
 	UpdateCameras(globalRegistry);
 

@@ -15,8 +15,8 @@ public:
 	virtual void Free() override;
 
 public:
-	virtual void OnUpdate(entt::registry& registry, const vector<Scene*> activeScenes, f32 dt) override;
-	virtual void OnSubmit(entt::registry& registry, const vector<Scene*> activeScenes, f32 dt) override;
+	virtual void OnUpdate(entt::registry& registry, const vector<Scene*>& activeScenes, f32 dt) override;
+	virtual void OnSubmit(entt::registry& registry, const vector<Scene*>& activeScenes, f32 dt) override;
 
 private:
 	void EnsureTerrainResources(class Scene* scene, entt::entity entity, struct TerrainComponent& terrain);

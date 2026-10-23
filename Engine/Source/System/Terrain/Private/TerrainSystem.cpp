@@ -195,7 +195,7 @@ void TerrainSystem::UpdateTerrainHeightmap(TerrainComponent& terrain)
 	}
 }
 
-void TerrainSystem::OnUpdate(entt::registry& registry, const vector<Scene*> activeScenes, f32 dt)
+void TerrainSystem::OnUpdate(entt::registry& registry, const vector<Scene*>& activeScenes, f32 dt)
 {
 	(void)registry;
 	(void)dt;
@@ -211,7 +211,7 @@ void TerrainSystem::OnUpdate(entt::registry& registry, const vector<Scene*> acti
 	}
 }
 
-void TerrainSystem::OnSubmit(entt::registry& registry, const vector<Scene*> activeScenes, f32 dt)
+void TerrainSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& activeScenes, f32 dt)
 {
 	(void)registry;
 	(void)dt;

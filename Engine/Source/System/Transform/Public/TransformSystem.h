@@ -16,7 +16,7 @@ public:
 	static TransformSystem* Create(void* arg = nullptr);
 	virtual void Free() override;
 public:
-	virtual void OnLateUpdate(entt::registry& globalRegistry, const vector<Scene*> activeScenes, f32 dt) override;
+	virtual void OnLateUpdate(entt::registry& globalRegistry, const vector<Scene*>& activeScenes, f32 dt) override;
 	// Commits synchronized components and world caches only after the complete graph succeeds.
 	static bool UpdateHierarchy(entt::registry& registry);
 	static bool TryGetWorldMatrix(const entt::registry& registry, entt::entity entity, glm::mat4& matrix);

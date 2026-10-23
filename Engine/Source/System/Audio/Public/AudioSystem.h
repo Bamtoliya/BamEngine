@@ -16,7 +16,7 @@ public:
 	virtual void Free() override;
 
 public:
-	void OnLateUpdate(entt::registry& globalRegistry, const vector<Scene*> activeScenes, f32 dt) override;
+	void OnLateUpdate(entt::registry& globalRegistry, const vector<Scene*>& activeScenes, f32 dt) override;
 
 private:
 	static void UpdateListeners(entt::registry& registry);

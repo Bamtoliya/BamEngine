@@ -82,7 +82,7 @@ TransformSystem* TransformSystem::Create(void* arg)
 }
 
 
-void TransformSystem::OnLateUpdate(entt::registry& globalRegistry, const vector<Scene*> activeScenes, f32)
+void TransformSystem::OnLateUpdate(entt::registry& globalRegistry, const vector<Scene*>& activeScenes, f32)
 {
     if (!UpdateHierarchy(globalRegistry)) ENGINE_LOG_WARN("Global transform update rejected.");
     for (Scene* scene : activeScenes)

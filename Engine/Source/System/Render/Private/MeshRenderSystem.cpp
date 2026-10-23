@@ -31,7 +31,7 @@ MeshRenderSystem* MeshRenderSystem::Create(void* arg)
 	return instance;
 }
 
-void MeshRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*> activeScenes, f32 dt)
+void MeshRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& activeScenes, f32 dt)
 {
     auto& renderer = Renderer::Get();
     vector<RenderPass*> targetPasses;

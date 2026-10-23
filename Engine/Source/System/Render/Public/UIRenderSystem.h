@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "System.h"
 
@@ -8,6 +8,6 @@ namespace Engine
     {
     public:
         static UIRenderSystem* Create(void* arg = nullptr) { return new UIRenderSystem(); }
-        void OnSubmit(entt::registry& registry, const vector<Scene*> activeScenes, f32 dt) override;
+        void OnSubmit(entt::registry& registry, const vector<Scene*>& activeScenes, f32 dt) override;
     };
 }

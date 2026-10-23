@@ -27,7 +27,7 @@ void AudioSystem::Free()
 {
 }
 
-void AudioSystem::OnLateUpdate(entt::registry& globalRegistry, const vector<Scene*> activeScenes, f32 dt)
+void AudioSystem::OnLateUpdate(entt::registry& globalRegistry, const vector<Scene*>& activeScenes, f32 dt)
 {
 	UpdateListeners(globalRegistry);
 	UpdateSources(globalRegistry);

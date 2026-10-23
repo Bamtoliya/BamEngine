@@ -22,6 +22,6 @@ PhysicsSystem* PhysicsSystem::Create(void* arg)
 	return instance;
 }
 
-void PhysicsSystem::OnFixedUpdate(entt::registry& registry, const vector<Scene*> activeScenes, f32 dt)
+void PhysicsSystem::OnFixedUpdate(entt::registry& registry, const vector<Scene*>& activeScenes, f32 dt)
 {
 }
