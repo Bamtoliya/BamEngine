@@ -7,6 +7,7 @@
 #include "Components/Core/FlagComponent.h"
 #include "CameraSystem.h"
 #include "PIEManager.h"
+#include "LocalizationManager.h"
 
 void GameViewportPanel::Initialize(void* arg)
 {
@@ -34,19 +35,14 @@ void GameViewportPanel::Update(f32 dt)
 {
 	CalculateRenderResolution(m_PanelWidth, m_PanelHeight);
 
-	// 1. 씬 내의 인게임 메인 카메라(IsMainCamera) 탐색
 	const auto cameraBuffer = FindActiveGameCameraBuffer();
 	m_HasActiveCamera = cameraBuffer.has_value();
+	if (!m_HasActiveCamera) return;
 
-	// 2. 인게임 카메라가 존재하면 전용 파이프라인으로 디퍼드 렌더링 제출
-	if (m_HasActiveCamera)
-	{
-		Engine::Scene* activeScene = Engine::SceneManager::Get().GetCurrentScene();
-		m_Pipeline.Submit(*cameraBuffer, activeScene);
-		m_DisplayRTName = m_Pipeline.GetFinalColorRTName();
-	}
+	Engine::Scene* activeScene = Engine::SceneManager::Get().GetCurrentScene();
+	m_Pipeline.Submit(*cameraBuffer, activeScene);
+	m_DisplayRTName = m_Pipeline.GetFinalColorRTName();
 
-	// 3. 채널 뷰 필터 (RGBA 외 채널 확인 시)
 	if (m_ChannelView != EViewportChannelView::RGBA)
 	{
 		m_ChannelFilter.SetChannelView(m_ChannelView);
@@ -64,16 +60,14 @@ void GameViewportPanel::DrawCustomViewport()
 	if (m_HasActiveCamera)
 	{
 		DrawRenderTargetImage(m_DisplayRTName);
+		return;
 	}
-	else
-	{
-		// 씬에 활성화된 메인 카메라가 없을 때 안내 표시
-		ImVec2 avail = ImGui::GetContentRegionAvail();
-		const char* noCamText = "No active [CameraComponent] with [IsMainCamera] in Scene";
-		ImVec2 textSize = ImGui::CalcTextSize(noCamText);
-		ImGui::SetCursorPos(ImVec2((avail.x - textSize.x) * 0.5f, (avail.y - textSize.y) * 0.5f));
-		ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "%s", noCamText);
-	}
+
+	const auto noCamText = LOCAL("Viewport.NoUsableCamera");
+	const ImVec2 avail = ImGui::GetContentRegionAvail();
+	const ImVec2 textSize = ImGui::CalcTextSize(noCamText.c_str());
+	ImGui::SetCursorPos(ImVec2((avail.x - textSize.x) * 0.5f, (avail.y - textSize.y) * 0.5f));
+	ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "%s", noCamText.c_str());
 }
 
 void GameViewportPanel::DrawCustomOptions()
@@ -85,35 +79,46 @@ void GameViewportPanel::DrawCustomOptions()
 
 std::optional<CameraBuffer> GameViewportPanel::FindActiveGameCameraBuffer()
 {
+	if (m_RenderWidth == 0 || m_RenderHeight == 0)
+		return std::nullopt;
+
 	Engine::Scene* activeScene = Engine::SceneManager::Get().GetCurrentScene();
 	if (!activeScene) return std::nullopt;
 
+	activeScene->UpdateHierarchyFlags();
+
 	auto& registry = activeScene->GetRegistry();
 	auto view = registry.view<Engine::CameraComponent, Engine::WorldTransformComponent, Engine::FlagComponent>();
+	const f32 aspectRatio = static_cast<f32>(m_RenderWidth) / static_cast<f32>(m_RenderHeight);
 
-	Engine::CameraComponent* targetCamera = nullptr;
-	for (auto entity : view)
+	// 메인 카메라를 먼저 검사하고, 실패하면 일반 카메라를 검사합니다.
+	for (int pass = 0; pass < 2; ++pass)
 	{
-		const auto& flag = view.get<Engine::FlagComponent>(entity);
-		if (!Engine::HasFlag(flag.flags, Engine::EEntityFlag::Active)) continue;
+		const bool requireMainCamera = pass == 0;
 
-		auto& cam = view.get<Engine::CameraComponent>(entity);
-		if (cam.IsMainCamera)
+		for (const auto entity : view)
 		{
-			targetCamera = &cam;
-			break;
+			auto& camera = view.get<Engine::CameraComponent>(entity);
+			if (camera.IsMainCamera != requireMainCamera)
+				continue;
+
+			const auto& flag = view.get<Engine::FlagComponent>(entity);
+			if (!flag.IsActiveInHierarchy() ||
+				Engine::HasFlag(flag.effectiveFlags, Engine::EEntityFlag::Dead))
+				continue;
+
+			const f32 previousAspectRatio = camera.AspectRatio;
+			camera.AspectRatio = aspectRatio;
+
+			if (!Engine::CameraSystem::UpdateCamera(registry, entity))
+			{
+				camera.AspectRatio = previousAspectRatio;
+				continue;
+			}
+
+			return camera.GetCameraBuffer();
 		}
-		if (!targetCamera) targetCamera = &cam; // 메인 지정이 없으면 첫 번째 활성 카메라 사용
 	}
 
-	if (!targetCamera) return std::nullopt;
-
-	// GameView 해상도 종횡비에 맞게 카메라 버퍼 갱신
-	if (m_RenderHeight > 0)
-	{
-		targetCamera->AspectRatio = static_cast<f32>(m_RenderWidth) / static_cast<f32>(m_RenderHeight);
-		Engine::CameraSystem::UpdateCameras(registry);
-	}
-
-	return targetCamera->GetCameraBuffer();
+	return std::nullopt;
 }

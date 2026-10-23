@@ -9,6 +9,8 @@
 #include "ModuleManager.h"
 #include "SceneManager.h"
 #include "Components/Render/CameraComponent.h"
+#include "Components/Core/FlagComponent.h"
+#include <optional>
 
 BEGIN(Client)
 
@@ -235,18 +237,30 @@ private:
         if (!currentScene) return;
 
         auto& registry = currentScene->GetRegistry();
-        auto cameraView = registry.view<CameraComponent>();
+        auto cameraView = registry.view<CameraComponent, FlagComponent>();
+        std::optional<CameraBuffer> selectedBuffer;
 
         for (auto entity : cameraView)
         {
-            const std::optional<CameraBuffer> optBuffer = cameraView.get<CameraComponent>(entity).GetCameraBuffer();
-            if (!optBuffer.has_value())
+            const auto& flag = cameraView.get<FlagComponent>(entity);
+            if (!flag.IsActiveInHierarchy() || HasFlag(flag.effectiveFlags, EEntityFlag::Dead))
                 continue;
-            CameraBuffer cameraBuffer = optBuffer.value();
-            cameraBuffer.time = static_cast<f32>(TimeManager::Get().GetTotalTime());
-            Renderer::Get().RegisterViewportCamera(cameraBuffer, renderPass);
-            return;
+
+            const auto& camera = cameraView.get<CameraComponent>(entity);
+            const auto buffer = camera.GetCameraBuffer();
+            if (!buffer) continue;
+
+            if (!selectedBuffer || camera.IsMainCamera)
+                selectedBuffer = buffer;
+
+            if (camera.IsMainCamera)
+                break;
         }
+
+        if (!selectedBuffer) return;
+
+        selectedBuffer->time = static_cast<f32>(TimeManager::Get().GetTotalTime());
+        Renderer::Get().RegisterViewportCamera(*selectedBuffer, renderPass);
     }
 
 private:
