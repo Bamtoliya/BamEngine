@@ -10,7 +10,7 @@ namespace Engine
 	class MaterialInterface;
 
 	ENUM()
-	enum ESpriteDrawMode
+	enum class ESpriteDrawMode
 	{
 		Simple,
 		Sliced,
