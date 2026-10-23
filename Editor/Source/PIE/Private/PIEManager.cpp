@@ -42,19 +42,19 @@ void PIEManager::Resume()
 void PIEManager::Stop()
 {
     if (m_State == EPlayState::Edit) return;
-    // 0. 플레이 중이던 모든 런타임 사운드 채널 즉시 정지
+
     Engine::AudioManager::Get().StopAllSounds();
-    m_State = EPlayState::Edit;
-    // 1. 선택 해제
     SelectionManager::Get().ClearSelection(true);
-    // 2. 스냅샷으로부터 씬 복원
+
     const EResult restoreResult = RestoreScene();
     if (restoreResult != EResult::Success)
     {
-        EDITOR_LOG_WARN("[PIE] Stopped without restoring scene: {}", ResultToString(restoreResult));
+        EDITOR_LOG_WARN("[PIE] Stop aborted; PIE state is unchanged. Scene restore failed: {}",
+            ResultToString(restoreResult));
         return;
     }
-    // 3. 에디트 히스토리(Undo/Redo) 초기화
+
+    m_State = EPlayState::Edit;
     Application::Get().GetEditHistory().Clear();
     EDITOR_LOG_INFO("[PIE] Stopped — scene restored");
 }
@@ -77,9 +77,16 @@ EResult PIEManager::RestoreScene()
 
     archive::JsonArchive ar;
     const EResult result = SceneManager::Get().LoadScene(ar, m_SnapshotPath);
+    if (result != EResult::Success)
+        return result;
 
-    // 복원 후 사용 완료된 임시 스냅샷 파일 삭제
     std::error_code ec;
     std::filesystem::remove(m_SnapshotPath, ec);
-    return result;
+    if (ec)
+    {
+        EDITOR_LOG_WARN("[PIE] Scene restored, but snapshot cleanup failed: {} ({})",
+            WStrToStr(m_SnapshotPath), ec.message());
+    }
+
+    return EResult::Success;
 }

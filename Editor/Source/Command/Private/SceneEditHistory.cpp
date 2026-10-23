@@ -8,6 +8,7 @@
 #include "ReflectionEditState.h"
 #include <unordered_set>
 #include <exception>
+#include <unordered_map>
 
 struct Editor::SceneEditSnapshot::Data
 {
@@ -112,10 +113,20 @@ Editor::SceneEditSnapshot Editor::SceneEditSnapshot::CaptureImpl(Engine::Scene& 
     {
         std::unordered_map<uint64, const Data::Row*> rows;
         for (const auto& row : data->Rows) rows.emplace(row.Id, &row);
+        std::unordered_map<uint64, std::size_t> parentReferences;
+        parentReferences.reserve(rows.size());
         for (const auto& row : data->Rows)
         {
-            if (row.Parent && (!rows.contains(row.Parent) ||
-                std::count(rows.at(row.Parent)->Children.begin(), rows.at(row.Parent)->Children.end(), row.Id) != 1))
+            for (const uint64 child : row.Children)
+            {
+                const auto found = rows.find(child);
+                if (found != rows.end() && found->second->Parent == row.Id)
+                    ++parentReferences[child];
+            }
+        }
+        for (const auto& row : data->Rows)
+        {
+            if (row.Parent && (!rows.contains(row.Parent) || parentReferences[row.Id] != 1))
                 return {};
             std::unordered_set<uint64> children, ancestors;
             for (const auto child : row.Children)
@@ -154,11 +165,27 @@ bool Editor::SceneEditSnapshot::MatchesStructure() const
             }
         if (ids.size() != m_Data->Rows.size() || scene.GetName() != m_Data->Name) return false;
     }
+
+    std::unordered_map<uint64, entt::entity> entitiesById;
+    entitiesById.reserve(m_Data->Rows.size());
+
+    for (const auto& row : m_Data->Rows)
+        entitiesById.emplace(row.Id, entt::entity(entt::null));
+
+    for (auto [handle, idComponent] : world.view<const Engine::IDComponent>().each())
+    {
+        if (idComponent.id == 0) continue;
+
+        auto found = entitiesById.find(idComponent.id);
+        if (found != entitiesById.end() && found->second == entt::null && scene.FindEntity(handle))
+            found->second = handle;
+    }
+
     for (const auto& row : m_Data->Rows)
     {
-        const auto* wrapper = scene.FindEntityById(row.Id);
-        if (!wrapper) return false;
-        const auto entity = wrapper->GetEntityHandle();
+        const auto found = entitiesById.find(row.Id);
+        if (found == entitiesById.end() || found->second == entt::null) return false;
+        const auto entity = found->second;
         for (const auto& entry : registry.GetComponentEntries())
         {
             if (!entry.MatchesStorage(world)) return false;
@@ -244,10 +271,21 @@ bool Editor::SceneEditSnapshot::Restore() const
         }
     }
     // Validate the complete resulting graph before any mutation or recursive transform update.
+    std::unordered_map<uint64, std::size_t> parentReferences;
+    parentReferences.reserve(graph.size());
     for (const auto& [id, link] : graph)
     {
-        if (link.Parent && (!graph.contains(link.Parent) ||
-            std::count(graph.at(link.Parent).Children.begin(), graph.at(link.Parent).Children.end(), id) != 1))
+        for (const uint64 child : link.Children)
+        {
+            const auto found = graph.find(child);
+            if (found != graph.end() && found->second.Parent == id)
+                ++parentReferences[child];
+        }
+    }
+
+    for (const auto& [id, link] : graph)
+    {
+        if (link.Parent && (!graph.contains(link.Parent) || parentReferences[id] != 1))
             return false;
         std::unordered_set<uint64> children, ancestors;
         for (const auto child : link.Children)

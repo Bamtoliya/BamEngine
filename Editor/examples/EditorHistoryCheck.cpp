@@ -1,4 +1,4 @@
-#include "SceneEditHistory.h"
+﻿#include "SceneEditHistory.h"
 #include "Scene.h"
 #include "CoreComponents.h"
 #include "RenderComponents.h"
@@ -268,6 +268,33 @@ namespace
         Check(history.Redo() && world.all_of<Engine::UIButtonComponent>(
             scene->FindEntityById(buttonId)->GetEntityHandle()), "button redo");
     }
+    void DuplicateHierarchyRejection()
+    {
+        ScenePtr scene(Engine::Scene::Create());
+        auto& parent = Add(*scene, L"parent");
+        auto& child = Add(*scene, L"child");
+        auto& other = Add(*scene, L"other");
+        auto& world = scene->GetRegistry();
+        const auto p = parent.GetEntityHandle(), c = child.GetEntityHandle(), o = other.GetEntityHandle();
+
+        Check(scene->ReparentEntity(child, &parent) == Engine::EntityReparentResult::Success, "parent setup");
+
+        const std::array targets{ o };
+        const auto snapshot = Editor::SceneEditSnapshot::Capture(*scene, targets);
+        Check(bool(snapshot), "snapshot setup");
+
+        world.get<Engine::NameComponent>(o).name = L"edited";
+        world.get<Engine::HierarchyComponent>(p).children.push_back(c);
+
+        Check(!Editor::SceneEditSnapshot::Capture(*scene), "duplicate child accepted during capture");
+        Check(!snapshot.Restore() && world.get<Engine::NameComponent>(o).name == L"edited" &&
+            world.get<Engine::HierarchyComponent>(p).children == std::vector{ c, c },
+            "rejected restore changed the scene");
+
+        world.get<Engine::HierarchyComponent>(p).children.pop_back();
+        Check(snapshot.Restore() && world.get<Engine::NameComponent>(o).name == L"other",
+            "valid hierarchy restore failed");
+    }
 }
 int main()
 {
@@ -277,6 +304,7 @@ int main()
         HistoryOwnership();
         ComponentAndGesture();
         StructureAndIdentity();
+        DuplicateHierarchyRejection();
         FailureAndLifetime();
         ReferencesAndUI();
         Engine::ReflectionRegistry::Destroy();
