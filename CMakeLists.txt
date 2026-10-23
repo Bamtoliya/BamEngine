@@ -32,6 +32,7 @@ endif()
 
 add_subdirectory(Engine)
 
+add_subdirectory(Tools/ModelConverter)
 add_subdirectory(Tools/TextureConverter)
 
 add_subdirectory(Editor)
