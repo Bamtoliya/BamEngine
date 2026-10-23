@@ -223,8 +223,9 @@ void MaterialPreviewRenderer::DrawUI(Engine::MaterialInterface* material)
 	// 3. 마우스 & 키보드 카메라 조작
 	if (ImGui::IsItemHovered())
 	{
-		ImGuiIO& io = ImGui::GetIO();
-		ImVec2 delta = io.MouseDelta;
+		auto& input = Engine::InputManager::Get();
+		const Engine::vec2 delta = input.GetMouseDelta();
+		const bool wantTextInput = ImGui::GetIO().WantTextInput;
 
 		vec3 offset;
 		offset.x = m_Distance * cosf(m_Pitch) * sinf(m_Yaw);
@@ -237,47 +238,45 @@ void MaterialPreviewRenderer::DrawUI(Engine::MaterialInterface* material)
 		vec3 right = glm::normalize(glm::cross(vec3(0.0f, 1.0f, 0.0f), fwd));
 		vec3 up = vec3(0.0f, 1.0f, 0.0f);
 
-		if (ImGui::IsMouseDragging(ImGuiMouseButton_Left))
+		if (input.IsMouseButtonDragging(Engine::EMouseButton::Left))
 		{
 			m_AutoRotate = false;
 			m_Yaw += delta.x * 0.015f;
 			m_Pitch = glm::clamp(m_Pitch - delta.y * 0.015f, -1.5f, 1.5f);
 		}
 
-		if (ImGui::IsMouseDragging(ImGuiMouseButton_Right))
+		if (input.IsMouseButtonDragging(Engine::EMouseButton::Right))
 		{
 			m_AutoRotate = false;
 			m_Yaw += delta.x * 0.015f;
 			m_Pitch = glm::clamp(m_Pitch - delta.y * 0.015f, -1.5f, 1.5f);
 		}
 
-		if (ImGui::IsMouseDown(ImGuiMouseButton_Right))
+		if (input.IsMouseButtonPressed(Engine::EMouseButton::Right) && !wantTextInput)
 		{
-			float dt = io.DeltaTime;
-			float moveDist = m_MoveSpeed * dt;
+			const float moveDist = m_MoveSpeed * ImGui::GetIO().DeltaTime;
 
-			if (ImGui::IsKeyDown(ImGuiKey_W)) m_Target += fwd * moveDist;
-			if (ImGui::IsKeyDown(ImGuiKey_S)) m_Target -= fwd * moveDist;
-			if (ImGui::IsKeyDown(ImGuiKey_D)) m_Target += right * moveDist;
-			if (ImGui::IsKeyDown(ImGuiKey_A)) m_Target -= right * moveDist;
-			if (ImGui::IsKeyDown(ImGuiKey_E)) m_Target += up * moveDist;
-			if (ImGui::IsKeyDown(ImGuiKey_Q)) m_Target -= up * moveDist;
+			if (input.IsKeyButtonPressed(Engine::EKeyCode::W)) m_Target += fwd * moveDist;
+			if (input.IsKeyButtonPressed(Engine::EKeyCode::S)) m_Target -= fwd * moveDist;
+			if (input.IsKeyButtonPressed(Engine::EKeyCode::D)) m_Target += right * moveDist;
+			if (input.IsKeyButtonPressed(Engine::EKeyCode::A)) m_Target -= right * moveDist;
+			if (input.IsKeyButtonPressed(Engine::EKeyCode::E)) m_Target += up * moveDist;
+			if (input.IsKeyButtonPressed(Engine::EKeyCode::Q)) m_Target -= up * moveDist;
 		}
 
-		if (ImGui::IsMouseDragging(ImGuiMouseButton_Middle) || (io.KeyShift && ImGui::IsMouseDragging(ImGuiMouseButton_Left)))
+		if (input.IsMouseButtonDragging(Engine::EMouseButton::Middle) ||
+			(input.IsShiftPressed() && input.IsMouseButtonDragging(Engine::EMouseButton::Left)))
 		{
 			m_AutoRotate = false;
-			float panSpeed = m_Distance * 0.0025f;
+			const float panSpeed = m_Distance * 0.0025f;
 			m_Target -= right * (delta.x * panSpeed);
 			m_Target += up * (delta.y * panSpeed);
 		}
 
-		if (io.MouseWheel != 0.0f)
-		{
-			m_Distance = glm::clamp(m_Distance - io.MouseWheel * 0.25f, 0.5f, 15.0f);
-		}
+		if (input.GetMouseScrollDeltaY() != 0.0f)
+			m_Distance = glm::clamp(m_Distance - input.GetMouseScrollDeltaY() * 0.25f, 0.5f, 15.0f);
 
-		if (ImGui::IsKeyPressed(ImGuiKey_F))
+		if (!wantTextInput && input.IsKeyButtonDown(Engine::EKeyCode::F))
 		{
 			m_Target = vec3(0.0f);
 			m_Distance = 3.5f;
