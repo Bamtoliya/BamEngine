@@ -4,6 +4,7 @@
 #include "CoreComponents.h"
 #include "Adapters/GlmArchiveAdapter.h"
 #include <limits>
+#include <unordered_set>
 
 #pragma region Constructor&Destructor
 EResult Scene::Initialize(void* arg)
@@ -56,15 +57,66 @@ void Scene::LateUpdate(f32 dt)
 #pragma region Entity Management
 Entity& Scene::CreateEntity()
 {
-	while (FindEntityById(m_NextEntityId) != nullptr)
-		m_NextEntityId = m_NextEntityId == (std::numeric_limits<uint64>::max)() ? 1 : m_NextEntityId + 1;
-	const uint64 id = m_NextEntityId;
+	if (FindEntityById(m_NextEntityId) != nullptr)
+	{
+		std::unordered_set<uint64> occupiedIds;
+		occupiedIds.reserve(m_EntityMap.size());
+
+		for (auto [handle, idComponent] : m_LocalRegistry.view<const IDComponent>().each())
+		{
+			if (m_EntityMap.contains(handle))
+				occupiedIds.insert(idComponent.id);
+		}
+
+		do
+		{
+			m_NextEntityId = m_NextEntityId == (std::numeric_limits<uint64>::max)() ?
+				1 : m_NextEntityId + 1;
+		} while (occupiedIds.contains(m_NextEntityId));
+	}
+
+	return CreateEntityWithId(m_NextEntityId);
+}
+Entity& Scene::CreateEntityWithId(uint64 id)
+{
 	m_NextEntityId = id == (std::numeric_limits<uint64>::max)() ? 1 : id + 1;
-	entt::entity entityHandle = m_LocalRegistry.create();
+
+	const entt::entity entityHandle = m_LocalRegistry.create();
 	m_LocalRegistry.emplace<IDComponent>(entityHandle, id);
 	Entity* entity = Entity::Create(entityHandle, this);
 	m_EntityMap[entityHandle] = entity;
 	return *entity;
+}
+
+std::vector<entt::entity> Scene::CreateEntities(std::size_t count)
+{
+	std::vector<entt::entity> created;
+	if (count == 0) return created;
+	created.reserve(count);
+
+	std::unordered_set<uint64> occupiedIds;
+	occupiedIds.reserve(m_EntityMap.size());
+
+	for (auto [handle, idComponent] : m_LocalRegistry.view<const IDComponent>().each())
+	{
+		if (m_EntityMap.contains(handle))
+			occupiedIds.insert(idComponent.id);
+	}
+
+	for (std::size_t i = 0; i < count; ++i)
+	{
+		while (occupiedIds.contains(m_NextEntityId))
+		{
+			m_NextEntityId = m_NextEntityId == (std::numeric_limits<uint64>::max)() ?
+				1 : m_NextEntityId + 1;
+		}
+
+		const uint64 id = m_NextEntityId;
+		occupiedIds.insert(id);
+		created.push_back(CreateEntityWithId(id).GetEntityHandle());
+	}
+
+	return created;
 }
 Entity* Scene::FindEntity(entt::entity handle)
 {
@@ -78,13 +130,18 @@ Entity* Scene::FindEntity(entt::entity handle)
 bool Scene::DestroyEntity(Entity& entity)
 {
 	if (entity.GetScene() != this || FindEntity(entity.GetEntityHandle()) != &entity) return false;
+
 	std::vector<entt::entity> pending{ entity.GetEntityHandle() }, removal;
+	std::unordered_set<entt::entity> removalSet;
+
 	while (!pending.empty())
 	{
 		const auto current = pending.back();
 		pending.pop_back();
-		if (!FindEntity(current) || std::ranges::find(removal, current) != removal.end()) return false;
+
+		if (!FindEntity(current) || !removalSet.insert(current).second) return false;
 		removal.push_back(current);
+
 		if (const auto* link = m_LocalRegistry.try_get<HierarchyComponent>(current))
 		{
 			for (const auto child : link->children)
@@ -96,11 +153,13 @@ bool Scene::DestroyEntity(Entity& entity)
 			}
 		}
 	}
+
 	for (auto [other, link] : m_LocalRegistry.view<HierarchyComponent>().each())
 	{
-		if (std::ranges::find(removal, other) != removal.end()) continue;
-		if (std::ranges::find(removal, link.parent) != removal.end()) return false;
+		if (removalSet.contains(other)) continue;
+		if (removalSet.contains(link.parent)) return false;
 	}
+
 	std::vector<std::pair<const reflection::PropertyInfo*, reflection::ObjectView>> references;
 	if (ReflectionRegistry::IsCreated())
 		for (const auto& entry : ReflectionRegistry::Get().GetComponentEntries())
@@ -108,23 +167,26 @@ bool Scene::DestroyEntity(Entity& entity)
 			if (!entry.ReflectionType || !entry.MatchesStorage(m_LocalRegistry)) continue;
 			for (auto [handle] : m_LocalRegistry.storage<entt::entity>().each())
 			{
-				if (!entry.Has(m_LocalRegistry, handle) || std::ranges::find(removal, handle) != removal.end()) continue;
+				if (!entry.Has(m_LocalRegistry, handle) || removalSet.contains(handle)) continue;
 				const auto object = entry.Edit(m_LocalRegistry, handle);
 				for (const auto& property : entry.ReflectionType->Properties)
 				{
 					if (property.GetValueCppType() != std::type_index(typeid(entt::entity))) continue;
 					const auto* reference = property.ReadValue(object).Get<entt::entity>();
-					if (!reference || std::ranges::find(removal, *reference) == removal.end()) continue;
+					if (!reference || !removalSet.contains(*reference)) continue;
 					if (!property.CanWrite() || object.IsReadOnly()) return false;
 					references.emplace_back(&property, object);
 				}
 			}
 		}
+
 	const entt::entity cleared = entt::null;
 	for (const auto& [property, object] : references)
 		if (!property->WriteValue(object, reflection::ValueView::From(cleared))) return false;
+
 	for (auto [other, link] : m_LocalRegistry.view<HierarchyComponent>().each())
-		std::erase_if(link.children, [&](auto child) { return std::ranges::find(removal, child) != removal.end(); });
+		std::erase_if(link.children, [&](auto child) { return removalSet.contains(child); });
+
 	for (const auto handle : removal)
 	{
 		Entity* wrapper = m_EntityMap.at(handle);
@@ -228,11 +290,12 @@ void Scene::UpdateHierarchyFlags()
 				for (const auto child : link->children) self(self, child, currentEffective, true);
 		};
 
-	// 1. 루트 엔티티(부모가 없는 엔티티)부터 하향식으로 전파
-	for (const auto entity : world.view<FlagComponent>())
+	// FlagComponent 유무와 관계없이 모든 루트에서 전파합니다.
+	for (auto [entity] : entityStorage->each())
 	{
 		const auto* link = world.try_get<HierarchyComponent>(entity);
-		if (!link || link->parent == entt::null) propagate(propagate, entity, EEntityFlag::None, false);
+		if (!link || link->parent == entt::null)
+			propagate(propagate, entity, EEntityFlag::None, false);
 	}
 }
 #pragma endregion

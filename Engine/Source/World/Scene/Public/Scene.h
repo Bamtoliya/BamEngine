@@ -16,9 +16,6 @@ BEGIN(Engine)
 
 enum class EntityReparentResult { Success, Unchanged, InvalidEntity, InvalidHierarchy, Cycle, InvalidTransform, DepthLimit };
 
-class EventSystem;
-class UICanvas;
-
 struct SceneCreateDesc
 {
 	wstring name = L"Scene";
@@ -101,8 +98,7 @@ public:
 			return ComponentVisitResult::NotInitialized;
 		return ReflectionRegistry::Get().ForEachComponent(m_LocalRegistry, entity.GetEntityHandle(), visitor);
 	}
-	[[nodiscard]] ComponentVisitResult ForEachReflectedComponent(const Entity& entity,
-		const ComponentVisitor& visitor) const
+	[[nodiscard]] ComponentVisitResult ForEachReflectedComponent(const Entity& entity, const ComponentVisitor& visitor) const
 	{
 		if (entity.GetScene() != this || !m_LocalRegistry.valid(entity.GetEntityHandle()))
 			return ComponentVisitResult::InvalidEntity;
@@ -110,6 +106,9 @@ public:
 			return ComponentVisitResult::NotInitialized;
 		return ReflectionRegistry::Get().ForEachComponent(m_LocalRegistry, entity.GetEntityHandle(), visitor);
 	}
+private:
+	std::vector<entt::entity> CreateEntities(std::size_t count);
+	Entity& CreateEntityWithId(uint64 id);
 #pragma endregion
 
 #pragma region Flag Mangement
@@ -121,14 +120,6 @@ public:
 	void SetPaused(bool paused);
 
 	void UpdateHierarchyFlags();
-#pragma endregion
-
-#pragma region System Management
-public:
-	class EventSystem* GetEventSystem() const { return m_EventSystem; }
-	void SetEventSystem(class EventSystem* sys) { m_EventSystem = sys; }
-	class UICanvas* GetRootCanvas() const { return m_RootCanvas; }
-	void SetRootCanvas(class UICanvas* canvas) { m_RootCanvas = canvas; }
 #pragma endregion
 
 #pragma region Save&Load
@@ -152,9 +143,6 @@ protected:
 
 	PROPERTY()
 	wstring m_Name = { L"Scene" };
-
-	class EventSystem* m_EventSystem = { nullptr };
-	class UICanvas* m_RootCanvas = { nullptr };
 #pragma endregion
 };
 

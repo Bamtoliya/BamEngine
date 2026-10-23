@@ -157,6 +157,21 @@ namespace
         if (scene->ReparentEntity(first) != Result::InvalidHierarchy)
             return Fail("Inconsistent links were silently repaired by a move.");
         relation.parent = entt::null;
+        const auto firstHandle = first.GetEntityHandle(), secondHandle = second.GetEntityHandle();
+        auto& secondRelation = world.get<Engine::HierarchyComponent>(secondHandle);
+
+        relation.parent = secondHandle;
+        relation.children = { secondHandle };
+        secondRelation.parent = firstHandle;
+        secondRelation.children = { firstHandle };
+
+        if (scene->ReparentEntity(first) != Result::InvalidHierarchy)
+            return Fail("A reciprocal hierarchy cycle was accepted.");
+
+        relation.parent = entt::null;
+        relation.children.clear();
+        secondRelation.parent = entt::null;
+        secondRelation.children.clear();
         auto* parent = &first;
         for (int i = 1; i < 256; ++i)
         {

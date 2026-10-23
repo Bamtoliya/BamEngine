@@ -1,4 +1,4 @@
-#include "Scene.h"
+﻿#include "Scene.h"
 #include "Components/Core/NameComponent.h"
 #include "Components/Core/TransformComponent.h"
 #include "Reflection/ReflectionRegistry.h"
@@ -35,6 +35,21 @@ namespace
         return 1;
     }
 
+    bool SameMatrix(const glm::mat4& left, const glm::mat4& right)
+    {
+        constexpr float tolerance = 1.0e-4f;
+        for (int column = 0; column < 4; ++column)
+        {
+            for (int row = 0; row < 4; ++row)
+            {
+                const float a = left[column][row], b = right[column][row];
+                if (!std::isfinite(a) || !std::isfinite(b) || std::abs(a - b) > tolerance)
+                    return false;
+            }
+        }
+        return true;
+    }
+
     bool SameOrientation(const glm::quat& left, const glm::quat& right)
     {
         const glm::vec3 axes[] =
@@ -53,6 +68,36 @@ namespace
         }
 
         return true;
+    }
+
+    int CheckHierarchyFlagRoot()
+    {
+        std::unique_ptr<Engine::Scene, SceneDeleter> scene{ Engine::Scene::Create() };
+        if (!scene) return Fail("Hierarchy flag scene creation failed.");
+
+        auto& world = scene->GetRegistry();
+        const auto parent = scene->CreateEntity().GetEntityHandle();
+        const auto child = scene->CreateEntity().GetEntityHandle();
+
+        world.emplace<Engine::HierarchyComponent>(parent).children.push_back(child);
+        world.emplace<Engine::HierarchyComponent>(child).parent = parent;
+        world.emplace<Engine::FlagComponent>(parent).SetActive(false);
+        world.emplace<Engine::FlagComponent>(child);
+
+        scene->UpdateHierarchyFlags();
+        const auto& flags = world.get<Engine::FlagComponent>(child);
+        if (flags.IsActiveInHierarchy() || flags.IsVisibleInHierarchy())
+            return Fail("An inactive parent did not suppress child flags.");
+
+        world.remove<Engine::FlagComponent>(parent);
+        scene->UpdateHierarchyFlags();
+
+        const auto& refreshedFlags = world.get<Engine::FlagComponent>(child);
+        if (!refreshedFlags.IsActiveInHierarchy() || !refreshedFlags.IsVisibleInHierarchy() ||
+            refreshedFlags.flags != Engine::EEntityFlag::Default)
+            return Fail("Removing parent flags left stale child flags.");
+
+        return 0;
     }
 
     int CheckTransformRotation()
@@ -310,6 +355,10 @@ namespace
                 Engine::FlagComponent>(emptyEntity))
             return Fail("Invalid Transform created component dependencies.");
 
+        if (!SameMatrix(restoredWorld.get<Engine::WorldTransformComponent>(restoredEntity).worldMatrix,
+            source.GetLocalMatrix()))
+            return Fail("Single Transform restoration did not update the world matrix immediately.");
+
         return 0;
     }
 }
@@ -337,7 +386,8 @@ int main()
         return Fail("Engine core reflection lookup failed.");
     }
 
-    if (CheckUnifiedRegistry(*engineRegistry) != 0 ||
+    if (CheckHierarchyFlagRoot() != 0 ||
+        CheckUnifiedRegistry(*engineRegistry) != 0 ||
         CheckTransformArchive<archive::JsonArchive>(*engineRegistry) != 0 ||
         CheckTransformArchive<archive::BeveArchive>(*engineRegistry) != 0)
         return 1;

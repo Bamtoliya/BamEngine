@@ -4,9 +4,11 @@
 #include "UIComponents.h"
 #include <glm/gtx/matrix_decompose.hpp>
 #include <algorithm>
-#include <array>
+#include <vector>
 #include <cmath>
 #include <optional>
+#include <unordered_map>
+#include <unordered_set>
 
 namespace
 {
@@ -30,6 +32,18 @@ namespace
     bool ValidHierarchy(Engine::Scene& scene)
     {
         const auto& world = scene.GetRegistry();
+        std::unordered_map<entt::entity, std::size_t> parentReferences;
+        for (const auto parent : world.view<Engine::HierarchyComponent>())
+        {
+            const auto& relation = world.get<Engine::HierarchyComponent>(parent);
+            for (const auto child : relation.children)
+            {
+                const auto* childRelation = world.valid(child) ?
+                    world.try_get<Engine::HierarchyComponent>(child) : nullptr;
+                if (childRelation && childRelation->parent == parent)
+                    ++parentReferences[child];
+            }
+        }
         for (const auto entity : world.view<Engine::HierarchyComponent>())
         {
             if (!scene.FindEntity(entity)) return false;
@@ -47,33 +61,57 @@ namespace
                 }
                 else if (!world.all_of<Engine::TransformComponent, Engine::WorldTransformComponent>(entity) ||
                     !world.all_of<Engine::TransformComponent, Engine::WorldTransformComponent>(relation.parent)) return false;
-                const auto& siblings = world.get<Engine::HierarchyComponent>(relation.parent).children;
-                if (std::count(siblings.begin(), siblings.end(), entity) != 1) return false;
+                const auto found = parentReferences.find(entity);
+                if (found == parentReferences.end() || found->second != 1) return false;
             }
-            const auto& childList = relation.children;
-            for (std::size_t i = 0; i < childList.size(); ++i)
+            std::unordered_set<entt::entity> children;
+            for (const auto child : relation.children)
             {
-                const auto child = childList[i];
                 const auto* childRelation = world.valid(child) ?
                     world.try_get<Engine::HierarchyComponent>(child) : nullptr;
-                const bool duplicate = std::find(childList.begin(), childList.begin() + static_cast<std::ptrdiff_t>(i), child) !=
-                    childList.begin() + static_cast<std::ptrdiff_t>(i);
-                if (!childRelation || childRelation->parent != entity || duplicate)
+                if (!childRelation || childRelation->parent != entity || !children.insert(child).second)
                     return false;
             }
-            std::array<entt::entity, MaxDepth> chain{};
-            std::size_t depth = 0;
+        }
+
+        // Depth 0 means visiting; positive values mean validated root-based depth.
+        std::unordered_map<entt::entity, std::size_t> depths;
+        std::vector<entt::entity> chain;
+
+        for (const auto entity : world.view<Engine::HierarchyComponent>())
+        {
+            if (depths.contains(entity)) continue;
+
+            chain.clear();
             auto current = entity;
+            std::size_t depth = 0;
+
             while (current != entt::null)
             {
-                const bool cycle = std::find(chain.begin(), chain.begin() + depth, current) != chain.begin() + depth;
-                if (!world.valid(current) || cycle || depth >= MaxDepth)
-                    return false;
-                chain[depth++] = current;
+                if (!world.valid(current)) return false;
+
+                const auto [found, inserted] = depths.try_emplace(current, 0);
+                if (!inserted)
+                {
+                    if (found->second == 0) return false;
+                    depth = found->second;
+                    break;
+                }
+
+                if (chain.size() >= MaxDepth) return false;
+                chain.push_back(current);
+
                 const auto* link = world.try_get<Engine::HierarchyComponent>(current);
                 current = link ? link->parent : entt::null;
             }
+
+            for (auto node = chain.rbegin(); node != chain.rend(); ++node)
+            {
+                if (++depth > MaxDepth) return false;
+                depths.at(*node) = depth;
+            }
         }
+
         return true;
     }
 

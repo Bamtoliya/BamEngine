@@ -35,7 +35,8 @@ namespace
         static_cast<void>(world.get_or_emplace<Engine::WorldTransformComponent>(entity));
         static_cast<void>(world.get_or_emplace<Engine::FlagComponent>(entity));
         static_cast<void>(world.get_or_emplace<T>(entity));
-        Engine::TransformSystem::UpdateHierarchy(world);
+        if (!world.ctx().contains<Engine::DeferredComponentTransformUpdate>())
+            Engine::TransformSystem::UpdateHierarchy(world);
         return true;
     }
 
@@ -167,7 +168,7 @@ namespace
 
             if constexpr (std::is_same_v<T, Engine::TransformComponent>)
             {
-                if (!Engine::TransformSystem::UpdateHierarchy(world))
+                if (!world.ctx().contains<Engine::DeferredComponentTransformUpdate>() && !Engine::TransformSystem::UpdateHierarchy(world))
                 {
                     if (backup) target = *backup;
                     else

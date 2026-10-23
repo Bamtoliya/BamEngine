@@ -1,4 +1,4 @@
-# 엔진 ReflectionRegistry 사용
+﻿# 엔진 ReflectionRegistry 사용
 
 Engine::ReflectionRegistry는 엔진 타입 정보와 ECS 컴포넌트 작업의 소유자다.
 내부의 reflection::Registry는 독립 모듈의 타입·멤버 정보를 그대로 사용한다.
@@ -120,7 +120,7 @@ JSON과 BEVE는 같은 씬 형식과 리플렉션 처리 경로를 사용한다.
 직렬화 실패에서는 기존 문서와 파일을 유지한다. 파일 기록 중 I/O 실패에 대한 원자적 교체는 아직 제공하지 않는다.
 파일 버전은 현재 1만 읽으며, 타입·필드 이름 변경에 대한 마이그레이션은 아직 없다.
 직접 entt::registry::create로 만든 엔티티는 Scene의 Entity 래퍼와 ID가 없으므로 씬 저장 대상에 사용할 수 없다.
-이 형식은 ECS 씬 데이터 대상이며, 기존 GameObject·EventSystem·UICanvas 데이터는 포함하지 않는다.
+이 형식은 Scene의 ECS 엔티티와 직렬화 대상 컴포넌트를 저장한다.
 
 ## Inspector 속성 편집
 

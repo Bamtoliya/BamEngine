@@ -342,6 +342,42 @@ namespace
         restored->GetRegistry().get<Engine::IDComponent>(handle).id = 0;
         if (restored->WriteArchive(writer).Code != archive::ArchiveErrorCode::InvalidValue)
             return Fail("Zero persistent ID was saved.");
+        ScenePtr collisionScene(Engine::Scene::Create());
+        if (!collisionScene) return Fail("Failed to create ID collision test scene.");
+
+        for (uint64 i = 0; i < 4; ++i)
+        {
+            auto& created = collisionScene->CreateEntity();
+            collisionScene->GetRegistry().get<Engine::IDComponent>(created.GetEntityHandle()).id = i + 5;
+        }
+
+        const auto nextHandle = collisionScene->CreateEntity().GetEntityHandle();
+        if (collisionScene->GetRegistry().get<Engine::IDComponent>(nextHandle).id != 9)
+            return Fail("Persistent ID allocation did not skip consecutive occupied values.");
+
+        struct AllocationCase { std::string Entities; uint64 NextId; };
+        const AllocationCase allocationCases[] = {
+            { EntityJson(1) + "," + EntityJson(2), 3 },
+            { EntityJson(2) + "," + EntityJson(1), 4 },
+            { EntityJson(5) + "," + EntityJson(6) + "," + EntityJson(7) + "," + EntityJson(8), 9 },
+            { EntityJson((std::numeric_limits<uint64>::max)()), 2 }
+        };
+
+        for (const auto& allocation : allocationCases)
+        {
+            archive::JsonArchive allocationReader;
+            if (!allocationReader.Decode(SceneJson(allocation.Entities)))
+                return Fail("Invalid ID allocation test JSON.");
+
+            Engine::Scene* loaded = nullptr;
+            if (!Engine::Scene::CreateFromArchive(allocationReader, loaded))
+                return Fail("ID allocation test scene load failed.");
+
+            ScenePtr allocationScene(loaded);
+            const auto createdHandle = allocationScene->CreateEntity().GetEntityHandle();
+            if (allocationScene->GetRegistry().get<Engine::IDComponent>(createdHandle).id != allocation.NextId)
+                return Fail("Scene loading changed the next persistent ID.");
+        }
         return true;
     }
 
@@ -750,6 +786,29 @@ namespace
         if (scene->InstantiatePrefabArchive(badPrefab, failedRoot).Code != archive::ArchiveErrorCode::UnsupportedType ||
             failedRoot != nullptr || world.storage<Engine::IDComponent>().size() != countBefore)
             return Fail("Failed prefab instantiation did not roll back created entities.");
+
+        auto& rollbackParent = scene->CreateEntity();
+        const auto rollbackParentHandle = rollbackParent.GetEntityHandle();
+        const auto rollbackCount = world.storage<Engine::IDComponent>().size();
+
+        const std::string reorderedJson =
+            R"({"Prefab":{"Version":1,"RootId":1,"Entities":[)"
+            R"({"Id":2,"Hierarchy":{"Parent":1,"Children":[]},"Components":[)" + TransformJson +
+            R"(]},{"Id":1,"Hierarchy":{"Parent":0,"Children":[2]},"Components":[)" + TransformJson + R"(]}]}})";
+
+        archive::JsonArchive rollbackReader;
+        if (!rollbackReader.Decode(reorderedJson))
+            return Fail("Failed to decode reordered prefab.");
+
+        Engine::Entity* rollbackRoot = nullptr;
+        const auto rollbackResult = scene->InstantiatePrefabArchive(rollbackReader, rollbackRoot, &rollbackParent);
+
+        if (rollbackResult.Code != archive::ArchiveErrorCode::InvalidValue ||
+            rollbackResult.Field != "Prefab.Parent" || rollbackRoot != nullptr ||
+            world.storage<Engine::IDComponent>().size() != rollbackCount ||
+            scene->FindEntity(rollbackParentHandle) == nullptr)
+            return Fail("Reordered prefab rollback failed.");
+
         return true;
     }
 }

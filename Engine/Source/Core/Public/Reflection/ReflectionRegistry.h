@@ -13,6 +13,7 @@
 #include <vector>
 
 BEGIN(Engine)
+struct DeferredComponentTransformUpdate {};
 
 enum class ComponentVisitResult { Completed, Stopped, InvalidEntity, NotInitialized };
 using ComponentVisitor = std::function<bool(const reflection::TypeInfo&, const reflection::ObjectView&)>;
@@ -86,28 +87,18 @@ public:
     [[nodiscard]] reflection::ObjectView GetDefaultComponentObject(entt::id_type storageId) const;
     [[nodiscard]] reflection::ObjectView GetDefaultComponentObject(const reflection::TypeInfo& type) const;
 
-    [[nodiscard]] archive::ArchiveResult WriteComponent(archive::IArchive& ar, std::string_view key,
-        const entt::registry& world, entt::entity entity, std::type_index type,
-        const archive_reflection::PropertyCodecs* codecs = nullptr) const;
-    [[nodiscard]] archive::ArchiveResult ReadComponent(const archive::IArchive& ar, std::string_view key,
-        entt::registry& world, entt::entity entity, std::type_index type,
-        const archive_reflection::PropertyCodecs* codecs = nullptr) const;
-    [[nodiscard]] archive::ArchiveResult WriteComponents(archive::IArchive& ar, std::string_view key,
-        const entt::registry& world, entt::entity entity,
-        const archive_reflection::PropertyCodecs* codecs = nullptr) const;
+    [[nodiscard]] archive::ArchiveResult WriteComponent(archive::IArchive& ar, std::string_view key, const entt::registry& world, entt::entity entity, std::type_index type, const archive_reflection::PropertyCodecs* codecs = nullptr) const;
+    [[nodiscard]] archive::ArchiveResult ReadComponent(const archive::IArchive& ar, std::string_view key, entt::registry& world, entt::entity entity, std::type_index type, const archive_reflection::PropertyCodecs* codecs = nullptr) const;
+    [[nodiscard]] archive::ArchiveResult WriteComponents(archive::IArchive& ar, std::string_view key, const entt::registry& world, entt::entity entity, const archive_reflection::PropertyCodecs* codecs = nullptr) const;
 
     template<typename T>
-    [[nodiscard]] archive::ArchiveResult WriteComponent(archive::IArchive& ar, std::string_view key,
-        const entt::registry& world, entt::entity entity,
-        const archive_reflection::PropertyCodecs* codecs = nullptr) const
+    [[nodiscard]] archive::ArchiveResult WriteComponent(archive::IArchive& ar, std::string_view key, const entt::registry& world, entt::entity entity, const archive_reflection::PropertyCodecs* codecs = nullptr) const
     {
         return WriteComponent(ar, key, world, entity, std::type_index(typeid(T)), codecs);
     }
 
     template<typename T>
-    [[nodiscard]] archive::ArchiveResult ReadComponent(const archive::IArchive& ar, std::string_view key,
-        entt::registry& world, entt::entity entity,
-        const archive_reflection::PropertyCodecs* codecs = nullptr) const
+    [[nodiscard]] archive::ArchiveResult ReadComponent(const archive::IArchive& ar, std::string_view key, entt::registry& world, entt::entity entity, const archive_reflection::PropertyCodecs* codecs = nullptr) const
     {
         return ReadComponent(ar, key, world, entity, std::type_index(typeid(T)), codecs);
     }
