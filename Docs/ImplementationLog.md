@@ -922,3 +922,25 @@ Use this as the primary execution list until a playable 2D vertical slice is com
   Client의 로그 인자와 CSV 키 등록을 확인했다.
 - 실행 검증: 이번 로그 변경의 빌드·로캘 검사·실제 UI 동작은 미확인이다.
   기존 Editor.log에는 이전 출력 형식이 남아 있어 최신 변경의 실행 근거로 사용하지 않는다.
+
+## 2026-10-22 — 그래프·다중 선택 편집과 엔진 경로 보완 (6636769a)
+
+- 이 커밋의 실행 프로그램별 로그 경로와 Console 발생 주체 필터는 위의 같은 날 항목에 기록했으므로 여기서는 반복하지 않는다.
+- 그래프: Reflection Archive 기반 JSON 저장·불러오기와 검증을 연결하고, 파일 처리 단계를 구분해 오류를 반환한다.
+  GraphPanel에서 파일 편집을 지원하며 GraphBindingComponent로 엔티티별 실행 그래프를 연결한다.
+  파일 변경 재로딩이 실패하면 기존 그래프를 유지한다.
+- 셰이더 그래프: Color 및 Unlit 머티리얼 HLSL 생성, 셰이더 컴파일·미리보기와 런타임 머티리얼 파이프라인 검증 경로를 추가했다.
+- 에디터: Hierarchy의 Shift 범위 선택과 Inspector의 다중 대상 공통 Transform·플래그·리플렉션 속성 편집을 추가했다.
+  편집 잠금·읽기 전용·스냅 조건을 확인하고 적용 실패 시 기존 값을 복원한다.
+- 렌더링·DX12: 불투명 메시 정렬과 프러스텀 컬링, 렌더 큐·뷰포트 컨테이너 재사용,
+  PipelineManager의 최근 파이프라인 조회 캐시를 적용했다. DX12는 프레임별 명령 할당자·펜스·동적 버퍼를 분리하고,
+  프레임 슬롯 재사용 시 동기화하며 GPU 자원·디스크립터 해제를 펜스 완료 뒤로 미룬다.
+- Transform·피킹·에디터 표시: 월드 행렬 캐시와 메시 지오메트리 버전 기반 BVH 갱신·레이 탐색을 추가했다.
+  Hierarchy 문자열 캐시, 로캘 문자열 조회 API와 string_view 조회, 그래프 노드·머티리얼 콤보의 문자열 복사 감소도 포함한다.
+- 상태·자원 오류 처리: Terrain 참조 소유권·dirty 업로드·데이터 검사를 보완하고 CPU 리샘플링을 추가했다.
+  메시 버퍼 입력과 Archive 복원 실패 처리를 강화하고, 런타임 리소스 버전을 직렬화에서 제외했다.
+  Canvas 표시·계층 플래그, Undo/Redo 후 계층 플래그, Client 시작 씬·렌더링 실패 반환도 수정했다.
+- 빌드·검사 코드: Engine Unity Build를 활성화하고 ShaderGraphCheck, TerrainDataCheck,
+  PickingBVHBenchmark를 추가했으며 그래프·피킹·Transform·Inspector·Archive 회귀 검사 코드를 확장했다.
+  관련 검사 실행 결과는 이 커밋 및 이번 기록 작업에서 확인하지 않았으며, 테스트는 요청에 따라 실행하지 않았다.
+  렌더링 성능 수치와 실제 GPU·Editor UI 동작도 확인하지 않았다.
