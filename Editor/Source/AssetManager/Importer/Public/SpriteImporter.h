@@ -3,7 +3,7 @@
 #include "ImporterInterface.h"
 
 BEGIN(Editor)
-class SpriteImporter : public ImporterInterface
+class SpriteImporter : public IImporter
 {
 #pragma region Constructor&Destructor
 private:
@@ -12,7 +12,7 @@ private:
 	virtual EResult Initialize(void* arg = nullptr) override { return EResult::Success; }
 public:
 	static SpriteImporter* Create() { return new SpriteImporter(); }
-	virtual void Free() override { ImporterInterface::Free(); }
+	virtual void Free() override { IImporter::Free(); }
 #pragma endregion
 
 public:

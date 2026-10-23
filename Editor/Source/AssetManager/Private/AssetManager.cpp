@@ -3,6 +3,7 @@
 #include "AssetManager.h"
 #include "Logger.h"
 #include <exception>
+#include <cctype>
 
 #pragma region Importer
 #include "SpriteImporter.h"
@@ -22,7 +23,7 @@
 
 IMPLEMENT_SINGLETON(AssetManager);
 
-#pragma region Construcotr&Destructor
+#pragma region Constructor&Destructor
 EResult AssetManager::Initialize(void* arg)
 {
 	m_Importers[".png"] = TextureImporter::Create();
@@ -158,8 +159,6 @@ void AssetManager::Update(f32 dt)
 }
 #pragma endregion
 
-
-
 #pragma region Codec
 void AssetManager::ExecuteAsync(std::function<EResult()> task)
 {
@@ -180,6 +179,31 @@ EResult AssetManager::Import(const filesystem::path& sourcePath, const filesyste
 
 void AssetManager::ImportAsync(const filesystem::path& sourcePath, const filesystem::path& destDir, void* arg)
 {
+	std::string extension = sourcePath.extension().string();
+	for (char& character : extension)
+		character = static_cast<char>(std::tolower(static_cast<unsigned char>(character)));
+
+	if (extension == ".fbx" || extension == ".obj" || extension == ".gltf")
+	{
+		// 현재 모델 Import는 메인 스레드에서 동기로 검증합니다.
+		// 완료 알림과 통계는 기존 Update() 경로를 사용합니다.
+		std::promise<EResult> completion;
+		auto future = completion.get_future();
+
+		try
+		{
+			completion.set_value(Import(sourcePath, destDir, arg));
+		}
+		catch (...)
+		{
+			completion.set_exception(std::current_exception());
+		}
+
+		std::lock_guard lock(m_PendingMutex);
+		m_PendingTasks.push_back(std::move(future));
+		return;
+	}
+
 	auto futureTask = std::async(std::launch::async, [this, sourcePath, destDir, arg]() -> EResult
 		{
 			// 이 안은 백그라운드 스레드이므로 여기서 무거운 Import를 호출해도 UI가 멈추지 않습니다!
@@ -212,7 +236,6 @@ void AssetManager::ExportAsync(const filesystem::path& sourcePath, const filesys
 	m_PendingTasks.push_back(std::move(futureTask));
 }
 #pragma endregion
-
 
 #pragma region Metrics
 AssetTaskMetrics AssetManager::GetTaskMetrics() const

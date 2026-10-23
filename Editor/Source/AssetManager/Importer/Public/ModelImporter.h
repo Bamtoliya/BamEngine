@@ -58,27 +58,29 @@ enum class EModelImportOption : uint32
 
 ENABLE_BITMASK_OPERATORS(EModelImportOption);
 
-struct tagModelImportDesc
+struct ModelImportDesc
 {
 	EModelPostProcessFlag PostProcessFlags = EModelPostProcessFlag::Triangulate | EModelPostProcessFlag::FlipUVs;
-	EModelImportOption ImportOptions = EModelImportOption::Meshes | EModelImportOption::Materials;
+	EModelImportOption ImportOptions = EModelImportOption::Meshes;
+	bool SaveToFile = true;
 };
 
 BEGIN(Editor)
-class ModelImporter : public ImporterInterface
+class ModelImporter : public IImporter
 {
 #pragma region Contructor&Destructor
-	using DESC = tagModelImportDesc;
+	using DESC = ModelImportDesc;
 private:
 	ModelImporter() = default;
 	virtual ~ModelImporter() = default;
 	virtual EResult Initialize(void* arg = nullptr) override { return EResult::Success; }
 public:
 	static ModelImporter* Create() { return new ModelImporter(); }
-	virtual void Free() override { ImporterInterface::Free(); }
+	virtual void Free() override { IImporter::Free(); }
 #pragma endregion
 public:
-	virtual EResult Import(const filesystem::path& sourcePath, const filesystem::path& destDir = {}, void* arg = nullptr) override;
+	EResult Import(const filesystem::path& sourcePath, const filesystem::path& destDir = {}, void* arg = nullptr) override;
+	EResult CreateJob(const filesystem::path& sourcePath, const filesystem::path& destDir, void* arg, std::unique_ptr<ImportJob>& outJob) override;
 
 private:
 	void ProcessModelNode(

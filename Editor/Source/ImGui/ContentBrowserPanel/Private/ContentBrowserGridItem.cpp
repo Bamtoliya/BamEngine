@@ -742,7 +742,7 @@ void ContentBrowserGridItem::ContextMenu_Model(const std::filesystem::path& path
 			ModelImporter* importer = ModelImporter::Create();
 			if (importer)
 			{
-				tagModelImportDesc desc = {};
+				ModelImportDesc desc = {};
 				const EResult res = importer->Import(path, path.parent_path(), &desc);
 				Safe_Release(importer);
 

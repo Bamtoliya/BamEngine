@@ -3,7 +3,7 @@
 #include "ImporterInterface.h"
 
 BEGIN(Editor)
-class MaterialImporter : public ImporterInterface
+class MaterialImporter : public IImporter
 {
 #pragma region Constructor&Destructor
 public:
@@ -12,7 +12,7 @@ public:
     virtual EResult Initialize(void* arg = nullptr) { return EResult::Success; }
 public:
 	static MaterialImporter* Create() { return new MaterialImporter(); }
-    virtual void Free() override { ImporterInterface::Free(); }
+    virtual void Free() override { IImporter::Free(); }
 #pragma endregion
 
 public:

@@ -1,7 +1,7 @@
 ﻿#pragma once
 #include "ImporterInterface.h"
 BEGIN(Editor)
-class AnimationImporter : public ImporterInterface
+class AnimationImporter : public IImporter
 {
 #pragma region Constructor&Destructor
 private:
@@ -10,7 +10,7 @@ private:
     virtual EResult Initialize(void* arg = nullptr) { return EResult::Success; }
 public:
 	static AnimationImporter* Create() { return new AnimationImporter(); }
-    virtual void Free() override { ImporterInterface::Free(); }
+    virtual void Free() override { IImporter::Free(); }
 #pragma endregion
 
 public:

@@ -1,0 +1,62 @@
+﻿#pragma once
+
+#include "ModelImporter.h"
+#include "ImportJob.h"
+#include "ModelConverter.h"
+#include "Vertex.h"
+
+namespace Editor
+{
+    struct ModelImportRequest
+    {
+        filesystem::path SourcePath;
+        filesystem::path DestinationDirectory;
+        ModelImportDesc Settings;
+    };
+
+    struct PreparedModelMesh
+    {
+        std::string Name;
+        std::uint32_t MaterialIndex = 0;
+
+        std::vector<Engine::VertexPosition> Positions;
+        std::vector<Engine::VertexMaterial> Attributes;
+        std::vector<Engine::uint32> Indices;
+
+        glm::vec3 BoundsMin{};
+        glm::vec3 BoundsMax{};
+    };
+
+    struct PreparedModelData
+    {
+        filesystem::path SourcePath;
+        std::uint32_t MaterialCount = 0;
+        std::vector<PreparedModelMesh> Meshes;
+        std::vector<Tools::ModelConversion::NodeData> Nodes;
+    };
+
+    class ModelImportTask final : public ImportJob
+    {
+    public:
+        explicit ModelImportTask(ModelImportRequest request);
+
+        EResult Prepare() override;
+
+        // Prepare 실행 완료를 동기화한 뒤에만 접근합니다.
+        const ModelImportRequest& GetRequest() const { return m_Request; }
+        const PreparedModelData* GetPreparedModel() const
+        {
+            return m_PreparedModel ? &*m_PreparedModel : nullptr;
+        }
+
+        Tools::ModelConversion::Error GetErrorCode() const { return m_ErrorCode; }
+        const std::string& GetErrorMessage() const { return m_ErrorMessage; }
+
+    private:
+        ModelImportRequest m_Request;
+        std::optional<PreparedModelData> m_PreparedModel;
+        Tools::ModelConversion::Error m_ErrorCode = Tools::ModelConversion::Error::None;
+        std::string m_ErrorMessage;
+        bool m_PrepareStarted = false;
+    };
+}

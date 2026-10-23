@@ -8,7 +8,7 @@ struct tagShaderImportDesc
 };
 
 BEGIN(Engine)
-class ShaderImporter : public ImporterInterface
+class ShaderImporter : public IImporter
 {
 #pragma region Constructor& Destructor
 private:
@@ -18,7 +18,7 @@ private:
 	virtual EResult Initialize(void* arg = nullptr) override { return EResult::Success; }
 public:
 	static ShaderImporter* Create() { return new ShaderImporter(); }
-	virtual void Free() override { ImporterInterface::Free(); }
+	virtual void Free() override { IImporter::Free(); }
 #pragma endregion
 
 public:

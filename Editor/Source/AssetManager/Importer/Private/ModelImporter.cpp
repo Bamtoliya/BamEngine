@@ -2,6 +2,13 @@
 
 #include "Model.h"
 #include "ModelImporter.h"
+#include "ModelImportTask.h"
+#include <utility>
+#include "ModelConverter.h"
+#include "ResourceManager.h"
+#include "Logger.h"
+#include <limits>
+#include <memory>
 
 namespace
 {
@@ -47,73 +54,203 @@ namespace
 
 EResult ModelImporter::Import(const filesystem::path& sourcePath, const filesystem::path& destDir, void* arg)
 {
-	CAST_DESC
-		Assimp::Importer importer;
-	uint32 postProcessFlags = aiProcess_Triangulate | aiProcess_FlipUVs;
-	if (desc)
+	const DESC settings = arg ? *static_cast<const DESC*>(arg) : DESC{};
+
+	if (settings.ImportOptions != EModelImportOption::Meshes)
 	{
-		postProcessFlags = static_cast<uint32>(desc->PostProcessFlags);
-		if (postProcessFlags == 0)
-		{
-			postProcessFlags = aiProcess_Triangulate | aiProcess_FlipUVs;
-		}
+		BAM_LOG(Error, "Editor", "Asset", "Only static mesh import is currently supported.");
+		return EResult::NotImplemented;
 	}
-	const aiScene* scene = importer.ReadFile(sourcePath.string(), postProcessFlags);
-	if (!scene || (scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE) || !scene->mRootNode)
+
+	auto flags = settings.PostProcessFlags;
+	if (flags == EModelPostProcessFlag::None)
+		flags = EModelPostProcessFlag::Triangulate | EModelPostProcessFlag::FlipUVs;
+
+	const auto supported = EModelPostProcessFlag::Triangulate | EModelPostProcessFlag::FlipUVs |
+		EModelPostProcessFlag::GenSmoothNormals | EModelPostProcessFlag::CalcTangentSpace;
+
+	if ((static_cast<uint32>(flags) & ~static_cast<uint32>(supported)) != 0)
+		return EResult::NotImplemented;
+
+	Tools::ModelConversion::Options options;
+	options.FlipUVs = HasFlag(flags, EModelPostProcessFlag::FlipUVs);
+
+	auto converted = Tools::ModelConversion::ConvertStaticModel(sourcePath, options);
+	if (!converted)
 	{
-		fmt::print("Error importing model: {}\n", importer.GetErrorString());
+		BAM_LOG(Error, "Editor", "Asset", "Model conversion failed: {}", converted.Message);
 		return EResult::Fail;
 	}
-	ModelCreateDesc modelCreateDesc;
-	filesystem::path outputDir = destDir.empty() ? sourcePath.parent_path() : destDir;
-	wstring sourceStem = sourcePath.stem().wstring();
+
+	auto& data = *converted.Model;
+	const filesystem::path outputDir = destDir.empty() ? data.SourcePath.parent_path() : destDir;
+
+	if (settings.SaveToFile)
+	{
+		std::error_code ec;
+		filesystem::create_directories(outputDir, ec);
+		if (ec)
+			return EResult::Fail;
+	}
+
+	const auto destroyMesh = [](Mesh* mesh)
+		{
+			if (mesh)
+			{
+				mesh->Free();
+				delete mesh;
+			}
+		};
+
+	using MeshOwner = std::unique_ptr<Mesh, decltype(destroyMesh)>;
+
+	struct PendingMesh
+	{
+		wstring Key;
+		MeshOwner Resource;
+	};
+
+	std::vector<PendingMesh> pending;
+	pending.reserve(data.Meshes.size());
+
+	ResourceManager& manager = ResourceManager::Get();
 	unordered_map<wstring, uint32> nameCounts;
 	uint32 meshSerial = 0;
+	constexpr auto maxBytes = (std::numeric_limits<uint32>::max)();
 
-	if (HasFlag(desc->ImportOptions, EModelImportOption::Skeleton))
+	for (auto& source : data.Meshes)
 	{
-		ProcessSkeleton(scene, outputDir, sourceStem, modelCreateDesc);
+		const auto vertexCount = source.Vertices.size();
+		const auto indexCount = source.Indices.size();
+
+		if (vertexCount > maxBytes / sizeof(VertexPosition) ||
+			vertexCount > maxBytes / sizeof(VertexMaterial) || indexCount > maxBytes / sizeof(uint32))
+		{
+			return EResult::InvalidArgument;
+		}
+
+		const wstring meshStem = MakeUniqueMeshStem(
+			data.SourcePath.stem().wstring(), StrToWStr(source.Name), meshSerial++, nameCounts);
+
+		const auto outputPath = outputDir / (meshStem + L".bammesh");
+		const wstring key = NormalizePath(outputPath.wstring());
+
+		// 기존 리소스 교체는 이후 재임포트 처리에서 구현합니다.
+		if (manager.IsValid(manager.FindHandleByKey(key)))
+		{
+			BAM_LOG(Error, "Editor", "Asset", "Mesh resource already exists: {}", WStrToStr(key));
+			return EResult::AlreadyInitialized;
+		}
+
+		std::vector<VertexPosition> positions(vertexCount);
+		std::vector<VertexMaterial> attributes(vertexCount);
+
+		for (std::size_t i = 0; i < vertexCount; ++i)
+		{
+			const auto& vertex = source.Vertices[i];
+
+			positions[i].position = { vertex.Position[0], vertex.Position[1], vertex.Position[2] };
+			attributes[i].normal = { vertex.Normal[0], vertex.Normal[1], vertex.Normal[2] };
+			attributes[i].texCoord = { vertex.TexCoord[0], vertex.TexCoord[1] };
+			attributes[i].tangent = { vertex.Tangent[0], vertex.Tangent[1], vertex.Tangent[2] };
+			attributes[i].binormal = { vertex.Bitangent[0], vertex.Bitangent[1], vertex.Bitangent[2] };
+			attributes[i].color = { vertex.Color[0], vertex.Color[1], vertex.Color[2], vertex.Color[3] };
+		}
+
+		MeshCreateDesc desc;
+		desc.Key = key;
+		desc.Path = key;
+		desc.Streams[static_cast<uint32>(EMeshStream::Position)] = {
+			positions.data(), static_cast<uint32>(vertexCount), sizeof(VertexPosition)
+		};
+		desc.Streams[static_cast<uint32>(EMeshStream::Material)] = {
+			attributes.data(), static_cast<uint32>(vertexCount), sizeof(VertexMaterial)
+		};
+		desc.IndexData = source.Indices.data();
+		desc.IndexCount = static_cast<uint32>(indexCount);
+		desc.IndexStride = sizeof(uint32);
+		desc.BoundingBoxMin = { source.BoundsMin[0], source.BoundsMin[1], source.BoundsMin[2] };
+		desc.BoundingBoxMax = { source.BoundsMax[0], source.BoundsMax[1], source.BoundsMax[2] };
+
+		MeshOwner mesh(Mesh::Create(&desc), destroyMesh);
+		if (!mesh)
+			return EResult::Fail;
+
+		pending.push_back({ key, std::move(mesh) });
 	}
 
-	ProcessModelNode(scene->mRootNode, scene, outputDir, sourceStem, nameCounts, meshSerial, modelCreateDesc);
-
-	if (HasFlag(desc->ImportOptions, EModelImportOption::Animations))
+	// 저장에 성공한 뒤 ResourceManager로 소유권을 넘깁니다.
+	if (settings.SaveToFile)
 	{
-		ProcessAnimations(scene, outputDir, sourceStem, modelCreateDesc);
+		for (const auto& mesh : pending)
+		{
+			const EResult result = manager.SaveToBinaryFile(mesh.Resource.get(), mesh.Key);
+			if (result != EResult::Success)
+				return result;
+		}
 	}
 
-	//if (HasFlag(desc->ImportOptions, EModelImportOption::Materials))
-	//{
-	//	for (uint32 i = 0; i < scene->mNumMaterials; ++i)
-	//	{
-	//		ProcessMaterial(scene->mMaterials[i], i, scene, outputDir, sourceStem, modelCreateDesc);
-	//	}
-	//}
+	for (auto& mesh : pending)
+	{
+		auto handle = manager.AddResource<Mesh>(mesh.Key, mesh.Resource.release());
+		if (!handle.IsValid())
+			return EResult::Fail;
+	}
 
-#pragma region Save To File
-	//filesystem::path outputPath = outputDir / sourcePath.filename().replace_extension(".bammodel.json");
-	//Model* model = Model::Create(&modelCreateDesc);
-	//ResourceManager::Get().SaveToJsonFile(model, outputPath.wstring());
-	//ResourceManager::Get().DestroyResource(model);
-	//for (auto& meshHandle : modelCreateDesc.Meshes)
-	//{
-	//	ResourceManager::Get().DestroyResource(meshHandle.GetRawHandle());
-	//}
-	//for (auto& materialHandle : modelCreateDesc.Materials)
-	//{
-	//	ResourceManager::Get().DestroyResource(materialHandle.GetRawHandle());
-	//}
-	//for (auto& animationHandle : modelCreateDesc.Animations)
-	//{
-	//	ResourceManager::Get().DestroyResource(animationHandle.GetRawHandle());
-	//}
-	//ResourceManager::Get().DestroyResource(modelCreateDesc.Skeleton.GetRawHandle());
-	//modelCreateDesc.Meshes.clear();
-	//modelCreateDesc.Materials.clear();
-	//modelCreateDesc.Animations.clear();
-	//modelCreateDesc.Skeleton = ResourceHandle<Skeleton>();
-#pragma endregion
+	return EResult::Success;
+}
 
+EResult ModelImporter::CreateJob(const filesystem::path& sourcePath, const filesystem::path& destDir,
+	void* arg, std::unique_ptr<ImportJob>& outJob)
+{
+	if (outJob || sourcePath.empty())
+		return EResult::InvalidArgument;
+
+	ModelImportDesc settings = arg ? *static_cast<const ModelImportDesc*>(arg) : ModelImportDesc{};
+
+	if (settings.PostProcessFlags == EModelPostProcessFlag::None)
+		settings.PostProcessFlags = EModelPostProcessFlag::Triangulate | EModelPostProcessFlag::FlipUVs;
+
+	// 현재 변환 모듈에서 처리할 수 있는 후처리 설정만 받습니다.
+	const auto supportedFlags = EModelPostProcessFlag::Triangulate | EModelPostProcessFlag::FlipUVs |
+		EModelPostProcessFlag::GenSmoothNormals | EModelPostProcessFlag::CalcTangentSpace;
+
+	const auto requestedFlags = static_cast<uint32>(settings.PostProcessFlags);
+	if ((requestedFlags & ~static_cast<uint32>(supportedFlags)) != 0)
+		return EResult::NotImplemented;
+
+	const auto supportedOptions = EModelImportOption::Meshes | EModelImportOption::Materials;
+	const auto requestedOptions = static_cast<uint32>(settings.ImportOptions);
+
+	if (!HasFlag(settings.ImportOptions, EModelImportOption::Meshes))
+		return EResult::NotImplemented;
+
+	if ((requestedOptions & ~static_cast<uint32>(supportedOptions)) != 0)
+		return EResult::NotImplemented;
+
+	std::error_code ec;
+	auto inputPath = filesystem::absolute(sourcePath, ec).lexically_normal();
+	if (ec)
+		return EResult::InvalidArgument;
+
+	filesystem::path outputDirectory;
+	if (destDir.empty())
+	{
+		outputDirectory = inputPath.parent_path();
+	}
+	else
+	{
+		outputDirectory = filesystem::absolute(destDir, ec).lexically_normal();
+		if (ec)
+			return EResult::InvalidArgument;
+	}
+
+	ModelImportRequest request;
+	request.SourcePath = std::move(inputPath);
+	request.DestinationDirectory = std::move(outputDirectory);
+	request.Settings = settings;
+
+	outJob = std::make_unique<ModelImportTask>(std::move(request));
 	return EResult::Success;
 }
 

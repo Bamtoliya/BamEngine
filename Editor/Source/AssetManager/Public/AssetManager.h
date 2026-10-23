@@ -47,7 +47,7 @@ public:
 #pragma region Member Variables
 private:
 	// 각 확장자 항목은 임포터 참조 하나를 소유한다.
-	unordered_map<string, ImporterInterface*> m_Importers;
+	unordered_map<string, IImporter*> m_Importers;
 	unordered_map<string, ExporterInterface*> m_Exporters;
 
 	vector<future<EResult>> m_PendingTasks;

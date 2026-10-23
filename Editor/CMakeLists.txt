@@ -80,6 +80,7 @@ target_include_directories(Editor
 target_link_libraries(Editor
     PRIVATE
         BamEngine::Engine
+        BamTools::ModelConverter
         TextureConverter
         imgui::imgui
         imnodes

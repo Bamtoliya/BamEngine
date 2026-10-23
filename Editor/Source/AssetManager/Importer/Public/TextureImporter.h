@@ -10,7 +10,7 @@ struct tagTextureImportDesc
 };
 
 BEGIN(Editor)
-class TextureImporter : public ImporterInterface
+class TextureImporter : public IImporter
 {
 #pragma region Constructor&Destructor
 private:
@@ -20,7 +20,7 @@ private:
 	virtual EResult Initialize(void* arg = nullptr) override { return EResult::Success; }
 public:
 	static TextureImporter* Create() { return new TextureImporter(); }
-	virtual void Free() override { ImporterInterface::Free(); }
+	virtual void Free() override { IImporter::Free(); }
 #pragma endregion
 
 public:

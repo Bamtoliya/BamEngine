@@ -1,7 +1,7 @@
 ﻿#pragma once
 #include "ImporterInterface.h"
 BEGIN(Editor)
-class AudioImporter : public ImporterInterface
+class AudioImporter : public IImporter
 {
 #pragma region Constructor&Destructor
 private:
