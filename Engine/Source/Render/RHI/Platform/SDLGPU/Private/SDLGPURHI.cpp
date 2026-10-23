@@ -395,6 +395,65 @@ EResult SDLGPURHI::UploadBufferData(SDL_GPUBuffer* buffer, void* data, uint32 si
 	return EResult::Success;
 }
 
+EResult SDLGPURHI::UploadBufferRange(SDL_GPUBuffer* buffer, const void* data, uint32 size, uint32 offset, SDL_GPUFence*& outFence)
+{
+	if (!m_Device || !buffer || !data || size == 0 || outFence)
+		return EResult::InvalidArgument;
+
+	SDL_GPUTransferBufferCreateInfo transferInfo = {};
+	transferInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+	transferInfo.size = size;
+
+	SDL_GPUTransferBuffer* transfer = SDL_CreateGPUTransferBuffer(m_Device, &transferInfo);
+	if (!transfer)
+		return EResult::Fail;
+
+	void* mapped = SDL_MapGPUTransferBuffer(m_Device, transfer, false);
+	if (!mapped)
+	{
+		SDL_ReleaseGPUTransferBuffer(m_Device, transfer);
+		return EResult::Fail;
+	}
+
+	memcpy(mapped, data, size);
+	SDL_UnmapGPUTransferBuffer(m_Device, transfer);
+
+	SDL_GPUCommandBuffer* command = SDL_AcquireGPUCommandBuffer(m_Device);
+	if (!command)
+	{
+		SDL_ReleaseGPUTransferBuffer(m_Device, transfer);
+		return EResult::Fail;
+	}
+
+	SDL_GPUCopyPass* copyPass = SDL_BeginGPUCopyPass(command);
+	if (!copyPass)
+	{
+		SDL_CancelGPUCommandBuffer(command);
+		SDL_ReleaseGPUTransferBuffer(m_Device, transfer);
+		return EResult::Fail;
+	}
+
+	SDL_GPUTransferBufferLocation source = {};
+	source.transfer_buffer = transfer;
+	source.offset = 0;
+
+	SDL_GPUBufferRegion destination = {};
+	destination.buffer = buffer;
+	destination.offset = offset;
+	destination.size = size;
+
+	// 앞서 업로드한 다른 구간을 보존합니다.
+	SDL_UploadToGPUBuffer(copyPass, &source, &destination, false);
+	SDL_EndGPUCopyPass(copyPass);
+
+	outFence = SDL_SubmitGPUCommandBufferAndAcquireFence(command);
+
+	// 제출된 명령에서 사용하는 메모리는 SDL이 안전한 시점에 해제합니다.
+	SDL_ReleaseGPUTransferBuffer(m_Device, transfer);
+
+	return outFence ? EResult::Success : EResult::Fail;
+}
+
 #pragma endregion
 
 #pragma region Pipeline

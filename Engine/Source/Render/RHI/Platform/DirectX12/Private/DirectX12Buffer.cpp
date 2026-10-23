@@ -124,3 +124,30 @@ void DirectX12Buffer::SetData(const void* data, uint32 size)
 		memcpy(m_MappedData, data, size);
 	}
 }
+
+EResult DirectX12Buffer::UploadRangeInternal(const void* data, uint32 size, uint32 offset)
+{
+	if (!m_Buffer)
+		return EResult::Fail;
+
+	if (!m_MappedData)
+		return EResult::NotImplemented;
+
+	auto* destination = static_cast<uint8*>(m_MappedData) + offset;
+	std::memcpy(destination, data, size);
+	return EResult::Success;
+}
+
+EResult DirectX12Buffer::QueryUploadComplete(bool& complete)
+{
+	complete = false;
+
+	if (!m_Buffer)
+		return EResult::Fail;
+
+	if (!m_MappedData)
+		return EResult::NotImplemented;
+
+	complete = true;
+	return EResult::Success;
+}

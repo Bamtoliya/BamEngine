@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "RHI.h"
 #include "SDLGPUTypes.h"
@@ -54,6 +54,7 @@ public:
 public:
 	EResult UploadTextureData(SDL_GPUTexture* texture, void* data, uint32 dataSize, uint32 width, uint32 height, uint32 depthOrArraySize = 1, uint32 mipLevels = 1);
 	EResult UploadBufferData(SDL_GPUBuffer* buffer, void* data, uint32 size);
+	EResult UploadBufferRange(SDL_GPUBuffer* buffer, const void* data, uint32 size, uint32 offset, SDL_GPUFence*& outFence);
 #pragma endregion
 
 #pragma region Bind Resources

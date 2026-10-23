@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "RHIResource.h"
 enum class ERHIBufferType
@@ -51,6 +51,36 @@ public:
 #pragma region Setter
 public:
 	virtual void SetData(const void* data, uint32 size) BAM_PURE;
+public:
+	// 새 정점·인덱스 버퍼의 초기 업로드용입니다.
+	// data는 이번 청크의 시작 주소이며, offset은 목적지의 바이트 오프셋입니다.
+	EResult UploadRange(const void* data, uint32 size, uint32 offset)
+	{
+		if (m_BufferType != ERHIBufferType::Vertex && m_BufferType != ERHIBufferType::Index)
+			return EResult::NotImplemented;
+
+		if (!data || size == 0 || offset > m_Size || size > m_Size - offset)
+			return EResult::InvalidArgument;
+
+		if ((offset % 4) != 0 || (size % 4) != 0)
+			return EResult::InvalidArgument;
+
+		return UploadRangeInternal(data, size, offset);
+	}
+
+	// complete=true는 미완료 청크가 없다는 의미입니다.
+	// 버퍼 전체가 채워졌는지는 호출자가 업로드 바이트 수로 관리합니다.
+	virtual EResult QueryUploadComplete(bool& complete)
+	{
+		complete = false;
+		return EResult::NotImplemented;
+	}
+
+protected:
+	virtual EResult UploadRangeInternal(const void* data, uint32 size, uint32 offset)
+	{
+		return EResult::NotImplemented;
+	}
 #pragma endregion
 
 protected:

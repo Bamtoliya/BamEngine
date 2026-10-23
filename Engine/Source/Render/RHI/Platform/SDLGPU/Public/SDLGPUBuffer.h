@@ -10,7 +10,6 @@ private:
 	SDLGPUBuffer(RHI* rhi, const DESC& desc) :
 		RHIBuffer(rhi, desc)
 	{
-		m_Data.resize(m_Size);
 	}
 	virtual ~SDLGPUBuffer() = default;
 	EResult Initialize(const DESC& desc);
@@ -26,8 +25,12 @@ public:
 
 public:
 	virtual void SetData(const void* data, uint32 size) override;
+public:
+	EResult QueryUploadComplete(bool& complete) override;
+protected:
+	EResult UploadRangeInternal(const void* data, uint32 size, uint32 offset) override;
 private:
-	vector<uint8> m_Data;
+	SDL_GPUFence* m_UploadFence = nullptr;
 	SDL_GPUBuffer* m_GPUBuffer = { nullptr };
 };
 END
