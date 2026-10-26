@@ -19,10 +19,19 @@ void SystemManager::Free()
 
 void SystemManager::FixedUpdate(entt::registry& registry, const vector<Scene*>& activeScenes, f32 dt)
 {
+	if (!std::isfinite(dt) || dt <= 0.f)
+		return;
+
 	for (ISystem* system : m_Systems)
 	{
 		if (system->IsActive())
 			system->OnFixedUpdate(registry, activeScenes, dt);
+	}
+
+	for (ISystem* system : m_Systems)
+	{
+		if (system->IsActive())
+			system->OnPostFixedUpdate(registry, activeScenes, dt);
 	}
 }
 

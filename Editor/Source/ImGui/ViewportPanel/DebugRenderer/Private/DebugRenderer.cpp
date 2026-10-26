@@ -173,9 +173,12 @@ void DebugRenderer::RegisterColliderDebug(const CameraBuffer& cameraBuffer)
 	const Frustum frustum = FrustumCuller::ExtractFrustum(cameraBuffer.viewProjMatrix);
 	const auto isVisibleInFrustum = [&](const vec3& localCenter, const vec3& localExtent, const mat4& worldMatrix)
 		{
-			const AABB localAABB(localCenter - localExtent, localCenter + localExtent);
-			const AABB worldAABB = FrustumCuller::TransformAABB(localAABB, worldMatrix);
-			return FrustumCuller::TestAABB(frustum, worldAABB);
+			const BoundingBox localBounds(localCenter - localExtent, localCenter + localExtent);
+			BoundingBox worldBounds;
+			if (!localBounds.TryTransformToAABB(worldMatrix, worldBounds))
+				return true;
+
+			return FrustumCuller::TestBoundingBox(frustum, worldBounds);
 		};
 	const auto drawCircleXY = [&](const vec3& localCenter, f32 radius, const vec4& color, const mat4& worldMatrix)
 		{

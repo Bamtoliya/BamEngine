@@ -42,3 +42,27 @@ endif()
 if(BUILD_TESTING)
     add_test(NAME TerrainDataCheck COMMAND TerrainDataCheck)
 endif()
+
+add_executable(Physics2DCheck examples/Physics2DCheck.cpp)
+target_link_libraries(Physics2DCheck PRIVATE BamEngine::Engine)
+set_target_properties(Physics2DCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
+
+if(MSVC)
+    target_compile_options(Physics2DCheck PRIVATE /utf-8 /Zc:preprocessor)
+endif()
+
+if(BUILD_TESTING)
+    add_test(NAME Physics2DCheck COMMAND Physics2DCheck)
+endif()
+
+add_executable(CollisionGeometryCheck examples/CollisionGeometryCheck.cpp)
+target_link_libraries(CollisionGeometryCheck PRIVATE BamEngine::Engine)
+set_target_properties(CollisionGeometryCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
+
+if(MSVC)
+    target_compile_options(CollisionGeometryCheck PRIVATE /utf-8 /Zc:preprocessor)
+endif()
+
+if(BUILD_TESTING)
+    add_test(NAME CollisionGeometryCheck COMMAND CollisionGeometryCheck)
+endif()

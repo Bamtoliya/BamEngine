@@ -52,6 +52,10 @@
 #include <memory>
 
 #include <random>
+#include <cstdint>
+#include <cmath>
+#include <limits>
+#include <cstring>
 
 #pragma endregion
 

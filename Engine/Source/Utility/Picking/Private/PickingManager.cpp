@@ -154,7 +154,7 @@ Entity* PickingManager::PickEntityByRay(const Ray& ray, f32 maxDistance, HitResu
 					HitResult hit{};
 					const bool hasHit = testTriangles
 						? Collision::Raycast(ray, *mesh, matrix, hit, closestDistance)
-						: Collision::Raycast(ray, AABB(mesh->GetMin(), mesh->GetMax()), matrix, hit, closestDistance);
+						: Collision::Raycast(ray, BoundingBox(mesh->GetMin(), mesh->GetMax()), matrix, hit, closestDistance);
 					if (hasHit && (!closest || hit.distance < closestDistance))
 					{
 						closest = candidate;

@@ -77,8 +77,10 @@ void MeshRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& 
 
             if (!mesh->IsDynamic())
             {
-                const AABB localBounds(mesh->GetMin(), mesh->GetMax());
-                command.worldBounds = FrustumCuller::TransformAABB(localBounds, command.worldMatrix);
+                const BoundingBox localBounds(mesh->GetMin(), mesh->GetMax());
+                BoundingBox worldBounds;
+                if (localBounds.TryTransformToAABB(command.worldMatrix, worldBounds))
+                    command.worldBounds = worldBounds;
             }
 
             command.pickingId = PickingManager::Get().RegisterPickingEntity(scene, entity);

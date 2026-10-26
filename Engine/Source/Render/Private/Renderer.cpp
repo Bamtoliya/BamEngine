@@ -409,7 +409,7 @@ EResult Renderer::RenderMeshes(const vector<StaticDrawCommand>& commands, Render
 		if (!mesh || !material)
 			return EResult::Fail;
 
-		if (frustum && command.worldBounds && !FrustumCuller::TestAABB(*frustum, *command.worldBounds))
+		if (frustum && command.worldBounds && !FrustumCuller::TestBoundingBox(*frustum, *command.worldBounds))
 			continue;
 
 		if (material != lastMaterial || mesh != lastMesh)

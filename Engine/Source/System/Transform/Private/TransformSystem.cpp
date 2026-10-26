@@ -377,3 +377,20 @@ bool TransformSystem::TrySetAbsolute(entt::registry& registry, entt::entity enti
     candidate.absolute = flags;
     return TryCommitTransform(registry, entity, candidate);
 }
+
+bool TransformSystem::UpdateRootWorld(TransformComponent& transform, WorldTransformComponent& worldTransform)
+{
+    auto candidate = transform;
+    if (!candidate.HasValidAbsoluteFlags() || !candidate.SynchronizeRotation() ||
+        !candidate.SetLocalPosition(candidate.position) || !candidate.SetLocalScale(candidate.scale))
+        return false;
+
+    const glm::mat4 parent(1.f);
+    glm::mat4 matrix;
+    if (!TryComposeWorld(candidate, parent, matrix))
+        return false;
+
+    transform = candidate;
+    worldTransform.CommitWorld(candidate, parent, matrix);
+    return true;
+}

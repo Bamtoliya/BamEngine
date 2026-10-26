@@ -5,36 +5,25 @@
 #include "Components/Core/HierarchyComponent.h"
 #include "Components/Core/FlagComponent.h"
 #include "Collision.h"
-#include <cmath>
+#include "Entity.h"
+#include "TransformSystem.h"
+#include "Components/Core/WorldTransformComponent.h"
 
-EResult PhysicsSystem::Initialize(void* arg)
+#pragma region Helper
+using PhysicsShape2D = variant<Rect, Circle, Capsule>;
+
+static mat3 GetPhysicsMatrix2D(const mat4& world)
 {
-	(void)arg;
-	return EResult::Success;
+    return mat3(
+        vec3(world[0].x, world[0].y, 0.f),
+        vec3(world[1].x, world[1].y, 0.f),
+        vec3(world[3].x, world[3].y, 1.f));
 }
 
-void PhysicsSystem::Free()
-{
-}
-
-PhysicsSystem* PhysicsSystem::Create(void* arg)
-{
-	PhysicsSystem* instance = new PhysicsSystem();
-	if (IsFailure(instance->Initialize(arg)))
-	{
-		Safe_Release(instance);
-		return nullptr;
-	}
-	return instance;
-}
-
-static bool TryBuildPhysicsBoxRect(const entt::registry& world, entt::entity entity, Rect& result)
+static bool TryBuildPhysicsShape(const entt::registry& world, entt::entity entity, PhysicsShape2D& result)
 {
     const auto& collider = world.get<Collider2DComponent>(entity);
-    const auto& transform = world.get<TransformComponent>(entity);
-    const auto* box = std::get_if<Box2DShape>(&collider.GetShape());
-
-    if (!collider.GetSettings().Enabled || !box || !box->HasValidParameters())
+    if (!collider.GetSettings().Enabled)
         return false;
 
     const auto* hierarchy = world.try_get<HierarchyComponent>(entity);
@@ -46,32 +35,125 @@ static bool TryBuildPhysicsBoxRect(const entt::registry& world, entt::entity ent
         HasFlag(flag->flags, EEntityFlag::Dead)))
         return false;
 
-    auto candidate = transform;
-    if (!candidate.HasValidAbsoluteFlags() || !candidate.SynchronizeRotation())
+    const auto& worldTransform = world.get<WorldTransformComponent>(entity);
+    const glm::dmat4 matrix(worldTransform.worldMatrix);
+    const glm::dvec2 axisX(matrix[0]);
+    const glm::dvec2 axisY(matrix[1]);
+    const double scaleX = glm::length(axisX);
+    const double scaleY = glm::length(axisY);
+    const double limit = std::numeric_limits<f32>::max();
+    constexpr double tolerance = 1.0e-6;
+
+    if (!std::isfinite(scaleX) || !std::isfinite(scaleY) || scaleX <= 0.0 || scaleY <= 0.0 ||
+        std::abs(matrix[0].z) > scaleX * tolerance ||
+        std::abs(matrix[1].z) > scaleY * tolerance)
         return false;
 
-    // 현재는 회전하지 않은 Box만 처리합니다.
-    if (std::abs(candidate.rotation.x) > 1.0e-6f ||
-        std::abs(candidate.rotation.y) > 1.0e-6f ||
-        std::abs(candidate.rotation.z) > 1.0e-6f)
+    const glm::dvec2 offset(collider.GetOffset());
+    const glm::dvec2 worldCenter(matrix * glm::dvec4(offset, 0.0, 1.0));
+
+    for (int axis = 0; axis < 2; ++axis)
+    {
+        if (!std::isfinite(worldCenter[axis]) || std::abs(worldCenter[axis]) > limit)
+            return false;
+    }
+
+    if (const auto* box = std::get_if<Box2DShape>(&collider.GetShape()))
+    {
+        if (!box->HasValidParameters())
+            return false;
+
+        const vec2 halfSize = box->Size * 0.5f;
+        const vec2 minimum = collider.GetOffset() - halfSize;
+        const Rect bounds(minimum.x, minimum.y, box->Size.x, box->Size.y);
+
+        if (halfSize.x <= 0.f || halfSize.y <= 0.f || !IsFinite(minimum) ||
+            !std::isfinite(bounds.Right()) || !std::isfinite(bounds.Bottom()))
+            return false;
+
+        for (int index = 0; index < 4; ++index)
+        {
+            const glm::dvec4 corner((index & 1) ? bounds.Right() : bounds.left,
+                (index & 2) ? bounds.Bottom() : bounds.top, 0.0, 1.0);
+            const glm::dvec2 point(matrix * corner);
+
+            for (int axis = 0; axis < 2; ++axis)
+            {
+                if (!std::isfinite(point[axis]) || std::abs(point[axis]) > limit)
+                    return false;
+            }
+        }
+
+        result = bounds;
+        return true;
+    }
+
+    // 원과 캡슐의 둥근 부분이 원으로 유지되는 변환만 지원합니다.
+    if (std::abs(scaleX - scaleY) > tolerance * glm::max(scaleX, scaleY) ||
+        std::abs(glm::dot(axisX / scaleX, axisY / scaleY)) > tolerance)
         return false;
 
-    const vec2 scale(candidate.scale.x, candidate.scale.y);
-    const vec2 center = vec2(candidate.position.x, candidate.position.y) + collider.GetOffset() * scale;
-    const vec2 size = box->Size * glm::abs(scale);
-    const vec2 min = center - size * 0.5f;
+    const auto* circle = std::get_if<Circle2DShape>(&collider.GetShape());
+    const auto* capsule = std::get_if<Capsule2DShape>(&collider.GetShape());
 
-    if (!std::isfinite(min.x) || !std::isfinite(min.y) ||
-        !std::isfinite(size.x) || !std::isfinite(size.y) ||
-        size.x <= 0.f || size.y <= 0.f)
+    if (circle && !circle->HasValidParameters())
+        return false;
+    if (!circle && (!capsule || !capsule->HasValidParameters()))
         return false;
 
-    const Rect bounds(min.x, min.y, size.x, size.y);
-    if (!std::isfinite(bounds.Right()) || !std::isfinite(bounds.Bottom()))
+    const double localRadius = circle ? circle->Radius : capsule->Radius;
+    const double scaledRadius = localRadius * ((scaleX + scaleY) * 0.5);
+    if (!std::isfinite(scaledRadius) || scaledRadius <= 0.0 || scaledRadius > limit)
         return false;
 
-    result = bounds;
+    const f32 radius = static_cast<f32>(scaledRadius);
+    if (radius <= 0.f)
+        return false;
+
+    if (circle)
+    {
+        result = Circle(vec2(worldCenter), radius);
+        return true;
+    }
+
+    const double halfSegment = static_cast<double>(capsule->Height) * 0.5 - capsule->Radius;
+    const glm::dvec2 segmentOffset = axisY * halfSegment;
+    const glm::dvec2 first = worldCenter - segmentOffset;
+    const glm::dvec2 second = worldCenter + segmentOffset;
+
+    for (int axis = 0; axis < 2; ++axis)
+    {
+        if (!std::isfinite(first[axis]) || std::abs(first[axis]) > limit ||
+            !std::isfinite(second[axis]) || std::abs(second[axis]) > limit)
+            return false;
+    }
+
+    result = Capsule(vec3(vec2(first), 0.f), vec3(vec2(second), 0.f), radius);
     return true;
+}
+
+static bool IntersectsPhysicsShapes2D(const entt::registry& world, entt::entity entityA, entt::entity entityB,
+    const PhysicsShape2D& shapeA, const PhysicsShape2D& shapeB, HitResult& hit)
+{
+    const mat4& worldA = world.get<WorldTransformComponent>(entityA).worldMatrix;
+    const mat4& worldB = world.get<WorldTransformComponent>(entityB).worldMatrix;
+
+    return std::visit([&](const auto& a, const auto& b)
+        {
+            using ShapeA = std::decay_t<decltype(a)>;
+            using ShapeB = std::decay_t<decltype(b)>;
+
+            if constexpr (std::is_same_v<ShapeA, Rect> && std::is_same_v<ShapeB, Rect>)
+                return Collision::Intersects(a, GetPhysicsMatrix2D(worldA), b, GetPhysicsMatrix2D(worldB), hit);
+            else if constexpr (std::is_same_v<ShapeA, Rect>)
+                return Collision::Intersects(a, GetPhysicsMatrix2D(worldA), b, hit);
+            else if constexpr (std::is_same_v<ShapeB, Rect>)
+                return Collision::Intersects(a, b, GetPhysicsMatrix2D(worldB), hit);
+            else if constexpr (std::is_same_v<ShapeA, Capsule> && std::is_same_v<ShapeB, Capsule>)
+                return Collision::Intersects2D(a, b, hit);
+            else
+                return Collision::Intersects(a, b, hit);
+        }, shapeA, shapeB);
 }
 
 static void ResolvePhysicsContact(entt::registry& world, entt::entity entityA, entt::entity entityB, const HitResult& hit, bool resolveVelocity)
@@ -85,9 +167,17 @@ static void ResolvePhysicsContact(entt::registry& world, entt::entity entityA, e
             if (!body || body->BodyType == ERigidBodyType::Static)
                 return true;
 
-            if (body->BodyType != ERigidBodyType::Dynamic ||
-                !std::isfinite(body->Mass) || body->Mass <= 0.f ||
-                !std::isfinite(body->LinearVelocity.x) || !std::isfinite(body->LinearVelocity.y))
+            if (body->BodyType != ERigidBodyType::Dynamic &&
+                body->BodyType != ERigidBodyType::Kinematic)
+                return false;
+
+            if (!std::isfinite(body->LinearVelocity.x) || !std::isfinite(body->LinearVelocity.y))
+                return false;
+
+            if (body->BodyType == ERigidBodyType::Kinematic)
+                return true;
+
+            if (!std::isfinite(body->Mass) || body->Mass <= 0.f)
                 return false;
 
             inverseMass = 1.0 / static_cast<double>(body->Mass);
@@ -111,8 +201,16 @@ static void ResolvePhysicsContact(entt::registry& world, entt::entity entityA, e
     const double weightA = inverseMassA / inverseMassSum;
     const double weightB = inverseMassB / inverseMassSum;
 
-    glm::dvec2 velocityA = inverseMassA > 0.0 ? glm::dvec2(bodyA->LinearVelocity) : glm::dvec2(0.0);
-    glm::dvec2 velocityB = inverseMassB > 0.0 ? glm::dvec2(bodyB->LinearVelocity) : glm::dvec2(0.0);
+    const auto getContactVelocity = [](const RigidBody2DComponent* body) -> glm::dvec2
+        {
+            if (!body || body->BodyType == ERigidBodyType::Static)
+                return glm::dvec2(0.0);
+
+            return glm::dvec2(body->LinearVelocity);
+        };
+
+    glm::dvec2 velocityA = getContactVelocity(bodyA);
+    glm::dvec2 velocityB = getContactVelocity(bodyB);
     const double normalSpeed = glm::dot(velocityA - velocityB, normal);
 
     const auto& settingsA = world.get<Collider2DComponent>(entityA).GetSettings();
@@ -177,20 +275,122 @@ static void ResolvePhysicsContact(entt::registry& world, entt::entity entityA, e
         (inverseMassB > 0.0 && !candidateB.SetLocalPosition(positionB)))
         return;
 
-    // 양쪽 검증이 성공한 뒤 상태를 반영합니다.
+    auto candidateWorldA = world.get<WorldTransformComponent>(entityA);
+    auto candidateWorldB = world.get<WorldTransformComponent>(entityB);
+
+    if ((inverseMassA > 0.0 && !TransformSystem::UpdateRootWorld(candidateA, candidateWorldA)) ||
+        (inverseMassB > 0.0 && !TransformSystem::UpdateRootWorld(candidateB, candidateWorldB)))
+        return;
+
     if (inverseMassA > 0.0)
     {
         transformA = candidateA;
+        world.get<WorldTransformComponent>(entityA) = candidateWorldA;
         bodyA->LinearVelocity = nextVelocityA;
     }
 
     if (inverseMassB > 0.0)
     {
         transformB = candidateB;
+        world.get<WorldTransformComponent>(entityB) = candidateWorldB;
         bodyB->LinearVelocity = nextVelocityB;
     }
 }
 
+using PhysicsTriggerPair = pair<entt::entity, entt::entity>;
+
+struct PhysicsTriggerState
+{
+    set<PhysicsTriggerPair> Previous;
+    vector<TriggerEvent> Events;
+};
+
+static void CollectPhysicsTriggerEvents2D(Scene& scene)
+{
+    auto& world = scene.GetRegistry();
+    auto& state = world.ctx().emplace<PhysicsTriggerState>();
+    state.Events.clear();
+
+    std::set<PhysicsTriggerPair> current;
+    auto colliders = world.view<Collider2DComponent, TransformComponent, WorldTransformComponent>();
+
+    for (auto first = colliders.begin(); first != colliders.end(); ++first)
+    {
+        auto second = first;
+        ++second;
+
+        for (; second != colliders.end(); ++second)
+        {
+            const auto handleA = *first;
+            const auto handleB = *second;
+            const auto& settingsA = colliders.get<Collider2DComponent>(handleA).GetSettings();
+            const auto& settingsB = colliders.get<Collider2DComponent>(handleB).GetSettings();
+
+            if (!settingsA.IsTrigger && !settingsB.IsTrigger)
+                continue;
+
+            auto* entityA = scene.FindEntity(handleA);
+            auto* entityB = scene.FindEntity(handleB);
+            HitResult hit{};
+
+            if (!entityA || !entityB || !PhysicsSystem::Overlap2D(*entityA, *entityB, hit))
+                continue;
+
+            PhysicsTriggerPair pair{ handleA, handleB };
+            if (pair.second < pair.first)
+                std::swap(pair.first, pair.second);
+
+            current.insert(pair);
+        }
+    }
+
+    for (const auto& pair : current)
+    {
+        const auto type = state.Previous.contains(pair)
+            ? ETriggerEventType::Stay
+            : ETriggerEventType::Enter;
+
+        state.Events.push_back({ pair.first, pair.second, type });
+    }
+
+    for (const auto& pair : state.Previous)
+    {
+        if (current.contains(pair))
+            continue;
+
+        // 한쪽이 삭제돼도 살아 있는 쪽에서 이탈을 처리할 수 있습니다.
+        if (scene.FindEntity(pair.first) || scene.FindEntity(pair.second))
+            state.Events.push_back({ pair.first, pair.second, ETriggerEventType::Exit });
+    }
+
+    state.Previous = std::move(current);
+}
+#pragma endregion
+
+#pragma region Constructor&Destructor
+EResult PhysicsSystem::Initialize(void* arg)
+{
+    (void)arg;
+    return EResult::Success;
+}
+
+PhysicsSystem* PhysicsSystem::Create(void* arg)
+{
+    PhysicsSystem* instance = new PhysicsSystem();
+    if (IsFailure(instance->Initialize(arg)))
+    {
+        Safe_Release(instance);
+        return nullptr;
+    }
+    return instance;
+}
+
+void PhysicsSystem::Free()
+{
+}
+#pragma endregion
+
+#pragma region Loop
 void PhysicsSystem::OnFixedUpdate(entt::registry& registry, const vector<Scene*>& activeScenes, f32 dt)
 {
     // 첫 단계에서는 PIE 복원 대상인 씬의 강체만 처리합니다.
@@ -203,18 +403,36 @@ void PhysicsSystem::OnFixedUpdate(entt::registry& registry, const vector<Scene*>
 
     for (Scene* scene : activeScenes)
     {
-        if (!scene || !scene->IsActive() || scene->IsPaused())
+        if (!scene)
             continue;
 
+        if (!scene->IsActive() || scene->IsPaused())
+        {
+            if (auto* state = scene->GetRegistry().ctx().find<PhysicsTriggerState>())
+                state->Events.clear();
+
+            continue;
+        }
+
         auto& world = scene->GetRegistry();
-        auto view = world.view<RigidBody2DComponent, TransformComponent>();
+
+        if (!TransformSystem::UpdateHierarchy(world))
+        {
+            if (auto* state = world.ctx().find<PhysicsTriggerState>())
+                state->Events.clear();
+
+            continue;
+        }
+        
+        auto view = world.view<RigidBody2DComponent, TransformComponent, WorldTransformComponent>();
 
         for (auto entity : view)
         {
             auto& body = view.get<RigidBody2DComponent>(entity);
             auto& transform = view.get<TransformComponent>(entity);
 
-            if (body.BodyType != ERigidBodyType::Dynamic)
+            if (body.BodyType != ERigidBodyType::Dynamic &&
+                body.BodyType != ERigidBodyType::Kinematic)
                 continue;
 
             const auto* hierarchy = world.try_get<HierarchyComponent>(entity);
@@ -229,6 +447,25 @@ void PhysicsSystem::OnFixedUpdate(entt::registry& registry, const vector<Scene*>
             // 외력은 이번 고정 스텝에서 소비합니다.
             const vec2 force = body.AccumulatedForce;
             body.AccumulatedForce = vec2(0.f);
+
+            if (body.BodyType == ERigidBodyType::Kinematic)
+            {
+                if (!transform.HasValidAbsoluteFlags() ||
+                    !std::isfinite(body.LinearVelocity.x) || !std::isfinite(body.LinearVelocity.y))
+                    continue;
+
+                const vec3 position = transform.position + vec3(body.LinearVelocity, 0.f) * dt;
+                auto candidate = transform;
+                auto candidateWorld = world.get<WorldTransformComponent>(entity);
+
+                if (!candidate.SetLocalPosition(position) ||
+                    !TransformSystem::UpdateRootWorld(candidate, candidateWorld))
+                    continue;
+
+                transform = candidate;
+                world.get<WorldTransformComponent>(entity) = candidateWorld;
+                continue;
+            }
 
             if (!transform.HasValidAbsoluteFlags() ||
                 !std::isfinite(body.Mass) || body.Mass <= 0.f ||
@@ -248,13 +485,19 @@ void PhysicsSystem::OnFixedUpdate(entt::registry& registry, const vector<Scene*>
                 continue;
 
             const vec3 position = transform.position + vec3(velocity.x, velocity.y, 0.f) * dt;
-            if (!transform.SetLocalPosition(position))
+            auto candidate = transform;
+            auto candidateWorld = world.get<WorldTransformComponent>(entity);
+
+            if (!candidate.SetLocalPosition(position) ||
+                !TransformSystem::UpdateRootWorld(candidate, candidateWorld))
                 continue;
 
+            transform = candidate;
+            world.get<WorldTransformComponent>(entity) = candidateWorld;
             body.LinearVelocity = velocity;
         }
 
-        auto colliders = world.view<Collider2DComponent, TransformComponent>();
+        auto colliders = world.view<Collider2DComponent, TransformComponent, WorldTransformComponent>();
         constexpr int positionIterations = 8;
 
         for (int iteration = 0; iteration < positionIterations; ++iteration)
@@ -280,18 +523,80 @@ void PhysicsSystem::OnFixedUpdate(entt::registry& registry, const vector<Scene*>
                         (settingsB.CollisionLayer & settingsA.CollisionMask) == 0u)
                         continue;
 
-                    Rect boundsA, boundsB;
-                    if (!TryBuildPhysicsBoxRect(world, entityA, boundsA) ||
-                        !TryBuildPhysicsBoxRect(world, entityB, boundsB))
+                    PhysicsShape2D shapeA, shapeB;
+                    if (!TryBuildPhysicsShape(world, entityA, shapeA) ||
+                        !TryBuildPhysicsShape(world, entityB, shapeB))
                         continue;
 
-                    HitResult hit;
-                    if (!Collision::Intersects(boundsA, boundsB, hit))
+                    HitResult hit{};
+                    if (!IntersectsPhysicsShapes2D(world, entityA, entityB, shapeA, shapeB, hit))
                         continue;
 
                     ResolvePhysicsContact(world, entityA, entityB, hit, resolveVelocity);
                 }
             }
         }
+
+        if (!TransformSystem::UpdateHierarchy(world))
+        {
+            if (auto* state = world.ctx().find<PhysicsTriggerState>())
+                state->Events.clear();
+
+            continue;
+        }
+
+        CollectPhysicsTriggerEvents2D(*scene);
     }
 }
+#pragma endregion
+
+#pragma region Overlap
+bool PhysicsSystem::Overlap2D(const Entity& entityA, const Entity& entityB, HitResult& outHitResult)
+{
+    outHitResult.Reset();
+
+    Scene* scene = entityA.GetScene();
+    if (!scene || scene != entityB.GetScene() || !scene->IsActive() || scene->IsPaused())
+        return false;
+
+    const auto handleA = entityA.GetEntityHandle();
+    const auto handleB = entityB.GetEntityHandle();
+
+    if (handleA == handleB ||
+        scene->FindEntity(handleA) != &entityA ||
+        scene->FindEntity(handleB) != &entityB)
+        return false;
+
+    const auto& world = scene->GetRegistry();
+    if (!world.all_of<Collider2DComponent, TransformComponent, WorldTransformComponent>(handleA) ||
+        !world.all_of<Collider2DComponent, TransformComponent, WorldTransformComponent>(handleB))
+        return false;
+
+    const auto& settingsA = world.get<Collider2DComponent>(handleA).GetSettings();
+    const auto& settingsB = world.get<Collider2DComponent>(handleB).GetSettings();
+
+    if ((settingsA.CollisionLayer & settingsB.CollisionMask) == 0u ||
+        (settingsB.CollisionLayer & settingsA.CollisionMask) == 0u)
+        return false;
+
+    PhysicsShape2D shapeA, shapeB;
+    if (!TryBuildPhysicsShape(world, handleA, shapeA) ||
+        !TryBuildPhysicsShape(world, handleB, shapeB))
+        return false;
+
+    return IntersectsPhysicsShapes2D(world, handleA, handleB, shapeA, shapeB, outHitResult);
+}
+span<const TriggerEvent> PhysicsSystem::GetTriggerEvents2D(const Scene& scene)
+{
+    const auto* state = scene.GetRegistry().ctx().find<PhysicsTriggerState>();
+    if (!state)
+        return {};
+
+    return { state->Events.data(), state->Events.size() };
+}
+
+void PhysicsSystem::ResetTriggerState2D(Scene& scene)
+{
+    scene.GetRegistry().ctx().erase<PhysicsTriggerState>();
+}
+#pragma endregion

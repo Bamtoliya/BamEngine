@@ -69,7 +69,7 @@ int main()
     }
 
     const glm::mat4 identity(1.0f);
-    const Engine::AABB bounds(mesh->GetMin(), mesh->GetMax());
+    const Engine::BoundingBox bounds(mesh->GetMin(), mesh->GetMax());
 
     const auto linear = [&](const Engine::Ray& ray) -> float
         {

@@ -1,6 +1,6 @@
 ﻿#pragma once
 
-#include "Vertex.h"
+#include "Structs/Vertex.h"
 
 const InputLayoutDesc VertexPosition::Layout =
 {

@@ -13,12 +13,14 @@
 ,CATEGORY_ATMOSPHERE_SYNC,Atmosphere Sync,대기 동기화
 ,CATEGORY_AUDIO,Audio,오디오
 ,CATEGORY_BOUNDS,Bounds,경계
+,CATEGORY_CIRCLE,Circle,원
 ,CATEGORY_CLOUDS,Clouds,구름
 ,CATEGORY_CLOUD_SHAPE,Cloud Shape,구름 형태
 ,CATEGORY_CORE,Core,기본
 ,CATEGORY_FOG_COLOR,Fog Color,안개 색상
 ,CATEGORY_FOG_PARAMETERS,Fog Parameters,안개 매개변수
 ,CATEGORY_FOG_PLACEMENT,Fog Placement,안개 배치
+,CATEGORY_HIT_RESULT,Hit Result,히트 결과
 ,CATEGORY_LAYER_PLACEMENT,Layer Placement,구름층 배치
 ,CATEGORY_LIGHTING,Lighting,조명
 ,CATEGORY_PARAMETER,Parameter,매개변수
@@ -145,6 +147,7 @@
 ,PROP_CAMERA_TYPE,Camera Type,카메라 타입
 ,PROP_CASCADE_SPLIT_LAMBDA,Cascade Split Lambda,캐스케이드 분할 가중치
 ,PROP_CAST_SHADOW,Cast Shadow,그림자
+,PROP_CENTER,Center,중심
 ,PROP_CLOUD_ALTITUDE,Cloud Altitude,구름 고도
 ,PROP_CLOUD_COVERAGE,Cloud Coverage,구름 덮개
 ,PROP_CLOUD_DENSITY,Cloud Density,구름 밀도
@@ -233,6 +236,7 @@
 ,PROP_MORPH_SPEED,Morph Speed,대류 피어오름 속도
 ,PROP_NAME,Name,이름
 ,PROP_NEAR_PLANE,Near Plane,근거리 평면
+,PROP_NORMAL,Normal,법선
 ,PROP_NORMAL_COLOR,Normal Color,기본 색
 ,PROP_OFFSET,Offset,오프셋
 ,PROP_ORIGIN,Origin,원점
@@ -244,6 +248,7 @@
 ,PROP_PIXEL_SHADER,Pixel Shader,픽셀 셰이더
 ,PROP_PIXEL_SHADER_HANDLE,Pixel Shader Handle,픽셀 셰이더 핸들
 ,PROP_PLAY_ON_AWAKE,Play On Awake,시작 시 자동 재생
+,PROP_POINT,Point,점
 ,PROP_POINT_A,Point A,시작점 A
 ,PROP_POINT_B,Point B,끝점 B
 ,PROP_POSITION,Position,위치
@@ -320,12 +325,15 @@
 ,STRUCT_AABB,AABB,축 정렬 경계 상자(AABB)
 ,STRUCT_AUDIO_LISTENER,Audio Listener,오디오 리스너
 ,STRUCT_AUDIO_SOURCE,Audio Source,오디오 소스
+,STRUCT_BOUNDING_BOX,Bounding Box,경계 상자
+,STRUCT_BOUNDING_SPHERE,Bounding Sphere,경계 구
 ,STRUCT_BOX_2D,Box 2D,2D 상자
 ,STRUCT_BUTTON,Button,버튼
 ,STRUCT_CAMERA,Camera,카메라
 ,STRUCT_CANVAS,Canvas,캔버스
 ,STRUCT_CAPSULE,Capsule,캡슐
 ,STRUCT_CAPSULE_2D,Capsule 2D,2D 캡슐
+,STRUCT_CIRCLE,Circle,원
 ,STRUCT_CIRCLE_2D,Circle 2D,2D 원
 ,STRUCT_COLLIDER,Collider,충돌체
 ,STRUCT_COLLIDER_2D,Collider 2D,2D 충돌체
@@ -334,6 +342,7 @@
 ,STRUCT_FOG,Fog,안개
 ,STRUCT_GRAPH_BINDING,Graph Binding,그래프 연결
 ,STRUCT_HIERARCHY,Hierarchy,계층
+,STRUCT_HIT_RESULT,Hit Result,히트 결과
 ,STRUCT_ID,ID,ID
 ,STRUCT_IMAGE,Image,이미지
 ,STRUCT_JOINT_2D,Distance Joint 2D,2D 거리 조인트

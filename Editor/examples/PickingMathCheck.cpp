@@ -19,7 +19,7 @@ namespace
 	{
 		return Engine::PickingManager::TryBuildRay(inverseViewProjection, uv, ray, maxDistance);
 	}
-	bool RaycastBounds(const Engine::Ray& ray, const Engine::AABB& bounds, const glm::mat4& world, float maxDistance, float& distance)
+	bool RaycastBounds(const Engine::Ray& ray, const Engine::BoundingBox& bounds, const glm::mat4& world, float maxDistance, float& distance)
 	{
 		Engine::HitResult hit{};
 		if (!Engine::Collision::Raycast(ray, bounds, world, hit, maxDistance)) return false;
@@ -71,7 +71,7 @@ namespace
 			Near(rebuilt.Nodes.front().BoundsMin.x, 20.0f) && Near(rebuilt.Nodes.front().BoundsMax.x, 41.0f) &&
 			Near(mesh->GetMin().x, 20.0f) && Near(mesh->GetMax().x, 41.0f);
 
-		const Engine::AABB bounds(mesh->GetMin(), mesh->GetMax());
+		const Engine::BoundingBox bounds(mesh->GetMin(), mesh->GetMax());
 		const Engine::Ray movedRay({ 20.25f, 0.25f, -5.0f }, { 0.0f, 0.0f, 1.0f });
 		const Engine::Ray oldRay({ -9.75f, 0.25f, -5.0f }, { 0.0f, 0.0f, 1.0f });
 		Engine::HitResult boundsHit{};
@@ -293,7 +293,7 @@ int main()
 	if (TryBuildRay(glm::mat4(0.0f), { 0.5f, 0.5f }, center) ||
 		TryBuildRay(glm::mat4(1.0f), { nan, 0.5f }, center)) return Fail("Invalid unprojection was accepted.");
 
-	const Engine::AABB bounds(glm::vec3(-1.0f), glm::vec3(1.0f));
+	const Engine::BoundingBox bounds(glm::vec3(-1.0f), glm::vec3(1.0f));
 	const glm::mat4 identity(1.0f);
 	float distance = 0.0f;
 	const Engine::Ray forward({ 0.0f, 0.0f, -5.0f }, { 0.0f, 0.0f, 2.0f });
@@ -316,7 +316,7 @@ int main()
 		glm::scale(identity, { 2.0f, 1.0f, 0.5f });
 	if (!RaycastBounds(forward, bounds, rotated, 20.0f, distance) || !Near(distance, 13.0f))
 		return Fail("Rotated mesh bounds failed.");
-	const Engine::AABB quad({ -1.0f, -1.0f, 0.0f }, { 1.0f, 1.0f, 0.0f });
+	const Engine::BoundingBox quad({ -1.0f, -1.0f, 0.0f }, { 1.0f, 1.0f, 0.0f });
 	if (!RaycastBounds(forward, quad, identity, 20.0f, distance) || !Near(distance, 5.0f))
 		return Fail("Zero-thickness sprite bounds failed.");
 	if (RaycastBounds(forward, bounds, glm::scale(identity, { 1.0f, 0.0f, 1.0f }), 20.0f, distance) ||
@@ -370,7 +370,7 @@ int main()
 	{
 		triangleMesh->Free();
 		triangleMesh = nullptr;
-		return Fail("Back mesh behind empty AABB corner should be hit.");
+		return Fail("Back mesh behind empty BoundingBox corner should be hit.");
 	}
 	triangleMesh->Free();
 	triangleMesh = nullptr;

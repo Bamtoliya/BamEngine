@@ -19,7 +19,7 @@ struct StaticDrawCommand
 	mat4 worldMatrix = { glm::identity<mat4>() };
 	RenderObjectId objectId{};
 	uint32 pickingId = 0;
-	std::optional<AABB> worldBounds{};
+	std::optional<BoundingBox> worldBounds{};
 };
 
 struct SkinnedDrawCommand
