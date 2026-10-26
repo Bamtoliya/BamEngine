@@ -3,11 +3,10 @@
 #include "Shader.h"
 #include "Renderer.h"
 #include "Logger.h"
+#include "NotificationManager.h"
 #include <windows.h>
 #include <fstream>
 #include <unordered_set>
-
-IMPLEMENT_SINGLETON(ShaderHotReloadManager)
 
 namespace
 {
@@ -118,6 +117,7 @@ std::filesystem::path ShaderHotReloadManager::ResolveShaderSourceDirectory()
 	return "Resources/Shader/hlsl";
 }
 
+#pragma region Constructor&Destrcutor
 EResult ShaderHotReloadManager::Initialize(void* arg)
 {
 	m_WatchDirectory = ResolveShaderSourceDirectory();
@@ -137,6 +137,18 @@ EResult ShaderHotReloadManager::Initialize(void* arg)
 	return EResult::Success;
 }
 
+ShaderHotReloadManager* ShaderHotReloadManager::Create()
+{
+	ShaderHotReloadManager* instance = new ShaderHotReloadManager();
+	if (instance->Initialize() != EResult::Success)
+	{
+		instance->Free();
+		delete instance;
+		return nullptr;
+	}
+	return instance;
+}
+
 void ShaderHotReloadManager::Free()
 {
 	if (m_FileWatcher)
@@ -149,17 +161,10 @@ void ShaderHotReloadManager::Free()
 	m_FileListener = nullptr;
 	__super::Free();
 }
-
-void ShaderHotReloadManager::NotifyFileModified(const std::filesystem::path& filePath)
-{
-	if (!m_AutoReload) return;
-	std::lock_guard<std::mutex> lock(m_QueueMutex);
-	m_PendingFiles[filePath.string()] = std::chrono::steady_clock::now();
-}
+#pragma endregion
 
 void ShaderHotReloadManager::Update()
 {
-	// UI 버튼 등에서 요청된 전체 재컴파일을 렌더링 전 안전한 유휴 시점에 실행
 	if (m_PendingRecompileAll.exchange(false))
 	{
 		EDITOR_LOG_INFO("[Shader Hot Reload] Safe tick: Recompiling all shaders...");
@@ -167,36 +172,26 @@ void ShaderHotReloadManager::Update()
 		return;
 	}
 
-	if (m_PendingFiles.empty()) return;
+	const auto readyFiles = CollectReadyFiles(std::chrono::milliseconds(300));
+	if (readyFiles.empty())
+		return;
 
-	const auto now = std::chrono::steady_clock::now();
 	std::vector<std::filesystem::path> targetHlslFiles;
 	std::unordered_set<std::string> targetHlslKeys;
 	std::unordered_set<std::string> modifiedHeaderKeys;
 
+	for (const auto& file : readyFiles)
 	{
-		std::lock_guard<std::mutex> lock(m_QueueMutex);
-		for (auto it = m_PendingFiles.begin(); it != m_PendingFiles.end(); )
+		const std::string ext = ToLowerCopy(file.extension().string());
+
+		if (ext == ".hlsli")
 		{
-			if (std::chrono::duration_cast<std::chrono::milliseconds>(now - it->second).count() >= 300)
-			{
-				std::filesystem::path p(it->first);
-				const std::string ext = ToLowerCopy(p.extension().string());
-				if (ext == ".hlsli")
-				{
-					modifiedHeaderKeys.insert(NormalizePathKey(p));
-				}
-				else if (ext == ".hlsl")
-				{
-					if (targetHlslKeys.insert(NormalizePathKey(p)).second)
-						targetHlslFiles.push_back(p);
-				}
-				it = m_PendingFiles.erase(it);
-			}
-			else
-			{
-				++it;
-			}
+			modifiedHeaderKeys.insert(NormalizePathKey(file));
+		}
+		else if (ext == ".hlsl")
+		{
+			if (targetHlslKeys.insert(NormalizePathKey(file)).second)
+				targetHlslFiles.push_back(file);
 		}
 	}
 
@@ -243,8 +238,10 @@ void ShaderHotReloadManager::ProcessModifiedFile(const std::filesystem::path& hl
 	{
 		EDITOR_LOG_ERROR("[Shader Hot Reload] Failed to compile '{}':\n{}",
 			hlslPath.filename().string(), result.ErrorMessage);
-		// 빨간색 에러 토스트 등록 (8초간 유지)
-		AddNotification(LOCAL("Notification.ShaderCompileError"), hlslPath.filename().string() + ":\n" + result.ErrorMessage, true, 8.0f);
+		NotificationManager::Get().AddNotification(
+			LOCAL("Notification.ShaderCompileError"),
+			hlslPath.filename().string() + ":\n" + result.ErrorMessage,
+			ELogLevel::Error, 8.0f);
 		return;
 	}
 
@@ -284,7 +281,10 @@ void ShaderHotReloadManager::ProcessModifiedFile(const std::filesystem::path& hl
 				EDITOR_LOG_INFO("[Shader Hot Reload] Hot-swapped: {} (Key: {}, {} bytes)",
 					hlslPath.filename().string(), WStrToStr(shader->GetKey()), result.Bytecode.size());
 				// 초록색 성공 토스트 등록 (3초간 유지)
-				AddNotification(LOCAL("Notification.ShaderHotReloaded"), LOCAL_FMT("Notification.ReloadedFile", hlslPath.filename().string()), false, 3.0f);
+				NotificationManager::Get().AddNotification(
+					LOCAL("Notification.ShaderHotReloaded"),
+					LOCAL_FMT("Notification.ReloadedFile", hlslPath.filename().string()),
+					ELogLevel::Info, 3.0f);
 			}
 		}
 	}
@@ -307,72 +307,5 @@ void ShaderHotReloadManager::RecompileAll()
 		{
 			ProcessModifiedFile(entry.path());
 		}
-	}
-}
-
-void ShaderHotReloadManager::AddNotification(const std::string& title, const std::string& msg, bool isError, float duration)
-{
-	m_Notifications.push_back({ title, msg, isError, duration });
-}
-
-void ShaderHotReloadManager::DrawNotificationUI()
-{
-	if (m_Notifications.empty()) return;
-
-	const float dt = ImGui::GetIO().DeltaTime;
-	const ImGuiViewport* viewport = ImGui::GetMainViewport();
-	const ImVec2 workPos = viewport->WorkPos;
-	const ImVec2 workSize = viewport->WorkSize;
-
-	float currentY = workPos.y + workSize.y - 30.0f;
-
-	for (int i = static_cast<int>(m_Notifications.size()) - 1; i >= 0; --i)
-	{
-		auto& notif = m_Notifications[i];
-		notif.RemainingTime -= dt;
-		if (notif.RemainingTime <= 0.0f)
-		{
-			m_Notifications.erase(m_Notifications.begin() + i);
-			continue;
-		}
-
-		// 창 위치: 화면 우측 하단에 차곡차곡 배치
-		ImGui::SetNextWindowPos(ImVec2(workPos.x + workSize.x - 380.0f, currentY), ImGuiCond_Always, ImVec2(0.0f, 1.0f));
-		ImGui::SetNextWindowSize(ImVec2(360.0f, 0.0f));
-
-		// 배경 및 테두리 색상 (에러: 짙은 적색, 성공: 짙은 녹색)
-		ImVec4 bgColor = notif.IsError ? ImVec4(0.20f, 0.05f, 0.05f, 0.92f) : ImVec4(0.05f, 0.18f, 0.05f, 0.92f);
-		ImVec4 borderColor = notif.IsError ? ImVec4(0.95f, 0.25f, 0.25f, 1.0f) : ImVec4(0.25f, 0.85f, 0.25f, 1.0f);
-
-		ImGui::PushStyleColor(ImGuiCol_WindowBg, bgColor);
-		ImGui::PushStyleColor(ImGuiCol_Border, borderColor);
-		ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
-		ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.5f);
-
-		std::string windowName = "##ShaderToast_" + std::to_string(i);
-		const ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize |
-			ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoMove;
-
-		if (ImGui::Begin(windowName.c_str(), nullptr, flags))
-		{
-			// 타이틀 및 닫기 [X] 버튼
-			ImVec4 titleColor = notif.IsError ? ImVec4(1.0f, 0.4f, 0.4f, 1.0f) : ImVec4(0.4f, 1.0f, 0.4f, 1.0f);
-			ImGui::TextColored(titleColor, "%s %s", notif.IsError ? "[!]" : "[V]", notif.Title.c_str());
-
-			ImGui::SameLine(ImGui::GetWindowWidth() - 30.0f);
-			if (ImGui::SmallButton("X"))
-			{
-				notif.RemainingTime = 0.0f;
-			}
-
-			ImGui::Separator();
-			ImGui::TextWrapped("%s", notif.Message.c_str());
-
-			currentY -= (ImGui::GetWindowHeight() + 10.0f);
-		}
-		ImGui::End();
-
-		ImGui::PopStyleVar(2);
-		ImGui::PopStyleColor(2);
 	}
 }

@@ -1,6 +1,6 @@
 ﻿#pragma once
 
-#include "Editor_Includes.h"
+#include "HotReloaderInterface.h"
 #include <efsw/efsw.hpp>
 #include <filesystem>
 #include <unordered_map>
@@ -11,27 +11,19 @@
 
 BEGIN(Editor)
 
-class AssetHotReloadManager final : public Base
+class AssetHotReloadManager final : public IHotReloader
 {
-	DECLARE_SINGLETON(AssetHotReloadManager)
-
+#pragma region Constructor & Destructor
 private:
 	AssetHotReloadManager() = default;
 	virtual ~AssetHotReloadManager() = default;
 	EResult Initialize(void* arg = nullptr);
-
 public:
+	static AssetHotReloadManager* Create(void* arg = nullptr);
 	void Free() override;
-
-	// 매 프레임 메인 루프에서 변경 큐를 디바운스 확인 후 핫스왑
-	void Update();
-
-	void NotifyFileModified(const std::filesystem::path& filePath);
-
-	[[nodiscard]] bool IsAutoReloadEnabled() const { return m_AutoReload; }
-	void SetAutoReload(bool enable) { m_AutoReload = enable; }
-	[[nodiscard]] bool& GetAutoReloadRef() { return m_AutoReload; }
-
+#pragma endregion
+public:
+	void Update() override;
 private:
 	void ProcessModifiedTexture(const std::filesystem::path& texturePath);
 	void ProcessModifiedMaterial(const std::filesystem::path& materialPath);
@@ -44,10 +36,6 @@ private:
 	efsw::FileWatchListener* m_FileListener = nullptr;
 	efsw::WatchID m_WatchID = 0;
 	std::filesystem::path m_WatchDirectory;
-
-	std::mutex m_QueueMutex;
-	std::unordered_map<std::string, std::chrono::steady_clock::time_point> m_PendingFiles;
-	bool m_AutoReload = true;
 };
 
 END

@@ -26,6 +26,8 @@
 #include "PIEManager.h"
 #include "ModuleHotReloadManager.h"
 #include "ShaderHotReloadManager.h"
+#include "HotReloadManager.h"
+#include "NotificationManager.h"
 
 void ToolBar::Draw(SDL_Window* window)
 {
@@ -73,7 +75,6 @@ void ToolBar::Draw(SDL_Window* window)
 	ImGui::End();
 
 	ImGui::PopStyleVar(3);
-	ShaderHotReloadManager::Get().DrawNotificationUI();
 }
 
 float ToolBar::GetPlayBarHeight() const
@@ -123,7 +124,20 @@ void ToolBar::LoadResourceFile()
 	wstring filePath;
 	if (!FileDialogs::OpenFileDialog(filePath, { {StrToWStr(LOCAL("FileDialog.ResourceFiles")), L""} }, filePath))
 		return;
-	ResourceManager::Get().LoadFile(filePath);
+	auto& manager = ResourceManager::Get();
+	const auto handle = manager.LoadFile(filePath);
+
+	if (!manager.IsValid(handle))
+	{
+		BAM_LOG(Error, "Editor", "Asset", "Toolbar resource load failed: path={}", WStrToStr(filePath));
+		NotificationManager::Get().AddNotification(LOCAL("Notification.LoadResourceFailed"),
+			LOCAL_FMT("Notification.ResourceLoadFailed", WStrToStr(filePath)), ELogLevel::Error, 3.0f);
+		return;
+	}
+
+	BAM_LOG(Info, "Editor", "Asset", "Toolbar resource loaded: path={}", WStrToStr(filePath));
+	NotificationManager::Get().AddNotification(LOCAL("Notification.LoadResourceSucceeded"),
+		LOCAL_FMT("Notification.ResourceLoadSucceeded", WStrToStr(filePath)), ELogLevel::Info, 3.0f);
 }
 
 
@@ -440,16 +454,20 @@ void ToolBar::DrawPlayControls()
 	ImGui::PushID("HotReloadBtn");
 	if (ImGui::Button((ICON_FA_ARROWS_ROTATE " " + LOCAL_LABEL("ToolBar.ModuleReload")).c_str(), ImVec2(100.0f, 0)))
 	{
-		ModuleHotReloadManager::Get().ReloadModule();
+		HotReloadManager::Get().GetModuleReloader().ReloadModule();
 	}
 	if (ImGui::IsItemHovered())
 	{
-		ImGui::SetTooltip("%s", LOCAL_FMT("ToolBar.ReloadModuleTooltip", ModuleHotReloadManager::Get().GetReloadIndex()).c_str());
+		ImGui::SetTooltip("%s", LOCAL_FMT("ToolBar.ReloadModuleTooltip", HotReloadManager::Get().GetModuleReloader().GetReloadIndex()).c_str());
 	}
 	ImGui::PopID();
 
 	ImGui::SameLine(0.0f, 5.0f);
-	ImGui::Checkbox(LOCAL_LABEL("ToolBar.AutoReload").c_str(), &ModuleHotReloadManager::Get().GetAutoReloadRef());
+	auto& moduleReloader = HotReloadManager::Get().GetModuleReloader();
+	bool autoReload = moduleReloader.IsAutoReloadEnabled();
+
+	if (ImGui::Checkbox(LOCAL_LABEL("ToolBar.AutoReload").c_str(), &autoReload))
+		moduleReloader.SetAutoReload(autoReload);
 	if (ImGui::IsItemHovered())
 	{
 		ImGui::SetTooltip("%s", LOCAL_CSTR("ToolBar.AutoReloadTooltip"));
@@ -459,7 +477,7 @@ void ToolBar::DrawPlayControls()
 	// 셰이더 전체 재컴파일 및 핫스왑 버튼
 	if (ImGui::Button(LOCAL_LABEL("ToolBar.ShaderReload").c_str()))
 	{
-		ShaderHotReloadManager::Get().RequestRecompileAll();
+		HotReloadManager::Get().GetShaderReloader().RequestRecompileAll();
 	}
 	if (ImGui::IsItemHovered())
 	{

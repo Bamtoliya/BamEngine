@@ -8,8 +8,7 @@
 #include "MaterialInstance.h"
 #include "Logger.h"
 #include <windows.h>
-
-IMPLEMENT_SINGLETON(AssetHotReloadManager)
+#include "NotificationManager.h"
 
 namespace
 {
@@ -60,6 +59,7 @@ namespace
 	private:
 		AssetHotReloadManager* m_Manager = nullptr;
 	};
+
 }
 
 std::filesystem::path AssetHotReloadManager::ResolveTextureDirectory()
@@ -82,6 +82,7 @@ std::filesystem::path AssetHotReloadManager::ResolveTextureDirectory()
 	return "Resources";
 }
 
+#pragma region Constructor&Destructor
 EResult AssetHotReloadManager::Initialize(void* arg)
 {
 	m_WatchDirectory = ResolveTextureDirectory();
@@ -114,40 +115,29 @@ void AssetHotReloadManager::Free()
 	__super::Free();
 }
 
-void AssetHotReloadManager::NotifyFileModified(const std::filesystem::path& filePath)
+AssetHotReloadManager* AssetHotReloadManager::Create(void* arg)
 {
-	if (!m_AutoReload) return;
-	std::lock_guard<std::mutex> lock(m_QueueMutex);
-	m_PendingFiles[filePath.string()] = std::chrono::steady_clock::now();
+	AssetHotReloadManager* instance = new AssetHotReloadManager();
+	if (instance->Initialize(arg) != EResult::Success)
+	{
+		instance->Free();
+		delete instance;
+		return nullptr;
+	}
+	return instance;
 }
+#pragma endregion
 
 void AssetHotReloadManager::Update()
 {
-	if (m_PendingFiles.empty()) return;
-
-	const auto now = std::chrono::steady_clock::now();
-	std::vector<std::filesystem::path> readyFiles;
-
-	{
-		std::lock_guard<std::mutex> lock(m_QueueMutex);
-		for (auto it = m_PendingFiles.begin(); it != m_PendingFiles.end(); )
-		{
-			if (std::chrono::duration_cast<std::chrono::milliseconds>(now - it->second).count() >= 300)
-			{
-				readyFiles.push_back(it->first);
-				it = m_PendingFiles.erase(it);
-			}
-			else
-			{
-				++it;
-			}
-		}
-	}
+	const auto readyFiles = CollectReadyFiles(std::chrono::milliseconds(300));
 
 	for (const auto& file : readyFiles)
 	{
 		std::string ext = file.extension().string();
-		for (char& c : ext) c = static_cast<char>(tolower(c));
+		for (char& c : ext)
+			c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
+
 		if (IsSupportedImageExtension(ext))
 		{
 			ProcessModifiedTexture(file);
@@ -198,8 +188,8 @@ void AssetHotReloadManager::ProcessModifiedTexture(const std::filesystem::path& 
 			{
 				reloadedAny = true;
 				// 방금 만든 우측 하단 토스트 알림 연동!
-				ShaderHotReloadManager::Get().AddNotification(LOCAL("Notification.TextureHotReloaded"),
-					LOCAL_FMT("Notification.ReloadedFile", texturePath.filename().string()), false, 3.0f);
+				NotificationManager::Get().AddNotification(LOCAL("Notification.TextureHotReloaded"),
+					LOCAL_FMT("Notification.ReloadedFile", texturePath.filename().string()), ELogLevel::Info, 3.0f);
 			}
 		}
 	}
@@ -234,8 +224,8 @@ void AssetHotReloadManager::ProcessModifiedMaterial(const std::filesystem::path&
 			{
 				if (IsSuccess(mat->Reload(materialPath)))
 				{
-					ShaderHotReloadManager::Get().AddNotification(LOCAL("Notification.MaterialHotReloaded"),
-						LOCAL_FMT("Notification.ReloadedFile", materialPath.filename().string()), false, 3.0f);
+					NotificationManager::Get().AddNotification(LOCAL("Notification.MaterialHotReloaded"),
+						LOCAL_FMT("Notification.ReloadedFile", materialPath.filename().string()), ELogLevel::Info, 3.0f);
 				}
 			}
 		}
@@ -264,8 +254,8 @@ void AssetHotReloadManager::ProcessModifiedLocalization(const std::filesystem::p
 	if (IsSuccess(Engine::LocalizationManager::Get().ReloadData()))
 	{
 		EDITOR_LOG_INFO("[HotReload] Localization reloaded: {}", locPath.filename().string());
-		ShaderHotReloadManager::Get().AddNotification(LOCAL("Notification.LocalizationReloaded"),
-			LOCAL_FMT("Notification.ReloadedFile", locPath.filename().string()), false, 3.0f);
+		NotificationManager::Get().AddNotification(LOCAL("Notification.LocalizationReloaded"),
+			LOCAL_FMT("Notification.ReloadedFile", locPath.filename().string()), ELogLevel::Info, 3.0f);
 	}
 }
 
@@ -295,8 +285,8 @@ void AssetHotReloadManager::ProcessModifiedMesh(const std::filesystem::path& mes
 		{
 			if (IsSuccess(mesh->Reload(meshPath)))
 			{
-				ShaderHotReloadManager::Get().AddNotification(LOCAL("Notification.MeshHotReloaded"),
-					LOCAL_FMT("Notification.ReloadedFile", meshPath.filename().string()), false, 3.0f);
+				NotificationManager::Get().AddNotification(LOCAL("Notification.MeshHotReloaded"),
+					LOCAL_FMT("Notification.ReloadedFile", meshPath.filename().string()), ELogLevel::Info, 3.0f);
 			}
 		}
 	}

@@ -701,3 +701,7 @@ GraphPanel,RuntimeMaterialOld,This is an earlier result. Create another material
 Hierarchy,EntityFallback,Entity {},엔티티 {}
 Console,CollapseDuplicates,Collapse duplicates,중복 묶기
 Viewport,NoUsableCamera,No usable active camera in the scene.,씬에 사용할 수 있는 활성 카메라가 없습니다.
+Notification,LoadResourceFailed,Resource load failed,리소스 불러오기 실패
+Notification,LoadResourceSucceeded,Resource loaded,리소스 불러오기 완료
+Notification,ResourceLoadFailed,Failed to load resource: {},리소스를 불러오지 못했습니다: {}
+Notification,ResourceLoadSucceeded,Loaded resource: {},리소스를 불러왔습니다: {}

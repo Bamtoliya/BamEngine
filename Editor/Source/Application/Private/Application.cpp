@@ -11,8 +11,8 @@
 #include "Systems.h"
 #include "PIEManager.h"
 #include "ModuleHotReloadManager.h"
-#include "ShaderHotReloadManager.h"
-#include "AssetHotReloadManager.h"
+#include "HotReloadManager.h"
+#include "NotificationManager.h"
 #include "TerrainUtility.h"
 #include "TerrainComponent.h" 
 #include "StartupResourceLoader.h"
@@ -43,6 +43,9 @@ EResult Application::Initialize(void* arg)
             return result;
         };
 
+    if (!NotificationManager::Create())
+        return fail("NotificationManager", EResult::Fail);
+
     result = InitializeWindow(createInfo);
     if (result != EResult::Success)
         return fail("InitializeWindow", result);
@@ -66,9 +69,8 @@ EResult Application::Initialize(void* arg)
     if (result != EResult::Success)
         return fail("InitializeSystem", result);
 
-    ModuleHotReloadManager::Create();
-    ShaderHotReloadManager::Create();
-    AssetHotReloadManager::Create();
+    if (!HotReloadManager::Create())
+        return fail("HotReloadManager", EResult::Fail);
     // Editor.exe 실행 파일과 같은 디렉터리에 있는 GameModule.dll 로드
     wchar_t exePathBuf[MAX_PATH] = {};
     GetModuleFileNameW(nullptr, exePathBuf, MAX_PATH);
@@ -76,7 +78,7 @@ EResult Application::Initialize(void* arg)
     const std::filesystem::path modulePath = exeDir / L"GameModule.dll";
     if (std::filesystem::exists(modulePath))
     {
-        ModuleHotReloadManager::Get().LoadModule(modulePath);
+        HotReloadManager::Get().GetModuleReloader().LoadModule(modulePath);
     }
     else
     {
@@ -118,9 +120,7 @@ void Application::Free()
         m_PIEManager = nullptr;
     }
 
-    AssetHotReloadManager::Destroy();
-    ShaderHotReloadManager::Destroy();
-    ModuleHotReloadManager::Destroy();
+    HotReloadManager::Destroy();
     ShortcutManager::Get().SaveToFile();
     ShortcutManager::Destroy();
 
@@ -141,6 +141,8 @@ void Application::Free()
         SDL_Quit();
         m_SDLInitialized = false;
     }
+
+    NotificationManager::Destroy();
 
     if (m_LoggerInitialized)
     {
@@ -1179,9 +1181,8 @@ void Application::Run(int argc, char* argv[])
         InputManager::Get().Update(dt);
         ImGuiManager::Get().Update(dt);
         m_AssetManager->Update(dt);
-        ModuleHotReloadManager::Get().Update();
-        ShaderHotReloadManager::Get().Update();
-        AssetHotReloadManager::Get().Update();
+        HotReloadManager::Get().Update();
+        NotificationManager::Get().Update(dt);
 
         if (PIEManager::Get().IsPlaying())
         {

@@ -1,6 +1,6 @@
 ﻿#pragma once
 
-#include "Editor_Includes.h"
+#include "HotReloaderInterface.h"
 #include "Module/ModuleInterface.h"
 #include <efsw/efsw.hpp>
 #include <filesystem>
@@ -11,20 +11,20 @@ BEGIN(Editor)
 
 enum class EHotReloadState : uint8 { Idle, Reloading, Failed };
 
-class ModuleHotReloadManager final : public Base
+class ModuleHotReloadManager final : public IHotReloader
 {
-    DECLARE_SINGLETON(ModuleHotReloadManager)
-
+#pragma region Constructor&Destructor
 private:
     ModuleHotReloadManager() = default;
     virtual ~ModuleHotReloadManager() = default;
     EResult Initialize(void* arg = nullptr);
+public:
+    static ModuleHotReloadManager* Create(void* arg = nullptr);
+    void Free() override;
+#pragma endregion
 
 public:
-    void Free() override;
-
-    // 매 프레임 메인 스레드에서 자동 리로드 큐 검사
-    void Update();
+    void Update() override;
 
     EResult LoadModule(const std::filesystem::path& dllPath);
     EResult UnloadModule();
@@ -35,13 +35,6 @@ public:
     [[nodiscard]] Engine::IModule* GetModule() const { return m_CurrentModule; }
     [[nodiscard]] uint32 GetReloadIndex() const { return m_ReloadIndex; }
     [[nodiscard]] const std::filesystem::path& GetOriginalDllPath() const { return m_OriginalDllPath; }
-
-    [[nodiscard]] bool IsAutoReloadEnabled() const { return m_AutoReload; }
-    void SetAutoReload(bool enable) { m_AutoReload = enable; }
-    [[nodiscard]] bool& GetAutoReloadRef() { return m_AutoReload; }
-
-    void NotifyFileModified();
-
 private:
     std::filesystem::path CreateShadowCopy(const std::filesystem::path& srcDllPath);
     void CleanupShadowCopies();
@@ -64,9 +57,6 @@ private:
     efsw::FileWatchListener* m_FileListener = nullptr;
     efsw::WatchID m_WatchID = 0;
     std::string m_WatchedFileName;
-    bool m_AutoReload = true;
-    std::atomic<bool> m_PendingAutoReload = false;
-    std::chrono::steady_clock::time_point m_LastModifiedTime;
 };
 
 END

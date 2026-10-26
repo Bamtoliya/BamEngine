@@ -7,6 +7,7 @@
 #pragma endregion
 
 #include "ImGuiManager.h"
+#include "NotificationManager.h"
 #include "Application.h"
 #include "SceneManager.h"
 #include "SelectionManager.h"
@@ -326,6 +327,8 @@ void ImGuiManager::Draw()
 		const bool suppressed = ImGui::GetIO().WantTextInput;
 		ShortcutManager::Get().ProcessShortcuts(EShortcutContext::Global, suppressed);
 	}
+
+	NotificationManager::Get().DrawNotificationUI();
 }
 
 void ImGuiManager::MainDockspace()

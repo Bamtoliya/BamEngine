@@ -15,7 +15,8 @@ public:
     {
         if (filename == m_TargetFilename && (action == efsw::Action::Modified || action == efsw::Action::Add))
         {
-            if (m_Manager) m_Manager->NotifyFileModified();
+            if (m_Manager) 
+                m_Manager->NotifyFileModified(std::filesystem::path(dir) / filename);
         }
     }
 
@@ -24,8 +25,7 @@ private:
     std::string m_TargetFilename;
 };
 
-IMPLEMENT_SINGLETON(ModuleHotReloadManager)
-
+#pragma region Constructor&Destructor
 EResult ModuleHotReloadManager::Initialize(void* arg)
 {
     std::error_code ec;
@@ -39,29 +39,34 @@ void ModuleHotReloadManager::Free()
     StopWatching();
     UnloadModule();
     CleanupShadowCopies();
+    __super::Free();
 }
-
-void ModuleHotReloadManager::NotifyFileModified()
+ModuleHotReloadManager* ModuleHotReloadManager::Create(void* arg)
 {
-    m_LastModifiedTime = std::chrono::steady_clock::now();
-    m_PendingAutoReload = true;
+	ModuleHotReloadManager* instance = new ModuleHotReloadManager();
+	if (instance->Initialize(arg) != EResult::Success)
+	{
+        instance->Free();
+		delete instance;
+		return nullptr;
+	}
+	return instance;
 }
+#pragma endregion
 
 void ModuleHotReloadManager::Update()
 {
-    if (!m_AutoReload || !m_PendingAutoReload || m_State == EHotReloadState::Reloading)
+    if (m_State == EHotReloadState::Reloading)
         return;
 
-    // 링커가 파일 작성을 완전히 마칠 때까지 마지막 수정 이벤트 후 250ms 대기 (디바운스)
-    const auto now = std::chrono::steady_clock::now();
-    const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - m_LastModifiedTime).count();
-    if (elapsed >= 250)
-    {
-        m_PendingAutoReload = false;
-        EDITOR_LOG_INFO("[HotReload] Auto-reload triggered by file change!");
-        ReloadModule();
-    }
+    const auto readyFiles = CollectReadyFiles(std::chrono::milliseconds(250));
+    if (readyFiles.empty())
+        return;
+
+    EDITOR_LOG_INFO("[HotReload] Auto-reload triggered by file change!");
+    ReloadModule();
 }
+
 
 void ModuleHotReloadManager::StartWatching(const std::filesystem::path& dllPath)
 {

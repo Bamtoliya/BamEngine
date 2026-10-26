@@ -4,6 +4,8 @@
 #include "ContentBrowserGridItem.h"
 #include "SelectionManager.h"
 #include "ShaderHotReloadManager.h"
+#include "HotReloadManager.h"
+#include "NotificationManager.h"
 #include "ModelImporter.h"
 #include "Mesh.h"
 #include <archive/JsonArchive.h>
@@ -571,8 +573,8 @@ void ContentBrowserGridItem::ContextMenu_Material(const std::filesystem::path& p
 					if (IsSuccess(mat->Reload(path)))
 					{
 						reloaded = true;
-						ShaderHotReloadManager::Get().AddNotification(LOCAL("Notification.MaterialReloaded"),
-							LOCAL_FMT("Notification.ReloadedFile", path.filename().string()), false, 3.0f);
+						NotificationManager::Get().AddNotification(LOCAL("Notification.MaterialReloaded"),
+							LOCAL_FMT("Notification.ReloadedFile", path.filename().string()), ELogLevel::Info, 3.0f);
 					}
 				}
 			}
@@ -583,8 +585,8 @@ void ContentBrowserGridItem::ContextMenu_Material(const std::filesystem::path& p
 
 		if (!reloaded)
 		{
-			ShaderHotReloadManager::Get().AddNotification(LOCAL("Notification.MaterialNotLoaded"),
-				LOCAL_FMT("Notification.InactiveFile", path.filename().string()), true, 3.0f);
+			NotificationManager::Get().AddNotification(LOCAL("Notification.MaterialNotLoaded"),
+				LOCAL_FMT("Notification.InactiveFile", path.filename().string()), ELogLevel::Info, 3.0f);
 		}
 	}
 
@@ -623,8 +625,8 @@ void ContentBrowserGridItem::ContextMenu_Material(const std::filesystem::path& p
 				{
 					rm.SaveToJsonFile(instHandle.Get(), instPath.wstring());
 					EDITOR_LOG_INFO("Created Material Instance (JSON): {}", instPath.string());
-					ShaderHotReloadManager::Get().AddNotification(LOCAL("Notification.InstanceCreated"),
-						instPath.filename().string(), false, 3.0f);
+					NotificationManager::Get().AddNotification(LOCAL("Notification.InstanceCreated"),
+						instPath.filename().string(), ELogLevel::Info, 3.0f);
 				}
 			}
 		}
@@ -673,13 +675,13 @@ void ContentBrowserGridItem::ContextMenu_Material(const std::filesystem::path& p
 							}
 						}
 					}
-					ShaderHotReloadManager::Get().AddNotification(LOCAL("Notification.OpenBaseMaterial"),
-						baseMatPath.filename().string(), false, 2.0f);
+					NotificationManager::Get().AddNotification(LOCAL("Notification.OpenBaseMaterial"),
+						baseMatPath.filename().string(), ELogLevel::Info, 2.0f);
 				}
 				else
 				{
-					ShaderHotReloadManager::Get().AddNotification(LOCAL("Notification.BaseMaterialNotFound"),
-						baseMatPath.string(), true, 3.0f);
+					NotificationManager::Get().AddNotification(LOCAL("Notification.BaseMaterialNotFound"),
+						baseMatPath.string(), ELogLevel::Error, 3.0f);
 				}
 			}
 		}
@@ -723,15 +725,15 @@ void ContentBrowserGridItem::ContextMenu_Model(const std::filesystem::path& path
 					if (IsSuccess(mesh->Reload(path)))
 					{
 						reloaded = true;
-						ShaderHotReloadManager::Get().AddNotification(LOCAL("Notification.MeshReloaded"),
-							LOCAL_FMT("Notification.ReloadedFile", path.filename().string()), false, 3.0f);
+						NotificationManager::Get().AddNotification(LOCAL("Notification.MeshReloaded"),
+							LOCAL_FMT("Notification.ReloadedFile", path.filename().string()), ELogLevel::Info, 3.0f);
 					}
 				}
 			}
 			if (!reloaded)
 			{
-				ShaderHotReloadManager::Get().AddNotification(LOCAL("Notification.MeshNotLoaded"),
-					LOCAL_FMT("Notification.InactiveFile", path.filename().string()), true, 3.0f);
+				NotificationManager::Get().AddNotification(LOCAL("Notification.MeshNotLoaded"),
+					LOCAL_FMT("Notification.InactiveFile", path.filename().string()), ELogLevel::Info, 3.0f);
 			}
 		}
 	}
@@ -748,13 +750,13 @@ void ContentBrowserGridItem::ContextMenu_Model(const std::filesystem::path& path
 
 				if (IsSuccess(res))
 				{
-					ShaderHotReloadManager::Get().AddNotification(LOCAL("Notification.ModelReimported"),
-						LOCAL_FMT("Notification.ReimportedFile", path.filename().string()), false, 3.0f);
+					NotificationManager::Get().AddNotification(LOCAL("Notification.ModelReimported"),
+						LOCAL_FMT("Notification.ReimportedFile", path.filename().string()), ELogLevel::Info, 3.0f);
 				}
 				else
 				{
-					ShaderHotReloadManager::Get().AddNotification(LOCAL("Notification.ReimportFailed"),
-						LOCAL_FMT("Notification.ReimportFailedFile", path.filename().string()), true, 3.0f);
+					NotificationManager::Get().AddNotification(LOCAL("Notification.ReimportFailed"),
+						LOCAL_FMT("Notification.ReimportFailedFile", path.filename().string()), ELogLevel::Error, 3.0f);
 				}
 			}
 		}
@@ -784,15 +786,15 @@ void ContentBrowserGridItem::ContextMenu_Texture(const std::filesystem::path& pa
 				if (IsSuccess(tex->Reload(path)))
 				{
 					reloaded = true;
-					ShaderHotReloadManager::Get().AddNotification(LOCAL("Notification.TextureReloaded"),
-						LOCAL_FMT("Notification.ReloadedFile", path.filename().string()), false, 3.0f);
+					NotificationManager::Get().AddNotification(LOCAL("Notification.TextureReloaded"),
+						LOCAL_FMT("Notification.ReloadedFile", path.filename().string()), ELogLevel::Info, 3.0f);
 				}
 			}
 		}
 		if (!reloaded)
 		{
-			ShaderHotReloadManager::Get().AddNotification(LOCAL("Notification.TextureNotLoaded"),
-				LOCAL_FMT("Notification.InactiveFile", path.filename().string()), true, 3.0f);
+			NotificationManager::Get().AddNotification(LOCAL("Notification.TextureNotLoaded"),
+				LOCAL_FMT("Notification.InactiveFile", path.filename().string()), ELogLevel::Info, 3.0f);
 		}
 	}
 	if (ImGui::MenuItem((ICON_FA_IMAGE " " + LOCAL_LABEL("ContentBrowser.CreateSprite")).c_str()))
@@ -847,14 +849,14 @@ void ContentBrowserGridItem::ContextMenu_Shader(const std::filesystem::path& pat
 	{
 		if (ImGui::MenuItem((ICON_FA_ROTATE " " + LOCAL_LABEL("ContentBrowser.RecompileAllShaders")).c_str()))
 		{
-			ShaderHotReloadManager::Get().RequestRecompileAll();
+			HotReloadManager::Get().GetShaderReloader().RequestRecompileAll();
 		}
 	}
 	else
 	{
 		if (ImGui::MenuItem((ICON_FA_CODE " " + LOCAL_LABEL("ContentBrowser.RecompileShader")).c_str()))
 		{
-			ShaderHotReloadManager::Get().RecompileFile(path);
+			HotReloadManager::Get().GetShaderReloader().RecompileFile(path);
 		}
 	}
 }
@@ -880,23 +882,23 @@ bool ContentBrowserGridItem::ConvertJsonToBinary(const std::filesystem::path& pa
 	Engine::Resource* res = rm.GetResource(handle);
 	if (!res)
 	{
-		ShaderHotReloadManager::Get().AddNotification(LOCAL("Notification.BakeFailed"),
-			LOCAL_FMT("Notification.JsonLoadFailed", path.filename().string()), true, 3.0f);
+		NotificationManager::Get().AddNotification(LOCAL("Notification.BakeFailed"),
+			LOCAL_FMT("Notification.JsonLoadFailed", path.filename().string()), ELogLevel::Error, 3.0f);
 		return false;
 	}
 
 	const EResult result = rm.SaveToBeveFile(res, outPath.wstring());
 	if (IsSuccess(result))
 	{
-		ShaderHotReloadManager::Get().AddNotification(LOCAL("Notification.BakeSucceeded"),
-			LOCAL_FMT("Notification.CreatedFile", outPath.filename().string()), false, 3.0f);
+		NotificationManager::Get().AddNotification(LOCAL("Notification.BakeSucceeded"),
+			LOCAL_FMT("Notification.CreatedFile", outPath.filename().string()), ELogLevel::Info, 3.0f);
 		EDITOR_LOG_INFO("[Asset Baking] Baked {} (Type: {}) -> {}",
 			path.string(), static_cast<uint32>(assetType), outPath.string());
 		return true;
 	}
 
-	ShaderHotReloadManager::Get().AddNotification(LOCAL("Notification.BakeFailed"),
-		LOCAL_FMT("Notification.BinarySaveFailed", outPath.filename().string()), true, 3.0f);
+	NotificationManager::Get().AddNotification(LOCAL("Notification.BakeFailed"),
+		LOCAL_FMT("Notification.BinarySaveFailed", outPath.filename().string()), ELogLevel::Error, 3.0f);
 	return false;
 }
 
@@ -910,22 +912,22 @@ bool ContentBrowserGridItem::ConvertBinaryToJson(const std::filesystem::path& pa
 	Engine::Resource* res = rm.GetResource(handle);
 	if (!res)
 	{
-		ShaderHotReloadManager::Get().AddNotification(LOCAL("Notification.ExportFailed"),
-			LOCAL_FMT("Notification.BinaryLoadFailed", path.filename().string()), true, 3.0f);
+		NotificationManager::Get().AddNotification(LOCAL("Notification.ExportFailed"),
+			LOCAL_FMT("Notification.BinaryLoadFailed", path.filename().string()), ELogLevel::Error, 3.0f);
 		return false;
 	}
 
 	const EResult result = rm.SaveToJsonFile(res, outPath.wstring());
 	if (IsSuccess(result))
 	{
-		ShaderHotReloadManager::Get().AddNotification(LOCAL("Notification.ExportSucceeded"),
-			LOCAL_FMT("Notification.CreatedFile", outPath.filename().string()), false, 3.0f);
+		NotificationManager::Get().AddNotification(LOCAL("Notification.ExportSucceeded"),
+			LOCAL_FMT("Notification.CreatedFile", outPath.filename().string()), ELogLevel::Info, 3.0f);
 		EDITOR_LOG_INFO("[Asset Export] Successfully exported binary to JSON: {} -> {}",
 			path.string(), outPath.string());
 		return true;
 	}
 
-	ShaderHotReloadManager::Get().AddNotification(LOCAL("Notification.ExportFailed"),
-		LOCAL_FMT("Notification.JsonSaveFailed", outPath.filename().string()), true, 3.0f);
+	NotificationManager::Get().AddNotification(LOCAL("Notification.ExportFailed"),
+		LOCAL_FMT("Notification.JsonSaveFailed", outPath.filename().string()), ELogLevel::Error, 3.0f);
 	return false;
 }
