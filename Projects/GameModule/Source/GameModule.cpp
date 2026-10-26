@@ -21,6 +21,7 @@
 #include <cstdint>
 #include <type_traits>
 #include <array>
+#include "SkyAtmosphereSystem.h"
 
 class SpinSystem final : public Engine::ISystem
 {
@@ -47,7 +48,7 @@ public:
                     auto& transform = view.get<Engine::TransformComponent>(entity);
                     glm::vec3 euler = transform.eulerRotation;
                     euler.y += rotateSpeed * dt;
-                    transform.SetEulerRotation(euler);
+					(void)transform.SetEulerRotation(euler);
                 }
             }
         }
@@ -395,20 +396,23 @@ namespace
 class GameModule final : public Engine::IModule
 {
 public:
-    void OnLoad() override
-    {
-        BAM_LOG(Info, "GameModule", "Lifecycle", "[GameModule] Registering SpinSystem...");
-        Engine::SystemManager::Get().AddSystem<SpinSystem>();
+	void OnLoad() override
+	{
+		// 구름 텍스처 초기화 및 머티리얼 바인딩 (1회)
+		SkyAtmosphereSystem::InitializeResources();
+		BAM_LOG(Info, "GameModule", "Lifecycle", "[GameModule] Registering Systems...");
+		Engine::SystemManager::Get().AddSystem<SpinSystem>();
+		Engine::SystemManager::Get().AddSystem<SkyAtmosphereSystem>();
 		if (!Engine::SystemManager::Get().AddSystem<GraphMovementSystem>())
 			BAM_LOG(Error, "GameModule", "GraphMovement", "System registration failed.");
-    }
-
-    void OnUnload() override
-    {
-        BAM_LOG(Info, "GameModule", "Lifecycle", "[GameModule] Unregistering SpinSystem...");
+	}
+	void OnUnload() override
+	{
+		BAM_LOG(Info, "GameModule", "Lifecycle", "[GameModule] Unregistering Systems...");
 		Engine::SystemManager::Get().RemoveSystem<GraphMovementSystem>();
-        Engine::SystemManager::Get().RemoveSystem<SpinSystem>();
-    }
+		Engine::SystemManager::Get().RemoveSystem<SkyAtmosphereSystem>();
+		Engine::SystemManager::Get().RemoveSystem<SpinSystem>();
+	}
 
     void OnPreHotReload() override
     {

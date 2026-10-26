@@ -99,6 +99,34 @@ EResult Renderer::Render(f32 dt)
 
 	for (const auto& pass : renderPasses)
 	{
+		// 1. 패스가 비활성화된 경우: 드로우콜은 모두 건너뛰되, 이전 프레임 잔상을 방지하기 위해 Clear만 수행
+		if (!pass->IsEnabled())
+		{
+			if (pass->GetLoadOperation() == ERenderPassLoadOperation::RPLO_Clear ||
+				pass->GetStencilLoadOperation() == ERenderPassLoadOperation::RPLO_Clear ||
+				pass->GetPassType() == ERenderPassType::Shadow)
+			{
+				m_RHI->BeginRenderPass(pass);
+				// Point Light 큐브맵 섀도우인 경우 6개 면을 모두 1.0(최대 깊이)으로 Clear
+				if (pass->GetPassType() == ERenderPassType::Shadow && !pass->GetDepthStencilName().empty())
+				{
+					if (auto* depthRT = RenderTargetManager::Get().GetRenderTarget(pass->GetDepthStencilName()))
+					{
+						if (depthRT->GetTexture() && depthRT->GetTexture()->GetDimension() == ETextureDimension::TextureCube)
+						{
+							for (uint32 face = 0; face < 6; ++face)
+							{
+								m_RHI->BindDepthSlice(depthRT->GetTexture(), face);
+								m_RHI->ClearDepthSlice(depthRT->GetTexture(), face, 1.0f, 0);
+							}
+						}
+					}
+				}
+				m_RHI->EndRenderPass();
+			}
+			continue;
+		}
+
 		const ERenderPassType passType = pass->GetPassType();
 		if (passType == ERenderPassType::Shadow && !LightManager::Get().HasShadowCastingLights())
 			continue;
@@ -425,9 +453,28 @@ EResult Renderer::RenderMeshes(const vector<StaticDrawCommand>& commands, Render
 			lastMaterial = material;
 		}
 
-		SceneUBO objectData = {};
+		SceneUBO objectData{};
 		objectData.worldMatrix = command.worldMatrix;
 		objectData.pickingData.x = static_cast<float>(command.pickingId);
+
+		if (command.heightfield)
+		{
+			const auto& heightfield = *command.heightfield;
+			RHISampler* sampler = SamplerManager::Get().GetDefaultSampler();
+
+			if (!heightfield.heightmap || !heightfield.splatmap || !sampler)
+				return EResult::Fail;
+
+			if (IsFailure(m_RHI->BindTextureSampler(heightfield.heightmap.get(), sampler, 1)) ||
+				IsFailure(m_RHI->BindTextureSampler(heightfield.splatmap.get(), sampler, 4)))
+				return EResult::Fail;
+
+			objectData.heightfieldData = vec4(
+				heightfield.maxHeight, heightfield.cellSpacing.x, heightfield.cellSpacing.y, 0.f);
+
+			// 명령별 텍스처를 덮어썼으므로 다음 명령에서는 머티리얼을 다시 바인딩합니다.
+			lastMaterial = nullptr;
+		}
 
 		if (IsFailure(m_RHI->BindConstantBuffer(&objectData, sizeof(objectData), 1)))
 			return EResult::Fail;

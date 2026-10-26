@@ -20,6 +20,7 @@ EResult RenderPass::Initialize(void* arg)
 	m_Desc.overrideClearColor = desc->overrideClearColor;
 	m_Desc.passType = desc->passType;
 	m_Desc.acceptedBlendModes = desc->acceptedBlendModes;
+	m_Desc.isEnabled = desc->isEnabled;
 	return EResult::Success;
 }
 RenderPass* RenderPass::Create(void* arg)

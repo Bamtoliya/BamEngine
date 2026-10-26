@@ -1,86 +1,16 @@
 ﻿#pragma once
 
 #include "Editor_Includes.h"
-#include "EnumBit.h"
-
-namespace
-{
-	static constexpr uint32 MAX_PP_PASSES = 16;
-
-	struct ViewportPassInfo
-	{
-		wstring Name;
-		bool	Enabled;
-	};
-
-	struct PPEffect
-	{
-		wstring Name;
-		bool Enabled = false;
-		RHIPipeline* Pipeline = nullptr;
-		vector<uint8> Parameters;
-	};
-
-	struct ToneMappingParams
-	{
-		f32 exposure = 1.0f;
-		f32 gamma = 2.2f;
-		f32 _pad0 = 0.f;
-		f32 _pad1 = 0.f;
-	};
-}
-
-// -------------------------------------------------------------
-// [NEW] Object-Oriented PostProcess Architecture
-// -------------------------------------------------------------
+#include "PostProcessPipeline.h"
 
 BEGIN(Editor)
 
-class PostProcess
+struct ViewportPassInfo
 {
-public:
-	PostProcess(const wstring& name) : m_Name(name), m_Enabled(false) {}
-	virtual ~PostProcess() = default;
-
-public:
-	virtual void Initialize(const wstring& prefix) = 0;
-	virtual void Free() = 0;
-	virtual EResult SubmitPass(f32 dt, Engine::RenderPassID passID, const wstring& sourceRT) = 0;
-	virtual void DrawImGuiOptions() = 0;
-
-public:
-	const wstring& GetName() const { return m_Name; }
-	virtual string GetDisplayName() const { return WStrToStr(m_Name); }
-	bool IsEnabled() const { return m_Enabled; }
-	void SetEnabled(bool enable) { m_Enabled = enable; }
-	void Toggle() { m_Enabled = !m_Enabled; }
-
-protected:
-	wstring m_Name;
-	bool m_Enabled;
+	wstring Name;
+	Engine::RenderPassID PassID = INVALID_PASS_ID;
+	bool    Enabled = true;
 };
-
-// -------------------------------------------------------------
-
-class ToneMapping : public PostProcess
-{
-public:
-	ToneMapping() : PostProcess(L"Tone Mapping (ACES)") {}
-	string GetDisplayName() const override { return LOCAL("PostProcess.ToneMapping"); }
-	virtual ~ToneMapping() = default;
-
-public:
-	virtual void Initialize(const wstring& prefix) override;
-	virtual void Free() override;
-	virtual EResult SubmitPass(f32 dt, Engine::RenderPassID passID, const wstring& sourceRT) override;
-	virtual void DrawImGuiOptions() override;
-
-private:
-	Engine::RHIPipeline* m_Pipeline = nullptr;
-	ToneMappingParams m_Params; // 기존 구조체 재활용 (추후 Engine쪽으로 옮겨도 됨)
-};
-
-// -------------------------------------------------------------
 
 class PostProcessChain
 {
@@ -89,15 +19,21 @@ public:
 	~PostProcessChain() = default;
 
 public:
-	void Initialize(const wstring& prefix);
-	void Free();
+	void Initialize(const wstring& prefix) { m_Pipeline.Initialize(prefix); }
+	void Free() { m_Pipeline.Free(); }
 
-	void AddPostProcess(PostProcess* effect);
-	void ExecuteChain(f32 dt, const std::vector<Engine::RenderPassID>& passIDs, wstring& currentRT, const wstring* ppRTNames);
+	void PrepareResources(uint32 width, uint32 height) { m_Pipeline.PrepareResources(width, height); }
+	void Resize(uint32 width, uint32 height) { m_Pipeline.Resize(width, height); }
+
+	// 입력 RT를 받아 최종 출력 RT 반환
+	wstring ExecuteChain(f32 dt, const wstring& inputRT) { return m_Pipeline.Execute(dt, inputRT); }
 	void DrawImGuiMenu();
 
+	Engine::PostProcessPipeline& GetPipeline() { return m_Pipeline; }
+	const Engine::PostProcessPipeline& GetPipeline() const { return m_Pipeline; }
+
 private:
-	std::vector<PostProcess*> m_Effects;
+	Engine::PostProcessPipeline m_Pipeline;
 };
 
 END

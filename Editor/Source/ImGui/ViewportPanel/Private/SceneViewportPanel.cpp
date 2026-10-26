@@ -13,7 +13,6 @@
 #include "Scene.h"
 #include "CoreComponents.h"
 #include "RenderComponents.h"
-#include "CloudTextureGenerator.h"
 #include "Light.h"
 #include "TimeManager.h"
 #include "Components/Render/SkyAtmosphereComponent.h"
@@ -24,8 +23,6 @@
 #include "PIEManager.h"
 
 #include <glm/gtc/type_ptr.hpp>
-#include <cmath>
-#include <string>
 
 #include "TerrainEditor.h"
 #include "TerrainComponent.h"
@@ -158,10 +155,7 @@ void SceneViewportPanel::PrepareRenderTargetsAndPasses(uint32 width, uint32 heig
 		//Depth
 		{{width, height, 1, 1, 1, ETextureSampleCount::TextureSampleCount1, ETextureFormat::D24_UNORM_S8_UINT, ETextureDimension::Texture2D, ETextureUsage::DepthStencilTarget | ETextureUsage::Sampler, nullptr, 0, false, vec4(0.f)}, L"Depth"},
 		//LightingColor (원래 인덱스 7번으로 복구)
-		{{width, height, 1, 1, 1, ETextureSampleCount::TextureSampleCount1, ETextureFormat::R8G8B8A8_UNORM, ETextureDimension::Texture2D, ETextureUsage::RenderTarget | ETextureUsage::Sampler, nullptr, 0, false, vec4(0.f, 0.f, 0.f, 1.f)}, L"LightingColor"},
-		//Ping-pong RTs
-		{{width, height, 1, 1, 1, ETextureSampleCount::TextureSampleCount1, ETextureFormat::R8G8B8A8_UNORM, ETextureDimension::Texture2D, ETextureUsage::RenderTarget | ETextureUsage::Sampler, nullptr, 0, false, vec4(0.f, 0.f, 0.f, 1.f)}, L"PP_A"},
-		{{width, height, 1, 1, 1, ETextureSampleCount::TextureSampleCount1, ETextureFormat::R8G8B8A8_UNORM, ETextureDimension::Texture2D, ETextureUsage::RenderTarget | ETextureUsage::Sampler, nullptr, 0, false, vec4(0.f, 0.f, 0.f, 1.f)}, L"PP_B"},
+		{{width, height, 1, 1, 1, ETextureSampleCount::TextureSampleCount1, ETextureFormat::R8G8B8A8_UNORM, ETextureDimension::Texture2D, ETextureUsage::RenderTarget | ETextureUsage::Sampler, nullptr, 0, false, vec4(0.f, 0.f, 0.f, 1.f)}, L"LightingColor"}
 	};
 
 	for (auto& rtDesc : gbufferRTDescs)
@@ -180,17 +174,12 @@ void SceneViewportPanel::PrepareRenderTargetsAndPasses(uint32 width, uint32 heig
 	rtMgr.CreateRenderTarget(&pointShadowDesc);
 	m_OwnedRTNames.push_back(m_PointShadowDepthName);
 #pragma endregion
-#pragma endregion
-
-#pragma endregion
 
 #pragma region RenderPasses
 	vector<wstring> gBufferNames = { m_OwnedRTNames.begin(), m_OwnedRTNames.begin() + 5 };
 	m_ShadowDepthName = m_OwnedRTNames[5];
 	wstring depthName = m_OwnedRTNames[6];
 	m_LightingColorName = m_OwnedRTNames[7];
-	m_PPRTNames[0] = m_OwnedRTNames[8];
-	m_PPRTNames[1] = m_OwnedRTNames[9];
 
 	auto& rpMgr = RenderPassManager::Get();
 	m_ShadowPassID = rpMgr.RegisterRenderPass(
@@ -233,19 +222,6 @@ void SceneViewportPanel::PrepareRenderTargetsAndPasses(uint32 width, uint32 heig
 		vec4(0.0f, 0.0f, 0.0f, -1.0f), 120, ERenderSortType::BackToFront, ERenderPassType::ForwardTransparent,
 		EBlendMode::AlphaBlend | EBlendMode::Additive | EBlendMode::NonPremultiplied | EBlendMode::Decal);
 
-	
-
-	// ── PostProcess ping-pong passes (priorities 120~135) ──
-	for (uint32 pi = 0; pi < MAX_PP_PASSES; ++pi)
-	{
-		RenderPassID rpID = rpMgr.RegisterRenderPass(
-			prefix + L"PP_" + std::to_wstring(pi), { m_PPRTNames[pi % 2] }, L"",
-			ERenderPassLoadOperation::RPLO_Load, ERenderPassStoreOperation::RPSO_Store,
-			ERenderPassLoadOperation::RPLO_Load, ERenderPassStoreOperation::RPSO_Store,
-			vec4(0.0f, 0.f, 0.f, -1.f), 130 + pi, ERenderSortType::None, ERenderPassType::PostProcess, EBlendMode::None);
-		m_PPPassIDs.push_back(rpID);
-	}
-
 	m_UIOverlayPassID = rpMgr.RegisterRenderPass(
 		prefix + L"UIOverlayPass", {}, L"",
 		ERenderPassLoadOperation::RPLO_Load, ERenderPassStoreOperation::RPSO_Store,
@@ -254,19 +230,22 @@ void SceneViewportPanel::PrepareRenderTargetsAndPasses(uint32 width, uint32 heig
 		EBlendMode::Opaque | EBlendMode::Masked | EBlendMode::AlphaBlend | EBlendMode::Additive | EBlendMode::NonPremultiplied);
 #pragma endregion
 
+	m_PostProcessChain.PrepareResources(width, height);
+
 	m_ChannelPreviewPassID = rpMgr.RegisterRenderPass(
-		prefix + L"ChannelPreviewPass", { m_PPRTNames[0] }, L"",
+		prefix + L"ChannelPreviewPass", { m_LightingColorName }, L"",
 		ERenderPassLoadOperation::RPLO_Load, ERenderPassStoreOperation::RPSO_Store,
 		ERenderPassLoadOperation::RPLO_Load, ERenderPassStoreOperation::RPSO_Store,
 		vec4(0.0f, 0.0f, 0.0f, -1.0f), 400, ERenderSortType::None, ERenderPassType::Custom, EBlendMode::None);
 
 	m_PassOptions = {
-		{ L"Shadow",            true  },
-		{ L"PointShadow",       true  },
-		{ L"Geometry",          true  },
-		{ L"Lighting",          true  },
-		{ L"ForwardTransparent",true  },
-		{ L"UIOverlay",         true  },
+		{ L"Shadow",             m_ShadowPassID,             true },
+		{ L"PointShadow",        m_PointShadowPassID,        true },
+		{ L"Geometry",           m_GeometryPassID,           true },
+		{ L"Lighting",           m_LightingPassID,           true },
+		{ L"Forward",            m_ForwardPassID,            true },
+		{ L"ForwardTransparent", m_ForwardTransparentPassID, true },
+		{ L"UIOverlay",          m_UIOverlayPassID,          true },
 	};
 }
 void SceneViewportPanel::PreparePipelines()
@@ -327,64 +306,43 @@ void SceneViewportPanel::Update(f32 dt)
 
 	RenderPassManager& rpMgr = RenderPassManager::Get();
 	Renderer& renderer = Renderer::Get();
-	renderer.RegisterViewportCamera(rpMgr.GetRenderPassByID(m_ShadowPassID));
-	renderer.RegisterViewportCamera(rpMgr.GetRenderPassByID(m_PointShadowPassID));
+	auto isPassEnabled = [this](RenderPassID passID) -> bool {
+		for (const auto& opt : m_PassOptions)
+		{
+			if (opt.PassID == passID) return opt.Enabled;
+		}
+		return true;
+		};
+	if (isPassEnabled(m_ShadowPassID))
+		renderer.RegisterViewportCamera(rpMgr.GetRenderPassByID(m_ShadowPassID));
+	if (isPassEnabled(m_PointShadowPassID))
+		renderer.RegisterViewportCamera(rpMgr.GetRenderPassByID(m_PointShadowPassID));
 	if (cameraBuffer.has_value())
 	{
-		renderer.RegisterViewportCamera(*cameraBuffer, rpMgr.GetRenderPassByID(m_GeometryPassID));
+		if (isPassEnabled(m_GeometryPassID))
+			renderer.RegisterViewportCamera(*cameraBuffer, rpMgr.GetRenderPassByID(m_GeometryPassID));
 		const SkyAtmosphereData skyData = BuildSkyAtmosphereData();
-
-		// ForwardPass에 최신 대기/태양광 데이터를 패스 상수로 주입
-		if (auto* forwardPass = rpMgr.GetRenderPassByID(m_ForwardPassID))
+		if (isPassEnabled(m_ForwardPassID))
 		{
-			auto& rm = ResourceManager::Get();
-			auto shapeHandle = rm.GetResourceHandle<Texture>(L"Resources/Texture/CloudBaseShape3D");
-			auto weatherHandle = rm.GetResourceHandle<Texture>(L"Resources/Texture/CloudWeatherMap2D");
-
-			// 1. 3D 클라우드 텍스처와 웨더 맵 텍스처가 없으면 생성하여 리소스 매니저에 등록
-			if (!shapeHandle.IsValid() || !weatherHandle.IsValid())
-			{
-				if (auto* rhi = Renderer::Get().GetRHI())
-				{
-					RHITexture* rhiShape = CloudTextureGenerator::CreateBaseShapeTexture(rhi, 64);
-					RHITexture* rhiWeather = CloudTextureGenerator::CreateWeatherMapTexture(rhi, 256);
-					Texture* shapeTex = Texture::CreateFromRHITexture(rhiShape, L"Resources/Texture/CloudBaseShape3D");
-					Texture* weatherTex = Texture::CreateFromRHITexture(rhiWeather, L"Resources/Texture/CloudWeatherMap2D");
-					shapeHandle = rm.AddResource<Texture>(L"Resources/Texture/CloudBaseShape3D", shapeTex);
-					weatherHandle = rm.AddResource<Texture>(L"Resources/Texture/CloudWeatherMap2D", weatherTex);
-				}
-			}
-
-			// 2. SkyMaterial을 확장자 포함/미포함 두 키 모두로 안전하게 탐색
-			auto skyMatHandle = rm.GetResourceHandle<Material>(RESOURCE_PATH L"Material/SkyMaterial.bammat.json");
-			if (!skyMatHandle.IsValid())
-			{
-				skyMatHandle = rm.GetResourceHandle<Material>(RESOURCE_PATH L"Material/SkyMaterial");
-			}
-
-			// 3. SkyMaterial에 구름 텍스처 바인딩 보장 (슬롯 0: 3D Shape, 슬롯 1: 2D WeatherMap)
-			if (auto* skyMat = skyMatHandle.Get())
-			{
-				if (shapeHandle.IsValid() && weatherHandle.IsValid())
-				{
-					skyMat->SetTextureBinding("CloudBaseShape3D", 0, shapeHandle);
-					skyMat->SetTextureBinding("CloudWeatherMap2D", 1, weatherHandle);
-				}
-			}
-
-			forwardPass->SetPassConstantStruct(3, skyData); // slot 3 (b1, space3)
+			if (auto* forwardPass = rpMgr.GetRenderPassByID(m_ForwardPassID))
+				forwardPass->SetPassConstantStruct(3, skyData);
+			renderer.RegisterViewportCamera(*cameraBuffer, rpMgr.GetRenderPassByID(m_ForwardPassID));
 		}
-		renderer.RegisterViewportCamera(*cameraBuffer, rpMgr.GetRenderPassByID(m_ForwardPassID));
-		renderer.RegisterViewportCamera(*cameraBuffer, rpMgr.GetRenderPassByID(m_ForwardTransparentPassID));
-		SubmitLightingPass(*cameraBuffer, skyData);
+		if (isPassEnabled(m_ForwardTransparentPassID))
+			renderer.RegisterViewportCamera(*cameraBuffer, rpMgr.GetRenderPassByID(m_ForwardTransparentPassID));
+		if (isPassEnabled(m_LightingPassID))
+			SubmitLightingPass(*cameraBuffer, skyData);
 	}
-	renderer.RegisterViewportCamera(rpMgr.GetRenderPassByID(m_UIOverlayPassID));
-
+	if (isPassEnabled(m_UIOverlayPassID))
+		renderer.RegisterViewportCamera(rpMgr.GetRenderPassByID(m_UIOverlayPassID));
 	uint32 ppSlot = 0;
 	wstring currentRT = m_LightingColorName;
+	// Lighting이 꺼진 경우 디버깅 화면으로 GBuffer_Diffuse(0번 인덱스)를 우회 표시
+	if (!isPassEnabled(m_LightingPassID) && !m_OwnedRTNames.empty())
+		currentRT = m_OwnedRTNames[0];
 	SubmitPostProcessPass(dt, ppSlot, currentRT);
-	SubmitUIOverlayPass(currentRT);
-
+	if (isPassEnabled(m_UIOverlayPassID))
+		SubmitUIOverlayPass(currentRT);
 	if (m_ShowFinalComposed)
 		m_DisplayRTName = currentRT;
 	else
@@ -436,14 +394,16 @@ void SceneViewportPanel::DrawCustomViewport()
 	Application::Get().GetEditHistory().AllowShortcuts(ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows));
 	BaseViewportPanel::DrawCustomViewport();
 	const bool imageHovered = ImGui::IsItemHovered();
-
 	if (Scene* scene = SceneManager::Get().GetCurrentScene())
 		scene->UpdateHierarchyFlags();
-
 	DrawImGuizmo();
 	DrawImViewGuizmo();
-	DrawLightOverlay();
-	DrawCameraOverlay();
+	// UIOverlay 패스가 켜져 있을 때만 에디터 뷰포트 아이콘 오버레이를 표시!
+	if (auto* uiPass = RenderPassManager::Get().GetRenderPassByID(m_UIOverlayPassID); !uiPass || uiPass->IsEnabled())
+	{
+		DrawLightOverlay();
+		DrawCameraOverlay();
+	}
 	DrawSelectionLocked();
 	CapturePickingRequest(imageHovered);
 	HandleTerrainSculpting(imageHovered);
@@ -582,14 +542,20 @@ void SceneViewportPanel::DrawPostProcessMenu()
 	m_PostProcessChain.DrawImGuiMenu();
 }
 
+// SceneViewportPanel.cpp의 DrawRenderPassMenu (약 564번째 줄 교체)
 void SceneViewportPanel::DrawRenderPassMenu()
 {
 	if (ImGui::BeginMenu(LOCAL_CSTR("UI_PASS")))
 	{
+		auto& rpMgr = RenderPassManager::Get();
 		for (auto& pass : m_PassOptions)
 		{
 			string label = WStrToStr(pass.Name);
-			ImGui::MenuItem(label.c_str(), nullptr, &pass.Enabled);
+			if (ImGui::MenuItem(label.c_str(), nullptr, &pass.Enabled))
+			{
+				if (auto* renderPass = rpMgr.GetRenderPassByID(pass.PassID))
+					renderPass->SetEnabled(pass.Enabled);
+			}
 		}
 		ImGui::EndMenu();
 	}
@@ -610,6 +576,7 @@ void SceneViewportPanel::ResizeRenderTargets(uint32 width, uint32 height)
 		m_CameraController->SetAspectRatio(static_cast<f32>(width) / static_cast<f32>(height));
 		m_CameraController->RefreshMatrices();
 	}
+	m_PostProcessChain.Resize(width, height);
 	BaseViewportPanel::ResizeRenderTargets(width, height);
 }
 #pragma endregion
@@ -1181,26 +1148,21 @@ void SceneViewportPanel::SubmitLightingPass(const CameraBuffer& cameraBuffer, co
 			lightingData.SunDirection = skyData.SunDirection;
 
 			auto& rm = ResourceManager::Get();
-			auto shapeHandle = rm.GetResourceHandle<Texture>(L"Resources/Texture/CloudBaseShape3D");
-			auto weatherHandle = rm.GetResourceHandle<Texture>(L"Resources/Texture/CloudWeatherMap2D");
-
+			auto shapeHandle = rm.GetResourceHandle<Texture>(L"Resources/Texture/CloudBaseShape3D.bamtex");
+			auto weatherHandle = rm.GetResourceHandle<Texture>(L"Resources/Texture/CloudWeatherMap2D.bamtex");
 			auto* shapeTexture = shapeHandle.Get();
 			auto* weatherTexture = weatherHandle.Get();
-			if (!shapeTexture || !weatherTexture)
+			if (shapeTexture && weatherTexture)
 			{
-				fmt::print(stderr, "Cloud shadow textures are missing\n");
-				return EResult::Fail;
+				auto* shapeRHI = shapeTexture->GetRHITexture();
+				auto* weatherRHI = weatherTexture->GetRHITexture();
+				if (shapeRHI && weatherRHI)
+				{
+					rhi->BindTextureSampler(shapeRHI, sampler, 0);
+					rhi->BindTextureSampler(weatherRHI, sampler, 1);
+				}
 			}
-
-			auto* shapeRHI = shapeTexture->GetRHITexture();
-			auto* weatherRHI = weatherTexture->GetRHITexture();
-			if (!shapeRHI || !weatherRHI)
-				return EResult::Fail;
-
-			if (IsFailure(rhi->BindTextureSampler(shapeRHI, sampler, 0)))
-				return EResult::Fail;
-
-			if (IsFailure(rhi->BindTextureSampler(weatherRHI, sampler, 1)))
+			if (IsFailure(rhi->BindConstantBuffer(&lightingData, sizeof(lightingData), 3)))
 				return EResult::Fail;
 
 			if (IsFailure(rhi->BindConstantBuffer(&lightingData, sizeof(lightingData), 3)))
@@ -1218,8 +1180,7 @@ void SceneViewportPanel::SubmitLightingPass(const CameraBuffer& cameraBuffer, co
 
 void SceneViewportPanel::SubmitPostProcessPass(f32 dt, uint32& slot, std::wstring& currentRT)
 {
-	m_PostProcessChain.ExecuteChain(dt, m_PPPassIDs, currentRT, m_PPRTNames);
-	slot += static_cast<uint32>(m_PPPassIDs.size()); // Or just let slot be handled. Wait, slot is not needed outside?
+	currentRT = m_PostProcessChain.ExecuteChain(dt, currentRT);
 }
 void SceneViewportPanel::SubmitUIOverlayPass(const wstring& currentRT)
 {
@@ -1495,18 +1456,10 @@ SkyAtmosphereData SceneViewportPanel::BuildSkyAtmosphereData()
 		for (auto [e, sky] : skyView.each())
 		{
 			if (!sky.IsEnabled) continue;
-
-			if (sky.EnableTimeProgression && sky.DayCycleDuration > 0.1f)
-			{
-				f32 dt = ImGui::GetIO().DeltaTime;
-				sky.TimeOfDay = std::fmod(sky.TimeOfDay + (24.0f / sky.DayCycleDuration) * dt, 24.0f);
-				if (sky.TimeOfDay < 0.0f) sky.TimeOfDay += 24.0f;
-			}
-
+			// 시간 증가 및 라이트 Transform 조작 코드는 GameModule로 이전되었으므로 순수 읽기만 수행
 			f32 hourAngle = (sky.TimeOfDay - 12.0f) * (glm::pi<float>() / 12.0f);
 			f32 latRad = glm::radians(sky.Latitude);
 			vec3 toSun = glm::normalize(vec3(std::sin(hourAngle), std::cos(hourAngle) * std::cos(latRad), -std::cos(hourAngle) * std::sin(latRad)));
-
 			skyData.SunDirection = toSun;
 			skyData.ZenithColor = sky.ZenithColor;
 			skyData.HorizonColor = sky.HorizonColor;
@@ -1516,34 +1469,25 @@ SkyAtmosphereData SceneViewportPanel::BuildSkyAtmosphereData()
 			skyData.SunSize = sky.SunSize;
 			skyData.SunColor = sky.CustomSunColor;
 			skyData.SunIntensity = sky.CustomSunIntensity;
-
-			// SkyAtmosphere의 기본 구름 설정을 초기값으로 반영
 			skyData.Cloud.EnableClouds = sky.EnableClouds ? 1u : 0u;
 			skyData.Cloud.CloudCoverage = sky.CloudCoverage;
 			skyData.Cloud.CloudDensity = sky.CloudDensity;
 			skyData.Cloud.LayerBottomAltitude = sky.CloudAltitude;
 			skyData.Cloud.WindSpeed = sky.CloudSpeed * 100.0f;
-
 			if (sky.AutoSyncDirectionalLight)
 			{
-				auto lightView = registry.view<LightComponent, TransformComponent>();
-				for (auto [le, light, tr] : lightView.each())
+				auto lightView = registry.view<LightComponent>();
+				for (auto [le, light] : lightView.each())
 				{
 					if (light.IsEnabled && light.LightType == ELightType::Directional)
 					{
-						vec3 forward = -toSun;
-						f32 pitch = glm::degrees(std::asin(-forward.y));
-						f32 yaw = glm::degrees(std::atan2(forward.x, forward.z));
-						tr.eulerRotation = vec3(pitch, yaw, 0.0f);
-						tr.rotation = glm::quat(glm::radians(tr.eulerRotation));
-
 						skyData.SunColor = light.Color;
 						skyData.SunIntensity = light.Intensity;
 						break;
 					}
 				}
 			}
-			break; // 조기 return 대신 break로 루프 탈출
+			break;
 		}
 
 		// 2. 씬에 전용 VolumetricCloudComponent가 있으면 상세 설정으로 덮어쓰기

@@ -35,6 +35,40 @@ Use one entry per meaningful change.
 
 ---
 
+## [2026-10-26] 뷰포트 패스별 런타임 On/Off 토글 및 SkyAtmosphere 시스템 분리
+
+- Area: Engine | Editor | GameModule | Render
+- Type: Feature | Refactor | Fix
+- 관련 파일:
+  - Engine/Source/Render/RenderPass/Public/RenderPassTypes.h
+  - Engine/Source/Render/RenderPass/Public/RenderPass.h
+  - Engine/Source/Render/RenderPass/Private/RenderPass.cpp
+  - Engine/Source/Render/Private/Renderer.cpp
+  - Editor/Source/ImGui/ViewportPanel/Public/PostProcess.h
+  - Editor/Source/ImGui/ViewportPanel/Private/SceneViewportPanel.cpp
+  - Projects/GameModule/Source/SkyAtmosphereSystem.h
+  - Projects/GameModule/Source/SkyAtmosphereSystem.cpp
+  - Projects/GameModule/Source/GameModule.cpp
+- 배경 및 목적:
+  - 씬 뷰포트 패널에서 렌더 패스(Shadow, PointShadow, Geometry, Lighting, Forward, ForwardTransparent, UIOverlay)를 실시간으로 끄고 켜며 렌더링 파이프라인 단계를 격리·디버깅하려는 요구사항 해결.
+  - 씬 뷰포트 패널의 `Update()` 내부에 혼재되어 있던 3D 볼류메트릭 구름 텍스처 절차적 생성 및 `SkyMaterial` 바인딩, 태양 시뮬레이션 코드의 책임 분리(SRP 준수).
+- 구현 내용:
+  - **RenderPass On/Off 제어 기반 구축**:
+    - `RenderPassDesc`에 `bool isEnabled = true;` 필드 추가 및 `RenderPass`의 Getter/Setter(`IsEnabled()`, `SetEnabled()`) 위임 연결.
+    - `Renderer::Render`에서 비활성화된 패스는 드로우콜(메시, 스프라이트, UI, 커스텀 커맨드)을 스킵하되, 이전 프레임 잔상(고스트 데이터) 방지를 위해 `RPLO_Clear` 대상 렌더타겟 및 큐브맵 섀도우(6면)의 Clear만 수행 후 `EndRenderPass`를 호출하도록 처리.
+  - **뷰포트 UI 및 디스플레이 연동**:
+    - `ViewportPassInfo`에 `RenderPassID`를 매핑하고, 뷰포트의 `PASS` 메뉴 클릭 시 대상 패스의 활성화 여부를 즉시 갱신.
+    - `LightingPass` 비활성화 시 검은 화면 대신 `GBuffer_Diffuse` 텍스처로 최종 디스플레이를 자동 우회(Bypass)하여 지오메트리 텍스처 확인 가능.
+    - `UIOverlay` 토글 시 인게임 UI 캔버스 패스와 함께 에디터 뷰포트의 라이트/카메라 오버레이 아이콘 표시도 연동.
+  - **SkyAtmosphere 시스템 분리**:
+    - 구름 3D 텍스처 생성 및 `SkyMaterial` 슬롯 바인딩(1회)과 태양 시간 진행(`TimeOfDay`) 및 `DirectionalLight` 회전 동기화를 `Projects/GameModule/Source/SkyAtmosphereSystem`으로 분리.
+    - `GameModule::OnLoad()`에서 시스템 등록 및 리소스 초기화 1회 수행으로 이전하여, 다중 뷰포트 실행 시 시간이 중복 진행되던 버그를 차단하고 뷰포트 코드를 경량화.
+- 검증:
+  - Shadow/PointShadow 해제 시 잔상 없이 그림자가 즉시 제거되는 동작 확인.
+  - Geometry 해제 시 G-Buffer 클리어 및 메시 렌더링 스킵 확인.
+  - Lighting 해제 시 GBuffer_Diffuse 디스플레이 우회 정상 동작 확인.
+  - Forward/ForwardTransparent 및 UIOverlay 해제 시 해당 요소들의 격리 및 복원 확인.
+
 ## [2026-10-16] ECS UI Z-Index 편집과 그리기·선택 순서
 
 - Core/Public/Components/UI/UIRenderOrderComponent.h에 zIndex를 분리했다. 미지정 요소의 기본값은 0이다.
@@ -944,3 +978,96 @@ Use this as the primary execution list until a playable 2D vertical slice is com
   PickingBVHBenchmark를 추가했으며 그래프·피킹·Transform·Inspector·Archive 회귀 검사 코드를 확장했다.
   관련 검사 실행 결과는 이 커밋 및 이번 기록 작업에서 확인하지 않았으며, 테스트는 요청에 따라 실행하지 않았다.
   렌더링 성능 수치와 실제 GPU·Editor UI 동작도 확인하지 않았다.
+
+## 2026-10-23 — ECS 정리·상태 전파·2D 물리와 모델 변환 기반 보완
+
+- 기록 범위: `6636769a` 이후의 변경을 `aa2633fc`부터 `7c265b75`까지 16개 로컬 커밋으로 분리했다.
+  아래 내용은 해당 커밋의 구현 기록이며, 실행 검증 결과와 현재 제한은 별도로 명시한다.
+- 로캘 (`aa2633fc`): Engine.csv의 CATEGORY_PHYSICS, STRUCT_BOX_2D, STRUCT_CAPSULE_2D,
+  STRUCT_CIRCLE_2D에 영어·한국어 번역을 채웠다. Editor.csv에는 콘솔 중복 묶기와 사용 가능한 카메라가
+  없을 때의 안내를 등록하고 콘솔 집계 문구를 보완했다. CSV 변환기로 English.json·Korean.json을 갱신했다.
+- 시스템 호출 (`e80d4770`): ISystem·SystemManager와 각 시스템, GameModule의 활성 씬 목록 인자를
+  값 전달에서 const 참조로 바꾸어 시스템 호출마다 발생하던 컨테이너 복사를 제거했다.
+  프레임 시간이나 메모리 사용량의 개선 수치는 측정하지 않았다.
+- 씬·계층·아카이브 (`e6305ec0`): 엔티티 ID 충돌 탐색과 일괄 생성, 하위 트리 삭제 대상 조회에
+  집합을 사용하고, 계층의 부모·자식 상호 참조와 중복·순환·깊이 검증에서 반복 탐색을 줄였다.
+  씬·프리팹 복원 중 컴포넌트별 Transform 갱신을 지연하고 계층 구성 후 갱신하도록 정리했으며,
+  실패 시 상태 보존과 엔티티 ID 처리에 관한 검사 코드를 보완했다.
+  사용하지 않는 GameObjectInspector·DynamicEvent·Event 파일과 Scene의 구형 EventSystem·UICanvas 접근자를 제거하고,
+  EngineReflectionIntegration.md의 설명을 ECS 엔티티 기준으로 갱신했다.
+- 씬 오버레이 (`05067746`): Runtime의 LateUpdate에서 활성 씬의 계층 플래그를 갱신한다.
+  SceneViewportPanel의 오버레이에도 부모로부터 전파된 유효 가시성·활성 상태를 반영하도록 수정했다.
+- 카메라 (`f0398db9`): CameraSystem에 개별 카메라 버퍼 갱신을 분리했다.
+  GameView는 계층에서 활성 상태이며 유효한 버퍼를 만들 수 있는 메인 카메라를 먼저 검사하고,
+  실패하면 일반 카메라를 검사한다. 사용할 카메라가 없으면 렌더 제출·채널 필터 처리를 건너뛰고 번역된 안내를 표시한다.
+  Client도 유효한 활성 카메라 중 메인 카메라를 우선하여 선택한다.
+- 편집 이력·PIE 복원 (`1d669669`): 스냅샷 구조 비교에 ID 조회 맵을 사용하고,
+  캡처·복원 전 계층 검증에서 부모 참조 횟수와 중복 자식을 검사한다.
+  PIE 종료 시 씬 복원에 실패하면 편집 상태로 전환하거나 이력을 지우지 않고 스냅샷을 남긴다.
+  복원에 성공한 뒤 스냅샷 삭제만 실패한 경우에는 경고를 기록한다.
+  복원 실패 전 수행한 사운드 정지와 선택 해제까지 되돌리는 처리는 포함하지 않는다.
+- 콘솔 (`4788e3ef`): 레벨·발생 주체·분류·메시지·파일·행 번호가 같은 로그를 묶는 옵션을 추가했다.
+  묶기는 기본 활성화이며 반복 횟수는 999를 상한으로 표시한다.
+  상태 문구는 표시 행·보관 로그·수집 누락·오래된 항목 제거를 구분한다.
+- 미리보기 입력 (`9acbdb96`): MaterialPreviewRenderer의 키·마우스 버튼·이동·휠·보조 키 조회를
+  InputManager로 통일했다. ImGui의 위젯·포커스 등 UI 문맥 판정은 유지한다.
+- 시작 리소스 (`72557150`): 설정 파일 읽기·파싱, 누락된 설정, 알 수 없는 분류와 리소스 로드 실패를
+  사전 로드 결과에 반영하고, Application 초기화까지 실패를 전달한다.
+  공통 파일 로드 처리를 정리하고 시작 메시 목록의 기존 네 파일 항목을 제거했다.
+- 2D 물리 (`ef527735`): Editor에 PhysicsSystem을 등록하고 PIE의 FixedUpdate를
+  TimeManager가 제공하는 고정 스텝으로 소비한다. 편집 중에는 누적된 고정 스텝을 비운다.
+  동적 강체의 중력·외력·선형 감쇠 적분과 박스 간 충돌의 속도·침투 보정,
+  충돌 레이어·마스크 및 유한 값 검사를 추가했다. Rect 충돌 결과의 침투 깊이·법선·겹침 영역 계산을 보완했다.
+  물리 도형의 리플렉션 표시 이름·분류와 PhysicsTest.json 샘플 씬을 추가했다.
+  현재 접촉 응답은 부모가 없고 회전하지 않은 Box2DShape에 한정하며, 트리거는 응답에서 제외한다.
+  원·캡슐·회전 박스·부모가 있는 강체까지 물리 시뮬레이션을 지원한다는 의미는 아니다.
+- RHI 버퍼 (`dfcde380`): 정점·인덱스 버퍼의 범위·정렬을 검사하는 부분 업로드 API와
+  완료 상태 조회를 추가하고 DirectX12·SDLGPU에 연결했다.
+  SDLGPU는 업로드 펜스의 완료를 확인한 뒤 다음 부분 업로드를 허용하고,
+  기존 CPU 측 버퍼 복사본을 제거했다. 실제 GPU 동작과 처리 시간은 확인하지 않았다.
+- 모델 변환 도구 (`5173dd03`): Assimp를 사용하는 독립 정적 라이브러리 ModelConverter와
+  BamTools::ModelConverter 타깃을 추가했다. 정적 메시의 정점·인덱스·경계와 노드 계층을 CPU 데이터로 변환하며,
+  잘못된 참조·유한하지 않은 값·개수 제한을 검사한다. 애니메이션·스키닝·모프 변환은 지원하지 않는다.
+- 모델 임포트 (`d7aeab18`): 임포터 인터페이스를 IImporter로 정리하고 ModelImporter에 변환 도구를 연결했다.
+  임시 메시 자원을 소유한 상태에서 생성·저장을 처리한 뒤 ResourceManager에 넘기며,
+  이미 등록된 리소스 키의 교체는 거부한다. 여러 파일의 저장·등록 전체를 원자적으로 되돌리는 처리는 제공하지 않는다.
+  ImportJob·ModelImportTask와 CreateJob으로 요청 설정·CPU 준비 데이터·오류 결과를 분리했다.
+  현재 AssetManager::ImportAsync의 모델 경로는 호출 스레드에서 동기 Import를 수행하고 기존 완료 알림 경로를 사용한다.
+  CPU 준비 작업의 백그라운드 실행, 단계별 GPU 업로드와 최종 등록을 연결한 비동기 임포트 완료 상태는 아니다.
+- 스프라이트 (`d5a58329`): ESpriteDrawMode를 enum class로 바꾸어 열거자 범위를 제한했다.
+- 샘플 데이터 (`337302ed`): GraphMovement.json을 추가하고 RaytracingScene.json의 머티리얼 참조 경로와
+  직렬화 값을 갱신했다. uv1.bamsprite.json의 영역 필드를 현재 Rect 직렬화 키인 left·top·width·height에 맞췄다.
+- 문서·작업 지침 (`7c265b75`): 이전 `6636769a`의 구현 기록을 보완하고,
+  Mentor 에이전트가 루트 AGENTS.md와 작업 범위의 프로젝트 문서를 먼저 확인하도록 지침을 추가했다.
+- 검증: 커밋 정리 작업에서 CSV→JSON 변환기의 `--strict` 실행과
+  `Utility/LocalizationAuditor/audit_localization.py --root . --strict` 실행이 성공했다.
+  검사 대상 소스 428개에서 누락 키·빈 영어/한국어 번역·검사 대상 UI 호출의 하드코딩 문구는 발견되지 않았다.
+  이 결과는 실제 언어 전환·편집 상태 유지나 검사 범위 밖의 동적 문자열까지 보장하지 않는다.
+  SceneArchiveCheck·SceneReflectionCheck·HierarchyEditorCheck·EditorHistoryCheck의 검사 코드는 확장했으나,
+  이번 커밋 정리와 기록 작업에서는 C++ 빌드·CTest·실제 Editor/Client UI·물리·GPU 실행 검증을 수행하지 않았다.
+  성능 측정도 수행하지 않았으므로 구현상의 탐색·복사 감소와 측정된 성능 향상을 구분한다.
+
+
+## 2026-10-26 — 스카이 애트모스피어·클라우드 텍스처 에셋화 및 지평선 렌더링 최적화
+
+- 요청: SkyAtmosphereSystem에서 생성한 절차적 구름 텍스처를 디스크 파일로 저장·캐싱하는 파이프라인 구축 및 볼류메트릭 클라우드 지평선(수평선) 시점의 심한 프레임 드랍 완화.
+- 텍스처 아카이브 확장 및 CPU 데이터 보존:
+  - `Engine/Source/Resource/Texture/Private/Texture.cpp`: `ValidateTextureHeader`에서 `Texture3D` 및 `depth >= 1`을 허용하고 3D 볼륨 크기(`width * height * depth * 4`)를 계산하도록 확장.
+  - `Engine/Source/Resource/Texture/Public/Texture.h`: `SetTempData()` 호출 시 `m_CachedHeader.dataSize`, `mipLevels`, `arraySize` 기본 메타데이터를 동기화하여 `WriteArchive` 유효성 검사 실패를 방지.
+  - `Engine/Source/Render/Cloud/Private/CloudTextureGenerator.cpp`: `CreateBaseShapeTexture`와 `CreateWeatherMapTexture`가 내부에서 생성한 CPU 픽셀 데이터를 `Texture` 객체에 보관(`SetTempData`)하고 완성된 `Texture*`를 반환하도록 통합.
+  - `Projects/GameModule/Source/SkyAtmosphereSystem.cpp`: `.bamtex` 파일이 디스크에 존재할 경우 `rm.LoadFile()`을 통해 역직렬화 로드하고, 부재 시에만 노이즈를 절차적으로 생성한 뒤 `rm.SaveToBinaryFile()`로 디스크에 자동 캐싱.
+  - `Editor/Source/ImGui/InspectorPanel/Private/ReflectionPropertyDrawer.cpp`: `#include "ImGui/Public/ResourcePicker.h"`로 인클루드 경로를 명시하여 `ReflectionInspectorCheck` 테스트 타깃 컴파일 에러 해결.
+- 볼류메트릭 클라우드 지평선 프레임 안정화:
+  - 원인: 지평선 방향 광선이 지구 곡률을 스쳐 지나가며 광선 길이(`tEnd - tStart`) 및 카메라와 구름층 사이 거리(`tStart`)가 수십 km로 폭증하여 192스텝을 꽉 채우고, 대기 산란 루프(64스텝) 및 메인 루프에서 태양광 투과 서브 마칭(픽셀당 1,500회 이상 텍스처 페치)이 중첩 발생.
+  - `Resources/Shader/hlsl/atmosphereSkyPS.hlsl`: 대기 산란 64스텝 루프 내에서 구름 그림자를 중복 계산하던 `ENABLE_CLOUD_ATMOSPHERE_SHADOW`를 비활성화하여 대기 연산 비용 절감.
+  - `Resources/Shader/hlsl/cloud.hlsli`:
+    - 원거리 컬링: 카메라와 구름 시작 지점 거리(`tStart`)가 28km 이상인 경우 레이마칭 조기 탈출.
+    - 거리 기반 적응형 LOD: 지평선 방향 광선에 대해 마칭 스텝을 최대 48~24스텝(기존 192스텝)으로 동적 감축 및 스텝 간격 조정.
+    - 태양광 투과 마칭 경량화: `ComputeCloudSunTransmittance` 스텝 수를 2~4스텝으로 줄이고 미세 디테일 노이즈 샘플링을 생략하는 `highDetail = false` 분기 추가.
+    - Space Skipping: 빈 하늘 구간은 1.5배 보폭으로 건너뛰어 불필요한 텍스처 페치 축소.
+    - 원거리 페이드아웃: 20km~30km 구간에서 알파 감쇠를 적용하여 시각적 팝핑 방지.
+- 검증 및 범위:
+  - 컴파일 오류(Texture3D 검증, LoadResource 템플릿 인스턴스화 불일치, ResourcePicker 누락)를 해결하고 빌드 완료.
+  - 런타임 1회 실행 후 `Resources/Texture/CloudBaseShape3D.bamtex` 및 `CloudWeatherMap2D.bamtex`가 디스크에 정상 생성됨을 확인.
+  - 지평선 시점의 텍스처 페치 및 마칭 루프 부하가 감소하여 프레임 드랍이 완화됨을 확인.
+  - 독립 렌더 패스(1/4 저해상도 버퍼 + Temporal Reprojection) 및 2D Cloud Shadow Map 분리는 향후 차세대 과제로 유지.

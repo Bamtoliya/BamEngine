@@ -73,5 +73,6 @@ struct RenderPassDesc
 	vec4 overrideClearColor = vec4(0.0f, 0.0f, 0.0f, -1.0f);
 	ERenderPassType passType = ERenderPassType::Custom;
 	EBlendMode acceptedBlendModes = EBlendMode::ALL;
+	bool isEnabled = true;
 };
 END

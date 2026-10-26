@@ -36,6 +36,7 @@ public:
 	const ERenderPassType GetPassType() const { return m_Desc.passType; }
 	EBlendMode GetAcceptedBlendModes() const { return m_Desc.acceptedBlendModes; }
 	bool IsAcceptsBlendMode(EBlendMode mode) const { return (m_Desc.acceptedBlendModes & mode) != EBlendMode::None; }
+	bool IsEnabled() const { return m_Desc.isEnabled; }
 #pragma endregion
 
 #pragma region Setter
@@ -55,6 +56,7 @@ public:
 	void SetOverrideClearColor(const vec4& color) { m_Desc.overrideClearColor = color; }
 	void SetPassType(ERenderPassType passType) { m_Desc.passType = passType; }
 	void SetAcceptedBlendModes(EBlendMode blendModes) { m_Desc.acceptedBlendModes = blendModes; }
+	void SetEnabled(bool enabled) { m_Desc.isEnabled = enabled; }
 #pragma endregion
 
 #pragma region Pass Constant Buffer Interface
