@@ -84,6 +84,7 @@ private:
 	bool m_NeedToExpandTree = false;
 private:
 	filesystem::path m_RenamingPath;
+	vector<filesystem::path> m_InteractionPaths;
 	char m_RenameBuffer[256];
 private:
 	f32 m_ThumbnailSize = 64.0f;

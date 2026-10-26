@@ -705,3 +705,4 @@ Notification,LoadResourceFailed,Resource load failed,리소스 불러오기 실�
 Notification,LoadResourceSucceeded,Resource loaded,리소스 불러오기 완료
 Notification,ResourceLoadFailed,Failed to load resource: {},리소스를 불러오지 못했습니다: {}
 Notification,ResourceLoadSucceeded,Loaded resource: {},리소스를 불러왔습니다: {}
+ContentBrowser,NoMatchingAssets,No matching assets.,표시할 에셋이 없습니다.

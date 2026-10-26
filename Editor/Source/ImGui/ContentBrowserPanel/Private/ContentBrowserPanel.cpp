@@ -478,77 +478,128 @@ void ContentBrowserPanel::DrawGridItem(const filesystem::directory_entry& direct
 {
 	const auto& path = directoryEntry.path();
 
-	ImTextureID thumbnailTexID = NULL;
+	ImTextureID thumbnailTexID = 0;
 	if (!directoryEntry.is_directory())
 	{
 		thumbnailTexID = ImGuiManager::Get().GetImGuiTextureID(AssetCache::Get().GetThumbnail(path));
 	}
 
-	ContentBrowserGridItem::Draw(
-		directoryEntry,
-		m_RootPath,
-		thumbnailTexID,
-		m_ThumbnailSize,
-		m_Padding,
-		m_RenamingPath,
-		m_RenameBuffer,
-		sizeof(m_RenameBuffer),
-		m_CurrentDirectory,
-		m_SearchBuffer
-	);
+	const bool keepAlive = ContentBrowserGridItem::Draw(directoryEntry, m_RootPath, thumbnailTexID,
+		m_ThumbnailSize, m_Padding, m_RenamingPath, m_RenameBuffer, sizeof(m_RenameBuffer),
+		m_CurrentDirectory, m_SearchBuffer);
+
+	if (keepAlive)
+		m_InteractionPaths.push_back(path);
 }
 
 void ContentBrowserPanel::DrawGrid(bool enterPressed)
 {
-	f32 cellSize = m_ThumbnailSize + m_Padding;
-	f32 panelWidth = ImGui::GetContentRegionAvail().x;
-	int32 columnCount = static_cast<int>(panelWidth / cellSize);
-	if (columnCount < 1) columnCount = 1;
-	if (ImGui::BeginTable("ContentBrowserTable", columnCount))
+	std::vector<filesystem::path> interactionPaths;
+	interactionPaths.swap(m_InteractionPaths);
+	const string searchStr(m_SearchBuffer);
+	const bool isSearching = !searchStr.empty();
+	const bool searchCleared = !isSearching && !m_LastSearchString.empty();
+
+	if (enterPressed)
 	{
-		string searchStr(m_SearchBuffer);
-		bool isSearching = !searchStr.empty();
-		bool searchCleared = (m_SearchBuffer[0] == '\0' && !m_LastSearchString.empty());
+		m_LastSearchString = searchStr;
+		m_SearchResults.clear();
 
-		if (enterPressed)
+		if (isSearching)
 		{
-			m_LastSearchString = searchStr; // 검색어 업데이트
-			m_SearchResults.clear();
-
-			if (isSearching)
+			for (const auto& entry : filesystem::recursive_directory_iterator(
+				m_RootPath, filesystem::directory_options::skip_permission_denied))
 			{
-				for (auto& directoryEntry : filesystem::recursive_directory_iterator(m_RootPath, filesystem::directory_options::skip_permission_denied))
-				{
-					string filenameString = directoryEntry.path().filename().string();
-					if (StringContainsCaseInsensitive(filenameString, searchStr))
-					{
-						m_SearchResults.push_back(directoryEntry);
-					}
-				}
+				if (StringContainsCaseInsensitive(entry.path().filename().string(), searchStr))
+					m_SearchResults.push_back(entry);
 			}
 		}
-
-		if (isSearching && !m_SearchResults.empty())
-		{
-			for (auto& directoryEntry : m_SearchResults)
-			{
-				if (!PassesFilter(directoryEntry, m_FilterMask)) continue;
-				ImGui::TableNextColumn();
-				DrawGridItem(directoryEntry);
-			}
-		}
-		else
-		{
-			for (auto& directoryEntry : m_CachedEntries)
-			{
-				if (!PassesFilter(directoryEntry, m_FilterMask)) continue;
-				ImGui::TableNextColumn();
-				DrawGridItem(directoryEntry);
-			}
-			m_SearchResults.clear();
-		}
-		ImGui::EndTable();
 	}
+
+	if (!isSearching)
+	{
+		m_LastSearchString.clear();
+		m_SearchResults.clear();
+	}
+
+	if (enterPressed || searchCleared)
+		ImGui::SetScrollY(0.0f);
+
+	// 파일 항목을 복사하지 않고 이번 프레임에 사용할 참조 목록을 만듭니다.
+	const auto& source = isSearching ? m_SearchResults : m_CachedEntries;
+	std::vector<const filesystem::directory_entry*> entries;
+	entries.reserve(source.size());
+
+	for (const auto& entry : source)
+	{
+		if (PassesFilter(entry, m_FilterMask))
+			entries.push_back(&entry);
+	}
+
+	if (entries.empty())
+	{
+		ImGui::TextDisabled("%s", LOCAL("ContentBrowser.NoMatchingAssets").c_str());
+		return;
+	}
+
+	const float cellSize = m_ThumbnailSize + m_Padding;
+	const float panelWidth = ImGui::GetContentRegionAvail().x;
+	const int columnCount = std::clamp(static_cast<int>(panelWidth / cellSize), 1, 64);
+	const int itemCount = static_cast<int>(entries.size());
+	const int rowCount = (itemCount + columnCount - 1) / columnCount;
+
+	ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ImVec2(m_Padding * 0.5f, m_Padding * 0.5f));
+
+	const ImGuiTableFlags flags = ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoSavedSettings;
+	if (!ImGui::BeginTable("ContentBrowserTable", columnCount, flags))
+	{
+		ImGui::PopStyleVar();
+		return;
+	}
+
+	for (int column = 0; column < columnCount; ++column)
+		ImGui::TableSetupColumn("##AssetColumn", ImGuiTableColumnFlags_WidthFixed, m_ThumbnailSize);
+
+	// 이름 변경 입력창도 같은 행 높이 안에 들어가도록 최소 높이를 확보합니다.
+	const float nameHeight = std::max(ImGui::GetTextLineHeight() * 2.0f + 12.0f, ImGui::GetFrameHeight());
+	const float rowHeight = std::ceil(m_ThumbnailSize + nameHeight + ImGui::GetStyle().CellPadding.y * 2.0f);
+
+	ImGuiListClipper clipper;
+	clipper.Begin(rowCount, rowHeight);
+
+	if (!m_RenamingPath.empty() || !interactionPaths.empty())
+	{
+		for (int index = 0; index < itemCount; ++index)
+		{
+			const auto& path = entries[index]->path();
+			const bool interacting = std::find(interactionPaths.begin(), interactionPaths.end(), path)
+				!= interactionPaths.end();
+
+			if (path == m_RenamingPath || interacting)
+				clipper.IncludeItemByIndex(index / columnCount);
+		}
+	}
+
+	while (clipper.Step())
+	{
+		for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; ++row)
+		{
+			ImGui::TableNextRow(ImGuiTableRowFlags_None, rowHeight);
+
+			for (int column = 0; column < columnCount; ++column)
+			{
+				const int index = row * columnCount + column;
+				if (index >= itemCount)
+					break;
+
+				ImGui::TableSetColumnIndex(column);
+				DrawGridItem(*entries[index]);
+			}
+		}
+	}
+
+	ImGui::EndTable();
+	ImGui::PopStyleVar();
 }
 
 void ContentBrowserPanel::FileConfilictPopup()

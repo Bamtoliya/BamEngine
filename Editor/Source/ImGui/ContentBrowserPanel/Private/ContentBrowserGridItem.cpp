@@ -131,28 +131,31 @@ namespace
 	}
 }
 
-void ContentBrowserGridItem::Draw(const std::filesystem::directory_entry& directoryEntry, const std::filesystem::path& rootPath, ImTextureID thumbnailTexID, f32 thumbnailSize, f32 padding, std::filesystem::path& outRenamingPath, char* renameBuffer, size_t renameBufferSize, std::filesystem::path& currentDirectory, char* searchBuffer)
+bool ContentBrowserGridItem::Draw(const std::filesystem::directory_entry& directoryEntry,
+	const std::filesystem::path& rootPath, ImTextureID thumbnailTexID, f32 thumbnailSize, f32 padding,
+	std::filesystem::path& outRenamingPath, char* renameBuffer, size_t renameBufferSize,
+	std::filesystem::path& currentDirectory, char* searchBuffer)
 {
-	float filledSize = ImGui::GetContentRegionAvail().x;
+	const float filledSize = thumbnailSize;
 	const auto& path = directoryEntry.path();
 	auto relativePath = path.lexically_relative(rootPath);
 	std::filesystem::path payloadPath = rootPath.filename() / relativePath;
 
 	ImGui::PushID(path.string().c_str());
 
-	// 1. 썸네일 및 부가 요소 렌더링
 	Thumbnail(directoryEntry, thumbnailTexID, filledSize, padding);
+	const bool thumbnailActive = ImGui::IsItemActive();
+
 	ToolTip(directoryEntry);
 	ContextMenu(path, outRenamingPath, renameBuffer, renameBufferSize);
-	DragAndDropTarget(payloadPath);
+	const bool contextMenuOpen = ImGui::IsPopupOpen("##AssetContextMenu");
+	const bool dragging = DragAndDropTarget(payloadPath);
 
-	// 썸네일 위에서 더블클릭 시 처리
 	if (ImGui::IsItemHovered() && MOUSE_BUTTON_DOUBLE_CLICK(EMouseButton::Left))
 	{
 		HandleItemDoubleClick(directoryEntry, currentDirectory, searchBuffer);
 	}
 
-	// 2. 이름 변경 중인지 확인 후 하단 UI 분기
 	if (outRenamingPath == path)
 	{
 		DrawRename(path, filledSize, outRenamingPath, renameBuffer, renameBufferSize, currentDirectory);
@@ -163,6 +166,7 @@ void ContentBrowserGridItem::Draw(const std::filesystem::directory_entry& direct
 	}
 
 	ImGui::PopID();
+	return thumbnailActive || contextMenuOpen || dragging;
 }
 
 void ContentBrowserGridItem::Thumbnail(const std::filesystem::directory_entry& directoryEntry, ImTextureID thumbnailTexID, f32 thumbnailSize, f32 padding)
@@ -252,7 +256,7 @@ void ContentBrowserGridItem::ContextMenu(const std::filesystem::path& path,
 	std::filesystem::path& outRenamingPath, char* renameBuffer, size_t renameBufferSize)
 {
 	std::string filenameString = path.filename().string();
-	if (ImGui::BeginPopupContextItem())
+	if (ImGui::BeginPopupContextItem("##AssetContextMenu"))
 	{
 		if (ImGui::MenuItem((ICON_FA_PEN " " + LOCAL_LABEL("EditorCommon.Rename")).c_str(), "F2"))
 		{
@@ -401,23 +405,18 @@ void ContentBrowserGridItem::ToolTip(const std::filesystem::directory_entry& dir
 	}
 }
 
-void ContentBrowserGridItem::DragAndDropTarget(const std::filesystem::path& relativePath)
+bool ContentBrowserGridItem::DragAndDropTarget(const std::filesystem::path& relativePath)
 {
-	if (ImGui::BeginDragDropSource())
-	{
-		std::wstring wPath = Engine::NormalizePath(relativePath.wstring());
+	if (!ImGui::BeginDragDropSource())
+		return false;
 
-		// 기존 범용 페이로드
-		ImGui::SetDragDropPayload(
-			"CONTENT_BROWSER_ITEM",
-			wPath.c_str(),
-			(wPath.length() + 1) * sizeof(wchar_t));
+	std::wstring wPath = Engine::NormalizePath(relativePath.wstring());
 
-		// One payload per drag; the receiver validates the resolved resource type.
+	ImGui::SetDragDropPayload("CONTENT_BROWSER_ITEM", wPath.c_str(), (wPath.length() + 1) * sizeof(wchar_t));
 
-		ImGui::Text("%s", relativePath.filename().string().c_str());
-		ImGui::EndDragDropSource();
-	}
+	ImGui::Text("%s", relativePath.filename().string().c_str());
+	ImGui::EndDragDropSource();
+	return true;
 }
 
 void ContentBrowserGridItem::DrawRename(const std::filesystem::path& path, f32 thumbnailSize, std::filesystem::path& outRenamingPath, char* renameBuffer, size_t renameBufferSize, std::filesystem::path& currentDirectory)
@@ -458,7 +457,7 @@ void ContentBrowserGridItem::DrawRename(const std::filesystem::path& path, f32 t
 void ContentBrowserGridItem::DrawNameBox(const std::filesystem::directory_entry& directoryEntry, const std::filesystem::path& rootPath, f32 thumbnailSize, std::filesystem::path& currentDirectory, char* searchBuffer)
 {
 	const auto& path = directoryEntry.path();
-	auto relativePath = std::filesystem::relative(path, rootPath);
+	auto relativePath = path.lexically_relative(rootPath);
 
 	// 폴더면 그대로(filename), 파일이면 확장자 제거(stem)
 	std::string filenameString = directoryEntry.is_directory() ? relativePath.filename().string() : relativePath.stem().string();

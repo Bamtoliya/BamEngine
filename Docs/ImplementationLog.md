@@ -35,6 +35,36 @@ Use one entry per meaningful change.
 
 ---
 
+## [2026-10-26] 콘텐츠 브라우저 행 클리핑과 메뉴 프레임 하락 완화
+
+- Area: Editor | UI
+- Type: Fix | Performance
+- 관련 파일:
+  - Editor/Source/ImGui/ContentBrowserPanel/Private/ContentBrowserPanel.cpp
+  - Editor/Source/ImGui/ContentBrowserPanel/Private/ContentBrowserGridItem.cpp
+  - Editor/Source/ImGui/ContentBrowserPanel/Public/ContentBrowserPanel.h
+  - Editor/Source/ImGui/ContentBrowserPanel/Public/ContentBrowserGridItem.h
+  - Resources/Data/Localization/Editor.csv
+  - Resources/Data/Localization/English.json
+  - Resources/Data/Localization/Korean.json
+- 배경 및 원인:
+  - 사용자는 간단한 File 메뉴를 열어 둔 동안 프레임이 떨어져 약 30FPS에 머무르고, 콘텐츠 브라우저를 닫으면 회복되는 현상을 확인했다.
+  - 조사 당시 작업 트리의 DrawGrid()는 어느 팝업이든 열리거나 드래그 페이로드가 있으면 모든 행을 클리퍼에 포함했다. 이 때문에 다른 메뉴를 열어도 화면 밖 항목의 위젯 구성과 썸네일 조회까지 반복됐다.
+- 구현 내용:
+  - 항목 참조 목록과 고정 열 너비·행 높이를 사용해 그리드를 행 단위로 클리핑한다. 이름 변경 입력창을 포함한 행 높이와 썸네일 크기를 일치시킨다.
+  - ContentBrowserGridItem::Draw()와 DragAndDropTarget()이 상호작용 유지 여부를 반환하도록 변경했다. 썸네일 활성 상태, 해당 항목의 우클릭 메뉴, 드래그 원본 상태를 구분해 확인한다.
+  - 패널은 상호작용 중인 항목의 경로를 다음 프레임으로 전달하고, 이름 변경 대상과 해당 경로의 행만 IncludeItemByIndex()로 추가 처리한다. 모든 팝업·페이로드를 기준으로 전체 행을 포함하던 처리는 제거했다.
+  - 우클릭 메뉴는 기존 경로별 PushID() 안에서 안정적인 내부 ID인 ##AssetContextMenu를 사용한다. 폴더·검색·필터 변경으로 목록에서 사라진 대상은 다음 프레임 유지 목록에서 자연스럽게 제외된다.
+  - DrawNameBox()의 상대 경로 계산은 lexically_relative()를 사용한다. 빈 검색·필터 결과 안내의 로캘 키 ContentBrowser.NoMatchingAssets를 CSV와 한국어·영어 JSON에 함께 포함했다.
+- 검증:
+  - 사용자 실행 확인: 적용 후 일부 비용은 남지만 프레임 하락이 완화됐다고 보고했다. 개선 전후의 정량 프레임 시간과 개선율은 측정하지 않았다.
+  - AI 정적 확인: 선언·정의·호출부와 설치된 ImGui 1.92.5의 팝업·클리퍼 API를 확인했다. 이번 기록·커밋 작업에서 빌드·자동 테스트는 실행하지 않았다.
+  - 우클릭 대상이 화면 밖으로 이동하는 경우, 드래그 중 스크롤, 이름 변경 중 패널 너비 변경, 언어 변경 시 ID·편집 상태 유지와 단축키 충돌은 별도 회귀 확인이 필요하다.
+- 한계 및 후속:
+  - 전체 목록 필터링과 참조 목록 구성은 여전히 매 프레임 수행한다. 남은 비용의 원인이나 CPU·GPU별 기여도는 확정하지 않았다.
+  - 30FPS에 머무는 현상에서 VSync의 기여도는 미검증이다. 이번에는 Present·프레임 제한·입력 수집 경로를 변경하지 않았다.
+  - 사용자의 결정에 따라 추가 최적화는 여기서 중단한다.
+
 ## [2026-10-26] 뷰포트 패스별 런타임 On/Off 토글 및 SkyAtmosphere 시스템 분리
 
 - Area: Engine | Editor | GameModule | Render

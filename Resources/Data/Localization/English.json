@@ -516,6 +516,7 @@
         "ContentBrowser.ReloadTexture": "Reload Texture",
         "ContentBrowser.RecompileAllShaders": "Recompile All Shaders",
         "ContentBrowser.RecompileShader": "Recompile Shader",
+        "ContentBrowser.NoMatchingAssets": "No matching assets.",
         "TerrainEditor.NoScene": "No active scene.",
         "TerrainEditor.NoSelection": "No terrain selected. Select a Terrain entity in Hierarchy.",
         "TerrainEditor.SculptOn": "Sculpting: ON (Click to Disable)",
