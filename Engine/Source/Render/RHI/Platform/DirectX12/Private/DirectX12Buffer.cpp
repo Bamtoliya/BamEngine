@@ -13,11 +13,18 @@ EResult DirectX12Buffer::Initialize(const DESC& desc)
 
 	D3D12_HEAP_PROPERTIES heapProps = {};
 	D3D12_RESOURCE_STATES initialState = D3D12_RESOURCE_STATE_GENERIC_READ;
+	D3D12_RESOURCE_FLAGS resourceFlags = D3D12_RESOURCE_FLAG_NONE;
 
 	if (m_BufferType == ERHIBufferType::Readback)
 	{
 		heapProps.Type = D3D12_HEAP_TYPE_READBACK;
 		initialState = D3D12_RESOURCE_STATE_COPY_DEST;
+	}
+	else if (m_BufferType == ERHIBufferType::Storage)
+	{
+		heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
+		initialState = D3D12_RESOURCE_STATE_COMMON;
+		resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
 	}
 	else
 	{
@@ -27,7 +34,6 @@ EResult DirectX12Buffer::Initialize(const DESC& desc)
 	}
 
 	D3D12_RESOURCE_DESC resourceDesc = {};
-
 	resourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
 	resourceDesc.Alignment = 0;
 	resourceDesc.Width = m_Size;
@@ -38,7 +44,7 @@ EResult DirectX12Buffer::Initialize(const DESC& desc)
 	resourceDesc.SampleDesc.Count = 1;
 	resourceDesc.SampleDesc.Quality = 0;
 	resourceDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-	resourceDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
+	resourceDesc.Flags = resourceFlags;
 	if (FAILED(device->CreateCommittedResource(
 		&heapProps,
 		D3D12_HEAP_FLAG_NONE,

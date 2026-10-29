@@ -47,6 +47,8 @@ Texture2D gPosition : register(t4, space3);
 Texture2D gShadowDepth : register(t5, space3);
 ByteAddressBuffer gLightBuffer : register(t6, space3);
 TextureCube gPointShadowDepth : register(t7, space3);
+StructuredBuffer<uint2> gTileLightGrid : register(t8, space3);
+StructuredBuffer<uint>  gTileLightIndexList : register(t9, space3);
 
 SamplerState gBufferSampler : register(s0, space3);
 ConstantBuffer<LightingPassData> gLightingData : register(b1, space3);
@@ -71,7 +73,7 @@ Light LoadLight(uint lightIndex)
 	light.Color = asfloat(gLightBuffer.Load3(address + 32u));
 	light.PackedFlags = gLightBuffer.Load(address + 44u);
 	light.AttenuationCoeff = asfloat(gLightBuffer.Load3(address + 48u));
-	light.Pad0 = asfloat(gLightBuffer.Load(address + 60u));
+	light.ShadowStrength = asfloat(gLightBuffer.Load(address + 60u));
 	light.SpotInnerCos = asfloat(gLightBuffer.Load(address + 64u));
 	light.SpotOuterCos = asfloat(gLightBuffer.Load(address + 68u));
 	light.SpotFalloff = asfloat(gLightBuffer.Load(address + 72u));
@@ -138,6 +140,16 @@ float3 FresnelSchlick(float cosTheta, float3 f0)
 	return f0 + (1.0f - f0) * pow(saturate(1.0f - cosTheta), 5.0f);
 }
 
+float3 EnvBRDFApprox(float3 f0, float roughness, float normalDotView)
+{
+	const float4 c0 = float4(-1.0f, -0.0275f, -0.572f, 0.022f);
+	const float4 c1 = float4(1.0f, 0.0425f, 1.04f, -0.04f);
+	float4 r = roughness * c0 + c1;
+	float a004 = min(r.x * r.x, exp2(-9.28f * normalDotView)) * r.x + r.y;
+	float2 AB = float2(-1.04f, 1.04f) * a004 + r.zw;
+	return f0 * AB.x + AB.y;
+}
+
 static const float2 VOGEL_DISK_16[16] = {
 	float2(-0.1345f, 0.1165f), float2(0.1874f, -0.2443f), float2(-0.0694f, 0.3891f), float2(-0.2505f, -0.3951f),
 	float2(0.5057f, 0.1706f),  float2(-0.4907f, 0.2928f), float2(0.2072f, -0.6033f), float2(0.2520f, 0.6375f),
@@ -181,6 +193,32 @@ bool FindBlocker(float3 projCoord, float depthBias, float2 searchRadius, float2x
 
 // ── 캐스케이드 디버그 시각화 매크로 (1로 설정 시 영역별 RGB 틴트 출력) ──
 #define DEBUG_CASCADE_COLORS 0
+
+// ── 타일 조명 디버그 시각화 매크로 (1로 설정 시 타일 격자 및 광원 수 히트맵 출력) ──
+#define DEBUG_TILE_LIGHT_HEATMAP 0
+
+float3 GetTileHeatmapColor(uint count)
+{
+	if (count == 0u)
+		return float3(0.02f, 0.02f, 0.05f);
+	if (count <= 3u)
+		return lerp(float3(0.0f, 0.2f, 0.8f), float3(0.0f, 0.8f, 0.4f), count / 3.0f);
+	if (count <= 8u)
+		return lerp(float3(0.0f, 0.8f, 0.4f), float3(0.9f, 0.9f, 0.0f), (count - 3.0f) / 5.0f);
+	if (count <= 20u)
+		return lerp(float3(0.9f, 0.9f, 0.0f), float3(1.0f, 0.2f, 0.0f), (count - 8.0f) / 12.0f);
+	return float3(1.0f, 0.0f, 0.5f);
+}
+
+float3 ApplyTileHeatmapDebug(float3 baseColor, uint count, float2 screenPos)
+{
+	uint2 p = uint2(screenPos) % 16u;
+	if (p.x == 0u || p.y == 0u)
+		return float3(0.9f, 0.9f, 0.9f);
+
+	float3 heatmap = GetTileHeatmapColor(count);
+	return lerp(baseColor, heatmap, 0.6f);
+}
 
 // 단일 캐스케이드에 대한 PCSS + Vogel Disk 16-Tap 샘플링
 float EvaluateCascadeShadow(uint cascadeIndex, float3 biasedWorldPos, float depthBias, float2 screenPos, float2x2 rot, float2 texelSize)
@@ -616,7 +654,8 @@ float4 main(PS_INPUT input) : SV_TARGET
     float3 viewDirection = normalize(commonData.CameraPos - worldPosition);
     float3 f0 = lerp(float3(0.04f, 0.04f, 0.04f), albedo, metallic);
     float3 directLighting = float3(0.0f, 0.0f, 0.0f);
-    float3 skyAmbient = float3(0.0f, 0.0f, 0.0f);
+    float3 skyDiffuseIrradiance = float3(0.0f, 0.0f, 0.0f);
+    float3 skySpecularRadiance = float3(0.0f, 0.0f, 0.0f);
     bool hasSkyLight = false;
     bool consumedShadowMap = false;
     uint numLights = gLightBuffer.Load(0u);
@@ -627,25 +666,53 @@ float4 main(PS_INPUT input) : SV_TARGET
 		cloudSunLightIndex = FindAtmosphereSunLightIndex(numLights);
 	}
 
-    for (uint lightIndex = 0u; lightIndex < numLights; ++lightIndex)
+	uint width, height;
+    gPosition.GetDimensions(width, height);
+    uint tilesX = (width + 15u) / 16u;
+    uint2 tileCoord = uint2(input.Position.xy) / 16u;
+    uint tileIndex = tileCoord.y * tilesX + tileCoord.x;
+
+	    uint2 tileInfo = gTileLightGrid[tileIndex];
+    uint tileStart = tileInfo.x;
+    uint tileLightCount = min(tileInfo.y, 256u);
+
+    // [Fallback 안전장치]: 타일 광원 수가 0이면 전체 광원(numLights)을 안전하게 순회하여 조명 꺼짐 방지
+    bool useTileList = (tileLightCount > 0u);
+    uint lightLoopCount = useTileList ? tileLightCount : numLights;
+
+    for (uint i = 0u; i < lightLoopCount; ++i)
     {
+        uint lightIndex = useTileList ? gTileLightIndexList[tileStart + i] : i;
         Light light = LoadLight(lightIndex);
         if (!HasLightFlag(light.PackedFlags, LIGHT_FLAG_USE_IN_DEFERRED))
             continue;
 
-        uint lightType = GetLightType(light.PackedFlags);
+		uint lightType = GetLightType(light.PackedFlags);
         if (lightType == LIGHT_TYPE_SKY)
         {
             hasSkyLight = true;
-            if (!HasLightFlag(light.PackedFlags, LIGHT_FLAG_AFFECT_DIFFUSE))
-                continue;
-
-            float hemiT = saturate(dot(normal, normalize(light.Direction)) * 0.5f + 0.5f);
+            float indirect = max(light.Range, 0.0f) * max(light.Intensity, 0.0f);
             float3 zenith = max(light.Color, float3(0.0f, 0.0f, 0.0f));
             float3 ground = max(light.AttenuationCoeff, float3(0.0f, 0.0f, 0.0f));
-            float3 hemiColor = lerp(ground, zenith, hemiT);
-            float indirect = max(light.Range, 0.0f) * max(light.Intensity, 0.0f);
-            skyAmbient += hemiColor * albedo * indirect;
+            float3 skyDir = normalize(light.Direction);
+
+            // 1. Diffuse Irradiance (표면 법선 방향 반구 적분)
+            if (HasLightFlag(light.PackedFlags, LIGHT_FLAG_AFFECT_DIFFUSE))
+            {
+                float hemiDiff = saturate(dot(normal, skyDir) * 0.5f + 0.5f);
+                skyDiffuseIrradiance += lerp(ground, zenith, hemiDiff) * indirect;
+            }
+
+            // 2. Specular Prefiltered Radiance (반사 벡터 및 거칠기 기반 수렴)
+            if (HasLightFlag(light.PackedFlags, LIGHT_FLAG_AFFECT_SPECULAR))
+            {
+                float3 reflectDir = reflect(-viewDirection, normal);
+                float hemiSpec = saturate(dot(reflectDir, skyDir) * 0.5f + 0.5f);
+                float3 rawSkyColor = lerp(ground, zenith, hemiSpec);
+                float3 avgSky = (zenith + ground) * 0.5f;
+                // 거칠기가 커질수록 반사광이 주변 평균색(블러)으로 수렴
+                skySpecularRadiance += lerp(rawSkyColor, avgSky, roughness * roughness) * indirect;
+            }
             continue;
         }
 
@@ -655,32 +722,50 @@ float4 main(PS_INPUT input) : SV_TARGET
             float3 lightDir = normalize(-light.Direction);
             float mainShadow = CalcShadowFactor(light, worldPosition, normal, input.Position.xy);
             float contactShadow = CalcContactShadow(worldPosition, normal, lightDir, input.Position.xy);
-            shadowFactor = min(mainShadow, contactShadow);
+            // 접촉 그림자를 부드럽게 감쇠(최대 40% 차폐)하여 주 그림자와 자연스럽게 합성
+            float rawShadow = min(mainShadow, lerp(0.4f, 1.0f, contactShadow));
+            shadowFactor = lerp(1.0f - light.ShadowStrength, 1.0f, rawShadow);
             consumedShadowMap = true;
         }
         else if (receiveShadow && lightType == LIGHT_TYPE_SPOT && HasLightFlag(light.PackedFlags, LIGHT_FLAG_CAST_SHADOWS))
         {
-            shadowFactor = CalcSpotShadowFactor(light, worldPosition, normal, input.Position.xy);
+            float rawShadow = CalcSpotShadowFactor(light, worldPosition, normal, input.Position.xy);
+            shadowFactor = lerp(1.0f - light.ShadowStrength, 1.0f, rawShadow);
         }
-		else if (receiveShadow && lightType == LIGHT_TYPE_POINT && HasLightFlag(light.PackedFlags, LIGHT_FLAG_CAST_SHADOWS))
+        else if (receiveShadow && lightType == LIGHT_TYPE_POINT && HasLightFlag(light.PackedFlags, LIGHT_FLAG_CAST_SHADOWS))
         {
-            shadowFactor = CalcPointShadowFactor(light, worldPosition, normal, input.Position.xy);
-        }
-
-        if (receiveShadow && lightIndex == cloudSunLightIndex)
-        {
-            shadowFactor *= CalcCloudShadowFactor(worldPosition);
+            float rawShadow = CalcPointShadowFactor(light, worldPosition, normal, input.Position.xy);
+            shadowFactor = lerp(1.0f - light.ShadowStrength, 1.0f, rawShadow);
         }
 
         directLighting += CalcLight(light, worldPosition, normal, viewDirection, albedo, roughness, metallic, f0) * shadowFactor;
     }
 
-    float3 ambient = hasSkyLight ? skyAmbient * ambientOcclusion : float3(0.03f, 0.03f, 0.03f) * albedo * ambientOcclusion;
+    float normalDotView = max(dot(normal, viewDirection), 0.0f);
+    float3 specularBRDF = EnvBRDFApprox(f0, roughness, normalDotView);
+    float3 kd = (1.0f - f0) * (1.0f - metallic);
+    float3 diffuseIBL;
+    float3 specularIBL;
+    if (hasSkyLight)
+    {
+        diffuseIBL = kd * albedo * skyDiffuseIrradiance;
+        specularIBL = skySpecularRadiance * specularBRDF;
+    }
+    else
+    {
+        float3 fallbackEnv = float3(0.15f, 0.15f, 0.15f);
+        diffuseIBL = kd * albedo * fallbackEnv;
+        specularIBL = fallbackEnv * specularBRDF;
+    }
+    float3 ambient = (diffuseIBL + specularIBL) * ambientOcclusion;
     float3 color = ambient + directLighting + emission;
     float4 fog = CalculateFog(worldPosition, commonData.CameraPos);
     color = lerp(color, fog.rgb, fog.a);
 #if DEBUG_CASCADE_COLORS
     color *= GetCascadeDebugColor(worldPosition);
+#endif
+#if DEBUG_TILE_LIGHT_HEATMAP
+    color = ApplyTileHeatmapDebug(color, tileLightCount, input.Position.xy);
 #endif
     color = color / (color + 1.0f);
     color = pow(color, 1.0f / 2.2f);

@@ -51,6 +51,8 @@ namespace Engine
 		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_FLAGS"))
 		ELightFlags Flags = ELightFlags::UseInDeferredRendering | ELightFlags::AffectDiffuse | ELightFlags::AffectSpecular;
 
+		PROPERTY(EDITABLE, ALLOW_MISSING, CATEGORY("CATEGORY_SHADOW"), DISPLAY_NAME("PROP_SHADOW_STRENGTH"), RANGE(0.0f, 1.0f, 0.05f))
+		f32 ShadowStrength = 1.0f;
 		PROPERTY(EDITABLE, CATEGORY("CATEGORY_SHADOW"), DISPLAY_NAME("PROP_SHADOW_RANGE"), RANGE(1.0f, 500.0f, 1.0f))
 		f32 ShadowRange = 50.f;
 

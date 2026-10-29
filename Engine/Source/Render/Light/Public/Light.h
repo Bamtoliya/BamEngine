@@ -21,7 +21,7 @@ struct GPULight
 	Engine::uint32 PackedFlags;
 
 	Engine::vec3 AttenuationCoeff;
-	Engine::f32 Pad0;
+	Engine::f32 ShadowStrength;
 
 	Engine::f32 SpotInnerCos;
 	Engine::f32 SpotOuterCos;

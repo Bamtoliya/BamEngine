@@ -28,7 +28,7 @@ struct Light
     uint    PackedFlags;
 
     float3  AttenuationCoeff;
-    float   Pad0;
+    float   ShadowStrength;
 
     float   SpotInnerCos;
     float   SpotOuterCos;

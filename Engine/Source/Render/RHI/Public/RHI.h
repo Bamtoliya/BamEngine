@@ -54,6 +54,12 @@ public:
     virtual EResult BeginFrame() BAM_PURE;
     virtual EResult EndFrame() BAM_PURE;
 
+#pragma region Presentation
+public:
+    virtual bool SupportsVSync(bool) const { return false; }
+    virtual EResult SetVSync(bool) { return EResult::NotImplemented; }
+    bool IsVSyncEnabled() const { return m_VSyncEnabled; }
+#pragma endregion
 
 #pragma region Create Resources
 public:
@@ -65,7 +71,7 @@ public:
     virtual RHITexture* CreateTextureFromFile(const wchar* filename) BAM_PURE;
     virtual RHITexture* CreateTexture(const RHITextureDesc& desc) BAM_PURE;
 	virtual RHITexture* CreateTextureFromNativeHandle(void* nativeHandle) BAM_PURE;
-    virtual EResult UploadTextureData(RHITexture* texture, const RHITextureDesc& desc) { return EResult::NotImplemented; }
+    virtual EResult UploadTextureData(RHITexture* texture, const RHITextureDesc& desc, uint32 dstX = 0, uint32 dstY = 0) { return EResult::NotImplemented; }
 public:
     virtual RHIPipeline* CreatePipeline(const RHIPipelineDesc& desc) BAM_PURE;
 public:
@@ -85,6 +91,7 @@ public:
     virtual EResult BindShader(RHIShader* shader) BAM_PURE;
 public:
     virtual EResult BindPipeline(RHIPipeline* pipeline) BAM_PURE;
+    virtual void InvalidatePipelineBinding(const RHIPipeline* pipeline) {}
 public:
     virtual EResult BindSampler(RHISampler* sampler) BAM_PURE;
 public:
@@ -94,6 +101,9 @@ public:
     virtual EResult BindConstantBuffer(const void* data, uint32 size, uint32 slot);
     virtual EResult BindConstantRangeBuffer(void* arg, uint32 slot, uint32 offset, uint32 size);
 	virtual EResult BindStorageBuffer(RHIBuffer* buffer, uint32 slot);
+    virtual EResult BindInstanceBuffer(RHIBuffer* buffer, uint32 offset = 0);
+    virtual EResult BindInstanceBuffer(const void* data, uint32 instanceCount);
+    virtual EResult BindComputeStorageBuffer(RHIBuffer* buffer, uint32 slot = 0) { return EResult::NotImplemented; }
 #pragma endregion
 
 #pragma region RenderPass
@@ -113,7 +123,7 @@ public:
 public:
     virtual EResult Draw(uint32 count) BAM_PURE;
     virtual EResult DrawIndexed(uint32 count) BAM_PURE;
-    virtual EResult DrawIndexedInstanced() BAM_PURE;
+    virtual EResult DrawIndexedInstanced(uint32 indexCountPerInstance, uint32 instanceCount, uint32 startIndexLocation = 0, int32 baseVertexLocation = 0, uint32 startInstanceLocation = 0) BAM_PURE;
     virtual EResult DrawTexture(RHITexture* texture) BAM_PURE;
     virtual EResult BlitTexture(class RHITexture* src, class RHITexture* dst) { return EResult::NotImplemented; }
     // Synchronous single-pixel download from a submitted RGBA32F texture, outside frame recording.
@@ -122,6 +132,12 @@ public:
         return EResult::NotImplemented;
     }
 #pragma endregion
+
+#pragma region Compute
+public:
+    virtual EResult Dispatch(uint32 threadGroupCountX, uint32 threadGroupCountY, uint32 threadGroupCountZ) { return EResult::NotImplemented; }
+    virtual EResult ResourceBarrierUAV(RHIBuffer* buffer) { return EResult::NotImplemented; }
+#pragma endregion  
 
 #pragma region Setter
     virtual EResult SetClearColor(vec4 color) BAM_PURE;
@@ -153,8 +169,11 @@ protected:
 	void RecordIndexedDraw(uint32 indexCount);
 #pragma endregion
 
+#pragma region Initialization
 protected:
-	EResult InitializeConstantBuffers();
+    EResult InitializeConstantBuffers();
+    EResult InitializeInstanceBuffers();
+#pragma endregion
 
 #pragma region Member Variable
 protected:
@@ -170,9 +189,14 @@ protected:
     RHIBuffer* m_DynamicConstantBuffers[MAX_SWAPCHAIN_BUFFERS] = { nullptr };
     uint32     m_DynamicBufferCursor = 0;
     uint32     m_ConstantBufferAlignment = 256;
+
+    static constexpr uint32 DYNAMIC_INSTANCE_BUFFER_SIZE = 65536 * 80; // 5MB (최대 65,536개 인스턴스)
+    RHIBuffer* m_DynamicInstanceBuffers[MAX_SWAPCHAIN_BUFFERS] = { nullptr };
+    uint32     m_DynamicInstanceBufferCursor = 0;
 protected:
 	RHIShader* m_CurrentShader = { nullptr };
 protected:
+    bool m_VSyncEnabled = true;
     uint32 m_SwapChainWidth = { 0 };
     uint32 m_SwapChainHeight = { 0 };
 

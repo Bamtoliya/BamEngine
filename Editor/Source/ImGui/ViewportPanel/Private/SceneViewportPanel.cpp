@@ -29,6 +29,9 @@
 #include "TerrainUtility.h"
 #include "Collision.h"
 #include "SceneEditHistory.h"
+#include "EditorSettings.h"
+#include "Components/Render/PostProcessComponent.h"
+#include "NotificationManager.h"
 
 #pragma region Helper
 struct LightingPassData
@@ -132,6 +135,9 @@ void SceneViewportPanel::Initialize(void* arg)
 #endif // _DEBUG
 
 	m_PostProcessChain.Initialize(m_Name);
+
+	if (!m_PostProcessChain.GetPipeline().SaveToString(m_DefaultPostProcessSettings))
+		EDITOR_LOG_ERROR("Default post-process settings could not be captured: {}", WStrToStr(m_Name));
 
 	m_SelectedRTName = m_LightingColorName;
 }
@@ -278,6 +284,45 @@ void SceneViewportPanel::Free()
 	m_DebugRenderer.Free();
 #endif
 	m_PostProcessChain.Free();
+}
+#pragma endregion
+
+#pragma region Workspace Settings
+void SceneViewportPanel::RestoreViewportState(const ViewportWorkspace& state)
+{
+	CameraViewportPanel::RestoreViewportState(state);
+
+	auto& passManager = RenderPassManager::Get();
+
+	for (auto& option : m_PassOptions)
+	{
+		auto* renderPass = passManager.GetRenderPassByID(option.PassID);
+
+		if (!renderPass)
+			continue;
+
+		const auto found = state.RenderPassStates.find(option.Name);
+		const bool enabled = found != state.RenderPassStates.end() ? found->second : true;
+
+		option.Enabled = enabled;
+		renderPass->SetEnabled(enabled);
+	}
+}
+
+ViewportWorkspace SceneViewportPanel::CaptureViewportState() const
+{
+	auto state = CameraViewportPanel::CaptureViewportState();
+	auto& passManager = RenderPassManager::Get();
+
+	for (const auto& option : m_PassOptions)
+	{
+		const auto* renderPass = passManager.GetRenderPassByID(option.PassID);
+
+		if (renderPass)
+			state.RenderPassStates[option.Name] = renderPass->IsEnabled();
+	}
+
+	return state;
 }
 #pragma endregion
 
@@ -1129,11 +1174,27 @@ void SceneViewportPanel::SubmitLightingPass(const CameraBuffer& cameraBuffer, co
 						return EResult::Fail;
 				}
 			}
-			// Lighting 파이프라인 바인딩
+			auto& lightManager = LightManager::Get();
+
+			// ── 1. 타일 기반 광원 컬링 디스패치 (Compute 파이프라인 선행 실행) ──
+			if (auto* posRT = rtMgr.GetRenderTarget(sourceNames[4]))
+			{
+				if (auto* posTex = posRT->GetTexture())
+				{
+					lightManager.DispatchLightCulling(camBuf, posTex);
+				}
+			}
+
+			// ── 2. Lighting 그래픽스 파이프라인 복원 (반드시 컴퓨트 디스패치 직후 바인딩) ──
 			if (IsFailure(rhi->BindPipeline(m_LightingPipeline)))
 				return EResult::Fail;
 
-			auto& lightManager = LightManager::Get();
+			// ── 3. 타일 결과 버퍼 바인딩 (m_StorageBuffers[1] -> t8, m_StorageBuffers[2] -> t9) ──
+			if (auto* gridBuf = lightManager.GetTileLightGridBuffer())
+				rhi->BindStorageBuffer(gridBuf, 1);
+			if (auto* idxBuf = lightManager.GetTileLightIndexBuffer())
+				rhi->BindStorageBuffer(idxBuf, 2);
+
 			if (IsFailure(lightManager.Bind(0)))
 			{
 				fmt::print(stderr, "LightManager::Bind failed\n");
@@ -1178,9 +1239,128 @@ void SceneViewportPanel::SubmitLightingPass(const CameraBuffer& cameraBuffer, co
 		m_LightingPassID);
 }
 
+bool SceneViewportPanel::SyncPostProcess(Scene& scene, entt::entity entity, const PostProcessComponent& source)
+{
+	const auto restoreRequest = m_PostProcessChain.TakeSceneRestoreRequest();
+	const bool restoreRequested = restoreRequest &&
+		restoreRequest->TargetScene == &scene && restoreRequest->TargetEntity == entity;
+
+	if (restoreRequest && !restoreRequested)
+	{
+		m_PostProcessChain.CompleteSceneRestore(false);
+
+		NotificationManager::Get().AddNotification(LOCAL("UI_POST_FX"),
+			LOCAL("PostProcess.RestoreUnavailable"), ELogLevel::Warn);
+	}
+
+	const bool unchanged = !restoreRequested &&
+		m_LastBoundScene == &scene && m_LastPostProcessEntity == entity &&
+		m_LastPostProcessPreset == source.PresetName && m_LastPostProcessSettings == source.PipelineSettings;
+
+	if (unchanged)
+		return m_PostProcessStateUsable;
+
+	m_LastBoundScene = &scene;
+	m_LastPostProcessEntity = entity;
+	m_LastPostProcessPreset = source.PresetName;
+	m_LastPostProcessSettings = source.PipelineSettings;
+
+	EDITOR_LOG_INFO("Post-process source: scene={}, preset={}, inlineBytes={}",
+		WStrToStr(scene.GetName()), source.PresetName, source.PipelineSettings.size());
+
+	const auto notifyFailure = [this, restoreRequested]
+		{
+			if (restoreRequested)
+				m_PostProcessChain.CompleteSceneRestore(false);
+
+			const char* key = m_PostProcessStateUsable
+				? "PostProcess.ApplyFailed" : "PostProcess.RestoreFailed";
+
+			NotificationManager::Get().AddNotification(LOCAL("UI_POST_FX"), LOCAL(key), ELogLevel::Error);
+		};
+
+	auto& pipeline = m_PostProcessChain.GetPipeline();
+	const bool hadUsableState = m_PostProcessStateUsable;
+	std::string previousSettings;
+
+	if (m_DefaultPostProcessSettings.empty() ||
+		(hadUsableState && !pipeline.SaveToString(previousSettings)))
+	{
+		EDITOR_LOG_ERROR("Post-process settings backup is unavailable: {}", WStrToStr(m_Name));
+		notifyFailure();
+		return m_PostProcessStateUsable;
+	}
+
+	bool applied = pipeline.LoadFromString(m_DefaultPostProcessSettings);
+
+	if (applied && !source.PipelineSettings.empty())
+	{
+		applied = pipeline.LoadFromString(source.PipelineSettings);
+	}
+	else if (applied && !source.PresetName.empty())
+	{
+		const auto path = StrToWStr("Resources/Config/PostProcess/Presets/" + source.PresetName + ".json");
+		applied = pipeline.LoadFromFile(path);
+	}
+
+	if (applied)
+	{
+		std::string actualSettings;
+
+		if (pipeline.SaveToString(actualSettings))
+			EDITOR_LOG_INFO("Post-process applied settings: {}", actualSettings);
+
+		m_PostProcessStateUsable = true;
+		if (restoreRequested)
+		{
+			m_PostProcessChain.CompleteSceneRestore(true);
+
+			NotificationManager::Get().AddNotification(LOCAL("UI_POST_FX"),
+				LOCAL("PostProcess.SceneRestored"), ELogLevel::Info);
+		}
+
+		return true;
+	}
+
+	m_PostProcessStateUsable = hadUsableState && pipeline.LoadFromString(previousSettings);
+
+	EDITOR_LOG_ERROR("Post-process apply failed: viewport={}, preset={}, restored={}",
+		WStrToStr(m_Name), source.PresetName, m_PostProcessStateUsable);
+
+	notifyFailure();
+	return m_PostProcessStateUsable;
+}
+
 void SceneViewportPanel::SubmitPostProcessPass(f32 dt, uint32& slot, std::wstring& currentRT)
 {
-	currentRT = m_PostProcessChain.ExecuteChain(dt, currentRT);
+	if (Scene* activeScene = SceneManager::Get().GetCurrentScene())
+	{
+		auto view = activeScene->GetRegistry().view<PostProcessComponent>();
+
+		for (auto [entity, source] : view.each())
+		{
+			if (!source.IsEnabled)
+				continue;
+
+			if (SyncPostProcess(*activeScene, entity, source))
+				currentRT = m_PostProcessChain.ExecuteChain(dt, currentRT);
+
+			return;
+		}
+	}
+
+	m_LastBoundScene = nullptr;
+	m_LastPostProcessEntity = entt::null;
+	m_LastPostProcessPreset.clear();
+	m_LastPostProcessSettings.clear();
+
+	if (m_PostProcessChain.TakeSceneRestoreRequest())
+	{
+		m_PostProcessChain.CompleteSceneRestore(false);
+
+		NotificationManager::Get().AddNotification(LOCAL("UI_POST_FX"),
+			LOCAL("PostProcess.RestoreUnavailable"), ELogLevel::Warn);
+	}
 }
 void SceneViewportPanel::SubmitUIOverlayPass(const wstring& currentRT)
 {

@@ -25,12 +25,10 @@ public:
 	virtual void Free() override;
 #pragma endregion
 
-
 #pragma region Loop
 public:
 	void Update(f32 dt);
 #pragma endregion
-
 
 #pragma region Light Management
 public:
@@ -51,12 +49,30 @@ public:
 	LightShadowData GetShadowData(uint32 lightIndex = 0) const;
 #pragma endregion
 
+#pragma region Tiled Lighting
+public:
+	EResult EnsureTileBuffers(uint32 width, uint32 height);
+	EResult DispatchLightCulling(const CameraBuffer& cameraBuffer, class RHITexture* positionTexture);
+	class RHIBuffer* GetTileLightGridBuffer() const { return m_TileLightGridBuffer; }
+	class RHIBuffer* GetTileLightIndexBuffer() const { return m_TileLightIndexBuffer; }
+	uint32 GetTileCountX() const { return m_TileCountX; }
+	uint32 GetTileCountY() const { return m_TileCountY; }
+private:
+	EResult EnsureTiledCullingPipeline();
+#pragma endregion
+
 #pragma region Member Variables
 private:
 	class RHIBuffer* m_LightBuffers[MAX_SWAPCHAIN_BUFFERS] = {};
 	bool m_BufferDirty[MAX_SWAPCHAIN_BUFFERS] = {};
 	vector<std::array<CameraBuffer, MAX_SHADOW_CASCADES>> m_ShadowCameraBuffers;
 	vector<LightShadowData> m_ShadowData;
+
+	class RHIBuffer* m_TileLightGridBuffer = nullptr;
+	class RHIBuffer* m_TileLightIndexBuffer = nullptr;
+	class RHIPipeline* m_TiledCullingPipeline = nullptr;
+	uint32 m_TileCountX = 0;
+	uint32 m_TileCountY = 0;
 
 	CameraBuffer m_SpotShadowCameraBuffer{};
 	mat4 m_SpotShadowViewProj{ 1.0f };

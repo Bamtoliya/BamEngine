@@ -107,8 +107,26 @@ foreach(SHADER_FILE ${HLSL_SOURCES})
         )
         list(APPEND ALL_SHADER_OUTPUTS "${DXIL_OUT}" "${SPIRV_OUT}")
 
+    elseif(UPPER_NAME MATCHES "CS$" OR UPPER_NAME MATCHES "_CS$")
+        set(DXIL_OUT "${DXIL_OUT_DIR}/${SHADER_NAME_WE}.cso")
+        set(SPIRV_OUT "${SPIRV_OUT_DIR}/${SHADER_NAME_WE}.spv")
+
+        add_custom_command(
+            OUTPUT "${DXIL_OUT}"
+            COMMAND "${DXC_COMPILER}" -D _DX12_=1 -T cs_6_0 -E main -Fo "${DXIL_OUT}" "${SHADER_FILE}"
+            DEPENDS ${_shader_dependencies} "${CMAKE_CURRENT_LIST_FILE}"
+            COMMENT "Compiling ${SHADER_NAME_WE} (DXIL, CS)..."
+        )
+        add_custom_command(
+            OUTPUT "${SPIRV_OUT}"
+            COMMAND "${DXC_COMPILER}" -spirv -T cs_6_0 -E main -Fo "${SPIRV_OUT}" "${SHADER_FILE}"
+            DEPENDS ${_shader_dependencies} "${CMAKE_CURRENT_LIST_FILE}"
+            COMMENT "Compiling ${SHADER_NAME_WE} (SPIR-V, CS)..."
+        )
+        list(APPEND ALL_SHADER_OUTPUTS "${DXIL_OUT}" "${SPIRV_OUT}")
+
     else()
-        message(WARNING "Shader '${SHADER_NAME_WE}.hlsl' does not end with 'VS' or 'PS'. Skipping compilation.")
+        message(WARNING "Shader '${SHADER_NAME_WE}.hlsl' does not end with 'VS', 'PS', or 'CS'. Skipping compilation.")
     endif()
 endforeach()
 

@@ -28,6 +28,10 @@ void RHI::Free()
 	{ 
 		Safe_Release(buffer);
 	}
+	for (auto& buffer : m_DynamicInstanceBuffers)
+	{
+		Safe_Release(buffer);
+	}
 
 	for (auto& renderTarget : m_CurrentRenderTargets) { Safe_Release(renderTarget); }
 
@@ -153,6 +157,33 @@ EResult RHI::BindStorageBuffer(RHIBuffer* buffer, uint32 slot)
 	return EResult::Success;
 }
 
+EResult RHI::BindInstanceBuffer(RHIBuffer* buffer, uint32 offset)
+{
+	return EResult::NotImplemented;
+}
+EResult RHI::BindInstanceBuffer(const void* data, uint32 instanceCount)
+{
+	if (!data || instanceCount == 0) return EResult::InvalidArgument;
+	const uint32 bytesNeeded = instanceCount * 80;
+	const uint32 alignedSize = (bytesNeeded + (m_ConstantBufferAlignment - 1)) & ~(m_ConstantBufferAlignment - 1);
+	if (m_DynamicInstanceBufferCursor + alignedSize > DYNAMIC_INSTANCE_BUFFER_SIZE)
+	{
+		ENGINE_LOG_ERROR("Dynamic instance buffer overflow. Needed: {}, Remaining: {}",
+			alignedSize, DYNAMIC_INSTANCE_BUFFER_SIZE - m_DynamicInstanceBufferCursor);
+		return EResult::OutOfMemory;
+	}
+	RHIBuffer* ringBuffer = m_DynamicInstanceBuffers[m_CurrentBackBufferIndex];
+	if (!ringBuffer) return EResult::Fail;
+	void* mappedPtr = ringBuffer->GetMappedPointer();
+	if (!mappedPtr) return EResult::Fail;
+	memcpy(static_cast<uint8*>(mappedPtr) + m_DynamicInstanceBufferCursor, data, bytesNeeded);
+	const EResult result = BindInstanceBuffer(ringBuffer, m_DynamicInstanceBufferCursor);
+	if (IsSuccess(result))
+	{
+		m_DynamicInstanceBufferCursor += alignedSize;
+	}
+	return result;
+}
 #pragma endregion
 
 #pragma endregion
@@ -187,6 +218,17 @@ EResult RHI::InitializeConstantBuffers()
 	{
 		m_DynamicConstantBuffers[i] = CreateBuffer(nullptr, DYNAMIC_CONSTANT_BUFFER_SIZE, 0, ERHIBufferType::Upload);
 		if (!m_DynamicConstantBuffers[i])
+			return EResult::Fail;
+	}
+	return EResult::Success;
+}
+
+EResult RHI::InitializeInstanceBuffers()
+{
+	for (uint32 i = 0; i < m_SwapChainBufferCount; ++i)
+	{
+		m_DynamicInstanceBuffers[i] = CreateBuffer(nullptr, DYNAMIC_INSTANCE_BUFFER_SIZE, 80, ERHIBufferType::Upload);
+		if (!m_DynamicInstanceBuffers[i])
 			return EResult::Fail;
 	}
 	return EResult::Success;
