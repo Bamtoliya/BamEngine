@@ -1,5 +1,9 @@
 # 그래프 어노테이션과 기본 제어 흐름
 
+2026-10-24 보완: 현재 GraphFile 저장/로드와 제한된 ShaderGraphCompiler·Editor 컴파일 호출을 정적으로 확인했다.
+아래의 과거 단계 범위와 실제 실행 검증 결과를 구분한다.
+후속 순서는 [DevelopmentPriorities.md](DevelopmentPriorities.md), 분류는 [SourceOrganizationGuidelines.md](SourceOrganizationGuidelines.md)를 따른다.
+
 ## 현재 범위와 책임
 
 리플렉션 메타데이터를 읽어 Logic 그래프의 노드·핀 정의를 등록한다.
@@ -130,7 +134,8 @@ Engine/Source 헤더는 기존 ReflectionBuild.cmake의 FUNCTION/PROPERTY 스캔
 
 순수 데이터 정의는 Core.Bool/Int/Float, Math.AddFloat/MultiplyFloat/GreaterFloat/LessFloat,
 Logic.And/Or/Not/SelectFloat다. And/Or는 두 입력을 평가하며 SelectFloat는 선택한 값 경로만 평가한다.
-Logic/Shader 공통 정의 중 Logic 평가는 GraphExecutor에서 제공하며 Shader 코드 생성은 아직 없다.
+Logic/Shader 공통 정의 중 Logic 평가는 GraphExecutor에서 제공한다.
+현재 ShaderGraphCompiler에는 제한된 색상 출력 생성이 있으며, Logic 수학·제어 흐름 전체의 셰이더 변환을 뜻하지 않는다.
 Logic의 Bool/Int/Float/Float2/Float3/Float4 결과 노드와 Shader.ColorOutput을 제공한다.
 어노테이션으로 등록하는 수학·벡터 함수와 Logic.Xor는 현재 Logic 전용이다.
 

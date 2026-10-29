@@ -1,5 +1,10 @@
 # 수학 노드와 로직 실행 추적
 
+2026-10-24 보완: 아래의 검증·제외 범위는 실행기 작성 단계의 기록이다.
+현재 GraphFile의 JSON API·GraphPanel 저장/로드 호출과 제한된 ShaderGraphCompiler 생성·Editor 컴파일 호출이 있다.
+이번 정리는 그 경로의 정적 확인이며 실행·GPU 검증을 새로 수행한 것은 아니다.
+후속 순서는 [DevelopmentPriorities.md](DevelopmentPriorities.md), 코드 배치는 [SourceOrganizationGuidelines.md](SourceOrganizationGuidelines.md)를 따른다.
+
 ## 구현 범위
 
 Engine의 GraphExecutor가 Logic 그래프의 복사본을 실행한다. Editor는 같은 실행기를 사용하며
@@ -7,7 +12,8 @@ Engine의 GraphExecutor가 Logic 그래프의 복사본을 실행한다. Editor�
 이번 작업은 코드 작성과 정적 검토까지 수행했다. 빌드·CTest·실제 UI 조작 결과는 아직 없다.
 
 공통 데이터·등록은 GraphFoundation.md와 GraphReflection.md, 화면 편집은 GraphPanel.md를 참고한다.
-저장·불러오기, PIE 자동 연결, 셰이더 코드 생성, 객체 Get/Set 실행은 이번 범위에 포함되지 않는다.
+저장·불러오기, PIE 자동 연결, 셰이더 코드 생성, 객체 Get/Set 실행은 이 실행기 작성 단계의 범위에서 제외했다.
+현재 코드의 기능 부재를 뜻하지 않으며, 저장과 제한된 셰이더 생성은 위 보완을 기준으로 다시 확인한다.
 
 ## 실제 수학 함수
 

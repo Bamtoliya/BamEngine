@@ -1,11 +1,17 @@
 # 그래프 기초: 데이터와 연결 검증
 
+2026-10-24 보완: 이 문서는 기초 단계의 설계·검증 범위를 기록한다.
+현재 코드에는 [GraphFile](../Engine/Source/Graph/Public/GraphFile.h)의 JSON 저장/로드와
+[ShaderGraphCompiler](../Engine/Source/Graph/Private/ShaderGraphCompiler.cpp)의 제한된 색상 그래프 HLSL 생성이 있다.
+API와 호출 경로의 정적 확인이며 범용 셰이더 그래프·PIE 자동 연결·실제 UI/GPU 검증 완료를 뜻하지 않는다.
+후속 선택은 [DevelopmentPriorities.md](DevelopmentPriorities.md), 분류는 [SourceOrganizationGuidelines.md](SourceOrganizationGuidelines.md)를 따른다.
+
 ## 1. 이번 단계의 범위
 
 로직 그래프와 셰이더 그래프가 공유할 노드·핀·연결 데이터를 구현했다.
 공통 기반은 C++ API로 그래프를 구성하고 연결 규칙을 검사한다.
 Editor의 `GraphPanel`이 이 API에 연결되었으며 화면 편집의 구현 내용과 확인 방법은 `Docs/GraphPanel.md`에 기록한다.
-Logic 실행기와 추적 미리보기는 `Docs/GraphExecution.md`에 기록한다. 셰이더 코드 생성은 아직 없다.
+Logic 실행기와 추적 미리보기는 `Docs/GraphExecution.md`에 기록한다. 현재 셰이더 생성의 제한된 범위는 위 보완을 참고한다.
 `Validate()` 성공은 구성 규칙을 만족한다는 뜻이며 실행 가능하다는 보장이 아니다.
 
 `EngineEditorClientGuidelines.md`의 Engine/Editor 책임과 Visual Scripting 원칙을 따른다.
@@ -179,11 +185,12 @@ Release도 사용하는 경우 `--config Release`로 빌드하고 CTest에 `-C R
 ## 8. 후속 구현 순서
 
 1. Editor 그래프 패널: `GraphPanel`과 imnodes 연결 코드를 작성했다. 빌드와 실제 조작 검증은 아직 수행하지 않았다.
-2. 저장 형식: 버전과 타입·핀 키 변경 정책을 정한 뒤 Reflection/Archive에 연결한다.
+2. 저장 형식: 현재 GraphFile의 JSON API와 GraphPanel 호출을 출발점으로 버전·타입/핀 키 변경·실패 보존을 검증한다.
 3. 로직 실행기: 초기 해석기·실행량 제한·추적을 작성했다. 빌드·실행 검증과 씬 객체 바인딩은 남아 있다.
-4. 셰이더 생성기: 순서 정렬, 단계별 검증, 코드 생성과 기존 셰이더 컴파일·머티리얼 경로를 연결한다.
+4. 셰이더 생성기: 현재의 제한된 색상 생성과 Editor 컴파일 호출을 출발점으로 지원 노드·단계·실패 복구를 검증한다.
+   일반 노드 그래프의 순서 정렬과 범용 재질 생성까지 완료된 것으로 보지 않는다.
 
-현재 `GraphComponent.h`는 네이티브 콜백을 보관하는 과거 실험 코드다.
-이번 `Graph`의 실행이나 씬 직렬화와 연결되지 않았다.
+현재 씬 실행 연결의 검토 대상은 `GraphBindingComponent`, `GraphFile`, `GraphExecutor`다.
+과거 `GraphComponent.h` 실험 설명을 현재 컴포넌트의 이름이나 PIE 실행 완료 근거로 사용하지 않는다.
 `Tools/GraphCompiler/GraphCompiler.py`도 입력 연결을 해석하지 않는 기존 고정 코드 생성 예제로 남아 있다.
 해당 JSON은 이번 그래프의 저장 형식이 아니며 새로운 로직·셰이더 컴파일러로 간주하지 않는다.

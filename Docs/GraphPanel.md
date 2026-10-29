@@ -1,5 +1,9 @@
 # GraphPanel: ImGui 노드 편집 패널
 
+2026-10-24 보완: 현재 GraphPanel에는 GraphFile JSON 저장/로드와 제한된 HLSL 생성·컴파일 호출이 있다.
+이 문서의 초기 패널 작성 범위와 최신 코드의 존재, 실제 Editor·GPU 검증을 구분한다.
+후속 선택은 [DevelopmentPriorities.md](DevelopmentPriorities.md), 책임 분류는 [SourceOrganizationGuidelines.md](SourceOrganizationGuidelines.md)를 따른다.
+
 ## 구현 범위와 검증 상태
 
 `ImGuiInterface`를 상속한 `GraphPanel`을 기본 패널에 등록했다.
@@ -136,6 +140,7 @@ ctest --test-dir out/build/engine-reflection-unified -C Debug -R '^Graph(Palette
 ## 남은 범위
 
 Logic 실행·추적 미리보기의 사용법은 `Docs/GraphExecution.md`에 기록한다.
-파일 저장·불러오기, Undo/Redo, 씬 연결과 셰이더 코드 생성은 아직 없다.
-현재 편집 내용은 프로세스를 종료하면 사라진다.
-기존 `GraphComponent`와 Python GraphCompiler 실험 코드는 이번 패널의 실행 경로가 아니다.
+초기 패널 단계 이후 GraphFile을 이용한 JSON 저장/로드와 제한된 셰이더 생성·컴파일 호출이 추가돼 있다.
+저장 후 재실행·실패 보존·미지원 노드·셰이더 교체 실패와 실제 GPU 출력은 별도 검증해야 한다.
+Undo/Redo·씬 객체 바인딩·PIE 자동 실행은 현재 소유자와 호출 경로를 다시 확인해 후속 범위를 정한다.
+현재 씬 연결 검토 대상은 GraphBindingComponent이며, 과거 GraphComponent와 Python GraphCompiler 실험을 같은 경로로 취급하지 않는다.

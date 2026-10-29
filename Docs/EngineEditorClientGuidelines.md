@@ -7,6 +7,8 @@
 
 작업 방식과 코드 평가 기준은 루트 AGENTS.md를 따른다.
 리플렉션과 직렬화의 세부 원칙은 Docs/ReflectionArchiveGuidelines.md를 따른다.
+소스 분류·의존성·PCH·파일 조직은 [SourceOrganizationGuidelines.md](SourceOrganizationGuidelines.md)를 따른다.
+여러 개발 계획의 작업 선택·선행 조건·보류 상태는 [DevelopmentPriorities.md](DevelopmentPriorities.md)에서 관리한다.
 
 현재 구현 상태와 단기 작업 순서는 개발 계획 및 구현 기록에서 관리한다.
 장기 목표에 포함되었다는 이유만으로 모든 기능을 한 번에 구현하지 않는다.
@@ -377,3 +379,18 @@ Editor는 프로젝트의 대상 플랫폼과 빌드 구성을 선택하고
   입력 변경에 해당하면 짧은 누름·해제, 좌우 보조 키, 드래그·휠, 분리 창과 PIE도 검증한다.
 - 정적 확인·자동 테스트·실제 UI 조작 결과를 구분하고, 예외와 미검증 범위를 기록한다.
   이 기준 자체를 파일 수정이나 검증 명령 실행의 허가로 해석하지 않으며 AGENTS.md의 작업 방식을 따른다.
+
+## 15. 소스 분류와 계획의 적용
+
+배포·의존 경계를 먼저 구분하고 그 안에서는 기능 소유자별로 코드를 모은다.
+같은 기능의 컴포넌트·시스템·리소스는 역할과 수명을 구분하면서 가까이 배치할 수 있다.
+기본 경로는 기능/Public·Private이며, Core·World·Resource·Runtime의 공통 책임을 기능별 구현과 구분한다.
+공유 에셋·실행 인스턴스·GPU·편집 상태를 분리하고 Engine에서 Editor나 선택적 외부 연동을 필수로 요구하지 않는다.
+
+엔진 표준 헤더는 PCH에서 중앙 공급하는 방침을 사용하며 모든 사용 파일에 직접 include를 반복하는 규칙은 두지 않는다.
+공급 순서·소비 타깃·리플렉션 파서·독립 모듈·Debug/서드파티 매크로 경계는 SourceOrganizationGuidelines 8절에 따른다.
+
+분류·이관과 코드 읽기 순서의 상세 기준은 SourceOrganizationGuidelines를 단일 기준으로 사용한다.
+통합 우선순위는 DevelopmentPriorities, 기능별 계약과 완료 예제는 각 개발 계획에서 관리한다.
+기존 Client 배포 보류 같은 사용자 결정을 문서 연결이나 우선순위 지정만으로 해제하지 않는다.
+장기 목표의 폴더·클래스 이름을 미리 만드는 것보다 작은 구현·검증 단위를 완성한다.
