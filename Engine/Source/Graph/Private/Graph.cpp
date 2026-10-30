@@ -1,7 +1,5 @@
 ﻿#include "Graph.h"
 #include "GraphValue.h"
-#include <unordered_set>
-#include <utility>
 
 const GraphNode* Graph::FindNode(GraphNodeId id) const
 {
@@ -208,56 +206,129 @@ std::vector<GraphDiagnostic> Graph::Validate(const GraphRegistry& registry) cons
 
 GraphData Graph::ExportData() const
 {
-	return { GraphData::CurrentVersion, m_Domain, m_NextNodeId, m_NextLinkId, m_Nodes, m_Links };
+	return { GraphData::CurrentVersion, m_Domain, m_NextNodeId, m_NextLinkId, m_Nodes, m_Links, m_Variables };
 }
 
 GraphDiagnostic Graph::ImportData(const GraphRegistry& registry, const GraphData& data)
 {
-	if (data.Version != GraphData::CurrentVersion)
-		return { EGraphError::UnsupportedVersion, 0, {}, 0, "Unsupported graph data version." };
+	if (data.Domain != m_Domain)
+		return { EGraphError::UnsupportedDomain, 0, {}, 0, "Graph data domain does not match this graph." };
+	m_NextNodeId = data.NextNodeId;
+	m_NextLinkId = data.NextLinkId;
+	m_Nodes = data.Nodes;
+	m_Links = data.Links;
+	m_Variables = data.Variables;
+	const auto errors = Validate(registry);
+	return errors.empty() ? GraphDiagnostic{} : errors.front();
+}
 
-	std::unordered_set<GraphNodeId> nodeIds;
-	for (const auto& node : data.Nodes)
+const GraphVariable* Graph::FindVariable(const std::string& name) const
+{
+	for (const auto& var : m_Variables)
 	{
-		if (node.Id == 0)
-			return { EGraphError::InvalidDocument, node.Id, {}, 0, "Node ID must be non-zero." };
-
-		if (!nodeIds.insert(node.Id).second)
-			return { EGraphError::DuplicateNodeId, node.Id, {}, 0, "Duplicate node ID." };
-
-		if (data.NextNodeId != 0 && node.Id >= data.NextNodeId)
-			return { EGraphError::InvalidDocument, node.Id, {}, 0, "Next node ID must exceed existing node IDs." };
+		if (var.Name == name) return &var;
 	}
+	return nullptr;
+}
 
-	std::unordered_set<GraphLinkId> linkIds;
-	for (const auto& link : data.Links)
+void Graph::RegisterVariableNodes(GraphRegistry& registry) const
+{
+	for (const auto& var : m_Variables)
 	{
-		if (link.Id == 0)
-			return { EGraphError::InvalidDocument, 0, {}, link.Id, "Link ID must be non-zero." };
+		const std::string getName = "Variable.Get." + var.Name;
+		const std::string setName = "Variable.Set." + var.Name;
 
-		if (!linkIds.insert(link.Id).second)
-			return { EGraphError::DuplicateLinkId, 0, {}, link.Id, "Duplicate link ID." };
+		// 1. Get 노드: 순수 데이터 노드, 출력 핀 (출력 핀의 DefaultValue는 반드시 {})
+		GraphNodeDefinition getDef;
+		getDef.Type = getName;
+		getDef.Domains = { m_Domain };
+		getDef.DisplayName = "Get " + var.Name;
+		getDef.Category = "Variables";
+		getDef.Pins.push_back({ "value", EGraphPinDirection::Output, var.Type, {} });
+		(void)registry.Register(getDef);
 
-		if (data.NextLinkId != 0 && link.Id >= data.NextLinkId)
-			return { EGraphError::InvalidDocument, 0, {}, link.Id, "Next link ID must exceed existing link IDs." };
+		// 2. Set 노드: 실행 노드, 입력 핀 (exec, value), 출력 핀 (then, outValue)
+		GraphNodeDefinition setDef;
+		setDef.Type = setName;
+		setDef.Domains = { m_Domain };
+		setDef.DisplayName = "Set " + var.Name;
+		setDef.Category = "Variables";
+		setDef.Pins.push_back({ "exec", EGraphPinDirection::Input, EGraphPinType::Execution, {} });
+		setDef.Pins.push_back({ "value", EGraphPinDirection::Input, var.Type, var.DefaultValue });
+		setDef.Pins.push_back({ "then", EGraphPinDirection::Output, EGraphPinType::Execution, {} });
+		setDef.Pins.push_back({ "outValue", EGraphPinDirection::Output, var.Type, {} });
+		(void)registry.Register(setDef);
 	}
+}
 
-	Graph candidate(data.Domain);
-	candidate.m_NextNodeId = data.NextNodeId;
-	candidate.m_NextLinkId = data.NextLinkId;
-	candidate.m_Nodes = data.Nodes;
-	candidate.m_Links = data.Links;
+GraphDiagnostic Graph::AddVariable(GraphRegistry& registry, GraphVariable variable)
+{
+	if (variable.Name.empty())
+		return { EGraphError::InvalidDefinition, 0, {}, 0, "Variable name cannot be empty." };
 
-	for (const auto& diagnostic : candidate.Validate(registry))
-	{
-		if (diagnostic.Code != EGraphError::MissingRequiredInput)
-			return diagnostic;
-	}
+	if (FindVariable(variable.Name))
+		return { EGraphError::DuplicateType, 0, {}, 0, "Variable with this name already exists." };
 
-	m_Nodes.swap(candidate.m_Nodes);
-	m_Links.swap(candidate.m_Links);
-	m_Domain = candidate.m_Domain;
-	m_NextNodeId = candidate.m_NextNodeId;
-	m_NextLinkId = candidate.m_NextLinkId;
+	m_Variables.push_back(std::move(variable));
+	RegisterVariableNodes(registry);
 	return {};
+}
+
+GraphDiagnostic Graph::RemoveVariable(GraphRegistry& registry, const std::string& name)
+{
+	auto it = std::remove_if(m_Variables.begin(), m_Variables.end(),
+		[&name](const GraphVariable& var) { return var.Name == name; });
+
+	if (it == m_Variables.end())
+		return { EGraphError::PinNotFound, 0, {}, 0, "Variable not found." };
+
+	m_Variables.erase(it, m_Variables.end());
+	RegisterVariableNodes(registry);
+	return {};
+}
+
+Graph::ReconciliationReport Graph::Reconcile(const GraphRegistry& registry)
+{
+	ReconciliationReport report;
+	// 1. 노드별 입력값(InputValues) 동기화
+	for (auto& node : m_Nodes)
+	{
+		const auto* definition = registry.Find(node.Type);
+		if (!definition) continue;
+		// 스키마에서 삭제된 핀의 입력값 정리
+		std::erase_if(node.InputValues, [&](const auto& pair)
+			{
+				const bool exists = std::any_of(definition->Pins.begin(), definition->Pins.end(),
+					[&](const GraphPin& pin) { return pin.Key == pair.first && pin.Direction == EGraphPinDirection::Input; });
+				if (!exists) { ++report.RemovedValues; return true; }
+				return false;
+			});
+		// 새로 추가된 입력 핀 중 기본값이 있는 경우 주입
+		for (const auto& pin : definition->Pins)
+		{
+			if (pin.Direction == EGraphPinDirection::Input && !std::holds_alternative<std::monostate>(pin.DefaultValue))
+			{
+				if (!node.InputValues.contains(pin.Key))
+				{
+					node.InputValues[pin.Key] = pin.DefaultValue;
+					++report.InjectedDefaults;
+				}
+			}
+		}
+	}
+	// 2. 유효하지 않게 된 링크(삭제된 핀 또는 타입 불일치) 안전하게 제거
+	std::erase_if(m_Links, [&](const GraphLink& link)
+		{
+			const GraphPin* fromPin = nullptr;
+			const GraphPin* toPin = nullptr;
+			if (!ResolvePin(registry, link.From, fromPin).Succeeded() ||
+				!ResolvePin(registry, link.To, toPin).Succeeded() ||
+				fromPin->Type != toPin->Type)
+			{
+				++report.RemovedLinks;
+				return true;
+			}
+			return false;
+		});
+	return report;
 }

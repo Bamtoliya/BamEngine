@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "Engine_API.h"
 #include "GraphNode.h"
@@ -11,7 +11,9 @@ class ENGINE_API GraphRegistry
 {
 public:
 	[[nodiscard]] GraphDiagnostic Register(GraphNodeDefinition definition);
+	[[nodiscard]] GraphDiagnostic RegisterOrUpdate(GraphNodeDefinition definition);
 	[[nodiscard]] GraphDiagnostic RegisterBuiltins();
+	void ClearReflectedNodes();
 	const GraphNodeDefinition* Find(const std::string& type) const;
 	const GraphPin* FindPin(const std::string& type, const std::string& pin) const;
 	std::vector<std::string> GetTypes(EGraphDomain domain) const;

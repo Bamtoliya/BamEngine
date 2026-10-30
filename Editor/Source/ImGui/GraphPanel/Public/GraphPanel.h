@@ -6,16 +6,14 @@
 #include "GraphReflection.h"
 #include "GraphExecutor.h"
 #include "GraphFile.h"
-#include <filesystem>
 #include "ShaderCompiler.h"
-#include <memory>
 #include "Material.h"
 
-struct ImNodesContext;
+namespace ax::NodeEditor { struct EditorContext; }
 
 BEGIN(Editor)
 class GraphShaderPreview;
-class GraphPanel : public ImGuiInterface
+class GraphPanel : public IImGui
 {
 public:
 	GraphPanel();
@@ -55,11 +53,10 @@ private:
 	struct GraphDocument
 	{
 		explicit GraphDocument(Engine::EGraphDomain domain) : Data(domain) {}
-
 		Engine::Graph Data;
 		std::filesystem::path FilePath;
 		Engine::GraphFileResult FileResult;
-		ImNodesContext* Context = nullptr;
+		ax::NodeEditor::EditorContext* Context = nullptr;
 		std::unordered_map<Engine::GraphNodeId, NodeView> Nodes;
 		std::unordered_map<int, Engine::GraphPinReference> Pins;
 		std::unordered_map<Engine::GraphLinkId, int> Links;
@@ -80,6 +77,8 @@ private:
 	void SaveDocument(bool saveAs);
 	void OpenDocument();
 	Engine::GraphDiagnostic BuildDocumentViews(GraphDocument& document);
+	void DrawDebugToolbar();
+	void UpdateLiveDebugging();
 	void DrawExecutionToolbar();
 	void DrawExecutionTrace();
 	void BeginExecution();
@@ -90,11 +89,13 @@ private:
 	void PrepareNodeMenu(Engine::GraphPinReference source = {});
 	void DrawNodeMenu();
 	void DrawProperties();
+	void DrawVariables();
 	void DrawInputValue(const Engine::GraphNode& node, const Engine::GraphPin& pin);
 	void DrawDiagnostics();
 	void DrawStatus();
 	static bool DrawValue(Engine::EGraphPinType type, Engine::GraphValue& value);
 	static Engine::GraphValue MakeDefaultValue(Engine::EGraphPinType type);
+	
 private:
 	void DrawShaderToolbar();
 	void DrawShaderBuildDetails();
@@ -125,6 +126,14 @@ private:
 		Engine::GraphPinReference& to) const;
 	static ImU32 PinColor(Engine::EGraphPinType type);
 	static const char* PinTypeName(Engine::EGraphPinType type);
+	void DrawCommentNode(const Engine::GraphNode& node);
+	void CreateCommentBoxFromSelection();
+#pragma endregion
+
+#pragma region Debugging
+private:
+	void ToggleBreakpoint(Engine::GraphNodeId node);
+	bool HasBreakpoint(Engine::GraphNodeId node) const;
 #pragma endregion
 
 #pragma region Editing
@@ -166,6 +175,16 @@ private:
 	bool m_FocusNodeSearch = false;
 	bool m_OpenNodePopup = false;
 	std::unordered_map<Engine::GraphNodeId, std::unordered_map<std::string, Engine::GraphValue>> m_ObservedValues;
+
+	entt::entity m_DebugEntity = entt::null;
+	std::unordered_map<Engine::GraphLinkId, float> m_LinkPulseTimers;
+	std::uint64_t m_LastDebugTraceSequence = 0;
+
+	char m_NewVarName[64] = {};
+	int m_NewVarType = 2; // 기본값: Float
+
+	std::unordered_map<std::wstring, std::unordered_set<Engine::GraphNodeId>> m_Breakpoints;
+	Engine::GraphNodeId m_HitBreakpointNode = 0;
 #pragma endregion
 };
 

@@ -1,67 +1,88 @@
-#include "GraphRegistry.h"
+﻿#include "GraphRegistry.h"
 #include "GraphValue.h"
-#include <unordered_set>
-#include <utility>
 
 namespace Engine
 {
-
-GraphDiagnostic GraphRegistry::Register(GraphNodeDefinition definition)
-{
-	auto invalid = [](std::string pin, std::string message)
+	namespace
 	{
-		return GraphDiagnostic{ EGraphError::InvalidDefinition, 0, std::move(pin), 0, std::move(message) };
-	};
-	if (definition.Type.empty() || definition.Domains.empty())
-		return invalid({}, "Node type and at least one domain are required.");
-	if (Find(definition.Type))
-		return { EGraphError::DuplicateType, 0, {}, 0, "Node type is already registered: " + definition.Type };
-
-	std::unordered_set<int> domains;
-	for (auto domain : definition.Domains)
-	{
-		if ((domain != EGraphDomain::Logic && domain != EGraphDomain::Shader) ||
-			!domains.insert(static_cast<int>(domain)).second)
-			return invalid({}, "Invalid or duplicate graph domain.");
-	}
-	const bool shader = domains.contains(static_cast<int>(EGraphDomain::Shader));
-	std::unordered_set<std::string> keys;
-	for (const auto& pin : definition.Pins)
-	{
-		if (pin.Key.empty() || !keys.insert(pin.Key).second)
-			return invalid(pin.Key, "Pin keys must be non-empty and unique within a node.");
-		if (pin.Direction != EGraphPinDirection::Input && pin.Direction != EGraphPinDirection::Output)
-			return invalid(pin.Key, "Invalid pin direction.");
-		switch (pin.Type)
+		GraphDiagnostic ValidateAndRegister(std::unordered_map<std::string, GraphNodeDefinition>& defs,
+			GraphNodeDefinition definition, bool allowUpdate)
 		{
-		case EGraphPinType::Execution:
-		case EGraphPinType::Bool:
-		case EGraphPinType::Int:
-		case EGraphPinType::Float:
-		case EGraphPinType::Float2:
-		case EGraphPinType::Float3:
-		case EGraphPinType::Float4: break;
-		case EGraphPinType::Object:
-			if (pin.ObjectType.empty()) return invalid(pin.Key, "Object pins require a reflected type name.");
-			break;
-		default: return invalid(pin.Key, "Invalid pin type.");
-		}
-		if (pin.Type != EGraphPinType::Object && !pin.ObjectType.empty())
-			return invalid(pin.Key, "Only object pins can specify an object type.");
-		if (shader && (pin.Type == EGraphPinType::Execution || pin.Type == EGraphPinType::Object))
-			return invalid(pin.Key, "Shader nodes cannot declare execution or object pins.");
-		if (!std::holds_alternative<std::monostate>(pin.DefaultValue))
-		{
-			if (pin.Direction != EGraphPinDirection::Input ||
-				!GraphValueMatchesType(pin.DefaultValue, pin.Type) || !IsFiniteGraphValue(pin.DefaultValue))
-				return invalid(pin.Key, "Only data inputs can have a finite, exactly typed default value.");
+			auto invalid = [](std::string pin, std::string message)
+				{
+					return GraphDiagnostic{ EGraphError::InvalidDefinition, 0, std::move(pin), 0, std::move(message) };
+				};
+			if (definition.Type.empty() || definition.Domains.empty())
+				return invalid({}, "Node type and at least one domain are required.");
+
+			if (!allowUpdate && defs.find(definition.Type) != defs.end())
+				return { EGraphError::DuplicateType, 0, {}, 0, "Node type is already registered: " + definition.Type };
+
+			std::unordered_set<int> domains;
+			for (auto domain : definition.Domains)
+			{
+				if ((domain != EGraphDomain::Logic && domain != EGraphDomain::Shader) ||
+					!domains.insert(static_cast<int>(domain)).second)
+					return invalid({}, "Invalid or duplicate graph domain.");
+			}
+			const bool shader = domains.contains(static_cast<int>(EGraphDomain::Shader));
+			std::unordered_set<std::string> keys;
+			for (const auto& pin : definition.Pins)
+			{
+				if (pin.Key.empty() || !keys.insert(pin.Key).second)
+					return invalid(pin.Key, "Pin keys must be non-empty and unique within a node.");
+				if (pin.Direction != EGraphPinDirection::Input && pin.Direction != EGraphPinDirection::Output)
+					return invalid(pin.Key, "Invalid pin direction.");
+				switch (pin.Type)
+				{
+				case EGraphPinType::Execution:
+				case EGraphPinType::Bool:
+				case EGraphPinType::Int:
+				case EGraphPinType::Float:
+				case EGraphPinType::Float2:
+				case EGraphPinType::Float3:
+				case EGraphPinType::Float4: break;
+				case EGraphPinType::Object:
+					if (pin.ObjectType.empty()) return invalid(pin.Key, "Object pins require a reflected type name.");
+					break;
+				default: return invalid(pin.Key, "Invalid pin type.");
+				}
+				if (pin.Type != EGraphPinType::Object && !pin.ObjectType.empty())
+					return invalid(pin.Key, "Only object pins can specify an object type.");
+				if (shader && (pin.Type == EGraphPinType::Execution || pin.Type == EGraphPinType::Object))
+					return invalid(pin.Key, "Shader nodes cannot declare execution or object pins.");
+				if (!std::holds_alternative<std::monostate>(pin.DefaultValue))
+				{
+					if (pin.Direction != EGraphPinDirection::Input ||
+						!GraphValueMatchesType(pin.DefaultValue, pin.Type) || !IsFiniteGraphValue(pin.DefaultValue))
+						return invalid(pin.Key, "Only data inputs can have a finite, exactly typed default value.");
+				}
+			}
+
+			const auto type = definition.Type;
+			if (allowUpdate) defs.insert_or_assign(type, std::move(definition));
+			else defs.emplace(type, std::move(definition));
+			return {};
 		}
 	}
 
-	const auto type = definition.Type;
-	m_Definitions.emplace(type, std::move(definition));
-	return {};
-}
+	GraphDiagnostic GraphRegistry::Register(GraphNodeDefinition definition)
+	{
+		return ValidateAndRegister(m_Definitions, std::move(definition), false);
+	}
+
+	GraphDiagnostic GraphRegistry::RegisterOrUpdate(GraphNodeDefinition definition)
+	{
+		return ValidateAndRegister(m_Definitions, std::move(definition), true);
+	}
+
+	void GraphRegistry::ClearReflectedNodes()
+	{
+		std::erase_if(m_Definitions, [](const auto& pair)
+			{
+				return pair.second.Reflection.Kind != EGraphReflectionKind::None;
+			});
+	}
 
 const GraphNodeDefinition* GraphRegistry::Find(const std::string& type) const
 {

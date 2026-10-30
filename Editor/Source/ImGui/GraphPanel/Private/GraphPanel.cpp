@@ -2,29 +2,75 @@
 #include "GraphMessageLocalization.h"
 #include "LocalizationManager.h"
 #include "ReflectionRegistry.h"
-#include <imnodes.h>
-#include <algorithm>
-#include <utility>
 #include "FileDialogs.h"
-#include <limits>
-#include <memory>
+#include "PIEManager.h"
+#include "Logger.h"
+#include "HotReloadManager.h"
+#include "ModuleHotReloadManager.h"
+#include <imgui_node_editor.h>
+
+namespace ed = ax::NodeEditor;
 
 #pragma region Constructor&Destructor
 GraphPanel::GraphPanel()
 {
 	m_Name = L"Graph"; m_DisplayNameKey = "GraphPanel.Title";
 	m_LastDiagnostic = m_Registry.RegisterBuiltins();
+	// ── 코멘트 그룹 노드 등록 ──
+	Engine::GraphNodeDefinition commentDef;
+	commentDef.Type = "Core.Comment";
+	commentDef.DisplayName = "Comment";
+	commentDef.Category = "Organization";
+	commentDef.Domains = { Engine::EGraphDomain::Logic, Engine::EGraphDomain::Shader };
+	m_Registry.Register(std::move(commentDef));
 	m_Ready = m_LastDiagnostic.Succeeded();
 	if (m_Ready && ReflectionRegistry::IsCreated())
 	{
 		m_ExecutionReflection = ReflectionRegistry::Get().GetRegistry();
 		m_LastDiagnostic = RegisterReflectedGraphNodes(m_Registry, m_ExecutionReflection);
 	}
+
+	Engine::GraphSystem::SetNodeExecuteHook([this](const std::wstring& path, Engine::GraphNodeId node)
+		{
+			const auto key = std::filesystem::path(path).filename().wstring();
+			auto it = m_Breakpoints.find(key);
+			if (it != m_Breakpoints.end() && it->second.contains(node))
+			{
+				m_HitBreakpointNode = node;
+				if (PIEManager::IsCreated())
+				{
+					PIEManager::Get().Pause(); // 에디터가 게임을 즉시 일시정지!
+				}
+				BAM_LOG(Warn, "Editor", "Breakpoint", "Breakpoint HIT at node #{}! Game paused.", node);
+			}
+		});
+
+	if (HotReloadManager::IsCreated())
+	{
+		HotReloadManager::Get().GetModuleReloader().RegisterPostReloadCallback([this]()
+			{
+				if (ReflectionRegistry::IsCreated())
+				{
+					m_ExecutionReflection = ReflectionRegistry::Get().GetRegistry();
+					m_Registry.ClearReflectedNodes();
+					RegisterReflectedGraphNodes(m_Registry, m_ExecutionReflection);
+				}
+				m_NodeCandidates.clear(); // 우클릭 검색 팔레트 목록 즉시 갱신
+
+				m_Logic.Data.Reconcile(m_Registry);
+				m_Shader.Data.Reconcile(m_Registry);
+
+				BuildDocumentViews(m_Logic); // 캔버스 노드의 신규 핀 실시간 갱신
+				BuildDocumentViews(m_Shader);
+				BAM_LOG(Info, "GraphPanel", "HotReload", "Graph nodes and pins synchronized with hot-reloaded module.");
+			});
+	}
 }
 
 GraphPanel::~GraphPanel()
 {
 	Free();
+	Engine::GraphSystem::SetNodeExecuteHook(nullptr);
 }
 
 void GraphPanel::Free()
@@ -33,8 +79,11 @@ void GraphPanel::Free()
 	m_ExecutionReflection = {};
 	for (auto* document : { &m_Logic, &m_Shader })
 	{
-		if (document->Context) ImNodes::DestroyContext(document->Context);
-		document->Context = nullptr;
+		if (document->Context)
+		{
+			ed::DestroyEditor(document->Context);
+			document->Context = nullptr;
+		}
 		document->ShaderBuild = {};
 	}
 	m_Ready = false;
@@ -53,7 +102,7 @@ void GraphPanel::Draw()
 		return;
 	}
 
-	auto* previousContext = ImNodes::GetCurrentContext();
+	auto* previousContext = ed::GetCurrentEditor();
 	GraphDocument* previousDocument = nullptr;
 	for (auto* document : { &m_Logic, &m_Shader })
 	{
@@ -71,9 +120,11 @@ void GraphPanel::Draw()
 			ActivateDocument();
 			DrawToolbar();
 			DrawFileToolbar();
+			DrawDebugToolbar();
 			DrawShaderToolbar();
 			DrawExecutionToolbar();
 			UpdateExecution();
+			UpdateLiveDebugging();
 			ImGui::Separator();
 			const float footerHeight = ImGui::GetTextLineHeightWithSpacing() * 2 +
 				ImGui::GetStyle().CellPadding.y * 2 + ImGui::GetStyle().ItemSpacing.y;
@@ -89,6 +140,8 @@ void GraphPanel::Draw()
 				if (ImGui::BeginChild("##GraphProperties", ImVec2(0.0f, height)))
 				{
 					DrawProperties();
+					ImGui::Separator();
+					DrawVariables();
 					ImGui::Separator();
 					DrawDiagnostics();
 					ImGui::Separator();
@@ -114,7 +167,7 @@ void GraphPanel::Draw()
 		m_Hovered = false;
 	}
 	ImGui::End();
-	ImNodes::SetCurrentContext(previousDocument ? previousDocument->Context : previousContext);
+	ed::SetCurrentEditor(previousDocument ? previousDocument->Context : previousContext);
 }
 #pragma endregion
 
@@ -144,16 +197,15 @@ void GraphPanel::DrawToolbar()
 	ImGui::SameLine();
 	if (ImGui::Button(LOCAL_CSTR("GraphPanel.AddNode")))
 	{
-		const auto pan = ImNodes::EditorContextGetPanning();
-		const float offset = 24.0f * static_cast<float>(GetDocument().Data.GetNodes().size() % 6);
-		m_AddPosition = ImVec2(40.0f + offset - pan.x, 40.0f + offset - pan.y);
+		const auto mouse = InputManager::Get().GetScreenMousePosition();
+		m_AddPosition = ed::ScreenToCanvas(ImVec2(mouse.x, mouse.y));
 		PrepareNodeMenu();
 		m_OpenNodePopup = true;
 	}
 	ImGui::SameLine();
 	if (ImGui::Button(LOCAL_CSTR("GraphPanel.Validate"))) RefreshValidation();
 	ImGui::SameLine();
-	if (ImGui::Button(LOCAL_CSTR("GraphPanel.ResetView"))) ImNodes::EditorContextResetPanning(ImVec2(0.0f, 0.0f));
+	if (ImGui::Button(LOCAL_CSTR("GraphPanel.ResetView"))) ed::NavigateToContent(0.5f);
 	ImGui::SameLine();
 	ImGui::BeginDisabled(GetDocument().SelectedNodes.empty() && GetDocument().SelectedLinks.empty());
 	if (ImGui::Button(LOCAL_CSTR("GraphPanel.Delete"))) DeleteSelection();
@@ -228,6 +280,9 @@ void GraphPanel::OpenDocument()
 		return;
 	}
 
+	// 로드된 그래프 파일의 변수 노드 스키마 등록
+	candidate.Data.RegisterVariableNodes(m_Registry);
+
 	if (candidate.Data.GetDomain() != m_Domain)
 	{
 		document.FileResult = {
@@ -246,16 +301,17 @@ void GraphPanel::OpenDocument()
 
 	candidate.Diagnostics = candidate.Data.Validate(m_Registry);
 
-	std::unique_ptr<ImNodesContext, decltype(&ImNodes::DestroyContext)> freshContext(
-		ImNodes::CreateContext(), &ImNodes::DestroyContext);
-	ImNodes::SetCurrentContext(freshContext.get());
+	ed::Config config;
+	config.SettingsName = (m_Domain == EGraphDomain::Logic) ? "LogicGraph" : "ShaderGraph";
+	auto* freshContext = ed::CreateEditor(&config);
+	ed::SetCurrentEditor(freshContext);
 
 	std::size_t index = 0;
 	for (const auto& node : candidate.Data.GetNodes())
 	{
 		const float x = 40.0f + static_cast<float>(index % 3) * 420.0f;
 		const float y = 40.0f + static_cast<float>(index / 3) * 360.0f;
-		ImNodes::SetNodeGridSpacePos(candidate.Nodes.at(node.Id).Id, ImVec2(x, y));
+		ed::SetNodePosition(candidate.Nodes.at(node.Id).Id, ImVec2(x, y));
 		++index;
 	}
 
@@ -266,8 +322,8 @@ void GraphPanel::OpenDocument()
 	}
 
 	std::swap(document, candidate);
-	document.Context = freshContext.release();
-	if (candidate.Context) ImNodes::DestroyContext(candidate.Context);
+	document.Context = freshContext;
+	if (candidate.Context) ed::DestroyEditor(candidate.Context);
 
 	m_LastDiagnostic = {};
 	m_AddPosition = ImVec2(40.0f, 40.0f);
@@ -431,6 +487,15 @@ void GraphPanel::DrawFileToolbar()
 void GraphPanel::PrepareNodeMenu(GraphPinReference source)
 {
 	m_AddSource = std::move(source);
+
+	// ── GameModule 등 외부 모듈에서 새로 등록된 리플렉션 노드를 항상 최신 동기화 ──
+	if (ReflectionRegistry::IsCreated())
+	{
+		m_ExecutionReflection = ReflectionRegistry::Get().GetRegistry();
+		m_Registry.ClearReflectedNodes();
+		RegisterReflectedGraphNodes(m_Registry, m_ExecutionReflection);
+	}
+
 	m_NodeCandidates = FindGraphNodeCandidates(GetDocument().Data, m_Registry, m_AddSource);
 	m_NodeSearch[0] = '\0';
 	m_NodeMenuActive = true;
@@ -463,40 +528,139 @@ void GraphPanel::DrawNodeMenu()
 	ImGui::InputTextWithHint("##NodeSearch", LOCAL_CSTR("GraphPanel.SearchNodes"),
 		m_NodeSearch, IM_ARRAYSIZE(m_NodeSearch));
 	ImGui::Separator();
-	bool any = false;
-	ImGui::BeginChild("##NodeResults", ImVec2(ImGui::GetFontSize() * 28.0f, ImGui::GetTextLineHeightWithSpacing() * 17));
+
+	struct NodeEntry
+	{
+		std::string Type;
+		std::string DisplayName;
+		std::string Tooltip;
+		std::vector<std::string> CompatiblePins;
+	};
+
+	struct CategoryNode
+	{
+		std::string DisplayName;
+		std::map<std::string, CategoryNode> SubCategories;
+		std::vector<NodeEntry> Nodes;
+	};
+
+	const bool hasSearch = m_NodeSearch[0] != '\0';
+	CategoryNode root;
+
 	for (const auto& candidate : m_NodeCandidates)
 	{
 		const auto* definition = m_Registry.Find(candidate.Type);
 		if (!definition) continue;
 		const string name = definition->DisplayName.empty() ? candidate.Type : LOCAL(definition->DisplayName);
-		string label = definition->Category.empty() ? name : LOCAL(definition->Category) + " / " + name;
+		const string categoryRaw = definition->Category.empty() ? "General" : definition->Category;
+		string label = LOCAL(categoryRaw) + " / " + name;
 		if (!candidate.Pin.empty())
 		{
 			const auto* pin = m_Registry.FindPin(candidate.Type, candidate.Pin);
-			if (!pin) continue;
-			label += " / " + (pin->DisplayName.empty() ? pin->Key : LOCAL(pin->DisplayName));
+			if (pin) label += " / " + (pin->DisplayName.empty() ? pin->Key : LOCAL(pin->DisplayName));
 		}
 		const string searchText = label + " " + LOCAL(definition->Tooltip);
 		if (!MatchesGraphNodeSearch(*definition, candidate, m_NodeSearch, searchText)) continue;
-		any = true;
-		label += "###Candidate";
-		ImGui::PushID(candidate.Type.c_str());
-		ImGui::PushID(candidate.Pin.c_str());
-		if (ImGui::Selectable(label.c_str(), false, ImGuiSelectableFlags_NoAutoClosePopups) && AddNode(candidate))
-			ImGui::CloseCurrentPopup();
-		if (ImGui::IsItemHovered())
+
+		CategoryNode* current = &root;
+		std::string_view remaining = categoryRaw;
+		while (!remaining.empty())
 		{
-			ImGui::BeginTooltip();
-			ImGui::TextUnformatted(candidate.Type.c_str());
-			if (!candidate.Pin.empty()) ImGui::TextUnformatted(candidate.Pin.c_str());
-			if (!definition->Tooltip.empty()) ImGui::TextUnformatted(LOCAL_CSTR(definition->Tooltip));
-			ImGui::EndTooltip();
+			const auto slash = remaining.find('/');
+			const auto part = slash == std::string_view::npos ? remaining : remaining.substr(0, slash);
+			std::string partStr(part);
+			auto& child = current->SubCategories[partStr];
+			if (child.DisplayName.empty()) child.DisplayName = LOCAL(partStr);
+			current = &child;
+			if (slash == std::string_view::npos) break;
+			remaining.remove_prefix(slash + 1);
 		}
-		ImGui::PopID();
-		ImGui::PopID();
+
+		auto nodeIt = std::find_if(current->Nodes.begin(), current->Nodes.end(),
+			[&](const NodeEntry& n) { return n.Type == candidate.Type; });
+		if (nodeIt == current->Nodes.end())
+		{
+			current->Nodes.push_back({ candidate.Type, name, definition->Tooltip, {} });
+			nodeIt = current->Nodes.end() - 1;
+		}
+		if (!candidate.Pin.empty()) nodeIt->CompatiblePins.push_back(candidate.Pin);
 	}
-	if (!any) ImGui::TextDisabled("%s", LOCAL_CSTR("GraphPanel.NoMatchingNodes"));
+
+	ImGui::BeginChild("##NodeResults", ImVec2(ImGui::GetFontSize() * 28.0f, ImGui::GetTextLineHeightWithSpacing() * 18));
+
+	auto DrawCategory = [&](auto& self, const CategoryNode& cat, bool isRoot) -> void
+		{
+			for (const auto& [rawName, subCat] : cat.SubCategories)
+			{
+				ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_SpanAvailWidth;
+				if (hasSearch) flags |= ImGuiTreeNodeFlags_DefaultOpen;
+
+				if (ImGui::TreeNodeEx(subCat.DisplayName.c_str(), flags))
+				{
+					self(self, subCat, false);
+					ImGui::TreePop();
+				}
+			}
+
+			for (const auto& nodeItem : cat.Nodes)
+			{
+				if (nodeItem.CompatiblePins.size() > 1)
+				{
+					ImGuiTreeNodeFlags nodeFlags = ImGuiTreeNodeFlags_SpanAvailWidth;
+					if (hasSearch) nodeFlags |= ImGuiTreeNodeFlags_DefaultOpen;
+
+					if (ImGui::TreeNodeEx((nodeItem.DisplayName + "###" + nodeItem.Type).c_str(), nodeFlags))
+					{
+						for (const auto& pinKey : nodeItem.CompatiblePins)
+						{
+							const auto* pin = m_Registry.FindPin(nodeItem.Type, pinKey);
+							const string pinLabel = pin && !pin->DisplayName.empty() ? LOCAL(pin->DisplayName) : pinKey;
+
+							ImGui::PushID(nodeItem.Type.c_str());
+							ImGui::PushID(pinKey.c_str());
+							if (ImGui::Selectable(pinLabel.c_str(), false, ImGuiSelectableFlags_NoAutoClosePopups))
+							{
+								if (AddNode({ nodeItem.Type, pinKey })) ImGui::CloseCurrentPopup();
+							}
+							ImGui::PopID();
+							ImGui::PopID();
+						}
+						ImGui::TreePop();
+					}
+				}
+				else
+				{
+					const std::string pinKey = nodeItem.CompatiblePins.empty() ? "" : nodeItem.CompatiblePins.front();
+					std::string displayLabel = nodeItem.DisplayName;
+					if (!pinKey.empty())
+					{
+						const auto* pin = m_Registry.FindPin(nodeItem.Type, pinKey);
+						displayLabel += " (" + (pin && !pin->DisplayName.empty() ? LOCAL(pin->DisplayName) : pinKey) + ")";
+					}
+
+					ImGui::PushID(nodeItem.Type.c_str());
+					ImGui::PushID(pinKey.c_str());
+					if (ImGui::Selectable((displayLabel + "###Item").c_str(), false, ImGuiSelectableFlags_NoAutoClosePopups))
+					{
+						if (AddNode({ nodeItem.Type, pinKey })) ImGui::CloseCurrentPopup();
+					}
+					if (ImGui::IsItemHovered())
+					{
+						ImGui::BeginTooltip();
+						ImGui::TextUnformatted(nodeItem.Type.c_str());
+						if (!nodeItem.Tooltip.empty()) ImGui::TextUnformatted(LOCAL_CSTR(nodeItem.Tooltip));
+						ImGui::EndTooltip();
+					}
+					ImGui::PopID();
+					ImGui::PopID();
+				}
+			}
+		};
+
+	const bool any = !root.SubCategories.empty() || !root.Nodes.empty();
+	if (any) DrawCategory(DrawCategory, root, true);
+	else ImGui::TextDisabled("%s", LOCAL_CSTR("GraphPanel.NoMatchingNodes"));
+
 	ImGui::EndChild();
 }
 
@@ -545,6 +709,91 @@ void GraphPanel::DrawProperties()
 	}
 }
 
+void GraphPanel::DrawVariables()
+{
+	if (m_Domain != Engine::EGraphDomain::Logic) return;
+
+	auto& document = GetDocument();
+	ImGui::TextUnformatted("Variables");
+	ImGui::Separator();
+
+	// 1. 기존 변수 목록 표시 및 Get/Set 노드 생성
+	const auto& vars = document.Data.GetVariables();
+	if (vars.empty())
+	{
+		ImGui::TextDisabled("No variables defined.");
+	}
+	else
+	{
+		for (size_t i = 0; i < vars.size(); ++i)
+		{
+			const auto& var = vars[i];
+			ImGui::PushID(static_cast<int>(i));
+
+			ImGui::BulletText("%s (%s)", var.Name.c_str(), PinTypeName(var.Type));
+			ImGui::SameLine();
+			if (ImGui::SmallButton("+Get"))
+			{
+				m_AddSource = {};
+
+				const auto mouse = InputManager::Get().GetScreenMousePosition();
+				m_AddPosition = ed::ScreenToCanvas(ImVec2(mouse.x, mouse.y));
+				GraphNodeCandidate candidate;
+				candidate.Type = "Variable.Get." + var.Name;
+				AddNode(candidate);
+			}
+			ImGui::SameLine();
+			if (ImGui::SmallButton("+Set"))
+			{
+				m_AddSource = {};
+				const auto mouse = InputManager::Get().GetScreenMousePosition();
+				m_AddPosition = ed::ScreenToCanvas(ImVec2(mouse.x, mouse.y));
+				GraphNodeCandidate candidate;
+				candidate.Type = "Variable.Set." + var.Name;
+				AddNode(candidate);
+			}
+			ImGui::SameLine();
+
+			if (ImGui::SmallButton(ICON_FA_XMARK))
+			{
+				(void)document.Data.RemoveVariable(m_Registry, var.Name);
+				ImGui::PopID();
+				break;
+			}
+
+			ImGui::PopID();
+		}
+	}
+
+	ImGui::Spacing();
+	ImGui::Separator();
+
+	// 2. 새 변수 추가 UI
+	ImGui::TextUnformatted("Add Variable");
+	ImGui::InputText("Name##NewVar", m_NewVarName, sizeof(m_NewVarName));
+
+	const char* typeNames[] = { "Bool", "Int", "Float", "Float2", "Float3", "Float4" };
+	const Engine::EGraphPinType typeValues[] = {
+		Engine::EGraphPinType::Bool, Engine::EGraphPinType::Int, Engine::EGraphPinType::Float,
+		Engine::EGraphPinType::Float2, Engine::EGraphPinType::Float3, Engine::EGraphPinType::Float4
+	};
+
+	ImGui::Combo("Type##NewVar", &m_NewVarType, typeNames, IM_ARRAYSIZE(typeNames));
+
+	if (ImGui::Button("Create Variable") && m_NewVarName[0] != '\0')
+	{
+		Engine::GraphVariable newVar;
+		newVar.Name = m_NewVarName;
+		newVar.Type = typeValues[m_NewVarType];
+		newVar.DefaultValue = MakeDefaultValue(newVar.Type);
+
+		if (document.Data.AddVariable(m_Registry, std::move(newVar)).Succeeded())
+		{
+			m_NewVarName[0] = '\0';
+		}
+	}
+}
+
 void GraphPanel::DrawInputValue(const GraphNode& node, const GraphPin& pin)
 {
 	auto& graph = GetDocument().Data;
@@ -557,7 +806,8 @@ void GraphPanel::DrawInputValue(const GraphNode& node, const GraphPin& pin)
 	const bool missing = std::holds_alternative<std::monostate>(value);
 	if (missing) value = MakeDefaultValue(pin.Type);
 
-	ImGui::PushID(FindPinId(reference));
+	// 핀 고유 키로 확실한 ID 스택 격리
+	ImGui::PushID(pin.Key.c_str());
 	ImGui::Separator();
 	ImGui::TextUnformatted((pin.DisplayName.empty() ? pin.Key : LOCAL(pin.DisplayName)).c_str());
 	if (connected) ImGui::TextDisabled("%s", LOCAL_CSTR("GraphPanel.Connected"));
@@ -571,10 +821,16 @@ void GraphPanel::DrawInputValue(const GraphNode& node, const GraphPin& pin)
 	ImGui::BeginDisabled(connected);
 	ImGui::SetNextItemWidth(-1.0f);
 	if (DrawValue(pin.Type, value)) ApplyResult(graph.SetInputValue(m_Registry, reference, value));
-	if (missing && ImGui::SmallButton(LOCAL_CSTR("GraphPanel.UseValue")))
+
+	// ## 접미사로 중복 ID 충돌 원천 차단!
+	const std::string useLabel = fmt::format("{}##Use_{}", LOCAL_CSTR("GraphPanel.UseValue"), pin.Key);
+	if (missing && ImGui::SmallButton(useLabel.c_str()))
 		ApplyResult(graph.SetInputValue(m_Registry, reference, value));
-	if (overridden && ImGui::SmallButton(LOCAL_CSTR("GraphPanel.ResetValue")))
+
+	const std::string resetLabel = fmt::format("{}##Reset_{}", LOCAL_CSTR("GraphPanel.ResetValue"), pin.Key);
+	if (overridden && ImGui::SmallButton(resetLabel.c_str()))
 		ApplyResult(graph.ResetInputValue(m_Registry, reference));
+
 	ImGui::EndDisabled();
 	ImGui::PopID();
 }
@@ -638,6 +894,30 @@ void GraphPanel::DrawStatus()
 }
 #pragma endregion
 
+#pragma region Debugging
+void GraphPanel::ToggleBreakpoint(Engine::GraphNodeId node)
+{
+	if (node == 0) return;
+	const auto key = GetDocument().FilePath.filename().wstring();
+	if (key.empty()) return;
+
+	auto& set = m_Breakpoints[key];
+	if (set.contains(node)) set.erase(node);
+	else set.insert(node);
+}
+
+bool GraphPanel::HasBreakpoint(Engine::GraphNodeId node) const
+{
+	if (node == 0) return false;
+	const auto key = GetDocument().FilePath.filename().wstring();
+	if (key.empty()) return false;
+
+	auto it = m_Breakpoints.find(key);
+	return it != m_Breakpoints.end() && it->second.contains(node);
+}
+#pragma endregion
+
+
 #pragma region Editing
 GraphPanel::GraphDocument& GraphPanel::GetDocument()
 {
@@ -697,7 +977,7 @@ bool GraphPanel::AddNode(const GraphNodeCandidate& candidate)
 		view.Pins.emplace(pin.Key, pinId);
 		document.Pins.emplace(pinId, GraphPinReference{ result.Node, pin.Key });
 	}
-	ImNodes::SetNodeGridSpacePos(view.Id, m_AddPosition);
+	ed::SetNodePosition(view.Id, m_AddPosition);
 	document.Nodes.emplace(result.Node, std::move(view));
 	if (result.Link != 0) document.Links.emplace(result.Link, static_cast<int>(document.NextId++));
 	document.PendingSelection = result.Node;
@@ -707,8 +987,7 @@ bool GraphPanel::AddNode(const GraphNodeCandidate& candidate)
 void GraphPanel::DeleteSelection()
 {
 	auto& document = GetDocument();
-	ImNodes::ClearNodeSelection();
-	ImNodes::ClearLinkSelection();
+	ed::ClearSelection();
 	for (auto id : document.SelectedLinks)
 	{
 		if (ApplyResult(document.Data.Disconnect(id))) document.Links.erase(id);
