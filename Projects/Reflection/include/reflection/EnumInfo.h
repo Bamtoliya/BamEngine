@@ -4,6 +4,7 @@
 #include <reflection/ValueView.h>
 #include <reflection/EnumValue.h>
 #include <reflection/detail/EnumValueConversion.h>
+#include <reflection/ModuleId.h>
 
 #include <optional>
 #include <cstdint>
@@ -34,6 +35,7 @@ namespace reflection
 
         std::vector<EnumEntry> Entries;
         reflection::Metadata Metadata;
+        ModuleId OwnerModule = DefaultModuleId;
 
         template<typename T>
             requires std::is_enum_v<T>

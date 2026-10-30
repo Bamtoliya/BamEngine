@@ -5,6 +5,7 @@
 #include <reflection/RegistrationResult.h>
 #include <reflection/ObjectView.h>
 #include <reflection/ValueView.h>
+#include <reflection/ModuleId.h>
 
 #include <string>
 #include <string_view>
@@ -90,11 +91,28 @@ namespace reflection
 
         [[nodiscard]]
         RegistrationResult TryMerge(Registry&& source);
-
+        // ── ModuleId 기반 활성 모듈 태깅 및 일괄 해제 API ──
+        void SetActiveModule(ModuleId id) noexcept { m_activeModule = id; }
+        [[nodiscard]] ModuleId GetActiveModule() const noexcept { return m_activeModule; }
+        size_t UnregisterModule(ModuleId id);
+        // RAII 스코프 헬퍼
+        struct ScopedActiveModule
+        {
+            Registry& Target;
+            ModuleId Previous;
+            ScopedActiveModule(Registry& registry, ModuleId id) noexcept
+                : Target(registry), Previous(registry.GetActiveModule()) {
+                Target.SetActiveModule(id);
+            }
+            ~ScopedActiveModule() { Target.SetActiveModule(Previous); }
+            ScopedActiveModule(const ScopedActiveModule&) = delete;
+            ScopedActiveModule& operator=(const ScopedActiveModule&) = delete;
+        };
     private:
         std::unordered_map<std::string, TypeInfo> m_types;
         std::unordered_map<std::string, EnumInfo> m_enums;
         using FunctionOverloads = std::unordered_map<std::string, FunctionInfo>;
         std::unordered_map<std::string, FunctionOverloads> m_freeFunctions;
+        ModuleId m_activeModule = DefaultModuleId; // 추가
     };
 }

@@ -6,6 +6,7 @@
 #include <reflection/ObjectView.h>
 #include <reflection/ValueView.h>
 #include <reflection/BaseInfo.h>
+#include <reflection/ModuleId.h> 
 
 #include <string>
 #include <string_view>
@@ -23,6 +24,7 @@ namespace reflection
         std::vector<FunctionInfo> Functions;
         reflection::Metadata Metadata;
         std::vector<BaseInfo> Bases;
+        ModuleId OwnerModule = DefaultModuleId;
 
         template<typename T>
             requires (std::is_class_v<T> || std::is_union_v<T>)

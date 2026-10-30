@@ -128,6 +128,10 @@ namespace reflection
         }
 
         std::string key = type.QualifiedName;
+        if (type.OwnerModule == DefaultModuleId)
+        {
+            type.OwnerModule = m_activeModule;
+        }
         const auto [position, inserted] =
             m_types.emplace(std::move(key), std::move(type));
 
@@ -184,6 +188,10 @@ namespace reflection
         }
 
         std::string key = enumeration.QualifiedName;
+        if (enumeration.OwnerModule == DefaultModuleId)
+        {
+            enumeration.OwnerModule = m_activeModule;
+        }
         const auto [position, inserted] =
             m_enums.emplace(std::move(key), std::move(enumeration));
 
@@ -258,8 +266,7 @@ namespace reflection
         return value.IsValid() ? FindEnum(value.GetCppType()) : nullptr;
     }
 
-    RegistrationResult Registry::TryRegisterFreeFunction(
-        std::string qualifiedName, FunctionInfo function)
+    RegistrationResult Registry::TryRegisterFreeFunction(std::string qualifiedName, FunctionInfo function)
     {
         if (qualifiedName.empty() || function.IsStaticMember || function.IsConstMember)
         {
@@ -273,6 +280,10 @@ namespace reflection
         }
 
         std::string signature = function.Signature;
+        if (function.OwnerModule == DefaultModuleId)
+        {
+            function.OwnerModule = m_activeModule;
+        }
         const auto [position, inserted] = m_freeFunctions[qualifiedName]
             .emplace(std::move(signature), std::move(function));
 
@@ -285,8 +296,7 @@ namespace reflection
         return {};
     }
 
-    const FunctionInfo* Registry::FindFreeFunction(
-        std::string_view qualifiedName, std::string_view signature) const
+    const FunctionInfo* Registry::FindFreeFunction(std::string_view qualifiedName, std::string_view signature) const
     {
         const auto group = m_freeFunctions.find(std::string(qualifiedName));
         if (group == m_freeFunctions.end())
@@ -351,6 +361,18 @@ namespace reflection
             }
         }
 
+        const ModuleId mergeModule = (source.m_activeModule != DefaultModuleId) ? source.m_activeModule : m_activeModule;
+        if (mergeModule != DefaultModuleId)
+        {
+            for (auto& [name, type] : source.m_types)
+                if (type.OwnerModule == DefaultModuleId) type.OwnerModule = mergeModule;
+            for (auto& [name, enumeration] : source.m_enums)
+                if (enumeration.OwnerModule == DefaultModuleId) enumeration.OwnerModule = mergeModule;
+            for (auto& [name, overloads] : source.m_freeFunctions)
+                for (auto& [sig, func] : overloads)
+                    if (func.OwnerModule == DefaultModuleId) func.OwnerModule = mergeModule;
+        }
+
         // 노드를 이동하기 전에 필요한 버킷 공간을 준비합니다.
         m_types.reserve(m_types.size() + source.m_types.size());
         m_enums.reserve(m_enums.size() + source.m_enums.size());
@@ -379,5 +401,37 @@ namespace reflection
 
         source.m_freeFunctions.clear();
         return {};
+    }
+
+    size_t Registry::UnregisterModule(ModuleId id)
+    {
+        if (id == DefaultModuleId) return 0; // 코어 심볼 보호
+
+        size_t count = 0;
+        for (auto it = m_types.begin(); it != m_types.end(); )
+        {
+            if (it->second.OwnerModule == id) { it = m_types.erase(it); ++count; }
+            else { ++it; }
+        }
+
+        for (auto it = m_enums.begin(); it != m_enums.end(); )
+        {
+            if (it->second.OwnerModule == id) { it = m_enums.erase(it); ++count; }
+            else { ++it; }
+        }
+
+        for (auto it = m_freeFunctions.begin(); it != m_freeFunctions.end(); )
+        {
+            auto& overloads = it->second;
+            for (auto fit = overloads.begin(); fit != overloads.end(); )
+            {
+                if (fit->second.OwnerModule == id) { fit = overloads.erase(fit); ++count; }
+                else { ++fit; }
+            }
+            if (overloads.empty()) { it = m_freeFunctions.erase(it); }
+            else { ++it; }
+        }
+
+        return count;
     }
 }

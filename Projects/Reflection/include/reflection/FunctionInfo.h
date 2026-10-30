@@ -2,6 +2,7 @@
 
 #include <reflection/Metadata.h>
 #include <reflection/Invocation.h>
+#include <reflection/ModuleId.h>
 
 #include <any>
 #include <string>
@@ -145,6 +146,7 @@ namespace reflection
         reflection::Metadata Metadata;
         // Keep source spelling in ReturnType; consumers may use the resolved type for bindings.
         std::string CanonicalReturnType;
+        ModuleId OwnerModule = DefaultModuleId;
 
         [[nodiscard]] bool CanInvokeDynamicWithoutObject() const noexcept { return m_dynamicInvoke != nullptr; }
         [[nodiscard]] const std::vector<std::type_index>& GetParameterCppTypes() const { return m_parameterTypes; }
