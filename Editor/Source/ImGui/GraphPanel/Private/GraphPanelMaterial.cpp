@@ -5,10 +5,6 @@
 #include "Mesh.h"
 #include "Texture.h"
 #include "SamplerManager.h"
-#include <memory>
-#include <stdexcept>
-#include <utility>
-#include <vector>
 
 namespace
 {

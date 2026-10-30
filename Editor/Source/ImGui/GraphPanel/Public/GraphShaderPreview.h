@@ -1,7 +1,5 @@
 ﻿#pragma once
 
-#include <memory>
-#include <string>
 #include "ShaderCompiler.h"
 #include "ResourceHandle.h"
 #include "Shader.h"

@@ -1,17 +1,10 @@
 ﻿#include "GraphPanel.h"
-#include "GraphPanel.h"
-#include "GraphPanel.h"
 #include "GraphMessageLocalization.h"
 #include "ShaderGraphCompiler.h"
 #include "LocalizationManager.h"
 #include <imgui_stdlib.h>
-#include <chrono>
-#include <fstream>
-#include <system_error>
-#include <utility>
 #include "GraphShaderPreview.h"
 #include "ImGuiManager.h"
-#include <algorithm>
 
 namespace
 {

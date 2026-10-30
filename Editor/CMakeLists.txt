@@ -83,7 +83,7 @@ target_link_libraries(Editor
         BamTools::ModelConverter
         TextureConverter
         imgui::imgui
-        imnodes
+        imgui-node-editor
         imguizmo::imguizmo
         assimp::assimp
         efsw::efsw
@@ -92,9 +92,11 @@ target_link_libraries(Editor
 # ==============================================================================
 # 6. Custom Build Steps & Checks
 # ==============================================================================
+include(ReflectionBuild)
 include(LocalizationBuild)
 
 add_dependencies(Editor GenerateLocalization)
+add_dependencies(Editor GameModule)
 
 if(BAMENGINE_BUILD_REFLECTION_CHECK)
     include(Checks)

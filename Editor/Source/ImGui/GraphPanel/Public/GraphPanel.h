@@ -68,6 +68,7 @@ private:
 		bool ResetContext = false;
 		bool RestoreSelection = false;
 		ShaderBuildState ShaderBuild;
+		std::unordered_map<Engine::GraphNodeId, std::string> CommentTexts;
 	};
 
 #pragma region DrawUI
@@ -185,6 +186,9 @@ private:
 
 	std::unordered_map<std::wstring, std::unordered_set<Engine::GraphNodeId>> m_Breakpoints;
 	Engine::GraphNodeId m_HitBreakpointNode = 0;
+
+	Engine::GraphNodeId m_EditingCommentNode = 0;
+	char m_CommentEditBuffer[128] = {};
 #pragma endregion
 };
 

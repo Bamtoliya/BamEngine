@@ -1,11 +1,12 @@
-#include "GraphPanel.h"
+﻿#include "GraphPanel.h"
 #include "GraphMessageLocalization.h"
 #include "LocalizationManager.h"
-#include <algorithm>
-#include <cmath>
-#include <iomanip>
-#include <sstream>
-#include <type_traits>
+#include "PIEManager.h"
+#include "SceneManager.h"
+#include "Scene.h"
+#include "GraphSystem.h"
+#include "Components/Graph/GraphBindingComponent.h"
+#include "Components/Core/NameComponent.h"
 
 void GraphPanel::InvalidateExecution()
 {
@@ -198,4 +199,101 @@ void GraphPanel::DrawExecutionTrace()
 	}
 	ImGui::EndChild();
 	ImGui::TextWrapped("%s", LOCAL_CSTR("GraphPanel.PreviewScope"));
+}
+
+void GraphPanel::DrawDebugToolbar()
+{
+	if (m_Domain != Engine::EGraphDomain::Logic) return;
+	ImGui::SameLine();
+	ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
+	ImGui::SameLine();
+	auto* scene = SceneManager::IsCreated() ? SceneManager::Get().GetCurrentScene() : nullptr;
+	std::string previewName = "Debug: [None]";
+	if (scene && scene->GetRegistry().valid(m_DebugEntity))
+	{
+		const auto* nameComp = scene->GetRegistry().try_get<Engine::NameComponent>(m_DebugEntity);
+		if (nameComp && !nameComp->name.empty())
+			previewName = fmt::format("Debug: {} (#{})", WStrToStr(nameComp->name), entt::to_integral(m_DebugEntity));
+		else
+			previewName = fmt::format("Debug: Entity #{}", entt::to_integral(m_DebugEntity));
+	}
+	else
+	{
+		m_DebugEntity = entt::null;
+	}
+	ImGui::SetNextItemWidth(ImGui::GetFontSize() * 15.0f);
+	if (ImGui::BeginCombo("##DebugEntity", previewName.c_str()))
+	{
+		if (ImGui::Selectable("None", m_DebugEntity == entt::null))
+		{
+			m_DebugEntity = entt::null;
+			m_LinkPulseTimers.clear();
+		}
+		if (scene)
+		{
+			auto& reg = scene->GetRegistry();
+			for (auto entity : reg.view<Engine::GraphBindingComponent>())
+			{
+				const auto& binding = reg.get<Engine::GraphBindingComponent>(entity);
+				const auto* nameComp = reg.try_get<Engine::NameComponent>(entity);
+				std::string itemLabel;
+				if (nameComp && !nameComp->name.empty())
+					itemLabel = fmt::format("{} (#{})", WStrToStr(nameComp->name), entt::to_integral(entity));
+				else
+					itemLabel = fmt::format("Entity #{}", entt::to_integral(entity));
+				if (!binding.graphFile.empty())
+					itemLabel += fmt::format(" [{}]", WStrToStr(std::filesystem::path(binding.graphFile).filename().wstring()));
+				const bool selected = (m_DebugEntity == entity);
+				if (ImGui::Selectable(itemLabel.c_str(), selected))
+				{
+					m_DebugEntity = entity;
+					m_LinkPulseTimers.clear();
+					m_LastDebugTraceSequence = 0;
+				}
+			}
+		}
+		ImGui::EndCombo();
+	}
+	if (ImGui::IsItemHovered())
+	{
+		ImGui::SetTooltip("Select an active actor to visualize live execution wire flow and watch pin values.");
+	}
+}
+void GraphPanel::UpdateLiveDebugging()
+{
+	const float dt = ImGui::GetIO().DeltaTime;
+	// 1. 와이어 펄스 지속 타이머 감소
+	for (auto it = m_LinkPulseTimers.begin(); it != m_LinkPulseTimers.end(); )
+	{
+		it->second -= dt;
+		if (it->second <= 0.0f) it = m_LinkPulseTimers.erase(it);
+		else ++it;
+	}
+	if (m_Domain != Engine::EGraphDomain::Logic) return;
+	// 게임이 일시정지 상태가 아니라면 히트 노드 초기화
+	if (!PIEManager::IsCreated() || !PIEManager::Get().IsPaused())
+	{
+		m_HitBreakpointNode = 0;
+	}
+	// 2. PIE 중이고 디버그 엔티티가 선택되어 있으면 실시간 트레이스 동기화
+	const bool isPIE = PIEManager::IsCreated() && PIEManager::Get().IsPlaying();
+	auto* scene = SceneManager::IsCreated() ? SceneManager::Get().GetCurrentScene() : nullptr;
+	if (!isPIE || !scene || !scene->GetRegistry().valid(m_DebugEntity)) return;
+	const auto* executor = Engine::GraphSystem::GetDebugExecutor(scene, m_DebugEntity);
+	if (!executor) return;
+	// 신규 트레이스 이벤트 처리 (신호가 지난 링크에 펄스 부여 및 핀 관측값 갱신)
+	const auto& trace = executor->GetTrace();
+	for (const auto& event : trace)
+	{
+		if (event.Sequence <= m_LastDebugTraceSequence) continue;
+		m_LastDebugTraceSequence = event.Sequence;
+		if (event.Kind == Engine::EGraphTraceKind::Link && event.Link != 0)
+		{
+			m_LinkPulseTimers[event.Link] = 0.4f; // 0.4초 동안 와이어 맥동
+		}
+		else if (event.Kind == Engine::EGraphTraceKind::Value)
+		{
+			m_ObservedValues[event.Node].insert_or_assign(event.Pin, event.Value);
+		}
+	}
 }

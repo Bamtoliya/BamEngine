@@ -79,6 +79,34 @@ Use one entry per meaningful change.
 
 ---
 
+## [2026-10-30] 블루프린트 코멘트 그룹 박스(단축키 C) 구현 및 GraphValue 타입 제약 우회 구조 설계
+
+- Area: Editor | UI | Graph
+- Type: Feature | Architecture | UX
+- 관련 파일:
+  - Editor/Source/ImGui/GraphPanel/Public/GraphPanel.h
+  - Editor/Source/ImGui/GraphPanel/Private/GraphPanel.cpp
+  - Editor/Source/ImGui/GraphPanel/Private/GraphPanelNodeEditor.cpp
+  - Docs/VisualScriptingBlueprintPlan.md
+  - Docs/ImplementationLog.md
+- 배경 및 원인:
+  - 언리얼 엔진 블루프린트처럼 복수의 노드를 시각적·논리적 단위로 묶고 함께 이동시킬 수 있는 코멘트 박스(단축키 `C`) 기능 필요.
+  - 엔진의 데이터 모델인 `GraphValue`가 `std::string`을 지원하지 않아 `std::holds_alternative<std::string>` 조회 시 C2338 `static_assert` 컴파일 에러 발생.
+  - `Core.Comment` 노드 정의에 `"Size"` 핀이 등록되지 않아 `Graph::SetInputValue`가 `PinNotFound` 오류로 크기 저장을 거부하는 아키텍처 제약 존재.
+- 구현 내용:
+  1. **내부 데이터 저장용 `"Size"`(Float2) 핀 등록:**
+     - `GraphPanel.cpp` 생성자에서 `Core.Comment` 노드 정의에 `Float2` 타입의 `"Size"` 핀을 등록하여 `Graph::SetInputValue` 유효성 검증을 100% 통과시키고 크기를 보관.
+  2. **`GraphDocument::CommentTexts` 맵 분리:**
+     - `GraphValue`가 문자열을 담지 못하는 한계를 해결하기 위해 에디터 도큐먼트 내에 `std::unordered_map<Engine::GraphNodeId, std::string> CommentTexts`를 신설하여 컴파일 오류를 원천 차단하고 타입 안전한 주석 타이틀 보관.
+  3. **헤더 텍스트 더블클릭 인라인 편집:**
+     - 코멘트 헤더를 더블클릭하면 즉시 `ImGui::InputText`로 전환되어 원하는 주석 이름(예: "Update Move", "Calculate Damage")으로 직관적으로 변경 가능.
+  4. **Z-Order 2-Pass 렌더링 분리:**
+     - `DrawCanvas`에서 `Core.Comment` 노드를 먼저 렌더링하고 일반 노드를 나중에 렌더링하여, 반투명 코멘트 박스가 일반 노드의 핀 클릭이나 버튼 입력을 가로채지 않도록 완벽 보장.
+  5. **단축키 `C` 및 Bounding Box 자동 계산:**
+     - 다중 선택된 노드들의 최소/최대 좌표를 계산하고 여백(Padding X=35, Y=25, HeaderExtraY=32)을 부여하여 감싸는 박스를 자동 생성하고, `ed::Group(size)` 연동으로 코멘트 박스 드래그 시 내부 노드 자석식 일괄 이동 및 우측 하단 크기 조절 지원.
+
+---
+
 ## [2026-10-30] 노드 그래프 에디터의 imgui-node-editor 전환 및 블루프린트 룩앤필 고도화
 
 - Area: Editor | UI | Graph

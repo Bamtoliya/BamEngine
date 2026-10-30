@@ -127,6 +127,13 @@ flowchart TD
 - **목적:** 언리얼 엔진 블루프린트 수준의 직관적이고 미려한 노드 저작 환경(가로 흐름, 밀착형 헤더, 그룹 박스, 정밀 피벗)을 구축한다.
 - **세부 내용 및 작업 항목:**
   1. **완료된 기반 작업 (Completed):**
+     - **블루프린트 코멘트 그룹 박스 (Comment Box / Grouping - 단축키 `C`):**
+       - `Core.Comment` 노드 정의에 크기(`Size`, Float2) 핀 등록 및 `SetInputValue` 검증 통과.
+       - `GraphDocument::CommentTexts` 맵을 통한 안전한 문자열 주석 관리 (`GraphValue` static_assert 방지).
+       - 다중 노드 선택 후 `C` 키 입력 시 Bounding Box 자동 계산(패딩 포함) 및 코멘트 상자 생성.
+       - 코멘트 헤더 더블클릭 시 인라인 텍스트 편집(`ImGui::InputText`) 지원.
+       - `ed::Group(size)` 연동으로 코멘트 상자 드래그 시 내부 노드 자석식 일괄 이동 및 우측 하단 크기 조절(Resize) 완비.
+       - 코멘트 노드를 일반 노드보다 먼저 렌더링하는 2-Pass 분리로 전면 노드 클릭/와이어 연결 완벽 보장.
      - **노드 에디터 프레임워크 전환:** 기존 `imnodes`에서 언리얼 블루프린트 1:1 클론에 특화된 `imgui-node-editor` (Thedmd)로 마이그레이션 완료 (CMake `FetchContent_Declare(bam_imgui_node_editor)`).
      - **자유로운 캔버스 내비게이션:** 무한 줌인/줌아웃(Zoom) 및 우클릭 패닝, `NavigateToContent()` 맞춤 뷰 지원.
      - **실시간 실행선 펄스 흐름 (`ed::Flow`):** 게임 로직 실행 시 신호가 통과한 와이어에 애니메이션 펄스를 자동 재생.
@@ -137,10 +144,6 @@ flowchart TD
   2. **현재 진행 중 / 최우선 작업 (In-Progress & Priority):**
      - **핀 아이콘 정밀 피벗(Pivot) 결합:**
        - 아이콘(`ICON_FA_CIRCLE`, `ICON_FA_PLAY`)만을 `ed::BeginPin` ~ `ed::EndPin`으로 감싸고 `ed::PinPivotAlignment(0.5, 0.5)`를 적용하여, 와이어 연결점이 텍스트 블록이 아닌 아이콘 정중앙에 정확히 꽂히도록 결합.
-     - **코멘트 그룹 박스 (Comment Box / Grouping - 단축키 `C`):**
-       - `Core.Comment` 노드 정의 등록 및 `ed::Group(size)` 연동.
-       - 다중 선택된 노드들의 Bounding Box를 자동 계산하여 감싸는 반투명 코멘트 상자 생성.
-       - 코멘트 상자 드래그 시 내부 노드 자석식 일괄 이동 및 우측 하단 크기 조절(Resize) 연동.
   3. **후속 편의성 작업 (Backlog / Planned):**
      - **노드 자동 정렬 도구 (Alignment Tools - 단축키):**
        - 다중 선택 후 `Shift + W/A/S/D`를 통한 상/좌/하/우 일렬 정렬 및 수평/수직 등간격 배치.

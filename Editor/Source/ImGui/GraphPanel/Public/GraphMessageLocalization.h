@@ -2,7 +2,6 @@
 
 #include "Engine_Includes.h"
 #include "LocalizationManager.h"
-#include <string_view>
 
 namespace Editor
 {

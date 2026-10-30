@@ -22,6 +22,16 @@ GraphPanel::GraphPanel()
 	commentDef.DisplayName = "Comment";
 	commentDef.Category = "Organization";
 	commentDef.Domains = { Engine::EGraphDomain::Logic, Engine::EGraphDomain::Shader };
+
+	// 크기(Size) 저장을 위한 Float2 핀 정의 (내부 저장용)
+	Engine::GraphPin sizePin;
+	sizePin.Key = "Size";
+	sizePin.DisplayName = "Size";
+	sizePin.Type = Engine::EGraphPinType::Float2;
+	sizePin.Direction = Engine::EGraphPinDirection::Input;
+	sizePin.DefaultValue = std::array<float, 2>{ 400.0f, 250.0f };
+	commentDef.Pins.push_back(sizePin);
+
 	m_Registry.Register(std::move(commentDef));
 	m_Ready = m_LastDiagnostic.Succeeded();
 	if (m_Ready && ReflectionRegistry::IsCreated())
