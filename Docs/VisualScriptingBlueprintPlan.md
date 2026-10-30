@@ -4,6 +4,7 @@
 - 상태: 계획 / 목표 수립
 - 공통 기준: [EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md)
 - 선행 기반: [GraphFoundation.md](GraphFoundation.md), [GraphExecution.md](GraphExecution.md), [GraphReflection.md](GraphReflection.md), [GraphPanel.md](GraphPanel.md)
+- 핫리로드 최적화: [ModuleHotReloadOptimization.md](ModuleHotReloadOptimization.md)
 - 통합 우선순위 연결: [DevelopmentPriorities.md](DevelopmentPriorities.md)
 
 ---
@@ -26,7 +27,7 @@
 ### 2.1 이미 구축된 기반 (준비 완료)
 - **그래프 기초 데이터 모델 (`GraphFoundation`):** 노드(`GraphNode`), 핀(`GraphPin`), 연결선(`GraphLink`)의 생성, 삭제, 순환 검사, JSON 직렬화 및 역직렬화 완비.
 - **실행 엔진 (`GraphExecutor`):** 실행선(`Execution`)을 순차적으로 처리하는 태스크 큐 기반 가상 머신, 예산(`budget`) 제한을 통한 무한 루프 방지, 실행 트레이스(`GraphTraceEvent`) 로깅 완비.
-- **노드 에디터 UI (`GraphPanel`):** ImNodes 기반의 노드 캔버스, 와이어 드래그 앤 드롭 연결, 노드 팔레트 검색, 핀 타입별 색상 구분 지원.
+- **노드 에디터 UI (`GraphPanel`):** imgui-node-editor 기반의 블루프린트 캔버스, 자유로운 줌/패닝, 와이어 드래그 앤 드롭 연결, 노드 팔레트 검색, 핀 타입별 색상 구분 및 실시간 실행선 흐름 펄스(`ed::Flow`) 지원.
 - **C++ 리플렉션 연동 (`GraphReflection`):** 네이티브 C++ 함수 정보를 바인딩하여 노드에서 동적으로 호출(`Invoke`)할 수 있는 기반 구비.
 
 ### 2.2 언리얼 블루프린트 완성을 위해 결여된 4대 핵심 요소
@@ -92,29 +93,61 @@ flowchart TD
   - 대상 모듈: 오디오 재생(`PlaySound`), 파티클 재생, 물리 힘 가하기(`AddForce`), UI 텍스트 변경 등.
 - **완료 기준:** C++로 작성한 `AudioComponent::PlaySound()` 함수가 에디터 노드 팔레트에 자동으로 나타나고 그래프에서 즉시 호출된다.
 
-#### 4.1 C++ 핫리로드 기반 라이브 노드·핀 동적 동기화 목표 (Live Node & Pin Hot-Reload Pipeline)
-- **최종 사용자 경험 목표 (UX Goal):**
-  - 개발자가 C++ 코드(`GameModule` 등)에서 새로운 `FUNCTION(GRAPH_CALLABLE)` 함수를 추가하거나 기존 함수의 매개변수(핀)를 변경하고 **Visual Studio에서 빌드(`Ctrl+Shift+B`)만 누르면**:
+#### 4.1 C++ 핫리로드 기반 라이브 노드·핀 동적 동기화 (완료)
+- **최종 사용자 경험 목표 (UX Goal 달성):**
+  - 개발자가 C++ 코드(`GameModule` 등)에서 새로운 `FUNCTION(GRAPH_CALLABLE)` 함수를 추가하거나 기존 함수의 매개변수(핀)를 변경하고 저장하면:
   - **에디터를 재시작할 필요 없이(Zero-Restart)**,
-  - 1) **그래프 에디터 우클릭 팔레트**에 새로운 노드가 즉시 검색 및 배치 가능한 상태로 실시간 등장한다.
-  - 2) **이미 캔버스에 배치되어 있던 기존 노드**에도 추가된 매개변수 핀이 실시간으로 쏙 생겨나며, 기본값(`GRAPH_PIN_DEFAULT`)이 자동으로 채워진다.
+  - 1) **그래프 에디터 우클릭 팔레트**에 새로운 노드가 즉시 검색 및 배치 가능한 상태로 실시간 등장.
+  - 2) **이미 캔버스에 배치되어 있던 기존 노드**에도 추가된 매개변수 핀이 실시간으로 쏙 생겨나며, 기본값(`GRAPH_PIN_DEFAULT`)이 자동으로 주입됨.
+  - 3) **삭제된 핀의 와이어는 안전하게 자동 연결 해제**되어 댕글링 포인터 및 런타임 크래시를 방지함.
 
-- **구조적 변경 및 아키텍처 파이프라인 (4단계 목표):**
-  1. **모듈 핫리로드 이벤트와 리플렉션 델타 갱신 (Hot-Reload $\rightarrow$ Reflection Re-scan):**
-     - `ModuleHotReloadManager`가 DLL 리로드를 완료하면 `OnPostHotReload` 콜백을 통해 리플렉션 레지스트리(`ReflectionRegistry`)에 새 DLL의 메타데이터를 통보.
-     - 리플렉션 시스템이 변경된 함수 심볼과 메타데이터 목록을 추출하여 엔진 코어에 전달.
-  2. **스키마 핫스왑 지원 (`GraphRegistry::RegisterOrUpdate`):**
-     - 현재 `GraphRegistry::Register`는 기존에 등록된 노드 타입이 존재하면 `DuplicateType` 에러를 반환하며 등록을 거부함.
-     - 핫리로드 발생 시 기존 노드 정의(`GraphNodeDefinition`)의 함수 포인터와 핀 구성을 제자리에서 안전하게 덮어쓸 수 있는 `RegisterOrUpdate` API 구축.
-  3. **노드 인스턴스 핀 자동 조정 (Live Pin Reconciliation & Migration):**
-     - 현재 열려 있는 그래프 문서(`GraphDocument`)와 씬에 로드된 그래프 에셋들을 순회하며 스키마 변경 사항을 동기화:
-       - **새 핀 추가 시:** 기존 노드 인스턴스에 새 핀을 생성하고, C++ 매크로에 정의된 `GRAPH_PIN_DEFAULT` 기본값을 즉시 주입.
-       - **핀 삭제 / 타입 변경 시:** 유효하지 않게 된 와이어(`GraphLink`)를 안전하게 끊어 댕글링(Dangling) 참조 및 가상머신 크래시를 방지하고, 에디터에 경고 진단(`Diagnostic`) 표기.
-  4. **`GraphPanel` UI 캔버스 실시간 리프레시 (UI Canvas Sync):**
-     - `GraphPanel`이 핫리로드 알림을 수신하면:
-       - 우클릭 노드 검색 팔레트 캐시(`m_NodeCandidates`)를 즉시 재생성.
-       - ImNodes의 노드 뷰(`NodeView`)를 재계산하여 새 핀에 고유 ID를 할당하고 캔버스에 즉시 렌더링.
-     - 실행 중이던 가상 머신(`GraphExecutor`)은 실행을 멈추지 않고, 캐싱된 함수 포인터(`m_Functions`)만 원자적으로 교체하여 끊김 없는 라이브 코딩 경험 제공.
+- **핫리로드 성능 및 시간 단축 최적화 세부 분석:** [ModuleHotReloadOptimization.md](ModuleHotReloadOptimization.md)
+  - MSBuild `/p:BuildProjectReferences=false` 적용, `GameModule` PCH 추가, 디바운스 200ms 단축으로 리로드 시간 1.5초대 달성.
+
+- **구현 완료된 아키텍처 파이프라인:**
+  1. **ModuleId 기반 소유자 태깅 및 일괄 해제 (`reflection::Registry`):**
+     - `Projects/Reflection` 라이브러리에 `ModuleId` 개념을 도입하여 모듈 언로드 시 `UnregisterModule`로 100% 안전하게 심볼 제거.
+     - 핫리로드 시 이전 DLL 심볼 잔존으로 인한 `DuplicateFreeFunction` (error 13) 원천 해결.
+  2. **스키마 핫스왑 지원 (`GraphRegistry::RegisterOrUpdate` & `ClearReflectedNodes`):**
+     - 이전 리플렉션 노드를 안전하게 제거하고 새 DLL의 최신 노드 정의로 덮어쓰는 핫스왑 파이프라인 구축.
+  3. **노드 인스턴스 핀 자동 조정 (`Graph::Reconcile`):**
+     - 캔버스 내 노드의 신규 핀에 기본값 주입 및 삭제된 핀에 연결된 링크를 원자적으로 정리.
+  4. **`GraphPanel` UI 캔버스 실시간 리프레시:**
+     - `PostReloadCallback` 수신 시 `Reconcile` 및 `BuildDocumentViews`를 순차 호출하여 캔버스 실시간 동기화.
+
+#### 4.2 엔진 런타임(GraphSystem) 핫스왑 및 엔티티 0-크래시 보장 (다음 작업)
+- **목적:** 에디터 패널뿐만 아니라 실제 게임 루프(PIE)를 구동하는 `GraphSystem`과 씬 내 엔티티의 `GraphRuntimeState`를 핫리로드와 동기화하여, 게임 플레이 중 C++ 코드 수정 시 댕글링 함수 포인터로 인한 `0xC0000005 Access Violation` 크래시를 원천 차단한다.
+- **세부 내용:**
+  1. `GraphSystem::ReloadReflectedNodes()`: 모듈 핫리로드 시 엔진 전역 `GraphRegistry`의 리플렉션 노드를 갱신하고, 구버전 템플릿 그래프 캐시(`m_GraphCache`)를 초기화.
+  2. `GraphRuntimeState` 인스턴스 핫스왑: 활성 씬 엔티티들이 보관 중인 `GraphExecutor`의 함수 포인터 테이블을 새 DLL 메모리 주소로 안전하게 리셋·재바인딩.
+  3. PIE 일시정지(`Pause`) 및 재개 연동: 리로드 중에는 프레임 실행을 잠시 정지하고, 바인딩 완료 후 중단점 없이 부드럽게 재개.
+- **완료 기준:** PIE 플레이 도중 C++ 함수 로직이나 파라미터를 변경해도 게임이 꺼지지 않고 씬의 큐브 엔티티가 새로운 C++ 로직을 즉시 실행한다.
+
+#### 4.2 블루프린트 에디터 UI/UX 고도화 및 편의성 작업 (imgui-node-editor 기반)
+- **목적:** 언리얼 엔진 블루프린트 수준의 직관적이고 미려한 노드 저작 환경(가로 흐름, 밀착형 헤더, 그룹 박스, 정밀 피벗)을 구축한다.
+- **세부 내용 및 작업 항목:**
+  1. **완료된 기반 작업 (Completed):**
+     - **노드 에디터 프레임워크 전환:** 기존 `imnodes`에서 언리얼 블루프린트 1:1 클론에 특화된 `imgui-node-editor` (Thedmd)로 마이그레이션 완료 (CMake `FetchContent_Declare(bam_imgui_node_editor)`).
+     - **자유로운 캔버스 내비게이션:** 무한 줌인/줌아웃(Zoom) 및 우클릭 패닝, `NavigateToContent()` 맞춤 뷰 지원.
+     - **실시간 실행선 펄스 흐름 (`ed::Flow`):** 게임 로직 실행 시 신호가 통과한 와이어에 애니메이션 펄스를 자동 재생.
+     - **상단 Exec 통과 + 하단 데이터 2열 분할 레이아웃:** `Exec In`과 `Exec Out`을 최상단 행에 좌우로 마주보게 배치하여 실행 흐름이 수평으로 직진하게 만들고, 하단에 데이터 핀을 2열로 배치하여 노드가 계단식으로 우하향 처지는 현상을 근본적으로 해결.
+     - **노드 Bounding Box 밀착형 헤더 배경:** 노드 크기별 오차 없이 `ed::GetNodeBackgroundDrawList`로 외곽 테두리에 100% 밀착되는 상단 둥근 헤더 채우기 및 카테고리별 테마 색상(이벤트: 레드, 함수: 블루, 수학/순수: 그린, 변수: 청록/오렌지) 적용.
+     - **ImGui ID 스택 충돌 해결:** 노드 레벨(`node.Id`) 및 핀 레벨(`pin.Key`) 격리와 `##ResetPin`, `##UsePin` 식별자 부여로 "기본값으로 복원" 버튼의 ID 중복(Duplicate ID) 경고 박멸.
+     - **툴팁 좌표계 정규화:** 캔버스 줌/패닝 행렬 왜곡을 방지하기 위해 툴팁을 `ed::Suspend()` / `ed::Resume()`으로 래핑하여 마우스 커서 바로 아래에 정확히 팝업되도록 개선.
+  2. **현재 진행 중 / 최우선 작업 (In-Progress & Priority):**
+     - **핀 아이콘 정밀 피벗(Pivot) 결합:**
+       - 아이콘(`ICON_FA_CIRCLE`, `ICON_FA_PLAY`)만을 `ed::BeginPin` ~ `ed::EndPin`으로 감싸고 `ed::PinPivotAlignment(0.5, 0.5)`를 적용하여, 와이어 연결점이 텍스트 블록이 아닌 아이콘 정중앙에 정확히 꽂히도록 결합.
+     - **코멘트 그룹 박스 (Comment Box / Grouping - 단축키 `C`):**
+       - `Core.Comment` 노드 정의 등록 및 `ed::Group(size)` 연동.
+       - 다중 선택된 노드들의 Bounding Box를 자동 계산하여 감싸는 반투명 코멘트 상자 생성.
+       - 코멘트 상자 드래그 시 내부 노드 자석식 일괄 이동 및 우측 하단 크기 조절(Resize) 연동.
+  3. **후속 편의성 작업 (Backlog / Planned):**
+     - **노드 자동 정렬 도구 (Alignment Tools - 단축키):**
+       - 다중 선택 후 `Shift + W/A/S/D`를 통한 상/좌/하/우 일렬 정렬 및 수평/수직 등간격 배치.
+     - **리디렉트 / 꺾임점 노드 (Reroute / Knot Node):**
+       - 와이어 더블 클릭 시 선 경로를 직각이나 원하는 경로로 우회 정리하는 경유지 핀 생성.
+     - **코멘트 텍스트 인라인 수정:**
+       - 코멘트 헤더 더블 클릭 시 즉시 제목 텍스트 편집 모드 진입.
 
 ### Phase 5. 실시간 와이어 흐름 디버깅과 중단점 (P3)
 - **목적:** 언리얼 엔진 블루프린트의 핵심 경험인 "실행 흐름 시각화"를 구현하여 디버깅 편의성을 극대화한다.

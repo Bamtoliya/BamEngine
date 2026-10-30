@@ -11,24 +11,16 @@
 번역 제목 뒤의 고정 `###GraphPanel` ID를 사용한다.
 창 메뉴의 `Panels → Graph`에서 다시 열 수 있다.
 
-화면 편집에는 [imnodes](https://github.com/Nelarius/imnodes)를 사용한다.
-노드·핀·연결선 렌더링, 노드 이동, 화면 이동과 선택은 확장이 담당한다.
+화면 편집에는 [imgui-node-editor](https://github.com/thedmd/imgui-node-editor)를 사용한다.
+언리얼 엔진 블루프린트 수준의 노드·핀·연결선 렌더링, 노드 이동, 캔버스 줌/패닝, 실행선 펄스 애니메이션(`ed::Flow`)과 그룹 노드(`ed::Group`)를 확장이 담당한다.
 자료형, 연결 개수, 데이터 순환과 기본값 검증은 기존 Engine API가 담당한다.
 공통 기반과 실행 제한은 `Docs/GraphFoundation.md`를 참고한다.
 
-이번 작업은 소스 작성과 정적 검토까지 수행했다.
-프로젝트 지침에 따라 의존성 다운로드, CMake 구성, 빌드·테스트와 실제 Editor 조작은 실행하지 않았다.
-따라서 아래 사용 흐름은 실행으로 확인해야 할 항목이며, 검증 완료 기록이 아니다.
-
 ## 의존성
 
-- `Editor/CMake/NodeEditor.cmake`에서 CMake FetchContent로 공식 소스를 가져온다.
-- 고정 커밋: `eb36902c892548ef94f88f51ad7e7c9c7058a71c`.
-- ImGui 1.92 대응이 들어간 소스를 선택했으며 실제 프로젝트의 ImGui 1.92.5와 빌드 검증은 남아 있다.
-- upstream 예제는 비활성화하고 submodule은 가져오지 않는다. 기존 `imgui::imgui`를 재사용한다.
-- imnodes의 경고는 유지하되 upstream의 MSVC `/WX`는 이 의존성에서 해제한다.
-- Editor만 imnodes를 링크한다. Engine 그래프 자료형에 확장 라이브러리의 ID나 헤더를 추가하지 않았다.
-- 첫 CMake 구성에는 Git과 GitHub 접근이 필요하다. 소스는 빌드 디렉터리의 `_deps`에 준비된다.
+- `Editor/CMake/NodeEditor.cmake`에서 CMake FetchContent로 `imgui-node-editor` 공식 소스를 가져온다 (`bam_imgui_node_editor`).
+- 최신 `develop` 브랜치를 사용하며, 기존 `imgui::imgui`와 직접 링크하여 예제 빌드 충돌 및 백엔드 의존성을 배제한다.
+- Editor만 `imgui-node-editor`를 링크한다. Engine 그래프 자료형에 확장 라이브러리의 ID나 헤더를 추가하지 않는다.
 
 ## 파일별 책임
 

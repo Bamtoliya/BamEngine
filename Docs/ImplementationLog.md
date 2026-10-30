@@ -35,6 +35,78 @@ Use one entry per meaningful change.
 
 ---
 
+## [2026-10-30] C++ 모듈 핫리로드 라이브 노드·핀 동적 동기화 및 빌드 최적화 (Phase 4.1)
+
+- Area: Reflection | Graph | HotReload | Editor
+- Type: Feature | Performance | Architecture
+- 관련 파일:
+  - Projects/Reflection/include/reflection/ModuleId.h
+  - Projects/Reflection/include/reflection/Registry.h
+  - Projects/Reflection/src/Registry.cpp
+  - Projects/Reflection/include/reflection/TypeInfo.h
+  - Projects/Reflection/include/reflection/FunctionInfo.h
+  - Projects/Reflection/include/reflection/EnumInfo.h
+  - Projects/GameModule/CMakeLists.txt
+  - Projects/GameModule/Source/GameModule.cpp
+  - Projects/GameModule/Source/GameGameplayLibrary.h
+  - Engine/Source/Graph/Public/GraphRegistry.h
+  - Engine/Source/Graph/Private/GraphRegistry.cpp
+  - Engine/Source/Graph/Public/Graph.h
+  - Engine/Source/Graph/Private/Graph.cpp
+  - Editor/Source/HotReload/Private/ModuleBuildManager.cpp
+  - Editor/Source/HotReload/Public/ModuleBuildManager.h
+  - Editor/Source/ImGui/GraphPanel/Private/GraphPanel.cpp
+  - Docs/ModuleHotReloadOptimization.md
+  - Docs/VisualScriptingBlueprintPlan.md
+- 배경 및 원인:
+  - C++ `GameModule`에서 새로운 `FUNCTION(GRAPH_CALLABLE)` 노드를 작성하고 핫리로드 시, 이전 버전 DLL의 심볼이 `reflection::Registry`에 잔존하여 `RegistrationError::DuplicateFreeFunction` (error 13)으로 인해 갱신이 실패함.
+  - 리플렉션 심볼 갱신 부재로 에디터 그래프 패널에 새로 작성한 노드가 나타나지 않거나 삭제된 노드가 유령처럼 남는 현상 발생.
+  - `cmake --build` 시 최상위 솔루션 전체의 의존성 순회 평가와 PCH 부재로 인해 단순 C++ 1줄 수정에도 10초 이상의 긴 리로드 지연이 발생함.
+- 구현 내용:
+  1. **리플렉션 독립성 보장 및 `ModuleId` 태깅 기반 일괄 언레지스터**:
+     - `Projects/Reflection` 라이브러리의 순수성을 유지하기 위해 엔진 도메인에 종속되지 않는 범용 식별자 `ModuleId` (`std::uint32_t`) 도입.
+     - `Registry::SetActiveModule`, `ScopedActiveModule`을 통해 병합 및 등록 시 소유자 모듈 태그를 자동 주입하고, `Registry::UnregisterModule(ModuleId)`로 DLL 언로드 시 해당 모듈의 모든 타입·함수·열거형을 안전하게 일괄 제거.
+  2. **스키마 핫스왑 및 노드 핀 인스턴스 자동 동기화 (`Reconcile`)**:
+     - `GraphRegistry::ClearReflectedNodes()`를 추가하여 기존 리플렉션 노드만 초기화 후 최신 심볼들로 재등록.
+     - `Graph::Reconcile(const GraphRegistry&)`를 구현하여, 캔버스에 이미 배치된 노드 인스턴스에 새 핀이 추가된 경우 기본값(`DefaultValue`)을 자동 주입하고, 삭제되거나 타입이 바뀐 핀에 연결된 링크는 안전하게 연결 해제하여 런타임 크래시를 원천 차단.
+  3. **핫리로드 빌드 속도 1.5초대 최적화**:
+     - `ModuleBuildManager.cpp`: 파일 저장 감지 디바운스를 500ms에서 200ms로 단축.
+     - MSBuild 옵션 `-- /p:BuildProjectReferences=false /m`을 적용하여 솔루션 내 20여 개 종속 프로젝트 순회 검사를 건너뛰고 멀티코어로 즉시 빌드.
+     - `GameModule/CMakeLists.txt`: `target_precompile_headers`로 엔진 및 코어 헤더 PCH 적용.
+- 다음 작업 (현재 계획된 작업):
+  - `GraphSystem` 런타임 엔진의 핫리로드 동기화 (`ReloadReflectedNodes`) 및 활성 씬 엔티티의 `GraphRuntimeState` 핫스왑 (PIE 실행 중 0-크래시 보장).
+  - PIE 실행 중 씬 엔티티 라이브 게임플레이 디스패치 및 실시간 반영.
+
+---
+
+## [2026-10-30] 노드 그래프 에디터의 imgui-node-editor 전환 및 블루프린트 룩앤필 고도화
+
+- Area: Editor | UI | Graph
+- Type: Feature | Refactor | UX
+- 관련 파일:
+  - Editor/CMake/NodeEditor.cmake
+  - Editor/CMakeLists.txt
+  - Editor/Source/ImGui/GraphPanel/Public/GraphPanel.h
+  - Editor/Source/ImGui/GraphPanel/Private/GraphPanel.cpp
+  - Editor/Source/ImGui/GraphPanel/Private/GraphPanelNodeEditor.cpp
+  - Docs/VisualScriptingBlueprintPlan.md
+  - Docs/GraphPanel.md
+- 배경 및 원인:
+  - 기존 `imnodes` 기반 노드 에디터는 단일 세로 루프로 핀을 렌더링하여 `Exec In`이 상단에, `Exec Out`과 `Result`가 최하단에 배치되면서 다음 노드로 연결할 때 와이어가 우하향 계단식으로 늘어지는 UX 문제가 발생했다.
+  - 언리얼 엔진 블루프린트 수준의 줌/패닝, 실행선 펄스 애니메이션, 노드 그룹화(코멘트 상자)를 지원하기 위해 전문 프레임워크인 `imgui-node-editor`로 전환을 결정했다.
+- 구현 내용:
+  - **빌드 시스템 전환:** CMake `FetchContent`를 통해 `imgui-node-editor` (Thedmd) 소스를 가져오고 `ThirdParty` 타깃으로 구성하여 `Editor`에 링크.
+  - **수평 가로 흐름(Left-to-Right) 정립:** `Exec In`과 `Exec Out`을 최상단 행에 좌우로 마주보게 배치하고, 하단에 데이터 핀을 2열로 분할하여 세로 처짐 현상 제거.
+  - **밀착형 헤더 배경:** 노드 Bounding Box(`nodeMin` ~ `nodeMax`)를 계산하여 테두리 유격/빈틈 없이 외곽선에 100% 밀착되는 상단 둥근 헤더 채우기 및 노드 카테고리별 테마 색상(이벤트: 레드, 함수: 블루, 수학/순수: 그린, 변수: 청록/오렌지) 적용.
+  - **ImGui ID 충돌 해결:** 노드(`node.Id`) 및 핀(`pin.Key`) 단위 격리와 고유 접미사(`##ResetPin`, `##UsePin`)를 부여하여 "기본값으로 복원" 버튼의 ID duplicate 경고 해결.
+  - **툴팁 좌표계 정규화:** 캔버스 줌/패닝 변환에 의한 툴팁 튐 현상을 방지하기 위해 `ed::Suspend()` / `ed::Resume()` 래핑 적용.
+- 진행 중 / 후속 작업:
+  - **핀 아이콘 정밀 피벗 결합:** 와이어 연결점이 텍스트 블록이 아닌 아이콘(`●`, `▶`) 중심에 정확히 결합되도록 `ed::PinPivotAlignment(0.5, 0.5)` 적용.
+  - **코멘트 그룹 박스 (단축키 C):** `Core.Comment` 노드 정의 등록 및 `ed::Group(size)` 연동을 통해 선택된 노드들을 감싸는 반투명 그룹 박스 생성 및 일괄 이동/크기 조절 지원.
+  - **노드 자동 정렬 도구:** 다중 선택 후 `Shift + W/A/S/D` 수평/수직 정렬.
+
+---
+
 ## [2026-10-26] 콘텐츠 브라우저 행 클리핑과 메뉴 프레임 하락 완화
 
 - Area: Editor | UI
@@ -188,6 +260,37 @@ Use one entry per meaningful change.
 
 ---
 
+
+---
+
+## [2026-10-30] 노드 그래프 에디터의 imgui-node-editor 전환 및 블루프린트 룩앤필 고도화
+
+- Area: Editor | UI | Graph
+- Type: Feature | Refactor | UX
+- 관련 파일:
+  - Editor/CMake/NodeEditor.cmake
+  - Editor/CMakeLists.txt
+  - Editor/Source/ImGui/GraphPanel/Public/GraphPanel.h
+  - Editor/Source/ImGui/GraphPanel/Private/GraphPanel.cpp
+  - Editor/Source/ImGui/GraphPanel/Private/GraphPanelNodeEditor.cpp
+  - Docs/VisualScriptingBlueprintPlan.md
+  - Docs/GraphPanel.md
+- 배경 및 원인:
+  - 기존 `imnodes` 기반 노드 에디터는 단일 세로 루프로 핀을 렌더링하여 `Exec In`이 상단에, `Exec Out`과 `Result`가 최하단에 배치되면서 다음 노드로 연결할 때 와이어가 우하향 계단식으로 늘어지는 UX 문제가 발생했다.
+  - 언리얼 엔진 블루프린트 수준의 줌/패닝, 실행선 펄스 애니메이션, 노드 그룹화(코멘트 상자)를 지원하기 위해 전문 프레임워크인 `imgui-node-editor`로 전환을 결정했다.
+- 구현 내용:
+  - **빌드 시스템 전환:** CMake `FetchContent`를 통해 `imgui-node-editor` (Thedmd) 소스를 가져오고 `ThirdParty` 타깃으로 구성하여 `Editor`에 링크.
+  - **수평 가로 흐름(Left-to-Right) 정립:** `Exec In`과 `Exec Out`을 최상단 행에 좌우로 마주보게 배치하고, 하단에 데이터 핀을 2열로 분할하여 세로 처짐 현상 제거.
+  - **밀착형 헤더 배경:** 노드 Bounding Box(`nodeMin` ~ `nodeMax`)를 계산하여 테두리 유격/빈틈 없이 외곽선에 100% 밀착되는 상단 둥근 헤더 채우기 및 노드 카테고리별 테마 색상(이벤트: 레드, 함수: 블루, 수학/순수: 그린, 변수: 청록/오렌지) 적용.
+  - **ImGui ID 충돌 해결:** 노드(`node.Id`) 및 핀(`pin.Key`) 단위 격리와 고유 접미사(`##ResetPin`, `##UsePin`)를 부여하여 "기본값으로 복원" 버튼의 ID duplicate 경고 해결.
+  - **툴팁 좌표계 정규화:** 캔버스 줌/패닝 변환에 의한 툴팁 튐 현상을 방지하기 위해 `ed::Suspend()` / `ed::Resume()` 래핑 적용.
+- 진행 중 / 후속 작업:
+  - **핀 아이콘 정밀 피벗 결합:** 와이어 연결점이 텍스트 블록이 아닌 아이콘(`●`, `▶`) 중심에 정확히 결합되도록 `ed::PinPivotAlignment(0.5, 0.5)` 적용.
+  - **코멘트 그룹 박스 (단축키 C):** `Core.Comment` 노드 정의 등록 및 `ed::Group(size)` 연동을 통해 선택된 노드들을 감싸는 반투명 그룹 박스 생성 및 일괄 이동/크기 조절 지원.
+  - **노드 자동 정렬 도구:** 다중 선택 후 `Shift + W/A/S/D` 수평/수직 정렬.
+
+---
+
 ## 3. Example Entry
 
 ### [2026-07-01] Documented full technology map
@@ -206,6 +309,37 @@ Use one entry per meaningful change.
   - Keep this doc synced with actual code usage.
 - Validation:
   - Manual review against CMake and source files.
+
+---
+
+
+---
+
+## [2026-10-30] 노드 그래프 에디터의 imgui-node-editor 전환 및 블루프린트 룩앤필 고도화
+
+- Area: Editor | UI | Graph
+- Type: Feature | Refactor | UX
+- 관련 파일:
+  - Editor/CMake/NodeEditor.cmake
+  - Editor/CMakeLists.txt
+  - Editor/Source/ImGui/GraphPanel/Public/GraphPanel.h
+  - Editor/Source/ImGui/GraphPanel/Private/GraphPanel.cpp
+  - Editor/Source/ImGui/GraphPanel/Private/GraphPanelNodeEditor.cpp
+  - Docs/VisualScriptingBlueprintPlan.md
+  - Docs/GraphPanel.md
+- 배경 및 원인:
+  - 기존 `imnodes` 기반 노드 에디터는 단일 세로 루프로 핀을 렌더링하여 `Exec In`이 상단에, `Exec Out`과 `Result`가 최하단에 배치되면서 다음 노드로 연결할 때 와이어가 우하향 계단식으로 늘어지는 UX 문제가 발생했다.
+  - 언리얼 엔진 블루프린트 수준의 줌/패닝, 실행선 펄스 애니메이션, 노드 그룹화(코멘트 상자)를 지원하기 위해 전문 프레임워크인 `imgui-node-editor`로 전환을 결정했다.
+- 구현 내용:
+  - **빌드 시스템 전환:** CMake `FetchContent`를 통해 `imgui-node-editor` (Thedmd) 소스를 가져오고 `ThirdParty` 타깃으로 구성하여 `Editor`에 링크.
+  - **수평 가로 흐름(Left-to-Right) 정립:** `Exec In`과 `Exec Out`을 최상단 행에 좌우로 마주보게 배치하고, 하단에 데이터 핀을 2열로 분할하여 세로 처짐 현상 제거.
+  - **밀착형 헤더 배경:** 노드 Bounding Box(`nodeMin` ~ `nodeMax`)를 계산하여 테두리 유격/빈틈 없이 외곽선에 100% 밀착되는 상단 둥근 헤더 채우기 및 노드 카테고리별 테마 색상(이벤트: 레드, 함수: 블루, 수학/순수: 그린, 변수: 청록/오렌지) 적용.
+  - **ImGui ID 충돌 해결:** 노드(`node.Id`) 및 핀(`pin.Key`) 단위 격리와 고유 접미사(`##ResetPin`, `##UsePin`)를 부여하여 "기본값으로 복원" 버튼의 ID duplicate 경고 해결.
+  - **툴팁 좌표계 정규화:** 캔버스 줌/패닝 변환에 의한 툴팁 튐 현상을 방지하기 위해 `ed::Suspend()` / `ed::Resume()` 래핑 적용.
+- 진행 중 / 후속 작업:
+  - **핀 아이콘 정밀 피벗 결합:** 와이어 연결점이 텍스트 블록이 아닌 아이콘(`●`, `▶`) 중심에 정확히 결합되도록 `ed::PinPivotAlignment(0.5, 0.5)` 적용.
+  - **코멘트 그룹 박스 (단축키 C):** `Core.Comment` 노드 정의 등록 및 `ed::Group(size)` 연동을 통해 선택된 노드들을 감싸는 반투명 그룹 박스 생성 및 일괄 이동/크기 조절 지원.
+  - **노드 자동 정렬 도구:** 다중 선택 후 `Shift + W/A/S/D` 수평/수직 정렬.
 
 ---
 
@@ -237,6 +371,37 @@ Use one entry per meaningful change.
   - Option A: mark inactive backends/subsystems as planned and document status explicitly.
   - Option B: remove inactive code/dependencies until backend integration starts.
   - Add backend support matrix to README and keep this log updated per release.
+
+---
+
+
+---
+
+## [2026-10-30] 노드 그래프 에디터의 imgui-node-editor 전환 및 블루프린트 룩앤필 고도화
+
+- Area: Editor | UI | Graph
+- Type: Feature | Refactor | UX
+- 관련 파일:
+  - Editor/CMake/NodeEditor.cmake
+  - Editor/CMakeLists.txt
+  - Editor/Source/ImGui/GraphPanel/Public/GraphPanel.h
+  - Editor/Source/ImGui/GraphPanel/Private/GraphPanel.cpp
+  - Editor/Source/ImGui/GraphPanel/Private/GraphPanelNodeEditor.cpp
+  - Docs/VisualScriptingBlueprintPlan.md
+  - Docs/GraphPanel.md
+- 배경 및 원인:
+  - 기존 `imnodes` 기반 노드 에디터는 단일 세로 루프로 핀을 렌더링하여 `Exec In`이 상단에, `Exec Out`과 `Result`가 최하단에 배치되면서 다음 노드로 연결할 때 와이어가 우하향 계단식으로 늘어지는 UX 문제가 발생했다.
+  - 언리얼 엔진 블루프린트 수준의 줌/패닝, 실행선 펄스 애니메이션, 노드 그룹화(코멘트 상자)를 지원하기 위해 전문 프레임워크인 `imgui-node-editor`로 전환을 결정했다.
+- 구현 내용:
+  - **빌드 시스템 전환:** CMake `FetchContent`를 통해 `imgui-node-editor` (Thedmd) 소스를 가져오고 `ThirdParty` 타깃으로 구성하여 `Editor`에 링크.
+  - **수평 가로 흐름(Left-to-Right) 정립:** `Exec In`과 `Exec Out`을 최상단 행에 좌우로 마주보게 배치하고, 하단에 데이터 핀을 2열로 분할하여 세로 처짐 현상 제거.
+  - **밀착형 헤더 배경:** 노드 Bounding Box(`nodeMin` ~ `nodeMax`)를 계산하여 테두리 유격/빈틈 없이 외곽선에 100% 밀착되는 상단 둥근 헤더 채우기 및 노드 카테고리별 테마 색상(이벤트: 레드, 함수: 블루, 수학/순수: 그린, 변수: 청록/오렌지) 적용.
+  - **ImGui ID 충돌 해결:** 노드(`node.Id`) 및 핀(`pin.Key`) 단위 격리와 고유 접미사(`##ResetPin`, `##UsePin`)를 부여하여 "기본값으로 복원" 버튼의 ID duplicate 경고 해결.
+  - **툴팁 좌표계 정규화:** 캔버스 줌/패닝 변환에 의한 툴팁 튐 현상을 방지하기 위해 `ed::Suspend()` / `ed::Resume()` 래핑 적용.
+- 진행 중 / 후속 작업:
+  - **핀 아이콘 정밀 피벗 결합:** 와이어 연결점이 텍스트 블록이 아닌 아이콘(`●`, `▶`) 중심에 정확히 결합되도록 `ed::PinPivotAlignment(0.5, 0.5)` 적용.
+  - **코멘트 그룹 박스 (단축키 C):** `Core.Comment` 노드 정의 등록 및 `ed::Group(size)` 연동을 통해 선택된 노드들을 감싸는 반투명 그룹 박스 생성 및 일괄 이동/크기 조절 지원.
+  - **노드 자동 정렬 도구:** 다중 선택 후 `Shift + W/A/S/D` 수평/수직 정렬.
 
 ---
 
@@ -383,6 +548,37 @@ Use this as the primary execution list until a playable 2D vertical slice is com
 - [ ] Any data format change has migration notes
 - [ ] README architecture sections remain synchronized
 - [ ] A new ImplementationLog entry is added for each merged milestone
+
+---
+
+
+---
+
+## [2026-10-30] 노드 그래프 에디터의 imgui-node-editor 전환 및 블루프린트 룩앤필 고도화
+
+- Area: Editor | UI | Graph
+- Type: Feature | Refactor | UX
+- 관련 파일:
+  - Editor/CMake/NodeEditor.cmake
+  - Editor/CMakeLists.txt
+  - Editor/Source/ImGui/GraphPanel/Public/GraphPanel.h
+  - Editor/Source/ImGui/GraphPanel/Private/GraphPanel.cpp
+  - Editor/Source/ImGui/GraphPanel/Private/GraphPanelNodeEditor.cpp
+  - Docs/VisualScriptingBlueprintPlan.md
+  - Docs/GraphPanel.md
+- 배경 및 원인:
+  - 기존 `imnodes` 기반 노드 에디터는 단일 세로 루프로 핀을 렌더링하여 `Exec In`이 상단에, `Exec Out`과 `Result`가 최하단에 배치되면서 다음 노드로 연결할 때 와이어가 우하향 계단식으로 늘어지는 UX 문제가 발생했다.
+  - 언리얼 엔진 블루프린트 수준의 줌/패닝, 실행선 펄스 애니메이션, 노드 그룹화(코멘트 상자)를 지원하기 위해 전문 프레임워크인 `imgui-node-editor`로 전환을 결정했다.
+- 구현 내용:
+  - **빌드 시스템 전환:** CMake `FetchContent`를 통해 `imgui-node-editor` (Thedmd) 소스를 가져오고 `ThirdParty` 타깃으로 구성하여 `Editor`에 링크.
+  - **수평 가로 흐름(Left-to-Right) 정립:** `Exec In`과 `Exec Out`을 최상단 행에 좌우로 마주보게 배치하고, 하단에 데이터 핀을 2열로 분할하여 세로 처짐 현상 제거.
+  - **밀착형 헤더 배경:** 노드 Bounding Box(`nodeMin` ~ `nodeMax`)를 계산하여 테두리 유격/빈틈 없이 외곽선에 100% 밀착되는 상단 둥근 헤더 채우기 및 노드 카테고리별 테마 색상(이벤트: 레드, 함수: 블루, 수학/순수: 그린, 변수: 청록/오렌지) 적용.
+  - **ImGui ID 충돌 해결:** 노드(`node.Id`) 및 핀(`pin.Key`) 단위 격리와 고유 접미사(`##ResetPin`, `##UsePin`)를 부여하여 "기본값으로 복원" 버튼의 ID duplicate 경고 해결.
+  - **툴팁 좌표계 정규화:** 캔버스 줌/패닝 변환에 의한 툴팁 튐 현상을 방지하기 위해 `ed::Suspend()` / `ed::Resume()` 래핑 적용.
+- 진행 중 / 후속 작업:
+  - **핀 아이콘 정밀 피벗 결합:** 와이어 연결점이 텍스트 블록이 아닌 아이콘(`●`, `▶`) 중심에 정확히 결합되도록 `ed::PinPivotAlignment(0.5, 0.5)` 적용.
+  - **코멘트 그룹 박스 (단축키 C):** `Core.Comment` 노드 정의 등록 및 `ed::Group(size)` 연동을 통해 선택된 노드들을 감싸는 반투명 그룹 박스 생성 및 일괄 이동/크기 조절 지원.
+  - **노드 자동 정렬 도구:** 다중 선택 후 `Shift + W/A/S/D` 수평/수직 정렬.
 
 ---
 
