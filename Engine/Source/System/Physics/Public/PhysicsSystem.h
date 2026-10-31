@@ -16,6 +16,14 @@ struct ENGINE_API SceneRaycastHit
 	HitResult Hit;
 };
 
+struct ENGINE_API RaycastQuery
+{
+	f32 maxDistance = FLT_MAX;
+	uint32 layerMask = 0xFFFFFFFFu;
+	bool includeTrigger = false;
+	entt::entity ignoreEntity = entt::null;
+};
+
 class ENGINE_API PhysicsSystem : public ISystem
 {
 private:
@@ -33,7 +41,20 @@ public:
 	static std::span<const TriggerEvent> GetTriggerEvents2D(const Scene& scene);
 	static void ResetTriggerState2D(Scene& scene);
 public:
-	static bool Raycast(const Scene& scene, const Ray& ray, SceneRaycastHit& outHit, f32 maxDistance = FLT_MAX);
-	static std::vector<SceneRaycastHit> RaycastAll(const Scene& scene, const Ray& ray, f32 maxDistance = FLT_MAX);
+	static bool Raycast(const Scene& scene, const Ray& ray, SceneRaycastHit& outHit, const RaycastQuery& query);
+	static std::vector<SceneRaycastHit> RaycastAll(const Scene& scene, const Ray& ray, const RaycastQuery& query);
+	// 기존 호출부 하위 호환 오버로드
+	static bool Raycast(const Scene& scene, const Ray& ray, SceneRaycastHit& outHit, f32 maxDistance = FLT_MAX)
+	{
+		RaycastQuery query{};
+		query.maxDistance = maxDistance;
+		return Raycast(scene, ray, outHit, query);
+	}
+	static std::vector<SceneRaycastHit> RaycastAll(const Scene& scene, const Ray& ray, f32 maxDistance = FLT_MAX)
+	{
+		RaycastQuery query{};
+		query.maxDistance = maxDistance;
+		return RaycastAll(scene, ray, query);
+	}
 };
 END

@@ -606,74 +606,148 @@ void PhysicsSystem::ResetTriggerState2D(Scene& scene)
 #pragma endregion
 
 #pragma region Raycast
-bool PhysicsSystem::Raycast(const Scene& scene, const Ray& ray, SceneRaycastHit& outHit, f32 maxDistance)
+namespace
 {
-    const auto allHits = RaycastAll(scene, ray, maxDistance);
-    if (allHits.empty()) return false;
-    outHit = allHits.front();
-    return true;
-}
-std::vector<SceneRaycastHit> PhysicsSystem::RaycastAll(const Scene& scene, const Ray& ray, f32 maxDistance)
-{
-    std::vector<SceneRaycastHit> results;
-    const auto& world = scene.GetRegistry();
-    // 1. 3D ColliderComponent 순회
-    auto view = world.view<ColliderComponent, WorldTransformComponent>();
-    for (auto entity : view)
+    inline bool PassRaycastFilter(const entt::registry& world, entt::entity entity,
+        const Engine::ColliderSettings& settings, const Engine::RaycastQuery& query)
     {
-        const auto* flag = world.try_get<FlagComponent>(entity);
-        if (flag && (!flag->IsActive() || HasFlag(flag->flags, EEntityFlag::Paused) || HasFlag(flag->flags, EEntityFlag::Dead)))
-            continue;
-        const auto& collider = view.get<ColliderComponent>(entity);
-        if (!collider.GetSettings().Enabled)
-            continue;
-        const auto& worldTransform = view.get<WorldTransformComponent>(entity);
-        const mat4 colliderWorld = worldTransform.worldMatrix * glm::translate(mat4(1.0f), collider.GetOffset());
-        HitResult tempHit{};
-        bool hitFound = false;
-        if (const auto* box = std::get_if<BoxShape>(&collider.GetShape()))
+        if (entity == query.ignoreEntity) return false;
+        if (!settings.Enabled) return false;
+        if (!query.includeTrigger && settings.IsTrigger) return false;
+        if ((settings.CollisionLayer & query.layerMask) == 0) return false;
+        const auto* flag = world.try_get<Engine::FlagComponent>(entity);
+        if (flag && (!flag->IsActive() || HasFlag(flag->flags, Engine::EEntityFlag::Paused) ||
+            HasFlag(flag->flags, Engine::EEntityFlag::Dead)))
         {
-            if (box->HasValidParameters())
-            {
-                const BoundingBox b(vec3(0.0f), box->Size * 0.5f);
-                hitFound = Collision::Raycast(ray, b, colliderWorld, tempHit, maxDistance);
-            }
+            return false;
         }
-        else if (const auto* sphere = std::get_if<SphereShape>(&collider.GetShape()))
+        return true;
+    }
+    inline bool TestColliderHit(const Engine::Ray& ray, const Engine::ColliderComponent& collider,
+        const glm::mat4& worldMatrix, float testDistance, Engine::HitResult& outHit)
+    {
+        const glm::mat4 colliderWorld = worldMatrix * glm::translate(glm::mat4(1.0f), collider.GetOffset());
+        if (const auto* box = std::get_if<Engine::BoxShape>(&collider.GetShape()))
         {
-            if (sphere->HasValidParameters())
-            {
-                const vec3 worldCenter = vec3(colliderWorld[3]);
-                const BoundingSphere s(worldCenter, sphere->Radius);
-                hitFound = Collision::Raycast(ray, s, tempHit, maxDistance);
-            }
+            if (!box->HasValidParameters()) return false;
+            const Engine::BoundingBox b(Engine::vec3(0.0f), box->Size * 0.5f);
+            return Engine::Collision::Raycast(ray, b, colliderWorld, outHit, testDistance);
         }
-        else if (const auto* meshShape = std::get_if<MeshShape>(&collider.GetShape()))
+        if (const auto* sphere = std::get_if<Engine::SphereShape>(&collider.GetShape()))
+        {
+            if (!sphere->HasValidParameters()) return false;
+            const Engine::vec3 worldCenter = Engine::vec3(colliderWorld[3]);
+            const Engine::BoundingSphere s(worldCenter, sphere->Radius);
+            return Engine::Collision::Raycast(ray, s, outHit, testDistance);
+        }
+        if (const auto* meshShape = std::get_if<Engine::MeshShape>(&collider.GetShape()))
         {
             if (meshShape->HasMesh())
             {
                 if (auto* mesh = meshShape->MeshHandle.Get())
-                    hitFound = Collision::Raycast(ray, *mesh, colliderWorld, tempHit, maxDistance);
+                    return Engine::Collision::Raycast(ray, *mesh, colliderWorld, outHit, testDistance);
             }
         }
-        if (hitFound && tempHit.hasHit && tempHit.distance <= maxDistance)
+        return false;
+    }
+}
+bool PhysicsSystem::Raycast(const Scene& scene, const Ray& ray, SceneRaycastHit& outHit, const RaycastQuery& query)
+{
+    if (query.maxDistance <= 0.0f || !std::isfinite(query.maxDistance)) return false;
+    const float dirLenSq = glm::dot(ray.direction, ray.direction);
+    if (!std::isfinite(dirLenSq) || dirLenSq <= 1.0e-6f) return false;
+    const auto& world = scene.GetRegistry();
+    float closestDistance = query.maxDistance;
+    bool hasHit = false;
+    SceneRaycastHit bestHit{};
+    // 1. 3D ColliderComponent 순회 (거리 컷오프 조기 탈출)
+    auto view = world.view<ColliderComponent, WorldTransformComponent>();
+    for (auto entity : view)
+    {
+        const auto& collider = view.get<ColliderComponent>(entity);
+        if (!PassRaycastFilter(world, entity, collider.GetSettings(), query)) continue;
+        const auto& worldTransform = view.get<WorldTransformComponent>(entity);
+        HitResult tempHit{};
+        if (TestColliderHit(ray, collider, worldTransform.worldMatrix, closestDistance, tempHit))
         {
-            results.push_back({ entity, tempHit });
+            if (tempHit.hasHit && tempHit.distance < closestDistance)
+            {
+                closestDistance = tempHit.distance;
+                bestHit = { entity, tempHit };
+                hasHit = true;
+            }
         }
     }
     // 2. TerrainComponent 지형 순회
     auto terrainView = world.view<TerrainComponent, WorldTransformComponent>();
     for (auto entity : terrainView)
     {
+        if (entity == query.ignoreEntity) continue;
         const auto* flag = world.try_get<FlagComponent>(entity);
-        if (flag && (!flag->IsActive() || HasFlag(flag->flags, EEntityFlag::Paused) || HasFlag(flag->flags, EEntityFlag::Dead)))
+        if (flag && (!flag->IsActive() || HasFlag(flag->flags, EEntityFlag::Paused) ||
+            HasFlag(flag->flags, EEntityFlag::Dead)))
+        {
             continue;
+        }
         const auto& terrain = terrainView.get<TerrainComponent>(entity);
         const auto& worldTransform = terrainView.get<WorldTransformComponent>(entity);
         HitResult terrainHit{};
-        if (Collision::Raycast(ray, terrain, worldTransform.worldMatrix, terrainHit, maxDistance) && terrainHit.hasHit)
+        if (Collision::Raycast(ray, terrain, worldTransform.worldMatrix, terrainHit, closestDistance))
         {
-            results.push_back({ entity, terrainHit });
+            if (terrainHit.hasHit && terrainHit.distance < closestDistance)
+            {
+                closestDistance = terrainHit.distance;
+                bestHit = { entity, terrainHit };
+                hasHit = true;
+            }
+        }
+    }
+    if (hasHit)
+    {
+        outHit = bestHit;
+        return true;
+    }
+    return false;
+}
+std::vector<SceneRaycastHit> PhysicsSystem::RaycastAll(const Scene& scene, const Ray& ray, const RaycastQuery& query)
+{
+    if (query.maxDistance <= 0.0f || !std::isfinite(query.maxDistance)) return {};
+    const float dirLenSq = glm::dot(ray.direction, ray.direction);
+    if (!std::isfinite(dirLenSq) || dirLenSq <= 1.0e-6f) return {};
+    std::vector<SceneRaycastHit> results;
+    const auto& world = scene.GetRegistry();
+    // 1. 3D ColliderComponent 순회
+    auto view = world.view<ColliderComponent, WorldTransformComponent>();
+    for (auto entity : view)
+    {
+        const auto& collider = view.get<ColliderComponent>(entity);
+        if (!PassRaycastFilter(world, entity, collider.GetSettings(), query)) continue;
+        const auto& worldTransform = view.get<WorldTransformComponent>(entity);
+        HitResult tempHit{};
+        if (TestColliderHit(ray, collider, worldTransform.worldMatrix, query.maxDistance, tempHit))
+        {
+            if (tempHit.hasHit && tempHit.distance <= query.maxDistance)
+                results.push_back({ entity, tempHit });
+        }
+    }
+    // 2. TerrainComponent 지형 순회
+    auto terrainView = world.view<TerrainComponent, WorldTransformComponent>();
+    for (auto entity : terrainView)
+    {
+        if (entity == query.ignoreEntity) continue;
+        const auto* flag = world.try_get<FlagComponent>(entity);
+        if (flag && (!flag->IsActive() || HasFlag(flag->flags, EEntityFlag::Paused) ||
+            HasFlag(flag->flags, EEntityFlag::Dead)))
+        {
+            continue;
+        }
+        const auto& terrain = terrainView.get<TerrainComponent>(entity);
+        const auto& worldTransform = terrainView.get<WorldTransformComponent>(entity);
+        HitResult terrainHit{};
+        if (Collision::Raycast(ray, terrain, worldTransform.worldMatrix, terrainHit, query.maxDistance))
+        {
+            if (terrainHit.hasHit && terrainHit.distance <= query.maxDistance)
+                results.push_back({ entity, terrainHit });
         }
     }
     // 3. 가장 가까운 거리 순으로 정렬

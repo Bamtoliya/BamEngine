@@ -96,17 +96,21 @@ void MeshRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& 
                 const float coverage = glm::clamp((worldRadius * projY) / distance, 0.0f, 1.0f);
                 const float margin = lodGroup->hysteresisMargin;
                 const int32 current = lodGroup->currentLODIndex;
+
                 float lod2Thresh = lodGroup->lod2ScreenCoverage;
                 if (current == 2) lod2Thresh += margin;
                 float lod1Thresh = lodGroup->lod1ScreenCoverage;
                 if (current == 1) lod1Thresh += (coverage < lod1Thresh ? -margin : margin);
+
                 int32 targetLOD = 0;
                 if (lodGroup->lod2Mesh.Get() && coverage <= lod2Thresh)
                     targetLOD = 2;
                 else if (lodGroup->lod1Mesh.Get() && coverage <= lod1Thresh)
                     targetLOD = 1;
-                // 주 뷰포트 카메라 기준일 때만 영속 상태를 갱신
+
+                // 주 에디터 뷰포트 카메라 기준일 때만 컴포넌트의 영속 상태 갱신
                 lodGroup->currentLODIndex = targetLOD;
+
                 if (targetLOD == 2 && lodGroup->lod2Mesh.Get())
                     mesh = lodGroup->lod2Mesh.Get();
                 else if (targetLOD == 1 && lodGroup->lod1Mesh.Get())

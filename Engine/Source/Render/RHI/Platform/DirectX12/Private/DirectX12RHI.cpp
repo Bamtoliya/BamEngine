@@ -268,8 +268,7 @@ void DirectX12RHI::Free()
 {
     if (m_CommandQueue && m_Fence && IsFailure(WaitForGPU()))
     {
-        ENGINE_LOG_ERROR("GPU synchronization failed during DirectX12RHI shutdown.");
-        std::terminate();
+        ENGINE_LOG_ERROR("GPU synchronization failed during DirectX12RHI shutdown. Proceeding with resource cleanup.");
     }
 
     for (auto& buffers : m_TextureUploadBuffers)
@@ -292,8 +291,7 @@ void DirectX12RHI::Free()
 
     if (!m_DeferredReleases.empty() && IsFailure(WaitForGPU()))
     {
-        ENGINE_LOG_ERROR("Deferred resource synchronization failed during DirectX12RHI shutdown.");
-        std::terminate();
+        ENGINE_LOG_ERROR("Deferred resource synchronization failed during DirectX12RHI shutdown. Clearing deferred list.");
     }
 
     Safe_Delete(m_RtvAllocator);
@@ -636,8 +634,11 @@ EResult DirectX12RHI::ReadTexturePixel(RHITexture* texture, uint32 x, uint32 y, 
 	ID3D12CommandList* lists[] = { list.Get() };
 	m_CommandQueue->ExecuteCommandLists(1, lists);
 	// Match the existing upload path: submitted resources must outlive the GPU copy.
-	if (FAILED(m_CommandQueue->Signal(fence.Get(), 1)) || FAILED(fence->SetEventOnCompletion(1, nullptr)))
-		std::terminate();
+    if (FAILED(m_CommandQueue->Signal(fence.Get(), 1)) || FAILED(fence->SetEventOnCompletion(1, nullptr)))
+    {
+        ENGINE_LOG_ERROR("DirectX12RHI::ReadTexturePixel failed to signal or wait on fence.");
+        return EResult::Fail;
+    }
 	if (FAILED(m_Device->GetDeviceRemovedReason())) return EResult::Fail;
 	void* data = nullptr;
 	const D3D12_RANGE readRange{ 0, sizeof(float) * 4 };
