@@ -103,9 +103,32 @@ bool GraphPanel::CompileShaderGraph(ERHIType target)
 	}
 }
 
+void GraphPanel::DrawShaderMenu()
+{
+	if (m_Domain != EGraphDomain::Shader) return;
+	if (!ImGui::BeginMenu(LOCAL_LABEL("GraphPanel.ShaderBuild").c_str())) return;
+	if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.GenerateHlsl").c_str()))
+		GenerateShaderSource();
+	if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.CheckDxil").c_str()))
+		CompileShaderGraph(ERHIType::DirectX12);
+	if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.CheckSpirv").c_str()))
+		CompileShaderGraph(ERHIType::Vulkan);
+	ImGui::Separator();
+	if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.PreviewShader").c_str()))
+		BuildShaderPreview();
+	if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.CheckMaterialDxil").c_str()))
+		CompileMaterialShader();
+	if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.CreateRuntimeMaterial").c_str()))
+		CreateRuntimeMaterial();
+	ImGui::EndMenu();
+}
+
 void GraphPanel::DrawShaderToolbar()
 {
 	if (m_Domain != EGraphDomain::Shader) return;
+
+	ImGui::TextColored(ImVec4(0.35f, 0.78f, 1.0f, 1.0f), "[Shader]");
+	ImGui::SameLine();
 
 	if (ImGui::Button(LOCAL_LABEL("GraphPanel.GenerateHlsl").c_str())) GenerateShaderSource();
 	ImGui::SameLine();
@@ -114,7 +137,11 @@ void GraphPanel::DrawShaderToolbar()
 	ImGui::SameLine();
 	if (ImGui::Button(LOCAL_LABEL("GraphPanel.CheckSpirv").c_str()))
 		CompileShaderGraph(ERHIType::Vulkan);
-	ImGui::SameLine();
+
+	ImGui::SameLine(0.0f, 12.0f);
+	ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
+	ImGui::SameLine(0.0f, 12.0f);
+
 	if (ImGui::Button(LOCAL_LABEL("GraphPanel.PreviewShader").c_str()))
 		BuildShaderPreview();
 	ImGui::SameLine();
@@ -124,7 +151,8 @@ void GraphPanel::DrawShaderToolbar()
 	if (ImGui::Button(LOCAL_LABEL("GraphPanel.CreateRuntimeMaterial").c_str()))
 		CreateRuntimeMaterial();
 
-	ImGui::TextDisabled("%s", LOCAL_CSTR("GraphPanel.ShaderCompileOnly"));
+	ImGui::SameLine();
+	ImGui::TextDisabled("(%s)", LOCAL_CSTR("GraphPanel.ShaderCompileOnly"));
 }
 
 void GraphPanel::DrawShaderBuildDetails()

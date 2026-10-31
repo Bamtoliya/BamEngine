@@ -121,21 +121,21 @@ void GraphPanel::Draw()
 	}
 	const string windowTitle = LOCAL("GraphPanel.Title") + "###GraphPanel";
 	ImGui::SetNextWindowSize(ImVec2(1000.0f, 650.0f), ImGuiCond_FirstUseEver);
-	if (ImGui::Begin(windowTitle.c_str(), &m_Open))
+	if (ImGui::Begin(windowTitle.c_str(), &m_Open, ImGuiWindowFlags_MenuBar))
 	{
 		m_Focused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
 		m_Hovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows);
 		if (m_Ready)
 		{
 			ActivateDocument();
+			// ── 윈도우 상단 드롭다운 메뉴바 ──
+			DrawMenuBar();
+			// ── 메뉴바 아래 단일 행 퀵 액세스 툴바 ──
 			DrawToolbar();
-			DrawFileToolbar();
-			DrawDebugToolbar();
-			DrawShaderToolbar();
-			DrawExecutionToolbar();
 			UpdateExecution();
 			UpdateLiveDebugging();
 			ImGui::Separator();
+
 			const float footerHeight = ImGui::GetTextLineHeightWithSpacing() * 2 +
 				ImGui::GetStyle().CellPadding.y * 2 + ImGui::GetStyle().ItemSpacing.y;
 			const float height = std::max(1.0f, ImGui::GetContentRegionAvail().y - footerHeight);
@@ -182,10 +182,94 @@ void GraphPanel::Draw()
 #pragma endregion
 
 #pragma region DrawUI
+void GraphPanel::DrawMenuBar()
+{
+	if (!ImGui::BeginMenuBar()) return;
+	// 1. [파일 (File)] 메뉴
+	if (ImGui::BeginMenu(LOCAL_LABEL("UI_FILE").c_str()))
+	{
+		if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.Open").c_str(), "Ctrl+O"))
+		{
+			if (GetDocument().Data.GetNodes().empty()) OpenDocument();
+			else ImGui::OpenPopup(LOCAL_LABEL("GraphPanel.ConfirmOpen").c_str());
+		}
+		if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.Save").c_str(), "Ctrl+S"))
+			SaveDocument(false);
+		if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.SaveAs").c_str(), "Ctrl+Shift+S"))
+			SaveDocument(true);
+		ImGui::EndMenu();
+	}
+	// 2. [편집 (Edit)] 메뉴
+	if (ImGui::BeginMenu(LOCAL_LABEL("UI_EDIT").c_str()))
+	{
+		if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.AddNode").c_str(), "Space"))
+		{
+			const auto mouse = InputManager::Get().GetScreenMousePosition();
+			m_AddPosition = ed::ScreenToCanvas(ImVec2(mouse.x, mouse.y));
+			PrepareNodeMenu();
+			m_OpenNodePopup = true;
+		}
+		const bool hasSelection = !GetDocument().SelectedNodes.empty() || !GetDocument().SelectedLinks.empty();
+		if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.Delete").c_str(), "Del", false, hasSelection))
+			DeleteSelection();
+		ImGui::Separator();
+		if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.Validate").c_str(), "F7"))
+			RefreshValidation();
+		ImGui::EndMenu();
+	}
+	// 3. [보기 (View)] 메뉴
+	if (ImGui::BeginMenu(LOCAL_LABEL("UI_WINDOW").c_str()))
+	{
+		if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.ResetView").c_str(), "F"))
+			ed::NavigateToContent(0.5f);
+		ImGui::Separator();
+		if (ImGui::BeginMenu(LOCAL_LABEL("GraphPanel.Connection").c_str()))
+		{
+			if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.WireElectronic").c_str(), nullptr, m_WireStyle == EWireStyle::ElectronicHybrid))
+				m_WireStyle = EWireStyle::ElectronicHybrid;
+			if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.WireStraight").c_str(), nullptr, m_WireStyle == EWireStyle::Straight))
+				m_WireStyle = EWireStyle::Straight;
+			if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.WireCurved").c_str(), nullptr, m_WireStyle == EWireStyle::Curved))
+				m_WireStyle = EWireStyle::Curved;
+			ImGui::EndMenu();
+		}
+		ImGui::EndMenu();
+	}
+	// 4. [모드 (Mode/Domain)] 메뉴
+	if (ImGui::BeginMenu(LOCAL_LABEL("GraphPanel.Title").c_str()))
+	{
+		if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.Logic").c_str(), nullptr, m_Domain == EGraphDomain::Logic))
+		{
+			if (m_Domain != EGraphDomain::Logic)
+			{
+				SuspendDocument();
+				m_Domain = EGraphDomain::Logic;
+				ActivateDocument();
+				m_LastDiagnostic = {};
+			}
+		}
+		if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.Shader").c_str(), nullptr, m_Domain == EGraphDomain::Shader))
+		{
+			if (m_Domain != EGraphDomain::Shader)
+			{
+				SuspendDocument();
+				m_Domain = EGraphDomain::Shader;
+				ActivateDocument();
+				m_LastDiagnostic = {};
+			}
+		}
+		ImGui::EndMenu();
+	}
+	// 5. 도메인별 전용 메뉴 (Logic: Debug, Shader: Build)
+	if (m_Domain == EGraphDomain::Logic) DrawExecutionMenu();
+	else if (m_Domain == EGraphDomain::Shader) DrawShaderMenu();
+	ImGui::EndMenuBar();
+}
 void GraphPanel::DrawToolbar()
 {
+	// ── 1줄 퀵 액세스 툴바: 도메인 콤보 + 핵심 빠른 실행 액션 + 파일명 ──
 	const char* domainKey = m_Domain == EGraphDomain::Logic ? "GraphPanel.Logic" : "GraphPanel.Shader";
-	ImGui::SetNextItemWidth(ImGui::GetFontSize() * 8.0f);
+	ImGui::SetNextItemWidth(ImGui::GetFontSize() * 7.5f);
 	if (ImGui::BeginCombo("##GraphDomain", LOCAL_CSTR(domainKey)))
 	{
 		const EGraphDomain domains[]{ EGraphDomain::Logic, EGraphDomain::Shader };
@@ -205,38 +289,20 @@ void GraphPanel::DrawToolbar()
 		ImGui::EndCombo();
 	}
 	ImGui::SameLine();
-	if (ImGui::Button(LOCAL_CSTR("GraphPanel.AddNode")))
+	ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
+	ImGui::SameLine();
+	// 도메인별 퀵 액션 라인
+	if (m_Domain == EGraphDomain::Logic)
 	{
-		const auto mouse = InputManager::Get().GetScreenMousePosition();
-		m_AddPosition = ed::ScreenToCanvas(ImVec2(mouse.x, mouse.y));
-		PrepareNodeMenu();
-		m_OpenNodePopup = true;
+		DrawExecutionToolbar();
+		DrawDebugToolbar();
+	}
+	else if (m_Domain == EGraphDomain::Shader)
+	{
+		DrawShaderToolbar();
 	}
 	ImGui::SameLine();
-	if (ImGui::Button(LOCAL_CSTR("GraphPanel.Validate"))) RefreshValidation();
-	ImGui::SameLine();
-	if (ImGui::Button(LOCAL_CSTR("GraphPanel.ResetView"))) ed::NavigateToContent(0.5f);
-	ImGui::SameLine();
-	ImGui::BeginDisabled(GetDocument().SelectedNodes.empty() && GetDocument().SelectedLinks.empty());
-	if (ImGui::Button(LOCAL_CSTR("GraphPanel.Delete"))) DeleteSelection();
-	ImGui::EndDisabled();
-	ImGui::SameLine();
-	const char* wireKey = m_WireStyle == EWireStyle::ElectronicHybrid ? "GraphPanel.WireElectronic" :
-		(m_WireStyle == EWireStyle::Straight ? "GraphPanel.WireStraight" : "GraphPanel.WireCurved");
-	const char* wireIcon = m_WireStyle == EWireStyle::ElectronicHybrid ? ICON_FA_BOLT :
-		(m_WireStyle == EWireStyle::Straight ? ICON_FA_MINUS : ICON_FA_BEZIER_CURVE);
-	const string wireBtnLabel = string(wireIcon) + " " + LOCAL(wireKey) + "###GraphWireStyle";
-	if (ImGui::Button(wireBtnLabel.c_str()))
-	{
-		int nextMode = (static_cast<int>(m_WireStyle) + 1) % 3;
-		m_WireStyle = static_cast<EWireStyle>(nextMode);
-	}
-	if (ImGui::IsItemHovered())
-	{
-		const char* tooltipKey = m_WireStyle == EWireStyle::ElectronicHybrid ? "GraphPanel.WireElectronicHint" :
-			(m_WireStyle == EWireStyle::Straight ? "GraphPanel.WireStraightHint" : "GraphPanel.WireCurvedHint");
-		ImGui::SetTooltip("%s", LOCAL_CSTR(tooltipKey));
-	}
+	DrawFileToolbar();
 }
 
 void GraphPanel::SaveDocument(bool saveAs)
@@ -420,21 +486,6 @@ GraphDiagnostic GraphPanel::BuildDocumentViews(GraphDocument& document)
 
 void GraphPanel::DrawFileToolbar()
 {
-	if (ImGui::Button(LOCAL_LABEL("GraphPanel.Save").c_str())) SaveDocument(false);
-	ImGui::SameLine();
-	if (ImGui::Button(LOCAL_LABEL("GraphPanel.SaveAs").c_str())) SaveDocument(true);
-
-	const auto& document = GetDocument();
-
-	ImGui::SameLine();
-	if (ImGui::Button(LOCAL_LABEL("GraphPanel.Open").c_str()))
-	{
-		if (GetDocument().Data.GetNodes().empty())
-			OpenDocument();
-		else
-			ImGui::OpenPopup(LOCAL_LABEL("GraphPanel.ConfirmOpen").c_str());
-	}
-
 	bool openRequested = false;
 	const ImVec2 center = ImGui::GetMainViewport()->GetCenter();
 	ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
@@ -458,61 +509,19 @@ void GraphPanel::DrawFileToolbar()
 		ImGui::EndPopup();
 	}
 	if (openRequested) OpenDocument();
-
-	ImGui::SameLine();
-
-	const std::string pathText = document.FilePath.empty()
+	const auto& document = GetDocument();
+	const std::string filenameText = document.FilePath.empty()
 		? LOCAL("GraphPanel.NoFile")
-		: LOCAL_FMT("GraphPanel.FilePath", WStrToStr(document.FilePath.wstring()));
-
-	ImGui::TextDisabled("%s", pathText.c_str());
-	if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", pathText.c_str());
-
-	const auto& result = document.FileResult;
-	if (result.Succeeded()) return;
-
-	const char* stageKey = "GraphPanel.FileStageUnknown";
-	switch (result.Stage)
-	{
-	case EGraphFileStage::Validate: stageKey = "GraphPanel.FileStageValidate"; break;
-	case EGraphFileStage::Serialize: stageKey = "GraphPanel.FileStageSerialize"; break;
-	case EGraphFileStage::Read: stageKey = "GraphPanel.FileStageRead"; break;
-	case EGraphFileStage::Deserialize: stageKey = "GraphPanel.FileStageDeserialize"; break;
-	case EGraphFileStage::Write: stageKey = "GraphPanel.FileStageWrite"; break;
-	case EGraphFileStage::Replace: stageKey = "GraphPanel.FileStageReplace"; break;
-	default: break;
-	}
-
-	const auto message = LOCAL_FMT("GraphPanel.FileFailed", LOCAL(stageKey));
-	ImGui::TextColored(ImVec4(1.0f, 0.45f, 0.35f, 1.0f), "%s", message.c_str());
-
+		: WStrToStr(document.FilePath.filename().wstring());
+	ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
+	ImGui::SameLine();
+	ImGui::TextDisabled("[%s]", filenameText.c_str());
 	if (ImGui::IsItemHovered())
 	{
-		ImGui::BeginTooltip();
-
-		if (!result.ArchiveError)
-		{
-			const auto detail = LOCAL_FMT("GraphPanel.ArchiveErrorDetail",
-				static_cast<int>(result.ArchiveError.Code), result.ArchiveError.Field);
-			ImGui::TextWrapped("%s", detail.c_str());
-		}
-
-		if (!result.GraphError.Succeeded())
-		{
-			const auto detail = LOCAL_FMT("GraphPanel.GraphErrorDetail",
-				static_cast<int>(result.GraphError.Code), result.GraphError.Node,
-				result.GraphError.Pin, LocalizeGraphMessage(result.GraphError.Message));
-			ImGui::TextWrapped("%s", detail.c_str());
-		}
-
-		if (result.SystemError)
-		{
-			const auto detail = LOCAL_FMT("GraphPanel.SystemErrorDetail",
-				result.SystemError.value(), result.SystemError.message());
-			ImGui::TextWrapped("%s", detail.c_str());
-		}
-
-		ImGui::EndTooltip();
+		const std::string fullPathText = document.FilePath.empty()
+			? LOCAL("GraphPanel.NoFile")
+			: LOCAL_FMT("GraphPanel.FilePath", WStrToStr(document.FilePath.wstring()));
+		ImGui::SetTooltip("%s", fullPathText.c_str());
 	}
 }
 

@@ -74,6 +74,7 @@ private:
 
 #pragma region DrawUI
 private:
+	void DrawMenuBar();
 	void DrawToolbar();
 	void DrawFileToolbar();
 	void SaveDocument(bool saveAs);
@@ -82,6 +83,8 @@ private:
 	void DrawDebugToolbar();
 	void UpdateLiveDebugging();
 	void DrawExecutionToolbar();
+	void DrawExecutionMenu();
+	void DrawShaderMenu();
 	void DrawExecutionTrace();
 	void BeginExecution();
 	void UpdateExecution();

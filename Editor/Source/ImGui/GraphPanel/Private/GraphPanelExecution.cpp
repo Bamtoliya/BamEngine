@@ -35,6 +35,11 @@ void GraphPanel::BeginExecution()
 void GraphPanel::DrawExecutionToolbar()
 {
 	if (m_Domain != EGraphDomain::Logic) return;
+
+	// ── 2행 구획 A: 실행 미리보기 (Preview) ──
+	ImGui::TextColored(ImVec4(0.35f, 0.78f, 1.0f, 1.0f), "[%s]", LOCAL_CSTR("GraphPanel.ExecutionTrace"));
+	ImGui::SameLine();
+
 	const auto state = m_Executor.GetState();
 	const bool busy = state == EGraphExecutionState::Running || state == EGraphExecutionState::Paused;
 	const auto* entry = m_Logic.Data.FindNode(m_EntryNode);
@@ -45,8 +50,9 @@ void GraphPanel::DrawExecutionToolbar()
 			if (node.Type == "Event.Start" || node.Type == "Event.Update") { m_EntryNode = node.Id; break; }
 		entry = m_Logic.Data.FindNode(m_EntryNode);
 	}
+
 	ImGui::BeginDisabled(busy);
-	ImGui::SetNextItemWidth(ImGui::GetFontSize() * 14.0f);
+	ImGui::SetNextItemWidth(ImGui::GetFontSize() * 12.0f);
 	const string preview = entry ? fmt::format("{} #{}", entry->Type, entry->Id) : LOCAL("GraphPanel.NoEntry");
 	if (ImGui::BeginCombo("##GraphEntry", preview.c_str()))
 	{
@@ -59,6 +65,7 @@ void GraphPanel::DrawExecutionToolbar()
 		ImGui::EndCombo();
 	}
 	ImGui::EndDisabled();
+
 	ImGui::SameLine();
 	ImGui::BeginDisabled(!entry || state == EGraphExecutionState::Running);
 	if (ImGui::Button(LOCAL_CSTR("GraphPanel.Run")))
@@ -67,10 +74,12 @@ void GraphPanel::DrawExecutionToolbar()
 		if (m_LastDiagnostic.Succeeded()) { m_Executor.Resume(); m_FollowTrace = true; }
 	}
 	ImGui::EndDisabled();
+
 	ImGui::SameLine();
 	ImGui::BeginDisabled(state != EGraphExecutionState::Running);
 	if (ImGui::Button(LOCAL_CSTR("GraphPanel.Pause"))) m_Executor.Pause();
 	ImGui::EndDisabled();
+
 	ImGui::SameLine();
 	ImGui::BeginDisabled(!entry);
 	if (ImGui::Button(LOCAL_CSTR("GraphPanel.Step")))
@@ -81,10 +90,12 @@ void GraphPanel::DrawExecutionToolbar()
 		m_FollowTrace = true;
 	}
 	ImGui::EndDisabled();
+
 	ImGui::SameLine();
 	ImGui::BeginDisabled(!busy);
 	if (ImGui::Button(LOCAL_CSTR("GraphPanel.Stop"))) m_Executor.Stop();
 	ImGui::EndDisabled();
+
 	ImGui::SameLine();
 	if (ImGui::Button(LOCAL_CSTR("GraphPanel.ResetInstance")))
 	{
@@ -201,12 +212,49 @@ void GraphPanel::DrawExecutionTrace()
 	ImGui::TextWrapped("%s", LOCAL_CSTR("GraphPanel.PreviewScope"));
 }
 
+void GraphPanel::DrawExecutionMenu()
+{
+	if (m_Domain != EGraphDomain::Logic) return;
+	if (!ImGui::BeginMenu(LOCAL_LABEL("UI_DEBUG").c_str())) return;
+	const auto state = m_Executor.GetState();
+	const bool busy = (state == EGraphExecutionState::Running || state == EGraphExecutionState::Paused);
+	const auto* entry = m_Logic.Data.FindNode(m_EntryNode);
+	if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.Run").c_str(), "F5", false, entry != nullptr && state != EGraphExecutionState::Running))
+	{
+		if (state != EGraphExecutionState::Paused) BeginExecution();
+		if (m_LastDiagnostic.Succeeded()) { m_Executor.Resume(); m_FollowTrace = true; }
+	}
+	if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.Pause").c_str(), "F6", false, state == EGraphExecutionState::Running))
+		m_Executor.Pause();
+	if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.Step").c_str(), "F10", false, entry != nullptr))
+	{
+		if (!busy) BeginExecution();
+		m_Executor.Pause();
+		m_Executor.Step();
+		m_FollowTrace = true;
+	}
+	if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.Stop").c_str(), "Shift+F5", false, busy))
+		m_Executor.Stop();
+	ImGui::Separator();
+	if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.ResetInstance").c_str()))
+	{
+		InvalidateExecution();
+		m_LastDiagnostic = {};
+	}
+	ImGui::EndMenu();
+}
 void GraphPanel::DrawDebugToolbar()
 {
 	if (m_Domain != Engine::EGraphDomain::Logic) return;
-	ImGui::SameLine();
+
+	ImGui::SameLine(0.0f, 12.0f);
 	ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
+	ImGui::SameLine(0.0f, 12.0f);
+
+	// ── 2행 구획 B: PIE 라이브 디버그 관찰 ──
+	ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.3f, 1.0f), "[PIE]");
 	ImGui::SameLine();
+
 	auto* scene = SceneManager::IsCreated() ? SceneManager::Get().GetCurrentScene() : nullptr;
 	std::string previewName = LOCAL("GraphPanel.DebugNone");
 	if (scene && scene->GetRegistry().valid(m_DebugEntity))
@@ -221,6 +269,7 @@ void GraphPanel::DrawDebugToolbar()
 	{
 		m_DebugEntity = entt::null;
 	}
+
 	ImGui::SetNextItemWidth(ImGui::GetFontSize() * 15.0f);
 	if (ImGui::BeginCombo("##DebugEntity", previewName.c_str()))
 	{
@@ -258,9 +307,7 @@ void GraphPanel::DrawDebugToolbar()
 		ImGui::EndCombo();
 	}
 	if (ImGui::IsItemHovered())
-	{
 		ImGui::SetTooltip("%s", LOCAL_CSTR("GraphPanel.DebugEntityHint"));
-	}
 }
 void GraphPanel::UpdateLiveDebugging()
 {
