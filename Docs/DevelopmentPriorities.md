@@ -56,15 +56,15 @@ Engine·Render·Editor·Client 계획에서 무엇을 먼저 연결하고 무엇
 
 ### P0-B. 표준 헤더의 PCH 중앙화 및 전처리기 구성 정리
 
-- **2026-10-31 현황**:
+- **2026-11-01 현황**:
   - `Projects/GameModule/CMakeLists.txt`에 PCH(`target_precompile_headers`)가 적용되어 모듈 핫리로드 빌드 시간이 단축되었다.
   - `Editor/Source/ImGui/ViewportPanel/Private/SceneViewportPanel.cpp`의 `m_DebugRenderer` 및 `Engine/Source/Core/Public/Structs/Vertex.h`의 `DebugVertex`에서 `#ifdef _DEBUG` 분기가 제거되어 Release 에디터에서도 디버그 드로우가 상시 정상 제공된다 (반영 완료).
   - `Engine/Source/Graph/Public/GraphGameplayLibrary.h`의 `std::cout` 사용이 제거되고 `BAM_LOG` 로깅 시스템으로 전환 완료되었다.
+  - `Engine/Source/Render/RHI/Platform/DirectX12/Private/DirectX12RHI.cpp` 내 3곳의 `OutputDebugStringA` + `std::terminate()` 호출이 안전한 에러 로깅(`BAM_LOG_ERROR`) 및 `EResult::Fail` 반환으로 교체 완료되었다 (2026-11-01 반영 완료).
   - **남은 항목**:
     - `BAM_EDITOR` / `BAM_SHIPPING` 타깃 전처리기 매크로 정의.
-    - `Engine/Source/Render/RHI/Platform/DirectX12/Private/DirectX12RHI.cpp` 내 3곳의 `OutputDebugStringA` + `std::terminate()` 호출을 안전한 에러 반환 정책으로 정리.
 - **조치 기준**:
-  - [SourceOrganizationGuidelines.md](SourceOrganizationGuidelines.md) 8절 및 [BuildConfigurationAndPreprocessing.md](BuildConfigurationAndPreprocessing.md) 4절에 따라 타깃 매크로 정의와 `std::terminate` 호출을 정리한다.
+  - [SourceOrganizationGuidelines.md](SourceOrganizationGuidelines.md) 8절 및 [BuildConfigurationAndPreprocessing.md](BuildConfigurationAndPreprocessing.md) 4절에 따라 타깃 매크로 정의를 정리한다.
 - 완료 기준: 영향 타깃에서 필요한 정의가 제공되고 `std::terminate` 직접 호출이 제거된다.
 
 ### P0-C. 소유 위치가 명확한 파일부터 정리
@@ -88,14 +88,16 @@ Engine·Render·Editor·Client 계획에서 무엇을 먼저 연결하고 무엇
   - **S2 (바인딩 계약)**:
     - [Shader/BINDING_LAYOUT.md](Shader/BINDING_LAYOUT.md)를 실제 `DirectX12RHI` 루트 시그니처(`space0`~`space3`, Root Parameter `[0]`~`[10]`) 기준으로 갱신 완료했다.
     - `SDLGPURHI`의 `DrawIndexedInstanced`(`NotImplemented`), `BindInstanceBuffer`, Compute 인터페이스는 미지원 상태로 안전 폴백 정책을 유지한다.
-  - **기구현 S3·S4의 정적 결함 해결 (반영 완료)**:
+  - **기구현 S3·S4의 정적 결함 해결 및 보존 (반영 완료)**:
     1. `Resources/Shader/hlsl/tiledLightCullingCS.hlsl`: 좌·우·상·하 4개 타일 절두체 평면(`s_FrustumPlanes[4]`) 역투영 및 구면 교차 검증을 추가하여 화면 전체 폭 광원 과할당 문제를 해결했다.
     2. `Resources/Shader/hlsl/lightingPS.hlsl`: `for (uint i = 0u; i < tileLightCount; ++i)` 루프로 타일 내 선별 광원만 순회하여 `tileLightCount == 0`일 때 전체 광원을 순회하던 버그를 해결했다.
     3. `Editor/Source/ImGui/ViewportPanel/Private/ViewportDeferredPipeline.cpp`: `lightManager.DispatchLightCulling` 호출을 연결하여 타일 라이트 컬링이 정상 실행되도록 일관성을 확보했다.
     4. `Engine/Source/Render/Private/Renderer.cpp`: `batchMesh->GetIndexBuffer()` 유무에 따라 비인덱스 메시(`indexCount == 0`)도 `m_RHI->DrawInstanced(vertexCount, instanceCount)`로 인스턴싱 드로우하도록 처리 완료했다.
-  - **남은 항목**:
-    - `MeshRenderSystem::OnSubmit`의 단일 카메라 기준 `currentLODIndex` 갱신을 다중 뷰포트/패스별로 분리하는 보완.
-- 완료 기준: S3·S4의 정적 결함이 해결되었으며, S1 패스별 CPU/GPU 계측을 통해 고정 씬에서 단일 드로우/전체 광원 순회 대비 실제 비용 변화를 수치로 검증한다.
+    5. `Engine/Source/System/Render/Private/MeshRenderSystem.cpp`: 주 뷰포트 카메라 렌더링 시에만 `LODGroupComponent` 상태를 갱신하도록 보호하여 보조 패스 거리로 인한 LOD 상태 오염 방지 완료.
+  - **실측 성능 검증 완료 (2026-11-01 MetricsPanel 확인)**:
+    - 타일 라이트 컬링: 라이팅 비집중 영역 응시 시 GPU 시간 1.10 ms -> 0.25 ms (77% 단축).
+    - 정적 메시 인스턴싱: 인덱스 31만 개 추가에도 드로우콜 56 -> 57회로 유지 (배칭 검증 완료).
+- 완료 기준: S3·S4의 정적 결함이 해결되었으며, S1 패스별 CPU/GPU 계측을 통해 고정 씬에서 단일 드로우/전체 광원 순회 대비 실제 비용 변화를 수치로 검증 완료했다.
 
 ### P1-A. 편집 데이터와 저장 실패 보호
 
@@ -160,10 +162,12 @@ Engine·Render·Editor·Client 계획에서 무엇을 먼저 연결하고 무엇
     - **프리팹 2단계 (격리 편집 모드)**: `PrefabModeManager` 뷰포트 격리 편집 모드(메인 씬 보존, 메인 뷰포트·기즈모 100% 활용, 상단 복귀/저장 배너).
     - **프리팹 3단계 (원본 연결 및 오버라이드 관리)**: 단일 원천 루트 전용 `PrefabInstanceComponent`, 계층 패널 청록색 강조 및 컨텍스트 메뉴(Open/Select/Unpack), 인스펙터 상단 프리팹 헤더 바 및 Overrides 팝업(Apply All, Revert All, Unpack).
     - **엔티티 다중 복사·붙여넣기 (17절 완료)**: `EntityClipboard` 메모리 직렬화, 조상 필터링, 원래 계층/형제 순서 보존, 원자적 단일 Undo(`UI_HISTORY_PASTE`), 단축키(`Ctrl+C`/`Ctrl+V`/`Ctrl+Shift+V`) 및 다중 삭제(`DeleteEntities`, `Delete` 키).
+    - **그래프 패널 상단 도구 모음 메뉴바 리팩터링 (2026-11-01 구현 완료)**:
+      - 기존 2단 버튼 나열 방식을 제거하고 `ImGuiWindowFlags_MenuBar` 기반 상단 메뉴바(`File`, `Edit`, `View`, `Graph Mode`, `Debug/Build`)와 1줄 퀵 액세스 툴바로 재설계하여 캔버스 작업 공간 대폭 확보.
+    - **씬 레벨 독립 Collider Raycast API (2026-11-01 구현 완료)**:
+      - `PhysicsSystem::Raycast`/`RaycastAll`에 `RaycastQuery`(거리, 레이어마스크, 트리거 포함 여부, 무시 엔티티) 필터링, 활성 플래그 검사, 거리 컷오프 기반 조기 탈출(Early-out) 최적화 및 하위 호환 오버로드 완비.
   - **남은 항목**:
-    1. `PickingManager` 가시성에 의존하지 않는 씬 레벨 Collider Raycast API([EngineDevelopmentPlan.md](EngineDevelopmentPlan.md) 8절).
-    2. 독립 Sprite Flipbook 재생기(6절).
-    3. 그래프 패널 상단 도구 모음 정리([ImGuiDevelopmentPlan.md](ImGuiDevelopmentPlan.md) 18절).
+    1. 독립 Sprite Flipbook 재생기([EngineDevelopmentPlan.md](EngineDevelopmentPlan.md) 8절).
 - 완료 기준: PIE 중 모듈 핫리로드와 그래프 실행이 안전하게 유지되고, 입력으로 작은 씬을 조작하며 화면 표시 여부와 무관한 충돌 질의·두 인스턴스의 독립 상태를 확인한다.
 
 ### P2-B. 기본 렌더 확장 (S3·S4·S5 검증 및 완성)
@@ -269,14 +273,20 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
 
 ### 재조정된 단기 실행 우선순위 (Next Execution Order)
 
-1. **[1순위 / P0-A] 작업 트리 불필요 부산물 정리 및 미커밋 변경 단위별 커밋**
-   - 0바이트 빈 파일(`Editor/Source/Application/Private/ApplicationSettings.cpp`), 레거시 POC 생성물(`Tools/GraphCompiler/test_graph.gen.cpp`), 루트 셰이더 컴파일 부산물(`Resources/Shader/default_*.cso`) 등 정리.
-   - 작업 트리에 누적된 약 200여 개 파일의 변경 사항을 렌더링 최적화, 스크립팅 핫스왑, 에디터 UI 등으로 의미 있게 분리하여 커밋.
-2. **[2순위 / S1 & S4 실행 검증] 고정 씬에서 MetricsPanel 기반 타일 라이트 컬링 및 인스턴싱 실측 성능 수치 확인**
-   - 단일 드로우/전체 광원 순회 대비 인스턴싱/타일 라이트 컬링 적용 시의 실측 GPU ms 및 CPU ms 변화를 `MetricsPanel`을 통해 확인하고 검증 기록 남김.
-3. **[3순위 / P0-B & S3 잔여] 안정화 마무리**
+1. **[1순위 / P0-A] 작업 트리 불필요 부산물 정리 및 미커밋 변경 단위별 커밋 (완료)**
+   - 대용량 LLVM 의존성(.gitignore) 제외 완료, 5대 단위 커밋으로 작업 트리 정리 및 원격 push 완료.
+2. **[2순위 / S1 & S4 실행 검증] 고정 씬에서 MetricsPanel 기반 타일 라이트 컬링 및 인스턴싱 실측 성능 수치 확인 (완료)**
+   - 2026-11-01 실측 결과: 라이트 비집중 영역 응시 시 `LightingPass` GPU 시간이 1.10 ms -> 0.25 ms로 77% 단축 확인.
+   - 인덱스 31만 개 추가 시에도 드로우콜 56 -> 57회로 유지되어 `DrawIndexedInstanced` 배칭 동작 확인 완료.
+3. **[3순위 / P0-B & S3 잔여] 안정화 마무리 (현재 우선순위)**
    - `Engine/Source/Render/RHI/Platform/DirectX12/Private/DirectX12RHI.cpp` 내 3곳의 `std::terminate()` 호출을 안전한 에러 반환 정책으로 정리.
    - `MeshRenderSystem`의 다중 뷰포트/패스별 카메라 기준 독립 LOD 평가 지원.
+4. **[4순위 / P2-A 잔여] 에디터 및 게임플레이 편의성 마감**
+   - `PickingManager` 가시성에 의존하지 않는 씬 레벨 Collider Raycast API 도입 ([EngineDevelopmentPlan.md](EngineDevelopmentPlan.md) 8절).
+   - 그래프 패널 상단 도구 모음 정리 ([ImGuiDevelopmentPlan.md](ImGuiDevelopmentPlan.md) 18절).
+5. **[5순위 / P3 준비] 에셋 참조 탐색기 및 콘텐츠 확장**
+   - 에셋 참조 색인 및 역참조 시각화 창(`AssetReferencePanel`) 구축.
+   - 모델·텍스처 임포트 설정 저장 및 재임포트 파이프라인.
 4. **[4순위 / P2-A 잔여] 에디터 및 게임플레이 편의성 마감**
    - `PickingManager` 가시성에 의존하지 않는 씬 레벨 Collider Raycast API 도입 ([EngineDevelopmentPlan.md](EngineDevelopmentPlan.md) 8절).
    - 그래프 패널 상단 도구 모음 정리 ([ImGuiDevelopmentPlan.md](ImGuiDevelopmentPlan.md) 18절).

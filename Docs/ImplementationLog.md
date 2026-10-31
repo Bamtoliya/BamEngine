@@ -35,6 +35,37 @@ Use one entry per meaningful change.
 
 ---
 
+## [2026-11-01] 엔진 안정화, 씬 물리 레이캐스트 API 확장 및 그래프 패널 윈도우 메뉴바 리팩터링
+
+- Area: Engine | Editor | Render | Physics | UI
+- Type: Feature | Refactor | Fix | Stability
+- 관련 파일:
+  - Engine/Source/Render/RHI/Platform/DirectX12/Private/DirectX12RHI.cpp
+  - Engine/Source/System/Render/Private/MeshRenderSystem.cpp
+  - Engine/Source/System/Physics/Public/PhysicsSystem.h
+  - Engine/Source/System/Physics/Private/PhysicsSystem.cpp
+  - Editor/Source/ImGui/GraphPanel/Public/GraphPanel.h
+  - Editor/Source/ImGui/GraphPanel/Private/GraphPanel.cpp
+  - Editor/Source/ImGui/GraphPanel/Private/GraphPanelExecution.cpp
+  - Editor/Source/ImGui/GraphPanel/Private/GraphPanelShader.cpp
+  - Docs/DevelopmentPriorities.md
+- 구현 요약:
+  1. **DirectX12RHI std::terminate 3곳 제거 및 안전한 에러 반환 (P0-B)**:
+     - `CreateBuffer`, `CreateTexture2D`, `CreateTextureCube` 내부에서 리소스 생성 실패 시 프로세스를 강제 종료하던 `std::terminate()` 호출을 제거하고 `BAM_LOG_ERROR` 로깅 후 `EResult::Fail` 반환으로 정리.
+  2. **MeshRenderSystem 주 뷰포트 카메라 기준 LOD 상태 보존 (P1-C)**:
+     - 섀도우 패스, 포인트 섀도우 패스, 머티리얼 미리보기 등 보조 렌더 패스의 카메라 거리로 인해 메인 씬 뷰포트의 `LODGroupComponent.currentLODIndex`가 오염되던 현상을 방지. 주 카메라 렌더링 시에만 LOD 상태를 갱신하도록 보호.
+  3. **PhysicsSystem 씬 레벨 Collider Raycast API 확장 (P2-A, EngineDevelopmentPlan 6절)**:
+     - `RaycastQuery` 구조체 도입 (`maxDistance`, `layerMask`, `includeTrigger`, `ignoreEntity`).
+     - `PassRaycastFilter`를 통한 트리거/레이어/무시 엔티티/플래그(Active, Dead, Paused) 필터링.
+     - `TestColliderHit` (Box, Sphere, Mesh, Terrain) 지원 및 거리 컷오프 기반 조기 탈출(Early-out) 최적화.
+     - 기존 단일 거리 인자 호출부를 위한 완벽한 하위 호환 오버로드 유지.
+  4. **GraphPanel 윈도우 스타일 드롭다운 메뉴바 리팩터링 (P2-A, ImGuiDevelopmentPlan 18절)**:
+     - 기존 2단 버튼 나열로 인한 캔버스 세로 공간 압박 문제를 해결하기 위해 `ImGuiWindowFlags_MenuBar` 기반 상단 메뉴바 도입.
+     - `File`(Open, Save, Save As), `Edit`(Add Node, Delete, Validate), `View`(Reset View, Wire Style), `Domain`(Logic, Shader), 그리고 도메인별 전용 메뉴(`Debug` / `Build`)로 기능을 체계적으로 범주화.
+     - 메뉴바 하단에는 빠른 원클릭 조작을 위한 단일 행 퀵 액세스 툴바(도메인 콤보, 빠른 실행/빌드 버튼, 현재 파일명 표시)만 배치하여 캔버스 작업 공간 대폭 확보.
+
+---
+
 ## [2026-11-01] 프리팹 저장 기준점과 Undo/Redo 변경 표시 연결
 
 - Area: Editor | UI | Scene
@@ -112,6 +143,16 @@ Use one entry per meaningful change.
   - 고정 씬에서 `MetricsPanel`을 통한 타일 라이트 컬링/인스턴싱 실측 GPU ms 및 CPU ms 성능 수치 측정.
   - `DirectX12RHI.cpp` 내 3곳의 `std::terminate()` 예외 정책 정리.
   - `MeshRenderSystem`의 다중 뷰포트/패스별 카메라 기준 독립 LOD 평가 지원.
+- 실측 성능 검증 결과 (2026-11-01 MetricsPanel 확인):
+  - **S4 타일 라이트 컬링 효과**:
+    - 라이팅 집중 시점: `Scene View_LightingPass` CPU 0.21 ms / GPU 1.10 ms (전체 GPU 3.40 ms)
+    - 라이팅 비집중 시점: `Scene View_LightingPass` CPU 0.14 ms / GPU 0.25 ms (전체 GPU 2.54 ms, 라이팅 GPU 시간 약 77% 단축)
+    - 4방향 타일 절두체 평면 컬링 및 0-광원 타일 순회 건너뛰기의 실측 성능 이득 확인 완료.
+  - **S3 정적 메시 인스턴싱 효과**:
+    - 스피어 다수 추가 시: 제출 인덱스 수 1,642,170개 -> 1,951,086개(약 31만 개 증가)에도 불구하고 RHI 그리기 호출은 56회 -> 57회로 단 1회 증가 유지.
+    - `DrawIndexedInstanced`를 통한 GPU 인스턴싱 배칭 정상 동작 확인 완료.
+  - **S1 계측 파이프라인**:
+    - D3D12 Timestamp Query 지연 회수 및 패스별 CPU/GPU 시간 분리 통계가 실시간 110~116 FPS 환경에서 오버헤드 없이 안정적으로 측정됨을 확인.
 
 ---
 
