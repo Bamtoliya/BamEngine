@@ -263,7 +263,8 @@ namespace
 
         for (const auto& entry : fs::recursive_directory_iterator(root))
         {
-            Check(!entry.path().filename().string().starts_with(".bamconfig-save-"),
+            const auto name = entry.path().filename().string();
+            Check(!name.starts_with(".bamconfig-save-") && !name.starts_with(".archive-save-"),
                 "A settings save left a temporary directory behind.");
         }
     }

@@ -26,7 +26,7 @@ public:
     [[nodiscard]] const std::filesystem::path& GetPrefabPath() const { return m_CurrentPrefabPath; }
     [[nodiscard]] Engine::Scene* GetPrefabScene() const { return m_PrefabScene; }
     [[nodiscard]] Engine::Entity* GetRootEntity() const { return m_PrefabRootEntity; }
-    [[nodiscard]] bool HasUnsavedChanges() const { return m_HasUnsavedChanges; }
+    [[nodiscard]] bool HasUnsavedChanges() const;
     void MarkDirty() { m_HasUnsavedChanges = true; }
 
     bool EnterPrefabMode(const std::filesystem::path& prefabPath);

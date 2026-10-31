@@ -118,6 +118,17 @@ bool PrefabModeManager::EnterPrefabMode(const std::filesystem::path& prefabPath)
     return true;
 }
 
+bool PrefabModeManager::HasUnsavedChanges() const
+{
+    if (!m_IsInPrefabMode) return false;
+
+    const auto& history = Application::Get().GetEditHistory();
+    if (history.CanFinalizeEditsFor(m_PrefabScene))
+        return history.HasUnsavedChanges();
+
+    return m_HasUnsavedChanges;
+}
+
 bool PrefabModeManager::SavePrefab()
 {
     if (!m_IsInPrefabMode || !m_PrefabScene || !m_PrefabRootEntity || m_CurrentPrefabPath.empty())

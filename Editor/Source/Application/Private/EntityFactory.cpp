@@ -10,6 +10,7 @@
 #include "ResourceManager.h"
 #include "UILayout.h"
 #include "PrefabModeManager.h"
+#include <stdexcept>
 
 Entity& EntityFactory::CreateCanvasEntity(Scene* scene, const wstring& name)
 {
@@ -73,7 +74,20 @@ Entity& EntityFactory::CreateEmptyEntity(Scene* scene, const wstring& name)
 
 	auto& prefabMode = PrefabModeManager::Get();
 	if (prefabMode.IsInPrefabMode() && prefabMode.GetPrefabScene() == scene)
+	{
+		auto* root = prefabMode.GetRootEntity();
+		const auto result = root ? scene->ReparentEntity(entity, root) : EntityReparentResult::InvalidEntity;
+
+		if (result != EntityReparentResult::Success && result != EntityReparentResult::Unchanged)
+		{
+			if (!scene->DestroyEntity(entity))
+				prefabMode.MarkDirty();
+
+			throw std::runtime_error("Could not attach the new entity to the prefab root.");
+		}
+
 		prefabMode.MarkDirty();
+	}
 
 	return entity;
 }

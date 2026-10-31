@@ -985,6 +985,7 @@
         "History.Unnamed": "Unnamed Command",
         "Prefab.MissingAsset": "Missing Prefab",
         "Prefab.ChildOf": "(Child of {})",
+        "Hierarchy.DropPrefabRoot": "Drop here to add a prefab at the scene root",
         "A non-empty stable GRAPH_ID is required.": "A non-empty stable GRAPH_ID is required.",
         "A pure node must return a value.": "A pure node must return a value.",
         "Abs (Float)": "Abs (Float)",

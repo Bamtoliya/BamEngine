@@ -322,7 +322,15 @@ void HierarchyPanel::DrawSceneContextMenu(Scene* scene)
 	{
 		if (ImGui::MenuItem(LOCAL_LABEL("Hierarchy.AddEntity").c_str()))
 		{
-			EntityFactory::CreateEmptyEntity(scene);
+			try
+			{
+				EntityFactory::CreateEmptyEntity(scene);
+			}
+			catch (const std::exception& error)
+			{
+				EDITOR_LOG_ERROR("Entity creation failed: {}", error.what());
+				m_HierarchyMessage = "UI_HIERARCHY_EDIT_FAILED";
+			}
 		}
 		if (ImGui::MenuItem(LOCAL_LABEL("Hierarchy.AddCanvas").c_str()))
 		{
@@ -562,10 +570,8 @@ void HierarchyPanel::DrawEntityHierarchy(Scene* scene)
 		archive::JsonArchive ar;
 		Engine::Entity* spawned = nullptr;
 		auto& history = Application::Get().GetEditHistory();
-		auto& history = Application::Get().GetEditHistory();
 		if (!history.Enabled()) return;
 
-		auto* parentEntity = action.DropPrefabTarget != entt::null ? scene->FindEntity(action.DropPrefabTarget) : nullptr;
 		if (action.DropPrefabTarget != entt::null && !parentEntity)
 		{
 			m_HierarchyMessage = "UI_HIERARCHY_BAD_DROP";
@@ -579,8 +585,6 @@ void HierarchyPanel::DrawEntityHierarchy(Scene* scene)
 			return;
 		}
 
-		archive::JsonArchive ar;
-		Engine::Entity* spawned = nullptr;
 		if (SceneManager::Get().InstantiatePrefab(ar, action.DropPrefabFile, spawned, parentEntity) == Engine::EResult::Success && spawned)
 		{
 			if (before) history.Record(std::move(before), SceneEditSnapshot::Capture(*scene), "UI_HISTORY_INSTANTIATE_PREFAB");

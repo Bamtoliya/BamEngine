@@ -9,7 +9,6 @@
 #include "MaterialInterface.h"
 #include "Sprite.h"
 #include "Collision.h"
-#include <cmath>
 
 IMPLEMENT_SINGLETON(PickingManager)
 

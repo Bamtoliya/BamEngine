@@ -86,3 +86,5 @@ Logs/
 Resources/Shader/bin/
 Resources/Shader/spirv/
 Engine/Generated/
+
+Projects/Reflection/dependencies/

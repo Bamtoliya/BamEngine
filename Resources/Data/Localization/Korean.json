@@ -985,6 +985,7 @@
         "History.Unnamed": "이름 없는 명령",
         "Prefab.MissingAsset": "프리팹을 찾을 수 없음",
         "Prefab.ChildOf": "({}의 자식)",
+        "Hierarchy.DropPrefabRoot": "여기에 놓으면 씬 루트에 프리팹을 추가합니다",
         "A non-empty stable GRAPH_ID is required.": "비어 있지 않은 고정 GRAPH_ID가 필요합니다.",
         "A pure node must return a value.": "순수 노드는 값을 반환해야 합니다.",
         "Abs (Float)": "절댓값 (Float)",
