@@ -3,21 +3,11 @@
 #include "ResourceManager.h"
 #include "NotificationManager.h"
 #include <IconsFontAwesome7.h>
-#include <algorithm>
 
 SpriteAnimationEditor::SpriteAnimationEditor()
 {
 	m_Name = L"Sprite Animation Editor";
 	m_DisplayNameKey = "ResourceEditor.SpriteAnimationTitle";
-}
-
-SpriteAnimationEditor::~SpriteAnimationEditor()
-{
-	if (m_Animation)
-	{
-		delete m_Animation;
-		m_Animation = nullptr;
-	}
 }
 
 bool SpriteAnimationEditor::IsSupported(const std::filesystem::path& assetPath) const
@@ -34,17 +24,20 @@ void SpriteAnimationEditor::SetTargetResource(const std::filesystem::path& asset
 
 void SpriteAnimationEditor::LoadAnimation(const std::filesystem::path& path)
 {
-	if (m_Animation)
+	auto& rm = Engine::ResourceManager::Get();
+	const std::wstring normPath = Engine::NormalizePath(path.wstring());
+	m_AnimationHandle = rm.GetResourceHandle<Engine::SpriteAnimation>(normPath);
+
+	if (!m_AnimationHandle.IsValid() && std::filesystem::exists(path))
 	{
-		delete m_Animation;
-		m_Animation = nullptr;
+		auto* newAnim = Engine::SpriteAnimation::Create();
+		if (newAnim)
+		{
+			newAnim->LoadFromFile(normPath);
+			m_AnimationHandle = rm.AddResource<Engine::SpriteAnimation>(normPath, newAnim);
+		}
 	}
 
-	m_Animation = Engine::SpriteAnimation::Create();
-	if (m_Animation && std::filesystem::exists(path))
-	{
-		m_Animation->LoadFromFile(path.wstring());
-	}
 	m_CurrentTime = 0.0f;
 	m_CurrentFrameIndex = 0;
 	m_IsPlaying = true;
@@ -53,9 +46,10 @@ void SpriteAnimationEditor::LoadAnimation(const std::filesystem::path& path)
 
 void SpriteAnimationEditor::SaveAnimation()
 {
-	if (!m_Animation || m_TargetResourcePath.empty()) return;
+	auto* anim = GetAnimation();
+	if (!anim || m_TargetResourcePath.empty()) return;
 
-	if (m_Animation->SaveToFile(m_TargetResourcePath.wstring()))
+	if (anim->SaveToFile(m_TargetResourcePath.wstring()))
 	{
 		m_IsDirty = false;
 		NotificationManager::Get().AddNotification(LOCAL("ResourceEditor.SpriteAnimationTitle"),
@@ -70,13 +64,15 @@ void SpriteAnimationEditor::SaveAnimation()
 
 void SpriteAnimationEditor::Update(f32 dt)
 {
-	if (!m_Open || !m_Animation) return;
+	if (!m_Open) return;
+	auto* anim = GetAnimation();
+	if (!anim) return;
 
-	if (m_IsPlaying && m_Animation->GetFrameCount() > 0)
+	if (m_IsPlaying && anim->GetFrameCount() > 0)
 	{
 		m_CurrentTime += dt;
-		const bool loop = m_Animation->GetPlayMode() == Engine::ESpriteAnimationPlayMode::Loop;
-		m_CurrentFrameIndex = m_Animation->GetFrameIndexAtTime(m_CurrentTime, loop);
+		const bool loop = anim->GetPlayMode() == Engine::ESpriteAnimationPlayMode::Loop;
+		m_CurrentFrameIndex = anim->GetFrameIndexAtTime(m_CurrentTime, loop);
 	}
 }
 
@@ -124,9 +120,9 @@ void SpriteAnimationEditor::DrawToolbar()
 		ImGui::EndMenuBar();
 	}
 
-	if (!m_Animation) return;
+	auto* anim = GetAnimation();
+	if (!anim) return;
 
-	// ── 컨트롤 툴바 ──
 	if (ImGui::Button(ICON_FA_FLOPPY_DISK "##SaveBtn"))
 		SaveAnimation();
 	ImGui::SameLine();
@@ -147,7 +143,7 @@ void SpriteAnimationEditor::DrawToolbar()
 	if (ImGui::Button(ICON_FA_BACKWARD_STEP "##Prev"))
 	{
 		m_IsPlaying = false;
-		const int32 count = m_Animation->GetFrameCount();
+		const int32 count = anim->GetFrameCount();
 		if (count > 0)
 			m_CurrentFrameIndex = (m_CurrentFrameIndex - 1 + count) % count;
 	}
@@ -156,30 +152,30 @@ void SpriteAnimationEditor::DrawToolbar()
 	if (ImGui::Button(ICON_FA_FORWARD_STEP "##Next"))
 	{
 		m_IsPlaying = false;
-		const int32 count = m_Animation->GetFrameCount();
+		const int32 count = anim->GetFrameCount();
 		if (count > 0)
 			m_CurrentFrameIndex = (m_CurrentFrameIndex + 1) % count;
 	}
 	ImGui::SameLine();
 
-	ImGui::Text("Frame: %d / %d", m_CurrentFrameIndex + 1, std::max(m_Animation->GetFrameCount(), 1));
+	ImGui::Text("Frame: %d / %d", m_CurrentFrameIndex + 1, std::max<int32>(anim->GetFrameCount(), 1));
 	ImGui::SameLine();
 
 	ImGui::SetNextItemWidth(90.0f);
-	f32 fps = m_Animation->GetFPS();
+	f32 fps = anim->GetFPS();
 	if (ImGui::DragFloat("FPS", &fps, 0.5f, 1.0f, 60.0f, "%.1f"))
 	{
-		m_Animation->SetFPS(fps);
+		anim->SetFPS(fps);
 		m_IsDirty = true;
 	}
 	ImGui::SameLine();
 
 	ImGui::SetNextItemWidth(110.0f);
-	int32 playMode = static_cast<int32>(m_Animation->GetPlayMode());
+	int32 playMode = static_cast<int32>(anim->GetPlayMode());
 	const char* modeNames[] = { "Loop", "Once", "PingPong" };
 	if (ImGui::Combo("Mode", &playMode, modeNames, IM_ARRAYSIZE(modeNames)))
 	{
-		m_Animation->SetPlayMode(static_cast<Engine::ESpriteAnimationPlayMode>(playMode));
+		anim->SetPlayMode(static_cast<Engine::ESpriteAnimationPlayMode>(playMode));
 		m_IsDirty = true;
 	}
 	ImGui::SameLine();
@@ -202,7 +198,7 @@ void SpriteAnimationEditor::DrawPreviewCanvas(f32 availWidth, f32 availHeight)
 	const ImVec2 canvasSize = ImGui::GetContentRegionAvail();
 	ImDrawList* drawList = ImGui::GetWindowDrawList();
 
-	// 1. 체크무늬 배경 렌더링
+	// 1. 체크무늬 배경
 	const float gridStep = 16.0f;
 	for (float y = 0.0f; y < canvasSize.y; y += gridStep)
 	{
@@ -217,7 +213,7 @@ void SpriteAnimationEditor::DrawPreviewCanvas(f32 availWidth, f32 availHeight)
 		}
 	}
 
-	// 2. 마우스 인터랙션 (패닝 및 줌)
+	// 2. 마우스 줌 & 패닝
 	if (ImGui::IsWindowHovered())
 	{
 		if (ImGui::IsMouseDragging(ImGuiMouseButton_Right) || ImGui::IsMouseDragging(ImGuiMouseButton_Middle))
@@ -232,32 +228,27 @@ void SpriteAnimationEditor::DrawPreviewCanvas(f32 availWidth, f32 availHeight)
 	}
 
 	// 3. 현재 프레임 스프라이트 렌더링
-	if (m_Animation && m_Animation->GetFrameCount() > 0)
+	auto* anim = GetAnimation();
+	if (anim && anim->GetFrameCount() > 0)
 	{
-		const auto* keyFrame = m_Animation->GetFrame(m_CurrentFrameIndex);
+		const auto* keyFrame = anim->GetFrame(m_CurrentFrameIndex);
 		if (keyFrame && keyFrame->sprite.IsValid() && keyFrame->sprite.Get())
 		{
 			auto* sprite = keyFrame->sprite.Get();
 			auto* texture = sprite->GetTexture();
-			if (texture && texture->GetRHITexture())
+			auto* rhiTexture = texture ? texture->GetRHITexture() : nullptr;
+			if (rhiTexture)
 			{
-				ImTextureID texID = ImGuiManager::Get().GetImGuiTextureID(texture->GetRHITexture());
+				ImTextureID texID = ImGuiManager::Get().GetImGuiTextureID(rhiTexture);
+				const vec4 uv = sprite->GetUVTransform();
+				const float u0 = uv.x;
+				const float v0 = uv.y;
+				const float u1 = uv.x + uv.z;
+				const float v1 = uv.y + uv.w;
+
 				const Engine::Rect region = sprite->GetRegion();
-				const float texW = static_cast<float>(std::max(texture->GetWidth(), 1u));
-				const float texH = static_cast<float>(std::max(texture->GetHeight(), 1u));
-
-				float u0 = 0.0f, v0 = 0.0f, u1 = 1.0f, v1 = 1.0f;
-				float spriteW = texW, spriteH = texH;
-
-				if (region.right > region.left && region.bottom > region.top)
-				{
-					u0 = region.left / texW;
-					v0 = region.top / texH;
-					u1 = region.right / texW;
-					v1 = region.bottom / texH;
-					spriteW = region.right - region.left;
-					spriteH = region.bottom - region.top;
-				}
+				const float spriteW = (region.width > 0.0f) ? region.width : static_cast<float>(rhiTexture->GetWidth());
+				const float spriteH = (region.height > 0.0f) ? region.height : static_cast<float>(rhiTexture->GetHeight());
 
 				const ImVec2 center(canvasPos.x + canvasSize.x * 0.5f + m_PanOffset.x, canvasPos.y + canvasSize.y * 0.5f + m_PanOffset.y);
 				const vec2 pivot = sprite->GetPivot();
@@ -266,14 +257,13 @@ void SpriteAnimationEditor::DrawPreviewCanvas(f32 availWidth, f32 availHeight)
 
 				drawList->AddImage(texID, pMin, pMax, ImVec2(u0, v0), ImVec2(u1, v1));
 
-				// 피벗 크로스헤어
+				// 피벗 십자선
 				drawList->AddLine(ImVec2(center.x - 8.0f, center.y), ImVec2(center.x + 8.0f, center.y), IM_COL32(255, 60, 60, 220), 1.5f);
 				drawList->AddLine(ImVec2(center.x, center.y - 8.0f), ImVec2(center.x, center.y + 8.0f), IM_COL32(60, 255, 60, 220), 1.5f);
 			}
 		}
 	}
 
-	// 좌상단 줌/해상도 오버레이
 	ImGui::SetCursorPos(ImVec2(8.0f, 8.0f));
 	ImGui::TextColored(ImVec4(0.85f, 0.85f, 0.85f, 1.0f), "Zoom: %.0f%%", m_Zoom * 100.0f);
 
@@ -286,7 +276,8 @@ void SpriteAnimationEditor::DrawFramesList(f32 availWidth)
 	ImGui::TextUnformatted(LOCAL_CSTR("ResourceEditor.KeyFrames"));
 	ImGui::Separator();
 
-	if (!m_Animation)
+	auto* anim = GetAnimation();
+	if (!anim)
 	{
 		ImGui::EndChild();
 		return;
@@ -294,11 +285,11 @@ void SpriteAnimationEditor::DrawFramesList(f32 availWidth)
 
 	if (ImGui::Button(ICON_FA_PLUS " Add Frame", ImVec2(-1.0f, 26.0f)))
 	{
-		m_Animation->AddFrame(Engine::ResourceHandle<Engine::Sprite>(), 1.0f);
+		anim->AddFrame(Engine::ResourceHandle<Engine::Sprite>(), 1.0f);
 		m_IsDirty = true;
 	}
 
-	auto& frames = m_Animation->GetFrames();
+	auto& frames = anim->GetFrames();
 	for (int32 i = 0; i < static_cast<int32>(frames.size()); ++i)
 	{
 		ImGui::PushID(i);
@@ -316,25 +307,24 @@ void SpriteAnimationEditor::DrawFramesList(f32 availWidth)
 		ImGui::SameLine();
 		if (ImGui::Button(ICON_FA_ARROW_UP) && i > 0)
 		{
-			m_Animation->SwapFrames(i, i - 1);
+			anim->SwapFrames(i, i - 1);
 			m_IsDirty = true;
 		}
 		ImGui::SameLine();
 		if (ImGui::Button(ICON_FA_ARROW_DOWN) && i + 1 < static_cast<int32>(frames.size()))
 		{
-			m_Animation->SwapFrames(i, i + 1);
+			anim->SwapFrames(i, i + 1);
 			m_IsDirty = true;
 		}
 		ImGui::SameLine();
 		if (ImGui::Button(ICON_FA_XMARK))
 		{
-			m_Animation->RemoveFrame(i);
+			anim->RemoveFrame(i);
 			m_IsDirty = true;
 			ImGui::PopID();
 			break;
 		}
 
-		// 각 프레임 세부 속성 (지속 시간 가중치)
 		ImGui::SetNextItemWidth(90.0f);
 		if (ImGui::DragFloat("Duration", &frames[i].frameDuration, 0.1f, 0.1f, 10.0f, "%.1fx"))
 			m_IsDirty = true;
@@ -349,14 +339,15 @@ void SpriteAnimationEditor::DrawFramesList(f32 availWidth)
 void SpriteAnimationEditor::DrawFilmstrip(f32 height)
 {
 	ImGui::BeginChild("Filmstrip", ImVec2(0.0f, height), true, ImGuiWindowFlags_HorizontalScrollbar);
-	if (!m_Animation || m_Animation->GetFrameCount() == 0)
+	auto* anim = GetAnimation();
+	if (!anim || anim->GetFrameCount() == 0)
 	{
 		ImGui::TextDisabled("No frames in animation. Click 'Add Frame' above.");
 		ImGui::EndChild();
 		return;
 	}
 
-	const auto& frames = m_Animation->GetFrames();
+	const auto& frames = anim->GetFrames();
 	const float itemSize = 64.0f;
 
 	for (int32 i = 0; i < static_cast<int32>(frames.size()); ++i)
@@ -375,19 +366,15 @@ void SpriteAnimationEditor::DrawFilmstrip(f32 height)
 		{
 			auto* sprite = frames[i].sprite.Get();
 			auto* texture = sprite->GetTexture();
-			if (texture && texture->GetRHITexture())
+			auto* rhiTexture = texture ? texture->GetRHITexture() : nullptr;
+			if (rhiTexture)
 			{
-				texID = ImGuiManager::Get().GetImGuiTextureID(texture->GetRHITexture());
-				const Engine::Rect region = sprite->GetRegion();
-				const float tw = static_cast<float>(std::max(texture->GetWidth(), 1u));
-				const float th = static_cast<float>(std::max(texture->GetHeight(), 1u));
-				if (region.right > region.left && region.bottom > region.top)
-				{
-					u0 = region.left / tw;
-					v0 = region.top / th;
-					u1 = region.right / tw;
-					v1 = region.bottom / th;
-				}
+				texID = ImGuiManager::Get().GetImGuiTextureID(rhiTexture);
+				const vec4 uv = sprite->GetUVTransform();
+				u0 = uv.x;
+				v0 = uv.y;
+				u1 = uv.x + uv.z;
+				v1 = uv.y + uv.w;
 			}
 		}
 

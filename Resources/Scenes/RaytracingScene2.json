@@ -72,6 +72,7 @@
                             "ShadowNormalBias": 0.009999999776482582,
                             "ShadowRange": 50,
                             "ShadowSlopeBias": 0.004999999888241291,
+                            "ShadowStrength": 1,
                             "SpotFalloffExponent": 1,
                             "SpotInnerAngle": 15,
                             "SpotOuterAngle": 30
@@ -128,6 +129,7 @@
                             "ShadowNormalBias": 0.009999999776482582,
                             "ShadowRange": 50,
                             "ShadowSlopeBias": 0.004999999888241291,
+                            "ShadowStrength": 1,
                             "SpotFalloffExponent": 1,
                             "SpotInnerAngle": 15,
                             "SpotOuterAngle": 30
@@ -184,6 +186,7 @@
                             "ShadowNormalBias": 0.009999999776482582,
                             "ShadowRange": 50,
                             "ShadowSlopeBias": 0.5,
+                            "ShadowStrength": 1,
                             "SpotFalloffExponent": 1,
                             "SpotInnerAngle": 15,
                             "SpotOuterAngle": 30
@@ -809,6 +812,9 @@
                     {
                         "Data": {
                             "AutoSyncDirectionalLight": true,
+                            "BRDFLutMap": {
+                                "Null": true
+                            },
                             "CloudAltitude": 2500,
                             "CloudCoverage": 0.44999998807907104,
                             "CloudDensity": 0.800000011920929,
@@ -821,8 +827,15 @@
                             "GroundColor": [0.15000000596046448, 0.12999999523162842, 0.11999999731779099],
                             "HorizonBlend": 1,
                             "HorizonColor": [0.699999988079071, 0.8199999928474426, 0.949999988079071],
+                            "IBLIntensity": 1,
+                            "IrradianceMap": {
+                                "Null": true
+                            },
                             "IsEnabled": true,
                             "Latitude": 45,
+                            "PrefilteredMap": {
+                                "Null": true
+                            },
                             "SkyIntensity": 1,
                             "SunSize": 0.03500000014901161,
                             "TimeOfDay": 12,
@@ -986,6 +999,7 @@
                             "ShadowNormalBias": 0.009999999776482582,
                             "ShadowRange": 50,
                             "ShadowSlopeBias": 0.004999999888241291,
+                            "ShadowStrength": 1,
                             "SpotFalloffExponent": 1,
                             "SpotInnerAngle": 15,
                             "SpotOuterAngle": 30
@@ -1033,6 +1047,7 @@
                         "Data": {
                             "IsEnabled": true,
                             "IsUnbound": true,
+                            "PipelineSettings": "",
                             "PresetName": "Cinematic",
                             "Priority": 0
                         },
@@ -1057,6 +1072,28 @@
             }
         ],
         "Name": "RaytracingScene",
+        "ResourceReferences": [
+            {
+                "AssetKey": "CubeMesh",
+                "AssetPath": "CubeMesh"
+            },
+            {
+                "AssetKey": "Resources/Material/GBufferMaterial.bammat.json",
+                "AssetPath": "Resources/Material/GBufferMaterial.bammat.json"
+            },
+            {
+                "AssetKey": "Resources/Material/SkyMaterial.bammat.json",
+                "AssetPath": "Resources/Material/SkyMaterial.bammat.json"
+            },
+            {
+                "AssetKey": "Resources/Material/TerrainMaterial.bammat.json",
+                "AssetPath": "Resources/Material/TerrainMaterial.bammat.json"
+            },
+            {
+                "AssetKey": "SphereMesh",
+                "AssetPath": "SphereMesh"
+            }
+        ],
         "Version": 1
     }
 }

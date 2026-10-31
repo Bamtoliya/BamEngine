@@ -20,11 +20,11 @@ enum class EGraphDomain
 };
 
 enum class EGraphPinDirection { Input, Output };
-enum class EGraphPinType { Execution, Bool, Int, Float, Float2, Float3, Float4, Object };
+enum class EGraphPinType { Execution, Bool, Int, Float, Float2, Float3, Float4, Object, String };
 
 // monostate means "no default". Execution and Object pins never carry literal values.
 using GraphValue = std::variant<std::monostate, bool, std::int64_t, float,
-	std::array<float, 2>, std::array<float, 3>, std::array<float, 4>>;
+	std::array<float, 2>, std::array<float, 3>, std::array<float, 4>, std::string>;
 
 enum class EGraphError
 {

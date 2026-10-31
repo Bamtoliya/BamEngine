@@ -46,6 +46,7 @@ std::optional<Type> ReflectedPinType(std::string name)
 	if (name == "int" || name == "signedint" || name == "int32_t" || name == "std::int32_t" ||
 		name == "longlong" || name == "longlongint" || name == "signedlonglong" ||
 		name == "signedlonglongint" || name == "int64_t" || name == "std::int64_t") return Type::Int;
+	if (name == "string" || name == "std::string" || name.find("basic_string<char") != std::string::npos) return Type::String;
 	if constexpr (sizeof(long) == sizeof(std::int64_t))
 		if (name == "long" || name == "longint" || name == "signedlong" || name == "signedlongint") return Type::Int;
 	return std::nullopt;
@@ -56,6 +57,7 @@ std::optional<Type> ReflectedPinType(std::type_index type)
 	if (type == typeid(bool)) return Type::Bool;
 	if (type == typeid(float)) return Type::Float;
 	if (type == typeid(std::int32_t) || type == typeid(std::int64_t)) return Type::Int;
+	if (type == typeid(std::string)) return Type::String;
 	if (type == typeid(std::array<float, 2>)) return Type::Float2;
 	if (type == typeid(std::array<float, 3>)) return Type::Float3;
 	if (type == typeid(std::array<float, 4>)) return Type::Float4;
@@ -90,6 +92,10 @@ bool ReadDefault(const reflection::MetadataValue& value, Type type, GraphValue& 
 				return true;
 			}
 		}
+	}
+	if (type == Type::String)
+	{
+		if (const auto* item = std::get_if<std::string>(&value)) { result = *item; return true; }
 	}
 	return false;
 }

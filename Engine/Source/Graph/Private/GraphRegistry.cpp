@@ -41,7 +41,8 @@ namespace Engine
 				case EGraphPinType::Float:
 				case EGraphPinType::Float2:
 				case EGraphPinType::Float3:
-				case EGraphPinType::Float4: break;
+				case EGraphPinType::Float4:
+				case EGraphPinType::String: break;
 				case EGraphPinType::Object:
 					if (pin.ObjectType.empty()) return invalid(pin.Key, "Object pins require a reflected type name.");
 					break;
@@ -49,8 +50,8 @@ namespace Engine
 				}
 				if (pin.Type != EGraphPinType::Object && !pin.ObjectType.empty())
 					return invalid(pin.Key, "Only object pins can specify an object type.");
-				if (shader && (pin.Type == EGraphPinType::Execution || pin.Type == EGraphPinType::Object))
-					return invalid(pin.Key, "Shader nodes cannot declare execution or object pins.");
+				if (shader && (pin.Type == EGraphPinType::Execution || pin.Type == EGraphPinType::Object || pin.Type == EGraphPinType::String))
+					return invalid(pin.Key, "Shader nodes cannot declare execution, object, or string pins.");
 				if (!std::holds_alternative<std::monostate>(pin.DefaultValue))
 				{
 					if (pin.Direction != EGraphPinDirection::Input ||
@@ -213,7 +214,11 @@ GraphDiagnostic GraphRegistry::RegisterBuiltins()
 		{ "Logic.Float4Result", logic, {
 			{ "exec", Direction::Input, Type::Execution, {} }, { "value", Direction::Input, Type::Float4, {} } } },
 		{ "Shader.ColorOutput", { EGraphDomain::Shader }, {
-			{ "color", Direction::Input, Type::Float4, std::array<float, 4>{ 1.0f, 1.0f, 1.0f, 1.0f } } } }
+			{ "color", Direction::Input, Type::Float4, std::array<float, 4>{ 1.0f, 1.0f, 1.0f, 1.0f } } } },
+		{ "Core.String", logic, {
+			{ "value", Direction::Input, Type::String, std::string{} }, { "result", Direction::Output, Type::String, {} } } },
+		{ "Core.Reroute.String", logic, {
+			{ "In", Direction::Input, Type::String, std::string{} }, { "Out", Direction::Output, Type::String, {} } } }
 	};
 	for (auto& definition : definitions)
 	{

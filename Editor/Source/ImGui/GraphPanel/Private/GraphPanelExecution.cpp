@@ -146,20 +146,21 @@ const GraphValue* GraphPanel::FindObservedValue(const GraphPinReference& pin) co
 std::string GraphPanel::TraceValueText(const GraphValue& value)
 {
 	return std::visit([](const auto& item) -> std::string
-	{
-		using T = std::decay_t<decltype(item)>;
-		std::ostringstream text;
-		text << std::setprecision(9) << std::boolalpha;
-		if constexpr (std::is_same_v<T, std::monostate>) return {};
-		else if constexpr (std::is_arithmetic_v<T>) text << item;
-		else
 		{
-			text << '(';
-			for (std::size_t i = 0; i < item.size(); ++i) { if (i) text << ", "; text << item[i]; }
-			text << ')';
-		}
-		return text.str();
-	}, value);
+			using T = std::decay_t<decltype(item)>;
+			std::ostringstream text;
+			text << std::setprecision(9) << std::boolalpha;
+			if constexpr (std::is_same_v<T, std::monostate>) return {};
+			else if constexpr (std::is_same_v<T, std::string>) return item;
+			else if constexpr (std::is_arithmetic_v<T>) text << item;
+			else
+			{
+				text << '(';
+				for (std::size_t i = 0; i < item.size(); ++i) { if (i) text << ", "; text << item[i]; }
+				text << ')';
+			}
+			return text.str();
+		}, value);
 }
 
 void GraphPanel::DrawExecutionTrace()

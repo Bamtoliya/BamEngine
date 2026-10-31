@@ -18,6 +18,7 @@ namespace archive_graph
 			else if constexpr (std::is_same_v<T, bool>) return "Bool";
 			else if constexpr (std::is_same_v<T, std::int64_t>) return "Int";
 			else if constexpr (std::is_same_v<T, float>) return "Float";
+			else if constexpr (std::is_same_v<T, std::string>) return "String";
 			else if constexpr (std::is_same_v<T, std::array<float, 2>>) return "Float2";
 			else if constexpr (std::is_same_v<T, std::array<float, 3>>) return "Float3";
 			else
@@ -101,6 +102,7 @@ namespace archive_graph
 				if (type == "Float2") return detail::ReadAlternative<std::array<float, 2>>(object, candidate);
 				if (type == "Float3") return detail::ReadAlternative<std::array<float, 3>>(object, candidate);
 				if (type == "Float4") return detail::ReadAlternative<std::array<float, 4>>(object, candidate);
+				if (type == "String") return detail::ReadAlternative<std::string>(object, candidate);
 
 				return { archive::ArchiveErrorCode::InvalidValue, "Type" };
 			});

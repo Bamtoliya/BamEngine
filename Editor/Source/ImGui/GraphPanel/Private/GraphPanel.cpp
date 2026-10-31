@@ -888,6 +888,18 @@ bool GraphPanel::DrawValue(EGraphPinType type, GraphValue& value)
 	case EGraphPinType::Float2: return ImGui::InputFloat2("##Value", std::get<std::array<float, 2>>(value).data(), "%.6g");
 	case EGraphPinType::Float3: return ImGui::InputFloat3("##Value", std::get<std::array<float, 3>>(value).data(), "%.6g");
 	case EGraphPinType::Float4: return ImGui::InputFloat4("##Value", std::get<std::array<float, 4>>(value).data(), "%.6g");
+	case EGraphPinType::String:
+	{
+		auto& str = std::get<std::string>(value);
+		char buffer[256];
+		strncpy_s(buffer, str.c_str(), sizeof(buffer));
+		if (ImGui::InputText("##Value", buffer, sizeof(buffer)))
+		{
+			str = buffer;
+			return true;
+		}
+		return false;
+	}
 	default: return false;
 	}
 }
@@ -902,6 +914,7 @@ GraphValue GraphPanel::MakeDefaultValue(EGraphPinType type)
 	case EGraphPinType::Float2: return std::array<float, 2>{};
 	case EGraphPinType::Float3: return std::array<float, 3>{};
 	case EGraphPinType::Float4: return std::array<float, 4>{};
+	case EGraphPinType::String: return std::string{};
 	default: return {};
 	}
 }

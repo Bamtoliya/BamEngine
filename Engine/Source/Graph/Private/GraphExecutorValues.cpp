@@ -16,13 +16,18 @@ std::any NativeValue(const GraphValue& value, std::type_index type)
 			throw std::runtime_error("Value is outside the native int32 range.");
 		return static_cast<std::int32_t>(*integer);
 	}
-	return std::visit([&](const auto& item) -> std::any
+	if (type == typeid(std::string))
 	{
-		using T = std::decay_t<decltype(item)>;
-		if constexpr (!std::is_same_v<T, std::monostate>)
-			if (type == typeid(T)) return item;
-		throw std::runtime_error("Native argument type mismatch.");
-	}, value);
+		if (const auto* str = std::get_if<std::string>(&value)) return *str;
+		throw std::runtime_error("Value is not a string.");
+	}
+	return std::visit([&](const auto& item) -> std::any
+		{
+			using T = std::decay_t<decltype(item)>;
+			if constexpr (!std::is_same_v<T, std::monostate>)
+				if (type == typeid(T)) return item;
+			throw std::runtime_error("Native argument type mismatch.");
+		}, value);
 }
 
 GraphValue ReturnedValue(const std::any& value)
@@ -32,6 +37,7 @@ GraphValue ReturnedValue(const std::any& value)
 	if (const auto* item = std::any_cast<float>(&value)) return *item;
 	if (const auto* item = std::any_cast<std::int64_t>(&value)) return *item;
 	if (const auto* item = std::any_cast<std::int32_t>(&value)) return static_cast<std::int64_t>(*item);
+	if (const auto* item = std::any_cast<std::string>(&value)) return *item;
 	if (const auto* item = std::any_cast<std::array<float, 2>>(&value)) return *item;
 	if (const auto* item = std::any_cast<std::array<float, 3>>(&value)) return *item;
 	if (const auto* item = std::any_cast<std::array<float, 4>>(&value)) return *item;

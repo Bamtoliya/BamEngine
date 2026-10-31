@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "GraphTypes.h"
 #include <algorithm>
@@ -18,6 +18,7 @@ inline bool GraphValueMatchesType(const GraphValue& value, EGraphPinType type)
 	case EGraphPinType::Float2: return std::holds_alternative<std::array<float, 2>>(value);
 	case EGraphPinType::Float3: return std::holds_alternative<std::array<float, 3>>(value);
 	case EGraphPinType::Float4: return std::holds_alternative<std::array<float, 4>>(value);
+	case EGraphPinType::String: return std::holds_alternative<std::string>(value);
 	default: return false;
 	}
 }

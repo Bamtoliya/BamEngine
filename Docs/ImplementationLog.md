@@ -35,6 +35,41 @@ Use one entry per meaningful change.
 
 ---
 
+## [2026-11-01] 비주얼 스크립팅(Graph) 시스템 String 핀 타입 완전 지원 및 SpriteAnimationEditor 리소스 핸들 안전성 개선
+
+- Area: Engine | Editor | Graph | Resource | UI
+- Type: Feature | Fix | Stability | Architecture
+- 관련 파일:
+  - Engine/Source/Graph/Public/GraphTypes.h
+  - Engine/Source/Graph/Public/GraphValue.h
+  - Engine/Source/Graph/Private/GraphReflection.cpp
+  - Engine/Source/Graph/Private/GraphRegistry.cpp
+  - Engine/Source/Graph/Private/GraphExecutorValues.cpp
+  - Engine/Source/Core/Archive/Public/Adapters/GraphValueArchiveAdapter.h
+  - Editor/Source/ImGui/GraphPanel/Private/GraphPanel.cpp
+  - Editor/Source/ImGui/GraphPanel/Private/GraphPanelNodeEditor.cpp
+  - Editor/Source/ImGui/GraphPanel/Private/GraphPanelExecution.cpp
+  - Editor/Source/ImGui/ResourceEditor/Public/SpriteAnimationEditor.h
+  - Editor/Source/ImGui/ResourceEditor/Private/SpriteAnimationEditor.cpp
+- 구현 요약:
+  1. **비주얼 스크립팅(Graph) String 핀 타입(EGraphPinType::String) 및 값 지원 확장**:
+     - `GraphTypes.h`: `EGraphPinType::String` 추가 및 `GraphValue` variant에 `std::string` 포함.
+     - `GraphValue.h`: `GraphValueMatchesType`에 `String` 타입 매칭 검증 추가.
+     - `GraphReflection.cpp`: `ReflectedPinType`에 `std::string`, `basic_string<char>` 및 `typeid(std::string)` 매핑 추가, `ReadDefault` 문자열 기본값 처리 추가.
+     - `GraphRegistry.cpp`: 핀 유효성 검사 통과 및 `Core.String` 리터럴 노드, `Core.Reroute.String` 리라우트 노드 등록.
+     - `GraphExecutorValues.cpp`: `NativeValue` 및 `ReturnedValue`에서 `std::string` 형변환 지원.
+     - `GraphValueArchiveAdapter.h`: `ValueTag<std::string>`("String") 및 `ReadValue` 역직렬화 분기 추가.
+     - `GraphPanel.cpp`, `GraphPanelNodeEditor.cpp`, `GraphPanelExecution.cpp`: `DrawValue`에 `ImGui::InputText` 연동, `MakeDefaultValue` 기본값 생성, `PinColor`(마젠타), `PinTypeName`("String"), `TraceValueText` 디버그 문자열 출력 연결.
+     - **결과**: `GetAnimatorBool`, `SetAnimatorFloat` 등 애니메이터 비주얼 스크립트 노드 등록 시 발생하던 `Unsupported by-value parameter: class std::basic_string<char>` 진단 에러 완전 해결.
+  2. **SpriteAnimationEditor 리소스 핸들 기반 안전성 개선**:
+     - `SpriteAnimationEditor` 내부에서 원시 포인터(`SpriteAnimation* m_Animation`) 소유권을 엔진 표준인 `ResourceHandle<SpriteAnimation>` 참조 방식으로 변경하여 수명 주기 누수 및 댕글링 포인터 위험 원천 차단.
+     - 스프라이트 UV Transform(`GetUVTransform()`) 및 프레임 스왑/편집 로직 안정화.
+- 검증:
+  - MSVC 컴파일 및 리플렉션 노드 등록 경고 해소 확인.
+  - 비주얼 스크립팅 에디터 캔버스에서 문자열 핀 입출력 정상 동작 확인.
+
+---
+
 ## [2026-11-01] 3D 스켈레탈 애니메이션 런타임, 상태 머신(ASM), 1D 블렌드 트리 및 에디터 저작 패널(AnimatorGraphPanel) 구축
 
 - Area: Engine | Render | Editor | Resource | Reflection

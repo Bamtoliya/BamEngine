@@ -10,7 +10,7 @@ class SpriteAnimationEditor final : public ResourceEditorInterface
 {
 public:
 	SpriteAnimationEditor();
-	virtual ~SpriteAnimationEditor();
+	virtual ~SpriteAnimationEditor() = default;
 
 public:
 	virtual bool IsSupported(const std::filesystem::path& assetPath) const override;
@@ -21,6 +21,7 @@ public:
 private:
 	void LoadAnimation(const std::filesystem::path& path);
 	void SaveAnimation();
+	Engine::SpriteAnimation* GetAnimation() const { return m_AnimationHandle.Get(); }
 
 	void DrawToolbar();
 	void DrawPreviewCanvas(f32 availWidth, f32 availHeight);
@@ -28,7 +29,7 @@ private:
 	void DrawFilmstrip(f32 height);
 
 private:
-	Engine::SpriteAnimation* m_Animation = nullptr;
+	Engine::ResourceHandle<Engine::SpriteAnimation> m_AnimationHandle;
 	bool m_IsPlaying = true;
 	f32 m_CurrentTime = 0.0f;
 	int32 m_CurrentFrameIndex = 0;

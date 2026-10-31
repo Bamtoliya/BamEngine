@@ -794,6 +794,7 @@ ImU32 GraphPanel::PinColor(EGraphPinType type)
 	case EGraphPinType::Bool: return IM_COL32(225, 90, 100, 255);
 	case EGraphPinType::Int: return IM_COL32(80, 200, 210, 255);
 	case EGraphPinType::Float: return IM_COL32(110, 210, 120, 255);
+	case EGraphPinType::String: return IM_COL32(235, 95, 210, 255); // 언리얼 스타일의 핫핑크
 	case EGraphPinType::Object: return IM_COL32(190, 130, 230, 255);
 	default: return IM_COL32(110, 155, 240, 255);
 	}
@@ -810,6 +811,7 @@ const char* GraphPanel::PinTypeName(EGraphPinType type)
 	case EGraphPinType::Float2: return "Float2";
 	case EGraphPinType::Float3: return "Float3";
 	case EGraphPinType::Float4: return "Float4";
+	case EGraphPinType::String: return "String";
 	case EGraphPinType::Object: return "Object";
 	default: return "Unknown";
 	}
