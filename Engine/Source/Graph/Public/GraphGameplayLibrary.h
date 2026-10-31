@@ -206,14 +206,51 @@ namespace Engine::GraphGameplay
 		auto* anim = scene->GetRegistry().try_get<SpriteAnimationComponent>(entity);
 		if (anim) anim->Pause();
 	}
-	FUNCTION(GRAPH_CALLABLE("Sprite.SetAnimationFPS"), DISPLAY_NAME("Set Sprite Animation FPS"), CATEGORY("Sprite"),
-		GRAPH_PIN_DEFAULT("fps", 12.0f))
-		inline void SetSpriteAnimationFPS(float fps)
+	FUNCTION(GRAPH_CALLABLE("Sprite.StopAnimation"), DISPLAY_NAME("Stop Sprite Animation"), CATEGORY("Sprite"))
+		inline void StopSpriteAnimation()
 	{
 		Scene* scene = GraphSystem::GetCurrentScene();
 		entt::entity entity = GraphSystem::GetCurrentEntity();
 		if (!scene || entity == entt::null) return;
 		auto* anim = scene->GetRegistry().try_get<SpriteAnimationComponent>(entity);
-		if (anim) anim->framesPerSecond = std::max(0.1f, fps);
+		if (anim) anim->Stop();
+	}
+	FUNCTION(GRAPH_CALLABLE("Sprite.SetFrame"), DISPLAY_NAME("Set Sprite Frame"), CATEGORY("Sprite"),
+		GRAPH_PIN_DEFAULT("frameIndex", 0))
+		inline void SetSpriteAnimationFrame(int frameIndex)
+	{
+		Scene* scene = GraphSystem::GetCurrentScene();
+		entt::entity entity = GraphSystem::GetCurrentEntity();
+		if (!scene || entity == entt::null) return;
+		auto* anim = scene->GetRegistry().try_get<SpriteAnimationComponent>(entity);
+		if (anim) anim->SetFrame(frameIndex);
+	}
+	FUNCTION(GRAPH_CALLABLE("Sprite.SetPlayRate"), DISPLAY_NAME("Set Sprite Play Rate"), CATEGORY("Sprite"),
+		GRAPH_PIN_DEFAULT("rate", 1.0f))
+		inline void SetSpritePlayRate(float rate)
+	{
+		Scene* scene = GraphSystem::GetCurrentScene();
+		entt::entity entity = GraphSystem::GetCurrentEntity();
+		if (!scene || entity == entt::null) return;
+		auto* anim = scene->GetRegistry().try_get<SpriteAnimationComponent>(entity);
+		if (anim) anim->playRate = rate;
+	}
+	FUNCTION(GRAPH_PURE("Sprite.IsPlaying"), DISPLAY_NAME("Is Sprite Animation Playing"), CATEGORY("Sprite"))
+		inline bool IsSpriteAnimationPlaying()
+	{
+		Scene* scene = GraphSystem::GetCurrentScene();
+		entt::entity entity = GraphSystem::GetCurrentEntity();
+		if (!scene || entity == entt::null) return false;
+		auto* anim = scene->GetRegistry().try_get<SpriteAnimationComponent>(entity);
+		return anim ? anim->isPlaying : false;
+	}
+	FUNCTION(GRAPH_PURE("Sprite.GetCurrentFrame"), DISPLAY_NAME("Get Current Sprite Frame"), CATEGORY("Sprite"))
+		inline int GetCurrentSpriteFrame()
+	{
+		Scene* scene = GraphSystem::GetCurrentScene();
+		entt::entity entity = GraphSystem::GetCurrentEntity();
+		if (!scene || entity == entt::null) return 0;
+		auto* anim = scene->GetRegistry().try_get<SpriteAnimationComponent>(entity);
+		return anim ? anim->currentFrameIndex : 0;
 	}
 }

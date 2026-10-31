@@ -100,6 +100,7 @@
 ,Get Actor Location,,
 ,Get Axis Horizontal (A/D/Left/Right),,
 ,Get Axis Vertical (W/S/Up/Down),,
+,Get Current Sprite Frame,,
 ,Get Delta Seconds,,
 ,Get Forward Vector,,
 ,Get Last Hit Distance,,
@@ -130,6 +131,7 @@
 ,Is Actor Visible,,
 ,Is Key Pressed,,
 ,Is Space Pressed,,
+,Is Sprite Animation Playing,,
 ,LENS_DISTORTION_CUBIC,Cubic Distortion,2차 왜곡
 ,LENS_DISTORTION_INTENSITY,Distortion,왜곡
 ,LENS_DISTORTION_SCALE,Scale,스케일
@@ -468,6 +470,8 @@
 ,Set Linear Velocity,,
 ,Set Master Volume,,
 ,Set Sprite Animation FPS,,
+,Set Sprite Frame,,
+,Set Sprite Play Rate,,
 ,Shader,Shader,셰이더
 ,Shader nodes cannot declare execution or object pins.,Shader nodes cannot declare execution or object pins.,셰이더 노드에는 실행 핀 또는 객체 핀을 선언할 수 없습니다.
 ,ShaderGraph.Cycle,A cycle was encountered while resolving the color input.,색상 입력을 찾는 중 순환 연결을 발견했습니다.
@@ -489,6 +493,7 @@
 ,Sqrt requires a non-negative input.,Sqrt requires a non-negative input.,Sqrt 입력은 0 이상이어야 합니다.
 ,Start already ran in this instance. Reload to restart.,Start already ran in this instance. Reload to restart.,이 인스턴스에서 Start가 이미 실행됐습니다. 다시 시작하려면 다시 불러오세요.
 ,Stop All Audio,,
+,Stop Sprite Animation,,
 ,Sun,Sun,태양
 ,TONE_MAPPING_EXPOSURE,Exposure,노출
 ,TONE_MAPPING_GAMMA,Gamma,감마
