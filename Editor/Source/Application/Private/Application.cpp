@@ -32,6 +32,7 @@
 
 #include "SceneDocument.h"
 #include "EditorSettingsService.h"
+#include "PrefabModeManager.h"
 
 IMPLEMENT_SINGLETON(Application)
 
@@ -147,6 +148,9 @@ void Application::Free()
 
     if (EditorSettingsService::IsCreated())
         EditorSettingsService::Get().UnbindRuntime();
+
+    if (PrefabModeManager::IsCreated())
+        PrefabModeManager::Destroy();
 
     m_Documents.Clear();
     m_SceneDocumentId = InvalidEditorDocumentId;
