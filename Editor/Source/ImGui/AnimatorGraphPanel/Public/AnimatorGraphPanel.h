@@ -1,0 +1,54 @@
+﻿#pragma once
+
+#include "ImGuiInterface.h"
+#include "AnimatorStateMachine.h"
+#include <memory>
+#include <string>
+#include <unordered_map>
+
+BEGIN(Editor)
+
+class AnimatorGraphPanel : public IImGui
+{
+public:
+	AnimatorGraphPanel();
+	virtual ~AnimatorGraphPanel() override = default;
+
+	virtual void Draw() override;
+
+	void SetStateMachine(const std::shared_ptr<Engine::AnimatorStateMachine>& sm);
+	std::shared_ptr<Engine::AnimatorStateMachine> GetStateMachine() const { return m_StateMachine; }
+
+private:
+	// GraphPanel 스타일 2단 메뉴/툴바
+	void DrawMenuBar();
+	void DrawToolbar();
+	void OpenDocument();
+	void SaveDocument(bool saveAs);
+
+	// 3분할 작업 공간
+	void DrawParametersTab();
+	void DrawCanvas();
+	void DrawTransitions(ImDrawList* drawList, const ImVec2& canvasPos);
+	void DrawCanvasContextMenu();
+	void DrawSelectionInspector();
+	void DrawStateInspector(Engine::AnimState& state);
+	void DrawTransitionInspector(Engine::AnimTransition& transition);
+
+private:
+	std::shared_ptr<Engine::AnimatorStateMachine> m_StateMachine;
+	std::string m_CurrentFilePath;
+	bool m_IsDirty = false;
+
+	// UI 선택 및 조작 상태
+	int m_SelectedStateIndex = -1;
+	int m_SelectedTransitionIndex = -1;
+	int m_ConnectingSourceIndex = -1;
+	int m_DraggingStateIndex = -1;
+
+	// 노드 위치 및 스크롤
+	ImVec2 m_CanvasScrolling = ImVec2(0.0f, 0.0f);
+	std::unordered_map<std::string, ImVec2> m_NodePositions;
+};
+
+END

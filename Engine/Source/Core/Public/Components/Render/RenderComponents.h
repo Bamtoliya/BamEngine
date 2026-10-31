@@ -11,3 +11,5 @@
 #include "Components/Render/TerrainComponent.h"
 #include "Components/Render/PostProcessComponent.h"
 #include "Components/Render/LODGroupComponent.h"
+#include "Components/Render/SpriteAnimationComponent.h"
+#include "Components/Render/AnimatorComponent.h"

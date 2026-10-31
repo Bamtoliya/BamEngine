@@ -327,6 +327,7 @@ bool ReflectionRegistry::RegisterComponentOperations()
     append.template operator()<LODGroupComponent>("LOD Group", "Rendering", &AddSpatialComponent<LODGroupComponent>);
     append.template operator()<SpriteRendererComponent>("Sprite Renderer", "Rendering", &AddSpatialComponent<SpriteRendererComponent>);
     append.template operator()<SkinnedMeshRendererComponent>("Skinned Mesh Renderer", "Rendering", &AddSpatialComponent<SkinnedMeshRendererComponent>);
+    append.template operator()<AnimatorComponent>("Animator", "Rendering", &AddSpatialComponent<AnimatorComponent>);
     append.template operator()<RigidBodyComponent>("Rigid Body", "Physics 3D", &AddSpatialComponent<RigidBodyComponent>);
     append.template operator()<ColliderComponent>("Collider", "Physics 3D", &AddSpatialComponent<ColliderComponent>);
     append.template operator()<JointComponent>("Joint", "Physics 3D", &AddSpatialComponent<JointComponent>);

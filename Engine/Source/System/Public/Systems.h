@@ -11,3 +11,4 @@
 #include "TerrainSystem.h"
 #include "GraphSystem.h"
 #include "SpriteAnimationSystem.h"
+#include "AnimationSystem.h"

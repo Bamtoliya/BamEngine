@@ -19,11 +19,12 @@
 #include "ReflectionRegistry.h"
 #include "Components/Core/PrefabInstanceComponent.h"
 #include "PrefabModeManager.h"
-#include "SelectionManager.h"
+#include "AnimationEvaluator.h"
 #include "NotificationManager.h"
 #include "SceneManager.h"
 #include "Archive/JsonArchive.h"
 #include <imgui_internal.h>
+#include "FileDialogs.h"
 
 InspectorPanel::InspectorPanel(uint32 panelId) : m_PanelId(panelId)
 {
@@ -913,6 +914,248 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 				if (ImGui::Button(LOCAL_LABEL("UI_PLAY").c_str())) audioSource.Play();
 			}
 		}
+		else if (object.Is<Engine::SpriteAnimationComponent>())
+		{
+			changed = ReflectionPropertyDrawer::DrawObject(type, object, registry, &componentSettings, drawHeaderMenu);
+			auto& anim = world.get<Engine::SpriteAnimationComponent>(handle);
+			auto* renderer = world.try_get<Engine::SpriteRendererComponent>(handle);
+			ImGui::Spacing();
+			ImGui::Separator();
+			const int frameCount = static_cast<int>(anim.frames.size());
+			if (frameCount <= 0)
+			{
+				ImGui::TextDisabled("%s", LOCAL_CSTR("SpriteAnimation.NoFrames"));
+			}
+			else
+			{
+				// 1. 타임라인 프레임 슬라이더
+				int currentFrame = anim.currentFrameIndex;
+				ImGui::AlignTextToFramePadding();
+				ImGui::Text("%s", LOCAL_CSTR("SpriteAnimation.Timeline"));
+				ImGui::SameLine();
+				ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 65.0f);
+				const std::string sliderLabel = fmt::format("{} / {}", currentFrame + 1, frameCount);
+				if (ImGui::SliderInt("##AnimTimelineSlider", &currentFrame, 0, frameCount - 1, sliderLabel.c_str()))
+				{
+					anim.SetFrame(currentFrame);
+					if (renderer&& currentFrame >= 0 && currentFrame < frameCount)
+						renderer->spriteHandle = anim.frames[currentFrame];
+					changed = true;
+				}
+				// 2. 에디터 뷰포트 실시간 미리보기 재생 컨트롤
+				static bool s_EditorPreviewActive = false;
+				static entt::entity s_PreviewEntity = entt::null;
+				const bool isPreviewing = (s_EditorPreviewActive && s_PreviewEntity == handle);
+				if (isPreviewing)
+				{
+					const float dt = ImGui::GetIO().DeltaTime;
+					const float fps = anim.framesPerSecond > 0.0f ? anim.framesPerSecond : 12.0f;
+					const float frameDuration = std::max(1.0f / fps, 0.001f);
+					anim.elapsedTime += dt * std::abs(anim.playRate);
+					while (anim.elapsedTime >= frameDuration)
+					{
+						anim.elapsedTime -= frameDuration;
+						anim.currentFrameIndex = (anim.currentFrameIndex + 1) % frameCount;
+						if (renderer) renderer->spriteHandle = anim.frames[anim.currentFrameIndex];
+					}
+					ImGui::TextColored(ImVec4(0.2f, 0.9f, 0.2f, 1.0f), "%s", LOCAL_CSTR("SpriteAnimation.Previewing"));
+					ImGui::SameLine();
+					if (ImGui::Button((ICON_FA_PAUSE " " + LOCAL_LABEL("SpriteAnimation.Pause")).c_str()))
+						s_EditorPreviewActive = false;
+					ImGui::SameLine();
+					if (ImGui::Button((ICON_FA_STOP " " + LOCAL_LABEL("SpriteAnimation.Stop")).c_str()))
+					{
+						s_EditorPreviewActive = false;
+						anim.SetFrame(0);
+						if (renderer && !anim.frames.empty()) renderer->spriteHandle = anim.frames[0];
+					}
+				}
+				else
+				{
+					ImGui::TextDisabled("%s", LOCAL_CSTR("SpriteAnimation.Stopped"));
+					ImGui::SameLine();
+					if (ImGui::Button((ICON_FA_PLAY " " + LOCAL_LABEL("SpriteAnimation.Preview")).c_str()))
+					{
+						s_EditorPreviewActive = true;
+						s_PreviewEntity = handle;
+					}
+					ImGui::SameLine();
+					if (ImGui::Button((ICON_FA_ROTATE_LEFT " " + LOCAL_LABEL("SpriteAnimation.Reset")).c_str()))
+					{
+						anim.SetFrame(0);
+						if (renderer && !anim.frames.empty()) renderer->spriteHandle = anim.frames[0];
+					}
+				}
+				if (!renderer)
+				{
+					ImGui::Spacing();
+					ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.2f, 1.0f), "%s", LOCAL_CSTR("SpriteAnimation.MissingRendererWarning"));
+				}
+			}
+		}
+		else if (object.Is<Engine::AnimatorComponent>())
+		{
+			changed = ReflectionPropertyDrawer::DrawObject(type, object, registry, &componentSettings, drawHeaderMenu);
+			auto& animator = world.get<Engine::AnimatorComponent>(handle);
+			auto* skinnedRenderer = world.try_get<Engine::SkinnedMeshRendererComponent>(handle);
+			auto* clip = animator.currentClip.Get();
+			auto* skeleton = skinnedRenderer ? skinnedRenderer->skeletonHandle.Get() : nullptr;
+			ImGui::Spacing();
+			ImGui::Separator();
+
+			// ── Animator Controller 에셋 로드 UI ──
+			ImGui::Text("%s", LOCAL_CSTR("Animator.ControllerPath"));
+			char pathBuf[260] = {};
+			std::strncpy(pathBuf, animator.controllerPath.c_str(), sizeof(pathBuf) - 1);
+			ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 65.0f);
+			if (ImGui::InputText("##ControllerPathInput", pathBuf, sizeof(pathBuf)))
+			{
+				animator.controllerPath = pathBuf;
+				changed = true;
+			}
+			ImGui::SameLine();
+			// 파일 탐색기 열기 버튼
+			if (ImGui::Button((ICON_FA_FOLDER_OPEN "##BrowseController")))
+			{
+				std::wstring selectedPath;
+				const std::vector<FileDialogFilter> filters{
+					{ L"Animator Controller (*.animator)", L"*.animator" },
+					{ L"JSON Files (*.json)", L"*.json" }
+				};
+				if (FileDialogs::OpenFileDialog(selectedPath, filters))
+				{
+					animator.controllerPath = WStrToStr(selectedPath);
+					if (animator.LoadController(animator.controllerPath)) changed = true;
+				}
+			}
+			ImGui::Spacing();
+
+			// ▼▼▼ 여기에 삽입 (1004번 라인) ▼▼▼
+			if (animator.runtimeState.HasStateMachine())
+			{
+				ImGui::Spacing();
+				ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "%s", LOCAL_CSTR("Animator.StateMachine"));
+				ImGui::Text("%s: %s", LOCAL_CSTR("Animator.CurrentState"), animator.runtimeState.GetCurrentStateName().c_str());
+
+				if (animator.runtimeState.IsTransitioning())
+				{
+					const float progress = animator.runtimeState.GetTransitionProgress();
+					ImGui::ProgressBar(progress, ImVec2(-1.0f, 0.0f), fmt::format("{:.1f}%", progress * 100.0f).c_str());
+				}
+
+				ImGui::Spacing();
+				ImGui::TextDisabled("%s", LOCAL_CSTR("Animator.Parameters"));
+				auto& params = animator.runtimeState.GetParameters().GetAll();
+				for (auto& [paramName, paramData] : params)
+				{
+					ImGui::PushID(paramName.c_str());
+					switch (paramData.type)
+					{
+					case Engine::EAnimatorParamType::Float:
+						if (ImGui::DragFloat(paramName.c_str(), &paramData.floatValue, 0.05f)) changed = true;
+						break;
+					case Engine::EAnimatorParamType::Int:
+						if (ImGui::DragInt(paramName.c_str(), &paramData.intValue)) changed = true;
+						break;
+					case Engine::EAnimatorParamType::Bool:
+						if (ImGui::Checkbox(paramName.c_str(), &paramData.boolValue)) changed = true;
+						break;
+					case Engine::EAnimatorParamType::Trigger:
+						if (ImGui::Button((LOCAL_LABEL("Animator.Trigger") + " (" + paramName + ")").c_str()))
+						{
+							animator.SetTrigger(paramName);
+							changed = true;
+						}
+						break;
+					}
+					ImGui::PopID();
+				}
+				ImGui::Separator();
+			}
+
+			if (!clip)
+			{
+				ImGui::TextDisabled("%s", LOCAL_CSTR("Animator.NoClipAssigned"));
+			}
+			else
+			{
+				const float tps = clip->GetTicksPerSecond() > 0.0 ? static_cast<float>(clip->GetTicksPerSecond()) : 25.0f;
+				const float durationSec = static_cast<float>(clip->GetDuration() / tps);
+				// 1. 타임라인 시간 슬라이더
+				float currentTime = animator.currentTime;
+				ImGui::AlignTextToFramePadding();
+				ImGui::Text("%s", LOCAL_CSTR("Animator.Timeline"));
+				ImGui::SameLine();
+				ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 65.0f);
+				const std::string sliderLabel = fmt::format("{:.2f}s / {:.2f}s", currentTime, durationSec);
+				if (ImGui::SliderFloat("##AnimTimeSlider", &currentTime, 0.0f, durationSec, sliderLabel.c_str()))
+				{
+					animator.currentTime = currentTime;
+					if (skeleton)
+					{
+						Engine::AnimationEvaluator::EvaluateSkinningMatrices(*clip, *skeleton,
+							animator.currentTime, animator.finalBoneMatrices);
+					}
+					changed = true;
+				}
+				// 2. 에디터 뷰포트 실시간 미리보기 재생 컨트롤
+				static bool s_AnimatorPreviewActive = false;
+				static entt::entity s_AnimatorPreviewEntity = entt::null;
+				const bool isPreviewing = (s_AnimatorPreviewActive && s_AnimatorPreviewEntity == handle);
+				if (isPreviewing)
+				{
+					const float dt = ImGui::GetIO().DeltaTime;
+					animator.currentTime += dt * animator.playRate;
+					if (durationSec > 0.0f && animator.isLooping)
+						animator.currentTime = std::fmod(animator.currentTime, durationSec);
+					if (skeleton)
+					{
+						Engine::AnimationEvaluator::EvaluateSkinningMatrices(*clip, *skeleton,
+							animator.currentTime, animator.finalBoneMatrices);
+					}
+					ImGui::TextColored(ImVec4(0.2f, 0.9f, 0.2f, 1.0f), "%s", LOCAL_CSTR("Animator.Previewing"));
+					ImGui::SameLine();
+					if (ImGui::Button((ICON_FA_PAUSE " " + LOCAL_LABEL("Animator.Pause")).c_str()))
+						s_AnimatorPreviewActive = false;
+					ImGui::SameLine();
+					if (ImGui::Button((ICON_FA_STOP " " + LOCAL_LABEL("Animator.Stop")).c_str()))
+					{
+						s_AnimatorPreviewActive = false;
+						animator.currentTime = 0.0f;
+						if (skeleton)
+						{
+							Engine::AnimationEvaluator::EvaluateSkinningMatrices(*clip, *skeleton,
+								0.0f, animator.finalBoneMatrices);
+						}
+					}
+				}
+				else
+				{
+					ImGui::TextDisabled("%s", LOCAL_CSTR("Animator.Stopped"));
+					ImGui::SameLine();
+					if (ImGui::Button((ICON_FA_PLAY " " + LOCAL_LABEL("Animator.Preview")).c_str()))
+					{
+						s_AnimatorPreviewActive = true;
+						s_AnimatorPreviewEntity = handle;
+					}
+					ImGui::SameLine();
+					if (ImGui::Button((ICON_FA_ROTATE_LEFT " " + LOCAL_LABEL("Animator.Reset")).c_str()))
+					{
+						animator.currentTime = 0.0f;
+						if (skeleton)
+						{
+							Engine::AnimationEvaluator::EvaluateSkinningMatrices(*clip, *skeleton,
+								0.0f, animator.finalBoneMatrices);
+						}
+					}
+				}
+				if (!skinnedRenderer || !skeleton)
+				{
+					ImGui::Spacing();
+					ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.2f, 1.0f), "%s", LOCAL_CSTR("Animator.MissingRendererWarning"));
+				}
+			}
+			}
 		else changed = ReflectionPropertyDrawer::DrawObject(type, object, registry, &componentSettings, drawHeaderMenu);
 
 		// **주의**: 기존에 이 자리에 있던 `if (ImGui::BeginPopupContextItem(popupId.c_str())) { ... }` 블록은 완전히 지웁니다!

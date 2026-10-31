@@ -172,6 +172,7 @@ private:
         if (!systemManager.AddSystem<MeshRenderSystem>()) return EResult::Fail;
         if (!systemManager.AddSystem<SpriteRenderSystem>()) return EResult::Fail;
         if (!systemManager.AddSystem<SpriteAnimationSystem>()) return EResult::Fail;
+        if (!systemManager.AddSystem<AnimationSystem>()) return EResult::Fail;
         if (!systemManager.AddSystem<UIRenderSystem>()) return EResult::Fail;
         if (!systemManager.AddSystem<AudioSystem>()) return EResult::Fail;
         if (!systemManager.AddSystem<TerrainSystem>()) return EResult::Fail;

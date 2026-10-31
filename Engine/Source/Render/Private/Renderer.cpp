@@ -567,19 +567,51 @@ EResult Renderer::RenderMeshes(const vector<StaticDrawCommand>& commands, Render
 
 EResult Renderer::RenderSkinnedMeshes(f32 dt, vector<SkinnedDrawCommand>& commands, ERenderSortType sortType, RenderPass* renderPass)
 {
+	if (!m_RHI || !renderPass) return EResult::Fail;
+	if (commands.empty()) return EResult::Success;
+	RHIPipelineDesc pipelineDesc;
+	const EResult prepareResult = PreparePassPipelineDesc(renderPass, pipelineDesc);
+	if (IsFailure(prepareResult)) return prepareResult;
+	const ERenderPassType passType = renderPass->GetPassType();
+	MaterialInterface* lastMaterial = nullptr;
+	Mesh* lastMesh = nullptr;
 	for (auto& command : commands)
 	{
-		if (command.mesh && command.material)
+		if (!command.mesh || !command.material) continue;
+		if (command.material != lastMaterial || command.mesh != lastMesh)
 		{
-			if (IsFailure(command.material->Bind(0)))
+			if (IsFailure(BindMeshPipeline(command.mesh, command.material, passType, pipelineDesc)))
 				return EResult::Fail;
+		}
+		if (command.material != lastMaterial)
+		{
+			if (IsFailure(command.material->Bind(2)))
+				return EResult::Fail;
+			lastMaterial = command.material;
+		}
+		if (command.mesh != lastMesh)
+		{
 			if (IsFailure(command.mesh->Bind(0)))
 				return EResult::Fail;
-			//m_RHI->BindConstantBuffer(command.pBoneMatrices, sizeof(mat4) * command.pMesh->GetBoneCount(), 1, EShaderType::Vertex);
-			m_RHI->DrawIndexed(command.mesh->GetIndexCount());
+			lastMesh = command.mesh;
 		}
+		// 1. 오브젝트 상수 버퍼 (월드 행렬 등) 바인딩: b0, space2 (Root Parameter [3])
+		SceneUBO objectData{};
+		objectData.worldMatrix = command.worldMatrix;
+		if (IsFailure(m_RHI->BindConstantBuffer(&objectData, sizeof(objectData), 1)))
+			return EResult::Fail;
+		// 2. 뼈 행렬 StructuredBuffer 바인딩: t0, space2 (Root Parameter [4])
+		if (command.boneMatrices && !command.boneMatrices->empty())
+		{
+			m_RHI->BindInstanceBuffer(command.boneMatrices->data(), static_cast<uint32>(command.boneMatrices->size()));
+		}
+		// 3. 인덱스 드로우
+		if (command.mesh->GetIndexBuffer())
+			m_RHI->DrawIndexed(command.mesh->GetIndexCount());
+		else
+			m_RHI->Draw(command.mesh->GetVertexCount());
 	}
-	return EResult();
+	return EResult::Success;
 }
 
 EResult Renderer::RenderSprite(f32 dt, vector<SpriteDrawCommand>& commands, ERenderSortType sortType, RenderPass* renderPass)

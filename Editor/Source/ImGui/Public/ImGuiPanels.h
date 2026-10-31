@@ -13,3 +13,4 @@
 #include "GraphicSettingPanel.h"
 #include "PostProcessPanel.h"
 #include "HistoryPanel.h"
+#include "AnimatorGraphPanel.h"

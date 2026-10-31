@@ -3,6 +3,8 @@
 #include "MaterialInterface.h"
 #include "CoreComponents.h"
 #include "StaticMeshRendererComponent.h"
+#include "SkinnedMeshRendererComponent.h"
+#include "AnimatorComponent.h"
 #include "TransformSystem.h"
 #include "Logger.h"
 
@@ -10,16 +12,12 @@ EResult Engine::Scene::InstantiateModel(const Model& model,
 	const ResourceHandle<MaterialInterface>& material, Entity*& outRoot)
 {
 	outRoot = nullptr;
-
 	if (!material.IsValid())
 		return EResult::InvalidArgument;
-
-	if (model.GetSkeleton().IsValid() || !model.GetAnimations().empty())
-		return EResult::NotImplemented;
-
+	// 기존 NotImplemented 가드 제거: Skeleton 유무 판별
+	const bool hasSkeleton = model.GetSkeleton().IsValid();
 	const auto& nodes = model.GetNodes();
 	const auto meshes = model.GetMeshes();
-
 	if (nodes.empty())
 		return EResult::InvalidArgument;
 
@@ -78,17 +76,34 @@ EResult Engine::Scene::InstantiateModel(const Model& model,
 
 	const auto addRenderer = [&](entt::entity handle, uint32 meshIndex)
 		{
-			auto& renderer = world.emplace<StaticMeshRendererComponent>(handle);
-			renderer.meshHandle = meshes[meshIndex];
-
 			const auto assignedMaterial = model.GetMeshMaterial(meshIndex);
-			renderer.materialHandle = assignedMaterial.IsValid() ?
+			const auto matHandle = assignedMaterial.IsValid() ?
 				ResourceHandle<MaterialInterface>(assignedMaterial) : material;
+			if (hasSkeleton)
+			{
+				auto& skinnedRenderer = world.emplace<SkinnedMeshRendererComponent>(handle);
+				skinnedRenderer.meshHandle = meshes[meshIndex];
+				skinnedRenderer.materialHandle = matHandle;
+				skinnedRenderer.skeletonHandle = model.GetSkeleton();
+			}
+			else
+			{
+				auto& staticRenderer = world.emplace<StaticMeshRendererComponent>(handle);
+				staticRenderer.meshHandle = meshes[meshIndex];
+				staticRenderer.materialHandle = matHandle;
+			}
 		};
-
 	const entt::entity rootHandle = created.front();
 	const auto modelPath = model.GetPath().empty() ? model.GetKey() : model.GetPath();
 	initialize(rootHandle, std::filesystem::path(modelPath).stem().wstring(), TransformComponent{});
+	// 스켈레톤이나 애니메이션이 있는 모델의 경우 루트 엔티티에 AnimatorComponent 자동 부착
+	if (hasSkeleton || !model.GetAnimations().empty())
+	{
+		auto& animator = world.emplace<AnimatorComponent>(rootHandle);
+		const auto& animations = model.GetAnimations();
+		if (!animations.empty())
+			animator.currentClip = animations.front(); // 첫 번째 기본 클립 지정
+	}
 
 	size_t nextExtraEntity = nodes.size() + 1;
 

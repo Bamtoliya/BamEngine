@@ -1,0 +1,51 @@
+{
+    "AnimatorController": {
+        "DefaultState": "Locomotion",
+        "Parameters": [
+            { "Name": "Speed", "Type": 0, "FloatValue": 0.0, "IntValue": 0, "BoolValue": false },
+            { "Name": "Jump", "Type": 3, "FloatValue": 0.0, "IntValue": 0, "BoolValue": false }
+        ],
+        "States": [
+            {
+                "Name": "Locomotion",
+                "PlayRate": 1.0,
+                "IsLooping": true,
+                "ClipKey": "",
+                "BlendTree": {
+                    "ParameterName": "Speed",
+                    "Samples": [
+                        { "Threshold": 0.0, "ClipKey": "" },
+                        { "Threshold": 2.0, "ClipKey": "" },
+                        { "Threshold": 6.0, "ClipKey": "" }
+                    ]
+                }
+            },
+            {
+                "Name": "Jump",
+                "PlayRate": 1.0,
+                "IsLooping": false,
+                "ClipKey": ""
+            }
+        ],
+        "Transitions": [
+            {
+                "SourceState": "Locomotion",
+                "TargetState": "Jump",
+                "Duration": 0.15,
+                "HasExitTime": false,
+                "ExitTime": 0.0,
+                "Conditions": [
+                    { "ParameterName": "Jump", "Mode": 4, "Threshold": 0.0 }
+                ]
+            },
+            {
+                "SourceState": "Jump",
+                "TargetState": "Locomotion",
+                "Duration": 0.25,
+                "HasExitTime": true,
+                "ExitTime": 0.85,
+                "Conditions": []
+            }
+        ]
+    }
+}

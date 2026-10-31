@@ -32,7 +32,7 @@ private:
 	EResult Initialize(void* arg = nullptr);
 public:
 	static PhysicsSystem* Create(void* arg = nullptr);
-	virtual void Free();
+	virtual void Free() override;
 public:
 	virtual void OnFixedUpdate(entt::registry& registry, const vector<Scene*>& activeScenes, f32 dt) override;
 public:

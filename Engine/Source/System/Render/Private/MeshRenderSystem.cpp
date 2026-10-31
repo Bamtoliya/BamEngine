@@ -155,5 +155,33 @@ void MeshRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& 
                 renderer.SubmitStatic(command, target.pass->GetID());
             }
         }
+
+        // 3. 스킨드 메시(SkinnedMeshRendererComponent) 순회 및 렌더러 제출
+        auto skinnedView = scene->GetRegistry().view<SkinnedMeshRendererComponent, WorldTransformComponent, FlagComponent>();
+        for (auto [entity, skinnedRenderer, worldTransform, flag] : skinnedView.each())
+        {
+            if (!flag.IsActiveInHierarchy() || !flag.IsVisibleInHierarchy() ||
+                HasFlag(flag.effectiveFlags, EEntityFlag::Dead)) continue;
+            Mesh* mesh = skinnedRenderer.meshHandle.Get();
+            MaterialInterface* material = skinnedRenderer.materialHandle.Get();
+            if (!mesh || !material) continue;
+            // AnimatorComponent가 부착되어 있는 경우 계산된 본 행렬 목록 참조
+            const auto* animator = scene->GetRegistry().try_get<AnimatorComponent>(entity);
+            const std::vector<mat4>* boneMatrices = (animator && !animator->finalBoneMatrices.empty())
+                ? &animator->finalBoneMatrices : nullptr;
+            SkinnedDrawCommand command;
+            command.mesh = mesh;
+            command.material = material;
+            command.worldMatrix = worldTransform.worldMatrix;
+            command.boneMatrices = boneMatrices;
+            for (const auto& target : targets)
+            {
+                if (target.pass->GetPassType() == ERenderPassType::Shadow && !skinnedRenderer.castShadow)
+                    continue;
+                if (!target.pass->IsAcceptsBlendMode(material->GetBlendMode()))
+                    continue;
+                renderer.SubmitSkinned(command, target.pass->GetID());
+            }
+        }
     }
 }
