@@ -1,7 +1,5 @@
 ﻿#include "Render/Cloud/Public/CloudTextureGenerator.h"
-#include <vector>
-#include <cmath>
-#include <algorithm>
+#include "Texture.h"
 
 namespace Engine
 {
@@ -80,11 +78,10 @@ namespace Engine
         return 1.0f - std::min(minDist, 1.0f);
     }
 
-    RHITexture* CloudTextureGenerator::CreateBaseShapeTexture(RHI* rhi, uint32 size)
+    Texture* CloudTextureGenerator::CreateBaseShapeTexture(RHI* rhi, const std::wstring& key, uint32 size)
     {
         if (!rhi) return nullptr;
         std::vector<uint8_t> pixels(size * size * size * 4);
-
         for (uint32 z = 0; z < size; ++z)
         {
             float fz = static_cast<float>(z) / size;
@@ -94,32 +91,22 @@ namespace Engine
                 for (uint32 x = 0; x < size; ++x)
                 {
                     float fx = static_cast<float>(x) / size;
-
-                    // 1. 저주파 3D Perlin 옥타브 합성 (구름의 묵직한 볼륨 바디)
                     float p0 = Perlin3D(fx, fy, fz, 4);
                     float p1 = Perlin3D(fx, fy, fz, 8);
                     float perlin = p0 * 0.7f + p1 * 0.3f;
-
-                    // 2. 저주파 Worley (구름의 몽글몽글한 덩어리 구조)
                     float w0 = Worley3D(fx, fy, fz, 4, 0);
-
-                    // 3. 진짜 언리얼 엔진 Perlin-Worley 결합: Perlin 바디에 Worley 세포 구조를 융합
                     float perlinWorley = std::clamp(perlin * 0.60f + w0 * 0.40f, 0.0f, 1.0f);
-
-                    // 4. 고주파 침식용 독립 Worley FBM (G: 중간 거품, B: 미세 솜털, A: 초미세 에로전)
                     float w1 = Worley3D(fx, fy, fz, 8, 101);
                     float w2 = Worley3D(fx, fy, fz, 16, 202);
                     float w3 = Worley3D(fx, fy, fz, 32, 303);
-
                     size_t idx = (z * size * size + y * size + x) * 4;
-                    pixels[idx + 0] = static_cast<uint8_t>(perlinWorley * 255.0f); // R: Base Shape
-                    pixels[idx + 1] = static_cast<uint8_t>(w1 * 255.0f);           // G: Worley 8
-                    pixels[idx + 2] = static_cast<uint8_t>(w2 * 255.0f);           // B: Worley 16
-                    pixels[idx + 3] = static_cast<uint8_t>(w3 * 255.0f);           // A: Worley 32
+                    pixels[idx + 0] = static_cast<uint8_t>(perlinWorley * 255.0f);
+                    pixels[idx + 1] = static_cast<uint8_t>(w1 * 255.0f);
+                    pixels[idx + 2] = static_cast<uint8_t>(w2 * 255.0f);
+                    pixels[idx + 3] = static_cast<uint8_t>(w3 * 255.0f);
                 }
             }
         }
-
         RHITextureDesc desc{};
         desc.width = size; desc.height = size; desc.depth = size;
         desc.mipLevels = 1; desc.arraySize = 1;
@@ -128,39 +115,35 @@ namespace Engine
         desc.usage = ETextureUsage::Sampler;
         desc.data = pixels.data();
         desc.dataSize = static_cast<uint32>(pixels.size());
-
-        return rhi->CreateTexture(desc);
+        RHITexture* rhiTex = rhi->CreateTexture(desc);
+        if (!rhiTex) return nullptr;
+        Texture* tex = Texture::CreateFromRHITexture(rhiTex, key);
+        if (tex)
+            tex->SetTempData(pixels);
+        return tex;
     }
-
-    RHITexture* CloudTextureGenerator::CreateWeatherMapTexture(RHI* rhi, uint32 size)
+    Texture* CloudTextureGenerator::CreateWeatherMapTexture(RHI* rhi, const std::wstring& key, uint32 size)
     {
         if (!rhi) return nullptr;
         std::vector<uint8_t> pixels(size * size * 4);
-
         for (uint32 y = 0; y < size; ++y)
         {
             float fy = static_cast<float>(y) / size;
             for (uint32 x = 0; x < size; ++x)
             {
                 float fx = static_cast<float>(x) / size;
-
-                // 2D Perlin FBM: 기상 위성도처럼 거대한 구름 군집과 빈 하늘을 형성
                 float p0 = Perlin3D(fx, fy, 0.1f, 3);
                 float p1 = Perlin3D(fx, fy, 0.3f, 6);
                 float p2 = Perlin3D(fx, fy, 0.7f, 12);
                 float coverage = std::clamp(p0 * 0.55f + p1 * 0.30f + p2 * 0.15f, 0.0f, 1.0f);
-
-                // 구름 꼭대기 고도 그래디언트 (G)
                 float heightGrad = std::clamp(p0 * 0.7f + 0.3f, 0.4f, 1.0f);
-
                 size_t idx = (y * size + x) * 4;
-                pixels[idx + 0] = static_cast<uint8_t>(coverage * 255.0f);   // R: Cloud Coverage
-                pixels[idx + 1] = static_cast<uint8_t>(heightGrad * 255.0f); // G: Cloud Max Height
-                pixels[idx + 2] = 255;                                        // B: Density Factor (1.0)
+                pixels[idx + 0] = static_cast<uint8_t>(coverage * 255.0f);
+                pixels[idx + 1] = static_cast<uint8_t>(heightGrad * 255.0f);
+                pixels[idx + 2] = 255;
                 pixels[idx + 3] = 255;
             }
         }
-
         RHITextureDesc desc{};
         desc.width = size; desc.height = size; desc.depth = 1;
         desc.mipLevels = 1; desc.arraySize = 1;
@@ -169,7 +152,11 @@ namespace Engine
         desc.usage = ETextureUsage::Sampler;
         desc.data = pixels.data();
         desc.dataSize = static_cast<uint32>(pixels.size());
-
-        return rhi->CreateTexture(desc);
+        RHITexture* rhiTex = rhi->CreateTexture(desc);
+        if (!rhiTex) return nullptr;
+        Texture* tex = Texture::CreateFromRHITexture(rhiTex, key);
+        if (tex)
+            tex->SetTempData(pixels);
+        return tex;
     }
 }

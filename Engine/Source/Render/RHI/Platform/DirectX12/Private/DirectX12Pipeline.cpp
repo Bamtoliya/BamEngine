@@ -3,13 +3,13 @@
 #include "DirectX12Shader.h"
 #include "Logger.h"
 #include <directx/d3d12sdklayers.h>
-#include <cstddef>
 
 #pragma region Constructor & Destructor
 EResult DirectX12Pipeline::Initialize(const DESC& desc)
 {
 	Safe_AddRef(desc.vertexShader);
 	Safe_AddRef(desc.pixelShader);
+	Safe_AddRef(desc.computeShader);
 	return CreatePipelineState();
 }
 
@@ -32,10 +32,10 @@ void DirectX12Pipeline::Free()
 		dxRHI->DeferRelease(m_Pipeline.Get());
 		dxRHI->InvalidatePipelineBinding(this);
 	}
-
 	m_Pipeline.Reset();
 	Safe_Release(m_Desc.vertexShader);
 	Safe_Release(m_Desc.pixelShader);
+	Safe_Release(m_Desc.computeShader); // 추가
 	__super::Free();
 }
 
@@ -60,6 +60,31 @@ EResult DirectX12Pipeline::CreatePipelineState()
 {
 	DirectX12RHI* dxRHI = static_cast<DirectX12RHI*>(m_RHI);
 	ID3D12Device* dxDevice = static_cast<ID3D12Device*>(dxRHI->GetNativeRHI());
+
+	// ── Compute Pipeline 생성 ──
+	if (m_Desc.pipelineType == EPipelineType::Compute)
+	{
+		if (!m_Desc.computeShader)
+		{
+			ENGINE_LOG_ERROR("Compute pipeline requires a valid computeShader.");
+			return EResult::InvalidArgument;
+		}
+		DirectX12Shader* cs = static_cast<DirectX12Shader*>(m_Desc.computeShader);
+		D3D12_COMPUTE_PIPELINE_STATE_DESC computePsoDesc = {};
+		computePsoDesc.pRootSignature = static_cast<ID3D12RootSignature*>(dxRHI->GetGlobalRootSignature());
+		computePsoDesc.CS = { cs->GetBytecode().pShaderBytecode, cs->GetBytecode().BytecodeLength };
+		ComPtr<ID3D12PipelineState> newPipeline;
+		const HRESULT hr = dxDevice->CreateComputePipelineState(&computePsoDesc, IID_PPV_ARGS(&newPipeline));
+		if (FAILED(hr))
+		{
+			ENGINE_LOG_ERROR("CreateComputePipelineState failed: HRESULT=0x{:08X}", static_cast<uint32>(hr));
+			return EResult::Fail;
+		}
+		dxRHI->DeferRelease(m_Pipeline.Get());
+		m_Pipeline.Swap(newPipeline);
+		dxRHI->InvalidatePipelineBinding(this);
+		return EResult::Success;
+	}
 
 	D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
 	psoDesc.pRootSignature = static_cast<ID3D12RootSignature*>(dxRHI->GetGlobalRootSignature());

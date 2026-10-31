@@ -57,6 +57,7 @@ void MetricsPanel::Update(f32 dt)
     if (auto* rhi = Engine::Renderer::Get().GetRHI())
     {
         m_RenderMetrics = rhi->GetLastFrameMetrics();
+        m_Capabilities = rhi->GetCapabilities();
     }
 
     // 이 패널은 기존 ImGuiManager의 메인 스레드 Update에서 호출됩니다.
@@ -209,23 +210,84 @@ void MetricsPanel::DrawRenderMetrics()
         ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.2f, 1.0f), "%s", LOCAL_CSTR("Metrics.RenderFailed"));
     }
 
+    // 1. 드로우콜 및 기본 정점/인덱스 통계
     const auto drawCalls = LOCAL_FMT("Metrics.DrawCalls", m_RenderMetrics.GetTotalDrawCalls());
-
-    const auto breakdown = LOCAL_FMT("Metrics.DrawBreakdown", m_RenderMetrics.DrawCalls,
-        m_RenderMetrics.IndexedDrawCalls);
-
+    const auto breakdown = LOCAL_FMT("Metrics.DrawBreakdown", m_RenderMetrics.DrawCalls, m_RenderMetrics.IndexedDrawCalls);
     const auto vertices = LOCAL_FMT("Metrics.Vertices", m_RenderMetrics.SubmittedVertices);
-
     const auto indices = LOCAL_FMT("Metrics.Indices", m_RenderMetrics.SubmittedIndices);
 
     ImGui::TextUnformatted(drawCalls.c_str());
     ImGui::TextUnformatted(breakdown.c_str());
-
-    ImGui::PushTextWrapPos(0.0f);
     ImGui::TextUnformatted(vertices.c_str());
     ImGui::TextUnformatted(indices.c_str());
-    ImGui::TextUnformatted(LOCAL_CSTR("Metrics.DrawHint"));
-    ImGui::PopTextWrapPos();
+
+    ImGui::Spacing();
+    ImGui::Separator();
+
+    // 2. CPU / GPU 전체 프레임 소요 시간
+    ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "%s", LOCAL_CSTR("Metrics.RenderTimes"));
+    ImGui::Text("%s", LOCAL_FMT("Metrics.TotalCPUSubmit", m_RenderMetrics.TotalCPUTimeMs).c_str());
+    ImGui::Text("%s", LOCAL_FMT("Metrics.TotalGPUExecute", m_RenderMetrics.TotalGPUTimeMs).c_str());
+
+    // 3. 패스별 세부 실행 시간 테이블 (CPU vs GPU)
+    if (!m_RenderMetrics.PassMetrics.empty())
+    {
+        if (ImGui::BeginTable("PassMetricsTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp))
+        {
+            ImGui::TableSetupColumn(LOCAL_LABEL("Metrics.RenderPass").c_str(), ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableSetupColumn(LOCAL_LABEL("Metrics.CPUTime").c_str(), ImGuiTableColumnFlags_WidthFixed, 65.0f);
+            ImGui::TableSetupColumn(LOCAL_LABEL("Metrics.GPUTime").c_str(), ImGuiTableColumnFlags_WidthFixed, 65.0f);
+            ImGui::TableHeadersRow();
+
+            for (const auto& pass : m_RenderMetrics.PassMetrics)
+            {
+                std::string passNameStr = WStrToStr(pass.PassName);
+                ImGui::TableNextRow();
+                ImGui::TableSetColumnIndex(0);
+                ImGui::TextUnformatted(passNameStr.c_str());
+                ImGui::TableSetColumnIndex(1);
+                ImGui::Text("%.2f", pass.CPUTimeMs);
+                ImGui::TableSetColumnIndex(2);
+                ImGui::Text("%.2f", pass.GPUTimeMs);
+            }
+            ImGui::EndTable();
+        }
+    }
+
+    ImGui::Spacing();
+    ImGui::Separator();
+
+    // 4. VRAM 및 디스크립터 메모리 상태
+    const auto& mem = m_RenderMetrics.MemoryStats;
+    ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "%s", LOCAL_CSTR("Metrics.VRAMDescriptors"));
+    if (mem.DedicatedVRAMBudgetMB > 0)
+    {
+        const float vramRatio = static_cast<float>(mem.DedicatedVRAMUsageMB) / static_cast<float>(mem.DedicatedVRAMBudgetMB);
+        char overlay[64];
+        snprintf(overlay, sizeof(overlay), "%llu / %llu MB (%.1f%%)", mem.DedicatedVRAMUsageMB, mem.DedicatedVRAMBudgetMB, vramRatio * 100.0f);
+        ImGui::ProgressBar(vramRatio, ImVec2(-1.0f, 0.0f), overlay);
+    }
+    else
+    {
+        ImGui::Text("%s", LOCAL_FMT("Metrics.DedicatedVRAM", mem.DedicatedVRAMUsageMB).c_str());
+    }
+    ImGui::Text("%s", LOCAL_FMT("Metrics.AllocatedDescriptors", mem.AllocatedDescriptors).c_str());
+
+    ImGui::Spacing();
+    ImGui::Separator();
+
+    // 5. 하드웨어 기능 지원 (Capabilities)
+    ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "%s", LOCAL_CSTR("Metrics.HardwareCapabilities"));
+    ImGui::BulletText("%s", LOCAL_FMT("Metrics.ComputeShader",
+        LOCAL(m_Capabilities.SupportsCompute ? "Metrics.Supported" : "Metrics.NotSupported")).c_str());
+    ImGui::BulletText("%s", LOCAL_FMT("Metrics.IndirectDraw",
+        LOCAL(m_Capabilities.SupportsIndirectDraw ? "Metrics.Supported" : "Metrics.NotSupported")).c_str());
+    ImGui::BulletText("%s", LOCAL_FMT("Metrics.MeshShader",
+        LOCAL(m_Capabilities.SupportsMeshShaders ? "Metrics.SupportedTier1Plus" : "Metrics.NotSupported")).c_str());
+    ImGui::BulletText("%s", LOCAL_FMT("Metrics.DXRRaytracing",
+        LOCAL(m_Capabilities.SupportsRaytracing ? "Metrics.SupportedTier1_0Plus" : "Metrics.NotSupported")).c_str());
+    ImGui::BulletText("%s", LOCAL_FMT("Metrics.DescriptorIndexing",
+        LOCAL(m_Capabilities.SupportsDescriptorIndexing ? "Metrics.SupportedTier3" : "Metrics.Tier1Or2")).c_str());
 }
 
 void MetricsPanel::ResetHistory()

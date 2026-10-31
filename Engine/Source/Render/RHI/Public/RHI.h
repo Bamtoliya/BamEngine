@@ -123,6 +123,7 @@ public:
 public:
     virtual EResult Draw(uint32 count) BAM_PURE;
     virtual EResult DrawIndexed(uint32 count) BAM_PURE;
+    virtual EResult DrawInstanced(uint32 vertexCountPerInstance, uint32 instanceCount, uint32 startVertexLocation = 0, uint32 startInstanceLocation = 0) BAM_PURE;
     virtual EResult DrawIndexedInstanced(uint32 indexCountPerInstance, uint32 instanceCount, uint32 startIndexLocation = 0, int32 baseVertexLocation = 0, uint32 startInstanceLocation = 0) BAM_PURE;
     virtual EResult DrawTexture(RHITexture* texture) BAM_PURE;
     virtual EResult BlitTexture(class RHITexture* src, class RHITexture* dst) { return EResult::NotImplemented; }
@@ -160,13 +161,17 @@ public:
 
 #pragma region Frame Metrics
 public:
-    void BeginMetricsFrame();
-	void EndMetricsFrame(bool renderSucceeded);
-	const RHIFrameMetrics& GetFrameMetrics() const { return m_CurrentFrameMetrics; }
-	const RHIFrameMetrics& GetLastFrameMetrics() const { return m_LastFrameMetrics; }
+    virtual void BeginMetricsFrame();
+    virtual void EndMetricsFrame(bool renderSucceeded);
+    const RHIFrameMetrics& GetFrameMetrics() const { return m_CurrentFrameMetrics; }
+    const RHIFrameMetrics& GetLastFrameMetrics() const { return m_LastFrameMetrics; }
+    virtual void BeginPassMetrics(const std::wstring& passName);
+    virtual void EndPassMetrics();
+    virtual const RHICapabilities& GetCapabilities() const { return m_Capabilities; }
+    virtual RHIMemoryStats QueryMemoryStats() { return {}; }
 protected:
     void RecordDraw(uint32 vertexCount);
-	void RecordIndexedDraw(uint32 indexCount);
+    void RecordIndexedDraw(uint32 indexCount);
 #pragma endregion
 
 #pragma region Initialization
@@ -213,8 +218,13 @@ protected:
 	RHIPipeline* m_CurrentPipeline = { nullptr };
     RenderPass* m_CurrentRenderPass = { nullptr };
 protected:
-	RHIFrameMetrics m_CurrentFrameMetrics = {};
-    RHIFrameMetrics m_LastFrameMetrics = {};
+    RHICapabilities m_Capabilities{};
+    RHIFrameMetrics m_CurrentFrameMetrics{};
+    RHIFrameMetrics m_LastFrameMetrics{};
+
+    std::chrono::high_resolution_clock::time_point m_FrameStartTime;
+    std::chrono::high_resolution_clock::time_point m_CurrentPassStartTime;
+    std::wstring m_CurrentPassName;
 #pragma endregion
 };
 

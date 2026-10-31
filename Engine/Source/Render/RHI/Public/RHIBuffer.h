@@ -10,6 +10,7 @@ enum class ERHIBufferType
 	IndirectArgs,
 	Readback,
 	Upload,
+	Storage,
 };
 
 struct RHIBufferDesc

@@ -23,6 +23,10 @@ namespace
 		VolumetricCloudData Cloud{};
 		vec3 SunDirection{ 0.0f, 1.0f, 0.0f };
 		f32 PlanetRadius = 6360000.0f;
+		uint32 HasIBLMaps = 0u;
+		f32 IBLIntensity = 1.0f;
+		vec2 _iblPad{ 0.0f };
+		vec4 _reserved{ 0.0f };
 	};
 }
 
@@ -216,12 +220,24 @@ void ViewportDeferredPipeline::SubmitLightingPass(const CameraBuffer& cameraBuff
 					return Engine::EResult::Fail;
 			}
 
-			// 4. 파이프라인 바인딩
+			auto& lightManager = Engine::LightManager::Get();
+			// 3-1. 타일 기반 광원 컬링 Compute Shader 디스패치
+			if (auto* posRT = rtMgr.GetRenderTarget(sourceNames[4]))
+			{
+				if (auto* posTex = posRT->GetTexture())
+				{
+					lightManager.DispatchLightCulling(camBuf, posTex);
+				}
+			}
+			// 4. 조명 그래픽스 파이프라인 바인딩 (컴퓨트 디스패치 직후 바인딩)
 			if (Engine::IsFailure(rhi->BindPipeline(m_LightingPipeline)))
 				return Engine::EResult::Fail;
-
-			// 5. 광원 버퍼 바인딩 (t6, space3)
-			auto& lightManager = Engine::LightManager::Get();
+			// 4-1. 타일 결과 버퍼 바인딩 (슬롯 1 -> t8, 슬롯 2 -> t9)
+			if (auto* gridBuf = lightManager.GetTileLightGridBuffer())
+				rhi->BindStorageBuffer(gridBuf, 1);
+			if (auto* idxBuf = lightManager.GetTileLightIndexBuffer())
+				rhi->BindStorageBuffer(idxBuf, 2);
+			// 5. 광원 데이터 버퍼 바인딩 (t6, space3)
 			if (Engine::IsFailure(lightManager.Bind(0)))
 				return Engine::EResult::Fail;
 

@@ -3,8 +3,6 @@
 #include "Editor_Includes.h"
 #include "RenderPassTypes.h"
 #include "CameraBuffer.h"
-#include <string>
-#include <vector>
 
 BEGIN(Engine)
 class Scene;

@@ -31,12 +31,20 @@ struct ShadowData
 	float PointLightRange;
 };
 
+TextureCube gIrradianceMap : register(t10, space3);
+TextureCube gPrefilteredEnvMap : register(t11, space3);
+Texture2D gBRDFLut : register(t12, space3);
+
 struct LightingPassData
 {
-	ShadowData Shadow;
-	VolumetricCloudData Cloud;
-	float3 SunDirection;
-	float PlanetRadius;
+    ShadowData Shadow;
+    VolumetricCloudData Cloud;
+    float3 SunDirection;
+    float PlanetRadius;
+    uint HasIBLMaps;
+    float IBLIntensity;
+    float2 _iblPad;
+    float4 _reserved;
 };
 
 Texture2D gDiffuse : register(t0, space3);
@@ -666,23 +674,18 @@ float4 main(PS_INPUT input) : SV_TARGET
 		cloudSunLightIndex = FindAtmosphereSunLightIndex(numLights);
 	}
 
-	uint width, height;
+    uint width, height;
     gPosition.GetDimensions(width, height);
     uint tilesX = (width + 15u) / 16u;
     uint2 tileCoord = uint2(input.Position.xy) / 16u;
     uint tileIndex = tileCoord.y * tilesX + tileCoord.x;
-
-	    uint2 tileInfo = gTileLightGrid[tileIndex];
+    uint2 tileInfo = gTileLightGrid[tileIndex];
     uint tileStart = tileInfo.x;
     uint tileLightCount = min(tileInfo.y, 256u);
-
-    // [Fallback 안전장치]: 타일 광원 수가 0이면 전체 광원(numLights)을 안전하게 순회하여 조명 꺼짐 방지
-    bool useTileList = (tileLightCount > 0u);
-    uint lightLoopCount = useTileList ? tileLightCount : numLights;
-
-    for (uint i = 0u; i < lightLoopCount; ++i)
+    // 타일 컬링 결과에 등록된 선별 광원만 순회 (광원이 없으면 0회 순회)
+    for (uint i = 0u; i < tileLightCount; ++i)
     {
-        uint lightIndex = useTileList ? gTileLightIndexList[tileStart + i] : i;
+        uint lightIndex = gTileLightIndexList[tileStart + i];
         Light light = LoadLight(lightIndex);
         if (!HasLightFlag(light.PackedFlags, LIGHT_FLAG_USE_IN_DEFERRED))
             continue;
@@ -742,18 +745,35 @@ float4 main(PS_INPUT input) : SV_TARGET
     }
 
     float normalDotView = max(dot(normal, viewDirection), 0.0f);
-    float3 specularBRDF = EnvBRDFApprox(f0, roughness, normalDotView);
     float3 kd = (1.0f - f0) * (1.0f - metallic);
-    float3 diffuseIBL;
-    float3 specularIBL;
-    if (hasSkyLight)
+    float3 diffuseIBL = float3(0.0f, 0.0f, 0.0f);
+    float3 specularIBL = float3(0.0f, 0.0f, 0.0f);
+
+    if (gLightingData.HasIBLMaps != 0u)
     {
+        // ── 1. 큐브맵 텍스처 기반 고품질 Split-Sum PBR IBL ──
+        float3 irradiance = gIrradianceMap.Sample(gBufferSampler, normal).rgb;
+        diffuseIBL = kd * albedo * irradiance * gLightingData.IBLIntensity;
+
+        float3 reflectDir = reflect(-viewDirection, normal);
+        const float MAX_REFLECTION_LOD = 4.0f;
+        float3 prefilteredColor = gPrefilteredEnvMap.SampleLevel(gBufferSampler, reflectDir, roughness * MAX_REFLECTION_LOD).rgb;
+
+        float2 brdf = gBRDFLut.Sample(gBufferSampler, float2(normalDotView, roughness)).rg;
+        float3 specularBRDF = f0 * brdf.x + brdf.y;
+        specularIBL = prefilteredColor * specularBRDF * gLightingData.IBLIntensity;
+    }
+    else if (hasSkyLight)
+    {
+        // ── 2. 기존 반구형 수식 기반 SkyLight 보간 (텍스처 미지정 시 안전 폴백) ──
+        float3 specularBRDF = EnvBRDFApprox(f0, roughness, normalDotView);
         diffuseIBL = kd * albedo * skyDiffuseIrradiance;
         specularIBL = skySpecularRadiance * specularBRDF;
     }
     else
     {
         float3 fallbackEnv = float3(0.15f, 0.15f, 0.15f);
+        float3 specularBRDF = EnvBRDFApprox(f0, roughness, normalDotView);
         diffuseIBL = kd * albedo * fallbackEnv;
         specularIBL = fallbackEnv * specularBRDF;
     }

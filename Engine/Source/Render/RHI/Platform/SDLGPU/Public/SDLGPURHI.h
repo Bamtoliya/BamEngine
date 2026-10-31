@@ -98,7 +98,8 @@ public:
 #pragma region Draw
 	virtual EResult Draw(uint32 count) override;
 	virtual EResult DrawIndexed(uint32 count) override;
-	virtual EResult DrawIndexedInstanced() override { return EResult::NotImplemented; }
+	virtual EResult DrawInstanced(uint32 vertexCountPerInstance, uint32 instanceCount, uint32 startVertexLocation = 0, uint32 startInstanceLocation = 0) override { return EResult::NotImplemented; }
+	virtual EResult DrawIndexedInstanced(uint32 indexCountPerInstance, uint32 instanceCount, uint32 startIndexLocation = 0, int32 baseVertexLocation = 0, uint32 startInstanceLocation = 0) override { return EResult::NotImplemented; }
 	virtual EResult DrawTexture(RHITexture* texture) override;
 	virtual EResult BlitTexture(class RHITexture* src, class RHITexture* dst) override;
 	virtual EResult ReadTexturePixel(RHITexture* texture, uint32 x, uint32 y, vec4& pixel) override;

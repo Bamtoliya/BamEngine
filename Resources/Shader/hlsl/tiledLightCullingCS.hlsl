@@ -7,9 +7,8 @@
 Texture2D gPosition : register(t4, space3);
 ByteAddressBuffer gLightBuffer : register(t6, space3);
 
-// 출력 UAV 버퍼
-RWStructuredBuffer<uint2> g_TileLightGrid : register(u0, space3);      // x: startIndex, y: lightCount
-RWStructuredBuffer<uint>  g_TileLightIndexList : register(u1, space3); // 선별된 광원 인덱스 배열
+RWStructuredBuffer<uint2> g_TileLightGrid : register(u0, space3); // x: startIndex, y: lightCount
+RWStructuredBuffer<uint> g_TileLightIndexList : register(u1, space3); // 선별된 광원 인덱스 배열
 
 static const uint LIGHT_BUFFER_HEADER_SIZE = 16u;
 static const uint LIGHT_BUFFER_STRIDE = 80u;
@@ -18,7 +17,6 @@ Light LoadLight(uint lightIndex)
 {
     uint address = LIGHT_BUFFER_HEADER_SIZE + lightIndex * LIGHT_BUFFER_STRIDE;
     Light light;
-
     light.Position = asfloat(gLightBuffer.Load3(address));
     light.Intensity = asfloat(gLightBuffer.Load(address + 12u));
     light.Direction = asfloat(gLightBuffer.Load3(address + 16u));
@@ -31,7 +29,6 @@ Light LoadLight(uint lightIndex)
     light.SpotOuterCos = asfloat(gLightBuffer.Load(address + 68u));
     light.SpotFalloff = asfloat(gLightBuffer.Load(address + 72u));
     light.Pad1 = asfloat(gLightBuffer.Load(address + 76u));
-
     return light;
 }
 
@@ -39,25 +36,56 @@ groupshared uint s_MinZ;
 groupshared uint s_MaxZ;
 groupshared uint s_TileLightCount;
 groupshared uint s_TileLightIndices[MAX_LIGHTS_PER_TILE];
+groupshared float4 s_FrustumPlanes[4]; // Left, Right, Top, Bottom (원점을 지나므로 xyz만 사용)
+
+// NDC 좌표를 View-space 방향 벡터로 역투영 (Z=1 평면)
+float3 UnprojectNDC(float2 ndc)
+{
+    float4 clip = float4(ndc, 1.0f, 1.0f);
+    float4 view = mul(commonData.InvProjection, clip);
+    return view.xyz / view.w;
+}
 
 [numthreads(TILE_SIZE, TILE_SIZE, 1)]
 void main(uint3 groupID : SV_GroupID, uint3 groupThreadID : SV_GroupThreadID, uint groupIndex : SV_GroupIndex)
 {
-    // 1. 타일 공유 변수 초기화
+    uint width, height;
+    gPosition.GetDimensions(width, height);
+
+    // 1. 타일 공유 변수 및 절두체 평면 초기화 (스레드 0번 수행)
     if (groupIndex == 0)
     {
         s_MinZ = 0x7F7FFFFF; // float 최대치 (비트 표현)
         s_MaxZ = 0;
         s_TileLightCount = 0;
+
+        // 타일의 픽셀 경계 계산
+        float pxMinX = float(groupID.x * TILE_SIZE);
+        float pxMaxX = min(float((groupID.x + 1) * TILE_SIZE), float(width));
+        float pxMinY = float(groupID.y * TILE_SIZE);
+        float pxMaxY = min(float((groupID.y + 1) * TILE_SIZE), float(height));
+
+        // 뷰포트 좌표를 NDC [-1, 1] 범위로 변환 (DirectX: Y축 상단이 +1, 하단이 -1)
+        float2 ndcMin = float2((pxMinX / float(width)) * 2.0f - 1.0f, 1.0f - (pxMaxY / float(height)) * 2.0f);
+        float2 ndcMax = float2((pxMaxX / float(width)) * 2.0f - 1.0f, 1.0f - (pxMinY / float(height)) * 2.0f);
+
+        // 타일의 4개 코너 뷰 공간 방향 벡터 (Left-Handed: Z+ 전방)
+        float3 v00 = UnprojectNDC(float2(ndcMin.x, ndcMax.y)); // 좌상단
+        float3 v10 = UnprojectNDC(float2(ndcMax.x, ndcMax.y)); // 우상단
+        float3 v01 = UnprojectNDC(float2(ndcMin.x, ndcMin.y)); // 좌하단
+        float3 v11 = UnprojectNDC(float2(ndcMax.x, ndcMin.y)); // 우하단
+
+        // 타일 내부를 향하는 4개 평면 법선 계산 (원점 (0,0,0)을 지남)
+        s_FrustumPlanes[0] = float4(normalize(cross(v00, v01)), 0.0f); // Left Plane
+        s_FrustumPlanes[1] = float4(normalize(cross(v11, v10)), 0.0f); // Right Plane
+        s_FrustumPlanes[2] = float4(normalize(cross(v10, v00)), 0.0f); // Top Plane
+        s_FrustumPlanes[3] = float4(normalize(cross(v01, v11)), 0.0f); // Bottom Plane
     }
     GroupMemoryBarrierWithGroupSync();
 
     // 2. 픽셀별 뷰 공간 깊이 추출 및 타일 minZ/maxZ 계산
-    uint width, height;
-    gPosition.GetDimensions(width, height);
     int2 pixelCoord = int2(groupID.xy * TILE_SIZE + groupThreadID.xy);
-
-    if (pixelCoord.x < (int)width && pixelCoord.y < (int)height)
+    if (pixelCoord.x < (int) width && pixelCoord.y < (int) height)
     {
         float3 worldPos = gPosition.Load(int3(pixelCoord, 0)).rgb;
         if (length(worldPos) > 0.0001f)
@@ -75,6 +103,7 @@ void main(uint3 groupID : SV_GroupID, uint3 groupThreadID : SV_GroupThreadID, ui
 
     float minTileZ = asfloat(s_MinZ);
     float maxTileZ = asfloat(s_MaxZ);
+    bool hasGeometry = (minTileZ <= maxTileZ);
 
     // 3. 광원 순회 및 타일 절두체 구면 교차 검사
     uint numLights = gLightBuffer.Load(0u);
@@ -97,19 +126,36 @@ void main(uint3 groupID : SV_GroupID, uint3 groupThreadID : SV_GroupThreadID, ui
             continue;
         }
 
-        // Point Light 및 Spot Light: 뷰 공간 거리 검사
+        // 지오메트리가 없는 타일은 국소 광원을 수집하지 않음
+        if (!hasGeometry)
+            continue;
+
+        // Point Light 및 Spot Light: 뷰 공간 절두체 평면 및 거리 검사
         float3 lightViewPos = mul(commonData.View, float4(light.Position, 1.0f)).xyz;
         float lightRange = max(light.Range, 0.1f);
 
-        // Z축 범위 검사 (minTileZ ~ maxTileZ)
-        if ((lightViewPos.z + lightRange >= minTileZ) && (lightViewPos.z - lightRange <= maxTileZ))
+        // Z축 범위 검사
+        if ((lightViewPos.z + lightRange < minTileZ) || (lightViewPos.z - lightRange > maxTileZ))
+            continue;
+
+        // 좌/우/상/하 4개 절두체 평면 검사
+        bool inFrustum = true;
+        [unroll]
+        for (int p = 0; p < 4; ++p)
+        {
+            if (dot(s_FrustumPlanes[p].xyz, lightViewPos) < -lightRange)
+            {
+                inFrustum = false;
+                break;
+            }
+        }
+
+        if (inFrustum)
         {
             uint slot;
             InterlockedAdd(s_TileLightCount, 1, slot);
             if (slot < MAX_LIGHTS_PER_TILE)
-            {
                 s_TileLightIndices[slot] = lightIndex;
-            }
         }
     }
     GroupMemoryBarrierWithGroupSync();
@@ -119,7 +165,7 @@ void main(uint3 groupID : SV_GroupID, uint3 groupThreadID : SV_GroupThreadID, ui
     {
         uint tilesX = (width + TILE_SIZE - 1) / TILE_SIZE;
         uint tileIndex = groupID.y * tilesX + groupID.x;
-        uint count = min(s_TileLightCount, (uint)MAX_LIGHTS_PER_TILE);
+        uint count = min(s_TileLightCount, (uint) MAX_LIGHTS_PER_TILE);
         uint startIndex = tileIndex * MAX_LIGHTS_PER_TILE;
 
         g_TileLightGrid[tileIndex] = uint2(startIndex, count);

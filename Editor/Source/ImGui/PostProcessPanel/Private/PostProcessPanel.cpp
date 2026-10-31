@@ -440,6 +440,7 @@ void PostProcessPanel::DrawPresetToolbar(PostProcessChain* chain)
 {
 	if (!chain) return;
 	const string savePopupTitle = LOCAL("PostProcess.SavePresetTitle") + "###PostProcessSavePreset";
+	const string deletePopupTitle = LOCAL("PostProcess.DeletePreset") + "###DeletePresetModal";
 
 	const std::string presetDir = PresetDirectory;
 
@@ -503,7 +504,7 @@ void PostProcessPanel::DrawPresetToolbar(PostProcessChain* chain)
 	if (!canDelete) ImGui::BeginDisabled(true);
 	if (ImGui::Button(ICON_FA_TRASH_CAN "##DeletePresetBtn", ImVec2(iconBtnWidth, iconBtnWidth)))
 	{
-		ImGui::OpenPopup("DeletePresetModal");
+		ImGui::OpenPopup(deletePopupTitle.c_str());
 	}
 	if (!canDelete) ImGui::EndDisabled();
 
@@ -588,7 +589,7 @@ void PostProcessPanel::DrawPresetToolbar(PostProcessChain* chain)
 	}
 
 	// ── 프리셋 삭제 확인 모달 팝업 ──
-	if (ImGui::BeginPopupModal("DeletePresetModal", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+	if (ImGui::BeginPopupModal(deletePopupTitle.c_str(), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
 	{
 		if (canDelete)
 		{

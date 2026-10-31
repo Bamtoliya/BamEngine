@@ -246,6 +246,8 @@ EResult DirectX12RHI::Initialize(void* arg)
         return EResult::Fail;
     }
 
+    InitializeCapabilities();
+    InitializeTimestampQueries();
     return EResult::Success;
 }
 
@@ -417,6 +419,40 @@ EResult DirectX12RHI::BeginFrame()
         m_FrameFailed = true;
         return waitResult;
     }
+
+    // ── 완료된 프레임의 타임스탬프 회수 (GPU 스톨 없는 지연 회수) ──
+    const uint32 frameIdx = m_CurrentBackBufferIndex;
+    if (m_ResolvedQueryCounts[frameIdx] > 0 && m_TimestampFrequency > 0 && m_TimestampReadbackBuffers[frameIdx])
+    {
+        D3D12_RANGE readRange = { 0, m_ResolvedQueryCounts[frameIdx] * sizeof(uint64) };
+        uint64* timestampData = nullptr;
+        if (SUCCEEDED(m_TimestampReadbackBuffers[frameIdx]->Map(0, &readRange, reinterpret_cast<void**>(&timestampData))))
+        {
+            m_LastGPUTimestampResults.clear();
+            f32 totalGpuMs = 0.0f;
+            for (const auto& passQuery : m_CompletedPassQueries[frameIdx])
+            {
+                if (passQuery.startIndex < m_ResolvedQueryCounts[frameIdx] && passQuery.endIndex < m_ResolvedQueryCounts[frameIdx])
+                {
+                    const uint64 start = timestampData[passQuery.startIndex];
+                    const uint64 end = timestampData[passQuery.endIndex];
+                    if (end >= start)
+                    {
+                        const f32 ms = static_cast<f32>(end - start) / static_cast<f32>(m_TimestampFrequency) * 1000.0f;
+                        m_LastGPUTimestampResults[passQuery.passName] = ms;
+                        totalGpuMs += ms;
+                    }
+                }
+            }
+            m_LastTotalGPUTimeMs = totalGpuMs;
+            m_TimestampReadbackBuffers[frameIdx]->Unmap(0, nullptr);
+        }
+        m_ResolvedQueryCounts[frameIdx] = 0;
+    }
+
+    m_TimestampQueryCount = 0;
+    m_ActivePassQueries.clear();
+
     m_TextureUploadCursors[m_CurrentBackBufferIndex] = 0;
 	m_BackBuffer = m_SwapChainBuffers[m_CurrentBackBufferIndex];
 	m_DynamicHeapCursor = 0;
@@ -469,6 +505,15 @@ EResult DirectX12RHI::EndFrame()
         barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
         m_CommandList->ResourceBarrier(1, &barrier);
         dxBackBuffer->SetCurrentState(D3D12_RESOURCE_STATE_PRESENT);
+    }
+
+    // ── 타임스탬프 쿼리 결과 리졸브 ──
+    if (m_TimestampQueryCount > 0 && m_TimestampQueryHeap && m_TimestampReadbackBuffers[m_CurrentBackBufferIndex])
+    {
+        m_CommandList->ResolveQueryData(m_TimestampQueryHeap.Get(), D3D12_QUERY_TYPE_TIMESTAMP,
+            0, m_TimestampQueryCount, m_TimestampReadbackBuffers[m_CurrentBackBufferIndex].Get(), 0);
+        m_ResolvedQueryCounts[m_CurrentBackBufferIndex] = m_TimestampQueryCount;
+        m_CompletedPassQueries[m_CurrentBackBufferIndex] = m_ActivePassQueries;
     }
 
     const HRESULT closeResult = m_CommandList->Close();
@@ -919,14 +964,13 @@ EResult DirectX12RHI::UploadTextureData(RHITexture* texture, const RHITextureDes
 
     if (FAILED(m_CommandQueue->Signal(fence.Get(), 1)))
     {
-        OutputDebugStringA("Texture upload: Signal failed.\n");
-        std::terminate();
+        ENGINE_LOG_ERROR("Texture upload: CommandQueue signal failed.");
+        return EResult::Fail;
     }
-
     if (FAILED(fence->SetEventOnCompletion(1, nullptr)))
     {
-        OutputDebugStringA("Texture upload: fence wait failed.\n");
-        std::terminate();
+        ENGINE_LOG_ERROR("Texture upload: Fence wait failed.");
+        return EResult::Fail;
     }
 
     if (FAILED(m_Device->GetDeviceRemovedReason()))
@@ -1673,6 +1717,33 @@ EResult DirectX12RHI::DrawIndexed(uint32 count)
     return EResult::Success;
 }
 
+EResult DirectX12RHI::DrawInstanced(uint32 vertexCountPerInstance, uint32 instanceCount, uint32 startVertexLocation, uint32 startInstanceLocation)
+{
+    if (!m_CommandList || instanceCount == 0 || vertexCountPerInstance == 0)
+        return EResult::InvalidArgument;
+
+    if (m_NumVertexBuffersBound > MAX_BUFFER_SLOTS)
+        return EResult::Fail;
+
+    D3D12_VERTEX_BUFFER_VIEW views[MAX_BUFFER_SLOTS] = {};
+    for (uint32 slot = 0; slot < m_NumVertexBuffersBound; ++slot)
+    {
+        if (!m_VertexBuffers[slot]) continue;
+        DirectX12Buffer* buffer = static_cast<DirectX12Buffer*>(m_VertexBuffers[slot]);
+        views[slot] = buffer->GetVertexBufferView();
+    }
+
+    if (m_NumVertexBuffersBound > 0)
+        m_CommandList->IASetVertexBuffers(0, m_NumVertexBuffersBound, views);
+
+    if (IsFailure(ApplyShaderResources()))
+        return EResult::Fail;
+
+    m_CommandList->DrawInstanced(vertexCountPerInstance, instanceCount, startVertexLocation, startInstanceLocation);
+    RecordDraw(vertexCountPerInstance * instanceCount);
+    return EResult::Success;
+}
+
 EResult DirectX12RHI::DrawIndexedInstanced(uint32 indexCountPerInstance, uint32 instanceCount, uint32 startIndexLocation, int32 baseVertexLocation, uint32 startInstanceLocation)
 {
     if (!m_CommandList || instanceCount == 0 || indexCountPerInstance == 0)
@@ -1762,5 +1833,143 @@ EResult DirectX12RHI::SetViewport(int32 x, int32 y, uint32 width, uint32 height)
     m_CommandList->RSSetViewports(1, &viewport);
     m_CommandList->RSSetScissorRects(1, &scissor);
     return EResult::Success;
+}
+#pragma endregion
+
+#pragma region Frame Metrics
+void DirectX12RHI::InitializeCapabilities()
+{
+    m_Capabilities.SupportsCompute = true;      // D3D12 기본 지원
+    m_Capabilities.SupportsIndirectDraw = true; // ExecuteIndirect 기본 지원
+    m_Capabilities.MaxComputeWorkGroupInvocations = 1024;
+
+    // Mesh Shader 지원 여부
+    D3D12_FEATURE_DATA_D3D12_OPTIONS7 options7 = {};
+    if (SUCCEEDED(m_Device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS7, &options7, sizeof(options7))))
+        m_Capabilities.SupportsMeshShaders = (options7.MeshShaderTier >= D3D12_MESH_SHADER_TIER_1);
+
+    // DXR (Raytracing) 지원 여부
+    D3D12_FEATURE_DATA_D3D12_OPTIONS5 options5 = {};
+    if (SUCCEEDED(m_Device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS5, &options5, sizeof(options5))))
+        m_Capabilities.SupportsRaytracing = (options5.RaytracingTier >= D3D12_RAYTRACING_TIER_1_0);
+
+    // Bindless (Descriptor Indexing) 지원 여부
+    D3D12_FEATURE_DATA_D3D12_OPTIONS options = {};
+    if (SUCCEEDED(m_Device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS, &options, sizeof(options))))
+        m_Capabilities.SupportsDescriptorIndexing = (options.ResourceBindingTier >= D3D12_RESOURCE_BINDING_TIER_3);
+}
+
+void DirectX12RHI::InitializeTimestampQueries()
+{
+    if (FAILED(m_CommandQueue->GetTimestampFrequency(&m_TimestampFrequency)))
+        m_TimestampFrequency = 0;
+
+    D3D12_QUERY_HEAP_DESC heapDesc = {};
+    heapDesc.Type = D3D12_QUERY_HEAP_TYPE_TIMESTAMP;
+    heapDesc.Count = MAX_TIMESTAMP_QUERIES;
+    if (FAILED(m_Device->CreateQueryHeap(&heapDesc, IID_PPV_ARGS(&m_TimestampQueryHeap))))
+        return;
+
+    const uint64 bufferSize = MAX_TIMESTAMP_QUERIES * sizeof(uint64);
+    D3D12_HEAP_PROPERTIES heapProps = {};
+    heapProps.Type = D3D12_HEAP_TYPE_READBACK;
+
+    D3D12_RESOURCE_DESC resDesc = {};
+    resDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+    resDesc.Width = bufferSize;
+    resDesc.Height = 1;
+    resDesc.DepthOrArraySize = 1;
+    resDesc.MipLevels = 1;
+    resDesc.Format = DXGI_FORMAT_UNKNOWN;
+    resDesc.SampleDesc.Count = 1;
+    resDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+
+    for (uint32 i = 0; i < MAX_SWAPCHAIN_BUFFERS; ++i)
+    {
+        m_Device->CreateCommittedResource(&heapProps, D3D12_HEAP_FLAG_NONE, &resDesc,
+            D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&m_TimestampReadbackBuffers[i]));
+    }
+}
+
+void DirectX12RHI::BeginPassMetrics(const std::wstring& passName)
+{
+    RHI::BeginPassMetrics(passName);
+
+    if (m_CommandList && m_TimestampQueryHeap && (m_TimestampQueryCount + 2 <= MAX_TIMESTAMP_QUERIES))
+    {
+        const uint32 startIndex = m_TimestampQueryCount++;
+        m_CommandList->EndQuery(m_TimestampQueryHeap.Get(), D3D12_QUERY_TYPE_TIMESTAMP, startIndex);
+
+        PassQueryRange range{};
+        range.passName = passName;
+        range.startIndex = startIndex;
+        m_ActivePassQueries.push_back(range);
+    }
+}
+
+void DirectX12RHI::EndPassMetrics()
+{
+    if (m_CommandList && m_TimestampQueryHeap && !m_ActivePassQueries.empty() && (m_TimestampQueryCount < MAX_TIMESTAMP_QUERIES))
+    {
+        const uint32 endIndex = m_TimestampQueryCount++;
+        m_CommandList->EndQuery(m_TimestampQueryHeap.Get(), D3D12_QUERY_TYPE_TIMESTAMP, endIndex);
+        m_ActivePassQueries.back().endIndex = endIndex;
+    }
+
+    RHI::EndPassMetrics();
+
+    // 직전 회수된 해당 패스의 GPU 시간 주입
+    if (!m_CurrentFrameMetrics.PassMetrics.empty())
+    {
+        auto& metric = m_CurrentFrameMetrics.PassMetrics.back();
+        if (auto it = m_LastGPUTimestampResults.find(metric.PassName); it != m_LastGPUTimestampResults.end())
+            metric.GPUTimeMs = it->second;
+    }
+}
+
+void DirectX12RHI::EndMetricsFrame(bool renderSucceeded)
+{
+    RHI::EndMetricsFrame(renderSucceeded);
+    m_CurrentFrameMetrics.TotalGPUTimeMs = m_LastTotalGPUTimeMs;
+    m_LastFrameMetrics = m_CurrentFrameMetrics;
+}
+
+RHIMemoryStats DirectX12RHI::QueryMemoryStats()
+{
+    RHIMemoryStats stats{};
+    if (m_DXGIFactory)
+    {
+        ComPtr<IDXGIAdapter1> adapter;
+        for (UINT i = 0; m_DXGIFactory->EnumAdapters1(i, &adapter) != DXGI_ERROR_NOT_FOUND; ++i)
+        {
+            DXGI_ADAPTER_DESC1 desc;
+            adapter->GetDesc1(&desc);
+            if (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) continue;
+
+            ComPtr<IDXGIAdapter3> adapter3;
+            if (SUCCEEDED(adapter.As(&adapter3)))
+            {
+                DXGI_QUERY_VIDEO_MEMORY_INFO localInfo{};
+                if (SUCCEEDED(adapter3->QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &localInfo)))
+                {
+                    stats.DedicatedVRAMBudgetMB = localInfo.Budget / (1024 * 1024);
+                    stats.DedicatedVRAMUsageMB = localInfo.CurrentUsage / (1024 * 1024);
+                }
+                DXGI_QUERY_VIDEO_MEMORY_INFO nonLocalInfo{};
+                if (SUCCEEDED(adapter3->QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_NON_LOCAL, &nonLocalInfo)))
+                {
+                    stats.SharedSystemMemoryUsageMB = nonLocalInfo.CurrentUsage / (1024 * 1024);
+                }
+                break;
+            }
+        }
+    }
+
+    if (m_RtvAllocator) stats.AllocatedDescriptors += m_RtvAllocator->GetAllocatedCount();
+    if (m_DsvAllocator) stats.AllocatedDescriptors += m_DsvAllocator->GetAllocatedCount();
+    if (m_SrvAllocator) stats.AllocatedDescriptors += m_SrvAllocator->GetAllocatedCount();
+    if (m_SamplerAllocator) stats.AllocatedDescriptors += m_SamplerAllocator->GetAllocatedCount();
+
+    return stats;
 }
 #pragma endregion

@@ -188,18 +188,38 @@ EResult RHI::BindInstanceBuffer(const void* data, uint32 instanceCount)
 
 #pragma endregion
 
+#pragma region Frame Metrics
 void RHI::BeginMetricsFrame()
 {
 	m_CurrentFrameMetrics = {};
+	m_CurrentFrameMetrics.PassMetrics.reserve(16);
+	m_FrameStartTime = std::chrono::high_resolution_clock::now();
 }
-
 void RHI::EndMetricsFrame(bool renderSucceeded)
 {
+	const auto now = std::chrono::high_resolution_clock::now();
+	m_CurrentFrameMetrics.TotalCPUTimeMs = std::chrono::duration<f32, std::milli>(now - m_FrameStartTime).count();
+	m_CurrentFrameMetrics.MemoryStats = QueryMemoryStats();
 	m_CurrentFrameMetrics.RenderSucceeded = renderSucceeded;
 	m_CurrentFrameMetrics.Available = true;
 	m_LastFrameMetrics = m_CurrentFrameMetrics;
 }
-
+void RHI::BeginPassMetrics(const std::wstring& passName)
+{
+	m_CurrentPassName = passName;
+	m_CurrentPassStartTime = std::chrono::high_resolution_clock::now();
+}
+void RHI::EndPassMetrics()
+{
+	const auto now = std::chrono::high_resolution_clock::now();
+	const f32 passCpuMs = std::chrono::duration<f32, std::milli>(now - m_CurrentPassStartTime).count();
+	RHIPassMetric passMetric{};
+	passMetric.PassName = m_CurrentPassName;
+	passMetric.CPUTimeMs = passCpuMs;
+	passMetric.GPUTimeMs = 0.0f; // 기본 백엔드는 0, D3D12에서 타임스탬프 결과 주입
+	m_CurrentFrameMetrics.PassMetrics.push_back(passMetric);
+	m_CurrentPassName.clear();
+}
 void RHI::RecordDraw(uint32 vertexCount)
 {
 	++m_CurrentFrameMetrics.DrawCalls;
@@ -211,6 +231,11 @@ void RHI::RecordIndexedDraw(uint32 indexCount)
 	++m_CurrentFrameMetrics.IndexedDrawCalls;
 	m_CurrentFrameMetrics.SubmittedIndices += indexCount;
 }
+#pragma endregion
+
+
+
+
 
 EResult RHI::InitializeConstantBuffers()
 {

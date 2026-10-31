@@ -3,6 +3,7 @@
 #include "DirectX12Types.h"
 #include "DirectX12DescriptorAllocator.h"
 #include <vector>
+#include <cstddef>
 
 struct DirectX12RHIDesc : public RHIDesc
 {
@@ -45,7 +46,7 @@ public:
 	RHITexture* CreateTextureFromFile(const wchar* filename) override;
 	RHITexture* CreateTexture(const RHITextureDesc& desc) override;
 	RHITexture* CreateTextureFromNativeHandle(void* nativeHandle) override;
-	EResult UploadTextureData(RHITexture* texture, const RHITextureDesc& desc) override;
+	EResult UploadTextureData(RHITexture* texture, const RHITextureDesc& desc, uint32 dstX = 0, uint32 dstY = 0) override;
 public:
 	RHIPipeline* CreatePipeline(const RHIPipelineDesc& desc) override;
 	RHISampler* CreateSampler(const SamplerDesc& desc) override;
@@ -60,13 +61,15 @@ public:
 	EResult BindRenderTargets(uint32 count, RHITexture** renderTargets, RHITexture* depthStencil) override;
 	EResult BindShader(RHIShader* shader) override;
 	EResult BindPipeline(RHIPipeline* pipeline) override;
-	void InvalidatePipelineBinding(const RHIPipeline* pipeline)
+	void InvalidatePipelineBinding(const RHIPipeline* pipeline) override
 	{
 		if (m_CurrentPipeline == pipeline)
 			m_CurrentPipeline = nullptr;
 	}
 	EResult BindSampler(RHISampler* sampler) override;
 	EResult BindConstantRangeBuffer(void* arg, uint32 slot, uint32 offset, uint32 size) override;
+	EResult BindInstanceBuffer(RHIBuffer* buffer, uint32 offset = 0) override;
+	EResult BindComputeStorageBuffer(RHIBuffer* buffer, uint32 slot = 0) override;
 #pragma endregion
 
 #pragma region RenderPass
@@ -94,30 +97,37 @@ private:
 	void CollectDeferredReleases();
 #pragma endregion
 
-
-
-
-#pragma region Draw Call
+#pragma region Draw
 private:
 	EResult ApplyShaderResources();
 public:
 	EResult Draw(uint32 count) override;
 	EResult DrawIndexed(uint32 count) override;
-	EResult DrawIndexedInstanced() override;
+	virtual EResult DrawInstanced(uint32 vertexCountPerInstance, uint32 instanceCount, uint32 startVertexLocation = 0, uint32 startInstanceLocation = 0) override;
+	virtual EResult DrawIndexedInstanced(uint32 indexCountPerInstance, uint32 instanceCount, uint32 startIndexLocation = 0, int32 baseVertexLocation = 0, uint32 startInstanceLocation = 0) override;
 	EResult DrawTexture(RHITexture* texture) override;
-	EResult ReadTexturePixel(RHITexture* texture, uint32 x, uint32 y, vec4& pixel) override;
+	EResult ReadTexturePixel(RHITexture* texture, uint32 x, uint32 y, vec4& pixel) override;	
 #pragma endregion
 
+#pragma region Compute
+public:
+	EResult Dispatch(uint32 threadGroupCountX, uint32 threadGroupCountY, uint32 threadGroupCountZ) override;
+	EResult ResourceBarrierUAV(RHIBuffer* buffer) override;
+#pragma endregion
+
+#pragma region Setter
 public:
 	EResult SetClearColor(vec4 color) override;
 	EResult SetViewport(int32 x, int32 y, uint32 width, uint32 height) override;
+#pragma endregion
+
+#pragma region Getter
+public:
 	virtual void* GetNativeRHI() const override { return m_Device.Get(); }
 	virtual void* GetWindowHandle() const override { return m_WindowHandle; }
-
 public:
 	ID3D12CommandQueue* GetCommandQueue() const { return m_CommandQueue.Get(); }
 	ID3D12GraphicsCommandList* GetCommandList() const { return m_CommandList.Get(); }
-
 public:
 	DirectX12DescriptorAllocator* GetRTVAllocator() const { return m_RtvAllocator; }
 	DirectX12DescriptorAllocator* GetDSVAllocator() const { return m_DsvAllocator; }
@@ -125,6 +135,28 @@ public:
 	DirectX12DescriptorAllocator* GetSamplerAllocator() const { return m_SamplerAllocator; }
 public:
 	ID3D12RootSignature* GetGlobalRootSignature() const { return m_GlobalRootSignature.Get(); }
+#pragma endregion
+
+
+#pragma region Frame Metrics
+public:
+	virtual void BeginPassMetrics(const std::wstring& passName) override;
+	virtual void EndPassMetrics() override;
+	virtual void EndMetricsFrame(bool renderSucceeded) override;
+	virtual RHIMemoryStats QueryMemoryStats() override;
+private:
+	void InitializeCapabilities();
+	void InitializeTimestampQueries();
+#pragma endregion
+
+
+
+	
+private:
+	ComPtr<ID3D12Resource> CreateTextureUploadBuffer(UINT64 size);
+
+	std::vector<ComPtr<ID3D12Resource>> m_TextureUploadBuffers[MAX_SWAPCHAIN_BUFFERS];
+	std::size_t m_TextureUploadCursors[MAX_SWAPCHAIN_BUFFERS] = {};
 private:
 
 	//DirectX 12 Core
@@ -169,5 +201,20 @@ private:
 		uint32 descriptorIndex = UINT32_MAX;
 	};
 	std::vector<DeferredReleaseEntry> m_DeferredReleases;
+
+#pragma region Frame Metrics
+	static constexpr uint32 MAX_TIMESTAMP_QUERIES = 64;
+	ComPtr<ID3D12QueryHeap> m_TimestampQueryHeap;
+	ComPtr<ID3D12Resource> m_TimestampReadbackBuffers[MAX_SWAPCHAIN_BUFFERS];
+	uint64 m_TimestampFrequency = 0;
+	uint32 m_TimestampQueryCount = 0;
+	uint32 m_ResolvedQueryCounts[MAX_SWAPCHAIN_BUFFERS] = {};
+	struct PassQueryRange { std::wstring passName; uint32 startIndex = 0; uint32 endIndex = 0; };
+	std::vector<PassQueryRange> m_ActivePassQueries;
+	std::vector<PassQueryRange> m_CompletedPassQueries[MAX_SWAPCHAIN_BUFFERS];
+	std::unordered_map<std::wstring, f32> m_LastGPUTimestampResults;
+	f32 m_LastTotalGPUTimeMs = 0.0f;
+#pragma endregion
+
 };
 END

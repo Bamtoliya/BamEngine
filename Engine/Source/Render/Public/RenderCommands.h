@@ -3,13 +3,22 @@
 #include "Engine_Includes.h"
 #include "ResourceHandle.h"
 #include "Structs.h"
-#include <optional>
+
 BEGIN(Engine)
 
 struct RenderObjectId
 {
 	uint32 sceneId = 0;
 	uint32 entityId = 0;
+};
+
+struct HeightfieldDrawData
+{
+	std::shared_ptr<class RHITexture> heightmap;
+	std::shared_ptr<class RHITexture> splatmap;
+	std::shared_ptr<class Mesh> gridMesh;
+	f32 maxHeight = 0.f;
+	vec2 cellSpacing = vec2(1.f);
 };
 
 struct StaticDrawCommand
@@ -20,6 +29,7 @@ struct StaticDrawCommand
 	RenderObjectId objectId{};
 	uint32 pickingId = 0;
 	std::optional<BoundingBox> worldBounds{};
+	std::optional<HeightfieldDrawData> heightfield{};
 };
 
 struct SkinnedDrawCommand

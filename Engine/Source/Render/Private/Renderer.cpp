@@ -7,6 +7,7 @@
 //Rendering
 #include "RenderPassManager.h"
 #include "RenderTargetManager.h"
+#include "InstanceData.h"
 //Pipeline
 #include "RHIPipeline.h"
 #include "PipelineManager.h"
@@ -16,7 +17,6 @@
 #include "Shader.h"
 #include "Texture.h"
 #include "MaterialInterface.h"
-
 //Light
 #include "LightManager.h"
 
@@ -130,6 +130,9 @@ EResult Renderer::Render(f32 dt)
 		const ERenderPassType passType = pass->GetPassType();
 		if (passType == ERenderPassType::Shadow && !LightManager::Get().HasShadowCastingLights())
 			continue;
+
+		m_RHI->BeginPassMetrics(pass->GetName());
+
 		auto staticIt = m_StaticDrawCommands.find(pass->GetID());
 		if (staticIt != m_StaticDrawCommands.end() && staticIt->second.size() > 1 &&
 			pass->GetSortType() != ERenderSortType::BackToFront)
@@ -405,14 +408,14 @@ EResult Renderer::Render(f32 dt)
 				PickingManager::Get().MarkPickingPass(pass->GetID());
 		}
 		GetRenderPassDelegate(pass->GetID()).Broadcast(dt);
+		m_RHI->EndPassMetrics();
 	}
 
 	return EResult::Success;
 }
 
 TODO("Renderer::RenderMeshes, RenderSkinnedMeshes, RenderSprite 함수에서 Material과 Mesh를 Bind하고 DrawIndexed 호출하는 부분을 RHI에 맞게 구현 필요")
-EResult Renderer::RenderMeshes(const vector<StaticDrawCommand>& commands, RenderPass* renderPass,
-	const Frustum* frustum)
+EResult Renderer::RenderMeshes(const vector<StaticDrawCommand>& commands, RenderPass* renderPass, const Frustum* frustum)
 {
 	if (!m_RHI || !renderPass)
 		return EResult::Fail;
@@ -429,6 +432,48 @@ EResult Renderer::RenderMeshes(const vector<StaticDrawCommand>& commands, Render
 	MaterialInterface* lastMaterial = nullptr;
 	Mesh* lastMesh = nullptr;
 
+	MaterialInterface* batchMaterial = nullptr;
+	Mesh* batchMesh = nullptr;
+	vector<InstanceData> instanceBatch;
+	instanceBatch.reserve(128);
+
+	auto flushBatch = [&]() -> EResult
+		{
+			if (instanceBatch.empty() || !batchMesh || !batchMaterial)
+				return EResult::Success;
+
+			if (batchMaterial != lastMaterial || batchMesh != lastMesh)
+			{
+				if (IsFailure(BindMeshPipeline(batchMesh, batchMaterial, passType, pipelineDesc)))
+					return EResult::Fail;
+			}
+
+			if (batchMaterial != lastMaterial)
+			{
+				if (IsFailure(batchMaterial->Bind(2)))
+					return EResult::Fail;
+				lastMaterial = batchMaterial;
+			}
+
+			if (batchMesh != lastMesh)
+			{
+				if (IsFailure(batchMesh->Bind(0)))
+					return EResult::Fail;
+				lastMesh = batchMesh;
+			}
+
+			const uint32 instanceCount = static_cast<uint32>(instanceBatch.size());
+			if (IsFailure(m_RHI->BindInstanceBuffer(instanceBatch.data(), instanceCount)))
+				return EResult::Fail;
+
+			const EResult result = batchMesh->GetIndexBuffer()
+				? m_RHI->DrawIndexedInstanced(batchMesh->GetIndexCount(), instanceCount)
+				: m_RHI->DrawInstanced(batchMesh->GetVertexCount(), instanceCount);
+
+			instanceBatch.clear();
+			return result;
+		};
+
 	for (const auto& command : commands)
 	{
 		Mesh* mesh = command.mesh;
@@ -437,31 +482,34 @@ EResult Renderer::RenderMeshes(const vector<StaticDrawCommand>& commands, Render
 		if (!mesh || !material)
 			return EResult::Fail;
 
+		// 프러스텀 컬링
 		if (frustum && command.worldBounds && !FrustumCuller::TestBoundingBox(*frustum, *command.worldBounds))
 			continue;
 
-		if (material != lastMaterial || mesh != lastMesh)
-		{
-			if (IsFailure(BindMeshPipeline(mesh, material, passType, pipelineDesc)))
-				return EResult::Fail;
-		}
-
-		if (material != lastMaterial)
-		{
-			if (IsFailure(material->Bind(2)))
-				return EResult::Fail;
-			lastMaterial = material;
-		}
-
-		SceneUBO objectData{};
-		objectData.worldMatrix = command.worldMatrix;
-		objectData.pickingData.x = static_cast<float>(command.pickingId);
-
+		// 지형(Heightfield) 등 단일 드로우 특수 객체 처리
 		if (command.heightfield)
 		{
+			if (IsFailure(flushBatch()))
+				return EResult::Fail;
+
+			batchMaterial = nullptr;
+			batchMesh = nullptr;
+
+			if (material != lastMaterial || mesh != lastMesh)
+			{
+				if (IsFailure(BindMeshPipeline(mesh, material, passType, pipelineDesc)))
+					return EResult::Fail;
+			}
+
+			if (material != lastMaterial)
+			{
+				if (IsFailure(material->Bind(2)))
+					return EResult::Fail;
+				lastMaterial = material;
+			}
+
 			const auto& heightfield = *command.heightfield;
 			RHISampler* sampler = SamplerManager::Get().GetDefaultSampler();
-
 			if (!heightfield.heightmap || !heightfield.splatmap || !sampler)
 				return EResult::Fail;
 
@@ -469,32 +517,52 @@ EResult Renderer::RenderMeshes(const vector<StaticDrawCommand>& commands, Render
 				IsFailure(m_RHI->BindTextureSampler(heightfield.splatmap.get(), sampler, 4)))
 				return EResult::Fail;
 
+			SceneUBO objectData{};
+			objectData.worldMatrix = command.worldMatrix;
+			objectData.pickingData.x = static_cast<float>(command.pickingId);
 			objectData.heightfieldData = vec4(
 				heightfield.maxHeight, heightfield.cellSpacing.x, heightfield.cellSpacing.y, 0.f);
 
-			// 명령별 텍스처를 덮어썼으므로 다음 명령에서는 머티리얼을 다시 바인딩합니다.
 			lastMaterial = nullptr;
-		}
 
-		if (IsFailure(m_RHI->BindConstantBuffer(&objectData, sizeof(objectData), 1)))
-			return EResult::Fail;
-
-		if (mesh != lastMesh)
-		{
-			if (IsFailure(mesh->Bind(0)))
+			if (IsFailure(m_RHI->BindConstantBuffer(&objectData, sizeof(objectData), 1)))
 				return EResult::Fail;
-			lastMesh = mesh;
+
+			if (mesh != lastMesh)
+			{
+				if (IsFailure(mesh->Bind(0)))
+					return EResult::Fail;
+				lastMesh = mesh;
+			}
+
+			const EResult result = mesh->GetIndexBuffer()
+				? m_RHI->DrawIndexed(mesh->GetIndexCount())
+				: m_RHI->Draw(mesh->GetVertexCount());
+
+			if (IsFailure(result))
+				return result;
+
+			continue;
 		}
 
-		const EResult result = mesh->GetIndexBuffer()
-			? m_RHI->DrawIndexed(mesh->GetIndexCount())
-			: m_RHI->Draw(mesh->GetVertexCount());
+		// 일반 정적 메시: 머티리얼 또는 메시가 달라지면 이전 배치 플러시
+		if (material != batchMaterial || mesh != batchMesh)
+		{
+			if (IsFailure(flushBatch()))
+				return EResult::Fail;
 
-		if (IsFailure(result))
-			return result;
+			batchMaterial = material;
+			batchMesh = mesh;
+		}
+
+		InstanceData inst{};
+		inst.worldMatrix = command.worldMatrix;
+		inst.pickingData.x = static_cast<float>(command.pickingId);
+		instanceBatch.push_back(inst);
 	}
 
-	return EResult::Success;
+	// 잔여 배치 최종 플러시
+	return flushBatch();
 }
 
 EResult Renderer::RenderSkinnedMeshes(f32 dt, vector<SkinnedDrawCommand>& commands, ERenderSortType sortType, RenderPass* renderPass)

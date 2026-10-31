@@ -50,6 +50,7 @@ private:
 	bool m_Paused = false;
 
 	Engine::RHIFrameMetrics m_RenderMetrics{};
+	Engine::RHICapabilities m_Capabilities{};
 	Engine::ResourceMetrics m_ResourceMetrics{};
 
 	f32 m_ResourceRefreshElapsed = 0.5f;

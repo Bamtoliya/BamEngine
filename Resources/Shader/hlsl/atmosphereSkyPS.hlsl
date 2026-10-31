@@ -170,12 +170,12 @@ float4 main(PS_INPUT input) : SV_TARGET
             float3 transmittance = exp(-totalExtinction);
 
             float cloudSunTransmittance = 1.0f;
-            if (cloudShadowEnabled)
+            // 3스텝당 1회 샘플링 및 구름층 고도 부근(상하 1500m 이내)에서만 검사
+            if (cloudShadowEnabled && (i % 3 == 0) && (sampleHeight <= cloudLayerTop + 1500.0f))
             {
                 float2 cloudLightTransmittance = ComputeCloudSunTransmittance(
                     samplePos, sunDir, PLANET_RADIUS, cloudLayerBottom, cloudLayerTop, cloudExtinctionCoeff,
                     sky.Cloud, cloudWindOffset, commonData.Time, baseShapeTex, weatherMapTex, cloudSampler);
-
                 cloudSunTransmittance = cloudLightTransmittance.x;
             }
 

@@ -16,6 +16,7 @@ public:
 
     ID3D12DescriptorHeap* GetHeap() const { return m_Heap.Get(); }
     D3D12_GPU_DESCRIPTOR_HANDLE GetGPUHandle(uint32 index) const;
+    uint32 GetAllocatedCount() const { return m_CurrentIndex - static_cast<uint32>(m_FreeIndices.size()); }
 
 private:
 	ComPtr<ID3D12DescriptorHeap> m_Heap = { nullptr };
