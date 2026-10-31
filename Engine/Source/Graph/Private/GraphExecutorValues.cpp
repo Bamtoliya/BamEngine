@@ -1,9 +1,6 @@
-#include "GraphExecutor.h"
+﻿#include "GraphExecutor.h"
 #include "GraphMathLibrary.h"
 #include "GraphValue.h"
-#include <limits>
-#include <stdexcept>
-#include <type_traits>
 
 namespace
 {
@@ -121,7 +118,8 @@ GraphValue GraphExecutor::Evaluate(GraphNodeId node, const std::string& pin)
 		const auto& instance = *m_Graph.FindNode(node);
 		const auto& type = instance.Type;
 		GraphValue value;
-		if (type == "Core.Bool" || type == "Core.Int" || type == "Core.Float" || type == "Core.Float2" ||
+		if (type.rfind("Core.Reroute", 0) == 0) value = ReadInput(node, "In");
+		else if (type == "Core.Bool" || type == "Core.Int" || type == "Core.Float" || type == "Core.Float2" ||
 			type == "Core.Float3" || type == "Core.Float4") value = ReadInput(node, "value");
 		else if (type == "Math.AddFloat" || type == "Math.MultiplyFloat" ||
 			type == "Math.GreaterFloat" || type == "Math.LessFloat")
@@ -146,6 +144,13 @@ GraphValue GraphExecutor::Evaluate(GraphNodeId node, const std::string& pin)
 			m_Registry.FindPin(type, "exec")->Type != EGraphPinType::Execution)) value = Invoke(node);
 		else if (type == "Flow.FlipFlop" && pin == "isA")
 			value = !m_NodeStates[node].NextA;
+		else if (type.rfind("Variable.Get.", 0) == 0)
+		{
+			const std::string varName = type.substr(13);
+			auto it = m_Variables.find(varName);
+			if (it != m_Variables.end()) value = it->second;
+			else throw std::runtime_error("Variable not found in executor: " + varName);
+		}
 		else
 		{
 			const auto outputs = m_Outputs.find(node);

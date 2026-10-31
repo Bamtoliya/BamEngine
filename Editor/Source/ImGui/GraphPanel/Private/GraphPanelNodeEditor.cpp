@@ -13,7 +13,9 @@ void GraphPanel::ActivateDocument()
 	{
 		ed::Config config;
 		config.SettingsName = (m_Domain == Engine::EGraphDomain::Logic) ? "LogicGraph" : "ShaderGraph";
+		config.NavigateButtonIndex = 2; // ★ 2 = 마우스 가운데 버튼(휠 클릭)으로 캔버스 화면 이동!
 		document.Context = ed::CreateEditor(&config);
+
 		// ── 언리얼 블루프린트 글로벌 테마 설정 ──
 		ed::SetCurrentEditor(document.Context);
 		auto& style = ed::GetStyle();
@@ -24,12 +26,13 @@ void GraphPanel::ActivateDocument()
 		style.Colors[ed::StyleColor_NodeBorder] = ImVec4(0.24f, 0.25f, 0.28f, 1.0f);
 		style.Colors[ed::StyleColor_HovNodeBorder] = ImVec4(0.95f, 0.70f, 0.20f, 1.0f);
 		style.Colors[ed::StyleColor_SelNodeBorder] = ImVec4(1.0f, 0.85f, 0.30f, 1.0f);
-		style.Colors[ed::StyleColor_Flow] = ImVec4(1.0f, 0.95f, 0.35f, 1.0f); // 실행선 형광 펄스
+		style.Colors[ed::StyleColor_Flow] = ImVec4(1.0f, 0.95f, 0.35f, 1.0f);
 		style.Colors[ed::StyleColor_FlowMarker] = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
 		style.FlowSpeed = 160.0f;
 		style.FlowMarkerDistance = 28.0f;
 	}
 	ed::SetCurrentEditor(document.Context);
+	ed::GetStyle().LinkStrength = (m_WireStyle == EWireStyle::Straight) ? 0.0f : 100.0f;
 }
 void GraphPanel::SuspendDocument()
 {
@@ -62,38 +65,169 @@ void GraphPanel::DrawCanvas(float height)
 	HandleConnections(ImVec2(0, 0), true);
 	ReadSelection();
 	ed::End();
-	// 빈 캔버스 배경 우클릭 시 노드 생성 메뉴 오픈
-	const bool itemHovered = ed::GetHoveredNode() || ed::GetHoveredPin() || ed::GetHoveredLink();
-	if (InputManager::Get().IsMouseButtonUp(EMouseButton::Right) && !itemHovered)
+
+	// ★ 와이어(링크) 좌클릭 더블클릭 시 리루트 노드 즉시 자동 삽입!
+	// ── DrawCanvas() 내부의 와이어 더블클릭 감지 부분 교체 ──
+	auto& input = Engine::InputManager::Get();
+	const ed::LinkId hoveredLinkId = ed::GetHoveredLink();
+	if (hoveredLinkId && input.IsMouseButtonDoubleClicked(Engine::EMouseButton::Left))
+	{
+		const auto mouse = input.GetScreenMousePosition();
+		const ImVec2 canvasPos = ed::ScreenToCanvas(ImVec2(mouse.x, mouse.y));
+		InsertRerouteNodeOnLink(static_cast<uintptr_t>(hoveredLinkId.Get()), canvasPos);
+	}
+
+	// ── 우클릭 컨텍스트 메뉴 감지 (노드 / 와이어 / 빈 캔버스 분기) ──
+	const ed::NodeId hoveredNodeId = ed::GetHoveredNode();
+	const ed::PinId hoveredPinId = ed::GetHoveredPin();
+	if (InputManager::Get().IsMouseButtonUp(EMouseButton::Right))
 	{
 		const auto mouse = InputManager::Get().GetScreenMousePosition();
-		m_AddPosition = ed::ScreenToCanvas(ImVec2(mouse.x, mouse.y));
-		PrepareNodeMenu();
-		ImGui::OpenPopup("##GraphCanvasMenu");
+		const ImVec2 canvasPos = ed::ScreenToCanvas(ImVec2(mouse.x, mouse.y));
+		m_ContextPosition = canvasPos;
+		if (hoveredNodeId)
+		{
+			m_ContextNodeId = static_cast<uintptr_t>(hoveredNodeId.Get());
+			// 우클릭한 노드가 선택 목록에 없다면 해당 노드로 단일 선택
+			for (const auto& [nodeId, view] : document.Nodes)
+			{
+				if (view.Id == static_cast<int>(m_ContextNodeId))
+				{
+					if (std::find(document.SelectedNodes.begin(), document.SelectedNodes.end(), nodeId) == document.SelectedNodes.end())
+						document.SelectedNodes = { nodeId };
+					break;
+				}
+			}
+			ImGui::OpenPopup("##GraphNodeMenu");
+		}
+		else if (hoveredLinkId)
+		{
+			m_ContextLinkId = static_cast<uintptr_t>(hoveredLinkId.Get());
+			ImGui::OpenPopup("##GraphLinkMenu");
+		}
+		else if (!hoveredPinId)
+		{
+			m_AddPosition = canvasPos;
+			PrepareNodeMenu();
+			ImGui::OpenPopup("##GraphCanvasMenu");
+		}
 	}
-	const bool menuOpen = ImGui::IsPopupOpen("##GraphCanvasMenu") || m_OpenNodePopup;
+	const bool menuOpen = ImGui::IsPopupOpen("##GraphCanvasMenu") || ImGui::IsPopupOpen("##GraphNodeMenu") ||
+		ImGui::IsPopupOpen("##GraphLinkMenu") || m_OpenNodePopup;
 	const bool canvasFocused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
-
-	if (canvasFocused && !menuOpen && !ImGui::GetIO().WantTextInput && InputManager::Get().IsKeyButtonDown(EKeyCode::C))
+	// ── 단축키 처리 ──
+	if (canvasFocused && !menuOpen && !ImGui::GetIO().WantTextInput)
 	{
-		CreateCommentBoxFromSelection();
+		const bool shift = ImGui::GetIO().KeyShift || Engine::InputManager::Get().IsShiftPressed();
+		const bool ctrl = ImGui::GetIO().KeyCtrl || Engine::InputManager::Get().IsCtrlPressed();
+		if (shift)
+		{
+			if (InputManager::Get().IsKeyButtonDown(EKeyCode::W)) AlignSelectedNodes('W');
+			else if (InputManager::Get().IsKeyButtonDown(EKeyCode::S)) AlignSelectedNodes('S');
+			else if (InputManager::Get().IsKeyButtonDown(EKeyCode::A)) AlignSelectedNodes('A');
+			else if (InputManager::Get().IsKeyButtonDown(EKeyCode::D)) AlignSelectedNodes('D');
+			else if (InputManager::Get().IsKeyButtonDown(EKeyCode::H)) AlignSelectedNodes('H');
+			else if (InputManager::Get().IsKeyButtonDown(EKeyCode::V)) AlignSelectedNodes('V');
+		}
+		else if (ctrl)
+		{
+			if (InputManager::Get().IsKeyButtonDown(EKeyCode::D)) DuplicateSelection();
+		}
+		else if (InputManager::Get().IsKeyButtonDown(EKeyCode::C))
+		{
+			CreateCommentBoxFromSelection();
+		}
+		else if (InputManager::Get().IsKeyButtonDown(EKeyCode::Delete) || ImGui::IsKeyPressed(ImGuiKey_Delete))
+		{
+			DeleteSelection();
+		}
+		else if (InputManager::Get().IsKeyButtonDown(EKeyCode::F9))
+		{
+			if (!document.SelectedNodes.empty()) ToggleBreakpoint(document.SelectedNodes.front());
+		}
 	}
-
+	// ── 1. 빈 캔버스 우클릭 메뉴 ──
 	if (ImGui::BeginPopup("##GraphCanvasMenu"))
 	{
 		DrawNodeMenu();
 		ImGui::Separator();
-		if (ImGui::MenuItem("Create Comment Box", "C")) CreateCommentBoxFromSelection();
+		if (ImGui::MenuItem("Create Comment Box (Group)", "C")) CreateCommentBoxFromSelection();
 		const bool selected = !document.SelectedNodes.empty() || !document.SelectedLinks.empty();
 		if (ImGui::MenuItem(LOCAL_CSTR("GraphPanel.Delete"), "Delete", false, selected)) DeleteSelection();
 		ImGui::EndPopup();
 	}
+	// ── 2. 와이어(링크) 전용 컨텍스트 메뉴 ──
+	if (ImGui::BeginPopup("##GraphLinkMenu"))
+	{
+		Engine::GraphLinkId targetLinkId = 0;
+		for (const auto& [id, edId] : document.Links)
+		{
+			if (edId == static_cast<int>(m_ContextLinkId)) { targetLinkId = id; break; }
+		}
+		if (ImGui::MenuItem("Add Reroute Node"))
+		{
+			InsertRerouteNodeOnLink(m_ContextLinkId, m_ContextPosition);
+			ImGui::CloseCurrentPopup();
+		}
+		if (ImGui::MenuItem("Break Link", nullptr, false, targetLinkId != 0))
+		{
+			if (ApplyResult(document.Data.Disconnect(targetLinkId))) document.Links.erase(targetLinkId);
+			ImGui::CloseCurrentPopup();
+		}
+		ImGui::EndPopup();
+	}
+	// ── 3. 노드 전용 컨텍스트 메뉴 ──
+	if (ImGui::BeginPopup("##GraphNodeMenu"))
+	{
+		Engine::GraphNodeId targetNodeId = 0;
+		for (const auto& [nodeId, view] : document.Nodes)
+		{
+			if (view.Id == static_cast<int>(m_ContextNodeId)) { targetNodeId = nodeId; break; }
+		}
+		if (ImGui::MenuItem("Duplicate", "Ctrl+D")) DuplicateSelection();
+		if (ImGui::MenuItem("Create Comment Box (Group)", "C")) CreateCommentBoxFromSelection();
+		if (ImGui::MenuItem("Break All Pin Links", nullptr, false, targetNodeId != 0))
+		{
+			BreakAllNodeLinks(targetNodeId);
+			ImGui::CloseCurrentPopup();
+		}
+		if (targetNodeId != 0)
+		{
+			const bool isBp = HasBreakpoint(targetNodeId);
+			if (ImGui::MenuItem(isBp ? "Remove Breakpoint" : "Toggle Breakpoint", "F9"))
+				ToggleBreakpoint(targetNodeId);
+		}
+		if (document.SelectedNodes.size() >= 2)
+		{
+			ImGui::Separator();
+			if (ImGui::BeginMenu("Alignment"))
+			{
+				if (ImGui::MenuItem("Align Top", "Shift+W")) AlignSelectedNodes('W');
+				if (ImGui::MenuItem("Align Bottom", "Shift+S")) AlignSelectedNodes('S');
+				if (ImGui::MenuItem("Align Left", "Shift+A")) AlignSelectedNodes('A');
+				if (ImGui::MenuItem("Align Right", "Shift+D")) AlignSelectedNodes('D');
+				const bool canDistribute = document.SelectedNodes.size() >= 3;
+				if (ImGui::MenuItem("Distribute Horizontally", "Shift+H", false, canDistribute)) AlignSelectedNodes('H');
+				if (ImGui::MenuItem("Distribute Vertically", "Shift+V", false, canDistribute)) AlignSelectedNodes('V');
+				ImGui::EndMenu();
+			}
+		}
+		ImGui::Separator();
+		if (ImGui::MenuItem(LOCAL_CSTR("GraphPanel.Delete"), "Delete")) DeleteSelection();
+		ImGui::EndPopup();
+	}
 }
+
 void GraphPanel::DrawNode(const GraphNode& node)
 {
 	if (node.Type == "Core.Comment")
 	{
 		DrawCommentNode(node);
+		return;
+	}
+	if (node.Type.rfind("Core.Reroute", 0) == 0)
+	{
+		DrawRerouteNode(node);
 		return;
 	}
 
@@ -115,26 +249,53 @@ void GraphPanel::DrawNode(const GraphNode& node)
 		else { if (isInput) dataInputs.push_back(&pin); else dataOutputs.push_back(&pin); }
 	}
 
-	// 2. 노드별 최적 너비 계산 (최소 180px 보장)
-	float nodeWidth = std::max(180.0f, ImGui::CalcTextSize(name).x + 40.0f);
-	for (const auto& pin : definition->Pins)
+	// 2. 컬럼 너비 정밀 계산 (핀 아이콘 실측 너비: 18.0f)
+	constexpr float pinIconWidth = 18.0f;
+	const float titleWidth = ImGui::CalcTextSize(name).x + 24.0f;
+
+	float maxInWidth = 0.0f;
+	for (const auto* pin : execInputs)
+		maxInWidth = std::max(maxInWidth, ImGui::CalcTextSize(pin->Key.c_str()).x + pinIconWidth);
+	for (const auto* pin : dataInputs)
 	{
-		const auto pinText = localization.GetTextForDisplay(pin.DisplayName);
-		const char* label = pin.DisplayName.empty() ? pin.Key.c_str() : pinText.c_str();
-		nodeWidth = std::max(nodeWidth, ImGui::CalcTextSize(label).x * 2.0f + 60.0f);
+		const auto pinText = localization.GetTextForDisplay(pin->DisplayName);
+		const char* label = pin->DisplayName.empty() ? pin->Key.c_str() : pinText.c_str();
+		maxInWidth = std::max(maxInWidth, ImGui::CalcTextSize(label).x + pinIconWidth + 85.0f);
 	}
 
-	// 3. 노드 성격별 블루프린트 헤더 색상
-	ImU32 headerColor = IM_COL32(40, 85, 145, 240); // 함수 호출: 블루
-	if (node.Type.rfind("Event.", 0) == 0) headerColor = IM_COL32(185, 40, 40, 240); // 이벤트: 레드
-	else if (node.Type.rfind("Variable.Get.", 0) == 0) headerColor = IM_COL32(30, 130, 125, 240); // 변수 Get: 청록
-	else if (node.Type.rfind("Variable.Set.", 0) == 0) headerColor = IM_COL32(190, 100, 30, 240); // 변수 Set: 오렌지
-	else if (execInputs.empty() && execOutputs.empty()) headerColor = IM_COL32(40, 135, 65, 240); // 순수 연산: 그린
+	float maxOutWidth = 0.0f;
+	for (const auto* pin : execOutputs)
+		maxOutWidth = std::max(maxOutWidth, ImGui::CalcTextSize(pin->Key.c_str()).x + pinIconWidth);
+	for (const auto* pin : dataOutputs)
+	{
+		const auto pinText = localization.GetTextForDisplay(pin->DisplayName);
+		const char* label = pin->DisplayName.empty() ? pin->Key.c_str() : pinText.c_str();
+		maxOutWidth = std::max(maxOutWidth, ImGui::CalcTextSize(label).x + pinIconWidth);
+	}
+
+	const float minNodeWidth = 140.0f;
+	const float targetWidth = std::max({ minNodeWidth, titleWidth, maxInWidth + maxOutWidth + 20.0f });
+
+	float middleSpacing = 16.0f;
+	if (maxInWidth > 0.0f && maxOutWidth > 0.0f)
+		middleSpacing = std::max(16.0f, targetWidth - maxInWidth - maxOutWidth);
+	else if (maxInWidth == 0.0f && maxOutWidth > 0.0f)
+		middleSpacing = std::max(0.0f, targetWidth - maxOutWidth);
+
+	// 3. 노드 헤더 색상
+	ImU32 headerColor = IM_COL32(40, 85, 145, 240);
+	if (node.Type.rfind("Event.", 0) == 0) headerColor = IM_COL32(185, 40, 40, 240);
+	else if (node.Type.rfind("Variable.Get.", 0) == 0) headerColor = IM_COL32(30, 130, 125, 240);
+	else if (node.Type.rfind("Variable.Set.", 0) == 0) headerColor = IM_COL32(190, 100, 30, 240);
+	else if (execInputs.empty() && execOutputs.empty()) headerColor = IM_COL32(40, 135, 65, 240);
 
 	ed::BeginNode(found->second.Id);
 	ImGui::PushID(static_cast<int>(node.Id));
 
-	// ── 헤더 그룹 (노드 너비 확보 및 타이틀 출력) ──
+	// ★ 노드 전체 단일 BeginGroup
+	ImGui::BeginGroup();
+
+	// ── 헤더 그룹 ──
 	ImGui::BeginGroup();
 	ImGui::TextUnformatted(name);
 	if (ImGui::IsItemHovered() && !definition->Tooltip.empty())
@@ -143,101 +304,104 @@ void GraphPanel::DrawNode(const GraphNode& node)
 		ImGui::SetTooltip("%s", LOCAL_CSTR(definition->Tooltip));
 		ed::Resume();
 	}
-	ImGui::Dummy(ImVec2(nodeWidth, 2.0f)); // 노드 최소 가로폭 보장
+	ImGui::Dummy(ImVec2(targetWidth, 2.0f));
 	ImGui::EndGroup();
 	const float headerBottom = ImGui::GetItemRectMax().y + 4.0f;
 	ImGui::Spacing();
 
-	// ── 1. 최상단 Exec 행 (아이콘 정중앙 피벗 결합) ──
-	const size_t execRows = std::max(execInputs.size(), execOutputs.size());
-	for (size_t r = 0; r < execRows; ++r)
+	const bool execStraight = (m_WireStyle == EWireStyle::ElectronicHybrid || m_WireStyle == EWireStyle::Straight);
+	const bool dataStraight = (m_WireStyle == EWireStyle::Straight);
+	// 1. 좌측 컬럼 렌더링 및 실제 차지한 가로폭(leftColWidth) 정밀 측정
+	float leftColWidth = 0.0f;
+	if (maxInWidth > 0.0f)
 	{
-		const GraphPin* inPin = (r < execInputs.size()) ? execInputs[r] : nullptr;
-		const GraphPin* outPin = (r < execOutputs.size()) ? execOutputs[r] : nullptr;
-
-		if (inPin)
+		ImGui::BeginGroup();
+		if (execStraight) ed::PushStyleVar(ed::StyleVar_LinkStrength, 0.0f);
+		for (const auto* inPin : execInputs)
 		{
 			const int id = found->second.Pins.at(inPin->Key);
-			// ★ 아이콘만 핀으로 감싸고 중심 피벗 지정!
 			ed::BeginPin(id, ed::PinKind::Input);
-			ed::PinPivotAlignment(ImVec2(0.5f, 0.5f));
+			ed::PinPivotAlignment(ImVec2(0.0f, 0.5f));
 			ImGui::TextColored(ImVec4(1.0f, 1.0f, 1.0f, 1.0f), ICON_FA_PLAY);
 			ed::EndPin();
-
 			ImGui::SameLine(0.0f, 6.0f);
 			ImGui::TextUnformatted(inPin->Key.c_str());
 		}
-
-		if (outPin)
-		{
-			const float outWidth = ImGui::CalcTextSize(outPin->Key.c_str()).x + 30.0f;
-			const float rightX = nodeWidth - outWidth;
-
-			if (inPin) ImGui::SameLine();
-			if (ImGui::GetCursorPosX() < rightX) ImGui::SetCursorPosX(rightX);
-
-			ImGui::TextUnformatted(outPin->Key.c_str());
-			ImGui::SameLine(0.0f, 6.0f);
-
-			const int id = found->second.Pins.at(outPin->Key);
-			// ★ 출력 Exec도 아이콘만 핀으로 감싸기!
-			ed::BeginPin(id, ed::PinKind::Output);
-			ed::PinPivotAlignment(ImVec2(0.5f, 0.5f));
-			ImGui::TextColored(ImVec4(1.0f, 1.0f, 1.0f, 1.0f), ICON_FA_PLAY);
-			ed::EndPin();
-		}
-	}
-
-	if (execRows > 0 && (!dataInputs.empty() || !dataOutputs.empty())) ImGui::Spacing();
-
-	// ── 2. 하단 데이터 핀 (아이콘 정중앙 피벗 결합) ──
-	const size_t dataRows = std::max(dataInputs.size(), dataOutputs.size());
-	for (size_t r = 0; r < dataRows; ++r)
-	{
-		const GraphPin* inPin = (r < dataInputs.size()) ? dataInputs[r] : nullptr;
-		const GraphPin* outPin = (r < dataOutputs.size()) ? dataOutputs[r] : nullptr;
-
-		if (inPin)
+		if (execStraight) ed::PopStyleVar();
+		if (dataStraight) ed::PushStyleVar(ed::StyleVar_LinkStrength, 0.0f);
+		for (const auto* inPin : dataInputs)
 		{
 			const int id = found->second.Pins.at(inPin->Key);
 			const ImVec4 pinColor = ImGui::ColorConvertU32ToFloat4(PinColor(inPin->Type));
-
-			// ★ 아이콘만 핀으로 감싸기 (와이어가 원의 정중앙에 꽂힘!)
 			ed::BeginPin(id, ed::PinKind::Input);
-			ed::PinPivotAlignment(ImVec2(0.5f, 0.5f));
+			ed::PinPivotAlignment(ImVec2(0.0f, 0.5f));
 			ImGui::TextColored(pinColor, ICON_FA_CIRCLE);
 			ed::EndPin();
-
 			ImGui::SameLine(0.0f, 6.0f);
-			ImGui::TextUnformatted(inPin->Key.c_str());
-
+			const auto pinText = localization.GetTextForDisplay(inPin->DisplayName);
+			const char* label = inPin->DisplayName.empty() ? inPin->Key.c_str() : pinText.c_str();
+			ImGui::TextUnformatted(label);
 			DrawPinValue(node, *inPin, 80.0f);
 		}
-
-		if (outPin)
+		if (dataStraight) ed::PopStyleVar();
+		ImGui::EndGroup();
+		leftColWidth = ImGui::GetItemRectSize().x; // ★ 좌측 컬럼의 실제 너비 캡처!
+	}
+	// 2. 우측 컬럼을 노드의 맨 오른쪽 테두리로 밀어내기
+	if (maxOutWidth > 0.0f)
+	{
+		const float availWidth = std::max(targetWidth, leftColWidth + maxOutWidth + 24.0f);
+		const float rightSpacing = std::max(16.0f, availWidth - leftColWidth - maxOutWidth);
+		if (leftColWidth > 0.0f)
+			ImGui::SameLine(0.0f, rightSpacing);
+		else
+			ImGui::Dummy(ImVec2(rightSpacing, 1.0f)), ImGui::SameLine(0.0f, 0.0f);
+		ImGui::BeginGroup();
+		if (execStraight) ed::PushStyleVar(ed::StyleVar_LinkStrength, 0.0f);
+		for (const auto* outPin : execOutputs)
 		{
-			const float outWidth = ImGui::CalcTextSize(outPin->Key.c_str()).x + 30.0f;
-			const float rightX = nodeWidth - outWidth;
-
-			if (inPin) ImGui::SameLine();
-			if (ImGui::GetCursorPosX() < rightX) ImGui::SetCursorPosX(rightX);
-
+			const float textW = ImGui::CalcTextSize(outPin->Key.c_str()).x;
+			const float actualRowW = textW + pinIconWidth;
+			const float indent = std::max(0.0f, maxOutWidth - actualRowW);
+			if (indent > 0.0f) ImGui::Indent(indent);
 			ImGui::TextUnformatted(outPin->Key.c_str());
 			ImGui::SameLine(0.0f, 6.0f);
-
+			const int id = found->second.Pins.at(outPin->Key);
+			ed::BeginPin(id, ed::PinKind::Output);
+			ed::PinPivotAlignment(ImVec2(1.0f, 0.5f));
+			ImGui::TextColored(ImVec4(1.0f, 1.0f, 1.0f, 1.0f), ICON_FA_PLAY);
+			ed::EndPin();
+			if (indent > 0.0f) ImGui::Unindent(indent);
+		}
+		if (execStraight) ed::PopStyleVar();
+		if (dataStraight) ed::PushStyleVar(ed::StyleVar_LinkStrength, 0.0f);
+		for (const auto* outPin : dataOutputs)
+		{
+			const auto pinText = localization.GetTextForDisplay(outPin->DisplayName);
+			const char* label = outPin->DisplayName.empty() ? outPin->Key.c_str() : pinText.c_str();
+			const float textW = ImGui::CalcTextSize(label).x;
+			const float actualRowW = textW + pinIconWidth;
+			const float indent = std::max(0.0f, maxOutWidth - actualRowW);
+			if (indent > 0.0f) ImGui::Indent(indent);
+			ImGui::TextUnformatted(label);
+			ImGui::SameLine(0.0f, 6.0f);
 			const int id = found->second.Pins.at(outPin->Key);
 			const ImVec4 pinColor = ImGui::ColorConvertU32ToFloat4(PinColor(outPin->Type));
 			ed::BeginPin(id, ed::PinKind::Output);
-			ed::PinPivotAlignment(ImVec2(0.5f, 0.5f));
+			ed::PinPivotAlignment(ImVec2(1.0f, 0.5f));
 			ImGui::TextColored(pinColor, ICON_FA_CIRCLE);
 			ed::EndPin();
+			if (indent > 0.0f) ImGui::Unindent(indent);
 		}
+		if (dataStraight) ed::PopStyleVar();
+		ImGui::EndGroup();
 	}
+	ImGui::EndGroup(); // 노드 전체 그룹 닫기
 
 	ImGui::PopID();
 	ed::EndNode();
 
-	// ── ★ 핵심: 노드의 실제 크기에 0.1px 오차 없이 완벽 밀착되는 헤더 배경 렌더링 ──
+	// ── 헤더 배경 ──
 	if (ImGui::IsItemVisible())
 	{
 		const ImVec2 nodeMin = ImGui::GetItemRectMin();
@@ -246,14 +410,11 @@ void GraphPanel::DrawNode(const GraphNode& node)
 		const float halfBorder = style.NodeBorderWidth * 0.5f;
 
 		auto* drawList = ed::GetNodeBackgroundDrawList(found->second.Id);
-
-		// 노드 상단 테두리에 딱 맞춘 헤더 사각형 채우기
 		drawList->AddRectFilled(
 			ImVec2(nodeMin.x + halfBorder, nodeMin.y + halfBorder),
 			ImVec2(nodeMax.x - halfBorder, headerBottom),
 			headerColor, style.NodeRounding, ImDrawFlags_RoundCornersTop);
 
-		// 헤더와 본문 사이의 미려한 구분선
 		drawList->AddLine(
 			ImVec2(nodeMin.x + halfBorder, headerBottom),
 			ImVec2(nodeMax.x - halfBorder, headerBottom),
@@ -332,17 +493,20 @@ void GraphPanel::DrawLinks()
 	{
 		const auto found = document.Links.find(link.Id);
 		if (found == document.Links.end()) continue;
-		const int from = FindPinId(link.From);
-		const int to = FindPinId(link.To);
-		if (from == 0 || to == 0) continue;
-		// 핀 타입 조회
+
+		const auto fromPin = FindPinId(link.From);
+		const auto toPin = FindPinId(link.To);
+		if (fromPin == 0 || toPin == 0) continue;
+
 		const auto* fromNode = document.Data.FindNode(link.From.Node);
 		const auto* pin = fromNode ? m_Registry.FindPin(fromNode->Type, link.From.Pin) : nullptr;
-		const ImVec4 pinColor = ImGui::ColorConvertU32ToFloat4(PinColor(pin ? pin->Type : EGraphPinType::Float));
-		ed::Link(found->second, from, to, pinColor, 2.5f);
-		// 실행 중인 링크에는 실시간 와이어 펄스 애니메이션 적용
-		const bool isFlowing = (m_Domain == EGraphDomain::Logic && m_TraceLink == link.Id);
-		if (isFlowing) ed::Flow(found->second);
+		const ImU32 color = pin ? PinColor(pin->Type) : IM_COL32(220, 220, 220, 255);
+
+		// ★ Exec 실행선은 2.8px로 굵고 선명하게, Data선은 1.8px로 날렵하게 차별화!
+		const bool isExec = pin && (pin->Type == Engine::EGraphPinType::Execution);
+		const float thickness = isExec ? 2.8f : 1.8f;
+
+		ed::Link(found->second, fromPin, toPin, ImGui::ColorConvertU32ToFloat4(color), thickness);
 	}
 }
 
@@ -367,6 +531,23 @@ void GraphPanel::HandleConnections(const ImVec2& origin, bool canvasHovered)
 					GetConnectionPins(static_cast<int>(inputPinId.Get()), static_cast<int>(outputPinId.Get()), from, to);
 					if (ReserveEditorIds(1))
 					{
+						// ★ [언리얼 블루프린트 스타일] 기존 와이어 자동 교체 (Replace Connection)
+						const auto* fromNode = document.Data.FindNode(from.Node);
+						const auto* fromPin = fromNode ? m_Registry.FindPin(fromNode->Type, from.Pin) : nullptr;
+						const bool isExec = fromPin && (fromPin->Type == Engine::EGraphPinType::Execution);
+						// 1) 대상 입력 핀(to)에 이미 연결된 선이 있거나, 2) 실행 출력 핀(from)에 이미 연결된 선이 있다면 먼저 끊기!
+						std::vector<Engine::GraphLinkId> linksToRemove;
+						for (const auto& l : document.Data.GetLinks())
+						{
+							if (l.To == to || (isExec && l.From == from))
+								linksToRemove.push_back(l.Id);
+						}
+						for (auto linkId : linksToRemove)
+						{
+							if (ApplyResult(document.Data.Disconnect(linkId)))
+								document.Links.erase(linkId);
+						}
+						// 새로운 링크 연결
 						const auto result = document.Data.Connect(m_Registry, from, to);
 						if (ApplyResult(result)) document.Links.emplace(result.Link, static_cast<int>(document.NextId++));
 					}
@@ -394,7 +575,7 @@ void GraphPanel::HandleConnections(const ImVec2& origin, bool canvasHovered)
 		ed::EndCreate(); // <--- if (ed::BeginCreate()) 블록 내부로 이동
 	}
 
-	// 2. 링크 삭제 처리 (BeginDelete가 true일 때만 내부에서 처리 및 EndDelete 호출)
+	// 2. 링크 및 노드 삭제 처리
 	if (ed::BeginDelete())
 	{
 		ed::LinkId linkId;
@@ -412,8 +593,25 @@ void GraphPanel::HandleConnections(const ImVec2& origin, bool canvasHovered)
 				}
 			}
 		}
-
-		ed::EndDelete(); // <--- if (ed::BeginDelete()) 블록 내부로 이동
+		// ★ 추가: 선택 노드 Delete 키 삭제 처리
+		ed::NodeId delNodeId;
+		while (ed::QueryDeletedNode(&delNodeId))
+		{
+			if (ed::AcceptDeletedItem())
+			{
+				const int viewId = static_cast<int>(delNodeId.Get());
+				for (const auto& [nodeId, view] : document.Nodes)
+				{
+					if (view.Id == viewId)
+					{
+						document.SelectedNodes = { nodeId };
+						DeleteSelection();
+						break;
+					}
+				}
+			}
+		}
+		ed::EndDelete();
 	}
 }
 void GraphPanel::ReadSelection()
@@ -588,7 +786,7 @@ void GraphPanel::DrawCommentNode(const GraphNode& node)
 	if (currentSize.x > 0.0f && currentSize.y > 0.0f &&
 		(std::abs(currentSize.x - groupSize.x) > 2.0f || std::abs(currentSize.y - groupSize.y) > 2.0f))
 	{
-		document.Data.SetInputValue(m_Registry, { node.Id, "Size" },
+		(void)document.Data.SetInputValue(m_Registry, { node.Id, "Size" },
 			std::array<float, 2>{ currentSize.x, currentSize.y });
 	}
 }
@@ -650,9 +848,269 @@ void GraphPanel::CreateCommentBoxFromSelection()
 	if (AddNode(candidate))
 	{
 		const auto lastNodeId = document.PendingSelection;
-		document.Data.SetInputValue(m_Registry, { lastNodeId, "Size" },
+		(void)document.Data.SetInputValue(m_Registry, { lastNodeId, "Size" },
 			std::array<float, 2>{ commentSize.x, commentSize.y });
 		document.CommentTexts[lastNodeId] = "Comment";
 	}
 }
+
+void GraphPanel::DrawRerouteNode(const Engine::GraphNode& node)
+{
+	const auto found = GetDocument().Nodes.find(node.Id);
+	if (found == GetDocument().Nodes.end()) return;
+	const auto* inPin = m_Registry.FindPin(node.Type, "In");
+	const auto* outPin = m_Registry.FindPin(node.Type, "Out");
+	if (!inPin || !outPin) return;
+	const bool isExec = (inPin->Type == Engine::EGraphPinType::Execution);
+	const ImU32 pinCol = PinColor(inPin->Type);
+	const ImVec4 pinColor = ImGui::ColorConvertU32ToFloat4(pinCol);
+	const bool rerouteStraight = (isExec && (m_WireStyle == EWireStyle::ElectronicHybrid || m_WireStyle == EWireStyle::Straight))
+		|| (!isExec && m_WireStyle == EWireStyle::Straight);
+	if (rerouteStraight) ed::PushStyleVar(ed::StyleVar_LinkStrength, 0.0f);
+	// 네모난 테두리 및 배경 100% 완전 투명화
+	ed::PushStyleColor(ed::StyleColor_NodeBg, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+	ed::PushStyleColor(ed::StyleColor_NodeBorder, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+	ed::PushStyleColor(ed::StyleColor_HovNodeBorder, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+	ed::PushStyleColor(ed::StyleColor_SelNodeBorder, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+	ed::PushStyleVar(ed::StyleVar_NodeBorderWidth, 0.0f);
+	ed::PushStyleVar(ed::StyleVar_HoveredNodeBorderWidth, 0.0f);
+	ed::PushStyleVar(ed::StyleVar_SelectedNodeBorderWidth, 0.0f);
+	ed::PushStyleVar(ed::StyleVar_NodePadding, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+	ed::BeginNode(found->second.Id);
+	ImGui::PushID(static_cast<int>(node.Id));
+	// 1. 점 아이콘 렌더링
+	const bool isSelected = ed::IsNodeSelected(found->second.Id);
+	const ImVec4 dotColor = isSelected ? ImVec4(1.0f, 0.85f, 0.3f, 1.0f) : pinColor;
+	ImGui::TextColored(dotColor, isExec ? ICON_FA_PLAY : ICON_FA_CIRCLE);
+	// 2. 점 아이콘의 Bounding Box 및 정중앙 좌표(dotCenter) 계산
+	const ImVec2 dotMin = ImGui::GetItemRectMin();
+	const ImVec2 dotMax = ImGui::GetItemRectMax();
+	const ImVec2 dotCenter = ImVec2((dotMin.x + dotMax.x) * 0.5f, (dotMin.y + dotMax.y) * 0.5f);
+	// ★ 3. In 핀: 좌측 절반 영역을 잡되, 와이어 연결 피벗은 점의 완벽한 정중앙(dotCenter)!
+	const int inPinId = found->second.Pins.at("In");
+	ed::BeginPin(inPinId, ed::PinKind::Input);
+	ed::PinRect(dotMin, ImVec2(dotCenter.x, dotMax.y));
+	ed::PinPivotRect(dotCenter, dotCenter);
+	ed::EndPin();
+	// ★ 4. Out 핀: 우측 절반 영역을 잡되, 와이어 연결 피벗은 점의 완벽한 정중앙(dotCenter)!
+	const int outPinId = found->second.Pins.at("Out");
+	ed::BeginPin(outPinId, ed::PinKind::Output);
+	ed::PinRect(ImVec2(dotCenter.x, dotMin.y), dotMax);
+	ed::PinPivotRect(dotCenter, dotCenter);
+	ed::EndPin();
+	ImGui::PopID();
+	ed::EndNode();
+	ed::PopStyleVar(4);
+	ed::PopStyleColor(4);
+	if (rerouteStraight) ed::PopStyleVar();
+}
+
+void GraphPanel::InsertRerouteNodeOnLink(uintptr_t hoveredLinkEdId, const ImVec2& canvasPos)
+{
+	auto& document = GetDocument();
+	Engine::GraphLinkId targetLinkId = 0;
+	for (const auto& [id, edId] : document.Links)
+	{
+		if (edId == static_cast<int>(hoveredLinkEdId))
+		{
+			targetLinkId = id;
+			break;
+		}
+	}
+	if (targetLinkId == 0) return;
+
+	const auto links = document.Data.GetLinks();
+	const auto linkIt = std::find_if(links.begin(), links.end(),
+		[targetLinkId](const Engine::GraphLink& l) { return l.Id == targetLinkId; });
+	if (linkIt == links.end()) return;
+
+	const auto originalFrom = linkIt->From;
+	const auto originalTo = linkIt->To;
+
+	const auto* fromNode = document.Data.FindNode(originalFrom.Node);
+	const auto* fromPin = fromNode ? m_Registry.FindPin(fromNode->Type, originalFrom.Pin) : nullptr;
+	if (!fromPin) return;
+
+	std::string rerouteType = "Core.Reroute";
+	switch (fromPin->Type)
+	{
+	case Engine::EGraphPinType::Execution: rerouteType = "Core.Reroute"; break;
+	case Engine::EGraphPinType::Bool: rerouteType = "Core.Reroute.Bool"; break;
+	case Engine::EGraphPinType::Int: rerouteType = "Core.Reroute.Int"; break;
+	case Engine::EGraphPinType::Float: rerouteType = "Core.Reroute.Float"; break;
+	case Engine::EGraphPinType::Float2: rerouteType = "Core.Reroute.Float2"; break;
+	case Engine::EGraphPinType::Float3: rerouteType = "Core.Reroute.Float3"; break;
+	case Engine::EGraphPinType::Float4: rerouteType = "Core.Reroute.Float4"; break;
+	default: break;
+	}
+
+	if (!ApplyResult(document.Data.Disconnect(targetLinkId))) return;
+	document.Links.erase(targetLinkId);
+
+	// 마우스 클릭 위치에 노드 생성
+	m_AddPosition = canvasPos;
+	GraphNodeCandidate candidate{ rerouteType, {} };
+	if (!AddNode(candidate)) return;
+	const auto newNodeId = document.PendingSelection;
+
+	// In / Out 양방향 자동 연결
+	const auto connFrom = document.Data.Connect(m_Registry, originalFrom, { newNodeId, "In" });
+	if (ApplyResult(connFrom)) document.Links.emplace(connFrom.Link, static_cast<int>(document.NextId++));
+
+	const auto connTo = document.Data.Connect(m_Registry, { newNodeId, "Out" }, originalTo);
+	if (ApplyResult(connTo)) document.Links.emplace(connTo.Link, static_cast<int>(document.NextId++));
+
+	// ★ 핵심: 마우스 위치에 노드 위치를 강제 확정! (BuildDocumentViews 제거)
+	ed::SetNodePosition(document.Nodes.at(newNodeId).Id, canvasPos);
+}
+
+void GraphPanel::AlignSelectedNodes(char direction)
+{
+	auto& document = GetDocument();
+	struct NodeLayout { Engine::GraphNodeId Id; ed::NodeId EdId; ImVec2 Pos; ImVec2 Size; };
+	std::vector<NodeLayout> selected;
+	for (auto nodeId : document.SelectedNodes)
+	{
+		const auto* node = document.Data.FindNode(nodeId);
+		if (!node || node->Type == "Core.Comment") continue;
+		const auto it = document.Nodes.find(nodeId);
+		if (it == document.Nodes.end()) continue;
+		const ed::NodeId edId = it->second.Id;
+		const ImVec2 pos = ed::GetNodePosition(edId);
+		const ImVec2 size = ed::GetNodeSize(edId);
+		if (pos.x == FLT_MAX || size.x <= 0.0f) continue;
+		selected.push_back({ nodeId, edId, pos, size });
+	}
+	if (direction == 'H' || direction == 'V')
+	{
+		if (selected.size() < 3) return;
+	}
+	else
+	{
+		if (selected.size() < 2) return;
+	}
+	switch (direction)
+	{
+	case 'W': // Align Top: Y 최소값 기준
+	{
+		float minY = FLT_MAX;
+		for (const auto& item : selected) minY = std::min(minY, item.Pos.y);
+		for (const auto& item : selected) ed::SetNodePosition(item.EdId, ImVec2(item.Pos.x, minY));
+		break;
+	}
+	case 'S': // Align Bottom: Y 최대 바텀값 기준
+	{
+		float maxBottom = -FLT_MAX;
+		for (const auto& item : selected) maxBottom = std::max(maxBottom, item.Pos.y + item.Size.y);
+		for (const auto& item : selected) ed::SetNodePosition(item.EdId, ImVec2(item.Pos.x, maxBottom - item.Size.y));
+		break;
+	}
+	case 'A': // Align Left: X 최소값 기준
+	{
+		float minX = FLT_MAX;
+		for (const auto& item : selected) minX = std::min(minX, item.Pos.x);
+		for (const auto& item : selected) ed::SetNodePosition(item.EdId, ImVec2(minX, item.Pos.y));
+		break;
+	}
+	case 'D': // Align Right: X 최대 라이트값 기준
+	{
+		float maxRight = -FLT_MAX;
+		for (const auto& item : selected) maxRight = std::max(maxRight, item.Pos.x + item.Size.x);
+		for (const auto& item : selected) ed::SetNodePosition(item.EdId, ImVec2(maxRight - item.Size.x, item.Pos.y));
+		break;
+	}
+	case 'H': // Distribute Horizontally: 가로 균등 분배
+	{
+		std::sort(selected.begin(), selected.end(), [](const NodeLayout& a, const NodeLayout& b) { return a.Pos.x < b.Pos.x; });
+		float totalWidth = 0.0f;
+		for (const auto& item : selected) totalWidth += item.Size.x;
+		const float span = (selected.back().Pos.x + selected.back().Size.x) - selected.front().Pos.x;
+		const float totalGap = span - totalWidth;
+		const float gap = totalGap / static_cast<float>(selected.size() - 1);
+		float currentX = selected.front().Pos.x;
+		for (size_t i = 1; i < selected.size() - 1; ++i)
+		{
+			currentX += selected[i - 1].Size.x + gap;
+			ed::SetNodePosition(selected[i].EdId, ImVec2(currentX, selected[i].Pos.y));
+		}
+		break;
+	}
+	case 'V': // Distribute Vertically: 세로 균등 분배
+	{
+		std::sort(selected.begin(), selected.end(), [](const NodeLayout& a, const NodeLayout& b) { return a.Pos.y < b.Pos.y; });
+		float totalHeight = 0.0f;
+		for (const auto& item : selected) totalHeight += item.Size.y;
+		const float span = (selected.back().Pos.y + selected.back().Size.y) - selected.front().Pos.y;
+		const float totalGap = span - totalHeight;
+		const float gap = totalGap / static_cast<float>(selected.size() - 1);
+		float currentY = selected.front().Pos.y;
+		for (size_t i = 1; i < selected.size() - 1; ++i)
+		{
+			currentY += selected[i - 1].Size.y + gap;
+			ed::SetNodePosition(selected[i].EdId, ImVec2(selected[i].Pos.x, currentY));
+		}
+		break;
+	}
+	default: break;
+	}
+}
 #pragma endregion
+
+void GraphPanel::BreakAllNodeLinks(Engine::GraphNodeId nodeId)
+{
+	auto& document = GetDocument();
+	std::vector<Engine::GraphLinkId> toRemove;
+	for (const auto& link : document.Data.GetLinks())
+	{
+		if (link.From.Node == nodeId || link.To.Node == nodeId) toRemove.push_back(link.Id);
+	}
+	for (auto linkId : toRemove)
+	{
+		if (ApplyResult(document.Data.Disconnect(linkId))) document.Links.erase(linkId);
+	}
+}
+
+void GraphPanel::DuplicateSelection()
+{
+	auto& document = GetDocument();
+	if (document.SelectedNodes.empty()) return;
+
+	std::vector<Engine::GraphNodeId> newSelected;
+	const float offset = 30.0f;
+
+	for (auto selNodeId : document.SelectedNodes)
+	{
+		const auto* origNode = document.Data.FindNode(selNodeId);
+		if (!origNode) continue;
+
+		const auto origView = document.Nodes.find(selNodeId);
+		ImVec2 origPos = m_AddPosition;
+		if (origView != document.Nodes.end())
+		{
+			const ImVec2 pos = ed::GetNodePosition(origView->second.Id);
+			if (pos.x != FLT_MAX) origPos = ImVec2(pos.x + offset, pos.y + offset);
+		}
+
+		m_AddPosition = origPos;
+		GraphNodeCandidate candidate{ origNode->Type, {} };
+		if (AddNode(candidate))
+		{
+			const auto newNodeId = document.PendingSelection;
+			newSelected.push_back(newNodeId);
+
+			for (const auto& [key, val] : origNode->InputValues)
+			{
+				(void)document.Data.SetInputValue(m_Registry, { newNodeId, key }, val);
+			}
+
+			auto itComment = document.CommentTexts.find(selNodeId);
+			if (itComment != document.CommentTexts.end())
+			{
+				document.CommentTexts[newNodeId] = itComment->second;
+			}
+		}
+	}
+
+	document.SelectedNodes = std::move(newSelected);
+	BuildDocumentViews(document);
+}

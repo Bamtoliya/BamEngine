@@ -134,6 +134,20 @@ GraphDiagnostic GraphRegistry::RegisterBuiltins()
 		{ "Core.Float4", common, {
 			{ "value", Direction::Input, Type::Float4, std::array<float, 4>{} },
 			{ "result", Direction::Output, Type::Float4, {} } } },
+		{ "Core.Reroute", logic, {
+			{ "In", Direction::Input, Type::Execution, {} }, { "Out", Direction::Output, Type::Execution, {} } } },
+		{ "Core.Reroute.Bool", common, {
+			{ "In", Direction::Input, Type::Bool, false }, { "Out", Direction::Output, Type::Bool, {} } } },
+		{ "Core.Reroute.Int", common, {
+			{ "In", Direction::Input, Type::Int, std::int64_t{ 0 } }, { "Out", Direction::Output, Type::Int, {} } } },
+		{ "Core.Reroute.Float", common, {
+			{ "In", Direction::Input, Type::Float, 0.0f }, { "Out", Direction::Output, Type::Float, {} } } },
+		{ "Core.Reroute.Float2", common, {
+			{ "In", Direction::Input, Type::Float2, std::array<float, 2>{} }, { "Out", Direction::Output, Type::Float2, {} } } },
+		{ "Core.Reroute.Float3", common, {
+			{ "In", Direction::Input, Type::Float3, std::array<float, 3>{} }, { "Out", Direction::Output, Type::Float3, {} } } },
+		{ "Core.Reroute.Float4", common, {
+			{ "In", Direction::Input, Type::Float4, std::array<float, 4>{} }, { "Out", Direction::Output, Type::Float4, {} } } },
 		{ "Math.AddFloat", common, {
 			{ "a", Direction::Input, Type::Float, 0.0f }, { "b", Direction::Input, Type::Float, 0.0f },
 			{ "result", Direction::Output, Type::Float, {} } } },
@@ -206,6 +220,12 @@ GraphDiagnostic GraphRegistry::RegisterBuiltins()
 		const auto separator = definition.Type.find('.');
 		definition.Category = definition.Type.substr(0, separator);
 		definition.DisplayName = definition.Type.substr(separator + 1);
+		if (definition.Type.rfind("Core.Reroute", 0) == 0)
+		{
+			definition.Category = "Organization";
+			definition.DisplayName = "Reroute";
+			definition.Tooltip = "Pass through execution or data wire cleanly.";
+		}
 	}
 	for (auto& definition : definitions)
 	{

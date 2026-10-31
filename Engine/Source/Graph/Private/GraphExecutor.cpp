@@ -1,27 +1,24 @@
-#include "GraphExecutor.h"
-#include <algorithm>
-#include <cmath>
-#include <iterator>
-#include <stdexcept>
-#include <utility>
+﻿#include "GraphExecutor.h"
 
-namespace Engine
-{
 namespace
 {
-bool SupportsBuiltin(const std::string& type)
-{
-	const char* types[]{ "Core.Bool", "Core.Int", "Core.Float", "Core.Float2", "Core.Float3", "Core.Float4",
-		"Math.AddFloat", "Math.MultiplyFloat", "Math.GreaterFloat", "Math.LessFloat", "Logic.And", "Logic.Or",
-		"Logic.Not", "Logic.SelectFloat", "Event.Start", "Event.Update", "Flow.Branch", "Flow.Sequence",
-		"Flow.ForLoop", "Flow.WhileLoop", "Flow.DoOnce", "Flow.Gate", "Flow.FlipFlop", "Logic.FloatResult",
-		"Logic.BoolResult", "Logic.IntResult", "Logic.Float2Result", "Logic.Float3Result", "Logic.Float4Result" };
-	return std::find(std::begin(types), std::end(types), type) != std::end(types);
-}
+	bool SupportsBuiltin(const std::string& type)
+	{
+		if (type.rfind("Variable.Get.", 0) == 0 || type.rfind("Variable.Set.", 0) == 0) return true;
+		if (type.rfind("Core.Reroute", 0) == 0) return true;
+
+		const char* types[]{ "Core.Bool", "Core.Int", "Core.Float", "Core.Float2", "Core.Float3", "Core.Float4",
+			"Math.AddFloat", "Math.MultiplyFloat", "Math.GreaterFloat", "Math.LessFloat", "Logic.And", "Logic.Or",
+			"Logic.Not", "Logic.SelectFloat", "Event.Start", "Event.Update", "Flow.Branch", "Flow.Sequence",
+			"Flow.ForLoop", "Flow.WhileLoop", "Flow.DoOnce", "Flow.Gate", "Flow.FlipFlop", "Logic.FloatResult",
+			"Logic.BoolResult", "Logic.IntResult", "Logic.Float2Result", "Logic.Float3Result", "Logic.Float4Result" };
+		return std::find(std::begin(types), std::end(types), type) != std::end(types);
+	}
 }
 
 void GraphExecutor::Clear()
 {
+	m_Variables.clear();
 	m_Pending.clear();
 	m_Active.clear();
 	m_Evaluating.clear();
@@ -54,6 +51,10 @@ GraphDiagnostic GraphExecutor::Load(const Graph& graph, const GraphRegistry& reg
 	}
 	m_Graph = graph;
 	m_Registry = registry;
+	for (const auto& var : graph.GetVariables())
+	{
+		m_Variables[var.Name] = var.DefaultValue;
+	}
 	for (const auto& node : graph.GetNodes())
 	{
 		const auto& definition = *registry.Find(node.Type);
@@ -194,6 +195,12 @@ void GraphExecutor::Execute(const Task& task)
 	if (!node) throw std::runtime_error("Execution node is missing.");
 	const auto id = node->Id;
 	const auto& type = node->Type;
+
+	if (task.Kind == TaskKind::Enter && m_NodeStepCallback)
+	{
+		m_NodeStepCallback(id);
+	}
+
 	if (task.Kind == TaskKind::Leave)
 	{
 		m_Active.erase(id);
@@ -222,7 +229,8 @@ void GraphExecutor::Execute(const Task& task)
 	Trace(EGraphTraceKind::Enter, id, task.Pin);
 	if (!m_Active.insert(id).second) throw std::runtime_error("Re-entry into an active node is not supported.");
 	m_Pending.push_back({ TaskKind::Leave, id });
-	if (type == "Event.Start" || type == "Event.Update") PushOutput(id, "exec");
+	if (type.rfind("Core.Reroute", 0) == 0) PushOutput(id, "Out");
+	else if (type == "Event.Start" || type == "Event.Update") PushOutput(id, "exec");
 	else if (type == "Flow.Branch") PushOutput(id, std::get<bool>(ReadInput(id, "condition")) ? "true" : "false");
 	else if (type == "Flow.Sequence") { PushOutput(id, "then1"); PushOutput(id, "then0"); }
 	else if (type == "Flow.ForLoop")
@@ -270,6 +278,15 @@ void GraphExecutor::Execute(const Task& task)
 	else if (type == "Logic.FloatResult" || type == "Logic.BoolResult" || type == "Logic.IntResult" ||
 		type == "Logic.Float2Result" || type == "Logic.Float3Result" || type == "Logic.Float4Result")
 		m_Result = Store(id, "value", ReadInput(id, "value"));
+	else if (type.rfind("Variable.Set.", 0) == 0)
+	{
+		const std::string varName = type.substr(13);
+		const auto value = ReadInput(id, "value");
+		m_Variables[varName] = value;
+		Store(id, "outValue", value);
+		Trace(EGraphTraceKind::Value, id, "value", 0, value, "Set " + varName);
+		PushOutput(id, "then");
+	}
 	else if (m_Functions.contains(type) && m_Registry.FindPin(type, "exec") &&
 		m_Registry.FindPin(type, "exec")->Type == EGraphPinType::Execution)
 	{
@@ -280,4 +297,16 @@ void GraphExecutor::Execute(const Task& task)
 	else throw std::runtime_error("Execution is not implemented for node type: " + type);
 }
 
+const GraphValue* GraphExecutor::GetVariable(const std::string& name) const
+{
+	auto it = m_Variables.find(name);
+	return it != m_Variables.end() ? &it->second : nullptr;
+}
+
+bool GraphExecutor::SetVariable(const std::string& name, GraphValue value)
+{
+	auto it = m_Variables.find(name);
+	if (it == m_Variables.end()) return false;
+	it->second = std::move(value);
+	return true;
 }

@@ -134,32 +134,56 @@ flowchart TD
      - **ImGui ID 스택 충돌 해결:** 노드 레벨(`node.Id`) 및 핀 레벨(`pin.Key`) 격리와 `##ResetPin`, `##UsePin` 식별자 부여로 "기본값으로 복원" 버튼의 ID 중복(Duplicate ID) 경고 박멸.
      - **툴팁 좌표계 정규화:** 캔버스 줌/패닝 행렬 왜곡을 방지하기 위해 툴팁을 `ed::Suspend()` / `ed::Resume()`으로 래핑하여 마우스 커서 바로 아래에 정확히 팝업되도록 개선.
 
-  2. **최우선 진행 및 목표 작업 (In-Progress & Next Goals):**
-     - **와이어 꺾임점 / 리디렉트 노드 (Reroute / Knot Node):**
-       - **목적:** 복잡하게 얽히거나 장거리로 연결되는 와이어를 원하는 경로로 직각/우회 배선하여 블루프린트 가독성을 극대화.
-       - **세부 내용:**
-         - `Core.Reroute` 노드 정의 등록: 단일 입력 핀과 출력 핀을 가지며, 연결된 선의 자료형(`EGraphPinType`)을 동적으로 동기화.
-         - 와이어 더블클릭(`Double Click`) 또는 와이어 우클릭 메뉴의 `Add Reroute Node` 선택 시 마우스 커서 위치에 리디렉트 노드 자동 삽입 및 기존 와이어 분할 연결.
-         - 텍스트 라벨과 헤더가 없는 초소형 원형 핀 노드로 간결하게 렌더링.
-       - **완료 기준:** 와이어 더블클릭 시 꺾임 노드가 생성되어 선이 직각/원하는 각도로 깔끔하게 정리되고, 실행 흐름이나 데이터 전달이 끊김 없이 정상 통과한다.
+  2. **완료 및 최근 구현된 고도화 작업 (Completed & Enhanced):**
+     - **노드 고무줄 늘어남 및 핀 치우침 원천 박멸 (2열 컬럼 Group 분할 레이아웃):**
+       - 기존 `ImGui::SetCursorPosX`의 전역 윈도우 좌표 오염 및 캔버스 스크롤 왜곡 버그 완전 제거.
+       - 좌측 입력 컬럼(`BeginGroup`)과 우측 출력 컬럼(`BeginGroup`)으로 분할하고, 좌측 컬럼의 실제 폭(`ImGui::GetItemRectSize().x`)을 측정하여 남는 공간만큼 우측 컬럼을 밀어붙여 `then ▶`, `result` 등 모든 Out 핀이 노드의 오른쪽 테두리에 100% 밀착 정렬.
+     - **언리얼 블루프린트 1:1 와이어 자동 교체 (Replace Connection):**
+       - 이미 연결된 입력 핀(In)이나 단일 실행 출력(Exec Out)에 새 와이어를 연결할 경우, 기존 링크를 안전하게 먼저 끊고 새 와이어로 원자적 교체.
+     - **Electronic Nodes 플러그인 스타일 와이어 렌더링 (하이브리드 모드):**
+       - Exec 실행선: 반듯한 직선(`LinkStrength = 0.0f`) + 두께 2.8px로 메인 로직 버스선 강조.
+       - Data 데이터선: 부드러운 곡선(`LinkStrength = 100.0f`) + 두께 1.8px로 데이터 흐름 분리.
+       - 툴바 토글 버튼(`Wire: All Curved` / `Wire: Electronic` / `Wire: All Straight`)을 통해 전체 곡선, 하이브리드, 전체 직선 3단계 실시간 전환 지원.
+     - **리디렉트 / 꺾임점 노드 (Reroute / Knot Node) 완성:**
+       - 와이어 위 마우스 좌클릭 더블클릭(`InputManager::Get().IsMouseButtonDoubleClicked`) 시 해당 마우스 위치에 즉시 정확히 생성.
+       - `InsertRerouteNodeOnLink`의 위치 유실 원인이었던 불필요한 `BuildDocumentViews` 제거.
+       - 네모난 테두리 및 배경 박스(`SelNodeBorder`, `NodeBg`)를 100% 투명화하여 이동 시 오직 원형 점 하나만 매끄럽게 드래그 이동.
+       - 점의 좌측 모서리(In 핀)와 우측 모서리(Out 핀)를 분할하고 `ed::PinPivotRect(dotCenter, dotCenter)`를 적용하여, 들어오고 나가는 모든 와이어가 점의 정중앙에서 하나로 완벽하게 연결.
+       - 빈 캔버스에 단독으로 배치된 리루트 노드 허브 기능 및 Out 핀에서 여러 번 와이어를 뽑아내는 1:N 다중 분기(Multi-Link Fan-out) 완비.
+     - **마우스 미들클릭(휠 클릭) 캔버스 화면 이동(Pan) 활성화:**
+       - `config.NavigateButtonIndex = 2` 설정으로 안내 문구 및 언리얼 표준에 맞춘 휠 클릭 드래그 캔버스 이동 활성화.
+     - **프로젝트 지침 14절 준수 (InputManager 일원화):**
+       - 와이어 더블클릭, 단축키 및 스크린 좌표 처리를 ImGui 직접 호출에서 `Engine::InputManager` 단일 원천으로 일원화.
      - **노드 다중 선택 자동 정렬 도구 (Alignment & Distribution Tools):**
-       - **목적:** 마우스 수동 드래그 정렬의 피로도를 제거하고 언리얼 엔진 블루프린트와 100% 동일한 정렬 단축키 환경 제공.
+       - `Shift + W/S/A/D` 상/하/좌/우 정렬 및 `Shift + H/V` 수평/수직 균등 분배 지원.
+     - **노드·와이어 컨텍스트 메뉴 (Node & Wire Context Menus):**
+       - 노드 우클릭: 복제(`Ctrl+D`), 코멘트 그룹 박스 생성(`C`), 모든 연결 해제(`Break All Pin Links`), 정렬 서브메뉴.
+       - 와이어 우클릭: `Add Reroute Node`, `Break Link`.
+
+  3. **다음 우선순위 목표 작업 (Next Goals):**
+     - **리소스 피커(`ResourcePicker.h`) 최적화:** 매 프레임 디스크 파일 탐색 제거 및 팝업 오픈 시 1회 캐싱, 템플릿 인자 `T`별 호환 확장자 컴파일 타임 필터링 적용.
+     - **핀 컨텍스트 메뉴:** 핀 우클릭 시 `Break Links to Pin`, `Promote to Variable` (변수로 승격).
+       - **목적:** 빈 캔버스 우클릭 메뉴와 분리하여, 마우스 커서 아래의 노드·선(와이어)·핀 대상별 즉각적인 조작 편의성을 제공하고 언리얼 엔진 블루프린트와 동일한 편집 워크플로우 지원.
        - **세부 내용:**
-         - `Shift + W`: 선택된 노드들의 Y 최소값을 기준으로 상단 일렬 정렬 (Align Top).
-         - `Shift + S`: 선택된 노드들의 Y 최대값을 기준으로 하단 일렬 정렬 (Align Bottom).
-         - `Shift + A`: 선택된 노드들의 X 최소값을 기준으로 좌측 일렬 정렬 (Align Left).
-         - `Shift + D`: 선택된 노드들의 X 최대값을 기준으로 우측 일렬 정렬 (Align Right).
-         - `Shift + H`: 3개 이상 선택된 노드들을 수평(가로) 등간격으로 균등 자동 분배 (Distribute Horizontally).
-         - `Shift + V`: 3개 이상 선택된 노드들을 수직(세로) 등간격으로 균등 자동 분배 (Distribute Vertically).
-         - `ed::SetNodePosition`을 통한 즉각적인 캔버스 좌표 정렬 및 정렬 Undo/Redo 트랜잭션 기록.
-       - **완료 기준:** 여러 노드를 선택하고 `Shift + W/A/S/D`를 누르면 즉시 수평/수직으로 반듯하게 정렬된다.
-     - **핀 아이콘 정밀 피벗 결합 완비 (`ed::PinPivotAlignment`):**
-       - **목적:** 와이어 연결점이 텍스트 블록에 걸치지 않고 원형/재생 아이콘(`ICON_FA_CIRCLE`, `ICON_FA_PLAY`)의 정중앙에 정확히 물리도록 결합.
-       - **세부 내용:** 아이콘만을 `BeginPin`으로 감싸고 `PinPivotAlignment(ImVec2(0.5f, 0.5f))` 적용 및 와이어 드래그 스냅 정확도 검증.
-       - **완료 기준:** 캔버스 줌인/줌아웃 시에도 와이어 끝점이 아이콘 중심에서 0.1px도 어긋나지 않는다.
-     - **노드 개별 코멘트 버블 (Node Comment Bubble):**
-       - **목적:** 언리얼 엔진의 `NodeComment`처럼 일반 노드 상단에 말풍선/메모 형태로 주석을 띄우는 UI 지원.
-       - **세부 내용:** 노드 상단에 작게 텍스트 말풍선 및 토글 버튼을 제공하여, 코멘트 그룹 박스 없이도 각 노드의 역할을 즉시 명시.
+         1. **노드 컨텍스트 메뉴 (Node Context Menu):**
+            - 노드 헤더 또는 본문 우클릭 시 호출 (dd::GetHoveredNode()).
+            - **복사 / 잘라내기 / 붙여넣기 / 복제** (`Copy / Cut / Paste / Duplicate` - `Ctrl+C/X/V/D`): 선택된 노드 및 연결 와이어를 클립보드로 직렬화/역직렬화하여 원하는 위치에 복제.
+            - **노드 삭제** (`Delete`): 선택 노드 및 연결된 모든 링크 안전하게 일괄 제거.
+            - **모든 연결 해제** (`Break All Pin Links`): 해당 노드의 모든 In/Out 핀에 연결된 와이어 일괄 분리.
+            - **중단점 토글** (`Toggle Breakpoint` - `F9`): 런타임/PIE 디버깅용 중단점 설정/해제.
+            - **노드 정렬 서브메뉴** (`Alignment`): 다중 노드 선택 시 상/하/좌/우 정렬(`Shift+W/S/A/D`) 및 수평/수직 균등 분배(`Shift+H/V`).
+         2. **와이어(링크) 컨텍스트 메뉴 (Wire / Link Context Menu):**
+            - 연결선(와이어) 우클릭 시 호출 (dd::GetHoveredLink()).
+            - **리디렉트 노드 삽입** (`Add Reroute Node`): 클릭한 와이어 좌표에 해당 핀 타입의 `Core.Reroute` 노드 자동 생성 및 와이어 양방향 분할 연결.
+            - **와이어 분리/삭제** (`Break Link`): 해당 와이어 연결 해제.
+            - **양끝 노드로 캔버스 이동** (`Jump to Source Node / Jump to Target Node`): 장거리 연결 시 와이어의 시작 노드 또는 끝 노드로 부드러운 화면 패닝.
+            - **실시간 디버그 감시값 고정** (`Watch Value`): 데이터 와이어인 경우 해당 선을 통과하는 실시간 런타임 값을 캔버스 상에 핀 태그로 상시 시각화.
+         3. **핀 컨텍스트 메뉴 (Pin Context Menu):**
+            - 개별 핀 우클릭 시 호출 (dd::GetHoveredPin()).
+            - **이 핀의 모든 연결 해제** (`Break Links to [PinName]`): 해당 핀에 꽂힌 와이어만 선별적 해제.
+            - **기본값으로 복원** (`Reset to Default`): 오버라이드된 입력값을 스키마 기본값으로 롤백.
+            - **변수로 승격** (`Promote to Variable`): 해당 핀의 타입과 일치하는 그래프 변수를 자동 생성하고 Get/Set 연결.
+       - **완료 기준:** 노드나 와이어 위에서 우클릭했을 때 캔버스 생성 메뉴가 아닌 대상 전용 팝업 메뉴가 뜨며, Reroute 삽입·연결 해제·삭제·복제 기능이 마우스 하나로 즉시 수행된다.
 
 #### 4.3 엔진 런타임(GraphSystem) 핫스왑 및 엔티티 0-크래시 보장 (P1)
 - **목적:** 에디터 패널뿐만 아니라 실제 게임 루프(PIE)를 구동하는 `GraphSystem`과 씬 내 엔티티의 `GraphRuntimeState`를 핫리로드와 동기화하여, 게임 플레이 중 C++ 코드 수정 시 댕글링 함수 포인터로 인한 `0xC0000005 Access Violation` 크래시를 원천 차단한다.

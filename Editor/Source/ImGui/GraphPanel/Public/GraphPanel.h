@@ -12,6 +12,7 @@
 namespace ax::NodeEditor { struct EditorContext; }
 
 BEGIN(Editor)
+enum class EWireStyle : int { Curved = 0, ElectronicHybrid = 1, Straight = 2 };
 class GraphShaderPreview;
 class GraphPanel : public IImGui
 {
@@ -123,12 +124,18 @@ private:
 	void ReadSelection();
 	bool ReserveEditorIds(std::size_t count);
 	int FindPinId(const Engine::GraphPinReference& pin) const;
-	void GetConnectionPins(int first, int second, Engine::GraphPinReference& from,
-		Engine::GraphPinReference& to) const;
+	void GetConnectionPins(int first, int second, Engine::GraphPinReference& from, Engine::GraphPinReference& to) const;
 	static ImU32 PinColor(Engine::EGraphPinType type);
 	static const char* PinTypeName(Engine::EGraphPinType type);
 	void DrawCommentNode(const Engine::GraphNode& node);
 	void CreateCommentBoxFromSelection();
+
+	void DrawRerouteNode(const Engine::GraphNode& node);
+	void InsertRerouteNodeOnLink(uintptr_t hoveredLinkEdId, const ImVec2& canvasPos);
+	void AlignSelectedNodes(char direction);
+
+	void DuplicateSelection();
+	void BreakAllNodeLinks(Engine::GraphNodeId nodeId);
 #pragma endregion
 
 #pragma region Debugging
@@ -187,8 +194,13 @@ private:
 	std::unordered_map<std::wstring, std::unordered_set<Engine::GraphNodeId>> m_Breakpoints;
 	Engine::GraphNodeId m_HitBreakpointNode = 0;
 
+	uintptr_t m_ContextLinkId = 0;
+	uintptr_t m_ContextNodeId = 0;
+	ImVec2 m_ContextPosition = { 0.0f, 0.0f };
+
 	Engine::GraphNodeId m_EditingCommentNode = 0;
 	char m_CommentEditBuffer[128] = {};
+	EWireStyle m_WireStyle = EWireStyle::ElectronicHybrid;
 #pragma endregion
 };
 

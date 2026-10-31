@@ -32,7 +32,7 @@ GraphPanel::GraphPanel()
 	sizePin.DefaultValue = std::array<float, 2>{ 400.0f, 250.0f };
 	commentDef.Pins.push_back(sizePin);
 
-	m_Registry.Register(std::move(commentDef));
+	(void)m_Registry.Register(std::move(commentDef));
 	m_Ready = m_LastDiagnostic.Succeeded();
 	if (m_Ready && ReflectionRegistry::IsCreated())
 	{
@@ -63,7 +63,7 @@ GraphPanel::GraphPanel()
 				{
 					m_ExecutionReflection = ReflectionRegistry::Get().GetRegistry();
 					m_Registry.ClearReflectedNodes();
-					RegisterReflectedGraphNodes(m_Registry, m_ExecutionReflection);
+					(void)RegisterReflectedGraphNodes(m_Registry, m_ExecutionReflection);
 				}
 				m_NodeCandidates.clear(); // 우클릭 검색 팔레트 목록 즉시 갱신
 
@@ -220,6 +220,20 @@ void GraphPanel::DrawToolbar()
 	ImGui::BeginDisabled(GetDocument().SelectedNodes.empty() && GetDocument().SelectedLinks.empty());
 	if (ImGui::Button(LOCAL_CSTR("GraphPanel.Delete"))) DeleteSelection();
 	ImGui::EndDisabled();
+	ImGui::SameLine();
+	const char* wireBtnLabel = (m_WireStyle == EWireStyle::ElectronicHybrid) ? ICON_FA_BOLT " Wire: Electronic" :
+		(m_WireStyle == EWireStyle::Straight ? ICON_FA_MINUS " Wire: All Straight" : ICON_FA_BEZIER_CURVE " Wire: All Curved");
+	if (ImGui::Button(wireBtnLabel))
+	{
+		int nextMode = (static_cast<int>(m_WireStyle) + 1) % 3;
+		m_WireStyle = static_cast<EWireStyle>(nextMode);
+	}
+	if (ImGui::IsItemHovered())
+	{
+		const char* tooltip = (m_WireStyle == EWireStyle::ElectronicHybrid) ? "Wire: Electronic (Exec Straight + Data Curved)" :
+			(m_WireStyle == EWireStyle::Straight ? "Wire: All Straight Lines (Exec & Data Straight)" : "Wire: All Curved Bezier Lines");
+		ImGui::SetTooltip("%s (Click to toggle)", tooltip);
+	}
 }
 
 void GraphPanel::SaveDocument(bool saveAs)
@@ -417,24 +431,27 @@ void GraphPanel::DrawFileToolbar()
 	}
 
 	bool openRequested = false;
-	if (ImGui::BeginPopupModal(LOCAL_LABEL("GraphPanel.ConfirmOpen").c_str(),
-		nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+	const ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+	ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+	ImGui::SetNextWindowSize(ImVec2(320.0f, 0.0f), ImGuiCond_Appearing);
+	if (ImGui::BeginPopupModal(LOCAL_LABEL("GraphPanel.ConfirmOpen").c_str(), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
 	{
-		ImGui::TextWrapped("%s", LOCAL_CSTR("GraphPanel.ReplaceWarning"));
-
-		if (ImGui::Button(LOCAL_LABEL("GraphPanel.ReplaceCurrent").c_str()))
+		ImGui::PushTextWrapPos(300.0f);
+		ImGui::TextUnformatted(LOCAL_CSTR("GraphPanel.ReplaceWarning"));
+		ImGui::PopTextWrapPos();
+		ImGui::Spacing();
+		ImGui::Separator();
+		ImGui::Spacing();
+		if (ImGui::Button(LOCAL_LABEL("GraphPanel.ReplaceCurrent").c_str(), ImVec2(120.0f, 0.0f)))
 		{
 			ImGui::CloseCurrentPopup();
 			openRequested = true;
 		}
-
-		ImGui::SameLine();
-		if (ImGui::Button(LOCAL_LABEL("EditorCommon.Cancel").c_str()))
+		ImGui::SameLine(0.0f, 8.0f);
+		if (ImGui::Button(LOCAL_LABEL("EditorCommon.Cancel").c_str(), ImVec2(120.0f, 0.0f)))
 			ImGui::CloseCurrentPopup();
-
 		ImGui::EndPopup();
 	}
-
 	if (openRequested) OpenDocument();
 
 	ImGui::SameLine();
@@ -503,7 +520,7 @@ void GraphPanel::PrepareNodeMenu(GraphPinReference source)
 	{
 		m_ExecutionReflection = ReflectionRegistry::Get().GetRegistry();
 		m_Registry.ClearReflectedNodes();
-		RegisterReflectedGraphNodes(m_Registry, m_ExecutionReflection);
+		(void)RegisterReflectedGraphNodes(m_Registry, m_ExecutionReflection);
 	}
 
 	m_NodeCandidates = FindGraphNodeCandidates(GetDocument().Data, m_Registry, m_AddSource);
@@ -926,7 +943,6 @@ bool GraphPanel::HasBreakpoint(Engine::GraphNodeId node) const
 	return it != m_Breakpoints.end() && it->second.contains(node);
 }
 #pragma endregion
-
 
 #pragma region Editing
 GraphPanel::GraphDocument& GraphPanel::GetDocument()
