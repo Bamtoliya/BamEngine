@@ -4,10 +4,6 @@
 #include "Renderer.h"
 #include "Logger.h"
 #include <glaze/glaze.hpp>
-#include <fstream>
-#include <sstream>
-#include <string_view>
-#include <vector>
 
 namespace Editor::StartupConfig
 {

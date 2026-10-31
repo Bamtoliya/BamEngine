@@ -27,57 +27,37 @@ EResult Runtime::Initialize(void* arg)
 			return EResult::Fail;
 		};
 
-	m_ReflectionRegistry = ReflectionRegistry::Create();
-	if (!m_ReflectionRegistry) return fail("ReflectionRegistry");
+	const auto create = []<typename T, typename... Args>(T * &target, Args&&... args)
+	{
+		target = T::Create(std::forward<Args>(args)...);
+		return target != nullptr;
+	};
 
-	m_ModuleManager = ModuleManager::Create();
-	if (!m_ModuleManager) return fail("ModuleManager");
+	if (!create(m_ReflectionRegistry)) return fail("ReflectionRegistry");
+	if (!create(m_ModuleManager)) return fail("ModuleManager");
+	if (!create(m_TimeManager)) return fail("TimeManager");
+	if (!create(m_InputManager)) return fail("InputManager");
+	if (!create(m_AudioManager)) return fail("AudioManager");
+	if (!create(m_ResourceManager)) return fail("ResourceManager");
+	if (!create(m_SceneManager)) return fail("SceneManager");
+	if (!create(m_SystemManager)) return fail("SystemManager");
+	if (!create(m_LocalizationManager)) return fail("LocalizationManager");
+	if (!create(m_RenderTargetManager)) return fail("RenderTargetManager");
+	if (!create(m_RenderPassManager)) return fail("RenderPassManager");
 
-	m_TimeManager = TimeManager::Create();
-	if (!m_TimeManager) return fail("TimeManager");
-
-	m_InputManager = InputManager::Create();
-	if (!m_InputManager) return fail("InputManager");
-
-	m_AudioManager = AudioManager::Create();
-	if (!m_AudioManager) return fail("AudioManager");
-
-	m_ResourceManager = ResourceManager::Create();
-	if (!m_ResourceManager) return fail("ResourceManager");
-
-	m_SceneManager = SceneManager::Create();
-	if (!m_SceneManager) return fail("SceneManager");
-
-	m_SystemManager = SystemManager::Create();
-	if (!m_SystemManager) return fail("SystemManager");
-
-	m_LocalizationManager = LocalizationManager::Create();
-	if (!m_LocalizationManager) return fail("LocalizationManager");
-
-	m_RenderTargetManager = RenderTargetManager::Create();
-	if (!m_RenderTargetManager) return fail("RenderTargetManager");
-
-	m_RenderPassManager = RenderPassManager::Create();
-	if (!m_RenderPassManager) return fail("RenderPassManager");
-
-	m_Renderer = Renderer::Create(&rendererDesc);
-	if (!m_Renderer) return fail("Renderer");
+	if (!create(m_Renderer, &rendererDesc)) return fail("Renderer");
 
 	PipelineManagerDesc pipelineDesc = {};
 	pipelineDesc.rhi = m_Renderer->GetRHI();
-	m_PipelineManager = PipelineManager::Create(&pipelineDesc);
-	if (!m_PipelineManager) return fail("PipelineManager");
+	if (!create(m_PipelineManager, &pipelineDesc)) return fail("PipelineManager");
 
-	m_SamplerManager = SamplerManager::Create(m_Renderer->GetRHI());
-	if (!m_SamplerManager) return fail("SamplerManager");
+	if (!create(m_SamplerManager, m_Renderer->GetRHI())) return fail("SamplerManager");
 
 	LightManagerDesc lightDesc = {};
 	lightDesc.RHI = m_Renderer->GetRHI();
-	m_LightManager = LightManager::Create(&lightDesc);
-	if (!m_LightManager) return fail("LightManager");
+	if (!create(m_LightManager, &lightDesc)) return fail("LightManager");
 
-	m_PickingManager = PickingManager::Create();
-	if (!m_PickingManager) return fail("PickingManager");
+	if (!create(m_PickingManager)) return fail("PickingManager");
 
 	return EResult::Success;
 }
@@ -122,14 +102,6 @@ void Runtime::Free()
 #pragma endregion
 
 #pragma region Loop
-void Runtime::RunFrame(f32 dt)
-{	
-	FixedUpdate(dt);
-	Update(dt);
-	LateUpdate(dt);
-	Render(dt);
-	
-}
 void Runtime::FixedUpdate(f32 dt)
 {
 	SystemManager::Get().FixedUpdate(m_GlobalRegistry, SceneManager::Get().GetActiveScenes(), dt);

@@ -3,7 +3,6 @@
 #include "Engine_API.h"
 #include "Macro.h"
 #include "Result.h"
-#include <cstdint>
 
 BEGIN(Engine)
 class ENGINE_API Base

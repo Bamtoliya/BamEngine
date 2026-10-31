@@ -13,7 +13,6 @@
 #define new DBG_NEW 
 #endif
 
-
 ENUM()
 enum class EModelPostProcessFlag : uint32
 {
@@ -66,6 +65,7 @@ struct ModelImportDesc
 };
 
 BEGIN(Editor)
+class ModelImportTask;
 class ModelImporter : public IImporter
 {
 #pragma region Contructor&Destructor
@@ -81,7 +81,11 @@ public:
 public:
 	EResult Import(const filesystem::path& sourcePath, const filesystem::path& destDir = {}, void* arg = nullptr) override;
 	EResult CreateJob(const filesystem::path& sourcePath, const filesystem::path& destDir, void* arg, std::unique_ptr<ImportJob>& outJob) override;
-
+	EResult Finalize(ModelImportTask& task);
+	// nullopt: 진행 중, 값 있음: 전체 작업 종료
+	std::optional<EResult> FinalizeStep(ModelImportTask& task);
+private:
+	std::optional<EResult> FinalizeOneStep(ModelImportTask& task);
 private:
 	void ProcessModelNode(
 		const aiNode* node,

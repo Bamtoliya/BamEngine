@@ -5,13 +5,6 @@
 
 #include <reflection/Registry.h>
 
-#include <algorithm>
-#include <cmath>
-#include <cstdint>
-#include <variant>
-#include <limits>
-#include <vector>
-
 namespace
 {
     const char* GetTransformEditorPropertyName(Editor::TransformEditMode mode)

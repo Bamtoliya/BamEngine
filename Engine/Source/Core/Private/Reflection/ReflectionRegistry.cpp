@@ -14,10 +14,6 @@
 #include <entt/core/type_info.hpp>
 #include <entt/entity/component.hpp>
 
-#include <algorithm>
-#include <iostream>
-#include <utility>
-#include <optional>
 
 namespace
 {
@@ -327,24 +323,18 @@ bool ReflectionRegistry::RegisterComponentOperations()
     append.template operator()<TransformComponent>("Transform", "Core", &AddSpatialComponent<TransformComponent>);
     append.template operator()<CameraComponent>("Camera", "Rendering", &AddSpatialComponent<CameraComponent>);
     append.template operator()<LightComponent>("Light", "Rendering", &AddSpatialComponent<LightComponent>);
-    append.template operator()<StaticMeshRendererComponent>(
-        "Static Mesh Renderer", "Rendering", &AddSpatialComponent<StaticMeshRendererComponent>);
-    append.template operator()<SpriteRendererComponent>(
-        "Sprite Renderer", "Rendering", &AddSpatialComponent<SpriteRendererComponent>);
-    append.template operator()<SkinnedMeshRendererComponent>(
-        "Skinned Mesh Renderer", "Rendering", &AddSpatialComponent<SkinnedMeshRendererComponent>);
-    append.template operator()<RigidBodyComponent>(
-        "Rigid Body", "Physics 3D", &AddSpatialComponent<RigidBodyComponent>);
+    append.template operator()<StaticMeshRendererComponent>( "Static Mesh Renderer", "Rendering", &AddSpatialComponent<StaticMeshRendererComponent>);
+    append.template operator()<LODGroupComponent>("LOD Group", "Rendering", &AddSpatialComponent<LODGroupComponent>);
+    append.template operator()<SpriteRendererComponent>("Sprite Renderer", "Rendering", &AddSpatialComponent<SpriteRendererComponent>);
+    append.template operator()<SkinnedMeshRendererComponent>("Skinned Mesh Renderer", "Rendering", &AddSpatialComponent<SkinnedMeshRendererComponent>);
+    append.template operator()<RigidBodyComponent>("Rigid Body", "Physics 3D", &AddSpatialComponent<RigidBodyComponent>);
     append.template operator()<ColliderComponent>("Collider", "Physics 3D", &AddSpatialComponent<ColliderComponent>);
     append.template operator()<JointComponent>("Joint", "Physics 3D", &AddSpatialComponent<JointComponent>);
-    append.template operator()<RigidBody2DComponent>(
-        "Rigid Body 2D", "Physics 2D", &AddSpatialComponent<RigidBody2DComponent>);
-    append.template operator()<Collider2DComponent>(
-        "Collider 2D", "Physics 2D", &AddSpatialComponent<Collider2DComponent>);
+    append.template operator()<RigidBody2DComponent>("Rigid Body 2D", "Physics 2D", &AddSpatialComponent<RigidBody2DComponent>);
+    append.template operator()<Collider2DComponent>("Collider 2D", "Physics 2D", &AddSpatialComponent<Collider2DComponent>);
     append.template operator()<Joint2DComponent>("Joint 2D", "Physics 2D", &AddSpatialComponent<Joint2DComponent>);
     append.template operator()<SkyAtmosphereComponent>("Sky Atmosphere", "Rendering", &AddSpatialComponent<SkyAtmosphereComponent>);
     append.template operator()<TerrainComponent>("Terrain", "Rendering", &AddSpatialComponent<TerrainComponent>);
-
     append.template operator()<PostProcessComponent>("Post Process", "Rendering", &AddSpatialComponent<PostProcessComponent>);
 
     const bool generated = reflection_generated::ForEach_BamEngine_Type([&]<typename T>()

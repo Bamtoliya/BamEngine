@@ -160,6 +160,11 @@ EKeyCode StringToEngineKeyCode(const string& keyString)
         {"numpadmultiply", EKeyCode::NumpadMultiply}, {"*", EKeyCode::NumpadMultiply},
         {"numpaddivide", EKeyCode::NumpadDivide}, {"numpadenter", EKeyCode::NumpadEnter},
 
+        {"numpad+", EKeyCode::NumpadAdd},
+        {"numpad-", EKeyCode::NumpadSubtract},
+        {"numpad*", EKeyCode::NumpadMultiply},
+        {"numpad/", EKeyCode::NumpadDivide},
+
         // 기능키
         {"f1", EKeyCode::F1}, {"f2", EKeyCode::F2}, {"f3", EKeyCode::F3}, {"f4", EKeyCode::F4},
         {"f5", EKeyCode::F5}, {"f6", EKeyCode::F6}, {"f7", EKeyCode::F7}, {"f8", EKeyCode::F8},

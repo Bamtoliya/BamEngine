@@ -64,7 +64,6 @@ const InputLayoutDesc Vertex2D::Layout =
 	0
 };
 
-#ifdef _DEBUG
 const InputLayoutDesc DebugVertex::Layout =
 {
 	{
@@ -75,4 +74,3 @@ const InputLayoutDesc DebugVertex::Layout =
 	EVertexInputRate::PerVertex,
 	0
 };
-#endif

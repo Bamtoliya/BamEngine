@@ -9,7 +9,8 @@
 #include "ResourceHandle.h"
 #include "ResourceManager.h"
 #include "UILayout.h"
-#include <stdexcept>
+#include "PrefabModeManager.h"
+
 Entity& EntityFactory::CreateCanvasEntity(Scene* scene, const wstring& name)
 {
 	if (!scene) throw std::invalid_argument("Canvas creation requires a scene.");
@@ -69,6 +70,11 @@ Entity& EntityFactory::CreateEmptyEntity(Scene* scene, const wstring& name)
 	transform.rotation = quat(1.0f, 0.0f, 0.0f, 0.0f);
 	transform.scale = vec3(1.0f, 1.0f, 1.0f);
 	scene->AddComponent<WorldTransformComponent>(entity);
+
+	auto& prefabMode = PrefabModeManager::Get();
+	if (prefabMode.IsInPrefabMode() && prefabMode.GetPrefabScene() == scene)
+		prefabMode.MarkDirty();
+
 	return entity;
 }
 

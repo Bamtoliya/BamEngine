@@ -40,6 +40,8 @@ void BaseViewportPanel::Update(f32 dt)
 }
 void BaseViewportPanel::Draw()
 {
+	m_Focused = false;
+	m_Hovered = false;
 	if (!m_Open) return;
 	ImGui::PushID(this);
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));

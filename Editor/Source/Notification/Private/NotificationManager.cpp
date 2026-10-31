@@ -1,5 +1,4 @@
 ﻿#include "NotificationManager.h"
-#include <cmath>
 
 IMPLEMENT_SINGLETON(NotificationManager)
 

@@ -5,3 +5,4 @@
 #include "ModelEditor.h"
 #include "ShaderEditor.h"
 #include "MaterialEditor.h"
+#include "PrefabEditorPanel.h"

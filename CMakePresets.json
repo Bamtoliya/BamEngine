@@ -21,25 +21,27 @@
           "rhs": "Windows"
         }
       },
-        {
-          "name": "x64-debug",
-          "displayName": "x64 Debug",
-          "inherits": "windows-base",
-          "architecture": {
-            "value": "x64",
-            "strategy": "external"
-          },
-          "cacheVariables": {
-            "CMAKE_BUILD_TYPE": "Debug",
-            "CMAKE_CONFIGURATION_TYPES": "Debug"
-          },
-          "vendor": {
-            "microsoft.com/VisualStudioSettings/CMake/1.0": {
-              "enableClangTidyCodeAnalysis": true,
-              "clangTidyChecks": "-*,readability-identifier-naming"
-            }
-          }
+      {
+        "name": "x64-debug",
+        "displayName": "x64 Debug",
+        "inherits": "windows-base",
+        "architecture": {
+          "value": "x64",
+          "strategy": "external"
         },
+        "cacheVariables": {
+          "CMAKE_BUILD_TYPE": "Debug",
+          "CMAKE_CONFIGURATION_TYPES": "Debug",
+          "BAMENGINE_BUILD_GRAPH_CHECK": "ON",
+          "ARCHIVE_BUILD_EXAMPLE": "ON"
+        },
+        "vendor": {
+          "microsoft.com/VisualStudioSettings/CMake/1.0": {
+            "enableClangTidyCodeAnalysis": true,
+            "clangTidyChecks": "-*,readability-identifier-naming"
+          }
+        }
+      },
         {
             "name": "x64-release",
             "displayName": "x64 Release",

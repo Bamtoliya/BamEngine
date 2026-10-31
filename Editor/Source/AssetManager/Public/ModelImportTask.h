@@ -7,6 +7,7 @@
 
 namespace Editor
 {
+    struct ModelFinalizeState;
     struct ModelImportRequest
     {
         filesystem::path SourcePath;
@@ -44,6 +45,10 @@ namespace Editor
 
         // Prepare 실행 완료를 동기화한 뒤에만 접근합니다.
         const ModelImportRequest& GetRequest() const { return m_Request; }
+        PreparedModelData* GetPreparedModel()
+        {
+            return m_PreparedModel ? &*m_PreparedModel : nullptr;
+        }
         const PreparedModelData* GetPreparedModel() const
         {
             return m_PreparedModel ? &*m_PreparedModel : nullptr;
@@ -58,5 +63,7 @@ namespace Editor
         Tools::ModelConversion::Error m_ErrorCode = Tools::ModelConversion::Error::None;
         std::string m_ErrorMessage;
         bool m_PrepareStarted = false;
+        friend class ModelImporter;
+        std::shared_ptr<ModelFinalizeState> m_FinalizeState;
     };
 }

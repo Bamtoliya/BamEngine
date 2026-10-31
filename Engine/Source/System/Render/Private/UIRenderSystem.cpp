@@ -5,10 +5,6 @@
 #include "RenderPass.h"
 #include "ResourceManager.h"
 #include "CoreComponents.h"
-#include "Sprite.h"
-#include "MaterialInterface.h"
-#include <cmath>
-#include <unordered_set>
 
 void Engine::UIRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& activeScenes, f32 dt)
 {

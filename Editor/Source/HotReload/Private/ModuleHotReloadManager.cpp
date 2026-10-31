@@ -1,6 +1,5 @@
 ﻿#include "ModuleHotReloadManager.h"
-#include <chrono>
-#include <thread>
+#include "PIEManager.h"
 
 // efsw 파일 이벤트 리스너
 class ModuleHotReloadFileListener final : public efsw::FileWatchListener
@@ -102,30 +101,28 @@ void ModuleHotReloadManager::StopWatching()
 std::filesystem::path ModuleHotReloadManager::CreateShadowCopy(const std::filesystem::path& srcDllPath)
 {
     std::error_code ec;
-    if (!std::filesystem::exists(srcDllPath, ec))
-    {
-        EDITOR_LOG_ERROR("[HotReload] Original module not found: {}", srcDllPath.string());
-        return {};
-    }
 
-    // 링커가 파일 쓰기를 완전히 마칠 때까지 최대 500ms(50ms x 10회) 대기
+    // 링커가 기존 파일을 지우고 새 파일을 완전히 쓸 때까지 최대 1.5초(50ms x 30회) 안전 대기
     bool fileReady = false;
-    for (int retry = 0; retry < 10; ++retry)
+    for (int retry = 0; retry < 30; ++retry)
     {
-        HANDLE hFile = CreateFileW(srcDllPath.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr,
-            OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-        if (hFile != INVALID_HANDLE_VALUE)
+        if (std::filesystem::exists(srcDllPath, ec))
         {
-            CloseHandle(hFile);
-            fileReady = true;
-            break;
+            HANDLE hFile = CreateFileW(srcDllPath.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr,
+                OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+            if (hFile != INVALID_HANDLE_VALUE)
+            {
+                CloseHandle(hFile);
+                fileReady = true;
+                break;
+            }
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
     }
 
     if (!fileReady)
     {
-        EDITOR_LOG_ERROR("[HotReload] DLL file is locked by compiler/linker: {}", srcDllPath.string());
+        EDITOR_LOG_ERROR("[HotReload] Original module not ready or locked: {}", srcDllPath.string());
         return {};
     }
 
@@ -246,6 +243,11 @@ EResult ModuleHotReloadManager::ReloadModule()
     {
         m_State = EHotReloadState::Failed;
         EDITOR_LOG_ERROR("[HotReload] Reload failed: {}", ResultToString(result));
+        if (PIEManager::IsCreated() && PIEManager::Get().IsPlaying())
+        {
+            PIEManager::Get().Pause();
+            EDITOR_LOG_WARN("[HotReload] PIE execution paused automatically to prevent crash from unloaded module.");
+        }
         return result;
     }
 
@@ -253,6 +255,12 @@ EResult ModuleHotReloadManager::ReloadModule()
         m_CurrentModule->OnPostHotReload();
 
     m_State = EHotReloadState::Idle;
+
+    for (const auto& callback : m_PostReloadCallbacks)
+    {
+        if (callback) callback();
+    }
+
     EDITOR_LOG_INFO("[HotReload] Module reloaded successfully (Version: {})", m_ReloadIndex);
     return EResult::Success;
 }

@@ -152,7 +152,7 @@ namespace Engine
 	};
 
 	STRUCT()
-		struct ENGINE_API Vertex
+	struct ENGINE_API Vertex
 	{
 		REFLECT_BODY();
 
@@ -213,9 +213,6 @@ namespace Engine
 		static const InputLayoutDesc Layout;
 	};
 
-
-
-#ifdef _DEBUG
 	struct ENGINE_API DebugVertex
 	{
 		vec3 position;
@@ -223,13 +220,16 @@ namespace Engine
 
 		static const InputLayoutDesc Layout;
 	};
-#endif
+
 	struct ENGINE_API SceneUBO
 	{
 		mat4 worldMatrix;
-		vec4 pickingData = vec4(0.0f); // x: frame-local ID, exactly representable up to 2^24 - 1
+		vec4 pickingData = vec4(0.f);
+		vec4 heightfieldData = vec4(0.f); // 최대 높이, X 간격, Z 간격, 예약
 	};
+
 	static_assert(offsetof(SceneUBO, pickingData) == 64);
-	static_assert(sizeof(SceneUBO) == 80);
+	static_assert(offsetof(SceneUBO, heightfieldData) == 80);
+	static_assert(sizeof(SceneUBO) == 96);
 #pragma endregion
 }

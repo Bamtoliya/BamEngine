@@ -214,10 +214,12 @@ void MaterialPreviewRenderer::DrawUI(Engine::MaterialInterface* material)
 	ImVec2 cursorPos = ImGui::GetCursorScreenPos();
 	ImDrawList* drawList = ImGui::GetWindowDrawList();
 
-	ImGui::Image(texID, previewSize);
+	ImGui::InvisibleButton("##MaterialPreviewViewport", previewSize,
+		ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight | ImGuiButtonFlags_MouseButtonMiddle);
 
 	ImVec2 bbMin = cursorPos;
 	ImVec2 bbMax = ImVec2(cursorPos.x + previewSize.x, cursorPos.y + previewSize.y);
+	drawList->AddImage(texID, bbMin, bbMax);
 	drawList->AddRect(bbMin, bbMax, IM_COL32(65, 70, 80, 255), 4.0f, 0, 1.5f);
 
 	// 3. 마우스 & 키보드 카메라 조작

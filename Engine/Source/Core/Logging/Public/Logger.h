@@ -7,9 +7,6 @@
 #include <utility>
 #include <string_view>
 #include <filesystem>
-#include <atomic>
-#include <mutex>
-#include <fstream>
 #include <fmt/format.h>
 
 #include "LogEntry.h"

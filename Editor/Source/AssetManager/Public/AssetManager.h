@@ -4,7 +4,6 @@
 #include "ImporterInterface.h"
 #include "ExporterInterface.h"
 #include "AssetCache.h"
-#include <mutex>
 #include "AssetTaskMetrics.h"
 
 BEGIN(Editor)
@@ -35,6 +34,7 @@ public:
 	void ExportAsync(const filesystem::path& sourcePath, const filesystem::path& destDir = {}, void* arg = nullptr);
 public:
 	Engine::MulticastDelegate<> GetAsyncDelegate() { return m_OnAsyncDelegate; }
+	Engine::MulticastDelegate<>& OnAsyncCompleted() { return m_OnAsyncDelegate; }
 #pragma endregion
 
 #pragma region Metrics
@@ -50,8 +50,15 @@ private:
 	unordered_map<string, IImporter*> m_Importers;
 	unordered_map<string, ExporterInterface*> m_Exporters;
 
-	vector<future<EResult>> m_PendingTasks;
-	vector<future<EResult>> m_ActiveTasks;
+	struct AsyncTask
+	{
+		std::future<EResult> Future;
+		std::function<std::optional<EResult>(EResult)> Complete;
+		std::optional<EResult> PreparedResult;
+	};
+
+	vector<AsyncTask> m_PendingTasks;
+	vector<AsyncTask> m_ActiveTasks;
 	Engine::MulticastDelegate<> m_OnAsyncDelegate;
 private:
 	AssetCache* m_AssetCache = nullptr;

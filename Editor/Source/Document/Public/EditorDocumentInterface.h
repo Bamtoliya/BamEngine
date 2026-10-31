@@ -2,6 +2,7 @@
 
 #include "Engine_Includes.h"
 #include "Result.h"
+#include "FileDialogContext.h"
 
 namespace Editor
 {
@@ -13,6 +14,7 @@ namespace Editor
         std::wstring Pattern;
         std::wstring DefaultFileName;
         std::wstring DefaultExtension;
+        Editor::EFileDialogContext Context = Editor::EFileDialogContext::General;
     };
 
     class IEditorDocument

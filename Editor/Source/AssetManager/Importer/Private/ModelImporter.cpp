@@ -3,12 +3,82 @@
 #include "Model.h"
 #include "ModelImporter.h"
 #include "ModelImportTask.h"
-#include <utility>
 #include "ModelConverter.h"
 #include "ResourceManager.h"
 #include "Logger.h"
-#include <limits>
-#include <memory>
+
+#pragma push_macro("new")
+#undef new
+#include <archive/BeveArchive.h>
+#pragma pop_macro("new")
+
+#include "HotReloadManager.h"
+#include "AssetHotReloadManager.h"
+
+namespace Editor
+{
+	struct ModelFinalizeState
+	{
+		struct ResourceDeleter
+		{
+			void operator()(Resource* resource) const
+			{
+				if (!resource)
+					return;
+
+				resource->Free();
+				delete resource;
+			}
+		};
+
+		struct StagedFile
+		{
+			filesystem::path Path;
+			bool Owned = false;
+
+			StagedFile() = default;
+			StagedFile(const StagedFile&) = delete;
+			StagedFile& operator=(const StagedFile&) = delete;
+
+			~StagedFile()
+			{
+				if (Owned)
+				{
+					std::error_code ec;
+					filesystem::remove(Path, ec);
+				}
+			}
+		};
+
+		struct SavedMesh
+		{
+			archive::ArchiveResult Result;
+			std::unique_ptr<StagedFile> File;
+			size_t ByteCount = 0;
+			double WorkerMs = 0.0;
+			double WriteMs = 0.0;
+			double ReleaseMs = 0.0;
+		};
+
+		using MeshOwner = std::unique_ptr<Mesh, ResourceDeleter>;
+		using ModelOwner = std::unique_ptr<Resource, ResourceDeleter>;
+
+		struct PendingMesh
+		{
+			wstring Key;
+			MeshOwner Resource;
+		};
+
+		ModelImportDesc Settings;
+		ModelCreateDesc ModelDesc;
+		std::vector<PendingMesh> Meshes;
+		unordered_map<wstring, uint32> NameCounts;
+		size_t NextMesh = 0;
+		size_t NextSave = 0;
+		double SnapshotMs = 0.0;
+		std::future<SavedMesh> Saving;
+	};
+}
 
 namespace
 {
@@ -23,11 +93,7 @@ namespace
 		return name;
 	}
 
-	wstring MakeUniqueMeshStem(
-		const wstring& sourceStem,
-		const wstring& meshKey,
-		uint32 meshSerial,
-		unordered_map<wstring, uint32>& nameCounts)
+	wstring MakeUniqueMeshStem( const wstring& sourceStem, const wstring& meshKey, uint32 meshSerial, unordered_map<wstring, uint32>& nameCounts)
 	{
 		wstring safeKey = meshKey.empty() ? (L"Mesh_" + std::to_wstring(meshSerial)) : meshKey;
 		safeKey = SanitizeFileName(safeKey);
@@ -50,154 +116,503 @@ namespace
 			aiMat.a4, aiMat.b4, aiMat.c4, aiMat.d4
 		);
 	}
+
+ 	EResult ValidateImportOutput(ResourceManager & manager, const wstring& key, bool saveToFile)
+	{
+		if (manager.IsValid(manager.FindHandleByKey(key)))
+		{
+			BAM_LOG(Error, "Editor", "Asset", "Import output resource already registered: {}", WStrToStr(key));
+			return EResult::AlreadyInitialized;
+		}
+
+		if (!saveToFile)
+			return EResult::Success;
+
+		std::error_code ec;
+		const bool exists = filesystem::exists(filesystem::path(key), ec);
+
+		if (ec)
+		{
+			BAM_LOG(Error, "Editor", "Asset", "Failed to inspect import output: path={}, error={}",
+				WStrToStr(key), ec.message());
+			return EResult::Fail;
+		}
+
+		if (exists)
+		{
+			BAM_LOG(Error, "Editor", "Asset", "Import output already exists: {}", WStrToStr(key));
+			return EResult::AlreadyInitialized;
+		}
+
+		return EResult::Success;
+	}
+
+	EResult CommitPreparedModel(ModelFinalizeState& state)
+	{
+		auto& manager = ResourceManager::Get();
+		auto& modelDesc = state.ModelDesc;
+		auto& pending = state.Meshes;
+		const auto& settings = state.Settings;
+		const auto& modelKey = modelDesc.Key;
+		using ModelOwner = ModelFinalizeState::ModelOwner;
+
+		if (const EResult result = ValidateImportOutput(manager, modelKey, settings.SaveToFile);
+			result != EResult::Success)
+		{
+			return result;
+		}
+
+		for (const auto& mesh : pending)
+		{
+			// 메시 파일은 이 작업이 이미 저장했으므로 등록 여부만 검사합니다.
+			if (const EResult result = ValidateImportOutput(manager, mesh.Key, false);
+				result != EResult::Success)
+			{
+				return result;
+			}
+		}
+
+		// 이후 단계가 실패하면 이번에 등록한 메시만 정리합니다.
+		struct MeshRegistrationRollback
+		{
+			ResourceManager& Manager;
+			std::vector<Handle> Handles;
+			bool Committed = false;
+
+			~MeshRegistrationRollback()
+			{
+				if (Committed)
+					return;
+
+				for (auto it = Handles.rbegin(); it != Handles.rend(); ++it)
+					Manager.DestroyResource(*it);
+			}
+		};
+
+		MeshRegistrationRollback rollback{ manager, {}, false };
+		rollback.Handles.reserve(pending.size());
+		modelDesc.Meshes.reserve(pending.size());
+
+		for (auto& mesh : pending)
+		{
+			Mesh* instance = mesh.Resource.get();
+			auto handle = manager.AddResource<Mesh>(mesh.Key, mesh.Resource.release());
+
+			if (!handle.IsValid())
+				return EResult::Fail;
+
+			// AddResource는 중복 키이면 기존 리소스를 반환합니다.
+			if (handle.Get() != instance)
+				return EResult::AlreadyInitialized;
+
+			rollback.Handles.push_back(handle.GetRawHandle());
+			modelDesc.Meshes.push_back(std::move(handle));
+		}
+
+		ModelOwner model(Model::Create(&modelDesc));
+		if (!model)
+		{
+			BAM_LOG(Error, "Editor", "Asset", "Model creation failed: {}", WStrToStr(modelKey));
+			return EResult::Fail;
+		}
+
+		if (settings.SaveToFile)
+		{
+			const EResult result = manager.SaveToBinaryFile(model.get(), modelKey);
+			if (result != EResult::Success)
+				return result;
+		}
+
+		Model* instance = static_cast<Model*>(model.get());
+		auto modelHandle = manager.AddResource<Model>(modelKey, static_cast<Model*>(model.release()));
+
+		if (!modelHandle.IsValid())
+			return EResult::Fail;
+
+		if (modelHandle.Get() != instance)
+			return EResult::AlreadyInitialized;
+
+		rollback.Committed = true;
+
+		BAM_LOG(Info, "Editor", "Asset", "Model import finished: meshes={}, nodes={}, key={}",
+			modelDesc.Meshes.size(), modelDesc.Nodes.size(), WStrToStr(modelKey));
+
+		return EResult::Success;
+	}
+
+	EResult CheckImportSaveResult(const archive::ArchiveResult& result, const wstring& path)
+	{
+		if (result)
+			return EResult::Success;
+
+		BAM_LOG(Error, "Editor", "Asset", "Model mesh save failed: code={}, field={}, path={}",
+			static_cast<int>(result.Code), result.Field, WStrToStr(path));
+
+		return result.Code == archive::ArchiveErrorCode::UnsupportedType ?
+			EResult::NotImplemented : EResult::Fail;
+	}
+
+	ModelFinalizeState::SavedMesh EncodeAndStageMesh(
+		std::unique_ptr<archive::BeveArchive> snapshot, filesystem::path stagingPath)
+	{
+		using Clock = std::chrono::steady_clock;
+
+		ModelFinalizeState::SavedMesh saved;
+		std::string bytes;
+
+		const auto encodeStart = Clock::now();
+		saved.Result = snapshot->ToBeve(bytes);
+		snapshot.reset();
+		saved.WorkerMs = std::chrono::duration<double, std::milli>(Clock::now() - encodeStart).count();
+		saved.ByteCount = bytes.size();
+
+		if (saved.Result)
+		{
+			if (std::cmp_greater(bytes.size(), (std::numeric_limits<std::streamsize>::max)()))
+			{
+				saved.Result = { archive::ArchiveErrorCode::FileWriteFailed, "Mesh.StagingSize" };
+			}
+			else
+			{
+				saved.File = std::make_unique<ModelFinalizeState::StagedFile>();
+				saved.File->Path = std::move(stagingPath);
+
+				const auto writeStart = Clock::now();
+
+				{
+					std::ofstream file(saved.File->Path, std::ios::out | std::ios::binary | std::ios::noreplace);
+
+					if (!file)
+					{
+						saved.Result = { archive::ArchiveErrorCode::FileOpenFailed, "Mesh.StagingFile" };
+					}
+					else
+					{
+						saved.File->Owned = true;
+
+						if (!bytes.empty())
+							file.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+
+						file.close();
+
+						if (!file)
+							saved.Result = { archive::ArchiveErrorCode::FileWriteFailed, "Mesh.StagingFile" };
+					}
+				}
+
+				saved.WriteMs = std::chrono::duration<double, std::milli>(Clock::now() - writeStart).count();
+			}
+		}
+
+		const auto releaseStart = Clock::now();
+		std::string{}.swap(bytes);
+		saved.ReleaseMs = std::chrono::duration<double, std::milli>(Clock::now() - releaseStart).count();
+
+		return saved;
+	}
 }
 
 EResult ModelImporter::Import(const filesystem::path& sourcePath, const filesystem::path& destDir, void* arg)
 {
-	const DESC settings = arg ? *static_cast<const DESC*>(arg) : DESC{};
+	std::unique_ptr<ImportJob> job;
+	const EResult createResult = CreateJob(sourcePath, destDir, arg, job);
+	if (createResult != EResult::Success)
+		return createResult;
 
-	if (settings.ImportOptions != EModelImportOption::Meshes)
+	auto* task = dynamic_cast<ModelImportTask*>(job.get());
+	if (!task)
+		return EResult::InvalidArgument;
+
+	const EResult prepareResult = task->Prepare();
+	if (prepareResult != EResult::Success)
 	{
-		BAM_LOG(Error, "Editor", "Asset", "Only static mesh import is currently supported.");
-		return EResult::NotImplemented;
+		BAM_LOG(Error, "Editor", "Asset", "Model preparation failed: code={}, source={}, error={}",
+			static_cast<int>(task->GetErrorCode()), sourcePath.string(), task->GetErrorMessage());
+		return prepareResult;
 	}
 
-	auto flags = settings.PostProcessFlags;
-	if (flags == EModelPostProcessFlag::None)
-		flags = EModelPostProcessFlag::Triangulate | EModelPostProcessFlag::FlipUVs;
+	return Finalize(*task);
+}
 
-	const auto supported = EModelPostProcessFlag::Triangulate | EModelPostProcessFlag::FlipUVs |
-		EModelPostProcessFlag::GenSmoothNormals | EModelPostProcessFlag::CalcTangentSpace;
-
-	if ((static_cast<uint32>(flags) & ~static_cast<uint32>(supported)) != 0)
-		return EResult::NotImplemented;
-
-	Tools::ModelConversion::Options options;
-	options.FlipUVs = HasFlag(flags, EModelPostProcessFlag::FlipUVs);
-
-	auto converted = Tools::ModelConversion::ConvertStaticModel(sourcePath, options);
-	if (!converted)
+EResult ModelImporter::Finalize(ModelImportTask& task)
+{
+	for (;;)
 	{
-		BAM_LOG(Error, "Editor", "Asset", "Model conversion failed: {}", converted.Message);
-		return EResult::Fail;
+		const auto result = FinalizeStep(task);
+		if (result)
+			return *result;
+
+		if (task.m_FinalizeState && task.m_FinalizeState->Saving.valid())
+			task.m_FinalizeState->Saving.wait();
 	}
+}
 
-	auto& data = *converted.Model;
-	const filesystem::path outputDir = destDir.empty() ? data.SourcePath.parent_path() : destDir;
+std::optional<EResult> ModelImporter::FinalizeStep(ModelImportTask& task)
+{
+	using Clock = std::chrono::steady_clock;
+	const auto deadline = Clock::now() + std::chrono::milliseconds(2);
 
-	if (settings.SaveToFile)
+	do
 	{
-		std::error_code ec;
-		filesystem::create_directories(outputDir, ec);
-		if (ec)
+		const auto result = FinalizeOneStep(task);
+		if (result)
+			return result;
+
+		const auto& state = task.m_FinalizeState;
+		if (!state)
 			return EResult::Fail;
-	}
 
-	const auto destroyMesh = [](Mesh* mesh)
+		// 작업 스레드를 기다리며 반복하지 않고 다음 프레임으로 넘깁니다.
+		if (state->Saving.valid() &&
+			state->Saving.wait_for(std::chrono::seconds(0)) != std::future_status::ready)
 		{
-			if (mesh)
+			return std::nullopt;
+		}
+	} while (Clock::now() < deadline);
+
+	return std::nullopt;
+}
+
+std::optional<EResult> ModelImporter::FinalizeOneStep(ModelImportTask& task)
+{
+	using Clock = std::chrono::steady_clock;
+	const auto finish = [&task](EResult result) -> std::optional<EResult>
+		{
+			task.m_FinalizeState.reset();
+			return result;
+		};
+
+	try
+	{
+		auto* prepared = task.GetPreparedModel();
+		if (!prepared)
+			return finish(EResult::InvalidArgument);
+
+		auto& data = *prepared;
+		const auto& request = task.GetRequest();
+		const auto& outputDir = request.DestinationDirectory;
+		auto& manager = ResourceManager::Get();
+
+		if (!task.m_FinalizeState)
+		{
+			if (data.Nodes.empty() || data.Meshes.empty() || outputDir.empty())
+				return finish(EResult::InvalidArgument);
+
+			task.m_FinalizeState = std::make_shared<ModelFinalizeState>();
+			auto& state = *task.m_FinalizeState;
+			state.Settings = request.Settings;
+
+			auto& desc = state.ModelDesc;
+			const wstring stem = SanitizeFileName(data.SourcePath.stem().wstring());
+			desc.Key = NormalizePath((outputDir / (stem + L".bammodel")).wstring());
+			desc.Path = desc.Key;
+
+			if (const EResult result = ValidateImportOutput(manager, desc.Key, state.Settings.SaveToFile);
+				result != EResult::Success)
 			{
-				mesh->Free();
-				delete mesh;
+				return finish(result);
 			}
-		};
 
-	using MeshOwner = std::unique_ptr<Mesh, decltype(destroyMesh)>;
+			desc.Nodes.reserve(data.Nodes.size());
+			desc.Materials.resize(data.MaterialCount);
+			desc.MeshMaterialIndices.reserve(data.Meshes.size());
+			state.Meshes.reserve(data.Meshes.size());
 
-	struct PendingMesh
-	{
-		wstring Key;
-		MeshOwner Resource;
-	};
+			for (const auto& mesh : data.Meshes)
+				desc.MeshMaterialIndices.push_back(mesh.MaterialIndex);
 
-	std::vector<PendingMesh> pending;
-	pending.reserve(data.Meshes.size());
+			for (const auto& source : data.Nodes)
+			{
+				ModelNode node;
+				node.Name = StrToWStr(source.Name);
+				node.ParentIndex = source.ParentIndex;
+				node.MeshIndices.assign(source.MeshIndices.begin(), source.MeshIndices.end());
 
-	ResourceManager& manager = ResourceManager::Get();
-	unordered_map<wstring, uint32> nameCounts;
-	uint32 meshSerial = 0;
-	constexpr auto maxBytes = (std::numeric_limits<uint32>::max)();
+				for (int column = 0; column < 4; ++column)
+				{
+					for (int row = 0; row < 4; ++row)
+						node.LocalTransform[column][row] = source.LocalTransform[column * 4 + row];
+				}
 
-	for (auto& source : data.Meshes)
-	{
-		const auto vertexCount = source.Vertices.size();
-		const auto indexCount = source.Indices.size();
+				desc.Nodes.push_back(std::move(node));
+			}
 
-		if (vertexCount > maxBytes / sizeof(VertexPosition) ||
-			vertexCount > maxBytes / sizeof(VertexMaterial) || indexCount > maxBytes / sizeof(uint32))
-		{
-			return EResult::InvalidArgument;
+			if (state.Settings.SaveToFile)
+			{
+				std::error_code ec;
+				filesystem::create_directories(outputDir, ec);
+				if (ec)
+					return finish(EResult::Fail);
+			}
 		}
 
-		const wstring meshStem = MakeUniqueMeshStem(
-			data.SourcePath.stem().wstring(), StrToWStr(source.Name), meshSerial++, nameCounts);
+		// finish()에서 작업의 참조를 해제해도 현재 호출이 끝날 때까지 상태를 유지합니다.
+		auto state = task.m_FinalizeState;
 
-		const auto outputPath = outputDir / (meshStem + L".bammesh");
-		const wstring key = NormalizePath(outputPath.wstring());
-
-		// 기존 리소스 교체는 이후 재임포트 처리에서 구현합니다.
-		if (manager.IsValid(manager.FindHandleByKey(key)))
+		if (state->NextMesh < data.Meshes.size())
 		{
-			BAM_LOG(Error, "Editor", "Asset", "Mesh resource already exists: {}", WStrToStr(key));
-			return EResult::AlreadyInitialized;
+			auto& source = data.Meshes[state->NextMesh];
+			const auto vertexCount = source.Positions.size();
+			const auto indexCount = source.Indices.size();
+			constexpr auto maxBytes = (std::numeric_limits<uint32>::max)();
+
+			if (source.Attributes.size() != vertexCount ||
+				vertexCount > maxBytes / sizeof(VertexPosition) ||
+				vertexCount > maxBytes / sizeof(VertexMaterial) || indexCount > maxBytes / sizeof(uint32))
+			{
+				return finish(EResult::InvalidArgument);
+			}
+
+			const wstring stem = MakeUniqueMeshStem(data.SourcePath.stem().wstring(),
+				StrToWStr(source.Name), static_cast<uint32>(state->NextMesh), state->NameCounts);
+			const wstring key = NormalizePath((outputDir / (stem + L".bammesh")).wstring());
+
+			if (const EResult result = ValidateImportOutput(manager, key, state->Settings.SaveToFile);
+				result != EResult::Success)
+			{
+				return finish(result);
+			}
+
+			MeshCreateDesc desc;
+			desc.Key = key;
+			desc.Path = key;
+			desc.Streams[static_cast<uint32>(EMeshStream::Position)] = {
+				source.Positions.data(), static_cast<uint32>(vertexCount), sizeof(VertexPosition)
+			};
+			desc.Streams[static_cast<uint32>(EMeshStream::Material)] = {
+				source.Attributes.data(), static_cast<uint32>(vertexCount), sizeof(VertexMaterial)
+			};
+			desc.IndexData = source.Indices.data();
+			desc.IndexCount = static_cast<uint32>(indexCount);
+			desc.IndexStride = sizeof(uint32);
+			desc.BoundingBoxMin = source.BoundsMin;
+			desc.BoundingBoxMax = source.BoundsMax;
+
+			const auto createStart = Clock::now();
+			ModelFinalizeState::MeshOwner mesh(Mesh::Create(&desc));
+			const double createMs = std::chrono::duration<double, std::milli>(Clock::now() - createStart).count();
+
+			const auto vertexBytes = static_cast<std::uint64_t>(vertexCount) *
+				(sizeof(VertexPosition) + sizeof(VertexMaterial));
+			const auto indexBytes = static_cast<std::uint64_t>(indexCount) * sizeof(uint32);
+
+			BAM_LOG(Info, "Editor", "Asset",
+				"Model mesh create timing: key={}, vertices={}, indices={}, input_bytes={}, create_ms={:.3f}, success={}",
+				WStrToStr(key), vertexCount, indexCount, vertexBytes + indexBytes, createMs, static_cast<bool>(mesh));
+
+			if (!mesh)
+				return finish(EResult::Fail);
+
+			state->Meshes.push_back({ key, std::move(mesh) });
+			++state->NextMesh;
+			return std::nullopt;
 		}
 
-		std::vector<VertexPosition> positions(vertexCount);
-		std::vector<VertexMaterial> attributes(vertexCount);
-
-		for (std::size_t i = 0; i < vertexCount; ++i)
+		if (state->Settings.SaveToFile && state->NextSave < state->Meshes.size())
 		{
-			const auto& vertex = source.Vertices[i];
+			const auto& mesh = state->Meshes[state->NextSave];
 
-			positions[i].position = { vertex.Position[0], vertex.Position[1], vertex.Position[2] };
-			attributes[i].normal = { vertex.Normal[0], vertex.Normal[1], vertex.Normal[2] };
-			attributes[i].texCoord = { vertex.TexCoord[0], vertex.TexCoord[1] };
-			attributes[i].tangent = { vertex.Tangent[0], vertex.Tangent[1], vertex.Tangent[2] };
-			attributes[i].binormal = { vertex.Bitangent[0], vertex.Bitangent[1], vertex.Bitangent[2] };
-			attributes[i].color = { vertex.Color[0], vertex.Color[1], vertex.Color[2], vertex.Color[3] };
+			if (!state->Saving.valid())
+			{
+				if (const EResult result = ValidateImportOutput(manager, mesh.Key, true);
+					result != EResult::Success)
+				{
+					return finish(result);
+				}
+
+				auto snapshot = std::make_unique<archive::BeveArchive>();
+				const auto snapshotStart = Clock::now();
+
+				const auto archiveResult = mesh.Resource->WriteArchive(*snapshot);
+				state->SnapshotMs = std::chrono::duration<double, std::milli>(
+					Clock::now() - snapshotStart).count();
+
+				if (const EResult result = CheckImportSaveResult(archiveResult, mesh.Key);
+					result != EResult::Success)
+				{
+					return finish(result);
+				}
+
+				// 이 함수는 메인 스레드에서 실행합니다.
+				static Engine::uint64 stagingSerial = 0;
+
+				filesystem::path stagingPath(mesh.Key);
+				stagingPath += ".bamimport-" + std::to_string(++stagingSerial) + "-" +
+					std::to_string(Clock::now().time_since_epoch().count()) + ".tmp";
+
+				state->Saving = std::async(
+					std::launch::async, EncodeAndStageMesh, std::move(snapshot), std::move(stagingPath));
+
+				return std::nullopt;
+			}
+
+			if (state->Saving.wait_for(std::chrono::seconds(0)) != std::future_status::ready)
+				return std::nullopt;
+
+			auto saved = state->Saving.get();
+
+			if (const EResult result = CheckImportSaveResult(saved.Result, mesh.Key);
+				result != EResult::Success)
+			{
+				return finish(result);
+			}
+
+			if (!saved.File || !saved.File->Owned)
+				return finish(EResult::Fail);
+
+			const auto publishStart = Clock::now();
+
+			// 저장하는 동안 다른 요청이 최종 출력을 만들었는지 다시 검사합니다.
+			if (const EResult result = ValidateImportOutput(manager, mesh.Key, true);
+				result != EResult::Success)
+			{
+				return finish(result);
+			}
+
+			std::error_code ec;
+			filesystem::rename(saved.File->Path, filesystem::path(mesh.Key), ec);
+
+			if (ec)
+			{
+				BAM_LOG(Error, "Editor", "Asset",
+					"Failed to publish imported mesh: path={}, error={}", WStrToStr(mesh.Key), ec.message());
+				return finish(EResult::Fail);
+			}
+
+			saved.File->Owned = false;
+
+			if (HotReloadManager::IsCreated())
+				HotReloadManager::Get().GetAssetReloader().RecordMeshFileState(filesystem::path(mesh.Key));
+
+			const double publishMs =
+				std::chrono::duration<double, std::milli>(Clock::now() - publishStart).count();
+
+			BAM_LOG(Info, "Editor", "Asset",
+				"Model mesh save timing: path={}, bytes={}, snapshot_ms={:.3f}, worker_ms={:.3f}, "
+				"write_ms={:.3f}, release_ms={:.3f}, publish_ms={:.3f}",
+				WStrToStr(mesh.Key), saved.ByteCount, state->SnapshotMs, saved.WorkerMs,
+				saved.WriteMs, saved.ReleaseMs, publishMs);
+
+			++state->NextSave;
+			return std::nullopt;
 		}
 
-		MeshCreateDesc desc;
-		desc.Key = key;
-		desc.Path = key;
-		desc.Streams[static_cast<uint32>(EMeshStream::Position)] = {
-			positions.data(), static_cast<uint32>(vertexCount), sizeof(VertexPosition)
-		};
-		desc.Streams[static_cast<uint32>(EMeshStream::Material)] = {
-			attributes.data(), static_cast<uint32>(vertexCount), sizeof(VertexMaterial)
-		};
-		desc.IndexData = source.Indices.data();
-		desc.IndexCount = static_cast<uint32>(indexCount);
-		desc.IndexStride = sizeof(uint32);
-		desc.BoundingBoxMin = { source.BoundsMin[0], source.BoundsMin[1], source.BoundsMin[2] };
-		desc.BoundingBoxMax = { source.BoundsMax[0], source.BoundsMax[1], source.BoundsMax[2] };
+		const auto commitStart = Clock::now();
+		const EResult commitResult = CommitPreparedModel(*state);
+		const double commitMs = std::chrono::duration<double, std::milli>(Clock::now() - commitStart).count();
 
-		MeshOwner mesh(Mesh::Create(&desc), destroyMesh);
-		if (!mesh)
-			return EResult::Fail;
+		BAM_LOG(Info, "Editor", "Asset",
+			"Model commit timing: key={}, meshes={}, nodes={}, commit_ms={:.3f}, result={}",
+			WStrToStr(state->ModelDesc.Key), state->Meshes.size(), state->ModelDesc.Nodes.size(),
+			commitMs, static_cast<int>(commitResult));
 
-		pending.push_back({ key, std::move(mesh) });
+		return finish(commitResult);
 	}
-
-	// 저장에 성공한 뒤 ResourceManager로 소유권을 넘깁니다.
-	if (settings.SaveToFile)
+	catch (...)
 	{
-		for (const auto& mesh : pending)
-		{
-			const EResult result = manager.SaveToBinaryFile(mesh.Resource.get(), mesh.Key);
-			if (result != EResult::Success)
-				return result;
-		}
+		task.m_FinalizeState.reset();
+		throw;
 	}
-
-	for (auto& mesh : pending)
-	{
-		auto handle = manager.AddResource<Mesh>(mesh.Key, mesh.Resource.release());
-		if (!handle.IsValid())
-			return EResult::Fail;
-	}
-
-	return EResult::Success;
 }
 
 EResult ModelImporter::CreateJob(const filesystem::path& sourcePath, const filesystem::path& destDir,
@@ -219,14 +634,11 @@ EResult ModelImporter::CreateJob(const filesystem::path& sourcePath, const files
 	if ((requestedFlags & ~static_cast<uint32>(supportedFlags)) != 0)
 		return EResult::NotImplemented;
 
-	const auto supportedOptions = EModelImportOption::Meshes | EModelImportOption::Materials;
-	const auto requestedOptions = static_cast<uint32>(settings.ImportOptions);
-
-	if (!HasFlag(settings.ImportOptions, EModelImportOption::Meshes))
+	if (settings.ImportOptions != EModelImportOption::Meshes)
+	{
+		BAM_LOG(Error, "Editor", "Asset", "Only static mesh import is currently supported.");
 		return EResult::NotImplemented;
-
-	if ((requestedOptions & ~static_cast<uint32>(supportedOptions)) != 0)
-		return EResult::NotImplemented;
+	}
 
 	std::error_code ec;
 	auto inputPath = filesystem::absolute(sourcePath, ec).lexically_normal();

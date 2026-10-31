@@ -36,7 +36,7 @@ void CameraViewportPanel::Update(f32 dt)
 	if (!CalculateRenderResolution(m_PanelWidth, m_PanelHeight))
 		return;
 
-	if (m_CameraController && m_Focused)
+	if (m_Open && m_CameraController && m_Focused)
 		m_CameraController->HandleInput(dt);
 
 	if (m_CameraController && m_RenderHeight > 0)

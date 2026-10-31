@@ -230,6 +230,21 @@
             "SpirvPath": "Resources/Shader/bin/spirv/terrainPS.spv",
             "Type": "Fragment",
             "EntryPoint": "main"
+        },
+        {
+            "Key": "Resources/Shader/TerrainShadowDepthVS",
+            "DxilPath": "Resources/Shader/bin/dxil/terrainShadowDepthVS.cso",
+            "SpirvPath": "Resources/Shader/bin/spirv/terrainShadowDepthVS.spv",
+            "Type": "Vertex",
+            "EntryPoint": "main",
+            "UniformBuffers": 2
+        },
+        {
+            "Key": "Resources/Shader/tiledLightCullingCS",
+            "DxilPath": "Resources/Shader/bin/dxil/tiledLightCullingCS.cso",
+            "SpirvPath": "Resources/Shader/bin/spirv/tiledLightCullingCS.spv",
+            "Type": "Compute",
+            "EntryPoint": "main"
         }
     ]
 }

@@ -6,15 +6,6 @@
 #include "Logger.h"
 #include "PipelineManager.h"
 
-#pragma push_macro("new")
-#undef new
-
-#include <algorithm>
-#include <cwctype>
-#include <filesystem>
-
-#pragma pop_macro("new")
-
 #pragma region Constructor&Destructor
 EResult Shader::Initialize(void* arg)
 {

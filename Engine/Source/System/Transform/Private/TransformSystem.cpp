@@ -1,10 +1,6 @@
 ﻿#include "TransformSystem.h"
 #include "CoreComponents.h"
 #include <glm/gtx/matrix_decompose.hpp>
-#include <array>
-#include <algorithm>
-#include <optional>
-#include <utility>
 
 namespace
 {

@@ -46,7 +46,7 @@ namespace
 		{
 			if (action == efsw::Actions::Modified || action == efsw::Actions::Add)
 			{
-				std::filesystem::path fullPath = std::filesystem::path(dir) / filename;
+				const auto fullPath = std::filesystem::u8path(dir) / std::filesystem::u8path(filename);
 				std::string ext = fullPath.extension().string();
 				for (char& c : ext) c = static_cast<char>(tolower(c));
 				if (IsSupportedImageExtension(ext) || IsSupportedMaterialExtension(fullPath) ||
@@ -60,6 +60,22 @@ namespace
 		AssetHotReloadManager* m_Manager = nullptr;
 	};
 
+	std::wstring MeshFileKey(const std::filesystem::path& filePath)
+	{
+		if (filePath.empty())
+			return {};
+
+		std::error_code ec;
+		const auto normalized = std::filesystem::weakly_canonical(filePath, ec);
+		if (ec)
+			return {};
+
+		auto key = normalized.generic_wstring();
+		for (wchar_t& character : key)
+			character = static_cast<wchar_t>(std::towlower(character));
+
+		return key;
+	}
 }
 
 std::filesystem::path AssetHotReloadManager::ResolveTextureDirectory()
@@ -112,6 +128,7 @@ void AssetHotReloadManager::Free()
 	}
 	delete m_FileListener;
 	m_FileListener = nullptr;
+	m_MeshFileStates.clear();
 	__super::Free();
 }
 
@@ -261,33 +278,67 @@ void AssetHotReloadManager::ProcessModifiedLocalization(const std::filesystem::p
 
 void AssetHotReloadManager::ProcessModifiedMesh(const std::filesystem::path& meshPath)
 {
-	Engine::ResourceManager& rm = Engine::ResourceManager::Get();
-	auto meshHandles = rm.GetResourceHandles<Engine::Mesh>();
+	const auto targetKey = MeshFileKey(meshPath);
+	if (targetKey.empty())
+		return;
 
-	std::string targetStem = meshPath.stem().string();
-	for (char& c : targetStem) c = static_cast<char>(tolower(c));
-	if (targetStem.ends_with(".bammesh")) targetStem = targetStem.substr(0, targetStem.length() - 8);
+	MeshFileState currentState;
+	const bool hasState = ReadMeshFileState(meshPath, currentState);
+	const auto known = m_MeshFileStates.find(targetKey);
 
-	for (const auto& handle : meshHandles)
+	if (hasState && known != m_MeshFileStates.end() && known->second == currentState)
+		return;
+
+	auto& manager = ResourceManager::Get();
+	bool matched = false;
+	bool allSucceeded = true;
+
+	for (const auto& handle : manager.GetResourceHandles<Mesh>())
 	{
-		auto* mesh = static_cast<Engine::Mesh*>(rm.GetResource(handle));
-		if (!mesh) continue;
+		auto* mesh = dynamic_cast<Mesh*>(manager.GetResource(handle));
+		if (!mesh)
+			continue;
 
-		std::string keyStem = std::filesystem::path(mesh->GetKey()).stem().string();
-		for (char& c : keyStem) c = static_cast<char>(tolower(c));
-		if (keyStem.ends_with(".bammesh")) keyStem = keyStem.substr(0, keyStem.length() - 8);
+		const auto& resourcePath = mesh->GetPath().empty() ? mesh->GetKey() : mesh->GetPath();
+		if (MeshFileKey(std::filesystem::path(resourcePath)) != targetKey)
+			continue;
 
-		std::string fileStem = std::filesystem::path(mesh->GetPath()).stem().string();
-		for (char& c : fileStem) c = static_cast<char>(tolower(c));
-		if (fileStem.ends_with(".bammesh")) fileStem = fileStem.substr(0, fileStem.length() - 8);
+		matched = true;
 
-		if (keyStem == targetStem || fileStem == targetStem)
+		if (mesh->Reload(meshPath) != EResult::Success)
 		{
-			if (IsSuccess(mesh->Reload(meshPath)))
-			{
-				NotificationManager::Get().AddNotification(LOCAL("Notification.MeshHotReloaded"),
-					LOCAL_FMT("Notification.ReloadedFile", meshPath.filename().string()), ELogLevel::Info, 3.0f);
-			}
+			allSucceeded = false;
+			continue;
 		}
+
+		NotificationManager::Get().AddNotification(LOCAL("Notification.MeshHotReloaded"),
+			LOCAL_FMT("Notification.ReloadedFile", meshPath.filename().string()), ELogLevel::Info, 3.0f);
 	}
+
+	if (matched && allSucceeded && hasState)
+		m_MeshFileStates.insert_or_assign(targetKey, currentState);
+}
+
+bool AssetHotReloadManager::ReadMeshFileState(const std::filesystem::path& filePath, MeshFileState& state)
+{
+	std::error_code ec;
+	state.WriteTime = std::filesystem::last_write_time(filePath, ec);
+	if (ec)
+		return false;
+
+	state.Size = std::filesystem::file_size(filePath, ec);
+	return !ec;
+}
+
+void AssetHotReloadManager::RecordMeshFileState(const std::filesystem::path& filePath)
+{
+	const auto key = MeshFileKey(filePath);
+	if (key.empty())
+		return;
+
+	MeshFileState state;
+	if (ReadMeshFileState(filePath, state))
+		m_MeshFileStates.insert_or_assign(key, state);
+	else
+		m_MeshFileStates.erase(key);
 }

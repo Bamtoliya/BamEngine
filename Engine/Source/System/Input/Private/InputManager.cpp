@@ -25,10 +25,12 @@ void InputManager::Update(f32 dt)
 	// Preserve taps that begin and end between two frame snapshots.
 	m_KeyDownEvents = m_PendingKeyDown;
 	m_KeyUpEvents = m_PendingKeyUp;
+	m_KeyRepeatEvents = m_PendingKeyRepeat;
 	m_MouseDownEvents = m_PendingMouseDown;
 	m_MouseUpEvents = m_PendingMouseUp;
 	m_PendingKeyDown.fill(false);
 	m_PendingKeyUp.fill(false);
+	m_PendingKeyRepeat.fill(false);
 	m_PendingMouseDown.fill(false);
 	m_PendingMouseUp.fill(false);
 
@@ -153,6 +155,12 @@ bool InputManager::IsKeyButtonPressed(EKeyCode key)
 	}
 	return m_CurrentKeyStates[keyIndex];
 }
+bool InputManager::IsKeyButtonRepeated(EKeyCode key) const
+{
+	const auto index = static_cast<uint32>(key);
+	return index < m_KeyRepeatEvents.size() &&
+		m_CurrentKeyStates[index] != 0 && m_KeyRepeatEvents[index];
+}
 
 bool InputManager::IsKeyButtonDown(const string& key)
 {
@@ -167,6 +175,11 @@ bool InputManager::IsKeyButtonUp(const string& key)
 bool InputManager::IsKeyButtonPressed(const string& key)
 {
 	return IsKeyButtonPressed(StringToEngineKeyCode(key));
+}
+
+bool InputManager::IsKeyButtonRepeated(const string& key) const
+{
+	return IsKeyButtonRepeated(StringToEngineKeyCode(key));
 }
 
 #pragma endregion
@@ -238,11 +251,23 @@ void InputManager::ProcessEvent(const SDL_Event& event)
 	if (event.type == SDL_EVENT_KEY_DOWN || event.type == SDL_EVENT_KEY_UP)
 	{
 		const auto key = SDLKeyToEngineKeyCode(event.key.scancode);
-		if (key != EKeyCode::Unknown && !event.key.repeat)
+		const auto index = static_cast<uint32>(key);
+
+		if (key != EKeyCode::Unknown && index < m_PendingKeyDown.size())
 		{
-			const auto index = static_cast<uint32>(key);
-			if (event.type == SDL_EVENT_KEY_DOWN) m_PendingKeyDown[index] = true;
-			else m_PendingKeyUp[index] = true;
+			if (event.type == SDL_EVENT_KEY_UP)
+			{
+				m_PendingKeyUp[index] = true;
+				m_PendingKeyRepeat[index] = false;
+			}
+			else if (event.key.repeat)
+			{
+				m_PendingKeyRepeat[index] = true;
+			}
+			else
+			{
+				m_PendingKeyDown[index] = true;
+			}
 		}
 	}
 	else if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN || event.type == SDL_EVENT_MOUSE_BUTTON_UP)

@@ -303,16 +303,16 @@ void InspectorPanel::DrawPrefabHeaderBar(Engine::Entity& entity)
 		}
 
 		// 2. Revert All: 원본 파일에서 다시 인스턴스화하여 현재 인스턴스 복원
-		if (ImGui::MenuItem((std::string(ICON_FA_UNDO " ") + LOCAL("Prefab.RevertAll")).c_str()))
+		if (ImGui::MenuItem((std::string(ICON_FA_ROTATE_LEFT " ") + LOCAL("Prefab.RevertAll")).c_str()))
 		{
 			entt::entity parentH = entt::null;
 			if (const auto* link = world.try_get<Engine::HierarchyComponent>(rootHandle))
 				parentH = link->parent;
 
 			Engine::Entity* parentEntity = (parentH != entt::null) ? scene->FindEntity(parentH) : nullptr;
-			Engine::Vector3 oldPos = Engine::Vector3::Zero;
-			Engine::Vector3 oldRot = Engine::Vector3::Zero;
-			Engine::Vector3 oldScale = Engine::Vector3::One;
+			glm::vec3 oldPos{ 0.0f };
+			glm::vec3 oldRot{ 0.0f };
+			glm::vec3 oldScale{ 1.0f };
 
 			if (const auto* tr = world.try_get<Engine::TransformComponent>(rootHandle))
 			{
@@ -344,7 +344,7 @@ void InspectorPanel::DrawPrefabHeaderBar(Engine::Entity& entity)
 		ImGui::Separator();
 
 		// 3. Unpack: 프리팹 연결 해제 (루트의 컴포넌트 1개만 제거)
-		if (ImGui::MenuItem((std::string(ICON_FA_UNLINK " ") + LOCAL("Prefab.Unpack")).c_str()))
+		if (ImGui::MenuItem((std::string(ICON_FA_LINK_SLASH " ") + LOCAL("Prefab.Unpack")).c_str()))
 		{
 			world.remove<Engine::PrefabInstanceComponent>(rootHandle);
 			NotificationManager::Get().AddNotification(LOCAL("ResourceType.Prefab"), LOCAL("Notification.PrefabUnpacked"), ELogLevel::Info, 3.0f);
@@ -530,8 +530,13 @@ void InspectorPanel::DrawCommonTransformVector(Engine::Scene& scene, std::span<c
 					if (result == TransformBatchResult::Rejected)
 						storage->SetInt(errorId, 1);
 					else if (result == TransformBatchResult::Changed)
-						history.Record(std::move(before), SceneEditSnapshot::Capture(scene, entities),
-							"UI_HISTORY_TRANSFORM");
+					{
+						history.Record(std::move(before), SceneEditSnapshot::Capture(scene, entities), "UI_HISTORY_TRANSFORM");
+
+						auto& prefabMode = PrefabModeManager::Get();
+						if (prefabMode.IsInPrefabMode() && prefabMode.GetPrefabScene() == &scene)
+							prefabMode.MarkDirty();
+					}
 				}
 			}
 		}
@@ -616,6 +621,10 @@ void InspectorPanel::DrawCommonFlags(Engine::Scene& scene, std::span<const entt:
 			auto after = SceneEditSnapshot::Capture(scene, entities);
 			history.Record(before, after, "UI_HISTORY_PROPERTY");
 			before = std::move(after);
+
+			auto& prefabMode = PrefabModeManager::Get();
+			if (prefabMode.IsInPrefabMode() && prefabMode.GetPrefabScene() == &scene)
+				prefabMode.MarkDirty();
 		};
 
 	drawFlag("Hierarchy.Active", "Active", &Flag::IsActive, &Flag::SetActive);
@@ -704,6 +713,10 @@ void InspectorPanel::DrawCommonReflectedProperties(Engine::Scene& scene, std::sp
 	}
 
 	history.Record(std::move(before), SceneEditSnapshot::Capture(scene, entities), "UI_HISTORY_PROPERTY");
+
+	auto& prefabMode = PrefabModeManager::Get();
+	if (prefabMode.IsInPrefabMode() && prefabMode.GetPrefabScene() == &scene)
+		prefabMode.MarkDirty();
 }
 
 EResult InspectorPanel::SetSelectedEntity(Engine::Entity* entity)
@@ -936,7 +949,13 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 		Engine::TransformSystem::UpdateHierarchy(scene->GetRegistry());
 	}
 	if (anyChanged)
+	{
 		history.Record(std::move(before), SceneEditSnapshot::Capture(*scene, targets), "UI_HISTORY_PROPERTIES", true);
+
+		auto& prefabMode = PrefabModeManager::Get();
+		if (prefabMode.IsInPrefabMode() && prefabMode.GetPrefabScene() == scene)
+			prefabMode.MarkDirty();
+	}
 
 	if (result == Engine::ComponentVisitResult::InvalidEntity)
 	{
@@ -1022,11 +1041,16 @@ void InspectorPanel::DrawAddComponentPopup(Engine::Entity& entity)
                 auto& history = Application::Get().GetEditHistory();
                 const std::array targets{ handle };
                 auto before = SceneEditSnapshot::Capture(*scene, targets);
-                if (before && entry.TryAdd(world, handle))
-                {
-                    history.Record(std::move(before), SceneEditSnapshot::Capture(*scene, targets), "UI_HISTORY_COMPONENT");
-                    ImGui::CloseCurrentPopup();
-                }
+				if (before && entry.TryAdd(world, handle))
+				{
+					history.Record(std::move(before), SceneEditSnapshot::Capture(*scene, targets), "UI_HISTORY_COMPONENT");
+
+					auto& prefabMode = PrefabModeManager::Get();
+					if (prefabMode.IsInPrefabMode() && prefabMode.GetPrefabScene() == scene)
+						prefabMode.MarkDirty();
+
+					ImGui::CloseCurrentPopup();
+				}
             }
             ImGui::PopID();
         }

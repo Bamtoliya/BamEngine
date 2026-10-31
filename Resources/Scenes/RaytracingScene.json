@@ -72,6 +72,7 @@
                             "ShadowNormalBias": 0.009999999776482582,
                             "ShadowRange": 50,
                             "ShadowSlopeBias": 0.004999999888241291,
+                            "ShadowStrength": 1,
                             "SpotFalloffExponent": 1,
                             "SpotInnerAngle": 15,
                             "SpotOuterAngle": 30
@@ -128,6 +129,7 @@
                             "ShadowNormalBias": 0.009999999776482582,
                             "ShadowRange": 50,
                             "ShadowSlopeBias": 0.004999999888241291,
+                            "ShadowStrength": 1,
                             "SpotFalloffExponent": 1,
                             "SpotInnerAngle": 15,
                             "SpotOuterAngle": 30
@@ -144,7 +146,7 @@
                         "Data": {
                             "absolute": 0,
                             "eulerRotation": [0, 0, 0],
-                            "position": [-8, 6, 4],
+                            "position": [0.14509010314941406, 4.101620197296143, -11.882431030273438],
                             "rotation": [0, 0, 0, 1],
                             "scale": [1, 1, 1]
                         },
@@ -184,6 +186,7 @@
                             "ShadowNormalBias": 0.009999999776482582,
                             "ShadowRange": 50,
                             "ShadowSlopeBias": 0.5,
+                            "ShadowStrength": 1,
                             "SpotFalloffExponent": 1,
                             "SpotInnerAngle": 15,
                             "SpotOuterAngle": 30
@@ -411,6 +414,24 @@
                     },
                     {
                         "Data": {
+                            "hysteresisMargin": 0.019999999552965164,
+                            "lod1Mesh": {
+                                "AssetKey": "SphereMesh",
+                                "AssetPath": "SphereMesh",
+                                "Null": false
+                            },
+                            "lod1ScreenCoverage": 0.25,
+                            "lod2Mesh": {
+                                "AssetKey": "SphereMesh",
+                                "AssetPath": "SphereMesh",
+                                "Null": false
+                            },
+                            "lod2ScreenCoverage": 0.07999999821186066
+                        },
+                        "Type": "Engine::LODGroupComponent"
+                    },
+                    {
+                        "Data": {
                             "name": "Shadow Slit Pillar A"
                         },
                         "Type": "Engine::NameComponent"
@@ -596,6 +617,13 @@
                             "flags": 3
                         },
                         "Type": "Engine::FlagComponent"
+                    },
+                    {
+                        "Data": {
+                            "enabled": true,
+                            "graphFile": "Resources/Scripts/CubeController.json"
+                        },
+                        "Type": "Engine::GraphBindingComponent"
                     },
                     {
                         "Data": {
@@ -986,6 +1014,7 @@
                             "ShadowNormalBias": 0.009999999776482582,
                             "ShadowRange": 50,
                             "ShadowSlopeBias": 0.004999999888241291,
+                            "ShadowStrength": 1,
                             "SpotFalloffExponent": 1,
                             "SpotInnerAngle": 15,
                             "SpotOuterAngle": 30
@@ -1014,9 +1043,72 @@
                     "Parent": 18
                 },
                 "Id": 20
+            },
+            {
+                "Components": [
+                    {
+                        "Data": {
+                            "flags": 3
+                        },
+                        "Type": "Engine::FlagComponent"
+                    },
+                    {
+                        "Data": {
+                            "name": "Entity"
+                        },
+                        "Type": "Engine::NameComponent"
+                    },
+                    {
+                        "Data": {
+                            "IsEnabled": true,
+                            "IsUnbound": true,
+                            "PipelineSettings": "{\n    \"Effects\": [\n        {\n            \"Enabled\": false,\n            \"Name\": \"Tone Mapping (ACES)\",\n            \"Parameters\": {\n                \"Exposure\": 1,\n                \"Gamma\": 2.200000047683716\n            }\n        },\n        {\n            \"Enabled\": false,\n            \"Name\": \"Bloom\",\n            \"Parameters\": {\n                \"Intensity\": 1,\n                \"Scatter\": 0.699999988079071,\n                \"SoftKnee\": 0.5,\n                \"Threshold\": 1\n            }\n        },\n        {\n            \"Enabled\": false,\n            \"Name\": \"Color Adjustments\",\n            \"Parameters\": {\n                \"Brightness\": 0,\n                \"Contrast\": 1,\n                \"Saturation\": 1\n            }\n        },\n        {\n            \"Enabled\": false,\n            \"Name\": \"Vignette\",\n            \"Parameters\": {\n                \"Intensity\": 0.800000011920929,\n                \"Roundness\": 1,\n                \"Smoothness\": 0.5\n            }\n        },\n        {\n            \"Enabled\": false,\n            \"Name\": \"Chromatic Aberration\",\n            \"Parameters\": {\n                \"Falloff\": 1.5,\n                \"Intensity\": 0.004999999888241291\n            }\n        },\n        {\n            \"Enabled\": false,\n            \"Name\": \"Film Grain\",\n            \"Parameters\": {\n                \"Intensity\": 0.05000000074505806,\n                \"LuminanceBias\": 0.5,\n                \"Scale\": 1\n            }\n        },\n        {\n            \"Enabled\": false,\n            \"Name\": \"Lens Distortion\",\n            \"Parameters\": {\n                \"CubicDistortion\": 0,\n                \"Distortion\": 0,\n                \"Scale\": 1\n            }\n        },\n        {\n            \"Enabled\": false,\n            \"Name\": \"Sharpen\",\n            \"Parameters\": {\n                \"Sharpness\": 0.5\n            }\n        }\n    ]\n}",
+                            "PresetName": "DefaultPreset",
+                            "Priority": 0
+                        },
+                        "Type": "Engine::PostProcessComponent"
+                    },
+                    {
+                        "Data": {
+                            "absolute": 0,
+                            "eulerRotation": [0, 0, 0],
+                            "position": [0, 0, 0],
+                            "rotation": [0, 0, 0, 1],
+                            "scale": [1, 1, 1]
+                        },
+                        "Type": "Engine::TransformComponent"
+                    }
+                ],
+                "Hierarchy": {
+                    "Children": [],
+                    "Parent": 0
+                },
+                "Id": 21
             }
         ],
         "Name": "RaytracingScene",
+        "ResourceReferences": [
+            {
+                "AssetKey": "CubeMesh",
+                "AssetPath": "CubeMesh"
+            },
+            {
+                "AssetKey": "Resources/Material/GBufferMaterial.bammat.json",
+                "AssetPath": "Resources/Material/GBufferMaterial.bammat.json"
+            },
+            {
+                "AssetKey": "Resources/Material/SkyMaterial.bammat.json",
+                "AssetPath": "Resources/Material/SkyMaterial.bammat.json"
+            },
+            {
+                "AssetKey": "Resources/Material/TerrainMaterial.bammat.json",
+                "AssetPath": "Resources/Material/TerrainMaterial.bammat.json"
+            },
+            {
+                "AssetKey": "SphereMesh",
+                "AssetPath": "SphereMesh"
+            }
+        ],
         "Version": 1
     }
 }

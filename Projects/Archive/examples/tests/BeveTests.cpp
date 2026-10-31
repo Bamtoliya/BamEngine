@@ -11,6 +11,9 @@
 #include <string>
 #include <system_error>
 #include <vector>
+#include <archive/JsonArchive.h>
+#include <algorithm>
+#include <array>
 
 namespace archive_tests
 {
@@ -138,6 +141,101 @@ namespace archive_tests
             fileEmbedded != embedded || fileItems != items)
         {
             return Fail("BEVE binary file round-trip failed.");
+        }
+
+        {
+            std::vector<std::uint8_t> payload(65536);
+            for (std::size_t i = 0; i < payload.size(); ++i)
+                payload[i] = static_cast<std::uint8_t>(i % 256);
+
+            archive::BeveArchive packedWriter;
+            std::string packedDocument;
+
+            if (!packedWriter.WriteArray("Bytes", payload) ||
+                !packedWriter.WriteArray("Empty", std::vector<std::uint8_t>{}) ||
+                !packedWriter.ToBeve(packedDocument) || packedDocument.size() > payload.size() + 1024)
+            {
+                return Fail("Packed byte writing or encoded size is incorrect.");
+            }
+
+            archive::BeveArchive packedReader;
+            std::vector<std::uint8_t> restored;
+            std::vector<std::uint8_t> empty{ 42 };
+            std::vector<std::uint32_t> widened;
+            std::size_t count = 0;
+
+            if (!packedReader.Parse(packedDocument) ||
+                !packedReader.ReadArray("Bytes", restored) || restored != payload ||
+                !packedReader.ReadArray("Empty", empty) || !empty.empty() ||
+                !packedReader.GetArraySize("Bytes", count) || count != payload.size() ||
+                !packedReader.ReadArray("Bytes", widened) || widened.size() != payload.size() ||
+                !std::equal(payload.begin(), payload.end(), widened.begin()))
+            {
+                return Fail("Packed byte reading is incorrect.");
+            }
+
+            count = 0;
+            if (!packedReader.ReadArrayElements("Bytes",
+                [&](archive::IArchive& entry, std::string_view key, std::size_t index) -> archive::ArchiveResult
+                {
+                    std::uint8_t value = 0;
+                    const auto result = entry.Read(key, value);
+                    if (!result)
+                        return result;
+
+                    if (value != payload[index])
+                        return { Code::InvalidValue, std::string{ key } };
+
+                    ++count;
+                    return {};
+                }) || count != payload.size())
+            {
+                return Fail("Packed byte element reading is incorrect.");
+            }
+
+            // 기존 generic_u64 형식으로 만든 BEVE를 새 구현에서 읽습니다.
+            glz::generic_u64 legacy;
+            legacy.data = glz::generic_u64::object_t{};
+            auto& legacyField = legacy.get_object()["Bytes"];
+            legacyField.data = glz::generic_u64::array_t{};
+
+            const std::array<std::uint8_t, 4> sample{ 0, 127, 128, 255 };
+            for (const auto byte : sample)
+            {
+                glz::generic_u64 element;
+                element.data = static_cast<std::uint64_t>(byte);
+                legacyField.get_array().push_back(std::move(element));
+            }
+
+            std::string legacyDocument;
+            if (glz::write_beve(legacy, legacyDocument) ||
+                !packedReader.Parse(legacyDocument) ||
+                !packedReader.ReadArray("Bytes", restored) ||
+                restored != std::vector<std::uint8_t>(sample.begin(), sample.end()))
+            {
+                return Fail("Legacy byte array compatibility failed.");
+            }
+
+            legacyField.get_array()[0].data = std::int64_t{ -1 };
+            const auto beforeInvalidRead = restored;
+
+            if (glz::write_beve(legacy, legacyDocument) ||
+                !packedReader.Parse(legacyDocument) ||
+                packedReader.ReadArray("Bytes", restored).Code != Code::InvalidValue ||
+                restored != beforeInvalidRead)
+            {
+                return Fail("Invalid legacy byte data changed the destination.");
+            }
+
+            archive::JsonArchive jsonWriter;
+            archive::JsonArchive jsonReader;
+            std::string json;
+
+            if (!jsonWriter.WriteArray("Bytes", payload) || !jsonWriter.ToJson(json) ||
+                !jsonReader.Parse(json) || !jsonReader.ReadArray("Bytes", restored) || restored != payload)
+            {
+                return Fail("JSON byte array compatibility failed.");
+            }
         }
 
         return 0;

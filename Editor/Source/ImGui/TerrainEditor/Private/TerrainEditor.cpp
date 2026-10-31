@@ -111,10 +111,10 @@ void TerrainEditor::Draw()
 		{
 			std::wstring openPath;
 			const std::vector<FileDialogFilter> filters = {
-				{ L"Image Files", L"*.png;*.jpg;*.jpeg;*.bmp;*.tga;*.hdr" },
-				{ L"All Files", L"*.*" }
+				{ StrToWStr(LOCAL("FileDialog.ImageFiles")), L"*.png;*.jpg;*.jpeg;*.bmp;*.tga;*.hdr" },
+				{ StrToWStr(LOCAL("FileDialog.AllFiles")), L"*.*" }
 			};
-			if (FileDialogs::OpenFileDialog(openPath, filters))
+			if (FileDialogs::OpenFileDialog(openPath, filters, L"", EFileDialogContext::HeightmapOpen))
 			{
 				Engine::TerrainUtility::LoadHeightmapFromFile(*terrainComp, openPath);
 			}
@@ -125,9 +125,9 @@ void TerrainEditor::Draw()
 		{
 			std::wstring savePath;
 			const std::vector<FileDialogFilter> filters = {
-				{ L"PNG Image (*.png)", L"*.png" }
+				{ StrToWStr(LOCAL("FileDialog.PngFiles")), L"*.png" }
 			};
-			if (FileDialogs::SaveFileDialog(savePath, filters, L"Terrain_Heightmap", L"png"))
+			if (FileDialogs::SaveFileDialog(savePath, filters, L"Terrain_Heightmap", L"png", EFileDialogContext::HeightmapSave	))
 			{
 				Engine::TerrainUtility::SaveHeightmapToFile(*terrainComp, savePath);
 			}
@@ -137,7 +137,7 @@ void TerrainEditor::Draw()
 		if (ImGui::Button(LOCAL_LABEL("TerrainEditor.ResetTerrain").c_str(), ImVec2(-1.0f, 26.0f)))
 		{
 			std::fill(terrainComp->HeightData.begin(), terrainComp->HeightData.end(), 0.0f);
-			terrainComp->IsDirty = true;
+			terrainComp->MarkHeightDirty();
 		}
 	}
 	ImGui::End();

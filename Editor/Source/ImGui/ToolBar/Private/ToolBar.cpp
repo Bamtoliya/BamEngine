@@ -26,6 +26,7 @@
 #include "NotificationManager.h"
 #include "SceneDocument.h"
 #include "EditorSettingsService.h"
+#include "ModuleBuildManager.h"
 
 
 void ToolBar::Draw(SDL_Window* window)
@@ -116,10 +117,35 @@ void ToolBar::DrawFileMenu()
 void ToolBar::ImportAsset()
 {
 	wstring filePath;
-	if (!FileDialogs::OpenFileDialog(filePath, { {StrToWStr(LOCAL("FileDialog.AssetFiles")), L""}}, filePath))
+	if (!FileDialogs::OpenFileDialog(filePath, {
+	{ StrToWStr(LOCAL("FileDialog.AssetFiles")), L"*.*" }
+		}, L"", EFileDialogContext::ResourceImport))
 		return;
-	AssetManager::Get().Import(filePath, filePath);
-	//static_cast<ContentBrowserPanel*>(ImGuiManager::Get().GetImGuiPanel(L"Content Browser"))->RequestRefresh();
+
+	const filesystem::path sourcePath(filePath);
+	wstring extension = sourcePath.extension().wstring();
+	for (wchar_t& character : extension)
+		character = static_cast<wchar_t>(std::towlower(character));
+
+	const bool isModel = extension == L".fbx" || extension == L".obj" || extension == L".gltf";
+	const filesystem::path destination = isModel ? sourcePath.parent_path() : sourcePath;
+
+	if (isModel)
+	{
+		AssetManager::Get().ImportAsync(sourcePath, destination);
+		return;
+	}
+
+	const EResult result = AssetManager::Get().Import(sourcePath, destination);
+	if (result != EResult::Success)
+	{
+		BAM_LOG(Error, "Editor", "Asset", "Toolbar import failed: source={}, result={}",
+			sourcePath.string(), ResultToString(result));
+		return;
+	}
+
+	if (auto* panel = dynamic_cast<ContentBrowserPanel*>(ImGuiManager::Get().GetImGuiPanel(L"Content Browser")))
+		panel->RequestRefresh();
 }
 
 void ToolBar::LoadResourceFile()
@@ -436,9 +462,36 @@ void ToolBar::DrawPlayControls()
 	ImGui::PopID();
 
 	ImGui::SameLine(0.0f, 15.0f); // 재생 제어 버튼들과 간격 띄우기
+	// ■ C++ GameModule Compile
+	auto& buildManager = HotReloadManager::Get().GetModuleBuilder();
+	const bool compiling = buildManager.IsCompiling();
+	ImGui::PushID("CompileModuleBtn");
+	if (compiling) ImGui::BeginDisabled();
+	const std::string compileBtnText = compiling ?
+		(std::string(ICON_FA_SPINNER) + " " + LOCAL_LABEL("ToolBar.ModuleCompiling")) :
+		(std::string(ICON_FA_HAMMER) + " " + LOCAL_LABEL("ToolBar.ModuleCompile"));
+	if (ImGui::Button(compileBtnText.c_str()))
+	{
+		buildManager.RequestBuild();
+	}
+	if (compiling) ImGui::EndDisabled();
+	if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+	{
+		ImGui::SetTooltip("%s", LOCAL_CSTR("ToolBar.ModuleCompileTooltip"));
+	}
+	ImGui::PopID();
+	ImGui::SameLine(0.0f, 5.0f);
+	bool autoCompile = buildManager.IsAutoCompileEnabled();
+	if (ImGui::Checkbox(LOCAL_LABEL("ToolBar.AutoCompile").c_str(), &autoCompile))
+		buildManager.SetAutoCompileEnabled(autoCompile);
+	if (ImGui::IsItemHovered())
+	{
+		ImGui::SetTooltip("%s", LOCAL_CSTR("ToolBar.AutoCompileTooltip"));
+	}
+	ImGui::SameLine(0.0f, 10.0f);
 	// ■ Hot Reload
 	ImGui::PushID("HotReloadBtn");
-	if (ImGui::Button((ICON_FA_ARROWS_ROTATE " " + LOCAL_LABEL("ToolBar.ModuleReload")).c_str(), ImVec2(100.0f, 0)))
+	if (ImGui::Button((ICON_FA_ARROWS_ROTATE " " + LOCAL_LABEL("ToolBar.ModuleReload")).c_str()))
 	{
 		HotReloadManager::Get().GetModuleReloader().ReloadModule();
 	}

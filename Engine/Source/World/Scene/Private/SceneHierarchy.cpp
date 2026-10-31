@@ -3,12 +3,6 @@
 #include "TransformSystem.h"
 #include "UIComponents.h"
 #include <glm/gtx/matrix_decompose.hpp>
-#include <algorithm>
-#include <vector>
-#include <cmath>
-#include <optional>
-#include <unordered_map>
-#include <unordered_set>
 
 namespace
 {

@@ -102,6 +102,9 @@
 ,Get Axis Vertical (W/S/Up/Down),,
 ,Get Delta Seconds,,
 ,Get Forward Vector,,
+,Get Last Hit Distance,,
+,Get Last Hit Location,,
+,Get Last Hit Normal,,
 ,Get Linear Velocity,,
 ,Graph annotations belong on FUNCTION or PROPERTY declarations.,Graph annotations belong on FUNCTION or PROPERTY declarations.,그래프 어노테이션은 FUNCTION 또는 PROPERTY 선언에 지정해야 합니다.
 ,"Graph parameters require unique, non-empty names.","Graph parameters require unique, non-empty names.",그래프 매개변수에는 비어 있지 않은 고유 이름이 필요합니다.

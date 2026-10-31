@@ -6,6 +6,7 @@
 #include <QTreeWidgetItem>
 
 #include "QtManager.h"
+#include "LocalizationManager.h"
 
 using namespace Editor;
 
@@ -26,6 +27,11 @@ Engine::EResult QtManager::Initialize(void* arg)
 	const auto& desc = *static_cast<const QtManagerDesc*>(arg);
 	if (desc.Width <= 0 || desc.Height <= 0 || !desc.Title)
 		return Engine::EResult::InvalidArgument;
+	const auto text = [](const char* key)
+	{
+		if (!Engine::LocalizationManager::IsCreated()) return QString::fromUtf8(key);
+		return QString::fromStdString(Engine::LocalizationManager::Get().GetText(key));
+	};
 
 	m_MainWindow = std::make_unique<QMainWindow>();
 
@@ -35,25 +41,25 @@ Engine::EResult QtManager::Initialize(void* arg)
 	window->setDockNestingEnabled(true);
 	window->setAttribute(Qt::WA_DeleteOnClose, false);
 
-	auto* viewport = new QLabel("Engine viewport integration pending", window);
+	auto* viewport = new QLabel(text("QtEditor.ViewportPending"), window);
 	viewport->setAlignment(Qt::AlignCenter);
 	window->setCentralWidget(viewport);
 
-	auto* hierarchyDock = new QDockWidget("Hierarchy", window);
+	auto* hierarchyDock = new QDockWidget(text("UI_HIERARCHY"), window);
 	hierarchyDock->setObjectName("HierarchyDock");
 
 	auto* hierarchyTree = new QTreeWidget(hierarchyDock);
-	hierarchyTree->setHeaderLabel("Scene");
+	hierarchyTree->setHeaderLabel(text("UI_SCENE"));
 
 	auto* sceneItem = new QTreeWidgetItem(hierarchyTree);
-	sceneItem->setText(0, "Scene binding pending");
+	sceneItem->setText(0, text("QtEditor.ScenePending"));
 
 	hierarchyDock->setWidget(hierarchyTree);
 	window->addDockWidget(Qt::LeftDockWidgetArea, hierarchyDock);
 
-	auto* inspectorDock = new QDockWidget("Inspector", window);
+	auto* inspectorDock = new QDockWidget(text("UI_INSPECTOR"), window);
 	inspectorDock->setObjectName("InspectorDock");
-	inspectorDock->setWidget(new QLabel("Selection binding pending", inspectorDock));
+	inspectorDock->setWidget(new QLabel(text("QtEditor.SelectionPending"), inspectorDock));
 	window->addDockWidget(Qt::RightDockWidgetArea, inspectorDock);
 
 	return Engine::EResult::Success;

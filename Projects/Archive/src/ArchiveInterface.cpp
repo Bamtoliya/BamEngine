@@ -105,7 +105,15 @@ namespace archive
 
     ArchiveResult IArchive::SaveEncodedToFile(const std::filesystem::path& path, std::string_view document)
     {
+        std::error_code ignored;
+        return SaveEncodedToFile(path, document, ignored);
+    }
+
+    ArchiveResult IArchive::SaveEncodedToFile(
+        const std::filesystem::path& path, std::string_view document, std::error_code& fileError)
+    {
         namespace fs = std::filesystem;
+        fileError.clear();
 
         if (std::cmp_greater(document.size(), (std::numeric_limits<std::streamsize>::max)()))
             return { ArchiveErrorCode::FileWriteFailed, {} };
@@ -113,9 +121,8 @@ namespace archive
         if (path.empty() || !path.has_filename() || path.filename() == "." || path.filename() == "..")
             return { ArchiveErrorCode::FileOpenFailed, {} };
 
-        std::error_code error;
-        const auto target = fs::absolute(path, error);
-        if (error)
+        const auto target = fs::absolute(path, fileError);
+        if (fileError)
             return { ArchiveErrorCode::FileOpenFailed, {} };
 
         struct TemporarySave
@@ -139,19 +146,22 @@ namespace archive
         {
             auto directory = target.parent_path() / (".archive-save-" + stamp + "-" + std::to_string(attempt));
 
-            if (fs::create_directory(directory, error))
+            if (fs::create_directory(directory, fileError))
             {
                 temporary.Directory = std::move(directory);
                 temporary.File = temporary.Directory / "document.tmp";
                 break;
             }
 
-            if (error && error != std::errc::file_exists)
+            if (fileError && fileError != std::errc::file_exists)
                 return { ArchiveErrorCode::FileOpenFailed, {} };
         }
 
         if (temporary.Directory.empty())
+        {
+            fileError = std::make_error_code(std::errc::file_exists);
             return { ArchiveErrorCode::FileOpenFailed, {} };
+        }
 
         std::ofstream file{ temporary.File, std::ios::binary | std::ios::trunc };
         if (!file)
@@ -164,8 +174,8 @@ namespace archive
         if (!file)
             return { ArchiveErrorCode::FileWriteFailed, {} };
 
-        fs::rename(temporary.File, target, error);
-        if (error)
+        fs::rename(temporary.File, target, fileError);
+        if (fileError)
             return { ArchiveErrorCode::FileWriteFailed, {} };
 
         return {};

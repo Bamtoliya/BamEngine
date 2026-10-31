@@ -1,11 +1,5 @@
 ﻿#include "ShaderCompiler.h"
 #include "Logger.h"
-#include <fstream>
-#include <cstdlib>
-#include <cstdint>
-#include <limits>
-
-BEGIN(Engine)
 
 std::filesystem::path ShaderCompiler::FindDxcPath()
 {
@@ -173,5 +167,3 @@ ShaderCompileResult ShaderCompiler::Compile(
     result.OutputPath = outPath;
     return result;
 }
-
-END

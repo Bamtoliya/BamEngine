@@ -37,7 +37,7 @@ public:
 #pragma region Setter
 public:
 	void	SetTargetFPS(uint32 fps)	{ m_TargetFPS = fps; }
-	void	SetFixedStep(f32 step)		{ m_FixedStep = step; }
+	bool	SetFixedStep(f32 step);
 #pragma endregion
 
 #pragma region Helper
@@ -47,6 +47,10 @@ public:
 
 #pragma region Variables
 private:
+	static constexpr f32 DefaultFixedStep = 1.f / 60.f;
+	static constexpr f32 MinFixedStep = 0.001f;
+	static constexpr f64 MaxAccumulatedTime = 0.5;
+
 	std::chrono::steady_clock::time_point m_LastTime = std::chrono::steady_clock::now();
 
 	//Time
@@ -60,7 +64,7 @@ private:
 	f32		m_FPSTimer = { 0.f };
 
 	//Fixed Step
-	f32		m_FixedStep = { 0.f };
+	f32		m_FixedStep = { DefaultFixedStep };
 	f64 	m_AccTime	= { 0.0 };
 #pragma endregion
 };

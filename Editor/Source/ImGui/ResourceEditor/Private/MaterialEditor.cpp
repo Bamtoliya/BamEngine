@@ -4,10 +4,7 @@
 #include "ResourceManager.h"
 #include "ImGuiManager.h"
 #include "Logger.h"
-#include <algorithm>
 #include "LocalizationManager.h"
-#include <array>
-#include <optional>
 
 namespace
 {
@@ -86,7 +83,6 @@ void MaterialEditor::Update(f32 dt)
 	}
 }
 
-// MaterialEditor.cpp -> MaterialEditor::Draw() 전체 교체
 void MaterialEditor::Draw()
 {
 	if (!m_Open) return;
@@ -253,15 +249,16 @@ void MaterialEditor::DrawShaderSettings()
 	if (!ImGui::CollapsingHeader(LOCAL_CSTR("MaterialEditor.ShaderSettings"), ImGuiTreeNodeFlags_DefaultOpen))
 		return;
 
-	auto DrawShaderSlot = [&](const std::string& label, const Engine::Shader* currentShader, float btnWidth, auto onDrop)
+	auto DrawShaderSlot = [&](const std::string& slotId, const std::string& label, const Engine::ResourceHandle<Engine::Shader>& currentShader, float btnWidth, auto onDrop)
 		{
-			std::string shaderName = currentShader ? GetResourceDisplayName(currentShader) : (btnWidth < 0.0f ? LOCAL("MaterialEditor.DropShader") : "(None)");
+			std::string shaderName = currentShader ? GetResourceDisplayName(currentShader.Get()) :
+				(btnWidth < 0.0f ? LOCAL("MaterialEditor.DropShader") : LOCAL("EditorCommon.None"));
 			if (!label.empty())
 			{
 				ImGui::Text("%s:", label.c_str());
 				ImGui::SameLine();
 			}
-			ImGui::PushID(label.empty() ? "ShaderSlot" : label.c_str());
+			ImGui::PushID(slotId.c_str());
 			ImGui::Button(shaderName.c_str(), ImVec2(btnWidth, 0.0f));
 			if (ImGui::BeginDragDropTarget())
 			{
@@ -289,8 +286,8 @@ void MaterialEditor::DrawShaderSettings()
 
 	// 1. 기본 셰이더 (Default Fallback)
 	ImGui::TextDisabled("%s", LOCAL_CSTR("MaterialEditor.DefaultShaders"));
-	DrawShaderSlot(LOCAL("MaterialEditor.DefaultVS"), m_Material->GetVertexShader(), 240.0f, [&](auto handle) { m_Material->SetVertexShaderHandle(handle); });
-	DrawShaderSlot(LOCAL("MaterialEditor.DefaultPS"), m_Material->GetPixelShader(), 240.0f, [&](auto handle) { m_Material->SetPixelShaderHandle(handle); });
+	DrawShaderSlot("DefaultVS", LOCAL("MaterialEditor.DefaultVS"), m_Material->GetVertexShaderHandle(), 240.0f, [&](auto handle) { m_Material->SetVertexShaderHandle(handle); });
+	DrawShaderSlot("DefaultPS", LOCAL("MaterialEditor.DefaultPS"), m_Material->GetPixelShaderHandle(), 240.0f, [&](auto handle) { m_Material->SetPixelShaderHandle(handle); });
 
 	ImGui::Spacing();
 	ImGui::Separator();
@@ -326,15 +323,15 @@ void MaterialEditor::DrawShaderSettings()
 				? LOCAL(passTypeNames[typeIdx]) : LOCAL("MaterialOption.Unknown");
 			ImGui::Text("%s", typeName.c_str());
 
-			// Column 1: Pass Vertex Shader
+			// Column 1: Pass Vertex Shader (고유 ID "VS" 전달)
 			ImGui::TableSetColumnIndex(1);
-			DrawShaderSlot("", passShader.vertexShader.Get(), -1.0f, [&](auto handle) {
+			DrawShaderSlot("VS", "", passShader.vertexShader, -1.0f, [&](auto handle) {
 				m_Material->SetPassShader(passShader.passType, handle, passShader.pixelShader);
 				});
 
-			// Column 2: Pass Pixel Shader
+			// Column 2: Pass Pixel Shader (고유 ID "PS" 전달)
 			ImGui::TableSetColumnIndex(2);
-			DrawShaderSlot("", passShader.pixelShader.Get(), -1.0f, [&](auto handle) {
+			DrawShaderSlot("PS", "", passShader.pixelShader, -1.0f, [&](auto handle) {
 				m_Material->SetPassShader(passShader.passType, passShader.vertexShader, handle);
 				});
 
@@ -365,7 +362,8 @@ void MaterialEditor::DrawShaderSettings()
 		auto passType = static_cast<Engine::ERenderPassType>(m_NewPassTypeIndex);
 		if (!m_Material->HasPassShader(passType))
 		{
-			m_Material->SetPassShader(passType, {}, {});
+			// 빈 핸들 대신 기존 기본 셰이더를 초기값으로 복사하여 크래시 방지
+			m_Material->SetPassShader(passType, m_Material->GetVertexShaderHandle(), m_Material->GetPixelShaderHandle());
 			m_IsDirty = true;
 		}
 	}
@@ -377,47 +375,185 @@ void MaterialEditor::DrawTextureBindings()
 	if (!ImGui::CollapsingHeader(LOCAL_CSTR("MaterialEditor.TextureBindings"), ImGuiTreeNodeFlags_DefaultOpen))
 		return;
 
-	const auto& bindings = m_Material->GetTextureBindings();
+	auto* inst = dynamic_cast<Engine::MaterialInstance*>(m_Material);
+	Engine::Material* baseMat = inst ? inst->GetBaseMaterial() : nullptr;
+
+	// 1. 셰이더 요구 슬롯 파악 (머티리얼 또는 베이스 머티리얼의 픽셀 셰이더 기준)
+	struct ExpectedSlot
+	{
+		uint32 slot;
+		std::string name;
+	};
+
+	std::vector<ExpectedSlot> expectedSlots = { { 0, "Diffuse" } };
+	const Engine::Shader* ps = m_Material->GetPixelShader();
+	if (!ps && baseMat) ps = baseMat->GetPixelShader();
+
+	if (ps)
+	{
+		const std::string psKey = ToLowerStr(WStrToStr(ps->GetKey()));
+		const std::string psPath = ToLowerStr(WStrToStr(ps->GetSpirvPath()));
+		const std::string combined = psKey + " " + psPath;
+
+		if (combined.find("gbuffer") != std::string::npos)
+		{
+			expectedSlots = {
+				{ 0, "Diffuse" },
+				{ 1, "Normal" },
+				{ 2, "PBR" },
+				{ 3, "Emissive" }
+			};
+		}
+		else if (combined.find("terrain") != std::string::npos)
+		{
+			expectedSlots = {
+				{ 0, "Diffuse" },
+				{ 1, "HeightMap" },
+				{ 2, "RockMap" },
+				{ 3, "DirtMap" },
+				{ 4, "SplatMap" }
+			};
+		}
+		else if (combined.find("sprite") != std::string::npos)
+		{
+			expectedSlots = { { 0, "Sprite" } };
+		}
+	}
+
+	// 2. 머티리얼 인스턴스 상속 및 바인딩 행 병합
+	struct BindingRow
+	{
+		uint32 slot = 0;
+		std::string name;
+		Engine::ResourceHandle<Engine::Texture> texture;
+		Engine::ResourceHandle<Engine::Texture> baseTexture;
+		bool isOverridden = false;
+		bool hasBase = false;
+	};
+
+	std::vector<BindingRow> rows;
+
+	// 2-1. 베이스 머티리얼의 슬롯 먼저 수집
+	if (baseMat)
+	{
+		for (const auto& b : baseMat->GetTextureBindings())
+			rows.push_back({ b.slot, b.name, b.texture, b.texture, false, true });
+	}
+
+	// 2-2. 인스턴스(또는 일반 머티리얼) 본인의 바인딩 병합
+	const auto& currentBindings = m_Material->GetTextureBindings();
+	for (const auto& b : currentBindings)
+	{
+		auto it = std::find_if(rows.begin(), rows.end(), [&](const BindingRow& r) { return r.slot == b.slot; });
+		if (it != rows.end())
+		{
+			it->name = b.name;
+			it->texture = b.texture;
+			it->isOverridden = true;
+		}
+		else
+		{
+			rows.push_back({ b.slot, b.name, b.texture, {}, true, false });
+		}
+	}
+
+	// 2-3. 셰이더 요구 슬롯 중 아직 없는 슬롯 추가 (Placeholder)
+	for (const auto& exp : expectedSlots)
+	{
+		auto it = std::find_if(rows.begin(), rows.end(), [&](const BindingRow& r) { return r.slot == exp.slot; });
+		if (it == rows.end())
+			rows.push_back({ exp.slot, exp.name, {}, {}, false, false });
+	}
+
+	// 2-4. 슬롯 번호 순서(t0, t1, t2...)로 정렬
+	std::sort(rows.begin(), rows.end(), [](const BindingRow& a, const BindingRow& b) { return a.slot < b.slot; });
+
 	int slotToRemove = -1;
 
+	// 3. 텍스처 바인딩 테이블 렌더링
 	if (ImGui::BeginTable("TextureBindingsTable", 5, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp))
 	{
-		ImGui::TableSetupColumn(LOCAL_CSTR("MaterialEditor.Slot"), ImGuiTableColumnFlags_WidthFixed, 45.0f);
-		ImGui::TableSetupColumn(LOCAL_CSTR("MaterialEditor.Name"), ImGuiTableColumnFlags_WidthFixed, 90.0f);
-		ImGui::TableSetupColumn(LOCAL_CSTR("MaterialEditor.Preview"), ImGuiTableColumnFlags_WidthFixed, 36.0f);
+		ImGui::TableSetupColumn(LOCAL_CSTR("MaterialEditor.Slot"), ImGuiTableColumnFlags_WidthFixed, 80.0f);
+		ImGui::TableSetupColumn(LOCAL_CSTR("MaterialEditor.Name"), ImGuiTableColumnFlags_WidthFixed, 130.0f);
+		ImGui::TableSetupColumn(LOCAL_CSTR("MaterialEditor.Preview"), ImGuiTableColumnFlags_WidthFixed, 75.0f);
 		ImGui::TableSetupColumn(LOCAL_CSTR("MaterialEditor.TextureDragDrop"), ImGuiTableColumnFlags_WidthStretch);
 		ImGui::TableSetupColumn("##Action", ImGuiTableColumnFlags_WidthFixed, 35.0f);
 		ImGui::TableHeadersRow();
 
-		for (size_t i = 0; i < bindings.size(); ++i)
+		for (size_t i = 0; i < rows.size(); ++i)
 		{
-			const auto& binding = bindings[i];
+			const auto& row = rows[i];
 			ImGui::PushID(static_cast<int>(i));
 			ImGui::TableNextRow();
 
-			// 0: Slot
+			// Column 0: Slot 번호 및 +- 버튼 (베이스가 없는 독립 슬롯일 때만 +- 지원)
 			ImGui::TableSetColumnIndex(0);
-			ImGui::Text("%u", binding.slot);
+			if (row.isOverridden || row.hasBase)
+			{
+				ImGui::Text("t%u", row.slot);
+				if (!baseMat && row.isOverridden)
+				{
+					ImGui::SameLine();
+					if (row.slot > 0 && ImGui::SmallButton("-"))
+					{
+						m_Material->SetTextureBinding(row.name, row.slot - 1, row.texture);
+						m_IsDirty = true;
+					}
+					ImGui::SameLine();
+					if (ImGui::SmallButton("+"))
+					{
+						m_Material->SetTextureBinding(row.name, row.slot + 1, row.texture);
+						m_IsDirty = true;
+					}
+				}
+			}
+			else
+			{
+				ImGui::TextDisabled("t%u", row.slot);
+			}
 
-			// 1: Name
+			// Column 1: Name (상태 표시)
 			ImGui::TableSetColumnIndex(1);
-			ImGui::TextUnformatted(binding.name.c_str());
+			if (baseMat)
+			{
+				if (row.isOverridden)
+				{
+					ImGui::TextColored(ImVec4(0.35f, 0.85f, 1.0f, 1.0f), "%s*", row.name.c_str());
+					if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("MaterialEditor.OverriddenInInstance"));
+				}
+				else if (row.hasBase)
+				{
+					ImGui::TextDisabled("%s", LOCAL_FMT("MaterialEditor.BaseBinding", row.name).c_str());
+					if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("MaterialEditor.InheritedFromBase"));
+				}
+				else
+				{
+					ImGui::TextDisabled("%s", row.name.c_str());
+				}
+			}
+			else
+			{
+				if (row.isOverridden) ImGui::TextUnformatted(row.name.c_str());
+				else ImGui::TextDisabled("%s", row.name.c_str());
+			}
 
-			// 2: Preview
+			// Column 2: Preview
 			ImGui::TableSetColumnIndex(2);
 			ImTextureID texID = 0;
-			if (binding.texture.IsValid() && binding.texture.Get() && binding.texture.Get()->GetRHITexture())
-				texID = ImGuiManager::Get().GetImGuiTextureID(binding.texture.Get()->GetRHITexture());
+			if (row.texture.IsValid() && row.texture.Get() && row.texture.Get()->GetRHITexture())
+				texID = ImGuiManager::Get().GetImGuiTextureID(row.texture.Get()->GetRHITexture());
 
-			if (texID)
-				ImGui::Image(texID, ImVec2(28.0f, 28.0f));
-			else
-				ImGui::Dummy(ImVec2(28.0f, 28.0f));
+			if (texID) ImGui::Image(texID, ImVec2(28.0f, 28.0f));
+			else ImGui::Dummy(ImVec2(28.0f, 28.0f));
 
-			// 3: Texture Handle & DragDrop
+			// Column 3: Texture Drag & Drop Slot
 			ImGui::TableSetColumnIndex(3);
-			std::string texName = binding.texture.IsValid() ? GetResourceDisplayName(binding.texture.Get()) : LOCAL("MaterialEditor.DropTexture");
+			std::string texName = row.texture.IsValid() ? GetResourceDisplayName(row.texture.Get()) : LOCAL("MaterialEditor.DropTexture");
+			const bool isDimmed = !row.isOverridden;
+			if (isDimmed) ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.65f, 0.65f, 0.65f, 1.0f));
 			ImGui::Button(texName.c_str(), ImVec2(-1.0f, 0.0f));
+			if (isDimmed) ImGui::PopStyleColor();
+
 			if (ImGui::BeginDragDropTarget())
 			{
 				if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM"))
@@ -435,7 +571,7 @@ void MaterialEditor::DrawTextureBindings()
 						}
 						if (texHandle.IsValid())
 						{
-							m_Material->SetTextureBinding(binding.name, binding.slot, texHandle);
+							m_Material->SetTextureBinding(row.name, row.slot, texHandle);
 							m_IsDirty = true;
 						}
 					}
@@ -443,10 +579,26 @@ void MaterialEditor::DrawTextureBindings()
 				ImGui::EndDragDropTarget();
 			}
 
-			// 4: Delete button
+			// Column 4: Action (인스턴스 오버라이드 해제 또는 삭제)
 			ImGui::TableSetColumnIndex(4);
-			if (ImGui::Button(ICON_FA_TRASH "##RemoveBinding"))
-				slotToRemove = static_cast<int>(binding.slot);
+			if (baseMat && row.isOverridden && row.hasBase)
+			{
+				// 부모 상속 슬롯을 오버라이드한 경우 -> 되돌리기 버튼 (Revert to Base)
+				if (ImGui::Button(ICON_FA_ROTATE_LEFT "##RevertOverride"))
+					slotToRemove = static_cast<int>(row.slot);
+				if (ImGui::IsItemHovered())
+					ImGui::SetTooltip("%s", LOCAL_CSTR("MaterialEditor.Revert"));
+			}
+			else if (row.isOverridden)
+			{
+				// 일반 머티리얼의 등록 슬롯이거나 인스턴스의 추가 커스텀 슬롯 -> 삭제 버튼
+				if (ImGui::Button(ICON_FA_TRASH "##RemoveBinding"))
+					slotToRemove = static_cast<int>(row.slot);
+			}
+			else
+			{
+				ImGui::Dummy(ImVec2(20.0f, 0.0f));
+			}
 
 			ImGui::PopID();
 		}
@@ -459,24 +611,20 @@ void MaterialEditor::DrawTextureBindings()
 		m_IsDirty = true;
 	}
 
-	// 새 텍스처 바인딩 슬롯 추가
+	// 4. 새 슬롯 원클릭 추가 (다음 빈 슬롯 자동 계산)
+	uint32 nextAvailableSlot = 0;
+	for (const auto& r : rows)
+		if (r.slot >= nextAvailableSlot) nextAvailableSlot = r.slot + 1;
+
 	ImGui::Spacing();
 	ImGui::PushID("NewBindingControl");
-	ImGui::SetNextItemWidth(50.0f);
-	ImGui::InputInt("##SlotNum", &m_NewTextureSlotNumber);
-	ImGui::SameLine();
-	ImGui::SetNextItemWidth(120.0f);
-	ImGui::InputTextWithHint("##SlotName", LOCAL_CSTR("MaterialEditor.SlotNameHint"), m_NewTextureSlotName, sizeof(m_NewTextureSlotName));
-	ImGui::SameLine();
-	if (ImGui::Button((ICON_FA_PLUS " " + LOCAL("MaterialEditor.AddBinding")).c_str()))
+	const std::string addBtnText = ICON_FA_PLUS " " +
+		LOCAL_FMT("MaterialEditor.AddBindingAtSlot", LOCAL("MaterialEditor.AddBinding"), nextAvailableSlot) + "###AddTextureBinding";
+	if (ImGui::Button(addBtnText.c_str()))
 	{
-		if (m_NewTextureSlotNumber >= 0 && m_NewTextureSlotName[0] != '\0')
-		{
-			m_Material->SetTextureBinding(m_NewTextureSlotName, static_cast<uint32>(m_NewTextureSlotNumber), {});
-			m_IsDirty = true;
-			m_NewTextureSlotNumber++;
-			m_NewTextureSlotName[0] = '\0';
-		}
+		std::string finalName = "Texture_" + std::to_string(nextAvailableSlot);
+		m_Material->SetTextureBinding(finalName, nextAvailableSlot, {});
+		m_IsDirty = true;
 	}
 	ImGui::PopID();
 }
@@ -593,8 +741,10 @@ void MaterialEditor::DrawParameters()
 	ImGui::SetNextItemWidth(140.0f);
 	ImGui::InputTextWithHint("##ParamName", LOCAL_CSTR("MaterialEditor.ParamNameHint"), m_NewParamName, sizeof(m_NewParamName));
 	ImGui::SameLine();
-	const char* typeNames[] = { "Float", "Float2", "Float3 (Color)", "Float4 (Color)", "Int", "Bool" };
-	ImGui::SetNextItemWidth(130.0f);
+	const string colorFloat3 = LOCAL_FMT("MaterialEditor.ColorType", "Float3");
+	const string colorFloat4 = LOCAL_FMT("MaterialEditor.ColorType", "Float4");
+	const char* typeNames[] = { "Float", "Float2", colorFloat3.c_str(), colorFloat4.c_str(), "Int", "Bool" };
+	ImGui::SetNextItemWidth(155.0f);
 	ImGui::Combo("##ParamType", &m_NewParamTypeIndex, typeNames, IM_ARRAYSIZE(typeNames));
 	ImGui::SameLine();
 	if (ImGui::Button((ICON_FA_PLUS " " + LOCAL("MaterialEditor.AddParam")).c_str()))

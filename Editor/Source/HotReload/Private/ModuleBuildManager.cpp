@@ -1,4 +1,6 @@
 ﻿#include "ModuleBuildManager.h"
+#include "HotReloadManager.h"
+#include "ModuleHotReloadManager.h"
 #include "NotificationManager.h"
 #include "LocalizationManager.h"
 #include <windows.h>

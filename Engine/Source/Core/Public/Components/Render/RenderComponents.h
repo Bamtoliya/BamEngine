@@ -10,3 +10,4 @@
 #include "Components/Render/VolumetricCloudComponent.h"
 #include "Components/Render/TerrainComponent.h"
 #include "Components/Render/PostProcessComponent.h"
+#include "Components/Render/LODGroupComponent.h"

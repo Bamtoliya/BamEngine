@@ -2,9 +2,6 @@
 
 #include "SelectionManager.h"
 
-#include <algorithm>
-#include <cmath>
-
 IMPLEMENT_SINGLETON(SelectionManager)
 
 #pragma region Constructor&Destructor

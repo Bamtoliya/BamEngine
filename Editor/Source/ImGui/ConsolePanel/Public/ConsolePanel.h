@@ -2,7 +2,6 @@
 
 #include "ImGuiInterface.h"
 #include "LogEntry.h"
-#include <optional>
 
 #define MAX_CONSOLE_ITEMS 1000
 

@@ -6,9 +6,55 @@
 #include "Renderer.h"
 #include "RenderPass.h"
 #include "PickingManager.h"
-#include "RHI.h"
-#include "RHITexture.h"
 #include "Texture.h"
+
+namespace
+{
+	bool TryInferTerrainResolution(std::size_t sampleCount, uint32& resolution)
+	{
+		const uint64 maxSamples = (std::numeric_limits<uint32>::max)() / sizeof(f32);
+		if (sampleCount < 4 || sampleCount > maxSamples)
+			return false;
+
+		const uint64 axis = static_cast<uint64>(std::sqrt(static_cast<double>(sampleCount)));
+		if (axis * axis != sampleCount)
+			return false;
+
+		resolution = static_cast<uint32>(axis - 1);
+		return true;
+	}
+
+	bool TryResampleTerrainSplatData(const std::vector<uint8>& source, uint32 targetResolution,
+		std::size_t targetCount, std::vector<uint8>& result)
+	{
+		uint32 sourceResolution = 0;
+		if (source.size() % 4 != 0 ||
+			!TryInferTerrainResolution(source.size() / 4, sourceResolution))
+			return false;
+
+		const std::size_t sourceAxis = static_cast<std::size_t>(sourceResolution) + 1;
+		const std::size_t targetAxis = static_cast<std::size_t>(targetResolution) + 1;
+		std::vector<uint8> candidate(targetCount * 4);
+
+		for (std::size_t z = 0; z < targetAxis; ++z)
+		{
+			const uint64 sourceZ = (static_cast<uint64>(z) * sourceResolution +
+				targetResolution / 2) / targetResolution;
+
+			for (std::size_t x = 0; x < targetAxis; ++x)
+			{
+				const uint64 sourceX = (static_cast<uint64>(x) * sourceResolution +
+					targetResolution / 2) / targetResolution;
+				const std::size_t sourceIndex = (sourceZ * sourceAxis + sourceX) * 4;
+				const std::size_t targetIndex = (z * targetAxis + x) * 4;
+				std::copy_n(source.data() + sourceIndex, 4, candidate.data() + targetIndex);
+			}
+		}
+
+		result.swap(candidate);
+		return true;
+	}
+}
 
 EResult TerrainSystem::Initialize(void* arg)
 {
@@ -32,144 +78,153 @@ TerrainSystem* TerrainSystem::Create(void* arg)
 	return instance;
 }
 
-void TerrainSystem::EnsureTerrainResources(Scene* scene, entt::entity entity, TerrainComponent& terrain)
+bool TerrainSystem::EnsureTerrainResources(TerrainComponent& terrain)
 {
-	if (!scene) return;
+	uint32 axisCount = 0;
+	std::size_t sampleCount = 0;
 
-	// 1. GridMesh 동적 생성 및 핸들 할당 (터레인 고유 그리드 메시는 시스템이 관리)
-	if (!terrain.GridMesh.IsValid())
+	if (!std::isfinite(terrain.Width) || terrain.Width <= 0.f ||
+		!std::isfinite(terrain.Length) || terrain.Length <= 0.f ||
+		!std::isfinite(terrain.MaxHeight) || terrain.MaxHeight < 0.f ||
+		!TerrainUtility::TryGetGridLayout(terrain.Resolution, axisCount, sampleCount))
+		return false;
+
+	const f32 stepX = terrain.Width / static_cast<f32>(terrain.Resolution);
+	const f32 stepZ = terrain.Length / static_cast<f32>(terrain.Resolution);
+	if (!std::isfinite(stepX) || stepX <= 0.f || !std::isfinite(stepZ) || stepZ <= 0.f)
+		return false;
+
+	const bool heightLayoutMatches = terrain.HeightData.size() == sampleCount;
+	const bool splatLayoutMatches = terrain.SplatData.size() == sampleCount * 4;
+
+	const bool meshMatches = terrain.GridMesh &&
+		terrain.GridMesh->GetVertexCount() == sampleCount &&
+		terrain.GridMesh->GetMin().x == -terrain.Width * 0.5f &&
+		terrain.GridMesh->GetMax().x == terrain.Width * 0.5f &&
+		terrain.GridMesh->GetMin().z == -terrain.Length * 0.5f &&
+		terrain.GridMesh->GetMax().z == terrain.Length * 0.5f;
+
+	const auto textureMatches = [&](const std::shared_ptr<RHITexture>& texture, ETextureFormat format)
+		{
+			return texture && texture->GetWidth() == axisCount &&
+				texture->GetHeight() == axisCount && texture->GetFormat() == format;
+		};
+
+	const bool heightTextureMatches = textureMatches(terrain.HeightmapTexture, ETextureFormat::R32_FLOAT);
+	const bool splatTextureMatches = textureMatches(terrain.SplatmapTexture, ETextureFormat::R8G8B8A8_UNORM);
+
+	if (heightLayoutMatches && splatLayoutMatches && meshMatches &&
+		heightTextureMatches && splatTextureMatches)
+		return true;
+
+	RHI* rhi = Renderer::Get().GetRHI();
+	if (!rhi)
+		return false;
+
+	TerrainComponent candidate = terrain;
+
+	for (const f32 height : candidate.HeightData)
+	{
+		if (!std::isfinite(height) || height < 0.f || height > 1.f)
+			return false;
+	}
+
+	if (!heightLayoutMatches)
+	{
+		if (candidate.HeightData.empty())
+		{
+			candidate.HeightData.resize(sampleCount);
+			const f32 center = static_cast<f32>(terrain.Resolution) * 0.5f;
+
+			for (uint32 z = 0; z < axisCount; ++z)
+			{
+				for (uint32 x = 0; x < axisCount; ++x)
+				{
+					const f32 dx = (static_cast<f32>(x) - center) / center;
+					const f32 dz = (static_cast<f32>(z) - center) / center;
+					candidate.HeightData[static_cast<std::size_t>(z) * axisCount + x] =
+						std::max(0.f, 1.f - dx * dx - dz * dz);
+				}
+			}
+		}
+		else
+		{
+			uint32 sourceResolution = 0;
+			if (!TryInferTerrainResolution(candidate.HeightData.size(), sourceResolution) ||
+				!TerrainUtility::ResampleHeightData(
+					candidate.HeightData, sourceResolution, terrain.Resolution, candidate.HeightData))
+				return false;
+		}
+	}
+
+	if (!splatLayoutMatches)
+	{
+		if (candidate.SplatData.empty())
+		{
+			candidate.SplatData.assign(sampleCount * 4, 0);
+			for (std::size_t index = 0; index < sampleCount; ++index)
+				candidate.SplatData[index * 4] = 255;
+		}
+		else if (!TryResampleTerrainSplatData(
+			candidate.SplatData, terrain.Resolution, sampleCount, candidate.SplatData))
+		{
+			return false;
+		}
+	}
+
+	if (!meshMatches)
 	{
 		Mesh* mesh = TerrainUtility::CreateGridMesh(terrain.Width, terrain.Length, terrain.Resolution);
-		if (mesh)
-		{
-			const uint64 entityId = static_cast<uint64>(entt::to_integral(entity));
-			std::wstring key = L"Runtime_TerrainGridMesh_" + std::to_wstring(entityId);
-			terrain.GridMesh = ResourceManager::Get().AddResource<Mesh>(key, mesh);
-		}
-	}
+		if (!mesh)
+			return false;
 
-	// 2. CPU 높이 데이터 배열 확보 ((Resolution + 1) * (Resolution + 1))
-	const uint32 vertexAxisCount = terrain.Resolution + 1;
-	const uint32 totalVertexCount = vertexAxisCount * vertexAxisCount;
-	if (terrain.HeightData.size() != totalVertexCount)
-	{
-		terrain.HeightData.resize(totalVertexCount);
-		const float center = static_cast<float>(terrain.Resolution) * 0.5f;
-		for (uint32 z = 0; z < vertexAxisCount; ++z)
-		{
-			for (uint32 x = 0; x < vertexAxisCount; ++x)
+		candidate.GridMesh = std::shared_ptr<Mesh>(mesh, [](Mesh* value)
 			{
-				const float dx = (static_cast<float>(x) - center) / center;
-				const float dz = (static_cast<float>(z) - center) / center;
-				const float distSq = dx * dx + dz * dz;
-				terrain.HeightData[z * vertexAxisCount + x] = std::max(0.0f, 1.0f - distSq);
-			}
-		}
-		terrain.IsDirty = true;
+				value->Free();
+				delete value;
+			});
 	}
 
-	// 3. GPU 높이맵 텍스처 (R32_FLOAT) 생성
-	RHI* rhi = Renderer::Get().GetRHI();
-	if (rhi && !terrain.HeightmapTexture)
-	{
-		RHITextureDesc desc{};
-		desc.width = vertexAxisCount;
-		desc.height = vertexAxisCount;
-		desc.format = ETextureFormat::R32_FLOAT;
-		desc.dimension = ETextureDimension::Texture2D;
-		desc.usage = ETextureUsage::Sampler;
-		desc.data = terrain.HeightData.data();
-		desc.dataSize = static_cast<uint32>(terrain.HeightData.size() * sizeof(f32));
-
-		RHITexture* rawTexture = rhi->CreateTexture(desc);
-		if (rawTexture)
+	const auto createTexture = [&](ETextureFormat format, void* data, uint32 dataSize)
 		{
-			terrain.HeightmapTexture = std::shared_ptr<RHITexture>(rawTexture, [](RHITexture* p) { Safe_Release(p); });
-			terrain.IsDirty = false;
+			RHITextureDesc desc{};
+			desc.width = axisCount;
+			desc.height = axisCount;
+			desc.format = format;
+			desc.dimension = ETextureDimension::Texture2D;
+			desc.usage = ETextureUsage::Sampler;
+			desc.data = data;
+			desc.dataSize = dataSize;
 
-			const uint64 entityId = static_cast<uint64>(entt::to_integral(entity));
-			const std::wstring texKey = L"Runtime_TerrainHeightmap_" + std::to_wstring(entityId);
-			Safe_AddRef(rawTexture);
-			Texture* heightmapTex = Texture::CreateFromRHITexture(rawTexture, texKey);
-			auto heightmapHandle = ResourceManager::Get().AddResource<Texture>(texKey, heightmapTex);
-			Texture* registered = heightmapHandle.Get();
-			RHITexture* registeredTexture = registered ? registered->GetRHITexture() : nullptr;
+			return std::shared_ptr<RHITexture>(rhi->CreateTexture(desc),
+				[](RHITexture* value) { Safe_Release(value); });
+		};
 
-			if (registeredTexture && registeredTexture != terrain.HeightmapTexture.get())
-			{
-				Safe_AddRef(registeredTexture);
-				terrain.HeightmapTexture = std::shared_ptr<RHITexture>(
-					registeredTexture, [](RHITexture* p) { Safe_Release(p); });
-				terrain.IsDirty = true;
-			}
-		}
-	}
-
-	// 4. 머티리얼과 높이맵 텍스처가 모두 준비되었을 때 머티리얼의 Slot 1에 높이맵 바인딩 보장
-	if (terrain.TerrainMaterial.IsValid() && terrain.HeightmapTexture)
+	if (!heightLayoutMatches || !heightTextureMatches)
 	{
-		const uint64 entityId = static_cast<uint64>(entt::to_integral(entity));
-		const std::wstring texKey = L"Runtime_TerrainHeightmap_" + std::to_wstring(entityId);
-		auto heightmapHandle = ResourceManager::Get().GetResourceHandle<Texture>(texKey);
-		if (heightmapHandle.IsValid())
-		{
-			terrain.TerrainMaterial->SetTextureBinding("HeightMap", 1, heightmapHandle);
-		}
+		candidate.HeightmapTexture = createTexture(ETextureFormat::R32_FLOAT,
+			candidate.HeightData.data(), static_cast<uint32>(sampleCount * sizeof(f32)));
+
+		if (!candidate.HeightmapTexture)
+			return false;
+
+		candidate.IsDirty = false;
+		candidate.HeightDirtyRegion.reset();
 	}
 
-	// EnsureTerrainResources 내 스플랫 맵 생성 부분
-	if (rhi && !terrain.SplatmapTexture)
+	if (!splatLayoutMatches || !splatTextureMatches)
 	{
-		const uint32 totalVertexCount = vertexAxisCount * vertexAxisCount;
-		if (terrain.SplatData.size() != totalVertexCount * 4)
-		{
-			terrain.SplatData.assign(totalVertexCount * 4, 0);
-			for (uint32 i = 0; i < totalVertexCount; ++i)
-				terrain.SplatData[i * 4 + 0] = 255; // 기본 잔디
-		}
+		candidate.SplatmapTexture = createTexture(ETextureFormat::R8G8B8A8_UNORM,
+			candidate.SplatData.data(), static_cast<uint32>(sampleCount * 4));
 
-		RHITextureDesc desc{};
-		desc.width = vertexAxisCount;
-		desc.height = vertexAxisCount;
-		desc.format = ETextureFormat::R8G8B8A8_UNORM;
-		desc.dimension = ETextureDimension::Texture2D;
-		desc.usage = ETextureUsage::Sampler;
-		desc.data = terrain.SplatData.data();
-		desc.dataSize = static_cast<uint32>(terrain.SplatData.size());
+		if (!candidate.SplatmapTexture)
+			return false;
 
-		RHITexture* rawTexture = rhi->CreateTexture(desc);
-		if (rawTexture)
-		{
-			terrain.SplatmapTexture = std::shared_ptr<RHITexture>(rawTexture, [](RHITexture* p) { Safe_Release(p); });
-			terrain.IsSplatDirty = false;
-
-			const uint64 entityId = static_cast<uint64>(entt::to_integral(entity));
-			const std::wstring texKey = L"Runtime_TerrainSplatmap_" + std::to_wstring(entityId);
-			Safe_AddRef(rawTexture);
-			Texture* splatTex = Texture::CreateFromRHITexture(rawTexture, texKey);
-			auto splatHandle = ResourceManager::Get().AddResource<Texture>(texKey, splatTex);
-			Texture* registered = splatHandle.Get();
-			RHITexture* registeredTexture = registered ? registered->GetRHITexture() : nullptr;
-
-			if (registeredTexture && registeredTexture != terrain.SplatmapTexture.get())
-			{
-				Safe_AddRef(registeredTexture);
-				terrain.SplatmapTexture = std::shared_ptr<RHITexture>(
-					registeredTexture, [](RHITexture* p) { Safe_Release(p); });
-				terrain.IsSplatDirty = true;
-			}
-		}
+		candidate.IsSplatDirty = false;
 	}
 
-	// 머티리얼 바인딩 보장 (Slot 4에 SplatMap 바인딩)
-	if (terrain.TerrainMaterial.IsValid() && terrain.SplatmapTexture)
-	{
-		const uint64 entityId = static_cast<uint64>(entt::to_integral(entity));
-		const std::wstring texKey = L"Runtime_TerrainSplatmap_" + std::to_wstring(entityId);
-		auto splatHandle = ResourceManager::Get().GetResourceHandle<Texture>(texKey);
-		if (splatHandle.IsValid())
-			terrain.TerrainMaterial->SetTextureBinding("SplatMap", 4, splatHandle);
-	}
+	terrain = std::move(candidate);
+	return true;
 }
 
 void TerrainSystem::UpdateTerrainHeightmap(TerrainComponent& terrain)
@@ -179,19 +234,53 @@ void TerrainSystem::UpdateTerrainHeightmap(TerrainComponent& terrain)
 	RHI* rhi = Renderer::Get().GetRHI();
 	if (!rhi) return;
 
-	const uint32 vertexAxisCount = terrain.Resolution + 1;
+	uint32 axisCount = 0;
+	std::size_t sampleCount = 0;
+	if (!TerrainUtility::TryGetGridLayout(terrain.Resolution, axisCount, sampleCount) ||
+		terrain.HeightData.size() != sampleCount)
+		return;
+
+	const PixelRect fullRegion{ 0, 0, axisCount, axisCount };
+	PixelRect region = terrain.HeightDirtyRegion.value_or(fullRegion);
+
+	// 이전 해상도의 영역 등이 남아 있다면 전체 갱신으로 처리합니다.
+	if (region.IsEmpty() || region.maxX > axisCount || region.maxY > axisCount)
+		region = fullRegion;
+
 	RHITextureDesc desc{};
-	desc.width = vertexAxisCount;
-	desc.height = vertexAxisCount;
+	desc.width = region.Width();
+	desc.height = region.Height();
 	desc.format = ETextureFormat::R32_FLOAT;
 	desc.dimension = ETextureDimension::Texture2D;
 	desc.usage = ETextureUsage::Sampler;
-	desc.data = terrain.HeightData.data();
-	desc.dataSize = static_cast<uint32>(terrain.HeightData.size() * sizeof(f32));
+	desc.dataSize = static_cast<uint32>(static_cast<uint64>(desc.width) * desc.height * sizeof(f32));
 
-	if (IsSuccess(rhi->UploadTextureData(terrain.HeightmapTexture.get(), desc)))
+	std::vector<f32> uploadData;
+	const bool isFullUpload = region.minX == 0 && region.minY == 0 &&
+		region.maxX == axisCount && region.maxY == axisCount;
+
+	if (isFullUpload)
+	{
+		desc.data = terrain.HeightData.data();
+	}
+	else
+	{
+		uploadData.resize(static_cast<std::size_t>(desc.width) * desc.height);
+
+		for (uint32 row = 0; row < desc.height; ++row)
+		{
+			const std::size_t sourceIndex = static_cast<std::size_t>(region.minY + row) * axisCount + region.minX;
+			const std::size_t targetIndex = static_cast<std::size_t>(row) * desc.width;
+			std::copy_n(terrain.HeightData.data() + sourceIndex, desc.width, uploadData.data() + targetIndex);
+		}
+
+		desc.data = uploadData.data();
+	}
+
+	if (IsSuccess(rhi->UploadTextureData(terrain.HeightmapTexture.get(), desc, region.minX, region.minY)))
 	{
 		terrain.IsDirty = false;
+		terrain.HeightDirtyRegion.reset();
 	}
 }
 
@@ -206,7 +295,7 @@ void TerrainSystem::OnUpdate(entt::registry& registry, const vector<Scene*>& act
 		auto view = scene->GetRegistry().view<TerrainComponent>();
 		for (auto [entity, terrain] : view.each())
 		{
-			EnsureTerrainResources(scene, entity, terrain);
+			EnsureTerrainResources(terrain);
 		}
 	}
 }
@@ -244,21 +333,55 @@ void TerrainSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& act
 		auto view = scene->GetRegistry().view<TerrainComponent, WorldTransformComponent, FlagComponent>();
 		for (auto [entity, terrain, worldTransform, flag] : view.each())
 		{
-			EnsureTerrainResources(scene, entity, terrain);
+			if (!EnsureTerrainResources(terrain))
+				continue;
+
 			UpdateTerrainHeightmap(terrain);
 			UpdateTerrainSplatmap(terrain);
 
 			if (!flag.IsActiveInHierarchy() || !flag.IsVisibleInHierarchy() || HasFlag(flag.effectiveFlags, EEntityFlag::Dead)) continue;
 
-			Mesh* mesh = terrain.GridMesh.Get();
+			Mesh* mesh = terrain.GridMesh.get();
 			MaterialInterface* material = terrain.TerrainMaterial.Get();
-			if (!mesh || !material) continue;
+
+			if (!mesh || !material || !terrain.HeightmapTexture || !terrain.SplatmapTexture ||
+				terrain.IsDirty || terrain.IsSplatDirty)
+				continue;
+
+			if (terrain.Resolution == 0 ||
+				!std::isfinite(terrain.Width) || terrain.Width <= 0.f ||
+				!std::isfinite(terrain.Length) || terrain.Length <= 0.f ||
+				!std::isfinite(terrain.MaxHeight) || terrain.MaxHeight < 0.f)
+				continue;
+
+			const uint64 axisCount = static_cast<uint64>(terrain.Resolution) + 1;
+			if (terrain.HeightmapTexture->GetWidth() != axisCount ||
+				terrain.HeightmapTexture->GetHeight() != axisCount ||
+				static_cast<uint64>(mesh->GetVertexCount()) != axisCount * axisCount)
+				continue;
+
+			if (mesh->GetMin().x != -terrain.Width * 0.5f || mesh->GetMax().x != terrain.Width * 0.5f ||
+				mesh->GetMin().z != -terrain.Length * 0.5f || mesh->GetMax().z != terrain.Length * 0.5f)
+				continue;
+
+			const vec2 cellSpacing(terrain.Width / static_cast<f32>(terrain.Resolution),
+				terrain.Length / static_cast<f32>(terrain.Resolution));
+
+			if (!std::isfinite(cellSpacing.x) || !std::isfinite(cellSpacing.y) ||
+				cellSpacing.x <= 0.f || cellSpacing.y <= 0.f)
+				continue;
 
 			StaticDrawCommand command;
 			command.mesh = mesh;
 			command.material = material;
 			command.worldMatrix = worldTransform.worldMatrix;
 			command.pickingId = PickingManager::Get().RegisterPickingEntity(scene, entity);
+			command.heightfield.emplace();
+			command.heightfield->gridMesh = terrain.GridMesh;
+			command.heightfield->heightmap = terrain.HeightmapTexture;
+			command.heightfield->splatmap = terrain.SplatmapTexture;
+			command.heightfield->maxHeight = terrain.MaxHeight;
+			command.heightfield->cellSpacing = cellSpacing;
 
 			for (RenderPass* pass : targetPasses)
 			{

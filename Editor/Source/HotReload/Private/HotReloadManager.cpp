@@ -2,29 +2,58 @@
 #include "ModuleHotReloadManager.h"
 #include "ShaderHotReloadManager.h"
 #include "AssetHotReloadManager.h"
+#include "ModuleBuildManager.h"
+
+static std::filesystem::path ResolveProjectRoot()
+{
+    std::error_code ec;
+    wchar_t exePathBuf[MAX_PATH] = {};
+    GetModuleFileNameW(nullptr, exePathBuf, MAX_PATH);
+    std::filesystem::path cur = std::filesystem::path(exePathBuf).parent_path();
+    for (int i = 0; i < 7; ++i)
+    {
+        if (std::filesystem::exists(cur / "Projects" / "GameModule" / "Source", ec))
+            return cur;
+        if (!cur.has_parent_path()) break;
+        cur = cur.parent_path();
+    }
+    return std::filesystem::current_path();
+}
+
+static std::filesystem::path ResolveBuildDirectory(const std::filesystem::path& projectRoot)
+{
+    std::error_code ec;
+    wchar_t exePathBuf[MAX_PATH] = {};
+    GetModuleFileNameW(nullptr, exePathBuf, MAX_PATH);
+    std::filesystem::path cur = std::filesystem::path(exePathBuf).parent_path();
+    for (int i = 0; i < 5; ++i)
+    {
+        if (std::filesystem::exists(cur / "CMakeCache.txt", ec))
+            return cur;
+        if (!cur.has_parent_path()) break;
+        cur = cur.parent_path();
+    }
+    const std::filesystem::path defaultCandidate = projectRoot / "out/build/x64-debug";
+    if (std::filesystem::exists(defaultCandidate / "CMakeCache.txt", ec))
+        return defaultCandidate;
+    return cur;
+}
 
 IMPLEMENT_SINGLETON(HotReloadManager)
 #pragma region Constructor&Destructor
 EResult HotReloadManager::Initialize(void*)
 {
     m_ModuleReloader = ModuleHotReloadManager::Create();
-    if (!m_ModuleReloader)
-        return EResult::Fail;
-
+    if (!m_ModuleReloader) return EResult::Fail;
     m_ShaderReloader = ShaderHotReloadManager::Create();
-    if (!m_ShaderReloader)
-    {
-        Free();
-        return EResult::Fail;
-    }
-
+    if (!m_ShaderReloader) { Free(); return EResult::Fail; }
     m_AssetReloader = AssetHotReloadManager::Create();
-    if (!m_AssetReloader)
-    {
-        Free();
-        return EResult::Fail;
-    }
-
+    if (!m_AssetReloader) { Free(); return EResult::Fail; }
+    // 실제 프로젝트 루트와 CMake 빌드 디렉터리를 찾아 ModuleBuildManager 생성
+    const std::filesystem::path projectRoot = ResolveProjectRoot();
+    const std::filesystem::path buildDir = ResolveBuildDirectory(projectRoot);
+    m_ModuleBuilder = ModuleBuildManager::Create(projectRoot, buildDir);
+    if (!m_ModuleBuilder) { Free(); return EResult::Fail; }
     return EResult::Success;
 }
 
@@ -33,6 +62,7 @@ void HotReloadManager::Free()
     Safe_Release(m_AssetReloader);
     Safe_Release(m_ShaderReloader);
     Safe_Release(m_ModuleReloader);
+    Safe_Release(m_ModuleBuilder);
 
     __super::Free();
 }
@@ -40,10 +70,11 @@ void HotReloadManager::Free()
 
 void HotReloadManager::Update()
 {
-    IHotReloader* reloaders[] = { m_ModuleReloader, m_ShaderReloader, m_AssetReloader };
-
+    IHotReloader* reloaders[] = { m_ModuleReloader, m_ShaderReloader, m_AssetReloader, m_ModuleBuilder };
     for (IHotReloader* reloader : reloaders)
-        reloader->Update();
+    {
+        if (reloader) reloader->Update();
+    }
 }
 
 #pragma region Getter
@@ -63,5 +94,11 @@ AssetHotReloadManager& HotReloadManager::GetAssetReloader()
 {
     assert(m_AssetReloader != nullptr);
     return *m_AssetReloader;
+}
+
+ModuleBuildManager& HotReloadManager::GetModuleBuilder()
+{
+    assert(m_ModuleBuilder != nullptr);
+    return *m_ModuleBuilder;
 }
 #pragma endregion

@@ -8,6 +8,10 @@
 #include "Entity.h"
 #include "TransformSystem.h"
 #include "Components/Core/WorldTransformComponent.h"
+#include "Components/Physics/ColliderComponent.h"
+#include "Components/Render/TerrainComponent.h"
+#include "Mesh.h"
+#include <glm/gtc/matrix_transform.hpp>
 
 #pragma region Helper
 using PhysicsShape2D = variant<Rect, Circle, Capsule>;
@@ -598,5 +602,84 @@ span<const TriggerEvent> PhysicsSystem::GetTriggerEvents2D(const Scene& scene)
 void PhysicsSystem::ResetTriggerState2D(Scene& scene)
 {
     scene.GetRegistry().ctx().erase<PhysicsTriggerState>();
+}
+#pragma endregion
+
+#pragma region Raycast
+bool PhysicsSystem::Raycast(const Scene& scene, const Ray& ray, SceneRaycastHit& outHit, f32 maxDistance)
+{
+    const auto allHits = RaycastAll(scene, ray, maxDistance);
+    if (allHits.empty()) return false;
+    outHit = allHits.front();
+    return true;
+}
+std::vector<SceneRaycastHit> PhysicsSystem::RaycastAll(const Scene& scene, const Ray& ray, f32 maxDistance)
+{
+    std::vector<SceneRaycastHit> results;
+    const auto& world = scene.GetRegistry();
+    // 1. 3D ColliderComponent 순회
+    auto view = world.view<ColliderComponent, WorldTransformComponent>();
+    for (auto entity : view)
+    {
+        const auto* flag = world.try_get<FlagComponent>(entity);
+        if (flag && (!flag->IsActive() || HasFlag(flag->flags, EEntityFlag::Paused) || HasFlag(flag->flags, EEntityFlag::Dead)))
+            continue;
+        const auto& collider = view.get<ColliderComponent>(entity);
+        if (!collider.GetSettings().Enabled)
+            continue;
+        const auto& worldTransform = view.get<WorldTransformComponent>(entity);
+        const mat4 colliderWorld = worldTransform.worldMatrix * glm::translate(mat4(1.0f), collider.GetOffset());
+        HitResult tempHit{};
+        bool hitFound = false;
+        if (const auto* box = std::get_if<BoxShape>(&collider.GetShape()))
+        {
+            if (box->HasValidParameters())
+            {
+                const BoundingBox b(vec3(0.0f), box->Size * 0.5f);
+                hitFound = Collision::Raycast(ray, b, colliderWorld, tempHit, maxDistance);
+            }
+        }
+        else if (const auto* sphere = std::get_if<SphereShape>(&collider.GetShape()))
+        {
+            if (sphere->HasValidParameters())
+            {
+                const vec3 worldCenter = vec3(colliderWorld[3]);
+                const BoundingSphere s(worldCenter, sphere->Radius);
+                hitFound = Collision::Raycast(ray, s, tempHit, maxDistance);
+            }
+        }
+        else if (const auto* meshShape = std::get_if<MeshShape>(&collider.GetShape()))
+        {
+            if (meshShape->HasMesh())
+            {
+                if (auto* mesh = meshShape->MeshHandle.Get())
+                    hitFound = Collision::Raycast(ray, *mesh, colliderWorld, tempHit, maxDistance);
+            }
+        }
+        if (hitFound && tempHit.hasHit && tempHit.distance <= maxDistance)
+        {
+            results.push_back({ entity, tempHit });
+        }
+    }
+    // 2. TerrainComponent 지형 순회
+    auto terrainView = world.view<TerrainComponent, WorldTransformComponent>();
+    for (auto entity : terrainView)
+    {
+        const auto* flag = world.try_get<FlagComponent>(entity);
+        if (flag && (!flag->IsActive() || HasFlag(flag->flags, EEntityFlag::Paused) || HasFlag(flag->flags, EEntityFlag::Dead)))
+            continue;
+        const auto& terrain = terrainView.get<TerrainComponent>(entity);
+        const auto& worldTransform = terrainView.get<WorldTransformComponent>(entity);
+        HitResult terrainHit{};
+        if (Collision::Raycast(ray, terrain, worldTransform.worldMatrix, terrainHit, maxDistance) && terrainHit.hasHit)
+        {
+            results.push_back({ entity, terrainHit });
+        }
+    }
+    // 3. 가장 가까운 거리 순으로 정렬
+    std::sort(results.begin(), results.end(), [](const SceneRaycastHit& a, const SceneRaycastHit& b) {
+        return a.Hit.distance < b.Hit.distance;
+        });
+    return results;
 }
 #pragma endregion

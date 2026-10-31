@@ -1,10 +1,9 @@
-#pragma once
+﻿#pragma once
 
 #include "BaseViewportPanel.h"
 #include "CanvasView2D.h"
 #include "UILayout.h"
 #include "UIEventSystem.h"
-#include <optional>
 
 namespace Editor
 {

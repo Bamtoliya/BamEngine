@@ -3,12 +3,6 @@
 #include "HotReloaderInterface.h"
 #include "ShaderCompiler.h"
 #include <efsw/efsw.hpp>
-#include <filesystem>
-#include <unordered_map>
-#include <chrono>
-#include <mutex>
-#include <vector>
-#include <string>
 
 BEGIN(Editor)
 

@@ -60,6 +60,7 @@ if(MSVC)
         /Zc:preprocessor
         /utf-8
         /MP
+        /bigobj
     )
     target_link_options(Editor PRIVATE
         $<$<CONFIG:Debug>:/INCREMENTAL>

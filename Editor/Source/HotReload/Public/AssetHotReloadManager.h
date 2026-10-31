@@ -2,12 +2,6 @@
 
 #include "HotReloaderInterface.h"
 #include <efsw/efsw.hpp>
-#include <filesystem>
-#include <unordered_map>
-#include <chrono>
-#include <mutex>
-#include <vector>
-#include <string>
 
 BEGIN(Editor)
 
@@ -24,6 +18,7 @@ public:
 #pragma endregion
 public:
 	void Update() override;
+	void RecordMeshFileState(const std::filesystem::path& filePath);
 private:
 	void ProcessModifiedTexture(const std::filesystem::path& texturePath);
 	void ProcessModifiedMaterial(const std::filesystem::path& materialPath);
@@ -32,10 +27,22 @@ private:
 	std::filesystem::path ResolveTextureDirectory();
 
 private:
+	struct MeshFileState
+	{
+		std::filesystem::file_time_type WriteTime;
+		std::uintmax_t Size = 0;
+
+		bool operator==(const MeshFileState&) const = default;
+	};
+
+	static bool ReadMeshFileState(const std::filesystem::path& filePath, MeshFileState& state);
+private:
 	efsw::FileWatcher* m_FileWatcher = nullptr;
 	efsw::FileWatchListener* m_FileListener = nullptr;
 	efsw::WatchID m_WatchID = 0;
 	std::filesystem::path m_WatchDirectory;
+	// 메인 스레드에서만 접근합니다.
+	std::unordered_map<std::wstring, MeshFileState> m_MeshFileStates;
 };
 
 END

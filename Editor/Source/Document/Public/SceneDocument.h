@@ -34,7 +34,7 @@ namespace Editor
 
         EditorDocumentSaveInfo GetSaveInfo() const override
         {
-            return { "FileDialog.SceneFiles", L"*.json", L"NewScene.json", L"json" };
+            return { "FileDialog.SceneFiles", L"*.json", L"NewScene.json", L"json", EFileDialogContext::SceneSave };
         }
 
         Engine::EResult RebindRestoredScene();

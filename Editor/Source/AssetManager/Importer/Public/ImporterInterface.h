@@ -3,11 +3,6 @@
 #include "Editor_Includes.h"
 #include "ImportJob.h"
 
-#pragma push_macro("new")
-#undef new
-#include <memory>
-#pragma pop_macro("new")
-
 BEGIN(Editor)
 class IImporter : public Base
 {

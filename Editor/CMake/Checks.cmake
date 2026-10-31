@@ -19,11 +19,13 @@ add_executable(EditorHistoryCheck examples/EditorHistoryCheck.cpp
     Source/Document/Private/SceneDocument.cpp
     Source/Command/Private/CommandHistory.cpp
     Source/Command/Private/SceneEditHistory.cpp
-    Source/Document/Private/EditorDocumentManager.cpp)
+    Source/Document/Private/EditorDocumentManager.cpp
+    Source/Document/Private/EditorDocumentController.cpp)
 
 target_include_directories(EditorHistoryCheck PRIVATE
     "${EDITOR_SOURCE_DIR}/Command/Public"
     "${EDITOR_SOURCE_DIR}/Document/Public"
+    "${EDITOR_SOURCE_DIR}/FileDialog/Public"
     "${EDITOR_SOURCE_DIR}/ImGui/InspectorPanel/Public")
 target_link_libraries(EditorHistoryCheck PRIVATE BamEngine::Engine)
 target_precompile_headers(EditorHistoryCheck PRIVATE

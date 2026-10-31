@@ -1,8 +1,6 @@
 ﻿#pragma once
 #include "ResourceManager.h"
 #include "Resources.h"
-#include <type_traits>
-
 
 namespace
 {

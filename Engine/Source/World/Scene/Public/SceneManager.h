@@ -32,8 +32,7 @@ public:
 	EResult SaveScene(archive::IArchive& ar, const wstring& filePath);
 	EResult LoadScene(archive::IArchive& ar, const wstring& filePath);
 	EResult SavePrefab(archive::IArchive& ar, const wstring& filePath, const Entity& rootEntity);
-	EResult InstantiatePrefab(archive::IArchive& ar, const wstring& filePath,
-		Entity*& outRootEntity, Entity* parent = nullptr);
+	EResult InstantiatePrefab(archive::IArchive& ar, const wstring& filePath, Entity*& outRootEntity, Entity* parent = nullptr);
 
 	EResult AddScene(Scene* scene);
 	EResult RemoveScene(Scene* scene);

@@ -1,7 +1,6 @@
 ﻿#pragma once
 
 #include "Engine_Includes.h"
-#include <span>
 #include <lz4.h>
 
 namespace Engine

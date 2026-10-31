@@ -1,12 +1,10 @@
 ﻿#pragma once
 
 #include "Reflection/ComponentAnnotations.h"
-#include "Types.h"
-#include "Resource.h"
 #include "Mesh.h"
 #include "Material.h"
 #include "RHITexture.h"
-#include <vector>
+#include "Structs/PixelRect.h"
 
 namespace Engine
 {
@@ -31,7 +29,7 @@ namespace Engine
 		ResourceHandle<Material> TerrainMaterial;
 
 		// ── 런타임 GPU/CPU 리소스 (직렬화 제외) ──
-		ResourceHandle<Mesh> GridMesh = {};
+		std::shared_ptr<Mesh> GridMesh;
 		std::vector<f32> HeightData = {};
 		std::shared_ptr<RHITexture> HeightmapTexture = nullptr;
 		bool IsDirty = false;
@@ -39,5 +37,32 @@ namespace Engine
 		std::vector<uint8> SplatData = {}; // (Resolution + 1)^2 * 4 바이트 (RGBA)
 		std::shared_ptr<RHITexture> SplatmapTexture = nullptr;
 		bool IsSplatDirty = false;
+		std::optional<PixelRect> HeightDirtyRegion;
+
+		void MarkHeightDirty()
+		{
+			IsDirty = true;
+			HeightDirtyRegion.reset();
+		}
+
+		void MarkHeightDirty(const PixelRect& region)
+		{
+			if (region.IsEmpty()) return;
+
+			if (!IsDirty)
+			{
+				HeightDirtyRegion = region;
+			}
+			else if (HeightDirtyRegion)
+			{
+				auto& dirty = *HeightDirtyRegion;
+				dirty.minX = (std::min)(dirty.minX, region.minX);
+				dirty.minY = (std::min)(dirty.minY, region.minY);
+				dirty.maxX = (std::max)(dirty.maxX, region.maxX);
+				dirty.maxY = (std::max)(dirty.maxY, region.maxY);
+			}
+
+			IsDirty = true;
+		}
 	};
 }

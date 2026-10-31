@@ -1,7 +1,6 @@
-#include "PropertyDrawerEnTT.h"
+﻿#include "PropertyDrawerEnTT.h"
 #include "ImGuiManager.h"
 #include <glm/glm.hpp>
-#include <cstring>
 #include <glm/gtc/type_ptr.hpp>
 
 BEGIN(Editor)

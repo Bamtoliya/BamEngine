@@ -3,10 +3,19 @@
 #include "Engine_Includes.h"
 #include "System.h"
 #include "TriggerEvent.h"
+#include "Structs/HitResult.h"
+#include "Structs/Ray.h"
 
 BEGIN(Engine)
 class Entity;
-struct HitResult;
+class Scene;
+
+struct ENGINE_API SceneRaycastHit
+{
+	entt::entity Entity = entt::null;
+	HitResult Hit;
+};
+
 class ENGINE_API PhysicsSystem : public ISystem
 {
 private:
@@ -23,7 +32,8 @@ public:
 public:
 	static std::span<const TriggerEvent> GetTriggerEvents2D(const Scene& scene);
 	static void ResetTriggerState2D(Scene& scene);
-private:
-
+public:
+	static bool Raycast(const Scene& scene, const Ray& ray, SceneRaycastHit& outHit, f32 maxDistance = FLT_MAX);
+	static std::vector<SceneRaycastHit> RaycastAll(const Scene& scene, const Ray& ray, f32 maxDistance = FLT_MAX);
 };
 END

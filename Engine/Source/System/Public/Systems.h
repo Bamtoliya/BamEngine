@@ -9,3 +9,5 @@
 #include "UIRenderSystem.h"
 #include "AudioSystem.h"
 #include "TerrainSystem.h"
+#include "GraphSystem.h"
+#include "SpriteAnimationSystem.h"

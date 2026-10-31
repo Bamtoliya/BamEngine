@@ -61,15 +61,15 @@ void ShortcutSettingsPanel::DrawActionTable()
         ImGui::TableSetupColumn(LOCAL_CSTR("Shortcuts.ColAction"), ImGuiTableColumnFlags_WidthStretch);
         ImGui::TableSetupColumn(LOCAL_CSTR("Shortcuts.ColCategory"), ImGuiTableColumnFlags_WidthFixed, 100.0f);
         ImGui::TableSetupColumn(LOCAL_CSTR("Shortcuts.ColShortcut"), ImGuiTableColumnFlags_WidthFixed, 180.0f);
-        ImGui::TableSetupColumn(LOCAL_CSTR("Shortcuts.ColReset"), ImGuiTableColumnFlags_WidthFixed, 60.0f);
+        ImGui::TableSetupColumn(LOCAL_CSTR("Shortcuts.ColReset"), ImGuiTableColumnFlags_WidthFixed, 80.0f);
         ImGui::TableHeadersRow();
 
         for (const auto& [id, action] : actions)
         {
             const std::string displayName = action.DisplayNameKey.empty() ? id : LOCAL(action.DisplayNameKey);
-            const std::string category = action.CategoryKey.empty() ? "General" : LOCAL(action.CategoryKey);
+            const std::string category = action.CategoryKey.empty() ? LOCAL("UI_GENERAL") : LOCAL(action.CategoryKey);
             const ShortcutChord activeChord = shortcuts.GetActiveChord(id);
-            const std::string chordText = activeChord.ToString();
+            const std::string chordText = activeChord.IsValid() ? activeChord.ToString() : LOCAL("EditorCommon.None");
 
             if (!m_Filter.PassFilter(displayName.c_str()) && !m_Filter.PassFilter(id.c_str()) &&
                 !m_Filter.PassFilter(category.c_str()) && !m_Filter.PassFilter(chordText.c_str()))
@@ -185,7 +185,7 @@ void ShortcutSettingsPanel::HandleKeyCapture()
                 std::string conflictId = shortcuts.FindConflict(newChord, action->Context, m_ListeningActionId);
                 if (!conflictId.empty())
                 {
-                    m_ConflictWarning = "Conflict: " + newChord.ToString() + " is already assigned to " + conflictId;
+                    m_ConflictWarning = LOCAL_FMT("Shortcuts.Conflict", newChord.ToString(), conflictId);
                 }
                 else
                 {

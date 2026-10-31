@@ -1,11 +1,7 @@
 ﻿#include "Logger.h"
-
 #pragma push_macro("new")
 #undef new
-
-#include <ctime>
 #include <fmt/chrono.h>
-
 #pragma pop_macro("new")
 
 struct LoggerState

@@ -51,7 +51,13 @@ public:
 
 #pragma region TempData
 public:
-	void SetTempData(const vector<uint8>& data) { m_TempData = data; }
+	void SetTempData(const vector<uint8>& data)
+	{
+		m_TempData = data;
+		m_CachedHeader.dataSize = static_cast<uint32>(data.size());
+		if (m_CachedHeader.mipLevels == 0) m_CachedHeader.mipLevels = 1;
+		if (m_CachedHeader.arraySize == 0) m_CachedHeader.arraySize = 1;
+	}
 	void ClearTempData() { m_TempData.clear(); }
 #pragma endregion
 

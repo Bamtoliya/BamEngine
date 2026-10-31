@@ -7,6 +7,22 @@
 #include "AssetManager.h"
 #include "RHITexture.h"
 
+namespace
+{
+    std::string ThumbnailCacheKey(const filesystem::path& path)
+    {
+        if (path.empty())
+            return {};
+
+        std::error_code ec;
+        const auto absolutePath = path.is_absolute() ? path : filesystem::absolute(path, ec);
+        if (ec)
+            return {};
+
+        return absolutePath.lexically_normal().generic_string();
+    }
+}
+
 IMPLEMENT_SINGLETON(AssetCache)
 
 #pragma region Constructor&Destructor
@@ -21,103 +37,180 @@ void AssetCache::Free()
 
 void AssetCache::Update()
 {
-	std::vector<ThumbnailUploadTask> tasks;
-	{
-		std::lock_guard lock(m_UploadMutex);
-		tasks = std::move(m_UploadTasks);
-	}
+    std::vector<ThumbnailUploadTask> tasks;
+    std::unordered_set<std::string> invalidations;
 
-	for (auto& task : tasks)
-	{
-		// 디코딩 실패 처리
-		if (task.Width == 0 || task.Height == 0)
-		{
-			m_ThumbnailCache[task.AssetPath] = nullptr;
-			m_LoadingPaths.erase(task.AssetPath);
-			continue;
-		}
+    {
+        std::lock_guard lock(m_UploadMutex);
+        tasks.swap(m_UploadTasks);
+        invalidations.swap(m_PendingInvalidations);
+    }
 
-		RHITextureDesc desc = {};
-		desc.width = task.Width;
-		desc.height = task.Height;
-		desc.data = task.Data.data();
-		desc.dataSize = (uint32)task.Data.size();
+    // 같은 프레임에 변경 요청과 완료 결과가 들어오면 변경부터 반영합니다.
+    for (const auto& path : invalidations)
+        ClearCache(filesystem::path(path));
 
-		RHITexture* rhiTexture = Renderer::Get().GetRHI()->CreateTexture(desc);
-		m_ThumbnailCache.emplace(task.AssetPath, rhiTexture);	
-		m_LoadingPaths.erase(task.AssetPath);
-	}
+    RHI* rhi = Renderer::IsCreated() ? Renderer::Get().GetRHI() : nullptr;
+
+    for (auto& task : tasks)
+    {
+        const auto loading = m_LoadingPaths.find(task.AssetPath);
+
+        if (loading == m_LoadingPaths.end() || loading->second != task.RequestId)
+        {
+            BAM_LOG(Trace, "Editor", "Asset",
+                "Discarded stale thumbnail: path={}, request={}", task.AssetPath, task.RequestId);
+            continue;
+        }
+
+        m_LoadingPaths.erase(loading);
+
+        RHITexture* texture = nullptr;
+
+        if (rhi && task.Width > 0 && task.Height > 0 && !task.Data.empty())
+        {
+            RHITextureDesc desc = {};
+            desc.width = task.Width;
+            desc.height = task.Height;
+            desc.data = task.Data.data();
+            desc.dataSize = static_cast<uint32>(task.Data.size());
+
+            if (task.Data.size() == desc.dataSize)
+                texture = rhi->CreateTexture(desc);
+        }
+
+        // 실패 결과도 nullptr로 캐시합니다.
+        const auto inserted = m_ThumbnailCache.emplace(task.AssetPath, texture);
+        if (!inserted.second)
+            Safe_Release(texture);
+    }
 }
 #pragma endregion
 
 #pragma region Thumbnail Management
 RHITexture* AssetCache::GetThumbnail(const filesystem::path& assetPath)
 {
-    std::string pathStr = assetPath.string();
-
-    // 1. 이미 캐시에 있다면 즉시 반환
-    auto it = m_ThumbnailCache.find(pathStr);
-    if (it != m_ThumbnailCache.end())
-        return it->second;
-
-    // 2. 이미 로딩 중이라면 더미(nullptr) 반환
-    if (m_LoadingPaths.count(pathStr))
+    const std::string key = ThumbnailCacheKey(assetPath);
+    if (key.empty())
         return nullptr;
 
-    m_LoadingPaths.insert(pathStr);
+    if (const auto cached = m_ThumbnailCache.find(key); cached != m_ThumbnailCache.end())
+        return cached->second;
 
-    // 3. 백그라운드 디코딩 태스크 예약
+    if (m_LoadingPaths.contains(key))
+        return nullptr;
+
     std::string ext = assetPath.extension().string();
-    for (auto& c : ext) c = tolower(c);
+    for (char& ch : ext)
+        ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
 
-    AssetManager::Get().ExecuteAsync([this, pathStr, ext]() -> EResult {
-        std::optional<ThumbnailUploadTask> task;
-        if (ext == ".png" || ext == ".jpg" || ext == ".tga" || ext == ".bmp")
-        {
-            task = LoadImageThumbnail(pathStr);
-        }
-        else if (ext == ".fbx" || ext == ".obj" || ext == ".gltf")
-        {
-            task = LoadModelThumbnail(pathStr);
-        }
+    const bool isImage = ext == ".png" || ext == ".jpg" || ext == ".tga" || ext == ".bmp";
+    const bool isModel = ext == ".fbx" || ext == ".obj" || ext == ".gltf";
 
-        if (task)
-        {
-            std::lock_guard lock(m_UploadMutex);
-            m_UploadTasks.push_back(std::move(task.value()));
-        }
-        else
-        {
-            // 실패 처리: 메인 쓰레드에서 nullptr 캐싱하도록 Width=0인 빈 태스크 전달
-            ThumbnailUploadTask failTask;
-            failTask.AssetPath = pathStr;
-            failTask.Width = 0;
-            std::lock_guard lock(m_UploadMutex);
-            m_UploadTasks.push_back(std::move(failTask));
-        }
-        return EResult::Success;
-    });
+    if (!isImage && !isModel)
+    {
+        m_ThumbnailCache.emplace(key, nullptr);
+        return nullptr;
+    }
+
+    const Engine::uint64 requestId = ++m_NextRequestId;
+    m_LoadingPaths.emplace(key, requestId);
+
+    try
+    {
+        AssetManager::Get().ExecuteAsync([this, key, requestId, isImage]() -> EResult
+            {
+                ThumbnailUploadTask task;
+                EResult result = EResult::Success;
+
+                try
+                {
+                    const filesystem::path path(key);
+                    auto decoded = isImage ? LoadImageThumbnail(path) : LoadModelThumbnail(path);
+
+                    if (decoded)
+                        task = std::move(*decoded);
+                }
+                catch (const std::exception& error)
+                {
+                    BAM_LOG(Error, "Editor", "Asset",
+                        "Thumbnail generation failed: path={}, error={}", key, error.what());
+                    result = EResult::Fail;
+                }
+                catch (...)
+                {
+                    BAM_LOG(Error, "Editor", "Asset",
+                        "Thumbnail generation threw an unknown exception: path={}", key);
+                    result = EResult::Fail;
+                }
+
+                task.AssetPath = key;
+                task.RequestId = requestId;
+
+                {
+                    std::lock_guard lock(m_UploadMutex);
+                    m_UploadTasks.push_back(std::move(task));
+                }
+
+                return result;
+            });
+    }
+    catch (...)
+    {
+        m_LoadingPaths.erase(key);
+        m_ThumbnailCache.emplace(key, nullptr);
+        BAM_LOG(Error, "Editor", "Asset", "Failed to queue thumbnail generation: path={}", key);
+    }
 
     return nullptr;
 }
 
-void AssetCache::ClearCache(const filesystem::path& assetPath)
+void AssetCache::RequestInvalidate(const filesystem::path& assetPath)
 {
-    auto it = m_ThumbnailCache.find(assetPath.string());
-
-    if (it == m_ThumbnailCache.end())
+    const std::string key = ThumbnailCacheKey(assetPath);
+    if (key.empty())
         return;
 
-    Safe_Release(it->second);
-    m_ThumbnailCache.erase(it);
+    std::lock_guard lock(m_UploadMutex);
+    m_PendingInvalidations.insert(key);
 }
+
+void AssetCache::ClearCache(const filesystem::path& assetPath)
+{
+    const std::string key = ThumbnailCacheKey(assetPath);
+    if (key.empty())
+        return;
+
+    // 캐시가 아직 없더라도 진행 중인 요청은 무효화해야 합니다.
+    m_LoadingPaths.erase(key);
+
+    const auto cached = m_ThumbnailCache.find(key);
+    if (cached == m_ThumbnailCache.end())
+        return;
+
+    Safe_Release(cached->second);
+    m_ThumbnailCache.erase(cached);
+}
+
 void AssetCache::ClearAll()
 {
-	for (auto& [path, texture] : m_ThumbnailCache)
-	{
-		Safe_Release(texture);
-	}
-	m_ThumbnailCache.clear();
+    m_LoadingPaths.clear();
+
+    for (auto& [path, texture] : m_ThumbnailCache)
+        Safe_Release(texture);
+
+    m_ThumbnailCache.clear();
+
+    std::vector<ThumbnailUploadTask> discarded;
+
+    {
+        std::lock_guard lock(m_UploadMutex);
+        discarded.swap(m_UploadTasks);
+        m_PendingInvalidations.clear();
+    }
+
+    // m_NextRequestId는 초기화하지 않습니다.
+    // 이전 작업의 번호와 새 요청의 번호가 다시 같아지는 것을 막습니다.
 }
 
 std::optional<AssetCache::ThumbnailUploadTask> AssetCache::LoadImageThumbnail(const filesystem::path& assetPath)

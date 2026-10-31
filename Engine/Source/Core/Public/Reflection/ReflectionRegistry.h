@@ -69,6 +69,7 @@ public:
     void Free() override;
 
     [[nodiscard]] const reflection::Registry& GetRegistry() const noexcept { return m_Registry; }
+    [[nodiscard]] reflection::Registry& GetMutableRegistry() noexcept { return m_Registry; }
     [[nodiscard]] const archive_reflection::PropertyCodecs& GetPropertyCodecs() const noexcept { return m_Codecs; }
     [[nodiscard]] const reflection::RegistrationResult& GetRegistrationResult() const noexcept
     {

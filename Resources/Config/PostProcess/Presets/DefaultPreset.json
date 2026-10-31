@@ -1,0 +1,73 @@
+{
+    "Effects": [
+        {
+            "Enabled": false,
+            "Name": "Tone Mapping (ACES)",
+            "Parameters": {
+                "Exposure": 1,
+                "Gamma": 2.200000047683716
+            }
+        },
+        {
+            "Enabled": false,
+            "Name": "Bloom",
+            "Parameters": {
+                "Intensity": 1,
+                "Scatter": 0.699999988079071,
+                "SoftKnee": 0.5,
+                "Threshold": 1
+            }
+        },
+        {
+            "Enabled": false,
+            "Name": "Color Adjustments",
+            "Parameters": {
+                "Brightness": 0,
+                "Contrast": 1,
+                "Saturation": 1
+            }
+        },
+        {
+            "Enabled": false,
+            "Name": "Vignette",
+            "Parameters": {
+                "Intensity": 0.4000000059604645,
+                "Roundness": 1,
+                "Smoothness": 0.5
+            }
+        },
+        {
+            "Enabled": false,
+            "Name": "Chromatic Aberration",
+            "Parameters": {
+                "Falloff": 1.5,
+                "Intensity": 0.004999999888241291
+            }
+        },
+        {
+            "Enabled": false,
+            "Name": "Film Grain",
+            "Parameters": {
+                "Intensity": 0.05000000074505806,
+                "LuminanceBias": 0.5,
+                "Scale": 1
+            }
+        },
+        {
+            "Enabled": false,
+            "Name": "Lens Distortion",
+            "Parameters": {
+                "CubicDistortion": 0,
+                "Distortion": 0,
+                "Scale": 1
+            }
+        },
+        {
+            "Enabled": false,
+            "Name": "Sharpen",
+            "Parameters": {
+                "Sharpness": 0.5
+            }
+        }
+    ]
+}

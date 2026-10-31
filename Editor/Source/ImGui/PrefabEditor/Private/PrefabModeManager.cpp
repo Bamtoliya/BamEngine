@@ -10,6 +10,7 @@
 #include "NotificationManager.h"
 #include "LocalizationManager.h"
 #include <archive/JsonArchive.h>
+#include "Application.h"
 
 IMPLEMENT_LAZY_SINGLETON(PrefabModeManager)
 
@@ -129,6 +130,10 @@ bool PrefabModeManager::SavePrefab()
 
     if (result)
     {
+        auto& history = Application::Get().GetEditHistory();
+        if (history.CanFinalizeEditsFor(m_PrefabScene))
+            history.MarkSaved();
+
         m_HasUnsavedChanges = false;
         NotificationManager::Get().AddNotification(LOCAL("ResourceType.Prefab"), LOCAL_FMT("Notification.PrefabSaved", m_CurrentPrefabPath.filename().string()), ELogLevel::Info, 3.0f);
         return true;
@@ -223,9 +228,8 @@ void PrefabModeManager::DrawViewportBanner()
         ImGui::TextUnformatted(LOCAL_CSTR("PrefabEditor.UnsavedChangesPrompt"));
         ImGui::Spacing();
 
-        if (ImGui::Button(LOCAL_CSTR("PrefabEditor.Save"), ImVec2(100, 0)))
+        if (ImGui::Button(LOCAL_CSTR("PrefabEditor.Save"), ImVec2(100, 0)) && SavePrefab())
         {
-            SavePrefab();
             ImGui::CloseCurrentPopup();
             ExitPrefabMode(true);
         }

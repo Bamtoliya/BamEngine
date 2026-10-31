@@ -16,7 +16,9 @@
 #include <functional>
 #include <optional>
 #include <utility>
+#include <span>
 #include <any>
+#include <system_error>
 
 namespace archive
 {
@@ -71,6 +73,17 @@ namespace archive
         [[nodiscard]] ArchiveResult WriteArray(std::string_view key, const Range& values)
         {
             using T = std::ranges::range_value_t<const Range>;
+            if constexpr (std::same_as<T, std::uint8_t> &&
+                std::ranges::contiguous_range<const Range> && std::ranges::sized_range<const Range>)
+            {
+                const auto bytes = std::span<const std::uint8_t>{
+                    std::ranges::data(values), std::ranges::size(values)
+                };
+                const auto result = WriteByteArrayValues(key, bytes);
+
+                if (result.Code != ArchiveErrorCode::UnsupportedType)
+                    return result;
+            }
             std::vector<ArchiveScalarValue> candidate;
 
             if constexpr (std::ranges::sized_range<const Range>)
@@ -256,6 +269,14 @@ namespace archive
         template<ArchiveScalar T>
         [[nodiscard]] ArchiveResult ReadArray(std::string_view key, std::vector<T>& values) const
         {
+            if constexpr (std::same_as<T, std::uint8_t>)
+            {
+                const auto result = ReadByteArrayValues(key, values);
+
+                if (result.Code != ArchiveErrorCode::UnsupportedType)
+                    return result;
+            }
+
             std::vector<ArchiveScalarValue> sources;
             const auto result = ReadArrayValues(key, GetScalarType<T>(), sources);
 
@@ -723,6 +744,7 @@ namespace archive
         [[nodiscard]] ArchiveResult LoadFromFile(const std::filesystem::path& path);
         // 이미 인코딩한 문서 바이트를 그대로 저장합니다.
         [[nodiscard]] static ArchiveResult SaveEncodedToFile(const std::filesystem::path& path, std::string_view document);
+        [[nodiscard]] static ArchiveResult SaveEncodedToFile(const std::filesystem::path& path, std::string_view document, std::error_code& fileError);
 
         [[nodiscard]] virtual ArchiveResult GetMapSize(std::string_view key, std::size_t& size) const = 0;
 
@@ -755,6 +777,16 @@ namespace archive
         virtual ArchiveResult ReadObjectArrayValues(std::string_view key, const ObjectArrayReader& readObject) const = 0;
         using ObjectMapKeyReader = std::function<ArchiveResult(std::size_t, const ArchiveScalarValue&)>;
         virtual ArchiveResult ReadObjectMapValues(std::string_view key, ArchiveScalarType keyType, const ObjectMapKeyReader& readKey, const ObjectArrayReader& readValue) const = 0;
+
+        virtual ArchiveResult WriteByteArrayValues(std::string_view key, std::span<const std::uint8_t>)
+        {
+            return { ArchiveErrorCode::UnsupportedType, std::string{ key } };
+        }
+
+        virtual ArchiveResult ReadByteArrayValues(std::string_view key, std::vector<std::uint8_t>&) const
+        {
+            return { ArchiveErrorCode::UnsupportedType, std::string{ key } };
+        }
         
     private:
         template<typename T>

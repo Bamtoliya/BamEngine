@@ -2,9 +2,7 @@
 
 #include "Editor_Includes.h"
 #include "Components/Render/CameraComponent.h"
-
 #include <entt/entt.hpp>
-#include <string>
 
 BEGIN(Engine)
 class Scene;

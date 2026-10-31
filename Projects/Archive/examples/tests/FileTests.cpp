@@ -186,6 +186,25 @@ namespace archive_tests
         if (replacement.SaveToFile(blockedDirectory).Code != archive::ArchiveErrorCode::FileWriteFailed)
             return Fail("Replacement into a directory was accepted.");
 
+        const char* encodedReplacement = R"({"Replacement":99})";
+        std::error_code saveError;
+
+        const auto failedSave =
+            archive::IArchive::SaveEncodedToFile(blockedDirectory, encodedReplacement, saveError);
+
+        if (failedSave.Code != archive::ArchiveErrorCode::FileWriteFailed || !saveError)
+            return Fail("Replacement failure did not report its filesystem error.");
+
+        const auto successfulSave =
+            archive::IArchive::SaveEncodedToFile(filePath, encodedReplacement, saveError);
+
+        if (!successfulSave || saveError)
+            return Fail("Successful saving retained a previous filesystem error.");
+
+        if (!replacementReader.LoadFromFile(filePath) ||
+            !replacementReader.Read("Replacement", replacementValue) || replacementValue != 99)
+            return Fail("Encoded replacement contents differ.");
+
         archive::JsonArchive protectedReader;
         std::string expectedProtected, actualProtected;
         if (!writer.Encode(expectedProtected) || !protectedReader.LoadFromFile(protectedPath) ||

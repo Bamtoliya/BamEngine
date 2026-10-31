@@ -9,7 +9,6 @@
 #include "RenderTargetManager.h"
 #include "RenderPassManager.h"
 #include "Renderer.h"
-#include <limits>
 
 namespace
 {

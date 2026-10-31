@@ -236,6 +236,12 @@ namespace archive
             return { ArchiveErrorCode::MissingField, std::string{ key } };
         }
 
+        if (const auto* bytes = it->second.get_if<Value::bytes_t>())
+        {
+            size = bytes->size();
+            return {};
+        }
+
         const auto* elements = it->second.get_if<Value::array_t>();
 
         if (!elements)
@@ -536,34 +542,40 @@ namespace archive
         return {};
     }
 
-    ArchiveResult GlazeArchiveBase::ReadArrayElementValues(std::string_view key,
-        const ArrayElementCallback& readElement) const
+    ArchiveResult GlazeArchiveBase::ReadArrayElementValues(std::string_view key, const ArrayElementCallback& readElement) const
     {
         const auto* object = FindObject(m_Root, m_ObjectPath);
         if (!object)
-        {
             return { ArchiveErrorCode::InvalidOperation, std::string{ key } };
-        }
+
         const auto found = object->find(key);
         if (found == object->end())
-        {
             return { ArchiveErrorCode::MissingField, std::string{ key } };
-        }
+
         const auto* elements = found->second.get_if<Value::array_t>();
-        if (!elements)
-        {
+        const auto* bytes = found->second.get_if<Value::bytes_t>();
+        if (!elements && !bytes)
             return InvalidValue(key);
-        }
-        for (std::size_t index = 0; index < elements->size(); ++index)
+
+        const std::size_t count = elements ? elements->size() : bytes->size();
+
+        for (std::size_t index = 0; index < count; ++index)
         {
+            Value element;
+
+            if (bytes)
+                element.data = static_cast<std::uint64_t>((*bytes)[index]);
+            else
+                element = (*elements)[index];
+
             ObjectArchive temporary;
-            temporary.m_Root.get_object().insert_or_assign("Value", (*elements)[index]);
+            temporary.m_Root.get_object().emplace("Value", std::move(element));
+
             const auto result = readElement(temporary, "Value", index);
             if (!result)
-            {
                 return result;
-            }
         }
+
         return {};
     }
     ArchiveResult GlazeArchiveBase::WriteObjectMapValues(std::string_view key, std::size_t size, ArchiveScalarType,
@@ -697,6 +709,18 @@ namespace archive
         if (it == object->end())
         {
             return { ArchiveErrorCode::MissingField, std::string{ key } };
+        }
+
+        if (const auto* bytes = it->second.get_if<Value::bytes_t>())
+        {
+            std::vector<ArchiveScalarValue> candidate;
+            candidate.reserve(bytes->size());
+
+            for (const auto byte : *bytes)
+                candidate.emplace_back(byte);
+
+            values.swap(candidate);
+            return {};
         }
 
         const auto* elements = it->second.get_if<Value::array_t>();
@@ -961,5 +985,80 @@ namespace archive
     }
 #pragma endregion
 
+
+    ArchiveResult GlazeArchiveBase::WriteByteArrayValues(std::string_view key, std::span<const std::uint8_t> values)
+    {
+        auto* object = FindObject(m_Root, m_ObjectPath);
+        if (!object)
+            return { ArchiveErrorCode::InvalidOperation, std::string{ key } };
+
+        Value candidate;
+        candidate.data = Value::bytes_t{};
+        auto& bytes = std::get<Value::bytes_t>(candidate.data);
+
+        if (values.size() > bytes.max_size())
+            return InvalidValue(key);
+
+        if (!values.empty())
+            bytes.assign(values.begin(), values.end());
+
+        object->insert_or_assign(std::string{ key }, std::move(candidate));
+        return {};
+    }
+
+    ArchiveResult GlazeArchiveBase::ReadByteArrayValues(std::string_view key, std::vector<std::uint8_t>& values) const
+    {
+        const auto* object = FindObject(m_Root, m_ObjectPath);
+        if (!object)
+            return { ArchiveErrorCode::InvalidOperation, std::string{ key } };
+
+        const auto found = object->find(key);
+        if (found == object->end())
+            return { ArchiveErrorCode::MissingField, std::string{ key } };
+
+        if (const auto* bytes = found->second.get_if<Value::bytes_t>())
+        {
+            auto candidate = *bytes;
+            values.swap(candidate);
+            return {};
+        }
+
+        // 기존 JSON·BEVE의 숫자 배열도 읽습니다.
+        const auto* elements = found->second.get_if<Value::array_t>();
+        if (!elements)
+            return InvalidValue(key);
+
+        std::vector<std::uint8_t> candidate;
+        if (elements->size() > candidate.max_size())
+            return InvalidValue(key);
+
+        candidate.reserve(elements->size());
+
+        for (const auto& element : *elements)
+        {
+            std::uint64_t number = 0;
+
+            if (const auto* unsignedValue = element.get_if<std::uint64_t>())
+            {
+                number = *unsignedValue;
+            }
+            else if (const auto* signedValue = element.get_if<std::int64_t>(); signedValue && *signedValue >= 0)
+            {
+                number = static_cast<std::uint64_t>(*signedValue);
+            }
+            else
+            {
+                return InvalidValue(key);
+            }
+
+            if (number > 255)
+                return InvalidValue(key);
+
+            candidate.push_back(static_cast<std::uint8_t>(number));
+        }
+
+        values.swap(candidate);
+        return {};
+    }
 
 }

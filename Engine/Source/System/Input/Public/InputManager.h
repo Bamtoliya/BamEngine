@@ -51,10 +51,12 @@ public:
 	bool IsKeyButtonDown(EKeyCode key);
 	bool IsKeyButtonUp(EKeyCode key);
 	bool IsKeyButtonPressed(EKeyCode key);
+	bool IsKeyButtonRepeated(EKeyCode key) const;
 public:
 	bool IsKeyButtonDown(const string& key);
 	bool IsKeyButtonUp(const string& key);
 	bool IsKeyButtonPressed(const string& key);
+	bool IsKeyButtonRepeated(const string& key) const;
 	bool IsCtrlPressed() { return IsKeyButtonPressed(EKeyCode::LCtrl) || IsKeyButtonPressed(EKeyCode::RCtrl); }
 	bool IsShiftPressed() { return IsKeyButtonPressed(EKeyCode::LShift) || IsKeyButtonPressed(EKeyCode::RShift); }
 	bool IsAltPressed() { return IsKeyButtonPressed(EKeyCode::LAlt) || IsKeyButtonPressed(EKeyCode::RAlt); }
@@ -105,10 +107,9 @@ public:
 
 #pragma region Member Variables
 private:
-	array<uint8, SDL_SCANCODE_COUNT> m_CurrentKeyStates{};
-	array<uint8, SDL_SCANCODE_COUNT> m_PreviousKeyStates{};
-	array<bool, SDL_SCANCODE_COUNT> m_KeyDownEvents{}, m_KeyUpEvents{};
-	array<bool, SDL_SCANCODE_COUNT> m_PendingKeyDown{}, m_PendingKeyUp{};
+	array<uint8, SDL_SCANCODE_COUNT> m_CurrentKeyStates{}, m_PreviousKeyStates{};
+	array<bool, SDL_SCANCODE_COUNT> m_KeyDownEvents{}, m_KeyUpEvents{}, m_KeyRepeatEvents{};
+	array<bool, SDL_SCANCODE_COUNT> m_PendingKeyDown{}, m_PendingKeyUp{}, m_PendingKeyRepeat{};
 
 	array<uint8, static_cast<uint32>(EMouseButton::Count)> m_CurrentMouseButtonStates{};
 	array<uint8, static_cast<uint32>(EMouseButton::Count)> m_PreviousMouseButtonStates{};

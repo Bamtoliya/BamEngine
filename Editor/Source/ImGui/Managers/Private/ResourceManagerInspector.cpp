@@ -1,8 +1,5 @@
 ﻿#include "ResourceManagerInspector.h"
 
-#include <algorithm>
-#include <cfloat>
-
 BEGIN(Editor)
 
 ResourceManagerInspector::ResourceManagerInspector()
@@ -151,7 +148,7 @@ void ResourceManagerInspector::DrawTable()
 
     ImGui::TableSetupColumn(LOCAL_LABEL("ResourceInspector.Path").c_str(), ImGuiTableColumnFlags_WidthStretch, 1.5f);
 
-    ImGui::TableSetupColumn(LOCAL_LABEL("ResourceInspector.Refs").c_str(), ImGuiTableColumnFlags_WidthFixed, 55.0f);
+    ImGui::TableSetupColumn(LOCAL_LABEL("ResourceInspector.Refs").c_str(), ImGuiTableColumnFlags_WidthFixed, 80.0f);
 
     ImGui::TableHeadersRow();
 

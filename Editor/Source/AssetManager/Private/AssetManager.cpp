@@ -2,8 +2,7 @@
 
 #include "AssetManager.h"
 #include "Logger.h"
-#include <exception>
-#include <cctype>
+#include "ModelImportTask.h"
 
 #pragma region Importer
 #include "SpriteImporter.h"
@@ -63,11 +62,14 @@ void AssetManager::Free()
 {
 	for (auto& task : m_ActiveTasks)
 	{
-		if (task.valid()) task.wait();
+		if (task.Future.valid())
+			task.Future.wait();
 	}
+
 	for (auto& task : m_PendingTasks)
 	{
-		if (task.valid()) task.wait();
+		if (task.Future.valid())
+			task.Future.wait();
 	}
 	m_ActiveTasks.clear();
 	m_PendingTasks.clear();
@@ -102,49 +104,71 @@ void AssetManager::Update(f32 dt)
 
 	Engine::uint64 succeededThisUpdate = 0;
 
-	for (auto it = m_ActiveTasks.begin();
-		it != m_ActiveTasks.end(); )
+	using Clock = std::chrono::steady_clock;
+	const auto completionStart = Clock::now();
+	const auto finalizeDeadline = completionStart + std::chrono::milliseconds(2);
+	bool ranFinalizer = false;
+
+	for (auto it = m_ActiveTasks.begin(); it != m_ActiveTasks.end(); )
 	{
-		if (it->wait_for(std::chrono::seconds(0)) !=
-			std::future_status::ready)
+		std::optional<EResult> completedResult;
+
+		try
+		{
+			if (!it->PreparedResult)
+			{
+				if (it->Future.wait_for(std::chrono::seconds(0)) != std::future_status::ready)
+				{
+					++it;
+					continue;
+				}
+
+				it->PreparedResult = it->Future.get();
+			}
+
+			if (it->Complete)
+			{
+				if (ranFinalizer && Clock::now() >= finalizeDeadline)
+				{
+					++it;
+					continue;
+				}
+
+				ranFinalizer = true;
+				completedResult = it->Complete(*it->PreparedResult);
+			}
+			else
+			{
+				completedResult = *it->PreparedResult;
+			}
+		}
+		catch (const std::exception& exception)
+		{
+			completedResult = EResult::Fail;
+			BAM_LOG(Error, "Editor", "Asset", "Async task threw an exception: {}", exception.what());
+		}
+		catch (...)
+		{
+			completedResult = EResult::Fail;
+			BAM_LOG(Error, "Editor", "Asset", "Async task threw an unknown exception.");
+		}
+
+		if (!completedResult)
 		{
 			++it;
 			continue;
 		}
 
-		EResult result = EResult::Fail;
-
-		// 비동기 작업에서 발생한 C++ 예외는 get()에서 다시 전달됩니다.
-		try
-		{
-			result = it->get();
-		}
-		catch (const std::exception& exception)
-		{
-			BAM_LOG(
-				Error,
-				"Editor", "Asset",
-				"Async task threw an exception: {}",
-				exception.what());
-		}
-		catch (...)
-		{
-			BAM_LOG(
-				Error, "Editor", "Asset",
-				"Async task threw an unknown exception");
-		}
-
-		if (IsFailure(result))
-		{
-			++m_FailedTasks;
-			BAM_LOG(Error, "Editor", "Asset", "Async task failed");
-		}
-		else
+		if (*completedResult == EResult::Success)
 		{
 			++m_SucceededTasks;
 			++succeededThisUpdate;
-
-			BAM_LOG(Info, "Editor", "Asset", "Async task succeeded");
+			BAM_LOG(Info, "Editor", "Asset", "Async task succeeded.");
+		}
+		else
+		{
+			++m_FailedTasks;
+			BAM_LOG(Error, "Editor", "Asset", "Async task failed: {}", ResultToString(*completedResult));
 		}
 
 		it = m_ActiveTasks.erase(it);
@@ -156,6 +180,18 @@ void AssetManager::Update(f32 dt)
 	{
 		m_OnAsyncDelegate.Broadcast();
 	}
+	if (ranFinalizer)
+	{
+		const double completionMs =
+			std::chrono::duration<double, std::milli>(Clock::now() - completionStart).count();
+
+		if (completionMs >= 8.0)
+		{
+			BAM_LOG(Warn, "Editor", "Asset",
+				"Async completion frame timing: completion_ms={:.3f}, remaining_tasks={}",
+				completionMs, m_ActiveTasks.size());
+		}
+	}
 }
 #pragma endregion
 
@@ -164,7 +200,7 @@ void AssetManager::ExecuteAsync(std::function<EResult()> task)
 {
 	auto futureTask = std::async(std::launch::async, task);
 	std::lock_guard lock(m_PendingMutex);
-	m_PendingTasks.push_back(std::move(futureTask));
+	m_PendingTasks.push_back({ std::move(futureTask), {} });
 }
 EResult AssetManager::Import(const filesystem::path& sourcePath, const filesystem::path& destDir, void* arg)
 {
@@ -183,35 +219,86 @@ void AssetManager::ImportAsync(const filesystem::path& sourcePath, const filesys
 	for (char& character : extension)
 		character = static_cast<char>(std::tolower(static_cast<unsigned char>(character)));
 
-	if (extension == ".fbx" || extension == ".obj" || extension == ".gltf")
+	const auto readyFuture = [](EResult result)
+		{
+			std::promise<EResult> promise;
+			auto future = promise.get_future();
+			promise.set_value(result);
+			return future;
+		};
+
+	AsyncTask pending;
+
+	try
 	{
-		// 현재 모델 Import는 메인 스레드에서 동기로 검증합니다.
-		// 완료 알림과 통계는 기존 Update() 경로를 사용합니다.
-		std::promise<EResult> completion;
-		auto future = completion.get_future();
-
-		try
+		const bool isModel = extension == ".fbx" || extension == ".obj" || extension == ".gltf";
+		if (isModel)
 		{
-			completion.set_value(Import(sourcePath, destDir, arg));
-		}
-		catch (...)
-		{
-			completion.set_exception(std::current_exception());
-		}
+			const auto found = m_Importers.find(extension);
+			auto* importer = found != m_Importers.end() ?
+				dynamic_cast<ModelImporter*>(found->second) : nullptr;
 
-		std::lock_guard lock(m_PendingMutex);
-		m_PendingTasks.push_back(std::move(future));
-		return;
+			std::unique_ptr<ImportJob> job;
+			EResult result = importer ?
+				importer->CreateJob(sourcePath, destDir, arg, job) : EResult::NotImplemented;
+
+			std::shared_ptr<ModelImportTask> task;
+			if (result == EResult::Success)
+			{
+				task = std::dynamic_pointer_cast<ModelImportTask>(
+					std::shared_ptr<ImportJob>(std::move(job)));
+
+				if (!task)
+					result = EResult::InvalidArgument;
+			}
+
+			if (result != EResult::Success)
+			{
+				BAM_LOG(Error, "Editor", "Asset", "Model import request failed: source={}, result={}",
+					sourcePath.string(), ResultToString(result));
+				pending.Future = readyFuture(result);
+			}
+			else
+			{
+				pending.Complete = [task, importer](EResult prepareResult) -> std::optional<EResult>
+					{
+						if (prepareResult != EResult::Success)
+						{
+							BAM_LOG(Error, "Editor", "Asset", "Model preparation failed: source={}, code={}, error={}",
+								task->GetRequest().SourcePath.string(),
+								static_cast<int>(task->GetErrorCode()), task->GetErrorMessage());
+							return prepareResult;
+						}
+
+						return importer->FinalizeStep(*task);
+					};
+
+				pending.Future = std::async(std::launch::async, [task]() -> EResult
+					{
+						return task->Prepare();
+					});
+			}
+		}
+		else
+		{
+			pending.Future = std::async(std::launch::async,
+				[this, sourcePath, destDir, arg]() -> EResult
+				{
+					return Import(sourcePath, destDir, arg);
+				});
+		}
+	}
+	catch (...)
+	{
+		pending.Complete = {};
+
+		std::promise<EResult> failure;
+		pending.Future = failure.get_future();
+		failure.set_exception(std::current_exception());
 	}
 
-	auto futureTask = std::async(std::launch::async, [this, sourcePath, destDir, arg]() -> EResult
-		{
-			// 이 안은 백그라운드 스레드이므로 여기서 무거운 Import를 호출해도 UI가 멈추지 않습니다!
-			return this->Import(sourcePath, destDir, arg);
-		});
-
 	std::lock_guard lock(m_PendingMutex);
-	m_PendingTasks.push_back(std::move(futureTask));
+	m_PendingTasks.push_back(std::move(pending));
 }
 
 EResult AssetManager::Export(const filesystem::path& sourcePath, const filesystem::path& destDir, void* arg)
@@ -233,7 +320,7 @@ void AssetManager::ExportAsync(const filesystem::path& sourcePath, const filesys
 		});
 
 	std::lock_guard lock(m_PendingMutex);
-	m_PendingTasks.push_back(std::move(futureTask));
+	m_PendingTasks.push_back({ std::move(futureTask), {} });
 }
 #pragma endregion
 

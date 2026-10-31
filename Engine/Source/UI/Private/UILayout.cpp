@@ -1,8 +1,5 @@
 ﻿#include "UILayout.h"
 #include "CoreComponents.h"
-#include <cmath>
-#include <unordered_set>
-#include <algorithm>
 
 namespace
 {

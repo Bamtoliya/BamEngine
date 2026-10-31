@@ -20,6 +20,7 @@
 #include <archive/JsonArchive.h>
 #include "NotificationManager.h"
 #include "EntityClipboard.h"
+#include "PrefabModeManager.h"
 #include "Components/Core/PrefabInstanceComponent.h"
 
 
@@ -211,29 +212,6 @@ void HierarchyPanel::Draw()
 
 		DrawEntityHierarchy(currentScene);
 		DrawSceneContextMenu(currentScene);
-		if (ImGui::BeginDragDropTarget())
-		{
-			if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM"))
-			{
-				std::filesystem::path p((const wchar_t*)payload->Data);
-				std::string filename = p.filename().string();
-				for (char& c : filename) c = static_cast<char>(tolower(c));
-				if (filename.ends_with(".bamprefab.json") || filename.ends_with(".prefab.json") || p.extension() == ".bamprefab")
-				{
-					archive::JsonArchive ar;
-					Engine::Entity* spawned = nullptr;
-					auto& history = Application::Get().GetEditHistory();
-					auto before = history.Enabled() ? SceneEditSnapshot::Capture(*currentScene) : SceneEditSnapshot{};
-					if (SceneManager::Get().InstantiatePrefab(ar, p.wstring(), spawned, nullptr) == Engine::EResult::Success && spawned)
-					{
-						if (before) history.Record(std::move(before), SceneEditSnapshot::Capture(*currentScene), "UI_HISTORY_INSTANTIATE_PREFAB");
-						SelectionManager::Get().SetSelectedEntity(spawned);
-						NotificationManager::Get().AddNotification(LOCAL("ResourceType.Prefab"), LOCAL_FMT("Notification.PrefabInstantiated", p.stem().string()), ELogLevel::Info, 3.0f);
-					}
-				}
-			}
-			ImGui::EndDragDropTarget();
-		}
     }
     else
     {
@@ -436,6 +414,28 @@ void HierarchyPanel::DrawEntityHierarchy(Scene* scene)
 		std::unordered_set<entt::entity> deleteSet(action.DeleteEntities.begin(), action.DeleteEntities.end());
 		std::vector<Engine::Entity*> rootsToDelete;
 		auto& registry = scene->GetRegistry();
+		auto& prefabMode = PrefabModeManager::Get();
+		if (prefabMode.IsInPrefabMode() && prefabMode.GetPrefabScene() == scene)
+		{
+			if (const auto* root = prefabMode.GetRootEntity())
+			{
+				auto current = root->GetEntityHandle();
+				std::unordered_set<entt::entity> visited;
+
+				while (current != entt::null)
+				{
+					if (!visited.insert(current).second || deleteSet.contains(current))
+					{
+						m_HierarchyMessage = "Hierarchy.PrefabRootDeleteBlocked";
+						action.DeleteEntities.clear();
+						break;
+					}
+
+					const auto* hierarchy = registry.try_get<Engine::HierarchyComponent>(current);
+					current = hierarchy ? hierarchy->parent : entt::null;
+				}
+			}
+		}
 		for (auto handle : action.DeleteEntities)
 		{
 			entt::entity current = handle;
@@ -461,13 +461,27 @@ void HierarchyPanel::DrawEntityHierarchy(Scene* scene)
 		{
 			auto& history = Application::Get().GetEditHistory();
 			auto before = history.Enabled() ? SceneEditSnapshot::Capture(*scene) : SceneEditSnapshot{};
-			selection.ClearSelection();
-			for (auto* ent : rootsToDelete)
-			{
-				(void)scene->DestroyEntity(*ent);
-			}
+
 			if (before)
-				history.Record(std::move(before), SceneEditSnapshot::Capture(*scene), "UI_HISTORY_DELETE");
+			{
+				bool deleted = false;
+				selection.ClearSelection();
+
+				for (auto* ent : rootsToDelete)
+				{
+					if (scene->DestroyEntity(*ent))
+						deleted = true;
+				}
+
+				if (deleted)
+				{
+					history.Record(std::move(before), SceneEditSnapshot::Capture(*scene), "UI_HISTORY_DELETE");
+
+					auto& prefabMode = PrefabModeManager::Get();
+					if (prefabMode.IsInPrefabMode() && prefabMode.GetPrefabScene() == scene)
+						prefabMode.MarkDirty();
+				}
+			}
 		}
 	}
 	if (action.MoveUp != entt::null || action.MoveDown != entt::null)
@@ -535,7 +549,8 @@ void HierarchyPanel::DrawEntityHierarchy(Scene* scene)
 	}
 	if (action.UnpackPrefab != entt::null)
 	{
-		auto before = history.CanRecord() ? SceneEditSnapshot::Capture(*scene) : std::nullopt;
+		auto& history = Application::Get().GetEditHistory();
+		auto before = history.Enabled() ? SceneEditSnapshot::Capture(*scene) : SceneEditSnapshot{};
 		scene->GetRegistry().remove<Engine::PrefabInstanceComponent>(action.UnpackPrefab);
 		if (before)
 			history.Record(std::move(before), SceneEditSnapshot::Capture(*scene), "UI_HISTORY_UNPACK_PREFAB");
@@ -547,12 +562,39 @@ void HierarchyPanel::DrawEntityHierarchy(Scene* scene)
 		archive::JsonArchive ar;
 		Engine::Entity* spawned = nullptr;
 		auto& history = Application::Get().GetEditHistory();
-		auto before = history.Enabled() ? SceneEditSnapshot::Capture(*scene) : SceneEditSnapshot{};
+		auto& history = Application::Get().GetEditHistory();
+		if (!history.Enabled()) return;
+
+		auto* parentEntity = action.DropPrefabTarget != entt::null ? scene->FindEntity(action.DropPrefabTarget) : nullptr;
+		if (action.DropPrefabTarget != entt::null && !parentEntity)
+		{
+			m_HierarchyMessage = "UI_HIERARCHY_BAD_DROP";
+			return;
+		}
+
+		auto before = SceneEditSnapshot::Capture(*scene);
+		if (!before)
+		{
+			m_HierarchyMessage = "UI_HISTORY_CAPTURE_FAILED";
+			return;
+		}
+
+		archive::JsonArchive ar;
+		Engine::Entity* spawned = nullptr;
 		if (SceneManager::Get().InstantiatePrefab(ar, action.DropPrefabFile, spawned, parentEntity) == Engine::EResult::Success && spawned)
 		{
 			if (before) history.Record(std::move(before), SceneEditSnapshot::Capture(*scene), "UI_HISTORY_INSTANTIATE_PREFAB");
 			SelectionManager::Get().SetSelectedEntity(spawned);
 			NotificationManager::Get().AddNotification(LOCAL("ResourceType.Prefab"), LOCAL_FMT("Notification.PrefabInstantiated", WStrToStr(std::filesystem::path(action.DropPrefabFile).stem().wstring())), ELogLevel::Info, 3.0f);
+			m_RevealEntity = spawned->GetEntityHandle();
+			m_HierarchyMessage.clear();
+		}
+		else
+		{
+			NotificationManager::Get().AddNotification(LOCAL("ResourceType.Prefab"),
+				LOCAL_FMT("Notification.PrefabInstantiateFailed",
+					WStrToStr(std::filesystem::path(action.DropPrefabFile).filename().wstring())),
+				ELogLevel::Error, 3.0f);
 		}
 	}
     if (action.RejectedDrop)

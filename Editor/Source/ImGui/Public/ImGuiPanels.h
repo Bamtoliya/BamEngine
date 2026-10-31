@@ -12,3 +12,4 @@
 #include "EditorActionRegistry.h"
 #include "GraphicSettingPanel.h"
 #include "PostProcessPanel.h"
+#include "HistoryPanel.h"

@@ -13,6 +13,8 @@
 #include "Components/Core/PrefabInstanceComponent.h"
 #include "PrefabModeManager.h"
 #include "SelectionManager.h"
+#include "ReflectionInspectorSupport.h"
+#include <cctype>
 
 namespace
 {
@@ -401,6 +403,30 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
             action.RejectedDrop = true;
         else action.Move = EntityHierarchyMove{ source.Entity, parent };
     };
+    const auto acceptPrefab = [&](entt::entity parent)
+        {
+            const auto* dropped = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM");
+            if (!dropped) return;
+
+            const auto decoded = Editor::DecodeInspectorResourcePath(dropped->Data, dropped->DataSize);
+            if (!decoded)
+            {
+                action.RejectedDrop = true;
+                return;
+            }
+
+            std::string extension = Engine::WStrToStr(std::filesystem::path(*decoded).extension().wstring());
+            for (char& ch : extension) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+
+            if (extension != ".json" && extension != ".bamprefab" && extension != ".prefab")
+            {
+                action.RejectedDrop = true;
+                return;
+            }
+
+            action.DropPrefabFile = *decoded;
+            action.DropPrefabTarget = parent;
+        };
     int rowIndex = 0; // 줄무늬 배경 카운터
     const auto draw = [&](auto&& self, entt::entity entity) -> void
         {
@@ -477,17 +503,7 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
             if (!locked && ImGui::BeginDragDropTarget())
             {
                 acceptMove(entity);
-                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM"))
-                {
-                    std::filesystem::path p((const wchar_t*)payload->Data);
-                    std::string filename = p.filename().string();
-                    for (char& c : filename) c = static_cast<char>(tolower(c));
-                    if (filename.ends_with(".bamprefab.json") || filename.ends_with(".prefab.json") || p.extension() == ".bamprefab")
-                    {
-                        action.DropPrefabFile = p.wstring();
-                        action.DropPrefabTarget = entity;
-                    }
-                }
+                acceptPrefab(entity);
                 ImGui::EndDragDropTarget();
             }
             if (!locked && ImGui::BeginPopupContextItem("EntityActions"))
@@ -521,7 +537,7 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
                             PrefabModeManager::Get().EnterPrefabMode(prefabComp->prefabAssetPath);
                         if (ImGui::MenuItem((std::string(ICON_FA_LOCATION_ARROW " ") + LOCAL("Prefab.Select")).c_str()))
                             SelectionManager::Get().SetSelectedAsset(prefabComp->prefabAssetPath);
-                        if (ImGui::MenuItem((std::string(ICON_FA_UNLINK " ") + LOCAL("Prefab.Unpack")).c_str()))
+                        if (ImGui::MenuItem((std::string(ICON_FA_LINK_SLASH " ") + LOCAL("Prefab.Unpack")).c_str()))
                             action.UnpackPrefab = prefabRoot; // 루트의 컴포넌트만 제거하면 연결 해제 완료!
                     }
                 }
@@ -630,12 +646,20 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
     else if (tree.Roots.empty())
         ImGui::TextDisabled("%s", Text("UI_HIERARCHY_EMPTY", "No entities.").c_str());
     const auto* payload = ImGui::GetDragDropPayload();
-    if (!locked && payload && payload->IsDataType(EntityPayload))
+    const bool entityDrag = payload && payload->IsDataType(EntityPayload);
+    const bool assetDrag = payload && payload->IsDataType("CONTENT_BROWSER_ITEM");
+
+    if (!locked && (entityDrag || assetDrag))
     {
-        ImGui::Button(Text("UI_HIERARCHY_ROOT_DROP", "Drop here to move to root").c_str(), ImVec2(-1.0f, 0.0f));
+        const char* labelKey = assetDrag ? "Hierarchy.DropPrefabRoot" : "UI_HIERARCHY_ROOT_DROP";
+        const std::string label = Text(labelKey) + "###HierarchyRootDrop";
+        const float height = std::max(ImGui::GetFrameHeight(), ImGui::GetContentRegionAvail().y);
+
+        ImGui::Button(label.c_str(), ImVec2(-1.0f, height));
         if (ImGui::BeginDragDropTarget())
         {
             acceptMove(entt::null);
+            acceptPrefab(entt::null);
             ImGui::EndDragDropTarget();
         }
     }

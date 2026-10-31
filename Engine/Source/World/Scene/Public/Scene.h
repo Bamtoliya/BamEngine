@@ -5,14 +5,16 @@
 #include "Entity.h"
 #include "TypeIdentityInterface.h"
 #include "Reflection/ReflectionRegistry.h"
-#include <utility>
 #include <archive/ArchiveResult.h>
+#include "ResourceHandle.h"
 
 BEGIN(archive)
 class IArchive;
 END
 
 BEGIN(Engine)
+class Model;
+class MaterialInterface;
 
 enum class EntityReparentResult { Success, Unchanged, InvalidEntity, InvalidHierarchy, Cycle, InvalidTransform, DepthLimit };
 
@@ -33,7 +35,7 @@ ENABLE_BITMASK_OPERATORS(ESceneFlags)
 CLASS()
 class ENGINE_API Scene : public Base, public ITypeIdentity
 {
-	REFLECT_BASE()
+	REFLECT_CLASS()
 #pragma region Constructor&Destructor
 protected:
 	using DESC = SceneCreateDesc;
@@ -106,6 +108,7 @@ public:
 			return ComponentVisitResult::NotInitialized;
 		return ReflectionRegistry::Get().ForEachComponent(m_LocalRegistry, entity.GetEntityHandle(), visitor);
 	}
+	[[nodiscard]] EResult InstantiateModel(const Model& model, const ResourceHandle<MaterialInterface>& material, Entity*& outRoot);
 private:
 	std::vector<entt::entity> CreateEntities(std::size_t count);
 	Entity& CreateEntityWithId(uint64 id);

@@ -1,16 +1,10 @@
 ﻿#include "TerrainUtility.h"
 #include "Vertex.h"
-#include <vector>
 #include "TerrainComponent.h"
-#include <algorithm>
-#include <cmath>
 #include <stb_image.h>
-#include <cstddef>
-#include <limits>
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <stb_image_write.h>
-#include <filesystem>
 
 namespace
 {
@@ -36,11 +30,26 @@ namespace
 
 Mesh* TerrainUtility::CreateGridMesh(float width, float length, uint32 resolution)
 {
-	if (resolution == 0 || width <= 0.0f || length <= 0.0f) return nullptr;
+	uint32 vertCountX = 0;
+	std::size_t sampleCount = 0;
 
-	const uint32 vertCountX = resolution + 1;
-	const uint32 vertCountZ = resolution + 1;
-	const uint32 totalVertices = vertCountX * vertCountZ;
+	if (!std::isfinite(width) || width <= 0.f ||
+		!std::isfinite(length) || length <= 0.f ||
+		!TryGetGridLayout(resolution, vertCountX, sampleCount))
+		return nullptr;
+
+	const float dx = width / static_cast<float>(resolution);
+	const float dz = length / static_cast<float>(resolution);
+	const float startX = -width * 0.5f;
+	const float startZ = -length * 0.5f;
+
+	if (!std::isfinite(dx) || dx <= 0.f || !std::isfinite(dz) || dz <= 0.f ||
+		!std::isfinite(startX + static_cast<float>(resolution) * dx) ||
+		!std::isfinite(startZ + static_cast<float>(resolution) * dz))
+		return nullptr;
+
+	const uint32 vertCountZ = vertCountX;
+	const uint32 totalVertices = static_cast<uint32>(sampleCount);
 	const uint32 totalQuads = resolution * resolution;
 	const uint32 totalIndices = totalQuads * 6;
 
@@ -48,10 +57,7 @@ Mesh* TerrainUtility::CreateGridMesh(float width, float length, uint32 resolutio
 	std::vector<VertexMaterial> materials(totalVertices);
 	std::vector<uint32> indices(totalIndices);
 
-	const float dx = width / static_cast<float>(resolution);
-	const float dz = length / static_cast<float>(resolution);
-	const float startX = -width * 0.5f;
-	const float startZ = -length * 0.5f;
+	// 여기부터 기존 정점 생성 부분을 유지합니다.
 
 	// 1. 정점 데이터 생성 (XZ 평면, Y=0, UV는 0.0 ~ 1.0)
 	uint32 vIdx = 0;
@@ -127,7 +133,7 @@ bool TerrainUtility::ApplyBrush(TerrainComponent& terrain, const glm::vec3& hitW
 	if (localPos.x < -halfWidth || localPos.x > halfWidth || localPos.z < -halfLength || localPos.z > halfLength)
 		return false;
 	const float radius = params.Radius;
-	// 2. 영향받는 사각 영역(AABB) 정점 인덱스 산출 (전체 순회 방지 최적화)
+	// 2. 영향받는 사각 영역(BoundingBox) 정점 인덱스 산출 (전체 순회 방지 최적화)
 	const float uMin = glm::clamp((localPos.x - radius + halfWidth) / terrain.Width, 0.0f, 1.0f);
 	const float uMax = glm::clamp((localPos.x + radius + halfWidth) / terrain.Width, 0.0f, 1.0f);
 	const float vMin = glm::clamp((localPos.z - radius + halfLength) / terrain.Length, 0.0f, 1.0f);
@@ -189,7 +195,8 @@ bool TerrainUtility::ApplyBrush(TerrainComponent& terrain, const glm::vec3& hitW
 			}
 		}
 	}
-	if (modified) terrain.IsDirty = true;
+	if (modified) terrain.MarkHeightDirty(PixelRect{ minX, minZ, maxX + 1, maxZ + 1 });
+
 	return modified;
 }
 
@@ -240,7 +247,7 @@ bool TerrainUtility::LoadHeightmapFromFile(TerrainComponent& terrain, const std:
 	}
 
 	stbi_image_free(pixels);
-	terrain.IsDirty = true;
+	terrain.MarkHeightDirty();
 	return true;
 }
 
@@ -371,4 +378,17 @@ bool TerrainUtility::ResampleHeightData(const std::vector<f32>& source, uint32 s
 
 	result.swap(candidate);
 	return true;
+}
+
+bool TerrainUtility::TryGetGridLayout(uint32 resolution, uint32& axisCount, std::size_t& sampleCount)
+{
+	if (!TryGetHeightmapSize(resolution, axisCount, sampleCount))
+		return false;
+
+	const uint64 maxBytes = (std::numeric_limits<uint32>::max)();
+	const uint64 quadCount = static_cast<uint64>(resolution) * resolution;
+
+	return sampleCount <= maxBytes / sizeof(VertexPosition) &&
+		sampleCount <= maxBytes / sizeof(VertexMaterial) &&
+		quadCount <= maxBytes / (6 * sizeof(uint32));
 }

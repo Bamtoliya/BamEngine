@@ -494,6 +494,9 @@ EResult ImGuiManager::CreateDefaultPanels()
 	AddImGuiPanel(new ResourceManagerInspector());
 	AddImGuiPanel(new TerrainEditor());
 	AddImGuiPanel(new PostProcessPanel());
+	HistoryPanel* historyPanel = new HistoryPanel();
+	historyPanel->Initialize();
+	AddImGuiPanel(historyPanel);
 
 	GraphicSettingPanelDesc graphicsDesc;
 	graphicsDesc.Window = m_Window;
@@ -536,6 +539,11 @@ EResult ImGuiManager::CreateResourceEditors()
 	MaterialEditor* materialEditor = new MaterialEditor();
 	materialEditor->Close();
 	AddImGuiPanel(materialEditor);
+
+	PrefabEditorPanel* prefabEditor = new PrefabEditorPanel();
+	prefabEditor->Close();
+	AddImGuiPanel(prefabEditor);
+
 	return EResult::Success;
 }
 #pragma endregion
@@ -876,13 +884,15 @@ ImTextureID ImGuiManager::GetImGuiTextureID(const RHITexture* texture) const
 #pragma region Settings
 void ImGuiManager::NotifySettingsChange(const EditorSettingsChangeResult& result)
 {
-	if (result.Applied && result.SaveStatus == EEditorSettingsSaveStatus::Saved)
-		return;
-
 	const char* key = "EditorSettings.ApplyFailed";
 	auto level = ELogLevel::Error;
 
-	if (result.Applied)
+	if (result.Applied && result.SaveStatus == EEditorSettingsSaveStatus::Saved)
+	{
+		key = "EditorSettings.Saved";
+		level = ELogLevel::Info;
+	}
+	else if (result.Applied)
 	{
 		key = result.SaveStatus == EEditorSettingsSaveStatus::SessionOnly
 			? "EditorSettings.SessionOnly" : "EditorSettings.SaveFailed";

@@ -19,7 +19,7 @@ public:
 	virtual void OnSubmit(entt::registry& registry, const vector<Scene*>& activeScenes, f32 dt) override;
 
 private:
-	void EnsureTerrainResources(class Scene* scene, entt::entity entity, struct TerrainComponent& terrain);
+	bool EnsureTerrainResources(struct TerrainComponent& terrain);
 	void UpdateTerrainHeightmap(TerrainComponent& terrain);
 	void UpdateTerrainSplatmap(TerrainComponent& terrain);
 };

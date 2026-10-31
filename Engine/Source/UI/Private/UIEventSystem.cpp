@@ -1,7 +1,6 @@
-#include "UIEventSystem.h"
+﻿#include "UIEventSystem.h"
 #include "Scene.h"
 #include "CoreComponents.h"
-#include <cmath>
 
 namespace
 {

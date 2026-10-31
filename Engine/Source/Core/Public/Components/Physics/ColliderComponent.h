@@ -25,7 +25,7 @@ namespace Engine
         Mesh
     };
 
-    STRUCT()
+    STRUCT(DISPLAY_NAME("STRUCT_BOX_SHAPE"), CATEGORY("CATEGORY_PHYSICS_3D"))
     struct BoxShape
     {
         REFLECT_BODY()
@@ -42,7 +42,7 @@ namespace Engine
         }
     };
 
-    STRUCT()
+    STRUCT(DISPLAY_NAME("STRUCT_SPHERE_SHAPE"), CATEGORY("CATEGORY_PHYSICS_3D"))
     struct SphereShape
     {
         REFLECT_BODY()
@@ -57,7 +57,7 @@ namespace Engine
         }
     };
 
-    STRUCT()
+    STRUCT(DISPLAY_NAME("STRUCT_CAPSULE_SHAPE"), CATEGORY("CATEGORY_PHYSICS_3D"))
     struct CapsuleShape
     {
         REFLECT_BODY()
@@ -77,7 +77,7 @@ namespace Engine
         }
     };
 
-    STRUCT()
+    STRUCT(DISPLAY_NAME("STRUCT_MESH_SHAPE"), CATEGORY("CATEGORY_PHYSICS_3D"))
     struct MeshShape
     {
         REFLECT_BODY()

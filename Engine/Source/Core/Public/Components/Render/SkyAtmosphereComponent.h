@@ -3,6 +3,8 @@
 #include "Reflection/ComponentAnnotations.h"
 #include "Components/Render/VolumetricCloudComponent.h"
 #include "Types.h"
+#include "ResourceHandle.h"
+#include "Texture.h"
 
 namespace Engine
 {
@@ -93,5 +95,15 @@ namespace Engine
 
         PROPERTY(EDITABLE, CATEGORY("CATEGORY_CLOUDS"), DISPLAY_NAME("PROP_CLOUD_ALTITUDE"))
         f32 CloudAltitude = 2500.0f; // 구름 층 고도 (미터 단위)
+
+        // ── IBL (Image-Based Lighting) 환경 텍스처 ──
+        PROPERTY(EDITABLE, ALLOW_MISSING, CATEGORY("CATEGORY_IBL"), DISPLAY_NAME("PROP_IRRADIANCE_MAP"))
+        ResourceHandle<Texture> IrradianceMap;
+        PROPERTY(EDITABLE, ALLOW_MISSING, CATEGORY("CATEGORY_IBL"), DISPLAY_NAME("PROP_PREFILTERED_MAP"))
+        ResourceHandle<Texture> PrefilteredMap;
+        PROPERTY(EDITABLE, ALLOW_MISSING, CATEGORY("CATEGORY_IBL"), DISPLAY_NAME("PROP_BRDF_LUT"))
+        ResourceHandle<Texture> BRDFLutMap;
+        PROPERTY(EDITABLE, ALLOW_MISSING, CATEGORY("CATEGORY_IBL"), DISPLAY_NAME("PROP_IBL_INTENSITY"))
+        f32 IBLIntensity = 1.0f;
     };
 }

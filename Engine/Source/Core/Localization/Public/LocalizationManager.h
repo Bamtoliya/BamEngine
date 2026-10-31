@@ -1,11 +1,14 @@
 ﻿#pragma once
 
 #include "Base.h"
+#include <cstdint>
+#include <vector>
+#include <string>
 #include <functional>
 #include <string_view>
 #include <unordered_map>
 
-enum class ELocalizationLanguage : uint8
+enum class ELocalizationLanguage : std::uint8_t
 {
 	English = 0,
 	Korean,
@@ -89,8 +92,8 @@ private:
 	};
 
 	using TextMap = std::unordered_map<string, string, TextKeyHash, std::equal_to<>>;
-	vector<TextMap> m_LocalizationData;
-	vector<wstring> m_RegisteredFiles;
+	std::vector<TextMap> m_LocalizationData;
+	std::vector<wstring> m_RegisteredFiles;
 #pragma endregion
 
 	

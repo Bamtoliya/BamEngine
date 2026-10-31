@@ -43,6 +43,7 @@ struct ShortcutChord
     bool operator!=(const ShortcutChord& other) const { return !(*this == other); }
 
     bool Evaluate(Engine::InputManager& input) const;
+    bool Evaluate(Engine::InputManager& input, bool allowRepeat) const;
     std::string ToString() const;
     static ShortcutChord FromString(const std::string& str);
 };

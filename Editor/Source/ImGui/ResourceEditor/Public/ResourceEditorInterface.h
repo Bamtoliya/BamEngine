@@ -1,7 +1,6 @@
 ﻿#pragma once
 
 #include "ImGuiInterface.h"
-#include <filesystem>
 
 BEGIN(Editor)
 class ResourceEditorInterface : public IImGui

@@ -38,9 +38,9 @@ public:
 
 #pragma region Loop
 public:
-	void RunFrame(f32 dt);
+	// 호스트가 고정 스텝의 크기와 실행 횟수를 결정합니다.
 	void FixedUpdate(f32 dt);
-	// Hosts may sample input before editor updates and reuse that snapshot for simulation.
+	// 호스트에서 입력을 먼저 갱신했다면 같은 입력 샘플을 재사용합니다.
 	void Update(f32 dt, bool updateInput = true);
 	void LateUpdate(f32 dt);
 	EResult Render(f32 dt);

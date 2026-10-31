@@ -2,7 +2,6 @@
 
 #include "Editor_Includes.h"
 #include "ShortcutChord.h"
-#include <functional>
 
 BEGIN(Editor)
 
@@ -24,6 +23,7 @@ struct EditorAction
     ShortcutChord DefaultChord;   // 기본 단축키
     std::function<void()> ExecuteHandler;
     std::function<bool()> CanExecute; // 실행 가능 여부 (미지정 시 항상 true)
+    bool AllowRepeat = false;
 };
 
 END

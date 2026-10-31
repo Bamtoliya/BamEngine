@@ -1,8 +1,6 @@
 ﻿#pragma once
 #include "TimeManager.h"
 
-#define MAX_ACCUMULATED_TIME 0.5f
-
 IMPLEMENT_SINGLETON(TimeManager)
 
 #pragma region Constructor&Destructor
@@ -13,7 +11,7 @@ EResult TimeManager::Initialize(void* arg)
     m_TotalTime = 0.0;
 
     m_TargetFPS = 0;
-    m_FixedStep = 1.0f / 60.0f;
+    m_FixedStep = DefaultFixedStep;
 
     m_AccTime = 0.0;
 
@@ -52,9 +50,9 @@ void TimeManager::Update()
     m_TotalTime += static_cast<f64>(m_DeltaTime);
     m_AccTime += static_cast<f64>(m_DeltaTime);
 
-    if (m_AccTime > MAX_ACCUMULATED_TIME)
+    if (m_AccTime > MaxAccumulatedTime)
     {
-        m_AccTime = MAX_ACCUMULATED_TIME;
+        m_AccTime = MaxAccumulatedTime;
     }
 
     m_FrameCount++;
@@ -67,6 +65,18 @@ void TimeManager::Update()
     }
 }
 
+#pragma endregion
+
+#pragma region Setter
+bool TimeManager::SetFixedStep(f32 step)
+{
+    if (!std::isfinite(step) || step < MinFixedStep ||
+        static_cast<f64>(step) > MaxAccumulatedTime)
+        return false;
+
+    m_FixedStep = step;
+    return true;
+}
 #pragma endregion
 
 

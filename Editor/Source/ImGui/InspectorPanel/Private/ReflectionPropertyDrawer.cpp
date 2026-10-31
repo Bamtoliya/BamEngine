@@ -10,11 +10,6 @@
 #include <glm/gtc/quaternion.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
-#include <cstdint>
-#include <string>
-#include <variant>
-#include <algorithm>
-#include <cmath>
 #include "Editor_Macros.h"
 #include "LocalizationManager.h"
 #include "Reflection/ReflectionRegistry.h"
@@ -22,10 +17,7 @@
 #include "PhysicsComponent.h"
 #include <imgui_stdlib.h>
 #include <archive/Unicode.h>
-#include <limits>
-#include <charconv>
-#include <cstring>
-#include <vector>
+#include "ResourcePicker.h"
 #pragma push_macro("new")
 #undef new
 #include <imgui_internal.h>
@@ -60,58 +52,6 @@ namespace
             for (int row = 0; row < value[column].length(); ++row)
                 if (!std::isfinite(value[column][row])) return false;
         }
-        return changed;
-    }
-
-    template<typename T>
-    bool DrawResourcePicker(Engine::ResourceHandle<T>& value, bool canEdit)
-    {
-        auto& manager = Engine::ResourceManager::Get();
-        auto* current = manager.GetResource(value.GetRawHandle());
-        const auto label = current != nullptr ? Engine::WStrToStr(current->GetKey()) :
-            Editor::LocalizeInspectorText("UI_RESOURCE_NONE");
-        bool changed = false;
-        bool failed = ImGui::GetStateStorage()->GetBool(ImGui::GetID("DropFailed"), false);
-        ImGui::BeginDisabled(!canEdit);
-        const auto button = label + "###ResourcePicker";
-        if (ImGui::Button(button.c_str(), ImVec2(-1.0f, 0.0f))) ImGui::OpenPopup("ResourceChoices");
-        if (canEdit && ImGui::BeginDragDropTarget())
-        {
-            if (const auto* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM"))
-            {
-                const auto path = Editor::DecodeInspectorResourcePath(payload->Data, payload->DataSize);
-                const auto handle = path ? manager.LoadFile(*path) : Engine::Handle{};
-                changed = Editor::TryAssignInspectorResource(value, handle);
-                failed = !changed;
-            }
-            ImGui::EndDragDropTarget();
-        }
-        if (ImGui::BeginPopup("ResourceChoices"))
-        {
-            if (ImGui::Selectable(Editor::LocalizeInspectorText("UI_RESOURCE_CLEAR").c_str()))
-            {
-                value.Reset();
-                changed = true;
-                failed = false;
-            }
-            for (const auto& entry : manager.GetDebugSnapshot())
-            {
-                const auto handle = manager.FindHandleByKey(entry.Key);
-                if (dynamic_cast<T*>(manager.GetResource(handle)) == nullptr) continue;
-                const auto text = Engine::WStrToStr(entry.Key);
-                ImGui::PushID(text.c_str());
-                if (ImGui::Selectable(text.c_str(), handle == value.GetRawHandle()))
-                {
-                    changed = Editor::TryAssignInspectorResource(value, handle);
-                    failed = !changed;
-                }
-                ImGui::PopID();
-            }
-            ImGui::EndPopup();
-        }
-        ImGui::EndDisabled();
-        ImGui::GetStateStorage()->SetBool(ImGui::GetID("DropFailed"), failed);
-        if (failed) ImGui::TextDisabled("%s", Editor::LocalizeInspectorText("UI_RESOURCE_REJECTED").c_str());
         return changed;
     }
 
@@ -291,7 +231,7 @@ namespace
 			}
 		}
 
-		return "Value preview unavailable";
+		return Editor::LocalizeInspectorText("Inspector.ValuePreviewUnavailable");
 	}
 
 	bool GetReflectionDrawerBoolMetadata(const reflection::Metadata& metadata, const char* key, bool fallback)
@@ -1185,7 +1125,7 @@ namespace Editor
 		else if (const auto* current = read.Value.Get<Engine::ResourceHandle<Engine::Type>>()) \
 		{ \
 			changed = DrawReflectionPropertyEditor(property, object, *current, canEdit, \
-				[&](auto& candidate) { return DrawResourcePicker(candidate, canEdit); }); \
+				[&](auto& candidate) { return Editor::DrawInspectorResourcePicker(candidate, canEdit); }); \
 		}
 		INSPECTOR_RESOURCE(Texture)
 		INSPECTOR_RESOURCE(Sprite)

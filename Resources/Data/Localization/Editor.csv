@@ -984,3 +984,4 @@ QtEditor,SelectionPending,Selection binding pending,선택 대상 연결 대기 
 History,Unnamed,Unnamed Command,이름 없는 명령
 Prefab,MissingAsset,Missing Prefab,프리팹을 찾을 수 없음
 Prefab,ChildOf,(Child of {}),({}의 자식)
+Hierarchy,DropPrefabRoot,Drop here to add a prefab at the scene root,여기에 놓으면 씬 루트에 프리팹을 추가합니다

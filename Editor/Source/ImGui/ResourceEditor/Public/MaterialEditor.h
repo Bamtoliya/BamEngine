@@ -3,7 +3,6 @@
 #include "ResourceEditorInterface.h"
 #include "MaterialInterface.h"
 #include "MaterialPreviewRenderer.h"
-#include <string>
 
 BEGIN(Engine)
 class MaterialInterface;

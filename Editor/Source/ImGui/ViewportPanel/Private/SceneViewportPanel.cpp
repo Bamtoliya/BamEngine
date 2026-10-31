@@ -32,6 +32,8 @@
 #include "EditorSettings.h"
 #include "Components/Render/PostProcessComponent.h"
 #include "NotificationManager.h"
+#include <archive/JsonArchive.h>
+#include "PrefabModeManager.h"
 
 #pragma region Helper
 struct LightingPassData
@@ -40,9 +42,12 @@ struct LightingPassData
 	VolumetricCloudData Cloud{};
 	vec3 SunDirection{ 0.0f, 1.0f, 0.0f };
 	f32 PlanetRadius = 6360000.0f;
+	uint32 HasIBLMaps = 0u;
+	f32 IBLIntensity = 1.0f;
+	vec2 _iblPad{ 0.0f };
+	vec4 _reserved{ 0.0f };
 };
-
-static_assert(sizeof(LightingPassData) == 480);
+static_assert(sizeof(LightingPassData) == 512);
 static_assert(offsetof(LightingPassData, Shadow) == 0);
 static_assert(offsetof(LightingPassData, Cloud) == 336);
 static_assert(offsetof(LightingPassData, SunDirection) == 464);
@@ -125,16 +130,17 @@ void SceneViewportPanel::Initialize(void* arg)
 	__super::Initialize(arg);
 	CAST_DESC
 
+	m_RenderWidth = desc->RenderTargetWidth;
+	m_RenderHeight = desc->RenderTargetHeight;
+
 #pragma region Prepare RenderPass And Pipelines
 	PreparePipelines();
 	m_PostProcessChain.Initialize(m_Name);
-	PrepareRenderTargetsAndPasses(desc->RenderTargetWidth, desc->RenderTargetHeight);
+	PrepareRenderTargetsAndPasses(m_RenderWidth, m_RenderHeight);
 #pragma endregion
 
 	m_Grid.Initialize(m_Name);
-#ifdef _DEBUG
 	m_DebugRenderer.Initialize(m_Name);
-#endif // _DEBUG
 
 	if (!m_PostProcessChain.GetPipeline().SaveToString(m_DefaultPostProcessSettings))
 		EDITOR_LOG_ERROR("Default post-process settings could not be captured: {}", WStrToStr(m_Name));
@@ -280,9 +286,7 @@ void SceneViewportPanel::Free()
 	__super::Free();
 	m_Grid.Free();
 
-#ifdef _DEBUG
 	m_DebugRenderer.Free();
-#endif
 	m_PostProcessChain.Free();
 }
 #pragma endregion
@@ -337,7 +341,7 @@ void SceneViewportPanel::Update(f32 dt)
 	const bool isPIE = PIEManager::Get().IsPlaying() || PIEManager::Get().IsPaused();
 
 	// 1. 에디터 카메라 입력: PIE 실행 중에는 에디터 카메라 이동을 차단
-	if (!isPIE && m_CameraController && m_Focused && m_Hovered)
+	if (!isPIE && m_Open && m_CameraController && m_Focused && m_Hovered)
 		m_CameraController->HandleInput(dt);
 
 	if (m_CameraController)
@@ -403,10 +407,8 @@ void SceneViewportPanel::Update(f32 dt)
 	if (cameraBuffer.has_value() && *m_Grid.GetVisible())
 		m_Grid.SubmitGrid(*cameraBuffer, IsOrthographic(), m_DisplayRTName, m_OwnedRTNames[6]);
 
-#ifdef _DEBUG
 	if (cameraBuffer.has_value() && *m_DebugRenderer.GetDrawCollidersPtr())
 		m_DebugRenderer.SubmitDebugDraw(*cameraBuffer, m_DisplayRTName);
-#endif
 
 	KeyboardInput();
 	MouseInput();
@@ -438,8 +440,40 @@ void SceneViewportPanel::DrawCustomOptions()
 void SceneViewportPanel::DrawCustomViewport()
 {
 	Application::Get().GetEditHistory().AllowShortcuts(ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows));
+	PrefabModeManager::Get().DrawViewportBanner();
 	BaseViewportPanel::DrawCustomViewport();
 	const bool imageHovered = ImGui::IsItemHovered();
+
+	if (ImGui::BeginDragDropTarget())
+	{
+		if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM"))
+		{
+			std::filesystem::path p((const wchar_t*)payload->Data);
+			std::string filename = p.filename().string();
+			for (char& c : filename) c = static_cast<char>(tolower(c));
+			std::string ext = p.extension().string();
+			for (char& c : ext) c = static_cast<char>(tolower(c));
+
+			if (filename.ends_with(".bamprefab.json") || filename.ends_with(".prefab.json") || ext == ".bamprefab" || ext == ".prefab" || ext == ".json")
+			{
+				if (Scene* currentScene = SceneManager::Get().GetCurrentScene())
+				{
+					archive::JsonArchive ar;
+					Engine::Entity* spawned = nullptr;
+					auto& history = Application::Get().GetEditHistory();
+					auto before = history.Enabled() ? SceneEditSnapshot::Capture(*currentScene) : SceneEditSnapshot{};
+					if (SceneManager::Get().InstantiatePrefab(ar, p.wstring(), spawned, nullptr) == Engine::EResult::Success && spawned)
+					{
+						if (before) history.Record(std::move(before), SceneEditSnapshot::Capture(*currentScene), "UI_HISTORY_INSTANTIATE_PREFAB");
+						SelectionManager::Get().SetSelectedEntity(spawned);
+						NotificationManager::Get().AddNotification(LOCAL("ResourceType.Prefab"), LOCAL_FMT("Notification.PrefabInstantiated", p.stem().string()), ELogLevel::Info, 3.0f);
+					}
+				}
+			}
+		}
+		ImGui::EndDragDropTarget();
+	}
+
 	if (Scene* scene = SceneManager::Get().GetCurrentScene())
 		scene->UpdateHierarchyFlags();
 	DrawImGuizmo();
@@ -576,9 +610,7 @@ void SceneViewportPanel::DrawDebugMenu()
 	if (ImGui::BeginMenu(LOCAL_CSTR("UI_DEBUG")))
 	{
 		ImGui::MenuItem(LOCAL_LABEL("Viewport.ShowGrid").c_str(), nullptr, m_Grid.GetVisible());
-#ifdef _DEBUG
 		ImGui::MenuItem(LOCAL_LABEL("Viewport.ShowCollider").c_str(), nullptr, m_DebugRenderer.GetDrawCollidersPtr());
-#endif
 		ImGui::EndMenu();
 	}
 }
@@ -773,7 +805,11 @@ void SceneViewportPanel::DrawImGuizmo()
 	if (changed && history.Enabled() && before)
 	{
 		if (TransformPropertyEditor::ApplyWorldMatrix(world, entity, worldMatrix, editMode))
+		{
 			history.Record(std::move(before), SceneEditSnapshot::Capture(*scene, targets), "UI_HISTORY_TRANSFORM", true);
+			if (PrefabModeManager::Get().IsInPrefabMode())
+				PrefabModeManager::Get().MarkDirty();
+		}
 		else ImGui::SetTooltip("%s", LOCAL_CSTR("Viewport.TransformRejected"));
 	}
 
@@ -1222,9 +1258,31 @@ void SceneViewportPanel::SubmitLightingPass(const CameraBuffer& cameraBuffer, co
 			LightingPassData lightingData{};
 			if (lightManager.HasShadowCastingLights())
 				lightingData.Shadow = lightManager.GetShadowData(0u);
-
 			lightingData.Cloud = skyData.Cloud;
 			lightingData.SunDirection = skyData.SunDirection;
+			// ── IBL 텍스처 바인딩 (t10, t11, t12) ──
+			if (Scene* activeScene = SceneManager::Get().GetCurrentScene())
+			{
+				auto skyView = activeScene->GetRegistry().view<SkyAtmosphereComponent>();
+				for (auto [e, sky] : skyView.each())
+				{
+					if (sky.IsEnabled && sky.IrradianceMap.IsValid() && sky.PrefilteredMap.IsValid() && sky.BRDFLutMap.IsValid())
+					{
+						auto* irrTex = sky.IrradianceMap.Get();
+						auto* prefTex = sky.PrefilteredMap.Get();
+						auto* lutTex = sky.BRDFLutMap.Get();
+						if (irrTex && prefTex && lutTex)
+						{
+							rhi->BindTextureSampler(irrTex->GetRHITexture(), sampler, MAX_MATERIAL_TEXTURE_SLOTS + 10);
+							rhi->BindTextureSampler(prefTex->GetRHITexture(), sampler, MAX_MATERIAL_TEXTURE_SLOTS + 11);
+							rhi->BindTextureSampler(lutTex->GetRHITexture(), sampler, MAX_MATERIAL_TEXTURE_SLOTS + 12);
+							lightingData.HasIBLMaps = 1u;
+							lightingData.IBLIntensity = sky.IBLIntensity;
+							break;
+						}
+					}
+				}
+			}
 
 			auto& rm = ResourceManager::Get();
 			auto shapeHandle = rm.GetResourceHandle<Texture>(L"Resources/Texture/CloudBaseShape3D.bamtex");
@@ -1241,9 +1299,6 @@ void SceneViewportPanel::SubmitLightingPass(const CameraBuffer& cameraBuffer, co
 					rhi->BindTextureSampler(weatherRHI, sampler, 1);
 				}
 			}
-			if (IsFailure(rhi->BindConstantBuffer(&lightingData, sizeof(lightingData), 3)))
-				return EResult::Fail;
-
 			if (IsFailure(rhi->BindConstantBuffer(&lightingData, sizeof(lightingData), 3)))
 				return EResult::Fail;
 

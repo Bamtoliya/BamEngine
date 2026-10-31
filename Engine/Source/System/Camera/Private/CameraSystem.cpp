@@ -3,7 +3,6 @@
 #include "Components/Core/WorldTransformComponent.h"
 
 #include <glm/ext/matrix_clip_space.hpp>
-#include <cmath>
 
 namespace
 {

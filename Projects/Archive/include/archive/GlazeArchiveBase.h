@@ -1,11 +1,12 @@
 ﻿#pragma once
 
+#include <archive/ArchiveValue.h>
 #include <archive/ArchiveInterface.h>
 
 #include <optional>
 #include <functional>
-
 #include <glaze/json/generic.hpp>
+
 
 namespace archive
 {
@@ -26,7 +27,7 @@ namespace archive
         [[nodiscard]] ArchiveResult BeginReadObjectElement(std::string_view key, std::size_t index) override;
 
     protected:
-        using Value = glz::generic_u64;
+        using Value = detail::ArchiveValue;
 
         ArchiveResult WriteArrayElementValues(std::string_view key, std::size_t size,
             const ArrayElementCallback& writeElement) override;
@@ -48,6 +49,9 @@ namespace archive
         ArchiveResult ReadObjectValue(std::string_view key, const ObjectReader& readObject) const override;
         ArchiveResult ReadObjectArrayValues(std::string_view key, const ObjectArrayReader& readObject) const override;
         ArchiveResult ReadObjectMapValues(std::string_view key, ArchiveScalarType keyType, const ObjectMapKeyReader& readKey, const ObjectArrayReader& readValue) const override;
+
+        ArchiveResult WriteByteArrayValues(std::string_view key, std::span<const std::uint8_t> values) override;
+        ArchiveResult ReadByteArrayValues(std::string_view key, std::vector<std::uint8_t>& values) const override;
 
         GlazeArchiveBase();
 

@@ -29,19 +29,19 @@ namespace archive
 
     ArchiveResult JsonArchive::DecodeDocument(std::string_view document)
     {
+        constexpr std::string_view utf8Bom{ "\xEF\xBB\xBF", 3 };
+
+        if (document.starts_with(utf8Bom))
+            document.remove_prefix(utf8Bom.size());
+
         std::string text{ document };
 
         if (glz::validate_json(text))
-        {
             return { ArchiveErrorCode::InvalidDocument, {} };
-        }
 
         Value candidate;
-
         if (glz::read_json(candidate, text) || !candidate.is_object())
-        {
             return { ArchiveErrorCode::InvalidDocument, {} };
-        }
 
         m_Root = std::move(candidate);
         return {};

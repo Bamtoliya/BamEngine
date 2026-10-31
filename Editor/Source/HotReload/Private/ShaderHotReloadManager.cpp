@@ -5,8 +5,6 @@
 #include "Logger.h"
 #include "NotificationManager.h"
 #include <windows.h>
-#include <fstream>
-#include <unordered_set>
 
 namespace
 {

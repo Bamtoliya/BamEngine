@@ -1,0 +1,82 @@
+{
+    "Graph": {
+        "Domain": 0,
+        "NextLinkId": 10,
+        "NextNodeId": 8,
+        "Version": 1,
+        "Nodes": [
+            {
+                "Id": 1,
+                "Type": "Event.Update",
+                "InputValues": []
+            },
+            {
+                "Id": 2,
+                "Type": "Transform.AddLocalRotation",
+                "InputValues": [
+                    { "Key": "pitch", "Value": { "Type": "Float", "Value": 0.0 } },
+                    { "Key": "yaw", "Value": { "Type": "Float", "Value": 1.0 } },
+                    { "Key": "roll", "Value": { "Type": "Float", "Value": 0.0 } }
+                ]
+            },
+            {
+                "Id": 3,
+                "Type": "Input.GetAxisVertical",
+                "InputValues": []
+            },
+            {
+                "Id": 4,
+                "Type": "Math.MultiplyFloat",
+                "InputValues": [
+                    { "Key": "b", "Value": { "Type": "Float", "Value": 0.05 } }
+                ]
+            },
+            {
+                "Id": 5,
+                "Type": "Transform.AddLocalOffset",
+                "InputValues": [
+                    { "Key": "x", "Value": { "Type": "Float", "Value": 0.0 } },
+                    { "Key": "y", "Value": { "Type": "Float", "Value": 0.0 } }
+                ]
+            },
+            {
+                "Id": 6,
+                "Type": "Debug.PrintFloat",
+                "InputValues": []
+            }
+        ],
+        "Links": [
+            {
+                "Id": 1,
+                "From": { "Node": 1, "Pin": "exec" },
+                "To": { "Node": 2, "Pin": "exec" }
+            },
+            {
+                "Id": 2,
+                "From": { "Node": 2, "Pin": "then" },
+                "To": { "Node": 5, "Pin": "exec" }
+            },
+            {
+                "Id": 3,
+                "From": { "Node": 3, "Pin": "result" },
+                "To": { "Node": 4, "Pin": "a" }
+            },
+            {
+                "Id": 4,
+                "From": { "Node": 4, "Pin": "result" },
+                "To": { "Node": 5, "Pin": "z" }
+            },
+            {
+                "Id": 5,
+                "From": { "Node": 5, "Pin": "then" },
+                "To": { "Node": 6, "Pin": "exec" }
+            },
+            {
+                "Id": 6,
+                "From": { "Node": 3, "Pin": "result" },
+                "To": { "Node": 6, "Pin": "value" }
+            }
+        ],
+        "Variables": []
+    }
+}

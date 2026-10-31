@@ -107,7 +107,7 @@ void ShortcutManager::ProcessShortcuts(EShortcutContext activeContext, bool supp
         {
             const auto* action = FindAction(id);
             if (!action || action->Context != activeContext) continue;
-            if (chord.Evaluate(input))
+            if (chord.Evaluate(input, action->AllowRepeat))
             {
                 if (!action->CanExecute || action->CanExecute())
                 {
@@ -122,7 +122,7 @@ void ShortcutManager::ProcessShortcuts(EShortcutContext activeContext, bool supp
     {
         const auto* action = FindAction(id);
         if (!action || action->Context != EShortcutContext::Global) continue;
-        if (chord.Evaluate(input))
+        if (chord.Evaluate(input, action->AllowRepeat))
         {
             if (!action->CanExecute || action->CanExecute())
             {

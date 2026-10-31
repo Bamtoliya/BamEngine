@@ -35,7 +35,7 @@ BEGIN(Engine)
 CLASS()
 class ENGINE_API Resource : public ITypeIdentity
 {
-	REFLECT_BASE()
+	REFLECT_CLASS()
 	using DESC = ResourceCreateDesc;
 	friend class ResourceManager;
 #pragma region Constructor&Destructor

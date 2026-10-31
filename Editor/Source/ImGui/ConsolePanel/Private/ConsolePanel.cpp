@@ -1,9 +1,5 @@
 ﻿#include "ConsolePanel.h"
 #include "InputManager.h"
-#include <set>
-#include <map>
-#include <string_view>
-#include <tuple>
 
 #pragma region Loop
 void ConsolePanel::Draw()
@@ -118,7 +114,7 @@ void ConsolePanel::DrawOptions()
     }
 
     ImGui::SameLine();
-    ImGui::SetNextItemWidth(ImGui::GetFontSize() * 8.0f);
+    ImGui::SetNextItemWidth(ImGui::GetFontSize() * 9.5f);
     DrawLevelFilter();
     ImGui::SameLine();
     ImGui::Checkbox(LOCAL_LABEL("Console.CollapseDuplicates").c_str(), &m_CollapseDuplicates);

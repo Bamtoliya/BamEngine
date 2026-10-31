@@ -20,31 +20,24 @@ ETextureFormat ToTextureFormat(uint32 channels, bool sRGB)
 }
 
 constexpr uint32 TextureArchiveFormatVersion = 1;
-
 [[nodiscard]]
 archive::ArchiveResult ValidateTextureHeader(const TextureBinaryHeader& header, f32 ppu, uint32& byteCount)
 {
-	if (header.dimension != ETextureDimension::Texture2D ||
-		header.depth != 1 || header.mipLevels != 1 || header.arraySize != 1)
-	{
+	const bool isValid2D = (header.dimension == ETextureDimension::Texture2D && header.depth == 1);
+	const bool isValid3D = (header.dimension == ETextureDimension::Texture3D && header.depth >= 1);
+	if ((!isValid2D && !isValid3D) || header.mipLevels != 1 || header.arraySize != 1)
 		return { archive::ArchiveErrorCode::UnsupportedType, "Texture.TextureHeader.Layout" };
-	}
-
 	if (header.format != ETextureFormat::R8G8B8A8_UNORM)
 		return { archive::ArchiveErrorCode::UnsupportedType, "Texture.TextureHeader.format" };
-
-	if (header.width == 0 || header.height == 0)
+	if (header.width == 0 || header.height == 0 || header.depth == 0)
 		return { archive::ArchiveErrorCode::InvalidValue, "Texture.TextureHeader.Size" };
-
 	if (!std::isfinite(ppu) || ppu <= 0.f)
 		return { archive::ArchiveErrorCode::InvalidValue, "Texture.PixelPerUnit" };
-
-	const uint64 rowBytes = static_cast<uint64>(header.width) * 4;
-
-	if (rowBytes > std::numeric_limits<uint32>::max() / header.height)
+	const uint64 sliceBytes = static_cast<uint64>(header.width) * 4 * header.height;
+	const uint64 totalBytes = sliceBytes * header.depth;
+	if (totalBytes > std::numeric_limits<uint32>::max())
 		return { archive::ArchiveErrorCode::InvalidValue, "Texture.TextureHeader.dataSize" };
-
-	byteCount = static_cast<uint32>(rowBytes * header.height);
+	byteCount = static_cast<uint32>(totalBytes);
 	return {};
 }
 

@@ -3,9 +3,6 @@
 #include "HotReloaderInterface.h"
 #include "Module/ModuleInterface.h"
 #include <efsw/efsw.hpp>
-#include <filesystem>
-#include <atomic>
-#include <chrono>
 
 BEGIN(Editor)
 
@@ -35,12 +32,18 @@ public:
     [[nodiscard]] Engine::IModule* GetModule() const { return m_CurrentModule; }
     [[nodiscard]] uint32 GetReloadIndex() const { return m_ReloadIndex; }
     [[nodiscard]] const std::filesystem::path& GetOriginalDllPath() const { return m_OriginalDllPath; }
+
+public:
+    using PostReloadCallback = std::function<void()>;
+    void RegisterPostReloadCallback(PostReloadCallback callback)
+    {
+        if (callback) m_PostReloadCallbacks.push_back(std::move(callback));
+    }
 private:
     std::filesystem::path CreateShadowCopy(const std::filesystem::path& srcDllPath);
     void CleanupShadowCopies();
     void StartWatching(const std::filesystem::path& dllPath);
-    void StopWatching();
-
+    void StopWatching();    
 private:
     EHotReloadState m_State = EHotReloadState::Idle;
     std::filesystem::path m_OriginalDllPath;
@@ -51,7 +54,7 @@ private:
     Engine::IModule* m_CurrentModule = nullptr;
     DestroyModuleFunc m_DestroyFunc = nullptr;
     uint32 m_ReloadIndex = 0;
-
+    std::vector<PostReloadCallback> m_PostReloadCallbacks;
     // efsw 자동 감지 관련
     efsw::FileWatcher* m_FileWatcher = nullptr;
     efsw::FileWatchListener* m_FileListener = nullptr;

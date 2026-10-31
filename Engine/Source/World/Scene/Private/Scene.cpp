@@ -3,8 +3,6 @@
 #include "Scene.h"
 #include "CoreComponents.h"
 #include "Adapters/GlmArchiveAdapter.h"
-#include <limits>
-#include <unordered_set>
 
 #pragma region Constructor&Destructor
 EResult Scene::Initialize(void* arg)
