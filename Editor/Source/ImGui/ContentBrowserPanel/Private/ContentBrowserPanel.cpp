@@ -580,9 +580,26 @@ void ContentBrowserPanel::DrawGrid(bool enterPressed)
 			entries.push_back(&entry);
 	}
 
+	// Editor/Source/ImGui/ContentBrowserPanel/Private/ContentBrowserPanel.cpp
+// 583행 ~ 588행 부근 DrawGrid() 내부 교체
+
 	if (entries.empty())
 	{
-		ImGui::TextDisabled("%s", LOCAL("ContentBrowser.NoMatchingAssets").c_str());
+		if (isSearching)
+		{
+			ImGui::TextDisabled("%s: \"%s\"", LOCAL_CSTR("ContentBrowser.NoSearchResults"), searchStr.c_str());
+			ImGui::SameLine();
+			if (ImGui::SmallButton(LOCAL_CSTR("ContentBrowser.ClearSearch")))
+			{
+				m_SearchBuffer[0] = '\0';
+				m_SearchResults.clear();
+				m_LastSearchString.clear();
+			}
+		}
+		else
+		{
+			ImGui::TextDisabled("%s", LOCAL_CSTR("ContentBrowser.EmptyFolder"));
+		}
 		return;
 	}
 

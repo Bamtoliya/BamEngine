@@ -131,32 +131,27 @@ namespace
 		}
 	}
 
-	void HandleItemDoubleClick(const std::filesystem::directory_entry& directoryEntry,
-		std::filesystem::path& currentDirectory, char* searchBuffer)
+	void OpenAssetOrFolder(const std::filesystem::path& path, bool isDirectory, std::filesystem::path& currentDirectory, char* searchBuffer)
 	{
-		const auto& path = directoryEntry.path();
-
-		if (directoryEntry.is_directory())
+		if (isDirectory)
 		{
 			currentDirectory /= path.filename();
 			if (searchBuffer) searchBuffer[0] = '\0';
 			return;
 		}
-
-		// 1. Scene JSON 파일 더블클릭 시 씬 로드
+		// 1. Scene JSON 파일인 경우
 		if (IsSceneFile(path))
 		{
 			OpenSceneFromFile(path);
 			return;
 		}
-		// 1-1. Prefab 파일 더블클릭 시 뷰포트 프리팹 격리 모드 진입
+		// 2. Prefab 파일인 경우
 		if (IsPrefabFile(path))
 		{
 			PrefabModeManager::Get().EnterPrefabMode(path);
 			return;
 		}
-
-		// 2. 일반 리소스 에디터 오픈
+		// 3. 일반 리소스 에디터 패널 오픈
 		Editor::SelectionManager::Get().SetSelectedAsset(path);
 		for (auto* panel : Editor::ImGuiManager::Get().GetImGuiPanels())
 		{
@@ -166,9 +161,17 @@ namespace
 				{
 					resEditor->SetTargetResource(path);
 					resEditor->Open();
-					break;
+					return;
 				}
 			}
+		}
+		// 4. 지원하는 내부 에디터가 없는 일반 파일/소스 파일: OS 기본 연결 프로그램으로 열기
+		const std::wstring absPath = std::filesystem::absolute(path).wstring();
+		HINSTANCE result = ShellExecuteW(nullptr, L"open", absPath.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+		if (reinterpret_cast<INT_PTR>(result) <= 32)
+		{
+			NotificationManager::Get().AddNotification(LOCAL("EditorCommon.Open"),
+				LOCAL_FMT("Notification.OpenExternalFailed", path.filename().string()), ELogLevel::Warn, 3.0f);
 		}
 	}
 }
@@ -189,14 +192,11 @@ bool ContentBrowserGridItem::Draw(const std::filesystem::directory_entry& direct
 	const bool thumbnailActive = ImGui::IsItemActive();
 
 	ToolTip(directoryEntry);
-	ContextMenu(path, outRenamingPath, renameBuffer, renameBufferSize);
+	ContextMenu(path, outRenamingPath, renameBuffer, renameBufferSize, currentDirectory, searchBuffer);
 	const bool contextMenuOpen = ImGui::IsPopupOpen("##AssetContextMenu");
 	const bool dragging = DragAndDropTarget(payloadPath);
-
 	if (ImGui::IsItemHovered() && MOUSE_BUTTON_DOUBLE_CLICK(EMouseButton::Left))
-	{
-		HandleItemDoubleClick(directoryEntry, currentDirectory, searchBuffer);
-	}
+		OpenAssetOrFolder(path, directoryEntry.is_directory(), currentDirectory, searchBuffer);
 
 	if (outRenamingPath == path)
 	{
@@ -300,21 +300,48 @@ void ContentBrowserGridItem::Thumbnail(const std::filesystem::directory_entry& d
 }
 
 void ContentBrowserGridItem::ContextMenu(const std::filesystem::path& path,
-	std::filesystem::path& outRenamingPath, char* renameBuffer, size_t renameBufferSize)
+	std::filesystem::path& outRenamingPath, char* renameBuffer, size_t renameBufferSize,
+	std::filesystem::path& currentDirectory, char* searchBuffer)
 {
+	const bool isDir = std::filesystem::is_directory(path);
 	std::string filenameString = path.filename().string();
 	if (ImGui::BeginPopupContextItem("##AssetContextMenu"))
 	{
+		// 1. 최상단 [열기]: 더블클릭과 동일한 공통 동작
+		if (ImGui::MenuItem((ICON_FA_FOLDER_OPEN " " + LOCAL_LABEL("EditorCommon.Open")).c_str()))
+			OpenAssetOrFolder(path, isDir, currentDirectory, searchBuffer);
+		// 2. 파일인 경우: [외부 프로그램으로 열기] (내부 에디터가 있는 파일도 원본 파일로 열어볼 수 있도록 지원)
+		if (!isDir)
+		{
+			if (ImGui::MenuItem((ICON_FA_ARROW_UP_RIGHT_FROM_SQUARE " " + LOCAL_LABEL("EditorCommon.OpenWithDefaultProgram")).c_str()))
+			{
+				const std::wstring absPath = std::filesystem::absolute(path).wstring();
+				ShellExecuteW(nullptr, L"open", absPath.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+			}
+		}
+		// 3. [탐색기에서 표시]: 유니코드 및 공백 경로 완벽 대응
+		if (ImGui::MenuItem((ICON_FA_FOLDER_CLOSED " " + LOCAL_LABEL("EditorCommon.ShowInExplorer")).c_str()))
+		{
+			const std::wstring absPath = std::filesystem::absolute(path).wstring();
+			if (isDir)
+			{
+				ShellExecuteW(nullptr, L"open", absPath.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+			}
+			else
+			{
+				const std::wstring param = L"/select,\"" + absPath + L"\"";
+				ShellExecuteW(nullptr, L"open", L"explorer.exe", param.c_str(), nullptr, SW_SHOWNORMAL);
+			}
+		}
+		ImGui::Separator();
+		// 4. [이름 변경], [경로 복사]
 		if (ImGui::MenuItem((ICON_FA_PEN " " + LOCAL_LABEL("EditorCommon.Rename")).c_str(), "F2"))
 		{
 			outRenamingPath = path;
 			strncpy(renameBuffer, filenameString.c_str(), renameBufferSize);
 		}
-
 		if (ImGui::MenuItem((ICON_FA_COPY " " + LOCAL_LABEL("EditorCommon.CopyPath")).c_str(), "Ctrl+C"))
-		{
 			ImGui::SetClipboardText(path.string().c_str());
-		}
 
 		if (ImGui::MenuItem((ICON_FA_FOLDER_OPEN " " + LOCAL_LABEL("EditorCommon.ShowInExplorer")).c_str()))
 		{
@@ -594,9 +621,7 @@ void ContentBrowserGridItem::DrawNameBox(const std::filesystem::directory_entry&
 
 	// 네임 박스 위에서 더블클릭 시 처리
 	if (ImGui::IsItemHovered() && MOUSE_BUTTON_DOUBLE_CLICK(EMouseButton::Left))
-	{
-		HandleItemDoubleClick(directoryEntry, currentDirectory, searchBuffer);
-	}
+		OpenAssetOrFolder(directoryEntry.path(), directoryEntry.is_directory(), currentDirectory, searchBuffer);
 }
 
 void ContentBrowserGridItem::ContextMenu_Material(const std::filesystem::path& path)

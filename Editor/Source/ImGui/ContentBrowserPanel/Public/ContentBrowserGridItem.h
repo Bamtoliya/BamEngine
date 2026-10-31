@@ -12,7 +12,7 @@ public:
 
 private:
 	static void Thumbnail(const std::filesystem::directory_entry& directoryEntry, ImTextureID thumbnailTexID, f32 thumbnailSize, f32 padding);
-	static void ContextMenu(const std::filesystem::path& path, std::filesystem::path& outRenamingPath, char* renameBuffer, size_t renameBufferSize);
+	static void ContextMenu(const std::filesystem::path& path, std::filesystem::path& outRenamingPath, char* renameBuffer, size_t renameBufferSize, std::filesystem::path& currentDirectory, char* searchBuffer);
 	static void ToolTip(const std::filesystem::directory_entry& directoryEntry);
 	static bool DragAndDropTarget(const std::filesystem::path& relativePath);
 

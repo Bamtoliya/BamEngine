@@ -985,3 +985,31 @@ History,Unnamed,Unnamed Command,이름 없는 명령
 Prefab,MissingAsset,Missing Prefab,프리팹을 찾을 수 없음
 Prefab,ChildOf,(Child of {}),({}의 자식)
 Hierarchy,DropPrefabRoot,Drop here to add a prefab at the scene root,여기에 놓으면 씬 루트에 프리팹을 추가합니다
+GraphPanel,MenuFile,File,문서
+GraphPanel,MenuEdit,Edit,편집
+GraphPanel,MenuView,View,보기
+GraphPanel,MenuMore,More...,더 보기...
+GraphPanel,WireStyle,Wire Style,와이어 스타일
+GraphPanel,WireStyleElectronic,Electronic (Hybrid),전자 노드 (하이브리드)
+GraphPanel,WireStyleStraight,All Straight,모두 직선
+GraphPanel,WireStyleCurved,All Curved,모두 곡선
+GraphPanel,WireStyleTooltip,Select wire connection rendering style,와이어 연결 렌더링 스타일을 선택합니다.
+GraphPanel,MenuMoreTooltip,Additional actions and overflow tools,추가 작업 및 오버플로우 도구
+GraphPanel,PreviewHeader,Preview,실행 미리보기
+GraphPanel,PreviewHint,Local execution preview inside panel. Does not affect scene entities.,패널 내부 미리보기 실행입니다. 씬 엔티티에 영향을 주지 않습니다.
+GraphPanel,PieHeader,PIE Live Watch,PIE 관찰
+GraphPanel,PieTargetEntity,Target Entity,관찰 대상 엔티티
+GraphPanel,PieNotRunning,PIE not running,PIE 미실행
+GraphPanel,PieNoBinding,No entity has GraphBindingComponent.,GraphBindingComponent를 가진 엔티티가 없습니다.
+GraphPanel,PieObserving,Observing: {},관찰 중: {}
+GraphPanel,PieEntitySelectHint,Select an active entity in the scene to observe its live execution wire pulse and values.,씬에서 활성 엔티티를 선택하여 실시간 실행 와이어 흐름과 핀 값을 관찰합니다.
+GraphPanel,MenuBuild,Build,빌드
+GraphPanel,MenuMaterial,Material,머티리얼
+GraphPanel,BuildTarget,Target: {},대상: {}
+GraphPanel,CompileAll,Compile All,모두 컴파일
+GraphPanel,ShaderCompileAndPreview,Compile & Preview,컴파일 및 미리보기
+ContentBrowser,NoSearchResults,No search results found,검색 결과가 없습니다
+ContentBrowser,ClearSearch,Clear,지우기
+ContentBrowser,EmptyFolder,Folder is empty,폴더가 비어 있습니다
+Notification,OpenExternalFailed,Failed to open file with default program: {},기본 프로그램으로 파일을 열지 못했습니다: {}
+
