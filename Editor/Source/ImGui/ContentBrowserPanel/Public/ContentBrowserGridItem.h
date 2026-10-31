@@ -1,7 +1,6 @@
 ﻿#pragma once
 
 #include "Editor_Includes.h"
-#include <filesystem>
 
 BEGIN(Editor)
 class ContentBrowserGridItem

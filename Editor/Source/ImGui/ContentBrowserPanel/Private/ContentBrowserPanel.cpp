@@ -14,19 +14,25 @@
 using namespace std;
 
 #pragma region ContentBrowserFileListner
-void ContentBrowserFileListener::handleFileAction(efsw::WatchID watchid, const std::string& dir, const std::string& filename, efsw::Action action, std::string oldFilename)
+void ContentBrowserFileListener::handleFileAction(efsw::WatchID watchid, const std::string& dir,
+	const std::string& filename, efsw::Action action, std::string oldFilename)
 {
-	if (action == efsw::Action::Modified || action == efsw::Action::Add || action == efsw::Action::Delete || action == efsw::Action::Moved)
+	if (action != efsw::Action::Modified && action != efsw::Action::Add &&
+		action != efsw::Action::Delete && action != efsw::Action::Moved)
 	{
-		filesystem::path fullPath = dir;
-		fullPath.append(filename);
-		AssetCache::Get().ClearCache(fullPath);
+		return;
 	}
 
+	const filesystem::path directory(dir);
+	auto& cache = AssetCache::Get();
+
+	cache.RequestInvalidate(directory / filename);
+
+	if (action == efsw::Action::Moved && !oldFilename.empty())
+		cache.RequestInvalidate(directory / oldFilename);
+
 	if (m_RefreshFlag)
-	{
-		*m_RefreshFlag = true; // 메인 스레드에 캐시 갱신이 필요함을 알림
-	}
+		m_RefreshFlag->store(true);
 }
 #pragma endregion
 
@@ -58,7 +64,7 @@ static bool PassesFilter(const filesystem::directory_entry& entry, uint32 filter
 
 	// 선택된 각 카테고리의 비트가 켜져있는지 확인하고 해당 확장자면 true 반환
 	if ((filterMask & (1 << 0)) && (ext == ".png" || ext == ".jpg" || ext == ".tga")) return true; // Texture
-	if ((filterMask & (1 << 1)) && (ext == ".fbx" || ext == ".obj" || ext == ".gltf" || ext == ".blend")) return true; // Model
+	if ((filterMask & (1 << 1)) && (ext == ".fbx" || ext == ".obj" || ext == ".gltf" || ext == ".blend" || ext == ".bammodel" || ext == ".bammesh")) return true; // Model
 	if ((filterMask & (1 << 2)) && (ext == ".mat")) return true; // Material
 	if ((filterMask & (1 << 3)) && (ext == ".hlsl" || ext == ".glsl")) return true; // Shader
 	if ((filterMask & (1 << 4)) && (ext == ".csv" || ext == ".json")) return true; // Data
@@ -106,8 +112,9 @@ EResult ContentBrowserPanel::Initialize(void* arg)
 	m_FileListener = new ContentBrowserFileListener(&m_NeedsCacheRefresh);
 	m_WatchID = m_FileWatcher->addWatch(m_RootPath.string(), m_FileListener, true);
 	m_FileWatcher->watch();
-	AssetManager::Get().GetAsyncDelegate().AddLambda([this]() {
-		RequestRefresh();
+	m_AsyncCompletionHandle = AssetManager::Get().OnAsyncCompleted().AddLambda([this]()
+		{
+			RequestRefresh();
 		});
 	return EResult::Success;
 }
@@ -164,8 +171,15 @@ void ContentBrowserPanel::ProcessEvent(const SDL_Event* event)
 }
 void ContentBrowserPanel::Free()
 {
-	Safe_Delete(m_FileListener);
+	// 감시 스레드가 종료될 때까지 리스너와 패널 상태를 유지합니다.
 	Safe_Delete(m_FileWatcher);
+	m_WatchID = 0;
+	Safe_Delete(m_FileListener);
+
+	if (m_AsyncCompletionHandle != 0 && AssetManager::IsCreated())
+		AssetManager::Get().OnAsyncCompleted().Remove(m_AsyncCompletionHandle);
+
+	m_AsyncCompletionHandle = 0;
 }
 
 #pragma region TreeView
@@ -414,10 +428,24 @@ void ContentBrowserPanel::AddressBar()
 
 bool ContentBrowserPanel::SearchBar()
 {
-	ImGui::SetNextItemWidth(150.f);
-	return ImGui::InputTextWithHint("##SearchBar",
+	ImGui::SetNextItemWidth(130.f);
+	bool enter = ImGui::InputTextWithHint("##SearchBar",
 		(ICON_FA_MAGNIFYING_GLASS " " + LOCAL("EditorCommon.Search")).c_str(), m_SearchBuffer, sizeof(m_SearchBuffer),
 		ImGuiInputTextFlags_EnterReturnsTrue);
+
+	ImGui::SameLine();
+	const char* scopeKey = m_SearchAllFolders ? "ContentBrowser.ScopeAll" : "ContentBrowser.ScopeCurrent";
+	const string scopeLabel = LOCAL(scopeKey) + "###ContentSearchScope";
+	if (ImGui::Button(scopeLabel.c_str()))
+	{
+		m_SearchAllFolders = !m_SearchAllFolders;
+		enter = true; // 검색 범위 전환 시 즉시 재검색 실행
+	}
+	if (ImGui::IsItemHovered())
+		ImGui::SetTooltip("%s", LOCAL_CSTR(m_SearchAllFolders ?
+			"ContentBrowser.ScopeAllHint" : "ContentBrowser.ScopeCurrentHint"));
+
+	return enter;
 }
 
 void ContentBrowserPanel::ContentFilter()
@@ -448,7 +476,7 @@ void ContentBrowserPanel::ContentFilter()
 			previewText = LOCAL_FMT("ContentBrowser.Multiple", activeCount);
 	}
 
-	ImGui::SetNextItemWidth(100.f);
+	ImGui::SetNextItemWidth(135.f);
 	if (ImGui::BeginCombo("##Filter", previewText.c_str()))
 	{
 		// "All" 항목 (마스크 초기화)
@@ -509,11 +537,25 @@ void ContentBrowserPanel::DrawGrid(bool enterPressed)
 
 		if (isSearching)
 		{
-			for (const auto& entry : filesystem::recursive_directory_iterator(
-				m_RootPath, filesystem::directory_options::skip_permission_denied))
+			if (m_SearchAllFolders)
 			{
-				if (StringContainsCaseInsensitive(entry.path().filename().string(), searchStr))
-					m_SearchResults.push_back(entry);
+				// 전체 리소스 폴더 재귀 검색
+				for (const auto& entry : filesystem::recursive_directory_iterator(
+					m_RootPath, filesystem::directory_options::skip_permission_denied))
+				{
+					if (StringContainsCaseInsensitive(entry.path().filename().string(), searchStr))
+						m_SearchResults.push_back(entry);
+				}
+			}
+			else
+			{
+				// 현재 디렉토리 내부만 검색
+				for (const auto& entry : filesystem::directory_iterator(
+					m_CurrentDirectory, filesystem::directory_options::skip_permission_denied))
+				{
+					if (StringContainsCaseInsensitive(entry.path().filename().string(), searchStr))
+						m_SearchResults.push_back(entry);
+				}
 			}
 		}
 	}
@@ -712,6 +754,16 @@ void ContentBrowserPanel::OnExteranalDropped(const vector<string>& droppedFiles)
 
 		if (filesystem::exists(sourcePath))
 		{
+			std::string extension = sourcePath.extension().string();
+			for (char& character : extension)
+				character = static_cast<char>(std::tolower(static_cast<unsigned char>(character)));
+
+			const bool isModel = extension == ".fbx" || extension == ".obj" || extension == ".gltf";
+			if (isModel)
+			{
+				AssetManager::Get().ImportAsync(sourcePath, m_CurrentDirectory);
+				continue;
+			}
 			filesystem::path destinationPath = m_CurrentDirectory / sourcePath.filename();
 
 			std::error_code ec;

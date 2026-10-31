@@ -2,9 +2,6 @@
 
 #include "Editor_Includes.h"
 #include "ImGuiInterface.h"
-#include <filesystem>
-#include <map>
-#include <unordered_map>
 #include <efsw/efsw.hpp>
 
 BEGIN(Editor)
@@ -65,6 +62,7 @@ private:
 private:
 	void FileConfilictPopup();
 #pragma endregion
+
 #pragma region Helper Functions
 private:
 	void RefreshCacheIfNeeded();
@@ -99,8 +97,10 @@ private:
 	char m_SearchBuffer[256];
 	uint32 m_FilterMask = 0;
 	string m_LastSearchString;
+	bool m_SearchAllFolders = false;
 	vector<filesystem::directory_entry> m_SearchResults;
 private:
+	Engine::DelegateHandle m_AsyncCompletionHandle = 0;
 	map<filesystem::path, vector<filesystem::path>> m_CachedSubdirectories;
 	vector<filesystem::directory_entry> m_CachedEntries;
 	filesystem::path m_LastWatchedDirectory;
