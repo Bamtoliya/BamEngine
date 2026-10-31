@@ -5,13 +5,7 @@ Engine 계획 15절 및 Gymnasium 규약 준수
 
 import json
 import socket
-import random
-
-try:
-    import numpy as np
-    HAS_NUMPY = True
-except ImportError:
-    HAS_NUMPY = False
+import numpy as np
 
 try:
     import gymnasium as gym
@@ -47,7 +41,7 @@ class BamCartPoleEnv(gym.Env):
     def _send_cmd(self, payload: dict) -> dict:
         msg = json.dumps(payload) + "\n"
         self.sock.sendall(msg.encode('utf-8'))
-
+        
         # 줄바꿈(\n)까지 응답 수신
         buf = b""
         while b"\n" not in buf:
@@ -55,7 +49,7 @@ class BamCartPoleEnv(gym.Env):
             if not chunk:
                 raise ConnectionResetError("BamEngine server disconnected.")
             buf += chunk
-
+        
         line = buf.split(b"\n")[0].decode('utf-8')
         return json.loads(line)
 
@@ -64,40 +58,31 @@ class BamCartPoleEnv(gym.Env):
         if resp.get("status") != "ok":
             raise RuntimeError(f"Failed to get spaces: {resp}")
 
-        # Gymnasium spaces 설정 (numpy가 있으면 numpy 배열, 없으면 기본 객체)
-        if HAS_GYMNASIUM and HAS_NUMPY:
+        # Gymnasium spaces 설정
+        if HAS_GYMNASIUM:
             self.action_space = spaces.Discrete(resp["action_space"]["n"])
             shape = tuple(resp["observation_space"]["shape"])
             self.observation_space = spaces.Box(
                 low=-np.inf, high=np.inf, shape=shape, dtype=np.float32
             )
         else:
-            n_actions = resp["action_space"]["n"]
-            self.action_space = type('Discrete', (), {
-                'n': n_actions,
-                'sample': lambda: random.randint(0, n_actions - 1)
-            })()
-            self.observation_space = type('Box', (), {
-                'shape': tuple(resp["observation_space"]["shape"])
-            })()
+            self.action_space = type('Discrete', (), {'n': resp["action_space"]["n"], 'sample': lambda: np.random.randint(0, 2)})()
+            self.observation_space = type('Box', (), {'shape': tuple(resp["observation_space"]["shape"])})()
 
     def reset(self, seed: int = None, options: dict = None):
-        if HAS_GYMNASIUM:
-            super().reset(seed=seed)
+        super().reset(seed=seed) if HAS_GYMNASIUM else None
         cmd = {"cmd": "reset"}
         if seed is not None:
             cmd["seed"] = seed
-
+        
         resp = self._send_cmd(cmd)
-        raw_obs = resp["observation"]
-        obs = np.array(raw_obs, dtype=np.float32) if HAS_NUMPY else raw_obs
+        obs = np.array(resp["observation"], dtype=np.float32)
         info = resp.get("info", {})
         return obs, info
 
     def step(self, action: int):
         resp = self._send_cmd({"cmd": "step", "action": int(action)})
-        raw_obs = resp["observation"]
-        obs = np.array(raw_obs, dtype=np.float32) if HAS_NUMPY else raw_obs
+        obs = np.array(resp["observation"], dtype=np.float32)
         reward = float(resp["reward"])
         terminated = bool(resp["terminated"])
         truncated = bool(resp["truncated"])

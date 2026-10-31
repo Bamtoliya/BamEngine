@@ -575,43 +575,60 @@ BlendState MaterialInterface::GetBlendState()
 EResult MaterialInterface::Bind(uint32 slot)
 {
     RHI* rhi = Renderer::Get().GetRHI();
-    bool bBoundAny = false;
+    if (!rhi) return EResult::Fail;
+
+    auto& rm = ResourceManager::Get();
+    auto* defaultSampler = SamplerManager::Get().GetDefaultSampler();
+
+    // 1. 슬롯 점유 여부 추적 (G-Buffer 0~3 슬롯)
+    bool slotBound[4] = { false, false, false, false };
+
     for (auto& binding : m_TextureBindings)
     {
         Texture* texture = binding.texture.Get();
         if (!texture)
         {
-            auto fallbackHandle = ResourceManager::Get().GetResourceHandle<Texture>(L"Resources/Texture/magenta1x1.png");
+            auto fallbackHandle = rm.GetResourceHandle<Texture>(L"Resources/Texture/white1x1.png");
             texture = fallbackHandle.Get();
         }
 
         RHISampler* sampler = binding.hasCustomSampler
             ? SamplerManager::Get().GetOrCreateSampler(binding.samplerDesc)
-            : SamplerManager::Get().GetDefaultSampler();
+            : defaultSampler;
 
         if (!texture || !sampler) return EResult::Fail;
 
         RHITexture* rhiTexture = texture->GetRHITexture();
-        if (!rhiTexture) continue;  // GPU 업로드 안 된 텍스처는 skip
+        if (!rhiTexture) continue;
 
         if (IsFailure(rhi->BindTextureSampler(rhiTexture, sampler, binding.slot)))
             return EResult::Fail;
 
-        bBoundAny = true;
+        if (binding.slot < 4)
+            slotBound[binding.slot] = true;
     }
-    if (!bBoundAny)
+
+    // 2. [상태 누수 방지]: 머티리얼에 지정되지 않은 빈 슬롯을 안전한 기본 더미 텍스처로 리셋
+    static const wchar_t* defaultTextures[4] = {
+        L"Resources/Texture/white1x1.png", // Slot 0: Diffuse (흰색)
+        L"Resources/Texture/blue1x1.png",  // Slot 1: Normal (기본 평면 노멀)
+        L"Resources/Texture/black1x1.png", // Slot 2: PBR (비금속/기본값)
+        L"Resources/Texture/black1x1.png"  // Slot 3: Emission (완전한 0 무발광!)
+    };
+
+    for (uint32 s = 0; s < 4; ++s)
     {
-        auto fallbackHandle = ResourceManager::Get().GetResourceHandle<Texture>(L"Resources/Texture/magenta1x1.png");
-        Texture* texture = fallbackHandle.Get();
-        RHISampler* sampler = SamplerManager::Get().GetDefaultSampler();
-        if (!texture || !sampler) return EResult::Fail;
-
-        RHITexture* rhiTexture = texture->GetRHITexture();
-        if (!rhiTexture) return EResult::Fail;  // fallback도 GPU 미업로드 시 실패 처리
-
-        if (IsFailure(rhi->BindTextureSampler(rhiTexture, sampler, 0)))
-            return EResult::Fail;
+        if (!slotBound[s])
+        {
+            auto dummyHandle = rm.GetResourceHandle<Texture>(defaultTextures[s]);
+            if (auto* dummyTex = dummyHandle.Get())
+            {
+                if (auto* rhiDummy = dummyTex->GetRHITexture())
+                    rhi->BindTextureSampler(rhiDummy, defaultSampler, s);
+            }
+        }
     }
+
     return EResult::Success;
 }
 #pragma endregion

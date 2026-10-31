@@ -35,6 +35,31 @@ Use one entry per meaningful change.
 
 ---
 
+## [2026-11-01] G-Buffer 텍스처 상태 누수 규명 및 플래그 기반 샘플링·머티리얼 그래프 입력 계획 수립 (P1-E)
+
+- Area: Render | Material | Shader | Documentation
+- Type: Fix | Architecture | Docs
+- 관련 파일:
+  - Docs/RenderingDevelopmentPlan.md
+  - Docs/DevelopmentPriorities.md
+  - Engine/Source/Resource/Material/Private/MaterialInterface.cpp
+  - Resources/Shader/hlsl/gbufferPS.hlsl
+- 동기 및 배경:
+  - 씬 뷰포트에서 간헐적으로 바닥과 벽이 새하얗게 폭발(과노출)하는 현상 분석 중, 텍스처 슬롯이 비어있는 머티리얼(GBufferMaterial)이 그려질 때 이전 드로우콜의 PBR(Slot 2) 및 Emission(Slot 3) 텍스처 상태가 RHI에 그대로 잔류하여 누수되는 결함 확인.
+  - 드로우콜 FrontToBack 정렬 순서에 따라 바닥 평면의 Emission에 이전 메쉬의 밝은 텍스처가 덮어써져 자체 발광이 1.0 이상으로 치솟았던 것을 사용자가 직접 렌더타겟 진단으로 규명함.
+- 구현 내용 (즉시 조치):
+  - Engine/Source/Resource/Material/Private/MaterialInterface.cpp:
+    - MaterialInterface::Bind()에서 slotBound[4]를 통해 슬롯 점유 여부를 추적.
+    - 머티리얼에 명시되지 않은 G-Buffer 핵심 슬롯(0: Diffuse, 1: Normal, 2: PBR, 3: Emission)을 안전한 기본 더미 텍스처(white1x1, blue1x1, black1x1)로 덮어써서 이전 드로우콜의 텍스처 잔류 상태를 원천 리셋하도록 수정 완료.
+- 개발 계획 반영 (Docs/RenderingDevelopmentPlan.md S2-C 및 Docs/DevelopmentPriorities.md P1-E):
+  1. **텍스처 유효성 비트 플래그(MaterialFeatureFlags) 도입**:
+     - 1x1 더미 텍스처 없이 슬롯을 순수하게 비우는(Unbound/Null SRV) 방식을 안전하게 취할 수 있도록, 텍스처 바인딩 여부를 비트 플래그로 전달하여 셰이더가 미지정 슬롯을 샘플링하지 않고 안전한 수학적 기본값(Emission: 0.0, Normal: 정점 법선, PBR: 상수 거칠기/금속도/차폐 1.0)으로 즉시 분기 처리.
+  2. **머티리얼 그래프 기반 상수/벡터/컬러 분리 입력 연동**:
+     - 텍스처 에셋을 반드시 샘플링하는 방식에서 탈피하여, 머티리얼 노드 그래프에서 단일 Color(RGBA), 스칼라(Float), 분리된 채널(Split RGBA / Swizzle)을 G-Buffer의 각 채널에 직접 꽂을 수 있는 유연한 머티리얼 파라미터 평가 경로 구축.
+     - 텍스처 없는 절차적/상수 기반 머티리얼 지원 및 텍스처 페치 대역폭 최적화.
+
+---
+
 ## [2026-11-01] 강화학습(RL) 첫 헤드리스 환경(CartPole) 및 Gymnasium 소켓 통신 서버(RLServer) 구축 (P2-C)
 
 - Area: Engine | Simulation | Tools | Client | Architecture
