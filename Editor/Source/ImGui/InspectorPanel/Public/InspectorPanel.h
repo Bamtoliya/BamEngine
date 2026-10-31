@@ -3,9 +3,6 @@
 #include "Editor_Includes.h"
 #include "ImGuiInterface.h"
 #include "ReflectionEditState.h"
-#include <unordered_map>
-#include <cstddef>
-#include <span>
 #include <entt/entity/entity.hpp>
 
 BEGIN(Engine)
@@ -29,6 +26,7 @@ public:
 
 private:
     void DrawHeaderBar(Engine::Entity* currentEntity, std::size_t selectionCount);
+    void DrawPrefabHeaderBar(Engine::Entity& entity);
     void DrawCommonComponents(Engine::Scene& scene, std::span<const entt::entity> entities);
     void DrawCommonTransformVector(Engine::Scene& scene, std::span<const entt::entity> entities, TransformEditMode mode);
     void DrawCommonFlags(Engine::Scene& scene, std::span<const entt::entity> entities);

@@ -16,15 +16,14 @@
 #include "ResourceManager.h"
 #include "Texture.h"
 #include "UILayout.h"
-#include <algorithm>
-#include <string_view>
-#include <vector>
 #include "ReflectionRegistry.h"
+#include "Components/Core/PrefabInstanceComponent.h"
+#include "PrefabModeManager.h"
+#include "SelectionManager.h"
+#include "NotificationManager.h"
+#include "SceneManager.h"
+#include "Archive/JsonArchive.h"
 #include <imgui_internal.h>
-#include <utility>
-#include <variant>
-#include <charconv>
-#include <cstring>
 
 InspectorPanel::InspectorPanel(uint32 panelId) : m_PanelId(panelId)
 {
@@ -76,6 +75,9 @@ void InspectorPanel::Draw()
 			targetEntity = targets.empty() ? nullptr : currentScene->FindEntity(targets.back());
 
 		DrawHeaderBar(targetEntity, targets.size());
+
+		if (targetEntity != nullptr && targets.size() <= 1)
+			DrawPrefabHeaderBar(*targetEntity);
 
 		// 3. 스크롤 가능한 본문 영역 (ImGui::BeginChild)
 		if (ImGui::BeginChild("InspectorPropertiesScrollArea", ImVec2(0, 0), false, ImGuiWindowFlags_None))
@@ -209,6 +211,149 @@ void InspectorPanel::DrawHeaderBar(Engine::Entity* currentEntity, std::size_t se
 	if (ImGui::IsItemHovered())
 		ImGui::SetTooltip("%s", m_IsLocked ? LOCAL_CSTR("Inspector.LockedTooltip") : LOCAL_CSTR("Inspector.UnlockedTooltip"));
 
+	ImGui::Separator();
+}
+
+void InspectorPanel::DrawPrefabHeaderBar(Engine::Entity& entity)
+{
+	auto* scene = entity.GetScene();
+	if (!scene) return;
+
+	auto& world = scene->GetRegistry();
+	const auto handle = entity.GetEntityHandle();
+
+	// 부모를 거슬러 올라가 PrefabInstanceComponent를 가진 루트 탐색
+	entt::entity cur = handle;
+	entt::entity rootHandle = entt::null;
+	while (cur != entt::null)
+	{
+		if (world.all_of<Engine::PrefabInstanceComponent>(cur))
+		{
+			rootHandle = cur;
+			break;
+		}
+		const auto* link = world.try_get<Engine::HierarchyComponent>(cur);
+		cur = link ? link->parent : entt::null;
+	}
+
+	if (rootHandle == entt::null) return; // 프리팹 소속이 아님
+
+	auto* prefabComp = world.try_get<Engine::PrefabInstanceComponent>(rootHandle);
+	if (!prefabComp) return;
+
+	Engine::Entity* rootEntity = scene->FindEntity(rootHandle);
+	if (!rootEntity) return;
+
+	const bool isRoot = (rootHandle == handle);
+	std::filesystem::path prefabPath(prefabComp->prefabAssetPath);
+	std::string prefabFileName = Engine::WStrToStr(prefabPath.filename().wstring());
+	if (prefabFileName.empty()) prefabFileName = LOCAL("Prefab.MissingAsset");
+
+	ImGui::Spacing();
+	ImGui::AlignTextToFramePadding();
+
+	// 루트 엔티티는 "Prefab: 에셋명", 자식 엔티티는 "(Child of Prefab: 에셋명)"으로 명확히 구분
+	if (isRoot)
+		ImGui::TextColored(ImVec4(0.35f, 0.78f, 1.0f, 1.0f), ICON_FA_CUBES " %s", prefabFileName.c_str());
+	else
+		ImGui::TextColored(ImVec4(0.35f, 0.78f, 1.0f, 0.75f), ICON_FA_CUBE " %s",
+			LOCAL_FMT("Prefab.ChildOf", prefabFileName).c_str());
+
+	if (ImGui::IsItemHovered())
+		ImGui::SetTooltip("%s", Engine::WStrToStr(prefabComp->prefabAssetPath).c_str());
+
+	ImGui::SameLine();
+	const float btnWidth = 65.0f;
+	const float totalBtnsWidth = (btnWidth * 2) + 85.0f + (ImGui::GetStyle().ItemSpacing.x * 2);
+	const float rightOffset = ImGui::GetContentRegionAvail().x - totalBtnsWidth;
+	if (rightOffset > 0.0f)
+		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + rightOffset);
+
+	// [Open] 버튼: 프리팹 뷰포트 격리 편집 모드 진입
+	if (ImGui::Button((std::string(ICON_FA_FOLDER_OPEN " ") + LOCAL("Prefab.Open")).c_str(), ImVec2(btnWidth, 0)))
+		PrefabModeManager::Get().EnterPrefabMode(prefabComp->prefabAssetPath);
+
+	ImGui::SameLine();
+
+	// [Select] 버튼: ContentBrowser에서 에셋 선택
+	if (ImGui::Button((std::string(ICON_FA_LOCATION_ARROW " ") + LOCAL("Prefab.Select")).c_str(), ImVec2(btnWidth, 0)))
+		SelectionManager::Get().SetSelectedAsset(prefabComp->prefabAssetPath);
+
+	ImGui::SameLine();
+
+	// [Overrides] 버튼: 드롭다운 팝업
+	if (ImGui::Button((std::string(LOCAL("Prefab.Overrides")) + " " ICON_FA_CARET_DOWN).c_str(), ImVec2(85.0f, 0)))
+		ImGui::OpenPopup("PrefabOverridesPopup");
+
+	if (ImGui::BeginPopup("PrefabOverridesPopup"))
+	{
+		ImGui::TextDisabled("%s", LOCAL_CSTR("Prefab.OverridesHeader"));
+		ImGui::Separator();
+
+		// 1. Apply All: 현재 인스턴스의 변경사항을 원본 .bamprefab.json에 덮어쓰기
+		if (ImGui::MenuItem((std::string(ICON_FA_CHECK " ") + LOCAL("Prefab.ApplyAll")).c_str()))
+		{
+			archive::JsonArchive ar;
+			const Engine::EResult res = Engine::SceneManager::Get().SavePrefab(ar, prefabComp->prefabAssetPath, *rootEntity);
+
+			if (res == Engine::EResult::Success)
+				NotificationManager::Get().AddNotification(LOCAL("ResourceType.Prefab"), LOCAL_FMT("Notification.PrefabApplied", prefabFileName), ELogLevel::Info, 3.0f);
+			else
+				NotificationManager::Get().AddNotification(LOCAL("ResourceType.Prefab"), LOCAL_FMT("Notification.PrefabSaveFailed", prefabFileName), ELogLevel::Error, 4.0f);
+		}
+
+		// 2. Revert All: 원본 파일에서 다시 인스턴스화하여 현재 인스턴스 복원
+		if (ImGui::MenuItem((std::string(ICON_FA_UNDO " ") + LOCAL("Prefab.RevertAll")).c_str()))
+		{
+			entt::entity parentH = entt::null;
+			if (const auto* link = world.try_get<Engine::HierarchyComponent>(rootHandle))
+				parentH = link->parent;
+
+			Engine::Entity* parentEntity = (parentH != entt::null) ? scene->FindEntity(parentH) : nullptr;
+			Engine::Vector3 oldPos = Engine::Vector3::Zero;
+			Engine::Vector3 oldRot = Engine::Vector3::Zero;
+			Engine::Vector3 oldScale = Engine::Vector3::One;
+
+			if (const auto* tr = world.try_get<Engine::TransformComponent>(rootHandle))
+			{
+				oldPos = tr->position;
+				oldRot = tr->eulerRotation;
+				oldScale = tr->scale;
+			}
+
+			archive::JsonArchive ar;
+			Engine::Entity* newRoot = nullptr;
+			const Engine::EResult res = Engine::SceneManager::Get().InstantiatePrefab(ar, prefabComp->prefabAssetPath, newRoot, parentEntity);
+
+			if (res == Engine::EResult::Success && newRoot)
+			{
+				if (auto* newTr = scene->GetRegistry().try_get<Engine::TransformComponent>(newRoot->GetEntityHandle()))
+				{
+					newTr->position = oldPos;
+					newTr->eulerRotation = oldRot;
+					newTr->scale = oldScale;
+					newTr->SynchronizeRotation();
+				}
+
+				scene->DestroyEntity(*rootEntity);
+				SelectionManager::Get().SetSelectedEntity(newRoot);
+				NotificationManager::Get().AddNotification(LOCAL("ResourceType.Prefab"), LOCAL("Notification.PrefabReverted"), ELogLevel::Info, 3.0f);
+			}
+		}
+
+		ImGui::Separator();
+
+		// 3. Unpack: 프리팹 연결 해제 (루트의 컴포넌트 1개만 제거)
+		if (ImGui::MenuItem((std::string(ICON_FA_UNLINK " ") + LOCAL("Prefab.Unpack")).c_str()))
+		{
+			world.remove<Engine::PrefabInstanceComponent>(rootHandle);
+			NotificationManager::Get().AddNotification(LOCAL("ResourceType.Prefab"), LOCAL("Notification.PrefabUnpacked"), ELogLevel::Info, 3.0f);
+		}
+
+		ImGui::EndPopup();
+	}
+
+	ImGui::Spacing();
 	ImGui::Separator();
 }
 
@@ -480,8 +625,7 @@ void InspectorPanel::DrawCommonFlags(Engine::Scene& scene, std::span<const entt:
 		ImGui::TextDisabled("%s", LOCAL_CSTR("Inspector.MultiEditUnavailable"));
 }
 
-void InspectorPanel::DrawCommonReflectedProperties(Engine::Scene& scene, std::span<const entt::entity> entities,
-	const Engine::ComponentReflectionEntry& entry)
+void InspectorPanel::DrawCommonReflectedProperties(Engine::Scene& scene, std::span<const entt::entity> entities, const Engine::ComponentReflectionEntry& entry)
 {
 	if (entities.empty() || !entry.ReflectionType || !entry.Edit || !entry.Has) return;
 	const auto& type = *entry.ReflectionType;

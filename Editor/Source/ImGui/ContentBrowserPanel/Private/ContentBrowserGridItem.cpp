@@ -3,15 +3,18 @@
 #include "ResourceEditorInterface.h"
 #include "ContentBrowserGridItem.h"
 #include "SelectionManager.h"
-#include "ShaderHotReloadManager.h"
-#include "HotReloadManager.h"
-#include "NotificationManager.h"
 #include "ModelImporter.h"
 #include "Mesh.h"
 #include <archive/JsonArchive.h>
 #include <archive/BeveArchive.h>
 #include "SceneManager.h"
+#include "NotificationManager.h"
 #include "Application.h"
+#include "AssetManager.h"
+#include "HotReloadManager.h"
+#include "ShaderHotReloadManager.h"
+#include "PIEManager.h"
+#include "PrefabModeManager.h"
 
 namespace
 {
@@ -61,6 +64,50 @@ namespace
 		return ar.HasField("Scene", hasScene) && hasScene;
 	}
 
+	bool IsPrefabFile(const std::filesystem::path& path)
+	{
+		std::string ext = path.extension().string();
+		for (char& c : ext) c = static_cast<char>(tolower(c));
+		if (ext == ".bamprefab" || ext == ".prefab") return true;
+		if (ext != ".json") return false;
+
+		std::string filename = path.filename().string();
+		for (char& c : filename) c = static_cast<char>(tolower(c));
+		if (filename.ends_with(".bamprefab.json") || filename.ends_with(".prefab.json")) return true;
+
+		archive::JsonArchive ar;
+		if (!ar.LoadFromFile(path)) return false;
+
+		bool hasPrefab = false;
+		return ar.HasField("Prefab", hasPrefab) && hasPrefab;
+	}
+
+	bool InstantiatePrefabFromFile(const std::filesystem::path& path, Engine::Entity* parent = nullptr)
+	{
+		if (!Engine::SceneManager::IsCreated()) return false;
+		auto* currentScene = Engine::SceneManager::Get().GetCurrentScene();
+		if (!currentScene) return false;
+
+		auto& history = Application::Get().GetEditHistory();
+		auto before = history.Enabled() ? SceneEditSnapshot::Capture(*currentScene) : SceneEditSnapshot{};
+
+		archive::JsonArchive ar;
+		Engine::Entity* spawnedEntity = nullptr;
+		const Engine::EResult result = Engine::SceneManager::Get().InstantiatePrefab(ar, path.wstring(), spawnedEntity, parent);
+		if (result == Engine::EResult::Success && spawnedEntity)
+		{
+			if (before) history.Record(std::move(before), SceneEditSnapshot::Capture(*currentScene), "UI_HISTORY_INSTANTIATE_PREFAB");
+			SelectionManager::Get().SetSelectedEntity(spawnedEntity);
+			NotificationManager::Get().AddNotification(LOCAL("ResourceType.Prefab"), LOCAL_FMT("Notification.PrefabInstantiated", path.stem().string()), ELogLevel::Info, 3.0f);
+			return true;
+		}
+		else
+		{
+			NotificationManager::Get().AddNotification(LOCAL("ResourceType.Prefab"), LOCAL_FMT("Notification.PrefabInstantiateFailed", path.stem().string()), ELogLevel::Error, 3.0f);
+			return false;
+		}
+	}
+
 	bool OpenSceneFromFile(const std::filesystem::path& path)
 	{
 		return Editor::ImGuiManager::Get().RequestOpenScene(path);
@@ -100,6 +147,12 @@ namespace
 		if (IsSceneFile(path))
 		{
 			OpenSceneFromFile(path);
+			return;
+		}
+		// 1-1. Prefab 파일 더블클릭 시 뷰포트 프리팹 격리 모드 진입
+		if (IsPrefabFile(path))
+		{
+			PrefabModeManager::Get().EnterPrefabMode(path);
 			return;
 		}
 
@@ -173,7 +226,12 @@ void ContentBrowserGridItem::Thumbnail(const std::filesystem::directory_entry& d
 		std::string ext = directoryEntry.path().extension().string();
 		for (auto& c : ext) c = tolower(c);
 
-		if (ext == ".png" || ext == ".jpg" || ext == ".tga")
+		if (IsPrefabFile(directoryEntry.path()))
+		{
+			icon = ICON_FA_CUBES;
+			typeColor = ImVec4(0.2f, 0.7f, 0.9f, 0.35f);
+		}
+		else if (ext == ".png" || ext == ".jpg" || ext == ".tga")
 		{
 			icon = ICON_FA_IMAGE;
 			typeColor = ImVec4(0.2f, 0.8f, 0.2f, 0.4f);
@@ -266,6 +324,27 @@ void ContentBrowserGridItem::ContextMenu(const std::filesystem::path& path,
 			{
 				std::string param = "/select,\"" + path.string() + "\"";
 				ShellExecuteA(NULL, "open", "explorer.exe", param.c_str(), NULL, SW_SHOWNORMAL);
+			}
+		}
+
+		if (!std::filesystem::is_directory(path))
+		{
+			if (ImGui::MenuItem((ICON_FA_ARROW_UP_RIGHT_FROM_SQUARE " " + LOCAL_LABEL("EditorCommon.OpenWithDefaultProgram")).c_str()))
+			{
+				ShellExecuteW(nullptr, L"open", path.wstring().c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+			}
+		}
+
+		if (!std::filesystem::is_directory(path) && IsPrefabFile(path))
+		{
+			ImGui::Separator();
+			if (ImGui::MenuItem((ICON_FA_PEN " " + LOCAL_LABEL("ContentBrowser.EditPrefab")).c_str()))
+			{
+				PrefabModeManager::Get().EnterPrefabMode(path);
+			}
+			if (ImGui::MenuItem((ICON_FA_CUBES " " + LOCAL_LABEL("ContentBrowser.InstantiatePrefab")).c_str()))
+			{
+				InstantiatePrefabFromFile(path);
 			}
 		}
 
@@ -608,13 +687,21 @@ void ContentBrowserGridItem::ContextMenu_Material(const std::filesystem::path& p
 				desc.BaseMaterialHandle = baseHandle;
 				desc.Key = std::filesystem::relative(instPath).wstring();
 				desc.Path = instPath.wstring();
-				auto instHandle = rm.LoadResource<Engine::MaterialInstance>(&desc);
-				if (instHandle)
+
+				// 1. 메모리에 인스턴스 객체 직접 생성
+				auto* newInst = Engine::MaterialInstance::Create(&desc);
+				if (newInst)
 				{
-					rm.SaveToJsonFile(instHandle.Get(), instPath.wstring());
-					EDITOR_LOG_INFO("Created Material Instance (JSON): {}", instPath.string());
-					NotificationManager::Get().AddNotification(LOCAL("Notification.InstanceCreated"),
-						instPath.filename().string(), ELogLevel::Info, 3.0f);
+					// 2. 디스크에 .bammatinst.json 파일로 저장
+					if (rm.SaveToJsonFile(newInst, instPath.wstring()) == EResult::Success)
+					{
+						// 3. 에셋 매니저에 정식 등록 및 알림
+						rm.LoadFile(std::filesystem::relative(instPath).wstring());
+						EDITOR_LOG_INFO("Created Material Instance (JSON): {}", instPath.string());
+						NotificationManager::Get().AddNotification(LOCAL("Notification.InstanceCreated"),
+							instPath.filename().string(), ELogLevel::Info, 3.0f);
+					}
+					rm.DestroyResource(newInst);
 				}
 			}
 		}
@@ -729,24 +816,7 @@ void ContentBrowserGridItem::ContextMenu_Model(const std::filesystem::path& path
 	{
 		if (ImGui::MenuItem((ICON_FA_FILE_IMPORT " " + LOCAL_LABEL("ContentBrowser.Reimport")).c_str()))
 		{
-			ModelImporter* importer = ModelImporter::Create();
-			if (importer)
-			{
-				ModelImportDesc desc = {};
-				const EResult res = importer->Import(path, path.parent_path(), &desc);
-				Safe_Release(importer);
-
-				if (IsSuccess(res))
-				{
-					NotificationManager::Get().AddNotification(LOCAL("Notification.ModelReimported"),
-						LOCAL_FMT("Notification.ReimportedFile", path.filename().string()), ELogLevel::Info, 3.0f);
-				}
-				else
-				{
-					NotificationManager::Get().AddNotification(LOCAL("Notification.ReimportFailed"),
-						LOCAL_FMT("Notification.ReimportFailedFile", path.filename().string()), ELogLevel::Error, 3.0f);
-				}
-			}
+			AssetManager::Get().ImportAsync(path, path.parent_path());
 		}
 	}
 }

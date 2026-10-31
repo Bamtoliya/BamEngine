@@ -35,6 +35,63 @@ Use one entry per meaningful change.
 
 ---
 
+## [2026-10-31] 에디터 프리팹 파이프라인(생성·격리모드·루트연결·오버라이드) 및 엔티티 다중 복사·붙여넣기 완성
+
+- Area: Editor | Engine | Scene | UI | Archive
+- Type: Feature | Architecture | UX
+- 관련 파일:
+  - Engine/Source/Core/Public/Components/Core/PrefabInstanceComponent.h
+  - Engine/Source/Core/Public/Components/Core/CoreComponents.h
+  - Engine/Source/World/Scene/Private/SceneManager.cpp
+  - Editor/Source/Clipboard/Public/EntityClipboard.h
+  - Editor/Source/Clipboard/Private/EntityClipboard.cpp
+  - Editor/Source/ImGui/HierarchyPanel/Public/EntityHierarchyView.h
+  - Editor/Source/ImGui/HierarchyPanel/Private/EntityHierarchyView.cpp
+  - Editor/Source/ImGui/HierarchyPanel/Private/HierarchyPanel.cpp
+  - Editor/Source/ImGui/InspectorPanel/Public/InspectorPanel.h
+  - Editor/Source/ImGui/InspectorPanel/Private/InspectorPanel.cpp
+  - Editor/Source/ImGui/ResourceEditor/Public/PrefabModeManager.h
+  - Editor/Source/ImGui/ResourceEditor/Private/PrefabModeManager.cpp
+  - Editor/Source/ImGui/ContentBrowserPanel/Private/ContentBrowserGridItem.cpp
+  - Editor/Source/Command/Private/EditorActionRegistry.cpp
+  - Resources/Data/Localization/Engine.csv
+  - Resources/Data/Localization/Editor.csv
+- 배경:
+  - ImGuiDevelopmentPlan.md 10절 프리팹 파이프라인과 17절 엔티티 다중 복사·붙여넣기 구현.
+  - 프리팹 에셋 생성·배치에 그치지 않고, 씬 내부 뷰포트·기즈모를 100% 활용하는 유니티 스타일의 프리팹 격리 편집 모드(PrefabModeManager)와, 원본 에셋과 인스턴스 간의 연결·오버라이드 관리(PrefabInstanceComponent, Apply All, Revert All, Unpack) 파이프라인 구축.
+  - 다중 엔티티 복사·붙여넣기 시 부모-자식 동시 선택 중복 복제 방지, 계층 순서 보존, 원자적 단일 Undo 스냅샷 보장.
+- 구현 내용:
+  - **엔티티 다중 복사·붙여넣기 (EntityClipboard)**:
+    - archive::JsonArchive 메모리 직렬화를 사용하여 선택된 엔티티 서브트리를 독립적으로 직렬화. 원본이 삭제되거나 수정되어도 안전하게 붙여넣기 가능.
+    - 조상 필터링: 선택 집합 중 다른 선택 엔티티의 자손인 노드는 복사 루트에서 제외하여 중복 생성 방지.
+    - 단일 원자적 Undo: 여러 엔티티를 한 번에 붙여넣더라도 UI_HISTORY_PASTE 단일 스냅샷으로 묶어 Ctrl+Z/Ctrl+Y 일괄 제어.
+    - 단축키: Ctrl+C(복사), Ctrl+V(붙여넣기), Ctrl+Shift+V(자식으로 붙여넣기) 바인딩 및 붙여넣기 후 신규 루트 자동 선택.
+    - 계층 패널 다중 삭제: Delete 키 및 우클릭 메뉴를 통한 DeleteEntities 지원, 부모-자식 동시 삭제 시 충돌 방지.
+  - **프리팹 1단계 (생성·배치)**:
+    - Hierarchy 우클릭 Save As Prefab... (EFileDialogContext::PrefabSave), ContentBrowser .bamprefab.json 식별(ICON_FA_CUBES, 시안 틴트), 드래그 앤 드롭 인스턴스화.
+  - **프리팹 2단계 (뷰포트 격리 편집 모드 PrefabModeManager)**:
+    - 미니 윈도우 대신 메인 씬을 Safe_AddRef로 메모리에 안전 보존하고 임시 프리팹 씬(m_PrefabScene)으로 전환.
+    - 메인 뷰포트, 하이어라키, 인스펙터, ImGuizmo 3D 조작 기능을 100% 그대로 활용.
+    - 뷰포트 상단에 ◀ Back to Scene 배너 및 저장 버튼을 배치하여 원클릭으로 메인 씬에 안전 복귀.
+  - **프리팹 3단계 (단일 원천 루트 전용 연결 및 오버라이드 관리)**:
+    - 아키텍처 정석 설계: 데이터 중복(Single Source of Truth 위반)을 방지하기 위해 PrefabInstanceComponent는 서브트리의 루트 엔티티에만 부착.
+    - FindPrefabRootHandle 헬퍼: 부모 계층을 탐색하여 자식 엔티티도 즉시 자신의 프리팹 루트 및 원본 에셋 경로 식별.
+    - Hierarchy 시각화: 프리팹 루트 및 자식 엔티티 청록색(ImVec4(0.35f, 0.78f, 1.0f, 1.0f)) 텍스트 및 큐브 아이콘 표시, 우클릭 시 Open Prefab, Select in Content Browser, Unpack Prefab 제공.
+    - Inspector 상단 프리팹 헤더 바:
+      - Open: 프리팹 격리 편집 모드 진입.
+      - Select: Content Browser에서 해당 에셋 선택.
+      - Overrides 드롭다운: Apply All (원본 에셋에 덮어쓰기), Revert All (원본 에셋에서 복원), Unpack (루트 컴포넌트 제거로 일반 엔티티 전환).
+    - 다국어 CSV 등록: Engine.csv(컴포넌트 리플렉션) 및 Editor.csv(UI/메뉴/알림/히스토리)에 다국어 키 동기화.
+- 검증:
+  - C++ 한 줄 작성 규칙 엄수, Lazy_Singleton 적용을 통한 싱글턴 크래시 원천 차단.
+  - 정적 분석 및 컴파일 에러 해결(C2039, C2664, C2663, C1128 /bigobj 플래그 등).
+- 남은 항목:
+  - ImGuiDevelopmentPlan.md 11절 A: 씬 문서 상태·미저장 변경 보호 및 SceneManager 미저장 변경 감지 경고 팝업(Save/Discard/Cancel).
+  - 14절: 머티리얼/텍스처 에셋 썸네일 실시간 미리보기 파이프라인.
+
+---
+
+
 ## [2026-10-31] 에디터 설정·워크스페이스 저장 경로와 씬 문서·후처리 저장 흐름 정리
 
 - Area: Editor | Engine | Resource | Archive | UI

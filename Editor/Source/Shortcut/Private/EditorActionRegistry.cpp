@@ -4,6 +4,9 @@
 #include "ToolBar.h"
 #include "PIEManager.h"
 #include "SceneDocument.h"
+#include "EntityClipboard.h"
+#include "SelectionManager.h"
+#include "SceneManager.h"
 
 BEGIN(Editor)
 
@@ -22,7 +25,8 @@ void EditorActionRegistry::RegisterAll()
         .CanExecute = []() {
             auto& h = Application::Get().GetEditHistory();
             return h.ShortcutsAllowed() && h.CanUndo();
-        }
+        },
+        .AllowRepeat = true
         });
 
     sm.RegisterAction({
@@ -35,6 +39,59 @@ void EditorActionRegistry::RegisterAll()
         .CanExecute = []() {
             auto& h = Application::Get().GetEditHistory();
             return h.ShortcutsAllowed() && h.CanRedo();
+        },
+        .AllowRepeat = true
+        });
+
+    sm.RegisterAction({
+    .Id = "Edit.Copy",
+    .DisplayNameKey = "EditorCommon.Copy",
+    .CategoryKey = "UI_EDIT",
+    .Context = EShortcutContext::Global,
+    .DefaultChord = ShortcutChord(Engine::EKeyCode::C, EModifierKey::Ctrl),
+    .ExecuteHandler = []() {
+        if (auto* scene = SceneManager::Get().GetCurrentScene())
+            EntityClipboard::CopySelected(scene);
+    },
+    .CanExecute = []() {
+        auto& h = Application::Get().GetEditHistory();
+        if (!h.ShortcutsAllowed() || !PIEManager::Get().IsEditing()) return false;
+        return !SelectionManager::Get().GetSelectedEntities().empty();
+    }
+        });
+
+    sm.RegisterAction({
+        .Id = "Edit.Paste",
+        .DisplayNameKey = "EditorCommon.Paste",
+        .CategoryKey = "UI_EDIT",
+        .Context = EShortcutContext::Global,
+        .DefaultChord = ShortcutChord(Engine::EKeyCode::V, EModifierKey::Ctrl),
+        .ExecuteHandler = []() {
+            if (auto* scene = SceneManager::Get().GetCurrentScene())
+                EntityClipboard::Paste(scene, nullptr);
+        },
+        .CanExecute = []() {
+            auto& h = Application::Get().GetEditHistory();
+            return h.ShortcutsAllowed() && PIEManager::Get().IsEditing() && EntityClipboard::HasData();
+        }
+        });
+
+    sm.RegisterAction({
+        .Id = "Edit.PasteAsChild",
+        .DisplayNameKey = "EditorCommon.PasteAsChild",
+        .CategoryKey = "UI_EDIT",
+        .Context = EShortcutContext::Global,
+        .DefaultChord = ShortcutChord(Engine::EKeyCode::V, EModifierKey::Ctrl | EModifierKey::Shift),
+        .ExecuteHandler = []() {
+            if (auto* scene = SceneManager::Get().GetCurrentScene())
+            {
+                auto* parent = SelectionManager::Get().GetPrimarySelectedEntity();
+                EntityClipboard::Paste(scene, parent);
+            }
+        },
+        .CanExecute = []() {
+            auto& h = Application::Get().GetEditHistory();
+            return h.ShortcutsAllowed() && PIEManager::Get().IsEditing() && EntityClipboard::HasData();
         }
         });
 

@@ -3,7 +3,6 @@
 #include "SceneManager.h"
 #include <archive/ArchiveInterface.h>
 #include "LightManager.h"
-#include <new>
 
 IMPLEMENT_SINGLETON(SceneManager)
 
@@ -26,25 +25,6 @@ void SceneManager::Free()
 	m_Scenes.clear();
 }
 #pragma endregion
-
-//#pragma region Loop
-//void SceneManager::FixedUpdate(f32 dt)
-//{
-//	if(m_CurrentScene)
-//		m_CurrentScene->FixedUpdate(dt);
-//}
-//void SceneManager::Update(f32 dt)
-//{
-//	if(m_CurrentScene)
-//		m_CurrentScene->Update(dt);
-//}
-//void SceneManager::LateUpdate(f32 dt)
-//{
-//	if(m_CurrentScene)
-//		m_CurrentScene->LateUpdate(dt);
-//}
-//#pragma endregion
-
 
 #pragma region Scene Management
 EResult SceneManager::OpenScene(Scene* newScene)
@@ -159,8 +139,7 @@ EResult SceneManager::SavePrefab(archive::IArchive& ar, const wstring& filePath,
 	return EResult::Success;
 }
 
-EResult SceneManager::InstantiatePrefab(
-	archive::IArchive& ar, const wstring& filePath, Entity*& outRootEntity, Entity* parent)
+EResult SceneManager::InstantiatePrefab(archive::IArchive& ar, const wstring& filePath, Entity*& outRootEntity, Entity* parent)
 {
 	if (filePath.empty() || outRootEntity != nullptr)
 		return EResult::InvalidArgument;
@@ -177,6 +156,12 @@ EResult SceneManager::InstantiatePrefab(
 		ENGINE_LOG_ERROR("Prefab load failed: code={}, field={}, path={}",
 			static_cast<int>(result.Code), result.Field, WStrToStr(filePath));
 		return EResult::Fail;
+	}
+
+	if (outRootEntity)
+	{
+		auto& comp = m_CurrentScene->GetRegistry().emplace_or_replace<PrefabInstanceComponent>(outRootEntity->GetEntityHandle());
+		comp.prefabAssetPath = filePath;
 	}
 
 	return EResult::Success;

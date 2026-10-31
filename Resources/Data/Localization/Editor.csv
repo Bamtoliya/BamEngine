@@ -1,5 +1,15 @@
 Group,Key,English,Korean
 ,Unsupported graph data version.,Unsupported graph data version.,지원하지 않는 그래프 데이터 버전입니다.
+,UI_HISTORY_PASTE,Paste Entities,엔티티 붙여넣기
+,UI_HISTORY_INSTANTIATE_PREFAB,Instantiate Prefab,프리팹 배치
+,UI_DELETE_SELECTED_ENTITIES,Delete Selected Entities,선택한 엔티티 삭제
+,UI_HISTORY_UNPACK_PREFAB,Unpack Prefab,프리팹 연결 해제
+,Graph data domain does not match this graph.,Graph data domain does not match this graph.,그래프 데이터의 도메인이 현재 그래프와 일치하지 않습니다.
+,Variable name cannot be empty.,Variable name cannot be empty.,변수 이름은 비워 둘 수 없습니다.
+,Variable with this name already exists.,Variable with this name already exists.,같은 이름의 변수가 이미 있습니다.
+,Variable not found.,Variable not found.,변수를 찾을 수 없습니다.
+,Variable not found in executor:,Variable not found in executor:,실행기에서 변수를 찾을 수 없습니다:
+,Pass through execution or data wire cleanly.,Pass through execution or data wire cleanly.,실행선이나 데이터선을 중간에서 연결해 경로를 정리합니다.
 ,Node ID must be non-zero.,Node ID must be non-zero.,노드 ID는 0일 수 없습니다.
 ,Duplicate node ID.,Duplicate node ID.,노드 ID가 중복되었습니다.
 ,Next node ID must exceed existing node IDs.,Next node ID must exceed existing node IDs.,다음 노드 ID는 기존 노드 ID보다 커야 합니다.
@@ -28,7 +38,6 @@ Group,Key,English,Korean
 ,Engine::ETransformAbsolute.Rotation,Absolute Rotation,회전 독립
 ,Engine::ETransformAbsolute.Scale,Absolute Scale,크기 독립
 ,Engine::ETransformAbsolute.All,Independent Transform,Transform 전체 독립
-,UI_POST_FX,Post FX,후처리
 ,UI_PASS,Passes,패스
 ,UI_DEBUG,Debug,디버그
 ,UI_CAMERA,Camera,카메라
@@ -97,6 +106,8 @@ Group,Key,English,Korean
 ,UI_SIZE_UNAVAILABLE,Size unavailable,크기를 읽을 수 없습니다.
 ,UI_RESET_TO_DEFAULT,Reset to Default,기본값으로 재설정
 ,UI_VALUE_PREVIEW_UNAVAILABLE,Value preview unavailable,값 미리보기를 사용할 수 없습니다
+,UI_POST_FX,Post FX,후처리
+,UI_OPEN_POST_PROCESS_PANEL,Open Post-Process Panel...,후처리 패널 열기...
 Transform,Hirarchy_AddGameObject,Add GameObject,게임 오브젝트 추가+
 Transform,Position,Position,위치
 Transform,Rotation,Rotation,회전
@@ -178,6 +189,7 @@ EditorCommon,Delete,Delete,삭제
 EditorCommon,CopyPath,Copy Path,경로 복사
 EditorCommon,ShowInExplorer,Show in Explorer,탐색기에서 보기
 EditorCommon,NewFolder,New Folder,새 폴더
+EditorCommon,Save,Save,저장
 EditorCommon,Search,Search...,검색...
 ResourceType,Texture,Texture,텍스처
 ResourceType,Sprite,Sprite,스프라이트
@@ -243,8 +255,6 @@ Viewport,Canvas,Canvas,캔버스
 Viewport,NewCanvas,New Canvas,새 캔버스
 Viewport,AddImage,Add Image,이미지 추가
 Viewport,AddButton,Add Button,버튼 추가
-PostProcess,Exposure,Exposure,노출
-PostProcess,Gamma,Gamma,감마
 PostProcess,Effects,Effects,효과
 Inspector,NoSelection,No Entity selected.,선택된 엔티티가 없습니다.
 Inspector,NoScene,Entity has no Scene.,엔티티에 씬이 없습니다.
@@ -553,6 +563,9 @@ Notification,TextureHotReloaded,Texture Hot-Swapped,텍스처 핫 리로드 완�
 Notification,MaterialHotReloaded,Material Hot-Swapped,머티리얼 핫 리로드 완료
 Notification,MeshHotReloaded,Mesh Hot-Swapped,메시 핫 리로드 완료
 Notification,LocalizationReloaded,Localization Hot-Reloaded,번역 데이터 핫 리로드 완료
+Notification,CompilingModule,Compiling GameModule in background...,GameModule 컴파일을 시작합니다...
+Notification,CompileSuccess,GameModule compilation succeeded!,GameModule 컴파일 완료 및 핫로드 준비 완료!
+Notification,CompileFailed,GameModule compilation failed! Check console log.,GameModule 컴파일 실패! 콘솔 로그를 확인하세요.
 Notification,ShaderCompileError,Shader Compile Error,셰이더 컴파일 오류
 Notification,ShaderHotReloaded,Shader Hot-Swapped,셰이더 핫 리로드 완료
 Notification,ReloadedFile,{} reloaded.,{} 파일을 다시 불러왔습니다.
@@ -567,6 +580,11 @@ Notification,JsonSaveFailed,Failed to save JSON resource: {},JSON 리소스를 �
 ToolBar,TargetFPS,Target FPS,목표 프레임 속도
 TerrainEditor,Title,Terrain Editor,지형 편집기
 ToolBar,ModuleReload,Hot Reload,핫 리로드
+ToolBar,ModuleCompile,Compile,컴파일
+ToolBar,ModuleCompiling,Compiling...,컴파일 중...
+ToolBar,ModuleCompileTooltip,Build GameModule C++ source in the background.,GameModule C++ 소스를 백그라운드에서 빌드합니다.
+ToolBar,AutoCompile,Auto-Compile,자동 컴파일
+ToolBar,AutoCompileTooltip,Automatically trigger background build on C++ source save.,C++ 소스 파일 저장 시 자동으로 백그라운드 빌드를 수행합니다.
 MaterialOption,Opaque,Opaque,불투명
 MaterialOption,Masked,Masked,마스크
 MaterialOption,Translucent,Translucent,반투명
@@ -701,13 +719,20 @@ GraphPanel,RuntimeMaterialOld,This is an earlier result. Create another material
 Hierarchy,EntityFallback,Entity {},엔티티 {}
 Console,CollapseDuplicates,Collapse duplicates,중복 묶기
 Viewport,NoUsableCamera,No usable active camera in the scene.,씬에 사용할 수 있는 활성 카메라가 없습니다.
+ResourceEditor,InstantiateModel,Add Model to Scene,모델을 씬에 배치
+ModelEditor,MaterialSlot,Material Slot {},머티리얼 슬롯 {}
+ModelEditor,NoModel,Open an imported .bammodel resource. If loading failed check the log.,임포트된 .bammodel 리소스를 여세요. 로드 실패 시 로그를 확인하세요.
+ModelEditor,NoSlots,No material slots. Older models may need to be imported again.,머티리얼 슬롯이 없습니다. 이전 모델은 다시 임포트해야 할 수 있습니다.
+ModelEditor,PendingSave,Material assignments changed. Save the model to keep them.,머티리얼 연결이 변경됐습니다. 유지하려면 모델을 저장하세요.
+ModelEditor,Saved,Model saved.,모델을 저장했습니다.
+ModelEditor,SaveFailed,Failed to save the model. Check the log.,모델 저장에 실패했습니다. 로그를 확인하세요.
+ModelEditor,EditModeOnly,Material assignments can be edited and saved after stopping PIE.,PIE를 종료하면 머티리얼 연결을 편집하고 저장할 수 있습니다.
+ToolBar,TargetFPSHint,0 disables the FPS limit. Range: 0-1000.,0은 FPS 제한을 해제합니다. 입력 범위: 0~1000.
 Notification,LoadResourceFailed,Resource load failed,리소스 불러오기 실패
 Notification,LoadResourceSucceeded,Resource loaded,리소스 불러오기 완료
 Notification,ResourceLoadFailed,Failed to load resource: {},리소스를 불러오지 못했습니다: {}
 Notification,ResourceLoadSucceeded,Loaded resource: {},리소스를 불러왔습니다: {}
 ContentBrowser,NoMatchingAssets,No matching assets.,표시할 에셋이 없습니다.
-,UI_OPEN_POST_PROCESS_PANEL,Open Post-Process Panel...,후처리 패널 열기...
-EditorCommon,Save,Save,저장
 PostProcess,OpenPanel,Open Post-Process Panel...,후처리 패널 열기...
 PostProcess,ColorAdjustments,Color Adjustments,색상 조정
 PostProcess,Vignette,Vignette,비네팅
@@ -828,3 +853,134 @@ EditorSettings,WorkspaceSaveBlocked,Workspace saving is blocked. Changes apply o
 EditorSettings,SettingsFilePath,Settings file: {},설정 파일: {}
 EditorSettings,PathUnavailable,Storage path unavailable,저장 경로를 사용할 수 없습니다
 EditorSettings,SettingsRecoveryHint,Close the editor and inspect the file or path. Back up existing files before making changes and restart after recovery.,에디터를 종료한 뒤 파일과 경로를 확인하세요. 기존 파일은 수정 전에 백업하고 복구 후 다시 실행하세요.
+EditorCommon,OpenWithDefaultProgram,Open with Default Program,기본 프로그램으로 열기
+EditorSettings,Saved,Settings applied and saved.,설정을 적용하고 저장했습니다.
+UI,SAVE_AS_PREFAB,Save As Prefab...,프리팹으로 저장...
+ContentBrowser,InstantiatePrefab,Instantiate in Scene,씬에 인스턴스화
+Notification,PrefabSaved,Prefab saved: {},프리팹 저장 완료: {}
+Notification,PrefabSaveFailed,Failed to save prefab: {},프리팹 저장 실패: {}
+Notification,PrefabInstantiated,Prefab instantiated: {},프리팹 인스턴스화 완료: {}
+Notification,PrefabInstantiateFailed,Failed to instantiate prefab: {},프리팹 인스턴스화 실패: {}
+EditorCommon,Copy,Copy,복사
+EditorCommon,Paste,Paste,붙여넣기
+EditorCommon,PasteAsChild,Paste As Child,자식으로 붙여넣기
+Notification,EntitiesCopied,Copied {} entities,엔티티 {}개 복사됨
+Notification,EntitiesPasted,Pasted {} entities,엔티티 {}개 붙여넣기 완료
+Notification,EntitiesPasteFailed,Failed to paste entities,엔티티 붙여넣기 실패
+ResourceEditor,PrefabTitle,Prefab Editor,프리팹 에디터
+ContentBrowser,EditPrefab,Edit Prefab,프리팹 편집
+PrefabEditor,Hierarchy,Prefab Hierarchy,프리팹 계층 구조
+PrefabEditor,Inspector,Prefab Inspector,프리팹 인스펙터
+PrefabEditor,NoEntitySelected,No entity selected.,선택된 엔티티가 없습니다.
+PrefabEditor,NoPrefabLoaded,No prefab loaded.,로드된 프리팹이 없습니다.
+PrefabEditor,Save,Save,저장
+PrefabEditor,SaveAs,Save As...,다른 이름으로 저장...
+PrefabEditor,Revert,Revert to Saved,변경 취소 및 다시 로드
+PrefabEditor,UnsavedChangesPrompt,Prefab has unsaved changes. Do you want to save them?,프리팹에 저장되지 않은 변경사항이 있습니다. 저장하시겠습니까?
+FileDialog,PrefabFiles,Prefab Files (*.bamprefab.json),프리팹 파일 (*.bamprefab.json)
+FileDialog,JsonFiles,JSON Files (*.json),JSON 파일 (*.json)
+FileDialog,ImageFiles,Image Files,이미지 파일
+FileDialog,PngFiles,PNG Images (*.png),PNG 이미지 (*.png)
+PrefabMode,BackToScene,Back to Scene,씬으로 복귀
+PrefabMode,Title,Prefab Mode,프리팹 격리 편집 모드
+Notification,EnterPrefabMode,Entered Prefab Mode: {},프리팹 편집 모드 진입: {}
+Prefab,Open,Open,열기
+Prefab,Select,Select,선택
+Prefab,Overrides,Overrides,오버라이드
+Prefab,OverridesHeader,Prefab Overrides Management,프리팹 오버라이드 관리
+Prefab,ApplyAll,Apply All,원본에 모두 적용 (Apply All)
+Prefab,RevertAll,Revert All,원본 상태로 되돌리기 (Revert All)
+Prefab,Unpack,Unpack Prefab,프리팹 연결 해제 (Unpack)
+Notification,PrefabApplied,Prefab changes applied: {},프리팹 원본에 적용 완료: {}
+Notification,PrefabReverted,Prefab reverted to original asset.,프리팹을 원본 상태로 복원했습니다.
+Notification,PrefabUnpacked,Prefab unpacked successfully.,프리팹 연결을 해제했습니다.
+UI,HISTORY_UNPACK_PREFAB,Unpack Prefab,프리팹 연결 해제
+EditorCommon,Type,Type,타입
+GraphPanel,WireElectronic,Wire: Electronic,와이어: 혼합
+GraphPanel,WireStraight,Wire: All Straight,와이어: 모두 직선
+GraphPanel,WireCurved,Wire: All Curved,와이어: 모두 곡선
+GraphPanel,WireElectronicHint,Execution wires are straight and data wires are curved. Click to switch styles.,실행선은 직선이고 데이터선은 곡선입니다. 클릭하면 표시 방식을 전환합니다.
+GraphPanel,WireStraightHint,All execution and data wires are straight. Click to switch styles.,실행선과 데이터선을 모두 직선으로 표시합니다. 클릭하면 표시 방식을 전환합니다.
+GraphPanel,WireCurvedHint,All wires use Bezier curves. Click to switch styles.,모든 연결선을 베지어 곡선으로 표시합니다. 클릭하면 표시 방식을 전환합니다.
+GraphPanel,Variables,Variables,변수
+GraphPanel,NoVariables,No variables defined.,정의된 변수가 없습니다.
+GraphPanel,AddVariableGet,+Get,+읽기
+GraphPanel,AddVariableSet,+Set,+쓰기
+GraphPanel,AddVariable,Add Variable,변수 추가
+GraphPanel,CreateVariable,Create Variable,변수 생성
+GraphPanel,DebugNone,Debug: [None],디버그: [없음]
+GraphPanel,DebugNamedEntity,Debug: {} (#{}),디버그: {} (#{})
+GraphPanel,DebugEntity,Debug: Entity #{},디버그: 엔티티 #{}
+GraphPanel,EntityLabel,Entity #{},엔티티 #{}
+GraphPanel,DebugEntityHint,Select an active actor to visualize live execution wire flow and watch pin values.,실행 중인 액터를 선택하면 연결선의 실행 흐름과 핀 값을 관찰할 수 있습니다.
+GraphPanel,CreateCommentBox,Create Comment Box (Group),코멘트 상자 생성 (그룹)
+GraphPanel,AddReroute,Add Reroute Node,리루트 노드 추가
+GraphPanel,BreakLink,Break Link,연결 해제
+GraphPanel,BreakAllPinLinks,Break All Pin Links,모든 핀 연결 해제
+GraphPanel,RemoveBreakpoint,Remove Breakpoint,중단점 제거
+GraphPanel,ToggleBreakpoint,Toggle Breakpoint,중단점 설정/해제
+GraphPanel,Alignment,Alignment,정렬
+GraphPanel,AlignTop,Align Top,위쪽 정렬
+GraphPanel,AlignBottom,Align Bottom,아래쪽 정렬
+GraphPanel,AlignLeft,Align Left,왼쪽 정렬
+GraphPanel,AlignRight,Align Right,오른쪽 정렬
+GraphPanel,DistributeHorizontal,Distribute Horizontally,가로 간격 균등 배치
+GraphPanel,DistributeVertical,Distribute Vertically,세로 간격 균등 배치
+GraphPanel,PinSummary,Pin: {} ({}),핀: {} ({})
+GraphPanel,BreakPinLinks,Break Links to {},{} 핀의 연결 해제
+GraphPanel,PromoteVariable,Promote to Variable,변수로 승격
+ContentBrowser,ScopeAll,Scope: All,범위: 전체
+ContentBrowser,ScopeCurrent,Scope: Current,범위: 현재 폴더
+ContentBrowser,ScopeAllHint,Searching all resource folders (Recursive),모든 리소스 폴더와 하위 폴더를 검색합니다.
+ContentBrowser,ScopeCurrentHint,Searching current directory only,현재 폴더만 검색합니다.
+ResourcePicker,LoadedInMemory,Loaded in Memory:,메모리에 로드된 리소스:
+ResourcePicker,ProjectFiles,Project Files (On Disk):,프로젝트 파일 (디스크):
+ResourcePicker,DiskFile,{} [Disk],{} [디스크]
+Inspector,ValuePreviewUnavailable,Value preview unavailable,값 미리보기를 사용할 수 없습니다
+Shortcuts,Conflict,Conflict: {} is already assigned to {},단축키 충돌: {}은(는) 이미 {}에 지정되어 있습니다
+History,Title,History,편집 이력
+History,ActionShortcut,{} ({}),{} ({})
+History,Clear,Clear History,이력 비우기
+History,Cleared,Command history cleared.,명령 이력을 비웠습니다.
+History,UnsavedChanges,[Unsaved Changes],[저장되지 않은 변경 사항]
+History,AllChangesSaved,[All Changes Saved],[모든 변경 사항 저장됨]
+History,Status,Status,상태
+History,CommandAction,Command Action,명령
+History,SavedColumn,Saved,저장 여부
+History,Current,>> Current,>> 현재
+History,InitialState,[Initial State],[초기 상태]
+History,SavedMarker,[Saved],[저장됨]
+Metrics,RenderTimes,Render Times:,렌더링 시간:
+Metrics,TotalCPUSubmit,Total CPU Submit: {:.2f} ms,CPU 전체 제출 시간: {:.2f} ms
+Metrics,TotalGPUExecute,Total GPU Execute: {:.2f} ms,GPU 전체 실행 시간: {:.2f} ms
+Metrics,RenderPass,Render Pass,렌더 패스
+Metrics,CPUTime,CPU (ms),CPU (ms)
+Metrics,GPUTime,GPU (ms),GPU (ms)
+Metrics,VRAMDescriptors,VRAM & Descriptors:,VRAM 및 디스크립터:
+Metrics,DedicatedVRAM,Dedicated VRAM: {} MB,전용 VRAM: {} MB
+Metrics,AllocatedDescriptors,Allocated Descriptors: {},할당된 디스크립터: {}
+Metrics,HardwareCapabilities,Hardware Capabilities:,하드웨어 지원 기능:
+Metrics,ComputeShader,Compute Shader: {},컴퓨트 셰이더: {}
+Metrics,IndirectDraw,Indirect Draw: {},간접 그리기: {}
+Metrics,MeshShader,Mesh Shader: {},메시 셰이더: {}
+Metrics,DXRRaytracing,DXR Raytracing: {},DXR 레이 트레이싱: {}
+Metrics,DescriptorIndexing,Descriptor Indexing (Bindless): {},디스크립터 인덱싱 (바인드리스): {}
+Metrics,Supported,Supported,지원
+Metrics,NotSupported,Not Supported,미지원
+Metrics,SupportedTier1Plus,Supported (Tier 1+),지원 (Tier 1 이상)
+Metrics,SupportedTier1_0Plus,Supported (Tier 1.0+),지원 (Tier 1.0 이상)
+Metrics,SupportedTier3,Supported (Tier 3),지원 (Tier 3)
+Metrics,Tier1Or2,Tier 1/2,Tier 1/2
+MaterialEditor,OverriddenInInstance,Overridden in Instance,인스턴스에서 재정의됨
+MaterialEditor,BaseBinding,{} (Base),{} (원본)
+MaterialEditor,InheritedFromBase,Inherited from Base Material,원본 머티리얼에서 상속됨
+MaterialEditor,AddBindingAtSlot,{} (Slot {}),{} (슬롯 {})
+MaterialEditor,ColorType,{} (Color),{} (색상)
+PrefabEditor,CloseConfirmTitle,Unsaved Prefab Changes,저장되지 않은 프리팹 변경 사항
+PrefabEditor,ExitConfirmTitle,Exit Prefab Mode,프리팹 편집 모드 종료
+QtEditor,ViewportPending,Engine viewport integration pending,엔진 뷰포트 연결 대기 중
+QtEditor,ScenePending,Scene binding pending,씬 연결 대기 중
+QtEditor,SelectionPending,Selection binding pending,선택 대상 연결 대기 중
+History,Unnamed,Unnamed Command,이름 없는 명령
+Prefab,MissingAsset,Missing Prefab,프리팹을 찾을 수 없음
+Prefab,ChildOf,(Child of {}),({}의 자식)

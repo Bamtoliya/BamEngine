@@ -31,11 +31,18 @@ namespace Editor
     struct EntityHierarchyAction
     {
         entt::entity Clicked = entt::null;
-        entt::entity Delete = entt::null;
+        std::vector<entt::entity> DeleteEntities;
         entt::entity MoveUp = entt::null;
         entt::entity MoveDown = entt::null;
         entt::entity ToggleVisible = entt::null;
         entt::entity ToggleActive = entt::null;
+        entt::entity SaveAsPrefab = entt::null;
+        entt::entity UnpackPrefab = entt::null;
+        bool Copy = false;
+        bool Paste = false; 
+        entt::entity PasteAsChild = entt::null;
+        std::wstring DropPrefabFile;
+        entt::entity DropPrefabTarget = entt::null;
         bool Toggle = false;
         bool Range = false;
         std::vector<entt::entity> VisibleEntities;

@@ -14,7 +14,13 @@
 
 #include "EntityFactory.h"
 #include "CoreComponents.h"
-#include <algorithm>
+#include "ToolBar.h"
+
+#include "FileDialogs.h"
+#include <archive/JsonArchive.h>
+#include "NotificationManager.h"
+#include "EntityClipboard.h"
+#include "Components/Core/PrefabInstanceComponent.h"
 
 
 static bool CheckboxTristate(const char* label, bool* v, bool is_mixed)
@@ -90,7 +96,7 @@ bool HierarchyPanel::DrawRenameBox(T* target, ImGuiTreeNodeFlags flags, bool isS
 		ImVec2 boxMin = ImVec2(std::min(m_BoxStartPos.x, m_BoxEndPos.x), std::min(m_BoxStartPos.y, m_BoxEndPos.y));
 		ImVec2 boxMax = ImVec2(std::max(m_BoxStartPos.x, m_BoxEndPos.x), std::max(m_BoxStartPos.y, m_BoxEndPos.y));
 
-		// 3. AABB(Axis-Aligned Bounding Box) 교차 검사
+		// 3. BoundingBox(Axis-Aligned Bounding Box) 교차 검사
 		// 두 사각형이 겹치는지 확인
 		bool overlap = (itemMin.x < boxMax.x && itemMax.x > boxMin.x) &&
 			(itemMin.y < boxMax.y && itemMax.y > boxMin.y);
@@ -203,8 +209,31 @@ void HierarchyPanel::Draw()
 		}
 		ImGui::Spacing();
 
-        DrawEntityHierarchy(currentScene);
-        DrawSceneContextMenu(currentScene);
+		DrawEntityHierarchy(currentScene);
+		DrawSceneContextMenu(currentScene);
+		if (ImGui::BeginDragDropTarget())
+		{
+			if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM"))
+			{
+				std::filesystem::path p((const wchar_t*)payload->Data);
+				std::string filename = p.filename().string();
+				for (char& c : filename) c = static_cast<char>(tolower(c));
+				if (filename.ends_with(".bamprefab.json") || filename.ends_with(".prefab.json") || p.extension() == ".bamprefab")
+				{
+					archive::JsonArchive ar;
+					Engine::Entity* spawned = nullptr;
+					auto& history = Application::Get().GetEditHistory();
+					auto before = history.Enabled() ? SceneEditSnapshot::Capture(*currentScene) : SceneEditSnapshot{};
+					if (SceneManager::Get().InstantiatePrefab(ar, p.wstring(), spawned, nullptr) == Engine::EResult::Success && spawned)
+					{
+						if (before) history.Record(std::move(before), SceneEditSnapshot::Capture(*currentScene), "UI_HISTORY_INSTANTIATE_PREFAB");
+						SelectionManager::Get().SetSelectedEntity(spawned);
+						NotificationManager::Get().AddNotification(LOCAL("ResourceType.Prefab"), LOCAL_FMT("Notification.PrefabInstantiated", p.stem().string()), ELogLevel::Info, 3.0f);
+					}
+				}
+			}
+			ImGui::EndDragDropTarget();
+		}
     }
     else
     {
@@ -213,12 +242,10 @@ void HierarchyPanel::Draw()
 		m_RangeAnchorId = 0;
         m_HierarchyMessage.clear();
         ImGui::TextUnformatted(LOCAL_CSTR("UI_NO_SCENE_LOADED"));
-        if (SceneManager::IsCreated() && ImGui::Button(LOCAL_CSTR("UI_CREATE_NEW_SCENE")))
-        {
-            const EResult result = SceneManager::Get().NewScene();
-            if (result == EResult::Success) SelectionManager::Get().ClearSelection();
-            else EDITOR_LOG_ERROR("Failed to create scene: {}", ResultToString(result));
-        }
+		if (SceneManager::IsCreated() && ImGui::Button(LOCAL_CSTR("UI_CREATE_NEW_SCENE")))
+		{
+			ToolBar::NewScene();
+		}
     }
     if (InputManager::Get().IsMouseButtonDown(EMouseButton::Left) && ImGui::IsWindowHovered() &&
         !ImGui::IsAnyItemHovered() && !InputManager::Get().IsCtrlPressed())
@@ -320,102 +347,16 @@ void HierarchyPanel::DrawSceneContextMenu(Scene* scene)
 			EntityFactory::CreateEmptyEntity(scene);
 		}
 		if (ImGui::MenuItem(LOCAL_LABEL("Hierarchy.AddCanvas").c_str()))
-			SelectionManager::Get().SetSelectedEntity(&EntityFactory::CreateCanvasEntity(scene));
-		if (ImGui::MenuItem(LOCAL_LABEL("Hierarchy.AddPrimitive").c_str()))
 		{
-			try
-			{
-				Entity& entity = EntityFactory::CreatePrimitiveEntity(scene, L"Cube", L"CubeMesh", L"Resources/Material/GBufferMaterial");
-				SelectionManager::Get().SetSelectedEntity(&entity);
-			}
-			catch (const std::exception& error)
-			{
-				EDITOR_LOG_ERROR("Failed to create Cube: {}", error.what());
-			}
+			EntityFactory::CreateCanvasEntity(scene);
 		}
-		if (ImGui::MenuItem(LOCAL_LABEL("Hierarchy.AddSprite").c_str()))
+
+		ImGui::Separator();
+
+		const bool hasClipboard = EntityClipboard::HasData();
+		if (ImGui::MenuItem((std::string(ICON_FA_PASTE " ") + LOCAL_LABEL("EditorCommon.Paste")).c_str(), "Ctrl+V", false, hasClipboard))
 		{
-			try
-			{
-				Entity& entity = EntityFactory::CreateSpriteEntity(scene, L"Sprite", L"Resources/Material/SpriteMaterial");
-				SelectionManager::Get().SetSelectedEntity(&entity);
-			}
-			catch (const std::exception& error)
-			{
-				EDITOR_LOG_ERROR("Failed to create Sprite: {}", error.what());
-			}
-		}
-		if (ImGui::BeginMenu(LOCAL_LABEL("Hierarchy.Light").c_str()))
-		{
-			if (ImGui::MenuItem(LOCAL_LABEL("Hierarchy.AddDirectionalLight").c_str()))
-			{
-				try
-				{
-					Entity& entity = EntityFactory::CreateLightEntity(scene, L"Light", L"Directional");
-					SelectionManager::Get().SetSelectedEntity(&entity);
-				}
-				catch (const std::exception& error)
-				{
-					EDITOR_LOG_ERROR("Failed to create Directional Light: {}", error.what());
-				}
-
-			}
-
-			if (ImGui::MenuItem(LOCAL_LABEL("Hierarchy.AddPointLight").c_str()))
-			{
-				try
-				{
-					Entity& entity = EntityFactory::CreateLightEntity(scene, L"Light", L"Point");
-					SelectionManager::Get().SetSelectedEntity(&entity);
-				}
-				catch (const std::exception& error)
-				{
-					EDITOR_LOG_ERROR("Failed to create Point Light: {}", error.what());
-				}
-
-			}
-
-			if (ImGui::MenuItem(LOCAL_LABEL("Hierarchy.AddSpotLight").c_str()))
-			{
-				try
-				{
-					Entity& entity = EntityFactory::CreateLightEntity(scene, L"Light", L"Spot");
-					SelectionManager::Get().SetSelectedEntity(&entity);
-				}
-				catch (const std::exception& error)
-				{
-					EDITOR_LOG_ERROR("Failed to create Spot Light: {}", error.what());
-				}
-
-			}
-
-			if (ImGui::MenuItem(LOCAL_LABEL("Hierarchy.AddSkyLight").c_str()))
-			{
-				try
-				{
-					Entity& entity = EntityFactory::CreateLightEntity(scene, L"Light", L"Sky");
-					SelectionManager::Get().SetSelectedEntity(&entity);
-				}
-				catch (const std::exception& error)
-				{
-					EDITOR_LOG_ERROR("Failed to create Sky Light: {}", error.what());
-				}
-
-			}
-
-			ImGui::EndMenu();
-		}
-		if (ImGui::MenuItem(LOCAL_LABEL("Hierarchy.AddTerrain").c_str()))
-		{
-			try
-			{
-				Entity& entity = EntityFactory::CreateTerrainEntity(scene, L"Terrain");
-				SelectionManager::Get().SetSelectedEntity(&entity);
-			}
-			catch (const std::exception& error)
-			{
-				EDITOR_LOG_ERROR("Failed to create Terrain: {}", error.what());
-			}
+			EntityClipboard::Paste(scene, nullptr);
 		}
 
 		ImGui::EndPopup();
@@ -441,7 +382,7 @@ void HierarchyPanel::DrawEntityHierarchy(Scene* scene)
     m_LastHierarchyScene = scene;
     m_LastHierarchyPrimary = primary;
     m_RevealEntity = entt::null;
-	const auto action = m_EntityTree.Draw(*scene, selected, reveal, selection.IsPrimarySelectionLocked(), m_SearchFilter);
+	auto action = m_EntityTree.Draw(*scene, selected, reveal, selection.IsPrimarySelectionLocked(), m_SearchFilter);
 	if (action.Clicked != entt::null && !selection.IsPrimarySelectionLocked())
 	{
 		auto* entity = scene->FindEntity(action.Clicked);
@@ -480,18 +421,55 @@ void HierarchyPanel::DrawEntityHierarchy(Scene* scene)
 			}
 		}
 	}
-    if (action.Delete != entt::null)
-    {
-        auto& history = Application::Get().GetEditHistory();
-        auto before = history.Enabled() ? SceneEditSnapshot::Capture(*scene) : SceneEditSnapshot{};
-        auto* entity = scene->FindEntity(action.Delete);
-        if (before && entity)
-        {
-            selection.ClearSelection();
-            if (scene->DestroyEntity(*entity))
-                history.Record(std::move(before), SceneEditSnapshot::Capture(*scene), "UI_HISTORY_DELETE");
-        }
-    }
+	if (!selection.IsPrimarySelectionLocked() && KEY_DOWN(EKeyCode::Delete) &&
+		ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && !ImGui::GetIO().WantTextInput)
+	{
+		for (auto* entity : selection.GetSelectedEntities())
+		{
+			if (entity && entity->GetScene() == scene)
+				action.DeleteEntities.push_back(entity->GetEntityHandle());
+		}
+	}
+	if (!action.DeleteEntities.empty())
+	{
+		// 상위 부모가 이미 삭제 목록에 있으면 자식은 별도 Destroy에서 제외하여 충돌 방지
+		std::unordered_set<entt::entity> deleteSet(action.DeleteEntities.begin(), action.DeleteEntities.end());
+		std::vector<Engine::Entity*> rootsToDelete;
+		auto& registry = scene->GetRegistry();
+		for (auto handle : action.DeleteEntities)
+		{
+			entt::entity current = handle;
+			bool hasSelectedAncestor = false;
+			while (true)
+			{
+				const auto* hier = registry.try_get<Engine::HierarchyComponent>(current);
+				if (!hier || hier->parent == entt::null) break;
+				if (deleteSet.contains(hier->parent))
+				{
+					hasSelectedAncestor = true;
+					break;
+				}
+				current = hier->parent;
+			}
+			if (!hasSelectedAncestor)
+			{
+				if (auto* ent = scene->FindEntity(handle))
+					rootsToDelete.push_back(ent);
+			}
+		}
+		if (!rootsToDelete.empty())
+		{
+			auto& history = Application::Get().GetEditHistory();
+			auto before = history.Enabled() ? SceneEditSnapshot::Capture(*scene) : SceneEditSnapshot{};
+			selection.ClearSelection();
+			for (auto* ent : rootsToDelete)
+			{
+				(void)scene->DestroyEntity(*ent);
+			}
+			if (before)
+				history.Record(std::move(before), SceneEditSnapshot::Capture(*scene), "UI_HISTORY_DELETE");
+		}
+	}
 	if (action.MoveUp != entt::null || action.MoveDown != entt::null)
 	{
 		const auto target = action.MoveUp != entt::null ? action.MoveUp : action.MoveDown;
@@ -528,6 +506,55 @@ void HierarchyPanel::DrawEntityHierarchy(Scene* scene)
 			if (before) history.Record(std::move(before), SceneEditSnapshot::Capture(*scene), "UI_HISTORY_PROPERTY");
 		}
 	}
+	if (action.SaveAsPrefab != entt::null)
+	{
+		auto* entity = scene->FindEntity(action.SaveAsPrefab);
+		if (entity)
+		{
+			const auto* nameComp = scene->GetRegistry().try_get<Engine::NameComponent>(action.SaveAsPrefab);
+			std::wstring defaultName = (nameComp && !nameComp->name.empty()) ? nameComp->name : L"NewPrefab";
+			std::wstring outPath;
+			std::vector<FileDialogFilter> filters = {
+				{ StrToWStr(LOCAL("FileDialog.PrefabFiles")), L"*.bamprefab.json" },
+				{ StrToWStr(LOCAL("FileDialog.JsonFiles")), L"*.json" }
+			};
+			if (FileDialogs::SaveFileDialog(outPath, filters, defaultName + L".bamprefab.json", L"bamprefab.json", EFileDialogContext::PrefabSave))
+			{
+				archive::JsonArchive ar;
+				const Engine::EResult res = SceneManager::Get().SavePrefab(ar, outPath, *entity);
+				if (res == Engine::EResult::Success)
+				{
+					NotificationManager::Get().AddNotification(LOCAL("ResourceType.Prefab"), LOCAL_FMT("Notification.PrefabSaved", WStrToStr(std::filesystem::path(outPath).filename().wstring())), ELogLevel::Info, 3.0f);
+				}
+				else
+				{
+					NotificationManager::Get().AddNotification(LOCAL("ResourceType.Prefab"), LOCAL_FMT("Notification.PrefabSaveFailed", WStrToStr(std::filesystem::path(outPath).filename().wstring())), ELogLevel::Error, 3.0f);
+				}
+			}
+		}
+	}
+	if (action.UnpackPrefab != entt::null)
+	{
+		auto before = history.CanRecord() ? SceneEditSnapshot::Capture(*scene) : std::nullopt;
+		scene->GetRegistry().remove<Engine::PrefabInstanceComponent>(action.UnpackPrefab);
+		if (before)
+			history.Record(std::move(before), SceneEditSnapshot::Capture(*scene), "UI_HISTORY_UNPACK_PREFAB");
+		NotificationManager::Get().AddNotification(LOCAL("ResourceType.Prefab"), LOCAL("Notification.PrefabUnpacked"), ELogLevel::Info, 3.0f);
+	}
+	if (!action.DropPrefabFile.empty())
+	{
+		auto* parentEntity = action.DropPrefabTarget != entt::null ? scene->FindEntity(action.DropPrefabTarget) : nullptr;
+		archive::JsonArchive ar;
+		Engine::Entity* spawned = nullptr;
+		auto& history = Application::Get().GetEditHistory();
+		auto before = history.Enabled() ? SceneEditSnapshot::Capture(*scene) : SceneEditSnapshot{};
+		if (SceneManager::Get().InstantiatePrefab(ar, action.DropPrefabFile, spawned, parentEntity) == Engine::EResult::Success && spawned)
+		{
+			if (before) history.Record(std::move(before), SceneEditSnapshot::Capture(*scene), "UI_HISTORY_INSTANTIATE_PREFAB");
+			SelectionManager::Get().SetSelectedEntity(spawned);
+			NotificationManager::Get().AddNotification(LOCAL("ResourceType.Prefab"), LOCAL_FMT("Notification.PrefabInstantiated", WStrToStr(std::filesystem::path(action.DropPrefabFile).stem().wstring())), ELogLevel::Info, 3.0f);
+		}
+	}
     if (action.RejectedDrop)
         m_HierarchyMessage = "UI_HIERARCHY_BAD_DROP";
     if (action.Move)
@@ -560,6 +587,19 @@ void HierarchyPanel::DrawEntityHierarchy(Scene* scene)
         }
         if (editLocked) m_HierarchyMessage = "UI_TRANSFORM_UNLOCK_REPARENT";
     }
+	if (action.Copy)
+	{
+		EntityClipboard::CopySelected(scene);
+	}
+	if (action.Paste)
+	{
+		EntityClipboard::Paste(scene, nullptr);
+	}
+	if (action.PasteAsChild != entt::null)
+	{
+		auto* parentEntity = scene->FindEntity(action.PasteAsChild);
+		EntityClipboard::Paste(scene, parentEntity);
+	}
     if (!m_HierarchyMessage.empty()) ImGui::TextDisabled("%s", LOCAL_CSTR(m_HierarchyMessage));
 }
 

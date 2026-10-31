@@ -32,6 +32,7 @@
 ,CATEGORY_FOG_PARAMETERS,Fog Parameters,안개 매개변수
 ,CATEGORY_FOG_PLACEMENT,Fog Placement,안개 배치
 ,CATEGORY_HIT_RESULT,Hit Result,히트 결과
+,CATEGORY_IBL,Image-Based Lighting,이미지 기반 조명
 ,CATEGORY_LAYER_PLACEMENT,Layer Placement,구름층 배치
 ,CATEGORY_LIGHTING,Lighting,조명
 ,CATEGORY_PARAMETER,Parameter,매개변수
@@ -195,6 +196,7 @@
 ,PROP_BLEND_MODE,Blend Mode,블렌드 모드
 ,PROP_BODY_TYPE,Body Type,강체 종류
 ,PROP_BONE,Bone,본
+,PROP_BRDF_LUT,BRDF Lookup Texture,BRDF 조회 텍스처
 ,PROP_CAMERA_TYPE,Camera Type,카메라 타입
 ,PROP_CASCADE_SPLIT_LAMBDA,Cascade Split Lambda,캐스케이드 분할 가중치
 ,PROP_CAST_SHADOW,Cast Shadow,그림자
@@ -211,6 +213,7 @@
 ,PROP_CONNECTED_LOCAL_ANCHOR,Connected Anchor,연결 앵커
 ,PROP_COVERAGE,Cloud Coverage,구름 커버리지
 ,PROP_CULL_MODE,Cull Mode,컬링 모드
+,PROP_CURRENT_FRAME,Current Frame,현재 프레임
 ,PROP_DAY_DURATION,Day Duration (s),하루 길이(초)
 ,PROP_DENSITY,Cloud Density,구름 밀도
 ,PROP_DEPTH_COMPARE_OP,Depth Compare Op,깊이 비교 연산
@@ -242,6 +245,8 @@
 ,PROP_FOG_START_DIST,Fog Start Distance,안개 시작 거리
 ,PROP_FOG_TYPE,Fog Type,안개 타입
 ,PROP_FOV,Field of View,시야각
+,PROP_FPS,Frames Per Second,초당 프레임 수
+,PROP_FRAMES,Frames,프레임 목록
 ,PROP_FREEZE_ROTATION,Freeze Rotation,회전 고정
 ,PROP_FRICTION,Friction,마찰
 ,PROP_FRONT_FACE,Front Face,전면 방향
@@ -253,6 +258,7 @@
 ,PROP_HORIZON_COLOR,Horizon Color,지평선 색상
 ,PROP_HOVER_COLOR,Hover Color,호버 색
 ,PROP_HYSTERESIS_MARGIN,Hysteresis Margin,히스테리시스 마진
+,PROP_IBL_INTENSITY,IBL Intensity,이미지 기반 조명 강도
 ,PROP_ID,ID,ID
 ,PROP_INDIRECT_INTENSITY,Indirect Intensity,간접 강도
 ,PROP_INFORMATION,Information,정보
@@ -260,8 +266,10 @@
 ,PROP_INTERACTABLE,Interactable,상호작용
 ,PROP_INVERSE_INERTIA,Inverse Inertia,역관성
 ,PROP_INVERSE_INERTIA_LOCAL,Local Inverse Inertia,로컬 역관성
+,PROP_IRRADIANCE_MAP,Irradiance Map,확산광 맵
 ,PROP_IS_3D,3D Audio,3D 오디오
 ,PROP_IS_ACTIVE,Is Active,활성 상태
+,PROP_IS_PLAYING,Playing,재생 중
 ,PROP_IS_TRIGGER,Trigger,트리거
 ,PROP_LANGUAGE,Language,언어
 ,PROP_LAYER_BOTTOM,Layer Bottom Altitude,구름 시작 고도
@@ -304,12 +312,16 @@
 ,PROP_PIVOT,Pivot,피벗
 ,PROP_PIXEL_SHADER,Pixel Shader,픽셀 셰이더
 ,PROP_PIXEL_SHADER_HANDLE,Pixel Shader Handle,픽셀 셰이더 핸들
+,PROP_PLAY_MODE,Playback Mode,재생 방식
 ,PROP_PLAY_ON_AWAKE,Play On Awake,시작 시 자동 재생
+,PROP_PLAY_RATE,Playback Rate,재생 배속
 ,PROP_POINT,Point,점
 ,PROP_POINT_A,Point A,시작점 A
 ,PROP_POINT_B,Point B,끝점 B
 ,PROP_POSITION,Position,위치
 ,PROP_POWDER_EFFECT,Powder Effect,파우더 슈가 효과
+,PROP_PREFAB_PATH,Prefab Path,프리팹 파일 경로
+,PROP_PREFILTERED_MAP,Prefiltered Environment Map,사전 필터링 환경 맵
 ,PROP_PRESET_NAME,Preset Name,프리셋 이름
 ,PROP_PRESS_COLOR,Press Color,Press 색
 ,PROP_PRIORITY,Priority,우선순위
@@ -365,6 +377,7 @@
 ,Parameter,Parameter,매개변수
 ,Pass enter to exit only while the gate is open.,Pass enter to exit only while the gate is open.,게이트가 열려 있을 때만 enter를 exit로 전달합니다.
 ,Pass once until reset; state belongs to the graph instance.,Pass once until reset; state belongs to the graph instance.,초기화할 때까지 한 번만 통과합니다. 상태는 그래프 인스턴스에 속합니다.
+,Pause Sprite Animation,,
 ,Physics,,
 ,Pin default exceeds int32 range:,Pin default exceeds int32 range:,핀 기본값이 int32 범위를 벗어났습니다:
 ,Pin default must be finite and match the parameter type:,Pin default must be finite and match the parameter type:,핀 기본값은 유한하며 매개변수 자료형과 일치해야 합니다:
@@ -372,6 +385,7 @@
 ,Pin keys must be non-empty and unique within a node.,Pin keys must be non-empty and unique within a node.,핀 키는 비어 있지 않아야 하며 노드 안에서 고유해야 합니다.
 ,Pin types must match exactly; conversions are explicit.,Pin types must match exactly; conversions are explicit.,핀 자료형이 정확히 일치해야 합니다. 변환은 명시적으로 지정하세요.
 ,Pipeline,Pipeline,파이프라인
+,Play Sprite Animation,,
 ,Pointer/reference parameters are not supported by graphs.,Pointer/reference parameters are not supported by graphs.,그래프는 포인터 또는 참조 매개변수를 지원하지 않습니다.
 ,Pointer/reference results are not supported by graphs.,Pointer/reference results are not supported by graphs.,그래프는 포인터 또는 참조 반환값을 지원하지 않습니다.
 ,Print Float,,
@@ -380,6 +394,7 @@
 ,Property access binding does not support the requested graph policy.,Property access binding does not support the requested graph policy.,속성 접근 바인딩이 요청한 그래프 정책을 지원하지 않습니다.
 ,Property exposure requires a stable GRAPH_ID.,Property exposure requires a stable GRAPH_ID.,속성을 노출하려면 고정 GRAPH_ID가 필요합니다.
 ,Random Float In Range,,
+,Raycast (Line Trace),,
 ,Re-entry into an active node is not supported.,Re-entry into an active node is not supported.,실행 중인 노드에 다시 진입할 수 없습니다.
 ,Re-evaluate condition before each body iteration.,Re-evaluate condition before each body iteration.,본문을 반복하기 전에 매번 조건을 다시 평가합니다.
 ,Reflection function binding is unavailable:,Reflection function binding is unavailable:,리플렉션 함수 바인딩을 사용할 수 없습니다:
@@ -395,13 +410,13 @@
 ,STRUCT_BOUNDING_BOX,Bounding Box,경계 상자
 ,STRUCT_BOUNDING_SPHERE,Bounding Sphere,경계 구
 ,STRUCT_BOX_2D,Box 2D,2D 상자
-,STRUCT_BOX_SHAPE,,
+,STRUCT_BOX_SHAPE,Box Shape,상자 형상
 ,STRUCT_BUTTON,Button,버튼
 ,STRUCT_CAMERA,Camera,카메라
 ,STRUCT_CANVAS,Canvas,캔버스
 ,STRUCT_CAPSULE,Capsule,캡슐
 ,STRUCT_CAPSULE_2D,Capsule 2D,2D 캡슐
-,STRUCT_CAPSULE_SHAPE,,
+,STRUCT_CAPSULE_SHAPE,Capsule Shape,캡슐 형상
 ,STRUCT_CIRCLE,Circle,원
 ,STRUCT_CIRCLE_2D,Circle 2D,2D 원
 ,STRUCT_COLLIDER,Collider,충돌체
@@ -421,6 +436,7 @@
 ,STRUCT_MESH_SHAPE,Mesh Shape,메시 형상
 ,STRUCT_NAME,Name,이름
 ,STRUCT_POST_PROCESS,Post Process,포스트 프로세스
+,STRUCT_PREFAB_INSTANCE,Prefab Instance,프리팹 인스턴스
 ,STRUCT_RAY,Ray,광선
 ,STRUCT_RECT,Rect,사각 영역
 ,STRUCT_RECT_TRANSFORM,Rect Transform,Rect 트랜스폼
@@ -429,6 +445,7 @@
 ,STRUCT_SKINNED_MESH_RENDERER,Skinned Mesh Renderer,스킨드 메시 렌더러
 ,STRUCT_SKY_ATMOSPHERE,Sky Atmosphere,하늘 대기
 ,STRUCT_SPHERE_SHAPE,Sphere Shape,구 형상
+,STRUCT_SPRITE_ANIMATION,Sprite Animation,스프라이트 애니메이션
 ,STRUCT_SPRITE_RENDERER,Sprite Renderer,스프라이트 렌더러
 ,STRUCT_STATIC_MESH_RENDERER,Static Mesh Renderer,정적 메쉬 렌더러
 ,STRUCT_TAG,Tags,태그
@@ -447,6 +464,7 @@
 ,Set Light Intensity,,
 ,Set Linear Velocity,,
 ,Set Master Volume,,
+,Set Sprite Animation FPS,,
 ,Shader,Shader,셰이더
 ,Shader nodes cannot declare execution or object pins.,Shader nodes cannot declare execution or object pins.,셰이더 노드에는 실행 핀 또는 객체 핀을 선언할 수 없습니다.
 ,ShaderGraph.Cycle,A cycle was encountered while resolving the color input.,색상 입력을 찾는 중 순환 연결을 발견했습니다.
@@ -464,6 +482,7 @@
 ,Specify exactly one of GRAPH_READONLY and GRAPH_READWRITE.,Specify exactly one of GRAPH_READONLY and GRAPH_READWRITE.,GRAPH_READONLY와 GRAPH_READWRITE 중 하나만 지정하세요.
 ,Spot Inner Angle (Degrees),Spot Inner Angle (Degrees),스포트 내부 각도(도)
 ,Spot Outer Angle (Degrees),Spot Outer Angle (Degrees),스포트 외부 각도(도)
+,Sprite,,
 ,Sqrt requires a non-negative input.,Sqrt requires a non-negative input.,Sqrt 입력은 0 이상이어야 합니다.
 ,Start already ran in this instance. Reload to restart.,Start already ran in this instance. Reload to restart.,이 인스턴스에서 Start가 이미 실행됐습니다. 다시 시작하려면 다시 불러오세요.
 ,Stop All Audio,,

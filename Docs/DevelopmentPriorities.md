@@ -150,7 +150,12 @@ Engine·Render·Editor·Client 계획에서 무엇을 먼저 연결하고 무엇
   - **남은 항목**:
     1. **Phase 4.3 (`GraphSystem` 런타임 핫스왑)**: PIE 실행 중 `GameModule.dll` 리로드 시 활성 엔티티들의 `GraphRuntimeState` 및 `GraphExecutor`를 재바인딩하여 크래시 없이 새 C++ 노드 로직을 즉시 반영.
     2. **`Client/Source/Main.cpp` 시스템 등록 누락 수정**: `Editor`와 달리 `Client`의 `InitializeSystems()`에 누락되어 있는 `GraphSystem`, `PhysicsSystem`, `TerrainSystem` 등록.
-    3. **엔진·프리팹 기본 연결**: `PickingManager` 가시성에 의존하지 않는 씬 레벨 Collider Raycast API([EngineDevelopmentPlan.md](EngineDevelopmentPlan.md) 8절), 독립 Sprite Flipbook 재생기(6절), 에디터 초기 Prefab 생성·배치·Undo/Redo UI([ImGuiDevelopmentPlan.md](ImGuiDevelopmentPlan.md) 10절 1단계).
+    3. **엔진·프리팹 기본 연결 및 파이프라인 (2026-10-31 구현 완료)**:
+       - **프리팹 1단계 (생성·배치)**: 계층 패널 `Save As Prefab...`, 콘텐츠 브라우저 큐브 식별, 드래그 앤 드롭 인스턴스화 및 Undo/Redo.
+       - **프리팹 2단계 (격리 편집 모드)**: `PrefabModeManager` 뷰포트 격리 편집 모드(메인 씬 보존, 메인 뷰포트·기즈모 100% 활용, 상단 복귀/저장 배너).
+       - **프리팹 3단계 (원본 연결 및 오버라이드 관리)**: 단일 원천 루트 전용 `PrefabInstanceComponent`, 계층 패널 청록색 강조 및 컨텍스트 메뉴(Open/Select/Unpack), 인스펙터 상단 프리팹 헤더 바 및 Overrides 팝업(Apply All, Revert All, Unpack).
+       - **엔티티 다중 복사·붙여넣기 (17절 완료)**: `EntityClipboard` 메모리 직렬화, 조상 필터링, 원래 계층/형제 순서 보존, 원자적 단일 Undo(`UI_HISTORY_PASTE`), 단축키(`Ctrl+C`/`Ctrl+V`/`Ctrl+Shift+V`) 및 다중 삭제(`DeleteEntities`, `Delete` 키).
+       - *남은 항목*: `PickingManager` 가시성에 의존하지 않는 씬 레벨 Collider Raycast API([EngineDevelopmentPlan.md](EngineDevelopmentPlan.md) 8절), 독립 Sprite Flipbook 재생기(6절).
     4. *참고*: `Tools/GraphCompiler/GraphCompiler.py`(Phase 6)는 구형 `GraphComponent`/`GameObject` 대상의 57줄 POC 수준이므로 P3/P4 패키징 단계로 이관한다.
 - 완료 기준: PIE 중 모듈 핫리로드와 그래프 실행이 안전하게 유지되고, 입력으로 작은 씬을 조작하며 화면 표시 여부와 무관한 충돌 질의·두 인스턴스의 독립 상태를 확인한다.
 
@@ -271,5 +276,6 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
    - `GraphicSettingPanel` 뷰포트 해상도 제어 및 `ToolBar` 설정 메뉴 연결(P1-B, 완료).
    - `ResourcePicker` 검색·핸들 타입 필터링 및 팝업 캐싱(프레임 드랍 방지)·미로드 에셋 선택 및 `ContentBrowserPanel` 검색 범위 전환(P1-D).
    - Undo/Redo `HistoryPanel` 시각화 창 추가(P1-A, 완료) 및 블루프린트 Reroute/정렬 단축키(P2-A Phase 4.2 잔여, 완료).
+   - 그래프 패널 상단 도구 모음 정리(P2-A Phase 4.2 후속, 계획): [ImGuiDevelopmentPlan.md](ImGuiDevelopmentPlan.md) 18절의 공통·도메인별 배치, 미리보기/PIE 관찰 구분과 좁은 폭 대응을 적용한다.
 
 코드 직접 수정·빌드·테스트 권한은 사용자 요청과 AGENTS.md를 따르며 이 문서가 실행 허가를 대신하지 않는다.

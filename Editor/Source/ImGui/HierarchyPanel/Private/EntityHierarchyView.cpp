@@ -7,11 +7,12 @@
 #include "LocalizationManager.h"
 #include "Functions.h"
 #include <imgui.h>
-#include <algorithm>
-#include <array>
-#include <cstring>
 #include "IconsFontAwesome7.h"
 #include <fmt/format.h>
+#include "EntityClipboard.h"
+#include "Components/Core/PrefabInstanceComponent.h"
+#include "PrefabModeManager.h"
+#include "SelectionManager.h"
 
 namespace
 {
@@ -83,8 +84,27 @@ namespace
 
     struct EntityTypeVisual { const char* Icon; ImVec4 Color; };
 
+    entt::entity FindPrefabRootHandle(const entt::registry& world, entt::entity entity)
+    {
+        entt::entity cur = entity;
+        while (cur != entt::null)
+        {
+            if (world.all_of<Engine::PrefabInstanceComponent>(cur))
+                return cur;
+            const auto* link = world.try_get<Engine::HierarchyComponent>(cur);
+            cur = link ? link->parent : entt::null;
+        }
+        return entt::null;
+    }
     EntityTypeVisual GetEntityVisual(const entt::registry& world, entt::entity entity, bool hasChildren)
     {
+        const entt::entity prefabRoot = FindPrefabRootHandle(world, entity);
+        if (prefabRoot != entt::null)
+        {
+            const bool isRoot = (prefabRoot == entity);
+            const char* icon = isRoot ? ICON_FA_CUBES : (hasChildren ? ICON_FA_FOLDER : ICON_FA_CUBE);
+            return { icon, ImVec4(0.35f, 0.78f, 1.0f, 1.0f) }; // 유니티 스타일 청록색
+        }
         if (world.all_of<Engine::CameraComponent>(entity))
             return { ICON_FA_CAMERA, ImVec4(0.45f, 0.75f, 1.0f, 1.0f) }; // 하늘색 (카메라)
         if (world.all_of<Engine::LightComponent>(entity))
@@ -101,8 +121,21 @@ namespace
             return { ICON_FA_MOUNTAIN, ImVec4(0.35f, 0.85f, 0.45f, 1.0f) }; // 연두색 (터레인/지형)
         if (hasChildren)
             return { ICON_FA_FOLDER, ImVec4(0.92f, 0.82f, 0.55f, 1.0f) }; // 따뜻한 베이지 (폴더/그룹)
-
         return { ICON_FA_CIRCLE, ImVec4(0.65f, 0.65f, 0.65f, 0.8f) }; // 회색 (기본 빈 엔티티)
+    }
+
+    void PushEntityId(const entt::registry& world, entt::entity entity)
+    {
+        const auto* id = world.try_get<Engine::IDComponent>(entity);
+        const bool persistent = id && id->id != 0;
+        const std::uint64_t value = persistent ?
+            id->id : static_cast<std::uint64_t>(entt::to_integral(entity));
+
+        std::array<char, 32> buffer{};
+        buffer[0] = persistent ? 'P' : 'R';
+
+        const auto result = std::to_chars(buffer.data() + 1, buffer.data() + buffer.size(), value);
+        ImGui::PushID(buffer.data(), result.ptr);
     }
 }
 
@@ -388,7 +421,7 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
                 ImGuiTreeNodeFlags_SpanFullWidth | ImGuiTreeNodeFlags_FramePadding;
             if (std::ranges::find(selected, entity) != selected.end()) flags |= ImGuiTreeNodeFlags_Selected;
             if (children.empty()) flags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
-            ImGui::PushID(static_cast<int>(entt::to_integral(entity)));
+            PushEntityId(world, entity);
 
             // 조상이거나, 검색 중 일치 자식을 가진 부모 노드는 자동으로 펼침
             if (ancestors.contains(entity) || (isFiltering && visibleInSearch.contains(entity) && !matchingEntities.contains(entity)))
@@ -444,6 +477,17 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
             if (!locked && ImGui::BeginDragDropTarget())
             {
                 acceptMove(entity);
+                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM"))
+                {
+                    std::filesystem::path p((const wchar_t*)payload->Data);
+                    std::string filename = p.filename().string();
+                    for (char& c : filename) c = static_cast<char>(tolower(c));
+                    if (filename.ends_with(".bamprefab.json") || filename.ends_with(".prefab.json") || p.extension() == ".bamprefab")
+                    {
+                        action.DropPrefabFile = p.wstring();
+                        action.DropPrefabTarget = entity;
+                    }
+                }
                 ImGui::EndDragDropTarget();
             }
             if (!locked && ImGui::BeginPopupContextItem("EntityActions"))
@@ -451,15 +495,69 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
                 const auto* link = world.try_get<Engine::HierarchyComponent>(entity);
                 const bool hasParent = link && link->parent != entt::null;
 
-                if(hasParent && ImGui::MenuItem(Text("UI_HIERARCHY_MOVE_UP", "Move Up").c_str()))
+                if (ImGui::MenuItem((std::string(ICON_FA_COPY " ") + Text("EditorCommon.Copy", "Copy")).c_str(), "Ctrl+C"))
+                    action.Copy = true;
+
+                const bool hasClipboard = EntityClipboard::HasData();
+                if (ImGui::MenuItem((std::string(ICON_FA_PASTE " ") + Text("EditorCommon.Paste", "Paste")).c_str(), "Ctrl+V", false, hasClipboard))
+                    action.Paste = true;
+
+                if (ImGui::MenuItem((std::string(ICON_FA_PASTE " ") + Text("EditorCommon.PasteAsChild", "Paste As Child")).c_str(), "Ctrl+Shift+V", false, hasClipboard))
+                    action.PasteAsChild = entity;
+
+                ImGui::Separator();
+
+                if (ImGui::MenuItem((std::string(ICON_FA_CUBES " ") + Text("UI.SAVE_AS_PREFAB", "Save As Prefab...")).c_str()))
+                    action.SaveAsPrefab = entity;
+
+                const entt::entity prefabRoot = FindPrefabRootHandle(world, entity);
+                if (prefabRoot != entt::null)
+                {
+                    const auto* prefabComp = world.try_get<Engine::PrefabInstanceComponent>(prefabRoot);
+                    if (prefabComp)
+                    {
+                        ImGui::Separator();
+                        if (ImGui::MenuItem((std::string(ICON_FA_FOLDER_OPEN " ") + LOCAL("Prefab.Open")).c_str()))
+                            PrefabModeManager::Get().EnterPrefabMode(prefabComp->prefabAssetPath);
+                        if (ImGui::MenuItem((std::string(ICON_FA_LOCATION_ARROW " ") + LOCAL("Prefab.Select")).c_str()))
+                            SelectionManager::Get().SetSelectedAsset(prefabComp->prefabAssetPath);
+                        if (ImGui::MenuItem((std::string(ICON_FA_UNLINK " ") + LOCAL("Prefab.Unpack")).c_str()))
+                            action.UnpackPrefab = prefabRoot; // 루트의 컴포넌트만 제거하면 연결 해제 완료!
+                    }
+                }
+
+                if (hasParent) ImGui::Separator();
+
+                if (hasParent && ImGui::MenuItem(Text("UI_HIERARCHY_MOVE_UP", "Move Up").c_str()))
                     action.MoveUp = entity;
                 if (hasParent && ImGui::MenuItem(Text("UI_HIERARCHY_MOVE_DOWN", "Move Down").c_str()))
                     action.MoveDown = entity;
 
-                if (hasParent) ImGui::Separator();
+                ImGui::Separator();
 
-                if (ImGui::MenuItem(Text("UI_DELETE_ENTITY", "Delete entity and children").c_str()))
-                    action.Delete = entity;
+                const bool isEntitySelected = std::find(selected.begin(), selected.end(), entity) != selected.end();
+                const size_t selectedCount = selected.size();
+                std::string deleteLabel;
+                if (isEntitySelected && selectedCount > 1)
+                {
+                    deleteLabel = Text("UI_DELETE_SELECTED_ENTITIES", "Delete selected entities") + " (" + std::to_string(selectedCount) + ")";
+                }
+                else
+                {
+                    deleteLabel = Text("UI_DELETE_ENTITY", "Delete entity and children");
+                }
+
+                if (ImGui::MenuItem((std::string(ICON_FA_TRASH " ") + deleteLabel).c_str(), "Delete"))
+                {
+                    if (isEntitySelected && selectedCount > 1)
+                    {
+                        action.DeleteEntities.assign(selected.begin(), selected.end());
+                    }
+                    else
+                    {
+                        action.DeleteEntities.push_back(entity);
+                    }
+                }
                 ImGui::EndPopup();
             }
 
