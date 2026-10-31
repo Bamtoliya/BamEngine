@@ -35,6 +35,31 @@ Use one entry per meaningful change.
 
 ---
 
+## [2026-11-01] 렌더링 S5 큐브맵 IBL 연동 검증 및 ViewportDeferredPipeline/GameViewport 후처리 일관성 완성
+
+- Area: Render | Engine | Editor | RHI
+- Type: Feature | Architecture | Stability | Consistency
+- 관련 파일:
+  - Engine/Source/Render/RHI/Platform/DirectX12/Private/DirectX12RHI.cpp
+  - Editor/Source/ImGui/ViewportPanel/Private/ViewportDeferredPipeline.cpp
+  - Editor/Source/ImGui/ViewportPanel/Public/GameViewportPanel.h
+  - Editor/Source/ImGui/ViewportPanel/Private/GameViewportPanel.cpp
+  - Docs/DevelopmentPriorities.md
+  - Docs/RenderingDevelopmentPlan.md
+- 구현 요약:
+  1. **DirectX 12 Null SRV 차원(Dimension) 안전장치 보완 (DirectX12RHI.cpp)**:
+     - `lightingPS.hlsl`의 `TextureCube` 레지스터(`t7` Point Shadow, `t10` Irradiance, `t11` Prefiltered Env)에 텍스처가 바인딩되지 않았을 때, 일괄 `Texture2D`로 생성되던 Null SRV를 `D3D12_SRV_DIMENSION_TEXTURECUBE`로 분기 처리.
+     - D3D12 디버그 레이어의 리소스 차원 불일치(Dimension mismatch) 경고 및 미정의 샘플링 오류 원천 차단.
+  2. **ViewportDeferredPipeline의 IBL & 대기 조명 일관성 연동 (ViewportDeferredPipeline.cpp)**:
+     - Game Viewport 및 보조 뷰포트에서 사용하는 `SubmitLightingPass`에 씬의 `SkyAtmosphereComponent` 및 `VolumetricCloudComponent` 검색·바인딩 파이프라인 연결.
+     - `IrradianceMap (t10)`, `PrefilteredMap (t11)`, `BRDFLutMap (t12)` 바인딩 및 `HasIBLMaps`, `IBLIntensity`, 태양 방향, 클라우드 3D/2D 노이즈 텍스처 바인딩을 일관되게 주입하여 Game View에서도 고품질 Split-Sum PBR IBL 렌더링 보장.
+     - `DeferredLightingPassData`에 대해 512바이트 레이아웃 일치를 보장하는 `static_assert` 오프셋 검증 추가.
+  3. **GameViewportPanel 포스트프로세스 체인(PostProcessChain) 연동 (GameViewportPanel.h, GameViewportPanel.cpp)**:
+     - `GameViewportPanel`에 `PostProcessChain` 수명 주기(`Initialize`, `Free`, `ResizeRenderTargets`) 및 `GetPostProcessChain()` 가상 함수 재정의 구현.
+     - `SubmitPostProcessPass`를 통해 씬의 `PostProcessComponent` 설정(인라인 `PipelineSettings` 및 `PresetName`)을 읽어들여 ACES 톤매핑, 블룸, 비네트 등의 후처리가 인게임 뷰 화면에 실시간으로 일관되게 적용되도록 완성.
+
+---
+
 ## [2026-11-01] 콘텐츠 브라우저 OS 연동·공통 열기 일원화 및 다중 뷰포트/패스별 독립 LOD 파이프라인 완성
 
 - Area: Editor | Engine | Render | UI | Localization

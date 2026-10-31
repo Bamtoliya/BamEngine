@@ -50,8 +50,10 @@ IBL처럼 비교적 독립적인 화질 개선은 측정·바인딩 기반이 �
 - **S5 (IBL 및 그림자 안정화 — 반구형 Sky IBL 및 Split-Sum PBR 큐브맵 IBL 반영)**:
   - `lightingPS.hlsl`에 반구형 Sky Irradiance·거칠기 기반 수렴(`LIGHT_TYPE_SKY` + `EnvBRDFApprox`), 접촉 그림자 소프트닝, `ShadowStrength`가 반영되었다.
   - 큐브맵 텍스처 기반 고품질 Split-Sum PBR IBL(`gLightingData.HasIBLMaps != 0u`, `gIrradianceMap`, `gPrefilteredEnvMap`, `gBRDFLut`) 파이프라인 셰이더 연동이 추가되었다.
-- **포스트프로세스 파이프라인 (별도 구현됨)**:
+  - `DirectX12RHI`의 큐브맵 Null SRV 차원 안전장치가 보강되었으며, `SceneViewportPanel`과 `ViewportDeferredPipeline` 모두 IBL 텍스처(t10, t11, t12) 및 대기/구름 데이터가 일관되게 바인딩된다.
+- **포스트프로세스 파이프라인**:
   - `Engine/Source/Render/PostProcess/`(`PostProcessPipeline`, `BloomEffect`, `PostProcessMaterialEffect`) 및 `Editor/Source/ImGui/PostProcessPanel/`이 추가되어 Bloom, Vignette, ChromaticAberration, FilmGrain, LensDistortion, ColorAdjustments, Sharpen, Tonemapping을 처리한다.
+  - 프리셋(JSON) I/O 및 씬 인라인 복원 파이프라인이 구축되었으며, `SceneViewportPanel`뿐만 아니라 `GameViewportPanel`에도 `PostProcessChain`이 연동되어 인게임 뷰에서도 씬의 후처리 효과가 온전히 반영된다.
 
 주요 확인 파일:
 

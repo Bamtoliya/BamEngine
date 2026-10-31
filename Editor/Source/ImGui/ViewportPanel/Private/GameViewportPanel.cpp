@@ -5,6 +5,7 @@
 #include "Components/Core/TransformComponent.h"
 #include "Components/Core/WorldTransformComponent.h"
 #include "Components/Core/FlagComponent.h"
+#include "Components/Render/PostProcessComponent.h"
 #include "CameraSystem.h"
 #include "PIEManager.h"
 #include "LocalizationManager.h"
@@ -16,11 +17,14 @@ void GameViewportPanel::Initialize(void* arg)
 
 		// 뷰포트 디퍼드 파이프라인 초기화 (접두사: L"GameView")
 		m_Pipeline.Initialize(m_Name, m_RenderWidth, m_RenderHeight);
+	m_PostProcessChain.Initialize(m_Name);
+	m_PostProcessChain.GetPipeline().SaveToString(m_DefaultPostProcessSettings);
 	m_SelectedRTName = m_DisplayRTName = m_Pipeline.GetFinalColorRTName();
 }
 
 void GameViewportPanel::Free()
 {
+	m_PostProcessChain.Free();
 	m_Pipeline.Free();
 	__super::Free();
 }
@@ -28,9 +32,51 @@ void GameViewportPanel::Free()
 EResult GameViewportPanel::ResizeRenderTargets(uint32 width, uint32 height)
 {
 	const auto pipelineResult = m_Pipeline.Resize(width, height);
+	const auto ppResult = m_PostProcessChain.Resize(width, height);
 	const auto channelResult = BaseViewportPanel::ResizeRenderTargets(width, height);
 
-	return pipelineResult != EResult::Success ? pipelineResult : channelResult;
+	if (pipelineResult != EResult::Success) return pipelineResult;
+	if (ppResult != EResult::Success) return ppResult;
+	return channelResult;
+}
+
+void GameViewportPanel::SubmitPostProcessPass(f32 dt, std::wstring& currentRT)
+{
+	Engine::Scene* activeScene = Engine::SceneManager::Get().GetCurrentScene();
+	if (!activeScene) return;
+
+	auto view = activeScene->GetRegistry().view<Engine::PostProcessComponent>();
+	for (auto [entity, source] : view.each())
+	{
+		if (!source.IsEnabled) continue;
+
+		const bool unchanged = m_LastPostProcessEntity == entity &&
+			m_LastPostProcessPreset == source.PresetName && m_LastPostProcessSettings == source.PipelineSettings;
+
+		if (!unchanged)
+		{
+			m_LastPostProcessEntity = entity;
+			m_LastPostProcessPreset = source.PresetName;
+			m_LastPostProcessSettings = source.PipelineSettings;
+
+			auto& pipeline = m_PostProcessChain.GetPipeline();
+			bool applied = pipeline.LoadFromString(m_DefaultPostProcessSettings);
+			if (applied && !source.PipelineSettings.empty())
+				applied = pipeline.LoadFromString(source.PipelineSettings);
+			else if (applied && !source.PresetName.empty())
+				applied = pipeline.LoadFromFile(StrToWStr("Resources/Config/PostProcess/Presets/" + source.PresetName + ".json"));
+
+			m_PostProcessStateUsable = applied;
+		}
+
+		if (m_PostProcessStateUsable)
+			currentRT = m_PostProcessChain.ExecuteChain(dt, currentRT);
+		return;
+	}
+
+	m_LastPostProcessEntity = entt::null;
+	m_LastPostProcessPreset.clear();
+	m_LastPostProcessSettings.clear();
 }
 
 void GameViewportPanel::Update(f32 dt)
@@ -44,7 +90,10 @@ void GameViewportPanel::Update(f32 dt)
 
 	Engine::Scene* activeScene = Engine::SceneManager::Get().GetCurrentScene();
 	m_Pipeline.Submit(*cameraBuffer, activeScene);
-	m_DisplayRTName = m_Pipeline.GetFinalColorRTName();
+	std::wstring currentRT = m_Pipeline.GetFinalColorRTName();
+
+	SubmitPostProcessPass(dt, currentRT);
+	m_DisplayRTName = currentRT;
 
 	if (m_ChannelView != EViewportChannelView::RGBA)
 	{

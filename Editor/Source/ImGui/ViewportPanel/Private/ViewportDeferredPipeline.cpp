@@ -28,6 +28,11 @@ namespace
 		vec2 _iblPad{ 0.0f };
 		vec4 _reserved{ 0.0f };
 	};
+	static_assert(sizeof(DeferredLightingPassData) == 512);
+	static_assert(offsetof(DeferredLightingPassData, Shadow) == 0);
+	static_assert(offsetof(DeferredLightingPassData, Cloud) == 336);
+	static_assert(offsetof(DeferredLightingPassData, SunDirection) == 464);
+	static_assert(offsetof(DeferredLightingPassData, PlanetRadius) == 476);
 }
 
 ViewportDeferredPipeline::~ViewportDeferredPipeline()
@@ -183,9 +188,8 @@ void ViewportDeferredPipeline::Submit(const CameraBuffer& cameraBuffer, Engine::
 
 void ViewportDeferredPipeline::SubmitLightingPass(const CameraBuffer& cameraBuffer, Engine::Scene* targetScene)
 {
-	(void)targetScene;
 	Engine::Renderer::Get().SubmitCustomCommand(
-		[this, cameraBuffer](f32 dt, Engine::RenderPass* pass) -> Engine::EResult
+		[this, cameraBuffer, targetScene](f32 dt, Engine::RenderPass* pass) -> Engine::EResult
 		{
 			(void)dt;
 			(void)pass;
@@ -244,6 +248,85 @@ void ViewportDeferredPipeline::SubmitLightingPass(const CameraBuffer& cameraBuff
 			DeferredLightingPassData lightingData{};
 			if (lightManager.HasShadowCastingLights())
 				lightingData.Shadow = lightManager.GetShadowData(0u);
+
+			// ── IBL 텍스처 및 대기/구름 데이터 바인딩 (t10, t11, t12) ──
+			Engine::Scene* sceneToQuery = targetScene ? targetScene : Engine::SceneManager::Get().GetCurrentScene();
+			if (sceneToQuery)
+			{
+				auto skyView = sceneToQuery->GetRegistry().view<Engine::SkyAtmosphereComponent>();
+				for (auto [e, sky] : skyView.each())
+				{
+					if (!sky.IsEnabled) continue;
+
+					float sunPitch = glm::radians(sky.TimeOfDay * 15.0f - 90.0f);
+					float sunYaw = glm::radians(sky.Latitude);
+					lightingData.SunDirection = glm::normalize(vec3(
+						glm::cos(sunPitch) * glm::sin(sunYaw),
+						glm::sin(sunPitch),
+						glm::cos(sunPitch) * glm::cos(sunYaw)
+					));
+
+					lightingData.Cloud.EnableClouds = sky.EnableClouds ? 1u : 0u;
+					lightingData.Cloud.CloudCoverage = sky.CloudCoverage;
+					lightingData.Cloud.CloudDensity = sky.CloudDensity;
+					lightingData.Cloud.LayerBottomAltitude = sky.CloudAltitude;
+					lightingData.Cloud.WindSpeed = sky.CloudSpeed * 100.0f;
+
+					if (sky.IrradianceMap.IsValid() && sky.PrefilteredMap.IsValid() && sky.BRDFLutMap.IsValid())
+					{
+						auto* irrTex = sky.IrradianceMap.Get();
+						auto* prefTex = sky.PrefilteredMap.Get();
+						auto* lutTex = sky.BRDFLutMap.Get();
+						if (irrTex && prefTex && lutTex)
+						{
+							rhi->BindTextureSampler(irrTex->GetRHITexture(), sampler, MAX_MATERIAL_TEXTURE_SLOTS + 10);
+							rhi->BindTextureSampler(prefTex->GetRHITexture(), sampler, MAX_MATERIAL_TEXTURE_SLOTS + 11);
+							rhi->BindTextureSampler(lutTex->GetRHITexture(), sampler, MAX_MATERIAL_TEXTURE_SLOTS + 12);
+							lightingData.HasIBLMaps = 1u;
+							lightingData.IBLIntensity = sky.IBLIntensity;
+						}
+					}
+					break;
+				}
+
+				auto cloudView = sceneToQuery->GetRegistry().view<Engine::VolumetricCloudComponent>();
+				for (auto [ce, cloud] : cloudView.each())
+				{
+					if (!cloud.IsEnabled) continue;
+					lightingData.Cloud.EnableClouds = 1u;
+					lightingData.Cloud.LayerBottomAltitude = cloud.LayerBottomAltitude;
+					lightingData.Cloud.LayerHeight = cloud.LayerHeight;
+					lightingData.Cloud.TracingMaxDistance = cloud.TracingMaxDistance;
+					lightingData.Cloud.CloudCoverage = cloud.CloudCoverage;
+					lightingData.Cloud.CloudDensity = cloud.CloudDensity;
+					lightingData.Cloud.WeatherScale = 1.0f / std::max(cloud.WeatherMapSize, 100.0f);
+					lightingData.Cloud.ShapeScale = 1.0f / std::max(cloud.ShapeNoiseSize, 50.0f);
+					lightingData.Cloud.DetailScale = 1.0f / std::max(cloud.DetailNoiseSize, 10.0f);
+					lightingData.Cloud.WindDirection = cloud.WindDirection;
+					lightingData.Cloud.WindSpeed = cloud.WindSpeed;
+					lightingData.Cloud.MorphSpeed = cloud.MorphSpeed;
+					lightingData.Cloud.CloudAlbedo = cloud.CloudAlbedo;
+					lightingData.Cloud.ExtinctionFactor = cloud.ExtinctionFactor;
+					lightingData.Cloud.PowderExtinction = cloud.PowderExtinction;
+					break;
+				}
+			}
+
+			auto& rm = Engine::ResourceManager::Get();
+			auto shapeHandle = rm.GetResourceHandle<Engine::Texture>(L"Resources/Texture/CloudBaseShape3D.bamtex");
+			auto weatherHandle = rm.GetResourceHandle<Engine::Texture>(L"Resources/Texture/CloudWeatherMap2D.bamtex");
+			auto* shapeTexture = shapeHandle.Get();
+			auto* weatherTexture = weatherHandle.Get();
+			if (shapeTexture && weatherTexture)
+			{
+				auto* shapeRHI = shapeTexture->GetRHITexture();
+				auto* weatherRHI = weatherTexture->GetRHITexture();
+				if (shapeRHI && weatherRHI)
+				{
+					rhi->BindTextureSampler(shapeRHI, sampler, 0);
+					rhi->BindTextureSampler(weatherRHI, sampler, 1);
+				}
+			}
 
 			// 6. 조명 패스 상수 버퍼 바인딩 (slot 3 -> b1, space3)
 			if (Engine::IsFailure(rhi->BindConstantBuffer(&lightingData, sizeof(lightingData), 3)))

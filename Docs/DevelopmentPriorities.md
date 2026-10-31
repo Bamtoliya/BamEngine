@@ -22,6 +22,7 @@ Engine·Render·Editor·Client 계획에서 무엇을 먼저 연결하고 무엇
 - [ImplementationLog.md](ImplementationLog.md): 작업별 구현·검증 근거. 계획의 체크 표시로 대체하지 않는다.
 - [VisualScriptingBlueprintPlan.md](VisualScriptingBlueprintPlan.md): 비주얼 스크립팅과 블루프린트 개발 계획 및 런타임 게임플레이 연동.
 - [ModuleHotReloadOptimization.md](ModuleHotReloadOptimization.md): C++ 모듈 핫리로드 및 빌드 시간 단축 계획.
+- [AnimatorGraphPlan.md](AnimatorGraphPlan.md): 애니메이터 그래프, 애니메이션 상태 머신(ASM) 및 블렌드 트리 개발 계획.
 
 전체 작업 선택은 이 문서, 기능 내부의 구현 순서·실패 정책은 상세 계획을 따른다.
 새 사용자 결정이 우선하며 충돌이 생기면 이 문서와 해당 계획을 함께 갱신한다.
@@ -179,9 +180,9 @@ Engine·Render·Editor·Client 계획에서 무엇을 먼저 연결하고 무엇
   - **S3**: `InstanceData`, `LODGroupComponent`, `MeshRenderSystem` 화면 덮개 비율 + 히스테리시스 LOD 선택, `Renderer::RenderMeshes` 인스턴스 배칭(`DrawIndexedInstanced` 및 비인덱스 `DrawInstanced` 지원) 반영됨.
   - **S4**: `tiledLightCullingCS.hlsl` 4방향 절두체 평면 컬링, `DirectX12Pipeline` Compute PSO, `DirectX12RHI::Dispatch`/`ResourceBarrierUAV`, `LightManager::DispatchLightCulling`, `lightingPS.hlsl` 선별 광원 루프 순회 반영됨.
   - **S5 및 후처리**: `lightingPS.hlsl`의 반구형 Sky IBL 및 Split-Sum PBR 큐브맵 IBL(`gLightingData.HasIBLMaps`, `gIrradianceMap`, `gPrefilteredEnvMap`, `gBRDFLut`), 접촉 그림자, `ShadowStrength`와 `PostProcessPipeline`(`BloomEffect`, `PostProcessMaterialEffect` 기반 8종 효과) 및 `PostProcessPanel` 반영됨.
+    - D3D12 Null SRV 큐브맵 차원 안전장치(`DirectX12RHI.cpp`), `ViewportDeferredPipeline`의 IBL/대기 조명 일관성 연동, `GameViewportPanel`의 `PostProcessChain` 연동을 통해 Scene/Game View 간 렌더링 일관성 완성.
   - **남은 항목**:
     1. **S1 계측 실측 검증**: 고정 씬에서 단일 드로우/전체 광원 순회 대비 인스턴싱/타일 라이트 컬링의 실측 GPU/CPU 비용 변화를 `MetricsPanel` 수치로 확인.
-    2. **LOD 다중 뷰포트 상태 분리**: `MeshRenderSystem`에서 뷰포트/패스별 카메라 기준 독립 LOD 평가 지원.
 - 완료 기준: 작은/큰 씬에서 고정 비용과 이득을 S1 계측 수치로 구분하고, 미지원·용량 초과의 정확한 대체 동작과 IBL/그림자 품질을 확인한다.
 
 ### P2-C. 강화학습의 첫 환경
@@ -216,7 +217,7 @@ Engine·Render·Editor·Client 계획에서 무엇을 먼저 연결하고 무엇
 선택한 기능의 기본 실행·수명·저장·계측이 검증된 후 필요한 항목을 확장한다.
 
 - Engine 4·5·7절: CPU 파티클→다중 이미터·모듈, 스플라인 경로, 독립 트레일. 서로 불필요한 선행 조건으로 묶지 않는다.
-- Engine 9·10절: 두 클립 블렌딩·소켓·상태 제어. 포즈 그래프·IK·리타게팅은 해당 평가 기반 이후 추가한다.
+- Engine 9·10절 및 [AnimatorGraphPlan.md](AnimatorGraphPlan.md): 두 클립 블렌딩·소켓·상태 제어. 런타임 클립 평가·상태 머신(ASM) 코어와 `AnimatorGraphPanel`(상태/전이 캔버스, 트랜지션 인스펙터, 파라미터 패널) 저작 도구를 구축한다. 1D/2D 블렌드 트리·IK·리타게팅은 해당 평가 기반 이후 단계적으로 확장한다.
 - Engine 11절: 실제 요구에 맞는 텍스트 스크립트 언어/VM 선택·엔진 바인딩·배포. 네이티브 모듈과 지원 범위를 구분한다.
 - ImGui 10·11·14절: 독립 프리팹 편집, 참조 색인·누락 검사, 임포트 옵션·재임포트, 검색·썸네일·미리보기와 비용 제한.
 - Engine 14절: 해당 예제에 필요한 캐릭터 이동·게임 저장·카메라·오디오·UI 위젯·타일맵·비동기 로딩을 작은 흐름으로 연결한다.
@@ -290,11 +291,10 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
 5. **[5순위 / P3 준비] 에셋 참조 탐색기 및 콘텐츠 확장**
    - 에셋 참조 색인 및 역참조 시각화 창(`AssetReferencePanel`) 구축.
    - 모델·텍스처 임포트 설정 저장 및 재임포트 파이프라인.
-4. **[4순위 / P2-A 잔여] 에디터 및 게임플레이 편의성 마감**
-   - `PickingManager` 가시성에 의존하지 않는 씬 레벨 Collider Raycast API 도입 ([EngineDevelopmentPlan.md](EngineDevelopmentPlan.md) 8절).
-   - 그래프 패널 상단 도구 모음 정리 ([ImGuiDevelopmentPlan.md](ImGuiDevelopmentPlan.md) 18절).
-5. **[5순위 / P3 준비] 에셋 참조 탐색기 및 콘텐츠 확장**
-   - 에셋 참조 색인 및 역참조 시각화 창(`AssetReferencePanel`) 구축.
-   - 모델·텍스처 임포트 설정 저장 및 재임포트 파이프라인.
+6. **[6순위 / P3 애니메이션] 애니메이터 그래프 파이프라인 구축 ([AnimatorGraphPlan.md](AnimatorGraphPlan.md))**
+   - Phase 1: 런타임 스켈레탈 클립 평가기(`ClipEvaluator`, `SkeletonPose`) 및 스키닝 버퍼 바인딩 연동.
+   - Phase 2: 애니메이션 상태 머신(ASM) 코어(`State`, `Transition`, `Parameter`, 엔티티별 런타임 격리).
+   - Phase 3 & 4: `AnimatorGraphPanel`(상태 머신 캔버스, 트랜지션 인스펙터, 파라미터 탭) 저작 UI 및 포즈 블렌딩.
+   - Phase 5: `AnimatorComponent` 및 비주얼 스크립팅 노드(`SetAnimatorFloat`, `SetAnimatorTrigger` 등) 게임플레이 연동.
 
 코드 직접 수정·빌드·테스트 권한은 사용자 요청과 AGENTS.md를 따르며 이 문서가 실행 허가를 대신하지 않는다.

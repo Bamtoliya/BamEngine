@@ -1526,8 +1526,17 @@ EResult DirectX12RHI::ApplyShaderResources()
 
         // 사용하지 않는 슬롯도 유효한 null SRV로 채웁니다.
         view.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-        view.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-        view.Texture2D.MipLevels = 1;
+        if (isLighting && (slot == MAX_MATERIAL_TEXTURE_SLOTS + 7 || slot == MAX_MATERIAL_TEXTURE_SLOTS + 10 || slot == MAX_MATERIAL_TEXTURE_SLOTS + 11))
+        {
+            view.ViewDimension = D3D12_SRV_DIMENSION_TEXTURECUBE;
+            view.TextureCube.MipLevels = 1;
+            view.TextureCube.MostDetailedMip = 0;
+        }
+        else
+        {
+            view.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+            view.Texture2D.MipLevels = 1;
+        }
 
         RHITexture* source = m_CurrentTextures[slot];
         if (!source) continue;

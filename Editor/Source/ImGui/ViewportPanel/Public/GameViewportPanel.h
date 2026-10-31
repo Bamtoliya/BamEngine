@@ -2,6 +2,7 @@
 
 #include "BaseViewportPanel.h"
 #include "ViewportDeferredPipeline.h"
+#include "PostProcess.h"
 
 BEGIN(Editor)
 
@@ -23,6 +24,8 @@ public:
 public:
 	virtual void Update(f32 dt) override;
 	virtual void Draw() override;
+	virtual PostProcessChain* GetPostProcessChain() override { return &m_PostProcessChain; }
+	virtual const PostProcessChain* GetPostProcessChain() const override { return &m_PostProcessChain; }
 
 protected:
 	virtual void DrawCustomViewport() override;
@@ -31,9 +34,16 @@ protected:
 
 private:
 	std::optional<CameraBuffer> FindActiveGameCameraBuffer();
+	void SubmitPostProcessPass(f32 dt, std::wstring& currentRT);
 
 private:
 	ViewportDeferredPipeline m_Pipeline;
+	PostProcessChain m_PostProcessChain;
+	string m_DefaultPostProcessSettings;
+	string m_LastPostProcessPreset;
+	string m_LastPostProcessSettings;
+	entt::entity m_LastPostProcessEntity = entt::null;
+	bool m_PostProcessStateUsable = true;
 	bool m_HasActiveCamera = false;
 };
 
