@@ -28,16 +28,13 @@ private:
 	void DrawSceneMenu();
 public:
 	static void NewScene();
-	static void SaveScene();
+	static void SaveScene(bool saveAs = false);
 	static void LoadScene();
 #pragma endregion
 
 #pragma region Window Menu
 private:
 	void DrawWindowMenu();
-private:
-	void DrawDisplaySettingsWindow();
-private:
 	void AddNewViewportPanel();
 	void DrawNewViewportPopup();
 #pragma endregion
@@ -57,13 +54,15 @@ private:
 	void DrawWindowControls(SDL_Window* window);
 #pragma endregion
 
+#pragma region Settings
+public:
+
+#pragma endregion
 
 
 
 
 #pragma region Variables
-private:
-	bool m_DisplaySettingsWindow = false;
 private:
 	bool m_ShowNewViewportPopup = false;
 	ViewportPanelDesc m_newViewportDesc;

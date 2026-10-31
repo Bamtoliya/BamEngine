@@ -35,6 +35,61 @@ Use one entry per meaningful change.
 
 ---
 
+## [2026-10-31] 에디터 설정·워크스페이스 저장 경로와 씬 문서·후처리 저장 흐름 정리
+
+- Area: Editor | Engine | Resource | Archive | UI
+- Type: Feature | Refactor | Fix
+- 관련 파일:
+  - Editor/Source/Settings/Public/EditorSettings.h
+  - Editor/Source/Settings/Private/EditorSettingsService.cpp
+  - Editor/Source/Application/Private/Application.cpp
+  - Editor/Source/Document/
+  - Editor/Source/Command/Private/EditorEditContext.cpp
+  - Editor/Source/ImGui/GraphicSetting/
+  - Editor/Source/ImGui/PostProcessPanel/
+  - Editor/Source/ImGui/ViewportPanel/
+  - Engine/Source/Core/Config/
+  - Engine/Source/Core/Archive/Public/Adapters/ResourceHandleArchiveAdapter.h
+  - Engine/Source/Resource/Public/ResourceReference.h
+  - Engine/Source/World/Scene/Private/SceneArchive.cpp
+  - Engine/Source/Render/PostProcess/
+  - Projects/Archive/include/archive/ArchiveInterface.h
+  - Projects/Archive/src/ArchiveInterface.cpp
+  - Editor/examples/EditorSettingsCheck.cpp
+  - Editor/examples/EditorHistoryCheck.cpp
+  - Engine/examples/SceneArchiveCheck.cpp
+  - Config/Project.json
+- 배경:
+  - 창·패널·뷰포트·씬 설정의 소유자와 저장 시점이 섞여 있어 시작 시 복원, UI 적용, 종료 시 캡처의 호출 흐름을 추적하기 어려웠다.
+  - 씬 저장과 패널의 실행 상태 수집을 분리하고, 파일 읽기·쓰기 실패가 기존 설정이나 미저장 편집을 지우지 않도록 정리했다.
+- 구현 내용:
+  - `EditorPreferences`, `EditorWorkspace`, `ProjectSettings`로 저장 범위를 나누고, 사용자가 확정한 싱글턴 `EditorSettingsService`를 설정 요청 진입점으로 사용한다. `Application`은 초기화·종료 순서를 조정하고 각 매니저와 패널이 자신의 실행 상태를 적용·캡처한다.
+  - 개인 설정은 SDL 사용자 설정 경로, 프로젝트별 작업 상태는 `.bam/User/Workspace.json`, 공유 프로젝트 설정은 `Config/Project.json`으로 분리한다. 개인 작업 상태 경로는 Git에서 제외한다. 단축키와 파일 다이얼로그의 마지막 경로 저장도 연결한다.
+  - `GraphicSettingPanel`에 창 크기·전체 화면·UI 배율·목표 FPS·VSync와 기본 Scene/Game View 해상도 편집을 연결한다. 편집 초안과 적용값을 구분하고, 실제 적용 결과를 받은 뒤 캡처·저장하며 결과를 토스트로 알린다.
+  - 창 변경에는 15초 유지 확인과 자동 복구, 적용·복구 대기 제한을 둔다. 설정 파일 복원에 실패하면 기본값으로 시작하되 해당 파일의 자동 저장을 차단하고 경로·복구 안내를 표시한다.
+  - `IImGui::CaptureState/RestoreState`와 뷰포트 상태를 통해 패널 열림 상태·도킹·편집 카메라·렌더 패스·Content Browser 상태를 저장한다. UI 배율·언어처럼 UI 프레임워크에 종속되지 않는 설정 요청은 서비스가 조정한다.
+  - `SceneDocument`, `EditorDocumentManager`, `EditorDocumentController`로 씬의 저장·다른 이름 저장·미저장 확인과 New/Open/Close/Quit를 연결한다. 저장 실패 또는 취소 시 후속 씬 교체를 진행하지 않는다. `EditorEditContext`는 편집 이력과 Undo/Redo 후 선택 복원을 담당한다.
+  - 명령의 상태 ID와 저장 기준점으로 미저장 여부를 판단한다. 편집 스냅샷 수집 실패·기록 실패를 미추적 변경으로 보존하고, PIE 종료 후 복원된 씬에 문서를 다시 연결한다.
+  - 후처리 실행 파이프라인을 Engine으로 옮기고, 에디터는 미리보기·프리셋 관리와 씬 반영을 담당한다. 씬의 `PostProcessComponent::PipelineSettings`를 저장 원본으로 사용하고, 씬 전환·Undo/Redo 시 실행 파이프라인에 재적용한다. 패널 편집은 명시적인 씬 반영을 거쳐 씬 저장에 포함된다.
+  - 후처리 프리셋 저장·불러오기·삭제·목록 갱신과 파일 이름 검증을 추가한다. 공통 Material 파라미터 편집·초기화 API, 효과 셰이더와 시작 등록, 기본 예제 프리셋을 함께 포함한다.
+  - Scene View는 후처리 이름·효과 초기화 후 렌더 타깃과 패스를 생성한다. 뷰포트·채널 필터·후처리의 리사이즈 결과를 전파하고 실패 시 이전 크기 복구를 시도하며, 유효한 타깃이 없는 프레임의 렌더링을 건너뛴다. VSync 요청에 필요한 DX12 선언과 SDLGPU 구현도 연결한다.
+  - 씬·프리팹 직렬화 시 `ResourceReferenceSet`을 수집해 선택적 `ResourceReferences` 메타데이터로 저장한다. Archive의 빌려 쓰는 쓰기 컨텍스트를 자식 객체에 전달하고, 참조 목록을 컴포넌트 복원 전에 선로딩한다. 구버전 파일의 목록 누락을 허용하며, 선로딩 실패는 기록하고 실제 필수 핸들의 복원 실패는 유지한다.
+  - `ConfigManager`의 후보 객체 읽기와 파일 교체 저장을 사용하고, 공통 Archive 저장에도 임시 파일을 통한 기존 파일 보호를 추가한다. 설정 검사 대상은 실제 설정 DTO의 Reflection 코드를 별도 생성한다.
+- 커밋 범위:
+  - 공용 파일은 이번 설정·문서·후처리·리소스 참조 저장에 필요한 변경 부분만 선택한다. 관련 로캘 원본과 영어·한국어 사전, 렌더 컴포넌트 집계 헤더 이동 및 PCH의 표준 헤더 의존성을 함께 포함한다.
+  - 그래프 실행·핫리로드 추가 기능, 인스턴싱·LOD·타일 조명 최적화, 임포터·리소스 피커 확장, 새 History 패널 UI, Client 변경과 사용자 테스트 씬은 이번 커밋에서 제외한다. 생성 코드·로그·컴파일된 셰이더·의존성 배포 파일도 제외한다.
+- 검증:
+  - 사용자가 실행한 `EditorSettingsCheck`의 통과를 `out/build/x64-debug/Testing/Temporary/LastTest.log`에서 확인했다. 2026-10-31 12:42 실행, 0.10초, `Editor settings persistence checks passed.` 결과다.
+  - 해당 검사는 설정 왕복 저장·기존 파일 교체·읽기 실패 시 값과 파일 보존·선택 필드 기본값·스키마 검증·직렬화/저장 실패·임시 파일 정리를 다룬다. 서비스 상태 머신이나 UI·GPU 동작의 검증으로 확대하지 않는다.
+  - 같은 작업 흐름에서 사용자가 `ArchiveExample`·`SceneArchiveCheck` 통과를 보고했다. 마지막 테스트 로그는 이후 설정 검사 실행으로 교체되어 있으며, 이 결과도 최종 선별 커밋 전체의 빌드·실행 보증으로 간주하지 않는다.
+  - 이번 커밋 정리에서는 파일·호출 경로와 스테이징 내용을 정적으로 확인한다. AI가 빌드·테스트를 새로 실행하거나 원격으로 푸시하지 않는다.
+  - `git diff --cached --check`에서 기존 소스 변경의 줄 끝 공백 6곳을 확인했다. 소스 수정 권한을 이번 기록·커밋 허가로 확대하지 않고 그대로 보존한다.
+- 남은 항목:
+  - 최종 커밋 기준 빌드와 관련 검사 재실행, 재시작 후 설정·카메라·렌더 패스·도킹 복원, 창 확인 취소·시간 초과, GPU 리사이즈 실패·복구, 언어 변경 중 초안 유지와 미적용 초안 저장 제외를 실제 에디터에서 검증한다.
+  - 후처리의 씬 전환·종료·재열기·Undo/Redo를 실제 화면과 비교한다. 특히 이번 초기화 순서 수정은 위 설정 데이터 검사만으로 검증되지 않는다.
+  - `ConfigManager`와 공통 Archive에 겹치는 임시 파일 교체 처리는 별도 정리 대상으로 남긴다. 리소스 목록은 직접 참조 수집이며, 전체 전이 의존성·스트리밍 구현을 의미하지 않는다.
+  - 동적으로 생성한 뷰포트의 재생성과 공통 런타임 설정 API는 후속 범위다. Client 시작·설정·배포 연결은 `BuildAndPackagingPlan.md`의 보류 결정을 유지한다.
+
 ## [2026-10-30] C++ 모듈 핫리로드 라이브 노드·핀 동적 동기화 및 빌드 최적화 (Phase 4.1)
 
 - Area: Reflection | Graph | HotReload | Editor

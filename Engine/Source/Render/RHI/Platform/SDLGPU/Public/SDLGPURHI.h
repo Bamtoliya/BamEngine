@@ -35,6 +35,13 @@ public:
 	virtual EResult BeginFrame() override;
 	virtual EResult EndFrame() override;
 
+#pragma region Presentation
+public:
+	bool SupportsVSync(bool enabled) const override;
+	EResult SetVSync(bool enabled) override;
+#pragma endregion
+
+
 #pragma region Create Resources
 public:
 	virtual RHIBuffer* CreateBuffer(void* data, uint32 size, uint32 stride, ERHIBufferType type) override;

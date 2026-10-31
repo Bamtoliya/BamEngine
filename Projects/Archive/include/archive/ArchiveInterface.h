@@ -16,6 +16,7 @@
 #include <functional>
 #include <optional>
 #include <utility>
+#include <any>
 
 namespace archive
 {
@@ -23,6 +24,24 @@ namespace archive
     {
     public:
         virtual ~IArchive() = default;
+
+        template<typename T>
+        void SetWriteContext(T* context)
+        {
+            m_WriteContext = context;
+        }
+
+        template<typename T>
+        [[nodiscard]] T* GetWriteContext() const noexcept
+        {
+            const auto* stored = std::any_cast<T*>(&m_WriteContext);
+            return stored ? *stored : nullptr;
+        }
+
+        void ClearWriteContext() noexcept
+        {
+            m_WriteContext.reset();
+        }
 
         // Callbacks operate on one isolated value using the supplied field name.
         // A writer must produce exactly that field and leave object depth at zero.
@@ -112,8 +131,9 @@ namespace archive
         requires std::invocable<Writer&, IArchive&, const T&>
         [[nodiscard]] ArchiveResult WriteObject(std::string_view key, const T& value, Writer&& writeObject)
         {
-            return WriteObjectValue(key, [&value, &writeObject, key](IArchive& temporary) -> ArchiveResult
+            return WriteObjectValue(key, [this, &value, &writeObject, key](IArchive& temporary) -> ArchiveResult
                 {
+                    temporary.m_WriteContext = m_WriteContext;
                     const auto result = std::invoke(writeObject, temporary, value);
 
                     if (!result)
@@ -134,8 +154,9 @@ namespace archive
         [[nodiscard]] ArchiveResult WriteObjectArray(std::string_view key, std::size_t size, Writer&& writeElement)
         {
             return WriteObjectArrayValues(key, size,
-                [&writeElement, key](IArchive& temporary, std::size_t index) -> ArchiveResult
+                [this, &writeElement, key](IArchive& temporary, std::size_t index) -> ArchiveResult
                 {
+                    temporary.m_WriteContext = m_WriteContext;
                     const auto path = std::string{ key } + "[" + std::to_string(index) + "]";
                     auto result = std::invoke(writeElement, temporary, index);
 
@@ -158,8 +179,9 @@ namespace archive
         [[nodiscard]] ArchiveResult WriteObjectArray(std::string_view key, const std::vector<T>& values, Writer&& writeObject)
         {
             return WriteObjectArrayValues(key, values.size(),
-                [&values, &writeObject, key](IArchive& temporary, std::size_t index) -> ArchiveResult
+                [this, &values, &writeObject, key](IArchive& temporary, std::size_t index) -> ArchiveResult
                 {
+                    temporary.m_WriteContext = m_WriteContext;
                     const auto path = std::string{ key } + "[" + std::to_string(index) + "]";
                     auto result = std::invoke(writeObject, temporary, values[index]);
 
@@ -189,8 +211,9 @@ namespace archive
                     const auto path = std::string{ key } + "[" + std::to_string(index) + "].Key";
                     return MakeScalarValue(path, entry->first, destination);
                 },
-                [&entry, &writeObject, key](IArchive& temporary, std::size_t index) -> ArchiveResult
+                [this, &entry, &writeObject, key](IArchive& temporary, std::size_t index) -> ArchiveResult
                 {
+                    temporary.m_WriteContext = m_WriteContext;
                     const auto path = std::string{ key } + "[" + std::to_string(index) + "].Value";
                     auto result = std::invoke(writeObject, temporary, entry->second);
 
@@ -698,6 +721,8 @@ namespace archive
         //File
         [[nodiscard]] ArchiveResult SaveToFile(const std::filesystem::path& path) const;
         [[nodiscard]] ArchiveResult LoadFromFile(const std::filesystem::path& path);
+        // 이미 인코딩한 문서 바이트를 그대로 저장합니다.
+        [[nodiscard]] static ArchiveResult SaveEncodedToFile(const std::filesystem::path& path, std::string_view document);
 
         [[nodiscard]] virtual ArchiveResult GetMapSize(std::string_view key, std::size_t& size) const = 0;
 
@@ -939,5 +964,7 @@ namespace archive
                 return {};
             }
         }
+    private:
+        std::any m_WriteContext;
     };
 }

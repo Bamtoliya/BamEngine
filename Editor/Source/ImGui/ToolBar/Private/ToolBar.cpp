@@ -3,15 +3,12 @@
 #include "imgui.h"
 #include "ToolBar.h"
 
-#include "Scene.h"
 #include "SceneManager.h"
 #include "ShortcutManager.h"
 
 #include "LocalizationManager.h"
 
-#include "ViewportPanels.h"
-#include "InspectorPanel.h"
-#include "HierarchyPanel.h"
+#include "ImGuiPanels.h"
 #include "ImGuiManager.h"
 
 #include "Application.h"
@@ -21,13 +18,15 @@
 
 #include "SelectionManager.h"
 #include "AssetManager.h"
-#include "ContentBrowserPanel.h"
 
 #include "PIEManager.h"
+#include "HotReloadManager.h"
 #include "ModuleHotReloadManager.h"
 #include "ShaderHotReloadManager.h"
-#include "HotReloadManager.h"
 #include "NotificationManager.h"
+#include "SceneDocument.h"
+#include "EditorSettingsService.h"
+
 
 void ToolBar::Draw(SDL_Window* window)
 {
@@ -102,9 +101,13 @@ void ToolBar::DrawFileMenu()
 			LoadResourceFile();
 		}
 
-		if (ImGui::MenuItem(LOCAL_CSTR("UI_SETTINGS"), ""))
-		{
+		auto* settingsPanel = ImGuiManager::Get().GetImGuiPanel(L"GraphicsSettings");
 
+		if (ImGui::MenuItem(LOCAL_LABEL("UI_SETTINGS").c_str(), nullptr, false,
+			settingsPanel != nullptr) && settingsPanel)
+		{
+			TODO("Open overall settings panel, May this button not be here");
+			settingsPanel->Open();
 		}
 		ImGui::EndMenu();
 	}
@@ -122,8 +125,11 @@ void ToolBar::ImportAsset()
 void ToolBar::LoadResourceFile()
 {
 	wstring filePath;
-	if (!FileDialogs::OpenFileDialog(filePath, { {StrToWStr(LOCAL("FileDialog.ResourceFiles")), L""} }, filePath))
+	if (!FileDialogs::OpenFileDialog(filePath, {
+	{ StrToWStr(LOCAL("FileDialog.ResourceFiles")), L"*.bam*;*.json;*.beve" }
+		}, L"Resources", EFileDialogContext::ResourceOpen))
 		return;
+
 	auto& manager = ResourceManager::Get();
 	const auto handle = manager.LoadFile(filePath);
 
@@ -139,10 +145,7 @@ void ToolBar::LoadResourceFile()
 	NotificationManager::Get().AddNotification(LOCAL("Notification.LoadResourceSucceeded"),
 		LOCAL_FMT("Notification.ResourceLoadSucceeded", WStrToStr(filePath)), ELogLevel::Info, 3.0f);
 }
-
-
 #pragma endregion
-
 
 #pragma region EditMenu
 void ToolBar::DrawEditMenu()
@@ -162,7 +165,6 @@ void ToolBar::DrawEditMenu()
 }
 #pragma endregion
 
-
 #pragma region SceneMenu
 void ToolBar::DrawSceneMenu()
 {
@@ -170,154 +172,128 @@ void ToolBar::DrawSceneMenu()
 	{
 		ACTION_MENU_ITEM(LOCAL_CSTR("UI_NEW_SCENE"), "File.NewScene");
 		ACTION_MENU_ITEM(LOCAL_CSTR("UI_SAVE_SCENE"), "File.SaveScene");
+		auto* document = Application::Get().GetSceneDocument();
+		const bool canSave = PIEManager::Get().IsEditing() && document && document->CanSave();
+
+		if (ImGui::MenuItem(LOCAL_LABEL("EditorDocument.SaveAs").c_str(), nullptr, false, canSave))
+			SaveScene(true);
+
+		if (document && document->HasUnsavedChanges())
+			ImGui::TextUnformatted(LOCAL_CSTR("EditorDocument.Modified"));
 		ACTION_MENU_ITEM(LOCAL_CSTR("UI_LOAD_SCENE"), "File.LoadScene");
 		ImGui::Separator();
-		if (ImGui::MenuItem(LOCAL_CSTR("UI_CLOSE_SCENE")))
+		if (ImGui::MenuItem(LOCAL_CSTR("UI_CLOSE_SCENE"), nullptr, false, PIEManager::Get().IsEditing()))
 		{
-			const EResult result = SceneManager::Get().CloseScene();
-			if (result == EResult::Success)
-				SelectionManager::Get().ClearSelection(true);
-			else
-				EDITOR_LOG_ERROR("Failed to close scene: {}", ResultToString(result));
+			ImGuiManager::Get().RequestCloseScene();
 		}
 		ImGui::EndMenu();
 	}
 }
 void ToolBar::NewScene()
 {
-	const EResult result = SceneManager::Get().NewScene();
-	if (result != EResult::Success)
+	ImGuiManager::Get().RequestNewScene();
+}
+
+void ToolBar::SaveScene(bool saveAs)
+{
+	if (!PIEManager::Get().IsEditing())
 	{
-		EDITOR_LOG_ERROR("Failed to create scene: {}", ResultToString(result));
+		NotificationManager::Get().AddNotification(LOCAL("EditorDocument.Title"),
+			LOCAL("EditorDocument.SaveUnavailable"), ELogLevel::Warn);
 		return;
 	}
 
-	SelectionManager::Get().ClearSelection(true);
-}
+	auto& controller = ImGuiManager::Get().GetDocumentController();
 
-void ToolBar::SaveScene()
-{
-	wstring filePath;
-	if (!FileDialogs::SaveFileDialog(filePath, { {StrToWStr(LOCAL("FileDialog.SceneFiles")), L"*.json"} },
-		L"NewScene.json", L"json"))
-		return;
-
-	archive::JsonArchive ar;
-	const EResult result = SceneManager::Get().SaveScene(ar, filePath);
-
-	if (result != EResult::Success)
+	if (controller.IsBusy())
 	{
-		EDITOR_LOG_ERROR("Failed to save scene: {} ({})",
-			WStrToStr(filePath), ResultToString(result));
+		NotificationManager::Get().AddNotification(LOCAL("EditorDocument.Title"),
+			LOCAL("EditorDocument.OperationBusy"), ELogLevel::Warn);
+		return;
+	}
+
+	const auto id = Application::Get().GetSceneDocumentId();
+
+	if (!controller.RequestSave(id, saveAs))
+	{
+		NotificationManager::Get().AddNotification(LOCAL("EditorDocument.Title"),
+			LOCAL("EditorDocument.SaveUnavailable"), ELogLevel::Warn);
 	}
 }
 void ToolBar::LoadScene()
 {
-	wstring filePath;
-	if (!FileDialogs::OpenFileDialog(filePath, { {StrToWStr(LOCAL("FileDialog.SceneFiles")), L"*.json"} }))
-		return;
+	auto& gui = ImGuiManager::Get();
 
-	archive::JsonArchive ar;
-	const EResult result = SceneManager::Get().LoadScene(ar, filePath);
-
-	if (result != EResult::Success)
+	if (!PIEManager::Get().IsEditing())
 	{
-		EDITOR_LOG_ERROR("Failed to load scene: {} ({})", WStrToStr(filePath), ResultToString(result));
+		NotificationManager::Get().AddNotification(LOCAL("EditorDocument.Title"),
+			LOCAL("EditorDocument.SceneActionUnavailable"), ELogLevel::Warn);
 		return;
 	}
 
-	SelectionManager::Get().ClearSelection(true);
-	Application::Get().GetEditHistory().Clear();
+	if (gui.GetDocumentController().IsBusy())
+	{
+		NotificationManager::Get().AddNotification(LOCAL("EditorDocument.Title"),
+			LOCAL("EditorDocument.OperationBusy"), ELogLevel::Warn);
+		return;
+	}
+
+	std::wstring filePath;
+	if (!FileDialogs::OpenFileDialog(filePath,
+		{ { StrToWStr(LOCAL("FileDialog.SceneFiles")), L"*.json" } },
+		L"Resources\\Scenes", EFileDialogContext::SceneOpen))
+	{
+		return;
+	}
+
+	gui.RequestOpenScene(std::filesystem::path(filePath));
 }
 #pragma endregion
-
 
 #pragma region WindowMenu
 
 void ToolBar::DrawWindowMenu()
 {
+	auto& gui = ImGuiManager::Get();
+
 	if (ImGui::BeginMenu(LOCAL_CSTR("UI_WINDOW")))
 	{
-		if (ImGui::MenuItem(LOCAL_LABEL("ToolBar.DisplaySettings").c_str()))
+		auto* settingsPanel = gui.GetImGuiPanel(L"GraphicsSettings");
+		const bool settingsOpen = settingsPanel && settingsPanel->IsOpen();
+
+		if (ImGui::MenuItem(LOCAL_LABEL("ToolBar.DisplaySettings").c_str(),
+			nullptr, settingsOpen, settingsPanel != nullptr) && settingsPanel)
 		{
-			m_DisplaySettingsWindow = !m_DisplaySettingsWindow;
+			settingsPanel->ToggleOpen();
 		}
 
 		if (ImGui::MenuItem(LOCAL_LABEL("ToolBar.NewViewportPanel").c_str()))
-		{
 			AddNewViewportPanel();
-		}
 
 		ImGui::Separator();
 
 		if (ImGui::BeginMenu(LOCAL_LABEL("ToolBar.Panels").c_str()))
 		{
-			const auto& panels = ImGuiManager::Get().GetImGuiPanels();
-
-			for (const auto& panel : panels)
+			for (auto* panel : gui.GetImGuiPanels())
 			{
-				bool IsOpen = panel->IsOpen();
+				bool open = panel->IsOpen();
+
 				ImGui::PushID(panel);
 				const string label = panel->GetDisplayName() + "###Panel";
-				if (ImGui::MenuItem(label.c_str(), nullptr, &IsOpen))
-				{
-					panel->SetOpen(IsOpen);
-				}
+
+				if (ImGui::MenuItem(label.c_str(), nullptr, &open))
+					panel->SetOpen(open);
+
 				ImGui::PopID();
 			}
 
-
 			ImGui::EndMenu();
 		}
+
 		ImGui::EndMenu();
 	}
 
-	if(m_DisplaySettingsWindow)
-		DrawDisplaySettingsWindow();
-
 	DrawNewViewportPopup();
-}
-void ToolBar::DrawDisplaySettingsWindow()
-{
-	if (ImGui::Begin(LOCAL_LABEL("ToolBar.DisplaySettings").c_str(), &m_DisplaySettingsWindow)) // 창 이름
-	{
-		static int width = g_WindowWidth;
-		static int height = g_WindowHeight;
-		static bool isFullscreen = false;
-
-		// 현재 상태 가져오기 (처음 한 번만 동기화하거나, 매번 갱신하거나 선택)
-		// 여기서는 UI 조작 값을 우선하도록 단순화했습니다.
-
-		ImGui::Text("%s", LOCAL_CSTR("UI_RESOLUTION"));
-		ImGui::InputInt(LOCAL_LABEL("EditorCommon.Width").c_str(), &width);
-		ImGui::InputInt(LOCAL_LABEL("EditorCommon.Height").c_str(), &height);
-
-		ImGui::Checkbox(LOCAL_LABEL("ToolBar.Fullscreen").c_str(), &isFullscreen);
-
-		if (ImGui::Button(LOCAL_LABEL("ToolBar.ApplyResolution").c_str()))
-		{
-			// 실제 적용
-			Application::Get().SetResolution(width, height, isFullscreen);
-		}
-
-		ImGui::Separator();
-
-		// [옵션] UI 스케일 조절 (4K 모니터 대응용)
-		float uiScale = ImGuiManager::Get().GetUIScale();
-		if (ImGui::DragFloat(LOCAL_LABEL("ToolBar.UIScale").c_str(), &uiScale, 0.01f, 0.5f, 3.0f, "%.2fx"))
-		{
-			ImGuiManager::Get().SetUIScale(uiScale);
-		}
-
-		ImGui::Separator();
-		static int32 targetFPS = TimeManager::Get().GetTargetFPS();
-		ImGui::DragInt(LOCAL_LABEL("ToolBar.TargetFPS").c_str(), &targetFPS);
-		if (ImGui::Button(LOCAL_LABEL("ToolBar.ApplyFPS").c_str()))
-		{
-			TimeManager::Get().SetTargetFPS(targetFPS);
-		}
-	}
-	ImGui::End();
 }
 void ToolBar::AddNewViewportPanel()
 {
@@ -369,20 +345,30 @@ void ToolBar::DrawNewViewportPopup()
 
 #pragma endregion
 
-
 #pragma region HelpMenu
 void ToolBar::DrawHelpMenu()
 {
-	if (ImGui::BeginMenu(LOCAL_CSTR("UI_HELP")))
+	if (ImGui::BeginMenu(LOCAL_LABEL("UI_HELP").c_str()))
 	{
-		if (ImGui::BeginMenu(LOCAL_CSTR("UI_LANGUAGE")))
+		if (ImGui::BeginMenu(LOCAL_LABEL("UI_LANGUAGE").c_str()))
 		{
-			if (ImGui::MenuItem(LOCAL_CSTR("UI_ENGLISH")))
-				LocalizationManager::Get().SetCurrentLanguage(ELocalizationLanguage::English);
-			if (ImGui::MenuItem(LOCAL_CSTR("UI_KOREAN")))
-				LocalizationManager::Get().SetCurrentLanguage(ELocalizationLanguage::Korean);
+			const auto current = LocalizationManager::Get().GetCurrentLanguage();
+
+			if (ImGui::MenuItem(LOCAL_LABEL("UI_ENGLISH").c_str(), nullptr, current == ELocalizationLanguage::English))
+			{
+				const auto result = EditorSettingsService::Get().SetEditorLanguage(ELocalizationLanguage::English);
+				ImGuiManager::Get().NotifySettingsChange(result);
+			}
+
+			if (ImGui::MenuItem(LOCAL_LABEL("UI_KOREAN").c_str(), nullptr, current == ELocalizationLanguage::Korean))
+			{
+				const auto result = EditorSettingsService::Get().SetEditorLanguage(ELocalizationLanguage::Korean);
+				ImGuiManager::Get().NotifySettingsChange(result);
+			}
+
 			ImGui::EndMenu();
 		}
+
 		ImGui::EndMenu();
 	}
 }

@@ -55,7 +55,7 @@ void PIEManager::Stop()
     }
 
     m_State = EPlayState::Edit;
-    Application::Get().GetEditHistory().Clear();
+    Application::Get().RebindSceneDocumentAfterPlay();
     EDITOR_LOG_INFO("[PIE] Stopped — scene restored");
 }
 

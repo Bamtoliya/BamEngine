@@ -1,38 +1,49 @@
 ﻿#pragma once
-#include <fmt/core.h>
-#include <SDL3/SDL.h>
 #include "Application.h"
-#include "Runtime.h"
-#include "ImGuiManager.h"
-#include "SelectionManager.h"
-#include "CoreComponents.h"
-#include "AssetManager.h"
+#include <SDL3/SDL.h>
 #include <archive/JsonArchive.h>
+#include "Runtime.h"
+
+#include "SelectionManager.h"
+
+#include "AssetManager.h"
+
 #include "Systems.h"
 #include "PIEManager.h"
-#include "ModuleHotReloadManager.h"
-#include "HotReloadManager.h"
-#include "NotificationManager.h"
-#include "TerrainUtility.h"
-#include "TerrainComponent.h" 
-#include "StartupResourceLoader.h"
-#include "ShortcutManager.h"
 
-BEGIN(Editor)
+#include "ImGuiManager.h"
+
+#include "ShortcutManager.h"
+#include "ConfigManager.h"
+#include "ReflectionRegistry.h"
+#include "BamEditorSettings.gen.h"
+#include <SDL3/SDL_filesystem.h>
+#include "TimeManager.h"
+#include "Logger.h"
+
+
+#include "StartupResourceLoader.h"
+#include "HotReloadManager.h"
+#include "ModuleHotReloadManager.h"
+#include "TerrainComponent.h"
+#include "NotificationManager.h"
+#include "Components/Core/IDComponent.h"
+#include "TerrainUtility.h"
+
+#include "SceneDocument.h"
+#include "EditorSettingsService.h"
 
 IMPLEMENT_SINGLETON(Application)
 
 #pragma region Constructor&Destructor
 EResult Application::Initialize(void* arg)
 {
-    if (!arg)
-        return EResult::InvalidArgument;
+    if (!arg) return EResult::InvalidArgument;
 
-    const auto& createInfo = *static_cast<const ApplicationCreateInfo*>(arg);
+    CAST_DESC;
 
-    EResult result = InitializeLogger();
-    if (result != EResult::Success)
-        return result;
+    if(!InitializeLogger())
+        return EResult::Fail; 
 
     m_LoggerInitialized = true;
 
@@ -46,31 +57,51 @@ EResult Application::Initialize(void* arg)
     if (!NotificationManager::Create())
         return fail("NotificationManager", EResult::Fail);
 
-    result = InitializeWindow(createInfo);
-    if (result != EResult::Success)
-        return fail("InitializeWindow", result);
+    if (!InitializeWindow(*desc))
+        return fail("InitializeWindow", EResult::Fail);
 
-    result = InitializeRuntime(createInfo);
-    if (result != EResult::Success)
-        return fail("InitializeRuntime", result);
+    if (!InitializeRuntime(*desc))
+        return fail("InitializeRuntime", EResult::Fail);
 
-    ShortcutManager::Create();
-    IntializeRenderer();
+    ShortcutManagerDesc shortcutDesc;
+
+    EditorSettingsService& editorService = EditorSettingsService::Get();
+
+
+    const auto& preferencesPath = editorService.GetPreferencesPath();
+    if (!preferencesPath.empty())
+        shortcutDesc.ConfigPath = preferencesPath.parent_path() / "EditorShortcuts.json";
+
+    shortcutDesc.LegacyPath = editorService.GetProjectRoot() / "Resources" / "Config" / "EditorShortcuts.json";
+
+    if (!ShortcutManager::Create(&shortcutDesc))
+        return fail("ShortcutManager", EResult::Fail);
+    if(!IntializeRenderer())
+		return fail("IntializeRenderer", EResult::Fail);
     if (!InitializeResources())
         return fail("InitializeResources", EResult::Fail);
 
-    result = InitializeImGui();
-    if (result != EResult::Success)
-        return fail("InitializeImGui", result);
+    if (!InitializeImGui())
+        return fail("InitializeImGui", EResult::Fail);
 
-    InitializeLocalization();
+    if(!InitializeLocalization())
+        return fail("InitializeLocalization", EResult::Fail);
 
-    result = InitializeSystem();
-    if (result != EResult::Success)
-        return fail("InitializeSystem", result);
+    auto* rhi = Renderer::Get().GetRHI();
+    if (!rhi)
+        return fail("BindRuntime", EResult::Fail);
+
+    EditorSettingsService::Get().BindRuntime(*m_ImGuiManager, TimeManager::Get(), LocalizationManager::Get(), *rhi);
+
+    if (!EditorSettingsService::Get().RestoreEditorState())
+        return fail("RestoreEditorState", EResult::Fail);
+
+    if (!InitializeSystem())
+        return fail("InitializeSystem", EResult::Fail);
 
     if (!HotReloadManager::Create())
         return fail("HotReloadManager", EResult::Fail);
+
     // Editor.exe 실행 파일과 같은 디렉터리에 있는 GameModule.dll 로드
     wchar_t exePathBuf[MAX_PATH] = {};
     GetModuleFileNameW(nullptr, exePathBuf, MAX_PATH);
@@ -85,28 +116,38 @@ EResult Application::Initialize(void* arg)
         BAM_LOG(Warn, "Editor", "HotReload", "GameModule.dll not found at: {}", modulePath.string());
     }
     ShortcutManager::Get().LoadFromFile();
+
+    RestoreLastEditedScene();
+    if (m_SceneDocumentId == InvalidEditorDocumentId && SceneManager::Get().GetCurrentScene())
+        AdoptSceneDocument({});
+
+    m_InitializationCompleted = true;
     return EResult::Success;
 }
-
 void Application::Free()
 {
-    m_EditHistory.BeforeReplay = {};
-    m_EditHistory.AfterReplay = {};
-    m_HistorySelection.clear();
-    m_EditHistory.Commands().OnHistoryChanged().Clear();
-    m_EditHistory.Clear();
-
-    if (m_AssetManager)
+    if (m_InitializationCompleted)
     {
-        AssetManager::Destroy();
-        m_AssetManager = nullptr;
+        m_InitializationCompleted = false;
+
+        if (EditorSettingsService::IsCreated())
+            CaptureAndSaveEditorWorkspace();
     }
+
+    if (EditorSettingsService::IsCreated())
+        EditorSettingsService::Get().UnbindRuntime();
+
+    m_Documents.Clear();
+    m_SceneDocumentId = InvalidEditorDocumentId;
+    m_EditContext.Shutdown();
 
     if (m_ImGuiManager)
     {
         ImGuiManager::Destroy();
         m_ImGuiManager = nullptr;
     }
+
+    AssetManager::Destroy();
 
     if (m_SelectionManager)
     {
@@ -121,8 +162,12 @@ void Application::Free()
     }
 
     HotReloadManager::Destroy();
-    ShortcutManager::Get().SaveToFile();
-    ShortcutManager::Destroy();
+
+    if (ShortcutManager::IsCreated())
+    {
+        ShortcutManager::Get().SaveToFile();
+        ShortcutManager::Destroy();
+    }
 
     if (m_Runtime)
     {
@@ -135,6 +180,8 @@ void Application::Free()
         SDL_DestroyWindow(m_Window);
         m_Window = nullptr;
     }
+
+    EditorSettingsService::Destroy();
 
     if (m_SDLInitialized)
     {
@@ -151,7 +198,6 @@ void Application::Free()
         m_LoggerInitialized = false;
     }
 }
-
 #pragma endregion
 
 #pragma region Initialize
@@ -165,15 +211,38 @@ EResult Application::InitializeWindow(const ApplicationCreateInfo& createInfo)
 
     m_SDLInitialized = true;
 
-    uint32 windowFlags = SDL_WINDOW_RESIZABLE | SDL_WINDOW_BORDERLESS | SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_VULKAN;
+#pragma region EditorSettingsServiceInitialization
+    if (!EditorSettingsService::Create())
+        return EResult::Fail;
 
-    // SDL3에서 OS 기본 IME(한글 조합 등) 창을 띄우기 위한 힌트 설정
+    auto& settings = EditorSettingsService::Get();
+
+    if (!settings.LoadForStartup(createInfo.width, createInfo.height))
+        return EResult::Fail;
+
+    const auto& workspace = settings.GetWorkspace();
+#pragma endregion
+
+    SDL_WindowFlags windowFlags = SDL_WINDOW_RESIZABLE | SDL_WINDOW_BORDERLESS |
+        SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_VULKAN;
+
+    if (workspace.WindowFullscreen)
+        windowFlags |= SDL_WINDOW_FULLSCREEN;
+    else if (workspace.WindowMaximized)
+        windowFlags |= SDL_WINDOW_MAXIMIZED;
+
     SDL_SetHint(SDL_HINT_IME_IMPLEMENTED_UI, "1");
 
     m_Window = SDL_CreateWindow(
-        "BamEngine Editor", g_WindowWidth, g_WindowHeight,
-        windowFlags
-    );
+        createInfo.AppName, workspace.WindowWidth, workspace.WindowHeight, windowFlags);
+
+    if (!m_Window)
+    {
+        BAM_LOG(Error, "Editor", "Application", "Window creation failed: {}", SDL_GetError());
+        return EResult::Fail;
+    }
+
+    SDL_SetWindowMinimumSize(m_Window, 320, 240);
 
     if (m_Window)
     {
@@ -231,15 +300,27 @@ EResult Application::InitializeWindow(const ApplicationCreateInfo& createInfo)
             SDL_DestroySurface(iconSurface);
         }
     }
+
+    if (!SDL_SyncWindow(m_Window))
+    {
+        BAM_LOG(Error, "Editor", "Window", "Initial window synchronization failed: {}", SDL_GetError());
+        return EResult::Fail;
+    }
+
     return EResult::Success;
 }
-
 EResult Application::InitializeRuntime(const ApplicationCreateInfo& createInfo)
 {
-    if (!m_Window)
-        return EResult::InvalidArgument;
+    if (!m_Window) return EResult::InvalidArgument;
 
     RUNTIMEDESC runtimeDesc = {};
+
+	if (GRAPHICS_BACKEND == EGraphicsBackend::DirectX12)
+		runtimeDesc.RendererDesc.rhiType = ERHIType::DirectX12;
+	else if (GRAPHICS_BACKEND == EGraphicsBackend::Vulkan)
+		runtimeDesc.RendererDesc.rhiType = ERHIType::SDLGPU;
+	else
+		return EResult::NotImplemented;
     SDLGPURHIDesc sdlgpuDesc = {};
     DirectX12RHIDesc directX12Desc = {};
 
@@ -273,43 +354,61 @@ EResult Application::InitializeRuntime(const ApplicationCreateInfo& createInfo)
         return EResult::NotImplemented;
     }
 
-    runtimeDesc.RendererDesc.rhiDesc->width = g_WindowWidth;
-    runtimeDesc.RendererDesc.rhiDesc->height = g_WindowHeight;
+    int pixelWidth = 0;
+    int pixelHeight = 0;
+    if (!SDL_GetWindowSizeInPixels(m_Window, &pixelWidth, &pixelHeight) || pixelWidth <= 0 || pixelHeight <= 0)
+        return EResult::Fail;
+
+    runtimeDesc.RendererDesc.rhiDesc->width = static_cast<uint32>(pixelWidth);
+    runtimeDesc.RendererDesc.rhiDesc->height = static_cast<uint32>(pixelHeight);
     runtimeDesc.RendererDesc.rhiDesc->isVSync = true;
 
     m_Runtime = Runtime::Create(&runtimeDesc);
     if (!m_Runtime)
         return EResult::Fail;
 
-    m_AssetManager = AssetManager::Create();
-    if (!m_AssetManager)
+    auto* rhi = Renderer::Get().GetRHI();
+    if (!rhi)
+        return EResult::Fail;
+
+    EditorSettingsService::Get().RestoreStartupVSync(*rhi);
+
+    if(!AssetManager::Create())
         return EResult::Fail;
 
     return EResult::Success;
 }
-
 EResult Application::InitializeSystem()
 {
-	auto& systemManager = SystemManager::Get();
+    auto& systemManager = SystemManager::Get();
 
-	if(!systemManager.AddSystem<TransformSystem>())
-		return EResult::Fail;
-	if(!systemManager.AddSystem<MeshRenderSystem>())
-		return EResult::Fail;
-    if(!systemManager.AddSystem<SpriteRenderSystem>())
-		return EResult::Fail;
-    if (!systemManager.AddSystem<CameraSystem>())
-        return EResult::Fail;
-    if (!systemManager.AddSystem<LightSystem>())
-        return EResult::Fail;
-    if (!systemManager.AddSystem<UIRenderSystem>())
-        return EResult::Fail;
-    if (!systemManager.AddSystem<AudioSystem>())
-        return EResult::Fail;
-    if (!systemManager.AddSystem<TerrainSystem>())
-        return EResult::Fail;
-	if (!systemManager.AddSystem<PhysicsSystem>())
-		return EResult::Fail;
+    const auto addSystems = [&systemManager]<typename... SystemTypes>()
+    {
+        return (... && static_cast<bool>(systemManager.AddSystem<SystemTypes>()));
+    };
+
+    const bool success = addSystems.operator() <
+        TransformSystem, MeshRenderSystem, SpriteRenderSystem,
+        CameraSystem, LightSystem, UIRenderSystem,
+        AudioSystem, TerrainSystem, PhysicsSystem > ();
+
+    return success ? EResult::Success : EResult::Fail;
+}
+EResult Application::IntializeRenderer()
+{
+    auto& rtMgr = RenderTargetManager::Get();
+    auto* rhi = Renderer::Get().GetRHI();
+    uint32 w = rhi->GetSwapChainWidth();
+    uint32 h = rhi->GetSwapChainHeight();
+    // ── 에디터 최종 출력용 RT (ImGui가 여기에 렌더) ──
+    RenderTargetDesc finalDesc = {};
+    finalDesc.textureDesc.format = ETextureFormat::R8G8B8A8_UNORM;
+    finalDesc.name = L"FinalColor";
+    finalDesc.textureDesc.width = w;
+    finalDesc.textureDesc.height = h;
+    finalDesc.textureDesc.usage = ETextureUsage::RenderTarget | ETextureUsage::Sampler;
+    rtMgr.CreateRenderTarget(&finalDesc);
+
     return EResult::Success;
 }
 EResult Application::InitializeImGui()
@@ -327,40 +426,15 @@ EResult Application::InitializeImGui()
 
     m_SelectionManager = SelectionManager::Create();
     m_PIEManager = PIEManager::Create();
-    m_EditHistory.BeforeReplay = [this]
-    {
-        m_HistorySelection.clear();
-        for (auto* entity : m_SelectionManager->GetSelectedEntities())
-        {
-            if (!entity || !entity->GetScene()) continue;
-            auto* scene = entity->GetScene();
-            const auto* id = scene->GetRegistry().try_get<Engine::IDComponent>(entity->GetEntityHandle());
-            if (id) m_HistorySelection.emplace_back(scene, id->id);
-        }
-        m_SelectionManager->ClearSelection(true);
-    };
-    m_EditHistory.AfterReplay = [this]
-        {
-            const bool locked = m_SelectionManager->IsPrimarySelectionLocked();
-            m_SelectionManager->SetPrimarySelectionLock(false);
-            for (const auto& [scene, id] : m_HistorySelection)
-                if (auto* entity = scene->FindEntityById(id)) m_SelectionManager->AddToEntitySelection(entity);
-            m_SelectionManager->SetPrimarySelectionLock(locked);
-            m_HistorySelection.clear();
-
-            // Undo / Redo 후 복원된 터레인의 GPU 높이맵 동기화 보장
-            for (auto* scene : SceneManager::Get().GetActiveScenes())
-            {
-                if (!scene) continue;
-                for (auto [entity, terrain] : scene->GetRegistry().view<Engine::TerrainComponent>().each())
-                    terrain.IsDirty = true;
-            }
-        };
     if (!m_SelectionManager)
     {
         fmt::print(stderr, "SelectionManager Creation Failed\n");
         return EResult::Fail;
     }
+
+    const auto editResult = m_EditContext.Initialize(*m_SelectionManager);
+    if (editResult != EResult::Success)
+        return editResult;
 
     RenderPassID uiPassID = RenderPassManager::Get().RegisterRenderPass(
         L"Editor UI",
@@ -389,366 +463,46 @@ EResult Application::InitializeLogger()
     BAM_LOG(Info, "Editor", "Application", "Logger initialization finished");
     return EResult::Success;
 }
-#pragma endregion
-
-#pragma region Localization
-void Application::InitializeLocalization()
+EResult Application::InitializeLocalization()
 {
-    LocalizationManager::Get().RegisterLocalizationData(L"Resources/Data/Localization/English.json");
-    LocalizationManager::Get().RegisterLocalizationData(L"Resources/Data/Localization/Korean.json");
-    LocalizationManager::Get().LoadData();
+	LocalizationManager* localizationManager = LocalizationManager::Create();
+    if(!localizationManager)
+    {
+        fmt::print(stderr, "LocalizationManager Creation Failed\n");
+        return EResult::Fail;
+    }
+    if(IsFailure(localizationManager->RegisterLocalizationData(L"Resources/Data/Localization/English.json")))
+    {
+		BAM_LOG(Error, "Editor", "Application", "Failed to register English localization data");
+        return EResult::Fail;
+    }
+    if(IsFailure(localizationManager->RegisterLocalizationData(L"Resources/Data/Localization/Korean.json")))
+    {
+        BAM_LOG(Error, "Editor", "Application", "Failed to register Korean localization data");
+        return EResult::Fail;
+    }
+    if(IsFailure(localizationManager->LoadData()))
+    {
+        BAM_LOG(Error, "Editor", "Application", "Failed to load localization data");
+        return EResult::Fail;
+    }
+    return EResult::Success;
 }
 #pragma endregion
 
-#pragma region Resources
+#pragma region Resource
 bool Application::InitializeResources()
 {
+    if (!EditorSettingsService::Get().LoadProjectSettings(ReflectionRegistry::Get().GetRegistry()))
+        return false;
+
     InitializeMeshes();
-    return StartupResourceLoader::LoadPipeline(STARTUP_MANIFEST_PATH);
+
+    const auto manifestPath =
+        EditorSettingsService::Get().GetProjectRoot() / std::filesystem::path(EditorSettingsService::Get().GetProjectSettings().StartupManifestPath);
+
+    return StartupResourceLoader::LoadPipeline(manifestPath);
 }
-
-void Application::InitializeFiles()
-{
-    ResourceManager& resourceManager = ResourceManager::Get();
-    wstring resourcesToLoad[] =
-    {
-        //Texture
-        RESOURCE_PATH L"Texture/uv1.png",
-        RESOURCE_PATH L"Texture/white1x1.png",
-        RESOURCE_PATH L"Texture/black1x1.png",
-        RESOURCE_PATH L"Texture/magenta1x1.png",
-        RESOURCE_PATH L"Texture/green1x1.png",
-        RESOURCE_PATH L"Texture/blue1x1.png",
-
-        ///Sprite
-        RESOURCE_PATH L"Texture/uv1.bamsprite.json",
-    };
-
-    for (const auto& path : resourcesToLoad)
-    {
-        resourceManager.LoadFile(path);
-    }
-}
-
-void Application::InitializeShaders()
-{
-    ResourceManager& rm = ResourceManager::Get();
-
-	ShaderDesc defaultVsDesc = {};
-    {
-	    defaultVsDesc.Key   = RESOURCE_PATH L"Shader/DefaultVS";
-        defaultVsDesc.Path  = RESOURCE_PATH L"Shader/bin/dxil/defaultVS.cso";
-        defaultVsDesc.shaderType = EShaderType::Vertex;
-        defaultVsDesc.entryPoint = "main";
-	    auto handle = rm.LoadResource<Shader>(&defaultVsDesc);
-	    //rm.SaveToBinaryFile(handle.Get(), RESOURCE_PATH L"Shader/default_vs.bamshader");
-	}
-
-    ShaderDesc defaultPsDesc = {};
-    {
-        defaultPsDesc.Key   = RESOURCE_PATH L"Shader/DefaultPS";
-        defaultPsDesc.Path  = RESOURCE_PATH L"Shader/bin/dxil/defaultPS.cso";
-        defaultPsDesc.shaderType = EShaderType::Fragment;
-        defaultPsDesc.entryPoint = "main";
-	    auto handle = rm.LoadResource<Shader>(&defaultPsDesc);
-	    //rm.SaveToBinaryFile(handle.Get(), RESOURCE_PATH L"Shader/default_ps.bamshader");
-	}
-
-    ShaderDesc gbufferVsDesc = {};
-    {
-        gbufferVsDesc.Key = RESOURCE_PATH L"Shader/GBufferVS";
-        gbufferVsDesc.Path = RESOURCE_PATH L"Shader/bin/dxil/gbufferVS.cso";
-        gbufferVsDesc.shaderType = EShaderType::Vertex;
-        gbufferVsDesc.entryPoint = "main";
-        rm.LoadResource<Shader>(&gbufferVsDesc);
-    }
-
-    ShaderDesc gbufferPsDesc = {};
-    {
-        gbufferPsDesc.Key = RESOURCE_PATH L"Shader/GBufferPS";
-        gbufferPsDesc.Path = RESOURCE_PATH L"Shader/bin/dxil/gbufferPS.cso";
-        gbufferPsDesc.shaderType = EShaderType::Fragment;
-        gbufferPsDesc.entryPoint = "main";
-        rm.LoadResource<Shader>(&gbufferPsDesc);
-    }
-    ShaderDesc previewPsDesc = {};
-    {
-        previewPsDesc.Key = RESOURCE_PATH L"Shader/MaterialPreviewPS";
-        previewPsDesc.Path = RESOURCE_PATH L"Shader/bin/dxil/materialPreviewPS.cso";
-        if (Renderer::Get().GetRHIType() == ERHIType::SDLGPU)
-            previewPsDesc.Path = RESOURCE_PATH L"Shader/bin/spirv/materialPreviewPS.spv";
-        previewPsDesc.shaderType = EShaderType::Fragment;
-        previewPsDesc.entryPoint = "main";
-        rm.LoadResource<Shader>(&previewPsDesc);
-    }
-
-    //ShaderDesc defaultSkinningShaderDesc = {};
-    //{
-    //    defaultSkinningShaderDesc.Key = L"Resources/Shader/Skinning";
-    //    defaultSkinningShaderDesc.Path = L"Resources/Shader/skinning.vert.spv";
-    //    defaultSkinningShaderDesc.spirvPath = L"Resources/Shader/skinning.vert.spv";
-    //    defaultSkinningShaderDesc.shaderType = EShaderType::Vertex;
-    //    defaultSkinningShaderDesc.numStorageBuffers = 1;
-    //    auto handle = rm.LoadResource<Shader>(&defaultSkinningShaderDesc);
-    //}
-    
-    //rm.SaveToBinaryFile(skinningShader, L"Resources/Shader/skinning.vert.bamshader");
-    //rm.LoadFile(L"Resources/Shader/skinning.vert.bamshader");
-
-    //ShaderDesc defaultVsDesc = {};
-    //defaultVsDesc.Key = L"Resources/Shader/GBufferVS";
-    //defaultVsDesc.Path = L"Resources/Shader/gbuffer.vert.spv";
-    //defaultVsDesc.spirvPath = L"Resources/Shader/gbuffer.vert.spv";
-    //defaultVsDesc.shaderType = EShaderType::Vertex;
-    //rm.LoadResource<Shader>(&defaultVsDesc);
-    //{
-    //    auto handle = rm.GetResourceHandle<Shader>(defaultVsDesc.Key);
-    //    rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/gbuffer.vert.bamshader");
-    //}
-    //rm.LoadFile(L"Resources/Shader/gbuffer.vert.bamshader");
-
-    //ShaderDesc gbufferVsDesc = {};
-    //gbufferVsDesc.Key = L"Resources/Shader/GBufferVS";
-    //gbufferVsDesc.Path = L"Resources/Shader/gbuffer.vert.spv";
-    //gbufferVsDesc.spirvPath = L"Resources/Shader/gbuffer.vert.spv";
-    //gbufferVsDesc.shaderType = EShaderType::Vertex;
-    //rm.LoadResource<Shader>(&gbufferVsDesc);
-    //{
-    //    auto handle = rm.GetResourceHandle<Shader>(gbufferVsDesc.Key);
-    //    rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/gbuffer.vert.bamshader");
-    //}
-    //rm.LoadFile(L"Resources/Shader/gbuffer.vert.bamshader");
-    //ShaderDesc gbufferPsDesc = {};
-    //gbufferPsDesc.Key = L"Resources/Shader/GBufferPS";
-    //gbufferPsDesc.Path = L"Resources/Shader/gbuffer.frag.spv";
-    //gbufferPsDesc.spirvPath = L"Resources/Shader/gbuffer.frag.spv";
-    //gbufferPsDesc.shaderType = EShaderType::Pixel;
-    //rm.LoadResource<Shader>(&gbufferPsDesc);
-    //{
-    //    auto handle = rm.GetResourceHandle<Shader>(gbufferPsDesc.Key);
-    //    rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/gbuffer.frag.bamshader");
-    //}
-    //rm.LoadFile(L"Resources/Shader/gbuffer.frag.bamshader");
-
-    // Fullscreen Quad VS
-    ShaderDesc fsQuadVsDesc = {};
-    {
-        fsQuadVsDesc.Key        = L"FullscreenQuadVS";
-        fsQuadVsDesc.Path       = RESOURCE_PATH L"Shader/bin/dxil/fullscreenQuadVS.cso";
-        //fsQuadVsDesc.spirvPath  = RESOURCE_PATH L"Shader/bin/spirv/fullscreenQuadVS.spv";
-        fsQuadVsDesc.shaderType = EShaderType::Vertex;
-        fsQuadVsDesc.entryPoint = "main";
-        auto handle = rm.LoadResource<Shader>(&fsQuadVsDesc);
-        rm.SaveToJsonFile(handle.Get(), L"Resources/Shader/fullscreen_quad.vert.bamshader.json");
-    }
-    
-    // Lighting PS
-    ShaderDesc lightingPsDesc = {};
-    {
-        lightingPsDesc.Key          = L"LightingPS";
-        lightingPsDesc.Path         = RESOURCE_PATH L"Shader/bin/dxil/lightingPS.cso";
-        //lightingPsDesc.spirvPath = RESOURCE_PATH L"Shader/bin/spirv/lightingPS.spv";
-
-        lightingPsDesc.shaderType = EShaderType::Fragment;
-        lightingPsDesc.entryPoint = "main";
-        lightingPsDesc.numSamplers = 6;
-        lightingPsDesc.numStorageBuffers = 1;
-        lightingPsDesc.numUniformBuffers = 2;
-        auto handle = rm.LoadResource<Shader>(&lightingPsDesc);;
-        //rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/lighting.frag.bamshader");
-        //rm.LoadFile(L"Resources/Shader/lighting.frag.bamshader");
-    }
-    
-
-    // Shadow Depth VS (static mesh)
-    ShaderDesc shadowDepthVsDesc = {};
-    {
-        shadowDepthVsDesc.Key = RESOURCE_PATH L"Shader/ShadowDepthVS";
-        shadowDepthVsDesc.Path = RESOURCE_PATH L"Shader/bin/dxil/shadowDepthVS.cso";
-        shadowDepthVsDesc.shaderType = EShaderType::Vertex;
-        shadowDepthVsDesc.entryPoint = "main";
-        shadowDepthVsDesc.numUniformBuffers = 2;
-        rm.LoadResource<Shader>(&shadowDepthVsDesc);
-    }
-
-    // Shadow Depth VS (skinning)
-    //ShaderDesc shadowDepthSkinVsDesc = {};
-    //{
-    //    shadowDepthSkinVsDesc.Key = L"ShadowDepthSkinningVS";
-    //    shadowDepthSkinVsDesc.shaderType = EShaderType::Vertex;
-    //    shadowDepthSkinVsDesc.Path = L"Resources/Shader/shadow_depth_skinning.vert.spv";
-    //    shadowDepthSkinVsDesc.spirvPath = L"Resources/Shader/shadow_depth_skinning.vert.spv";
-    //    shadowDepthSkinVsDesc.entryPoint = "main";
-    //    shadowDepthSkinVsDesc.numStorageBuffers = 1;
-    //    rm.LoadResource<Shader>(&shadowDepthSkinVsDesc);
-    //    {
-    //        auto handle = rm.GetResourceHandle<Shader>(shadowDepthSkinVsDesc.Key);
-    //        rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/shadow_depth_skinning.vert.bamshader");
-    //    }
-    //    rm.LoadFile(L"Resources/Shader/shadow_depth_skinning.vert.bamshader");
-    //}
-
-    // Shadow Depth PS (depth-only)
-    ShaderDesc shadowDepthPsDesc = {};
-    {
-        shadowDepthPsDesc.Key = RESOURCE_PATH L"Shader/ShadowDepthPS";
-        shadowDepthPsDesc.Path = RESOURCE_PATH L"Shader/bin/dxil/shadowDepthPS.cso";
-        shadowDepthPsDesc.shaderType = EShaderType::Fragment;
-        shadowDepthPsDesc.entryPoint = "main";
-        rm.LoadResource<Shader>(&shadowDepthPsDesc);
-    }
-    // Viewport Channel PS
-    ShaderDesc viewportChannelPsDesc = {};
-    {
-        viewportChannelPsDesc.Key           = L"ViewportChannelPS";
-        viewportChannelPsDesc.Path          = RESOURCE_PATH L"Shader/bin/dxil/viewport_channelPS.cso";
-        //viewportChannelPsDesc.spirvPath   = RESOURCE_PATH L"Shader/bin/spirv/viewport_channelPS.spv";
-        viewportChannelPsDesc.shaderType = EShaderType::Fragment;
-        viewportChannelPsDesc.entryPoint = "main";
-        viewportChannelPsDesc.numSamplers = 1;
-        viewportChannelPsDesc.numUniformBuffers = 1;
-        auto handle = rm.LoadResource<Shader>(&viewportChannelPsDesc);
-        //rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/viewport_channel.frag.bamshader");
-        //rm.LoadFile(L"Resources/Shader/viewport_channel.frag.bamshader");
-    }
-    
-    //// PostProcess PS
-    //ShaderDesc postProcessPsDesc = {};
-    //postProcessPsDesc.Key = L"PostProcessPS";
-    //postProcessPsDesc.shaderType = EShaderType::Pixel;
-    //postProcessPsDesc.Path = L"Resources/Shader/postprocess.frag.spv";
-    //postProcessPsDesc.spirvPath = L"Resources/Shader/postprocess.frag.spv";
-    //postProcessPsDesc.entryPoint = "main";
-    //postProcessPsDesc.numSamplers = 1;
-    //postProcessPsDesc.numUniformBuffers = 1;
-    //rm.LoadResource<Shader>(&postProcessPsDesc);
-    //{
-    //    auto handle = rm.GetResourceHandle<Shader>(postProcessPsDesc.Key);
-    //    rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/postprocess.frag.bamshader");
-    //}
-    //rm.LoadFile(L"Resources/Shader/postprocess.frag.bamshader");
-
-    // PostProcess - Tone Mapping PS
-    ShaderDesc ppToneMappingPsDesc = {};
-    {
-        ppToneMappingPsDesc.Key         = L"PostProcess_ToneMappingPS";
-        ppToneMappingPsDesc.Path        = RESOURCE_PATH L"Shader/bin/dxil/postprocess_tonemappingPS.cso";
-        //ppToneMappingPsDesc.spirvPath   = RESOURCE_PATH L"Shader/bin/spirv/postprocess_tonemappingPS.spv";
-
-        ppToneMappingPsDesc.shaderType = EShaderType::Fragment;
-
-        ppToneMappingPsDesc.entryPoint = "main";
-        ppToneMappingPsDesc.numSamplers = 1;
-        ppToneMappingPsDesc.numUniformBuffers = 1;
-        auto handle = rm.LoadResource<Shader>(&ppToneMappingPsDesc);
-        //rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/postprocess_tonemapping.frag.bamshader");
-        //rm.LoadFile(L"Resources/Shader/postprocess_tonemapping.frag.bamshader");
-    }
-
-
-    // ── Sky Shaders ──
-    ShaderDesc skyVsDesc = {};
-    {
-        skyVsDesc.Key = RESOURCE_PATH L"Shader/SkyVS";
-        skyVsDesc.Path = RESOURCE_PATH L"Shader/bin/dxil/skyVS.cso";
-        skyVsDesc.shaderType = EShaderType::Vertex;
-        skyVsDesc.entryPoint = "main";
-        rm.LoadResource<Shader>(&skyVsDesc);
-    }
-    
-    ShaderDesc skyPsDesc = {};
-    {
-        skyPsDesc.Key = RESOURCE_PATH L"Shader/SkyPS";
-        skyPsDesc.Path = RESOURCE_PATH L"Shader/bin/dxil/atmosphereSkyPS.cso";
-        skyPsDesc.shaderType = EShaderType::Fragment;
-        skyPsDesc.entryPoint = "main";
-        rm.LoadResource<Shader>(&skyPsDesc);
-    }
-
-    //// UI VS
-    //ShaderDesc uiVSDesc = {};
-    //uiVSDesc.Key = L"UIVS";
-    //uiVSDesc.shaderType = EShaderType::Vertex;
-    //uiVSDesc.Path = L"Resources/Shader/ui.vert.spv";
-    //uiVSDesc.spirvPath = L"Resources/Shader/ui.vert.spv";
-    //uiVSDesc.entryPoint = "main";
-    //uiVSDesc.numUniformBuffers = 1;
-    //rm.LoadResource<Shader>(&uiVSDesc);
-    //{
-    //    auto handle = rm.GetResourceHandle<Shader>(uiVSDesc.Key);
-    //    rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/ui.vert.bamshader");
-    //}
-    //rm.LoadFile(L"Resources/Shader/ui.vert.bamshader");
-
-    //// UI PS
-    //ShaderDesc uiPSDesc = {};
-    //uiPSDesc.Key = L"UIPS";
-    //uiPSDesc.shaderType = EShaderType::Pixel;
-    //uiPSDesc.Path = L"Resources/Shader/ui.frag.spv";
-    //uiPSDesc.spirvPath = L"Resources/Shader/ui.frag.spv";
-    //uiPSDesc.entryPoint = "main";
-    //uiPSDesc.numUniformBuffers = 1;
-    //rm.LoadResource<Shader>(&uiPSDesc);
-    //{
-    //    auto handle = rm.GetResourceHandle<Shader>(uiPSDesc.Key);
-    //    rm.SaveToBinaryFile(handle.Get(), L"Resources/Shader/ui.frag.bamshader");
-    //}
-    //rm.LoadFile(L"Resources/Shader/ui.frag.bamshader");
-
-    for (const auto& stage : { std::pair{ L"UIVS", EShaderType::Vertex }, std::pair{ L"UIPS", EShaderType::Fragment } })
-    {
-        ShaderDesc uiShader{};
-        uiShader.Key = RESOURCE_PATH L"Shader/" + std::wstring(stage.first);
-        uiShader.Path = stage.second == EShaderType::Vertex ? RESOURCE_PATH L"Shader/bin/dxil/uiVS.cso" :
-            RESOURCE_PATH L"Shader/bin/dxil/uiPS.cso";
-        if (Renderer::Get().GetRHIType() == ERHIType::SDLGPU)
-            uiShader.Path = stage.second == EShaderType::Vertex ? RESOURCE_PATH L"Shader/bin/spirv/uiVS.spv" :
-                RESOURCE_PATH L"Shader/bin/spirv/uiPS.spv";
-        uiShader.shaderType = stage.second;
-        uiShader.entryPoint = "main";
-        rm.LoadResource<Shader>(&uiShader);
-    }
-    ShaderDesc spriteVS{};
-    {
-        spriteVS.Key = RESOURCE_PATH L"Shader/GBufferSpriteVS";
-        spriteVS.Path = RESOURCE_PATH L"Shader/bin/dxil/gbufferSpriteVS.cso";
-        spriteVS.shaderType = EShaderType::Vertex;
-        spriteVS.entryPoint = "main";
-        rm.LoadResource<Shader>(&spriteVS);
-    }
-
-    ShaderDesc spritePS{};
-    {
-        spritePS.Key = RESOURCE_PATH L"Shader/GBufferSpritePS";
-        spritePS.Path = RESOURCE_PATH L"Shader/bin/dxil/gbufferSpritePS.cso";
-        spritePS.shaderType = EShaderType::Fragment;
-        spritePS.entryPoint = "main";
-        rm.LoadResource<Shader>(&spritePS);
-    }
-
-    ShaderDesc terrainVSDesc = {};
-    {
-        terrainVSDesc.Key = RESOURCE_PATH L"Shader/TerrainVS";
-        terrainVSDesc.Path = RESOURCE_PATH L"Shader/bin/dxil/terrainVS.cso";
-        if (Renderer::Get().GetRHIType() == ERHIType::SDLGPU)
-            terrainVSDesc.Path = RESOURCE_PATH L"Shader/bin/spirv/terrainVS.spv";
-        terrainVSDesc.shaderType = EShaderType::Vertex;
-        terrainVSDesc.entryPoint = "main";
-        rm.LoadResource<Shader>(&terrainVSDesc);
-    }
-
-    ShaderDesc terrainPSDesc = {};
-    {
-        terrainPSDesc.Key = RESOURCE_PATH L"Shader/TerrainPS";
-        terrainPSDesc.Path = RESOURCE_PATH L"Shader/bin/dxil/terrainPS.cso";
-        if (Renderer::Get().GetRHIType() == ERHIType::SDLGPU)
-            terrainPSDesc.Path = RESOURCE_PATH L"Shader/bin/spirv/terrainPS.spv";
-        terrainPSDesc.shaderType = EShaderType::Fragment;
-        terrainPSDesc.entryPoint = "main";
-        rm.LoadResource<Shader>(&terrainPSDesc);
-    }
-}
-
 void Application::InitializeMeshes()
 {
     ResourceManager& resourceManager = ResourceManager::Get();
@@ -933,219 +687,50 @@ void Application::InitializeMeshes()
 #pragma endregion
 
 }
-
-void Application::InitializeMaterials()
-{
-    ResourceManager& resourceManager = ResourceManager::Get();
-#pragma region Basic Materials
-
-    MaterialDesc defaultMaterialDesc = {};
-    defaultMaterialDesc.Key = L"Resources/Material/DefaultMaterial";
-    defaultMaterialDesc.VertexShaderHandle = resourceManager.GetResourceHandle<Shader>(RESOURCE_PATH L"Shader/DefaultVS");
-    defaultMaterialDesc.PixelShaderHandle = resourceManager.GetResourceHandle<Shader>(RESOURCE_PATH L"Shader/DefaultPS");
-    Material* material = resourceManager.LoadResource<Material>(&defaultMaterialDesc).Get();
-    material->SetTextureBinding("Default", 0, resourceManager.GetResourceHandle<Texture>(RESOURCE_PATH L"Texture/magenta1x1.png"));
-    resourceManager.SaveToJsonFile(material, RESOURCE_PATH L"Material/DefaultMaterial.bammat.json");
-    
-    MaterialDesc spriteMaterialDesc = {};
-    spriteMaterialDesc.Key = RESOURCE_PATH L"Material/SpriteMaterial";
-    spriteMaterialDesc.VertexShaderHandle = resourceManager.GetResourceHandle<Shader>(RESOURCE_PATH L"Shader/GBufferSpriteVS");
-    spriteMaterialDesc.PixelShaderHandle = resourceManager.GetResourceHandle<Shader>(RESOURCE_PATH L"Shader/GBufferSpritePS");
-    // The GBuffer sprite path uses alpha cutout; blending would also corrupt its picking ID.
-    spriteMaterialDesc.BlendMode = EBlendMode::Masked;
-    spriteMaterialDesc.CullMode = ECullMode::None;
-    spriteMaterialDesc.DepthMode = EDepthMode::ReadWrite;
-    Material* spriteMaterial = resourceManager.LoadResource<Material>(&spriteMaterialDesc).Get();
-    resourceManager.SaveToJsonFile(spriteMaterial, RESOURCE_PATH L"Material/SpriteMaterial.bammat.json");
-
-    MaterialInstanceDesc spriteMaterialInstanceDesc = {};
-    spriteMaterialInstanceDesc.BaseMaterialHandle = resourceManager.GetResourceHandle<Material>(RESOURCE_PATH L"Material/SpriteMaterial");
-    spriteMaterialInstanceDesc.Key = L"Resources/Material/SpriteMaterialInstance";
-    ResourceHandle<MaterialInstance> spriteMaterialInstanceHandle = resourceManager.LoadResource<MaterialInstance>(&spriteMaterialInstanceDesc);
-    MaterialInstance* spriteMaterialInstance = spriteMaterialInstanceHandle.Get();
-    resourceManager.SaveToJsonFile(spriteMaterialInstance, L"Resources/Material/SpriteMaterialInstance.bammatinst.json");
-
-    MaterialDesc skinningMaterialDesc = {};
-    skinningMaterialDesc.Key = L"Resources/Material/SkinningMaterial";
-    skinningMaterialDesc.VertexShaderHandle = resourceManager.GetResourceHandle<Shader>(L"Resources/Shader/skinning.vert.bamshader");
-    skinningMaterialDesc.PixelShaderHandle = resourceManager.GetResourceHandle<Shader>(L"Resources/Shader/default.frag.bamshader");
-    skinningMaterialDesc.BlendMode = EBlendMode::AlphaBlend;
-    skinningMaterialDesc.CullMode = ECullMode::None;
-    skinningMaterialDesc.DepthMode = EDepthMode::ReadWrite;
-    resourceManager.LoadResource<Material>(&skinningMaterialDesc);
-
-    MaterialInstanceDesc skinningMaterialInstanceDesc = {};
-    skinningMaterialInstanceDesc.BaseMaterialHandle = resourceManager.GetResourceHandle<Material>(L"Resources/Material/SkinningMaterial");
-    skinningMaterialInstanceDesc.Key = L"Resources/Material/SkinningMaterialInstance";
-    resourceManager.LoadResource<MaterialInstance>(&skinningMaterialInstanceDesc);
 #pragma endregion
 
-    // ── G-Buffer Material 생성 ──
-    MaterialDesc gbufferMatDesc = {};
-    gbufferMatDesc.Key = RESOURCE_PATH L"Material/GBufferMaterial";
-    gbufferMatDesc.VertexShaderHandle = resourceManager.GetResourceHandle<Shader>(RESOURCE_PATH L"Shader/GBufferVS");
-    gbufferMatDesc.PixelShaderHandle = resourceManager.GetResourceHandle<Shader>(RESOURCE_PATH L"Shader/GBufferPS");
-    gbufferMatDesc.BlendMode = EBlendMode::Opaque;
-    gbufferMatDesc.CullMode = ECullMode::Back;
-    gbufferMatDesc.DepthMode = EDepthMode::ReadWrite;
-    Material* gbufferMat = resourceManager.LoadResource<Material>(&gbufferMatDesc).Get();
-    gbufferMat->SetTextureBinding("Diffuse", 0, resourceManager.GetResourceHandle<Texture>(RESOURCE_PATH L"Texture/white1x1.png"));
-    gbufferMat->SetPassShader(
-        ERenderPassType::Shadow,
-        resourceManager.GetResourceHandle<Shader>(RESOURCE_PATH L"Shader/ShadowDepthVS"),
-        resourceManager.GetResourceHandle<Shader>(RESOURCE_PATH L"Shader/ShadowDepthPS")
-    );
-    resourceManager.SaveToJsonFile(gbufferMat, L"Resources/Material/GBufferMaterial.bammat.json");
-
-    // ── Terrain Material 생성 ──
-    MaterialDesc terrainMatDesc = {};
-    terrainMatDesc.Key = RESOURCE_PATH L"Material/TerrainMaterial";
-    terrainMatDesc.VertexShaderHandle = resourceManager.GetResourceHandle<Shader>(RESOURCE_PATH L"Shader/TerrainVS");
-    terrainMatDesc.PixelShaderHandle = resourceManager.GetResourceHandle<Shader>(RESOURCE_PATH L"Shader/TerrainPS"); // <-- TerrainPS로 교체
-    terrainMatDesc.BlendMode = EBlendMode::Opaque;
-    terrainMatDesc.CullMode = ECullMode::None;
-    terrainMatDesc.DepthMode = EDepthMode::ReadWrite;
-    Material* terrainMat = resourceManager.LoadResource<Material>(&terrainMatDesc).Get();
-    terrainMat->SetTextureBinding("Diffuse", 0, resourceManager.GetResourceHandle<Texture>(RESOURCE_PATH L"Texture/white1x1.png"));
-    terrainMat->SetTextureBinding("RockDiffuse", 2, resourceManager.GetResourceHandle<Texture>(RESOURCE_PATH L"Texture/white1x1.png"));
-    terrainMat->SetTextureBinding("DirtDiffuse", 3, resourceManager.GetResourceHandle<Texture>(RESOURCE_PATH L"Texture/white1x1.png"));
-    terrainMat->SetPassShader(
-        ERenderPassType::Shadow,
-        resourceManager.GetResourceHandle<Shader>(RESOURCE_PATH L"Shader/ShadowDepthVS"),
-        resourceManager.GetResourceHandle<Shader>(RESOURCE_PATH L"Shader/ShadowDepthPS")
-    );
-    resourceManager.SaveToJsonFile(terrainMat, L"Resources/Material/TerrainMaterial.bammat.json");
-
-
-	// ── Shadow Depth Material 생성 ──
-    MaterialDesc shadowDepthMatDesc = {};
-    shadowDepthMatDesc.Key = RESOURCE_PATH L"Material/ShadowDepthMaterial";
-    shadowDepthMatDesc.VertexShaderHandle =
-        resourceManager.GetResourceHandle<Shader>(RESOURCE_PATH L"Shader/ShadowDepthVS");
-    shadowDepthMatDesc.PixelShaderHandle =
-        resourceManager.GetResourceHandle<Shader>(RESOURCE_PATH L"Shader/ShadowDepthPS");
-    shadowDepthMatDesc.BlendMode = EBlendMode::Opaque;
-    shadowDepthMatDesc.CullMode = ECullMode::Front;
-    shadowDepthMatDesc.DepthMode = EDepthMode::ReadWrite;
-    resourceManager.LoadResource<Material>(&shadowDepthMatDesc);
-
-	MaterialDesc shadowDepthSkinMatDesc = {};
-    shadowDepthSkinMatDesc.Key = L"Resources/Material/ShadowDepthSkinningMaterial";
-    shadowDepthSkinMatDesc.VertexShaderHandle = resourceManager.GetResourceHandle<Shader>(
-        L"Resources/Shader/shadow_depth_skinning.vert.bamshader");
-    shadowDepthSkinMatDesc.PixelShaderHandle = resourceManager.GetResourceHandle<Shader>(
-        L"Resources/Shader/shadow_depth.frag.bamshader");
-    shadowDepthSkinMatDesc.BlendMode = EBlendMode::Opaque;
-    shadowDepthSkinMatDesc.CullMode = ECullMode::Front;
-    shadowDepthSkinMatDesc.DepthMode = EDepthMode::ReadWrite;
-    resourceManager.LoadResource<Material>(&shadowDepthSkinMatDesc);
-
-
-	// ── Transparent Material 생성 ──
-	MaterialDesc transparentMatDesc = {};
-    transparentMatDesc.Key = L"Resources/Material/TransparentMaterial";
-    transparentMatDesc.VertexShaderHandle = resourceManager.GetResourceHandle<Shader>(
-        RESOURCE_PATH L"Shader/DefaultVS");
-    transparentMatDesc.PixelShaderHandle = resourceManager.GetResourceHandle<Shader>(
-        RESOURCE_PATH L"Shader/DefaultPS");
-    transparentMatDesc.BlendMode = EBlendMode::AlphaBlend;
-    transparentMatDesc.CullMode = ECullMode::None;
-    transparentMatDesc.DepthMode = EDepthMode::ReadOnly;
-	Material* transparentMat = resourceManager.LoadResource<Material>(&transparentMatDesc).Get();
-	resourceManager.SaveToJsonFile(transparentMat, L"Resources/Material/TransparentMaterial.bammat.json");
-
-
-    // ── Sky Material 생성 ──
-    MaterialDesc skyMatDesc = {};
-    skyMatDesc.Key = RESOURCE_PATH L"Material/SkyMaterial";
-    skyMatDesc.VertexShaderHandle = resourceManager.GetResourceHandle<Shader>(RESOURCE_PATH L"Shader/SkyVS");
-    skyMatDesc.PixelShaderHandle = resourceManager.GetResourceHandle<Shader>(RESOURCE_PATH L"Shader/SkyPS");
-    skyMatDesc.BlendMode = EBlendMode::Forward; // ForwardPass에서만 렌더링되도록 보장
-    skyMatDesc.CullMode = ECullMode::None;
-    skyMatDesc.DepthMode = EDepthMode::ReadOnly;
-    skyMatDesc.DepthCompareOp = ECompareOp::LessOrEqual;
-    Material* skyMat = resourceManager.LoadResource<Material>(&skyMatDesc).Get();
-    resourceManager.SaveToJsonFile(skyMat, RESOURCE_PATH L"Material/SkyMaterial.bammat.json");
-
-    // ── UI Material 생성 ──
-    MaterialDesc uiMatDesc = {};
-    uiMatDesc.Key = L"Resources/Material/UIMaterial";
-    uiMatDesc.VertexShaderHandle = resourceManager.GetResourceHandle<Shader>(
-        L"Resources/Shader/UIVS");
-    uiMatDesc.PixelShaderHandle = resourceManager.GetResourceHandle<Shader>(
-        L"Resources/Shader/UIPS");
-    uiMatDesc.BlendMode = EBlendMode::NonPremultiplied;
-    uiMatDesc.CullMode = ECullMode::None;
-    uiMatDesc.DepthMode = EDepthMode::None;
-    uiMatDesc.DepthCompareOp = ECompareOp::LessOrEqual;
-    Material* uiMat = resourceManager.LoadResource<Material>(&uiMatDesc).Get();
-    resourceManager.SaveToJsonFile(uiMat, L"Resources/Material/UIMaterial.bammat.json");
-}
-
-#pragma endregion
-
-#pragma region Rendering
-void Application::IntializeRenderer()
-{
-    auto& rtMgr = RenderTargetManager::Get();
-    auto* rhi = Renderer::Get().GetRHI();
-    uint32 w = rhi->GetSwapChainWidth();
-    uint32 h = rhi->GetSwapChainHeight();
-    // ── 에디터 최종 출력용 RT (ImGui가 여기에 렌더) ──
-    RenderTargetDesc finalDesc = {};
-    finalDesc.textureDesc.format = ETextureFormat::R8G8B8A8_UNORM;
-    finalDesc.name = L"FinalColor";
-    finalDesc.textureDesc.width = w;
-    finalDesc.textureDesc.height = h;
-    finalDesc.textureDesc.usage = ETextureUsage::RenderTarget | ETextureUsage::Sampler;
-    rtMgr.CreateRenderTarget(&finalDesc);
-
-}
-void Application::SubmitRenderPasses()
-{
-    //Renderer::Get().SubmitCustomCommand([](f32 dt, RenderPass* pass) -> EResult
-    //    {
-    //        auto* rhi = Renderer::Get().GetRHI();
-    //        auto& rtMgr = RenderTargetManager::Get();
-    //        RHISampler* sampler = SamplerManager::Get().GetDefaultSampler();
-    //        rhi->BindTextureSampler(
-    //            rtMgr.GetRenderTarget(L"GBuffer_Diffuse")->GetTexture(),
-    //            sampler, 0);
-    //        rhi->BindTextureSampler(
-    //            rtMgr.GetRenderTarget(L"GBuffer_Normal")->GetTexture(),
-    //            sampler, 1);
-    //        rhi->BindTextureSampler(
-    //            rtMgr.GetRenderTarget(L"GBuffer_PBR")->GetTexture(),
-    //            sampler, 2);
-    //        rhi->BindTextureSampler(
-    //            rtMgr.GetRenderTarget(L"GBuffer_Emission")->GetTexture(),
-    //            sampler, 3);
-    //        rhi->BindTextureSampler(
-    //            rtMgr.GetRenderTarget(L"GBuffer_Position")->GetTexture(),
-    //            sampler, 4);
-    //        return EResult::Success;
-    //    }, m_LightingPassID);
-}
-#pragma endregion
-
+#pragma region Loop
 void Application::Run(int argc, char* argv[])
 {
     bool bIsRunning = true;
+    m_QuitApproved = false;
     SDL_Event event;
     auto& timeManager = Engine::TimeManager::Get();
 
     while (bIsRunning)
     {
+
+        auto& settings = EditorSettingsService::Get();
+        settings.ProcessPendingVSyncChange();
+
+        if (settings.IsWindowChangePending())
+        {
+            settings.ProcessPendingWindowChange(CaptureApplicationState(), [this](const EditorWindowRequest& request)
+                {
+                    return SubmitWindowRequest(request);
+                });
+        }
+
         while (SDL_PollEvent(&event)) {
             ImGuiManager::Get().ProcessEvent(&event);
-			InputManager::Get().ProcessEvent(event);
+            InputManager::Get().ProcessEvent(event);
+            if (event.type == SDL_EVENT_WINDOW_RESIZED || event.type == SDL_EVENT_WINDOW_MAXIMIZED ||
+                event.type == SDL_EVENT_WINDOW_RESTORED || event.type == SDL_EVENT_WINDOW_ENTER_FULLSCREEN ||
+                event.type == SDL_EVENT_WINDOW_LEAVE_FULLSCREEN)
+            {
+                if (event.window.windowID == SDL_GetWindowID(m_Window))
+                    CaptureEditorWindowState();
+            }
             if (event.type == SDL_EVENT_TEXT_EDITING || event.type == SDL_EVENT_TEXT_EDITING_CANDIDATES)
             {
                 int a = 10;
-                
+
             }
-            if (event.type == SDL_EVENT_QUIT) {
-                bIsRunning = false;
+            if (event.type == SDL_EVENT_QUIT ||
+                (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED &&
+                    event.window.windowID == SDL_GetWindowID(m_Window)))
+            {
+                ImGuiManager::Get().RequestQuit();
             }
             else if (event.type == SDL_EVENT_WINDOW_RESIZED || event.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED)
             {
@@ -1176,11 +761,27 @@ void Application::Run(int argc, char* argv[])
             break;
 
         timeManager.Update();
-		f32 dt = timeManager.GetDeltaTime();
-		UpdateTitle(dt);
+
+        if (settings.IsWindowChangePending())
+        {
+            int pixelWidth = 0;
+            int pixelHeight = 0;
+
+            const bool hasPixelSize = SDL_GetWindowSizeInPixels(m_Window, &pixelWidth, &pixelHeight);
+            auto* rhi = Renderer::Get().GetRHI();
+
+            const bool outputReady = hasPixelSize && pixelWidth > 0 && pixelHeight > 0 && rhi &&
+                rhi->GetSwapChainWidth() == static_cast<uint32>(pixelWidth) &&
+                rhi->GetSwapChainHeight() == static_cast<uint32>(pixelHeight);
+
+            settings.ObserveWindowChange(CaptureApplicationState(), outputReady);
+        }
+
+        f32 dt = timeManager.GetDeltaTime();
+        UpdateTitle(dt);
         InputManager::Get().Update(dt);
         ImGuiManager::Get().Update(dt);
-        m_AssetManager->Update(dt);
+        AssetManager::Get().Update(dt);
         HotReloadManager::Get().Update();
         NotificationManager::Get().Update(dt);
 
@@ -1200,37 +801,11 @@ void Application::Run(int argc, char* argv[])
 
             m_Runtime->LateUpdate(dt);
         }
-		m_Runtime->Render(dt);
+        m_Runtime->Render(dt);
+        if (m_QuitApproved)
+            bIsRunning = false;
     }
 }
-
-void Application::Shutdown()
-{
-    Free();
-}
-
-void Application::SetResolution(uint32 width, uint32 height, bool fullscreen)
-{
-    if (!m_Window) return;
-
-    if(fullscreen)
-    {
-		SDL_SetWindowFullscreen(m_Window, true);
-    }
-    else
-    {
-        SDL_SetWindowFullscreen(m_Window, false);
-        SDL_SetWindowSize(m_Window, width, height);
-        SDL_SetWindowPosition(m_Window, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
-    }
-}
-
-void Application::GetWindowSize(int32* w, int32* h) const
-{
-    if (m_Window)
-        SDL_GetWindowSize(m_Window, w, h);
-}
-
 void Application::UpdateTitle(f32 dt)
 {
     static uint32 lastFPS = 0;
@@ -1244,4 +819,217 @@ void Application::UpdateTitle(f32 dt)
         SDL_SetWindowTitle(m_Window, title.c_str());
     }
 }
-END
+#pragma endregion
+
+#pragma region Settings
+EditorApplicationState Application::CaptureApplicationState() const
+{
+    EditorApplicationState state;
+
+    if (TimeManager::IsCreated())
+    {
+        state.HasTargetFPS = true;
+        state.TargetFPS = TimeManager::Get().GetTargetFPS();
+    }
+
+    if (!m_Window)
+        return state;
+
+    state.HasWindow = true;
+
+    const auto flags = SDL_GetWindowFlags(m_Window);
+    state.WindowMinimized = (flags & SDL_WINDOW_MINIMIZED) != 0;
+    state.WindowMaximized = (flags & SDL_WINDOW_MAXIMIZED) != 0;
+    state.WindowFullscreen = (flags & SDL_WINDOW_FULLSCREEN) != 0;
+
+    int width = 0;
+    int height = 0;
+
+    if (SDL_GetWindowSize(m_Window, &width, &height))
+    {
+        state.HasWindowSize = true;
+        state.WindowWidth = width;
+        state.WindowHeight = height;
+    }
+
+    return state;
+}
+
+void Application::CaptureAndSaveEditorWorkspace()
+{
+    EditorSettingsService::Get().CaptureWindowState(CaptureApplicationState());
+
+    if (m_ImGuiManager)
+        EditorSettingsService::Get().CaptureWorkspace(*m_ImGuiManager);
+
+    EditorSettingsService::Get().SaveWorkspace();
+}
+
+void Application::RestoreLastEditedScene()
+{
+    const auto& workspace = EditorSettingsService::Get().GetWorkspace();
+    const auto& project = EditorSettingsService::Get().GetProjectSettings();
+    const auto& storedPath = workspace.LastScenePath.empty()
+        ? project.StartupScenePath : workspace.LastScenePath;
+
+    if (storedPath.empty())
+        return;
+
+    try
+    {
+        auto path = std::filesystem::u8path(storedPath);
+        if (path.is_relative())
+            path = EditorSettingsService::Get().GetProjectRoot() / path;
+
+        path = path.lexically_normal();
+
+        archive::JsonArchive reader;
+        if (SceneManager::Get().LoadScene(reader, path.wstring()) != EResult::Success)
+        {
+            BAM_LOG(Warn, "Editor", "Workspace", "Cannot restore scene: {}", storedPath);
+            return;
+        }
+
+        AdoptSceneDocument(path);
+    }
+    catch (const std::filesystem::filesystem_error& error)
+    {
+        BAM_LOG(Warn, "Editor", "Workspace", "Invalid startup scene path: {}", error.what());
+    }
+}
+
+EResult Application::SubmitWindowRequest(const EditorWindowRequest& request)
+{
+    if (!m_Window)
+        return EResult::AccessDenied;
+
+    if (!EditorWorkspace::HasValidWindowSize(request.Width, request.Height))
+        return EResult::InvalidArgument;
+
+    const auto fail = [](const char* operation)
+        {
+            BAM_LOG(Error, "Editor", "Window", "{} failed: {}", operation, SDL_GetError());
+            return EResult::Fail;
+        };
+
+    if (!SDL_SetWindowFullscreen(m_Window, false))
+        return fail("SDL_SetWindowFullscreen");
+
+    if (!SDL_SyncWindow(m_Window))
+        return fail("SDL_SyncWindow");
+
+    if (SDL_GetWindowFlags(m_Window) & (SDL_WINDOW_MAXIMIZED | SDL_WINDOW_MINIMIZED))
+    {
+        if (!SDL_RestoreWindow(m_Window))
+            return fail("SDL_RestoreWindow");
+
+        if (!SDL_SyncWindow(m_Window))
+            return fail("SDL_SyncWindow");
+    }
+
+    if (!SDL_SetWindowSize(m_Window, request.Width, request.Height))
+        return fail("SDL_SetWindowSize");
+
+    if (!SDL_SetWindowPosition(m_Window, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED))
+        return fail("SDL_SetWindowPosition");
+
+    if (!SDL_SyncWindow(m_Window))
+        return fail("SDL_SyncWindow");
+
+    int width = 0;
+    int height = 0;
+
+    if (!SDL_GetWindowSize(m_Window, &width, &height))
+        return fail("SDL_GetWindowSize");
+
+    if (width != request.Width || height != request.Height)
+    {
+        BAM_LOG(Error, "Editor", "Window", "Requested windowed size was not accepted");
+        return EResult::Fail;
+    }
+
+    if (request.Maximized)
+    {
+        if (!SDL_MaximizeWindow(m_Window))
+            return fail("SDL_MaximizeWindow");
+
+        if (!SDL_SyncWindow(m_Window))
+            return fail("SDL_SyncWindow");
+    }
+
+    if (request.Fullscreen)
+    {
+        if (!SDL_SetWindowFullscreen(m_Window, true))
+            return fail("SDL_SetWindowFullscreen");
+
+        if (!SDL_SyncWindow(m_Window))
+            return fail("SDL_SyncWindow");
+    }
+
+    return EResult::Success;
+}
+
+void Application::CaptureEditorWindowState()
+{
+    EditorSettingsService::Get().CaptureWindowState(CaptureApplicationState());
+}
+
+void Application::RememberEditedScene(const std::filesystem::path& path)
+{
+    if (PIEManager::IsCreated() && !PIEManager::Get().IsEditing())
+        return;
+
+    EditorSettingsService::Get().RememberEditedScene(path);
+}
+#pragma endregion
+
+#pragma region Document
+SceneDocument* Application::GetSceneDocument()
+{
+    return dynamic_cast<SceneDocument*>(m_Documents.Find(m_SceneDocumentId));
+}
+
+void Application::AdoptSceneDocument(const std::filesystem::path& path)
+{
+    if (!PIEManager::Get().IsEditing())
+        return;
+
+    auto* scene = SceneManager::Get().GetCurrentScene();
+    auto nextId = InvalidEditorDocumentId;
+
+    if (scene)
+    {
+        auto document = std::make_unique<SceneDocument>(SceneManager::Get(), GetEditHistory(), path);
+        document->SetReadOnly(false);
+        nextId = m_Documents.Add(std::move(document));
+
+        if (nextId == InvalidEditorDocumentId)
+            throw std::runtime_error("Scene document registration failed");
+    }
+
+    m_Documents.Remove(m_SceneDocumentId);
+    m_SceneDocumentId = nextId;
+    GetEditHistory().ResetDocument(scene, true);
+
+    if (nextId != InvalidEditorDocumentId)
+        m_Documents.SetActive(nextId);
+
+    RememberEditedScene(path);
+}
+
+void Application::RebindSceneDocumentAfterPlay()
+{
+    if (auto* document = GetSceneDocument())
+    {
+        const auto result = document->RebindRestoredScene();
+        document->SetReadOnly(result != EResult::Success);
+
+        if (result != EResult::Success)
+            BAM_LOG(Error, "Editor", "Document", "Cannot rebind restored scene document");
+
+        return;
+    }
+
+    GetEditHistory().Synchronize(SceneManager::Get().GetCurrentScene(), true);
+}
+#pragma endregion

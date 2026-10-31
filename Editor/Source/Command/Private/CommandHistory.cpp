@@ -1,4 +1,4 @@
-#include "CommandHistory.h"
+﻿#include "CommandHistory.h"
 
 namespace
 {
@@ -33,7 +33,11 @@ bool Editor::CommandHistory::Undo()
 {
     if (!CanUndo()) return false;
     ProcessingScope scope(m_IsExecuting);
-    if (!m_Commands[m_Cursor - 1]->Undo()) return false;
+
+    const auto& entry = m_Commands[m_Cursor - 1];
+    if (!entry.Command->Undo()) return false;
+
+    m_CurrentStateId = entry.BeforeStateId;
     --m_Cursor;
     m_OnHistoryChanged.Broadcast();
     return true;
@@ -43,7 +47,11 @@ bool Editor::CommandHistory::Redo()
 {
     if (!CanRedo()) return false;
     ProcessingScope scope(m_IsExecuting);
-    if (!m_Commands[m_Cursor]->Execute()) return false;
+
+    const auto& entry = m_Commands[m_Cursor];
+    if (!entry.Command->Execute()) return false;
+
+    m_CurrentStateId = entry.AfterStateId;
     ++m_Cursor;
     m_OnHistoryChanged.Broadcast();
     return true;
@@ -61,7 +69,11 @@ void Editor::CommandHistory::Clear()
 void Editor::CommandHistory::Append(std::unique_ptr<EditorCommand> command)
 {
     m_Commands.erase(m_Commands.begin() + m_Cursor, m_Commands.end());
-    m_Commands.push_back(std::move(command));
-    if (m_Commands.size() > m_Limit) m_Commands.erase(m_Commands.begin());
+    m_Commands.push_back({ std::move(command), m_CurrentStateId, m_NextStateId++ });
+
+    if (m_Commands.size() > m_Limit)
+        m_Commands.erase(m_Commands.begin());
+
     m_Cursor = m_Commands.size();
+    m_CurrentStateId = m_Commands.back().AfterStateId;
 }

@@ -1,36 +1,27 @@
 ﻿#pragma once
 #include "InputManager.h"
 #include "ShortcutManager.h"
+#include <archive/JsonArchive.h>
+#include "EditorSettingsService.h"
 
 #pragma region Third Library
 #include <fmt/core.h>
 #pragma endregion
 
 #include "ImGuiManager.h"
-#include "NotificationManager.h"
 #include "Application.h"
 #include "SceneManager.h"
 #include "SelectionManager.h"
 #include "RHIs.h"
 #include "PIEManager.h"
 
-#include "ViewportPanels.h"
-#include "InspectorPanel.h"
-#include "HierarchyPanel.h"
-#include "ContentBrowserPanel.h"
-#include "ConsolePanel.h"
-#include "MetricsPanel.h"
-#include "GraphPanel.h"
-#include "ResourceManagerInspector.h"
-#include "ShortcutSettingsPanel.h"
-#include "EditorActionRegistry.h"
-
+#include "ImGuiPanels.h"
+#include "NotificationManager.h"
 #include "ResourceEditors.h"
 #include "TerrainEditor.h"
-#include <exception>
-
 
 #include "DirectX12Texture.h"
+#include "SceneDocument.h"
 
 #pragma region Imgui Header
 #include "imgui.h"
@@ -54,7 +45,8 @@ EResult ImGuiManager::Initialize(void* arg)
 	if (!arg) return EResult::InvalidArgument;
 
 	CAST_DESC
-	if (!desc->Window || !desc->RHI) return EResult::InvalidArgument;
+	if (!desc->Window || !desc->RHI)
+		return EResult::InvalidArgument;
 
 	auto fail = [this](const char* stage)
 	{
@@ -73,6 +65,7 @@ EResult ImGuiManager::Initialize(void* arg)
 	if (!m_ImGuiContext) return fail("CreateContext");
 
 	ImGuiIO& io = ImGui::GetIO(); (void)io;
+	io.IniFilename = nullptr;
 	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 	io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 	io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
@@ -80,8 +73,8 @@ EResult ImGuiManager::Initialize(void* arg)
 	std::string fontPath = "C:\\Windows\\Fonts\\malgun.ttf";
 	vector<string> iconsFontPaths;
 
-	iconsFontPaths.push_back("Resources/Fonts/fontawesome-free-7.1.0-desktop/otfs/Font Awesome 7 Free-Regular-400.otf");
 	iconsFontPaths.push_back("Resources\\Fonts\\fontawesome-free-7.1.0-desktop\\otfs\\Font Awesome 7 Free-Solid-900.otf");
+	iconsFontPaths.push_back("Resources/Fonts/fontawesome-free-7.1.0-desktop/otfs/Font Awesome 7 Free-Regular-400.otf");	
 
 	
 	if (std::filesystem::exists(fontPath))
@@ -152,6 +145,7 @@ EResult ImGuiManager::Initialize(void* arg)
 	if (CreateDefaultPanels() != EResult::Success)
 		return fail("CreateDefaultPanels");
 
+	m_DocumentController = std::make_unique<EditorDocumentController>(Application::Get().GetDocuments());
 	EditorActionRegistry::RegisterAll();
 
 	return EResult::Success;
@@ -175,7 +169,7 @@ void ImGuiManager::Free()
 {
 	if (m_ImGuiContext)
 		ImGui::SetCurrentContext(m_ImGuiContext);
-
+	m_WorkspacePanels.clear();
 	m_PendingRemovePanels.clear();
 
 	for (auto& panel : m_PendingAddPanels)
@@ -231,10 +225,13 @@ void ImGuiManager::Free()
 
 void ImGuiManager::Update(f32 dt)
 {
+	auto& settings = EditorSettingsService::Get();
+	settings.ProcessPendingViewportResolutionChange();
+
 	for (auto& panel : m_ImGuiPanels)
-	{
 		panel->Update(dt);
-	}
+
+	settings.CompleteViewportResolutionChange();
 }
 
 void ImGuiManager::Begin()
@@ -296,7 +293,9 @@ void ImGuiManager::Draw()
 	auto& history = Application::Get().GetEditHistory();
 	auto& pieManager = PIEManager::Get();
 	history.Synchronize(SceneManager::Get().GetCurrentScene(), PIEManager::Get().CanEdit());
+	SynchronizeSceneDocumentAccess();
 	history.BeginFrame();
+	DrawDocumentConfirmation();
 	MainDockspace();
 	history.Synchronize(SceneManager::Get().GetCurrentScene(), PIEManager::Get().CanEdit());
 
@@ -321,11 +320,56 @@ void ImGuiManager::Draw()
 	}
 	m_PendingRemovePanels.clear();
 	ImGui::ShowMetricsWindow();
-	if(!ImGui::IsAnyItemActive() && !ImGuizmo::IsUsing() && !InputManager::Get().IsMouseButtonPressed(EMouseButton::Left))
+	SynchronizeSceneDocumentAccess();
+	if (!ImGui::IsAnyItemActive() && !ImGuizmo::IsUsing() &&
+		!InputManager::Get().IsMouseButtonPressed(EMouseButton::Left))
 	{
 		history.Flush();
-		const bool suppressed = ImGui::GetIO().WantTextInput;
+
+		const bool suppressed = ImGui::GetIO().WantTextInput || m_DocumentController->HasPendingAction() || 
+			EditorSettingsService::Get().IsWindowChangePending();
 		ShortcutManager::Get().ProcessShortcuts(EShortcutContext::Global, suppressed);
+
+		if (const auto result = m_DocumentController->ProcessPendingSave())
+		{
+			auto& application = Application::Get();
+
+			if (result->Status == EDocumentSaveStatus::Saved)
+			{
+				const auto* document = application.GetDocuments().Find(result->Id);
+
+				if (document && result->Id == application.GetSceneDocumentId())
+					application.RememberEditedScene(document->GetPath());
+
+				const auto name = document && !document->GetPath().empty()
+					? WStrToStr(document->GetPath().wstring()) : LOCAL("EditorDocument.Untitled");
+
+				NotificationManager::Get().AddNotification(LOCAL("EditorDocument.Title"),
+					LOCAL_FMT("EditorDocument.Saved", name), ELogLevel::Info);
+			}
+			else if (result->Status == EDocumentSaveStatus::Failed)
+			{
+				NotificationManager::Get().AddNotification(LOCAL("EditorDocument.Title"),
+					LOCAL("EditorDocument.SaveFailed"), ELogLevel::Error);
+			}
+			else if (result->Status == EDocumentSaveStatus::Unavailable)
+			{
+				NotificationManager::Get().AddNotification(LOCAL("EditorDocument.Title"),
+					LOCAL("EditorDocument.SaveUnavailable"), ELogLevel::Warn);
+			}
+
+			m_DocumentController->NotifySaveResult(*result);
+		}
+
+		if (const auto result = m_DocumentController->ProcessPendingAction())
+		{
+			if (*result != EResult::Success)
+			{
+				BAM_LOG(Error, "Editor", "Document", "Document action failed: {}", ResultToString(*result));
+				NotificationManager::Get().AddNotification(LOCAL("EditorDocument.Title"),
+					LOCAL("EditorDocument.OperationFailed"), ELogLevel::Error);
+			}
+		}
 	}
 
 	NotificationManager::Get().DrawNotificationUI();
@@ -371,32 +415,35 @@ void ImGuiManager::MainDockspace()
 #pragma endregion
 
 #pragma region ImGui Management
-EResult ImGuiManager::AddImGuiPanel(ImGuiInterface* panel)
+EResult ImGuiManager::AddImGuiPanel(IImGui* panel)
 {
 	if (!panel) return EResult::InvalidArgument;
     m_PendingAddPanels.push_back(panel);
     return EResult::Success;
 }
 
-EResult ImGuiManager::RemoveImGuiPanel(ImGuiInterface* panel)
+EResult ImGuiManager::RemoveImGuiPanel(IImGui* panel)
 {
-	if (!panel) return EResult::InvalidArgument;
-    m_PendingRemovePanels.push_back(panel);
-    return EResult::Success;
+	if (!panel)
+		return EResult::InvalidArgument;
+
+	std::erase(m_WorkspacePanels, panel);
+	m_PendingRemovePanels.push_back(panel);
+	return EResult::Success;
 }
-ImGuiInterface* ImGuiManager::GetImGuiPanel(const wstring& name)
+IImGui* ImGuiManager::GetImGuiPanel(const wstring& name)
 {
 	auto it = std::find_if(m_ImGuiPanels.begin(), m_ImGuiPanels.end(),
-		[&name](ImGuiInterface* panel) { return panel->GetName() == name; });
+		[&name](IImGui* panel) { return panel->GetName() == name; });
 	if (it != m_ImGuiPanels.end())
 	{
 		return *it;
 	}
 	return nullptr;
 }
-vector<ImGuiInterface*> ImGuiManager::GetImGuiPanels(const wstring& name)
+vector<IImGui*> ImGuiManager::GetImGuiPanels(const wstring& name)
 {
-	vector<ImGuiInterface*> panels;
+	vector<IImGui*> panels;
 	for (const auto& panel : m_ImGuiPanels)
 	{
 		if (panel->GetName() == name)
@@ -446,6 +493,25 @@ EResult ImGuiManager::CreateDefaultPanels()
 	AddImGuiPanel(new GraphPanel());
 	AddImGuiPanel(new ResourceManagerInspector());
 	AddImGuiPanel(new TerrainEditor());
+	AddImGuiPanel(new PostProcessPanel());
+
+	GraphicSettingPanelDesc graphicsDesc;
+	graphicsDesc.Window = m_Window;
+
+	auto* graphicsPanel = new GraphicSettingPanel();
+	auto graphicsResult = graphicsPanel->Initialize(&graphicsDesc);
+
+	if (graphicsResult == EResult::Success)
+		graphicsResult = AddImGuiPanel(graphicsPanel);
+
+	if (graphicsResult != EResult::Success)
+	{
+		Safe_Release(graphicsPanel);
+		return graphicsResult;
+	}
+
+	m_WorkspacePanels = m_PendingAddPanels;
+
 	CreateResourceEditors();
 	return EResult::Success;
 }
@@ -477,6 +543,8 @@ EResult ImGuiManager::CreateResourceEditors()
 #pragma region Style
 void ImGuiManager::SetUIScale(float scale)
 {
+	if (!std::isfinite(scale))
+		return;
 	m_UIScale = std::clamp(scale, 0.5f, 3.0f);
 	ImGuiStyle& style = ImGui::GetStyle();
 	style = m_BaseStyle;               // 원본 스타일로 초기화
@@ -801,6 +869,276 @@ ImTextureID ImGuiManager::GetImGuiTextureID(const RHITexture* texture) const
 	}
 	default:
 		return ImTextureID();
+	}
+}
+#pragma endregion
+
+#pragma region Settings
+void ImGuiManager::NotifySettingsChange(const EditorSettingsChangeResult& result)
+{
+	if (result.Applied && result.SaveStatus == EEditorSettingsSaveStatus::Saved)
+		return;
+
+	const char* key = "EditorSettings.ApplyFailed";
+	auto level = ELogLevel::Error;
+
+	if (result.Applied)
+	{
+		key = result.SaveStatus == EEditorSettingsSaveStatus::SessionOnly
+			? "EditorSettings.SessionOnly" : "EditorSettings.SaveFailed";
+		level = ELogLevel::Warn;
+	}
+
+	NotificationManager::Get().AddNotification(LOCAL("EditorSettings.Title"), LOCAL(key), level);
+}
+#pragma endregion
+
+#pragma region Workspace
+void ImGuiManager::RestoreWorkspace(const EditorWorkspace& workspace)
+{
+	if (!m_ImGuiContext)
+		return;
+
+	auto* previousContext = ImGui::GetCurrentContext();
+	ImGui::SetCurrentContext(m_ImGuiContext);
+
+	if (!workspace.ImGuiLayout.empty())
+		ImGui::LoadIniSettingsFromMemory(workspace.ImGuiLayout.data(), workspace.ImGuiLayout.size());
+
+	for (auto* panel : m_WorkspacePanels)
+		panel->RestoreState(workspace);
+
+	ImGui::SetCurrentContext(previousContext);
+}
+
+void ImGuiManager::CaptureWorkspace(EditorWorkspace& workspace)
+{
+	if (!m_ImGuiContext)
+		return;
+
+	auto* previousContext = ImGui::GetCurrentContext();
+	ImGui::SetCurrentContext(m_ImGuiContext);
+
+	for (const auto* panel : m_WorkspacePanels)
+		panel->CaptureState(workspace);
+
+	std::size_t size = 0;
+	const char* layout = ImGui::SaveIniSettingsToMemory(&size);
+
+	if (layout)
+		workspace.ImGuiLayout.assign(layout, size);
+
+	ImGui::SetCurrentContext(previousContext);
+}
+#pragma endregion
+
+#pragma region Document
+bool ImGuiManager::RequestNewScene()
+{
+	return RequestSceneAction(ESceneDocumentAction::New);
+}
+
+bool ImGuiManager::RequestOpenScene(const std::filesystem::path& path)
+{
+	return RequestSceneAction(ESceneDocumentAction::Open, path);
+}
+
+bool ImGuiManager::RequestCloseScene()
+{
+	return RequestSceneAction(ESceneDocumentAction::Close);
+}
+
+bool ImGuiManager::RequestSceneAction(ESceneDocumentAction action, std::filesystem::path path)
+{
+	if (!PIEManager::Get().IsEditing())
+	{
+		NotificationManager::Get().AddNotification(LOCAL("EditorDocument.Title"),
+			LOCAL("EditorDocument.SceneActionUnavailable"), ELogLevel::Warn);
+		return false;
+	}
+
+	if (m_DocumentController->IsBusy())
+	{
+		NotificationManager::Get().AddNotification(LOCAL("EditorDocument.Title"),
+			LOCAL("EditorDocument.OperationBusy"), ELogLevel::Warn);
+		return false;
+	}
+
+	if (action == ESceneDocumentAction::Close && !SceneManager::Get().GetCurrentScene())
+	{
+		NotificationManager::Get().AddNotification(LOCAL("EditorDocument.Title"),
+			LOCAL("UI_NO_SCENE_LOADED"), ELogLevel::Warn);
+		return false;
+	}
+
+	if (action == ESceneDocumentAction::Open)
+	{
+		std::error_code error;
+		path = std::filesystem::absolute(path, error);
+		if (error)
+		{
+			BAM_LOG(Error, "Editor", "Document", "Cannot resolve scene path: {}", error.message());
+
+			NotificationManager::Get().AddNotification(LOCAL("EditorDocument.Title"),
+				LOCAL("EditorDocument.OperationFailed"), ELogLevel::Error);
+			return false;
+		}
+
+		path = path.lexically_normal();
+	}
+
+	auto& application = Application::Get();
+	std::vector<EditorDocumentId> documents;
+
+	if (application.GetSceneDocumentId() != InvalidEditorDocumentId)
+		documents.push_back(application.GetSceneDocumentId());
+
+	return m_DocumentController->RequestAction(std::move(documents),
+		[action, path = std::move(path)](const std::vector<EditorDocumentId>&) -> EResult
+		{
+			if (!PIEManager::Get().IsEditing())
+				return EResult::AccessDenied;
+
+			auto& scenes = SceneManager::Get();
+			EResult result = EResult::Fail;
+
+			switch (action)
+			{
+			case ESceneDocumentAction::New:
+				result = scenes.NewScene();
+				break;
+			case ESceneDocumentAction::Open:
+			{
+				archive::JsonArchive reader;
+				result = scenes.LoadScene(reader, path.wstring());
+				break;
+			}
+			case ESceneDocumentAction::Close:
+				result = scenes.CloseScene();
+				break;
+			}
+
+			if (result != EResult::Success)
+				return result;
+
+			SelectionManager::Get().ClearSelection(true);
+			Application::Get().AdoptSceneDocument(
+				action == ESceneDocumentAction::Open ? path : std::filesystem::path{});
+
+			std::string message;
+
+			if (action == ESceneDocumentAction::Open)
+				message = LOCAL_FMT("EditorDocument.SceneOpened", WStrToStr(path.wstring()));
+			else if (action == ESceneDocumentAction::New)
+				message = LOCAL("EditorDocument.SceneCreated");
+			else
+				message = LOCAL("EditorDocument.SceneClosed");
+
+			NotificationManager::Get().AddNotification(LOCAL("EditorDocument.Title"), message, ELogLevel::Info);
+
+			return EResult::Success;
+		});
+}
+
+bool ImGuiManager::RequestQuit()
+{
+	if (m_DocumentController->IsBusy())
+		return false;
+
+	if (!PIEManager::Get().IsEditing())
+	{
+		PIEManager::Get().Stop();
+		if (!PIEManager::Get().IsEditing())
+		{
+			NotificationManager::Get().AddNotification(LOCAL("EditorDocument.Title"),
+				LOCAL("EditorDocument.OperationFailed"), ELogLevel::Error);
+			return false;
+		}
+	}
+
+	auto& application = Application::Get();
+
+	return m_DocumentController->RequestAction(application.GetDocuments().GetDocumentIds(),
+		[](const std::vector<EditorDocumentId>&) -> EResult
+		{
+			Application::Get().CompleteQuitRequest();
+			return EResult::Success;
+		});
+}
+bool ImGuiManager::PreparePendingSceneSave()
+{
+	return false;
+}
+void ImGuiManager::DrawDocumentConfirmation()
+{
+	auto& controller = *m_DocumentController;
+	const auto title = LOCAL("EditorDocument.ConfirmTitle") + "###DocumentActionConfirm";
+
+	if (controller.HasPendingAction() && !ImGui::IsPopupOpen(title.c_str()))
+		ImGui::OpenPopup(title.c_str());
+
+	if (!ImGui::BeginPopupModal(title.c_str(), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+		return;
+
+	if (!controller.HasPendingAction())
+	{
+		ImGui::CloseCurrentPopup();
+		ImGui::EndPopup();
+		return;
+	}
+
+	const auto id = controller.GetConfirmationDocumentId();
+	if (id == InvalidEditorDocumentId)
+	{
+		ImGui::TextUnformatted(LOCAL_CSTR("EditorDocument.Processing"));
+		ImGui::EndPopup();
+		return;
+	}
+
+	const auto* document = Application::Get().GetDocuments().Find(id);
+	if (!document)
+	{
+		controller.CancelForDocument(id);
+		ImGui::CloseCurrentPopup();
+		ImGui::EndPopup();
+		return;
+	}
+
+	const auto name = document->GetPath().empty()
+		? LOCAL("EditorDocument.Untitled") : WStrToStr(document->GetPath().wstring());
+
+	ImGui::TextUnformatted(LOCAL_FMT("EditorDocument.UnsavedMessage", name).c_str());
+	ImGui::Spacing();
+
+	ImGui::BeginDisabled(!document->CanSave());
+	if (ImGui::Button(LOCAL_LABEL("EditorDocument.Save").c_str()))
+		controller.ResolveConfirmation(EDocumentActionChoice::Save);
+	ImGui::EndDisabled();
+
+	ImGui::SameLine();
+	if (ImGui::Button(LOCAL_LABEL("EditorDocument.Discard").c_str()))
+		controller.ResolveConfirmation(EDocumentActionChoice::Discard);
+
+	ImGui::SameLine();
+	if (ImGui::Button(LOCAL_LABEL("EditorCommon.Cancel").c_str()))
+	{
+		controller.ResolveConfirmation(EDocumentActionChoice::Cancel);
+		ImGui::CloseCurrentPopup();
+	}
+
+	ImGui::EndPopup();
+}
+void ImGuiManager::SynchronizeSceneDocumentAccess()
+{
+	auto& application = Application::Get();
+
+	if (auto* document = application.GetSceneDocument())
+	{
+		const bool readOnly = !PIEManager::Get().IsEditing();
+		document->SetReadOnly(readOnly);
+
+		if (readOnly)
+			m_DocumentController->CancelForDocument(application.GetSceneDocumentId());
 	}
 }
 #pragma endregion

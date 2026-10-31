@@ -2,18 +2,30 @@
 #include "InputManager.h"
 #include "imgui.h"
 #include "Editor_Macros.h"
-#include <glaze/glaze.hpp>
-#include <filesystem>
+#include "ConfigManager.h"
 
 IMPLEMENT_SINGLETON(ShortcutManager)
 
 EResult ShortcutManager::Initialize(void* arg)
 {
+    if (!arg)
+        return EResult::InvalidArgument;
+
+    const auto& desc = *static_cast<const ShortcutManagerDesc*>(arg);
+    m_ConfigPath = desc.ConfigPath;
+    m_LegacyPath = desc.LegacyPath;
+    m_CanSaveConfig = false;
+
     return EResult::Success;
 }
 
 void ShortcutManager::Free()
 {
+    m_StoredOverrides.clear();
+    m_HintStringCache.clear();
+    m_ConfigPath.clear();
+    m_LegacyPath.clear();
+    m_CanSaveConfig = false;
     m_Actions.clear();
     m_ActiveBindings.clear();
     __super::Free();
@@ -158,45 +170,137 @@ const EditorAction* ShortcutManager::FindAction(const std::string& actionId) con
     return (it != m_Actions.end()) ? &it->second : nullptr;
 }
 
-bool ShortcutManager::SaveToFile(const std::filesystem::path& path) const
+bool ShortcutManager::SaveToFile() const
 {
-    const std::filesystem::path targetPath = path.empty() ? GetDefaultConfigPath() : path;
-    if (targetPath.has_parent_path())
-        std::filesystem::create_directories(targetPath.parent_path());
-    // 기본값과 달라진 액션만 추출 (Delta Storage)
-    std::unordered_map<std::string, std::string> overrides;
+    if (!m_CanSaveConfig || m_ConfigPath.empty())
+    {
+        EDITOR_LOG_WARN("Shortcut config saving is disabled; the existing file was preserved.");
+        return false;
+    }
+
+    auto overrides = m_StoredOverrides;
+
     for (const auto& [id, action] : m_Actions)
     {
-        auto it = m_ActiveBindings.find(id);
-        if (it != m_ActiveBindings.end() && it->second != action.DefaultChord)
-        {
-            overrides[id] = it->second.ToString(); // "None" 또는 "Ctrl+Shift+Z"
-        }
+        const auto found = m_ActiveBindings.find(id);
+
+        if (found == m_ActiveBindings.end() || found->second == action.DefaultChord)
+            overrides.erase(id);
+        else
+            overrides[id] = found->second.ToString();
     }
-    std::string buffer;
-    auto ec = glz::write_file_json < glz::opts{ .prettify = true } > (overrides, targetPath.string(), buffer);
-    return ec == glz::error_code::none;
-}
-bool ShortcutManager::LoadFromFile(const std::filesystem::path& path)
-{
-    const std::filesystem::path targetPath = path.empty() ? GetDefaultConfigPath() : path;
-    if (!std::filesystem::exists(targetPath))
-        return true; // 설정 파일이 없으면 기본 바인딩 유지
-    std::unordered_map<std::string, std::string> overrides;
-    std::string buffer;
-    auto ec = glz::read_file_json(overrides, targetPath.string(), buffer);
-    if (ec != glz::error_code::none)
-        return false;
-    for (const auto& [id, chordStr] : overrides)
+
+    archive::JsonArchive writer;
+
+    for (const auto& [id, chord] : overrides)
     {
-        if (m_Actions.contains(id))
+        const auto result = writer.Write(id, chord);
+        if (!result)
         {
-            m_ActiveBindings[id] = ShortcutChord::FromString(chordStr);
+            EDITOR_LOG_ERROR("Shortcut serialization failed: code={}, field={}",
+                static_cast<int>(result.Code), result.Field);
+            return false;
         }
     }
+
+    const auto result = Engine::ConfigManager::SaveDocument(writer, m_ConfigPath);
+    if (!result)
+    {
+        EDITOR_LOG_ERROR("Shortcut config save failed: code={}, field={}, filesystem={}",
+            static_cast<int>(result.Error.Code), result.Error.Field, result.FileError.message());
+        return false;
+    }
+
     return true;
 }
-std::filesystem::path ShortcutManager::GetDefaultConfigPath()
+bool ShortcutManager::LoadFromFile()
 {
-    return std::filesystem::path(CONFIG_PATH) / "EditorShortcuts.json";
+    m_CanSaveConfig = false;
+
+    if (m_ConfigPath.empty())
+    {
+        EDITOR_LOG_WARN("Shortcut config path is unavailable; current bindings were retained.");
+        return false;
+    }
+
+    std::error_code error;
+    auto source = m_ConfigPath;
+    bool exists = std::filesystem::exists(source, error);
+
+    if (!error && !exists && !m_LegacyPath.empty())
+    {
+        source = m_LegacyPath;
+        exists = std::filesystem::exists(source, error);
+    }
+
+    if (error)
+    {
+        EDITOR_LOG_WARN("Shortcut config lookup failed: {}", error.message());
+        return false;
+    }
+
+    if (!exists)
+    {
+        ResetAllBindings();
+        m_StoredOverrides.clear();
+        m_HintStringCache.clear();
+        m_CanSaveConfig = true;
+        return true;
+    }
+
+    archive::JsonArchive reader;
+    auto result = reader.LoadFromFile(source);
+    if (!result)
+    {
+        EDITOR_LOG_WARN("Shortcut config read failed: code={}, field={}",
+            static_cast<int>(result.Code), result.Field);
+        return false;
+    }
+
+    std::vector<std::string> ids;
+    result = reader.GetFieldNames(ids);
+    if (!result)
+    {
+        EDITOR_LOG_WARN("Shortcut config fields could not be read.");
+        return false;
+    }
+
+    std::unordered_map<std::string, std::string> overrides;
+    auto candidate = m_ActiveBindings;
+
+    for (const auto& [id, action] : m_Actions)
+        candidate[id] = action.DefaultChord;
+
+    for (const auto& id : ids)
+    {
+        std::string text;
+        result = reader.Read(id, text);
+
+        if (!result)
+        {
+            EDITOR_LOG_WARN("Invalid shortcut config field: {}", id);
+            return false;
+        }
+
+        overrides.emplace(id, text);
+
+        if (!m_Actions.contains(id))
+            continue;
+
+        const auto chord = ShortcutChord::FromString(text);
+        if (chord.ToString() != text)
+        {
+            EDITOR_LOG_WARN("Invalid shortcut chord: action={}, chord={}", id, text);
+            return false;
+        }
+
+        candidate[id] = chord;
+    }
+
+    m_ActiveBindings = std::move(candidate);
+    m_StoredOverrides = std::move(overrides);
+    m_HintStringCache.clear();
+    m_CanSaveConfig = true;
+
+    return true;
 }

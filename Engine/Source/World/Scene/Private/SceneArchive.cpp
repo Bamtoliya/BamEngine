@@ -4,12 +4,7 @@
 #include "UIComponents.h"
 #include <archive/ArchiveInterface.h>
 #include <reflection_archive/ReflectionArchiveAdapter.h>
-
-#include <algorithm>
-#include <memory>
-#include <unordered_set>
-#include <limits>
-#include <unordered_map>
+#include "Adapters/ResourceHandleArchiveAdapter.h"
 
 namespace
 {
@@ -173,6 +168,43 @@ namespace
             return registry.ReadComponent(component, "Data", world, handle, entry->Type);
         });
     }
+
+    template<typename Writer>
+    archive::ArchiveResult WriteDocumentWithResourceReferences(archive::IArchive& ar, std::string_view key, Writer&& writeDocument)
+    {
+        Engine::ResourceReferenceSet references;
+
+        const auto result = ar.WriteObject(key, references,
+            [&](archive::IArchive& object, const auto&) -> archive::ArchiveResult
+            {
+                object.SetWriteContext(&references);
+
+                auto written = writeDocument(object);
+                if (written)
+                    written = archive_resource::WriteResourceReferences(object, "ResourceReferences", references);
+
+                return written;
+            });
+
+        if (result)
+        {
+            if (auto* destination = ar.GetWriteContext<Engine::ResourceReferenceSet>())
+                destination->insert(references.begin(), references.end());
+        }
+
+        return result;
+    }
+
+    void PreloadDocumentResources(std::string_view kind, const Engine::ResourceReferenceSet& references)
+    {
+        const auto unresolved = archive_resource::PreloadResourceReferences(references);
+
+        for (const auto& reference : unresolved)
+        {
+            ENGINE_LOG_WARN("{} resource preload deferred: key=\"{}\", path=\"{}\"", kind,
+                Engine::WStrToStr(reference.AssetKey), Engine::WStrToStr(reference.AssetPath));
+        }
+    }
 }
 
 BEGIN(Engine)
@@ -233,7 +265,7 @@ archive::ArchiveResult Scene::WriteArchive(archive::IArchive& ar) const
     auto result = ValidateHierarchy(entities, m_LocalRegistry);
     if (!result) return result;
 
-    return ar.WriteObject("Scene", entities, [&](archive::IArchive& object, const auto&) -> archive::ArchiveResult
+    return WriteDocumentWithResourceReferences(ar, "Scene", [&](archive::IArchive& object) -> archive::ArchiveResult
     {
         auto written = object.Write("Version", SceneArchiveVersion);
         if (written) written = object.Write("Name", m_Name);
@@ -278,6 +310,7 @@ archive::ArchiveResult Scene::CreateFromArchive(const archive::IArchive& ar, Sce
     std::vector<SceneEntityRecord> entities;
     std::unordered_set<uint64> ids;
     bool unused = false;
+    ResourceReferenceSet resourceReferences;
     auto result = ar.ReadObject("Scene", unused, [&](archive::IArchive& object, bool&) -> archive::ArchiveResult
     {
         uint32 version = 0;
@@ -285,11 +318,14 @@ archive::ArchiveResult Scene::CreateFromArchive(const archive::IArchive& ar, Sce
         if (!field) return field;
         if (version != SceneArchiveVersion)
             return { archive::ArchiveErrorCode::InvalidValue, "Version" };
+        field = archive_resource::ReadResourceReferences(object, "ResourceReferences", resourceReferences);
+        if (!field) return field;
         field = object.Read("Name", candidate->m_Name);
         bool active = true;
         if (field) field = object.Read("Active", active);
         if (!field) return field;
         candidate->SetActive(active);
+        PreloadDocumentResources("Scene", resourceReferences);
         return object.ReadObjectArray("Entities", [&](archive::IArchive& value, std::size_t)
             -> archive::ArchiveResult
         {
@@ -421,7 +457,7 @@ archive::ArchiveResult Scene::WritePrefabArchive(archive::IArchive& ar, const En
     auto result = ValidateHierarchy(entities, m_LocalRegistry);
     if (!result) return result;
 
-    return ar.WriteObject("Prefab", entities, [&](archive::IArchive& object, const auto&) -> archive::ArchiveResult
+    return WriteDocumentWithResourceReferences(ar, "Prefab", [&](archive::IArchive& object) -> archive::ArchiveResult
     {
         auto written = object.Write("Version", SceneArchiveVersion);
         if (written) written = object.Write("RootId", uint64(1));
@@ -472,6 +508,7 @@ archive::ArchiveResult Scene::InstantiatePrefabArchive(const archive::IArchive& 
     std::unordered_set<uint64> ids;
     uint64 rootId = 0;
     bool unused = false;
+    ResourceReferenceSet resourceReferences;
     auto result = ar.ReadObject("Prefab", unused, [&](archive::IArchive& object, bool&) -> archive::ArchiveResult
     {
         uint32 version = 0;
@@ -479,10 +516,13 @@ archive::ArchiveResult Scene::InstantiatePrefabArchive(const archive::IArchive& 
         if (!field) return field;
         if (version != SceneArchiveVersion)
             return { archive::ArchiveErrorCode::InvalidValue, "Version" };
+        field = archive_resource::ReadResourceReferences(object, "ResourceReferences", resourceReferences);
+        if (!field) return field;
         field = object.Read("RootId", rootId);
         if (!field) return field;
         if (rootId == 0)
             return { archive::ArchiveErrorCode::InvalidValue, "RootId" };
+        PreloadDocumentResources("Prefab", resourceReferences);
         return object.ReadObjectArray("Entities", [&](archive::IArchive& value, std::size_t)
             -> archive::ArchiveResult
         {

@@ -7,7 +7,7 @@
 #define MAX_CONSOLE_ITEMS 1000
 
 BEGIN(Editor)
-class ConsolePanel : public ImGuiInterface
+class ConsolePanel : public IImGui
 {
 public:
 	ConsolePanel() { m_Name = L"Console"; m_DisplayNameKey = "UI_CONSOLE"; };

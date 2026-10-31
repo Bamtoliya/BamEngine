@@ -117,27 +117,177 @@ EResult MaterialInterface::OnPostLoad()
 #pragma endregion
 
 #pragma region Parameter Interface
-template<typename T>
-T MaterialInterface::GetParameter(const string& name) const
+
+uint32 MaterialInterface::CalculateNextOffset(size_t typeSize, size_t alignment) const
 {
-	auto it = m_Parameters.find(name);
-	if (it != m_Parameters.end() && it->second.data.size() >= sizeof(T))
-	{
-		T value;
-		memcpy(&value, it->second.data.data(), sizeof(T));
-		return value;
-	}
-	return T{};
+    size_t currentEnd = 0;
+    for (const auto& [name, param] : m_Parameters)
+    {
+        const size_t end = param.offset + param.data.size();
+        if (end > currentEnd) currentEnd = end;
+    }
+
+    // 1. 기본 정렬 올림 (4B, 8B, 16B)
+    size_t alignedOffset = (currentEnd + (alignment - 1)) & ~(alignment - 1);
+
+    // 2. HLSL 16바이트 경계 넘침(Crossing 16-byte boundary) 방지 검사
+    if ((alignedOffset / 16) != ((alignedOffset + typeSize - 1) / 16))
+    {
+        alignedOffset = (alignedOffset + 15) & ~15; // 다음 16바이트 경계로 점프
+    }
+
+    return static_cast<uint32>(alignedOffset);
 }
 
-// 명시적 인스턴스화
-template f32 MaterialInterface::GetParameter<f32>(const string&) const;
-template vec2 MaterialInterface::GetParameter<vec2>(const string&) const;
-template vec3 MaterialInterface::GetParameter<vec3>(const string&) const;
-template vec4 MaterialInterface::GetParameter<vec4>(const string&) const;
-template int32 MaterialInterface::GetParameter<int32>(const string&) const;
-template bool MaterialInterface::GetParameter<bool>(const string&) const;
-template mat4 MaterialInterface::GetParameter<mat4>(const string&) const;
+void MaterialInterface::AddFloat(const string& name, f32 defaultValue, float min, float max, const string& localKey)
+{
+    uint32 offset = CalculateNextOffset(sizeof(f32), 4);
+    m_Parameters[name] = MaterialParameter(EMaterialParameterType::Float, &defaultValue, sizeof(f32), offset, min, max, localKey, false);
+}
+
+void MaterialInterface::AddFloat2(const string& name, const vec2& defaultValue, float min, float max, const string& localKey)
+{
+    uint32 offset = CalculateNextOffset(sizeof(vec2), 8);
+    m_Parameters[name] = MaterialParameter(EMaterialParameterType::Float2, &defaultValue, sizeof(vec2), offset, min, max, localKey, false);
+}
+
+void MaterialInterface::AddFloat3(const string& name, const vec3& defaultValue, float min, float max, const string& localKey)
+{
+    uint32 offset = CalculateNextOffset(sizeof(vec3), 16);
+    m_Parameters[name] = MaterialParameter(EMaterialParameterType::Float3, &defaultValue, sizeof(vec3), offset, min, max, localKey, false);
+}
+
+void MaterialInterface::AddColor3(const string& name, const vec3& defaultColor, const string& localKey)
+{
+    uint32 offset = CalculateNextOffset(sizeof(vec3), 16);
+    m_Parameters[name] = MaterialParameter(EMaterialParameterType::Float3, &defaultColor, sizeof(vec3), offset, 0.0f, 1.0f, localKey, true);
+}
+
+void MaterialInterface::AddFloat4(const string& name, const vec4& defaultValue, float min, float max, const string& localKey)
+{
+    uint32 offset = CalculateNextOffset(sizeof(vec4), 16);
+    m_Parameters[name] = MaterialParameter(EMaterialParameterType::Float4, &defaultValue, sizeof(vec4), offset, min, max, localKey, false);
+}
+
+void MaterialInterface::AddColor4(const string& name, const vec4& defaultColor, const string& localKey)
+{
+    uint32 offset = CalculateNextOffset(sizeof(vec4), 16);
+    m_Parameters[name] = MaterialParameter(EMaterialParameterType::Float4, &defaultColor, sizeof(vec4), offset, 0.0f, 1.0f, localKey, true);
+}
+
+void MaterialInterface::AddInt(const string& name, int32 defaultValue, int32 min, int32 max, const string& localKey)
+{
+    uint32 offset = CalculateNextOffset(sizeof(int32), 4);
+    m_Parameters[name] = MaterialParameter(EMaterialParameterType::Int, &defaultValue, sizeof(int32), offset, static_cast<float>(min), static_cast<float>(max), localKey, false);
+}
+
+void MaterialInterface::AddBool(const string& name, bool defaultValue, const string& localKey)
+{
+    uint32 offset = CalculateNextOffset(sizeof(bool), 4);
+    m_Parameters[name] = MaterialParameter(EMaterialParameterType::Bool, &defaultValue, sizeof(bool), offset, 0.0f, 1.0f, localKey, false);
+}
+
+void MaterialInterface::SetFloat(const string& name, f32 value)
+{
+    auto it = m_Parameters.find(name);
+    if (it != m_Parameters.end())
+    {
+        if (it->second.data.size() >= sizeof(value))
+            memcpy(it->second.data.data(), &value, sizeof(value));
+        return;
+    }
+    AddFloat(name, value);
+}
+
+void MaterialInterface::SetFloat2(const string& name, const vec2& value)
+{
+    auto it = m_Parameters.find(name);
+    if (it != m_Parameters.end())
+    {
+        if (it->second.data.size() >= sizeof(value))
+            memcpy(it->second.data.data(), &value, sizeof(value));
+        return;
+    }
+    AddFloat2(name, value);
+}
+
+void MaterialInterface::SetFloat3(const string& name, const vec3& value)
+{
+    auto it = m_Parameters.find(name);
+    if (it != m_Parameters.end())
+    {
+        if (it->second.data.size() >= sizeof(value))
+            memcpy(it->second.data.data(), &value, sizeof(value));
+        return;
+    }
+    AddFloat3(name, value);
+}
+
+void MaterialInterface::SetFloat4(const string& name, const vec4& value)
+{
+    auto it = m_Parameters.find(name);
+    if (it != m_Parameters.end())
+    {
+        if (it->second.data.size() >= sizeof(value))
+            memcpy(it->second.data.data(), &value, sizeof(value));
+        return;
+    }
+    AddFloat4(name, value);
+}
+
+void MaterialInterface::SetInt(const string& name, int32 value)
+{
+    auto it = m_Parameters.find(name);
+    if (it != m_Parameters.end())
+    {
+        if (it->second.data.size() >= sizeof(value))
+            memcpy(it->second.data.data(), &value, sizeof(value));
+        return;
+    }
+    AddInt(name, value);
+}
+
+void MaterialInterface::SetBool(const string& name, bool value)
+{
+    auto it = m_Parameters.find(name);
+    if (it != m_Parameters.end())
+    {
+        if (it->second.data.size() >= sizeof(value))
+            memcpy(it->second.data.data(), &value, sizeof(value));
+        return;
+    }
+    AddBool(name, value);
+}
+
+void MaterialInterface::SetMatrix(const string& name, const mat4& value)
+{
+    auto it = m_Parameters.find(name);
+    if (it != m_Parameters.end())
+    {
+        if (it->second.data.size() >= sizeof(value))
+            memcpy(it->second.data.data(), &value, sizeof(value));
+        return;
+    }
+    uint32 offset = CalculateNextOffset(sizeof(mat4), 16);
+    m_Parameters[name] = MaterialParameter(EMaterialParameterType::Matrix, &value, sizeof(mat4), offset);
+}
+
+void MaterialInterface::ResetParameter(const string& name)
+{
+    auto it = m_Parameters.find(name);
+    if (it != m_Parameters.end() && !it->second.defaultValue.empty())
+        it->second.data = it->second.defaultValue;
+}
+
+void MaterialInterface::ResetAllParameters()
+{
+    for (auto& [name, param] : m_Parameters)
+    {
+        if (!param.defaultValue.empty())
+            param.data = param.defaultValue;
+    }
+}
+
 #pragma endregion
 
 #pragma region Texture Binding Interface
@@ -363,11 +513,12 @@ void MaterialInterface::ClearTextureBindings()
 #pragma endregion
 
 #pragma region Shader
+// MaterialInterface.cpp 수정 제안
 Shader* MaterialInterface::GetVertexShader(ERenderPassType passType) const
 {
     for (const auto& binding : m_PassShaders)
     {
-        if (binding.passType == passType && binding.vertexShader.IsValid())
+        if (binding.passType == passType && binding.vertexShader.IsValid() && binding.pixelShader.IsValid())
             return binding.vertexShader.Get();
     }
     return m_VertexShaderHandle.Get();
@@ -377,7 +528,7 @@ Shader* MaterialInterface::GetPixelShader(ERenderPassType passType) const
 {
     for (const auto& binding : m_PassShaders)
     {
-        if (binding.passType == passType)
+        if (binding.passType == passType && binding.vertexShader.IsValid() && binding.pixelShader.IsValid())
             return binding.pixelShader.Get();
     }
     return m_PixelShaderHandle.Get();

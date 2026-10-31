@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "CommandHistory.h"
 #include <functional>
@@ -47,6 +47,19 @@ namespace Editor
         void AllowShortcuts(bool focused) { m_ShortcutsAllowed |= focused; }
         bool ShortcutsAllowed() const { return m_ShortcutsAllowed; }
         const std::string& Error() const { return m_Error; }
+        void ResetDocument(Engine::Scene* scene, bool editing);
+        bool HasUnsavedChanges() const;
+        uint64 GetSavedStateId() const { return m_SavedStateId; }
+        bool CanMarkSaved() const
+        {
+            return m_CurrentScene && m_Enabled && m_ScopeDepth == 0 && !m_Pending;
+        }
+        bool CanFinalizeEditsFor(const Engine::Scene* scene) const
+        {
+            return scene && m_CurrentScene == scene && m_Enabled && m_ScopeDepth == 0;
+        }
+        bool MarkSaved();
+        void NotifyUntrackedChange();
     private:
         friend class SceneEditScope;
         class Change;
@@ -59,6 +72,8 @@ namespace Editor
         std::size_t m_ScopeDepth = 0;
         uint64 m_Revision = 0;
         std::string m_Error;
+        uint64 m_SavedStateId = 0;
+        bool m_UntrackedChanges = false;
     };
 
     // A discrete document operation. Continuous widgets use Record(..., true) instead.

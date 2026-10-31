@@ -127,14 +127,14 @@ void SceneViewportPanel::Initialize(void* arg)
 
 #pragma region Prepare RenderPass And Pipelines
 	PreparePipelines();
+	m_PostProcessChain.Initialize(m_Name);
 	PrepareRenderTargetsAndPasses(desc->RenderTargetWidth, desc->RenderTargetHeight);
 #pragma endregion
+
 	m_Grid.Initialize(m_Name);
 #ifdef _DEBUG
 	m_DebugRenderer.Initialize(m_Name);
 #endif // _DEBUG
-
-	m_PostProcessChain.Initialize(m_Name);
 
 	if (!m_PostProcessChain.GetPipeline().SaveToString(m_DefaultPostProcessSettings))
 		EDITOR_LOG_ERROR("Default post-process settings could not be captured: {}", WStrToStr(m_Name));
@@ -331,7 +331,8 @@ void SceneViewportPanel::Update(f32 dt)
 {
 	// Download the clicked frame before resizing/replacing its render targets.
 	ProcessPickingRequest();
-	CalculateRenderResolution(m_PanelWidth, m_PanelHeight);
+	if (!CalculateRenderResolution(m_PanelWidth, m_PanelHeight))
+		return;
 
 	const bool isPIE = PIEManager::Get().IsPlaying() || PIEManager::Get().IsPaused();
 
@@ -605,24 +606,41 @@ void SceneViewportPanel::DrawRenderPassMenu()
 		ImGui::EndMenu();
 	}
 }
-void SceneViewportPanel::ResizeRenderTargets(uint32 width, uint32 height)
+EResult SceneViewportPanel::ResizeRenderTargets(uint32 width, uint32 height)
 {
+	if (width == 0 || height == 0 || m_OwnedRTNames.empty())
+		return EResult::InvalidArgument;
+
 	auto& rtMgr = RenderTargetManager::Get();
+	bool succeeded = true;
+
 	for (const auto& name : m_OwnedRTNames)
 	{
-		// 섀도우 맵(Directional 및 Point Light 큐브맵)은 고정 해상도이므로 뷰포트 리사이즈에서 제외
 		if (name == m_ShadowDepthName || name == m_PointShadowDepthName)
 			continue;
-		if (auto* rt = rtMgr.GetRenderTarget(name))
-			rt->Resize(width, height);
+
+		auto* target = rtMgr.GetRenderTarget(name);
+
+		if (!target || target->Resize(width, height) != EResult::Success)
+			succeeded = false;
 	}
-	if (m_CameraController && height > 0)
+
+	if (m_PostProcessChain.Resize(width, height) != EResult::Success)
+		succeeded = false;
+
+	if (BaseViewportPanel::ResizeRenderTargets(width, height) != EResult::Success)
+		succeeded = false;
+
+	if (!succeeded)
+		return EResult::Fail;
+
+	if (m_CameraController)
 	{
 		m_CameraController->SetAspectRatio(static_cast<f32>(width) / static_cast<f32>(height));
 		m_CameraController->RefreshMatrices();
 	}
-	m_PostProcessChain.Resize(width, height);
-	BaseViewportPanel::ResizeRenderTargets(width, height);
+
+	return EResult::Success;
 }
 #pragma endregion
 

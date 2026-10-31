@@ -6,6 +6,7 @@
 
 #include <iostream>
 #include <system_error>
+#include <set>
 
 namespace archive_tests
 {
@@ -143,6 +144,56 @@ namespace archive_tests
         {
             return Fail("Invalid output directory check failed.");
         }
+
+        const auto blockedDirectory = dataDirectory / "blocked-save";
+        std::filesystem::create_directories(blockedDirectory, directoryError);
+        if (directoryError)
+            return Fail("Cannot create the replacement failure directory.");
+
+        const auto protectedPath = blockedDirectory / "keep.json";
+        if (!writer.SaveToFile(protectedPath))
+            return Fail("Cannot prepare the protected file.");
+
+        const auto listEntries = [&]()
+            {
+                std::set<std::filesystem::path> entries;
+                for (const auto& entry : std::filesystem::directory_iterator(dataDirectory))
+                    entries.insert(entry.path().filename());
+                return entries;
+            };
+
+        const auto entriesBefore = listEntries();
+
+        archive::JsonArchive replacement;
+        if (!replacement.Write("Replacement", 42) || !replacement.SaveToFile(filePath))
+            return Fail("Existing file replacement failed.");
+
+        archive::JsonArchive replacementReader;
+        int replacementValue = 0;
+        if (!replacementReader.LoadFromFile(filePath) ||
+            !replacementReader.Read("Replacement", replacementValue) || replacementValue != 42)
+            return Fail("Replacement file contents differ.");
+
+        archive::JsonArchive incomplete;
+        if (!incomplete.BeginWriteObject("Incomplete") ||
+            incomplete.SaveToFile(filePath).Code != archive::ArchiveErrorCode::InvalidOperation)
+            return Fail("Incomplete document was saved.");
+
+        if (!replacementReader.LoadFromFile(filePath) ||
+            !replacementReader.Read("Replacement", replacementValue) || replacementValue != 42)
+            return Fail("Encoding failure changed the existing file.");
+
+        if (replacement.SaveToFile(blockedDirectory).Code != archive::ArchiveErrorCode::FileWriteFailed)
+            return Fail("Replacement into a directory was accepted.");
+
+        archive::JsonArchive protectedReader;
+        std::string expectedProtected, actualProtected;
+        if (!writer.Encode(expectedProtected) || !protectedReader.LoadFromFile(protectedPath) ||
+            !protectedReader.Encode(actualProtected) || actualProtected != expectedProtected)
+            return Fail("Replacement failure changed protected contents.");
+
+        if (listEntries() != entriesBefore)
+            return Fail("Saving left unexpected directory entries.");
 
         std::cout << "JSON file checks passed.\n";
         return 0;

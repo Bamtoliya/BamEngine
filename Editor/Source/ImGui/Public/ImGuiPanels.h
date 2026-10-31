@@ -1,0 +1,14 @@
+﻿#pragma 
+
+#include "ViewportPanels.h"
+#include "InspectorPanel.h"
+#include "HierarchyPanel.h"
+#include "ContentBrowserPanel.h"
+#include "ConsolePanel.h"
+#include "MetricsPanel.h"
+#include "GraphPanel.h"
+#include "ResourceManagerInspector.h"
+#include "ShortcutSettingsPanel.h"
+#include "EditorActionRegistry.h"
+#include "GraphicSettingPanel.h"
+#include "PostProcessPanel.h"

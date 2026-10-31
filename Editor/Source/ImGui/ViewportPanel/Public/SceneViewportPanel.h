@@ -11,6 +11,10 @@
 
 #pragma pop_macro("COLOR")
 
+BEGIN(Engine)
+struct PostProcessComponent;
+END
+
 BEGIN(Editor)
 
 enum class EScenePickingMode : uint8
@@ -23,6 +27,7 @@ struct SceneViewportPanelDesc : public CameraViewportPanelDesc
 {
 
 };
+
 class SceneViewportPanel : public CameraViewportPanel
 {
 	using DESC = SceneViewportPanelDesc;
@@ -34,6 +39,14 @@ public:
 	virtual void Initialize(void* arg = nullptr) override;
 public:
 	virtual void Free();
+	virtual PostProcessChain* GetPostProcessChain() override { return &m_PostProcessChain; }
+	virtual const PostProcessChain* GetPostProcessChain() const override { return &m_PostProcessChain; }
+#pragma endregion
+
+#pragma region Workspace Settings
+public:
+	void RestoreViewportState(const ViewportWorkspace& state) override;
+	ViewportWorkspace CaptureViewportState() const override;
 #pragma endregion
 
 #pragma region Prepare Rendering Pipeline
@@ -77,13 +90,13 @@ protected:
 
 #pragma region Resolution & Aspect
 protected:
-	virtual void ResizeRenderTargets(uint32 width, uint32 height) override;
+	EResult ResizeRenderTargets(uint32 width, uint32 height) override;
 #pragma endregion
-
 
 #pragma region Render Passes
 private:
 	void SubmitLightingPass(const CameraBuffer& cameraBuffer, const SkyAtmosphereData& skyData);
+	bool SyncPostProcess(Engine::Scene& scene, entt::entity entity, const Engine::PostProcessComponent& source);
 	void SubmitPostProcessPass(f32 dt, uint32& slot, std::wstring& currentRT);
 	void SubmitUIOverlayPass(const wstring& currentRT);
 #pragma endregion
@@ -128,10 +141,13 @@ private:
 
 	bool m_ShowFinalComposed = true;
 private:
-	PostProcessChain		m_PostProcessChain;
-
-	wstring					m_PPRTNames[2]; // ping-pong A / B
-	vector<RenderPassID>	m_PPPassIDs;
+	PostProcessChain m_PostProcessChain;
+	string m_DefaultPostProcessSettings;
+	string m_LastPostProcessPreset;
+	string m_LastPostProcessSettings;
+	Engine::Scene* m_LastBoundScene = nullptr;
+	entt::entity m_LastPostProcessEntity = entt::null;
+	bool m_PostProcessStateUsable = true;
 
 	//Pipelines
 	class RHIPipeline* m_LightingPipeline = { nullptr };

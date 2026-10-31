@@ -134,20 +134,31 @@ void ViewportDeferredPipeline::CreateLightingPipeline()
 	m_LightingPipeline = Engine::PipelineManager::Get().GetOrCreatePipeline(pd);
 }
 
-void ViewportDeferredPipeline::Resize(uint32 width, uint32 height)
+EResult ViewportDeferredPipeline::Resize(uint32 width, uint32 height)
 {
-	if (m_Width == width && m_Height == height) return;
-	if (width == 0 || height == 0) return;
+	if (width == 0 || height == 0 || m_OwnedRTNames.empty())
+		return EResult::InvalidArgument;
+
+	auto& rtMgr = Engine::RenderTargetManager::Get();
+	bool succeeded = true;
+
+	for (const auto& name : m_OwnedRTNames)
+	{
+		if (name == m_ShadowDepthName)
+			continue;
+
+		auto* target = rtMgr.GetRenderTarget(name);
+
+		if (!target || target->Resize(width, height) != EResult::Success)
+			succeeded = false;
+	}
+
+	if (!succeeded)
+		return EResult::Fail;
 
 	m_Width = width;
 	m_Height = height;
-
-	auto& rtm = Engine::RenderTargetManager::Get();
-	for (const auto& name : m_OwnedRTNames)
-	{
-		if (name == m_ShadowDepthName) continue; // Shadow는 4096 고정
-		rtm.ResizeRenderTarget(name, width, height);
-	}
+	return EResult::Success;
 }
 
 void ViewportDeferredPipeline::Submit(const CameraBuffer& cameraBuffer, Engine::Scene* targetScene)

@@ -7,7 +7,7 @@
 
 BEGIN(Editor)
 
-class HierarchyPanel : public ImGuiInterface
+class HierarchyPanel : public IImGui
 {
 public:
 	HierarchyPanel() { m_Name = L"Hierarchy Panel"; m_DisplayNameKey = "UI_HIERARCHY"; }

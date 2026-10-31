@@ -23,7 +23,7 @@ struct FileDropConflict
 	filesystem::path Dest;
 };
 
-class ContentBrowserPanel : public ImGuiInterface
+class ContentBrowserPanel : public IImGui
 {
 public:
 	ContentBrowserPanel() = default;
@@ -36,9 +36,10 @@ public:
 #pragma region Request
 public:
 	void RequestRefresh() { m_NeedsCacheRefresh = true; }
+	void RestoreViewState(const std::string& relativeDirectory, float thumbnailSize);
+	std::string GetRelativeDirectory() const;
+	float GetThumbnailSize() const { return m_ThumbnailSize; }
 #pragma endregion
-
-
 
 #pragma region TreeView
 private:
@@ -74,7 +75,12 @@ private:
 	void CreateEmptyMaterial(const filesystem::path& path);
 #pragma endregion
 
-	
+#pragma region Workspace Settings
+public:
+	void CaptureState(EditorWorkspace& workspace) const override;
+	void RestoreState(const EditorWorkspace& workspace) override;
+#pragma endregion
+
 
 #pragma region Member Variable
 private:

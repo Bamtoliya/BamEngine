@@ -3,6 +3,8 @@
 #include "ContentBrowserPanel.h"
 #include "ContentBrowserGridItem.h"
 #include "ContentBrowserTreeItem.h"
+#include "Editor_Macros.h"
+#include "EditorSettings.h"
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 #include "LocalizationManager.h"
@@ -772,3 +774,85 @@ void ContentBrowserPanel::CreateEmptyMaterial(const filesystem::path& path)
 		EDITOR_LOG_WARN("Material saving is unavailable: {}", ResultToString(result));
 }
 #pragma endregion
+
+#pragma region Workspace Settings
+void ContentBrowserPanel::CaptureState(EditorWorkspace& workspace) const
+{
+	IImGui::CaptureState(workspace);
+
+	workspace.ContentBrowserDirectory = GetRelativeDirectory();
+	workspace.ContentBrowserThumbnailSize = GetThumbnailSize();
+}
+
+void ContentBrowserPanel::RestoreState(const EditorWorkspace& workspace)
+{
+	IImGui::RestoreState(workspace);
+	RestoreViewState(workspace.ContentBrowserDirectory, workspace.ContentBrowserThumbnailSize);
+}
+#pragma endregion
+
+
+void ContentBrowserPanel::RestoreViewState(const std::string& relativeDirectory, float thumbnailSize)
+{
+	m_ThumbnailSize = std::isfinite(thumbnailSize) && thumbnailSize >= 32.0f && thumbnailSize <= 256.0f
+		? thumbnailSize : 64.0f;
+
+	m_CurrentDirectory = m_RootPath;
+	m_LastDirectory.clear();
+	m_LastWatchedDirectory.clear();
+	m_NeedToExpandTree = true;
+	RequestRefresh();
+
+	m_SearchBuffer[0] = '\0';
+	m_LastSearchString.clear();
+	m_SearchResults.clear();
+
+	if (relativeDirectory.empty())
+		return;
+
+	try
+	{
+		const auto relative = std::filesystem::u8path(relativeDirectory).lexically_normal();
+
+		if (relative.has_root_path() || (!relative.empty() && *relative.begin() == ".."))
+		{
+			EDITOR_LOG_WARN("Content browser directory rejected: {}", relativeDirectory);
+			return;
+		}
+
+		const auto directory = (m_RootPath / relative).lexically_normal();
+		std::error_code error;
+
+		if (!std::filesystem::is_directory(directory, error))
+		{
+			EDITOR_LOG_WARN("Content browser directory unavailable: path={}, filesystem={}",
+				relativeDirectory, error.message());
+			return;
+		}
+
+		m_CurrentDirectory = directory;
+	}
+	catch (const std::filesystem::filesystem_error& error)
+	{
+		EDITOR_LOG_WARN("Content browser directory restore failed: {}", error.what());
+	}
+}
+
+std::string ContentBrowserPanel::GetRelativeDirectory() const
+{
+	try
+	{
+		const auto relative = m_CurrentDirectory.lexically_relative(m_RootPath);
+
+		if (relative.empty() || relative.has_root_path() || *relative.begin() == "..")
+			return {};
+
+		const auto utf8 = relative.generic_u8string();
+		return std::string(utf8.begin(), utf8.end());
+	}
+	catch (const std::filesystem::filesystem_error& error)
+	{
+		EDITOR_LOG_WARN("Content browser directory capture failed: {}", error.what());
+		return {};
+	}
+}

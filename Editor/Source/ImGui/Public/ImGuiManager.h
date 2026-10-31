@@ -3,9 +3,11 @@
 #include "ImGuiInterface.h"
 #include "ToolBar.h"
 #include <SDL3/SDL.h>
+#include "EditorSettings.h"
+#include "EditorDocumentController.h"
 
 BEGIN(Editor)
-
+struct EditorSettingsChangeResult;
 struct ImGuiManagerDesc
 {
 	SDL_Window* Window = { nullptr };
@@ -21,32 +23,30 @@ private:
 	ImGuiManager() {}
 	virtual ~ImGuiManager() = default;
 	EResult Initialize(void* arg = nullptr);
-private:
-	EResult InitializeImGui();
 public:
 	virtual void Free()override;
 #pragma endregion
 
-#pragma region Update
+#pragma region Loop
 public:
 	void Update(f32 dt);
-#pragma endregion
-
-
 public:
 	void Begin();
 	void End();
 	void ProcessEvent(const SDL_Event* event);
 	void Draw();
+#pragma endregion
 
 #pragma region ImGui Management
+private:
+	EResult InitializeImGui();
 public:
-	EResult AddImGuiPanel(ImGuiInterface* panel);
-	EResult RemoveImGuiPanel(ImGuiInterface* panel);
+	EResult AddImGuiPanel(IImGui* panel);
+	EResult RemoveImGuiPanel(IImGui* panel);
 public:
-	ImGuiInterface* GetImGuiPanel(const wstring& name);
-	vector<ImGuiInterface*> GetImGuiPanels(const wstring& name);
-	const vector<ImGuiInterface*>& GetImGuiPanels() const { return m_ImGuiPanels; }
+	IImGui* GetImGuiPanel(const wstring& name);
+	vector<IImGui*> GetImGuiPanels(const wstring& name);
+	const vector<IImGui*>& GetImGuiPanels() const { return m_ImGuiPanels; }
 private:
 	EResult CreateDefaultPanels();
 private:
@@ -103,6 +103,41 @@ public:
 	ImTextureID GetImGuiTextureID(const class RHITexture* texture) const;
 #pragma endregion
 
+#pragma region Settings
+public:
+	void NotifySettingsChange(const EditorSettingsChangeResult& result);
+
+#pragma endregion
+
+
+#pragma region Workspace
+public:
+	void RestoreWorkspace(const EditorWorkspace& workspace);
+	void CaptureWorkspace(EditorWorkspace& workspace);
+#pragma endregion
+
+#pragma region Document
+public:
+	bool RequestNewScene();
+	bool RequestOpenScene(const std::filesystem::path& path);
+	bool RequestCloseScene();
+	bool RequestQuit();
+	EditorDocumentController& GetDocumentController() { return *m_DocumentController; }
+	bool PreparePendingSceneSave();
+private:
+	enum class ESceneDocumentAction
+	{
+		New,
+		Open,
+		Close
+	};
+
+	bool RequestSceneAction(ESceneDocumentAction action, std::filesystem::path path = {});
+	void DrawDocumentConfirmation();
+	void SynchronizeSceneDocumentAccess();
+#pragma endregion
+
+
 #pragma region Variables
 private:
 	SDL_Window* m_Window = { nullptr };
@@ -111,7 +146,7 @@ private:
 	ImGuiContext* m_ImGuiContext = nullptr;
 	bool m_PlatformBackendInitialized = false;
 	bool m_RendererBackendInitialized = false;
-
+	std::unique_ptr<EditorDocumentController> m_DocumentController;
 #pragma region DirectX12
 	struct ID3D12DescriptorHeap* m_ImGuiSrvDescHeap = nullptr;
 	uint32 m_ImGuiSrvDescriptorSize = 0;
@@ -123,11 +158,12 @@ private:
 #pragma region ImGui
 private:
 	ToolBar m_ToolBar;
-	vector<ImGuiInterface*> m_ImGuiPanels;
-	vector<ImGuiInterface*> m_PendingAddPanels;
-	vector<ImGuiInterface*> m_PendingRemovePanels;
+	vector<IImGui*> m_ImGuiPanels;
+	vector<IImGui*> m_PendingAddPanels;
+	vector<IImGui*> m_PendingRemovePanels;
 	ImGuiStyle m_BaseStyle{};
 	float m_UIScale = 1.0f;
+	vector<IImGui*> m_WorkspacePanels;
 #pragma endregion
 #pragma endregion
 };

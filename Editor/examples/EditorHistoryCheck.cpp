@@ -7,6 +7,10 @@
 #include "UILayout.h"
 #include <iostream>
 #include <stdexcept>
+#include "EditorDocumentManager.h"
+#include "SceneDocument.h"
+#include "SceneManager.h"
+#include "EditorDocumentController.h"
 
 namespace
 {
@@ -50,6 +54,55 @@ namespace
         }
         Check(alive == 0, "destructor ownership");
     }
+    void HistoryStateIdentity()
+    {
+        int value = 0, alive = 0;
+        bool fail = false;
+        Editor::CommandHistory history(2);
+
+        const auto execute = [&]()
+            {
+                return history.Execute(std::make_unique<TestCommand>(value, alive, fail));
+            };
+
+        const auto initial = history.GetCurrentStateId();
+        Check(execute(), "first state");
+        const auto saved = history.GetCurrentStateId();
+
+        Check(execute(), "second state");
+        const auto latest = history.GetCurrentStateId();
+
+        fail = true;
+        Check(!history.Undo() && history.GetCurrentStateId() == latest, "failed undo changed state");
+        fail = false;
+
+        Check(history.Undo() && history.GetCurrentStateId() == saved, "undo state");
+        Check(history.Redo() && history.GetCurrentStateId() == latest, "redo state");
+        Check(history.Undo() && history.Undo(), "return to initial");
+        Check(history.GetCurrentStateId() == initial, "initial state lost");
+
+        fail = true;
+        Check(!history.Redo() && history.GetCurrentStateId() == initial, "failed redo changed state");
+        Check(!execute() && history.GetCurrentStateId() == initial, "failed execute changed state");
+        fail = false;
+
+        Check(execute() && history.GetCurrentStateId() != saved, "branch reused saved state");
+        const auto branch = history.GetCurrentStateId();
+
+        Check(execute() && execute(), "history limit setup");
+        Check(history.Undo() && history.Undo(), "history limit undo");
+        Check(history.GetCurrentStateId() == branch && !history.CanUndo(), "history limit changed state");
+
+        history.Clear();
+        Check(history.GetCurrentStateId() == branch, "clear changed document state");
+
+        ++value;
+        Check(history.Record(std::make_unique<TestCommand>(value, alive, fail)), "record state");
+        const auto recorded = history.GetCurrentStateId();
+        Check(recorded != branch && recorded != saved, "record reused state");
+        Check(history.Undo() && history.GetCurrentStateId() == branch, "record undo state");
+        Check(history.Redo() && history.GetCurrentStateId() == recorded, "record redo state");
+    }
     Engine::Entity& Add(Engine::Scene& scene, const wchar_t* name)
     {
         auto& entity = scene.CreateEntity();
@@ -60,6 +113,79 @@ namespace
         world.emplace<Engine::WorldTransformComponent>(handle);
         world.emplace<Engine::HierarchyComponent>(handle);
         return entity;
+    }
+    void SceneDocumentState()
+    {
+        ScenePtr scene(Engine::Scene::Create());
+        Check(bool(scene), "document scene");
+
+        auto& entity = Add(*scene, L"before");
+        auto& world = scene->GetRegistry();
+        const auto handle = entity.GetEntityHandle();
+        const std::array targets{ handle };
+
+        Editor::SceneEditHistory history;
+        history.ResetDocument(scene.get(), true);
+        Check(!history.HasUnsavedChanges(), "initial document dirty");
+
+        const auto changeName = [&](const wchar_t* name)
+            {
+                auto before = Editor::SceneEditSnapshot::Capture(*scene, targets);
+                world.get<Engine::NameComponent>(handle).name = name;
+                history.Record(before, Editor::SceneEditSnapshot::Capture(*scene, targets), "name", true);
+            };
+
+        changeName(L"first");
+        Check(history.HasUnsavedChanges() && history.Commands().GetUndoCount() == 0, "pending edit ignored");
+
+        const auto revision = history.Revision();
+        Check(history.MarkSaved() && !history.HasUnsavedChanges(), "save baseline");
+        Check(history.Revision() != revision, "save gesture boundary");
+
+        changeName(L"second");
+        history.Flush();
+        Check(history.HasUnsavedChanges(), "second edit ignored");
+        Check(history.Undo() && !history.HasUnsavedChanges(), "undo to saved state");
+        Check(world.get<Engine::NameComponent>(handle).name == L"first", "saved value not restored");
+        Check(history.Redo() && history.HasUnsavedChanges(), "redo dirty state");
+
+        history.Clear();
+        Check(history.HasUnsavedChanges() && !history.CanUndo(), "clear marked document saved");
+        Check(history.MarkSaved(), "save after clear");
+
+        changeName(L"third");
+        history.Clear();
+        Check(history.HasUnsavedChanges(), "discarded pending edit lost dirty state");
+        Check(history.MarkSaved() && !history.HasUnsavedChanges(), "save pending result");
+
+        world.get<Engine::NameComponent>(handle).name = L"external";
+        history.NotifyUntrackedChange();
+        history.Synchronize(scene.get(), false);
+        Check(history.HasUnsavedChanges() && !history.MarkSaved(), "play transition lost dirty state");
+
+        ScenePtr restored(Engine::Scene::Create());
+        Check(bool(restored), "restored scene");
+        history.Synchronize(restored.get(), true);
+        Check(history.HasUnsavedChanges(), "scene pointer change marked document saved");
+
+        history.ResetDocument(restored.get(), true);
+        Check(!history.HasUnsavedChanges(), "new document baseline");
+        history.Record({}, {}, "invalid");
+        Check(history.HasUnsavedChanges(), "capture failure lost dirty state");
+
+        history.ResetDocument(restored.get(), true);
+        bool rejectedSave = false;
+        try
+        {
+            Editor::SceneEditScope edit(history, *restored, "exception");
+            rejectedSave = !history.MarkSaved();
+            throw std::runtime_error("expected");
+        }
+        catch (const std::runtime_error&)
+        {
+        }
+
+        Check(rejectedSave && history.HasUnsavedChanges(), "failed scope lost dirty state");
     }
     void ComponentAndGesture()
     {
@@ -295,6 +421,248 @@ namespace
         Check(snapshot.Restore() && world.get<Engine::NameComponent>(o).name == L"other",
             "valid hierarchy restore failed");
     }
+
+    struct TestDocument final : Editor::IEditorDocument
+    {
+        int& Alive;
+        std::filesystem::path Path;
+        bool Dirty = false;
+        bool Writable = false;
+
+        explicit TestDocument(int& alive) : Alive(alive) { ++Alive; }
+        ~TestDocument() override { --Alive; }
+
+        const std::filesystem::path& GetPath() const override { return Path; }
+        bool HasUnsavedChanges() const override { return Dirty; }
+        bool CanSave() const override { return Writable; }
+
+        Engine::EResult SaveTo(const std::filesystem::path&) override
+        {
+            return Engine::EResult::NotImplemented;
+        }
+
+        Engine::EResult DiscardChanges() override
+        {
+            return Engine::EResult::NotImplemented;
+        }
+        Editor::EditorDocumentSaveInfo GetSaveInfo() const override { return {}; }
+    };
+
+    void DocumentOwnership()
+    {
+        using namespace Editor;
+
+        int alive = 0;
+        {
+            EditorDocumentManager documents;
+            Check(documents.Add(nullptr) == InvalidEditorDocumentId, "null document accepted");
+
+            const auto first = documents.Add(std::make_unique<TestDocument>(alive));
+            auto modified = std::make_unique<TestDocument>(alive);
+            modified->Dirty = true;
+            const auto second = documents.Add(std::move(modified));
+
+            Check(first != InvalidEditorDocumentId && second != first && alive == 2, "document registration");
+            Check(documents.GetActiveId() == first, "initial active document");
+            Check(documents.GetDocumentIds() == std::vector<EditorDocumentId>{ first, second }, "document order");
+            Check(documents.GetModifiedDocumentIds() == std::vector<EditorDocumentId>{ second },
+                "modified document collection");
+
+            Check(documents.SetActive(second), "activate document");
+            Check(!documents.SetActive(second + 1) && documents.GetActiveId() == second,
+                "invalid activation changed active document");
+
+            Check(documents.Remove(second) && alive == 1, "removed document not destroyed");
+            Check(!documents.Find(second) && documents.GetActiveId() == InvalidEditorDocumentId,
+                "removed document still accessible");
+            Check(!documents.Remove(second) && alive == 1, "repeated removal changed ownership");
+
+            documents.Clear();
+            Check(alive == 0 && !documents.Find(first), "clear retained documents");
+
+            const auto third = documents.Add(std::make_unique<TestDocument>(alive));
+            Check(third > second && !documents.Find(first) && !documents.Find(second), "stale document ID reused");
+        }
+
+        Check(alive == 0, "manager destruction retained documents");
+    }
+    void SceneDocumentPersistence()
+    {
+        using Engine::EResult;
+
+        struct ManagerScope
+        {
+            ManagerScope()
+            {
+                Check(!Engine::SceneManager::IsCreated(), "scene manager already exists");
+                Check(Engine::SceneManager::Create() != nullptr, "scene manager creation");
+            }
+
+            ~ManagerScope()
+            {
+                Engine::SceneManager::Destroy();
+            }
+        } managerScope;
+
+        auto& scenes = Engine::SceneManager::Get();
+        Check(scenes.NewScene() == EResult::Success, "document scene creation");
+
+        Editor::SceneEditHistory history;
+        history.ResetDocument(scenes.GetCurrentScene(), true);
+
+        Editor::SceneDocument document(scenes, history);
+        Check(!document.CanSave(), "document unexpectedly writable");
+        document.SetReadOnly(false);
+
+        const auto directory = std::filesystem::current_path() / "scene-document-check";
+        std::filesystem::create_directories(directory);
+        const auto path = directory / "document.scene.json";
+
+        {
+            Editor::SceneEditScope edit(history, *document.GetScene(), "saved name");
+            document.GetScene()->SetName(L"saved");
+        }
+
+        Check(document.SaveTo(path) == EResult::Success, "document save");
+        const auto savedPath = document.GetPath();
+        Check(savedPath.is_absolute() && !document.HasUnsavedChanges(), "saved document state");
+
+        {
+            Editor::SceneEditScope edit(history, *document.GetScene(), "draft name");
+            document.GetScene()->SetName(L"draft");
+        }
+
+        Check(document.HasUnsavedChanges(), "document edit not tracked");
+        Check(history.Undo() && !document.HasUnsavedChanges(), "undo did not return to saved state");
+        Check(history.Redo() && document.HasUnsavedChanges(), "redo did not restore dirty state");
+
+        Check(document.SaveTo(directory) != EResult::Success, "directory accepted as save file");
+        Check(document.GetPath() == savedPath && document.HasUnsavedChanges(), "failed save changed document state");
+        Check(document.GetScene()->GetName() == L"draft", "failed save changed draft");
+
+        Check(document.DiscardChanges() == EResult::Success, "document discard");
+        Check(document.GetScene() == scenes.GetCurrentScene(), "document and manager scene mismatch");
+        Check(document.GetScene()->GetName() == L"saved" && !document.HasUnsavedChanges(),
+            "discard did not restore saved content");
+
+        {
+            Editor::SceneEditScope edit(history, *document.GetScene(), "retained draft");
+            document.GetScene()->SetName(L"retained");
+        }
+
+        auto* retainedScene = document.GetScene();
+        const auto retainedRevision = history.Revision();
+
+        {
+            std::ofstream damaged(savedPath, std::ios::binary | std::ios::trunc);
+            damaged << "{";
+            damaged.close();
+            Check(bool(damaged), "test file corruption failed");
+        }
+
+        Check(document.DiscardChanges() != EResult::Success, "corrupt document restored");
+        Check(document.GetScene() == retainedScene && scenes.GetCurrentScene() == retainedScene,
+            "failed discard replaced scene");
+        Check(document.GetScene()->GetName() == L"retained" && document.HasUnsavedChanges(),
+            "failed discard lost draft");
+        Check(history.Revision() == retainedRevision, "failed discard changed history");
+
+        document.SetReadOnly(true);
+        Check(document.SaveTo(path) == EResult::AccessDenied, "read-only document saved");
+        Check(document.DiscardChanges() == EResult::AccessDenied, "read-only document discarded");
+        document.SetReadOnly(false);
+
+        {
+            Editor::SceneEditScope edit(history, *document.GetScene(), "active edit");
+            Check(document.SaveTo(path) == EResult::AccessDenied, "save accepted during active edit");
+        }
+
+        Check(scenes.NewScene() == EResult::Success, "external scene replacement");
+        Check(!document.CanSave(), "stale scene document writable");
+        Check(document.SaveTo(path) == EResult::AccessDenied, "stale scene document saved");
+
+        const auto dirtyBeforeRebind = document.HasUnsavedChanges();
+        const auto pathBeforeRebind = document.GetPath();
+
+        Check(document.RebindRestoredScene() == EResult::Success, "restored scene rebind");
+        Check(document.GetScene() == scenes.GetCurrentScene() && document.CanSave(), "rebound document unavailable");
+        Check(document.GetPath() == pathBeforeRebind &&
+            document.HasUnsavedChanges() == dirtyBeforeRebind, "rebind changed document save state");
+    }
+    void DocumentActionProtection()
+    {
+        using namespace Editor;
+        using Engine::EResult;
+
+        int alive = 0;
+        EditorDocumentManager documents;
+        EditorDocumentController controller(documents);
+
+        auto owned = std::make_unique<TestDocument>(alive);
+        auto* document = owned.get();
+        document->Dirty = true;
+        document->Writable = true;
+        const auto id = documents.Add(std::move(owned));
+
+        int executions = 0;
+        const auto successAction = [&](const std::vector<EditorDocumentId>& discarded) -> EResult
+            {
+                Check(discarded.empty(), "unexpected discard approval");
+                ++executions;
+                return EResult::Success;
+            };
+
+        Check(controller.RequestAction({ id }, successAction), "request guarded action");
+        Check(!controller.ProcessPendingAction() && controller.GetConfirmationDocumentId() == id,
+            "dirty document did not require confirmation");
+        Check(!controller.RequestSave(id), "independent save accepted during confirmation");
+        Check(controller.ResolveConfirmation(EDocumentActionChoice::Cancel), "cancel confirmation");
+        Check(!controller.HasPendingAction() && executions == 0 && document->Dirty, "cancel changed document");
+
+        Check(controller.RequestAction({ id }, [&](const std::vector<EditorDocumentId>& discarded) -> EResult
+            {
+                Check(discarded == std::vector<EditorDocumentId>{ id }, "discard approval missing");
+                Check(document->Dirty, "draft discarded before replacement");
+                ++executions;
+                return EResult::Fail;
+            }), "request failing replacement");
+
+        controller.ProcessPendingAction();
+        Check(controller.ResolveConfirmation(EDocumentActionChoice::Discard), "approve discard");
+        const auto failed = controller.ProcessPendingAction();
+        Check(failed && *failed == EResult::Fail && document->Dirty && documents.Find(id),
+            "failed replacement lost document");
+
+        for (const auto status : { EDocumentSaveStatus::NotSelected,
+            EDocumentSaveStatus::Failed, EDocumentSaveStatus::Unavailable })
+        {
+            Check(controller.RequestAction({ id }, successAction), "request action before failed save");
+            controller.ProcessPendingAction();
+            Check(controller.ResolveConfirmation(EDocumentActionChoice::Save), "choose save");
+            controller.NotifySaveResult({ id, status });
+            Check(!controller.HasPendingAction() && executions == 1 && document->Dirty,
+                "incomplete save allowed replacement");
+        }
+
+        Check(controller.RequestAction({ id }, successAction), "request action before successful save");
+        controller.ProcessPendingAction();
+        Check(controller.ResolveConfirmation(EDocumentActionChoice::Save), "choose successful save");
+
+        // 실제 파일 저장은 SceneDocumentPersistence에서 검사한다.
+        document->Dirty = false;
+        controller.NotifySaveResult({ id, EDocumentSaveStatus::Saved });
+
+        const auto saved = controller.ProcessPendingAction();
+        Check(saved && *saved == EResult::Success && executions == 2, "saved document did not allow action");
+
+        document->Dirty = true;
+        Check(controller.RequestAction({ id }, successAction), "request action before removal");
+        controller.ProcessPendingAction();
+        documents.Remove(id);
+
+        const auto missing = controller.ProcessPendingAction();
+        Check(missing && *missing == EResult::Fail && executions == 2, "missing document action executed");
+    }
 }
 int main()
 {
@@ -302,11 +670,16 @@ int main()
     {
         Check(Engine::ReflectionRegistry::Create() != nullptr, "reflection init");
         HistoryOwnership();
+        DocumentOwnership();
+        HistoryStateIdentity();
+        SceneDocumentState();
         ComponentAndGesture();
         StructureAndIdentity();
         DuplicateHierarchyRejection();
         FailureAndLifetime();
         ReferencesAndUI();
+        SceneDocumentPersistence();
+        DocumentActionProtection();
         Engine::ReflectionRegistry::Destroy();
         std::cout << "Editor history checks passed.\n";
         return 0;

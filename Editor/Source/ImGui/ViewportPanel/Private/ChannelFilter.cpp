@@ -49,37 +49,38 @@ void ChannelFilter::Free()
 }
 #pragma endregion
 
-void ChannelFilter::EnsureChannelPreviewRT(const wstring& sourceRTName)
+EResult ChannelFilter::EnsureChannelPreviewRT(const wstring& sourceRTName)
 {
     if (sourceRTName.empty() || m_ChannelPreviewRTName.empty())
-        return;
+        return EResult::InvalidArgument;
 
     auto& rtMgr = RenderTargetManager::Get();
-    RenderTarget* src = rtMgr.GetRenderTarget(sourceRTName);
-    if (!src)
-        return;
+    auto* source = rtMgr.GetRenderTarget(sourceRTName);
 
-    RenderTarget* dst = rtMgr.GetRenderTarget(m_ChannelPreviewRTName);
-    if (!dst)
+    if (!source || !source->GetTexture())
+        return EResult::Fail;
+
+    auto* target = rtMgr.GetRenderTarget(m_ChannelPreviewRTName);
+
+    if (!target)
     {
-        RenderTargetDesc desc = {};
-		desc.textureDesc.format = ETextureFormat::R8G8B8A8_UNORM;
-		desc.textureDesc.usage = ETextureUsage::RenderTarget | ETextureUsage::Sampler;
-        desc.textureDesc.width = src->GetWidth();
-        desc.textureDesc.height = src->GetHeight();
+        RenderTargetDesc desc{};
+        desc.textureDesc.format = ETextureFormat::R8G8B8A8_UNORM;
+        desc.textureDesc.usage = ETextureUsage::RenderTarget | ETextureUsage::Sampler;
+        desc.textureDesc.width = source->GetWidth();
+        desc.textureDesc.height = source->GetHeight();
         desc.textureDesc.clearColor = vec4(0.f, 0.f, 0.f, 1.f);
         desc.name = m_ChannelPreviewRTName;
-        rtMgr.CreateRenderTarget(&desc);
-        return;
+
+        return rtMgr.CreateRenderTarget(&desc) ? EResult::Success : EResult::Fail;
     }
 
-    if (dst->GetWidth() != src->GetWidth() || dst->GetHeight() != src->GetHeight())
-        dst->Resize(src->GetWidth(), src->GetHeight());
+    return target->Resize(source->GetWidth(), source->GetHeight());
 }
 
-void ChannelFilter::Resize(const wstring& sourceRTName)
+EResult ChannelFilter::Resize(const wstring& sourceRTName)
 {
-    EnsureChannelPreviewRT(sourceRTName);
+    return EnsureChannelPreviewRT(sourceRTName);
 }
 
 void ChannelFilter::SubmitChannelPreviewPass(const wstring& sourceRTName, wstring& outRTName)
@@ -93,7 +94,8 @@ void ChannelFilter::SubmitChannelPreviewPass(const wstring& sourceRTName, wstrin
     if (!IsReady())
         return;
 
-    EnsureChannelPreviewRT(sourceRTName);
+    if (!EnsureChannelPreviewRT(sourceRTName))
+        return;
     RenderTarget* dst = GetChannelPreviewRT();
     if (!dst)
         return;

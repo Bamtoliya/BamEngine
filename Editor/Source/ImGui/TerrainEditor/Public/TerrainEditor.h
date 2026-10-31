@@ -6,7 +6,7 @@
 
 BEGIN(Editor)
 
-class TerrainEditor : public ImGuiInterface
+class TerrainEditor : public IImGui
 {
 public:
 	TerrainEditor();

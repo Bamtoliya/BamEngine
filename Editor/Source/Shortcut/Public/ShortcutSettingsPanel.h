@@ -6,7 +6,7 @@
 
 BEGIN(Editor)
 
-class ShortcutSettingsPanel : public ImGuiInterface
+class ShortcutSettingsPanel : public IImGui
 {
 public:
     ShortcutSettingsPanel();

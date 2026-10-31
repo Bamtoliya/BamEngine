@@ -25,7 +25,7 @@ public:
 	void Free();
 
 	// 2. 해상도 리사이즈: 뷰포트 패널 크기가 바뀔 때 RT 리사이즈
-	void Resize(uint32 width, uint32 height);
+	EResult Resize(uint32 width, uint32 height);
 
 	// 3. 매 프레임 렌더링 제출 (뷰포트 Update에서 호출)
 	//    targetScene: 렌더링할 타겟 씬 (nullptr이면 기본 activeScenes 렌더링)

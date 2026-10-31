@@ -66,7 +66,22 @@ EResult SDLGPURHI::Initialize(void* arg)
 		if (!SDL_ClaimWindowForGPUDevice(m_Device, m_Window))
 		{
 			SDL_DestroyGPUDevice(m_Device);
+			m_Device = nullptr;
 			return EResult::Fail;
+		}
+
+		m_VSyncEnabled = true;
+
+		const auto vsyncResult = SetVSync(desc->isVSync);
+
+		if (vsyncResult != EResult::Success)
+		{
+			ENGINE_LOG_ERROR("Initial VSync configuration failed: {}", ResultToString(vsyncResult));
+
+			SDL_ReleaseWindowFromGPUDevice(m_Device, m_Window);
+			SDL_DestroyGPUDevice(m_Device);
+			m_Device = nullptr;
+			return vsyncResult;
 		}
 
 		m_SwapChainHeight = desc->height;
@@ -165,6 +180,43 @@ EResult SDLGPURHI::EndFrame()
 	}
 	
 	return result;
+}
+#pragma endregion
+
+#pragma region Presentation
+bool SDLGPURHI::SupportsVSync(bool enabled) const
+{
+	if (!m_Device || !m_Window)
+		return false;
+
+	const auto mode = enabled ? SDL_GPU_PRESENTMODE_VSYNC : SDL_GPU_PRESENTMODE_IMMEDIATE;
+	return SDL_WindowSupportsGPUPresentMode(m_Device, m_Window, mode);
+}
+
+EResult SDLGPURHI::SetVSync(bool enabled)
+{
+	if (!m_Device || !m_Window)
+		return EResult::InvalidArgument;
+
+	if (m_CurrentCommandBuffer || m_CurrentRenderPass)
+		return EResult::AccessDenied;
+
+	if (!SupportsVSync(enabled))
+		return EResult::NotImplemented;
+
+	if (m_VSyncEnabled == enabled)
+		return EResult::Success;
+
+	const auto mode = enabled ? SDL_GPU_PRESENTMODE_VSYNC : SDL_GPU_PRESENTMODE_IMMEDIATE;
+
+	if (!SDL_SetGPUSwapchainParameters(m_Device, m_Window, SDL_GPU_SWAPCHAINCOMPOSITION_SDR, mode))
+	{
+		ENGINE_LOG_ERROR("GPU present mode change failed: {}", SDL_GetError());
+		return EResult::Fail;
+	}
+
+	m_VSyncEnabled = enabled;
+	return EResult::Success;
 }
 #pragma endregion
 

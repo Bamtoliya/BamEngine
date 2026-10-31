@@ -3,6 +3,7 @@
 #include "Application.h"
 #include "ToolBar.h"
 #include "PIEManager.h"
+#include "SceneDocument.h"
 
 BEGIN(Editor)
 
@@ -45,7 +46,7 @@ void EditorActionRegistry::RegisterAll()
         .Context = EShortcutContext::Global,
         .DefaultChord = ShortcutChord(Engine::EKeyCode::N, EModifierKey::Ctrl),
         .ExecuteHandler = []() { ToolBar::NewScene(); },
-        .CanExecute = []() { return PIEManager::Get().CanEdit(); }
+        .CanExecute = []() { return PIEManager::Get().IsEditing(); }
         });
 
     sm.RegisterAction({
@@ -55,7 +56,9 @@ void EditorActionRegistry::RegisterAll()
         .Context = EShortcutContext::Global,
         .DefaultChord = ShortcutChord(Engine::EKeyCode::S, EModifierKey::Ctrl),
         .ExecuteHandler = []() { ToolBar::SaveScene(); },
-        .CanExecute = []() { return PIEManager::Get().CanEdit(); }
+        .CanExecute = []() {
+            const auto* document = Application::Get().GetSceneDocument();
+            return PIEManager::Get().IsEditing() && document && document->CanSave(); }
         });
 
     sm.RegisterAction({
@@ -67,9 +70,6 @@ void EditorActionRegistry::RegisterAll()
         .ExecuteHandler = []() { ToolBar::LoadScene(); },
         .CanExecute = []() { return PIEManager::Get().CanEdit(); }
         });
-
-    // 사용자 커스텀 오버라이드 단축키 불러오기
-    sm.LoadFromFile();
 }
 
 END

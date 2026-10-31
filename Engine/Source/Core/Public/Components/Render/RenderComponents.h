@@ -9,3 +9,4 @@
 #include "Components/Render/FogComponent.h"
 #include "Components/Render/VolumetricCloudComponent.h"
 #include "Components/Render/TerrainComponent.h"
+#include "Components/Render/PostProcessComponent.h"

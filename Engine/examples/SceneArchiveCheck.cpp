@@ -9,7 +9,9 @@
 #include "TransformSystem.h"
 #include <archive/JsonArchive.h>
 #include <archive/BeveArchive.h>
-
+#include "Adapters/ResourceHandleArchiveAdapter.h"
+#include "ResourceReference.h"
+#include <map>
 #include <cstring>
 #include <fstream>
 #include <iostream>
@@ -381,6 +383,140 @@ namespace
         return true;
     }
 
+    bool CheckStoredResourceReferences(const archive::IArchive& ar, std::string_view root, const Engine::ResourceReferenceSet& expected)
+    {
+        Engine::ResourceReferenceSet actual;
+        bool unused = false;
+
+        const auto result = ar.ReadObject(root, unused,
+            [&](archive::IArchive& object, bool&) -> archive::ArchiveResult
+            {
+                return object.ReadObjectArray("ResourceReferences",
+                    [&](archive::IArchive& entry, std::size_t) -> archive::ArchiveResult
+                    {
+                        Engine::ResourceReference reference;
+                        auto read = entry.Read("AssetKey", reference.AssetKey);
+                        if (read) read = entry.Read("AssetPath", reference.AssetPath);
+                        if (!read) return read;
+
+                        if (!actual.insert(std::move(reference)).second)
+                            return { archive::ArchiveErrorCode::InvalidValue, "ResourceReferences" };
+
+                        return {};
+                    });
+            });
+
+        if (!result || actual != expected)
+            return Fail("Stored resource reference list did not match.");
+
+        return true;
+    }
+
+    bool CheckResourceReferenceReading()
+    {
+        archive::JsonArchive reader;
+        Engine::ResourceReferenceSet references;
+
+        const char* valid =
+            R"({"ResourceReferences":[{"AssetKey":"CubeMesh"},)"
+            R"({"AssetPath":"Models/Test.bammesh.json"}]})";
+
+        const Engine::ResourceReferenceSet expected = {
+            { L"CubeMesh", L"" },
+            { L"", L"Models/Test.bammesh.json" }
+        };
+
+        if (!reader.Decode(valid) ||
+            !archive_resource::ReadResourceReferences(reader, "ResourceReferences", references) ||
+            references != expected)
+        {
+            return Fail("Valid resource reference reading failed.");
+        }
+
+        for (const char* json : { "{}", R"({"ResourceReferences":[]})" })
+        {
+            references = expected;
+
+            if (!reader.Decode(json) ||
+                !archive_resource::ReadResourceReferences(reader, "ResourceReferences", references) ||
+                !references.empty())
+            {
+                return Fail("Missing or empty resource references did not use an empty default.");
+            }
+        }
+
+        const std::vector<std::string> invalidDocuments = {
+            R"({"ResourceReferences":{}})",
+            R"({"ResourceReferences":[{"AssetKey":7}]})",
+            R"({"ResourceReferences":[{}]})",
+            R"({"ResourceReferences":[{"AssetKey":"CubeMesh"},)"
+            R"({"AssetKey":"CubeMesh","AssetPath":""}]})"
+        };
+
+        const Engine::ResourceReferenceSet preserved = { { L"Keep", L"keep.json" } };
+
+        for (const auto& json : invalidDocuments)
+        {
+            if (!reader.Decode(json))
+                return Fail("Invalid-reference fixture was not valid JSON.");
+
+            references = preserved;
+            const auto result = archive_resource::ReadResourceReferences(reader, "ResourceReferences", references);
+
+            if (result || result.Code != archive::ArchiveErrorCode::InvalidValue || references != preserved)
+                return Fail("Invalid resource references were accepted or changed the previous output.");
+        }
+
+        return true;
+    }
+
+    bool CheckRejectedResourceReferenceDocuments()
+    {
+        for (const std::string root : { "Scene", "Prefab" })
+        {
+            const std::string json = "{\"" + root + "\":" +
+                R"({"Version":1,"Name":"References","Active":true,"RootId":1,)"
+                R"("Entities":[{"Id":1,"Components":[]}],)"
+                R"("ResourceReferences":[{"AssetKey":"","AssetPath":""}]}})";
+
+            archive::JsonArchive reader;
+            if (!reader.Decode(json))
+                return Fail("Invalid-reference document fixture could not be decoded.");
+
+            archive::ArchiveResult result;
+
+            if (root == "Scene")
+            {
+                Engine::Scene* loaded = nullptr;
+                result = Engine::Scene::CreateFromArchive(reader, loaded);
+                ScenePtr owned(loaded);
+
+                if (loaded)
+                    return Fail("Invalid reference metadata unexpectedly created a scene.");
+            }
+            else
+            {
+                ScenePtr target(Engine::Scene::Create());
+                if (!target)
+                    return Fail("Could not create the prefab validation target.");
+
+                Engine::Entity* loaded = nullptr;
+                result = target->InstantiatePrefabArchive(reader, loaded);
+
+                if (loaded)
+                    return Fail("Invalid reference metadata unexpectedly instantiated a prefab.");
+            }
+
+            if (result || result.Code != archive::ArchiveErrorCode::InvalidValue ||
+                !result.Field.starts_with("ResourceReferences"))
+            {
+                return Fail("Document loading did not reject invalid resource reference metadata.");
+            }
+        }
+
+        return true;
+    }
+
     bool CheckResourcesAndHandlesRoundTrip()
     {
         auto& rm = Engine::ResourceManager::Get();
@@ -486,9 +622,114 @@ namespace
         meshShape.MeshHandle = meshHandle;
         if (!collider.SetShape(meshShape)) return Fail("Failed to set ColliderComponent MeshShape.");
 
+        Engine::ResourceReferenceSet sceneReferences;
         archive::JsonArchive sceneWriter;
+        sceneWriter.SetWriteContext(&sceneReferences);
+
         if (!scene->WriteArchive(sceneWriter) || !sceneWriter.SaveToFile(L"resource-scene.json"))
             return Fail("Scene with ResourceHandle components failed to save.");
+
+        const Engine::ResourceReferenceSet expectedReferences = {
+            { meshHandle->GetKey(), meshHandle->GetPath() },
+            { miHandle->GetKey(), miHandle->GetPath() },
+            { matHandle->GetKey(), matHandle->GetPath() },
+            { skelHandle->GetKey(), skelHandle->GetPath() }
+        };
+
+        if (sceneReferences != expectedReferences)
+            return Fail("Scene resource references were missing or duplicated.");
+
+        Engine::ResourceReferenceSet prefabReferences;
+        archive::JsonArchive prefabWriter;
+        prefabWriter.SetWriteContext(&prefabReferences);
+
+        auto* prefabRoot = scene->FindEntityById(100);
+
+        if (!prefabRoot || !scene->WritePrefabArchive(prefabWriter, *prefabRoot) ||
+            prefabReferences != expectedReferences)
+        {
+            return Fail("Prefab resource references did not match the serialized subtree.");
+        }
+
+        if (!CheckStoredResourceReferences(sceneWriter, "Scene", expectedReferences) ||
+            !CheckStoredResourceReferences(prefabWriter, "Prefab", expectedReferences))
+        {
+            return false;
+        }
+
+        archive::BeveArchive binaryWriter;
+
+        if (!scene->WriteArchive(binaryWriter) || !scene->WritePrefabArchive(binaryWriter, *prefabRoot))
+            return Fail("BEVE resource reference writing failed.");
+
+        std::string binary;
+        archive::BeveArchive binaryReader;
+
+        if (!binaryWriter.Encode(binary) || !binaryReader.Decode(binary) ||
+            !CheckStoredResourceReferences(binaryReader, "Scene", expectedReferences) ||
+            !CheckStoredResourceReferences(binaryReader, "Prefab", expectedReferences))
+        {
+            return Fail("BEVE resource reference round-trip failed.");
+        }
+
+        {
+            Engine::ResourceReferenceSet accumulated = expectedReferences;
+            accumulated.insert({ L"OutsideThisScene", L"" });
+
+            archive::JsonArchive writer;
+            writer.SetWriteContext(&accumulated);
+
+            if (!scene->WriteArchive(writer) ||
+                !CheckStoredResourceReferences(writer, "Scene", expectedReferences) ||
+                writer.GetWriteContext<Engine::ResourceReferenceSet>() != &accumulated ||
+                accumulated.size() != expectedReferences.size() + 1)
+            {
+                return Fail("Document writing replaced or leaked the caller's resource reference context.");
+            }
+        }
+
+        {
+            Engine::ResourceReferenceSet captured;
+            const Engine::ResourceReferenceSet meshOnly = {
+                { meshHandle->GetKey(), meshHandle->GetPath() }
+            };
+
+            archive::BeveArchive writer;
+            writer.SetWriteContext(&captured);
+
+            const std::map<int, Engine::ResourceHandle<Engine::Mesh>> meshes{ { 0, meshHandle } };
+
+            const auto mapResult = writer.WriteObjectMap("Map", meshes,
+                [](archive::IArchive& object, const Engine::ResourceHandle<Engine::Mesh>& mesh)
+                {
+                    return archive_resource::WriteHandle(object, "Ref", mesh);
+                });
+
+            if (!mapResult || captured != meshOnly)
+                return Fail("Object-map writing did not propagate the write context.");
+
+            captured.clear();
+
+            const auto objectArrayResult = writer.WriteObjectArray("Objects", 1,
+                [&](archive::IArchive& object, std::size_t)
+                {
+                    return archive_resource::WriteHandle(object, "Ref", meshHandle);
+                });
+
+            if (!objectArrayResult || captured != meshOnly)
+                return Fail("Object-array writing did not propagate the write context.");
+
+            captured.clear();
+
+            const auto arrayResult = writer.WriteArrayElements("Array", 1,
+                [&](archive::IArchive& object, std::string_view key, std::size_t)
+                {
+                    return archive_resource::WriteHandle(object, key, meshHandle);
+                });
+
+            if (!arrayResult || captured != meshOnly)
+                return Fail("Array-element writing did not propagate the write context.");
+        }
 
         // Clear all resources from ResourceManager and reload the scene from scratch so ReadHandle resolves from disk.
         meshHandle.Reset();
@@ -502,6 +743,160 @@ namespace
         skinnedRenderer = {};
         collider = {};
         rm.Free();
+
+        {
+            const std::wstring meshKey = L"test-mesh.bammesh.json";
+            const std::wstring missingKey = L"000-preload-missing.bammesh.json";
+
+            const Engine::ResourceReferenceSet references = {
+                { missingKey, missingKey },
+                { meshKey, meshKey }
+            };
+            const Engine::ResourceReferenceSet expectedUnresolved = { { missingKey, missingKey } };
+
+            if (rm.IsValid(rm.FindHandleByKey(meshKey)))
+                return Fail("Resource preload fixture was not cold.");
+
+            const auto unresolved = archive_resource::PreloadResourceReferences(references);
+            auto prepared = rm.FindHandleByKey(meshKey);
+            const auto* preparedMesh = dynamic_cast<const Engine::Mesh*>(rm.GetResource(prepared));
+
+            if (unresolved != expectedUnresolved || !preparedMesh || preparedMesh->GetVertexCount() != 3)
+                return Fail("Preloading did not continue after an unresolved reference.");
+
+            if (!archive_resource::PreloadResourceReferences({ { meshKey, meshKey } }).empty() ||
+                rm.FindHandleByKey(meshKey) != prepared)
+            {
+                return Fail("Preloading did not reuse the registered resource.");
+            }
+
+            if (Engine::IsFailure(rm.DestroyResource(prepared)))
+                return Fail("Failed to clean up the direct preload check.");
+
+            const std::string referenceJson =
+                R"("ResourceReferences":[{"AssetKey":"000-preload-missing.bammesh.json"},)"
+                R"({"AssetKey":"test-mesh.bammesh.json"}])";
+
+            for (const std::string root : { "Scene", "Prefab" })
+            {
+                const std::string json = "{\"" + root + "\":" +
+                    R"({"Version":1,"Name":"Preload","Active":true,"RootId":1,)" + referenceJson +
+                    R"(,"Entities":[{"Id":1,"Components":[)" + TransformJson + R"(]}]}})";
+
+                archive::JsonArchive reader;
+                if (!reader.Decode(json))
+                    return Fail("Resource preload document fixture could not be decoded.");
+
+                ScenePtr document;
+
+                if (root == "Scene")
+                {
+                    Engine::Scene* loaded = nullptr;
+                    const auto result = Engine::Scene::CreateFromArchive(reader, loaded);
+                    document.reset(loaded);
+
+                    if (!result || !document)
+                        return Fail("An unused unresolved preload reference rejected the scene.");
+                }
+                else
+                {
+                    document.reset(Engine::Scene::Create());
+                    if (!document)
+                        return Fail("Could not create the prefab preload target.");
+
+                    Engine::Entity* loaded = nullptr;
+                    if (!document->InstantiatePrefabArchive(reader, loaded) || !loaded)
+                        return Fail("An unused unresolved preload reference rejected the prefab.");
+                }
+
+                prepared = rm.FindHandleByKey(meshKey);
+                if (!rm.IsValid(prepared))
+                    return Fail("Document loading did not preload its resource reference list.");
+
+                if (Engine::IsFailure(rm.DestroyResource(prepared)))
+                    return Fail("Failed to clean up the document preload check.");
+            }
+
+            const std::string requiredJson =
+                R"({"Scene":{"Version":1,"Name":"Required","Active":true,)"
+                R"("ResourceReferences":[{"AssetKey":"000-preload-missing.bammesh.json"}],)"
+                R"("Entities":[{"Id":1,"Components":[)"
+                R"({"Type":"Engine::StaticMeshRendererComponent","Data":{)"
+                R"("meshHandle":{"Null":false,"AssetKey":"000-preload-missing.bammesh.json","AssetPath":""},)"
+                R"("materialHandle":{"Null":true},"castShadow":true}}]}]}})";
+
+            archive::JsonArchive requiredReader;
+            if (!requiredReader.Decode(requiredJson))
+                return Fail("Required-resource fixture could not be decoded.");
+
+            Engine::Scene* rejected = nullptr;
+            const auto result = Engine::Scene::CreateFromArchive(requiredReader, rejected);
+            ScenePtr unexpected(rejected);
+
+            if (result || rejected || !result.Field.starts_with("Entities"))
+                return Fail("An unresolved component reference did not reject the scene.");
+        }
+
+        Engine::Handle loadedKeyOnlyMesh;
+
+        {
+            archive::JsonArchive reader;
+            const char* json = R"({"Ref":{"Null":false,"AssetKey":"test-mesh.bammesh.json","AssetPath":""}})";
+
+            if (!reader.Decode(json))
+                return Fail("Failed to decode the key-only resource reference.");
+
+            Engine::ResourceHandle<Engine::Mesh> restoredMesh;
+
+            if (!archive_resource::ReadHandle(reader, "Ref", restoredMesh) || !restoredMesh.IsValid() ||
+                restoredMesh->GetVertexCount() != 3 || restoredMesh->GetIndexCount() != 3)
+            {
+                return Fail("Failed to load an uncached resource using its exact AssetKey path.");
+            }
+
+            loadedKeyOnlyMesh = restoredMesh.GetRawHandle();
+        }
+
+        if (Engine::IsFailure(rm.DestroyResource(loadedKeyOnlyMesh)))
+            return Fail("Failed to clean up the key-only resource check.");
+
+        Engine::Handle basenameMeshHandle;
+        Engine::Handle pathMeshHandle;
+
+        {
+            MeshCreateDesc basenameDesc = meshDesc;
+            basenameDesc.Key = L"test-mesh";
+            basenameDesc.Path = L"test-mesh";
+
+            auto basenameMesh = rm.AddResource<Engine::Mesh>(basenameDesc.Key, Engine::Mesh::Create(&basenameDesc));
+            if (!basenameMesh.IsValid())
+                return Fail("Failed to create the basename collision fixture.");
+
+            archive::JsonArchive reader;
+            const char* json =
+                R"({"Ref":{"Null":false,"AssetKey":"Models/test-mesh.bammesh","AssetPath":"test-mesh.bammesh.json"}})";
+
+            if (!reader.Decode(json))
+                return Fail("Failed to decode the path-qualified resource reference.");
+
+            Engine::ResourceHandle<Engine::Mesh> restoredMesh;
+
+            if (!archive_resource::ReadHandle(reader, "Ref", restoredMesh) || !restoredMesh.IsValid() ||
+                restoredMesh.GetRawHandle() == basenameMesh.GetRawHandle() ||
+                restoredMesh->GetVertexCount() != 3 || restoredMesh->GetIndexCount() != 3)
+            {
+                return Fail("A path-qualified resource reference resolved to an unrelated basename resource.");
+            }
+
+            basenameMeshHandle = basenameMesh.GetRawHandle();
+            pathMeshHandle = restoredMesh.GetRawHandle();
+        }
+
+        if (Engine::IsFailure(rm.DestroyResource(pathMeshHandle)) ||
+            Engine::IsFailure(rm.DestroyResource(basenameMeshHandle)))
+        {
+            return Fail("Failed to clean up the basename collision check.");
+        }
 
         ModelCreateDesc reloadedModelDesc{};
         reloadedModelDesc.Key = L"test-model.bammodel.json";
@@ -827,6 +1222,7 @@ int main()
         !CheckFileRoundTrip<archive::BeveArchive>(L"round-trip.beve") ||
         !CheckManagerAndWriteFailure() || !CheckEmptyScene() || !CheckHierarchyDepthAndIds() ||
         !CheckResourceRuntimeVersion() || !CheckShaderBinaryPaths() || !CheckMeshArchiveValidation() ||
+        !CheckResourceReferenceReading() || !CheckRejectedResourceReferenceDocuments() ||
         !CheckResourcesAndHandlesRoundTrip() || !CheckPrefabRoundTrip())
         return 1;
     std::cout << "Scene file, persistent ID, hierarchy, resource handle, resource archive, and prefab checks passed.\n";

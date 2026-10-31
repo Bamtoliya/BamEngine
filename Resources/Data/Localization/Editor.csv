@@ -706,3 +706,125 @@ Notification,LoadResourceSucceeded,Resource loaded,리소스 불러오기 완료
 Notification,ResourceLoadFailed,Failed to load resource: {},리소스를 불러오지 못했습니다: {}
 Notification,ResourceLoadSucceeded,Loaded resource: {},리소스를 불러왔습니다: {}
 ContentBrowser,NoMatchingAssets,No matching assets.,표시할 에셋이 없습니다.
+,UI_OPEN_POST_PROCESS_PANEL,Open Post-Process Panel...,후처리 패널 열기...
+EditorCommon,Save,Save,저장
+PostProcess,OpenPanel,Open Post-Process Panel...,후처리 패널 열기...
+PostProcess,ColorAdjustments,Color Adjustments,색상 조정
+PostProcess,Vignette,Vignette,비네팅
+PostProcess,Saturation,Saturation,채도
+PostProcess,Contrast,Contrast,대비
+PostProcess,Brightness,Brightness,밝기
+PostProcess,Intensity,Intensity,강도
+PostProcess,Smoothness,Smoothness,부드러움
+PostProcess,Roundness,Roundness,원형도
+PostProcess,Preset,Preset,프리셋
+PostProcess,Viewport,Viewport,뷰포트
+PostProcess,NoViewport,No active viewport with post-processing pipeline found.,후처리 파이프라인이 있는 활성 뷰포트를 찾을 수 없습니다.
+PostProcess,SelectEffectPrompt,Select an effect from the pipeline list to edit parameters.,파라미터를 편집하려면 파이프라인 목록에서 효과를 선택하십시오.
+PostProcess,NoEffects,No post-processing effects registered.,등록된 후처리 효과가 없습니다.
+PostProcess,NoParameters,No configurable parameters.,설정 가능한 파라미터가 없습니다.
+PostProcess,SelectPresetPrompt,Select Preset...,프리셋 선택...
+PostProcess,EnterPresetName,Enter Preset Name:,프리셋 이름 입력:
+PostProcess,SavePresetTitle,Save Preset,프리셋 저장
+PostProcess,Active,Active,활성
+PostProcess,Name,Name,이름
+PostProcess,Label,Label,라벨
+PostProcess,Value,Value,값
+PostProcess,Reset,Reset,초기화
+PostProcess,Unsupported,Unsupported,미지원
+EditorDocument,SaveAs,Save As...,다른 이름으로 저장...
+EditorDocument,Modified,Unsaved changes,미저장 변경 있음
+EditorDocument,SaveFailed,Could not save the document. Check the log.,문서를 저장하지 못했습니다. 로그를 확인하세요.
+EditorDocument,Title,Documents,문서
+EditorDocument,ConfirmTitle,Unsaved Changes,미저장 변경
+EditorDocument,UnsavedMessage,Save changes to {} before continuing?,계속하기 전에 {}의 변경 사항을 저장하시겠습니까?
+EditorDocument,Untitled,Untitled document,이름 없는 문서
+EditorDocument,Save,Save,저장
+EditorDocument,Discard,Discard,버리기
+EditorDocument,Processing,Preparing the document operation...,문서 작업을 준비하고 있습니다...
+EditorDocument,OperationFailed,Could not complete the document operation. Check the log.,문서 작업을 완료하지 못했습니다. 로그를 확인하세요.
+PostProcess,DeletePreset,Delete Preset,프리셋 삭제
+PostProcess,ConfirmDelete,Delete preset '{}'?,정말 '{}' 프리셋을 삭제하시겠습니까?
+PostProcess,ResetPipeline,Reset All to Default,기본값으로 전체 초기화
+EditorSettings,Title,Editor Settings,에디터 설정
+EditorSettings,ApplyFailed,Could not apply the settings. Check the log.,설정을 적용하지 못했습니다. 로그를 확인하세요.
+EditorSettings,SessionOnly,Applied for this session. File saving is unavailable.,현재 세션에 적용했습니다. 설정 파일을 저장할 수 없습니다.
+EditorSettings,SaveFailed,Applied for this session. Saving failed. Check the log.,현재 세션에 적용했습니다. 저장에 실패했습니다. 로그를 확인하세요.
+GraphicsSettings,Title,Graphics Settings,그래픽 설정
+GraphicsSettings,ApplyUIScale,Apply UI Scale,UI 배율 적용
+GraphicsSettings,InvalidWindowSize,Width must be 320-16384 and height 240-16384.,너비는 320-16384 높이는 240-16384 범위여야 합니다.
+GraphicsSettings,ReloadApplied,Reload Applied Values,현재 적용값 다시 불러오기
+EditorSettings,WindowRequestSubmitted,Window change request submitted. Completion has not been confirmed.,창 변경 요청을 전달했습니다. 아직 적용 완료를 확인하지 않았습니다.
+EditorSettings,WindowRequestFailed,Window change request processing failed. Check the log.,창 변경 요청 처리에 실패했습니다. 로그를 확인하세요.
+EditorSettings,WindowRequestRejected,Invalid window settings or another request is pending.,창 설정 값이 잘못되었거나 다른 요청을 처리 중입니다.
+EditorSettings,WindowApplied,Requested window state and output buffer size verified.,요청한 창 상태와 출력 버퍼 크기를 확인했습니다.
+EditorSettings,WindowApplying,Waiting for the window change...,창 변경이 완료되기를 기다리는 중입니다.
+EditorSettings,WindowApplyTimedOut,The requested window state or output buffer size was not observed in time.,제한 시간 안에 요청한 창 상태 또는 출력 버퍼 크기를 확인하지 못했습니다.
+EditorDocument,Saved,Saved: {},저장했습니다: {}
+EditorDocument,SaveUnavailable,The document cannot be saved right now.,현재 문서를 저장할 수 없습니다.
+EditorDocument,SceneOpened,Opened scene: {},씬을 열었습니다: {}
+EditorDocument,SceneCreated,Created a new scene.,새 씬을 생성했습니다.
+EditorDocument,SceneClosed,Closed the scene.,씬을 닫았습니다.
+EditorDocument,OperationBusy,Another document operation is in progress.,다른 문서 작업을 처리 중입니다.
+EditorDocument,SceneActionUnavailable,Stop play mode before changing the scene.,씬을 변경하려면 플레이 모드를 종료하세요.
+EditorSettings,WindowConfirmTitle,Keep Window Settings,창 설정 유지
+EditorSettings,WindowConfirmMessage,Keep these window settings? Reverting in {} seconds.,이 창 설정을 유지하시겠습니까? {}초 뒤 이전 설정으로 되돌립니다.
+EditorSettings,KeepWindowChange,Keep Changes,변경 유지
+EditorSettings,WindowConfirmed,Window settings confirmed and saved.,창 설정을 확정하고 저장했습니다.
+EditorSettings,WindowReverted,Restored the previous window settings.,이전 창 설정으로 복원했습니다.
+EditorSettings,WindowConfirmationTimedOut,No confirmation was received in time. Previous settings were restored.,확인 시간이 지나 이전 창 설정으로 복원했습니다.
+EditorSettings,WindowRestoreFailed,Could not restore the previous window settings. Automatic window capture is suspended.,이전 창 설정을 복원하지 못했습니다. 창 상태 자동 캡처를 중단했습니다.
+EditorSettings,WindowCaptureBlocked,Apply and confirm usable window settings to resume automatic window capture.,사용 가능한 창 설정을 다시 적용하고 유지 여부를 확정하면 자동 캡처가 재개됩니다.
+PostProcess,ApplyFailed,Could not apply post-processing settings. Previous runtime settings were preserved.,후처리 설정을 적용하지 못했습니다. 이전 실행 설정을 유지합니다.
+PostProcess,RestoreFailed,Could not restore post-processing settings. Rendering continues without post-processing.,후처리 설정을 복원하지 못했습니다. 후처리 없이 렌더링합니다.
+PostProcess,ApplyToScene,Apply to Scene,씬에 적용
+PostProcess,ApplyToSceneHint,Apply panel edits to the scene before saving.,패널 편집값을 씬에 적용한 뒤 씬을 저장하세요.
+PostProcess,AppliedToScene,Post-processing settings applied to the scene. Save the scene to write them to disk.,후처리 설정을 씬에 반영했습니다. 씬을 저장하면 파일에 기록됩니다.
+PostProcess,SceneApplyFailed,Could not capture post-processing settings. The scene was not changed.,후처리 설정을 수집하지 못했습니다. 씬 데이터는 변경하지 않았습니다.
+PostProcess,NoActiveComponent,No enabled PostProcessComponent in the current scene.,현재 씬에 활성화된 후처리 컴포넌트가 없습니다.
+PostProcess,PreviewPreset,Preview Preset,미리보기 프리셋
+PostProcess,PresetLoadFailed,Could not load preset: {},프리셋을 불러오지 못했습니다: {}
+PostProcess,PresetDeleteFailed,Could not delete preset: {},프리셋을 삭제하지 못했습니다: {}
+PostProcess,PresetSaved,Saved preset: {},프리셋을 저장했습니다: {}
+PostProcess,PresetSaveFailed,Could not save preset: {},프리셋을 저장하지 못했습니다: {}
+PostProcess,InvalidPresetName,Enter a file name without folder paths or invalid characters.,폴더 경로와 사용할 수 없는 문자를 제외한 파일 이름을 입력하세요.
+PostProcess,RestoreSceneSettings,Restore Scene Settings,씬 설정으로 되돌리기
+PostProcess,SceneRestored,Preview restored to the current scene settings.,미리보기를 현재 씬 설정으로 되돌렸습니다.
+PostProcess,RestoreUnavailable,The scene or active post-processing target changed or is unavailable.,씬이나 활성 후처리 대상이 변경됐거나 존재하지 않아 복원하지 못했습니다.
+PostProcess,SceneSourceInline,Scene settings: Custom values,씬 설정: 직접 편집값
+PostProcess,SceneSourcePreset,Scene settings: Preset '{}',씬 설정: 프리셋 '{}'
+PostProcess,SceneSourceDefault,Scene settings: Defaults,씬 설정: 기본값
+PostProcess,PresetListFailed,Could not refresh the preset list. Previous entries were kept.,프리셋 목록을 새로고침하지 못했습니다. 이전 목록을 유지합니다.
+GraphicsSettings,VSync,VSync,VSync
+GraphicsSettings,ApplyVSync,Apply and Save VSync,VSync 적용 및 저장
+GraphicsSettings,VSyncHint,Applies to the shared editor and PIE output. The FPS limit is separate.,에디터와 PIE가 공유하는 화면 출력에 적용됩니다. 목표 FPS 제한은 별도입니다.
+GraphicsSettings,VSyncUnsupported,The selected VSync setting is not supported.,선택한 VSync 설정을 지원하지 않습니다.
+GraphicsSettings,VSyncPending,Applying VSync...,VSync를 적용하고 있습니다...
+GraphicsSettings,VSyncRequestRejected,The VSync change cannot be requested right now.,현재 VSync 변경을 요청할 수 없습니다.
+GraphicsSettings,VSyncSaved,VSync applied and saved.,VSync를 적용하고 저장했습니다.
+GraphicsSettings,VSyncPreferenceMismatch,The current output differs from the VSync preference.,현재 출력 상태가 VSync 설정값과 다릅니다.
+GraphicsSettings,ViewportTitle,Viewport Resolution,뷰포트 해상도
+GraphicsSettings,TargetViewport,Target Viewport,대상 뷰포트
+GraphicsSettings,NoViewport,No supported viewport is available.,설정할 수 있는 뷰포트가 없습니다.
+GraphicsSettings,ViewportModeValue,Resolution mode: {},해상도 모드: {}
+GraphicsSettings,ViewportPreset,Preset,프리셋
+GraphicsSettings,ViewportCustom,Custom,사용자 지정
+GraphicsSettings,ViewportReferenceSize,Reference resolution: {} x {},기준 해상도: {} x {}
+GraphicsSettings,ViewportAspectValue,Aspect ratio: {},종횡비: {}
+Viewport,RenderTargetsUnavailable,Render targets are unavailable. Change the resolution to retry.,렌더 타깃을 준비하지 못했습니다. 해상도를 변경해 다시 시도하세요.
+GraphicsSettings,ViewportApplied,Current Settings,현재 적용값
+GraphicsSettings,ViewportDraft,Draft Settings,편집값
+GraphicsSettings,ViewportMode,Resolution Mode,해상도 모드
+GraphicsSettings,ApplyViewport,Apply and Save Viewport,뷰포트 적용 및 저장
+GraphicsSettings,ReloadViewport,Reload Viewport Values,뷰포트 편집값 되돌리기
+GraphicsSettings,ViewportPending,Applying viewport settings...,뷰포트 설정을 적용하고 있습니다...
+GraphicsSettings,ViewportSaved,Viewport settings applied and saved.,뷰포트 설정을 적용하고 저장했습니다.
+GraphicsSettings,ViewportRequestRejected,The viewport change cannot be requested right now.,현재 뷰포트 변경을 요청할 수 없습니다.
+GraphicsSettings,ViewportRestoreFailed,Viewport render targets could not be restored.,뷰포트 렌더 타깃을 복구하지 못했습니다.
+EditorSettings,PreferencesStartupFallback,User preferences could not be restored. Started with defaults; preference saving is blocked.,개인 설정을 복원하지 못해 기본값으로 시작했습니다. 개인 설정 파일 저장이 차단됩니다.
+EditorSettings,WorkspaceStartupFallback,The workspace could not be restored. Started with defaults; workspace saving is blocked.,작업 공간을 복원하지 못해 기본값으로 시작했습니다. 작업 공간 파일 저장이 차단됩니다.
+EditorSettings,PreferencesSaveBlocked,User preference saving is blocked. Changes apply only to this session.,개인 설정 파일 저장이 차단돼 있습니다. 변경값은 현재 실행에만 적용됩니다.
+EditorSettings,WorkspaceSaveBlocked,Workspace saving is blocked. Changes apply only to this session.,작업 공간 파일 저장이 차단돼 있습니다. 변경값은 현재 실행에만 적용됩니다.
+EditorSettings,SettingsFilePath,Settings file: {},설정 파일: {}
+EditorSettings,PathUnavailable,Storage path unavailable,저장 경로를 사용할 수 없습니다
+EditorSettings,SettingsRecoveryHint,Close the editor and inspect the file or path. Back up existing files before making changes and restart after recovery.,에디터를 종료한 뒤 파일과 경로를 확인하세요. 기존 파일은 수정 전에 백업하고 복구 후 다시 실행하세요.

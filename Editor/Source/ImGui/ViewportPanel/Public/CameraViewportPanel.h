@@ -58,6 +58,13 @@ protected:
 	void DrawDimensionToggleButton();
 #pragma endregion
 
+#pragma region Workspace State
+public:
+	void RestoreViewportState(const ViewportWorkspace& state) override;
+	ViewportWorkspace CaptureViewportState() const override;
+#pragma endregion
+
+
 #pragma region Member Variable
 protected:
 	EditorCameraController* m_CameraController = { nullptr };

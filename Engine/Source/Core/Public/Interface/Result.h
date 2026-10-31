@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "Types.h"
+#include "Logger.h"
 
 namespace Engine
 {
@@ -16,24 +17,12 @@ namespace Engine
 		AccessDenied
 	};
 
-	inline bool IsSuccess(EResult result)
+	inline constexpr bool operator!(EResult result) noexcept
 	{
-		return result == EResult::Success;
+		return result != EResult::Success;
 	}
 
-	inline bool IsFailure(EResult result)
-	{
-		if (result != EResult::Success)
-		{
-#if defined(_MSC_VER) && defined(_DEBUG)
-			__debugbreak();
-#endif
-			return true;
-		}
-		return false;
-	}
-
-	inline const char* ResultToString(EResult result)
+	inline const char* ResultToString(EResult result, std::source_location location = std::source_location::current())
 	{
 		switch (result)
 		{
@@ -48,6 +37,26 @@ namespace Engine
 		default:							return "Unknown Error";
 		}
 	}
+
+	inline bool IsSuccess(EResult result)
+	{
+		return result == EResult::Success;
+	}
+
+	inline bool IsFailure(EResult result, std::source_location location = std::source_location::current())
+	{
+		if (result != EResult::Success)
+		{
+#if defined(_MSC_VER) && defined(_DEBUG)
+			Logger::Log(ELogLevel::Error, "Engine", "Result", location, "Failure: {} ({}:{} in {})", ResultToString(result), location.file_name(), location.line(), location.function_name());
+			__debugbreak();
+#endif
+			return true;
+		}
+		return false;
+	}
+
+	
 
 	struct ActionResult
 	{

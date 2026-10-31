@@ -1,19 +1,9 @@
-﻿# --- CMake/ReflectionBuild.cmake ---
-
-add_reflection_bundle(
+﻿reflection_generate(
     TARGET Editor
-    MODULE Editor
-    SOURCE_ROOT "${EDITOR_SOURCE_DIR}"
-    OUTPUT_CPP "${EDITOR_GENERATED_SOURCE}"
-    DEPENDS
-        "${CMAKE_CURRENT_LIST_FILE}"
-        ${EDITOR_HEADERS}
-        ${REFLECTION_CODEGEN_SOURCES}
-    EXTRA_ARGS
-        --strip-namespace Editor
-        --strip-namespace Engine
-        --namespace-fallback Editor
-        --namespace-fallback Engine
-        --resource-handle-template ResourceHandle
-    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    MODULE BamEditorSettings
+    CXX_STANDARD 23
+    HEADERS "${EDITOR_SOURCE_DIR}/Settings/Public/EditorSettings.h"
+    HEADER_INCLUDE_ROOT "${EDITOR_SOURCE_DIR}"
+    OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/Generated/Settings/$<CONFIG>"
+    VISIBILITY PRIVATE
 )

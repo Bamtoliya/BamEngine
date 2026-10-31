@@ -6,6 +6,7 @@
 #include "InputManager.h"
 #include "DirectX12Texture.h"
 #include "ImGuiManager.h"
+#include "EditorSettings.h"
 
 #pragma region Contructor&Destructor
 void BaseViewportPanel::Initialize(void* arg)
@@ -24,9 +25,11 @@ void BaseViewportPanel::Free()
 }
 #pragma endregion
 
+#pragma region Loop
 void BaseViewportPanel::Update(f32 dt)
 {
-	CalculateRenderResolution(m_PanelWidth, m_PanelHeight);
+	if (!CalculateRenderResolution(m_PanelWidth, m_PanelHeight))
+		return;
 	m_IsRenderTargetViewer = true;
 	m_DisplayRTName = m_SelectedRTName;
 	if (m_ChannelView != EViewportChannelView::RGBA)
@@ -35,13 +38,6 @@ void BaseViewportPanel::Update(f32 dt)
 		m_ChannelFilter.SubmitChannelPreviewPass(m_SelectedRTName, m_DisplayRTName);
 	}
 }
-
-string BaseViewportPanel::GetDisplayName() const
-{
-	return m_IsRenderTargetViewer ? LOCAL_FMT("Viewport.ViewerTitle", WStrToStr(m_SelectedRTName)) :
-		ImGuiInterface::GetDisplayName();
-}
-
 void BaseViewportPanel::Draw()
 {
 	if (!m_Open) return;
@@ -60,14 +56,24 @@ void BaseViewportPanel::Draw()
 
 	ImGui::PopID();
 }
+#pragma endregion
 
+#pragma region Viewport
 void BaseViewportPanel::DrawCustomViewport()
 {
 	DrawRenderTargetImage(m_DisplayRTName);
 }
-
 void BaseViewportPanel::DrawRenderTargetImage(const wstring& rtName)
 {
+	if (!m_RenderTargetsValid)
+	{
+		m_Focused = false;
+		m_Hovered = false;
+		m_ImageSize = ImVec2(0.f, 0.f);
+		ImGui::TextWrapped("%s", LOCAL_CSTR("Viewport.RenderTargetsUnavailable"));
+		return;
+	}
+
 	ImVec2 panelSize = ImGui::GetContentRegionAvail();
 	panelSize.x = glm::max(panelSize.x, 1.0f);
 	panelSize.y = glm::max(panelSize.y, 1.0f);
@@ -135,6 +141,7 @@ void BaseViewportPanel::DrawRenderTargetImage(const wstring& rtName)
 		}
 	}
 }
+#pragma endregion
 
 #pragma region Options Bar
 void BaseViewportPanel::DrawOptionsBar()
@@ -250,7 +257,7 @@ void BaseViewportPanel::DrawRTItemContextMenu(const wstring& rtName)
 #pragma endregion
 
 #pragma region Resolution&Ratio
-void BaseViewportPanel::CalculateRenderResolution(uint32 panelWidth, uint32 panelHeight)
+EResult BaseViewportPanel::CalculateRenderResolution(uint32 panelWidth, uint32 panelHeight)
 {
 	uint32 newWidth = panelWidth;
 	uint32 newHeight = panelHeight;
@@ -280,17 +287,30 @@ void BaseViewportPanel::CalculateRenderResolution(uint32 panelWidth, uint32 pane
 			newHeight = (uint32)(newWidth / targetRatio);
 	}
 	// 최소 크기 보정
-	newWidth = glm::max(newWidth, (uint32)64);
-	newHeight = glm::max(newHeight, (uint32)64);
-	// 변경 감지 → RT 재생성
-	if (newWidth != m_RenderWidth || newHeight != m_RenderHeight)
-	{
-		m_RenderWidth = newWidth;
-		m_RenderHeight = newHeight;
-		ResizeRenderTargets(m_RenderWidth, m_RenderHeight);
-	}
-}
+	newWidth = glm::max(newWidth, static_cast<uint32>(MinResolutionDimension));
+	newHeight = glm::max(newHeight, static_cast<uint32>(MinResolutionDimension));
 
+	if (newWidth == m_RenderWidth && newHeight == m_RenderHeight && m_RenderTargetsValid)
+		return m_LastResolutionUpdateResult = EResult::Success;
+
+	const auto result = ResizeRenderTargets(newWidth, newHeight);
+
+	if (result != EResult::Success)
+	{
+		const auto restored = ResizeRenderTargets(m_RenderWidth, m_RenderHeight);
+		m_RenderTargetsValid = restored == EResult::Success;
+
+		EDITOR_LOG_ERROR("Viewport resize failed: name={}, requested={}x{}, restored={}",
+			WStrToStr(m_Name), newWidth, newHeight, m_RenderTargetsValid);
+
+		return m_LastResolutionUpdateResult = result;
+	}
+
+	m_RenderWidth = newWidth;
+	m_RenderHeight = newHeight;
+	m_RenderTargetsValid = true;
+	return m_LastResolutionUpdateResult = EResult::Success;
+}
 f32 BaseViewportPanel::GetAspectRatio(EAspectRatioMode mode) const
 {
 	switch (mode)
@@ -304,68 +324,193 @@ f32 BaseViewportPanel::GetAspectRatio(EAspectRatioMode mode) const
 	default: return 1.f;
 	}
 }
-
-void BaseViewportPanel::ResizeRenderTargets(uint32 width, uint32 height)
+EResult BaseViewportPanel::ResizeRenderTargets(uint32 width, uint32 height)
 {
-	m_ChannelFilter.Resize(m_SelectedRTName);
+	return m_ChannelFilter.Resize(m_SelectedRTName);
 }
-
 void BaseViewportPanel::DrawResolutionMenu()
 {
-	if (ImGui::BeginMenu(LOCAL_CSTR("UI_RESOLUTION")))
+	if (!ImGui::BeginMenu(LOCAL_LABEL("UI_RESOLUTION").c_str()))
+		return;
+
+	auto state = CaptureResolutionState();
+	bool changed = false;
+
+	if (ImGui::MenuItem(LOCAL_LABEL("Viewport.FreePanelSize").c_str(), nullptr,
+		state.ResolutionMode == static_cast<int32>(EViewportResolutionMode::Free)))
 	{
-		// --- Resolution Mode ---
-		if (ImGui::MenuItem(LOCAL_LABEL("Viewport.FreePanelSize").c_str(), nullptr,
-			m_ResolutionMode == EViewportResolutionMode::Free))
-			m_ResolutionMode = EViewportResolutionMode::Free;
-		ImGui::Separator();
-		// --- Presets ---
-		for (uint32 i = 0; i < g_PresetCount; ++i)
+		state.ResolutionMode = static_cast<int32>(EViewportResolutionMode::Free);
+		changed = true;
+	}
+
+	ImGui::Separator();
+
+	for (uint32 index = 0; index < g_PresetCount; ++index)
+	{
+		const auto& preset = g_ResolutionPresets[index];
+		const bool selected = state.ResolutionMode == static_cast<int32>(EViewportResolutionMode::Preset) &&
+			state.PresetWidth == static_cast<int32>(preset.Width) &&
+			state.PresetHeight == static_cast<int32>(preset.Height);
+
+		if (ImGui::MenuItem(LOCAL_LABEL(preset.NameKey).c_str(), nullptr, selected))
 		{
-			bool selected = (m_ResolutionMode == EViewportResolutionMode::Preset
-				&& m_PresetIndex == (int32)i);
-			if (ImGui::MenuItem(LOCAL_LABEL(g_ResolutionPresets[i].NameKey).c_str(), nullptr, selected))
+			state.ResolutionMode = static_cast<int32>(EViewportResolutionMode::Preset);
+			state.PresetWidth = static_cast<int32>(preset.Width);
+			state.PresetHeight = static_cast<int32>(preset.Height);
+			changed = true;
+		}
+	}
+
+	ImGui::Separator();
+
+	const bool isCustom = state.ResolutionMode == static_cast<int32>(EViewportResolutionMode::Custom);
+
+	if (ImGui::MenuItem(LOCAL_LABEL("Viewport.Custom").c_str(), nullptr, isCustom))
+	{
+		state.ResolutionMode = static_cast<int32>(EViewportResolutionMode::Custom);
+		changed = true;
+	}
+
+	if (isCustom)
+	{
+		changed |= ImGui::InputInt(LOCAL_LABEL("EditorCommon.Width").c_str(), &state.CustomWidth, 1, 100);
+		changed |= ImGui::InputInt(LOCAL_LABEL("EditorCommon.Height").c_str(), &state.CustomHeight, 1, 100);
+		state.CustomWidth = glm::clamp(state.CustomWidth, MinResolutionDimension, MaxResolutionWidth);
+		state.CustomHeight = glm::clamp(state.CustomHeight, MinResolutionDimension, MaxResolutionHeight);
+	}
+
+	ImGui::Separator();
+
+	if (ImGui::BeginMenu(LOCAL_LABEL("Viewport.AspectRatio").c_str()))
+	{
+		auto ratioItem = [&](const char* label, EAspectRatioMode mode)
 			{
-				m_ResolutionMode = EViewportResolutionMode::Preset;
-				m_PresetIndex = i;
-			}
-		}
-		ImGui::Separator();
-		// --- Custom ---
-		bool isCustom = (m_ResolutionMode == EViewportResolutionMode::Custom);
-		if (ImGui::MenuItem(LOCAL_LABEL("Viewport.Custom").c_str(), nullptr, isCustom))
-			m_ResolutionMode = EViewportResolutionMode::Custom;
-		if (isCustom)
-		{
-			ImGui::InputInt(LOCAL_LABEL("EditorCommon.Width").c_str(), &m_CustomWidth, 1, 100);
-			ImGui::InputInt(LOCAL_LABEL("EditorCommon.Height").c_str(), &m_CustomHeight, 1, 100);
-			m_CustomWidth = glm::clamp(m_CustomWidth, 64, 7680);
-			m_CustomHeight = glm::clamp(m_CustomHeight, 64, 4320);
-		}
-		ImGui::Separator();
-		// --- Aspect Ratio ---
-		if (ImGui::BeginMenu(LOCAL_LABEL("Viewport.AspectRatio").c_str()))
-		{
-			auto ratioItem = [&](const char* label, EAspectRatioMode mode)
+				const auto value = static_cast<int32>(mode);
+
+				if (ImGui::MenuItem(label, nullptr, state.AspectRatioMode == value))
 				{
-					if (ImGui::MenuItem(label, nullptr, m_AspectRatioMode == mode))
-						m_AspectRatioMode = mode;
-				};
-			ratioItem(LOCAL_LABEL("Viewport.FreeAspect").c_str(), EAspectRatioMode::Free);
-			ratioItem("16:9", EAspectRatioMode::Ratio_16_9);
-			ratioItem("16:10", EAspectRatioMode::Ratio_16_10);
-			ratioItem("4:3", EAspectRatioMode::Ratio_4_3);
-			ratioItem("21:9", EAspectRatioMode::Ratio_21_9);
-			ratioItem("1:1", EAspectRatioMode::Ratio_1_1);
-			ratioItem("9:16", EAspectRatioMode::Ratio_9_16);
-			ImGui::EndMenu();
-		}
-		// --- 현재 해상도 표시 ---
-		ImGui::Separator();
-		ImGui::Text("%s", LOCAL_FMT("Viewport.RenderSize", m_RenderWidth, m_RenderHeight).c_str());
-		float scale = (float)m_RenderWidth / (float)m_PanelWidth * 100.f;
-		ImGui::Text("%s", LOCAL_FMT("Viewport.Scale", scale).c_str());
+					state.AspectRatioMode = value;
+					changed = true;
+				}
+			};
+
+		ratioItem(LOCAL_LABEL("Viewport.FreeAspect").c_str(), EAspectRatioMode::Free);
+		ratioItem("16:9", EAspectRatioMode::Ratio_16_9);
+		ratioItem("16:10", EAspectRatioMode::Ratio_16_10);
+		ratioItem("4:3", EAspectRatioMode::Ratio_4_3);
+		ratioItem("21:9", EAspectRatioMode::Ratio_21_9);
+		ratioItem("1:1", EAspectRatioMode::Ratio_1_1);
+		ratioItem("9:16", EAspectRatioMode::Ratio_9_16);
 		ImGui::EndMenu();
 	}
+
+	ImGui::Separator();
+	ImGui::Text("%s", LOCAL_FMT("Viewport.RenderSize", m_RenderWidth, m_RenderHeight).c_str());
+
+	const float scale = static_cast<float>(m_RenderWidth) / static_cast<float>(m_PanelWidth) * 100.f;
+	ImGui::Text("%s", LOCAL_FMT("Viewport.Scale", scale).c_str());
+	ImGui::EndMenu();
+
+	if (changed && !TrySetResolutionState(state))
+		EDITOR_LOG_WARN("Viewport resolution change was rejected: {}", WStrToStr(m_Name));
+}
+#pragma endregion
+
+#pragma region Workspace State
+void BaseViewportPanel::CaptureState(EditorWorkspace& workspace) const
+{
+	IImGui::CaptureState(workspace);
+	workspace.ViewportStates[GetName()] = CaptureViewportState();
+}
+void BaseViewportPanel::RestoreState(const EditorWorkspace& workspace)
+{
+	IImGui::RestoreState(workspace);
+	const auto found = workspace.ViewportStates.find(GetName());
+
+	if (found != workspace.ViewportStates.end())
+		RestoreViewportState(found->second);
+}
+bool BaseViewportPanel::TrySetResolutionState(const ViewportWorkspace& state)
+{
+	const auto validSize = [](std::int32_t width, std::int32_t height)
+		{
+			return width >= MinResolutionDimension && width <= MaxResolutionWidth &&
+				height >= MinResolutionDimension && height <= MaxResolutionHeight;
+		};
+
+	const bool validMode = state.ResolutionMode >= 0 &&
+		state.ResolutionMode <= static_cast<std::int32_t>(EViewportResolutionMode::Custom);
+	const bool validAspect = state.AspectRatioMode >= 0 &&
+		state.AspectRatioMode <= static_cast<std::int32_t>(EAspectRatioMode::Ratio_9_16);
+
+	if (!validMode || !validAspect || !validSize(state.CustomWidth, state.CustomHeight) ||
+		!validSize(state.PresetWidth, state.PresetHeight))
+	{
+		return false;
+	}
+
+	auto mode = static_cast<EViewportResolutionMode>(state.ResolutionMode);
+	int32 presetIndex = m_PresetIndex;
+	int32 customWidth = state.CustomWidth;
+	int32 customHeight = state.CustomHeight;
+	bool presetFound = false;
+
+	for (uint32 index = 0; index < g_PresetCount; ++index)
+	{
+		const auto& preset = g_ResolutionPresets[index];
+
+		if (preset.Width == static_cast<uint32>(state.PresetWidth) &&
+			preset.Height == static_cast<uint32>(state.PresetHeight))
+		{
+			presetIndex = static_cast<int32>(index);
+			presetFound = true;
+			break;
+		}
+	}
+
+	if (mode == EViewportResolutionMode::Preset && !presetFound)
+	{
+		mode = EViewportResolutionMode::Custom;
+		customWidth = state.PresetWidth;
+		customHeight = state.PresetHeight;
+
+		EDITOR_LOG_WARN("Viewport preset is unavailable; using custom resolution: {}", WStrToStr(m_Name));
+	}
+
+	m_ResolutionMode = mode;
+	m_AspectRatioMode = static_cast<EAspectRatioMode>(state.AspectRatioMode);
+	m_PresetIndex = presetIndex;
+	m_CustomWidth = customWidth;
+	m_CustomHeight = customHeight;
+	return true;
+}
+
+ViewportWorkspace BaseViewportPanel::CaptureResolutionState() const
+{
+	ViewportWorkspace state;
+	state.ResolutionMode = static_cast<std::int32_t>(m_ResolutionMode);
+	state.AspectRatioMode = static_cast<std::int32_t>(m_AspectRatioMode);
+	state.CustomWidth = m_CustomWidth;
+	state.CustomHeight = m_CustomHeight;
+
+	if (m_PresetIndex >= 0 && m_PresetIndex < static_cast<int32>(g_PresetCount))
+	{
+		const auto& preset = g_ResolutionPresets[m_PresetIndex];
+		state.PresetWidth = static_cast<std::int32_t>(preset.Width);
+		state.PresetHeight = static_cast<std::int32_t>(preset.Height);
+	}
+
+	return state;
+}
+
+void BaseViewportPanel::RestoreViewportState(const ViewportWorkspace& state)
+{
+	if (!TrySetResolutionState(state))
+		EDITOR_LOG_WARN("Invalid viewport resolution state: {}", WStrToStr(m_Name));
+}
+
+ViewportWorkspace BaseViewportPanel::CaptureViewportState() const
+{
+	return CaptureResolutionState();
 }
 #pragma endregion

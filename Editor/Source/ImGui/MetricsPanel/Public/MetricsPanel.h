@@ -8,7 +8,7 @@
 #define MAX_METRICS_HISTORY 240
 
 BEGIN(Editor)
-class MetricsPanel : public ImGuiInterface
+class MetricsPanel : public IImGui
 {
 public:
 	MetricsPanel() { m_Name = L"Metrics"; m_DisplayNameKey = "UI_ENGINE_METRICS_PANEL"; }

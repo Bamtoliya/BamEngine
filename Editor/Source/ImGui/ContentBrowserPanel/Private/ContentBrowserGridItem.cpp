@@ -63,18 +63,7 @@ namespace
 
 	bool OpenSceneFromFile(const std::filesystem::path& path)
 	{
-		archive::JsonArchive ar;
-		const Engine::EResult result = Engine::SceneManager::Get().LoadScene(ar, path.wstring());
-		if (result != Engine::EResult::Success)
-		{
-			EDITOR_LOG_ERROR("Failed to load scene: {} ({})", path.string(), Engine::ResultToString(result));
-			return false;
-		}
-
-		Editor::SelectionManager::Get().ClearSelection(true);
-		Editor::Application::Get().GetEditHistory().Clear();
-		EDITOR_LOG_INFO("Successfully loaded scene from ContentBrowser: {}", path.string());
-		return true;
+		return Editor::ImGuiManager::Get().RequestOpenScene(path);
 	}
 
 	const char* GetBinaryExtension(Engine::EResourceType type)

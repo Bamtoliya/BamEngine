@@ -41,8 +41,8 @@ public:
 	void SetChannelView(EViewportChannelView view) { m_ChannelView = view; }
 	EViewportChannelView GetChannelView() const { return m_ChannelView; }
 
-	void EnsureChannelPreviewRT(const wstring& sourceRTName);
-	void Resize(const wstring& sourceRTName);
+	EResult EnsureChannelPreviewRT(const wstring& sourceRTName);
+	EResult Resize(const wstring& sourceRTName);
 	void SubmitChannelPreviewPass(const wstring& sourceRTName, wstring& outRTName);
 
 	const wstring& GetChannelPreviewRTName() const { return m_ChannelPreviewRTName; }

@@ -4,7 +4,7 @@
 #include <filesystem>
 
 BEGIN(Editor)
-class ResourceEditorInterface : public ImGuiInterface
+class ResourceEditorInterface : public IImGui
 {
 public:
 	virtual ~ResourceEditorInterface() = default;

@@ -5,7 +5,7 @@
 
 BEGIN(Editor)
 
-class ResourceManagerInspector final : public ImGuiInterface
+class ResourceManagerInspector final : public IImGui
 {
 public:
     ResourceManagerInspector();

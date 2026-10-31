@@ -22,20 +22,22 @@
 
 ## 2. 현재 코드에서 확인한 상태
 
-- `ToolBar::DrawDisplaySettingsWindow()`에 창 크기, 전체 화면, UI 배율과 목표 FPS 편집 UI가 있다.
-  패널 객체 대신 `ToolBar`의 bool로 창의 열림 여부를 관리한다.
-- 해당 UI의 창 크기·전체 화면·목표 FPS 편집값 일부는 함수 내부 `static` 변수다.
-  실제 창 상태나 다른 경로의 설정 변경을 다시 반영할 동기화 정책이 필요하다.
-- `EditorPreferences`에 언어, UI 배율과 목표 FPS가 있으며 사용자 설정 경로에 저장한다.
-- `EditorWorkspace`에 창 크기·최대화, 패널 열림 상태, 도킹 배치와 콘텐츠 브라우저 상태가 있다.
-  기존 화면 설정 창의 열림 여부를 위한 `DisplaySettingsOpen`도 있다.
-- 뷰포트 내부 해상도 모드·사용자 해상도·종횡비는 `BaseViewportPanel`에서 관리한다.
-  현재 소스에는 `ViewportWorkspace`, `EditorWorkspace::ViewportStates`와 기본 Scene View의 저장·복원 연결이 추가돼 있다.
-  이 코드의 존재와 실제 재실행·카메라·GPU 동작 검증 완료는 구분한다.
-- Editor의 RHI 초기화에서 `isVSync = true`를 지정한다.
-  실행 중 VSync 변경 가능 여부와 필요한 RHI API는 구현 시 추가 확인한다.
+- 확인일: 2026-10-31.
+- 화면 설정은 독립 GraphicSettingPanel에서 편집한다.
+  파일 메뉴와 창 메뉴가 같은 패널에 연결되어 있다.
+- EditorPreferences는 언어·UI 배율·목표 FPS·VSync를 사용자 설정 경로에 저장한다.
+- EditorWorkspace는 창 상태·패널 열림·도킹·콘텐츠 브라우저·뷰포트 상태를 프로젝트별로 저장한다.
+- EditorSettingsService가 시작 시 로드·검증과 실행 중 적용 요청·저장 결과를 조정한다.
+- 기본 Scene/Game View의 해상도는 대상별 초안으로 편집한다.
+  기존 뷰포트 Update에서 리사이즈하고 결과 확인 후 저장한다.
+- Scene View의 편집 카메라와 렌더 패스 활성화 상태는 ViewportWorkspace로 캡처·복원한다.
+- VSync는 시작 시 복원과 프레임 경계의 변경 요청에 연결되어 있다.
+- 손상되거나 지원하지 않는 설정 파일은 기본값으로 대체하고 원본 덮어쓰기를 차단한다.
+  시작 알림과 설정 패널에서 저장 차단 상태를 안내한다.
+- EditorSettingsCheck의 파일 입출력·데이터 검사는 통과했다.
+  이는 실제 UI·GPU·재실행 복원 검증 완료를 의미하지 않는다.
 
-위 내용은 소스 확인 결과다. 최근 빌드 결과와 각 기능의 실제 UI 동작은 구현을 재개할 때 다시 확인한다.
+8절의 실행 검증 항목은 실제 확인 결과에 따라 완료 처리한다.
 
 ## 3. 패널의 구성과 책임
 

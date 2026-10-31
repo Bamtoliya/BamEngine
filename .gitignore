@@ -77,3 +77,4 @@ Gemini.md
 *.bammat
 Temp
 /Projects/**/build/
+/.bam/User/

@@ -79,11 +79,29 @@ struct MaterialParameter
 	PROPERTY()
 	vector<uint8> data;
 
+	PROPERTY()
+	vector<uint8> defaultValue;
+
+	PROPERTY()
+	f32 minValue = 0.0f;
+
+	PROPERTY()
+	f32 maxValue = 1.0f;
+
+	PROPERTY()
+	string displayNameKey;
+
+	PROPERTY()
+	bool isColor = false;
+
 	MaterialParameter() = default;
-	MaterialParameter(EMaterialParameterType t, const void* ptr, size_t size, uint32 inOffset = 0)
-		: type(t), offset(inOffset), data(size)
+	MaterialParameter(EMaterialParameterType t, const void* ptr, size_t size, uint32 inOffset = 0,
+		f32 inMin = 0.0f, f32 inMax = 1.0f, const string& inKey = "", bool inIsColor = false)
+		: type(t), offset(inOffset), data(size), defaultValue(size),
+		minValue(inMin), maxValue(inMax), displayNameKey(inKey), isColor(inIsColor)
 	{
 		memcpy(data.data(), ptr, size);
+		memcpy(defaultValue.data(), ptr, size);
 	}
 
 	bool operator==(const MaterialParameter& other) const = default;
@@ -130,18 +148,37 @@ public:
 	bool HasParameter(const string& name) const { return m_Parameters.find(name) != m_Parameters.end(); }
 	bool RemoveParameter(const string& name) { return m_Parameters.erase(name) > 0; }
 	void ClearParameters() { m_Parameters.clear(); }
-	// Scalar
-	void SetFloat(const string& name, f32 value) { m_Parameters[name] = MaterialParameter(EMaterialParameterType::Float, &value, sizeof(value)); }
-	void SetFloat2(const string& name, const vec2& value) { m_Parameters[name] = MaterialParameter(EMaterialParameterType::Float2, &value, sizeof(value)); }
-	void SetFloat3(const string& name, const vec3& value) { m_Parameters[name] = MaterialParameter(EMaterialParameterType::Float3, &value, sizeof(value)); }
-	void SetFloat4(const string& name, const vec4& value) { m_Parameters[name] = MaterialParameter(EMaterialParameterType::Float4, &value, sizeof(value)); }
-	void SetInt(const string& name, int32 value) { m_Parameters[name] = MaterialParameter(EMaterialParameterType::Int, &value, sizeof(value)); }
-	void SetBool(const string& name, bool value) { m_Parameters[name] = MaterialParameter(EMaterialParameterType::Bool, &value, sizeof(value)); }
-	void SetMatrix(const string& name, const mat4& value) { m_Parameters[name] = MaterialParameter(EMaterialParameterType::Matrix, &value, sizeof(value)); };
+
+	// 셰이더 레이아웃 순서대로 파라미터를 등록하는 자동 오프셋 누적 API (메타데이터 지원)
+	void AddFloat(const string& name, f32 defaultValue = 0.0f, float min = 0.0f, float max = 1.0f, const string& localKey = "");
+	void AddFloat2(const string& name, const vec2& defaultValue = vec2(0.0f), float min = 0.0f, float max = 1.0f, const string& localKey = "");
+	void AddFloat3(const string& name, const vec3& defaultValue = vec3(0.0f), float min = 0.0f, float max = 1.0f, const string& localKey = "");
+	void AddColor3(const string& name, const vec3& defaultColor = vec3(1.0f), const string& localKey = "");
+	void AddFloat4(const string& name, const vec4& defaultValue = vec4(0.0f), float min = 0.0f, float max = 1.0f, const string& localKey = "");
+	void AddColor4(const string& name, const vec4& defaultColor = vec4(1.0f), const string& localKey = "");
+	void AddInt(const string& name, int32 defaultValue = 0, int32 min = 0, int32 max = 100, const string& localKey = "");
+	void AddBool(const string& name, bool defaultValue = false, const string& localKey = "");
+
+	// 파라미터 값 설정 (이미 등록된 파라미터면 기존 오프셋을 100% 보존하고 값만 갱신!)
+	void SetFloat(const string& name, f32 value);
+	void SetFloat2(const string& name, const vec2& value);
+	void SetFloat3(const string& name, const vec3& value);
+	void SetFloat4(const string& name, const vec4& value);
+	void SetInt(const string& name, int32 value);
+	void SetBool(const string& name, bool value);
+	void SetMatrix(const string& name, const mat4& value);
 
 	// Getter
 	template<typename T>
-	T GetParameter(const string& name) const;	
+	T GetParameter(const string& name) const;
+
+	// 파라미터 초기값 복원(Reset) API
+	void ResetParameter(const string& name);
+	void ResetAllParameters();
+
+private:
+	// 다음 파라미터가 배치될 최적의 정렬 오프셋을 계산하는 내부 헬퍼
+	uint32 CalculateNextOffset(size_t typeSize, size_t alignment) const;
 #pragma endregion
 
 
@@ -195,6 +232,8 @@ public:
 public:
 	virtual Shader* GetVertexShader(ERenderPassType passType = ERenderPassType::Geometry) const;
 	virtual Shader* GetPixelShader(ERenderPassType passType = ERenderPassType::Geometry) const;
+	ResourceHandle<Shader> GetVertexShaderHandle(ERenderPassType passType = ERenderPassType::Geometry) const { return m_VertexShaderHandle; };
+	ResourceHandle<Shader> GetPixelShaderHandle(ERenderPassType passType = ERenderPassType::Geometry) const { return m_PixelShaderHandle; };
 public:
 	virtual void SetVertexShaderHandle(const ResourceHandle<Shader>& shader) { m_VertexShaderHandle = shader; }
 	virtual void SetPixelShaderHandle(const ResourceHandle<Shader>& shader) { m_PixelShaderHandle = shader; }

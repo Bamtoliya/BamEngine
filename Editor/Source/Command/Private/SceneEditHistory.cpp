@@ -6,9 +6,6 @@
 #include "TransformSystem.h"
 #include "Components/UI/UIInteractionStateComponent.h"
 #include "ReflectionEditState.h"
-#include <unordered_set>
-#include <exception>
-#include <unordered_map>
 
 struct Editor::SceneEditSnapshot::Data
 {
@@ -402,7 +399,7 @@ void Editor::SceneEditHistory::Record(SceneEditSnapshot before, SceneEditSnapsho
     if (!m_Enabled) return;
     if (!before || !after || before.Scene() != after.Scene())
     {
-        Clear();
+        NotifyUntrackedChange();
         m_Error = "UI_HISTORY_CAPTURE_FAILED";
         return;
     }
@@ -411,6 +408,12 @@ void Editor::SceneEditHistory::Record(SceneEditSnapshot before, SceneEditSnapsho
     else
     {
         Flush();
+        if (m_Pending)
+        {
+            NotifyUntrackedChange();
+            return;
+        }
+
         m_Pending = std::make_shared<Change>(std::move(before), std::move(after), std::move(label));
     }
     if (!merge) Flush();
@@ -419,13 +422,29 @@ void Editor::SceneEditHistory::Record(SceneEditSnapshot before, SceneEditSnapsho
 
 void Editor::SceneEditHistory::Flush()
 {
-    if (!m_Pending) return;
-    m_Commands.Record(std::make_unique<Change>(*m_Pending));
-    m_Pending.reset();
+    if (!m_Pending)
+        return;
+
+    auto pending = std::move(m_Pending);
+    try
+    {
+        if (!m_Commands.Record(std::make_unique<Change>(*pending)))
+            m_Pending = std::move(pending);
+    }
+    catch (...)
+    {
+        m_UntrackedChanges = true;
+        if (!m_Pending)
+            m_Pending = std::move(pending);
+        throw;
+    }
 }
 
 void Editor::SceneEditHistory::Clear()
 {
+    if (m_Pending)
+        m_UntrackedChanges = true;
+
     m_Pending.reset();
     m_Commands.Clear();
     ++m_Revision;
@@ -484,12 +503,52 @@ Editor::SceneEditScope::~SceneEditScope()
 {
     if (!m_Entered) return;
     --m_History.m_ScopeDepth;
-    if (!m_Outer) return;
-    if (!m_History.Enabled()) return;
+    if (!m_Outer || !m_History.Enabled()) return;
+
     try
     {
-        if (std::uncaught_exceptions() != m_Uncaught) m_History.Clear();
-        else m_History.Record(std::move(m_Before), SceneEditSnapshot::Capture(m_Scene), std::move(m_Label));
+        if (std::uncaught_exceptions() != m_Uncaught)
+            m_History.NotifyUntrackedChange();
+        else
+            m_History.Record(std::move(m_Before), SceneEditSnapshot::Capture(m_Scene), std::move(m_Label));
     }
-    catch (...) { m_History.Clear(); }
+    catch (...)
+    {
+        m_History.NotifyUntrackedChange();
+    }
+}
+
+void Editor::SceneEditHistory::ResetDocument(Engine::Scene* scene, bool editing)
+{
+    Clear();
+    m_CurrentScene = scene;
+    m_Enabled = editing;
+    m_SavedStateId = m_Commands.GetCurrentStateId();
+    m_UntrackedChanges = false;
+}
+
+bool Editor::SceneEditHistory::HasUnsavedChanges() const
+{
+    return m_UntrackedChanges || m_Pending || m_Commands.GetCurrentStateId() != m_SavedStateId;
+}
+
+bool Editor::SceneEditHistory::MarkSaved()
+{
+    if (!m_CurrentScene || !m_Enabled || m_ScopeDepth != 0)
+        return false;
+
+    Flush();
+    if (m_Pending)
+        return false;
+
+    m_SavedStateId = m_Commands.GetCurrentStateId();
+    m_UntrackedChanges = false;
+    ++m_Revision;
+    return true;
+}
+
+void Editor::SceneEditHistory::NotifyUntrackedChange()
+{
+    m_UntrackedChanges = true;
+    Clear();
 }

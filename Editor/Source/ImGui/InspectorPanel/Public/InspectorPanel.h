@@ -15,7 +15,7 @@ struct ComponentReflectionEntry;
 END
 
 BEGIN(Editor)
-class InspectorPanel final : public ImGuiInterface
+class InspectorPanel final : public IImGui
 {
 public:
     explicit InspectorPanel(uint32 panelId = 0);

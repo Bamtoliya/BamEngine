@@ -3,12 +3,7 @@
 #include "ResourceManager.h"
 #include <archive/ArchiveInterface.h>
 #include <reflection_archive/PropertyArchiveCodecs.h>
-#include <array>
-#include <filesystem>
-#include <map>
-#include <unordered_map>
-#include <utility>
-#include <vector>
+#include "ResourceReference.h"
 
 namespace archive_resource
 {
@@ -42,8 +37,6 @@ namespace archive_resource
         const std::wstring keyExt = keyPath.extension().wstring();
         if (keyExt.rfind(L".bam", 0) == 0)
         {
-            handle = manager.FindHandleByKey(keyPath.stem().wstring());
-            if (manager.IsValid(handle)) return handle;
             std::filesystem::path stripped = keyPath;
             stripped.replace_extension();
             handle = manager.FindHandleByKey(stripped.wstring());
@@ -71,6 +64,19 @@ namespace archive_resource
         }
 
         // 3. assetPath가 비어있고 assetKey만 있을 때, 디스크 파일 탐색 및 자동 로드
+        if (!assetKey.empty())
+        {
+            std::error_code error;
+
+            if (std::filesystem::is_regular_file(std::filesystem::path(assetKey), error))
+            {
+                handle = manager.LoadFile(assetKey);
+
+                if (manager.IsValid(handle))
+                    return handle;
+            }
+        }
+
         for (const auto& ext : candidateExtensions)
         {
             const std::wstring candidatePath = assetKey + std::wstring(ext);
@@ -82,6 +88,94 @@ namespace archive_resource
         }
 
         return handle;
+    }
+
+    inline archive::ArchiveResult WriteResourceReferences(archive::IArchive& ar, std::string_view key,
+        const Engine::ResourceReferenceSet& references)
+    {
+        auto current = references.begin();
+
+        return ar.WriteObjectArray(key, references.size(),
+            [&](archive::IArchive& object, std::size_t) -> archive::ArchiveResult
+            {
+                auto result = object.Write("AssetKey", current->AssetKey);
+                if (result) result = object.Write("AssetPath", current->AssetPath);
+                if (result) ++current;
+                return result;
+            });
+    }
+
+    inline archive::ArchiveResult ReadResourceReferences(const archive::IArchive& ar, std::string_view key,
+        Engine::ResourceReferenceSet& references)
+    {
+        bool exists = false;
+        auto result = ar.HasField(key, exists);
+        if (!result) return result;
+
+        Engine::ResourceReferenceSet candidate;
+
+        if (exists)
+        {
+            result = ar.ReadObjectArray(key,
+                [&](archive::IArchive& object, std::size_t) -> archive::ArchiveResult
+                {
+                    Engine::ResourceReference reference;
+                    bool hasField = false;
+
+                    auto read = object.HasField("AssetKey", hasField);
+                    if (read && hasField) read = object.Read("AssetKey", reference.AssetKey);
+                    if (read) read = object.HasField("AssetPath", hasField);
+                    if (read && hasField) read = object.Read("AssetPath", reference.AssetPath);
+                    if (!read) return read;
+
+                    if (reference.AssetKey.empty() && reference.AssetPath.empty())
+                        return { archive::ArchiveErrorCode::InvalidValue, {} };
+
+                    if (!candidate.insert(std::move(reference)).second)
+                        return { archive::ArchiveErrorCode::InvalidValue, {} };
+
+                    return {};
+                });
+        }
+
+        if (result)
+            references.swap(candidate);
+
+        return result;
+    }
+
+    [[nodiscard]] inline Engine::ResourceReferenceSet PreloadResourceReferences(
+        const Engine::ResourceReferenceSet& references)
+    {
+        if (references.empty() || !Engine::ResourceManager::IsCreated())
+            return references;
+
+        auto& manager = Engine::ResourceManager::Get();
+        Engine::ResourceReferenceSet unresolved;
+
+        for (const auto& reference : references)
+        {
+            if (reference.AssetKey.empty() && reference.AssetPath.empty())
+            {
+                unresolved.insert(reference);
+                continue;
+            }
+
+            try
+            {
+                const auto handle = ResolveResourceHandle(manager, reference.AssetKey, reference.AssetPath);
+                if (manager.IsValid(handle))
+                    continue;
+            }
+            catch (const std::filesystem::filesystem_error& error)
+            {
+                ENGINE_LOG_WARN("Resource preload path error: {}", error.what());
+            }
+
+            unresolved.insert(reference);
+        }
+
+        return unresolved;
     }
 
     // Handles are process-local; persist asset identity and resolve it through the engine resource manager.
@@ -100,13 +194,21 @@ namespace archive_resource
                 (resource->GetKey().empty() && resource->GetPath().empty()))
                 return { archive::ArchiveErrorCode::InvalidValue, std::string(key) };
         }
-        return ar.WriteObject(key, empty, [&](archive::IArchive& object, bool isNull) -> archive::ArchiveResult
+        const auto result = ar.WriteObject(key, empty, [&](archive::IArchive& object, bool isNull) -> archive::ArchiveResult
+            {
+                auto written = object.Write("Null", isNull);
+                if (written && !isNull) written = object.Write("AssetKey", resource->GetKey());
+                if (written && !isNull) written = object.Write("AssetPath", resource->GetPath());
+                return written;
+            });
+
+        if (result && resource)
         {
-            auto result = object.Write("Null", isNull);
-            if (result && !isNull) result = object.Write("AssetKey", resource->GetKey());
-            if (result && !isNull) result = object.Write("AssetPath", resource->GetPath());
-            return result;
-        });
+            if (auto* references = ar.GetWriteContext<Engine::ResourceReferenceSet>())
+                references->insert({ resource->GetKey(), resource->GetPath() });
+        }
+
+        return result;
     }
 
     template<typename T>

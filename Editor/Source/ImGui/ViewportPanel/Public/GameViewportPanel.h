@@ -2,7 +2,6 @@
 
 #include "BaseViewportPanel.h"
 #include "ViewportDeferredPipeline.h"
-#include <optional>
 
 BEGIN(Editor)
 
@@ -28,7 +27,7 @@ public:
 protected:
 	virtual void DrawCustomViewport() override;
 	virtual void DrawCustomOptions() override;
-	virtual void ResizeRenderTargets(uint32 width, uint32 height) override;
+	EResult ResizeRenderTargets(uint32 width, uint32 height) override;
 
 private:
 	std::optional<CameraBuffer> FindActiveGameCameraBuffer();

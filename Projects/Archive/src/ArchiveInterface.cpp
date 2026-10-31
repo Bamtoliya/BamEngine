@@ -1,4 +1,6 @@
 ﻿#include <archive/ArchiveInterface.h>
+#include <chrono>
+#include <system_error>
 
 namespace archive
 {
@@ -29,17 +31,17 @@ namespace archive
         const ArrayElementCallback& writeElement)
     {
         if (!writeElement)
-        {
             return { ArchiveErrorCode::InvalidOperation, std::string{ key } };
-        }
+
         return WriteArrayElementValues(key, size,
             [&](IArchive& temporary, std::string_view valueKey, std::size_t index)
             {
+                temporary.m_WriteContext = m_WriteContext;
+
                 auto result = writeElement(temporary, valueKey, index);
                 if (result && temporary.GetObjectDepth() != 0)
-                {
                     result = { ArchiveErrorCode::InvalidOperation, {} };
-                }
+
                 return ArrayElementResult(key, index, valueKey, result);
             });
     }
@@ -95,31 +97,76 @@ namespace archive
     {
         std::string document;
         const auto result = Encode(document);
-
         if (!result)
-        {
             return result;
-        }
+
+        return SaveEncodedToFile(path, document);
+    }
+
+    ArchiveResult IArchive::SaveEncodedToFile(const std::filesystem::path& path, std::string_view document)
+    {
+        namespace fs = std::filesystem;
 
         if (std::cmp_greater(document.size(), (std::numeric_limits<std::streamsize>::max)()))
-        {
             return { ArchiveErrorCode::FileWriteFailed, {} };
-        }
 
-        std::ofstream file{ path, std::ios::binary | std::ios::trunc };
-
-        if (!file)
-        {
+        if (path.empty() || !path.has_filename() || path.filename() == "." || path.filename() == "..")
             return { ArchiveErrorCode::FileOpenFailed, {} };
-        }
 
-        file.write(document.data(), static_cast<std::streamsize>(document.size()));
-        file.close();
+        std::error_code error;
+        const auto target = fs::absolute(path, error);
+        if (error)
+            return { ArchiveErrorCode::FileOpenFailed, {} };
 
-        if (!file)
+        struct TemporarySave
         {
-            return { ArchiveErrorCode::FileWriteFailed, {} };
+            fs::path Directory;
+            fs::path File;
+
+            ~TemporarySave()
+            {
+                std::error_code ignored;
+                if (!File.empty())
+                    fs::remove(File, ignored);
+                if (!Directory.empty())
+                    fs::remove(Directory, ignored);
+            }
+        } temporary;
+
+        const auto stamp = std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+
+        for (unsigned attempt = 0; attempt < 64; ++attempt)
+        {
+            auto directory = target.parent_path() / (".archive-save-" + stamp + "-" + std::to_string(attempt));
+
+            if (fs::create_directory(directory, error))
+            {
+                temporary.Directory = std::move(directory);
+                temporary.File = temporary.Directory / "document.tmp";
+                break;
+            }
+
+            if (error && error != std::errc::file_exists)
+                return { ArchiveErrorCode::FileOpenFailed, {} };
         }
+
+        if (temporary.Directory.empty())
+            return { ArchiveErrorCode::FileOpenFailed, {} };
+
+        std::ofstream file{ temporary.File, std::ios::binary | std::ios::trunc };
+        if (!file)
+            return { ArchiveErrorCode::FileOpenFailed, {} };
+
+        if (!document.empty())
+            file.write(document.data(), static_cast<std::streamsize>(document.size()));
+
+        file.close();
+        if (!file)
+            return { ArchiveErrorCode::FileWriteFailed, {} };
+
+        fs::rename(temporary.File, target, error);
+        if (error)
+            return { ArchiveErrorCode::FileWriteFailed, {} };
 
         return {};
     }

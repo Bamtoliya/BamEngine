@@ -1,41 +1,94 @@
 ﻿#pragma once
+#include "Engine_API.h"
+#include <archive/JsonArchive.h>
+#include <reflection/Registry.h>
+#include <reflection_archive/ReflectionArchiveAdapter.h>
 
-#include "Base.h"
+#include <filesystem>
+#include <system_error>
 
-BEGIN(Engine)
-
-class ENGINE_API ConfigManager final : public Base
+namespace Engine
 {
-	DECLARE_SINGLETON(ConfigManager)
+    enum class EConfigLoadStatus
+    {
+        Loaded,
+        NotFound,
+        Failed
+    };
 
-#pragma region Constructor&Destructor
-private:
-	EResult Initialize(void* arg);
-	virtual void Free() override;
-#pragma endregion
-public:
-	void LoadSettings();
-	void SaveSettings();
+    struct ConfigLoadResult
+    {
+        EConfigLoadStatus Status = EConfigLoadStatus::Failed;
+        archive::ArchiveResult Error;
+        std::error_code FileError;
+    };
 
-	template<typename T>
-	bool Save(T& OutConfig, const string& FileName)
-	{
-		filesystem::path Path(FileName);
-		if (Path.has_parent_path())
-			filesystem::create_directories(Path.parent_path());
+    struct ConfigSaveResult
+    {
+        archive::ArchiveResult Error;
+        std::error_code FileError;
 
-		// Glaze를 이용한 저장 (Prettify 옵션 사용)
-		auto ErrorCode = glz::write_file_json < glz::opts{ .prettify = true } > (InConfig, FullPath, string{});
-		return ErrorCode == glz::error_code::none;
-	}
+        [[nodiscard]] explicit operator bool() const noexcept
+        {
+            return static_cast<bool>(Error) && !FileError;
+        }
+    };
 
-	template<typename T>
-	bool Load(T& InConfig, const string& FileName)
-	{
-		if (!filesystem::exists(FileName))
-			return false;
-		auto ErrorCode = glz::read_json(FileName, InConfig);
-		return ErrorCode == glz::Error::None;
-	}
-};
-END
+    class ENGINE_API ConfigManager final
+    {
+    public:
+        template<typename T>
+        [[nodiscard]] static ConfigLoadResult Load(T& config, const std::filesystem::path& path,
+            const reflection::Registry& registry)
+        {
+            const auto* type = registry.FindType<T>();
+            if (!type)
+            {
+                return { EConfigLoadStatus::Failed,
+                    { archive::ArchiveErrorCode::UnsupportedType, "Settings" }, {} };
+            }
+
+            std::error_code error;
+            const bool exists = std::filesystem::exists(path, error);
+
+            if (error)
+                return { EConfigLoadStatus::Failed, {}, error };
+
+            if (!exists)
+                return { EConfigLoadStatus::NotFound, {}, {} };
+
+            archive::JsonArchive reader;
+            auto result = reader.LoadFromFile(path);
+            if (!result)
+                return { EConfigLoadStatus::Failed, result, {} };
+
+            result = archive_reflection::ReadObject(reader, "Settings", *type, config, &registry);
+            if (!result)
+                return { EConfigLoadStatus::Failed, result, {} };
+
+            return { EConfigLoadStatus::Loaded, {}, {} };
+        }
+    public:
+        template<typename T>
+        [[nodiscard]] static ConfigSaveResult Save(const T& config, const std::filesystem::path& path,
+            const reflection::Registry& registry)
+        {
+            const auto* type = registry.FindType<T>();
+            if (!type)
+                return { { archive::ArchiveErrorCode::UnsupportedType, "Settings" }, {} };
+
+            archive::JsonArchive writer;
+            const auto result = archive_reflection::WriteObject(
+                writer, "Settings", *type, reflection::ObjectView::From(config), &registry);
+
+            if (!result)
+                return { result, {} };
+
+            return SaveDocument(writer, path);
+        }
+
+    public:
+        [[nodiscard]] static ConfigSaveResult SaveDocument(const archive::JsonArchive& document,
+            const std::filesystem::path& path);
+    };
+}

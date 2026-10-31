@@ -2,9 +2,14 @@
 
 #include "Editor_Includes.h"
 #include "ShortcutTypes.h"
-#include <unordered_map>
 
 BEGIN(Editor)
+
+struct ShortcutManagerDesc
+{
+    std::filesystem::path ConfigPath;
+    std::filesystem::path LegacyPath;
+};
 
 class ShortcutManager : public Base
 {
@@ -36,17 +41,20 @@ public:
     ShortcutChord GetActiveChord(const std::string& actionId) const;
     const EditorAction* FindAction(const std::string& actionId) const;
 
-    bool SaveToFile(const std::filesystem::path& path = "") const;
-    bool LoadFromFile(const std::filesystem::path& path = "");
+    bool SaveToFile() const;
+    bool LoadFromFile();
 
     const std::unordered_map<std::string, EditorAction>& GetActions() const { return m_Actions; }
     const std::unordered_map<std::string, ShortcutChord>& GetActiveBindings() const { return m_ActiveBindings; }
-    static std::filesystem::path GetDefaultConfigPath();
 
 private:
     std::unordered_map<std::string, EditorAction> m_Actions;
     std::unordered_map<std::string, ShortcutChord> m_ActiveBindings;
     mutable std::unordered_map<std::string, std::string> m_HintStringCache;
+    std::filesystem::path m_ConfigPath;
+    std::filesystem::path m_LegacyPath;
+    std::unordered_map<std::string, std::string> m_StoredOverrides;
+    bool m_CanSaveConfig = false;
 };
 
 END

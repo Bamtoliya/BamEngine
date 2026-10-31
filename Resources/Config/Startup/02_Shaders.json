@@ -86,6 +86,96 @@
             "UniformBuffers": 1
         },
         {
+            "Key": "PostProcess_VignettePS",
+            "DxilPath": "Resources/Shader/bin/dxil/vignettePS.cso",
+            "SpirvPath": "Resources/Shader/bin/spirv/vignettePS.spv",
+            "Type": "Fragment",
+            "EntryPoint": "main",
+            "Samplers": 1,
+            "UniformBuffers": 1
+        },
+        {
+            "Key": "PostProcess_ColorAdjustmentsPS",
+            "DxilPath": "Resources/Shader/bin/dxil/colorAdjustmentsPS.cso",
+            "SpirvPath": "Resources/Shader/bin/spirv/colorAdjustmentsPS.spv",
+            "Type": "Fragment",
+            "EntryPoint": "main",
+            "Samplers": 1,
+            "UniformBuffers": 1
+        },
+        {
+            "Key": "PostProcess_ChromaticAberrationPS",
+            "DxilPath": "Resources/Shader/bin/dxil/chromaticAberrationPS.cso",
+            "SpirvPath": "Resources/Shader/bin/spirv/chromaticAberrationPS.spv",
+            "Type": "Fragment",
+            "EntryPoint": "main",
+            "Samplers": 1,
+            "UniformBuffers": 1
+        },
+        {
+            "Key": "PostProcess_FilmGrainPS",
+            "DxilPath": "Resources/Shader/bin/dxil/filmGrainPS.cso",
+            "SpirvPath": "Resources/Shader/bin/spirv/filmGrainPS.spv",
+            "Type": "Fragment",
+            "EntryPoint": "main",
+            "Samplers": 1,
+            "UniformBuffers": 1
+        },
+        {
+            "Key": "PostProcess_LensDistortionPS",
+            "DxilPath": "Resources/Shader/bin/dxil/lensDistortionPS.cso",
+            "SpirvPath": "Resources/Shader/bin/spirv/lensDistortionPS.spv",
+            "Type": "Fragment",
+            "EntryPoint": "main",
+            "Samplers": 1,
+            "UniformBuffers": 1
+        },
+        {
+            "Key": "PostProcess_SharpenPS",
+            "DxilPath": "Resources/Shader/bin/dxil/sharpenPS.cso",
+            "SpirvPath": "Resources/Shader/bin/spirv/sharpenPS.spv",
+            "Type": "Fragment",
+            "EntryPoint": "main",
+            "Samplers": 1,
+            "UniformBuffers": 1
+        },
+        {
+            "Key": "PostProcess_BloomPrefilterPS",
+            "DxilPath": "Resources/Shader/bin/dxil/bloomPrefilterPS.cso",
+            "SpirvPath": "Resources/Shader/bin/spirv/bloomPrefilterPS.spv",
+            "Type": "Fragment",
+            "EntryPoint": "main",
+            "Samplers": 1,
+            "UniformBuffers": 1
+        },
+        {
+            "Key": "PostProcess_BloomDownsamplePS",
+            "DxilPath": "Resources/Shader/bin/dxil/bloomDownsamplePS.cso",
+            "SpirvPath": "Resources/Shader/bin/spirv/bloomDownsamplePS.spv",
+            "Type": "Fragment",
+            "EntryPoint": "main",
+            "Samplers": 1,
+            "UniformBuffers": 0
+        },
+        {
+            "Key": "PostProcess_BloomUpsamplePS",
+            "DxilPath": "Resources/Shader/bin/dxil/bloomUpsamplePS.cso",
+            "SpirvPath": "Resources/Shader/bin/spirv/bloomUpsamplePS.spv",
+            "Type": "Fragment",
+            "EntryPoint": "main",
+            "Samplers": 1,
+            "UniformBuffers": 1
+        },
+        {
+            "Key": "PostProcess_BloomCompositePS",
+            "DxilPath": "Resources/Shader/bin/dxil/bloomCompositePS.cso",
+            "SpirvPath": "Resources/Shader/bin/spirv/bloomCompositePS.spv",
+            "Type": "Fragment",
+            "EntryPoint": "main",
+            "Samplers": 1,
+            "UniformBuffers": 1
+        },
+        {
             "Key": "Resources/Shader/SkyVS",
             "DxilPath": "Resources/Shader/bin/dxil/skyVS.cso",
             "SpirvPath": "Resources/Shader/bin/spirv/skyVS.spv",

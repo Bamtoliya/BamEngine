@@ -1,0 +1,8 @@
+﻿{
+  "Settings": {
+    "SchemaVersion": 1,
+    "ProjectName": "BamEngine",
+    "StartupManifestPath": "Resources/Config/Startup/StartupManifest.json",
+    "StartupScenePath": ""
+  }
+}

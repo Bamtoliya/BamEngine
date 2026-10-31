@@ -1,2 +1,27 @@
 ﻿#pragma once
 
+#include <reflection/Annotations.h>
+
+#include <cstdint>
+#include <string>
+
+namespace Engine
+{
+    STRUCT()
+    struct ProjectSettings
+    {
+        static constexpr std::uint32_t CurrentSchemaVersion = 1;
+
+        PROPERTY()
+        std::uint32_t SchemaVersion = CurrentSchemaVersion;
+
+        PROPERTY(META("Optional", true))
+        std::string ProjectName = "Untitled";
+
+        PROPERTY()
+        std::string StartupManifestPath = "Resources/Config/Startup/StartupManifest.json";
+
+        PROPERTY(META("Optional", true))
+        std::string StartupScenePath;
+    };
+}

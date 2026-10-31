@@ -4,6 +4,7 @@
 #include "EditorCameraController.h"
 #include "IconsFontAwesome7.h"
 #include "Components/Core/TransformComponent.h"
+#include "EditorSettings.h"
 
 #pragma region Constructor&Destructor
 void CameraViewportPanel::Initialize(void* arg)
@@ -32,7 +33,8 @@ void CameraViewportPanel::Free()
 #pragma region Loop
 void CameraViewportPanel::Update(f32 dt)
 {
-	CalculateRenderResolution(m_PanelWidth, m_PanelHeight);
+	if (!CalculateRenderResolution(m_PanelWidth, m_PanelHeight))
+		return;
 
 	if (m_CameraController && m_Focused)
 		m_CameraController->HandleInput(dt);
@@ -209,5 +211,91 @@ void CameraViewportPanel::DrawDimensionToggleButton()
 	ImGui::PopStyleColor();
 
 	ImGui::PopStyleVar(2);
+}
+void CameraViewportPanel::RestoreViewportState(const ViewportWorkspace& state)
+{
+	BaseViewportPanel::RestoreViewportState(state);
+
+	if (!state.HasCamera || !m_CameraController)
+		return;
+
+	auto* transform = m_CameraController->GetTransformComponent();
+	auto* camera = m_CameraController->GetCameraComponent();
+
+	if (!transform || !camera)
+		return;
+
+	const auto finite = [](const std::array<float, 3>& values)
+		{
+			return std::all_of(values.begin(), values.end(), [](float value) { return std::isfinite(value); });
+		};
+
+	if (!finite(state.CameraPosition) || !finite(state.CameraRotation) ||
+		!std::isfinite(state.FOV) || state.FOV <= 0.0f || state.FOV >= 180.0f ||
+		!std::isfinite(state.OrthographicSize) || state.OrthographicSize <= 0.0f ||
+		!std::isfinite(state.CameraSpeed) || state.CameraSpeed < 1.0f)
+	{
+		EDITOR_LOG_WARN("Invalid editor camera state: {}", WStrToStr(m_Name));
+		return;
+	}
+
+	const auto previousTransform = *transform;
+	const auto previousCamera = *camera;
+	const float previousSpeed = m_CameraController->GetCameraSpeed();
+
+	auto candidate = previousTransform;
+	const vec3 position(state.CameraPosition[0], state.CameraPosition[1], state.CameraPosition[2]);
+	const vec3 rotation(state.CameraRotation[0], state.CameraRotation[1], state.CameraRotation[2]);
+
+	if (!candidate.SetLocalPosition(position) || !candidate.SetEulerRotation(rotation))
+	{
+		EDITOR_LOG_WARN("Editor camera transform restore failed: {}", WStrToStr(m_Name));
+		return;
+	}
+
+	*transform = candidate;
+	camera->CameraType = state.Perspective ? Engine::ECameraType::Perspective : Engine::ECameraType::Orthographic;
+	camera->FOV = state.FOV;
+	camera->OrthographicSize = state.OrthographicSize;
+
+	m_CameraController->SetCameraSpeed(state.CameraSpeed);
+	m_CameraController->SyncControlRotationFromTransform();
+	m_CameraController->RefreshMatrices();
+
+	if (!m_CameraController->GetCameraBuffer())
+	{
+		*transform = previousTransform;
+		*camera = previousCamera;
+
+		m_CameraController->SetCameraSpeed(previousSpeed);
+		m_CameraController->SyncControlRotationFromTransform();
+		m_CameraController->RefreshMatrices();
+
+		EDITOR_LOG_WARN("Editor camera matrices could not be restored: {}", WStrToStr(m_Name));
+	}
+}
+
+ViewportWorkspace CameraViewportPanel::CaptureViewportState() const
+{
+	auto state = BaseViewportPanel::CaptureViewportState();
+
+	if (!m_CameraController)
+		return state;
+
+	const auto* transform = m_CameraController->GetTransformComponent();
+	const auto* camera = m_CameraController->GetCameraComponent();
+
+	if (!transform || !camera)
+		return state;
+
+	state.HasCamera = true;
+	state.CameraPosition = { transform->position.x, transform->position.y, transform->position.z };
+	state.CameraRotation = { transform->eulerRotation.x, transform->eulerRotation.y, transform->eulerRotation.z };
+	state.Perspective = camera->CameraType == Engine::ECameraType::Perspective;
+	state.FOV = camera->FOV;
+	state.OrthographicSize = camera->OrthographicSize;
+	state.CameraSpeed = m_CameraController->GetCameraSpeed();
+
+	return state;
 }
 #pragma endregion

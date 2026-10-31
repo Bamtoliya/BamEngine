@@ -25,15 +25,18 @@ void GameViewportPanel::Free()
 	__super::Free();
 }
 
-void GameViewportPanel::ResizeRenderTargets(uint32 width, uint32 height)
+EResult GameViewportPanel::ResizeRenderTargets(uint32 width, uint32 height)
 {
-	__super::ResizeRenderTargets(width, height);
-	m_Pipeline.Resize(width, height);
+	const auto pipelineResult = m_Pipeline.Resize(width, height);
+	const auto channelResult = BaseViewportPanel::ResizeRenderTargets(width, height);
+
+	return pipelineResult != EResult::Success ? pipelineResult : channelResult;
 }
 
 void GameViewportPanel::Update(f32 dt)
 {
-	CalculateRenderResolution(m_PanelWidth, m_PanelHeight);
+	if (!CalculateRenderResolution(m_PanelWidth, m_PanelHeight))
+		return;
 
 	const auto cameraBuffer = FindActiveGameCameraBuffer();
 	m_HasActiveCamera = cameraBuffer.has_value();

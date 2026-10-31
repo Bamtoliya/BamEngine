@@ -16,8 +16,14 @@ target_precompile_headers(TransformInheritanceCheck PRIVATE
 set_target_properties(TransformInheritanceCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
 
 add_executable(EditorHistoryCheck examples/EditorHistoryCheck.cpp
-    Source/Command/Private/CommandHistory.cpp Source/Command/Private/SceneEditHistory.cpp)
-target_include_directories(EditorHistoryCheck PRIVATE "${EDITOR_SOURCE_DIR}/Command/Public"
+    Source/Document/Private/SceneDocument.cpp
+    Source/Command/Private/CommandHistory.cpp
+    Source/Command/Private/SceneEditHistory.cpp
+    Source/Document/Private/EditorDocumentManager.cpp)
+
+target_include_directories(EditorHistoryCheck PRIVATE
+    "${EDITOR_SOURCE_DIR}/Command/Public"
+    "${EDITOR_SOURCE_DIR}/Document/Public"
     "${EDITOR_SOURCE_DIR}/ImGui/InspectorPanel/Public")
 target_link_libraries(EditorHistoryCheck PRIVATE BamEngine::Engine)
 target_precompile_headers(EditorHistoryCheck PRIVATE
@@ -61,7 +67,11 @@ set_target_properties(HierarchyEditorCheck PROPERTIES UNITY_BUILD OFF FOLDER "Ch
 add_executable(ReflectionInspectorCheck examples/ReflectionInspectorCheck.cpp
     Source/ImGui/InspectorPanel/Private/ReflectionPropertyDrawer.cpp)
 target_include_directories(ReflectionInspectorCheck PRIVATE
-    "${EDITOR_SOURCE_DIR}/ImGui/InspectorPanel/Public" "${EDITOR_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/ThirdParty")
+    "${EDITOR_SOURCE_DIR}/ImGui/InspectorPanel/Public"
+    "${EDITOR_SOURCE_DIR}/ImGui/Public"
+    "${EDITOR_SOURCE_DIR}"
+    "${CMAKE_SOURCE_DIR}/ThirdParty"
+)
 target_link_libraries(ReflectionInspectorCheck PRIVATE BamEngine::Engine imgui::imgui)
 add_dependencies(ReflectionInspectorCheck GenerateLocalization)
 target_precompile_headers(ReflectionInspectorCheck PRIVATE
@@ -93,4 +103,33 @@ if(MSVC)
     target_compile_options(PickingMathCheck PRIVATE /utf-8)
     target_compile_options(TransformEditorCheck PRIVATE /utf-8)
     target_compile_options(ReflectionInspectorCheck PRIVATE /utf-8)
+endif()
+
+add_executable(EditorSettingsCheck examples/EditorSettingsCheck.cpp)
+
+target_include_directories(EditorSettingsCheck PRIVATE
+    "${EDITOR_SOURCE_DIR}"
+    "${EDITOR_SOURCE_DIR}/Settings/Public"
+)
+
+target_link_libraries(EditorSettingsCheck PRIVATE BamEngine::Engine)
+set_target_properties(EditorSettingsCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
+
+reflection_generate(
+    TARGET EditorSettingsCheck
+    MODULE BamEditorSettingsCheck
+    CXX_STANDARD 23
+    HEADERS "${EDITOR_SOURCE_DIR}/Settings/Public/EditorSettings.h"
+    HEADER_INCLUDE_ROOT "${EDITOR_SOURCE_DIR}"
+    OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/Generated/SettingsCheck/$<CONFIG>"
+    VISIBILITY PRIVATE
+)
+
+if(MSVC)
+    target_compile_options(EditorSettingsCheck PRIVATE /utf-8 /Zc:preprocessor)
+endif()
+
+if(BUILD_TESTING)
+    add_test(NAME EditorSettingsCheck COMMAND EditorSettingsCheck
+        "${CMAKE_CURRENT_BINARY_DIR}/editor-settings-check")
 endif()

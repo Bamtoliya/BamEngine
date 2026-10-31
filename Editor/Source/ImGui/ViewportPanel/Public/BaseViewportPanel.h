@@ -48,35 +48,35 @@ struct ViewportPanelDesc
 };
 
 BEGIN(Editor)
-
-class BaseViewportPanel : public ImGuiInterface
+struct ViewportWorkspace;
+class BaseViewportPanel : public IImGui
 {
 	using DESC = ViewportPanelDesc;
 #pragma region Constructor&Destructor
 public:
 	BaseViewportPanel() { m_Name = L"Base Viewport Panel"; }
 	virtual ~BaseViewportPanel() = default;
-public:
 	virtual void Initialize(void* arg = nullptr);
-public:
 	virtual void Free();
 #pragma endregion
 
+#pragma region Loop
 public:
 	virtual void Update(f32 dt) override;
-public:
 	void Draw();
-	string GetDisplayName() const override;
+#pragma endregion
 
-
-
+#pragma region Get & Set
 public:
+	string GetDisplayName() const override { return m_IsRenderTargetViewer ? LOCAL_FMT("Viewport.ViewerTitle", WStrToStr(m_SelectedRTName)) : IImGui::GetDisplayName(); };
 	void SetSelectedRenderTarget(const wstring& rtName) { m_SelectedRTName = rtName; }
+	virtual PostProcessChain* GetPostProcessChain() { return nullptr; }
+	virtual const PostProcessChain* GetPostProcessChain() const { return nullptr; }
+#pragma endregion
 
 #pragma region Draw Image
 protected:
 	virtual void DrawCustomViewport();
-protected:
 	void DrawRenderTargetImage(const wstring& rtName);
 #pragma endregion
 
@@ -84,35 +84,48 @@ protected:
 protected:
 	void DrawOptionsBar();
 	virtual void DrawCustomOptions();
-protected:
 	void DrawRenderTargetMenu();
 	void DrawChannelViewButton(float rightReservedWidth = 0.0f);
-protected:
 	void DrawRTItemContextMenu(const wstring& rtName);
 #pragma endregion
 
 #pragma region Resolution & Ratio
+public:
+	static constexpr int32 MinResolutionDimension = 64;
+	static constexpr int32 MaxResolutionWidth = 7680;
+	static constexpr int32 MaxResolutionHeight = 4320;
+
+	[[nodiscard]] ViewportWorkspace CaptureResolutionState() const;
+	[[nodiscard]] bool TrySetResolutionState(const ViewportWorkspace& state);
+
+	[[nodiscard]] EResult GetLastResolutionUpdateResult() const { return m_LastResolutionUpdateResult; }
+	[[nodiscard]] bool HasValidRenderTargets() const { return m_RenderTargetsValid; }
+
 protected:
-	void CalculateRenderResolution(uint32 panelWidth, uint32 panelHeight);
+	EResult CalculateRenderResolution(uint32 panelWidth, uint32 panelHeight);
 	f32 GetAspectRatio(EAspectRatioMode mode) const;
-	virtual void ResizeRenderTargets(uint32 width, uint32 height);
+	virtual EResult ResizeRenderTargets(uint32 width, uint32 height);
 	void DrawResolutionMenu();
 #pragma endregion
 
+#pragma region Workspace Settings
+public:
+	void CaptureState(EditorWorkspace& workspace) const override;
+	void RestoreState(const EditorWorkspace& workspace) override;
+	virtual void RestoreViewportState(const ViewportWorkspace& state);
+	virtual ViewportWorkspace CaptureViewportState() const;
+#pragma endregion
 
 #pragma region Members
 protected: //Viewport Display
 	ChannelFilter m_ChannelFilter;
 	EViewportChannelView m_ChannelView = EViewportChannelView::RGBA;
-
 	string m_WindowID;
 	bool m_IsRenderTargetViewer = false;
 	wstring m_SelectedRTName;
 	wstring m_DisplayRTName;
-protected:
 	ImVec2 m_ImageScreenPos = { 0.f, 0.f }; //Screen Absolute Position
 	ImVec2 m_ImageSize = { 0.f, 0.f }; //Actual Image Size after Letterbox
-protected: //Resolution & Aspect Ratio
 	EViewportResolutionMode m_ResolutionMode = EViewportResolutionMode::Free;
 	EAspectRatioMode        m_AspectRatioMode = EAspectRatioMode::Free;
 	int32                   m_PresetIndex = 2; // 기본: 1920x1080
@@ -122,6 +135,8 @@ protected: //Resolution & Aspect Ratio
 	// 실제 렌더링 해상도 (RT 크기)
 	uint32 m_RenderWidth = 1920;
 	uint32 m_RenderHeight = 1080;
+	bool m_RenderTargetsValid = true;
+	EResult m_LastResolutionUpdateResult = EResult::Success;
 	// Custom 모드용 사용자 입력 값
 	int32 m_CustomWidth = 1920;
 	int32 m_CustomHeight = 1080;
