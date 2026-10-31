@@ -124,6 +124,7 @@ Engine·Render·Editor·Client 계획에서 무엇을 먼저 연결하고 무엇
   - 창 변경 취소·시간 초과, 실제 GPU 리사이즈 실패와 복구.
   - 언어 변경 시 선택·초안 유지와 적용하지 않은 초안의 저장 제외.
 - **별도 후속 범위**:
+  - 개별 패널(`GraphicSettingPanel`, `ShortcutSettingsPanel`)을 통합하여 좌측 카테고리 네비게이션(`General`, `Graphic`, `Editor`, `Workspace`, `Shortcuts`, `Project Settings`)과 우측 상세 뷰로 관리하는 통합 설정 패널(`UnifiedSettingsPanel`) 구축 ([ImGuiDevelopmentPlan.md](ImGuiDevelopmentPlan.md) 3절).
   - EngineDevelopmentPlan.md 19절의 공통 런타임 설정 API.
   - 동적 생성 뷰포트의 재생성.
   - Client 시작·설정·배포 연결은 BuildAndPackagingPlan.md의 보류 결정을 따른다.
@@ -170,8 +171,10 @@ Engine·Render·Editor·Client 계획에서 무엇을 먼저 연결하고 무엇
       - 기존 2단 버튼 나열 방식을 제거하고 `ImGuiWindowFlags_MenuBar` 기반 상단 메뉴바(`File`, `Edit`, `View`, `Graph Mode`, `Debug/Build`)와 1줄 퀵 액세스 툴바로 재설계하여 캔버스 작업 공간 대폭 확보.
     - **씬 레벨 독립 Collider Raycast API (2026-11-01 구현 완료)**:
       - `PhysicsSystem::Raycast`/`RaycastAll`에 `RaycastQuery`(거리, 레이어마스크, 트리거 포함 여부, 무시 엔티티) 필터링, 활성 플래그 검사, 거리 컷오프 기반 조기 탈출(Early-out) 최적화 및 하위 호환 오버로드 완비.
-  - **남은 항목**:
-    1. 독립 Sprite Flipbook 재생기([EngineDevelopmentPlan.md](EngineDevelopmentPlan.md) 8절).
+    - **독립 SpriteAnimation 에셋 및 전용 에디터 구축 (2026-11-01 구현 완료)**:
+      - `SpriteAnimation` 리소스 에셋 클래스 및 JSON 직렬화/역직렬화 구축.
+      - `SpriteAnimationComponent` 및 `SpriteAnimationSystem` 에셋 우선/로컬 폴백 파이프라인 연동.
+      - `SpriteAnimationEditor` 전용 저작 패널(프리뷰 캔버스, 줌/팬, 피벗 크로스헤어, 툴바, 프레임 관리, 하단 필름스트립 타임라인) 및 콘텐츠 브라우저 더블클릭 연동 완성.
 - 완료 기준: PIE 중 모듈 핫리로드와 그래프 실행이 안전하게 유지되고, 입력으로 작은 씬을 조작하며 화면 표시 여부와 무관한 충돌 질의·두 인스턴스의 독립 상태를 확인한다.
 
 ### P2-B. 기본 렌더 확장 (S3·S4·S5 검증 및 완성)
@@ -194,10 +197,14 @@ Engine·Render·Editor·Client 계획에서 무엇을 먼저 연결하고 무엇
 
 ### P2-D. 아바타·제작 도구의 첫 재생
 
-- 3D는 Engine 계획 9절의 클립 평가·골격·스키닝을 먼저 연결하고, 표정/모프·매핑 등 필요한 16절 기반으로 확장한다.
-- 2D는 작은 변형 메시·파라미터 평가·마스크/합성을 독립 경로로 진행한다. 3D 전체 완료를 요구하지 않는다.
-- 17절의 제작 작업은 우선 임포트 데이터 검사·작은 수정·Undo/Redo·안전한 저장과 변환 결과 확인부터 시작한다.
-- 완료 기준: 같은 에셋의 두 실행 인스턴스와 Editor 미리보기가 상태를 공유하지 않고 저장 결과를 다시 재생한다.
+- **2026-11-01 현황**:
+  - **3D 스켈레탈 애니메이션 런타임 & GPU 스키닝 파이프라인 (Phase 1)**: `AnimationEvaluator`(키프레임 mix/slerp, 본 계층 결합, TRS 포즈 크로스페이드), `AnimatorComponent`, `AnimationSystem` 매 틱 갱신 및 `MeshRenderSystem`/`Renderer` 구조화 버퍼(`finalBoneMatrices`) GPU 스키닝 연동 완성.
+  - **애니메이션 상태 머신(ASM) 코어 (Phase 2)**: `AnimatorParameters`(Float/Int/Bool/Trigger), `AnimTransition`(크로스페이드 시간, HasExitTime, ExitTime, 조건식 목록), `AnimState`, `AnimatorStateMachine`, `AnimatorRuntimeState` 인스턴스 격리 및 비주얼 스크립팅 노드(`NODE_ANIMATOR_*`) 구축.
+  - **1D 블렌드 트리 (Phase 3)**: `BlendTree1D`(속도/파라미터 기반 인접 클립 선형 가중치 보간) 및 `AnimState` 블렌드 트리 연동 완성.
+  - **리플렉션 아카이브 직렬화**: `CLASS()`/`STRUCT()` 매크로 등록을 통한 `archive_reflection::WriteObject/ReadObject` 기반 `.animator` JSON 에셋 저장/불러오기 지원.
+  - **에디터 시각 저작 패널 (`AnimatorGraphPanel`, Phase 4)**: 18절 지침 풀다운 메뉴바 및 1줄 퀵툴바, 파라미터 독(+추가/삭제/실시간 조작), 캔버스 노드 자유 드래그, "Make Transition" 화살표 연결선, 트랜지션 인스펙터, `FileDialogs` 연동 및 씬 선택 엔티티 활성 상태 청록색 실시간 하이라이트 디버깅 완성.
+  - **남은 항목**: 2D 변형 메시/파라미터 평가(스프라이트 애니메이션과 독립 경로), 표정/모프·VRM 등 필요한 16·17절 기반 확장, Phase 5(고급 게임플레이 연동/AnimNotify/본 마스킹).
+- 완료 기준: 같은 에셋의 두 실행 인스턴스와 Editor 미리보기가 상태를 공유하지 않고 저장 결과를 다시 재생한다. (3D 스켈레탈 애니메이션/ASM/1D 블렌드 트리 검증 완료)
 
 ### P2-E. Client 시작·배포 — 현재 보류
 
@@ -285,9 +292,10 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
 3. **[3순위 / P0-B & S3 잔여] 안정화 마무리 (현재 우선순위)**
    - `Engine/Source/Render/RHI/Platform/DirectX12/Private/DirectX12RHI.cpp` 내 3곳의 `std::terminate()` 호출을 안전한 에러 반환 정책으로 정리.
    - `MeshRenderSystem`의 다중 뷰포트/패스별 카메라 기준 독립 LOD 평가 지원.
-4. **[4순위 / P2-A 잔여] 에디터 및 게임플레이 편의성 마감**
+4. **[4순위 / P2-A 잔여 & 편의성] 에디터 및 게임플레이 편의성 마감**
    - `PickingManager` 가시성에 의존하지 않는 씬 레벨 Collider Raycast API 도입 ([EngineDevelopmentPlan.md](EngineDevelopmentPlan.md) 8절).
    - 그래프 패널 상단 도구 모음 정리 ([ImGuiDevelopmentPlan.md](ImGuiDevelopmentPlan.md) 18절).
+   - 카테고리 기반 통합 설정 패널(`UnifiedSettingsPanel`: General, Graphic, Editor, Workspace, Shortcuts, Project Settings) 구축 ([ImGuiDevelopmentPlan.md](ImGuiDevelopmentPlan.md) 3절).
 5. **[5순위 / P3 준비] 에셋 참조 탐색기 및 콘텐츠 확장**
    - 에셋 참조 색인 및 역참조 시각화 창(`AssetReferencePanel`) 구축.
    - 모델·텍스처 임포트 설정 저장 및 재임포트 파이프라인.

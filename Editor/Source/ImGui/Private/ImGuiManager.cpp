@@ -494,6 +494,7 @@ EResult ImGuiManager::CreateDefaultPanels()
 	AddImGuiPanel(new ResourceManagerInspector());
 	AddImGuiPanel(new TerrainEditor());
 	AddImGuiPanel(new PostProcessPanel());
+	AddImGuiPanel(new AnimatorGraphPanel());
 	HistoryPanel* historyPanel = new HistoryPanel();
 	historyPanel->Initialize();
 	AddImGuiPanel(historyPanel);
@@ -535,6 +536,10 @@ EResult ImGuiManager::CreateResourceEditors()
 	SpriteEditor* spriteEditor = new SpriteEditor();
 	spriteEditor->Close();
 	AddImGuiPanel(spriteEditor);
+
+	SpriteAnimationEditor* spriteAnimEditor = new SpriteAnimationEditor();
+	spriteAnimEditor->Close();
+	AddImGuiPanel(spriteAnimEditor);
 
 	MaterialEditor* materialEditor = new MaterialEditor();
 	materialEditor->Close();

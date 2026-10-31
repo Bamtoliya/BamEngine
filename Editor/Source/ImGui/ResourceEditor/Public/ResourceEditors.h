@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "SpriteEditor.h"
+#include "SpriteAnimationEditor.h"
 #include "TextureEditor.h"
 #include "ModelEditor.h"
 #include "ShaderEditor.h"

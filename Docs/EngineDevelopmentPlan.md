@@ -7,7 +7,8 @@
 - 조사 갱신: 2026-10-24 / 공식 규격·제품 문서를 기능과 경계의 근거로 사용하며 구현 시 의존성 버전을 다시 확정
 - 공통 지침: [EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md), [ReflectionArchiveGuidelines.md](ReflectionArchiveGuidelines.md)
 - 연계 계획: [ImGuiDevelopmentPlan.md](ImGuiDevelopmentPlan.md), [RenderingDevelopmentPlan.md](RenderingDevelopmentPlan.md), [BuildAndPackagingPlan.md](BuildAndPackagingPlan.md)
-- 그래프 기반: [GraphFoundation.md](GraphFoundation.md), [GraphExecution.md](GraphExecution.md), [GraphReflection.md](GraphReflection.md)
+- 그래프 기반: [GraphFoundation.md](GraphFoundation.md), [GraphExecution.md](GraphExecution.md), [GraphReflection.md](GraphReflection.md), [VisualScriptingBlueprintPlan.md](VisualScriptingBlueprintPlan.md)
+- 애니메이터 그래프 계획: [AnimatorGraphPlan.md](AnimatorGraphPlan.md)
 - GPU 연결 지침: [Shader/BINDING_LAYOUT.md](Shader/BINDING_LAYOUT.md)
 - 분류·이관 기준: [SourceOrganizationGuidelines.md](SourceOrganizationGuidelines.md)
 - 통합 우선순위: [DevelopmentPriorities.md](DevelopmentPriorities.md)
@@ -195,17 +196,16 @@ Niagara 에셋 호환이나 같은 수준의 기능 전체 구현을 초기 완�
 완료 예제: 이동체 잔상 또는 무기 궤적이 방출 중지 후 자연스럽게 소멸한다.
 정지·급회전·순간이동·재생 초기화·PIE 반복에서 모양과 버퍼 수명이 안정적이며 최대 점 수를 지킨다.
 
-## 8. 스프라이트 애니메이션과 Flipbook
+## 8. 스프라이트 애니메이션과 Flipbook (SpriteAnimation)
 
-- 기존 Sprite·SpriteRenderer에 프레임 목록 또는 시트 영역, 프레임별 지속 시간과 재생 정보를 연결한다.
-  재생·일시정지·정지·초기화·속도·단발/반복·역방향·왕복 중 지원할 범위를 단계적으로 정한다.
+- **구현 완료 (2026-11-01)**:
+  - 독립 에셋 `SpriteAnimation` 클래스를 구축하여 클립(프레임 시퀀스, 가중치 `duration`, 기본 FPS, `ESpriteAnimationPlayMode`)을 에셋 단위로 분리하고 여러 엔티티가 공유 가능하도록 구조화.
+  - 리플렉션-아카이브 자동 직렬화 파이프라인과 완벽히 연동하여 Zero-Boilerplate 기반 JSON(`.spriteanim`) 저장 및 복원 지원.
+  - `SpriteAnimationComponent`와 `SpriteAnimationSystem`에 에셋 우선 및 로컬 폴백을 연결하고, 프레임 스파이크 방지(상한 2바퀴 컷오프) 및 프레임별 지속시간 가중치 평가 구현.
+  - `SpriteAnimationEditor` 전용 저작 도구를 구축하여 실시간 2D 프리뷰(체크무늬 배경, 줌/팬, 피벗 크로스헤어), 재생 툴바, 프레임 순서/가중치 편집 및 하단 필름스트립 타임라인 완성. 콘텐츠 브라우저 더블클릭 연동 완료.
 - 클립은 공유하고 현재 시간·프레임·재생 상태는 엔티티별로 관리한다.
   공유 Sprite의 영역을 매 프레임 수정해 다른 엔티티의 표시까지 바꾸지 않는다.
-  프레임별 Sprite 핸들 전환 또는 인스턴스별 UV 적용 중 기존 렌더 계약에 맞는 작은 변경을 선택한다.
 - 누적 시간으로 프레임을 계산하고 낮은 FPS·큰 delta에서도 속도를 유지한다.
-  길이 0·잘못된 프레임 지속 시간·누락 텍스처·클립 교체와 루프 경계의 동작을 정한다.
-- 프레임 이벤트는 건너뛴 구간·여러 루프·역재생에서의 발생 규칙과 처리량 제한을 정한다.
-  표시할 프레임만 고르는 것과 이벤트를 전달하는 것을 같은 처리로 생략하지 않는다.
 - 클립과 재생 설정을 저장·복원하고 Inspector에서 재생·미리보기·프레임 편집을 연결한다.
   파티클 Flipbook도 가능한 데이터·평가 규칙을 재사용하되 입자마다 불필요한 엔티티를 만들지 않는다.
 
@@ -241,8 +241,9 @@ Niagara 에셋 호환이나 같은 수준의 기능 전체 구현을 초기 완�
 완료 예제: 임포트한 캐릭터가 바인드 포즈와 단일 클립을 올바르게 표시하고, 이후 Idle/Walk 전이가 부드럽게 동작한다.
 동일 클립의 다중 인스턴스·골격 불일치·누락 트랙·음수/큰 delta의 지원 정책과 PIE·Client 결과를 확인한다.
 
-## 10. 그래프 상태 로직으로 애니메이션 제어
+## 10. 그래프 상태 로직으로 애니메이션 제어 (상세 계획: [AnimatorGraphPlan.md](AnimatorGraphPlan.md))
 
+- 상세 아키텍처 및 단계별 로드맵(Phase 1~5)은 [AnimatorGraphPlan.md](AnimatorGraphPlan.md)를 따른다.
 - 상태·클립·전이 조건·전이 시간·우선순위·초기 상태와 Bool/Float/Int/Trigger 파라미터를 정의한다.
   그래프 에셋은 공유하고 현재 상태·전이 진행·파라미터·이벤트 큐는 실행 인스턴스마다 소유한다.
 - 먼저 Idle↔Walk 같은 단순 상태 머신으로 2D 또는 3D 플레이어를 제어한다.

@@ -1,4 +1,25 @@
 Group,Key,English,Korean
+,AnimatorGraph.ResetView,Reset Canvas View,캔버스 뷰 초기화
+,AnimatorGraph.TransitionInspector,Transition Inspector,전이 속성 인스펙터
+,AnimatorGraph.Duration,Duration,전이 지속 시간
+,AnimatorGraph.HasExitTime,Has Exit Time,종료 시간 전이 사용
+,AnimatorGraph.ExitTime,Exit Time,종료 시점 비율
+,AnimatorGraph.Conditions,Conditions,전이 조건식
+,AnimatorGraph.MakeTransition,Make Transition,전이 연결선 만들기
+,AnimatorGraph.CreateState,Create State,새 상태 노드 생성
+,AnimatorGraph.SelectTargetToConnect,Click target node to connect transition,연결할 대상 노드를 클릭하세요
+,AnimatorGraph.Title,Animator Graph,애니메이터 그래프
+,AnimatorGraph.Unsaved,Unsaved Controller,저장되지 않은 컨트롤러
+,AnimatorGraph.NodeInspector,Node Inspector,노드 인스펙터
+,AnimatorGraph.SetDefaultState,Default Entry State,기본 진입 상태로 설정
+,AnimatorGraph.UseBlendTree,Use 1D Blend Tree,1D 블렌드 트리 사용
+,AnimatorGraph.Parameter,Parameter,매개변수
+,AnimatorGraph.Samples,Samples,샘플 수
+,AnimatorGraph.NoNodeSelected,No node selected.,선택된 노드가 없습니다.
+,Animator.StateMachine,State Machine,상태 머신
+,Animator.CurrentState,Current State,현재 상태
+,Animator.Parameters,Parameters,매개변수
+,Animator.Trigger,Trigger,트리거
 ,Unsupported graph data version.,Unsupported graph data version.,지원하지 않는 그래프 데이터 버전입니다.
 ,UI_HISTORY_PASTE,Paste Entities,엔티티 붙여넣기
 ,UI_HISTORY_INSTANTIATE_PREFAB,Instantiate Prefab,프리팹 배치
@@ -381,6 +402,8 @@ ResourceEditor,TextureTitle,Texture Editor,텍스처 편집기
 ResourceEditor,ModelTitle,Model Editor,모델 편집기
 ResourceEditor,ShaderTitle,Shader Editor,셰이더 편집기
 ResourceEditor,SpriteTitle,Sprite Editor,스프라이트 편집기
+ResourceEditor,SpriteAnimationTitle,Sprite Animation Editor,스프라이트 애니메이션 에디터
+ResourceEditor,KeyFrames,Key Frames,키 프레임 목록
 PostProcess,ToneMapping,Tone Mapping (ACES),톤 매핑 (ACES)
 FileDialog,AssetFiles,Asset Files,에셋 파일
 FileDialog,ResourceFiles,Resource Files,리소스 파일
@@ -1012,4 +1035,12 @@ ContentBrowser,NoSearchResults,No search results found,검색 결과가 없습�
 ContentBrowser,ClearSearch,Clear,지우기
 ContentBrowser,EmptyFolder,Folder is empty,폴더가 비어 있습니다
 Notification,OpenExternalFailed,Failed to open file with default program: {},기본 프로그램으로 파일을 열지 못했습니다: {}
-
+Animator,NoClipAssigned,No animation clip assigned.,할당된 애니메이션 클립이 없습니다.
+Animator,Timeline,Timeline,타임라인
+Animator,Previewing,Previewing,미리보기 재생 중
+Animator,Stopped,Stopped,정지됨
+Animator,Preview,Preview,미리보기
+Animator,Pause,Pause,일시정지
+Animator,Stop,Stop,정지
+Animator,Reset,Reset,초기화
+Animator,MissingRendererWarning,Requires SkinnedMeshRendererComponent with Skeleton to animate.,스켈레톤이 포함된 SkinnedMeshRendererComponent가 필요합니다.

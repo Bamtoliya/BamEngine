@@ -25,6 +25,7 @@ enum class EResourceType : uint32
 	Script,
 	Scene,
 	Save,
+	SpriteAnimation,
 };
 
 STRUCT()

@@ -35,6 +35,86 @@ Use one entry per meaningful change.
 
 ---
 
+## [2026-11-01] 3D 스켈레탈 애니메이션 런타임, 상태 머신(ASM), 1D 블렌드 트리 및 에디터 저작 패널(AnimatorGraphPanel) 구축
+
+- Area: Engine | Render | Editor | Resource | Reflection
+- Type: Feature | Architecture | Optimization
+- 관련 파일:
+  - Engine/Source/Resource/Model/Public/AnimationEvaluator.h, Private/AnimationEvaluator.cpp
+  - Engine/Source/Resource/Model/Public/AnimatorStateMachine.h, Private/AnimatorStateMachine.cpp
+  - Engine/Source/Resource/Model/Public/BlendTree1D.h, Private/BlendTree1D.cpp
+  - Engine/Source/Core/Public/Components/Render/AnimatorComponent.h
+  - Engine/Source/System/Render/Public/AnimationSystem.h, Private/AnimationSystem.cpp
+  - Engine/Source/System/Render/Private/MeshRenderSystem.cpp
+  - Engine/Source/Graph/Public/GraphGameplayLibrary.h
+  - Editor/Source/ImGui/AnimatorGraphPanel/Public/AnimatorGraphPanel.h, Private/AnimatorGraphPanel.cpp
+  - Editor/Source/ImGui/InspectorPanel/Private/InspectorPanel.cpp
+  - Resources/Data/Localization/Engine.csv, Editor.csv
+  - Docs/AnimatorGraphPlan.md
+- 구현 요약:
+  1. **런타임 스켈레탈 애니메이션 평가기 및 GPU 스키닝 연동 (Phase 1)**:
+     - `AnimationEvaluator`: 키프레임 보간(`glm::mix`, `glm::slerp`) 및 부모-자식 스켈레톤 계층 결합 행렬 도출.
+     - `AnimatorComponent` 및 `AnimationSystem`: 매 틱 엔티티별 포즈 갱신 및 `finalBoneMatrices` 계산.
+     - `MeshRenderSystem` 및 `Renderer::RenderSkinnedMeshes`: 최종 뼈 행렬 팔레트를 구조화 버퍼에 바인딩하여 GPU 스키닝 렌더링 파이프라인 완성.
+  2. **애니메이션 상태 머신(ASM) 런타임 코어 (Phase 2)**:
+     - `AnimatorParameters`: `Float`, `Int`, `Bool`, `Trigger`(전이 발동 시 자동 소모) 파라미터 컨테이너 구축.
+     - `AnimTransition`: 크로스페이드 시간, 종료 시간 전이(`HasExitTime`), 조건식 목록(`TransitionCondition`).
+     - `AnimationEvaluator::EvaluateBlendedSkinningMatrices`: 로컬 TRS 공간에서 최단 경로 쿼터니언 slerp 및 위치 mix를 수행하여 뼈 왜곡 없는 부드러운 상태 간 크로스페이드 지원.
+     - 비주얼 스크립팅 노드(`NODE_ANIMATOR_*`) 및 CSV 다국어 등록.
+  3. **1D 블렌드 트리 (Phase 3)**:
+     - `BlendTree1D`: 단일 연속 파라미터(예: `Speed`) 축에 임계값별 클립들을 정렬하고, 인접한 두 클립의 가중치 alpha를 실시간 선형 보간하여 포즈를 합성하는 블렌드 스페이스 구축.
+     - `AnimState`에 `BlendTree1D` 연동으로 단일 클립과 블렌드 트리를 완전 하위 호환 구조로 통합.
+  4. **리플렉션 아카이브 기반 자동 직렬화**:
+     - `CLASS()` 및 `STRUCT()` 매크로로 상태 머신 구조체들을 등록하여, 별도 아카이브 코드 없이 `archive_reflection::WriteObject/ReadObject`로 `.animator` JSON 에셋 저장 및 로드 완비.
+  5. **에디터 저작 패널 (`AnimatorGraphPanel`) 및 라이브 디버깅 (Phase 4)**:
+     - 18절 지침 준수: 상단 풀다운 메뉴바(`File`, `Edit`, `View`) 및 1줄 퀵 액세스 툴바(`New`, `Open`, `Save`, 파일 상태 배지).
+     - 파라미터 탭: Float/Int/Bool/Trigger 파라미터 추가/삭제/실시간 조작.
+     - 캔버스 UI: 노드 자유 드래그 이동, "Make Transition" 화살표 연결선 및 베지어 곡선 시각화.
+     - 트랜지션 인스펙터: 지속 시간, 종료 시간 비율, 파라미터 조건식 테이블 저작.
+     - 네이티브 파일 대화상자(`FileDialogs`) 연동 및 씬 선택 엔티티 활성 상태 실시간 청록색 네온 발광 디버깅.
+- 검증:
+  - MSVC x64-Debug 컴파일 및 빌드 성공.
+  - 에디터 패널을 통한 상태 머신 저작, `.animator` 직렬화 입출력 및 인스펙터 실시간 동기화 확인.
+
+---
+
+## [2026-11-01] 독립 SpriteAnimation 리소스 에셋 구축 및 전용 SpriteAnimationEditor 저작 패널 완성
+
+- Area: Engine | Editor | Resource | UI | Localization
+- Type: Feature | Architecture | UX
+- 관련 파일:
+  - Engine/Source/Resource/Public/ResourceBinaryHeader.h
+  - Engine/Source/Resource/Public/ResourceMetrics.h
+  - Engine/Source/Resource/Private/ResourceManager.cpp
+  - Engine/Source/Resource/Sprite/Public/SpriteAnimation.h
+  - Engine/Source/Resource/Sprite/Private/SpriteAnimation.cpp
+  - Engine/Source/Core/Public/Components/Render/SpriteAnimationComponent.h
+  - Engine/Source/System/Render/Private/SpriteAnimationSystem.cpp
+  - Editor/Source/ImGui/ResourceEditor/Public/SpriteAnimationEditor.h
+  - Editor/Source/ImGui/ResourceEditor/Private/SpriteAnimationEditor.cpp
+  - Editor/Source/ImGui/ResourceEditor/Public/ResourceEditors.h
+  - Editor/Source/ImGui/Private/ImGuiManager.cpp
+  - Resources/Data/Localization/Editor.csv
+  - Resources/Data/Localization/Engine.csv
+- 구현 요약:
+  1. **독립 SpriteAnimation 리소스 에셋 구축 (Engine 8절, P2-A)**:
+     - `EResourceType::SpriteAnimation` 등록 및 확장자(`.bamspriteanim`, `.spriteanim`) 연결.
+     - `SpriteKeyFrame` 구조체(스프라이트 핸들 및 프레임별 지속 시간 가중치 `duration`), 기본 FPS, 재생 모드(`Loop`/`Once`/`PingPong`) 정의.
+     - 수동 아카이브 오버라이드 없이 `Resource` 기본 클래스의 리플렉션 자동 순회 직렬화(`WriteProperties`/`VisitProperties`)를 100% 활용하는 무결한 Zero-Boilerplate 아키텍처 적용.
+     - `SaveToFile`/`LoadFromFile` 간편 JSON 파일 입출력 및 시간 기반 프레임 인덱스 탐색(`GetFrameIndexAtTime`) 유틸리티 완비.
+  2. **SpriteAnimationComponent 및 SpriteAnimationSystem 에셋 연동**:
+     - `SpriteAnimationComponent`에 `ResourceHandle<SpriteAnimation> animation` 프로퍼티 추가.
+     - 에셋이 지정되어 있으면 공유 에셋의 프레임 시퀀스와 FPS, 재생 모드, 프레임별 지속시간 가중치를 우선 평가하고, 없으면 기존 로컬 `frames` 배열로 자동 폴백(기존 씬 100% 하위 호환).
+  3. **SpriteAnimationEditor 전용 2D 애니메이션 저작/미리보기 에디터 패널 (ImGui 11절)**:
+     - `ResourceEditorInterface`를 상속받아 콘텐츠 브라우저에서 `.spriteanim` 파일 더블클릭 시 자동 로드 및 오픈.
+     - 상단 툴바: 에셋 저장(Save), 재생/일시정지/정지, 이전/다음 프레임, FPS 슬라이더, 재생 모드 콤보박스, 줌 리셋.
+     - 2D 프리뷰 캔버스: 투명 체크무늬(체스판) 배경, 마우스 휠 줌(0.25x~16x), 우클릭 패닝, 중심 피벗(Pivot) 크로스헤어 시각화.
+     - 프레임 인스펙터 & 필름스트립: 프레임 추가/삭제/순서 이동(▲/▼), 지속 시간 가중치 조절, 하단 타임라인 필름스트립 실시간 하이라이트 및 클릭 스크러빙.
+  4. **다국어 사전 키 등록**:
+     - `Editor.csv`(`ResourceEditor.SpriteAnimationTitle`, `ResourceEditor.KeyFrames`) 및 `Engine.csv`(`PROP_SPRITE`, `PROP_SPRITE_ANIMATION`, `PROP_FRAME_DURATION`) 등록.
+
+---
+
 ## [2026-11-01] 렌더링 S5 큐브맵 IBL 연동 검증 및 ViewportDeferredPipeline/GameViewport 후처리 일관성 완성
 
 - Area: Render | Engine | Editor | RHI

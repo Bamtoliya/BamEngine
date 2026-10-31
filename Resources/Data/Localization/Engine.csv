@@ -12,6 +12,7 @@
 ,Alternate a and b; reset makes a the next output.,Alternate a and b; reset makes a the next output.,a와 b를 번갈아 실행합니다. 초기화하면 다음 출력은 a가 됩니다.
 ,Anchor,Anchor,앵커
 ,Angles use radians.,Angles use radians.,각도는 라디안 단위를 사용합니다.
+,Animation,,
 ,"Asin input must be in [-1, 1].","Asin input must be in [-1, 1].","Asin 입력은 [-1, 1] 범위여야 합니다."
 ,Atan2 direction has zero length.,Atan2 direction has zero length.,Atan2 방향 벡터의 길이가 0입니다.
 ,Audio,,
@@ -20,6 +21,7 @@
 ,BLOOM_SOFT_KNEE,Soft Knee,전이 폭
 ,BLOOM_THRESHOLD,Threshold,임계값
 ,CATEGORY_ANCHOR,Anchor,앵커
+,CATEGORY_ANIMATION,,
 ,CATEGORY_ATMOSPHERE,Atmosphere,대기
 ,CATEGORY_ATMOSPHERE_SYNC,Atmosphere Sync,대기 동기화
 ,CATEGORY_AUDIO,Audio,오디오
@@ -97,6 +99,7 @@
 ,Finish then0 before running then1.,Finish then0 before running then1.,then0 실행을 마친 뒤 then1을 실행합니다.
 ,Float is outside the Int range.,Float is outside the Int range.,실숫값이 정수 범위를 벗어났습니다.
 ,Function schema has too many argument pins.,Function schema has too many argument pins.,함수 스키마의 인자 핀이 너무 많습니다.
+,Get 3D Animation Time,,
 ,Get Actor Location,,
 ,Get Axis Horizontal (A/D/Left/Right),,
 ,Get Axis Vertical (W/S/Up/Down),,
@@ -127,6 +130,7 @@
 ,Invalid pin key or display name:,Invalid pin key or display name:,핀 키 또는 표시 이름이 올바르지 않습니다:
 ,Invalid pin type.,Invalid pin type.,핀 자료형이 올바르지 않습니다.
 ,InverseLerp interval has zero width.,InverseLerp interval has zero width.,InverseLerp 구간의 길이가 0입니다.
+,Is 3D Animation Playing,,
 ,Is Actor Active,,
 ,Is Actor Visible,,
 ,Is Key Pressed,,
@@ -153,6 +157,19 @@
 ,Math/Vector2,Math/Vector2,수학/Vector2
 ,Math/Vector3,Math/Vector3,수학/Vector3
 ,Math/Vector4,Math/Vector4,수학/Vector4
+,NODE_ANIMATOR_GET_BOOL,Get Animator Bool,애니메이터 불리언 가져오기
+,NODE_ANIMATOR_GET_CURRENT_TIME,Get 3D Animation Time,3D 애니메이션 현재 시간 가져오기
+,NODE_ANIMATOR_GET_FLOAT,Get Animator Float,애니메이터 실수 가져오기
+,NODE_ANIMATOR_IS_PLAYING,Is 3D Animation Playing,3D 애니메이션 재생 중 여부
+,NODE_ANIMATOR_PAUSE,Pause 3D Animation,3D 애니메이션 일시정지
+,NODE_ANIMATOR_PLAY,Play 3D Animation,3D 애니메이션 재생
+,NODE_ANIMATOR_SET_BOOL,Set Animator Bool,애니메이터 불리언 설정
+,NODE_ANIMATOR_SET_FLOAT,Set Animator Float,애니메이터 실수 설정
+,NODE_ANIMATOR_SET_INT,Set Animator Int,애니메이터 정수 설정
+,NODE_ANIMATOR_SET_PLAY_RATE,Set 3D Animation Play Rate,3D 애니메이션 재생 속도 설정
+,NODE_ANIMATOR_SET_TIME,Set 3D Animation Time,3D 애니메이션 재생 시간 설정
+,NODE_ANIMATOR_SET_TRIGGER,Set Animator Trigger,애니메이터 트리거 설정
+,NODE_ANIMATOR_STOP,Stop 3D Animation,3D 애니메이션 중지
 ,Native argument type mismatch.,Native argument type mismatch.,네이티브 인자의 자료형이 일치하지 않습니다.
 ,No execution binding for node type:,No execution binding for node type:,실행 바인딩이 없는 노드 유형:
 ,No matching dynamic free/static function binding.,No matching dynamic free/static function binding.,일치하는 동적 자유 함수 또는 정적 함수 바인딩이 없습니다.
@@ -190,6 +207,7 @@
 ,PROP_ANCHOR_POSITION,Anchor Position,앵커 위치
 ,PROP_ANGULAR_DAMPING,Angular Damping,각 감쇠
 ,PROP_ANGULAR_VELOCITY,Angular Velocity,각속도
+,PROP_ANIMATION_CLIP,,
 ,PROP_ASPECT_RATIO,Aspect Ratio,비율
 ,PROP_ATTENUATION_COEFFICIENTS,Attenuation Coefficients,감쇠 계수
 ,PROP_ATTENUATION_MODE,Attenuation Mode,감쇠 모드
@@ -216,9 +234,11 @@
 ,PROP_COMPONENTS,Components,컴포넌트
 ,PROP_CONNECTED_ENTITY,Connected Entity,연결 엔티티
 ,PROP_CONNECTED_LOCAL_ANCHOR,Connected Anchor,연결 앵커
+,PROP_CONTROLLER_PATH,,
 ,PROP_COVERAGE,Cloud Coverage,구름 커버리지
 ,PROP_CULL_MODE,Cull Mode,컬링 모드
 ,PROP_CURRENT_FRAME,Current Frame,현재 프레임
+,PROP_CURRENT_TIME,,
 ,PROP_DAY_DURATION,Day Duration (s),하루 길이(초)
 ,PROP_DENSITY,Cloud Density,구름 밀도
 ,PROP_DEPTH_COMPARE_OP,Depth Compare Op,깊이 비교 연산
@@ -252,6 +272,7 @@
 ,PROP_FOV,Field of View,시야각
 ,PROP_FPS,Frames Per Second,초당 프레임 수
 ,PROP_FRAMES,Frames,프레임 목록
+,PROP_FRAME_DURATION,Frame Duration,프레임 지속 시간
 ,PROP_FREEZE_ROTATION,Freeze Rotation,회전 고정
 ,PROP_FRICTION,Friction,마찰
 ,PROP_FRONT_FACE,Front Face,전면 방향
@@ -274,6 +295,7 @@
 ,PROP_IRRADIANCE_MAP,Irradiance Map,확산광 맵
 ,PROP_IS_3D,3D Audio,3D 오디오
 ,PROP_IS_ACTIVE,Is Active,활성 상태
+,PROP_IS_LOOPING,,
 ,PROP_IS_PLAYING,Playing,재생 중
 ,PROP_IS_TRIGGER,Trigger,트리거
 ,PROP_LANGUAGE,Language,언어
@@ -355,6 +377,8 @@
 ,PROP_SPOT_FALLOFF_EXPONENT,Falloff Exponent,감쇠 지수
 ,PROP_SPOT_INNER_ANGLE,Inner Angle,내부 각도
 ,PROP_SPOT_OUTER_ANGLE,Outer Angle,외부 각도
+,PROP_SPRITE,Sprite,스프라이트
+,PROP_SPRITE_ANIMATION,Sprite Animation,스프라이트 애니메이션
 ,PROP_SPRITE_HANDLE,Sprite Handle,스프라이트 핸들
 ,PROP_SUN_COLOR,Sun Color,태양 색상
 ,PROP_SUN_INTENSITY,Sun Intensity,태양 강도
@@ -382,6 +406,7 @@
 ,Parameter,Parameter,매개변수
 ,Pass enter to exit only while the gate is open.,Pass enter to exit only while the gate is open.,게이트가 열려 있을 때만 enter를 exit로 전달합니다.
 ,Pass once until reset; state belongs to the graph instance.,Pass once until reset; state belongs to the graph instance.,초기화할 때까지 한 번만 통과합니다. 상태는 그래프 인스턴스에 속합니다.
+,Pause 3D Animation,,
 ,Pause Sprite Animation,,
 ,Physics,,
 ,Pin default exceeds int32 range:,Pin default exceeds int32 range:,핀 기본값이 int32 범위를 벗어났습니다:
@@ -390,6 +415,7 @@
 ,Pin keys must be non-empty and unique within a node.,Pin keys must be non-empty and unique within a node.,핀 키는 비어 있지 않아야 하며 노드 안에서 고유해야 합니다.
 ,Pin types must match exactly; conversions are explicit.,Pin types must match exactly; conversions are explicit.,핀 자료형이 정확히 일치해야 합니다. 변환은 명시적으로 지정하세요.
 ,Pipeline,Pipeline,파이프라인
+,Play 3D Animation,,
 ,Play Sprite Animation,,
 ,Pointer/reference parameters are not supported by graphs.,Pointer/reference parameters are not supported by graphs.,그래프는 포인터 또는 참조 매개변수를 지원하지 않습니다.
 ,Pointer/reference results are not supported by graphs.,Pointer/reference results are not supported by graphs.,그래프는 포인터 또는 참조 반환값을 지원하지 않습니다.
@@ -410,6 +436,7 @@
 ,Run the true or false execution path.,Run the true or false execution path.,참 또는 거짓 실행 경로를 실행합니다.
 ,SHARPEN_SHARPNESS,Sharpness,선명도
 ,STRUCT_AABB,AABB,축 정렬 경계 상자(AABB)
+,STRUCT_ANIMATOR,,
 ,STRUCT_AUDIO_LISTENER,Audio Listener,오디오 리스너
 ,STRUCT_AUDIO_SOURCE,Audio Source,오디오 소스
 ,STRUCT_BOUNDING_BOX,Bounding Box,경계 상자
@@ -461,6 +488,8 @@
 ,STRUCT_VOLUMETRIC_CLOUD,Volumetric Cloud,볼류메트릭 클라우드
 ,STRUCT_WORLD_TRANSFORM,World Transform,월드 트랜스폼
 ,Select a Start or Update event entry.,Select a Start or Update event entry.,Start 또는 Update 이벤트 진입점을 선택하세요.
+,Set 3D Animation Play Rate,,
+,Set 3D Animation Time,,
 ,Set Actor Active,,
 ,Set Actor Location,,
 ,Set Actor Visible,,
@@ -492,6 +521,7 @@
 ,Sprite,,
 ,Sqrt requires a non-negative input.,Sqrt requires a non-negative input.,Sqrt 입력은 0 이상이어야 합니다.
 ,Start already ran in this instance. Reload to restart.,Start already ran in this instance. Reload to restart.,이 인스턴스에서 Start가 이미 실행됐습니다. 다시 시작하려면 다시 불러오세요.
+,Stop 3D Animation,,
 ,Stop All Audio,,
 ,Stop Sprite Animation,,
 ,Sun,Sun,태양

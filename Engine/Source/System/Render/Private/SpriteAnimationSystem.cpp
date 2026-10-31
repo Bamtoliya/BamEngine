@@ -34,41 +34,43 @@ void SpriteAnimationSystem::OnUpdate(entt::registry& registry, const vector<Scen
 			}
 			auto& anim = view.get<SpriteAnimationComponent>(entity);
 			auto& renderer = view.get<SpriteRendererComponent>(entity);
-			if (!anim.isPlaying || anim.frames.empty()) continue;
-			const int32 frameCount = static_cast<int32>(anim.frames.size());
-			if (frameCount <= 0) continue;
+			const int32 frameCount = anim.GetEffectiveFrameCount();
+			if (!anim.isPlaying || frameCount <= 0) continue;
+
 			if (frameCount == 1)
 			{
 				anim.currentFrameIndex = 0;
-				renderer.spriteHandle = anim.frames[0];
+				renderer.spriteHandle = anim.GetSpriteAtFrame(0);
 				continue;
 			}
-			const f32 fps = anim.framesPerSecond > 0.0f ? anim.framesPerSecond : 12.0f;
-			const f32 frameDuration = std::max(1.0f / fps, 0.001f);
+
+			const f32 fps = anim.GetEffectiveFPS();
+			const f32 baseFrameDuration = std::max(1.0f / fps, 0.001f);
 			anim.elapsedTime += dt * std::abs(anim.playRate);
-			// 프레임 드롭이나 극단적인 delta 스파이크 시 무한 루프 방지 (최대 2바퀴 분량으로 컷오프)
+
 			const int32 maxSteps = frameCount * 2;
 			int32 stepCount = 0;
-			while (anim.elapsedTime >= frameDuration && stepCount < maxSteps)
+			const auto playMode = anim.GetEffectivePlayMode();
+			f32 currentRequiredDuration = baseFrameDuration * anim.GetEffectiveFrameDuration(anim.currentFrameIndex);
+
+			while (anim.elapsedTime >= currentRequiredDuration && stepCount < maxSteps)
 			{
-				anim.elapsedTime -= frameDuration;
+				anim.elapsedTime -= currentRequiredDuration;
 				++stepCount;
 				const bool forward = (anim.playRate >= 0.0f) ^ anim.isReversed;
-				if (anim.playMode == EFlipbookPlayMode::Loop)
+				if (playMode == ESpriteAnimationPlayMode::Loop)
 				{
 					if (forward)
 						anim.currentFrameIndex = (anim.currentFrameIndex + 1) % frameCount;
 					else
 						anim.currentFrameIndex = (anim.currentFrameIndex - 1 + frameCount) % frameCount;
 				}
-				else if (anim.playMode == EFlipbookPlayMode::Once)
+				else if (playMode == ESpriteAnimationPlayMode::Once)
 				{
 					if (forward)
 					{
 						if (anim.currentFrameIndex + 1 < frameCount)
-						{
 							anim.currentFrameIndex++;
-						}
 						else
 						{
 							anim.isPlaying = false;
@@ -79,9 +81,7 @@ void SpriteAnimationSystem::OnUpdate(entt::registry& registry, const vector<Scen
 					else
 					{
 						if (anim.currentFrameIndex > 0)
-						{
 							anim.currentFrameIndex--;
-						}
 						else
 						{
 							anim.isPlaying = false;
@@ -90,14 +90,12 @@ void SpriteAnimationSystem::OnUpdate(entt::registry& registry, const vector<Scen
 						}
 					}
 				}
-				else if (anim.playMode == EFlipbookPlayMode::PingPong)
+				else if (playMode == ESpriteAnimationPlayMode::PingPong)
 				{
 					if (forward)
 					{
 						if (anim.currentFrameIndex + 1 < frameCount)
-						{
 							anim.currentFrameIndex++;
-						}
 						else
 						{
 							anim.isReversed = !anim.isReversed;
@@ -107,9 +105,7 @@ void SpriteAnimationSystem::OnUpdate(entt::registry& registry, const vector<Scen
 					else
 					{
 						if (anim.currentFrameIndex > 0)
-						{
 							anim.currentFrameIndex--;
-						}
 						else
 						{
 							anim.isReversed = !anim.isReversed;
@@ -117,11 +113,12 @@ void SpriteAnimationSystem::OnUpdate(entt::registry& registry, const vector<Scen
 						}
 					}
 				}
+				currentRequiredDuration = baseFrameDuration * anim.GetEffectiveFrameDuration(anim.currentFrameIndex);
 			}
-			// 안전 상한을 초과한 누적 잔여 시간은 리셋하여 다음 프레임 폭주 방지
+
 			if (stepCount >= maxSteps) anim.elapsedTime = 0.0f;
 			if (anim.currentFrameIndex >= 0 && anim.currentFrameIndex < frameCount)
-				renderer.spriteHandle = anim.frames[anim.currentFrameIndex];
+				renderer.spriteHandle = anim.GetSpriteAtFrame(anim.currentFrameIndex);
 		}
 	}
 }
