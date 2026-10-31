@@ -1,4 +1,4 @@
-﻿#include "GraphPanel.h"
+#include "GraphPanel.h"
 #include "GraphMessageLocalization.h"
 #include "LocalizationManager.h"
 #include "ReflectionRegistry.h"
@@ -124,6 +124,7 @@ void GraphPanel::Draw()
 	if (ImGui::Begin(windowTitle.c_str(), &m_Open, ImGuiWindowFlags_MenuBar))
 	{
 		m_Focused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
+		if (m_Focused) s_ActiveGraphPanel = this;
 		m_Hovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows);
 		if (m_Ready)
 		{
@@ -1074,6 +1075,13 @@ void GraphPanel::RefreshValidation()
 {
 	auto& document = GetDocument();
 	document.Diagnostics = document.Data.Validate(m_Registry);
+}
+
+void GraphPanel::ToggleBreakpointOnSelected()
+{
+	auto& document = GetDocument();
+	if (!document.SelectedNodes.empty())
+		ToggleBreakpoint(document.SelectedNodes.front());
 }
 
 bool GraphPanel::ApplyResult(GraphDiagnostic result)

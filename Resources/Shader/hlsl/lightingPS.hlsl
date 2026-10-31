@@ -787,7 +787,5 @@ float4 main(PS_INPUT input) : SV_TARGET
 #if DEBUG_TILE_LIGHT_HEATMAP
     color = ApplyTileHeatmapDebug(color, tileLightCount, input.Position.xy);
 #endif
-    color = color / (color + 1.0f);
-    color = pow(color, 1.0f / 2.2f);
     return float4(color, diffuseSample.a);
 }

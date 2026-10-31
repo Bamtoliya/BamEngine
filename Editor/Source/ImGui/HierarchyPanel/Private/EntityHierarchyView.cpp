@@ -1,4 +1,4 @@
-﻿#include "EntityHierarchyView.h"
+#include "EntityHierarchyView.h"
 #include "InputManager.h"
 #include "Scene.h"
 #include "CoreComponents.h"
@@ -10,6 +10,7 @@
 #include "IconsFontAwesome7.h"
 #include <fmt/format.h>
 #include "EntityClipboard.h"
+#include "ShortcutManager.h"
 #include "Components/Core/PrefabInstanceComponent.h"
 #include "PrefabModeManager.h"
 #include "SelectionManager.h"
@@ -511,14 +512,14 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
                 const auto* link = world.try_get<Engine::HierarchyComponent>(entity);
                 const bool hasParent = link && link->parent != entt::null;
 
-                if (ImGui::MenuItem((std::string(ICON_FA_COPY " ") + Text("EditorCommon.Copy", "Copy")).c_str(), "Ctrl+C"))
+                if (ImGui::MenuItem((std::string(ICON_FA_COPY " ") + Text("EditorCommon.Copy", "Copy")).c_str(), ShortcutManager::Get().GetShortcutHint("Edit.Copy")))
                     action.Copy = true;
 
                 const bool hasClipboard = EntityClipboard::HasData();
-                if (ImGui::MenuItem((std::string(ICON_FA_PASTE " ") + Text("EditorCommon.Paste", "Paste")).c_str(), "Ctrl+V", false, hasClipboard))
+                if (ImGui::MenuItem((std::string(ICON_FA_PASTE " ") + Text("EditorCommon.Paste", "Paste")).c_str(), ShortcutManager::Get().GetShortcutHint("Edit.Paste"), false, hasClipboard))
                     action.Paste = true;
 
-                if (ImGui::MenuItem((std::string(ICON_FA_PASTE " ") + Text("EditorCommon.PasteAsChild", "Paste As Child")).c_str(), "Ctrl+Shift+V", false, hasClipboard))
+                if (ImGui::MenuItem((std::string(ICON_FA_PASTE " ") + Text("EditorCommon.PasteAsChild", "Paste As Child")).c_str(), ShortcutManager::Get().GetShortcutHint("Edit.PasteAsChild"), false, hasClipboard))
                     action.PasteAsChild = entity;
 
                 ImGui::Separator();
@@ -563,7 +564,7 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
                     deleteLabel = Text("UI_DELETE_ENTITY", "Delete entity and children");
                 }
 
-                if (ImGui::MenuItem((std::string(ICON_FA_TRASH " ") + deleteLabel).c_str(), "Delete"))
+                if (ImGui::MenuItem((std::string(ICON_FA_TRASH " ") + deleteLabel).c_str(), ShortcutManager::Get().GetShortcutHint("Edit.Delete")))
                 {
                     if (isEntitySelected && selectedCount > 1)
                     {

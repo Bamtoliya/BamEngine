@@ -1,7 +1,7 @@
 {
     "Effects": [
         {
-            "Enabled": false,
+            "Enabled": true,
             "Name": "Tone Mapping (ACES)",
             "Parameters": {
                 "Exposure": 1,

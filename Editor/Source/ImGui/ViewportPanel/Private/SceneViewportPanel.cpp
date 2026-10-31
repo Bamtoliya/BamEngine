@@ -1,6 +1,7 @@
-﻿#pragma once
+#pragma once
 
 #include "SceneViewportPanel.h"
+#include "ShortcutManager.h"
 #include "EditorCameraController.h"
 #include "Application.h"
 #include "RenderTargetManager.h"
@@ -129,118 +130,43 @@ void SceneViewportPanel::Initialize(void* arg)
 {
 	__super::Initialize(arg);
 	CAST_DESC
-
-	m_RenderWidth = desc->RenderTargetWidth;
+		m_RenderWidth = desc->RenderTargetWidth;
 	m_RenderHeight = desc->RenderTargetHeight;
-
 #pragma region Prepare RenderPass And Pipelines
-	PreparePipelines();
+	m_Pipeline.Initialize(m_Name, m_RenderWidth, m_RenderHeight, true);
 	m_PostProcessChain.Initialize(m_Name);
 	PrepareRenderTargetsAndPasses(m_RenderWidth, m_RenderHeight);
 #pragma endregion
-
 	m_Grid.Initialize(m_Name);
 	m_DebugRenderer.Initialize(m_Name);
-
 	if (!m_PostProcessChain.GetPipeline().SaveToString(m_DefaultPostProcessSettings))
 		EDITOR_LOG_ERROR("Default post-process settings could not be captured: {}", WStrToStr(m_Name));
-
 	m_SelectedRTName = m_LightingColorName;
 }
 void SceneViewportPanel::PrepareRenderTargetsAndPasses(uint32 width, uint32 height)
 {
 	wstring prefix = m_Name + L"_";
-
-#pragma region RenderTargets
-	auto& rtMgr = RenderTargetManager::Get();
-
-	RenderTargetDesc gbufferRTDescs[] =
-	{
-		//GBuffers
-		{{width, height, 1, 1, 1, ETextureSampleCount::TextureSampleCount1, ETextureFormat::R8G8B8A8_UNORM, ETextureDimension::Texture2D, ETextureUsage::RenderTarget | ETextureUsage::Sampler, nullptr, 0, false, vec4(0.f)}, L"GBuffer_Diffuse"},
-		{{width, height, 1, 1, 1, ETextureSampleCount::TextureSampleCount1, ETextureFormat::R16G16B16A16_FLOAT, ETextureDimension::Texture2D, ETextureUsage::RenderTarget | ETextureUsage::Sampler, nullptr, 0, false, vec4(0.f)}, L"GBuffer_Normal"},
-		{{width, height, 1, 1, 1, ETextureSampleCount::TextureSampleCount1, ETextureFormat::R8G8B8A8_UNORM, ETextureDimension::Texture2D, ETextureUsage::RenderTarget | ETextureUsage::Sampler, nullptr, 0, false, vec4(0.f)}, L"GBuffer_PBR"},
-		{{width, height, 1, 1, 1, ETextureSampleCount::TextureSampleCount1, ETextureFormat::R8G8B8A8_UNORM, ETextureDimension::Texture2D, ETextureUsage::RenderTarget | ETextureUsage::Sampler, nullptr, 0, false, vec4(0.f)}, L"GBuffer_Emission"},
-		{{width, height, 1, 1, 1, ETextureSampleCount::TextureSampleCount1, ETextureFormat::R32G32B32A32_FLOAT, ETextureDimension::Texture2D, ETextureUsage::RenderTarget | ETextureUsage::Sampler, nullptr, 0, false, vec4(0.f)}, L"GBuffer_Position"},
-		//ShadowDepth
-		{{4096, 4096, 1, 1, 1, ETextureSampleCount::TextureSampleCount1, ETextureFormat::D32_FLOAT, ETextureDimension::Texture2D, ETextureUsage::DepthStencilTarget | ETextureUsage::Sampler, nullptr, 0, false, vec4(0.f)}, L"ShadowDepth"},
-		//Depth
-		{{width, height, 1, 1, 1, ETextureSampleCount::TextureSampleCount1, ETextureFormat::D24_UNORM_S8_UINT, ETextureDimension::Texture2D, ETextureUsage::DepthStencilTarget | ETextureUsage::Sampler, nullptr, 0, false, vec4(0.f)}, L"Depth"},
-		//LightingColor (원래 인덱스 7번으로 복구)
-		{{width, height, 1, 1, 1, ETextureSampleCount::TextureSampleCount1, ETextureFormat::R8G8B8A8_UNORM, ETextureDimension::Texture2D, ETextureUsage::RenderTarget | ETextureUsage::Sampler, nullptr, 0, false, vec4(0.f, 0.f, 0.f, 1.f)}, L"LightingColor"}
-	};
-
-	for (auto& rtDesc : gbufferRTDescs)
-	{
-		rtDesc.name = prefix + rtDesc.name;
-		rtMgr.CreateRenderTarget(&rtDesc);
-		m_OwnedRTNames.push_back(rtDesc.name);
-	}
-
-	// ── PointShadowDepth는 기존 인덱스를 건드리지 않도록 루프 뒤에서 별도 생성 ──
-	m_PointShadowDepthName = prefix + L"PointShadowDepth";
-	RenderTargetDesc pointShadowDesc = {
-		{1024, 1024, 1, 1, 6, ETextureSampleCount::TextureSampleCount1, ETextureFormat::D32_FLOAT, ETextureDimension::TextureCube, ETextureUsage::DepthStencilTarget | ETextureUsage::Sampler, nullptr, 0, false, vec4(0.f)},
-		m_PointShadowDepthName
-	};
-	rtMgr.CreateRenderTarget(&pointShadowDesc);
-	m_OwnedRTNames.push_back(m_PointShadowDepthName);
-#pragma endregion
-
-#pragma region RenderPasses
-	vector<wstring> gBufferNames = { m_OwnedRTNames.begin(), m_OwnedRTNames.begin() + 5 };
-	m_ShadowDepthName = m_OwnedRTNames[5];
-	wstring depthName = m_OwnedRTNames[6];
-	m_LightingColorName = m_OwnedRTNames[7];
-
 	auto& rpMgr = RenderPassManager::Get();
-	m_ShadowPassID = rpMgr.RegisterRenderPass(
-		prefix + L"ShadowPass", {}, m_ShadowDepthName,
-		ERenderPassLoadOperation::RPLO_Clear, ERenderPassStoreOperation::RPSO_Store,
-		ERenderPassLoadOperation::RPLO_Clear, ERenderPassStoreOperation::RPSO_Store,
-		vec4(0.0f, 0.0f, 0.0f, -1.0f), 0, ERenderSortType::FrontToBack, ERenderPassType::Shadow, EBlendMode::Opaque | EBlendMode::Masked);
 
-	m_PointShadowPassID = rpMgr.RegisterRenderPass(
-		prefix + L"PointShadowPass", {}, m_PointShadowDepthName,
-		ERenderPassLoadOperation::RPLO_Clear, ERenderPassStoreOperation::RPSO_Store,
-		ERenderPassLoadOperation::RPLO_Clear, ERenderPassStoreOperation::RPSO_Store,
-		vec4(0.0f, 0.0f, 0.0f, -1.0f), 0, ERenderSortType::FrontToBack, ERenderPassType::Shadow, EBlendMode::Opaque | EBlendMode::Masked);
+	m_OwnedRTNames = m_Pipeline.GetOwnedRTNames();
+	m_ShadowDepthName = m_Pipeline.GetShadowDepthRTName();
+	m_PointShadowDepthName = m_Pipeline.GetPointShadowDepthRTName();
+	m_LightingColorName = m_Pipeline.GetFinalColorRTName();
 
-	m_GeometryPassID = rpMgr.RegisterRenderPass(
-		prefix + L"GeometryPass", gBufferNames, depthName,
-		ERenderPassLoadOperation::RPLO_Clear, ERenderPassStoreOperation::RPSO_Store,
-		ERenderPassLoadOperation::RPLO_Clear, ERenderPassStoreOperation::RPSO_Store,
-		vec4(0.0f, 0.f, 0.f, -1.f), 0, ERenderSortType::FrontToBack, ERenderPassType::Geometry, EBlendMode::Opaque | EBlendMode::Masked);
+	m_ShadowPassID = m_Pipeline.GetShadowPassID();
+	m_PointShadowPassID = m_Pipeline.GetPointShadowPassID();
+	m_GeometryPassID = m_Pipeline.GetGeometryPassID();
+	m_LightingPassID = m_Pipeline.GetLightingPassID();
+	m_ForwardPassID = m_Pipeline.GetForwardPassID();
+	m_ForwardTransparentPassID = m_Pipeline.GetForwardTransparentPassID();
 
-	m_LightingPassID = rpMgr.RegisterRenderPass(
-		prefix + L"LightingPass", { m_LightingColorName }, L"",
-		ERenderPassLoadOperation::RPLO_Clear, ERenderPassStoreOperation::RPSO_Store,
-		ERenderPassLoadOperation::RPLO_Clear, ERenderPassStoreOperation::RPSO_Store,
-		vec4(0.0f, 0.0f, 0.0f, -1.0f), 100, ERenderSortType::None, ERenderPassType::Lighting, EBlendMode::None);
-
-	m_ForwardPassID = rpMgr.RegisterRenderPass(
-		prefix + L"ForwardPass",
-		{ m_LightingColorName }, depthName,
-		ERenderPassLoadOperation::RPLO_Load, ERenderPassStoreOperation::RPSO_Store,
-		ERenderPassLoadOperation::RPLO_Load, ERenderPassStoreOperation::RPSO_Store,
-		vec4(0.0f, 0.0f, 0.0f, -1.0f), 110, ERenderSortType::FrontToBack, ERenderPassType::Forward,
-		EBlendMode::Forward);
-
-	m_ForwardTransparentPassID = rpMgr.RegisterRenderPass(
-		prefix + L"ForwardTransparentPass",
-		{ m_LightingColorName }, depthName,
-		ERenderPassLoadOperation::RPLO_Load, ERenderPassStoreOperation::RPSO_Store,
-		ERenderPassLoadOperation::RPLO_Load, ERenderPassStoreOperation::RPSO_Store,
-		vec4(0.0f, 0.0f, 0.0f, -1.0f), 120, ERenderSortType::BackToFront, ERenderPassType::ForwardTransparent,
-		EBlendMode::AlphaBlend | EBlendMode::Additive | EBlendMode::NonPremultiplied | EBlendMode::Decal);
-
+	// UIOverlayPass (UI 전용 풀스크린 합성 패스)
 	m_UIOverlayPassID = rpMgr.RegisterRenderPass(
 		prefix + L"UIOverlayPass", {}, L"",
 		ERenderPassLoadOperation::RPLO_Load, ERenderPassStoreOperation::RPSO_Store,
 		ERenderPassLoadOperation::RPLO_Load, ERenderPassStoreOperation::RPSO_Store,
 		vec4(0.f, 0.f, 0.f, -1.f), 200, ERenderSortType::FrontToBack, ERenderPassType::UI,
 		EBlendMode::Opaque | EBlendMode::Masked | EBlendMode::AlphaBlend | EBlendMode::Additive | EBlendMode::NonPremultiplied);
-#pragma endregion
 
 	m_PostProcessChain.PrepareResources(width, height);
 
@@ -262,32 +188,16 @@ void SceneViewportPanel::PrepareRenderTargetsAndPasses(uint32 width, uint32 heig
 }
 void SceneViewportPanel::PreparePipelines()
 {
-	ResourceManager& rm = ResourceManager::Get();
-	auto createPipe = [&](const wstring& psName) -> Engine::RHIPipeline* {
-		RHIPipelineDesc pd = {};
-		pd.pipelineType = EPipelineType::Graphics;
-		pd.vertexShader = rm.GetResourceHandle<Shader>(L"FullscreenQuadVS")->GetRHIShader();
-		pd.pixelShader = rm.GetResourceHandle<Shader>(psName)->GetRHIShader();
-		pd.colorAttachmentCount = 1;
-		pd.colorAttachmentFormats[0] = ETextureFormat::R8G8B8A8_UNORM;
-		pd.depthStencilAttachmentFormat = ETextureFormat::UNKNOWN;
-		pd.depthStencilState.depthTestEnable = false;
-		pd.depthStencilState.depthWriteEnable = false;
-		pd.topology = ETopology::TriangleList;
-		pd.cullMode = ECullMode::None;
-		pd.blendState = BlendState{};
-		return PipelineManager::Get().GetOrCreatePipeline(pd);
-		};
-
-	m_LightingPipeline = createPipe(L"LightingPS");
+	// 조명 합성 파이프라인은 m_Pipeline 내부에서 생성·관리됨
 }
+
 void SceneViewportPanel::Free()
 {
 	__super::Free();
 	m_Grid.Free();
-
 	m_DebugRenderer.Free();
 	m_PostProcessChain.Free();
+	m_Pipeline.Free();
 }
 #pragma endregion
 
@@ -353,7 +263,9 @@ void SceneViewportPanel::Update(f32 dt)
 
 	// 2. 카메라 버퍼 결정: PIE 중이면 씬 카메라 우선, 없으면 에디터 카메라로 폴백
 	const std::optional<CameraBuffer> cameraBuffer = GetActiveCameraBuffer();
-
+	Scene* activeScene = SceneManager::Get().GetCurrentScene();
+	if (cameraBuffer.has_value())
+		m_Pipeline.Submit(*cameraBuffer, activeScene);
 	RenderPassManager& rpMgr = RenderPassManager::Get();
 	Renderer& renderer = Renderer::Get();
 	auto isPassEnabled = [this](RenderPassID passID) -> bool {
@@ -363,26 +275,6 @@ void SceneViewportPanel::Update(f32 dt)
 		}
 		return true;
 		};
-	if (isPassEnabled(m_ShadowPassID))
-		renderer.RegisterViewportCamera(rpMgr.GetRenderPassByID(m_ShadowPassID));
-	if (isPassEnabled(m_PointShadowPassID))
-		renderer.RegisterViewportCamera(rpMgr.GetRenderPassByID(m_PointShadowPassID));
-	if (cameraBuffer.has_value())
-	{
-		if (isPassEnabled(m_GeometryPassID))
-			renderer.RegisterViewportCamera(*cameraBuffer, rpMgr.GetRenderPassByID(m_GeometryPassID));
-		const SkyAtmosphereData skyData = BuildSkyAtmosphereData();
-		if (isPassEnabled(m_ForwardPassID))
-		{
-			if (auto* forwardPass = rpMgr.GetRenderPassByID(m_ForwardPassID))
-				forwardPass->SetPassConstantStruct(3, skyData);
-			renderer.RegisterViewportCamera(*cameraBuffer, rpMgr.GetRenderPassByID(m_ForwardPassID));
-		}
-		if (isPassEnabled(m_ForwardTransparentPassID))
-			renderer.RegisterViewportCamera(*cameraBuffer, rpMgr.GetRenderPassByID(m_ForwardTransparentPassID));
-		if (isPassEnabled(m_LightingPassID))
-			SubmitLightingPass(*cameraBuffer, skyData);
-	}
 	if (isPassEnabled(m_UIOverlayPassID))
 		renderer.RegisterViewportCamera(rpMgr.GetRenderPassByID(m_UIOverlayPassID));
 	uint32 ppSlot = 0;
@@ -439,7 +331,10 @@ void SceneViewportPanel::DrawCustomOptions()
 
 void SceneViewportPanel::DrawCustomViewport()
 {
-	Application::Get().GetEditHistory().AllowShortcuts(ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows));
+	m_Focused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
+	m_Hovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows);
+	if (m_Focused) s_ActiveSceneViewport = this;
+	Application::Get().GetEditHistory().AllowShortcuts(m_Focused);
 	PrefabModeManager::Get().DrawViewportBanner();
 	BaseViewportPanel::DrawCustomViewport();
 	const bool imageHovered = ImGui::IsItemHovered();
@@ -578,11 +473,12 @@ void SceneViewportPanel::DrawGizmoMenu()
 {
 	if (ImGui::BeginMenu(LOCAL_CSTR("UI_GIZMO")))
 	{
-		if (ImGui::MenuItem(LOCAL_LABEL("Viewport.Translate").c_str(), "Shift + 1", m_GizmoOperation == ImGuizmo::TRANSLATE))
+		auto& sm = ShortcutManager::Get();
+		if (ImGui::MenuItem(LOCAL_LABEL("Viewport.Translate").c_str(), sm.GetShortcutHint("Viewport.GizmoTranslate"), m_GizmoOperation == ImGuizmo::TRANSLATE))
 			m_GizmoOperation = ImGuizmo::TRANSLATE;
-		if (ImGui::MenuItem(LOCAL_LABEL("Viewport.Rotate").c_str(), "Shift + 2", m_GizmoOperation == ImGuizmo::ROTATE))
+		if (ImGui::MenuItem(LOCAL_LABEL("Viewport.Rotate").c_str(), sm.GetShortcutHint("Viewport.GizmoRotate"), m_GizmoOperation == ImGuizmo::ROTATE))
 			m_GizmoOperation = ImGuizmo::ROTATE;
-		if (ImGui::MenuItem(LOCAL_LABEL("Viewport.ScaleOperation").c_str(), "Shift + 3", m_GizmoOperation == ImGuizmo::SCALE))
+		if (ImGui::MenuItem(LOCAL_LABEL("Viewport.ScaleOperation").c_str(), sm.GetShortcutHint("Viewport.GizmoScale"), m_GizmoOperation == ImGuizmo::SCALE))
 			m_GizmoOperation = ImGuizmo::SCALE;
 		ImGui::Separator();
 		if (ImGui::MenuItem(LOCAL_LABEL("Viewport.Local").c_str(), nullptr, m_GizmoMode == ImGuizmo::LOCAL))
@@ -640,22 +536,14 @@ void SceneViewportPanel::DrawRenderPassMenu()
 }
 EResult SceneViewportPanel::ResizeRenderTargets(uint32 width, uint32 height)
 {
-	if (width == 0 || height == 0 || m_OwnedRTNames.empty())
+	if (width == 0 || height == 0)
 		return EResult::InvalidArgument;
 
-	auto& rtMgr = RenderTargetManager::Get();
 	bool succeeded = true;
+	if (m_Pipeline.Resize(width, height) != EResult::Success)
+		succeeded = false;
 
-	for (const auto& name : m_OwnedRTNames)
-	{
-		if (name == m_ShadowDepthName || name == m_PointShadowDepthName)
-			continue;
-
-		auto* target = rtMgr.GetRenderTarget(name);
-
-		if (!target || target->Resize(width, height) != EResult::Success)
-			succeeded = false;
-	}
+	m_OwnedRTNames = m_Pipeline.GetOwnedRTNames();
 
 	if (m_PostProcessChain.Resize(width, height) != EResult::Success)
 		succeeded = false;
@@ -1149,169 +1037,6 @@ void SceneViewportPanel::DrawSelectionLocked()
 #pragma endregion
 
 #pragma region Rendering
-void SceneViewportPanel::SubmitLightingPass(const CameraBuffer& cameraBuffer, const SkyAtmosphereData& skyData)
-{
-	Renderer::Get().SubmitCustomCommand(
-		[this, cameraBuffer, skyData](f32 dt, RenderPass* pass) -> EResult
-		{
-			auto* rhi = Renderer::Get().GetRHI();
-			auto& rtMgr = RenderTargetManager::Get();
-			auto& smMgr = SamplerManager::Get();
-			RHISampler* sampler = smMgr.GetDefaultSampler();
-			wstring prefix = m_Name + L"_";
-
-			CameraBuffer camBuf = cameraBuffer;
-			camBuf.time = static_cast<f32>(TimeManager::Get().GetTotalTime());
-
-			if (IsFailure(rhi->BindConstantBuffer(&camBuf, sizeof(CameraBuffer), 0)))
-				return EResult::Fail;
-			const wstring sourceNames[] = {
-				prefix + L"GBuffer_Diffuse", prefix + L"GBuffer_Normal", prefix + L"GBuffer_PBR",
-				prefix + L"GBuffer_Emission", prefix + L"GBuffer_Position", m_ShadowDepthName
-			};
-
-			// Fog 상수 버퍼 바인딩 (slot 2 -> register(b0, space3))
-			FogData fogData{};
-			fogData.FogEnabled = 0u;
-
-			if (Scene* activeScene = SceneManager::Get().GetCurrentScene())
-			{
-				auto fogView = activeScene->GetRegistry().view<FogComponent>();
-				for (auto [e, fog] : fogView.each())
-				{
-					if (!fog.IsEnabled) continue;
-
-					fogData.FogEnabled = 1u;
-					fogData.FogType = static_cast<uint32>(fog.FogType);
-					fogData.FogColor = fog.FogColor;
-					fogData.FogDensity = fog.FogDensity;
-					fogData.FogHeight = fog.FogHeight;
-					fogData.FogHeightFalloff = fog.FogHeightFalloff;
-					fogData.FogStartDistance = fog.FogStartDistance;
-					fogData.FogEndDistance = fog.FogEndDistance;
-					fogData.FogMaxOpacity = fog.FogMaxOpacity;
-
-					if (fog.AutoSyncAtmosphere)
-					{
-						auto skyView = activeScene->GetRegistry().view<SkyAtmosphereComponent>();
-						for (auto [se, sky] : skyView.each())
-						{
-							if (sky.IsEnabled)
-							{
-								fogData.FogColor = glm::mix(fog.FogColor, sky.HorizonColor, 0.65f);
-								break;
-							}
-						}
-					}
-					break;
-				}
-			}
-
-			if (IsFailure(rhi->BindConstantBuffer(&fogData, sizeof(fogData), 2)))
-				return EResult::Fail;
-
-			for (uint32 i = 0; i < 6; ++i)
-			{
-				auto* source = rtMgr.GetRenderTarget(sourceNames[i]);
-				if (!source || !source->GetTexture()) return EResult::Fail;
-
-				if (IsFailure(rhi->BindTextureSampler(source->GetTexture(), sampler, MAX_MATERIAL_TEXTURE_SLOTS + i)))
-					return EResult::Fail;
-			}
-
-			// Point Light TextureCube 바인딩 (slot: MAX_MATERIAL_TEXTURE_SLOTS + 7 -> register(t7, space3))
-			if (auto* pointShadowRT = rtMgr.GetRenderTarget(m_PointShadowDepthName))
-			{
-				if (auto* pointShadowTex = pointShadowRT->GetTexture())
-				{
-					if (IsFailure(rhi->BindTextureSampler(pointShadowTex, sampler, MAX_MATERIAL_TEXTURE_SLOTS + 7)))
-						return EResult::Fail;
-				}
-			}
-			auto& lightManager = LightManager::Get();
-
-			// ── 1. 타일 기반 광원 컬링 디스패치 (Compute 파이프라인 선행 실행) ──
-			if (auto* posRT = rtMgr.GetRenderTarget(sourceNames[4]))
-			{
-				if (auto* posTex = posRT->GetTexture())
-				{
-					lightManager.DispatchLightCulling(camBuf, posTex);
-				}
-			}
-
-			// ── 2. Lighting 그래픽스 파이프라인 복원 (반드시 컴퓨트 디스패치 직후 바인딩) ──
-			if (IsFailure(rhi->BindPipeline(m_LightingPipeline)))
-				return EResult::Fail;
-
-			// ── 3. 타일 결과 버퍼 바인딩 (m_StorageBuffers[1] -> t8, m_StorageBuffers[2] -> t9) ──
-			if (auto* gridBuf = lightManager.GetTileLightGridBuffer())
-				rhi->BindStorageBuffer(gridBuf, 1);
-			if (auto* idxBuf = lightManager.GetTileLightIndexBuffer())
-				rhi->BindStorageBuffer(idxBuf, 2);
-
-			if (IsFailure(lightManager.Bind(0)))
-			{
-				fmt::print(stderr, "LightManager::Bind failed\n");
-				return EResult::Fail;
-			}
-
-			LightingPassData lightingData{};
-			if (lightManager.HasShadowCastingLights())
-				lightingData.Shadow = lightManager.GetShadowData(0u);
-			lightingData.Cloud = skyData.Cloud;
-			lightingData.SunDirection = skyData.SunDirection;
-			// ── IBL 텍스처 바인딩 (t10, t11, t12) ──
-			if (Scene* activeScene = SceneManager::Get().GetCurrentScene())
-			{
-				auto skyView = activeScene->GetRegistry().view<SkyAtmosphereComponent>();
-				for (auto [e, sky] : skyView.each())
-				{
-					if (sky.IsEnabled && sky.IrradianceMap.IsValid() && sky.PrefilteredMap.IsValid() && sky.BRDFLutMap.IsValid())
-					{
-						auto* irrTex = sky.IrradianceMap.Get();
-						auto* prefTex = sky.PrefilteredMap.Get();
-						auto* lutTex = sky.BRDFLutMap.Get();
-						if (irrTex && prefTex && lutTex)
-						{
-							rhi->BindTextureSampler(irrTex->GetRHITexture(), sampler, MAX_MATERIAL_TEXTURE_SLOTS + 10);
-							rhi->BindTextureSampler(prefTex->GetRHITexture(), sampler, MAX_MATERIAL_TEXTURE_SLOTS + 11);
-							rhi->BindTextureSampler(lutTex->GetRHITexture(), sampler, MAX_MATERIAL_TEXTURE_SLOTS + 12);
-							lightingData.HasIBLMaps = 1u;
-							lightingData.IBLIntensity = sky.IBLIntensity;
-							break;
-						}
-					}
-				}
-			}
-
-			auto& rm = ResourceManager::Get();
-			auto shapeHandle = rm.GetResourceHandle<Texture>(L"Resources/Texture/CloudBaseShape3D.bamtex");
-			auto weatherHandle = rm.GetResourceHandle<Texture>(L"Resources/Texture/CloudWeatherMap2D.bamtex");
-			auto* shapeTexture = shapeHandle.Get();
-			auto* weatherTexture = weatherHandle.Get();
-			if (shapeTexture && weatherTexture)
-			{
-				auto* shapeRHI = shapeTexture->GetRHITexture();
-				auto* weatherRHI = weatherTexture->GetRHITexture();
-				if (shapeRHI && weatherRHI)
-				{
-					rhi->BindTextureSampler(shapeRHI, sampler, 0);
-					rhi->BindTextureSampler(weatherRHI, sampler, 1);
-				}
-			}
-			if (IsFailure(rhi->BindConstantBuffer(&lightingData, sizeof(lightingData), 3)))
-				return EResult::Fail;
-
-			if (IsFailure(rhi->Draw(3)))
-			{
-				fmt::print(stderr, "Lighting draw failed\n");
-				return EResult::Fail;
-			}
-			return EResult::Success;
-		},
-		m_LightingPassID);
-}
-
 bool SceneViewportPanel::SyncPostProcess(Scene& scene, entt::entity entity, const PostProcessComponent& source)
 {
 	const auto restoreRequest = m_PostProcessChain.TakeSceneRestoreRequest();
@@ -1422,18 +1147,26 @@ void SceneViewportPanel::SubmitPostProcessPass(f32 dt, uint32& slot, std::wstrin
 		}
 	}
 
-	m_LastBoundScene = nullptr;
-	m_LastPostProcessEntity = entt::null;
-	m_LastPostProcessPreset.clear();
-	m_LastPostProcessSettings.clear();
+	const bool wasDefaultState = (m_LastBoundScene == nullptr && m_LastPostProcessEntity == entt::null);
+	if (!wasDefaultState)
+	{
+		m_LastBoundScene = nullptr;
+		m_LastPostProcessEntity = entt::null;
+		m_LastPostProcessPreset.clear();
+		m_LastPostProcessSettings.clear();
+		if (!m_DefaultPostProcessSettings.empty())
+			m_PostProcessStateUsable = m_PostProcessChain.GetPipeline().LoadFromString(m_DefaultPostProcessSettings);
+	}
 
 	if (m_PostProcessChain.TakeSceneRestoreRequest())
 	{
 		m_PostProcessChain.CompleteSceneRestore(false);
-
-		NotificationManager::Get().AddNotification(LOCAL("UI_POST_FX"),
-			LOCAL("PostProcess.RestoreUnavailable"), ELogLevel::Warn);
+		NotificationManager::Get().AddNotification(LOCAL("UI_POST_FX"), LOCAL("PostProcess.RestoreUnavailable"), ELogLevel::Warn);
 	}
+
+	// 씬에 활성화된 PostProcessComponent가 없더라도, 선형 HDR 버퍼의 안전한 변환을 위해 기본 톤매핑 체인을 실행
+	if (m_PostProcessStateUsable)
+		currentRT = m_PostProcessChain.ExecuteChain(dt, currentRT);
 }
 void SceneViewportPanel::SubmitUIOverlayPass(const wstring& currentRT)
 {
@@ -1444,7 +1177,7 @@ void SceneViewportPanel::SubmitUIOverlayPass(const wstring& currentRT)
 #pragma region Inputs
 void SceneViewportPanel::KeyboardInput()
 {
-	if (KEY_PRESSED(EKeyCode::LShift))
+	if (false && KEY_PRESSED(EKeyCode::LShift))
 	{
 		if (KEY_DOWN("1")) m_GizmoOperation = ImGuizmo::OPERATION::TRANSLATE;
 		if (KEY_DOWN("2")) m_GizmoOperation = ImGuizmo::OPERATION::ROTATE;
@@ -1694,80 +1427,6 @@ std::optional<CameraBuffer> SceneViewportPanel::FindActiveSceneCameraBuffer()
 	return std::nullopt;
 }
 
-SkyAtmosphereData SceneViewportPanel::BuildSkyAtmosphereData()
-{
-	SkyAtmosphereData skyData{};
-	if (!SceneManager::IsCreated()) return skyData;
-
-	for (Scene* scene : SceneManager::Get().GetActiveScenes())
-	{
-		if (!scene) continue;
-		auto& registry = scene->GetRegistry();
-
-		// 1. SkyAtmosphereComponent 검색 및 태양광/대기 산란 계산
-		auto skyView = registry.view<SkyAtmosphereComponent>();
-		for (auto [e, sky] : skyView.each())
-		{
-			if (!sky.IsEnabled) continue;
-			// 시간 증가 및 라이트 Transform 조작 코드는 GameModule로 이전되었으므로 순수 읽기만 수행
-			f32 hourAngle = (sky.TimeOfDay - 12.0f) * (glm::pi<float>() / 12.0f);
-			f32 latRad = glm::radians(sky.Latitude);
-			vec3 toSun = glm::normalize(vec3(std::sin(hourAngle), std::cos(hourAngle) * std::cos(latRad), -std::cos(hourAngle) * std::sin(latRad)));
-			skyData.SunDirection = toSun;
-			skyData.ZenithColor = sky.ZenithColor;
-			skyData.HorizonColor = sky.HorizonColor;
-			skyData.GroundColor = sky.GroundColor;
-			skyData.HorizonBlend = sky.HorizonBlend;
-			skyData.SkyIntensity = sky.SkyIntensity;
-			skyData.SunSize = sky.SunSize;
-			skyData.SunColor = sky.CustomSunColor;
-			skyData.SunIntensity = sky.CustomSunIntensity;
-			skyData.Cloud.EnableClouds = sky.EnableClouds ? 1u : 0u;
-			skyData.Cloud.CloudCoverage = sky.CloudCoverage;
-			skyData.Cloud.CloudDensity = sky.CloudDensity;
-			skyData.Cloud.LayerBottomAltitude = sky.CloudAltitude;
-			skyData.Cloud.WindSpeed = sky.CloudSpeed * 100.0f;
-			if (sky.AutoSyncDirectionalLight)
-			{
-				auto lightView = registry.view<LightComponent>();
-				for (auto [le, light] : lightView.each())
-				{
-					if (light.IsEnabled && light.LightType == ELightType::Directional)
-					{
-						skyData.SunColor = light.Color;
-						skyData.SunIntensity = light.Intensity;
-						break;
-					}
-				}
-			}
-			break;
-		}
-
-		// 2. 씬에 전용 VolumetricCloudComponent가 있으면 상세 설정으로 덮어쓰기
-		auto cloudView = registry.view<VolumetricCloudComponent>();
-		for (auto [ce, cloud] : cloudView.each())
-		{
-			skyData.Cloud.EnableClouds = cloud.IsEnabled ? 1u : 0u;
-			skyData.Cloud.LayerBottomAltitude = cloud.LayerBottomAltitude;
-			skyData.Cloud.LayerHeight = cloud.LayerHeight;
-			skyData.Cloud.TracingMaxDistance = cloud.TracingMaxDistance;
-			skyData.Cloud.CloudCoverage = cloud.CloudCoverage;
-			skyData.Cloud.CloudDensity = cloud.CloudDensity;
-			skyData.Cloud.WeatherScale = 1.0f / std::max(cloud.WeatherMapSize, 100.0f);
-			skyData.Cloud.ShapeScale = 1.0f / std::max(cloud.ShapeNoiseSize, 50.0f);
-			skyData.Cloud.DetailScale = 1.0f / std::max(cloud.DetailNoiseSize, 10.0f);
-			skyData.Cloud.WindDirection = cloud.WindDirection;
-			skyData.Cloud.WindSpeed = cloud.WindSpeed;
-			skyData.Cloud.MorphSpeed = cloud.MorphSpeed;
-			skyData.Cloud.CloudAlbedo = cloud.CloudAlbedo;
-			skyData.Cloud.ExtinctionFactor = cloud.ExtinctionFactor;
-			skyData.Cloud.PowderExtinction = cloud.PowderExtinction;
-			break;
-		}
-	}
-	return skyData;
-}
-
 void SceneViewportPanel::HandleTerrainSculpting(bool imageHovered)
 {
 	auto* terrainEditor = TerrainEditor::Get();
@@ -1853,4 +1512,11 @@ void SceneViewportPanel::HandleTerrainSculpting(bool imageHovered)
 			m_SculptModified = true;
 		}
 	}
+}
+
+
+void SceneViewportPanel::FocusSelectedEntity()
+{
+	if (m_CameraController)
+		m_CameraController->FocusEntity(SelectionManager::Get().GetPrimarySelectedEntity());
 }

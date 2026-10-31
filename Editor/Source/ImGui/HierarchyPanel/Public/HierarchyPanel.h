@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "Base.h"
 #include "ImGuiInterface.h"
@@ -13,6 +13,8 @@ public:
 	HierarchyPanel() { m_Name = L"Hierarchy Panel"; m_DisplayNameKey = "UI_HIERARCHY"; }
 	virtual ~HierarchyPanel() = default;
 public:
+	virtual EShortcutContext GetShortcutContext() const override { return EShortcutContext::Hierarchy; }
+	static bool DeleteSelectedEntities(class Engine::Scene* scene);
 	virtual void Draw() override;
 	virtual void Free() override { m_EntityTree.ResetDrag(); __super::Free(); }
 private:

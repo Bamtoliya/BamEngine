@@ -9,6 +9,8 @@
 #include "SceneManager.h"
 #include "Components/Render/CameraComponent.h"
 #include "Components/Core/FlagComponent.h"
+#include "CartPoleEnvironment.h"
+#include "RLServer.h"
 
 BEGIN(Client)
 
@@ -276,8 +278,32 @@ private:
 
 END
 
-int main()
+int main(int argc, char* argv[])
 {
+    // ── 강화학습 헤드리스 모드 (--rl 또는 --headless-rl) ──
+    for (int i = 1; i < argc; ++i)
+    {
+        if (std::string_view(argv[i]) == "--rl" || std::string_view(argv[i]) == "--headless-rl")
+        {
+            auto env = std::make_shared<Engine::CartPoleEnvironment>();
+            Engine::RLServer server(env);
+            if (server.Start(9999))
+            {
+                fmt::print("=====================================================\n");
+                fmt::print("  BamEngine RLServer running on 127.0.0.1:9999\n");
+                fmt::print("  Waiting for Python gymnasium client... (Ctrl+C to stop)\n");
+                fmt::print("=====================================================\n");
+
+                while (server.IsRunning())
+                {
+                    if (server.AcceptClient())
+                        server.ServeClient();
+                }
+            }
+            return 0;
+        }
+    }
+
     SDL_SetMainReady();
 
     Client::Application application;

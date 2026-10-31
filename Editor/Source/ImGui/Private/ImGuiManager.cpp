@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "InputManager.h"
 #include "ShortcutManager.h"
 #include <archive/JsonArchive.h>
@@ -328,7 +328,20 @@ void ImGuiManager::Draw()
 
 		const bool suppressed = ImGui::GetIO().WantTextInput || m_DocumentController->HasPendingAction() || 
 			EditorSettingsService::Get().IsWindowChangePending();
-		ShortcutManager::Get().ProcessShortcuts(EShortcutContext::Global, suppressed);
+		EShortcutContext activeContext = EShortcutContext::Global;
+		for (const auto* panel : m_ImGuiPanels)
+		{
+			if (panel && panel->IsOpen() && panel->IsFocused())
+			{
+				const auto ctx = panel->GetShortcutContext();
+				if (ctx != EShortcutContext::Global)
+				{
+					activeContext = ctx;
+					break;
+				}
+			}
+		}
+		ShortcutManager::Get().ProcessShortcuts(activeContext, suppressed);
 
 		if (const auto result = m_DocumentController->ProcessPendingSave())
 		{

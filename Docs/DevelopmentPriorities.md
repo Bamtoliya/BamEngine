@@ -23,6 +23,7 @@ Engine·Render·Editor·Client 계획에서 무엇을 먼저 연결하고 무엇
 - [VisualScriptingBlueprintPlan.md](VisualScriptingBlueprintPlan.md): 비주얼 스크립팅과 블루프린트 개발 계획 및 런타임 게임플레이 연동.
 - [ModuleHotReloadOptimization.md](ModuleHotReloadOptimization.md): C++ 모듈 핫리로드 및 빌드 시간 단축 계획.
 - [AnimatorGraphPlan.md](AnimatorGraphPlan.md): 애니메이터 그래프, 애니메이션 상태 머신(ASM) 및 블렌드 트리 개발 계획.
+- [NetworkFoundationPlan.md](NetworkFoundationPlan.md): 소켓 전송 계층, 패킷 직렬화, 세션 및 ECS 리플리케이션·RPC 개발 계획.
 
 전체 작업 선택은 이 문서, 기능 내부의 구현 순서·실패 정책은 상세 계획을 따른다.
 새 사용자 결정이 우선하며 충돌이 생기면 이 문서와 해당 계획을 함께 갱신한다.
@@ -179,21 +180,27 @@ Engine·Render·Editor·Client 계획에서 무엇을 먼저 연결하고 무엇
 
 ### P2-B. 기본 렌더 확장 (S3·S4·S5 검증 및 완성)
 
-- **2026-10-31 현황**:
+- **2026-11-01 현황**:
   - **S3**: `InstanceData`, `LODGroupComponent`, `MeshRenderSystem` 화면 덮개 비율 + 히스테리시스 LOD 선택, `Renderer::RenderMeshes` 인스턴스 배칭(`DrawIndexedInstanced` 및 비인덱스 `DrawInstanced` 지원) 반영됨.
   - **S4**: `tiledLightCullingCS.hlsl` 4방향 절두체 평면 컬링, `DirectX12Pipeline` Compute PSO, `DirectX12RHI::Dispatch`/`ResourceBarrierUAV`, `LightManager::DispatchLightCulling`, `lightingPS.hlsl` 선별 광원 루프 순회 반영됨.
-  - **S5 및 후처리**: `lightingPS.hlsl`의 반구형 Sky IBL 및 Split-Sum PBR 큐브맵 IBL(`gLightingData.HasIBLMaps`, `gIrradianceMap`, `gPrefilteredEnvMap`, `gBRDFLut`), 접촉 그림자, `ShadowStrength`와 `PostProcessPipeline`(`BloomEffect`, `PostProcessMaterialEffect` 기반 8종 효과) 및 `PostProcessPanel` 반영됨.
-    - D3D12 Null SRV 큐브맵 차원 안전장치(`DirectX12RHI.cpp`), `ViewportDeferredPipeline`의 IBL/대기 조명 일관성 연동, `GameViewportPanel`의 `PostProcessChain` 연동을 통해 Scene/Game View 간 렌더링 일관성 완성.
+  - **S5 및 후처리/HDR 파이프라인 일원화**:
+    - `lightingPS.hlsl`의 반구형 Sky IBL 및 Split-Sum PBR 큐브맵 IBL(`gLightingData.HasIBLMaps`, `gIrradianceMap`, `gPrefilteredEnvMap`, `gBRDFLut`), 접촉 그림자, `ShadowStrength`와 `PostProcessPipeline`(`BloomEffect`, `PostProcessMaterialEffect` 기반 8종 효과) 및 `PostProcessPanel` 반영됨.
+    - **HDR 파이프라인 일원화**: `lightingPS.hlsl`의 내장 Reinhard/감마 보정 제거, `LightingColor` 버퍼 포맷 `R16G16B16A16_FLOAT` 승격을 통한 1.0 초과 물리 광량 보존, `PostProcessPipeline`의 ACES Filmic 톤매핑 + 감마 보정 상시 가동(PostProcessComponent 부재 시에도 Default ACES 자동 폴백)을 통해 실행/씬별 과노출 및 탈색 불일치 근본 해결.
+    - **공통 디퍼드 파이프라인(`ViewportDeferredPipeline`) 통합**: `SceneViewportPanel`의 수백 줄에 달하던 자체 GBuffer/Shadow/PointShadow/Lighting/Forward 렌더패스 및 커맨드를 `ViewportDeferredPipeline`으로 단일화하여 Scene View, Game View, Material Preview 전반의 렌더링 일관성(스카이 대기, IBL, Directional/Point 그림자 100% 동등성) 확보.
   - **남은 항목**:
     1. **S1 계측 실측 검증**: 고정 씬에서 단일 드로우/전체 광원 순회 대비 인스턴싱/타일 라이트 컬링의 실측 GPU/CPU 비용 변화를 `MetricsPanel` 수치로 확인.
 - 완료 기준: 작은/큰 씬에서 고정 비용과 이득을 S1 계측 수치로 구분하고, 미지원·용량 초과의 정확한 대체 동작과 IBL/그림자 품질을 확인한다.
 
 ### P2-C. 강화학습의 첫 환경
 
-- Engine 계획 15절: 수치 관측의 단일 환경, 외부 제어 스텝·reset·seed·관측/행동·종료/중단 계약.
-- 필요한 물리·시간 상태만 먼저 격리하고 창·Renderer·오디오 없는 구성을 작은 예제로 검증한다.
-- 로컬 Python 요청/응답과 첫 Gymnasium 어댑터를 연결한다. 게임 기능 전체나 고급 렌더링 완료를 기다리지 않는다.
-- 완료 기준: 반복 reset과 같은 조건의 스텝을 검사하고 한 환경의 상태·관측 버퍼가 다음 에피소드에 섞이지 않는다.
+- **2026-11-01 현황**:
+  - **Gymnasium 규약 준수 공통 인터페이스 (`RLEnvironment.h`)**: `IRLEnvironment`, `RLObservation`, `RLAction`(이산/연속), `RLStepResult`(관측, 보상, terminated, truncated, info), `RLSpace`(Box, Discrete) 인터페이스 구축.
+  - **헤드리스 물리 시뮬레이션 환경 (`CartPoleEnvironment.h/cpp`)**: 창·Renderer·오디오 없는 순수 수치 오일러 적분(50Hz, tau=0.02) 기반 카트폴 역학 모델 구축, 난수 시드 기반 초기화 및 각도/위치 한계값에 따른 Terminated 판정 구현.
+  - **로컬 IPC 통신 서버 (`RLServer.h/cpp`)**: Windows Winsock 기반의 TCP 소켓 서버(기본 포트 9999) 구축, 개행 구분 JSON 프로토콜(`get_spaces`, `reset`, `step`, `close`) 처리 완비.
+  - **Python Gymnasium 어댑터 (`Tools/RL/bam_gym_env.py`)**: `gymnasium.Env` 및 표준 라이브러리 폴백을 지원하는 어댑터 구축, 2개 연속 에피소드 무작위 제어 실행 및 이전 에피소드와의 완전한 상태 격리 검증 완료.
+  - **클라이언트 CLI 엔트리포인트 (`Client/Source/Main.cpp`)**: `--rl` 명령행 인자를 통한 독립 헤드리스 서버 구동 연결.
+  - **남은 항목**: 씬 기반 물리 컴포넌트(RigidBody/Joint) 연동 환경, 다중 환경 병렬화(Vectorization), ONNX Runtime 정책 추론 연결(Engine 15절 F).
+- 완료 기준: 반복 reset과 같은 조건의 스텝을 검사하고 한 환경의 상태·관측 버퍼가 다음 에피소드에 섞이지 않는다. (CartPole-v1 2개 에피소드 실측 검증 완료)
 
 ### P2-D. 아바타·제작 도구의 첫 재생
 
@@ -228,6 +235,7 @@ Engine·Render·Editor·Client 계획에서 무엇을 먼저 연결하고 무엇
 - Engine 11절: 실제 요구에 맞는 텍스트 스크립트 언어/VM 선택·엔진 바인딩·배포. 네이티브 모듈과 지원 범위를 구분한다.
 - ImGui 10·11·14절: 독립 프리팹 편집, 참조 색인·누락 검사, 임포트 옵션·재임포트, 검색·썸네일·미리보기와 비용 제한.
 - Engine 14절: 해당 예제에 필요한 캐릭터 이동·게임 저장·카메라·오디오·UI 위젯·타일맵·비동기 로딩을 작은 흐름으로 연결한다.
+- Engine 14절 M 및 [NetworkFoundationPlan.md](NetworkFoundationPlan.md): 소켓 전송 계층(`INetworkTransport`)과 바이너리 패킷 프로토콜, 세션 라이프사이클(Connect/Disconnect/Ping) 기초를 구축하고, ECS 엔티티 리플리케이션(`NetworkIdentity`, `NetworkTransform`)과 RPC로 확장한다. 멀티플레이 전체를 강화학습이나 V-Tuber의 필수 선행 조건으로 묶지 않는다.
 - Render M1: Compute 기반과 S3 이후 GPU 가시 명령·간접 그리기→Hi-Z를 CPU 기준 경로와 비교한다.
 - Render M2: 바인딩 병목·명령 구성 제약이 측정될 때 Bindless를 추가한다.
 - Render M3: 기능 지원·자원 계약·계측을 갖춘 뒤 DXR 그림자→반사를 독립 경로로 진행한다.
@@ -243,7 +251,7 @@ Engine·Render·Editor·Client 계획에서 무엇을 먼저 연결하고 무엇
 - Render M5·L1~L5: Meshlet/Mesh Shader, 가상화 지오메트리, VSM, ReSTIR, 기준 패스 트레이싱과 추가 연구 후보.
 - GPU 파티클·비동기 Compute·고급 스트리밍은 실제 데이터 규모와 비용이 요구할 때 진행한다.
 - 중첩 프리팹·Variant·복잡한 포즈 그래프·상태 이전 핫 리로드는 안정된 식별·평가·복구 계약 이후다.
-- 내비게이션·게임 AI·씬 스트리밍·멀티플레이는 대상 게임의 요구와 기존 구현을 다시 확인한 뒤 별도 범위를 정한다.
+- 내비게이션·게임 AI·씬 스트리밍은 대상 게임의 요구에 따라 진행하고, 멀티플레이어 고급 확장(클라이언트 예측, 랙 보상, 대역폭 최적화)은 기본 네트워크 세션 및 리플리케이션 검증 이후 단계로 확장한다 ([NetworkFoundationPlan.md](NetworkFoundationPlan.md) Phase 5).
 - 학습의 대규모 병렬화·다중 에이전트·관절/모션 최적화, 아바타의 고급 추적·제작 연산·장시간 출력은 첫 예제 이후다.
 
 P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·콘텐츠·측정이 갖춰지면 우선순위를 올릴 수 있다.
@@ -304,5 +312,9 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
    - Phase 2: 애니메이션 상태 머신(ASM) 코어(`State`, `Transition`, `Parameter`, 엔티티별 런타임 격리).
    - Phase 3 & 4: `AnimatorGraphPanel`(상태 머신 캔버스, 트랜지션 인스펙터, 파라미터 탭) 저작 UI 및 포즈 블렌딩.
    - Phase 5: `AnimatorComponent` 및 비주얼 스크립팅 노드(`SetAnimatorFloat`, `SetAnimatorTrigger` 등) 게임플레이 연동.
+7. **[7순위 / P3 네트워크] 네트워크 기초 파이프라인 구축 ([NetworkFoundationPlan.md](NetworkFoundationPlan.md))**
+   - Phase 1 & 2: 소켓 전송 계층(`INetworkTransport`, WinSock2 논블로킹 소켓) 및 바이너리 패킷 프로토콜/직렬화(`PacketHeader`, `PacketDispatcher`).
+   - Phase 3 & 4: 세션 관리(Listen/Dedicated/Client, 핸드셰이크, 핑/RTT 계측) 및 ECS 엔티티 리플리케이션(`NetworkIdentity`, `NetworkTransform`, RPC).
+   - Phase 5: 서버 틱 동기화, 클라이언트 측 예측(Prediction) 및 네트워크 프로파일러 패널 연동.
 
 코드 직접 수정·빌드·테스트 권한은 사용자 요청과 AGENTS.md를 따르며 이 문서가 실행 허가를 대신하지 않는다.

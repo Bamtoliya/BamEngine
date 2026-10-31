@@ -1044,3 +1044,40 @@ Animator,Pause,Pause,일시정지
 Animator,Stop,Stop,정지
 Animator,Reset,Reset,초기화
 Animator,MissingRendererWarning,Requires SkinnedMeshRendererComponent with Skeleton to animate.,스켈레톤이 포함된 SkinnedMeshRendererComponent가 필요합니다.
+
+Shortcuts,CategoryPIE,Play & Simulation,재생 및 시뮬레이션
+Shortcuts,CategoryBuild,Build & Hot Reload,빌드 및 핫 리로드
+Shortcuts,CategoryViewport,Viewport,뷰포트
+Shortcuts,CategoryGraph,Graph Editor,그래프 에디터
+Action,File.SaveSceneAs,Save Scene As...,다른 이름으로 씬 저장...
+Action,File.CloseScene,Close Scene,씬 닫기
+Action,File.ImportAsset,Import Asset...,에셋 가져오기...
+Action,File.Exit,Exit,에디터 종료
+Action,Edit.Duplicate,Duplicate,복제
+Action,Edit.Delete,Delete,삭제
+Action,Edit.Deselect,Deselect All,선택 해제
+Action,PIE.Play,Play,재생
+Action,PIE.PauseResume,Pause / Resume,일시정지 / 재개
+Action,PIE.Stop,Stop,정지
+Action,Build.CompileModule,Compile Game Module,게임 모듈 컴파일
+Action,Build.ReloadModule,Reload Game Module,게임 모듈 핫 리로드
+Action,Build.ReloadShaders,Recompile Shaders,셰이더 전체 재컴파일
+Action,Viewport.GizmoSelect,Select Mode,선택 모드
+Action,Viewport.GizmoTranslate,Translate,이동 기즈모
+Action,Viewport.GizmoRotate,Rotate,회전 기즈모
+Action,Viewport.GizmoScale,Scale,스케일 기즈모
+Action,Viewport.ToggleCoord,Toggle Local / World,로컬 / 월드 좌표계 전환
+Action,Viewport.ToggleSnap,Toggle Grid Snap,그리드 스냅 토글
+Action,Viewport.Focus,Focus Selected,선택 오브젝트로 포커스
+Action,Viewport.ToggleLock,Toggle Selection Lock,선택 잠금 토글
+Action,Viewport.ToggleGrid,Toggle Grid,그리드 표시 토글
+Action,Graph.AlignTop,Align Top,위쪽 정렬
+Action,Graph.AlignBottom,Align Bottom,아래쪽 정렬
+Action,Graph.AlignLeft,Align Left,왼쪽 정렬
+Action,Graph.AlignRight,Align Right,오른쪽 정렬
+Action,Graph.DistributeHoriz,Distribute Horizontally,가로 균등 분배
+Action,Graph.DistributeVert,Distribute Vertically,세로 균등 분배
+Action,Graph.Duplicate,Duplicate Nodes,노드 복제
+Action,Graph.CreateComment,Create Comment Box,코멘트 박스 생성
+Action,Graph.Delete,Delete Elements,선택 항목 삭제
+Action,Graph.ToggleBreakpoint,Toggle Breakpoint,중단점 설정/해제

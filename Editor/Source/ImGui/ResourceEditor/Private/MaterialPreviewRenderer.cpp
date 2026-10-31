@@ -25,6 +25,9 @@ void MaterialPreviewRenderer::Initialize(uint32 width, uint32 height)
 	m_Height = height;
 	// 1. 프리뷰 전용 파이프라인 초기화 (acceptSceneMeshes=false 로 메인 씬 유입 차단)
 	m_Pipeline.Initialize(L"MatPreview", m_Width, m_Height, false);
+	m_PostProcessChain.Initialize(L"MatPreview_PP");
+	m_PostProcessChain.PrepareResources(m_Width, m_Height);
+	m_DisplayRTName = m_Pipeline.GetFinalColorRTName();
 	// 2. 프리뷰 메쉬 리소스 로드
 	auto& rm = Engine::ResourceManager::Get();
 	m_SphereMesh = rm.GetResourceHandle<Engine::Mesh>(L"SphereMesh");
@@ -33,11 +36,10 @@ void MaterialPreviewRenderer::Initialize(uint32 width, uint32 height)
 	// 3. 프리뷰 전용 Scene 및 엔티티 구축
 	SetupPreviewScene();
 }
-
 void MaterialPreviewRenderer::Free()
 {
+	m_PostProcessChain.Free();
 	m_Pipeline.Free();
-
 	if (m_PreviewScene)
 	{
 		Engine::Safe_Release(m_PreviewScene);
@@ -165,14 +167,15 @@ void MaterialPreviewRenderer::Submit(Engine::MaterialInterface* material, f32 dt
 			Engine::Renderer::Get().SubmitStatic(cmd, m_Pipeline.GetGeometryPassID());
 		}
 	}
+	// 7. 톤매핑 후처리 체인 실행 (선형 HDR -> ACES Filmic LDR 변환)
+	m_DisplayRTName = m_PostProcessChain.ExecuteChain(dt, m_Pipeline.GetFinalColorRTName());
 }
 
 void MaterialPreviewRenderer::DrawUI(Engine::MaterialInterface* material)
 {
 	auto& rtm = Engine::RenderTargetManager::Get();
-	auto* colorRT = rtm.GetRenderTarget(m_Pipeline.GetFinalColorRTName());
+	auto* colorRT = rtm.GetRenderTarget(m_DisplayRTName);
 	if (!colorRT || !colorRT->GetTexture()) return;
-
 	ImTextureID texID = ImGuiManager::Get().GetImGuiTextureID(colorRT->GetTexture());
 	if (!texID) return;
 
@@ -293,6 +296,6 @@ void MaterialPreviewRenderer::DrawUI(Engine::MaterialInterface* material)
 
 Engine::RHITexture* MaterialPreviewRenderer::GetPreviewRHITexture() const
 {
-	auto* rt = Engine::RenderTargetManager::Get().GetRenderTarget(m_Pipeline.GetFinalColorRTName());
+	auto* rt = Engine::RenderTargetManager::Get().GetRenderTarget(m_DisplayRTName);
 	return rt ? rt->GetTexture() : nullptr;
 }

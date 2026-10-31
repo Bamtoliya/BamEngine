@@ -9,6 +9,7 @@
 - 연계 계획: [ImGuiDevelopmentPlan.md](ImGuiDevelopmentPlan.md), [RenderingDevelopmentPlan.md](RenderingDevelopmentPlan.md), [BuildAndPackagingPlan.md](BuildAndPackagingPlan.md)
 - 그래프 기반: [GraphFoundation.md](GraphFoundation.md), [GraphExecution.md](GraphExecution.md), [GraphReflection.md](GraphReflection.md), [VisualScriptingBlueprintPlan.md](VisualScriptingBlueprintPlan.md)
 - 애니메이터 그래프 계획: [AnimatorGraphPlan.md](AnimatorGraphPlan.md)
+- 네트워크 기반 계획: [NetworkFoundationPlan.md](NetworkFoundationPlan.md)
 - GPU 연결 지침: [Shader/BINDING_LAYOUT.md](Shader/BINDING_LAYOUT.md)
 - 분류·이관 기준: [SourceOrganizationGuidelines.md](SourceOrganizationGuidelines.md)
 - 통합 우선순위: [DevelopmentPriorities.md](DevelopmentPriorities.md)
@@ -433,9 +434,10 @@ Client 시작 설정과 배포는 BuildAndPackagingPlan의 기존 보류 상태�
 - 완료 예제: 제작한 맵을 저장·실행하고 일부 셀 수정 시 관련 청크만 갱신한다.
   3D Terrain 기능을 2D TileMap의 대체로 취급하지 않는다.
 
-### M. 네트워크·멀티플레이
+### M. 네트워크·멀티플레이 (상세 계획: [NetworkFoundationPlan.md](NetworkFoundationPlan.md))
 
-- 전송·연결·메시지 직렬화·버전·시간 동기화 기반부터 두고, 게임 요구에 따라 RPC·소유권·복제·예측/보정을 확장한다.
+- 상세 아키텍처 및 단계별 로드맵(Phase 1~5)은 [NetworkFoundationPlan.md](NetworkFoundationPlan.md)를 따른다.
+- 전송(`INetworkTransport`)·연결·메시지 직렬화(`PacketStream`, `PacketDispatcher`)·버전·시간 동기화 기반부터 두고, 게임 요구에 따라 RPC·소유권·복제(`NetworkIdentityComponent`, `NetworkTransformComponent`)·예측/보정을 확장한다.
 - VMC 추적 패킷·학습기 통신·게임 멀티플레이는 전송 일부를 공유할 수 있지만 세션·신뢰성·메시지 계약은 따로 정의한다.
 - 완료 예제: 두 Client의 객체 생성/삭제·상태 전달과 연결 종료·지연·패킷 유실을 검증한다.
   멀티플레이 전체를 강화학습이나 V-Tuber의 첫 결과물에 선행시키지 않는다.

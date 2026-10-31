@@ -192,7 +192,9 @@ void HierarchyPanel::Draw()
         return;
     }
     Scene* currentScene = SceneManager::IsCreated() ? SceneManager::Get().GetCurrentScene() : nullptr;
-    Application::Get().GetEditHistory().AllowShortcuts(ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows));
+    m_Focused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
+    m_Hovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows);
+    Application::Get().GetEditHistory().AllowShortcuts(m_Focused);
     if (currentScene)
     {
         DrawSceneTitle(currentScene);
@@ -651,5 +653,79 @@ void HierarchyPanel::DrawEntityHierarchy(Scene* scene)
 
 void HierarchyPanel::DrawEntityName(const wstring& name, bool isSelected)
 {
+}
 
+bool HierarchyPanel::DeleteSelectedEntities(Engine::Scene* scene)
+{
+	if (!scene) return false;
+	auto& selection = SelectionManager::Get();
+	if (selection.IsPrimarySelectionLocked()) return false;
+	const auto& selectedEntities = selection.GetSelectedEntities();
+	if (selectedEntities.empty()) return false;
+
+	std::vector<entt::entity> deleteList;
+	for (auto* entity : selectedEntities)
+	{
+		if (entity && entity->GetScene() == scene)
+			deleteList.push_back(entity->GetEntityHandle());
+	}
+	if (deleteList.empty()) return false;
+
+	std::unordered_set<entt::entity> deleteSet(deleteList.begin(), deleteList.end());
+	auto& registry = scene->GetRegistry();
+	auto& prefabMode = PrefabModeManager::Get();
+	if (prefabMode.IsInPrefabMode() && prefabMode.GetPrefabScene() == scene)
+	{
+		if (const auto* root = prefabMode.GetRootEntity())
+		{
+			auto current = root->GetEntityHandle();
+			std::unordered_set<entt::entity> visited;
+			while (current != entt::null)
+			{
+				if (!visited.insert(current).second || deleteSet.contains(current))
+					return false;
+				const auto* hierarchy = registry.try_get<Engine::HierarchyComponent>(current);
+				current = hierarchy ? hierarchy->parent : entt::null;
+			}
+		}
+	}
+
+	std::vector<Engine::Entity*> rootsToDelete;
+	for (auto handle : deleteList)
+	{
+		entt::entity current = handle;
+		bool hasSelectedAncestor = false;
+		while (true)
+		{
+			const auto* hier = registry.try_get<Engine::HierarchyComponent>(current);
+			if (!hier || hier->parent == entt::null) break;
+			if (deleteSet.contains(hier->parent)) { hasSelectedAncestor = true; break; }
+			current = hier->parent;
+		}
+		if (!hasSelectedAncestor)
+		{
+			if (auto* ent = scene->FindEntity(handle))
+				rootsToDelete.push_back(ent);
+		}
+	}
+	if (rootsToDelete.empty()) return false;
+
+	auto& history = Application::Get().GetEditHistory();
+	auto before = history.Enabled() ? SceneEditSnapshot::Capture(*scene) : SceneEditSnapshot{};
+	if (!before) return false;
+
+	bool deleted = false;
+	selection.ClearSelection();
+	for (auto* ent : rootsToDelete)
+	{
+		if (scene->DestroyEntity(*ent))
+			deleted = true;
+	}
+	if (deleted)
+	{
+		history.Record(std::move(before), SceneEditSnapshot::Capture(*scene), "UI_HISTORY_DELETE");
+		if (prefabMode.IsInPrefabMode() && prefabMode.GetPrefabScene() == scene)
+			prefabMode.MarkDirty();
+	}
+	return deleted;
 }

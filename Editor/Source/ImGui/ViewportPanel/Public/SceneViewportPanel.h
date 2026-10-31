@@ -3,6 +3,7 @@
 #include "CameraViewportPanel.h"
 #include "DebugRenderer.h"
 #include "Grid.h"
+#include "ViewportDeferredPipeline.h"
 #include "SceneEditHistory.h"
 #pragma push_macro("COLOR")
 #undef COLOR
@@ -41,6 +42,17 @@ public:
 	virtual void Free();
 	virtual PostProcessChain* GetPostProcessChain() override { return &m_PostProcessChain; }
 	virtual const PostProcessChain* GetPostProcessChain() const override { return &m_PostProcessChain; }
+public:
+	virtual EShortcutContext GetShortcutContext() const override { return EShortcutContext::Viewport; }
+	static SceneViewportPanel* GetActiveSceneViewport() { return s_ActiveSceneViewport; }
+	void SetGizmoOperation(ImGuizmo::OPERATION op) { m_GizmoOperation = op; }
+	ImGuizmo::OPERATION GetGizmoOperation() const { return m_GizmoOperation; }
+	void ToggleGizmoMode() { m_GizmoMode = (m_GizmoMode == ImGuizmo::LOCAL) ? ImGuizmo::WORLD : ImGuizmo::LOCAL; }
+	void ToggleSnap() { m_GizmoUseSnap = !m_GizmoUseSnap; }
+	void ToggleGrid() { m_Grid.Toggle(); }
+	void FocusSelectedEntity();
+private:
+	inline static SceneViewportPanel* s_ActiveSceneViewport = nullptr;
 #pragma endregion
 
 #pragma region Workspace Settings
@@ -95,7 +107,6 @@ protected:
 
 #pragma region Render Passes
 private:
-	void SubmitLightingPass(const CameraBuffer& cameraBuffer, const SkyAtmosphereData& skyData);
 	bool SyncPostProcess(Engine::Scene& scene, entt::entity entity, const Engine::PostProcessComponent& source);
 	void SubmitPostProcessPass(f32 dt, uint32& slot, std::wstring& currentRT);
 	void SubmitUIOverlayPass(const wstring& currentRT);
@@ -116,13 +127,13 @@ private:
 private:
 	std::optional<CameraBuffer> GetActiveCameraBuffer();
 	std::optional<CameraBuffer> FindActiveSceneCameraBuffer();
-	SkyAtmosphereData BuildSkyAtmosphereData();
 	void HandleTerrainSculpting(bool imageHovered);
 
 #pragma region Member Variables
 private:
 	vector<ViewportPassInfo> m_PassOptions;
-	//Render Passes & Render Targets
+	ViewportDeferredPipeline m_Pipeline;
+	// Render Passes
 	RenderPassID m_GeometryPassID = INVALID_PASS_ID;
 	RenderPassID m_LightingPassID = INVALID_PASS_ID;
 	RenderPassID m_DebugPassID = INVALID_PASS_ID;
@@ -132,13 +143,11 @@ private:
 	RenderPassID m_ForwardTransparentPassID = INVALID_PASS_ID;
 	RenderPassID m_ChannelPreviewPassID = INVALID_PASS_ID;
 	RenderPassID m_UIOverlayPassID = INVALID_PASS_ID;
-
+	// 하위 호환 및 RT 메뉴 캐시 (m_Pipeline에서 공급받음)
 	wstring m_ShadowDepthName;
 	wstring m_PointShadowDepthName;
 	wstring m_LightingColorName;
-
 	vector<wstring> m_OwnedRTNames;
-
 	bool m_ShowFinalComposed = true;
 private:
 	PostProcessChain m_PostProcessChain;
@@ -148,11 +157,7 @@ private:
 	Engine::Scene* m_LastBoundScene = nullptr;
 	entt::entity m_LastPostProcessEntity = entt::null;
 	bool m_PostProcessStateUsable = true;
-
-	//Pipelines
-	class RHIPipeline* m_LightingPipeline = { nullptr };
-
-	//Grid
+	// Grid
 	Grid m_Grid;
 	bool m_ShowGrid = { true };
 private:

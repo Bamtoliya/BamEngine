@@ -1,4 +1,5 @@
-﻿#include "GraphPanel.h"
+#include "GraphPanel.h"
+#include "ShortcutManager.h"
 #include "GraphMessageLocalization.h"
 #include "InputManager.h"
 #include "LocalizationManager.h"
@@ -120,7 +121,7 @@ void GraphPanel::DrawCanvas(float height)
 		ImGui::IsPopupOpen("##GraphLinkMenu") || ImGui::IsPopupOpen("##GraphPinMenu") || m_OpenNodePopup;
 	const bool canvasFocused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
 	// ── 단축키 처리 ──
-	if (canvasFocused && !menuOpen && !ImGui::GetIO().WantTextInput)
+	if (false && canvasFocused && !menuOpen && !ImGui::GetIO().WantTextInput) // Handled via ShortcutManager (GraphEditor Context)
 	{
 		const bool shift = ImGui::GetIO().KeyShift || Engine::InputManager::Get().IsShiftPressed();
 		const bool ctrl = ImGui::GetIO().KeyCtrl || Engine::InputManager::Get().IsCtrlPressed();
@@ -155,9 +156,9 @@ void GraphPanel::DrawCanvas(float height)
 	{
 		DrawNodeMenu();
 		ImGui::Separator();
-		if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.CreateCommentBox").c_str(), "C")) CreateCommentBoxFromSelection();
+		if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.CreateCommentBox").c_str(), ShortcutManager::Get().GetShortcutHint("Graph.CreateComment"))) CreateCommentBoxFromSelection();
 		const bool selected = !document.SelectedNodes.empty() || !document.SelectedLinks.empty();
-		if (ImGui::MenuItem(LOCAL_CSTR("GraphPanel.Delete"), "Delete", false, selected)) DeleteSelection();
+		if (ImGui::MenuItem(LOCAL_CSTR("GraphPanel.Delete"), ShortcutManager::Get().GetShortcutHint("Graph.Delete"), false, selected)) DeleteSelection();
 		ImGui::EndPopup();
 	}
 	// ── 2. 와이어(링크) 전용 컨텍스트 메뉴 ──
@@ -188,8 +189,8 @@ void GraphPanel::DrawCanvas(float height)
 		{
 			if (view.Id == static_cast<int>(m_ContextNodeId)) { targetNodeId = nodeId; break; }
 		}
-		if (ImGui::MenuItem(LOCAL_LABEL("Hierarchy.Duplicate").c_str(), "Ctrl+D")) DuplicateSelection();
-		if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.CreateCommentBox").c_str(), "C")) CreateCommentBoxFromSelection();
+		if (ImGui::MenuItem(LOCAL_LABEL("Hierarchy.Duplicate").c_str(), ShortcutManager::Get().GetShortcutHint("Graph.Duplicate"))) DuplicateSelection();
+		if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.CreateCommentBox").c_str(), ShortcutManager::Get().GetShortcutHint("Graph.CreateComment"))) CreateCommentBoxFromSelection();
 		if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.BreakAllPinLinks").c_str(), nullptr, false, targetNodeId != 0))
 		{
 			BreakAllNodeLinks(targetNodeId);

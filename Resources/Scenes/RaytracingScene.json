@@ -837,6 +837,9 @@
                     {
                         "Data": {
                             "AutoSyncDirectionalLight": true,
+                            "BRDFLutMap": {
+                                "Null": true
+                            },
                             "CloudAltitude": 2500,
                             "CloudCoverage": 0.44999998807907104,
                             "CloudDensity": 0.800000011920929,
@@ -849,8 +852,15 @@
                             "GroundColor": [0.15000000596046448, 0.12999999523162842, 0.11999999731779099],
                             "HorizonBlend": 1,
                             "HorizonColor": [0.699999988079071, 0.8199999928474426, 0.949999988079071],
+                            "IBLIntensity": 1,
+                            "IrradianceMap": {
+                                "Null": true
+                            },
                             "IsEnabled": true,
                             "Latitude": 45,
+                            "PrefilteredMap": {
+                                "Null": true
+                            },
                             "SkyIntensity": 1,
                             "SunSize": 0.03500000014901161,
                             "TimeOfDay": 12,
@@ -1062,7 +1072,7 @@
                         "Data": {
                             "IsEnabled": true,
                             "IsUnbound": true,
-                            "PipelineSettings": "{\n    \"Effects\": [\n        {\n            \"Enabled\": false,\n            \"Name\": \"Tone Mapping (ACES)\",\n            \"Parameters\": {\n                \"Exposure\": 1,\n                \"Gamma\": 2.200000047683716\n            }\n        },\n        {\n            \"Enabled\": false,\n            \"Name\": \"Bloom\",\n            \"Parameters\": {\n                \"Intensity\": 1,\n                \"Scatter\": 0.699999988079071,\n                \"SoftKnee\": 0.5,\n                \"Threshold\": 1\n            }\n        },\n        {\n            \"Enabled\": false,\n            \"Name\": \"Color Adjustments\",\n            \"Parameters\": {\n                \"Brightness\": 0,\n                \"Contrast\": 1,\n                \"Saturation\": 1\n            }\n        },\n        {\n            \"Enabled\": false,\n            \"Name\": \"Vignette\",\n            \"Parameters\": {\n                \"Intensity\": 0.800000011920929,\n                \"Roundness\": 1,\n                \"Smoothness\": 0.5\n            }\n        },\n        {\n            \"Enabled\": false,\n            \"Name\": \"Chromatic Aberration\",\n            \"Parameters\": {\n                \"Falloff\": 1.5,\n                \"Intensity\": 0.004999999888241291\n            }\n        },\n        {\n            \"Enabled\": false,\n            \"Name\": \"Film Grain\",\n            \"Parameters\": {\n                \"Intensity\": 0.05000000074505806,\n                \"LuminanceBias\": 0.5,\n                \"Scale\": 1\n            }\n        },\n        {\n            \"Enabled\": false,\n            \"Name\": \"Lens Distortion\",\n            \"Parameters\": {\n                \"CubicDistortion\": 0,\n                \"Distortion\": 0,\n                \"Scale\": 1\n            }\n        },\n        {\n            \"Enabled\": false,\n            \"Name\": \"Sharpen\",\n            \"Parameters\": {\n                \"Sharpness\": 0.5\n            }\n        }\n    ]\n}",
+                            "PipelineSettings": "{\n    \"Effects\": [\n        {\n            \"Enabled\": true,\n            \"Name\": \"Tone Mapping (ACES)\",\n            \"Parameters\": {\n                \"Exposure\": 1,\n                \"Gamma\": 2.200000047683716\n            }\n        },\n        {\n            \"Enabled\": false,\n            \"Name\": \"Bloom\",\n            \"Parameters\": {\n                \"Intensity\": 1,\n                \"Scatter\": 0.699999988079071,\n                \"SoftKnee\": 0.5,\n                \"Threshold\": 1\n            }\n        },\n        {\n            \"Enabled\": false,\n            \"Name\": \"Color Adjustments\",\n            \"Parameters\": {\n                \"Brightness\": 0,\n                \"Contrast\": 1,\n                \"Saturation\": 1\n            }\n        },\n        {\n            \"Enabled\": false,\n            \"Name\": \"Vignette\",\n            \"Parameters\": {\n                \"Intensity\": 0.4000000059604645,\n                \"Roundness\": 1,\n                \"Smoothness\": 0.5\n            }\n        },\n        {\n            \"Enabled\": false,\n            \"Name\": \"Chromatic Aberration\",\n            \"Parameters\": {\n                \"Falloff\": 1.5,\n                \"Intensity\": 0.004999999888241291\n            }\n        },\n        {\n            \"Enabled\": false,\n            \"Name\": \"Film Grain\",\n            \"Parameters\": {\n                \"Intensity\": 0.05000000074505806,\n                \"LuminanceBias\": 0.5,\n                \"Scale\": 1\n            }\n        },\n        {\n            \"Enabled\": false,\n            \"Name\": \"Lens Distortion\",\n            \"Parameters\": {\n                \"CubicDistortion\": 0,\n                \"Distortion\": 0,\n                \"Scale\": 1\n            }\n        },\n        {\n            \"Enabled\": false,\n            \"Name\": \"Sharpen\",\n            \"Parameters\": {\n                \"Sharpness\": 0.5\n            }\n        }\n    ]\n}",
                             "PresetName": "DefaultPreset",
                             "Priority": 0
                         },

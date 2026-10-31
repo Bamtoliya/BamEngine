@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "ImGuiInterface.h"
 #include "Graph.h"
@@ -27,6 +27,16 @@ public:
 	const Engine::Graph& GetGraph() const;
 	[[nodiscard]] Engine::GraphDiagnostic RegisterNode(Engine::GraphNodeDefinition definition);
 	[[nodiscard]] Engine::GraphDiagnostic RegisterReflectionNodes(const reflection::Registry& registry);
+public:
+	virtual EShortcutContext GetShortcutContext() const override { return EShortcutContext::GraphEditor; }
+	static GraphPanel* GetActiveGraphPanel() { return s_ActiveGraphPanel; }
+	void AlignNodes(char dir) { AlignSelectedNodes(dir); }
+	void DuplicateSelectedNodes() { DuplicateSelection(); }
+	void CreateCommentBox() { CreateCommentBoxFromSelection(); }
+	void DeleteSelectedElements() { DeleteSelection(); }
+	void ToggleBreakpointOnSelected();
+private:
+	inline static GraphPanel* s_ActiveGraphPanel = nullptr;
 
 private:
 	struct NodeView

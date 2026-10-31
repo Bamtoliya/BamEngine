@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "imgui.h"
 #include "ToolBar.h"
@@ -87,13 +87,15 @@ void ToolBar::DrawFileMenu()
 {
 	if (ImGui::BeginMenu(LOCAL_CSTR("UI_FILE")))
 	{
-		if (ImGui::MenuItem(LOCAL_CSTR("UI_EXIT"), "Alt+F4"))
+		ACTION_MENU_ITEM(LOCAL_CSTR("UI_EXIT"), "File.Exit");
+		if (false)
 		{
 			SDL_Event quit_event;
 			quit_event.type = SDL_EVENT_QUIT;
 			SDL_PushEvent(&quit_event);
 		}
-		if (ImGui::MenuItem(LOCAL_CSTR("UI_IMPORT_ASSET"), ""))
+		ACTION_MENU_ITEM(LOCAL_CSTR("UI_IMPORT_ASSET"), "File.ImportAsset");
+		if (false)
 		{
 			ImportAsset();
 		}
@@ -181,6 +183,11 @@ void ToolBar::DrawEditMenu()
 		ACTION_MENU_ITEM(LOCAL_CSTR("UI_UNDO"), "Edit.Undo");
 		ACTION_MENU_ITEM(LOCAL_CSTR("UI_REDO"), "Edit.Redo");
 		ImGui::Separator();
+		ACTION_MENU_ITEM(LOCAL_CSTR("EditorCommon.Copy"), "Edit.Copy");
+		ACTION_MENU_ITEM(LOCAL_CSTR("EditorCommon.Paste"), "Edit.Paste");
+		ACTION_MENU_ITEM(LOCAL_CSTR("Hierarchy.Duplicate"), "Edit.Duplicate");
+		ACTION_MENU_ITEM(LOCAL_CSTR("EditorCommon.Delete"), "Edit.Delete");
+		ImGui::Separator();
 		if (ImGui::MenuItem(LOCAL_CSTR("Shortcuts.Title")))
 		{
 			if (auto* panel = ImGuiManager::Get().GetImGuiPanel(L"ShortcutSettings"))
@@ -201,14 +208,16 @@ void ToolBar::DrawSceneMenu()
 		auto* document = Application::Get().GetSceneDocument();
 		const bool canSave = PIEManager::Get().IsEditing() && document && document->CanSave();
 
-		if (ImGui::MenuItem(LOCAL_LABEL("EditorDocument.SaveAs").c_str(), nullptr, false, canSave))
+		ACTION_MENU_ITEM(LOCAL_LABEL("EditorDocument.SaveAs").c_str(), "File.SaveSceneAs");
+		if (false)
 			SaveScene(true);
 
 		if (document && document->HasUnsavedChanges())
 			ImGui::TextUnformatted(LOCAL_CSTR("EditorDocument.Modified"));
 		ACTION_MENU_ITEM(LOCAL_CSTR("UI_LOAD_SCENE"), "File.LoadScene");
 		ImGui::Separator();
-		if (ImGui::MenuItem(LOCAL_CSTR("UI_CLOSE_SCENE"), nullptr, false, PIEManager::Get().IsEditing()))
+		ACTION_MENU_ITEM(LOCAL_CSTR("UI_CLOSE_SCENE"), "File.CloseScene");
+		if (false)
 		{
 			ImGuiManager::Get().RequestCloseScene();
 		}
@@ -430,7 +439,7 @@ void ToolBar::DrawPlayControls()
 	if (state != EPlayState::Edit) ImGui::BeginDisabled();
 	if (ImGui::Button(ICON_FA_PLAY, ImVec2(btnWidth, 0))) pie.StartPlay();
 	if (state != EPlayState::Edit) ImGui::EndDisabled();
-	if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("ToolBar.PlayTooltip"));
+	if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s (%s)", LOCAL_CSTR("ToolBar.PlayTooltip"), ShortcutManager::Get().GetShortcutHint("PIE.Play"));
 	ImGui::PopID();
 
 	ImGui::SameLine();
@@ -441,12 +450,12 @@ void ToolBar::DrawPlayControls()
 	if (state == EPlayState::Pause)
 	{
 		if (ImGui::Button(ICON_FA_PLAY, ImVec2(btnWidth, 0))) pie.Resume();
-		if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("ToolBar.ResumeTooltip"));
+		if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s (%s)", LOCAL_CSTR("ToolBar.ResumeTooltip"), ShortcutManager::Get().GetShortcutHint("PIE.PauseResume"));
 	}
 	else
 	{
 		if (ImGui::Button(ICON_FA_PAUSE, ImVec2(btnWidth, 0))) pie.Pause();
-		if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("ToolBar.PauseTooltip"));
+		if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s (%s)", LOCAL_CSTR("ToolBar.PauseTooltip"), ShortcutManager::Get().GetShortcutHint("PIE.PauseResume"));
 	}
 	if (state == EPlayState::Edit) ImGui::EndDisabled();
 	ImGui::PopID();
@@ -458,7 +467,7 @@ void ToolBar::DrawPlayControls()
 	if (state == EPlayState::Edit) ImGui::BeginDisabled();
 	if (ImGui::Button(ICON_FA_STOP, ImVec2(btnWidth, 0))) pie.Stop();
 	if (state == EPlayState::Edit) ImGui::EndDisabled();
-	if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("ToolBar.StopTooltip"));
+	if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s (%s)", LOCAL_CSTR("ToolBar.StopTooltip"), ShortcutManager::Get().GetShortcutHint("PIE.Stop"));
 	ImGui::PopID();
 
 	ImGui::SameLine(0.0f, 15.0f); // 재생 제어 버튼들과 간격 띄우기
@@ -477,7 +486,7 @@ void ToolBar::DrawPlayControls()
 	if (compiling) ImGui::EndDisabled();
 	if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
 	{
-		ImGui::SetTooltip("%s", LOCAL_CSTR("ToolBar.ModuleCompileTooltip"));
+		ImGui::SetTooltip("%s (%s)", LOCAL_CSTR("ToolBar.ModuleCompileTooltip"), ShortcutManager::Get().GetShortcutHint("Build.CompileModule"));
 	}
 	ImGui::PopID();
 	ImGui::SameLine(0.0f, 5.0f);
@@ -497,7 +506,7 @@ void ToolBar::DrawPlayControls()
 	}
 	if (ImGui::IsItemHovered())
 	{
-		ImGui::SetTooltip("%s", LOCAL_FMT("ToolBar.ReloadModuleTooltip", HotReloadManager::Get().GetModuleReloader().GetReloadIndex()).c_str());
+		ImGui::SetTooltip("%s (%s)", LOCAL_FMT("ToolBar.ReloadModuleTooltip", HotReloadManager::Get().GetModuleReloader().GetReloadIndex()).c_str(), ShortcutManager::Get().GetShortcutHint("Build.ReloadModule"));
 	}
 	ImGui::PopID();
 
@@ -520,7 +529,7 @@ void ToolBar::DrawPlayControls()
 	}
 	if (ImGui::IsItemHovered())
 	{
-		ImGui::SetTooltip("%s", LOCAL_CSTR("ToolBar.ShaderReloadTooltip"));
+		ImGui::SetTooltip("%s (%s)", LOCAL_CSTR("ToolBar.ShaderReloadTooltip"), ShortcutManager::Get().GetShortcutHint("Build.ReloadShaders"));
 	}
 }
 

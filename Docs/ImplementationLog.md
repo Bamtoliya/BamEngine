@@ -35,6 +35,71 @@ Use one entry per meaningful change.
 
 ---
 
+## [2026-11-01] 강화학습(RL) 첫 헤드리스 환경(CartPole) 및 Gymnasium 소켓 통신 서버(RLServer) 구축 (P2-C)
+
+- Area: Engine | Simulation | Tools | Client | Architecture
+- Type: Feature | Architecture | Stability
+- 관련 파일:
+  - Engine/Source/Simulation/Public/RLEnvironment.h
+  - Engine/Source/Simulation/Public/CartPoleEnvironment.h
+  - Engine/Source/Simulation/Private/CartPoleEnvironment.cpp
+  - Engine/Source/Simulation/Public/RLServer.h
+  - Engine/Source/Simulation/Private/RLServer.cpp
+  - Tools/RL/bam_gym_env.py
+  - Client/Source/Main.cpp
+  - Docs/DevelopmentPriorities.md
+- 구현 요약:
+  1. **Gymnasium 규약 준수 강화학습 공통 계약 (RLEnvironment.h)**:
+     - `IRLEnvironment`: `Initialize()`, `Reset(seed)`, `Step(action)`, `GetObservationSpace()`, `GetActionSpace()`, `Close()` 순수 가상 인터페이스.
+     - `RLObservation` (float 벡터 버퍼), `RLAction` (이산/연속 공용), `RLStepResult` (관측, 보상, Terminated, Truncated, InfoJson), `RLSpace` (Box, Discrete).
+     - DLL 동적 라이브러리 심볼 바인딩(`ENGINE_API`) 완비.
+  2. **헤드리스 수치 물리 시뮬레이터 (CartPoleEnvironment.h/cpp)**:
+     - 창, RHI 렌더러, 오디오가 전혀 필요 없는 순수 C++ 수치 물리 환경.
+     - Gymnasium CartPole-v1 표준 물리 상수(카트 질량 1.0, 폴 질량 0.1, 길이 0.5, 중력 9.8, 힘 10N) 및 50Hz 고정 dt(tau=0.02) 오일러 운동 방정식 구현.
+     - 난수 시드 기반 초기화 및 한계 조건(|x|>2.4, |theta|>12도) 도달 시 `Terminated: true` 판정.
+  3. **초경량 로컬 TCP IPC 서버 (RLServer.h/cpp)**:
+     - Windows Winsock(`ws2_32.lib`) 기반의 127.0.0.1:9999 로컬 TCP 서버.
+     - 개행 구분 Line-delimited JSON 프로토콜(`get_spaces`, `reset`, `step`, `close`) 처리기 및 빠른 응답 직렬화기 구축.
+     - `::bind`, `::listen`, `::accept`, `::recv`, `::send` 전역 스코프 네임스페이스 격리 및 Nagle 알고리즘 비활성화(`TCP_NODELAY`)로 지연시간 최소화.
+  4. **Python Gymnasium 어댑터 (Tools/RL/bam_gym_env.py)**:
+     - `gymnasium.Env`와 호환되며, `numpy`/`gymnasium` 부재 시 순수 파이썬 표준 라이브러리(`random`, `json`, `socket`)로 자동 폴백되는 견고한 어댑터 구현.
+  5. **클라이언트 CLI 엔트리포인트 (Client/Source/Main.cpp)**:
+     - `Client.exe --rl` 인자 분기를 통해 SDL 창 및 렌더러 생성 없이 즉시 헤드리스 RL 서버로 구동되는 실행 경로 완성.
+- 검증:
+  - MSVC x64-Debug 컴파일 및 링크 성공.
+  - C++ `Client.exe --rl` 구동 후 `python Tools/RL/bam_gym_env.py` 실행:
+    - `get_spaces` (Discrete 2, Box [4]) 정상 조회.
+    - 2개 연속 에피소드 실행: 에피소드 1(39스텝 종료, reward 38.0), 에피소드 2(22스텝 종료, reward 21.0).
+    - `Terminated: true` 판정 및 에피소드 간 상태 누수 없는 완전한 상태 격리 실측 확인.
+
+---
+
+## [2026-11-01] HDR 렌더링 파이프라인 일원화 및 SceneViewportPanel 공통 디퍼드 파이프라인(ViewportDeferredPipeline) 통합
+
+- Area: Editor | Render | Shader | Architecture
+- Type: Refactor | Fix | Architecture | Performance
+- 관련 파일:
+  - Resources/Shader/hlsl/lightingPS.hlsl
+  - Editor/Source/ImGui/ViewportPanel/Public/ViewportDeferredPipeline.h
+  - Editor/Source/ImGui/ViewportPanel/Private/ViewportDeferredPipeline.cpp
+  - Editor/Source/ImGui/ViewportPanel/Public/SceneViewportPanel.h
+  - Editor/Source/ImGui/ViewportPanel/Private/SceneViewportPanel.cpp
+  - Editor/Source/ImGui/ViewportPanel/Private/GameViewportPanel.cpp
+- 변경 동기:
+  - 디퍼드 라이팅 셰이더(`lightingPS.hlsl`) 끝자락에 Reinhard 톤매핑 및 감마 2.2 보정이 하드코딩되어 있고, 라이팅 렌더타깃(`LightingColor`)이 8비트 LDR(`R8G8B8A8_UNORM`)로 고정되어 고휘도 HDR 물리 광량이 조기 클램핑되는 결함 존재.
+  - 후처리 체인(`PostProcessPipeline`)이 가동될 때 이미 감마 보정된 픽셀 위에 ACES Filmic과 감마 보정이 중복 적용(이중 톤매핑 & 이중 감마 보정)되어, 씬에 PostProcessComponent 존재 여부에 따라 화면이 새하얗게 날아가거나(과노출/탈색) 음영이 뭉개지는 상태 불일치 발생.
+  - `SceneViewportPanel`과 `ViewportDeferredPipeline`이 거의 동일한 GBuffer/조명 합성 로직(~400줄)을 각자 중복 구현하고 있어 렌더링 기능(Point Light 그림자, Fog, IBL 등)의 동기화 불일치 지속 발생.
+- 구현 요약:
+  1. **라이팅 셰이더 순수 선형 HDR 광량 출력**: `lightingPS.hlsl`의 하드코딩된 Reinhard 및 감마 2.2 인코딩 제거.
+  2. **LightingColor 버퍼 포맷 승격**: `ViewportDeferredPipeline` 및 `SceneViewportPanel`의 라이팅 렌더타깃과 파이프라인 RTV 포맷을 `R16G16B16A16_FLOAT`로 승격하여 1.0 초과 광량 온전 보존.
+  3. **톤매핑/감마보정 일원화 및 상시 보장**: `SceneViewportPanel` 및 `GameViewportPanel`의 `SubmitPostProcessPass`에서 씬에 `PostProcessComponent`가 없더라도 기본 톤매핑 체인(Default.json: ACES Filmic + Gamma 2.2)이 작동하도록 폴백 보장.
+  4. **공통 디퍼드 파이프라인 통합**: `ViewportDeferredPipeline`에 `PointShadowDepth` 큐브맵 섀도우, `ForwardPass`/`ForwardTransparentPass`, 대기 산란(SkyAtmosphereData) 자동 계산 및 주입 기능을 통합하고, `SceneViewportPanel`의 수백 줄에 달하던 자체 렌더패스/라이팅 커맨드를 `m_Pipeline` 단일 인스턴스로 위임하여 중복 제거.
+- 검증:
+  - 에디터 컴파일 빌드 통과.
+  - 스카이박스 대기 정상 렌더링, 태양 위치와 일치하는 자연스러운 음영 및 그림자 합성 확인.
+
+---
+
 ## [2026-11-01] 비주얼 스크립팅(Graph) 시스템 String 핀 타입 완전 지원 및 SpriteAnimationEditor 리소스 핸들 안전성 개선
 
 - Area: Engine | Editor | Graph | Resource | UI

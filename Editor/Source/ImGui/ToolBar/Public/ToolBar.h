@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "Base.h"
 #include "BaseViewportPanel.h"
@@ -9,13 +9,13 @@ class ToolBar
 public:
 	void Draw(SDL_Window* window);
 	float GetPlayBarHeight() const;
-private:
+
 #pragma region File Menu
 private:
 	void DrawFileMenu();
-private:
-	void ImportAsset();
-	void LoadResourceFile();
+public:
+	static void ImportAsset();
+	static void LoadResourceFile();
 #pragma endregion
 
 #pragma region Edit Menu
@@ -56,11 +56,7 @@ private:
 
 #pragma region Settings
 public:
-
 #pragma endregion
-
-
-
 
 #pragma region Variables
 private:

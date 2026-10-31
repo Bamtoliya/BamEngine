@@ -5,6 +5,7 @@
 #include "Mesh.h"
 #include "MaterialInterface.h"
 #include "ViewportDeferredPipeline.h"
+#include "PostProcess.h"
 
 BEGIN(Engine)
 class Scene;
@@ -46,8 +47,10 @@ private:
 	uint32 m_Width = 512;
 	uint32 m_Height = 512;
 
-	// 독립 뷰포트 디퍼드 파이프라인
+	// 독립 뷰포트 디퍼드 파이프라인 및 포스트 프로세스 체인
 	ViewportDeferredPipeline m_Pipeline;
+	PostProcessChain m_PostProcessChain;
+	std::wstring m_DisplayRTName;
 
 	// 프리뷰 전용 독립 씬 및 엔티티
 	Engine::Scene* m_PreviewScene = nullptr;
@@ -58,16 +61,16 @@ private:
 	Engine::ResourceHandle<Engine::Mesh> m_SphereMesh;
 	Engine::ResourceHandle<Engine::Mesh> m_CubeMesh;
 	Engine::ResourceHandle<Engine::Mesh> m_PlaneMesh;
-	EPreviewMeshType m_CurrentMeshType = EPreviewMeshType::Sphere;
 
-	// 카메라 속성
+	// 뷰포트 조작
+	EPreviewMeshType m_CurrentMeshType = EPreviewMeshType::Sphere;
 	vec3 m_Target = vec3(0.0f);
-	f32 m_Yaw = 0.5f;
-	f32 m_Pitch = 0.25f;
 	f32 m_Distance = 3.5f;
+	f32 m_Pitch = 0.25f;
+	f32 m_Yaw = 0.5f;
 	f32 m_MoveSpeed = 3.0f;
 	bool m_AutoRotate = true;
-	f32 m_AutoRotateSpeed = 0.5f;
+	f32 m_AutoRotateSpeed = 0.4f;
 };
 
 END

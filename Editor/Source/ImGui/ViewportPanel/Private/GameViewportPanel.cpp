@@ -43,40 +43,51 @@ EResult GameViewportPanel::ResizeRenderTargets(uint32 width, uint32 height)
 void GameViewportPanel::SubmitPostProcessPass(f32 dt, std::wstring& currentRT)
 {
 	Engine::Scene* activeScene = Engine::SceneManager::Get().GetCurrentScene();
-	if (!activeScene) return;
-
-	auto view = activeScene->GetRegistry().view<Engine::PostProcessComponent>();
-	for (auto [entity, source] : view.each())
+	if (activeScene)
 	{
-		if (!source.IsEnabled) continue;
-
-		const bool unchanged = m_LastPostProcessEntity == entity &&
-			m_LastPostProcessPreset == source.PresetName && m_LastPostProcessSettings == source.PipelineSettings;
-
-		if (!unchanged)
+		auto view = activeScene->GetRegistry().view<Engine::PostProcessComponent>();
+		for (auto [entity, source] : view.each())
 		{
-			m_LastPostProcessEntity = entity;
-			m_LastPostProcessPreset = source.PresetName;
-			m_LastPostProcessSettings = source.PipelineSettings;
+			if (!source.IsEnabled) continue;
 
-			auto& pipeline = m_PostProcessChain.GetPipeline();
-			bool applied = pipeline.LoadFromString(m_DefaultPostProcessSettings);
-			if (applied && !source.PipelineSettings.empty())
-				applied = pipeline.LoadFromString(source.PipelineSettings);
-			else if (applied && !source.PresetName.empty())
-				applied = pipeline.LoadFromFile(StrToWStr("Resources/Config/PostProcess/Presets/" + source.PresetName + ".json"));
+			const bool unchanged = m_LastPostProcessEntity == entity &&
+				m_LastPostProcessPreset == source.PresetName && m_LastPostProcessSettings == source.PipelineSettings;
 
-			m_PostProcessStateUsable = applied;
+			if (!unchanged)
+			{
+				m_LastPostProcessEntity = entity;
+				m_LastPostProcessPreset = source.PresetName;
+				m_LastPostProcessSettings = source.PipelineSettings;
+
+				auto& pipeline = m_PostProcessChain.GetPipeline();
+				bool applied = pipeline.LoadFromString(m_DefaultPostProcessSettings);
+				if (applied && !source.PipelineSettings.empty())
+					applied = pipeline.LoadFromString(source.PipelineSettings);
+				else if (applied && !source.PresetName.empty())
+					applied = pipeline.LoadFromFile(StrToWStr("Resources/Config/PostProcess/Presets/" + source.PresetName + ".json"));
+
+				m_PostProcessStateUsable = applied;
+			}
+
+			if (m_PostProcessStateUsable)
+				currentRT = m_PostProcessChain.ExecuteChain(dt, currentRT);
+			return;
 		}
-
-		if (m_PostProcessStateUsable)
-			currentRT = m_PostProcessChain.ExecuteChain(dt, currentRT);
-		return;
 	}
 
-	m_LastPostProcessEntity = entt::null;
-	m_LastPostProcessPreset.clear();
-	m_LastPostProcessSettings.clear();
+	const bool wasDefaultState = (m_LastPostProcessEntity == entt::null);
+	if (!wasDefaultState)
+	{
+		m_LastPostProcessEntity = entt::null;
+		m_LastPostProcessPreset.clear();
+		m_LastPostProcessSettings.clear();
+		if (!m_DefaultPostProcessSettings.empty())
+			m_PostProcessStateUsable = m_PostProcessChain.GetPipeline().LoadFromString(m_DefaultPostProcessSettings);
+	}
+
+	// 씬에 활성화된 PostProcessComponent가 없더라도 기본 톤매핑 체인을 실행
+	if (m_PostProcessStateUsable)
+		currentRT = m_PostProcessChain.ExecuteChain(dt, currentRT);
 }
 
 void GameViewportPanel::Update(f32 dt)

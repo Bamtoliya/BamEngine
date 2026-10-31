@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "ImGuiInterface.h"
 #include "ChannelFilter.h"
@@ -69,6 +69,7 @@ public:
 #pragma region Get & Set
 public:
 	string GetDisplayName() const override { return m_IsRenderTargetViewer ? LOCAL_FMT("Viewport.ViewerTitle", WStrToStr(m_SelectedRTName)) : IImGui::GetDisplayName(); };
+	virtual EShortcutContext GetShortcutContext() const override { return EShortcutContext::Viewport; }
 	void SetSelectedRenderTarget(const wstring& rtName) { m_SelectedRTName = rtName; }
 	virtual PostProcessChain* GetPostProcessChain() { return nullptr; }
 	virtual const PostProcessChain* GetPostProcessChain() const { return nullptr; }
