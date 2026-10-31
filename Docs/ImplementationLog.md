@@ -35,6 +35,33 @@ Use one entry per meaningful change.
 
 ---
 
+## [2026-11-01] 콘텐츠 브라우저 OS 연동·공통 열기 일원화 및 다중 뷰포트/패스별 독립 LOD 파이프라인 완성
+
+- Area: Editor | Engine | Render | UI | Localization
+- Type: Feature | Architecture | UX | Optimization
+- 관련 파일:
+  - Editor/Source/ImGui/ContentBrowserPanel/Public/ContentBrowserGridItem.h
+  - Editor/Source/ImGui/ContentBrowserPanel/Private/ContentBrowserGridItem.cpp
+  - Editor/Source/ImGui/ContentBrowserPanel/Private/ContentBrowserPanel.cpp
+  - Engine/Source/System/Render/Private/MeshRenderSystem.cpp
+  - Resources/Data/Localization/Editor.csv
+  - Resources/Data/Localization/Korean.json
+  - Resources/Data/Localization/English.json
+  - Docs/DevelopmentPriorities.md
+- 구현 요약:
+  1. **콘텐츠 브라우저 공통 열기 및 컨텍스트 메뉴 일원화 (P1-D, ImGuiDevelopmentPlan 14절)**:
+     - `OpenAssetOrFolder` 공통 함수로 더블클릭과 컨텍스트 메뉴의 `[열기]` 동작을 완전히 통합 (폴더 이동, 씬/프리팹/머티리얼/그래프 내부 에디터 열기).
+     - 내부 에디터가 없는 소스/스크립트/문서/일반 파일 더블클릭 시 OS 기본 연결 프로그램(`ShellExecuteW`) 자동 폴백 실행 및 실패 시 알림(Notification) 제공.
+     - 컨텍스트 메뉴 최상단에 `[열기]`, `[기본 프로그램으로 열기]`, `[탐색기에서 표시]` 배치 및 유니코드/공백 경로 안전화(`ShellExecuteW` 기반 `explorer.exe /select,"<경로>"`).
+     - 검색창 검색 결과 0개 시 `검색 결과가 없습니다: "{0}"` 안내 문구와 원클릭 `[검색 지우기]` 버튼 제공 및 빈 폴더와 검색 상태 명확히 분리.
+     - 다국어 사전(`EditorCommon.Open`, `ContentBrowser.NoSearchResults`, `ContentBrowser.EmptyFolder`, `ContentBrowser.ClearSearch`) 등록 완비.
+  2. **MeshRenderSystem 다중 뷰포트/패스별 독립 LOD 평가 및 상태 분리 (P1-C, RenderingDevelopmentPlan S3)**:
+     - `PassTarget` 구조체를 통해 활성 뷰포트/패스별 고유 카메라(위치, `projY`)를 수집.
+     - 각 패스(Scene View, Game View, Shadow Pass 등)별로 해당 시점의 카메라 거리에 기반하여 독립적인 LOD 메시(`activeMesh`)를 평가하고 제출.
+     - 컴포넌트의 영속 관찰 상태(`currentLODIndex`)는 오직 주 에디터 메인 카메라(`target.isPrimaryGeometry`)일 때만 갱신하여 보조 패스로 인한 상태 오염 원천 차단.
+
+---
+
 ## [2026-11-01] 엔진 안정화, 씬 물리 레이캐스트 API 확장 및 그래프 패널 윈도우 메뉴바 리팩터링
 
 - Area: Engine | Editor | Render | Physics | UI

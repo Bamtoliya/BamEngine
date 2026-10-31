@@ -130,14 +130,17 @@ Engine·Render·Editor·Client 계획에서 무엇을 먼저 연결하고 무엇
 
 ### P1-D. 기본 에셋 판정·열기와 작업량 제한
 
-- **2026-10-31 현황**:
+- **2026-11-01 현황**:
   - `ContentBrowserPanel` 그리드 행 단위 클리핑(`ImGuiListClipper`)과 `ResourceReference` 도입 완료.
   - `Editor/Source/ImGui/Public/ResourcePicker.h` 최적화 완료:
     - `IsResourceExtensionCompatible<T>`를 통해 템플릿 인자 `T`(`Texture`, `Material`, `Model`, `AudioClip`, `Shader` 등)에 매핑된 호환 확장자 파일만 선별 표시.
     - `if (isAppearing)` 플래그를 통해 팝업 진입 시 1회만 디스크를 스캔하고 `s_CachedDiskFiles`에 캐싱하여 매 프레임 재귀 I/O 순회 병목을 원천 차단.
+  - `ContentBrowserGridItem` 및 `ContentBrowserPanel` 편의 기능 완성 (2026-11-01 반영 완료):
+    - `OpenAssetOrFolder` 공통 함수를 통해 더블클릭과 컨텍스트 메뉴의 `열기` 동작 통합 (내부 에디터 미지원 파일은 OS 기본 프로그램 폴백).
+    - 컨텍스트 메뉴 상단 `열기`, `기본 프로그램으로 열기`, `탐색기에서 표시(Show in Explorer)` 유니코드 안전화(`ShellExecuteW`).
+    - 검색창 검색 범위 토글(`현재 폴더` vs `전체 리소스 폴더`), 검색 결과 0개 시 명확한 안내 및 `검색 지우기` 버튼 연동.
   - **남은 항목**:
-    1. `ContentBrowserPanel`의 검색 범위 선택(`현재 폴더` vs `전체 리소스 폴더`, 14-E), 외부 프로그램 열기 메뉴(14-A).
-    2. 에셋 썸네일 축소 생성 및 캐시 예산 제한(14-D).
+    1. 에셋 썸네일 축소 생성 및 캐시 예산 제한(14-D).
 - 완료 기준: JSON/바이너리의 같은 콘텐츠 타입을 구분하고, 리소스 피커가 프레임 드랍 없이 해당 핸들 타입(`T`)과 호환되는 에셋만 디스크에서 즉각 선별·표시하며, 미로드 에셋 선택·검색 범위 전환·손상/미지원 처리가 동작한다.
 
 ## 5. P2: 작은 결과물과 기본 실행 경로
