@@ -85,10 +85,14 @@ void GraphPanel::DrawCanvas(float height)
 		const auto mouse = InputManager::Get().GetScreenMousePosition();
 		const ImVec2 canvasPos = ed::ScreenToCanvas(ImVec2(mouse.x, mouse.y));
 		m_ContextPosition = canvasPos;
-		if (hoveredNodeId)
+		if (hoveredPinId)
+		{
+			m_ContextPinId = static_cast<uintptr_t>(hoveredPinId.Get());
+			ImGui::OpenPopup("##GraphPinMenu");
+		}
+		else if (hoveredNodeId)
 		{
 			m_ContextNodeId = static_cast<uintptr_t>(hoveredNodeId.Get());
-			// 우클릭한 노드가 선택 목록에 없다면 해당 노드로 단일 선택
 			for (const auto& [nodeId, view] : document.Nodes)
 			{
 				if (view.Id == static_cast<int>(m_ContextNodeId))
@@ -105,7 +109,7 @@ void GraphPanel::DrawCanvas(float height)
 			m_ContextLinkId = static_cast<uintptr_t>(hoveredLinkId.Get());
 			ImGui::OpenPopup("##GraphLinkMenu");
 		}
-		else if (!hoveredPinId)
+		else
 		{
 			m_AddPosition = canvasPos;
 			PrepareNodeMenu();
@@ -113,7 +117,7 @@ void GraphPanel::DrawCanvas(float height)
 		}
 	}
 	const bool menuOpen = ImGui::IsPopupOpen("##GraphCanvasMenu") || ImGui::IsPopupOpen("##GraphNodeMenu") ||
-		ImGui::IsPopupOpen("##GraphLinkMenu") || m_OpenNodePopup;
+		ImGui::IsPopupOpen("##GraphLinkMenu") || ImGui::IsPopupOpen("##GraphPinMenu") || m_OpenNodePopup;
 	const bool canvasFocused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
 	// ── 단축키 처리 ──
 	if (canvasFocused && !menuOpen && !ImGui::GetIO().WantTextInput)
@@ -151,7 +155,7 @@ void GraphPanel::DrawCanvas(float height)
 	{
 		DrawNodeMenu();
 		ImGui::Separator();
-		if (ImGui::MenuItem("Create Comment Box (Group)", "C")) CreateCommentBoxFromSelection();
+		if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.CreateCommentBox").c_str(), "C")) CreateCommentBoxFromSelection();
 		const bool selected = !document.SelectedNodes.empty() || !document.SelectedLinks.empty();
 		if (ImGui::MenuItem(LOCAL_CSTR("GraphPanel.Delete"), "Delete", false, selected)) DeleteSelection();
 		ImGui::EndPopup();
@@ -164,12 +168,12 @@ void GraphPanel::DrawCanvas(float height)
 		{
 			if (edId == static_cast<int>(m_ContextLinkId)) { targetLinkId = id; break; }
 		}
-		if (ImGui::MenuItem("Add Reroute Node"))
+		if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.AddReroute").c_str()))
 		{
 			InsertRerouteNodeOnLink(m_ContextLinkId, m_ContextPosition);
 			ImGui::CloseCurrentPopup();
 		}
-		if (ImGui::MenuItem("Break Link", nullptr, false, targetLinkId != 0))
+		if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.BreakLink").c_str(), nullptr, false, targetLinkId != 0))
 		{
 			if (ApplyResult(document.Data.Disconnect(targetLinkId))) document.Links.erase(targetLinkId);
 			ImGui::CloseCurrentPopup();
@@ -184,9 +188,9 @@ void GraphPanel::DrawCanvas(float height)
 		{
 			if (view.Id == static_cast<int>(m_ContextNodeId)) { targetNodeId = nodeId; break; }
 		}
-		if (ImGui::MenuItem("Duplicate", "Ctrl+D")) DuplicateSelection();
-		if (ImGui::MenuItem("Create Comment Box (Group)", "C")) CreateCommentBoxFromSelection();
-		if (ImGui::MenuItem("Break All Pin Links", nullptr, false, targetNodeId != 0))
+		if (ImGui::MenuItem(LOCAL_LABEL("Hierarchy.Duplicate").c_str(), "Ctrl+D")) DuplicateSelection();
+		if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.CreateCommentBox").c_str(), "C")) CreateCommentBoxFromSelection();
+		if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.BreakAllPinLinks").c_str(), nullptr, false, targetNodeId != 0))
 		{
 			BreakAllNodeLinks(targetNodeId);
 			ImGui::CloseCurrentPopup();
@@ -194,26 +198,134 @@ void GraphPanel::DrawCanvas(float height)
 		if (targetNodeId != 0)
 		{
 			const bool isBp = HasBreakpoint(targetNodeId);
-			if (ImGui::MenuItem(isBp ? "Remove Breakpoint" : "Toggle Breakpoint", "F9"))
+			const char* breakpointKey = isBp ? "GraphPanel.RemoveBreakpoint" : "GraphPanel.ToggleBreakpoint";
+			if (ImGui::MenuItem(LOCAL_LABEL(breakpointKey).c_str(), "F9"))
 				ToggleBreakpoint(targetNodeId);
 		}
 		if (document.SelectedNodes.size() >= 2)
 		{
 			ImGui::Separator();
-			if (ImGui::BeginMenu("Alignment"))
+			if (ImGui::BeginMenu(LOCAL_LABEL("GraphPanel.Alignment").c_str()))
 			{
-				if (ImGui::MenuItem("Align Top", "Shift+W")) AlignSelectedNodes('W');
-				if (ImGui::MenuItem("Align Bottom", "Shift+S")) AlignSelectedNodes('S');
-				if (ImGui::MenuItem("Align Left", "Shift+A")) AlignSelectedNodes('A');
-				if (ImGui::MenuItem("Align Right", "Shift+D")) AlignSelectedNodes('D');
+				if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.AlignTop").c_str(), "Shift+W")) AlignSelectedNodes('W');
+				if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.AlignBottom").c_str(), "Shift+S")) AlignSelectedNodes('S');
+				if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.AlignLeft").c_str(), "Shift+A")) AlignSelectedNodes('A');
+				if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.AlignRight").c_str(), "Shift+D")) AlignSelectedNodes('D');
 				const bool canDistribute = document.SelectedNodes.size() >= 3;
-				if (ImGui::MenuItem("Distribute Horizontally", "Shift+H", false, canDistribute)) AlignSelectedNodes('H');
-				if (ImGui::MenuItem("Distribute Vertically", "Shift+V", false, canDistribute)) AlignSelectedNodes('V');
+				if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.DistributeHorizontal").c_str(), "Shift+H", false, canDistribute))
+					AlignSelectedNodes('H');
+				if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.DistributeVertical").c_str(), "Shift+V", false, canDistribute))
+					AlignSelectedNodes('V');
 				ImGui::EndMenu();
 			}
 		}
 		ImGui::Separator();
 		if (ImGui::MenuItem(LOCAL_CSTR("GraphPanel.Delete"), "Delete")) DeleteSelection();
+		ImGui::EndPopup();
+	}
+	// ── 핀 우클릭 메뉴 ──
+	if (ImGui::BeginPopup("##GraphPinMenu"))
+	{
+		Engine::GraphNodeId targetNodeId = 0;
+		std::string targetPinKey = "";
+		for (const auto& [nodeId, view] : document.Nodes)
+		{
+			for (const auto& [pinKey, pinId] : view.Pins)
+			{
+				if (pinId == static_cast<int>(m_ContextPinId))
+				{
+					targetNodeId = nodeId;
+					targetPinKey = pinKey;
+					break;
+				}
+			}
+			if (targetNodeId != 0) break;
+		}
+
+		const auto* targetNode = document.Data.FindNode(targetNodeId);
+		const auto* schema = targetNode ? m_Registry.Find(targetNode->Type) : nullptr;
+		const Engine::GraphPin* pinSchema = nullptr;
+		if (schema)
+		{
+			for (const auto& pin : schema->Pins)
+			{
+				if (pin.Key == targetPinKey) { pinSchema = &pin; break; }
+			}
+		}
+
+		if (targetNode && pinSchema)
+		{
+			ImGui::TextDisabled("%s", LOCAL_FMT("GraphPanel.PinSummary", targetPinKey, PinTypeName(pinSchema->Type)).c_str());
+			ImGui::Separator();
+
+			// 1. 해당 핀에 연결된 모든 와이어 분리
+			const std::string breakLabel = ICON_FA_SCISSORS " " + LOCAL_FMT("GraphPanel.BreakPinLinks", targetPinKey) +
+				"###GraphBreakPinLinks";
+			if (ImGui::MenuItem(breakLabel.c_str()))
+			{
+				std::vector<Engine::GraphLinkId> linksToRemove;
+				for (const auto& link : document.Data.GetLinks())
+				{
+					if ((link.From.Node == targetNodeId && link.From.Pin == targetPinKey) ||
+						(link.To.Node == targetNodeId && link.To.Pin == targetPinKey))
+					{
+						linksToRemove.push_back(link.Id);
+					}
+				}
+				for (auto linkId : linksToRemove)
+				{
+					if (ApplyResult(document.Data.Disconnect(linkId))) document.Links.erase(linkId);
+				}
+			}
+
+			// 2. 오버라이드된 입력값을 기본값으로 복원 (입력 핀 전용)
+			if (pinSchema->Direction == Engine::EGraphPinDirection::Input && pinSchema->Type != Engine::EGraphPinType::Execution)
+			{
+				if (ImGui::MenuItem((ICON_FA_ROTATE_LEFT " " + LOCAL_LABEL("GraphPanel.ResetValue")).c_str()))
+				{
+					(void)document.Data.ResetInputValue(m_Registry, { targetNodeId, targetPinKey });
+				}
+			}
+
+			// 3. 변수로 승격 (Promote to Variable - 데이터 핀 전용)
+			if (pinSchema->Type != Engine::EGraphPinType::Execution)
+			{
+				if (ImGui::MenuItem((ICON_FA_ARROW_UP_RIGHT_FROM_SQUARE " " + LOCAL_LABEL("GraphPanel.PromoteVariable")).c_str()))
+				{
+					std::string varName = targetPinKey;
+					int suffix = 1;
+					while (document.Data.FindVariable(varName))
+					{
+						varName = targetPinKey + "_" + std::to_string(suffix++);
+					}
+
+					Engine::GraphValue defaultVal = pinSchema->DefaultValue;
+					if (const auto it = targetNode->InputValues.find(targetPinKey); it != targetNode->InputValues.end())
+					{
+						defaultVal = it->second;
+					}
+
+					Engine::GraphVariable newVar{ varName, pinSchema->Type, defaultVal };
+					if (document.Data.AddVariable(m_Registry, newVar).Succeeded())
+					{
+						document.Data.RegisterVariableNodes(m_Registry);
+						const std::string varNodeType = "Variable.Get." + varName;
+						m_AddPosition = ImVec2(m_ContextPosition.x - 180.0f, m_ContextPosition.y);
+						GraphNodeCandidate candidate{ varNodeType, {} };
+						if (AddNode(candidate))
+						{
+							const auto newNodeId = document.PendingSelection;
+							const auto conn = document.Data.Connect(m_Registry, { newNodeId, "Value" }, { targetNodeId, targetPinKey });
+							if (ApplyResult(conn))
+							{
+								document.Links.emplace(conn.Link, static_cast<int>(document.NextId++));
+							}
+						}
+					}
+				}
+			}
+		}
+
 		ImGui::EndPopup();
 	}
 }

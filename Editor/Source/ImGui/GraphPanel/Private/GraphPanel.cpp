@@ -221,18 +221,21 @@ void GraphPanel::DrawToolbar()
 	if (ImGui::Button(LOCAL_CSTR("GraphPanel.Delete"))) DeleteSelection();
 	ImGui::EndDisabled();
 	ImGui::SameLine();
-	const char* wireBtnLabel = (m_WireStyle == EWireStyle::ElectronicHybrid) ? ICON_FA_BOLT " Wire: Electronic" :
-		(m_WireStyle == EWireStyle::Straight ? ICON_FA_MINUS " Wire: All Straight" : ICON_FA_BEZIER_CURVE " Wire: All Curved");
-	if (ImGui::Button(wireBtnLabel))
+	const char* wireKey = m_WireStyle == EWireStyle::ElectronicHybrid ? "GraphPanel.WireElectronic" :
+		(m_WireStyle == EWireStyle::Straight ? "GraphPanel.WireStraight" : "GraphPanel.WireCurved");
+	const char* wireIcon = m_WireStyle == EWireStyle::ElectronicHybrid ? ICON_FA_BOLT :
+		(m_WireStyle == EWireStyle::Straight ? ICON_FA_MINUS : ICON_FA_BEZIER_CURVE);
+	const string wireBtnLabel = string(wireIcon) + " " + LOCAL(wireKey) + "###GraphWireStyle";
+	if (ImGui::Button(wireBtnLabel.c_str()))
 	{
 		int nextMode = (static_cast<int>(m_WireStyle) + 1) % 3;
 		m_WireStyle = static_cast<EWireStyle>(nextMode);
 	}
 	if (ImGui::IsItemHovered())
 	{
-		const char* tooltip = (m_WireStyle == EWireStyle::ElectronicHybrid) ? "Wire: Electronic (Exec Straight + Data Curved)" :
-			(m_WireStyle == EWireStyle::Straight ? "Wire: All Straight Lines (Exec & Data Straight)" : "Wire: All Curved Bezier Lines");
-		ImGui::SetTooltip("%s (Click to toggle)", tooltip);
+		const char* tooltipKey = m_WireStyle == EWireStyle::ElectronicHybrid ? "GraphPanel.WireElectronicHint" :
+			(m_WireStyle == EWireStyle::Straight ? "GraphPanel.WireStraightHint" : "GraphPanel.WireCurvedHint");
+		ImGui::SetTooltip("%s", LOCAL_CSTR(tooltipKey));
 	}
 }
 
@@ -252,7 +255,8 @@ void GraphPanel::SaveDocument(bool saveAs)
 			{ StrToWStr(LOCAL("FileDialog.GraphFiles")), L"*.json" }
 		};
 
-		if (!FileDialogs::SaveFileDialog(selectedPath, filters, defaultName, L"json")) return;
+		if (!FileDialogs::SaveFileDialog(selectedPath, filters, defaultName, L"json", EFileDialogContext::GraphSave))
+			return;
 		path = std::filesystem::path(selectedPath);
 	}
 
@@ -279,7 +283,8 @@ void GraphPanel::OpenDocument()
 		{ StrToWStr(LOCAL("FileDialog.GraphFiles")), L"*.json" }
 	};
 
-	if (!FileDialogs::OpenFileDialog(selectedPath, filters)) return;
+	if (!FileDialogs::OpenFileDialog(selectedPath, filters, L"", EFileDialogContext::GraphOpen))
+		return;
 
 	auto& document = GetDocument();
 	if (!ReflectionRegistry::IsCreated())
@@ -741,14 +746,14 @@ void GraphPanel::DrawVariables()
 	if (m_Domain != Engine::EGraphDomain::Logic) return;
 
 	auto& document = GetDocument();
-	ImGui::TextUnformatted("Variables");
+	ImGui::TextUnformatted(LOCAL_CSTR("GraphPanel.Variables"));
 	ImGui::Separator();
 
 	// 1. 기존 변수 목록 표시 및 Get/Set 노드 생성
 	const auto& vars = document.Data.GetVariables();
 	if (vars.empty())
 	{
-		ImGui::TextDisabled("No variables defined.");
+		ImGui::TextDisabled("%s", LOCAL_CSTR("GraphPanel.NoVariables"));
 	}
 	else
 	{
@@ -759,7 +764,7 @@ void GraphPanel::DrawVariables()
 
 			ImGui::BulletText("%s (%s)", var.Name.c_str(), PinTypeName(var.Type));
 			ImGui::SameLine();
-			if (ImGui::SmallButton("+Get"))
+			if (ImGui::SmallButton(LOCAL_LABEL("GraphPanel.AddVariableGet").c_str()))
 			{
 				m_AddSource = {};
 
@@ -770,7 +775,7 @@ void GraphPanel::DrawVariables()
 				AddNode(candidate);
 			}
 			ImGui::SameLine();
-			if (ImGui::SmallButton("+Set"))
+			if (ImGui::SmallButton(LOCAL_LABEL("GraphPanel.AddVariableSet").c_str()))
 			{
 				m_AddSource = {};
 				const auto mouse = InputManager::Get().GetScreenMousePosition();
@@ -796,8 +801,9 @@ void GraphPanel::DrawVariables()
 	ImGui::Separator();
 
 	// 2. 새 변수 추가 UI
-	ImGui::TextUnformatted("Add Variable");
-	ImGui::InputText("Name##NewVar", m_NewVarName, sizeof(m_NewVarName));
+	ImGui::TextUnformatted(LOCAL_CSTR("GraphPanel.AddVariable"));
+	const string nameLabel = LOCAL("EditorCommon.Name") + "###GraphNewVarName";
+	ImGui::InputText(nameLabel.c_str(), m_NewVarName, sizeof(m_NewVarName));
 
 	const char* typeNames[] = { "Bool", "Int", "Float", "Float2", "Float3", "Float4" };
 	const Engine::EGraphPinType typeValues[] = {
@@ -805,9 +811,10 @@ void GraphPanel::DrawVariables()
 		Engine::EGraphPinType::Float2, Engine::EGraphPinType::Float3, Engine::EGraphPinType::Float4
 	};
 
-	ImGui::Combo("Type##NewVar", &m_NewVarType, typeNames, IM_ARRAYSIZE(typeNames));
+	const string typeLabel = LOCAL("EditorCommon.Type") + "###GraphNewVarType";
+	ImGui::Combo(typeLabel.c_str(), &m_NewVarType, typeNames, IM_ARRAYSIZE(typeNames));
 
-	if (ImGui::Button("Create Variable") && m_NewVarName[0] != '\0')
+	if (ImGui::Button(LOCAL_LABEL("GraphPanel.CreateVariable").c_str()) && m_NewVarName[0] != '\0')
 	{
 		Engine::GraphVariable newVar;
 		newVar.Name = m_NewVarName;

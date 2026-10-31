@@ -1,6 +1,5 @@
 ﻿#define SDL_MAIN_HANDLED
 #include <SDL3/SDL_main.h>
-#include <filesystem>
 #include <archive/JsonArchive.h>
 
 #include "Engine_Includes.h"
@@ -10,7 +9,6 @@
 #include "SceneManager.h"
 #include "Components/Render/CameraComponent.h"
 #include "Components/Core/FlagComponent.h"
-#include <optional>
 
 BEGIN(Client)
 
@@ -173,8 +171,12 @@ private:
         if (!systemManager.AddSystem<LightSystem>()) return EResult::Fail;
         if (!systemManager.AddSystem<MeshRenderSystem>()) return EResult::Fail;
         if (!systemManager.AddSystem<SpriteRenderSystem>()) return EResult::Fail;
+        if (!systemManager.AddSystem<SpriteAnimationSystem>()) return EResult::Fail;
         if (!systemManager.AddSystem<UIRenderSystem>()) return EResult::Fail;
         if (!systemManager.AddSystem<AudioSystem>()) return EResult::Fail;
+        if (!systemManager.AddSystem<TerrainSystem>()) return EResult::Fail;
+        if (!systemManager.AddSystem<PhysicsSystem>()) return EResult::Fail;
+        if (!systemManager.AddSystem<GraphSystem>()) return EResult::Fail;
         return EResult::Success;
     }
 

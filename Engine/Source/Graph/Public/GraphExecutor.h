@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "Graph.h"
 #include <reflection/Registry.h>
@@ -34,11 +34,18 @@ public:
 	void Clear();
 	void Step();
 	void Tick(std::size_t maxTasks = 64);
+
+	using NodeStepCallback = std::function<void(GraphNodeId nodeId)>;
+	void SetNodeStepCallback(NodeStepCallback cb) { m_NodeStepCallback = std::move(cb); }
 	EGraphExecutionState GetState() const { return m_State; }
 	const GraphDiagnostic& GetDiagnostic() const { return m_Diagnostic; }
 	const std::deque<GraphTraceEvent>& GetTrace() const { return m_Trace; }
 	const GraphValue& GetResult() const { return m_Result; }
 	std::size_t GetRemainingBudget() const { return m_Budget; }
+	// ── 사용자 정의 변수 런타임 접근 ──
+	const GraphValue* GetVariable(const std::string& name) const;
+	bool SetVariable(const std::string& name, GraphValue value);
+	const std::unordered_map<std::string, GraphValue>& GetVariables() const { return m_Variables; }
 
 private:
 	enum class TaskKind { Enter, Leave, ForNext, WhileNext };
@@ -77,6 +84,7 @@ private:
 	std::unordered_map<GraphNodeId, std::unordered_map<std::string, GraphValue>> m_Outputs;
 	std::unordered_set<GraphNodeId> m_Active;
 	std::unordered_set<GraphNodeId> m_Evaluating;
+	std::unordered_map<std::string, GraphValue> m_Variables;
 	std::vector<Task> m_Pending;
 	std::deque<GraphTraceEvent> m_Trace;
 	GraphValue m_Result;
@@ -86,5 +94,6 @@ private:
 	std::uint64_t m_Sequence = 0;
 	bool m_Loaded = false;
 	bool m_Started = false;
+	NodeStepCallback m_NodeStepCallback = nullptr;
 };
 }

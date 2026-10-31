@@ -208,14 +208,14 @@ void GraphPanel::DrawDebugToolbar()
 	ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
 	ImGui::SameLine();
 	auto* scene = SceneManager::IsCreated() ? SceneManager::Get().GetCurrentScene() : nullptr;
-	std::string previewName = "Debug: [None]";
+	std::string previewName = LOCAL("GraphPanel.DebugNone");
 	if (scene && scene->GetRegistry().valid(m_DebugEntity))
 	{
 		const auto* nameComp = scene->GetRegistry().try_get<Engine::NameComponent>(m_DebugEntity);
 		if (nameComp && !nameComp->name.empty())
-			previewName = fmt::format("Debug: {} (#{})", WStrToStr(nameComp->name), entt::to_integral(m_DebugEntity));
+			previewName = LOCAL_FMT("GraphPanel.DebugNamedEntity", WStrToStr(nameComp->name), entt::to_integral(m_DebugEntity));
 		else
-			previewName = fmt::format("Debug: Entity #{}", entt::to_integral(m_DebugEntity));
+			previewName = LOCAL_FMT("GraphPanel.DebugEntity", entt::to_integral(m_DebugEntity));
 	}
 	else
 	{
@@ -224,7 +224,7 @@ void GraphPanel::DrawDebugToolbar()
 	ImGui::SetNextItemWidth(ImGui::GetFontSize() * 15.0f);
 	if (ImGui::BeginCombo("##DebugEntity", previewName.c_str()))
 	{
-		if (ImGui::Selectable("None", m_DebugEntity == entt::null))
+		if (ImGui::Selectable(LOCAL_LABEL("EditorCommon.None").c_str(), m_DebugEntity == entt::null))
 		{
 			m_DebugEntity = entt::null;
 			m_LinkPulseTimers.clear();
@@ -240,23 +240,26 @@ void GraphPanel::DrawDebugToolbar()
 				if (nameComp && !nameComp->name.empty())
 					itemLabel = fmt::format("{} (#{})", WStrToStr(nameComp->name), entt::to_integral(entity));
 				else
-					itemLabel = fmt::format("Entity #{}", entt::to_integral(entity));
+					itemLabel = LOCAL_FMT("GraphPanel.EntityLabel", entt::to_integral(entity));
 				if (!binding.graphFile.empty())
 					itemLabel += fmt::format(" [{}]", WStrToStr(std::filesystem::path(binding.graphFile).filename().wstring()));
 				const bool selected = (m_DebugEntity == entity);
+				ImGui::PushID(static_cast<int>(entt::to_integral(entity)));
+				itemLabel += "###DebugEntityItem";
 				if (ImGui::Selectable(itemLabel.c_str(), selected))
 				{
 					m_DebugEntity = entity;
 					m_LinkPulseTimers.clear();
 					m_LastDebugTraceSequence = 0;
 				}
+				ImGui::PopID();
 			}
 		}
 		ImGui::EndCombo();
 	}
 	if (ImGui::IsItemHovered())
 	{
-		ImGui::SetTooltip("Select an active actor to visualize live execution wire flow and watch pin values.");
+		ImGui::SetTooltip("%s", LOCAL_CSTR("GraphPanel.DebugEntityHint"));
 	}
 }
 void GraphPanel::UpdateLiveDebugging()

@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "GraphAnnotations.h"
 #include <algorithm>
@@ -7,6 +7,7 @@
 #include <limits>
 #include <numbers>
 #include <stdexcept>
+#include <random>
 
 namespace Engine::GraphMath
 {
@@ -462,5 +463,28 @@ inline float StepFloat(float edge, float value)
 	return value < edge ? 0.0f : 1.0f;
 }
 
+FUNCTION(GRAPH_PURE("Math.RandomFloatInRange"), DISPLAY_NAME("Random Float In Range"), CATEGORY("Math/Random"),
+	GRAPH_PIN_DEFAULT("min", 0.0f), GRAPH_PIN_DEFAULT("max", 1.0f))
+	inline float RandomFloatInRange(float min, float max)
+{
+	static thread_local std::mt19937 gen{ std::random_device{}() };
+	std::uniform_real_distribution<float> dist(min, max);
+	return dist(gen);
 }
 
+FUNCTION(GRAPH_PURE("Math.SinDeg"), DISPLAY_NAME("Sin (Degrees)"), CATEGORY("Math/Trig"),
+	GRAPH_PIN_DEFAULT("deg", 0.0f))
+	inline float SinDeg(float deg)
+{
+	constexpr float toRad = static_cast<float>(std::numbers::pi / 180.0);
+	return std::sin(deg * toRad);
+}
+
+FUNCTION(GRAPH_PURE("Math.CosDeg"), DISPLAY_NAME("Cos (Degrees)"), CATEGORY("Math/Trig"),
+	GRAPH_PIN_DEFAULT("deg", 0.0f))
+	inline float CosDeg(float deg)
+{
+	constexpr float toRad = static_cast<float>(std::numbers::pi / 180.0);
+	return std::cos(deg * toRad);
+}
+}

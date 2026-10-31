@@ -1,14 +1,6 @@
-#include "GraphReflection.h"
+﻿#include "GraphReflection.h"
 #include "GraphValue.h"
 #include <reflection/Registry.h>
-#include <algorithm>
-#include <cctype>
-#include <cmath>
-#include <limits>
-#include <optional>
-#include <typeindex>
-#include <unordered_set>
-#include <utility>
 
 namespace
 {
@@ -205,7 +197,7 @@ GraphDiagnostic RegisterFunction(GraphRegistry& graph, const reflection::Functio
 	else if (pure)
 		return Invalid(location, "A pure node must return a value.");
 	if (callable) node.Pins.push_back({ "then", Direction::Output, Type::Execution, {} });
-	auto result = graph.Register(std::move(node));
+	auto result = graph.RegisterOrUpdate(std::move(node));
 	if (!result.Succeeded()) result.Message = location + ": " + result.Message;
 	return result;
 }
@@ -243,7 +235,7 @@ GraphDiagnostic RegisterProperty(GraphRegistry& graph, const reflection::TypeInf
 	node.DisplayName = "Get " + displayName;
 	node.Reflection = { EGraphReflectionKind::PropertyGet, owner.QualifiedName, property.Name, {} };
 	node.Pins = { TargetPin(owner.QualifiedName), { "result", Direction::Output, *type, {} } };
-	auto result = graph.Register(node);
+	auto result = graph.RegisterOrUpdate(std::move(node));
 	if (!result.Succeeded()) { result.Message = location + ": " + result.Message; return result; }
 	if (!readWrite) return {};
 	node.Type = id + ".Set";
@@ -251,7 +243,7 @@ GraphDiagnostic RegisterProperty(GraphRegistry& graph, const reflection::TypeInf
 	node.Reflection.Kind = EGraphReflectionKind::PropertySet;
 	node.Pins = { { "exec", Direction::Input, Type::Execution, {} }, TargetPin(owner.QualifiedName),
 		{ "value", Direction::Input, *type, {} }, { "then", Direction::Output, Type::Execution, {} } };
-	result = graph.Register(std::move(node));
+	result = graph.RegisterOrUpdate(std::move(node));
 	if (!result.Succeeded()) result.Message = location + ": " + result.Message;
 	return result;
 }

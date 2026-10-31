@@ -102,6 +102,17 @@ EResult Application::Initialize(void* arg)
     if (!HotReloadManager::Create())
         return fail("HotReloadManager", EResult::Fail);
 
+    if (HotReloadManager::IsCreated())
+    {
+        HotReloadManager::Get().GetModuleReloader().RegisterPostReloadCallback([]()
+            {
+                if (auto* graphSystem = SystemManager::Get().GetSystem<GraphSystem>())
+                {
+                    graphSystem->ReloadReflectedNodes(SceneManager::Get().GetActiveScenes());
+                }
+            });
+    }
+
     // Editor.exe 실행 파일과 같은 디렉터리에 있는 GameModule.dll 로드
     wchar_t exePathBuf[MAX_PATH] = {};
     GetModuleFileNameW(nullptr, exePathBuf, MAX_PATH);
@@ -388,9 +399,9 @@ EResult Application::InitializeSystem()
     };
 
     const bool success = addSystems.operator() <
-        TransformSystem, MeshRenderSystem, SpriteRenderSystem,
+        TransformSystem, MeshRenderSystem, SpriteRenderSystem, SpriteAnimationSystem,
         CameraSystem, LightSystem, UIRenderSystem,
-        AudioSystem, TerrainSystem, PhysicsSystem > ();
+        AudioSystem, TerrainSystem, PhysicsSystem, GraphSystem > ();
 
     return success ? EResult::Success : EResult::Fail;
 }

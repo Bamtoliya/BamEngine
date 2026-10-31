@@ -2,7 +2,9 @@
 
 #include "GraphNode.h"
 #include "GraphLink.h"
+#include "GraphVariable.h"
 #include <reflection/Annotations.h>
+#include <vector>
 
 namespace Engine
 {
@@ -29,6 +31,9 @@ namespace Engine
 
 		PROPERTY()
 		std::vector<GraphLink> Links;
+
+		PROPERTY()
+		std::vector<GraphVariable> Variables;
 	};
 
 }

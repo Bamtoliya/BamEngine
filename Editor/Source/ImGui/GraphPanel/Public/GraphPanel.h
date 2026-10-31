@@ -196,6 +196,7 @@ private:
 
 	uintptr_t m_ContextLinkId = 0;
 	uintptr_t m_ContextNodeId = 0;
+	uintptr_t m_ContextPinId = 0;
 	ImVec2 m_ContextPosition = { 0.0f, 0.0f };
 
 	Engine::GraphNodeId m_EditingCommentNode = 0;

@@ -1,10 +1,5 @@
 ﻿#include "ShaderGraphCompiler.h"
 #include "GraphValue.h"
-#include <algorithm>
-#include <iomanip>
-#include <limits>
-#include <locale>
-#include <sstream>
 
 namespace Engine
 {
