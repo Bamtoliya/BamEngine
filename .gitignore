@@ -1,4 +1,4 @@
-#visual studio
+﻿#visual studio
 .vs
 
 # Prerequisites
@@ -78,3 +78,11 @@ Gemini.md
 Temp
 /Projects/**/build/
 /.bam/User/
+/vcpkg/
+/archive-example/
+*.cso
+Logs/
+.vscode/
+Resources/Shader/bin/
+Resources/Shader/spirv/
+Engine/Generated/

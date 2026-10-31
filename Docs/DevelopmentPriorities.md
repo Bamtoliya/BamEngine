@@ -1,7 +1,7 @@
 # 통합 개발 우선순위와 완료 기준
 
-- 작성일: 2026-10-24 (최종 갱신: 2026-10-30)
-- 상태: 계획 및 2026-10-30 작업 트리 정적 점검 반영 / 빌드·실행·GPU 성능 검증은 별도 수행 기준을 따른다.
+- 작성일: 2026-10-24 (최종 갱신: 2026-10-31)
+- 상태: 계획 및 2026-10-31 작업 트리 정적 점검 반영 / 빌드·실행·GPU 성능 검증은 별도 수행 기준을 따른다.
 - 공통 기준: [EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md)
 - 분류와 이관: [SourceOrganizationGuidelines.md](SourceOrganizationGuidelines.md), [BuildConfigurationAndPreprocessing.md](BuildConfigurationAndPreprocessing.md)
 
@@ -56,15 +56,16 @@ Engine·Render·Editor·Client 계획에서 무엇을 먼저 연결하고 무엇
 
 ### P0-B. 표준 헤더의 PCH 중앙화 및 전처리기 구성 정리
 
-- **2026-10-30 현황**:
+- **2026-10-31 현황**:
   - `Projects/GameModule/CMakeLists.txt`에 PCH(`target_precompile_headers`)가 적용되어 모듈 핫리로드 빌드 시간이 단축되었다.
-  - 반면 [BuildConfigurationAndPreprocessing.md](BuildConfigurationAndPreprocessing.md) 4절의 정리 대상은 아직 미적용 상태다:
-    - `BAM_EDITOR` / `BAM_SHIPPING` 타깃 매크로 미정의.
-    - `Editor/Source/ImGui/ViewportPanel/Private/SceneViewportPanel.cpp`의 `m_DebugRenderer` 및 `Engine/Source/Core/Public/Vertex.h`의 `DebugVertex`가 여전히 `#ifdef _DEBUG`에 묶여 있어 Release 에디터에서 콜라이더 디버그 표시가 누락됨.
-    - `Engine/Source/Render/RHI/Platform/DirectX12/Private/DirectX12RHI.cpp`의 `OutputDebugStringA` + `std::terminate()`, `Engine/Source/Graph/Public/GraphGameplayLibrary.h`의 `std::cout` 사용이 남아 있음.
+  - `Editor/Source/ImGui/ViewportPanel/Private/SceneViewportPanel.cpp`의 `m_DebugRenderer` 및 `Engine/Source/Core/Public/Structs/Vertex.h`의 `DebugVertex`에서 `#ifdef _DEBUG` 분기가 제거되어 Release 에디터에서도 디버그 드로우가 상시 정상 제공된다 (반영 완료).
+  - `Engine/Source/Graph/Public/GraphGameplayLibrary.h`의 `std::cout` 사용이 제거되고 `BAM_LOG` 로깅 시스템으로 전환 완료되었다.
+  - **남은 항목**:
+    - `BAM_EDITOR` / `BAM_SHIPPING` 타깃 전처리기 매크로 정의.
+    - `Engine/Source/Render/RHI/Platform/DirectX12/Private/DirectX12RHI.cpp` 내 3곳의 `OutputDebugStringA` + `std::terminate()` 호출을 안전한 에러 반환 정책으로 정리.
 - **조치 기준**:
-  - [SourceOrganizationGuidelines.md](SourceOrganizationGuidelines.md) 8절 및 [BuildConfigurationAndPreprocessing.md](BuildConfigurationAndPreprocessing.md) 4절에 따라 PCH 공급과 빌드 구성 매크로를 정리한다.
-- 완료 기준: 영향 타깃에서 필요한 정의가 제공되고, Release 에디터에서 디버그 드로우가 누락되지 않으며 `std::terminate`/`std::cout` 직접 호출이 제거된다.
+  - [SourceOrganizationGuidelines.md](SourceOrganizationGuidelines.md) 8절 및 [BuildConfigurationAndPreprocessing.md](BuildConfigurationAndPreprocessing.md) 4절에 따라 타깃 매크로 정의와 `std::terminate` 호출을 정리한다.
+- 완료 기준: 영향 타깃에서 필요한 정의가 제공되고 `std::terminate` 직접 호출이 제거된다.
 
 ### P0-C. 소유 위치가 명확한 파일부터 정리
 
@@ -75,29 +76,33 @@ Engine·Render·Editor·Client 계획에서 무엇을 먼저 연결하고 무엇
 
 전체 폴더 재배치·싱글턴 전면 교체·엔진 다중 DLL 분리는 P0의 완료 조건이 아니다.
 
-## 4. P1: 안전한 제작과 측정 가능한 공통 기반 (우선순위 재조정 반영)
+## 4. P1: 안전한 제작과 측정 가능한 공통 기반
 
-> **우선순위 재조정 사유 (2026-10-30)**:
-> P2-B(렌더링 S3 인스턴싱/LOD, S4 타일 라이트 컬링, S5 반구형 Sky IBL) 코드가 P1-C(S1 계측, S2 바인딩 계약)보다 먼저 작성되었으나, 정적 점검에서 **S4 컴퓨트 셰이더의 XY 타일 절두체 판정 누락 및 0-광원 폴백 버그, S3 다중 뷰포트 LOD 상태 변이 및 비인덱스 메시 인스턴싱 누락, S2 문서·백엔드 불일치**가 확인되었다. 따라서 신규 기능 확장보다 **P1-C(렌더링 계약 동기화·기구현 S3/S4 결함 수정·S1 계측 도입)**를 P1 최상위로 끌어올려 먼저 안정화한다.
+### P1-C. CPU/GPU 계측, 바인딩 계약 동기화 및 렌더링 S3·S4 안정화
 
-### P1-C. [최우선 격상] CPU/GPU 계측, 바인딩 계약 동기화 및 기구현 S3·S4 결함 수정
-
-- **2026-10-30 현황**:
-  - **S1 (계측 및 지원 조회)**: `RHIFrameMetrics`는 여전히 드로우콜·정점/인덱스 수 4개 항목만 집계하며, 패스별 CPU 제출 시간·GPU Timestamp Query·메모리/디스크립터 사용량·기능 지원 질의 API가 미구현 상태다.
-  - **S2 (바인딩 계약)**: [Shader/BINDING_LAYOUT.md](Shader/BINDING_LAYOUT.md)를 실제 `DirectX12RHI` 루트 시그니처(`space0`~`space3`, Root Parameter `[0]`~`[10]`) 기준으로 갱신 완료했으나, `SDLGPURHI`는 `DrawIndexedInstanced`(`NotImplemented`), `BindInstanceBuffer`, `BindComputeStorageBuffer`, `Dispatch`, `ResourceBarrierUAV`가 미구현 상태다.
-  - **기구현 S3·S4의 즉시 수정 대상 결함**:
-    1. `Resources/Shader/hlsl/tiledLightCullingCS.hlsl`: 타일별 깊이(`[minTileZ, maxTileZ]`)만 비교하고 **타일 상·하·좌·우 XY 절두체 평면 컬링이 누락**된 문제 및 View-space Z 부호(`viewZ > 0.0f`) 전제 점검.
-    2. `Resources/Shader/hlsl/lightingPS.hlsl`: `tileLightCount == 0`일 때 타일 컬링 미사용으로 오판하여 전체 `numLights`를 순회하는 폴백 버그 수정(상수 버퍼에 명시적 타일 컬링 활성화 플래그 분리).
-    3. `Editor/Source/ImGui/ViewportPanel/Private/ViewportDeferredPipeline.cpp`의 타일 컬링/버퍼 바인딩 누락 및 `SceneViewportPanel::SubmitLightingPass`의 중복 `BindConstantBuffer(..., 3)` 호출 제거.
-    4. `Engine/Source/Render/Private/Renderer.cpp`의 비인덱스 메시(`indexCount == 0`) 인스턴싱 드로우 누락 및 `MeshRenderSystem::OnSubmit`의 단일 카메라 기준 `currentLODIndex` 변이 보완.
-- 완료 기준: S3·S4의 정적 결함이 해결되고, S1 패스별 CPU/GPU 계측을 통해 고정 씬에서 단일 드로우/전체 광원 순회 대비 실제 비용 변화를 수치로 확인할 수 있으며, 백엔드 미지원 경로가 안전하게 처리된다.
+- **2026-10-31 구현 현황**:
+  - **S1 (계측 및 기능 지원 조회 — 구현 완료)**:
+    - `Engine/Source/Render/RHI/Public/RHIFrameMetrics.h`에 패스별 CPU/GPU 실행 시간(`RHIPassMetric`), 하드웨어 지원(`RHICapabilities`), VRAM/디스크립터 통계(`RHIMemoryStats`) 구조 확장을 완료했다.
+    - `DirectX12RHI.cpp`에서 D3D12 Timestamp QueryHeap 및 ReadbackBuffer를 통한 패스별 GPU 시간 지연 회수(`m_LastGPUTimestampResults`)와 `QueryMemoryStats()` 구현을 완료했다.
+    - `Editor/Source/ImGui/MetricsPanel/Private/MetricsPanel.cpp`에 패스별 CPU/GPU 시간 테이블, VRAM/디스크립터 사용량, 하드웨어 기능 지원 여부 UI 렌더링을 연결했다.
+  - **S2 (바인딩 계약)**:
+    - [Shader/BINDING_LAYOUT.md](Shader/BINDING_LAYOUT.md)를 실제 `DirectX12RHI` 루트 시그니처(`space0`~`space3`, Root Parameter `[0]`~`[10]`) 기준으로 갱신 완료했다.
+    - `SDLGPURHI`의 `DrawIndexedInstanced`(`NotImplemented`), `BindInstanceBuffer`, Compute 인터페이스는 미지원 상태로 안전 폴백 정책을 유지한다.
+  - **기구현 S3·S4의 정적 결함 해결 (반영 완료)**:
+    1. `Resources/Shader/hlsl/tiledLightCullingCS.hlsl`: 좌·우·상·하 4개 타일 절두체 평면(`s_FrustumPlanes[4]`) 역투영 및 구면 교차 검증을 추가하여 화면 전체 폭 광원 과할당 문제를 해결했다.
+    2. `Resources/Shader/hlsl/lightingPS.hlsl`: `for (uint i = 0u; i < tileLightCount; ++i)` 루프로 타일 내 선별 광원만 순회하여 `tileLightCount == 0`일 때 전체 광원을 순회하던 버그를 해결했다.
+    3. `Editor/Source/ImGui/ViewportPanel/Private/ViewportDeferredPipeline.cpp`: `lightManager.DispatchLightCulling` 호출을 연결하여 타일 라이트 컬링이 정상 실행되도록 일관성을 확보했다.
+    4. `Engine/Source/Render/Private/Renderer.cpp`: `batchMesh->GetIndexBuffer()` 유무에 따라 비인덱스 메시(`indexCount == 0`)도 `m_RHI->DrawInstanced(vertexCount, instanceCount)`로 인스턴싱 드로우하도록 처리 완료했다.
+  - **남은 항목**:
+    - `MeshRenderSystem::OnSubmit`의 단일 카메라 기준 `currentLODIndex` 갱신을 다중 뷰포트/패스별로 분리하는 보완.
+- 완료 기준: S3·S4의 정적 결함이 해결되었으며, S1 패스별 CPU/GPU 계측을 통해 고정 씬에서 단일 드로우/전체 광원 순회 대비 실제 비용 변화를 수치로 검증한다.
 
 ### P1-A. 편집 데이터와 저장 실패 보호
 
-- **2026-10-30 현황**:
+- **2026-10-31 현황**:
   - `Editor/Source/Document/`(`IEditorDocument`, `SceneDocument`, `EditorDocumentManager`, `EditorDocumentController`)와 `SceneEditHistory`(`HasUnsavedChanges`, `MarkSaved`, `CanFinalizeEditsFor`)가 구현되어 `ToolBar`의 New/Load/Save/Close 및 앱 종료 흐름에 연결되었다.
-  - **남은 항목**: [ImGuiDevelopmentPlan.md](ImGuiDevelopmentPlan.md) 11절 A의 **Undo/Redo 명령 스택 및 저장 기준점 시각화 창(`HistoryPanel`)** 미구현(자동 백업·복구 UI는 다음 단계 유지).
-- 완료 기준: 취소가 씬 교체를 막고, 저장 실패 후 초안·기존 파일·변경 표시가 보존되며, `HistoryPanel`에서 현재Undo/Redo 위치와 저장 기준점을 확인할 수 있다.
+  - Undo/Redo 명령 스택 및 저장 기준점 시각화 창(`HistoryPanel`)이 구현되어 이력 표시와 Undo/Redo가 연결되었다.
+- 완료 기준: 취소가 씬 교체를 막고, 저장 실패 후 초안·기존 파일·변경 표시가 보존되며, `HistoryPanel`에서 현재 Undo/Redo 위치와 저장 기준점을 확인할 수 있다.
 
 ### P1-B. 설정 적용 경로와 기존 저장/복원 연결
 
@@ -123,15 +128,14 @@ Engine·Render·Editor·Client 계획에서 무엇을 먼저 연결하고 무엇
 
 ### P1-D. 기본 에셋 판정·열기와 작업량 제한
 
-- **2026-10-30 현황**:
+- **2026-10-31 현황**:
   - `ContentBrowserPanel` 그리드 행 단위 클리핑(`ImGuiListClipper`)과 `ResourceReference` 도입 완료.
-  - `ResourcePicker.h`에 텍스트 필터 및 디스크 상의 미로드 에셋 선택 로직이 추가되었으나, **팝업(`ResourceChoices`)이 열려 있는 동안 매 프레임 `recursive_directory_iterator("Resources")`로 모든 디스크 파일을 동기 순회하여 심각한 프레임 드랍이 발생하고 대상 핸들 타입과 무관한 파일까지 노출**되는 결함 확인.
-  - **개선 계획 및 남은 항목**:
-    1. `Editor/Source/ImGui/Public/ResourcePicker.h` 디스크 스캔 최적화 및 핸들 타입별 필터링:
-       - **핸들 타입 기반 확장자 필터링**: `ResourceHandle<T>`의 `T`에 매핑된 호환 확장자(예: `Texture` -> `.png`, `.jpg`, `.dds` / `Material` -> `.bammat`, `.bammat.json` / `Model` -> `.fbx`, `.obj` / `Audio` -> `.wav`, `.mp3` 등)에 해당하는 파일만 디스크 후보로 수집.
-       - **팝업 진입 시 1회 스캔 및 캐싱**: 매 프레임 재귀 탐색을 방지하고, 팝업이 처음 열리는 시점(`IsWindowAppearing` 또는 팝업 오픈 상태 플래그)에 1회만 후보 목록을 캐싱하여 렌더링 프레임 저하 방지.
-       - **AssetCache/메타데이터 색인 연계**: 향후 `AssetCache` 색인 목록을 직접 조회하여 디스크 I/O 없이 인스펙터 리소스 피커 즉각 렌더링.
-    2. `ContentBrowserPanel`의 검색 범위 선택(`현재 폴더` vs `전체 리소스 폴더`, 14-E), 외부 프로그램 열기 메뉴(14-A), 썸네일 축소 생성 및 캐시 예산 제한(14-D).
+  - `Editor/Source/ImGui/Public/ResourcePicker.h` 최적화 완료:
+    - `IsResourceExtensionCompatible<T>`를 통해 템플릿 인자 `T`(`Texture`, `Material`, `Model`, `AudioClip`, `Shader` 등)에 매핑된 호환 확장자 파일만 선별 표시.
+    - `if (isAppearing)` 플래그를 통해 팝업 진입 시 1회만 디스크를 스캔하고 `s_CachedDiskFiles`에 캐싱하여 매 프레임 재귀 I/O 순회 병목을 원천 차단.
+  - **남은 항목**:
+    1. `ContentBrowserPanel`의 검색 범위 선택(`현재 폴더` vs `전체 리소스 폴더`, 14-E), 외부 프로그램 열기 메뉴(14-A).
+    2. 에셋 썸네일 축소 생성 및 캐시 예산 제한(14-D).
 - 완료 기준: JSON/바이너리의 같은 콘텐츠 타입을 구분하고, 리소스 피커가 프레임 드랍 없이 해당 핸들 타입(`T`)과 호환되는 에셋만 디스크에서 즉각 선별·표시하며, 미로드 에셋 선택·검색 범위 전환·손상/미지원 처리가 동작한다.
 
 ## 5. P2: 작은 결과물과 기본 실행 경로
@@ -147,27 +151,30 @@ Engine·Render·Editor·Client 계획에서 무엇을 먼저 연결하고 무엇
     - **리루트(Reroute/Knot) 노드 완성**: 더블클릭 마우스 위치 정확 생성, 네모 박스 제거 및 점 하나로 드래그 이동, 점 중심(`dotCenter`) 와이어 피벗 결합, 단독 생성 허브 및 1:N 다중 분기 지원.
     - **입력 일원화 및 내비게이션**: 마우스 휠(미들클릭) 드래그 캔버스 패닝(`NavigateButtonIndex = 2`), 지침 14절 준수(`InputManager` 일원화).
     - **정렬 및 그룹화**: `Shift+W/S/A/D/H/V` 자동 정렬/분배, 코멘트 그룹 박스(`C`), 노드·와이어 우클릭 메뉴.
+  - **Phase 4.3 런타임 핫스왑 및 Client 시스템 등록 완성 (2026-10-31 반영 완료)**:
+    - `GraphSystem::ReloadReflectedNodes`: 모듈 핫리로드 시 활성 씬 엔티티들의 기존 변수(`oldVariables`)를 보존하고 새 리플렉션 심볼 및 그래프 템플릿으로 `GraphRuntimeState`를 핫스왑.
+    - `Application.cpp`: `HotReloadManager::RegisterPostReloadCallback`에서 `GraphSystem->ReloadReflectedNodes(activeScenes)`를 자동 호출하도록 연결하여 PIE 실행 중 0-크래시 핫스왑 보장.
+    - `Client/Source/Main.cpp`: `InitializeSystems()`에 `GraphSystem`, `PhysicsSystem`, `TerrainSystem` 등록 완료.
+  - **엔진·프리팹 기본 연결 및 파이프라인 (2026-10-31 구현 완료)**:
+    - **프리팹 1단계 (생성·배치)**: 계층 패널 `Save As Prefab...`, 콘텐츠 브라우저 큐브 식별, 드래그 앤 드롭 인스턴스화 및 Undo/Redo.
+    - **프리팹 2단계 (격리 편집 모드)**: `PrefabModeManager` 뷰포트 격리 편집 모드(메인 씬 보존, 메인 뷰포트·기즈모 100% 활용, 상단 복귀/저장 배너).
+    - **프리팹 3단계 (원본 연결 및 오버라이드 관리)**: 단일 원천 루트 전용 `PrefabInstanceComponent`, 계층 패널 청록색 강조 및 컨텍스트 메뉴(Open/Select/Unpack), 인스펙터 상단 프리팹 헤더 바 및 Overrides 팝업(Apply All, Revert All, Unpack).
+    - **엔티티 다중 복사·붙여넣기 (17절 완료)**: `EntityClipboard` 메모리 직렬화, 조상 필터링, 원래 계층/형제 순서 보존, 원자적 단일 Undo(`UI_HISTORY_PASTE`), 단축키(`Ctrl+C`/`Ctrl+V`/`Ctrl+Shift+V`) 및 다중 삭제(`DeleteEntities`, `Delete` 키).
   - **남은 항목**:
-    1. **Phase 4.3 (`GraphSystem` 런타임 핫스왑)**: PIE 실행 중 `GameModule.dll` 리로드 시 활성 엔티티들의 `GraphRuntimeState` 및 `GraphExecutor`를 재바인딩하여 크래시 없이 새 C++ 노드 로직을 즉시 반영.
-    2. **`Client/Source/Main.cpp` 시스템 등록 누락 수정**: `Editor`와 달리 `Client`의 `InitializeSystems()`에 누락되어 있는 `GraphSystem`, `PhysicsSystem`, `TerrainSystem` 등록.
-    3. **엔진·프리팹 기본 연결 및 파이프라인 (2026-10-31 구현 완료)**:
-       - **프리팹 1단계 (생성·배치)**: 계층 패널 `Save As Prefab...`, 콘텐츠 브라우저 큐브 식별, 드래그 앤 드롭 인스턴스화 및 Undo/Redo.
-       - **프리팹 2단계 (격리 편집 모드)**: `PrefabModeManager` 뷰포트 격리 편집 모드(메인 씬 보존, 메인 뷰포트·기즈모 100% 활용, 상단 복귀/저장 배너).
-       - **프리팹 3단계 (원본 연결 및 오버라이드 관리)**: 단일 원천 루트 전용 `PrefabInstanceComponent`, 계층 패널 청록색 강조 및 컨텍스트 메뉴(Open/Select/Unpack), 인스펙터 상단 프리팹 헤더 바 및 Overrides 팝업(Apply All, Revert All, Unpack).
-       - **엔티티 다중 복사·붙여넣기 (17절 완료)**: `EntityClipboard` 메모리 직렬화, 조상 필터링, 원래 계층/형제 순서 보존, 원자적 단일 Undo(`UI_HISTORY_PASTE`), 단축키(`Ctrl+C`/`Ctrl+V`/`Ctrl+Shift+V`) 및 다중 삭제(`DeleteEntities`, `Delete` 키).
-       - *남은 항목*: `PickingManager` 가시성에 의존하지 않는 씬 레벨 Collider Raycast API([EngineDevelopmentPlan.md](EngineDevelopmentPlan.md) 8절), 독립 Sprite Flipbook 재생기(6절).
-    4. *참고*: `Tools/GraphCompiler/GraphCompiler.py`(Phase 6)는 구형 `GraphComponent`/`GameObject` 대상의 57줄 POC 수준이므로 P3/P4 패키징 단계로 이관한다.
+    1. `PickingManager` 가시성에 의존하지 않는 씬 레벨 Collider Raycast API([EngineDevelopmentPlan.md](EngineDevelopmentPlan.md) 8절).
+    2. 독립 Sprite Flipbook 재생기(6절).
+    3. 그래프 패널 상단 도구 모음 정리([ImGuiDevelopmentPlan.md](ImGuiDevelopmentPlan.md) 18절).
 - 완료 기준: PIE 중 모듈 핫리로드와 그래프 실행이 안전하게 유지되고, 입력으로 작은 씬을 조작하며 화면 표시 여부와 무관한 충돌 질의·두 인스턴스의 독립 상태를 확인한다.
 
 ### P2-B. 기본 렌더 확장 (S3·S4·S5 검증 및 완성)
 
-- **2026-10-30 현황**:
-  - **S3**: `InstanceData`, `LODGroupComponent`, `MeshRenderSystem` 화면 덮개 비율 + 히스테리시스 LOD 선택, `Renderer::RenderMeshes` 인스턴스 배칭, `gbufferVS.hlsl`/`shadowDepthVS.hlsl`의 `StructuredBuffer<InstanceData> g_Instances : register(t0, space2)` 반영됨.
-  - **S4**: `ShaderBuild.cmake`의 `*CS.hlsl`(`cs_6_0`) 빌드, `DirectX12Pipeline` Compute PSO, `DirectX12RHI::Dispatch`/`ResourceBarrierUAV`, `LightManager::DispatchLightCulling` 및 `tiledLightCullingCS.hlsl` 반영됨.
-  - **S5 및 후처리**: `lightingPS.hlsl`의 반구형 Sky IBL(`LIGHT_TYPE_SKY` + `EnvBRDFApprox`), 접촉 그림자, `ShadowStrength`와 `PostProcessPipeline`(`BloomEffect`, `PostProcessMaterialEffect` 기반 Vignette/ChromaticAberration/FilmGrain/LensDistortion/ColorAdjustments/Sharpen/Tonemapping) 및 `PostProcessPanel` 반영됨.
+- **2026-10-31 현황**:
+  - **S3**: `InstanceData`, `LODGroupComponent`, `MeshRenderSystem` 화면 덮개 비율 + 히스테리시스 LOD 선택, `Renderer::RenderMeshes` 인스턴스 배칭(`DrawIndexedInstanced` 및 비인덱스 `DrawInstanced` 지원) 반영됨.
+  - **S4**: `tiledLightCullingCS.hlsl` 4방향 절두체 평면 컬링, `DirectX12Pipeline` Compute PSO, `DirectX12RHI::Dispatch`/`ResourceBarrierUAV`, `LightManager::DispatchLightCulling`, `lightingPS.hlsl` 선별 광원 루프 순회 반영됨.
+  - **S5 및 후처리**: `lightingPS.hlsl`의 반구형 Sky IBL 및 Split-Sum PBR 큐브맵 IBL(`gLightingData.HasIBLMaps`, `gIrradianceMap`, `gPrefilteredEnvMap`, `gBRDFLut`), 접촉 그림자, `ShadowStrength`와 `PostProcessPipeline`(`BloomEffect`, `PostProcessMaterialEffect` 기반 8종 효과) 및 `PostProcessPanel` 반영됨.
   - **남은 항목**:
-    1. **P1-C에서 격상된 S3·S4 결함 수정 및 S1 계측 검증 완료** (최우선 선행).
-    2. **S5 환경맵 텍스처 기반 IBL 확장**: 현재의 반구형 색상 근사(`SkyLight`)를 넘어 큐브맵 기반 Diffuse Irradiance / Roughness별 Prefiltered Specular / 2D BRDF LUT 텍스처 파이프라인 연결 및 그림자 경계 안정성 측정.
+    1. **S1 계측 실측 검증**: 고정 씬에서 단일 드로우/전체 광원 순회 대비 인스턴싱/타일 라이트 컬링의 실측 GPU/CPU 비용 변화를 `MetricsPanel` 수치로 확인.
+    2. **LOD 다중 뷰포트 상태 분리**: `MeshRenderSystem`에서 뷰포트/패스별 카메라 기준 독립 LOD 평가 지원.
 - 완료 기준: 작은/큰 씬에서 고정 비용과 이득을 S1 계측 수치로 구분하고, 미지원·용량 초과의 정확한 대체 동작과 IBL/그림자 품질을 확인한다.
 
 ### P2-C. 강화학습의 첫 환경
@@ -247,35 +254,34 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
 
 각 계획의 상세 기능 목록과 완료 기준은 원문에서 유지한다. 우선순위 분류만으로 기존 검증 상태를 바꾸지 않는다.
 
-## 10. 조사 시점의 문서·코드 차이와 재조정된 단기 실행 순서 (2026-10-30)
+## 10. 조사 시점의 문서·코드 차이와 재조정된 단기 실행 순서 (2026-10-31)
 
-2026-10-30 작업 트리 정적 점검을 통해 다음 사실과 괴리를 확인했다.
+2026-10-31 작업 트리 정적 점검을 통해 다음 구현 완료 사실과 실제 남은 과제를 확인했다.
 
-- **코드에 반영되었으나 결함·미완성 지점이 확인된 영역**:
-  - 렌더링 S3(`InstanceData`, `LODGroupComponent`, `MeshRenderSystem`, `Renderer::RenderMeshes`)와 S4(`tiledLightCullingCS.hlsl`, `LightManager::DispatchLightCulling`)가 S1(계측)·S2(바인딩 문서 동기화)보다 먼저 작성되었으나, 타일 XY 절두체 컬링 누락·0-광원 폴백 버그·비인덱스 메시 인스턴싱 누락·단일 카메라 LOD 변이가 존재한다.
-  - 비주얼 스크립팅(`GraphSystem`, `GraphPanel`의 `imgui-node-editor` 전환, 코멘트 박스 `C`, `ModuleId` 기반 핫리로드 및 `Graph::Reconcile`)이 구현되었으나, PIE 실행 중 `GraphSystem`의 활성 실행기 핫스왑(Phase 4.3)과 `Client`의 시스템 등록(`GraphSystem`, `PhysicsSystem`, `TerrainSystem`)이 빠져 있다.
-  - 문서 보호(`EditorDocumentController`, `SceneEditHistory`)와 그래픽 설정(`EditorSettingsService`, `GraphicSettingPanel`)이 연결되었으나, `HistoryPanel` UI, 뷰포트 내부 해상도 설정 연동, `ToolBar`의 `UI_SETTINGS` 메뉴 연결, `ResourcePicker`의 미로드 에셋·검색·썸네일 지원이 남아 있다.
+- **코드에 구현 완료되어 문서와 동기화된 영역**:
+  - **렌더링 S4 & S5**: `tiledLightCullingCS.hlsl` 4방향 절두체 평면 컬링 완료, `lightingPS.hlsl` 0-광원 루프 수정 및 Split-Sum PBR 큐브맵 IBL 연동 완료, `ViewportDeferredPipeline` 타일 라이트 컬링 연결 완료.
+  - **렌더링 S1 계측**: `RHIFrameMetrics` 패스별 CPU/GPU 시간 및 VRAM/디스크립터 통계 확장, D3D12 Timestamp QueryHeap/ReadbackBuffer 연동, `MetricsPanel` UI 렌더링 완료.
+  - **렌더링 S3 인스턴싱**: `Renderer::RenderMeshes` 비인덱스 메시(`DrawInstanced`) 인스턴싱 처리 완료.
+  - **비주얼 스크립팅 핫스왑 (Phase 4.3)**: `GraphSystem::ReloadReflectedNodes` 엔티티 변수 보존 핫스왑 및 `Application.cpp` 콜백 자동 연결 완료.
+  - **클라이언트 초기화**: `Client/Source/Main.cpp`의 `InitializeSystems()`에 `GraphSystem`, `PhysicsSystem`, `TerrainSystem` 등록 완료.
+  - **리소스 피커 최적화 (P1-D)**: `ResourcePicker.h` 템플릿 인자 `T`별 호환 확장자 필터링 및 팝업 오픈 시 1회 스캔 캐싱 완료.
+  - **전처리기 및 로깅 정리 (P0-B)**: `SceneViewportPanel.cpp` 및 `Vertex.h`의 `_DEBUG` 분기 제거, `GraphGameplayLibrary.h`의 `std::cout`을 `BAM_LOG`로 교체 완료.
 
 ### 재조정된 단기 실행 우선순위 (Next Execution Order)
 
-새로운 P2/P3 기능을 추가로 벌리기 전에 아래 1~5순위 순서로 현재 작업 트리의 변경을 안정화하고 마감한다.
-
-1. **[1순위 / P0-A] 작업 트리 불필요 부산물 정리 및 변경 범위 분리**
+1. **[1순위 / P0-A] 작업 트리 불필요 부산물 정리 및 미커밋 변경 단위별 커밋**
    - 0바이트 빈 파일(`Editor/Source/Application/Private/ApplicationSettings.cpp`), 레거시 POC 생성물(`Tools/GraphCompiler/test_graph.gen.cpp`), 루트 셰이더 컴파일 부산물(`Resources/Shader/default_*.cso`) 등 정리.
-2. **[2순위 / P1-C & P2-B 안정화] 기구현 렌더링 S3·S4 결함 수정 및 S2 백엔드 계약 방어**
-   - `tiledLightCullingCS.hlsl` 타일 상·하·좌·우 절두체 평면 컬링 추가 및 View-space Z 부호 검증.
-   - `lightingPS.hlsl`의 `tileLightCount == 0` 전체 광원 루프 폴백 버그 수정 및 `ViewportDeferredPipeline` 바인딩 일관성 확보, `SceneViewportPanel` 중복 CBV 바인딩 제거.
-   - `Renderer::RenderMeshes` 비인덱스 인스턴싱 처리 및 `MeshRenderSystem` 다중 뷰포트/패스 LOD 제출 기준 보완.
-3. **[3순위 / P1-C] 렌더링 S1 CPU/GPU 계측(`RHIFrameMetrics` 확장) 구현 및 S3·S4 효과 검증**
-   - 패스별 CPU 제출 시간, D3D12 Timestamp Query 기반 GPU 시간, 디스크립터·메모리 통계 및 기능 지원 질의를 `RHIFrameMetrics`와 `MetricsPanel`에 연결하여 S3(인스턴싱/LOD)·S4(타일 라이트 컬링)의 전후 성능을 수치로 검증.
-4. **[4순위 / P2-A & P0-B] 런타임 스크립팅 핫스왑(Phase 4.3), `Client` 시스템 등록, 전처리기 정리**
-   - `GraphSystem`에 모듈 핫리로드 시 활성 엔티티 `GraphRuntimeState` 재바인딩 연결.
-   - `Client/Source/Main.cpp`의 `InitializeSystems()`에 `GraphSystem`, `PhysicsSystem`, `TerrainSystem` 등록.
-   - [BuildConfigurationAndPreprocessing.md](BuildConfigurationAndPreprocessing.md) 4절의 `#ifdef _DEBUG` 제거(`SceneViewportPanel`, `Vertex.h`), `BAM_EDITOR` 도입, `std::terminate`/`std::cout` 정리.
-5. **[5순위 / P1-A·P1-B·P1-D] 에디터 제작 기반 잔여 UI 마감**
-   - `GraphicSettingPanel` 뷰포트 해상도 제어 및 `ToolBar` 설정 메뉴 연결(P1-B, 완료).
-   - `ResourcePicker` 검색·핸들 타입 필터링 및 팝업 캐싱(프레임 드랍 방지)·미로드 에셋 선택 및 `ContentBrowserPanel` 검색 범위 전환(P1-D).
-   - Undo/Redo `HistoryPanel` 시각화 창 추가(P1-A, 완료) 및 블루프린트 Reroute/정렬 단축키(P2-A Phase 4.2 잔여, 완료).
-   - 그래프 패널 상단 도구 모음 정리(P2-A Phase 4.2 후속, 계획): [ImGuiDevelopmentPlan.md](ImGuiDevelopmentPlan.md) 18절의 공통·도메인별 배치, 미리보기/PIE 관찰 구분과 좁은 폭 대응을 적용한다.
+   - 작업 트리에 누적된 약 200여 개 파일의 변경 사항을 렌더링 최적화, 스크립팅 핫스왑, 에디터 UI 등으로 의미 있게 분리하여 커밋.
+2. **[2순위 / S1 & S4 실행 검증] 고정 씬에서 MetricsPanel 기반 타일 라이트 컬링 및 인스턴싱 실측 성능 수치 확인**
+   - 단일 드로우/전체 광원 순회 대비 인스턴싱/타일 라이트 컬링 적용 시의 실측 GPU ms 및 CPU ms 변화를 `MetricsPanel`을 통해 확인하고 검증 기록 남김.
+3. **[3순위 / P0-B & S3 잔여] 안정화 마무리**
+   - `Engine/Source/Render/RHI/Platform/DirectX12/Private/DirectX12RHI.cpp` 내 3곳의 `std::terminate()` 호출을 안전한 에러 반환 정책으로 정리.
+   - `MeshRenderSystem`의 다중 뷰포트/패스별 카메라 기준 독립 LOD 평가 지원.
+4. **[4순위 / P2-A 잔여] 에디터 및 게임플레이 편의성 마감**
+   - `PickingManager` 가시성에 의존하지 않는 씬 레벨 Collider Raycast API 도입 ([EngineDevelopmentPlan.md](EngineDevelopmentPlan.md) 8절).
+   - 그래프 패널 상단 도구 모음 정리 ([ImGuiDevelopmentPlan.md](ImGuiDevelopmentPlan.md) 18절).
+5. **[5순위 / P3 준비] 에셋 참조 탐색기 및 콘텐츠 확장**
+   - 에셋 참조 색인 및 역참조 시각화 창(`AssetReferencePanel`) 구축.
+   - 모델·텍스처 임포트 설정 저장 및 재임포트 파이프라인.
 
 코드 직접 수정·빌드·테스트 권한은 사용자 요청과 AGENTS.md를 따르며 이 문서가 실행 허가를 대신하지 않는다.

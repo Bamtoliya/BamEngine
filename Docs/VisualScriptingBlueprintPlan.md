@@ -30,17 +30,18 @@
 - **노드 에디터 UI (`GraphPanel`):** imgui-node-editor 기반의 블루프린트 캔버스, 자유로운 줌/패닝, 와이어 드래그 앤 드롭 연결, 노드 팔레트 검색, 핀 타입별 색상 구분 및 실시간 실행선 흐름 펄스(`ed::Flow`) 지원.
 - **C++ 리플렉션 연동 (`GraphReflection`):** 네이티브 C++ 함수 정보를 바인딩하여 노드에서 동적으로 호출(`Invoke`)할 수 있는 기반 구비.
 
-### 2.2 언리얼 블루프린트 완성을 위해 결여된 4대 핵심 요소
-1. **엔진 라이프사이클 이벤트 및 PIE 자동 디스패치 부재:**
-   - 현재는 에디터 UI 버튼으로 `Update`를 수동 1회 실행하는 수준에 머물러 있음.
-   - 게임 실행(PIE) 시 `Event BeginPlay`, 매 프레임 `Event Tick(DeltaTime)`이 엔티티 그래프로 자동 전달되는 파이프라인이 없음.
-2. **엔티티 및 ECS 컴포넌트 접근(Get/Set) 노드 부재:**
-   - 현재 노드는 순수 수학·벡터·논리 연산 위주로 구성되어 있음.
-   - 엔티티의 `TransformComponent`(위치, 회전, 스케일), `Physics`, `Audio`, `Input`을 읽고 쓰는 게임플레이 노드가 없음.
-3. **그래프 사용자 정의 변수(Graph Variables / Blackboard) 시스템 부재:**
-   - 엔티티 인스턴스마다 고유하게 유지해야 하는 변수(`HP`, `MoveSpeed`, `IsAlive` 등)를 선언하고, `Get/Set` 노드로 접근하는 기능이 없음.
-4. **리플렉션 기반 게임플레이 API 자동 노출 파이프라인 부재:**
-   - C++ 함수를 추가할 때마다 수동으로 노드 정의를 등록해야 하는 번거로움이 존재함.
+### 2.2 언리얼 블루프린트 완성을 위해 기구현된 핵심 기반 (구축 완료)
+1. **엔진 라이프사이클 이벤트 및 PIE 자동 디스패치 (Phase 1 완료):**
+   - `Event.Start`(BeginPlay) 및 `Event.Update`(Tick) 구현 완료.
+   - `GraphSystem`이 활성 씬의 `GraphBindingComponent` 엔티티마다 프레임 델타 타임을 주입하고 틱 실행 디스패치.
+2. **엔티티 및 ECS 컴포넌트 접근(Get/Set) 노드 (Phase 2 완료):**
+   - `GraphActorLibrary` 및 `GraphGameplayLibrary`를 통해 `TransformComponent` 조작, `Input` 질의 노드 완비.
+3. **그래프 사용자 정의 변수(Graph Variables) 시스템 (Phase 3 완료):**
+   - `GraphVariable` 데이터 구조 및 캔버스 Get/Set 노드, 엔티티별 독립 실행기 내 변수 격리 보관 완비.
+4. **리플렉션 기반 게임플레이 API 자동 노출 및 핫리로드 파이프라인 (Phase 4 완료):**
+   - `FUNCTION(GRAPH_CALLABLE)` 어노테이션 기반 노드 자동 등록.
+   - `ModuleId` 기반 일괄 언레지스터, 노드 핀 인스턴스 자동 동기화(`Reconcile`), 1.5초대 C++ 핫리로드 구축.
+   - `GraphSystem::ReloadReflectedNodes`를 통한 런타임 핫스왑(Phase 4.3) 및 엔티티 0-크래시 보장 완비.
 
 ---
 
@@ -161,6 +162,7 @@ flowchart TD
        - 와이어 우클릭: `Add Reroute Node`, `Break Link`.
 
   3. **다음 우선순위 목표 작업 (Next Goals):**
+     - **그래프 패널 상단 도구 모음 정리 (2026-10-31 계획 추가 / 미완료):** [ImGuiDevelopmentPlan.md](ImGuiDevelopmentPlan.md) 18절. 공통·도메인별 도구를 두 행으로 정리하고, Logic 실행 미리보기와 PIE 관찰을 구분한다. 상세 작업의 메뉴 이동·좁은 폭 대응·상태 표시·로캘과 입력 문맥을 함께 검증한다.
      - **리소스 피커(`ResourcePicker.h`) 최적화:** 매 프레임 디스크 파일 탐색 제거 및 팝업 오픈 시 1회 캐싱, 템플릿 인자 `T`별 호환 확장자 컴파일 타임 필터링 적용.
      - **핀 컨텍스트 메뉴:** 핀 우클릭 시 `Break Links to Pin`, `Promote to Variable` (변수로 승격).
        - **목적:** 빈 캔버스 우클릭 메뉴와 분리하여, 마우스 커서 아래의 노드·선(와이어)·핀 대상별 즉각적인 조작 편의성을 제공하고 언리얼 엔진 블루프린트와 동일한 편집 워크플로우 지원.
@@ -185,13 +187,13 @@ flowchart TD
             - **변수로 승격** (`Promote to Variable`): 해당 핀의 타입과 일치하는 그래프 변수를 자동 생성하고 Get/Set 연결.
        - **완료 기준:** 노드나 와이어 위에서 우클릭했을 때 캔버스 생성 메뉴가 아닌 대상 전용 팝업 메뉴가 뜨며, Reroute 삽입·연결 해제·삭제·복제 기능이 마우스 하나로 즉시 수행된다.
 
-#### 4.3 엔진 런타임(GraphSystem) 핫스왑 및 엔티티 0-크래시 보장 (P1)
+#### 4.3 엔진 런타임(GraphSystem) 핫스왑 및 엔티티 0-크래시 보장 (완료)
 - **목적:** 에디터 패널뿐만 아니라 실제 게임 루프(PIE)를 구동하는 `GraphSystem`과 씬 내 엔티티의 `GraphRuntimeState`를 핫리로드와 동기화하여, 게임 플레이 중 C++ 코드 수정 시 댕글링 함수 포인터로 인한 `0xC0000005 Access Violation` 크래시를 원천 차단한다.
-- **세부 내용:**
+- **구현 내용 (완료):**
   1. `GraphSystem::ReloadReflectedNodes()`: 모듈 핫리로드 시 엔진 전역 `GraphRegistry`의 리플렉션 노드를 갱신하고, 구버전 템플릿 그래프 캐시(`m_GraphCache`)를 초기화.
-  2. `GraphRuntimeState` 인스턴스 핫스왑: 활성 씬 엔티티들이 보관 중인 `GraphExecutor`의 함수 포인터 테이블을 새 DLL 메모리 주소로 안전하게 리셋·재바인딩.
-  3. PIE 일시정지(`Pause`) 및 재개 연동: 리로드 중에는 프레임 실행을 잠시 정지하고, 바인딩 완료 후 중단점 없이 부드럽게 재개.
-- **완료 기준:** PIE 플레이 도중 C++ 함수 로직이나 파라미터를 변경해도 게임이 꺼지지 않고 씬의 큐브 엔티티가 새로운 C++ 로직을 즉시 실행한다.
+  2. `GraphRuntimeState` 인스턴스 핫스왑: 활성 씬 엔티티들이 보관 중인 기존 변수(`oldVariables`)와 실행 상태(`wasStarted`)를 보존하며, 새 DLL의 리플렉션 심볼로 `executor.Load` 후 변수 값을 완벽 복원.
+  3. `Application.cpp` 콜백 연동: `HotReloadManager::Get().GetModuleReloader().RegisterPostReloadCallback`에 `graphSystem->ReloadReflectedNodes(activeScenes)`를 연결하여 모듈 리로드 시 자동으로 런타임 핫스왑 트리거.
+- **완료 기준 달성:** PIE 플레이 도중 C++ 함수 로직이나 파라미터를 변경해도 게임이 꺼지지 않고 씬의 큐브 엔티티가 새로운 C++ 로직을 즉시 실행한다.
 
 ### Phase 5. 실시간 와이어 흐름 디버깅과 중단점 (P3)
 - **목적:** 언리얼 엔진 블루프린트의 핵심 경험인 "실행 흐름 시각화"를 구현하여 디버깅 편의성을 극대화한다.

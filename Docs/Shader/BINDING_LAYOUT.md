@@ -1,5 +1,7 @@
 # Shader Resource Binding Layout
 
+- 최종 갱신: 2026-10-30 (`DirectX12RHI::CreateRootSignature` 및 현행 HLSL 셰이더 바인딩 반영)
+
 This document defines the shared resource-group order for HLSL/D3D12 and
 GLSL/Vulkan shaders.
 
@@ -11,40 +13,50 @@ GLSL/Vulkan shaders.
   (UAV), and `s` (sampler).
 
 The pair `(register number, space)` must match the pair `(binding, set)` in
-the equivalent GLSL shader. For example, HLSL `register(b1, space1)` maps to
-GLSL `layout(set = 1, binding = 1)`.
+the equivalent GLSL shader. For example, HLSL `register(b0, space2)` maps to
+GLSL `layout(set = 2, binding = 0)`.
 
-## Space Order
+## Space Order (Current DirectX12RHI & HLSL Contract)
 
-| Space / set | Update scope | Current resources |
-| --- | --- | --- |
-| `0` | Skinning data | `t0`: `boneMatrices` / `BoneSSBO` |
-| `1` | Per-frame vertex data and per-object draw data | `b0`: `CommonVSData`; `b1`: `ObjectData` |
-| `2` | Material textures, render targets, and samplers | `t0-t15`: SRVs; `s0-s7`: samplers |
-| `3` | Per-frame pixel data and pass-specific constants | `b0`: `CommonPSData`, post-process, or viewport data; `b1`: shadow or sky data |
+| Space / set | Update scope | Root Parameter Index (`DirectX12RHI`) | Current resources |
+| --- | --- | --- | --- |
+| `0` | Global / Per-frame camera data | `[0]` Root CBV (`b0, space0`) | `b0`: `CommonVSData` / `CameraBuffer` (RHI CBV slot `0`) |
+| `1` | Material textures, LUTs, and material samplers | `[1]` SRV Table (`t0-t15, space1`)<br>`[2]` Sampler Table (`s0-s7, space1`) | `t0-t15`: Material SRVs (or Cloud `shapeNoiseTex`/`weatherMapTex` in LightingPass)<br>`s0-s7`: Material Samplers (RHI texture slots `0..15`) |
+| `2` | Per-object draw constants and instancing buffer | `[3]` Root CBV (`b0, space2`)<br>`[4]` Root SRV (`t0, space2`) | `b0`: `ObjectData` / `SceneUBO` (RHI CBV slot `1`)<br>`t0`: `StructuredBuffer<InstanceData> g_Instances` (`BindInstanceBuffer`) |
+| `3` | Pass-specific constants, G-Buffer/Shadow/Light SRVs, Samplers, and Compute UAVs | `[5]` Root CBV (`b0, space3`)<br>`[6]` Root CBV (`b1, space3`)<br>`[7]` SRV Table (`t0-t15, space3`)<br>`[8]` Sampler Table (`s0-s7, space3`)<br>`[9]` Root UAV (`u0, space3`)<br>`[10]` Root UAV (`u1, space3`) | `b0`: `FogData` / PostProcess params / `CullingConstants` (RHI CBV slot `2`)<br>`b1`: `LightingPassData` / Shadow / Sky data (RHI CBV slot `3`)<br>`t0-t4`: GBuffer (`Diffuse`, `Normal`, `PBR`, `Emission`, `Position`)<br>`t5`: Directional/Spot `shadowTex` (`Texture2DArray`)<br>`t6`: `StructuredBuffer<LightData> gLights` (StorageBuffer slot `0`)<br>`t7`: Point Light `pointShadowTex` (`TextureCube`)<br>`t8`: `StructuredBuffer<uint2> gTileLightGrid` (StorageBuffer slot `1`)<br>`t9`: `StructuredBuffer<uint> gTileLightIndexList` (StorageBuffer slot `2`)<br>`s0-s7`: Pass samplers<br>`u0`: `RWStructuredBuffer<uint2> g_TileLightGrid` (Compute UAV slot `0`)<br>`u1`: `RWStructuredBuffer<uint> g_TileLightIndexList` (Compute UAV slot `1`) |
 
-The numeric order is an engine convention, not an HLSL requirement. New
-resource groups should use the lowest space whose update scope matches the
-resource. Do not renumber an existing space solely to make its number reflect
-an ideal update-frequency order; that changes the cross-backend shader ABI.
+> **Note on Skinning & Backend Parity (2026-10-30)**:
+> - Legacy `boneMatrices` (`t0, space0`) is not currently declared in `DirectX12RHI::CreateRootSignature()`. When skeletal skinning (P2-D) is connected, its SRV/CBV slot must be assigned without colliding with `space0`–`space3` above.
+> - `SDLGPURHI` currently implements graphics CBV/texture/sampler bindings (`space0`, `space1`, `space2` CBV, `space3` CBV/SRV/Sampler), while `DrawIndexedInstanced`, `BindInstanceBuffer` (`t0, space2`), and Compute UAV/Dispatch (`u0-u1, space3`) are currently D3D12-only.
 
-## D3D12 Root Signature Requirements
+## D3D12 Root Signature Layout (`DirectX12RHI.cpp`)
 
-Each descriptor range must declare the same register space as its shader
-resources. `CD3DX12_DESCRIPTOR_RANGE::Init` defaults to `RegisterSpace = 0`,
-so pass the fourth argument for every non-zero space.
+Each descriptor range and root descriptor must declare the same register space as its shader resources:
 
 ```cpp
-CD3DX12_DESCRIPTOR_RANGE ranges[5];
-ranges[0].Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 0, 1);  // b0, space1
-ranges[1].Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 1, 1);  // b1, space1
-ranges[2].Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 2, 0, 3);  // b0-b1, space3
-ranges[3].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 16, 0, 2); // t0-t15, space2
-ranges[4].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER, 8, 0, 2); // s0-s7, space2
-```
+CD3DX12_DESCRIPTOR_RANGE matSrvRange;
+matSrvRange.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 16, 0, 1);     // t0-t15, space1
+CD3DX12_DESCRIPTOR_RANGE matSampRange;
+matSampRange.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER, 8, 0, 1); // s0-s7, space1
 
-Skinned vertex shaders additionally require an SRV range for `t0, space0`.
-It must be separate from the `t0-t15, space2` texture range.
+CD3DX12_DESCRIPTOR_RANGE passSrvRange;
+passSrvRange.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 16, 0, 3);    // t0-t15, space3
+CD3DX12_DESCRIPTOR_RANGE passSampRange;
+passSampRange.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER, 8, 0, 3);// s0-s7, space3
+
+CD3DX12_ROOT_PARAMETER rootParams[11];
+rootParams[0].InitAsConstantBufferView(0, 0);                    // b0, space0 (Global CBV)
+rootParams[1].InitAsDescriptorTable(1, &matSrvRange, D3D12_SHADER_VISIBILITY_ALL);
+rootParams[2].InitAsDescriptorTable(1, &matSampRange, D3D12_SHADER_VISIBILITY_ALL);
+rootParams[3].InitAsConstantBufferView(0, 2);                    // b0, space2 (Object CBV)
+rootParams[4].InitAsShaderResourceView(0, 2);                    // t0, space2 (Instance SRV)
+rootParams[5].InitAsConstantBufferView(0, 3);                    // b0, space3 (Pass CBV #0)
+rootParams[6].InitAsConstantBufferView(1, 3);                    // b1, space3 (Pass CBV #1)
+rootParams[7].InitAsDescriptorTable(1, &passSrvRange, D3D12_SHADER_VISIBILITY_ALL);
+rootParams[8].InitAsDescriptorTable(1, &passSampRange, D3D12_SHADER_VISIBILITY_ALL);
+rootParams[9].InitAsUnorderedAccessView(0, 3);                   // u0, space3 (Pass UAV #0)
+rootParams[10].InitAsUnorderedAccessView(1, 3);                  // u1, space3 (Pass UAV #1)
+```
 
 ## Change Checklist
 

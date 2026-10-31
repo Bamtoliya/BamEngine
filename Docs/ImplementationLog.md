@@ -35,6 +35,55 @@ Use one entry per meaningful change.
 
 ---
 
+## [2026-10-31] 렌더링 S1 계측·S4 타일 라이트 컬링 절두체 완성, 블루프린트 런타임 핫스왑(Phase 4.3) 및 리소스 피커 최적화 구현 확인 및 문서 동기화
+
+- Area: Render | Graph | Editor | HotReload | Shader
+- Type: Docs | Verification | Performance | Architecture
+- 관련 파일:
+  - Resources/Shader/hlsl/tiledLightCullingCS.hlsl
+  - Resources/Shader/hlsl/lightingPS.hlsl
+  - Engine/Source/Render/RHI/Public/RHIFrameMetrics.h
+  - Engine/Source/Render/RHI/Platform/DirectX12/Private/DirectX12RHI.cpp
+  - Editor/Source/ImGui/MetricsPanel/Private/MetricsPanel.cpp
+  - Engine/Source/System/Graph/Public/GraphSystem.h
+  - Engine/Source/System/Graph/Private/GraphSystem.cpp
+  - Editor/Source/Application/Private/Application.cpp
+  - Client/Source/Main.cpp
+  - Editor/Source/ImGui/Public/ResourcePicker.h
+  - Engine/Source/Render/Private/Renderer.cpp
+  - Docs/DevelopmentPriorities.md
+  - Docs/RenderingDevelopmentPlan.md
+  - Docs/VisualScriptingBlueprintPlan.md
+  - Docs/ImGuiDevelopmentPlan.md
+- 배경:
+  - 2026-10-30 문서에 결함 또는 미구현 과제로 기록되었던 렌더링 S1 계측, S4 컴퓨트 셰이더 절두체 컬링, 비주얼 스크립팅 런타임 핫스왑(Phase 4.3), Client 시스템 등록, 인스펙터 리소스 피커 매 프레임 순회 병목이 실제 코드베이스에서 이미 해결·구현되어 있음을 정밀 점검으로 확인.
+  - 최신 코드베이스의 실제 구현 상태와 계획 문서 간의 괴리를 제거하고 우선순위를 재조정하기 위해 문서를 갱신.
+- 확인된 구현 내용:
+  1. **렌더링 S4 타일 라이트 컬링 절두체 평면 컬링 및 0-광원 루프 해결**:
+     - `tiledLightCullingCS.hlsl`: 좌·우·상·하 4개 타일 절두체 평면(`s_FrustumPlanes[4]`) 역투영 및 구면 교차 검증을 추가하여 전체 폭 광원 과할당 문제 해결 완료.
+     - `lightingPS.hlsl`: `for (uint i = 0u; i < tileLightCount; ++i)` 루프로 타일 내 선별 광원만 순회하여 0-광원 타일 전체 순회 버그 해결 완료. 큐브맵 기반 Split-Sum PBR IBL 파이프라인 연동 완비.
+     - `ViewportDeferredPipeline.cpp`: `lightManager.DispatchLightCulling` 연결 완료.
+  2. **렌더링 S1 CPU/GPU 계측 파이프라인**:
+     - `RHIFrameMetrics.h`: `RHIPassMetric`, `RHICapabilities`, `RHIMemoryStats` 확장 완료.
+     - `DirectX12RHI.cpp`: D3D12 Timestamp QueryHeap 및 ReadbackBuffer를 통한 패스별 GPU 시간 지연 회수와 VRAM/디스크립터 통계 질의 완비.
+     - `MetricsPanel.cpp`: 패스별 CPU/GPU 시간 테이블, VRAM/디스크립터 사용량, 하드웨어 기능 지원 여부 UI 렌더링 완비.
+  3. **비주얼 스크립팅 런타임 핫스왑 (Phase 4.3) 및 Client 시스템 등록**:
+     - `GraphSystem::ReloadReflectedNodes`: 활성 씬 엔티티들의 기존 변수(`oldVariables`)와 실행 상태를 보존하며 새 리플렉션 심볼로 `executor.Load` 후 변수 값을 완벽 복원.
+     - `Application.cpp`: `HotReloadManager::RegisterPostReloadCallback`에서 `ReloadReflectedNodes`를 자동 호출하여 PIE 실행 중 0-크래시 핫스왑 완비.
+     - `Client/Source/Main.cpp`: `InitializeSystems()`에 `GraphSystem`, `PhysicsSystem`, `TerrainSystem` 등록 완료.
+  4. **인스펙터 리소스 피커 최적화 (P1-D)**:
+     - `ResourcePicker.h`: `IsResourceExtensionCompatible<T>`로 템플릿 인자 `T`별 호환 확장자 필터링 및 `if (isAppearing)` 팝업 1회 스캔 캐싱 완비.
+  5. **렌더링 S3 비인덱스 인스턴싱 및 전처리기 정리**:
+     - `Renderer.cpp`: `m_RHI->DrawInstanced(vertexCount, instanceCount)`로 비인덱스 인스턴싱 드로우 지원 완비.
+     - `SceneViewportPanel.cpp` 및 `Vertex.h`: `#ifdef _DEBUG` 분기 제거 완료.
+     - `GraphGameplayLibrary.h`: `std::cout`을 `BAM_LOG`로 교체 완료.
+- 다음 실제 남은 과제:
+  - 고정 씬에서 `MetricsPanel`을 통한 타일 라이트 컬링/인스턴싱 실측 GPU ms 및 CPU ms 성능 수치 측정.
+  - `DirectX12RHI.cpp` 내 3곳의 `std::terminate()` 예외 정책 정리.
+  - `MeshRenderSystem`의 다중 뷰포트/패스별 카메라 기준 독립 LOD 평가 지원.
+
+---
+
 ## [2026-10-31] 에디터 프리팹 파이프라인(생성·격리모드·루트연결·오버라이드) 및 엔티티 다중 복사·붙여넣기 완성
 
 - Area: Editor | Engine | Scene | UI | Archive

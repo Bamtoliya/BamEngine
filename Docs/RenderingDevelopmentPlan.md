@@ -1,7 +1,7 @@
 # 렌더링 개발 목표
 
-- 작성일: 2026-10-24
-- 상태: 개발 계획 / 아래 목표는 구현·실행 검증 완료를 의미하지 않는다.
+- 작성일: 2026-10-24 (최종 갱신: 2026-10-31)
+- 상태: 개발 계획 및 2026-10-31 정적 점검 반영 / 아래 목표와 코드 존재 여부는 GPU 실행·성능 측정 완료를 의미하지 않는다.
 - 범위: 후처리 효과 추가보다 장면 제출, 가시성, 기하 처리, 재질, 조명과 GPU 자원 관리에 집중한다.
 - 관련 지침: [EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md), [Shader/BINDING_LAYOUT.md](Shader/BINDING_LAYOUT.md)
 - 연계 계획: [ImGuiDevelopmentPlan.md](ImGuiDevelopmentPlan.md), [BuildAndPackagingPlan.md](BuildAndPackagingPlan.md)
@@ -27,40 +27,39 @@ M1~M4는 조건부 P3, M5·L 계열은 P4로 대응하되 아래의 실제 선�
 GPU Driven과 DXR은 별도의 발전 경로다. Bindless나 Mesh Shader를 DXR의 필수 선행 조건으로 만들지 않는다.
 IBL처럼 비교적 독립적인 화질 개선은 측정·바인딩 기반이 마련되면 병행할 수 있다.
 
-## 2. 현재 출발점: 소스에서 확인한 범위
+## 2. 현재 출발점: 소스에서 확인한 범위 (2026-10-31 갱신)
 
-다음 내용은 작성 시점 작업 트리의 정적 확인 결과다. 빌드·GPU 실행·성능 측정은 이번 문서 작성에서 수행하지 않았다.
-작업 트리에 기존 변경이 있으므로 특정 커밋의 확정 상태로 해석하지 않는다.
+다음 내용은 2026-10-31 시점 작업 트리의 정적 확인 결과다. 빌드·GPU 실행·성능 측정은 별도 검증 단계에서 수행한다.
 
-- `Renderer`는 패스별 Static·Skinned·Sprite·UI 명령과 뷰포트 카메라를 관리한다.
-  `RenderMeshes()`는 명령마다 오브젝트 상수를 바인딩하고 `Draw()` 또는 `DrawIndexed()`를 호출한다.
-  같은 메시·머티리얼의 연속 바인딩을 줄이는 처리는 있지만, 이것을 인스턴스 배칭 완료로 보지 않는다.
-- `MeshRenderSystem::OnSubmit()`은 정적 메시의 월드 AABB를 계산해 제출한다.
-  `RenderMeshes()`에는 전달된 프러스텀에 대한 CPU AABB 검사가 있다.
-  GPU 가시성 판정이나 Hi-Z 오클루전 컬링까지 구현됐다는 뜻은 아니다.
-- `lightingPS.hlsl`에는 G-buffer 기반 PBR 직접광, CSM·Spot·Point 그림자 평가와 전체 광원 순회가 있다.
-  환경광은 Sky Light의 반구 색상 또는 기본 ambient 항으로 계산한다.
-  이번에 확인한 조명 경로에서 환경맵 기반 IBL과 프로브 기반 동적 GI 연결은 확인하지 못했다.
-- `RHIFrameMetrics`에는 드로우 수와 제출 정점·인덱스 수가 있다. 패스별 GPU 시간은 이 구조에 없다.
-- 공통 `RHI`에는 현재 Compute Dispatch, 간접 그리기, Mesh Shader, DXR 실행 인터페이스가 없다.
-  `EPipelineType::Compute`, 런타임 컴파일러의 `cs_6_0`, `ERHIBufferType::IndirectArgs`는 존재하지만
-  자료형·컴파일 분기만으로 실행 기능이 완성됐다고 판단하지 않는다.
-- 공통 `DrawIndexedInstanced()`는 인자가 없는 선언이며, DirectX12 구현은 실패를 반환한다.
-  `DrawIndexed()` 내부의 네이티브 `DrawIndexedInstanced(count, 1, ...)` 호출은 인스턴스 1개를 그리는 경로다.
-- `Engine/CMake/ShaderBuild.cmake`의 자동 컴파일 분기는 현재 VS·PS를 처리한다.
-  Compute·Mesh·Raytracing 단계 도입에는 자동 빌드와 런타임 컴파일 경로를 함께 확인해야 한다.
-- `BINDING_LAYOUT.md`는 텍스처·샘플러를 주로 space2에 정의하지만,
-  현재 `lightingPS.hlsl`에는 조명 SRV·샘플러의 space3와 구름 리소스의 space1 사용이 있다.
-  문서만으로 모든 패스의 현재 ABI를 설명할 수 없으므로 패스별 바인딩을 대조해 문서를 보완해야 한다.
-  이 차이만으로 런타임 바인딩 오류를 단정하지 않는다.
+- **S1 (CPU/GPU 계측 — 코드 구현 완료)**:
+  - `RHIFrameMetrics.h`에 패스별 CPU/GPU 시간(`RHIPassMetric`), 하드웨어 지원(`RHICapabilities`), VRAM/디스크립터 통계(`RHIMemoryStats`) 구조 확장이 완료되었다.
+  - `DirectX12RHI.cpp`에서 D3D12 Timestamp QueryHeap 및 ReadbackBuffer를 통한 패스별 GPU 시간 지연 회수와 VRAM 예산/사용량/디스크립터 통계 질의(`QueryMemoryStats`)가 구현되었다.
+  - `MetricsPanel.cpp`에서 패스별 CPU/GPU 시간 테이블, VRAM/디스크립터 사용량, 하드웨어 기능 지원 여부를 시각화한다.
+- **S2 (바인딩 레이아웃 계약 — 문서 갱신 완료 / 백엔드 차이 관리)**:
+  - [Shader/BINDING_LAYOUT.md](Shader/BINDING_LAYOUT.md)를 `DirectX12RHI::CreateRootSignature()`의 실제 `space0`~`space3`(Root Parameter `[0]`~`[10]`) 구조와 일치하도록 갱신했다.
+  - `SDLGPURHI`는 `DrawIndexedInstanced`(`NotImplemented`), `BindInstanceBuffer`, Compute 인터페이스가 미구현 상태로, 미지원 시 안전 폴백 경로를 유지한다.
+- **S3 (정적 메시 인스턴싱 및 기본 LOD — 코드 반영 완료)**:
+  - `InstanceData`(`worldMatrix`, `normalMatrix`, `pickingID`), `LODGroupComponent`가 추가되었다.
+  - `MeshRenderSystem::OnSubmit()`에서 화면 덮개 비율(Screen Coverage) + 히스테리시스 기반 LOD 선택을 수행하고, `Renderer::RenderMeshes()`가 `BindInstanceBuffer()` 및 인덱스/비인덱스 여부에 따라 `DrawIndexedInstanced()` / `DrawInstanced()` 배칭 드로우를 수행한다.
+  - **남은 항목**: `MeshRenderSystem::OnSubmit()`의 주 뷰포트 단일 카메라 기준 `lodGroup->currentLODIndex` 갱신을 다중 뷰포트/패스별로 분리하는 보완.
+- **S4 (Compute 기반 및 Tiled Light Culling — 코드 반영 및 결함 해결 완료)**:
+  - `ShaderBuild.cmake`에 `*CS.hlsl`(`cs_6_0`) 컴파일 추가, `DirectX12Pipeline` Compute PSO, `DirectX12RHI::Dispatch`/`ResourceBarrierUAV`, `LightManager::DispatchLightCulling` 구현 완료.
+  - `tiledLightCullingCS.hlsl`에 타일의 4방향 절두체 평면(`s_FrustumPlanes[4]`) 역투영 및 구면 교차 판정이 추가되어 전체 타일 광원 과할당 문제가 해결되었다.
+  - `lightingPS.hlsl`에서 선별된 타일 광원만 순회하도록 수정되어 `tileLightCount == 0`일 때의 전체 광원 순회 버그가 해결되었다.
+  - `SceneViewportPanel`과 `ViewportDeferredPipeline` 모두 `DispatchLightCulling` 및 버퍼 바인딩이 일관되게 연결되었다.
+- **S5 (IBL 및 그림자 안정화 — 반구형 Sky IBL 및 Split-Sum PBR 큐브맵 IBL 반영)**:
+  - `lightingPS.hlsl`에 반구형 Sky Irradiance·거칠기 기반 수렴(`LIGHT_TYPE_SKY` + `EnvBRDFApprox`), 접촉 그림자 소프트닝, `ShadowStrength`가 반영되었다.
+  - 큐브맵 텍스처 기반 고품질 Split-Sum PBR IBL(`gLightingData.HasIBLMaps != 0u`, `gIrradianceMap`, `gPrefilteredEnvMap`, `gBRDFLut`) 파이프라인 셰이더 연동이 추가되었다.
+- **포스트프로세스 파이프라인 (별도 구현됨)**:
+  - `Engine/Source/Render/PostProcess/`(`PostProcessPipeline`, `BloomEffect`, `PostProcessMaterialEffect`) 및 `Editor/Source/ImGui/PostProcessPanel/`이 추가되어 Bloom, Vignette, ChromaticAberration, FilmGrain, LensDistortion, ColorAdjustments, Sharpen, Tonemapping을 처리한다.
 
 주요 확인 파일:
 
-- [Renderer.cpp](../Engine/Source/Render/Private/Renderer.cpp)
-- [MeshRenderSystem.cpp](../Engine/Source/System/Render/Private/MeshRenderSystem.cpp)
+- [Renderer.cpp](../Engine/Source/Render/Private/Renderer.cpp), [LightManager.cpp](../Engine/Source/Render/Light/Private/LightManager.cpp)
+- [MeshRenderSystem.cpp](../Engine/Source/System/Render/Private/MeshRenderSystem.cpp), [LODGroupComponent.h](../Engine/Source/Core/Public/Components/Render/LODGroupComponent.h)
 - [RHI.h](../Engine/Source/Render/RHI/Public/RHI.h), [RHIFrameMetrics.h](../Engine/Source/Render/RHI/Public/RHIFrameMetrics.h)
-- [DirectX12RHI.cpp](../Engine/Source/Render/RHI/Platform/DirectX12/Private/DirectX12RHI.cpp)
-- [lightingPS.hlsl](../Resources/Shader/hlsl/lightingPS.hlsl), [ShaderBuild.cmake](../Engine/CMake/ShaderBuild.cmake)
+- [DirectX12RHI.cpp](../Engine/Source/Render/RHI/Platform/DirectX12/Private/DirectX12RHI.cpp), [SDLGPURHI.cpp](../Engine/Source/Render/RHI/Platform/SDLGPU/Private/SDLGPURHI.cpp)
+- [tiledLightCullingCS.hlsl](../Resources/Shader/hlsl/tiledLightCullingCS.hlsl), [lightingPS.hlsl](../Resources/Shader/hlsl/lightingPS.hlsl), [ShaderBuild.cmake](../Engine/CMake/ShaderBuild.cmake)
 
 ## 3. 도입 원칙
 
