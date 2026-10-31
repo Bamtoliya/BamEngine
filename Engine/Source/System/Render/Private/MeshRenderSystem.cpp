@@ -31,10 +31,20 @@ MeshRenderSystem* MeshRenderSystem::Create(void* arg)
 	return instance;
 }
 
+
 void MeshRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& activeScenes, f32 dt)
 {
     auto& renderer = Renderer::Get();
-    vector<RenderPass*> targetPasses;
+
+    // 1. 활성 뷰포트/패스별 고유 카메라 정보(위치, ProjY) 추출 및 묶음 구성
+    struct PassTarget
+    {
+        RenderPass* pass = nullptr;
+        vec3 cameraPos = vec3(0.0f);
+        float projY = 1.0f;
+        bool isPrimaryGeometry = false;
+    };
+    vector<PassTarget> targets;
 
     for (const auto& viewport : renderer.GetActiveViewportCameras())
     {
@@ -42,35 +52,29 @@ void MeshRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& 
         if (!pass) continue;
 
         const ERenderPassType passType = pass->GetPassType();
-        const bool isShadowPass = passType == ERenderPassType::Shadow;
+        const bool isShadowPass = (passType == ERenderPassType::Shadow);
 
-        // Shadow 패스의 카메라는 Renderer에서 광원 카메라로 설정한다.
         if (!isShadowPass && !viewport.hasCamera) continue;
-
         if (passType != ERenderPassType::Geometry && passType != ERenderPassType::Forward && !isShadowPass)
             continue;
 
-        if (std::find(targetPasses.begin(), targetPasses.end(), pass) == targetPasses.end())
-            targetPasses.push_back(pass);
-    }
-
-    if (targetPasses.empty())
-        return;
-
-    // 주 뷰포트 카메라(Geometry 패스) 정보 추출
-    vec3 cameraPos(0.0f);
-    float projY = 1.0f; // 1.0 / tan(fovY / 2)
-    for (const auto& viewport : renderer.GetActiveViewportCameras())
-    {
-        if (viewport.hasCamera && viewport.renderPass &&
-            viewport.renderPass->GetPassType() == ERenderPassType::Geometry)
+        auto it = std::find_if(targets.begin(), targets.end(), [pass](const PassTarget& t) {
+            return t.pass == pass;
+            });
+        if (it == targets.end())
         {
-            cameraPos = viewport.cameraBuffer.cameraPosition;
-            projY = glm::max(std::abs(viewport.cameraBuffer.projMatrix[1][1]), 0.1f);
-            break;
+            PassTarget target;
+            target.pass = pass;
+            target.cameraPos = viewport.cameraBuffer.cameraPosition;
+            target.projY = glm::max(std::abs(viewport.cameraBuffer.projMatrix[1][1]), 0.1f);
+            target.isPrimaryGeometry = (passType == ERenderPassType::Geometry);
+            targets.push_back(target);
         }
     }
 
+    if (targets.empty()) return;
+
+    // 2. 씬 엔티티 순회 및 패스별 독립 LOD 메시 제출
     for (Scene* scene : activeScenes)
     {
         if (!scene) continue;
@@ -78,69 +82,77 @@ void MeshRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& 
         auto view = scene->GetRegistry().view<StaticMeshRendererComponent, WorldTransformComponent, FlagComponent>();
         for (auto [entity, meshRenderer, worldTransform, flag] : view.each())
         {
-            if (!flag.IsActiveInHierarchy() || !flag.IsVisibleInHierarchy() || HasFlag(flag.effectiveFlags, EEntityFlag::Dead)) continue;
+            if (!flag.IsActiveInHierarchy() || !flag.IsVisibleInHierarchy() ||
+                HasFlag(flag.effectiveFlags, EEntityFlag::Dead))
+            {
+                continue;
+            }
 
-            Mesh* mesh = meshRenderer.meshHandle.Get();
+            Mesh* baseMesh = meshRenderer.meshHandle.Get();
             MaterialInterface* material = meshRenderer.materialHandle.Get();
-            if (!mesh || !material) continue;
+            if (!baseMesh || !material) continue;
 
-            // LODGroupComponent가 부착되어 있는 경우 화면 점유율 기반 LOD 메시 선택
-            if (auto* lodGroup = scene->GetRegistry().try_get<LODGroupComponent>(entity))
+            auto* lodGroup = scene->GetRegistry().try_get<LODGroupComponent>(entity);
+            const uint32 pickingId = PickingManager::Get().RegisterPickingEntity(scene, entity);
+
+            for (const auto& target : targets)
             {
-                const vec3 objectPos = vec3(worldTransform.worldMatrix[3]);
-                const float distance = glm::max(glm::distance(cameraPos, objectPos), 0.001f);
-                const float maxScale = glm::max(glm::length(vec3(worldTransform.worldMatrix[0])),
-                    glm::max(glm::length(vec3(worldTransform.worldMatrix[1])), glm::length(vec3(worldTransform.worldMatrix[2]))));
-                const float localRadius = glm::length(mesh->GetMin() - mesh->GetMax()) * 0.5f;
-                const float worldRadius = glm::max(localRadius * maxScale, 0.01f);
-                const float coverage = glm::clamp((worldRadius * projY) / distance, 0.0f, 1.0f);
-                const float margin = lodGroup->hysteresisMargin;
-                const int32 current = lodGroup->currentLODIndex;
-
-                float lod2Thresh = lodGroup->lod2ScreenCoverage;
-                if (current == 2) lod2Thresh += margin;
-                float lod1Thresh = lodGroup->lod1ScreenCoverage;
-                if (current == 1) lod1Thresh += (coverage < lod1Thresh ? -margin : margin);
-
-                int32 targetLOD = 0;
-                if (lodGroup->lod2Mesh.Get() && coverage <= lod2Thresh)
-                    targetLOD = 2;
-                else if (lodGroup->lod1Mesh.Get() && coverage <= lod1Thresh)
-                    targetLOD = 1;
-
-                // 주 에디터 뷰포트 카메라 기준일 때만 컴포넌트의 영속 상태 갱신
-                lodGroup->currentLODIndex = targetLOD;
-
-                if (targetLOD == 2 && lodGroup->lod2Mesh.Get())
-                    mesh = lodGroup->lod2Mesh.Get();
-                else if (targetLOD == 1 && lodGroup->lod1Mesh.Get())
-                    mesh = lodGroup->lod1Mesh.Get();
-            }
-
-            StaticDrawCommand command;
-            command.mesh = mesh;
-            command.material = material;
-            command.worldMatrix = worldTransform.worldMatrix;
-
-            if (!mesh->IsDynamic())
-            {
-                const BoundingBox localBounds(mesh->GetMin(), mesh->GetMax());
-                BoundingBox worldBounds;
-                if (localBounds.TryTransformToAABB(command.worldMatrix, worldBounds))
-                    command.worldBounds = worldBounds;
-            }
-
-            command.pickingId = PickingManager::Get().RegisterPickingEntity(scene, entity);
-
-            for (RenderPass* pass : targetPasses)
-            {
-                if (pass->GetPassType() == ERenderPassType::Shadow && !meshRenderer.castShadow)
+                if (target.pass->GetPassType() == ERenderPassType::Shadow && !meshRenderer.castShadow)
                     continue;
 
-                if (!pass->IsAcceptsBlendMode(material->GetBlendMode()))
+                if (!target.pass->IsAcceptsBlendMode(material->GetBlendMode()))
                     continue;
 
-                renderer.SubmitStatic(command, pass->GetID());
+                Mesh* activeMesh = baseMesh;
+
+                // LODGroupComponent가 있을 경우 해당 패스 카메라 시점 기준으로 독립 LOD 평가
+                if (lodGroup)
+                {
+                    const vec3 objectPos = vec3(worldTransform.worldMatrix[3]);
+                    const float distance = glm::max(glm::distance(target.cameraPos, objectPos), 0.001f);
+                    const float maxScale = glm::max(glm::length(vec3(worldTransform.worldMatrix[0])),
+                        glm::max(glm::length(vec3(worldTransform.worldMatrix[1])), glm::length(vec3(worldTransform.worldMatrix[2]))));
+                    const float localRadius = glm::length(baseMesh->GetMin() - baseMesh->GetMax()) * 0.5f;
+                    const float worldRadius = glm::max(localRadius * maxScale, 0.01f);
+                    const float coverage = glm::clamp((worldRadius * target.projY) / distance, 0.0f, 1.0f);
+                    const float margin = lodGroup->hysteresisMargin;
+                    const int32 current = lodGroup->currentLODIndex;
+
+                    float lod2Thresh = lodGroup->lod2ScreenCoverage;
+                    if (current == 2) lod2Thresh += margin;
+                    float lod1Thresh = lodGroup->lod1ScreenCoverage;
+                    if (current == 1) lod1Thresh += (coverage < lod1Thresh ? -margin : margin);
+
+                    int32 targetLOD = 0;
+                    if (lodGroup->lod2Mesh.Get() && coverage <= lod2Thresh)
+                        targetLOD = 2;
+                    else if (lodGroup->lod1Mesh.Get() && coverage <= lod1Thresh)
+                        targetLOD = 1;
+
+                    // 주 에디터 메인 카메라에서만 컴포넌트의 영속 관찰 상태 갱신
+                    if (target.isPrimaryGeometry) lodGroup->currentLODIndex = targetLOD;
+
+                    if (targetLOD == 2 && lodGroup->lod2Mesh.Get())
+                        activeMesh = lodGroup->lod2Mesh.Get();
+                    else if (targetLOD == 1 && lodGroup->lod1Mesh.Get())
+                        activeMesh = lodGroup->lod1Mesh.Get();
+                }
+
+                StaticDrawCommand command;
+                command.mesh = activeMesh;
+                command.material = material;
+                command.worldMatrix = worldTransform.worldMatrix;
+
+                if (!activeMesh->IsDynamic())
+                {
+                    const BoundingBox localBounds(activeMesh->GetMin(), activeMesh->GetMax());
+                    BoundingBox worldBounds;
+                    if (localBounds.TryTransformToAABB(command.worldMatrix, worldBounds))
+                        command.worldBounds = worldBounds;
+                }
+
+                command.pickingId = pickingId;
+                renderer.SubmitStatic(command, target.pass->GetID());
             }
         }
     }
