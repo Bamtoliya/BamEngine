@@ -35,6 +35,37 @@ Use one entry per meaningful change.
 
 ---
 
+## [2026-11-01] 프리팹 저장 기준점과 Undo/Redo 변경 표시 연결
+
+- Area: Editor | UI | Scene
+- Type: Fix | Docs
+- 관련 파일:
+  - Editor/Source/ImGui/PrefabEditor/Private/PrefabModeManager.cpp
+  - Editor/Source/ImGui/PrefabEditor/Public/PrefabModeManager.h
+  - Docs/ImGuiDevelopmentPlan.md
+  - Docs/EditorUndoRedo.md
+- 배경:
+  - 수동 `MarkDirty()` 플래그만 읽으면 Undo로 저장 상태에 돌아와도 별표와 종료 확인이 유지된다.
+  - 메인 씬과 프리팹이 같은 `SceneEditHistory`를 사용하므로 프리팹의 저장 기준점을 설정할 때 메인 씬의 미저장 여부도 보존해야 한다.
+- 이번 변경:
+  - 프리팹 진입 전에 이력이 메인 씬을 편집할 수 있는 상태인지 검사하고 미저장 여부를 보관한다.
+  - 실제 현재 씬이 프리팹으로 전환된 경우 `ResetDocument()`로 불러온 상태를 저장 기준점으로 설정한다.
+  - 별표 표시와 종료 확인 조건을 기존 `HasUnsavedChanges()` 조회로 통일한다. 이력이 프리팹을 대상으로 할 때 현재 상태와 저장 기준점을 비교하고, 조회할 수 없는 문맥에서는 기존 플래그를 사용한다.
+  - 메인 씬 열기가 성공한 뒤 이력 대상을 복원한다. 진입 전에 미저장 상태였다면 `NotifyUntrackedChange()`로 다시 표시한다.
+- 기존 커밋과의 구분:
+  - `HasUnsavedChanges()` 구현과 저장 성공 시 `MarkSaved()` 호출은 선행 커밋 `e80d745c`에 포함되어 있다.
+  - 계층 패널 프리팹 드롭, 편집 경로별 `MarkDirty()` 연결, 루트 삭제 방지, 빈 엔티티의 프리팹 루트 연결은 이번 미커밋 코드 차이에 포함되지 않는다. 이번 변경에서 다시 구현하거나 실행 검증한 것으로 기록하지 않는다.
+- 제약 및 후속 확인:
+  - 메인 씬의 미저장 여부를 보존하는 변경이며 씬 전환 전 Undo/Redo 명령 목록을 보관·복원하는 기능은 아니다.
+  - 이력에 기록되지 않은 편집 전체와 PIE 전환, 프리팹 진입 실패 시의 자원·선택 복구를 완성한 변경으로 해석하지 않는다.
+  - 프리팹 진입의 `OpenScene()` 반환값은 여전히 직접 처리하지 않는다. 이번 기준점 설정은 현재 씬이 실제로 프리팹인지 확인한 경우에만 수행한다.
+- 검증:
+  - 현재 diff와 호출 경로를 정적으로 확인했고 `git diff --check`에서 공백 오류가 없었다. 이번 커밋 범위는 프리팹 소스 2개와 관련 문서 3개다.
+  - 이번 작업에서 빌드·CTest·Editor 실행·F5 수동 검증은 수행하지 않았다. 사용자로부터 아래 항목의 통과 결과를 전달받지는 않았다.
+  - 수동 확인 항목은 [ImGuiDevelopmentPlan.md](ImGuiDevelopmentPlan.md) 10절의 2026-11-01 후속 기록을 따른다.
+
+---
+
 ## [2026-10-31] 렌더링 S1 계측·S4 타일 라이트 컬링 절두체 완성, 블루프린트 런타임 핫스왑(Phase 4.3) 및 리소스 피커 최적화 구현 확인 및 문서 동기화
 
 - Area: Render | Graph | Editor | HotReload | Shader

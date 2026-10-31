@@ -64,6 +64,11 @@ bool PrefabModeManager::EnterPrefabMode(const std::filesystem::path& prefabPath)
     auto& sm = Engine::SceneManager::Get();
     m_SavedMainScene = sm.GetCurrentScene();
     if (!m_SavedMainScene) return false;
+    auto& history = Application::Get().GetEditHistory();
+    if (!history.CanFinalizeEditsFor(m_SavedMainScene))
+        return false;
+
+    m_MainSceneHadUnsavedChanges = history.HasUnsavedChanges();
 
     Safe_AddRef(m_SavedMainScene);
 
@@ -106,6 +111,10 @@ bool PrefabModeManager::EnterPrefabMode(const std::filesystem::path& prefabPath)
     SetupDefaultEnvironment(m_PrefabScene);
 
     sm.OpenScene(m_PrefabScene);
+
+    if (sm.GetCurrentScene() == m_PrefabScene)
+        history.ResetDocument(m_PrefabScene, history.Enabled());
+
     Safe_Release(m_PrefabScene);
 
     SelectionManager::Get().SetSelectedEntity(m_PrefabRootEntity);
@@ -160,7 +169,7 @@ bool PrefabModeManager::ExitPrefabMode(bool discardChanges)
 {
     if (!m_IsInPrefabMode) return true;
 
-    if (!discardChanges && m_HasUnsavedChanges)
+    if (!discardChanges && HasUnsavedChanges())
     {
         m_ShowExitConfirmModal = true;
         return false;
@@ -169,9 +178,18 @@ bool PrefabModeManager::ExitPrefabMode(bool discardChanges)
     auto& sm = Engine::SceneManager::Get();
     if (m_SavedMainScene)
     {
-        sm.OpenScene(m_SavedMainScene);
+        if (sm.OpenScene(m_SavedMainScene) != Engine::EResult::Success)
+            return false;
+
+        auto& history = Application::Get().GetEditHistory();
+        history.ResetDocument(m_SavedMainScene, history.Enabled());
+
+        if (m_MainSceneHadUnsavedChanges)
+            history.NotifyUntrackedChange();
+
         Safe_Release(m_SavedMainScene);
         m_SavedMainScene = nullptr;
+        m_MainSceneHadUnsavedChanges = false;
     }
 
     m_PrefabScene = nullptr;
@@ -211,7 +229,7 @@ void PrefabModeManager::DrawViewportBanner()
         ImGui::SameLine();
 
         std::string title = std::string(ICON_FA_CUBES " ") + LOCAL("PrefabMode.Title") + ": " + m_CurrentPrefabPath.filename().string();
-        if (m_HasUnsavedChanges) title += " *";
+        if (HasUnsavedChanges()) title += " *";
         ImGui::TextColored(ImVec4(0.35f, 0.85f, 1.0f, 1.0f), "%s", title.c_str());
 
         const float saveWidth = 80.0f;

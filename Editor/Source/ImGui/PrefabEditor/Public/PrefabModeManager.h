@@ -46,6 +46,7 @@ private:
     Engine::Entity* m_PrefabRootEntity = nullptr;
     bool m_HasUnsavedChanges = false;
     bool m_ShowExitConfirmModal = false;
+    bool m_MainSceneHadUnsavedChanges = false;
     std::vector<Engine::Entity*> m_SavedSelection;
 };
 
