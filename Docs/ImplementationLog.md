@@ -35,6 +35,86 @@ Use one entry per meaningful change.
 
 ---
 
+## [2026-11-02] 하단 푸터 바(Footer Bar) 빌드 제어 이관, 콘텐츠 브라우저 시각 분류 고도화 및 .bam*.json 복합 확장자 표준화
+
+- Area: Editor | UI | ContentBrowser | ToolBar | Localization | Docs
+- Type: Feature | Refactor | Docs
+- 관련 파일:
+  - Docs/ImGuiDevelopmentPlan.md (Section 19, Section 20)
+  - Docs/DevelopmentPriorities.md
+  - Docs/ImplementationLog.md
+  - Editor/Source/ImGui/ToolBar/Public/ToolBar.h
+  - Editor/Source/ImGui/ToolBar/Private/ToolBar.cpp
+  - Editor/Source/ImGui/ContentBrowserPanel/Private/ContentBrowserGridItem.cpp
+  - Editor/Source/ImGui/ContentBrowserPanel/Private/ContentBrowserPanel.cpp
+  - Editor/Source/ImGui/Public/ResourcePicker.h
+  - Editor/Source/Document/Public/SceneDocument.h
+  - Resources/Data/Localization/Editor.csv
+- 동기 및 배경:
+  - 상단 툴바(ToolBar)에 Play/Pause/Stop과 컴파일, 핫 리로드, 자동 컴파일/리로드, 셰이더 리로드 버튼이 모두 섞여 있어 시각적 복잡도가 높고 레이아웃이 답답했던 문제를 해결하고자 컴파일/리로드 버튼들을 화면 최하단 슬림 푸터(`##FooterBarRow`)로 분리.
+  - 콘텐츠 브라우저에서 `.json` 파일들이 모두 획일적인 회색 텍스트 아이콘과 "JSON" 배지로만 노출되어, 머티리얼·메시·스프라이트·애니메이터·스크립트·씬·후처리 프리셋 등을 직관적으로 식별하기 어려웠음.
+  - 씬 파일 및 특정 목적의 에셋 파일들이 일반 `.json`과 혼용되는 것을 방지하기 위해 `.bam<type>.json` 형태의 복합 확장자 체계를 확립하고, 기존 단일 확장자(`.animator`, `.spriteanim`, `.anim`, `.materialinstance`) 및 디렉터리 문맥(`Scripts/`, `Config/`, `PostProcess/Presets/`)에 대한 O(1) 무결점 시각 분류를 구현함.
+  - 콘텐츠 브라우저 우클릭 메뉴의 `EditorCommon.Open` 로캘 키 누락으로 영문/한글 모드에서 키 문자열이 그대로 노출되던 결함 수정.
+- 구현 내용 요약:
+  1. **슬림 푸터 바(Footer Bar) 구축 (`ToolBar.cpp`, `ToolBar.h`, `ImGuiDevelopmentPlan.md` 19절)**:
+     - PIE 플레이 제어줄(`##PlayBarRow`)에서 모듈 컴파일, 모듈 핫 리로드, 자동 컴파일 토글, 자동 핫 리로드 토글, 셰이더 전체 재컴파일 버튼을 제거하고, 에디터 최하단 `DrawFooterBar()`(`##FooterBarRow`)로 이관.
+     - 텍스트 라벨을 간결한 아이콘 버튼(`ICON_FA_HAMMER`, `ICON_FA_ROTATE`, `ICON_FA_FILE_CODE`)과 컴팩트 체크박스로 대체하고 상세 안내를 툴팁으로 이동시켜 약 22px 높이의 얇고 안정적인 푸터 완성.
+  2. **콘텐츠 브라우저 그리드 아이템 시각 분류 고도화 (`ContentBrowserGridItem.cpp`, `ImGuiDevelopmentPlan.md` 20절)**:
+     - `DescribeAssetVisual()` 함수를 전면 개선하여, 디스크 I/O 없이 파일명·복합 확장자·상위 폴더 계층(`HasDirectorySegment`)만으로 O(1) 수준의 즉각적인 카드 렌더링 지원.
+     - **복합 확장자 지원**: `.bamscene.json`, `.bamprefab.json`, `.bammat.json`, `.bammatinst.json`, `.bammesh.json`, `.bammodel.json`, `.bamsprite.json`, `.bamspriteanim.json`, `.bamanim.json`, `.bamskel.json`, `.bamanimator.json`, `.bamgraph.json`, `.bampostfx.json`, `.bamscript.json`, `.bamconfig.json`, `.bamshader.json`.
+     - **단일 확장자 및 폴더 문맥 완벽 호환**:
+       - 애니메이터: `.animator`, `.bamanimator` $\rightarrow$ `ICON_FA_DIAGRAM_PROJECT` (마젠타 퍼플, `ANIMATOR` 배지).
+       - 애니메이션: `.spriteanim`, `.bamspriteanim` $\rightarrow$ `ICON_FA_FILM` (`SPRITE ANIM` 배지), `.anim`, `.bamanim` 및 `Animation/` 폴더 $\rightarrow$ `ICON_FA_PERSON_RUNNING` (`ANIM` 배지).
+       - 스크립트: `.bamscript`, `.lua`, `.cpp`, `.h` 및 `Scripts/` 폴더 내 `.json` $\rightarrow$ `ICON_FA_SCROLL` (틸 에메랄드, `SCRIPT` 배지).
+       - 컨피그: `.ini`, `.cfg`, `.config`, `.toml`, `.yaml`, `.xml` 및 `Resources/Config/` 하위 `.json` (`PostProcess/Presets`는 `POST FX`, 그 외는 `CONFIG`).
+       - 셰이더: `.hlsl`, `.glsl`, `.cso`, `.spv`, `.bamshader`, `.bamshader.json` $\rightarrow$ `ICON_FA_CODE` (`HLSL`/`SHADER`/`SPV`), `.hlsli` $\rightarrow$ `ICON_FA_FILE_CODE` (`HLSLI`).
+       - 머티리얼 인스턴스: `.materialinstance` 단일 확장자 지원.
+     - 네임 박스 렌더링(`DrawNameBox`) 시 복합 접미사(`.bammesh.json` $\rightarrow$ `Cube`)를 완전히 제거한 정제된 파일명(`CleanName`)을 표시하고 우하단에 명확한 타입 배지(`MESH`, `MAT`, `SCRIPT` 등) 렌더링.
+     - 썸네일 영역 상단 둥근 모서리 배경 틴트와 하단 2px 타입 고유 액센트 라인 적용.
+  3. **콘텐츠 브라우저 필터 동기화 (`ContentBrowserPanel.cpp`)**:
+     - `PassesFilter()`에서 단일 확장자(`.spriteanim`, `.animator`, `.materialinstance`, `.spv`, `.cfg` 등) 및 복합 확장자들이 상단 5대 카테고리(Texture, Model, Material, Shader, Data)에 누락 없이 정확하게 분류되도록 갱신.
+  4. **씬 및 리소스 피커 복합 확장자 호환 (`SceneDocument.h`, `ResourcePicker.h`)**:
+     - `SceneDocument::IsSceneFile()`에서 `.bamscene.json` 및 `.scene.json`을 씬 파일로 즉시 판별.
+     - `ResourcePicker.h`에서 `Material` 선택 시 `.bammat.json`, `.bammatinst.json`, `.bammat`, `.bammatinst`만 필터링되도록 보강.
+  5. **로캘(Localization) 누락 키 추가 (`Editor.csv`)**:
+     - `EditorCommon,Open,Open,열기` 및 공통 UI 키(`EditorCommon.New`, `EditorCommon.File`, `EditorCommon.Edit`, `EditorCommon.SaveAs`, `EditorMenu.File`, `UI_VIEW`) 추가.
+- 검증 및 확인:
+  - 콘텐츠 브라우저에서 스크립트, 애니메이터, 애니메이션 클립, 컨피그 파일들이 고유의 아이콘과 타입 배지로 노출됨을 확인.
+  - 파일 우클릭 시 컨텍스트 메뉴 최상단 항목이 번역 키 대신 "열기"(Open)로 정상 출력됨을 확인.
+
+---
+
+## [2026-11-01] 전체 코드·문서 정합성 점검, 누락 현황 동기화 및 개발 우선순위(Next Execution Order) 재조정
+
+- Area: Docs | Architecture | Engine | Render | Editor | Graph | Animation
+- Type: Docs | Audit | Cleanup
+- 관련 파일:
+  - Docs/DevelopmentPriorities.md
+  - Docs/RenderingDevelopmentPlan.md
+  - Docs/EngineDevelopmentPlan.md
+  - Docs/ImGuiDevelopmentPlan.md
+  - Docs/VisualScriptingBlueprintPlan.md
+  - Docs/AnimatorGraphPlan.md
+  - Docs/BuildConfigurationAndPreprocessing.md
+  - Docs/GraphFoundation.md
+  - Docs/GraphReflection.md
+  - Docs/GraphPanel.md
+  - Docs/ImplementationLog.md
+- 점검 및 동기화 내용:
+  1. **기완료 작업의 미완료 표기 해소 및 우선순위 갱신 (`DevelopmentPriorities.md`)**:
+     - P0-A 미커밋 파일 정리 및 단위별 커밋 완료 상태 반영.
+     - 기존 단기 실행 순서 3순위(`DirectX12RHI` `std::terminate` 제거, `MeshRenderSystem` 다중 뷰포트/패스별 독립 LOD 평가), 4순위 중 씬 레벨 `RaycastQuery` 및 `GraphPanel` 상단 메뉴바 리팩터링, 6순위 중 `AnimatorGraph` Phase 1~4 구현 완료 사실을 완료 목록으로 이동.
+     - P2-E의 `Client/Source/Main.cpp` 시스템 등록 상태(`AnimationSystem`, `SpriteAnimationSystem`, `GraphSystem`, `PhysicsSystem`, `TerrainSystem` 및 `--rl` 엔트리포인트 등록 완료)를 실제 코드와 일치하도록 갱신.
+     - 차기 단기 실행 우선순위를 **1순위 P1-E(`MaterialFeatureFlags` 및 머티리얼 그래프 입력 유연화) -> 2순위 P2-D/Phase 5(계층형 스켈레탈 모델 루트 `AnimatorComponent` ↔ 자식 `SkinnedMeshRendererComponent` 연결 및 `.animator` 에셋 자동 로드, `AnimNotify`/본 마스킹) -> 3순위 `UnifiedSettingsPanel` 및 그래프 핀 컨텍스트 메뉴 -> 4순위 에셋 썸네일 예산 및 `AssetReferencePanel`/재임포트 -> 5순위 `BAM_EDITOR` 전처리기/표준 스트림 잔여 정리 -> 6순위 네트워크 기초(`NetworkFoundationPlan`) -> 7순위 RL 확장 및 파티클/스플라인/트레일** 순으로 재편성.
+  2. **스켈레탈 애니메이션 계층 구조 갭 명시 (`AnimatorGraphPlan.md`, `EngineDevelopmentPlan.md`, `DevelopmentPriorities.md`)**:
+     - `Scene::InstantiateModel()`은 모델 루트 엔티티에 `AnimatorComponent`, 자식 메시 엔티티에 `SkinnedMeshRendererComponent`를 분리 생성하는 반면, `AnimationSystem::OnUpdate()`와 `MeshRenderSystem::OnSubmit()`은 동일 엔티티 기준으로 조회하는 구조적 차이를 확인하고 Phase 5의 최우선 연결 과제로 명시.
+  3. **비주얼 스크립팅 `EGraphPinType::String` 지원 및 UI 리팩터링 동기화 (`GraphFoundation.md`, `GraphReflection.md`, `GraphPanel.md`, `VisualScriptingBlueprintPlan.md`)**:
+     - `GraphReflection.md`에서 문자열(`std::string`)을 거부한다는 구버전 설명을 수정하여 `std::string` 인자·반환값 지원 사실을 반영하고, `GraphFoundation.md`·`GraphPanel.md`에 `String` 핀 타입과 `InputText` 편집 지원을 반영.
+  4. **전처리기 정비 현황 구분 (`BuildConfigurationAndPreprocessing.md`)**:
+     - `BuildConfigurationAndPreprocessing.md` 4절의 항목별 완료(`GraphGameplayLibrary.h`, `DirectX12RHI.cpp`, `Vertex.h`, `GraphSystem.h`) 및 잔여(`LocalizationManager.cpp`, `ReflectionRegistry.cpp`, `BAM_EDITOR` 매크로) 상태를 체크리스트로 구분.
+
+---
+
 ## [2026-11-01] G-Buffer 텍스처 상태 누수 규명 및 플래그 기반 샘플링·머티리얼 그래프 입력 계획 수립 (P1-E)
 
 - Area: Render | Material | Shader | Documentation

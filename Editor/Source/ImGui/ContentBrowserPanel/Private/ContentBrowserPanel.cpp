@@ -58,17 +58,35 @@ static bool PassesFilter(const filesystem::directory_entry& entry, uint32 filter
 {
 	if (filterMask == 0) return true; // 아무것도 선택하지 않거나 "All"인 경우 모두 표시
 	if (entry.is_directory()) return true; // 폴더는 무조건 표시
-
+	string filename = entry.path().filename().string();
+	for (auto& c : filename) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
 	string ext = entry.path().extension().string();
-	for (auto& c : ext) c = tolower(c); // 소문자로 변환
-
-	// 선택된 각 카테고리의 비트가 켜져있는지 확인하고 해당 확장자면 true 반환
-	if ((filterMask & (1 << 0)) && (ext == ".png" || ext == ".jpg" || ext == ".tga")) return true; // Texture
-	if ((filterMask & (1 << 1)) && (ext == ".fbx" || ext == ".obj" || ext == ".gltf" || ext == ".blend" || ext == ".bammodel" || ext == ".bammesh")) return true; // Model
-	if ((filterMask & (1 << 2)) && (ext == ".mat")) return true; // Material
-	if ((filterMask & (1 << 3)) && (ext == ".hlsl" || ext == ".glsl")) return true; // Shader
-	if ((filterMask & (1 << 4)) && (ext == ".csv" || ext == ".json")) return true; // Data
-
+	for (auto& c : ext) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+	const bool isTexture = (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga" ||
+		ext == ".bmp" || ext == ".dds" || ext == ".hdr" || ext == ".bamtex" || ext == ".bamsprite" ||
+		ext == ".bamspriteanim" || ext == ".spriteanim" ||
+		filename.ends_with(".bamtex.json") || filename.ends_with(".bamsprite.json") ||
+		filename.ends_with(".bamspriteanim.json") || filename.ends_with(".spriteanim.json"));
+	const bool isModel = (ext == ".fbx" || ext == ".obj" || ext == ".gltf" || ext == ".glb" ||
+		ext == ".blend" || ext == ".bammodel" || ext == ".bammesh" || ext == ".bamanim" || ext == ".anim" ||
+		ext == ".bamskel" || ext == ".bamanimator" || ext == ".animator" ||
+		filename.ends_with(".bammodel.json") || filename.ends_with(".bammesh.json") ||
+		filename.ends_with(".bamanim.json") || filename.ends_with(".anim.json") ||
+		filename.ends_with(".bamskel.json") || filename.ends_with(".bamanimator.json") || filename.ends_with(".animator.json"));
+	const bool isMaterial = (ext == ".mat" || ext == ".bammat" || ext == ".bammatinst" || ext == ".materialinstance" ||
+		filename.ends_with(".bammat.json") || filename.ends_with(".bammatinst.json"));
+	const bool isShader = (ext == ".hlsl" || ext == ".hlsli" || ext == ".glsl" ||
+		ext == ".vert" || ext == ".frag" || ext == ".comp" || ext == ".cso" || ext == ".spv" ||
+		ext == ".bamshader" || filename.ends_with(".bamshader.json"));
+	const bool isData = (ext == ".csv" || ext == ".beve" || ext == ".ini" || ext == ".cfg" ||
+		ext == ".config" || ext == ".toml" || ext == ".yaml" || ext == ".yml" || ext == ".xml" ||
+		ext == ".bamscript" || ext == ".bamgraph" || ext == ".bamprefab" || ext == ".prefab" || ext == ".bamscene" ||
+		(ext == ".json" && !isTexture && !isModel && !isMaterial && !isShader));
+	if ((filterMask & (1 << 0)) && isTexture)  return true; // Texture / Sprite / SpriteAnim
+	if ((filterMask & (1 << 1)) && isModel)    return true; // Model / Mesh / Anim / Animator
+	if ((filterMask & (1 << 2)) && isMaterial) return true; // Material / MaterialInstance
+	if ((filterMask & (1 << 3)) && isShader)   return true; // Shader
+	if ((filterMask & (1 << 4)) && isData)     return true; // Data / Scene / Prefab / Script / Config
 	return false;
 }
 
@@ -775,7 +793,7 @@ void ContentBrowserPanel::OnExteranalDropped(const vector<string>& droppedFiles)
 			for (char& character : extension)
 				character = static_cast<char>(std::tolower(static_cast<unsigned char>(character)));
 
-			const bool isModel = extension == ".fbx" || extension == ".obj" || extension == ".gltf";
+			const bool isModel = extension == ".fbx" || extension == ".obj" || extension == ".gltf" || extension == ".glb";
 			if (isModel)
 			{
 				AssetManager::Get().ImportAsync(sourcePath, m_CurrentDirectory);

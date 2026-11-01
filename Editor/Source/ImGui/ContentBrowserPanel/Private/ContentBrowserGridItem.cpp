@@ -18,14 +18,252 @@
 
 namespace
 {
+	struct AssetVisualDesc
+	{
+		const char* Icon = ICON_FA_FILE;
+		ImVec4 BgColor = ImVec4(1.0f, 1.0f, 1.0f, 0.10f);
+		ImVec4 AccentColor = ImVec4(0.65f, 0.65f, 0.65f, 1.0f);
+		std::string BadgeText;
+		std::string CleanName;
+	};
+	std::string ToLowerAscii(std::string_view str)
+	{
+		std::string out;
+		out.reserve(str.size());
+		for (char c : str) out.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
+		return out;
+	}
+	bool StripMatchedSuffix(std::string_view rawFilename, std::string_view lowerFilename, std::string_view lowerSuffix, std::string& outCleanName)
+	{
+		if (lowerFilename.size() > lowerSuffix.size() && lowerFilename.ends_with(lowerSuffix))
+		{
+			outCleanName.assign(rawFilename.substr(0, rawFilename.size() - lowerSuffix.size()));
+			return true;
+		}
+		return false;
+	}
+
+	bool HasDirectorySegment(const std::filesystem::path& parentPath, std::string_view targetLower)
+	{
+		for (const auto& part : parentPath)
+		{
+			if (ToLowerAscii(part.string()) == targetLower) return true;
+		}
+		return false;
+	}
+	// 디스크 I/O 없이 파일명·복합 확장자·상위 폴더만으로 즉시 시각 정보를 결정합니다.
+	AssetVisualDesc DescribeAssetVisual(const std::filesystem::path& path, bool isDirectory)
+	{
+		AssetVisualDesc desc;
+		const std::string rawFilename = path.filename().string();
+		if (isDirectory)
+		{
+			desc.Icon = ICON_FA_FOLDER;
+			desc.BgColor = ImVec4(0.90f, 0.70f, 0.20f, 0.28f);
+			desc.AccentColor = ImVec4(0.95f, 0.78f, 0.25f, 1.0f);
+			desc.BadgeText = LOCAL("ContentBrowser.Folder");
+			desc.CleanName = rawFilename;
+			return desc;
+		}
+		const std::string lowerFilename = ToLowerAscii(rawFilename);
+		const std::filesystem::path parentPath = path.parent_path();
+		struct CompoundRule
+		{
+			std::string_view Suffix;
+			const char* Icon;
+			ImVec4 BgColor;
+			ImVec4 AccentColor;
+			const char* Badge;
+		};
+		// 긴 복합 확장자부터 우선 매칭합니다.
+		static constexpr CompoundRule kRules[] = {
+			// Scene
+			{ ".bamscene.json",      ICON_FA_CLAPPERBOARD,        ImVec4(0.95f, 0.55f, 0.15f, 0.35f), ImVec4(1.00f, 0.65f, 0.25f, 1.0f), "SCENE" },
+			{ ".scene.json",         ICON_FA_CLAPPERBOARD,        ImVec4(0.95f, 0.55f, 0.15f, 0.35f), ImVec4(1.00f, 0.65f, 0.25f, 1.0f), "SCENE" },
+			{ ".bamscene",           ICON_FA_CLAPPERBOARD,        ImVec4(0.95f, 0.55f, 0.15f, 0.35f), ImVec4(1.00f, 0.65f, 0.25f, 1.0f), "SCENE" },
+			// Prefab
+			{ ".bamprefab.json",     ICON_FA_CUBES,               ImVec4(0.20f, 0.75f, 0.95f, 0.35f), ImVec4(0.35f, 0.85f, 1.00f, 1.0f), "PREFAB" },
+			{ ".prefab.json",        ICON_FA_CUBES,               ImVec4(0.20f, 0.75f, 0.95f, 0.35f), ImVec4(0.35f, 0.85f, 1.00f, 1.0f), "PREFAB" },
+			{ ".bamprefab",          ICON_FA_CUBES,               ImVec4(0.20f, 0.75f, 0.95f, 0.35f), ImVec4(0.35f, 0.85f, 1.00f, 1.0f), "PREFAB" },
+			{ ".prefab",             ICON_FA_CUBES,               ImVec4(0.20f, 0.75f, 0.95f, 0.35f), ImVec4(0.35f, 0.85f, 1.00f, 1.0f), "PREFAB" },
+			// Material Instance & Material
+			{ ".bammatinst.json",    ICON_FA_CLONE,               ImVec4(0.90f, 0.45f, 0.30f, 0.38f), ImVec4(1.00f, 0.58f, 0.42f, 1.0f), "MAT INST" },
+			{ ".bammatinst",         ICON_FA_CLONE,               ImVec4(0.90f, 0.45f, 0.30f, 0.38f), ImVec4(1.00f, 0.58f, 0.42f, 1.0f), "MAT INST" },
+			{ ".materialinstance",   ICON_FA_CLONE,               ImVec4(0.90f, 0.45f, 0.30f, 0.38f), ImVec4(1.00f, 0.58f, 0.42f, 1.0f), "MAT INST" },
+			{ ".bammat.json",        ICON_FA_CIRCLE_HALF_STROKE,  ImVec4(0.90f, 0.25f, 0.30f, 0.38f), ImVec4(1.00f, 0.40f, 0.45f, 1.0f), "MAT" },
+			{ ".bammat",             ICON_FA_CIRCLE_HALF_STROKE,  ImVec4(0.90f, 0.25f, 0.30f, 0.38f), ImVec4(1.00f, 0.40f, 0.45f, 1.0f), "MAT" },
+			{ ".mat",                ICON_FA_CIRCLE_HALF_STROKE,  ImVec4(0.90f, 0.25f, 0.30f, 0.38f), ImVec4(1.00f, 0.40f, 0.45f, 1.0f), "MAT" },
+			// Mesh & Model
+			{ ".bammesh.json",       ICON_FA_DRAW_POLYGON,        ImVec4(0.30f, 0.55f, 0.95f, 0.38f), ImVec4(0.45f, 0.70f, 1.00f, 1.0f), "MESH" },
+			{ ".bammesh",            ICON_FA_DRAW_POLYGON,        ImVec4(0.30f, 0.55f, 0.95f, 0.38f), ImVec4(0.45f, 0.70f, 1.00f, 1.0f), "MESH" },
+			{ ".bammodel.json",      ICON_FA_CUBE,                ImVec4(0.20f, 0.40f, 0.90f, 0.38f), ImVec4(0.40f, 0.60f, 1.00f, 1.0f), "MODEL" },
+			{ ".bammodel",           ICON_FA_CUBE,                ImVec4(0.20f, 0.40f, 0.90f, 0.38f), ImVec4(0.40f, 0.60f, 1.00f, 1.0f), "MODEL" },
+			// Sprite Animation & Sprite
+			{ ".bamspriteanim.json", ICON_FA_FILM,                ImVec4(0.35f, 0.90f, 0.65f, 0.38f), ImVec4(0.45f, 1.00f, 0.75f, 1.0f), "SPRITE ANIM" },
+			{ ".spriteanim.json",    ICON_FA_FILM,                ImVec4(0.35f, 0.90f, 0.65f, 0.38f), ImVec4(0.45f, 1.00f, 0.75f, 1.0f), "SPRITE ANIM" },
+			{ ".bamspriteanim",      ICON_FA_FILM,                ImVec4(0.35f, 0.90f, 0.65f, 0.38f), ImVec4(0.45f, 1.00f, 0.75f, 1.0f), "SPRITE ANIM" },
+			{ ".spriteanim",         ICON_FA_FILM,                ImVec4(0.35f, 0.90f, 0.65f, 0.38f), ImVec4(0.45f, 1.00f, 0.75f, 1.0f), "SPRITE ANIM" },
+			{ ".bamsprite.json",     ICON_FA_IMAGES,              ImVec4(0.30f, 0.85f, 0.50f, 0.38f), ImVec4(0.45f, 0.95f, 0.65f, 1.0f), "SPRITE" },
+			{ ".bamsprite",          ICON_FA_IMAGES,              ImVec4(0.30f, 0.85f, 0.50f, 0.38f), ImVec4(0.45f, 0.95f, 0.65f, 1.0f), "SPRITE" },
+			// Texture
+			{ ".bamtex.json",        ICON_FA_IMAGE,               ImVec4(0.20f, 0.80f, 0.35f, 0.38f), ImVec4(0.35f, 0.92f, 0.50f, 1.0f), "TEX" },
+			{ ".bamtex",             ICON_FA_IMAGE,               ImVec4(0.20f, 0.80f, 0.35f, 0.38f), ImVec4(0.35f, 0.92f, 0.50f, 1.0f), "TEX" },
+			// Animator / Animation / Skeleton
+			{ ".bamanimator.json",   ICON_FA_DIAGRAM_PROJECT,     ImVec4(0.85f, 0.35f, 0.75f, 0.38f), ImVec4(0.95f, 0.50f, 0.85f, 1.0f), "ANIMATOR" },
+			{ ".animator.json",      ICON_FA_DIAGRAM_PROJECT,     ImVec4(0.85f, 0.35f, 0.75f, 0.38f), ImVec4(0.95f, 0.50f, 0.85f, 1.0f), "ANIMATOR" },
+			{ ".bamanimator",        ICON_FA_DIAGRAM_PROJECT,     ImVec4(0.85f, 0.35f, 0.75f, 0.38f), ImVec4(0.95f, 0.50f, 0.85f, 1.0f), "ANIMATOR" },
+			{ ".animator",           ICON_FA_DIAGRAM_PROJECT,     ImVec4(0.85f, 0.35f, 0.75f, 0.38f), ImVec4(0.95f, 0.50f, 0.85f, 1.0f), "ANIMATOR" },
+			{ ".bamanim.json",       ICON_FA_PERSON_RUNNING,      ImVec4(0.95f, 0.35f, 0.65f, 0.38f), ImVec4(1.00f, 0.50f, 0.78f, 1.0f), "ANIM" },
+			{ ".anim.json",          ICON_FA_PERSON_RUNNING,      ImVec4(0.95f, 0.35f, 0.65f, 0.38f), ImVec4(1.00f, 0.50f, 0.78f, 1.0f), "ANIM" },
+			{ ".bamanim",            ICON_FA_PERSON_RUNNING,      ImVec4(0.95f, 0.35f, 0.65f, 0.38f), ImVec4(1.00f, 0.50f, 0.78f, 1.0f), "ANIM" },
+			{ ".anim",               ICON_FA_PERSON_RUNNING,      ImVec4(0.95f, 0.35f, 0.65f, 0.38f), ImVec4(1.00f, 0.50f, 0.78f, 1.0f), "ANIM" },
+			{ ".bamskel.json",       ICON_FA_BONE,                ImVec4(0.80f, 0.75f, 0.60f, 0.38f), ImVec4(0.92f, 0.88f, 0.72f, 1.0f), "SKEL" },
+			{ ".bamskel",            ICON_FA_BONE,                ImVec4(0.80f, 0.75f, 0.60f, 0.38f), ImVec4(0.92f, 0.88f, 0.72f, 1.0f), "SKEL" },
+			// Script
+			{ ".bamscript.json",     ICON_FA_SCROLL,              ImVec4(0.20f, 0.75f, 0.65f, 0.38f), ImVec4(0.35f, 0.95f, 0.82f, 1.0f), "SCRIPT" },
+			{ ".script.json",        ICON_FA_SCROLL,              ImVec4(0.20f, 0.75f, 0.65f, 0.38f), ImVec4(0.35f, 0.95f, 0.82f, 1.0f), "SCRIPT" },
+			{ ".bamscript",          ICON_FA_SCROLL,              ImVec4(0.20f, 0.75f, 0.65f, 0.38f), ImVec4(0.35f, 0.95f, 0.82f, 1.0f), "SCRIPT" },
+			// Node Graph & PostProcess & Config
+			{ ".bamgraph.json",      ICON_FA_CIRCLE_NODES,        ImVec4(0.45f, 0.40f, 0.90f, 0.38f), ImVec4(0.60f, 0.55f, 1.00f, 1.0f), "GRAPH" },
+			{ ".graph.json",         ICON_FA_CIRCLE_NODES,        ImVec4(0.45f, 0.40f, 0.90f, 0.38f), ImVec4(0.60f, 0.55f, 1.00f, 1.0f), "GRAPH" },
+			{ ".bamgraph",           ICON_FA_CIRCLE_NODES,        ImVec4(0.45f, 0.40f, 0.90f, 0.38f), ImVec4(0.60f, 0.55f, 1.00f, 1.0f), "GRAPH" },
+			{ ".bampostfx.json",     ICON_FA_WAND_MAGIC_SPARKLES, ImVec4(0.60f, 0.40f, 0.85f, 0.38f), ImVec4(0.75f, 0.55f, 0.98f, 1.0f), "POST FX" },
+			{ ".postfx.json",        ICON_FA_WAND_MAGIC_SPARKLES, ImVec4(0.60f, 0.40f, 0.85f, 0.38f), ImVec4(0.75f, 0.55f, 0.98f, 1.0f), "POST FX" },
+			{ ".bamconfig.json",     ICON_FA_GEARS,               ImVec4(0.45f, 0.60f, 0.75f, 0.38f), ImVec4(0.65f, 0.80f, 0.95f, 1.0f), "CONFIG" },
+			{ ".config.json",        ICON_FA_GEARS,               ImVec4(0.45f, 0.60f, 0.75f, 0.38f), ImVec4(0.65f, 0.80f, 0.95f, 1.0f), "CONFIG" },
+			{ ".cfg.json",           ICON_FA_GEARS,               ImVec4(0.45f, 0.60f, 0.75f, 0.38f), ImVec4(0.65f, 0.80f, 0.95f, 1.0f), "CONFIG" },
+			// Shader Binary & Metadata
+			{ ".bamshader.json",     ICON_FA_CODE,                ImVec4(0.70f, 0.30f, 0.90f, 0.40f), ImVec4(0.82f, 0.48f, 1.00f, 1.0f), "SHADER" },
+			{ ".bamshader",          ICON_FA_CODE,                ImVec4(0.70f, 0.30f, 0.90f, 0.40f), ImVec4(0.82f, 0.48f, 1.00f, 1.0f), "SHADER" },
+		};
+		for (const auto& rule : kRules)
+		{
+			if (StripMatchedSuffix(rawFilename, lowerFilename, rule.Suffix, desc.CleanName))
+			{
+				desc.Icon = rule.Icon;
+				desc.BgColor = rule.BgColor;
+				desc.AccentColor = rule.AccentColor;
+				desc.BadgeText = rule.Badge;
+				return desc;
+			}
+		}
+		// 단일 확장자 분류
+		std::string ext = ToLowerAscii(path.extension().string());
+		desc.CleanName = path.stem().string();
+		if (!ext.empty() && ext[0] == '.')
+		{
+			desc.BadgeText = ext.substr(1);
+			for (char& c : desc.BadgeText) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+		}
+		if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga" || ext == ".bmp" || ext == ".dds" || ext == ".hdr")
+		{
+			desc.Icon = ICON_FA_IMAGE;
+			desc.BgColor = ImVec4(0.20f, 0.80f, 0.35f, 0.38f);
+			desc.AccentColor = ImVec4(0.35f, 0.92f, 0.50f, 1.0f);
+		}
+		else if (ext == ".fbx" || ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".blend")
+		{
+			desc.Icon = ICON_FA_CUBE;
+			desc.BgColor = ImVec4(0.20f, 0.40f, 0.90f, 0.38f);
+			desc.AccentColor = ImVec4(0.40f, 0.60f, 1.00f, 1.0f);
+		}
+		else if (ext == ".hlsl" || ext == ".glsl" || ext == ".vert" || ext == ".frag" || ext == ".comp" || ext == ".cso" || ext == ".spv")
+		{
+			desc.Icon = ICON_FA_CODE;
+			desc.BgColor = ImVec4(0.70f, 0.30f, 0.90f, 0.40f);
+			desc.AccentColor = ImVec4(0.82f, 0.48f, 1.00f, 1.0f);
+		}
+		else if (ext == ".hlsli")
+		{
+			desc.Icon = ICON_FA_FILE_CODE;
+			desc.BgColor = ImVec4(0.25f, 0.60f, 0.85f, 0.40f);
+			desc.AccentColor = ImVec4(0.40f, 0.75f, 0.98f, 1.0f);
+		}
+		else if (ext == ".lua" || ext == ".cs" || ext == ".py" || ext == ".cpp" || ext == ".hpp" || ext == ".c" || ext == ".h")
+		{
+			desc.Icon = ICON_FA_SCROLL;
+			desc.BgColor = ImVec4(0.20f, 0.75f, 0.65f, 0.38f);
+			desc.AccentColor = ImVec4(0.35f, 0.95f, 0.82f, 1.0f);
+			desc.BadgeText = "SCRIPT";
+		}
+		else if (ext == ".ini" || ext == ".cfg" || ext == ".config" || ext == ".toml" || ext == ".yaml" || ext == ".yml" || ext == ".xml")
+		{
+			desc.Icon = ICON_FA_GEARS;
+			desc.BgColor = ImVec4(0.45f, 0.60f, 0.75f, 0.38f);
+			desc.AccentColor = ImVec4(0.65f, 0.80f, 0.95f, 1.0f);
+			desc.BadgeText = "CONFIG";
+		}
+		else if (ext == ".wav" || ext == ".mp3" || ext == ".ogg" || ext == ".flac")
+		{
+			desc.Icon = ICON_FA_VOLUME_HIGH;
+			desc.BgColor = ImVec4(0.95f, 0.75f, 0.20f, 0.38f);
+			desc.AccentColor = ImVec4(1.00f, 0.85f, 0.35f, 1.0f);
+		}
+		else if (ext == ".json")
+		{
+			// 폴더 문맥 기반 분류 (디스크 I/O 없이 기존 단일 .json 에셋을 정확히 식별)
+			if (HasDirectorySegment(parentPath, "scenes"))
+			{
+				desc.Icon = ICON_FA_CLAPPERBOARD;
+				desc.BgColor = ImVec4(0.95f, 0.55f, 0.15f, 0.35f);
+				desc.AccentColor = ImVec4(1.00f, 0.65f, 0.25f, 1.0f);
+				desc.BadgeText = "SCENE";
+			}
+			else if (HasDirectorySegment(parentPath, "prefabs"))
+			{
+				desc.Icon = ICON_FA_CUBES;
+				desc.BgColor = ImVec4(0.20f, 0.75f, 0.95f, 0.35f);
+				desc.AccentColor = ImVec4(0.35f, 0.85f, 1.00f, 1.0f);
+				desc.BadgeText = "PREFAB";
+			}
+			else if (HasDirectorySegment(parentPath, "scripts") || HasDirectorySegment(parentPath, "script"))
+			{
+				desc.Icon = ICON_FA_SCROLL;
+				desc.BgColor = ImVec4(0.20f, 0.75f, 0.65f, 0.38f);
+				desc.AccentColor = ImVec4(0.35f, 0.95f, 0.82f, 1.0f);
+				desc.BadgeText = "SCRIPT";
+			}
+			else if (HasDirectorySegment(parentPath, "postprocess") || HasDirectorySegment(parentPath, "presets"))
+			{
+				desc.Icon = ICON_FA_WAND_MAGIC_SPARKLES;
+				desc.BgColor = ImVec4(0.60f, 0.40f, 0.85f, 0.38f);
+				desc.AccentColor = ImVec4(0.75f, 0.55f, 0.98f, 1.0f);
+				desc.BadgeText = "POST FX";
+			}
+			else if (HasDirectorySegment(parentPath, "config") || HasDirectorySegment(parentPath, "startup"))
+			{
+				desc.Icon = ICON_FA_GEARS;
+				desc.BgColor = ImVec4(0.45f, 0.60f, 0.75f, 0.38f);
+				desc.AccentColor = ImVec4(0.65f, 0.80f, 0.95f, 1.0f);
+				desc.BadgeText = "CONFIG";
+			}
+			else if (HasDirectorySegment(parentPath, "animation") || HasDirectorySegment(parentPath, "animations"))
+			{
+				desc.Icon = ICON_FA_PERSON_RUNNING;
+				desc.BgColor = ImVec4(0.95f, 0.35f, 0.65f, 0.38f);
+				desc.AccentColor = ImVec4(1.00f, 0.50f, 0.78f, 1.0f);
+				desc.BadgeText = "ANIM";
+			}
+			else
+			{
+				desc.Icon = ICON_FA_FILE_LINES;
+				desc.BgColor = ImVec4(0.55f, 0.55f, 0.55f, 0.35f);
+				desc.AccentColor = ImVec4(0.75f, 0.75f, 0.75f, 1.0f);
+			}
+		}
+		else if (ext == ".csv" || ext == ".beve")
+		{
+			desc.Icon = ICON_FA_FILE_LINES;
+			desc.BgColor = ImVec4(0.55f, 0.55f, 0.55f, 0.35f);
+			desc.AccentColor = ImVec4(0.75f, 0.75f, 0.75f, 1.0f);
+		}
+		return desc;
+	}
 	Engine::EResourceType PeekResourceType(const std::filesystem::path& path)
 	{
-		std::string ext = path.extension().string();
-		for (char& c : ext) c = static_cast<char>(tolower(c));
-
+		std::string ext = ToLowerAscii(path.extension().string());
 		Engine::ResourceBinaryHeader header;
 		archive::ArchiveResult res;
-
 		if (ext == ".json")
 		{
 			archive::JsonArchive ar;
@@ -42,55 +280,53 @@ namespace
 				return fields.Read("ResourceType", h.ResourceType);
 				});
 		}
-
 		return res ? header.ResourceType : Engine::EResourceType::Unknown;
 	}
-
 	bool IsSceneFile(const std::filesystem::path& path)
 	{
-		std::string ext = path.extension().string();
-		for (char& c : ext) c = static_cast<char>(tolower(c));
+		std::string ext = ToLowerAscii(path.extension().string());
 		if (ext != ".json") return false;
-
-		std::string stem = path.stem().string();
-		for (char& c : stem) c = static_cast<char>(tolower(c));
+		std::string stem = ToLowerAscii(path.stem().string());
 		if (stem.ends_with(".scene") || stem.ends_with(".bamscene")) return true;
-
+		// 다른 복합 에셋 확장자(.bammat.json 등)인 경우 불필요한 JSON 파싱 없이 즉시 제외
+		if (stem.find(".bam") != std::string::npos || stem.ends_with(".prefab") ||
+			stem.ends_with(".spriteanim") || stem.ends_with(".animator") ||
+			stem.ends_with(".graph") || stem.ends_with(".postfx"))
+		{
+			return false;
+		}
 		// 일반 .json 파일인 경우 루트의 "Scene" 키 존재 여부 확인
 		archive::JsonArchive ar;
 		if (!ar.LoadFromFile(path)) return false;
-
 		bool hasScene = false;
 		return ar.HasField("Scene", hasScene) && hasScene;
 	}
-
 	bool IsPrefabFile(const std::filesystem::path& path)
 	{
-		std::string ext = path.extension().string();
-		for (char& c : ext) c = static_cast<char>(tolower(c));
+		std::string ext = ToLowerAscii(path.extension().string());
 		if (ext == ".bamprefab" || ext == ".prefab") return true;
 		if (ext != ".json") return false;
-
-		std::string filename = path.filename().string();
-		for (char& c : filename) c = static_cast<char>(tolower(c));
+		std::string filename = ToLowerAscii(path.filename().string());
 		if (filename.ends_with(".bamprefab.json") || filename.ends_with(".prefab.json")) return true;
-
+		std::string stem = ToLowerAscii(path.stem().string());
+		if (stem.find(".bam") != std::string::npos || stem.ends_with(".scene") ||
+			stem.ends_with(".spriteanim") || stem.ends_with(".animator") ||
+			stem.ends_with(".graph") || stem.ends_with(".postfx"))
+		{
+			return false;
+		}
 		archive::JsonArchive ar;
 		if (!ar.LoadFromFile(path)) return false;
-
 		bool hasPrefab = false;
 		return ar.HasField("Prefab", hasPrefab) && hasPrefab;
 	}
-
 	bool InstantiatePrefabFromFile(const std::filesystem::path& path, Engine::Entity* parent = nullptr)
 	{
 		if (!Engine::SceneManager::IsCreated()) return false;
 		auto* currentScene = Engine::SceneManager::Get().GetCurrentScene();
 		if (!currentScene) return false;
-
 		auto& history = Application::Get().GetEditHistory();
 		auto before = history.Enabled() ? SceneEditSnapshot::Capture(*currentScene) : SceneEditSnapshot{};
-
 		archive::JsonArchive ar;
 		Engine::Entity* spawnedEntity = nullptr;
 		const Engine::EResult result = Engine::SceneManager::Get().InstantiatePrefab(ar, path.wstring(), spawnedEntity, parent);
@@ -107,12 +343,10 @@ namespace
 			return false;
 		}
 	}
-
 	bool OpenSceneFromFile(const std::filesystem::path& path)
 	{
 		return Editor::ImGuiManager::Get().RequestOpenScene(path);
 	}
-
 	const char* GetBinaryExtension(Engine::EResourceType type)
 	{
 		using namespace Engine;
@@ -130,7 +364,6 @@ namespace
 		default:                              return ".beve";
 		}
 	}
-
 	void OpenAssetOrFolder(const std::filesystem::path& path, bool isDirectory, std::filesystem::path& currentDirectory, char* searchBuffer)
 	{
 		if (isDirectory)
@@ -175,7 +408,6 @@ namespace
 		}
 	}
 }
-
 bool ContentBrowserGridItem::Draw(const std::filesystem::directory_entry& directoryEntry,
 	const std::filesystem::path& rootPath, ImTextureID thumbnailTexID, f32 thumbnailSize, f32 padding,
 	std::filesystem::path& outRenamingPath, char* renameBuffer, size_t renameBufferSize,
@@ -185,19 +417,15 @@ bool ContentBrowserGridItem::Draw(const std::filesystem::directory_entry& direct
 	const auto& path = directoryEntry.path();
 	auto relativePath = path.lexically_relative(rootPath);
 	std::filesystem::path payloadPath = rootPath.filename() / relativePath;
-
 	ImGui::PushID(path.string().c_str());
-
 	Thumbnail(directoryEntry, thumbnailTexID, filledSize, padding);
 	const bool thumbnailActive = ImGui::IsItemActive();
-
 	ToolTip(directoryEntry);
 	ContextMenu(path, outRenamingPath, renameBuffer, renameBufferSize, currentDirectory, searchBuffer);
 	const bool contextMenuOpen = ImGui::IsPopupOpen("##AssetContextMenu");
 	const bool dragging = DragAndDropTarget(payloadPath);
 	if (ImGui::IsItemHovered() && MOUSE_BUTTON_DOUBLE_CLICK(EMouseButton::Left))
 		OpenAssetOrFolder(path, directoryEntry.is_directory(), currentDirectory, searchBuffer);
-
 	if (outRenamingPath == path)
 	{
 		DrawRename(path, filledSize, outRenamingPath, renameBuffer, renameBufferSize, currentDirectory);
@@ -206,86 +434,36 @@ bool ContentBrowserGridItem::Draw(const std::filesystem::directory_entry& direct
 	{
 		DrawNameBox(directoryEntry, rootPath, filledSize, currentDirectory, searchBuffer);
 	}
-
 	ImGui::PopID();
 	return thumbnailActive || contextMenuOpen || dragging;
 }
-
 void ContentBrowserGridItem::Thumbnail(const std::filesystem::directory_entry& directoryEntry, ImTextureID thumbnailTexID, f32 thumbnailSize, f32 padding)
 {
-	std::string icon = ICON_FA_FILE;
-	ImVec4 typeColor = ImVec4(1.0f, 1.0f, 1.0f, 0.1f);
-
-	if (directoryEntry.is_directory())
+	const AssetVisualDesc visual = DescribeAssetVisual(directoryEntry.path(), directoryEntry.is_directory());
+	ImVec2 cursorPos = ImGui::GetCursorScreenPos();
+	ImDrawList* drawList = ImGui::GetWindowDrawList();
+	if (!thumbnailTexID)
 	{
-		icon = ICON_FA_FOLDER;
-		typeColor = ImVec4(0.9f, 0.7f, 0.2f, 0.3f);
+		// 썸네일이 없을 때: 상단 모서리가 둥근 타입별 틴트 배경 + 밝은 타입 포인트 컬러 아이콘 렌더링
+		drawList->AddRectFilled(cursorPos, ImVec2(cursorPos.x + thumbnailSize, cursorPos.y + thumbnailSize),
+			ImGui::GetColorU32(visual.BgColor), 4.0f, ImDrawFlags_RoundCornersTop);
+		ImFont* font = ImGui::GetFont();
+		float iconFontSize = thumbnailSize * 0.52f;
+		ImVec2 iconSize = font->CalcTextSizeA(iconFontSize, FLT_MAX, 0.0f, visual.Icon);
+		ImVec2 iconPos = ImVec2(cursorPos.x + (thumbnailSize - iconSize.x) * 0.5f, cursorPos.y + (thumbnailSize - iconSize.y) * 0.5f);
+		drawList->AddText(font, iconFontSize, iconPos, ImGui::GetColorU32(visual.AccentColor), visual.Icon);
 	}
 	else
 	{
-		std::string ext = directoryEntry.path().extension().string();
-		for (auto& c : ext) c = tolower(c);
-
-		if (IsPrefabFile(directoryEntry.path()))
-		{
-			icon = ICON_FA_CUBES;
-			typeColor = ImVec4(0.2f, 0.7f, 0.9f, 0.35f);
-		}
-		else if (ext == ".png" || ext == ".jpg" || ext == ".tga")
-		{
-			icon = ICON_FA_IMAGE;
-			typeColor = ImVec4(0.2f, 0.8f, 0.2f, 0.4f);
-		}
-		else if (ext == ".fbx" || ext == ".obj")
-		{
-			icon = ICON_FA_CUBE;
-			typeColor = ImVec4(0.2f, 0.4f, 0.9f, 0.4f);
-		}
-		else if (ext == ".mat")
-		{
-			icon = ICON_FA_CIRCLE;
-			typeColor = ImVec4(0.9f, 0.3f, 0.3f, 0.4f);
-		}
-		else if (ext == ".hlsl" || ext == ".glsl")
-		{
-			icon = ICON_FA_CODE;
-			typeColor = ImVec4(0.7f, 0.3f, 0.9f, 0.4f); // 쉐이더 본체: 퍼플
-		}
-		else if (ext == ".hlsli")
-		{
-			icon = ICON_FA_FILE_CODE;
-			typeColor = ImVec4(0.25f, 0.6f, 0.85f, 0.4f); // 인클루드 헤더: 스카이블루
-		}
-		else if (ext == ".csv" || ext == ".json")
-		{
-			icon = ICON_FA_FILE_LINES;
-			typeColor = ImVec4(0.6f, 0.6f, 0.6f, 0.4f);
-		}
+		// 썸네일 이미지가 있는 경우에도 배경 틴트를 은은하게 깔아 투명 텍스처/스프라이트 가독성을 높입니다.
+		drawList->AddRectFilled(cursorPos, ImVec2(cursorPos.x + thumbnailSize, cursorPos.y + thumbnailSize),
+			ImGui::GetColorU32(ImVec4(visual.BgColor.x, visual.BgColor.y, visual.BgColor.z, 0.18f)), 4.0f, ImDrawFlags_RoundCornersTop);
 	}
-
-	ImVec2 cursorPos = ImGui::GetCursorScreenPos();
-	ImDrawList* drawList = ImGui::GetWindowDrawList();
-
-	if (!thumbnailTexID)
-	{
-		// 썸네일이 없을 때 렌더링하는 배경의 경우, 네임박스와 자연스럽게 이어지도록 상단 모서리만 둥글게 처리합니다.
-		drawList->AddRectFilled(cursorPos, ImVec2(cursorPos.x + thumbnailSize, cursorPos.y + thumbnailSize), ImGui::GetColorU32(typeColor), 4.0f, ImDrawFlags_RoundCornersTop);
-		ImFont* font = ImGui::GetFont();
-		float iconFontSize = thumbnailSize * 0.85f;
-		ImVec2 iconSize = font->CalcTextSizeA(iconFontSize, FLT_MAX, 0.0f, icon.c_str());
-		ImVec2 iconPos = ImVec2(cursorPos.x + (thumbnailSize - iconSize.x) * 0.5f, cursorPos.y + (thumbnailSize - iconSize.y) * 0.5f);
-		drawList->AddText(font, iconFontSize, iconPos, ImGui::GetColorU32(ImGuiCol_Text), icon.c_str());
-	}
-
 	ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
 	ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(1.0f, 1.0f, 1.0f, 0.1f));
 	ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(1.0f, 1.0f, 1.0f, 0.2f));
-
-	// ImageButton과 일반 Button의 패딩 차이로 인한 크기 불일치 해결
 	ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
-
 	std::string buttonId = "##Btn_" + directoryEntry.path().filename().string();
-
 	if (thumbnailTexID)
 	{
 		ImGui::ImageButton(buttonId.c_str(), thumbnailTexID, { thumbnailSize, thumbnailSize });
@@ -294,11 +472,14 @@ void ContentBrowserGridItem::Thumbnail(const std::filesystem::directory_entry& d
 	{
 		ImGui::Button(buttonId.c_str(), { thumbnailSize, thumbnailSize });
 	}
-
+	// 썸네일 하단 2px 타입 액센트 스트립 (썸네일 유무와 무관하게 리소스 종류를 한눈에 식별)
+	drawList->AddRectFilled(
+		ImVec2(cursorPos.x, cursorPos.y + thumbnailSize - 2.0f),
+		ImVec2(cursorPos.x + thumbnailSize, cursorPos.y + thumbnailSize),
+		ImGui::GetColorU32(visual.AccentColor));
 	ImGui::PopStyleVar();
 	ImGui::PopStyleColor(3);
 }
-
 void ContentBrowserGridItem::ContextMenu(const std::filesystem::path& path,
 	std::filesystem::path& outRenamingPath, char* renameBuffer, size_t renameBufferSize,
 	std::filesystem::path& currentDirectory, char* searchBuffer)
@@ -310,7 +491,7 @@ void ContentBrowserGridItem::ContextMenu(const std::filesystem::path& path,
 		// 1. 최상단 [열기]: 더블클릭과 동일한 공통 동작
 		if (ImGui::MenuItem((ICON_FA_FOLDER_OPEN " " + LOCAL_LABEL("EditorCommon.Open")).c_str()))
 			OpenAssetOrFolder(path, isDir, currentDirectory, searchBuffer);
-		// 2. 파일인 경우: [외부 프로그램으로 열기] (내부 에디터가 있는 파일도 원본 파일로 열어볼 수 있도록 지원)
+		// 2. 파일인 경우: [외부 프로그램으로 열기]
 		if (!isDir)
 		{
 			if (ImGui::MenuItem((ICON_FA_ARROW_UP_RIGHT_FROM_SQUARE " " + LOCAL_LABEL("EditorCommon.OpenWithDefaultProgram")).c_str()))
@@ -319,7 +500,7 @@ void ContentBrowserGridItem::ContextMenu(const std::filesystem::path& path,
 				ShellExecuteW(nullptr, L"open", absPath.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
 			}
 		}
-		// 3. [탐색기에서 표시]: 유니코드 및 공백 경로 완벽 대응
+		// 3. [탐색기에서 표시]: 유니코드 및 공백 경로 대응
 		if (ImGui::MenuItem((ICON_FA_FOLDER_CLOSED " " + LOCAL_LABEL("EditorCommon.ShowInExplorer")).c_str()))
 		{
 			const std::wstring absPath = std::filesystem::absolute(path).wstring();
@@ -342,27 +523,7 @@ void ContentBrowserGridItem::ContextMenu(const std::filesystem::path& path,
 		}
 		if (ImGui::MenuItem((ICON_FA_COPY " " + LOCAL_LABEL("EditorCommon.CopyPath")).c_str(), "Ctrl+C"))
 			ImGui::SetClipboardText(path.string().c_str());
-
-		if (ImGui::MenuItem((ICON_FA_FOLDER_OPEN " " + LOCAL_LABEL("EditorCommon.ShowInExplorer")).c_str()))
-		{
-			if (std::filesystem::is_directory(path))
-				ShellExecuteA(NULL, "open", path.string().c_str(), NULL, NULL, SW_SHOWNORMAL);
-			else
-			{
-				std::string param = "/select,\"" + path.string() + "\"";
-				ShellExecuteA(NULL, "open", "explorer.exe", param.c_str(), NULL, SW_SHOWNORMAL);
-			}
-		}
-
-		if (!std::filesystem::is_directory(path))
-		{
-			if (ImGui::MenuItem((ICON_FA_ARROW_UP_RIGHT_FROM_SQUARE " " + LOCAL_LABEL("EditorCommon.OpenWithDefaultProgram")).c_str()))
-			{
-				ShellExecuteW(nullptr, L"open", path.wstring().c_str(), nullptr, nullptr, SW_SHOWNORMAL);
-			}
-		}
-
-		if (!std::filesystem::is_directory(path) && IsPrefabFile(path))
+		if (!isDir && IsPrefabFile(path))
 		{
 			ImGui::Separator();
 			if (ImGui::MenuItem((ICON_FA_PEN " " + LOCAL_LABEL("ContentBrowser.EditPrefab")).c_str()))
@@ -374,24 +535,24 @@ void ContentBrowserGridItem::ContextMenu(const std::filesystem::path& path,
 				InstantiatePrefabFromFile(path);
 			}
 		}
-
-		if (!std::filesystem::is_directory(path))
+		if (!isDir)
 		{
-			std::string filename = path.filename().string();
-			for (auto& c : filename) c = static_cast<char>(tolower(c));
-
+			std::string filename = ToLowerAscii(path.filename().string());
 			Engine::EResourceType peekedType = Engine::EResourceType::Unknown;
 			if (filename.ends_with(".json") || filename.ends_with(".beve"))
 				peekedType = PeekResourceType(path);
-			if (filename.ends_with(".bammat") || filename.ends_with(".bammatinst") ||
+			if (filename.ends_with(".bammat") || filename.ends_with(".bammat.json") ||
+				filename.ends_with(".bammatinst") || filename.ends_with(".bammatinst.json") ||
 				peekedType == Engine::EResourceType::Material ||
 				peekedType == Engine::EResourceType::MaterialInstance)
 			{
 				ContextMenu_Material(path);
 			}
 			else if (filename.ends_with(".fbx") || filename.ends_with(".obj") ||
-				filename.ends_with(".gltf") || filename.ends_with(".bammesh") ||
-				peekedType == Engine::EResourceType::Mesh)
+				filename.ends_with(".gltf") || filename.ends_with(".glb") ||
+				filename.ends_with(".bammesh") || filename.ends_with(".bammesh.json") ||
+				filename.ends_with(".bammodel") || filename.ends_with(".bammodel.json") ||
+				peekedType == Engine::EResourceType::Mesh || peekedType == Engine::EResourceType::Model)
 			{
 				ContextMenu_Model(path);
 			}
@@ -406,8 +567,7 @@ void ContentBrowserGridItem::ContextMenu(const std::filesystem::path& path,
 				ContextMenu_Shader(path);
 			}
 		}
-
-		if (!std::filesystem::is_directory(path) && IsSceneFile(path))
+		if (!isDir && IsSceneFile(path))
 		{
 			ImGui::Separator();
 			if (ImGui::MenuItem((ICON_FA_FOLDER_OPEN " " + LOCAL_LABEL("UI_LOAD_SCENE")).c_str()))
@@ -415,14 +575,15 @@ void ContentBrowserGridItem::ContextMenu(const std::filesystem::path& path,
 				OpenSceneFromFile(path);
 			}
 		}
-
-		// JSON <-> Binary 변환 메뉴
-		if (!std::filesystem::is_directory(path))
+		// JSON <-> Binary 변환 메뉴 (Scene / Prefab / Graph 등 비-Resource 직렬화 포맷은 제외)
+		if (!isDir)
 		{
-			std::string filename = path.filename().string();
-			for (auto& c : filename) c = static_cast<char>(tolower(c));
-
-			if (filename.ends_with(".json"))
+			std::string filename = ToLowerAscii(path.filename().string());
+			const bool isConvertibleJson = filename.ends_with(".bammat.json") || filename.ends_with(".bammatinst.json") ||
+				filename.ends_with(".bammesh.json") || filename.ends_with(".bammodel.json") ||
+				filename.ends_with(".bamsprite.json") || filename.ends_with(".bamanim.json") ||
+				filename.ends_with(".bamskel.json") || filename.ends_with(".bamtex.json");
+			if (isConvertibleJson || (filename.ends_with(".json") && PeekResourceType(path) != Engine::EResourceType::Unknown))
 			{
 				ImGui::Separator();
 				if (ImGui::MenuItem((ICON_FA_FILE_EXPORT " " + LOCAL_LABEL("ContentBrowser.BakeToBinary")).c_str()))
@@ -430,7 +591,8 @@ void ContentBrowserGridItem::ContextMenu(const std::filesystem::path& path,
 					ConvertJsonToBinary(path);
 				}
 			}
-			else if (filename.find(".bam") != std::string::npos || filename.ends_with(".beve"))
+			else if ((filename.find(".bam") != std::string::npos && !filename.ends_with(".json") && !filename.ends_with(".bamprefab")) ||
+				filename.ends_with(".beve"))
 			{
 				ImGui::Separator();
 				if (ImGui::MenuItem((ICON_FA_FILE_CODE " " + LOCAL_LABEL("ContentBrowser.ExportToJson")).c_str()))
@@ -439,51 +601,42 @@ void ContentBrowserGridItem::ContextMenu(const std::filesystem::path& path,
 				}
 			}
 		}
-
 		ImGui::Separator();
-
 		if (ImGui::MenuItem((ICON_FA_TRASH " " + LOCAL_LABEL("EditorCommon.Delete")).c_str()))
 		{
 			std::error_code ec;
-			if (std::filesystem::is_directory(path))
+			if (isDir)
 				std::filesystem::remove_all(path, ec);
 			else
 				std::filesystem::remove(path, ec);
-
 			if (ec) EDITOR_LOG_ERROR("Failed to delete asset {}: {}", path.string(), ec.message());
 			else EDITOR_LOG_INFO("Deleted asset: {}", path.string());
 		}
-
 		ImGui::EndPopup();
 	}
-
 	if (ImGui::IsItemHovered() && KEY_DOWN(EKeyCode::F2))
 	{
 		outRenamingPath = path;
 		strncpy(renameBuffer, filenameString.c_str(), renameBufferSize);
 	}
 }
-
 void ContentBrowserGridItem::ToolTip(const std::filesystem::directory_entry& directoryEntry)
 {
 	if (ImGui::IsItemHovered())
 	{
 		std::filesystem::path path = directoryEntry.path();
 		std::string filenameString = path.filename().string();
+		const AssetVisualDesc visual = DescribeAssetVisual(path, directoryEntry.is_directory());
 		ImGui::BeginTooltip();
 		ImGui::TextUnformatted(filenameString.c_str());
 		ImGui::Separator();
-
 		if (directoryEntry.is_directory())
 		{
 			ImGui::Text("%s", LOCAL_CSTR("ContentBrowser.FolderType"));
 		}
 		else
 		{
-			std::string ext = path.extension().string();
-			for (auto& c : ext) c = tolower(c);
-			ImGui::Text("%s", LOCAL_FMT("ContentBrowser.FileType", ext.c_str()).c_str());
-
+			ImGui::TextColored(visual.AccentColor, "%s %s", visual.Icon, visual.BadgeText.c_str());
 			try
 			{
 				uintmax_t fileSize = std::filesystem::file_size(path);
@@ -499,29 +652,21 @@ void ContentBrowserGridItem::ToolTip(const std::filesystem::directory_entry& dir
 		ImGui::EndTooltip();
 	}
 }
-
 bool ContentBrowserGridItem::DragAndDropTarget(const std::filesystem::path& relativePath)
 {
 	if (!ImGui::BeginDragDropSource())
 		return false;
-
 	std::wstring wPath = Engine::NormalizePath(relativePath.wstring());
-
 	ImGui::SetDragDropPayload("CONTENT_BROWSER_ITEM", wPath.c_str(), (wPath.length() + 1) * sizeof(wchar_t));
-
 	ImGui::Text("%s", relativePath.filename().string().c_str());
 	ImGui::EndDragDropSource();
 	return true;
 }
-
 void ContentBrowserGridItem::DrawRename(const std::filesystem::path& path, f32 thumbnailSize, std::filesystem::path& outRenamingPath, char* renameBuffer, size_t renameBufferSize, std::filesystem::path& currentDirectory)
 {
-	// 이름 변경 텍스트 박스도 썸네일과 딱 붙도록 Y축 여백 제거
 	ImGui::SetCursorPosY(ImGui::GetCursorPosY() - ImGui::GetStyle().ItemSpacing.y);
-
 	float width = (currentDirectory == path.parent_path()) ? thumbnailSize : ImGui::GetContentRegionAvail().x * 0.8f;
 	ImGui::SetNextItemWidth(width);
-
 	if (ImGui::InputText("##RenameInput", renameBuffer, renameBufferSize, ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll))
 	{
 		std::filesystem::path newPath = path.parent_path() / renameBuffer;
@@ -535,10 +680,8 @@ void ContentBrowserGridItem::DrawRename(const std::filesystem::path& path, f32 t
 		}
 		outRenamingPath.clear();
 	}
-
 	if (ImGui::IsItemVisible() && !ImGui::IsAnyItemActive())
 		ImGui::SetKeyboardFocusHere(-1);
-
 	if (ImGui::IsItemDeactivated() && !ImGui::IsItemDeactivatedAfterEdit())
 	{
 		outRenamingPath.clear();
@@ -548,78 +691,50 @@ void ContentBrowserGridItem::DrawRename(const std::filesystem::path& path, f32 t
 		outRenamingPath.clear();
 	}
 }
-
 void ContentBrowserGridItem::DrawNameBox(const std::filesystem::directory_entry& directoryEntry, const std::filesystem::path& rootPath, f32 thumbnailSize, std::filesystem::path& currentDirectory, char* searchBuffer)
 {
 	const auto& path = directoryEntry.path();
-	auto relativePath = path.lexically_relative(rootPath);
-
-	// 폴더면 그대로(filename), 파일이면 확장자 제거(stem)
-	std::string filenameString = directoryEntry.is_directory() ? relativePath.filename().string() : relativePath.stem().string();
-
+	const AssetVisualDesc visual = DescribeAssetVisual(path, directoryEntry.is_directory());
+	const std::string& filenameString = visual.CleanName;
+	const std::string& typeStr = visual.BadgeText;
 	float boxWidth = thumbnailSize;
-
-	// 고정 높이 지정: 텍스트 2줄(이름, 타입) + 여백(12.0f)으로 항상 균일한 높이 유지
 	float boxHeight = ImGui::GetTextLineHeight() * 2.0f + 12.0f;
-
-	std::string typeStr = "";
-	if (directoryEntry.is_directory())
-	{
-		typeStr = LOCAL("ContentBrowser.Folder");
-	}
-	else
-	{
-		typeStr = path.extension().string();
-		if (!typeStr.empty() && typeStr[0] == '.') typeStr = typeStr.substr(1);
-		for (auto& c : typeStr) c = toupper(c);
-	}
-
 	ImVec2 typeTextSize = ImGui::CalcTextSize(typeStr.c_str());
-
 	ImVec2 cursorPos = ImGui::GetCursorScreenPos();
-	// [핵심 변경점] 썸네일과 완전히 밀착시키기 위해 ImGui의 기본 ItemSpacing만큼 위로 끌어올립니다.
 	cursorPos.y -= ImGui::GetStyle().ItemSpacing.y;
-
 	ImVec2 boxMin = cursorPos;
 	ImVec2 boxMax = ImVec2(boxMin.x + boxWidth, boxMin.y + boxHeight);
-
 	ImDrawList* drawList = ImGui::GetWindowDrawList();
-
-	// 1. 네임 박스 배경 (상단은 각지게, 하단만 둥글게 처리하여 이어진 카드 느낌 연출)
-	ImU32 boxColor = ImGui::GetColorU32(ImVec4(0.15f, 0.15f, 0.15f, 0.8f));
+	// 1. 네임 박스 배경
+	ImU32 boxColor = ImGui::GetColorU32(ImVec4(0.15f, 0.15f, 0.15f, 0.85f));
 	drawList->AddRectFilled(boxMin, boxMax, boxColor, 4.0f, ImDrawFlags_RoundCornersBottom);
-
 	// 2. 텍스트 축약(Ellipsis) 로직 (UTF-8 한글 깨짐 방지 처리 포함)
-	float maxTextWidth = boxWidth - 8.0f; // 양옆 패딩 4.0f 제외한 최대 너비
+	float maxTextWidth = boxWidth - 8.0f;
 	std::string displayFileName = filenameString;
-
 	if (ImGui::CalcTextSize(displayFileName.c_str()).x > maxTextWidth)
 	{
 		while (!displayFileName.empty() && ImGui::CalcTextSize((displayFileName + "...").c_str()).x > maxTextWidth)
 		{
-			// UTF-8 안전한 pop_back (멀티바이트 문자가 중간에 잘리지 않도록 안전하게 삭제)
 			while (!displayFileName.empty())
 			{
 				char c = displayFileName.back();
 				displayFileName.pop_back();
-				if ((c & 0xC0) != 0x80) break; // 후속 바이트(10xxxxxx)가 아니면 1글자 지우기 완료
+				if ((c & 0xC0) != 0x80) break;
 			}
 		}
 		displayFileName += "...";
 	}
-
-	// 3. 파일 이름 렌더링 (1줄 렌더링, 길면 축약됨)
+	// 3. 깔끔하게 정제된 파일 이름 렌더링 (.bam* 중간 확장자 제거됨)
 	drawList->AddText(ImVec2(boxMin.x + 4.0f, boxMin.y + 4.0f), ImGui::GetColorU32(ImGuiCol_Text), displayFileName.c_str());
-
-	// 4. 확장자/타입 렌더링 (우측 하단 고정 배치)
+	// 4. 우측 하단 타입 배지 렌더링 (리소스 고유 AccentColor 적용)
 	ImVec2 typePos = ImVec2(boxMax.x - typeTextSize.x - 4.0f, boxMax.y - typeTextSize.y - 4.0f);
-	drawList->AddText(typePos, ImGui::GetColorU32(ImGuiCol_TextDisabled), typeStr.c_str());
-
+	ImVec4 badgeColor = directoryEntry.is_directory()
+		? ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled)
+		: ImVec4(visual.AccentColor.x, visual.AccentColor.y, visual.AccentColor.z, 0.90f);
+	drawList->AddText(typePos, ImGui::GetColorU32(badgeColor), typeStr.c_str());
 	// 5. 공간 점유 및 더블 클릭 인터랙션
 	ImGui::SetCursorScreenPos(boxMin);
 	ImGui::Dummy(ImVec2(boxWidth, boxHeight));
-
-	// 네임 박스 위에서 더블클릭 시 처리
 	if (ImGui::IsItemHovered() && MOUSE_BUTTON_DOUBLE_CLICK(EMouseButton::Left))
 		OpenAssetOrFolder(directoryEntry.path(), directoryEntry.is_directory(), currentDirectory, searchBuffer);
 }
@@ -790,12 +905,10 @@ void ContentBrowserGridItem::ContextMenu_Material(const std::filesystem::path& p
 
 void ContentBrowserGridItem::ContextMenu_Model(const std::filesystem::path& path)
 {
-	std::string ext = path.extension().string();
-	for (auto& c : ext) c = static_cast<char>(tolower(c));
-
+	std::string filename = ToLowerAscii(path.filename().string());
+	std::string ext = ToLowerAscii(path.extension().string());
 	ImGui::Separator();
-
-	if (ext == ".bammesh")
+	if (filename.ends_with(".bammesh") || filename.ends_with(".bammesh.json"))
 	{
 		if (ImGui::MenuItem((ICON_FA_ROTATE " " + LOCAL_LABEL("ContentBrowser.ReloadMesh")).c_str()))
 		{
@@ -837,7 +950,7 @@ void ContentBrowserGridItem::ContextMenu_Model(const std::filesystem::path& path
 			}
 		}
 	}
-	else if (ext == ".fbx" || ext == ".obj" || ext == ".gltf")
+	else if (ext == ".fbx" || ext == ".obj" || ext == ".gltf" || ext == ".glb")
 	{
 		if (ImGui::MenuItem((ICON_FA_FILE_IMPORT " " + LOCAL_LABEL("ContentBrowser.Reimport")).c_str()))
 		{

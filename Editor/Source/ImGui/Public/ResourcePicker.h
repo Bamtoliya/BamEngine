@@ -29,44 +29,64 @@ namespace Editor
 	namespace Detail
 	{
 		template<typename T>
-		inline bool IsResourceExtensionCompatible(std::string_view ext)
+		inline bool IsResourceExtensionCompatible(std::string_view filenameOrExt)
 		{
-			std::string lowerExt;
-			lowerExt.reserve(ext.size());
-			for (char c : ext) lowerExt.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
-
+			std::string lower;
+			lower.reserve(filenameOrExt.size());
+			for (char c : filenameOrExt) lower.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
+			auto endsWith = [&](std::string_view suffix) {
+				return lower.size() >= suffix.size() &&
+					std::string_view(lower).substr(lower.size() - suffix.size()) == suffix;
+				};
 			if constexpr (std::is_same_v<T, Engine::Texture>)
 			{
-				return lowerExt == ".png" || lowerExt == ".jpg" || lowerExt == ".jpeg" ||
-					lowerExt == ".dds" || lowerExt == ".tga" || lowerExt == ".bmp" || lowerExt == ".hdr";
+				return endsWith(".png") || endsWith(".jpg") || endsWith(".jpeg") ||
+					endsWith(".dds") || endsWith(".tga") || endsWith(".bmp") || endsWith(".hdr") ||
+					endsWith(".bamtex") || endsWith(".bamtex.json");
 			}
-			else if constexpr (std::is_same_v<T, Engine::Material> || std::is_same_v<T, Engine::MaterialInterface> || std::is_same_v<T, Engine::MaterialInstance>)
+			else if constexpr (std::is_same_v<T, Engine::Material>)
 			{
-				return lowerExt == ".bammat" || lowerExt == ".json";
+				return endsWith(".bammat") || endsWith(".bammat.json") || endsWith(".mat");
 			}
-			else if constexpr (std::is_same_v<T, Engine::Model> || std::is_same_v<T, Engine::Mesh>)
+			else if constexpr (std::is_same_v<T, Engine::MaterialInstance>)
 			{
-				return lowerExt == ".fbx" || lowerExt == ".obj" || lowerExt == ".gltf" || lowerExt == ".glb" || lowerExt == ".bammodel";
+				return endsWith(".bammatinst") || endsWith(".bammatinst.json");
+			}
+			else if constexpr (std::is_same_v<T, Engine::MaterialInterface>)
+			{
+				return endsWith(".bammat") || endsWith(".bammat.json") ||
+					endsWith(".bammatinst") || endsWith(".bammatinst.json") || endsWith(".mat");
+			}
+			else if constexpr (std::is_same_v<T, Engine::Model>)
+			{
+				return endsWith(".fbx") || endsWith(".obj") || endsWith(".gltf") || endsWith(".glb") ||
+					endsWith(".bammodel") || endsWith(".bammodel.json");
+			}
+			else if constexpr (std::is_same_v<T, Engine::Mesh>)
+			{
+				return endsWith(".fbx") || endsWith(".obj") || endsWith(".gltf") || endsWith(".glb") ||
+					endsWith(".bammesh") || endsWith(".bammesh.json") ||
+					endsWith(".bammodel") || endsWith(".bammodel.json");
 			}
 			else if constexpr (std::is_same_v<T, Engine::Sprite>)
 			{
-				return lowerExt == ".bamsprite";
+				return endsWith(".bamsprite") || endsWith(".bamsprite.json");
 			}
 			else if constexpr (std::is_same_v<T, Engine::AudioClip>)
 			{
-				return lowerExt == ".wav" || lowerExt == ".mp3" || lowerExt == ".ogg" || lowerExt == ".flac";
+				return endsWith(".wav") || endsWith(".mp3") || endsWith(".ogg") || endsWith(".flac");
 			}
 			else if constexpr (std::is_same_v<T, Engine::Shader>)
 			{
-				return lowerExt == ".hlsl" || lowerExt == ".cso";
+				return endsWith(".hlsl") || endsWith(".cso") || endsWith(".bamshader");
 			}
 			else if constexpr (std::is_same_v<T, Engine::Animation>)
 			{
-				return lowerExt == ".bamanim" || lowerExt == ".fbx";
+				return endsWith(".bamanim") || endsWith(".bamanim.json") || endsWith(".fbx");
 			}
 			else if constexpr (std::is_same_v<T, Engine::Skeleton>)
 			{
-				return lowerExt == ".bamskel" || lowerExt == ".fbx";
+				return endsWith(".bamskel") || endsWith(".bamskel.json") || endsWith(".fbx");
 			}
 			else
 			{
@@ -153,8 +173,8 @@ namespace Editor
 					{
 						if (!fileEntry.is_regular_file()) continue;
 
-						const auto ext = fileEntry.path().extension().string();
-						if (!Detail::IsResourceExtensionCompatible<T>(ext)) continue;
+						const auto filename = fileEntry.path().filename().string();
+						if (!Detail::IsResourceExtensionCompatible<T>(filename)) continue;
 
 						const auto normKey = Detail::NormalizeResourceKey(fileEntry.path().wstring());
 						if (loadedNormalizedKeys.contains(normKey)) continue;

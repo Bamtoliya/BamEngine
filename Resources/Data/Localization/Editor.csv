@@ -1044,7 +1044,6 @@ Animator,Pause,Pause,일시정지
 Animator,Stop,Stop,정지
 Animator,Reset,Reset,초기화
 Animator,MissingRendererWarning,Requires SkinnedMeshRendererComponent with Skeleton to animate.,스켈레톤이 포함된 SkinnedMeshRendererComponent가 필요합니다.
-
 Shortcuts,CategoryPIE,Play & Simulation,재생 및 시뮬레이션
 Shortcuts,CategoryBuild,Build & Hot Reload,빌드 및 핫 리로드
 Shortcuts,CategoryViewport,Viewport,뷰포트
@@ -1081,3 +1080,12 @@ Action,Graph.Duplicate,Duplicate Nodes,노드 복제
 Action,Graph.CreateComment,Create Comment Box,코멘트 박스 생성
 Action,Graph.Delete,Delete Elements,선택 항목 삭제
 Action,Graph.ToggleBreakpoint,Toggle Breakpoint,중단점 설정/해제
+EditorCommon,On,ON,켜짐
+EditorCommon,Off,OFF,꺼짐
+EditorCommon,Open,Open,열기
+EditorCommon,New,New,새로 만들기
+EditorCommon,File,File,파일
+EditorCommon,Edit,Edit,편집
+EditorCommon,SaveAs,Save As...,다른 이름으로 저장...
+EditorMenu,File,File,파일
+,UI_VIEW,View,보기
