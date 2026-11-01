@@ -186,10 +186,8 @@ private://3D
 	vec3 m_GizmoSnapTranslation = { 1.0f, 1.0f, 1.0f };
 	vec3 m_GizmoSnapRotation = { 15.0f, 15.0f, 15.0f };
 	vec3 m_GizmoSnapScale = { 0.1f, 0.1f, 0.1f };
-#ifdef _DEBUG 
 protected:
 	DebugRenderer m_DebugRenderer;
-#endif // _DEBUG
 protected:
 	bool m_ShowLightOverlay = { true };
 	bool m_ShowCameraOverlay = { true };

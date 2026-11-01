@@ -52,62 +52,89 @@ EResult MaterialInstance::Bind(uint32 slot)
 	Material* baseMaterial = m_BaseMaterialHandle.Get();
 	if (!rhi || !baseMaterial)
 		return EResult::Fail;
-	bool bBoundAny = false; // ★ 텍스처를 하나라도 바인딩했는지 추적
+
+	auto& rm = ResourceManager::Get();
+	auto* defaultSampler = SamplerManager::Get().GetDefaultSampler();
+
+	// 0단계: 아카이브 로드 후 내부 슬롯 캐시가 비어있으면 자동 복구
+	if (!m_TextureBindings.empty() && FindTextureBindingIndexBySlot(m_TextureBindings[0].slot) < 0)
+	{
+		RebuildTextureBindingCache();
+	}
+
+	bool slotBound[4] = { false, false, false, false };
+
 	// 1단계: Base Material의 텍스처 슬롯 순회
 	for (auto& baseBinding : baseMaterial->GetTextureBindings())
 	{
 		bool hasOverride = HasTextureBindingBySlot(baseBinding.slot) || (!baseBinding.name.empty() && HasTextureBinding(baseBinding.name));
-		// 자신에게 오버라이드가 있으면 스킵 (2단계에서 처리)
 		if (hasOverride)
 			continue;
+
 		Texture* texture = baseBinding.texture.Get();
-		if (!texture) // 텍스처가 유실되었을 경우 더미 텍스처로 대체
+		if (!texture)
 		{
-			auto fallbackHandle = ResourceManager::Get().GetResourceHandle<Texture>(L"Resources/Texture/magenta1x1.png");
+			auto fallbackHandle = rm.GetResourceHandle<Texture>(L"Resources/Texture/white1x1.png");
 			texture = fallbackHandle.Get();
 		}
 		RHISampler* sampler = baseBinding.hasCustomSampler
 			? SamplerManager::Get().GetOrCreateSampler(baseBinding.samplerDesc)
-			: SamplerManager::Get().GetDefaultSampler();
-		if (!texture || !sampler)
-			return EResult::Fail;
-		if (IsFailure(rhi->BindTextureSampler(texture->GetRHITexture(), sampler, baseBinding.slot)))
+			: defaultSampler;
+
+		if (!texture || !sampler) return EResult::Fail;
+
+		RHITexture* rhiTex = texture->GetRHITexture();
+		if (rhiTex && IsFailure(rhi->BindTextureSampler(rhiTex, sampler, baseBinding.slot)))
 			return EResult::Fail;
 
-		bBoundAny = true; // 성공적으로 바인딩됨
+		if (baseBinding.slot < 4)
+			slotBound[baseBinding.slot] = true;
 	}
+
 	// 2단계: 자신의 오버라이드 바인드
 	for (auto& binding : m_TextureBindings)
 	{
 		Texture* texture = binding.texture.Get();
 		if (!texture)
 		{
-			auto fallbackHandle = ResourceManager::Get().GetResourceHandle<Texture>(L"Resources/Texture/magenta1x1.png");
+			auto fallbackHandle = rm.GetResourceHandle<Texture>(L"Resources/Texture/white1x1.png");
 			texture = fallbackHandle.Get();
 		}
 		RHISampler* sampler = binding.hasCustomSampler
 			? SamplerManager::Get().GetOrCreateSampler(binding.samplerDesc)
-			: SamplerManager::Get().GetDefaultSampler();
+			: defaultSampler;
 
-		if (!texture || !sampler)
-			return EResult::Fail;
-		if (IsFailure(rhi->BindTextureSampler(texture->GetRHITexture(), sampler, binding.slot)))
+		if (!texture || !sampler) return EResult::Fail;
+
+		RHITexture* rhiTex = texture->GetRHITexture();
+		if (rhiTex && IsFailure(rhi->BindTextureSampler(rhiTex, sampler, binding.slot)))
 			return EResult::Fail;
 
-		bBoundAny = true; // 성공적으로 바인딩됨
+		if (binding.slot < 4)
+			slotBound[binding.slot] = true;
 	}
-	// 3단계: 안전장치 - 텍스처가 단 하나도 세팅되지 않은 기본 상태일 경우
-	if (!bBoundAny)
+
+	// 3단계: [상태 누수 방지] 지정되지 않은 빈 슬롯을 안전한 표준 더미 텍스처로 리셋
+	static const wchar_t* defaultTextures[4] = {
+		L"Resources/Texture/white1x1.png", // Slot 0: Diffuse (흰색)
+		L"Resources/Texture/blue1x1.png",  // Slot 1: Normal (기본 평면 노멀)
+		L"Resources/Texture/black1x1.png", // Slot 2: PBR (비금속/기본값)
+		L"Resources/Texture/black1x1.png"  // Slot 3: Emission (완전한 0 무발광!)
+	};
+
+	for (uint32 s = 0; s < 4; ++s)
 	{
-		auto fallbackHandle = ResourceManager::Get().GetResourceHandle<Texture>(L"Resources/Texture/magenta1x1.png");
-		Texture* texture = fallbackHandle.Get();
-		RHISampler* sampler = SamplerManager::Get().GetDefaultSampler();
-		if (!texture || !sampler)
-			return EResult::Fail;
-
-		if (IsFailure(rhi->BindTextureSampler(texture->GetRHITexture(), sampler, 0)))
-			return EResult::Fail;
+		if (!slotBound[s])
+		{
+			auto dummyHandle = rm.GetResourceHandle<Texture>(defaultTextures[s]);
+			if (auto* dummyTex = dummyHandle.Get())
+			{
+				if (auto* rhiDummy = dummyTex->GetRHITexture())
+					rhi->BindTextureSampler(rhiDummy, defaultSampler, s);
+			}
+		}
 	}
+
 	return EResult::Success;
 }
 

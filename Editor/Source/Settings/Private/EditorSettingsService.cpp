@@ -10,6 +10,7 @@
 #include "BaseViewportPanel.h"
 
 #include <SDL3/SDL_filesystem.h>
+#include "PlatformPath.h"
 
 namespace
 {
@@ -109,14 +110,26 @@ bool EditorSettingsService::LoadForStartup(std::uint32_t defaultWidth, std::uint
 
     m_EditorWorkspace.WindowWidth = static_cast<std::int32_t>(defaultWidth);
     m_EditorWorkspace.WindowHeight = static_cast<std::int32_t>(defaultHeight);
+    m_ProjectRoot.clear();
 
-    std::error_code error;
-    m_ProjectRoot = std::filesystem::current_path(error);
-
-    if (error)
+    // 실행 파일 위치부터 부모로 거슬러 올라가며 프로젝트 루트 마커 탐색
+    std::filesystem::path cur = Engine::PlatformPath::GetExecutableDirectory();
+    std::error_code ec;
+    for (int i = 0; i < 7; ++i)
     {
-        BAM_LOG(Error, "Editor", "Config", "Cannot resolve project root: {}", error.message());
-        return false;
+        if (std::filesystem::exists(cur / "Config" / "Project.json", ec) ||
+            std::filesystem::exists(cur / ".bam", ec))
+        {
+            m_ProjectRoot = cur;
+            break;
+        }
+        if (!cur.has_parent_path()) break;
+        cur = cur.parent_path();
+    }
+    if (m_ProjectRoot.empty())
+    {
+        m_ProjectRoot = std::filesystem::current_path(ec);
+        BAM_LOG(Warn, "Editor", "Config", "Project marker not found; falling back to current_path: {}", m_ProjectRoot.string());
     }
 
     reflection::RegistrationResult registration;

@@ -5,6 +5,7 @@
 #include "Logger.h"
 #include "NotificationManager.h"
 #include <windows.h>
+#include "PlatformPath.h"
 
 namespace
 {
@@ -97,22 +98,7 @@ namespace
 
 std::filesystem::path ShaderHotReloadManager::ResolveShaderSourceDirectory()
 {
-	std::error_code ec;
-	std::filesystem::path candidate = std::filesystem::current_path() / "Resources" / "Shader" / "hlsl";
-	if (std::filesystem::exists(candidate, ec)) return candidate;
-
-	wchar_t exePathBuf[MAX_PATH] = {};
-	GetModuleFileNameW(nullptr, exePathBuf, MAX_PATH);
-	std::filesystem::path cur = std::filesystem::path(exePathBuf).parent_path();
-	for (int i = 0; i < 5; ++i)
-	{
-		candidate = cur / "Resources" / "Shader" / "hlsl";
-		if (std::filesystem::exists(candidate, ec)) return candidate;
-		if (!cur.has_parent_path()) break;
-		cur = cur.parent_path();
-	}
-
-	return "Resources/Shader/hlsl";
+	return Engine::PlatformPath::ResolveProjectRelative("Resources/Shader/hlsl");
 }
 
 #pragma region Constructor&Destrcutor
@@ -289,8 +275,23 @@ void ShaderHotReloadManager::ProcessModifiedFile(const std::filesystem::path& hl
 
 	if (!reloadedAny)
 	{
-		EDITOR_LOG_INFO("[Shader Hot Reload] Compiled {} ({} bytes), output saved to disk.",
-			hlslPath.filename().string(), result.Bytecode.size());
+		ShaderDesc desc;
+		const std::wstring stemW = hlslPath.stem().wstring();
+		desc.Key = L"Resources/Shader/" + stemW;
+		desc.shaderType = shaderType;
+		desc.dxilPath = L"Resources/Shader/bin/dxil/" + stemW + L".cso";
+		desc.spirvPath = L"Resources/Shader/bin/spirv/" + stemW + L".spv";
+		desc.Path = (rhiType == Engine::ERHIType::DirectX12) ? desc.dxilPath : desc.spirvPath;
+		auto newHandle = rm.LoadResource<Engine::Shader>(&desc);
+		if (newHandle.IsValid())
+		{
+			EDITOR_LOG_INFO("[Shader Hot Reload] Compiled and registered new shader: {} (Key: {}, {} bytes)",
+				hlslPath.filename().string(), WStrToStr(desc.Key), result.Bytecode.size());
+			NotificationManager::Get().AddNotification(
+				LOCAL("Notification.ShaderHotReloaded"),
+				LOCAL_FMT("Notification.ReloadedFile", hlslPath.filename().string()),
+				ELogLevel::Info, 3.0f);
+		}
 	}
 }
 

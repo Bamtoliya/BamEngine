@@ -1,7 +1,7 @@
 # 렌더링 개발 목표
 
-- 작성일: 2026-10-24 (최종 갱신: 2026-10-31)
-- 상태: 개발 계획 및 2026-10-31 정적 점검 반영 / 아래 목표와 코드 존재 여부는 GPU 실행·성능 측정 완료를 의미하지 않는다.
+- 작성일: 2026-10-24 (최종 갱신: 2026-11-01)
+- 상태: 개발 계획 및 2026-11-01 정적 점검·실측 검증 반영 / 아래 장기 목표와 일부 코드 존재 여부는 전체 GPU 실행·성능 측정 완료를 의미하지 않는다.
 - 범위: 후처리 효과 추가보다 장면 제출, 가시성, 기하 처리, 재질, 조명과 GPU 자원 관리에 집중한다.
 - 관련 지침: [EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md), [Shader/BINDING_LAYOUT.md](Shader/BINDING_LAYOUT.md)
 - 연계 계획: [ImGuiDevelopmentPlan.md](ImGuiDevelopmentPlan.md), [BuildAndPackagingPlan.md](BuildAndPackagingPlan.md)
@@ -27,33 +27,32 @@ M1~M4는 조건부 P3, M5·L 계열은 P4로 대응하되 아래의 실제 선�
 GPU Driven과 DXR은 별도의 발전 경로다. Bindless나 Mesh Shader를 DXR의 필수 선행 조건으로 만들지 않는다.
 IBL처럼 비교적 독립적인 화질 개선은 측정·바인딩 기반이 마련되면 병행할 수 있다.
 
-## 2. 현재 출발점: 소스에서 확인한 범위 (2026-10-31 갱신)
+## 2. 현재 출발점: 소스에서 확인한 범위 (2026-11-01 갱신)
 
-다음 내용은 2026-10-31 시점 작업 트리의 정적 확인 결과다. 빌드·GPU 실행·성능 측정은 별도 검증 단계에서 수행한다.
+다음 내용은 2026-11-01 시점 작업 트리의 정적 확인 및 S1·S3·S4 실측 검증 결과다.
 
-- **S1 (CPU/GPU 계측 — 코드 구현 완료)**:
+- **S1 (CPU/GPU 계측 — 코드 구현 및 실측 확인 완료)**:
   - `RHIFrameMetrics.h`에 패스별 CPU/GPU 시간(`RHIPassMetric`), 하드웨어 지원(`RHICapabilities`), VRAM/디스크립터 통계(`RHIMemoryStats`) 구조 확장이 완료되었다.
-  - `DirectX12RHI.cpp`에서 D3D12 Timestamp QueryHeap 및 ReadbackBuffer를 통한 패스별 GPU 시간 지연 회수와 VRAM 예산/사용량/디스크립터 통계 질의(`QueryMemoryStats`)가 구현되었다.
-  - `MetricsPanel.cpp`에서 패스별 CPU/GPU 시간 테이블, VRAM/디스크립터 사용량, 하드웨어 기능 지원 여부를 시각화한다.
-- **S2 (바인딩 레이아웃 계약 — 문서 갱신 완료 / 백엔드 차이 관리)**:
+  - `DirectX12RHI.cpp`에서 D3D12 Timestamp QueryHeap 및 ReadbackBuffer를 통한 패스별 GPU 시간 지연 회수와 VRAM 예산/사용량/디스크립터 통계 질의(`QueryMemoryStats`)가 구현되었고, 리소스 생성 실패 시 `std::terminate()` 대신 `BAM_LOG_ERROR` 및 `EResult::Fail`을 반환하도록 안정화되었다.
+  - `MetricsPanel.cpp`에서 패스별 CPU/GPU 시간 테이블, VRAM/디스크립터 사용량, 하드웨어 기능 지원 여부를 시각화하며 실시간 110~116 FPS 환경에서 계측 동작이 확인되었다.
+- **S2 (바인딩 레이아웃 계약 및 텍스처 슬롯 상태 누수 방지)**:
   - [Shader/BINDING_LAYOUT.md](Shader/BINDING_LAYOUT.md)를 `DirectX12RHI::CreateRootSignature()`의 실제 `space0`~`space3`(Root Parameter `[0]`~`[10]`) 구조와 일치하도록 갱신했다.
+  - `MaterialInterface::Bind()`에서 G-Buffer 슬롯(0: Diffuse, 1: Normal, 2: PBR, 3: Emission) 점유 여부를 추적하고, 미지정 슬롯을 안전한 기본 더미 텍스처(`white1x1`, `blue1x1`, `black1x1`)로 리셋하여 이전 드로우콜의 텍스처 잔류 누수 현상을 즉시 차단했다 (후속으로 S2-C 플래그 기반 샘플링 분기 계획 수립).
   - `SDLGPURHI`는 `DrawIndexedInstanced`(`NotImplemented`), `BindInstanceBuffer`, Compute 인터페이스가 미구현 상태로, 미지원 시 안전 폴백 경로를 유지한다.
-- **S3 (정적 메시 인스턴싱 및 기본 LOD — 코드 반영 완료)**:
+- **S3 (정적 메시 인스턴싱, 다중 패스 독립 LOD 및 GPU 스키닝 제출 — 구현 및 배칭 실측 완료)**:
   - `InstanceData`(`worldMatrix`, `normalMatrix`, `pickingID`), `LODGroupComponent`가 추가되었다.
-  - `MeshRenderSystem::OnSubmit()`에서 화면 덮개 비율(Screen Coverage) + 히스테리시스 기반 LOD 선택을 수행하고, `Renderer::RenderMeshes()`가 `BindInstanceBuffer()` 및 인덱스/비인덱스 여부에 따라 `DrawIndexedInstanced()` / `DrawInstanced()` 배칭 드로우를 수행한다.
-  - **남은 항목**: `MeshRenderSystem::OnSubmit()`의 주 뷰포트 단일 카메라 기준 `lodGroup->currentLODIndex` 갱신을 다중 뷰포트/패스별로 분리하는 보완.
-- **S4 (Compute 기반 및 Tiled Light Culling — 코드 반영 및 결함 해결 완료)**:
+  - `MeshRenderSystem::OnSubmit()`에서 `PassTarget` 구조체를 통해 활성 뷰포트/패스별 고유 카메라(위치, `projY`) 기준으로 독립적인 화면 덮개 비율(Screen Coverage) + 히스테리시스 LOD를 평가·제출하며, 주 뷰포트(`isPrimaryGeometry`)일 때만 `lodGroup->currentLODIndex`를 갱신하여 보조 패스로 인한 LOD 상태 오염을 차단했다.
+  - `Renderer::RenderMeshes()`가 `BindInstanceBuffer()` 및 인덱스/비인덱스 여부에 따라 `DrawIndexedInstanced()` / `DrawInstanced()` 배칭 드로우를 수행하며, 인덱스 31만 개 추가 시에도 드로우콜(56 -> 57회)이 유지됨을 실측 검증했다.
+  - `SkinnedMeshRendererComponent`와 `AnimatorComponent::finalBoneMatrices`를 연결한 GPU 스키닝 구조화 버퍼 제출(`SubmitSkinned` / `RenderSkinnedMeshes`)도 구축되었다.
+- **S4 (Compute 기반 및 Tiled Light Culling — 구현 및 실측 검증 완료)**:
   - `ShaderBuild.cmake`에 `*CS.hlsl`(`cs_6_0`) 컴파일 추가, `DirectX12Pipeline` Compute PSO, `DirectX12RHI::Dispatch`/`ResourceBarrierUAV`, `LightManager::DispatchLightCulling` 구현 완료.
   - `tiledLightCullingCS.hlsl`에 타일의 4방향 절두체 평면(`s_FrustumPlanes[4]`) 역투영 및 구면 교차 판정이 추가되어 전체 타일 광원 과할당 문제가 해결되었다.
-  - `lightingPS.hlsl`에서 선별된 타일 광원만 순회하도록 수정되어 `tileLightCount == 0`일 때의 전체 광원 순회 버그가 해결되었다.
+  - `lightingPS.hlsl`에서 선별된 타일 광원만 순회하도록 수정되어 `tileLightCount == 0`일 때의 전체 광원 순회 버그가 해결되었으며, 라이팅 비집중 영역 응시 시 `LightingPass` GPU 시간이 1.10 ms -> 0.25 ms(77% 단축)로 감소함을 실측 확인했다.
   - `SceneViewportPanel`과 `ViewportDeferredPipeline` 모두 `DispatchLightCulling` 및 버퍼 바인딩이 일관되게 연결되었다.
-- **S5 (IBL 및 그림자 안정화 — 반구형 Sky IBL 및 Split-Sum PBR 큐브맵 IBL 반영)**:
-  - `lightingPS.hlsl`에 반구형 Sky Irradiance·거칠기 기반 수렴(`LIGHT_TYPE_SKY` + `EnvBRDFApprox`), 접촉 그림자 소프트닝, `ShadowStrength`가 반영되었다.
-  - 큐브맵 텍스처 기반 고품질 Split-Sum PBR IBL(`gLightingData.HasIBLMaps != 0u`, `gIrradianceMap`, `gPrefilteredEnvMap`, `gBRDFLut`) 파이프라인 셰이더 연동이 추가되었다.
-  - `DirectX12RHI`의 큐브맵 Null SRV 차원 안전장치가 보강되었으며, `SceneViewportPanel`과 `ViewportDeferredPipeline` 모두 IBL 텍스처(t10, t11, t12) 및 대기/구름 데이터가 일관되게 바인딩된다.
-- **포스트프로세스 파이프라인**:
-  - `Engine/Source/Render/PostProcess/`(`PostProcessPipeline`, `BloomEffect`, `PostProcessMaterialEffect`) 및 `Editor/Source/ImGui/PostProcessPanel/`이 추가되어 Bloom, Vignette, ChromaticAberration, FilmGrain, LensDistortion, ColorAdjustments, Sharpen, Tonemapping을 처리한다.
-  - 프리셋(JSON) I/O 및 씬 인라인 복원 파이프라인이 구축되었으며, `SceneViewportPanel`뿐만 아니라 `GameViewportPanel`에도 `PostProcessChain`이 연동되어 인게임 뷰에서도 씬의 후처리 효과가 온전히 반영된다.
+- **S5 (IBL, 그림자 안정화 및 HDR·공통 디퍼드 파이프라인 일원화 — 구현 완료)**:
+  - `lightingPS.hlsl`에 반구형 Sky Irradiance·거칠기 기반 수렴(`LIGHT_TYPE_SKY` + `EnvBRDFApprox`), 접촉 그림자 소프트닝, `ShadowStrength` 및 큐브맵 기반 Split-Sum PBR IBL(`gLightingData.HasIBLMaps != 0u`, `gIrradianceMap`, `gPrefilteredEnvMap`, `gBRDFLut`)이 반영되었다.
+  - `DirectX12RHI`의 큐브맵 Null SRV 차원(`D3D12_SRV_DIMENSION_TEXTURECUBE`) 안전장치가 보강되었으며, `SceneViewportPanel`의 중복 디퍼드 패스 코드를 `ViewportDeferredPipeline`으로 통합하여 Scene View, Game View, Material Preview 전반의 렌더링 일관성을 확보했다.
+  - **선형 HDR 및 포스트프로세스 일원화**: `lightingPS.hlsl`의 내장 Reinhard/감마 보정을 제거하고 `LightingColor` 렌더타깃을 `R16G16B16A16_FLOAT`로 승격하여 선형 HDR 광량을 보존하며, `PostProcessPipeline`(8종 효과 및 `PostProcessComponent` 부재 시 Default ACES 톤매핑 + 감마 2.2 자동 폴백)이 Scene View와 Game View 모두에 일관되게 적용된다.
 
 주요 확인 파일:
 

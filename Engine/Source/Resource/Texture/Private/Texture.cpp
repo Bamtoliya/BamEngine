@@ -4,6 +4,7 @@
 #include "Texture.h"
 #include "Renderer.h"
 #include "ResourceManager.h"
+#include "Runtime.h"
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 #include <reflection_archive/ReflectionArchiveAdapter.h>
@@ -63,13 +64,26 @@ EResult Texture::Initialize(void* arg)
 	if (!rhi)
 		return EResult::Fail;
 
-	const std::string path = std::filesystem::path(m_Path).string();
+	std::filesystem::path fullPath = m_Path;
+	if (fullPath.is_relative() && Runtime::IsCreated())
+		fullPath = Runtime::Get().ResolveProjectRelativePath(fullPath);
+
+	std::ifstream file(fullPath, std::ios::binary | std::ios::ate);
+	if (!file.is_open())
+		return EResult::FileNotFound;
+
+	const std::streamsize size = file.tellg();
+	file.seekg(0, std::ios::beg);
+	std::vector<uint8_t> buffer(static_cast<size_t>(size));
+	if (!file.read(reinterpret_cast<char*>(buffer.data()), size))
+		return EResult::Fail;
+
 	int width = 0;
 	int height = 0;
 	int originalChannels = 0;
-
 	std::unique_ptr<stbi_uc, decltype(&stbi_image_free)> pixels(
-		stbi_load(path.c_str(), &width, &height, &originalChannels, STBI_rgb_alpha), stbi_image_free);
+		stbi_load_from_memory(buffer.data(), static_cast<int>(buffer.size()), &width, &height, &originalChannels, STBI_rgb_alpha),
+		stbi_image_free);
 
 	if (!pixels || width <= 0 || height <= 0)
 		return EResult::Fail;
@@ -360,18 +374,35 @@ EResult Texture::Reload(const std::filesystem::path& filePath)
 	if (targetPath.empty()) return EResult::InvalidArgument;
 	RHI* rhi = Renderer::Get().GetRHI();
 	if (!rhi) return EResult::Fail;
+
+	if (targetPath.is_relative() && Runtime::IsCreated())
+		targetPath = Runtime::Get().ResolveProjectRelativePath(targetPath);
+
 	const std::string path = targetPath.string();
+
+	std::ifstream file(targetPath, std::ios::binary | std::ios::ate);
+	if (!file.is_open())
+	{
+		ENGINE_LOG_ERROR("[Texture Hot Reload] Image file not found: {}", targetPath.string());
+		return EResult::FileNotFound;
+	}
+
+	const std::streamsize size = file.tellg();
+	file.seekg(0, std::ios::beg);
+	std::vector<uint8_t> buffer(static_cast<size_t>(size));
+	if (!file.read(reinterpret_cast<char*>(buffer.data()), size))
+		return EResult::Fail;
 
 	int width = 0;
 	int height = 0;
 	int originalChannels = 0;
-
 	std::unique_ptr<stbi_uc, decltype(&stbi_image_free)> pixels(
-		stbi_load(path.c_str(), &width, &height, &originalChannels, STBI_rgb_alpha), stbi_image_free);
+		stbi_load_from_memory(buffer.data(), static_cast<int>(buffer.size()), &width, &height, &originalChannels, STBI_rgb_alpha),
+		stbi_image_free);
 
 	if (!pixels || width <= 0 || height <= 0)
 	{
-		ENGINE_LOG_ERROR("[Texture Hot Reload] Failed to read image file: {}", path);
+		ENGINE_LOG_ERROR("[Texture Hot Reload] Failed to read image file: {}", targetPath.string());
 		return EResult::Fail;
 	}
 

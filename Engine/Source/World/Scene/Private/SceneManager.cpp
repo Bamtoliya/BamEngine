@@ -3,6 +3,7 @@
 #include "SceneManager.h"
 #include <archive/ArchiveInterface.h>
 #include "LightManager.h"
+#include "PlatformPath.h"
 
 IMPLEMENT_SINGLETON(SceneManager)
 
@@ -79,21 +80,20 @@ EResult SceneManager::SaveScene(archive::IArchive& ar, const wstring& filePath)
 {
 	if (filePath.empty())
 		return EResult::InvalidArgument;
-
 	if (!m_CurrentScene)
 		return EResult::Fail;
-
+	std::filesystem::path targetPath(filePath);
+	if (targetPath.is_relative())
+		targetPath = PlatformPath::ResolveProjectRelative(targetPath);
 	auto result = m_CurrentScene->WriteArchive(ar);
 	if (result)
-		result = ar.SaveToFile(std::filesystem::path(filePath));
-
+		result = ar.SaveToFile(targetPath);
 	if (!result)
 	{
 		ENGINE_LOG_ERROR("Scene save failed: code={}, field={}, path={}",
 			static_cast<int>(result.Code), result.Field, WStrToStr(filePath));
 		return EResult::Fail;
 	}
-
 	return EResult::Success;
 }
 
@@ -101,9 +101,11 @@ EResult SceneManager::LoadScene(archive::IArchive& ar, const wstring& filePath)
 {
 	if (filePath.empty())
 		return EResult::InvalidArgument;
-
+	std::filesystem::path targetPath(filePath);
+	if (targetPath.is_relative())
+		targetPath = PlatformPath::ResolveProjectRelative(targetPath);
 	Scene* candidate = nullptr;
-	auto result = ar.LoadFromFile(std::filesystem::path(filePath));
+	auto result = ar.LoadFromFile(targetPath);
 	if (result) result = Scene::CreateFromArchive(ar, candidate);
 	if (!result)
 	{
@@ -111,7 +113,6 @@ EResult SceneManager::LoadScene(archive::IArchive& ar, const wstring& filePath)
 			static_cast<int>(result.Code), result.Field, WStrToStr(filePath));
 		return EResult::Fail;
 	}
-
 	const EResult openResult = OpenScene(candidate);
 	Safe_Release(candidate);
 	return openResult;

@@ -46,8 +46,13 @@ EResult AssetManager::Initialize(void* arg)
 	m_Importers[".gltf"] = m_Importers[".fbx"];
 	Safe_AddRef(m_Importers[".gltf"]);
 
+	m_Importers[".glb"] = m_Importers[".fbx"];
+	Safe_AddRef(m_Importers[".glb"]);
+
 	m_Importers[".anim"] = AnimationImporter::Create();
 	m_Importers[".spv"] = ShaderImporter::Create();
+	m_Importers[".hlsl"] = m_Importers[".spv"];
+	Safe_AddRef(m_Importers[".hlsl"]);
 
 	m_AssetCache = AssetCache::Create();
 	if (!m_AssetCache)
@@ -231,7 +236,7 @@ void AssetManager::ImportAsync(const filesystem::path& sourcePath, const filesys
 
 	try
 	{
-		const bool isModel = extension == ".fbx" || extension == ".obj" || extension == ".gltf";
+		const bool isModel = extension == ".fbx" || extension == ".obj" || extension == ".gltf" || extension == ".glb";
 		if (isModel)
 		{
 			const auto found = m_Importers.find(extension);

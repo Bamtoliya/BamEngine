@@ -4,7 +4,9 @@
 #include "SceneManager.h"
 #include "Components/Render/AnimatorComponent.h"
 #include "Components/Core/NameComponent.h"
+#include "Components/Core/HierarchyComponent.h"
 #include "SelectionManager.h"
+#include "ResourcePicker.h"
 #include "Entity.h"
 
 AnimatorGraphPanel::AnimatorGraphPanel()
@@ -318,16 +320,19 @@ void AnimatorGraphPanel::DrawCanvas()
 	if (currentScene && selectedEntity)
 	{
 		auto& reg = currentScene->GetRegistry();
-		const entt::entity handle = selectedEntity->GetEntityHandle();
-		if (handle != entt::null && reg.valid(handle))
+		entt::entity cur = selectedEntity->GetEntityHandle();
+		const Engine::AnimatorComponent* animComp = nullptr;
+		while (cur != entt::null && reg.valid(cur))
 		{
-			auto* animComp = reg.try_get<Engine::AnimatorComponent>(handle);
-			if (animComp && animComp->runtimeState.HasStateMachine())
-			{
-				liveActiveState = animComp->runtimeState.GetCurrentStateName();
-				isLiveTransitioning = animComp->runtimeState.IsTransitioning();
-				liveTransitionProgress = animComp->runtimeState.GetTransitionProgress();
-			}
+			if ((animComp = reg.try_get<Engine::AnimatorComponent>(cur)) != nullptr) break;
+			const auto* hierarchy = reg.try_get<Engine::HierarchyComponent>(cur);
+			cur = hierarchy ? hierarchy->parent : entt::null;
+		}
+		if (animComp && animComp->runtimeState.HasStateMachine())
+		{
+			liveActiveState = animComp->runtimeState.GetCurrentStateName();
+			isLiveTransitioning = animComp->runtimeState.IsTransitioning();
+			liveTransitionProgress = animComp->runtimeState.GetTransitionProgress();
 		}
 	}
 
@@ -537,7 +542,19 @@ void AnimatorGraphPanel::DrawStateInspector(Engine::AnimState& state)
 	std::strncpy(nameBuf, state.name.c_str(), sizeof(nameBuf) - 1);
 	if (ImGui::InputText(LOCAL_LABEL("EditorCommon.Name").c_str(), nameBuf, sizeof(nameBuf)))
 	{
+		const std::string oldName = state.name;
 		state.name = nameBuf;
+		if (m_StateMachine->defaultState == oldName) m_StateMachine->defaultState = state.name;
+		if (m_NodePositions.contains(oldName))
+		{
+			m_NodePositions[state.name] = m_NodePositions[oldName];
+			m_NodePositions.erase(oldName);
+		}
+		for (auto& tr : m_StateMachine->transitions)
+		{
+			if (tr.sourceState == oldName) tr.sourceState = state.name;
+			if (tr.targetState == oldName) tr.targetState = state.name;
+		}
 		m_IsDirty = true;
 	}
 
@@ -545,7 +562,8 @@ void AnimatorGraphPanel::DrawStateInspector(Engine::AnimState& state)
 	if (ImGui::Checkbox(LOCAL_LABEL("PROP_IS_LOOPING").c_str(), &state.isLooping)) m_IsDirty = true;
 
 	const bool isDefault = (state.name == m_StateMachine->defaultState);
-	if (ImGui::Checkbox(LOCAL_LABEL("AnimatorGraph.SetDefaultState").c_str(), const_cast<bool*>(&isDefault)))
+	bool defaultToggle = isDefault;
+	if (ImGui::Checkbox(LOCAL_LABEL("AnimatorGraph.SetDefaultState").c_str(), &defaultToggle) && defaultToggle)
 	{
 		m_StateMachine->defaultState = state.name;
 		m_IsDirty = true;
@@ -562,17 +580,65 @@ void AnimatorGraphPanel::DrawStateInspector(Engine::AnimState& state)
 		m_IsDirty = true;
 	}
 
-	if (state.IsBlendTree())
+	if (!state.IsBlendTree())
 	{
-		char paramBuf[64] = {};
-		std::strncpy(paramBuf, state.blendTree->parameterName.c_str(), sizeof(paramBuf) - 1);
-		if (ImGui::InputText(LOCAL_LABEL("AnimatorGraph.Parameter").c_str(), paramBuf, sizeof(paramBuf)))
+		ImGui::Text("%s", LOCAL_CSTR("PROP_ANIMATION_CLIP"));
+		ImGui::PushID("StateMotionClip");
+		if (Editor::DrawInspectorResourcePicker(state.clip, true)) m_IsDirty = true;
+		ImGui::PopID();
+	}
+	else
+	{
+		if (ImGui::BeginCombo(LOCAL_LABEL("AnimatorGraph.Parameter").c_str(), state.blendTree->parameterName.c_str()))
 		{
-			state.blendTree->parameterName = paramBuf;
+			for (const auto& [paramName, paramData] : m_StateMachine->defaultParameters)
+			{
+				if (paramData.type != Engine::EAnimatorParamType::Float) continue;
+				const bool isSelected = (state.blendTree->parameterName == paramName);
+				if (ImGui::Selectable(paramName.c_str(), isSelected))
+				{
+					state.blendTree->parameterName = paramName;
+					m_IsDirty = true;
+				}
+			}
+			ImGui::EndCombo();
+		}
+
+		ImGui::Spacing();
+		ImGui::Text("%s (%d)", LOCAL_CSTR("AnimatorGraph.Samples"), static_cast<int>(state.blendTree->samples.size()));
+		ImGui::SameLine(ImGui::GetContentRegionAvail().x - 24.0f);
+		if (ImGui::Button(ICON_FA_PLUS "##AddBlendSample"))
+		{
+			const float nextThreshold = state.blendTree->samples.empty()
+				? 0.0f : state.blendTree->samples.back().threshold + 1.0f;
+			state.blendTree->AddSample(nextThreshold, {});
 			m_IsDirty = true;
 		}
 
-		ImGui::Text("%s: %d", LOCAL_CSTR("AnimatorGraph.Samples"), static_cast<int>(state.blendTree->samples.size()));
+		int sampleToRemove = -1;
+		bool needSort = false;
+		for (size_t i = 0; i < state.blendTree->samples.size(); ++i)
+		{
+			auto& sample = state.blendTree->samples[i];
+			ImGui::PushID(static_cast<int>(i));
+			ImGui::SetNextItemWidth(75.0f);
+			if (ImGui::DragFloat("##SampleThreshold", &sample.threshold, 0.05f))
+			{
+				needSort = true;
+				m_IsDirty = true;
+			}
+			ImGui::SameLine();
+			if (ImGui::Button(ICON_FA_TRASH "##RemoveSample")) sampleToRemove = static_cast<int>(i);
+			if (Editor::DrawInspectorResourcePicker(sample.clip, true)) m_IsDirty = true;
+			ImGui::Spacing();
+			ImGui::PopID();
+		}
+		if (sampleToRemove >= 0 && sampleToRemove < static_cast<int>(state.blendTree->samples.size()))
+		{
+			state.blendTree->samples.erase(state.blendTree->samples.begin() + sampleToRemove);
+			m_IsDirty = true;
+		}
+		if (needSort) state.blendTree->SortSamples();
 	}
 }
 

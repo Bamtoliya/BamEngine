@@ -1,9 +1,9 @@
 ﻿#pragma once
-
 #include "Resources.h"
 #include "ResourceHandle.h"
 #include "ResourceMetrics.h"
 #include "Logger.h"
+#include "PlatformPath.h"
 #include <archive/JsonArchive.h>
 #include <archive/BeveArchive.h>
 #include <cwctype>
@@ -62,9 +62,12 @@ public:
 	void RegisterExplicitLoader();
 	EResult DestroyResource(const Handle& handle);
 	EResult DestroyResource(Resource* resource);
+#ifdef BAM_EDITOR
 public:
 	vector<ResourceDebugInfo> GetDebugSnapshot();
+#endif
 #pragma endregion
+
 
 #pragma region Metric
 public:

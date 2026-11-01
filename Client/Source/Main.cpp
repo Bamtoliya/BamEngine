@@ -2,7 +2,11 @@
 #include <SDL3/SDL_main.h>
 #include <archive/JsonArchive.h>
 
-#include "Engine_Includes.h"
+#include "PlatformPath.h"
+#include "Config.h"
+#include "ConfigManager.h"
+#include "ReflectionRegistry.h"
+
 #include "Runtime.h"
 #include "Systems.h"
 #include "ModuleManager.h"
@@ -38,7 +42,12 @@ public:
 
     EResult Initialize()
     {
-        if (!Logger::Initialize(L"Logs/Client.log"))
+        // 1. 프로젝트 루트를 가장 먼저 확정
+        m_ProjectRoot = ResolveProjectRoot();
+
+        // 2. 로거를 프로젝트 루트 기준으로 안전하게 초기화
+        const auto logPath = m_ProjectRoot / "Logs" / "Client.log";
+        if (!Logger::Initialize(logPath))
             return EResult::Fail;
 
         m_LoggerInitialized = true;
@@ -81,9 +90,16 @@ public:
         runtimeDesc.RendererDesc.rhiType = ERHIType::DirectX12;
         runtimeDesc.RendererDesc.rhiDesc = &rhiDesc;
 
+        // 엔진 독립성을 지키며 호스트 경로 주입
+        runtimeDesc.ProjectRoot = m_ProjectRoot;
+        runtimeDesc.AssetRoot = "Resources";
+
         m_Runtime = Runtime::Create(&runtimeDesc);
         if (!m_Runtime)
             return EResult::Fail;
+
+        // 엔진 초기화 후 ProjectSettings 로드
+        LoadProjectSettings();
 
         if (IsFailure(InitializeSystems()))
             return EResult::Fail;
@@ -196,10 +212,10 @@ private:
 
     void LoadGameModule()
     {
-        wchar_t exePathBuf[MAX_PATH] = {};
-        GetModuleFileNameW(nullptr, exePathBuf, MAX_PATH);
-        const std::filesystem::path exeDir = std::filesystem::path(exePathBuf).parent_path();
-        const std::filesystem::path modulePath = exeDir / L"GameModule.dll";
+        const auto exeDir = PlatformPath::GetExecutableDirectory();
+        std::filesystem::path modulePath = exeDir / L"GameModule.dll";
+        if (!std::filesystem::exists(modulePath))
+            modulePath = m_ProjectRoot / L"GameModule.dll";
 
         if (!std::filesystem::exists(modulePath))
         {
@@ -214,7 +230,13 @@ private:
 
     EResult LoadStartupScene()
     {
-        const std::filesystem::path scenePath = L"Resources/Scenes/NewScene2.json";
+        // ProjectSettings에 지정된 StartupScenePath가 있으면 우선 사용, 비어있으면 기본 씬으로 폴백
+        std::filesystem::path scenePath;
+        if (!m_ProjectSettings.StartupScenePath.empty())
+            scenePath = m_ProjectRoot / m_ProjectSettings.StartupScenePath;
+        else
+            scenePath = m_ProjectRoot / "Resources" / "Scenes" / "NewScene2.json";
+
         if (!std::filesystem::exists(scenePath))
         {
             BAM_LOG(Error, "Client", "Startup", "Startup scene file does not exist: {}", scenePath.string());
@@ -268,12 +290,49 @@ private:
         Renderer::Get().RegisterViewportCamera(*selectedBuffer, renderPass);
     }
 
+    private:
+        std::filesystem::path ResolveProjectRoot() const
+        {
+            const auto exeDir = PlatformPath::GetExecutableDirectory();
+            std::error_code ec;
+
+            // 1. 배포 환경: 실행 파일 바로 옆에 Resources 폴더나 Config 폴더가 있는 경우
+            if (std::filesystem::exists(exeDir / "Resources", ec) || std::filesystem::exists(exeDir / "Config", ec))
+                return exeDir;
+
+            // 2. 개발 환경: 상위 부모 디렉터리를 거슬러 올라가며 마커(Config/Project.json 또는 .bam) 탐색
+            std::filesystem::path cur = exeDir;
+            for (int i = 0; i < 7; ++i)
+            {
+                if (std::filesystem::exists(cur / "Config" / "Project.json", ec) ||
+                    std::filesystem::exists(cur / ".bam", ec))
+                {
+                    return cur;
+                }
+                if (!cur.has_parent_path()) break;
+                cur = cur.parent_path();
+            }
+
+            return exeDir;
+        }
+
+        void LoadProjectSettings()
+        {
+            const auto projectJsonPath = m_ProjectRoot / "Config" / "Project.json";
+            if (std::filesystem::exists(projectJsonPath))
+            {
+                const auto& registry = ReflectionRegistry::Get().GetRegistry();
+                Engine::ConfigManager::Load(m_ProjectSettings, projectJsonPath, registry);
+            }
+        }    
 private:
     SDL_Window* m_Window = nullptr;
     Runtime* m_Runtime = nullptr;
     RenderPassID m_ForwardPassID = 0;
     bool m_SDLInitialized = false;
     bool m_LoggerInitialized = false;
+    std::filesystem::path m_ProjectRoot;
+    Engine::ProjectSettings m_ProjectSettings;
 };
 
 END

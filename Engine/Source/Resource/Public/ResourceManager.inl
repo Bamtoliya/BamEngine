@@ -1,5 +1,4 @@
 ﻿#pragma once
-#include "ResourceManager.h"
 
 template<typename T, typename... Args>
 ResourceHandle<T> ResourceManager::LoadResource(Args&&... args)
@@ -40,9 +39,10 @@ ResourceHandle<T> ResourceManager::LoadResource(Args&&... args)
 		return ResourceHandle<T>(handle);
 
 	std::filesystem::path fsPath(pathStr);
+	if (fsPath.is_relative())
+		fsPath = PlatformPath::ResolveProjectRelative(fsPath);
 	wstring extension = fsPath.extension().wstring();
 	std::transform(extension.begin(), extension.end(), extension.begin(), ::towlower);
-
 	const auto loadArchive = [&](archive::IArchive& ar) -> ResourceHandle<T>
 		{
 			auto result = ar.LoadFromFile(fsPath);

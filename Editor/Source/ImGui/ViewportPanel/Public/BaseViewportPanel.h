@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "ImGuiInterface.h"
 #include "ChannelFilter.h"
@@ -141,6 +141,9 @@ protected: //Viewport Display
 	// Custom 모드용 사용자 입력 값
 	int32 m_CustomWidth = 1920;
 	int32 m_CustomHeight = 1080;
+protected:
+	bool m_IsVisibleOnScreen = true;       // 도킹 탭 뒤에 숨겨졌는지 여부
+	float m_TimeSinceLastRender = 0.0f;     // 비활성 프레임 쓰로틀링 타이머
 #pragma endregion
 };
 END

@@ -10,6 +10,7 @@
 #include "LocalizationManager.h"
 #include "AssetManager.h"
 #include "ImGuiManager.h"
+#include "EditorSettingsService.h"
 
 using namespace std;
 
@@ -119,9 +120,8 @@ static void ResolveConflict(const FileDropConflict& conflict, int action)
 EResult ContentBrowserPanel::Initialize(void* arg)
 {
 	m_Name = L"Content Browser"; m_DisplayNameKey = "UI_CONTENT_BROWSER";
-	filesystem::path resourcePath = filesystem::current_path();
-	resourcePath.append("Resources");
-	m_RootPath = resourcePath;
+	const auto projectRoot = EditorSettingsService::IsCreated() ? EditorSettingsService::Get().GetProjectRoot() : Engine::PlatformPath::GetExecutableDirectory();
+	m_RootPath = projectRoot / "Resources";
 	m_CurrentDirectory = m_RootPath;
 	m_LastDirectory = m_CurrentDirectory;
 	m_NeedToExpandTree = true;

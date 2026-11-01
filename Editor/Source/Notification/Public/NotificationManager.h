@@ -24,7 +24,7 @@ public:
 
     // Update와 DrawNotificationUI는 메인 스레드에서 호출합니다.
     void Update(f32 dt);
-    void DrawNotificationUI();
+    void DrawNotificationUI(f32 bottomOffset = 0.0f);
 
 private:
     struct Notification

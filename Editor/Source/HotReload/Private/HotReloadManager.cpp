@@ -3,40 +3,15 @@
 #include "ShaderHotReloadManager.h"
 #include "AssetHotReloadManager.h"
 #include "ModuleBuildManager.h"
+#include "PlatformPath.h"
 
 static std::filesystem::path ResolveProjectRoot()
 {
-    std::error_code ec;
-    wchar_t exePathBuf[MAX_PATH] = {};
-    GetModuleFileNameW(nullptr, exePathBuf, MAX_PATH);
-    std::filesystem::path cur = std::filesystem::path(exePathBuf).parent_path();
-    for (int i = 0; i < 7; ++i)
-    {
-        if (std::filesystem::exists(cur / "Projects" / "GameModule" / "Source", ec))
-            return cur;
-        if (!cur.has_parent_path()) break;
-        cur = cur.parent_path();
-    }
-    return std::filesystem::current_path();
+    return Engine::PlatformPath::GetProjectRoot();
 }
-
 static std::filesystem::path ResolveBuildDirectory(const std::filesystem::path& projectRoot)
 {
-    std::error_code ec;
-    wchar_t exePathBuf[MAX_PATH] = {};
-    GetModuleFileNameW(nullptr, exePathBuf, MAX_PATH);
-    std::filesystem::path cur = std::filesystem::path(exePathBuf).parent_path();
-    for (int i = 0; i < 5; ++i)
-    {
-        if (std::filesystem::exists(cur / "CMakeCache.txt", ec))
-            return cur;
-        if (!cur.has_parent_path()) break;
-        cur = cur.parent_path();
-    }
-    const std::filesystem::path defaultCandidate = projectRoot / "out/build/x64-debug";
-    if (std::filesystem::exists(defaultCandidate / "CMakeCache.txt", ec))
-        return defaultCandidate;
-    return cur;
+    return projectRoot / "out/build/x64-debug";
 }
 
 IMPLEMENT_SINGLETON(HotReloadManager)

@@ -32,7 +32,7 @@ struct ModelCreateDesc : public ResourceCreateDesc
 {
 	vector<ModelNode> Nodes;
 	vector<ResourceHandle<Mesh>> Meshes;
-	vector<ResourceHandle<Material>> Materials;
+	vector<ResourceHandle<MaterialInterface>> Materials;
 	ResourceHandle<Skeleton> Skeleton;
 	vector<ResourceHandle<Animation>> Animations;
 	vector<uint32> MeshMaterialIndices;
@@ -64,17 +64,17 @@ public:
 #pragma region Getter
 public:
 	vector<ResourceHandle<Mesh>> GetMeshes() const { return m_Meshes; }
-	vector<ResourceHandle<Material>> GetMaterials() const { return m_Materials; }
+	vector<ResourceHandle<MaterialInterface>> GetMaterials() const { return m_Materials; }
 	ResourceHandle<Skeleton> GetSkeleton() const { return m_Skeleton; }
 	vector<ResourceHandle<Animation>> GetAnimations() const { return m_Animations; }
 	const vector<ModelNode>& GetNodes() const { return m_Nodes; }
 	const vector<uint32>& GetMeshMaterialIndices() const { return m_MeshMaterialIndices; }
-	ResourceHandle<Material> GetMeshMaterial(uint32 meshIndex) const;
+	ResourceHandle<MaterialInterface> GetMeshMaterial(uint32 meshIndex) const;
 #pragma endregion
 
 #pragma region Setter
 public:
-	EResult SetMaterial(uint32 slotIndex, const ResourceHandle<Material>& material);
+	EResult SetMaterial(uint32 slotIndex, const ResourceHandle<MaterialInterface>& material);
 #pragma endregion
 
 
@@ -90,7 +90,7 @@ private:
 	PROPERTY()
 	vector<ResourceHandle<Mesh>> m_Meshes;
 	PROPERTY()
-	vector<ResourceHandle<Material>> m_Materials;
+	vector<ResourceHandle<MaterialInterface>> m_Materials;
 	PROPERTY()
 	ResourceHandle<Skeleton> m_Skeleton;
 	PROPERTY()

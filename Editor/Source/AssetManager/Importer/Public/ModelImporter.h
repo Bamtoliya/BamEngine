@@ -59,9 +59,10 @@ ENABLE_BITMASK_OPERATORS(EModelImportOption);
 
 struct ModelImportDesc
 {
-	EModelPostProcessFlag PostProcessFlags = EModelPostProcessFlag::Triangulate | EModelPostProcessFlag::FlipUVs;
-	EModelImportOption ImportOptions = EModelImportOption::Meshes;
+	EModelPostProcessFlag PostProcessFlags = EModelPostProcessFlag::Triangulate | EModelPostProcessFlag::FlipUVs | EModelPostProcessFlag::MakeLeftHanded | EModelPostProcessFlag::FlipWindingOrder;
+	EModelImportOption ImportOptions = EModelImportOption::Meshes | EModelImportOption::Skeleton | EModelImportOption::Animations | EModelImportOption::Materials;
 	bool SaveToFile = true;
+	bool Overwrite = true;
 };
 
 BEGIN(Editor)
@@ -86,53 +87,5 @@ public:
 	std::optional<EResult> FinalizeStep(ModelImportTask& task);
 private:
 	std::optional<EResult> FinalizeOneStep(ModelImportTask& task);
-private:
-	void ProcessModelNode(
-		const aiNode* node,
-		const aiScene* scene,
-		const filesystem::path& outputDir,
-		const wstring& sourceStem,
-		unordered_map<wstring, uint32>& nameCounts,
-		uint32& meshSerial,
-		ModelCreateDesc& modelCreateDesc);
-	void ProcessMeshVertex(
-		const aiMesh*,
-		const aiScene*,
-		MeshCreateDesc&,
-		vector<VertexPosition>&,
-		vector<VertexMaterial>&);
-	void ProcessMeshSkinData(
-		const aiMesh* mesh,
-		const aiScene* scene,
-		Skeleton* skeleton,
-		MeshCreateDesc& meshCreateInfo,
-		vector<VertexSkinData>& outSkinData);
-	void ProcessMeshIndex(
-		const aiMesh* mesh,
-		const aiScene* scene,
-		MeshCreateDesc& meshCreateInfo,
-		vector<uint32>& outIndices);
-	void ProcessSkeleton(
-		const aiScene* scene,
-		const filesystem::path& outputDir,
-		const wstring& sourceStem,
-		ModelCreateDesc& modelCreateDesc);
-	void ProcessAnimations(
-		const aiScene* scene,
-		const filesystem::path& outputDir,
-		const wstring& sourceStem,
-		ModelCreateDesc& modelCreateDesc);
-	void ProcessMaterial(
-		const aiMaterial* aiMat,
-		uint32 matIndex,
-		const aiScene* scene,
-		const filesystem::path& outputDir,
-		const wstring& sourceStem,
-		ModelCreateDesc& modelCreateDesc);
-
-#pragma region Member Variables
-private:
-#pragma endregion
-
 };
 END

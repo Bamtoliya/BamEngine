@@ -134,6 +134,8 @@ public:
 	virtual const vector<InputLayoutDesc>& GetInputLayoutDescs() const;
 	bool IsDynamic() const { return HasFlag(m_Flags, EMeshFlag::Dynamic); }
 	const MeshRaycastBVH& GetRaycastBVH() const;
+public:
+	[[nodiscard]] bool IsSkinned() const { return m_VertexBuffers[(uint32)EMeshStream::SkinData] != nullptr; }
 #pragma endregion
 
 #pragma region Setter

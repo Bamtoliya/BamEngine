@@ -105,7 +105,7 @@ RHITexture* AssetCache::GetThumbnail(const filesystem::path& assetPath)
         ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
 
     const bool isImage = ext == ".png" || ext == ".jpg" || ext == ".tga" || ext == ".bmp";
-    const bool isModel = ext == ".fbx" || ext == ".obj" || ext == ".gltf";
+    const bool isModel = false;
 
     if (!isImage && !isModel)
     {

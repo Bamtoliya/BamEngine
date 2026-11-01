@@ -157,7 +157,20 @@ void MeshRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& 
         }
 
         // 3. 스킨드 메시(SkinnedMeshRendererComponent) 순회 및 렌더러 제출
-        auto skinnedView = scene->GetRegistry().view<SkinnedMeshRendererComponent, WorldTransformComponent, FlagComponent>();
+        auto& world = scene->GetRegistry();
+        auto findAnimatorInAncestors = [&world](entt::entity startEntity) -> const AnimatorComponent*
+            {
+                entt::entity cur = startEntity;
+                while (cur != entt::null && world.valid(cur))
+                {
+                    if (const auto* anim = world.try_get<AnimatorComponent>(cur)) return anim;
+                    const auto* hierarchy = world.try_get<HierarchyComponent>(cur);
+                    cur = hierarchy ? hierarchy->parent : entt::null;
+                }
+                return nullptr;
+            };
+
+        auto skinnedView = world.view<SkinnedMeshRendererComponent, WorldTransformComponent, FlagComponent>();
         for (auto [entity, skinnedRenderer, worldTransform, flag] : skinnedView.each())
         {
             if (!flag.IsActiveInHierarchy() || !flag.IsVisibleInHierarchy() ||
@@ -165,15 +178,19 @@ void MeshRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& 
             Mesh* mesh = skinnedRenderer.meshHandle.Get();
             MaterialInterface* material = skinnedRenderer.materialHandle.Get();
             if (!mesh || !material) continue;
-            // AnimatorComponent가 부착되어 있는 경우 계산된 본 행렬 목록 참조
-            const auto* animator = scene->GetRegistry().try_get<AnimatorComponent>(entity);
+
+            // 자신 또는 부모(루트) 계층의 AnimatorComponent에서 계산된 본 행렬 목록 참조
+            const auto* animator = findAnimatorInAncestors(entity);
             const std::vector<mat4>* boneMatrices = (animator && !animator->finalBoneMatrices.empty())
                 ? &animator->finalBoneMatrices : nullptr;
+
             SkinnedDrawCommand command;
             command.mesh = mesh;
             command.material = material;
             command.worldMatrix = worldTransform.worldMatrix;
             command.boneMatrices = boneMatrices;
+            command.pickingId = PickingManager::Get().RegisterPickingEntity(scene, entity);
+
             for (const auto& target : targets)
             {
                 if (target.pass->GetPassType() == ERenderPassType::Shadow && !skinnedRenderer.castShadow)

@@ -3,6 +3,7 @@
 #include "Shader.h"
 #include "Renderer.h"
 #include "Logger.h"
+#include "EditorSettingsService.h"
 #include <glaze/glaze.hpp>
 
 namespace Editor::StartupConfig
@@ -70,10 +71,15 @@ namespace Editor::StartupConfig
 	{
 		bool success = true;
 		auto& resourceManager = Engine::ResourceManager::Get();
+		const auto projectRoot = EditorSettingsService::Get().GetProjectRoot();
 
 		for (const auto& path : paths)
 		{
-			if (!resourceManager.LoadFile(std::filesystem::path(path).wstring()).IsValid())
+			std::filesystem::path fullPath = path;
+			if (fullPath.is_relative())
+				fullPath = projectRoot / fullPath;
+
+			if (!resourceManager.LoadFile(fullPath.wstring()).IsValid())
 			{
 				EDITOR_LOG_ERROR("[StartupLoader] Failed to load {} resource: {}", category, path);
 				success = false;
@@ -114,9 +120,13 @@ bool Editor::StartupResourceLoader::LoadPipeline(const std::filesystem::path& ma
 	EDITOR_LOG_INFO("[StartupLoader] Starting resource preload pipeline...");
 
 	bool success = true;
+	const auto projectRoot = EditorSettingsService::Get().GetProjectRoot();
 	for (const auto& step : manifest.Pipeline)
 	{
-		const std::filesystem::path configPath = step.Config;
+		std::filesystem::path configPath = step.Config;
+		if (configPath.is_relative())
+			configPath = projectRoot / configPath;
+
 		bool stepSuccess = false;
 
 		if (!std::filesystem::exists(configPath))
@@ -173,6 +183,7 @@ bool Editor::StartupResourceLoader::LoadShaders(const std::filesystem::path& con
 		Engine::Renderer::Get().GetRHIType() == Engine::ERHIType::SDLGPU;
 	auto& resourceManager = Engine::ResourceManager::Get();
 	bool success = true;
+	const auto projectRoot = EditorSettingsService::Get().GetProjectRoot();
 
 	for (const auto& item : manifest.Shaders)
 	{
@@ -181,7 +192,10 @@ bool Editor::StartupResourceLoader::LoadShaders(const std::filesystem::path& con
 
 		std::string path = isSdlGpu ? item.SpirvPath : item.DxilPath;
 		if (path.empty()) path = item.DxilPath;
-		desc.Path = std::filesystem::path(path).wstring();
+		std::filesystem::path shaderPath = path;
+		if (shaderPath.is_relative())
+			shaderPath = projectRoot / shaderPath;
+		desc.Path = shaderPath.wstring();
 		desc.shaderType = (item.Type == "Fragment" || item.Type == "Pixel")
 			? EShaderType::Fragment : EShaderType::Vertex;
 		desc.entryPoint = item.EntryPoint.empty() ? "main" : item.EntryPoint;

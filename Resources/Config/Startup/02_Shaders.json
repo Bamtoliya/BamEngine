@@ -29,6 +29,21 @@
             "EntryPoint": "main"
         },
         {
+            "Key": "Resources/Shader/GBufferSkinningVS",
+            "DxilPath": "Resources/Shader/bin/dxil/gbufferSkinningVS.cso",
+            "SpirvPath": "Resources/Shader/bin/spirv/gbufferSkinningVS.spv",
+            "Type": "Vertex",
+            "EntryPoint": "main"
+        },
+        {
+            "Key": "Resources/Shader/ShadowDepthSkinningVS",
+            "DxilPath": "Resources/Shader/bin/dxil/shadowDepthSkinningVS.cso",
+            "SpirvPath": "Resources/Shader/bin/spirv/shadowDepthSkinningVS.spv",
+            "Type": "Vertex",
+            "EntryPoint": "main",
+            "UniformBuffers": 2
+        },
+        {
             "Key": "Resources/Shader/MaterialPreviewPS",
             "DxilPath": "Resources/Shader/bin/dxil/materialPreviewPS.cso",
             "SpirvPath": "Resources/Shader/bin/spirv/materialPreviewPS.spv",

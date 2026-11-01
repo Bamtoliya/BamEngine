@@ -24,30 +24,24 @@
 
 ## 2. 현재 상태와 갭 분석 (Gap Analysis)
 
-### 2.1 이미 구축된 기반 (Ready)
+### 2.1 이미 구축된 기반 (Ready — 2026-11-01 반영 완료)
 - **애니메이션 원천 데이터:** `Engine/Source/Resource/Model/Public/Animation.h`, `Skeleton.h`, `Bone.h`에 뼈 계층, 포지션/로테이션/스케일 키프레임, 지속 시간(`Duration`), `TicksPerSecond` 정의 완비.
-- **노드 에디터 캔버스 기반:** `Editor/Source/ImGui/GraphPanel/`에 `imgui-node-editor` 기반 줌/패닝, 노드 배치, 링크 연결, 와이어 스타일링, 컨텍스트 메뉴 인프라 완비.
-- **비주얼 스크립팅 연동 인프라:** `VisualScriptingBlueprintPlan`을 통해 게임플레이 라이브러리(`GraphGameplayLibrary`)와 런타임 틱 디스패치(`GraphSystem`)가 구축되어 있어, 블루프린트에서 애니메이터 파라미터를 읽고 쓰는 인터페이스 연결이 용이함.
-- **2D 프레임 애니메이션:** `SpriteAnimationComponent` 및 `SpriteAnimationSystem`이 구축되어 단일 스프라이트 시퀀스 재생 처리 완료.
+- **런타임 포즈 평가 및 GPU 스키닝 (Phase 1 완료):** `AnimationEvaluator`(`EvaluateSkinningMatrices`, `EvaluateBlendedSkinningMatrices`), `AnimatorComponent`, `AnimationSystem`, `MeshRenderSystem` 및 `Renderer::RenderSkinnedMeshes` 구조화 버퍼 바인딩 구축 완료. `SceneModel.cpp`의 `InstantiateModel()`에서 `NotImplemented` 가드가 제거되어 스켈레탈 모델 배치 시 루트에 `AnimatorComponent`, 메시 노드에 `SkinnedMeshRendererComponent`를 생성함.
+- **애니메이션 상태 머신 및 1D 블렌드 트리 (Phase 2~3 완료):** `AnimatorParameters`, `AnimTransition`, `AnimState`, `AnimatorStateMachine`, `BlendTree1D` 및 `ReflectionArchive` 기반 `.animator` JSON 직렬화 구축 완료.
+- **에디터 시각 저작 패널 (`AnimatorGraphPanel`, Phase 4 완료):** 18절 메뉴바/퀵툴바, 파라미터 독, 상태 노드 드래그 및 트랜지션 연결선, 트랜지션 인스펙터, 씬 선택 엔티티 활성 상태 실시간 청록색 하이라이트 디버깅 구축 완료.
+- **비주얼 스크립팅 연동 인프라:** `GraphGameplayLibrary`에 `Animator.Play/Pause/Stop/SetPlayRate/SetTime/IsPlaying/GetCurrentTime` 및 `Animator.SetFloat/SetInt/SetBool/SetTrigger/GetFloat/GetBool` 노드가 등록되었고, `EGraphPinType::String` 지원(`d3fc6bd2`)을 통해 블루프린트에서 문자열 파라미터 이름을 직접 전달할 수 있음.
+- **2D 프레임 애니메이션:** 독립 `SpriteAnimation` 에셋(`.spriteanim`), `SpriteAnimationComponent`/`System`, 전용 `SpriteAnimationEditor` 구축 완료.
 
-### 2.2 애니메이터 그래프 구축을 위해 필요한 핵심 공백 (To-Do)
-1. **런타임 본 포즈 평가기 (Pose Evaluator & Sampling):**
-   - 현재 `Scene::InstantiateModel()`에서 애니메이션/스켈레톤이 존재하는 모델은 `NotImplemented`로 처리되고 있음.
-   - 특정 시간 `t`에서 클립의 키프레임을 보간하여 로컬 본 트랜스폼을 계산하고, 부모-자식 행렬 곱셈을 통해 최종 팔레트 행렬(`SkinningMatrixPalette`)을 도출하는 런타임 평가기 필요.
-2. **애니메이션 상태 머신 코어 (Animation State Machine Runtime):**
-   - 상태(State: 재생할 클립 또는 서브 그래프), 전이(Transition: 출발 상태 → 도착 상태), 전이 조건(Condition: Float, Int, Bool, Trigger 파라미터 비교) 엔진 코어.
-   - 전이 구간 동안 두 포즈를 시간에 따라 보간하는 크로스페이드(Crossfade) 블렌더.
-3. **블렌드 스페이스 / 블렌드 트리 (1D & 2D Blend Tree):**
-   - 이동 속도(Speed)에 따라 Walk와 Run을 부드럽게 연속 혼합하는 1D 블렌드 노드, 이동 방향(Direction)과 속도를 조합하는 2D 블렌드 노드.
-4. **애디터 시각 저작 패널 (`AnimatorGraphPanel`):**
-   - 상태 노드(State Node) 배치, 노드 간 드래그로 트랜지션 화살표(Transition Wire) 연결, 시작 상태(`Entry`) 및 임의 전이(`Any State`) 노드 지원.
-   - 상태 선택 시 재생 클립 및 루프 여부 설정, 트랜지션 선택 시 지속 시간(`Duration`) 및 조건식(`Speed > 0.1` 등) 편집 인스펙터.
-   - 좌측 파라미터 관리 탭(Float, Int, Bool, Trigger 추가/삭제/기본값 지정).
-   - 에디터 내 3D 모델 실시간 프리뷰 뷰포트 및 디버깅용 활성 상태 하이라이트.
-5. **ECS 컴포넌트 및 게임플레이 시스템 통합:**
-   - 엔티티에 부착하는 `AnimatorComponent` 정의.
-   - `AnimatorSystem`이 매 프레임 파라미터 평가 → 상태 전이 갱신 → 포즈 샘플링 및 블렌딩 → 스키닝 버퍼 GPU 제출을 관장.
-   - 블루프린트 및 C++에서 `SetBool`, `SetFloat`, `SetTrigger`를 호출할 수 있는 API 바인딩.
+### 2.2 애니메이터 그래프 완성을 위해 남은 핵심 과제 (To-Do — Phase 5 및 확장)
+1. **계층형 스켈레탈 모델(루트 `AnimatorComponent` ↔ 자식 `SkinnedMeshRendererComponent`) 참조 연결 및 에셋 자동 로드:**
+   - `Scene::InstantiateModel()`은 모델 루트 엔티티(`rootHandle`)에 `AnimatorComponent`를 부착하고, 하위 노드 엔티티(`handle`/`meshEntity`)에 `SkinnedMeshRendererComponent`를 부착한다.
+   - 반면 현재 `AnimationSystem::OnUpdate()`와 `MeshRenderSystem::OnSubmit()`은 동일 엔티티에 두 컴포넌트가 함께 있는 경우만 조회하고 있으므로, 부모/루트 계층에서 `AnimatorComponent` 또는 `Skeleton`을 탐색해 연결하고 `AnimatorComponent`에 `.animator` 파일 경로/에셋 자동 로드 프로퍼티를 연결하는 작업이 필요하다.
+2. **2D 블렌드 트리 (2D Blend Space):**
+   - 현재 1D 블렌드 트리(`BlendTree1D`)까지 구현되어 있으며, 이동 방향(`Direction`)과 속도(`Speed`) 2축을 조합하는 2D 블렌드 노드는 후속 확장 대상이다.
+3. **고급 게임플레이 연동 및 패널 내 3D 프리뷰 뷰포트 (Phase 5):**
+   - 특정 프레임 도달 시 사운드/이펙트를 발송하는 애니메이션 노티파이(`AnimNotify`).
+   - 상체/하체 분리 재생을 위한 레이어드 애니메이션 및 본 마스킹(`BoneMask`).
+   - `AnimatorGraphPanel` 내부의 독립 3D 모델 실시간 프리뷰 뷰포트.
 
 ---
 
@@ -140,21 +134,21 @@ flowchart TD
 
 ---
 
-### Phase 5. 게임플레이 연동 및 고급 기능 (Phase 1~4 완료 후 대기)
-- **목적:** 비주얼 스크립팅 및 C++ 게임플레이 코드에서 애니메이터를 자유자재로 제어하고, 사운드/이펙트 트리거와 상체/하체 분리 재생을 지원한다.
+### Phase 5. 게임플레이 연동 및 고급 기능 (기본 컴포넌트·노드 연동 완료 / 계층 모델·고급 기능 대기)
+- **목적:** 비주얼 스크립팅 및 C++ 게임플레이 코드에서 애니메이터를 자유자재로 제어하고, 계층형 모델 참조·사운드/이펙트 트리거·상체/하체 분리 재생을 지원한다.
 - **세부 내용:**
-  - **컴포넌트 및 시스템 연동:**
-    - `AnimatorComponent`: `AnimatorGraphAsset` 핸들과 런타임 인스턴스 보유.
-    - `AnimatorSystem`: ECS 시스템으로 매 프레임 월드 내 모든 애니메이터 컴포넌트 갱신.
-  - **비주얼 스크립팅 노드 (`GraphGameplayLibrary`):**
-    - `Animator.SetFloat`, `Animator.SetBool`, `Animator.SetTrigger`, `Animator.GetFloat` 등 노드 등록.
-  - **애니메이션 노티파이 (AnimNotify):**
+  - **컴포넌트 및 시스템 연동 (기본 구현 완료 / 계층 연결 보완 대기):**
+    - `AnimatorComponent` 및 `AnimationSystem`(`Editor`·`Client` 등록 완료) 구축 완료.
+    - **남은 연결 과제**: `Scene::InstantiateModel()`로 생성된 계층형 스켈레탈 모델(루트 `AnimatorComponent` ↔ 자식 `SkinnedMeshRendererComponent`) 간의 부모/루트 참조 해석 연결 및 `.animator` 에셋 파일 경로 자동 로드 연동.
+  - **비주얼 스크립팅 노드 (`GraphGameplayLibrary` — 구현 완료):**
+    - `Animator.Play/Pause/Stop/SetPlayRate/SetTime/IsPlaying/GetCurrentTime` 및 `Animator.SetFloat`, `Animator.SetInt`, `Animator.SetBool`, `Animator.SetTrigger`, `Animator.GetFloat`, `Animator.GetBool` 노드 등록 및 `EGraphPinType::String` 핀 연동 완료.
+  - **애니메이션 노티파이 (`AnimNotify` — 대기):**
     - 특정 프레임에 도달했을 때 발송되는 이벤트(발소리 사운드, 칼 휘두르는 궤적 파티클 등).
     - 비주얼 스크립팅 커스텀 이벤트 또는 C++ 델리게이트 수신.
-  - **레이어드 애니메이션 & 본 마스킹 (Layered Animation & Bone Mask):**
+  - **레이어드 애니메이션 & 본 마스킹 (`Layered Animation & Bone Mask` — 대기):**
     - 베이스 레이어(하체: 이동 애니메이션) + 상위 레이어(상체: 사격/공격 애니메이션) 분리 재생.
     - 스켈레톤의 특정 본(`Spine` 등) 이하 계층만 오버라이드하는 본 마스크 에셋.
-- **완료 기준:** 플레이어가 W 키를 누르면 비주얼 스크립트가 `Speed`를 올려 캐릭터가 걷고, 마우스 클릭 시 상체만 공격 모션을 취하며 발자국 프레임에 맞춰 사운드 노티파이가 콘솔에 로깅된다.
+- **완료 기준:** 플레이어가 W 키를 누르면 비주얼 스크립트가 `Speed`를 올려 계층형 3D 캐릭터가 걷고, 마우스 클릭 시 상체만 공격 모션을 취하며 발자국 프레임에 맞춰 사운드 노티파이가 콘솔에 로깅된다.
 
 ---
 
@@ -232,4 +226,4 @@ struct AnimatorRuntimeState
 - [x] **파라미터 및 트리거:** Trigger 파라미터가 1회 전이 후 즉각 소모(Consume)되어 무한 루프가 발생하지 않는가? (`ConsumeTriggers()` 및 전이 후 자동 리셋 완료)
 - [x] **다중 인스턴스 격리:** 동일한 에셋을 공유하는 두 엔티티가 서로 다른 파라미터를 가질 때 간섭 없이 독립 동작하는가? (`AnimatorRuntimeState` 독립 인스턴스 격리 완료)
 - [x] **에디터 UI 및 직렬화:** 노드 배치와 트랜지션 연결이 JSON으로 정상 저장·로드되며, 실행 중 활성 상태가 시각적으로 모니터링되는가? (`AnimatorGraphPanel` 18절 메뉴바/툴바/파라미터독/트랜지션인스펙터 및 네온 하이라이트 디버깅 완료)
-- [ ] **비주얼 스크립팅 연동:** 블루프린트 그래프에서 캐릭터 속도에 따라 `SetFloat("Speed", value)`를 호출하여 애니메이션 상태를 통제할 수 있는가? (`NODE_ANIMATOR_*` 노드 정의 완료, Phase 5 런타임 틱 완전 연동 대기)
+- [ ] **비주얼 스크립팅 및 계층형 모델 완전 연동:** 블루프린트 그래프에서 캐릭터 속도에 따라 `SetFloat("Speed", value)`를 호출하여 계층형 3D 캐릭터의 애니메이션 상태를 통제할 수 있는가? (`NODE_ANIMATOR_*` 노드 및 `EGraphPinType::String` 지원 완료, 루트 `AnimatorComponent` ↔ 자식 `SkinnedMeshRendererComponent` 계층 참조 연결 및 `.animator` 에셋 자동 로드 검증 대기)

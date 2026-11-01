@@ -55,7 +55,13 @@ EResult Renderer::Initialize(void* arg)
 }
 
 void Renderer::Free()
-{	
+{
+	// 기본 셰이더 핸들 초기화
+	m_DefaultGBufferVS = {};
+	m_DefaultGBufferSkinningVS = {};
+	m_DefaultShadowDepthVS = {};
+	m_DefaultShadowDepthSkinningVS = {};
+
 	m_RenderPassManager = nullptr;
 
 	if (m_RHI)
@@ -369,6 +375,17 @@ EResult Renderer::Render(f32 dt)
 					}
 				}
 
+				auto skinnedIt = m_SkinnedDrawCommands.find(pass->GetID());
+				if (skinnedIt != m_SkinnedDrawCommands.end())
+				{
+					const EResult result = RenderSkinnedMeshes(dt, skinnedIt->second, pass->GetSortType(), pass);
+					if (IsFailure(result))
+					{
+						ENGINE_LOG_ERROR("ECS skinned mesh rendering failed. Pass ID: {}", pass->GetID());
+						return result;
+					}
+				}
+
 				auto spriteIt = m_SpriteDrawCommands.find(pass->GetID());
 				if (spriteIt != m_SpriteDrawCommands.end())
 				{
@@ -575,6 +592,8 @@ EResult Renderer::RenderSkinnedMeshes(f32 dt, vector<SkinnedDrawCommand>& comman
 	const ERenderPassType passType = renderPass->GetPassType();
 	MaterialInterface* lastMaterial = nullptr;
 	Mesh* lastMesh = nullptr;
+	static const vector<mat4> s_IdentityBones(256, glm::identity<mat4>());
+
 	for (auto& command : commands)
 	{
 		if (!command.mesh || !command.material) continue;
@@ -598,18 +617,33 @@ EResult Renderer::RenderSkinnedMeshes(f32 dt, vector<SkinnedDrawCommand>& comman
 		// 1. 오브젝트 상수 버퍼 (월드 행렬 등) 바인딩: b0, space2 (Root Parameter [3])
 		SceneUBO objectData{};
 		objectData.worldMatrix = command.worldMatrix;
+		objectData.pickingData.x = static_cast<float>(command.pickingId);
 		if (IsFailure(m_RHI->BindConstantBuffer(&objectData, sizeof(objectData), 1)))
 			return EResult::Fail;
-		// 2. 뼈 행렬 StructuredBuffer 바인딩: t0, space2 (Root Parameter [4])
+		// 2. 뼈 행렬 StructuredBuffer 바인딩 (최소 256개 본 크기 보장으로 GPU OOB 원천 차단)
+		static vector<mat4> s_BoneUploadBuffer(256, glm::identity<mat4>());
 		if (command.boneMatrices && !command.boneMatrices->empty())
 		{
-			m_RHI->BindInstanceBuffer(command.boneMatrices->data(), static_cast<uint32>(command.boneMatrices->size()));
+			const size_t copyCount = std::min(command.boneMatrices->size(), s_BoneUploadBuffer.size());
+			std::memcpy(s_BoneUploadBuffer.data(), command.boneMatrices->data(), copyCount * sizeof(mat4));
+			if (copyCount < s_BoneUploadBuffer.size())
+			{
+				std::fill(s_BoneUploadBuffer.begin() + copyCount, s_BoneUploadBuffer.end(), glm::identity<mat4>());
+			}
+			if (IsFailure(m_RHI->BindInstanceBuffer(s_BoneUploadBuffer.data(), static_cast<uint32>(s_BoneUploadBuffer.size()), sizeof(mat4))))
+				return EResult::Fail;
+		}
+		else
+		{
+			if (IsFailure(m_RHI->BindInstanceBuffer(s_IdentityBones.data(), static_cast<uint32>(s_IdentityBones.size()), sizeof(mat4))))
+				return EResult::Fail;
 		}
 		// 3. 인덱스 드로우
-		if (command.mesh->GetIndexBuffer())
-			m_RHI->DrawIndexed(command.mesh->GetIndexCount());
-		else
-			m_RHI->Draw(command.mesh->GetVertexCount());
+		const EResult drawResult = command.mesh->GetIndexBuffer()
+			? m_RHI->DrawIndexed(command.mesh->GetIndexCount())
+			: m_RHI->Draw(command.mesh->GetVertexCount());
+		if (IsFailure(drawResult))
+			return drawResult;
 	}
 	return EResult::Success;
 }
@@ -926,49 +960,43 @@ EResult Renderer::PreparePassPipelineDesc(RenderPass* renderPass, RHIPipelineDes
 	return EResult::Success;
 }
 
-EResult Renderer::PrepareMeshPipelineDesc(Mesh* mesh, MaterialInterface* material,
-	ERenderPassType passType, RHIPipelineDesc& desc)
+EResult Renderer::PrepareMeshPipelineDesc(Mesh* mesh, MaterialInterface* material, ERenderPassType passType, RHIPipelineDesc& desc)
 {
-	if (!m_RHI || !material)
-		return EResult::InvalidArgument;
-
-	Shader* vs = material->GetVertexShader(passType);
+	if (!m_RHI || !material) return EResult::InvalidArgument;
+	// [현대 엔진 방식] 메시 정점 특성(Static vs Skinned)과 패스에 맞춰 버텍스 셰이더 자동 매칭
+	Shader* vs = ResolveVertexShader(mesh, material, passType);
 	Shader* ps = material->GetPixelShader(passType);
-
-	if (!vs || !ps || !vs->GetRHIShader() || !ps->GetRHIShader())
-		return EResult::InvalidArgument;
-
+	if (!vs || !ps || !vs->GetRHIShader() || !ps->GetRHIShader()) return EResult::InvalidArgument;
 	desc.pipelineType = EPipelineType::Graphics;
 	desc.topology = mesh ? mesh->GetTopology() : ETopology::TriangleList;
-
 	if (mesh)
 	{
 		const auto& inputLayouts = mesh->GetInputLayoutDescs();
-		if (desc.inputLayouts != inputLayouts)
-			desc.inputLayouts = inputLayouts;
+		const std::wstring& vsKey = vs->GetKey();
+		const bool isSkinningVS = (vsKey.find(L"Skinning") != std::wstring::npos || vsKey.find(L"skinning") != std::wstring::npos);
+		const bool hasSkinLayout = (inputLayouts.size() > 2); // EMeshStream::SkinData (슬롯 2)
+		// 최종 안전장치: ResolveVertexShader가 호환성을 보장하므로 통과하지만, 비정상 상황 시 D3D12 크래시 방어
+		if (isSkinningVS && !hasSkinLayout) return EResult::InvalidArgument;
+		if (desc.inputLayouts != inputLayouts) desc.inputLayouts = inputLayouts;
 	}
 	else
 	{
 		desc.inputLayouts.clear();
 	}
-
 	desc.vertexShader = vs->GetRHIShader();
 	desc.pixelShader = ps->GetRHIShader();
 	desc.frontFace = material->GetFrontFace();
 	desc.cullMode = material->GetCullMode();
 	desc.fillMode = material->GetFillMode();
 	desc.blendState = material->GetBlendState();
-
 	const bool hasDepthStencil = desc.depthStencilAttachmentFormat != ETextureFormat::UNKNOWN;
 	desc.depthStencilState.depthTestEnable = hasDepthStencil && material->GetDepthMode() != EDepthMode::None;
 	desc.depthStencilState.depthWriteEnable = hasDepthStencil && material->GetDepthMode() == EDepthMode::ReadWrite;
 	desc.depthStencilState.depthCompareOp = material->GetDepthCompareOp();
-
 	return EResult::Success;
 }
 
-EResult Renderer::BindMeshPipeline(Mesh* mesh, MaterialInterface* material,
-	ERenderPassType passType, RHIPipelineDesc& desc)
+EResult Renderer::BindMeshPipeline(Mesh* mesh, MaterialInterface* material, ERenderPassType passType, RHIPipelineDesc& desc)
 {
 	const auto result = PrepareMeshPipelineDesc(mesh, material, passType, desc);
 	if (IsFailure(result)) return result;
@@ -1004,5 +1032,65 @@ EResult Renderer::BindMeshPipeline(Mesh* mesh, MaterialInterface* material, Rend
 	if (IsFailure(result)) return result;
 
 	return BindMeshPipeline(mesh, material, renderPass->GetPassType(), desc);
+}
+#pragma endregion
+
+#pragma region Default Shaders
+void Renderer::EnsureDefaultShaders()
+{
+	if (m_DefaultGBufferVS.IsValid() && m_DefaultGBufferVS.Get()) return;
+	auto& rm = ResourceManager::Get();
+	auto getOrLoad = [&](const std::wstring& path) -> ResourceHandle<Shader>
+		{
+			auto handle = rm.GetResourceHandle<Shader>(path);
+			if (!handle.IsValid() || !handle.Get())
+			{
+				auto loaded = rm.LoadFile(path);
+				if (loaded.IsValid()) handle = ResourceHandle<Shader>(loaded);
+			}
+			return handle;
+		};
+	m_DefaultGBufferVS = getOrLoad(L"Resources/Shader/GBufferVS");
+	m_DefaultGBufferSkinningVS = getOrLoad(L"Resources/Shader/GBufferSkinningVS");
+	m_DefaultShadowDepthVS = getOrLoad(L"Resources/Shader/ShadowDepthVS");
+	m_DefaultShadowDepthSkinningVS = getOrLoad(L"Resources/Shader/ShadowDepthSkinningVS");
+}
+Shader* Renderer::ResolveVertexShader(Mesh* mesh, MaterialInterface* material, ERenderPassType passType)
+{
+	Shader* matVS = material ? material->GetVertexShader(passType) : nullptr;
+	if (!mesh || !matVS) return matVS;
+	const bool isSkinned = mesh->IsSkinned();
+	const std::wstring vsKey = matVS->GetKey();
+	const bool isSkinningVS = (vsKey.find(L"Skinning") != std::wstring::npos || vsKey.find(L"skinning") != std::wstring::npos);
+	// 1. [안전 보장] 메시와 머티리얼의 스키닝 속성이 일치하면 기존 셰이더를 100% 그대로 유지합니다.
+	// (기존의 모든 정상적인 정적 메시 드로우콜은 이 분기를 타고 그대로 렌더링되므로 안전합니다.)
+	if (isSkinned == isSkinningVS)
+	{
+		return matVS;
+	}
+	// 2. [불일치 해결] 오직 타입이 어긋났을 때만 대체 셰이더를 찾습니다.
+	EnsureDefaultShaders();
+	if (isSkinned)
+	{
+		// 스킨드 메시인데 정적 VS가 온 경우 -> 스키닝 VS로 자동 승격
+		if (passType == ERenderPassType::Shadow)
+		{
+			Shader* shadowSkinVS = m_DefaultShadowDepthSkinningVS.Get();
+			return shadowSkinVS ? shadowSkinVS : matVS;
+		}
+		Shader* gbufferSkinVS = m_DefaultGBufferSkinningVS.Get();
+		return gbufferSkinVS ? gbufferSkinVS : matVS;
+	}
+	else
+	{
+		// 정적 메시인데 스키닝 VS가 온 경우 -> 정적 VS로 안전 강등 (마테리얼 에디터 프리뷰 구체 등)
+		if (passType == ERenderPassType::Shadow)
+		{
+			Shader* shadowVS = m_DefaultShadowDepthVS.Get();
+			return shadowVS ? shadowVS : matVS;
+		}
+		Shader* gbufferVS = m_DefaultGBufferVS.Get();
+		return gbufferVS ? gbufferVS : matVS;
+	}
 }
 #pragma endregion

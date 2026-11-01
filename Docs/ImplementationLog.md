@@ -1895,3 +1895,31 @@ Use this as the primary execution list until a playable 2D vertical slice is com
   - 런타임 1회 실행 후 `Resources/Texture/CloudBaseShape3D.bamtex` 및 `CloudWeatherMap2D.bamtex`가 디스크에 정상 생성됨을 확인.
   - 지평선 시점의 텍스처 페치 및 마칭 루프 부하가 감소하여 프레임 드랍이 완화됨을 확인.
   - 독립 렌더 패스(1/4 저해상도 버퍼 + Temporal Reprojection) 및 2D Cloud Shadow Map 분리는 향후 차세대 과제로 유지.
+
+
+## 2026-11-02 — 3D 모델 임포트 파이프라인 완성 (GLTF/GLB/FBX 머티리얼·임베디드 텍스처 연동) 및 머티리얼 인스턴스 렌더링 안정화
+
+- 요청: 3D 모델 파일(`Fox.glb` 등) 임포트 시 메시뿐만 아니라 스켈레톤, 애니메이션, 머티리얼 슬롯 및 임베디드 텍스처(PNG 바이너리)를 자동 추출하여 에셋화하고, 씬에 배치했을 때 텍스처와 라이팅이 정상 렌더링되도록 파이프라인 통합 및 버그 수정.
+- 모델 임포트 파이프라인 구축 및 다형성 확장:
+  - `Tools/ModelConverter/Public/ModelConverter.h`, `Private/ModelConverter.cpp`:
+    - Assimp `mMaterials` 순회를 통해 PBR 기본 인자(BaseColor, Roughness, Metallic) 및 텍스처 바인딩 슬롯 정보(`TextureBindingInfo`) 추출.
+    - GLB/FBX 바이너리에 내장된 임베디드 텍스처(`scene->GetEmbeddedTexture()`) 바이너리 데이터(`EmbeddedData`) 추출 지원.
+  - `Editor/Source/AssetManager/Public/ModelImportTask.h`, `Private/ModelImportTask.cpp`:
+    - 백그라운드 태스크의 `PreparedModelData`에 머티리얼 목록 및 임베디드 텍스처 데이터 복사/전달 파이프라인 연결.
+  - `Editor/Source/AssetManager/Importer/Public/ModelImporter.h`, `Private/ModelImporter.cpp`:
+    - `EModelImportOption::Materials` 옵션 지원 및 `ModelImportDesc`에 `bool Overwrite = true` 추가.
+    - `CommitPreparedModel`에서 임베디드 텍스처를 디스크(`.png`)로 자동 덤프하고 `ResourceManager::LoadFile` 연동.
+    - 스켈레탈 메시 기본 머티리얼(`SkinningMaterial.bammat.json`) 기반의 `MaterialInstance`(`.bammatinst`) 생성, 추출된 텍스처 바인딩 및 모델 에셋 등록.
+  - `Engine/Source/Resource/Model/Public/Model.h`, `Private/Model.cpp`:
+    - 모델 에셋의 머티리얼 슬롯을 `ResourceHandle<Material>`에서 `ResourceHandle<MaterialInterface>`로 다형성 확장하여 `.bammat` 외에 `.bammatinst`도 직접 연결할 수 있도록 개선.
+- 머티리얼 인스턴스 렌더링 버그 수정 및 상태 누수 방지:
+  - 현상: 여우 모델 씬 배치 시 지오메트리는 정상 렌더링되나 음영/조명 없이 완전히 새하얗게(Pure White / Unlit 자체 발광) 출력됨.
+  - 원인:
+    - `MaterialInstance::Bind`에 미바인딩 슬롯(Normal/PBR/Emission)에 대한 표준 기본 텍스처 리셋 처리가 누락되어, 이전 드로우 콜의 흰색 텍스처가 Slot 3(Emission)에 남아있어 픽셀 셰이더에서 자체 발광 발생.
+    - 아카이브 역직렬화 직후 슬롯 검색 캐시(`m_TextureSlotToIndex`)가 비어 있어 `HasTextureBindingBySlot()`이 오작동함.
+  - 해결:
+    - `Engine/Source/Resource/Material/Private/MaterialInstance.cpp`: `MaterialInstance::Bind` 진입 시 내부 슬롯 캐시가 비어 있으면 `RebuildTextureBindingCache()` 자동 호출.
+    - 바인딩되지 않은 G-Buffer 텍스처 슬롯(0~3)에 표준 기본 텍스처(`white1x1`, `blue1x1`, `black1x1(PBR)`, `black1x1(Emission)`)를 강제 바인딩하여 텍스처 상태 누수 원천 차단.
+- 검증 및 범위:
+  - `Fox.glb` 임포트 시 메시(`Fox_fox1.bammesh`), 스켈레톤(`Fox_Skeleton.bamskel`), 애니메이션 3종(`Fox_Survey`, `Walk`, `Run`), 알베도 텍스처(`Fox_fox_material_Albedo.png`), 머티리얼 인스턴스(`Fox_fox_material.bammatinst`), 모델(`Fox.bammodel`)이 유효하게 디스크에 생성됨을 확인.
+  - 씬 배치 시 여우 모델에 주황색/흰색 텍스처와 디렉셔널 라이트 음영이 정상적으로 렌더링됨을 시각적으로 확인.

@@ -299,9 +299,8 @@ EResult ReflectionRegistry::Initialize(void*)
                     ar, key, value, m_Registry, m_Codecs);
             }))
     {
-        std::cerr << "Engine reflection initialization failed: "
-            << reflection::ToString(m_RegistrationResult.Error)
-            << ", owner: " << m_RegistrationResult.Owner << ", member: " << m_RegistrationResult.Member << '\n';
+        BAM_LOG(Fatal, "Engine", "Reflection", "Engine reflection initialization failed: {}, owner: {}, member: {}",
+            reflection::ToString(m_RegistrationResult.Error), m_RegistrationResult.Owner, m_RegistrationResult.Member);
         Free();
         return EResult::Fail;
     }

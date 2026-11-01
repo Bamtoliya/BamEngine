@@ -2,6 +2,7 @@
 
 #include "SDLGPUShader.h"
 #include "SDLGPURHI.h"
+#include "Runtime.h"
 
 #pragma region Constructor&Destructor
 EResult SDLGPUShader::Initialize(const DESC& desc)
@@ -18,7 +19,7 @@ EResult SDLGPUShader::Initialize(const DESC& desc)
 
         if (shaderPath.is_relative())
         {
-            shaderPath = std::filesystem::path(BAMENGINE_PROJECT_ROOT) / shaderPath;
+            shaderPath = Runtime::Get().ResolveProjectRelativePath(shaderPath);
         }
 
         shaderPath = std::filesystem::weakly_canonical(shaderPath);
@@ -27,7 +28,7 @@ EResult SDLGPUShader::Initialize(const DESC& desc)
         if (!shaderFile.is_open())
         {
             fmt::print(stderr, "Shader open failed\n");
-            fmt::print(stderr, "  project  : {}\n", std::filesystem::path(BAMENGINE_PROJECT_ROOT).string());
+            fmt::print(stderr, "  project  : {}\n", Runtime::Get().GetProjectRoot().string());
             fmt::print(stderr, "  requested: {}\n", std::filesystem::path(desc.filePath).string());
             fmt::print(stderr, "  resolved : {}\n", shaderPath.string());
             return EResult::FileNotFound;

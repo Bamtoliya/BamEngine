@@ -5,6 +5,7 @@
 #include "TextureImporter.h"
 #include "TextureCompressorInterface.h"
 #include "AssetManager.h"
+#include "EditorSettingsService.h"
 
 static Engine::ETextureFormat s_TargetFormat = Engine::ETextureFormat::BC1_RGBA_UNORM;
 static uint32 s_CompressFlagsValue = static_cast<uint32>(ECompressFlags::GenerateMipMaps | ECompressFlags::HighQuality);
@@ -132,7 +133,8 @@ bool TextureInspector::OnInspectorGUI(const std::filesystem::path& assetPath)
 
             // [핵심 변경점] 절대 경로를 프로젝트 루트 기준의 '상대 경로'로 변환합니다.
             // (std::filesystem::current_path()가 엔진의 작업 디렉토리 즉, 프로젝트 루트라고 가정)
-            std::filesystem::path relSourcePath = std::filesystem::relative(assetPath, std::filesystem::current_path());
+            const auto projectRoot = EditorSettingsService::IsCreated() ? EditorSettingsService::Get().GetProjectRoot() : Engine::PlatformPath::GetExecutableDirectory();
+            std::filesystem::path relSourcePath = std::filesystem::relative(assetPath, projectRoot);
             std::filesystem::path relDestDir = relSourcePath;
 
             bool autoGenSprite = s_AutoGenerateSprite;

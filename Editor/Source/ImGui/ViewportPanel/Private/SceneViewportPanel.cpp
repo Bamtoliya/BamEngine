@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "SceneViewportPanel.h"
 #include "ShortcutManager.h"
@@ -35,6 +35,8 @@
 #include "NotificationManager.h"
 #include <archive/JsonArchive.h>
 #include "PrefabModeManager.h"
+#include "Model.h"
+#include "ResourceManager.h"
 
 #pragma region Helper
 struct LightingPassData
@@ -243,6 +245,19 @@ ViewportWorkspace SceneViewportPanel::CaptureViewportState() const
 #pragma region Loop
 void SceneViewportPanel::Update(f32 dt)
 {
+	// 1. 창이 닫혔거나 다른 탭 뒤에 숨겨진 경우 렌더링 100% 차단 (0 FPS)
+	if (!m_Open || !m_IsVisibleOnScreen)
+		return;
+	// 2. 적응형 프레임 쓰로틀링 판정
+	const bool isHighPriority = m_Focused || m_Hovered || PIEManager::Get().IsPlaying();
+	const float targetInterval = isHighPriority ? 0.0f : (1.0f / 15.0f); // 비포커스 시 15 FPS
+	m_TimeSinceLastRender += dt;
+	if (m_TimeSinceLastRender < targetInterval)
+	{
+		// 이번 프레임은 GPU 렌더링 제출 생략 (이전 프레임의 RT 이미지를 그대로 표시)
+		return;
+	}
+	m_TimeSinceLastRender = 0.0f;
 	// Download the clicked frame before resizing/replacing its render targets.
 	ProcessPickingRequest();
 	if (!CalculateRenderResolution(m_PanelWidth, m_PanelHeight))
@@ -349,7 +364,30 @@ void SceneViewportPanel::DrawCustomViewport()
 			std::string ext = p.extension().string();
 			for (char& c : ext) c = static_cast<char>(tolower(c));
 
-			if (filename.ends_with(".bamprefab.json") || filename.ends_with(".prefab.json") || ext == ".bamprefab" || ext == ".prefab" || ext == ".json")
+			if (ext == ".bammodel" || filename.ends_with(".bammodel.json"))
+			{
+				if (Scene* currentScene = SceneManager::Get().GetCurrentScene())
+				{
+					auto& rm = Engine::ResourceManager::Get();
+					Engine::ResourceHandle<Engine::Model> model(rm.LoadFile(p.wstring()));
+					const wchar_t* matPath = (model.IsValid() && model->GetSkeleton().IsValid())
+						? L"Resources/Material/SkinningMaterial.bammat.json"
+						: L"Resources/Material/GBufferMaterial.bammat.json";
+					Engine::ResourceHandle<Engine::MaterialInterface> mat(rm.LoadFile(matPath));
+					if (model.IsValid() && mat.IsValid())
+					{
+						auto& history = Application::Get().GetEditHistory();
+						auto before = history.Enabled() ? SceneEditSnapshot::Capture(*currentScene) : SceneEditSnapshot{};
+						Engine::Entity* root = nullptr;
+						if (currentScene->InstantiateModel(*model, mat, root) == Engine::EResult::Success && root)
+						{
+							if (before) history.Record(std::move(before), SceneEditSnapshot::Capture(*currentScene), "UI_HISTORY_CREATE");
+							SelectionManager::Get().SetSelectedEntity(root);
+						}
+					}
+				}
+			}
+			else if (filename.ends_with(".bamprefab.json") || filename.ends_with(".prefab.json") || ext == ".bamprefab" || ext == ".prefab" || ext == ".json")
 			{
 				if (Scene* currentScene = SceneManager::Get().GetCurrentScene())
 				{

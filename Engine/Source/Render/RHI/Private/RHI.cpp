@@ -161,10 +161,10 @@ EResult RHI::BindInstanceBuffer(RHIBuffer* buffer, uint32 offset)
 {
 	return EResult::NotImplemented;
 }
-EResult RHI::BindInstanceBuffer(const void* data, uint32 instanceCount)
+EResult RHI::BindInstanceBuffer(const void* data, uint32 instanceCount, uint32 stride)
 {
-	if (!data || instanceCount == 0) return EResult::InvalidArgument;
-	const uint32 bytesNeeded = instanceCount * 80;
+	if (!data || instanceCount == 0 || stride == 0) return EResult::InvalidArgument;
+	const uint32 bytesNeeded = instanceCount * stride;
 	const uint32 alignedSize = (bytesNeeded + (m_ConstantBufferAlignment - 1)) & ~(m_ConstantBufferAlignment - 1);
 	if (m_DynamicInstanceBufferCursor + alignedSize > DYNAMIC_INSTANCE_BUFFER_SIZE)
 	{

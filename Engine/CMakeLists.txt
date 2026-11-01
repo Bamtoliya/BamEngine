@@ -53,8 +53,11 @@ set_target_properties(Engine PROPERTIES UNITY_BUILD ON)
 # 컴파일 정의 (전처리기 매크로)
 target_compile_definitions(Engine PRIVATE
     ENGINE_EXPORTS
-    BAMENGINE_PROJECT_ROOT="${CMAKE_SOURCE_DIR}"
 )
+
+if(BAMENGINE_WITH_EDITOR)
+    target_compile_definitions(Engine PUBLIC BAM_EDITOR=1)
+endif()
 
 set(_engine_glm_definitions
     GLM_FORCE_DEPTH_ZERO_TO_ONE

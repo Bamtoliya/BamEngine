@@ -9,6 +9,7 @@
 #include "Logger.h"
 #include <windows.h>
 #include "NotificationManager.h"
+#include "PlatformPath.h"
 
 namespace
 {
@@ -80,22 +81,7 @@ namespace
 
 std::filesystem::path AssetHotReloadManager::ResolveTextureDirectory()
 {
-	std::error_code ec;
-	std::filesystem::path candidate = std::filesystem::current_path() / "Resources";
-	if (std::filesystem::exists(candidate, ec)) return candidate;
-
-	wchar_t exePathBuf[MAX_PATH] = {};
-	GetModuleFileNameW(nullptr, exePathBuf, MAX_PATH);
-	std::filesystem::path cur = std::filesystem::path(exePathBuf).parent_path();
-	for (int i = 0; i < 5; ++i)
-	{
-		candidate = cur / "Resources";
-		if (std::filesystem::exists(candidate, ec)) return candidate;
-		if (!cur.has_parent_path()) break;
-		cur = cur.parent_path();
-	}
-
-	return "Resources";
+	return Engine::PlatformPath::ResolveProjectRelative("Resources");
 }
 
 #pragma region Constructor&Destructor

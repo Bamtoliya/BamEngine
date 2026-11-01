@@ -49,6 +49,7 @@ public:
 	static void SetCurrentContext(Scene* scene, entt::entity entity, float dt);
 	static void ClearCurrentContext();
 
+#ifdef BAM_EDITOR
 	// ── 디버깅 인터페이스 (에디터 계층 연동용) ──
 	// 1. 에디터 펄스 렌더링용 실행기 조회
 	static const GraphExecutor* GetDebugExecutor(Scene* scene, entt::entity entity);
@@ -57,6 +58,7 @@ public:
 	using NodeExecuteHook = std::function<void(const std::wstring& graphPath, GraphNodeId nodeId)>;
 	static void SetNodeExecuteHook(NodeExecuteHook hook);
 	static void TriggerNodeExecuteHook(const std::wstring& graphPath, GraphNodeId nodeId);
+#endif
 
 private:
 	GraphRegistry m_Registry;

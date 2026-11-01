@@ -22,6 +22,7 @@ namespace Editor
 
         std::vector<Engine::VertexPosition> Positions;
         std::vector<Engine::VertexMaterial> Attributes;
+        std::vector<Engine::VertexSkinData> SkinWeights;
         std::vector<Engine::uint32> Indices;
 
         glm::vec3 BoundsMin{};
@@ -32,8 +33,11 @@ namespace Editor
     {
         filesystem::path SourcePath;
         std::uint32_t MaterialCount = 0;
+        std::vector<Tools::ModelConversion::MaterialData> Materials;
         std::vector<PreparedModelMesh> Meshes;
         std::vector<Tools::ModelConversion::NodeData> Nodes;
+        std::vector<Tools::ModelConversion::BoneData> Bones;
+        std::vector<Tools::ModelConversion::AnimationData> Animations;
     };
 
     class ModelImportTask final : public ImportJob

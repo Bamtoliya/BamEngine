@@ -103,16 +103,29 @@ EResult Model::OnPostLoad()
 #pragma endregion
 
 #pragma region Getter
-ResourceHandle<Material> Model::GetMeshMaterial(uint32 meshIndex) const
+ResourceHandle<MaterialInterface> Model::GetMeshMaterial(uint32 meshIndex) const
 {
 	if (meshIndex >= m_MeshMaterialIndices.size())
 		return {};
-
 	const uint32 materialIndex = m_MeshMaterialIndices[meshIndex];
 	if (materialIndex >= m_Materials.size())
 		return {};
-
 	return m_Materials[materialIndex];
+}
+#pragma endregion
+#pragma region Setter
+EResult Model::SetMaterial(uint32 slotIndex, const ResourceHandle<MaterialInterface>& material)
+{
+	if (slotIndex >= m_Materials.size())
+		return EResult::InvalidArgument;
+	const Handle handle = material.GetRawHandle();
+	if (handle.IsValid() && dynamic_cast<MaterialInterface*>(ResourceManager::Get().GetResource(handle)) == nullptr)
+		return EResult::InvalidArgument;
+	if (m_Materials[slotIndex] == material)
+		return EResult::Success;
+	m_Materials[slotIndex] = material;
+	IncreaseVersion();
+	return EResult::Success;
 }
 #pragma endregion
 #pragma region Save&Load
@@ -135,26 +148,6 @@ archive::ArchiveResult Model::ReadArchive(const archive::IArchive& ar)
 	return result;
 }
 #pragma endregion
-
-#pragma region Setter
-EResult Model::SetMaterial(uint32 slotIndex, const ResourceHandle<Material>& material)
-{
-	if (slotIndex >= m_Materials.size())
-		return EResult::InvalidArgument;
-
-	const Handle handle = material.GetRawHandle();
-	if (handle.IsValid() && dynamic_cast<Material*>(ResourceManager::Get().GetResource(handle)) == nullptr)
-		return EResult::InvalidArgument;
-
-	if (m_Materials[slotIndex] == material)
-		return EResult::Success;
-
-	m_Materials[slotIndex] = material;
-	IncreaseVersion();
-	return EResult::Success;
-}
-#pragma endregion
-
 
 EResult Model::Bind(uint32 slot)
 {

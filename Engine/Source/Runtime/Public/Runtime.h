@@ -17,11 +17,16 @@
 #include "PickingManager.h"
 #include "AudioManager.h"
 #include "ModuleManager.h"
+#include "PlatformPath.h"
 
 BEGIN(Engine)
 typedef struct RuntimeCreateInfo
 {
 	RendererDesc RendererDesc;
+
+	// 호스트가 결정하여 엔진에 전달하는 경로들 (엔진 독립성 유지)
+	std::filesystem::path ProjectRoot;
+	std::filesystem::path AssetRoot = "Resources";
 } RUNTIMEDESC;
 
 class ENGINE_API Runtime : public Base
@@ -46,6 +51,19 @@ public:
 	EResult Render(f32 dt);
 #pragma endregion
 
+#pragma region Paths
+public:
+	const std::filesystem::path& GetProjectRoot() const { return m_ProjectRoot; }
+	const std::filesystem::path& GetAssetRoot() const { return m_AssetRoot; }
+	// 상대 경로를 주입받은 ProjectRoot 기준 절대 경로로 안전하게 결합
+	std::filesystem::path ResolveProjectRelativePath(const std::filesystem::path& relativePath) const
+	{
+		if (relativePath.is_absolute()) return PlatformPath::Normalize(relativePath);
+		return PlatformPath::Normalize(m_ProjectRoot / relativePath);
+	}
+#pragma endregion
+
+
 #pragma region Variables
 private:
 	entt::registry m_GlobalRegistry;
@@ -65,6 +83,9 @@ private:
 	PickingManager* m_PickingManager = { nullptr };
 	AudioManager* m_AudioManager = { nullptr };
 	ModuleManager* m_ModuleManager = { nullptr };
+private:
+	std::filesystem::path m_ProjectRoot;
+	std::filesystem::path m_AssetRoot;
 #pragma endregion
 };
 

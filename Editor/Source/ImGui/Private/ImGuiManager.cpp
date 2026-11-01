@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "InputManager.h"
 #include "ShortcutManager.h"
 #include <archive/JsonArchive.h>
@@ -8,6 +8,7 @@
 #include <fmt/core.h>
 #pragma endregion
 
+#include "PlatformPath.h"
 #include "ImGuiManager.h"
 #include "Application.h"
 #include "SceneManager.h"
@@ -70,11 +71,18 @@ EResult ImGuiManager::Initialize(void* arg)
 	io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 	io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
 
-	std::string fontPath = "C:\\Windows\\Fonts\\malgun.ttf";
-	vector<string> iconsFontPaths;
-
-	iconsFontPaths.push_back("Resources\\Fonts\\fontawesome-free-7.1.0-desktop\\otfs\\Font Awesome 7 Free-Solid-900.otf");
-	iconsFontPaths.push_back("Resources/Fonts/fontawesome-free-7.1.0-desktop/otfs/Font Awesome 7 Free-Regular-400.otf");	
+	// 1. 시스템 폰트 디렉터리 동적 취득
+	std::filesystem::path fontPath = Engine::PlatformPath::GetSystemFontDirectory() / "malgun.ttf";
+	if (EditorSettingsService::IsCreated())
+	{
+		const auto& customFont = EditorSettingsService::Get().GetPreferences().CustomFontPath;
+		if (!customFont.empty() && std::filesystem::exists(customFont))
+			fontPath = customFont;
+	}
+	const auto projectRoot = Engine::Runtime::IsCreated() ? Engine::Runtime::Get().GetProjectRoot() : Engine::PlatformPath::GetExecutableDirectory();
+	vector<std::filesystem::path> iconsFontPaths;
+	iconsFontPaths.push_back(projectRoot / "Resources/Fonts/fontawesome-free-7.1.0-desktop/otfs/Font Awesome 7 Free-Solid-900.otf");
+	iconsFontPaths.push_back(projectRoot / "Resources/Fonts/fontawesome-free-7.1.0-desktop/otfs/Font Awesome 7 Free-Regular-400.otf");
 
 	
 	if (std::filesystem::exists(fontPath))
@@ -101,30 +109,31 @@ EResult ImGuiManager::Initialize(void* arg)
 		}
 
 		ImFontConfig fontConfig;
-		fontConfig.OversampleH = 1; // 메모리 최적화: 기본값 3 -> 1 (폰트 아틀라스 크기 축소)
+		fontConfig.OversampleH = 1;
 		fontConfig.OversampleV = 1;
 		fontConfig.PixelSnapH = true;
-		io.Fonts->AddFontFromFileTTF(fontPath.c_str(), 18.0f, &fontConfig, ranges.Data);
+		// UTF-8 문자열로 변환하여 ImGui에 전달 (한글 경로 완벽 보장)
+		const auto utf8FontPath = fontPath.u8string();
+		io.Fonts->AddFontFromFileTTF(reinterpret_cast<const char*>(utf8FontPath.c_str()), 18.0f, &fontConfig, ranges.Data);
 	}
 	else
 	{
-		fmt::print(stderr, "Font file not found: {}\n", fontPath);
+		fmt::print(stderr, "Font file not found: {}\n", fontPath.string());
 	}
-
-	for (auto& filePath : iconsFontPaths)
+	for (const auto& filePath : iconsFontPaths)
 	{
-		if (filesystem::exists(filePath))
+		if (std::filesystem::exists(filePath))
 		{
-			// 아이콘 폰트 로드
 			ImFontConfig iconsConfig;
 			iconsConfig.MergeMode = true;
 			iconsConfig.PixelSnapH = true;
 			static const ImWchar icons_ranges[] = { ICON_MIN_FA, ICON_MAX_FA, 0 };
-			io.Fonts->AddFontFromFileTTF(filePath.c_str(), 16.0f, &iconsConfig, icons_ranges);
+			const auto utf8IconPath = filePath.u8string();
+			io.Fonts->AddFontFromFileTTF(reinterpret_cast<const char*>(utf8IconPath.c_str()), 16.0f, &iconsConfig, icons_ranges);
 		}
 		else
 		{
-			fmt::print(stderr, "Icons font file not found: {}\n", filePath);
+			fmt::print(stderr, "Icons font file not found: {}\n", filePath.string());
 		}
 	}
 
@@ -385,7 +394,7 @@ void ImGuiManager::Draw()
 		}
 	}
 
-	NotificationManager::Get().DrawNotificationUI();
+	NotificationManager::Get().DrawNotificationUI(m_ToolBar.GetFooterBarHeight());
 }
 
 void ImGuiManager::MainDockspace()
@@ -394,8 +403,9 @@ void ImGuiManager::MainDockspace()
 	// 메인 뷰포트 전체를 덮는 "DockSpace" 윈도우를 만듭니다.
 	const ImGuiViewport* viewport = ImGui::GetMainViewport();
 	const float topReserve = m_ToolBar.GetPlayBarHeight();
+	const float bottomReserve = m_ToolBar.GetFooterBarHeight();
 	ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x, viewport->WorkPos.y + topReserve));
-	ImGui::SetNextWindowSize(ImVec2(viewport->WorkSize.x, viewport->WorkSize.y - topReserve));
+	ImGui::SetNextWindowSize(ImVec2(viewport->WorkSize.x, std::max(1.0f, viewport->WorkSize.y - topReserve - bottomReserve)));
 	ImGui::SetNextWindowViewport(viewport->ID);
 
 	// 스타일: 라운딩 없음, 테두리 없음, 패딩 없음

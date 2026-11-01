@@ -1,7 +1,7 @@
 ﻿#pragma once
-
 #include "ShaderImporter.h"
 #include "Shader.h"
+#include "ShaderCompiler.h"
 #include "ShaderReflection.h"
 #include "ResourceManager.h"
 
@@ -44,7 +44,34 @@ namespace
 
 EResult ShaderImporter::Import(const filesystem::path& sourcePath, const filesystem::path& destDir, void* arg)
 {
-    if (sourcePath.extension() != L".spv")
+    std::wstring ext = sourcePath.extension().wstring();
+    std::transform(ext.begin(), ext.end(), ext.begin(), ::towlower);
+    if (ext == L".hlsl")
+    {
+        const EShaderType shaderType = ShaderCompiler::DeduceShaderTypeFromPath(sourcePath);
+        if (shaderType == EShaderType::Unknown)
+            return EResult::InvalidArgument;
+        const ERHIType rhiType = Renderer::IsCreated() ? Renderer::Get().GetRHIType() : ERHIType::DirectX12;
+        const ShaderCompileResult compileResult = ShaderCompiler::Compile(sourcePath, shaderType, rhiType);
+        if (!compileResult.Success)
+            return EResult::Fail;
+        const std::wstring stemW = sourcePath.stem().wstring();
+        ShaderDesc desc = {};
+        desc.Key = L"Resources/Shader/" + stemW;
+        desc.shaderType = shaderType;
+        desc.dxilPath = L"Resources/Shader/bin/dxil/" + stemW + L".cso";
+        desc.spirvPath = L"Resources/Shader/bin/spirv/" + stemW + L".spv";
+        desc.Path = (rhiType == ERHIType::DirectX12) ? desc.dxilPath : desc.spirvPath;
+        ResourceManager& rm = ResourceManager::Get();
+        auto existing = rm.GetResourceHandle<Shader>(desc.Key);
+        if (existing.IsValid() && existing.Get())
+        {
+            return existing.Get()->UpdateBytecode(compileResult.Bytecode);
+        }
+        auto handle = rm.LoadResource<Shader>(&desc);
+        return handle.IsValid() ? EResult::Success : EResult::Fail;
+    }
+    if (ext != L".spv")
         return EResult::InvalidArgument;
 
     vector<uint8> shaderBytecode;

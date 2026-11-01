@@ -7,10 +7,6 @@ file(GLOB_RECURSE CLIENT_SOURCES CONFIGURE_DEPENDS "${CLIENT_SOURCE_DIR}/*.cpp")
 
 add_executable(Client ${CLIENT_HEADERS} ${CLIENT_SOURCES})
 
-target_compile_definitions(Client PRIVATE
-    BAMENGINE_PROJECT_ROOT="${CMAKE_SOURCE_DIR}"
-)
-
 target_link_libraries(Client PRIVATE
     BamEngine::Engine
 )

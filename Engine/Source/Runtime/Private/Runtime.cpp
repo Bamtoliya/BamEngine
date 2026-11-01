@@ -18,6 +18,10 @@ EResult Runtime::Initialize(void* arg)
 	if (!runtimeDesc->RendererDesc.rhiDesc)
 		return EResult::InvalidArgument;
 
+	m_ProjectRoot = runtimeDesc->ProjectRoot.empty() ? PlatformPath::GetExecutableDirectory() : PlatformPath::Normalize(runtimeDesc->ProjectRoot);
+	m_AssetRoot = runtimeDesc->AssetRoot.empty() ? "Resources" : PlatformPath::Normalize(runtimeDesc->AssetRoot);
+	PlatformPath::SetProjectRoot(m_ProjectRoot);
+
 	RendererDesc rendererDesc = runtimeDesc->RendererDesc;
 
 	const auto fail = [this](const char* stage)

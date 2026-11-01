@@ -41,6 +41,7 @@ namespace Engine
 		// 애니메이션 상태 머신 런타임 인스턴스 (비직렬화)
 		AnimatorRuntimeState runtimeState;
 		std::shared_ptr<AnimatorStateMachine> stateMachineAsset;
+		std::string loadedControllerPath;
 
 		void Play() { isPlaying = true; }
 		void Pause() { isPlaying = false; }
@@ -53,6 +54,7 @@ namespace Engine
 			if (!sm->LoadFromFile(path)) return false;
 			stateMachineAsset = sm;
 			controllerPath = path;
+			loadedControllerPath = path;
 			runtimeState.BindStateMachine(stateMachineAsset);
 			return true;
 		}

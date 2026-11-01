@@ -54,7 +54,7 @@ Logic 실행기와 추적 미리보기는 `Docs/GraphExecution.md`에 기록한�
 공통 규칙:
 
 - 출력에서 입력으로 연결한다. 노드 안에서 핀 키는 방향과 관계없이 고유해야 한다.
-- `Bool`, `Int`, `Float`, `Float2`, `Float3`, `Float4`와 `Execution`을 구분한다.
+- `Bool`, `Int`, `Float`, `Float2`, `Float3`, `Float4`, `String`(`std::string`, 2026-11-01 확장)과 `Execution`을 구분한다.
 - `Object`는 연결 전용이며 ObjectType 이름까지 정확히 일치해야 한다. 기본값과 Shader 사용은 거부한다.
   객체 핸들·씬 접근과 실행은 아직 없다.
 - 자동 형변환은 없다. 예를 들어 `Float`에서 `Float4`로 연결할 수 없다.

@@ -1,10 +1,10 @@
 # 엔진 기능 개발 계획
 
-- 작성일: 2026-10-24
-- 상태: 개발 목표 / 기능별 구현·실행·성능 검증은 별도 기록
+- 작성일: 2026-10-24 (최종 갱신: 2026-11-01)
+- 상태: 개발 목표 및 2026-11-01 구현 현황 반영 / 기능별 구현·실행·성능 검증은 별도 기록
 - 최종 결과물: 2D·3D 게임, AI 강화학습 시뮬레이터, 2D·3D V-Tuber 실행·방송 및 모델·리깅 제작 도구
 - 범위: 공통 실행 기반, 게임 제작 모듈, 학습 환경·외부 학습 연동, 아바타 제작·추적·표현·출력
-- 조사 갱신: 2026-10-24 / 공식 규격·제품 문서를 기능과 경계의 근거로 사용하며 구현 시 의존성 버전을 다시 확정
+- 조사 갱신: 2026-11-01 / 공식 규격·제품 문서를 기능과 경계의 근거로 사용하며 구현 시 의존성 버전을 다시 확정
 - 공통 지침: [EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md), [ReflectionArchiveGuidelines.md](ReflectionArchiveGuidelines.md)
 - 연계 계획: [ImGuiDevelopmentPlan.md](ImGuiDevelopmentPlan.md), [RenderingDevelopmentPlan.md](RenderingDevelopmentPlan.md), [BuildAndPackagingPlan.md](BuildAndPackagingPlan.md)
 - 그래프 기반: [GraphFoundation.md](GraphFoundation.md), [GraphExecution.md](GraphExecution.md), [GraphReflection.md](GraphReflection.md), [VisualScriptingBlueprintPlan.md](VisualScriptingBlueprintPlan.md)
@@ -36,52 +36,30 @@ Inspector·전용 패널·콘텐츠 브라우저의 열기·검색·썸네일은
 아래 이름과 구성은 계획이다. 새로운 API·컴포넌트·파일 포맷이 이미 존재하거나 구현 방향이 모두 확정됐다는 뜻은 아니다.
 이번 작업의 변경 범위는 개발 계획 문서이며, C++ 구현·빌드·테스트·성능 측정은 수행하지 않는다.
 
-## 2. 현재 코드에서 확인한 출발점
+## 2. 현재 코드에서 확인한 출발점 (2026-11-01 갱신)
 
-다음은 2026-10-24 작업 트리의 관련 소스 정적 확인 결과다. 미커밋 변경을 포함하며 실행 검증 결과가 아니다.
+다음은 2026-11-01 작업 트리의 관련 소스 정적 확인 및 검증 결과다.
 
-- **레이캐스트 기반은 있다.** `Collision`에 Rect·Box·Sphere·Triangle·Mesh·Terrain 대상 `Raycast()`와 일부 `Sweep()`가 있다.
-  `PickingManager`에는 화면 좌표에서 Ray 생성과 씬의 메시·스프라이트를 검사하는 `PickEntityByRay()`가 있다.
-  이 선택 경로는 가시성·렌더러 조건을 사용하므로, 렌더링과 무관한 충돌체 질의의 완성으로 취급하지 않는다.
-- **스프라이트 표시 기반은 있다.** `Sprite`에 텍스처·영역·피벗이 있고 `SpriteRendererComponent`와 `SpriteRenderSystem`이 있다.
-  확인한 제출 경로는 `Simple` 모드의 단일 스프라이트를 처리한다. 전용 프레임 시퀀스 재생 시스템은 이번 검색에서 확인하지 못했다.
-- **애니메이션 데이터 기반은 있다.** `Animation`에 위치·회전·스케일 키와 길이·TicksPerSecond가 있고,
-  `Skeleton`·`Bone`·`Model`에 골격·계층·애니메이션 참조가 있다.
-  `Scene::InstantiateModel()`은 스켈레톤 또는 애니메이션이 있는 모델에 `NotImplemented`를 반환한다.
-  스키닝 명령 자료형의 존재만으로 클립 재생·포즈 평가·씬 배치의 연결 완료를 판단하지 않는다.
-- **로직 그래프 실행 기반은 있다.** `GraphExecutor`에 Start/Update 진입, 상태·예산·일시정지·단계 실행·추적이 있다.
-  현재 `Load()`는 Object 핀을 거부하며, 지원하는 자유/static 함수와 기본 로직 노드를 실행한다.
-  `GraphBindingComponent`에 파일 경로와 enabled가 있지만, 확인한 Engine Runtime·System·World와 Client 코드에서는
-  이를 읽어 엔티티마다 그래프를 구동하는 연결을 찾지 못했다.
-- **그래프 파일 저장 API도 있다.** `GraphFile.h/.cpp`의 JSON 저장·로드를 재사용 대상으로 삼는다.
-  GraphFoundation·GraphExecution 문서에는 해당 작업 당시 저장·PIE 연결을 제외했다는 설명이 남아 있으므로,
-  문서의 과거 범위와 현재 API의 존재를 구분한다. 저장 API 존재가 PIE 연결의 완료를 뜻하지는 않는다.
-- **Script 리소스 틀은 있다.** `Resource/Script`의 `Script`는 생성·초기화·해제 기반이며,
-  확인한 파일에는 소스 실행·VM·객체별 인스턴스·엔진 이벤트 바인딩이 없다.
-  C++ 프로젝트 모듈·리플렉션 함수·Visual Scripting과 텍스트 스크립트 실행을 같은 완료 항목으로 묶지 않는다.
-- 파티클·스플라인·트레일·애니메이션 상태 머신의 전용 실행 시스템은 이번 Engine·Editor 소스 검색에서 확인하지 못했다.
-  별도 명칭이나 외부 모듈의 구현 여부는 각 작업을 재개할 때 다시 확인한다.
-- `SystemManager`에 FixedUpdate·Update·LateUpdate·제출 단계가 있다.
-  각 신규 기능은 어느 단계에서 어떤 데이터를 읽고 쓰는지 정한 뒤 기존 실행 루프에 연결한다.
-- `Runtime::Initialize()`는 현재 RHI 초기화 정보를 요구하고 렌더러·오디오를 함께 생성한다.
-  `FixedUpdate(dt)`와 `Render(dt)` 호출은 분리돼 있지만, 렌더러 없는 초기화나 환경별 reset/step API가 구현됐다는 뜻은 아니다.
-  Runtime과 여러 관리자가 싱글턴이며 활성 Scene 전체를 갱신하므로, 여러 학습 환경의 상태 격리를 별도로 검증해야 한다.
-- RHI에 `ReadTexturePixel()`이 있지만 전체 관측 이미지의 비동기 읽기·배치 센서·방송 공유 텍스처의 완료 근거는 아니다.
-  확인한 모델 임포트 경로의 뼈 처리만으로 VRM·표정 모프·2D 변형·추적 입력을 지원한다고 판단하지 않는다.
-- UI·입력·오디오·리소스·씬 관리의 추가 확인 범위와 확장 목표는 14절에 기록한다.
-  강화학습·V-Tuber 관련 전용 API·모듈은 이번 관련 소스 검색에서 확인하지 못했으며, 각 단계 시작 시 다시 확인한다.
+- **레이캐스트 및 씬 충돌 질의 (구현 완료):** `Collision`에 Rect·Box·Sphere·Triangle·Mesh·Terrain 대상 `Raycast()`와 일부 `Sweep()`가 있으며, `PhysicsSystem::Raycast()` / `RaycastAll()` 및 `RaycastQuery`(최대 거리, 레이어마스크, 트리거 포함 여부, 무시 엔티티, 활성 플래그 검사, 거리 컷오프 조기 탈출)가 구현되어 `PickingManager`의 화면 가시성과 무관한 씬 레벨 충돌체 질의 및 블루프린트 노드(`Physics.Raycast`) 연동이 완료되었다.
+- **스프라이트 표시 및 Flipbook 애니메이션 (구현 완료):** `SpriteRendererComponent`/`SpriteRenderSystem` 기반 위에 독립 `SpriteAnimation` 리소스 에셋(`.spriteanim`), `SpriteAnimationComponent`, `SpriteAnimationSystem`(에셋 우선/로컬 폴백, 가중치 지속 시간 평가), 전용 `SpriteAnimationEditor` 패널 및 비주얼 스크립팅 제어 노드가 구축 완료되었다.
+- **3D 스켈레탈 애니메이션 및 상태 머신 (Phase 1~4 구현 완료 / 계층 모델 참조 연결 대기):** `AnimationEvaluator`(키프레임 보간 및 본 행렬 도출, 로컬 TRS 크로스페이드), `AnimatorStateMachine`(파라미터·전이·조건식), `BlendTree1D`, `AnimatorComponent`, `AnimationSystem`, `AnimatorGraphPanel` 및 GPU 스키닝 구조화 버퍼 제출이 구축되었다. `Scene::InstantiateModel()`의 `NotImplemented` 가드가 제거되어 모델 루트에 `AnimatorComponent`, 메시 노드에 `SkinnedMeshRendererComponent`를 생성하나, 현재 `AnimationSystem`/`MeshRenderSystem`은 동일 엔티티 기준으로 조회하므로 루트↔자식 계층 참조 연결 및 `.animator` 에셋 경로 자동 로드는 후속 보완 대상이다.
+- **로직 그래프 실행 및 씬/PIE 연결 (구현 완료):** `GraphSystem`이 `Editor`와 `Client` 모두에 등록되어 `GraphBindingComponent` 엔티티마다 `Event.Start`/`Event.Update`를 자동 구동한다. 사용자 정의 변수(`GraphVariable`), `EGraphPinType::String` 문자열 핀, 리플렉션 기반 `GraphActorLibrary`/`GraphGameplayLibrary` 노드, 그리고 C++ 모듈 핫리로드 시 엔티티 변수를 보존하며 런타임 인스턴스를 교체하는 `ReloadReflectedNodes`(Phase 4.3)가 구축 완료되었다.
+- **그래프 파일 저장 API (구현 완료):** `GraphFile.h/.cpp`의 JSON 저장·로드와 `GraphPanel`, `GraphSystem`의 캐시/문서 연동이 동작한다.
+- **Script 리소스 틀은 있다.** `Resource/Script`의 `Script`는 생성·초기화·해제 기반이며, 확인한 파일에는 텍스트 소스 실행·VM·객체별 인스턴스·엔진 이벤트 바인딩이 없다. C++ 프로젝트 모듈·리플렉션 함수·Visual Scripting과 텍스트 스크립트 실행을 같은 완료 항목으로 묶지 않는다.
+- **파티클·스플라인·트레일:** 전용 실행 시스템은 아직 미구현 상태이며, 각 작업을 시작할 때 4·5·7절 기준으로 구현한다.
+- **SystemManager 실행 루프:** `FixedUpdate`·`Update`·`LateUpdate`·`OnSubmit` 단계가 있으며, `Editor`와 `Client/Source/Main.cpp` 모두 `TransformSystem`, `CameraSystem`, `LightSystem`, `MeshRenderSystem`, `SpriteRenderSystem`, `SpriteAnimationSystem`, `AnimationSystem`, `UIRenderSystem`, `AudioSystem`, `TerrainSystem`, `PhysicsSystem`, `GraphSystem`을 등록해 구동한다.
+- **강화학습 첫 헤드리스 환경 (P2-C 구현 완료):** `Engine/Source/Simulation/`에 Gymnasium 규약을 따르는 `IRLEnvironment`, 창·Renderer·오디오 없이 동작하는 수치 물리 환경 `CartPoleEnvironment`(50Hz 오일러 적분), Winsock TCP 기반 `RLServer`(`127.0.0.1:9999`), `Client.exe --rl` CLI 모드, 그리고 Python `Tools/RL/bam_gym_env.py` 어댑터가 구축되어 에피소드 반복 reset/step 및 상태 격리가 검증되었다. 씬 물리 연동 환경·벡터화·영상 센서·ONNX 추론은 15절 후속 범위다.
+- **V-Tuber 및 아바타 확장:** RHI의 `ReadTexturePixel()`이나 기본 골격 임포트만으로 전체 비동기 센서 읽기·방송 공유 텍스처·VRM·표정 모프·2D 변형·추적 입력을 지원한다고 판단하지 않으며 16·17절 단계에서 진행한다.
 
 현재 주요 확인 파일:
 
-- `Engine/Source/Physics/Public/Collision.h`, `Private/Collision.cpp`
-- `Engine/Source/Utility/Picking/Public/PickingManager.h`, `Private/PickingManager.cpp`
-- `Engine/Source/Resource/Sprite/Public/Sprite.h`, `Engine/Source/System/Render/Private/SpriteRenderSystem.cpp`
-- `Engine/Source/Resource/Model/Public/Animation.h`, `Skeleton.h`, `Bone.h`, `Model.h`
-- `Engine/Source/World/Scene/Private/SceneModel.cpp`
-- `Engine/Source/Graph/Public/GraphExecutor.h`, `GraphFile.h`, `Private/GraphExecutor.cpp`
-- `Engine/Source/Core/Public/Components/Graph/GraphBindingComponent.h`
-- `Engine/Source/Resource/Script/Public/Script.h`, `Private/Script.cpp`
-- `Engine/Source/System/Manager/Public/SystemManager.h`, `Engine/Source/Runtime/Private/Runtime.cpp`
+- `Engine/Source/Physics/Public/Collision.h`, `Engine/Source/System/Physics/Public/PhysicsSystem.h`, `Private/PhysicsSystem.cpp`
+- `Engine/Source/Resource/Sprite/Public/Sprite.h`, `SpriteAnimation.h`, `Engine/Source/System/Render/Private/SpriteAnimationSystem.cpp`
+- `Engine/Source/Resource/Model/Public/Animation.h`, `AnimationEvaluator.h`, `AnimatorStateMachine.h`, `BlendTree1D.h`
+- `Engine/Source/System/Render/Public/AnimationSystem.h`, `Private/MeshRenderSystem.cpp`, `Engine/Source/World/Scene/Private/SceneModel.cpp`
+- `Engine/Source/Graph/Public/GraphExecutor.h`, `GraphFile.h`, `GraphGameplayLibrary.h`, `Engine/Source/System/Graph/Public/GraphSystem.h`
+- `Engine/Source/Simulation/Public/RLEnvironment.h`, `CartPoleEnvironment.h`, `RLServer.h`, `Tools/RL/bam_gym_env.py`
+- `Engine/Source/Resource/Script/Public/Script.h`, `Engine/Source/System/Manager/Public/SystemManager.h`, `Client/Source/Main.cpp`
 
 ## 3. 공통 구현 기준: 상태·시간·저장·성능
 

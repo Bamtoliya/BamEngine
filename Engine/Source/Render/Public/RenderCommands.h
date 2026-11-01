@@ -39,6 +39,7 @@ struct SkinnedDrawCommand
 	mat4 worldMatrix = { glm::identity<mat4>() };
 	const std::vector<mat4>* boneMatrices = { nullptr };
 	RenderObjectId objectId{};
+	uint32 pickingId = 0;
 };
 
 struct SpriteDrawCommand

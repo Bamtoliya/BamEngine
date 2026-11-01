@@ -15,9 +15,10 @@ void GameViewportPanel::Initialize(void* arg)
 	__super::Initialize(arg);
 	CAST_DESC
 
-		// 뷰포트 디퍼드 파이프라인 초기화 (접두사: L"GameView")
-		m_Pipeline.Initialize(m_Name, m_RenderWidth, m_RenderHeight);
+	// 뷰포트 디퍼드 파이프라인 초기화 (접두사: L"GameView")
+	m_Pipeline.Initialize(m_Name, m_RenderWidth, m_RenderHeight);
 	m_PostProcessChain.Initialize(m_Name);
+	m_PostProcessChain.PrepareResources(m_RenderWidth, m_RenderHeight); // <-- 이 줄 추가
 	m_PostProcessChain.GetPipeline().SaveToString(m_DefaultPostProcessSettings);
 	m_SelectedRTName = m_DisplayRTName = m_Pipeline.GetFinalColorRTName();
 }
@@ -92,6 +93,19 @@ void GameViewportPanel::SubmitPostProcessPass(f32 dt, std::wstring& currentRT)
 
 void GameViewportPanel::Update(f32 dt)
 {
+	// 1. 창이 닫혔거나 다른 탭 뒤에 숨겨진 경우 렌더링 100% 차단 (0 FPS)
+	if (!m_Open || !m_IsVisibleOnScreen)
+		return;
+	// 2. 적응형 프레임 쓰로틀링 판정
+	const bool isHighPriority = m_Focused || m_Hovered || PIEManager::Get().IsPlaying();
+	const float targetInterval = isHighPriority ? 0.0f : (1.0f / 15.0f); // 비포커스 시 15 FPS
+	m_TimeSinceLastRender += dt;
+	if (m_TimeSinceLastRender < targetInterval)
+	{
+		// 이번 프레임은 GPU 렌더링 제출 생략 (이전 프레임의 RT 이미지를 그대로 표시)
+		return;
+	}
+	m_TimeSinceLastRender = 0.0f;
 	if (!CalculateRenderResolution(m_PanelWidth, m_PanelHeight))
 		return;
 

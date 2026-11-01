@@ -997,7 +997,19 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 		{
 			changed = ReflectionPropertyDrawer::DrawObject(type, object, registry, &componentSettings, drawHeaderMenu);
 			auto& animator = world.get<Engine::AnimatorComponent>(handle);
-			auto* skinnedRenderer = world.try_get<Engine::SkinnedMeshRendererComponent>(handle);
+			auto findSkinnedRenderer = [&](auto& self, entt::entity cur) -> Engine::SkinnedMeshRendererComponent*
+				{
+					if (auto* sr = world.try_get<Engine::SkinnedMeshRendererComponent>(cur)) return sr;
+					const auto* hier = world.try_get<Engine::HierarchyComponent>(cur);
+					if (!hier) return nullptr;
+					for (entt::entity child : hier->children)
+					{
+						if (!world.valid(child)) continue;
+						if (auto* sr = self(self, child)) return sr;
+					}
+					return nullptr;
+				};
+			auto* skinnedRenderer = findSkinnedRenderer(findSkinnedRenderer, handle);
 			auto* clip = animator.currentClip.Get();
 			auto* skeleton = skinnedRenderer ? skinnedRenderer->skeletonHandle.Get() : nullptr;
 			ImGui::Spacing();

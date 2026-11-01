@@ -25,7 +25,7 @@ namespace Engine
 		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_RESOLUTION"))
 		uint32 Resolution = 128; // 그리드 가로/세로 분할 수
 
-		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_MATERIAL_HANDLE"))
+		PROPERTY(EDITABLE, ALLOW_MISSING, DISPLAY_NAME("PROP_MATERIAL_HANDLE"))
 		ResourceHandle<Material> TerrainMaterial;
 
 		// ── 런타임 GPU/CPU 리소스 (직렬화 제외) ──

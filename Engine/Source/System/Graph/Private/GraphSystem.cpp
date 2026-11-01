@@ -11,7 +11,9 @@ namespace
 	Scene* s_CurrentScene = nullptr;
 	entt::entity s_CurrentEntity = entt::null;
 	float s_CurrentDeltaTime = 0.0f;
+#ifdef BAM_EDITOR
 	GraphSystem::NodeExecuteHook s_NodeExecuteHook = nullptr;
+#endif
 }
 
 Scene* GraphSystem::GetCurrentScene() { return s_CurrentScene; }
@@ -154,7 +156,9 @@ void GraphSystem::OnUpdate(entt::registry& globalRegistry, const vector<Scene*>&
 				GraphRuntimeState newState;
 				newState.loadedPath = binding.graphFile;
 				newState.executor.SetNodeStepCallback([path = binding.graphFile](GraphNodeId nodeId) {
+#ifdef BAM_EDITOR
 					GraphSystem::TriggerNodeExecuteHook(path, nodeId);
+#endif
 					});
 				const auto diag = newState.executor.Load(*graphTemplate, m_Registry, sourceRegistry);
 				if (!diag.Succeeded())
@@ -184,7 +188,9 @@ void GraphSystem::OnUpdate(entt::registry& globalRegistry, const vector<Scene*>&
 				{
 					for (GraphNodeId startEntry : runtime->startNodes)
 					{
+#ifdef BAM_EDITOR
 						if (s_NodeExecuteHook) s_NodeExecuteHook(binding.graphFile, startEntry);
+#endif
 
 						if (runtime->executor.Begin(startEntry, 0.0f).Succeeded())
 						{
@@ -199,7 +205,9 @@ void GraphSystem::OnUpdate(entt::registry& globalRegistry, const vector<Scene*>&
 				// 2. Event.Update (Tick) 매 프레임 디스패치
 				for (GraphNodeId updateEntry : runtime->updateNodes)
 				{
+#ifdef BAM_EDITOR
 					if (s_NodeExecuteHook) s_NodeExecuteHook(binding.graphFile, updateEntry);
+#endif
 
 					if (runtime->executor.Begin(updateEntry, dt).Succeeded())
 					{
@@ -208,6 +216,7 @@ void GraphSystem::OnUpdate(entt::registry& globalRegistry, const vector<Scene*>&
 						{
 							runtime->executor.Tick();
 
+#ifdef BAM_EDITOR
 							// 와이어를 타고 진입하는 노드들도 훅에 통보
 							if (s_NodeExecuteHook)
 							{
@@ -217,6 +226,7 @@ void GraphSystem::OnUpdate(entt::registry& globalRegistry, const vector<Scene*>&
 										s_NodeExecuteHook(binding.graphFile, event.Node);
 								}
 							}
+#endif
 						}
 					}
 					else if (runtime->executor.GetDiagnostic().Code == EGraphError::ExecutionLimit)
@@ -245,6 +255,7 @@ void GraphSystem::OnUpdate(entt::registry& globalRegistry, const vector<Scene*>&
 	}
 }
 
+#ifdef BAM_EDITOR
 const GraphExecutor* GraphSystem::GetDebugExecutor(Scene* scene, entt::entity entity)
 {
 	if (!scene || entity == entt::null) return nullptr;
@@ -264,6 +275,7 @@ void GraphSystem::TriggerNodeExecuteHook(const std::wstring& graphPath, GraphNod
 		s_NodeExecuteHook(graphPath, nodeId);
 	}
 }
+#endif
 
 void GraphSystem::ReloadReflectedNodes(const std::vector<Scene*>& activeScenes)
 {
@@ -302,9 +314,11 @@ void GraphSystem::ReloadReflectedNodes(const std::vector<Scene*>& activeScenes)
 			const bool wasStarted = runtime.hasStarted;
 
 			runtime.executor.Clear();
+#ifdef BAM_EDITOR
 			runtime.executor.SetNodeStepCallback([path = binding.graphFile](GraphNodeId nodeId) {
 				GraphSystem::TriggerNodeExecuteHook(path, nodeId);
 				});
+#endif
 
 			const auto diag = runtime.executor.Load(*graphTemplate, m_Registry, &reflection);
 			if (!diag.Succeeded())

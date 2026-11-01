@@ -10,6 +10,7 @@
 #include <cmath>
 #include <glm/gtc/constants.hpp>
 #include <glm/gtc/quaternion.hpp>
+#include "PlatformPath.h"
 
 void SkyAtmosphereSystem::InitializeResources()
 {
@@ -17,19 +18,23 @@ void SkyAtmosphereSystem::InitializeResources()
 	auto* rhi = Engine::Renderer::Get().GetRHI();
 	if (!rhi) return;
 
-	const std::wstring shapeKey = L"Resources/Texture/CloudBaseShape3D";
-	const std::wstring weatherKey = L"Resources/Texture/CloudWeatherMap2D";
-	const std::wstring shapePath = shapeKey + L".bamtex";
-	const std::wstring weatherPath = weatherKey + L".bamtex";
-
-	// 1. 디스크에 이미 캐싱된 파일이 있는지 확인 및 로드 (LoadResource<Texture> 사용)
+	const std::wstring shapeKey = L"Resources/Texture/CloudBaseShape3D.bamtex";
+	const std::wstring weatherKey = L"Resources/Texture/CloudWeatherMap2D.bamtex";
+	// 1. 디스크에 이미 캐싱된 파일이 있는지 확인 및 로드
 	auto shapeHandle = rm.GetResourceHandle<Engine::Texture>(shapeKey);
-	if (!shapeHandle.IsValid() && std::filesystem::exists(shapePath))
-		shapeHandle = Engine::ResourceHandle<Engine::Texture>(rm.LoadFile(shapePath));
+	if (!shapeHandle.IsValid())
+	{
+		auto resolved = Engine::PlatformPath::ResolveProjectRelative(shapeKey);
+		if (std::filesystem::exists(resolved))
+			shapeHandle = Engine::ResourceHandle<Engine::Texture>(rm.LoadFile(shapeKey));
+	}
 	auto weatherHandle = rm.GetResourceHandle<Engine::Texture>(weatherKey);
-	if (!weatherHandle.IsValid() && std::filesystem::exists(weatherPath))
-		weatherHandle = Engine::ResourceHandle<Engine::Texture>(rm.LoadFile(weatherPath));
-
+	if (!weatherHandle.IsValid())
+	{
+		auto resolved = Engine::PlatformPath::ResolveProjectRelative(weatherKey);
+		if (std::filesystem::exists(resolved))
+			weatherHandle = Engine::ResourceHandle<Engine::Texture>(rm.LoadFile(weatherKey));
+	}
 	// 2. 리소스가 없으면 새로 생성 후 디스크에 .bamtex 파일로 저장
 	if (!shapeHandle.IsValid())
 	{
@@ -37,17 +42,16 @@ void SkyAtmosphereSystem::InitializeResources()
 		if (shapeTex)
 		{
 			shapeHandle = rm.AddResource<Engine::Texture>(shapeKey, shapeTex);
-			rm.SaveToBinaryFile(shapeTex, shapePath);
+			rm.SaveToBinaryFile(shapeTex, shapeKey);
 		}
 	}
-
 	if (!weatherHandle.IsValid())
 	{
 		Engine::Texture* weatherTex = Engine::CloudTextureGenerator::CreateWeatherMapTexture(rhi, weatherKey, 256);
 		if (weatherTex)
 		{
 			weatherHandle = rm.AddResource<Engine::Texture>(weatherKey, weatherTex);
-			rm.SaveToBinaryFile(weatherTex, weatherPath);
+			rm.SaveToBinaryFile(weatherTex, weatherKey);
 		}
 	}
 

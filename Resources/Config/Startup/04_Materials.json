@@ -6,6 +6,7 @@
         "Resources/Material/SkyMaterial.bammat.json",
         "Resources/Material/TerrainMaterial.bammat.json",
         "Resources/Material/TransparentMaterial.bammat.json",
-        "Resources/Material/UIMaterial.bammat.json"
+        "Resources/Material/UIMaterial.bammat.json",
+        "Resources/Material/SkinningMaterial.bammat.json"
     ]
 }

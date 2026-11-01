@@ -20,6 +20,7 @@ project(BamEngine)
 
 include(CTest)
 option(BAMENGINE_BUILD_REFLECTION_CHECK "Build engine and editor reflection integration checks" OFF)
+option(BAMENGINE_WITH_EDITOR "Build with editor support and editor-only engine APIs" ON)
 
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
@@ -35,6 +36,8 @@ add_subdirectory(Engine)
 add_subdirectory(Tools/ModelConverter)
 add_subdirectory(Tools/TextureConverter)
 
-add_subdirectory(Editor)
+if(BAMENGINE_WITH_EDITOR)
+    add_subdirectory(Editor)
+endif()
 add_subdirectory(Projects/GameModule)
 add_subdirectory(Client)

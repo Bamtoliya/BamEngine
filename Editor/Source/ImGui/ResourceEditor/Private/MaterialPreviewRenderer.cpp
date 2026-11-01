@@ -120,18 +120,14 @@ void MaterialPreviewRenderer::UpdatePreviewMesh(Engine::MaterialInterface* mater
 void MaterialPreviewRenderer::Submit(Engine::MaterialInterface* material, f32 dt)
 {
 	if (!material || !m_PreviewScene) return;
-	// 1. 메쉬 엔티티의 머티리얼과 메쉬 타입 동기화
 	UpdatePreviewMesh(material);
-	// 2. 트랜스폼 계층 및 라이트 캐시 최신화
 	auto& registry = m_PreviewScene->GetRegistry();
 	Engine::TransformSystem::UpdateHierarchy(registry);
 	Engine::LightSystem::UpdateLights(registry);
-	// 3. 자동 회전
 	if (m_AutoRotate)
 	{
 		m_Yaw += m_AutoRotateSpeed * dt;
 	}
-	// 4. 카메라 좌표 및 뷰/투영 행렬 계산
 	vec3 offset;
 	offset.x = m_Distance * cosf(m_Pitch) * sinf(m_Yaw);
 	offset.y = m_Distance * sinf(m_Pitch);
@@ -148,9 +144,8 @@ void MaterialPreviewRenderer::Submit(Engine::MaterialInterface* material, f32 dt
 	cameraBuffer.invViewProjMatrix = glm::inverse(cameraBuffer.viewProjMatrix);
 	cameraBuffer.cameraPosition = eye;
 	cameraBuffer.time = static_cast<f32>(Engine::TimeManager::Get().GetTotalTime());
-	// 5. 프리뷰 전용 디퍼드 파이프라인에 카메라 등록
 	m_Pipeline.Submit(cameraBuffer, m_PreviewScene);
-	// 6. [핵심] 프리뷰 메쉬 드로우 커맨드를 프리뷰의 GeometryPass에 직접 제출!
+	// 6. 프리뷰 메쉬 드로우 커맨드를 프리뷰의 GeometryPass에 제출
 	auto* meshComp = registry.try_get<Engine::StaticMeshRendererComponent>(m_MeshEntity);
 	auto* transComp = registry.try_get<Engine::WorldTransformComponent>(m_MeshEntity);
 	if (meshComp && transComp)
@@ -167,7 +162,6 @@ void MaterialPreviewRenderer::Submit(Engine::MaterialInterface* material, f32 dt
 			Engine::Renderer::Get().SubmitStatic(cmd, m_Pipeline.GetGeometryPassID());
 		}
 	}
-	// 7. 톤매핑 후처리 체인 실행 (선형 HDR -> ACES Filmic LDR 변환)
 	m_DisplayRTName = m_PostProcessChain.ExecuteChain(dt, m_Pipeline.GetFinalColorRTName());
 }
 

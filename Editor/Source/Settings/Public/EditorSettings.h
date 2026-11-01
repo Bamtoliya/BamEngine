@@ -25,28 +25,28 @@ namespace Editor
     };
 
     STRUCT()
-    struct EditorPreferences
+        struct EditorPreferences
     {
         static constexpr std::uint32_t CurrentSchemaVersion = 1;
         static constexpr float MinUIScale = 0.5f;
         static constexpr float MaxUIScale = 3.0f;
         static constexpr std::int32_t MaxTargetFPS = 1000;
-
         PROPERTY()
         std::uint32_t SchemaVersion = CurrentSchemaVersion;
-
         PROPERTY(META("Optional", true))
         std::string Language = "Korean";
-
         PROPERTY(META("Optional", true))
         float UIScale = 1.0f;
-
         PROPERTY(META("Optional", true))
         std::int32_t TargetFPS = 0;
-
         PROPERTY(META("Optional", true))
         bool VSync = true;
-
+        PROPERTY(META("Optional", true))
+        std::string CustomFontPath;
+        PROPERTY(META("Optional", true))
+        std::string DxcExecutablePath;
+        PROPERTY(META("Optional", true))
+        std::string PythonExecutablePath;
         [[nodiscard]] bool HasValidValues() const
         {
             return SchemaVersion == CurrentSchemaVersion && (Language == "English" || Language == "Korean") &&

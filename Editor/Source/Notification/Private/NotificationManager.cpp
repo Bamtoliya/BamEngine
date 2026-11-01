@@ -66,7 +66,7 @@ void NotificationManager::Update(f32 dt)
     }
 }
 
-void NotificationManager::DrawNotificationUI()
+void NotificationManager::DrawNotificationUI(f32 bottomOffset)
 {
     if (m_Notifications.empty())
         return;
@@ -76,7 +76,7 @@ void NotificationManager::DrawNotificationUI()
     const f32 margin = fontSize;
     const f32 gap = fontSize * 0.5f;
     const f32 width = std::max(1.0f, std::min(fontSize * 22.0f, viewport->WorkSize.x - margin * 2.0f));
-    f32 bottom = viewport->WorkPos.y + viewport->WorkSize.y - margin;
+    f32 bottom = viewport->WorkPos.y + viewport->WorkSize.y - margin - std::max(0.0f, bottomOffset);
 
     const ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize |
         ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing |

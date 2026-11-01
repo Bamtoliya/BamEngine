@@ -5,14 +5,14 @@
 #include <imgui_stdlib.h>
 #include "GraphShaderPreview.h"
 #include "ImGuiManager.h"
+#include "PlatformPath.h"
 
 namespace
 {
 	std::filesystem::path ReserveGraphShaderSourcePath()
 	{
 		namespace fs = std::filesystem;
-
-		const auto root = fs::absolute("Temp/GraphShader");
+		const auto root = PlatformPath::ResolveProjectRelative("Temp/GraphShader");
 		fs::create_directories(root);
 
 		const auto stamp = std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
@@ -291,7 +291,7 @@ void GraphPanel::CompileMaterialShader()
 		file.close();
 
 		std::filesystem::copy_file(
-			std::filesystem::absolute("Resources/Shader/hlsl/shading_flags.hlsli"),
+			PlatformPath::ResolveProjectRelative("Resources/Shader/hlsl/shading_flags.hlsli"),
 			sourcePath.parent_path() / "shading_flags.hlsli");
 
 		auto compiled = ShaderCompiler::Compile(sourcePath, EShaderType::Fragment, ERHIType::DirectX12, "main");

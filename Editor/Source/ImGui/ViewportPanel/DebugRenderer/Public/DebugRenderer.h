@@ -7,7 +7,6 @@
 #include "RenderTargetTypes.h"
 
 
-#ifdef _DEBUG
 BEGIN(Editor)
 class DebugRenderer : public Base
 {
@@ -42,4 +41,3 @@ private:
 	RenderPassID m_RenderPassID = { INVALID_PASS_ID };
 };
 END
-#endif

@@ -21,7 +21,7 @@
 ,BLOOM_SOFT_KNEE,Soft Knee,전이 폭
 ,BLOOM_THRESHOLD,Threshold,임계값
 ,CATEGORY_ANCHOR,Anchor,앵커
-,CATEGORY_ANIMATION,,
+,CATEGORY_ANIMATION,Animation,애니메이션
 ,CATEGORY_ATMOSPHERE,Atmosphere,대기
 ,CATEGORY_ATMOSPHERE_SYNC,Atmosphere Sync,대기 동기화
 ,CATEGORY_AUDIO,Audio,오디오
@@ -207,7 +207,7 @@
 ,PROP_ANCHOR_POSITION,Anchor Position,앵커 위치
 ,PROP_ANGULAR_DAMPING,Angular Damping,각 감쇠
 ,PROP_ANGULAR_VELOCITY,Angular Velocity,각속도
-,PROP_ANIMATION_CLIP,,
+,PROP_ANIMATION_CLIP,Animation Clip,애니메이션 클립
 ,PROP_ASPECT_RATIO,Aspect Ratio,비율
 ,PROP_ATTENUATION_COEFFICIENTS,Attenuation Coefficients,감쇠 계수
 ,PROP_ATTENUATION_MODE,Attenuation Mode,감쇠 모드
@@ -234,11 +234,11 @@
 ,PROP_COMPONENTS,Components,컴포넌트
 ,PROP_CONNECTED_ENTITY,Connected Entity,연결 엔티티
 ,PROP_CONNECTED_LOCAL_ANCHOR,Connected Anchor,연결 앵커
-,PROP_CONTROLLER_PATH,,
+,PROP_CONTROLLER_PATH,Controller Path,애니메이터 컨트롤러 경로
 ,PROP_COVERAGE,Cloud Coverage,구름 커버리지
 ,PROP_CULL_MODE,Cull Mode,컬링 모드
 ,PROP_CURRENT_FRAME,Current Frame,현재 프레임
-,PROP_CURRENT_TIME,,
+,PROP_CURRENT_TIME,Current Time,현재 재생 시간
 ,PROP_DAY_DURATION,Day Duration (s),하루 길이(초)
 ,PROP_DENSITY,Cloud Density,구름 밀도
 ,PROP_DEPTH_COMPARE_OP,Depth Compare Op,깊이 비교 연산
@@ -295,7 +295,7 @@
 ,PROP_IRRADIANCE_MAP,Irradiance Map,확산광 맵
 ,PROP_IS_3D,3D Audio,3D 오디오
 ,PROP_IS_ACTIVE,Is Active,활성 상태
-,PROP_IS_LOOPING,,
+,PROP_IS_LOOPING,Looping,반복 재생
 ,PROP_IS_PLAYING,Playing,재생 중
 ,PROP_IS_TRIGGER,Trigger,트리거
 ,PROP_LANGUAGE,Language,언어
@@ -436,7 +436,7 @@
 ,Run the true or false execution path.,Run the true or false execution path.,참 또는 거짓 실행 경로를 실행합니다.
 ,SHARPEN_SHARPNESS,Sharpness,선명도
 ,STRUCT_AABB,AABB,축 정렬 경계 상자(AABB)
-,STRUCT_ANIMATOR,,
+,STRUCT_ANIMATOR,Animator,애니메이터
 ,STRUCT_AUDIO_LISTENER,Audio Listener,오디오 리스너
 ,STRUCT_AUDIO_SOURCE,Audio Source,오디오 소스
 ,STRUCT_BOUNDING_BOX,Bounding Box,경계 상자

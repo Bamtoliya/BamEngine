@@ -67,42 +67,39 @@ flowchart TD
 
 ---
 
-## 4. 엔진 소스 내 디버그 코드 현황 및 정비 과제
+## 4. 엔진 소스 내 디버그 코드 현황 및 정비 과제 (2026-11-01 갱신)
 
-클라이언트 빌드 및 패키징 작업 전에 정비해야 할 엔진(`Engine/Source`) 내의 세부 항목 목록이다.
+클라이언트 빌드 및 패키징 작업 전에 정비해야 할 엔진(`Engine/Source`) 내의 세부 항목 목록과 반영 현황이다.
 
 ### 4.1. 콘솔 직접 출력 스트림 제거 (`std::cerr`, `std::cout`)
 엔진 공식 로거(`BAM_LOG`, `ENGINE_LOG_ERROR`) 대신 C++ 표준 스트림을 직접 호출하는 코드는 에디터 콘솔 창에 수집되지 않으며, 배포판 GUI 실행 시 불필요한 I/O를 유발한다.
 
-- `Engine/Source/Core/Localization/Private/LocalizationManager.cpp` (21, 29, 42, 58줄):
-  `std::cerr` 호출부를 `BAM_LOG(Error, "Localization", ...)` 또는 `ENGINE_LOG_ERROR`로 전환.
-- `Engine/Source/Core/Private/Reflection/ReflectionRegistry.cpp` (302줄):
-  `std::cerr` 호출부를 `BAM_LOG(Fatal, "Reflection", ...)`로 전환.
-- `Engine/Source/Graph/Public/GraphGameplayLibrary.h` (21, 28, 34줄):
-  블루프린트 `Debug.PrintFloat` 등의 `std::cout`을 `BAM_LOG(Info, "BlueprintLog", ...)`로 전환.
+- [ ] `Engine/Source/Core/Localization/Private/LocalizationManager.cpp` (21, 29, 42, 58줄):
+  `std::cerr` 호출부를 `BAM_LOG(Error, "Localization", ...)` 또는 `ENGINE_LOG_ERROR`로 전환 (남은 과제).
+- [ ] `Engine/Source/Core/Private/Reflection/ReflectionRegistry.cpp` (302줄):
+  `std::cerr` 호출부를 `BAM_LOG(Fatal, "Reflection", ...)`로 전환 (남은 과제).
+- [x] `Engine/Source/Graph/Public/GraphGameplayLibrary.h` (20~38줄):
+  블루프린트 `Debug.PrintFloat/PrintInt/PrintVector`의 `std::cout`을 `BAM_LOG(Info, "Engine", "BlueprintLog", ...)`로 전환 완료.
 
-### 4.2. 저수준 디버그 API 및 강제 종료 개선
-- `Engine/Source/Render/RHI/Platform/DirectX12/Private/DirectX12RHI.cpp` (922, 928줄):
-  - `OutputDebugStringA` 및 `std::terminate()` 호출을 제거하고, `ENGINE_LOG_ERROR`로 원인을 남긴 뒤 `EResult::Fail`을 정상 반환하도록 개선.
+### 4.2. 저수준 디버그 API 및 강제 종료 개선 (완료 — 2026-11-01)
+- [x] `Engine/Source/Render/RHI/Platform/DirectX12/Private/DirectX12RHI.cpp`:
+  - `CreateBuffer`, `CreateTexture2D`, `CreateTextureCube` 내부 3곳의 `OutputDebugStringA` 및 `std::terminate()` 호출을 제거하고, `BAM_LOG_ERROR`로 원인을 남긴 뒤 `EResult::Fail`을 정상 반환하도록 개선 완료.
 
 ### 4.3. 디버그 전용 인터페이스 전처리기 정비
-- `Engine/Source/System/Graph/Public/GraphSystem.h` (51줄):
-  - 비표준 문법인 `#ifdef(_DEBUG)`를 `#if defined(BAM_EDITOR)` (또는 `#if defined(_DEBUG)`)로 수정.
-- `Engine/Source/System/Graph/Private/GraphSystem.cpp` (232줄):
-  - `GetDebugExecutor` 구현부에도 헤더와 동일하게 전처리기 매크로를 일치시킴.
-- `Engine/Source/System/Graph/Public/GraphSystem.h` (58~60줄):
-  - `NodeExecuteHook`, `TriggerNodeExecuteHook` 등 에디터 중단점용 훅 인터페이스를 `#if defined(BAM_EDITOR)`로 격리.
+- [x] `Engine/Source/System/Graph/Public/GraphSystem.h` 및 `Private/GraphSystem.cpp`:
+  - 비표준 문법이었던 `#ifdef(_DEBUG)`가 제거되어 Release 에디터에서도 `GetDebugExecutor`가 정상 링크되도록 조치 완료.
+- [ ] `Engine/Source/System/Graph/Public/GraphSystem.h` (54~60줄):
+  - 향후 CMake에 `BAM_EDITOR` 타깃 정의 추가 시 `GetDebugExecutor`, `NodeExecuteHook`, `TriggerNodeExecuteHook` 등 에디터 전용 디버그 훅 인터페이스를 `#if defined(BAM_EDITOR)`로 격리 (남은 과제).
 
-### 4.4. 릴리스 에디터 빌드 파손 방지 (최우선 과제)
-- `Engine/Source/Core/Public/Structs/Vertex.h` (218줄) 및 `Vertex.cpp` (67줄):
-  - `DebugVertex`가 `#ifdef _DEBUG`로 감싸져 있어 에디터를 Release로 빌드하면 링크 에러가 발생함.
-  - `#ifdef _DEBUG`를 제거하여 항상 정의되도록 하거나, `#if defined(BAM_EDITOR)`로 전환.
+### 4.4. 릴리스 에디터 빌드 파손 방지 (완료 — 2026-10-31)
+- [x] `Engine/Source/Core/Public/Structs/Vertex.h` (216줄) 및 `Editor/Source/ImGui/ViewportPanel/Private/SceneViewportPanel.cpp`:
+  - `DebugVertex` 및 `m_DebugRenderer`를 감싸고 있던 `#ifdef _DEBUG` 분기를 제거하여 Release 에디터 빌드에서도 디버그 렌더링이 상시 정상 동작하도록 해결 완료.
 
 ### 4.5. 단언 매크로 및 디버그 스냅샷 격리
-- `Engine/Source/Core/Public/Macro.h` (43줄):
-  - 원시 C `assert()`를 엔진 표준 단언 체계로 정비.
-- `Engine/Source/Resource/Public/ResourceManager.h` (66줄):
-  - `GetDebugSnapshot()` 함수를 `#if defined(BAM_EDITOR)`로 감싸 최종 Client 배포 바이너리에서 제외.
+- [ ] `Engine/Source/Core/Public/Macro.h` (43줄):
+  - 원시 C `assert()`를 엔진 표준 단언 체계로 정비 (남은 과제).
+- [ ] `Engine/Source/Resource/Public/ResourceManager.h` (66줄):
+  - `GetDebugSnapshot()` 함수를 `#if defined(BAM_EDITOR)`로 감싸 최종 Client 배포 바이너리에서 제외 (남은 과제).
 
 ---
 

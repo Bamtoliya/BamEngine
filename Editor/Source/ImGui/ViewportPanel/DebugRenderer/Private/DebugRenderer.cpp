@@ -1,5 +1,4 @@
-﻿#ifdef _DEBUG
-#pragma once
+﻿#pragma once
 
 #include "DebugRenderer.h"
 #include "Renderer.h"
@@ -370,4 +369,3 @@ void DebugRenderer::DrawSphere(const vec3& center, float radius, const vec4& col
 	}
 }
 #pragma endregion
-#endif

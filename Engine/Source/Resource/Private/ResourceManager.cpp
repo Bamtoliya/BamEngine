@@ -1,6 +1,7 @@
 ﻿#pragma once
 #include "ResourceManager.h"
 #include "Resources.h"
+#include "Runtime.h"
 
 namespace
 {
@@ -30,7 +31,7 @@ namespace
 		if (ec)
 			absolutePath = fs::path(inputPath);
 
-		fs::path projectRoot = fs::weakly_canonical(fs::current_path(), ec);
+		fs::path projectRoot = Engine::Runtime::IsCreated() ? Engine::Runtime::Get().GetProjectRoot() : fs::current_path();
 		if (ec)
 			projectRoot = fs::current_path();
 
@@ -49,7 +50,10 @@ void Engine::ResourceHandleAccess::AddRef(const Engine::Handle& handle)
 
 void Engine::ResourceHandleAccess::Release(const Engine::Handle& handle)
 {
-	Engine::ResourceManager::Get().ReleaseResource(handle);
+	if (Engine::ResourceManager::IsCreated())
+	{
+		Engine::ResourceManager::Get().ReleaseResource(handle);
+	}
 }
 
 bool Engine::ResourceHandleAccess::IsValid(const Engine::Handle& handle)
@@ -117,7 +121,12 @@ Handle ResourceManager::LoadFile(const wstring& filePath)
 
 	fs::path absolutePath(filePath);
 	if (!absolutePath.is_absolute())
-		absolutePath = fs::absolute(absolutePath);
+	{
+		if (Runtime::IsCreated())
+			absolutePath = Runtime::Get().ResolveProjectRelativePath(absolutePath);
+		else
+			absolutePath = fs::absolute(absolutePath);
+	}
 
 	const wstring relativePath = ToProjectRelativePath(absolutePath.wstring());
 
@@ -192,12 +201,30 @@ void ResourceManager::RegisterExplicitLoader()
 			return this->LoadResource<MaterialInstance>(&desc).GetRawHandle();
 		};
 
-
 	auto shaderLoader = [this](wstring key, wstring path) -> Handle
 		{
+			namespace fs = std::filesystem;
+			fs::path filePath(key);
+			wstring ext = filePath.extension().wstring();
+			std::transform(ext.begin(), ext.end(), ext.begin(), ::towlower);
+
 			ShaderDesc desc;
 			desc.Key = key;
 			desc.Path = key;
+
+			// .cso / .spv 실행용 바이너리를 직접 로드할 때 스테이지 및 경로 설정
+			if (ext == L".cso" || ext == L".dxil" || ext == L".spv")
+			{
+				wstring stem = filePath.stem().wstring();
+				std::transform(stem.begin(), stem.end(), stem.begin(), ::towupper);
+				if (stem.ends_with(L"VS") || stem.ends_with(L"_VS")) desc.shaderType = EShaderType::Vertex;
+				else if (stem.ends_with(L"PS") || stem.ends_with(L"_PS")) desc.shaderType = EShaderType::Fragment;
+				else if (stem.ends_with(L"CS") || stem.ends_with(L"_CS")) desc.shaderType = EShaderType::Compute;
+
+				if (ext == L".spv") desc.spirvPath = key;
+				else desc.dxilPath = key;
+			}
+
 			return this->LoadResource<Shader>(&desc).GetRawHandle();
 		};
 
@@ -254,6 +281,9 @@ void ResourceManager::RegisterExplicitLoader()
 
 
 	m_LoaderRegistry[L".bamshader"] = shaderLoader;
+	m_LoaderRegistry[L".cso"] = shaderLoader;
+	m_LoaderRegistry[L".dxil"] = shaderLoader;
+	m_LoaderRegistry[L".spv"] = shaderLoader;
 
 	m_LoaderRegistry[L".bammatinst"] = materialInstanceLoader;
 
@@ -336,6 +366,7 @@ EResult ResourceManager::DestroyResource(Resource* resource)
 
 	return EResult::Success;
 }
+#ifdef BAM_EDITOR
 vector<ResourceDebugInfo> ResourceManager::GetDebugSnapshot()
 {
 	vector<ResourceDebugInfo> result;
@@ -366,6 +397,7 @@ vector<ResourceDebugInfo> ResourceManager::GetDebugSnapshot()
 
 	return result;
 }
+#endif
 #pragma endregion
 
 #pragma region Metrics
@@ -575,45 +607,50 @@ EResult ResourceManager::SaveToJsonFile(Resource* resource, const wstring& fileP
 {
 	if (!resource || filePath.empty())
 		return EResult::InvalidArgument;
-
+	std::filesystem::path targetPath(filePath);
+	if (targetPath.is_relative())
+		targetPath = PlatformPath::ResolveProjectRelative(targetPath);
+	if (targetPath.has_parent_path())
+	{
+		std::error_code ec;
+		std::filesystem::create_directories(targetPath.parent_path(), ec);
+	}
 	archive::JsonArchive ar;
 	auto result = resource->WriteArchive(ar);
-
 	if (result)
-		result = ar.SaveToFile(std::filesystem::path(filePath));
-
+		result = ar.SaveToFile(targetPath);
 	if (!result)
 	{
 		ENGINE_LOG_ERROR("JSON resource save failed: code={}, field={}, path={}",
 			static_cast<int>(result.Code), result.Field, WStrToStr(filePath));
-
 		return result.Code == archive::ArchiveErrorCode::UnsupportedType
 			? EResult::NotImplemented : EResult::Fail;
 	}
-
 	return EResult::Success;
 }
-
 EResult ResourceManager::SaveToBeveFile(Resource* resource, const wstring& filePath)
 {
 	if (!resource || filePath.empty())
 		return EResult::InvalidArgument;
-
+	std::filesystem::path targetPath(filePath);
+	if (targetPath.is_relative())
+		targetPath = PlatformPath::ResolveProjectRelative(targetPath);
+	if (targetPath.has_parent_path())
+	{
+		std::error_code ec;
+		std::filesystem::create_directories(targetPath.parent_path(), ec);
+	}
 	archive::BeveArchive ar;
 	auto result = resource->WriteArchive(ar);
-
 	if (result)
-		result = ar.SaveToFile(std::filesystem::path(filePath));
-
+		result = ar.SaveToFile(targetPath);
 	if (!result)
 	{
 		ENGINE_LOG_ERROR("BEVE resource save failed: code={}, field={}, path={}",
 			static_cast<int>(result.Code), result.Field, WStrToStr(filePath));
-
 		return result.Code == archive::ArchiveErrorCode::UnsupportedType
 			? EResult::NotImplemented : EResult::Fail;
 	}
-
 	return EResult::Success;
 }
 

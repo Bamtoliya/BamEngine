@@ -12,6 +12,7 @@
 #include "PIEManager.h"
 
 #include "ImGuiManager.h"
+#include <imgui_internal.h> 
 
 #include "ShortcutManager.h"
 #include "ConfigManager.h"
@@ -288,26 +289,39 @@ EResult Application::InitializeWindow(const ApplicationCreateInfo& createInfo)
             }
 
             // --- 2. 타이틀 바 (드래그) 판정 ---
-            const int titleBarHeight = 36; // ImGui 메뉴바 높이 + 여백
-            const int leftMenuAreaWidth = 350;  // File, Edit, Scene 메뉴 등을 클릭할 공간
-            const int rightButtonAreaWidth = 150; // 우측 제어 버튼(-ㅁX)을 클릭할 공간
-
+            const int titleBarHeight = 36;
+            const int leftMenuAreaWidth = 350;
+            const int rightButtonAreaWidth = 150;
             if (area->y < titleBarHeight)
             {
-                // 메뉴와 우측 버튼 사이의 빈 공간만 드래그 가능하게 설정
+                // [개선] 상단 영역 위에 다른 ImGui 패널 창(플로팅 창/팝업 등)이 올라와 있다면,
+                // 패널 조작이 최우선이므로 메인 윈도우 드래그를 양보합니다.
+                if (ImGui::GetCurrentContext())
+                {
+                    ImGuiContext& g = *ImGui::GetCurrentContext();
+                    if (g.HoveredWindow != nullptr)
+                    {
+                        const std::string_view winName = g.HoveredWindow->Name;
+                        // 메인 메뉴바(##MainMenuBar)나 최상위 도킹 뷰포트 배경이 아닌 패널 창이 마우스 아래에 있다면 조작 양보
+                        const bool isMainWindowChrome = (winName == "##MainMenuBar" || winName.starts_with("DockSpaceViewport_"));
+                        if (!isMainWindowChrome)
+                        {
+                            return SDL_HITTEST_NORMAL; // ImGui 패널에 입력 전달
+                        }
+                    }
+                }
+                // 메뉴와 우측 제어 버튼(-ㅁX) 사이의 순수 타이틀바 빈 공간만 메인 창 드래그 허용
                 if (area->x > leftMenuAreaWidth && area->x < (winWidth - rightButtonAreaWidth))
                 {
                     return SDL_HITTEST_DRAGGABLE;
                 }
-
-                return SDL_HITTEST_NORMAL; // 메뉴나 버튼 위에 마우스가 있음
+                return SDL_HITTEST_NORMAL;
             }
-
-            // 위 영역들에 해당하지 않으면 일반적인 클라이언트 영역(게임 화면, 에디터 UI)
             return SDL_HITTEST_NORMAL;
             }, nullptr);
 
-        SDL_Surface* iconSurface = SDL_LoadBMP("Resources/icon.bmp");
+        const auto iconPath = (EditorSettingsService::Get().GetProjectRoot() / "Resources" / "icon.bmp").u8string();
+        SDL_Surface* iconSurface = SDL_LoadBMP(reinterpret_cast<const char*>(iconPath.c_str()));
 
         if (iconSurface)
         {
@@ -340,6 +354,10 @@ EResult Application::InitializeRuntime(const ApplicationCreateInfo& createInfo)
     DirectX12RHIDesc directX12Desc = {};
 
     runtimeDesc.RendererDesc.rhiType = RHI_TYPE;
+
+    // EditorSettingsService가 파악한 프로젝트 루트와 설정을 주입
+    runtimeDesc.ProjectRoot = EditorSettingsService::Get().GetProjectRoot();
+    runtimeDesc.AssetRoot = EditorSettingsService::Get().GetProjectSettings().AssetDirectory;
 
     switch (runtimeDesc.RendererDesc.rhiType)
     {
@@ -481,17 +499,13 @@ EResult Application::InitializeLogger()
 EResult Application::InitializeLocalization()
 {
 	LocalizationManager* localizationManager = LocalizationManager::Create();
-    if(!localizationManager)
+    const auto projectRoot = EditorSettingsService::Get().GetProjectRoot();
+    if (IsFailure(localizationManager->RegisterLocalizationData((projectRoot / "Resources/Data/Localization/English.json").wstring())))
     {
-        fmt::print(stderr, "LocalizationManager Creation Failed\n");
+        BAM_LOG(Error, "Editor", "Application", "Failed to register English localization data");
         return EResult::Fail;
     }
-    if(IsFailure(localizationManager->RegisterLocalizationData(L"Resources/Data/Localization/English.json")))
-    {
-		BAM_LOG(Error, "Editor", "Application", "Failed to register English localization data");
-        return EResult::Fail;
-    }
-    if(IsFailure(localizationManager->RegisterLocalizationData(L"Resources/Data/Localization/Korean.json")))
+    if (IsFailure(localizationManager->RegisterLocalizationData((projectRoot / "Resources/Data/Localization/Korean.json").wstring())))
     {
         BAM_LOG(Error, "Editor", "Application", "Failed to register Korean localization data");
         return EResult::Fail;

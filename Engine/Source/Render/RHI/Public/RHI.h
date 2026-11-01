@@ -101,8 +101,8 @@ public:
     virtual EResult BindConstantBuffer(const void* data, uint32 size, uint32 slot);
     virtual EResult BindConstantRangeBuffer(void* arg, uint32 slot, uint32 offset, uint32 size);
 	virtual EResult BindStorageBuffer(RHIBuffer* buffer, uint32 slot);
-    virtual EResult BindInstanceBuffer(RHIBuffer* buffer, uint32 offset = 0);
-    virtual EResult BindInstanceBuffer(const void* data, uint32 instanceCount);
+    virtual EResult BindInstanceBuffer(RHIBuffer* buffer, uint32 offset);
+    virtual EResult BindInstanceBuffer(const void* data, uint32 instanceCount, uint32 stride = 80);
     virtual EResult BindComputeStorageBuffer(RHIBuffer* buffer, uint32 slot = 0) { return EResult::NotImplemented; }
 #pragma endregion
 

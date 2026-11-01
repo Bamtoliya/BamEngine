@@ -294,7 +294,8 @@ void ConsolePanel::RebuildVisibleRows()
 
     std::map<GroupKey, std::size_t> groups;
 
-    for (std::size_t i = 0; i < m_Items.size(); ++i)
+    // 최신 항목부터 순회하여 그룹의 대표 행이 마지막 발생 항목이 되도록 합니다.
+    for (std::size_t i = m_Items.size(); i-- > 0;)
     {
         const auto& item = m_Items[i];
         const auto& entry = item.Entry;
@@ -330,6 +331,9 @@ void ConsolePanel::RebuildVisibleRows()
         else
             row.CountCapped = true;
     }
+
+    // 역순으로 쌓았으므로 시간 순서(오래된 것 → 최신)로 되돌립니다.
+    std::reverse(m_VisibleRows.begin(), m_VisibleRows.end());
 }
 
 std::string ConsolePanel::BuildDisplayText(const Engine::LogEntry& entry)

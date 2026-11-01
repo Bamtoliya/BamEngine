@@ -109,6 +109,13 @@ public:
 	ERHIType GetRHIType() const { return m_RHIType; }
 #pragma endregion
 
+#pragma region Default Shaders
+private:
+	void EnsureDefaultShaders();
+	class Shader* ResolveVertexShader(Mesh* mesh, MaterialInterface* material, ERenderPassType passType);
+#pragma endregion
+
+
 #pragma region Variable
 private:
 	class RHI* m_RHI = { nullptr };
@@ -131,6 +138,11 @@ private:
 
 	vector<ViewportCameraInfo> m_ViewportCameras;
 	unordered_map<RenderPassID, vector<ViewportJob>> m_ViewportJobsPerPass;
+private:
+	ResourceHandle<Shader> m_DefaultGBufferVS;
+	ResourceHandle<Shader> m_DefaultGBufferSkinningVS;
+	ResourceHandle<Shader> m_DefaultShadowDepthVS;
+	ResourceHandle<Shader> m_DefaultShadowDepthSkinningVS;
 #pragma endregion
 };
 END

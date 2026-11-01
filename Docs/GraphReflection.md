@@ -57,10 +57,10 @@ inline float Add(float left, float right)
 const만으로 순수성을 추정하지 않는다. GRAPH_PURE는 사용자가 부작용이 없음을 명시하는 계약이다.
 이 표기만으로 캐싱 가능성이나 Shader 변환 가능성을 보장하지 않는다.
 
-지원 자료형은 bool, int32/int64 계열, float와 자유/static 함수의 std::array<float, 2/3/4> 값 전달·반환이다.
+지원 자료형은 bool, int32/int64 계열, float, 문자열(`std::string`, 2026-11-01 확장)과 자유/static 함수의 std::array<float, 2/3/4> 값 전달·반환이다.
 Graph Int는 int64로 표현하며 int32 기본값과 실제 호출 직전 인자 범위도 검사한다.
 구조 검사만으로 네이티브 호출 성공을 보장하지 않는다.
-포인터·참조 인자, 출력 참조, enum, double, 문자열과 일반 구조체 반환은 아직 거부한다.
+포인터·참조 인자, 출력 참조, enum, double과 일반 구조체 반환은 아직 거부한다.
 함수 호출 바인딩이 없거나 순수 함수가 void를 반환하는 경우도 오류다.
 
 기본값은 bool에는 bool, 정수에는 정수 리터럴, float에는 0.0f 같은 실수 리터럴을 쓴다.

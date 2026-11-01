@@ -4,6 +4,7 @@
 #include <archive/ArchiveInterface.h>
 #include <reflection_archive/PropertyArchiveCodecs.h>
 #include "ResourceReference.h"
+#include "Runtime.h"
 
 namespace archive_resource
 {
@@ -50,30 +51,40 @@ namespace archive_resource
         // 2. assetPath가 있으면 파일 로드 시도
         if (!assetPath.empty())
         {
-            const std::filesystem::path fsPath(assetPath);
+            std::filesystem::path fsPath(assetPath);
+            if (fsPath.is_relative() && Runtime::IsCreated())
+                fsPath = Runtime::Get().ResolveProjectRelativePath(fsPath);
             const std::wstring pathExt = fsPath.extension().wstring();
             if (pathExt.rfind(L".bam", 0) == 0)
             {
-                if (std::filesystem::exists(assetPath + L".json"))
+                if (std::filesystem::exists(fsPath.wstring() + L".json"))
                     return manager.LoadFile(assetPath + L".json");
-                if (std::filesystem::exists(assetPath + L".beve"))
+                if (std::filesystem::exists(fsPath.wstring() + L".beve"))
                     return manager.LoadFile(assetPath + L".beve");
             }
             handle = manager.LoadFile(assetPath);
             if (manager.IsValid(handle)) return handle;
         }
-
         // 3. assetPath가 비어있고 assetKey만 있을 때, 디스크 파일 탐색 및 자동 로드
         if (!assetKey.empty())
         {
             std::error_code error;
-
-            if (std::filesystem::is_regular_file(std::filesystem::path(assetKey), error))
+            std::filesystem::path keyFsPath(assetKey);
+            if (keyFsPath.is_relative() && Runtime::IsCreated())
+                keyFsPath = Runtime::Get().ResolveProjectRelativePath(keyFsPath);
+            if (std::filesystem::is_regular_file(keyFsPath, error))
             {
                 handle = manager.LoadFile(assetKey);
-
-                if (manager.IsValid(handle))
-                    return handle;
+                if (manager.IsValid(handle)) return handle;
+            }
+            for (const auto& ext : candidateExtensions)
+            {
+                std::filesystem::path candidatePath = keyFsPath.wstring() + std::wstring(ext);
+                if (std::filesystem::exists(candidatePath))
+                {
+                    handle = manager.LoadFile(assetKey + std::wstring(ext));
+                    if (manager.IsValid(handle)) return handle;
+                }
             }
         }
 

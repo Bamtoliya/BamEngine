@@ -1,7 +1,7 @@
 # 비주얼 스크립팅과 블루프린트 개발 계획
 
-- 작성일: 2026-10-29
-- 상태: 계획 / 목표 수립
+- 작성일: 2026-10-29 (최종 갱신: 2026-11-01)
+- 상태: Phase 1~4 구현 완료 / Phase 5~6 진행 및 확장 대기
 - 공통 기준: [EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md)
 - 선행 기반: [GraphFoundation.md](GraphFoundation.md), [GraphExecution.md](GraphExecution.md), [GraphReflection.md](GraphReflection.md), [GraphPanel.md](GraphPanel.md)
 - 핫리로드 최적화: [ModuleHotReloadOptimization.md](ModuleHotReloadOptimization.md)
@@ -160,11 +160,15 @@ flowchart TD
      - **노드·와이어 컨텍스트 메뉴 (Node & Wire Context Menus):**
        - 노드 우클릭: 복제(`Ctrl+D`), 코멘트 그룹 박스 생성(`C`), 모든 연결 해제(`Break All Pin Links`), 정렬 서브메뉴.
        - 와이어 우클릭: `Add Reroute Node`, `Break Link`.
+     - **그래프 패널 상단 도구 모음 윈도우 메뉴바 리팩터링 (2026-11-01 구현 완료):**
+       - [ImGuiDevelopmentPlan.md](ImGuiDevelopmentPlan.md) 18절에 따라 기존 2단 버튼 나열을 제거하고 `ImGuiWindowFlags_MenuBar` 기반 상단 드롭다운 메뉴바(`File`, `Edit`, `View`, `Mode`, `Debug/Build`)와 1줄 퀵 액세스 툴바로 정리하여 캔버스 공간을 확보함.
+     - **리소스 피커(`ResourcePicker.h`) 최적화 (2026-11-01 구현 완료):**
+       - 매 프레임 디스크 파일 탐색을 제거하고 팝업 오픈 시(`isAppearing`) 1회 캐싱 및 템플릿 인자 `T`별 호환 확장자(`IsResourceExtensionCompatible<T>`) 컴파일 타임 필터링 적용 완료.
+     - **`String` 핀 타입(`EGraphPinType::String`) 완전 지원 (2026-11-01 구현 완료):**
+       - `GraphValue`에 `std::string` 추가, 리플렉션 함수 `std::string` 인자·반환값 자동 매핑, `Core.String` 리터럴 및 `Core.Reroute.String` 리루트 노드, `GraphValueArchiveAdapter` 직렬화, `GraphPanel` `ImGui::InputText` 편집 및 마젠타 색상 핀 연동 완료 (`SetAnimatorFloat` 등 문자열 인자 노드 지원).
 
   3. **다음 우선순위 목표 작업 (Next Goals):**
-     - **그래프 패널 상단 도구 모음 정리 (2026-10-31 계획 추가 / 미완료):** [ImGuiDevelopmentPlan.md](ImGuiDevelopmentPlan.md) 18절. 공통·도메인별 도구를 두 행으로 정리하고, Logic 실행 미리보기와 PIE 관찰을 구분한다. 상세 작업의 메뉴 이동·좁은 폭 대응·상태 표시·로캘과 입력 문맥을 함께 검증한다.
-     - **리소스 피커(`ResourcePicker.h`) 최적화:** 매 프레임 디스크 파일 탐색 제거 및 팝업 오픈 시 1회 캐싱, 템플릿 인자 `T`별 호환 확장자 컴파일 타임 필터링 적용.
-     - **핀 컨텍스트 메뉴:** 핀 우클릭 시 `Break Links to Pin`, `Promote to Variable` (변수로 승격).
+     - **핀 컨텍스트 메뉴 및 와이어 고급 탐색:** 핀 우클릭 시 `Break Links to Pin`, `Reset to Default`, `Promote to Variable` (변수로 승격), 와이어 우클릭 시 `Jump to Source/Target Node` 및 `Watch Value` 감시값 고정.
        - **목적:** 빈 캔버스 우클릭 메뉴와 분리하여, 마우스 커서 아래의 노드·선(와이어)·핀 대상별 즉각적인 조작 편의성을 제공하고 언리얼 엔진 블루프린트와 동일한 편집 워크플로우 지원.
        - **세부 내용:**
          1. **노드 컨텍스트 메뉴 (Node Context Menu):**

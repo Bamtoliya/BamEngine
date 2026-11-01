@@ -18,7 +18,7 @@ EResult LocalizationManager::LoadData()
 {
 	if (m_RegisteredFiles.empty())
 	{
-		std::cerr << "No localization files registered." << std::endl;
+		BAM_LOG(Error, "Engine", "Localization", "No localization files registered.");
 		return EResult::Fail;
 	}
 	for (const wstring& filePath : m_RegisteredFiles)
@@ -26,7 +26,7 @@ EResult LocalizationManager::LoadData()
 		ifstream file(filePath);
 		if (!file.is_open())
 		{
-			std::cerr << "Failed to open localization file: " << std::filesystem::path(filePath).string() << std::endl;
+			BAM_LOG(Error, "Engine", "Localization", "Failed to open localization file: {}", std::filesystem::path(filePath).string());
 			continue;
 		}
 
@@ -35,11 +35,11 @@ EResult LocalizationManager::LoadData()
 		string content = buffer.str();
 
 		unordered_map<string, unordered_map<string, string>> rawData;
-		auto result =glz::read_json(rawData, content);
+		auto result = glz::read_json(rawData, content);
 		if (result)
 		{
-			string errorMessage = "Error parsing localization file: " + std::filesystem::path(filePath).string() + " - " + std::to_string(static_cast<int>(result.ec));
-			std::cerr << errorMessage << std::endl;
+			BAM_LOG(Error, "Engine", "Localization", "Error parsing localization file: {} - {}",
+				std::filesystem::path(filePath).string(), static_cast<int>(result.ec));
 		}
 
 		for (const auto& [langKey, dataMap] : rawData)
@@ -55,7 +55,7 @@ EResult LocalizationManager::LoadData()
 			}
 			else
 			{
-				std::cerr << "Unknown language key in localization file: " << langKey << std::endl;
+				BAM_LOG(Warn, "Engine", "Localization", "Unknown language key in localization file: {}", langKey);
 				continue;
 			}
 			int index = static_cast<int>(lang);

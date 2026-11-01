@@ -15,7 +15,7 @@
 bool ModelEditor::IsSupported(const std::filesystem::path& assetPath) const
 {
     const auto ext = assetPath.extension().wstring();
-    return ext == L".fbx" || ext == L".obj" || ext == L".gltf" || ext == L".bammodel";
+    return ext == L".fbx" || ext == L".obj" || ext == L".gltf" || ext == L".glb" || ext == L".bammodel";
 }
 
 void ModelEditor::Draw()
@@ -77,14 +77,14 @@ void ModelEditor::InstantiateModel()
 {
 	Scene* scene = SceneManager::Get().GetCurrentScene();
 	auto& history = Application::Get().GetEditHistory();
-
 	if (!scene || !history.Enabled())
 		return;
-
 	auto& manager = ResourceManager::Get();
 	auto model = m_ModelHandle;
-	ResourceHandle<Material> material(manager.LoadFile(L"Resources/Material/GBufferMaterial.bammat.json"));
-
+	const wchar_t* defaultMatPath = (model.IsValid() && model->GetSkeleton().IsValid())
+		? L"Resources/Material/SkinningMaterial.bammat.json"
+		: L"Resources/Material/GBufferMaterial.bammat.json";
+	ResourceHandle<Material> material(manager.LoadFile(defaultMatPath));
 	if (!model.IsValid() || !material.IsValid())
 	{
 		EDITOR_LOG_ERROR("Model placement requires a valid model and material.");

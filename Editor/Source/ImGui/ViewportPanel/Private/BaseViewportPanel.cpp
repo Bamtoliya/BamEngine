@@ -42,20 +42,31 @@ void BaseViewportPanel::Draw()
 {
 	m_Focused = false;
 	m_Hovered = false;
-	if (!m_Open) return;
+	if (!m_Open)
+	{
+		m_IsVisibleOnScreen = false;
+		return;
+	}
+
 	ImGui::PushID(this);
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
 	ImGuiWindowFlags window_flags = ImGuiWindowFlags_MenuBar;
 	const string windowID = GetDisplayName() + "###" + m_WindowID;
+
+	// ImGui::Begin이 false를 반환하면 다른 탭 뒤에 완전히 숨겨진 상태입니다.
 	if (ImGui::Begin(windowID.c_str(), &m_Open, window_flags))
 	{
+		m_IsVisibleOnScreen = true;
 		DrawOptionsBar();
 		DrawCustomViewport();
 	}
+	else
+	{
+		m_IsVisibleOnScreen = false;
+	}
+
 	ImGui::End();
 	ImGui::PopStyleVar();
-
-
 	ImGui::PopID();
 }
 #pragma endregion
