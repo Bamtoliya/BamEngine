@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "imgui.h"
 #include "ToolBar.h"
@@ -49,37 +49,51 @@ void ToolBar::Draw(SDL_Window* window)
 	}
 
 	const ImGuiViewport* vp = ImGui::GetMainViewport();
-	const float menuBarH = ImGui::GetFrameHeight();
-	const float playBarH = ImGui::GetFrameHeight() + ImGui::GetStyle().FramePadding.y * 2.0f;
+	const float playBarH = GetPlayBarHeight();
+	const float footerBarH = GetFooterBarHeight();
 
-	ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x, vp->WorkPos.y));
-	ImGui::SetNextWindowSize(ImVec2(vp->WorkSize.x, GetPlayBarHeight()));
-
-	ImGuiWindowFlags flags = 0;
-	flags |= ImGuiWindowFlags_NoDocking;
-	flags |= ImGuiWindowFlags_NoTitleBar;
-	flags |= ImGuiWindowFlags_NoResize;
-	flags |= ImGuiWindowFlags_NoMove;
-	flags |= ImGuiWindowFlags_NoScrollbar;
-	flags |= ImGuiWindowFlags_NoSavedSettings;
-	flags |= ImGuiWindowFlags_NoNavFocus;
+	ImGuiWindowFlags barFlags = ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+		ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoNavFocus;
 
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.0f, 4.0f));
 
-	if (ImGui::Begin("##PlayBarRow", nullptr, flags))
+	// 1. 상단 Play Bar
+	ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x, vp->WorkPos.y));
+	ImGui::SetNextWindowSize(ImVec2(vp->WorkSize.x, playBarH));
+	ImGui::SetNextWindowViewport(vp->ID);
+	if (ImGui::Begin("##PlayBarRow", nullptr, barFlags))
 	{
 		DrawPlayControls();
 	}
 	ImGui::End();
+	ImGui::PopStyleVar();
 
+	// 2. 하단 슬림 Footer Bar (WindowMinSize 제한 해제 및 패딩 축소)
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowMinSize, ImVec2(1.0f, 1.0f));
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.0f, 2.0f));
+	ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4.0f, 1.0f));
+	ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x, vp->WorkPos.y + vp->WorkSize.y - footerBarH));
+	ImGui::SetNextWindowSize(ImVec2(vp->WorkSize.x, footerBarH));
+	ImGui::SetNextWindowViewport(vp->ID);
+	if (ImGui::Begin("##FooterBarRow", nullptr, barFlags))
+	{
+		DrawFooterControls();
+	}
+	ImGui::End();
 	ImGui::PopStyleVar(3);
+	ImGui::PopStyleVar(2);
 }
 
 float ToolBar::GetPlayBarHeight() const
 {
 	return ImGui::GetFrameHeight() + ImGui::GetStyle().FramePadding.y * 2.0f + ImGui::GetStyle().ItemSpacing.y;
+}
+
+float ToolBar::GetFooterBarHeight() const
+{
+	return ImGui::GetFontSize() + 6.0f;
 }
 
 #pragma region FileMenu
@@ -129,7 +143,7 @@ void ToolBar::ImportAsset()
 	for (wchar_t& character : extension)
 		character = static_cast<wchar_t>(std::towlower(character));
 
-	const bool isModel = extension == L".fbx" || extension == L".obj" || extension == L".gltf";
+	const bool isModel = extension == L".fbx" || extension == L".obj" || extension == L".gltf" || extension == L".glb";
 	const filesystem::path destination = isModel ? sourcePath.parent_path() : sourcePath;
 
 	if (isModel)
@@ -275,7 +289,7 @@ void ToolBar::LoadScene()
 
 	std::wstring filePath;
 	if (!FileDialogs::OpenFileDialog(filePath,
-		{ { StrToWStr(LOCAL("FileDialog.SceneFiles")), L"*.json" } },
+		{ { StrToWStr(LOCAL("FileDialog.SceneFiles")), L"*.bamscene.json;*.json" } },
 		L"Resources\\Scenes", EFileDialogContext::SceneOpen))
 	{
 		return;
@@ -469,68 +483,108 @@ void ToolBar::DrawPlayControls()
 	if (state == EPlayState::Edit) ImGui::EndDisabled();
 	if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s (%s)", LOCAL_CSTR("ToolBar.StopTooltip"), ShortcutManager::Get().GetShortcutHint("PIE.Stop"));
 	ImGui::PopID();
+}
 
-	ImGui::SameLine(0.0f, 15.0f); // 재생 제어 버튼들과 간격 띄우기
-	// ■ C++ GameModule Compile
+void ToolBar::DrawFooterControls()
+{
 	auto& buildManager = HotReloadManager::Get().GetModuleBuilder();
+	auto& moduleReloader = HotReloadManager::Get().GetModuleReloader();
+	auto& shaderReloader = HotReloadManager::Get().GetShaderReloader();
+
+	const float btnHeight = ImGui::GetFontSize() + 2.0f;
+	const float btnWidth = btnHeight * 1.25f;
+	const ImVec2 btnSize(btnWidth, btnHeight);
+	const float pairGap = 3.0f;
+	const float groupGap = 10.0f;
+	const float totalWidth = btnWidth * 5.0f + pairGap * 2.0f + groupGap * 2.0f;
+
+	const float startX = std::max(ImGui::GetStyle().WindowPadding.x, ImGui::GetWindowWidth() - totalWidth - ImGui::GetStyle().WindowPadding.x);
+	ImGui::SetCursorPosX(startX);
+
+	auto drawToggleIconBtn = [&](const char* id, const char* icon, bool& state) -> bool
+		{
+			ImGui::PushID(id);
+			if (state)
+			{
+				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.18f, 0.48f, 0.82f, 1.0f));
+				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.26f, 0.59f, 0.98f, 1.0f));
+				ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.06f, 0.53f, 0.98f, 1.0f));
+			}
+			else
+			{
+				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.16f, 0.18f, 0.20f, 0.85f));
+				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.24f, 0.28f, 0.33f, 1.0f));
+				ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.20f, 0.24f, 0.29f, 1.0f));
+				ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+			}
+
+			const bool clicked = ImGui::Button(icon, btnSize);
+			ImGui::PopStyleColor(state ? 3 : 4);
+			if (clicked) state = !state;
+			ImGui::PopID();
+			return clicked;
+		};
+
+	// 1. C++ GameModule Compile
 	const bool compiling = buildManager.IsCompiling();
 	ImGui::PushID("CompileModuleBtn");
 	if (compiling) ImGui::BeginDisabled();
-	const std::string compileBtnText = compiling ?
-		(std::string(ICON_FA_SPINNER) + " " + LOCAL_LABEL("ToolBar.ModuleCompiling")) :
-		(std::string(ICON_FA_HAMMER) + " " + LOCAL_LABEL("ToolBar.ModuleCompile"));
-	if (ImGui::Button(compileBtnText.c_str()))
-	{
+	if (ImGui::Button(compiling ? ICON_FA_SPINNER : ICON_FA_HAMMER, btnSize))
 		buildManager.RequestBuild();
-	}
 	if (compiling) ImGui::EndDisabled();
 	if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
 	{
-		ImGui::SetTooltip("%s (%s)", LOCAL_CSTR("ToolBar.ModuleCompileTooltip"), ShortcutManager::Get().GetShortcutHint("Build.CompileModule"));
+		const char* title = LOCAL_CSTR(compiling ? "ToolBar.ModuleCompiling" : "ToolBar.ModuleCompile");
+		ImGui::SetTooltip("%s (%s)\n%s", title, ShortcutManager::Get().GetShortcutHint("Build.CompileModule"), LOCAL_CSTR("ToolBar.ModuleCompileTooltip"));
 	}
 	ImGui::PopID();
-	ImGui::SameLine(0.0f, 5.0f);
+
+	ImGui::SameLine(0.0f, pairGap);
+
+	// 2. Auto-Compile Toggle
 	bool autoCompile = buildManager.IsAutoCompileEnabled();
-	if (ImGui::Checkbox(LOCAL_LABEL("ToolBar.AutoCompile").c_str(), &autoCompile))
+	if (drawToggleIconBtn("AutoCompileBtn", ICON_FA_BOLT, autoCompile))
 		buildManager.SetAutoCompileEnabled(autoCompile);
 	if (ImGui::IsItemHovered())
 	{
-		ImGui::SetTooltip("%s", LOCAL_CSTR("ToolBar.AutoCompileTooltip"));
+		ImGui::SetTooltip("%s: %s\n%s", LOCAL_CSTR("ToolBar.AutoCompile"), LOCAL_CSTR(autoCompile ? "EditorCommon.On" : "EditorCommon.Off"), LOCAL_CSTR("ToolBar.AutoCompileTooltip"));
 	}
-	ImGui::SameLine(0.0f, 10.0f);
-	// ■ Hot Reload
+
+	ImGui::SameLine(0.0f, groupGap);
+
+	// 3. Hot Reload Module
 	ImGui::PushID("HotReloadBtn");
-	if (ImGui::Button((ICON_FA_ARROWS_ROTATE " " + LOCAL_LABEL("ToolBar.ModuleReload")).c_str()))
-	{
-		HotReloadManager::Get().GetModuleReloader().ReloadModule();
-	}
+	if (ImGui::Button(ICON_FA_ARROWS_ROTATE, btnSize))
+		moduleReloader.ReloadModule();
 	if (ImGui::IsItemHovered())
 	{
-		ImGui::SetTooltip("%s (%s)", LOCAL_FMT("ToolBar.ReloadModuleTooltip", HotReloadManager::Get().GetModuleReloader().GetReloadIndex()).c_str(), ShortcutManager::Get().GetShortcutHint("Build.ReloadModule"));
+		ImGui::SetTooltip("%s (%s)\n%s", LOCAL_CSTR("ToolBar.ModuleReload"), ShortcutManager::Get().GetShortcutHint("Build.ReloadModule"),
+			LOCAL_FMT("ToolBar.ReloadModuleTooltip", moduleReloader.GetReloadIndex()).c_str());
 	}
 	ImGui::PopID();
 
-	ImGui::SameLine(0.0f, 5.0f);
-	auto& moduleReloader = HotReloadManager::Get().GetModuleReloader();
-	bool autoReload = moduleReloader.IsAutoReloadEnabled();
+	ImGui::SameLine(0.0f, pairGap);
 
-	if (ImGui::Checkbox(LOCAL_LABEL("ToolBar.AutoReload").c_str(), &autoReload))
+	// 4. Auto-Reload Toggle
+	bool autoReload = moduleReloader.IsAutoReloadEnabled();
+	if (drawToggleIconBtn("AutoReloadBtn", ICON_FA_LINK, autoReload))
 		moduleReloader.SetAutoReload(autoReload);
 	if (ImGui::IsItemHovered())
 	{
-		ImGui::SetTooltip("%s", LOCAL_CSTR("ToolBar.AutoReloadTooltip"));
+		ImGui::SetTooltip("%s: %s\n%s", LOCAL_CSTR("ToolBar.AutoReload"), LOCAL_CSTR(autoReload ? "EditorCommon.On" : "EditorCommon.Off"), LOCAL_CSTR("ToolBar.AutoReloadTooltip"));
 	}
 
-	ImGui::SameLine();
-	// 셰이더 전체 재컴파일 및 핫스왑 버튼
-	if (ImGui::Button(LOCAL_LABEL("ToolBar.ShaderReload").c_str()))
-	{
-		HotReloadManager::Get().GetShaderReloader().RequestRecompileAll();
-	}
+	ImGui::SameLine(0.0f, groupGap);
+
+	// 5. Shader Reload
+	ImGui::PushID("ShaderReloadBtn");
+	if (ImGui::Button(ICON_FA_FIRE, btnSize))
+		shaderReloader.RequestRecompileAll();
 	if (ImGui::IsItemHovered())
 	{
-		ImGui::SetTooltip("%s (%s)", LOCAL_CSTR("ToolBar.ShaderReloadTooltip"), ShortcutManager::Get().GetShortcutHint("Build.ReloadShaders"));
+		ImGui::SetTooltip("%s (%s)\n%s", LOCAL_CSTR("ToolBar.ShaderReload"), ShortcutManager::Get().GetShortcutHint("Build.ReloadShaders"), LOCAL_CSTR("ToolBar.ShaderReloadTooltip"));
 	}
+	ImGui::PopID();
 }
 
 #pragma endregion

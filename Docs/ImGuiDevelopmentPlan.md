@@ -23,9 +23,9 @@
 
 ## 2. 현재 코드에서 확인한 상태
 
-- 확인일: 2026-10-31.
+- 확인일: 2026-11-01.
 - 화면 설정은 독립 GraphicSettingPanel에서 편집한다.
-  파일 메뉴와 창 메뉴가 같은 패널에 연결되어 있다.
+  파일 메뉴와 창 메뉴가 같은 패널에 연결되어 있다 (후속으로 3절의 카테고리 기반 `UnifiedSettingsPanel` 통합 예정).
 - EditorPreferences는 언어·UI 배율·목표 FPS·VSync를 사용자 설정 경로에 저장한다.
 - EditorWorkspace는 창 상태·패널 열림·도킹·콘텐츠 브라우저·뷰포트 상태를 프로젝트별로 저장한다.
 - EditorSettingsService가 시작 시 로드·검증과 실행 중 적용 요청·저장 결과를 조정한다.
@@ -35,8 +35,10 @@
 - VSync는 시작 시 복원과 프레임 경계의 변경 요청에 연결되어 있다.
 - 손상되거나 지원하지 않는 설정 파일은 기본값으로 대체하고 원본 덮어쓰기를 차단한다.
   시작 알림과 설정 패널에서 저장 차단 상태를 안내한다.
-- 프리팹 파이프라인(생성·배치, 뷰포트 격리 편집 모드 `PrefabModeManager`, 단일 원천 루트 `PrefabInstanceComponent` 및 Apply/Revert/Unpack)과 엔티티 다중 복사·붙여넣기(`EntityClipboard`)가 구현 완료되었다.
-- 인스펙터 리소스 피커(`ResourcePicker.h`)의 템플릿 인자 `T`별 호환 확장자 필터링 및 팝업 진입 시 1회 스캔 캐싱이 구현되어 프레임 드랍 병목이 해결되었다.
+- 씬 문서 보호(`SceneDocument`, `EditorDocumentManager`, `EditorDocumentController`)와 `HistoryPanel`(Undo/Redo 이력 및 저장 기준점 표시)이 구현되어 New/Load/Save/Close 및 종료 흐름에 연결되었다 (11절 A).
+- 프리팹 파이프라인(생성·배치, 뷰포트 격리 편집 모드 `PrefabModeManager`, 단일 원천 루트 `PrefabInstanceComponent` 및 Apply/Revert/Unpack, 저장 기준점 Undo 연동)과 엔티티 다중 복사·붙여넣기(`EntityClipboard`)가 구현 완료되었다 (10절, 17절).
+- 인스펙터 리소스 피커(`ResourcePicker.h`)의 템플릿 인자 `T`별 호환 확장자 필터링 및 팝업 진입 시 1회 스캔 캐싱과, 콘텐츠 브라우저(`ContentBrowserGridItem`/`ContentBrowserPanel`)의 공통 열기(`OpenAssetOrFolder`), 외부 프로그램 실행(`ShellExecuteW`), 검색 범위 토글(`현재 폴더` vs `전체 리소스 폴더`)이 구현되었다 (14절 A, B, E).
+- 전용 리소스/그래프 에디터로 2D `SpriteAnimationEditor`(필름스트립 타임라인·피벗 프리뷰, `ResourceHandle` 참조)와 3D `AnimatorGraphPanel`(상태 머신 캔버스·파라미터 독·트랜지션 인스펙터·활성 상태 하이라이트, 11절 H)이 구현되었으며, `GraphPanel` 상단 도구 모음이 윈도우 메뉴바(`File`, `Edit`, `View`, `Mode`, `Debug/Build`) + 1줄 퀵 액세스 툴바로 리팩터링되었다 (18절).
 - EditorSettingsCheck의 파일 입출력·데이터 검사는 통과했다.
   이는 실제 UI·GPU·재실행 복원 검증 완료를 의미하지 않는다.
 
@@ -381,16 +383,16 @@ Visual Studio F5 수동 확인 항목:
 - Build·Cook·Stage·Package 처리는 UI 밖에서도 호출할 수 있는 공통 작업으로 구성한다.
 - 완료 기준은 UI 버튼 동작뿐 아니라 개발 경로 밖의 배포 폴더에서 Client가 실행되는 것이다.
 
-### H. `AnimatorGraphPanel` (애니메이터 그래프 및 상태 머신 에디터) — P3 목표
+### H. `AnimatorGraphPanel` (애니메이터 그래프 및 상태 머신 에디터) — 구현 완료 (2026-11-01) / 3D 프리뷰 뷰포트 후속
 
 - 상세 계획: [AnimatorGraphPlan.md](AnimatorGraphPlan.md) Phase 4.
-- 현재 기반: `Editor/Source/ImGui/GraphPanel/`에 `imgui-node-editor` 기반 줌/패닝, 노드 배치 및 링크 시각화 인프라가 구축되어 있음.
-- 목표:
-  1. **상태 머신 캔버스:** `Entry`, `Any State`, 상태 노드(`AnimState`)를 배치하고 노드 간 드래그로 트랜지션 화살표(Transition Wire)를 연결한다.
-  2. **트랜지션 및 상태 인스펙터:** 상태 노드 선택 시 클립 핸들·루프·재생 속도를 지정하고, 트랜지션 선택 시 지속 시간(`Duration`), 종료 시간(`Exit Time`) 및 파라미터 조건식 테이블을 편집한다.
-  3. **파라미터 독(Dock):** `Float`, `Int`, `Bool`, `Trigger` 파라미터를 추가·삭제하고, PIE 실행 중 슬라이더/체크박스로 실시간 값을 변경해 전이를 즉시 테스트한다.
-  4. **실시간 디버깅 및 프리뷰:** PIE 실행 중 현재 활성화된 상태 노드에 발광 테두리를 표시하고, 패널 내부 독립 3D 뷰포트를 통해 메인 씬 영향 없이 애니메이션 재생 결과를 즉각 확인한다.
-- 완료 기준: `AnimatorGraphAsset` 파일을 생성·편집하고 JSON으로 저장·복원할 수 있으며, PIE에서 활성 상태 및 전이 과정이 실시간으로 시각화된다.
+- **2026-11-01 구현 완료 내역:**
+  1. **18절 표준 메뉴바 및 1줄 퀵툴바:** `File`, `Edit`, `View` 풀다운 메뉴바와 `New`, `Open`, `Save` 및 현재 파일 배지 툴바 구축.
+  2. **상태 머신 캔버스:** `Entry`, 상태 노드(`AnimState`) 자유 드래그 배치 및 "Make Transition" 베지어 곡선 화살표 연결선 생성.
+  3. **트랜지션 및 상태 인스펙터:** 상태 노드 선택 시 클립/1D 블렌드 트리·루프·재생 속도 지정, 트랜지션 선택 시 지속 시간(`Duration`), 종료 시간(`Exit Time`) 및 파라미터 조건식 테이블 편집.
+  4. **파라미터 독(Dock):** `Float`, `Int`, `Bool`, `Trigger` 파라미터 추가·삭제 및 실시간 값 조작.
+  5. **실시간 디버깅 및 직렬화:** `.animator` JSON 저장/복원(`FileDialogs` 연동) 및 씬 선택 엔티티의 현재 활성 상태 노드 청록색 발광 테두리 시각화 완료.
+- **후속 범위:** 패널 내부 격리된 3D 모델 프리뷰 뷰포트(`PreviewViewport`) 내장.
 
 ## 12. 확장 목표의 권장 진행 순서
 
@@ -652,8 +654,8 @@ BamEngine의 우선 기준은 작은 게임의 제작·저장·실행·배포 �
 
 ## 18. 그래프 패널 상단 도구 모음 정리
 
-- 추가일: 2026-10-31.
-- 상태: 개발 계획 / UI 변경·실행 검증 미완료.
+- 추가일: 2026-10-31 (2026-11-01 윈도우 메뉴바 + 1줄 퀵툴바 코드 리팩터링 반영 완료).
+- 상태: 코드 반영 완료 (`GraphPanel::DrawMenuBar` 및 1줄 `DrawToolbar`) / 좁은 폭 대응 및 UI 회귀 검증 대기.
 - 목표: 자주 쓰는 작업을 찾기 쉽게 묶고 캔버스 공간을 확보한다. Logic 실행 미리보기·PIE 관찰·Shader 제작의 조작 대상을 명확히 구분한다.
 - 관련 문서: [GraphPanel.md](GraphPanel.md), [GraphExecution.md](GraphExecution.md), [VisualScriptingBlueprintPlan.md](VisualScriptingBlueprintPlan.md) Phase 4.2.
 
@@ -707,3 +709,229 @@ BamEngine의 우선 기준은 작은 게임의 제작·저장·실행·배포 �
 - [ ] 상단을 축약해도 메뉴에서 모든 기존 작업에 접근하고, 오류와 실행 상태를 확인할 수 있다.
 - [ ] 언어 변경 후 선택·팝업·문서·노드 배치가 유지되고 메뉴·단축키·텍스트 입력이 충돌하지 않는다.
 - [ ] Visual Studio 빌드와 실제 UI 회귀 확인 결과를 구분해 기록한다. 이번 문서 추가를 구현 완료로 처리하지 않는다.
+
+## 19. 에디터 하단 푸터(Footer Bar) 도입 및 빌드·핫리로드 제어 이관
+
+- 추가일: 2026-11-02
+- 상태: 개발 계획
+- 목표: 상단 PIE 재생 바(`##PlayBarRow`)에 혼재되어 있던 C++ 모듈 컴파일·자동 컴파일·모듈 핫리로드·자동 리로드·셰이더 리로드 제어 위젯들을 에디터 하단 푸터(`##FooterBarRow`)로 이관하고, 긴 설명 라벨 대신 **아이콘/컴팩트 버튼 + 상세 툴팁(Tooltip)** 구조로 단순화한다.
+- 대상 파일:
+  - `Editor/Source/ImGui/ToolBar/Public/ToolBar.h`
+  - `Editor/Source/ImGui/ToolBar/Private/ToolBar.cpp`
+  - `Editor/Source/ImGui/Private/ImGuiManager.cpp`
+  - `Editor/Source/Notification/Private/NotificationManager.cpp`
+  - `Resources/Data/Localization/Editor.csv`
+
+### 19.1 현재 코드에서 확인한 문제
+
+1. **상단 Play Bar의 책임 혼재**:
+   - `ToolBar::DrawPlayControls()`(`ToolBar.cpp:415-534`)에서 시뮬레이션 실행 제어(`Play`, `Pause/Resume`, `Stop`)와 백그라운드 빌드·핫리로드 제어(`Compile`, `Auto-Compile`, `Hot Reload`, `Auto`, `Shader Reload`)를 한 줄에 함께 그린다.
+2. **중앙 정렬 비대칭 및 좁은 창에서의 잘림**:
+   - `startX` 중앙 정렬 계산이 PIE 버튼 3개의 폭만 기준으로 삼고, 그 우측에 텍스트 라벨이 포함된 5개 위젯을 `SameLine()`으로 이어 붙인다.
+   - 창 너비가 좁아지거나 UI 배율(`m_UIScale`)이 커질 때 우측 빌드·리로드 위젯들이 화면 밖으로 잘린다(`ImGuiWindowFlags_NoScrollbar`).
+3. **불필요한 상시 텍스트 공간 점유**:
+   - 버튼과 체크박스마다 `"컴파일"`, `"자동 컴파일"`, `"핫 리로드"`, `"자동"`, `"셰이더 리로드"` 문구가 상시 노출되어 가로 공간을 과도하게 차지한다.
+
+### 19.2 레이아웃 및 동작 설계
+
+```
+[상단 Play Bar (##PlayBarRow)]
++---------------------------------------------------------------------------------+
+|                                 [ ▶ ] [ ⏸ ] [ ■ ]                               |
++---------------------------------------------------------------------------------+
+|                                                                                 |
+|                              MainDockSpace (패널 영역)                            |
+|                                                                                 |
++---------------------------------------------------------------------------------+
+| [하단 Footer Bar (##FooterBarRow)]                        [🔨][⚡] | [🔄][🔗] | [🔥] |
++---------------------------------------------------------------------------------+
+```
+
+1. **상단 Play Bar (`##PlayBarRow`, `ToolBar::DrawPlayControls`)**:
+   - 순수하게 PIE 실행 제어(`Play`, `Pause/Resume`, `Stop`) 3개 버튼만 남겨 중앙 정렬을 유지한다.
+2. **하단 Footer Bar (`##FooterBarRow`, `ToolBar::DrawFooterBar`)**:
+   - 메인 뷰포트(`ImGui::GetMainViewport()`) 최하단(`WorkPos.y + WorkSize.y - footerH`)에 고정 높이(`GetFooterBarHeight()`)의 단일 행 윈도우를 렌더링한다.
+   - `ImGuiManager::MainDockspace()`에서 `topReserve`(`GetPlayBarHeight()`)와 함께 `bottomReserve`(`GetFooterBarHeight()`)를 차감하여 도킹 영역이 푸터와 겹치지 않게 한다:
+     - 위치: `(viewport->WorkPos.x, viewport->WorkPos.y + topReserve)`
+     - 크기: `(viewport->WorkSize.x, viewport->WorkSize.y - topReserve - bottomReserve)`
+   - `NotificationManager::DrawNotificationUI()`의 하단 기준점(`bottom`) 계산 시에도 푸터 높이를 반영하여 우하단 알림 토스트가 푸터 버튼을 가리지 않도록 한다.
+3. **아이콘 중심 컴팩트 버튼 + 툴팁(Tooltip) 구성**:
+   - 푸터에는 긴 텍스트 설명이나 체크박스 라벨을 나열하지 않고 **아이콘 중심의 작은 버튼/토글 버튼만 배치**하며, 상세 설명·현재 상태·단축키는 마우스 호버 시 **툴팁**으로 제공한다.
+   - 우측 영역에 다음 5개 제어를 그룹화하여 배치한다:
+
+| 구분 | 위젯 ID | 버튼 표시 (아이콘) | 동작 및 상태 표현 | 툴팁(Tooltip) 표시 내용 |
+| :--- | :--- | :---: | :--- | :--- |
+| **1. 모듈 컴파일** | `CompileModuleBtn` | `ICON_FA_HAMMER` (컴파일 중: `ICON_FA_SPINNER`) | 클릭 시 `buildManager.RequestBuild()` 호출. 컴파일 중에는 `BeginDisabled()` 처리 | 제목(`ToolBar.ModuleCompile` / `ModuleCompiling`) + 설명(`ToolBar.ModuleCompileTooltip`) + 단축키(`Build.CompileModule`) |
+| **2. 자동 컴파일 토글** | `AutoCompileBtn` | `ICON_FA_BOLT` (또는 토글 아이콘) | 클릭 시 `buildManager.SetAutoCompileEnabled(!autoCompile)` 토글. ON 상태일 때 버튼 활성 강조색(`ImGuiCol_Button`) 적용 | 제목(`ToolBar.AutoCompile`) + 현재 상태(`ON` / `OFF`) + 설명(`ToolBar.AutoCompileTooltip`) |
+| **3. 모듈 핫 리로드** | `HotReloadBtn` | `ICON_FA_ARROWS_ROTATE` | 클릭 시 `moduleReloader.ReloadModule()` 호출 | 제목(`ToolBar.ModuleReload`) + 설명(`ToolBar.ReloadModuleTooltip`, 리로드 인덱스 포함) + 단축키(`Build.ReloadModule`) |
+| **4. 자동 리로드 토글** | `AutoReloadBtn` | `ICON_FA_LINK` (또는 자동 동기화 아이콘) | 클릭 시 `moduleReloader.SetAutoReload(!autoReload)` 토글. ON 상태일 때 버튼 활성 강조색 적용 | 제목(`ToolBar.AutoReload`) + 현재 상태(`ON` / `OFF`) + 설명(`ToolBar.AutoReloadTooltip`) |
+| **5. 셰이더 리로드** | `ShaderReloadBtn` | `ICON_FA_FIRE` (또는 셰이더 아이콘) | 클릭 시 `shaderReloader.RequestRecompileAll()` 호출 | 제목(`ToolBar.ShaderReload`) + 설명(`ToolBar.ShaderReloadTooltip`) + 단축키(`Build.ReloadShaders`) |
+
+### 19.3 로캘 및 입력 처리 기준 (지침 14절 준수)
+
+- **로캘 키 재사용**:
+  - 기존 `Resources/Data/Localization/Editor.csv`에 등록된 `ToolBar.ModuleCompile`, `ToolBar.ModuleCompiling`, `ToolBar.ModuleCompileTooltip`, `ToolBar.AutoCompile`, `ToolBar.AutoCompileTooltip`, `ToolBar.ModuleReload`, `ToolBar.ReloadModuleTooltip`, `ToolBar.AutoReload`, `ToolBar.AutoReloadTooltip`, `ToolBar.ShaderReload`, `ToolBar.ShaderReloadTooltip`를 툴팁 구성에 그대로 재사용한다.
+  - 토글 상태(`ON`/`OFF` 또는 활성/비활성) 표시에 추가 키가 필요한 경우에만 `Editor.csv`에 한·영 번역을 함께 추가한다.
+- **고정 ImGui ID**:
+  - 아이콘만 표시하는 버튼들이 충돌하지 않도록 `ImGui::PushID("...")` 또는 `ICON_FA_... "###..."` 형식으로 고정 ID를 부여한다.
+- **단축키 일관성**:
+  - `EditorActionRegistry`에 등록된 `Build.CompileModule`(`Ctrl+Shift+B`), `Build.ReloadModule`(`Ctrl+Shift+R`), `Build.ReloadShaders`(`Ctrl+Alt+R`) 경로와 힌트 표시(`ShortcutManager::Get().GetShortcutHint(...)`)를 그대로 유지한다.
+
+### 19.4 구현 순서
+
+1. **1단계 (`ToolBar` 푸터 인터페이스 추가)**:
+   - `ToolBar.h`에 `GetFooterBarHeight() const` 및 `DrawFooterControls()`(또는 `DrawFooterBar()`)를 선언한다.
+   - `ToolBar::Draw()`에서 상단 `##PlayBarRow` 외에 하단 `##FooterBarRow` 윈도우를 생성하여 `DrawFooterControls()`를 호출한다.
+2. **2단계 (`MainDockspace` 및 `NotificationManager` 영역 조정)**:
+   - `ImGuiManager::MainDockspace()`에서 하단 여유 높이(`m_ToolBar.GetFooterBarHeight()`)를 제외하도록 DockSpace 높이를 조정한다.
+   - `NotificationManager::DrawNotificationUI()`에서 우하단 알림 시작 위치(`bottom`)가 푸터 바 위로 올라오도록 오프셋을 반영한다.
+3. **3단계 (컴파일·핫리로드 위젯 이관 및 컴팩트 버튼화)**:
+   - `ToolBar::DrawPlayControls()`에서 컴파일·핫리로드·셰이더 리로드 관련 코드를 제거하고 PIE 3버튼만 남긴다.
+   - `ToolBar::DrawFooterControls()`에 우측 정렬된 아이콘 버튼 5종(모듈 컴파일, 자동 컴파일 토글, 모듈 핫리로드, 자동 리로드 토글, 셰이더 리로드)과 상세 툴팁을 구현한다.
+
+### 19.5 완료 검증 체크리스트
+
+- [ ] 상단 Play Bar에 `Play`, `Pause/Resume`, `Stop` 3개 버튼만 남아 중앙에 정렬된다.
+- [ ] 하단 Footer Bar가 메인 창 최하단에 고정 표시되며, 하단 도킹 패널(Content Browser, Console 등)의 탭이나 스크롤바를 가리지 않는다.
+- [ ] 우하단 토스트 알림(`NotificationManager`)이 나타날 때 하단 푸터 바와 겹치지 않고 푸터 위쪽에 표시된다.
+- [ ] 푸터의 5개 아이콘 버튼(컴파일, 자동 컴파일, 핫리로드, 자동 리로드, 셰이더 리로드) 클릭 시 기존과 동일하게 동작하며, 자동 토글(Auto-Compile, Auto-Reload)의 ON/OFF 상태가 버튼 색상과 툴팁으로 즉시 식별된다.
+- [ ] 컴파일 진행 중(`IsCompiling() == true`)일 때 컴파일 버튼이 스피너 아이콘으로 바뀌고 비활성화되며, 비활성화 상태에서도 호버 시 툴팁(`ImGuiHoveredFlags_AllowWhenDisabled`)이 정상 표시된다.
+- [ ] 각 버튼에 마우스를 올렸을 때 기능 이름, 상세 설명, 현재 상태(버전 또는 ON/OFF), 단축키가 한국어/영어 언어 설정에 맞춰 툴팁으로 표시된다.
+
+## 20. 콘텐츠 브라우저 그리드 아이템 시각 분류 고도화 및 목적별 JSON 복합 확장자(`.bam*.json`) 표준화
+
+- 추가일: 2026-11-02
+- 상태: 개발 계획 (하단 푸터 작업 완료 및하단 푸터 높이 조정 반영 후 진행)
+- 목표:
+  1. `ContentBrowserPanel` 및 `ContentBrowserGridItem`에서 현재 `.hlsl`/`.hlsli`/`.bamprefab.json` 등 일부에만 적용되어 있는 그리드 카드 꾸미기(아이콘·배경색·타입 배지)를 **모든 엔진 리소스 및 에셋(`Scene`, `Material`, `MaterialInstance`, `Mesh`, `Model`, `Sprite`, `SpriteAnimation`, `Animation`, `Skeleton`, `Animator`, `Graph`, `Audio`, `PostProcess`)으로 확대**하여 한눈에 에셋 종류를 식별할 수 있게 한다.
+  2. `Scene` 파일을 비롯한 **특정 목적을 가진 모든 JSON 직렬화 파일에 `*.bam<type>.json` 형태의 복합 확장자(Compound Extension)를 표준으로 부여**하여, 일반 데이터 `.json` 파일과 혼용되지 않고 디스크 파일 열기(`PeekResourceType`) 없이 파일명만으로 O(1)에 정확한 타입을 판별하도록 통일한다.
+- 대상 파일:
+  - `Editor/Source/ImGui/ContentBrowserPanel/Private/ContentBrowserGridItem.cpp`
+  - `Editor/Source/ImGui/ContentBrowserPanel/Private/ContentBrowserPanel.cpp`
+  - `Editor/Source/ImGui/Public/ResourcePicker.h`
+  - `Editor/Source/ImGui/ToolBar/Private/ToolBar.cpp` (씬 열기/저장 필터)
+  - `Editor/Source/ImGui/GraphPanel/Private/GraphPanel.cpp` (그래프 열기/저장 필터)
+  - `Editor/Source/ImGui/AnimatorGraphPanel/Private/AnimatorGraphPanel.cpp` (애니메이터 열기/저장 필터)
+  - `Editor/Source/ImGui/PostProcessPanel/Private/PostProcessPanel.cpp` (후처리 프리셋 확장자)
+
+---
+
+### 20.1 현재 코드에서 확인한 문제
+
+1. **단일 확장자(`.extension()`) 의존으로 인한 시각 분류 누락**:
+   - `ContentBrowserGridItem::Thumbnail`(`ContentBrowserGridItem.cpp:214-264`)은 `path.extension()`만 검사하므로, `Wood.bammat.json`, `Cube.bammesh.json`, `NewScene.json`, `Hero.bamsprite.json` 등이 모두 `.json` 분기(`ICON_FA_FILE_LINES`, 회색 배경)로 빠져 일반 텍스트/데이터 파일과 똑같이 보인다.
+   - 심지어 바이너리 리소스인 `.bammesh`, `.bammodel`, `.bammat`, `.bammatinst`, `.bamsprite`, `.bamanim`, `.bamskel`, `.bamtex`도 `Thumbnail()` 분기에 등록되어 있지 않아 기본 파일 아이콘(`ICON_FA_FILE`, 무채색)으로 표시된다.
+2. **네임박스(`DrawNameBox`)의 이름 잘림 및 무의미한 `"JSON"` 타입 표시**:
+   - `DrawNameBox`(`ContentBrowserGridItem.cpp:552-625`)에서 파일 이름을 `path.stem()`으로만 추출하기 때문에 `Cube.bammesh.json`의 이름이 `"Cube.bammesh"`로 지저분하게 남고, 우측 하단 타입 라벨(`typeStr`)에는 `"MESH"`가 아니라 `"JSON"`이 찍힌다.
+3. **목적별 JSON 파일과 일반 `.json`의 혼용**:
+   - `Scene` 파일(`NewScene2.json`), 비주얼 스크립팅 `Graph` 파일, `PostProcess` 프리셋 등이 고유 접미사 없이 `.json` 확장자만 사용하고 있다.
+   - 이 때문에 `IsSceneFile()`이나 `PeekResourceType()`처럼 파일을 직접 열어 JSON 파싱을 시도해야 하거나, 인스펙터의 `ResourcePicker<Material>` 팝업이 `.json`을 허용하면서 씬·프리팹·메시 JSON까지 머티리얼 후보 목록에 섞여 나오는 문제가 발생한다.
+4. **콘텐츠 브라우저 상단 필터(`PassesFilter`) 누락**:
+   - `ContentBrowserPanel.cpp:57-73`의 `PassesFilter()`에서 Material 필터가 `.mat`만 검사하여 정작 엔진 머티리얼(`.bammat`, `.bammat.json`, `.bammatinst.json`)은 필터링 시 전부 사라지며, Model 필터도 `.bammesh.json`과 `.bammodel.json`을 누락하고 있다.
+
+---
+
+### 20.2 목적별 JSON 파일의 복합 확장자(`*.bam<type>.json`) 표준화 규약
+
+> **[핵심 원칙]**
+> 엔진과 에디터에서 특정 도메인 목적(씬, 머티리얼, 메시, 프리팹, 그래프, 애니메이션, 프리셋 등)을 가지는 모든 JSON 직렬화 에셋은 일반 `.json`과 절대 혼용하지 않으며, 반드시 **`<이름>.bam<type>.json`** 복합 확장자를 사용한다.
+> 바이너리(BEVE)로 구울(Bake) 때는 뒤의 `.json`만 제거한 **`<이름>.bam<type>`** 과 1:1로 대응시킨다.
+
+| 도메인 분류 | 에셋 종류 (`EResourceType` / 역할) | 표준 JSON 확장자 | 대응 바이너리 확장자 | 하위 호환 인식 범위 (읽기 전용) |
+| :--- | :--- | :--- | :--- | :--- |
+| **월드 / 계층** | **Scene (씬)** | **`.bamscene.json`** | `.bamscene` | `.scene.json`, 루트에 `"Scene"` 키가 있는 레거시 `.json` |
+| **월드 / 계층** | **Prefab (프리팹)** | **`.bamprefab.json`** | `.bamprefab` | `.prefab.json`, `.prefab` |
+| **머티리얼** | **Material (베이스 머티리얼)** | **`.bammat.json`** | `.bammat` | `.mat` |
+| **머티리얼** | **Material Instance (인스턴스)** | **`.bammatinst.json`** | `.bammatinst` | - |
+| **3D 지오메트리** | **Model (모델 계층/슬롯)** | **`.bammodel.json`** | `.bammodel` | 원본 `.fbx`, `.obj`, `.gltf`, `.glb` |
+| **3D 지오메트리** | **Mesh (단일 메시 데이터)** | **`.bammesh.json`** | `.bammesh` | - |
+| **텍스처 / 2D** | **Texture (엔진 압축 텍스처)** | **`.bamtex.json`** | `.bamtex` | 원본 `.png`, `.jpg`, `.jpeg`, `.tga`, `.bmp`, `.dds`, `.hdr` |
+| **텍스처 / 2D** | **Sprite (2D 스프라이트)** | **`.bamsprite.json`** | `.bamsprite` | - |
+| **텍스처 / 2D** | **Sprite Animation (2D 클립)** | **`.bamspriteanim.json`** | `.bamspriteanim` | `.spriteanim`, `.spriteanim.json` |
+| **3D 애니메이션** | **Animation Clip (3D 클립)** | **`.bamanim.json`** | `.bamanim` | `.anim`, `.anim.json` |
+| **3D 애니메이션** | **Skeleton (3D 스켈레톤)** | **`.bamskel.json`** | `.bamskel` | - |
+| **3D 애니메이션** | **Animator Controller (ASM)** | **`.bamanimator.json`** | `.bamanimator` | `.animator`, `.animator.json` |
+| **로직 / 스크립트** | **Script (스크립트 / 로직 에셋)** | **`.bamscript.json`** | `.bamscript` | `.script.json`, `Resources/Scripts/*.json`, `.lua`, `.cpp`, `.h` |
+| **로직 / 셰이더** | **Graph (블루프린트 / 셰이더 그래프)** | **`.bamgraph.json`** | `.bamgraph` | `.graph.json` |
+| **렌더링 설정** | **Post-Process Preset (후처리)** | **`.bampostfx.json`** | `.bampostfx` | `Resources/Config/PostProcess/Presets/*.json` |
+| **엔진/에디터 설정** | **Config (단축키 / 시작 매니페스트 등)** | **`.bamconfig.json`** | - | `Resources/Config/**/*.json`, `.ini`, `.cfg`, `.toml`, `.yaml` |
+| **일반 데이터** | **순수 데이터 테이블 / 설정** | `.json`, `.csv` | `.beve` | 특정 `.bam*` 접미사가 없는 일반 데이터 파일 |
+
+---
+
+### 20.3 그리드 아이템(`ContentBrowserGridItem`) 시각 디자인 명세
+
+모든 그리드 카드는 **상단 썸네일/아이콘 영역 + 중앙 컬러 액센트 바(2px) + 하단 네임박스(정제된 파일명 + 우하단 타입 배지)** 의 일관된 카드 레이아웃을 갖는다.
+
+```
++--------------------+
+|     (배경 틴트)     |
+|                    |
+|     [ 대표 아이콘 ]   |  <-- 썸네일 텍스처가 있으면 썸네일 렌더링,
+|                    |      없으면 타입별 고유 배경색(typeColor) + 중앙 아이콘 렌더링
++====================+  <-- 2px 두께의 타입 고유 액센트 라인 (썸네일이 있어도 타입 식별 가능)
+| PlayerCharacter    |  <-- 복합 확장자(.bammesh.json 등)를 완전히 제거한 깔끔한 이름
+|          [ MESH ]  |  <-- 단순 "JSON" 대신 명확한 타입 배지 표시 (바이너리는 "MESH · BIN" 등 구분 가능)
++--------------------+
+```
+
+#### 타입별 아이콘·배경색·타입 배지 팔레트
+
+| 분류 | 대상 확장자 / 조건 | 아이콘 (`FontAwesome 7`) | 배경/액센트 색상 (`RGBA`) | 우하단 배지 (`typeStr`) |
+| :--- | :--- | :---: | :--- | :---: |
+| **Folder** | 디렉터리 | `ICON_FA_FOLDER` | 골드 옐로우 `(0.90, 0.70, 0.20, 0.35)` | `FOLDER` (로캘) |
+| **Scene** | `.bamscene.json`, `.bamscene` (및 레거시 씬) | `ICON_FA_CLAPPERBOARD` (또는 `ICON_FA_MAP`) | 앰버 오렌지 `(0.95, 0.55, 0.15, 0.40)` | `SCENE` |
+| **Prefab** | `.bamprefab.json`, `.bamprefab` | `ICON_FA_CUBES` | 시안 블루 `(0.20, 0.75, 0.95, 0.40)` | `PREFAB` |
+| **Material** | `.bammat.json`, `.bammat`, `.mat` | `ICON_FA_CIRCLE_HALF_STROKE` | 에메랄드 그린 `(0.20, 0.80, 0.45, 0.40)` | `MATERIAL` (또는 `MAT`) |
+| **Material Inst** | `.bammatinst.json`, `.bammatinst` | `ICON_FA_CLONE` | 민트 그린 `(0.15, 0.75, 0.65, 0.40)` | `MAT INST` |
+| **Model** | `.bammodel.json`, `.bammodel`, `.fbx`, `.obj`, `.gltf`, `.glb` | `ICON_FA_CUBE` | 로열 블루 `(0.25, 0.45, 0.95, 0.40)` | `MODEL` / 원본 확장자 |
+| **Mesh** | `.bammesh.json`, `.bammesh` | `ICON_FA_DRAW_POLYGON` | 인디고 블루 `(0.40, 0.45, 0.95, 0.40)` | `MESH` |
+| **Texture** | `.bamtex.json`, `.bamtex`, `.png`, `.jpg`, `.tga`, `.dds`, `.hdr` | `ICON_FA_IMAGE` | 포레스트 그린 `(0.30, 0.78, 0.30, 0.40)` | `TEXTURE` / 원본 확장자 |
+| **Sprite** | `.bamsprite.json`, `.bamsprite` | `ICON_FA_IMAGES` | 라임 그린 `(0.55, 0.85, 0.25, 0.40)` | `SPRITE` |
+| **Sprite Anim** | `.bamspriteanim.json`, `.bamspriteanim`, `.spriteanim` | `ICON_FA_FILM` | 민트 그린 `(0.35, 0.90, 0.65, 0.38)` | `SPRITE ANIM` |
+| **Animation** | `.bamanim.json`, `.bamanim`, `.anim.json`, `.anim` | `ICON_FA_PERSON_RUNNING` | 로즈 핑크 `(0.95, 0.35, 0.65, 0.38)` | `ANIM` |
+| **Skeleton** | `.bamskel.json`, `.bamskel` | `ICON_FA_BONE` | 샌드 골드 `(0.80, 0.75, 0.60, 0.38)` | `SKEL` |
+| **Animator** | `.bamanimator.json`, `.bamanimator`, `.animator.json`, `.animator` | `ICON_FA_DIAGRAM_PROJECT` | 마젠타 퍼플 `(0.85, 0.35, 0.75, 0.38)` | `ANIMATOR` |
+| **Script** | `.bamscript.json`, `.script.json`, `Scripts/*.json`, `.lua`, `.cpp`, `.h` | `ICON_FA_SCROLL` | 틸 에메랄드 `(0.20, 0.75, 0.65, 0.38)` | `SCRIPT` |
+| **Graph** | `.bamgraph.json`, `.graph.json` | `ICON_FA_CIRCLE_NODES` | 일렉트릭 퍼플 `(0.45, 0.40, 0.90, 0.38)` | `GRAPH` |
+| **Shader (본체)** | `.hlsl`, `.glsl`, `.cso`, `.spv`, `.bamshader`, `.bamshader.json` | `ICON_FA_CODE` | 퍼플 `(0.70, 0.30, 0.90, 0.40)` | `HLSL` / `SHADER` |
+| **Shader (헤더)** | `.hlsli` | `ICON_FA_FILE_CODE` | 스카이 블루 `(0.25, 0.60, 0.85, 0.40)` | `HLSLI` |
+| **PostFX Preset** | `.bampostfx.json`, `Config/PostProcess/Presets/*.json` | `ICON_FA_WAND_MAGIC_SPARKLES` | 바이올렛 `(0.60, 0.40, 0.85, 0.38)` | `POST FX` |
+| **Config** | `.bamconfig.json`, `Config/**/*.json`, `.ini`, `.cfg`, `.toml`, `.yaml` | `ICON_FA_GEARS` | 스틸 블루 `(0.45, 0.60, 0.75, 0.38)` | `CONFIG` |
+| **Audio** | `.wav`, `.mp3`, `.ogg`, `.flac` | `ICON_FA_VOLUME_HIGH` | 옐로우 오렌지 `(0.95, 0.75, 0.20, 0.40)` | `AUDIO` / 확장자 |
+| **Data (CSV/JSON)** | 일반 `.csv`, `.json`, `.beve` | `ICON_FA_FILE_LINES` | 슬레이트 그레이 `(0.55, 0.58, 0.62, 0.40)` | `CSV` / `JSON` |
+
+---
+
+### 20.4 머티리얼 및 메시 썸네일/시각 구분 보강
+
+1. **머티리얼(`Material` / `MaterialInstance`) 시각 구분**:
+   - 정적 썸네일 렌더가 아직 생성되지 않은 상태에서도 베이스 머티리얼(`ICON_FA_CIRCLE_HALF_STROKE`, 에메랄드 그린, `MAT` 배지)과 머티리얼 인스턴스(`ICON_FA_CLONE`, 민트 그린, `MAT INST` 배지)가 아이콘·배경색·배지로 즉시 구분된다.
+   - 머티리얼 파일(`.bammat.json` / `.bammat`)에 대표 Albedo 텍스처가 바인딩되어 있거나 추후 오프스크린 구체(Sphere) 프리뷰가 캐싱되면 `AssetCache::GetThumbnail`을 통해 썸네일을 표시하되, 하단 2px 액센트 라인과 `MAT` / `MAT INST` 배지를 유지해 일반 텍스처와 혼동되지 않게 한다.
+2. **메시(`.bammesh.json` / `.bammesh`) 및 모델(`.bammodel.json` / `.bammodel`) 시각 구분**:
+   - 원본 모델(`.fbx`/`.obj`/`.gltf`, `ICON_FA_CUBE`), 엔진 모델(`.bammodel*`, `ICON_FA_CUBE` + `MODEL` 배지), 분리 추출된 개별 메시(`.bammesh*`, `ICON_FA_DRAW_POLYGON` + 인디고 배경 + `MESH` 배지)를 서로 다른 아이콘과 색상 톤으로 분리한다.
+
+---
+
+### 20.5 구현 순서
+
+1. **1단계 (공통 에셋 분류 헬퍼 `ClassifyAssetVisualInfo` 구축)**:
+   - 파일 경로(소문자 전체 파일명 `filename`)를 받아 복합 확장자 접미사(`.bamscene.json`, `.bammesh.json`, `.bammat.json` 등)를 우선 판별하고, `{ EAssetVisualCategory, icon, typeColor, badgeLabel, cleanStem }`을 반환하는 O(1) 분류 함수를 작성한다.
+   - `DrawNameBox`에서 `cleanStem`(`Cube.bammesh.json` $\rightarrow$ `Cube`)과 `badgeLabel`(`MESH`)을 사용하도록 교체한다.
+   - `Thumbnail`에서 `typeColor`, `icon`, 그리고 썸네일 하단 2px 액센트 라인을 그리도록 개선한다.
+2. **2단계 (콘텐츠 브라우저 필터 `PassesFilter` 및 `ResourcePicker` 동기화)**:
+   - `ContentBrowserPanel.cpp`의 `PassesFilter()`가 복합 확장자(`.bammat.json`, `.bammesh.json`, `.bamsprite.json` 등)를 각 카테고리에 맞게 필터링하도록 연결한다.
+   - `ResourcePicker.h`의 `IsResourceExtensionCompatible<T>`가 단일 `ext` 대신 전체 파일명(복합 확장자 포함)을 받도록 확장하여, `Material` 선택 시 일반 `.json`이나 `.bamscene.json`이 섞여 나오지 않고 `.bammat` / `.bammat.json` / `.bammatinst` / `.bammatinst.json`만 정확히 표시되게 한다.
+3. **3단계 (`Scene` 및 에디터 문서 저장/열기 확장자 `.bamscene.json` 전환)**:
+   - 씬 저장 시 기본 확장자를 `.bamscene.json`으로 부여하고, `FileDialogs`의 씬 파일 필터(`FileDialog.SceneFiles`)를 `*.bamscene.json;*.json`으로 갱신하여 기존 `NewScene2.json` 등 레거시 씬 파일 열기도 100% 하위 호환한다.
+   - 그래프(`.bamgraph.json`), 애니메이터(`.bamanimator.json`), 스프라이트 애니메이션(`.bamspriteanim.json`), 후처리 프리셋(`.bampostfx.json`)의 저장 기본 확장자와 열기 필터도 기존 파일 호환을 유지하며 순차 통일한다.
+
+---
+
+### 20.6 완료 검증 체크리스트
+
+- [ ] `*.bammesh.json`, `*.bammat.json`, `*.bammatinst.json`, `*.bamscene.json`, `*.bamprefab.json`, `*.bamsprite.json` 등이 일반 회색 `.json` 아이콘이 아닌 각각의 고유 아이콘과 배경색으로 렌더링된다.
+- [ ] 그리드 아이템 하단 네임박스에 중간 확장자(`.bammesh`, `.bammat` 등)가 제거된 순수 파일 이름만 깔끔하게 표시되고, 우하단에 `"JSON"` 대신 `"MESH"`, `"MAT"`, `"MAT INST"`, `"SCENE"` 등의 타입 배지가 표시된다.
+- [ ] 콘텐츠 브라우저 상단 필터에서 `Material` 또는 `Model` 선택 시 `.bammat.json`, `.bammatinst.json`, `.bammesh.json`, `.bammodel.json` 파일들이 누락 없이 표시된다.
+- [ ] 인스펙터 `ResourcePicker`에서 머티리얼 슬롯 클릭 시 `.bamscene.json`, `.bamprefab.json`, `.bammesh.json` 등 무관한 JSON 파일이 제외되고 머티리얼 에셋만 노출된다.
+- [ ] 새 씬을 저장할 때 `.bamscene.json`으로 저장되며, 기존 `.json`으로 저장된 씬과 새 `.bamscene.json` 씬 모두 더블클릭 및 `Load Scene` 메뉴에서 정상 로드된다.

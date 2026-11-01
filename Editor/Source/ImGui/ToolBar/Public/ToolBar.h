@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "Base.h"
 #include "BaseViewportPanel.h"
@@ -9,6 +9,7 @@ class ToolBar
 public:
 	void Draw(SDL_Window* window);
 	float GetPlayBarHeight() const;
+	float GetFooterBarHeight() const;
 
 #pragma region File Menu
 private:
@@ -44,9 +45,10 @@ private:
 	void DrawHelpMenu();
 #pragma endregion
 
-#pragma region Play Controls
+#pragma region Play & Footer Controls
 private:
-    void DrawPlayControls();
+	void DrawPlayControls();
+	void DrawFooterControls();
 #pragma endregion
 
 #pragma region Window Control
