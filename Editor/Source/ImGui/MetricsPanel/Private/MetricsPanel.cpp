@@ -6,6 +6,7 @@
 #include "RenderPassManager.h"
 #include "ResourceManager.h"
 #include "AssetManager.h"
+#include "RenderPass.h"
 
 void MetricsPanel::Draw()
 {
@@ -59,6 +60,11 @@ void MetricsPanel::Update(f32 dt)
         m_RenderMetrics = rhi->GetLastFrameMetrics();
         m_Capabilities = rhi->GetCapabilities();
     }
+
+    if (std::isfinite(dt) && dt > 0.0f)
+        m_ElapsedTime += dt;
+    UpdatePassStats();
+    UpdateDrawSnapshot(dt);
 
     // 이 패널은 기존 ImGuiManager의 메인 스레드 Update에서 호출됩니다.
     m_TargetFPS = Engine::TimeManager::Get().GetTargetFPS();
@@ -198,39 +204,34 @@ void MetricsPanel::DrawEngineStatus()
 void MetricsPanel::DrawRenderMetrics()
 {
     ImGui::TextUnformatted(LOCAL_CSTR("Metrics.RHIDraws"));
-
-    if (!m_RenderMetrics.Available)
+    if (!m_DisplaySnapshot.Available)
     {
         ImGui::TextDisabled("%s", LOCAL_CSTR("Metrics.NoCapture"));
         return;
     }
-
-    if (!m_RenderMetrics.RenderSucceeded)
+    if (m_DisplaySnapshot.RenderFailed)
     {
         ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.2f, 1.0f), "%s", LOCAL_CSTR("Metrics.RenderFailed"));
     }
-
-    // 1. 드로우콜 및 기본 정점/인덱스 통계
-    const auto drawCalls = LOCAL_FMT("Metrics.DrawCalls", m_RenderMetrics.GetTotalDrawCalls());
-    const auto breakdown = LOCAL_FMT("Metrics.DrawBreakdown", m_RenderMetrics.DrawCalls, m_RenderMetrics.IndexedDrawCalls);
-    const auto vertices = LOCAL_FMT("Metrics.Vertices", m_RenderMetrics.SubmittedVertices);
-    const auto indices = LOCAL_FMT("Metrics.Indices", m_RenderMetrics.SubmittedIndices);
-
+    const auto& snapshot = m_DisplaySnapshot;
+    // 1. 드로우콜 및 기본 정점/인덱스 통계 (최근 구간 중 가장 무거운 프레임)
+    const auto drawCalls = LOCAL_FMT("Metrics.DrawCalls", snapshot.GetTotalDrawCalls());
+    const auto breakdown = LOCAL_FMT("Metrics.DrawBreakdown", snapshot.DrawCalls, snapshot.IndexedDrawCalls);
+    const auto vertices = LOCAL_FMT("Metrics.Vertices", snapshot.SubmittedVertices);
+    const auto indices = LOCAL_FMT("Metrics.Indices", snapshot.SubmittedIndices);
     ImGui::TextUnformatted(drawCalls.c_str());
     ImGui::TextUnformatted(breakdown.c_str());
     ImGui::TextUnformatted(vertices.c_str());
     ImGui::TextUnformatted(indices.c_str());
-
     ImGui::Spacing();
     ImGui::Separator();
-
-    // 2. CPU / GPU 전체 프레임 소요 시간
+    // 2. CPU / GPU 전체 프레임 소요 시간 (위 통계와 같은 프레임)
     ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "%s", LOCAL_CSTR("Metrics.RenderTimes"));
-    ImGui::Text("%s", LOCAL_FMT("Metrics.TotalCPUSubmit", m_RenderMetrics.TotalCPUTimeMs).c_str());
-    ImGui::Text("%s", LOCAL_FMT("Metrics.TotalGPUExecute", m_RenderMetrics.TotalGPUTimeMs).c_str());
+    ImGui::Text("%s", LOCAL_FMT("Metrics.TotalCPUSubmit", snapshot.TotalCPUTimeMs).c_str());
+    ImGui::Text("%s", LOCAL_FMT("Metrics.TotalGPUExecute", snapshot.TotalGPUTimeMs).c_str());
 
-    // 3. 패스별 세부 실행 시간 테이블 (CPU vs GPU)
-    if (!m_RenderMetrics.PassMetrics.empty())
+    // 3. 패스별 세부 실행 시간 테이블 (등록 순서 고정 + 이동 평균)
+    if (!m_PassStats.empty())
     {
         if (ImGui::BeginTable("PassMetricsTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp))
         {
@@ -239,17 +240,32 @@ void MetricsPanel::DrawRenderMetrics()
             ImGui::TableSetupColumn(LOCAL_LABEL("Metrics.GPUTime").c_str(), ImGuiTableColumnFlags_WidthFixed, 65.0f);
             ImGui::TableHeadersRow();
 
-            for (const auto& pass : m_RenderMetrics.PassMetrics)
+            const ImVec4 staleColor = ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled);
+
+            for (const auto* renderPass : Engine::RenderPassManager::Get().GetAllRenderPasses())
             {
-                std::string passNameStr = WStrToStr(pass.PassName);
+                const auto found = m_PassStats.find(renderPass->GetName());
+                if (found == m_PassStats.end())
+                    continue;
+
+                const auto& stat = found->second;
+                const bool stale = m_ElapsedTime - stat.LastSeenTime > PassStaleSeconds;
+
+                if (stale)
+                    ImGui::PushStyleColor(ImGuiCol_Text, staleColor);
+
                 ImGui::TableNextRow();
                 ImGui::TableSetColumnIndex(0);
-                ImGui::TextUnformatted(passNameStr.c_str());
+                ImGui::TextUnformatted(stat.DisplayName.c_str());
                 ImGui::TableSetColumnIndex(1);
-                ImGui::Text("%.2f", pass.CPUTimeMs);
+                ImGui::Text("%.2f", stat.CPUTimeMs);
                 ImGui::TableSetColumnIndex(2);
-                ImGui::Text("%.2f", pass.GPUTimeMs);
+                ImGui::Text("%.2f", stat.GPUTimeMs);
+
+                if (stale)
+                    ImGui::PopStyleColor();
             }
+
             ImGui::EndTable();
         }
     }
@@ -290,6 +306,70 @@ void MetricsPanel::DrawRenderMetrics()
         LOCAL(m_Capabilities.SupportsDescriptorIndexing ? "Metrics.SupportedTier3" : "Metrics.Tier1Or2")).c_str());
 }
 
+void MetricsPanel::UpdatePassStats()
+{
+    if (!m_RenderMetrics.Available)
+        return;
+
+    for (const auto& pass : m_RenderMetrics.PassMetrics)
+    {
+        const auto [it, inserted] = m_PassStats.try_emplace(pass.PassName);
+        auto& stat = it->second;
+
+        if (inserted)
+        {
+            stat.DisplayName = WStrToStr(pass.PassName);
+            stat.CPUTimeMs = pass.CPUTimeMs;
+            stat.GPUTimeMs = pass.GPUTimeMs;
+        }
+        else
+        {
+            stat.CPUTimeMs += (pass.CPUTimeMs - stat.CPUTimeMs) * PassSmoothing;
+            stat.GPUTimeMs += (pass.GPUTimeMs - stat.GPUTimeMs) * PassSmoothing;
+        }
+
+        stat.LastSeenTime = m_ElapsedTime;
+    }
+
+    std::erase_if(m_PassStats, [this](const auto& pair) { return m_ElapsedTime - pair.second.LastSeenTime > PassHoldSeconds; });
+}
+
+void MetricsPanel::UpdateDrawSnapshot(f32 dt)
+{
+    if (m_RenderMetrics.Available)
+    {
+        const auto& frame = m_RenderMetrics;
+        const bool heavier = !m_WindowPeak.Available || frame.GetTotalDrawCalls() >= m_WindowPeak.GetTotalDrawCalls();
+        const bool failed = m_WindowPeak.RenderFailed || !frame.RenderSucceeded;
+
+        if (heavier)
+        {
+            m_WindowPeak.DrawCalls = frame.DrawCalls;
+            m_WindowPeak.IndexedDrawCalls = frame.IndexedDrawCalls;
+            m_WindowPeak.SubmittedVertices = frame.SubmittedVertices;
+            m_WindowPeak.SubmittedIndices = frame.SubmittedIndices;
+            m_WindowPeak.TotalCPUTimeMs = frame.TotalCPUTimeMs;
+            m_WindowPeak.TotalGPUTimeMs = frame.TotalGPUTimeMs;
+            m_WindowPeak.Available = true;
+        }
+
+        // 구간 안에서 한 번이라도 실패했다면 표시 값이 성공 프레임이어도 경고를 유지합니다.
+        m_WindowPeak.RenderFailed = failed;
+    }
+
+    if (std::isfinite(dt) && dt > 0.0f)
+        m_DrawSnapshotElapsed += dt;
+
+    if (m_DrawSnapshotElapsed >= DrawSnapshotWindowSeconds || !m_DisplaySnapshot.Available)
+    {
+        if (m_WindowPeak.Available)
+            m_DisplaySnapshot = m_WindowPeak;
+
+        m_WindowPeak = {};
+        m_DrawSnapshotElapsed = 0.0;
+    }
+}
+
 void MetricsPanel::ResetHistory()
 {
     m_FrameTimes.fill(0.0f);
@@ -301,6 +381,10 @@ void MetricsPanel::ResetHistory()
     m_AverageMs = 0.0f;
     m_MinMs = 0.0f;
     m_MaxMs = 0.0f;
+
+    m_WindowPeak = {};
+    m_DisplaySnapshot = {};
+    m_DrawSnapshotElapsed = 0.0;
 }
 
 void MetricsPanel::RecalculateStatistics()
@@ -334,7 +418,6 @@ void MetricsPanel::RecalculateStatistics()
     m_AverageMs = static_cast<f32>(
         totalMs / static_cast<f64>(m_SampleCount));
 }
-
 
 void MetricsPanel::UpdateResourceMetrics(f32 dt)
 {

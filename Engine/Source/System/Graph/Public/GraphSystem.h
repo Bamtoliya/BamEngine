@@ -63,6 +63,7 @@ public:
 private:
 	GraphRegistry m_Registry;
 	std::unordered_map<std::wstring, Graph> m_GraphCache;
+	bool m_Initialized = false;
 };
 
 END

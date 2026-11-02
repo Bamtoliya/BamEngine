@@ -1,5 +1,6 @@
 {
     "Korean": {
+        "UI_VIEW": "보기",
         "AnimatorGraph.ResetView": "캔버스 뷰 초기화",
         "AnimatorGraph.TransitionInspector": "전이 속성 인스펙터",
         "AnimatorGraph.Duration": "전이 지속 시간",
@@ -361,7 +362,7 @@
         "Metrics.EngineState": "엔진 상태",
         "Metrics.ActiveScenes": "활성 씬: {}",
         "Metrics.RegisteredPasses": "등록된 렌더 패스: {}",
-        "Metrics.RHIDraws": "RHI 그리기 명령 — 이전 프레임",
+        "Metrics.RHIDraws": "RHI 그리기 명령 — 최근 0.5초 중 가장 무거운 프레임",
         "Metrics.NoCapture": "완료된 수집 결과가 없습니다.",
         "Metrics.RenderFailed": "렌더링 실패: 일부 집계만 표시합니다",
         "Metrics.DrawCalls": "그리기 호출: {}",
@@ -1089,7 +1090,6 @@
         "EditorCommon.Edit": "편집",
         "EditorCommon.SaveAs": "다른 이름으로 저장...",
         "EditorMenu.File": "파일",
-        "EditorMenu.UI_VIEW": "보기",
         "A non-empty stable GRAPH_ID is required.": "비어 있지 않은 고정 GRAPH_ID가 필요합니다.",
         "A pure node must return a value.": "순수 노드는 값을 반환해야 합니다.",
         "Abs (Float)": "절댓값 (Float)",

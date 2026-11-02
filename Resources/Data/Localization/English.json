@@ -1,5 +1,6 @@
 {
     "English": {
+        "UI_VIEW": "View",
         "AnimatorGraph.ResetView": "Reset Canvas View",
         "AnimatorGraph.TransitionInspector": "Transition Inspector",
         "AnimatorGraph.Duration": "Duration",
@@ -361,7 +362,7 @@
         "Metrics.EngineState": "Engine state",
         "Metrics.ActiveScenes": "Active scenes: {}",
         "Metrics.RegisteredPasses": "Registered render passes: {}",
-        "Metrics.RHIDraws": "RHI draw commands — previous frame",
+        "Metrics.RHIDraws": "RHI draw commands — heaviest frame in last 0.5 s",
         "Metrics.NoCapture": "No completed capture.",
         "Metrics.RenderFailed": "Render failed: partial counts",
         "Metrics.DrawCalls": "Draw calls: {}",
@@ -1089,7 +1090,6 @@
         "EditorCommon.Edit": "Edit",
         "EditorCommon.SaveAs": "Save As...",
         "EditorMenu.File": "File",
-        "EditorMenu.UI_VIEW": "View",
         "A non-empty stable GRAPH_ID is required.": "A non-empty stable GRAPH_ID is required.",
         "A pure node must return a value.": "A pure node must return a value.",
         "Abs (Float)": "Abs (Float)",

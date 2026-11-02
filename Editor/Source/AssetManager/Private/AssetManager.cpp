@@ -3,6 +3,7 @@
 #include "AssetManager.h"
 #include "Logger.h"
 #include "ModelImportTask.h"
+#include "ThumbnailRenderer.h"
 
 #pragma region Importer
 #include "SpriteImporter.h"
@@ -61,6 +62,7 @@ EResult AssetManager::Initialize(void* arg)
 		return EResult::Fail;
 	}
 
+	ThumbnailRenderer::Create();
 	return EResult::Success;
 }
 void AssetManager::Free()
@@ -82,6 +84,7 @@ void AssetManager::Free()
 	RELEASE_MAP(m_Importers);
 	RELEASE_MAP(m_Exporters);
 	m_OnAsyncDelegate.Clear();
+	ThumbnailRenderer::Destroy();
 	AssetCache::Destroy();
 	m_AssetCache = nullptr;
 }

@@ -5,6 +5,7 @@
 #include "Components/Graph/GraphBindingComponent.h"
 #include "Scene.h"
 #include "Logger.h"
+#include "PlatformPath.h"
 
 namespace
 {
@@ -54,10 +55,11 @@ void GraphSystem::Free()
 {
 	m_GraphCache.clear();
 	ClearCurrentContext();
+	m_Initialized = false;
 }
-
 void GraphSystem::OnInitialize()
 {
+	if (m_Initialized) return;
 	const auto builtinDiag = m_Registry.RegisterBuiltins();
 	if (!builtinDiag.Succeeded())
 	{
@@ -72,53 +74,50 @@ void GraphSystem::OnInitialize()
 			BAM_LOG(Error, "GraphSystem", "Init", "RegisterReflectedGraphNodes failed: {}", reflectDiag.Message);
 		}
 	}
+	m_Initialized = true;
 }
 
 const Graph* GraphSystem::GetOrLoadGraph(const std::wstring& path)
 {
 	if (path.empty() || !ReflectionRegistry::IsCreated()) return nullptr;
-
 	auto it = m_GraphCache.find(path);
 	if (it != m_GraphCache.end()) return &it->second;
-
 	// 레지스트리 초기화 보장
 	OnInitialize();
-
-	// ── 스마트 경로 탐색 ──
+	// ── 스마트 경로 탐색 (프로젝트 루트 기준 결합) ──
 	std::filesystem::path targetPath(path);
+	if (targetPath.is_relative())
+		targetPath = PlatformPath::ResolveProjectRelative(targetPath);
 	if (!std::filesystem::exists(targetPath))
 	{
 		// 1. Resources/Scripts/ 아래에서 검색
-		const auto scriptsPath = std::filesystem::path(L"Resources/Scripts") / targetPath;
-		if (std::filesystem::exists(scriptsPath)) targetPath = scriptsPath;
+		const auto scriptsPath = PlatformPath::ResolveProjectRelative(std::filesystem::path(L"Resources/Scripts") / path);
+		if (std::filesystem::exists(scriptsPath))
+			targetPath = scriptsPath;
 		// 2. Resources/ 아래에서 검색
 		else
 		{
-			const auto resPath = std::filesystem::path(L"Resources") / targetPath;
-			if (std::filesystem::exists(resPath)) targetPath = resPath;
+			const auto resPath = PlatformPath::ResolveProjectRelative(std::filesystem::path(L"Resources") / path);
+			if (std::filesystem::exists(resPath))
+				targetPath = resPath;
 		}
 	}
-
 	if (!std::filesystem::exists(targetPath))
 	{
 		BAM_LOG(Error, "GraphSystem", "Load", "Graph file not found: '{}'", WStrToStr(path));
 		return nullptr;
 	}
-
 	const auto& reflection = ReflectionRegistry::Get();
 	Graph loadedGraph;
 	const auto result = LoadGraphJson(targetPath, loadedGraph, m_Registry,
 		reflection.GetRegistry(), reflection.GetPropertyCodecs());
-
 	if (!result.Succeeded())
 	{
 		BAM_LOG(Error, "GraphSystem", "Load", "Failed to load graph JSON '{}': Stage {}, Error {}",
 			targetPath.string(), static_cast<int>(result.Stage), result.GraphError.Message);
 		return nullptr;
 	}
-
 	BAM_LOG(Info, "GraphSystem", "Load", "Successfully loaded graph: '{}'", targetPath.string());
-
 	auto [insertedIt, success] = m_GraphCache.emplace(path, std::move(loadedGraph));
 	return success ? &insertedIt->second : nullptr;
 }

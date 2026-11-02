@@ -1101,8 +1101,8 @@
                         "Data": {
                             "controllerPath": "",
                             "currentClip": {
-                                "AssetKey": "I:/BamtoliyaGithub/BamEngine/Resources/Model/Fox_Survey.bamanim",
-                                "AssetPath": "I:/BamtoliyaGithub/BamEngine/Resources/Model/Fox_Survey.bamanim",
+                                "AssetKey": "Resources/Model/Fox_Survey.bamanim",
+                                "AssetPath": "Resources/Model/Fox_Survey.bamanim",
                                 "Null": false
                             },
                             "isLooping": true,
@@ -1158,7 +1158,7 @@
                         "Data": {
                             "absolute": 0,
                             "eulerRotation": [0, 0, 0],
-                            "position": [0, 0, -0],
+                            "position": [0, 0, 0],
                             "rotation": [0, 0, 0, 1],
                             "scale": [1, 1, 1]
                         },
@@ -1189,7 +1189,7 @@
                         "Data": {
                             "absolute": 0,
                             "eulerRotation": [0, 0, 0],
-                            "position": [0, 0, -0],
+                            "position": [0, 0, 0],
                             "rotation": [0, 0, 0, 1],
                             "scale": [1, 1, 1]
                         },
@@ -1220,7 +1220,7 @@
                         "Data": {
                             "absolute": 0,
                             "eulerRotation": [0, 0, 0],
-                            "position": [0, 0, -0],
+                            "position": [0, 0, 0],
                             "rotation": [0, 0, 0, 1],
                             "scale": [1, 1, 1]
                         },
@@ -1251,7 +1251,7 @@
                         "Data": {
                             "absolute": 0,
                             "eulerRotation": [90.00021362304688, 0, 0],
-                            "position": [0, 0, -0],
+                            "position": [0, 0, 0],
                             "rotation": [0.7071080803871155, 0, 0, 0.7071054577827454],
                             "scale": [1, 0.9999999403953552, 0.9999999403953552]
                         },
@@ -1313,7 +1313,7 @@
                         "Data": {
                             "absolute": 0,
                             "eulerRotation": [0, 0, -72.37303161621094],
-                            "position": [12.850601196289062, 0, -0],
+                            "position": [12.850601196289062, 0, 0],
                             "rotation": [0, 0, -0.5904157757759094, 0.8070992827415466],
                             "scale": [1, 1, 1]
                         },
@@ -1344,7 +1344,7 @@
                         "Data": {
                             "absolute": 0,
                             "eulerRotation": [0, 0, 1.9953635931015015],
-                            "position": [21.65575408935547, -0.000118255615234375, -0],
+                            "position": [21.65575408935547, -0.000118255615234375, 0],
                             "rotation": [0, 0, 0.01741195283830166, 0.9998484253883362],
                             "scale": [1, 1, 1]
                         },
@@ -1375,8 +1375,8 @@
                         "Data": {
                             "absolute": 0,
                             "eulerRotation": [0, 0, 35.321353912353516],
-                            "position": [25.64914321899414, 0, -0],
-                            "rotation": [0, 0, 0.3033791780471802, 0.9528700113296509],
+                            "position": [25.64914321899414, 0, 0],
+                            "rotation": [0, 0, 0.3033791482448578, 0.9528699517250061],
                             "scale": [1, 1, 1]
                         },
                         "Type": "Engine::TransformComponent"
@@ -1406,8 +1406,8 @@
                         "Data": {
                             "absolute": 0,
                             "eulerRotation": [0, 0, -47.19204330444336],
-                            "position": [13.376960754394531, 0, -0],
-                            "rotation": [-0, 0, -0.40028542280197144, 0.9163905382156372],
+                            "position": [13.376960754394531, 0, 0],
+                            "rotation": [0, 0, -0.40028542280197144, 0.9163905382156372],
                             "scale": [1, 1, 1]
                         },
                         "Type": "Engine::TransformComponent"
@@ -1468,7 +1468,7 @@
                         "Data": {
                             "absolute": 0,
                             "eulerRotation": [0, 0, 4.2552924156188965],
-                            "position": [23.04512596130371, 0, -0],
+                            "position": [23.04512596130371, 0, 0],
                             "rotation": [0, 0, 0.03712590038776398, 0.9993106126785278],
                             "scale": [1, 1, 1]
                         },
@@ -1499,7 +1499,7 @@
                         "Data": {
                             "absolute": 0,
                             "eulerRotation": [1.6372781991958618, 0.16023631393909454, 54.85520935058594],
-                            "position": [19.350055694580078, -0.14598655700683594, -0],
+                            "position": [19.350055694580078, -0.14598655700683594, 0],
                             "rotation": [0.012037405744194984, 0.007822209037840366, 0.4605622887611389, 0.8875113129615784],
                             "scale": [0.9999999403953552, 1, 1]
                         },
@@ -1561,7 +1561,7 @@
                         "Data": {
                             "absolute": 0,
                             "eulerRotation": [0, 0, 4.2552924156188965],
-                            "position": [23.045124053955078, 0, -0],
+                            "position": [23.045124053955078, 0, 0],
                             "rotation": [0, 0, 0.03712590038776398, 0.9993106126785278],
                             "scale": [1, 1, 1]
                         },
@@ -1592,7 +1592,7 @@
                         "Data": {
                             "absolute": 0,
                             "eulerRotation": [-2.419738292694092, -0.5545543432235718, 54.80961990356445],
-                            "position": [19.350051879882812, -0.14599037170410156, -0],
+                            "position": [19.350051879882812, -0.14599037170410156, 0],
                             "rotation": [-0.016517912968993187, -0.014013740234076977, 0.46007558703422546, 0.887615442276001],
                             "scale": [1, 1, 1]
                         },
@@ -1623,7 +1623,7 @@
                         "Data": {
                             "absolute": 0,
                             "eulerRotation": [0, 0, 158.16015625],
-                            "position": [4.2603759765625, 15.958770751953125, -0],
+                            "position": [4.2603759765625, 15.958770751953125, 0],
                             "rotation": [0, 0, 0.9818928837776184, 0.1894369125366211],
                             "scale": [1, 1, 1]
                         },
@@ -1654,7 +1654,7 @@
                         "Data": {
                             "absolute": 0,
                             "eulerRotation": [0, 0, -7.983997821807861],
-                            "position": [12.411918640136719, 0, -0],
+                            "position": [12.411918640136719, 0, 0],
                             "rotation": [0, 0, -0.06961716711521149, 0.9975737929344177],
                             "scale": [1, 1, 1]
                         },
@@ -1685,8 +1685,8 @@
                         "Data": {
                             "absolute": 0,
                             "eulerRotation": [0, 0, -6.171761512756348],
-                            "position": [24.24032211303711, 0, -0],
-                            "rotation": [0, 0, -0.053832750767469406, 0.9985500574111938],
+                            "position": [24.24032211303711, 0, 0],
+                            "rotation": [0, 0, -0.053832754492759705, 0.9985500574111938],
                             "scale": [1, 1, 1]
                         },
                         "Type": "Engine::TransformComponent"
@@ -1747,8 +1747,8 @@
                         "Data": {
                             "absolute": 0,
                             "eulerRotation": [0, 0, -43.190040588378906],
-                            "position": [18.944175720214844, 0, -0],
-                            "rotation": [-0, 0, -0.3680437505245209, 0.929808497428894],
+                            "position": [18.944175720214844, 0, 0],
+                            "rotation": [0, 0, -0.3680437505245209, 0.929808497428894],
                             "scale": [1, 1, 1]
                         },
                         "Type": "Engine::TransformComponent"
@@ -1778,7 +1778,7 @@
                         "Data": {
                             "absolute": 0,
                             "eulerRotation": [-0.02529759332537651, 0.01305109728127718, 54.57866668701172],
-                            "position": [17.942811965942383, 0, -0],
+                            "position": [17.942811965942383, 0, 0],
                             "rotation": [-0.0002484105934854597, -3.7498272716096626E-12, 0.45848411321640015, 0.8887025713920593],
                             "scale": [1, 1, 1]
                         },
@@ -1809,7 +1809,7 @@
                         "Data": {
                             "absolute": 0,
                             "eulerRotation": [0, 0, 66.36235046386719],
-                            "position": [15.779938697814941, 0, -0],
+                            "position": [15.779938697814941, 0, 0],
                             "rotation": [0, 0, 0.5472882986068726, 0.8369441628456116],
                             "scale": [1, 1, 1]
                         },
@@ -1841,7 +1841,7 @@
                             "absolute": 0,
                             "eulerRotation": [0, 0, -151.84075927734375],
                             "position": [4.813777923583984, 5.154026031494141, -6.967563629150391],
-                            "rotation": [-0, -0, -0.9699586033821106, 0.24327006936073303],
+                            "rotation": [0, 0, -0.9699586033821106, 0.24327006936073303],
                             "scale": [1, 1, 1]
                         },
                         "Type": "Engine::TransformComponent"
@@ -1871,8 +1871,8 @@
                         "Data": {
                             "absolute": 0,
                             "eulerRotation": [0, 0, -43.19004821777344],
-                            "position": [18.944183349609375, 0, -0],
-                            "rotation": [-0, 0, -0.36804381012916565, 0.9298084378242493],
+                            "position": [18.944183349609375, 0, 0],
+                            "rotation": [0, 0, -0.36804381012916565, 0.9298084378242493],
                             "scale": [0.9999999403953552, 0.9999999403953552, 1]
                         },
                         "Type": "Engine::TransformComponent"
@@ -1902,7 +1902,7 @@
                         "Data": {
                             "absolute": 0,
                             "eulerRotation": [0.015632687136530876, -0.008052151650190353, 54.50457000732422],
-                            "position": [17.94281005859375, 0, -0],
+                            "position": [17.94281005859375, 0, 0],
                             "rotation": [0.00015345457359217107, 3.5315730374796406E-12, 0.4579094350337982, 0.8889989852905273],
                             "scale": [1, 1, 1]
                         },
@@ -1933,7 +1933,7 @@
                         "Data": {
                             "absolute": 0,
                             "eulerRotation": [0, 0, 66.36235046386719],
-                            "position": [15.779935836791992, 0, -0],
+                            "position": [15.779935836791992, 0, 0],
                             "rotation": [0, 0, 0.5472882986068726, 0.8369441628456116],
                             "scale": [1, 1, 1]
                         },
@@ -1950,6 +1950,20 @@
                 "Components": [
                     {
                         "Data": {
+                            "controllerPath": "",
+                            "currentClip": {
+                                "AssetKey": "Resources/Model/Fox_Walk.bamanim",
+                                "AssetPath": "Resources/Model/Fox_Walk.bamanim",
+                                "Null": false
+                            },
+                            "isLooping": true,
+                            "isPlaying": true,
+                            "playRate": 1
+                        },
+                        "Type": "Engine::AnimatorComponent"
+                    },
+                    {
+                        "Data": {
                             "flags": 3
                         },
                         "Type": "Engine::FlagComponent"
@@ -1964,18 +1978,18 @@
                         "Data": {
                             "castShadow": true,
                             "materialHandle": {
-                                "AssetKey": "I:/BamtoliyaGithub/BamEngine/Resources/Model/Fox_fox_material.bammatinst",
-                                "AssetPath": "I:/BamtoliyaGithub/BamEngine/Resources/Model/Fox_fox_material.bammatinst",
+                                "AssetKey": "Resources/Model/Fox_fox_material.bammatinst",
+                                "AssetPath": "Resources/Model/Fox_fox_material.bammatinst",
                                 "Null": false
                             },
                             "meshHandle": {
-                                "AssetKey": "I:/BamtoliyaGithub/BamEngine/Resources/Model/Fox_fox1.bammesh",
-                                "AssetPath": "I:/BamtoliyaGithub/BamEngine/Resources/Model/Fox_fox1.bammesh",
+                                "AssetKey": "Resources/Model/Fox_fox1.bammesh",
+                                "AssetPath": "Resources/Model/Fox_fox1.bammesh",
                                 "Null": false
                             },
                             "skeletonHandle": {
-                                "AssetKey": "I:/BamtoliyaGithub/BamEngine/Resources/Model/Fox_Skeleton.bamskel",
-                                "AssetPath": "I:/BamtoliyaGithub/BamEngine/Resources/Model/Fox_Skeleton.bamskel",
+                                "AssetKey": "Resources/Model/Fox_Skeleton.bamskel",
+                                "AssetPath": "Resources/Model/Fox_Skeleton.bamskel",
                                 "Null": false
                             }
                         },
@@ -1985,7 +1999,7 @@
                         "Data": {
                             "absolute": 0,
                             "eulerRotation": [0, 0, 0],
-                            "position": [0, 0, -0],
+                            "position": [0, 0, 0],
                             "rotation": [0, 0, 0, 1],
                             "scale": [1, 1, 1]
                         },
@@ -2006,22 +2020,6 @@
                 "AssetPath": "CubeMesh"
             },
             {
-                "AssetKey": "I:/BamtoliyaGithub/BamEngine/Resources/Model/Fox_Skeleton.bamskel",
-                "AssetPath": "I:/BamtoliyaGithub/BamEngine/Resources/Model/Fox_Skeleton.bamskel"
-            },
-            {
-                "AssetKey": "I:/BamtoliyaGithub/BamEngine/Resources/Model/Fox_Survey.bamanim",
-                "AssetPath": "I:/BamtoliyaGithub/BamEngine/Resources/Model/Fox_Survey.bamanim"
-            },
-            {
-                "AssetKey": "I:/BamtoliyaGithub/BamEngine/Resources/Model/Fox_fox1.bammesh",
-                "AssetPath": "I:/BamtoliyaGithub/BamEngine/Resources/Model/Fox_fox1.bammesh"
-            },
-            {
-                "AssetKey": "I:/BamtoliyaGithub/BamEngine/Resources/Model/Fox_fox_material.bammatinst",
-                "AssetPath": "I:/BamtoliyaGithub/BamEngine/Resources/Model/Fox_fox_material.bammatinst"
-            },
-            {
                 "AssetKey": "Resources/Material/GBufferMaterial.bammat.json",
                 "AssetPath": "Resources/Material/GBufferMaterial.bammat.json"
             },
@@ -2032,6 +2030,26 @@
             {
                 "AssetKey": "Resources/Material/TerrainMaterial.bammat.json",
                 "AssetPath": "Resources/Material/TerrainMaterial.bammat.json"
+            },
+            {
+                "AssetKey": "Resources/Model/Fox_Skeleton.bamskel",
+                "AssetPath": "Resources/Model/Fox_Skeleton.bamskel"
+            },
+            {
+                "AssetKey": "Resources/Model/Fox_Survey.bamanim",
+                "AssetPath": "Resources/Model/Fox_Survey.bamanim"
+            },
+            {
+                "AssetKey": "Resources/Model/Fox_Walk.bamanim",
+                "AssetPath": "Resources/Model/Fox_Walk.bamanim"
+            },
+            {
+                "AssetKey": "Resources/Model/Fox_fox1.bammesh",
+                "AssetPath": "Resources/Model/Fox_fox1.bammesh"
+            },
+            {
+                "AssetKey": "Resources/Model/Fox_fox_material.bammatinst",
+                "AssetPath": "Resources/Model/Fox_fox_material.bammatinst"
             },
             {
                 "AssetKey": "SphereMesh",

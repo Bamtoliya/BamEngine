@@ -76,22 +76,45 @@ void MaterialEditor::SetTargetResource(const std::filesystem::path& assetPath)
 
 void MaterialEditor::Update(f32 dt)
 {
-	// Renderer::Render()가 실행되기 전에 미리 프리뷰 드로우 커맨드와 카메라를 제출
-	if (m_Open && m_Material)
+	// 1. 창이 닫혔거나 다른 탭 뒤에 숨겨진 경우 프리뷰 제출 완전 차단 (0 FPS)
+	if (!m_Open || !m_IsVisibleOnScreen || !m_Material)
+		return;
+	// 2. 마우스 조작이나 파라미터 변경이 없는 정적 상태에서는 프레임 쓰로틀링 (5 FPS)
+	if (m_PreviewDirtyTimer > 0.0f)
 	{
-		m_PreviewRenderer.Submit(m_Material, dt);
+		m_PreviewDirtyTimer -= dt;
+		m_PreviewRenderer.Submit(m_Material, dt); // 활성 조작 중: 60 FPS
+	}
+	else
+	{
+		static float s_IdleTimer = 0.0f;
+		s_IdleTimer += dt;
+		if (s_IdleTimer >= 0.2f) // 평소 대기 상태: 0.2초(5 FPS)마다 1회만 제출
+		{
+			s_IdleTimer = 0.0f;
+			m_PreviewRenderer.Submit(m_Material, dt);
+		}
 	}
 }
 
 void MaterialEditor::Draw()
 {
-	if (!m_Open) return;
-
+	if (!m_Open)
+	{
+		m_IsVisibleOnScreen = false;
+		return;
+	}
 	const std::string title = GetDisplayName() + " - " + m_TargetResourcePath.filename().string() + "###" + WStrToStr(m_Name);
 	ImGui::SetNextWindowSize(ImVec2(1000.0f, 650.0f), ImGuiCond_FirstUseEver);
-
+	// 가려진 탭이면 Begin이 false를 반환합니다.
 	if (ImGui::Begin(title.c_str(), &m_Open))
 	{
+		m_IsVisibleOnScreen = true;
+		// 마우스가 에디터 위에 있거나 포커스된 경우 프리뷰 갱신 타이머 연장 (0.5초 동안 활성 렌더링)
+		if (ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows) || ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows))
+		{
+			m_PreviewDirtyTimer = 0.5f;
+		}
 		if (!m_Material)
 		{
 			ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%s", LOCAL_FMT("MaterialEditor.LoadFailed", m_TargetResourcePath.string()).c_str());
@@ -128,6 +151,10 @@ void MaterialEditor::Draw()
 			DrawParameters();
 		}
 		ImGui::EndChild();
+	}
+	else
+	{
+		m_IsVisibleOnScreen = false;
 	}
 	ImGui::End();
 }

@@ -136,7 +136,24 @@ EResult Renderer::Render(f32 dt)
 		const ERenderPassType passType = pass->GetPassType();
 		if (passType == ERenderPassType::Shadow && !LightManager::Get().HasShadowCastingLights())
 			continue;
-
+		// ── [핵심 최적화] 실제 수행할 작업이 전혀 없는 빈 패스(Empty Pass) 완전 스킵 ──
+		const RenderPassID pid = pass->GetID();
+		auto delIt = m_RenderPassDelegates.find(pid);
+		const bool hasDelegate = (delIt != m_RenderPassDelegates.end() && delIt->second.IsBound());
+		const bool hasCommands =
+			(m_StaticDrawCommands.find(pid) != m_StaticDrawCommands.end() && !m_StaticDrawCommands.at(pid).empty()) ||
+			(m_SkinnedDrawCommands.find(pid) != m_SkinnedDrawCommands.end() && !m_SkinnedDrawCommands.at(pid).empty()) ||
+			(m_SpriteDrawCommands.find(pid) != m_SpriteDrawCommands.end() && !m_SpriteDrawCommands.at(pid).empty()) ||
+			(m_UIImageDrawCommands.find(pid) != m_UIImageDrawCommands.end() && !m_UIImageDrawCommands.at(pid).empty()) ||
+			(m_CustomRenderQueues.find(pid) != m_CustomRenderQueues.end() && !m_CustomRenderQueues.at(pid).empty()) ||
+			hasDelegate;
+		// 화면 클리어가 필요하거나(LoadOp == Clear), 섀도우 패스이거나, 실제 커맨드가 있는 경우에만 실행
+		const bool needsExecution = hasCommands ||
+			(pass->GetLoadOperation() == ERenderPassLoadOperation::RPLO_Clear) ||
+			(pass->GetStencilLoadOperation() == ERenderPassLoadOperation::RPLO_Clear) ||
+			(passType == ERenderPassType::Shadow);
+		if (!needsExecution)
+			continue; // 커맨드 없는 빈 패스는 RHI 바인딩 및 메트릭 기록 자체를 스킵!
 		m_RHI->BeginPassMetrics(pass->GetName());
 
 		auto staticIt = m_StaticDrawCommands.find(pass->GetID());
@@ -945,9 +962,17 @@ EResult Renderer::PreparePassPipelineDesc(RenderPass* renderPass, RHIPipelineDes
 		desc.colorAttachmentFormats[i] = rt->GetFormat();
 	}
 
+	const wstring& depthStencilName = renderPass->GetDepthStencilName();
+
+	// [수정] 렌더 타깃이 없고 Depth도 없는 백버퍼(스왑체인) 전용 패스인 경우 백버퍼 RTV 1개 설정
+	if (desc.colorAttachmentCount == 0 && depthStencilName.empty())
+	{
+		desc.colorAttachmentCount = 1;
+		desc.colorAttachmentFormats[0] = ETextureFormat::R8G8B8A8_UNORM;
+	}
+
 	desc.depthStencilAttachmentFormat = ETextureFormat::UNKNOWN;
 
-	const wstring& depthStencilName = renderPass->GetDepthStencilName();
 	if (!depthStencilName.empty())
 	{
 		RenderTarget* ds = rtManager.GetRenderTarget(depthStencilName);

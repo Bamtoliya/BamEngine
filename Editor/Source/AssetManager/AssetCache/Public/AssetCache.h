@@ -37,7 +37,19 @@ private:
 
 	std::optional<ThumbnailUploadTask> LoadImageThumbnail(const filesystem::path& assetPath);
 	std::optional<ThumbnailUploadTask> LoadModelThumbnail(const filesystem::path& assetPath);
+
+private:
+	void ProcessPendingMaterialThumbnail();
+	enum class ECaptureState : uint8
+	{
+		Idle,
+		Rendering
+	};
+	std::queue<std::string> m_PendingMaterialQueue;
+	std::string m_CurrentCapturingKey;
+	ECaptureState m_CaptureState = ECaptureState::Idle;
 #pragma endregion
+
 
 #pragma region Member Variables
 private:

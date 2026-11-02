@@ -28,14 +28,16 @@ public:
 	void Setup(uint32 size = 128);
 
 	// 머티리얼 1회 렌더링 제출 (구체 메쉬에 머티리얼을 바인딩하고 오프스크린 파이프라인에 Submit)
-	void SubmitMaterial(Engine::MaterialInterface* material);
+	bool SubmitMaterial(Engine::MaterialInterface* material);
 
 	// 최종 조명 합성이 완료된 128x128 렌더 타깃 텍스처 조회
 	[[nodiscard]] Engine::RHITexture* GetFinalTexture() const;
 
+	// 현재 렌더 타깃의 이미지를 복제한 독립 RHITexture 인스턴스 생성 (AssetCache 보관용)
+	[[nodiscard]] Engine::RHITexture* CreateThumbnailTexture() const;
+
 private:
 	void SetupStudioScene();
-
 private:
 	uint32 m_Size = 128;
 	bool m_Initialized = false;

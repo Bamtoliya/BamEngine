@@ -285,14 +285,27 @@ EResult PostProcessPipeline::Resize(uint32 width, uint32 height)
 
 wstring PostProcessPipeline::Execute(f32 dt, const wstring& inputRT)
 {
-	// 활성화된 효과가 하나도 없으면 패스를 타지 않고 원본 RT를 즉시 반환 (Zero-Cost Pass-through)
+	// 활성화된 이펙트가 없으면 패스를 아예 타지 않고 입력 RT를 그대로 바이패스 (Zero-Cost)
+	bool hasAnyActiveEffect = false;
+	for (auto* effect : m_Effects)
+	{
+		if (effect && effect->IsEnabled())
+		{
+			hasAnyActiveEffect = true;
+			break;
+		}
+	}
+
+	if (!hasAnyActiveEffect)
+		return inputRT;
+
 	wstring currentRT = inputRT;
 	uint32 slot = 0;
 
 	for (auto* effect : m_Effects)
 	{
-		if (!effect || !effect->IsEnabled()) continue;
-		if (slot >= m_PassIDs.size()) break;
+		if (!effect || !effect->IsEnabled() || slot >= m_PassIDs.size())
+			continue;
 
 		const wstring writeRT = m_PPRTNames[slot % 2];
 		effect->SubmitPass(dt, m_PassIDs[slot], currentRT);

@@ -238,7 +238,12 @@ void ImGuiManager::Update(f32 dt)
 	settings.ProcessPendingViewportResolutionChange();
 
 	for (auto& panel : m_ImGuiPanels)
+	{
+		if (!panel->IsOpen())
+			continue; // <-- 닫힌 패널은 Update 연산 스킵
+
 		panel->Update(dt);
+	}
 
 	settings.CompleteViewportResolutionChange();
 }

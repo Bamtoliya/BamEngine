@@ -6,6 +6,9 @@
 #include <shlobj.h> // Windows Shell API
 #include "AssetManager.h"
 #include "RHITexture.h"
+#include "ThumbnailRenderer.h"
+#include "ResourceManager.h"
+#include "MaterialInterface.h"
 
 namespace
 {
@@ -84,6 +87,78 @@ void AssetCache::Update()
         if (!inserted.second)
             Safe_Release(texture);
     }
+    // 머티리얼 1프레임 오프스크린 캡처 파이프라인 처리
+    ProcessPendingMaterialThumbnail();
+}
+
+void AssetCache::ProcessPendingMaterialThumbnail()
+{
+    if (!ThumbnailRenderer::IsCreated()) return;
+
+    auto& thumbRenderer = ThumbnailRenderer::Get();
+
+    // 1단계: 이전 프레임에서 렌더링 제출한 결과물이 있으면 복제하여 캐시에 등록
+    if (m_CaptureState == ECaptureState::Rendering)
+    {
+        if (!m_CurrentCapturingKey.empty())
+        {
+            RHITexture* newTexture = thumbRenderer.CreateThumbnailTexture();
+            m_LoadingPaths.erase(m_CurrentCapturingKey);
+
+            if (newTexture)
+            {
+                const auto inserted = m_ThumbnailCache.emplace(m_CurrentCapturingKey, newTexture);
+                if (!inserted.second)
+                    Safe_Release(newTexture);
+            }
+            else
+            {
+                m_ThumbnailCache.emplace(m_CurrentCapturingKey, nullptr);
+            }
+        }
+
+        m_CurrentCapturingKey.clear();
+        m_CaptureState = ECaptureState::Idle;
+    }
+
+    // 2단계: 대기열에서 다음 머티리얼 1개를 꺼내어 128x128 뷰포트에 렌더링 제출
+    while (!m_PendingMaterialQueue.empty() && m_CaptureState == ECaptureState::Idle)
+    {
+        std::string key = m_PendingMaterialQueue.front();
+        m_PendingMaterialQueue.pop();
+
+        // 이미 무효화되었거나 캐시가 존재하면 스킵
+        if (!m_LoadingPaths.contains(key) || m_ThumbnailCache.contains(key))
+            continue;
+
+        std::filesystem::path path(key);
+        std::error_code ec;
+        const std::wstring relPath = std::filesystem::relative(path, ec).wstring();
+        if (ec) continue;
+
+        auto& rm = Engine::ResourceManager::Get();
+        auto handle = rm.GetResourceHandle<Engine::MaterialInterface>(relPath);
+        if (!handle.IsValid())
+        {
+            auto loadedHandle = rm.LoadFile(relPath);
+            if (loadedHandle.IsValid())
+                handle = Engine::ResourceHandle<Engine::MaterialInterface>(loadedHandle);
+        }
+
+        auto* material = handle.Get();
+        if (material && thumbRenderer.SubmitMaterial(material))
+        {
+            m_CurrentCapturingKey = key;
+            m_CaptureState = ECaptureState::Rendering;
+            break;
+        }
+        else
+        {
+            // 3D 렌더링을 지원하지 않는 머티리얼(UI/Sprite 등)이거나 로드 실패 시 nullptr 캐시 (기본 아이콘 표시)
+            m_LoadingPaths.erase(key);
+            m_ThumbnailCache.emplace(key, nullptr);
+        }
+    }
 }
 #pragma endregion
 
@@ -100,12 +175,26 @@ RHITexture* AssetCache::GetThumbnail(const filesystem::path& assetPath)
     if (m_LoadingPaths.contains(key))
         return nullptr;
 
+    std::string filename = assetPath.filename().string();
+    for (char& ch : filename)
+        ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+
     std::string ext = assetPath.extension().string();
     for (char& ch : ext)
         ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
 
     const bool isImage = ext == ".png" || ext == ".jpg" || ext == ".tga" || ext == ".bmp";
     const bool isModel = false;
+    const bool isMaterial = ext == ".bammat" || ext == ".bammatinst" || ext == ".mat" ||
+        filename.ends_with(".bammat.json") || filename.ends_with(".bammatinst.json");
+
+    if (isMaterial)
+    {
+        const Engine::uint64 requestId = ++m_NextRequestId;
+        m_LoadingPaths.emplace(key, requestId);
+        m_PendingMaterialQueue.push(key);
+        return nullptr;
+    }
 
     if (!isImage && !isModel)
     {
@@ -195,10 +284,11 @@ void AssetCache::ClearCache(const filesystem::path& assetPath)
 void AssetCache::ClearAll()
 {
     m_LoadingPaths.clear();
-
+    m_PendingMaterialQueue = {};
+    m_CurrentCapturingKey.clear();
+    m_CaptureState = ECaptureState::Idle;
     for (auto& [path, texture] : m_ThumbnailCache)
         Safe_Release(texture);
-
     m_ThumbnailCache.clear();
 
     std::vector<ThumbnailUploadTask> discarded;

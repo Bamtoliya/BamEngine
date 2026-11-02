@@ -35,6 +35,56 @@ Use one entry per meaningful change.
 
 ---
 
+## [2026-11-02] CWD 독립적 실행 경로(PlatformPath) 구축 및 Standalone Client 시작 씬 로드 및 렌더링 파이프라인 연동
+
+- Area: Engine | Client | Render | Core | Docs
+- Type: Feature | Fix | Refactor | Docs
+- 관련 파일:
+  - Docs/ImplementationLog.md
+  - Docs/BuildAndPackagingPlan.md
+  - Engine/Source/Core/Public/PlatformPath.h, PlatformPath.cpp
+  - Engine/Source/Runtime/Public/Runtime.h, Runtime.cpp
+  - Engine/Source/Render/Private/Renderer.cpp
+  - Engine/Source/Render/RHI/Platform/DirectX12/Private/DirectX12RHI.cpp, DirectX12RHI.h
+  - Engine/Source/System/Graph/Private/GraphSystem.cpp, GraphSystem.h
+  - Engine/Source/Resource/Texture/Private/Texture.cpp
+  - Engine/Source/Resource/Private/ResourceManager.cpp
+  - Engine/Source/Render/RHI/Platform/DirectX12/Private/DirectX12Shader.cpp
+  - Projects/GameModule/Source/SkyAtmosphereSystem.cpp
+  - Editor/Source/Settings/Private/EditorSettingsService.cpp
+  - Editor/Source/AssetManager/Private/StartupResourceLoader.cpp
+  - Editor/Source/HotReload/Private/ShaderHotReloadManager.cpp
+  - Client/Source/Main.cpp
+  - Config/Project.json
+- 동기 및 배경:
+  - 작업 디렉터리(CWD)가 소스 루트가 아닌 위치(예: C:\, 다른 드라이브)에서 Editor 또는 Client를 실행할 경우, 하드코딩된 상대 경로(Resources/..., Config/..., Logs/...)로 인해 셰이더, 리소스, 로그 파일 및 씬을 로드하지 못하고 초기화에 실패하거나 크래시가 발생하는 문제 해결.
+  - 컴파일 타임 매크로(BAMENGINE_PROJECT_ROOT)에 의존하던 경로 탐색 방식을 런타임 실행 파일 위치 기반의 역추적(.bam, Config/Project.json) 단일 진실의 원천(PlatformPath::ResolveProjectRelative)으로 표준화.
+  - Client 애플리케이션의 시작 씬 로드 미지원, 기본 프리미티브 메시 미등록, D3D12 백버퍼 Forward 패스에서의 드라이버 RTV 불일치 크래시를 단계적으로 해결하여 독립 실행 클라이언트에서 씬 렌더링이 동작하도록 구현.
+- 구현 내용 요약:
+  1. OS 및 프로젝트 경로 헬퍼(PlatformPath) 구축:
+     - PlatformPath::GetExecutableDirectory(), Normalize(), ResolveProjectRelative(), ToProjectRelative() 구현.
+     - ProjectRoot를 정적 싱글턴으로 관리하며, RUNTIMEDESC를 통해 호스트(Editor/Client)에서 엔진으로 기준 경로 주입.
+     - Texture.cpp에서 stbi_load_from_memory + std::ifstream을 적용하여 CWD 및 한글 경로 독립성 확보.
+     - DirectX12Shader.cpp, ResourceManager.cpp, SkyAtmosphereSystem.cpp, HotReload 계열에서 상위 폴더 탐색 루프 전수 제거 및 PlatformPath로 단일화.
+  2. Standalone Client 런타임 시작 흐름 및 리소스 파이프라인 연결(Client/Source/Main.cpp):
+     - ResolveProjectRoot()를 통해 실행 파일 위치 기반으로 ProjectRoot를 자동 감지하고 로거 및 Runtime에 주입.
+     - InitializePrimitiveMeshes()를 추가하여 에디터와 동일한 기본 메시(QuadMesh, CubeMesh, SphereMesh)를 GPU 버퍼로 등록, 씬 로드 시 메쉬 누락 에러 방지.
+     - LoadProjectSettings()를 통해 Config/Project.json의 StartupScenePath(Resources/Scenes/RaytracingScene.json)를 동적으로 로드.
+     - UpdateViewportCamera()를 구현하여 씬 내 CameraComponent 또는 폴백 카메라를 Renderer에 등록.
+  3. DirectX12 백버퍼 파이프라인 RTV 불일치 크래시 수정(Renderer.cpp):
+     - 백버퍼 전용 패스(colorAttachmentCount == 0 && depthStencilName.empty()) 시 파이프라인 디스크립터에 스왑체인 포맷(desc.colorAttachmentCount = 1, R8G8B8A8_UNORM)이 할당되지 않아 PSO의 NumRenderTargets = 0이 되던 결함 수정.
+     - 커맨드 리스트에 바인딩된 백버퍼 RTV와 PSO의 RTV 개수 불일치로 인해 DrawIndexedInstanced에서 발생하던 GPU 드라이버 크래시 해결.
+  4. 비주얼 스크립팅 그래프 시스템 안정화(GraphSystem.cpp, GraphSystem.h):
+     - GraphSystem::Initialize()에 중복 초기화 방지 가드(m_Initialized)를 추가하여 Core.Bool 노드 중복 등록 에러 방지.
+     - GetOrLoadGraph의 스크립트 파일 경로 탐색 시 PlatformPath::ResolveProjectRelative 적용.
+- 검증 및 확인:
+  - C:\ 디렉터리에서 Editor.exe 실행 시 리소스 프리로드, 셰이더, 격자, 대기 텍스처, 핫 리로드가 정상 작동함 확인.
+  - C:\ 디렉터리에서 Client.exe 실행 시 프로젝트 루트 감지, 씬 로드 및 초기화 통과, DrawIndexedInstanced 크래시 없이 윈도우에 씬 지오메트리가 렌더링됨을 확인.
+- 잔여 과제 및 후속 계획:
+  - Client는 현재 단일 백버퍼 Forward 패스로만 동작하므로, 씬의 디퍼드 머티리얼(GBufferMaterial) 및 조명을 완전하게 표현하기 위해 클라이언트용 디퍼드 파이프라인(GBuffer + LightingPass) 또는 포워드 셰이더 매핑 필요.
+
+---
+
 ## [2026-11-02] 하단 푸터 바(Footer Bar) 빌드 제어 이관, 콘텐츠 브라우저 시각 분류 고도화 및 .bam*.json 복합 확장자 표준화
 
 - Area: Editor | UI | ContentBrowser | ToolBar | Localization | Docs

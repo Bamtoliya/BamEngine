@@ -45,5 +45,8 @@ private:
 
 	// 3D 머티리얼 프리뷰 렌더러
 	MaterialPreviewRenderer m_PreviewRenderer;
+private:
+	bool m_IsVisibleOnScreen = false;
+	float m_PreviewDirtyTimer = 0.0f;
 };
 END

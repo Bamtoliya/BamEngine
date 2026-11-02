@@ -1,11 +1,11 @@
 # 다음 목표: Client 실행 설정과 빌드·패키징
 
-- 작성일: 2026-10-24
-- 상태: 계획 / 구현 보류
+- 작성일: 2026-10-24 (최종 갱신: 2026-11-02)
+- 상태: 진행 / 1~2단계 경로 및 Client 시작 씬 연결 완료, 패키징/배포 파이프라인 대기
 - 관련 지침: [EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md)의 3절, 12절, 13절
 - 직렬화 지침: [ReflectionArchiveGuidelines.md](ReflectionArchiveGuidelines.md)
 - 분류·이관 기준: [SourceOrganizationGuidelines.md](SourceOrganizationGuidelines.md)
-- 통합 우선순위: [DevelopmentPriorities.md](DevelopmentPriorities.md)의 P2-E / 현재 보류
+- 통합 우선순위: [DevelopmentPriorities.md](DevelopmentPriorities.md)의 P2-E (1~2단계 완료)
 
 ## 1. 진행 결정
 

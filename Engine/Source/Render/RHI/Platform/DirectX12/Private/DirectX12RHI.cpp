@@ -649,6 +649,67 @@ EResult DirectX12RHI::ReadTexturePixel(RHITexture* texture, uint32 x, uint32 y, 
 	return EResult::Success;
 }
 
+EResult DirectX12RHI::BlitTexture(RHITexture* src, RHITexture* dst)
+{
+    if (!src || !dst || !m_Device || !m_CommandQueue)
+        return EResult::InvalidArgument;
+
+    auto* dxSrc = static_cast<DirectX12Texture*>(src);
+    auto* dxDst = static_cast<DirectX12Texture*>(dst);
+    auto* srcRes = static_cast<ID3D12Resource*>(dxSrc->GetNativeHandle());
+    auto* dstRes = static_cast<ID3D12Resource*>(dxDst->GetNativeHandle());
+
+    if (!srcRes || !dstRes)
+        return EResult::Fail;
+
+    ComPtr<ID3D12CommandAllocator> allocator;
+    ComPtr<ID3D12GraphicsCommandList> list;
+    ComPtr<ID3D12Fence> fence;
+
+    if (FAILED(m_Device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&allocator))) ||
+        FAILED(m_Device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator.Get(), nullptr, IID_PPV_ARGS(&list))) ||
+        FAILED(m_Device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence))))
+    {
+        return EResult::Fail;
+    }
+
+    D3D12_RESOURCE_BARRIER barriers[2] = {};
+    barriers[0].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+    barriers[0].Transition.pResource = srcRes;
+    barriers[0].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+    barriers[0].Transition.StateBefore = dxSrc->GetCurrentState();
+    barriers[0].Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_SOURCE;
+
+    barriers[1].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+    barriers[1].Transition.pResource = dstRes;
+    barriers[1].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+    barriers[1].Transition.StateBefore = dxDst->GetCurrentState();
+    barriers[1].Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_DEST;
+
+    list->ResourceBarrier(2, barriers);
+    list->CopyResource(dstRes, srcRes);
+
+    barriers[0].Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_SOURCE;
+    barriers[0].Transition.StateAfter = dxSrc->GetCurrentState();
+
+    barriers[1].Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
+    barriers[1].Transition.StateAfter = D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE;
+
+    list->ResourceBarrier(2, barriers);
+    dxDst->SetCurrentState(D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE);
+
+    if (FAILED(list->Close()))
+        return EResult::Fail;
+
+    ID3D12CommandList* lists[] = { list.Get() };
+    m_CommandQueue->ExecuteCommandLists(1, lists);
+
+    if (FAILED(m_CommandQueue->Signal(fence.Get(), 1)) || FAILED(fence->SetEventOnCompletion(1, nullptr)))
+        return EResult::Fail;
+
+    return EResult::Success;
+}
+
 #pragma region Buffer
 RHIBuffer* DirectX12RHI::CreateBuffer(void* data, uint32 size, uint32 stride, ERHIBufferType type)
 {
