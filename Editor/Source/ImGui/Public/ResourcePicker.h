@@ -82,7 +82,7 @@ namespace Editor
 			}
 			else if constexpr (std::is_same_v<T, Engine::Shader>)
 			{
-				return endsWith(".hlsl") || endsWith(".cso") || endsWith(".bamshader");
+				return endsWith(".hlsl") || endsWith(".cso") || endsWith(".bamshader") || endsWith(".bamshader.json");
 			}
 			else if constexpr (std::is_same_v<T, Engine::Animation>)
 			{
@@ -201,19 +201,16 @@ namespace Editor
 				}
 
 				std::error_code ec;
-				const std::filesystem::path resDir = "Resources";
+				const std::filesystem::path resDir = Engine::PlatformPath::ResolveProjectRelative("Resources");
 				if (std::filesystem::exists(resDir, ec))
 				{
 					for (const auto& fileEntry : std::filesystem::recursive_directory_iterator(resDir, std::filesystem::directory_options::skip_permission_denied, ec))
 					{
 						if (!fileEntry.is_regular_file()) continue;
-
 						const auto filename = fileEntry.path().filename().string();
 						if (!Detail::IsResourceExtensionCompatible<T>(filename)) continue;
-
 						const auto normKey = Detail::NormalizeResourceKey(fileEntry.path().wstring());
 						if (loadedNormalizedKeys.contains(normKey)) continue;
-
 						s_CachedDiskFiles.push_back({
 							fileEntry.path().filename().string(),
 							Engine::WStrToStr(normKey),

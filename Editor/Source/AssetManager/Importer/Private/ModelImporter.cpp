@@ -192,7 +192,7 @@ namespace
 		};
 
 		RegistrationRollback rollback{ manager, {}, false };
-		rollback.Handles.reserve(pending.size() + 1 + data.Animations.size());
+		rollback.Handles.reserve(pending.size() + 1 + data.Animations.size() + data.Materials.size());
 		modelDesc.Meshes.reserve(pending.size());
 
 		for (auto& mesh : pending)
@@ -360,35 +360,60 @@ namespace
 			}
 			if (!baseMat.IsValid() || !baseMat.Get())
 			{
-				BAM_LOG(Error, "Editor", "Asset", "Base material load failed: {}", WStrToStr(baseMatPath));
+				BAM_LOG(Error, "Editor", "Asset", "Base material load failed (required): {}", WStrToStr(baseMatPath));
+				return EResult::Fail;
 			}
+
 			// 텍스처 로드/추출 헬퍼 람다
 			auto resolveTexture = [&](const Tools::ModelConversion::TextureBindingInfo& info,
 				const wstring& matStem, const wstring& slotName) -> ResourceHandle<Texture>
 				{
 					if (info.Path.empty() && info.EmbeddedData.empty()) return {};
+
 					filesystem::path texFilePath;
 					if (info.IsEmbedded && !info.EmbeddedData.empty())
 					{
-						// 임베디드 텍스처를 PNG 파일로 디스크에 저장
+						// 임베디드 텍스처를 PNG 파일로 디스크에 저장 (Overwrite 정책 반영)
 						const wstring texStem = matStem + L"_" + slotName + L".png";
 						texFilePath = outputDir / texStem;
-						if (!filesystem::exists(texFilePath))
+
+						std::error_code ec;
+						const bool exists = filesystem::exists(texFilePath, ec);
+						if (exists && !settings.Overwrite)
 						{
-							std::ofstream file(texFilePath, std::ios::binary);
-							if (file.is_open())
-								file.write(reinterpret_cast<const char*>(info.EmbeddedData.data()), info.EmbeddedData.size());
+							// 이미 존재하고 덮어쓰기가 아니면 기존 파일을 재사용합니다.
+						}
+						else
+						{
+							std::ofstream file(texFilePath, std::ios::binary | std::ios::trunc);
+							if (!file.is_open())
+							{
+								BAM_LOG(Error, "Editor", "Asset", "Failed to open embedded texture file for writing: {}", texFilePath.string());
+								return {};
+							}
+							file.write(reinterpret_cast<const char*>(info.EmbeddedData.data()), static_cast<std::streamsize>(info.EmbeddedData.size()));
+							file.close();
+							if (!file)
+							{
+								BAM_LOG(Error, "Editor", "Asset", "Failed to write embedded texture: {}", texFilePath.string());
+								return {};
+							}
 						}
 					}
 					else if (!info.Path.empty())
 					{
-						// 외부 파일 경로 탐색
+						// 외부 파일 경로 탐색 (외부 텍스처 부재 시 경고 로깅 후 폴백)
 						filesystem::path candidate = data.SourcePath.parent_path() / info.Path;
 						if (filesystem::exists(candidate))
 							texFilePath = candidate;
 						else if (filesystem::exists(outputDir / info.Path))
 							texFilePath = outputDir / info.Path;
+						else
+						{
+							BAM_LOG(Warn, "Editor", "Asset", "External texture not found: {}", candidate.string());
+						}
 					}
+
 					if (!texFilePath.empty())
 					{
 						const wstring texKey = NormalizePath(texFilePath.wstring());
@@ -402,19 +427,34 @@ namespace
 					}
 					return {};
 				};
+
 			for (size_t matIdx = 0; matIdx < data.Materials.size(); ++matIdx)
 			{
 				const auto& srcMat = data.Materials[matIdx];
 				const wstring rawMatName = StrToWStr(srcMat.Name);
 				const wstring matStem = MakeUniqueStem(sourceStem, rawMatName, L"Mat", static_cast<uint32>(matIdx), state.NameCounts);
 				const wstring matKey = NormalizePath((outputDir / (matStem + L".bammatinst")).wstring());
+
+				// 머티리얼 출력 사전 유효성 검사 (기존 파일 존재 여부 및 Overwrite 정책)
+				if (const EResult result = ValidateImportOutput(manager, matKey, settings.SaveToFile, settings.Overwrite);
+					result != EResult::Success)
+				{
+					return result;
+				}
+
 				MaterialInstanceDesc matDesc;
 				matDesc.Key = matKey;
 				matDesc.Path = matKey;
 				matDesc.BaseMaterialHandle = baseMat;
+
 				using MaterialInstanceOwner = std::unique_ptr<MaterialInstance, ModelFinalizeState::ResourceDeleter>;
 				MaterialInstanceOwner matInst(MaterialInstance::Create(&matDesc));
-				if (!matInst) continue;
+				if (!matInst)
+				{
+					BAM_LOG(Error, "Editor", "Asset", "MaterialInstance creation failed: {}", WStrToStr(matKey));
+					return EResult::Fail;
+				}
+
 				// 슬롯별 텍스처 바인딩
 				if (auto albedo = resolveTexture(srcMat.BaseColorTexture, matStem, L"Albedo"))
 					matInst->SetTextureBySlot(0, albedo);
@@ -424,18 +464,31 @@ namespace
 					matInst->SetTextureBySlot(2, orm);
 				if (auto emissive = resolveTexture(srcMat.EmissiveTexture, matStem, L"Emissive"))
 					matInst->SetTextureBySlot(3, emissive);
+
 				// PBR 기본 인자 설정 (BaseColor 등)
 				matInst->SetFloat4("BaseColor", vec4(srcMat.BaseColorFactor[0], srcMat.BaseColorFactor[1], srcMat.BaseColorFactor[2], srcMat.BaseColorFactor[3]));
+
 				if (settings.SaveToFile)
-					manager.SaveToBinaryFile(matInst.get(), matKey);
+				{
+					const EResult saveResult = manager.SaveToBinaryFile(matInst.get(), matKey);
+					if (saveResult != EResult::Success)
+					{
+						BAM_LOG(Error, "Editor", "Asset", "MaterialInstance save failed: path={}, result={}", WStrToStr(matKey), static_cast<int>(saveResult));
+						return saveResult;
+					}
+				}
+
 				MaterialInstance* instPtr = matInst.get();
 				auto matHandle = manager.AddResource<MaterialInstance>(matKey, matInst.release());
-				if (matHandle.IsValid() && matHandle.Get() == instPtr)
+				if (!matHandle.IsValid() || matHandle.Get() != instPtr)
 				{
-					rollback.Handles.push_back(matHandle.GetRawHandle());
-					if (matIdx < modelDesc.Materials.size())
-						modelDesc.Materials[matIdx] = ResourceHandle<MaterialInterface>(matHandle);
+					BAM_LOG(Error, "Editor", "Asset", "MaterialInstance registration failed: {}", WStrToStr(matKey));
+					return EResult::Fail;
 				}
+
+				rollback.Handles.push_back(matHandle.GetRawHandle());
+				if (matIdx < modelDesc.Materials.size())
+					modelDesc.Materials[matIdx] = ResourceHandle<MaterialInterface>(matHandle);
 			}
 		}
 
