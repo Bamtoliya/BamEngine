@@ -87,6 +87,8 @@ int main()
     source.ModeGroups = { std::vector<consumer::Mode>{ consumer::Mode::Backward, consumer::Mode::Forward },
         std::vector<consumer::Mode>{} };
     source.SetRevision(42);
+    source.ActiveEntry = std::make_shared<consumer::Entry>(L"스마트포인터", 9.9f, 77);
+    source.NullEntry = nullptr;
 
     if (!CheckRoundTrip<archive::JsonArchive>(registry, *type, source))
     {

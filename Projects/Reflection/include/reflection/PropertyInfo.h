@@ -41,11 +41,28 @@ namespace reflection
         Set,
         UnorderedSet,
         Map,
-		UnorderedMap
+		UnorderedMap,
+		SmartPointer
     };
 
     namespace detail
     {
+        template<typename T>
+        struct SmartPointerTraits { static constexpr bool IsSmartPointer = false; static constexpr bool IsShared = false; static constexpr bool IsUnique = false; };
+        template<typename T>
+        struct SmartPointerTraits<std::shared_ptr<T>> { static constexpr bool IsSmartPointer = true; static constexpr bool IsShared = true; static constexpr bool IsUnique = false; using PointeeType = T; };
+        template<typename T>
+        struct SmartPointerTraits<std::unique_ptr<T>> { static constexpr bool IsSmartPointer = true; static constexpr bool IsShared = false; static constexpr bool IsUnique = true; using PointeeType = T; };
+        struct PropertyPointerAccess
+        {
+            std::type_index PointeeType{ typeid(void) };
+            bool IsShared = false;
+            bool IsUnique = false;
+            bool (*IsNull)(const void* owner) = nullptr;
+            void (*Reset)(void* owner) = nullptr;
+            ObjectView(*CreateDefault)(void* owner) = nullptr;
+            ObjectView(*GetPointeeObject)(void* owner) = nullptr;
+        };
         template<typename T>
         struct MemberTraits;
 
@@ -108,6 +125,10 @@ namespace reflection
             {
                 return MapTraits<Value>::IsUnordered
                     ? PropertyValueKind::UnorderedMap : PropertyValueKind::Map;
+            }
+            else if constexpr (SmartPointerTraits<Value>::IsSmartPointer)
+            {
+                return PropertyValueKind::SmartPointer;
             }
             else if constexpr (std::is_class_v<Value>)
             {
@@ -189,7 +210,7 @@ namespace reflection
         [[nodiscard]]
         bool CanWrite() const noexcept
         {
-            return m_write != nullptr;
+            return m_write != nullptr || (IsSmartPointer() && m_pointerAccess.Reset != nullptr);
         }
 
         [[nodiscard]]
@@ -1614,6 +1635,31 @@ namespace reflection
             return { Error::None, m_container.EditElementObject(object.m_writeAddress, index) };
         }
 
+    public:
+        [[nodiscard]] bool IsSmartPointer() const noexcept { return m_valueKind == PropertyValueKind::SmartPointer; }
+        [[nodiscard]] std::type_index GetPointeeCppType() const noexcept { return m_pointerAccess.PointeeType; }
+        [[nodiscard]] bool IsPointerNull(const ObjectView& object) const
+        {
+            if (!object.IsValid() || object.m_type != m_ownerType || m_pointerAccess.IsNull == nullptr) return true;
+            return m_pointerAccess.IsNull(object.m_readAddress);
+        }
+        void ResetPointer(const ObjectView& object) const
+        {
+            if (!object.IsValid() || object.m_type != m_ownerType || object.m_writeAddress == nullptr || m_pointerAccess.Reset == nullptr) return;
+            m_pointerAccess.Reset(object.m_writeAddress);
+        }
+        [[nodiscard]] ObjectView CreatePointerInstance(const ObjectView& object) const
+        {
+            if (!object.IsValid() || object.m_type != m_ownerType || object.m_writeAddress == nullptr || m_pointerAccess.CreateDefault == nullptr) return {};
+            return m_pointerAccess.CreateDefault(object.m_writeAddress);
+        }
+        [[nodiscard]] ObjectView GetPointeeObject(const ObjectView& object) const
+        {
+            if (!object.IsValid() || object.m_type != m_ownerType || m_pointerAccess.GetPointeeObject == nullptr) return {};
+            void* targetAddress = object.m_writeAddress != nullptr ? object.m_writeAddress : const_cast<void*>(object.m_readAddress);
+            return m_pointerAccess.GetPointeeObject(targetAddress);
+        }
+
     private:
         PropertyReadResult TryReadMapPart(const ObjectView& object, std::size_t index, bool readKey) const
         {
@@ -1649,6 +1695,7 @@ namespace reflection
         bool m_objectValue = false;
         ObjectView(*m_editObject)(void*) = nullptr;
         detail::PropertyContainerAccess m_container;
+        detail::PropertyPointerAccess m_pointerAccess{};
 
         template<auto Member>
         friend PropertyInfo MakeProperty(
@@ -1745,6 +1792,48 @@ namespace reflection
 
                         return target.TryWriteValue(object, ValueView::From(*converted));
                     };
+            }
+        }
+
+        if constexpr (detail::SmartPointerTraits<Value>::IsSmartPointer)
+        {
+            using Pointee = typename detail::SmartPointerTraits<Value>::PointeeType;
+            property.m_pointerAccess.PointeeType = std::type_index(typeid(Pointee));
+            property.m_pointerAccess.IsShared = detail::SmartPointerTraits<Value>::IsShared;
+            property.m_pointerAccess.IsUnique = detail::SmartPointerTraits<Value>::IsUnique;
+            property.m_pointerAccess.IsNull = +[](const void* object) -> bool {
+                const auto* owner = static_cast<const Owner*>(object);
+                return (owner->*Member) == nullptr;
+                };
+            if constexpr (!std::is_const_v<MemberValue>)
+            {
+                property.m_pointerAccess.Reset = +[](void* object) {
+                    auto* owner = static_cast<Owner*>(object);
+                    (owner->*Member).reset();
+                    };
+                if constexpr (std::default_initializable<Pointee> && (std::is_class_v<Pointee> || std::is_union_v<Pointee>))
+                {
+                    property.m_pointerAccess.CreateDefault = +[](void* object) -> ObjectView {
+                        auto* owner = static_cast<Owner*>(object);
+                        if constexpr (detail::SmartPointerTraits<Value>::IsShared)
+                        {
+                            owner->*Member = std::make_shared<Pointee>();
+                            return ObjectView::From(*(owner->*Member));
+                        }
+                        else
+                        {
+                            owner->*Member = std::make_unique<Pointee>();
+                            return ObjectView::From(*(owner->*Member));
+                        }
+                        };
+                }
+                if constexpr (std::is_class_v<Pointee> || std::is_union_v<Pointee>)
+                {
+                    property.m_pointerAccess.GetPointeeObject = +[](void* object) -> ObjectView {
+                        auto* owner = static_cast<Owner*>(object);
+                        return (owner->*Member) ? ObjectView::From(*(owner->*Member)) : ObjectView{};
+                        };
+                }
             }
         }
 

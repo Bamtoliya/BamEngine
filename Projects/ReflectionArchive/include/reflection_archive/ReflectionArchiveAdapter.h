@@ -1121,6 +1121,86 @@ namespace archive_reflection
             return WithParentField(property.Name, endResult);
         }
 
+        inline archive::ArchiveResult WriteSmartPointer(archive::IArchive& ar,
+            const reflection::PropertyInfo& property, const reflection::ObjectView& object,
+            const reflection::Registry* registry, const PropertyCodecs* codecs)
+        {
+            if (property.IsPointerNull(object))
+            {
+                // Null 스마트 포인터는 아카이브 필드를 안전하게 생략(Omit)합니다.
+                return {};
+            }
+            if (registry == nullptr)
+            {
+                return { archive::ArchiveErrorCode::UnsupportedType, property.Name };
+            }
+            const auto* pointeeType = registry->FindType(property.GetPointeeCppType());
+            if (pointeeType == nullptr)
+            {
+                return { archive::ArchiveErrorCode::UnsupportedType, property.Name };
+            }
+            const auto pointeeObject = property.GetPointeeObject(object);
+            if (!pointeeObject.IsValid())
+            {
+                return { archive::ArchiveErrorCode::InvalidOperation, property.Name };
+            }
+            return ar.WriteObject(property.Name, pointeeObject,
+                [&property, pointeeType, registry, codecs](archive::IArchive& temporary, const reflection::ObjectView& source)
+                {
+                    return WithParentField(property.Name, WriteProperties(temporary, *pointeeType, source, registry, codecs));
+                });
+        }
+        inline archive::ArchiveResult ReadSmartPointer(archive::IArchive& ar,
+            const reflection::PropertyInfo& property, const reflection::ObjectView& object,
+            const reflection::Registry* registry, const PropertyCodecs* codecs)
+        {
+            bool exists = false;
+            const auto fieldResult = ar.HasField(property.Name, exists);
+            if (!fieldResult)
+            {
+                return fieldResult;
+            }
+            if (!exists)
+            {
+                // 필드가 부재할 경우 null 포인터로 초기화(Reset)합니다.
+                property.ResetPointer(object);
+                return {};
+            }
+            if (registry == nullptr)
+            {
+                return { archive::ArchiveErrorCode::UnsupportedType, property.Name };
+            }
+            const auto* pointeeType = registry->FindType(property.GetPointeeCppType());
+            if (pointeeType == nullptr)
+            {
+                return { archive::ArchiveErrorCode::UnsupportedType, property.Name };
+            }
+            auto targetObject = property.GetPointeeObject(object);
+            if (!targetObject.IsValid())
+            {
+                // 동적 인스턴스 생성 (std::make_shared<T>())
+                targetObject = property.CreatePointerInstance(object);
+            }
+            if (!targetObject.IsValid())
+            {
+                return { archive::ArchiveErrorCode::InvalidOperation, property.Name };
+            }
+            const auto beginResult = ar.BeginReadObject(property.Name);
+            if (!beginResult)
+            {
+                // 필드는 있으나 null 리터럴 등으로 인해 객체 시작에 실패한 경우 안전하게 reset
+                property.ResetPointer(object);
+                return {};
+            }
+            const auto result = ReadProperties(ar, *pointeeType, targetObject, registry, codecs);
+            const auto endResult = ar.EndObject();
+            if (!result)
+            {
+                return WithParentField(property.Name, result);
+            }
+            return WithParentField(property.Name, endResult);
+        }
+
         inline archive::ArchiveResult WriteProperty(archive::IArchive& ar,
             const reflection::PropertyInfo& property, const reflection::ObjectView& object,
             const reflection::Registry* registry, const PropertyCodecs* codecs)
@@ -1215,6 +1295,10 @@ namespace archive_reflection
             else if (property.GetValueKind() == reflection::PropertyValueKind::Enum)
             {
                 result = WriteEnum(ar, property, readResult.Value, registry);
+            }
+            else if (property.GetValueKind() == reflection::PropertyValueKind::SmartPointer)
+            {
+                result = WriteSmartPointer(ar, property, object, registry, codecs);
             }
             else if (property.GetValueKind() == reflection::PropertyValueKind::Class)
             {
@@ -1395,6 +1479,10 @@ namespace archive_reflection
             else if (property.GetValueKind() == reflection::PropertyValueKind::Enum)
             {
                 result = ReadEnum(ar, property, object, registry);
+            }
+            else if (property.GetValueKind() == reflection::PropertyValueKind::SmartPointer)
+            {
+                result = ReadSmartPointer(ar, property, object, registry, codecs);
             }
             else if (property.GetValueKind() == reflection::PropertyValueKind::Class)
             {

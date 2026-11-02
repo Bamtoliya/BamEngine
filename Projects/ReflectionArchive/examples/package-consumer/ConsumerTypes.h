@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <reflection/Annotations.h>
 
@@ -131,10 +131,32 @@ namespace consumer
         PROPERTY()
         std::array<std::vector<Mode>, 2> ModeGroups{};
 
+        PROPERTY()
+        std::shared_ptr<Entry> ActiveEntry = nullptr;
+        PROPERTY()
+        std::shared_ptr<Entry> NullEntry = nullptr;
+
         std::int32_t GetRevision() const { return m_revision; }
         void SetRevision(std::int32_t value) { m_revision = value; }
 
-        bool operator==(const Settings&) const = default;
+        bool operator==(const Settings& other) const
+        {
+            if (static_cast<const SettingsBase&>(*this) != static_cast<const SettingsBase&>(other)) return false;
+            if (Enabled != other.Enabled || Entries != other.Entries || Labels != other.Labels ||
+                Counts != other.Counts || EntriesById != other.EntriesById || NamedEntries != other.NamedEntries ||
+                Modes != other.Modes || FixedModes != other.FixedModes || ModeSet != other.ModeSet ||
+                Flags != other.Flags || PermissionsByMode != other.PermissionsByMode ||
+                ModesByPermission != other.ModesByPermission || EntriesByMode != other.EntriesByMode ||
+                FixedEntries != other.FixedEntries || Matrix != other.Matrix || EntryGroups != other.EntryGroups ||
+                ModeGroups != other.ModeGroups || m_revision != other.m_revision)
+            {
+                return false;
+            }
+            const bool activeEqual = (!ActiveEntry && !other.ActiveEntry) ||
+                (ActiveEntry && other.ActiveEntry && *ActiveEntry == *other.ActiveEntry);
+            const bool nullEqual = (!NullEntry && !other.NullEntry);
+            return activeEqual && nullEqual;
+        }
 
     private:
         PROPERTY()

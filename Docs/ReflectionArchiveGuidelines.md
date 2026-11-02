@@ -130,3 +130,34 @@ Reflection, Archive, ReflectionArchive를 완성한 뒤
 
 기능 구현, 정적 검토와 실행 검증을 구분하여 기록한다.
 일부 타입의 성공을 모든 등록 타입의 지원으로 일반화하지 않는다.
+
+## 8. 스마트 포인터 및 가변 소유권의 일반화 직렬화 계획 (방안 C)
+
+### 8.1 배경 및 문제의식
+- 현재 `ReflectionArchive`는 일반 스칼라, 열거형, 값 타입 중첩 객체(Nested Struct/Class), `std::vector`, `std::unordered_map`을 100% 자동 직렬화한다.
+- 그러나 `std::shared_ptr<T>`, `std::unique_ptr<T>`, `std::optional<T>` 같은 소유권 래퍼 타입은 개별 타입마다 `PropertyCodecs::Register<T>`로 수동 코덱을 등록하지 않으면 `UnsupportedType (code=10)` 오류가 발생한다.
+- 2026-11-02 발생한 `AnimState::blendTree` 직렬화 오류는 1차적으로 값 타입 전환(`BlendTree1D blendTree;`, 방안 B)으로 불필요한 힙 동적 할당과 타입별 특수화를 제거하여 해결했다.
+- 하지만 향후 다형성 객체(Polymorphic Hierarchy), 재귀적 트리 노드, 또는 선택적 필드(Optional)를 표현하기 위해 포인터 직렬화가 불가피한 영역이 존재한다.
+
+### 8.2 일반화 직렬화 어댑터 설계 요구사항 (방안 C)
+1. **타입별 수동 특수화 금지**:
+   - `std::shared_ptr<T>`를 프로퍼티로 선언할 때마다 `ReflectionRegistry`에 코덱을 일일이 수동 등록하는 방식을 지양한다.
+   - `ReflectionArchive` 계층에서 C++20 Concepts(`template<typename T> requires IsReflected<T>`)를 활용하여 제네릭 스마트 포인터 어댑터를 지원한다.
+2. **Null/유효 객체 라이프사이클 처리**:
+   - **쓰기 (Write)**: `ptr == nullptr`일 경우 아카이브 필드를 안전하게 생략(Omit)하거나 null로 기록한다.
+   - **읽기 (Read)**: 필드가 부재하거나 null일 경우 `ptr.reset()`을 수행하고, 유효한 데이터가 존재할 경우 `std::make_shared<T>()`로 인스턴스를 동적 생성한 뒤 리플렉션 역직렬화를 진행한다.
+3. **순환 참조 및 그래프 직렬화 경계**:
+   - 단순 단방향 트리 소유권과 양방향 그래프 참조를 구분한다. `std::weak_ptr`이나 순환 참조가 필요한 복합 그래프는 단순 계층 아카이브와 분리하여 ID 기반 식별자 정책을 정립한 후 확장한다.
+
+### 8.3 구현 완료 및 아키텍처 상세 (2026-11-02)
+1. **Reflection 모듈 일급 시민 지원 (`PropertyInfo.h`)**:
+   - `PropertyValueKind::SmartPointer` 열거값 추가.
+   - `SmartPointerTraits<T>`를 통해 `std::shared_ptr<T>`, `std::unique_ptr<T>` 컴파일 타임 자동 감지.
+   - `PropertyPointerAccess` 함수 포인터 테이블 도입 (`IsNull`, `Reset`, `CreateDefault`, `GetPointeeObject`, `PointeeType`).
+   - `MakeProperty`에서 스마트 포인터 수명 주기 함수들을 자동 바인딩하여 런타임 제네릭 인터페이스 제공.
+2. **ReflectionArchive 모듈 제네릭 어댑터 연동 (`ReflectionArchiveAdapter.h`)**:
+   - `WriteSmartPointer`: `nullptr`일 경우 아카이브 필드 생략(Omit), 유효 포인터일 경우 역참조하여 순수 멤버 데이터 직렬화 (가상 메모리 주소 비기록).
+   - `ReadSmartPointer`: 필드 부재/null 시 `ResetPointer()`, 필드 존재 시 `CreatePointerInstance()`(`std::make_shared<T>()` 동적 할당) 후 내부 멤버 역직렬화.
+3. **검증 및 성과**:
+   - `package-consumer` 독립 예제에 `ActiveEntry`(유효 인스턴스) 및 `NullEntry`(`nullptr`) 왕복(Round-trip) 테스트 연동.
+   - 타입별 수동 코덱(`PropertyCodecs::Register`) 등록 0개로 100% 자동 직렬화 달성.
