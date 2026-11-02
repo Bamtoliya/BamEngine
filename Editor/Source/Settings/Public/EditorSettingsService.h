@@ -73,6 +73,7 @@ public:
 public:
     bool LoadForStartup(std::uint32_t defaultWidth, std::uint32_t defaultHeight);
     bool LoadProjectSettings(const reflection::Registry& registry);
+    EEditorSettingsSaveStatus SaveProjectSettings(const Engine::ProjectSettings& settings);
 
     void CaptureWindowState(const EditorApplicationState& state);
     void CaptureWorkspace(ImGuiManager& gui);
@@ -103,6 +104,11 @@ public:
     [[nodiscard]] EditorSettingsChangeResult SetEditorUIScale(float scale);
     [[nodiscard]] EditorSettingsChangeResult SetEditorTargetFPS(std::int32_t fps);
     [[nodiscard]] EditorSettingsChangeResult SetEditorLanguage(ELocalizationLanguage language);
+    [[nodiscard]] EditorSettingsChangeResult SetGizmoSnapping(float translation, float rotation, float scale);
+    [[nodiscard]] EditorSettingsChangeResult SetGizmoSnapTranslation(float snap);
+    [[nodiscard]] EditorSettingsChangeResult SetGizmoSnapRotation(float snap);
+    [[nodiscard]] EditorSettingsChangeResult SetGizmoSnapScale(float snap);
+    [[nodiscard]] EditorSettingsChangeResult SetEditorPreferences(const EditorPreferences& preferences);
 
     [[nodiscard]] std::vector<EditorViewportResolutionSnapshot> GetViewportResolutionStates() const;
 
@@ -123,13 +129,12 @@ private:
     EEditorSettingsSaveStatus SavePreferences() const;
 
 public:
-    const EditorPreferences& GetPreferences() const { return m_EditorPreferences; }
-    const EditorWorkspace& GetWorkspace() const { return m_EditorWorkspace; }
-    const Engine::ProjectSettings& GetProjectSettings() const { return m_ProjectSettings; }
-
-    const std::filesystem::path& GetProjectRoot() const { return m_ProjectRoot; }
-    const std::filesystem::path& GetPreferencesPath() const { return m_EditorPreferencesPath; }
-    const std::filesystem::path& GetWorkspacePath() const { return m_EditorWorkspacePath; }
+    [[nodiscard]] const EditorPreferences& GetPreferences() const;
+    [[nodiscard]] const EditorWorkspace& GetWorkspace() const;
+    [[nodiscard]] const Engine::ProjectSettings& GetProjectSettings() const;
+    [[nodiscard]] const std::filesystem::path& GetProjectRoot() const;
+    [[nodiscard]] const std::filesystem::path& GetPreferencesPath() const;
+    [[nodiscard]] const std::filesystem::path& GetWorkspacePath() const;
 
     [[nodiscard]] bool IsPreferencesSaveBlocked() const { return !m_CanSaveEditorPreferences; }
     [[nodiscard]] bool IsWorkspaceSaveBlocked() const { return !m_CanSaveEditorWorkspace; }

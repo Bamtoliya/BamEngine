@@ -189,6 +189,15 @@ bool EditorSettingsService::LoadProjectSettings(const reflection::Registry& regi
         }, "ProjectSettings");
 }
 
+EEditorSettingsSaveStatus EditorSettingsService::SaveProjectSettings(const Engine::ProjectSettings& settings)
+{
+    if (m_ProjectRoot.empty())
+        return EEditorSettingsSaveStatus::Failed;
+    m_ProjectSettings = settings;
+    const std::filesystem::path projectPath = m_ProjectRoot / "Config" / "Project.json";
+    return WriteEditorSettingsFile(m_ProjectSettings, projectPath, m_SettingsRegistry, true, "ProjectSettings");
+}
+
 void EditorSettingsService::CaptureWindowState(const EditorApplicationState& state)
 {
     if (m_WindowPhase != EWindowChangePhase::Idle || m_WindowCaptureBlocked)
@@ -428,6 +437,7 @@ bool EditorSettingsService::ApplyPreferences(const EditorPreferences& preference
         return false;
 
     m_ImGuiManager->SetUIScale(preferences.UIScale);
+    m_ImGuiManager->ApplyTheme(preferences.Theme);
     m_TimeManager->SetTargetFPS(static_cast<uint32>(preferences.TargetFPS));
 
     m_EditorPreferences = preferences;
@@ -564,6 +574,41 @@ EditorSettingsChangeResult EditorSettingsService::SetEditorLanguage(ELocalizatio
     EditorPreferences candidate = m_EditorPreferences;
     candidate.Language = language == ELocalizationLanguage::English ? "English" : "Korean";
     return ApplyAndSavePreferences(candidate);
+}
+
+EditorSettingsChangeResult EditorSettingsService::SetGizmoSnapping(float translation, float rotation, float scale)
+{
+    EditorPreferences candidate = m_EditorPreferences;
+    candidate.GizmoSnapTranslation = translation;
+    candidate.GizmoSnapRotation = rotation;
+    candidate.GizmoSnapScale = scale;
+    return ApplyAndSavePreferences(candidate);
+}
+
+EditorSettingsChangeResult EditorSettingsService::SetGizmoSnapTranslation(float snap)
+{
+    EditorPreferences candidate = m_EditorPreferences;
+    candidate.GizmoSnapTranslation = snap;
+    return ApplyAndSavePreferences(candidate);
+}
+
+EditorSettingsChangeResult EditorSettingsService::SetGizmoSnapRotation(float snap)
+{
+    EditorPreferences candidate = m_EditorPreferences;
+    candidate.GizmoSnapRotation = snap;
+    return ApplyAndSavePreferences(candidate);
+}
+
+EditorSettingsChangeResult EditorSettingsService::SetGizmoSnapScale(float snap)
+{
+    EditorPreferences candidate = m_EditorPreferences;
+    candidate.GizmoSnapScale = snap;
+    return ApplyAndSavePreferences(candidate);
+}
+
+EditorSettingsChangeResult EditorSettingsService::SetEditorPreferences(const EditorPreferences& preferences)
+{
+    return ApplyAndSavePreferences(preferences);
 }
 
 EEditorSettingsSaveStatus EditorSettingsService::SavePreferences() const
@@ -797,3 +842,10 @@ std::optional<EditorWindowRequestResult> EditorSettingsService::TakeWindowReques
     m_WindowRequestResult.reset();
     return result;
 }
+
+const EditorPreferences& EditorSettingsService::GetPreferences() const { return m_EditorPreferences; }
+const EditorWorkspace& EditorSettingsService::GetWorkspace() const { return m_EditorWorkspace; }
+const Engine::ProjectSettings& EditorSettingsService::GetProjectSettings() const { return m_ProjectSettings; }
+const std::filesystem::path& EditorSettingsService::GetProjectRoot() const { return m_ProjectRoot; }
+const std::filesystem::path& EditorSettingsService::GetPreferencesPath() const { return m_EditorPreferencesPath; }
+const std::filesystem::path& EditorSettingsService::GetWorkspacePath() const { return m_EditorWorkspacePath; }

@@ -110,13 +110,11 @@ void ToolBar::DrawFileMenu()
 			LoadResourceFile();
 		}
 
-		auto* settingsPanel = ImGuiManager::Get().GetImGuiPanel(L"GraphicsSettings");
-
-		if (ImGui::MenuItem(LOCAL_LABEL("UI_SETTINGS").c_str(), nullptr, false,
-			settingsPanel != nullptr) && settingsPanel)
+		auto& sm = ShortcutManager::Get();
+		if (ImGui::MenuItem(LOCAL_LABEL("Settings.Title").c_str(), sm.GetShortcutHint("Editor.OpenSettings")))
 		{
-			TODO("Open overall settings panel, May this button not be here");
-			settingsPanel->Open();
+			if (auto* panel = dynamic_cast<UnifiedSettingsPanel*>(ImGuiManager::Get().GetImGuiPanel(L"UnifiedSettings")))
+				panel->OpenWithCategory(EUnifiedSettingsCategory::General);
 		}
 		ImGui::EndMenu();
 	}
@@ -194,10 +192,10 @@ void ToolBar::DrawEditMenu()
 		ACTION_MENU_ITEM(LOCAL_CSTR("Hierarchy.Duplicate"), "Edit.Duplicate");
 		ACTION_MENU_ITEM(LOCAL_CSTR("EditorCommon.Delete"), "Edit.Delete");
 		ImGui::Separator();
-		if (ImGui::MenuItem(LOCAL_CSTR("Shortcuts.Title")))
+		if (ImGui::MenuItem(LOCAL_LABEL("Settings.CategoryShortcuts").c_str()))
 		{
-			if (auto* panel = ImGuiManager::Get().GetImGuiPanel(L"ShortcutSettings"))
-				panel->Open();
+			if (auto* panel = dynamic_cast<UnifiedSettingsPanel*>(ImGuiManager::Get().GetImGuiPanel(L"UnifiedSettings")))
+				panel->OpenWithCategory(EUnifiedSettingsCategory::Shortcuts);
 		}
 		ImGui::EndMenu();
 	}
@@ -299,13 +297,10 @@ void ToolBar::DrawWindowMenu()
 
 	if (ImGui::BeginMenu(LOCAL_CSTR("UI_WINDOW")))
 	{
-		auto* settingsPanel = gui.GetImGuiPanel(L"GraphicsSettings");
-		const bool settingsOpen = settingsPanel && settingsPanel->IsOpen();
-
-		if (ImGui::MenuItem(LOCAL_LABEL("ToolBar.DisplaySettings").c_str(),
-			nullptr, settingsOpen, settingsPanel != nullptr) && settingsPanel)
+		if (ImGui::MenuItem(LOCAL_LABEL("Settings.CategoryGraphic").c_str()))
 		{
-			settingsPanel->ToggleOpen();
+			if (auto* panel = dynamic_cast<UnifiedSettingsPanel*>(ImGuiManager::Get().GetImGuiPanel(L"UnifiedSettings")))
+				panel->OpenWithCategory(EUnifiedSettingsCategory::Graphic);
 		}
 
 		if (ImGui::MenuItem(LOCAL_LABEL("ToolBar.NewViewportPanel").c_str()))

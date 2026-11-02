@@ -94,8 +94,13 @@ private:
 public:
 	void SetUIScale(float scale);
 	[[nodiscard]] float GetUIScale() const { return m_UIScale; }
-private:
+	void UpdateFontScale(float fontSize);
 	void SetCustomStyle();
+	void ApplyDefaultDarkStyle();
+	void ApplyTheme(const std::string& theme);
+	[[nodiscard]] bool SaveCustomStyle(const std::filesystem::path& path);
+	[[nodiscard]] bool LoadCustomStyle(const std::filesystem::path& path);
+	[[nodiscard]] std::filesystem::path GetCustomStylePath() const;
 #pragma endregion
 
 #pragma region Helper

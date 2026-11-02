@@ -24,7 +24,8 @@
 
 ## 2. 현재 코드에서 확인한 상태
 
-- 확인일: 2026-11-01.
+- 확인일: 2026-11-03.
+- 통합 설정 패널(`UnifiedSettingsPanel`)이 전면 구현되어 환경설정 7대 카테고리가 일원화되었으며, ImGui 커스텀 스타일 영속화(`EditorStyle.json`) 및 Unscaled SSOT 아키텍처가 구축되었다.
 - 화면 설정은 독립 GraphicSettingPanel에서 편집한다.
   파일 메뉴와 창 메뉴가 같은 패널에 연결되어 있다 (후속으로 3절의 카테고리 기반 `UnifiedSettingsPanel` 통합 예정).
 - EditorPreferences는 언어·UI 배율·목표 FPS·VSync를 사용자 설정 경로에 저장한다.
@@ -110,7 +111,9 @@
 
 #### C. `Editor` (에디터 환경)
 - **UI 배율 (UI Scale):** 전체 에디터 인터페이스 DPI 스케일링 배율(0.5x ~ 3.0x), 취소 및 원래 값 복원 지원.
-- **기즈모 (Gizmo):** 이동/회전/스케일 기즈모 크기, 그리드 스냅 단위(Grid Snap Unit: 0.1, 0.5, 1.0 등).
+- **기즈모 스냅 (Gizmo Snapping - 방안 A 확정):**
+  - 이동/회전/스케일 스냅 단위(`GizmoSnapTranslation`, `GizmoSnapRotation`, `GizmoSnapScale`)는 특정 뷰포트 인스턴스에 종속되지 않고 `EditorPreferences`에 소유권을 일원화하여 `EditorPreferences.json`에 영속화한다.
+  - 모든 3D 뷰포트(`SceneViewportPanel`, 향후 프리팹 뷰포트, 분할 뷰포트 등)는 `EditorSettingsService`를 단일 진실의 원천(SSOT)으로 참조하여 일관된 스냅 단위를 유지한다.
 - **뷰포트 탐색 카메라:** 씬 뷰포트 카메라 이동 속도(`CameraSpeed`), 감도, FOV(기본 60도), 직교 크기(Orthographic Size).
 - **디버그 및 로깅:** 콘솔 창에 출력할 최소 로그 레벨 필터(`Trace`, `Info`, `Warning`, `Error`).
 
@@ -142,6 +145,7 @@
 1. **사용자 개인 설정 (`EditorPreferences`):**
    - 언어, UI 배율, 목표 FPS, VSync, 에디터 테마 등 개발자 개인 환경에 귀속되는 설정.
    - `SDL_GetPrefPath("BamEngine", "Editor")` 아래 `EditorPreferences.json`에 저장(현재 구현).
+   - **기즈모 스냅 단위 (`GizmoSnapTranslation`, `GizmoSnapRotation`, `GizmoSnapScale`):** 특정 뷰포트 인스턴스의 일회성 상태가 아닌 에디터 전역 사용자 환경설정에 속하므로 `EditorPreferences`에 포함하여 영속화하고, `UnifiedSettingsPanel` 및 뷰포트에서 공통 참조한다.
 2. **프로젝트별 작업 상태 (`EditorWorkspace`):**
    - 창 크기, 패널 열림 상태, 도킹 배치, 뷰포트별 해상도/카메라 상태 등 프로젝트 작업 공간에 귀속되는 상태.
    - 프로젝트 루트의 `.bam/User/Workspace.json`에 저장(현재 구현).
@@ -151,6 +155,10 @@
 4. **프로젝트 공통 설정 (`ProjectSettings`):**
    - 프로젝트 이름, 시작 씬 경로, 인게임 입력 액션 등 버전 관리에 포함되어 팀 전체가 공유해야 하는 설정.
    - 프로젝트 루트의 `Config/Project.json`에 저장(현재 구현).
+5. **ImGui 커스텀 스타일 (`EditorStyle.json`):**
+   - `ImGui::ShowStyleEditor`를 통해 사용자가 자유롭게 커스터마이징한 색상(55개 컬러 슬롯) 및 라운딩/패딩/여백 데이터.
+   - 사용자 환경설정 폴더의 `EditorStyle.json`에 저장(`EditorSettingsService::GetPreferencesPath().parent_path() / "EditorStyle.json"`).
+   - **Unscaled Base Style SSOT 원칙**: UI 배율(`UIScale`)이 역적용된 1.0f 기준 순수 수치로 파일에 저장하고 메모리에서는 `m_BaseStyle`로 보관하여, `SetUIScale()` 호출 시 누적 곱연산에 의한 간격 왜곡 없이 언제나 깨끗하게 1회 스케일링되도록 보장한다.
 
 저장 데이터는 모두 기존 리플렉션 및 `ReflectionArchive` 기반 JSON 직렬화 경로를 일관되게 사용하며, 누락된 필드는 안전한 기본값으로 폴백한다.
 
@@ -936,8 +944,39 @@ BamEngine의 우선 기준은 작은 게임의 제작·저장·실행·배포 �
 
 ### 20.6 완료 검증 체크리스트
 
-- [ ] `*.bammesh.json`, `*.bammat.json`, `*.bammatinst.json`, `*.bamscene.json`, `*.bamprefab.json`, `*.bamsprite.json` 등이 일반 회색 `.json` 아이콘이 아닌 각각의 고유 아이콘과 배경색으로 렌더링된다.
-- [ ] 그리드 아이템 하단 네임박스에 중간 확장자(`.bammesh`, `.bammat` 등)가 제거된 순수 파일 이름만 깔끔하게 표시되고, 우하단에 `"JSON"` 대신 `"MESH"`, `"MAT"`, `"MAT INST"`, `"SCENE"` 등의 타입 배지가 표시된다.
-- [ ] 콘텐츠 브라우저 상단 필터에서 `Material` 또는 `Model` 선택 시 `.bammat.json`, `.bammatinst.json`, `.bammesh.json`, `.bammodel.json` 파일들이 누락 없이 표시된다.
-- [ ] 인스펙터 `ResourcePicker`에서 머티리얼 슬롯 클릭 시 `.bamscene.json`, `.bamprefab.json`, `.bammesh.json` 등 무관한 JSON 파일이 제외되고 머티리얼 에셋만 노출된다.
-- [ ] 새 씬을 저장할 때 `.bamscene.json`으로 저장되며, 기존 `.json`으로 저장된 씬과 새 `.bamscene.json` 씬 모두 더블클릭 및 `Load Scene` 메뉴에서 정상 로드된다.
+- [x] `*.bammesh.json`, `*.bammat.json`, `*.bammatinst.json`, `*.bamscene.json`, `*.bamprefab.json`, `*.bamsprite.json` 등이 일반 회색 `.json` 아이콘이 아닌 각각의 고유 아이콘과 배경색으로 렌더링된다.
+- [x] 그리드 아이템 하단 네임박스에 중간 확장자(`.bammesh`, `.bammat` 등)가 제거된 순수 파일 이름만 깔끔하게 표시되고, 우하단에 `"JSON"` 대신 `"MESH"`, `"MAT"`, `"MAT INST"`, `"SCENE"` 등의 타입 배지가 표시된다.
+- [x] 콘텐츠 브라우저 상단 필터에서 `Material` 또는 `Model` 선택 시 `.bammat.json`, `.bammatinst.json`, `.bammesh.json`, `.bammodel.json` 파일들이 누락 없이 표시된다.
+- [x] 인스펙터 `ResourcePicker`에서 머티리얼 슬롯 클릭 시 `.bamscene.json`, `.bamprefab.json`, `.bammesh.json` 등 무관한 JSON 파일이 제외되고 머티리얼 에셋만 노출된다.
+- [x] 새 씬을 저장할 때 `.bamscene.json`으로 저장되며, 기존 `.json`으로 저장된 씬과 새 `.bamscene.json` 씬 모두 더블클릭 및 `Load Scene` 메뉴에서 정상 로드된다.
+
+---
+
+## 21. 에디터 공통 모달 대화상자(Modal Dialog) 표준 디자인 및 통일 계획
+
+### 21.1 배경 및 목적
+- 현재 에디터의 주요 확인/경고 팝업(`PrefabModeManager`의 미저장 종료 확인, `ImGuiManager`의 문서 저장 확인, `ContentBrowserPanel`의 삭제/충돌 확인 등)이 `ImGuiWindowFlags_AlwaysAutoResize`에만 의존하고 있어, 텍스트 글자 수에 따라 창 너비가 200px대로 찌그러지거나 들쭉날쭉해지는 시각적 결함이 있다.
+- 화면 해상도 변경 시 도입된 표준 모달 규격(최소 너비 보장, 넉넉한 여백, 표준 버튼 규격 및 카운트다운 게이지)을 에디터 전체 모달 대화상자로 확장하여 일관되고 안정적인 UX를 확립한다.
+
+### 21.2 표준 모달 디자인 가이드라인
+1. **크기 및 형태 (Sizing & Constraints)**:
+   - 최소 너비(Min Width): `ImGui::SetNextWindowSizeConstraints(ImVec2(420.0f, 0.0f), ImVec2(600.0f, FLT_MAX))`를 적용해 텍스트가 짧아도 최소 420px의 안정적인 종횡비를 유지한다.
+   - 내부 패딩(Padding): `ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(18.0f, 16.0f))`를 적용해 테두리와 내용물 사이의 답답함을 해소한다.
+2. **헤더 레이아웃 (Header)**:
+   - 상단에 카테고리별 테마 아이콘(경고: `ICON_FA_TRIANGLE_EXCLAMATION`, 정보: `ICON_FA_CIRCLE_INFO`, 디스플레이: `ICON_FA_DESKTOP`, 저장: `ICON_FA_FLOPPY_DISK`)과 타이틀 텍스트를 배치하고 하단 구분선(`ImGui::Separator()`)으로 영역을 분리한다.
+3. **버튼 규격 및 정렬 (Button Standards)**:
+   - 버튼 크기: 최소 너비 `110.0f`, 높이 `28.0f`로 통일하여 마우스 클릭 미스를 방지한다.
+   - 버튼 배치: 하단 우측 정렬(`ImGui::GetWindowContentRegionMax().x - totalBtnsWidth`)로 균형 배치한다.
+   - 색상 구분:
+     - 긍정/확정 액션(저장, 적용, 확인): 파란색(`ImVec4(0.18f, 0.45f, 0.75f, 1.0f)`)
+     - 파괴적 액션(삭제, 변경사항 버리기): 붉은색(`ImVec4(0.75f, 0.20f, 0.20f, 1.0f)`)
+     - 취소/닫기: 기본 버튼 색상
+4. **동적 게이지/타임아웃 시각화**:
+   - 15초 화면 확인 등 시한부 선택이 필요한 모달에는 `ImGui::ProgressBar`를 통해 남은 시간을 시각적으로 제공한다.
+
+### 21.3 적용 대상 모달 목록 (후속 구현 대상)
+- [ ] `PrefabModeManager::DrawExitConfirmModal`: 프리팹 미저장 변경사항 종료 확인 (저장 / 버리기 / 취소)
+- [ ] `ImGuiManager::DrawDocumentConfirmation`: 메인 씬 문서 닫기/종료 확인
+- [ ] `ContentBrowserPanel`: 에셋 삭제 확인 및 덮어쓰기 확인
+- [ ] `GraphPanel`: 그래프 저장/열기 전환 확인
+- [ ] 공통 헬퍼화: `ModalDialogHelper::BeginStandardModal(...)` 등 공통 래퍼 도입 검토

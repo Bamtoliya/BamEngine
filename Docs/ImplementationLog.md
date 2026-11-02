@@ -35,6 +35,52 @@ Use one entry per meaningful change.
 
 ---
 
+## [2026-11-03] 통합 설정 패널(UnifiedSettingsPanel) 전면 구축, ImGui 커스텀 스타일 영속화 및 스케일링 버그 수정
+
+- Area: Editor | UI | Settings | Style | Localization
+- Type: Feature | Architecture | Fix
+- 관련 파일:
+  - Editor/Source/ImGui/SettingsPanel/Public/UnifiedSettingsPanel.h
+  - Editor/Source/ImGui/SettingsPanel/Private/UnifiedSettingsPanel.cpp
+  - Editor/Source/ImGui/Public/ImGuiManager.h
+  - Editor/Source/ImGui/Private/ImGuiManager.cpp
+  - Editor/Source/Settings/Public/EditorSettings.h
+  - Editor/Source/Settings/Public/EditorSettingsService.h
+  - Editor/Source/Settings/Private/EditorSettingsService.cpp
+  - Editor/Source/ImGui/ToolBar/Private/ToolBar.cpp
+  - Editor/Source/FileDialog/Public/FileDialogs.h
+  - Editor/Source/FileDialog/Private/FileDialogs.cpp
+  - Resources/Data/Localization/Editor.csv
+  - Resources/Data/Localization/Korean.json
+  - Resources/Data/Localization/English.json
+- Motivation:
+  - 기존의 개별 독립 패널(`GraphicSettingPanel`, `ShortcutSettingsPanel` 등)로 파편화되어 있던 에디터 및 프로젝트 설정을 단일 통합 창(`UnifiedSettingsPanel`)으로 일원화.
+  - 기즈모 스냅, 카메라 속도/FOV, 폰트 파일/크기, 시작 씬, 에셋/셰이더 경로 등 에디터 작업에 필수적인 설정을 중앙 집중화하고 영속화.
+  - ImGui 커스텀 스타일 편집기(`ShowStyleEditor`)에서 수정한 테마가 재시작 시 보존되지 않고, 테마 복원 시 누적 곱연산으로 인해 UI 간격이 기하급수적으로 벌어지던 치명적 버그 해결.
+  - 폰트 크기 변경 및 한/영 전환 시 고정 폭 버튼 텍스트가 잘리는 문제 해결.
+- Implementation summary:
+  - **`UnifiedSettingsPanel` 전면 구축**:
+    - 좌측 3대 그룹 트리(`System & Display`, `Editor & Workspace`, `Project`) 내비게이션, 스플리터 리사이징(`m_SidebarWidth`), 가로 스크롤바.
+    - 7대 카테고리 구현: `General`(언어, UI 배율, 폰트 파일 탐색기, 폰트 크기, 자동 저장), `Theme & Style`(다크/라이트/클래식/커스텀 프리셋, StyleEditor 임베드, 원클릭 복원), `Graphic`(창 해상도, 전체화면, FPS, VSync, 15초 확인 모달), `Editor`(기즈모 스냅 SSOT, 카메라 속도/FOV, 로그 레벨), `Workspace`(뷰포트 해상도 프리셋/커스텀/종횡비 비동기 적용, 썸네일 크기, 도킹 레이아웃), `Shortcuts`(실시간 검색, 키 캡처, 충돌 감지, 리셋), `Project Settings`(프로젝트명, 시작 씬, 에셋/셰이더 폴더 탐색기, 영속화).
+  - **ImGui 커스텀 스타일 영속화 및 Unscaled Base Style SSOT 구축**:
+    - `EditorStyle.json`으로 55개 색상 슬롯과 라운딩, 패딩, 여백을 직렬화/역직렬화(`ImGuiManager::SaveCustomStyle`, `LoadCustomStyle`).
+    - `m_BaseStyle`을 1.0f 기본 배율 원본으로 고정하고, `SetUIScale(m_UIScale)`을 단 1회만 적용하여 `ScaleAllSizes` 누적 곱연산으로 간격이 벌어지는 버그를 원천 차단.
+  - **동적 버튼 너비 산출 (잘림 방지)**:
+    - 하단 액션 바 버튼(`Reset to Defaults`, `Discard`, `Apply`)을 고정 100px 대신 `std::max(90.0f, ImGui::CalcTextSize(...) + FramePadding * 2 + 16.0f)` 기반으로 계산하여 어떤 언어/폰트 크기에서도 잘림 없이 완벽하게 자동 핏팅.
+  - **폴더 탐색 다이얼로그 (`OpenFolderDialog`) 신규 구현**:
+    - Windows IFileDialog `FOS_PICKFOLDERS` 기반의 프로젝트 루트/에셋/셰이더 디렉터리 브라우저 연동.
+  - **로캘 키 및 인프라 동기화**:
+    - `Editor.csv`에 `Settings.*` 키 일괄 등록 및 `GenerateLocalization`을 통한 JSON 자동 동기화.
+- Technical details:
+  - **ABI 오프셋 불일치 0xC0000005 크래시 규명 및 해결**:
+    - `EditorPreferences` 구조체 크기 변경 후, `SKIP_UNITY_BUILD_INCLUSION`으로 컴파일되는 `Application.cpp`와 Unity 빌드로 컴파일되는 `EditorSettingsService.cpp` 간 인라인 getter 오프셋 불일치로 발생했던 포인터 역참조 크래시를 `EditorSettingsService` getter 함수의 `.cpp` 이전(ABI 격리)을 통해 원천 해결.
+- Validation:
+  - 전체 재빌드(`--clean-first`) 및 에디터 구동 시 0-크래시 검증 완료.
+  - 폰트 크기 실시간 변경 및 UI 배율(1.25x) 적용 상태에서 테마 반복 전환 시 간격 불변 검증 완료.
+  - 에디터 재시작 후 커스텀 스타일(`EditorStyle.json`) 자동 복원 검증 완료.
+
+---
+
 ## [2026-11-03] 애니메이터 편집기 파일 안전 보호, 입력/로캘 정합성 및 패키징 스크립트 파괴적 삭제 방어 (P1-A / F01·F03·F11)
 
 - Area: Engine | Editor | Tools | Localization
@@ -2038,3 +2084,44 @@ Use this as the primary execution list until a playable 2D vertical slice is com
 - 검증 및 범위:
   - `Fox.glb` 임포트 시 메시(`Fox_fox1.bammesh`), 스켈레톤(`Fox_Skeleton.bamskel`), 애니메이션 3종(`Fox_Survey`, `Walk`, `Run`), 알베도 텍스처(`Fox_fox_material_Albedo.png`), 머티리얼 인스턴스(`Fox_fox_material.bammatinst`), 모델(`Fox.bammodel`)이 유효하게 디스크에 생성됨을 확인.
   - 씬 배치 시 여우 모델에 주황색/흰색 텍스처와 디렉셔널 라이트 음영이 정상적으로 렌더링됨을 시각적으로 확인.
+
+
+## 2026-11-03 — 에디터 UI/UX 전면 개편: 리소스 피커 대형 썸네일·배지 분리, 콘솔 패널 4열 테이블·동적 수직 스플리터, 썸네일 렌더러 3점 조명 및 디퍼드 파이프라인 안정화
+
+- 요청: 
+  - 에셋 썸네일 렌더러 복원 및 3점 조명 스튜디오 씬 적용.
+  - 디퍼드 라이팅 패스 D3D12 `Draw(3)` 크래시(`KernelBase.dll!RaiseException`, SDK Layers 검증 실패) 및 프리뷰 조명 미적용(Flat) 버그 해결.
+  - 리소스 피커(`ResourcePicker`) 전면 개편: 대형 썸네일 슬라이더(40~120px), 배지 우측 분리 정렬 및 크기 동적 계산, ImGui ID 충돌 해결.
+  - 콘솔 패널(`ConsolePanel`) 가독성 개선: 4열 테이블 구조, 레벨/카테고리 캡슐 배지, `SingleLineMessage` 캐시로 `ImGuiListClipper` 누락 해결, 하단 상세 뷰 및 인터랙티브 수직 스플리터(Splitter) 구현.
+- 에셋 썸네일 렌더러 3점 조명 스튜디오 복원 및 렌더링 안정화:
+  - `Editor/Source/Rendering/Thumbnail/Private/ThumbnailRenderer.cpp`, `Public/ThumbnailRenderer.h`:
+    - 썸네일 프리뷰를 위한 3점 조명(Key Light - 주광, Fill Light - 보조광, Rim Light - 역광) 스튜디오 조명 환경 구축.
+    - `AssetCache`를 통한 썸네일 비동기 생성 및 RHI 텍스처 업로드 파이프라인 연동.
+- 디퍼드 라이팅 패스 D3D12 `Draw(3)` 줄 1736 크래시 및 프리뷰 Flat 현상 해결:
+  - `Editor/Source/ImGui/ViewportPanel/Private/ViewportDeferredPipeline.cpp`, `Public/ViewportDeferredPipeline.h`:
+    - 원인: `BindTextureSampler` 호출로 8번 루트 파라미터(Sampler Table)를 설정한 직후 `BindPipeline(m_LightingPipeline)`이 호출되어 `SetGraphicsRootSignature`로 인해 기존 루트 파라미터가 모두 무효화됨.
+    - 해결: 파이프라인 바인딩을 모든 리소스 바인딩보다 맨 앞으로 이동하여 D3D12 SDK Layers 검증 실패 및 크래시(`RaiseException`) 원천 차단.
+  - `Resources/Shader/hlsl/lightingPS.hlsl`, `Engine/Source/Render/RHI/Public/RHIPipelineTypes.h`:
+    - 씬 뷰포트와 달리 타일 컬링을 수행하지 않는 독립 프리뷰 씬에서 광원이 0개로 판정되어 Flat하게 출력되던 문제를 `DeferredLightingPassData`의 `UseTiledCulling` 플래그 및 전체 광원 순회 폴백으로 해결.
+- 인스펙터 `ResourcePicker` UI/UX 전면 개편:
+  - `Editor/Source/ImGui/Public/ResourcePicker.h`:
+    - 썸네일 크기 확대: 기본 64px(기존 36px 대비 1.8배) 및 40~120px 슬라이더 지원.
+    - 2단 텍스트(파일명 노란색 강조 + 상대 경로 회색) 및 128x128 호버 툴팁 프리뷰 연동.
+    - 우측 컬럼 배지 정렬: 경로 텍스트와 타입 배지(`MATERIAL`, `3D MODEL` 등)가 세로로 포개지던 결함을 우측 독립 컬럼 배치로 원천 차단.
+    - 배지 크기 동적 계산: 아이콘 및 텍스트 폰트 크기 기반으로 패딩(`badgePadX: 10px`, `badgePadY: 5px`)을 동적 적용하여 아이콘이 테두리 밖으로 삐져나오던 문제 해결.
+    - ImGui ID 충돌 해결: 메모리 로드 리소스와 디스크 파일의 경로가 일치할 때 발생하던 ID Collision 경고를 `Mem_`, `Disk_` 접두사 및 `PushID` 스코프로 해결.
+- 콘솔 패널(`ConsolePanel`) 모던 테이블화 및 인터랙티브 수직 스플리터 구현:
+  - `Editor/Source/ImGui/ConsolePanel/Private/ConsolePanel.cpp`, `Public/ConsolePanel.h`:
+    - 4열 정렬 테이블: `[Time / Level]`, `[Category]`, `[Message]`, `[Source]` 컬럼 분할 및 교차 행 배경(`RowBg`) 적용.
+    - 컬러 캡슐 배지: `[ INFO ]`, `[ WARN ]`, `[ ERROR ]` 등 레벨별 고유 포인트 컬러/아이콘/반투명 배경/외곽선 배지 및 카테고리 태그 적용.
+    - 행 높이 고정 및 `ImGuiListClipper` 누락 방지: 긴 메시지 및 줄바꿈(`\n`)으로 인해 행 높이가 팽창하여 가상화 스크롤 계산이 깨지고 아래쪽 로그가 통째로 사라지던 문제를 `SingleLineMessage` 도입 및 `ScrollX` 제거로 100% 원천 해결.
+    - 하단 상세 뷰(Detail View) 및 인터랙티브 수직 스플리터:
+      - 6px 두께의 수직 스플리터 위젯(`ImGui::Button("##ConsoleDetailSplitter")`) 및 중앙 그립 알약 핸들 배치.
+      - 마우스 호버/드래그 시 `ImGuiMouseCursor_ResizeNS` 상하 화살표 커서로 즉시 전환.
+      - 마우스 드래그(`MouseDelta.y`)로 상세 뷰 높이를 60px에서 창 전체 크기까지 부드럽게 실시간 조절 지원. 기본 높이를 160px로 확대.
+      - 상세 뷰 상단에 메타 정보 헤더 및 전문 `[ 복사 ]` 버튼, `[ ✕ 닫기 ]` 버튼 추가.
+- 검증 및 범위:
+  - 리소스 피커에서 40~120px 썸네일 크기 변경 및 호버 프리뷰 툴팁이 정상 동작함을 확인.
+  - 리소스 피커 배지가 우측에 안정적으로 정렬되어 텍스트와 겹치지 않고 아이콘이 테두리 안에 정돈됨을 확인.
+  - 콘솔 패널에서 긴 셰이더 에러 메시지가 인입되어도 다른 로그가 누락되지 않고 1줄로 표시되며, 행 클릭 시 하단 상세 창에 줄바꿈이 보존되어 출력됨을 확인.
+  - 상세 뷰 상단 스플리터 경계선을 마우스로 끌어 높이를 원하는 대로 늘리고 줄일 수 있으며, [✕] 버튼으로 상세 창을 닫을 수 있음을 확인.

@@ -23,6 +23,7 @@
 
 #include "DirectX12Texture.h"
 #include "SceneDocument.h"
+#include "ConfigManager.h"
 
 #pragma region Imgui Header
 #include "imgui.h"
@@ -73,11 +74,15 @@ EResult ImGuiManager::Initialize(void* arg)
 
 	// 1. 시스템 폰트 디렉터리 동적 취득
 	std::filesystem::path fontPath = Engine::PlatformPath::GetSystemFontDirectory() / "malgun.ttf";
+	float fontSize = 18.0f; // 기본 크기
 	if (EditorSettingsService::IsCreated())
 	{
-		const auto& customFont = EditorSettingsService::Get().GetPreferences().CustomFontPath;
+		const auto& prefs = EditorSettingsService::Get().GetPreferences();
+		const auto& customFont = prefs.CustomFontPath;
 		if (!customFont.empty() && std::filesystem::exists(customFont))
 			fontPath = customFont;
+		if (prefs.FontSize >= 10.0f && prefs.FontSize <= 48.0f)
+			fontSize = prefs.FontSize; // 설정된 폰트 크기 반영
 	}
 	const auto projectRoot = Engine::Runtime::IsCreated() ? Engine::Runtime::Get().GetProjectRoot() : Engine::PlatformPath::GetExecutableDirectory();
 	vector<std::filesystem::path> iconsFontPaths;
@@ -114,7 +119,7 @@ EResult ImGuiManager::Initialize(void* arg)
 		fontConfig.PixelSnapH = true;
 		// UTF-8 문자열로 변환하여 ImGui에 전달 (한글 경로 완벽 보장)
 		const auto utf8FontPath = fontPath.u8string();
-		io.Fonts->AddFontFromFileTTF(reinterpret_cast<const char*>(utf8FontPath.c_str()), 18.0f, &fontConfig, ranges.Data);
+		io.Fonts->AddFontFromFileTTF(reinterpret_cast<const char*>(utf8FontPath.c_str()), fontSize, &fontConfig, ranges.Data);
 	}
 	else
 	{
@@ -340,8 +345,8 @@ void ImGuiManager::Draw()
 	{
 		history.Flush();
 
-		const bool suppressed = ImGui::GetIO().WantTextInput || m_DocumentController->HasPendingAction() || 
-			EditorSettingsService::Get().IsWindowChangePending();
+		const bool suppressed = ImGui::GetIO().WantTextInput || m_DocumentController->HasPendingAction() ||
+			EditorSettingsService::Get().IsWindowChangePending() || ShortcutManager::Get().IsCapturing();
 		EShortcutContext activeContext = EShortcutContext::Global;
 		for (const auto* panel : m_ImGuiPanels)
 		{
@@ -526,7 +531,8 @@ EResult ImGuiManager::CreateDefaultPanels()
 	HistoryPanel* historyPanel = new HistoryPanel();
 	historyPanel->Initialize();
 	AddImGuiPanel(historyPanel);
-
+	AddImGuiPanel(new UnifiedSettingsPanel());
+	
 	GraphicSettingPanelDesc graphicsDesc;
 	graphicsDesc.Window = m_Window;
 
@@ -588,66 +594,61 @@ void ImGuiManager::SetUIScale(float scale)
 		return;
 	m_UIScale = std::clamp(scale, 0.5f, 3.0f);
 	ImGuiStyle& style = ImGui::GetStyle();
-	style = m_BaseStyle;               // 원본 스타일로 초기화
-	style.ScaleAllSizes(m_UIScale);    // 여백, 패딩, 핸들 크기 등 모든 위젯 수치 일괄 스케일링
-	ImGui::GetIO().FontGlobalScale = m_UIScale; // 폰트 배율 동기화
+	style = m_BaseStyle;
+	style.ScaleAllSizes(m_UIScale);
+	float fontSize = 18.0f;
+	if (EditorSettingsService::IsCreated())
+		fontSize = EditorSettingsService::Get().GetPreferences().FontSize;
+	const float fontRatio = (fontSize >= 10.0f && fontSize <= 48.0f) ? (fontSize / 18.0f) : 1.0f;
+	ImGui::GetIO().FontGlobalScale = m_UIScale * fontRatio;
+}
+void ImGuiManager::UpdateFontScale(float fontSize)
+{
+	const float baseSize = 18.0f;
+	const float fontRatio = (fontSize >= 10.0f && fontSize <= 48.0f) ? (fontSize / baseSize) : 1.0f;
+	ImGui::GetIO().FontGlobalScale = m_UIScale * fontRatio; // 실시간 폰트 크기 즉각 반영
 }
 void ImGuiManager::SetCustomStyle()
 {
-	ImGuiStyle& style = ImGui::GetStyle();
-	ImVec4* colors = style.Colors;
-
-	// 1. 레이아웃 수치 조정 (둥글게, 여백 넉넉하게)
-	style.WindowRounding = 5.0f;    // 창 모서리 둥글기
-	style.FrameRounding = 4.0f;     // 입력 필드 둥글기
-	style.PopupRounding = 4.0f;     // 팝업 둥글기
-	style.GrabRounding = 4.0f;      // 슬라이더 손잡이 둥글기
-	style.TabRounding = 4.0f;       // 탭 둥글기
-
-	style.WindowPadding = ImVec2(8.0f, 8.0f);
-	style.FramePadding = ImVec2(5.0f, 3.0f);
-	style.ItemSpacing = ImVec2(8.0f, 4.0f);
-	style.ScrollbarSize = 12.0f;
-
-	// 2. 색상 팔레트 설정 (Modern Dark Theme)
-	// 기본 배경
+	ImGuiStyle newStyle;                  // 1. 항상 1.0f 기준의 깨끗한 새 스타일 인스턴스로 시작
+	ImGui::StyleColorsDark(&newStyle);    // 2. ImGui 기본 다크 색상으로 전체 초기화
+	// 레이아웃 수치 정의 (1.0f 기본 배율 기준)
+	newStyle.WindowRounding = 5.0f;
+	newStyle.FrameRounding = 4.0f;
+	newStyle.PopupRounding = 4.0f;
+	newStyle.GrabRounding = 4.0f;
+	newStyle.TabRounding = 4.0f;
+	newStyle.WindowPadding = ImVec2(8.0f, 8.0f);
+	newStyle.FramePadding = ImVec2(5.0f, 3.0f);
+	newStyle.ItemSpacing = ImVec2(8.0f, 4.0f);
+	newStyle.ScrollbarSize = 12.0f;
+	// BamEngine 고유 Modern Dark 색상 팔레트 적용
+	ImVec4* colors = newStyle.Colors;
 	colors[ImGuiCol_Text] = ImVec4(0.95f, 0.96f, 0.98f, 1.00f);
 	colors[ImGuiCol_TextDisabled] = ImVec4(0.36f, 0.42f, 0.47f, 1.00f);
-	colors[ImGuiCol_WindowBg] = ImVec4(0.11f, 0.12f, 0.13f, 1.00f); // 아주 어두운 회색
+	colors[ImGuiCol_WindowBg] = ImVec4(0.11f, 0.12f, 0.13f, 1.00f);
 	colors[ImGuiCol_ChildBg] = ImVec4(0.15f, 0.18f, 0.22f, 1.00f);
 	colors[ImGuiCol_PopupBg] = ImVec4(0.08f, 0.08f, 0.08f, 0.94f);
 	colors[ImGuiCol_Border] = ImVec4(0.08f, 0.10f, 0.12f, 1.00f);
 	colors[ImGuiCol_BorderShadow] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
-
-	// 헤더 (Inspector 등의 제목)
-	colors[ImGuiCol_Header] = ImVec4(0.22f, 0.29f, 0.41f, 1.00f);       // 약간 푸른빛 도는 회색
-	colors[ImGuiCol_HeaderHovered] = ImVec4(0.26f, 0.59f, 0.98f, 0.80f); // 호버 시 밝은 파랑
+	colors[ImGuiCol_Header] = ImVec4(0.22f, 0.29f, 0.41f, 1.00f);
+	colors[ImGuiCol_HeaderHovered] = ImVec4(0.26f, 0.59f, 0.98f, 0.80f);
 	colors[ImGuiCol_HeaderActive] = ImVec4(0.26f, 0.59f, 0.98f, 1.00f);
-
-	// 타이틀 바 (창 제목 표시줄)
 	colors[ImGuiCol_TitleBg] = ImVec4(0.09f, 0.10f, 0.11f, 1.00f);
 	colors[ImGuiCol_TitleBgActive] = ImVec4(0.13f, 0.14f, 0.16f, 1.00f);
 	colors[ImGuiCol_TitleBgCollapsed] = ImVec4(0.00f, 0.00f, 0.00f, 0.51f);
 	colors[ImGuiCol_MenuBarBg] = ImVec4(0.14f, 0.14f, 0.14f, 1.00f);
-
-	// 버튼
 	colors[ImGuiCol_Button] = ImVec4(0.20f, 0.25f, 0.29f, 1.00f);
-	colors[ImGuiCol_ButtonHovered] = ImVec4(0.26f, 0.59f, 0.98f, 1.00f); // 파란색 하이라이트
+	colors[ImGuiCol_ButtonHovered] = ImVec4(0.26f, 0.59f, 0.98f, 1.00f);
 	colors[ImGuiCol_ButtonActive] = ImVec4(0.06f, 0.53f, 0.98f, 1.00f);
-
-	// 프레임 (InputText, Checkbox 배경)
 	colors[ImGuiCol_FrameBg] = ImVec4(0.20f, 0.21f, 0.22f, 0.54f);
 	colors[ImGuiCol_FrameBgHovered] = ImVec4(0.26f, 0.59f, 0.98f, 0.40f);
 	colors[ImGuiCol_FrameBgActive] = ImVec4(0.26f, 0.59f, 0.98f, 0.67f);
-
-	// 탭 (Docking 탭)
 	colors[ImGuiCol_Tab] = ImVec4(0.15f, 0.18f, 0.22f, 0.86f);
 	colors[ImGuiCol_TabHovered] = ImVec4(0.26f, 0.59f, 0.98f, 0.80f);
 	colors[ImGuiCol_TabActive] = ImVec4(0.20f, 0.25f, 0.29f, 1.00f);
 	colors[ImGuiCol_TabUnfocused] = ImVec4(0.15f, 0.18f, 0.22f, 0.97f);
 	colors[ImGuiCol_TabUnfocusedActive] = ImVec4(0.20f, 0.25f, 0.29f, 1.00f);
-
-	// 기타
 	colors[ImGuiCol_CheckMark] = ImVec4(0.26f, 0.59f, 0.98f, 1.00f);
 	colors[ImGuiCol_SliderGrab] = ImVec4(0.24f, 0.52f, 0.88f, 1.00f);
 	colors[ImGuiCol_SliderGrabActive] = ImVec4(0.26f, 0.59f, 0.98f, 1.00f);
@@ -657,6 +658,169 @@ void ImGuiManager::SetCustomStyle()
 	colors[ImGuiCol_ResizeGrip] = ImVec4(0.26f, 0.59f, 0.98f, 0.20f);
 	colors[ImGuiCol_ResizeGripHovered] = ImVec4(0.26f, 0.59f, 0.98f, 0.67f);
 	colors[ImGuiCol_ResizeGripActive] = ImVec4(0.26f, 0.59f, 0.98f, 0.95f);
+	m_BaseStyle = newStyle;   // 1.0f 기준 순수 스타일을 원본으로 저장
+	SetUIScale(m_UIScale);    // 현재 UIScale에 맞춰 1회만 정확하게 스케일링
+}
+std::filesystem::path ImGuiManager::GetCustomStylePath() const
+{
+	if (EditorSettingsService::IsCreated())
+	{
+		const auto& prefPath = EditorSettingsService::Get().GetPreferencesPath();
+		if (!prefPath.empty())
+			return prefPath.parent_path() / "EditorStyle.json";
+	}
+	return std::filesystem::path();
+}
+
+void ImGuiManager::ApplyDefaultDarkStyle()
+{
+	SetCustomStyle();
+}
+
+void ImGuiManager::ApplyTheme(const std::string& theme)
+{
+	if (theme == "Light")
+	{
+		ImGuiStyle newStyle;
+		ImGui::StyleColorsLight(&newStyle);
+		newStyle.WindowRounding = 5.0f;
+		newStyle.FrameRounding = 4.0f;
+		newStyle.PopupRounding = 4.0f;
+		newStyle.WindowPadding = ImVec2(8.0f, 8.0f);
+		newStyle.FramePadding = ImVec2(5.0f, 3.0f);
+		newStyle.ItemSpacing = ImVec2(8.0f, 4.0f);
+		m_BaseStyle = newStyle;
+		SetUIScale(m_UIScale);
+	}
+	else if (theme == "Classic")
+	{
+		ImGuiStyle newStyle;
+		ImGui::StyleColorsClassic(&newStyle);
+		newStyle.WindowRounding = 5.0f;
+		newStyle.FrameRounding = 4.0f;
+		newStyle.PopupRounding = 4.0f;
+		newStyle.WindowPadding = ImVec2(8.0f, 8.0f);
+		newStyle.FramePadding = ImVec2(5.0f, 3.0f);
+		newStyle.ItemSpacing = ImVec2(8.0f, 4.0f);
+		m_BaseStyle = newStyle;
+		SetUIScale(m_UIScale);
+	}
+	else if (theme == "Custom")
+	{
+		const auto customPath = GetCustomStylePath();
+		if (customPath.empty() || !LoadCustomStyle(customPath))
+			ApplyDefaultDarkStyle();
+	}
+	else
+	{
+		ApplyDefaultDarkStyle();
+	}
+}
+
+bool ImGuiManager::SaveCustomStyle(const std::filesystem::path& path)
+{
+	if (path.empty())
+		return false;
+
+	const ImGuiStyle& style = ImGui::GetStyle();
+	archive::JsonArchive writer;
+
+	const float invScale = (m_UIScale > 0.0f) ? (1.0f / m_UIScale) : 1.0f;
+	(void)writer.Write("WindowRounding", style.WindowRounding * invScale);
+	(void)writer.Write("ChildRounding", style.ChildRounding * invScale);
+	(void)writer.Write("FrameRounding", style.FrameRounding * invScale);
+	(void)writer.Write("PopupRounding", style.PopupRounding * invScale);
+	(void)writer.Write("ScrollbarRounding", style.ScrollbarRounding * invScale);
+	(void)writer.Write("GrabRounding", style.GrabRounding * invScale);
+	(void)writer.Write("TabRounding", style.TabRounding * invScale);
+
+	(void)writer.Write("WindowPaddingX", style.WindowPadding.x * invScale);
+	(void)writer.Write("WindowPaddingY", style.WindowPadding.y * invScale);
+	(void)writer.Write("FramePaddingX", style.FramePadding.x * invScale);
+	(void)writer.Write("FramePaddingY", style.FramePadding.y * invScale);
+	(void)writer.Write("ItemSpacingX", style.ItemSpacing.x * invScale);
+	(void)writer.Write("ItemSpacingY", style.ItemSpacing.y * invScale);
+
+	(void)writer.Write("WindowBorderSize", style.WindowBorderSize);
+	(void)writer.Write("FrameBorderSize", style.FrameBorderSize);
+	(void)writer.Write("PopupBorderSize", style.PopupBorderSize);
+	(void)writer.Write("ScrollbarSize", style.ScrollbarSize * invScale);
+	(void)writer.Write("GrabMinSize", style.GrabMinSize * invScale);
+
+	if (writer.BeginWriteObject("Colors"))
+	{
+		for (int i = 0; i < ImGuiCol_COUNT; ++i)
+		{
+			const char* name = ImGui::GetStyleColorName(static_cast<ImGuiCol>(i));
+			const ImVec4& c = style.Colors[i];
+			const std::string rgba = fmt::format("{:.4f},{:.4f},{:.4f},{:.4f}", c.x, c.y, c.z, c.w);
+			(void)writer.Write(name, rgba);
+		}
+		(void)writer.EndObject();
+	}
+
+	const auto saveResult = Engine::ConfigManager::SaveDocument(writer, path);
+	if (!saveResult)
+	{
+		BAM_LOG(Error, "Editor", "Style", "Failed to save custom style to {}", path.string());
+		return false;
+	}
+
+	m_BaseStyle = style;
+	BAM_LOG(Info, "Editor", "Style", "Saved custom style to {}", path.string());
+	return true;
+}
+
+bool ImGuiManager::LoadCustomStyle(const std::filesystem::path& path)
+{
+	if (path.empty() || !std::filesystem::exists(path))
+		return false;
+	archive::JsonArchive reader;
+	const auto loadResult = reader.LoadFromFile(path);
+	if (!loadResult)
+	{
+		BAM_LOG(Warn, "Editor", "Style", "Failed to load custom style from {}", path.string());
+		return false;
+	}
+	ImGuiStyle unscaledStyle; // 깨끗한 1.0f 인스턴스에 먼저 로드
+	float fVal = 0.0f;
+	if (reader.Read("WindowRounding", fVal)) unscaledStyle.WindowRounding = fVal;
+	if (reader.Read("ChildRounding", fVal)) unscaledStyle.ChildRounding = fVal;
+	if (reader.Read("FrameRounding", fVal)) unscaledStyle.FrameRounding = fVal;
+	if (reader.Read("PopupRounding", fVal)) unscaledStyle.PopupRounding = fVal;
+	if (reader.Read("ScrollbarRounding", fVal)) unscaledStyle.ScrollbarRounding = fVal;
+	if (reader.Read("GrabRounding", fVal)) unscaledStyle.GrabRounding = fVal;
+	if (reader.Read("TabRounding", fVal)) unscaledStyle.TabRounding = fVal;
+	if (reader.Read("WindowPaddingX", fVal)) unscaledStyle.WindowPadding.x = fVal;
+	if (reader.Read("WindowPaddingY", fVal)) unscaledStyle.WindowPadding.y = fVal;
+	if (reader.Read("FramePaddingX", fVal)) unscaledStyle.FramePadding.x = fVal;
+	if (reader.Read("FramePaddingY", fVal)) unscaledStyle.FramePadding.y = fVal;
+	if (reader.Read("ItemSpacingX", fVal)) unscaledStyle.ItemSpacing.x = fVal;
+	if (reader.Read("ItemSpacingY", fVal)) unscaledStyle.ItemSpacing.y = fVal;
+	if (reader.Read("WindowBorderSize", fVal)) unscaledStyle.WindowBorderSize = fVal;
+	if (reader.Read("FrameBorderSize", fVal)) unscaledStyle.FrameBorderSize = fVal;
+	if (reader.Read("PopupBorderSize", fVal)) unscaledStyle.PopupBorderSize = fVal;
+	if (reader.Read("ScrollbarSize", fVal)) unscaledStyle.ScrollbarSize = fVal;
+	if (reader.Read("GrabMinSize", fVal)) unscaledStyle.GrabMinSize = fVal;
+	if (reader.BeginReadObject("Colors"))
+	{
+		for (int i = 0; i < ImGuiCol_COUNT; ++i)
+		{
+			const char* name = ImGui::GetStyleColorName(static_cast<ImGuiCol>(i));
+			std::string rgbaStr;
+			if (reader.Read(name, rgbaStr))
+			{
+				float r = 0.0f, g = 0.0f, b = 0.0f, a = 1.0f;
+				if (sscanf_s(rgbaStr.c_str(), "%f,%f,%f,%f", &r, &g, &b, &a) == 4)
+					unscaledStyle.Colors[i] = ImVec4(r, g, b, a);
+			}
+		}
+		(void)reader.EndObject();
+	}
+	m_BaseStyle = unscaledStyle; // 1.0f 원본으로 저장
+	SetUIScale(m_UIScale);       // m_UIScale(1.25)을 정확히 1번만 적용
+	BAM_LOG(Info, "Editor", "Style", "Loaded custom style from {}", path.string());
+	return true;
 }
 #pragma endregion
 

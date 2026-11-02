@@ -14,3 +14,4 @@
 #include "PostProcessPanel.h"
 #include "HistoryPanel.h"
 #include "AnimatorGraphPanel.h"
+#include "UnifiedSettingsPanel.h"

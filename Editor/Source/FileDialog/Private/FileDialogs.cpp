@@ -9,9 +9,9 @@
 
 namespace
 {
-    bool ShowNativeFileDialog(wstring& outPath, const vector<FileDialogFilter>& filters, bool save,
-        EFileDialogContext context, wstring_view initialDir, wstring_view defaultFileName,
-        wstring_view defaultExt)
+    static bool ShowDialog(wstring& outPath, bool save, bool pickFolders,
+        const vector<FileDialogFilter>& filters, wstring_view defaultFileName,
+        wstring_view defaultExt, wstring_view initialDir, EFileDialogContext context)
     {
         struct FileDialogComScope
         {
@@ -59,6 +59,8 @@ namespace
 
         options |= FOS_FORCEFILESYSTEM | FOS_PATHMUSTEXIST | FOS_NOCHANGEDIR;
         options |= save ? FOS_OVERWRITEPROMPT : FOS_FILEMUSTEXIST;
+        if (pickFolders)
+            options |= FOS_PICKFOLDERS;
 
         result = dialog->SetOptions(options);
         if (FAILED(result))
@@ -151,11 +153,14 @@ namespace
 bool FileDialogs::SaveFileDialog(wstring& outPath, const vector<FileDialogFilter>& filters,
     wstring_view defaultFileName, wstring_view defaultExt, EFileDialogContext context)
 {
-    return ShowNativeFileDialog(outPath, filters, true, context, L"", defaultFileName, defaultExt);
+    return ShowDialog(outPath, true, false, filters, defaultFileName, defaultExt, L"", context);
 }
-
 bool FileDialogs::OpenFileDialog(wstring& outPath, const vector<FileDialogFilter>& filters,
     wstring_view initialDir, EFileDialogContext context)
 {
-    return ShowNativeFileDialog(outPath, filters, false, context, initialDir, L"", L"");
+    return ShowDialog(outPath, false, false, filters, L"", L"", initialDir, context);
+}
+bool FileDialogs::OpenFolderDialog(wstring& outPath, wstring_view initialDir, EFileDialogContext context)
+{
+    return ShowDialog(outPath, false, true, {}, L"", L"", initialDir, context);
 }

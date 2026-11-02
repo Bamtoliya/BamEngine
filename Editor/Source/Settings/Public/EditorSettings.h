@@ -38,20 +38,46 @@ namespace Editor
         PROPERTY(META("Optional", true))
         float UIScale = 1.0f;
         PROPERTY(META("Optional", true))
-        std::int32_t TargetFPS = 0;
+            std::int32_t TargetFPS = 0;
         PROPERTY(META("Optional", true))
-        bool VSync = true;
+            bool VSync = true;
         PROPERTY(META("Optional", true))
-        std::string CustomFontPath;
+            std::string CustomFontPath;
         PROPERTY(META("Optional", true))
-        std::string DxcExecutablePath;
+            float FontSize = 18.0f;
         PROPERTY(META("Optional", true))
-        std::string PythonExecutablePath;
+            std::string DxcExecutablePath; // 복구
+        PROPERTY(META("Optional", true))
+            std::string PythonExecutablePath; // 복구
+        PROPERTY(META("Optional", true))
+            std::string Theme = "Dark";
+        PROPERTY(META("Optional", true))
+            bool AutoSaveEnabled = true;
+        PROPERTY(META("Optional", true))
+            std::int32_t AutoSaveIntervalMinutes = 5;
+        PROPERTY(META("Optional", true))
+            float CameraSpeed = 100.0f;
+        PROPERTY(META("Optional", true))
+            float CameraFOV = 60.0f;
+        PROPERTY(META("Optional", true))
+            float GizmoSnapTranslation = 1.0f;
+        PROPERTY(META("Optional", true))
+            float GizmoSnapRotation = 15.0f;
+        PROPERTY(META("Optional", true))
+            float GizmoSnapScale = 0.1f;
         [[nodiscard]] bool HasValidValues() const
         {
             return SchemaVersion == CurrentSchemaVersion && (Language == "English" || Language == "Korean") &&
                 std::isfinite(UIScale) && UIScale >= MinUIScale && UIScale <= MaxUIScale &&
-                TargetFPS >= 0 && TargetFPS <= MaxTargetFPS;
+                TargetFPS >= 0 && TargetFPS <= MaxTargetFPS &&
+                (Theme.empty() || Theme == "Dark" || Theme == "Light" || Theme == "Classic" || Theme == "Custom") &&
+                (AutoSaveIntervalMinutes <= 0 || (AutoSaveIntervalMinutes >= 1 && AutoSaveIntervalMinutes <= 60)) &&
+                (!std::isfinite(FontSize) || (FontSize >= 10.0f && FontSize <= 48.0f)) &&
+                (!std::isfinite(CameraSpeed) || CameraSpeed > 0.0f) &&
+                (!std::isfinite(CameraFOV) || (CameraFOV >= 10.0f && CameraFOV <= 140.0f)) &&
+                (!std::isfinite(GizmoSnapTranslation) || GizmoSnapTranslation > 0.0f) &&
+                (!std::isfinite(GizmoSnapRotation) || GizmoSnapRotation > 0.0f) &&
+                (!std::isfinite(GizmoSnapScale) || GizmoSnapScale > 0.0f);
         }
     };
 

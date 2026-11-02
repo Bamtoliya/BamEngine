@@ -131,7 +131,7 @@ Engine·Render·Editor·Client 계획에서 무엇을 먼저 연결하고 무엇
   - 창 변경 취소·시간 초과, 실제 GPU 리사이즈 실패와 복구.
   - 언어 변경 시 선택·초안 유지와 적용하지 않은 초안의 저장 제외.
 - **별도 후속 범위**:
-  - 개별 패널(`GraphicSettingPanel`, `ShortcutSettingsPanel`)을 통합하여 좌측 카테고리 네비게이션(`General`, `Graphic`, `Editor`, `Workspace`, `Shortcuts`, `Project Settings`)과 우측 상세 뷰로 관리하는 통합 설정 패널(`UnifiedSettingsPanel`) 구축 ([ImGuiDevelopmentPlan.md](ImGuiDevelopmentPlan.md) 3절).
+  - **통합 설정 패널(`UnifiedSettingsPanel`) 전면 구축 완료 (2026-11-03)**: 개별 패널(`GraphicSettingPanel`, `ShortcutSettingsPanel`)을 통합하여 좌측 3대 그룹 트리 내비게이션(`General`, `Theme & Style`, `Graphic`, `Editor`, `Workspace`, `Shortcuts`, `Project Settings`)과 우측 상세 뷰로 관리하는 통합 설정 패널 일원화 완료. ImGui 커스텀 스타일 영속화(`EditorStyle.json`) 및 Unscaled SSOT 아키텍처, 버튼 동적 너비 자동 산출, 다이얼로그 폴더 브라우저 연동 완료 ([ImGuiDevelopmentPlan.md](ImGuiDevelopmentPlan.md) 3절).
   - EngineDevelopmentPlan.md 19절의 공통 런타임 설정 API.
   - 동적 생성 뷰포트의 재생성.
   - Client의 경로·설정 기반 시작 씬은 일부 반영되었다. 시작 매니페스트·실패 정책·배포는 BuildAndPackagingPlan.md의 잔여 범위다.

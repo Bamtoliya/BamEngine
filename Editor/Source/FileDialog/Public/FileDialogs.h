@@ -19,5 +19,8 @@ public:
 
     static bool OpenFileDialog(wstring& outPath, const vector<FileDialogFilter>& filters = {},
         wstring_view initialDir = L"", EFileDialogContext context = EFileDialogContext::General);
+
+    static bool OpenFolderDialog(wstring& outPath, wstring_view initialDir = L"",
+        EFileDialogContext context = EFileDialogContext::General);
 };
 END
