@@ -9,6 +9,7 @@
 - 애니메이터 그래프 계획: [AnimatorGraphPlan.md](AnimatorGraphPlan.md)
 - 분류·이관 기준: [SourceOrganizationGuidelines.md](SourceOrganizationGuidelines.md)
 - 통합 우선순위: [DevelopmentPriorities.md](DevelopmentPriorities.md)
+- 최신 정적 대조: [2026-11-02 코드·문서 점검](CodeDocumentationAudit-2026-11-02.md). 애니메이터 파일 보호·입력, 피커 CWD/확장자, 썸네일 예산의 잔여는 F01·F06·F11·F12를 따른다.
 
 ## 1. 목표
 
@@ -140,16 +141,16 @@
 
 1. **사용자 개인 설정 (`EditorPreferences`):**
    - 언어, UI 배율, 목표 FPS, VSync, 에디터 테마 등 개발자 개인 환경에 귀속되는 설정.
-   - 사용자 설정 디렉터리(`Config/EditorPreferences.json`)에 저장.
+   - `SDL_GetPrefPath("BamEngine", "Editor")` 아래 `EditorPreferences.json`에 저장(현재 구현).
 2. **프로젝트별 작업 상태 (`EditorWorkspace`):**
    - 창 크기, 패널 열림 상태, 도킹 배치, 뷰포트별 해상도/카메라 상태 등 프로젝트 작업 공간에 귀속되는 상태.
-   - 프로젝트 설정 디렉터리(`Config/EditorWorkspace.json`)에 저장.
+   - 프로젝트 루트의 `.bam/User/Workspace.json`에 저장(현재 구현).
 3. **단축키 매핑 (`ShortcutManager`):**
    - 에디터 작업 액션별 단축키 바인딩 데이터.
-   - 단축키 설정 파일(`Config/Shortcuts.json`)에 저장.
+   - 사용자 환경설정 폴더의 `EditorShortcuts.json`을 사용한다. `Resources/Config/EditorShortcuts.json`은 레거시 입력 경로다(현재 Application 초기화).
 4. **프로젝트 공통 설정 (`ProjectSettings`):**
    - 프로젝트 이름, 시작 씬 경로, 인게임 입력 액션 등 버전 관리에 포함되어 팀 전체가 공유해야 하는 설정.
-   - 프로젝트 루트 디렉터리(`Config/ProjectSettings.json`)에 저장.
+   - 프로젝트 루트의 `Config/Project.json`에 저장(현재 구현).
 
 저장 데이터는 모두 기존 리플렉션 및 `ReflectionArchive` 기반 JSON 직렬화 경로를 일관되게 사용하며, 누락된 필드는 안전한 기본값으로 폴백한다.
 
@@ -187,6 +188,10 @@
 ---
 
 ## 7. 구현 순서
+
+아래는 **통합 설정 패널 내부**의 구현 순서다. 프로젝트 전체의 첫 작업을 뜻하지 않는다.
+현재는 애니메이터 문서 보호·입력 일원화, 리소스 피커 정확성, 썸네일 예산·참조 검증을 먼저 진행한다.
+전역 선택과 완료 기준은 [DevelopmentPriorities.md 10절](DevelopmentPriorities.md)을 따른다.
 
 1. **1단계 (통합 패널 프레임워크 구축):**
    - `UnifiedSettingsPanel`을 생성하고 좌측 카테고리 네비게이션(사이드바) 및 우측 콘텐츠 영역 2열 레이아웃을 구축한다.
@@ -315,8 +320,9 @@ Visual Studio F5 수동 확인 항목:
 
 ### A. 씬 문서 상태·미저장 변경 보호와 `HistoryPanel` — 우선순위 높음
 
-- 현재 기반: `ToolBar`의 씬 생성·열기·저장·닫기, `SceneEditHistory`와 `CommandHistory`의 Undo/Redo가 있다.
-  MaterialEditor에는 자체 변경 표시가 있지만, 확인한 씬 메뉴에는 공통 미저장 확인 흐름이 없다.
+- 현재 기반: `ToolBar`의 씬 생성·열기·저장·닫기, `SceneEditHistory`와 `CommandHistory`의 Undo/Redo,
+  `SceneDocument`·`EditorDocumentController`의 저장/교체 보호와 `HistoryPanel`이 있다(2026-11-02 정적 대조).
+- 남은 범위: 씬의 실제 실패/취소 검증과 각 리소스 편집기의 보호 일관성. 특히 AnimatorGraphPanel은 저장/로드 반환값과 미저장 교체 보호를 보완해야 한다(점검 F01).
 - 목표: 씬 경로·변경 표시·일반 저장·다른 이름으로 저장을 구분하고, 씬 교체·닫기·종료 전에 저장 여부를 확인한다.
 - 이력 패널은 명령 이름·현재 위치·저장 기준점을 보여준다. 기존 Undo/Redo를 재사용하고 명령 컨테이너를 외부에서 수정하게 노출하지 않는다.
 - 저장 기준점은 명령 개수만으로 판단하지 않는다. Undo 후 분기, 이력 제한, 명령을 거치지 않는 편집도 고려한다.

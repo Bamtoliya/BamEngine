@@ -35,6 +35,35 @@ Use one entry per meaningful change.
 
 ---
 
+## [2026-11-02] 렌더러 유휴 패스 스킵, Editor UI 연산량 최적화 및 알림 히스토리 팝업 구현
+
+- Area: Engine | Editor | Render | UI
+- Type: Performance | Fix | Feature
+- 관련 파일:
+  - Engine/Source/Render/Private/Renderer.cpp
+  - Editor/Source/ImGui/Private/ImGuiManager.cpp
+  - Editor/Source/ImGui/ToolBar/Private/ToolBar.cpp
+  - Editor/Source/Notification/Private/NotificationManager.cpp
+  - Editor/Source/Notification/Public/NotificationManager.h
+  - Editor/Source/ImGui/ContentBrowserPanel/Private/ContentBrowserPanel.cpp
+- Motivation:
+  - 뷰포트 적응형 쓰로틀링(15 FPS) 시 비활성 프레임에서 커맨드가 없는 패스가 LoadOp == Clear 설정으로 인해 GBuffer/LightingColor를 검게 지워버리던 화면 깜빡임 방지.
+  - ImGuiManager::Draw()에 남아있던 테스트용 ImGui::ShowDemoWindow(nullptr)를 비활성화하여 Editor UI의 불필요한 위젯 평가 비용 제거.
+  - 지나간 에디터 알림을 열람할 수 있는 알림 히스토리(Notification Center) 팝업 및 하단 푸터 벨 버튼 연동.
+  - 콘텐츠 브라우저 상단에 고정 노출되던 비동기 태스크 진행 문구를 하단 푸터 바로 이관하여 레이아웃 정리.
+- Implementation summary:
+  - Renderer.cpp: 수행할 커맨드(hasCommands)가 전혀 없는 패스는 LoadOp == Clear 여부와 상관없이 실행 및 메트릭 기록을 완전 스킵하도록 가드 개선. 비활성 프레임의 이전 렌더타겟 결과를 그대로 보존.
+  - ImGuiManager.cpp: ImGui::ShowDemoWindow(nullptr) 주석 처리로 Editor UI CPU 시간 감축.
+  - NotificationManager: 최대 100개의 알림 내역을 보관하는 HistoryItem 구조체 및 DrawHistoryPopup() 구현.
+  - ToolBar.cpp: 하단 슬림 푸터 바에 알림 히스토리 토글 벨 버튼 및 비동기 에셋 임포트 진행률 표시 추가.
+- Technical details:
+  - hasCommands 검사 대상: StaticDrawCommands, SkinnedDrawCommands, SpriteDrawCommands, UIImageDrawCommands, CustomRenderQueues, RenderPassDelegates.
+  - 커맨드가 비어있는 프레임에는 RHI의 BeginRenderPass와 BeginPassMetrics 호출이 0회로 떨어져 GPU 렌더타겟 대역폭 소모 및 프로파일러 오버헤드 0 달성.
+- Validation:
+  - 엔진 통계창(MetricsPanel)에서 비활성 쓰로틀링 시 뷰포트 화면 깜빡임 소멸 및 Editor UI 프레임 타임 개선 확인.
+
+---
+
 ## [2026-11-02] CWD 독립적 실행 경로(PlatformPath) 구축 및 Standalone Client 시작 씬 로드 및 렌더링 파이프라인 연동
 
 - Area: Engine | Client | Render | Core | Docs

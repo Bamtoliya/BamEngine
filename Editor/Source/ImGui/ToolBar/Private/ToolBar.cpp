@@ -82,19 +82,11 @@ void ToolBar::Draw(SDL_Window* window)
 		DrawFooterControls();
 	}
 	ImGui::End();
+	NotificationManager::Get().DrawHistoryPopup();
 	ImGui::PopStyleVar(3);
 	ImGui::PopStyleVar(2);
 }
 
-float ToolBar::GetPlayBarHeight() const
-{
-	return ImGui::GetFrameHeight() + ImGui::GetStyle().FramePadding.y * 2.0f + ImGui::GetStyle().ItemSpacing.y;
-}
-
-float ToolBar::GetFooterBarHeight() const
-{
-	return ImGui::GetFontSize() + 6.0f;
-}
 
 #pragma region FileMenu
 void ToolBar::DrawFileMenu()
@@ -424,8 +416,11 @@ void ToolBar::DrawHelpMenu()
 
 #pragma endregion
 
-#pragma region PlayControls
-
+#pragma region Play Controls
+float ToolBar::GetPlayBarHeight() const
+{
+	return ImGui::GetFrameHeight() + ImGui::GetStyle().FramePadding.y * 2.0f + ImGui::GetStyle().ItemSpacing.y;
+}
 void ToolBar::DrawPlayControls()
 {
 	PIEManager& pie = PIEManager::Get();
@@ -484,22 +479,60 @@ void ToolBar::DrawPlayControls()
 	if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s (%s)", LOCAL_CSTR("ToolBar.StopTooltip"), ShortcutManager::Get().GetShortcutHint("PIE.Stop"));
 	ImGui::PopID();
 }
+#pragma endregion
 
+#pragma region Footer
+float ToolBar::GetFooterBarHeight() const
+{
+	return ImGui::GetFontSize() + 6.0f;
+}
 void ToolBar::DrawFooterControls()
 {
 	auto& buildManager = HotReloadManager::Get().GetModuleBuilder();
 	auto& moduleReloader = HotReloadManager::Get().GetModuleReloader();
 	auto& shaderReloader = HotReloadManager::Get().GetShaderReloader();
-
+	// ── 1. 좌측: 백그라운드 비동기 작업 진행률 표시 (화면 중앙 대신 하단 푸터에 얌전하게 표시) ──
+	size_t activeTasks = AssetManager::IsCreated() ? AssetManager::Get().GetActiveTaskCount() : 0;
+	if (activeTasks > 0)
+	{
+		ImGui::SetCursorPosX(ImGui::GetStyle().WindowPadding.x);
+		ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "%s",
+			(ICON_FA_ARROW_ROTATE_RIGHT " " + LOCAL_FMT("ContentBrowser.Importing", (int)activeTasks)).c_str());
+		if (ImGui::IsItemHovered())
+		{
+			ImGui::SetTooltip("%s", LOCAL_FMT("ContentBrowser.Importing", (int)activeTasks).c_str());
+		}
+	}
+	// ── 2. 우측 컨트롤 (알림 벨 버튼 + 빌드/핫리로드 제어 버튼들) ──
 	const float btnHeight = ImGui::GetFontSize() + 2.0f;
 	const float btnWidth = btnHeight * 1.25f;
 	const ImVec2 btnSize(btnWidth, btnHeight);
 	const float pairGap = 3.0f;
 	const float groupGap = 10.0f;
-	const float totalWidth = btnWidth * 5.0f + pairGap * 2.0f + groupGap * 2.0f;
-
+	// 버튼 6개 (알림 벨 + 컴파일 2개 + 핫리로드 3개)의 전체 너비 계산
+	const float totalWidth = btnWidth * 6.0f + pairGap * 2.0f + groupGap * 3.0f;
 	const float startX = std::max(ImGui::GetStyle().WindowPadding.x, ImGui::GetWindowWidth() - totalWidth - ImGui::GetStyle().WindowPadding.x);
 	ImGui::SetCursorPosX(startX);
+	// [신규] 0. 지나간 알림 히스토리 토글 벨 버튼
+	auto& notifMgr = NotificationManager::Get();
+	const bool historyOpen = notifMgr.IsHistoryPopupOpen();
+	const size_t notifCount = notifMgr.GetHistoryCount();
+	if (historyOpen)
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.5f, 0.85f, 1.0f));
+	else if (notifCount > 0)
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.25f, 0.25f, 0.28f, 0.9f));
+	else
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.16f, 0.18f, 0.20f, 0.85f));
+	if (ImGui::Button(ICON_FA_BELL, btnSize))
+	{
+		notifMgr.ToggleHistoryPopup();
+	}
+	ImGui::PopStyleColor();
+	if (ImGui::IsItemHovered())
+	{
+		ImGui::SetTooltip("%s (%d)", LOCAL_CSTR("Notification.HistoryTooltip"), static_cast<int>(notifCount));
+	}
+	ImGui::SameLine(0.0f, groupGap);
 
 	auto drawToggleIconBtn = [&](const char* id, const char* icon, bool& state) -> bool
 		{

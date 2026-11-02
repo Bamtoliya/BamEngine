@@ -147,13 +147,10 @@ EResult Renderer::Render(f32 dt)
 			(m_UIImageDrawCommands.find(pid) != m_UIImageDrawCommands.end() && !m_UIImageDrawCommands.at(pid).empty()) ||
 			(m_CustomRenderQueues.find(pid) != m_CustomRenderQueues.end() && !m_CustomRenderQueues.at(pid).empty()) ||
 			hasDelegate;
-		// 화면 클리어가 필요하거나(LoadOp == Clear), 섀도우 패스이거나, 실제 커맨드가 있는 경우에만 실행
-		const bool needsExecution = hasCommands ||
-			(pass->GetLoadOperation() == ERenderPassLoadOperation::RPLO_Clear) ||
-			(pass->GetStencilLoadOperation() == ERenderPassLoadOperation::RPLO_Clear) ||
-			(passType == ERenderPassType::Shadow);
-		if (!needsExecution)
-			continue; // 커맨드 없는 빈 패스는 RHI 바인딩 및 메트릭 기록 자체를 스킵!
+		// [수정] 수행할 커맨드(메쉬 드로우콜, 라이팅 커스텀 커맨드, 델리게이트 등)가 전혀 없는 패스는 실행하지 않고 스킵!
+		// 뷰포트가 쓰로틀링(15 FPS)으로 렌더링을 쉰 프레임에는 렌더타겟이 지워지지 않고 이전 프레임 결과가 100% 보존됩니다.
+		if (!hasCommands)
+			continue;
 		m_RHI->BeginPassMetrics(pass->GetName());
 
 		auto staticIt = m_StaticDrawCommands.find(pass->GetID());

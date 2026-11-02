@@ -1,36 +1,48 @@
 # 다음 목표: Client 실행 설정과 빌드·패키징
 
 - 작성일: 2026-10-24 (최종 갱신: 2026-11-02)
-- 상태: 진행 / 1~2단계 경로 및 Client 시작 씬 연결 완료, 패키징/배포 파이프라인 대기
+- 상태: 일부 구현 / 실행 루트·설정 기반 시작 씬 연결 반영, 시작 매니페스트·실패 정책·배포 검증 미완료
 - 관련 지침: [EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md)의 3절, 12절, 13절
 - 직렬화 지침: [ReflectionArchiveGuidelines.md](ReflectionArchiveGuidelines.md)
 - 분류·이관 기준: [SourceOrganizationGuidelines.md](SourceOrganizationGuidelines.md)
-- 통합 우선순위: [DevelopmentPriorities.md](DevelopmentPriorities.md)의 P2-E (1~2단계 완료)
+- 통합 우선순위: [DevelopmentPriorities.md](DevelopmentPriorities.md)의 P2-E
+- 최신 대조: [2026-11-02 코드·문서 점검](CodeDocumentationAudit-2026-11-02.md) F03~F06. 이번 갱신에서 새 빌드·실행·패키징은 하지 않았다.
 
 ## 1. 진행 결정
 
-Client의 시작 씬을 `ProjectSettings.StartupScenePath`에 연결하는 작업은 지금 진행하지 않는다.
-사용자 결정에 따라 빌드·패키징 작업을 시작할 때 실행 경로, 시작 리소스, 배포 설정과 함께 연결한다.
-통합 계획에서 배포를 완료 목표로 다루더라도 이 보류를 해제하지 않는다.
-재개 시에는 제작 UI와 공용 로딩/변환 처리를 구분하고, Client에 Editor 의존성을 추가하지 않는다.
+2026-10-24에는 Client 시작 씬·빌드·패키징을 함께 보류했다.
+2026-11-02 현재 코드는 실행 루트 탐색과 `StartupScenePath` 연결을 이미 포함하므로 그 부분은 구현 반영 상태로 갱신한다.
+시작 매니페스트·설정 실패 정책·Cook/Stage/Package와 저장소 밖 실행은 아직 미완료다.
+이번 문서 갱신은 남은 구현을 자동으로 재개하는 결정이 아니다.
+후속 작업에서는 제작 UI와 공용 로딩/변환 처리를 구분하고, Client에 Editor 의존성을 추가하지 않는다.
 
-이 문서는 다음 개발 목표를 기록한 계획이다. 기능 구현이나 실행 검증이 완료됐다는 뜻이 아니다.
+2026-11-02 우선순위 조정에서는 **삭제 범위 보호(F03)**와 **기존 Client의 설정 실패 보고(F05 일부)**를 작은 안정화 작업으로 분리한다.
+바이너리/설정/참조 수집(F04), 매니페스트·에셋 루트·배포 렌더 경로와 Cook/Stage/Package는 배포 재개 경로에서 진행한다.
+전체 배포 완료를 다른 제작·렌더링·애니메이션 작업의 공통 선행 조건으로 두지 않는다.
+세부 실행 조건은 [DevelopmentPriorities.md 10절](DevelopmentPriorities.md)을 따른다.
+
+이 문서는 코드 반영 범위와 남은 개발 목표를 함께 기록한다. 1~2단계 전체나 배포 검증 완료를 의미하지 않는다.
 현재 에디터 설정 저장·복원 작업과 Client 배포 작업의 범위를 구분한다.
 
 ## 2. 현재 코드에서 확인한 상태
 
 - `Engine/Source/Core/Config/Public/Config.h`에 공용 `ProjectSettings`가 있다.
-  `SchemaVersion`, `ProjectName`, `StartupManifestPath`, `StartupScenePath`를 저장한다.
-- `Config/Project.json`의 `StartupScenePath`는 현재 빈 문자열이다.
+  `SchemaVersion`, `ProjectName`, `AssetDirectory`, `StartupManifestPath`, `StartupScenePath`, `ShaderSourceDirectory`를 가진다.
+- `Config/Project.json`의 `StartupScenePath`는 `Resources/Scenes/RaytracingScene.json`이다.
 - Editor는 `ConfigManager`로 프로젝트 설정을 읽고 `StartupManifestPath`를 시작 리소스 로드에 사용한다.
-- `Client/Source/Main.cpp`의 `LoadStartupScene()`은 `Resources/Scenes/NewScene2.json`을 고정으로 읽는다.
-  Client에는 `ProjectSettings`를 읽어 시작 씬에 반영하는 연결이 아직 없다.
-- `Client/CMakeLists.txt`는 Visual Studio 디버거 작업 디렉터리를 소스 루트로 지정하고,
-  `BAMENGINE_PROJECT_ROOT`를 정의한다. 이 정의의 실제 사용 여부와 런타임 경로 의존성은 추가 확인 대상이다.
+- Client는 실행 파일 위치와 프로젝트 마커로 루트를 찾고 Runtime/PlatformPath에 주입한다.
+- `LoadProjectSettings()`가 설정을 읽고 `LoadStartupScene()`이 지정한 씬을 선택한다. 빈 값일 때만 NewScene2로 폴백한다.
+- 설정 로드 결과·스키마 버전은 검사하지 않고, `StartupManifestPath`와 `AssetDirectory`는 Client 시작 흐름에 반영하지 않는다.
+- Client에 기본 프리미티브 메시 등록·카메라 선택·시스템 등록과 단일 백버퍼 Forward 패스가 있다.
+  Editor의 디퍼드·조명·HDR/후처리와 동등한 렌더링 경로는 아니다.
+- `Client/CMakeLists.txt`의 Visual Studio 디버거 작업 디렉터리는 소스 루트다. 해당 타깃에 과거 `BAMENGINE_PROJECT_ROOT` 정의는 없다.
 - `StartupResourceLoader`는 현재 Editor의 AssetManager 소스 영역에 있다.
   Client에서 재사용할 범위와 의존성은 빌드·패키징 작업에서 검토한다.
+- `Tools/Scripts/PackageClient.ps1`은 초안이다. 출력 경로 재귀 삭제 보호, 구성별 바이너리 경로,
+  필수 파일 누락의 실패 처리와 Config/Model/Scripts 수집을 보완해야 한다. 현재 상태로 배포 완료를 주장하지 않는다.
 
-위 내용은 문서 작성 시점의 소스 확인 결과다. Client 빌드·실행 및 배포 검증 결과는 아니다.
+기존 ImplementationLog에는 다른 CWD에서 Client 초기화·지오메트리 표시를 확인한 기록이 있다.
+이번 갱신은 소스와 기존 로그의 대조이며 해당 실행이나 저장소 밖 배포를 새로 검증한 결과가 아니다.
 
 ## 3. 완료 목표
 
@@ -45,7 +57,7 @@ Editor에서 제작하고 저장한 프로젝트를 배포 폴더로 구성하�
 
 ## 4. 구현 순서
 
-### 1단계: 실행 경로와 설정 계약
+### 1단계: 실행 경로와 설정 계약 — 경로 헬퍼 반영 / 실패 정책 미완료
 
 - 실행 파일, 프로젝트 루트, 설정, 리소스와 로그의 기준 경로를 정한다.
 - 실행 파일 위치를 배포 루트의 기본 후보로 검토하고, 개발 실행과 배포 실행의 차이를 명시한다.
@@ -53,10 +65,10 @@ Editor에서 제작하고 저장한 프로젝트를 배포 폴더로 구성하�
 - 시작 씬의 빈 값, 잘못된 스키마 버전과 지원하지 않는 경로에 대한 실패 정책을 정한다.
 - 에디터 작업 복원용 `LastScenePath`와 배포 실행용 `StartupScenePath`의 용도를 구분한다.
 
-### 2단계: Client 시작 흐름 연결
+### 2단계: Client 시작 흐름 연결 — 설정 기반 씬 반영 / 매니페스트 미연결
 
 - ReflectionRegistry가 준비된 뒤 기존 `ConfigManager`로 `ProjectSettings`를 읽는다.
-- 하드코딩된 시작 씬을 제거하고 검증된 `StartupScenePath`를 사용한다.
+- 설정 기반 씬 선택은 반영되었다. 설정 검증과 빈 시작 씬의 명시적 실패/폴백 정책을 마무리한다.
 - `StartupManifestPath`의 리소스 로드와 시작 씬 로드 순서를 연결한다.
 - 실행 리소스 로드는 Engine/Client에서 재사용할 수 있는 위치와 인터페이스로 정리한다.
   Editor의 임포트 UI나 편집 상태를 Client 의존성으로 가져오지 않는다.
@@ -98,13 +110,15 @@ Package/
 ## 6. 완료 검증
 
 - [ ] 배포 폴더를 개발 저장소 밖으로 옮겨 실행한다.
-- [ ] 현재 작업 디렉터리가 배포 폴더와 달라도 지정한 프로젝트를 실행한다.
+- [ ] 현재 작업 디렉터리가 배포 폴더와 달라도 지정한 프로젝트·상대 컨트롤러 경로·미로드 리소스 탐색이 동작한다.
 - [ ] `StartupScenePath`를 바꾸면 해당 씬이 선택된다.
 - [ ] 시작 리소스와 씬의 에셋 참조가 복원되고 실제 화면·입력·필요한 게임 동작을 확인한다.
 - [ ] Editor 실행 파일과 개인 작업 상태 없이 Client가 실행된다.
 - [ ] 설정 누락, 잘못된 버전과 존재하지 않는 시작 씬에서 원인을 기록하고 실패한다.
 - [ ] 필수 리소스나 프로젝트 모듈 누락 시 원인을 확인할 수 있다.
 - [ ] 빌드, 배포 폴더 생성, 실제 실행 결과를 각각 기록한다.
+- [ ] 패키징 출력 경로가 소스/리소스/드라이브 루트이면 삭제 전 거부한다.
+- [ ] 필수 바이너리·설정·씬 참조 누락 시 패키징을 실패로 처리한다.
 
 ## 7. 재개 시 확인할 파일
 

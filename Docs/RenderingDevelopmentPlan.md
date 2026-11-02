@@ -7,6 +7,8 @@
 - 연계 계획: [ImGuiDevelopmentPlan.md](ImGuiDevelopmentPlan.md), [BuildAndPackagingPlan.md](BuildAndPackagingPlan.md)
 - 분류·이관 기준: [SourceOrganizationGuidelines.md](SourceOrganizationGuidelines.md)
 - 통합 우선순위: [DevelopmentPriorities.md](DevelopmentPriorities.md)
+- 최신 정적 대조: [2026-11-02 코드·문서 점검](CodeDocumentationAudit-2026-11-02.md) 2.6절·F08·F10. 기본 슬롯 실패와 타일 광원 용량 초과는 잔여 범위다.
+- 검증 한계: 아래의 과거 시간·드로우콜 관찰을 최신 동일 조건 비교 실험으로 확대하지 않는다. 이번 갱신에서 새 빌드·GPU 실행·성능 측정은 하지 않았다.
 
 ## 1. 목표와 우선순위
 
@@ -120,6 +122,11 @@ IBL처럼 비교적 독립적인 화질 개선은 측정·바인딩 기반이 �
 **완료 기준:** 셰이더 코드에서 변수 순서나 타입을 바꾸더라도 C++ 코드의 수동 수정 없이 런타임에서 오프셋 불일치나 화면 왜곡 없이 값이 올바르게 전달된다.
 
 ### S2-C. 플래그 기반 텍스처 샘플링 분기 및 머티리얼 그래프 입력 유연화
+
+실행 순서: 현재 기본 텍스처 확보/바인딩 실패(F08)와 관련 리소스 오류를 정리한 뒤,
+유효성 플래그·기본값 분기(3-A) → 그래프 상수/채널 입력(3-B)을 별도 작업으로 진행한다.
+타일 용량 초과(F10)는 해당 장면을 사용하기 전에 해결하며 전체 배포 완료를 이 기능의 필수 조건으로 두지 않는다.
+통합 선택·검증 기준은 [DevelopmentPriorities.md 10절](DevelopmentPriorities.md)을 따른다.
 
 **목적:** 텍스처를 무조건 샘플링하는 고정 파이프라인에서 탈피하여, 슬롯 미지정 시의 상태 누수(오염) 방지 및 머티리얼 그래프를 통한 유연한 상수/벡터/채널 분리 입력을 지원한다.
 

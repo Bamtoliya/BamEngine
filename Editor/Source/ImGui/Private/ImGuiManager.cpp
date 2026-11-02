@@ -313,7 +313,7 @@ void ImGuiManager::Draw()
 	MainDockspace();
 	history.Synchronize(SceneManager::Get().GetCurrentScene(), PIEManager::Get().CanEdit());
 
-	ImGui::ShowDemoWindow(nullptr); // 데모 윈도우 (테스트용, 나중에 제거)
+	//ImGui::ShowDemoWindow(nullptr); // 데모 윈도우 (테스트용, 나중에 제거)
 
 	for (auto& panel : m_ImGuiPanels)
 	{

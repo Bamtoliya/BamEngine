@@ -1,6 +1,6 @@
 # 엔진 기능 개발 계획
 
-- 작성일: 2026-10-24 (최종 갱신: 2026-11-01)
+- 작성일: 2026-10-24 (최종 갱신: 2026-11-02)
 - 상태: 개발 목표 및 2026-11-01 구현 현황 반영 / 기능별 구현·실행·성능 검증은 별도 기록
 - 최종 결과물: 2D·3D 게임, AI 강화학습 시뮬레이터, 2D·3D V-Tuber 실행·방송 및 모델·리깅 제작 도구
 - 범위: 공통 실행 기반, 게임 제작 모듈, 학습 환경·외부 학습 연동, 아바타 제작·추적·표현·출력
@@ -13,6 +13,7 @@
 - GPU 연결 지침: [Shader/BINDING_LAYOUT.md](Shader/BINDING_LAYOUT.md)
 - 분류·이관 기준: [SourceOrganizationGuidelines.md](SourceOrganizationGuidelines.md)
 - 통합 우선순위: [DevelopmentPriorities.md](DevelopmentPriorities.md)
+- 최신 대조: [2026-11-02 코드·문서 점검](CodeDocumentationAudit-2026-11-02.md). 계층 애니메이터·Client 시작 경로의 반영 범위와 실패 처리·검증 잔여를 구분한다.
 
 ## 1. 목표와 문서의 역할
 
@@ -42,13 +43,13 @@ Inspector·전용 패널·콘텐츠 브라우저의 열기·검색·썸네일은
 
 - **레이캐스트 및 씬 충돌 질의 (구현 완료):** `Collision`에 Rect·Box·Sphere·Triangle·Mesh·Terrain 대상 `Raycast()`와 일부 `Sweep()`가 있으며, `PhysicsSystem::Raycast()` / `RaycastAll()` 및 `RaycastQuery`(최대 거리, 레이어마스크, 트리거 포함 여부, 무시 엔티티, 활성 플래그 검사, 거리 컷오프 조기 탈출)가 구현되어 `PickingManager`의 화면 가시성과 무관한 씬 레벨 충돌체 질의 및 블루프린트 노드(`Physics.Raycast`) 연동이 완료되었다.
 - **스프라이트 표시 및 Flipbook 애니메이션 (구현 완료):** `SpriteRendererComponent`/`SpriteRenderSystem` 기반 위에 독립 `SpriteAnimation` 리소스 에셋(`.spriteanim`), `SpriteAnimationComponent`, `SpriteAnimationSystem`(에셋 우선/로컬 폴백, 가중치 지속 시간 평가), 전용 `SpriteAnimationEditor` 패널 및 비주얼 스크립팅 제어 노드가 구축 완료되었다.
-- **3D 스켈레탈 애니메이션 및 상태 머신 (Phase 1~4 구현 완료 / 계층 모델 참조 연결 대기):** `AnimationEvaluator`(키프레임 보간 및 본 행렬 도출, 로컬 TRS 크로스페이드), `AnimatorStateMachine`(파라미터·전이·조건식), `BlendTree1D`, `AnimatorComponent`, `AnimationSystem`, `AnimatorGraphPanel` 및 GPU 스키닝 구조화 버퍼 제출이 구축되었다. `Scene::InstantiateModel()`의 `NotImplemented` 가드가 제거되어 모델 루트에 `AnimatorComponent`, 메시 노드에 `SkinnedMeshRendererComponent`를 생성하나, 현재 `AnimationSystem`/`MeshRenderSystem`은 동일 엔티티 기준으로 조회하므로 루트↔자식 계층 참조 연결 및 `.animator` 에셋 경로 자동 로드는 후속 보완 대상이다.
+- **3D 스켈레탈 애니메이션 및 상태 머신 (기본 구현 반영 / 정확성·저장 보호 잔여):** `AnimationEvaluator`, `AnimatorStateMachine`, `BlendTree1D`, `AnimatorComponent`, `AnimationSystem`, `AnimatorGraphPanel` 및 GPU 스키닝 제출이 있다. 2026-11-02 정적 대조에서 루트 Animator↔하위 SkinnedMeshRenderer의 계층 조회와 `controllerPath` 자동 로드 진입점도 확인했다. 비반복 종료·부분 트랙·ASM 제어·상대 경로와 편집기 저장/로드 실패 보호는 [점검 F01·F06·F07](CodeDocumentationAudit-2026-11-02.md)의 미완료 범위다. 기본 코드 존재를 Phase 전체의 실행 검증 통과로 해석하지 않는다.
 - **로직 그래프 실행 및 씬/PIE 연결 (구현 완료):** `GraphSystem`이 `Editor`와 `Client` 모두에 등록되어 `GraphBindingComponent` 엔티티마다 `Event.Start`/`Event.Update`를 자동 구동한다. 사용자 정의 변수(`GraphVariable`), `EGraphPinType::String` 문자열 핀, 리플렉션 기반 `GraphActorLibrary`/`GraphGameplayLibrary` 노드, 그리고 C++ 모듈 핫리로드 시 엔티티 변수를 보존하며 런타임 인스턴스를 교체하는 `ReloadReflectedNodes`(Phase 4.3)가 구축 완료되었다.
 - **그래프 파일 저장 API (구현 완료):** `GraphFile.h/.cpp`의 JSON 저장·로드와 `GraphPanel`, `GraphSystem`의 캐시/문서 연동이 동작한다.
 - **Script 리소스 틀은 있다.** `Resource/Script`의 `Script`는 생성·초기화·해제 기반이며, 확인한 파일에는 텍스트 소스 실행·VM·객체별 인스턴스·엔진 이벤트 바인딩이 없다. C++ 프로젝트 모듈·리플렉션 함수·Visual Scripting과 텍스트 스크립트 실행을 같은 완료 항목으로 묶지 않는다.
 - **파티클·스플라인·트레일:** 전용 실행 시스템은 아직 미구현 상태이며, 각 작업을 시작할 때 4·5·7절 기준으로 구현한다.
 - **SystemManager 실행 루프:** `FixedUpdate`·`Update`·`LateUpdate`·`OnSubmit` 단계가 있으며, `Editor`와 `Client/Source/Main.cpp` 모두 `TransformSystem`, `CameraSystem`, `LightSystem`, `MeshRenderSystem`, `SpriteRenderSystem`, `SpriteAnimationSystem`, `AnimationSystem`, `UIRenderSystem`, `AudioSystem`, `TerrainSystem`, `PhysicsSystem`, `GraphSystem`을 등록해 구동한다.
-- **강화학습 첫 헤드리스 환경 (P2-C 구현 완료):** `Engine/Source/Simulation/`에 Gymnasium 규약을 따르는 `IRLEnvironment`, 창·Renderer·오디오 없이 동작하는 수치 물리 환경 `CartPoleEnvironment`(50Hz 오일러 적분), Winsock TCP 기반 `RLServer`(`127.0.0.1:9999`), `Client.exe --rl` CLI 모드, 그리고 Python `Tools/RL/bam_gym_env.py` 어댑터가 구축되어 에피소드 반복 reset/step 및 상태 격리가 검증되었다. 씬 물리 연동 환경·벡터화·영상 센서·ONNX 추론은 15절 후속 범위다.
+- **강화학습 첫 헤드리스 환경 (P2-C 기본 예제 반영):** `Engine/Source/Simulation/`의 `IRLEnvironment`, 수치 CartPole(50Hz), loopback TCP `RLServer`, `Client.exe --rl`, Python 어댑터가 있다. 과거 에피소드 실행 기록은 유지하되 전체 계약 검증 완료로 확대하지 않는다. seed=0·요청 파싱/송신·Gymnasium 미설치 폴백은 [점검 F09](CodeDocumentationAudit-2026-11-02.md)의 잔여 문제다. 씬 물리·벡터화·영상 센서·ONNX는 15절 후속 범위다.
 - **V-Tuber 및 아바타 확장:** RHI의 `ReadTexturePixel()`이나 기본 골격 임포트만으로 전체 비동기 센서 읽기·방송 공유 텍스처·VRM·표정 모프·2D 변형·추적 입력을 지원한다고 판단하지 않으며 16·17절 단계에서 진행한다.
 
 현재 주요 확인 파일:

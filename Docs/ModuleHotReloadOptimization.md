@@ -1,7 +1,7 @@
 # C++ 모듈 핫리로드 시간 단축 및 빌드 최적화 분석서
 
 - 작성일: 2026-10-30
-- 상태: 분석 및 최적화 실행 계획
+- 상태: 초기 분석 및 후속 계획 / PCH·200ms 디바운스·의존 빌드 생략 옵션 반영 (2026-11-02 정적 대조)
 - 대상: `Projects/GameModule`, `Editor/Source/HotReload`, `Projects/Reflection`
 - 관련 문서:
   - [VisualScriptingBlueprintPlan.md](VisualScriptingBlueprintPlan.md) (4.1절 라이브 노드 핫리로드 파이프라인)
@@ -13,9 +13,9 @@
 ## 1. 개요 및 목표
 
 ### 1.1 배경
-현재 `Projects/GameModule`에 `FUNCTION(GRAPH_CALLABLE)` 어노테이션을 붙여 C++ 소스를 수정한 뒤 저장하면, `ModuleBuildManager`가 변경을 감지하여 백그라운드에서 빌드(`cmake.exe --build`)를 수행하고 에디터가 DLL을 핫리로드하여 그래프 노드를 실시간으로 갱신한다.
+`Projects/GameModule`의 C++ 소스를 수정한 뒤 저장하면, `ModuleBuildManager`가 변경을 감지하여 백그라운드 빌드와 DLL 핫리로드를 수행하는 경로가 있다.
 
-그러나 현재 핫리로드 루프에는 **4~10초 이상의 지연 시간**이 발생하고 있으며, 이는 개발자가 C++ 로직을 수정하고 그래프에서 즉시 확인하는 '라이브 코딩 인터랙션(Live Interaction)'의 흐름을 방해한다.
+아래 1.2절과 2절의 시간·병목 설명은 2026-10-30 초기 분석 기록이다. 현재 코드의 미구현 목록이나 이번 재측정 결과로 해석하지 않는다.
 
 ### 1.2 목표 지표
 - **현재 소요 시간:** 약 5초 ~ 12초 (CMake 타임스탬프 갱신 시 15초 이상)
@@ -24,7 +24,15 @@
 
 ---
 
-## 2. 병목 구간 상세 분석 (Profiling & Root Cause)
+### 1.3 2026-11-02 코드 반영과 남은 확인
+
+- `Projects/GameModule/CMakeLists.txt`에 PCH가 있다.
+- `ModuleBuildManager::Update`의 디바운스는 200ms이며 실행 명령에 `/p:BuildProjectReferences=false /m`을 붙인다.
+- 현재 명령은 `cmake.exe --build`다. 아래 방안 A의 MSBuild 직접 실행 제안 전체가 적용된 것으로 기록하지 않는다.
+- HotReloadManager의 빌드 디렉터리는 x64-debug로 고정되어 Release 구성과 맞지 않을 수 있다([점검 F13](CodeDocumentationAudit-2026-11-02.md)).
+- 기존 구현 기록의 1.5초대 관찰은 보존하되 이번에 같은 조건으로 재측정하지 않았다. API/헤더 변경 시 의존 빌드 생략의 안전 범위도 별도로 확인한다.
+
+## 2. 초기 병목 구간 분석 (2026-10-30 기록)
 
 현재 핫리로드 프로세스는 아래 6단계로 이루어지며, 각 단계별 병목 원인은 다음과 같다.
 

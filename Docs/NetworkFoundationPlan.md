@@ -33,12 +33,13 @@ BamEngine이 멀티플레이어 게임, 강화학습 시뮬레이터(Python 어�
 ## 2. 현재 상태와 갭 분석 (Gap Analysis)
 
 ### 2.1 이미 구축된 기반 (Ready)
+- **RL 전용 loopback 통신:** `Simulation/RLServer`에 Winsock TCP listen/accept와 개행 요청/응답, `Client --rl`과 Python 어댑터가 있다(2026-11-02 정적 대조). 일반 전송 추상화·게임 세션·리플리케이션 완료를 의미하지 않으며 프로토콜 잔여는 [점검 F09](CodeDocumentationAudit-2026-11-02.md)를 따른다.
 - **리플렉션 및 직렬화 기반:** `Engine/Source/Core/Public/Reflection/` 및 `ReflectionArchive`를 통해 C++ 구조체 및 기본 자료형의 직렬화/역직렬화 인프라 구비.
 - **ECS 월드 아키텍처:** EnTT 기반 `World`, `Scene`, `Entity` 구조를 통해 컴포넌트 단위의 상태 조회 및 순회가 용이함.
 - **비주얼 스크립팅 이벤트 디스패치:** `GraphSystem` 및 `GraphGameplayLibrary`가 구축되어 있어 네트워크 이벤트/RPC의 노드 노출이 용이함.
 
 ### 2.2 네트워크 기반 구축을 위해 필요한 핵심 공백 (To-Do)
-1. **소켓 및 OS 전송 계층:** OS 레벨 소켓 라이브러리(WinSock2) 링크, 논블로킹 I/O 소켓 래퍼, 주소 해석(`IpAddress`, `EndPoint`) 부재.
+1. **일반 소켓 전송 계층:** RL 전용 Winsock 경로와 별개로 재사용 가능한 `INetworkTransport`, 논블로킹 I/O 래퍼, 주소 해석(`IpAddress`, `EndPoint`)은 계획 범위다. OS 소켓 사용 자체가 전혀 없다는 의미가 아니다.
 2. **바이너리 패킷 스트림:** 엔디안 안전성, 헤더 매직넘버, 패킷 ID, 시퀀스 번호, 체크섬 검증을 수행하는 고속 바이너리 버퍼(`BitStream`, `PacketWriter`, `PacketReader`) 부재.
 3. **패킷 디스패처 및 핸들러 테이블:** 수신된 패킷 ID에 따라 등록된 콜백 함수로 역직렬화된 데이터를 전달하는 라우터 부재.
 4. **세션 및 연결 관리자:** 서버(Listen/Dedicated) 바인드/리스닝, 클라이언트 접속 요청(Connect), 3-Way 핸드셰이크, 핑/RTT 계측, 하트비트 및 타임아웃 감지 부재.

@@ -1,16 +1,18 @@
 # 애니메이터 그래프와 애니메이션 상태 머신 개발 계획
 
 - 작성일: 2026-11-01
-- 상태: Phase 1~4 구현 완료 / Phase 5(고급 게임플레이 연동) 대기
+- 상태: Phase 1~4 기본 구현·계층 연결 반영 / 파일 보호·재생 정확성·고급 기능 미완료 (2026-11-02 정적 대조)
 - 공통 기준: [EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md), [SourceOrganizationGuidelines.md](SourceOrganizationGuidelines.md)
 - 선행 기반: [EngineDevelopmentPlan.md](EngineDevelopmentPlan.md) 9·10절, [GraphFoundation.md](GraphFoundation.md), [GraphPanel.md](GraphPanel.md), [VisualScriptingBlueprintPlan.md](VisualScriptingBlueprintPlan.md)
 - 통합 우선순위 연결: [DevelopmentPriorities.md](DevelopmentPriorities.md) (P2-D 및 P3/P4 애니메이션 및 콘텐츠 확장)
+- 최신 근거: [코드·문서 점검](CodeDocumentationAudit-2026-11-02.md) F01·F06·F07·F11. 이번 갱신에서 빌드·UI·GPU 검증은 하지 않았다.
 
 ---
 
 ## 1. 목적과 비전
 
-현재 BamEngine에는 모델의 본 계층 구조(`Skeleton`, `Bone`)와 키프레임 데이터(`Animation`) 및 2D 스프라이트 애니메이션(`SpriteAnimationComponent`/`System`) 기초가 마련되어 있으나, 3D 캐릭터가 여러 애니메이션 클립(Idle, Walk, Run, Jump, Attack 등)을 유기적으로 전이하고 혼합하는 **애니메이터 그래프(Animator Graph / Animation State Machine & Blend Tree)** 파이프라인이 부재하다.
+현재 BamEngine에는 본·키프레임 데이터와 스프라이트 재생 외에 3D 클립 평가·상태 머신·1D 블렌드·저작 패널의 기본 경로가 있다.
+이 계획은 기존 경로의 정확성·파일 보호·검증을 마무리하고 고급 애니메이션 기능으로 확장하는 목표를 관리한다.
 
 본 계획의 목표는 언리얼 엔진의 **애니메이션 블루프린트(Animation Blueprint / State Machine)** 및 유니티의 **애니메이터 컨트롤러(Animator Controller)** 와 동등한 수준으로, 캐릭터의 상태 전이 로직과 포즈 블렌딩을 시각적으로 저작하고 런타임에서 안정적으로 구동하는 통합 애니메이션 시스템을 구축하는 것이다.
 
@@ -24,18 +26,19 @@
 
 ## 2. 현재 상태와 갭 분석 (Gap Analysis)
 
-### 2.1 이미 구축된 기반 (Ready — 2026-11-01 반영 완료)
+### 2.1 이미 구축된 기반 (2026-11-02 정적 대조 / 전체 완료 기준과 구분)
 - **애니메이션 원천 데이터:** `Engine/Source/Resource/Model/Public/Animation.h`, `Skeleton.h`, `Bone.h`에 뼈 계층, 포지션/로테이션/스케일 키프레임, 지속 시간(`Duration`), `TicksPerSecond` 정의 완비.
-- **런타임 포즈 평가 및 GPU 스키닝 (Phase 1 완료):** `AnimationEvaluator`(`EvaluateSkinningMatrices`, `EvaluateBlendedSkinningMatrices`), `AnimatorComponent`, `AnimationSystem`, `MeshRenderSystem` 및 `Renderer::RenderSkinnedMeshes` 구조화 버퍼 바인딩 구축 완료. `SceneModel.cpp`의 `InstantiateModel()`에서 `NotImplemented` 가드가 제거되어 스켈레탈 모델 배치 시 루트에 `AnimatorComponent`, 메시 노드에 `SkinnedMeshRendererComponent`를 생성함.
-- **애니메이션 상태 머신 및 1D 블렌드 트리 (Phase 2~3 완료):** `AnimatorParameters`, `AnimTransition`, `AnimState`, `AnimatorStateMachine`, `BlendTree1D` 및 `ReflectionArchive` 기반 `.animator` JSON 직렬화 구축 완료.
-- **에디터 시각 저작 패널 (`AnimatorGraphPanel`, Phase 4 완료):** 18절 메뉴바/퀵툴바, 파라미터 독, 상태 노드 드래그 및 트랜지션 연결선, 트랜지션 인스펙터, 씬 선택 엔티티 활성 상태 실시간 청록색 하이라이트 디버깅 구축 완료.
+- **런타임 포즈 평가 및 GPU 스키닝 (Phase 1 기본 구현):** `AnimationEvaluator`, `AnimatorComponent`, `AnimationSystem`, `MeshRenderSystem`과 Renderer의 스키닝 제출이 있다. `InstantiateModel()`은 루트에 Animator, 하위 메시 노드에 SkinnedMeshRenderer를 생성한다. 재생 경계·부분 트랙 정확성은 별도 잔여다.
+- **애니메이션 상태 머신 및 1D 블렌드 트리 (Phase 2~3 기본 구현):** `AnimatorParameters`, `AnimTransition`, `AnimState`, `AnimatorStateMachine`, `BlendTree1D` 및 `.animator` JSON 읽기/쓰기가 있다. 파일 보호·ASM 제어 의미와 2D 블렌드는 미완료다.
+- **에디터 시각 저작 패널 (`AnimatorGraphPanel`, Phase 4 기본 UI):** 메뉴바/퀵툴바, 파라미터·상태·전이 편집과 활성 상태 표시 코드가 있다. 현재 캔버스는 ImGui/ImDrawList 기반 자체 구현이며, 저장/교체 보호·입력 일원화·독립 프리뷰는 남아 있다.
 - **비주얼 스크립팅 연동 인프라:** `GraphGameplayLibrary`에 `Animator.Play/Pause/Stop/SetPlayRate/SetTime/IsPlaying/GetCurrentTime` 및 `Animator.SetFloat/SetInt/SetBool/SetTrigger/GetFloat/GetBool` 노드가 등록되었고, `EGraphPinType::String` 지원(`d3fc6bd2`)을 통해 블루프린트에서 문자열 파라미터 이름을 직접 전달할 수 있음.
 - **2D 프레임 애니메이션:** 독립 `SpriteAnimation` 에셋(`.spriteanim`), `SpriteAnimationComponent`/`System`, 전용 `SpriteAnimationEditor` 구축 완료.
 
-### 2.2 애니메이터 그래프 완성을 위해 남은 핵심 과제 (To-Do — Phase 5 및 확장)
-1. **계층형 스켈레탈 모델(루트 `AnimatorComponent` ↔ 자식 `SkinnedMeshRendererComponent`) 참조 연결 및 에셋 자동 로드:**
+### 2.2 애니메이터 그래프 완성을 위해 남은 핵심 과제 (2026-11-02 정적 갱신)
+1. **기존 계층 연결 검증·파일 보호·재생 정확성:**
    - `Scene::InstantiateModel()`은 모델 루트 엔티티(`rootHandle`)에 `AnimatorComponent`를 부착하고, 하위 노드 엔티티(`handle`/`meshEntity`)에 `SkinnedMeshRendererComponent`를 부착한다.
-   - 반면 현재 `AnimationSystem::OnUpdate()`와 `MeshRenderSystem::OnSubmit()`은 동일 엔티티에 두 컴포넌트가 함께 있는 경우만 조회하고 있으므로, 부모/루트 계층에서 `AnimatorComponent` 또는 `Skeleton`을 탐색해 연결하고 `AnimatorComponent`에 `.animator` 파일 경로/에셋 자동 로드 프로퍼티를 연결하는 작업이 필요하다.
+   - 현재 `AnimationSystem`은 Animator의 하위 Skeleton을 검색하고 `MeshRenderSystem`은 자신/부모의 Animator를 찾는다. 직렬화되는 `controllerPath` 변경 시 자동 로드를 시도한다. 이 연결을 새로 구현할 필요는 없다.
+   - 남은 문제는 상대 컨트롤러 경로·실패 후 재시도, 비반복 종료·부분 트랙·ASM 제어, 패널의 저장/로드 실패 및 미저장 교체 보호다. 상세 근거·확인 조건은 점검 문서 F01·F06·F07을 따른다.
 2. **2D 블렌드 트리 (2D Blend Space):**
    - 현재 1D 블렌드 트리(`BlendTree1D`)까지 구현되어 있으며, 이동 방향(`Direction`)과 속도(`Speed`) 2축을 조합하는 2D 블렌드 노드는 후속 확장 대상이다.
 3. **고급 게임플레이 연동 및 패널 내 3D 프리뷰 뷰포트 (Phase 5):**
@@ -46,6 +49,13 @@
 ---
 
 ## 3. 단계별 개발 로드맵
+
+아래 세부 목록은 목표를 포함한다. 예시 타입명·imgui-node-editor 재사용·독립 프리뷰 등 모든 항목이 현재 구현되었다는 뜻은 아니다.
+현재 구현은 2.1절, 미완료 결함과 검증 범위는 2.2절 및 연결한 점검 문서를 따른다.
+
+2026-11-02 실행 순서 조정: 파일 저장 결과/미저장 교체 보호 → 상대 경로·재시도 → 비반복/부분 트랙·ASM 제어 → 다중 인스턴스/지원 실행 경로 확인 → 고급 기능으로 진행한다.
+로캘·InputManager는 해당 패널 수정과 함께 적용한다. 이미 있는 계층 연결을 다시 구현하지 않으며,
+전체 배포·머티리얼 그래프 완성을 이 경로의 필수 조건으로 두지 않는다. 전역 선택은 [통합 우선순위 10절](DevelopmentPriorities.md)을 따른다.
 
 ```mermaid
 flowchart TD
@@ -64,7 +74,7 @@ flowchart TD
 
 ---
 
-### Phase 1. 런타임 클립 평가 및 스키닝 파이프라인 (완료 - 2026-11-01)
+### Phase 1. 런타임 클립 평가 및 스키닝 파이프라인 (기본 구현 / 경계 검증 잔여)
 - **목적:** 3D 메시가 단일 애니메이션 클립을 시간에 맞춰 올바르게 재생하고 화면에 렌더링되도록 한다.
 - **세부 내용:**
   - `SkeletonPose`: 본 인덱스별 로컬 변환(Position, Rotation, Scale) 배열 구조체 정의.
@@ -76,7 +86,7 @@ flowchart TD
 
 ---
 
-### Phase 2. 애니메이션 상태 머신(ASM) 런타임 코어 (완료 - 2026-11-01)
+### Phase 2. 애니메이션 상태 머신(ASM) 런타임 코어 (기본 구현 / 제어 의미·검증 잔여)
 - **목적:** 엔티티가 파라미터 값에 따라 여러 애니메이션 상태를 오갈 수 있는 순수 C++ 런타임 엔진을 구축한다.
 - **세부 내용:**
   - **파라미터 시스템 (`AnimatorParameter`):**
@@ -97,7 +107,7 @@ flowchart TD
 
 ---
 
-### Phase 3. 포즈 블렌딩 및 1D/2D 블렌드 트리 (1D 완료 - 2026-11-01)
+### Phase 3. 포즈 블렌딩 및 1D/2D 블렌드 트리 (1D 구현 / 2D 미구현)
 - **목적:** 불연속적인 상태 전이뿐 아니라, 속도나 방향과 같은 연속적인 파라미터에 따라 복수의 클립 포즈를 가중치로 합성한다.
 - **세부 내용:**
   - **포즈 합성기 (`PoseBlender`):**
@@ -112,7 +122,7 @@ flowchart TD
 
 ---
 
-### Phase 4. 에디터 저작 패널 (`AnimatorGraphPanel`) (완료 - 2026-11-01)
+### Phase 4. 에디터 저작 패널 (`AnimatorGraphPanel`) (기본 UI 구현 / 파일 보호·입력·독립 프리뷰 잔여)
 - **목적:** 기획자 및 아티스트가 코드를 작성하지 않고도 시각적으로 상태 머신과 파라미터를 저작하는 전문 GUI를 제공한다.
 - **세부 내용:**
   - **캔버스 UI (`AnimatorGraphCanvas`):**
@@ -134,12 +144,12 @@ flowchart TD
 
 ---
 
-### Phase 5. 게임플레이 연동 및 고급 기능 (기본 컴포넌트·노드 연동 완료 / 계층 모델·고급 기능 대기)
+### Phase 5. 게임플레이 연동 및 고급 기능 (기본 컴포넌트·노드·계층 연결 반영 / 정확성·고급 기능 대기)
 - **목적:** 비주얼 스크립팅 및 C++ 게임플레이 코드에서 애니메이터를 자유자재로 제어하고, 계층형 모델 참조·사운드/이펙트 트리거·상체/하체 분리 재생을 지원한다.
 - **세부 내용:**
-  - **컴포넌트 및 시스템 연동 (기본 구현 완료 / 계층 연결 보완 대기):**
+  - **컴포넌트 및 시스템 연동 (계층 연결 포함 기본 구현 / 검증 잔여):**
     - `AnimatorComponent` 및 `AnimationSystem`(`Editor`·`Client` 등록 완료) 구축 완료.
-    - **남은 연결 과제**: `Scene::InstantiateModel()`로 생성된 계층형 스켈레탈 모델(루트 `AnimatorComponent` ↔ 자식 `SkinnedMeshRendererComponent`) 간의 부모/루트 참조 해석 연결 및 `.animator` 에셋 파일 경로 자동 로드 연동.
+    - **남은 검증 과제**: 기존 계층 조회·컨트롤러 로드를 다중 인스턴스·PIE·Client에서 검증한다. 파일 실패·재생 경계·Stop/SetTime/GetCurrentTime의 ASM 의미를 마무리한다.
   - **비주얼 스크립팅 노드 (`GraphGameplayLibrary` — 구현 완료):**
     - `Animator.Play/Pause/Stop/SetPlayRate/SetTime/IsPlaying/GetCurrentTime` 및 `Animator.SetFloat`, `Animator.SetInt`, `Animator.SetBool`, `Animator.SetTrigger`, `Animator.GetFloat`, `Animator.GetBool` 노드 등록 및 `EGraphPinType::String` 핀 연동 완료.
   - **애니메이션 노티파이 (`AnimNotify` — 대기):**

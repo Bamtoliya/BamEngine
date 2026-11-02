@@ -139,14 +139,6 @@ EResult ContentBrowserPanel::Initialize(void* arg)
 
 void ContentBrowserPanel::Draw()
 {
-	// AssetManager가 처리 중인 비동기 작업이 있다면 UI에 로딩 상태를 표시
-	size_t activeTasks = AssetManager::Get().GetActiveTaskCount();
-	if (activeTasks > 0)
-	{
-		ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "%s",
-			(ICON_FA_ARROW_ROTATE_RIGHT " " + LOCAL_FMT("ContentBrowser.Importing", (int)activeTasks)).c_str());
-		ImGui::Separator();
-	}
 	if (!m_Open) return;
 	const string windowTitle = LOCAL("UI_CONTENT_BROWSER") + "###ContentBrowserPanel";
 	ImGui::Begin(windowTitle.c_str(), &m_Open);
