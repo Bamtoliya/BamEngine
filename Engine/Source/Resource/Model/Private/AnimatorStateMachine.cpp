@@ -3,6 +3,7 @@
 #include "Reflection/ReflectionRegistry.h"
 #include <archive/JsonArchive.h>
 #include <reflection_archive/ReflectionArchiveAdapter.h>
+#include "PlatformPath.h"
 
 void AnimatorParameters::SetFloat(const std::string& name, float value)
 {
@@ -129,6 +130,16 @@ void AnimatorRuntimeState::BindStateMachine(const std::shared_ptr<AnimatorStateM
 	m_parameters.GetAll() = sm->defaultParameters;
 }
 
+void AnimatorRuntimeState::Reset()
+{
+	m_currentStateTime = 0.0f;
+	m_targetStateTime = 0.0f;
+	m_transitionElapsed = 0.0f;
+	m_isTransitioning = false;
+	m_targetStateName.clear();
+	if (m_stateMachine) m_currentStateName = m_stateMachine->defaultState;
+}
+
 void AnimatorRuntimeState::Update(float dt, const Skeleton& skeleton, std::vector<mat4>& outBoneMatrices)
 {
 	if (!m_stateMachine) return;
@@ -178,9 +189,12 @@ void AnimatorRuntimeState::Update(float dt, const Skeleton& skeleton, std::vecto
 		}
 	}
 
-	// 3. 시간 진행
+	// 3. 시간 진행 및 비반복 루프 처리
 	m_currentStateTime += dt * curState->playRate;
-
+	if (!curState->isLooping && curDurationSec > 0.0)
+	{
+		m_currentStateTime = std::min(m_currentStateTime, static_cast<float>(curDurationSec));
+	}
 	// 4. 포즈 평가 및 블렌딩
 	if (m_isTransitioning)
 	{
@@ -199,15 +213,17 @@ void AnimatorRuntimeState::Update(float dt, const Skeleton& skeleton, std::vecto
 				targetClip = targetState->clip.Get();
 			}
 		}
-
 		if (targetClip)
 		{
 			m_targetStateTime += dt * targetState->playRate;
+			const f64 targetDurationSec = targetClip->GetDuration() / (targetClip->GetTicksPerSecond() > 0.0 ? targetClip->GetTicksPerSecond() : 25.0);
+			if (!targetState->isLooping && targetDurationSec > 0.0)
+			{
+				m_targetStateTime = std::min(m_targetStateTime, static_cast<float>(targetDurationSec));
+			}
 			m_transitionElapsed += dt;
 			const float alpha = m_transitionElapsed / m_transitionDuration;
-
-			AnimationEvaluator::EvaluateBlendedSkinningMatrices(*primaryClip, m_currentStateTime, *targetClip, m_targetStateTime, alpha, skeleton, outBoneMatrices);
-
+			AnimationEvaluator::EvaluateBlendedSkinningMatrices(*primaryClip, m_currentStateTime, *targetClip, m_targetStateTime, alpha, skeleton, outBoneMatrices, curState->isLooping, targetState->isLooping);
 			if (alpha >= 1.0f)
 			{
 				m_currentStateName = m_targetStateName;
@@ -218,19 +234,18 @@ void AnimatorRuntimeState::Update(float dt, const Skeleton& skeleton, std::vecto
 		else
 		{
 			m_isTransitioning = false;
-			AnimationEvaluator::EvaluateSkinningMatrices(*primaryClip, skeleton, m_currentStateTime, outBoneMatrices);
+			AnimationEvaluator::EvaluateSkinningMatrices(*primaryClip, skeleton, m_currentStateTime, outBoneMatrices, curState->isLooping);
 		}
 	}
 	else
 	{
-		// 블렌드 트리 활성 상태인 경우 인접 두 클립 블렌딩
 		if (curState->IsBlendTree() && blendSecondaryClip && blendWeight > 0.0f)
 		{
-			AnimationEvaluator::EvaluateBlendedSkinningMatrices(*primaryClip, m_currentStateTime, *blendSecondaryClip, m_currentStateTime, blendWeight, skeleton, outBoneMatrices);
+			AnimationEvaluator::EvaluateBlendedSkinningMatrices(*primaryClip, m_currentStateTime, *blendSecondaryClip, m_currentStateTime, blendWeight, skeleton, outBoneMatrices, curState->isLooping, curState->isLooping);
 		}
 		else
 		{
-			AnimationEvaluator::EvaluateSkinningMatrices(*primaryClip, skeleton, m_currentStateTime, outBoneMatrices);
+			AnimationEvaluator::EvaluateSkinningMatrices(*primaryClip, skeleton, m_currentStateTime, outBoneMatrices, curState->isLooping);
 		}
 	}
 }
@@ -244,7 +259,7 @@ bool AnimatorStateMachine::SaveToFile(const std::string& filePath) const
 		BAM_LOG(Error, "Engine", "Asset", "[Animator] Reflection type not found for AnimatorStateMachine");
 		return false;
 	}
-
+	const std::string resolvedPath = PlatformPath::ResolveProjectRelative(filePath).string();
 	archive::JsonArchive ar;
 	const auto writeRes = archive_reflection::WriteObject(ar, "AnimatorController", *type, reflection::ObjectView::From(*this), &refl.GetRegistry(), &refl.GetPropertyCodecs());
 	if (!writeRes)
@@ -252,26 +267,24 @@ bool AnimatorStateMachine::SaveToFile(const std::string& filePath) const
 		BAM_LOG(Error, "Engine", "Asset", "[Animator] WriteObject failed: code={}, field={}", static_cast<int>(writeRes.Code), writeRes.Field);
 		return false;
 	}
-
-	const auto saveRes = ar.SaveToFile(filePath);
+	const auto saveRes = ar.SaveToFile(resolvedPath);
 	if (!saveRes)
 	{
-		BAM_LOG(Error, "Engine", "Asset", "[Animator] SaveToFile failed: code={}, field={}, path={}", static_cast<int>(saveRes.Code), saveRes.Field, filePath);
+		BAM_LOG(Error, "Engine", "Asset", "[Animator] SaveToFile failed: code={}, field={}, path={}", static_cast<int>(saveRes.Code), saveRes.Field, resolvedPath);
 		return false;
 	}
 	return true;
 }
-
 bool AnimatorStateMachine::LoadFromFile(const std::string& filePath)
 {
+	const std::string resolvedPath = PlatformPath::ResolveProjectRelative(filePath).string();
 	archive::JsonArchive ar;
-	const auto loadRes = ar.LoadFromFile(filePath);
+	const auto loadRes = ar.LoadFromFile(resolvedPath);
 	if (!loadRes)
 	{
-		BAM_LOG(Error, "Engine", "Asset", "[Animator] LoadFromFile failed: code={}, field={}, path={}", static_cast<int>(loadRes.Code), loadRes.Field, filePath);
+		BAM_LOG(Error, "Engine", "Asset", "[Animator] LoadFromFile failed: code={}, field={}, path={}", static_cast<int>(loadRes.Code), loadRes.Field, resolvedPath);
 		return false;
 	}
-
 	const auto& refl = Engine::ReflectionRegistry::Get();
 	const auto* type = refl.GetRegistry().FindType<AnimatorStateMachine>();
 	if (!type)
@@ -279,7 +292,6 @@ bool AnimatorStateMachine::LoadFromFile(const std::string& filePath)
 		BAM_LOG(Error, "Engine", "Asset", "[Animator] Reflection type not found for AnimatorStateMachine");
 		return false;
 	}
-
 	AnimatorStateMachine temp;
 	const auto readRes = archive_reflection::ReadObject(ar, "AnimatorController", *type, temp, &refl.GetRegistry(), &refl.GetPropertyCodecs());
 	if (!readRes)
@@ -287,7 +299,6 @@ bool AnimatorStateMachine::LoadFromFile(const std::string& filePath)
 		BAM_LOG(Error, "Engine", "Asset", "[Animator] ReadObject failed: code={}, field={}", static_cast<int>(readRes.Code), readRes.Field);
 		return false;
 	}
-
 	*this = std::move(temp);
 	return true;
 }

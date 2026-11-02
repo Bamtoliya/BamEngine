@@ -86,23 +86,24 @@ void AnimationSystem::OnUpdate(entt::registry& registry, const vector<Scene*>& a
 			if (animator.runtimeState.HasStateMachine())
 			{
 				animator.runtimeState.Update(dt * animator.playRate, *skeleton, animator.finalBoneMatrices);
+				animator.currentTime = animator.runtimeState.GetStateTime();
 			}
 			else
 			{
 				auto* clip = animator.currentClip.Get();
 				if (!clip) continue;
-
+				const f64 tps = clip->GetTicksPerSecond() > 0.0 ? clip->GetTicksPerSecond() : 25.0;
+				const f32 durationSec = clip->GetDuration() > 0.0 ? static_cast<f32>(clip->GetDuration() / tps) : 0.0f;
 				animator.currentTime += dt * animator.playRate;
-				if (!animator.isLooping && clip->GetDuration() > 0.0 && clip->GetTicksPerSecond() > 0.0)
+				if (!animator.isLooping && durationSec > 0.0f)
 				{
-					const f32 durationSec = static_cast<f32>(clip->GetDuration() / clip->GetTicksPerSecond());
 					if (animator.currentTime >= durationSec)
 					{
 						animator.currentTime = durationSec;
 						animator.isPlaying = false;
 					}
 				}
-				AnimationEvaluator::EvaluateSkinningMatrices(*clip, *skeleton, animator.currentTime, animator.finalBoneMatrices);
+				AnimationEvaluator::EvaluateSkinningMatrices(*clip, *skeleton, animator.currentTime, animator.finalBoneMatrices, animator.isLooping);
 			}
 		}
 	}

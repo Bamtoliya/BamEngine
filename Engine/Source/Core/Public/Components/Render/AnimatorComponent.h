@@ -45,7 +45,17 @@ namespace Engine
 
 		void Play() { isPlaying = true; }
 		void Pause() { isPlaying = false; }
-		void Stop() { isPlaying = false; currentTime = 0.0f; }
+		void Stop()
+		{
+			isPlaying = false;
+			currentTime = 0.0f;
+			if (runtimeState.HasStateMachine()) runtimeState.Reset();
+		}
+		void SetTime(float time)
+		{
+			currentTime = std::max(0.0f, time);
+			if (runtimeState.HasStateMachine()) runtimeState.SetStateTime(currentTime);
+		}
 
 		// 컨트롤러 파일 로드 및 상태 머신 바인딩
 		bool LoadController(const std::string& path)

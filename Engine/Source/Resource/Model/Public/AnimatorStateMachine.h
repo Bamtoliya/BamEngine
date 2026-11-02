@@ -162,6 +162,7 @@ class ENGINE_API AnimatorRuntimeState
 {
 public:
 	void BindStateMachine(const std::shared_ptr<AnimatorStateMachine>& sm);
+	void Reset();
 	bool HasStateMachine() const { return m_stateMachine != nullptr; }
 	const std::shared_ptr<AnimatorStateMachine>& GetStateMachine() const { return m_stateMachine; }
 
@@ -179,6 +180,9 @@ public:
 	const std::string& GetCurrentStateName() const { return m_currentStateName; }
 	bool IsTransitioning() const { return m_isTransitioning; }
 	float GetTransitionProgress() const { return m_transitionDuration > 0.0f ? (m_transitionElapsed / m_transitionDuration) : 1.0f; }
+
+	float GetStateTime() const { return m_currentStateTime; }
+	void SetStateTime(float time) { m_currentStateTime = std::max(0.0f, time); }
 
 	AnimatorParameters& GetParameters() { return m_parameters; }
 	const AnimatorParameters& GetParameters() const { return m_parameters; }

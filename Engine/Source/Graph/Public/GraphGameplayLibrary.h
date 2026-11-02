@@ -300,7 +300,7 @@ namespace Engine::GraphGameplay
 		entt::entity entity = GraphSystem::GetCurrentEntity();
 		if (!scene || entity == entt::null) return;
 		auto* anim = scene->GetRegistry().try_get<AnimatorComponent>(entity);
-		if (anim) anim->currentTime = std::max(0.0f, time);
+		if (anim) anim->SetTime(time);
 	}
 	FUNCTION(GRAPH_PURE("Animator.IsPlaying"), DISPLAY_NAME("Is 3D Animation Playing"), CATEGORY("Animation"))
 		inline bool Is3DAnimationPlaying()
