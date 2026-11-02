@@ -216,8 +216,8 @@
                         "m_Dirty": false,
                         "m_Materials": [
                            {
-                              "AssetKey": "Resources/Material/SkinningMaterial.bammat",
-                              "AssetPath": "Resources/Material/SkinningMaterial.bammat"
+                              "AssetKey": "Resources/Material/SkinningMaterial.bammat.json",
+                              "AssetPath": "Resources/Material/SkinningMaterial.bammat.json"
                            }
                         ],
                         "m_RenderPassID": 0,

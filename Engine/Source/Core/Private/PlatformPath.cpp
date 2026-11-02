@@ -60,4 +60,20 @@ namespace Engine
         std::replace(str.begin(), str.end(), L'\\', L'/');
         return std::filesystem::path(str).lexically_normal();
     }
+
+    std::filesystem::path Engine::PlatformPath::ToProjectRelative(const std::filesystem::path& path)
+    {
+        if (path.empty()) return path;
+        std::error_code ec;
+        const std::filesystem::path normalized = path.lexically_normal();
+        const std::filesystem::path root = GetProjectRoot().lexically_normal();
+        if (root.empty()) return normalized;
+        // 경로가 프로젝트 루트로 시작하면 상대 경로로 변환
+        auto rel = normalized.lexically_relative(root);
+        if (!rel.empty() && rel.native()[0] != L'.' && !rel.is_absolute())
+        {
+            return rel.generic_wstring();
+        }
+        return normalized.generic_wstring();
+    }
 }

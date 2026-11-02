@@ -532,6 +532,7 @@ EResult ImGuiManager::CreateDefaultPanels()
 	historyPanel->Initialize();
 	AddImGuiPanel(historyPanel);
 	AddImGuiPanel(new UnifiedSettingsPanel());
+	AddImGuiPanel(new AssetReferencePanel());
 	
 	GraphicSettingPanelDesc graphicsDesc;
 	graphicsDesc.Window = m_Window;

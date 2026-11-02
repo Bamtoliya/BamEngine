@@ -1,4 +1,19 @@
 Group,Key,English,Korean
+,Particle.ActiveCount,Active Particles,활성 파티클 수
+,Particle.Play,Play,재생
+,Particle.Pause,Pause,일시정지
+,Particle.Stop,Stop,정지
+,Particle.Reset,Reset,초기화
+,Particle.BurstNow,Burst Now,즉시 버스트
+,NODE_ANIMATOR_SET_LAYER_WEIGHT,Set Animator Layer Weight,애니메이터 레이어 가중치 설정
+,NODE_ANIMATOR_GET_LAYER_WEIGHT,Get Animator Layer Weight,애니메이터 레이어 가중치 가져오기
+,NODE_ANIMATOR_STOP_LAYER,Stop Animator Layer,애니메이터 레이어 중지
+,PROP_ANIMATOR_LAYERS,Animation Layers,애니메이션 레이어 목록
+,UI_ASSET_REFERENCE_PANEL,Asset Reference Checker,에셋 참조 검사기
+,AssetRef.ScanAll,Scan Resources,에셋 참조 검사
+,AssetRef.FixSafe,Fix Safe Issues,안전 항목 자동 복구
+,AssetRef.ScanRequired,Click Scan to inspect resource references.,검사 버튼을 눌러 에셋 참조를 검사하십시오.
+,AssetRef.BtnFix,Fix,복구
 ,AnimatorGraph.Entry,ENTRY ->,진입 (ENTRY) ->
 ,AnimatorGraph.Clip,Clip,클립
 ,AnimatorGraph.NoMotion,No Motion,동작 없음
@@ -30,6 +45,10 @@ Group,Key,English,Korean
 ,AnimatorGraph.Parameter,Parameter,매개변수
 ,AnimatorGraph.Samples,Samples,샘플 수
 ,AnimatorGraph.NoNodeSelected,No node selected.,선택된 노드가 없습니다.
+,AnimatorGraph.Notifies,Animation Notifies,애니메이션 알림 (Notifies)
+,AnimatorGraph.NotifyName,Notify Name,알림 이름
+,AnimatorGraph.NotifyTime,Trigger Time (s),발동 시간 (초)
+,AnimatorGraph.NotifyPayload,Payload / Parameter,전달 데이터 / 파라미터
 ,Animator.StateMachine,State Machine,상태 머신
 ,Animator.CurrentState,Current State,현재 상태
 ,Animator.Parameters,Parameters,매개변수

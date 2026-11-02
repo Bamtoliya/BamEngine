@@ -18,5 +18,7 @@ namespace Engine
 
         // 상대 경로를 프로젝트 루트 기준 절대 경로로 안전하게 결합
         static std::filesystem::path ResolveProjectRelative(const std::filesystem::path& relativePath);
+        // 절대 경로 또는 상대 경로를 프로젝트 루트 기준 상대 경로("Resources/...")로 안전하게 정규화
+        static std::filesystem::path ToProjectRelative(const std::filesystem::path& path);
     };
 }

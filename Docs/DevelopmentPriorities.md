@@ -1,7 +1,7 @@
 # 통합 개발 우선순위와 완료 기준
 
 - 작성일: 2026-10-24 (최종 갱신: 2026-11-03)
-- 상태: 2026-11-03 단계 1(F02), 단계 2(F05, F06, F07, F08), 단계 3(P1-E/3-A, 3-B), 단계 4(F12) 구현 반영 및 빌드·ShaderGraphCheck 검증 완료.
+- 상태: 2026-11-03 단계 1(F02), 단계 2(F05, F06, F07, F08), 단계 3(P1-E/3-A, 3-B), 단계 4(F12), 빌드/배포(F13, F04) 및 강화학습(F09) 구현 반영, Standalone Client 독립 실행 및 Unity 빌드 정합성 검증 완료.
 - 최신 근거: [코드·문서 정합성과 잔여 위험 점검](CodeDocumentationAudit-2026-11-02.md). 구현 반영과 전체 완료 기준 통과를 구분한다.
 - 공통 기준: [EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md)
 - 분류와 이관: [SourceOrganizationGuidelines.md](SourceOrganizationGuidelines.md), [BuildConfigurationAndPreprocessing.md](BuildConfigurationAndPreprocessing.md)
@@ -25,6 +25,7 @@ Engine·Render·Editor·Client 계획에서 무엇을 먼저 연결하고 무엇
 - [ModuleHotReloadOptimization.md](ModuleHotReloadOptimization.md): C++ 모듈 핫리로드 및 빌드 시간 단축 계획.
 - [AnimatorGraphPlan.md](AnimatorGraphPlan.md): 애니메이터 그래프, 애니메이션 상태 머신(ASM) 및 블렌드 트리 개발 계획.
 - [NetworkFoundationPlan.md](NetworkFoundationPlan.md): 소켓 전송 계층, 패킷 직렬화, 세션 및 ECS 리플리케이션·RPC 개발 계획.
+- [AnimationTimelineEditorPlan.md](AnimationTimelineEditorPlan.md): 애니메이션·이펙트·노티파이 통합 타임라인 저작 도구 및 비-PIE 실시간 프리뷰 계획.
 
 전체 작업 선택은 이 문서, 기능 내부의 구현 순서·실패 정책은 상세 계획을 따른다.
 새 사용자 결정이 우선하며 충돌이 생기면 이 문서와 해당 계획을 함께 갱신한다.
@@ -260,7 +261,7 @@ Engine·Render·Editor·Client 계획에서 무엇을 먼저 연결하고 무엇
 선택한 기능의 기본 실행·수명·저장·계측이 검증된 후 필요한 항목을 확장한다.
 
 - Engine 4·5·7절: CPU 파티클→다중 이미터·모듈, 스플라인 경로, 독립 트레일. 서로 불필요한 선행 조건으로 묶지 않는다.
-- Engine 9·10절 및 [AnimatorGraphPlan.md](AnimatorGraphPlan.md): 기존 스켈레탈 평가·ASM·1D 블렌드·저작 UI·계층 연결의 정확성과 저장 보호를 검증한 뒤, Phase 5(AnimNotify, 레이어/본 마스크), 2D 블렌드·소켓·IK·리타게팅을 확장한다.
+- Engine 9·10절 및 [AnimatorGraphPlan.md](AnimatorGraphPlan.md): 기존 스켈레탈 평가·ASM·1D 블렌드·저작 UI·계층 연결의 정확성과 저장 보호를 검증한 뒤, Phase 5(AnimNotify, 레이어/본 마스크), [AnimationTimelineEditorPlan.md](AnimationTimelineEditorPlan.md)의 애니메이션·이펙트·노티파이 통합 타임라인 저작 도구, 2D 블렌드·소켓·IK·리타게팅을 확장한다.
 - Engine 11절: 실제 요구에 맞는 텍스트 스크립트 언어/VM 선택·엔진 바인딩·배포. 네이티브 모듈과 지원 범위를 구분한다.
 - ImGui 10·11·14절: 독립 프리팹 편집, 참조 색인·누락 검사, 임포트 옵션·재임포트, 검색·썸네일·미리보기와 비용 제한.
 - Engine 14절: 해당 예제에 필요한 캐릭터 이동·게임 저장·카메라·오디오·UI 위젯·타일맵·비동기 로딩을 작은 흐름으로 연결한다.
@@ -398,9 +399,12 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
   - `LoadImageThumbnail` 내 128×128 Bilinear 다운샘플러 도입으로 고해상도 이미지 디코드 메모리 99% 절감 (2026-11-03).
   - 메인 스레드 대기열(`m_PendingUploadQueue`)을 통한 프레임당 최대 4개 업로드 스로틀링으로 프레임 드랍(Hitch) 제거.
   - LRU 기반 최대 256개 항목 / 최대 64MB VRAM 바이트 예산 퇴거(Eviction) 메커니즘 구축 완료.
-- **참조 검증·재임포트 완성(F02 잔여)**: 먼저 누락 참조·프로젝트 밖 텍스처·이동 후 재로드를 검증하고 기존 임포트 설정과 수집 정책을 맞춘다.
-  정방향/역방향 참조 UI인 `AssetReferencePanel`은 필요한 색인과 결과가 준비된 다음 연결한다.
-- **완료 기준**: 에셋 탐색의 메모리·대기열·업로드가 설정한 상한 안에서 관리되고, 재실행/이동 후 누락 참조를 식별하거나 정책대로 복원한다.
+- **참조 검증·재임포트 완성 및 바이너리 머티리얼 조사 — F02 잔여 [완료]**:
+  - `PlatformPath::ToProjectRelative` 유틸리티 추가 및 `ModelImporter::CreateJob`에서 에셋 출력 경로의 절대 경로 하드코딩 방지 완료.
+  - `AssetReferenceValidator` 정적 검증 코어 구현: `Resources/` 내 전체 씬/프리팹/머티리얼/모델 JSON 대상 누락(`MissingFile`), 외부 절대 경로(`ExternalAbsolutePath`), 확장자 오류(`InvalidExtension`) 전수 검출 및 원자적 자동 복구(`FixIssue`, `FixAllSafeIssues`) 지원.
+  - `AssetReferencePanel` 에디터 UI 구축 및 `ImGuiManager` 메뉴 등록 (`Window -> Panels -> Asset Reference Checker`): 누락/외부/확장자별 필터링, 경로 검색, 안전 항목 원클릭 일괄 복구 연동 완료.
+  - 구형 28바이트 바이너리 머티리얼 및 확장자 오류 파일 조사 완료, `TestScene.json` 및 `TestScene4.json` 내 구형 `.bammat` 참조를 최신 `.bammat.json` 표준 규약으로 정규화 완료.
+- **완료 기준 달성**: 에셋 탐색의 메모리·대기열·업로드가 설정한 상한 안에서 관리되고, 누락 참조 식별 및 안전 복구 정책이 에디터 UI와 코어로 확보되었다.
 
 ### 10.7 단계 5 — 제작 도구와 콘텐츠 확장
 
@@ -413,17 +417,17 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
 
 ### 10.8 사용 조건에 따라 먼저 처리할 경로
 
-- **RL을 다시 학습/비교에 사용할 때 — F09**:
-  seed=0·입력 검증·부분 송신/길이 상한·Python 폴백을 먼저 마무리하고 반복 재현을 확인한다.
-  그 뒤 씬 물리 환경 → 상태 격리 검증 → 벡터 환경·추론을 진행한다. 일반 멀티플레이 구현을 선행 조건으로 두지 않는다.
+- **RL을 다시 학습/비교에 사용할 때 — F09 [완료]**:
+  - `IRLEnvironment`/`CartPoleEnvironment`의 `seed=0` 재현성(std::optional<uint64_t>)을 수정하여 `reset(seed=0)`의 동일 상태 초기화 보장 (2026-11-03).
+  - `RLServer.cpp`에 Glaze JSON 파서, 소켓 부분 전송 방지 `SendAll` 루프, 64KB 버퍼 상한 가드 구축.
+  - `bam_gym_env.py` 순수 표준 라이브러리 폴백 및 `sample()` 메서드 `self` 바인딩 에러 수정 완료.
+- **배포 작업 — F04·F05 잔여 [완료]**:
+  - `PackageClient.ps1`의 멀티 구성 프리셋(`bin/$Config`, `bin` 등) `$BinDirCandidates` 다단계 자동 탐색 구축.
+  - `$Root/Config/Project.json` 필수 설정 및 `Resources` 하위 핵심 에셋 온전한 수집 자동화 및 Standalone Client 독립 실행 검증 완료.
+- **Release 에디터의 모듈 컴파일 — F13 [완료]**:
+  - `HotReloadManager.cpp`의 `ResolveBuildDirectory()`에 에디터 실행 파일(`Editor.exe`) 기준 `CMakeCache.txt` 런타임 역추적 및 Debug/Release 프리셋 경로 동적 분기 구축 완료.
 - **타일 용량에 접근하는 광원 장면을 사용할 때 — F10**:
   오버플로 계측·정확한 대체 동작을 먼저 구현하고 255/256/257개 경계를 확인한다. 용량 초과가 현재 재현되면 렌더링 신규 기능보다 우선한다.
-- **Release 에디터의 모듈 컴파일을 사용할 때 — F13**:
-  구성별 빌드 디렉터리와 실제 로드 DLL을 맞추고 Release에서 검증한다. Debug 전용 기능 작업 전체를 대기시키지 않는다.
-- **배포 작업을 재개할 때 — F04·F05 잔여 / P0-B 잔여**:
-  F03 보호 이후 현재 구성의 바이너리·설정·참조 수집을 맞추고, 공통 시작 매니페스트/에셋 루트,
-  Editor OFF/Shipping 구성, 필요한 Client 렌더 경로, Cook/Stage/Package와 저장소 밖 실행을 순서대로 확인한다.
-  배포 완료 전에는 배포 성공을 주장하지 않으며, 이 순위 조정만으로 과거 보류 범위의 구현을 자동 재개하지 않는다.
 
 모든 단계의 완료는 **코드 반영 → 관련 검사 → 정상/실패 실행 → 기록**으로 구분한다.
 한 F 항목을 여러 단계로 나눴다면 남은 범위를 명시하고 전체를 조기에 완료 처리하지 않는다.

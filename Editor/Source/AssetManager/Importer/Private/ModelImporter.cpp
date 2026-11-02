@@ -955,7 +955,11 @@ EResult ModelImporter::CreateJob(const filesystem::path& sourcePath, const files
 	}
 	else
 	{
-		outputDirectory = filesystem::absolute(destDir, ec).lexically_normal();
+		outputDirectory = Engine::PlatformPath::ToProjectRelative(destDir);
+		if (outputDirectory.empty())
+		{
+			outputDirectory = inputPath.parent_path();
+		}
 		if (ec)
 			return EResult::InvalidArgument;
 	}

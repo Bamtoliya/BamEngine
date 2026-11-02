@@ -217,8 +217,8 @@
                         "m_DrawShadow": false,
                         "m_Materials": [
                            {
-                              "AssetKey": "Resources/Material/DefaultMaterial.bammat",
-                              "AssetPath": "Resources/Material/DefaultMaterial.bammat"
+                              "AssetKey": "Resources/Material/DefaultMaterial.bammat.json",
+                              "AssetPath": "Resources/Material/DefaultMaterial.bammat.json"
                            }
                         ],
                         "m_ReceiveShadow": false,

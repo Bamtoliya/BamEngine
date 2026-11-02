@@ -35,6 +35,48 @@ Use one entry per meaningful change.
 
 ---
 
+## [2026-11-03] 에셋 참조 무결성 검증기(AssetReferenceValidator/Panel) 구축 및 바이너리 머티리얼 조사·정규화 (단계 4 F02 잔여)
+
+- Area: Engine | Editor | Resource | UI
+- Type: Feature | Fix | Architecture | Tooling
+- 관련 파일:
+  - Engine/Source/Core/Public/PlatformPath.h
+  - Engine/Source/Core/Private/PlatformPath.cpp
+  - Editor/Source/AssetManager/Importer/Private/ModelImporter.cpp
+  - Editor/Source/AssetManager/Public/AssetReferenceValidator.h
+  - Editor/Source/AssetManager/Private/AssetReferenceValidator.cpp
+  - Editor/Source/ImGui/AssetReferencePanel/Public/AssetReferencePanel.h
+  - Editor/Source/ImGui/AssetReferencePanel/Private/AssetReferencePanel.cpp
+  - Editor/Source/ImGui/Private/ImGuiManager.cpp
+  - Resources/Data/Localization/Editor.csv
+  - Resources/Scenes/TestScene.json
+  - Resources/Scenes/TestScene4.json
+  - Docs/DevelopmentPriorities.md
+- Motivation:
+  - `Logs/Editor.log`에 대량으로 기록되던 구형 바이너리 머티리얼(`DefaultMaterial.bammat` 등) 로드 실패(`stage=archive file read`) 원인을 규명하고 정합성을 회복.
+  - 모델 임포트 시 절대 경로(`I:/...`)가 하드코딩되어 다른 개발자 환경이나 독립 패키징 배포 시 메시가 로드되지 않는 결함 해결.
+  - 씬, 프리팹, 모델, 머티리얼 간 상호 참조 누락(`Missing`), 외부 절대 경로(`External`), 확장자 누락/불일치(`InvalidExtension`)를 전수 진단하고 안전하게 자동 치환하는 도구 및 코어 확보.
+- Implementation summary:
+  - **프로젝트 상대 경로 유틸리티 및 임포터 표준화**: `PlatformPath::ToProjectRelative`를 구현하고, `ModelImporter::CreateJob`에서 대상 디렉터리를 상대 경로로 정규화하여 생성 산출물의 절대 경로 하드코딩을 원천 차단.
+  - **에셋 참조 검증 코어 (`AssetReferenceValidator`)**:
+    - `Resources/` 폴더 내 모든 에셋 JSON을 탐색하여 `AssetPath`, `AssetKey`, `Path` 필드를 수집.
+    - 내장 셰이더/메시 심볼(`FullscreenQuad`, `LightingPS` 등) 제외 처리.
+    - 3대 결함 유형(`MissingFile`, `ExternalAbsolutePath`, `InvalidExtension`) 분류 및 `TryResolveFallbackPath` 기반 자동 복구 경로 산출.
+    - 임시 파일 생성 후 rename하는 원자적 파일 교체(`WriteTextFileAtomic`) 기반의 `FixIssue` 및 파일별 일괄 치환 `FixAllSafeIssues` 구현.
+  - **참조 검사기 UI 패널 (`AssetReferencePanel`)**:
+    - `IImGui` 기반 패널 구현 및 `ImGuiManager` 메뉴 등록 (`Window -> Panels -> Asset Reference Checker`).
+    - 스캔 결과 요약 통계(누락, 외부, 확장자 오류, 복구 가능 수), 결함 유형별 콤보 필터링, 경로 검색창 제공.
+    - 발견된 결함 목록 테이블 표시 및 단일 `[Fix]` / 상단 `[Fix Safe Issues]` 원클릭 일괄 복구 버튼 연동.
+    - `Editor.csv` 로캘 키(`UI_ASSET_REFERENCE_PANEL`, `AssetRef.*`) 다국어 완비.
+  - **바이너리 머티리얼 조사 및 구형 씬 참조 정규화**:
+    - `Logs/Editor.log`의 10개 실패 파일이 2026-10-11에 생성된 28바이트 구형/손상 포맷임을 규명(최신 원본은 `.bammat.json`으로 온전히 존재).
+    - `TestScene.json` 및 `TestScene4.json`에서 구형 `.bammat`을 가리키던 참조를 유효한 최신 `.bammat.json`으로 교체.
+- Validation:
+  - 에디터 내 `Asset Reference Checker` UI 패널 구동, 에셋 전체 스캔 및 안전 참조 자동 복구 정상 동작 확인.
+  - `TestScene` 및 `TestScene4` 로드 시 머티리얼 로드 에러 해소 검증 완료.
+
+---
+
 ## [2026-11-03] 에셋 파이프라인(F02·F12), 애니메이션 재생(F07), 머티리얼 플래그(P1-E·F08), 클라이언트 검증(F05) 종합 안정화
 
 - Area: Engine | Editor | Render | Resource | Client
