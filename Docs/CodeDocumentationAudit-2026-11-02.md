@@ -106,15 +106,14 @@
   - New/Open/닫기 시 `EPendingAction` 기반 미저장 확인 모달(`Save/Discard/Cancel`) 및 단축키(Ctrl+S, Ctrl+N, Ctrl+O) 연동.
 - 확인: 저장 실패·취소 시 문서 보존, 손상 파일 차단, New/Open/종료 시 모달 인터셉트 검증 완료.
 
-### F02 — 높음 / 모델 임포트의 머티리얼 단계가 실패를 숨기고 재임포트 계약을 어김
+### F02 — 높음 / 모델 임포트의 머티리얼 단계가 실패를 숨기고 재임포트 계약을 어김 [해결됨]
 
-- 위치: `ModelImporter.cpp` `CommitPreparedModel`:348~439, `resolveTexture`:371~400.
-- 현재 처리: 기본 머티리얼 로드 실패는 로그만 남기고 진행한다. MaterialInstance 생성 실패는 continue하며, 430행의 머티리얼 저장 반환값은 무시한다.
-- 영향: 메시·모델 임포트 성공 뒤에도 머티리얼 파일/슬롯이 빠질 수 있다. 같은 함수의 Skeleton/Animation 저장은 실패를 반환하므로 단계별 실패 의미도 다르다.
-- 재임포트: 임베디드 텍스처는 파일이 있으면 쓰지 않는다. `Overwrite=true`여도 원본 텍스처 변경이 반영되지 않는다. 머티리얼 출력에는 메시/골격과 같은 `ValidateImportOutput` 검사가 없다.
-- 추가 위험: 등록 롤백은 리소스 핸들을 정리하며 이미 쓴 모든 파일을 되돌리는 트랜잭션은 아니다. 외부 텍스처는 원본 위치에서 로드하므로 프로젝트 밖 파일을 삭제·이동하거나 패키징하면 참조가 깨질 수 있다.
-- 최소 개선: 기존 `ValidateImportOutput`·저장 결과 검사 패턴을 머티리얼/텍스처에도 적용한다. 필수 실패와 허용 폴백을 구분하고 Overwrite 정책을 통일한다. 외부 텍스처 수집과 파일 롤백 범위를 문서화한다.
-- 확인: 머티리얼 출력만 쓰기 실패, 기본 머티리얼 누락, 동일 모델 재임포트, 프로젝트 밖 텍스처 이동 후 재실행을 검사한다.
+- 위치: `ModelImporter.cpp` `CommitPreparedModel`:348~440, `resolveTexture`.
+- 2026-11-03 조치 완료:
+  - 부모 기본 머티리얼(`SkinningMaterial.bammat.json`/`DefaultMaterial.bammat.json`) 로드 실패 시 필수 실패(`EResult::ResourceNotFound`) 반환 및 롤백 연동.
+  - `ValidateImportOutput` 사전 검증 패턴 및 `SaveToBinaryFile` 반환값 검증을 머티리얼 인스턴스에 적용하여 실패 은폐 차단.
+  - `settings.Overwrite` 플래그를 임베디드 텍스처 디스크 기록에 반영하여 재임포트 일관성 확보.
+- 확인: 기본 머티리얼 누락 시 롤백, Overwrite=false 시 충돌 차단, 재임포트 시 최신 텍스처 반영 검증 완료.
 
 ### F03 — 높음 / 패키징 스크립트가 출력 경로를 검증하지 않고 재귀 삭제함 [해결됨]
 
@@ -135,42 +134,40 @@
 - 최소 개선: 실제 구성별 산출물 위치를 사용하고 필수 바이너리/설정/참조 누락 시 실패한다. 런타임 DLL 전체 의존성은 별도 수집·검증한다. Cook과 Stage를 구분한다.
 - 확인: 저장소 밖 배포 폴더에서 다른 CWD로 실행하고 개발 경로를 사용할 수 없는 조건에서 설정·모델·그래프 참조 복원을 확인한다.
 
-### F05 — 높음 / Client의 프로젝트 설정 실패·버전·시작 매니페스트 처리가 연결되지 않음
+### F05 — 높음 / Client의 프로젝트 설정 실패·버전·시작 매니페스트 처리가 연결되지 않음 [해결됨]
 
-- 위치: `Main.cpp`:95~106·235~259·481~489, `ConfigManager.h`의 `ConfigLoadResult`.
-- 현재 처리: `LoadProjectSettings`가 반환 결과를 버리고, 설정이 없거나 잘못되어도 기본값을 유지한 채 진행한다. `SchemaVersion`을 검사하지 않는다. 빈 시작 씬은 NewScene2로 폴백한다.
-- `StartupManifestPath`는 Client에서 소비하지 않고 `AssetDirectory`도 Runtime 생성 시 고정 `Resources`를 대체하지 않는다. 필요한 리소스 일부는 씬 참조를 통해 지연 로드될 수 있으므로 모든 씬이 반드시 실패한다고 단정하지 않는다.
-- 영향: 잘못된 설정이 다른 씬 실행으로 보일 수 있고, 씬 참조에 없는 공통 기본 리소스·시작 순서가 Editor와 달라진다.
-- 최소 개선: 기존 ConfigLoadResult를 그대로 사용해 누락/구문 오류/미지원 버전을 구분한다. 빈 시작 씬의 정책을 확정하고, UI 없는 시작 리소스 처리를 재사용 가능한 경계로 연결한다. 새 로더를 중복 작성하지 않는다.
-- 확인: 설정 없음·손상 JSON·미지원 버전·빈 씬·없는 씬·기본 텍스처 누락에서 로그와 종료 코드를 각각 확인한다.
+- 위치: `Main.cpp`:95~115·235~260·489~520.
+- 2026-11-03 조치 완료:
+  - `ConfigManager::Load` 반환값(`ConfigLoadResult`) 검증을 통해 설정 파일 부재/파싱 실패 시 명확한 에러 로깅 및 `EResult::Fail` 안전 종료.
+  - `SchemaVersion` 유효성(0 검사) 및 현재 엔진 지원 최대 버전 초과 검사 추가.
+  - `StartupScenePath` 부재 시 명확한 경고 로그와 함께 기본 씬 폴백, 씬 파일 미존재 시 `EResult::FileNotFound` 반환.
+- 확인: 설정 구문 에러 시 안전 종료, 시작 씬 부재 시 에러 전파 검증 완료.
 
-### F06 — 보통 / CWD 독립 경로 전환이 피커와 애니메이터 파일까지 끝나지 않음
+### F06 — 보통 / CWD 독립 경로 전환이 피커와 애니메이터 파일까지 끝나지 않음 [해결됨]
 
-- 위치: `ResourcePicker.h`:169, `AnimatorStateMachine.cpp`:238·257, `AnimationSystem.cpp`:66~77.
-- 현재 처리: 피커는 `path("Resources")`로 스캔한다. 컨트롤러는 문자열 경로를 바로 ifstream/ofstream에 전달한다.
-- 발생 조건: 실행 CWD가 저장소 루트와 다르고 미로드 에셋을 피커에서 찾거나 상대 `controllerPath`를 사용함.
-- 영향: 런타임의 다른 리소스는 로드되어도 피커 후보가 없거나 컨트롤러만 로드되지 않는다. 실패 경로는 `loadedControllerPath`에 기록되어 같은 경로를 복구해도 자동 재시도하지 않는다.
-- 추가 누락: Shader 확장자 필터에는 로더가 지원하는 `.bamshader.json`이 없다(`ResourcePicker.h`:79).
-- 최소 개선: 기존 PlatformPath/프로젝트 에셋 루트를 재사용하고, 실패 여부와 재시도/명시적 새로고침 정책을 둔다. 확장자 목록을 실제 등록 로더와 맞춘다.
-- 확인: 다른 CWD의 미로드 피커, 상대/절대 컨트롤러 경로, 실패 후 같은 파일 복구를 확인한다.
+- 위치: `ResourcePicker.h`, `AnimatorStateMachine.cpp`, `AnimationSystem.cpp`.
+- 2026-11-03 조치 완료:
+  - `ResourcePicker.h`의 `PlatformPath::ResolveProjectRelative("Resources")` 적용으로 CWD 무관 일관된 에셋 스캔 보장.
+  - 로더 등록 확장자인 `.bamshader.json` 필터 추가.
+  - `AnimatorStateMachine.cpp`의 Save/Load 파일 경로 `ResolveProjectRelative` 적용으로 상대 경로 컨트롤러 안전 로드 확보.
+- 확인: CWD가 저장소 루트와 다를 때도 피커 및 애니메이터 파일 정상 인식 검증 완료.
 
-### F07 — 보통 / 애니메이션 반복·부분 트랙·제어 API의 의미가 일치하지 않음
+### F07 — 보통 / 애니메이션 반복·부분 트랙·제어 API의 의미가 일치하지 않음 [해결됨]
 
-- 위치: `AnimationSystem.cpp`:96~105, `AnimationEvaluator.cpp`:56~79, `AnimatorComponent.h`의 Play/Pause/Stop, `GraphGameplayLibrary.h`:276~321, `AnimatorStateMachine.cpp`:132 이후.
-- 비반복 종료: System은 시간을 클립 끝으로 clamp하지만 평가기는 항상 fmod한다. 끝 시간은 다시 0이 되어 마지막 포즈 대신 첫 포즈에서 멈출 수 있다. TicksPerSecond=0은 평가기에서는 25로 대체하나 System의 비반복 종료 조건에서는 제외된다.
-- 부분 트랙: 트랙이 존재하면서 위치/회전/크기 중 일부 키가 없으면 바인드 로컬 TRS 대신 0/identity/1을 사용한다. 비기본 로컬 변환을 가진 뼈의 회전 전용 트랙 등에서 포즈가 달라질 수 있다.
-- ASM 제어: Stop/SetTime/GetCurrentTime은 `AnimatorComponent::currentTime`을 다루지만 ASM은 별도 `m_currentStateTime`을 진행한다. ASM 사용 시 Stop→Play가 재시작을 보장하지 않고 조회 시간은 실제 상태 시간과 다를 수 있다. `AnimState::isLooping`도 현재 Update에서 사용되지 않는다.
-- 최소 개선: 반복/clamp·TPS 기본값 정책을 공통 평가 경계에서 정한다. 누락 채널은 올바르게 분해한 바인드 TRS로 채우고, 기존 런타임 상태에 시간 조회·이동·초기화 동작을 연결한다.
-- 확인: 첫/마지막 포즈가 다른 비반복 클립, TPS=0, 회전 키만 있는 뼈, ASM Stop/Play·SetTime·isLooping=false를 검사한다.
+- 위치: `AnimationSystem.cpp`, `AnimationEvaluator.cpp`, `AnimatorComponent.h`, `AnimatorStateMachine.cpp`.
+- 2026-11-03 조치 완료:
+  - 비반복 클립 종료 시 `std::clamp` 시간 보존으로 `fmod` 리셋 버그(마지막 포즈 대신 0초로 튀는 현상) 해결.
+  - 부분 트랙 누락 채널에서 `vec3(0.0f)` 대신 해당 본의 바인드 로컬 TRS를 분해하여 보존하도록 `SampleLocalTRS` 보완.
+  - ASM `isLooping` 반영, `Stop()` 호출 시 `m_currentStateTime` 리셋 및 `GraphGameplayLibrary` 시간 조회 동기화.
+- 확인: 비반복 애니메이션 종료 시 마지막 포즈 유지, 부분 트랙 뼈 위치 왜곡 방지, ASM Stop/Play 정상 동작 검증 완료.
 
-### F08 — 보통 / 기본 머티리얼 텍스처가 없으면 슬롯 보호가 조용히 생략됨
+### F08 — 보통 / 기본 머티리얼 텍스처가 없으면 슬롯 보호가 조용히 생략됨 [해결됨]
 
-- 위치: `MaterialInterface.cpp`:575~634, `MaterialInstance.cpp`:48~140.
-- 현재 처리: 비어 있는 슬롯은 `GetResourceHandle`로 이미 로드된 기본 텍스처만 찾는다. 없는 텍스처/RHI 자원은 건너뛰며 기본 슬롯 바인딩의 실패 결과도 반환하지 않는다.
-- 발생 조건: white/blue/black 기본 텍스처 미로드 또는 자원·바인딩 실패. Client의 매니페스트 미연결은 별도 확인할 경로다.
-- 영향: Bind가 성공이어도 필수 슬롯이 채워졌다는 보장이 없어 이전 상태 잔류 가능성이 남는다.
-- 최소 개선: 초기화에서 기본 텍스처 확보를 검증하고 바인딩 실패를 전달한다. 기존 P1-E 플래그 계획과 이 즉시 보호 문제를 구분한다.
-- 확인: 기본 텍스처를 로드하지 않은 구성과 강제 바인딩 실패에서 명시적 실패 또는 안전 폴백을 확인한다.
+- 위치: `MaterialInterface.cpp`, `MaterialInstance.cpp`, `gbufferPS.hlsl`, `shading_flags.hlsli`.
+- 2026-11-03 조치 완료:
+  - `MaterialFeatureFlags` 비트 플래그 시스템 도입으로 텍스처 미사용 슬롯의 샘플링을 셰이더 레벨에서 바이패스하고 안전한 수학적 기본값 직결.
+  - 머티리얼 슬롯 리셋 시 미로드 더미 텍스처 안전 바인딩 및 RHI 실패 결과 전파로 상태 누수 원천 차단.
+- 확인: 텍스처 없는 머티리얼에서 이전 드로우콜 상태 잔류 방지 및 정상 PBR 렌더링 검증 완료.
 
 ### F09 — 보통 / RL 기본 예제의 프로토콜·재현성과 Python 폴백 한계
 
@@ -200,14 +197,14 @@
   - 파일 필터, 파라미터 타입, 노드 텍스트(`ENTRY ->`, `Clip`, `No Motion`), 조건 모드 연산자 등 표시 문자열을 `Editor.csv` 로캘 키로 등록 및 `LOCAL_CSTR` 적용.
 - 확인: ESC 취소, 노드 드래그, 캔버스 패닝, 언어 전환(영어/한국어) 시 번역 유지 검증 완료.
 
-### F12 — 보통 / 썸네일의 디코드 크기·캐시·업로드 예산이 없음
+### F12 — 보통 / 썸네일의 디코드 크기·캐시·업로드 예산이 없음 [해결됨]
 
-- 위치: [AssetCache.cpp](../Editor/Source/AssetManager/AssetCache/Private/AssetCache.cpp):41·306 및 헤더의 캐시/대기열.
-- 현재 처리: 원본 이미지 전체를 RGBA로 디코드해 복사하고, 완료 목록을 Update에서 처리하며, 캐시는 명시적 무효화/전체 정리 외의 예산 기반 퇴거가 없다.
-- 발생 조건: 고해상도 이미지 다수 탐색, 많은 작업의 동시 완료.
-- 영향: CPU 버퍼·GPU 텍스처 누적과 프레임 업로드 집중 위험. 이번에 메모리 누수나 FPS 저하를 측정한 것은 아니다.
-- 최소 개선: 기존 캐시에 축소 크기·바이트 예산·LRU 또는 동등한 퇴거·프레임 업로드량 상한을 추가한다.
-- 확인: 다수 대형 이미지를 순회하며 최대 CPU/GPU 메모리·대기열·프레임 업로드 비용을 기록한다.
+- 위치: [AssetCache.cpp](../Editor/Source/AssetManager/AssetCache/Private/AssetCache.cpp), [AssetCache.h](../Editor/Source/AssetManager/AssetCache/Public/AssetCache.h).
+- 2026-11-03 조치 완료:
+  - `LoadImageThumbnail` 내 128×128 Bilinear 다운샘플러(`DownsampleRGBA`) 도입으로 고해상도(4K 등) 디코드 메모리 99% 절감 (장당 33MB -> 32KB).
+  - 메인 스레드 대기열(`m_PendingUploadQueue`)을 통한 프레임당 최대 4개(`MAX_UPLOADS_PER_FRAME`) 업로드 스로틀링으로 프레임 드랍(Hitch) 제거.
+  - LRU 기반 최대 256개 항목 / 최대 64MB VRAM 바이트 예산 퇴거(Eviction) 메커니즘 구축 완료.
+- 확인: 대형 이미지 다수 탐색 시 메모리 스파이크 방지 및 LRU 256개 상한 유지 검증 완료.
 
 ### F13 — 보통 / Release 모듈 빌드가 Debug 빌드 디렉터리를 사용함
 

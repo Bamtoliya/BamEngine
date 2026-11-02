@@ -103,7 +103,12 @@ public:
         InitializePrimitiveMeshes();
 
         // 엔진 초기화 후 ProjectSettings 로드
-        LoadProjectSettings();
+        const EResult configResult = LoadProjectSettings();
+        if (IsFailure(configResult))
+        {
+            BAM_LOG(Fatal, "Client", "Application", "Project settings validation failed: {}", ResultToString(configResult));
+            return configResult;
+        }
 
         if (IsFailure(InitializeSystems()))
             return EResult::Fail;
@@ -234,19 +239,26 @@ private:
 
     EResult LoadStartupScene()
     {
-        // ProjectSettings에 지정된 StartupScenePath가 있으면 우선 사용, 비어있으면 기본 씬으로 폴백
         std::filesystem::path scenePath;
         if (!m_ProjectSettings.StartupScenePath.empty())
-            scenePath = m_ProjectRoot / m_ProjectSettings.StartupScenePath;
-        else
-            scenePath = m_ProjectRoot / "Resources" / "Scenes" / "NewScene2.json";
-
-        if (!std::filesystem::exists(scenePath))
         {
-            BAM_LOG(Error, "Client", "Startup", "Startup scene file does not exist: {}", scenePath.string());
-            return EResult::Fail;
+            scenePath = m_ProjectRoot / m_ProjectSettings.StartupScenePath;
+            if (!std::filesystem::exists(scenePath))
+            {
+                BAM_LOG(Error, "Client", "Startup", "Configured startup scene file does not exist: {}", scenePath.string());
+                return EResult::FileNotFound;
+            }
         }
-
+        else
+        {
+            scenePath = m_ProjectRoot / "Resources" / "Scenes" / "NewScene2.json";
+            BAM_LOG(Warn, "Client", "Startup", "StartupScenePath is empty. Falling back to default scene: {}", scenePath.string());
+            if (!std::filesystem::exists(scenePath))
+            {
+                BAM_LOG(Error, "Client", "Startup", "Default startup scene file does not exist: {}", scenePath.string());
+                return EResult::FileNotFound;
+            }
+        }
         archive::JsonArchive ar;
         const EResult result = SceneManager::Get().LoadScene(ar, scenePath.wstring());
         if (result != EResult::Success)
@@ -254,7 +266,6 @@ private:
             BAM_LOG(Error, "Client", "Startup", "Failed to load startup scene: {}", ResultToString(result));
             return result;
         }
-
         BAM_LOG(Info, "Client", "Startup", "Loaded startup scene: {}", scenePath.string());
         return EResult::Success;
     }
@@ -478,15 +489,36 @@ private:
         }
     }
 
-    void LoadProjectSettings()
+    EResult LoadProjectSettings()
+    {
+        const auto projectJsonPath = m_ProjectRoot / "Config" / "Project.json";
+        const auto& registry = ReflectionRegistry::Get().GetRegistry();
+        const auto loadResult = Engine::ConfigManager::Load(m_ProjectSettings, projectJsonPath, registry);
+        if (loadResult.Status == Engine::EConfigLoadStatus::NotFound)
         {
-            const auto projectJsonPath = m_ProjectRoot / "Config" / "Project.json";
-            if (std::filesystem::exists(projectJsonPath))
-            {
-                const auto& registry = ReflectionRegistry::Get().GetRegistry();
-                (void)Engine::ConfigManager::Load(m_ProjectSettings, projectJsonPath, registry);
-            }
+            BAM_LOG(Warn, "Client", "Config", "Project settings file not found: {}. Using defaults.", projectJsonPath.string());
+            return EResult::Success;
         }
+        if (loadResult.Status == Engine::EConfigLoadStatus::Failed)
+        {
+            BAM_LOG(Error, "Client", "Config", "Failed to load project settings from {}: code={}, field={}, fileError={}",
+                projectJsonPath.string(), static_cast<int>(loadResult.Error.Code), loadResult.Error.Field, loadResult.FileError.message());
+            return EResult::Fail;
+        }
+        if (m_ProjectSettings.SchemaVersion == 0)
+        {
+            BAM_LOG(Error, "Client", "Config", "Invalid ProjectSettings SchemaVersion: 0 in {}", projectJsonPath.string());
+            return EResult::InvalidArgument;
+        }
+        if (m_ProjectSettings.SchemaVersion > Engine::ProjectSettings::CurrentSchemaVersion)
+        {
+            BAM_LOG(Error, "Client", "Config", "Unsupported ProjectSettings SchemaVersion: {} (Max: {}) in {}",
+                m_ProjectSettings.SchemaVersion, Engine::ProjectSettings::CurrentSchemaVersion, projectJsonPath.string());
+            return EResult::InvalidArgument;
+        }
+        BAM_LOG(Info, "Client", "Config", "Loaded project settings (SchemaVersion={}) from {}", m_ProjectSettings.SchemaVersion, projectJsonPath.string());
+        return EResult::Success;
+    }
 private:
     SDL_Window* m_Window = nullptr;
     Runtime* m_Runtime = nullptr;

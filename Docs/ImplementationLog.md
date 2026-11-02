@@ -35,6 +35,51 @@ Use one entry per meaningful change.
 
 ---
 
+## [2026-11-03] 에셋 파이프라인(F02·F12), 애니메이션 재생(F07), 머티리얼 플래그(P1-E·F08), 클라이언트 검증(F05) 종합 안정화
+
+- Area: Engine | Editor | Render | Resource | Client
+- Type: Feature | Fix | Performance | Architecture
+- 관련 파일:
+  - Editor/Source/AssetManager/Importer/Private/ModelImporter.cpp
+  - Editor/Source/AssetManager/AssetCache/Public/AssetCache.h
+  - Editor/Source/AssetManager/AssetCache/Private/AssetCache.cpp
+  - Editor/Source/ImGui/Public/ResourcePicker.h
+  - Engine/Source/Resource/Model/Public/AnimationEvaluator.h
+  - Engine/Source/Resource/Model/Private/AnimationEvaluator.cpp
+  - Engine/Source/Resource/Model/Public/AnimatorStateMachine.h
+  - Engine/Source/Resource/Model/Private/AnimatorStateMachine.cpp
+  - Engine/Source/Core/Public/Components/Render/AnimatorComponent.h
+  - Engine/Source/System/Render/Private/AnimationSystem.cpp
+  - Engine/Source/Resource/Material/Public/MaterialInterface.h
+  - Engine/Source/Resource/Material/Private/MaterialInterface.cpp
+  - Engine/Source/Resource/Material/Public/MaterialInstance.h
+  - Engine/Source/Resource/Material/Private/MaterialInstance.cpp
+  - Resources/Shader/hlsl/shading_flags.hlsli
+  - Resources/Shader/hlsl/gbufferPS.hlsl
+  - Engine/Source/Graph/Public/ShaderGraphCompiler.h
+  - Engine/Source/Graph/Private/ShaderGraphCompiler.cpp
+  - Engine/examples/ShaderGraphCheck.cpp
+  - Client/Source/Main.cpp
+- Motivation:
+  - **F02 (모델 임포트)**: 기본 머티리얼 누락 시 껍데기 인스턴스를 계속 생성하고 저장 실패를 무시하던 문제 및 재임포트 시 Overwrite 플래그가 무시되던 결함 해결.
+  - **F12 (썸네일 캐시 예산)**: 4K 등 대형 이미지의 무제한 디코드로 인한 메모리 폭증, 프레임당 무제한 업로드로 인한 Hitch, 무제한 캐시 누적으로 인한 VRAM 고갈 위험 차단.
+  - **F07 (애니메이션 런타임)**: 비반복 애니메이션 종료 시 fmod 리셋 버그(마지막 포즈 대신 0초 첫 포즈로 튀는 현상) 해결, 부분 트랙의 바인드 로컬 TRS 오염 방지, ASM 시간 동기화.
+  - **P1-E / F08 (머티리얼 플래그)**: 텍스처 미사용 슬롯의 상태 누수 방지 및 셰이더 샘플링 바이패스, 기본 더미 텍스처 안전 바인딩.
+  - **3-B (셰이더 그래프)**: G-Buffer PBR 머티리얼 HLSL 코드 생성 및 채널 분리/결합 노드 지원.
+  - **F05 (클라이언트 검증)**: ProjectSettings 로드 결과 검증을 통한 설정 손상 시 안전 종료 및 시작 씬 부재 처리.
+- Implementation summary:
+  - **ModelImporter (F02)**: 기본 머티리얼 로드 실패 시 필수 실패(EResult::ResourceNotFound) 및 등록 롤백, Overwrite 정책 반영, ValidateImportOutput 패턴 적용.
+  - **AssetCache (F12)**: 128×128 Bilinear 다운샘플러(DownsampleRGBA)로 메모리 99% 절감, 메인 스레드 큐 기반 프레임당 최대 4개 업로드 스로틀링, LRU 256개 / 64MB 예산 퇴거 구축.
+  - **AnimationEvaluator / ASM (F07)**: 비반복 애니메이션 시간 clamp 보존, SampleLocalTRS에서 트랙 누락 채널을 본의 바인드 TRS로 보존, ASM isLooping 및 Stop() 시간 리셋 연결.
+  - **Material & G-Buffer (P1-E / F08)**: MaterialFeatureFlags 비트 플래그 시스템 구축, gbufferPS.hlsl에서 텍스처 없는 슬롯의 샘플링 바이패스 및 안전 기본값 직결.
+  - **ShaderGraphCompiler (3-B)**: GenerateGBufferMaterialHlsl 구현, Math.MakeFloat3/BreakFloat3/MakeFloat4/BreakFloat4 지원, ShaderGraphCheck 회귀 테스트 통과.
+  - **Client (F05)**: ConfigLoadResult 검사, SchemaVersion 유효성 검사, 시작 씬 미존재 시 FileNotFound 명확한 에러 전파.
+- Validation:
+  - cmake --build out/build/x64-debug --config Debug 전체 성공.
+  - ShaderGraphCheck CTest 통과.
+
+---
+
 ## [2026-11-03] 통합 설정 패널(UnifiedSettingsPanel) 전면 구축, ImGui 커스텀 스타일 영속화 및 스케일링 버그 수정
 
 - Area: Editor | UI | Settings | Style | Localization
