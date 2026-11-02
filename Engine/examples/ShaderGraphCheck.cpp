@@ -29,7 +29,9 @@ namespace
 	{
 		const auto previous = source;
 		const auto generators = {
-			&ShaderGraphCompiler::GenerateColorHlsl, &ShaderGraphCompiler::GenerateUnlitMaterialHlsl
+			&ShaderGraphCompiler::GenerateColorHlsl,
+			&ShaderGraphCompiler::GenerateUnlitMaterialHlsl,
+			&ShaderGraphCompiler::GenerateGBufferMaterialHlsl
 		};
 
 		for (const auto generate : generators)
@@ -66,6 +68,7 @@ int main()
 		GraphRegistry registry;
 		Accept(registry.RegisterBuiltins());
 
+		// ── 1. ColorOutput 및 기존 Float4 연동 검증 ──
 		Graph graph{ EGraphDomain::Shader };
 		const auto output = Add(graph, registry, "Shader.ColorOutput");
 		std::string source;
@@ -105,7 +108,8 @@ int main()
 			"float4(2.50000000e-01f, -5.00000000e-01f, 2.00000000e+00f, 1.00000000e+00f)") != std::string::npos,
 			"Material generation changed the resolved color or decimal formatting.");
 
-		const auto unsupported = Add(graph, registry, "Core.Float");
+		// ── 2. 미지원 노드 및 다중 출력 노드 거부 검증 ──
+		const auto unsupported = Add(graph, registry, "Core.Int");
 		Reject(graph, registry, source, EGraphError::UnsupportedCompilation);
 		Accept(graph.RemoveNode(unsupported));
 
@@ -113,13 +117,53 @@ int main()
 		Reject(graph, registry, source, EGraphError::InvalidDocument);
 		Accept(graph.RemoveNode(extraOutput));
 
+		const auto extraMatOutput = Add(graph, registry, "Shader.MaterialOutput");
+		Reject(graph, registry, source, EGraphError::InvalidDocument);
+		Accept(graph.RemoveNode(extraMatOutput));
+
 		Graph empty{ EGraphDomain::Shader };
 		Reject(empty, registry, source, EGraphError::InvalidDocument);
 
 		Graph logic{ EGraphDomain::Logic };
 		Reject(logic, registry, source, EGraphError::UnsupportedDomain);
 
-		std::cout << "Shader graph checks passed.\n" << source;
+		// ── 3. MaterialOutput 및 채널 분리/결합 PBR G-Buffer 검증 ──
+		Graph matGraph{ EGraphDomain::Shader };
+		const auto matOutput = Add(matGraph, registry, "Shader.MaterialOutput");
+		std::string gbufferSource;
+		Accept(ShaderGraphCompiler::GenerateGBufferMaterialHlsl(matGraph, registry, gbufferSource));
+		Expect(gbufferSource.find("SHADING_MODEL_DEFAULT_LIT") != std::string::npos, "Missing DEFAULT_LIT shading model.");
+		Expect(gbufferSource.find("float4(1.00000000e+00f, 1.00000000e+00f, 1.00000000e+00f, 1.00000000e+00f)") != std::string::npos, "Default baseColor was incorrect.");
+		Expect(gbufferSource.find("2.00000003e-01f") != std::string::npos, "Default roughness was incorrect.");
+		Expect(gbufferSource.find("0.00000000e+00f") != std::string::npos, "Default metallic was incorrect.");
+		Expect(gbufferSource.find("5.00000000e-01f") != std::string::npos, "Default cavity was incorrect.");
+		Expect(gbufferSource.find("1.00000000e+00f") != std::string::npos, "Default ao was incorrect.");
+		const auto makeEmissive = Add(matGraph, registry, "Math.MakeFloat3");
+		const auto floatX = Add(matGraph, registry, "Core.Float");
+		const auto floatY = Add(matGraph, registry, "Core.Float");
+		const auto floatZ = Add(matGraph, registry, "Core.Float");
+		Accept(matGraph.SetInputValue(registry, { floatX, "value" }, 0.125f));
+		Accept(matGraph.SetInputValue(registry, { floatY, "value" }, 0.25f));
+		Accept(matGraph.SetInputValue(registry, { floatZ, "value" }, 0.5f));
+		Accept(matGraph.Connect(registry, { floatX, "result" }, { makeEmissive, "x" }));
+		Accept(matGraph.Connect(registry, { floatY, "result" }, { makeEmissive, "y" }));
+		Accept(matGraph.Connect(registry, { floatZ, "result" }, { makeEmissive, "z" }));
+		Accept(matGraph.Connect(registry, { makeEmissive, "result" }, { matOutput, "emissive" }));
+		const auto pbrConst = Add(matGraph, registry, "Core.Float4");
+		const auto breakPbr = Add(matGraph, registry, "Math.BreakFloat4");
+		Accept(matGraph.SetInputValue(registry, { pbrConst, "value" }, std::array<float, 4>{ 0.25f, 0.75f, 0.5f, 1.0f }));
+		Accept(matGraph.Connect(registry, { pbrConst, "result" }, { breakPbr, "value" }));
+		Accept(matGraph.Connect(registry, { breakPbr, "x" }, { matOutput, "roughness" }));
+		Accept(matGraph.Connect(registry, { breakPbr, "y" }, { matOutput, "metallic" }));
+		{
+			LocaleScope locale;
+			Accept(ShaderGraphCompiler::GenerateGBufferMaterialHlsl(matGraph, registry, gbufferSource));
+		}
+		Expect(gbufferSource.find("float3(1.25000000e-01f, 2.50000000e-01f, 5.00000000e-01f)") != std::string::npos,
+			"MakeFloat3 emissive connection failed.");
+		Expect(gbufferSource.find("2.50000000e-01f") != std::string::npos, "BreakFloat4 x roughness failed.");
+		Expect(gbufferSource.find("7.50000000e-01f") != std::string::npos, "BreakFloat4 y metallic failed.");
+		std::cout << "Shader graph checks passed.\n";
 		return 0;
 	}
 	catch (const std::exception& error)

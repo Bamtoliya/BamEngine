@@ -43,6 +43,7 @@ public:
 #pragma endregion
 
 #pragma region Bind
+	virtual void BuildMaterialConstants(MaterialConstants& outConstants) const override;
 	virtual EResult Bind(uint32 slot) override;
 #pragma endregion
 

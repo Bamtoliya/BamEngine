@@ -1,4 +1,4 @@
-# Shader Resource Binding Layout
+﻿# Shader Resource Binding Layout
 
 - 최종 갱신: 2026-10-30 (`DirectX12RHI::CreateRootSignature` 및 현행 HLSL 셰이더 바인딩 반영)
 
@@ -23,7 +23,7 @@ GLSL `layout(set = 2, binding = 0)`.
 | `0` | Global / Per-frame camera data | `[0]` Root CBV (`b0, space0`) | `b0`: `CommonVSData` / `CameraBuffer` (RHI CBV slot `0`) |
 | `1` | Material textures, LUTs, and material samplers | `[1]` SRV Table (`t0-t15, space1`)<br>`[2]` Sampler Table (`s0-s7, space1`) | `t0-t15`: Material SRVs (or Cloud `shapeNoiseTex`/`weatherMapTex` in LightingPass)<br>`s0-s7`: Material Samplers (RHI texture slots `0..15`) |
 | `2` | Per-object draw constants and instancing buffer | `[3]` Root CBV (`b0, space2`)<br>`[4]` Root SRV (`t0, space2`) | `b0`: `ObjectData` / `SceneUBO` (RHI CBV slot `1`)<br>`t0`: `StructuredBuffer<InstanceData> g_Instances` (`BindInstanceBuffer`) |
-| `3` | Pass-specific constants, G-Buffer/Shadow/Light SRVs, Samplers, and Compute UAVs | `[5]` Root CBV (`b0, space3`)<br>`[6]` Root CBV (`b1, space3`)<br>`[7]` SRV Table (`t0-t15, space3`)<br>`[8]` Sampler Table (`s0-s7, space3`)<br>`[9]` Root UAV (`u0, space3`)<br>`[10]` Root UAV (`u1, space3`) | `b0`: `FogData` / PostProcess params / `CullingConstants` (RHI CBV slot `2`)<br>`b1`: `LightingPassData` / Shadow / Sky data (RHI CBV slot `3`)<br>`t0-t4`: GBuffer (`Diffuse`, `Normal`, `PBR`, `Emission`, `Position`)<br>`t5`: Directional/Spot `shadowTex` (`Texture2DArray`)<br>`t6`: `StructuredBuffer<LightData> gLights` (StorageBuffer slot `0`)<br>`t7`: Point Light `pointShadowTex` (`TextureCube`)<br>`t8`: `StructuredBuffer<uint2> gTileLightGrid` (StorageBuffer slot `1`)<br>`t9`: `StructuredBuffer<uint> gTileLightIndexList` (StorageBuffer slot `2`)<br>`s0-s7`: Pass samplers<br>`u0`: `RWStructuredBuffer<uint2> g_TileLightGrid` (Compute UAV slot `0`)<br>`u1`: `RWStructuredBuffer<uint> g_TileLightIndexList` (Compute UAV slot `1`) |
+| `3` | Pass-specific constants, G-Buffer/Shadow/Light SRVs, Samplers, and Compute UAVs | `[5]` Root CBV (`b0, space3`)<br>`[6]` Root CBV (`b1, space3`)<br>`[7]` SRV Table (`t0-t15, space3`)<br>`[8]` Sampler Table (`s0-s7, space3`)<br>`[9]` Root UAV (`u0, space3`)<br>`[10]` Root UAV (`u1, space3`) | `b0`: `FogData` / PostProcess params / `CullingConstants` / GeometryPass `MaterialConstants` (RHI CBV slot `2`)<br>`b1`: `LightingPassData` / Shadow / Sky data (RHI CBV slot `3`) ... |
 
 > **Note on Skinning & Backend Parity (2026-10-30)**:
 > - Legacy `boneMatrices` (`t0, space0`) is not currently declared in `DirectX12RHI::CreateRootSignature()`. When skeletal skinning (P2-D) is connected, its SRV/CBV slot must be assigned without colliding with `space0`–`space3` above.

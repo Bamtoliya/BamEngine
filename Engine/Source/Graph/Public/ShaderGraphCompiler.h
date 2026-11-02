@@ -13,5 +13,8 @@ namespace Engine
 
 		[[nodiscard]] static GraphDiagnostic GenerateUnlitMaterialHlsl(
 			const Graph& graph, const GraphRegistry& registry, std::string& outSource);
+
+		[[nodiscard]] static GraphDiagnostic GenerateGBufferMaterialHlsl(
+			const Graph& graph, const GraphRegistry& registry, std::string& outSource);
 	};
 }

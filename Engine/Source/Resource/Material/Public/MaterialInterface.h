@@ -53,6 +53,30 @@ struct MaterialPassShaderDesc
 	ResourceHandle<Shader> PixelShaderHandle;
 };
 
+// 1. 머티리얼 비트 플래그 열거형 정의
+ENUM()
+enum class EMaterialFeatureFlags : uint32
+{
+	None = 0,
+	HasDiffuse = 1 << 0, // 슬롯 0: Base Color / Albedo Map
+	HasNormal = 1 << 1, // 슬롯 1: Normal Map
+	HasPBR = 1 << 2, // 슬롯 2: PBR Map (Roughness/Metallic/Cavity/AO)
+	HasEmissive = 1 << 3, // 슬롯 3: Emissive Map
+};
+ENABLE_BITMASK_OPERATORS(EMaterialFeatureFlags)
+// 2. HLSL 16바이트 정렬을 준수하는 머티리얼 상수 버퍼 구조체 (총 48바이트)
+struct MaterialConstants
+{
+	uint32 materialFlags = 0;
+	float  roughness = 0.2f;
+	float  metallic = 0.0f;
+	float  cavity = 0.5f;
+	vec4   baseColor = vec4(1.0f);
+	vec3   emissiveColor = vec3(0.0f);
+	float  ao = 1.0f;
+};
+static_assert(sizeof(MaterialConstants) == 48, "MaterialConstants must be 48 bytes (aligned to 16 bytes)");
+
 ENUM()
 enum class EMaterialParameterType
 {
@@ -168,9 +192,19 @@ public:
 	void SetBool(const string& name, bool value);
 	void SetMatrix(const string& name, const mat4& value);
 
-	// Getter
+public:
+	virtual void BuildMaterialConstants(MaterialConstants& outConstants) const;
+
 	template<typename T>
-	T GetParameter(const string& name) const;
+	T GetParameter(const string& name, const T& defaultValue = T{}) const
+	{
+		auto it = m_Parameters.find(name);
+		if (it != m_Parameters.end() && it->second.data.size() >= sizeof(T))
+		{
+			return *reinterpret_cast<const T*>(it->second.data.data());
+		}
+		return defaultValue;
+	}
 
 	// 파라미터 초기값 복원(Reset) API
 	void ResetParameter(const string& name);

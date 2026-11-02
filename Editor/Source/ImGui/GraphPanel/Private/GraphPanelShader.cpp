@@ -266,16 +266,13 @@ void GraphPanel::DrawShaderPreview()
 void GraphPanel::CompileMaterialShader()
 {
 	if (m_Domain != EGraphDomain::Shader) return;
-
 	auto& build = m_Shader.ShaderBuild;
 	build.MaterialCurrent = false;
 	build.Details.clear();
-
 	try
 	{
 		std::string source;
-		m_LastDiagnostic = ShaderGraphCompiler::GenerateUnlitMaterialHlsl(m_Shader.Data, m_Registry, source);
-
+		m_LastDiagnostic = ShaderGraphCompiler::GenerateGBufferMaterialHlsl(m_Shader.Data, m_Registry, source);
 		if (!m_LastDiagnostic.Succeeded())
 		{
 			build.StatusKey = "GraphPanel.ShaderGenerationFailed";

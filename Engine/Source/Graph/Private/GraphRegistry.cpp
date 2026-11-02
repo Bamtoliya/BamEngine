@@ -218,7 +218,36 @@ GraphDiagnostic GraphRegistry::RegisterBuiltins()
 		{ "Core.String", logic, {
 			{ "value", Direction::Input, Type::String, std::string{} }, { "result", Direction::Output, Type::String, {} } } },
 		{ "Core.Reroute.String", logic, {
-			{ "In", Direction::Input, Type::String, std::string{} }, { "Out", Direction::Output, Type::String, {} } } }
+			{ "In", Direction::Input, Type::String, std::string{} }, { "Out", Direction::Output, Type::String, {} } } },
+		{ "Math.MakeFloat3", common, {
+			{ "x", Direction::Input, Type::Float, 0.0f },
+			{ "y", Direction::Input, Type::Float, 0.0f },
+			{ "z", Direction::Input, Type::Float, 0.0f },
+			{ "result", Direction::Output, Type::Float3, {} } } },
+		{ "Math.BreakFloat3", common, {
+			{ "value", Direction::Input, Type::Float3, std::array<float, 3>{} },
+			{ "x", Direction::Output, Type::Float, {} },
+			{ "y", Direction::Output, Type::Float, {} },
+			{ "z", Direction::Output, Type::Float, {} } } },
+		{ "Math.MakeFloat4", common, {
+			{ "x", Direction::Input, Type::Float, 0.0f },
+			{ "y", Direction::Input, Type::Float, 0.0f },
+			{ "z", Direction::Input, Type::Float, 0.0f },
+			{ "w", Direction::Input, Type::Float, 0.0f },
+			{ "result", Direction::Output, Type::Float4, {} } } },
+		{ "Math.BreakFloat4", common, {
+			{ "value", Direction::Input, Type::Float4, std::array<float, 4>{} },
+			{ "x", Direction::Output, Type::Float, {} },
+			{ "y", Direction::Output, Type::Float, {} },
+			{ "z", Direction::Output, Type::Float, {} },
+			{ "w", Direction::Output, Type::Float, {} } } },
+		{ "Shader.MaterialOutput", { EGraphDomain::Shader }, {
+			{ "baseColor", Direction::Input, Type::Float4, std::array<float, 4>{ 1.0f, 1.0f, 1.0f, 1.0f } },
+			{ "roughness", Direction::Input, Type::Float, 0.2f },
+			{ "metallic", Direction::Input, Type::Float, 0.0f },
+			{ "cavity", Direction::Input, Type::Float, 0.5f },
+			{ "ao", Direction::Input, Type::Float, 1.0f },
+			{ "emissive", Direction::Input, Type::Float3, std::array<float, 3>{ 0.0f, 0.0f, 0.0f } } } },
 	};
 	for (auto& definition : definitions)
 	{

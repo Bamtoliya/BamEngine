@@ -903,7 +903,7 @@ namespace
         reloadedModelDesc.Path = L"test-model.bammodel.json";
         auto reloadedModel = rm.LoadResource<Engine::Model>(&reloadedModelDesc);
         const auto reloadedMeshes = reloadedModel.IsValid() ? reloadedModel->GetMeshes() : vector<ResourceHandle<Engine::Mesh>>{};
-        const auto reloadedMaterials = reloadedModel.IsValid() ? reloadedModel->GetMaterials() : vector<ResourceHandle<Engine::Material>>{};
+        const auto reloadedMaterials = reloadedModel.IsValid() ? reloadedModel->GetMaterials() : vector<ResourceHandle<Engine::MaterialInterface>>{};
         const auto reloadedAnimations = reloadedModel.IsValid() ? reloadedModel->GetAnimations() : vector<ResourceHandle<Engine::Animation>>{};
         const auto reloadedSkeleton = reloadedModel.IsValid() ? reloadedModel->GetSkeleton() : ResourceHandle<Engine::Skeleton>{};
         float reloadedRoughness = 0.0f;

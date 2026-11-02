@@ -58,19 +58,25 @@ add_dependencies(GraphMessageLocalizationCheck GenerateLocalization)
 set_target_properties(GraphMessageLocalizationCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
 
 add_executable(HierarchyEditorCheck examples/HierarchyEditorCheck.cpp
-    Source/ImGui/HierarchyPanel/Private/EntityHierarchyView.cpp)
-target_include_directories(HierarchyEditorCheck PRIVATE "${EDITOR_SOURCE_DIR}/ImGui/HierarchyPanel/Public")
-target_include_directories(HierarchyEditorCheck PRIVATE "${CMAKE_SOURCE_DIR}/ThirdParty")
+    Source/ImGui/HierarchyPanel/Private/EntityHierarchyView.cpp
+    Source/Clipboard/Private/EntityClipboard.cpp
+    Source/Shortcut/Private/ShortcutManager.cpp
+    Source/Selection/Private/SelectionManager.cpp
+    Source/ImGui/PrefabEditor/Private/PrefabModeManager.cpp
+)
+target_include_directories(HierarchyEditorCheck PRIVATE
+    ${EDITOR_PUBLIC_INCLUDE_DIRS}
+    "${EDITOR_SOURCE_DIR}"
+    "${CMAKE_SOURCE_DIR}/ThirdParty"
+)
 target_link_libraries(HierarchyEditorCheck PRIVATE BamEngine::Engine imgui::imgui)
 target_precompile_headers(HierarchyEditorCheck PRIVATE
     "${CMAKE_SOURCE_DIR}/Engine/Source/Core/Public/Engine_Includes.h")
 set_target_properties(HierarchyEditorCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
-
 add_executable(ReflectionInspectorCheck examples/ReflectionInspectorCheck.cpp
     Source/ImGui/InspectorPanel/Private/ReflectionPropertyDrawer.cpp)
 target_include_directories(ReflectionInspectorCheck PRIVATE
-    "${EDITOR_SOURCE_DIR}/ImGui/InspectorPanel/Public"
-    "${EDITOR_SOURCE_DIR}/ImGui/Public"
+    ${EDITOR_PUBLIC_INCLUDE_DIRS}
     "${EDITOR_SOURCE_DIR}"
     "${CMAKE_SOURCE_DIR}/ThirdParty"
 )

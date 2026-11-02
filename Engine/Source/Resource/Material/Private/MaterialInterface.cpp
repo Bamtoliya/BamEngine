@@ -572,31 +572,87 @@ BlendState MaterialInterface::GetBlendState()
 #pragma endregion
 
 #pragma region Bind
+void MaterialInterface::BuildMaterialConstants(MaterialConstants& outConstants) const
+{
+    outConstants = MaterialConstants{};
+
+    // 1. 등록된 유효 텍스처 슬롯에 따라 비트 플래그 설정
+    for (const auto& binding : m_TextureBindings)
+    {
+        if (!binding.texture.Get()) continue;
+        switch (binding.slot)
+        {
+        case 0: outConstants.materialFlags |= static_cast<uint32>(EMaterialFeatureFlags::HasDiffuse); break;
+        case 1: outConstants.materialFlags |= static_cast<uint32>(EMaterialFeatureFlags::HasNormal); break;
+        case 2: outConstants.materialFlags |= static_cast<uint32>(EMaterialFeatureFlags::HasPBR); break;
+        case 3: outConstants.materialFlags |= static_cast<uint32>(EMaterialFeatureFlags::HasEmissive); break;
+        default: break;
+        }
+    }
+
+    // 2. 파라미터가 등록되어 있다면 상수 값 반영 (없으면 기본값 유지)
+    auto findParam = [this](const string& key) -> const MaterialParameter* {
+        auto it = m_Parameters.find(key);
+        return (it != m_Parameters.end()) ? &it->second : nullptr;
+        };
+
+    // Albedo / BaseColor
+    if (const auto* p = findParam("BaseColor"); p && p->data.size() >= sizeof(vec4))
+        outConstants.baseColor = *reinterpret_cast<const vec4*>(p->data.data());
+    else if (const auto* p2 = findParam("Color"); p2 && p2->data.size() >= sizeof(vec4))
+        outConstants.baseColor = *reinterpret_cast<const vec4*>(p2->data.data());
+
+    // Roughness
+    if (const auto* p = findParam("Roughness"); p && p->data.size() >= sizeof(float))
+        outConstants.roughness = *reinterpret_cast<const float*>(p->data.data());
+
+    // Metallic
+    if (const auto* p = findParam("Metallic"); p && p->data.size() >= sizeof(float))
+        outConstants.metallic = *reinterpret_cast<const float*>(p->data.data());
+
+    // Cavity
+    if (const auto* p = findParam("Cavity"); p && p->data.size() >= sizeof(float))
+        outConstants.cavity = *reinterpret_cast<const float*>(p->data.data());
+
+    // AO
+    if (const auto* p = findParam("AO"); p && p->data.size() >= sizeof(float))
+        outConstants.ao = *reinterpret_cast<const float*>(p->data.data());
+
+    // EmissiveColor
+    if (const auto* p = findParam("EmissiveColor"); p)
+    {
+        if (p->data.size() >= sizeof(vec4))
+            outConstants.emissiveColor = vec3(*reinterpret_cast<const vec4*>(p->data.data()));
+        else if (p->data.size() >= sizeof(vec3))
+            outConstants.emissiveColor = *reinterpret_cast<const vec3*>(p->data.data());
+    }
+    else if (const auto* p2 = findParam("Emission"); p2)
+    {
+        if (p2->data.size() >= sizeof(vec4))
+            outConstants.emissiveColor = vec3(*reinterpret_cast<const vec4*>(p2->data.data()));
+        else if (p2->data.size() >= sizeof(vec3))
+            outConstants.emissiveColor = *reinterpret_cast<const vec3*>(p2->data.data());
+    }
+}
+
 EResult MaterialInterface::Bind(uint32 slot)
 {
     RHI* rhi = Renderer::Get().GetRHI();
     if (!rhi) return EResult::Fail;
 
-    auto& rm = ResourceManager::Get();
     auto* defaultSampler = SamplerManager::Get().GetDefaultSampler();
-
-    // 1. 슬롯 점유 여부 추적 (G-Buffer 0~3 슬롯)
     bool slotBound[4] = { false, false, false, false };
 
+    // 1. 등록된 텍스처 바인딩
     for (auto& binding : m_TextureBindings)
     {
         Texture* texture = binding.texture.Get();
-        if (!texture)
-        {
-            auto fallbackHandle = rm.GetResourceHandle<Texture>(L"Resources/Texture/white1x1.png");
-            texture = fallbackHandle.Get();
-        }
+        if (!texture) continue;
 
         RHISampler* sampler = binding.hasCustomSampler
             ? SamplerManager::Get().GetOrCreateSampler(binding.samplerDesc)
             : defaultSampler;
-
-        if (!texture || !sampler) return EResult::Fail;
+        if (!sampler) return EResult::Fail;
 
         RHITexture* rhiTexture = texture->GetRHITexture();
         if (!rhiTexture) continue;
@@ -608,27 +664,16 @@ EResult MaterialInterface::Bind(uint32 slot)
             slotBound[binding.slot] = true;
     }
 
-    // 2. [상태 누수 방지]: 머티리얼에 지정되지 않은 빈 슬롯을 안전한 기본 더미 텍스처로 리셋
-    static const wchar_t* defaultTextures[4] = {
-        L"Resources/Texture/white1x1.png", // Slot 0: Diffuse (흰색)
-        L"Resources/Texture/blue1x1.png",  // Slot 1: Normal (기본 평면 노멀)
-        L"Resources/Texture/black1x1.png", // Slot 2: PBR (비금속/기본값)
-        L"Resources/Texture/black1x1.png"  // Slot 3: Emission (완전한 0 무발광!)
-    };
-
+    // 2. [상태 누수 방지]: 머티리얼에 지정되지 않은 빈 슬롯을 nullptr로 해제하여 이전 드로우콜 잔류 방지
     for (uint32 s = 0; s < 4; ++s)
     {
         if (!slotBound[s])
-        {
-            auto dummyHandle = rm.GetResourceHandle<Texture>(defaultTextures[s]);
-            if (auto* dummyTex = dummyHandle.Get())
-            {
-                if (auto* rhiDummy = dummyTex->GetRHITexture())
-                    rhi->BindTextureSampler(rhiDummy, defaultSampler, s);
-            }
-        }
+            rhi->BindTexture(nullptr, s);
     }
 
-    return EResult::Success;
+    // 3. 머티리얼 상수 버퍼(MaterialConstants) 바인딩 (slot = 2 -> b0, space3)
+    MaterialConstants constants;
+    BuildMaterialConstants(constants);
+    return rhi->BindConstantBuffer(&constants, sizeof(MaterialConstants), slot);
 }
 #pragma endregion

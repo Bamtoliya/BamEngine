@@ -45,43 +45,92 @@ void MaterialInstance::Free()
 }
 #pragma endregion
 
+void MaterialInstance::BuildMaterialConstants(MaterialConstants& outConstants) const
+{
+	// 1. BaseMaterial의 기본 상수 버퍼 데이터 상속
+	if (m_BaseMaterialHandle && m_BaseMaterialHandle.Get())
+	{
+		m_BaseMaterialHandle.Get()->BuildMaterialConstants(outConstants);
+	}
+	else
+	{
+		outConstants = MaterialConstants{};
+	}
+	// 2. 인스턴스 자신의 텍스처 오버라이드 반영 (오버라이드가 등록된 슬롯만 플래그 갱신)
+	for (const auto& binding : m_TextureBindings)
+	{
+		const uint32 flagBit = (binding.slot == 0) ? static_cast<uint32>(EMaterialFeatureFlags::HasDiffuse)
+			: (binding.slot == 1) ? static_cast<uint32>(EMaterialFeatureFlags::HasNormal)
+			: (binding.slot == 2) ? static_cast<uint32>(EMaterialFeatureFlags::HasPBR)
+			: (binding.slot == 3) ? static_cast<uint32>(EMaterialFeatureFlags::HasEmissive) : 0u;
+		if (flagBit == 0) continue;
+		if (binding.texture && binding.texture.Get())
+		{
+			outConstants.materialFlags |= flagBit;
+		}
+	}
+	// 3. 인스턴스 자신의 파라미터 오버라이드 반영
+	auto findParam = [this](const string& key) -> const MaterialParameter* {
+		auto it = m_Parameters.find(key);
+		return (it != m_Parameters.end()) ? &it->second : nullptr;
+		};
+	if (const auto* p = findParam("BaseColor"); p && p->data.size() >= sizeof(vec4))
+		outConstants.baseColor = *reinterpret_cast<const vec4*>(p->data.data());
+	else if (const auto* p2 = findParam("Color"); p2 && p2->data.size() >= sizeof(vec4))
+		outConstants.baseColor = *reinterpret_cast<const vec4*>(p2->data.data());
+	if (const auto* p = findParam("Roughness"); p && p->data.size() >= sizeof(float))
+		outConstants.roughness = *reinterpret_cast<const float*>(p->data.data());
+	if (const auto* p = findParam("Metallic"); p && p->data.size() >= sizeof(float))
+		outConstants.metallic = *reinterpret_cast<const float*>(p->data.data());
+	if (const auto* p = findParam("Cavity"); p && p->data.size() >= sizeof(float))
+		outConstants.cavity = *reinterpret_cast<const float*>(p->data.data());
+	if (const auto* p = findParam("AO"); p && p->data.size() >= sizeof(float))
+		outConstants.ao = *reinterpret_cast<const float*>(p->data.data());
+	if (const auto* p = findParam("EmissiveColor"); p)
+	{
+		if (p->data.size() >= sizeof(vec4))
+			outConstants.emissiveColor = vec3(*reinterpret_cast<const vec4*>(p->data.data()));
+		else if (p->data.size() >= sizeof(vec3))
+			outConstants.emissiveColor = *reinterpret_cast<const vec3*>(p->data.data());
+	}
+	else if (const auto* p2 = findParam("Emission"); p2)
+	{
+		if (p2->data.size() >= sizeof(vec4))
+			outConstants.emissiveColor = vec3(*reinterpret_cast<const vec4*>(p2->data.data()));
+		else if (p2->data.size() >= sizeof(vec3))
+			outConstants.emissiveColor = *reinterpret_cast<const vec3*>(p2->data.data());
+	}
+}
+
 EResult MaterialInstance::Bind(uint32 slot)
 {
 	if (!m_BaseMaterialHandle) return EResult::Fail;
 	RHI* rhi = Renderer::Get().GetRHI();
 	Material* baseMaterial = m_BaseMaterialHandle.Get();
-	if (!rhi || !baseMaterial)
-		return EResult::Fail;
+	if (!rhi || !baseMaterial) return EResult::Fail;
 
-	auto& rm = ResourceManager::Get();
 	auto* defaultSampler = SamplerManager::Get().GetDefaultSampler();
+	if (!defaultSampler) return EResult::Fail;
 
 	// 0단계: 아카이브 로드 후 내부 슬롯 캐시가 비어있으면 자동 복구
 	if (!m_TextureBindings.empty() && FindTextureBindingIndexBySlot(m_TextureBindings[0].slot) < 0)
-	{
 		RebuildTextureBindingCache();
-	}
 
 	bool slotBound[4] = { false, false, false, false };
 
-	// 1단계: Base Material의 텍스처 슬롯 순회
+	// 1단계: Base Material의 텍스처 슬롯 순회 (인스턴스 오버라이드가 없는 경우만)
 	for (auto& baseBinding : baseMaterial->GetTextureBindings())
 	{
 		bool hasOverride = HasTextureBindingBySlot(baseBinding.slot) || (!baseBinding.name.empty() && HasTextureBinding(baseBinding.name));
-		if (hasOverride)
-			continue;
+		if (hasOverride) continue;
 
 		Texture* texture = baseBinding.texture.Get();
-		if (!texture)
-		{
-			auto fallbackHandle = rm.GetResourceHandle<Texture>(L"Resources/Texture/white1x1.png");
-			texture = fallbackHandle.Get();
-		}
+		if (!texture) continue;
+
 		RHISampler* sampler = baseBinding.hasCustomSampler
 			? SamplerManager::Get().GetOrCreateSampler(baseBinding.samplerDesc)
 			: defaultSampler;
-
-		if (!texture || !sampler) return EResult::Fail;
+		if (!sampler) return EResult::Fail;
 
 		RHITexture* rhiTex = texture->GetRHITexture();
 		if (rhiTex && IsFailure(rhi->BindTextureSampler(rhiTex, sampler, baseBinding.slot)))
@@ -91,20 +140,16 @@ EResult MaterialInstance::Bind(uint32 slot)
 			slotBound[baseBinding.slot] = true;
 	}
 
-	// 2단계: 자신의 오버라이드 바인드
+	// 2단계: 자신의 오버라이드 텍스처 바인드
 	for (auto& binding : m_TextureBindings)
 	{
 		Texture* texture = binding.texture.Get();
-		if (!texture)
-		{
-			auto fallbackHandle = rm.GetResourceHandle<Texture>(L"Resources/Texture/white1x1.png");
-			texture = fallbackHandle.Get();
-		}
+		if (!texture) continue;
+
 		RHISampler* sampler = binding.hasCustomSampler
 			? SamplerManager::Get().GetOrCreateSampler(binding.samplerDesc)
 			: defaultSampler;
-
-		if (!texture || !sampler) return EResult::Fail;
+		if (!sampler) return EResult::Fail;
 
 		RHITexture* rhiTex = texture->GetRHITexture();
 		if (rhiTex && IsFailure(rhi->BindTextureSampler(rhiTex, sampler, binding.slot)))
@@ -114,28 +159,17 @@ EResult MaterialInstance::Bind(uint32 slot)
 			slotBound[binding.slot] = true;
 	}
 
-	// 3단계: [상태 누수 방지] 지정되지 않은 빈 슬롯을 안전한 표준 더미 텍스처로 리셋
-	static const wchar_t* defaultTextures[4] = {
-		L"Resources/Texture/white1x1.png", // Slot 0: Diffuse (흰색)
-		L"Resources/Texture/blue1x1.png",  // Slot 1: Normal (기본 평면 노멀)
-		L"Resources/Texture/black1x1.png", // Slot 2: PBR (비금속/기본값)
-		L"Resources/Texture/black1x1.png"  // Slot 3: Emission (완전한 0 무발광!)
-	};
-
+	// 3단계: [상태 누수 방지] 지정되지 않은 빈 슬롯을 nullptr로 해제
 	for (uint32 s = 0; s < 4; ++s)
 	{
 		if (!slotBound[s])
-		{
-			auto dummyHandle = rm.GetResourceHandle<Texture>(defaultTextures[s]);
-			if (auto* dummyTex = dummyHandle.Get())
-			{
-				if (auto* rhiDummy = dummyTex->GetRHITexture())
-					rhi->BindTextureSampler(rhiDummy, defaultSampler, s);
-			}
-		}
+			rhi->BindTexture(nullptr, s);
 	}
 
-	return EResult::Success;
+	// 4단계: 머티리얼 상수 버퍼 바인딩
+	MaterialConstants constants;
+	BuildMaterialConstants(constants);
+	return rhi->BindConstantBuffer(&constants, sizeof(MaterialConstants), slot);
 }
 
 void MaterialInstance::SetBaseMaterial(const ResourceHandle<Material>& material)
