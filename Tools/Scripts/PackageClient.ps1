@@ -5,42 +5,85 @@
 
 $ErrorActionPreference = "Stop"
 
-$Root = Resolve-Path "$PSScriptRoot/../.."
+$Root = [System.IO.Path]::GetFullPath((Resolve-Path "$PSScriptRoot/../..").Path).TrimEnd('\', '/')
+
+# ── 1. 출력 경로 절대 정규화 및 파괴적 삭제 방어 (F03 해결) ──
+function Get-NormalizedAbsolutePath([string]$path, [string]$baseDir) {
+    if ([System.IO.Path]::IsPathRooted($path)) {
+        return [System.IO.Path]::GetFullPath($path).TrimEnd('\', '/')
+    } else {
+        return [System.IO.Path]::GetFullPath([System.IO.Path]::Combine($baseDir, $path)).TrimEnd('\', '/')
+    }
+}
+
+$ResolvedOutput = Get-NormalizedAbsolutePath $OutputDir $Root
+
+# [가드 1] 드라이브 루트 삭제 차단 (예: C:\, I:\)
+$driveRoot = [System.IO.Path]::GetPathRoot($ResolvedOutput).TrimEnd('\', '/')
+if ($ResolvedOutput -eq $driveRoot -or $ResolvedOutput -eq "$driveRoot\") {
+    throw "Security Violation: OutputDir cannot be a drive root: '$ResolvedOutput'"
+}
+
+# [가드 2] 프로젝트 저장소 루트 및 상위 경로 삭제 차단
+if ($ResolvedOutput -eq $Root) {
+    throw "Security Violation: OutputDir cannot be the repository root: '$ResolvedOutput'"
+}
+if ($Root.StartsWith($ResolvedOutput, [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw "Security Violation: OutputDir cannot be a parent directory of the repository: '$ResolvedOutput'"
+}
+
+# [가드 3] 프로젝트 핵심 소스/데이터 디렉터리 삭제 차단
+$ForbiddenDirectories = @("Engine", "Editor", "Resources", "Config", "Tools", "Projects", "Docs", ".git", "Bin")
+foreach ($forbidden in $ForbiddenDirectories) {
+    $forbiddenPath = [System.IO.Path]::Combine($Root, $forbidden)
+    if ($ResolvedOutput -eq $forbiddenPath -or $ResolvedOutput.StartsWith("$forbiddenPath\", [System.StringComparison]::OrdinalIgnoreCase) -or $ResolvedOutput.StartsWith("$forbiddenPath/", [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Security Violation: OutputDir cannot be inside core project directory: '$forbiddenPath'"
+    }
+}
+
+# ── 2. 소스 바이너리 경로 확인 ──
 $BinDir = "$Root/out/build/x64-$($Config.ToLower())/bin"
-if (-not (Test-Path $BinDir)) {
+if (-not (Test-Path -LiteralPath $BinDir)) {
     $BinDir = "$Root/Bin/$Config"
 }
 
 Write-Host "=== Packaging BamEngine Client ($Config) ===" -ForegroundColor Cyan
 Write-Host "Source Bin: $BinDir"
-Write-Host "Target Dir: $OutputDir"
+Write-Host "Target Dir: $ResolvedOutput"
 
-# 1. 대상 폴더 생성
-if (Test-Path $OutputDir) {
-    Remove-Item -Recurse -Force $OutputDir
+# ── 3. 대상 폴더 안전 초기화 (-LiteralPath 사용) ──
+if (Test-Path -LiteralPath $ResolvedOutput) {
+    Write-Host "Cleaning existing output directory: $ResolvedOutput" -ForegroundColor Yellow
+    Remove-Item -LiteralPath $ResolvedOutput -Recurse -Force
 }
-New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null
-New-Item -ItemType Directory -Path "$OutputDir/Logs" -Force | Out-Null
+New-Item -ItemType Directory -LiteralPath $ResolvedOutput -Force | Out-Null
+New-Item -ItemType Directory -LiteralPath (Join-Path $ResolvedOutput "Logs") -Force | Out-Null
 
-# 2. 실행 바이너리 및 필수 DLL 복사
-$BinFiles = @("Client.exe", "Engine.dll", "GameModule.dll", "SDL3.dll")
-if ($Config -eq "Debug") {
-    $BinFiles += "fmodL.dll"
-} else {
-    $BinFiles += "fmod.dll"
-}
+# ── 4. 실행 바이너리 및 필수 DLL 복사 ──
+$RequiredBinaries = @("Client.exe", "Engine.dll", "GameModule.dll", "SDL3.dll")
+$OptionalBinaries = if ($Config -eq "Debug") { @("fmodL.dll") } else { @("fmod.dll") }
 
-foreach ($file in $BinFiles) {
+foreach ($file in $RequiredBinaries) {
     $src = Join-Path $BinDir $file
-    if (Test-Path $src) {
-        Copy-Item -Path $src -Destination $OutputDir -Force
+    if (Test-Path -LiteralPath $src) {
+        Copy-Item -LiteralPath $src -Destination $ResolvedOutput -Force
         Write-Host "Copied: $file" -ForegroundColor Green
     } else {
-        Write-Warning "Missing optional/required binary: $src"
+        throw "Packaging Failure: Missing required binary: $src"
     }
 }
 
-# 3. 런타임 리소스 복사 (Stage)
+foreach ($file in $OptionalBinaries) {
+    $src = Join-Path $BinDir $file
+    if (Test-Path -LiteralPath $src) {
+        Copy-Item -LiteralPath $src -Destination $ResolvedOutput -Force
+        Write-Host "Copied optional: $file" -ForegroundColor Green
+    } else {
+        Write-Warning "Missing optional binary: $src"
+    }
+}
+
+# ── 5. 런타임 리소스 복사 (Stage) ──
 $ResourcesToCopy = @(
     "Data",
     "Material",
@@ -48,22 +91,26 @@ $ResourcesToCopy = @(
     "Shader",
     "Texture",
     "Fonts",
-    "Audio"
+    "Audio",
+    "Model",
+    "Config",
+    "Scripts"
 )
 
-$TargetRes = Join-Path $OutputDir "Resources"
-New-Item -ItemType Directory -Path $TargetRes -Force | Out-Null
+$TargetRes = Join-Path $ResolvedOutput "Resources"
+New-Item -ItemType Directory -LiteralPath $TargetRes -Force | Out-Null
 
 foreach ($folder in $ResourcesToCopy) {
     $srcFolder = Join-Path $Root "Resources/$folder"
-    if (Test-Path $srcFolder) {
-        Copy-Item -Path $srcFolder -Destination $TargetRes -Recurse -Force
+    if (Test-Path -LiteralPath $srcFolder) {
+        Copy-Item -LiteralPath $srcFolder -Destination $TargetRes -Recurse -Force
         Write-Host "Copied Resource folder: $folder" -ForegroundColor Green
     }
 }
 
-if (Test-Path "$Root/Resources/icon.bmp") {
-    Copy-Item -Path "$Root/Resources/icon.bmp" -Destination $TargetRes -Force
+$iconPath = Join-Path $Root "Resources/icon.bmp"
+if (Test-Path -LiteralPath $iconPath) {
+    Copy-Item -LiteralPath $iconPath -Destination $TargetRes -Force
 }
 
-Write-Host "`nPackaging completed successfully at: $OutputDir" -ForegroundColor Cyan
+Write-Host "`nPackaging completed successfully at: $ResolvedOutput" -ForegroundColor Cyan

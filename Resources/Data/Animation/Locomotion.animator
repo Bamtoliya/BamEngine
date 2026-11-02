@@ -1,50 +1,78 @@
 {
     "AnimatorController": {
-        "DefaultState": "Locomotion",
-        "Parameters": [
-            { "Name": "Speed", "Type": 0, "FloatValue": 0.0, "IntValue": 0, "BoolValue": false },
-            { "Name": "Jump", "Type": 3, "FloatValue": 0.0, "IntValue": 0, "BoolValue": false }
-        ],
-        "States": [
+        "defaultParameters": [
             {
-                "Name": "Locomotion",
-                "PlayRate": 1.0,
-                "IsLooping": true,
-                "ClipKey": "",
-                "BlendTree": {
-                    "ParameterName": "Speed",
-                    "Samples": [
-                        { "Threshold": 0.0, "ClipKey": "" },
-                        { "Threshold": 2.0, "ClipKey": "" },
-                        { "Threshold": 6.0, "ClipKey": "" }
-                    ]
+                "Key": "Speed",
+                "Value": {
+                    "boolValue": false,
+                    "floatValue": 0.0,
+                    "intValue": 0,
+                    "type": 0
                 }
             },
             {
-                "Name": "Jump",
-                "PlayRate": 1.0,
-                "IsLooping": false,
-                "ClipKey": ""
+                "Key": "Jump",
+                "Value": {
+                    "boolValue": false,
+                    "floatValue": 0.0,
+                    "intValue": 0,
+                    "type": 3
+                }
             }
         ],
-        "Transitions": [
+        "defaultState": "Locomotion",
+        "states": [
             {
-                "SourceState": "Locomotion",
-                "TargetState": "Jump",
-                "Duration": 0.15,
-                "HasExitTime": false,
-                "ExitTime": 0.0,
-                "Conditions": [
-                    { "ParameterName": "Jump", "Mode": 4, "Threshold": 0.0 }
-                ]
+                "blendTree": {
+                    "name": "Locomotion",
+                    "parameterName": "Speed",
+                    "samples": [
+                        { "clip": { "Null": true }, "threshold": 0.0 },
+                        { "clip": { "Null": true }, "threshold": 2.0 },
+                        { "clip": { "Null": true }, "threshold": 6.0 }
+                    ]
+                },
+                "clip": { "Null": true },
+                "isBlendTree": true,
+                "isLooping": true,
+                "name": "Locomotion",
+                "playRate": 1.0
             },
             {
-                "SourceState": "Jump",
-                "TargetState": "Locomotion",
-                "Duration": 0.25,
-                "HasExitTime": true,
-                "ExitTime": 0.85,
-                "Conditions": []
+                "blendTree": {
+                    "name": "",
+                    "parameterName": "",
+                    "samples": []
+                },
+                "clip": { "Null": true },
+                "isBlendTree": false,
+                "isLooping": false,
+                "name": "Jump",
+                "playRate": 1.0
+            }
+        ],
+        "transitions": [
+            {
+                "conditions": [
+                    {
+                        "mode": 0,
+                        "parameterName": "Jump",
+                        "threshold": 0.0
+                    }
+                ],
+                "duration": 0.15,
+                "exitTime": 0.0,
+                "hasExitTime": false,
+                "sourceState": "Locomotion",
+                "targetState": "Jump"
+            },
+            {
+                "conditions": [],
+                "duration": 0.25,
+                "exitTime": 0.85,
+                "hasExitTime": true,
+                "sourceState": "Jump",
+                "targetState": "Locomotion"
             }
         ]
     }

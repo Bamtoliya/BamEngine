@@ -7,10 +7,11 @@ BEGIN(Editor)
 
 enum class EShortcutContext : uint8
 {
-    Global,       // 에디터 전역 (텍스트 입력 중이 아닐 때)
-    Viewport,     // 3D/2D 뷰포트 패널 활성 시
-    GraphEditor,  // 노드/스크립트 그래프 에디터 활성 시
-    Hierarchy,    // 씬 하이어라키 패널 활성 시
+    Global,         // 에디터 전역 (텍스트 입력 중이 아닐 때)
+    Viewport,       // 3D/2D 뷰포트 패널 활성 시
+    GraphEditor,    // 비주얼 스크립트 그래프 에디터 활성 시
+    AnimatorGraph,  // 애니메이터 상태 머신 에디터 활성 시
+    Hierarchy,      // 씬 하이어라키 패널 활성 시
     Count
 };
 

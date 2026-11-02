@@ -18,13 +18,13 @@ public:
 
 	void SetStateMachine(const std::shared_ptr<Engine::AnimatorStateMachine>& sm);
 	std::shared_ptr<Engine::AnimatorStateMachine> GetStateMachine() const { return m_StateMachine; }
-
+public:
+	virtual EShortcutContext GetShortcutContext() const override { return EShortcutContext::AnimatorGraph; }
+	static AnimatorGraphPanel* GetActivePanel() { return s_ActivePanel; }
 private:
 	// GraphPanel 스타일 2단 메뉴/툴바
 	void DrawMenuBar();
 	void DrawToolbar();
-	void OpenDocument();
-	void SaveDocument(bool saveAs);
 
 	// 3분할 작업 공간
 	void DrawParametersTab();
@@ -34,6 +34,20 @@ private:
 	void DrawSelectionInspector();
 	void DrawStateInspector(Engine::AnimState& state);
 	void DrawTransitionInspector(Engine::AnimTransition& transition);
+
+public:
+	enum class EPendingAction { None, New, Open, Close };
+	void RequestNew();
+	void RequestOpen();
+	void RequestClose();
+	bool SaveDocument(bool saveAs);
+	bool OpenDocument();
+private:
+	void ExecuteNew();
+	void ExecuteOpen();
+	void ExecuteClose();
+	void ExecutePendingAction();
+	void DrawConfirmModal();
 
 private:
 	std::shared_ptr<Engine::AnimatorStateMachine> m_StateMachine;
@@ -49,6 +63,9 @@ private:
 	// 노드 위치 및 스크롤
 	ImVec2 m_CanvasScrolling = ImVec2(0.0f, 0.0f);
 	std::unordered_map<std::string, ImVec2> m_NodePositions;
+
+	inline static AnimatorGraphPanel* s_ActivePanel = nullptr;
+	EPendingAction m_PendingAction = EPendingAction::None;
 };
 
 END

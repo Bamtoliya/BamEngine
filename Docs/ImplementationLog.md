@@ -35,6 +35,42 @@ Use one entry per meaningful change.
 
 ---
 
+## [2026-11-03] 애니메이터 편집기 파일 안전 보호, 입력/로캘 정합성 및 패키징 스크립트 파괴적 삭제 방어 (P1-A / F01·F03·F11)
+
+- Area: Engine | Editor | Tools | Localization
+- Type: Fix | Security | Architecture
+- 관련 파일:
+  - Engine/Source/Resource/Model/Public/AnimatorStateMachine.h
+  - Engine/Source/Resource/Model/Private/AnimatorStateMachine.cpp
+  - Editor/Source/ImGui/AnimatorGraphPanel/Public/AnimatorGraphPanel.h
+  - Editor/Source/ImGui/AnimatorGraphPanel/Private/AnimatorGraphPanel.cpp
+  - Editor/Source/Shortcut/Public/ShortcutTypes.h
+  - Editor/Source/Shortcut/Private/EditorActionRegistry.cpp
+  - Resources/Data/Localization/Editor.csv
+  - Tools/Scripts/PackageClient.ps1
+- Motivation:
+  - F01: `AnimatorGraphPanel`에서 `SaveToFile` 호출 시 기존 파일이 즉시 덮어씌워져 실패 시 데이터 유실 위험이 있었고, 미저장 변경사항이 있을 때 새 파일/열기/창 닫기 시 아무런 경고 없이 날아가는 취약점 해결.
+  - F01: `AnimState::blendTree`가 `shared_ptr` 동적 할당으로 관리되어 역직렬화 코덱 누락 및 객체 수명 관리 오버헤드가 발생하던 문제를 값 타입(`BlendTree1D`)으로 전환하여 해결.
+  - F03: 배포 패키징 스크립트(`PackageClient.ps1`)에 부적절한 `-OutputDir`(드라이브 루트 `C:\`, 저장소 루트, 핵심 소스/데이터 폴더 등)가 전달될 경우 `Remove-Item -Recurse -Force`로 인해 프로젝트 전체가 파괴될 수 있는 심각한 위험 차단.
+  - F11: `AnimatorGraphPanel` 내에서 `ImGui::GetIO()` 및 하드코딩 마우스/키보드 입력과 하드코딩 영어 문자열이 사용되던 것을 `Engine::InputManager` 및 `LocalizationManager` 로캘 키 기반으로 완전 전환.
+- Implementation summary:
+  - `AnimatorStateMachine`: `blendTree`를 값 타입(`BlendTree1D`)으로 변경하여 힙 할당 및 수동 코덱 제거. `IArchive::SaveToFile`을 통한 원자적 파일 쓰기 보장 및 `LoadFromFile` 시 임시 인스턴스 스왑을 통한 강한 예외 안전성(Strong Exception Guarantee) 확보.
+  - `AnimatorGraphPanel`: `EPendingAction`(`None, New, Open, Close`) 상태 머신 기반 미저장 확인 모달(`Save / Discard / Cancel`) 구현. `ImGuiWindowFlags_UnsavedDocument` 연동 및 ImGui 도킹 탭 닫기 가로채기(`!openState`) 로직 분리. 루트 뷰포트 기반 모달 렌더링으로 가시성 스킵 버그 방지.
+  - 단축키 연동: `ShortcutTypes.h` 및 `EditorActionRegistry.cpp`에 `EShortcutContext::AnimatorGraph` 컨텍스트 및 `Animator.Save`(Ctrl+S), `Animator.New`(Ctrl+N), `Animator.Open`(Ctrl+O) 액션 등록.
+  - `InputManager` & 로캘 일원화: `AnimatorGraphPanel`의 노드 드래그(`GetMouseDelta()`), 패닝(`IsMouseButtonPressed(EMouseButton::Middle)`), 좌표 변환(`GetScreenMousePosition()`), 전이 취소(ESC)를 `InputManager`로 전환하고 `Editor.csv`에 11개 로캘 키 등록.
+  - `PackageClient.ps1`: `Get-NormalizedAbsolutePath` 함수 추가. 드라이브 루트, 프로젝트 루트 및 상위, 프로젝트 핵심 디렉터리(`Engine`, `Editor`, `Resources` 등) 전달 시 즉시 `Security Violation` 예외를 던지며 중단되도록 가드 구축. `-LiteralPath` 적용 및 필수 실행 파일 누락 검사 추가.
+- Technical details:
+  - ImGui 도킹 탭 닫기 메커니즘: `ImGuiWindowFlags_UnsavedDocument`가 켜져 있어도 탭 'X' 클릭 시 `ImGui::Begin`이 `false`를 반환할 수 있으므로, 닫기 요청 검사는 `Begin` 직후 가시성과 무관하게 가로채고 모달은 `End` 이후 최상위에서 렌더링하여 안정적 모달 표시 보장.
+  - `BlendTree1D` 값 타입 전환으로 리플렉션 필드 직렬화가 내장 타입처럼 동작하여 복잡한 포인터 복원 로직 없이 완벽한 JSON 왕복 직렬화 달성.
+- Validation:
+  - `pwsh -File Tools/Scripts/PackageClient.ps1 -OutputDir .` -> `Security Violation` 예외 발생 확인.
+  - `pwsh -File Tools/Scripts/PackageClient.ps1 -OutputDir Resources` -> `Security Violation` 예외 발생 확인.
+  - `pwsh -File Tools/Scripts/PackageClient.ps1 -OutputDir "C:\"` -> `Security Violation` 예외 발생 확인.
+  - `AnimatorStateMachine` JSON 저장 및 로드 왕복 검증 통과.
+  - 에디터 단축키(Ctrl+S, Ctrl+N, Ctrl+O) 및 미저장 변경사항 보호 모달(Save, Discard, Cancel) 상호작용 검증 통과.
+
+---
+
 ## [2026-11-02] 렌더러 유휴 패스 스킵, Editor UI 연산량 최적화 및 알림 히스토리 팝업 구현
 
 - Area: Engine | Editor | Render | UI

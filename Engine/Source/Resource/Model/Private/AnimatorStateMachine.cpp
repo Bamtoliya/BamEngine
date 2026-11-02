@@ -142,8 +142,8 @@ void AnimatorRuntimeState::Update(float dt, const Skeleton& skeleton, std::vecto
 
 	if (curState->IsBlendTree())
 	{
-		const float paramVal = m_parameters.GetFloat(curState->blendTree->parameterName);
-		curState->blendTree->Evaluate(paramVal, primaryClip, blendSecondaryClip, blendWeight);
+		const float paramVal = m_parameters.GetFloat(curState->blendTree.parameterName);
+		curState->blendTree.Evaluate(paramVal, primaryClip, blendSecondaryClip, blendWeight);
 	}
 	else
 	{
@@ -192,7 +192,7 @@ void AnimatorRuntimeState::Update(float dt, const Skeleton& skeleton, std::vecto
 			{
 				const Animation* secClip = nullptr;
 				float secWeight = 0.0f;
-				targetState->blendTree->Evaluate(m_parameters.GetFloat(targetState->blendTree->parameterName), targetClip, secClip, secWeight);
+				targetState->blendTree.Evaluate(m_parameters.GetFloat(targetState->blendTree.parameterName), targetClip, secClip, secWeight);
 			}
 			else
 			{
@@ -239,35 +239,55 @@ bool AnimatorStateMachine::SaveToFile(const std::string& filePath) const
 {
 	const auto& refl = Engine::ReflectionRegistry::Get();
 	const auto* type = refl.GetRegistry().FindType<AnimatorStateMachine>();
-	if (!type) return false;
+	if (!type)
+	{
+		BAM_LOG(Error, "Engine", "Asset", "[Animator] Reflection type not found for AnimatorStateMachine");
+		return false;
+	}
 
 	archive::JsonArchive ar;
 	const auto writeRes = archive_reflection::WriteObject(ar, "AnimatorController", *type, reflection::ObjectView::From(*this), &refl.GetRegistry(), &refl.GetPropertyCodecs());
-	if (!writeRes) return false;
+	if (!writeRes)
+	{
+		BAM_LOG(Error, "Engine", "Asset", "[Animator] WriteObject failed: code={}, field={}", static_cast<int>(writeRes.Code), writeRes.Field);
+		return false;
+	}
 
-	std::string json;
-	if (!ar.ToJson(json)) return false;
-
-	std::ofstream file(filePath, std::ios::trunc);
-	if (!file.is_open()) return false;
-	file << json;
+	const auto saveRes = ar.SaveToFile(filePath);
+	if (!saveRes)
+	{
+		BAM_LOG(Error, "Engine", "Asset", "[Animator] SaveToFile failed: code={}, field={}, path={}", static_cast<int>(saveRes.Code), saveRes.Field, filePath);
+		return false;
+	}
 	return true;
 }
 
 bool AnimatorStateMachine::LoadFromFile(const std::string& filePath)
 {
-	std::ifstream file(filePath);
-	if (!file.is_open()) return false;
-	std::stringstream buffer;
-	buffer << file.rdbuf();
-
 	archive::JsonArchive ar;
-	if (!ar.Parse(buffer.str())) return false;
+	const auto loadRes = ar.LoadFromFile(filePath);
+	if (!loadRes)
+	{
+		BAM_LOG(Error, "Engine", "Asset", "[Animator] LoadFromFile failed: code={}, field={}, path={}", static_cast<int>(loadRes.Code), loadRes.Field, filePath);
+		return false;
+	}
 
 	const auto& refl = Engine::ReflectionRegistry::Get();
 	const auto* type = refl.GetRegistry().FindType<AnimatorStateMachine>();
-	if (!type) return false;
+	if (!type)
+	{
+		BAM_LOG(Error, "Engine", "Asset", "[Animator] Reflection type not found for AnimatorStateMachine");
+		return false;
+	}
 
-	const auto readRes = archive_reflection::ReadObject(ar, "AnimatorController", *type, *this, &refl.GetRegistry(), &refl.GetPropertyCodecs());
-	return static_cast<bool>(readRes);
+	AnimatorStateMachine temp;
+	const auto readRes = archive_reflection::ReadObject(ar, "AnimatorController", *type, temp, &refl.GetRegistry(), &refl.GetPropertyCodecs());
+	if (!readRes)
+	{
+		BAM_LOG(Error, "Engine", "Asset", "[Animator] ReadObject failed: code={}, field={}", static_cast<int>(readRes.Code), readRes.Field);
+		return false;
+	}
+
+	*this = std::move(temp);
+	return true;
 }

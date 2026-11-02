@@ -1,4 +1,17 @@
 Group,Key,English,Korean
+,AnimatorGraph.Entry,ENTRY ->,진입 (ENTRY) ->
+,AnimatorGraph.Clip,Clip,클립
+,AnimatorGraph.NoMotion,No Motion,동작 없음
+,AnimatorGraph.ParamFloat,Float,실수 (Float)
+,AnimatorGraph.ParamInt,Int,정수 (Int)
+,AnimatorGraph.ParamBool,Bool,불리언 (Bool)
+,AnimatorGraph.CancelEsc,Cancel (ESC),취소 (ESC)
+,AnimatorGraph.CondGreater,Greater (>),보다 큼 (>)
+,AnimatorGraph.CondLess,Less (<),보다 작음 (<)
+,AnimatorGraph.CondEqual,Equal (==),같음 (==)
+,AnimatorGraph.CondNotEqual,NotEqual (!=),같지 않음 (!=)
+,AnimatorGraph.CondIfTrue,IfTrue,참일 때 (True)
+,AnimatorGraph.CondIfFalse,IfFalse,거짓일 때 (False)
 ,UI_VIEW,View,보기
 ,AnimatorGraph.ResetView,Reset Canvas View,캔버스 뷰 초기화
 ,AnimatorGraph.TransitionInspector,Transition Inspector,전이 속성 인스펙터
@@ -1089,3 +1102,29 @@ EditorCommon,File,File,파일
 EditorCommon,Edit,Edit,편집
 EditorCommon,SaveAs,Save As...,다른 이름으로 저장...
 EditorMenu,File,File,파일
+Notification,HistoryTitle,Notification History,알림 히스토리
+Notification,TotalCount,Total Notifications,전체 알림
+Notification,NoHistory,No notification history.,지나간 알림이 없습니다.
+Notification,HistoryTooltip,View notification history,알림 히스토리 확인
+EditorCommon,Clear,Clear,지우기
+Settings,Title,Settings,설정
+Settings,CategoryGeneral,General,일반
+Settings,CategoryGraphic,Graphic & Display,그래픽 및 화면
+Settings,CategoryEditor,Editor Environment,에디터 환경
+Settings,CategoryWorkspace,Workspace,작업 공간
+Settings,CategoryShortcuts,Shortcuts,단축키
+Settings,CategoryProjectSettings,Project Settings,프로젝트 설정
+Settings,ResetDefaults,Reset to Defaults,기본값 복원
+EditorCommon,Apply,Apply,적용
+FileDialog,AnimatorFiles,Animator Controller Files (*.animator),애니메이터 컨트롤러 파일 (*.animator)
+Settings,GizmoSnapping,Gizmo Snapping,기즈모 스냅
+Settings,CameraMovement,Camera Movement,카메라 조작
+Settings,Logging,Logging,로깅
+Settings,GroupSystem,System & Display,시스템 및 화면
+Settings,GroupEditor,Editor & Workspace,에디터 및 작업 공간
+Settings,GroupProject,Project,프로젝트
+Settings,SectionLanguage,Language & Localization,언어 및 로캘
+Settings,SectionAppearance,Appearance & Scaling,디스플레이 배율
+Settings,SectionDisplayResolution,Window & Resolution,창 및 디스플레이
+Settings,SectionFrameSync,Framerate & Sync,프레임 레이트 및 동기화
+Settings,SectionLayoutPresets,Layout & Presets,레이아웃 및 프리셋

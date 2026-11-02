@@ -1,6 +1,6 @@
 # 애니메이터 그래프와 애니메이션 상태 머신 개발 계획
 
-- 작성일: 2026-11-01
+- 작성일: 2026-11-01 (갱신: 2026-11-02)
 - 상태: Phase 1~4 기본 구현·계층 연결 반영 / 파일 보호·재생 정확성·고급 기능 미완료 (2026-11-02 정적 대조)
 - 공통 기준: [EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md), [SourceOrganizationGuidelines.md](SourceOrganizationGuidelines.md)
 - 선행 기반: [EngineDevelopmentPlan.md](EngineDevelopmentPlan.md) 9·10절, [GraphFoundation.md](GraphFoundation.md), [GraphPanel.md](GraphPanel.md), [VisualScriptingBlueprintPlan.md](VisualScriptingBlueprintPlan.md)
@@ -29,7 +29,7 @@
 ### 2.1 이미 구축된 기반 (2026-11-02 정적 대조 / 전체 완료 기준과 구분)
 - **애니메이션 원천 데이터:** `Engine/Source/Resource/Model/Public/Animation.h`, `Skeleton.h`, `Bone.h`에 뼈 계층, 포지션/로테이션/스케일 키프레임, 지속 시간(`Duration`), `TicksPerSecond` 정의 완비.
 - **런타임 포즈 평가 및 GPU 스키닝 (Phase 1 기본 구현):** `AnimationEvaluator`, `AnimatorComponent`, `AnimationSystem`, `MeshRenderSystem`과 Renderer의 스키닝 제출이 있다. `InstantiateModel()`은 루트에 Animator, 하위 메시 노드에 SkinnedMeshRenderer를 생성한다. 재생 경계·부분 트랙 정확성은 별도 잔여다.
-- **애니메이션 상태 머신 및 1D 블렌드 트리 (Phase 2~3 기본 구현):** `AnimatorParameters`, `AnimTransition`, `AnimState`, `AnimatorStateMachine`, `BlendTree1D` 및 `.animator` JSON 읽기/쓰기가 있다. 파일 보호·ASM 제어 의미와 2D 블렌드는 미완료다.
+- **애니메이션 상태 머신 및 1D 블렌드 트리 (Phase 2~3 기본 구현):** `AnimatorParameters`, `AnimTransition`, `AnimState`, `AnimatorStateMachine`, `BlendTree1D` 및 `.animator` JSON 읽기/쓰기가 있다. `AnimState::blendTree`는 힙 동적 할당과 타입별 특수화 직렬화 코덱을 배제하기 위해 값 타입(`BlendTree1D blendTree;`, 방안 B)으로 소유하며, 향후 스마트 포인터 일반화 직렬화(방안 C)는 `ReflectionArchiveGuidelines.md` 8절의 장기 아키텍처 계획으로 분리한다. 파일 보호·ASM 제어 의미와 2D 블렌드는 미완료다.
 - **에디터 시각 저작 패널 (`AnimatorGraphPanel`, Phase 4 기본 UI):** 메뉴바/퀵툴바, 파라미터·상태·전이 편집과 활성 상태 표시 코드가 있다. 현재 캔버스는 ImGui/ImDrawList 기반 자체 구현이며, 저장/교체 보호·입력 일원화·독립 프리뷰는 남아 있다.
 - **비주얼 스크립팅 연동 인프라:** `GraphGameplayLibrary`에 `Animator.Play/Pause/Stop/SetPlayRate/SetTime/IsPlaying/GetCurrentTime` 및 `Animator.SetFloat/SetInt/SetBool/SetTrigger/GetFloat/GetBool` 노드가 등록되었고, `EGraphPinType::String` 지원(`d3fc6bd2`)을 통해 블루프린트에서 문자열 파라미터 이름을 직접 전달할 수 있음.
 - **2D 프레임 애니메이션:** 독립 `SpriteAnimation` 에셋(`.spriteanim`), `SpriteAnimationComponent`/`System`, 전용 `SpriteAnimationEditor` 구축 완료.
@@ -122,25 +122,18 @@ flowchart TD
 
 ---
 
-### Phase 4. 에디터 저작 패널 (`AnimatorGraphPanel`) (기본 UI 구현 / 파일 보호·입력·독립 프리뷰 잔여)
+### Phase 4. 에디터 저작 패널 (`AnimatorGraphPanel`) (파일 보호·모달·입력 정합성 완료 / 캔버스 UI 일원화·독립 프리뷰 후속)
 - **목적:** 기획자 및 아티스트가 코드를 작성하지 않고도 시각적으로 상태 머신과 파라미터를 저작하는 전문 GUI를 제공한다.
-- **세부 내용:**
-  - **캔버스 UI (`AnimatorGraphCanvas`):**
-    - `imgui-node-editor` 기반 상태 머신 전용 노드 렌더링.
-    - 특별 노드: `Entry`(시작 진입점), `Any State`(어느 상태에서든 조건 만족 시 전이).
-    - 상태 노드 드래그 및 노드 간 마우스 드래그로 트랜지션 연결선(방향성 화살표) 생성.
-  - **파라미터 패널 (`ParametersTab`):**
-    - 에셋 좌측 독에 파라미터 목록 표시 (`+` 버튼으로 Float/Int/Bool/Trigger 추가).
-    - 런타임(PIE) 실행 중 현재 파라미터 실시간 수치 표시 및 슬라이더/체크박스로 즉각 테스트 조작 가능.
-  - **인스펙터 연동 (`TransitionInspector`):**
-    - 상태 노드 선택 시: 모션 클립 슬롯(ResourcePicker 연동), 재생 속도, 루프 토글.
-    - 트랜지션 화살표 선택 시: `Has Exit Time` 체크박스, `Exit Time` 슬라이더, `Duration` 슬라이더, 조건식 추가/삭제 테이블.
-  - **실시간 디버깅 시각화:**
-    - PIE 실행 중 현재 활성화된 상태 노드에 청록색 테두리 발광 강조.
-    - 전이 진행 중인 트랜지션 연결선에 진행률 게이지 또는 파티클 펄스 시각화.
-  - **미리보기 뷰포트 (`PreviewViewport`):**
-    - 패널 내에 격리된 3D 뷰포트를 내장하여, 메인 씬에 영향을 주지 않고 샘플 모델에 애니메이터 그래프를 적용해 실시간 확인.
-- **완료 기준:** `AnimatorGraphAsset` 파일을 생성하고, 에디터에서 Idle ↔ Walk 트랜지션을 연결한 후 JSON 저장 및 재로드가 완벽히 동작하며, PIE에서 활성 상태가 시각적으로 강조된다.
+- **2026-11-02 구현 완료:**
+  - 원자적 파일 저장/로드 및 실패 결과 전파(F01 단계 1), `AnimState::blendTree` 값 타입(방안 B) 직렬화 안정화.
+  - New/Open/종료 시 미저장 변경사항 보호 모달(`Save/Discard/Cancel`) 및 포커스 기반 단축키(Ctrl+S, Ctrl+N, Ctrl+O) 연동(F01 단계 2).
+  - ESC 취소, 마우스 좌표/드래그/패닝의 `InputManager` 일원화 및 표시 문자열 `Editor.csv` 로캘 키 연동(F11 단계 3).
+- **후속 계획 과제 (사용자 확정):**
+  - **캔버스 UI 토대 일원화 (`imgui-node-editor` 전환):** 현재의 자체 `ImDrawList` 수동 렌더링을 `GraphPanel`과 동일한 `imgui-node-editor` 프레임워크로 마이그레이션.
+    - 데이터 모델(`AnimatorStateMachine`)은 독립적으로 보존하면서, 무한 줌/패닝, 다중 노드 마퀴(Marquee) 선택, 박스 드래그, 정렬 단축키 등 블루프린트와 일관된 조작감 제공.
+  - 특별 노드: `Any State`(어느 상태에서든 조건 만족 시 전이).
+  - 런타임 전이 진행률 게이지 또는 파티클 펄스 시각화.
+  - 독립 3D 모델 실시간 프리뷰 뷰포트 (`PreviewViewport`).
 
 ---
 

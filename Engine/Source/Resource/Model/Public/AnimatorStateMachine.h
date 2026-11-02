@@ -94,7 +94,9 @@ struct ENGINE_API AnimState
 		ResourceHandle<Animation> clip;
 
 	PROPERTY(EDITABLE)
-		std::shared_ptr<BlendTree1D> blendTree;
+		bool isBlendTree = false;
+	PROPERTY(EDITABLE)
+		BlendTree1D blendTree;
 
 	PROPERTY(EDITABLE)
 		float playRate = 1.0f;
@@ -102,7 +104,7 @@ struct ENGINE_API AnimState
 	PROPERTY(EDITABLE)
 		bool isLooping = true;
 
-	bool IsBlendTree() const { return blendTree != nullptr; }
+	bool IsBlendTree() const { return isBlendTree; }
 };
 
 STRUCT()

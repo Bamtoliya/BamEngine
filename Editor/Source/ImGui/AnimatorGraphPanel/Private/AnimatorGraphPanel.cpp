@@ -17,8 +17,8 @@ AnimatorGraphPanel::AnimatorGraphPanel()
 
 	m_StateMachine = std::make_shared<Engine::AnimatorStateMachine>();
 	m_StateMachine->defaultState = "Idle";
-	m_StateMachine->states.push_back(Engine::AnimState{ "Idle", {}, nullptr, 1.0f, true });
-	m_StateMachine->states.push_back(Engine::AnimState{ "Walk", {}, nullptr, 1.0f, true });
+	m_StateMachine->states.push_back(Engine::AnimState{ "Idle" });
+	m_StateMachine->states.push_back(Engine::AnimState{ "Walk" });
 
 	Engine::AnimTransition tr;
 	tr.sourceState = "Idle";
@@ -46,12 +46,28 @@ void AnimatorGraphPanel::Draw()
 	ImGui::SetNextWindowSize(ImVec2(1000.0f, 600.0f), ImGuiCond_FirstUseEver);
 	const std::string title = ICON_FA_DIAGRAM_PROJECT " " + GetDisplayName() + "###AnimatorGraphPanel";
 
-	if (ImGui::Begin(title.c_str(), &m_Open, ImGuiWindowFlags_MenuBar))
+	ImGuiWindowFlags windowFlags = ImGuiWindowFlags_MenuBar;
+	if (m_IsDirty) windowFlags |= ImGuiWindowFlags_UnsavedDocument;
+
+	bool openState = m_Open;
+	const bool isVisible = ImGui::Begin(title.c_str(), &openState, windowFlags);
+
+	// 1. 도킹 탭의 'X' 닫기 이벤트는 창의 가시성(isVisible)과 무관하게 즉시 가로챔
+	if (!openState)
 	{
-		// 1. 상단 메뉴바 (File, Edit, View)
+		RequestClose();
+	}
+
+	if (isVisible)
+	{
+		m_Focused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
+		if (m_Focused) s_ActivePanel = this;
+		m_Hovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows);
+
+		// 메뉴바
 		DrawMenuBar();
 
-		// 2. 메뉴바 바로 아래 1줄 퀵 액세스 툴바
+		// 퀵 액세스 툴바
 		DrawToolbar();
 		ImGui::Separator();
 
@@ -61,7 +77,7 @@ void AnimatorGraphPanel::Draw()
 		const float canvasWidth = std::max(200.0f, totalWidth - paramWidth - inspectorWidth - 16.0f);
 		const float contentHeight = ImGui::GetContentRegionAvail().y;
 
-		// 3. 3분할 작업 공간
+		// 3분할 작업 공간
 		ImGui::BeginChild("ParamsPanel", ImVec2(paramWidth, contentHeight), true);
 		DrawParametersTab();
 		ImGui::EndChild();
@@ -80,6 +96,9 @@ void AnimatorGraphPanel::Draw()
 		ImGui::EndChild();
 	}
 	ImGui::End();
+
+	// 2. 미저장 보호 모달은 패널의 Begin/End 외부 최상위 뷰포트에서 독립적으로 렌더링
+	DrawConfirmModal();
 }
 
 void AnimatorGraphPanel::DrawMenuBar()
@@ -89,17 +108,9 @@ void AnimatorGraphPanel::DrawMenuBar()
 		if (ImGui::BeginMenu(LOCAL_CSTR("EditorCommon.File")))
 		{
 			if (ImGui::MenuItem((ICON_FA_FILE " " + LOCAL_LABEL("EditorCommon.New")).c_str(), "Ctrl+N"))
-			{
-				m_StateMachine = std::make_shared<Engine::AnimatorStateMachine>();
-				m_StateMachine->defaultState = "Idle";
-				m_StateMachine->states.push_back(Engine::AnimState{ "Idle", {}, nullptr, 1.0f, true });
-				m_CurrentFilePath.clear();
-				m_SelectedStateIndex = -1;
-				m_SelectedTransitionIndex = -1;
-				m_IsDirty = false;
-			}
+				RequestNew();
 			if (ImGui::MenuItem((ICON_FA_FOLDER_OPEN " " + LOCAL_LABEL("EditorCommon.Open")).c_str(), "Ctrl+O"))
-				OpenDocument();
+				RequestOpen();
 			if (ImGui::MenuItem((ICON_FA_FLOPPY_DISK " " + LOCAL_LABEL("EditorCommon.Save")).c_str(), "Ctrl+S"))
 				SaveDocument(false);
 			if (ImGui::MenuItem((ICON_FA_FLOPPY_DISK " " + LOCAL_LABEL("EditorCommon.SaveAs")).c_str(), "Ctrl+Shift+S"))
@@ -145,16 +156,10 @@ void AnimatorGraphPanel::DrawMenuBar()
 void AnimatorGraphPanel::DrawToolbar()
 {
 	// 1줄 퀵 액세스 툴바: [New] [Open] [Save] | [파일상태 배지] | [새 상태]
-	if (ImGui::Button(ICON_FA_FILE "##QuickNew"))
-	{
-		m_StateMachine = std::make_shared<Engine::AnimatorStateMachine>();
-		m_CurrentFilePath.clear();
-		m_IsDirty = false;
-	}
+	if (ImGui::Button(ICON_FA_FILE "##QuickNew")) RequestNew();
 	if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("EditorCommon.New"));
-
 	ImGui::SameLine();
-	if (ImGui::Button(ICON_FA_FOLDER_OPEN "##QuickOpen")) OpenDocument();
+	if (ImGui::Button(ICON_FA_FOLDER_OPEN "##QuickOpen")) RequestOpen();
 	if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("EditorCommon.Open"));
 
 	ImGui::SameLine();
@@ -177,7 +182,7 @@ void AnimatorGraphPanel::DrawToolbar()
 	if (ImGui::Button((ICON_FA_PLUS " " + LOCAL_LABEL("AnimatorGraph.CreateState")).c_str()))
 	{
 		const std::string name = "State_" + std::to_string(m_StateMachine->states.size());
-		m_StateMachine->states.push_back(Engine::AnimState{ name, {}, nullptr, 1.0f, true });
+		m_StateMachine->states.push_back(Engine::AnimState{ name });
 		m_NodePositions[name] = ImVec2(250.0f, 150.0f);
 		m_IsDirty = true;
 	}
@@ -188,46 +193,61 @@ void AnimatorGraphPanel::DrawToolbar()
 		ImGui::SameLine();
 		ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "%s", LOCAL_CSTR("AnimatorGraph.SelectTargetToConnect"));
 		ImGui::SameLine();
-		if (ImGui::SmallButton("Cancel (ESC)")) m_ConnectingSourceIndex = -1;
-		if (ImGui::IsKeyPressed(ImGuiKey_Escape)) m_ConnectingSourceIndex = -1;
+		if (ImGui::SmallButton(LOCAL_LABEL("AnimatorGraph.CancelEsc").c_str())) m_ConnectingSourceIndex = -1;
+		if (Engine::InputManager::Get().IsKeyButtonDown(Engine::EKeyCode::Escape)) m_ConnectingSourceIndex = -1;
 	}
 }
 
-void AnimatorGraphPanel::OpenDocument()
+bool AnimatorGraphPanel::OpenDocument()
 {
 	std::wstring selectedPath;
 	const std::vector<FileDialogFilter> filters{
-		{ L"Animator Controller Files (*.animator)", L"*.animator" },
-		{ L"JSON Files (*.json)", L"*.json" }
+		{ StrToWStr(LOCAL("FileDialog.AnimatorFiles")), L"*.animator" },
+		{ StrToWStr(LOCAL("FileDialog.JsonFiles")), L"*.json" }
 	};
-	if (FileDialogs::OpenFileDialog(selectedPath, filters))
+	if (!FileDialogs::OpenFileDialog(selectedPath, filters)) return false;
+
+	const std::string targetPath = WStrToStr(selectedPath);
+	auto tempStateMachine = std::make_shared<Engine::AnimatorStateMachine>();
+	if (!tempStateMachine->LoadFromFile(targetPath))
 	{
-		m_CurrentFilePath = WStrToStr(selectedPath);
-		m_StateMachine->LoadFromFile(m_CurrentFilePath);
-		m_SelectedStateIndex = -1;
-		m_SelectedTransitionIndex = -1;
-		m_ConnectingSourceIndex = -1;
-		m_IsDirty = false;
+		BAM_LOG(Error, "Editor", "Asset", "Failed to load animator controller: {}", targetPath);
+		return false;
 	}
+
+	m_StateMachine = std::move(tempStateMachine);
+	m_CurrentFilePath = targetPath;
+	m_SelectedStateIndex = -1;
+	m_SelectedTransitionIndex = -1;
+	m_ConnectingSourceIndex = -1;
+	m_IsDirty = false;
+	return true;
 }
 
-void AnimatorGraphPanel::SaveDocument(bool saveAs)
+bool AnimatorGraphPanel::SaveDocument(bool saveAs)
 {
-	if (saveAs || m_CurrentFilePath.empty())
+	std::string targetPath = m_CurrentFilePath;
+	if (saveAs || targetPath.empty())
 	{
 		std::wstring selectedPath;
 		const std::vector<FileDialogFilter> filters{
-			{ L"Animator Controller Files (*.animator)", L"*.animator" }
+			{ StrToWStr(LOCAL("FileDialog.AnimatorFiles")), L"*.animator" }
 		};
-		if (FileDialogs::SaveFileDialog(selectedPath, filters, L"NewController", L"animator"))
-			m_CurrentFilePath = WStrToStr(selectedPath);
-		else return;
+		if (!FileDialogs::SaveFileDialog(selectedPath, filters, L"NewController", L"animator")) return false;
+		targetPath = WStrToStr(selectedPath);
 	}
-	if (!m_CurrentFilePath.empty())
+
+	if (targetPath.empty() || !m_StateMachine) return false;
+
+	if (!m_StateMachine->SaveToFile(targetPath))
 	{
-		m_StateMachine->SaveToFile(m_CurrentFilePath);
-		m_IsDirty = false;
+		BAM_LOG(Error, "Editor", "Asset", "Failed to save animator controller: {}", targetPath);
+		return false;
 	}
+
+	m_CurrentFilePath = targetPath;
+	m_IsDirty = false;
+	return true;
 }
 
 void AnimatorGraphPanel::DrawParametersTab()
@@ -239,25 +259,25 @@ void AnimatorGraphPanel::DrawParametersTab()
 
 	if (ImGui::BeginPopup("AddParamPopup"))
 	{
-		if (ImGui::MenuItem("Float"))
+		if (ImGui::MenuItem(LOCAL_CSTR("AnimatorGraph.ParamFloat")))
 		{
 			const std::string name = "NewFloat" + std::to_string(m_StateMachine->defaultParameters.size());
 			m_StateMachine->defaultParameters[name] = Engine::AnimatorParameter{ Engine::EAnimatorParamType::Float, 0.0f, 0, false };
 			m_IsDirty = true;
 		}
-		if (ImGui::MenuItem("Int"))
+		if (ImGui::MenuItem(LOCAL_CSTR("AnimatorGraph.ParamInt")))
 		{
 			const std::string name = "NewInt" + std::to_string(m_StateMachine->defaultParameters.size());
 			m_StateMachine->defaultParameters[name] = Engine::AnimatorParameter{ Engine::EAnimatorParamType::Int, 0.0f, 0, false };
 			m_IsDirty = true;
 		}
-		if (ImGui::MenuItem("Bool"))
+		if (ImGui::MenuItem(LOCAL_CSTR("AnimatorGraph.ParamBool")))
 		{
 			const std::string name = "NewBool" + std::to_string(m_StateMachine->defaultParameters.size());
 			m_StateMachine->defaultParameters[name] = Engine::AnimatorParameter{ Engine::EAnimatorParamType::Bool, 0.0f, 0, false };
 			m_IsDirty = true;
 		}
-		if (ImGui::MenuItem("Trigger"))
+		if (ImGui::MenuItem(LOCAL_CSTR("Animator.Trigger")))
 		{
 			const std::string name = "NewTrigger" + std::to_string(m_StateMachine->defaultParameters.size());
 			m_StateMachine->defaultParameters[name] = Engine::AnimatorParameter{ Engine::EAnimatorParamType::Trigger, 0.0f, 0, false };
@@ -291,7 +311,7 @@ void AnimatorGraphPanel::DrawParametersTab()
 			break;
 		case Engine::EAnimatorParamType::Bool:
 		case Engine::EAnimatorParamType::Trigger:
-			if (ImGui::Checkbox(paramData.type == Engine::EAnimatorParamType::Trigger ? "Trigger" : "Bool", &paramData.boolValue)) m_IsDirty = true;
+			if (ImGui::Checkbox(paramData.type == Engine::EAnimatorParamType::Trigger ? LOCAL_CSTR("Animator.Trigger") : LOCAL_CSTR("AnimatorGraph.ParamBool"), &paramData.boolValue)) m_IsDirty = true;
 			break;
 		}
 		ImGui::PopID();
@@ -309,7 +329,15 @@ void AnimatorGraphPanel::DrawCanvas()
 	ImDrawList* drawList = ImGui::GetWindowDrawList();
 	const ImVec2 canvasPos = ImGui::GetCursorScreenPos();
 	const ImVec2 canvasSize = ImGui::GetContentRegionAvail();
-	const ImVec2 mousePos = ImGui::GetMousePos();
+	const auto screenMouse = Engine::InputManager::Get().GetScreenMousePosition();
+	const ImVec2 mousePos(screenMouse.x, screenMouse.y);
+	// 캔버스 영역 위에서 마우스 휠 클릭(Middle 버튼) 드래그 시 캔버스 패닝 이동
+	if (ImGui::IsWindowHovered() && Engine::InputManager::Get().IsMouseButtonPressed(Engine::EMouseButton::Middle))
+	{
+		const auto delta = Engine::InputManager::Get().GetMouseDelta();
+		m_CanvasScrolling.x += delta.x;
+		m_CanvasScrolling.y += delta.y;
+	}
 	// ── 0. 현재 씬에서 선택된 엔티티의 런타임 애니메이터 상태 조회 ──
 	std::string liveActiveState;
 	bool isLiveTransitioning = false;
@@ -343,34 +371,28 @@ void AnimatorGraphPanel::DrawCanvas()
 		drawList->AddLine(ImVec2(canvasPos.x + x, canvasPos.y), ImVec2(canvasPos.x + x, canvasPos.y + canvasSize.y), gridColor);
 	for (float y = std::fmod(m_CanvasScrolling.y, gridStep); y < canvasSize.y; y += gridStep)
 		drawList->AddLine(ImVec2(canvasPos.x, canvasPos.y + y), ImVec2(canvasPos.x + canvasSize.x, canvasPos.y + y), gridColor);
-
-	// 2. 트랜지션 연결선 렌더링 (실시간 진행률 전달)
+	// 2. 트랜지션 연결선 렌더링
 	DrawTransitions(drawList, canvasPos);
-
 	// 3. Entry 노드 렌더링
 	const ImVec2 nodeSize = ImVec2(130.0f, 45.0f);
 	const ImVec2 entryPos = ImVec2(canvasPos.x + m_NodePositions["Entry"].x + m_CanvasScrolling.x, canvasPos.y + m_NodePositions["Entry"].y + m_CanvasScrolling.y);
 	drawList->AddRectFilled(entryPos, ImVec2(entryPos.x + nodeSize.x, entryPos.y + nodeSize.y), IM_COL32(30, 130, 60, 255), 5.0f);
-	drawList->AddText(ImVec2(entryPos.x + 15.0f, entryPos.y + 13.0f), IM_COL32(255, 255, 255, 255), "ENTRY ->");
-
+	drawList->AddText(ImVec2(entryPos.x + 15.0f, entryPos.y + 13.0f), IM_COL32(255, 255, 255, 255), LOCAL_CSTR("AnimatorGraph.Entry"));
 	// 4. 상태 노드들 렌더링
 	for (size_t i = 0; i < m_StateMachine->states.size(); ++i)
 	{
 		const auto& state = m_StateMachine->states[i];
 		if (!m_NodePositions.contains(state.name))
 			m_NodePositions[state.name] = ImVec2(220.0f + static_cast<float>(i * 160), 150.0f);
-
 		ImVec2& nodePosRef = m_NodePositions[state.name];
 		const ImVec2 screenPos = ImVec2(canvasPos.x + nodePosRef.x + m_CanvasScrolling.x, canvasPos.y + nodePosRef.y + m_CanvasScrolling.y);
 		const bool isSelected = (m_SelectedStateIndex == static_cast<int>(i));
 		const bool isDefault = (state.name == m_StateMachine->defaultState);
 		const bool isLiveActive = (!liveActiveState.empty() && liveActiveState == state.name);
-
-		// 마우스 드래그 이동
+		// 마우스 클릭 및 드래그 (InputManager 기준)
 		const bool isHovered = (mousePos.x >= screenPos.x && mousePos.x <= screenPos.x + nodeSize.x &&
 			mousePos.y >= screenPos.y && mousePos.y <= screenPos.y + nodeSize.y);
-
-		if (isHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+		if (isHovered && Engine::InputManager::Get().IsMouseButtonDown(Engine::EMouseButton::Left))
 		{
 			if (m_ConnectingSourceIndex >= 0 && m_ConnectingSourceIndex != static_cast<int>(i))
 			{
@@ -389,24 +411,20 @@ void AnimatorGraphPanel::DrawCanvas()
 				m_DraggingStateIndex = static_cast<int>(i);
 			}
 		}
-
 		if (m_DraggingStateIndex == static_cast<int>(i))
 		{
-			if (ImGui::IsMouseDragging(ImGuiMouseButton_Left))
+			if (Engine::InputManager::Get().IsMouseButtonPressed(Engine::EMouseButton::Left))
 			{
-				const ImVec2 delta = ImGui::GetIO().MouseDelta;
+				const auto delta = Engine::InputManager::Get().GetMouseDelta();
 				nodePosRef.x += delta.x;
 				nodePosRef.y += delta.y;
 				m_IsDirty = true;
 			}
-			if (ImGui::IsMouseReleased(ImGuiMouseButton_Left)) m_DraggingStateIndex = -1;
+			if (Engine::InputManager::Get().IsMouseButtonUp(Engine::EMouseButton::Left)) m_DraggingStateIndex = -1;
 		}
-
 		// 노드 배경
 		const ImU32 bgCol = isDefault ? IM_COL32(180, 100, 30, 255) : IM_COL32(50, 60, 75, 255);
 		drawList->AddRectFilled(screenPos, ImVec2(screenPos.x + nodeSize.x, screenPos.y + nodeSize.y), bgCol, 6.0f);
-
-		// 실시간 런타임 활성 노드 발광 강조 (Cyan 네온 테두리)
 		if (isLiveActive)
 		{
 			drawList->AddRect(ImVec2(screenPos.x - 2.0f, screenPos.y - 2.0f),
@@ -418,12 +436,10 @@ void AnimatorGraphPanel::DrawCanvas()
 			const ImU32 borderCol = isSelected ? IM_COL32(80, 200, 255, 255) : IM_COL32(20, 20, 20, 255);
 			drawList->AddRect(screenPos, ImVec2(screenPos.x + nodeSize.x, screenPos.y + nodeSize.y), borderCol, 6.0f, 0, isSelected ? 2.5f : 1.0f);
 		}
-
 		drawList->AddText(ImVec2(screenPos.x + 10.0f, screenPos.y + 8.0f), IM_COL32(255, 255, 255, 255), state.name.c_str());
-		const std::string subText = state.IsBlendTree() ? "[BlendTree1D]" : (state.clip.Get() ? "Clip" : "(No Motion)");
+		const std::string subText = state.IsBlendTree() ? "[BlendTree1D]" : (state.clip.Get() ? LOCAL("AnimatorGraph.Clip") : LOCAL("AnimatorGraph.NoMotion"));
 		drawList->AddText(ImVec2(screenPos.x + 10.0f, screenPos.y + 24.0f), IM_COL32(180, 180, 180, 255), subText.c_str());
 	}
-
 	// 5. 트랜지션 생성 중 안내선
 	if (m_ConnectingSourceIndex >= 0 && m_ConnectingSourceIndex < static_cast<int>(m_StateMachine->states.size()))
 	{
@@ -432,14 +448,14 @@ void AnimatorGraphPanel::DrawCanvas()
 			canvasPos.y + m_NodePositions[srcState.name].y + m_CanvasScrolling.y + nodeSize.y * 0.5f);
 		drawList->AddLine(srcPos, mousePos, IM_COL32(255, 200, 50, 200), 2.0f);
 	}
-
 	DrawCanvasContextMenu();
 }
 
 void AnimatorGraphPanel::DrawTransitions(ImDrawList* drawList, const ImVec2& canvasPos)
 {
 	const ImVec2 nodeSize = ImVec2(130.0f, 45.0f);
-	const ImVec2 mousePos = ImGui::GetMousePos();
+	const auto screenMouse = Engine::InputManager::Get().GetScreenMousePosition();
+	const ImVec2 mousePos(screenMouse.x, screenMouse.y);
 
 	for (size_t i = 0; i < m_StateMachine->transitions.size(); ++i)
 	{
@@ -468,7 +484,7 @@ void AnimatorGraphPanel::DrawTransitions(ImDrawList* drawList, const ImVec2& can
 			ImVec2(markerMin.x + 5.0f, markerMax.y - 4.0f),
 			ImVec2(markerMax.x - 4.0f, mid.y), IM_COL32(255, 255, 255, 255));
 
-		if (ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+		if (Engine::InputManager::Get().IsMouseButtonDown(Engine::EMouseButton::Left))
 		{
 			if (mousePos.x >= markerMin.x && mousePos.x <= markerMax.x &&
 				mousePos.y >= markerMin.y && mousePos.y <= markerMax.y)
@@ -506,10 +522,10 @@ void AnimatorGraphPanel::DrawCanvasContextMenu()
 			if (ImGui::MenuItem((ICON_FA_PLUS " " + LOCAL_LABEL("AnimatorGraph.CreateState")).c_str()))
 			{
 				const std::string name = "State_" + std::to_string(m_StateMachine->states.size());
-				m_StateMachine->states.push_back(Engine::AnimState{ name, {}, nullptr, 1.0f, true });
-				const ImVec2 mousePos = ImGui::GetMousePos();
+				m_StateMachine->states.push_back(Engine::AnimState{ name });
+				const auto screenMouse = Engine::InputManager::Get().GetScreenMousePosition();
 				const ImVec2 canvasPos = ImGui::GetCursorScreenPos();
-				m_NodePositions[name] = ImVec2(mousePos.x - canvasPos.x - m_CanvasScrolling.x, mousePos.y - canvasPos.y - m_CanvasScrolling.y);
+				m_NodePositions[name] = ImVec2(screenMouse.x - canvasPos.x - m_CanvasScrolling.x, screenMouse.y - canvasPos.y - m_CanvasScrolling.y);
 				m_IsDirty = true;
 			}
 		}
@@ -572,11 +588,8 @@ void AnimatorGraphPanel::DrawStateInspector(Engine::AnimState& state)
 	ImGui::Spacing();
 	ImGui::Separator();
 
-	bool isBlendTree = state.IsBlendTree();
-	if (ImGui::Checkbox(LOCAL_LABEL("AnimatorGraph.UseBlendTree").c_str(), &isBlendTree))
+	if (ImGui::Checkbox(LOCAL_LABEL("AnimatorGraph.UseBlendTree").c_str(), &state.isBlendTree))
 	{
-		if (isBlendTree && !state.blendTree) state.blendTree = std::make_shared<Engine::BlendTree1D>();
-		else if (!isBlendTree) state.blendTree = nullptr;
 		m_IsDirty = true;
 	}
 
@@ -589,15 +602,18 @@ void AnimatorGraphPanel::DrawStateInspector(Engine::AnimState& state)
 	}
 	else
 	{
-		if (ImGui::BeginCombo(LOCAL_LABEL("AnimatorGraph.Parameter").c_str(), state.blendTree->parameterName.c_str()))
+		ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "%s", LOCAL_CSTR("AnimatorGraph.BlendTree1D"));
+		ImGui::Spacing();
+
+		if (ImGui::BeginCombo(LOCAL_LABEL("AnimatorGraph.Parameter").c_str(), state.blendTree.parameterName.c_str()))
 		{
 			for (const auto& [paramName, paramData] : m_StateMachine->defaultParameters)
 			{
 				if (paramData.type != Engine::EAnimatorParamType::Float) continue;
-				const bool isSelected = (state.blendTree->parameterName == paramName);
+				const bool isSelected = (state.blendTree.parameterName == paramName);
 				if (ImGui::Selectable(paramName.c_str(), isSelected))
 				{
-					state.blendTree->parameterName = paramName;
+					state.blendTree.parameterName = paramName;
 					m_IsDirty = true;
 				}
 			}
@@ -605,21 +621,21 @@ void AnimatorGraphPanel::DrawStateInspector(Engine::AnimState& state)
 		}
 
 		ImGui::Spacing();
-		ImGui::Text("%s (%d)", LOCAL_CSTR("AnimatorGraph.Samples"), static_cast<int>(state.blendTree->samples.size()));
+		ImGui::Text("%s (%d)", LOCAL_CSTR("AnimatorGraph.Samples"), static_cast<int>(state.blendTree.samples.size()));
 		ImGui::SameLine(ImGui::GetContentRegionAvail().x - 24.0f);
 		if (ImGui::Button(ICON_FA_PLUS "##AddBlendSample"))
 		{
-			const float nextThreshold = state.blendTree->samples.empty()
-				? 0.0f : state.blendTree->samples.back().threshold + 1.0f;
-			state.blendTree->AddSample(nextThreshold, {});
+			const float nextThreshold = state.blendTree.samples.empty()
+				? 0.0f : state.blendTree.samples.back().threshold + 1.0f;
+			state.blendTree.AddSample(nextThreshold, {});
 			m_IsDirty = true;
 		}
 
 		int sampleToRemove = -1;
 		bool needSort = false;
-		for (size_t i = 0; i < state.blendTree->samples.size(); ++i)
+		for (size_t i = 0; i < state.blendTree.samples.size(); ++i)
 		{
-			auto& sample = state.blendTree->samples[i];
+			auto& sample = state.blendTree.samples[i];
 			ImGui::PushID(static_cast<int>(i));
 			ImGui::SetNextItemWidth(75.0f);
 			if (ImGui::DragFloat("##SampleThreshold", &sample.threshold, 0.05f))
@@ -628,17 +644,18 @@ void AnimatorGraphPanel::DrawStateInspector(Engine::AnimState& state)
 				m_IsDirty = true;
 			}
 			ImGui::SameLine();
-			if (ImGui::Button(ICON_FA_TRASH "##RemoveSample")) sampleToRemove = static_cast<int>(i);
+			ImGui::SetNextItemWidth(140.0f);
 			if (Editor::DrawInspectorResourcePicker(sample.clip, true)) m_IsDirty = true;
-			ImGui::Spacing();
+			ImGui::SameLine();
+			if (ImGui::SmallButton(ICON_FA_TRASH "##DelSample")) sampleToRemove = static_cast<int>(i);
 			ImGui::PopID();
 		}
-		if (sampleToRemove >= 0 && sampleToRemove < static_cast<int>(state.blendTree->samples.size()))
+		if (sampleToRemove >= 0 && sampleToRemove < static_cast<int>(state.blendTree.samples.size()))
 		{
-			state.blendTree->samples.erase(state.blendTree->samples.begin() + sampleToRemove);
+			state.blendTree.samples.erase(state.blendTree.samples.begin() + sampleToRemove);
 			m_IsDirty = true;
 		}
-		if (needSort) state.blendTree->SortSamples();
+		if (needSort) state.blendTree.SortSamples();
 	}
 }
 
@@ -689,13 +706,28 @@ void AnimatorGraphPanel::DrawTransitionInspector(Engine::AnimTransition& tr)
 			ImGui::EndCombo();
 		}
 
-		const char* modes[] = { "Greater (>)", "Less (<)", "Equal (==)", "NotEqual (!=)", "IfTrue", "IfFalse" };
+		const std::string modes[] = {
+			LOCAL("AnimatorGraph.CondGreater"),
+			LOCAL("AnimatorGraph.CondLess"),
+			LOCAL("AnimatorGraph.CondEqual"),
+			LOCAL("AnimatorGraph.CondNotEqual"),
+			LOCAL("AnimatorGraph.CondIfTrue"),
+			LOCAL("AnimatorGraph.CondIfFalse")
+		};
 		int currentMode = static_cast<int>(cond.mode);
-		ImGui::SetNextItemWidth(110.0f);
-		if (ImGui::Combo("##ModeCombo", &currentMode, modes, IM_ARRAYSIZE(modes)))
+		ImGui::SetNextItemWidth(125.0f);
+		if (ImGui::BeginCombo("##ModeCombo", modes[currentMode].c_str()))
 		{
-			cond.mode = static_cast<Engine::EConditionMode>(currentMode);
-			m_IsDirty = true;
+			for (int m = 0; m < 6; ++m)
+			{
+				const bool isSelected = (currentMode == m);
+				if (ImGui::Selectable(modes[m].c_str(), isSelected))
+				{
+					cond.mode = static_cast<Engine::EConditionMode>(m);
+					m_IsDirty = true;
+				}
+			}
+			ImGui::EndCombo();
 		}
 
 		if (cond.mode != Engine::EConditionMode::IfTrue && cond.mode != Engine::EConditionMode::IfFalse)
@@ -714,5 +746,118 @@ void AnimatorGraphPanel::DrawTransitionInspector(Engine::AnimTransition& tr)
 	{
 		tr.conditions.erase(tr.conditions.begin() + toRemove);
 		m_IsDirty = true;
+	}
+}
+
+void AnimatorGraphPanel::RequestNew()
+{
+	if (m_IsDirty) m_PendingAction = EPendingAction::New;
+	else ExecuteNew();
+}
+
+void AnimatorGraphPanel::RequestOpen()
+{
+	if (m_IsDirty) m_PendingAction = EPendingAction::Open;
+	else ExecuteOpen();
+}
+
+void AnimatorGraphPanel::RequestClose()
+{
+	if (m_IsDirty) m_PendingAction = EPendingAction::Close;
+	else ExecuteClose();
+}
+
+void AnimatorGraphPanel::ExecuteNew()
+{
+	m_StateMachine = std::make_shared<Engine::AnimatorStateMachine>();
+	m_StateMachine->defaultState = "Idle";
+	m_StateMachine->states.push_back(Engine::AnimState{ "Idle" });
+	m_NodePositions.clear();
+	m_NodePositions["Entry"] = ImVec2(50.0f, 150.0f);
+	m_NodePositions["Idle"] = ImVec2(220.0f, 150.0f);
+	m_CurrentFilePath.clear();
+	m_SelectedStateIndex = -1;
+	m_SelectedTransitionIndex = -1;
+	m_ConnectingSourceIndex = -1;
+	m_DraggingStateIndex = -1;
+	m_IsDirty = false;
+}
+
+void AnimatorGraphPanel::ExecuteOpen()
+{
+	OpenDocument();
+}
+
+void AnimatorGraphPanel::ExecuteClose()
+{
+	m_Open = false;
+}
+
+void AnimatorGraphPanel::ExecutePendingAction()
+{
+	const EPendingAction action = m_PendingAction;
+	m_PendingAction = EPendingAction::None;
+
+	switch (action)
+	{
+	case EPendingAction::New: ExecuteNew(); break;
+	case EPendingAction::Open: ExecuteOpen(); break;
+	case EPendingAction::Close: ExecuteClose(); break;
+	case EPendingAction::None: break;
+	}
+}
+
+void AnimatorGraphPanel::DrawConfirmModal()
+{
+	const std::string modalTitle = LOCAL("EditorDocument.ConfirmTitle") + "###AnimatorUnsavedChanges";
+
+	if (m_PendingAction != EPendingAction::None && !ImGui::IsPopupOpen(modalTitle.c_str()))
+	{
+		ImGui::OpenPopup(modalTitle.c_str());
+	}
+
+	const ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+	ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+
+	if (ImGui::BeginPopupModal(modalTitle.c_str(), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+	{
+		const std::string docName = m_CurrentFilePath.empty()
+			? LOCAL("EditorDocument.Untitled")
+			: std::filesystem::path(m_CurrentFilePath).filename().string();
+
+		ImGui::TextUnformatted(LOCAL_FMT("EditorDocument.UnsavedMessage", docName).c_str());
+		ImGui::Spacing();
+		ImGui::Separator();
+		ImGui::Spacing();
+
+		if (ImGui::Button(LOCAL_CSTR("EditorDocument.Save"), ImVec2(100.0f, 0.0f)))
+		{
+			if (SaveDocument(false))
+			{
+				ExecutePendingAction();
+				ImGui::CloseCurrentPopup();
+			}
+			else
+			{
+				m_PendingAction = EPendingAction::None;
+				ImGui::CloseCurrentPopup();
+			}
+		}
+
+		ImGui::SameLine(0.0f, 8.0f);
+		if (ImGui::Button(LOCAL_CSTR("EditorDocument.Discard"), ImVec2(100.0f, 0.0f)))
+		{
+			ExecutePendingAction();
+			ImGui::CloseCurrentPopup();
+		}
+
+		ImGui::SameLine(0.0f, 8.0f);
+		if (ImGui::Button(LOCAL_CSTR("EditorCommon.Cancel"), ImVec2(100.0f, 0.0f)))
+		{
+			m_PendingAction = EPendingAction::None;
+			ImGui::CloseCurrentPopup();
+		}
+
+		ImGui::EndPopup();
 	}
 }

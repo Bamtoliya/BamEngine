@@ -1,4 +1,4 @@
-#include "EditorActionRegistry.h"
+﻿#include "EditorActionRegistry.h"
 #include "ShortcutManager.h"
 #include "Application.h"
 #include "ToolBar.h"
@@ -16,6 +16,7 @@
 #include "ShaderHotReloadManager.h"
 #include "ImGuiManager.h"
 #include <SDL3/SDL_events.h>
+#include "AnimatorGraphPanel.h"
 
 BEGIN(Editor)
 
@@ -521,6 +522,56 @@ void EditorActionRegistry::RegisterAll()
             if (auto* gp = GraphPanel::GetActiveGraphPanel()) gp->ToggleBreakpointOnSelected();
         }
     });
+
+    // [Animator Graph Actions] (포커스 시 우선 실행)
+    sm.RegisterAction({
+        .Id = "Animator.Save",
+        .DisplayNameKey = "EditorCommon.Save",
+        .CategoryKey = "Shortcuts.CategoryGraph",
+        .Context = EShortcutContext::AnimatorGraph,
+        .DefaultChord = ShortcutChord(Engine::EKeyCode::S, EModifierKey::Ctrl),
+        .ExecuteHandler = []() {
+            if (auto* panel = AnimatorGraphPanel::GetActivePanel())
+                panel->SaveDocument(false);
+        }
+        });
+
+    // [Graph Editor Actions] (포커스 시 우선 실행)
+    sm.RegisterAction({
+        .Id = "Graph.Save",
+        .DisplayNameKey = "EditorCommon.Save",
+        .CategoryKey = "Shortcuts.CategoryGraph",
+        .Context = EShortcutContext::GraphEditor,
+        .DefaultChord = ShortcutChord(Engine::EKeyCode::S, EModifierKey::Ctrl),
+        .ExecuteHandler = []() {
+            if (auto* gp = GraphPanel::GetActiveGraphPanel())
+                gp->SaveDocument(false);
+        }
+        });
+
+    sm.RegisterAction({
+    .Id = "Animator.New",
+    .DisplayNameKey = "EditorCommon.New",
+    .CategoryKey = "Shortcuts.CategoryGraph",
+    .Context = EShortcutContext::AnimatorGraph,
+    .DefaultChord = ShortcutChord(Engine::EKeyCode::N, EModifierKey::Ctrl),
+    .ExecuteHandler = []() {
+        if (auto* panel = AnimatorGraphPanel::GetActivePanel())
+            panel->RequestNew();
+    }
+        });
+
+    sm.RegisterAction({
+        .Id = "Animator.Open",
+        .DisplayNameKey = "EditorCommon.Open",
+        .CategoryKey = "Shortcuts.CategoryGraph",
+        .Context = EShortcutContext::AnimatorGraph,
+        .DefaultChord = ShortcutChord(Engine::EKeyCode::O, EModifierKey::Ctrl),
+        .ExecuteHandler = []() {
+            if (auto* panel = AnimatorGraphPanel::GetActivePanel())
+                panel->RequestOpen();
+        }
+        });
 }
 
 END
