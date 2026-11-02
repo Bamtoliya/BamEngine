@@ -1,7 +1,7 @@
 # 통합 개발 우선순위와 완료 기준
 
 - 작성일: 2026-10-24 (최종 갱신: 2026-11-03)
-- 상태: 2026-11-03 단계 1(F02), 단계 2(F05, F06, F07, F08), 단계 3(P1-E/3-A, 3-B), 단계 4(F12), 빌드/배포(F13, F04) 및 강화학습(F09) 구현 반영, Standalone Client 독립 실행 및 Unity 빌드 정합성 검증 완료.
+- 상태: 2026-11-03 단계 1(F02), 단계 2(F05, F06, F07, F08), 단계 3(P1-E/3-A, 3-B), 단계 4(F12), 빌드/배포(F13, F04) 및 강화학습(F09) 구현 반영, Standalone Client 독립 실행 및 Unity 빌드 정합성 검증 완료, 단일 CPU 파티클 시스템 1단계 코어(Engine 4절) 구축 및 AnimationTimelineEditorPlan 계획 반영 완료.
 - 최신 근거: [코드·문서 정합성과 잔여 위험 점검](CodeDocumentationAudit-2026-11-02.md). 구현 반영과 전체 완료 기준 통과를 구분한다.
 - 공통 기준: [EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md)
 - 분류와 이관: [SourceOrganizationGuidelines.md](SourceOrganizationGuidelines.md), [BuildConfigurationAndPreprocessing.md](BuildConfigurationAndPreprocessing.md)
@@ -333,6 +333,10 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
     - `ContentBrowser` 공통 열기(`OpenAssetOrFolder`), 외부 앱 실행(`ShellExecuteW`), 검색 범위 토글 및 `ResourcePicker.h` 1회 스캔 캐싱 완료.
     - **하단 푸터 바(`Footer Bar`) 분리 (P1-B)**: 상단 PIE 바에서 C++ 모듈 컴파일·핫리로드·자동컴파일·셰이더리로드 버튼을 에디터 최하단 슬림 푸터(`##FooterBarRow`)로 이관하고 툴팁 기반 간결한 UI로 정리 완료 ([ImGuiDevelopmentPlan.md](ImGuiDevelopmentPlan.md) 19절).
     - **콘텐츠 브라우저 시각 분류 고도화 및 복합 확장자 표준화 (P1-D)**: O(1) 파일명·복합 확장자(`.bam*.json`)·폴더 문맥 기반 고유 아이콘/색상/배지 표시, 단일 확장자(`.animator`, `.spriteanim`, `.anim`, `.materialinstance`) 및 스크립트/컨피그/셰이더 분류, 네임박스 정제명(`CleanName`) 표시, `EditorCommon.Open` 로캘 반영 완료 ([ImGuiDevelopmentPlan.md](ImGuiDevelopmentPlan.md) 20절).
+  - **단일 CPU 파티클 시스템 1단계 및 애니메이션·FX 타임라인 계획 수립 (P3)**:
+    - `Particle`, `ParticleEmitterComponent`(방출률, 버스트, 수명, 속도, 크기, 회전, 색상 보간, World/Local 공간, 고정 시드, 원뿔 확산) 및 `ParticleSystem` 구축 완료.
+    - `Renderer::RenderSprite` 텍스처 상태 중복 바인딩 캐싱(`lastTexture`) 최적화 및 인스펙터 실시간 카운트/재생 제어 UI 연동 완료.
+    - [AnimationTimelineEditorPlan.md](AnimationTimelineEditorPlan.md) 수립: 비-PIE 실시간 프리뷰 루프 및 애니메이션·이펙트·노티파이 통합 타임라인 저작 도구 로드맵 수립.
 
 ### 10.1 우선순위 조정의 기준
 

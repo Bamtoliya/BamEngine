@@ -1168,6 +1168,37 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 				}
 			}
 			}
+		else if (object.Is<Engine::ParticleEmitterComponent>())
+		{
+			changed = ReflectionPropertyDrawer::DrawObject(type, object, registry, &componentSettings, drawHeaderMenu);
+			auto& emitter = world.get<Engine::ParticleEmitterComponent>(handle);
+			ImGui::Spacing();
+			ImGui::Separator();
+
+			// 실시간 활성 파티클 수 표시
+			ImGui::Text("%s: %zu / %u", LOCAL_CSTR("Particle.ActiveCount"), emitter.particles.size(), emitter.maxParticles);
+
+			// 재생 제어 툴바
+			if (ImGui::Button((ICON_FA_PLAY " " + LOCAL_LABEL("Particle.Play")).c_str()))
+			{
+				emitter.Play();
+			}
+			ImGui::SameLine();
+			if (ImGui::Button((ICON_FA_PAUSE " " + LOCAL_LABEL("Particle.Pause")).c_str()))
+			{
+				emitter.Pause();
+			}
+			ImGui::SameLine();
+			if (ImGui::Button((ICON_FA_STOP " " + LOCAL_LABEL("Particle.Stop")).c_str()))
+			{
+				emitter.Stop();
+			}
+			ImGui::SameLine();
+			if (ImGui::Button((ICON_FA_ROTATE_LEFT " " + LOCAL_LABEL("Particle.Reset")).c_str()))
+			{
+				emitter.Reset();
+			}
+		}
 		else changed = ReflectionPropertyDrawer::DrawObject(type, object, registry, &componentSettings, drawHeaderMenu);
 
 		// **주의**: 기존에 이 자리에 있던 `if (ImGui::BeginPopupContextItem(popupId.c_str())) { ... }` 블록은 완전히 지웁니다!

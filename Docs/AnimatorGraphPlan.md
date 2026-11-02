@@ -145,9 +145,10 @@ flowchart TD
     - **남은 검증 과제**: 기존 계층 조회·컨트롤러 로드를 다중 인스턴스·PIE·Client에서 검증한다. 파일 실패·재생 경계·Stop/SetTime/GetCurrentTime의 ASM 의미를 마무리한다.
   - **비주얼 스크립팅 노드 (`GraphGameplayLibrary` — 구현 완료):**
     - `Animator.Play/Pause/Stop/SetPlayRate/SetTime/IsPlaying/GetCurrentTime` 및 `Animator.SetFloat`, `Animator.SetInt`, `Animator.SetBool`, `Animator.SetTrigger`, `Animator.GetFloat`, `Animator.GetBool` 노드 등록 및 `EGraphPinType::String` 핀 연동 완료.
-  - **애니메이션 노티파이 (`AnimNotify` — 대기):**
+  - **애니메이션 노티파이 (`AnimNotify` — 대기, 상세 계획: [AnimationTimelineEditorPlan.md](AnimationTimelineEditorPlan.md)):**
     - 특정 프레임에 도달했을 때 발송되는 이벤트(발소리 사운드, 칼 휘두르는 궤적 파티클 등).
     - 비주얼 스크립팅 커스텀 이벤트 또는 C++ 델리게이트 수신.
+    - 애니메이션·이펙트·노티파이 통합 타임라인 저작 도구는 [AnimationTimelineEditorPlan.md](AnimationTimelineEditorPlan.md)의 로드맵을 따른다.
   - **레이어드 애니메이션 & 본 마스킹 (`Layered Animation & Bone Mask` — 대기):**
     - 베이스 레이어(하체: 이동 애니메이션) + 상위 레이어(상체: 사격/공격 애니메이션) 분리 재생.
     - 스켈레톤의 특정 본(`Spine` 등) 이하 계층만 오버라이드하는 본 마스크 에셋.

@@ -422,6 +422,7 @@ EResult Application::InitializeSystem()
 
     const bool success = addSystems.operator() <
         TransformSystem, MeshRenderSystem, SpriteRenderSystem, SpriteAnimationSystem, AnimationSystem,
+        ParticleSystem,
         CameraSystem, LightSystem, UIRenderSystem,
         AudioSystem, TerrainSystem, PhysicsSystem, GraphSystem > ();
 

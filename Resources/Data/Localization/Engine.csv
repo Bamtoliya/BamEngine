@@ -38,6 +38,10 @@
 ,CATEGORY_LAYER_PLACEMENT,Layer Placement,구름층 배치
 ,CATEGORY_LIGHTING,Lighting,조명
 ,CATEGORY_PARAMETER,Parameter,매개변수
+,CATEGORY_PARTICLE_COLOR,Color & Alpha,색상 및 알파
+,CATEGORY_PARTICLE_EMISSION,Emission,방출
+,CATEGORY_PARTICLE_MOTION,Lifetime & Dynamics,수명 및 역학
+,CATEGORY_PARTICLE_SIZE,Size & Rotation,크기 및 회전
 ,CATEGORY_PHYSICS,Physics,물리
 ,CATEGORY_PHYSICS_2D,Physics 2D,2D 물리
 ,CATEGORY_PHYSICS_3D,Physics 3D,3D 물리
@@ -220,6 +224,8 @@
 ,PROP_BODY_TYPE,Body Type,강체 종류
 ,PROP_BONE,Bone,본
 ,PROP_BRDF_LUT,BRDF Lookup Texture,BRDF 조회 텍스처
+,PROP_BURST_COUNT,Burst Count,버스트 방출량
+,PROP_BURST_INTERVAL,Burst Interval,버스트 주기
 ,PROP_CAMERA_TYPE,Camera Type,카메라 타입
 ,PROP_CASCADE_SPLIT_LAMBDA,Cascade Split Lambda,캐스케이드 분할 가중치
 ,PROP_CAST_SHADOW,Cast Shadow,그림자
@@ -231,6 +237,8 @@
 ,PROP_COLLISION_LAYER,Collision Layer,충돌 레이어
 ,PROP_COLLISION_MASK,Collision Mask,충돌 마스크
 ,PROP_COLOR,Color,색
+,PROP_COLOR_END,End Color,종료 색상
+,PROP_COLOR_START,Start Color,시작 색상
 ,PROP_COMPONENTS,Components,컴포넌트
 ,PROP_CONNECTED_ENTITY,Connected Entity,연결 엔티티
 ,PROP_CONNECTED_LOCAL_ANCHOR,Connected Anchor,연결 앵커
@@ -247,8 +255,11 @@
 ,PROP_DIRECTION,Direction,방향
 ,PROP_DIRTY,Dirty,갱신 필요
 ,PROP_DISABLE_COLOR,Disable Color,비활성 색
+,PROP_DRAG,Drag,공기 저항
 ,PROP_DRAW_MODE,Draw Mode,그리기 모드
 ,PROP_EFFECTIVE_FLAG,Effective Flags,유효 플래그
+,PROP_EMISSION_RATE,Emission Rate,방출률 (초당)
+,PROP_EMIT_DIRECTION,Direction,방출 방향
 ,PROP_ENABLED,Enabled,활성화
 ,PROP_ENABLE_CLOUDS,Enable Clouds,구름 활성화
 ,PROP_ENABLE_COLLISION,Enable Collision,충돌 허용
@@ -277,6 +288,7 @@
 ,PROP_FRICTION,Friction,마찰
 ,PROP_FRONT_FACE,Front Face,전면 방향
 ,PROP_GRAPH_FILE,Graph File,그래프 파일
+,PROP_GRAVITY_MODIFIER,Gravity,중력
 ,PROP_GRAVITY_SCALE,Gravity Scale,중력 배율
 ,PROP_GROUND_COLOR,Ground Color,지면 색상
 ,PROP_HEIGHT,Height,높이
@@ -303,6 +315,8 @@
 ,PROP_LAYER_HEIGHT,Layer Height,구름층 두께
 ,PROP_LEFT,Left,좌측
 ,PROP_LENGTH,Length,길이
+,PROP_LIFETIME_MAX,Lifetime Max,최대 수명
+,PROP_LIFETIME_MIN,Lifetime Min,최소 수명
 ,PROP_LIGHTING_LAYER_MASK,Lighting Layer Mask,조명 레이어 마스크
 ,PROP_LIGHT_TYPE,Light Type,빛 타입
 ,PROP_LINEAR_DAMPING,Linear Damping,선형 감쇠
@@ -321,6 +335,7 @@
 ,PROP_MAX,Max,최댓값
 ,PROP_MAX_DISTANCE,Max Distance,최대 감쇠 거리
 ,PROP_MAX_HEIGHT,Max Height,최대 높이
+,PROP_MAX_PARTICLES,Max Particles,최대 파티클 수
 ,PROP_MESH_HANDLE,Mesh Handle,메쉬 핸들
 ,PROP_MIN,Min,최솟값
 ,PROP_MIN_DISTANCE,Min Distance,최소 감쇠 거리
@@ -342,6 +357,7 @@
 ,PROP_PLAY_MODE,Playback Mode,재생 방식
 ,PROP_PLAY_ON_AWAKE,Play On Awake,시작 시 자동 재생
 ,PROP_PLAY_RATE,Playback Rate,재생 배속
+,PROP_PLAY_STATE,Play State,재생 상태
 ,PROP_POINT,Point,점
 ,PROP_POINT_A,Point A,시작점 A
 ,PROP_POINT_B,Point B,끝점 B
@@ -361,7 +377,10 @@
 ,PROP_RESTITUTION,Restitution,반발력
 ,PROP_REST_LENGTH,Rest Length,기준 거리
 ,PROP_ROTATION,Rotation,회전
+,PROP_ROTATION_SPEED_MAX,Rotation Speed Max,최대 회전 속도
+,PROP_ROTATION_SPEED_MIN,Rotation Speed Min,최소 회전 속도
 ,PROP_SCALE,Scale,크기
+,PROP_SEED,Random Seed,난수 시드
 ,PROP_SETTINGS,Settings,설정
 ,PROP_SHADOW_BIAS,Shadow Bias,그림자 바이어스
 ,PROP_SHADOW_MAX_DISTANCE,Shadow Max Distance,최대 그림자 거리
@@ -371,12 +390,18 @@
 ,PROP_SHADOW_STRENGTH,Shadow Strength,그림자 강도
 ,PROP_SHAPE,Shape,형상
 ,PROP_SHAPE_SIZE,Shape Noise Size,뭉게구름 덩어리 크기
+,PROP_SIM_SPACE,Simulation Space,시뮬레이션 공간
 ,PROP_SIZE,Size,크기
+,PROP_SIZE_END,End Size,종료 크기
+,PROP_SIZE_START,Start Size,시작 크기
 ,PROP_SKELETON_HANDLE,Skeleton Handle,스켈레톤 핸들
 ,PROP_SKY_INTENSITY,Sky Intensity,하늘 강도
+,PROP_SPEED_MAX,Initial Speed Max,최대 초기 속력
+,PROP_SPEED_MIN,Initial Speed Min,최소 초기 속력
 ,PROP_SPOT_FALLOFF_EXPONENT,Falloff Exponent,감쇠 지수
 ,PROP_SPOT_INNER_ANGLE,Inner Angle,내부 각도
 ,PROP_SPOT_OUTER_ANGLE,Outer Angle,외부 각도
+,PROP_SPREAD_ANGLE,Spread Angle,확산 각도
 ,PROP_SPRITE,Sprite,스프라이트
 ,PROP_SPRITE_ANIMATION,Sprite Animation,스프라이트 애니메이션
 ,PROP_SPRITE_HANDLE,Sprite Handle,스프라이트 핸들
@@ -386,14 +411,17 @@
 ,PROP_SUN_SIZE,Sun Size,태양 크기
 ,PROP_TAGS,Tags,태그
 ,PROP_TEXTURE_BINDINGS,Texture Bindings,텍스처 바인딩
+,PROP_TEXTURE_HANDLE,,
 ,PROP_TILING,Tiling,반복
 ,PROP_TIME_OF_DAY,Time of Day,하루 시간
 ,PROP_TOP,Top,상단
 ,PROP_TRANSFORM_ABSOLUTE,World Channels (Ignore Parent),월드 기준 채널 (부모 상속 해제)
 ,PROP_UNBOUND,Unbound,전역 적용
+,PROP_USE_FIXED_SEED,Use Fixed Seed,고정 시드 사용
 ,PROP_VERTEX_SHADER,Vertex Shader,버텍스 셰이더
 ,PROP_VERTEX_SHADER_HANDLE,Vertex Shader Handle,버텍스 셰이더 핸들
 ,PROP_VOLUME,Volume,볼륨
+,PROP_WARMUP_TIME,Warmup Time,예열 시간
 ,PROP_WEATHER_SIZE,Weather Map Size,웨더 맵 군집 크기
 ,PROP_WIDTH,Width,너비
 ,PROP_WIND_DIR,Wind Direction,바람 방향
@@ -467,6 +495,7 @@
 ,STRUCT_LOD_GROUP,LOD Group,LOD 그룹
 ,STRUCT_MESH_SHAPE,Mesh Shape,메시 형상
 ,STRUCT_NAME,Name,이름
+,STRUCT_PARTICLE_EMITTER,Particle Emitter,파티클 이미터
 ,STRUCT_POST_PROCESS,Post Process,포스트 프로세스
 ,STRUCT_PREFAB_INSTANCE,Prefab Instance,프리팹 인스턴스
 ,STRUCT_RAY,Ray,광선

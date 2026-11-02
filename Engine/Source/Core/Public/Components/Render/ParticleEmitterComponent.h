@@ -1,0 +1,151 @@
+﻿#pragma once
+
+#include "Reflection/ComponentAnnotations.h"
+#include "ResourceHandle.h"
+#include "Components/Render/SpriteRendererComponent.h"
+#include <random>
+#include <vector>
+
+namespace Engine
+{
+	class Texture;
+	class MaterialInterface;
+	class Mesh;
+
+	ENUM()
+		enum class EParticlePlayState : uint8
+	{
+		Playing,
+		Paused,
+		Stopped
+	};
+
+	ENUM()
+		enum class EParticleSimulationSpace : uint8
+	{
+		World,
+		Local
+	};
+
+	// 개별 파티클 인스턴스 데이터 (경량 POD)
+	struct Particle
+	{
+		vec3 position = vec3(0.0f);
+		vec3 velocity = vec3(0.0f);
+		vec4 color = vec4(1.0f);
+		vec2 size = vec2(1.0f);
+		f32 rotation = 0.0f;
+		f32 angularVelocity = 0.0f;
+		f32 age = 0.0f;
+		f32 lifetime = 1.0f;
+
+		bool IsAlive() const { return age < lifetime; }
+		f32 GetNormalizedAge() const { return lifetime > 0.0f ? glm::clamp(age / lifetime, 0.0f, 1.0f) : 1.0f; }
+	};
+
+	STRUCT(COMPONENT, DISPLAY_NAME("STRUCT_PARTICLE_EMITTER"), CATEGORY("CATEGORY_RENDER"))
+		struct ParticleEmitterComponent
+	{
+		REFLECT_BODY()
+
+			// ── 렌더링 리소스 (Rendering) ──
+			PROPERTY(EDITABLE, CATEGORY("CATEGORY_RENDER"), DISPLAY_NAME("PROP_TEXTURE_HANDLE"))
+			ResourceHandle<Texture> textureHandle;
+
+		PROPERTY(EDITABLE, CATEGORY("CATEGORY_RENDER"), DISPLAY_NAME("PROP_MATERIAL_HANDLE"))
+			ResourceHandle<MaterialInterface> materialHandle;
+
+		PROPERTY(EDITABLE, CATEGORY("CATEGORY_RENDER"), DISPLAY_NAME("PROP_MESH_HANDLE"))
+			ResourceHandle<Mesh> meshHandle;
+
+		PROPERTY(EDITABLE, CATEGORY("CATEGORY_RENDER"), DISPLAY_NAME("PROP_BILLBOARD_MODE"))
+			ESpriteBillboardMode billboardMode = ESpriteBillboardMode::CameraFacing;
+
+		// ── 방출 및 시뮬레이션 제어 (Emission) ──
+		PROPERTY(EDITABLE, CATEGORY("CATEGORY_PARTICLE_EMISSION"), DISPLAY_NAME("PROP_PLAY_STATE"))
+			EParticlePlayState playState = EParticlePlayState::Playing;
+
+		PROPERTY(EDITABLE, CATEGORY("CATEGORY_PARTICLE_EMISSION"), DISPLAY_NAME("PROP_SIM_SPACE"))
+			EParticleSimulationSpace simulationSpace = EParticleSimulationSpace::World;
+
+		PROPERTY(EDITABLE, CATEGORY("CATEGORY_PARTICLE_EMISSION"), DISPLAY_NAME("PROP_MAX_PARTICLES"))
+			uint32 maxParticles = 1000;
+
+		PROPERTY(EDITABLE, CATEGORY("CATEGORY_PARTICLE_EMISSION"), DISPLAY_NAME("PROP_EMISSION_RATE"))
+			f32 emissionRate = 30.0f;
+
+		PROPERTY(EDITABLE, CATEGORY("CATEGORY_PARTICLE_EMISSION"), DISPLAY_NAME("PROP_BURST_COUNT"))
+			uint32 burstCount = 0;
+
+		PROPERTY(EDITABLE, CATEGORY("CATEGORY_PARTICLE_EMISSION"), DISPLAY_NAME("PROP_BURST_INTERVAL"))
+			f32 burstInterval = 1.0f;
+
+		PROPERTY(EDITABLE, CATEGORY("CATEGORY_PARTICLE_EMISSION"), DISPLAY_NAME("PROP_WARMUP_TIME"))
+			f32 warmupTime = 0.0f;
+
+		PROPERTY(EDITABLE, CATEGORY("CATEGORY_PARTICLE_EMISSION"), DISPLAY_NAME("PROP_USE_FIXED_SEED"))
+			bool useFixedSeed = false;
+
+		PROPERTY(EDITABLE, CATEGORY("CATEGORY_PARTICLE_EMISSION"), DISPLAY_NAME("PROP_SEED"))
+			uint32 seed = 1337;
+
+		// ── 수명 및 역학 (Lifetime & Dynamics) ──
+		PROPERTY(EDITABLE, CATEGORY("CATEGORY_PARTICLE_MOTION"), DISPLAY_NAME("PROP_LIFETIME_MIN"))
+			f32 lifetimeMin = 1.0f;
+
+		PROPERTY(EDITABLE, CATEGORY("CATEGORY_PARTICLE_MOTION"), DISPLAY_NAME("PROP_LIFETIME_MAX"))
+			f32 lifetimeMax = 2.0f;
+
+		PROPERTY(EDITABLE, CATEGORY("CATEGORY_PARTICLE_MOTION"), DISPLAY_NAME("PROP_SPEED_MIN"))
+			f32 initialSpeedMin = 1.0f;
+
+		PROPERTY(EDITABLE, CATEGORY("CATEGORY_PARTICLE_MOTION"), DISPLAY_NAME("PROP_SPEED_MAX"))
+			f32 initialSpeedMax = 3.0f;
+
+		PROPERTY(EDITABLE, CATEGORY("CATEGORY_PARTICLE_MOTION"), DISPLAY_NAME("PROP_EMIT_DIRECTION"))
+			vec3 emissionDirection = vec3(0.0f, 1.0f, 0.0f);
+
+		PROPERTY(EDITABLE, CATEGORY("CATEGORY_PARTICLE_MOTION"), DISPLAY_NAME("PROP_SPREAD_ANGLE"))
+			f32 spreadAngleDegrees = 30.0f;
+
+		PROPERTY(EDITABLE, CATEGORY("CATEGORY_PARTICLE_MOTION"), DISPLAY_NAME("PROP_GRAVITY_MODIFIER"))
+			vec3 gravity = vec3(0.0f, -9.81f, 0.0f);
+
+		PROPERTY(EDITABLE, CATEGORY("CATEGORY_PARTICLE_MOTION"), DISPLAY_NAME("PROP_DRAG"))
+			f32 drag = 0.1f;
+
+		// ── 크기 및 회전 (Size & Rotation) ──
+		PROPERTY(EDITABLE, CATEGORY("CATEGORY_PARTICLE_SIZE"), DISPLAY_NAME("PROP_SIZE_START"))
+			vec2 sizeStart = vec2(0.5f, 0.5f);
+
+		PROPERTY(EDITABLE, CATEGORY("CATEGORY_PARTICLE_SIZE"), DISPLAY_NAME("PROP_SIZE_END"))
+			vec2 sizeEnd = vec2(0.1f, 0.1f);
+
+		PROPERTY(EDITABLE, CATEGORY("CATEGORY_PARTICLE_SIZE"), DISPLAY_NAME("PROP_ROTATION_SPEED_MIN"))
+			f32 rotationSpeedMin = -1.0f;
+
+		PROPERTY(EDITABLE, CATEGORY("CATEGORY_PARTICLE_SIZE"), DISPLAY_NAME("PROP_ROTATION_SPEED_MAX"))
+			f32 rotationSpeedMax = 1.0f;
+
+		// ── 색상 및 알파 (Color & Alpha) ──
+		PROPERTY(EDITABLE, COLOR_PROPERTY, CATEGORY("CATEGORY_PARTICLE_COLOR"), DISPLAY_NAME("PROP_COLOR_START"))
+			vec4 colorStart = vec4(1.0f, 0.8f, 0.2f, 1.0f);
+
+		PROPERTY(EDITABLE, COLOR_PROPERTY, CATEGORY("CATEGORY_PARTICLE_COLOR"), DISPLAY_NAME("PROP_COLOR_END"))
+			vec4 colorEnd = vec4(1.0f, 0.1f, 0.0f, 0.0f);
+
+		// ── 런타임 시뮬레이션 상태 ──
+		std::vector<Particle> particles;
+		f32 emissionAccumulator = 0.0f;
+		f32 burstTimer = 0.0f;
+		std::mt19937 rng;
+		bool rngInitialized = false;
+		bool warmupDone = false;
+
+		// ── 런타임 제어 API ──
+		void Play() { playState = EParticlePlayState::Playing; }
+		void Pause() { playState = EParticlePlayState::Paused; }
+		void Stop() { playState = EParticlePlayState::Stopped; }
+		void Reset() { particles.clear(); emissionAccumulator = 0.0f; burstTimer = 0.0f; warmupDone = false; }
+	};
+}

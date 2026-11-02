@@ -35,6 +35,49 @@ Use one entry per meaningful change.
 
 ---
 
+## [2026-11-03] 단일 CPU 파티클 시스템 1단계 코어 구축 및 애니메이션·FX 통합 타임라인 에디터 계획 수립 (P3)
+
+- Area: Engine | Render | Editor | Docs
+- Type: Feature | Optimization | Architecture | Docs
+- 관련 파일:
+  - Engine/Source/Core/Public/Components/Render/ParticleEmitterComponent.h
+  - Engine/Source/Core/Public/Components/Render/RenderComponents.h
+  - Engine/Source/System/Render/Public/ParticleSystem.h
+  - Engine/Source/System/Render/Private/ParticleSystem.cpp
+  - Engine/Source/Render/Private/Renderer.cpp
+  - Editor/Source/Application/Private/Application.cpp
+  - Client/Source/Main.cpp
+  - Editor/Source/ImGui/InspectorPanel/Private/InspectorPanel.cpp
+  - Resources/Data/Localization/Engine.csv
+  - Resources/Data/Localization/Editor.csv
+  - Docs/AnimationTimelineEditorPlan.md
+  - Docs/AnimatorGraphPlan.md
+  - Docs/DevelopmentPriorities.md
+- Motivation:
+  - 씬 내 화염, 연기, 스파크 등 동적 시각 효과를 표현하기 위한 CPU 파티클 시스템 1단계 기반 마련 (EngineDevelopmentPlan 4절).
+  - 파티클마다 엔티티를 생성하는 ECS 안티패턴을 배제하고 단일 컴포넌트 내 연속 입자 풀링 및 일괄 빌보드 렌더링 파이프라인 안착.
+  - 캐릭터 애니메이션 및 타격 프레임과 이펙트를 함께 제어하기 위한 통합 타임라인 저작 도구 계획 수립.
+- Implementation summary:
+  - `Particle`, `ParticleEmitterComponent` 설계 (방출률, 버스트, 수명, 속도, 크기, 회전, 색상 보간, World/Local 공간 분리, 고정 난수 시드, 원뿔 확산 각도).
+  - `ParticleSystem` (ISystem 상속, `OnUpdate` 오일러 물리 적분 및 $O(1)$ 스왑 앤 팝 제거, `OnSubmit` 카메라 뷰 기저 벡터 사전 계산 및 빌보드 조립).
+  - `Renderer::RenderSprite`의 텍스처/파이프라인 중복 바인딩 캐싱(`lastTexture`)을 통한 배칭 오버헤드 감소.
+  - 에디터 인스펙터 실시간 활성 파티클 카운트 및 원클릭 재생/일시정지/정지/리셋 툴바 UI 연동.
+  - 프로퍼티 5대 카테고리(`CATEGORY_RENDER`, `CATEGORY_PARTICLE_EMISSION`, `CATEGORY_PARTICLE_MOTION`, `CATEGORY_PARTICLE_SIZE`, `CATEGORY_PARTICLE_COLOR`) 분류 및 `Engine.csv`/`Editor.csv` 번역 원본 등록.
+  - `AnimationTimelineEditorPlan.md` 계획 문서 수립 (비-PIE 실시간 프리뷰 루프 및 애니메이션·이펙트·노티파이 통합 타임라인 저작 도구 로드맵).
+- Technical details:
+  - 개별 파티클 인스턴스는 경량 POD 구조체로 `std::vector<Particle>`에서 연속 메모리로 관리되어 캐시 히트율 극대화.
+  - 원뿔 확산 방향 계산 시 Gram-Schmidt 직교 기저를 사용하여 별도 쿼터니언 변환 오버헤드 없이 $O(1)$ 삼각함수만으로 균일 구면 캡 표본화.
+  - 렌더러 제출 시 루프 외부에서 카메라 역행렬의 `Right`, `Up`, `Forward` 축을 1회만 계산하고, 입자별 월드 행렬을 직접 합성하여 CPU 연산량 대폭 절감.
+- Validation:
+  - 에디터 뷰포트에서 단일 파티클 이미터 정상 방출 및 빌보드 시각화 확인 완료.
+  - 인스펙터 실시간 파티클 카운트 및 Play/Pause/Stop/Reset 버튼 정상 동작 검증.
+- Risks and follow-ups:
+  - 비-PIE 에디터 루프 재생 (`Application.cpp` 에디터 틱 분기).
+  - 반투명 파티클 카메라 거리 깊이 정렬 (Alpha Sorting).
+  - 완전한 하드웨어 인스턴싱(`DrawIndexedInstanced`) 배칭.
+
+---
+
 ## [2026-11-03] 에셋 참조 무결성 검증기(AssetReferenceValidator/Panel) 구축 및 바이너리 머티리얼 조사·정규화 (단계 4 F02 잔여)
 
 - Area: Engine | Editor | Resource | UI

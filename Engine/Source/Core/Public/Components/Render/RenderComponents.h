@@ -13,3 +13,4 @@
 #include "Components/Render/LODGroupComponent.h"
 #include "Components/Render/SpriteAnimationComponent.h"
 #include "Components/Render/AnimatorComponent.h"
+#include "Components/Render/ParticleEmitterComponent.h"

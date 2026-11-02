@@ -697,49 +697,41 @@ EResult Renderer::RenderSprite(f32 dt, vector<SpriteDrawCommand>& commands, ERen
 
 	MaterialInterface* lastMaterial = nullptr;
 	Mesh* lastMesh = nullptr;
+	Texture* lastTexture = nullptr;
 
 	for (const auto& command : commands)
 	{
 		if (!command.mesh || !command.material || !command.texture)
 			return EResult::Fail;
-
 		RHITexture* texture = command.texture->GetRHITexture();
-
 		if (!texture || !command.mesh->GetIndexBuffer())
 			return EResult::Fail;
-
 		if (command.material != lastMaterial || command.mesh != lastMesh)
 		{
 			if (IsFailure(BindMeshPipeline(command.mesh, command.material, passType, pipelineDesc)))
 				return EResult::Fail;
-
 			lastMaterial = command.material;
 		}
-
-		// 이번 Sprite 셰이더의 t0는 Sprite 리소스가 제공합니다.
-		if (IsFailure(m_RHI->BindTextureSampler(texture, sampler, 0)))
-			return EResult::Fail;
-
+		// 텍스처가 이전 커맨드와 다를 때만 무거운 Sampler 바인딩 갱신
+		if (command.texture != lastTexture)
+		{
+			if (IsFailure(m_RHI->BindTextureSampler(texture, sampler, 0)))
+				return EResult::Fail;
+			lastTexture = command.texture;
+		}
 		SpriteUBO objectData{};
 		objectData.worldMatrix = command.worldMatrix;
 		objectData.color = command.color;
 		objectData.uvTransform = command.uvTransform;
 		objectData.pickingData = vec4(static_cast<float>(command.pickingId), 0.0f, 0.0f, 0.0f);
-
-		if (IsFailure(m_RHI->BindConstantBuffer(
-			&objectData, sizeof(objectData), 1)))
-		{
+		if (IsFailure(m_RHI->BindConstantBuffer(&objectData, sizeof(objectData), 1)))
 			return EResult::Fail;
-		}
-
 		if (command.mesh != lastMesh)
 		{
 			if (IsFailure(command.mesh->Bind(0)))
 				return EResult::Fail;
-
 			lastMesh = command.mesh;
 		}
-
 		if (IsFailure(m_RHI->DrawIndexed(command.mesh->GetIndexCount())))
 			return EResult::Fail;
 	}
