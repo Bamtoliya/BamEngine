@@ -9,9 +9,39 @@
 #include <sstream>
 #include <vector>
 #include <iomanip>
+#include <optional>
+#include <glaze/glaze.hpp>
 
 namespace Engine
 {
+	struct RLCommandRequest
+	{
+		std::string cmd;
+		std::optional<uint64_t> seed;
+		std::optional<int64_t> action;
+	};
+	namespace
+	{
+		// 소켓 전체 바이트 보장 전송 함수 (Partial Send 방지)
+		bool SendAll(SOCKET sock, const std::string& data)
+		{
+			int totalSent = 0;
+			const int toSend = static_cast<int>(data.length());
+			while (totalSent < toSend)
+			{
+				int sent = ::send(sock, data.data() + totalSent, toSend - totalSent, 0);
+				if (sent <= 0)
+				{
+					return false;
+				}
+				totalSent += sent;
+			}
+			return true;
+		}
+		// 개행 없이 과도하게 유입되는 비정상 패킷 방어 상한 (64KB)
+		constexpr size_t MaxBufferCapacity = 64 * 1024;
+	}
+
 	RLServer::RLServer(std::shared_ptr<IRLEnvironment> environment)
 		: m_Environment(std::move(environment))
 	{
@@ -111,6 +141,13 @@ namespace Engine
 				break;
 			}
 
+			// 버퍼 오버플로 방어
+			if (buffer.size() + bytesRead > MaxBufferCapacity)
+			{
+				BAM_LOG(Error, "Simulation", "RLServer", "Client request buffer exceeded capacity ({} bytes). Dropping connection.", MaxBufferCapacity);
+				break;
+			}
+
 			buffer.append(recvBuf, bytesRead);
 
 			// 개행문자(\n) 기준으로 명령어 라인 추출
@@ -125,7 +162,11 @@ namespace Engine
 				if (line.empty()) continue;
 
 				std::string response = ProcessCommand(line) + "\n";
-				::send(clientSock, response.c_str(), static_cast<int>(response.length()), 0);
+				if (!SendAll(clientSock, response))
+				{
+					BAM_LOG(Error, "Simulation", "RLServer", "Failed to send complete response to client.");
+					break;
+				}
 			}
 		}
 
@@ -153,53 +194,45 @@ namespace Engine
 	{
 		if (!m_Environment) return "{\"status\":\"error\",\"message\":\"No environment\"}";
 
+		// Glaze를 통한 안전하고 유연한 JSON 파싱
+		RLCommandRequest req;
+		auto ec = glz::read_json(req, requestLine);
+		if (ec)
+		{
+			return "{\"status\":\"error\",\"message\":\"Invalid JSON format\"}";
+		}
+
 		// 1. get_spaces
-		if (requestLine.find("\"cmd\":\"get_spaces\"") != std::string::npos ||
-			requestLine.find("\"cmd\": \"get_spaces\"") != std::string::npos)
+		if (req.cmd == "get_spaces")
 		{
 			return SerializeSpacesResponse();
 		}
 
 		// 2. reset
-		if (requestLine.find("\"cmd\":\"reset\"") != std::string::npos ||
-			requestLine.find("\"cmd\": \"reset\"") != std::string::npos)
+		if (req.cmd == "reset")
 		{
-			uint64_t seed = 0;
-			size_t seedPos = requestLine.find("\"seed\":");
-			if (seedPos == std::string::npos) seedPos = requestLine.find("\"seed\": ");
-			if (seedPos != std::string::npos)
-			{
-				size_t numStart = requestLine.find_first_of("0123456789", seedPos);
-				if (numStart != std::string::npos)
-					seed = std::strtoull(&requestLine[numStart], nullptr, 10);
-			}
-			RLObservation obs = m_Environment->Reset(seed);
+			RLObservation obs = m_Environment->Reset(req.seed);
 			return SerializeResetResponse(obs);
 		}
 
 		// 3. step
-		if (requestLine.find("\"cmd\":\"step\"") != std::string::npos ||
-			requestLine.find("\"cmd\": \"step\"") != std::string::npos)
+		if (req.cmd == "step")
 		{
-			RLAction action;
-			size_t actionPos = requestLine.find("\"action\":");
-			if (actionPos == std::string::npos) actionPos = requestLine.find("\"action\": ");
-			if (actionPos != std::string::npos)
+			if (!req.action.has_value())
 			{
-				size_t numStart = requestLine.find_first_of("-0123456789", actionPos);
-				if (numStart != std::string::npos)
-				{
-					action.Type = ERLActionType::Discrete;
-					action.DiscreteAction = std::strtoll(&requestLine[numStart], nullptr, 10);
-				}
+				return "{\"status\":\"error\",\"message\":\"Missing action for step command\"}";
 			}
+
+			RLAction action;
+			action.Type = ERLActionType::Discrete;
+			action.DiscreteAction = req.action.value();
+
 			RLStepResult result = m_Environment->Step(action);
 			return SerializeStepResponse(result);
 		}
 
 		// 4. close
-		if (requestLine.find("\"cmd\":\"close\"") != std::string::npos ||
-			requestLine.find("\"cmd\": \"close\"") != std::string::npos)
+		if (req.cmd == "close")
 		{
 			m_Environment->Close();
 			return "{\"status\":\"ok\"}";

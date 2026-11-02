@@ -1,7 +1,5 @@
 ﻿#include "FileDialogs.h"
 #include "Editor_Macros.h"
-#include <shobjidl.h>
-#include <wrl/client.h>
 
 #pragma comment(lib, "ole32.lib")
 #pragma comment(lib, "shell32.lib")

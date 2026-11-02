@@ -12,7 +12,7 @@ namespace Engine
 		virtual ~CartPoleEnvironment() override = default;
 
 		virtual void Initialize() override;
-		virtual RLObservation Reset(uint64_t seed = 0) override;
+		virtual RLObservation Reset(std::optional<uint64_t> seed = std::nullopt) override;
 		virtual RLStepResult Step(const RLAction& action) override;
 		virtual RLSpace GetObservationSpace() const override;
 		virtual RLSpace GetActionSpace() const override;

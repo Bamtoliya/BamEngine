@@ -35,6 +35,58 @@ Use one entry per meaningful change.
 
 ---
 
+## [2026-11-03] 강화학습 프로토콜·결정론적 seed=0 보정(F09), Release 빌드 디렉터리 동적 추적(F13), Client 독립 배포 파이프라인 완성(F04) 및 Unity 헤더 충돌 보정
+
+- Area: Engine | Simulation | Editor | Tools | Build
+- Type: Feature | Fix | Reliability | Build
+- 관련 파일:
+  - Engine/Source/Simulation/Public/RLEnvironment.h
+  - Engine/Source/Simulation/Public/CartPoleEnvironment.h
+  - Engine/Source/Simulation/Private/CartPoleEnvironment.cpp
+  - Engine/Source/Simulation/Private/RLServer.cpp
+  - Tools/RL/bam_gym_env.py
+  - Editor/Source/HotReload/Private/HotReloadManager.cpp
+  - Tools/Scripts/PackageClient.ps1
+  - Editor/Source/ImGui/ViewportPanel/Private/ViewportDeferredPipeline.cpp
+  - Editor/Source/FileDialog/Private/FileDialogs.cpp
+  - Editor/Source/Command/Public/SceneEditHistory.h
+  - Engine/Source/World/Scene/Private/SceneManager.cpp
+  - Engine/Source/World/Scene/Private/SceneHierarchy.cpp
+  - Editor/Source/HotReload/Private/AssetHotReloadManager.cpp
+  - Docs/DevelopmentPriorities.md
+  - Docs/CodeDocumentationAudit-2026-11-02.md
+  - Docs/BuildAndPackagingPlan.md
+- Motivation:
+  - 강화학습 환경의 seed=0 재현성 결함 및 비표준 JSON 파싱 취약점 해결 (F09).
+  - 핫리로드 모듈 빌드 시 Release 구성의 빌드 디렉터리 불일치 해결 (F13).
+  - Standalone Client 패키징 시 바이너리 다단계 자동 탐색 및 누락 리소스 수집 완성 (F04).
+  - MSVC Unity 빌드 환경에서 전역 using namespace std; 및 Windows SDK 헤더 로드 순서로 인한 byte 심볼 모호성(C2872), ODR 충돌(C2084), Glaze 내부 링크 에러(C7631) 해소.
+- Implementation summary:
+  - **F09 (강화학습 프로토콜 및 재현성)**:
+    - `IRLEnvironment::Reset`에 `std::optional<uint64_t> seed = std::nullopt` 시그니처를 적용하고, `seed.has_value()` 분기로 `seed=0`일 때도 난수 생성기를 정확히 초기화하도록 수정하여 Gymnasium 계약 준수.
+    - `RLServer.cpp`에 `<glaze/glaze.hpp>`를 적용하여 견고한 JSON 역직렬화 구축. 익명 네임스페이스 대신 `Engine` 네임스페이스로 external linkage 보장.
+    - 소켓 부분 송신(Partial Send)을 방지하는 `SendAll()` 루프 및 64KB 버퍼 상한 도입.
+    - `bam_gym_env.py`의 `numpy` 선택적 임포트 및 메서드 호출 시 `self` 바인딩 에러 없는 순수 파이썬 폴백 공간(`DiscreteSpaceFallback`, `BoxSpaceFallback`) 구현.
+  - **F13 (Release 모듈 빌드 디렉터리 정합성)**:
+    - `HotReloadManager.cpp`의 `ResolveBuildDirectory()`에서 실행 파일 디렉터리 기준으로 상위 디렉터리의 `CMakeCache.txt`를 동적 역추적하여 Debug/Release 및 멀티 구성 프리셋 디렉터리를 자동 감지하도록 개선.
+  - **F04 (Client 배포 스크립트 산출물 수집 완성)**:
+    - `PackageClient.ps1`에 구성별 바이너리 다단계 자동 탐색 배열(`$BinDirCandidates`) 도입.
+    - `Config/Project.json` 및 의존성 리소스 필수 수집 및 누락 시 패키징 중단 예외 처리.
+  - **Unity 빌드 심볼 충돌 해결**:
+    - `SceneEditHistory.h` 최상단에 `#include "Editor_Includes.h"`를 추가하여 Windows SDK 헤더를 먼저 로드함으로써 `rpcndr.h`의 `byte`와 `std::byte` 모호성 충돌(C2872) 원천 차단.
+    - `SceneHierarchy.cpp`의 정적 헬퍼 함수명을 `HierarchyFinite`, `HierarchyMatches`로 변경하여 `TransformSystem.cpp`와의 ODR 심볼 충돌(C2084) 해결.
+    - `ViewportDeferredPipeline.cpp`에 `LightComponent.h`, `SceneManager.cpp`에 `PrefabInstanceComponent.h` 인클루드 보강.
+- Technical details:
+  - Unity 빌드에서 `Delegate.h` 등의 전역 `using namespace std;`가 선행 포함된 상태에서 뒤이어 `<shobjidl.h>`/`<rpcndr.h>`가 로드되면 `byte` 식별자 모호성이 발생하므로, Windows SDK를 사용하는 헤더는 최상단에서 SDK 헤더를 선점 포함하도록 정렬.
+- Validation:
+  - `CartPoleEnvironment` `reset(seed=0)` 반복 호출 시 정확히 동일한 초기 상태 100% 결정론적 재현 검증.
+  - 패키징 스크립트로 생성된 독립 배포 폴더에서 Client.exe 단독 실행 및 씬 로딩 검증 완료.
+  - MSVC Unity 빌드 전체 컴파일 및 링크 성공 (`Engine.dll`, `Editor.exe` 빌드 통과).
+- Risks and follow-ups:
+  - 전역 `using namespace std;` 제거 작업은 전체 코드베이스에 걸친 대규모 작업이므로 별도 리팩토링 단계에서 체계적으로 점진적 제거 권장.
+
+---
+
 ## [2026-11-03] 단일 CPU 파티클 시스템 1단계 코어 구축 및 애니메이션·FX 통합 타임라인 에디터 계획 수립 (P3)
 
 - Area: Engine | Render | Editor | Docs

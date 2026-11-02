@@ -7,7 +7,7 @@ $ErrorActionPreference = "Stop"
 
 $Root = [System.IO.Path]::GetFullPath((Resolve-Path "$PSScriptRoot/../..").Path).TrimEnd('\', '/')
 
-# ── 1. 출력 경로 절대 정규화 및 파괴적 삭제 방어 (F03 해결) ──
+# ── 1. 출력 경로 절대 정규화 및 파괴적 삭제 방어 (F03) ──
 function Get-NormalizedAbsolutePath([string]$path, [string]$baseDir) {
     if ([System.IO.Path]::IsPathRooted($path)) {
         return [System.IO.Path]::GetFullPath($path).TrimEnd('\', '/')
@@ -41,10 +41,27 @@ foreach ($forbidden in $ForbiddenDirectories) {
     }
 }
 
-# ── 2. 소스 바이너리 경로 확인 ──
-$BinDir = "$Root/out/build/x64-$($Config.ToLower())/bin"
-if (-not (Test-Path -LiteralPath $BinDir)) {
-    $BinDir = "$Root/Bin/$Config"
+# ── 2. 소스 바이너리 경로 다단계 자동 탐색 (F04) ──
+$configLower = $Config.ToLower()
+$BinDirCandidates = @(
+    "$Root/out/build/x64-$configLower/bin/$Config",
+    "$Root/out/build/x64-$configLower/bin",
+    "$Root/bin/$Config",
+    "$Root/Bin/$Config",
+    "$Root/bin",
+    "$Root/Bin"
+)
+
+$BinDir = $null
+foreach ($candidate in $BinDirCandidates) {
+    if (Test-Path -LiteralPath (Join-Path $candidate "Client.exe")) {
+        $BinDir = $candidate
+        break
+    }
+}
+
+if (-not $BinDir) {
+    throw "Packaging Failure: Could not locate 'Client.exe' for configuration '$Config'. Searched in:`n$($BinDirCandidates -join "`n")"
 }
 
 Write-Host "=== Packaging BamEngine Client ($Config) ===" -ForegroundColor Cyan
@@ -67,7 +84,7 @@ foreach ($file in $RequiredBinaries) {
     $src = Join-Path $BinDir $file
     if (Test-Path -LiteralPath $src) {
         Copy-Item -LiteralPath $src -Destination $ResolvedOutput -Force
-        Write-Host "Copied: $file" -ForegroundColor Green
+        Write-Host "Copied required binary: $file" -ForegroundColor Green
     } else {
         throw "Packaging Failure: Missing required binary: $src"
     }
@@ -77,13 +94,25 @@ foreach ($file in $OptionalBinaries) {
     $src = Join-Path $BinDir $file
     if (Test-Path -LiteralPath $src) {
         Copy-Item -LiteralPath $src -Destination $ResolvedOutput -Force
-        Write-Host "Copied optional: $file" -ForegroundColor Green
+        Write-Host "Copied optional binary: $file" -ForegroundColor Green
     } else {
         Write-Warning "Missing optional binary: $src"
     }
 }
 
-# ── 5. 런타임 리소스 복사 (Stage) ──
+# ── 5. 프로젝트 설정 파일 복사 (F04 핵심: Config/Project.json) ──
+$TargetConfig = Join-Path $ResolvedOutput "Config"
+New-Item -ItemType Directory -LiteralPath $TargetConfig -Force | Out-Null
+
+$ProjectJsonPath = Join-Path $Root "Config/Project.json"
+if (Test-Path -LiteralPath $ProjectJsonPath) {
+    Copy-Item -LiteralPath $ProjectJsonPath -Destination $TargetConfig -Force
+    Write-Host "Copied Config: Project.json" -ForegroundColor Green
+} else {
+    throw "Packaging Failure: Missing essential project config: $ProjectJsonPath"
+}
+
+# ── 6. 런타임 리소스 복사 (Stage) ──
 $ResourcesToCopy = @(
     "Data",
     "Material",

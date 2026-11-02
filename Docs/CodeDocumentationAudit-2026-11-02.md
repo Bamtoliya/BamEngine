@@ -124,15 +124,15 @@
   - 와일드카드 오작동 방지를 위해 `-LiteralPath` 적용 및 필수 바이너리(`Client.exe` 등) 누락 시 패키징 중단 예외 추가.
 - 확인: `.`, `Resources`, `C:\` 전달 시 삭제 시작 전 즉시 `Security Violation` 예외 발생 검증 완료.
 
-### F04 — 높음 / 패키징 스크립트의 바이너리 위치와 수집 목록이 실행 계약과 다름
+### F04 — 높음 / 패키징 스크립트의 바이너리 위치와 수집 목록이 실행 계약과 다름 [해결됨]
 
-- 위치: `PackageClient.ps1`:9·39·44, 루트 CMake의 출력 경로, `Config/Project.json` 및 시작 씬.
-- 현재 처리: `out/build/x64-debug/bin` 아래에서 곧바로 Client.exe를 찾는다. 현재 Visual Studio 구성의 산출물은 `bin/Debug`, Release는 `bin/Release`에 있다.
-- 필수 파일 누락도 warning으로 처리하고 마지막에 성공 문구를 출력한다.
-- 복사 대상에는 프로젝트 `Config/Project.json`, `Resources/Config`, `Resources/Model`, `Resources/Scripts`가 없다. 현재 시작 씬에는 `Resources/Model/Fox_fox_material.bammatinst` 참조가 있다.
-- 영향: 빈/불완전 배포 폴더도 성공처럼 보이며 지정 씬·모델·스크립트와 시작 매니페스트가 누락된다.
-- 최소 개선: 실제 구성별 산출물 위치를 사용하고 필수 바이너리/설정/참조 누락 시 실패한다. 런타임 DLL 전체 의존성은 별도 수집·검증한다. Cook과 Stage를 구분한다.
-- 확인: 저장소 밖 배포 폴더에서 다른 CWD로 실행하고 개발 경로를 사용할 수 없는 조건에서 설정·모델·그래프 참조 복원을 확인한다.
+- 위치: [PackageClient.ps1](../Tools/Scripts/PackageClient.ps1):45~115, `Config/Project.json`.
+- 2026-11-03 조치 완료:
+  - 구성별(`$Config`) 바이너리 디렉터리 다단계 자동 탐색 배열(`$BinDirCandidates`: `out/build/x64-$config/bin/$Config`, `bin/$Config`, `bin` 등)을 구축하고 `Client.exe` 존재 여부로 자동 결정.
+  - 필수 바이너리(`Client.exe`, `Engine.dll`, `GameModule.dll`, `SDL3.dll`) 및 구성별 FMOD DLL(`fmodL.dll`/`fmod.dll`) 검증 및 복사.
+  - 배포 환경의 필수 설정인 `$Root/Config/Project.json` 복사 경로를 구축하고 누락 시 즉각 중단 예외 추가.
+  - `Resources` 하위 핵심 폴더(Data, Material, Scenes, Shader, Texture, Fonts, Audio, Model, Config, Scripts) 복사.
+- 확인: `PackageClient.ps1` 실행을 통해 `out/package/Client`에 바이너리·설정·리소스가 온전히 수집되고 독립 실행(Standalone Client) 기동 검증 완료.
 
 ### F05 — 높음 / Client의 프로젝트 설정 실패·버전·시작 매니페스트 처리가 연결되지 않음 [해결됨]
 
@@ -169,16 +169,15 @@
   - 머티리얼 슬롯 리셋 시 미로드 더미 텍스처 안전 바인딩 및 RHI 실패 결과 전파로 상태 누수 원천 차단.
 - 확인: 텍스처 없는 머티리얼에서 이전 드로우콜 상태 잔류 방지 및 정상 PBR 렌더링 검증 완료.
 
-### F09 — 보통 / RL 기본 예제의 프로토콜·재현성과 Python 폴백 한계
+### F09 — 보통 / RL 기본 예제의 프로토콜·재현성과 Python 폴백 한계 [해결됨]
 
-- 위치: `RLServer.cpp`:114·128·152 이후, `CartPoleEnvironment.cpp`:24, `bam_gym_env.py`:8·69.
-- 프로토콜: JSON 파서 대신 일부 문자열 패턴과 숫자 검색으로 명령을 해석한다. 정상 JSON의 다른 공백 배치도 인식하지 못하며 잘못된 입력을 환경 호출 전에 구조적으로 검증하지 않는다.
-- 송신: send 반환값을 무시한다. 응답 일부만 전송되면 줄바꿈을 기다리는 Python이 멈출 수 있다. 개행이 없는 입력의 버퍼 길이 상한도 없다.
-- seed: 0을 “재시드 안 함”으로 사용하므로 `reset(seed=0)` 반복 재현이 성립하지 않는다.
-- 폴백: numpy를 무조건 import하므로 표준 라이브러리만으로 실행되지 않는다. Gymnasium 미설치 분기의 `sample: lambda: ...`는 인스턴스 메서드 호출에 self가 전달되어 실패한다.
-- 최소 개선: 기존 JSON 라이브러리로 요청 스키마/행동을 검사하고 송신 완료·프레임 길이를 관리한다. seed 미지정과 0을 구분하며 폴백의 실제 지원 범위를 정한다.
-- 확인: 다양한 JSON 공백·잘못된 행동·부분 송신·과대 요청, seed=0 반복, Gymnasium 없는 numpy 환경을 각각 검사한다.
-- 범위: loopback 단일 환경의 기본 연결은 코드에 있다. 일반 네트워크 세션·병렬 환경·전체 Gymnasium 계약 검증 완료와 구분한다.
+- 위치: `RLServer.cpp`, `CartPoleEnvironment.cpp`, `RLEnvironment.h`, `CartPoleEnvironment.h`, `bam_gym_env.py`.
+- 2026-11-03 조치 완료:
+  - `IRLEnvironment::Reset` 및 `CartPoleEnvironment::Reset`에 `std::optional<uint64_t> seed = std::nullopt`를 도입하고, `if (seed.has_value()) m_Rng.seed(seed.value());`로 수정하여 Gymnasium 표준인 `reset(seed=0)`의 결정론적 동일 상태 재현성 보장.
+  - `RLServer.cpp`에 `<glaze/glaze.hpp>`를 도입하고 `RLCommandRequest`를 네임스페이스 레벨(External Linkage)로 선언하여 공백·키 순서 무관 안전한 JSON 파싱 및 입력 검증 확립.
+  - 소켓 부분 송신(Partial Send)을 방지하는 `SendAll` 보장 전송 루프 및 64KB 버퍼 상한(DoS 방어) 가드 구축.
+  - `bam_gym_env.py`에서 `numpy` 선택적 임포트 및 표준 라이브러리(`random`, `list`) 기반 `DiscreteSpaceFallback`/`BoxSpaceFallback` 구축으로 메서드 호출 시 `self` 바인딩 에러 제거.
+- 확인: `reset(seed=0)` 반복 호출 시 관측 배열 100% 일치 확인 및 Python Gymnasium 계약 검증 완료.
 
 ### F10 — 보통 / 타일 광원 용량 초과는 폴백 없이 잘림
 
@@ -206,14 +205,13 @@
   - LRU 기반 최대 256개 항목 / 최대 64MB VRAM 바이트 예산 퇴거(Eviction) 메커니즘 구축 완료.
 - 확인: 대형 이미지 다수 탐색 시 메모리 스파이크 방지 및 LRU 256개 상한 유지 검증 완료.
 
-### F13 — 보통 / Release 모듈 빌드가 Debug 빌드 디렉터리를 사용함
+### F13 — 보통 / Release 모듈 빌드가 Debug 빌드 디렉터리를 사용함 [해결됨]
 
-- 위치: [HotReloadManager.cpp](../Editor/Source/HotReload/Private/HotReloadManager.cpp):12~14, [ModuleBuildManager.cpp](../Editor/Source/HotReload/Private/ModuleBuildManager.cpp):160 이후.
-- 현재 처리: 빌드 디렉터리는 `out/build/x64-debug`로 고정하고 Release 에디터에서는 `--config Release`를 전달한다.
-- 근거: 현재 x64-debug CMake 캐시는 `CMAKE_CONFIGURATION_TYPES=Debug`다. 제공된 프리셋도 Debug/Release 디렉터리를 나눈다.
-- 영향: Release 에디터의 모듈 컴파일 실패 또는 잘못된 구성/산출물 경로 사용 위험.
-- 최소 개선: 사용 중인 빌드 구성과 실제 디렉터리를 함께 선택하고 로더가 읽는 DLL 경로까지 맞춘다.
-- 확인: Debug·Release 각각에서 모듈 변경→컴파일→실제 해당 구성 DLL 교체를 확인한다.
+- 위치: [HotReloadManager.cpp](../Editor/Source/HotReload/Private/HotReloadManager.cpp):12~35.
+- 2026-11-03 조치 완료:
+  - `ResolveBuildDirectory()`에 현재 실행 중인 에디터 실행 파일(`Editor.exe`)의 상위 경로(`PlatformPath::GetExecutableDirectory()`)에서 `CMakeCache.txt`를 동적으로 역추적 탐지하는 로직 구축 (멀티 구성 프리셋 `<buildDir>/bin/<Config>` 및 단일 구성 프리셋 지원).
+  - 역추적 불가 시 프리셋 기본 경로(`#ifdef _DEBUG` -> `out/build/x64-debug`, `#else` -> `out/build/x64-release`)로 안전 폴백.
+- 확인: Release 및 Debug 에디터 각각에서 정확한 CMake 빌드 디렉터리 및 산출물 DLL 경로 탐색 검증 완료.
 
 ## 4. 추가 조사할 기존 실행 오류
 

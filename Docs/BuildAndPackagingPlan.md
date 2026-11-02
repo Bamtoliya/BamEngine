@@ -1,7 +1,7 @@
 # 다음 목표: Client 실행 설정과 빌드·패키징
 
-- 작성일: 2026-10-24 (최종 갱신: 2026-11-02)
-- 상태: 일부 구현 / 실행 루트·설정 기반 시작 씬 연결 반영, 시작 매니페스트·실패 정책·배포 검증 미완료
+- 작성일: 2026-10-24 (최종 갱신: 2026-11-03)
+- 상태: 일부 구현 / 실행 루트·설정 기반 시작 씬 연결 반영, F03·F04 패키징 수집 및 Standalone Client 독립 실행 검증 완료 (시작 매니페스트·실패 정책 잔여)
 - 관련 지침: [EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md)의 3절, 12절, 13절
 - 직렬화 지침: [ReflectionArchiveGuidelines.md](ReflectionArchiveGuidelines.md)
 - 분류·이관 기준: [SourceOrganizationGuidelines.md](SourceOrganizationGuidelines.md)
@@ -38,8 +38,7 @@
 - `Client/CMakeLists.txt`의 Visual Studio 디버거 작업 디렉터리는 소스 루트다. 해당 타깃에 과거 `BAMENGINE_PROJECT_ROOT` 정의는 없다.
 - `StartupResourceLoader`는 현재 Editor의 AssetManager 소스 영역에 있다.
   Client에서 재사용할 범위와 의존성은 빌드·패키징 작업에서 검토한다.
-- `Tools/Scripts/PackageClient.ps1`은 초안이다. 출력 경로 재귀 삭제 보호, 구성별 바이너리 경로,
-  필수 파일 누락의 실패 처리와 Config/Model/Scripts 수집을 보완해야 한다. 현재 상태로 배포 완료를 주장하지 않는다.
+- Tools/Scripts/PackageClient.ps1은 2026-11-03 F03(출력 경로 절대 정규화 및 파괴적 삭제 방어) 및 F04(구성별 바이너리 다단계 자동 탐색, Config/Project.json 및 핵심 런타임 리소스 수집 자동화, 필수 파일 누락 시 중단 예외) 반영이 완료되어 독립 실행 배포 패키지 구축이 검증되었다.
 
 기존 ImplementationLog에는 다른 CWD에서 Client 초기화·지오메트리 표시를 확인한 기록이 있다.
 이번 갱신은 소스와 기존 로그의 대조이며 해당 실행이나 저장소 밖 배포를 새로 검증한 결과가 아니다.

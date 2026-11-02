@@ -11,7 +11,26 @@ static std::filesystem::path ResolveProjectRoot()
 }
 static std::filesystem::path ResolveBuildDirectory(const std::filesystem::path& projectRoot)
 {
+    std::error_code ec;
+    const std::filesystem::path exeDir = Engine::PlatformPath::GetExecutableDirectory();
+    // 1. <buildDir>/bin/<Config>/Editor.exe 구조 역추적 (Visual Studio 멀티 구성 프리셋)
+    const std::filesystem::path candidate1 = exeDir.parent_path().parent_path();
+    if (std::filesystem::exists(candidate1 / "CMakeCache.txt", ec))
+    {
+        return candidate1;
+    }
+    // 2. <buildDir>/bin/Editor.exe 구조 역추적 (Ninja 등 단일 구성 프리셋)
+    const std::filesystem::path candidate2 = exeDir.parent_path();
+    if (std::filesystem::exists(candidate2 / "CMakeCache.txt", ec))
+    {
+        return candidate2;
+    }
+    // 3. 빌드 프리셋 기본 경로 Fallback
+#ifdef _DEBUG
     return projectRoot / "out/build/x64-debug";
+#else
+    return projectRoot / "out/build/x64-release";
+#endif
 }
 
 IMPLEMENT_SINGLETON(HotReloadManager)

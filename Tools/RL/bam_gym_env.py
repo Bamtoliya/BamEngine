@@ -5,7 +5,14 @@ Engine 계획 15절 및 Gymnasium 규약 준수
 
 import json
 import socket
-import numpy as np
+import random
+
+try:
+    import numpy as np
+    HAS_NUMPY = True
+except ImportError:
+    np = None
+    HAS_NUMPY = False
 
 try:
     import gymnasium as gym
@@ -16,6 +23,27 @@ except ImportError:
     class DummyEnv: pass
     gym = type('DummyGym', (), {'Env': DummyEnv})()
     spaces = None
+
+
+class DiscreteSpaceFallback:
+    """Gymnasium/numpy 미설치 시의 이산 행동 공간 폴백"""
+    def __init__(self, n: int):
+        self.n = n
+
+    def sample(self) -> int:
+        return random.randrange(self.n)
+
+    def __repr__(self):
+        return f"Discrete({self.n})"
+
+
+class BoxSpaceFallback:
+    """Gymnasium/numpy 미설치 시의 관측 공간 폴백"""
+    def __init__(self, shape: tuple):
+        self.shape = shape
+
+    def __repr__(self):
+        return f"Box({self.shape})"
 
 
 class BamCartPoleEnv(gym.Env):
@@ -59,30 +87,38 @@ class BamCartPoleEnv(gym.Env):
             raise RuntimeError(f"Failed to get spaces: {resp}")
 
         # Gymnasium spaces 설정
-        if HAS_GYMNASIUM:
-            self.action_space = spaces.Discrete(resp["action_space"]["n"])
-            shape = tuple(resp["observation_space"]["shape"])
+        num_actions = resp["action_space"]["n"]
+        obs_shape = tuple(resp["observation_space"]["shape"])
+
+        if HAS_GYMNASIUM and HAS_NUMPY:
+            self.action_space = spaces.Discrete(num_actions)
             self.observation_space = spaces.Box(
-                low=-np.inf, high=np.inf, shape=shape, dtype=np.float32
+                low=-np.inf, high=np.inf, shape=obs_shape, dtype=np.float32
             )
         else:
-            self.action_space = type('Discrete', (), {'n': resp["action_space"]["n"], 'sample': lambda: np.random.randint(0, 2)})()
-            self.observation_space = type('Box', (), {'shape': tuple(resp["observation_space"]["shape"])})()
+            self.action_space = DiscreteSpaceFallback(num_actions)
+            self.observation_space = BoxSpaceFallback(obs_shape)
 
     def reset(self, seed: int = None, options: dict = None):
-        super().reset(seed=seed) if HAS_GYMNASIUM else None
+        if HAS_GYMNASIUM:
+            super().reset(seed=seed)
         cmd = {"cmd": "reset"}
         if seed is not None:
-            cmd["seed"] = seed
+            cmd["seed"] = int(seed)
         
         resp = self._send_cmd(cmd)
-        obs = np.array(resp["observation"], dtype=np.float32)
+        raw_obs = resp["observation"]
+        obs = np.array(raw_obs, dtype=np.float32) if HAS_NUMPY else raw_obs
         info = resp.get("info", {})
         return obs, info
 
     def step(self, action: int):
         resp = self._send_cmd({"cmd": "step", "action": int(action)})
-        obs = np.array(resp["observation"], dtype=np.float32)
+        if resp.get("status") != "ok":
+            raise RuntimeError(f"Step command failed: {resp.get('message', 'Unknown error')}")
+
+        raw_obs = resp["observation"]
+        obs = np.array(raw_obs, dtype=np.float32) if HAS_NUMPY else raw_obs
         reward = float(resp["reward"])
         terminated = bool(resp["terminated"])
         truncated = bool(resp["truncated"])
@@ -105,6 +141,13 @@ if __name__ == "__main__":
         env = BamCartPoleEnv()
         print(f"Connected to BamEngine! Action space: {env.action_space}, Obs shape: {env.observation_space.shape}")
 
+        # ── 1. seed=0 결정론적 재현성 검증 ──
+        obs1, _ = env.reset(seed=0)
+        obs2, _ = env.reset(seed=0)
+        is_same = (obs1 == obs2).all() if HAS_NUMPY else (obs1 == obs2)
+        print(f"Deterministic seed=0 test: {'PASSED (Identical initial states)' if is_same else 'FAILED'}")
+
+        # ── 2. 2개 에피소드 실행 ──
         for episode in range(1, 3):
             obs, info = env.reset(seed=42 + episode)
             print(f"\n--- Episode {episode} Start ---")

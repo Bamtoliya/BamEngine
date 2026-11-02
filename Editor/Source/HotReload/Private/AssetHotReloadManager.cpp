@@ -7,7 +7,6 @@
 #include "Mesh.h"
 #include "MaterialInstance.h"
 #include "Logger.h"
-#include <windows.h>
 #include "NotificationManager.h"
 #include "PlatformPath.h"
 

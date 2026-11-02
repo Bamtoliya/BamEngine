@@ -5,6 +5,7 @@
 #include <string>
 #include <cstdint>
 #include <variant>
+#include <optional>
 
 namespace Engine
 {
@@ -59,7 +60,7 @@ namespace Engine
 		virtual ~IRLEnvironment() = default;
 
 		virtual void Initialize() = 0;
-		virtual RLObservation Reset(uint64_t seed = 0) = 0;
+		virtual RLObservation Reset(std::optional<uint64_t> seed = std::nullopt) = 0;
 		virtual RLStepResult Step(const RLAction& action) = 0;
 		virtual RLSpace GetObservationSpace() const = 0;
 		virtual RLSpace GetActionSpace() const = 0;

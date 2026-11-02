@@ -19,9 +19,12 @@ namespace Engine
 		m_StepCount = 0;
 	}
 
-	RLObservation CartPoleEnvironment::Reset(uint64_t seed)
+	RLObservation CartPoleEnvironment::Reset(std::optional<uint64_t> seed)
 	{
-		if (seed != 0) m_Rng.seed(seed);
+		if (seed.has_value())
+		{
+			m_Rng.seed(seed.value());
+		}
 
 		// 초기 상태: [-0.05, 0.05] 균등 분포 난수
 		std::uniform_real_distribution<float> dist(-0.05f, 0.05f);

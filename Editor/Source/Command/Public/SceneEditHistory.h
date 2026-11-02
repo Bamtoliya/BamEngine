@@ -1,5 +1,6 @@
 ﻿#pragma once
 
+#include "Editor_Includes.h"
 #include "CommandHistory.h"
 #include <functional>
 #include <span>

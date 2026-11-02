@@ -7,20 +7,20 @@
 namespace
 {
     constexpr std::size_t MaxDepth = 256;
-    bool Finite(const glm::dmat4& value)
+    bool HierarchyFinite(const glm::dmat4& value)
     {
         for (int c = 0; c < 4; ++c)
             for (int r = 0; r < 4; ++r)
                 if (!std::isfinite(value[c][r])) return false;
         return true;
     }
-    bool Matches(const glm::dmat4& left, const glm::dmat4& right)
+    bool HierarchyMatches(const glm::dmat4& left, const glm::dmat4& right)
     {
         for (int c = 0; c < 4; ++c)
             for (int r = 0; r < 4; ++r)
                 if (std::abs(left[c][r] - right[c][r]) >
                     1.0e-4 * std::max({ 1.0, std::abs(left[c][r]), std::abs(right[c][r]) })) return false;
-        return Finite(left) && Finite(right);
+        return HierarchyFinite(left) && HierarchyFinite(right);
     }
     // Validate runtime links before passing the graph to recursive TransformSystem traversal.
     bool ValidHierarchy(Engine::Scene& scene)
@@ -165,7 +165,7 @@ Engine::EntityReparentResult Engine::Scene::ReparentEntity(Entity& child, Entity
     if (!TransformSystem::TryGetLocalMatrix(glm::mat4(*parentWorld), candidate.absolute, glm::mat4(*desiredWorld), local) ||
         !TransformSystem::TryAssignLocalMatrix(candidate, local) ||
         !TransformSystem::TryComposeWorld(candidate, glm::mat4(*parentWorld), rebuilt) ||
-        !Matches(glm::dmat4(rebuilt), *desiredWorld)) return Result::InvalidTransform;
+        !HierarchyMatches(glm::dmat4(rebuilt), *desiredWorld)) return Result::InvalidTransform;
 
     // Stage vector edits before changing either side. Allocation exceptions are outside the transaction contract.
     HierarchyComponent childLink = previous ? *previous : HierarchyComponent{};
