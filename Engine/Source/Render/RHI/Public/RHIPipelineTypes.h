@@ -30,8 +30,8 @@ enum class ECullMode
 ENUM()
 enum class EFrontFace
 {
-	Clockwise,
-	CounterClockwise,
+	CounterClockwise = 0,
+	Clockwise = 1,
 };
 
 ENUM()

@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "ImGuiInterface.h"
 #include "Graph.h"
@@ -87,8 +87,10 @@ private:
 	void DrawMenuBar();
 	void DrawToolbar();
 	void DrawFileToolbar();
+public:
 	void SaveDocument(bool saveAs);
 	void OpenDocument();
+private:
 	Engine::GraphDiagnostic BuildDocumentViews(GraphDocument& document);
 	void DrawDebugToolbar();
 	void UpdateLiveDebugging();

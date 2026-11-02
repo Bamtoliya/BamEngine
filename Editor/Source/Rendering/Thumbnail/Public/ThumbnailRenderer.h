@@ -9,6 +9,7 @@
 BEGIN(Engine)
 class Scene;
 class RHITexture;
+class Model;
 END
 
 BEGIN(Editor)
@@ -30,6 +31,11 @@ public:
 	// 머티리얼 1회 렌더링 제출 (구체 메쉬에 머티리얼을 바인딩하고 오프스크린 파이프라인에 Submit)
 	bool SubmitMaterial(Engine::MaterialInterface* material);
 
+	// 단일 메쉬 1회 렌더링 제출 (AABB 자동 프레이밍, 머티리얼 미지정 시 기본 PBR 적용)
+	bool SubmitMesh(Engine::Mesh* mesh, Engine::MaterialInterface* material = nullptr);
+	// 복합 모델 1회 렌더링 제출 (다중 서브메쉬, 노드 계층, 통합 AABB 자동 프레이밍)
+	bool SubmitModel(Engine::Model* model);
+
 	// 최종 조명 합성이 완료된 128x128 렌더 타깃 텍스처 조회
 	[[nodiscard]] Engine::RHITexture* GetFinalTexture() const;
 
@@ -38,6 +44,8 @@ public:
 
 private:
 	void SetupStudioScene();
+	[[nodiscard]] CameraBuffer CalculateAutoFramingCamera(const vec3& bMin, const vec3& bMax) const;
+	[[nodiscard]] Engine::MaterialInterface* GetDefaultPreviewMaterial() const;
 private:
 	uint32 m_Size = 128;
 	bool m_Initialized = false;

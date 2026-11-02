@@ -208,44 +208,33 @@ bool PrefabModeManager::ExitPrefabMode(bool discardChanges)
     return true;
 }
 
-void PrefabModeManager::DrawViewportBanner()
+void PrefabModeManager::DrawMenuBarUI()
 {
     if (!m_IsInPrefabMode) return;
-    const std::string exitPopupTitle = LOCAL("PrefabEditor.ExitConfirmTitle") + "###PrefabExitConfirmPopup";
 
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.10f, 0.20f, 0.32f, 0.90f));
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.0f, 4.0f));
-
-    const float bannerHeight = ImGui::GetFrameHeight() + 8.0f;
-    if (ImGui::BeginChild("##PrefabViewportBanner", ImVec2(0.0f, bannerHeight), false, ImGuiWindowFlags_NoScrollbar))
+    // [씬으로 복귀] 버튼
+    if (ImGui::Button((std::string(ICON_FA_ARROW_LEFT " ") + LOCAL("PrefabMode.BackToScene")).c_str()))
     {
-        if (ImGui::Button((std::string(ICON_FA_ARROW_LEFT " ") + LOCAL("PrefabMode.BackToScene")).c_str()))
-        {
-            ExitPrefabMode(false);
-        }
-
-        ImGui::SameLine();
-        ImGui::TextDisabled("|");
-        ImGui::SameLine();
-
-        std::string title = std::string(ICON_FA_CUBES " ") + LOCAL("PrefabMode.Title") + ": " + m_CurrentPrefabPath.filename().string();
-        if (HasUnsavedChanges()) title += " *";
-        ImGui::TextColored(ImVec4(0.35f, 0.85f, 1.0f, 1.0f), "%s", title.c_str());
-
-        const float saveWidth = 80.0f;
-        const float alignX = ImGui::GetWindowContentRegionMax().x - saveWidth;
-        if (alignX > ImGui::GetCursorPosX())
-        {
-            ImGui::SameLine(alignX);
-            if (ImGui::Button((std::string(ICON_FA_FLOPPY_DISK " ") + LOCAL("PrefabEditor.Save")).c_str(), ImVec2(saveWidth, 0.0f)))
-            {
-                SavePrefab();
-            }
-        }
+        ExitPrefabMode(false);
     }
-    ImGui::EndChild();
-    ImGui::PopStyleVar();
-    ImGui::PopStyleColor();
+
+    ImGui::SameLine();
+    ImGui::TextDisabled("|");
+    ImGui::SameLine();
+
+    // 프리팹 이름 및 수정 여부 표시
+    std::string title = std::string(ICON_FA_CUBES " ") + LOCAL("PrefabMode.Title") + ": " + m_CurrentPrefabPath.filename().string();
+    if (HasUnsavedChanges()) title += " *";
+    ImGui::TextColored(ImVec4(0.35f, 0.85f, 1.0f, 1.0f), "%s", title.c_str());
+
+    ImGui::SameLine();
+    ImGui::TextDisabled("|");
+    ImGui::SameLine();
+}
+
+void PrefabModeManager::DrawExitConfirmModal()
+{
+    const std::string exitPopupTitle = LOCAL("PrefabEditor.ExitConfirmTitle") + "###PrefabExitConfirmPopup";
 
     if (m_ShowExitConfirmModal)
     {
@@ -276,4 +265,10 @@ void PrefabModeManager::DrawViewportBanner()
         }
         ImGui::EndPopup();
     }
+}
+
+void PrefabModeManager::DrawViewportBanner()
+{
+    // 모달 팝업 상태 유지
+    DrawExitConfirmModal();
 }

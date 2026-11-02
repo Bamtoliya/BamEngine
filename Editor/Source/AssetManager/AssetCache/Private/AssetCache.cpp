@@ -9,6 +9,10 @@
 #include "ThumbnailRenderer.h"
 #include "ResourceManager.h"
 #include "MaterialInterface.h"
+#include "Texture.h"
+#include "Sprite.h"
+#include "Model.h"
+#include "Mesh.h"
 
 namespace
 {
@@ -87,17 +91,17 @@ void AssetCache::Update()
         if (!inserted.second)
             Safe_Release(texture);
     }
-    // 머티리얼 1프레임 오프스크린 캡처 파이프라인 처리
-    ProcessPendingMaterialThumbnail();
+    // 3D 1프레임 오프스크린 캡처 파이프라인 처리
+    ProcessPending3DThumbnail();
 }
 
-void AssetCache::ProcessPendingMaterialThumbnail()
+void AssetCache::ProcessPending3DThumbnail()
 {
     if (!ThumbnailRenderer::IsCreated()) return;
 
     auto& thumbRenderer = ThumbnailRenderer::Get();
 
-    // 1단계: 이전 프레임에서 렌더링 제출한 결과물이 있으면 복제하여 캐시에 등록
+    // 1단계: 이전 프레임에서 제출한 렌더링 결과물이 있으면 텍스처 복제하여 캐시에 등록
     if (m_CaptureState == ECaptureState::Rendering)
     {
         if (!m_CurrentCapturingKey.empty())
@@ -108,8 +112,7 @@ void AssetCache::ProcessPendingMaterialThumbnail()
             if (newTexture)
             {
                 const auto inserted = m_ThumbnailCache.emplace(m_CurrentCapturingKey, newTexture);
-                if (!inserted.second)
-                    Safe_Release(newTexture);
+                if (!inserted.second) Safe_Release(newTexture);
             }
             else
             {
@@ -121,32 +124,114 @@ void AssetCache::ProcessPendingMaterialThumbnail()
         m_CaptureState = ECaptureState::Idle;
     }
 
-    // 2단계: 대기열에서 다음 머티리얼 1개를 꺼내어 128x128 뷰포트에 렌더링 제출
-    while (!m_PendingMaterialQueue.empty() && m_CaptureState == ECaptureState::Idle)
+    // 2단계: 대기열에서 다음 에셋 1개를 꺼내어 타입별 자동 프레이밍 렌더링 제출
+    while (!m_Pending3DQueue.empty() && m_CaptureState == ECaptureState::Idle)
     {
-        std::string key = m_PendingMaterialQueue.front();
-        m_PendingMaterialQueue.pop();
+        std::string key = m_Pending3DQueue.front();
+        m_Pending3DQueue.pop();
 
-        // 이미 무효화되었거나 캐시가 존재하면 스킵
         if (!m_LoadingPaths.contains(key) || m_ThumbnailCache.contains(key))
             continue;
 
         std::filesystem::path path(key);
+        std::string ext = path.extension().string();
+        for (char& c : ext) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        std::string filename = path.filename().string();
+        for (char& c : filename) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+
         std::error_code ec;
         const std::wstring relPath = std::filesystem::relative(path, ec).wstring();
         if (ec) continue;
 
         auto& rm = Engine::ResourceManager::Get();
-        auto handle = rm.GetResourceHandle<Engine::MaterialInterface>(relPath);
-        if (!handle.IsValid())
+        bool submitSuccess = false;
+
+        const bool isMat = ext == ".bammat" || ext == ".bammatinst" || ext == ".mat" ||
+            filename.ends_with(".bammat.json") || filename.ends_with(".bammatinst.json");
+        const bool isModel = ext == ".bammodel" || filename.ends_with(".bammodel.json");
+        const bool isMesh = ext == ".bammesh" || ext == ".fbx" || ext == ".glb" || ext == ".gltf" || ext == ".obj" || filename.ends_with(".bammesh.json");
+        const bool isTex = ext == ".bamtex" || filename.ends_with(".bamtex.json");
+        const bool isSprite = ext == ".bamsprite" || filename.ends_with(".bamsprite.json");
+        if (isTex)
         {
-            auto loadedHandle = rm.LoadFile(relPath);
-            if (loadedHandle.IsValid())
-                handle = Engine::ResourceHandle<Engine::MaterialInterface>(loadedHandle);
+            auto handle = rm.GetResourceHandle<Engine::Texture>(relPath);
+            if (!handle.IsValid())
+            {
+                auto loaded = rm.LoadFile(relPath);
+                if (loaded.IsValid()) handle = Engine::ResourceHandle<Engine::Texture>(loaded);
+            }
+            if (handle.IsValid() && handle.Get())
+            {
+                if (auto* rhiTex = handle.Get()->GetRHITexture())
+                {
+                    Engine::Safe_AddRef(rhiTex);
+                    m_ThumbnailCache.emplace(key, rhiTex);
+                    m_LoadingPaths.erase(key);
+                    continue;
+                }
+            }
+            m_ThumbnailCache.emplace(key, nullptr);
+            m_LoadingPaths.erase(key);
+            continue;
+        }
+        else if (isSprite)
+        {
+            auto handle = rm.GetResourceHandle<Engine::Sprite>(relPath);
+            if (!handle.IsValid())
+            {
+                auto loaded = rm.LoadFile(relPath);
+                if (loaded.IsValid()) handle = Engine::ResourceHandle<Engine::Sprite>(loaded);
+            }
+            if (handle.IsValid() && handle.Get())
+            {
+                if (auto* tex = handle.Get()->GetTexture())
+                {
+                    if (auto* rhiTex = tex->GetRHITexture())
+                    {
+                        Engine::Safe_AddRef(rhiTex);
+                        m_ThumbnailCache.emplace(key, rhiTex);
+                        m_LoadingPaths.erase(key);
+                        continue;
+                    }
+                }
+            }
+            m_ThumbnailCache.emplace(key, nullptr);
+            m_LoadingPaths.erase(key);
+            continue;
         }
 
-        auto* material = handle.Get();
-        if (material && thumbRenderer.SubmitMaterial(material))
+        if (isMat)
+        {
+            auto handle = rm.GetResourceHandle<Engine::MaterialInterface>(relPath);
+            if (!handle.IsValid())
+            {
+                auto loaded = rm.LoadFile(relPath);
+                if (loaded.IsValid()) handle = Engine::ResourceHandle<Engine::MaterialInterface>(loaded);
+            }
+            if (handle.IsValid() && handle.Get()) submitSuccess = thumbRenderer.SubmitMaterial(handle.Get());
+        }
+        else if (isModel)
+        {
+            auto handle = rm.GetResourceHandle<Engine::Model>(relPath);
+            if (!handle.IsValid())
+            {
+                auto loaded = rm.LoadFile(relPath);
+                if (loaded.IsValid()) handle = Engine::ResourceHandle<Engine::Model>(loaded);
+            }
+            if (handle.IsValid() && handle.Get()) submitSuccess = thumbRenderer.SubmitModel(handle.Get());
+        }
+        else if (isMesh)
+        {
+            auto handle = rm.GetResourceHandle<Engine::Mesh>(relPath);
+            if (!handle.IsValid())
+            {
+                auto loaded = rm.LoadFile(relPath);
+                if (loaded.IsValid()) handle = Engine::ResourceHandle<Engine::Mesh>(loaded);
+            }
+            if (handle.IsValid() && handle.Get()) submitSuccess = thumbRenderer.SubmitMesh(handle.Get());
+        }
+
+        if (submitSuccess)
         {
             m_CurrentCapturingKey = key;
             m_CaptureState = ECaptureState::Rendering;
@@ -154,7 +239,6 @@ void AssetCache::ProcessPendingMaterialThumbnail()
         }
         else
         {
-            // 3D 렌더링을 지원하지 않는 머티리얼(UI/Sprite 등)이거나 로드 실패 시 nullptr 캐시 (기본 아이콘 표시)
             m_LoadingPaths.erase(key);
             m_ThumbnailCache.emplace(key, nullptr);
         }
@@ -184,19 +268,20 @@ RHITexture* AssetCache::GetThumbnail(const filesystem::path& assetPath)
         ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
 
     const bool isImage = ext == ".png" || ext == ".jpg" || ext == ".tga" || ext == ".bmp";
-    const bool isModel = false;
     const bool isMaterial = ext == ".bammat" || ext == ".bammatinst" || ext == ".mat" ||
         filename.ends_with(".bammat.json") || filename.ends_with(".bammatinst.json");
-
-    if (isMaterial)
+    const bool isModelOrMesh = ext == ".bammodel" || ext == ".bammesh" || ext == ".glb" || ext == ".gltf" || ext == ".fbx" || ext == ".obj" ||
+        filename.ends_with(".bammodel.json") || filename.ends_with(".bammesh.json");
+    const bool isTextureOrSprite = ext == ".bamtex" || ext == ".bamsprite" ||
+        filename.ends_with(".bamtex.json") || filename.ends_with(".bamsprite.json");
+    if (isMaterial || isModelOrMesh || isTextureOrSprite)
     {
         const Engine::uint64 requestId = ++m_NextRequestId;
         m_LoadingPaths.emplace(key, requestId);
-        m_PendingMaterialQueue.push(key);
+        m_Pending3DQueue.push(key);
         return nullptr;
     }
-
-    if (!isImage && !isModel)
+    if (!isImage)
     {
         m_ThumbnailCache.emplace(key, nullptr);
         return nullptr;
@@ -207,30 +292,24 @@ RHITexture* AssetCache::GetThumbnail(const filesystem::path& assetPath)
 
     try
     {
-        AssetManager::Get().ExecuteAsync([this, key, requestId, isImage]() -> EResult
+        // AssetManager의 임포트 파이프라인(m_ActiveTasks, OnAsyncDelegate)을 오염시키지 않도록 독립 스레드로 분리 실행
+        std::thread([this, key, requestId, isImage]()
             {
                 ThumbnailUploadTask task;
-                EResult result = EResult::Success;
 
                 try
                 {
                     const filesystem::path path(key);
                     auto decoded = isImage ? LoadImageThumbnail(path) : LoadModelThumbnail(path);
-
-                    if (decoded)
-                        task = std::move(*decoded);
+                    if (decoded) task = std::move(*decoded);
                 }
                 catch (const std::exception& error)
                 {
-                    BAM_LOG(Error, "Editor", "Asset",
-                        "Thumbnail generation failed: path={}, error={}", key, error.what());
-                    result = EResult::Fail;
+                    BAM_LOG(Error, "Editor", "Asset", "Thumbnail generation failed: path={}, error={}", key, error.what());
                 }
                 catch (...)
                 {
-                    BAM_LOG(Error, "Editor", "Asset",
-                        "Thumbnail generation threw an unknown exception: path={}", key);
-                    result = EResult::Fail;
+                    BAM_LOG(Error, "Editor", "Asset", "Thumbnail generation threw an unknown exception: path={}", key);
                 }
 
                 task.AssetPath = key;
@@ -240,9 +319,7 @@ RHITexture* AssetCache::GetThumbnail(const filesystem::path& assetPath)
                     std::lock_guard lock(m_UploadMutex);
                     m_UploadTasks.push_back(std::move(task));
                 }
-
-                return result;
-            });
+            }).detach();
     }
     catch (...)
     {
@@ -284,7 +361,7 @@ void AssetCache::ClearCache(const filesystem::path& assetPath)
 void AssetCache::ClearAll()
 {
     m_LoadingPaths.clear();
-    m_PendingMaterialQueue = {};
+    m_Pending3DQueue = {};
     m_CurrentCapturingKey.clear();
     m_CaptureState = ECaptureState::Idle;
     for (auto& [path, texture] : m_ThumbnailCache)

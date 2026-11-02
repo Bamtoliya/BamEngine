@@ -346,8 +346,8 @@ Editor는 프로젝트의 대상 플랫폼과 빌드 구성을 선택하고
   창 제목·버튼·메뉴·콤보 항목·툴팁·알림·오류 안내와 리플렉션 표시 이름·분류·설명을 포함한다.
   배열·조건식·변수를 거쳐 UI에 전달되는 문구도 같은 기준을 적용한다.
 - 먼저 기존 키를 찾아 재사용한다. 새 키는 의미와 기능을 식별할 수 있는 안정적인 이름으로 만들고,
-  `Resources/Data/Localization/Engine.csv` 또는 `Editor.csv`에 영어·한국어 번역을 함께 등록한다.
-  JSON은 기존 변환·빌드 경로로 생성하며, 생성 파일만 수정하여 원본 CSV와 다르게 만들지 않는다.
+  항상 원본인 `Resources/Data/Localization/Engine.csv` 또는 `Editor.csv`에 영어·한국어 번역을 함께 등록한다.
+  생성 파일인 번역본 JSON(`Korean.json`, `English.json`)은 절대 직접 수정하지 않으며, 기존 변환·빌드 경로(`GenerateLocalization`)로 자동 생성되도록 한다.
 - Editor의 표시에는 기존 LOCAL·LOCAL_LABEL·LOCAL_FMT 경로를 활용한다.
   번역된 표시 이름과 내부 ID를 구분하여 언어 변경으로 선택·편집 상태가 초기화되지 않게 한다.
   문장 조각을 이어 붙이기보다 번역 서식과 인자를 사용하고 언어 간 서식 인자의 일치를 확인한다.

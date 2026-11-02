@@ -33,7 +33,7 @@ public:
 #pragma region Light Management
 public:
 	EResult Bind(uint32 slot);
-	EResult UpdateLightBuffer();
+	EResult UpdateLightBuffer(class Scene* targetScene = nullptr);
 private:
 	EResult EnsureBuffer();
 #pragma endregion

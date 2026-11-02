@@ -213,8 +213,6 @@ void GraphicSettingPanel::Draw()
 	if (!m_Window)
 		return;
 
-	DrawWindowConfirmation();
-
 	if (!m_Open)
 	{
 		ClearDraftChanges();

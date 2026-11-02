@@ -43,7 +43,8 @@ struct LightingPassData
     float PlanetRadius;
     uint HasIBLMaps;
     float IBLIntensity;
-    float2 _iblPad;
+    uint UseTiledCulling;
+    float _pad;
     float4 _reserved;
 };
 
@@ -674,23 +675,32 @@ float4 main(PS_INPUT input) : SV_TARGET
 		cloudSunLightIndex = FindAtmosphereSunLightIndex(numLights);
 	}
 
-    uint width, height;
-    gPosition.GetDimensions(width, height);
-    uint tilesX = (width + 15u) / 16u;
-    uint2 tileCoord = uint2(input.Position.xy) / 16u;
-    uint tileIndex = tileCoord.y * tilesX + tileCoord.x;
-    uint2 tileInfo = gTileLightGrid[tileIndex];
-    uint tileStart = tileInfo.x;
-    uint tileLightCount = min(tileInfo.y, 256u);
-    // 타일 컬링 결과에 등록된 선별 광원만 순회 (광원이 없으면 0회 순회)
-    for (uint i = 0u; i < tileLightCount; ++i)
+    uint loopCount = 0u;
+    uint tileStart = 0u;
+    bool useTiled = (gLightingData.UseTiledCulling != 0u);
+    if (useTiled)
     {
-        uint lightIndex = gTileLightIndexList[tileStart + i];
+        uint width, height;
+        gPosition.GetDimensions(width, height);
+        uint tilesX = (width + 15u) / 16u;
+        uint2 tileCoord = uint2(input.Position.xy) / 16u;
+        uint tileIndex = tileCoord.y * tilesX + tileCoord.x;
+        uint2 tileInfo = gTileLightGrid[tileIndex];
+        tileStart = tileInfo.x;
+        loopCount = min(tileInfo.y, 256u);
+    }
+    else
+    {
+        // 독립 프리뷰 모드(Thumbnail, MatPreview): 타일 컬링을 건너뛰고 전체 스튜디오 광원을 직접 순회
+        loopCount = min(numLights, 32u);
+    }
+    for (uint i = 0u; i < loopCount; ++i)
+    {
+        uint lightIndex = useTiled ? gTileLightIndexList[tileStart + i] : i;
         Light light = LoadLight(lightIndex);
         if (!HasLightFlag(light.PackedFlags, LIGHT_FLAG_USE_IN_DEFERRED))
             continue;
-
-		uint lightType = GetLightType(light.PackedFlags);
+        uint lightType = GetLightType(light.PackedFlags);
         if (lightType == LIGHT_TYPE_SKY)
         {
             hasSkyLight = true;

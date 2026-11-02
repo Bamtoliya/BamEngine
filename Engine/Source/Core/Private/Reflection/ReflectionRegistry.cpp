@@ -9,6 +9,7 @@
 #include "Adapters/GlmArchiveAdapter.h"
 #include "Adapters/ResourceHandleArchiveAdapter.h"
 #include "Adapters/GraphValueArchiveAdapter.h"
+#include "BlendTree1D.h"
 
 #include <reflection_archive/ReflectionArchiveAdapter.h>
 #include <entt/core/type_info.hpp>

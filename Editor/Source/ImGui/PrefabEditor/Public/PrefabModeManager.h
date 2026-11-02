@@ -33,6 +33,10 @@ public:
     bool SavePrefab();
     bool ExitPrefabMode(bool discardChanges = false);
 
+    // 헤더바(MenuBar) 내부 좌측 UI 및 종료 확인 모달
+    void DrawMenuBarUI();
+    void DrawExitConfirmModal();
+
     void DrawViewportBanner();
 
 private:

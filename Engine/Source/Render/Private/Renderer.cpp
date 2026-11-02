@@ -147,7 +147,7 @@ EResult Renderer::Render(f32 dt)
 			(m_UIImageDrawCommands.find(pid) != m_UIImageDrawCommands.end() && !m_UIImageDrawCommands.at(pid).empty()) ||
 			(m_CustomRenderQueues.find(pid) != m_CustomRenderQueues.end() && !m_CustomRenderQueues.at(pid).empty()) ||
 			hasDelegate;
-		// [수정] 수행할 커맨드(메쉬 드로우콜, 라이팅 커스텀 커맨드, 델리게이트 등)가 전혀 없는 패스는 실행하지 않고 스킵!
+		// [수정 복원] 수행할 커맨드가 전혀 없는 패스는 실행하지 않고 스킵!
 		// 뷰포트가 쓰로틀링(15 FPS)으로 렌더링을 쉰 프레임에는 렌더타겟이 지워지지 않고 이전 프레임 결과가 100% 보존됩니다.
 		if (!hasCommands)
 			continue;
@@ -985,7 +985,6 @@ EResult Renderer::PreparePassPipelineDesc(RenderPass* renderPass, RHIPipelineDes
 EResult Renderer::PrepareMeshPipelineDesc(Mesh* mesh, MaterialInterface* material, ERenderPassType passType, RHIPipelineDesc& desc)
 {
 	if (!m_RHI || !material) return EResult::InvalidArgument;
-	// [현대 엔진 방식] 메시 정점 특성(Static vs Skinned)과 패스에 맞춰 버텍스 셰이더 자동 매칭
 	Shader* vs = ResolveVertexShader(mesh, material, passType);
 	Shader* ps = material->GetPixelShader(passType);
 	if (!vs || !ps || !vs->GetRHIShader() || !ps->GetRHIShader()) return EResult::InvalidArgument;
@@ -996,10 +995,17 @@ EResult Renderer::PrepareMeshPipelineDesc(Mesh* mesh, MaterialInterface* materia
 		const auto& inputLayouts = mesh->GetInputLayoutDescs();
 		const std::wstring& vsKey = vs->GetKey();
 		const bool isSkinningVS = (vsKey.find(L"Skinning") != std::wstring::npos || vsKey.find(L"skinning") != std::wstring::npos);
-		const bool hasSkinLayout = (inputLayouts.size() > 2); // EMeshStream::SkinData (슬롯 2)
-		// 최종 안전장치: ResolveVertexShader가 호환성을 보장하므로 통과하지만, 비정상 상황 시 D3D12 크래시 방어
+		const bool hasSkinLayout = (inputLayouts.size() > 2);
 		if (isSkinningVS && !hasSkinLayout) return EResult::InvalidArgument;
-		if (desc.inputLayouts != inputLayouts) desc.inputLayouts = inputLayouts;
+		// 정적 VS인데 스킨드 레이아웃이 온 경우, 셰이더가 요구하지 않는 슬롯 2(SkinData)를 제외하고 안전하게 정적 레이아웃만 전달
+		if (!isSkinningVS && hasSkinLayout)
+		{
+			desc.inputLayouts.assign(inputLayouts.begin(), inputLayouts.begin() + 2);
+		}
+		else
+		{
+			if (desc.inputLayouts != inputLayouts) desc.inputLayouts = inputLayouts;
+		}
 	}
 	else
 	{
@@ -1036,10 +1042,10 @@ EResult Renderer::ValidateMeshMaterial(Mesh* mesh, MaterialInterface* material, 
 
 	RHIPipelineDesc desc;
 	auto result = PreparePassPipelineDesc(renderPass, desc);
-	if (IsFailure(result)) return result;
+	if (result != EResult::Success) return result;
 
 	result = PrepareMeshPipelineDesc(mesh, material, renderPass->GetPassType(), desc);
-	if (IsFailure(result)) return result;
+	if (result != EResult::Success) return result;
 
 	return PipelineManager::Get().GetOrCreatePipeline(desc) ? EResult::Success : EResult::Fail;
 }

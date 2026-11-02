@@ -41,12 +41,25 @@ bool ShortcutManager::RegisterAction(const EditorAction& action)
     return true;
 }
 
-bool ShortcutManager::Rebind(const std::string& actionId, const ShortcutChord& newChord)
+bool ShortcutManager::Rebind(const std::string& actionId, const ShortcutChord& newChord, bool resolveConflict)
 {
     auto it = m_ActiveBindings.find(actionId);
     if (it == m_ActiveBindings.end())
         return false;
-
+    if (newChord.IsValid() && resolveConflict)
+    {
+        const auto* action = FindAction(actionId);
+        if (action)
+        {
+            const std::string conflictId = FindConflict(newChord, action->Context, actionId);
+            if (!conflictId.empty())
+            {
+                auto conflictIt = m_ActiveBindings.find(conflictId);
+                if (conflictIt != m_ActiveBindings.end())
+                    conflictIt->second = ShortcutChord(); // 기존 액션 단축키 해제
+            }
+        }
+    }
     it->second = newChord;
     return true;
 }
@@ -97,8 +110,11 @@ std::string ShortcutManager::FindConflict(
 
 void ShortcutManager::ProcessShortcuts(EShortcutContext activeContext, bool suppressed)
 {
-    if (suppressed)
+    if (suppressed || m_IsCapturing || m_SuppressProcessOnce)
+    {
+        m_SuppressProcessOnce = false;
         return;
+    }
     auto& input = Engine::InputManager::Get();
     // 1. Local Context 검사
     if (activeContext != EShortcutContext::Global)

@@ -18,6 +18,8 @@ private:
 	{
 		LogEntry Entry;
 		std::string DisplayText;
+		std::string SingleLineMessage;
+		std::string TimeString;
 	};
 	struct ConsoleRow
 	{
@@ -38,14 +40,22 @@ private:
 	void DrawSearch();
 	void DrawStatus();
 
+	static std::string FormatTime(const std::chrono::system_clock::time_point& timestamp);
+	static void DrawLevelBadge(Engine::ELogLevel level);
+	static void DrawCategoryBadge(std::string_view category);
+	static void DrawRepeatBadge(std::uint32_t count, bool capped);
+
 	void DrawLog();
-	void DrawLogItem(const ConsoleRow& row);
+	void DrawLogItem(const ConsoleRow& row, float rowHeight);
 	void RebuildVisibleRows();
 
 private:
 	static std::string BuildDisplayText(const LogEntry& entry);
 	static const char* LevelName(Engine::ELogLevel level);
+	static const char* LevelIcon(Engine::ELogLevel level);
+	static const char* CategoryIcon(std::string_view category);
 	static ImVec4 LevelColor(Engine::ELogLevel level);
+private:
 private:
 	deque<ConsoleItem> m_Items;
 	ImGuiTextFilter m_Filter;
@@ -60,5 +70,7 @@ private:
 	uint64 m_EvictedCount = 0;
 
 	std::optional<std::string> m_SourceFilter;
+	int m_SelectedRowIndex = -1;
+	float m_DetailViewHeight = 160.0f;
 };
 END

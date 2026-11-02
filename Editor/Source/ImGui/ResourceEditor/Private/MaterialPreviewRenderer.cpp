@@ -52,40 +52,44 @@ void MaterialPreviewRenderer::Free()
 void MaterialPreviewRenderer::SetupPreviewScene()
 {
 	if (m_PreviewScene) return;
-
 	Engine::SceneCreateDesc desc{};
 	desc.name = L"MaterialPreview_Scene";
 	m_PreviewScene = Engine::Scene::Create(&desc);
 	if (!m_PreviewScene) return;
-
 	auto& registry = m_PreviewScene->GetRegistry();
-
-	// 1. 스튜디오 Directional Light 엔티티 생성 (트랜스폼 회전각으로 조명 방향 제어)
-	m_LightEntity = registry.create();
-	auto& lightTrans = registry.emplace<Engine::TransformComponent>(m_LightEntity);
-	registry.emplace<Engine::WorldTransformComponent>(m_LightEntity);
-	auto& lightFlag = registry.emplace<Engine::FlagComponent>(m_LightEntity);
-	lightFlag.flags = Engine::EEntityFlag::Active | Engine::EEntityFlag::Visible;
-
-	auto& lightComp = registry.emplace<Engine::LightComponent>(m_LightEntity);
-	lightComp.LightType = Engine::ELightType::Directional;
-	lightComp.Intensity = 2.5f;
-	lightComp.Color = vec3(1.0f, 0.98f, 0.95f);
-	lightComp.Flags = Engine::ELightFlags::UseInDeferredRendering | Engine::ELightFlags::AffectDiffuse | Engine::ELightFlags::AffectSpecular;
-	// 우상단에서 대각선 아래로 비추는 스튜디오 조명 각도 설정 (Pitch 45도, Yaw -30도)
-	(void)lightTrans.SetEulerRotation(vec3(45.0f, -30.0f, 0.0f));
-
+	// 방향성 조명 생성 헬퍼 람다
+	auto createDirLight = [&](const vec3& euler, const vec3& color, f32 intensity, bool specular) -> entt::entity
+		{
+			entt::entity e = registry.create();
+			auto& trans = registry.emplace<Engine::TransformComponent>(e);
+			registry.emplace<Engine::WorldTransformComponent>(e);
+			auto& flag = registry.emplace<Engine::FlagComponent>(e);
+			flag.flags = Engine::EEntityFlag::Active | Engine::EEntityFlag::Visible;
+			auto& comp = registry.emplace<Engine::LightComponent>(e);
+			comp.LightType = Engine::ELightType::Directional;
+			comp.Intensity = intensity;
+			comp.Color = color;
+			comp.Flags = Engine::ELightFlags::UseInDeferredRendering | Engine::ELightFlags::AffectDiffuse;
+			if (specular) comp.Flags |= Engine::ELightFlags::AffectSpecular;
+			(void)trans.SetEulerRotation(euler);
+			return e;
+		};
+	// 1. 머티리얼 프리뷰 스튜디오 3점 조명 구축
+	// 1) Key Light (주광): 카메라 시선(정면 우측 상단)에서 비추어 PBR 스펙큘러/반사광 강조
+	m_LightEntity = createDirLight(vec3(30.0f, 25.0f, 0.0f), vec3(1.0f, 0.98f, 0.95f), 2.8f, true);
+	// 2) Fill Light (보조광): 반대편(정면 좌측)에서 비추어 어두운 면의 알베도/텍스처 디테일 보존
+	createDirLight(vec3(15.0f, -45.0f, 0.0f), vec3(0.85f, 0.92f, 1.0f), 1.5f, false);
+	// 3) Rim Light (윤곽광): 뒤쪽 위에서 비추어 구체/큐브의 가장자리에 은은한 림 하이라이트 형성
+	createDirLight(vec3(45.0f, 160.0f, 0.0f), vec3(0.95f, 0.98f, 1.0f), 2.2f, true);
 	// 2. 프리뷰 대상 메쉬 엔티티 생성
 	m_MeshEntity = registry.create();
 	registry.emplace<Engine::TransformComponent>(m_MeshEntity);
 	registry.emplace<Engine::WorldTransformComponent>(m_MeshEntity);
 	auto& flag = registry.emplace<Engine::FlagComponent>(m_MeshEntity);
 	flag.flags = Engine::EEntityFlag::Active | Engine::EEntityFlag::Visible;
-
 	auto& meshComp = registry.emplace<Engine::StaticMeshRendererComponent>(m_MeshEntity);
 	meshComp.meshHandle = m_SphereMesh;
 	meshComp.castShadow = true;
-
 	// 계층 구조 및 라이트 GPU 버퍼 캐시 갱신
 	Engine::TransformSystem::UpdateHierarchy(registry);
 	Engine::LightSystem::UpdateLights(registry);

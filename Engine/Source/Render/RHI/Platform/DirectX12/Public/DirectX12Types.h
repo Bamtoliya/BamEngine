@@ -178,7 +178,7 @@ constexpr D3D12_CULL_MODE ToD3D12CullMode(Engine::ECullMode cullMode)
 
 constexpr BOOL ToD3D12FrontFace(Engine::EFrontFace frontFace)
 {
-	return (frontFace == Engine::EFrontFace::Clockwise) ? TRUE : FALSE;
+	return (frontFace == Engine::EFrontFace::CounterClockwise) ? TRUE : FALSE;
 }
 
 constexpr D3D12_COMPARISON_FUNC ToD3D12ComparisonFunc(Engine::ECompareOp compareOp)

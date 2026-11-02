@@ -183,9 +183,6 @@ private://3D
 	ImGuizmo::MODE m_GizmoMode = { ImGuizmo::MODE::LOCAL };
 	bool m_GizmoUseSnap = { false };
 	bool m_GizmoShowBounds = { false };
-	vec3 m_GizmoSnapTranslation = { 1.0f, 1.0f, 1.0f };
-	vec3 m_GizmoSnapRotation = { 15.0f, 15.0f, 15.0f };
-	vec3 m_GizmoSnapScale = { 0.1f, 0.1f, 0.1f };
 protected:
 	DebugRenderer m_DebugRenderer;
 protected:

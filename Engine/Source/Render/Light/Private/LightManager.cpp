@@ -68,20 +68,15 @@ EResult LightManager::Bind(uint32 slot)
 	return m_RHI->BindStorageBuffer(m_LightBuffers[frameIndex], slot);
 }
 
-EResult LightManager::UpdateLightBuffer()
+EResult LightManager::UpdateLightBuffer(Scene* targetScene)
 {
 	if (IsFailure(EnsureBuffer())) return EResult::Fail;
-
 	const uint32 frameIndex = m_RHI->GetFrameResourceIndex();
-
 	constexpr uint32 headerSize = sizeof(LightBufferHeader);
 	constexpr uint32 totalSize = headerSize + sizeof(GPULight) * MAX_LIGHTS;
-
 	std::array<uint8, totalSize> data{};
-
 	auto* header = reinterpret_cast<LightBufferHeader*>(data.data());
 	auto* gpuLights = reinterpret_cast<GPULight*>(data.data() + headerSize);
-
 	uint32 currentLightIndex = 0;
 	m_ShadowCameraBuffers.clear();
 	m_ShadowData.clear();
@@ -90,76 +85,77 @@ EResult LightManager::UpdateLightBuffer()
 	m_SpotShadowParams = vec4(0.0f);
 	m_PointShadowParams = vec4(0.0f);
 	m_PointShadowPosRange = vec4(0.0f);
-
-	// ECS Scene의 LightComponent 수집
-	if (SceneManager::IsCreated())
+	std::vector<Scene*> scenesToQuery;
+	if (targetScene)
 	{
-		for (Scene* scene : SceneManager::Get().GetActiveScenes())
+		scenesToQuery.push_back(targetScene);
+	}
+	else if (SceneManager::IsCreated())
+	{
+		scenesToQuery = SceneManager::Get().GetActiveScenes();
+	}
+	for (Scene* scene : scenesToQuery)
+	{
+		if (!scene) continue;
+		auto view = scene->GetRegistry().view<LightComponent>();
+		for (const auto entity : view)
 		{
-			if (!scene) continue;
-			auto view = scene->GetRegistry().view<LightComponent>();
-			for (const auto entity : view)
+			if (currentLightIndex >= MAX_LIGHTS) break;
+			const auto& light = view.get<LightComponent>(entity);
+			const auto optGpuLight = light.GetGPULightDesc();
+			if (optGpuLight.has_value())
 			{
-				if (currentLightIndex >= MAX_LIGHTS) break;
-				const auto& light = view.get<LightComponent>(entity);
-				const auto optGpuLight = light.GetGPULightDesc();
-				if (optGpuLight.has_value())
+				gpuLights[currentLightIndex++] = optGpuLight.value();
+			}
+			if (light.LightType == ELightType::Directional)
+			{
+				if (auto optShadowData = light.GetShadowData())
 				{
-					gpuLights[currentLightIndex++] = optGpuLight.value();
+					std::array<CameraBuffer, MAX_SHADOW_CASCADES> cascadeCams{};
+					for (uint32 c = 0; c < MAX_SHADOW_CASCADES; ++c)
+					{
+						if (auto optShadowCam = light.GetShadowCameraBuffer(c))
+							cascadeCams[c] = optShadowCam.value();
+					}
+					m_ShadowCameraBuffers.push_back(cascadeCams);
+					m_ShadowData.push_back(optShadowData.value());
 				}
-				if (light.LightType == ELightType::Directional)
+			}
+			else if (light.LightType == ELightType::Spot && !m_HasSpotShadow && HasFlag(light.Flags, ELightFlags::CastShadows))
+			{
+				if (auto optCam = light.GetShadowCameraBuffer(0))
 				{
-					if (auto optShadowData = light.GetShadowData())
+					m_SpotShadowCameraBuffer = optCam.value();
+					m_SpotShadowViewProj = optCam.value().viewProjMatrix;
+					m_SpotShadowParams = light.GetShadowParams();
+					m_HasSpotShadow = true;
+				}
+			}
+			else if (light.LightType == ELightType::Point && !m_HasPointShadow && HasFlag(light.Flags, ELightFlags::CastShadows))
+			{
+				bool allFacesCollected = true;
+				for (uint32 f = 0; f < 6; ++f)
+				{
+					if (auto optCam = light.GetPointShadowCameraBuffer(f))
 					{
-						std::array<CameraBuffer, MAX_SHADOW_CASCADES> cascadeCams{};
-						for (uint32 c = 0; c < MAX_SHADOW_CASCADES; ++c)
-						{
-							if (auto optShadowCam = light.GetShadowCameraBuffer(c))
-								cascadeCams[c] = optShadowCam.value();
-						}
-						m_ShadowCameraBuffers.push_back(cascadeCams);
-						m_ShadowData.push_back(optShadowData.value());
+						m_PointShadowCameraBuffers[f] = optCam.value();
+					}
+					else
+					{
+						allFacesCollected = false;
+						break;
 					}
 				}
-				else if (light.LightType == ELightType::Spot && !m_HasSpotShadow && HasFlag(light.Flags, ELightFlags::CastShadows))
+				if (allFacesCollected)
 				{
-					if (auto optCam = light.GetShadowCameraBuffer(0))
-					{
-						m_SpotShadowCameraBuffer = optCam.value();
-						m_SpotShadowViewProj = optCam.value().viewProjMatrix;
-						m_SpotShadowParams = light.GetShadowParams();
-						m_HasSpotShadow = true;
-					}
-				}
-				else if (light.LightType == ELightType::Point && !m_HasPointShadow && HasFlag(light.Flags, ELightFlags::CastShadows))
-				{
-					bool allFacesCollected = true;
-					for (uint32 f = 0; f < 6; ++f)
-					{
-						if (auto optCam = light.GetPointShadowCameraBuffer(f))
-						{
-							m_PointShadowCameraBuffers[f] = optCam.value();
-						}
-						else
-						{
-							allFacesCollected = false;
-							break;
-						}
-					}
-
-					if (allFacesCollected)
-					{
-						if (optGpuLight.has_value())
-							m_PointShadowPosRange = vec4(optGpuLight->Position, glm::max(optGpuLight->Range, 0.1f));
-
-						m_PointShadowParams = vec4(light.ShadowBias, light.ShadowSlopeBias, light.ShadowNormalBias, 1.0f);
-						m_HasPointShadow = true;
-					}
+					if (optGpuLight.has_value())
+						m_PointShadowPosRange = vec4(optGpuLight->Position, glm::max(optGpuLight->Range, 0.1f));
+					m_PointShadowParams = vec4(light.ShadowBias, light.ShadowSlopeBias, light.ShadowNormalBias, 1.0f);
+					m_HasPointShadow = true;
 				}
 			}
 		}
 	}
-
 	header->NumLights = currentLightIndex;
 	m_LightBuffers[frameIndex]->SetData(data.data(), totalSize);
 	m_BufferDirty[frameIndex] = false;
@@ -233,7 +229,7 @@ EResult LightManager::EnsureTileBuffers(uint32 width, uint32 height)
 	const uint32 tilesX = (width + 15) / 16;
 	const uint32 tilesY = (height + 15) / 16;
 
-	if (m_TileLightGridBuffer && m_TileLightIndexBuffer && m_TileCountX == tilesX && m_TileCountY == tilesY)
+	if (m_TileLightGridBuffer && m_TileLightIndexBuffer && m_TileCountX >= tilesX && m_TileCountY >= tilesY)
 		return EResult::Success;
 
 	m_TileCountX = tilesX;

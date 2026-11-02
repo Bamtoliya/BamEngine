@@ -76,6 +76,8 @@ private:
 
 	// 풀스크린 쿼드 조명 합성 파이프라인
 	Engine::RHIPipeline* m_LightingPipeline = nullptr;
+
+	Engine::RHIBuffer* m_LocalLightBuffer[MAX_SWAPCHAIN_BUFFERS] = {};
 };
 
 END

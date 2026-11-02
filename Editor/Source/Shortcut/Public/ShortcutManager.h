@@ -23,7 +23,7 @@ private:
 
 public:
     bool RegisterAction(const EditorAction& action);
-    bool Rebind(const std::string& actionId, const ShortcutChord& newChord);
+    bool Rebind(const std::string& actionId, const ShortcutChord& newChord, bool resolveConflict = true);
     void ResetBinding(const std::string& actionId);
     void ResetAllBindings();
 
@@ -31,6 +31,10 @@ public:
 
     // ImGui 의존성 없이, 외부에서 억제 여부(suppressed)를 받아 순수하게 판정
     void ProcessShortcuts(EShortcutContext activeContext = EShortcutContext::Global, bool suppressed = false);
+
+    void SetCapturing(bool capturing) { m_IsCapturing = capturing; }
+    bool IsCapturing() const { return m_IsCapturing; }
+    void SuppressNextProcess() { m_SuppressProcessOnce = true; }
 
     // 액션 실행 및 가능 여부 (UI 클릭 시 호출)
     bool ExecuteAction(const std::string& actionId);
@@ -55,6 +59,8 @@ private:
     std::filesystem::path m_LegacyPath;
     std::unordered_map<std::string, std::string> m_StoredOverrides;
     bool m_CanSaveConfig = false;
+    bool m_IsCapturing = false;
+    bool m_SuppressProcessOnce = false;
 };
 
 END

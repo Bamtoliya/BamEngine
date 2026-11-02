@@ -25,7 +25,8 @@ namespace
 		f32 PlanetRadius = 6360000.0f;
 		uint32 HasIBLMaps = 0u;
 		f32 IBLIntensity = 1.0f;
-		vec2 _iblPad{ 0.0f };
+		uint32 UseTiledCulling = 1u; // 0: 직접 광원 순회(프리뷰), 1: 타일 컬링 광원 순회(메인 씬)
+		f32 _pad = 0.0f;
 		vec4 _reserved{ 0.0f };
 	};
 	static_assert(sizeof(DeferredLightingPassData) == 512);
@@ -57,6 +58,12 @@ void ViewportDeferredPipeline::Free()
 	for (const auto& name : m_OwnedRTNames)
 		rtm.RemoveRenderTarget(name);
 	m_OwnedRTNames.clear();
+
+	for (auto& buf : m_LocalLightBuffer)
+	{
+		Engine::Safe_Release(buf);
+		buf = nullptr;
+	}
 
 	m_ShadowPassID = Engine::INVALID_PASS_ID;
 	m_PointShadowPassID = Engine::INVALID_PASS_ID;
@@ -334,26 +341,38 @@ void ViewportDeferredPipeline::SubmitLightingPass(const CameraBuffer& cameraBuff
 			auto& rtMgr = Engine::RenderTargetManager::Get();
 			auto* sampler = Engine::SamplerManager::Get().GetDefaultSampler();
 			if (!rhi || !sampler || !m_LightingPipeline) return Engine::EResult::Fail;
-
-			// 1. 카메라 버퍼 바인딩 (slot 0 -> b0, space0)
 			CameraBuffer camBuf = cameraBuffer;
 			camBuf.time = static_cast<f32>(Engine::TimeManager::Get().GetTotalTime());
+			const std::wstring sourceNames[] = {
+				m_Prefix + L"GBuffer_Diffuse", m_Prefix + L"GBuffer_Normal", m_Prefix + L"GBuffer_PBR",
+				m_Prefix + L"GBuffer_Emission", m_Prefix + L"GBuffer_Position", m_ShadowDepthName
+			};
+			auto& lightManager = Engine::LightManager::Get();
+			// 1. 타일 기반 광원 컬링 Compute Shader 디스패치 (메인 씬인 경우에만 그래픽스 상태 확립 전에 선행 실행)
+			if (m_AcceptSceneMeshes)
+			{
+				if (auto* posRT = rtMgr.GetRenderTarget(sourceNames[4]))
+				{
+					if (auto* posTex = posRT->GetTexture())
+						lightManager.DispatchLightCulling(camBuf, posTex);
+				}
+			}
+			// 2. 조명 그래픽스 파이프라인 바인딩 (모든 그래픽스 리소스 바인딩보다 먼저 실행하여 Root Signature 상태 확립)
+			if (Engine::IsFailure(rhi->BindPipeline(m_LightingPipeline)))
+				return Engine::EResult::Fail;
+			// 3. 카메라 버퍼 바인딩 (slot 0 -> b0, space0)
 			if (Engine::IsFailure(rhi->BindConstantBuffer(&camBuf, sizeof(CameraBuffer), 0)))
 				return Engine::EResult::Fail;
-
-			Engine::Scene* sceneToQuery = targetScene ? targetScene : Engine::SceneManager::Get().GetCurrentScene();
-
-			// 2. FogData 상수 버퍼 바인딩 (slot 2 -> b0, space3)
+			Engine::Scene* sceneToQuery = targetScene ? targetScene : (Engine::SceneManager::IsCreated() ? Engine::SceneManager::Get().GetCurrentScene() : nullptr);
+			// 4. FogData 상수 버퍼 바인딩 (slot 2 -> b0, space3)
 			Engine::FogData fogData{};
 			fogData.FogEnabled = 0u;
-
 			if (sceneToQuery)
 			{
 				auto fogView = sceneToQuery->GetRegistry().view<Engine::FogComponent>();
 				for (auto [e, fog] : fogView.each())
 				{
 					if (!fog.IsEnabled) continue;
-
 					fogData.FogEnabled = 1u;
 					fogData.FogType = static_cast<uint32>(fog.FogType);
 					fogData.FogColor = fog.FogColor;
@@ -363,7 +382,6 @@ void ViewportDeferredPipeline::SubmitLightingPass(const CameraBuffer& cameraBuff
 					fogData.FogStartDistance = fog.FogStartDistance;
 					fogData.FogEndDistance = fog.FogEndDistance;
 					fogData.FogMaxOpacity = fog.FogMaxOpacity;
-
 					if (fog.AutoSyncAtmosphere)
 					{
 						auto skyView = sceneToQuery->GetRegistry().view<Engine::SkyAtmosphereComponent>();
@@ -379,16 +397,9 @@ void ViewportDeferredPipeline::SubmitLightingPass(const CameraBuffer& cameraBuff
 					break;
 				}
 			}
-
 			if (Engine::IsFailure(rhi->BindConstantBuffer(&fogData, sizeof(fogData), 2)))
 				return Engine::EResult::Fail;
-
-			// 3. GBuffer 5개 + ShadowDepth 텍스처 바인딩 (t0~t5, space3)
-			const std::wstring sourceNames[] = {
-				m_Prefix + L"GBuffer_Diffuse", m_Prefix + L"GBuffer_Normal", m_Prefix + L"GBuffer_PBR",
-				m_Prefix + L"GBuffer_Emission", m_Prefix + L"GBuffer_Position", m_ShadowDepthName
-			};
-
+			// 5. GBuffer 5개 + ShadowDepth 텍스처 바인딩 (t0~t5, space3 및 Root Parameter 8번 Sampler Table 설정)
 			for (uint32 i = 0; i < 6; ++i)
 			{
 				auto* source = rtMgr.GetRenderTarget(sourceNames[i]);
@@ -396,8 +407,7 @@ void ViewportDeferredPipeline::SubmitLightingPass(const CameraBuffer& cameraBuff
 				if (Engine::IsFailure(rhi->BindTextureSampler(source->GetTexture(), sampler, MAX_MATERIAL_TEXTURE_SLOTS + i)))
 					return Engine::EResult::Fail;
 			}
-
-			// 3-1. Point Light TextureCube 바인딩 (t7, space3)
+			// 5-1. Point Light TextureCube 바인딩 (t7, space3)
 			if (auto* pointShadowRT = rtMgr.GetRenderTarget(m_PointShadowDepthName))
 			{
 				if (auto* pointShadowTex = pointShadowRT->GetTexture())
@@ -406,39 +416,62 @@ void ViewportDeferredPipeline::SubmitLightingPass(const CameraBuffer& cameraBuff
 						return Engine::EResult::Fail;
 				}
 			}
-
-			auto& lightManager = Engine::LightManager::Get();
-
-			// 3-2. 타일 기반 광원 컬링 Compute Shader 디스패치
-			if (auto* posRT = rtMgr.GetRenderTarget(sourceNames[4]))
-			{
-				if (auto* posTex = posRT->GetTexture())
-					lightManager.DispatchLightCulling(camBuf, posTex);
-			}
-
-			// 4. 조명 그래픽스 파이프라인 바인딩 (컴퓨트 디스패치 직후 바인딩)
-			if (Engine::IsFailure(rhi->BindPipeline(m_LightingPipeline)))
-				return Engine::EResult::Fail;
-
-			// 4-1. 타일 결과 버퍼 바인딩 (슬롯 1 -> t8, 슬롯 2 -> t9)
+			// 6. 타일 결과 버퍼 바인딩 (슬롯 1 -> t8, 슬롯 2 -> t9)
 			if (auto* gridBuf = lightManager.GetTileLightGridBuffer())
 				rhi->BindStorageBuffer(gridBuf, 1);
 			if (auto* idxBuf = lightManager.GetTileLightIndexBuffer())
 				rhi->BindStorageBuffer(idxBuf, 2);
-
-			// 5. 광원 데이터 버퍼 바인딩 (t6, space3)
-			if (Engine::IsFailure(lightManager.Bind(0)))
-				return Engine::EResult::Fail;
-
+			// 7. 광원 데이터 버퍼 바인딩 (slot 0 -> t6, space3)
+			if (!m_AcceptSceneMeshes)
+			{
+				// [격리] 독립 프리뷰(Thumbnail, MatPreview)는 자체 버퍼를 바인딩하여 씬 뷰포트의 LightManager 오염 방지
+				const uint32 frameIndex = rhi->GetFrameResourceIndex();
+				constexpr uint32 headerSize = sizeof(LightBufferHeader);
+				constexpr uint32 totalSize = headerSize + sizeof(GPULight) * MAX_LIGHTS;
+				if (!m_LocalLightBuffer[frameIndex])
+				{
+					std::array<uint8, totalSize> zeros{};
+					m_LocalLightBuffer[frameIndex] = rhi->CreateBuffer(zeros.data(), totalSize, sizeof(GPULight), ERHIBufferType::Structured);
+				}
+				if (m_LocalLightBuffer[frameIndex])
+				{
+					std::array<uint8, totalSize> data{};
+					auto* header = reinterpret_cast<LightBufferHeader*>(data.data());
+					auto* gpuLights = reinterpret_cast<GPULight*>(data.data() + headerSize);
+					uint32 count = 0;
+					if (targetScene)
+					{
+						auto view = targetScene->GetRegistry().view<Engine::LightComponent>();
+						for (const auto entity : view)
+						{
+							if (count >= MAX_LIGHTS) break;
+							const auto& light = view.get<Engine::LightComponent>(entity);
+							const auto optGpuLight = light.GetGPULightDesc();
+							if (optGpuLight.has_value())
+								gpuLights[count++] = optGpuLight.value();
+						}
+					}
+					header->NumLights = count;
+					m_LocalLightBuffer[frameIndex]->SetData(data.data(), totalSize);
+					if (Engine::IsFailure(rhi->BindStorageBuffer(m_LocalLightBuffer[frameIndex], 0)))
+						return Engine::EResult::Fail;
+				}
+			}
+			else
+			{
+				// 메인 뷰포트(SceneView, GameView)는 안전하게 전역 LightManager 바인딩
+				if (Engine::IsFailure(lightManager.Bind(0)))
+					return Engine::EResult::Fail;
+			}
 			DeferredLightingPassData lightingData{};
 			if (lightManager.HasShadowCastingLights())
 				lightingData.Shadow = lightManager.GetShadowData(0u);
-
-			// skyData로부터 정확한 태양 방향 및 구름 데이터 주입
+			// 메인 씬만 타일 기반 컬링을 켜고, 독립 프리뷰는 타일 컬링 없이 전체 스튜디오 광원 순회
+			lightingData.UseTiledCulling = m_AcceptSceneMeshes ? 1u : 0u;
+			// skyData로부터 태양 방향 및 구름 데이터 주입
 			lightingData.Cloud = skyData.Cloud;
 			lightingData.SunDirection = skyData.SunDirection;
-
-			// ── IBL 텍스처 바인딩 (t10, t11, t12) ──
+			// 8. IBL 텍스처 바인딩 (t10, t11, t12)
 			if (sceneToQuery)
 			{
 				auto skyView = sceneToQuery->GetRegistry().view<Engine::SkyAtmosphereComponent>();
@@ -461,7 +494,6 @@ void ViewportDeferredPipeline::SubmitLightingPass(const CameraBuffer& cameraBuff
 					}
 				}
 			}
-
 			auto& rm = Engine::ResourceManager::Get();
 			auto shapeHandle = rm.GetResourceHandle<Engine::Texture>(L"Resources/Texture/CloudBaseShape3D.bamtex");
 			auto weatherHandle = rm.GetResourceHandle<Engine::Texture>(L"Resources/Texture/CloudWeatherMap2D.bamtex");
@@ -477,15 +509,12 @@ void ViewportDeferredPipeline::SubmitLightingPass(const CameraBuffer& cameraBuff
 					rhi->BindTextureSampler(weatherRHI, sampler, 1);
 				}
 			}
-
-			// 6. 조명 패스 상수 버퍼 바인딩 (slot 3 -> b1, space3)
+			// 9. 조명 패스 상수 버퍼 바인딩 (slot 3 -> b1, space3)
 			if (Engine::IsFailure(rhi->BindConstantBuffer(&lightingData, sizeof(lightingData), 3)))
 				return Engine::EResult::Fail;
-
-			// 7. 풀스크린 쿼드 조명 합성 실행
+			// 10. 풀스크린 쿼드 조명 합성 실행
 			if (Engine::IsFailure(rhi->Draw(3)))
 				return Engine::EResult::Fail;
-
 			return Engine::EResult::Success;
 		},
 		m_LightingPassID

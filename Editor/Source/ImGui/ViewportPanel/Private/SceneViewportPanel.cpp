@@ -6,6 +6,7 @@
 #include "Application.h"
 #include "RenderTargetManager.h"
 #include "SelectionManager.h"
+#include "EditorSettingsService.h"
 #include "InputManager.h"
 #include "ImViewGuizmoCompat.h"
 #include "SceneManager.h"
@@ -330,6 +331,34 @@ void SceneViewportPanel::Draw()
 #pragma region Custom Draws
 void SceneViewportPanel::DrawCustomOptions()
 {
+	auto& prefabMode = PrefabModeManager::Get();
+	if (prefabMode.IsInPrefabMode())
+	{
+		// 1. 좌측: [<- 씬으로 복귀] | 프리팹: 에셋명 * |
+		prefabMode.DrawMenuBarUI();
+
+		// 2. 중앙: 프리팹 편집에 필수적인 기즈모 및 카메라 메뉴
+		DrawGizmoMenu();
+		DrawCameraMenu();
+
+		// 3. 우측: [저장] 버튼 및 채널 뷰 / 2D-3D 토글 정렬
+		const float saveBtnWidth = 80.0f;
+		const float dimGroupWidth = (ImGui::GetFrameHeight() * 1.1f) * 2.0f;
+		const float groupSpacing = ImGui::GetStyle().ItemSpacing.x;
+		const float rightReserved = saveBtnWidth + groupSpacing + dimGroupWidth + groupSpacing;
+
+		ImGui::SameLine(ImGui::GetWindowWidth() - rightReserved - ImGui::GetStyle().WindowPadding.x);
+		if (ImGui::Button((std::string(ICON_FA_FLOPPY_DISK " ") + LOCAL("PrefabEditor.Save")).c_str(), ImVec2(saveBtnWidth, 0.0f)))
+		{
+			prefabMode.SavePrefab();
+		}
+
+		DrawChannelViewButton(dimGroupWidth + groupSpacing);
+		DrawDimensionToggleButton();
+		return;
+	}
+
+	// 일반 씬 뷰포트 헤더바
 	DrawResolutionMenu();
 	DrawSceneRenderTargetMenu();
 	DrawCameraMenu();
@@ -531,11 +560,20 @@ void SceneViewportPanel::DrawGizmoMenu()
 			m_GizmoShowBounds = !m_GizmoShowBounds;
 		if (m_GizmoUseSnap)
 		{
-			ImGui::InputFloat3(LOCAL_LABEL("Viewport.SnapTranslation").c_str(), glm::value_ptr(m_GizmoSnapTranslation));
-			ImGui::InputFloat3(LOCAL_LABEL("Viewport.SnapRotation").c_str(), glm::value_ptr(m_GizmoSnapRotation));
-			ImGui::InputFloat3(LOCAL_LABEL("Viewport.SnapScale").c_str(), glm::value_ptr(m_GizmoSnapScale));
+			auto& settings = EditorSettingsService::Get();
+			const auto& prefs = settings.GetPreferences();
+			float snapT = prefs.GizmoSnapTranslation;
+			float snapR = prefs.GizmoSnapRotation;
+			float snapS = prefs.GizmoSnapScale;
+
+			if (ImGui::DragFloat(LOCAL_LABEL("Viewport.SnapTranslation").c_str(), &snapT, 0.1f, 0.01f, 100.0f, "%.2f"))
+				settings.SetGizmoSnapTranslation(snapT);
+			if (ImGui::DragFloat(LOCAL_LABEL("Viewport.SnapRotation").c_str(), &snapR, 1.0f, 1.0f, 180.0f, "%.1f deg"))
+				settings.SetGizmoSnapRotation(snapR);
+			if (ImGui::DragFloat(LOCAL_LABEL("Viewport.SnapScale").c_str(), &snapS, 0.05f, 0.01f, 10.0f, "%.2f"))
+				settings.SetGizmoSnapScale(snapS);
 		}
-		ImGui::EndMenu();
+		ImGui::EndMenu(); // 1번만 호출되도록 정리
 	}
 }
 
@@ -661,16 +699,16 @@ void SceneViewportPanel::DrawImGuizmo()
 	const glm::mat4 viewMatrix = cameraBuffer->viewMatrix;
 	const glm::mat4 projectionMatrix = cameraBuffer->projMatrix;
 
+	const auto& prefs = EditorSettingsService::Get().GetPreferences();
 	bool useSnap = m_GizmoUseSnap || InputManager::Get().IsCtrlPressed();
-	glm::vec3 snapValues = m_GizmoSnapTranslation;
-
+	glm::vec3 snapValues = glm::vec3(prefs.GizmoSnapTranslation);
 	if (editMode == TransformEditMode::Rotation)
 	{
-		snapValues = m_GizmoSnapRotation;
+		snapValues = glm::vec3(prefs.GizmoSnapRotation);
 	}
 	else if (editMode == TransformEditMode::Scale)
 	{
-		snapValues = m_GizmoSnapScale;
+		snapValues = glm::vec3(prefs.GizmoSnapScale);
 	}
 
 	const auto* settings = TransformPropertyEditor::GetSettings(world, entity, editMode);
@@ -1551,7 +1589,6 @@ void SceneViewportPanel::HandleTerrainSculpting(bool imageHovered)
 		}
 	}
 }
-
 
 void SceneViewportPanel::FocusSelectedEntity()
 {
