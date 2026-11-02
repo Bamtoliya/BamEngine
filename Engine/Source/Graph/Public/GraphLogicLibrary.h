@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "GraphAnnotations.h"
 #include "GraphMathLibrary.h"

@@ -412,9 +412,16 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
 
 ### 10.7 단계 5 — 제작 도구와 콘텐츠 확장
 
+- **애니메이션 기능 확장 — P3 / Phase 5 [코어 및 런타임 완료]**:
+  - **애니메이션 노티파이 (AnimNotify)**: `AnimNotify` 및 `AnimNotifyEvent` 데이터 모델 구축, `AnimState::notifies` 직렬화(`ALLOW_MISSING` 하위 호환성 확보), 루프 래핑 구간 포함 타임라인 검출 및 `AnimatorComponent::notifyCallbacks` 디스패치 파이프라인 완성.
+  - **레이어드 애니메이션 & 본 마스킹 (BoneMask)**: `BoneMask` 스켈레톤 계층 가중치 빌더, `AnimationEvaluator::EvaluateMaskedSkinningMatrices` LERP/SLERP 합성 엔진 구현, `AnimatorComponent::layers` 다중 레이어 구조 및 비주얼 스크립팅 노드(`Animator.SetLayerWeight/GetLayerWeight/StopLayer`) 등록 완료.
+  - **리플렉션 제네릭 컨테이너 에디터**: `ReflectionPropertyDrawer`에서 `std::vector<T>`를 지원하여 인스펙터에서 `[+]` 요소 추가, 트리 노드 전개, 구조체 하위 프로퍼티 편집, `[-]` 삭제 완비.
+  - **런타임 검증 완료**: `Fox` 모델(베이스: `Fox_Walk`, 상체 레이어: `Fox_Survey`, 마스크 본: `b_Spine01_02`)을 통해 상·하체 분리 블렌딩 및 가중치 실시간 조절 동작 검증 완료 (2026-11-03).
+  - **남은 목표 및 후속 과제**:
+    1. *AnimatorGraphPanel 독립 프리뷰 뷰포트 내 레이어 블렌딩 미반영*: 씬 뷰포트와 달리 컨트롤러 패널의 독립 미리보기는 단일 상태/1D 블렌드만 렌더링하므로, 레이어드 합성 프리뷰 파이프라인 보완 필요.
+    2. *2D 블렌드 트리 (Blend Space 2D)*: 속도/방향 2축 삼각망 보간.
+    3. *상태 머신 캔버스 UI 토대 일원화*: `imgui-node-editor` 기반으로 마이그레이션하여 줌/패닝 및 정렬 일관성 확보.
 - 통합 설정 창과 그래프 핀/와이어 편의 메뉴는 기존 저장·초안·입력 동작을 보존하면서 진행한다. 이미 있는 패널/서비스를 재사용한다.
-- 애니메이션은 단계 1의 파일 보호와 단계 2의 재생 검증 뒤 AnimNotify → 필요한 독립 프리뷰 → 레이어/본 마스크 순으로 작은 예제를 만든다.
-  2D 블렌드·IK·리타게팅은 해당 콘텐츠의 요구에 맞춰 선택한다. 머티리얼 그래프 전체를 애니메이션 확장의 필수 조건으로 두지 않는다.
 - 단일 CPU 파티클·스플라인·트레일은 각각 필요한 실행·저장·렌더 제출 기반으로 진행한다. 전체 네트워크나 배포 완료를 기다리지 않는다.
 - 네트워크는 `NetworkFoundationPlan`의 전송/패킷 → 세션 → 리플리케이션/RPC → 예측 순서를 유지한다.
   현재 단일 사용자 제작 경로를 막는 선행 조건으로 격상하지 않는다.

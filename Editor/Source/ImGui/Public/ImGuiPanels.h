@@ -15,3 +15,4 @@
 #include "HistoryPanel.h"
 #include "AnimatorGraphPanel.h"
 #include "UnifiedSettingsPanel.h"
+#include "AssetReferencePanel.h"

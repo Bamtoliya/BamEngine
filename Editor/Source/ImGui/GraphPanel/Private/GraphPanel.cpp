@@ -1,4 +1,4 @@
-#include "GraphPanel.h"
+﻿#include "GraphPanel.h"
 #include "GraphMessageLocalization.h"
 #include "LocalizationManager.h"
 #include "ReflectionRegistry.h"

@@ -134,3 +134,53 @@ void AnimationEvaluator::EvaluateBlendedSkinningMatrices(const Animation& clipA,
 		outBoneMatrices[i] = combinedTransforms[i] * bone.OffsetMatrix;
 	}
 }
+void AnimationEvaluator::EvaluateMaskedSkinningMatrices(const Animation& baseClip, f32 baseTime, const Animation& layerClip, f32 layerTime, const std::vector<float>& boneMaskWeights, f32 layerAlpha, const Skeleton& skeleton, std::vector<mat4>& outBoneMatrices, bool isLoopingBase, bool isLoopingLayer)
+{
+	const auto& bones = skeleton.GetBones();
+	const uint32 boneCount = static_cast<uint32>(bones.size());
+	if (boneCount == 0) { outBoneMatrices.clear(); return; }
+	if (outBoneMatrices.size() != boneCount) outBoneMatrices.resize(boneCount, glm::identity<mat4>());
+
+	const f32 clampedLayerAlpha = std::clamp(layerAlpha, 0.0f, 1.0f);
+	if (clampedLayerAlpha <= 0.0f) { EvaluateSkinningMatrices(baseClip, skeleton, baseTime, outBoneMatrices, isLoopingBase); return; }
+
+	unordered_map<wstring, const AnimationTrack*> trackMapBase;
+	for (const auto& track : baseClip.GetTracks()) trackMapBase[track.TargetBoneName] = &track;
+	unordered_map<wstring, const AnimationTrack*> trackMapLayer;
+	for (const auto& track : layerClip.GetTracks()) trackMapLayer[track.TargetBoneName] = &track;
+
+	std::vector<mat4> combinedTransforms(boneCount, glm::identity<mat4>());
+	for (uint32 i = 0; i < boneCount; ++i)
+	{
+		const auto& bone = bones[i];
+		const float maskWeight = (i < boneMaskWeights.size()) ? boneMaskWeights[i] : 0.0f;
+		const float finalWeight = std::clamp(maskWeight * clampedLayerAlpha, 0.0f, 1.0f);
+
+		vec3 pos; quat rot; vec3 scl;
+		if (finalWeight <= 0.0f)
+		{
+			SampleLocalTRS(baseClip, trackMapBase, bone, baseTime, pos, rot, scl, isLoopingBase);
+		}
+		else if (finalWeight >= 1.0f)
+		{
+			SampleLocalTRS(layerClip, trackMapLayer, bone, layerTime, pos, rot, scl, isLoopingLayer);
+		}
+		else
+		{
+			vec3 posA, posB; quat rotA, rotB; vec3 sclA, sclB;
+			SampleLocalTRS(baseClip, trackMapBase, bone, baseTime, posA, rotA, sclA, isLoopingBase);
+			SampleLocalTRS(layerClip, trackMapLayer, bone, layerTime, posB, rotB, sclB, isLoopingLayer);
+			pos = glm::mix(posA, posB, finalWeight);
+			rot = glm::normalize(glm::slerp(rotA, rotB, finalWeight));
+			scl = glm::mix(sclA, sclB, finalWeight);
+		}
+
+		const mat4 localTransform = glm::translate(mat4(1.0f), pos) * glm::toMat4(rot) * glm::scale(mat4(1.0f), scl);
+		if (bone.ParentIndex >= 0 && static_cast<uint32>(bone.ParentIndex) < boneCount)
+			combinedTransforms[i] = combinedTransforms[bone.ParentIndex] * localTransform;
+		else
+			combinedTransforms[i] = localTransform;
+
+		outBoneMatrices[i] = combinedTransforms[i] * bone.OffsetMatrix;
+	}
+}

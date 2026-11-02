@@ -1,4 +1,4 @@
-#include "EntityHierarchyView.h"
+﻿#include "EntityHierarchyView.h"
 #include "InputManager.h"
 #include "Scene.h"
 #include "CoreComponents.h"

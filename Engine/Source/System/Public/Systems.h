@@ -4,11 +4,14 @@
 #include "CameraSystem.h"
 #include "LightSystem.h"
 #include "PhysicsSystem.h"
-#include "MeshRenderSystem.h"
-#include "SpriteRenderSystem.h"
-#include "UIRenderSystem.h"
+
 #include "AudioSystem.h"
 #include "TerrainSystem.h"
 #include "GraphSystem.h"
+
+#include "UIRenderSystem.h"
+#include "MeshRenderSystem.h"
+#include "SpriteRenderSystem.h"
 #include "SpriteAnimationSystem.h"
 #include "AnimationSystem.h"
+#include "ParticleSystem.h"

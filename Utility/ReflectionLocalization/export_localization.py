@@ -51,6 +51,7 @@ def collect_keys(paths, metadata_names):
 
 def load_catalogs(directory, base_path):
     owners = {}
+    duplicate_locations = {}
     base_rows = {}
     found_base = False
 
@@ -88,11 +89,9 @@ def load_catalogs(directory, base_path):
             final_key = f"{current_group}.{key}" if current_group else key
 
             if final_key in owners:
-                previous_path, previous_line = owners[final_key]
-                raise ValueError(
-                    f"Duplicate key {final_key!r}: "
-                    f"{previous_path}:{previous_line}, {path}:{reader.line_num}"
-                )
+                locations = duplicate_locations.setdefault(final_key, [owners[final_key]])
+                locations.append((path, reader.line_num))
+                continue
 
             owners[final_key] = (path, reader.line_num)
 
@@ -106,6 +105,13 @@ def load_catalogs(directory, base_path):
 
     if not found_base:
         raise ValueError(f"Base CSV was not found in the catalog directory: {base_path}")
+
+        if duplicate_locations:
+            messages = [f"Duplicate keys ({len(duplicate_locations)}):"]
+            for key, locations in sorted(duplicate_locations.items()):
+                positions = ", ".join(f"{path}:{line}" for path, line in locations)
+                messages.append(f"  - {key!r}: {positions}")
+            raise ValueError("\n".join(messages))
 
     return owners, base_rows
 

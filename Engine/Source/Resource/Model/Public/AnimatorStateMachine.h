@@ -83,6 +83,28 @@ struct ENGINE_API TransitionCondition
 };
 
 STRUCT()
+struct ENGINE_API AnimNotify
+{
+	REFLECT_BODY()
+		PROPERTY(EDITABLE)
+		std::string name; // 노티파이 식별자 (예: "Footstep_L", "Attack_Hit")
+	PROPERTY(EDITABLE)
+		float triggerTime = 0.0f; // 상태 타임라인 내 발동 시간 (초)
+	PROPERTY(EDITABLE)
+		std::string payload; // 전달할 추가 파라미터 (예: 사운드 키, 소켓 이름 등)
+	bool operator==(const AnimNotify& other) const {
+		return name == other.name && std::abs(triggerTime - other.triggerTime) < 0.0001f && payload == other.payload;
+	}
+};
+struct ENGINE_API AnimNotifyEvent
+{
+	std::string stateName;
+	std::string notifyName;
+	std::string payload;
+	float triggerTime = 0.0f;
+};
+
+STRUCT()
 struct ENGINE_API AnimState
 {
 	REFLECT_BODY()
@@ -102,7 +124,10 @@ struct ENGINE_API AnimState
 		float playRate = 1.0f;
 
 	PROPERTY(EDITABLE)
-		bool isLooping = true;
+	bool isLooping = true;
+
+	PROPERTY(EDITABLE, ALLOW_MISSING)
+	std::vector<AnimNotify> notifies;
 
 	bool IsBlendTree() const { return isBlendTree; }
 };
@@ -178,11 +203,15 @@ public:
 	bool GetBool(const std::string& name) const { return m_parameters.GetBool(name); }
 
 	const std::string& GetCurrentStateName() const { return m_currentStateName; }
+	const Animation* GetCurrentClip() const;
 	bool IsTransitioning() const { return m_isTransitioning; }
 	float GetTransitionProgress() const { return m_transitionDuration > 0.0f ? (m_transitionElapsed / m_transitionDuration) : 1.0f; }
 
 	float GetStateTime() const { return m_currentStateTime; }
 	void SetStateTime(float time) { m_currentStateTime = std::max(0.0f, time); }
+
+	const std::vector<AnimNotifyEvent>& GetTriggeredNotifies() const { return m_triggeredNotifies; }
+	std::vector<AnimNotifyEvent> PopTriggeredNotifies() { auto res = std::move(m_triggeredNotifies); m_triggeredNotifies.clear(); return res; }
 
 	AnimatorParameters& GetParameters() { return m_parameters; }
 	const AnimatorParameters& GetParameters() const { return m_parameters; }
@@ -199,6 +228,10 @@ private:
 	float m_targetStateTime = 0.0f;
 	float m_transitionElapsed = 0.0f;
 	float m_transitionDuration = 0.25f;
+
+	float m_previousStateTime = 0.0f;
+	std::vector<AnimNotifyEvent> m_triggeredNotifies;
+	void CheckAndTriggerNotifies(const AnimState& state, float prevTime, float newTime, float duration, bool isLooping);
 };
 
 END

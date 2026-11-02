@@ -1,4 +1,4 @@
-#include <QApplication>
+﻿#include <QApplication>
 #include <QDockWidget>
 #include <QLabel>
 #include <QMainWindow>

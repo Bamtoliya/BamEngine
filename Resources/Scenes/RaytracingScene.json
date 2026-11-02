@@ -32,7 +32,7 @@
                         "Data": {
                             "absolute": 0,
                             "eulerRotation": [21.999582290649414, 0, 0],
-                            "position": [0, 8, -18],
+                            "position": [-70.60791015625, 87.48841857910156, -148.00698852539062],
                             "rotation": [0.19080542027950287, 0, 0, 0.981627881526947],
                             "scale": [1, 1, 1]
                         },
@@ -1099,20 +1099,6 @@
                 "Components": [
                     {
                         "Data": {
-                            "controllerPath": "",
-                            "currentClip": {
-                                "AssetKey": "Resources/Model/Fox_Survey.bamanim",
-                                "AssetPath": "Resources/Model/Fox_Survey.bamanim",
-                                "Null": false
-                            },
-                            "isLooping": true,
-                            "isPlaying": true,
-                            "playRate": 1
-                        },
-                        "Type": "Engine::AnimatorComponent"
-                    },
-                    {
-                        "Data": {
                             "flags": 3
                         },
                         "Type": "Engine::FlagComponent"
@@ -1686,7 +1672,7 @@
                             "absolute": 0,
                             "eulerRotation": [0, 0, -6.171761512756348],
                             "position": [24.24032211303711, 0, 0],
-                            "rotation": [0, 0, -0.0538327619433403, 0.9985500574111938],
+                            "rotation": [0, 0, -0.0538327731192112, 0.9985500574111938],
                             "scale": [1, 1, 1]
                         },
                         "Type": "Engine::TransformComponent"
@@ -1958,6 +1944,24 @@
                             },
                             "isLooping": true,
                             "isPlaying": true,
+                            "layers": [
+                                {
+                                    "clip": {
+                                        "AssetKey": "Resources/Model/Fox_Survey.bamanim",
+                                        "AssetPath": "Resources/Model/Fox_Survey.bamanim",
+                                        "Null": false
+                                    },
+                                    "isLooping": true,
+                                    "isPlaying": true,
+                                    "mask": {
+                                        "includeChildren": true,
+                                        "rootBoneName": "b_Spine01_02"
+                                    },
+                                    "name": "UpperBody",
+                                    "playRate": -5.300000190734863,
+                                    "weight": 1
+                                }
+                            ],
                             "playRate": 1
                         },
                         "Type": "Engine::AnimatorComponent"

@@ -333,10 +333,10 @@ void InspectorPanel::DrawPrefabHeaderBar(Engine::Entity& entity)
 					newTr->position = oldPos;
 					newTr->eulerRotation = oldRot;
 					newTr->scale = oldScale;
-					newTr->SynchronizeRotation();
+					(void)newTr->SynchronizeRotation();
 				}
 
-				scene->DestroyEntity(*rootEntity);
+				(void)scene->DestroyEntity(*rootEntity);
 				SelectionManager::Get().SetSelectedEntity(newRoot);
 				NotificationManager::Get().AddNotification(LOCAL("ResourceType.Prefab"), LOCAL("Notification.PrefabReverted"), ELogLevel::Info, 3.0f);
 			}

@@ -384,4 +384,33 @@ namespace Engine::GraphGameplay
 		auto* anim = scene->GetRegistry().try_get<AnimatorComponent>(entity);
 		return anim ? anim->runtimeState.GetBool(name) : false;
 	}
+	// ── 3D Animator 레이어 제어 노드 ──
+	FUNCTION(GRAPH_CALLABLE("Animator.SetLayerWeight"), DISPLAY_NAME("NODE_ANIMATOR_SET_LAYER_WEIGHT"), CATEGORY("Animation"),
+		GRAPH_PIN_DEFAULT("weight", 1.0f))
+		inline void SetAnimatorLayerWeight(std::string layerName, float weight)
+	{
+		Scene* scene = GraphSystem::GetCurrentScene();
+		entt::entity entity = GraphSystem::GetCurrentEntity();
+		if (!scene || entity == entt::null) return;
+		auto* anim = scene->GetRegistry().try_get<AnimatorComponent>(entity);
+		if (anim) anim->SetLayerWeight(layerName, weight);
+	}
+	FUNCTION(GRAPH_PURE("Animator.GetLayerWeight"), DISPLAY_NAME("NODE_ANIMATOR_GET_LAYER_WEIGHT"), CATEGORY("Animation"))
+		inline float GetAnimatorLayerWeight(std::string layerName)
+	{
+		Scene* scene = GraphSystem::GetCurrentScene();
+		entt::entity entity = GraphSystem::GetCurrentEntity();
+		if (!scene || entity == entt::null) return 0.0f;
+		auto* anim = scene->GetRegistry().try_get<AnimatorComponent>(entity);
+		return anim ? anim->GetLayerWeight(layerName) : 0.0f;
+	}
+	FUNCTION(GRAPH_CALLABLE("Animator.StopLayer"), DISPLAY_NAME("NODE_ANIMATOR_STOP_LAYER"), CATEGORY("Animation"))
+		inline void StopAnimatorLayer(std::string layerName)
+	{
+		Scene* scene = GraphSystem::GetCurrentScene();
+		entt::entity entity = GraphSystem::GetCurrentEntity();
+		if (!scene || entity == entt::null) return;
+		auto* anim = scene->GetRegistry().try_get<AnimatorComponent>(entity);
+		if (anim) anim->StopLayer(layerName);
+	}
 }

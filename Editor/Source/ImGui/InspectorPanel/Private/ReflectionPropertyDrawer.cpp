@@ -1193,9 +1193,75 @@ namespace Editor
 		}
 		else if (property.IsContainer())
 		{
-			const auto size = property.TryGetSize(object);
-			const auto preview = size ? LOCAL_FMT("UI_ELEMENT_COUNT", size.Size) : LOCAL("UI_SIZE_UNAVAILABLE");
-			ImGui::TextDisabled("%s", preview.c_str());
+			const auto sizeResult = property.TryGetSize(object);
+			const std::size_t count = sizeResult ? sizeResult.Size : 0;
+			const auto preview = sizeResult ? LOCAL_FMT("UI_ELEMENT_COUNT", count) : LOCAL("UI_SIZE_UNAVAILABLE");
+
+			const auto* elementType = registry ? registry->FindType(property.GetElementCppType()) : nullptr;
+			const bool isObjectSequence = (elementType != nullptr) && property.CanEditElementObject();
+
+			// 컨테이너 트리 노드 헤더 (예: "요소 0개###ContainerTree_layers")
+			const std::string treeLabel = fmt::format("{}###ContainerTree_{}", preview, property.Name);
+			const bool nodeOpen = ImGui::TreeNode(treeLabel.c_str());
+
+			// [+] 요소 추가 버튼: property.TryResize(count + 1) 호출
+			if (property.CanResize() && canEdit)
+			{
+				ImGui::SameLine();
+				if (ImGui::SmallButton((ICON_FA_PLUS "##Add_" + property.Name).c_str()))
+				{
+					if (property.TryResize(object, count + 1) == reflection::PropertyAccessError::None)
+					{
+						changed = true;
+					}
+				}
+				if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("UI_ADD_VALUE"));
+			}
+
+			if (nodeOpen)
+			{
+				std::size_t toRemoveIndex = std::numeric_limits<std::size_t>::max();
+
+				for (std::size_t i = 0; i < count; ++i)
+				{
+					ImGui::PushID(static_cast<int>(i));
+
+					if (isObjectSequence)
+					{
+						// 리플렉션 구조체 요소인 경우 서브 트리 노드 및 하위 프로퍼티 테이블 렌더링
+						auto elementResult = property.TryEditElementObject(object, i);
+						if (elementResult && elementResult.Object.IsValid())
+						{
+							std::string typeName = elementType->QualifiedName;
+							if (const auto pos = typeName.rfind("::"); pos != std::string::npos) typeName = typeName.substr(pos + 2);
+							const std::string elementLabel = fmt::format("[{}] {}###Element_{}", i, typeName, i);
+							if (ImGui::TreeNode(elementLabel.c_str()))
+							{
+								if (property.CanErase() && canEdit)
+								{
+									ImGui::SameLine(ImGui::GetContentRegionAvail().x - 24.0f);
+									if (ImGui::SmallButton(ICON_FA_TRASH "##DelElem")) toRemoveIndex = i;
+								}
+
+								changed |= DrawPropertyTable(*elementType, elementResult.Object, registry, editSettings);
+								ImGui::TreePop();
+							}
+						}
+					}
+					ImGui::PopID();
+				}
+
+				// [-] 요소 삭제: property.TryErase(toRemoveIndex) 호출
+				if (toRemoveIndex < count && property.CanErase() && canEdit)
+				{
+					if (property.TryErase(object, toRemoveIndex) == reflection::PropertyAccessError::None)
+					{
+						changed = true;
+					}
+				}
+
+				ImGui::TreePop();
+			}
 		}
 		else
 		{

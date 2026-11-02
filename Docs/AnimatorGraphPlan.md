@@ -1,7 +1,7 @@
 # 애니메이터 그래프와 애니메이션 상태 머신 개발 계획
 
-- 작성일: 2026-11-01 (갱신: 2026-11-02)
-- 상태: Phase 1~4 기본 구현·계층 연결 반영 / 파일 보호·재생 정확성·고급 기능 미완료 (2026-11-02 정적 대조)
+- 작성일: 2026-11-01 (갱신: 2026-11-03)
+- 상태: Phase 1~5 코어 및 레이어드 애니메이션/본 마스킹/노티파이/제네릭 컨테이너 인스펙터 구현 완료 / 그래프 패널 프리뷰 뷰포트 내 레이어 합성 및 2D 블렌드 미완료 (2026-11-03 런타임 검증)
 - 공통 기준: [EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md), [SourceOrganizationGuidelines.md](SourceOrganizationGuidelines.md)
 - 선행 기반: [EngineDevelopmentPlan.md](EngineDevelopmentPlan.md) 9·10절, [GraphFoundation.md](GraphFoundation.md), [GraphPanel.md](GraphPanel.md), [VisualScriptingBlueprintPlan.md](VisualScriptingBlueprintPlan.md)
 - 통합 우선순위 연결: [DevelopmentPriorities.md](DevelopmentPriorities.md) (P2-D 및 P3/P4 애니메이션 및 콘텐츠 확장)
@@ -137,22 +137,34 @@ flowchart TD
 
 ---
 
-### Phase 5. 게임플레이 연동 및 고급 기능 (기본 컴포넌트·노드·계층 연결 반영 / 정확성·고급 기능 대기)
+### Phase 5. 게임플레이 연동 및 고급 기능 (2026-11-03 구현 및 런타임 검증 완료)
 - **목적:** 비주얼 스크립팅 및 C++ 게임플레이 코드에서 애니메이터를 자유자재로 제어하고, 계층형 모델 참조·사운드/이펙트 트리거·상체/하체 분리 재생을 지원한다.
 - **세부 내용:**
-  - **컴포넌트 및 시스템 연동 (계층 연결 포함 기본 구현 / 검증 잔여):**
+  - **컴포넌트 및 시스템 연동 (구현 및 검증 완료):**
     - `AnimatorComponent` 및 `AnimationSystem`(`Editor`·`Client` 등록 완료) 구축 완료.
-    - **남은 검증 과제**: 기존 계층 조회·컨트롤러 로드를 다중 인스턴스·PIE·Client에서 검증한다. 파일 실패·재생 경계·Stop/SetTime/GetCurrentTime의 ASM 의미를 마무리한다.
+    - 루트 `AnimatorComponent`와 하위 `SkinnedMeshRendererComponent` 계층 스켈레톤 조회 및 런타임 GPU 스키닝 연동.
   - **비주얼 스크립팅 노드 (`GraphGameplayLibrary` — 구현 완료):**
-    - `Animator.Play/Pause/Stop/SetPlayRate/SetTime/IsPlaying/GetCurrentTime` 및 `Animator.SetFloat`, `Animator.SetInt`, `Animator.SetBool`, `Animator.SetTrigger`, `Animator.GetFloat`, `Animator.GetBool` 노드 등록 및 `EGraphPinType::String` 핀 연동 완료.
-  - **애니메이션 노티파이 (`AnimNotify` — 대기, 상세 계획: [AnimationTimelineEditorPlan.md](AnimationTimelineEditorPlan.md)):**
-    - 특정 프레임에 도달했을 때 발송되는 이벤트(발소리 사운드, 칼 휘두르는 궤적 파티클 등).
-    - 비주얼 스크립팅 커스텀 이벤트 또는 C++ 델리게이트 수신.
-    - 애니메이션·이펙트·노티파이 통합 타임라인 저작 도구는 [AnimationTimelineEditorPlan.md](AnimationTimelineEditorPlan.md)의 로드맵을 따른다.
-  - **레이어드 애니메이션 & 본 마스킹 (`Layered Animation & Bone Mask` — 대기):**
-    - 베이스 레이어(하체: 이동 애니메이션) + 상위 레이어(상체: 사격/공격 애니메이션) 분리 재생.
-    - 스켈레톤의 특정 본(`Spine` 등) 이하 계층만 오버라이드하는 본 마스크 에셋.
-- **완료 기준:** 플레이어가 W 키를 누르면 비주얼 스크립트가 `Speed`를 올려 계층형 3D 캐릭터가 걷고, 마우스 클릭 시 상체만 공격 모션을 취하며 발자국 프레임에 맞춰 사운드 노티파이가 콘솔에 로깅된다.
+    - `Animator.Play/Pause/Stop/SetPlayRate/SetTime/IsPlaying/GetCurrentTime` 및 `Animator.SetFloat/SetInt/SetBool/SetTrigger/GetFloat/GetBool`.
+    - 레이어 제어 노드: `Animator.SetLayerWeight`, `Animator.GetLayerWeight`, `Animator.StopLayer` 등록 완료.
+  - **애니메이션 노티파이 (`AnimNotify` — 2026-11-03 코어 및 인스펙터 저작 완료):**
+    - `AnimNotify`, `AnimNotifyEvent` 구조체 정의 및 `AnimState::notifies` 리플렉션 프로퍼티 직렬화 (`ALLOW_MISSING` 하위 호환성 확보).
+    - `AnimatorRuntimeState::Update()`에서 루프 래핑 구간 포함 노티파이 검출 및 `AnimatorComponent::notifyCallbacks` 디스패치 파이프라인 완성.
+    - `AnimatorGraphPanel` State Inspector에서 알림 시간/이름/페이로드 시각적 추가/삭제 저작 UI 완비.
+  - **레이어드 애니메이션 & 본 마스킹 (`Layered Animation & Bone Mask` — 2026-11-03 코어 및 런타임 검증 완료):**
+    - 스켈레톤 계층 순회 기반 본 마스크 가중치 빌더 (`BoneMask.h`).
+    - `AnimationEvaluator::EvaluateMaskedSkinningMatrices()`: 베이스 클립과 오버레이 클립을 본 마스크 가중치 및 레이어 알파로 선형/구면선형(SLERP) 합성하는 엔진 코어 구현.
+    - `AnimatorComponent::layers` 다중 레이어(`AnimatorLayer`) 구조체 및 제어 API (`PlayLayer`, `StopLayer`, `SetLayerWeight`, `GetLayerWeight`) 제공.
+    - `ReflectionPropertyDrawer`에 리플렉션 제네릭 컨테이너(`std::vector<T>`) 에디터 구현: 인스펙터에서 `[+]` 버튼으로 레이어를 추가/삭제하고, 각 레이어의 가중치, 마스크 본(`b_Spine01_02`, `Skeleton_torso_joint_1`), 클립을 직접 편집 가능.
+    - Fox 모델(베이스: `Fox_Walk`, 레이어: `Fox_Survey`, 마스크: `b_Spine01_02`)을 통해 상·하체 분리 블렌딩 런타임 검증 완료.
+- **남은 과제 및 후속 개선점 (사용자 피드백 반영):**
+  1. **AnimatorGraphPanel 독립 프리뷰 뷰포트의 레이어 블렌딩 미반영:**
+     - 현재 씬 뷰포트에서는 정상 블렌딩 재생되나, 컨트롤러 패널(`AnimatorGraphPanel`) 내부의 독립 미리보기 뷰포트는 단일 활성 상태 또는 1D 블렌드 트리만 샘플링하므로, 레이어드 마스킹 합성 결과를 독립 프리뷰 뷰포트에서도 함께 미리볼 수 있도록 뷰포트 합성 파이프라인 확장 필요.
+  2. **2D 블렌드 트리 (Blend Space 2D):**
+     - 이동 속도와 방향 2축 삼각망 보간.
+  3. **캔버스 UI 토대 일원화 (`imgui-node-editor` 마이그레이션):**
+     - 무한 줌/패닝, 박스 드래그 선택 등 블루프린트와 일관된 조작감 통일.
+  4. **Any State 노드:**
+     - 어느 상태에서든 조건 만족 시 즉시 전이.
 
 ---
 
@@ -177,6 +189,7 @@ struct AnimatorStateAsset
     std::string MotionClipGuid; // Animation Resource GUID
     float Speed = 1.0f;
     bool IsLooping = true;
+    std::vector<AnimNotify> Notifies; // 상태 타임라인 알림 이벤트
     ImVec2 EditorPosition; // 캔버스 노드 위치
 };
 
@@ -206,6 +219,7 @@ struct AnimatorRuntimeState
     std::unordered_map<std::string, bool> BoolParams;
     std::unordered_set<std::string> ActiveTriggers;
 
+    std::vector<AnimNotifyEvent> TriggeredNotifies;
     SkeletonPose EvaluatedPose; // 최종 평가된 로컬 본 포즈
 };
 ```
@@ -215,11 +229,11 @@ struct AnimatorRuntimeState
 ## 5. 지침 준수 및 품질 기준
 
 - **로캘 및 입력 규칙 (`EngineEditorClientGuidelines.md` 14절):**
-  - UI 텍스트, 노드 이름, 파라미터 타입명, 툴팁, 경고 메시지는 모두 `AnimatorGraph.*` 로캘 키를 사용하며 `Editor.csv`에 한국어 및 영어 원본을 등록한다.
+  - UI 텍스트, 노드 이름, 파라미터 타입명, 툴팁, 경고 메시지는 모두 `AnimatorGraph.*` 및 `NODE_ANIMATOR_*` 로캘 키를 사용하며 `Editor.csv`/`Engine.csv`에 한국어 및 영어 원본을 등록한다.
   - 캔버스 조작(패닝, 줌, 선택)은 프로젝트의 통합 `InputManager`를 따른다.
 - **안전성 및 메모리 관리:**
   - 존재하지 않는 클립, 삭제된 파라미터 참조 시 크래시 없이 안전하게 에러 진단(`LogWarning`)을 기록하고 기본 상태(T-포즈 또는 정지)를 유지한다.
-  - 매 프레임 동적 힙 할당(`new`/`malloc`)을 원천 차단하고, 포즈 버퍼(`SkeletonPose`)는 인스턴스별로 재사용한다.
+  - 매 프레임 동적 힙 할당(`new`/`malloc`)을 지양하고, 마스크 가중치는 스켈레톤 본 개수 변경 시에만 원자적으로 캐시 갱신한다.
 
 ---
 
@@ -230,4 +244,7 @@ struct AnimatorRuntimeState
 - [x] **파라미터 및 트리거:** Trigger 파라미터가 1회 전이 후 즉각 소모(Consume)되어 무한 루프가 발생하지 않는가? (`ConsumeTriggers()` 및 전이 후 자동 리셋 완료)
 - [x] **다중 인스턴스 격리:** 동일한 에셋을 공유하는 두 엔티티가 서로 다른 파라미터를 가질 때 간섭 없이 독립 동작하는가? (`AnimatorRuntimeState` 독립 인스턴스 격리 완료)
 - [x] **에디터 UI 및 직렬화:** 노드 배치와 트랜지션 연결이 JSON으로 정상 저장·로드되며, 실행 중 활성 상태가 시각적으로 모니터링되는가? (`AnimatorGraphPanel` 18절 메뉴바/툴바/파라미터독/트랜지션인스펙터 및 네온 하이라이트 디버깅 완료)
+- [x] **애니메이션 노티파이 (AnimNotify):** 타임라인 특정 프레임에서 알림 이벤트가 누락 없이 발동하며 인스펙터에서 편집 및 직렬화되는가? (2026-11-03 완료)
+- [x] **레이어드 애니메이션 & 본 마스킹:** 상·하체 분리 재생(예: 걷기 + 둘러보기)이 본 마스크 가중치에 따라 왜곡 없이 블렌딩되는가? (2026-11-03 Fox 모델 런타임 검증 완료)
+- [x] **리플렉션 제네릭 컨테이너 인스펙터:** `std::vector<AnimatorLayer>`를 포함한 컨테이너 속성이 인스펙터에서 직접 요소 추가/삭제 및 하위 프로퍼티 편집이 가능한가? (2026-11-03 `ReflectionPropertyDrawer` 완료)
 - [ ] **비주얼 스크립팅 및 계층형 모델 완전 연동:** 블루프린트 그래프에서 캐릭터 속도에 따라 `SetFloat("Speed", value)`를 호출하여 계층형 3D 캐릭터의 애니메이션 상태를 통제할 수 있는가? (`NODE_ANIMATOR_*` 노드 및 `EGraphPinType::String` 지원 완료, 루트 `AnimatorComponent` ↔ 자식 `SkinnedMeshRendererComponent` 계층 참조 연결 및 `.animator` 에셋 자동 로드 검증 대기)

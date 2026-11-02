@@ -4,14 +4,42 @@
 #include "ResourceHandle.h"
 #include "Animation.h"
 #include "AnimatorStateMachine.h"
-#include <vector>
-#include <memory>
-#include <string>
+#include "BoneMask.h"
 
 namespace Engine
 {
+	STRUCT()
+		struct ENGINE_API AnimatorLayer
+	{
+		REFLECT_BODY()
+
+			PROPERTY(EDITABLE, ALLOW_MISSING)
+			std::string name = "UpperBody";
+
+		PROPERTY(EDITABLE, ALLOW_MISSING)
+			float weight = 0.0f;
+
+		PROPERTY(EDITABLE, ALLOW_MISSING)
+			BoneMask mask;
+
+		PROPERTY(EDITABLE, ALLOW_MISSING)
+			ResourceHandle<Animation> clip;
+
+		PROPERTY(EDITABLE, ALLOW_MISSING)
+			float playRate = 1.0f;
+
+		PROPERTY(EDITABLE, ALLOW_MISSING)
+			bool isLooping = false;
+
+		PROPERTY(EDITABLE, ALLOW_MISSING)
+			bool isPlaying = false;
+
+		PROPERTY(READONLY, NOSERIALIZE)
+			float currentTime = 0.0f;
+	};
+
 	STRUCT(COMPONENT, DISPLAY_NAME("STRUCT_ANIMATOR"), CATEGORY("CATEGORY_RENDER"))
-		struct AnimatorComponent
+	struct AnimatorComponent
 	{
 		REFLECT_BODY()
 
@@ -42,6 +70,53 @@ namespace Engine
 		AnimatorRuntimeState runtimeState;
 		std::shared_ptr<AnimatorStateMachine> stateMachineAsset;
 		std::string loadedControllerPath;
+
+		using AnimNotifyCallback = std::function<void(entt::entity entity, const AnimNotifyEvent& event)>;
+		std::vector<AnimNotifyCallback> notifyCallbacks;
+		void RegisterNotifyCallback(AnimNotifyCallback callback)
+		{
+			notifyCallbacks.push_back(std::move(callback));
+		}
+
+		PROPERTY(EDITABLE, ALLOW_MISSING, DISPLAY_NAME("PROP_ANIMATOR_LAYERS"))
+		std::vector<AnimatorLayer> layers;
+		AnimatorLayer* FindLayer(const std::string& name)
+		{
+			for (auto& layer : layers) { if (layer.name == name) return &layer; }
+			return nullptr;
+		}
+		const AnimatorLayer* FindLayer(const std::string& name) const
+		{
+			for (const auto& layer : layers) { if (layer.name == name) return &layer; }
+			return nullptr;
+		}
+		void PlayLayer(const std::string& name, ResourceHandle<Animation> clip, float weight = 1.0f, bool isLooping = false)
+		{
+			auto* layer = FindLayer(name);
+			if (!layer)
+			{
+				layers.push_back(AnimatorLayer{ name, weight, BoneMask{ L"Spine", true }, clip, 1.0f, isLooping, true, 0.0f });
+				return;
+			}
+			layer->clip = clip;
+			layer->weight = weight;
+			layer->isLooping = isLooping;
+			layer->isPlaying = true;
+			layer->currentTime = 0.0f;
+		}
+		void StopLayer(const std::string& name)
+		{
+			if (auto* layer = FindLayer(name)) { layer->isPlaying = false; layer->currentTime = 0.0f; }
+		}
+		void SetLayerWeight(const std::string& name, float weight)
+		{
+			if (auto* layer = FindLayer(name)) layer->weight = std::clamp(weight, 0.0f, 1.0f);
+		}
+		float GetLayerWeight(const std::string& name) const
+		{
+			const auto* layer = FindLayer(name);
+			return layer ? layer->weight : 0.0f;
+		}
 
 		void Play() { isPlaying = true; }
 		void Pause() { isPlaying = false; }

@@ -308,21 +308,21 @@ void ConsolePanel::DrawLog()
     const float rowHeight = ImGui::GetTextLineHeight() + 8.0f;
     const bool hasSelection = (m_SelectedRowIndex >= 0 && m_SelectedRowIndex < static_cast<int>(m_Items.size()));
     const float splitterHeight = 6.0f;
+    const float spacingY = ImGui::GetStyle().ItemSpacing.y;
     const float totalAvailY = ImGui::GetContentRegionAvail().y;
+    if (totalAvailY < 1.0f) return;
 
-    // 상세 뷰 높이 클램핑 (최소 60px ~ 테이블을 가리지 않는 최대 높이)
-    float activeDetailHeight = 0.0f;
-    if (hasSelection)
-    {
-        const float minDetailHeight = 60.0f;
-        const float maxDetailHeight = (std::max)(minDetailHeight, totalAvailY - 80.0f);
-        m_DetailViewHeight = std::clamp(m_DetailViewHeight, minDetailHeight, maxDetailHeight);
-        activeDetailHeight = m_DetailViewHeight;
-    }
+    const float minTableHeight = (std::max)(60.0f, rowHeight * 2.0f);
+    const float minDetailHeight = 60.0f;
+    const float detailOverhead = splitterHeight + spacingY * 2.0f;
+    const float maxDetailHeight = totalAvailY - minTableHeight - detailOverhead;
+    const bool showDetail = hasSelection && maxDetailHeight >= minDetailHeight;
 
-    const float tableHeight = hasSelection
-        ? (totalAvailY - activeDetailHeight - splitterHeight - ImGui::GetStyle().ItemSpacing.y)
-        : totalAvailY;
+    const float activeDetailHeight = showDetail
+        ? std::clamp(m_DetailViewHeight, minDetailHeight, maxDetailHeight) : 0.0f;
+    if (showDetail) m_DetailViewHeight = activeDetailHeight;
+
+    const float tableHeight = totalAvailY - activeDetailHeight - (showDetail ? detailOverhead : 0.0f);
 
     const ImGuiTableFlags tableFlags =
         ImGuiTableFlags_RowBg |
@@ -330,7 +330,7 @@ void ConsolePanel::DrawLog()
         ImGuiTableFlags_BordersInnerV |
         ImGuiTableFlags_ScrollY |
         ImGuiTableFlags_SizingFixedFit;
-    const ImVec2 tableSize = ImVec2(0.0f, (std::max)(tableHeight, 60.0f));
+    const ImVec2 tableSize(0.0f, tableHeight);
 
     if (ImGui::BeginTable("ConsoleLogTable", 4, tableFlags, tableSize))
     {
@@ -343,7 +343,7 @@ void ConsolePanel::DrawLog()
         ImGui::TableHeadersRow();
 
         ImGuiListClipper clipper;
-        clipper.Begin(static_cast<int>(m_VisibleRows.size()), rowHeight);
+        clipper.Begin(static_cast<int>(m_VisibleRows.size()));
         while (clipper.Step())
         {
             for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; ++row)
@@ -360,7 +360,7 @@ void ConsolePanel::DrawLog()
     }
 
     // ── 하단 로그 상세 보기 창 및 상하 인터랙티브 스플리터 ──
-    if (hasSelection)
+    if (showDetail)
     {
         // 1. 수직 스플리터 바 (드래그로 높이 조절)
         const ImVec2 splitterPos = ImGui::GetCursorScreenPos();
@@ -380,14 +380,8 @@ void ConsolePanel::DrawLog()
 
         if (isSplitterActive)
         {
-            const float deltaY = ImGui::GetIO().MouseDelta.y;
-            if (deltaY != 0.0f)
-            {
-                m_DetailViewHeight -= deltaY;
-                const float minDetailHeight = 60.0f;
-                const float maxDetailHeight = (std::max)(minDetailHeight, totalAvailY - 80.0f);
-                m_DetailViewHeight = std::clamp(m_DetailViewHeight, minDetailHeight, maxDetailHeight);
-            }
+            const float deltaY = InputManager::Get().GetMouseDelta().y;
+            m_DetailViewHeight = std::clamp(activeDetailHeight - deltaY, minDetailHeight, maxDetailHeight);
         }
         ImGui::PopStyleColor(3);
 
@@ -408,7 +402,7 @@ void ConsolePanel::DrawLog()
 
         // 2. 상세 뷰 본문
         const auto& selected = m_Items[m_SelectedRowIndex];
-        if (ImGui::BeginChild("LogDetailView", ImVec2(0.0f, m_DetailViewHeight), true, ImGuiWindowFlags_None))
+        if (ImGui::BeginChild("LogDetailView", ImVec2(0.0f, activeDetailHeight), true, ImGuiWindowFlags_None))
         {
             // 상단 메타 정보 헤더
             DrawLevelBadge(selected.Entry.Level);

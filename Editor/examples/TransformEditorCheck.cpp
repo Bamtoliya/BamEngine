@@ -1,4 +1,4 @@
-#include "TransformPropertyEditor.h"
+﻿#include "TransformPropertyEditor.h"
 #include "Reflection/ReflectionRegistry.h"
 #include <archive/JsonArchive.h>
 #include <utility>

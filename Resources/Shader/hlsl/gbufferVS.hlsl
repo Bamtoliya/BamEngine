@@ -39,14 +39,16 @@ VS_OUTPUT main(VS_INPUT input, uint instanceId : SV_InstanceID)
     output.WorldPos = worldPosition.xyz;
 
     // 비균일/음수 스케일 역전치 법선 보정 (외적을 통한 여인수 기저 계산)
-    float3 axisX = world[0].xyz;
-    float3 axisY = world[1].xyz;
-    float3 axisZ = world[2].xyz;
-    float3 normalWorld = input.Normal.x * cross(axisY, axisZ) +
-                         input.Normal.y * cross(axisZ, axisX) +
-                         input.Normal.z * cross(axisX, axisY);
+    float3 axisX = float3(world[0][0], world[1][0], world[2][0]);
+    float3 axisY = float3(world[0][1], world[1][1], world[2][1]);
+    float3 axisZ = float3(world[0][2], world[1][2], world[2][2]);
 
-    output.Normal = normalize(normalWorld);
+    float3 normalWorld = input.Normal.x * cross(axisY, axisZ) +
+                        input.Normal.y * cross(axisZ, axisX) +
+                        input.Normal.z * cross(axisX, axisY);
+
+    float determinantSign = dot(axisX, cross(axisY, axisZ)) < 0.0f ? -1.0f : 1.0f;
+    output.Normal = normalize(normalWorld * determinantSign);
     output.TexCoord = input.TexCoord;
     output.Tangent = normalize(mul(world, float4(input.Tangent, 0.0f)).xyz);
     output.Color = input.Color;

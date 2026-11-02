@@ -657,6 +657,57 @@ void AnimatorGraphPanel::DrawStateInspector(Engine::AnimState& state)
 		}
 		if (needSort) state.blendTree.SortSamples();
 	}
+	// 애니메이션 노티파이 (Notifies) 저작 섹션
+	ImGui::Spacing();
+	ImGui::Separator();
+	ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "%s (%d)", LOCAL_CSTR("AnimatorGraph.Notifies"), static_cast<int>(state.notifies.size()));
+	ImGui::SameLine(ImGui::GetContentRegionAvail().x - 24.0f);
+	if (ImGui::Button(ICON_FA_PLUS "##AddNotify"))
+	{
+		state.notifies.push_back(Engine::AnimNotify{ "NewNotify", 0.0f, "" });
+		m_IsDirty = true;
+	}
+	int notifyToRemove = -1;
+	for (size_t i = 0; i < state.notifies.size(); ++i)
+	{
+		auto& notify = state.notifies[i];
+		ImGui::PushID(static_cast<int>(i));
+		// 발동 시간 (초)
+		ImGui::SetNextItemWidth(65.0f);
+		if (ImGui::DragFloat("##NotifyTime", &notify.triggerTime, 0.02f, 0.0f, 60.0f, "%.2fs")) m_IsDirty = true;
+		if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("AnimatorGraph.NotifyTime"));
+		// 노티파이 식별 이름
+		ImGui::SameLine();
+		ImGui::SetNextItemWidth(100.0f);
+		char nameBuf[64] = {};
+		std::strncpy(nameBuf, notify.name.c_str(), sizeof(nameBuf) - 1);
+		if (ImGui::InputText("##NotifyName", nameBuf, sizeof(nameBuf)))
+		{
+			notify.name = nameBuf;
+			m_IsDirty = true;
+		}
+		if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("AnimatorGraph.NotifyName"));
+		// 페이로드 (추가 데이터)
+		ImGui::SameLine();
+		ImGui::SetNextItemWidth(90.0f);
+		char payloadBuf[128] = {};
+		std::strncpy(payloadBuf, notify.payload.c_str(), sizeof(payloadBuf) - 1);
+		if (ImGui::InputText("##NotifyPayload", payloadBuf, sizeof(payloadBuf)))
+		{
+			notify.payload = payloadBuf;
+			m_IsDirty = true;
+		}
+		if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("AnimatorGraph.NotifyPayload"));
+		// 삭제 버튼
+		ImGui::SameLine();
+		if (ImGui::SmallButton(ICON_FA_TRASH "##DelNotify")) notifyToRemove = static_cast<int>(i);
+		ImGui::PopID();
+	}
+	if (notifyToRemove >= 0 && notifyToRemove < static_cast<int>(state.notifies.size()))
+	{
+		state.notifies.erase(state.notifies.begin() + notifyToRemove);
+		m_IsDirty = true;
+	}
 }
 
 void AnimatorGraphPanel::DrawTransitionInspector(Engine::AnimTransition& tr)

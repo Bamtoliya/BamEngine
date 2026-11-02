@@ -1,4 +1,4 @@
-#include "GraphNodePalette.h"
+﻿#include "GraphNodePalette.h"
 #include <iostream>
 #include <stdexcept>
 

@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "Components/UI/CanvasComponent.h"
 #include "Components/UI/RectTransformComponent.h"

@@ -82,28 +82,74 @@ void AnimationSystem::OnUpdate(entt::registry& registry, const vector<Scene*>& a
 			const auto* skeleton = FindSkeletonInHierarchy(world, entity);
 			if (!skeleton || !animator.isPlaying) continue;
 
-			// 3. 상태 머신이 바인딩되어 있는 경우 ASM 런타임 갱신, 아니면 단일 클립 평가
+			// 3. 베이스 레이어(ASM 또는 단일 클립) 평가
+			const Animation* baseClip = nullptr;
+			float baseTime = animator.currentTime;
+			bool isLoopingBase = animator.isLooping;
+
 			if (animator.runtimeState.HasStateMachine())
 			{
 				animator.runtimeState.Update(dt * animator.playRate, *skeleton, animator.finalBoneMatrices);
 				animator.currentTime = animator.runtimeState.GetStateTime();
+				baseTime = animator.currentTime;
+				baseClip = animator.runtimeState.GetCurrentClip();
+				if (const auto* st = animator.runtimeState.GetStateMachine()->FindState(animator.runtimeState.GetCurrentStateName()))
+				{
+					isLoopingBase = st->isLooping;
+				}
+
+				// 트리거된 노티파이 이벤트 디스패치
+				auto notifies = animator.runtimeState.PopTriggeredNotifies();
+				for (const auto& ev : notifies)
+				{
+					for (const auto& cb : animator.notifyCallbacks) { if (cb) cb(entity, ev); }
+				}
 			}
 			else
 			{
-				auto* clip = animator.currentClip.Get();
-				if (!clip) continue;
-				const f64 tps = clip->GetTicksPerSecond() > 0.0 ? clip->GetTicksPerSecond() : 25.0;
-				const f32 durationSec = clip->GetDuration() > 0.0 ? static_cast<f32>(clip->GetDuration() / tps) : 0.0f;
-				animator.currentTime += dt * animator.playRate;
-				if (!animator.isLooping && durationSec > 0.0f)
+				baseClip = animator.currentClip.Get();
+				if (baseClip)
 				{
-					if (animator.currentTime >= durationSec)
+					const f64 tps = baseClip->GetTicksPerSecond() > 0.0 ? baseClip->GetTicksPerSecond() : 25.0;
+					const f32 durationSec = baseClip->GetDuration() > 0.0 ? static_cast<f32>(baseClip->GetDuration() / tps) : 0.0f;
+					animator.currentTime += dt * animator.playRate;
+					if (!animator.isLooping && durationSec > 0.0f && animator.currentTime >= durationSec)
 					{
 						animator.currentTime = durationSec;
 						animator.isPlaying = false;
 					}
+					baseTime = animator.currentTime;
+					AnimationEvaluator::EvaluateSkinningMatrices(*baseClip, *skeleton, baseTime, animator.finalBoneMatrices, animator.isLooping);
 				}
-				AnimationEvaluator::EvaluateSkinningMatrices(*clip, *skeleton, animator.currentTime, animator.finalBoneMatrices, animator.isLooping);
+			}
+
+			// 4. 상위 오버레이 레이어(Layered Animation) 마스킹 합성
+			if (baseClip)
+			{
+				for (auto& layer : animator.layers)
+				{
+					if (!layer.isPlaying || layer.weight <= 0.0f) continue;
+					auto* layerClip = layer.clip.Get();
+					if (!layerClip) continue;
+
+					// 스켈레톤 본 개수에 맞게 마스크 가중치 캐시 갱신
+					if (layer.mask.boneWeights.size() != skeleton->GetBones().size())
+					{
+						layer.mask.BuildWeights(*skeleton);
+					}
+
+					// 레이어 타임라인 진행 및 비루프 재생 종료 검출
+					const f64 layerTps = layerClip->GetTicksPerSecond() > 0.0 ? layerClip->GetTicksPerSecond() : 25.0;
+					const f32 layerDuration = layerClip->GetDuration() > 0.0 ? static_cast<f32>(layerClip->GetDuration() / layerTps) : 0.0f;
+					layer.currentTime += dt * layer.playRate;
+					if (!layer.isLooping && layerDuration > 0.0f && layer.currentTime >= layerDuration)
+					{
+						layer.currentTime = layerDuration;
+						layer.isPlaying = false;
+					}
+
+					AnimationEvaluator::EvaluateMaskedSkinningMatrices(*baseClip, baseTime, *layerClip, layer.currentTime, layer.mask.boneWeights, layer.weight, *skeleton, animator.finalBoneMatrices, isLoopingBase, layer.isLooping);
+				}
 			}
 		}
 	}

@@ -123,20 +123,22 @@ void AnimatorRuntimeState::BindStateMachine(const std::shared_ptr<AnimatorStateM
 {
 	m_stateMachine = sm;
 	if (!m_stateMachine) return;
-
 	m_currentStateName = sm->defaultState;
 	m_currentStateTime = 0.0f;
+	m_previousStateTime = 0.0f;
 	m_isTransitioning = false;
 	m_parameters.GetAll() = sm->defaultParameters;
+	m_triggeredNotifies.clear();
 }
-
 void AnimatorRuntimeState::Reset()
 {
 	m_currentStateTime = 0.0f;
+	m_previousStateTime = 0.0f;
 	m_targetStateTime = 0.0f;
 	m_transitionElapsed = 0.0f;
 	m_isTransitioning = false;
 	m_targetStateName.clear();
+	m_triggeredNotifies.clear();
 	if (m_stateMachine) m_currentStateName = m_stateMachine->defaultState;
 }
 
@@ -189,12 +191,28 @@ void AnimatorRuntimeState::Update(float dt, const Skeleton& skeleton, std::vecto
 		}
 	}
 
-	// 3. 시간 진행 및 비반복 루프 처리
+	// 3. 시간 진행, 노티파이 검출 및 비반복 루프 처리
+	const float prevTime = m_currentStateTime;
 	m_currentStateTime += dt * curState->playRate;
-	if (!curState->isLooping && curDurationSec > 0.0)
+	if (curState->isLooping && curDurationSec > 0.0)
 	{
-		m_currentStateTime = std::min(m_currentStateTime, static_cast<float>(curDurationSec));
+		const float dur = static_cast<float>(curDurationSec);
+		const float wrappedTime = std::fmod(m_currentStateTime, dur);
+		CheckAndTriggerNotifies(*curState, prevTime, (m_currentStateTime >= dur ? wrappedTime : m_currentStateTime), dur, true);
+		m_currentStateTime = wrappedTime;
 	}
+	else if (curDurationSec > 0.0)
+	{
+		const float dur = static_cast<float>(curDurationSec);
+		const float clampedTime = std::min(m_currentStateTime, dur);
+		CheckAndTriggerNotifies(*curState, prevTime, clampedTime, dur, false);
+		m_currentStateTime = clampedTime;
+	}
+	else
+	{
+		CheckAndTriggerNotifies(*curState, prevTime, m_currentStateTime, 0.0f, false);
+	}
+	m_previousStateTime = m_currentStateTime;
 	// 4. 포즈 평가 및 블렌딩
 	if (m_isTransitioning)
 	{
@@ -250,6 +268,30 @@ void AnimatorRuntimeState::Update(float dt, const Skeleton& skeleton, std::vecto
 	}
 }
 
+void AnimatorRuntimeState::CheckAndTriggerNotifies(const AnimState& state, float prevTime, float newTime, float duration, bool isLooping)
+{
+	if (state.notifies.empty() || duration <= 0.0f) return;
+	for (const auto& notify : state.notifies)
+	{
+		const float t = notify.triggerTime;
+		bool triggered = false;
+		if (prevTime <= newTime)
+		{
+			// 일반 순방향 재생 구간
+			if (prevTime < t && t <= newTime) triggered = true;
+		}
+		else if (isLooping)
+		{
+			// 루프로 인해 타임라인이 끝에서 시작으로 래핑된 경우: [prevTime, duration] 또는 [0, newTime]
+			if ((prevTime < t && t <= duration) || (0.0f <= t && t <= newTime)) triggered = true;
+		}
+		if (triggered)
+		{
+			m_triggeredNotifies.push_back(AnimNotifyEvent{ state.name, notify.name, notify.payload, t });
+		}
+	}
+}
+
 bool AnimatorStateMachine::SaveToFile(const std::string& filePath) const
 {
 	const auto& refl = Engine::ReflectionRegistry::Get();
@@ -301,4 +343,20 @@ bool AnimatorStateMachine::LoadFromFile(const std::string& filePath)
 	}
 	*this = std::move(temp);
 	return true;
+}
+
+const Animation* AnimatorRuntimeState::GetCurrentClip() const
+{
+	if (!m_stateMachine) return nullptr;
+	const auto* st = m_stateMachine->FindState(m_currentStateName);
+	if (!st) return nullptr;
+	if (st->IsBlendTree())
+	{
+		const Animation* primary = nullptr;
+		const Animation* secondary = nullptr;
+		float weight = 0.0f;
+		st->blendTree.Evaluate(m_parameters.GetFloat(st->blendTree.parameterName), primary, secondary, weight);
+		return primary;
+	}
+	return st->clip.Get();
 }
