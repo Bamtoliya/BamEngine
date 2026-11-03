@@ -1,7 +1,7 @@
 # 통합 개발 우선순위와 완료 기준
 
 - 작성일: 2026-10-24 (최종 갱신: 2026-11-03)
-- 상태: 2026-11-03 단계 1(F02), 단계 2(F05, F06, F07, F08), 단계 3(P1-E/3-A, 3-B), 단계 4(F12), 빌드/배포(F13, F04) 및 강화학습(F09) 구현 반영, Standalone Client 독립 실행 및 Unity 빌드 정합성 검증 완료, 단일 CPU 파티클 시스템 1단계 코어(Engine 4절) 구축 및 AnimationTimelineEditorPlan 계획 반영 완료.
+- 상태: 2026-11-03 단계 1(F02), 단계 2(F05, F06, F07, F08), 단계 3(P1-E/3-A, 3-B), 단계 4(F12), 빌드/배포(F13, F04) 및 강화학습(F09) 구현 반영, Standalone Client 독립 실행 및 Unity 빌드 정합성 검증 완료, 단일 CPU 파티클 시스템 1단계 코어(Engine 4절) 구축, AnimationTimelineEditorPlan 계획 반영 및 네트워크 기초 파이프라인(NetworkFoundationPlan Phase 1~5) 구축 완료.
 - 최신 근거: [코드·문서 정합성과 잔여 위험 점검](CodeDocumentationAudit-2026-11-02.md). 구현 반영과 전체 완료 기준 통과를 구분한다.
 - 공통 기준: [EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md)
 - 분류와 이관: [SourceOrganizationGuidelines.md](SourceOrganizationGuidelines.md), [BuildConfigurationAndPreprocessing.md](BuildConfigurationAndPreprocessing.md)
@@ -423,8 +423,7 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
     3. *상태 머신 캔버스 UI 토대 일원화*: `imgui-node-editor` 기반으로 마이그레이션하여 줌/패닝 및 정렬 일관성 확보.
 - 통합 설정 창과 그래프 핀/와이어 편의 메뉴는 기존 저장·초안·입력 동작을 보존하면서 진행한다. 이미 있는 패널/서비스를 재사용한다.
 - 단일 CPU 파티클·스플라인·트레일은 각각 필요한 실행·저장·렌더 제출 기반으로 진행한다. 전체 네트워크나 배포 완료를 기다리지 않는다.
-- 네트워크는 `NetworkFoundationPlan`의 전송/패킷 → 세션 → 리플리케이션/RPC → 예측 순서를 유지한다.
-  현재 단일 사용자 제작 경로를 막는 선행 조건으로 격상하지 않는다.
+- 네트워크는 `NetworkFoundationPlan`의 Phase 1~5(소켓 전송 추상화, 바이너리 패킷 프로토콜, 세션/3-Way 핸드셰이크, ECS NetworkSystem 트랜스폼 동기화 및 에디터 NetworkProfilerPanel) 구축을 2026-11-03 완료하였다. 이후 필요 시 고급 RPC 및 클라이언트 예측 연구로 확장한다.
 
 ### 10.8 사용 조건에 따라 먼저 처리할 경로
 

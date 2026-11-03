@@ -1004,3 +1004,39 @@ BamEngine의 우선 기준은 작은 게임의 제작·저장·실행·배포 �
   - 테이블과 상세 창 사이에 6px 두께의 수직 스플리터(`ImGui::Button("##ConsoleDetailSplitter")`) 및 알약 그립 핸들 배치.
   - 마우스 호버/드래그 시 상하 리사이즈 커서(`ImGuiMouseCursor_ResizeNS`) 및 하이라이트 제공, 실시간 높이 드래그 조절(최소 60px ~ 창 전체 크기, 기본 160px).
   - 상세 뷰 상단에 메타 정보 헤더, 전문 [ 복사 ] 버튼, [ ✕ 닫기 ] 버튼 제공.
+
+---
+
+## 23. 메트릭스 패널(Metrics Panel) 하이브리드 대시보드 및 마스터-디테일 개편 계획
+
+### 23.1 배경 및 문제점
+- 현재 `MetricsPanel`은 `FrameSummary`, `FrameGraph`, `EngineStatus`, `RenderMetrics`, `ResourceMetrics`, `AssetTaskMetrics`가 단일 뷰포트에 무조건 전부 나열되는 수직 스크롤 구조(높이 1,500px 이상)로 작성되어 있다.
+- 특정 도메인(예: GPU 패스 시간과 비동기 에셋 태스크)만 집중 모니터링하려 해도 화면을 계속 위아래로 스크롤해야 하며, 렌더링되지 않는 비활성 영역까지 매 프레임 수백 개의 텍스트/표 드로우콜이 실행되는 비효율이 있다.
+
+### 23.2 상단: 반응형 핵심 KPI 요약 카드 그리드 (Overview Dashboard Cards)
+- 창 너비에 따라 가변적으로 2열/3열/4열 배치되는 반응형 카드 그리드 구축.
+- **5대 핵심 도메인 카드 구성**:
+  1. **Performance**: FPS, Frame Time ms, 미니 스파크라인 그래프, Target FPS 대비 달성율.
+  2. **GPU Rendering**: 총 드로우콜(인덱스/비인덱스 합계), 버텍스 수, 총 GPU 패스 시간 ms, 하드웨어 기능 뱃지.
+  3. **Memory & VRAM**: VRAM 예산 대비 사용량 게이지 바, 로드된 텍스처/메시/셰이더 캐시 총 메모리(MB).
+  4. **Engine & Tasks**: 활성 씬 수, 등록된 렌더 패스 수, 백그라운드 에셋 로딩 태스크 큐(대기/진행/완료).
+  5. **Network**: 현재 세션 모드(Server/Client/Standalone), 지연 시간(Smoothed RTT ms), 인바운드/아웃바운드 KB/s.
+- **상태 색상 뱃지 (Health Indicator)**:
+  - 정상(Green): FPS >= 60, VRAM <= 70%, RTT <= 50ms
+  - 주의(Yellow): FPS 30~60, VRAM 70~90%, RTT 50~150ms, 로딩 대기 4개 이상
+  - 경고(Red): FPS < 30, VRAM > 90%, RTT > 150ms, 렌더 실패(RenderFailed) 감지
+- 각 카드 우측 상단에 `[ View Details ↗ ]` 버튼을 배치하여 원클릭으로 하단 상세 뷰를 전개.
+
+### 23.3 하단: 마스터-디테일 심층 분석 뷰 (Detailed Inspection View)
+- 상단 카드 클릭 시 하단 영역에 해당 도메인의 상세 분석 테이블이 전체 폭으로 전개됨:
+  - `Performance` 선택 시: 전체 히스토리 프레임 그래프, FPS 통계(Min/Max/Avg).
+  - `GPU Rendering` 선택 시: 40여 개 렌더 패스별 CPU/GPU 시간 테이블(`PassStat`), 디스크립터 힙 사용량, D3D12 Timestamp 상세.
+  - `Memory & VRAM` 선택 시: 모델/머티리얼/텍스처/사운드별 세부 메모리 사용량 및 개별 핸들 통계.
+  - `Engine & Tasks` 선택 시: 비동기 태스크 큐 상세 목록, 스로틀링된 업로드 상태.
+  - `Network` 선택 시: 접속된 클라이언트 테이블, 실시간 RTT 플롯 라인, 핑/하트비트 통계.
+- 선택된 카드가 없을 때는 상단 대시보드 카드만 컴팩트하게 노출되어 작업 공간 낭비를 원천 차단.
+- 상단 카드와 하단 상세 뷰 사이에 리사이즈 가능한 수직 스플리터 적용.
+
+### 23.4 렌더링 및 연산 최적화
+- 하단 상세 뷰가 닫혀 있는 도메인은 수백 개의 `ImGui::Text` 및 문자열 포맷팅을 완전히 건너뛰어(Bypass) 에디터 렌더링 프레임 부하를 60% 이상 절감.
+- 상단 카드의 수치 갱신 주기를 0.2~0.5초(DrawSnapshotWindow)로 스로틀링하여 텍스트 깜빡임 방지.

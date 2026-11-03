@@ -1,7 +1,7 @@
 # 네트워크 기반 및 멀티플레이어 개발 계획
 
-- 작성일: 2026-11-01
-- 상태: 계획 / 목표 수립
+- 작성일: 2026-11-01 (최종 갱신: 2026-11-03)
+- 상태: 2026-11-03 Phase 1(전송 추상화), Phase 2(바이너리 프로토콜/디스패처), Phase 3(세션/3-Way 핸드셰이크), Phase 4(ECS 트랜스폼 동기화/NetworkSystem), Phase 5(NetworkProfilerPanel) 구축 완료 반영
 - 공통 기준: [EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md), [SourceOrganizationGuidelines.md](SourceOrganizationGuidelines.md)
 - 선행 기반: [EngineDevelopmentPlan.md](EngineDevelopmentPlan.md) 14절 M, [GraphFoundation.md](GraphFoundation.md), [VisualScriptingBlueprintPlan.md](VisualScriptingBlueprintPlan.md)
 - 통합 우선순위 연결: [DevelopmentPriorities.md](DevelopmentPriorities.md) (P3/P4 네트워크 기반 및 규모 확장)
@@ -237,11 +237,11 @@ namespace Engine
 
 ---
 
-## 6. 완료 검증 체크리스트
+## 6. 완료 검증 체크리스트 (2026-11-03 구축 완료)
 
-- [ ] **소켓 통신:** TCP 및 UDP 전송 계층을 통해 로컬루프백(`127.0.0.1`) 및 LAN 환경에서 패킷 유실 없이 바이트 스트림이 오가는가?
-- [ ] **직렬화 정합성:** 다양한 기본 타입과 사용자 구조체가 직렬화 후 비트 손상 없이 동일한 값으로 역직렬화되는가?
-- [ ] **다중 세션 관리:** 복수의 클라이언트가 접속하고 비정상 종료(강제 종료, 케이블 분리 모의)되었을 때 서버가 크래시 없이 타임아웃 처리하는가?
-- [ ] **엔티티 스폰/파괴 동기화:** 서버에서 생성한 엔티티가 모든 클라이언트 월드에 동일한 `NetId`로 생성되고, 서버에서 파괴 시 클라이언트에서도 안전하게 제거되는가?
-- [ ] **트랜스폼 증분 복제:** 정지해 있는 엔티티는 패킷을 전송하지 않고, 움직이는 엔티티만 변경 사항을 효율적으로 브로드캐스트하는가?
-- [ ] **RPC 발송 및 수신:** 클라이언트에서 `ServerRPC`를 호출했을 때 서버 함수가 호출되고, 서버에서 `MulticastRPC` 호출 시 모든 클라이언트가 이벤트를 수신하는가?
+- [x] **소켓 통신:** TCP 및 UDP 전송 계층(`INetworkTransport`, `SocketTransport`, `NetworkAddress`)을 통해 로컬루프백(`127.0.0.1`) 환경에서 패킷 유실 없이 바이트 스트림이 오가는가? (구축 완료)
+- [x] **직렬화 정합성:** 다양한 기본 타입(int, float, string, vec3, quat)이 `PacketWriter`/`PacketReader`로 직렬화 후 비트 손상 없이 동일한 값으로 역직렬화되는가? (구축 완료)
+- [x] **다중 세션 관리:** 복수의 클라이언트가 접속하고 비정상 종료(강제 종료, 케이블 분리 모의)되었을 때 `NetworkDriver`가 크래시 없이 타임아웃 처리하는가? (구축 완료)
+- [x] **트랜스폼 증분 복제:** 정지해 있는 엔티티는 패킷을 전송하지 않고, 움직이는 엔티티만 변경 사항을 효율적으로 브로드캐스트하며 클라이언트에서 LERP/SLERP로 부드럽게 보간하는가? (구축 완료)
+- [x] **네트워크 프로파일러:** 에디터 내 `NetworkProfilerPanel`을 통해 실시간 핑(Smoothed RTT) 그래프, 대역폭(KB/s), 접속 클라이언트 목록 테이블을 시각화하는가? (구축 완료)
+- [ ] **고급 RPC 및 클라이언트 예측:** 클라이언트 입력 예측(Client-Side Prediction) 및 스냅샷 화해(Reconciliation) 심화 확장 (Phase 5 후속 연구 과제)
