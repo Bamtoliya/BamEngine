@@ -15,3 +15,5 @@
 #include "SpriteAnimationSystem.h"
 #include "AnimationSystem.h"
 #include "ParticleSystem.h"
+
+#include "NetworkSystem.h"

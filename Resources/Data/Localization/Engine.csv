@@ -37,6 +37,7 @@
 ,CATEGORY_IBL,Image-Based Lighting,이미지 기반 조명
 ,CATEGORY_LAYER_PLACEMENT,Layer Placement,구름층 배치
 ,CATEGORY_LIGHTING,Lighting,조명
+,CATEGORY_NETWORK,,
 ,CATEGORY_PARAMETER,Parameter,매개변수
 ,CATEGORY_PARTICLE_COLOR,Color & Alpha,색상 및 알파
 ,CATEGORY_PARTICLE_EMISSION,Emission,방출
@@ -302,6 +303,7 @@
 ,PROP_INFORMATION,Information,정보
 ,PROP_INTENSITY,Intensity,강도
 ,PROP_INTERACTABLE,Interactable,상호작용
+,PROP_INTERPOLATION_SPEED,,
 ,PROP_INVERSE_INERTIA,Inverse Inertia,역관성
 ,PROP_INVERSE_INERTIA_LOCAL,Local Inverse Inertia,로컬 역관성
 ,PROP_IRRADIANCE_MAP,Irradiance Map,확산광 맵
@@ -309,6 +311,7 @@
 ,PROP_IS_ACTIVE,Is Active,활성 상태
 ,PROP_IS_LOOPING,Looping,반복 재생
 ,PROP_IS_PLAYING,Playing,재생 중
+,PROP_IS_SERVER_ONLY,,
 ,PROP_IS_TRIGGER,Trigger,트리거
 ,PROP_LANGUAGE,Language,언어
 ,PROP_LAYER_BOTTOM,Layer Bottom Altitude,구름 시작 고도
@@ -342,11 +345,13 @@
 ,PROP_MORPH_SPEED,Morph Speed,대류 피어오름 속도
 ,PROP_NAME,Name,이름
 ,PROP_NEAR_PLANE,Near Plane,근거리 평면
+,PROP_NETWORK_ID,,
 ,PROP_NORMAL,Normal,법선
 ,PROP_NORMAL_COLOR,Normal Color,기본 색
 ,PROP_OFFSET,Offset,오프셋
 ,PROP_ORIGIN,Origin,원점
 ,PROP_ORTHOGRAPHIC_SIZE,Orthographic Size,직교 투영 크기
+,PROP_OWNER_CLIENT_ID,,
 ,PROP_PARAMETERS,Parameters,매개변수
 ,PROP_PASS_SHADERS,Pass Shaders,패스별 셰이더
 ,PROP_PIPELINE_SETTINGS,Pipeline Settings,파이프라인 설정
@@ -362,6 +367,7 @@
 ,PROP_POINT_A,Point A,시작점 A
 ,PROP_POINT_B,Point B,끝점 B
 ,PROP_POSITION,Position,위치
+,PROP_POS_THRESHOLD,,
 ,PROP_POWDER_EFFECT,Powder Effect,파우더 슈가 효과
 ,PROP_PREFAB_PATH,Prefab Path,프리팹 파일 경로
 ,PROP_PREFILTERED_MAP,Prefiltered Environment Map,사전 필터링 환경 맵
@@ -379,6 +385,7 @@
 ,PROP_ROTATION,Rotation,회전
 ,PROP_ROTATION_SPEED_MAX,Rotation Speed Max,최대 회전 속도
 ,PROP_ROTATION_SPEED_MIN,Rotation Speed Min,최소 회전 속도
+,PROP_ROT_THRESHOLD,,
 ,PROP_SCALE,Scale,크기
 ,PROP_SEED,Random Seed,난수 시드
 ,PROP_SETTINGS,Settings,설정
@@ -409,6 +416,10 @@
 ,PROP_SUN_INTENSITY,Sun Intensity,태양 강도
 ,PROP_SUN_LATITUDE,Sun Latitude,태양 위도
 ,PROP_SUN_SIZE,Sun Size,태양 크기
+,PROP_SYNC_POSITION,,
+,PROP_SYNC_RATE,,
+,PROP_SYNC_ROTATION,,
+,PROP_SYNC_SCALE,,
 ,PROP_TAGS,Tags,태그
 ,PROP_TEXTURE_BINDINGS,Texture Bindings,텍스처 바인딩
 ,PROP_TEXTURE_HANDLE,,
@@ -495,6 +506,8 @@
 ,STRUCT_LOD_GROUP,LOD Group,LOD 그룹
 ,STRUCT_MESH_SHAPE,Mesh Shape,메시 형상
 ,STRUCT_NAME,Name,이름
+,STRUCT_NETWORK_IDENTITY,,
+,STRUCT_NETWORK_TRANSFORM,,
 ,STRUCT_PARTICLE_EMITTER,Particle Emitter,파티클 이미터
 ,STRUCT_POST_PROCESS,Post Process,포스트 프로세스
 ,STRUCT_PREFAB_INSTANCE,Prefab Instance,프리팹 인스턴스
@@ -578,3 +591,16 @@
 ,VIGNETTE_SMOOTHNESS,Smoothness,부드러움
 ,Value is outside the native int32 range.,Value is outside the native int32 range.,값이 네이티브 int32 범위를 벗어났습니다.
 ,Xor,Xor,XOR
+,CATEGORY_NETWORK,Network,네트워크
+,STRUCT_NETWORK_IDENTITY,Network Identity,네트워크 식별자
+,STRUCT_NETWORK_TRANSFORM,Network Transform,네트워크 트랜스폼
+,PROP_NETWORK_ID,Network ID,네트워크 ID
+,PROP_OWNER_CLIENT_ID,Owner Client ID,소유자 클라이언트 ID
+,PROP_IS_SERVER_ONLY,Server Only,서버 전용
+,PROP_SYNC_RATE,Sync Rate (Hz),동기화 주기 (Hz)
+,PROP_POS_THRESHOLD,Position Threshold (m),위치 변화 임계치 (m)
+,PROP_ROT_THRESHOLD,Rotation Threshold (rad),회전 변화 임계치 (rad)
+,PROP_SYNC_POSITION,Sync Position,위치 동기화
+,PROP_SYNC_ROTATION,Sync Rotation,회전 동기화
+,PROP_SYNC_SCALE,Sync Scale,스케일 동기화
+,PROP_INTERPOLATION_SPEED,Interpolation Speed,보간 추종 속도

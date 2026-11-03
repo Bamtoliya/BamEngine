@@ -1,4 +1,21 @@
 Group,Key,English,Korean
+,UI_NETWORK_PROFILER_PANEL,Network Profiler,네트워크 프로파일러
+,UI_NETWORK_SESSION_MODE,Session Mode,세션 모드
+,UI_NETWORK_STANDALONE,Standalone,스탠드얼론
+,UI_NETWORK_SERVER_RUNNING,Server Running,서버 실행 중
+,UI_NETWORK_CLIENT_CONNECTED,Client Connected,클라이언트 접속됨
+,UI_NETWORK_HOST_SERVER,Host Server,서버 호스팅
+,UI_NETWORK_CONNECT,Connect,서버 접속
+,UI_NETWORK_DISCONNECT,Disconnect / Stop,접속 해제 / 중지
+,UI_NETWORK_TRAFFIC,Network Traffic,네트워크 트래픽
+,UI_NETWORK_OUTBOUND,Outbound,송신
+,UI_NETWORK_INBOUND,Inbound,수신
+,UI_NETWORK_LATENCY_RTT,Latency (RTT),지연 시간 (RTT)
+,UI_NETWORK_CONNECTED_CLIENTS,Connected Clients,접속된 클라이언트
+,UI_NETWORK_CLIENT_ID,Client ID,클라이언트 ID
+,UI_NETWORK_REMOTE_ADDR,Remote Address,원격 주소
+,UI_NETWORK_STATE,State,상태
+,UI_NETWORK_PING,Ping,핑
 ,Particle.ActiveCount,Active Particles,활성 파티클 수
 ,Particle.Play,Play,재생
 ,Particle.Pause,Pause,일시정지
@@ -1183,3 +1200,20 @@ Console,ColSource,Source,소스
 Settings,Btn.ResetDefaults,Reset to Defaults,기본값으로 복원
 Settings,Btn.Discard,Discard Changes,변경 취소
 Settings,Btn.Apply,Apply,적용
+Viewport,RealtimeTooltip,Toggle Realtime Preview (Ctrl+R),실시간 프리뷰 토글 (Ctrl+R)
+Action,Viewport.ToggleRealtime,Toggle Realtime,실시간 프리뷰 토글
+Viewport,Realtime,Realtime,실시간
+Timeline,PanelTitle,Animation Timeline,애니메이션 타임라인
+Timeline,PreviewPlaceholder,3D Viewport Preview Area,3D 뷰포트 프리뷰 영역
+Timeline,TrackTitle,Timeline Tracks & Notifies,타임라인 트랙 및 노티파이
+Timeline,FirstFrame,First Frame,첫 프레임
+Timeline,PrevFrame,Previous Frame (Step Back),이전 프레임
+Timeline,NextFrame,Next Frame (Step Forward),다음 프레임
+Timeline,LastFrame,Last Frame,마지막 프레임
+Timeline,Loop,Toggle Loop,루프 반복 토글
+Timeline,Duration,Clip Duration (sec),클립 전체 길이 (초)
+Timeline,PlaybackSpeed,Playback Speed,재생 배속
+Timeline,AnimTrack,Anim Clip,애니메이션
+Timeline,NotifyTrack,FX / Notifies,이펙트/노티파이
+Timeline,SyncTooltip,Sync with selected entity in Scene,씬에서 선택된 엔티티와 동기화
+UI_NETWORK_PROFILER_PANEL,"네트워크 프로파일러","Network Profiler"
