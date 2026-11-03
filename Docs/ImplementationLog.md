@@ -2307,3 +2307,38 @@ Use this as the primary execution list until a playable 2D vertical slice is com
   - 리소스 피커 배지가 우측에 안정적으로 정렬되어 텍스트와 겹치지 않고 아이콘이 테두리 안에 정돈됨을 확인.
   - 콘솔 패널에서 긴 셰이더 에러 메시지가 인입되어도 다른 로그가 누락되지 않고 1줄로 표시되며, 행 클릭 시 하단 상세 창에 줄바꿈이 보존되어 출력됨을 확인.
   - 상세 뷰 상단 스플리터 경계선을 마우스로 끌어 높이를 원하는 대로 늘리고 줄일 수 있으며, [✕] 버튼으로 상세 창을 닫을 수 있음을 확인.
+
+
+## 2026-11-04 — 키네마틱 캐릭터 컨트롤러(Kinematic Character Controller, KCC) 시스템, 비주얼 스크립팅 노드 및 에디터 뷰포트 시각화 구현
+
+- **요청**:
+  - 동역학 물리(Dynamic RigidBody)의 원치 않는 토크 회전, 튕김 및 떨림 현상 없이, 캐릭터가 지형 및 3D 충돌체와 정밀하고 부드럽게 상호작용하는 전용 키네마틱 이동 시스템(KCC) 구축.
+  - 지면 접지 감지(Ground Detection & Snapping), 경사로 슬라이딩(Slope Limit & Slide), 턱/계단 오르기(Stair Step-Up), 장애물 충돌 스윕(Move & Slide Bounce Loop) 구현.
+  - 비주얼 스크립팅(Graph) 제어 노드 및 에디터 뷰포트 디버그 캡슐 와이어프레임 렌더링 추가.
+- **구현 내역**:
+  - `Engine/Source/Core/Public/Components/Physics/CharacterControllerComponent.h`:
+    - 캡슐 형상(`Height=2.0f`, `Radius=0.5f`, `Center=vec3(0, 1, 0)`, `SkinWidth=0.05f`), 이동 파라미터(`WalkSpeed`, `RunSpeed`, `JumpForce`, `Gravity`, `SlopeLimitDegrees`, `StepOffset`, `AirControl`) 정의.
+    - 리플렉션 및 직렬화 완전 지원, 런타임 제어 API (`Move`, `Jump`, `SetVelocity`, `GetWorldCapsule`, `GetWorldAABB`).
+  - `Engine/Source/System/Physics/Public/KinematicCharacterSystem.h`, `Private/KinematicCharacterSystem.cpp`:
+    - `ISystem` 상속, 물리 고정 스텝(`OnFixedUpdate`)에서 모든 활성 KCC 컴포넌트 일괄 시뮬레이션.
+    - 하향 레이/스윕 기반 지면 접지 감지 및 경사각 계산 (`DetectGround`).
+    - 급경사 미끄러짐(Slide Down Slope) 및 등판 가능한 완경사 바닥면 투영 이동.
+    - 장애물 충돌 시 다중 반복(최대 3회) 슬라이딩(Slide & Collide) 및 계단/턱 감지 시 수직 상승->전방 이동->하향 안착(Stair Step-Up) 처리.
+    - 상향 천장 충돌(Ceiling Hit) 및 하향 바닥 착지 처리.
+  - `Engine/Source/Core/Private/Reflection/ReflectionRegistry.cpp`:
+    - Add Component 메뉴의 "Physics 3D" 카테고리에 `CharacterControllerComponent` 등록.
+  - `Engine/Source/Graph/Public/GraphGameplayLibrary.h`:
+    - 비주얼 스크립팅 노드 7종 추가: `CharacterController.Move`, `Jump`, `IsGrounded`, `GetVelocity`, `SetVelocity`, `GetGroundNormal`, `GetGroundAngle`.
+  - `Editor/Source/Application/Private/Application.cpp` & `Client/Source/Main.cpp`:
+    - 에디터 런타임 및 Standalone Client의 `SystemManager`에 `KinematicCharacterSystem` 등록.
+  - `Editor/Source/ImGui/ViewportPanel/DebugRenderer/Private/DebugRenderer.cpp`:
+    - 뷰포트에서 `CharacterControllerComponent` 캡슐 와이어프레임(초록/주황) 및 지면 법선(청록) 디버그 렌더링 구현.
+  - `Resources/Data/Localization/Engine.csv`:
+    - 컴포넌트 및 속성 다국어 로캘 키 14개 추가.
+  - `Docs/KinematicCharacterControllerPlan.md` & `Docs/DevelopmentPriorities.md`:
+    - 사양 및 아키텍처 문서화, 통합 개발 우선순위 완료 반영.
+- **검증 결과**:
+  - `Editor` 및 `Client` 빌드 및 링크 정상 통과.
+  - 인스펙터 속성 편집 및 씬 아카이브 저장/복원 정합성 확인.
+  - 씬 뷰포트에서 캡슐 크기 변경에 따른 디버그 와이어프레임 실시간 반영 확인.
+  - 비주얼 스크립팅 그래프 에디터 노드 검색 및 배치 정상 확인.

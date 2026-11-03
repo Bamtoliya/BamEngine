@@ -249,6 +249,42 @@ void DebugRenderer::RegisterColliderDebug(const CameraBuffer& cameraBuffer)
 				}
 			}, collider.GetShape());
 	}
+	// CharacterControllerComponent 캡슐 와이어프레임 디버그 렌더링
+	for (auto [entity, kcc, tr, flag] : registry.view<CharacterControllerComponent, WorldTransformComponent, FlagComponent>().each())
+	{
+		if (!HasFlag(flag.flags, EEntityFlag::Active) || HasFlag(flag.flags, EEntityFlag::Dead)) continue;
+		const vec4 color = kcc.IsGrounded ? vec4(0.2f, 0.9f, 0.3f, 1.0f) : vec4(0.9f, 0.6f, 0.1f, 1.0f);
+		const vec3 offset = kcc.Center;
+		const mat4& worldMatrix = tr.worldMatrix;
+		const f32 halfHeight = kcc.Height * 0.5f;
+		const vec3 extent(kcc.Radius, halfHeight, kcc.Radius);
+		if (!isVisibleInFrustum(offset, extent, worldMatrix)) continue;
+
+		const f32 halfSegment = glm::max(0.0f, halfHeight - kcc.Radius);
+		const vec3 topLocal = offset + vec3(0.0f, halfSegment, 0.0f);
+		const vec3 bottomLocal = offset - vec3(0.0f, halfSegment, 0.0f);
+		const f32 maxScale = glm::max(glm::max(glm::length(vec3(worldMatrix[0])), glm::length(vec3(worldMatrix[1]))),
+			glm::length(vec3(worldMatrix[2])));
+
+		DrawSphere(vec3(worldMatrix * vec4(topLocal, 1.0f)), kcc.Radius * maxScale, color);
+		DrawSphere(vec3(worldMatrix * vec4(bottomLocal, 1.0f)), kcc.Radius * maxScale, color);
+
+		const vec3 sideOffsets[4] = {
+			vec3(kcc.Radius, 0.0f, 0.0f), vec3(-kcc.Radius, 0.0f, 0.0f),
+			vec3(0.0f, 0.0f, kcc.Radius), vec3(0.0f, 0.0f, -kcc.Radius)
+		};
+		for (const vec3& side : sideOffsets)
+		{
+			DrawLine(vec3(worldMatrix * vec4(topLocal + side, 1.0f)),
+				vec3(worldMatrix * vec4(bottomLocal + side, 1.0f)), color);
+		}
+
+		if (kcc.IsGrounded)
+		{
+			const vec3 footWorld = vec3(worldMatrix * vec4(offset - vec3(0.0f, halfHeight, 0.0f), 1.0f));
+			DrawLine(footWorld, footWorld + kcc.GroundNormal * 0.5f, vec4(0.0f, 1.0f, 1.0f, 1.0f));
+		}
+	}
 	for (auto [entity, collider2D, tr, flag] : registry.view<Collider2DComponent, WorldTransformComponent, FlagComponent>().each())
 	{
 		if (!HasFlag(flag.flags, EEntityFlag::Active) || HasFlag(flag.flags, EEntityFlag::Dead)) continue;

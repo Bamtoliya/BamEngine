@@ -65,6 +65,9 @@
 ,COLOR_ADJUSTMENTS_CONTRAST,Contrast,대비
 ,COLOR_ADJUSTMENTS_SATURATION,Saturation,채도
 ,Cannot normalize a zero-length vector.,Cannot normalize a zero-length vector.,길이가 0인 벡터는 정규화할 수 없습니다.
+,Character Jump,,
+,Character Move,,
+,CharacterController,,
 ,Clamp (Float),,
 ,Clamp minimum exceeds maximum.,Clamp minimum exceeds maximum.,Clamp 최솟값이 최댓값보다 큽니다.
 ,Compiled output file could not be opened:,Compiled output file could not be opened:,컴파일 출력 파일을 열지 못했습니다:
@@ -108,9 +111,12 @@
 ,Get Actor Location,,
 ,Get Axis Horizontal (A/D/Left/Right),,
 ,Get Axis Vertical (W/S/Up/Down),,
+,Get Character Velocity,,
 ,Get Current Sprite Frame,,
 ,Get Delta Seconds,,
 ,Get Forward Vector,,
+,Get Ground Angle,,
+,Get Ground Normal,,
 ,Get Last Hit Distance,,
 ,Get Last Hit Location,,
 ,Get Last Hit Normal,,
@@ -138,6 +144,7 @@
 ,Is 3D Animation Playing,,
 ,Is Actor Active,,
 ,Is Actor Visible,,
+,Is Grounded,,
 ,Is Key Pressed,,
 ,Is Space Pressed,,
 ,Is Sprite Animation Playing,,
@@ -313,6 +320,19 @@
 ,PROP_IS_PLAYING,Playing,재생 중
 ,PROP_IS_SERVER_ONLY,,
 ,PROP_IS_TRIGGER,Trigger,트리거
+,PROP_KCC_AIR_CONTROL,,
+,PROP_KCC_CENTER,,
+,PROP_KCC_GRAVITY,,
+,PROP_KCC_HEIGHT,,
+,PROP_KCC_IS_GROUNDED,,
+,PROP_KCC_JUMP_FORCE,,
+,PROP_KCC_RADIUS,,
+,PROP_KCC_RUN_SPEED,,
+,PROP_KCC_SKIN_WIDTH,,
+,PROP_KCC_SLOPE_LIMIT,,
+,PROP_KCC_STEP_OFFSET,,
+,PROP_KCC_VELOCITY,,
+,PROP_KCC_WALK_SPEED,,
 ,PROP_LANGUAGE,Language,언어
 ,PROP_LAYER_BOTTOM,Layer Bottom Altitude,구름 시작 고도
 ,PROP_LAYER_HEIGHT,Layer Height,구름층 두께
@@ -488,6 +508,7 @@
 ,STRUCT_CAPSULE,Capsule,캡슐
 ,STRUCT_CAPSULE_2D,Capsule 2D,2D 캡슐
 ,STRUCT_CAPSULE_SHAPE,Capsule Shape,캡슐 형상
+,STRUCT_CHARACTER_CONTROLLER,,
 ,STRUCT_CIRCLE,Circle,원
 ,STRUCT_CIRCLE_2D,Circle 2D,2D 원
 ,STRUCT_COLLIDER,Collider,충돌체
@@ -535,6 +556,7 @@
 ,Set Actor Active,,
 ,Set Actor Location,,
 ,Set Actor Visible,,
+,Set Character Velocity,,
 ,Set Light Color,,
 ,Set Light Enabled,,
 ,Set Light Intensity,,
@@ -591,16 +613,3 @@
 ,VIGNETTE_SMOOTHNESS,Smoothness,부드러움
 ,Value is outside the native int32 range.,Value is outside the native int32 range.,값이 네이티브 int32 범위를 벗어났습니다.
 ,Xor,Xor,XOR
-,CATEGORY_NETWORK,Network,네트워크
-,STRUCT_NETWORK_IDENTITY,Network Identity,네트워크 식별자
-,STRUCT_NETWORK_TRANSFORM,Network Transform,네트워크 트랜스폼
-,PROP_NETWORK_ID,Network ID,네트워크 ID
-,PROP_OWNER_CLIENT_ID,Owner Client ID,소유자 클라이언트 ID
-,PROP_IS_SERVER_ONLY,Server Only,서버 전용
-,PROP_SYNC_RATE,Sync Rate (Hz),동기화 주기 (Hz)
-,PROP_POS_THRESHOLD,Position Threshold (m),위치 변화 임계치 (m)
-,PROP_ROT_THRESHOLD,Rotation Threshold (rad),회전 변화 임계치 (rad)
-,PROP_SYNC_POSITION,Sync Position,위치 동기화
-,PROP_SYNC_ROTATION,Sync Rotation,회전 동기화
-,PROP_SYNC_SCALE,Sync Scale,스케일 동기화
-,PROP_INTERPOLATION_SPEED,Interpolation Speed,보간 추종 속도

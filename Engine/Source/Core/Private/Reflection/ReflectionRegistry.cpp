@@ -330,6 +330,7 @@ bool ReflectionRegistry::RegisterComponentOperations()
     append.template operator()<AnimatorComponent>("Animator", "Rendering", &AddSpatialComponent<AnimatorComponent>);
     append.template operator()<RigidBodyComponent>("Rigid Body", "Physics 3D", &AddSpatialComponent<RigidBodyComponent>);
     append.template operator()<ColliderComponent>("Collider", "Physics 3D", &AddSpatialComponent<ColliderComponent>);
+    append.template operator()<CharacterControllerComponent>("Character Controller", "Physics 3D", &AddSpatialComponent<CharacterControllerComponent>);
     append.template operator()<JointComponent>("Joint", "Physics 3D", &AddSpatialComponent<JointComponent>);
     append.template operator()<RigidBody2DComponent>("Rigid Body 2D", "Physics 2D", &AddSpatialComponent<RigidBody2DComponent>);
     append.template operator()<Collider2DComponent>("Collider 2D", "Physics 2D", &AddSpatialComponent<Collider2DComponent>);

@@ -1,7 +1,7 @@
 # 통합 개발 우선순위와 완료 기준
 
 - 작성일: 2026-10-24 (최종 갱신: 2026-11-03)
-- 상태: 2026-11-03 단계 1(F02), 단계 2(F05, F06, F07, F08), 단계 3(P1-E/3-A, 3-B), 단계 4(F12), 빌드/배포(F13, F04) 및 강화학습(F09) 구현 반영, Standalone Client 독립 실행 및 Unity 빌드 정합성 검증 완료, 단일 CPU 파티클 시스템 1단계 코어(Engine 4절) 구축, AnimationTimelineEditorPlan 계획 반영 및 네트워크 기초 파이프라인(NetworkFoundationPlan Phase 1~5) 구축 완료.
+- 상태: 2026-11-03 단계 1(F02), 단계 2(F05, F06, F07, F08), 단계 3(P1-E/3-A, 3-B), 단계 4(F12), 빌드/배포(F13, F04) 및 강화학습(F09) 구현 반영, Standalone Client 독립 실행 및 Unity 빌드 정합성 검증 완료, 단일 CPU 파티클 시스템 1단계 코어(Engine 4절) 구축, AnimationTimelineEditorPlan 계획 반영, 네트워크 기초 파이프라인(NetworkFoundationPlan Phase 1~5) 및 키네마틱 캐릭터 컨트롤러(KinematicCharacterControllerPlan) 구축 완료.
 - 최신 근거: [코드·문서 정합성과 잔여 위험 점검](CodeDocumentationAudit-2026-11-02.md). 구현 반영과 전체 완료 기준 통과를 구분한다.
 - 공통 기준: [EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md)
 - 분류와 이관: [SourceOrganizationGuidelines.md](SourceOrganizationGuidelines.md), [BuildConfigurationAndPreprocessing.md](BuildConfigurationAndPreprocessing.md)
@@ -26,6 +26,7 @@ Engine·Render·Editor·Client 계획에서 무엇을 먼저 연결하고 무엇
 - [AnimatorGraphPlan.md](AnimatorGraphPlan.md): 애니메이터 그래프, 애니메이션 상태 머신(ASM) 및 블렌드 트리 개발 계획.
 - [NetworkFoundationPlan.md](NetworkFoundationPlan.md): 소켓 전송 계층, 패킷 직렬화, 세션 및 ECS 리플리케이션·RPC 개발 계획.
 - [AnimationTimelineEditorPlan.md](AnimationTimelineEditorPlan.md): 애니메이션·이펙트·노티파이 통합 타임라인 저작 도구 및 비-PIE 실시간 프리뷰 계획.
+- [KinematicCharacterControllerPlan.md](KinematicCharacterControllerPlan.md): 키네마틱 캐릭터 컨트롤러(KCC), 지면 감지, 경사로·계단 오르기 및 슬라이딩 물리 계획.
 
 전체 작업 선택은 이 문서, 기능 내부의 구현 순서·실패 정책은 상세 계획을 따른다.
 새 사용자 결정이 우선하며 충돌이 생기면 이 문서와 해당 계획을 함께 갱신한다.
@@ -424,6 +425,7 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
 - 통합 설정 창과 그래프 핀/와이어 편의 메뉴는 기존 저장·초안·입력 동작을 보존하면서 진행한다. 이미 있는 패널/서비스를 재사용한다.
 - 단일 CPU 파티클·스플라인·트레일은 각각 필요한 실행·저장·렌더 제출 기반으로 진행한다. 전체 네트워크나 배포 완료를 기다리지 않는다.
 - 네트워크는 `NetworkFoundationPlan`의 Phase 1~5(소켓 전송 추상화, 바이너리 패킷 프로토콜, 세션/3-Way 핸드셰이크, ECS NetworkSystem 트랜스폼 동기화 및 에디터 NetworkProfilerPanel) 구축을 2026-11-03 완료하였다. 이후 필요 시 고급 RPC 및 클라이언트 예측 연구로 확장한다.
+- 키네마틱 캐릭터 컨트롤러는 `KinematicCharacterControllerPlan`의 계획에 따라 ECS 기반 `CharacterControllerComponent` 및 `KinematicCharacterSystem`을 통해 지면 감지, 경사로 슬라이딩, 턱/계단 오르기(Step-Up), 점프 및 중력 시뮬레이션, 비주얼 스크립팅 노드 7종 및 에디터 뷰포트 디버그 캡슐 렌더링을 구축 완료하였다 (2026-11-03 완료).
 
 ### 10.8 사용 조건에 따라 먼저 처리할 경로
 

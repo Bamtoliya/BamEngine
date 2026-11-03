@@ -11,3 +11,5 @@
 
 #include "Components/Physics/JointComponent.h"
 #include "Components/Physics/Joint2DComponent.h"
+
+#include "Components/Physics/CharacterControllerComponent.h"

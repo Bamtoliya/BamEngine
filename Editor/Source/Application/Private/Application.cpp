@@ -34,6 +34,7 @@
 #include "SceneDocument.h"
 #include "EditorSettingsService.h"
 #include "PrefabModeManager.h"
+#include "SceneViewportPanel.h"
 
 IMPLEMENT_SINGLETON(Application)
 
@@ -422,7 +423,7 @@ EResult Application::InitializeSystem()
 
     const bool success = addSystems.operator() <
         TransformSystem, MeshRenderSystem, SpriteRenderSystem, SpriteAnimationSystem, AnimationSystem,
-        ParticleSystem,
+        ParticleSystem, NetworkSystem, KinematicCharacterSystem,
         CameraSystem, LightSystem, UIRenderSystem,
         AudioSystem, TerrainSystem, PhysicsSystem, GraphSystem > ();
 
@@ -827,6 +828,18 @@ void Application::Run(int argc, char* argv[])
         {
             while (timeManager.IsFixedUpdateReady())
             {
+            }
+
+            // [하이브리드 프리뷰] 뷰포트의 Realtime 토글이 켜져 있을 때만 시각 효과(Presentation) 시스템을 선별 틱
+            bool shouldSimulate = false;
+            if (auto* viewport = SceneViewportPanel::GetActiveSceneViewport())
+            {
+                shouldSimulate = viewport->IsRealtime();
+            }
+
+            if (shouldSimulate)
+            {
+                m_Runtime->Update(dt, false, static_cast<uint8>(Engine::ESystemPhase::Presentation));
             }
 
             m_Runtime->LateUpdate(dt);

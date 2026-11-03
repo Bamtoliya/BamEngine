@@ -11,6 +11,7 @@
 #include <cstdint>
 #include "Logger.h"
 #include "Components/Render/SpriteAnimationComponent.h"
+#include "Components/Physics/CharacterControllerComponent.h"
 
 
 namespace Engine::GraphGameplay
@@ -412,5 +413,84 @@ namespace Engine::GraphGameplay
 		if (!scene || entity == entt::null) return;
 		auto* anim = scene->GetRegistry().try_get<AnimatorComponent>(entity);
 		if (anim) anim->StopLayer(layerName);
+	}
+
+	// ── 캐릭터 컨트롤러 노드 (CharacterController) ──
+	FUNCTION(GRAPH_CALLABLE("CharacterController.Move"), DISPLAY_NAME("Character Move"), CATEGORY("CharacterController"),
+		GRAPH_PIN_DEFAULT("x", 0.0f), GRAPH_PIN_DEFAULT("y", 0.0f), GRAPH_PIN_DEFAULT("z", 0.0f), GRAPH_PIN_DEFAULT("run", false))
+		inline void CharacterMove(float x, float y, float z, bool run)
+	{
+		Scene* scene = GraphSystem::GetCurrentScene();
+		entt::entity entity = GraphSystem::GetCurrentEntity();
+		if (!scene || entity == entt::null) return;
+		auto& reg = scene->GetRegistry();
+		auto* kcc = reg.try_get<CharacterControllerComponent>(entity);
+		if (!kcc) return;
+		kcc->Move(glm::vec3(x, y, z), run);
+	}
+	FUNCTION(GRAPH_CALLABLE("CharacterController.Jump"), DISPLAY_NAME("Character Jump"), CATEGORY("CharacterController"))
+		inline void CharacterJump()
+	{
+		Scene* scene = GraphSystem::GetCurrentScene();
+		entt::entity entity = GraphSystem::GetCurrentEntity();
+		if (!scene || entity == entt::null) return;
+		auto& reg = scene->GetRegistry();
+		auto* kcc = reg.try_get<CharacterControllerComponent>(entity);
+		if (!kcc) return;
+		kcc->Jump();
+	}
+	FUNCTION(GRAPH_PURE("CharacterController.IsGrounded"), DISPLAY_NAME("Is Grounded"), CATEGORY("CharacterController"))
+		inline bool CharacterIsGrounded()
+	{
+		Scene* scene = GraphSystem::GetCurrentScene();
+		entt::entity entity = GraphSystem::GetCurrentEntity();
+		if (!scene || entity == entt::null) return false;
+		auto& reg = scene->GetRegistry();
+		const auto* kcc = reg.try_get<CharacterControllerComponent>(entity);
+		return kcc ? kcc->IsGrounded : false;
+	}
+	FUNCTION(GRAPH_PURE("CharacterController.GetVelocity"), DISPLAY_NAME("Get Character Velocity"), CATEGORY("CharacterController"))
+		inline std::array<float, 3> CharacterGetVelocity()
+	{
+		Scene* scene = GraphSystem::GetCurrentScene();
+		entt::entity entity = GraphSystem::GetCurrentEntity();
+		if (!scene || entity == entt::null) return { 0.0f, 0.0f, 0.0f };
+		auto& reg = scene->GetRegistry();
+		const auto* kcc = reg.try_get<CharacterControllerComponent>(entity);
+		if (!kcc) return { 0.0f, 0.0f, 0.0f };
+		return { kcc->Velocity.x, kcc->Velocity.y, kcc->Velocity.z };
+	}
+	FUNCTION(GRAPH_CALLABLE("CharacterController.SetVelocity"), DISPLAY_NAME("Set Character Velocity"), CATEGORY("CharacterController"),
+		GRAPH_PIN_DEFAULT("x", 0.0f), GRAPH_PIN_DEFAULT("y", 0.0f), GRAPH_PIN_DEFAULT("z", 0.0f))
+		inline void CharacterSetVelocity(float x, float y, float z)
+	{
+		Scene* scene = GraphSystem::GetCurrentScene();
+		entt::entity entity = GraphSystem::GetCurrentEntity();
+		if (!scene || entity == entt::null) return;
+		auto& reg = scene->GetRegistry();
+		auto* kcc = reg.try_get<CharacterControllerComponent>(entity);
+		if (!kcc) return;
+		kcc->SetVelocity(glm::vec3(x, y, z));
+	}
+	FUNCTION(GRAPH_PURE("CharacterController.GetGroundNormal"), DISPLAY_NAME("Get Ground Normal"), CATEGORY("CharacterController"))
+		inline std::array<float, 3> CharacterGetGroundNormal()
+	{
+		Scene* scene = GraphSystem::GetCurrentScene();
+		entt::entity entity = GraphSystem::GetCurrentEntity();
+		if (!scene || entity == entt::null) return { 0.0f, 1.0f, 0.0f };
+		auto& reg = scene->GetRegistry();
+		const auto* kcc = reg.try_get<CharacterControllerComponent>(entity);
+		if (!kcc) return { 0.0f, 1.0f, 0.0f };
+		return { kcc->GroundNormal.x, kcc->GroundNormal.y, kcc->GroundNormal.z };
+	}
+	FUNCTION(GRAPH_PURE("CharacterController.GetGroundAngle"), DISPLAY_NAME("Get Ground Angle"), CATEGORY("CharacterController"))
+		inline float CharacterGetGroundAngle()
+	{
+		Scene* scene = GraphSystem::GetCurrentScene();
+		entt::entity entity = GraphSystem::GetCurrentEntity();
+		if (!scene || entity == entt::null) return 0.0f;
+		auto& reg = scene->GetRegistry();
+		const auto* kcc = reg.try_get<CharacterControllerComponent>(entity);
+		return kcc ? kcc->GroundAngle : 0.0f;
 	}
 }

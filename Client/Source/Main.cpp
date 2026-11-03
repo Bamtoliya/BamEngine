@@ -201,6 +201,8 @@ private:
         if (!systemManager.AddSystem<SpriteAnimationSystem>()) return EResult::Fail;
         if (!systemManager.AddSystem<AnimationSystem>()) return EResult::Fail;
         if (!systemManager.AddSystem<ParticleSystem>()) return EResult::Fail;
+        if (!systemManager.AddSystem<KinematicCharacterSystem>()) return EResult::Fail;
+        if (!systemManager.AddSystem<NetworkSystem>()) return EResult::Fail;
         if (!systemManager.AddSystem<UIRenderSystem>()) return EResult::Fail;
         if (!systemManager.AddSystem<AudioSystem>()) return EResult::Fail;
         if (!systemManager.AddSystem<TerrainSystem>()) return EResult::Fail;

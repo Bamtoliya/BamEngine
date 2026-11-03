@@ -17,3 +17,4 @@
 #include "ParticleSystem.h"
 
 #include "NetworkSystem.h"
+#include "KinematicCharacterSystem.h"
