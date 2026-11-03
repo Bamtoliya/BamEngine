@@ -1,60 +1,298 @@
-﻿#pragma once 
-
-#include "MetricsPanel.h"
+﻿#include "MetricsPanel.h"
 #include "TimeManager.h"
 #include "SceneManager.h"
 #include "RenderPassManager.h"
 #include "ResourceManager.h"
 #include "AssetManager.h"
 #include "RenderPass.h"
+#include "SystemManager.h"
+#include "NetworkSystem.h"
+#include <algorithm>
+#include <format>
 
 void MetricsPanel::Draw()
 {
-    if (!m_Open)
-        return;
+    if (!m_Open) return;
 
     const string windowTitle = LOCAL("UI_ENGINE_METRICS_PANEL") + "###EngineMetricsPanel";
-
     if (ImGui::Begin(windowTitle.c_str(), &m_Open))
     {
         m_Focused = ImGui::IsWindowFocused();
         m_Hovered = ImGui::IsWindowHovered();
 
         DrawToolbar();
-
         ImGui::Separator();
 
-        DrawFrameSummary();
-        DrawFrameGraph();
+        // 1. 상단: 반응형 핵심 KPI 요약 카드 그리드
+        DrawDashboardCards();
 
-        ImGui::Separator();
+        // 2. 하단: 사용자가 카드를 클릭했을 때만 심층 디테일 전개
+        if (m_SelectedDomain != EMetricsDomain::None)
+        {
+            ImGui::Spacing();
+            ImGui::Separator();
+            DrawDetailedInspectionView();
+        }
+    }
+    ImGui::End();
+}
 
-        DrawEngineStatus();
+void MetricsPanel::DrawDashboardCards()
+{
+    const float availWidth = ImGui::GetContentRegionAvail().x;
+    const float spacing = ImGui::GetStyle().ItemSpacing.x;
 
-        ImGui::Separator();
-        DrawRenderMetrics();
+    // 창 너비에 따른 반응형 열(Column) 수 결정
+    int cols = 4;
+    if (availWidth < 550.0f) cols = 1;
+    else if (availWidth < 850.0f) cols = 2;
+    else if (availWidth < 1100.0f) cols = 3;
 
-        ImGui::Separator();
-        DrawResourceMetrics();
+    const float cardWidth = (availWidth - (spacing * (cols - 1))) / static_cast<float>(cols);
 
-        ImGui::Separator();
-        DrawAssetTaskMetrics();
+    int currentCol = 0;
+    auto BeginNextCard = [&]() {
+        if (currentCol > 0 && currentCol % cols != 0) ImGui::SameLine();
+        currentCol++;
+        };
+
+    BeginNextCard();
+    DrawCardPerformance(cardWidth);
+
+    BeginNextCard();
+    DrawCardRendering(cardWidth);
+
+    BeginNextCard();
+    DrawCardMemory(cardWidth);
+
+    BeginNextCard();
+    DrawCardEngineTasks(cardWidth);
+
+    BeginNextCard();
+    DrawCardNetwork(cardWidth);
+}
+
+void MetricsPanel::DrawCardPerformance(float cardWidth)
+{
+    const bool isSelected = (m_SelectedDomain == EMetricsDomain::Performance);
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, isSelected ? ImVec4(0.15f, 0.25f, 0.35f, 0.8f) : ImVec4(0.14f, 0.14f, 0.16f, 0.7f));
+    ImGui::BeginChild("Card_Performance", ImVec2(cardWidth, 125.0f), true, ImGuiWindowFlags_NoScrollbar);
+
+    ImGui::TextColored(ImVec4(0.3f, 0.8f, 1.0f, 1.0f), "PERFORMANCE");
+    ImGui::SameLine(cardWidth - 75.0f);
+    const float fps = m_AverageMs > 0.0f ? 1000.0f / m_AverageMs : 0.0f;
+    if (fps >= 55.0f) ImGui::TextColored(ImVec4(0.2f, 0.9f, 0.2f, 1.0f), "[ GOOD ]");
+    else if (fps >= 30.0f) ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "[ WARN ]");
+    else ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "[ POOR ]");
+
+    ImGui::Text("%.1f FPS", fps);
+    ImGui::TextDisabled("Frame: %.2f ms (Avg: %.2f)", m_CurrentMs, m_AverageMs);
+
+    ImGui::Spacing();
+    if (ImGui::SmallButton(isSelected ? "Close Detail" : "View Details ->##Perf"))
+    {
+        m_SelectedDomain = isSelected ? EMetricsDomain::None : EMetricsDomain::Performance;
     }
 
-    ImGui::End();
+    ImGui::EndChild();
+    ImGui::PopStyleColor();
+}
+
+void MetricsPanel::DrawCardRendering(float cardWidth)
+{
+    const bool isSelected = (m_SelectedDomain == EMetricsDomain::Rendering);
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, isSelected ? ImVec4(0.15f, 0.25f, 0.35f, 0.8f) : ImVec4(0.14f, 0.14f, 0.16f, 0.7f));
+    ImGui::BeginChild("Card_Rendering", ImVec2(cardWidth, 125.0f), true, ImGuiWindowFlags_NoScrollbar);
+
+    ImGui::TextColored(ImVec4(0.4f, 0.9f, 0.4f, 1.0f), "GPU RENDERING");
+    ImGui::SameLine(cardWidth - 75.0f);
+    if (m_DisplaySnapshot.RenderFailed) ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "[ FAIL ]");
+    else ImGui::TextColored(ImVec4(0.2f, 0.9f, 0.2f, 1.0f), "[ OK ]");
+
+    ImGui::Text("Draws: %llu", m_DisplaySnapshot.GetTotalDrawCalls());
+    ImGui::TextDisabled("GPU Time: %.2f ms | Verts: %llu", m_DisplaySnapshot.TotalGPUTimeMs, m_DisplaySnapshot.SubmittedVertices);
+
+    ImGui::Spacing();
+    if (ImGui::SmallButton(isSelected ? "Close Detail" : "View Details ->##Render"))
+    {
+        m_SelectedDomain = isSelected ? EMetricsDomain::None : EMetricsDomain::Rendering;
+    }
+
+    ImGui::EndChild();
+    ImGui::PopStyleColor();
+}
+
+void MetricsPanel::DrawCardMemory(float cardWidth)
+{
+    const bool isSelected = (m_SelectedDomain == EMetricsDomain::Memory);
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, isSelected ? ImVec4(0.15f, 0.25f, 0.35f, 0.8f) : ImVec4(0.14f, 0.14f, 0.16f, 0.7f));
+    ImGui::BeginChild("Card_Memory", ImVec2(cardWidth, 125.0f), true, ImGuiWindowFlags_NoScrollbar);
+
+    ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.3f, 1.0f), "MEMORY & CACHE");
+    ImGui::SameLine(cardWidth - 75.0f);
+    ImGui::TextColored(ImVec4(0.2f, 0.9f, 0.2f, 1.0f), "[ HEALTHY ]");
+
+    ImGui::Text("Active: %llu / %llu slots", m_ResourceMetrics.ActiveResources, m_ResourceMetrics.TotalSlots);
+    const auto modelCount = m_ResourceMetrics.CountsByType[static_cast<size_t>(Engine::EResourceType::Model)];
+    const auto texCount = m_ResourceMetrics.CountsByType[static_cast<size_t>(Engine::EResourceType::Texture)];
+    ImGui::TextDisabled("Models: %llu | Textures: %llu", modelCount, texCount);
+
+    ImGui::Spacing();
+    if (ImGui::SmallButton(isSelected ? "Close Detail" : "View Details ->##Mem"))
+    {
+        m_SelectedDomain = isSelected ? EMetricsDomain::None : EMetricsDomain::Memory;
+    }
+
+    ImGui::EndChild();
+    ImGui::PopStyleColor();
+}
+
+void MetricsPanel::DrawCardEngineTasks(float cardWidth)
+{
+    const bool isSelected = (m_SelectedDomain == EMetricsDomain::EngineTasks);
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, isSelected ? ImVec4(0.15f, 0.25f, 0.35f, 0.8f) : ImVec4(0.14f, 0.14f, 0.16f, 0.7f));
+    ImGui::BeginChild("Card_EngineTasks", ImVec2(cardWidth, 125.0f), true, ImGuiWindowFlags_NoScrollbar);
+
+    ImGui::TextColored(ImVec4(0.8f, 0.4f, 1.0f, 1.0f), "TASKS & ENGINE");
+    ImGui::SameLine(cardWidth - 75.0f);
+    if (m_AssetTaskMetrics.Outstanding > 0) ImGui::TextColored(ImVec4(0.3f, 0.7f, 1.0f, 1.0f), "[ BUSY ]");
+    else ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "[ IDLE ]");
+
+    ImGui::Text("Passes: %zu | Scenes: %zu", m_RegisteredPassCount, m_ActiveSceneCount);
+    ImGui::TextDisabled("Tasks: %llu Active / %llu Done", m_AssetTaskMetrics.Outstanding, m_AssetTaskMetrics.GetCompleted());
+
+    ImGui::Spacing();
+    if (ImGui::SmallButton(isSelected ? "Close Detail" : "View Details ->##Tasks"))
+    {
+        m_SelectedDomain = isSelected ? EMetricsDomain::None : EMetricsDomain::EngineTasks;
+    }
+
+    ImGui::EndChild();
+    ImGui::PopStyleColor();
+}
+
+void MetricsPanel::DrawCardNetwork(float cardWidth)
+{
+    const bool isSelected = (m_SelectedDomain == EMetricsDomain::Network);
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, isSelected ? ImVec4(0.15f, 0.25f, 0.35f, 0.8f) : ImVec4(0.14f, 0.14f, 0.16f, 0.7f));
+    ImGui::BeginChild("Card_Network", ImVec2(cardWidth, 125.0f), true, ImGuiWindowFlags_NoScrollbar);
+
+    ImGui::TextColored(ImVec4(0.2f, 0.85f, 0.85f, 1.0f), "NETWORK");
+    ImGui::SameLine(cardWidth - 75.0f);
+
+    auto* sysMgr = &Engine::SystemManager::Get();
+    auto* netSystem = sysMgr ? sysMgr->GetSystem<Engine::NetworkSystem>() : nullptr;
+    if (!netSystem || netSystem->GetDriver().GetNetworkMode() == Engine::Network::ENetworkMode::Standalone)
+    {
+        ImGui::TextDisabled("[ OFFLINE ]");
+        ImGui::Text("Mode: Standalone");
+        ImGui::TextDisabled("Traffic: 0.0 KB/s");
+    }
+    else
+    {
+        ImGui::TextColored(ImVec4(0.2f, 0.9f, 0.2f, 1.0f), "[ ONLINE ]");
+        if (netSystem->GetDriver().IsClient())
+            ImGui::Text("Ping: %.1f ms", netSystem->GetDriver().GetSmoothedRTT());
+        else
+            ImGui::Text("Server: Port %u", netSystem->GetDriver().GetConfig().ServerPort);
+        ImGui::TextDisabled("Status: Connected");
+    }
+
+    ImGui::Spacing();
+    if (ImGui::SmallButton(isSelected ? "Close Detail" : "View Details ->##Net"))
+    {
+        m_SelectedDomain = isSelected ? EMetricsDomain::None : EMetricsDomain::Network;
+    }
+
+    ImGui::EndChild();
+    ImGui::PopStyleColor();
+}
+
+void MetricsPanel::DrawDetailedInspectionView()
+{
+    std::string domainTitle;
+    switch (m_SelectedDomain)
+    {
+    case EMetricsDomain::Performance: domainTitle = "Detailed Performance Inspection"; break;
+    case EMetricsDomain::Rendering:   domainTitle = "Detailed GPU Rendering & Passes"; break;
+    case EMetricsDomain::Memory:      domainTitle = "Detailed Resource Memory Inspection"; break;
+    case EMetricsDomain::EngineTasks: domainTitle = "Detailed Engine & Task Queue Inspection"; break;
+    case EMetricsDomain::Network:     domainTitle = "Detailed Network Session Inspection"; break;
+    default: break;
+    }
+
+    ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.3f, 1.0f), ">> %s", domainTitle.c_str());
+    ImGui::SameLine(ImGui::GetContentRegionAvail().x - 110.0f);
+    if (ImGui::Button("[ Close Detail X ]"))
+    {
+        m_SelectedDomain = EMetricsDomain::None;
+        return;
+    }
+
+    ImGui::Separator();
+    ImGui::Spacing();
+
+    switch (m_SelectedDomain)
+    {
+    case EMetricsDomain::Performance:
+        DrawFrameSummary();
+        ImGui::Separator();
+        DrawFrameGraph();
+        break;
+
+    case EMetricsDomain::Rendering:
+        DrawRenderMetrics();
+        break;
+
+    case EMetricsDomain::Memory:
+        DrawResourceMetrics();
+        break;
+
+    case EMetricsDomain::EngineTasks:
+        DrawEngineStatus();
+        ImGui::Separator();
+        DrawAssetTaskMetrics();
+        break;
+
+    case EMetricsDomain::Network:
+        DrawNetworkMetrics();
+        break;
+
+    default:
+        break;
+    }
+}
+
+void MetricsPanel::DrawNetworkMetrics()
+{
+    auto* sysMgr = &Engine::SystemManager::Get();
+    auto* netSystem = sysMgr ? sysMgr->GetSystem<Engine::NetworkSystem>() : nullptr;
+    if (!netSystem)
+    {
+        ImGui::TextDisabled("NetworkSystem is not registered.");
+        return;
+    }
+
+    auto& driver = netSystem->GetDriver();
+    ImGui::Text("Network Driver Status: %s", driver.IsServer() ? "Dedicated Server" : (driver.IsClient() ? "Client Connected" : "Standalone"));
+    if (driver.IsClient())
+    {
+        ImGui::BulletText("Smoothed RTT: %.2f ms", driver.GetSmoothedRTT());
+    }
+    else if (driver.IsServer())
+    {
+        ImGui::BulletText("Hosting on Port: %u", driver.GetConfig().ServerPort);
+    }
 }
 
 void MetricsPanel::Update(f32 dt)
 {
-    if (m_Paused)
-        return;
+    if (m_Paused) return;
 
     m_AssetTaskMetrics = AssetManager::Get().GetTaskMetrics();
-
     UpdateResourceMetrics(dt);
 
     m_RenderMetrics = {};
-
     if (auto* rhi = Engine::Renderer::Get().GetRHI())
     {
         m_RenderMetrics = rhi->GetLastFrameMetrics();
@@ -66,27 +304,17 @@ void MetricsPanel::Update(f32 dt)
     UpdatePassStats();
     UpdateDrawSnapshot(dt);
 
-    // 이 패널은 기존 ImGuiManager의 메인 스레드 Update에서 호출됩니다.
     m_TargetFPS = Engine::TimeManager::Get().GetTargetFPS();
+    m_ActiveSceneCount = Engine::SceneManager::Get().GetActiveScenes().size();
+    m_RegisteredPassCount = Engine::RenderPassManager::Get().GetAllRenderPasses().size();
 
-    m_ActiveSceneCount =
-        Engine::SceneManager::Get().GetActiveScenes().size();
-
-    m_RegisteredPassCount =
-        Engine::RenderPassManager::Get().GetAllRenderPasses().size();
-
-    // 그래프와 FPS 계산에 사용할 수 없는 샘플은 제외합니다.
-    if (!std::isfinite(dt) || dt <= 0.0f)
-        return;
+    if (!std::isfinite(dt) || dt <= 0.0f) return;
 
     const f32 frameMs = dt * 1000.0f;
-
-    if (!std::isfinite(frameMs))
-        return;
+    if (!std::isfinite(frameMs)) return;
 
     m_CurrentMs = frameMs;
     m_FrameTimes[m_WriteIndex] = frameMs;
-
     m_WriteIndex = (m_WriteIndex + 1) % MAX_METRICS_HISTORY;
 
     if (m_SampleCount < MAX_METRICS_HISTORY)
@@ -98,12 +326,10 @@ void MetricsPanel::Update(f32 dt)
 void MetricsPanel::DrawToolbar()
 {
     ImGui::Checkbox(LOCAL_LABEL("Metrics.PauseCapture").c_str(), &m_Paused);
-
     if (ImGui::IsItemHovered())
         ImGui::SetTooltip("%s", LOCAL_CSTR("Metrics.PauseHint"));
 
     ImGui::SameLine();
-
     if (ImGui::Button(LOCAL_LABEL("Metrics.ResetHistory").c_str()))
         ResetHistory();
 }
@@ -116,39 +342,26 @@ void MetricsPanel::DrawFrameSummary()
         return;
     }
 
-    const f32 averageFPS =
-        m_AverageMs > 0.0f ? 1000.0f / m_AverageMs : 0.0f;
-
+    const f32 averageFPS = m_AverageMs > 0.0f ? 1000.0f / m_AverageMs : 0.0f;
     ImGui::Text("%s", LOCAL_FMT("Metrics.AverageFPS", averageFPS).c_str());
 
-    if (ImGui::BeginTable(
-        "FrameStatistics",
-        2,
-        ImGuiTableFlags_SizingStretchSame))
+    if (ImGui::BeginTable("FrameStatistics", 2, ImGuiTableFlags_SizingStretchSame))
     {
         ImGui::TableNextRow();
-        ImGui::TableNextColumn();
-        ImGui::TextUnformatted(LOCAL_CSTR("Metrics.CurrentFrame"));
-        ImGui::TableNextColumn();
-        ImGui::Text("%.3f ms", m_CurrentMs);
+        ImGui::TableNextColumn(); ImGui::TextUnformatted(LOCAL_CSTR("Metrics.CurrentFrame"));
+        ImGui::TableNextColumn(); ImGui::Text("%.3f ms", m_CurrentMs);
 
         ImGui::TableNextRow();
-        ImGui::TableNextColumn();
-        ImGui::TextUnformatted(LOCAL_CSTR("Metrics.Average"));
-        ImGui::TableNextColumn();
-        ImGui::Text("%.3f ms", m_AverageMs);
+        ImGui::TableNextColumn(); ImGui::TextUnformatted(LOCAL_CSTR("Metrics.Average"));
+        ImGui::TableNextColumn(); ImGui::Text("%.3f ms", m_AverageMs);
 
         ImGui::TableNextRow();
-        ImGui::TableNextColumn();
-        ImGui::TextUnformatted(LOCAL_CSTR("Metrics.Minimum"));
-        ImGui::TableNextColumn();
-        ImGui::Text("%.3f ms", m_MinMs);
+        ImGui::TableNextColumn(); ImGui::TextUnformatted(LOCAL_CSTR("Metrics.Minimum"));
+        ImGui::TableNextColumn(); ImGui::Text("%.3f ms", m_MinMs);
 
         ImGui::TableNextRow();
-        ImGui::TableNextColumn();
-        ImGui::TextUnformatted(LOCAL_CSTR("Metrics.Maximum"));
-        ImGui::TableNextColumn();
-        ImGui::Text("%.3f ms", m_MaxMs);
+        ImGui::TableNextColumn(); ImGui::TextUnformatted(LOCAL_CSTR("Metrics.Maximum"));
+        ImGui::TableNextColumn(); ImGui::Text("%.3f ms", m_MaxMs);
 
         ImGui::EndTable();
     }
@@ -165,24 +378,15 @@ void MetricsPanel::DrawFrameSummary()
 
 void MetricsPanel::DrawFrameGraph()
 {
-    if (m_SampleCount == 0)
-        return;
+    if (m_SampleCount == 0) return;
 
-    // 버퍼가 가득 찼다면 다음 쓰기 위치가 가장 오래된 샘플입니다.
-    const int32 offset =
-        m_SampleCount == MAX_METRICS_HISTORY
-        ? static_cast<int32>(m_WriteIndex)
-        : 0;
-
-    // 기본 범위 0~33.33ms, 큰 지연이 발생하면 범위를 확장합니다.
-    const f32 scaleMax =
-        m_MaxMs > 30.0f ? m_MaxMs * 1.1f : 33.333f;
+    const int32 offset = (m_SampleCount == MAX_METRICS_HISTORY) ? static_cast<int32>(m_WriteIndex) : 0;
+    const f32 scaleMax = (m_MaxMs > 30.0f) ? m_MaxMs * 1.1f : 33.333f;
 
     ImGui::PlotLines("##FrameTimeHistory", m_FrameTimes.data(), static_cast<int32>(m_SampleCount), offset,
         LOCAL_CSTR("Metrics.FrameInterval"), 0.0f, scaleMax, ImVec2(ImGui::GetContentRegionAvail().x, 130.0f));
 
     ImGui::Text("%s", LOCAL_FMT("Metrics.RecentFrames", static_cast<int32>(m_SampleCount)).c_str());
-
     ImGui::PushTextWrapPos(0.0f);
     ImGui::TextUnformatted(LOCAL_CSTR("Metrics.FrameTimeHint"));
     ImGui::PopTextWrapPos();
@@ -191,13 +395,9 @@ void MetricsPanel::DrawFrameGraph()
 void MetricsPanel::DrawEngineStatus()
 {
     ImGui::TextUnformatted(LOCAL_CSTR("Metrics.EngineState"));
-
     const auto text = LOCAL_FMT("Metrics.ActiveScenes", m_ActiveSceneCount);
-
     ImGui::TextUnformatted(text.c_str());
-
     const auto text2 = LOCAL_FMT("Metrics.RegisteredPasses", m_RegisteredPassCount);
-
     ImGui::TextUnformatted(text2.c_str());
 }
 
@@ -214,7 +414,6 @@ void MetricsPanel::DrawRenderMetrics()
         ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.2f, 1.0f), "%s", LOCAL_CSTR("Metrics.RenderFailed"));
     }
     const auto& snapshot = m_DisplaySnapshot;
-    // 1. 드로우콜 및 기본 정점/인덱스 통계 (최근 구간 중 가장 무거운 프레임)
     const auto drawCalls = LOCAL_FMT("Metrics.DrawCalls", snapshot.GetTotalDrawCalls());
     const auto breakdown = LOCAL_FMT("Metrics.DrawBreakdown", snapshot.DrawCalls, snapshot.IndexedDrawCalls);
     const auto vertices = LOCAL_FMT("Metrics.Vertices", snapshot.SubmittedVertices);
@@ -225,12 +424,11 @@ void MetricsPanel::DrawRenderMetrics()
     ImGui::TextUnformatted(indices.c_str());
     ImGui::Spacing();
     ImGui::Separator();
-    // 2. CPU / GPU 전체 프레임 소요 시간 (위 통계와 같은 프레임)
+
     ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "%s", LOCAL_CSTR("Metrics.RenderTimes"));
     ImGui::Text("%s", LOCAL_FMT("Metrics.TotalCPUSubmit", snapshot.TotalCPUTimeMs).c_str());
     ImGui::Text("%s", LOCAL_FMT("Metrics.TotalGPUExecute", snapshot.TotalGPUTimeMs).c_str());
 
-    // 3. 패스별 세부 실행 시간 테이블 (등록 순서 고정 + 이동 평균)
     if (!m_PassStats.empty())
     {
         if (ImGui::BeginTable("PassMetricsTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp))
@@ -241,31 +439,21 @@ void MetricsPanel::DrawRenderMetrics()
             ImGui::TableHeadersRow();
 
             const ImVec4 staleColor = ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled);
-
             for (const auto* renderPass : Engine::RenderPassManager::Get().GetAllRenderPasses())
             {
                 const auto found = m_PassStats.find(renderPass->GetName());
-                if (found == m_PassStats.end())
-                    continue;
+                if (found == m_PassStats.end()) continue;
 
                 const auto& stat = found->second;
-                const bool stale = m_ElapsedTime - stat.LastSeenTime > PassStaleSeconds;
+                const bool stale = (m_ElapsedTime - stat.LastSeenTime) > PassStaleSeconds;
 
-                if (stale)
-                    ImGui::PushStyleColor(ImGuiCol_Text, staleColor);
-
+                if (stale) ImGui::PushStyleColor(ImGuiCol_Text, staleColor);
                 ImGui::TableNextRow();
-                ImGui::TableSetColumnIndex(0);
-                ImGui::TextUnformatted(stat.DisplayName.c_str());
-                ImGui::TableSetColumnIndex(1);
-                ImGui::Text("%.2f", stat.CPUTimeMs);
-                ImGui::TableSetColumnIndex(2);
-                ImGui::Text("%.2f", stat.GPUTimeMs);
-
-                if (stale)
-                    ImGui::PopStyleColor();
+                ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted(stat.DisplayName.c_str());
+                ImGui::TableSetColumnIndex(1); ImGui::Text("%.2f", stat.CPUTimeMs);
+                ImGui::TableSetColumnIndex(2); ImGui::Text("%.2f", stat.GPUTimeMs);
+                if (stale) ImGui::PopStyleColor();
             }
-
             ImGui::EndTable();
         }
     }
@@ -273,14 +461,14 @@ void MetricsPanel::DrawRenderMetrics()
     ImGui::Spacing();
     ImGui::Separator();
 
-    // 4. VRAM 및 디스크립터 메모리 상태
+    // VRAM 및 디스크립터 통계 (RHIMemoryStats 멤버 바인딩)
     const auto& mem = m_RenderMetrics.MemoryStats;
     ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "%s", LOCAL_CSTR("Metrics.VRAMDescriptors"));
     if (mem.DedicatedVRAMBudgetMB > 0)
     {
         const float vramRatio = static_cast<float>(mem.DedicatedVRAMUsageMB) / static_cast<float>(mem.DedicatedVRAMBudgetMB);
         char overlay[64];
-        snprintf(overlay, sizeof(overlay), "%llu / %llu MB (%.1f%%)", mem.DedicatedVRAMUsageMB, mem.DedicatedVRAMBudgetMB, vramRatio * 100.0f);
+        std::snprintf(overlay, sizeof(overlay), "%llu / %llu MB (%.1f%%)", mem.DedicatedVRAMUsageMB, mem.DedicatedVRAMBudgetMB, vramRatio * 100.0f);
         ImGui::ProgressBar(vramRatio, ImVec2(-1.0f, 0.0f), overlay);
     }
     else
@@ -292,24 +480,18 @@ void MetricsPanel::DrawRenderMetrics()
     ImGui::Spacing();
     ImGui::Separator();
 
-    // 5. 하드웨어 기능 지원 (Capabilities)
+    // 하드웨어 기능 지원 (RHICapabilities 멤버 바인딩)
     ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "%s", LOCAL_CSTR("Metrics.HardwareCapabilities"));
-    ImGui::BulletText("%s", LOCAL_FMT("Metrics.ComputeShader",
-        LOCAL(m_Capabilities.SupportsCompute ? "Metrics.Supported" : "Metrics.NotSupported")).c_str());
-    ImGui::BulletText("%s", LOCAL_FMT("Metrics.IndirectDraw",
-        LOCAL(m_Capabilities.SupportsIndirectDraw ? "Metrics.Supported" : "Metrics.NotSupported")).c_str());
-    ImGui::BulletText("%s", LOCAL_FMT("Metrics.MeshShader",
-        LOCAL(m_Capabilities.SupportsMeshShaders ? "Metrics.SupportedTier1Plus" : "Metrics.NotSupported")).c_str());
-    ImGui::BulletText("%s", LOCAL_FMT("Metrics.DXRRaytracing",
-        LOCAL(m_Capabilities.SupportsRaytracing ? "Metrics.SupportedTier1_0Plus" : "Metrics.NotSupported")).c_str());
-    ImGui::BulletText("%s", LOCAL_FMT("Metrics.DescriptorIndexing",
-        LOCAL(m_Capabilities.SupportsDescriptorIndexing ? "Metrics.SupportedTier3" : "Metrics.Tier1Or2")).c_str());
+    ImGui::BulletText("%s", LOCAL_FMT("Metrics.ComputeShader", LOCAL(m_Capabilities.SupportsCompute ? "Metrics.Supported" : "Metrics.NotSupported")).c_str());
+    ImGui::BulletText("%s", LOCAL_FMT("Metrics.IndirectDraw", LOCAL(m_Capabilities.SupportsIndirectDraw ? "Metrics.Supported" : "Metrics.NotSupported")).c_str());
+    ImGui::BulletText("%s", LOCAL_FMT("Metrics.MeshShader", LOCAL(m_Capabilities.SupportsMeshShaders ? "Metrics.SupportedTier1Plus" : "Metrics.NotSupported")).c_str());
+    ImGui::BulletText("%s", LOCAL_FMT("Metrics.DXRRaytracing", LOCAL(m_Capabilities.SupportsRaytracing ? "Metrics.SupportedTier1_0Plus" : "Metrics.NotSupported")).c_str());
+    ImGui::BulletText("%s", LOCAL_FMT("Metrics.DescriptorIndexing", LOCAL(m_Capabilities.SupportsDescriptorIndexing ? "Metrics.SupportedTier3" : "Metrics.Tier1Or2")).c_str());
 }
 
 void MetricsPanel::UpdatePassStats()
 {
-    if (!m_RenderMetrics.Available)
-        return;
+    if (!m_RenderMetrics.Available) return;
 
     for (const auto& pass : m_RenderMetrics.PassMetrics)
     {
@@ -353,7 +535,6 @@ void MetricsPanel::UpdateDrawSnapshot(f32 dt)
             m_WindowPeak.Available = true;
         }
 
-        // 구간 안에서 한 번이라도 실패했다면 표시 값이 성공 프레임이어도 경고를 유지합니다.
         m_WindowPeak.RenderFailed = failed;
     }
 
@@ -364,7 +545,6 @@ void MetricsPanel::UpdateDrawSnapshot(f32 dt)
     {
         if (m_WindowPeak.Available)
             m_DisplaySnapshot = m_WindowPeak;
-
         m_WindowPeak = {};
         m_DrawSnapshotElapsed = 0.0;
     }
@@ -373,15 +553,12 @@ void MetricsPanel::UpdateDrawSnapshot(f32 dt)
 void MetricsPanel::ResetHistory()
 {
     m_FrameTimes.fill(0.0f);
-
     m_WriteIndex = 0;
     m_SampleCount = 0;
-
     m_CurrentMs = 0.0f;
     m_AverageMs = 0.0f;
     m_MinMs = 0.0f;
     m_MaxMs = 0.0f;
-
     m_WindowPeak = {};
     m_DisplaySnapshot = {};
     m_DrawSnapshotElapsed = 0.0;
@@ -398,51 +575,31 @@ void MetricsPanel::RecalculateStatistics()
     }
 
     f64 totalMs = 0.0;
-
     m_MinMs = m_FrameTimes[0];
     m_MaxMs = m_FrameTimes[0];
 
     for (std::size_t i = 0; i < m_SampleCount; ++i)
     {
         const f32 value = m_FrameTimes[i];
-
         totalMs += value;
-
-        if (value < m_MinMs)
-            m_MinMs = value;
-
-        if (value > m_MaxMs)
-            m_MaxMs = value;
+        if (value < m_MinMs) m_MinMs = value;
+        if (value > m_MaxMs) m_MaxMs = value;
     }
 
-    m_AverageMs = static_cast<f32>(
-        totalMs / static_cast<f64>(m_SampleCount));
+    m_AverageMs = static_cast<f32>(totalMs / static_cast<f64>(m_SampleCount));
 }
 
 void MetricsPanel::UpdateResourceMetrics(f32 dt)
 {
-    if (!std::isfinite(dt) || dt <= 0.0f)
-        return;
-
+    if (!std::isfinite(dt) || dt <= 0.0f) return;
     m_ResourceRefreshElapsed += dt;
-
-    if (m_ResourceRefreshElapsed < 0.5f)
-        return;
-
-    // 긴 프레임 뒤에도 한 번만 조회합니다.
+    if (m_ResourceRefreshElapsed < 0.5f) return;
     m_ResourceRefreshElapsed = 0.0f;
-
-    m_ResourceMetrics =
-        Engine::ResourceManager::Get().GetMetrics();
+    m_ResourceMetrics = Engine::ResourceManager::Get().GetMetrics();
 }
 
 void MetricsPanel::DrawResourceMetrics()
 {
-    if (!ImGui::CollapsingHeader(LOCAL_LABEL("Metrics.Resources").c_str(), ImGuiTreeNodeFlags_DefaultOpen))
-    {
-        return;
-    }
-
     const auto summary = LOCAL_FMT("Metrics.ResourceSummary", m_ResourceMetrics.ActiveResources,
         m_ResourceMetrics.TotalSlots, m_ResourceMetrics.FreeSlots);
 
@@ -457,62 +614,36 @@ void MetricsPanel::DrawResourceMetrics()
         "ResourceType.Script", "ResourceType.Scene", "ResourceType.Save"
     };
 
-    static_assert(
-        IM_ARRAYSIZE(typeKeys) ==
-        Engine::ResourceMetrics::TypeCount);
+    static_assert(IM_ARRAYSIZE(typeKeys) == Engine::ResourceMetrics::TypeCount);
 
-    if (ImGui::BeginTable(
-        "ResourceCounts",
-        2,
-        ImGuiTableFlags_RowBg |
-        ImGuiTableFlags_BordersInnerH |
-        ImGuiTableFlags_SizingStretchProp))
+    if (ImGui::BeginTable("ResourceCounts", 2, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_SizingStretchProp))
     {
         ImGui::TableSetupColumn(LOCAL_LABEL("Metrics.Type").c_str());
         ImGui::TableSetupColumn(LOCAL_LABEL("Metrics.Count").c_str());
         ImGui::TableHeadersRow();
 
-        for (std::size_t i = 0;
-            i < m_ResourceMetrics.CountsByType.size();
-            ++i)
+        for (std::size_t i = 0; i < m_ResourceMetrics.CountsByType.size(); ++i)
         {
-            const auto count =
-                m_ResourceMetrics.CountsByType[i];
-
-            // 등록된 항목이 없는 종류는 숨깁니다.
-            if (count == 0)
-                continue;
+            const auto count = m_ResourceMetrics.CountsByType[i];
+            if (count == 0) continue;
 
             ImGui::TableNextRow();
-
             ImGui::TableNextColumn();
             ImGui::TextUnformatted(LOCAL_CSTR(typeKeys[i]));
-
             ImGui::TableNextColumn();
-
             const auto countText = fmt::format("{}", count);
             ImGui::TextUnformatted(countText.c_str());
         }
-
         ImGui::EndTable();
     }
-
     ImGui::TextDisabled("%s", LOCAL_CSTR("Metrics.RefreshInterval"));
 }
 
 void MetricsPanel::DrawAssetTaskMetrics()
 {
-    if (!ImGui::CollapsingHeader(LOCAL_LABEL("Metrics.AssetTasks").c_str(), ImGuiTreeNodeFlags_DefaultOpen))
-    {
-        return;
-    }
-
     const auto outstanding = LOCAL_FMT("Metrics.Outstanding", m_AssetTaskMetrics.Outstanding);
-
     const auto completed = LOCAL_FMT("Metrics.Completed", m_AssetTaskMetrics.GetCompleted());
-
     const auto succeeded = LOCAL_FMT("Metrics.Succeeded", m_AssetTaskMetrics.Succeeded);
-
     const auto failed = LOCAL_FMT("Metrics.Failed", m_AssetTaskMetrics.Failed);
 
     ImGui::TextUnformatted(outstanding.c_str());
@@ -520,11 +651,7 @@ void MetricsPanel::DrawAssetTaskMetrics()
     ImGui::TextUnformatted(succeeded.c_str());
 
     if (m_AssetTaskMetrics.Failed > 0)
-    {
-        ImGui::PushStyleColor(
-            ImGuiCol_Text,
-            ImVec4(1.0f, 0.4f, 0.4f, 1.0f));
-    }
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.4f, 0.4f, 1.0f));
 
     ImGui::TextUnformatted(failed.c_str());
 
