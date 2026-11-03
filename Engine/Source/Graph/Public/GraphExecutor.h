@@ -28,6 +28,7 @@ public:
 	[[nodiscard]] GraphDiagnostic Load(const Graph& graph, const GraphRegistry& registry,
 		const reflection::Registry* sourceRegistry = nullptr);
 	[[nodiscard]] GraphDiagnostic Begin(GraphNodeId entry, float delta = 0.0f, std::size_t budget = 10000);
+	[[nodiscard]] GraphDiagnostic BeginTrigger(GraphNodeId entry, int64_t otherEntity, std::size_t budget = 10000);
 	void Resume();
 	void Pause();
 	void Stop();

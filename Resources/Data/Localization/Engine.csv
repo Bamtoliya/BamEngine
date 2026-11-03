@@ -527,6 +527,7 @@
 ,STRUCT_LOD_GROUP,LOD Group,LOD 그룹
 ,STRUCT_MESH_SHAPE,Mesh Shape,메시 형상
 ,STRUCT_NAME,Name,이름
+,STRUCT_NATIVE_SCRIPT,Native Script,네이티브 스크립트
 ,STRUCT_NETWORK_IDENTITY,,
 ,STRUCT_NETWORK_TRANSFORM,,
 ,STRUCT_PARTICLE_EMITTER,Particle Emitter,파티클 이미터
@@ -546,6 +547,7 @@
 ,STRUCT_TAG,Tags,태그
 ,STRUCT_TERRAIN,Terrain,지형
 ,STRUCT_TRANSFORM,Transform,트랜스폼
+,STRUCT_TRIGGER_CALLBACK,Trigger Callback,트리거 콜백
 ,STRUCT_UI_INTERACTION_STATE,UI Interaction State,UI 상호작용 상태
 ,STRUCT_UI_RENDER_ORDER,UI Render Order,UI 렌더 순서
 ,STRUCT_VOLUMETRIC_CLOUD,Volumetric Cloud,볼류메트릭 클라우드

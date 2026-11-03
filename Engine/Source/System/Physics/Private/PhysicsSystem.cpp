@@ -12,6 +12,11 @@
 #include "Components/Render/TerrainComponent.h"
 #include "Mesh.h"
 #include <glm/gtc/matrix_transform.hpp>
+#include "Components/Physics/TriggerCallbackComponent.h"
+#include "Components/Physics/CharacterControllerComponent.h"
+#include "Components/Core/NativeScriptComponent.h"
+#include "GraphSystem.h"
+#include "Components/Graph/GraphBindingComponent.h"
 
 #pragma region Helper
 using PhysicsShape2D = variant<Rect, Circle, Capsule>;
@@ -136,8 +141,7 @@ static bool TryBuildPhysicsShape(const entt::registry& world, entt::entity entit
     return true;
 }
 
-static bool IntersectsPhysicsShapes2D(const entt::registry& world, entt::entity entityA, entt::entity entityB,
-    const PhysicsShape2D& shapeA, const PhysicsShape2D& shapeB, HitResult& hit)
+static bool IntersectsPhysicsShapes2D(const entt::registry& world, entt::entity entityA, entt::entity entityB, const PhysicsShape2D& shapeA, const PhysicsShape2D& shapeB, HitResult& hit)
 {
     const mat4& worldA = world.get<WorldTransformComponent>(entityA).worldMatrix;
     const mat4& worldB = world.get<WorldTransformComponent>(entityB).worldMatrix;
@@ -302,12 +306,22 @@ static void ResolvePhysicsContact(entt::registry& world, entt::entity entityA, e
 }
 
 using PhysicsTriggerPair = pair<entt::entity, entt::entity>;
-
 struct PhysicsTriggerState
 {
     set<PhysicsTriggerPair> Previous;
     vector<TriggerEvent> Events;
 };
+struct PhysicsTriggerState3D
+{
+    set<PhysicsTriggerPair> Previous;
+    vector<TriggerEvent> Events;
+};
+static void CollectPhysicsTriggerEvents2D(Scene& scene);
+static void CollectPhysicsTriggerEvents3D(Scene& scene);
+namespace
+{
+    std::vector<PhysicsSystem::GlobalTriggerCallback> s_GlobalTriggerCallbacks;
+}
 
 static void CollectPhysicsTriggerEvents2D(Scene& scene)
 {
@@ -367,6 +381,61 @@ static void CollectPhysicsTriggerEvents2D(Scene& scene)
             state.Events.push_back({ pair.first, pair.second, ETriggerEventType::Exit });
     }
 
+    state.Previous = std::move(current);
+}
+static void CollectPhysicsTriggerEvents3D(Scene& scene)
+{
+    auto& world = scene.GetRegistry();
+    auto& state = world.ctx().emplace<PhysicsTriggerState3D>();
+    state.Events.clear();
+    std::set<PhysicsTriggerPair> current;
+    auto colliders = world.view<ColliderComponent, WorldTransformComponent>();
+    for (auto first = colliders.begin(); first != colliders.end(); ++first)
+    {
+        auto second = first;
+        ++second;
+        for (; second != colliders.end(); ++second)
+        {
+            const auto handleA = *first;
+            const auto handleB = *second;
+            const auto& settingsA = colliders.get<ColliderComponent>(handleA).GetSettings();
+            const auto& settingsB = colliders.get<ColliderComponent>(handleB).GetSettings();
+            if (!settingsA.IsTrigger && !settingsB.IsTrigger) continue;
+            if ((settingsA.CollisionLayer & settingsB.CollisionMask) == 0u || (settingsB.CollisionLayer & settingsA.CollisionMask) == 0u) continue;
+            HitResult hit{};
+            if (!PhysicsSystem::Overlap3D(scene, handleA, handleB, hit)) continue;
+            PhysicsTriggerPair pair{ handleA, handleB };
+            if (pair.second < pair.first) std::swap(pair.first, pair.second);
+            current.insert(pair);
+        }
+    }
+    // CharacterController vs Trigger Collider 3D 검사
+    auto kccView = world.view<CharacterControllerComponent, WorldTransformComponent>();
+    for (auto kccEntity : kccView)
+    {
+        const auto& kcc = kccView.get<CharacterControllerComponent>(kccEntity);
+        for (auto colEntity : colliders)
+        {
+            const auto& settings = colliders.get<ColliderComponent>(colEntity).GetSettings();
+            if (!settings.IsTrigger || (settings.CollisionLayer & kcc.CollisionMask) == 0u) continue;
+            HitResult hit{};
+            if (!PhysicsSystem::Overlap3D(scene, kccEntity, colEntity, hit)) continue;
+            PhysicsTriggerPair pair{ kccEntity, colEntity };
+            if (pair.second < pair.first) std::swap(pair.first, pair.second);
+            current.insert(pair);
+        }
+    }
+    for (const auto& pair : current)
+    {
+        const auto type = state.Previous.contains(pair) ? ETriggerEventType::Stay : ETriggerEventType::Enter;
+        state.Events.push_back({ pair.first, pair.second, type });
+    }
+    for (const auto& pair : state.Previous)
+    {
+        if (current.contains(pair)) continue;
+        if (scene.FindEntity(pair.first) || scene.FindEntity(pair.second))
+            state.Events.push_back({ pair.first, pair.second, ETriggerEventType::Exit });
+    }
     state.Previous = std::move(current);
 }
 #pragma endregion
@@ -550,6 +619,11 @@ void PhysicsSystem::OnFixedUpdate(entt::registry& registry, const vector<Scene*>
         }
 
         CollectPhysicsTriggerEvents2D(*scene);
+        CollectPhysicsTriggerEvents3D(*scene);
+        if (const auto* state2D = world.ctx().find<PhysicsTriggerState>())
+            DispatchTriggerEvents(*scene, state2D->Events);
+        if (const auto* state3D = world.ctx().find<PhysicsTriggerState3D>())
+            DispatchTriggerEvents(*scene, state3D->Events);
     }
 }
 #pragma endregion
@@ -757,3 +831,134 @@ std::vector<SceneRaycastHit> PhysicsSystem::RaycastAll(const Scene& scene, const
     return results;
 }
 #pragma endregion
+
+// ── 3. 3D Overlap 및 트리거 수집/디스패치 구현부 ──
+bool PhysicsSystem::Overlap3D(const Scene& scene, entt::entity entityA, entt::entity entityB, HitResult& outHitResult)
+{
+    outHitResult.Reset();
+    const auto& world = scene.GetRegistry();
+    // Transform 필수 확인
+    if (!world.all_of<WorldTransformComponent>(entityA) || !world.all_of<WorldTransformComponent>(entityB))
+        return false;
+    const auto& trA = world.get<WorldTransformComponent>(entityA);
+    const auto& trB = world.get<WorldTransformComponent>(entityB);
+    // KCC vs Collider 검사
+    const auto* kccA = world.try_get<CharacterControllerComponent>(entityA);
+    const auto* kccB = world.try_get<CharacterControllerComponent>(entityB);
+    const auto* colA = world.try_get<ColliderComponent>(entityA);
+    const auto* colB = world.try_get<ColliderComponent>(entityB);
+    if (kccA && colB)
+    {
+        const Capsule capA = kccA->GetWorldCapsule(vec3(trA.worldMatrix[3]));
+        const mat4 worldB = trB.worldMatrix * glm::translate(mat4(1.0f), colB->GetOffset());
+        if (const auto* sphere = std::get_if<SphereShape>(&colB->GetShape()))
+            return Collision::Intersects(capA, BoundingSphere(vec3(worldB[3]), sphere->Radius), outHitResult);
+        if (const auto* box = std::get_if<BoxShape>(&colB->GetShape()))
+        {
+            const BoundingBox b(vec3(worldB[3]) - box->Size * 0.5f, vec3(worldB[3]) + box->Size * 0.5f);
+            return capA.Contains(b.Center()) || b.Contains(capA.Center());
+        }
+    }
+    else if (colA && kccB)
+    {
+        return Overlap3D(scene, entityB, entityA, outHitResult);
+    }
+    else if (colA && colB)
+    {
+        const mat4 worldA = trA.worldMatrix * glm::translate(mat4(1.0f), colA->GetOffset());
+        const mat4 worldB = trB.worldMatrix * glm::translate(mat4(1.0f), colB->GetOffset());
+        const auto* sphereA = std::get_if<SphereShape>(&colA->GetShape());
+        const auto* sphereB = std::get_if<SphereShape>(&colB->GetShape());
+        const auto* boxA = std::get_if<BoxShape>(&colA->GetShape());
+        const auto* boxB = std::get_if<BoxShape>(&colB->GetShape());
+        if (sphereA && sphereB)
+        {
+            const BoundingSphere sA(vec3(worldA[3]), sphereA->Radius);
+            const BoundingSphere sB(vec3(worldB[3]), sphereB->Radius);
+            return Collision::Intersects(sA, sB, outHitResult);
+        }
+        if (boxA && boxB)
+        {
+            const BoundingBox bA(-boxA->Size * 0.5f, boxA->Size * 0.5f);
+            const BoundingBox bB(-boxB->Size * 0.5f, boxB->Size * 0.5f);
+            return Collision::Intersects(bA, worldA, bB, worldB, outHitResult);
+        }
+        if (boxA && sphereB)
+        {
+            const BoundingBox bA(vec3(worldA[3]) - boxA->Size * 0.5f, vec3(worldA[3]) + boxA->Size * 0.5f);
+            const BoundingSphere sB(vec3(worldB[3]), sphereB->Radius);
+            return Collision::Intersects(bA, sB, outHitResult);
+        }
+        if (sphereA && boxB)
+        {
+            const BoundingSphere sA(vec3(worldA[3]), sphereA->Radius);
+            const BoundingBox bB(vec3(worldB[3]) - boxB->Size * 0.5f, vec3(worldB[3]) + boxB->Size * 0.5f);
+            return Collision::Intersects(bB, sA, outHitResult);
+        }
+    }
+    return false;
+}
+void PhysicsSystem::DispatchTriggerEvents(Scene& scene, const std::vector<TriggerEvent>& events)
+{
+    auto& world = scene.GetRegistry();
+    for (const auto& event : events)
+    {
+        const auto invoke = [&](entt::entity self, entt::entity other) {
+            if (!world.valid(self)) return;
+            // 1. C++ TriggerCallbackComponent 델리게이트 호출
+            if (auto* cb = world.try_get<TriggerCallbackComponent>(self))
+            {
+                if (event.type == ETriggerEventType::Enter && cb->OnEnter) cb->OnEnter(self, other, event.type);
+                else if (event.type == ETriggerEventType::Stay && cb->OnStay) cb->OnStay(self, other, event.type);
+                else if (event.type == ETriggerEventType::Exit && cb->OnExit) cb->OnExit(self, other, event.type);
+            }
+            // 2. 유니티 스타일 NativeScriptComponent 가상 함수 호출
+            if (auto* ns = world.try_get<NativeScriptComponent>(self))
+            {
+                if (!ns->Instance && ns->InstantiateScript)
+                {
+                    ns->Instance = ns->InstantiateScript();
+                    ns->Instance->m_Entity = self;
+                    ns->Instance->m_Scene = &scene;
+                    ns->Instance->OnCreate();
+                }
+                if (ns->Instance)
+                {
+                    if (event.type == ETriggerEventType::Enter) ns->Instance->OnTriggerEnter(other);
+                    else if (event.type == ETriggerEventType::Stay) ns->Instance->OnTriggerStay(other);
+                    else if (event.type == ETriggerEventType::Exit) ns->Instance->OnTriggerExit(other);
+                }
+            }
+            // 3. 비주얼 스크립팅 GraphBindingComponent 이벤트 노드 디스패치
+            if (world.all_of<GraphBindingComponent>(self))
+            {
+                GraphSystem::DispatchTriggerEvent(&scene, self, other, static_cast<uint8>(event.type));
+            }
+            };
+        invoke(event.entityA, event.entityB);
+        invoke(event.entityB, event.entityA);
+        // 3. 전역 리스너 브로드캐스트
+        for (const auto& callback : s_GlobalTriggerCallbacks)
+        {
+            if (callback) callback(event);
+        }
+    }
+}
+std::span<const TriggerEvent> PhysicsSystem::GetTriggerEvents3D(const Scene& scene)
+{
+    const auto* state = scene.GetRegistry().ctx().find<PhysicsTriggerState3D>();
+    if (!state) return {};
+    return { state->Events.data(), state->Events.size() };
+}
+void PhysicsSystem::ResetTriggerState3D(Scene& scene)
+{
+    scene.GetRegistry().ctx().erase<PhysicsTriggerState3D>();
+}
+void PhysicsSystem::RegisterGlobalTriggerCallback(GlobalTriggerCallback callback)
+{
+    s_GlobalTriggerCallbacks.push_back(std::move(callback));
+}
+void PhysicsSystem::ClearGlobalTriggerCallbacks()
+{
+    s_GlobalTriggerCallbacks.clear();
+}

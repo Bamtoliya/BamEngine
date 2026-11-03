@@ -2342,3 +2342,33 @@ Use this as the primary execution list until a playable 2D vertical slice is com
   - 인스펙터 속성 편집 및 씬 아카이브 저장/복원 정합성 확인.
   - 씬 뷰포트에서 캡슐 크기 변경에 따른 디버그 와이어프레임 실시간 반영 확인.
   - 비주얼 스크립팅 그래프 에디터 노드 검색 및 배치 정상 확인.
+
+
+## 2026-11-04 — 2D/3D 통합 물리 트리거(Trigger) 및 다중 채널 이벤트 디스패치 파이프라인 구축
+
+- **요청**:
+  - 기존에 수집만 되고 개별 엔티티/컴포넌트로 전달되지 않던 2D 물리 트리거 이벤트를 개선하고,
+  - 3D 충돌체(`ColliderComponent`) 및 키네마틱 캐릭터(`CharacterControllerComponent`) 간의 3D 트리거 겹침(Overlap) 판정을 신규 구현.
+  - 게임 모듈, C++ 프로그래머, 기획자/아티스트가 각각 원하는 방식으로 `OnTriggerEnter`, `OnTriggerStay`, `OnTriggerExit` 로직을 작성할 수 있도록 3대 채널(C++ 델리게이트, C++ 클래스 상속, 비주얼 스크립팅 노드)을 일원화 디스패처로 노출.
+- **구현 내역**:
+  - `Engine/Source/Core/Public/Components/Physics/TriggerCallbackComponent.h`:
+    - C++ 람다 및 함수 객체 델리게이트를 등록할 수 있는 경량 컴포넌트 (`OnEnter`, `OnStay`, `OnExit`).
+  - `Engine/Source/World/Entity/Public/ScriptableEntity.h`, `Engine/Source/Core/Public/Components/Core/NativeScriptComponent.h`:
+    - 유니티의 `MonoBehaviour` 및 언리얼의 `Actor`처럼 C++ 클래스를 상속받아 `OnTriggerEnter/Stay/Exit` 가상 함수를 직관적으로 오버라이드할 수 있는 스크립팅 베이스 및 ECS 바인딩 컴포넌트.
+  - `Engine/Source/System/Physics/Public/PhysicsSystem.h`, `Private/PhysicsSystem.cpp`:
+    - 3D Overlap 감지 함수 `PhysicsSystem::Overlap3D` 구현 (Box-Box, Box-Sphere, Sphere-Sphere, Capsule-Sphere, Capsule-Box, KCC-Trigger).
+    - 3D 트리거 쌍 수집 루프 `CollectPhysicsTriggerEvents3D` 구현.
+    - 2D 및 3D 이벤트를 순회하며 등록된 컴포넌트로 호출을 분배하는 통합 디스패처 `DispatchTriggerEvents` 구현.
+    - 전역 리스너 브로드캐스트 `RegisterGlobalTriggerCallback` 완비.
+  - `Engine/Source/Graph/Private/GraphRegistry.cpp`:
+    - 비주얼 스크립팅 빌트인 노드 3종 등록: `Event.OnTriggerEnter`, `Event.OnTriggerStay`, `Event.OnTriggerExit` (`exec` 실행 핀, `other` 상대 엔티티 ID 핀).
+  - `Engine/Source/Graph/Public/GraphExecutor.h`, `Private/GraphExecutor.cpp`:
+    - 트리거 노드 진입점 실행 및 상대 엔티티 주입 메서드 `BeginTrigger(nodeId, otherEntity)` 구현.
+  - `Engine/Source/System/Graph/Public/GraphSystem.h`, `Private/GraphSystem.cpp`:
+    - 그래프 런타임 상태(`GraphRuntimeState`)에 트리거 노드 캐싱 및 물리 이벤트 디스패치 브리지 `DispatchTriggerEvent` 구현.
+  - `Resources/Data/Localization/Engine.csv`:
+    - `STRUCT_TRIGGER_CALLBACK`, `STRUCT_NATIVE_SCRIPT` 로캘 키 추가.
+- **검증 결과**:
+  - `Engine` 및 `Editor` 빌드 에러 없이 통과.
+  - 에디터 그래프 캔버스 우클릭 메뉴에서 `OnTriggerEnter`, `OnTriggerStay`, `OnTriggerExit` 노드 정상 노출 및 배치 확인.
+  - C++ 람다, 네이티브 스크립트, 비주얼 스크립트 노드로의 이벤트 전달 경로 확보.

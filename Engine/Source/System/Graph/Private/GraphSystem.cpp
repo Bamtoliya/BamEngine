@@ -170,6 +170,9 @@ void GraphSystem::OnUpdate(entt::registry& globalRegistry, const vector<Scene*>&
 				{
 					if (node.Type == "Event.Start") newState.startNodes.push_back(node.Id);
 					else if (node.Type == "Event.Update") newState.updateNodes.push_back(node.Id);
+					else if (node.Type == "Event.OnTriggerEnter") newState.triggerEnterNodes.push_back(node.Id);
+					else if (node.Type == "Event.OnTriggerStay") newState.triggerStayNodes.push_back(node.Id);
+					else if (node.Type == "Event.OnTriggerExit") newState.triggerExitNodes.push_back(node.Id);
 				}
 
 				runtime = &world.emplace_or_replace<GraphRuntimeState>(entity, std::move(newState));
@@ -339,4 +342,34 @@ void GraphSystem::ReloadReflectedNodes(const std::vector<Scene*>& activeScenes)
 	}
 
 	BAM_LOG(Info, "GraphSystem", "HotSwap", "Successfully hot-swapped runtime graph executors.");
+}
+
+void GraphSystem::DispatchTriggerEvent(Scene* scene, entt::entity self, entt::entity other, uint8 triggerType)
+{
+	if (!scene) return;
+	auto& world = scene->GetRegistry();
+	auto* runtime = world.try_get<GraphRuntimeState>(self);
+	if (!runtime || !runtime->isValid) return;
+
+	const std::vector<GraphNodeId>* targetNodes = nullptr;
+	if (triggerType == 0) targetNodes = &runtime->triggerEnterNodes;       // Enter
+	else if (triggerType == 1) targetNodes = &runtime->triggerStayNodes;  // Stay
+	else if (triggerType == 2) targetNodes = &runtime->triggerExitNodes;  // Exit
+
+	if (!targetNodes || targetNodes->empty()) return;
+
+	SetCurrentContext(scene, self, 0.0f);
+
+	for (GraphNodeId nodeId : *targetNodes)
+	{
+		const int64_t otherId = static_cast<int64_t>(static_cast<uint32_t>(other));
+		if (runtime->executor.BeginTrigger(nodeId, otherId).Succeeded())
+		{
+			runtime->executor.Resume();
+			while (runtime->executor.GetState() == EGraphExecutionState::Running)
+				runtime->executor.Tick();
+		}
+	}
+
+	ClearCurrentContext();
 }

@@ -5,6 +5,7 @@
 #include "TriggerEvent.h"
 #include "Structs/HitResult.h"
 #include "Structs/Ray.h"
+#include <functional>
 
 BEGIN(Engine)
 class Entity;
@@ -37,13 +38,23 @@ public:
 	virtual void OnFixedUpdate(entt::registry& registry, const vector<Scene*>& activeScenes, f32 dt) override;
 public:
 	static bool Overlap2D(const Entity& entityA, const Entity& entityB, HitResult& outHitResult);
+	static bool Overlap3D(const Scene& scene, entt::entity entityA, entt::entity entityB, HitResult& outHitResult);
 public:
 	static std::span<const TriggerEvent> GetTriggerEvents2D(const Scene& scene);
+	static std::span<const TriggerEvent> GetTriggerEvents3D(const Scene& scene);
 	static void ResetTriggerState2D(Scene& scene);
+	static void ResetTriggerState3D(Scene& scene);
+
+	// 전역 트리거 리스너 등록
+	using GlobalTriggerCallback = std::function<void(const TriggerEvent&)>;
+	static void RegisterGlobalTriggerCallback(GlobalTriggerCallback callback);
+	static void ClearGlobalTriggerCallbacks();
+
+	// 2D & 3D 통합 이벤트 디스패처
+	static void DispatchTriggerEvents(Scene& scene, const std::vector<TriggerEvent>& events);
 public:
 	static bool Raycast(const Scene& scene, const Ray& ray, SceneRaycastHit& outHit, const RaycastQuery& query);
 	static std::vector<SceneRaycastHit> RaycastAll(const Scene& scene, const Ray& ray, const RaycastQuery& query);
-	// 기존 호출부 하위 호환 오버로드
 	static bool Raycast(const Scene& scene, const Ray& ray, SceneRaycastHit& outHit, f32 maxDistance = FLT_MAX)
 	{
 		RaycastQuery query{};

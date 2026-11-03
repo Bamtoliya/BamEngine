@@ -338,6 +338,8 @@ bool ReflectionRegistry::RegisterComponentOperations()
     append.template operator()<SkyAtmosphereComponent>("Sky Atmosphere", "Rendering", &AddSpatialComponent<SkyAtmosphereComponent>);
     append.template operator()<TerrainComponent>("Terrain", "Rendering", &AddSpatialComponent<TerrainComponent>);
     append.template operator()<PostProcessComponent>("Post Process", "Rendering", &AddSpatialComponent<PostProcessComponent>);
+    append.template operator()<TriggerCallbackComponent>("Trigger Callback", "Physics", &AddSpatialComponent<TriggerCallbackComponent>);
+    append.template operator()<NativeScriptComponent>("Native Script", "Core", &AddSpatialComponent<NativeScriptComponent>);
 
     const bool generated = reflection_generated::ForEach_BamEngine_Type([&]<typename T>()
     {

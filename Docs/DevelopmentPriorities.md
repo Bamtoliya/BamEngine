@@ -426,6 +426,7 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
 - 단일 CPU 파티클·스플라인·트레일은 각각 필요한 실행·저장·렌더 제출 기반으로 진행한다. 전체 네트워크나 배포 완료를 기다리지 않는다.
 - 네트워크는 `NetworkFoundationPlan`의 Phase 1~5(소켓 전송 추상화, 바이너리 패킷 프로토콜, 세션/3-Way 핸드셰이크, ECS NetworkSystem 트랜스폼 동기화 및 에디터 NetworkProfilerPanel) 구축을 2026-11-03 완료하였다. 이후 필요 시 고급 RPC 및 클라이언트 예측 연구로 확장한다.
 - 키네마틱 캐릭터 컨트롤러는 `KinematicCharacterControllerPlan`의 계획에 따라 ECS 기반 `CharacterControllerComponent` 및 `KinematicCharacterSystem`을 통해 지면 감지, 경사로 슬라이딩, 턱/계단 오르기(Step-Up), 점프 및 중력 시뮬레이션, 비주얼 스크립팅 노드 7종 및 에디터 뷰포트 디버그 캡슐 렌더링을 구축 완료하였다 (2026-11-03 완료).
+- 2D/3D 통합 물리 트리거 & 다중 채널 디스패치 파이프라인(`TriggerCallbackComponent`, `ScriptableEntity`/`NativeScriptComponent`, `Event.OnTriggerEnter/Stay/Exit` 비주얼 스크립트 노드 및 `PhysicsSystem::Overlap3D`)을 구축 완료하였다 (2026-11-04 완료).
 
 ### 10.8 사용 조건에 따라 먼저 처리할 경로
 

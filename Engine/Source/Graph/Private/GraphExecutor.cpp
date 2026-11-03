@@ -9,9 +9,10 @@ namespace
 
 		const char* types[]{ "Core.Bool", "Core.Int", "Core.Float", "Core.Float2", "Core.Float3", "Core.Float4",
 			"Math.AddFloat", "Math.MultiplyFloat", "Math.GreaterFloat", "Math.LessFloat", "Logic.And", "Logic.Or",
-			"Logic.Not", "Logic.SelectFloat", "Event.Start", "Event.Update", "Flow.Branch", "Flow.Sequence",
-			"Flow.ForLoop", "Flow.WhileLoop", "Flow.DoOnce", "Flow.Gate", "Flow.FlipFlop", "Logic.FloatResult",
-			"Logic.BoolResult", "Logic.IntResult", "Logic.Float2Result", "Logic.Float3Result", "Logic.Float4Result" };
+			"Logic.Not", "Logic.SelectFloat",
+			"Event.Start", "Event.Update","Event.OnTriggerEnter", "Event.OnTriggerStay", "Event.OnTriggerExit",
+			"Flow.Branch", "Flow.Sequence", "Flow.ForLoop", "Flow.WhileLoop", "Flow.DoOnce", "Flow.Gate", "Flow.FlipFlop",
+			"Logic.FloatResult", "Logic.BoolResult", "Logic.IntResult", "Logic.Float2Result", "Logic.Float3Result", "Logic.Float4Result" };
 		return std::find(std::begin(types), std::end(types), type) != std::end(types);
 	}
 }
@@ -108,6 +109,29 @@ GraphDiagnostic GraphExecutor::Begin(GraphNodeId entry, float delta, std::size_t
 	m_State = EGraphExecutionState::Paused;
 	if (node->Type == "Event.Start") m_Started = true;
 	else Store(entry, "delta", delta);
+	m_Pending.push_back({ TaskKind::Enter, entry });
+	return {};
+}
+
+GraphDiagnostic GraphExecutor::BeginTrigger(GraphNodeId entry, int64_t otherEntity, std::size_t budget)
+{
+	if (!m_Loaded || m_State == EGraphExecutionState::Running || m_State == EGraphExecutionState::Paused)
+		return { EGraphError::InvalidExecutionState, entry, {}, 0, "Load a graph and finish or stop current execution first." };
+
+	const auto* node = m_Graph.FindNode(entry);
+	if (!node || (node->Type != "Event.OnTriggerEnter" && node->Type != "Event.OnTriggerStay" && node->Type != "Event.OnTriggerExit"))
+		return { EGraphError::InvalidExecutionState, entry, {}, 0, "Select a valid Trigger event entry." };
+
+	m_Pending.clear();
+	m_Active.clear();
+	m_Evaluating.clear();
+	m_Outputs.clear();
+	m_Result = {};
+
+	m_Budget = budget;
+	m_State = EGraphExecutionState::Paused;
+
+	Store(entry, "other", otherEntity);
 	m_Pending.push_back({ TaskKind::Enter, entry });
 	return {};
 }
@@ -230,7 +254,7 @@ void GraphExecutor::Execute(const Task& task)
 	if (!m_Active.insert(id).second) throw std::runtime_error("Re-entry into an active node is not supported.");
 	m_Pending.push_back({ TaskKind::Leave, id });
 	if (type.rfind("Core.Reroute", 0) == 0) PushOutput(id, "Out");
-	else if (type == "Event.Start" || type == "Event.Update") PushOutput(id, "exec");
+	else if (type == "Event.Start" || type == "Event.Update" || type == "Event.OnTriggerEnter" || type == "Event.OnTriggerStay" || type == "Event.OnTriggerExit") PushOutput(id, "exec");
 	else if (type == "Flow.Branch") PushOutput(id, std::get<bool>(ReadInput(id, "condition")) ? "true" : "false");
 	else if (type == "Flow.Sequence") { PushOutput(id, "then1"); PushOutput(id, "then0"); }
 	else if (type == "Flow.ForLoop")

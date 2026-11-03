@@ -13,3 +13,5 @@
 #include "Components/Physics/Joint2DComponent.h"
 
 #include "Components/Physics/CharacterControllerComponent.h"
+#include "Components/Physics/TriggerCallbackComponent.h"
+#include "Components/Core/NativeScriptComponent.h"

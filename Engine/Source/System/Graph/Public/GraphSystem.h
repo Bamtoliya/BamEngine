@@ -19,6 +19,9 @@ struct ENGINE_API GraphRuntimeState
 	GraphExecutor executor;
 	std::vector<GraphNodeId> startNodes;
 	std::vector<GraphNodeId> updateNodes;
+	std::vector<GraphNodeId> triggerEnterNodes;
+	std::vector<GraphNodeId> triggerStayNodes;
+	std::vector<GraphNodeId> triggerExitNodes;
 	bool hasStarted = false;
 	bool isValid = true;
 };
@@ -43,6 +46,7 @@ public:
 	void ReloadReflectedNodes(const std::vector<class Scene*>& activeScenes);
 
 	// ── 노드 실행 컨텍스트 (Scene, Entity, DeltaTime) ──
+	static void DispatchTriggerEvent(Scene* scene, entt::entity self, entt::entity other, uint8 triggerType);
 	static Scene* GetCurrentScene();
 	static entt::entity GetCurrentEntity();
 	static float GetCurrentDeltaTime();

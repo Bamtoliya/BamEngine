@@ -248,6 +248,12 @@ GraphDiagnostic GraphRegistry::RegisterBuiltins()
 			{ "cavity", Direction::Input, Type::Float, 0.5f },
 			{ "ao", Direction::Input, Type::Float, 1.0f },
 			{ "emissive", Direction::Input, Type::Float3, std::array<float, 3>{ 0.0f, 0.0f, 0.0f } } } },
+		{ "Event.OnTriggerEnter", logic, {
+			{ "exec", Direction::Output, Type::Execution, {} }, { "other", Direction::Output, Type::Int, {} } } },
+		{ "Event.OnTriggerStay", logic, {
+			{ "exec", Direction::Output, Type::Execution, {} }, { "other", Direction::Output, Type::Int, {} } } },
+		{ "Event.OnTriggerExit", logic, {
+			{ "exec", Direction::Output, Type::Execution, {} }, { "other", Direction::Output, Type::Int, {} } } },
 	};
 	for (auto& definition : definitions)
 	{
