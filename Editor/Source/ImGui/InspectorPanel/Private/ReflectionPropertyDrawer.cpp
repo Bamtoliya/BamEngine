@@ -29,6 +29,30 @@
 
 namespace
 {
+	void DrawResponsivePropertyLabel(const std::string& displayName, const std::string& typeName,
+		float reservedRightWidth = 0.0f)
+	{
+		const float availWidth = ImGui::GetContentRegionAvail().x - reservedRightWidth;
+		const ImVec2 textSize = ImGui::CalcTextSize(displayName.c_str());
+		const bool isClipped = textSize.x > availWidth;
+		ImGui::AlignTextToFramePadding();
+		ImGui::TextUnformatted(displayName.c_str());
+		if (ImGui::IsItemHovered())
+		{
+			ImGui::BeginTooltip();
+			if (isClipped)
+			{
+				ImGui::TextUnformatted(displayName.c_str());
+				if (!typeName.empty()) ImGui::Separator();
+			}
+			if (!typeName.empty())
+			{
+				ImGui::TextDisabled("%s", typeName.c_str());
+			}
+			ImGui::EndTooltip();
+		}
+	}
+
     bool DrawInspectorText(std::string& value)
     {
         return ImGui::InputText("##Value", &value);
@@ -1064,53 +1088,48 @@ namespace Editor
 			}
 			if (ImGui::BeginTable("Properties", 2, flags))
 			{
-				ImGui::TableSetupColumn("##Property", ImGuiTableColumnFlags_WidthStretch, 0.25f);
-				ImGui::TableSetupColumn("##Value", ImGuiTableColumnFlags_WidthStretch, 0.75f);
-
+				// [반응형 컬럼 정책]: 라벨은 기본 120px를 확보하고, 값 컨트롤이 나머지 공간을 모두 차지
+				ImGui::TableSetupColumn("##Property", ImGuiTableColumnFlags_WidthFixed, 120.0f);
+				ImGui::TableSetupColumn("##Value", ImGuiTableColumnFlags_WidthStretch);
 				for (const auto& property : type.Properties)
 				{
 					if (InspectorMetadataText(property.Metadata, "Category", "UI_GENERAL") != category) continue;
 					if (!GetReflectionDrawerBoolMetadata(property.Metadata, "Visible", true)) continue;
-					if (!EvaluateEditCondition(property, type, object, registry)) continue; // 추가: 조건 거짓이면 행(Row) 생성 생략
-
+					if (!EvaluateEditCondition(property, type, object, registry)) continue;
 					const std::string displayName = GetReflectionDrawerDisplayName(property.Metadata, property.Name);
-
 					ImGui::TableNextRow();
 					ImGui::TableSetColumnIndex(0);
-					ImGui::TextUnformatted(displayName.data(), displayName.data() + displayName.size());
-					if (ImGui::IsItemHovered())
-						ImGui::SetTooltip("%s", property.TypeName.c_str());
-
-					// [방안 B]: Transform의 벡터 속성(Position, Rotation, Scale) 라벨 우측에 자물쇠 아이콘 배치
-					if (editSettings != nullptr && (editSettings->Vectors.contains(property.Name) || type.QualifiedName == "Engine::TransformComponent"))
+					// 1. 자물쇠 버튼 유무 확인 및 우측 예약 공간 계산
+					const bool hasLock = (editSettings != nullptr &&
+						(editSettings->Vectors.contains(property.Name) || type.QualifiedName == "Engine::TransformComponent"));
+					const float btnWidth = ImGui::GetFrameHeight() * 0.85f;
+					const float rightPadding = 4.0f;
+					const float reservedRightWidth = hasLock ? (btnWidth + rightPadding + ImGui::GetStyle().ItemSpacing.x) : 0.0f;
+					// 2. 스마트 반응형 라벨 출력 (잘림 감지 및 통합 툴팁)
+					DrawResponsivePropertyLabel(displayName, property.TypeName, reservedRightWidth);
+					// 3. Transform 벡터 속성 자물쇠 아이콘 배치
+					if (hasLock)
 					{
 						auto& vectorSettings = editSettings->Vectors[property.Name];
 						const char* lockIcon = vectorSettings.Locked ? ICON_FA_LOCK : ICON_FA_LOCK_OPEN;
-						const float btnWidth = ImGui::GetFrameHeight() * 0.85f;
-
 						ImGui::SameLine();
 						const float avail = ImGui::GetContentRegionAvail().x;
-						const float rightPadding = 4.0f;
 						if (avail > (btnWidth + rightPadding))
 							ImGui::SetCursorPosX(ImGui::GetCursorPosX() + avail - btnWidth - rightPadding);
-
 						ImGui::PushID(property.Name.c_str());
 						const bool wasLocked = vectorSettings.Locked;
 						if (wasLocked) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.4f, 0.1f, 0.8f));
-
 						if (ImGui::SmallButton(lockIcon))
 						{
 							vectorSettings.Locked = !vectorSettings.Locked;
 							if (vectorSettings.Locked) editSettings->ReadOnlyProperties.insert(property.Name);
 							else editSettings->ReadOnlyProperties.erase(property.Name);
 						}
-
 						if (wasLocked) ImGui::PopStyleColor();
 						if (ImGui::IsItemHovered())
 							ImGui::SetTooltip("%s", vectorSettings.Locked ? LOCAL_CSTR("Inspector.UnlockProperty") : LOCAL_CSTR("Inspector.LockProperty"));
 						ImGui::PopID();
 					}
-
 					ImGui::TableSetColumnIndex(1);
 					changed |= DrawValue(property, object, registry, editSettings);
 				}

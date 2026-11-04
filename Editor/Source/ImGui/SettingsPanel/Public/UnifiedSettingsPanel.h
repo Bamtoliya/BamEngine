@@ -30,6 +30,8 @@ public:
 
     void SetActiveCategory(EUnifiedSettingsCategory category) { m_ActiveCategory = category; }
     void OpenWithCategory(EUnifiedSettingsCategory category) { m_ActiveCategory = category; m_Open = true; }
+    virtual void CaptureState(EditorWorkspace& workspace) const override;
+    virtual void RestoreState(const EditorWorkspace& workspace) override;
 
 private:
     void ResetDrafts();

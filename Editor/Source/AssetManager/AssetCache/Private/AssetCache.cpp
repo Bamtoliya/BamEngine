@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "AssetCache.h"
 #include <stb_image.h>
 #include "Renderer.h"
@@ -13,20 +13,19 @@
 #include "Sprite.h"
 #include "Model.h"
 #include "Mesh.h"
+#include "Functions.h"
+#include "PlatformPath.h"
+#include <fstream>
+#include <limits>
 
 namespace
 {
     std::string ThumbnailCacheKey(const filesystem::path& path)
     {
-        if (path.empty())
-            return {};
+        if (path.empty()) return {};
 
-        std::error_code ec;
-        const auto absolutePath = path.is_absolute() ? path : filesystem::absolute(path, ec);
-        if (ec)
-            return {};
-
-        return absolutePath.lexically_normal().generic_string();
+        const auto absolutePath = Engine::PlatformPath::ResolveProjectRelative(path);
+        return Engine::WStrToStr(absolutePath.generic_wstring());
     }
 
     // F12: 고해상도 원본 이미지를 썸네일 해상도로 안전하게 축소하는 Bilinear 다운샘플러
@@ -99,7 +98,7 @@ void AssetCache::Update()
 
     // 같은 프레임에 변경 요청과 완료 결과가 들어오면 변경부터 반영합니다.
     for (const auto& path : invalidations)
-        ClearCache(filesystem::path(path));
+        ClearCache(Engine::Utf8ToPath(path));
 
     // 새로 도착한 태스크들을 메인 스레드 업로드 대기열에 추가
     for (auto& task : tasks)
@@ -206,44 +205,55 @@ void AssetCache::ProcessPending3DThumbnail()
     // 1단계: 이전 프레임에서 제출한 렌더링 결과물이 있으면 텍스처 복제하여 캐시에 등록
     if (m_CaptureState == ECaptureState::Rendering)
     {
-        if (!m_CurrentCapturingKey.empty())
+        const auto loading = m_LoadingPaths.find(m_CurrentCapturingKey);
+        const bool isCurrent = loading != m_LoadingPaths.end() &&
+            loading->second == m_CurrentCapturingRequestId;
+
+        if (isCurrent)
         {
             RHITexture* newTexture = thumbRenderer.CreateThumbnailTexture();
-            m_LoadingPaths.erase(m_CurrentCapturingKey);
+            m_LoadingPaths.erase(loading);
 
-            if (newTexture)
-            {
-                const size_t byteSize = static_cast<size_t>(MAX_THUMBNAIL_DIM) * MAX_THUMBNAIL_DIM * 4;
-                InsertToCache(m_CurrentCapturingKey, newTexture, byteSize);
-            }
-            else
-            {
-                InsertToCache(m_CurrentCapturingKey, nullptr, 0);
-            }
+            const size_t byteSize = newTexture != nullptr ?
+                static_cast<size_t>(MAX_THUMBNAIL_DIM) * MAX_THUMBNAIL_DIM * 4 : 0;
+
+            InsertToCache(m_CurrentCapturingKey, newTexture, byteSize);
+        }
+        else
+        {
+            BAM_LOG(Trace, "Editor", "Asset",
+                "Discarded stale 3D thumbnail: path={}, request={}",
+                m_CurrentCapturingKey, m_CurrentCapturingRequestId);
         }
 
         m_CurrentCapturingKey.clear();
+        m_CurrentCapturingRequestId = 0;
         m_CaptureState = ECaptureState::Idle;
     }
 
     // 2단계: 대기열에서 다음 에셋 1개를 꺼내어 타입별 자동 프레이밍 렌더링 제출
     while (!m_Pending3DQueue.empty() && m_CaptureState == ECaptureState::Idle)
     {
-        std::string key = m_Pending3DQueue.front();
+        const auto request = std::move(m_Pending3DQueue.front());
         m_Pending3DQueue.pop();
 
-        if (!m_LoadingPaths.contains(key) || m_ThumbnailCache.contains(key))
+        const auto& key = request.AssetPath;
+        const auto loading = m_LoadingPaths.find(key);
+
+        if (loading == m_LoadingPaths.end() || loading->second != request.RequestId ||
+            m_ThumbnailCache.contains(key))
             continue;
 
-        std::filesystem::path path(reinterpret_cast<const char8_t*>(key.c_str()));
-        std::string ext = path.extension().string();
-        for (char& c : ext) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-        std::string filename = path.filename().string();
-        for (char& c : filename) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        const filesystem::path path = Engine::Utf8ToPath(key);
+        std::string ext = Engine::WStrToStr(path.extension().wstring());
+        for (char& c : ext)
+            c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
 
-        std::error_code ec;
-        const std::wstring relPath = std::filesystem::relative(path, ec).wstring();
-        if (ec) continue;
+        std::string filename = Engine::WStrToStr(path.filename().wstring());
+        for (char& c : filename)
+            c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+
+        const std::wstring relPath = Engine::PlatformPath::ToProjectRelative(path).wstring();
 
         auto& rm = Engine::ResourceManager::Get();
         bool submitSuccess = false;
@@ -337,6 +347,7 @@ void AssetCache::ProcessPending3DThumbnail()
         if (submitSuccess)
         {
             m_CurrentCapturingKey = key;
+            m_CurrentCapturingRequestId = request.RequestId;
             m_CaptureState = ECaptureState::Rendering;
             break;
         }
@@ -366,15 +377,15 @@ RHITexture* AssetCache::GetThumbnail(const filesystem::path& assetPath)
     if (m_LoadingPaths.contains(key))
         return nullptr;
 
-    std::string filename = assetPath.filename().string();
+    std::string filename = Engine::WStrToStr(assetPath.filename().wstring());
     for (char& ch : filename)
         ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
 
-    std::string ext = assetPath.extension().string();
+    std::string ext = Engine::WStrToStr(assetPath.extension().wstring());
     for (char& ch : ext)
         ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
 
-    const bool isImage = ext == ".png" || ext == ".jpg" || ext == ".tga" || ext == ".bmp";
+    const bool isImage = ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga" || ext == ".bmp";
     const bool isMaterial = ext == ".bammat" || ext == ".bammatinst" || ext == ".mat" ||
         filename.ends_with(".bammat.json") || filename.ends_with(".bammatinst.json");
     const bool isModelOrMesh = ext == ".bammodel" || ext == ".bammesh" || ext == ".glb" || ext == ".gltf" || ext == ".fbx" || ext == ".obj" ||
@@ -386,7 +397,7 @@ RHITexture* AssetCache::GetThumbnail(const filesystem::path& assetPath)
     {
         const Engine::uint64 requestId = ++m_NextRequestId;
         m_LoadingPaths.emplace(key, requestId);
-        m_Pending3DQueue.push(key);
+        m_Pending3DQueue.push(Thumbnail3DRequest{ key, requestId });
         return nullptr;
     }
 
@@ -407,7 +418,7 @@ RHITexture* AssetCache::GetThumbnail(const filesystem::path& assetPath)
 
                 try
                 {
-                    const filesystem::path path(key);
+                    const filesystem::path path = Engine::Utf8ToPath(key);
                     auto decoded = isImage ? LoadImageThumbnail(path) : LoadModelThumbnail(path);
                     if (decoded) task = std::move(*decoded);
                 }
@@ -472,6 +483,7 @@ void AssetCache::ClearAll()
     m_LoadingPaths.clear();
     m_Pending3DQueue = {};
     m_CurrentCapturingKey.clear();
+    m_CurrentCapturingRequestId = 0;
     m_CaptureState = ECaptureState::Idle;
     for (auto& [path, entry] : m_ThumbnailCache)
         Safe_Release(entry.Texture);
@@ -491,13 +503,28 @@ void AssetCache::ClearAll()
 
 std::optional<AssetCache::ThumbnailUploadTask> AssetCache::LoadImageThumbnail(const filesystem::path& assetPath)
 {
+    const auto fullPath = Engine::PlatformPath::ResolveProjectRelative(assetPath);
+    std::ifstream file(fullPath, std::ios::binary | std::ios::ate);
+    if (!file.is_open()) return std::nullopt;
+
+    const std::streamsize size = file.tellg();
+    if (size <= 0 || size > static_cast<std::streamsize>((std::numeric_limits<int>::max)()))
+        return std::nullopt;
+
+    file.seekg(0, std::ios::beg);
+
+    std::vector<stbi_uc> encodedData(static_cast<size_t>(size));
+    if (!file.read(reinterpret_cast<char*>(encodedData.data()), size))
+        return std::nullopt;
+
     int32 width = 0, height = 0, channels = 0;
-    stbi_uc* data = stbi_load(assetPath.string().c_str(), &width, &height, &channels, 4);
+    stbi_uc* data = stbi_load_from_memory(encodedData.data(), static_cast<int>(size),
+        &width, &height, &channels, 4);
 
     if (data)
     {
         ThumbnailUploadTask task;
-        task.AssetPath = assetPath.string();
+        task.AssetPath = ThumbnailCacheKey(assetPath);
 
         // F12: 원본 이미지가 썸네일 해상도(128×128)를 초과하면 종횡비를 유지하며 다운샘플링
         if (width > MAX_THUMBNAIL_DIM || height > MAX_THUMBNAIL_DIM)
@@ -570,7 +597,7 @@ std::optional<AssetCache::ThumbnailUploadTask> AssetCache::LoadModelThumbnail(co
             }
 
             ThumbnailUploadTask task;
-            task.AssetPath = assetPath.string();
+            task.AssetPath = ThumbnailCacheKey(assetPath);
             task.Width = width;
             task.Height = height;
             task.Data = std::move(pixels);

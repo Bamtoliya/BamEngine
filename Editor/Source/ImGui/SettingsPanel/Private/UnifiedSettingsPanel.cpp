@@ -313,36 +313,18 @@ void UnifiedSettingsPanel::Draw()
     const float footerHeight = ImGui::GetFrameHeightWithSpacing() + 8.0f;
     const float contentHeight = ImGui::GetContentRegionAvail().y - footerHeight;
 
-    // 1. 좌측 사이드바 영역 (가로 스크롤바 플래그 적용)
+    // 1. 좌측 카테고리 사이드바
     ImGui::BeginChild("SettingsSidebarRegion", ImVec2(m_SidebarWidth, contentHeight), true, ImGuiWindowFlags_HorizontalScrollbar);
     DrawSidebar();
     ImGui::EndChild();
-
     ImGui::SameLine();
-
-    // 2. 사이드바 크기 조절 스플리터 (드래그하여 크기 조절)
-    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImGui::GetStyleColorVec4(ImGuiCol_SeparatorActive));
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImGui::GetStyleColorVec4(ImGuiCol_SeparatorHovered));
-    ImGui::Button("##SidebarSplitter", ImVec2(4.0f, contentHeight));
-    ImGui::PopStyleColor(3);
-
-    if (ImGui::IsItemActive())
-    {
-        m_SidebarWidth += ImGui::GetIO().MouseDelta.x;
-        const float minWidth = 180.0f;
-        const float maxWidth = (std::max)(minWidth, ImGui::GetWindowWidth() * 0.5f);
-        if (m_SidebarWidth < minWidth) m_SidebarWidth = minWidth;
-        if (m_SidebarWidth > maxWidth) m_SidebarWidth = maxWidth;
-    }
-    if (ImGui::IsItemHovered())
-    {
-        ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
-    }
-
+    // 2. 공통 스플리터 헬퍼 적용 (수동 코드 20줄 -> 2줄로 간소화)
+    const float minWidth = 180.0f;
+    const float maxWidth = (std::max)(minWidth, ImGui::GetWindowWidth() * 0.5f);
+    float dummyContentWidth = ImGui::GetContentRegionAvail().x - m_SidebarWidth - 4.0f;
+    Editor::SplitterV("##SidebarSplitter", &m_SidebarWidth, &dummyContentWidth, minWidth, 200.0f, contentHeight);
     ImGui::SameLine();
-
-    // 3. 우측 상세 콘텐츠 영역
+    // 3. 우측 설정 상세 컨텐츠 영역
     ImGui::BeginChild("SettingsContentRegion", ImVec2(0.0f, contentHeight), true);
     DrawContentArea();
     ImGui::EndChild();
@@ -1220,6 +1202,18 @@ void UnifiedSettingsPanel::DrawCategoryProjectSettings()
         }
         ImGui::Spacing();
     }
+}
+
+void UnifiedSettingsPanel::CaptureState(EditorWorkspace& workspace) const
+{
+    IImGui::CaptureState(workspace);
+    workspace.SetSplitter("Settings.SidebarWidth", m_SidebarWidth);
+}
+
+void UnifiedSettingsPanel::RestoreState(const EditorWorkspace& workspace)
+{
+    IImGui::RestoreState(workspace);
+    m_SidebarWidth = workspace.GetSplitter("Settings.SidebarWidth", 250.0f);
 }
 
 END

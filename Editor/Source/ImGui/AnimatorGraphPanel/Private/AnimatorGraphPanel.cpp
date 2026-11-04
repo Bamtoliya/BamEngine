@@ -13,6 +13,7 @@
 #include "MaterialInterface.h"
 #include "ShortcutManager.h"
 
+
 AnimatorGraphPanel::AnimatorGraphPanel()
 {
 	m_Name = L"Animator Graph";
@@ -22,6 +23,9 @@ AnimatorGraphPanel::AnimatorGraphPanel()
 }
 AnimatorGraphPanel::~AnimatorGraphPanel()
 {
+	if (s_ActivePanel == this)
+		s_ActivePanel = nullptr;
+
 	m_PreviewWidget.Free();
 }
 
@@ -42,6 +46,8 @@ void AnimatorGraphPanel::Update(f32 dt)
 
 void AnimatorGraphPanel::Draw()
 {
+	m_Focused = false;
+	m_Hovered = false;
 	if (!m_Open) return;
 
 	ImGui::SetNextWindowSize(ImVec2(1000.0f, 600.0f), ImGuiCond_FirstUseEver);
@@ -70,34 +76,37 @@ void AnimatorGraphPanel::Draw()
 		ImGui::Separator();
 
 		const float totalWidth = ImGui::GetContentRegionAvail().x;
-		const float leftPaneWidth = 260.0f;
-		const float inspectorWidth = 280.0f;
-		const float canvasWidth = std::max(200.0f, totalWidth - leftPaneWidth - inspectorWidth - 16.0f);
 		const float contentHeight = ImGui::GetContentRegionAvail().y;
-
-		// ── [좌측 영역] 3D 프리뷰 뷰포트 + 파라미터 독 (상하 분할) ──
-		ImGui::BeginChild("LeftPane", ImVec2(leftPaneWidth, contentHeight), true);
+		const float splitterThickness = 4.0f;
+		const float spacingX = ImGui::GetStyle().ItemSpacing.x;
+		// 캔버스 가용 너비 계산 (전체 폭 - 좌측 - 우측 - 스플리터 2개 - 아이템 간격 2개)
+		const float overhead = (splitterThickness * 2.0f) + (spacingX * 2.0f);
+		float canvasWidth = (std::max)(200.0f, totalWidth - m_LeftPaneWidth - m_InspectorWidth - overhead);
+		// ── [좌측 영역] 3D 프리뷰 뷰포트 + 파라미터 독 ──
+		ImGui::BeginChild("LeftPane", ImVec2(m_LeftPaneWidth, contentHeight), true);
 		if (m_ShowPreviewViewport)
 		{
-			const float previewHeight = std::min(leftPaneWidth * 0.95f, contentHeight * 0.45f);
-			DrawPreviewSection(leftPaneWidth - 16.0f, previewHeight);
+			const float previewHeight = std::min(m_LeftPaneWidth * 0.95f, contentHeight * 0.45f);
+			DrawPreviewSection(m_LeftPaneWidth - 16.0f, previewHeight);
 			ImGui::Separator();
 		}
 		DrawParametersTab();
 		ImGui::EndChild();
-
 		ImGui::SameLine();
-
+		// ── [좌측 스플리터: 좌측 ↔ 캔버스] ──
+		Editor::SplitterV("##LeftSplitter", &m_LeftPaneWidth, &canvasWidth, 180.0f, 200.0f, contentHeight, splitterThickness);
+		ImGui::SameLine();
 		// ── [중앙 영역] 상태 머신 노드 캔버스 ──
 		ImGui::BeginChild("CanvasPanel", ImVec2(canvasWidth, contentHeight), true,
 			ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 		DrawCanvas();
 		ImGui::EndChild();
-
 		ImGui::SameLine();
-
+		// ── [우측 스플리터: 캔버스 ↔ 우측 인스펙터] ──
+		Editor::SplitterV("##RightSplitter", &canvasWidth, &m_InspectorWidth, 200.0f, 200.0f, contentHeight, splitterThickness);
+		ImGui::SameLine();
 		// ── [우측 영역] 인스펙터 패널 ──
-		ImGui::BeginChild("InspectorPanel", ImVec2(inspectorWidth, contentHeight), true);
+		ImGui::BeginChild("InspectorPanel", ImVec2(m_InspectorWidth, contentHeight), true);
 		DrawSelectionInspector();
 		ImGui::EndChild();
 	}
@@ -105,6 +114,55 @@ void AnimatorGraphPanel::Draw()
 
 	// 2. 미저장 보호 모달은 패널의 Begin/End 외부 최상위 뷰포트에서 독립적으로 렌더링
 	DrawConfirmModal();
+}
+
+bool AnimatorGraphPanel::CanDeleteSelection() const
+{
+	if (!m_Open || !m_StateMachine || m_PendingAction != EPendingAction::None) return false;
+
+	const bool hasState = m_SelectedStateIndex >= 0 &&
+		m_SelectedStateIndex < static_cast<int>(m_StateMachine->states.size());
+	const bool hasTransition = m_SelectedTransitionIndex >= 0 &&
+		m_SelectedTransitionIndex < static_cast<int>(m_StateMachine->transitions.size());
+
+	return hasState || hasTransition;
+}
+
+void AnimatorGraphPanel::DeleteSelection()
+{
+	if (!CanDeleteSelection()) return;
+
+	const bool hasState = m_SelectedStateIndex >= 0 &&
+		m_SelectedStateIndex < static_cast<int>(m_StateMachine->states.size());
+
+	if (hasState)
+	{
+		const std::string deletedName = m_StateMachine->states[m_SelectedStateIndex].name;
+		m_StateMachine->states.erase(m_StateMachine->states.begin() + m_SelectedStateIndex);
+
+		std::erase_if(m_StateMachine->transitions, [&](const Engine::AnimTransition& transition) {
+			return transition.sourceState == deletedName || transition.targetState == deletedName;
+			});
+
+		m_NodePositions.erase(deletedName);
+
+		if (m_StateMachine->defaultState == deletedName)
+		{
+			m_StateMachine->defaultState = m_StateMachine->states.empty()
+				? std::string{} : m_StateMachine->states.front().name;
+		}
+	}
+	else
+	{
+		m_StateMachine->transitions.erase(m_StateMachine->transitions.begin() + m_SelectedTransitionIndex);
+	}
+
+	m_SelectedStateIndex = -1;
+	m_SelectedTransitionIndex = -1;
+	m_ConnectingSourceIndex = -1;
+	m_DraggingStateIndex = -1;
+	m_IsDirty = true;
+	SyncPreviewStateMachine();
 }
 
 void AnimatorGraphPanel::DrawMenuBar()
@@ -125,29 +183,9 @@ void AnimatorGraphPanel::DrawMenuBar()
 			ImGui::EndMenu();
 		}
 
-		if(ImGui::BeginMenu(LOCAL_CSTR("EditorCommon.Edit")))
+		if (ImGui::BeginMenu(LOCAL_CSTR("EditorCommon.Edit")))
 		{
-			auto& sm = ShortcutManager::Get();
-			if (ImGui::MenuItem((ICON_FA_TRASH " " + LOCAL_LABEL("EditorCommon.Delete")).c_str(),
-				sm.GetShortcutHint("Edit.Delete"), false, m_SelectedStateIndex >= 0 || m_SelectedTransitionIndex >= 0))
-			{
-				if (m_SelectedStateIndex >= 0 && m_SelectedStateIndex < static_cast<int>(m_StateMachine->states.size()))
-				{
-					const std::string delName = m_StateMachine->states[m_SelectedStateIndex].name;
-					m_StateMachine->states.erase(m_StateMachine->states.begin() + m_SelectedStateIndex);
-					std::erase_if(m_StateMachine->transitions, [&](const Engine::AnimTransition& tr) {
-						return tr.sourceState == delName || tr.targetState == delName;
-						});
-					m_SelectedStateIndex = -1;
-					m_IsDirty = true;
-				}
-				else if (m_SelectedTransitionIndex >= 0 && m_SelectedTransitionIndex < static_cast<int>(m_StateMachine->transitions.size()))
-				{
-					m_StateMachine->transitions.erase(m_StateMachine->transitions.begin() + m_SelectedTransitionIndex);
-					m_SelectedTransitionIndex = -1;
-					m_IsDirty = true;
-				}
-			}
+			ACTION_MENU_ITEM((ICON_FA_TRASH " " + LOCAL_LABEL("EditorCommon.Delete")).c_str(), "Animator.DeleteSelection");
 			ImGui::EndMenu();
 		}
 
@@ -527,16 +565,7 @@ void AnimatorGraphPanel::DrawCanvasContextMenu()
 			{
 				m_ConnectingSourceIndex = m_SelectedStateIndex;
 			}
-			if (ImGui::MenuItem((ICON_FA_TRASH " " + LOCAL_LABEL("EditorCommon.Delete")).c_str()))
-			{
-				const std::string deletedName = m_StateMachine->states[m_SelectedStateIndex].name;
-				m_StateMachine->states.erase(m_StateMachine->states.begin() + m_SelectedStateIndex);
-				std::erase_if(m_StateMachine->transitions, [&](const Engine::AnimTransition& tr) {
-					return tr.sourceState == deletedName || tr.targetState == deletedName;
-					});
-				m_SelectedStateIndex = -1;
-				m_IsDirty = true;
-			}
+			ACTION_MENU_ITEM((ICON_FA_TRASH " " + LOCAL_LABEL("EditorCommon.Delete")).c_str(), "Animator.DeleteSelection");
 		}
 		else
 		{
@@ -1004,4 +1033,18 @@ void AnimatorGraphPanel::UpdatePreview(f32 dt)
 void AnimatorGraphPanel::DrawPreviewSection(float width, float height)
 {
 	m_PreviewWidget.Draw(ImVec2(width, height));
+}
+
+void AnimatorGraphPanel::CaptureState(EditorWorkspace& workspace) const
+{
+	IImGui::CaptureState(workspace);
+	workspace.SetSplitter("Animator.LeftPaneWidth", m_LeftPaneWidth);
+	workspace.SetSplitter("Animator.InspectorWidth", m_InspectorWidth);
+}
+
+void AnimatorGraphPanel::RestoreState(const EditorWorkspace& workspace)
+{
+	IImGui::RestoreState(workspace);
+	m_LeftPaneWidth = workspace.GetSplitter("Animator.LeftPaneWidth", 260.0f);
+	m_InspectorWidth = workspace.GetSplitter("Animator.InspectorWidth", 280.0f);
 }

@@ -32,6 +32,10 @@ public:
 	virtual void Draw() override;
 	virtual void ProcessEvent(const SDL_Event* event) override;
 	virtual void Free() override;
+	virtual EShortcutContext GetShortcutContext() const override { return EShortcutContext::ContentBrowser; }
+	void SetRenameTarget(const filesystem::path& path) { m_RenameTargetPath = path; }
+	bool CanRenameTarget() const;
+	void RenameTarget();
 
 #pragma region Request
 public:
@@ -44,7 +48,6 @@ public:
 #pragma region TreeView
 private:
 	void DrawDirectoryTree(const filesystem::path& path);
-	void TreeViewContextMenu(const filesystem::path& path);
 #pragma endregion
 
 #pragma region GridView
@@ -90,6 +93,7 @@ private:
 	filesystem::path m_LastDirectory;
 	bool m_NeedToExpandTree = false;
 private:
+	filesystem::path m_RenameTargetPath;
 	filesystem::path m_RenamingPath;
 	vector<filesystem::path> m_InteractionPaths;
 	char m_RenameBuffer[256];
@@ -125,7 +129,6 @@ private:
 	bool m_IsImportModalActive = false;
 	PreviewViewportWidget m_ImportPreviewWidget;
 	Engine::Entity* m_ImportPreviewEntity = nullptr;
-	float m_ModalSplitterWidth = 380.0f;
 #pragma endregion
 };
 END

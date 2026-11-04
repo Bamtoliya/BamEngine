@@ -115,30 +115,19 @@ void ModelEditor::Draw()
 		const float maxLeft = std::max(minLeft, availWidth - minRight - 12.0f);
 		m_LeftPaneWidth = std::clamp(m_LeftPaneWidth, minLeft, maxLeft);
 
-		// ── [좌측 영역] 3D 프리뷰 뷰포트 ──
+		// ── [좌측] 3D 뷰포트 ──
 		const ImGuiWindowFlags vpFlags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
 		if (ImGui::BeginChild("##ModelViewportPane", ImVec2(m_LeftPaneWidth, availHeight), true, vpFlags))
 		{
 			m_PreviewWidget.Draw(ImVec2(m_LeftPaneWidth - 16.0f, availHeight - 16.0f));
 		}
 		ImGui::EndChild();
-
 		ImGui::SameLine();
-
-		// ── [중앙 영역] 수평 스플리터 (마우스 드래그 리사이징) ──
-		ImGui::Button("##ModelSplitter", ImVec2(4.0f, availHeight));
-		if (ImGui::IsItemActive())
-		{
-			m_LeftPaneWidth += ImGui::GetIO().MouseDelta.x;
-		}
-		if (ImGui::IsItemHovered())
-		{
-			ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
-		}
-
+		// ── [스플리터] 공통 헬퍼 단 1줄 적용 ──
+		float detailsWidth = (std::max)(minRight, availWidth - m_LeftPaneWidth - 4.0f);
+		Editor::SplitterV("##ModelSplitter", &m_LeftPaneWidth, &detailsWidth, minLeft, minRight, availHeight);
 		ImGui::SameLine();
-
-		// ── [우측 영역] 모델 상세 정보 & 머티리얼 슬롯 인스펙터 ──
+		// ── [우측] 머티리얼 슬롯 & 디테일 패널 ──
 		if (ImGui::BeginChild("##ModelDetailsPane", ImVec2(0.0f, availHeight), true))
 		{
 			ImGui::Text("%s", LOCAL_FMT("ResourceEditor.Target", m_TargetResourcePath.string()).c_str());
@@ -292,4 +281,15 @@ void ModelEditor::SaveModel()
 	}
 
 	m_StatusKey = "ModelEditor.Saved";
+}
+void ModelEditor::CaptureState(EditorWorkspace& workspace) const
+{
+	IImGui::CaptureState(workspace);
+	workspace.SetSplitter("ModelEditor.LeftPaneWidth", m_LeftPaneWidth);
+}
+
+void ModelEditor::RestoreState(const EditorWorkspace& workspace)
+{
+	IImGui::RestoreState(workspace);
+	m_LeftPaneWidth = workspace.GetSplitter("ModelEditor.LeftPaneWidth", 420.0f);
 }

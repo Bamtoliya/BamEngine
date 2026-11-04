@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <unordered_set>
+#include "RHITexture.h"
 
 namespace Engine
 {
@@ -131,10 +132,56 @@ namespace Editor
 			else
 				return { ICON_FA_FILE, ImVec4(0.65f, 0.65f, 0.65f, 1.0f), "ASSET" };
 		}
+
+		struct ResourceFieldThumbnail
+		{
+			Engine::RHITexture* Texture = nullptr;
+			ImVec2 UV0 = ImVec2(0.0f, 0.0f);
+			ImVec2 UV1 = ImVec2(1.0f, 1.0f);
+		};
+
+		inline ResourceFieldThumbnail GetResourceFieldThumbnail(Engine::Resource* resource)
+		{
+			ResourceFieldThumbnail result;
+			if (resource == nullptr) return result;
+
+			if (auto* texture = dynamic_cast<Engine::Texture*>(resource))
+			{
+				result.Texture = texture->GetRHITexture();
+			}
+			else if (auto* sprite = dynamic_cast<Engine::Sprite*>(resource))
+			{
+				auto* texture = sprite->GetTexture();
+				result.Texture = texture != nullptr ? texture->GetRHITexture() : nullptr;
+
+				const auto uv = sprite->GetUVTransform();
+				if (!std::isfinite(uv.x) || !std::isfinite(uv.y) ||
+					!std::isfinite(uv.z) || !std::isfinite(uv.w) || uv.z <= 0.0f || uv.w <= 0.0f)
+					return {};
+
+				result.UV0 = ImVec2(uv.x, uv.y);
+				result.UV1 = ImVec2(uv.x + uv.z, uv.y + uv.w);
+			}
+			else if (dynamic_cast<Engine::MaterialInterface*>(resource) != nullptr ||
+				dynamic_cast<Engine::Model*>(resource) != nullptr ||
+				dynamic_cast<Engine::Mesh*>(resource) != nullptr)
+			{
+				const auto& path = resource->GetPath().empty() ? resource->GetKey() : resource->GetPath();
+				if (!path.empty())
+					result.Texture = AssetCache::Get().GetThumbnail(Engine::PlatformPath::ResolveProjectRelative(path));
+			}
+
+			if (result.Texture != nullptr &&
+				(result.Texture->GetDimension() != Engine::ETextureDimension::Texture2D ||
+					result.Texture->GetArraySize() != 1))
+				return {};
+
+			return result;
+		}
 	}
 
 	template<typename T>
-	bool DrawInspectorResourcePicker(Engine::ResourceHandle<T>& value, bool canEdit)
+	bool DrawInspectorResourcePicker(Engine::ResourceHandle<T>& value, bool canEdit, bool showThumbnail = true)
 	{
 		auto& manager = Engine::ResourceManager::Get();
 		auto* current = manager.GetResource(value.GetRawHandle());
@@ -147,11 +194,80 @@ namespace Editor
 
 		ImGui::BeginDisabled(!canEdit);
 
-		const auto button = label + "###ResourcePicker";
-		if (ImGui::Button(button.c_str(), ImVec2(-1.0f, 0.0f)))
+		const auto& style = ImGui::GetStyle();
+		const float thumbnailSize = ImGui::GetTextLineHeight() * 2.0f + style.ItemInnerSpacing.y;
+		const float fieldHeight = showThumbnail ? thumbnailSize + style.FramePadding.y * 2.0f : 0.0f;
+		const auto button = showThumbnail ? std::string("###ResourcePicker") : label + "###ResourcePicker";
+
+		if (ImGui::Button(button.c_str(), ImVec2(-1.0f, fieldHeight)))
 			ImGui::OpenPopup("ResourceChoices");
-		if (ImGui::IsItemHovered())
-			ImGui::SetTooltip("%s", label.c_str());
+
+		const bool fieldHovered = ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled);
+
+		if (showThumbnail && ImGui::IsItemVisible())
+		{
+			const auto min = ImGui::GetItemRectMin();
+			const auto max = ImGui::GetItemRectMax();
+			auto* drawList = ImGui::GetWindowDrawList();
+			const auto visual = Detail::GetResourceVisual<T>(label);
+
+			const float availableWidth = std::max(0.0f, max.x - min.x - style.FramePadding.x * 2.0f);
+			const float side = std::min(thumbnailSize, availableWidth * 0.3f);
+			const ImVec2 imageMin(min.x + style.FramePadding.x, min.y + (fieldHeight - side) * 0.5f);
+			const ImVec2 imageMax(imageMin.x + side, imageMin.y + side);
+
+			drawList->PushClipRect(min, max, true);
+			drawList->AddRectFilled(imageMin, imageMax, ImGui::GetColorU32(ImGuiCol_FrameBg), style.FrameRounding);
+
+			const auto thumbnail = Detail::GetResourceFieldThumbnail(current);
+			const auto textureID = thumbnail.Texture != nullptr ?
+				ImGuiManager::Get().GetImGuiTextureID(thumbnail.Texture) : ImTextureID{};
+
+			const float imageWidth = thumbnail.Texture != nullptr ?
+				thumbnail.Texture->GetWidth() * (thumbnail.UV1.x - thumbnail.UV0.x) : 0.0f;
+			const float imageHeight = thumbnail.Texture != nullptr ?
+				thumbnail.Texture->GetHeight() * (thumbnail.UV1.y - thumbnail.UV0.y) : 0.0f;
+
+			if (textureID != ImTextureID{} && imageWidth > 0.0f && imageHeight > 0.0f)
+			{
+				const float scale = side / std::max(imageWidth, imageHeight);
+				const ImVec2 size(imageWidth * scale, imageHeight * scale);
+				const ImVec2 start(imageMin.x + (side - size.x) * 0.5f, imageMin.y + (side - size.y) * 0.5f);
+				const ImVec2 end(start.x + size.x, start.y + size.y);
+
+				drawList->AddImage(textureID, start, end, thumbnail.UV0, thumbnail.UV1,
+					ImGui::GetColorU32(ImVec4(1.0f, 1.0f, 1.0f, 1.0f)));
+			}
+			else
+			{
+				const auto iconSize = ImGui::CalcTextSize(visual.Icon);
+				const ImVec2 iconPosition(imageMin.x + (side - iconSize.x) * 0.5f,
+					imageMin.y + (side - iconSize.y) * 0.5f);
+
+				drawList->AddText(iconPosition, ImGui::GetColorU32(visual.Color), visual.Icon);
+			}
+
+			const auto separator = label.find_last_of("/\\");
+			const auto name = current != nullptr && separator != std::string::npos ?
+				label.substr(separator + 1) : label;
+
+			const float textX = imageMax.x + style.ItemInnerSpacing.x;
+			const float textY = min.y + style.FramePadding.y;
+			const ImVec2 textMin(textX, min.y);
+			const ImVec2 textMax(std::max(textX, max.x - style.FramePadding.x), max.y);
+
+			drawList->PushClipRect(textMin, textMax, true);
+			drawList->AddText(ImVec2(textX, textY), ImGui::GetColorU32(ImGuiCol_Text), name.c_str());
+
+			if (current != nullptr)
+			{
+				const float pathY = textY + ImGui::GetTextLineHeight() + style.ItemInnerSpacing.y;
+				drawList->AddText(ImVec2(textX, pathY), ImGui::GetColorU32(ImGuiCol_TextDisabled), label.c_str());
+			}
+
+			drawList->PopClipRect();
+			drawList->PopClipRect();
+		}
 
 		if (canEdit && ImGui::BeginDragDropTarget())
 		{
@@ -179,6 +295,9 @@ namespace Editor
 			}
 			ImGui::EndDragDropTarget();
 		}
+
+		if (fieldHovered)
+			ImGui::SetTooltip("%s", label.c_str());
 
 		// 팝업 기본 크기를 740x580으로 넉넉하게 확장하고, 최대 1600x1200까지 자유롭게 리사이즈 지원
 		ImGui::SetNextWindowSize(ImVec2(740.0f, 580.0f), ImGuiCond_Appearing);

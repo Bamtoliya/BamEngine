@@ -177,6 +177,18 @@ namespace Editor
 
         PROPERTY(META("Optional", true))
         std::map<std::wstring, ViewportWorkspace> ViewportStates;
+        // 패널별 스플리터 분할 위치 영속화 맵 (순수 std::string 키 사용)
+        PROPERTY(META("Optional", true))
+        std::map<std::string, float> SplitterStates;
+        void SetSplitter(const std::string& key, float value)
+        {
+            SplitterStates[key] = value;
+        }
+        [[nodiscard]] float GetSplitter(const std::string& key, float defaultValue) const
+        {
+            const auto it = SplitterStates.find(key);
+            return (it != SplitterStates.end()) ? it->second : defaultValue;
+        }
     };
 
     struct EditorWindowRequest

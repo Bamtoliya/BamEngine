@@ -3,6 +3,7 @@
 #include "ResourceManager.h"
 #include "NotificationManager.h"
 #include <IconsFontAwesome7.h>
+#include "ShortcutManager.h"
 
 SpriteAnimationEditor::SpriteAnimationEditor()
 {
@@ -44,9 +45,17 @@ void SpriteAnimationEditor::LoadAnimation(const std::filesystem::path& path)
 	m_IsDirty = false;
 }
 
+bool SpriteAnimationEditor::CanSaveAnimation() const
+{
+	return m_Open && GetAnimation() != nullptr && !m_TargetResourcePath.empty();
+}
+
 void SpriteAnimationEditor::SaveAnimation()
 {
+	if (!CanSaveAnimation()) return;
+
 	auto* anim = GetAnimation();
+
 	if (!anim || m_TargetResourcePath.empty()) return;
 
 	if (anim->SaveToFile(m_TargetResourcePath.wstring()))
@@ -78,6 +87,8 @@ void SpriteAnimationEditor::Update(f32 dt)
 
 void SpriteAnimationEditor::Draw()
 {
+	m_Focused = false;
+	m_Hovered = false;
 	if (!m_Open) return;
 
 	std::string title = LOCAL("ResourceEditor.SpriteAnimationTitle");
@@ -89,20 +100,33 @@ void SpriteAnimationEditor::Draw()
 	ImGui::SetNextWindowSize(ImVec2(800.0f, 600.0f), ImGuiCond_FirstUseEver);
 	if (ImGui::Begin(title.c_str(), &m_Open, ImGuiWindowFlags_MenuBar))
 	{
+		m_Focused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
+		m_Hovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows);
 		DrawToolbar();
-
 		const ImVec2 contentAvail = ImGui::GetContentRegionAvail();
-		const f32 filmstripHeight = 90.0f;
-		const f32 mainHeight = std::max(contentAvail.y - filmstripHeight - 8.0f, 200.0f);
-		const f32 canvasWidth = contentAvail.x * 0.65f;
-		const f32 inspectorWidth = contentAvail.x - canvasWidth - ImGui::GetStyle().ItemSpacing.x;
-
-		DrawPreviewCanvas(canvasWidth, mainHeight);
+		const float splitterThickness = 4.0f;
+		const float spacingY = ImGui::GetStyle().ItemSpacing.y;
+		const float spacingX = ImGui::GetStyle().ItemSpacing.x;
+		// 1. 상하 높이 계산 (상단 메인 최소 180px, 하단 필름스트립 최소 60px)
+		const float minMainH = 180.0f;
+		const float minFilmH = 60.0f;
+		float mainHeight = (std::max)(minMainH, contentAvail.y - m_FilmstripHeight - splitterThickness - spacingY);
+		// 2. 좌우 너비 계산 (좌측 캔버스 최소 200px, 우측 인스펙터 최소 180px)
+		const float minCanvasW = 200.0f;
+		const float minInspectorW = 180.0f;
+		float inspectorWidth = (std::max)(minInspectorW, contentAvail.x - m_CanvasWidth - splitterThickness - spacingX);
+		// ── [상단 좌측] 2D 스프라이트 프리뷰 캔버스 ──
+		DrawPreviewCanvas(m_CanvasWidth, mainHeight);
 		ImGui::SameLine();
-		DrawFramesList(inspectorWidth);
-
-		ImGui::Separator();
-		DrawFilmstrip(filmstripHeight);
+		// ── [좌우 스플리터] 캔버스 ↔ 프레임 목록 ──
+		Editor::SplitterV("##AnimCanvasSplitter", &m_CanvasWidth, &inspectorWidth, minCanvasW, minInspectorW, mainHeight, splitterThickness);
+		ImGui::SameLine();
+		// ── [상단 우측] 키프레임 인스펙터 목록 ──
+		DrawFramesList(inspectorWidth, mainHeight);
+		// ── [상하 스플리터] 상단 메인 ↔ 하단 필름스트립 ──
+		Editor::SplitterH("##AnimFilmstripSplitter", &mainHeight, &m_FilmstripHeight, minMainH, minFilmH, contentAvail.x, splitterThickness);
+		// ── [하단] 애니메이션 타임라인 필름스트립 ──
+		DrawFilmstrip(m_FilmstripHeight);
 	}
 	ImGui::End();
 }
@@ -113,8 +137,7 @@ void SpriteAnimationEditor::DrawToolbar()
 	{
 		if (ImGui::BeginMenu(LOCAL_CSTR("EditorMenu.File")))
 		{
-			if (ImGui::MenuItem(LOCAL_CSTR("EditorCommon.Save"), "Ctrl+S"))
-				SaveAnimation();
+			ACTION_MENU_ITEM(LOCAL_LABEL("EditorCommon.Save").c_str(), "SpriteAnimation.Save");
 			ImGui::EndMenu();
 		}
 		ImGui::EndMenuBar();
@@ -123,9 +146,10 @@ void SpriteAnimationEditor::DrawToolbar()
 	auto* anim = GetAnimation();
 	if (!anim) return;
 
+	ImGui::BeginDisabled(!CanSaveAnimation());
 	if (ImGui::Button(ICON_FA_FLOPPY_DISK "##SaveBtn"))
 		SaveAnimation();
-	ImGui::SameLine();
+	ImGui::EndDisabled();
 
 	const char* playIcon = m_IsPlaying ? ICON_FA_PAUSE "##Pause" : ICON_FA_PLAY "##Play";
 	if (ImGui::Button(playIcon))
@@ -270,9 +294,9 @@ void SpriteAnimationEditor::DrawPreviewCanvas(f32 availWidth, f32 availHeight)
 	ImGui::EndChild();
 }
 
-void SpriteAnimationEditor::DrawFramesList(f32 availWidth)
+void SpriteAnimationEditor::DrawFramesList(f32 availWidth, f32 availHeight)
 {
-	ImGui::BeginChild("FramesInspector", ImVec2(availWidth, 0.0f), true);
+	ImGui::BeginChild("FramesInspector", ImVec2(availWidth, availHeight), true);
 	ImGui::TextUnformatted(LOCAL_CSTR("ResourceEditor.KeyFrames"));
 	ImGui::Separator();
 
@@ -403,4 +427,18 @@ void SpriteAnimationEditor::DrawFilmstrip(f32 height)
 	}
 
 	ImGui::EndChild();
+}
+
+void SpriteAnimationEditor::CaptureState(EditorWorkspace& workspace) const
+{
+	IImGui::CaptureState(workspace);
+	workspace.SetSplitter("SpriteAnim.CanvasWidth", m_CanvasWidth);
+	workspace.SetSplitter("SpriteAnim.FilmstripHeight", m_FilmstripHeight);
+}
+
+void SpriteAnimationEditor::RestoreState(const EditorWorkspace& workspace)
+{
+	IImGui::RestoreState(workspace);
+	m_CanvasWidth = workspace.GetSplitter("SpriteAnim.CanvasWidth", 520.0f);
+	m_FilmstripHeight = workspace.GetSplitter("SpriteAnim.FilmstripHeight", 110.0f);
 }

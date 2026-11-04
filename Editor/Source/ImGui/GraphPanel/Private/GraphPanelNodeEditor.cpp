@@ -39,6 +39,7 @@ void GraphPanel::SuspendDocument()
 {
 	m_Executor.Pause();
 	m_DragPin = 0;
+	m_ContextClickStartedOnCanvas = false;
 	m_OpenNodePopup = false;
 	m_NodeMenuActive = false;
 	m_AddSource = {};
@@ -70,6 +71,17 @@ void GraphPanel::DrawCanvas(float height)
 	// ★ 와이어(링크) 좌클릭 더블클릭 시 리루트 노드 즉시 자동 삽입!
 	// ── DrawCanvas() 내부의 와이어 더블클릭 감지 부분 교체 ──
 	auto& input = Engine::InputManager::Get();
+	const bool canvasHovered = ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
+
+	if (input.IsMouseButtonDown(Engine::EMouseButton::Right))
+		m_ContextClickStartedOnCanvas = canvasHovered;
+
+	const bool openContextMenu = canvasHovered && m_ContextClickStartedOnCanvas &&
+		input.IsMouseButtonUp(Engine::EMouseButton::Right);
+
+	if (!input.IsMouseButtonPressed(Engine::EMouseButton::Right))
+		m_ContextClickStartedOnCanvas = false;
+
 	const ed::LinkId hoveredLinkId = ed::GetHoveredLink();
 	if (hoveredLinkId && input.IsMouseButtonDoubleClicked(Engine::EMouseButton::Left))
 	{
@@ -81,7 +93,7 @@ void GraphPanel::DrawCanvas(float height)
 	// ── 우클릭 컨텍스트 메뉴 감지 (노드 / 와이어 / 빈 캔버스 분기) ──
 	const ed::NodeId hoveredNodeId = ed::GetHoveredNode();
 	const ed::PinId hoveredPinId = ed::GetHoveredPin();
-	if (InputManager::Get().IsMouseButtonUp(EMouseButton::Right))
+	if (openContextMenu)
 	{
 		const auto mouse = InputManager::Get().GetScreenMousePosition();
 		const ImVec2 canvasPos = ed::ScreenToCanvas(ImVec2(mouse.x, mouse.y));

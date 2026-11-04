@@ -13,10 +13,12 @@
 BEGIN(Engine)
 class Entity;
 class Model;
+class MaterialInterface;
+struct ModelCreateDesc;
 END
 
 BEGIN(Editor)
-
+struct PreparedModelData;
 class ModelImportModal final : public IImGui
 {
 public:
@@ -32,18 +34,36 @@ public:
 
 	void Open(const std::filesystem::path& sourcePath, const std::filesystem::path& destDir = {});
 
-	virtual void CaptureState(EditorWorkspace& workspace) const override {}
-	virtual void RestoreState(const EditorWorkspace& workspace) override {}
+	virtual void CaptureState(EditorWorkspace& workspace) const override;
+	virtual void RestoreState(const EditorWorkspace& workspace) override;
 
 private:
-	void LoadPreviewModel();
-	void UpdatePreviewTransform();
+	void LoadPreviewModel(bool focusCamera);
+	bool UpdatePreviewTransform();
 	void ClearPreview();
+	bool CreatePreviewMaterials(const PreparedModelData& data, Engine::ModelCreateDesc& desc, const Engine::ResourceHandle<Engine::Material>& baseMaterial);
+
+private:
+	struct AlbedoPreviewInfo
+	{
+		std::string MaterialName;
+		std::string Reference;
+		std::string ResolvedPath;
+		const char* StatusKey = "ModelImport.TextureNotProcessed";
+		bool Embedded = false;
+	};
+
+	void DrawTextureReferences();
+	void DrawAlbedoThumbnail(size_t materialIndex, float maxEdge);
 
 private:
 	inline static ModelImportModal* s_Instance = nullptr;
 
 	bool m_OpenRequested = false;
+	bool m_PreviewReloadRequested = false;
+	bool m_PreviewReady = false;
+	bool m_CloseRequested = false;
+	bool m_ImportRequested = false;
 	std::filesystem::path m_SourcePath;
 	std::filesystem::path m_DestDir;
 	ModelImportDesc m_Desc;
@@ -51,6 +71,9 @@ private:
 	PreviewViewportWidget m_PreviewWidget;
 	Engine::Entity* m_PreviewEntity = nullptr;
 	std::vector<Engine::ResourceHandle<Engine::Mesh>> m_TempMeshes;
+	std::vector<Engine::ResourceHandle<Engine::MaterialInterface>> m_TempMaterials;
+	std::vector<Engine::ResourceHandle<Engine::Texture>> m_TempTextures;
+	std::vector<AlbedoPreviewInfo> m_AlbedoPreviewInfo;
 
 	float m_SplitterWidth = 380.0f;
 };

@@ -6,6 +6,7 @@
 #include "ModelConverter.h"
 #include "ResourceManager.h"
 #include "Logger.h"
+#include "PlatformPath.h"
 
 #pragma push_macro("new")
 #undef new
@@ -433,16 +434,10 @@ namespace
 					}
 					else if (!info.Path.empty())
 					{
-						// 외부 파일 경로 탐색 (외부 텍스처 부재 시 경고 로깅 후 폴백)
-						filesystem::path candidate = data.SourcePath.parent_path() / info.Path;
-						if (filesystem::exists(candidate))
-							texFilePath = candidate;
-						else if (filesystem::exists(outputDir / info.Path))
-							texFilePath = outputDir / info.Path;
-						else
-						{
-							BAM_LOG(Warn, "Editor", "Asset", "External texture not found: {}", candidate.string());
-						}
+						texFilePath = ModelImporter::ResolveExternalTexturePath(data.SourcePath, outputDir, info.Path);
+
+						if (texFilePath.empty())
+							BAM_LOG(Warn, "Editor", "Asset", "External texture not found: {}", info.Path);
 					}
 
 					if (!texFilePath.empty())
@@ -956,6 +951,17 @@ std::optional<EResult> ModelImporter::FinalizeOneStep(ModelImportTask& task)
 	}
 }
 
+Tools::ModelConversion::Options ModelImporter::MakeConversionOptions(const ModelImportDesc& desc)
+{
+	Tools::ModelConversion::Options options;
+	options.FlipUVs = HasFlag(desc.PostProcessFlags, EModelPostProcessFlag::FlipUVs);
+	options.ConvertToLeftHanded = HasFlag(desc.PostProcessFlags, EModelPostProcessFlag::MakeLeftHanded);
+	options.FlipWindingOrder = HasFlag(desc.PostProcessFlags, EModelPostProcessFlag::FlipWindingOrder);
+	options.UniformScale = desc.UniformScale;
+	options.RotationOffset = desc.RotationOffset;
+	return options;
+}
+
 ModelImportDesc ModelImporter::GetDefaultDesc(const std::filesystem::path& sourcePath)
 {
 	ModelImportDesc desc{};
@@ -1032,4 +1038,47 @@ EResult ModelImporter::CreateJob(const filesystem::path& sourcePath, const files
 
 	outJob = std::make_unique<ModelImportTask>(std::move(request));
 	return EResult::Success;
+}
+
+std::filesystem::path ModelImporter::ResolveExternalTexturePath(const std::filesystem::path& sourcePath,
+	const std::filesystem::path& destinationDirectory, std::string_view texturePathUtf8)
+{
+	namespace fs = std::filesystem;
+
+	if (sourcePath.empty() || texturePathUtf8.empty()) return {};
+
+	try
+	{
+		const fs::path reference = Engine::Utf8ToPath(texturePathUtf8);
+
+		const auto isFile = [](const fs::path& path)
+			{
+				std::error_code error;
+				return fs::is_regular_file(path, error);
+			};
+
+		if (reference.is_absolute())
+			return isFile(reference) ? reference.lexically_normal() : fs::path{};
+
+		const auto sourceDirectory = Engine::PlatformPath::ResolveProjectRelative(sourcePath).parent_path();
+		fs::path candidate = (sourceDirectory / reference).lexically_normal();
+
+		if (isFile(candidate))
+			return candidate;
+
+		if (!destinationDirectory.empty())
+		{
+			const auto outputDirectory = Engine::PlatformPath::ResolveProjectRelative(destinationDirectory);
+			candidate = (outputDirectory / reference).lexically_normal();
+
+			if (isFile(candidate))
+				return candidate;
+		}
+	}
+	catch (const fs::filesystem_error& exception)
+	{
+		BAM_LOG(Warn, "Editor", "Asset", "External texture path resolution failed: {}", exception.what());
+	}
+
+	return {};
 }

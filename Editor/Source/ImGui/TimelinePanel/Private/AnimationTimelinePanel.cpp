@@ -1745,4 +1745,20 @@ namespace Editor
 			playheadColor
 		);
 	}
+
+	void AnimationTimelinePanel::CaptureState(EditorWorkspace& workspace) const
+	{
+		IImGui::CaptureState(workspace);
+		workspace.SetSplitter("Timeline.InspectorWidth", m_InspectorWidth);
+		workspace.SetSplitter("Timeline.TimelineHeight", m_TimelineHeight);
+		workspace.SetSplitter("Timeline.TrackHeaderWidth", m_TrackHeaderWidth);
+	}
+
+	void AnimationTimelinePanel::RestoreState(const EditorWorkspace& workspace)
+	{
+		IImGui::RestoreState(workspace);
+		m_InspectorWidth = workspace.GetSplitter("Timeline.InspectorWidth", 280.0f);
+		m_TimelineHeight = workspace.GetSplitter("Timeline.TimelineHeight", 220.0f);
+		m_TrackHeaderWidth = workspace.GetSplitter("Timeline.TrackHeaderWidth", 180.0f);
+	}
 }

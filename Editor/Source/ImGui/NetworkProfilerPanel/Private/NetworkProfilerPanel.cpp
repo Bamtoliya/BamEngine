@@ -162,8 +162,8 @@ void NetworkProfilerPanel::DrawPingGraph(Engine::NetworkSystem* netSystem)
 void NetworkProfilerPanel::DrawConnectedClientsTable(Engine::NetworkSystem* netSystem)
 {
     ImGui::Text("Connected Clients:");
-
-    if (ImGui::BeginTable("ClientsTable", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg))
+    // ImGuiTableFlags_Resizable 추가
+    if (ImGui::BeginTable("ClientsTable", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable))
     {
         ImGui::TableSetupColumn("Client ID", ImGuiTableColumnFlags_WidthFixed, 80.0f);
         ImGui::TableSetupColumn("Remote Address", ImGuiTableColumnFlags_WidthStretch);

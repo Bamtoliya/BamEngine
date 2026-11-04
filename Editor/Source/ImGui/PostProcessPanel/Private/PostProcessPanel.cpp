@@ -209,11 +209,13 @@ void PostProcessPanel::DrawPipelineList(PostProcessChain* chain)
 		return;
 	}
 
-	static const ImGuiTableFlags tableFlags = ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_SizingFixedFit;
+	static const ImGuiTableFlags tableFlags = ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_Resizable;
 	if (ImGui::BeginTable("##PipelineTable", 2, tableFlags))
 	{
-		ImGui::TableSetupColumn(LOCAL_CSTR("PostProcess.Active"), ImGuiTableColumnFlags_WidthFixed, ImGui::GetFrameHeight());
-		ImGui::TableSetupColumn(LOCAL_CSTR("PostProcess.Name"), ImGuiTableColumnFlags_WidthStretch);
+		const std::string colActive = LOCAL("PostProcess.Active") + "##Active";
+		const std::string colName = LOCAL("PostProcess.Name") + "##Name";
+		ImGui::TableSetupColumn(colActive.c_str(), ImGuiTableColumnFlags_WidthFixed, ImGui::GetFrameHeight());
+		ImGui::TableSetupColumn(colName.c_str(), ImGuiTableColumnFlags_WidthStretch);
 
 		int32 dragSourceIdx = -1;
 		int32 dragTargetIdx = -1;
@@ -330,12 +332,15 @@ void PostProcessPanel::DrawEffectInspector(Engine::IPostProcessEffect* effect)
 	}
 
 	// ── 3열 테이블: [0: 라벨(35%)] | [1: 컨트롤(65%)] | [2: 리셋 버튼(고정)] ──
-	static const ImGuiTableFlags paramTableFlags = ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_NoBordersInBody;
+	static const ImGuiTableFlags paramTableFlags = ImGuiTableFlags_Resizable | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_NoBordersInBody;
 	if (ImGui::BeginTable("##ParamTable", 3, paramTableFlags))
 	{
-		ImGui::TableSetupColumn(LOCAL_CSTR("PostProcess.Label"), ImGuiTableColumnFlags_WidthStretch, 0.35f);
-		ImGui::TableSetupColumn(LOCAL_CSTR("PostProcess.Value"), ImGuiTableColumnFlags_WidthStretch, 0.65f);
-		ImGui::TableSetupColumn(LOCAL_CSTR("PostProcess.Reset"), ImGuiTableColumnFlags_WidthFixed, ImGui::GetFrameHeight());
+		const std::string colLabel = LOCAL("PostProcess.Label") + "##Label";
+		const std::string colValue = LOCAL("PostProcess.Value") + "##Value";
+		const std::string colReset = LOCAL("PostProcess.Reset") + "##Reset";
+		ImGui::TableSetupColumn(colLabel.c_str(), ImGuiTableColumnFlags_WidthStretch, 0.35f);
+		ImGui::TableSetupColumn(colValue.c_str(), ImGuiTableColumnFlags_WidthStretch, 0.65f);
+		ImGui::TableSetupColumn(colReset.c_str(), ImGuiTableColumnFlags_WidthFixed, ImGui::GetFrameHeight());
 
 		for (const auto& [name, param] : params)
 		{

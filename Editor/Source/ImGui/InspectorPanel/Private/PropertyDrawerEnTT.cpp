@@ -17,22 +17,26 @@ bool PropertyDrawerEnTT::DrawHeaderNode(entt::meta_any& instance, const entt::me
 bool PropertyDrawerEnTT::DrawPropertyTable(entt::meta_any& instance, const entt::meta_type& type)
 {
     bool anyChanged = false;
-    
+
+    // 컴포넌트 타입별로 ID 스택을 격리하여 다른 컴포넌트 테이블과의 컬럼 너비 충돌 방지
+    ImGui::PushID(type.info().name().data());
     if (ImGui::BeginTable("PropertyTable", 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_Resizable))
     {
-        ImGui::TableSetupColumn(LOCAL_LABEL("EditorCommon.Name").c_str(), ImGuiTableColumnFlags_WidthFixed, 100.0f);
-        ImGui::TableSetupColumn(LOCAL_LABEL("UI_VALUE").c_str(), ImGuiTableColumnFlags_WidthStretch);
-
+        // 다국어 변경 시에도 컬럼 폭이 유지되도록 ##Name, ##Value 부여
+        const std::string colName = LOCAL("EditorCommon.Name") + "##Name";
+        const std::string colValue = LOCAL("UI_VALUE") + "##Value";
+        ImGui::TableSetupColumn(colName.c_str(), ImGuiTableColumnFlags_WidthFixed, 120.0f);
+        ImGui::TableSetupColumn(colValue.c_str(), ImGuiTableColumnFlags_WidthStretch);
         for (auto [id, data] : type.data())
         {
             ImGui::TableNextRow();
             ImGui::TableSetColumnIndex(0);
-            
+
             const char* propName = "Unknown";
             if constexpr (requires { data.name(); }) {
                 propName = data.name() ? data.name() : "Unknown";
-            } else {
-                // If name() doesn't exist, we fallback
+            }
+            else {
                 propName = "UnknownProperty";
             }
             ImGui::AlignTextToFramePadding();
@@ -40,7 +44,7 @@ bool PropertyDrawerEnTT::DrawPropertyTable(entt::meta_any& instance, const entt:
                 LOCAL("Inspector.UnknownProperty") : std::strcmp(propName, "Unknown") == 0 ?
                 LOCAL("EditorCommon.Unknown") : LOCAL(propName);
             ImGui::TextUnformatted(displayName.c_str());
-            
+
             ImGui::TableSetColumnIndex(1);
             ImGui::PushID(propName);
             if (DrawProperty(instance, data))
@@ -51,7 +55,7 @@ bool PropertyDrawerEnTT::DrawPropertyTable(entt::meta_any& instance, const entt:
         }
         ImGui::EndTable();
     }
-    
+    ImGui::PopID(); // PushID 해제
     return anyChanged;
 }
 

@@ -662,3 +662,15 @@ ImVec4 ConsolePanel::LevelColor(Engine::ELogLevel level)
 
     return ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
 }
+
+void ConsolePanel::CaptureState(EditorWorkspace& workspace) const
+{
+    IImGui::CaptureState(workspace);
+    workspace.SetSplitter("Console.DetailHeight", m_DetailViewHeight);
+}
+
+void ConsolePanel::RestoreState(const EditorWorkspace& workspace)
+{
+    IImGui::RestoreState(workspace);
+    m_DetailViewHeight = workspace.GetSplitter("Console.DetailHeight", 160.0f);
+}

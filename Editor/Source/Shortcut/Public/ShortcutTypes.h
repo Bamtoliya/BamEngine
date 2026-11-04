@@ -13,6 +13,9 @@ enum class EShortcutContext : uint8
     AnimatorGraph,  // 애니메이터 상태 머신 에디터 활성 시
     Hierarchy,      // 씬 하이어라키 패널 활성 시
     AnimationTimeline, // 애니메이션 타임라인 패널 활성 시
+    PrefabEditor,
+    SpriteAnimationEditor,
+    ContentBrowser,
     Count
 };
 

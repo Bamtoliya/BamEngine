@@ -35,6 +35,14 @@ public:
 	void CreateCommentBox() { CreateCommentBoxFromSelection(); }
 	void DeleteSelectedElements() { DeleteSelection(); }
 	void ToggleBreakpointOnSelected();
+	bool CanRunExecution() const;
+	void RunExecution();
+	bool CanPauseExecution() const;
+	void PauseExecution();
+	bool CanStepExecution() const;
+	void StepExecution();
+	bool CanStopExecution() const;
+	void StopExecution();
 private:
 	inline static GraphPanel* s_ActiveGraphPanel = nullptr;
 
@@ -213,6 +221,7 @@ private:
 	uintptr_t m_ContextNodeId = 0;
 	uintptr_t m_ContextPinId = 0;
 	ImVec2 m_ContextPosition = { 0.0f, 0.0f };
+	bool m_ContextClickStartedOnCanvas = false;
 
 	Engine::GraphNodeId m_EditingCommentNode = 0;
 	char m_CommentEditBuffer[128] = {};

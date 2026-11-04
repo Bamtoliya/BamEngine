@@ -2,6 +2,11 @@
 
 #include "ImporterInterface.h"
 
+namespace Tools::ModelConversion
+{
+	struct Options;
+}
+
 #undef DBG_NEW
 #undef new
 #include "assimp/Importer.hpp"
@@ -88,6 +93,8 @@ public:
 	// nullopt: 진행 중, 값 있음: 전체 작업 종료
 	std::optional<EResult> FinalizeStep(ModelImportTask& task);
 	static ModelImportDesc GetDefaultDesc(const std::filesystem::path& sourcePath);
+	static Tools::ModelConversion::Options MakeConversionOptions(const ModelImportDesc& desc);
+	static std::filesystem::path ResolveExternalTexturePath(const std::filesystem::path& sourcePath, const std::filesystem::path& destinationDirectory, std::string_view texturePathUtf8);
 private:
 	std::optional<EResult> FinalizeOneStep(ModelImportTask& task);
 };

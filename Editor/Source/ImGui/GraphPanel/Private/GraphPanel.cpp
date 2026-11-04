@@ -85,6 +85,8 @@ GraphPanel::~GraphPanel()
 
 void GraphPanel::Free()
 {
+	if (s_ActiveGraphPanel == this)
+		s_ActiveGraphPanel = nullptr;
 	InvalidateExecution();
 	m_ExecutionReflection = {};
 	for (auto* document : { &m_Logic, &m_Shader })
@@ -143,8 +145,11 @@ void GraphPanel::Draw()
 			ImGui::PushID(static_cast<int>(m_Domain));
 			if (ImGui::BeginTable("##GraphWorkspace", 2, ImGuiTableFlags_Resizable, ImVec2(0.0f, height)))
 			{
-				ImGui::TableSetupColumn(LOCAL_LABEL("GraphPanel.Canvas").c_str(), ImGuiTableColumnFlags_WidthStretch, 3.0f);
-				ImGui::TableSetupColumn(LOCAL_LABEL("GraphPanel.Properties").c_str(), ImGuiTableColumnFlags_WidthStretch, 1.0f);
+				// 다국어 변경 시에도 캔버스/프로퍼티 비율이 보존되도록 ##Canvas, ##Properties 추가
+				const std::string colCanvas = LOCAL("GraphPanel.Canvas") + "##Canvas";
+				const std::string colProps = LOCAL("GraphPanel.Properties") + "##Properties";
+				ImGui::TableSetupColumn(colCanvas.c_str(), ImGuiTableColumnFlags_WidthStretch, 3.0f);
+				ImGui::TableSetupColumn(colProps.c_str(), ImGuiTableColumnFlags_WidthStretch, 1.0f);
 				ImGui::TableNextColumn();
 				DrawCanvas(height);
 				ImGui::TableNextColumn();

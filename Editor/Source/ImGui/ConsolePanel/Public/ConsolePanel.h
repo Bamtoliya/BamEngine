@@ -13,6 +13,8 @@ public:
 	virtual ~ConsolePanel() = default;
 	virtual void Draw() override;
 	virtual void Update(f32 dt) override;
+	virtual void CaptureState(EditorWorkspace& workspace) const override;
+	virtual void RestoreState(const EditorWorkspace& workspace) override;
 private:
 	struct ConsoleItem
 	{

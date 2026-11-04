@@ -7,6 +7,7 @@
 #include "GraphSystem.h"
 #include "Components/Graph/GraphBindingComponent.h"
 #include "Components/Core/NameComponent.h"
+#include "ShortcutManager.h"
 
 void GraphPanel::InvalidateExecution()
 {
@@ -30,6 +31,82 @@ void GraphPanel::BeginExecution()
 	m_LastDiagnostic = m_Executor.Begin(m_EntryNode, m_ExecutionDelta,
 		static_cast<std::size_t>(std::clamp(m_ExecutionBudget, 1, 100000)));
 	m_StepElapsed = 0.0f;
+}
+
+bool GraphPanel::CanRunExecution() const
+{
+	if (!m_Open || !m_Ready || m_Domain != EGraphDomain::Logic) return false;
+	if (m_Executor.GetState() == EGraphExecutionState::Running) return false;
+
+	const auto* entry = m_Logic.Data.FindNode(m_EntryNode);
+	return entry && (entry->Type == "Event.Start" || entry->Type == "Event.Update");
+}
+
+void GraphPanel::RunExecution()
+{
+	if (!CanRunExecution()) return;
+
+	if (m_Executor.GetState() != EGraphExecutionState::Paused)
+		BeginExecution();
+
+	if (!m_LastDiagnostic.Succeeded()) return;
+
+	m_Executor.Resume();
+	m_FollowTrace = true;
+}
+
+bool GraphPanel::CanPauseExecution() const
+{
+	if (!m_Open || !m_Ready || m_Domain != EGraphDomain::Logic) return false;
+	return m_Executor.GetState() == EGraphExecutionState::Running;
+}
+
+void GraphPanel::PauseExecution()
+{
+	if (!CanPauseExecution()) return;
+
+	m_Executor.Pause();
+}
+
+bool GraphPanel::CanStepExecution() const
+{
+	if (!m_Open || !m_Ready || m_Domain != EGraphDomain::Logic) return false;
+
+	const auto* entry = m_Logic.Data.FindNode(m_EntryNode);
+	return entry && (entry->Type == "Event.Start" || entry->Type == "Event.Update");
+}
+
+void GraphPanel::StepExecution()
+{
+	if (!CanStepExecution()) return;
+
+	const auto state = m_Executor.GetState();
+	const bool busy = state == EGraphExecutionState::Running || state == EGraphExecutionState::Paused;
+
+	if (!busy)
+	{
+		BeginExecution();
+		if (!m_LastDiagnostic.Succeeded()) return;
+	}
+
+	m_Executor.Pause();
+	m_Executor.Step();
+	m_FollowTrace = true;
+}
+
+bool GraphPanel::CanStopExecution() const
+{
+	if (!m_Open || !m_Ready || m_Domain != EGraphDomain::Logic) return false;
+
+	const auto state = m_Executor.GetState();
+	return state == EGraphExecutionState::Running || state == EGraphExecutionState::Paused;
+}
+
+void GraphPanel::StopExecution()
+{
+	if (!CanStopExecution()) return;
+
+	m_Executor.Stop();
 }
 
 void GraphPanel::DrawExecutionToolbar()
@@ -67,33 +144,26 @@ void GraphPanel::DrawExecutionToolbar()
 	ImGui::EndDisabled();
 
 	ImGui::SameLine();
-	ImGui::BeginDisabled(!entry || state == EGraphExecutionState::Running);
-	if (ImGui::Button(LOCAL_CSTR("GraphPanel.Run")))
-	{
-		if (state != EGraphExecutionState::Paused) BeginExecution();
-		if (m_LastDiagnostic.Succeeded()) { m_Executor.Resume(); m_FollowTrace = true; }
-	}
+	ImGui::BeginDisabled(!CanRunExecution());
+	if (ImGui::Button(LOCAL_LABEL("GraphPanel.Run").c_str()))
+		RunExecution();
 	ImGui::EndDisabled();
 
 	ImGui::SameLine();
-	ImGui::BeginDisabled(state != EGraphExecutionState::Running);
-	if (ImGui::Button(LOCAL_CSTR("GraphPanel.Pause"))) m_Executor.Pause();
+	ImGui::BeginDisabled(!CanPauseExecution());
+	if (ImGui::Button(LOCAL_LABEL("GraphPanel.Pause").c_str()))
+		PauseExecution();
 	ImGui::EndDisabled();
 
 	ImGui::SameLine();
-	ImGui::BeginDisabled(!entry);
-	if (ImGui::Button(LOCAL_CSTR("GraphPanel.Step")))
-	{
-		if (!busy) BeginExecution();
-		m_Executor.Pause();
-		m_Executor.Step();
-		m_FollowTrace = true;
-	}
+	ImGui::BeginDisabled(!CanStepExecution());
+	if (ImGui::Button(LOCAL_LABEL("GraphPanel.Step").c_str()))
+		StepExecution();
 	ImGui::EndDisabled();
 
-	ImGui::SameLine();
-	ImGui::BeginDisabled(!busy);
-	if (ImGui::Button(LOCAL_CSTR("GraphPanel.Stop"))) m_Executor.Stop();
+	ImGui::BeginDisabled(!CanStopExecution());
+	if (ImGui::Button(LOCAL_LABEL("GraphPanel.Stop").c_str()))
+		StopExecution();
 	ImGui::EndDisabled();
 
 	ImGui::SameLine();
@@ -217,31 +287,19 @@ void GraphPanel::DrawExecutionMenu()
 {
 	if (m_Domain != EGraphDomain::Logic) return;
 	if (!ImGui::BeginMenu(LOCAL_LABEL("UI_DEBUG").c_str())) return;
-	const auto state = m_Executor.GetState();
-	const bool busy = (state == EGraphExecutionState::Running || state == EGraphExecutionState::Paused);
-	const auto* entry = m_Logic.Data.FindNode(m_EntryNode);
-	if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.Run").c_str(), "F5", false, entry != nullptr && state != EGraphExecutionState::Running))
-	{
-		if (state != EGraphExecutionState::Paused) BeginExecution();
-		if (m_LastDiagnostic.Succeeded()) { m_Executor.Resume(); m_FollowTrace = true; }
-	}
-	if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.Pause").c_str(), "F6", false, state == EGraphExecutionState::Running))
-		m_Executor.Pause();
-	if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.Step").c_str(), "F10", false, entry != nullptr))
-	{
-		if (!busy) BeginExecution();
-		m_Executor.Pause();
-		m_Executor.Step();
-		m_FollowTrace = true;
-	}
-	if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.Stop").c_str(), "Shift+F5", false, busy))
-		m_Executor.Stop();
+
+	ACTION_MENU_ITEM(LOCAL_LABEL("GraphPanel.Run").c_str(), "Graph.Run");
+	ACTION_MENU_ITEM(LOCAL_LABEL("GraphPanel.Pause").c_str(), "Graph.Pause");
+	ACTION_MENU_ITEM(LOCAL_LABEL("GraphPanel.Step").c_str(), "Graph.Step");
+	ACTION_MENU_ITEM(LOCAL_LABEL("GraphPanel.Stop").c_str(), "Graph.Stop");
+
 	ImGui::Separator();
 	if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.ResetInstance").c_str()))
 	{
 		InvalidateExecution();
 		m_LastDiagnostic = {};
 	}
+
 	ImGui::EndMenu();
 }
 void GraphPanel::DrawDebugToolbar()

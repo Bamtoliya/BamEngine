@@ -18,6 +18,9 @@ public:
     virtual bool IsSupported(const std::filesystem::path& assetPath) const override;
     virtual void SetTargetResource(const std::filesystem::path& assetPath) override;
     virtual void Draw() override;
+    virtual EShortcutContext GetShortcutContext() const override { return EShortcutContext::PrefabEditor; }
+    bool CanSaveDocument() const;
+    bool SaveDocument();
 
 private:
     void LoadPrefab();

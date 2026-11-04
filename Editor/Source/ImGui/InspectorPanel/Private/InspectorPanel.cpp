@@ -266,31 +266,36 @@ void InspectorPanel::DrawPrefabHeaderBar(Engine::Entity& entity)
 	else
 		ImGui::TextColored(ImVec4(0.35f, 0.78f, 1.0f, 0.75f), ICON_FA_CUBE " %s",
 			LOCAL_FMT("Prefab.ChildOf", prefabFileName).c_str());
-
 	if (ImGui::IsItemHovered())
 		ImGui::SetTooltip("%s", Engine::WStrToStr(prefabComp->prefabAssetPath).c_str());
-
-	ImGui::SameLine();
+	// [반응형 레이아웃]: 버튼 3개의 총 너비 계산
 	const float btnWidth = 65.0f;
-	const float totalBtnsWidth = (btnWidth * 2) + 85.0f + (ImGui::GetStyle().ItemSpacing.x * 2);
-	const float rightOffset = ImGui::GetContentRegionAvail().x - totalBtnsWidth;
-	if (rightOffset > 0.0f)
-		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + rightOffset);
-
-	// [Open] 버튼: 프리팹 뷰포트 격리 편집 모드 진입
+	const float overridesBtnWidth = 85.0f;
+	const float spacing = ImGui::GetStyle().ItemSpacing.x;
+	const float totalBtnsWidth = (btnWidth * 2) + overridesBtnWidth + (spacing * 2);
+	const float availWidth = ImGui::GetContentRegionAvail().x;
+	// 가용 공간이 충분하면 같은 줄 우측에 정렬하고, 부족하면 다음 줄로 자동 개행(Wrap)
+	if (availWidth >= totalBtnsWidth + spacing)
+	{
+		ImGui::SameLine();
+		const float rightOffset = availWidth - totalBtnsWidth;
+		if (rightOffset > 0.0f)
+			ImGui::SetCursorPosX(ImGui::GetCursorPosX() + rightOffset);
+	}
+	else
+	{
+		ImGui::Spacing(); // 줄바꿈 후 약간의 여백 추가
+	}
+	// [Open] 버튼
 	if (ImGui::Button((std::string(ICON_FA_FOLDER_OPEN " ") + LOCAL("Prefab.Open")).c_str(), ImVec2(btnWidth, 0)))
 		PrefabModeManager::Get().EnterPrefabMode(prefabComp->prefabAssetPath);
-
 	ImGui::SameLine();
-
-	// [Select] 버튼: ContentBrowser에서 에셋 선택
+	// [Select] 버튼
 	if (ImGui::Button((std::string(ICON_FA_LOCATION_ARROW " ") + LOCAL("Prefab.Select")).c_str(), ImVec2(btnWidth, 0)))
 		SelectionManager::Get().SetSelectedAsset(prefabComp->prefabAssetPath);
-
 	ImGui::SameLine();
-
-	// [Overrides] 버튼: 드롭다운 팝업
-	if (ImGui::Button((std::string(LOCAL("Prefab.Overrides")) + " " ICON_FA_CARET_DOWN).c_str(), ImVec2(85.0f, 0)))
+	// [Overrides] 버튼
+	if (ImGui::Button((std::string(LOCAL("Prefab.Overrides")) + " " ICON_FA_CARET_DOWN).c_str(), ImVec2(overridesBtnWidth, 0)))
 		ImGui::OpenPopup("PrefabOverridesPopup");
 
 	if (ImGui::BeginPopup("PrefabOverridesPopup"))
@@ -940,7 +945,7 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 				ImGui::AlignTextToFramePadding();
 				ImGui::Text("%s", LOCAL_CSTR("SpriteAnimation.Timeline"));
 				ImGui::SameLine();
-				ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 65.0f);
+				ImGui::SetNextItemWidth(-FLT_MIN); // 남은 가용 폭을 100% 꽉 채움
 				const std::string sliderLabel = fmt::format("{} / {}", currentFrame + 1, frameCount);
 				if (ImGui::SliderInt("##AnimTimelineSlider", &currentFrame, 0, frameCount - 1, sliderLabel.c_str()))
 				{
@@ -1026,7 +1031,9 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 			ImGui::Text("%s", LOCAL_CSTR("Animator.ControllerPath"));
 			char pathBuf[260] = {};
 			std::strncpy(pathBuf, animator.controllerPath.c_str(), sizeof(pathBuf) - 1);
-			ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 65.0f);
+			const float folderBtnSize = ImGui::GetFrameHeight();
+			const float itemSpacing = ImGui::GetStyle().ItemSpacing.x;
+			ImGui::SetNextItemWidth(std::max(60.0f, ImGui::GetContentRegionAvail().x - folderBtnSize - itemSpacing));
 			if (ImGui::InputText("##ControllerPathInput", pathBuf, sizeof(pathBuf)))
 			{
 				animator.controllerPath = pathBuf;
@@ -1034,7 +1041,7 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 			}
 			ImGui::SameLine();
 			// 파일 탐색기 열기 버튼
-			if (ImGui::Button((ICON_FA_FOLDER_OPEN "##BrowseController")))
+			if (ImGui::Button((ICON_FA_FOLDER_OPEN "##BrowseController"), ImVec2(folderBtnSize, folderBtnSize)))
 			{
 				std::wstring selectedPath;
 				const std::vector<FileDialogFilter> filters{
@@ -1105,7 +1112,7 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 				ImGui::AlignTextToFramePadding();
 				ImGui::Text("%s", LOCAL_CSTR("Animator.Timeline"));
 				ImGui::SameLine();
-				ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 65.0f);
+				ImGui::SetNextItemWidth(-FLT_MIN); // 남은 가용 폭을 100% 꽉 채움
 				const std::string sliderLabel = fmt::format("{:.2f}s / {:.2f}s", currentTime, durationSec);
 				if (ImGui::SliderFloat("##AnimTimeSlider", &currentTime, 0.0f, durationSec, sliderLabel.c_str()))
 				{
@@ -1217,14 +1224,16 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 			ImGui::Text("%s", LOCAL_CSTR("Timeline.AssetFile"));
 			char pathBuf[260] = {};
 			std::strncpy(pathBuf, timeline.timelinePath.c_str(), sizeof(pathBuf) - 1);
-			ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 65.0f);
+			const float browseBtnSize = ImGui::GetFrameHeight();
+			const float browseSpacing = ImGui::GetStyle().ItemSpacing.x;
+			ImGui::SetNextItemWidth(std::max(60.0f, ImGui::GetContentRegionAvail().x - browseBtnSize - browseSpacing));
 			if (ImGui::InputText("##TimelinePathInput", pathBuf, sizeof(pathBuf)))
 			{
 				timeline.timelinePath = pathBuf;
 				changed = true;
 			}
 			ImGui::SameLine();
-			if (ImGui::Button(ICON_FA_FOLDER_OPEN "##BrowseTimeline"))
+			if (ImGui::Button((ICON_FA_FOLDER_OPEN "##BrowseTimeline"), ImVec2(browseBtnSize, browseBtnSize)))
 			{
 				std::wstring selectedPath;
 				const std::vector<FileDialogFilter> filters{

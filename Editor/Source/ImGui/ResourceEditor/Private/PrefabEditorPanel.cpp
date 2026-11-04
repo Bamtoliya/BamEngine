@@ -8,6 +8,7 @@
 #include "NotificationManager.h"
 #include "LocalizationManager.h"
 #include <archive/JsonArchive.h>
+#include "ShortcutManager.h"
 
 void PrefabEditorPanel::SceneDeleter::operator()(Engine::Scene* s) const
 {
@@ -97,8 +98,23 @@ bool PrefabEditorPanel::SavePrefab(const std::filesystem::path& path)
     }
 }
 
+bool PrefabEditorPanel::CanSaveDocument() const
+{
+    return m_Open && m_PrefabScene && m_RootEntity && !m_TargetResourcePath.empty() &&
+        !m_ShowCloseConfirmModal && m_PendingOpenPath.empty();
+}
+
+bool PrefabEditorPanel::SaveDocument()
+{
+    if (!CanSaveDocument()) return false;
+
+    return SavePrefab(m_TargetResourcePath);
+}
+
 void PrefabEditorPanel::Draw()
 {
+    m_Focused = false;
+    m_Hovered = false;
     if (!m_Open) return;
 
     std::string title = (m_TargetResourcePath.empty() ? LOCAL("ResourceEditor.PrefabTitle") : m_TargetResourcePath.filename().string());
@@ -111,6 +127,9 @@ void PrefabEditorPanel::Draw()
         ImGui::End();
         return;
     }
+
+    m_Focused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
+    m_Hovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows);
 
     DrawToolbar();
 
@@ -142,8 +161,7 @@ void PrefabEditorPanel::DrawToolbar()
     {
         if (ImGui::BeginMenu(LOCAL_LABEL("UI_FILE").c_str()))
         {
-            if (ImGui::MenuItem(LOCAL_LABEL("PrefabEditor.Save").c_str(), "Ctrl+S", false, m_RootEntity != nullptr))
-                SavePrefab(m_TargetResourcePath);
+            ACTION_MENU_ITEM(LOCAL_LABEL("PrefabEditor.Save").c_str(), "Prefab.Save");
 
             if (ImGui::MenuItem(LOCAL_LABEL("PrefabEditor.SaveAs").c_str(), nullptr, false, m_RootEntity != nullptr))
             {
@@ -164,8 +182,10 @@ void PrefabEditorPanel::DrawToolbar()
     }
 
     // 상단 단축 버튼 행
+    ImGui::BeginDisabled(!CanSaveDocument());
     if (ImGui::Button((ICON_FA_FLOPPY_DISK " " + LOCAL_LABEL("PrefabEditor.Save")).c_str()))
-        SavePrefab(m_TargetResourcePath);
+        SaveDocument();
+    ImGui::EndDisabled();
 
     ImGui::SameLine();
     if (ImGui::Button((ICON_FA_ROTATE_LEFT " " + LOCAL_LABEL("PrefabEditor.Revert")).c_str()))

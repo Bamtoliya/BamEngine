@@ -17,6 +17,10 @@
 #include "PrefabModeManager.h"
 #include "ShortcutManager.h"
 #include "ModelImportModal.h"
+#include "ContentBrowserPanel.h"
+#include "ImGuiManager.h"
+#include "ShortcutManager.h"
+#include "Editor_Macros.h"
 
 namespace
 {
@@ -487,9 +491,13 @@ void ContentBrowserGridItem::ContextMenu(const std::filesystem::path& path,
 	std::filesystem::path& currentDirectory, char* searchBuffer)
 {
 	const bool isDir = std::filesystem::is_directory(path);
-	std::string filenameString = path.filename().string();
+	auto* browser = dynamic_cast<ContentBrowserPanel*>(ImGuiManager::Get().GetImGuiPanel(L"Content Browser"));
+	if (browser && ImGui::IsItemHovered())
+		browser->SetRenameTarget(path);
 	if (ImGui::BeginPopupContextItem("##AssetContextMenu"))
 	{
+		if (browser)
+			browser->SetRenameTarget(path);
 		// 1. 최상단 [열기]: 더블클릭과 동일한 공통 동작
 		if (ImGui::MenuItem((ICON_FA_FOLDER_OPEN " " + LOCAL_LABEL("EditorCommon.Open")).c_str()))
 			OpenAssetOrFolder(path, isDir, currentDirectory, searchBuffer);
@@ -518,13 +526,9 @@ void ContentBrowserGridItem::ContextMenu(const std::filesystem::path& path,
 		}
 		ImGui::Separator();
 		// 4. [이름 변경], [경로 복사]
-		auto& sm = ShortcutManager::Get();
-		if (ImGui::MenuItem((ICON_FA_PEN " " + LOCAL_LABEL("EditorCommon.Rename")).c_str(), sm.GetShortcutHint("Edit.Rename")))
-		{
-			outRenamingPath = path;
-			strncpy(renameBuffer, filenameString.c_str(), renameBufferSize);
-		}
-		if (ImGui::MenuItem((ICON_FA_COPY " " + LOCAL_LABEL("EditorCommon.CopyPath")).c_str(), sm.GetShortcutHint("Edit.Copy")))
+		ACTION_MENU_ITEM((ICON_FA_PEN " " + LOCAL_LABEL("EditorCommon.Rename")).c_str(), "Edit.Rename");
+
+		if (ImGui::MenuItem((ICON_FA_COPY " " + LOCAL_LABEL("EditorCommon.CopyPath")).c_str()))
 			ImGui::SetClipboardText(path.string().c_str());
 		if (!isDir && IsPrefabFile(path))
 		{
@@ -616,11 +620,6 @@ void ContentBrowserGridItem::ContextMenu(const std::filesystem::path& path,
 			else EDITOR_LOG_INFO("Deleted asset: {}", path.string());
 		}
 		ImGui::EndPopup();
-	}
-	if (ImGui::IsItemHovered() && KEY_DOWN(EKeyCode::F2))
-	{
-		outRenamingPath = path;
-		strncpy(renameBuffer, filenameString.c_str(), renameBufferSize);
 	}
 }
 void ContentBrowserGridItem::ToolTip(const std::filesystem::directory_entry& directoryEntry)

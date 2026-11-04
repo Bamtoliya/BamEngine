@@ -163,10 +163,25 @@ void ContentBrowserPanel::Update(f32 dt)
 
 void ContentBrowserPanel::Draw()
 {
-	if (!m_Open) return;
+	m_Focused = false;
+	m_Hovered = false;
+	m_RenameTargetPath.clear();
+
+	if (!m_Open)
+		return;
+
 	const string windowTitle = LOCAL("UI_CONTENT_BROWSER") + "###ContentBrowserPanel";
-	ImGui::Begin(windowTitle.c_str(), &m_Open);
+	if (!ImGui::Begin(windowTitle.c_str(), &m_Open))
+	{
+		ImGui::End();
+		return;
+	}
+
+	m_Focused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
+	m_Hovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows);
+
 	FileConfilictPopup();
+
 	if (m_CurrentDirectory != m_LastDirectory)
 	{
 		m_NeedToExpandTree = true;
@@ -176,8 +191,11 @@ void ContentBrowserPanel::Draw()
 	static ImGuiTableFlags tableFlags = ImGuiTableFlags_Resizable | ImGuiTableFlags_ContextMenuInBody | ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV;
 	if (ImGui::BeginTable("ContentBrowserTableLayout", 2, tableFlags))
 	{
-		ImGui::TableSetupColumn(LOCAL_LABEL("ContentBrowser.Folders").c_str(), ImGuiTableColumnFlags_WidthFixed, 250.0f);
-		ImGui::TableSetupColumn(LOCAL_LABEL("ContentBrowser.Files").c_str(), ImGuiTableColumnFlags_WidthStretch);
+		// 다국어 변경 시에도 폴더 트리 너비가 보존되도록 ##Folders, ##Files 추가
+		const std::string colFolders = LOCAL("ContentBrowser.Folders") + "##Folders";
+		const std::string colFiles = LOCAL("ContentBrowser.Files") + "##Files";
+		ImGui::TableSetupColumn(colFolders.c_str(), ImGuiTableColumnFlags_WidthFixed, 250.0f);
+		ImGui::TableSetupColumn(colFiles.c_str(), ImGuiTableColumnFlags_WidthStretch);
 		ImGui::TableNextRow();
 		ImGui::TableNextColumn();
 		ImGui::BeginChild("TreeArea", ImVec2(0, 0), false);
@@ -217,6 +235,34 @@ void ContentBrowserPanel::Free()
 	m_ImportPreviewWidget.Free();
 }
 
+bool ContentBrowserPanel::CanRenameTarget() const
+{
+	if (!m_Open || m_RenameTargetPath.empty() || !m_RenamingPath.empty())
+		return false;
+
+	const auto relative = m_RenameTargetPath.lexically_normal().lexically_relative(m_RootPath.lexically_normal());
+	if (relative.empty() || relative == "." || relative.is_absolute() || *relative.begin() == "..")
+		return false;
+
+	std::error_code error;
+	if (!filesystem::exists(m_RenameTargetPath, error) || error)
+		return false;
+
+	const auto filename = m_RenameTargetPath.filename().u8string();
+	return !filename.empty() && filename.size() < sizeof(m_RenameBuffer);
+}
+
+void ContentBrowserPanel::RenameTarget()
+{
+	if (!CanRenameTarget())
+		return;
+
+	const auto filename = m_RenameTargetPath.filename().u8string();
+	m_RenamingPath = m_RenameTargetPath;
+	std::memcpy(m_RenameBuffer, filename.data(), filename.size());
+	m_RenameBuffer[filename.size()] = '\0';
+}
+
 #pragma region TreeView
 void ContentBrowserPanel::DrawDirectoryTree(const filesystem::path& path)
 {
@@ -251,63 +297,6 @@ void ContentBrowserPanel::DrawDirectoryTree(const filesystem::path& path)
 		for (const auto& childPath : childDirectories)
 			DrawDirectoryTree(childPath);
 		ImGui::TreePop();
-	}
-}
-
-void ContentBrowserPanel::TreeViewContextMenu(const filesystem::path& path)
-{
-	string filename = path.filename().string();
-	if (ImGui::BeginPopupContextItem())
-	{
-		m_CurrentDirectory = path; // 메뉴를 열 때 해당 디렉토리를 선택 상태로 만듦
-
-		if (ImGui::MenuItem((ICON_FA_PLUS " " + LOCAL_LABEL("EditorCommon.NewFolder")).c_str()))
-		{
-			filesystem::path newFolderPath = path / "NewFolder";
-			int suffix = 1;
-			while (filesystem::exists(newFolderPath))
-			{
-				newFolderPath = path / ("NewFolder_" + std::to_string(suffix++));
-			}
-			filesystem::create_directory(newFolderPath);
-		}
-
-		if (ImGui::MenuItem((ICON_FA_PEN " " + LOCAL_LABEL("EditorCommon.Rename")).c_str(), ShortcutManager::Get().GetShortcutHint("Edit.Rename")))
-		{
-			m_RenamingPath = path;
-			strncpy(m_RenameBuffer, filename.c_str(), sizeof(m_RenameBuffer));
-		}
-
-		ImGui::Separator();
-
-		if (ImGui::MenuItem((ICON_FA_FOLDER_OPEN " " + LOCAL_LABEL("EditorCommon.ShowInExplorer")).c_str()))
-		{
-			// Windows 전용 명령 (ShellExecute)
-			ShellExecuteA(NULL, "open", path.string().c_str(), NULL, NULL, SW_SHOWNORMAL);
-		}
-
-		if (ImGui::MenuItem((ICON_FA_COPY " " + LOCAL_LABEL("EditorCommon.CopyPath")).c_str()))
-		{
-			ImGui::SetClipboardText(path.string().c_str());
-		}
-
-		ImGui::Separator();
-
-		if (ImGui::MenuItem((ICON_FA_TRASH " " + LOCAL_LABEL("EditorCommon.Delete")).c_str(), nullptr, false,
-			path != m_RootPath))
-		{
-			// 루트가 아닐 때만 삭제 가능 (실제 삭제 시 모달 팝업 권장)
-			// filesystem::remove_all(path);
-			TODO("Tree View Folder 삭제 기능 구현하기")
-		}
-
-		ImGui::EndPopup();
-	}
-
-	if (ImGui::IsItemHovered() && KEY_DOWN(EKeyCode::F2))
-	{
-		m_RenamingPath = path;
-		strncpy(m_RenameBuffer, filename.c_str(), sizeof(m_RenameBuffer));
 	}
 }
 #pragma endregion

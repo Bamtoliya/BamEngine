@@ -19,6 +19,9 @@
 #include "AnimatorGraphPanel.h"
 #include "AnimationTimelinePanel.h"
 #include "UnifiedSettingsPanel.h"
+#include "PrefabEditorPanel.h"
+#include "SpriteAnimationEditor.h"
+#include "ContentBrowserPanel.h"
 
 BEGIN(Editor)
 
@@ -140,10 +143,14 @@ void EditorActionRegistry::RegisterAll()
                 HierarchyPanel::DeleteSelectedEntities(scene);
         },
         .CanExecute = []() {
-            auto& h = Application::Get().GetEditHistory();
-            auto& sel = SelectionManager::Get();
-            return h.ShortcutsAllowed() && PIEManager::Get().IsEditing() &&
-                !sel.IsPrimarySelectionLocked() && !sel.GetSelectedEntities().empty();
+            const auto* animatorPanel = AnimatorGraphPanel::GetActivePanel();
+            if (animatorPanel && animatorPanel->IsOpen() && animatorPanel->IsFocused())
+                return false;
+
+            auto& history = Application::Get().GetEditHistory();
+            auto& selection = SelectionManager::Get();
+            return history.ShortcutsAllowed() && PIEManager::Get().IsEditing() &&
+                !selection.IsPrimarySelectionLocked() && !selection.GetSelectedEntities().empty();
         }
     });
 
@@ -177,7 +184,17 @@ void EditorActionRegistry::RegisterAll()
         .Context = EShortcutContext::Global,
         .DefaultChord = ShortcutChord(Engine::EKeyCode::S, EModifierKey::Ctrl),
         .ExecuteHandler = []() { ToolBar::SaveScene(); },
-        .CanExecute = []() {
+                .CanExecute = []() {
+            const auto* prefabPanel = dynamic_cast<PrefabEditorPanel*>(
+                ImGuiManager::Get().GetImGuiPanel(L"Prefab Editor"));
+            if (prefabPanel && prefabPanel->IsOpen() && prefabPanel->IsFocused())
+                return false;
+
+            const auto* spritePanel = dynamic_cast<SpriteAnimationEditor*>(
+                ImGuiManager::Get().GetImGuiPanel(L"Sprite Animation Editor"));
+            if (spritePanel && spritePanel->IsOpen() && spritePanel->IsFocused())
+                return false;
+
             const auto* document = Application::Get().GetSceneDocument();
             return PIEManager::Get().IsEditing() && document && document->CanSave();
         }
@@ -408,9 +425,13 @@ void EditorActionRegistry::RegisterAll()
                 hierarchy->TriggerSelectedEntityRename();
         },
         .CanExecute = []() {
-            auto& sel = SelectionManager::Get();
-            return PIEManager::Get().IsEditing() && !sel.IsPrimarySelectionLocked() && !sel.GetSelectedEntities().empty();
-        }
+                const auto* browser = dynamic_cast<ContentBrowserPanel*>(ImGuiManager::Get().GetImGuiPanel(L"Content Browser"));
+                if (browser && browser->IsOpen() && browser->IsFocused())
+                    return false;
+
+                auto& sel = SelectionManager::Get();
+                return PIEManager::Get().IsEditing() && !sel.IsPrimarySelectionLocked() && !sel.GetSelectedEntities().empty();
+            }
         });
 
     sm.RegisterAction({
@@ -560,6 +581,22 @@ void EditorActionRegistry::RegisterAll()
         }
         });
 
+    sm.RegisterAction({
+    .Id = "Animator.DeleteSelection",
+    .DisplayNameKey = "EditorCommon.Delete",
+    .CategoryKey = "AnimatorGraph.Title",
+    .Context = EShortcutContext::AnimatorGraph,
+    .DefaultChord = ShortcutChord(Engine::EKeyCode::Delete),
+    .ExecuteHandler = []() {
+        if (auto* panel = AnimatorGraphPanel::GetActivePanel())
+            panel->DeleteSelection();
+    },
+    .CanExecute = []() {
+        const auto* panel = AnimatorGraphPanel::GetActivePanel();
+        return panel && panel->CanDeleteSelection();
+    }
+        });
+
     // [Graph Editor Actions] (포커스 시 우선 실행)
     sm.RegisterAction({
         .Id = "Graph.Save",
@@ -606,6 +643,70 @@ void EditorActionRegistry::RegisterAll()
     .ExecuteHandler = []() {
         if (auto* vp = SceneViewportPanel::GetActiveSceneViewport())
             vp->ToggleRealtime();
+    }
+        });
+
+    sm.RegisterAction({
+            .Id = "Graph.Run",
+            .DisplayNameKey = "Action.Graph.Run",
+            .CategoryKey = "Shortcuts.CategoryGraph",
+            .Context = EShortcutContext::GraphEditor,
+            .DefaultChord = ShortcutChord(Engine::EKeyCode::F5, EModifierKey::Ctrl),
+            .ExecuteHandler = []() {
+                if (auto* panel = GraphPanel::GetActiveGraphPanel())
+                    panel->RunExecution();
+            },
+            .CanExecute = []() {
+                const auto* panel = GraphPanel::GetActiveGraphPanel();
+                return panel && panel->CanRunExecution();
+            }
+        });
+
+    sm.RegisterAction({
+    .Id = "Graph.Pause",
+    .DisplayNameKey = "Action.Graph.Pause",
+    .CategoryKey = "Shortcuts.CategoryGraph",
+    .Context = EShortcutContext::GraphEditor,
+    .DefaultChord = ShortcutChord(Engine::EKeyCode::F6, EModifierKey::Ctrl),
+    .ExecuteHandler = []() {
+        if (auto* panel = GraphPanel::GetActiveGraphPanel())
+            panel->PauseExecution();
+    },
+    .CanExecute = []() {
+        const auto* panel = GraphPanel::GetActiveGraphPanel();
+        return panel && panel->CanPauseExecution();
+    }
+        });
+
+    sm.RegisterAction({
+    .Id = "Graph.Step",
+    .DisplayNameKey = "Action.Graph.Step",
+    .CategoryKey = "Shortcuts.CategoryGraph",
+    .Context = EShortcutContext::GraphEditor,
+    .DefaultChord = ShortcutChord(Engine::EKeyCode::F10),
+    .ExecuteHandler = []() {
+        if (auto* panel = GraphPanel::GetActiveGraphPanel())
+            panel->StepExecution();
+    },
+    .CanExecute = []() {
+        const auto* panel = GraphPanel::GetActiveGraphPanel();
+        return panel && panel->CanStepExecution();
+    }
+        });
+
+    sm.RegisterAction({
+    .Id = "Graph.Stop",
+    .DisplayNameKey = "Action.Graph.Stop",
+    .CategoryKey = "Shortcuts.CategoryGraph",
+    .Context = EShortcutContext::GraphEditor,
+    .DefaultChord = ShortcutChord(Engine::EKeyCode::F5, EModifierKey::Ctrl | EModifierKey::Shift),
+    .ExecuteHandler = []() {
+        if (auto* panel = GraphPanel::GetActiveGraphPanel())
+            panel->StopExecution();
+    },
+    .CanExecute = []() {
+        const auto* panel = GraphPanel::GetActiveGraphPanel();
+        return panel && panel->CanStopExecution();
     }
         });
 
@@ -741,6 +842,57 @@ void EditorActionRegistry::RegisterAll()
             if (auto* gp = GraphPanel::GetActiveGraphPanel())
                 gp->SaveDocument(true);
         }
+        });
+
+    // ── [Prefab Editor Actions] ──
+    sm.RegisterAction({
+            .Id = "Prefab.Save",
+            .DisplayNameKey = "PrefabEditor.Save",
+            .CategoryKey = "ResourceEditor.PrefabTitle",
+            .Context = EShortcutContext::PrefabEditor,
+            .DefaultChord = ShortcutChord(Engine::EKeyCode::S, EModifierKey::Ctrl),
+            .ExecuteHandler = []() {
+                auto* panel = dynamic_cast<PrefabEditorPanel*>(ImGuiManager::Get().GetImGuiPanel(L"Prefab Editor"));
+                if (panel) panel->SaveDocument();
+            },
+            .CanExecute = []() {
+                const auto* panel = dynamic_cast<PrefabEditorPanel*>(ImGuiManager::Get().GetImGuiPanel(L"Prefab Editor"));
+                return panel && panel->CanSaveDocument();
+            }
+        });
+
+    sm.RegisterAction({
+    .Id = "SpriteAnimation.Save",
+    .DisplayNameKey = "EditorCommon.Save",
+    .CategoryKey = "ResourceEditor.SpriteAnimationTitle",
+    .Context = EShortcutContext::SpriteAnimationEditor,
+    .DefaultChord = ShortcutChord(Engine::EKeyCode::S, EModifierKey::Ctrl),
+    .ExecuteHandler = []() {
+        auto* panel = dynamic_cast<SpriteAnimationEditor*>(
+            ImGuiManager::Get().GetImGuiPanel(L"Sprite Animation Editor"));
+        if (panel) panel->SaveAnimation();
+    },
+    .CanExecute = []() {
+        const auto* panel = dynamic_cast<SpriteAnimationEditor*>(
+            ImGuiManager::Get().GetImGuiPanel(L"Sprite Animation Editor"));
+        return panel && panel->CanSaveAnimation();
+    }
+        });
+
+    sm.RegisterAction({
+    .Id = "Edit.Rename",
+    .DisplayNameKey = "EditorCommon.Rename",
+    .CategoryKey = "UI_CONTENT_BROWSER",
+    .Context = EShortcutContext::ContentBrowser,
+    .DefaultChord = ShortcutChord(Engine::EKeyCode::F2),
+    .ExecuteHandler = []() {
+        auto* panel = dynamic_cast<ContentBrowserPanel*>(ImGuiManager::Get().GetImGuiPanel(L"Content Browser"));
+        if (panel) panel->RenameTarget();
+    },
+    .CanExecute = []() {
+        const auto* panel = dynamic_cast<ContentBrowserPanel*>(ImGuiManager::Get().GetImGuiPanel(L"Content Browser"));
+        return panel && panel->CanRenameTarget();
+    }
         });
 }
 

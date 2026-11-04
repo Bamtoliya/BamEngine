@@ -73,22 +73,38 @@ EResult Texture::Initialize(void* arg)
 		return EResult::FileNotFound;
 
 	const std::streamsize size = file.tellg();
+	if (size <= 0 || size > static_cast<std::streamsize>((std::numeric_limits<int>::max)()))
+		return EResult::InvalidArgument;
+
 	file.seekg(0, std::ios::beg);
-	std::vector<uint8_t> buffer(static_cast<size_t>(size));
+
+	vector<uint8> buffer(static_cast<size_t>(size));
 	if (!file.read(reinterpret_cast<char*>(buffer.data()), size))
 		return EResult::Fail;
 
+	return InitializeFromEncodedMemory(buffer);
+}
+
+EResult Texture::InitializeFromEncodedMemory(const vector<uint8>& encodedData)
+{
+	if (encodedData.empty() || encodedData.size() > static_cast<size_t>((std::numeric_limits<int>::max)()))
+		return EResult::InvalidArgument;
+
+	RHI* rhi = Renderer::IsCreated() ? Renderer::Get().GetRHI() : nullptr;
+	if (!rhi) return EResult::Fail;
+
+	const int encodedSize = static_cast<int>(encodedData.size());
 	int width = 0;
 	int height = 0;
-	int originalChannels = 0;
-	std::unique_ptr<stbi_uc, decltype(&stbi_image_free)> pixels(
-		stbi_load_from_memory(buffer.data(), static_cast<int>(buffer.size()), &width, &height, &originalChannels, STBI_rgb_alpha),
-		stbi_image_free);
+	int channels = 0;
 
-	if (!pixels || width <= 0 || height <= 0)
+	if (!stbi_info_from_memory(encodedData.data(), encodedSize, &width, &height, &channels))
 		return EResult::Fail;
 
-	TextureBinaryHeader header;
+	if (width <= 0 || height <= 0)
+		return EResult::InvalidArgument;
+
+	TextureBinaryHeader header{};
 	header.width = static_cast<uint32>(width);
 	header.height = static_cast<uint32>(height);
 	header.depth = 1;
@@ -101,12 +117,26 @@ EResult Texture::Initialize(void* arg)
 	if (!ValidateTextureHeader(header, m_PixelPerUnit, byteCount))
 		return EResult::InvalidArgument;
 
+	int decodedWidth = 0;
+	int decodedHeight = 0;
+
+	std::unique_ptr<stbi_uc, decltype(&stbi_image_free)> pixels(
+		stbi_load_from_memory(encodedData.data(), encodedSize, &decodedWidth, &decodedHeight, &channels,
+			STBI_rgb_alpha),
+		stbi_image_free);
+
+	if (!pixels || decodedWidth != width || decodedHeight != height)
+		return EResult::Fail;
+
 	header.dataSize = byteCount;
 	vector<uint8> pixelData(pixels.get(), pixels.get() + byteCount);
 
-	RHITextureDesc textureDesc;
+	RHITextureDesc textureDesc{};
 	textureDesc.width = header.width;
 	textureDesc.height = header.height;
+	textureDesc.depth = header.depth;
+	textureDesc.mipLevels = header.mipLevels;
+	textureDesc.arraySize = header.arraySize;
 	textureDesc.format = header.format;
 	textureDesc.dimension = header.dimension;
 	textureDesc.usage = ETextureUsage::Sampler;
@@ -114,12 +144,12 @@ EResult Texture::Initialize(void* arg)
 	textureDesc.dataSize = byteCount;
 
 	RHITexture* texture = rhi->CreateTexture(textureDesc);
-	if (!texture)
-		return EResult::Fail;
+	if (!texture) return EResult::Fail;
 
+	Safe_Release(m_RHITexture);
+	m_RHITexture = texture;
 	m_CachedHeader = header;
 	m_TempData = std::move(pixelData);
-	m_RHITexture = texture;
 	return EResult::Success;
 }
 
@@ -165,6 +195,21 @@ Texture* Texture::CreateFromRHITexture(RHITexture* rhiTexture, const wstring& ke
 	}
 	return instance;
 }
+
+Texture* Texture::CreateFromEncodedMemory(const vector<uint8>& encodedData, const wstring& key)
+{
+	std::unique_ptr<Texture> instance(new Texture());
+	instance->m_Key = NormalizePath(key);
+
+	if (IsFailure(instance->InitializeFromEncodedMemory(encodedData)))
+	{
+		instance->Free();
+		return nullptr;
+	}
+
+	return instance.release();
+}
+
 void Texture::Free()
 {
 	Safe_Release(m_RHITexture);
@@ -388,63 +433,27 @@ EResult Texture::Reload(const std::filesystem::path& filePath)
 	}
 
 	const std::streamsize size = file.tellg();
+	if (size <= 0 || size > static_cast<std::streamsize>((std::numeric_limits<int>::max)()))
+		return EResult::InvalidArgument;
+
 	file.seekg(0, std::ios::beg);
-	std::vector<uint8_t> buffer(static_cast<size_t>(size));
+
+	vector<uint8> buffer(static_cast<size_t>(size));
 	if (!file.read(reinterpret_cast<char*>(buffer.data()), size))
 		return EResult::Fail;
 
-	int width = 0;
-	int height = 0;
-	int originalChannels = 0;
-	std::unique_ptr<stbi_uc, decltype(&stbi_image_free)> pixels(
-		stbi_load_from_memory(buffer.data(), static_cast<int>(buffer.size()), &width, &height, &originalChannels, STBI_rgb_alpha),
-		stbi_image_free);
-
-	if (!pixels || width <= 0 || height <= 0)
+	const EResult result = InitializeFromEncodedMemory(buffer);
+	if (IsFailure(result))
 	{
-		ENGINE_LOG_ERROR("[Texture Hot Reload] Failed to read image file: {}", targetPath.string());
-		return EResult::Fail;
+		ENGINE_LOG_ERROR("[Texture Hot Reload] Image decode or GPU upload failed: {}", path);
+		return result;
 	}
 
-	TextureBinaryHeader header;
-	header.width = static_cast<uint32>(width);
-	header.height = static_cast<uint32>(height);
-	header.depth = 1;
-	header.mipLevels = 1;
-	header.arraySize = 1;
-	header.format = ETextureFormat::R8G8B8A8_UNORM;
-	header.dimension = ETextureDimension::Texture2D;
-
-	uint32 byteCount = 0;
-	if (!ValidateTextureHeader(header, m_PixelPerUnit, byteCount))
-		return EResult::InvalidArgument;
-
-	header.dataSize = byteCount;
-	vector<uint8> pixelData(pixels.get(), pixels.get() + byteCount);
-
-	RHITextureDesc textureDesc;
-	textureDesc.width = header.width;
-	textureDesc.height = header.height;
-	textureDesc.format = header.format;
-	textureDesc.dimension = header.dimension;
-	textureDesc.usage = ETextureUsage::Sampler;
-	textureDesc.data = pixelData.data();
-	textureDesc.dataSize = byteCount;
-
-	RHITexture* newTexture = rhi->CreateTexture(textureDesc);
-	if (!newTexture)
-	{
-		ENGINE_LOG_ERROR("[Texture Hot Reload] Failed to create GPU texture: {}", path);
-		return EResult::Fail;
-	}
-
-	Safe_Release(m_RHITexture);
-	m_RHITexture = newTexture;
-	m_CachedHeader = header;
-	m_TempData = std::move(pixelData);
 	IncreaseVersion();
 
-	ENGINE_LOG_INFO("[Texture Hot Reload] Successfully reloaded: {} ({}x{})", path, width, height);
+	ENGINE_LOG_INFO("[Texture Hot Reload] Successfully reloaded: {} ({}x{})",
+		path, m_CachedHeader.width, m_CachedHeader.height);
+
 	return EResult::Success;
 }
 #pragma endregion

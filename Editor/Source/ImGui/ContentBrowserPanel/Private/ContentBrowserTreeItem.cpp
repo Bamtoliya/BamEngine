@@ -1,6 +1,10 @@
 ﻿#pragma once
 
 #include "ContentBrowserTreeItem.h"
+#include "ContentBrowserPanel.h"
+#include "ImGuiManager.h"
+#include "ShortcutManager.h"
+#include "Editor_Macros.h"
 
 bool ContentBrowserTreeItem::DrawNode(
 	const std::filesystem::path& path,
@@ -68,9 +72,14 @@ bool ContentBrowserTreeItem::DrawNode(
 
 void ContentBrowserTreeItem::ContextMenu(const std::filesystem::path& path, const std::filesystem::path& rootPath, std::filesystem::path& outRenamingPath, char* renameBuffer, size_t renameBufferSize, std::filesystem::path& currentDirectory)
 {
-	std::string filename = path.filename().string();
+	auto* browser = dynamic_cast<ContentBrowserPanel*>(ImGuiManager::Get().GetImGuiPanel(L"Content Browser"));
+	if (browser && ImGui::IsItemHovered())
+		browser->SetRenameTarget(path);
 	if (ImGui::BeginPopupContextItem())
 	{
+		if (browser)
+			browser->SetRenameTarget(path);
+
 		currentDirectory = path;
 
 		if (ImGui::MenuItem((ICON_FA_PLUS " " + LOCAL_LABEL("EditorCommon.NewFolder")).c_str()))
@@ -84,12 +93,7 @@ void ContentBrowserTreeItem::ContextMenu(const std::filesystem::path& path, cons
 			std::filesystem::create_directory(newFolderPath);
 		}
 
-		if (ImGui::MenuItem((ICON_FA_PEN " " + LOCAL_LABEL("EditorCommon.Rename")).c_str(),
-			ShortcutManager::Get().GetShortcutHint("Edit.Rename")))
-		{
-			outRenamingPath = path;
-			strncpy(renameBuffer, filename.c_str(), renameBufferSize);
-		}
+		ACTION_MENU_ITEM((ICON_FA_PEN " " + LOCAL_LABEL("EditorCommon.Rename")).c_str(), "Edit.Rename");
 
 		ImGui::Separator();
 
@@ -113,13 +117,6 @@ void ContentBrowserTreeItem::ContextMenu(const std::filesystem::path& path, cons
 		}
 
 		ImGui::EndPopup();
-	}
-
-	// 호버 상태에서 F2 키 누르면 리네임 모드 진입
-	if (ImGui::IsItemHovered() && KEY_DOWN(EKeyCode::F2))
-	{
-		outRenamingPath = path;
-		strncpy(renameBuffer, filename.c_str(), renameBufferSize);
 	}
 }
 

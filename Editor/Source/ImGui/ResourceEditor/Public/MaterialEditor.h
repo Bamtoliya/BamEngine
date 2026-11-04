@@ -20,6 +20,8 @@ public:
 	virtual void SetTargetResource(const std::filesystem::path& assetPath) override;
 	virtual void Update(f32 dt) override; // 렌더 패스 실행 전 커맨드 사전 제출용
 	virtual void Draw() override;
+	virtual void CaptureState(EditorWorkspace& workspace) const override;
+	virtual void RestoreState(const EditorWorkspace& workspace) override;
 
 private:
 	void DrawToolbar();
@@ -48,5 +50,8 @@ private:
 private:
 	bool m_IsVisibleOnScreen = false;
 	float m_PreviewDirtyTimer = 0.0f;
+
+	// 3D 뷰포트 분할 너비
+	float m_ViewportWidth = 480.0f;
 };
 END

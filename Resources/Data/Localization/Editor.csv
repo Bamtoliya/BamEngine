@@ -1311,3 +1311,33 @@ UI,ModelImport.AnimationAndRig,Animation & Rigging,애니메이션 및 릭
 UI,ModelImport.ImportSkeleton,Import Skeleton,스켈레톤 임포트
 UI,ModelImport.ImportAnimations,Import Animations,애니메이션 임포트
 UI,ModelImport.ImportBtn,Import,임포트
+ModelImport,ModalTitle,Model Import Options,모델 임포트 옵션
+ModelImport,Transform,Transform & Coordinates,변환 및 좌표계
+ModelImport,Scale,Uniform Scale,스케일 배율
+ModelImport,Rotation,Rotation Offset (Pitch/Yaw/Roll),회전 오프셋 (X/Y/Z)
+ModelImport,LeftHanded,Convert to Left-Handed,왼손 좌표계 변환
+ModelImport,FlipUVs,Flip UVs (V-Axis),UV V축 반전
+ModelImport,FlipWinding,Flip Winding Order,면 와인딩 순서 반전
+ModelImport,MeshesAndMaterials,Meshes & Materials,메시 및 머티리얼
+ModelImport,ImportMeshes,Import Meshes,메시 임포트
+ModelImport,ImportMaterials,Import Materials,머티리얼 임포트
+ModelImport,AnimationAndRig,Animation & Rigging,애니메이션 및 릭
+ModelImport,ImportSkeleton,Import Skeleton,스켈레톤 임포트
+ModelImport,ImportAnimations,Import Animations,애니메이션 임포트
+ModelImport,ImportBtn,Import,임포트
+ModelImport,PreviewPending,Preparing preview...,프리뷰 준비 중...
+ModelImport,PreviewFailed,Preview unavailable. Check the console for details.,프리뷰를 표시할 수 없습니다. 콘솔에서 원인을 확인하세요.
+ModelImport,AlbedoReferences,Albedo Textures,Albedo 텍스처
+ModelImport,TextureMaterialFallback,Material {},머티리얼 {}
+ModelImport,TextureReference,Source reference,원본 참조
+ModelImport,TextureResolved,Resolved file,찾은 파일
+ModelImport,TextureStatus,Last load result,마지막 로드 결과
+ModelImport,TextureNone,None,없음
+ModelImport,TextureEmbeddedLocation,Embedded in the model,모델 파일 내부 이미지
+ModelImport,TextureNotProcessed,Not processed,처리 전
+ModelImport,TextureUnused,No texture reference,텍스처 참조 없음
+ModelImport,TextureLoaded,Loaded successfully,불러오기 성공
+ModelImport,TextureMissing,File not found - using base color,파일을 찾지 못해 기본색 사용
+ModelImport,TextureLoadFailed,Loading failed,불러오기 실패
+ModelImport,TextureInfoEmpty,No texture details available,표시할 텍스처 정보가 없습니다
+ModelImport,TextureMaterialsDisabled,Material import is disabled,머티리얼 임포트가 꺼져 있습니다

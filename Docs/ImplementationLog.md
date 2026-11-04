@@ -1,4 +1,4 @@
-# BamEngine Implementation Log
+﻿# BamEngine Implementation Log
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
@@ -33,6 +33,98 @@ Use one entry per meaningful change.
 - Notes:
   - Links to PR/issues/screenshots.
 
+---
+
+## [2026-11-05] 에디터 인스펙터 및 편집이력창 반응형 UI와 텍스트 클리핑 방지 고도화
+
+- Area: Editor | UI | Docs
+- Type: Feature | Fix | Refactor | Docs
+- Owner: @user & @assistant
+- 관련 파일:
+  - Docs/EngineEditorClientGuidelines.md
+  - Docs/ImplementationLog.md
+  - Editor/Source/ImGui/InspectorPanel/Private/ReflectionPropertyDrawer.cpp
+  - Editor/Source/ImGui/InspectorPanel/Private/PropertyDrawerEnTT.cpp
+  - Editor/Source/ImGui/InspectorPanel/Private/InspectorPanel.cpp
+  - Editor/Source/ImGui/HistoryPanel/Private/HistoryPanel.cpp
+- Motivation:
+  - 인스펙터 창 및 편집이력창의 너비가 좁아질 때 프로퍼티 라벨, 툴바 버튼, 경로 텍스트가 잘려나가는 현상 해결
+  - 다국어 텍스트 및 고정 비율 컬럼으로 인한 가독성 저하를 방지하고 상용 엔진 수준의 반응형 UI 지원
+- Implementation summary:
+  - ReflectionPropertyDrawer: 고정 비율(0.25:0.75) 테이블 컬럼을 기본 고정폭(120px) + 가변 확장(WidthStretch) 정책으로 개편
+  - DrawResponsivePropertyLabel: 텍스트 가용 너비 초과 감지(isClipped) 및 마우스 호버 시 전체 이름/타입 통합 툴팁 제공
+  - InspectorPanel: 프리팹 헤더바 버튼 3개에 대한 가용 폭 감지 및 자동 개행(Wrap) 적용, 슬라이더 너비 -FLT_MIN 꽉 채우기, 경로 입력 필드 폭 최적화
+  - HistoryPanel: 360px 기준 컴팩트 아이콘 버튼 툴바 자동 전환, 컬럼 슬림화(50px/45px), ShortcutManager::Get().GetShortcutHint() 기반 실시간 동적 핫키 힌트 연동
+- Technical details:
+  - 자물쇠 등 우측 컨트롤 예약 폭(reservedRightWidth)을 계산하여 정확한 텍스트 클리핑 감지
+  - ShortcutManager 중앙 액션(Edit.Undo, Edit.Redo) 힌트와 툴팁을 일원화하여 단축키 재바인딩 즉각 반영
+- Validation:
+  - 창 크기 변경 시 인스펙터 라벨 120px 유지 및 잘림 시 호버 툴팁 정상 표시 확인
+  - 프리팹 헤더바 및 편집이력 툴바의 좁은 창 자동 개행 및 아이콘 전환 검증 완료
+
+---
+
+## [2026-11-05] 에디터 패널 인터랙티브 스플리터 도입 및 레이아웃 상태 영속화(기억하기) 구현
+
+- Area: Editor | UI | Settings | Reflection | Docs
+- Type: Feature | Fix | Refactor | Docs
+- Owner: @user & @assistant
+- 관련 파일:
+  - Editor/Source/ImGui/Public/ImGuiSplitter.h
+  - Editor/Source/Settings/Public/EditorSettings.h
+  - Editor/Source/ImGui/Private/ImGuiManager.cpp
+  - Editor/Source/ImGui/AnimatorGraphPanel/Public/AnimatorGraphPanel.h
+  - Editor/Source/ImGui/AnimatorGraphPanel/Private/AnimatorGraphPanel.cpp
+  - Editor/Source/ImGui/ResourceEditor/Public/MaterialEditor.h
+  - Editor/Source/ImGui/ResourceEditor/Private/MaterialEditor.cpp
+  - Editor/Source/ImGui/ResourceEditor/Public/SpriteAnimationEditor.h
+  - Editor/Source/ImGui/ResourceEditor/Private/SpriteAnimationEditor.cpp
+  - Editor/Source/ImGui/ResourceEditor/Public/ModelEditor.h
+  - Editor/Source/ImGui/ResourceEditor/Private/ModelEditor.cpp
+  - Editor/Source/AssetManager/Importer/Public/ModelImportModal.h
+  - Editor/Source/AssetManager/Importer/Private/ModelImportModal.cpp
+  - Editor/Source/ImGui/SettingsPanel/Public/UnifiedSettingsPanel.h
+  - Editor/Source/ImGui/SettingsPanel/Private/UnifiedSettingsPanel.cpp
+  - Editor/Source/ImGui/ConsolePanel/Public/ConsolePanel.h
+  - Editor/Source/ImGui/ConsolePanel/Private/ConsolePanel.cpp
+  - Editor/Source/ImGui/TimelinePanel/Public/AnimationTimelinePanel.h
+  - Editor/Source/ImGui/TimelinePanel/Private/AnimationTimelinePanel.cpp
+  - Editor/Source/ImGui/InspectorPanel/Private/PropertyDrawerEnTT.cpp
+  - Editor/Source/ImGui/ContentBrowserPanel/Public/ContentBrowserPanel.h
+  - Editor/Source/ImGui/ContentBrowserPanel/Private/ContentBrowserPanel.cpp
+  - Editor/Source/ImGui/GraphPanel/Private/GraphPanel.cpp
+  - Editor/Source/Shortcut/Private/ShortcutSettingsPanel.cpp
+  - Editor/Source/ImGui/HistoryPanel/Private/HistoryPanel.cpp
+  - Editor/Source/ImGui/PostProcessPanel/Private/PostProcessPanel.cpp
+  - Editor/Source/ImGui/NetworkProfilerPanel/Private/NetworkProfilerPanel.cpp
+- 동기 및 배경:
+  - 에디터 내 주요 복합 창들(AnimatorGraphPanel, MaterialEditor, SpriteAnimationEditor)의 내부 분할이 고정 너비/비율로 하드코딩되어 있어, 파라미터나 테이블 컬럼 내용이 잘리고 사용자가 창 크기를 조절할 수 없었음.
+  - 기존에 스플리터가 있던 패널들(UnifiedSettingsPanel, ConsolePanel, TimelinePanel, ModelEditor 등)도 분할 크기가 C++ float 변수에만 머물러 있어, 에디터를 재시작하면 기본값으로 무조건 리셋되는 현상이 있었음.
+  - ShortcutSettingsPanel, HistoryPanel, PostProcessPanel 등 일부 테이블에 ImGuiTableFlags_Resizable이 누락되어 컬럼 조절이 불가능했고, 테이블 컬럼 라벨에 다국어 키만 전달되어 언어 전환 시 ImGui 컬럼 너비 설정이 초기화되는 문제 해결.
+- 구현 내용 요약:
+  1. **공통 스플리터 헬퍼 구축 (ImGuiSplitter.h)**:
+     - Editor/Source/ImGui/Public/ImGuiSplitter.h 신규 생성.
+     - ImGui 순정 SplitterBehavior를 기반으로 마우스 호버 감지 여유폭(hover_extend), 커서 변경(ResizeEW/ResizeNS), 하이라이트 렌더링, 양방향 크기 보존 클램핑을 지원하는 SplitterV (좌우) 및 SplitterH (상하) 인라인 헬퍼 함수 구현.
+  2. **고정 분할 패널의 스플리터 적용**:
+     - AnimatorGraphPanel: 고정 상수(260px, 280px)였던 좌측 뷰포트/파라미터 및 우측 인스펙터에 SplitterV 좌우 더블 스플리터 적용.
+     - MaterialEditor: 뷰포트 55% vs 디테일 창 45% 고정 비율을 SplitterV 기반 인터랙티브 분할로 개선.
+     - SpriteAnimationEditor: 캔버스 <-> 프레임 목록(SplitterV) 및 상단 <-> 필름스트립 타임라인(SplitterH) 2중 스플리터 적용.
+     - PrefabEditorPanel: 계층 뷰 스플리터 분석 및 기존 PrefabModeManager의 씬/계층/뷰포트 둔갑 시스템 확인 및 레거시 독립 창 정리 대상 분류.
+  3. **기존 수동 스플리터 패널 헬퍼 전환 및 리팩토링**:
+     - ModelEditor, ModelImportModal, UnifiedSettingsPanel의 20여 줄 수동 드래그/버튼 코드를 공통 SplitterV 헬퍼 단 1~2줄로 통합.
+  4. **테이블 컬럼 리사이즈 및 다국어 영속성 보강**:
+     - ShortcutSettingsPanel, HistoryPanel, PostProcessPanel, NetworkProfilerPanel에 ImGuiTableFlags_Resizable 플래그 추가하여 컬럼 폭 조절 잠금 해제.
+     - ContentBrowserPanel, GraphPanel, ShortcutSettingsPanel, HistoryPanel, PostProcessPanel, PropertyDrawerEnTT의 컬럼 라벨에 ##StableID를 부여하여 언어 변경(한국어 <-> 영어) 시에도 컬럼 너비 설정이 유지되도록 수정.
+     - PropertyDrawerEnTT의 DrawPropertyTable에 타입별 ImGui::PushID를 감싸 컴포넌트 간 테이블 ID 충돌 방지.
+     - ContentBrowserPanel.h의 미사용 변수 m_ModalSplitterWidth 정리.
+  5. **스플리터 영속화(기억하기) 시스템 구축**:
+     - Editor/Source/Settings/Public/EditorSettings.h: EditorWorkspace 구조체에 리플렉션 직렬화 필드 std::map<std::string, float> SplitterStates 및 SetSplitter/GetSplitter 헬퍼 함수 추가.
+     - Editor/Source/ImGui/Private/ImGuiManager.cpp: CreateDefaultPanels()에서 CreateResourceEditors() 호출 순서를 보정하여 머티리얼, 모델 등 리소스 에디터 패널들이 워크스페이스 저장/복원 대상(m_WorkspacePanels)에 정상 포함되도록 수정.
+     - 각 패널(AnimatorGraphPanel, MaterialEditor, SpriteAnimationEditor, ConsolePanel, AnimationTimelinePanel, UnifiedSettingsPanel, ModelEditor, ModelImportModal)에 CaptureState / RestoreState 오버라이드 구현.
+- 검증 및 확인:
+  - Editor 전체 빌드 정상 통과 (ReflectionGenerator 및 CMake 타깃 빌드 성공).
+  - 각 패널에서 스플리터 마우스 드래그 조작 시 리사이즈 커서(<->) 표시 및 부드러운 폭/높이 조절 동작 확인.
+  - 에디터 재시작 후 .bam/User/Workspace.json의 SplitterStates를 통해 조절했던 모든 분할 크기가 초기화 없이 정상 복원됨을 검증.
 ---
 
 ## [2026-11-05] 3인칭 캐릭터 Locomotion 애니메이션 블렌딩 고도화 및 모델 재임포트 핫 리로드

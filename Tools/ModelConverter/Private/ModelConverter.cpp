@@ -61,7 +61,10 @@ namespace Tools::ModelConversion
             flags |= aiProcess_FlipUVs;
 
         if (options.ConvertToLeftHanded)
-            flags |= aiProcess_MakeLeftHanded | aiProcess_FlipWindingOrder;
+            flags |= aiProcess_MakeLeftHanded;
+
+        if (options.FlipWindingOrder)
+            flags |= aiProcess_FlipWindingOrder;
 
         const auto utf8Path = sourcePath.u8string();
         const std::string filename(reinterpret_cast<const char*>(utf8Path.data()), utf8Path.size());

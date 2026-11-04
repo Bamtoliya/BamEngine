@@ -69,6 +69,8 @@ public:
 	void SyncFromSelectedEntity(); // 씬에서 선택된 엔티티 동기화 함수
 	bool SaveToFile(const std::string& filePath);
 	bool LoadFromFile(const std::string& filePath);
+	virtual void CaptureState(EditorWorkspace& workspace) const override;
+	virtual void RestoreState(const EditorWorkspace& workspace) override;
 
 public:
 	static AnimationTimelinePanel* GetActivePanel() { return s_ActivePanel; }

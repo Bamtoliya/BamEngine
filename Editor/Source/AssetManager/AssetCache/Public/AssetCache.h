@@ -64,8 +64,15 @@ private:
 		Idle,
 		Rendering
 	};
-	std::queue<std::string> m_Pending3DQueue;
+	struct Thumbnail3DRequest
+	{
+		std::string AssetPath;
+		Engine::uint64 RequestId = 0;
+	};
+
+	std::queue<Thumbnail3DRequest> m_Pending3DQueue;
 	std::string m_CurrentCapturingKey;
+	Engine::uint64 m_CurrentCapturingRequestId = 0;
 	ECaptureState m_CaptureState = ECaptureState::Idle;
 #pragma endregion
 

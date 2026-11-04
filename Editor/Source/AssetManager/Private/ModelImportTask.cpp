@@ -23,12 +23,7 @@ namespace Editor
                 return EResult::Fail;
             };
 
-        Tools::ModelConversion::Options options;
-        options.FlipUVs = HasFlag(m_Request.Settings.PostProcessFlags, EModelPostProcessFlag::FlipUVs);
-        options.ConvertToLeftHanded = HasFlag(m_Request.Settings.PostProcessFlags, EModelPostProcessFlag::MakeLeftHanded) ||
-            HasFlag(m_Request.Settings.PostProcessFlags, EModelPostProcessFlag::FlipWindingOrder);
-        options.UniformScale = m_Request.Settings.UniformScale;
-        options.RotationOffset = m_Request.Settings.RotationOffset;
+        const auto options = ModelImporter::MakeConversionOptions(m_Request.Settings);
 
         try
         {

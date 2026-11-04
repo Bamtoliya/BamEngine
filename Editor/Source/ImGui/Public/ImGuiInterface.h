@@ -3,6 +3,7 @@
 #include "Editor_Includes.h"
 #include <SDL3/SDL_events.h>
 #include "ShortcutTypes.h"
+#include "ImGuiSplitter.h"
 
 BEGIN(Editor)
 struct EditorWorkspace;

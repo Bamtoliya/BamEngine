@@ -53,15 +53,22 @@ void ShortcutSettingsPanel::DrawActionTable()
     auto& shortcuts = ShortcutManager::Get();
     const auto& actions = shortcuts.GetActions();
 
+    // ImGuiTableFlags_Resizable 추가
     constexpr ImGuiTableFlags tableFlags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
-        ImGuiTableFlags_ScrollY | ImGuiTableFlags_SizingFixedFit;
+        ImGuiTableFlags_ScrollY | ImGuiTableFlags_Resizable;
 
     if (ImGui::BeginTable("ShortcutTable", 4, tableFlags))
     {
-        ImGui::TableSetupColumn(LOCAL_CSTR("Shortcuts.ColAction"), ImGuiTableColumnFlags_WidthStretch);
-        ImGui::TableSetupColumn(LOCAL_CSTR("Shortcuts.ColCategory"), ImGuiTableColumnFlags_WidthFixed, 100.0f);
-        ImGui::TableSetupColumn(LOCAL_CSTR("Shortcuts.ColShortcut"), ImGuiTableColumnFlags_WidthFixed, 180.0f);
-        ImGui::TableSetupColumn(LOCAL_CSTR("Shortcuts.ColReset"), ImGuiTableColumnFlags_WidthFixed, 80.0f);
+        // 다국어 변경 시에도 컬럼 너비가 보존되도록 ##ID 부여
+        const std::string colAction = LOCAL("Shortcuts.ColAction") + "##Action";
+        const std::string colCategory = LOCAL("Shortcuts.ColCategory") + "##Category";
+        const std::string colShortcut = LOCAL("Shortcuts.ColShortcut") + "##Shortcut";
+        const std::string colReset = LOCAL("Shortcuts.ColReset") + "##Reset";
+
+        ImGui::TableSetupColumn(colAction.c_str(), ImGuiTableColumnFlags_WidthStretch);
+        ImGui::TableSetupColumn(colCategory.c_str(), ImGuiTableColumnFlags_WidthFixed, 100.0f);
+        ImGui::TableSetupColumn(colShortcut.c_str(), ImGuiTableColumnFlags_WidthFixed, 180.0f);
+        ImGui::TableSetupColumn(colReset.c_str(), ImGuiTableColumnFlags_WidthFixed, 80.0f);
         ImGui::TableHeadersRow();
 
         for (const auto& [id, action] : actions)

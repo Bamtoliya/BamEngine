@@ -554,10 +554,9 @@ EResult ImGuiManager::CreateDefaultPanels()
 		Safe_Release(graphicsPanel);
 		return graphicsResult;
 	}
-
-	m_WorkspacePanels = m_PendingAddPanels;
-
+	// CreateResourceEditors()를 먼저 호출한 뒤 m_WorkspacePanels를 확정합니다.
 	CreateResourceEditors();
+	m_WorkspacePanels = m_PendingAddPanels;
 	return EResult::Success;
 }
 EResult ImGuiManager::CreateResourceEditors()

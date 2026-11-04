@@ -24,9 +24,13 @@ public:
 
 	void SetStateMachine(const std::shared_ptr<Engine::AnimatorStateMachine>& sm);
 	std::shared_ptr<Engine::AnimatorStateMachine> GetStateMachine() const { return m_StateMachine; }
+	virtual void CaptureState(EditorWorkspace& workspace) const override;
+	virtual void RestoreState(const EditorWorkspace& workspace) override;
 public:
 	virtual EShortcutContext GetShortcutContext() const override { return EShortcutContext::AnimatorGraph; }
 	static AnimatorGraphPanel* GetActivePanel() { return s_ActivePanel; }
+	bool CanDeleteSelection() const;
+	void DeleteSelection();
 private:
 	// GraphPanel 스타일 2단 메뉴/툴바
 	void DrawMenuBar();
@@ -79,6 +83,10 @@ private:
 	// 노드 위치 및 스크롤
 	ImVec2 m_CanvasScrolling = ImVec2(0.0f, 0.0f);
 	std::unordered_map<std::string, ImVec2> m_NodePositions;
+
+	// 창 분할 너비
+	float m_LeftPaneWidth = 260.0f;
+	float m_InspectorWidth = 280.0f;
 
 	inline static AnimatorGraphPanel* s_ActivePanel = nullptr;
 	EPendingAction m_PendingAction = EPendingAction::None;

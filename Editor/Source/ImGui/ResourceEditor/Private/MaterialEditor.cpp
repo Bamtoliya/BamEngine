@@ -6,6 +6,7 @@
 #include "Logger.h"
 #include "LocalizationManager.h"
 #include "ResourcePicker.h"
+#include "AssetCache.h"
 
 namespace
 {
@@ -125,25 +126,28 @@ void MaterialEditor::Draw()
 			return;
 		}
 
-		// 상단 메인 툴바 (저장 버튼 등)
+		// 툴바 (저장 버튼 등)
 		DrawToolbar();
 		ImGui::Separator();
-
-		// 좌우 2분할 레이아웃 계산 (좌측 뷰포트 55%, 우측 디테일 패널 45%)
 		const float availWidth = ImGui::GetContentRegionAvail().x;
-		const float viewportWidth = std::max(availWidth * 0.55f, 320.0f);
-
-		// ── [좌측 영역] 3D 머티리얼 뷰포트 (자체 마우스 조작, 부모 스크롤 차단) ──
+		const float splitterThickness = 4.0f;
+		const float spacingX = ImGui::GetStyle().ItemSpacing.x;
+		// 우측 디테일 창 가용 너비 계산 (최소 320px 보장)
+		const float minLeft = 250.0f;
+		const float minRight = 320.0f;
+		float detailsWidth = (std::max)(minRight, availWidth - m_ViewportWidth - splitterThickness - spacingX);
+		// ── [좌측] 3D 머티리얼 뷰포트 ──
 		ImGuiWindowFlags vpFlags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
-		if (ImGui::BeginChild("##MaterialViewportPane", ImVec2(viewportWidth, 0.0f), true, vpFlags))
+		if (ImGui::BeginChild("##MaterialViewportPane", ImVec2(m_ViewportWidth, 0.0f), true, vpFlags))
 		{
 			m_PreviewRenderer.DrawUI(m_Material);
 		}
 		ImGui::EndChild();
-
 		ImGui::SameLine();
-
-		// ── [우측 영역] 머티리얼 프로퍼티 & 파라미터 디테일 패널 (독립 세로 스크롤) ──
+		// ── [스플리터] 뷰포트 ↔ 디테일 패널 ──
+		Editor::SplitterV("##MaterialSplitter", &m_ViewportWidth, &detailsWidth, minLeft, minRight, 0.0f, splitterThickness);
+		ImGui::SameLine();
+		// ── [우측] 프로퍼티 & 파라미터 패널 (남은 가용 폭 전체 채움) ──
 		if (ImGui::BeginChild("##MaterialDetailsPane", ImVec2(0.0f, 0.0f), true))
 		{
 			DrawPipelineSettings();
@@ -555,7 +559,7 @@ void MaterialEditor::DrawTextureBindings()
 			// Column 3: Texture Resource Picker Slot (클릭 시 피커 팝업 + 드래그 앤 드롭 동시 지원)
 			ImGui::TableSetColumnIndex(3);
 			auto texHandle = row.texture;
-			if (Editor::DrawInspectorResourcePicker(texHandle, true))
+			if (Editor::DrawInspectorResourcePicker(texHandle, true, false))
 			{
 				m_Material->SetTextureBinding(row.name, row.slot, texHandle);
 				m_IsDirty = true;
@@ -747,4 +751,16 @@ void MaterialEditor::DrawParameters()
 		}
 	}
 	ImGui::PopID();
+}
+
+void MaterialEditor::CaptureState(EditorWorkspace& workspace) const
+{
+	IImGui::CaptureState(workspace);
+	workspace.SetSplitter("Material.ViewportWidth", m_ViewportWidth);
+}
+
+void MaterialEditor::RestoreState(const EditorWorkspace& workspace)
+{
+	IImGui::RestoreState(workspace);
+	m_ViewportWidth = workspace.GetSplitter("Material.ViewportWidth", 480.0f);
 }
