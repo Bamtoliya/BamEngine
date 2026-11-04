@@ -1,7 +1,7 @@
 # 애니메이션·이펙트·노티파이 통합 타임라인 에디터 개발 계획 (Animation & FX Timeline Editor Plan)
 
-- 작성일: 2026-11-03
-- 상태: 계획 수립 / 개발 대기
+- 작성일: 2026-11-03 (갱신일: 2026-11-04)
+- 상태: Phase 1 ~ Phase 5 구현 완료 / 검증 완료
 - 공통 기준: [EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md), [SourceOrganizationGuidelines.md](SourceOrganizationGuidelines.md)
 - 연계 계획: [AnimatorGraphPlan.md](AnimatorGraphPlan.md) (Phase 5 AnimNotify 및 독립 프리뷰), [EngineDevelopmentPlan.md](EngineDevelopmentPlan.md) 4절(파티클 시스템), [DevelopmentPriorities.md](DevelopmentPriorities.md) (P3/P4)
 
@@ -72,9 +72,11 @@ flowchart TD
   - 첫 프레임으로 이동(`|<`), 이전 키프레임(`<`), 다음 키프레임(`>`), 끝으로 이동(`>|`).
   - 현재 시간 및 프레임 표시 (예: `01:24 (Frame 42 / 90)`), 재생 속도 슬라이더 (`0.1x` ~ `2.0x`).
 - **중앙 3D 프리뷰 뷰포트 (`PreviewViewport`):**
-  - [ThumbnailRenderer](file:///i:/BamtoliyaGithub/BamEngine/Editor/Source/Rendering/Thumbnail/Private/ThumbnailRenderer.cpp) 및 [MaterialPreviewRenderer](file:///i:/BamtoliyaGithub/BamEngine/Editor/Source/ImGui/ResourceEditor/Private/MaterialPreviewRenderer.cpp)의 오프스크린 파이프라인(`ViewportDeferredPipeline`)을 활용.
-  - 바닥 격자 그리드, 마우스 드래그 궤도 회전(Orbit)/팬(Pan)/줌(Zoom), 라이팅 지원.
-  - 본 소켓 시즈모 및 파티클 부착 위치 실시간 시각화.
+  - **공통 디퍼드 파이프라인(`ViewportDeferredPipeline`) 기반:** 메인 씬 뷰포트(`SceneViewportPanel`)와 동일한 G-Buffer 생성, PBR 디퍼드 라이팅, SkyAtmosphere/IBL, ACES 톤매핑 후처리를 적용하여 렌더링 퀄리티 및 룩 디벨롭먼트 일관성 유지.
+  - **G-Buffer 채널 뷰 지원:** `BaseViewportPanel`의 채널 필터(Albedo, Normal, Roughness, Metallic, Depth 등)를 지원하여 캐릭터 및 머티리얼 디버깅 가능.
+  - **에디터 표준 카메라(`EditorCameraController`) 적용:** 자체적인 궤도 계산 대신 표준 카메라 컨트롤러를 탑재하여 `Alt+LMB` 궤도 회전(Orbit), `Alt+MMB` 팬(Pan), `Alt+RMB`/`휠` 줌(Zoom), 우클릭+`WASD` 플라이, `F` 키 모델 중심 자동 포커싱을 완벽히 지원.
+  - **독립 프리뷰 씬(`PreviewScene`):** 메인 월드 오염을 방지하기 위해 격리된 경량 `Scene`을 소유하고, 여기에 모델, 바닥 그리드, 노티파이 파티클 이미터를 배치하여 렌더링.
+  - **본 소켓 기즈모 및 파티클 위치 시각화:** 캐릭터 본 계층, 부착 소켓 위치 및 파티클 발생 지점 실시간 시각화.
 - **하단 다중 트랙 타임라인 (Multi-Track Timeline):**
   - **헤더 눈금자 (Time Ruler):** 프레임/초 눈금 표시 및 타임라인 스크러버(Scrubber) 드래그 바.
   - **트랙 0 (Animation Pose):** 클립 전체 길이, 키프레임 위치 마커.
@@ -90,12 +92,13 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    P1["Phase 1: 비-PIE 에디터 실시간 프리뷰 루프\n(Application 에디터 틱 분기, 파티클 루프 토글, 씬 뷰포트 실시간 시뮬레이션)"]
-    P2["Phase 2: 애니메이션 노티파이 코어 데이터 모델\n(AnimNotifyEvent, AnimMontageAsset, 소켓 본 계층 바인딩, JSON 직렬화)"]
-    P3["Phase 3: AnimationTimelinePanel 기본 GUI\n(3D 오프스크린 뷰포트, 타임라인 눈금자, 스크러빙, 키프레임 재생기)"]
-    P4["Phase 4: 다중 트랙 저작 & 파티클/사운드 트리거 완성\n(FX 트랙 마커 드래그, 실시간 소켓 파티클 스폰, 게임플레이 노티파이 연동)"]
+    P1["Phase 1: 비-PIE 에디터 실시간 프리뷰 루프 (완료)\n(Application 에디터 틱 분기, 파티클 루프 토글, 씬 뷰포트 실시간 시뮬레이션)"]
+    P2["Phase 2: 애니메이션 노티파이 코어 데이터 모델 (완료)\n(AnimNotifyData, ActionTimelineAsset, 소켓 본 계층 바인딩, JSON 직렬화)"]
+    P3["Phase 3: AnimationTimelinePanel 기본 GUI (완료)\n(3D 오프스크린 뷰포트, 타임라인 눈금자, 스크러빙, 키프레임 재생기, 3중 스플리터)"]
+    P4["Phase 4: 다중 트랙 저작 & 에디터 인터랙션 완성 (완료)\n(FX/카메라 트랙, 노티파이 마커 드래그, 단축키 시스템, 콘텐츠 브라우저 연동)"]
+    P5["Phase 5: 런타임 액션 타임라인 재생 시스템 (완료)\n(ActionTimelineComponent, ActionTimelineSystem, 3D 오디오, 파티클 버스트, 카메라 연출)"]
 
-    P1 --> P2 --> P3 --> P4
+    P1 --> P2 --> P3 --> P4 --> P5
 ```
 
 ---
@@ -125,29 +128,50 @@ flowchart TD
 ---
 
 ### Phase 3. `AnimationTimelinePanel` GUI 토대 구축
-- **목적:** 애니메이션 클립을 로드하고, 타임라인을 스크러빙하며 독립 3D 뷰포트에서 캐릭터 포즈를 확인하는 전용 창 구축.
+- **목적:** 애니메이션 클립을 로드하고, 타임라인을 스크러빙하며 공통 표준 3D 뷰포트에서 캐릭터 포즈를 확인하는 전용 창 구축.
 - **세부 내용:**
   - 패널 등록: [ImGuiDevelopmentPlan.md](ImGuiDevelopmentPlan.md) 규격에 따라 `Editor/Source/ImGui/TimelinePanel/`에 구축.
-  - 독립 오프스크린 렌더링: `ThumbnailRenderer`의 설계를 계승하여 `PreviewScene`과 `CameraBuffer`, 그리드 바닥을 렌더링.
-  - 하단 타임라인 렌더러: ImGui 커스텀 드로우(`ImDrawList`) 기반의 눈금자, 초/프레임 텍스트, 시간 커서(붉은색 스크러빙 라인).
+  - 공통 디퍼드 뷰포트 및 표준 카메라 연동:
+    - [EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md) 16절 준수.
+    - `ViewportDeferredPipeline` 인스턴스(`Timeline_` 접두사)를 소유하여 PBR 디퍼드 라이팅, G-Buffer 채널 분리 뷰, ACES 톤매핑 후처리 지원.
+    - `EditorCameraController`를 탑재하여 `F` 키 모델 포커싱, `Alt+LMB` 궤도 회전, `Alt+MMB` 패닝 등 메인 뷰포트와 100% 동일한 조작감 제공.
+  - 하단 타임라인 렌더러: ImGui 커스텀 드로우(`ImDrawList`) 기반의 눈금자, 초/프레임 텍스트, 시간 커서(오렌지-레드 스크러빙 라인).
   - 마우스 스크러빙: 타임라인을 드래그하면 즉각 캐릭터의 포즈가 해당 프레임으로 갱신됨.
-- **완료 기준:** 패널에서 애니메이션 클립을 선택하면 3D 뷰포트에 캐릭터가 나타나고, 타임라인을 마우스로 드래그하는 속도에 맞춰 캐릭터 모션이 전/후진한다.
+- **완료 기준:** 패널에서 애니메이션 클립을 선택하면 디퍼드 3D 뷰포트에 PBR 조명을 받는 캐릭터가 나타나고, `F` 키로 포커스되며 타임라인을 마우스로 드래그하는 속도에 맞춰 캐릭터 모션이 전/후진한다.
 
 ---
 
-### Phase 4. 다중 트랙(FX/Sound/Notify) 저작 및 실시간 프리뷰 완성
-- **목적:** 타임라인 위에서 파티클 이펙트와 사운드를 자유롭게 배치하고, 재생 시 소켓 본에서 파티클이 터져 나오는 최종 통합 환경 완성.
+### Phase 4. 다중 트랙 저작 & 에디터 인터랙션 완성 - [완료]
+- **목적:** 타임라인 위에서 파티클 이펙트와 사운드를 자유롭게 배치하고, 키보드 단축키 및 콘텐츠 브라우저 연동 완성.
 - **세부 내용:**
-  - 트랙 UI: 우클릭 컨텍스트 메뉴로 `Add FX Track`, `Add Notify Marker` 제공.
-  - 이벤트 마커 상호작용: 마커 클릭 선택, 좌우 드래그로 시간 변경, Delete 키로 삭제.
-  - 소켓 본 바인딩: 선택한 노티파이의 소켓 본(예: `"RightHand"`) 위치에 파티클 이미터가 런타임에 동적으로 생성 및 부착(`HierarchyComponent` 또는 월드 변환 동기화).
-  - 파일 저장/불러오기: `ReflectionArchive` 기반 원자적 저장 및 에셋 브라우저 연동.
-- **완료 기준:** 캐릭터가 검을 휘두르는 30번째 프레임에 검기 파티클 마커를 배치하고 Play를 누르면, 검을 휘두르는 순간 손에 부착된 검기 파티클이 화려하게 방출되는 모습을 에디터 창에서 실시간으로 확인할 수 있다.
+  - 트랙 UI: 우클릭 컨텍스트 메뉴로 `Add FX Track`, `Add Audio Track`, `Add Camera Shot Track` 지원.
+  - 노티파이 마커 및 카메라 샷 블록 드래그 앤 이동:
+    - 그랩 시간 오프셋(`m_DragTimeOffset`) 보존으로 마우스 클릭 시 커서 점프 방지.
+    - 트랙 캔버스 영역에 `ImGui::InvisibleButton` 배치 및 `NoMove` 동적 플래그로 마커 드래그 시 패널 창 전체가 끌려다니는 버그 원천 해결.
+  - `ShortcutManager` 중앙 단축키 등록 (`Timeline.PlayPause`, `Timeline.PrevFrame`, `Timeline.NextFrame`, `Timeline.FirstFrame`, `Timeline.LastFrame`, `Timeline.ToggleLoop`, `Timeline.ZoomReset`, `Timeline.DeleteSelected`).
+  - `ResourceEditorInterface` 상속 및 구현: 콘텐츠 브라우저에서 `.actiontimeline.json` 파일 더블 클릭 시 자동 열기 및 로드.
+  - 씬 선택 엔티티 동기화 (`SyncFromSelectedEntity`): 씬에서 선택한 캐릭터 엔티티의 모델과 타임라인 에셋을 툴바 버튼으로 즉시 연동.
+- **완료 검증:** 에디터에서 타임라인 마커를 자유롭게 이동·삭제하고, 콘텐츠 브라우저 더블클릭 및 씬 동기화 정상 작동 확인.
 
 ---
 
-## 4. 선행 조건 및 개발 순서 연계
+### Phase 5. 런타임 액션 타임라인 재생 시스템 (Action Timeline Runtime System) - [완료]
+- **목적:** 에디터에서 저작한 `.actiontimeline.json` 에셋을 인게임(PIE 또는 런타임) 게임플레이 엔티티에서 실시간 재생.
+- **세부 내용:**
+  - `ActionTimelineComponent`: 엔티티 부착용 ECS 컴포넌트 (`timelinePath`, `playRate`, `isLooping`, `isPlaying`, `currentTime`, 콜백 델리게이트).
+  - `ActionTimelineSystem`: 매 프레임 `dt`에 따라 타임라인 진행 및 인게임 연동.
+    - `AnimatorComponent` 클립 및 재생 시간 강제 동기화.
+    - 본 소켓 기반 3D 월드 좌표 산출 (`ComputeSocketWorldPos`).
+    - `prevTime` ~ `currentTime` 구간 내 노티파이 누락 없는 검출 및 3D 사운드(`AudioManager`), 파티클 버스트(`ParticleEmitterComponent`) 트리거.
+    - 카메라 샷 연출: 메인 카메라(`CameraComponent`)의 목표 FOV 스무스 줌인, `ShakeIntensity` 화면 흔들림 오프셋 적용, 샷 종료 후 원래 FOV로 자연스러운 복원.
+  - `Systems.h`, `Application.cpp`, `Client/Main.cpp`에 런타임 시스템 등록 완료.
+  - 로캘 원본 CSV(`Engine.csv`, `Editor.csv`) 및 JSON 번역 파일 완벽 동기화.
+- **완료 검증:** 인게임 엔티티에서 타임라인 재생 시 지정된 프레임에 정확히 사운드가 출력되고 본 소켓 위치에서 파티클이 발생하며, 카메라 샷 연출이 종료 후 원래 화각으로 깔끔히 복원됨.
+
+---
+
+## 4. 완료 현황 요약
 
 1. **파티클 시스템 기초 (P3, 완료):** 단일 CPU 이미터, 빌보드 렌더러, 파티클 수명/적분 코어 완료.
-2. **Phase 1 (비-PIE 실시간 프리뷰):** 가장 적은 수정으로 즉시 체감할 수 있는 1단계 작업으로 우선 착수.
-3. **Phase 2 ~ 4 (몽타주/노티파이 타임라인 에디터):** [AnimatorGraphPlan.md](AnimatorGraphPlan.md) Phase 5와 연계하여 단계적으로 진행.
+2. **Phase 1 ~ Phase 4 (에디터 통합 저작 도구, 완료):** 비-PIE 실시간 프리뷰 루프, 다중 트랙 GUI, 스플리터, 마커 드래그, 단축키, 에셋 브라우저 연동 완료.
+3. **Phase 5 (인게임 런타임 재생 시스템, 완료):** 액션 타임라인 컴포넌트, 런타임 시스템, 소켓 파티클, 3D 사운드, 카메라 샷 줌인/복원/셰이크 완료.

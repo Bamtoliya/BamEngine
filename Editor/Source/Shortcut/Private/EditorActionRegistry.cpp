@@ -17,6 +17,8 @@
 #include "ImGuiManager.h"
 #include <SDL3/SDL_events.h>
 #include "AnimatorGraphPanel.h"
+#include "AnimationTimelinePanel.h"
+#include "UnifiedSettingsPanel.h"
 
 BEGIN(Editor)
 
@@ -380,14 +382,38 @@ void EditorActionRegistry::RegisterAll()
         .Id = "Viewport.Focus",
         .DisplayNameKey = "Action.Viewport.Focus",
         .CategoryKey = "Shortcuts.CategoryViewport",
-        .Context = EShortcutContext::Viewport,
+        .Context = EShortcutContext::Global, // 전역 어디서든 F로 포커스 가능
         .DefaultChord = ShortcutChord(Engine::EKeyCode::F),
         .ExecuteHandler = []() {
-            if (auto* vp = SceneViewportPanel::GetActiveSceneViewport())
+            SceneViewportPanel* vp = SceneViewportPanel::GetActiveSceneViewport();
+            if (!vp)
+                vp = dynamic_cast<SceneViewportPanel*>(ImGuiManager::Get().GetImGuiPanel(L"Scene View"));
+            if (vp)
                 vp->FocusSelectedEntity();
         },
-        .CanExecute = []() { return !SelectionManager::Get().GetSelectedEntities().empty(); }
-    });
+        .CanExecute = []() {
+            auto& h = Application::Get().GetEditHistory();
+            return h.ShortcutsAllowed() && !SelectionManager::Get().GetSelectedEntities().empty();
+        }
+        });
+
+    sm.RegisterAction({
+        .Id = "Hierarchy.Rename",
+        .DisplayNameKey = "EditorCommon.Rename",
+        .CategoryKey = "UI_HIERARCHY",
+        .Context = EShortcutContext::Hierarchy, // 계층 패널 문맥에만 적용
+        .DefaultChord = ShortcutChord(Engine::EKeyCode::F2),
+        .ExecuteHandler = []() {
+            if (auto* hierarchy = dynamic_cast<HierarchyPanel*>(ImGuiManager::Get().GetImGuiPanel(L"Hierarchy Panel")))
+                hierarchy->TriggerSelectedEntityRename();
+        },
+        .CanExecute = []() {
+            auto& h = Application::Get().GetEditHistory();
+            auto& sel = SelectionManager::Get();
+            return h.ShortcutsAllowed() && PIEManager::Get().IsEditing() &&
+                !sel.IsPrimarySelectionLocked() && !sel.GetSelectedEntities().empty();
+        }
+        });
 
     sm.RegisterAction({
         .Id = "Viewport.ToggleLock",
@@ -570,6 +596,159 @@ void EditorActionRegistry::RegisterAll()
         .ExecuteHandler = []() {
             if (auto* panel = AnimatorGraphPanel::GetActivePanel())
                 panel->RequestOpen();
+        }
+        });
+
+    sm.RegisterAction({
+    .Id = "Viewport.ToggleRealtime",
+    .DisplayNameKey = "Action.Viewport.ToggleRealtime",
+    .CategoryKey = "Shortcuts.CategoryViewport",
+    .Context = EShortcutContext::Viewport,
+    .DefaultChord = ShortcutChord(Engine::EKeyCode::R, EModifierKey::Ctrl),
+    .ExecuteHandler = []() {
+        if (auto* vp = SceneViewportPanel::GetActiveSceneViewport())
+            vp->ToggleRealtime();
+    }
+        });
+
+    // =========================================================================================
+    // [Animation Timeline Actions] (타임라인 패널 활성 시 동작)
+    // =========================================================================================
+    sm.RegisterAction({
+        .Id = "Timeline.PlayPause",
+        .DisplayNameKey = "Action.Timeline.PlayPause",
+        .CategoryKey = "Shortcuts.CategoryTimeline",
+        .Context = EShortcutContext::AnimationTimeline,
+        .DefaultChord = ShortcutChord(Engine::EKeyCode::Space),
+        .ExecuteHandler = []() {
+            if (auto* panel = AnimationTimelinePanel::GetActivePanel()) panel->TogglePlayPause();
+        }
+        });
+    sm.RegisterAction({
+        .Id = "Timeline.PrevFrame",
+        .DisplayNameKey = "Action.Timeline.PrevFrame",
+        .CategoryKey = "Shortcuts.CategoryTimeline",
+        .Context = EShortcutContext::AnimationTimeline,
+        .DefaultChord = ShortcutChord(Engine::EKeyCode::Left),
+        .ExecuteHandler = []() {
+            if (auto* panel = AnimationTimelinePanel::GetActivePanel()) panel->StepFrame(-1);
+        },
+        .AllowRepeat = true
+        });
+    sm.RegisterAction({
+        .Id = "Timeline.NextFrame",
+        .DisplayNameKey = "Action.Timeline.NextFrame",
+        .CategoryKey = "Shortcuts.CategoryTimeline",
+        .Context = EShortcutContext::AnimationTimeline,
+        .DefaultChord = ShortcutChord(Engine::EKeyCode::Right),
+        .ExecuteHandler = []() {
+            if (auto* panel = AnimationTimelinePanel::GetActivePanel()) panel->StepFrame(1);
+        },
+        .AllowRepeat = true
+        });
+    sm.RegisterAction({
+        .Id = "Timeline.FirstFrame",
+        .DisplayNameKey = "Action.Timeline.FirstFrame",
+        .CategoryKey = "Shortcuts.CategoryTimeline",
+        .Context = EShortcutContext::AnimationTimeline,
+        .DefaultChord = ShortcutChord(Engine::EKeyCode::Home),
+        .ExecuteHandler = []() {
+            if (auto* panel = AnimationTimelinePanel::GetActivePanel()) panel->GoToFirstFrame();
+        }
+        });
+    sm.RegisterAction({
+        .Id = "Timeline.LastFrame",
+        .DisplayNameKey = "Action.Timeline.LastFrame",
+        .CategoryKey = "Shortcuts.CategoryTimeline",
+        .Context = EShortcutContext::AnimationTimeline,
+        .DefaultChord = ShortcutChord(Engine::EKeyCode::End),
+        .ExecuteHandler = []() {
+            if (auto* panel = AnimationTimelinePanel::GetActivePanel()) panel->GoToLastFrame();
+        }
+        });
+    sm.RegisterAction({
+        .Id = "Timeline.ToggleLoop",
+        .DisplayNameKey = "Action.Timeline.ToggleLoop",
+        .CategoryKey = "Shortcuts.CategoryTimeline",
+        .Context = EShortcutContext::AnimationTimeline,
+        .DefaultChord = ShortcutChord(Engine::EKeyCode::L, EModifierKey::Ctrl),
+        .ExecuteHandler = []() {
+            if (auto* panel = AnimationTimelinePanel::GetActivePanel()) panel->ToggleLoop();
+        }
+        });
+    sm.RegisterAction({
+        .Id = "Timeline.ZoomReset",
+        .DisplayNameKey = "Action.Timeline.ZoomReset",
+        .CategoryKey = "Shortcuts.CategoryTimeline",
+        .Context = EShortcutContext::AnimationTimeline,
+        .DefaultChord = ShortcutChord(Engine::EKeyCode::F),
+        .ExecuteHandler = []() {
+            if (auto* panel = AnimationTimelinePanel::GetActivePanel()) panel->ResetZoom();
+        }
+        });
+    sm.RegisterAction({
+        .Id = "Timeline.DeleteSelected",
+        .DisplayNameKey = "Action.Timeline.DeleteSelected",
+        .CategoryKey = "Shortcuts.CategoryTimeline",
+        .Context = EShortcutContext::AnimationTimeline,
+        .DefaultChord = ShortcutChord(Engine::EKeyCode::Delete),
+        .ExecuteHandler = []() {
+            if (auto* panel = AnimationTimelinePanel::GetActivePanel()) panel->DeleteSelected();
+        }
+        });
+
+    // ── [Edit / Editor Actions] ──
+    sm.RegisterAction({
+        .Id = "Edit.Rename",
+        .DisplayNameKey = "Action.Edit.Rename",
+        .CategoryKey = "UI_EDIT",
+        .Context = EShortcutContext::Global,
+        .DefaultChord = ShortcutChord(Engine::EKeyCode::F2)
+        });
+    sm.RegisterAction({
+        .Id = "Editor.OpenSettings",
+        .DisplayNameKey = "Action.Editor.OpenSettings",
+        .CategoryKey = "UI_FILE",
+        .Context = EShortcutContext::Global,
+        .DefaultChord = ShortcutChord(Engine::EKeyCode::Comma, EModifierKey::Ctrl),
+        .ExecuteHandler = []() {
+            if (auto* panel = dynamic_cast<UnifiedSettingsPanel*>(ImGuiManager::Get().GetImGuiPanel(L"UnifiedSettings")))
+                panel->OpenWithCategory(EUnifiedSettingsCategory::General);
+        }
+        });
+    // ── [Animator Graph Actions] ──
+    sm.RegisterAction({
+        .Id = "Animator.SaveAs",
+        .DisplayNameKey = "Action.Animator.SaveAs",
+        .CategoryKey = "Shortcuts.CategoryGraph",
+        .Context = EShortcutContext::AnimatorGraph,
+        .DefaultChord = ShortcutChord(Engine::EKeyCode::S, EModifierKey::Ctrl | EModifierKey::Shift),
+        .ExecuteHandler = []() {
+            if (auto* panel = AnimatorGraphPanel::GetActivePanel())
+                panel->SaveDocument(true);
+        }
+        });
+    // ── [Visual Script Graph Actions] ──
+    sm.RegisterAction({
+        .Id = "Graph.Open",
+        .DisplayNameKey = "Action.Graph.Open",
+        .CategoryKey = "Shortcuts.CategoryGraph",
+        .Context = EShortcutContext::GraphEditor,
+        .DefaultChord = ShortcutChord(Engine::EKeyCode::O, EModifierKey::Ctrl),
+        .ExecuteHandler = []() {
+            if (auto* gp = GraphPanel::GetActiveGraphPanel())
+                gp->OpenDocument();
+        }
+        });
+    sm.RegisterAction({
+        .Id = "Graph.SaveAs",
+        .DisplayNameKey = "Action.Graph.SaveAs",
+        .CategoryKey = "Shortcuts.CategoryGraph",
+        .Context = EShortcutContext::GraphEditor,
+        .DefaultChord = ShortcutChord(Engine::EKeyCode::S, EModifierKey::Ctrl | EModifierKey::Shift),
+        .ExecuteHandler = []() {
+            if (auto* gp = GraphPanel::GetActiveGraphPanel())
+                gp->SaveDocument(true);
         }
         });
 }

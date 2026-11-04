@@ -14,6 +14,7 @@
 #include <reflection_archive/ReflectionArchiveAdapter.h>
 #include <entt/core/type_info.hpp>
 #include <entt/entity/component.hpp>
+#include <sstream>
 
 
 namespace
@@ -274,6 +275,18 @@ EResult ReflectionRegistry::Initialize(void*)
     if (!RegisterGeneratedTypes(m_Registry, m_RegistrationResult) || !RegisterComponentOperations() ||
         !registeredHandles ||
         !archive_graph::RegisterValueCodec(m_Codecs) ||
+        !m_Codecs.Register<entt::entity>(
+            [](archive::IArchive& ar, std::string_view key, const entt::entity& value) -> archive::ArchiveResult
+            {
+                return ar.Write(key, static_cast<std::uint32_t>(entt::to_integral(value)));
+            },
+            [](const archive::IArchive& ar, std::string_view key, entt::entity& value) -> archive::ArchiveResult
+            {
+                std::uint32_t id = 0;
+                auto res = ar.Read(key, id);
+                if (res) value = static_cast<entt::entity>(id);
+                return res;
+            }) ||
         !m_Codecs.Register<glm::vec2>(archive_glm::WriteVec2, archive_glm::ReadVec2) ||
         !m_Codecs.Register<glm::vec3>(archive_glm::WriteVec3, archive_glm::ReadVec3) ||
         !m_Codecs.Register<glm::vec4>(archive_glm::WriteVec4, archive_glm::ReadVec4) ||
@@ -322,6 +335,7 @@ bool ReflectionRegistry::RegisterComponentOperations()
     append.template operator()<FlagComponent>("Flags", "Core");
     append.template operator()<TransformComponent>("Transform", "Core", &AddSpatialComponent<TransformComponent>);
     append.template operator()<CameraComponent>("Camera", "Rendering", &AddSpatialComponent<CameraComponent>);
+    append.template operator()<SpringArmComponent>("Spring Arm", "Camera", &AddSpatialComponent<SpringArmComponent>);
     append.template operator()<LightComponent>("Light", "Rendering", &AddSpatialComponent<LightComponent>);
     append.template operator()<StaticMeshRendererComponent>( "Static Mesh Renderer", "Rendering", &AddSpatialComponent<StaticMeshRendererComponent>);
     append.template operator()<LODGroupComponent>("LOD Group", "Rendering", &AddSpatialComponent<LODGroupComponent>);
@@ -412,6 +426,45 @@ const ComponentReflectionEntry* ReflectionRegistry::FindComponent(std::string_vi
         if (entry.ReflectionType != nullptr && entry.ReflectionType->QualifiedName == qualifiedName)
             return &entry;
     return nullptr;
+}
+
+void ComponentReflectionEntry::EnsureDependencies(entt::registry& world, entt::entity entity) const
+{
+    if (!ReflectionType) return;
+    const auto* meta = ReflectionType->Metadata.Find("RequireComponents");
+    if (!meta) return;
+    const auto* reqStr = std::get_if<std::string>(meta);
+    if (!reqStr || reqStr->empty()) return;
+
+    if (!Engine::ReflectionRegistry::IsCreated()) return;
+    auto& reg = Engine::ReflectionRegistry::Get();
+
+    std::stringstream ss(*reqStr);
+    std::string item;
+    while (std::getline(ss, item, ','))
+    {
+        const auto start = item.find_first_not_of(" \t");
+        const auto end = item.find_last_not_of(" \t");
+        if (start == std::string::npos) continue;
+        const std::string reqName = item.substr(start, end - start + 1);
+
+        // 등록된 컴포넌트 목록에서 이름 매칭 (클래스명 단독 또는 네임스페이스 포함 매칭)
+        for (const auto& other : reg.GetComponentEntries())
+        {
+            const bool match = (other.StorageTypeName == reqName || other.StorageTypeName.ends_with("::" + reqName) ||
+                (other.ReflectionType && (other.ReflectionType->QualifiedName == reqName ||
+                    other.ReflectionType->QualifiedName.ends_with("::" + reqName))));
+
+            if (match)
+            {
+                if (!other.Has(world, entity))
+                {
+                    other.TryAdd(world, entity); // 재귀적으로 연쇄 의존성까지 안전하게 추가됨
+                }
+                break;
+            }
+        }
+    }
 }
 
 reflection::ObjectView ReflectionRegistry::GetComponentObject(entt::registry& world,

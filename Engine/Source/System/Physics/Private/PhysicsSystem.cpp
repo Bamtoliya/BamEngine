@@ -1,4 +1,4 @@
-﻿#include "PhysicsSystem.h"
+#include "PhysicsSystem.h"
 #include "PhysicsComponent.h"
 #include "Scene.h"
 #include "Components/Core/TransformComponent.h"
@@ -704,14 +704,17 @@ namespace
         if (const auto* box = std::get_if<Engine::BoxShape>(&collider.GetShape()))
         {
             if (!box->HasValidParameters()) return false;
-            const Engine::BoundingBox b(Engine::vec3(0.0f), box->Size * 0.5f);
+            const Engine::vec3 halfSize = box->Size * 0.5f;
+            const Engine::BoundingBox b(-halfSize, halfSize);
             return Engine::Collision::Raycast(ray, b, colliderWorld, outHit, testDistance);
         }
         if (const auto* sphere = std::get_if<Engine::SphereShape>(&collider.GetShape()))
         {
             if (!sphere->HasValidParameters()) return false;
             const Engine::vec3 worldCenter = Engine::vec3(colliderWorld[3]);
-            const Engine::BoundingSphere s(worldCenter, sphere->Radius);
+            const float maxScale = glm::max(glm::max(glm::length(glm::vec3(colliderWorld[0])),
+                glm::length(glm::vec3(colliderWorld[1]))), glm::length(glm::vec3(colliderWorld[2])));
+            const Engine::BoundingSphere s(worldCenter, sphere->Radius * maxScale);
             return Engine::Collision::Raycast(ray, s, outHit, testDistance);
         }
         if (const auto* meshShape = std::get_if<Engine::MeshShape>(&collider.GetShape()))

@@ -23,10 +23,12 @@ public:
     static EditorCameraController* Create(const std::wstring& name, const Engine::CameraComponent& settings);
     void Free() override;
 
-    void HandleInput(Engine::f32 dt);
+    void HandleInput(Engine::f32 dt, bool allowScroll = true);
     void SetControlRotation(const Engine::vec3& eulerAngles);
     void SyncControlRotationFromTransform();
     void FocusEntity(Engine::Entity* targetEntity);
+    void SetPivotPoint(const Engine::vec3& pivot) { m_PivotPoint = pivot; }
+    [[nodiscard]] Engine::vec3 GetPivotPoint() const { return m_PivotPoint; }
 
     Engine::Entity* GetEntity() const;
     Engine::TransformComponent* GetTransformComponent() const;
@@ -57,5 +59,6 @@ private:
     Engine::f32 m_ZoomSpeed3D = 2.0f;
     Engine::f32 m_ZoomSpeed2D = 0.5f;
     Engine::vec3 m_ControlRotation = Engine::vec3(0.0f);
+    Engine::vec3 m_PivotPoint = Engine::vec3(0.0f, 0.5f, 0.0f);
 };
 END

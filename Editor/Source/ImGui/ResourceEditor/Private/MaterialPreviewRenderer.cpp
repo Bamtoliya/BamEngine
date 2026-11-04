@@ -1,299 +1,125 @@
 ﻿#include "MaterialPreviewRenderer.h"
-#include "RenderTargetManager.h"
 #include "ResourceManager.h"
-#include "Renderer.h"
-#include "CameraBuffer.h"
-#include "TimeManager.h"
-#include "ImGuiManager.h"
-#include "Scene.h"
 #include "Components/Core/TransformComponent.h"
-#include "Components/Core/WorldTransformComponent.h"
-#include "Components/Core/FlagComponent.h"
 #include "Components/Render/StaticMeshRendererComponent.h"
-#include "Components/Render/LightComponent.h"
-#include "TransformSystem.h"
-#include "LightSystem.h"
+#include "IconsFontAwesome7.h"
 
-MaterialPreviewRenderer::~MaterialPreviewRenderer()
+namespace Editor
 {
-	Free();
-}
-
-void MaterialPreviewRenderer::Initialize(uint32 width, uint32 height)
-{
-	m_Width = width;
-	m_Height = height;
-	// 1. 프리뷰 전용 파이프라인 초기화 (acceptSceneMeshes=false 로 메인 씬 유입 차단)
-	m_Pipeline.Initialize(L"MatPreview", m_Width, m_Height, false);
-	m_PostProcessChain.Initialize(L"MatPreview_PP");
-	m_PostProcessChain.PrepareResources(m_Width, m_Height);
-	m_DisplayRTName = m_Pipeline.GetFinalColorRTName();
-	// 2. 프리뷰 메쉬 리소스 로드
-	auto& rm = Engine::ResourceManager::Get();
-	m_SphereMesh = rm.GetResourceHandle<Engine::Mesh>(L"SphereMesh");
-	m_CubeMesh = rm.GetResourceHandle<Engine::Mesh>(L"CubeMesh");
-	m_PlaneMesh = rm.GetResourceHandle<Engine::Mesh>(L"QuadMesh");
-	// 3. 프리뷰 전용 Scene 및 엔티티 구축
-	SetupPreviewScene();
-}
-void MaterialPreviewRenderer::Free()
-{
-	m_PostProcessChain.Free();
-	m_Pipeline.Free();
-	if (m_PreviewScene)
+	MaterialPreviewRenderer::~MaterialPreviewRenderer()
 	{
-		Engine::Safe_Release(m_PreviewScene);
-		m_PreviewScene = nullptr;
-	}
-	m_MeshEntity = entt::null;
-	m_LightEntity = entt::null;
-}
-
-void MaterialPreviewRenderer::SetupPreviewScene()
-{
-	if (m_PreviewScene) return;
-	Engine::SceneCreateDesc desc{};
-	desc.name = L"MaterialPreview_Scene";
-	m_PreviewScene = Engine::Scene::Create(&desc);
-	if (!m_PreviewScene) return;
-	auto& registry = m_PreviewScene->GetRegistry();
-	// 방향성 조명 생성 헬퍼 람다
-	auto createDirLight = [&](const vec3& euler, const vec3& color, f32 intensity, bool specular) -> entt::entity
-		{
-			entt::entity e = registry.create();
-			auto& trans = registry.emplace<Engine::TransformComponent>(e);
-			registry.emplace<Engine::WorldTransformComponent>(e);
-			auto& flag = registry.emplace<Engine::FlagComponent>(e);
-			flag.flags = Engine::EEntityFlag::Active | Engine::EEntityFlag::Visible;
-			auto& comp = registry.emplace<Engine::LightComponent>(e);
-			comp.LightType = Engine::ELightType::Directional;
-			comp.Intensity = intensity;
-			comp.Color = color;
-			comp.Flags = Engine::ELightFlags::UseInDeferredRendering | Engine::ELightFlags::AffectDiffuse;
-			if (specular) comp.Flags |= Engine::ELightFlags::AffectSpecular;
-			(void)trans.SetEulerRotation(euler);
-			return e;
-		};
-	// 1. 머티리얼 프리뷰 스튜디오 3점 조명 구축
-	// 1) Key Light (주광): 카메라 시선(정면 우측 상단)에서 비추어 PBR 스펙큘러/반사광 강조
-	m_LightEntity = createDirLight(vec3(30.0f, 25.0f, 0.0f), vec3(1.0f, 0.98f, 0.95f), 2.8f, true);
-	// 2) Fill Light (보조광): 반대편(정면 좌측)에서 비추어 어두운 면의 알베도/텍스처 디테일 보존
-	createDirLight(vec3(15.0f, -45.0f, 0.0f), vec3(0.85f, 0.92f, 1.0f), 1.5f, false);
-	// 3) Rim Light (윤곽광): 뒤쪽 위에서 비추어 구체/큐브의 가장자리에 은은한 림 하이라이트 형성
-	createDirLight(vec3(45.0f, 160.0f, 0.0f), vec3(0.95f, 0.98f, 1.0f), 2.2f, true);
-	// 2. 프리뷰 대상 메쉬 엔티티 생성
-	m_MeshEntity = registry.create();
-	registry.emplace<Engine::TransformComponent>(m_MeshEntity);
-	registry.emplace<Engine::WorldTransformComponent>(m_MeshEntity);
-	auto& flag = registry.emplace<Engine::FlagComponent>(m_MeshEntity);
-	flag.flags = Engine::EEntityFlag::Active | Engine::EEntityFlag::Visible;
-	auto& meshComp = registry.emplace<Engine::StaticMeshRendererComponent>(m_MeshEntity);
-	meshComp.meshHandle = m_SphereMesh;
-	meshComp.castShadow = true;
-	// 계층 구조 및 라이트 GPU 버퍼 캐시 갱신
-	Engine::TransformSystem::UpdateHierarchy(registry);
-	Engine::LightSystem::UpdateLights(registry);
-}
-
-void MaterialPreviewRenderer::UpdatePreviewMesh(Engine::MaterialInterface* material)
-{
-	if (!m_PreviewScene || m_MeshEntity == entt::null) return;
-
-	auto& registry = m_PreviewScene->GetRegistry();
-	auto* meshComp = registry.try_get<Engine::StaticMeshRendererComponent>(m_MeshEntity);
-	if (!meshComp) return;
-
-	switch (m_CurrentMeshType)
-	{
-	case EPreviewMeshType::Sphere: meshComp->meshHandle = m_SphereMesh; break;
-	case EPreviewMeshType::Cube:   meshComp->meshHandle = m_CubeMesh;   break;
-	case EPreviewMeshType::Plane:  meshComp->meshHandle = m_PlaneMesh;  break;
-	default: break;
+		Free();
 	}
 
-	if (material)
+	void MaterialPreviewRenderer::Initialize(uint32 width, uint32 height)
 	{
-		auto handle = Engine::ResourceManager::Get().GetResourceHandle<Engine::MaterialInterface>(material->GetKey());
-		if (meshComp->materialHandle != handle)
-		{
-			meshComp->materialHandle = handle;
-		}
-	}
-}
+		// 1. 공통 3D 프리뷰 위젯 초기화 (바닥 그리드는 기본 Off)
+		m_Widget.Initialize(L"MatPreview", width, height, false);
 
-void MaterialPreviewRenderer::Submit(Engine::MaterialInterface* material, f32 dt)
-{
-	if (!material || !m_PreviewScene) return;
-	UpdatePreviewMesh(material);
-	auto& registry = m_PreviewScene->GetRegistry();
-	Engine::TransformSystem::UpdateHierarchy(registry);
-	Engine::LightSystem::UpdateLights(registry);
-	if (m_AutoRotate)
-	{
-		m_Yaw += m_AutoRotateSpeed * dt;
-	}
-	vec3 offset;
-	offset.x = m_Distance * cosf(m_Pitch) * sinf(m_Yaw);
-	offset.y = m_Distance * sinf(m_Pitch);
-	offset.z = -m_Distance * cosf(m_Pitch) * cosf(m_Yaw);
-	vec3 eye = m_Target + offset;
-	mat4 view = glm::lookAtLH(eye, m_Target, vec3(0.0f, 1.0f, 0.0f));
-	mat4 proj = glm::perspectiveLH_ZO(glm::radians(45.0f), static_cast<f32>(m_Width) / static_cast<f32>(m_Height), 0.1f, 100.0f);
-	CameraBuffer cameraBuffer = {};
-	cameraBuffer.viewMatrix = view;
-	cameraBuffer.invViewMatrix = glm::inverse(view);
-	cameraBuffer.projMatrix = proj;
-	cameraBuffer.invProjMatrix = glm::inverse(proj);
-	cameraBuffer.viewProjMatrix = proj * view;
-	cameraBuffer.invViewProjMatrix = glm::inverse(cameraBuffer.viewProjMatrix);
-	cameraBuffer.cameraPosition = eye;
-	cameraBuffer.time = static_cast<f32>(Engine::TimeManager::Get().GetTotalTime());
-	m_Pipeline.Submit(cameraBuffer, m_PreviewScene);
-	// 6. 프리뷰 메쉬 드로우 커맨드를 프리뷰의 GeometryPass에 제출
-	auto* meshComp = registry.try_get<Engine::StaticMeshRendererComponent>(m_MeshEntity);
-	auto* transComp = registry.try_get<Engine::WorldTransformComponent>(m_MeshEntity);
-	if (meshComp && transComp)
-	{
-		Engine::Mesh* mesh = meshComp->meshHandle.Get();
-		Engine::MaterialInterface* mat = meshComp->materialHandle.Get();
-		if (mesh && mat)
-		{
-			Engine::StaticDrawCommand cmd{};
-			cmd.mesh = mesh;
-			cmd.material = mat;
-			cmd.worldMatrix = transComp->worldMatrix;
-			cmd.pickingId = 0;
-			Engine::Renderer::Get().SubmitStatic(cmd, m_Pipeline.GetGeometryPassID());
-		}
-	}
-	m_DisplayRTName = m_PostProcessChain.ExecuteChain(dt, m_Pipeline.GetFinalColorRTName());
-}
+		// 2. 프리뷰 메쉬 리소스 로드
+		auto& rm = Engine::ResourceManager::Get();
+		m_SphereMesh = rm.GetResourceHandle<Engine::Mesh>(L"SphereMesh");
+		m_CubeMesh = rm.GetResourceHandle<Engine::Mesh>(L"CubeMesh");
+		m_PlaneMesh = rm.GetResourceHandle<Engine::Mesh>(L"QuadMesh");
 
-void MaterialPreviewRenderer::DrawUI(Engine::MaterialInterface* material)
-{
-	auto& rtm = Engine::RenderTargetManager::Get();
-	auto* colorRT = rtm.GetRenderTarget(m_DisplayRTName);
-	if (!colorRT || !colorRT->GetTexture()) return;
-	ImTextureID texID = ImGuiManager::Get().GetImGuiTextureID(colorRT->GetTexture());
-	if (!texID) return;
+		// 3. 프리뷰 대상 메쉬 엔티티 생성 (컴포넌트만 부착하면 위젯이 자동 렌더링)
+		auto& entity = m_Widget.CreateEntity(L"MaterialPreviewMesh");
+		m_MeshEntity = entity.GetEntityHandle();
 
-	// 1. 상단 뷰포트 툴바
-	if (ImGui::RadioButton(LOCAL_LABEL("MaterialPreview.Sphere").c_str(), m_CurrentMeshType == EPreviewMeshType::Sphere))
-		m_CurrentMeshType = EPreviewMeshType::Sphere;
-	ImGui::SameLine();
+		auto& meshComp = m_Widget.GetRegistry().emplace<Engine::StaticMeshRendererComponent>(m_MeshEntity);
+		meshComp.meshHandle = m_SphereMesh;
+		meshComp.castShadow = true;
 
-	if (ImGui::RadioButton(LOCAL_LABEL("MaterialPreview.Cube").c_str(), m_CurrentMeshType == EPreviewMeshType::Cube))
-		m_CurrentMeshType = EPreviewMeshType::Cube;
-	ImGui::SameLine();
-
-	if (ImGui::RadioButton(LOCAL_LABEL("MaterialPreview.Plane").c_str(), m_CurrentMeshType == EPreviewMeshType::Plane))
-		m_CurrentMeshType = EPreviewMeshType::Plane;
-	ImGui::SameLine();
-
-	if (ImGui::Button(m_AutoRotate ? ICON_FA_PAUSE : ICON_FA_PLAY))
-		m_AutoRotate = !m_AutoRotate;
-	ImGui::SameLine();
-	if (ImGui::Button(ICON_FA_ROTATE_LEFT "##ResetView"))
-	{
-		m_Target = vec3(0.0f);
-		m_Yaw = 0.5f;
-		m_Pitch = 0.25f;
-		m_Distance = 3.5f;
-		m_AutoRotate = true;
+		// 4. 카메라 초기 포커스 세팅
+		m_Widget.FocusTarget(Engine::vec3(0.0f, 0.0f, 0.0f), 3.0f);
 	}
 
-	ImGui::Separator();
-
-	// 2. 가용 영역 전체를 채우는 3D 뷰포트 이미지 (중앙 정렬)
-	ImVec2 avail = ImGui::GetContentRegionAvail();
-	float size = std::max(std::min(avail.x, avail.y), 150.0f);
-	ImVec2 previewSize(size, size);
-
-	ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (avail.x - size) * 0.5f);
-	ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (avail.y - size) * 0.5f);
-
-	ImVec2 cursorPos = ImGui::GetCursorScreenPos();
-	ImDrawList* drawList = ImGui::GetWindowDrawList();
-
-	ImGui::InvisibleButton("##MaterialPreviewViewport", previewSize,
-		ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight | ImGuiButtonFlags_MouseButtonMiddle);
-
-	ImVec2 bbMin = cursorPos;
-	ImVec2 bbMax = ImVec2(cursorPos.x + previewSize.x, cursorPos.y + previewSize.y);
-	drawList->AddImage(texID, bbMin, bbMax);
-	drawList->AddRect(bbMin, bbMax, IM_COL32(65, 70, 80, 255), 4.0f, 0, 1.5f);
-
-	// 3. 마우스 & 키보드 카메라 조작
-	if (ImGui::IsItemHovered())
+	void MaterialPreviewRenderer::Free()
 	{
-		auto& input = Engine::InputManager::Get();
-		const Engine::vec2 delta = input.GetMouseDelta();
-		const bool wantTextInput = ImGui::GetIO().WantTextInput;
+		m_Widget.Free();
+		m_MeshEntity = entt::null;
+	}
 
-		vec3 offset;
-		offset.x = m_Distance * cosf(m_Pitch) * sinf(m_Yaw);
-		offset.y = m_Distance * sinf(m_Pitch);
-		offset.z = -m_Distance * cosf(m_Pitch) * cosf(m_Yaw);
-		vec3 eye = m_Target + offset;
+	void MaterialPreviewRenderer::UpdatePreviewMesh(Engine::MaterialInterface* material)
+	{
+		if (m_MeshEntity == entt::null) return;
 
-		vec3 camForward = glm::normalize(m_Target - eye);
-		vec3 fwd = glm::normalize(vec3(camForward.x, 0.0f, camForward.z));
-		vec3 right = glm::normalize(glm::cross(vec3(0.0f, 1.0f, 0.0f), fwd));
-		vec3 up = vec3(0.0f, 1.0f, 0.0f);
+		auto& registry = m_Widget.GetRegistry();
+		auto* meshComp = registry.try_get<Engine::StaticMeshRendererComponent>(m_MeshEntity);
+		if (!meshComp) return;
 
-		if (input.IsMouseButtonDragging(Engine::EMouseButton::Left))
+		switch (m_CurrentMeshType)
 		{
-			m_AutoRotate = false;
-			m_Yaw += delta.x * 0.015f;
-			m_Pitch = glm::clamp(m_Pitch - delta.y * 0.015f, -1.5f, 1.5f);
+		case EPreviewMeshType::Sphere: meshComp->meshHandle = m_SphereMesh; break;
+		case EPreviewMeshType::Cube:   meshComp->meshHandle = m_CubeMesh;   break;
+		case EPreviewMeshType::Plane:  meshComp->meshHandle = m_PlaneMesh;  break;
+		default: break;
 		}
 
-		if (input.IsMouseButtonDragging(Engine::EMouseButton::Right))
+		if (material)
 		{
-			m_AutoRotate = false;
-			m_Yaw += delta.x * 0.015f;
-			m_Pitch = glm::clamp(m_Pitch - delta.y * 0.015f, -1.5f, 1.5f);
+			auto handle = Engine::ResourceManager::Get().GetResourceHandle<Engine::MaterialInterface>(material->GetKey());
+			if (meshComp->materialHandle != handle)
+			{
+				meshComp->materialHandle = handle;
+			}
+		}
+	}
+
+	void MaterialPreviewRenderer::Submit(Engine::MaterialInterface* material, f32 dt)
+	{
+		if (!material || m_MeshEntity == entt::null) return;
+
+		// 1. 머티리얼 및 메쉬 동기화
+		UpdatePreviewMesh(material);
+
+		// 2. 메쉬 자전 (자전 시 조명 하이라이트가 회전하면서 PBR 특성 시각화)
+		if (m_AutoRotate)
+		{
+			auto* trans = m_Widget.GetRegistry().try_get<Engine::TransformComponent>(m_MeshEntity);
+			if (trans)
+			{
+				(void)trans->RotateLocal(glm::vec3(0.0f, 1.0f, 0.0f), static_cast<double>(m_AutoRotateSpeed * dt));
+			}
 		}
 
-		if (input.IsMouseButtonPressed(Engine::EMouseButton::Right) && !wantTextInput)
+		// 3. 위젯 프레임 틱 & 자동 렌더링 제출
+		m_Widget.BeginFrame(dt);
+		m_Widget.Submit(dt);
+	}
+
+	void MaterialPreviewRenderer::DrawUI(Engine::MaterialInterface* material)
+	{
+		// 1. 상단 메쉬 타입 라디오 버튼 & 조작 툴바
+		if (ImGui::RadioButton(LOCAL_LABEL("MaterialPreview.Sphere").c_str(), m_CurrentMeshType == EPreviewMeshType::Sphere))
+			m_CurrentMeshType = EPreviewMeshType::Sphere;
+		ImGui::SameLine();
+
+		if (ImGui::RadioButton(LOCAL_LABEL("MaterialPreview.Cube").c_str(), m_CurrentMeshType == EPreviewMeshType::Cube))
+			m_CurrentMeshType = EPreviewMeshType::Cube;
+		ImGui::SameLine();
+
+		if (ImGui::RadioButton(LOCAL_LABEL("MaterialPreview.Plane").c_str(), m_CurrentMeshType == EPreviewMeshType::Plane))
+			m_CurrentMeshType = EPreviewMeshType::Plane;
+		ImGui::SameLine();
+
+		if (ImGui::Button(m_AutoRotate ? ICON_FA_PAUSE : ICON_FA_PLAY))
+			m_AutoRotate = !m_AutoRotate;
+		ImGui::SameLine();
+
+		if (ImGui::Button(ICON_FA_ROTATE_LEFT "##ResetView"))
 		{
-			const float moveDist = m_MoveSpeed * ImGui::GetIO().DeltaTime;
-
-			if (input.IsKeyButtonPressed(Engine::EKeyCode::W)) m_Target += fwd * moveDist;
-			if (input.IsKeyButtonPressed(Engine::EKeyCode::S)) m_Target -= fwd * moveDist;
-			if (input.IsKeyButtonPressed(Engine::EKeyCode::D)) m_Target += right * moveDist;
-			if (input.IsKeyButtonPressed(Engine::EKeyCode::A)) m_Target -= right * moveDist;
-			if (input.IsKeyButtonPressed(Engine::EKeyCode::E)) m_Target += up * moveDist;
-			if (input.IsKeyButtonPressed(Engine::EKeyCode::Q)) m_Target -= up * moveDist;
-		}
-
-		if (input.IsMouseButtonDragging(Engine::EMouseButton::Middle) ||
-			(input.IsShiftPressed() && input.IsMouseButtonDragging(Engine::EMouseButton::Left)))
-		{
-			m_AutoRotate = false;
-			const float panSpeed = m_Distance * 0.0025f;
-			m_Target -= right * (delta.x * panSpeed);
-			m_Target += up * (delta.y * panSpeed);
-		}
-
-		if (input.GetMouseScrollDeltaY() != 0.0f)
-			m_Distance = glm::clamp(m_Distance - input.GetMouseScrollDeltaY() * 0.25f, 0.5f, 15.0f);
-
-		if (!wantTextInput && input.IsKeyButtonDown(Engine::EKeyCode::F))
-		{
-			m_Target = vec3(0.0f);
-			m_Distance = 3.5f;
-			m_Yaw = 0.5f;
-			m_Pitch = 0.25f;
+			auto* trans = m_Widget.GetRegistry().try_get<Engine::TransformComponent>(m_MeshEntity);
+			if (trans) (void)trans->SetEulerRotation(Engine::vec3(0.0f));
+			m_Widget.FocusTarget(Engine::vec3(0.0f), 3.0f);
 			m_AutoRotate = true;
 		}
 
-		ImGui::SetTooltip("%s", LOCAL_CSTR("MaterialPreview.Navigation"));
-	}
-}
+		ImGui::Separator();
 
-Engine::RHITexture* MaterialPreviewRenderer::GetPreviewRHITexture() const
-{
-	auto* rt = Engine::RenderTargetManager::Get().GetRenderTarget(m_DisplayRTName);
-	return rt ? rt->GetTexture() : nullptr;
+		// 2. 가용 영역 전체에 맞추어 공통 프리뷰 위젯 렌더링
+		const ImVec2 avail = ImGui::GetContentRegionAvail();
+		const float size = std::max(std::min(avail.x, avail.y), 150.0f);
+		m_Widget.Draw(ImVec2(size, size));
+	}
 }

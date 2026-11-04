@@ -2,21 +2,28 @@
 
 #include "ResourceEditorInterface.h"
 #include "Model.h"
+#include "PreviewViewportWidget.h"
+
+BEGIN(Engine)
+class Entity;
+END
 
 BEGIN(Editor)
 
 class ModelEditor final : public ResourceEditorInterface
 {
 public:
-	ModelEditor() { m_Name = L"Model Editor"; m_DisplayNameKey = "ResourceEditor.ModelTitle"; }
-	virtual ~ModelEditor() = default;
+	ModelEditor();
+	virtual ~ModelEditor() override;
 
 public:
 	bool IsSupported(const std::filesystem::path& assetPath) const override;
 	void SetTargetResource(const std::filesystem::path& assetPath) override;
 	void Draw() override;
+	virtual void Update(f32 dt) override;
 
 private:
+	void SetupPreviewModel();
 	void InstantiateModel();
 	void DrawMaterialSlots(Engine::Model& model, bool canEdit);
 	void SaveModel();
@@ -24,6 +31,13 @@ private:
 private:
 	Engine::ResourceHandle<Engine::Model> m_ModelHandle;
 	string m_StatusKey;
+
+	// 3D 프리뷰 뷰포트 & 엔티티
+	PreviewViewportWidget m_PreviewWidget;
+	Engine::Entity* m_PreviewEntity = nullptr;
+
+	// 리사이저블 분할 너비
+	float m_LeftPaneWidth = 420.0f;
 };
 
 END

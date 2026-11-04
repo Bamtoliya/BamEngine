@@ -18,6 +18,9 @@
 #include <imgui_stdlib.h>
 #include <archive/Unicode.h>
 #include "ResourcePicker.h"
+#include "SceneManager.h"
+#include "Scene.h"
+#include "CoreComponents.h"
 #pragma push_macro("new")
 #undef new
 #include <imgui_internal.h>
@@ -170,6 +173,133 @@ namespace
         }, value);
         return changed;
     }
+
+	bool DrawInspectorEntityPicker(entt::entity& value, bool canEdit)
+	{
+		bool changed = false;
+		Engine::Scene* scene = Engine::SceneManager::Get().GetCurrentScene();
+		if (!scene) return false;
+		auto& world = scene->GetRegistry();
+		// 1. 현재 할당된 엔티티 이름 결정
+		std::string displayName = "None (Entity)";
+		if (value != entt::null && world.valid(value))
+		{
+			if (const auto* nameComp = world.try_get<Engine::NameComponent>(value))
+				displayName = fmt::format("[Entity] {}", Engine::WStrToStr(nameComp->name));
+			else
+				displayName = fmt::format("[Entity] ID: {}", entt::to_integral(value));
+		}
+		// 우측 테두리 잘림 방지를 위한 여백 및 버튼 크기 계산
+		const float itemSpacing = ImGui::GetStyle().ItemSpacing.x;
+		const float clearBtnSize = ImGui::GetFrameHeight(); // 프레임 높이에 맞춘 정사각형 버튼
+		const float rightPadding = 4.0f;                    // 테이블 셀 우측 경계선과의 안전 여백
+		const float availWidth = ImGui::GetContentRegionAvail().x;
+
+		const bool showClearBtn = (value != entt::null && canEdit);
+		const float buttonWidth = showClearBtn
+			? std::max(20.0f, availWidth - clearBtnSize - itemSpacing - rightPadding)
+			: std::max(20.0f, availWidth - rightPadding);
+
+		ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, ImVec2(0.0f, 0.5f));
+		if (ImGui::Button(displayName.c_str(), ImVec2(buttonWidth, 0.0f)))
+		{
+			if (canEdit) ImGui::OpenPopup("SelectEntityPopup");
+		}
+		ImGui::PopStyleVar();
+
+		// 2. HierarchyPanel 드래그 앤 드롭 수신 ("BAM_HIERARCHY_ENTITY")
+		if (canEdit && ImGui::BeginDragDropTarget())
+		{
+			if (const auto* payload = ImGui::AcceptDragDropPayload("BAM_HIERARCHY_ENTITY"))
+			{
+				struct EntityDragPayload
+				{
+					Engine::Scene* Scene = nullptr;
+					entt::entity Entity = entt::null;
+					std::uint64_t PersistentId = 0;
+				};
+				if (payload->DataSize == sizeof(EntityDragPayload))
+				{
+					EntityDragPayload source{};
+					std::memcpy(&source, payload->Data, sizeof(source));
+					if (source.Scene == scene && world.valid(source.Entity))
+					{
+						value = source.Entity;
+						changed = true;
+					}
+				}
+			}
+			ImGui::EndDragDropTarget();
+		}
+
+		// 3. 할당 해제 (Clear 'X') 버튼
+		if (showClearBtn)
+		{
+			ImGui::SameLine();
+			if (ImGui::Button("X##ClearEntity", ImVec2(clearBtnSize, clearBtnSize)))
+			{
+				value = entt::null;
+				changed = true;
+			}
+		}
+		// 4. 클릭 시 엔티티 검색 및 선택 팝업 (크기 제한 및 내부 스크롤 영역 확보)
+		ImGui::SetNextWindowSizeConstraints(ImVec2(260.0f, 160.0f), ImVec2(400.0f, 360.0f));
+		ImGui::SetNextWindowSize(ImVec2(280.0f, 260.0f), ImGuiCond_Appearing);
+		if (ImGui::BeginPopup("SelectEntityPopup"))
+		{
+			static char searchBuffer[128] = "";
+			if (ImGui::IsWindowAppearing())
+			{
+				searchBuffer[0] = '\0';
+				ImGui::SetKeyboardFocusHere(0);
+			}
+
+			ImGui::SetNextItemWidth(-1.0f);
+			ImGui::InputTextWithHint("##Search", "Search entity...", searchBuffer, sizeof(searchBuffer));
+			ImGui::Separator();
+
+			// 상단 검색창은 고정하고, 하단 목록만 스크롤되도록 Child 윈도우 구성
+			if (ImGui::BeginChild("##EntityScrollRegion", ImVec2(0.0f, 0.0f), false, ImGuiWindowFlags_None))
+			{
+				if (ImGui::Selectable("None", value == entt::null))
+				{
+					value = entt::null;
+					changed = true;
+					searchBuffer[0] = '\0';
+					ImGui::CloseCurrentPopup();
+				}
+
+				auto view = world.view<entt::entity>();
+				for (auto entity : view)
+				{
+					std::string name = fmt::format("Entity [{}]", entt::to_integral(entity));
+					if (const auto* nameComp = world.try_get<Engine::NameComponent>(entity))
+						name = Engine::WStrToStr(nameComp->name);
+
+					if (searchBuffer[0] != '\0')
+					{
+						std::string lowerName = name;
+						std::string lowerSearch = searchBuffer;
+						std::transform(lowerName.begin(), lowerName.end(), lowerName.begin(), ::tolower);
+						std::transform(lowerSearch.begin(), lowerSearch.end(), lowerSearch.begin(), ::tolower);
+						if (lowerName.find(lowerSearch) == std::string::npos)
+							continue;
+					}
+
+					if (ImGui::Selectable(name.c_str(), value == entity))
+					{
+						value = entity;
+						changed = true;
+						searchBuffer[0] = '\0';
+						ImGui::CloseCurrentPopup();
+					}
+				}
+				ImGui::EndChild();
+			}
+			ImGui::EndPopup();
+		}
+		return changed;
+	}
 }
 
 namespace
@@ -960,8 +1090,9 @@ namespace Editor
 
 						ImGui::SameLine();
 						const float avail = ImGui::GetContentRegionAvail().x;
-						if (avail > btnWidth)
-							ImGui::SetCursorPosX(ImGui::GetCursorPosX() + avail - btnWidth);
+						const float rightPadding = 4.0f;
+						if (avail > (btnWidth + rightPadding))
+							ImGui::SetCursorPosX(ImGui::GetCursorPosX() + avail - btnWidth - rightPadding);
 
 						ImGui::PushID(property.Name.c_str());
 						const bool wasLocked = vectorSettings.Locked;
@@ -1138,6 +1269,11 @@ namespace Editor
 		INSPECTOR_RESOURCE(Animation)
 		INSPECTOR_RESOURCE(AudioClip)
 #undef INSPECTOR_RESOURCE
+		else if (const auto* current = read.Value.Get<entt::entity>())
+		{
+			changed = DrawReflectionPropertyEditor(property, object, *current, canEdit,
+				[&](entt::entity& candidate) { return DrawInspectorEntityPicker(candidate, canEdit); });
+		}
 		else if (read.Value.Is<Engine::ColliderShape>() || read.Value.Is<Engine::Collider2DShape>())
 		{
 			ImGui::BeginDisabled(!canEdit);
@@ -1239,7 +1375,7 @@ namespace Editor
 							{
 								if (property.CanErase() && canEdit)
 								{
-									ImGui::SameLine(ImGui::GetContentRegionAvail().x - 24.0f);
+									ImGui::SameLine(ImGui::GetContentRegionAvail().x - 28.0f);
 									if (ImGui::SmallButton(ICON_FA_TRASH "##DelElem")) toRemoveIndex = i;
 								}
 

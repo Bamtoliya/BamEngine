@@ -41,10 +41,16 @@ struct ComponentReflectionEntry
     bool (*Copy)(const entt::registry&, entt::entity, entt::registry&, entt::entity) = nullptr;
     void (*Remove)(entt::registry&, entt::entity) = nullptr;
 
+    ENGINE_API void EnsureDependencies(entt::registry& world, entt::entity entity) const;
+
     [[nodiscard]] bool TryAdd(entt::registry& world, entt::entity entity) const
     {
         if (!world.valid(entity) || !MatchesStorage(world) || Has == nullptr || Add == nullptr || Has(world, entity))
             return false;
+
+        // 필수 의존 컴포넌트(RequireComponents)가 정의되어 있다면 먼저 안전하게 추가!
+        EnsureDependencies(world, entity);
+
         return Add(world, entity) && world.valid(entity) && Has(world, entity);
     }
 
@@ -55,6 +61,74 @@ struct ComponentReflectionEntry
             (storage->info().hash() == StorageId && storage->info().name() == StorageTypeName);
     }
 };
+
+namespace detail
+{
+    template<typename T>
+    inline bool DefaultAddComponent(entt::registry& world, entt::entity entity)
+    {
+        if (!world.valid(entity) || world.all_of<T>(entity)) return false;
+        if constexpr (std::is_default_constructible_v<T>) {
+            world.emplace<T>(entity);
+            return true;
+        }
+        return false;
+    }
+    template<typename T>
+    inline Engine::ComponentReflectionEntry BuildComponentEntry(
+        const reflection::Registry& registry,
+        std::string name, std::string category,
+        Engine::ComponentReflectionEntry::AddFunc add = nullptr,
+        bool userAddable = true)
+    {
+        Engine::ComponentReflectionEntry entry;
+        entry.Type = std::type_index(typeid(T));
+        entry.StorageId = entt::type_hash<T>::value();
+        entry.StorageTypeName = entt::type_id<T>().name();
+        entry.Name = std::move(name);
+        entry.Category = std::move(category);
+        entry.ReflectionType = registry.FindType<T>();
+        entry.UserAddable = userAddable;
+        entry.Has = [](const entt::registry& world, entt::entity entity) {
+            const auto* storage = world.storage(entt::type_hash<T>::value());
+            const auto& type = entt::type_id<T>();
+            return world.valid(entity) && storage != nullptr && storage->info().hash() == type.hash() &&
+                storage->info().name() == type.name() && storage->contains(entity);
+            };
+        entry.Add = add != nullptr ? add : &DefaultAddComponent<T>;
+        entry.Edit = [](entt::registry& world, entt::entity entity) -> reflection::ObjectView {
+            if constexpr (entt::component_traits<T>::page_size != 0) {
+                auto* comp = world.try_get<T>(entity);
+                return comp ? reflection::ObjectView::From(*comp) : reflection::ObjectView{};
+            }
+            return {};
+            };
+        entry.View = [](const entt::registry& world, entt::entity entity) -> reflection::ObjectView {
+            if constexpr (entt::component_traits<T>::page_size != 0) {
+                const auto* comp = world.try_get<T>(entity);
+                return comp ? reflection::ObjectView::From(*comp) : reflection::ObjectView{};
+            }
+            return {};
+            };
+        if constexpr (std::is_default_constructible_v<T>) {
+            entry.Default = []() -> reflection::ObjectView {
+                static const T s_Default{};
+                return reflection::ObjectView::From(s_Default);
+                };
+        }
+        entry.Copy = [](const entt::registry& source, entt::entity from, entt::registry& target, entt::entity to) {
+            if constexpr (std::is_copy_constructible_v<T> && std::is_copy_assignable_v<T>) {
+                if (!source.valid(from) || !target.valid(to) || !source.all_of<T>(from)) return false;
+                if constexpr (entt::component_traits<T>::page_size == 0) target.emplace_or_replace<T>(to);
+                else target.emplace_or_replace<T>(to, source.get<T>(from));
+                return true;
+            }
+            return false;
+            };
+        entry.Remove = [](entt::registry& world, entt::entity entity) { world.remove<T>(entity); };
+        return entry;
+    }
+}
 
 class ENGINE_API ReflectionRegistry final : public Base
 {
@@ -104,6 +178,44 @@ public:
         return ReadComponent(ar, key, world, entity, std::type_index(typeid(T)), codecs);
     }
 
+public:
+    // ── 동적 컴포넌트 단일 등록 ──
+    template<typename T>
+    bool RegisterComponent(std::string displayName = "", std::string category = "Custom",
+        ComponentReflectionEntry::AddFunc customAdd = nullptr, bool userAddable = true)
+    {
+        const auto type = std::type_index(typeid(T));
+        if (FindComponent(type) != nullptr) return false;
+        const auto* info = m_Registry.FindType<T>();
+        if (displayName.empty()) {
+            if (info != nullptr) {
+                const auto* val = info->Metadata.Find("DisplayName");
+                const auto* str = val ? std::get_if<std::string>(val) : nullptr;
+                displayName = (str && !str->empty()) ? *str : info->QualifiedName;
+            }
+            else {
+                displayName = typeid(T).name();
+            }
+        }
+        if (category == "Custom" && info != nullptr) {
+            const auto* val = info->Metadata.Find("Category");
+            const auto* str = val ? std::get_if<std::string>(val) : nullptr;
+            if (str && !str->empty()) category = *str;
+        }
+        auto entry = detail::BuildComponentEntry<T>(m_Registry, std::move(displayName), std::move(category), customAdd, userAddable);
+        m_Components.push_back(std::move(entry));
+        return true;
+    }
+    // ── 동적 컴포넌트 단일 등록 해제 ──
+    template<typename T>
+    void UnregisterComponent()
+    {
+        const auto type = std::type_index(typeid(T));
+        std::erase_if(m_Components, [&](const ComponentReflectionEntry& entry) {
+            return entry.Type == type;
+            });
+    }
+
 private:
     static bool RegisterGeneratedTypes(reflection::Registry& registry, reflection::RegistrationResult& failure);
     bool RegisterComponentOperations();
@@ -115,3 +227,15 @@ private:
 };
 
 END
+
+
+#define REGISTER_MODULE_COMPONENTS(ModuleName) \
+    reflection_generated::ForEach_##ModuleName##_Type([&]<typename T>() { \
+        return Engine::ReflectionRegistry::Get().RegisterComponent<T>(); \
+    })
+
+#define UNREGISTER_MODULE_COMPONENTS(ModuleName) \
+    reflection_generated::ForEach_##ModuleName##_Type([&]<typename T>() { \
+        Engine::ReflectionRegistry::Get().UnregisterComponent<T>(); \
+        return true; \
+    })

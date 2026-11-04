@@ -18,8 +18,7 @@ private:
 public:
     static KinematicCharacterSystem* Create(void* arg = nullptr);
     virtual void Free() override;
-
-    virtual void OnFixedUpdate(entt::registry& registry, const vector<Scene*>& activeScenes, f32 dt) override;
+    virtual void OnUpdate(entt::registry& registry, const vector<Scene*>& activeScenes, f32 dt) override;
 
 public:
     static bool SweepCharacter(const Scene& scene, const CharacterControllerComponent& kcc, const vec3& fromPos, const vec3& direction, f32 distance, HitResult& outHit, entt::entity ignoreEntity);

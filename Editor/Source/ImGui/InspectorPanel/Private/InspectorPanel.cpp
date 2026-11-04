@@ -25,6 +25,8 @@
 #include "Archive/JsonArchive.h"
 #include <imgui_internal.h>
 #include "FileDialogs.h"
+#include "Components/Render/ActionTimelineComponent.h"
+#include "AnimationTimelinePanel.h"
 
 InspectorPanel::InspectorPanel(uint32 panelId) : m_PanelId(panelId)
 {
@@ -35,13 +37,18 @@ InspectorPanel::InspectorPanel(uint32 panelId) : m_PanelId(panelId)
 void InspectorPanel::Draw()
 {
 	if (!m_Open) return;
-
+	if (m_FocusRequested)
+		ImGui::SetNextWindowFocus();
 	const string windowTitle = m_PanelId == 0 ?
 		LOCAL("UI_INSPECTOR") + "###InspectorPanel" :
 		fmt::format("{} #{}###InspectorPanel_{}", LOCAL("UI_INSPECTOR"), m_PanelId + 1, m_PanelId);
-
 	if (ImGui::Begin(windowTitle.c_str(), &m_Open))
 	{
+		if (m_FocusRequested)
+		{
+			ImGui::SetWindowFocus();
+			m_FocusRequested = false;
+		}
 		Application::Get().GetEditHistory().AllowShortcuts(ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows));
 
 		// 1. 타깃 엔티티 결정
@@ -1199,9 +1206,69 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 				emitter.Reset();
 			}
 		}
-		else changed = ReflectionPropertyDrawer::DrawObject(type, object, registry, &componentSettings, drawHeaderMenu);
+		else if (object.Is<Engine::ActionTimelineComponent>())
+		{
+			changed = ReflectionPropertyDrawer::DrawObject(type, object, registry, &componentSettings, drawHeaderMenu);
+			auto& timeline = world.get<Engine::ActionTimelineComponent>(handle);
+			ImGui::Spacing();
+			ImGui::Separator();
 
-		// **주의**: 기존에 이 자리에 있던 `if (ImGui::BeginPopupContextItem(popupId.c_str())) { ... }` 블록은 완전히 지웁니다!
+			// 1. 에셋 파일 브라우저 UI
+			ImGui::Text("%s", LOCAL_CSTR("Timeline.AssetFile"));
+			char pathBuf[260] = {};
+			std::strncpy(pathBuf, timeline.timelinePath.c_str(), sizeof(pathBuf) - 1);
+			ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 65.0f);
+			if (ImGui::InputText("##TimelinePathInput", pathBuf, sizeof(pathBuf)))
+			{
+				timeline.timelinePath = pathBuf;
+				changed = true;
+			}
+			ImGui::SameLine();
+			if (ImGui::Button(ICON_FA_FOLDER_OPEN "##BrowseTimeline"))
+			{
+				std::wstring selectedPath;
+				const std::vector<FileDialogFilter> filters{
+					{ L"Action Timeline Asset (*.actiontimeline.json)", L"*.actiontimeline.json" },
+					{ L"All Files (*.*)", L"*.*" }
+				};
+				if (FileDialogs::OpenFileDialog(selectedPath, filters, L"Resources/Animation"))
+				{
+					timeline.timelinePath = Engine::WStrToStr(selectedPath);
+					changed = true;
+				}
+			}
+
+			// 2. 런타임 제어 툴바 (Play, Pause, Stop)
+			ImGui::Spacing();
+			if (ImGui::Button((ICON_FA_PLAY " " + LOCAL_LABEL("Particle.Play")).c_str()))
+			{
+				timeline.Play();
+			}
+			ImGui::SameLine();
+			if (ImGui::Button((ICON_FA_PAUSE " " + LOCAL_LABEL("Particle.Pause")).c_str()))
+			{
+				timeline.Pause();
+			}
+			ImGui::SameLine();
+			if (ImGui::Button((ICON_FA_STOP " " + LOCAL_LABEL("Particle.Stop")).c_str()))
+			{
+				timeline.Stop();
+			}
+			ImGui::SameLine();
+			ImGui::TextDisabled("(%.2fs)", timeline.currentTime);
+
+			// 3. 에디터 타임라인 패널 원클릭 편집 연동 버튼
+			ImGui::Spacing();
+			if (ImGui::Button((std::string(ICON_FA_ARROW_UP_RIGHT_FROM_SQUARE " ") + LOCAL("Timeline.OpenInEditor")).c_str()))
+			{
+				if (auto* timelinePanel = AnimationTimelinePanel::GetActivePanel())
+				{
+					timelinePanel->Open();
+					if (!timeline.timelinePath.empty()) timelinePanel->LoadFromFile(timeline.timelinePath);
+				}
+			}
+		}
+		else changed = ReflectionPropertyDrawer::DrawObject(type, object, registry, &componentSettings, drawHeaderMenu);
 
 		if (changed && object.Is<Engine::CameraComponent>()) world.get<Engine::CameraComponent>(handle).InvalidateCache();
 		if (changed && object.Is<Engine::LightComponent>()) world.get<Engine::LightComponent>(handle).InvalidateCache();

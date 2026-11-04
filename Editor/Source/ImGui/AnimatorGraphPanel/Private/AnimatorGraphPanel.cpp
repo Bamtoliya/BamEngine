@@ -8,35 +8,36 @@
 #include "SelectionManager.h"
 #include "ResourcePicker.h"
 #include "Entity.h"
+#include "ResourceManager.h"
+#include "Model.h"
+#include "MaterialInterface.h"
+#include "ShortcutManager.h"
 
 AnimatorGraphPanel::AnimatorGraphPanel()
 {
-	m_Name = L"AnimatorGraphPanel";
-	m_DisplayNameKey = "AnimatorGraph.Title";
-	m_Open = false;
-
-	m_StateMachine = std::make_shared<Engine::AnimatorStateMachine>();
-	m_StateMachine->defaultState = "Idle";
-	m_StateMachine->states.push_back(Engine::AnimState{ "Idle" });
-	m_StateMachine->states.push_back(Engine::AnimState{ "Walk" });
-
-	Engine::AnimTransition tr;
-	tr.sourceState = "Idle";
-	tr.targetState = "Walk";
-	tr.duration = 0.25f;
-	m_StateMachine->transitions.push_back(tr);
-
-	m_NodePositions["Entry"] = ImVec2(50.0f, 150.0f);
-	m_NodePositions["Idle"] = ImVec2(220.0f, 150.0f);
-	m_NodePositions["Walk"] = ImVec2(420.0f, 150.0f);
+	m_Name = L"Animator Graph";
+	m_CanvasScrolling = ImVec2(0.0f, 0.0f);
+	ExecuteNew();
+	InitializePreview();
+}
+AnimatorGraphPanel::~AnimatorGraphPanel()
+{
+	m_PreviewWidget.Free();
 }
 
 void AnimatorGraphPanel::SetStateMachine(const std::shared_ptr<Engine::AnimatorStateMachine>& sm)
 {
-	m_StateMachine = sm ? sm : std::make_shared<Engine::AnimatorStateMachine>();
+	m_StateMachine = sm;
 	m_SelectedStateIndex = -1;
 	m_SelectedTransitionIndex = -1;
-	m_ConnectingSourceIndex = -1;
+	m_CurrentFilePath.clear();
+	m_IsDirty = false;
+	SyncPreviewStateMachine();
+}
+
+void AnimatorGraphPanel::Update(f32 dt)
+{
+	UpdatePreview(dt);
 }
 
 void AnimatorGraphPanel::Draw()
@@ -52,7 +53,6 @@ void AnimatorGraphPanel::Draw()
 	bool openState = m_Open;
 	const bool isVisible = ImGui::Begin(title.c_str(), &openState, windowFlags);
 
-	// 1. 도킹 탭의 'X' 닫기 이벤트는 창의 가시성(isVisible)과 무관하게 즉시 가로챔
 	if (!openState)
 	{
 		RequestClose();
@@ -64,26 +64,31 @@ void AnimatorGraphPanel::Draw()
 		if (m_Focused) s_ActivePanel = this;
 		m_Hovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows);
 
-		// 메뉴바
+		// 메뉴바 및 퀵 툴바
 		DrawMenuBar();
-
-		// 퀵 액세스 툴바
 		DrawToolbar();
 		ImGui::Separator();
 
 		const float totalWidth = ImGui::GetContentRegionAvail().x;
-		const float paramWidth = 220.0f;
+		const float leftPaneWidth = 260.0f;
 		const float inspectorWidth = 280.0f;
-		const float canvasWidth = std::max(200.0f, totalWidth - paramWidth - inspectorWidth - 16.0f);
+		const float canvasWidth = std::max(200.0f, totalWidth - leftPaneWidth - inspectorWidth - 16.0f);
 		const float contentHeight = ImGui::GetContentRegionAvail().y;
 
-		// 3분할 작업 공간
-		ImGui::BeginChild("ParamsPanel", ImVec2(paramWidth, contentHeight), true);
+		// ── [좌측 영역] 3D 프리뷰 뷰포트 + 파라미터 독 (상하 분할) ──
+		ImGui::BeginChild("LeftPane", ImVec2(leftPaneWidth, contentHeight), true);
+		if (m_ShowPreviewViewport)
+		{
+			const float previewHeight = std::min(leftPaneWidth * 0.95f, contentHeight * 0.45f);
+			DrawPreviewSection(leftPaneWidth - 16.0f, previewHeight);
+			ImGui::Separator();
+		}
 		DrawParametersTab();
 		ImGui::EndChild();
 
 		ImGui::SameLine();
 
+		// ── [중앙 영역] 상태 머신 노드 캔버스 ──
 		ImGui::BeginChild("CanvasPanel", ImVec2(canvasWidth, contentHeight), true,
 			ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 		DrawCanvas();
@@ -91,6 +96,7 @@ void AnimatorGraphPanel::Draw()
 
 		ImGui::SameLine();
 
+		// ── [우측 영역] 인스펙터 패널 ──
 		ImGui::BeginChild("InspectorPanel", ImVec2(inspectorWidth, contentHeight), true);
 		DrawSelectionInspector();
 		ImGui::EndChild();
@@ -107,20 +113,23 @@ void AnimatorGraphPanel::DrawMenuBar()
 	{
 		if (ImGui::BeginMenu(LOCAL_CSTR("EditorCommon.File")))
 		{
-			if (ImGui::MenuItem((ICON_FA_FILE " " + LOCAL_LABEL("EditorCommon.New")).c_str(), "Ctrl+N"))
+			auto& sm = ShortcutManager::Get();
+			if (ImGui::MenuItem((ICON_FA_FILE " " + LOCAL_LABEL("EditorCommon.New")).c_str(), sm.GetShortcutHint("Animator.New")))
 				RequestNew();
-			if (ImGui::MenuItem((ICON_FA_FOLDER_OPEN " " + LOCAL_LABEL("EditorCommon.Open")).c_str(), "Ctrl+O"))
+			if (ImGui::MenuItem((ICON_FA_FOLDER_OPEN " " + LOCAL_LABEL("EditorCommon.Open")).c_str(), sm.GetShortcutHint("Animator.Open")))
 				RequestOpen();
-			if (ImGui::MenuItem((ICON_FA_FLOPPY_DISK " " + LOCAL_LABEL("EditorCommon.Save")).c_str(), "Ctrl+S"))
+			if (ImGui::MenuItem((ICON_FA_FLOPPY_DISK " " + LOCAL_LABEL("EditorCommon.Save")).c_str(), sm.GetShortcutHint("Animator.Save")))
 				SaveDocument(false);
-			if (ImGui::MenuItem((ICON_FA_FLOPPY_DISK " " + LOCAL_LABEL("EditorCommon.SaveAs")).c_str(), "Ctrl+Shift+S"))
+			if (ImGui::MenuItem((ICON_FA_FLOPPY_DISK " " + LOCAL_LABEL("EditorCommon.SaveAs")).c_str(), sm.GetShortcutHint("Animator.SaveAs")))
 				SaveDocument(true);
 			ImGui::EndMenu();
 		}
 
-		if (ImGui::BeginMenu(LOCAL_CSTR("EditorCommon.Edit")))
+		if(ImGui::BeginMenu(LOCAL_CSTR("EditorCommon.Edit")))
 		{
-			if (ImGui::MenuItem((ICON_FA_TRASH " " + LOCAL_LABEL("EditorCommon.Delete")).c_str(), "Delete", false, m_SelectedStateIndex >= 0 || m_SelectedTransitionIndex >= 0))
+			auto& sm = ShortcutManager::Get();
+			if (ImGui::MenuItem((ICON_FA_TRASH " " + LOCAL_LABEL("EditorCommon.Delete")).c_str(),
+				sm.GetShortcutHint("Edit.Delete"), false, m_SelectedStateIndex >= 0 || m_SelectedTransitionIndex >= 0))
 			{
 				if (m_SelectedStateIndex >= 0 && m_SelectedStateIndex < static_cast<int>(m_StateMachine->states.size()))
 				{
@@ -179,6 +188,13 @@ void AnimatorGraphPanel::DrawToolbar()
 	ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
 	ImGui::SameLine();
 
+	const char* vpIcon = m_ShowPreviewViewport ? ICON_FA_EYE : ICON_FA_EYE_SLASH;
+	if (ImGui::Button(vpIcon))
+	{
+		m_ShowPreviewViewport = !m_ShowPreviewViewport;
+	}
+	if (ImGui::IsItemHovered()) ImGui::SetTooltip("Toggle 3D Preview Viewport");
+
 	if (ImGui::Button((ICON_FA_PLUS " " + LOCAL_LABEL("AnimatorGraph.CreateState")).c_str()))
 	{
 		const std::string name = "State_" + std::to_string(m_StateMachine->states.size());
@@ -221,6 +237,7 @@ bool AnimatorGraphPanel::OpenDocument()
 	m_SelectedTransitionIndex = -1;
 	m_ConnectingSourceIndex = -1;
 	m_IsDirty = false;
+	SyncPreviewStateMachine();
 	return true;
 }
 
@@ -252,6 +269,8 @@ bool AnimatorGraphPanel::SaveDocument(bool saveAs)
 
 void AnimatorGraphPanel::DrawParametersTab()
 {
+	if (!m_StateMachine) return;
+
 	ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "%s", LOCAL_CSTR("Animator.Parameters"));
 	ImGui::SameLine(ImGui::GetContentRegionAvail().x - 24.0f);
 
@@ -326,6 +345,8 @@ void AnimatorGraphPanel::DrawParametersTab()
 
 void AnimatorGraphPanel::DrawCanvas()
 {
+	if (!m_StateMachine) return;
+
 	ImDrawList* drawList = ImGui::GetWindowDrawList();
 	const ImVec2 canvasPos = ImGui::GetCursorScreenPos();
 	const ImVec2 canvasSize = ImGui::GetContentRegionAvail();
@@ -535,6 +556,12 @@ void AnimatorGraphPanel::DrawCanvasContextMenu()
 
 void AnimatorGraphPanel::DrawSelectionInspector()
 {
+	if (!m_StateMachine)
+	{
+		ImGui::TextDisabled("%s", LOCAL_CSTR("AnimatorGraph.NoNodeSelected"));
+		return;
+	}
+
 	if (m_SelectedTransitionIndex >= 0 && m_SelectedTransitionIndex < static_cast<int>(m_StateMachine->transitions.size()))
 	{
 		DrawTransitionInspector(m_StateMachine->transitions[m_SelectedTransitionIndex]);
@@ -832,6 +859,7 @@ void AnimatorGraphPanel::ExecuteNew()
 	m_ConnectingSourceIndex = -1;
 	m_DraggingStateIndex = -1;
 	m_IsDirty = false;
+	SyncPreviewStateMachine();
 }
 
 void AnimatorGraphPanel::ExecuteOpen()
@@ -911,4 +939,65 @@ void AnimatorGraphPanel::DrawConfirmModal()
 
 		ImGui::EndPopup();
 	}
+}
+
+void AnimatorGraphPanel::InitializePreview()
+{
+	// 1. 공통 3D 프리뷰 위젯 초기화 (바닥 그리드 On)
+	m_PreviewWidget.Initialize(L"AnimGraphPreview", 260, 240, true);
+
+	// 2. 기본 프리뷰 캐릭터 모델(Fox) 및 스키닝 머티리얼 디스크 로드
+	auto& rm = Engine::ResourceManager::Get();
+	auto modelHandle = Engine::ResourceHandle<Engine::Model>(rm.LoadFile(L"Resources/Model/Fox.bammodel"));
+	if (modelHandle.IsValid() && modelHandle.Get() && m_PreviewWidget.GetScene())
+	{
+		const wchar_t* defaultMatPath = modelHandle->GetSkeleton().IsValid()
+			? L"Resources/Material/SkinningMaterial.bammat.json"
+			: L"Resources/Material/GBufferMaterial.bammat.json";
+		auto matHandle = Engine::ResourceHandle<Engine::MaterialInterface>(rm.LoadFile(defaultMatPath));
+		// 프리뷰 씬에 캐릭터 모델 인스턴스화
+		const Engine::EResult result = m_PreviewWidget.GetScene()->InstantiateModel(*modelHandle.Get(), matHandle, m_PreviewModelEntity);
+		if (result != Engine::EResult::Success)
+		{
+			EDITOR_LOG_ERROR("Failed to instantiate Fox preview model: {}", ResultToString(result));
+		}
+	}
+
+	// 3. 카메라 초기 시점 (캐릭터 중심 쿼터뷰)
+	m_PreviewWidget.FocusTarget(Engine::vec3(0.0f, 0.4f, 0.0f), 2.2f);
+	SyncPreviewStateMachine();
+}
+
+void AnimatorGraphPanel::SyncPreviewStateMachine()
+{
+	if (!m_PreviewModelEntity || !m_StateMachine) return;
+	auto* animator = m_PreviewWidget.GetRegistry().try_get<Engine::AnimatorComponent>(m_PreviewModelEntity->GetEntityHandle());
+	if (animator)
+	{
+		animator->runtimeState.BindStateMachine(m_StateMachine);
+		animator->isPlaying = true;
+	}
+}
+
+void AnimatorGraphPanel::UpdatePreview(f32 dt)
+{
+	if (!m_ShowPreviewViewport) return;
+
+	// 파라미터 변경 사항을 프리뷰 런타임 상태 머신에 실시간 동기화
+	if (m_PreviewModelEntity && m_StateMachine)
+	{
+		auto* animator = m_PreviewWidget.GetRegistry().try_get<Engine::AnimatorComponent>(m_PreviewModelEntity->GetEntityHandle());
+		if (animator && animator->runtimeState.GetStateMachine() != m_StateMachine)
+		{
+			animator->runtimeState.BindStateMachine(m_StateMachine);
+		}
+	}
+
+	m_PreviewWidget.BeginFrame(dt);
+	m_PreviewWidget.Submit(dt);
+}
+
+void AnimatorGraphPanel::DrawPreviewSection(float width, float height)
+{
+	m_PreviewWidget.Draw(ImVec2(width, height));
 }

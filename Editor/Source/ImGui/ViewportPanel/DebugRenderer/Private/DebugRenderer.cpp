@@ -8,6 +8,7 @@
 #include "SceneManager.h"
 #include "CoreComponents.h"
 #include "PhysicsComponent.h"
+#include "Components/Camera/SpringArmComponent.h"
 #include "TransformSystem.h"
 #include "Mesh.h"
 
@@ -283,6 +284,45 @@ void DebugRenderer::RegisterColliderDebug(const CameraBuffer& cameraBuffer)
 		{
 			const vec3 footWorld = vec3(worldMatrix * vec4(offset - vec3(0.0f, halfHeight, 0.0f), 1.0f));
 			DrawLine(footWorld, footWorld + kcc.GroundNormal * 0.5f, vec4(0.0f, 1.0f, 1.0f, 1.0f));
+		}
+	}
+	// SpringArmComponent 디버그 렌더링 (피벗, 붐 라인, 프로브 구체)
+	for (auto [entity, arm, tr, flag] : registry.view<SpringArmComponent, WorldTransformComponent, FlagComponent>().each())
+	{
+		if (!HasFlag(flag.flags, EEntityFlag::Active) || HasFlag(flag.flags, EEntityFlag::Dead)) continue;
+
+		// 1. 타깃 기준점 위치(피벗) 산출 (SpringArmSystem과 동일한 로직)
+		vec3 pivot = vec3(0.0f);
+		if (arm.TargetEntity != entt::null && registry.valid(arm.TargetEntity))
+		{
+			const auto* targetTr = registry.try_get<WorldTransformComponent>(arm.TargetEntity);
+			pivot = (targetTr ? vec3(targetTr->worldMatrix[3]) : vec3(0.0f)) + arm.TargetOffset;
+		}
+		else if (const auto* hier = registry.try_get<HierarchyComponent>(entity); hier && hier->parent != entt::null && registry.valid(hier->parent))
+		{
+			const auto* parentTr = registry.try_get<WorldTransformComponent>(hier->parent);
+			pivot = (parentTr ? vec3(parentTr->worldMatrix[3]) : vec3(0.0f)) + arm.TargetOffset;
+		}
+		else
+		{
+			const vec3 entityPos = vec3(tr.worldMatrix[3]);
+			pivot = (arm.HasAnchor ? arm.AnchorPosition : entityPos) + arm.TargetOffset;
+		}
+
+		// 2. 붐 회전 및 끝단 위치 계산 (Pitch, Yaw 2축 회전 반영)
+		const glm::quat rot = glm::quat(vec3(glm::radians(arm.Pitch), glm::radians(arm.Yaw), 0.0f));
+		const vec3 boomDir = -(rot * vec3(0.0f, 0.0f, 1.0f));
+		const vec3 socketOffsetWorld = rot * arm.SocketOffset;
+		const vec3 targetEnd = pivot + boomDir * arm.TargetArmLength + socketOffsetWorld;
+		const vec3 currentEnd = pivot + boomDir * arm.CurrentArmLength + socketOffsetWorld;
+
+		// 3. 디버그 와이어프레임 드로우
+		DrawSphere(pivot, 0.08f, vec4(1.0f, 1.0f, 0.2f, 0.8f));           // 피벗 지점 노란 점
+		DrawLine(pivot, targetEnd, vec4(1.0f, 0.9f, 0.3f, 0.35f));          // 목표 길이 가이드 라인 (연한 노랑)
+		DrawLine(pivot, currentEnd, vec4(0.2f, 0.8f, 1.0f, 1.0f));          // 현재 실제 카메라 라인 (시안색)
+		if (arm.DoCollisionTest && arm.ProbeRadius > 0.01f)
+		{
+			DrawSphere(currentEnd, arm.ProbeRadius, vec4(0.2f, 0.8f, 1.0f, 0.6f)); // 프로브 충돌 구체
 		}
 	}
 	for (auto [entity, collider2D, tr, flag] : registry.view<Collider2DComponent, WorldTransformComponent, FlagComponent>().each())

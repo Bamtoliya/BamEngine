@@ -194,6 +194,7 @@ private:
     {
         auto& systemManager = SystemManager::Get();
         if (!systemManager.AddSystem<TransformSystem>()) return EResult::Fail;
+        if (!systemManager.AddSystem<SpringArmSystem>()) return EResult::Fail;
         if (!systemManager.AddSystem<CameraSystem>()) return EResult::Fail;
         if (!systemManager.AddSystem<LightSystem>()) return EResult::Fail;
         if (!systemManager.AddSystem<MeshRenderSystem>()) return EResult::Fail;
@@ -201,6 +202,7 @@ private:
         if (!systemManager.AddSystem<SpriteAnimationSystem>()) return EResult::Fail;
         if (!systemManager.AddSystem<AnimationSystem>()) return EResult::Fail;
         if (!systemManager.AddSystem<ParticleSystem>()) return EResult::Fail;
+        if (!systemManager.AddSystem<ActionTimelineSystem>()) return EResult::Fail;
         if (!systemManager.AddSystem<KinematicCharacterSystem>()) return EResult::Fail;
         if (!systemManager.AddSystem<NetworkSystem>()) return EResult::Fail;
         if (!systemManager.AddSystem<UIRenderSystem>()) return EResult::Fail;

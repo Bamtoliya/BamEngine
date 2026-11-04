@@ -4,13 +4,7 @@
 #include "ResourceHandle.h"
 #include "Mesh.h"
 #include "MaterialInterface.h"
-#include "ViewportDeferredPipeline.h"
-#include "PostProcess.h"
-
-BEGIN(Engine)
-class Scene;
-class Entity;
-END
+#include "PreviewViewportWidget.h"
 
 BEGIN(Editor)
 
@@ -37,40 +31,25 @@ public:
 	// ImGui 뷰포트 UI 및 조작 렌더링
 	void DrawUI(Engine::MaterialInterface* material);
 
-	[[nodiscard]] Engine::RHITexture* GetPreviewRHITexture() const;
+	[[nodiscard]] Engine::RHITexture* GetPreviewRHITexture() const { return m_Widget.GetPreviewRHITexture(); }
 
 private:
-	void SetupPreviewScene();
 	void UpdatePreviewMesh(Engine::MaterialInterface* material);
 
 private:
-	uint32 m_Width = 512;
-	uint32 m_Height = 512;
+	// 공통 3D 프리뷰 위젯 (씬, 카메라 컨트롤러, 디퍼드 파이프라인 내장)
+	PreviewViewportWidget m_Widget;
 
-	// 독립 뷰포트 디퍼드 파이프라인 및 포스트 프로세스 체인
-	ViewportDeferredPipeline m_Pipeline;
-	PostProcessChain m_PostProcessChain;
-	std::wstring m_DisplayRTName;
-
-	// 프리뷰 전용 독립 씬 및 엔티티
-	Engine::Scene* m_PreviewScene = nullptr;
+	// 프리뷰 대상 메쉬 엔티티 및 리소스 핸들
 	entt::entity m_MeshEntity = entt::null;
-	entt::entity m_LightEntity = entt::null;
-
-	// 프리뷰 메쉬 핸들
 	Engine::ResourceHandle<Engine::Mesh> m_SphereMesh;
 	Engine::ResourceHandle<Engine::Mesh> m_CubeMesh;
 	Engine::ResourceHandle<Engine::Mesh> m_PlaneMesh;
 
-	// 뷰포트 조작
+	// 프리뷰 상태
 	EPreviewMeshType m_CurrentMeshType = EPreviewMeshType::Sphere;
-	vec3 m_Target = vec3(0.0f);
-	f32 m_Distance = 3.5f;
-	f32 m_Pitch = 0.25f;
-	f32 m_Yaw = 0.5f;
-	f32 m_MoveSpeed = 3.0f;
 	bool m_AutoRotate = true;
-	f32 m_AutoRotateSpeed = 0.4f;
+	f32 m_AutoRotateSpeed = 25.0f; // 초당 회전 각도 (도)
 };
 
 END

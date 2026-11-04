@@ -2,9 +2,14 @@
 
 #include "ImGuiInterface.h"
 #include "AnimatorStateMachine.h"
+#include "PreviewViewportWidget.h"
 #include <memory>
 #include <string>
 #include <unordered_map>
+
+BEGIN(Engine)
+class Entity;
+END
 
 BEGIN(Editor)
 
@@ -12,9 +17,10 @@ class AnimatorGraphPanel : public IImGui
 {
 public:
 	AnimatorGraphPanel();
-	virtual ~AnimatorGraphPanel() override = default;
+	virtual ~AnimatorGraphPanel() override;
 
 	virtual void Draw() override;
+	virtual void Update(f32 dt) override;
 
 	void SetStateMachine(const std::shared_ptr<Engine::AnimatorStateMachine>& sm);
 	std::shared_ptr<Engine::AnimatorStateMachine> GetStateMachine() const { return m_StateMachine; }
@@ -26,7 +32,12 @@ private:
 	void DrawMenuBar();
 	void DrawToolbar();
 
-	// 3분할 작업 공간
+	// 3D 프리뷰 및 작업 공간
+	void InitializePreview();
+	void UpdatePreview(f32 dt);
+	void DrawPreviewSection(float width, float height);
+	void SyncPreviewStateMachine();
+
 	void DrawParametersTab();
 	void DrawCanvas();
 	void DrawTransitions(ImDrawList* drawList, const ImVec2& canvasPos);
@@ -53,6 +64,11 @@ private:
 	std::shared_ptr<Engine::AnimatorStateMachine> m_StateMachine;
 	std::string m_CurrentFilePath;
 	bool m_IsDirty = false;
+
+	// 3D 프리뷰 뷰포트 & 모델
+	PreviewViewportWidget m_PreviewWidget;
+	Engine::Entity* m_PreviewModelEntity = nullptr;
+	bool m_ShowPreviewViewport = true;
 
 	// UI 선택 및 조작 상태
 	int m_SelectedStateIndex = -1;

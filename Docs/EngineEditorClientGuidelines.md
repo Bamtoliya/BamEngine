@@ -371,6 +371,15 @@ Editor는 프로젝트의 대상 플랫폼과 빌드 구성을 선택하고
   입력은 정해진 프레임 경계에서 한 번 갱신하고 Editor와 PIE가 같은 샘플을 재사용한다.
   화면 좌표·창 내부 좌표·논리 좌표를 구분하고 분리 창·DPI·상대 마우스 모드의 영향을 고려한다.
 
+### 에디터 단축키와 ShortcutManager의 역할
+
+- 에디터 기능에 바인딩되는 모든 키보드 단축키(단일 키, 조합 키)는 개별 패널이나 위젯 코드에서 `KEY_DOWN`, `KEY_PRESSED` 등으로 파편화하여 직접 처리하지 않는다.
+- 모든 단축키는 `ShortcutManager`(`EditorActionRegistry`)에 정식 액션(Action)으로 등록한다.
+  - 각 액션은 식별자(`Id`), 로캘 키(`DisplayNameKey`, `CategoryKey`), 유효 문맥(`EShortcutContext`: Global, Viewport, Hierarchy 등), 기본 키 바인딩(`DefaultChord`), 실행 조건(`CanExecute`)과 핸들러(`ExecuteHandler`)를 명시적으로 갖춘다.
+  - 글로벌하게 동작해야 하는 단축키(예: 어디서든 씬 오브젝트로 시점을 맞추는 `F`, 저장 `Ctrl+S`, 실행 취소 `Ctrl+Z` 등)는 `EShortcutContext::Global`을 부여하고, 특정 창 내부 전용 기능(예: 계층 패널 내부 이름 변경 `F2`, 뷰포트 내부 기즈모 모드 전환 `1~3` 등)은 해당 패널의 `EShortcutContext`를 명확히 분리한다.
+- 모든 UI 메뉴(툴바, 컨텍스트 메뉴, 팝업)의 단축키 힌트 표시는 `ShortcutManager::Get().GetShortcutHint("Action.Id")`를 통해 동적으로 조회하여, 사용자가 설정을 변경하더라도 항상 최신 바인딩이 표시되도록 한다.
+- 패널 단위의 임시 하드코딩 키 처리는 허용되지 않으며, 단축키 추가·수정 시에는 `EditorActionRegistry.cpp` 등록과 `Editor.csv` 로캘 키 연동을 기본으로 함께 진행한다.
+
 ### 완료와 리뷰에서 확인할 사항
 
 - AuditLocalization의 엄격 검사와 CSV→JSON 변환으로 누락 키·빈 번역·중복을 확인한다.
@@ -394,3 +403,47 @@ Editor는 프로젝트의 대상 플랫폼과 빌드 구성을 선택하고
 통합 우선순위는 DevelopmentPriorities, 기능별 계약과 완료 예제는 각 개발 계획에서 관리한다.
 기존 Client 배포 보류 같은 사용자 결정을 문서 연결이나 우선순위 지정만으로 해제하지 않는다.
 장기 목표의 폴더·클래스 이름을 미리 만드는 것보다 작은 구현·검증 단위를 완성한다.
+
+## 16. 에디터 3D 뷰포트와 프리뷰어 일원화 기준
+
+에디터 내에서 3D 콘텐츠를 렌더링하는 모든 패널(메인 씬 뷰포트, 타임라인 에디터, 머티리얼 에디터, 애니메이터 그래프 등)은 일관된 시각적 피드백과 조작감을 제공해야 한다.
+패널마다 독자적인 Forward 파이프라인이나 자체 카메라 수식을 구현하여 렌더링 퀄리티와 조작 경험이 파편화되지 않도록 다음 원칙을 준수한다.
+
+### 렌더링 파이프라인 일원화 (ViewportDeferredPipeline 재사용)
+
+- **디퍼드 렌더링 표준화:** 모든 3D 프리뷰어는 `ViewportDeferredPipeline`을 기반으로 G-Buffer 생성, 디퍼드 조명 합성, SkyAtmosphere/IBL 적용을 통일한다.
+- **G-Buffer 채널 뷰 및 후처리 통일:** `BaseViewportPanel`의 채널 필터(Albedo, Normal, Roughness, Metallic, Depth 등) 및 ACES 톤매핑/PostProcessChain을 동일하게 공유하여, 아티스트가 작업 창에서도 메인 뷰포트와 완전히 동일한 룩(Look)과 렌더링 분석 기능을 사용하도록 한다.
+- **격리된 프리뷰 씬(Isolated Preview Scene):** 프리뷰용 오브젝트가 메인 월드(`ActiveScene`)를 오염시키지 않도록, 각 프리뷰어는 경량의 독립 `Engine::Scene`을 소유하고 해당 씬을 `ViewportDeferredPipeline::Submit(cameraBuffer, targetScene)`으로 렌더링한다.
+
+### 에디터 카메라 조작계 공통화 (EditorCameraController)
+
+- **조작 표준 준수:** 모든 3D 뷰포트/프리뷰어는 `EditorCameraController`를 사용하거나 이를 내장하여 에디터 표준 카메라 조작계를 100% 동일하게 제공한다:
+  - `Alt + 마우스 좌클릭`: 타깃(모델/메쉬) 중심 궤도 회전(Orbit)
+  - `Alt + 마우스 중간클릭`: 시점 평면 패닝(Pan)
+  - `마우스 휠` / `Alt + 마우스 우클릭`: 줌(Zoom)
+  - `마우스 우클릭 드래그 + WASDQE`: 1인칭 프리 플라이(Free-Fly) 시점 이동
+  - `F` 키: 현재 포커스된 오브젝트(타임라인 스켈레탈 모델, 머티리얼 구체/큐브)의 바운딩 볼륨 중심 자동 포커싱
+  - 투영 모드 전환: 원근(Perspective) 및 정사영(Orthographic) 전환 지원
+- **입력 일관성:** 개별 뷰포트 패널에서 ImGui 마우스 좌표 수식을 임의로 구현하지 않고, `InputManager` 및 `EditorCameraController`의 공통 입력 처리 경로를 따른다.
+
+### 프리뷰 뷰포트의 컴포넌트화
+
+- 복합 패널(타임라인 패널처럼 3D 뷰포트와 2D 트랙 편집기가 함께 존재하는 창)은 `CameraViewportPanel`을 직접 상속하거나, `CameraViewportPanel`의 핵심 기능(카메라 컨트롤러 + `ViewportDeferredPipeline` + 옵션 툴바)을 내장한 재사용 가능한 `PreviewViewportWidget` 형태의 컴포넌트 구조를 채택한다.
+
+## 17. 에디터 패널 내부 분할 및 리사이징(Resizable Splitters) 원칙
+
+에디터 패널 내부를 둘 이상의 작업 구역으로 분할할 때는 사용자의 디스플레이 해상도, 작업 우선순위, 정보 밀도에 맞춰 각 영역의 크기를 자유롭게 조절할 수 있어야 한다. 하드코딩된 고정 크기로 화면을 강제 분할하는 것을 금지하며 다음 4대 원칙을 준수한다.
+
+### 분할 영역 조절의 4대 원칙
+
+1. **고정 크기 분할 금지 (No Fixed Width/Height Partitions):**
+   - 패널 내부를 수평 또는 수직으로 분할할 때(예: 뷰포트와 디테일 패널, 상단 프리뷰와 하단 타임라인, 트랙 헤더 사이드바와 타임라인 눈금자 본체), 특정 구역의 너비나 높이를 상수로 고정하지 않는다.
+   - 모든 분할 경계선에는 사용자가 마우스 드래그로 크기를 조절할 수 있는 **스플리터(Splitter)**를 필수로 제공한다.
+2. **최소/최대 한계 범위(Clamping) 보장:**
+   - 특정 영역을 과도하게 줄여 텍스트나 핵심 컨트롤이 찌그러지거나 사라지지 않도록 최소 크기(`minSize`)를 반드시 보장한다.
+   - 반대편 주요 작업 영역(예: 3D 뷰포트나 타임라인 트랙 본체)이 시야에서 완전히 사라지지 않도록 최대 크기(`maxSize`)를 전체 크기에 비례하여 안전하게 클램핑한다.
+3. **스플리터 시각적 피드백:**
+   - 스플리터 경계선에 마우스가 호버되면 마우스 커서를 방향에 맞게 즉시 변경한다 (`ImGuiMouseCursor_ResizeEW` 또는 `ImGuiMouseCursor_ResizeNS`).
+   - 마우스가 호버되거나 활성화(드래그) 상태일 때 경계선의 색상을 액센트 컬러(하이라이트)로 강조하여 사용자가 조작 중임을 명확히 인지하게 한다.
+4. **반응형 레이아웃(Responsive Layout):**
+   - 패널 창 자체의 크기가 조절될 때 고정된 사이드바나 인스펙터의 설정 너비는 유지하면서, 메인 작업 영역(뷰포트, 타임라인 본체 등)이 남은 여백을 유연하게 채우도록 구성한다.

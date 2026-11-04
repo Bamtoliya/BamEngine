@@ -77,7 +77,7 @@ void EditorCameraController::Free()
     Engine::Base::Free();
 }
 
-void EditorCameraController::HandleInput(Engine::f32 dt)
+void EditorCameraController::HandleInput(Engine::f32 dt, bool allowScroll)
 {
     auto* transform = GetTransformComponent();
     auto* camera = GetCameraComponent();
@@ -93,10 +93,18 @@ void EditorCameraController::HandleInput(Engine::f32 dt)
     Engine::vec3 moveDirection = Engine::vec3(0.0f);
     bool changed = false;
 
-    if (KEY_PRESSED("LShift"))
-        movementSpeed *= 2.0f;
+    const bool isAlt = KEY_PRESSED(Engine::EKeyCode::LAlt) || KEY_PRESSED(Engine::EKeyCode::RAlt);
+    const bool isLMB = MOUSE_BUTTON_PRESSED(Engine::EMouseButton::Left);
+    const bool isMMB = MOUSE_BUTTON_PRESSED(Engine::EMouseButton::Middle);
+    const bool isRMB = MOUSE_BUTTON_PRESSED(Engine::EMouseButton::Right);
 
-    if (mouseScrollDelta.y != 0.0f)
+    // 카메라와 피벗 간의 거리
+    Engine::vec3 toCamera = transform->position - m_PivotPoint;
+    float dist = glm::length(toCamera);
+    if (dist < 0.1f) dist = 0.1f;
+
+    // 1. 마우스 휠 줌 (뷰포트에 호버되어 있을 때만 허용)
+    if (allowScroll && mouseScrollDelta.y != 0.0f)
     {
         if (IsPerspective())
         {
@@ -131,7 +139,46 @@ void EditorCameraController::HandleInput(Engine::f32 dt)
 
     if (IsPerspective())
     {
-        if (MOUSE_BUTTON_PRESSED("Right"))
+        // 2. [Alt + LMB] 타깃 중심 궤도 회전 (Orbit)
+        if (isAlt && isLMB)
+        {
+            m_ControlRotation.y += mouseX * rotationSpeed;
+            m_ControlRotation.x = std::clamp(m_ControlRotation.x + mouseY * rotationSpeed, -89.0f, 89.0f);
+            m_ControlRotation.z = 0.0f;
+
+            const float pitchRad = glm::radians(m_ControlRotation.x);
+            const float yawRad = glm::radians(m_ControlRotation.y);
+            Engine::vec3 forward;
+            forward.x = sinf(yawRad) * cosf(pitchRad);
+            forward.y = -sinf(pitchRad);
+            forward.z = cosf(yawRad) * cosf(pitchRad);
+
+            transform->SetLocalPosition(m_PivotPoint - forward * dist);
+            transform->SetEulerRotation(m_ControlRotation);
+            changed = true;
+        }
+        // 3. [Alt + MMB] 또는 [MMB 단독] 시점 평면 패닝 (Pan)
+        else if (isMMB)
+        {
+            const float panFactor = dist * 0.002f;
+            const Engine::vec3 right = transform->GetLocalRight();
+            const Engine::vec3 up = transform->GetLocalUp();
+            const Engine::vec3 panDelta = (-right * mouseX + up * mouseY) * panFactor;
+
+            transform->SetLocalPosition(transform->position + panDelta);
+            m_PivotPoint += panDelta;
+            changed = true;
+        }
+        // 4. [Alt + RMB] 부드러운 줌 드래그
+        else if (isAlt && isRMB)
+        {
+            const float zoomDelta = (mouseX - mouseY) * 0.02f * dist;
+            dist = std::max(dist + zoomDelta, 0.2f);
+            transform->SetLocalPosition(m_PivotPoint - transform->GetLocalForward() * dist);
+            changed = true;
+        }
+        // 5. [RMB 단독] 1인칭 프리 플라이 회전
+        else if (isRMB)
         {
             m_ControlRotation.y += mouseX * rotationSpeed;
             m_ControlRotation.x = std::clamp(m_ControlRotation.x + mouseY * rotationSpeed, -89.0f, 89.0f);
@@ -139,14 +186,17 @@ void EditorCameraController::HandleInput(Engine::f32 dt)
 
             if (transform->SetEulerRotation(m_ControlRotation))
                 changed = true;
+
+            m_PivotPoint = transform->position + transform->GetLocalForward() * dist;
         }
 
-        if (KEY_PRESSED("W")) moveDirection += Engine::vec3(0.0f, 0.0f, 1.0f);
-        if (KEY_PRESSED("S")) moveDirection -= Engine::vec3(0.0f, 0.0f, 1.0f);
-        if (KEY_PRESSED("A")) moveDirection -= Engine::vec3(1.0f, 0.0f, 0.0f);
-        if (KEY_PRESSED("D")) moveDirection += Engine::vec3(1.0f, 0.0f, 0.0f);
-        if (KEY_PRESSED("Q")) moveDirection += Engine::vec3(0.0f, 1.0f, 0.0f);
-        if (KEY_PRESSED("E")) moveDirection -= Engine::vec3(0.0f, 1.0f, 0.0f);
+        // WASDQE 1인칭 이동
+        if (KEY_PRESSED(Engine::EKeyCode::W)) moveDirection += Engine::vec3(0.0f, 0.0f, 1.0f);
+        if (KEY_PRESSED(Engine::EKeyCode::S)) moveDirection -= Engine::vec3(0.0f, 0.0f, 1.0f);
+        if (KEY_PRESSED(Engine::EKeyCode::A)) moveDirection -= Engine::vec3(1.0f, 0.0f, 0.0f);
+        if (KEY_PRESSED(Engine::EKeyCode::D)) moveDirection += Engine::vec3(1.0f, 0.0f, 0.0f);
+        if (KEY_PRESSED(Engine::EKeyCode::Q)) moveDirection += Engine::vec3(0.0f, 1.0f, 0.0f);
+        if (KEY_PRESSED(Engine::EKeyCode::E)) moveDirection -= Engine::vec3(0.0f, 1.0f, 0.0f);
 
         if (KEY_PRESSED(Engine::EKeyCode::F))
         {
@@ -154,22 +204,15 @@ void EditorCameraController::HandleInput(Engine::f32 dt)
             changed = true;
         }
     }
-    else
-    {
-        if (KEY_PRESSED("W")) moveDirection += Engine::vec3(0.0f, 1.0f, 0.0f);
-        if (KEY_PRESSED("S")) moveDirection += Engine::vec3(0.0f, -1.0f, 0.0f);
-        if (KEY_PRESSED(Engine::EKeyCode::A)) moveDirection += Engine::vec3(-1.0f, 0.0f, 0.0f);
-        if (KEY_PRESSED(Engine::EKeyCode::D)) moveDirection += Engine::vec3(1.0f, 0.0f, 0.0f);
-    }
-
-    if (KEY_PRESSED("=")) IncreaseCameraSpeed();
-    if (KEY_PRESSED("-")) DecreaseCameraSpeed();
 
     if (glm::length2(moveDirection) > 0.001f)
     {
         moveDirection = glm::normalize(moveDirection);
         if (transform->TranslateLocal(moveDirection * movementSpeed))
+        {
+            m_PivotPoint += moveDirection * movementSpeed;
             changed = true;
+        }
     }
 
     if (changed)
@@ -200,46 +243,45 @@ void EditorCameraController::SyncControlRotationFromTransform()
     }
 }
 
+// Editor/Source/Application/Camera/Private/EditorCameraController.cpp 203~243행 교체
+
 void EditorCameraController::FocusEntity(Engine::Entity* targetEntity)
 {
-    if (targetEntity == nullptr)
-        return;
-
+    if (targetEntity == nullptr) return;
     Engine::Scene* scene = targetEntity->GetScene();
     auto* transform = GetTransformComponent();
-    if (scene == nullptr || transform == nullptr)
-        return;
-
+    if (scene == nullptr || transform == nullptr) return;
     auto& registry = scene->GetRegistry();
     const entt::entity handle = targetEntity->GetEntityHandle();
-    if (!registry.valid(handle))
-        return;
-
+    if (!registry.valid(handle)) return;
     glm::mat4 targetWorld(1.0f);
     if (const auto* worldTransform = registry.try_get<Engine::WorldTransformComponent>(handle))
         targetWorld = worldTransform->worldMatrix;
     else if (!Engine::TransformSystem::TryGetWorldMatrix(registry, handle, targetWorld))
         return;
-
     const Engine::vec3 targetPos = Engine::vec3(targetWorld[3]);
     Engine::vec3 cameraPos = transform->position;
-    Engine::vec3 forwardDir = targetPos - cameraPos;
-    const Engine::f32 distance = glm::length(forwardDir);
-
-    if (distance > 1e-5f)
-        forwardDir /= distance;
-    else
-        forwardDir = transform->GetLocalForward();
-
-    if (distance >= 15.0f)
+    if (IsOrthographic())
     {
-        cameraPos = targetPos - forwardDir * 10.0f;
-        static_cast<void>(transform->SetLocalPosition(cameraPos));
+        cameraPos.x = targetPos.x;
+        cameraPos.y = targetPos.y;
+        transform->SetLocalPosition(cameraPos);
     }
-
-    const Engine::f32 pitch = -glm::degrees(std::asin(std::clamp(forwardDir.y, -1.0f, 1.0f)));
-    const Engine::f32 yaw = glm::degrees(std::atan2(forwardDir.x, forwardDir.z));
-    SetControlRotation(Engine::vec3(std::clamp(pitch, -89.0f, 89.0f), yaw, 0.0f));
+    else
+    {
+        Engine::vec3 forwardDir = targetPos - cameraPos;
+        const Engine::f32 distance = glm::length(forwardDir);
+        forwardDir = (distance > 1e-5f) ? (forwardDir / distance) : transform->GetLocalForward();
+        // 거리 제한 없이 항상 타깃 앞 적정 거리(8.0f)로 카메라 배치
+        const Engine::f32 focusDistance = 8.0f;
+        cameraPos = targetPos - forwardDir * focusDistance;
+        transform->SetLocalPosition(cameraPos);
+        const Engine::f32 pitch = -glm::degrees(std::asin(std::clamp(forwardDir.y, -1.0f, 1.0f)));
+        const Engine::f32 yaw = glm::degrees(std::atan2(forwardDir.x, forwardDir.z));
+        m_ControlRotation = Engine::vec3(std::clamp(pitch, -89.0f, 89.0f), yaw, 0.0f);
+        transform->SetEulerRotation(m_ControlRotation);
+    }
+    RefreshMatrices(); // 항상 뷰/투영 행렬 즉시 갱신
 }
 
 Engine::Entity* EditorCameraController::GetEntity() const

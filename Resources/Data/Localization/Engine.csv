@@ -3,19 +3,19 @@
 ,A pure node must return a value.,A pure node must return a value.,순수 노드는 값을 반환해야 합니다.
 ,Abs (Float),Abs (Float),절댓값 (Float)
 ,"Acos input must be in [-1, 1].","Acos input must be in [-1, 1].","Acos 입력은 [-1, 1] 범위여야 합니다."
-,Actor,,
-,Add Force,,
-,Add Impulse,,
-,Add Local Offset,,
-,Add Local Rotation,,
-,Add World Offset,,
+,Actor,Actor,액터
+,Add Force,Add Force,힘 추가
+,Add Impulse,Add Impulse,충격량 추가
+,Add Local Offset,Add Local Offset,로컬 오프셋 추가
+,Add Local Rotation,Add Local Rotation,로컬 회전 추가
+,Add World Offset,Add World Offset,월드 오프셋 추가
 ,Alternate a and b; reset makes a the next output.,Alternate a and b; reset makes a the next output.,a와 b를 번갈아 실행합니다. 초기화하면 다음 출력은 a가 됩니다.
 ,Anchor,Anchor,앵커
 ,Angles use radians.,Angles use radians.,각도는 라디안 단위를 사용합니다.
-,Animation,,
+,Animation,Animation,애니메이션
 ,"Asin input must be in [-1, 1].","Asin input must be in [-1, 1].","Asin 입력은 [-1, 1] 범위여야 합니다."
 ,Atan2 direction has zero length.,Atan2 direction has zero length.,Atan2 방향 벡터의 길이가 0입니다.
-,Audio,,
+,Audio,Audio,오디오
 ,BLOOM_INTENSITY,Intensity,강도
 ,BLOOM_SCATTER,Scatter,확산 반경
 ,BLOOM_SOFT_KNEE,Soft Knee,전이 폭
@@ -26,6 +26,7 @@
 ,CATEGORY_ATMOSPHERE_SYNC,Atmosphere Sync,대기 동기화
 ,CATEGORY_AUDIO,Audio,오디오
 ,CATEGORY_BOUNDS,Bounds,경계
+,CATEGORY_CAMERA,Camera,카메라
 ,CATEGORY_CIRCLE,Circle,원
 ,CATEGORY_CLOUDS,Clouds,구름
 ,CATEGORY_CLOUD_SHAPE,Cloud Shape,구름 형태
@@ -37,7 +38,7 @@
 ,CATEGORY_IBL,Image-Based Lighting,이미지 기반 조명
 ,CATEGORY_LAYER_PLACEMENT,Layer Placement,구름층 배치
 ,CATEGORY_LIGHTING,Lighting,조명
-,CATEGORY_NETWORK,,
+,CATEGORY_NETWORK,Network,네트워크
 ,CATEGORY_PARAMETER,Parameter,매개변수
 ,CATEGORY_PARTICLE_COLOR,Color & Alpha,색상 및 알파
 ,CATEGORY_PARTICLE_EMISSION,Emission,방출
@@ -64,11 +65,12 @@
 ,COLOR_ADJUSTMENTS_BRIGHTNESS,Brightness,밝기
 ,COLOR_ADJUSTMENTS_CONTRAST,Contrast,대비
 ,COLOR_ADJUSTMENTS_SATURATION,Saturation,채도
+,Camera,Camera,카메라
 ,Cannot normalize a zero-length vector.,Cannot normalize a zero-length vector.,길이가 0인 벡터는 정규화할 수 없습니다.
-,Character Jump,,
-,Character Move,,
-,CharacterController,,
-,Clamp (Float),,
+,Character Jump,Character Jump,캐릭터 점프
+,Character Move,Character Move,캐릭터 이동
+,CharacterController,Character Controller,캐릭터 컨트롤러
+,Clamp (Float),Clamp (Float),클램프 (Float)
 ,Clamp minimum exceeds maximum.,Clamp minimum exceeds maximum.,Clamp 최솟값이 최댓값보다 큽니다.
 ,Compiled output file could not be opened:,Compiled output file could not be opened:,컴파일 출력 파일을 열지 못했습니다:
 ,Compiled output file could not be read completely:,Compiled output file could not be read completely:,컴파일 출력 파일을 끝까지 읽지 못했습니다:
@@ -76,17 +78,17 @@
 ,Compiled output file is too large:,Compiled output file is too large:,컴파일 출력 파일이 너무 큽니다:
 ,Connection must end at an input pin.,Connection must end at an input pin.,연결은 입력 핀에서 끝나야 합니다.
 ,Connection must start at an output pin.,Connection must start at an output pin.,연결은 출력 핀에서 시작해야 합니다.
-,Cos (Degrees),,
+,Cos (Degrees),Cos (Degrees),코사인 (도)
 ,DETAIL,Detail,세부 정보
 ,Data connections must be acyclic.,Data connections must be acyclic.,데이터 연결에는 순환이 없어야 합니다.
 ,Data input requires a link or value.,Data input requires a link or value.,데이터 입력에 연결 또는 값이 필요합니다.
 ,Data inputs accept one source.,Data inputs accept one source.,데이터 입력에는 하나의 출력만 연결할 수 있습니다.
 ,Data recursion depth exceeded or a cycle was encountered.,Data recursion depth exceeded or a cycle was encountered.,데이터 재귀 깊이를 초과했거나 순환을 발견했습니다.
 ,Data recursion limit.,Data recursion limit.,데이터 재귀 한도에 도달했습니다.
-,Debug,,
+,Debug,Debug,디버그
 ,Default value must be finite and exactly typed.,Default value must be finite and exactly typed.,기본값은 유한하며 자료형이 정확히 일치해야 합니다.
 ,Delta must be finite/non-negative and budget positive.,Delta must be finite/non-negative and budget positive.,시간 간격은 유한한 0 이상 값이고 실행 예산은 양수여야 합니다.
-,Destroy Actor,,
+,Destroy Actor,Destroy Actor,액터 파괴
 ,Details,Details,세부 정보
 ,Division by zero.,Division by zero.,0으로 나눌 수 없습니다.
 ,ENUM_ATTENUATION_MODE,Attenuation Mode,감쇠 모드
@@ -96,7 +98,7 @@
 ,ENUM_LIGHT_FLAGS,Light Flags,조명 플래그
 ,ENUM_LIGHT_TYPE,Light Type,조명 타입
 ,ENUM_TRANSFORM_ABSOLUTE,Absolute Transform Channels,월드 기준 Transform 채널
-,Entity,,
+,Entity,Entity,엔티티
 ,Execution budget exhausted.,Execution budget exhausted.,실행 예산을 모두 사용했습니다.
 ,Execution is not implemented for node type:,Execution is not implemented for node type:,실행이 구현되지 않은 노드 유형:
 ,Execution node is missing.,Execution node is missing.,실행 노드가 없습니다.
@@ -104,26 +106,31 @@
 ,FILM_GRAIN_INTENSITY,Intensity,강도
 ,FILM_GRAIN_LUMINANCE_BIAS,Luminance Bias,암부 가중치
 ,FILM_GRAIN_SCALE,Scale,입자 크기
+,"Failed to load graph JSON '{}': Stage {}, Error {}","Failed to load graph JSON '{}': Stage {}, Error {}","그래프 JSON '{}' 로드 실패: 단계 {}, 오류 {}"
+,Failed to load graph: {},Failed to load graph: {},그래프 로드 실패: {}
+,Failed to reload graph: {},Failed to reload graph: {},그래프 다시 로드 실패: {}
 ,Finish then0 before running then1.,Finish then0 before running then1.,then0 실행을 마친 뒤 then1을 실행합니다.
 ,Float is outside the Int range.,Float is outside the Int range.,실숫값이 정수 범위를 벗어났습니다.
 ,Function schema has too many argument pins.,Function schema has too many argument pins.,함수 스키마의 인자 핀이 너무 많습니다.
-,Get 3D Animation Time,,
-,Get Actor Location,,
-,Get Axis Horizontal (A/D/Left/Right),,
-,Get Axis Vertical (W/S/Up/Down),,
-,Get Character Velocity,,
-,Get Current Sprite Frame,,
-,Get Delta Seconds,,
-,Get Forward Vector,,
-,Get Ground Angle,,
-,Get Ground Normal,,
-,Get Last Hit Distance,,
-,Get Last Hit Location,,
-,Get Last Hit Normal,,
-,Get Linear Velocity,,
+,Get 3D Animation Time,Get 3D Animation Time,3D 애니메이션 시간 가져오기
+,Get Actor Location,Get Actor Location,액터 위치 가져오기
+,Get Arm Length,Get Arm Length,암 길이 가져오기
+,Get Axis Horizontal (A/D/Left/Right),Get Axis Horizontal (A/D/Left/Right),수평 축 입력 가져오기 (A/D/좌/우)
+,Get Axis Vertical (W/S/Up/Down),Get Axis Vertical (W/S/Up/Down),수직 축 입력 가져오기 (W/S/상/하)
+,Get Character Velocity,Get Character Velocity,캐릭터 속도 가져오기
+,Get Current Sprite Frame,Get Current Sprite Frame,현재 스프라이트 프레임 가져오기
+,Get Delta Seconds,Get Delta Seconds,델타 시간(초) 가져오기
+,Get Forward Vector,Get Forward Vector,전방 벡터 가져오기
+,Get Ground Angle,Get Ground Angle,지면 각도 가져오기
+,Get Ground Normal,Get Ground Normal,지면 법선 가져오기
+,Get Last Hit Distance,Get Last Hit Distance,마지막 히트 거리 가져오기
+,Get Last Hit Location,Get Last Hit Location,마지막 히트 위치 가져오기
+,Get Last Hit Normal,Get Last Hit Normal,마지막 히트 법선 가져오기
+,Get Linear Velocity,Get Linear Velocity,선속도 가져오기
 ,Graph annotations belong on FUNCTION or PROPERTY declarations.,Graph annotations belong on FUNCTION or PROPERTY declarations.,그래프 어노테이션은 FUNCTION 또는 PROPERTY 선언에 지정해야 합니다.
+,Graph file not found: '{}',Graph file not found: '{}',그래프 파일을 찾을 수 없습니다: '{}'
 ,"Graph parameters require unique, non-empty names.","Graph parameters require unique, non-empty names.",그래프 매개변수에는 비어 있지 않은 고유 이름이 필요합니다.
-,Input,,
+,Input,Input,입력
 ,Input pin is missing.,Input pin is missing.,입력 핀이 없습니다.
 ,Input requires a finite value or connection.,Input requires a finite value or connection.,입력에 유한한 값 또는 연결이 필요합니다.
 ,Int addition overflow.,Int addition overflow.,정수 덧셈에서 오버플로가 발생했습니다.
@@ -141,31 +148,32 @@
 ,Invalid pin key or display name:,Invalid pin key or display name:,핀 키 또는 표시 이름이 올바르지 않습니다:
 ,Invalid pin type.,Invalid pin type.,핀 자료형이 올바르지 않습니다.
 ,InverseLerp interval has zero width.,InverseLerp interval has zero width.,InverseLerp 구간의 길이가 0입니다.
-,Is 3D Animation Playing,,
-,Is Actor Active,,
-,Is Actor Visible,,
-,Is Grounded,,
-,Is Key Pressed,,
-,Is Space Pressed,,
-,Is Sprite Animation Playing,,
+,Is 3D Animation Playing,Is 3D Animation Playing,3D 애니메이션 재생 중 여부
+,Is Actor Active,Is Actor Active,액터 활성 여부
+,Is Actor Visible,Is Actor Visible,액터 가시 여부
+,Is Grounded,Is Grounded,지면 착지 여부
+,Is Key Pressed,Is Key Pressed,키 눌림 여부
+,Is Space Pressed,Is Space Pressed,스페이스 키 눌림 여부
+,Is Sprite Animation Playing,Is Sprite Animation Playing,스프라이트 애니메이션 재생 중 여부
 ,LENS_DISTORTION_CUBIC,Cubic Distortion,2차 왜곡
 ,LENS_DISTORTION_INTENSITY,Distortion,왜곡
 ,LENS_DISTORTION_SCALE,Scale,스케일
 ,Layout,Layout,레이아웃
-,Lerp (Float),,
-,Lighting,,
+,Lerp (Float),Lerp (Float),선형 보간 (Float)
+,Lighting,Lighting,조명
 ,Link ID space is exhausted.,Link ID space is exhausted.,연결 ID를 더 이상 할당할 수 없습니다.
 ,Link does not exist.,Link does not exist.,연결이 존재하지 않습니다.
+,Load a graph and finish or stop current execution first.,Load a graph and finish or stop current execution first.,그래프를 로드하고 현재 실행을 완료하거나 중지하십시오.
 ,Load a graph and finish or stop the current event first.,Load a graph and finish or stop the current event first.,그래프를 불러오고 현재 이벤트를 완료하거나 중지하세요.
 ,Log requires a positive input.,Log requires a positive input.,Log 입력은 양수여야 합니다.
 ,Log2 requires a positive input.,Log2 requires a positive input.,Log2 입력은 양수여야 합니다.
 ,Logic/Bool,Logic/Bool,논리/Bool
-,Math,,
+,Math,Math,수학
 ,Math result is not a finite Float.,Math result is not a finite Float.,연산 결과가 유한한 실숫값이 아닙니다.
 ,Math/Float,Math/Float,수학/Float
 ,Math/Int,Math/Int,수학/Int
-,Math/Random,,
-,Math/Trig,,
+,Math/Random,Math/Random,수학/무작위
+,Math/Trig,Math/Trig,수학/삼각법
 ,Math/Vector2,Math/Vector2,수학/Vector2
 ,Math/Vector3,Math/Vector3,수학/Vector3
 ,Math/Vector4,Math/Vector4,수학/Vector4
@@ -234,6 +242,7 @@
 ,PROP_BRDF_LUT,BRDF Lookup Texture,BRDF 조회 텍스처
 ,PROP_BURST_COUNT,Burst Count,버스트 방출량
 ,PROP_BURST_INTERVAL,Burst Interval,버스트 주기
+,PROP_CAMERA_LAG_SPEED,Camera Lag Speed,카메라 지연 속도
 ,PROP_CAMERA_TYPE,Camera Type,카메라 타입
 ,PROP_CASCADE_SPLIT_LAMBDA,Cascade Split Lambda,캐스케이드 분할 가중치
 ,PROP_CAST_SHADOW,Cast Shadow,그림자
@@ -253,6 +262,7 @@
 ,PROP_CONTROLLER_PATH,Controller Path,애니메이터 컨트롤러 경로
 ,PROP_COVERAGE,Cloud Coverage,구름 커버리지
 ,PROP_CULL_MODE,Cull Mode,컬링 모드
+,PROP_CURRENT_ARM_LENGTH,Current Arm Length,현재 암 길이
 ,PROP_CURRENT_FRAME,Current Frame,현재 프레임
 ,PROP_CURRENT_TIME,Current Time,현재 재생 시간
 ,PROP_DAY_DURATION,Day Duration (s),하루 길이(초)
@@ -263,12 +273,14 @@
 ,PROP_DIRECTION,Direction,방향
 ,PROP_DIRTY,Dirty,갱신 필요
 ,PROP_DISABLE_COLOR,Disable Color,비활성 색
+,PROP_DO_COLLISION_TEST,Do Collision Test,충돌 검사 여부
 ,PROP_DRAG,Drag,공기 저항
 ,PROP_DRAW_MODE,Draw Mode,그리기 모드
 ,PROP_EFFECTIVE_FLAG,Effective Flags,유효 플래그
 ,PROP_EMISSION_RATE,Emission Rate,방출률 (초당)
 ,PROP_EMIT_DIRECTION,Direction,방출 방향
 ,PROP_ENABLED,Enabled,활성화
+,PROP_ENABLE_CAMERA_LAG,Enable Camera Lag,카메라 지연 활성화
 ,PROP_ENABLE_CLOUDS,Enable Clouds,구름 활성화
 ,PROP_ENABLE_COLLISION,Enable Collision,충돌 허용
 ,PROP_ENABLE_TIME_CYCLE,Enable Time Cycle,시간 주기 활성화
@@ -308,31 +320,33 @@
 ,PROP_ID,ID,ID
 ,PROP_INDIRECT_INTENSITY,Indirect Intensity,간접 강도
 ,PROP_INFORMATION,Information,정보
+,PROP_INPUT_ENABLED,Input Enabled,입력 활성화
 ,PROP_INTENSITY,Intensity,강도
 ,PROP_INTERACTABLE,Interactable,상호작용
-,PROP_INTERPOLATION_SPEED,,
+,PROP_INTERPOLATION_SPEED,Interpolation Speed,보간 속도
 ,PROP_INVERSE_INERTIA,Inverse Inertia,역관성
 ,PROP_INVERSE_INERTIA_LOCAL,Local Inverse Inertia,로컬 역관성
+,PROP_INVERT_PITCH,Invert Pitch,상하 회전 반전
 ,PROP_IRRADIANCE_MAP,Irradiance Map,확산광 맵
 ,PROP_IS_3D,3D Audio,3D 오디오
 ,PROP_IS_ACTIVE,Is Active,활성 상태
 ,PROP_IS_LOOPING,Looping,반복 재생
 ,PROP_IS_PLAYING,Playing,재생 중
-,PROP_IS_SERVER_ONLY,,
+,PROP_IS_SERVER_ONLY,Is Server Only,서버 전용 여부
 ,PROP_IS_TRIGGER,Trigger,트리거
-,PROP_KCC_AIR_CONTROL,,
-,PROP_KCC_CENTER,,
-,PROP_KCC_GRAVITY,,
-,PROP_KCC_HEIGHT,,
-,PROP_KCC_IS_GROUNDED,,
-,PROP_KCC_JUMP_FORCE,,
-,PROP_KCC_RADIUS,,
-,PROP_KCC_RUN_SPEED,,
-,PROP_KCC_SKIN_WIDTH,,
-,PROP_KCC_SLOPE_LIMIT,,
-,PROP_KCC_STEP_OFFSET,,
-,PROP_KCC_VELOCITY,,
-,PROP_KCC_WALK_SPEED,,
+,PROP_KCC_AIR_CONTROL,Air Control,공중 제어
+,PROP_KCC_CENTER,Center,중심점
+,PROP_KCC_GRAVITY,Gravity,중력
+,PROP_KCC_HEIGHT,Height,높이
+,PROP_KCC_IS_GROUNDED,Is Grounded,지면 접촉 여부
+,PROP_KCC_JUMP_FORCE,Jump Force,점프력
+,PROP_KCC_RADIUS,Radius,반경
+,PROP_KCC_RUN_SPEED,Run Speed,달리기 속도
+,PROP_KCC_SKIN_WIDTH,Skin Width,스킨 폭
+,PROP_KCC_SLOPE_LIMIT,Slope Limit,경사각 한계
+,PROP_KCC_STEP_OFFSET,Step Offset,계단 높이 제한
+,PROP_KCC_VELOCITY,Velocity,속도
+,PROP_KCC_WALK_SPEED,Walk Speed,걷기 속도
 ,PROP_LANGUAGE,Language,언어
 ,PROP_LAYER_BOTTOM,Layer Bottom Altitude,구름 시작 고도
 ,PROP_LAYER_HEIGHT,Layer Height,구름층 두께
@@ -359,19 +373,23 @@
 ,PROP_MAX_DISTANCE,Max Distance,최대 감쇠 거리
 ,PROP_MAX_HEIGHT,Max Height,최대 높이
 ,PROP_MAX_PARTICLES,Max Particles,최대 파티클 수
+,PROP_MAX_PITCH,Max Pitch,최대 피치
 ,PROP_MESH_HANDLE,Mesh Handle,메쉬 핸들
 ,PROP_MIN,Min,최솟값
 ,PROP_MIN_DISTANCE,Min Distance,최소 감쇠 거리
+,PROP_MIN_PITCH,Min Pitch,최소 피치
 ,PROP_MORPH_SPEED,Morph Speed,대류 피어오름 속도
+,PROP_MOUSE_SENSITIVITY,Mouse Sensitivity,마우스 감도
 ,PROP_NAME,Name,이름
 ,PROP_NEAR_PLANE,Near Plane,근거리 평면
-,PROP_NETWORK_ID,,
+,PROP_NETWORK_ID,Network ID,네트워크 ID
 ,PROP_NORMAL,Normal,법선
 ,PROP_NORMAL_COLOR,Normal Color,기본 색
 ,PROP_OFFSET,Offset,오프셋
+,PROP_ORIENT_ROTATION_TO_MOVEMENT,Orient Rotation to Movement,이동 방향으로 회전 정렬
 ,PROP_ORIGIN,Origin,원점
 ,PROP_ORTHOGRAPHIC_SIZE,Orthographic Size,직교 투영 크기
-,PROP_OWNER_CLIENT_ID,,
+,PROP_OWNER_CLIENT_ID,Owner Client ID,소유자 클라이언트 ID
 ,PROP_PARAMETERS,Parameters,매개변수
 ,PROP_PASS_SHADERS,Pass Shaders,패스별 셰이더
 ,PROP_PIPELINE_SETTINGS,Pipeline Settings,파이프라인 설정
@@ -387,25 +405,28 @@
 ,PROP_POINT_A,Point A,시작점 A
 ,PROP_POINT_B,Point B,끝점 B
 ,PROP_POSITION,Position,위치
-,PROP_POS_THRESHOLD,,
+,PROP_POS_THRESHOLD,Position Threshold,위치 동기화 오차 한계
 ,PROP_POWDER_EFFECT,Powder Effect,파우더 슈가 효과
 ,PROP_PREFAB_PATH,Prefab Path,프리팹 파일 경로
 ,PROP_PREFILTERED_MAP,Prefiltered Environment Map,사전 필터링 환경 맵
 ,PROP_PRESET_NAME,Preset Name,프리셋 이름
 ,PROP_PRESS_COLOR,Press Color,Press 색
 ,PROP_PRIORITY,Priority,우선순위
+,PROP_PROBE_RADIUS,Probe Radius,프로브 반지름
 ,PROP_RADIUS,Radius,반지름
 ,PROP_RANGE,Range,범위
 ,PROP_RATIO,Ratio,비율
 ,PROP_RAYCAST_TARGET,Raycast Target,레이캐스트 타깃
 ,PROP_RENDER,Render,렌더링
+,PROP_REQUIRE_RIGHT_CLICK_ROTATE,Require Right Click to Rotate,우클릭 시에만 회전
 ,PROP_RESOLUTION,Resolution,해상도
 ,PROP_RESTITUTION,Restitution,반발력
 ,PROP_REST_LENGTH,Rest Length,기준 거리
 ,PROP_ROTATION,Rotation,회전
+,PROP_ROTATION_SMOOTH_SPEED,Rotation Smooth Speed,회전 부드러움 속도
 ,PROP_ROTATION_SPEED_MAX,Rotation Speed Max,최대 회전 속도
 ,PROP_ROTATION_SPEED_MIN,Rotation Speed Min,최소 회전 속도
-,PROP_ROT_THRESHOLD,,
+,PROP_ROT_THRESHOLD,Rotation Threshold,회전 동기화 오차 한계
 ,PROP_SCALE,Scale,크기
 ,PROP_SEED,Random Seed,난수 시드
 ,PROP_SETTINGS,Settings,설정
@@ -423,12 +444,15 @@
 ,PROP_SIZE_START,Start Size,시작 크기
 ,PROP_SKELETON_HANDLE,Skeleton Handle,스켈레톤 핸들
 ,PROP_SKY_INTENSITY,Sky Intensity,하늘 강도
+,PROP_SOCKET_OFFSET,Socket Offset,소켓 오프셋
 ,PROP_SPEED_MAX,Initial Speed Max,최대 초기 속력
 ,PROP_SPEED_MIN,Initial Speed Min,최소 초기 속력
 ,PROP_SPOT_FALLOFF_EXPONENT,Falloff Exponent,감쇠 지수
 ,PROP_SPOT_INNER_ANGLE,Inner Angle,내부 각도
 ,PROP_SPOT_OUTER_ANGLE,Outer Angle,외부 각도
 ,PROP_SPREAD_ANGLE,Spread Angle,확산 각도
+,PROP_SPRING_ARM_ENTITY,Spring Arm Entity,스프링 암 엔티티
+,PROP_SPRINT_MULTIPLIER,Sprint Multiplier,질주 배율
 ,PROP_SPRITE,Sprite,스프라이트
 ,PROP_SPRITE_ANIMATION,Sprite Animation,스프라이트 애니메이션
 ,PROP_SPRITE_HANDLE,Sprite Handle,스프라이트 핸들
@@ -436,14 +460,19 @@
 ,PROP_SUN_INTENSITY,Sun Intensity,태양 강도
 ,PROP_SUN_LATITUDE,Sun Latitude,태양 위도
 ,PROP_SUN_SIZE,Sun Size,태양 크기
-,PROP_SYNC_POSITION,,
-,PROP_SYNC_RATE,,
-,PROP_SYNC_ROTATION,,
-,PROP_SYNC_SCALE,,
+,PROP_SYNC_POSITION,Sync Position,위치 동기화
+,PROP_SYNC_RATE,Sync Rate,동기화 주기
+,PROP_SYNC_ROTATION,Sync Rotation,회전 동기화
+,PROP_SYNC_SCALE,Sync Scale,스케일 동기화
 ,PROP_TAGS,Tags,태그
+,PROP_TARGET_ARM_LENGTH,Target Arm Length,목표 암 길이
+,PROP_TARGET_ENTITY,Target Entity,타깃 엔티티
+,PROP_TARGET_OFFSET,Target Offset,타깃 오프셋
 ,PROP_TEXTURE_BINDINGS,Texture Bindings,텍스처 바인딩
-,PROP_TEXTURE_HANDLE,,
+,PROP_TEXTURE_HANDLE,Texture Handle,텍스처 핸들
 ,PROP_TILING,Tiling,반복
+,PROP_TIMELINE_ASSET,Timeline Asset,타임라인 에셋
+,PROP_TIMELINE_PATH,Timeline Path,타임라인 경로
 ,PROP_TIME_OF_DAY,Time of Day,하루 시간
 ,PROP_TOP,Top,상단
 ,PROP_TRANSFORM_ABSOLUTE,World Channels (Ignore Parent),월드 기준 채널 (부모 상속 해제)
@@ -460,34 +489,38 @@
 ,PROP_WORLDMATRIX,World Matrix,월드 매트릭스
 ,PROP_WORLD_MATRIX,World Matrix,월드 매트릭스
 ,PROP_WORLD_TRANSFORM,World Transform,월드 트랜스폼
+,PROP_YAW,Yaw,요 각도
 ,PROP_ZENITH_COLOR,Zenith Color,천정 색상
+,PROP_ZOOM_SENSITIVITY,Zoom Sensitivity,줌 감도
 ,PROP_Z_INDEX,Z-Index,Z 순서
 ,Parameter,Parameter,매개변수
 ,Pass enter to exit only while the gate is open.,Pass enter to exit only while the gate is open.,게이트가 열려 있을 때만 enter를 exit로 전달합니다.
 ,Pass once until reset; state belongs to the graph instance.,Pass once until reset; state belongs to the graph instance.,초기화할 때까지 한 번만 통과합니다. 상태는 그래프 인스턴스에 속합니다.
-,Pause 3D Animation,,
-,Pause Sprite Animation,,
-,Physics,,
+,Pause 3D Animation,Pause 3D Animation,3D 애니메이션 일시정지
+,Pause Sprite Animation,Pause Sprite Animation,스프라이트 애니메이션 일시정지
+,Physics,Physics,물리
 ,Pin default exceeds int32 range:,Pin default exceeds int32 range:,핀 기본값이 int32 범위를 벗어났습니다:
 ,Pin default must be finite and match the parameter type:,Pin default must be finite and match the parameter type:,핀 기본값은 유한하며 매개변수 자료형과 일치해야 합니다:
 ,Pin key does not exist in the node definition.,Pin key does not exist in the node definition.,노드 정의에 핀 키가 없습니다.
 ,Pin keys must be non-empty and unique within a node.,Pin keys must be non-empty and unique within a node.,핀 키는 비어 있지 않아야 하며 노드 안에서 고유해야 합니다.
 ,Pin types must match exactly; conversions are explicit.,Pin types must match exactly; conversions are explicit.,핀 자료형이 정확히 일치해야 합니다. 변환은 명시적으로 지정하세요.
 ,Pipeline,Pipeline,파이프라인
-,Play 3D Animation,,
-,Play Sprite Animation,,
+,Play 3D Animation,Play 3D Animation,3D 애니메이션 재생
+,Play Sprite Animation,Play Sprite Animation,스프라이트 애니메이션 재생
 ,Pointer/reference parameters are not supported by graphs.,Pointer/reference parameters are not supported by graphs.,그래프는 포인터 또는 참조 매개변수를 지원하지 않습니다.
 ,Pointer/reference results are not supported by graphs.,Pointer/reference results are not supported by graphs.,그래프는 포인터 또는 참조 반환값을 지원하지 않습니다.
-,Print Float,,
-,Print Int,,
-,Print Vector,,
+,Print Float,Print Float,Float 출력
+,Print Int,Print Int,Int 출력
+,Print Vector,Print Vector,Vector 출력
 ,Property access binding does not support the requested graph policy.,Property access binding does not support the requested graph policy.,속성 접근 바인딩이 요청한 그래프 정책을 지원하지 않습니다.
 ,Property exposure requires a stable GRAPH_ID.,Property exposure requires a stable GRAPH_ID.,속성을 노출하려면 고정 GRAPH_ID가 필요합니다.
-,Random Float In Range,,
-,Raycast (Line Trace),,
+,Random Float In Range,Random Float In Range,범위 내 무작위 Float
+,Raycast (Line Trace),Raycast (Line Trace),레이캐스트 (선 추적)
 ,Re-entry into an active node is not supported.,Re-entry into an active node is not supported.,실행 중인 노드에 다시 진입할 수 없습니다.
 ,Re-evaluate condition before each body iteration.,Re-evaluate condition before each body iteration.,본문을 반복하기 전에 매번 조건을 다시 평가합니다.
 ,Reflection function binding is unavailable:,Reflection function binding is unavailable:,리플렉션 함수 바인딩을 사용할 수 없습니다:
+,RegisterBuiltins failed: {},RegisterBuiltins failed: {},기본 제공 노드 등록 실패: {}
+,RegisterReflectedGraphNodes failed: {},RegisterReflectedGraphNodes failed: {},리플렉션 그래프 노드 등록 실패: {}
 ,Remainder by zero.,Remainder by zero.,나머지 연산의 제수는 0일 수 없습니다.
 ,Remap input interval has zero width.,Remap input interval has zero width.,Remap 입력 구간의 길이가 0입니다.
 ,Return the absolute value.,Return the absolute value.,절댓값을 반환합니다.
@@ -495,6 +528,7 @@
 ,Run the true or false execution path.,Run the true or false execution path.,참 또는 거짓 실행 경로를 실행합니다.
 ,SHARPEN_SHARPNESS,Sharpness,선명도
 ,STRUCT_AABB,AABB,축 정렬 경계 상자(AABB)
+,STRUCT_ACTION_TIMELINE,Action Timeline,액션 타임라인
 ,STRUCT_ANIMATOR,Animator,애니메이터
 ,STRUCT_AUDIO_LISTENER,Audio Listener,오디오 리스너
 ,STRUCT_AUDIO_SOURCE,Audio Source,오디오 소스
@@ -508,7 +542,7 @@
 ,STRUCT_CAPSULE,Capsule,캡슐
 ,STRUCT_CAPSULE_2D,Capsule 2D,2D 캡슐
 ,STRUCT_CAPSULE_SHAPE,Capsule Shape,캡슐 형상
-,STRUCT_CHARACTER_CONTROLLER,,
+,STRUCT_CHARACTER_CONTROLLER,Character Controller,캐릭터 컨트롤러
 ,STRUCT_CIRCLE,Circle,원
 ,STRUCT_CIRCLE_2D,Circle 2D,2D 원
 ,STRUCT_COLLIDER,Collider,충돌체
@@ -528,8 +562,8 @@
 ,STRUCT_MESH_SHAPE,Mesh Shape,메시 형상
 ,STRUCT_NAME,Name,이름
 ,STRUCT_NATIVE_SCRIPT,Native Script,네이티브 스크립트
-,STRUCT_NETWORK_IDENTITY,,
-,STRUCT_NETWORK_TRANSFORM,,
+,STRUCT_NETWORK_IDENTITY,Network Identity,네트워크 식별자
+,STRUCT_NETWORK_TRANSFORM,Network Transform,네트워크 트랜스폼
 ,STRUCT_PARTICLE_EMITTER,Particle Emitter,파티클 이미터
 ,STRUCT_POST_PROCESS,Post Process,포스트 프로세스
 ,STRUCT_PREFAB_INSTANCE,Prefab Instance,프리팹 인스턴스
@@ -541,34 +575,40 @@
 ,STRUCT_SKINNED_MESH_RENDERER,Skinned Mesh Renderer,스킨드 메시 렌더러
 ,STRUCT_SKY_ATMOSPHERE,Sky Atmosphere,하늘 대기
 ,STRUCT_SPHERE_SHAPE,Sphere Shape,구 형상
+,STRUCT_SPRING_ARM,Spring Arm,스프링 암
 ,STRUCT_SPRITE_ANIMATION,Sprite Animation,스프라이트 애니메이션
 ,STRUCT_SPRITE_RENDERER,Sprite Renderer,스프라이트 렌더러
 ,STRUCT_STATIC_MESH_RENDERER,Static Mesh Renderer,정적 메쉬 렌더러
 ,STRUCT_TAG,Tags,태그
 ,STRUCT_TERRAIN,Terrain,지형
+,STRUCT_THIRD_PERSON_CONTROLLER,Third Person Controller,3인칭 컨트롤러
 ,STRUCT_TRANSFORM,Transform,트랜스폼
 ,STRUCT_TRIGGER_CALLBACK,Trigger Callback,트리거 콜백
 ,STRUCT_UI_INTERACTION_STATE,UI Interaction State,UI 상호작용 상태
 ,STRUCT_UI_RENDER_ORDER,UI Render Order,UI 렌더 순서
 ,STRUCT_VOLUMETRIC_CLOUD,Volumetric Cloud,볼류메트릭 클라우드
 ,STRUCT_WORLD_TRANSFORM,World Transform,월드 트랜스폼
+,Script error on entity {}: {},Script error on entity {}: {},엔티티 {}의 스크립트 오류: {}
 ,Select a Start or Update event entry.,Select a Start or Update event entry.,Start 또는 Update 이벤트 진입점을 선택하세요.
-,Set 3D Animation Play Rate,,
-,Set 3D Animation Time,,
-,Set Actor Active,,
-,Set Actor Location,,
-,Set Actor Visible,,
-,Set Character Velocity,,
-,Set Light Color,,
-,Set Light Enabled,,
-,Set Light Intensity,,
-,Set Linear Velocity,,
-,Set Master Volume,,
-,Set Sprite Animation FPS,,
-,Set Sprite Frame,,
-,Set Sprite Play Rate,,
+,Select a valid Trigger event entry.,Select a valid Trigger event entry.,유효한 Trigger 이벤트 항목을 선택하십시오.
+,Set 3D Animation Play Rate,Set 3D Animation Play Rate,3D 애니메이션 재생 속도 설정
+,Set 3D Animation Time,Set 3D Animation Time,3D 애니메이션 시간 설정
+,Set Actor Active,Set Actor Active,액터 활성화 설정
+,Set Actor Location,Set Actor Location,액터 위치 설정
+,Set Actor Visible,Set Actor Visible,액터 가시성 설정
+,Set Arm Length,Set Arm Length,암 길이 설정
+,Set Character Velocity,Set Character Velocity,캐릭터 속도 설정
+,Set Light Color,Set Light Color,조명 색상 설정
+,Set Light Enabled,Set Light Enabled,조명 활성화 설정
+,Set Light Intensity,Set Light Intensity,조명 강도 설정
+,Set Linear Velocity,Set Linear Velocity,선속도 설정
+,Set Master Volume,Set Master Volume,마스터 볼륨 설정
+,Set Sprite Animation FPS,Set Sprite Animation FPS,스프라이트 애니메이션 FPS 설정
+,Set Sprite Frame,Set Sprite Frame,스프라이트 프레임 설정
+,Set Sprite Play Rate,Set Sprite Play Rate,스프라이트 재생 속도 설정
 ,Shader,Shader,셰이더
 ,Shader nodes cannot declare execution or object pins.,Shader nodes cannot declare execution or object pins.,셰이더 노드에는 실행 핀 또는 객체 핀을 선언할 수 없습니다.
+,"Shader nodes cannot declare execution, object, or string pins.","Shader nodes cannot declare execution, object, or string pins.","셰이더 노드는 실행, 객체 또는 문자열 핀을 선언할 수 없습니다."
 ,ShaderGraph.Cycle,A cycle was encountered while resolving the color input.,색상 입력을 찾는 중 순환 연결을 발견했습니다.
 ,ShaderGraph.DomainRequired,A Shader graph is required.,Shader 도메인의 그래프가 필요합니다.
 ,ShaderGraph.InvalidColor,A finite Float4 color value is required.,유한한 Float4 색상 값이 필요합니다.
@@ -577,33 +617,38 @@
 ,ShaderGraph.UnsupportedNode,This node is not supported by the color shader generator.,색상 셰이더 생성기가 지원하지 않는 노드입니다.
 ,Shadow,Shadow,그림자
 ,Shape,Shape,형상
-,Sin (Degrees),,
+,Sin (Degrees),Sin (Degrees),사인 (도)
 ,Sky,Sky,하늘
 ,SmoothStep requires edge0 < edge1.,SmoothStep requires edge0 < edge1.,SmoothStep에서는 edge0가 edge1보다 작아야 합니다.
 ,Specify exactly one of GRAPH_PURE(id) and GRAPH_CALLABLE(id).,Specify exactly one of GRAPH_PURE(id) and GRAPH_CALLABLE(id).,GRAPH_PURE(id)와 GRAPH_CALLABLE(id) 중 하나만 지정하세요.
 ,Specify exactly one of GRAPH_READONLY and GRAPH_READWRITE.,Specify exactly one of GRAPH_READONLY and GRAPH_READWRITE.,GRAPH_READONLY와 GRAPH_READWRITE 중 하나만 지정하세요.
 ,Spot Inner Angle (Degrees),Spot Inner Angle (Degrees),스포트 내부 각도(도)
 ,Spot Outer Angle (Degrees),Spot Outer Angle (Degrees),스포트 외부 각도(도)
-,Sprite,,
+,SpringArm Add Pitch,SpringArm Add Pitch,스프링 암 상하 회전 추가
+,SpringArm Add Yaw,SpringArm Add Yaw,스프링 암 좌우 회전 추가
+,Sprite,Sprite,스프라이트
 ,Sqrt requires a non-negative input.,Sqrt requires a non-negative input.,Sqrt 입력은 0 이상이어야 합니다.
 ,Start already ran in this instance. Reload to restart.,Start already ran in this instance. Reload to restart.,이 인스턴스에서 Start가 이미 실행됐습니다. 다시 시작하려면 다시 불러오세요.
-,Stop 3D Animation,,
-,Stop All Audio,,
-,Stop Sprite Animation,,
+,Stop 3D Animation,Stop 3D Animation,3D 애니메이션 정지
+,Stop All Audio,Stop All Audio,모든 오디오 정지
+,Stop Sprite Animation,Stop Sprite Animation,스프라이트 애니메이션 정지
+,Successfully hot-swapped runtime graph executors.,Successfully hot-swapped runtime graph executors.,런타임 그래프 실행기를 성공적으로 핫스왑했습니다.
+,Successfully loaded graph: '{}',Successfully loaded graph: '{}',그래프를 성공적으로 로드했습니다: '{}'
 ,Sun,Sun,태양
 ,TONE_MAPPING_EXPOSURE,Exposure,노출
 ,TONE_MAPPING_GAMMA,Gamma,감마
 ,Texture,Texture,텍스처
 ,The reflected execution source is unavailable.,The reflected execution source is unavailable.,리플렉션 실행 소스를 사용할 수 없습니다.
 ,These pins are already connected.,These pins are already connected.,이 핀들은 이미 연결되어 있습니다.
-,Time,,
+,Time,Time,시간
 ,Tolerance must be non-negative.,Tolerance must be non-negative.,허용 오차는 0 이상이어야 합니다.
-,Transformation,,
+,Transformation,Transformation,변환
 ,UI,UI,UI
 ,Unknown execution error.,Unknown execution error.,알 수 없는 실행 오류입니다.
 ,Unknown graph metadata or parameter:,Unknown graph metadata or parameter:,알 수 없는 그래프 메타데이터 또는 매개변수:
 ,Unknown node type:,Unknown node type:,알 수 없는 노드 유형:
 ,Unknown property graph metadata:,Unknown property graph metadata:,알 수 없는 속성 그래프 메타데이터:
+,Unknown script error on entity {},Unknown script error on entity {},엔티티 {}의 알 수 없는 스크립트 오류
 ,Unregistered node type:,Unregistered node type:,등록되지 않은 노드 유형:
 ,Unsupported by-value parameter:,Unsupported by-value parameter:,지원하지 않는 값 전달 매개변수:
 ,Unsupported native return value.,Unsupported native return value.,지원하지 않는 네이티브 반환값입니다.
@@ -613,5 +658,6 @@
 ,VIGNETTE_INTENSITY,Intensity,강도
 ,VIGNETTE_ROUNDNESS,Roundness,원형도
 ,VIGNETTE_SMOOTHNESS,Smoothness,부드러움
+,Value is not a string.,Value is not a string.,값이 문자열이 아닙니다.
 ,Value is outside the native int32 range.,Value is outside the native int32 range.,값이 네이티브 int32 범위를 벗어났습니다.
 ,Xor,Xor,XOR

@@ -1,7 +1,7 @@
 # 통합 개발 우선순위와 완료 기준
 
-- 작성일: 2026-10-24 (최종 갱신: 2026-11-03)
-- 상태: 2026-11-03 단계 1(F02), 단계 2(F05, F06, F07, F08), 단계 3(P1-E/3-A, 3-B), 단계 4(F12), 빌드/배포(F13, F04) 및 강화학습(F09) 구현 반영, Standalone Client 독립 실행 및 Unity 빌드 정합성 검증 완료, 단일 CPU 파티클 시스템 1단계 코어(Engine 4절) 구축, AnimationTimelineEditorPlan 계획 반영, 네트워크 기초 파이프라인(NetworkFoundationPlan Phase 1~5) 및 키네마틱 캐릭터 컨트롤러(KinematicCharacterControllerPlan) 구축 완료.
+- 작성일: 2026-10-24 (최종 갱신: 2026-11-04)
+- 상태: 2026-11-04 단계 1(F02), 단계 2(F05, F06, F07, F08), 단계 3(P1-E/3-A, 3-B), 단계 4(F12), 빌드/배포(F13, F04) 및 강화학습(F09) 구현 반영, Standalone Client 독립 실행 및 Unity 빌드 정합성 검증 완료, 단일 CPU 파티클 시스템 1단계 코어(Engine 4절) 구축, AnimationTimelineEditorPlan(에디터 저작 도구 및 런타임 액션 타임라인 재생 시스템 Phase 1~5) 구축 완료, 네트워크 기초 파이프라인 및 키네마틱 캐릭터 컨트롤러 구축 완료, 대화형 3D 모델 임포트 프리뷰 시스템(InteractiveModelImportPreviewPlan) 수립 및 뷰포트 인프라 구축 반영.
 - 최신 근거: [코드·문서 정합성과 잔여 위험 점검](CodeDocumentationAudit-2026-11-02.md). 구현 반영과 전체 완료 기준 통과를 구분한다.
 - 공통 기준: [EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md)
 - 분류와 이관: [SourceOrganizationGuidelines.md](SourceOrganizationGuidelines.md), [BuildConfigurationAndPreprocessing.md](BuildConfigurationAndPreprocessing.md)
@@ -27,6 +27,8 @@ Engine·Render·Editor·Client 계획에서 무엇을 먼저 연결하고 무엇
 - [NetworkFoundationPlan.md](NetworkFoundationPlan.md): 소켓 전송 계층, 패킷 직렬화, 세션 및 ECS 리플리케이션·RPC 개발 계획.
 - [AnimationTimelineEditorPlan.md](AnimationTimelineEditorPlan.md): 애니메이션·이펙트·노티파이 통합 타임라인 저작 도구 및 비-PIE 실시간 프리뷰 계획.
 - [KinematicCharacterControllerPlan.md](KinematicCharacterControllerPlan.md): 키네마틱 캐릭터 컨트롤러(KCC), 지면 감지, 경사로·계단 오르기 및 슬라이딩 물리 계획.
+- [ThirdPersonCharacterSystemPlan.md](ThirdPersonCharacterSystemPlan.md): 3인칭 캐릭터(KCC) 이동, 스프링암 카메라 제어, 3D 지면 충돌 안정화 및 애니메이션 연동 계획.
+- [InteractiveModelImportPreviewPlan.md](InteractiveModelImportPreviewPlan.md): 대화형 3D 모델 임포트 프리뷰 시스템, 실시간 축/스케일 변환 및 뷰포트 일원화 계획.
 
 전체 작업 선택은 이 문서, 기능 내부의 구현 순서·실패 정책은 상세 계획을 따른다.
 새 사용자 결정이 우선하며 충돌이 생기면 이 문서와 해당 계획을 함께 갱신한다.
@@ -170,6 +172,21 @@ Engine·Render·Editor·Client 계획에서 무엇을 먼저 연결하고 무엇
      - Albedo에 단색(Color Uniform) 직결, Roughness/Metallic에 스칼라 슬라이더 직결, Emission에 HDR Color 직결 등 텍스처 없는 절차적/상수 기반 머티리얼 작성을 완전하게 지원.
 - 완료 기준: 텍스처가 없는 머티리얼에서 이전 드로우콜의 텍스처 오염이나 하얗게 새는 현상이 발생하지 않고, 머티리얼 그래프에서 연결된 상수 컬러 및 채널 분리 데이터가 G-Buffer와 최종 라이팅에 정확히 반영된다.
 
+### P1-F. 대화형 3D 모델 임포트 프리뷰 시스템 및 에디터 뷰포트 일원화
+
+- **2026-11-04 현황 및 구현 반영**:
+  - 상세 계획: [InteractiveModelImportPreviewPlan.md](InteractiveModelImportPreviewPlan.md) 및 [EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md) 16절(3D 뷰포트 일원화), 17절(가변 스플리터).
+  - **Phase 1 (뷰포트 및 변환 인프라 구축 — 완료)**:
+    - `EditorCameraController`: `Alt+LMB`(피벗 중심 Orbit), `Alt+MMB`/`MMB`(Pan), `Alt+RMB`/휠(Zoom) 구현 및 뷰포트 호버 시에만 휠 스크롤 소비(`allowScroll`)로 모달/UI 스크롤 간섭 방지.
+    - `PreviewViewportWidget`: 포스트프로세스 체인(`ExecuteChain`) 이후 디스플레이 RT에 바닥 그리드(`m_Grid.SubmitGrid`) 렌더링 순서 교정, 정지 시 본 행렬 `Identity` 초기화로 원본 T-포즈 보장, `InvisibleButton`과 오버레이 툴바 Z-order 분리로 툴바 버튼 클릭 복구.
+    - `ModelEditor`: 프로퍼티 창에 `PreviewViewportWidget` 및 수평 가변 스플리터(`Splitter`) 장착 완료.
+    - `ModelConverter` & `ModelImporter`: `UniformScale`, `RotationOffset` 파라미터 확장 및 Assimp 루트 노드 변환 연동. `Resources/Data/Localization/Editor.csv`에 `ModelImport.*` 로캘 키 추가.
+    - `ContentBrowserPanel`: 외부 드래그 앤 드롭 시 모델 확장자(`.glb`, `.gltf`, `.fbx`, `.obj`) 감지 모달 트리거 및 기본 팝업(`DrawModelImportModal`) 연동.
+  - **후속 진행 (Phase 2~4)**:
+    - 모달 내 `PreviewViewportWidget` 임베딩 및 임시 프리뷰 씬 엔티티 트랜스폼 실시간 동기화 (슬라이더 조작 시 무지연 60 FPS 회전/스케일 피드백 제공).
+    - 가변 스플리터 적용 및 외부 에셋 썸네일 베이킹/프리셋 시스템 확장.
+- 완료 기준: 모달 오픈 시 3D 모델이 좌측 뷰포트에 즉각 표시되고, 우측 슬라이더와 원클릭 버튼("Pitch 180" 등) 조작 시 모델의 방향/스케일이 실시간 반영되며, 최종 임포트 결과물이 모달 세팅과 100% 일치한다.
+
 ## 5. P2: 작은 결과물과 기본 실행 경로
 
 ### P2-A. 게임 실행의 연결 및 비주얼 스크립팅 마감
@@ -262,7 +279,7 @@ Engine·Render·Editor·Client 계획에서 무엇을 먼저 연결하고 무엇
 선택한 기능의 기본 실행·수명·저장·계측이 검증된 후 필요한 항목을 확장한다.
 
 - Engine 4·5·7절: CPU 파티클→다중 이미터·모듈, 스플라인 경로, 독립 트레일. 서로 불필요한 선행 조건으로 묶지 않는다.
-- Engine 9·10절 및 [AnimatorGraphPlan.md](AnimatorGraphPlan.md): 기존 스켈레탈 평가·ASM·1D 블렌드·저작 UI·계층 연결의 정확성과 저장 보호를 검증한 뒤, Phase 5(AnimNotify, 레이어/본 마스크), [AnimationTimelineEditorPlan.md](AnimationTimelineEditorPlan.md)의 애니메이션·이펙트·노티파이 통합 타임라인 저작 도구, 2D 블렌드·소켓·IK·리타게팅을 확장한다.
+- Engine 9·10절 및 [AnimatorGraphPlan.md](AnimatorGraphPlan.md): 기존 스켈레탈 평가·ASM·1D 블렌드·저작 UI·계층 연결의 정확성과 저장 보호를 검증한 뒤, Phase 5(AnimNotify, 레이어/본 마스크), [AnimationTimelineEditorPlan.md](AnimationTimelineEditorPlan.md)의 애니메이션·이펙트·노티파이 통합 타임라인 저작 도구 및 런타임 재생 시스템(Phase 1~5 완료), 2D 블렌드·소켓·IK·리타게팅을 확장한다.
 - Engine 11절: 실제 요구에 맞는 텍스트 스크립트 언어/VM 선택·엔진 바인딩·배포. 네이티브 모듈과 지원 범위를 구분한다.
 - ImGui 10·11·14절: 독립 프리팹 편집, 참조 색인·누락 검사, 임포트 옵션·재임포트, 검색·썸네일·미리보기와 비용 제한.
 - Engine 14절: 해당 예제에 필요한 캐릭터 이동·게임 저장·카메라·오디오·UI 위젯·타일맵·비동기 로딩을 작은 흐름으로 연결한다.
