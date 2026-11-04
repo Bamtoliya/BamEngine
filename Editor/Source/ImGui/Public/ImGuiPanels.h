@@ -16,3 +16,5 @@
 #include "AnimatorGraphPanel.h"
 #include "UnifiedSettingsPanel.h"
 #include "AssetReferencePanel.h"
+#include "AnimationTimelinePanel.h"
+#include "NetworkProfilerPanel.h"

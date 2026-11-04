@@ -111,12 +111,12 @@ void Runtime::FixedUpdate(f32 dt)
 	SystemManager::Get().FixedUpdate(m_GlobalRegistry, SceneManager::Get().GetActiveScenes(), dt);
 	
 }
-void Runtime::Update(f32 dt, bool updateInput)
+void Runtime::Update(f32 dt, bool updateInput, uint8 phaseMask)
 {
 	if (updateInput) InputManager::Get().Update(dt);
 	AudioManager::Get().Update(dt);
 
-	SystemManager::Get().Update(m_GlobalRegistry, SceneManager::Get().GetActiveScenes(), dt);
+	SystemManager::Get().Update(m_GlobalRegistry, SceneManager::Get().GetActiveScenes(), dt, phaseMask);
 }
 void Runtime::LateUpdate(f32 dt)
 {

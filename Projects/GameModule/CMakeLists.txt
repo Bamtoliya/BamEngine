@@ -52,6 +52,7 @@ set(GAME_REFLECTION_HEADERS "${GAME_SOURCE_DIR}/GameGameplayLibrary.h")
 reflection_generate(
     TARGET GameModule
     MODULE GameModule
+    TYPE_LIST_METADATA Component
     CXX_STANDARD 23
     HEADERS ${GAME_REFLECTION_HEADERS}
     HEADER_INCLUDE_ROOT "${GAME_SOURCE_DIR}"

@@ -26,6 +26,7 @@ enum class EResourceType : uint32
 	Scene,
 	Save,
 	SpriteAnimation,
+	ActionTimeline,
 };
 
 STRUCT()

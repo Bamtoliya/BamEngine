@@ -21,5 +21,7 @@ public:
 private:
 	void UpdateEmitter(struct ParticleEmitterComponent& emitter, const struct WorldTransformComponent& transform, f32 dt);
 	void SpawnParticle(struct ParticleEmitterComponent& emitter, const struct WorldTransformComponent& transform);
+
+	virtual uint8 GetExecutionPhases() const override { return static_cast<uint8>(ESystemPhase::Presentation); }
 };
 END

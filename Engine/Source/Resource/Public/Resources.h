@@ -12,3 +12,4 @@
 #include "Skeleton.h"
 #include "Script.h"
 #include "AudioClip.h"
+#include "ActionTimelineAsset.h"

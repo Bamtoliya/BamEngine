@@ -167,6 +167,10 @@ Handle ResourceManager::LoadFile(const wstring& filePath)
 		WStrToStr(relativePath), WStrToStr(absolutePath.wstring()), WStrToStr(logicalExtension));
 	return {};
 }
+Handle ResourceManager::LoadFile(const string& filePath)
+{
+	return LoadFile(StrToWStr(filePath));
+}
 void ResourceManager::RegisterExplicitLoader()
 {
 	auto textureLoader = [this](wstring key, wstring path) -> Handle

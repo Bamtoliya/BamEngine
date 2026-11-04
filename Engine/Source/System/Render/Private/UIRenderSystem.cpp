@@ -6,6 +6,11 @@
 #include "ResourceManager.h"
 #include "CoreComponents.h"
 
+Engine::UIRenderSystem* Engine::UIRenderSystem::Create(void* arg)
+{
+    return new UIRenderSystem();
+}
+
 void Engine::UIRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& activeScenes, f32 dt)
 {
     auto& renderer = Renderer::Get();

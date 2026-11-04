@@ -15,7 +15,7 @@ public:
 	virtual void Free();
 public:
 	void FixedUpdate(entt::registry& registry, const vector<Scene*>& activeScenes, f32 dt);
-	void Update(entt::registry& registry, const vector<Scene*>& activeScenes, f32 dt);
+	void Update(entt::registry& registry, const vector<Scene*>& activeScenes, f32 dt, uint8 phaseMask = static_cast<uint8>(ESystemPhase::All));
 	void LateUpdate(entt::registry& registry, const vector<Scene*>& activeScenes, f32 dt);
 	void Sumbit(entt::registry& registry, const vector<Scene*>& activeScenes, f32 dt);
 public:
@@ -63,7 +63,7 @@ inline void SystemManager::RemoveSystem()
 	{
 		ISystem* system = it->second;
 		m_Systems.erase(std::remove(m_Systems.begin(), m_Systems.end(), system), m_Systems.end());
-		Safe_Delete(system);
+		Safe_Release(system);
 		m_SystemMap.erase(it);
 	}
 }

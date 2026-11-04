@@ -19,6 +19,7 @@ public:
 	void ToggleOpen() { m_Open = !m_Open; }
 	void Open() { m_Open = true; }
 	void Close() { m_Open = false; }
+	void Focus() { m_Open = true; m_FocusRequested = true; }
 	bool IsFocused() const { return m_Focused; }
 	virtual EShortcutContext GetShortcutContext() const { return EShortcutContext::Global; }
 public:
@@ -32,6 +33,7 @@ protected:
 	bool m_Open = true;
 	bool m_Focused = false;
 	bool m_Hovered = false;
+	bool m_FocusRequested = false;
 	wstring m_Name = L"ImGui Panel";
 	string m_DisplayNameKey;
 };

@@ -493,4 +493,56 @@ namespace Engine::GraphGameplay
 		const auto* kcc = reg.try_get<CharacterControllerComponent>(entity);
 		return kcc ? kcc->GroundAngle : 0.0f;
 	}
+
+	// ── 스프링 암 노드 (SpringArm) ──
+	FUNCTION(GRAPH_CALLABLE("SpringArm.AddPitch"), DISPLAY_NAME("SpringArm Add Pitch"), CATEGORY("Camera"),
+		GRAPH_PIN_DEFAULT("delta", 0.0f))
+		inline void SpringArmAddPitch(float delta)
+	{
+		Scene* scene = GraphSystem::GetCurrentScene();
+		entt::entity entity = GraphSystem::GetCurrentEntity();
+		if (!scene || entity == entt::null) return;
+
+		auto& reg = scene->GetRegistry();
+		auto* arm = reg.try_get<SpringArmComponent>(entity);
+		if (arm) arm->AddPitch(delta);
+	}
+
+	FUNCTION(GRAPH_CALLABLE("SpringArm.AddYaw"), DISPLAY_NAME("SpringArm Add Yaw"), CATEGORY("Camera"),
+		GRAPH_PIN_DEFAULT("delta", 0.0f))
+		inline void SpringArmAddYaw(float delta)
+	{
+		Scene* scene = GraphSystem::GetCurrentScene();
+		entt::entity entity = GraphSystem::GetCurrentEntity();
+		if (!scene || entity == entt::null) return;
+
+		auto& reg = scene->GetRegistry();
+		auto* arm = reg.try_get<SpringArmComponent>(entity);
+		if (arm) arm->AddYaw(delta);
+	}
+
+	FUNCTION(GRAPH_CALLABLE("SpringArm.SetArmLength"), DISPLAY_NAME("Set Arm Length"), CATEGORY("Camera"),
+		GRAPH_PIN_DEFAULT("length", 4.0f))
+		inline void SpringArmSetArmLength(float length)
+	{
+		Scene* scene = GraphSystem::GetCurrentScene();
+		entt::entity entity = GraphSystem::GetCurrentEntity();
+		if (!scene || entity == entt::null) return;
+
+		auto& reg = scene->GetRegistry();
+		auto* arm = reg.try_get<SpringArmComponent>(entity);
+		if (arm) arm->TargetArmLength = length;
+	}
+
+	FUNCTION(GRAPH_PURE("SpringArm.GetArmLength"), DISPLAY_NAME("Get Arm Length"), CATEGORY("Camera"))
+		inline float SpringArmGetArmLength()
+	{
+		Scene* scene = GraphSystem::GetCurrentScene();
+		entt::entity entity = GraphSystem::GetCurrentEntity();
+		if (!scene || entity == entt::null) return 4.0f;
+
+		auto& reg = scene->GetRegistry();
+		const auto* arm = reg.try_get<SpringArmComponent>(entity);
+		return arm ? arm->CurrentArmLength : 4.0f;
+	}
 }

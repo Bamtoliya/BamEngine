@@ -35,11 +35,11 @@ void SystemManager::FixedUpdate(entt::registry& registry, const vector<Scene*>& 
 	}
 }
 
-void SystemManager::Update(entt::registry& registry, const vector<Scene*>& activeScenes, f32 dt)
+void SystemManager::Update(entt::registry& registry, const vector<Scene*>& activeScenes, f32 dt, uint8 phaseMask)
 {
 	for (ISystem* system : m_Systems)
 	{
-		if (system->IsActive())
+		if (system->IsActive() && (system->GetExecutionPhases() & phaseMask))
 			system->OnUpdate(registry, activeScenes, dt);
 	}
 }
@@ -75,7 +75,7 @@ void SystemManager::ClearSystems()
 {
 	for (ISystem* system : m_Systems)
 	{
-		Safe_Delete(system);
+		Safe_Release(system);
 	}
 	m_Systems.clear();
 	m_SystemMap.clear();

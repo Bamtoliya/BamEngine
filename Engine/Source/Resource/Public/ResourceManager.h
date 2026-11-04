@@ -58,6 +58,7 @@ public:
 	vector<Handle> GetResourceHandles(uint64 typeHash);
 public:
 	EResult ImportFolder(const wstring& folderPath);
+	Handle LoadFile(const string& filePath);
 	Handle LoadFile(const wstring& filePath);
 	void RegisterExplicitLoader();
 	EResult DestroyResource(const Handle& handle);

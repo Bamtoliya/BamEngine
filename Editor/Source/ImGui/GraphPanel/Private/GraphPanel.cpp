@@ -187,16 +187,17 @@ void GraphPanel::DrawMenuBar()
 {
 	if (!ImGui::BeginMenuBar()) return;
 	// 1. [파일 (File)] 메뉴
+	auto& sm = ShortcutManager::Get();
 	if (ImGui::BeginMenu(LOCAL_LABEL("UI_FILE").c_str()))
 	{
-		if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.Open").c_str(), "Ctrl+O"))
+		if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.Open").c_str(), sm.GetShortcutHint("Graph.Open")))
 		{
 			if (GetDocument().Data.GetNodes().empty()) OpenDocument();
 			else ImGui::OpenPopup(LOCAL_LABEL("GraphPanel.ConfirmOpen").c_str());
 		}
-		if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.Save").c_str(), "Ctrl+S"))
+		if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.Save").c_str(), sm.GetShortcutHint("Graph.Save")))
 			SaveDocument(false);
-		if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.SaveAs").c_str(), "Ctrl+Shift+S"))
+		if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.SaveAs").c_str(), sm.GetShortcutHint("Graph.SaveAs")))
 			SaveDocument(true);
 		ImGui::EndMenu();
 	}

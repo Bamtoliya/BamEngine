@@ -196,11 +196,12 @@ void GraphPanel::DrawCanvas(float height)
 			BreakAllNodeLinks(targetNodeId);
 			ImGui::CloseCurrentPopup();
 		}
+		auto& sm = ShortcutManager::Get();
 		if (targetNodeId != 0)
 		{
 			const bool isBp = HasBreakpoint(targetNodeId);
 			const char* breakpointKey = isBp ? "GraphPanel.RemoveBreakpoint" : "GraphPanel.ToggleBreakpoint";
-			if (ImGui::MenuItem(LOCAL_LABEL(breakpointKey).c_str(), "F9"))
+			if (ImGui::MenuItem(LOCAL_LABEL(breakpointKey).c_str(), sm.GetShortcutHint("Graph.ToggleBreakpoint")))
 				ToggleBreakpoint(targetNodeId);
 		}
 		if (document.SelectedNodes.size() >= 2)
@@ -208,20 +209,20 @@ void GraphPanel::DrawCanvas(float height)
 			ImGui::Separator();
 			if (ImGui::BeginMenu(LOCAL_LABEL("GraphPanel.Alignment").c_str()))
 			{
-				if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.AlignTop").c_str(), "Shift+W")) AlignSelectedNodes('W');
-				if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.AlignBottom").c_str(), "Shift+S")) AlignSelectedNodes('S');
-				if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.AlignLeft").c_str(), "Shift+A")) AlignSelectedNodes('A');
-				if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.AlignRight").c_str(), "Shift+D")) AlignSelectedNodes('D');
+				if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.AlignTop").c_str(), sm.GetShortcutHint("Graph.AlignTop"))) AlignSelectedNodes('W');
+				if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.AlignBottom").c_str(), sm.GetShortcutHint("Graph.AlignBottom"))) AlignSelectedNodes('S');
+				if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.AlignLeft").c_str(), sm.GetShortcutHint("Graph.AlignLeft"))) AlignSelectedNodes('A');
+				if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.AlignRight").c_str(), sm.GetShortcutHint("Graph.AlignRight"))) AlignSelectedNodes('D');
 				const bool canDistribute = document.SelectedNodes.size() >= 3;
-				if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.DistributeHorizontal").c_str(), "Shift+H", false, canDistribute))
+				if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.DistributeHorizontal").c_str(), sm.GetShortcutHint("Graph.DistributeHoriz"), false, canDistribute))
 					AlignSelectedNodes('H');
-				if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.DistributeVertical").c_str(), "Shift+V", false, canDistribute))
+				if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.DistributeVertical").c_str(), sm.GetShortcutHint("Graph.DistributeVert"), false, canDistribute))
 					AlignSelectedNodes('V');
 				ImGui::EndMenu();
 			}
 		}
 		ImGui::Separator();
-		if (ImGui::MenuItem(LOCAL_CSTR("GraphPanel.Delete"), "Delete")) DeleteSelection();
+		if (ImGui::MenuItem(LOCAL_CSTR("GraphPanel.Delete"), sm.GetShortcutHint("Graph.Delete"))) DeleteSelection();
 		ImGui::EndPopup();
 	}
 	// ── 핀 우클릭 메뉴 ──
@@ -691,6 +692,7 @@ void GraphPanel::HandleConnections(const ImVec2& origin, bool canvasHovered)
 	// 2. 링크 및 노드 삭제 처리
 	if (ed::BeginDelete())
 	{
+		std::vector<Engine::GraphLinkId> linksToDelete;
 		ed::LinkId linkId;
 		while (ed::QueryDeletedLink(&linkId))
 		{
@@ -698,15 +700,12 @@ void GraphPanel::HandleConnections(const ImVec2& origin, bool canvasHovered)
 			{
 				for (const auto& [id, edId] : document.Links)
 				{
-					if (edId == static_cast<int>(linkId.Get()))
-					{
-						if (ApplyResult(document.Data.Disconnect(id))) document.Links.erase(id);
-						break;
-					}
+					if (edId == static_cast<int>(linkId.Get())) { linksToDelete.push_back(id); break; }
 				}
 			}
 		}
-		// ★ 추가: 선택 노드 Delete 키 삭제 처리
+
+		std::vector<Engine::GraphNodeId> nodesToDelete;
 		ed::NodeId delNodeId;
 		while (ed::QueryDeletedNode(&delNodeId))
 		{
@@ -715,16 +714,19 @@ void GraphPanel::HandleConnections(const ImVec2& origin, bool canvasHovered)
 				const int viewId = static_cast<int>(delNodeId.Get());
 				for (const auto& [nodeId, view] : document.Nodes)
 				{
-					if (view.Id == viewId)
-					{
-						document.SelectedNodes = { nodeId };
-						DeleteSelection();
-						break;
-					}
+					if (view.Id == viewId) { nodesToDelete.push_back(nodeId); break; }
 				}
 			}
 		}
 		ed::EndDelete();
+
+		// ed::EndDelete() 트랜잭션 종료 후 안전하게 일괄 삭제 수행
+		if (!linksToDelete.empty() || !nodesToDelete.empty())
+		{
+			document.SelectedLinks = std::move(linksToDelete);
+			document.SelectedNodes = std::move(nodesToDelete);
+			DeleteSelection();
+		}
 	}
 }
 void GraphPanel::ReadSelection()

@@ -115,6 +115,7 @@ target_link_libraries(Engine
         d3d12.lib
         dxgi.lib
         dxguid.lib
+        ws2_32.lib
         $<$<CONFIG:Debug>:${CMAKE_SOURCE_DIR}/ThirdParty/FMOD/lib/x64/fmodL_vc.lib>
         $<$<NOT:$<CONFIG:Debug>>:${CMAKE_SOURCE_DIR}/ThirdParty/FMOD/lib/x64/fmod_vc.lib>
 )

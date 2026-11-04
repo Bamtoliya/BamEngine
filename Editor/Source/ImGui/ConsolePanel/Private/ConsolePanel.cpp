@@ -424,16 +424,15 @@ void ConsolePanel::DrawLog()
             const float rightPad = closeBtnW + copyBtnW + ImGui::GetStyle().ItemSpacing.x * 2.0f;
             ImGui::SameLine(ImGui::GetWindowWidth() - rightPad);
 
-            if (ImGui::SmallButton(ICON_FA_COPY " 복사"))
+            if (ImGui::SmallButton((std::string(ICON_FA_COPY " ") + LOCAL("EditorCommon.Copy")).c_str()))
                 ImGui::SetClipboardText(selected.Entry.Message.c_str());
             if (ImGui::IsItemHovered())
                 ImGui::SetTooltip("%s", LOCAL_CSTR("Console.CopyHint"));
-
             ImGui::SameLine();
             if (ImGui::SmallButton(ICON_FA_XMARK "##CloseDetail"))
                 m_SelectedRowIndex = -1;
             if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("닫기");
+                ImGui::SetTooltip("%s", LOCAL_CSTR("EditorCommon.Close"));
 
             ImGui::Separator();
 

@@ -46,7 +46,7 @@ public:
 	// 호스트가 고정 스텝의 크기와 실행 횟수를 결정합니다.
 	void FixedUpdate(f32 dt);
 	// 호스트에서 입력을 먼저 갱신했다면 같은 입력 샘플을 재사용합니다.
-	void Update(f32 dt, bool updateInput = true);
+	void Update(f32 dt, bool updateInput = true, uint8 phaseMask = static_cast<uint8>(ESystemPhase::All));
 	void LateUpdate(f32 dt);
 	EResult Render(f32 dt);
 #pragma endregion

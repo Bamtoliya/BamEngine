@@ -23,7 +23,6 @@ void NetworkSystem::Free()
         m_Driver.reset();
     }
     m_NetIdToEntity.clear();
-    delete this;
 }
 
 EResult NetworkSystem::Initialize(void* arg)
