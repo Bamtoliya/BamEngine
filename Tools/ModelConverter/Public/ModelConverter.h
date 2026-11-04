@@ -130,6 +130,8 @@ namespace Tools::ModelConversion
     {
         bool FlipUVs = true;
         bool ConvertToLeftHanded = false;
+        float UniformScale = 1.0f;
+        std::array<float, 3> RotationOffset{ 0.0f, 0.0f, 0.0f }; // Euler angles in degrees (Pitch, Yaw, Roll)
     };
 
     enum class Error

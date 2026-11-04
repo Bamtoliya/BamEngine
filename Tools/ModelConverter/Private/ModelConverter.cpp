@@ -115,8 +115,20 @@ namespace Tools::ModelConversion
             NodeData node;
             node.Name = source.mName.C_Str();
             node.ParentIndex = current.ParentIndex;
-            node.LocalTransform = CopyMatrixColumnMajor(source.mTransformation);
-
+            aiMatrix4x4 localMat = source.mTransformation;
+            if (current.ParentIndex == -1)
+            {
+                aiMatrix4x4 rotX, rotY, rotZ, scaleMat;
+                const float radX = options.RotationOffset[0] * (3.14159265359f / 180.0f);
+                const float radY = options.RotationOffset[1] * (3.14159265359f / 180.0f);
+                const float radZ = options.RotationOffset[2] * (3.14159265359f / 180.0f);
+                aiMatrix4x4::RotationX(radX, rotX);
+                aiMatrix4x4::RotationY(radY, rotY);
+                aiMatrix4x4::RotationZ(radZ, rotZ);
+                aiMatrix4x4::Scaling(aiVector3D(options.UniformScale, options.UniformScale, options.UniformScale), scaleMat);
+                localMat = scaleMat * rotZ * rotY * rotX * localMat;
+            }
+            node.LocalTransform = CopyMatrixColumnMajor(localMat);
             if (!IsFinite(node.LocalTransform))
                 return Fail(Error::InvalidData, "A node transform contains a non-finite value.");
 

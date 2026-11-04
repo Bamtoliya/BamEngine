@@ -61,6 +61,8 @@ struct ModelImportDesc
 {
 	EModelPostProcessFlag PostProcessFlags = EModelPostProcessFlag::Triangulate | EModelPostProcessFlag::FlipUVs | EModelPostProcessFlag::MakeLeftHanded | EModelPostProcessFlag::FlipWindingOrder;
 	EModelImportOption ImportOptions = EModelImportOption::Meshes | EModelImportOption::Skeleton | EModelImportOption::Animations | EModelImportOption::Materials;
+	float UniformScale = 1.0f;
+	std::array<float, 3> RotationOffset{ 0.0f, 0.0f, 0.0f };
 	bool SaveToFile = true;
 	bool Overwrite = true;
 };

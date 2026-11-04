@@ -27,6 +27,8 @@ namespace Editor
         options.FlipUVs = HasFlag(m_Request.Settings.PostProcessFlags, EModelPostProcessFlag::FlipUVs);
         options.ConvertToLeftHanded = HasFlag(m_Request.Settings.PostProcessFlags, EModelPostProcessFlag::MakeLeftHanded) ||
             HasFlag(m_Request.Settings.PostProcessFlags, EModelPostProcessFlag::FlipWindingOrder);
+        options.UniformScale = m_Request.Settings.UniformScale;
+        options.RotationOffset = m_Request.Settings.RotationOffset;
 
         try
         {

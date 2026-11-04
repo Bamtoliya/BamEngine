@@ -1,4 +1,4 @@
-﻿#visual studio
+#visual studio
 .vs
 
 # Prerequisites
@@ -88,3 +88,5 @@ Resources/Shader/spirv/
 Engine/Generated/
 
 Projects/Reflection/dependencies/
+__pycache__/
+*.pyc

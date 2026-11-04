@@ -3,6 +3,7 @@
 #include "Editor_Includes.h"
 #include "ImGuiInterface.h"
 #include <efsw/efsw.hpp>
+#include "ModelImporter.h"
 
 BEGIN(Editor)
 
@@ -61,6 +62,7 @@ private:
 	void DrawGridItem(const filesystem::directory_entry& directoryEntry);
 private:
 	void FileConfilictPopup();
+	void DrawModelImportModal();
 #pragma endregion
 
 #pragma region Helper Functions
@@ -112,6 +114,12 @@ private:
 	bool m_OpenConflictPopup = false;
 	bool m_ApplyToAllConflicts = false;
 	vector<FileDropConflict> m_PendingConflicts;
+private:
+	// 모델 임포트 옵션 모달 상태
+	bool m_OpenModelImportModal = false;
+	filesystem::path m_PendingModelImportPath;
+	filesystem::path m_PendingModelDestDir;
+	ModelImportDesc m_CurrentModelImportDesc;
 #pragma endregion
 };
 END
