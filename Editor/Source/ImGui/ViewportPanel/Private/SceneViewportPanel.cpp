@@ -264,10 +264,8 @@ void SceneViewportPanel::Update(f32 dt)
 	if (!CalculateRenderResolution(m_PanelWidth, m_PanelHeight))
 		return;
 
-	const bool isPIE = PIEManager::Get().IsPlaying() || PIEManager::Get().IsPaused();
-
 	// 1. 에디터 카메라 입력: PIE 실행 중에는 에디터 카메라 이동을 차단
-	if (!isPIE && m_Open && m_CameraController && m_Focused && m_Hovered)
+	if (m_Open && m_CameraController && m_Focused && m_Hovered)
 		m_CameraController->HandleInput(dt);
 
 	if (m_CameraController)
@@ -357,6 +355,36 @@ void SceneViewportPanel::DrawCustomOptions()
 		DrawDimensionToggleButton();
 		return;
 	}
+
+	// 실시간 프리뷰 (Realtime) 토글 버튼
+	const bool wasRealtime = m_IsRealtime;
+	if (wasRealtime)
+	{
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.18f, 0.55f, 0.34f, 1.0f));
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.22f, 0.65f, 0.40f, 1.0f));
+	}
+
+	std::string realtimeLabel = std::string(ICON_FA_CLOCK " ") + LOCAL("Viewport.Realtime");
+	if (ImGui::Button(realtimeLabel.c_str()))
+	{
+		ToggleRealtime();
+	}
+
+	if (wasRealtime)
+	{
+		ImGui::PopStyleColor(2);
+	}
+
+	if (ImGui::IsItemHovered())
+	{
+		const char* hint = ShortcutManager::Get().GetShortcutHint("Viewport.ToggleRealtime");
+		if (hint && hint[0] != '\0')
+			ImGui::SetTooltip("%s (%s)", LOCAL_CSTR("Viewport.RealtimeTooltip"), hint);
+		else
+			ImGui::SetTooltip("%s", LOCAL_CSTR("Viewport.RealtimeTooltip"));
+	}
+
+	ImGui::SameLine();
 
 	// 일반 씬 뷰포트 헤더바
 	DrawResolutionMenu();
@@ -688,7 +716,6 @@ void SceneViewportPanel::DrawImGuizmo()
 		return;
 	}
 
-	const bool isPIE = PIEManager::Get().IsPlaying() || PIEManager::Get().IsPaused();
 	const std::optional<CameraBuffer> cameraBuffer = GetActiveCameraBuffer();
 
 	if (!cameraBuffer)
@@ -784,8 +811,6 @@ void SceneViewportPanel::DrawImGuizmo()
 
 void SceneViewportPanel::DrawImViewGuizmo()
 {
-	if (PIEManager::Get().IsPlaying() || PIEManager::Get().IsPaused()) return;
-
 	if (!m_CameraController || m_ImageSize.x <= 0.0f || m_ImageSize.y <= 0.0f)
 		return;
 
@@ -986,7 +1011,6 @@ void SceneViewportPanel::DrawCameraOverlay()
 
 	const mat4 editorViewProj = cameraBuffer->viewProjMatrix;
 	const vec3 editorCameraPos = cameraBuffer->cameraPosition;
-	const bool isPIE = PIEManager::Get().IsPlaying() || PIEManager::Get().IsPaused();
 
 	const ImU32 cameraColor = IM_COL32(90, 210, 255, 255);
 	const ImU32 frustumColor = IM_COL32(90, 210, 255, 200);
@@ -1000,7 +1024,6 @@ void SceneViewportPanel::DrawCameraOverlay()
 		const auto& flag = view.get<FlagComponent>(entity);
 		if (!IsSceneOverlayVisible(flag))
 			continue;
-		if (isPIE && camera.IsMainCamera) continue;
 
 		const vec3 worldPos = vec3(tr.worldMatrix[3]);
 		ImVec2 screenPos;
@@ -1448,59 +1471,7 @@ Entity* SceneViewportPanel::PickOverlayEntity(const ImVec2& mousePos) const
 
 std::optional<CameraBuffer> SceneViewportPanel::GetActiveCameraBuffer()
 {
-	const bool isPIE = PIEManager::Get().IsPlaying() || PIEManager::Get().IsPaused();
-	if (isPIE)
-	{
-		auto sceneBuffer = FindActiveSceneCameraBuffer();
-		if (sceneBuffer.has_value()) return sceneBuffer;
-	}
 	return m_CameraController ? m_CameraController->GetCameraBuffer() : std::nullopt;
-}
-
-std::optional<CameraBuffer> SceneViewportPanel::FindActiveSceneCameraBuffer()
-{
-	if (m_RenderWidth == 0 || m_RenderHeight == 0)
-		return std::nullopt;
-
-	Engine::Scene* activeScene = Engine::SceneManager::Get().GetCurrentScene();
-	if (!activeScene) return std::nullopt;
-
-	activeScene->UpdateHierarchyFlags();
-
-	auto& registry = activeScene->GetRegistry();
-	auto view = registry.view<Engine::CameraComponent, Engine::WorldTransformComponent, Engine::FlagComponent>();
-	const f32 aspectRatio = static_cast<f32>(m_RenderWidth) / static_cast<f32>(m_RenderHeight);
-
-	// 메인 카메라를 먼저 검사하고, 실패하면 일반 카메라를 검사합니다.
-	for (int pass = 0; pass < 2; ++pass)
-	{
-		const bool requireMainCamera = pass == 0;
-
-		for (const auto entity : view)
-		{
-			auto& camera = view.get<Engine::CameraComponent>(entity);
-			if (camera.IsMainCamera != requireMainCamera)
-				continue;
-
-			const auto& flag = view.get<Engine::FlagComponent>(entity);
-			if (!flag.IsActiveInHierarchy() ||
-				Engine::HasFlag(flag.effectiveFlags, Engine::EEntityFlag::Dead))
-				continue;
-
-			const f32 previousAspectRatio = camera.AspectRatio;
-			camera.AspectRatio = aspectRatio;
-
-			if (!Engine::CameraSystem::UpdateCamera(registry, entity))
-			{
-				camera.AspectRatio = previousAspectRatio;
-				continue;
-			}
-
-			return camera.GetCameraBuffer();
-		}
-	}
-
-	return std::nullopt;
 }
 
 void SceneViewportPanel::HandleTerrainSculpting(bool imageHovered)

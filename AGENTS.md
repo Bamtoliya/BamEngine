@@ -208,10 +208,10 @@ AGENTS.md는 학습 중심 작업 방식과 공통 평가 기준을 정의한다
 문서의 작업 절차를 파일 수정이나 명령 실행의 허가로 해석하지 않는다.
 작업 방식은 이 AGENTS.md의 학습 중심 지침을 따른다.
 
-## 11. 로캘 키와 입력 처리의 일관성
+## 11. 로캘 키와 입력·단축키 처리의 일관성
 
-엔진·에디터·클라이언트의 신규 기능과 수정하는 코드에는 로캘 키와 InputManager 사용을 기본으로 적용한다.
-표시 문구·번역 원본·ImGui ID·입력 수집 경계·UI 문맥·프레임과 좌표 처리·예외·검증의 세부 기준은
+엔진·에디터·클라이언트의 신규 기능과 수정하는 코드에는 로캘 키와 InputManager, ShortcutManager 사용을 기본으로 적용한다.
+표시 문구·번역 원본·ImGui ID·입력 수집 경계·UI 문맥·단축키 등록·프레임과 좌표 처리·예외·검증의 세부 기준은
 `Docs/EngineEditorClientGuidelines.md`의 14절을 읽고 따른다.
 
 
@@ -221,6 +221,15 @@ AGENTS.md는 학습 중심 작업 방식과 공통 평가 기준을 정의한다
 - 항상 원본 데이터인 **CSV 파일(`Resources/Data/Localization/Editor.csv`, `Engine.csv`)을 수정**한다.
 - JSON 번역본은 CSV로부터 변환 도구(`GenerateLocalization` 등)나 빌드 파이프라인을 거쳐 자동으로 생성·동기화되어야 한다.
 - 코드 변경 제안 및 리뷰 시에도 JSON 파일 수정을 제안하지 않고, CSV 행(Row) 추가·변경으로만 제안한다.
+
+
+### 에디터 단축키의 ShortcutManager 등록 원칙
+
+- 에디터 기능에 바인딩되는 모든 키보드 단축키(단일 키, 조합 키)는 개별 패널의 `Draw()`나 이벤트 루프에서 `KEY_DOWN`, `KEY_PRESSED` 등으로 파편화하여 하드코딩 처리하지 않는다.
+- 모든 에디터 단축키는 반드시 **`ShortcutManager`(`EditorActionRegistry`)에 액션으로 등록**하여 중앙 집중식으로 관리한다.
+  - 액션 등록 시 고유한 식별자(`Id`), 로캘 키(`DisplayNameKey`, `CategoryKey`), 적용 문맥(`Context`: Global, Viewport, Hierarchy 등), 기본 단축키(`DefaultChord`), 실행 조건(`CanExecute`), 실행 핸들러(`ExecuteHandler`)를 명확히 정의한다.
+- `ShortcutManager`에 일원화하여 등록해야 단축키 설정 창(`ShortcutSettingsPanel`)에서의 조회·재바인딩·충돌 감지 및 영속적 저장이 보장되며, 메뉴와 툴팁에서 `GetShortcutHint()`를 통해 동적 힌트를 일관되게 표시할 수 있다.
+- 텍스트 입력창(`WantTextInput`)이나 모달 팝업 등 UI 입력 문맥과의 단축키 충돌 방지는 `ShortcutManager`의 중앙 평가 경로를 따른다.
 
 기능 제안과 리뷰에는 해당 범위의 로캘·입력 기준 및 검증 항목을 포함한다.
 검증 실행 권한은 이 파일의 2절을 따른다.

@@ -142,6 +142,7 @@ namespace
     }
 }
 
+
 const std::string& Editor::GetEntityHierarchyName(Engine::Scene& scene, entt::entity entity)
 {
     static const std::string empty;
@@ -345,6 +346,13 @@ const Editor::EntityHierarchyTree& Editor::GetEntityHierarchyTree(Engine::Scene&
 
 Editor::EntityHierarchyView::~EntityHierarchyView() { ResetDrag(); }
 
+void EntityHierarchyView::StartRename(entt::entity entity, const std::string& currentName)
+{
+    m_RenamingEntity = entity;
+    strncpy_s(m_RenameBuffer, currentName.c_str(), sizeof(m_RenameBuffer));
+    m_FocusRenameInput = true;
+}
+
 void Editor::EntityHierarchyView::ResetDrag()
 {
     if (m_DragSource) m_DragSource->Release();
@@ -472,8 +480,42 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
             const auto& label = EntityLabel(scene, entity, visual.Icon, children.size());
 
             ImGui::SetNextItemAllowOverlap();
-            const bool opened = ImGui::TreeNodeEx("EntityNode", flags, "%s", label.c_str());
-            ImGui::PopStyleColor(); // 색상 복원
+            bool opened = false;
+            if (m_RenamingEntity == entity)
+            {
+                // 리네임 중일 때는 아이콘만 노드로 그리고 바로 옆에 인라인 텍스트 입력창 배치
+                opened = ImGui::TreeNodeEx("EntityNode", flags, "%s", visual.Icon);
+                ImGui::PopStyleColor();
+                ImGui::SameLine();
+                if (m_FocusRenameInput)
+                {
+                    ImGui::SetKeyboardFocusHere();
+                    m_FocusRenameInput = false;
+                }
+                ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 60.0f);
+                if (ImGui::InputText("##EntityRenameInput", m_RenameBuffer, sizeof(m_RenameBuffer),
+                    ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll))
+                {
+                    action.RenameEntity = entity;
+                    action.NewName = Engine::StrToWStr(m_RenameBuffer);
+                    m_RenamingEntity = entt::null;
+                }
+                else if (ImGui::IsKeyPressed(ImGuiKey_Escape))
+                {
+                    m_RenamingEntity = entt::null;
+                }
+                else if (ImGui::IsItemDeactivated() && !ImGui::IsKeyPressed(ImGuiKey_Escape))
+                {
+                    action.RenameEntity = entity;
+                    action.NewName = Engine::StrToWStr(m_RenameBuffer);
+                    m_RenamingEntity = entt::null;
+                }
+            }
+            else
+            {
+                opened = ImGui::TreeNodeEx("EntityNode", flags, "%s", label.c_str());
+                ImGui::PopStyleColor();
+            }
 
             if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen() && !locked)
             {
@@ -509,24 +551,36 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
             }
             if (!locked && ImGui::BeginPopupContextItem("EntityActions"))
             {
+                auto& sm = ShortcutManager::Get();
                 const auto* link = world.try_get<Engine::HierarchyComponent>(entity);
                 const bool hasParent = link && link->parent != entt::null;
-
-                if (ImGui::MenuItem((std::string(ICON_FA_COPY " ") + Text("EditorCommon.Copy", "Copy")).c_str(), ShortcutManager::Get().GetShortcutHint("Edit.Copy")))
-                    action.Copy = true;
-
-                const bool hasClipboard = EntityClipboard::HasData();
-                if (ImGui::MenuItem((std::string(ICON_FA_PASTE " ") + Text("EditorCommon.Paste", "Paste")).c_str(), ShortcutManager::Get().GetShortcutHint("Edit.Paste"), false, hasClipboard))
-                    action.Paste = true;
-
-                if (ImGui::MenuItem((std::string(ICON_FA_PASTE " ") + Text("EditorCommon.PasteAsChild", "Paste As Child")).c_str(), ShortcutManager::Get().GetShortcutHint("Edit.PasteAsChild"), false, hasClipboard))
-                    action.PasteAsChild = entity;
-
+                // 1. 씬 뷰포트에서 포커스 (단축키 힌트 동적 조회)
+                if (ImGui::MenuItem((std::string(ICON_FA_CROSSHAIRS " ") + LOCAL("Action.Viewport.Focus")).c_str(),
+                    sm.GetShortcutHint("Viewport.Focus")))
+                    action.FocusEntity = entity;
+                // 2. 이름 변경 (단축키 힌트 동적 조회)
+                if (ImGui::MenuItem((std::string(ICON_FA_PEN " ") + LOCAL("EditorCommon.Rename")).c_str(),
+                    sm.GetShortcutHint("Hierarchy.Rename")))
+                    action.StartRename = entity;
                 ImGui::Separator();
-
+                // 3. 자식 엔티티 추가
+                if (ImGui::MenuItem((std::string(ICON_FA_PLUS " ") + LOCAL("Hierarchy.CreateChild")).c_str()))
+                    action.CreateChild = entity;
+                ImGui::Separator();
+                // 4. 복사 / 복제 / 붙여넣기
+                if (ImGui::MenuItem((std::string(ICON_FA_COPY " ") + Text("EditorCommon.Copy", "Copy")).c_str(), sm.GetShortcutHint("Edit.Copy")))
+                    action.Copy = true;
+                if (ImGui::MenuItem((std::string(ICON_FA_CLONE " ") + LOCAL("Hierarchy.Duplicate")).c_str(), sm.GetShortcutHint("Edit.Duplicate")))
+                    action.Duplicate = true;
+                const bool hasClipboard = EntityClipboard::HasData();
+                if (ImGui::MenuItem((std::string(ICON_FA_PASTE " ") + Text("EditorCommon.Paste", "Paste")).c_str(), sm.GetShortcutHint("Edit.Paste"), false, hasClipboard))
+                    action.Paste = true;
+                if (ImGui::MenuItem((std::string(ICON_FA_PASTE " ") + Text("EditorCommon.PasteAsChild", "Paste As Child")).c_str(), sm.GetShortcutHint("Edit.PasteAsChild"), false, hasClipboard))
+                    action.PasteAsChild = entity;
+                ImGui::Separator();
+                // 4. 프리팹 관련
                 if (ImGui::MenuItem((std::string(ICON_FA_CUBES " ") + Text("UI.SAVE_AS_PREFAB", "Save As Prefab...")).c_str()))
                     action.SaveAsPrefab = entity;
-
                 const entt::entity prefabRoot = FindPrefabRootHandle(world, entity);
                 if (prefabRoot != entt::null)
                 {
@@ -539,41 +593,35 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
                         if (ImGui::MenuItem((std::string(ICON_FA_LOCATION_ARROW " ") + LOCAL("Prefab.Select")).c_str()))
                             SelectionManager::Get().SetSelectedAsset(prefabComp->prefabAssetPath);
                         if (ImGui::MenuItem((std::string(ICON_FA_LINK_SLASH " ") + LOCAL("Prefab.Unpack")).c_str()))
-                            action.UnpackPrefab = prefabRoot; // 루트의 컴포넌트만 제거하면 연결 해제 완료!
+                            action.UnpackPrefab = prefabRoot;
                     }
                 }
-
-                if (hasParent) ImGui::Separator();
-
-                if (hasParent && ImGui::MenuItem(Text("UI_HIERARCHY_MOVE_UP", "Move Up").c_str()))
-                    action.MoveUp = entity;
-                if (hasParent && ImGui::MenuItem(Text("UI_HIERARCHY_MOVE_DOWN", "Move Down").c_str()))
-                    action.MoveDown = entity;
-
+                // 5. 계층 순서 이동 및 루트로 이동 (부모 해제)
+                if (hasParent)
+                {
+                    ImGui::Separator();
+                    if (ImGui::MenuItem(Text("UI_HIERARCHY_MOVE_UP", "Move Up").c_str()))
+                        action.MoveUp = entity;
+                    if (ImGui::MenuItem(Text("UI_HIERARCHY_MOVE_DOWN", "Move Down").c_str()))
+                        action.MoveDown = entity;
+                    if (ImGui::MenuItem((std::string(ICON_FA_ARROW_UP_FROM_BRACKET " ") + LOCAL("Hierarchy.MoveToRoot")).c_str()))
+                        action.Unparent = entity;
+                }
                 ImGui::Separator();
-
+                // 6. 삭제
                 const bool isEntitySelected = std::find(selected.begin(), selected.end(), entity) != selected.end();
                 const size_t selectedCount = selected.size();
                 std::string deleteLabel;
                 if (isEntitySelected && selectedCount > 1)
-                {
                     deleteLabel = Text("UI_DELETE_SELECTED_ENTITIES", "Delete selected entities") + " (" + std::to_string(selectedCount) + ")";
-                }
                 else
-                {
                     deleteLabel = Text("UI_DELETE_ENTITY", "Delete entity and children");
-                }
-
                 if (ImGui::MenuItem((std::string(ICON_FA_TRASH " ") + deleteLabel).c_str(), ShortcutManager::Get().GetShortcutHint("Edit.Delete")))
                 {
                     if (isEntitySelected && selectedCount > 1)
-                    {
                         action.DeleteEntities.assign(selected.begin(), selected.end());
-                    }
                     else
-                    {
                         action.DeleteEntities.push_back(entity);
-                    }
                 }
                 ImGui::EndPopup();
             }

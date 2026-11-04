@@ -45,6 +45,9 @@ public:
 public:
 	virtual EShortcutContext GetShortcutContext() const override { return EShortcutContext::Viewport; }
 	static SceneViewportPanel* GetActiveSceneViewport() { return s_ActiveSceneViewport; }
+	bool IsRealtime() const { return m_IsRealtime; }
+	void SetRealtime(bool realtime) { m_IsRealtime = realtime; }
+	void ToggleRealtime() { m_IsRealtime = !m_IsRealtime; }
 	void SetGizmoOperation(ImGuizmo::OPERATION op) { m_GizmoOperation = op; }
 	ImGuizmo::OPERATION GetGizmoOperation() const { return m_GizmoOperation; }
 	void ToggleGizmoMode() { m_GizmoMode = (m_GizmoMode == ImGuizmo::LOCAL) ? ImGuizmo::WORLD : ImGuizmo::LOCAL; }
@@ -126,7 +129,6 @@ private:
 
 private:
 	std::optional<CameraBuffer> GetActiveCameraBuffer();
-	std::optional<CameraBuffer> FindActiveSceneCameraBuffer();
 	void HandleTerrainSculpting(bool imageHovered);
 
 #pragma region Member Variables
@@ -160,6 +162,7 @@ private:
 	// Grid
 	Grid m_Grid;
 	bool m_ShowGrid = { true };
+	bool m_IsRealtime = false;
 private:
 	vec2 m_InitialMousePos;
 	EScenePickingMode m_PickingMode = EScenePickingMode::GPUId;

@@ -1,7 +1,7 @@
 # 통합 개발 우선순위와 완료 기준
 
 - 작성일: 2026-10-24 (최종 갱신: 2026-11-04)
-- 상태: 2026-11-04 단계 1(F02), 단계 2(F05, F06, F07, F08), 단계 3(P1-E/3-A, 3-B), 단계 4(F12), 빌드/배포(F13, F04) 및 강화학습(F09) 구현 반영, Standalone Client 독립 실행 및 Unity 빌드 정합성 검증 완료, 단일 CPU 파티클 시스템 1단계 코어(Engine 4절) 구축, AnimationTimelineEditorPlan(에디터 저작 도구 및 런타임 액션 타임라인 재생 시스템 Phase 1~5) 구축 완료, 네트워크 기초 파이프라인 및 키네마틱 캐릭터 컨트롤러 구축 완료, 대화형 3D 모델 임포트 프리뷰 시스템(InteractiveModelImportPreviewPlan) 수립 및 뷰포트 인프라 구축 반영.
+- 상태: 2026-11-04 단계 1(F02), 단계 2(F05, F06, F07, F08), 단계 3(P1-E/3-A, 3-B), 단계 4(F12), 빌드/배포(F13, F04) 및 강화학습(F09) 구현 반영, Standalone Client 독립 실행 및 Unity 빌드 정합성 검증 완료, 단일 CPU 파티클 시스템 1단계 코어(Engine 4절) 구축, AnimationTimelineEditorPlan(에디터 저작 도구 및 런타임 액션 타임라인 재생 시스템 Phase 1~5) 구축 완료, 네트워크 기초 파이프라인 및 키네마틱 캐릭터 컨트롤러 구축 완료, 대화형 3D 모델 임포트 프리뷰 시스템(InteractiveModelImportPreviewPlan) 수립 및 뷰포트 인프라 구축 반영, 에디터 워크플로 및 계층·뷰포트·인스펙터 상호작용 개선과 단축키 중앙화(EditorWorkflowAndInteractionPlan) 구축 완료.
 - 최신 근거: [코드·문서 정합성과 잔여 위험 점검](CodeDocumentationAudit-2026-11-02.md). 구현 반영과 전체 완료 기준 통과를 구분한다.
 - 공통 기준: [EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md)
 - 분류와 이관: [SourceOrganizationGuidelines.md](SourceOrganizationGuidelines.md), [BuildConfigurationAndPreprocessing.md](BuildConfigurationAndPreprocessing.md)
@@ -29,6 +29,8 @@ Engine·Render·Editor·Client 계획에서 무엇을 먼저 연결하고 무엇
 - [KinematicCharacterControllerPlan.md](KinematicCharacterControllerPlan.md): 키네마틱 캐릭터 컨트롤러(KCC), 지면 감지, 경사로·계단 오르기 및 슬라이딩 물리 계획.
 - [ThirdPersonCharacterSystemPlan.md](ThirdPersonCharacterSystemPlan.md): 3인칭 캐릭터(KCC) 이동, 스프링암 카메라 제어, 3D 지면 충돌 안정화 및 애니메이션 연동 계획.
 - [InteractiveModelImportPreviewPlan.md](InteractiveModelImportPreviewPlan.md): 대화형 3D 모델 임포트 프리뷰 시스템, 실시간 축/스케일 변환 및 뷰포트 일원화 계획.
+- [Utf8PathHandlingPlan.md](Utf8PathHandlingPlan.md): UTF-8 파일 경로, 다국어('새 폴더' 등) 입출력 및 비동기 파일 감시자(efsw) 크래시 방어 계획.
+- [EditorWorkflowAndInteractionPlan.md](EditorWorkflowAndInteractionPlan.md): PIE 에디터 시점 분리, 계층/인스펙터 전면화 연계, F/F2 상호작용 및 단축키(ShortcutManager) 일원화 계획.
 
 전체 작업 선택은 이 문서, 기능 내부의 구현 순서·실패 정책은 상세 계획을 따른다.
 새 사용자 결정이 우선하며 충돌이 생기면 이 문서와 해당 계획을 함께 갱신한다.
@@ -83,6 +85,15 @@ Engine·Render·Editor·Client 계획에서 무엇을 먼저 연결하고 무엇
   - 컴포넌트를 `Engine/Source/Core/Public/Components/<Domain>/`의 개별 헤더로 분리했다. 도메인별 묶음 헤더도 해당 하위 경로에 남아 있다. 묶음 헤더 전체 제거로 해석하지 않는다(2026-11-02 대조).
   - `Entity.h/.cpp`를 `Engine/Source/World/Entity/Public|Private/`로 이동하고, 모델 인스턴스화 로직을 `Engine/Source/World/Scene/Private/SceneModel.cpp`로 분리 완료.
 - 완료 기준: 참조·생성 입력·관련 검사와 문서 경로를 추적할 수 있고 기존 동작을 보존한다.
+
+### P0-F. 다국어(UTF-8) 파일 경로 및 외부 비동기 파일 감시자 안정화 (Utf8PathHandlingPlan)
+
+- **2026-11-04 현황 (구현 및 안정화 완료)**:
+  - Windows 환경에서 다이얼로그나 탐색기로 '새 폴더' 등 한글 경로를 생성할 때 efsw 콜백에서 MSVC std::filesystem::path로의 narrow 문자열 디코딩 불일치(CP_ACP vs UTF-8, Win32 1113 오류)로 발생하던 크래시를 전수 차단.
+  - Engine::Utf8ToPath(Functions.h) 단일 진실의 원천 구축.
+  - ContentBrowserFileListener, ModuleSourceFileListener, ModuleHotReloadFileListener, ShaderFileListener의 handleFileAction 경로 생성 전수 교정 및 try-catch 예외 방어벽 구축.
+  - Content Browser 인라인 리네임(DrawRename)의 renameBuffer, 외부 드롭(OnExteranalDropped), AssetCache 3D 썸네일 경로 변환의 UTF-8 안전화 및 Wide String 결합(wstring) 적용 완료.
+- 완료 기준: 한글/다국어 파일명 및 경로 생성, 수정, 리네임, 드래그앤드롭 시 프로세스 비정상 종료 없이 정상 동작. (달성)
 
 전체 폴더 재배치·싱글턴 전면 교체·엔진 다중 DLL 분리는 P0의 완료 조건이 아니다.
 
@@ -186,6 +197,15 @@ Engine·Render·Editor·Client 계획에서 무엇을 먼저 연결하고 무엇
     - 모달 내 `PreviewViewportWidget` 임베딩 및 임시 프리뷰 씬 엔티티 트랜스폼 실시간 동기화 (슬라이더 조작 시 무지연 60 FPS 회전/스케일 피드백 제공).
     - 가변 스플리터 적용 및 외부 에셋 썸네일 베이킹/프리셋 시스템 확장.
 - 완료 기준: 모달 오픈 시 3D 모델이 좌측 뷰포트에 즉각 표시되고, 우측 슬라이더와 원클릭 버튼("Pitch 180" 등) 조작 시 모델의 방향/스케일이 실시간 반영되며, 최종 임포트 결과물이 모달 세팅과 100% 일치한다.
+
+### P1-G. 에디터 워크플로·상호작용 개선 및 단축키 일원화 (EditorWorkflowAndInteractionPlan)
+
+- **2026-11-04 현황 (구현 및 검증 완료)**:
+  - **PIE 에디터 시점 분리**: PIE 실행 중에도 `Scene View`는 에디터 카메라 조작(Orbit, Pan, Fly) 및 기즈모 디버깅을 상시 유지하고, 게임 실행 화면은 `Game View`를 자동 오픈/포커스하여 분리 표시. PIE 종료 시 `Scene View`로 포커스 자동 복원.
+  - **계층 패널 ↔ 인스펙터 연계**: 계층 패널에서 엔티티 클릭 시 숨겨진 인스펙터 탭을 즉시 최상위로 전면화(`Focus()`)하며, 기존 엔티티별 스크롤 유지 맵(`m_EntityScrollMap`) 보존.
+  - **계층 패널 빠른 조작 및 컨텍스트 메뉴 확장**: `Focus Selected`(F, 씬 뷰포트 카메라 이동), `Rename`(F2, 인라인 텍스트 입력), `Create Child Empty`, `Duplicate`(Ctrl+D), `Move to Root` 메뉴 확장.
+  - **단축키 중앙화 원칙 준수**: 패널 내 파편화된 수동 `KEY_DOWN` 처리(F, F2, Delete 등)를 제거하고 `ShortcutManager`(`EditorActionRegistry`)의 정식 액션(`Viewport.Focus`, `Hierarchy.Rename` 등) 및 문맥(`EShortcutContext`)으로 일원화. UI 메뉴 단축키 힌트 또한 `GetShortcutHint`로 동적 조회 일치.
+- 완료 기준: PIE 중 씬 뷰 에디터 카메라가 유지되고, 계층 패널 클릭 시 인스펙터 탭이 전면 노출되며, F/F2 단축키가 포커스 상태와 무관하게 일관성 있게 작동함. (달성)
 
 ## 5. P2: 작은 결과물과 기본 실행 경로
 

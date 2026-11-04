@@ -15,6 +15,7 @@ public:
 public:
 	virtual EShortcutContext GetShortcutContext() const override { return EShortcutContext::Hierarchy; }
 	static bool DeleteSelectedEntities(class Engine::Scene* scene);
+	void TriggerSelectedEntityRename();
 	virtual void Draw() override;
 	virtual void Free() override { m_EntityTree.ResetDrag(); __super::Free(); }
 private:

@@ -22,6 +22,8 @@
 #include "EntityClipboard.h"
 #include "PrefabModeManager.h"
 #include "Components/Core/PrefabInstanceComponent.h"
+#include "SceneViewportPanel.h"
+#include "InspectorPanel.h"
 
 
 static bool CheckboxTristate(const char* label, bool* v, bool is_mixed)
@@ -141,15 +143,6 @@ bool HierarchyPanel::DrawRenameBox(T* target, ImGuiTreeNodeFlags flags, bool isS
 		strcpy_s(m_RenameBuffer, name.c_str());  // 현재 이름 버퍼에 복사
 	}
 
-	// 3. [F2 키 트리거]
-	if (isSelected && ImGui::IsWindowFocused() && !ImGui::IsAnyItemActive())
-	{
-		if (KEY_DOWN(EKeyCode::F2))
-		{
-			m_RenamingId = targetId;
-			strcpy_s(m_RenameBuffer, name.c_str());
-		}
-	}
 
 	ImGui::SameLine();
 
@@ -342,7 +335,7 @@ void HierarchyPanel::DrawSceneContextMenu(Scene* scene)
 		ImGui::Separator();
 
 		const bool hasClipboard = EntityClipboard::HasData();
-		if (ImGui::MenuItem((std::string(ICON_FA_PASTE " ") + LOCAL_LABEL("EditorCommon.Paste")).c_str(), "Ctrl+V", false, hasClipboard))
+		if (ImGui::MenuItem((std::string(ICON_FA_PASTE " ") + LOCAL_LABEL("EditorCommon.Paste")).c_str(), ShortcutManager::Get().GetShortcutHint("Edit.Paste"), false, hasClipboard))
 		{
 			EntityClipboard::Paste(scene, nullptr);
 		}
@@ -403,19 +396,15 @@ void HierarchyPanel::DrawEntityHierarchy(Scene* scene)
 			{
 				if (action.Toggle) selection.ToggleEntitySelection(entity);
 				else selection.SetSelectedEntity(entity);
-
 				const auto* id = scene->GetRegistry().try_get<Engine::IDComponent>(action.Clicked);
 				m_RangeAnchorId = id && selection.IsEntitySelected(entity) ? id->id : 0;
 			}
-		}
-	}
-	if (!selection.IsPrimarySelectionLocked() && KEY_DOWN(EKeyCode::Delete) &&
-		ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && !ImGui::GetIO().WantTextInput)
-	{
-		for (auto* entity : selection.GetSelectedEntities())
-		{
-			if (entity && entity->GetScene() == scene)
-				action.DeleteEntities.push_back(entity->GetEntityHandle());
+			// 계층 패널에서 엔티티를 클릭하면 인스펙터 창/탭을 맨 위(전면)로 올리고 포커스
+			if (auto* inspector = dynamic_cast<InspectorPanel*>(ImGuiManager::Get().GetImGuiPanel(L"Inspector")))
+			{
+				inspector->Open();
+				inspector->Focus();
+			}
 		}
 	}
 	if (!action.DeleteEntities.empty())
@@ -566,6 +555,62 @@ void HierarchyPanel::DrawEntityHierarchy(Scene* scene)
 			history.Record(std::move(before), SceneEditSnapshot::Capture(*scene), "UI_HISTORY_UNPACK_PREFAB");
 		NotificationManager::Get().AddNotification(LOCAL("ResourceType.Prefab"), LOCAL("Notification.PrefabUnpacked"), ELogLevel::Info, 3.0f);
 	}
+	if (action.FocusEntity != entt::null)
+	{
+		if (auto* ent = scene->FindEntity(action.FocusEntity))
+			selection.SetSelectedEntity(ent);
+		SceneViewportPanel* vp = SceneViewportPanel::GetActiveSceneViewport();
+		if (!vp)
+			vp = dynamic_cast<SceneViewportPanel*>(ImGuiManager::Get().GetImGuiPanel(L"Scene View"));
+		if (vp)
+			vp->FocusSelectedEntity();
+	}
+	if (action.CreateChild != entt::null)
+	{
+		auto* parentEntity = scene->FindEntity(action.CreateChild);
+		if (parentEntity)
+		{
+			try
+			{
+				auto& child = EntityFactory::CreateEmptyEntity(scene, L"ChildEntity");
+				(void)scene->ReparentEntity(child, parentEntity);
+				selection.SetSelectedEntity(&child);
+				m_RevealEntity = child.GetEntityHandle();
+			}
+			catch (const std::exception& error)
+			{
+				EDITOR_LOG_ERROR("Child entity creation failed: {}", error.what());
+			}
+		}
+	}
+	if (action.Duplicate)
+	{
+		auto* primary = selection.GetPrimarySelectedEntity();
+		Entity* parent = nullptr;
+		if (primary)
+		{
+			const auto* hier = scene->GetRegistry().try_get<Engine::HierarchyComponent>(primary->GetEntityHandle());
+			if (hier && hier->parent != entt::null)
+				parent = scene->FindEntity(hier->parent);
+		}
+		if (EntityClipboard::CopySelected(scene))
+			EntityClipboard::Paste(scene, parent);
+	}
+	if (action.Unparent != entt::null)
+	{
+		auto* child = scene->FindEntity(action.Unparent);
+		if (child)
+		{
+			auto& history = Application::Get().GetEditHistory();
+			auto before = history.Enabled() ? SceneEditSnapshot::Capture(*scene) : SceneEditSnapshot{};
+			const auto result = scene->ReparentEntity(*child, nullptr);
+			if (result == EntityReparentResult::Success)
+			{
+				if (before) history.Record(std::move(before), SceneEditSnapshot::Capture(*scene), "UI_HISTORY_REPARENT");
+				m_RevealEntity = action.Unparent;
+			}
+		}
+	}
 	if (!action.DropPrefabFile.empty())
 	{
 		auto* parentEntity = action.DropPrefabTarget != entt::null ? scene->FindEntity(action.DropPrefabTarget) : nullptr;
@@ -649,6 +694,27 @@ void HierarchyPanel::DrawEntityHierarchy(Scene* scene)
 		EntityClipboard::Paste(scene, parentEntity);
 	}
     if (!m_HierarchyMessage.empty()) ImGui::TextDisabled("%s", LOCAL_CSTR(m_HierarchyMessage));
+	if (action.StartRename != entt::null)
+	{
+		const auto* nameComp = scene->GetRegistry().try_get<Engine::NameComponent>(action.StartRename);
+		std::string currentName = nameComp ? Engine::WStrToStr(nameComp->name) : "Entity";
+		m_EntityTree.StartRename(action.StartRename, currentName);
+	}
+	if (action.RenameEntity != entt::null && !action.NewName.empty())
+	{
+		auto* nameComp = scene->GetRegistry().try_get<Engine::NameComponent>(action.RenameEntity);
+		if (nameComp && nameComp->name != action.NewName)
+		{
+			auto& history = Application::Get().GetEditHistory();
+			auto before = history.Enabled() ? SceneEditSnapshot::Capture(*scene) : SceneEditSnapshot{};
+			nameComp->name = action.NewName;
+			if (before)
+				history.Record(std::move(before), SceneEditSnapshot::Capture(*scene), "UI_HISTORY_PROPERTY");
+			auto& prefabMode = PrefabModeManager::Get();
+			if (prefabMode.IsInPrefabMode() && prefabMode.GetPrefabScene() == scene)
+				prefabMode.MarkDirty();
+		}
+	}
 }
 
 void HierarchyPanel::DrawEntityName(const wstring& name, bool isSelected)
@@ -728,4 +794,18 @@ bool HierarchyPanel::DeleteSelectedEntities(Engine::Scene* scene)
 			prefabMode.MarkDirty();
 	}
 	return deleted;
+}
+
+void HierarchyPanel::TriggerSelectedEntityRename()
+{
+	auto& selection = SelectionManager::Get();
+	auto* primary = selection.GetPrimarySelectedEntity();
+	auto* scene = SceneManager::IsCreated() ? SceneManager::Get().GetCurrentScene() : nullptr;
+	if (primary && scene && primary->GetScene() == scene)
+	{
+		const auto handle = primary->GetEntityHandle();
+		const auto* nameComp = scene->GetRegistry().try_get<Engine::NameComponent>(handle);
+		std::string currentName = nameComp ? Engine::WStrToStr(nameComp->name) : "Entity";
+		m_EntityTree.StartRename(handle, currentName);
+	}
 }

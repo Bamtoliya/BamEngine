@@ -35,6 +35,44 @@ Use one entry per meaningful change.
 
 ---
 
+## [2026-11-04] 에디터 워크플로 및 계층·뷰포트·인스펙터 상호작용 개선과 단축키 중앙화 (EditorWorkflowAndInteractionPlan)
+
+- Area: Editor | UI | Shortcut
+- Type: Feature | Refactor | UX | Docs
+- Owner: @user & @assistant
+- 관련 파일:
+  - AGENTS.md
+  - Docs/EngineEditorClientGuidelines.md
+  - Docs/EditorWorkflowAndInteractionPlan.md
+  - Docs/DevelopmentPriorities.md
+  - Editor/Source/PIE/Private/PIEManager.cpp
+  - Editor/Source/ImGui/ViewportPanel/Private/SceneViewportPanel.cpp
+  - Editor/Source/ImGui/ViewportPanel/Public/SceneViewportPanel.h
+  - Editor/Source/ImGui/ViewportPanel/Private/BaseViewportPanel.cpp
+  - Editor/Source/Application/Camera/Private/EditorCameraController.cpp
+  - Editor/Source/Application/Camera/Public/EditorCameraController.h
+  - Editor/Source/ImGui/InspectorPanel/Private/InspectorPanel.cpp
+  - Editor/Source/ImGui/HierarchyPanel/Private/EntityHierarchyView.cpp
+  - Editor/Source/ImGui/HierarchyPanel/Public/EntityHierarchyView.h
+  - Editor/Source/ImGui/HierarchyPanel/Private/HierarchyPanel.cpp
+  - Editor/Source/ImGui/HierarchyPanel/Public/HierarchyPanel.h
+  - Editor/Source/Shortcut/Private/EditorActionRegistry.cpp
+  - Editor/Source/Shortcut/Public/ShortcutTypes.h
+- Motivation:
+  - PIE 실행 중 씬 뷰포트 카메라가 게임 카메라로 강제 전환되어 편집 및 디버깅 시점 유지가 불가능했던 문제 해결.
+  - 계층 패널에서 엔티티 선택 시 숨겨진 인스펙터 탭이 전면으로 노출되지 않고, 개별 패널 `Draw()`에 파편화된 `KEY_DOWN` 처리로 인해 단축키 충돌 및 씹힘이 발생하던 문제 해결.
+- Implementation summary:
+  - **PIE 카메라/뷰 분리**: PIE 실행 중에도 `Scene View`는 에디터 카메라 조작(Orbit, Pan, Fly) 및 기즈모 디버깅을 상시 유지하고, 게임 실행 화면은 `Game View`를 자동 오픈/포커스하여 분리 표시. PIE 종료 시 `Scene View`로 포커스 자동 복원.
+  - **계층 패널 ↔ 인스펙터 연계**: 계층 패널에서 엔티티 클릭 시 숨겨진 인스펙터 탭을 즉시 최상위로 전면화(`Focus()`)하며, 기존 엔티티별 스크롤 유지 맵(`m_EntityScrollMap`) 보존.
+  - **계층 패널 빠른 조작 및 컨텍스트 메뉴 확장**: `Focus Selected`(F, 씬 뷰포트 카메라 이동), `Rename`(F2, 인라인 텍스트 입력), `Create Child Empty`, `Duplicate`(Ctrl+D), `Move to Root` 메뉴 확장.
+  - **단축키 중앙화 원칙 준수**: 패널 내 파편화된 수동 `KEY_DOWN` 처리(F, F2, Delete 등)를 제거하고 `ShortcutManager`(`EditorActionRegistry`)의 정식 액션(`Viewport.Focus`, `Hierarchy.Rename` 등) 및 문맥(`EShortcutContext`)으로 일원화. UI 메뉴 단축키 힌트 또한 `GetShortcutHint`로 동적 조회 일치.
+  - **지침 및 가이드라인 문서화**: `AGENTS.md` 11절 및 `Docs/EngineEditorClientGuidelines.md` 14절에 단축키 중앙화 관리 원칙 명시.
+- Validation:
+  - `cmake --build out/build/x64-debug --target Editor` 빌드 성공 (경고 0, 에러 0).
+  - 씬 뷰포트 에디터 카메라 유지, Game View 자동 전환/복원, F 포커스, F2 인라인 이름 변경, 컨텍스트 메뉴 동작 검증.
+
+---
+
 ## [2026-11-03] 강화학습 프로토콜·결정론적 seed=0 보정(F09), Release 빌드 디렉터리 동적 추적(F13), Client 독립 배포 파이프라인 완성(F04) 및 Unity 헤더 충돌 보정
 
 - Area: Engine | Simulation | Editor | Tools | Build

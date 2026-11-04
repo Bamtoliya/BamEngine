@@ -31,6 +31,13 @@ namespace Editor
     struct EntityHierarchyAction
     {
         entt::entity Clicked = entt::null;
+        entt::entity FocusEntity = entt::null;
+        entt::entity CreateChild = entt::null;
+        entt::entity Unparent = entt::null;
+        entt::entity StartRename = entt::null;
+        entt::entity RenameEntity = entt::null;
+        std::wstring NewName;
+        bool Duplicate = false;
         std::vector<entt::entity> DeleteEntities;
         entt::entity MoveUp = entt::null;
         entt::entity MoveDown = entt::null;
@@ -39,7 +46,7 @@ namespace Editor
         entt::entity SaveAsPrefab = entt::null;
         entt::entity UnpackPrefab = entt::null;
         bool Copy = false;
-        bool Paste = false; 
+        bool Paste = false;
         entt::entity PasteAsChild = entt::null;
         std::wstring DropPrefabFile;
         entt::entity DropPrefabTarget = entt::null;
@@ -66,9 +73,13 @@ namespace Editor
         EntityHierarchyView(const EntityHierarchyView&) = delete;
         EntityHierarchyView& operator=(const EntityHierarchyView&) = delete;
         EntityHierarchyAction Draw(Engine::Scene& scene, std::span<const entt::entity> selected, entt::entity reveal = entt::null, bool locked = false, std::string_view filter = {});
+        void StartRename(entt::entity entity, const std::string& currentName);
         void ReleaseFinishedDrag();
         void ResetDrag();
     private:
         Engine::Scene* m_DragSource = nullptr;
+        entt::entity m_RenamingEntity = entt::null;
+        char m_RenameBuffer[128] = "";
+        bool m_FocusRenameInput = false;
     };
 }

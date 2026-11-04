@@ -153,8 +153,8 @@ void EditorCameraController::HandleInput(Engine::f32 dt, bool allowScroll)
             forward.y = -sinf(pitchRad);
             forward.z = cosf(yawRad) * cosf(pitchRad);
 
-            transform->SetLocalPosition(m_PivotPoint - forward * dist);
-            transform->SetEulerRotation(m_ControlRotation);
+            (void)transform->SetLocalPosition(m_PivotPoint - forward * dist);
+            (void)transform->SetEulerRotation(m_ControlRotation);
             changed = true;
         }
         // 3. [Alt + MMB] 또는 [MMB 단독] 시점 평면 패닝 (Pan)
@@ -165,7 +165,7 @@ void EditorCameraController::HandleInput(Engine::f32 dt, bool allowScroll)
             const Engine::vec3 up = transform->GetLocalUp();
             const Engine::vec3 panDelta = (-right * mouseX + up * mouseY) * panFactor;
 
-            transform->SetLocalPosition(transform->position + panDelta);
+            (void)transform->SetLocalPosition(transform->position + panDelta);
             m_PivotPoint += panDelta;
             changed = true;
         }
@@ -174,7 +174,7 @@ void EditorCameraController::HandleInput(Engine::f32 dt, bool allowScroll)
         {
             const float zoomDelta = (mouseX - mouseY) * 0.02f * dist;
             dist = std::max(dist + zoomDelta, 0.2f);
-            transform->SetLocalPosition(m_PivotPoint - transform->GetLocalForward() * dist);
+            (void)transform->SetLocalPosition(m_PivotPoint - transform->GetLocalForward() * dist);
             changed = true;
         }
         // 5. [RMB 단독] 1인칭 프리 플라이 회전
@@ -265,7 +265,7 @@ void EditorCameraController::FocusEntity(Engine::Entity* targetEntity)
     {
         cameraPos.x = targetPos.x;
         cameraPos.y = targetPos.y;
-        transform->SetLocalPosition(cameraPos);
+        (void)transform->SetLocalPosition(cameraPos);
     }
     else
     {
@@ -275,11 +275,11 @@ void EditorCameraController::FocusEntity(Engine::Entity* targetEntity)
         // 거리 제한 없이 항상 타깃 앞 적정 거리(8.0f)로 카메라 배치
         const Engine::f32 focusDistance = 8.0f;
         cameraPos = targetPos - forwardDir * focusDistance;
-        transform->SetLocalPosition(cameraPos);
+        (void)transform->SetLocalPosition(cameraPos);
         const Engine::f32 pitch = -glm::degrees(std::asin(std::clamp(forwardDir.y, -1.0f, 1.0f)));
         const Engine::f32 yaw = glm::degrees(std::atan2(forwardDir.x, forwardDir.z));
         m_ControlRotation = Engine::vec3(std::clamp(pitch, -89.0f, 89.0f), yaw, 0.0f);
-        transform->SetEulerRotation(m_ControlRotation);
+        (void)transform->SetEulerRotation(m_ControlRotation);
     }
     RefreshMatrices(); // 항상 뷰/투영 행렬 즉시 갱신
 }

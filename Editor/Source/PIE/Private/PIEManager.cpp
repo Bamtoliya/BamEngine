@@ -3,6 +3,7 @@
 #include "SceneManager.h"
 #include "SelectionManager.h"
 #include "AudioManager.h"
+#include "ImGuiManager.h"
 #include <archive/JsonArchive.h>
 
 IMPLEMENT_SINGLETON(PIEManager)
@@ -22,23 +23,26 @@ void PIEManager::StartPlay()
     }
     // 2. 플레이 상태로 전이
     m_State = EPlayState::Play;
+    // 3. 게임 뷰 열기 및 포커스 요청 (실행 상황 표출)
+    if (auto* gameView = ImGuiManager::Get().GetImGuiPanel(L"Game View"))
+    {
+        gameView->Open();
+        gameView->Focus();
+    }
     EDITOR_LOG_INFO("[PIE] Started Play Mode");
 }
-
 void PIEManager::Pause()
 {
     if (m_State != EPlayState::Play) return;
     m_State = EPlayState::Pause;
     EDITOR_LOG_INFO("[PIE] Paused");
 }
-
 void PIEManager::Resume()
 {
     if (m_State != EPlayState::Pause) return;
     m_State = EPlayState::Play;
     EDITOR_LOG_INFO("[PIE] Resumed");
 }
-
 void PIEManager::Stop()
 {
     if (m_State == EPlayState::Edit) return;
@@ -56,6 +60,16 @@ void PIEManager::Stop()
 
     m_State = EPlayState::Edit;
     Application::Get().RebindSceneDocumentAfterPlay();
+
+    // 에디터 복귀 시 씬 뷰포트(Scene View)로 포커스 복원
+    IImGui* sceneView = ImGuiManager::Get().GetImGuiPanel(L"Scene View");
+    if (!sceneView)
+        sceneView = ImGuiManager::Get().GetImGuiPanel(L"Scene Viewport");
+    if (sceneView)
+    {
+        sceneView->Focus();
+    }
+
     EDITOR_LOG_INFO("[PIE] Stopped — scene restored");
 }
 
