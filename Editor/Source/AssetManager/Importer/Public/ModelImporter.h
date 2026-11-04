@@ -87,6 +87,7 @@ public:
 	EResult Finalize(ModelImportTask& task);
 	// nullopt: 진행 중, 값 있음: 전체 작업 종료
 	std::optional<EResult> FinalizeStep(ModelImportTask& task);
+	static ModelImportDesc GetDefaultDesc(const std::filesystem::path& sourcePath);
 private:
 	std::optional<EResult> FinalizeOneStep(ModelImportTask& task);
 };

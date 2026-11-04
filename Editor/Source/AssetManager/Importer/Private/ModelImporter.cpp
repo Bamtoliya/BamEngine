@@ -197,6 +197,15 @@ namespace
 
 		for (auto& mesh : pending)
 		{
+			auto existingHandle = manager.FindHandleByKey(mesh.Key);
+			if (settings.Overwrite && manager.IsValid(existingHandle))
+			{
+				if (auto* existingMesh = static_cast<Mesh*>(manager.GetResource(existingHandle)))
+					existingMesh->Reload(mesh.Key); // 안전한 인플레이스 핫 리로드
+				modelDesc.Meshes.push_back(ResourceHandle<Mesh>(existingHandle));
+				continue;
+			}
+
 			Mesh* instance = mesh.Resource.get();
 			auto handle = manager.AddResource<Mesh>(mesh.Key, mesh.Resource.release());
 
@@ -251,13 +260,24 @@ namespace
 					return saveResult;
 			}
 
-			Skeleton* skelInstance = skeleton.get();
-			auto skelHandle = manager.AddResource<Skeleton>(skelKey, skeleton.release());
-			if (!skelHandle.IsValid() || skelHandle.Get() != skelInstance)
-				return EResult::Fail;
+			auto existingSkelHandle = manager.FindHandleByKey(skelKey);
+			if (settings.Overwrite && manager.IsValid(existingSkelHandle))
+			{
+				if (auto* existingSkel = static_cast<Skeleton*>(manager.GetResource(existingSkelHandle)))
+					existingSkel->Reload(skelKey);
 
-			rollback.Handles.push_back(skelHandle.GetRawHandle());
-			modelDesc.Skeleton = std::move(skelHandle);
+				modelDesc.Skeleton = ResourceHandle<Skeleton>(existingSkelHandle);
+			}
+			else
+			{
+				Skeleton* skelInstance = skeleton.get();
+				auto skelHandle = manager.AddResource<Skeleton>(skelKey, skeleton.release());
+				if (!skelHandle.IsValid() || skelHandle.Get() != skelInstance)
+					return EResult::Fail;
+
+				rollback.Handles.push_back(skelHandle.GetRawHandle());
+				modelDesc.Skeleton = std::move(skelHandle);
+			}
 		}
 
 		// 애니메이션 클립 생성 및 저장 (.bamanim)
@@ -335,13 +355,24 @@ namespace
 						return saveResult;
 				}
 
-				Animation* animInstance = animation.get();
-				auto animHandle = manager.AddResource<Animation>(animKey, animation.release());
-				if (!animHandle.IsValid() || animHandle.Get() != animInstance)
-					return EResult::Fail;
+				auto existingAnimHandle = manager.FindHandleByKey(animKey);
+				if (settings.Overwrite && manager.IsValid(existingAnimHandle))
+				{
+					if (auto* existingAnim = static_cast<Animation*>(manager.GetResource(existingAnimHandle)))
+						existingAnim->Reload(animKey);
 
-				rollback.Handles.push_back(animHandle.GetRawHandle());
-				modelDesc.Animations.push_back(std::move(animHandle));
+					modelDesc.Animations.push_back(ResourceHandle<Animation>(existingAnimHandle));
+				}
+				else
+				{
+					Animation* animInstance = animation.get();
+					auto animHandle = manager.AddResource<Animation>(animKey, animation.release());
+					if (!animHandle.IsValid() || animHandle.Get() != animInstance)
+						return EResult::Fail;
+
+					rollback.Handles.push_back(animHandle.GetRawHandle());
+					modelDesc.Animations.push_back(std::move(animHandle));
+				}
 			}
 		}
 
@@ -435,13 +466,21 @@ namespace
 				const wstring matStem = MakeUniqueStem(sourceStem, rawMatName, L"Mat", static_cast<uint32>(matIdx), state.NameCounts);
 				const wstring matKey = NormalizePath((outputDir / (matStem + L".bammatinst")).wstring());
 
-				// 머티리얼 출력 사전 유효성 검사 (기존 파일 존재 여부 및 Overwrite 정책)
 				if (const EResult result = ValidateImportOutput(manager, matKey, settings.SaveToFile, settings.Overwrite);
 					result != EResult::Success)
 				{
 					return result;
 				}
 
+				auto existingMatHandle = manager.FindHandleByKey(matKey);
+				if (settings.Overwrite && manager.IsValid(existingMatHandle))
+				{
+					if (auto* existingMat = static_cast<MaterialInstance*>(manager.GetResource(existingMatHandle)))
+						existingMat->Reload(matKey);
+					if (matIdx < modelDesc.Materials.size())
+						modelDesc.Materials[matIdx] = ResourceHandle<MaterialInterface>(existingMatHandle);
+					continue;
+				}
 				MaterialInstanceDesc matDesc;
 				matDesc.Key = matKey;
 				matDesc.Path = matKey;
@@ -506,14 +545,23 @@ namespace
 				return result;
 		}
 
-		Model* instance = static_cast<Model*>(model.get());
-		auto modelHandle = manager.AddResource<Model>(modelKey, static_cast<Model*>(model.release()));
+		auto existingModelHandle = manager.FindHandleByKey(modelKey);
+		if (settings.Overwrite && manager.IsValid(existingModelHandle))
+		{
+			if (auto* existingModel = static_cast<Model*>(manager.GetResource(existingModelHandle)))
+				existingModel->Reload(modelKey);
+		}
+		else
+		{
+			Model* instance = static_cast<Model*>(model.get());
+			auto modelHandle = manager.AddResource<Model>(modelKey, static_cast<Model*>(model.release()));
 
-		if (!modelHandle.IsValid())
-			return EResult::Fail;
+			if (!modelHandle.IsValid())
+				return EResult::Fail;
 
-		if (modelHandle.Get() != instance)
-			return EResult::AlreadyInitialized;
+			if (modelHandle.Get() != instance)
+				return EResult::AlreadyInitialized;
+		}
 
 		rollback.Committed = true;
 
@@ -908,8 +956,21 @@ std::optional<EResult> ModelImporter::FinalizeOneStep(ModelImportTask& task)
 	}
 }
 
-EResult ModelImporter::CreateJob(const filesystem::path& sourcePath, const filesystem::path& destDir,
-	void* arg, std::unique_ptr<ImportJob>& outJob)
+ModelImportDesc ModelImporter::GetDefaultDesc(const std::filesystem::path& sourcePath)
+{
+	ModelImportDesc desc{};
+	std::string ext = sourcePath.extension().string();
+	for (char& c : ext) c = static_cast<char>(tolower(c));
+
+	// glTF 포맷은 자체 Y-Up이므로 Assimp의 MakeLeftHanded가 쿼터니언을 비트는 현상 방지
+	if (ext == ".gltf" || ext == ".glb")
+	{
+		desc.PostProcessFlags &= ~EModelPostProcessFlag::MakeLeftHanded;
+	}
+	return desc;
+}
+
+EResult ModelImporter::CreateJob(const filesystem::path& sourcePath, const filesystem::path& destDir, void* arg, std::unique_ptr<ImportJob>& outJob)
 {
 	if (outJob || sourcePath.empty())
 		return EResult::InvalidArgument;

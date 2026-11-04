@@ -174,7 +174,7 @@ namespace Engine
                     glm::mat4 composedWorld;
                     if (TransformSystem::TryComposeWorld(camTransform, parentWorld->worldMatrix, composedWorld))
                     {
-                        camWorld.CommitWorld(camTransform, parentWorld->worldMatrix, composedWorld);
+                        TransformSystem::UpdateWorld(camTransform, parentWorld->worldMatrix, camWorld);
                     }
                 }
             }

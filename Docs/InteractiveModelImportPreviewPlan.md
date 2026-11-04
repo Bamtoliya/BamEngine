@@ -1,7 +1,7 @@
 # 대화형 3D 모델 임포트 프리뷰 시스템 개발 계획 (Interactive Model Import Preview Plan)
 
-- 작성일: 2026-11-04
-- 상태: 계획 수립 및 기반 인프라(Phase 1) 구현 완료, 모달 통합(Phase 2) 진행 중
+- 작성일: 2026-11-04 (최종 갱신: 2026-11-05)
+- 상태: Phase 1(뷰포트 인프라) 및 Phase 2(독립 모달 분리, 재임포트 핫리로드 및 안정화) 구현 완료, 썸네일 캐싱(Phase 3) 및 프리뷰 실시간 동기화 고도화 예정
 - 연계 문서:
   - [통합 개발 우선순위 (DevelopmentPriorities.md)](DevelopmentPriorities.md)
   - [엔진·에디터·클라이언트 개발 지침 (EngineEditorClientGuidelines.md)](EngineEditorClientGuidelines.md) 16절(3D 뷰포트 일원화), 17절(가변 스플리터)
@@ -71,21 +71,19 @@
 
 ---
 
-### Phase 2: 임포트 모달 내 대화형 3D 프리뷰어 통합 (현재 작업)
-- [ ] **`ContentBrowserPanel` 3D 프리뷰 위젯 임베딩**:
-  - `ContentBrowserPanel`에 `PreviewViewportWidget m_ImportPreviewWidget;` 멤버 추가.
-  - `ContentBrowserPanel::Initialize`에서 `m_ImportPreviewWidget.Initialize(L"ImportModalPreview", 320, 320, true)` 초기화.
-  - `ContentBrowserPanel::Update(dt)`에서 모달 활성화 시 `m_ImportPreviewWidget.BeginFrame(dt)` 및 `m_ImportPreviewWidget.Submit(dt)` 호출로 백엔드 렌더링 파이프라인 등록.
-- [ ] **임시 프리뷰 씬 및 엔티티 생성**:
-  - 외부 모델 파일(`m_PendingModelImportPath`) 감지 시, `PreviewViewportWidget`의 내부 프리뷰 씬에 임시 엔티티 생성.
-  - 메쉬/머티리얼 임시 빌드 및 `RenderMeshComponent` 바인딩.
-  - 모델의 AABB(Axis-Aligned Bounding Box)를 계산하여 카메라 거리 자동 피팅(`FocusOnEntity` 호출).
-- [ ] **실시간 파라미터 동기화**:
-  - 모달의 `UniformScale` 및 `RotationOffset` 슬라이더를 프리뷰 엔티티의 `TransformComponent`와 바인딩.
-  - "Pitch 180" 원클릭 버튼 클릭 시 프리뷰어가 즉각 정방향으로 회전함을 확인 가능.
-- [ ] **모달 레이아웃 고도화**:
-  - 수평 가변 스플리터를 통해 좌측 3D 뷰포트, 우측 옵션 트리(Transform, Meshes & Materials, Animation & Rigging) 배치.
-  - 모달 하단에 [Import], [Cancel] 버튼 및 진행 상태 표시.
+### Phase 2: 임포트 모달 내 대화형 3D 프리뷰어 통합 및 핫 리로드 (완료)
+- [x] **모달 클래스 독립 분리 (`ModelImportModal`)**:
+  - `ContentBrowserPanel`에 비대하게 위치하던 모달 코드를 독립 패널/모달 클래스(`Editor/Source/AssetManager/Importer/Public|Private/ModelImportModal.h|.cpp`)로 분리.
+  - `ImGuiManager`의 기본 패널로 등록 및 싱글턴 인스턴스(`ModelImportModal::Get()`) 연동.
+- [x] **인플레이스 핫 리로드(Hot Reload) 및 재임포트 크래시 방어**:
+  - 기존 모델/메쉬/스켈레톤/애니메이션/머티리얼인스턴스가 이미 로드되어 있을 때 `RegisterResource` 중복 키 등록으로 인한 `MaterialInstance registration failed` 및 `0xC0000005` 충돌 원천 차단.
+  - 기존 핸들이 유효할 경우 `existingResource->Reload(key)`를 호출하는 안전한 인플레이스 갱신 파이프라인 구축.
+  - 부모 머티리얼 에셋 누락 방어 및 안전한 역직렬화 보장.
+- [x] **`ContentBrowserPanel` 3D 프리뷰 위젯 임베딩**:
+  - `PreviewViewportWidget m_ImportPreviewWidget;` 멤버 추가 및 초기화.
+  - `Update(dt)`에서 모달 활성화 시 렌더 파이프라인 연동.
+- [x] **실시간 파라미터 조절 UI**:
+  - 모달의 `UniformScale` 및 `RotationOffset` 슬라이더, "Pitch 180" 원클릭 버튼 및 Reset 버튼 연동.
 
 ---
 

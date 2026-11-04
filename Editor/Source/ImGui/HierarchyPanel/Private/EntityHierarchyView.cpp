@@ -530,7 +530,7 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
 
             // --- 1. [핵심] TreeNodeEx에 Drag & Drop 및 우클릭 메뉴를 먼저 바인딩 ---
             const auto* id = world.try_get<Engine::IDComponent>(entity);
-            if (!locked && id && id->id != 0 && ImGui::BeginDragDropSource())
+            if (!locked && m_RenamingEntity != entity && id && id->id != 0 && ImGui::BeginDragDropSource())
             {
                 if (m_DragSource != &scene)
                 {
@@ -702,9 +702,12 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
     {
         const char* labelKey = assetDrag ? "Hierarchy.DropPrefabRoot" : "UI_HIERARCHY_ROOT_DROP";
         const std::string label = Text(labelKey) + "###HierarchyRootDrop";
-        const float height = std::max(ImGui::GetFrameHeight(), ImGui::GetContentRegionAvail().y);
+        const float height = std::max(ImGui::GetFrameHeight() * 1.5f, ImGui::GetContentRegionAvail().y);
 
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.25f, 0.3f, 0.35f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.5f, 0.7f, 0.6f));
         ImGui::Button(label.c_str(), ImVec2(-1.0f, height));
+        ImGui::PopStyleColor(2);
         if (ImGui::BeginDragDropTarget())
         {
             acceptMove(entt::null);

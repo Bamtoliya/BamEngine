@@ -1,0 +1,47 @@
+{
+    "AssetHeader": {
+        "MagicNumber": 6072351289621954882,
+        "ResourceType": 16,
+        "Version": 0
+    },
+    "m_CameraTracks": [
+        {
+            "Duration": 0.44999998807907104,
+            "FocusBoneName": "",
+            "IsActive": true,
+            "ShakeIntensity": 0.4000000059604645,
+            "StartTime": 0.3499999940395355,
+            "TargetFOV": 32,
+            "TrackName": "Cam_ActionZoom"
+        }
+    ],
+    "m_ClipName": "Survey",
+    "m_Duration": 3.4166667461395264,
+    "m_Key": "",
+    "m_ModelPath": "Resources/Model/Fox.bammodel",
+    "m_NotifyTracks": [
+        {
+            "IsMuted": false,
+            "Notifies": [
+                {
+                    "BurstCount": 30,
+                    "EventTag": "OnAttackHit",
+                    "Name": "Slash_Burst",
+                    "OffsetPosition": [0, 0, 0],
+                    "ParticleColor": [1, 0.6499999761581421, 0.15000000596046448, 1],
+                    "ParticleLifetime": 0.6000000238418579,
+                    "ParticleSize": 0.11999999731779099,
+                    "ParticleSpeed": 1.600000023841858,
+                    "SocketBoneName": "",
+                    "SoundPath": "",
+                    "SoundVolume": 1,
+                    "TriggerTime": 0.4000000059604645,
+                    "Type": 0
+                }
+            ],
+            "TrackName": "FX_Weapon"
+        }
+    ],
+    "m_Path": "",
+    "m_ResourceType": 16
+}

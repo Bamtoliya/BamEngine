@@ -3,6 +3,7 @@
 #include "ShortcutManager.h"
 #include <archive/JsonArchive.h>
 #include "EditorSettingsService.h"
+#include "ModelImportModal.h"
 
 #pragma region Third Library
 #include <fmt/core.h>
@@ -535,6 +536,9 @@ EResult ImGuiManager::CreateDefaultPanels()
 	AddImGuiPanel(new AssetReferencePanel());
 	AddImGuiPanel(new AnimationTimelinePanel());
 	AddImGuiPanel(new NetworkProfilerPanel());
+	ModelImportModal* modelImportModal = new ModelImportModal();
+	modelImportModal->Initialize();
+	AddImGuiPanel(modelImportModal);
 	
 	GraphicSettingPanelDesc graphicsDesc;
 	graphicsDesc.Window = m_Window;

@@ -401,17 +401,15 @@ void EditorActionRegistry::RegisterAll()
         .Id = "Hierarchy.Rename",
         .DisplayNameKey = "EditorCommon.Rename",
         .CategoryKey = "UI_HIERARCHY",
-        .Context = EShortcutContext::Hierarchy, // 계층 패널 문맥에만 적용
+        .Context = EShortcutContext::Global, // 계층 및 뷰포트 어디서든 선택된 엔티티 F2 이름 변경 지원
         .DefaultChord = ShortcutChord(Engine::EKeyCode::F2),
         .ExecuteHandler = []() {
             if (auto* hierarchy = dynamic_cast<HierarchyPanel*>(ImGuiManager::Get().GetImGuiPanel(L"Hierarchy Panel")))
                 hierarchy->TriggerSelectedEntityRename();
         },
         .CanExecute = []() {
-            auto& h = Application::Get().GetEditHistory();
             auto& sel = SelectionManager::Get();
-            return h.ShortcutsAllowed() && PIEManager::Get().IsEditing() &&
-                !sel.IsPrimarySelectionLocked() && !sel.GetSelectedEntities().empty();
+            return PIEManager::Get().IsEditing() && !sel.IsPrimarySelectionLocked() && !sel.GetSelectedEntities().empty();
         }
         });
 
@@ -698,13 +696,6 @@ void EditorActionRegistry::RegisterAll()
         });
 
     // ── [Edit / Editor Actions] ──
-    sm.RegisterAction({
-        .Id = "Edit.Rename",
-        .DisplayNameKey = "Action.Edit.Rename",
-        .CategoryKey = "UI_EDIT",
-        .Context = EShortcutContext::Global,
-        .DefaultChord = ShortcutChord(Engine::EKeyCode::F2)
-        });
     sm.RegisterAction({
         .Id = "Editor.OpenSettings",
         .DisplayNameKey = "Action.Editor.OpenSettings",

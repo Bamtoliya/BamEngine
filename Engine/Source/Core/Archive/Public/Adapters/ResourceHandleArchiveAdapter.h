@@ -223,40 +223,50 @@ namespace archive_resource
     }
 
     template<typename T>
-    archive::ArchiveResult ReadHandle(const archive::IArchive& ar, std::string_view key,
-        Engine::ResourceHandle<T>& value)
+    archive::ArchiveResult ReadHandle(const archive::IArchive& ar, std::string_view key, Engine::ResourceHandle<T>& value)
     {
         bool empty = true;
         Engine::ResourceHandle<T> candidate;
         const auto result = ar.ReadObject(key, empty,
             [&](archive::IArchive& object, bool& isNull) -> archive::ArchiveResult
-        {
-            bool hasNull = false;
-            auto read = object.HasField("Null", hasNull);
-            if (!read) return read;
-            if (hasNull)
             {
-                read = object.Read("Null", isNull);
-                if (!read || isNull) return read;
-            }
-            std::wstring assetKey, assetPath;
-            read = object.Read("AssetKey", assetKey);
-            if (read) read = object.Read("AssetPath", assetPath);
-            if (!read) return read;
-            if (!hasNull && assetKey.empty() && assetPath.empty())
-            {
-                isNull = true;
+                bool hasNull = false;
+                auto read = object.HasField("Null", hasNull);
+                if (!read) return read;
+                if (hasNull)
+                {
+                    read = object.Read("Null", isNull);
+                    if (!read || isNull) return read;
+                }
+
+                std::wstring assetKey, assetPath;
+                bool hasField = false;
+                read = object.HasField("AssetKey", hasField);
+                if (read && hasField) read = object.Read("AssetKey", assetKey);
+                if (read) read = object.HasField("AssetPath", hasField);
+                if (read && hasField) read = object.Read("AssetPath", assetPath);
+                if (!read) return read;
+
+                if (assetKey.empty() && !assetPath.empty()) assetKey = assetPath;
+                if (assetPath.empty() && !assetKey.empty()) assetPath = assetKey;
+
+                if (!hasNull && assetKey.empty() && assetPath.empty())
+                {
+                    isNull = true;
+                    return {};
+                }
+
+                if (!Engine::ResourceManager::IsCreated())
+                    return { archive::ArchiveErrorCode::InvalidOperation, "ResourceManager" };
+
+                auto& manager = Engine::ResourceManager::Get();
+                const auto handle = ResolveResourceHandle(manager, assetKey, assetPath);
+                if (!manager.IsValid(handle) || !dynamic_cast<T*>(manager.GetResource(handle)))
+                    return { archive::ArchiveErrorCode::InvalidValue, "ResourceReference" };
+
+                candidate = Engine::ResourceHandle<T>(handle);
                 return {};
-            }
-            if (!Engine::ResourceManager::IsCreated())
-                return { archive::ArchiveErrorCode::InvalidOperation, "ResourceManager" };
-            auto& manager = Engine::ResourceManager::Get();
-            const auto handle = ResolveResourceHandle(manager, assetKey, assetPath);
-            if (!manager.IsValid(handle) || !dynamic_cast<T*>(manager.GetResource(handle)))
-                return { archive::ArchiveErrorCode::InvalidValue, "ResourceReference" };
-            candidate = Engine::ResourceHandle<T>(handle);
-            return {};
-        });
+            });
         if (result) value = std::move(candidate);
         return result;
     }

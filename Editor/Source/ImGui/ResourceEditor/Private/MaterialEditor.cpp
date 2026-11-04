@@ -5,6 +5,7 @@
 #include "ImGuiManager.h"
 #include "Logger.h"
 #include "LocalizationManager.h"
+#include "ResourcePicker.h"
 
 namespace
 {
@@ -275,50 +276,28 @@ void MaterialEditor::DrawShaderSettings()
 {
 	if (!ImGui::CollapsingHeader(LOCAL_CSTR("MaterialEditor.ShaderSettings"), ImGuiTreeNodeFlags_DefaultOpen))
 		return;
-
-	auto DrawShaderSlot = [&](const std::string& slotId, const std::string& label, const Engine::ResourceHandle<Engine::Shader>& currentShader, float btnWidth, auto onDrop)
+	auto DrawShaderSlot = [&](const std::string& slotId, const std::string& label, Engine::ResourceHandle<Engine::Shader> currentShader, float btnWidth, auto onAssign)
 		{
-			std::string shaderName = currentShader ? GetResourceDisplayName(currentShader.Get()) :
-				(btnWidth < 0.0f ? LOCAL("MaterialEditor.DropShader") : LOCAL("EditorCommon.None"));
 			if (!label.empty())
 			{
 				ImGui::Text("%s:", label.c_str());
 				ImGui::SameLine();
 			}
 			ImGui::PushID(slotId.c_str());
-			ImGui::Button(shaderName.c_str(), ImVec2(btnWidth, 0.0f));
-			if (ImGui::BeginDragDropTarget())
+			if (btnWidth > 0.0f) ImGui::SetNextItemWidth(btnWidth);
+			if (Editor::DrawInspectorResourcePicker(currentShader, true))
 			{
-				if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM"))
-				{
-					std::filesystem::path p((const wchar_t*)payload->Data);
-					std::string ext = ToLowerStr(p.extension().string());
-					if (ext == ".hlsl" || ext == ".bamshader")
-					{
-						auto handle = Engine::ResourceManager::Get().LoadFile(p.wstring());
-						auto sHandle = Engine::ResourceManager::Get().GetResourceHandle<Engine::Shader>(p.wstring());
-						if (!sHandle.IsValid() && handle.IsValid())
-							sHandle = Engine::ResourceHandle<Engine::Shader>(handle);
-						if (sHandle.IsValid())
-						{
-							onDrop(sHandle);
-							m_IsDirty = true;
-						}
-					}
-				}
-				ImGui::EndDragDropTarget();
+				onAssign(currentShader);
+				m_IsDirty = true;
 			}
 			ImGui::PopID();
 		};
-
 	// 1. 기본 셰이더 (Default Fallback)
 	ImGui::TextDisabled("%s", LOCAL_CSTR("MaterialEditor.DefaultShaders"));
 	DrawShaderSlot("DefaultVS", LOCAL("MaterialEditor.DefaultVS"), m_Material->GetVertexShaderHandle(), 240.0f, [&](auto handle) { m_Material->SetVertexShaderHandle(handle); });
 	DrawShaderSlot("DefaultPS", LOCAL("MaterialEditor.DefaultPS"), m_Material->GetPixelShaderHandle(), 240.0f, [&](auto handle) { m_Material->SetPixelShaderHandle(handle); });
-
 	ImGui::Spacing();
 	ImGui::Separator();
-
 	// 2. 패스별 셰이더 오버라이드
 	ImGui::TextDisabled("%s", LOCAL_CSTR("MaterialEditor.PassSpecificShaders"));
 
@@ -573,37 +552,13 @@ void MaterialEditor::DrawTextureBindings()
 			if (texID) ImGui::Image(texID, ImVec2(28.0f, 28.0f));
 			else ImGui::Dummy(ImVec2(28.0f, 28.0f));
 
-			// Column 3: Texture Drag & Drop Slot
+			// Column 3: Texture Resource Picker Slot (클릭 시 피커 팝업 + 드래그 앤 드롭 동시 지원)
 			ImGui::TableSetColumnIndex(3);
-			std::string texName = row.texture.IsValid() ? GetResourceDisplayName(row.texture.Get()) : LOCAL("MaterialEditor.DropTexture");
-			const bool isDimmed = !row.isOverridden;
-			if (isDimmed) ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.65f, 0.65f, 0.65f, 1.0f));
-			ImGui::Button(texName.c_str(), ImVec2(-1.0f, 0.0f));
-			if (isDimmed) ImGui::PopStyleColor();
-
-			if (ImGui::BeginDragDropTarget())
+			auto texHandle = row.texture;
+			if (Editor::DrawInspectorResourcePicker(texHandle, true))
 			{
-				if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM"))
-				{
-					std::filesystem::path p((const wchar_t*)payload->Data);
-					std::string ext = ToLowerStr(p.extension().string());
-					if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga" || ext == ".dds" || ext == ".bamtex")
-					{
-						auto texHandle = Engine::ResourceManager::Get().GetResourceHandle<Engine::Texture>(p.wstring());
-						if (!texHandle.IsValid())
-						{
-							auto handle = Engine::ResourceManager::Get().LoadFile(p.wstring());
-							if (handle.IsValid())
-								texHandle = Engine::ResourceHandle<Engine::Texture>(handle);
-						}
-						if (texHandle.IsValid())
-						{
-							m_Material->SetTextureBinding(row.name, row.slot, texHandle);
-							m_IsDirty = true;
-						}
-					}
-				}
-				ImGui::EndDragDropTarget();
+				m_Material->SetTextureBinding(row.name, row.slot, texHandle);
+				m_IsDirty = true;
 			}
 
 			// Column 4: Action (인스턴스 오버라이드 해제 또는 삭제)

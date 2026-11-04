@@ -12,6 +12,7 @@
 #include "ImGuiManager.h"
 #include "EditorSettingsService.h"
 #include "ShortcutManager.h"
+#include "ModelImportModal.h"
 
 using namespace std;
 
@@ -147,7 +148,17 @@ EResult ContentBrowserPanel::Initialize(void* arg)
 		{
 			RequestRefresh();
 		});
+	m_ImportPreviewWidget.Initialize(L"ImportModalPreview", 380, 380, true);
 	return EResult::Success;
+}
+
+void ContentBrowserPanel::Update(f32 dt)
+{
+	if (m_IsImportModalActive)
+	{
+		m_ImportPreviewWidget.BeginFrame(dt);
+		m_ImportPreviewWidget.Submit(dt);
+	}
 }
 
 void ContentBrowserPanel::Draw()
@@ -156,7 +167,6 @@ void ContentBrowserPanel::Draw()
 	const string windowTitle = LOCAL("UI_CONTENT_BROWSER") + "###ContentBrowserPanel";
 	ImGui::Begin(windowTitle.c_str(), &m_Open);
 	FileConfilictPopup();
-	DrawModelImportModal();
 	if (m_CurrentDirectory != m_LastDirectory)
 	{
 		m_NeedToExpandTree = true;
@@ -204,6 +214,7 @@ void ContentBrowserPanel::Free()
 		AssetManager::Get().OnAsyncCompleted().Remove(m_AsyncCompletionHandle);
 
 	m_AsyncCompletionHandle = 0;
+	m_ImportPreviewWidget.Free();
 }
 
 #pragma region TreeView
@@ -749,129 +760,6 @@ void ContentBrowserPanel::FileConfilictPopup()
 		ImGui::EndPopup();
 	}
 }
-
-void ContentBrowserPanel::DrawModelImportModal()
-{
-	const std::string modalTitle = LOCAL("ModelImport.ModalTitle") + "###ModelImportOptionsModal";
-
-	if (m_OpenModelImportModal)
-	{
-		ImGui::OpenPopup(modalTitle.c_str());
-		m_OpenModelImportModal = false;
-	}
-
-	const ImVec2 center = ImGui::GetMainViewport()->GetCenter();
-	ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-	ImGui::SetNextWindowSize(ImVec2(460.0f, 0.0f), ImGuiCond_Appearing);
-
-	if (ImGui::BeginPopupModal(modalTitle.c_str(), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
-	{
-		ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), ICON_FA_CUBE " %s", m_PendingModelImportPath.filename().string().c_str());
-		ImGui::TextDisabled("%s", m_PendingModelImportPath.string().c_str());
-		ImGui::Spacing();
-		ImGui::Separator();
-		ImGui::Spacing();
-
-		// ── 1. 변환 및 좌표계 (Transform) ──
-		if (ImGui::CollapsingHeader(LOCAL_CSTR("ModelImport.Transform"), ImGuiTreeNodeFlags_DefaultOpen))
-		{
-			ImGui::DragFloat(LOCAL_LABEL("ModelImport.Scale").c_str(), &m_CurrentModelImportDesc.UniformScale, 0.01f, 0.0001f, 1000.0f, "%.4f");
-			ImGui::SameLine();
-			if (ImGui::SmallButton("0.01x")) m_CurrentModelImportDesc.UniformScale = 0.01f;
-			ImGui::SameLine();
-			if (ImGui::SmallButton("1.0x")) m_CurrentModelImportDesc.UniformScale = 1.0f;
-			ImGui::SameLine();
-			if (ImGui::SmallButton("100x")) m_CurrentModelImportDesc.UniformScale = 100.0f;
-
-			ImGui::DragFloat3(LOCAL_LABEL("ModelImport.Rotation").c_str(), m_CurrentModelImportDesc.RotationOffset.data(), 1.0f, -360.0f, 360.0f, "%.1f deg");
-			ImGui::SameLine();
-			if (ImGui::SmallButton("Pitch 180")) m_CurrentModelImportDesc.RotationOffset[0] = 180.0f; // 상하 뒤집힘 즉시 해결
-			ImGui::SameLine();
-			if (ImGui::SmallButton("Reset")) m_CurrentModelImportDesc.RotationOffset = { 0.0f, 0.0f, 0.0f };
-
-			bool leftHanded = HasFlag(m_CurrentModelImportDesc.PostProcessFlags, EModelPostProcessFlag::MakeLeftHanded);
-			if (ImGui::Checkbox(LOCAL_LABEL("ModelImport.LeftHanded").c_str(), &leftHanded))
-			{
-				if (leftHanded) m_CurrentModelImportDesc.PostProcessFlags |= EModelPostProcessFlag::MakeLeftHanded;
-				else m_CurrentModelImportDesc.PostProcessFlags &= ~EModelPostProcessFlag::MakeLeftHanded;
-			}
-
-			bool flipUVs = HasFlag(m_CurrentModelImportDesc.PostProcessFlags, EModelPostProcessFlag::FlipUVs);
-			if (ImGui::Checkbox(LOCAL_LABEL("ModelImport.FlipUVs").c_str(), &flipUVs))
-			{
-				if (flipUVs) m_CurrentModelImportDesc.PostProcessFlags |= EModelPostProcessFlag::FlipUVs;
-				else m_CurrentModelImportDesc.PostProcessFlags &= ~EModelPostProcessFlag::FlipUVs;
-			}
-
-			bool flipWinding = HasFlag(m_CurrentModelImportDesc.PostProcessFlags, EModelPostProcessFlag::FlipWindingOrder);
-			if (ImGui::Checkbox(LOCAL_LABEL("ModelImport.FlipWinding").c_str(), &flipWinding))
-			{
-				if (flipWinding) m_CurrentModelImportDesc.PostProcessFlags |= EModelPostProcessFlag::FlipWindingOrder;
-				else m_CurrentModelImportDesc.PostProcessFlags &= ~EModelPostProcessFlag::FlipWindingOrder;
-			}
-		}
-
-		ImGui::Spacing();
-
-		// ── 2. 메쉬 및 머티리얼 (Meshes & Materials) ──
-		if (ImGui::CollapsingHeader(LOCAL_CSTR("ModelImport.MeshesAndMaterials"), ImGuiTreeNodeFlags_DefaultOpen))
-		{
-			bool importMeshes = HasFlag(m_CurrentModelImportDesc.ImportOptions, EModelImportOption::Meshes);
-			if (ImGui::Checkbox(LOCAL_LABEL("ModelImport.ImportMeshes").c_str(), &importMeshes))
-			{
-				if (importMeshes) m_CurrentModelImportDesc.ImportOptions |= EModelImportOption::Meshes;
-				else m_CurrentModelImportDesc.ImportOptions &= ~EModelImportOption::Meshes;
-			}
-
-			bool importMats = HasFlag(m_CurrentModelImportDesc.ImportOptions, EModelImportOption::Materials);
-			if (ImGui::Checkbox(LOCAL_LABEL("ModelImport.ImportMaterials").c_str(), &importMats))
-			{
-				if (importMats) m_CurrentModelImportDesc.ImportOptions |= EModelImportOption::Materials;
-				else m_CurrentModelImportDesc.ImportOptions &= ~EModelImportOption::Materials;
-			}
-		}
-
-		ImGui::Spacing();
-
-		// ── 3. 애니메이션 및 스켈레톤 (Animation & Rigging) ──
-		if (ImGui::CollapsingHeader(LOCAL_CSTR("ModelImport.AnimationAndRig"), ImGuiTreeNodeFlags_DefaultOpen))
-		{
-			bool importSkel = HasFlag(m_CurrentModelImportDesc.ImportOptions, EModelImportOption::Skeleton);
-			if (ImGui::Checkbox(LOCAL_LABEL("ModelImport.ImportSkeleton").c_str(), &importSkel))
-			{
-				if (importSkel) m_CurrentModelImportDesc.ImportOptions |= EModelImportOption::Skeleton;
-				else m_CurrentModelImportDesc.ImportOptions &= ~EModelImportOption::Skeleton;
-			}
-
-			bool importAnims = HasFlag(m_CurrentModelImportDesc.ImportOptions, EModelImportOption::Animations);
-			if (ImGui::Checkbox(LOCAL_LABEL("ModelImport.ImportAnimations").c_str(), &importAnims))
-			{
-				if (importAnims) m_CurrentModelImportDesc.ImportOptions |= EModelImportOption::Animations;
-				else m_CurrentModelImportDesc.ImportOptions &= ~EModelImportOption::Animations;
-			}
-		}
-
-		ImGui::Spacing();
-		ImGui::Separator();
-		ImGui::Spacing();
-
-		// 하단 버튼
-		if (ImGui::Button((ICON_FA_DOWNLOAD " " + LOCAL_LABEL("ModelImport.ImportBtn")).c_str(), ImVec2(120.0f, 0.0f)))
-		{
-			AssetManager::Get().ImportAsync(m_PendingModelImportPath, m_PendingModelDestDir, &m_CurrentModelImportDesc);
-			ImGui::CloseCurrentPopup();
-		}
-
-		ImGui::SameLine(0.0f, 10.0f);
-		if (ImGui::Button(LOCAL_CSTR("EditorCommon.Cancel"), ImVec2(100.0f, 0.0f)))
-		{
-			ImGui::CloseCurrentPopup();
-		}
-
-		ImGui::EndPopup();
-	}
-}
-
 #pragma endregion
 
 #pragma region Helper
@@ -924,15 +812,8 @@ void ContentBrowserPanel::OnExteranalDropped(const vector<string>& droppedFiles)
 			const bool isModel = extension == ".fbx" || extension == ".obj" || extension == ".gltf" || extension == ".glb";
 			if (isModel)
 			{
-				m_PendingModelImportPath = sourcePath;
-				m_PendingModelDestDir = m_CurrentDirectory;
-				m_CurrentModelImportDesc = ModelImportDesc{}; // 기본값 리셋
-				// glTF 포맷은 자체 Y-Up이므로 기본적으로 LeftHanded 변환을 끄는 것이 안정적임
-				if (extension == ".gltf" || extension == ".glb")
-				{
-					m_CurrentModelImportDesc.PostProcessFlags &= ~EModelPostProcessFlag::MakeLeftHanded;
-				}
-				m_OpenModelImportModal = true;
+				if (auto* modal = ModelImportModal::Get())
+					modal->Open(sourcePath, m_CurrentDirectory);
 				continue;
 			}
 			filesystem::path destinationPath = m_CurrentDirectory / sourcePath.filename();

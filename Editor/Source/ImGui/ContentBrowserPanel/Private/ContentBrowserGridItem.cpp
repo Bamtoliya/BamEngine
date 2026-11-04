@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "ImGuiManager.h"
 #include "ResourceEditorInterface.h"
 #include "ContentBrowserGridItem.h"
@@ -16,6 +16,7 @@
 #include "PIEManager.h"
 #include "PrefabModeManager.h"
 #include "ShortcutManager.h"
+#include "ModelImportModal.h"
 
 namespace
 {
@@ -957,6 +958,37 @@ void ContentBrowserGridItem::ContextMenu_Model(const std::filesystem::path& path
 		if (ImGui::MenuItem((ICON_FA_FILE_IMPORT " " + LOCAL_LABEL("ContentBrowser.Reimport")).c_str()))
 		{
 			AssetManager::Get().ImportAsync(path, path.parent_path());
+		}
+		if (ImGui::MenuItem((ICON_FA_SLIDERS " " + LOCAL_LABEL("ContentBrowser.ReimportWithOptions")).c_str()))
+		{
+			if (auto* modal = ModelImportModal::Get())
+				modal->Open(path, path.parent_path());
+		}
+	}
+	else if (filename.ends_with(".bammodel") || filename.ends_with(".bammodel.json"))
+	{
+		std::filesystem::path sourceCandidate;
+		std::string stem = path.stem().string();
+		if (stem.ends_with(".bammodel")) stem = stem.substr(0, stem.length() - 9);
+
+		const std::vector<std::string> exts = { ".glb", ".gltf", ".fbx", ".obj" };
+		for (const auto& candidateExt : exts)
+		{
+			std::filesystem::path candidatePath = path.parent_path() / (stem + candidateExt);
+			if (std::filesystem::exists(candidatePath))
+			{
+				sourceCandidate = candidatePath;
+				break;
+			}
+		}
+
+		if (!sourceCandidate.empty())
+		{
+			if (ImGui::MenuItem((ICON_FA_SLIDERS " " + LOCAL_LABEL("ContentBrowser.ReimportWithOptions")).c_str()))
+			{
+				if (auto* modal = ModelImportModal::Get())
+					modal->Open(sourceCandidate, path.parent_path());
+			}
 		}
 	}
 }

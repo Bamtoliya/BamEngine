@@ -403,7 +403,6 @@ void HierarchyPanel::DrawEntityHierarchy(Scene* scene)
 			if (auto* inspector = dynamic_cast<InspectorPanel*>(ImGuiManager::Get().GetImGuiPanel(L"Inspector")))
 			{
 				inspector->Open();
-				inspector->Focus();
 			}
 		}
 	}
@@ -658,7 +657,8 @@ void HierarchyPanel::DrawEntityHierarchy(Scene* scene)
         auto* parent = scene->FindEntity(action.Move->Parent);
         const bool editLocked = child && TransformPropertyEditor::HasAnyLock(
             scene->GetRegistry(), child->GetEntityHandle());
-        const auto result = !editLocked && before && child && (parent || action.Move->Parent == entt::null) ?
+		const bool canCapture = !history.Enabled() || before;
+		const auto result = !editLocked && canCapture && child && (parent || action.Move->Parent == entt::null) ?
             scene->ReparentEntity(*child, parent) : EntityReparentResult::InvalidEntity;
         switch (result)
         {
@@ -803,6 +803,7 @@ void HierarchyPanel::TriggerSelectedEntityRename()
 	auto* scene = SceneManager::IsCreated() ? SceneManager::Get().GetCurrentScene() : nullptr;
 	if (primary && scene && primary->GetScene() == scene)
 	{
+		Focus(); // 계층 패널을 전면화하고 포커스를 획득하여 인라인 InputText 활성화 보장
 		const auto handle = primary->GetEntityHandle();
 		const auto* nameComp = scene->GetRegistry().try_get<Engine::NameComponent>(handle);
 		std::string currentName = nameComp ? Engine::WStrToStr(nameComp->name) : "Entity";

@@ -63,14 +63,11 @@ namespace Editor
 			}
 			else if constexpr (std::is_same_v<T, Engine::Model>)
 			{
-				return endsWith(".fbx") || endsWith(".obj") || endsWith(".gltf") || endsWith(".glb") ||
-					endsWith(".bammodel") || endsWith(".bammodel.json");
+				return endsWith(".bammodel") || endsWith(".bammodel.json");
 			}
 			else if constexpr (std::is_same_v<T, Engine::Mesh>)
 			{
-				return endsWith(".fbx") || endsWith(".obj") || endsWith(".gltf") || endsWith(".glb") ||
-					endsWith(".bammesh") || endsWith(".bammesh.json") ||
-					endsWith(".bammodel") || endsWith(".bammodel.json");
+				return endsWith(".bammesh") || endsWith(".bammesh.json");
 			}
 			else if constexpr (std::is_same_v<T, Engine::Sprite>)
 			{
@@ -86,11 +83,11 @@ namespace Editor
 			}
 			else if constexpr (std::is_same_v<T, Engine::Animation>)
 			{
-				return endsWith(".bamanim") || endsWith(".bamanim.json") || endsWith(".fbx");
+				return endsWith(".bamanim") || endsWith(".bamanim.json");
 			}
 			else if constexpr (std::is_same_v<T, Engine::Skeleton>)
 			{
-				return endsWith(".bamskel") || endsWith(".bamskel.json") || endsWith(".fbx");
+				return endsWith(".bamskel") || endsWith(".bamskel.json") || endsWith(".bamskeleton");
 			}
 			else
 			{
@@ -161,7 +158,22 @@ namespace Editor
 			if (const auto* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM"))
 			{
 				const auto path = DecodeInspectorResourcePath(payload->Data, payload->DataSize);
-				const auto handle = path ? manager.LoadFile(*path) : Engine::Handle{};
+				std::wstring targetPath = path ? *path : L"";
+				// FBX 등 모델 소스 파일이 드롭된 경우, 이미 변환된 .bammodel이 있으면 스마트 연결
+				if constexpr (std::is_same_v<T, Engine::Model>)
+				{
+					std::filesystem::path p(targetPath);
+					std::string ext = p.extension().string();
+					std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+					if (ext == ".fbx" || ext == ".obj" || ext == ".gltf" || ext == ".glb")
+					{
+						auto cand1 = p.parent_path() / (p.stem().wstring() + L".bammodel");
+						auto cand2 = p.parent_path() / (p.stem().wstring() + L".bammodel.json");
+						if (std::filesystem::exists(cand1)) targetPath = cand1.wstring();
+						else if (std::filesystem::exists(cand2)) targetPath = cand2.wstring();
+					}
+				}
+				const auto handle = !targetPath.empty() ? manager.LoadFile(targetPath) : Engine::Handle{};
 				changed = TryAssignInspectorResource(value, handle);
 				failed = !changed;
 			}

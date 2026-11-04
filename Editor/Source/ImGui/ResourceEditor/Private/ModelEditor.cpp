@@ -12,6 +12,7 @@
 #include "ResourcePicker.h"
 #include "PIEManager.h"
 #include "IconsFontAwesome7.h"
+#include "Components/Render/AnimatorComponent.h"
 
 ModelEditor::ModelEditor()
 {

@@ -4,6 +4,7 @@
 #include "ImGuiInterface.h"
 #include <efsw/efsw.hpp>
 #include "ModelImporter.h"
+#include "PreviewViewportWidget.h"
 
 BEGIN(Editor)
 
@@ -27,6 +28,7 @@ public:
 	ContentBrowserPanel() = default;
 	virtual ~ContentBrowserPanel() = default;
 	virtual EResult Initialize(void* arg = nullptr);
+	virtual void Update(f32 dt) override;
 	virtual void Draw() override;
 	virtual void ProcessEvent(const SDL_Event* event) override;
 	virtual void Free() override;
@@ -62,7 +64,6 @@ private:
 	void DrawGridItem(const filesystem::directory_entry& directoryEntry);
 private:
 	void FileConfilictPopup();
-	void DrawModelImportModal();
 #pragma endregion
 
 #pragma region Helper Functions
@@ -120,6 +121,11 @@ private:
 	filesystem::path m_PendingModelImportPath;
 	filesystem::path m_PendingModelDestDir;
 	ModelImportDesc m_CurrentModelImportDesc;
+	// 모델 임포트 옵션 모달 및 3D 프리뷰어
+	bool m_IsImportModalActive = false;
+	PreviewViewportWidget m_ImportPreviewWidget;
+	Engine::Entity* m_ImportPreviewEntity = nullptr;
+	float m_ModalSplitterWidth = 380.0f;
 #pragma endregion
 };
 END

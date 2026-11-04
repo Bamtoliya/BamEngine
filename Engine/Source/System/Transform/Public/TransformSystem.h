@@ -17,13 +17,13 @@ public:
 	virtual void Free() override;
 public:
 	virtual void OnLateUpdate(entt::registry& globalRegistry, const vector<Scene*>& activeScenes, f32 dt) override;
+	static bool UpdateWorld(TransformComponent& transform, const glm::mat4& parentWorld, WorldTransformComponent& worldTransform);
 	static bool UpdateRootWorld(TransformComponent& transform, WorldTransformComponent& worldTransform);
 	// Commits synchronized components and world caches only after the complete graph succeeds.
 	static bool UpdateHierarchy(entt::registry& registry);
 	static bool TryGetWorldMatrix(const entt::registry& registry, entt::entity entity, glm::mat4& matrix);
 	static bool TryComposeWorld(const TransformComponent& transform, const glm::mat4& parent, glm::mat4& matrix);
-	static bool TryGetLocalMatrix(const glm::mat4& parent, ETransformAbsolute flags,
-		const glm::mat4& desiredWorld, glm::dmat4& local);
+	static bool TryGetLocalMatrix(const glm::mat4& parent, ETransformAbsolute flags, const glm::mat4& desiredWorld, glm::dmat4& local);
 	static bool TryAssignLocalMatrix(TransformComponent& candidate, const glm::dmat4& local);
 	static bool TryCommitTransform(entt::registry& registry, entt::entity entity, TransformComponent candidate);
 	static bool TrySetAbsolute(entt::registry& registry, entt::entity entity, ETransformAbsolute flags);

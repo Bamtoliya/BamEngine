@@ -26,26 +26,10 @@
 #include <imgui.h>
 #include <algorithm>
 #include <cmath>
-#include "AnimationTimelinePanel.h"
-#include "LocalizationManager.h"
-#include "IconsFontAwesome7.h"
-#include "ResourceManager.h"
-#include "RenderTargetManager.h"
-#include "Renderer.h"
-#include "CameraBuffer.h"
-#include "TimeManager.h"
-#include "InputManager.h"
-#include "ImGuiManager.h"
-#include "Scene.h"
-#include "Functions.h"
-#include "AnimationEvaluator.h"
-#include "SelectionManager.h"
-#include "Entity.h"
-#include "FileDialogs.h"
-#include "PlatformPath.h"
 #include "AudioClip.h"
 #include "AudioManager.h"
 #include "Components/Render/ActionTimelineComponent.h"
+#include "Components/Core/NameComponent.h"
 
 namespace Editor
 {

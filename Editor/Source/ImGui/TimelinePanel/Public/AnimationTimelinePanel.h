@@ -7,6 +7,8 @@
 #include <string>
 #include <vector>
 #include <filesystem>
+#include "ViewportDeferredPipeline.h"
+#include "PostProcess.h"
 
 BEGIN(Engine)
 class Scene;

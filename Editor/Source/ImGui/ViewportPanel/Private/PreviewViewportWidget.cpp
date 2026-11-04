@@ -162,19 +162,20 @@ namespace Editor
 		auto* transform = m_CameraController->GetTransformComponent();
 		if (!transform) return;
 
-		// 타깃을 약간 위에서 정면으로 내려다보는 안정적인 뷰 각도 (Pitch 15도, Yaw 0도 정면)
+		// 기존: Yaw 0도 (모델의 등 뒤에서 바라봄)
+		// 수정: Yaw 160도 (모델의 정면 대각선 얼짱 각도에서 얼굴을 바라봄!)
 		const Engine::f32 pitchDeg = 15.0f;
-		const Engine::f32 yawDeg = 0.0f;
+		const Engine::f32 yawDeg = 160.0f; // 180도 완전 정면 또는 150~160도 쿼터뷰
 		const Engine::f32 pitchRad = glm::radians(pitchDeg);
 		const Engine::f32 yawRad = glm::radians(yawDeg);
 
-		// 카메라의 정면 시선 방향 벡터 (+Z가 전방, +Y가 상방)
+		// 카메라의 시선 방향 벡터
 		Engine::vec3 forwardDir;
 		forwardDir.x = sinf(yawRad) * cosf(pitchRad);
 		forwardDir.y = -sinf(pitchRad);
 		forwardDir.z = cosf(yawRad) * cosf(pitchRad);
 
-		// 카메라 위치: 타깃으로부터 시선 반대 방향으로 distance만큼 물러난 위치
+		// 카메라 위치: 타깃으로부터 시선 반대 방향으로 물러남 (모델 앞쪽 +Z 영역에 카메라 배치)
 		const Engine::vec3 cameraPos = targetPos - forwardDir * distance;
 
 		(void)transform->SetLocalPosition(cameraPos);
