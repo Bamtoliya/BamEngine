@@ -1,4 +1,4 @@
-﻿#include "ShaderHotReloadManager.h"
+#include "ShaderHotReloadManager.h"
 #include "ResourceManager.h"
 #include "Shader.h"
 #include "Renderer.h"
@@ -83,7 +83,7 @@ namespace
 		{
 			if (action == efsw::Actions::Modified || action == efsw::Actions::Add)
 			{
-				std::filesystem::path fullPath = std::filesystem::path(dir) / filename;
+				std::filesystem::path fullPath = std::filesystem::path(reinterpret_cast<const char8_t*>(dir.c_str())) / reinterpret_cast<const char8_t*>(filename.c_str());
 				std::string ext = ToLowerCopy(fullPath.extension().string());
 				if (ext == ".hlsl" || ext == ".hlsli")
 				{

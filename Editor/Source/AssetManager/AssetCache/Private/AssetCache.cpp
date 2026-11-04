@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "AssetCache.h"
 #include <stb_image.h>
 #include "Renderer.h"
@@ -235,7 +235,7 @@ void AssetCache::ProcessPending3DThumbnail()
         if (!m_LoadingPaths.contains(key) || m_ThumbnailCache.contains(key))
             continue;
 
-        std::filesystem::path path(key);
+        std::filesystem::path path(reinterpret_cast<const char8_t*>(key.c_str()));
         std::string ext = path.extension().string();
         for (char& c : ext) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
         std::string filename = path.filename().string();

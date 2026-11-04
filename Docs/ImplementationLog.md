@@ -73,6 +73,40 @@ Use one entry per meaningful change.
 
 ---
 
+## [2026-11-04] 다국어(UTF-8) 파일 경로 입출력 안정화 및 efsw 파일 감시자 스레드 예외 방어 (Utf8PathHandlingPlan)
+
+- Area: Engine | Editor | Core | HotReload | UI
+- Type: Fix | Reliability | Core
+- 관련 파일:
+  - Engine/Source/Core/Public/Functions.h
+  - Editor/Source/HotReload/Private/ModuleBuildManager.cpp
+  - Editor/Source/HotReload/Private/ModuleHotReloadManager.cpp
+  - Editor/Source/HotReload/Private/ShaderHotReloadManager.cpp
+  - Editor/Source/ImGui/ContentBrowserPanel/Private/ContentBrowserPanel.cpp
+  - Editor/Source/ImGui/ContentBrowserPanel/Private/ContentBrowserGridItem.cpp
+  - Editor/Source/ImGui/ContentBrowserPanel/Private/ContentBrowserTreeItem.cpp
+  - Editor/Source/AssetManager/AssetCache/Private/AssetCache.cpp
+  - Docs/Utf8PathHandlingPlan.md
+  - Docs/DevelopmentPriorities.md
+- Motivation:
+  - 한국어 Windows 환경에서 파일 다이얼로그나 탐색기를 통해 '새 폴더' 등 한글 경로를 생성할 때 efsw 콜백에서 MSVC std::filesystem::path로의 narrow 문자열 변환 시 인코딩 불일치(CP_ACP vs UTF-8, Win32 오류 코드 1113 ERROR_NO_UNICODE_TRANSLATION)로 인해 백그라운드 스레드에서 예외가 발생하여 에디터 프로세스가 크래시되는 결함 해결.
+  - ImGui 인라인 이름 변경(F2 renameBuffer), SDL3 외부 파일 드래그 앤 드롭(OnExteranalDropped), 썸네일 캐시 큐 등 잠재적 크래시 지점 전수 교정.
+- Implementation summary:
+  - Engine/Source/Core/Public/Functions.h에 C++20 표준 규격(reinterpret_cast<const char8_t*>, std::u8string_view) 기반의 Engine::Utf8ToPath 단일 진실의 원천(SSOT) 헬퍼 함수 구축.
+  - ContentBrowserFileListener::handleFileAction: UTF-8 경로 변환 및 try-catch 스레드 예외 방어벽 추가.
+  - ModuleSourceFileListener, ModuleHotReloadFileListener, ShaderFileListener: handleFileAction 내 UTF-8 경로 변환 적용.
+  - ContentBrowserGridItem.cpp / ContentBrowserTreeItem.cpp: 인라인 리네임(DrawRename)의 renameBuffer UTF-8 변환 적용 및 머티리얼 인스턴스/스프라이트 경로 생성 시 불필요한 narrow 왕복 변환을 제거하고 wstring 결합 적용.
+  - ContentBrowserPanel.cpp: OnExteranalDropped에서 SDL3의 UTF-8 경로 데이터를 (const char8_t*)로 안전하게 변환.
+  - AssetCache.cpp: ProcessPending3DThumbnail의 썸네일 캐시 큐 경로 변환 안전화.
+- Technical details:
+  - efsw, ImGui, SDL3 등 서드파티 라이브러리가 넘겨주는 std::string은 UTF-8이며, MSVC STL의 path(std::string)는 기본적으로 CP_ACP(CP949)를 가정하므로 UTF-8 다국어 바이트가 유입되면 MultiByteToWideChar 실패 및 예외가 발생함.
+  - (const char8_t*) 또는 Utf8ToPath를 통해 UTF-8임을 명시함으로써 C++20 표준 path 생성자가 올바른 코드페이지 변환을 수행하도록 보장.
+  - 외부 백그라운드 스레드(efsw) 콜백 내 try-catch를 배치하여 OS I/O 예외 발생 시 프로세스 즉사를 방지.
+- Validation:
+  - 정적 코드 분석 및 파일 감시자/UI/드롭 경로 전수 점검 완료.
+
+---
+
 ## [2026-11-03] 강화학습 프로토콜·결정론적 seed=0 보정(F09), Release 빌드 디렉터리 동적 추적(F13), Client 독립 배포 파이프라인 완성(F04) 및 Unity 헤더 충돌 보정
 
 - Area: Engine | Simulation | Editor | Tools | Build

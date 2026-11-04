@@ -15,7 +15,7 @@ public:
     void handleFileAction(efsw::WatchID watchid, const std::string& dir, const std::string& filename,
         efsw::Action action, std::string oldFilename) override
     {
-        const std::filesystem::path fullPath = std::filesystem::path(dir) / filename;
+        const std::filesystem::path fullPath = std::filesystem::path(reinterpret_cast<const char8_t*>(dir.c_str())) / reinterpret_cast<const char8_t*>(filename.c_str());
         const auto ext = fullPath.extension().string();
         if (ext == ".cpp" || ext == ".h" || ext == ".hpp" || ext == ".inl" || filename == "CMakeLists.txt")
         {

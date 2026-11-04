@@ -73,6 +73,11 @@ namespace Engine
 		return string(u8str.begin(), u8str.end());
 	}
 
+	inline std::filesystem::path Utf8ToPath(std::string_view utf8Str)
+	{
+		return std::filesystem::path(std::u8string_view(reinterpret_cast<const char8_t*>(utf8Str.data()), utf8Str.size()));
+	}
+
 	inline wstring NormalizePath(wstring path)
 	{
 		std::replace(path.begin(), path.end(), L'\\', L'/');

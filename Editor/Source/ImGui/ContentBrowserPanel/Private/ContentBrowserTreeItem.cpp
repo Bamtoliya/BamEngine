@@ -84,7 +84,8 @@ void ContentBrowserTreeItem::ContextMenu(const std::filesystem::path& path, cons
 			std::filesystem::create_directory(newFolderPath);
 		}
 
-		if (ImGui::MenuItem((ICON_FA_PEN " " + LOCAL_LABEL("EditorCommon.Rename")).c_str(), "F2"))
+		if (ImGui::MenuItem((ICON_FA_PEN " " + LOCAL_LABEL("EditorCommon.Rename")).c_str(),
+			ShortcutManager::Get().GetShortcutHint("Edit.Rename")))
 		{
 			outRenamingPath = path;
 			strncpy(renameBuffer, filename.c_str(), renameBufferSize);
@@ -127,7 +128,7 @@ void ContentBrowserTreeItem::DrawRename(const std::filesystem::path& path, std::
 	ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
 	if (ImGui::InputText("##TreeRenameInput", renameBuffer, renameBufferSize, ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll))
 	{
-		std::filesystem::path newPath = path.parent_path() / renameBuffer;
+		std::filesystem::path newPath = path.parent_path() / reinterpret_cast<const char8_t*>(renameBuffer);
 		if (renameBuffer[0] != '\0' && !std::filesystem::exists(newPath))
 		{
 			try {

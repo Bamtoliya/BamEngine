@@ -15,7 +15,7 @@ public:
         if (filename == m_TargetFilename && (action == efsw::Action::Modified || action == efsw::Action::Add))
         {
             if (m_Manager) 
-                m_Manager->NotifyFileModified(std::filesystem::path(dir) / filename);
+                m_Manager->NotifyFileModified(std::filesystem::path(reinterpret_cast<const char8_t*>(dir.c_str())) / reinterpret_cast<const char8_t*>(filename.c_str()));
         }
     }
 

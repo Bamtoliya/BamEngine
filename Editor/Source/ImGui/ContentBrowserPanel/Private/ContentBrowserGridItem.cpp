@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "ImGuiManager.h"
 #include "ResourceEditorInterface.h"
 #include "ContentBrowserGridItem.h"
@@ -15,6 +15,7 @@
 #include "ShaderHotReloadManager.h"
 #include "PIEManager.h"
 #include "PrefabModeManager.h"
+#include "ShortcutManager.h"
 
 namespace
 {
@@ -516,12 +517,13 @@ void ContentBrowserGridItem::ContextMenu(const std::filesystem::path& path,
 		}
 		ImGui::Separator();
 		// 4. [이름 변경], [경로 복사]
-		if (ImGui::MenuItem((ICON_FA_PEN " " + LOCAL_LABEL("EditorCommon.Rename")).c_str(), "F2"))
+		auto& sm = ShortcutManager::Get();
+		if (ImGui::MenuItem((ICON_FA_PEN " " + LOCAL_LABEL("EditorCommon.Rename")).c_str(), sm.GetShortcutHint("Edit.Rename")))
 		{
 			outRenamingPath = path;
 			strncpy(renameBuffer, filenameString.c_str(), renameBufferSize);
 		}
-		if (ImGui::MenuItem((ICON_FA_COPY " " + LOCAL_LABEL("EditorCommon.CopyPath")).c_str(), "Ctrl+C"))
+		if (ImGui::MenuItem((ICON_FA_COPY " " + LOCAL_LABEL("EditorCommon.CopyPath")).c_str(), sm.GetShortcutHint("Edit.Copy")))
 			ImGui::SetClipboardText(path.string().c_str());
 		if (!isDir && IsPrefabFile(path))
 		{
@@ -669,7 +671,7 @@ void ContentBrowserGridItem::DrawRename(const std::filesystem::path& path, f32 t
 	ImGui::SetNextItemWidth(width);
 	if (ImGui::InputText("##RenameInput", renameBuffer, renameBufferSize, ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll))
 	{
-		std::filesystem::path newPath = path.parent_path() / renameBuffer;
+		std::filesystem::path newPath = path.parent_path() / reinterpret_cast<const char8_t*>(renameBuffer);
 		if (renameBuffer[0] != '\0' && !std::filesystem::exists(newPath))
 		{
 			try {
@@ -802,15 +804,15 @@ void ContentBrowserGridItem::ContextMenu_Material(const std::filesystem::path& p
 	{
 		if (ImGui::MenuItem((ICON_FA_CLONE " " + LOCAL_LABEL("ContentBrowser.CreateMaterialInstance")).c_str()))
 		{
-			std::string baseStem = path.stem().string();
-			if (baseStem.ends_with(".bammat")) baseStem = baseStem.substr(0, baseStem.length() - 7);
+			std::wstring baseStem = path.stem().wstring();
+			if (baseStem.ends_with(L".bammat")) baseStem = baseStem.substr(0, baseStem.length() - 7);
 
-			std::filesystem::path instPath = path.parent_path() / (baseStem + ".bammatinst.json");
+			std::filesystem::path instPath = path.parent_path() / (baseStem + L".bammatinst.json");
 			int suffix = 1;
 			while (std::filesystem::exists(instPath))
 			{
 				instPath = path.parent_path() /
-					(baseStem + "_" + std::to_string(suffix++) + ".bammatinst.json");
+					(baseStem + L"_" + std::to_wstring(suffix++) + L".bammatinst.json");
 			}
 
 			auto& rm = Engine::ResourceManager::Get();
@@ -996,7 +998,7 @@ void ContentBrowserGridItem::ContextMenu_Texture(const std::filesystem::path& pa
 	if (ImGui::MenuItem((ICON_FA_IMAGE " " + LOCAL_LABEL("ContentBrowser.CreateSprite")).c_str()))
 	{
 		// 1. 중복 없는 .bamsprite.json 경로 결정
-		std::filesystem::path spritePath = path.parent_path() / (path.stem().string() + ".bamsprite.json");
+		std::filesystem::path spritePath = path.parent_path() / (path.stem().wstring() + L".bamsprite.json");
 		int suffix = 1;
 		while (std::filesystem::exists(spritePath))
 		{
@@ -1100,7 +1102,7 @@ bool ContentBrowserGridItem::ConvertJsonToBinary(const std::filesystem::path& pa
 
 bool ContentBrowserGridItem::ConvertBinaryToJson(const std::filesystem::path& path)
 {
-	std::filesystem::path outPath = path.parent_path() / (path.filename().string() + ".json");
+	std::filesystem::path outPath = path.parent_path() / (path.filename().wstring() + L".json");
 
 	auto& rm = Engine::ResourceManager::Get();
 	std::wstring relPath = std::filesystem::relative(path).wstring();
