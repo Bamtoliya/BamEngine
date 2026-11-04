@@ -35,6 +35,49 @@ Use one entry per meaningful change.
 
 ---
 
+## [2026-11-04] 3인칭 캐릭터 컨트롤러, 스프링암 카메라 및 KCC 물리 안정화 (ThirdPersonCharacterSystemPlan)
+
+- Area: Physics | Camera | Engine | Editor | Docs
+- Type: Feature | Fix | Docs
+- Owner: @user & @assistant
+- 관련 파일:
+  - Docs/ThirdPersonCharacterSystemPlan.md
+  - Docs/DevelopmentPriorities.md
+  - Docs/ImplementationLog.md
+  - Engine/Source/Core/Public/Components/Camera/SpringArmComponent.h
+  - Engine/Source/Core/Public/Components/Physics/ThirdPersonControllerComponent.h
+  - Engine/Source/Core/Public/Components/Physics/CharacterControllerComponent.h
+  - Engine/Source/System/Camera/Public/SpringArmSystem.h
+  - Engine/Source/System/Camera/Private/SpringArmSystem.cpp
+  - Engine/Source/System/Physics/Public/ThirdPersonControllerSystem.h
+  - Engine/Source/System/Physics/Private/ThirdPersonControllerSystem.cpp
+  - Engine/Source/System/Physics/Public/KinematicCharacterSystem.h
+  - Engine/Source/System/Physics/Private/KinematicCharacterSystem.cpp
+  - Engine/Source/System/Physics/Private/PhysicsSystem.cpp
+  - Editor/Source/Application/Private/Application.cpp
+  - Editor/Source/ImGui/ViewportPanel/DebugRenderer/Private/DebugRenderer.cpp
+  - Resources/Data/Localization/Engine.csv
+  - Resources/Data/Localization/Editor.csv
+- 동기 및 배경:
+  - 3D 충돌체(Box/Sphere)와 Kinematic Character Controller(KCC) 충돌 판정 결함으로 캐릭터가 바닥을 뚫고 추락하거나, 바닥에 하반신이 파묻혀 이동 입력이 영구히 막히는 현상 발생.
+  - 고정 물리 틱(FixedUpdate, 60Hz)과 렌더 틱(LateUpdate, 가변 주사율) 간의 주기 불일치로 인한 심한 시각적 떨림(Stuttering/Jitter) 해결 필요.
+  - 공중 체공 중 최고점을 지나 낙하를 시작할 때 수직 거리가 남아있음에도 바닥으로 순간이동하듯 착 달라붙는 조기 접지 흡착(Early Snap) 결함 해결 필요.
+  - 스프링암이 자식 엔티티로 부착된 계층 구조에서 뷰포트 상의 카메라 아이콘 및 프러스텀 위치가 스프링암 프로브 구체와 동기화되지 않고 엉뚱한 위치로 어긋나 보이는 결함 해결 필요.
+- 구현 및 해결 내용 요약:
+  1. **3D 충돌체 및 스윕 판정 정상화 (PhysicsSystem.cpp, KinematicCharacterSystem.cpp)**:
+     - PhysicsSystem::TestColliderHit의 BoundingBox 중심을 (0,0,0) ~ Size*0.5에서 [-halfSize, halfSize]로 정상화하고 SphereShape 스케일 반영.
+     - 발바닥 오프셋(ootOffset = Center.y - Height*0.5)을 계산하여 중심 피벗 메시(구체 등)가 바닥 패널 위에 정확히 안착하도록 보정.
+     - 수평 이동 스윕 시 발바닥 여유 마진을 적용하여 바닥과의 불필요한 마찰 걸림(Stuck) 제거.
+  2. **프레임 레이트 동기화 및 부드러운 이동 (KinematicCharacterSystem.cpp)**:
+     - KCC 물리 갱신을 OnFixedUpdate에서 OnUpdate(dt)로 전환하여 디스플레이 주사율(144Hz 등)과 1:1로 부드럽게 동기화, 화면 떨림을 완벽히 제거.
+  3. **공중 낙하와 지면 보행 분리 (KinematicCharacterSystem.cpp)**:
+     - DetectGround에 의한 조기 바닥 흡착 제거. kcc.IsGrounded 상태일 때만 보행용 지면 추적을 수행하고, 공중에서는 SweepCharacter에 의한 물리적 충돌 감지로만 자연스럽게 착지하도록 분리.
+  4. **스프링암 계층 좌표 변환 및 프러스텀 동기화 (SpringArmSystem.cpp)**:
+     - 부모가 있는 카메라 엔티티에 대해 부모 역행렬(invParent)을 적용하여 로컬 좌표와 회전을 설정하고, TransformSystem::TryComposeWorld 및 camWorld.CommitWorld를 호출하여 부모 변환을 정확히 결합.
+     - TransformSystem::UpdateRootWorld의 무조건 호출로 인해 부모 변환이 무시되고 로컬 좌표가 월드 행렬로 덮어씌워지던 버그를 해결하여 프로브 구체와 뷰포트 카메라 프러스텀의 위치를 일치시킴.
+
+---
+
 ## [2026-11-04] 에디터 워크플로 및 계층·뷰포트·인스펙터 상호작용 개선과 단축키 중앙화 (EditorWorkflowAndInteractionPlan)
 
 - Area: Editor | UI | Shortcut

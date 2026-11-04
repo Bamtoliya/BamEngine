@@ -72,13 +72,15 @@ flowchart TD
   - `PhysicsSystem::TestColliderHit`의 BoundingBox `[-halfSize, halfSize]` 중심 좌표 정상화 및 구체 스케일 반영.
   - `KinematicCharacterSystem::SweepCharacter`의 scaled AABB 변환 정상화.
 - **지면 감지 및 착지 알고리즘 정상화**:
-  - `DetectGround`의 공중 조기 흡착(Hard Snap) 제거: 지면 걷기 중 접지 유지와 공중 낙하 착지를 엄격히 분리.
+  - `DetectGround`의 공중 조기 흡착(Hard Snap) 제거: 지면 걷기 중 접지 유지와 공중 낙하 착지를 엄격히 분리하여 체공 중 바닥으로 순간이동하는 현상 방지.
   - 발바닥 오프셋(`footOffset`) 계산으로 중심 피벗 메시(구체 등)가 바닥에 파묻히는 현상 해결.
   - 수평 스윕 시 발바닥 여유 마진 적용으로 밟고 있는 바닥 패널과의 수평 마찰 걸림(Stuck) 방지.
 - **화면 및 카메라 지터(떨림) 완벽 제거**:
-  - `KinematicCharacterSystem`을 고정 물리(`OnFixedUpdate`)에서 프레임 동기화(`OnUpdate`)로 전환하여 모니터 주사율과 1:1 일치.
-- **계층 구조 카메라 좌표 변환**:
-  - 부모 엔티티가 있는 카메라에 대해 월드 좌표 $\rightarrow$ 부모 역행렬 로컬 좌표 변환 적용으로 프로브 구체와 카메라 위치 일치.
+  - `KinematicCharacterSystem`을 고정 물리(`OnFixedUpdate`)에서 프레임 동기화(`OnUpdate`)로 전환하여 렌더 루프 및 모니터 주사율과 1:1 일치.
+- **계층 구조 카메라 좌표 변환 및 프로브-프러스텀 위치 일치**:
+  - 부모 엔티티가 있는 카메라에 대해 부모 역행렬(`invParent`)을 통한 로컬 좌표 변환 적용.
+  - 부모가 있는 자식 엔티티에 `TransformSystem::UpdateRootWorld`를 무조건 호출하여 부모 변환이 무시되고 로컬 좌표가 월드로 덮어씌워지던 버그 수정.
+  - `TransformSystem::TryComposeWorld` 및 `camWorld.CommitWorld`를 통해 부모 행렬을 올바르게 결합하여 스프링암 프로브 구체와 뷰포트 카메라 프러스텀의 위치 불일치 완벽 해소.
 
 ### [ ] Phase 3: 애니메이션 시스템(Locomotion) 연동 (진행 중)
 - **물리 상태의 애니메이터 자동 바인딩**:

@@ -169,14 +169,21 @@ namespace Engine
                     const quat localRot = glm::quat_cast(invParent * glm::mat4_cast(armRot));
                     std::ignore = camTransform.SetLocalPosition(localPos);
                     camTransform.rotation = localRot;
+                    camTransform.SynchronizeRotation();
+
+                    glm::mat4 composedWorld;
+                    if (TransformSystem::TryComposeWorld(camTransform, parentWorld->worldMatrix, composedWorld))
+                    {
+                        camWorld.CommitWorld(camTransform, parentWorld->worldMatrix, composedWorld);
+                    }
                 }
             }
             else
             {
                 std::ignore = camTransform.SetLocalPosition(finalCameraPos);
                 camTransform.rotation = armRot;
+                TransformSystem::UpdateRootWorld(camTransform, camWorld);
             }
-            TransformSystem::UpdateRootWorld(camTransform, camWorld);
         }
     }
 }
