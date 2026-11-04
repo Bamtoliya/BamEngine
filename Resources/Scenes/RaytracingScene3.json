@@ -591,17 +591,37 @@
                 "Components": [
                     {
                         "Data": {
+                            "controllerPath": "I:\\BamtoliyaGithub\\BamEngine\\Resources\\Data\\Animation\\Locomotion.animator",
+                            "currentClip": {
+                                "AssetKey": "Resources/Model/Fox_Survey.bamanim",
+                                "AssetPath": "Resources/Model/Fox_Survey.bamanim",
+                                "Null": false
+                            },
+                            "isLooping": true,
+                            "isPlaying": true,
+                            "layers": [],
+                            "playRate": 1
+                        },
+                        "Type": "Engine::AnimatorComponent"
+                    },
+                    {
+                        "Data": {
                             "AirControl": 0.20000000298023224,
+                            "AutoUpdateAnimator": true,
                             "Center": [0, 0, 0],
                             "CollisionMask": 4294967295,
                             "Gravity": 0,
                             "Height": 2,
+                            "IsGroundedParamName": "IsGrounded",
                             "JumpForce": 7,
+                            "JumpParamName": "Jump",
                             "Radius": 1,
                             "RunSpeed": 8,
                             "SkinWidth": 0.05000000074505806,
                             "SlopeLimitDegrees": 45,
+                            "SpeedParamName": "Speed",
                             "StepOffset": 0.30000001192092896,
+                            "TargetAnimatorEntity": 4294967295,
                             "WalkSpeed": 5
                         },
                         "Type": "Engine::CharacterControllerComponent"
@@ -622,17 +642,22 @@
                         "Data": {
                             "castShadow": true,
                             "materialHandle": {
-                                "AssetKey": "Resources/Material/GBufferMaterial.bammat.json",
-                                "AssetPath": "Resources/Material/GBufferMaterial.bammat.json",
+                                "AssetKey": "Resources/Model/Fox_fox_material.bammatinst",
+                                "AssetPath": "Resources/Model/Fox_fox_material.bammatinst",
                                 "Null": false
                             },
                             "meshHandle": {
-                                "AssetKey": "SphereMesh",
-                                "AssetPath": "SphereMesh",
+                                "AssetKey": "Resources/Model/Fox_fox1.bammesh",
+                                "AssetPath": "Resources/Model/Fox_fox1.bammesh",
+                                "Null": false
+                            },
+                            "skeletonHandle": {
+                                "AssetKey": "Resources/Model/Fox_Skeleton.bamskel",
+                                "AssetPath": "Resources/Model/Fox_Skeleton.bamskel",
                                 "Null": false
                             }
                         },
-                        "Type": "Engine::StaticMeshRendererComponent"
+                        "Type": "Engine::SkinnedMeshRendererComponent"
                     },
                     {
                         "Data": {
@@ -652,15 +677,15 @@
                         "Data": {
                             "absolute": 0,
                             "eulerRotation": [0, 0, 0],
-                            "position": [-2, 7.152555465698242, -9.558938026428223],
+                            "position": [1, 9.152555465698242, -9.558938026428223],
                             "rotation": [0, 0, 0, 1],
-                            "scale": [1.5, 1.5, 1.5]
+                            "scale": [0.10000000149011612, 0.10000000149011612, 0.10000000149011612]
                         },
                         "Type": "Engine::TransformComponent"
                     }
                 ],
                 "Hierarchy": {
-                    "Children": [51],
+                    "Children": [],
                     "Parent": 0
                 },
                 "Id": 13
@@ -1098,17 +1123,17 @@
                     {
                         "Data": {
                             "absolute": 0,
-                            "eulerRotation": [30, 0, 0],
-                            "position": [-2, 17.152551651000977, -26.879438400268555],
+                            "eulerRotation": [210, -180, -180],
+                            "position": [1, 19.15256690979004, -26.879451751708984],
                             "rotation": [0.2588190734386444, 0, 0, 0.965925931930542],
-                            "scale": [0.6666666865348816, 0.6666666865348816, 0.6666666865348816]
+                            "scale": [0.6666669845581055, 0.6666666865348816, 0.6666669845581055]
                         },
                         "Type": "Engine::TransformComponent"
                     }
                 ],
                 "Hierarchy": {
                     "Children": [],
-                    "Parent": 13
+                    "Parent": 0
                 },
                 "Id": 51
             }
@@ -1126,6 +1151,22 @@
             {
                 "AssetKey": "Resources/Material/SkyMaterial.bammat.json",
                 "AssetPath": "Resources/Material/SkyMaterial.bammat.json"
+            },
+            {
+                "AssetKey": "Resources/Model/Fox_Skeleton.bamskel",
+                "AssetPath": "Resources/Model/Fox_Skeleton.bamskel"
+            },
+            {
+                "AssetKey": "Resources/Model/Fox_Survey.bamanim",
+                "AssetPath": "Resources/Model/Fox_Survey.bamanim"
+            },
+            {
+                "AssetKey": "Resources/Model/Fox_fox1.bammesh",
+                "AssetPath": "Resources/Model/Fox_fox1.bammesh"
+            },
+            {
+                "AssetKey": "Resources/Model/Fox_fox_material.bammatinst",
+                "AssetPath": "Resources/Model/Fox_fox_material.bammatinst"
             },
             {
                 "AssetKey": "SphereMesh",

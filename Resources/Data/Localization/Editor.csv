@@ -1,4 +1,12 @@
 ﻿Group,Key,English,Korean
+,ModelImport.Pitch180,Pitch 180°,상하 반전 (Pitch 180°)
+,ModelImport.Yaw180,Yaw 180°,헤딩 반전 (Yaw 180°)
+,ModelImport.Reset,Reset,초기화
+,ModelImport.ScalePoint01,0.01x,0.01배
+,ModelImport.Scale1,1.0x,1.0배
+,ModelImport.Scale100,100x,100배
+,ContentBrowser.ReimportWithOptions,Re-import with Options...,옵션과 함께 다시 임포트...
+,ContentBrowser.ReimportFromSource,Re-import from Source...,원본 파일로부터 다시 임포트...
 ,UI_NETWORK_PROFILER_PANEL,Network Profiler,네트워크 프로파일러
 ,UI_NETWORK_SESSION_MODE,Session Mode,세션 모드
 ,UI_NETWORK_STANDALONE,Standalone,스탠드얼론

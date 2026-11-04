@@ -126,6 +126,9 @@ struct ENGINE_API AnimState
 	PROPERTY(EDITABLE)
 	bool isLooping = true;
 
+	PROPERTY(EDITABLE, ALLOW_MISSING, DISPLAY_NAME("PROP_LOOP_BLEND_DURATION"))
+	float loopBlendDuration = 0.05f;
+
 	PROPERTY(EDITABLE, ALLOW_MISSING)
 	std::vector<AnimNotify> notifies;
 

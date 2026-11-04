@@ -125,7 +125,7 @@ namespace Engine
             // 5. 달리기 배율 적용 및 KCC 이동 요청
             const bool isSprinting = input.IsShiftPressed();
             const f32 speedFactor = isSprinting ? ctrl.SprintMultiplier : 1.0f;
-            kcc.Move(moveDir * speedFactor);
+            kcc.Move(moveDir * speedFactor, isSprinting);
 
             // 6. 점프 처리 (스페이스바)
             if (input.IsKeyButtonDown(EKeyCode::Space))

@@ -68,6 +68,24 @@ namespace Engine
         PROPERTY(READONLY, NOSERIALIZE, DISPLAY_NAME("PROP_KCC_IS_GROUNDED"))
             bool IsGrounded = false;
 
+        // ── 애니메이터 연동 설정 ──
+        PROPERTY(EDITABLE, ALLOW_MISSING, DISPLAY_NAME("PROP_KCC_AUTO_UPDATE_ANIMATOR"))
+            bool AutoUpdateAnimator = true;
+        PROPERTY(EDITABLE, ALLOW_MISSING, DISPLAY_NAME("PROP_KCC_ANIMATOR_ENTITY"))
+            entt::entity TargetAnimatorEntity = entt::null;
+        PROPERTY(EDITABLE, ALLOW_MISSING, DISPLAY_NAME("PROP_KCC_PARAM_SPEED"))
+            std::string SpeedParamName = "Speed";
+        PROPERTY(EDITABLE, ALLOW_MISSING, DISPLAY_NAME("PROP_KCC_PARAM_IS_GROUNDED"))
+            std::string IsGroundedParamName = "IsGrounded";
+        PROPERTY(EDITABLE, ALLOW_MISSING, DISPLAY_NAME("PROP_KCC_PARAM_JUMP"))
+            std::string JumpParamName = "Jump";
+        PROPERTY(EDITABLE, ALLOW_MISSING, DISPLAY_NAME("PROP_SCALE_PLAY_RATE_WITH_SPEED"))
+            bool ScalePlayRateWithSpeed = true;
+        PROPERTY(EDITABLE, ALLOW_MISSING, RANGE(0.1, 1.0), DISPLAY_NAME("PROP_MIN_PLAY_RATE"))
+            f32 MinPlayRate = 0.4f;
+        PROPERTY(EDITABLE, ALLOW_MISSING, RANGE(1.0, 3.0), DISPLAY_NAME("PROP_MAX_PLAY_RATE"))
+            f32 MaxPlayRate = 1.2f;
+
         // 런타임 제어용 비직렬화 필드
         vec3 MoveInput = vec3(0.0f);
         bool IsRunning = false;

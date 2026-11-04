@@ -2,62 +2,114 @@
 #include <glm/gtx/quaternion.hpp>
 #include <algorithm>
 
-vec3 AnimationEvaluator::InterpolatePosition(const vector<VectorKeyframe>& keys, f64 animTime)
+vec3 AnimationEvaluator::InterpolatePosition(const vector<VectorKeyframe>& keys, f64 animTime, f64 duration, bool isLooping)
 {
 	if (keys.empty()) return vec3(0.0f);
-	if (keys.size() == 1 || animTime <= keys.front().Time) return keys.front().Value;
-	if (animTime >= keys.back().Time) return keys.back().Value;
-	for (size_t i = 0; i + 1 < keys.size(); ++i)
+	if (keys.size() == 1) return keys.front().Value;
+
+	// 1. 일반 구간 보간
+	if (animTime >= keys.front().Time && animTime <= keys.back().Time)
 	{
-		if (animTime >= keys[i].Time && animTime <= keys[i + 1].Time)
+		for (size_t i = 0; i + 1 < keys.size(); ++i)
 		{
-			const f64 dt = keys[i + 1].Time - keys[i].Time;
-			const f32 factor = dt > 0.0 ? static_cast<f32>((animTime - keys[i].Time) / dt) : 0.0f;
-			return glm::mix(keys[i].Value, keys[i + 1].Value, factor);
+			if (animTime >= keys[i].Time && animTime <= keys[i + 1].Time)
+			{
+				const f64 dt = keys[i + 1].Time - keys[i].Time;
+				const f32 factor = dt > 0.0 ? static_cast<f32>((animTime - keys[i].Time) / dt) : 0.0f;
+				return glm::mix(keys[i].Value, keys[i + 1].Value, factor);
+			}
 		}
 	}
-	return keys.back().Value;
+
+	// 2. 루프 Wrap-around 보간: 마지막 키 -> duration -> 첫 번째 키
+	if (isLooping && duration > 0.0)
+	{
+		const f64 wrapDt = (duration - keys.back().Time) + keys.front().Time;
+		if (wrapDt > 0.0001)
+		{
+			const f64 elapsed = (animTime >= keys.back().Time) ? (animTime - keys.back().Time) : ((duration - keys.back().Time) + animTime);
+			const f32 factor = std::clamp(static_cast<f32>(elapsed / wrapDt), 0.0f, 1.0f);
+			return glm::mix(keys.back().Value, keys.front().Value, factor);
+		}
+	}
+
+	return (animTime <= keys.front().Time) ? keys.front().Value : keys.back().Value;
 }
 
-quat AnimationEvaluator::InterpolateRotation(const vector<QuaternionKeyframe>& keys, f64 animTime)
+quat AnimationEvaluator::InterpolateRotation(const vector<QuaternionKeyframe>& keys, f64 animTime, f64 duration, bool isLooping)
 {
 	if (keys.empty()) return glm::identity<quat>();
-	if (keys.size() == 1 || animTime <= keys.front().Time) return glm::normalize(keys.front().Value);
-	if (animTime >= keys.back().Time) return glm::normalize(keys.back().Value);
-	for (size_t i = 0; i + 1 < keys.size(); ++i)
+	if (keys.size() == 1) return glm::normalize(keys.front().Value);
+
+	// 1. 일반 구간 보간
+	if (animTime >= keys.front().Time && animTime <= keys.back().Time)
 	{
-		if (animTime >= keys[i].Time && animTime <= keys[i + 1].Time)
+		for (size_t i = 0; i + 1 < keys.size(); ++i)
 		{
-			const f64 dt = keys[i + 1].Time - keys[i].Time;
-			const f32 factor = dt > 0.0 ? static_cast<f32>((animTime - keys[i].Time) / dt) : 0.0f;
-			return glm::normalize(glm::slerp(keys[i].Value, keys[i + 1].Value, factor));
+			if (animTime >= keys[i].Time && animTime <= keys[i + 1].Time)
+			{
+				const f64 dt = keys[i + 1].Time - keys[i].Time;
+				const f32 factor = dt > 0.0 ? static_cast<f32>((animTime - keys[i].Time) / dt) : 0.0f;
+				return glm::normalize(glm::slerp(keys[i].Value, keys[i + 1].Value, factor));
+			}
 		}
 	}
-	return glm::normalize(keys.back().Value);
+
+	// 2. 루프 Wrap-around 보간: 마지막 키 -> duration -> 첫 번째 키
+	if (isLooping && duration > 0.0)
+	{
+		const f64 wrapDt = (duration - keys.back().Time) + keys.front().Time;
+		if (wrapDt > 0.0001)
+		{
+			const f64 elapsed = (animTime >= keys.back().Time) ? (animTime - keys.back().Time) : ((duration - keys.back().Time) + animTime);
+			const f32 factor = std::clamp(static_cast<f32>(elapsed / wrapDt), 0.0f, 1.0f);
+			return glm::normalize(glm::slerp(keys.back().Value, keys.front().Value, factor));
+		}
+	}
+
+	return (animTime <= keys.front().Time) ? glm::normalize(keys.front().Value) : glm::normalize(keys.back().Value);
 }
 
-vec3 AnimationEvaluator::InterpolateScale(const vector<VectorKeyframe>& keys, f64 animTime)
+vec3 AnimationEvaluator::InterpolateScale(const vector<VectorKeyframe>& keys, f64 animTime, f64 duration, bool isLooping)
 {
 	if (keys.empty()) return vec3(1.0f);
-	if (keys.size() == 1 || animTime <= keys.front().Time) return keys.front().Value;
-	if (animTime >= keys.back().Time) return keys.back().Value;
-	for (size_t i = 0; i + 1 < keys.size(); ++i)
+	if (keys.size() == 1) return keys.front().Value;
+
+	// 1. 일반 구간 보간
+	if (animTime >= keys.front().Time && animTime <= keys.back().Time)
 	{
-		if (animTime >= keys[i].Time && animTime <= keys[i + 1].Time)
+		for (size_t i = 0; i + 1 < keys.size(); ++i)
 		{
-			const f64 dt = keys[i + 1].Time - keys[i].Time;
-			const f32 factor = dt > 0.0 ? static_cast<f32>((animTime - keys[i].Time) / dt) : 0.0f;
-			return glm::mix(keys[i].Value, keys[i + 1].Value, factor);
+			if (animTime >= keys[i].Time && animTime <= keys[i + 1].Time)
+			{
+				const f64 dt = keys[i + 1].Time - keys[i].Time;
+				const f32 factor = dt > 0.0 ? static_cast<f32>((animTime - keys[i].Time) / dt) : 0.0f;
+				return glm::mix(keys[i].Value, keys[i + 1].Value, factor);
+			}
 		}
 	}
-	return keys.back().Value;
+
+	// 2. 루프 Wrap-around 보간: 마지막 키 -> duration -> 첫 번째 키
+	if (isLooping && duration > 0.0)
+	{
+		const f64 wrapDt = (duration - keys.back().Time) + keys.front().Time;
+		if (wrapDt > 0.0001)
+		{
+			const f64 elapsed = (animTime >= keys.back().Time) ? (animTime - keys.back().Time) : ((duration - keys.back().Time) + animTime);
+			const f32 factor = std::clamp(static_cast<f32>(elapsed / wrapDt), 0.0f, 1.0f);
+			return glm::mix(keys.back().Value, keys.front().Value, factor);
+		}
+	}
+
+	return (animTime <= keys.front().Time) ? keys.front().Value : keys.back().Value;
 }
 
-void AnimationEvaluator::SampleLocalTRS(const Animation& animation, const unordered_map<wstring, const AnimationTrack*>& trackMap, const Bone& bone, f32 timeInSeconds, vec3& outPos, quat& outRot, vec3& outScale, bool isLooping)
+void AnimationEvaluator::SampleLocalTRS(const Animation& animation, const unordered_map<wstring, const AnimationTrack*>& trackMap, const Bone& bone, f32 timeInSeconds, vec3& outPos, quat& outRot, vec3& outScale, bool isLooping, float loopBlendDuration)
 {
 	const f64 ticksPerSecond = animation.GetTicksPerSecond() > 0.0 ? animation.GetTicksPerSecond() : 25.0;
-	f64 animTimeTicks = static_cast<f64>(timeInSeconds) * ticksPerSecond;
 	const f64 durationTicks = animation.GetDuration();
+	const f32 durationSec = (durationTicks > 0.0 && ticksPerSecond > 0.0) ? static_cast<f32>(durationTicks / ticksPerSecond) : 0.0f;
+	f64 animTimeTicks = static_cast<f64>(timeInSeconds) * ticksPerSecond;
 	if (durationTicks > 0.0)
 	{
 		animTimeTicks = isLooping ? std::fmod(animTimeTicks, durationTicks) : std::clamp(animTimeTicks, 0.0, durationTicks);
@@ -66,21 +118,37 @@ void AnimationEvaluator::SampleLocalTRS(const Animation& animation, const unorde
 	const quat bindRot = glm::toQuat(bone.LocalTransform);
 	const vec3 bindScale = vec3(glm::length(vec3(bone.LocalTransform[0])), glm::length(vec3(bone.LocalTransform[1])), glm::length(vec3(bone.LocalTransform[2])));
 	const auto it = trackMap.find(bone.Name);
-	if (it != trackMap.end())
-	{
-		const auto* track = it->second;
-		outPos = !track->PositionKeyframes.empty() ? InterpolatePosition(track->PositionKeyframes, animTimeTicks) : bindPos;
-		outRot = !track->RotationKeyframes.empty() ? InterpolateRotation(track->RotationKeyframes, animTimeTicks) : bindRot;
-		outScale = !track->ScaleKeyframes.empty() ? InterpolateScale(track->ScaleKeyframes, animTimeTicks) : bindScale;
-	}
-	else
+	if (it == trackMap.end())
 	{
 		outPos = bindPos;
 		outRot = bindRot;
 		outScale = bindScale;
+		return;
+	}
+	const auto* track = it->second;
+	outPos = !track->PositionKeyframes.empty() ? InterpolatePosition(track->PositionKeyframes, animTimeTicks, durationTicks, isLooping) : bindPos;
+	outRot = !track->RotationKeyframes.empty() ? InterpolateRotation(track->RotationKeyframes, animTimeTicks, durationTicks, isLooping) : bindRot;
+	outScale = !track->ScaleKeyframes.empty() ? InterpolateScale(track->ScaleKeyframes, animTimeTicks, durationTicks, isLooping) : bindScale;
+	// [Loop-End Crossfade]: 루프 종료 전 0.25초 동안 시작 포즈(0.0초)로 부드럽게 블렌딩하여 툭 끊김을 원천 제거
+	if (isLooping && durationSec > 0.2f && loopBlendDuration > 0.001f)
+	{
+		const f32 blendWindow = std::min(loopBlendDuration, durationSec * 0.25f);
+		const f32 currentTimeInLoop = static_cast<f32>(std::fmod(timeInSeconds, durationSec));
+		const f32 blendStartTime = durationSec - blendWindow;
+		if (currentTimeInLoop >= blendStartTime)
+		{
+			const f32 alpha = glm::clamp((currentTimeInLoop - blendStartTime) / blendWindow, 0.0f, 1.0f);
+			const vec3 startPos = !track->PositionKeyframes.empty() ? InterpolatePosition(track->PositionKeyframes, 0.0, durationTicks, false) : bindPos;
+			const quat startRot = !track->RotationKeyframes.empty() ? InterpolateRotation(track->RotationKeyframes, 0.0, durationTicks, false) : bindRot;
+			const vec3 startScale = !track->ScaleKeyframes.empty() ? InterpolateScale(track->ScaleKeyframes, 0.0, durationTicks, false) : bindScale;
+			outPos = glm::mix(outPos, startPos, alpha);
+			outRot = glm::normalize(glm::slerp(outRot, startRot, alpha));
+			outScale = glm::mix(outScale, startScale, alpha);
+		}
 	}
 }
-void AnimationEvaluator::EvaluateSkinningMatrices(const Animation& animation, const Skeleton& skeleton, f32 timeInSeconds, std::vector<mat4>& outBoneMatrices, bool isLooping)
+
+void AnimationEvaluator::EvaluateSkinningMatrices(const Animation& animation, const Skeleton& skeleton, f32 timeInSeconds, std::vector<mat4>& outBoneMatrices, bool isLooping, float loopBlendDuration)
 {
 	const auto& bones = skeleton.GetBones();
 	const uint32 boneCount = static_cast<uint32>(bones.size());
@@ -94,7 +162,7 @@ void AnimationEvaluator::EvaluateSkinningMatrices(const Animation& animation, co
 	{
 		const auto& bone = bones[i];
 		vec3 pos; quat rot; vec3 scl;
-		SampleLocalTRS(animation, trackMap, bone, timeInSeconds, pos, rot, scl, isLooping);
+		SampleLocalTRS(animation, trackMap, bone, timeInSeconds, pos, rot, scl, isLooping, loopBlendDuration);
 		const mat4 localTransform = glm::translate(mat4(1.0f), pos) * glm::toMat4(rot) * glm::scale(mat4(1.0f), scl);
 		if (bone.ParentIndex >= 0 && static_cast<uint32>(bone.ParentIndex) < boneCount)
 			combinedTransforms[i] = combinedTransforms[bone.ParentIndex] * localTransform;

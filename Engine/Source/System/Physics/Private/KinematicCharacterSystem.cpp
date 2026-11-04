@@ -11,6 +11,24 @@
 #include "Components/Render/TerrainComponent.h"
 #include <glm/gtc/matrix_transform.hpp>
 #include <algorithm>
+#include "Components/Render/AnimatorComponent.h"
+
+namespace
+{
+    AnimatorComponent* FindAnimatorInHierarchy(entt::registry& world, entt::entity root)
+    {
+        const auto* hierarchy = world.try_get<HierarchyComponent>(root);
+        if (!hierarchy) return nullptr;
+        for (entt::entity child : hierarchy->children)
+        {
+            if (!world.valid(child)) continue;
+            if (auto* anim = world.try_get<AnimatorComponent>(child)) return anim;
+            if (auto* childAnim = FindAnimatorInHierarchy(world, child)) return childAnim;
+        }
+        return nullptr;
+    }
+}
+
 
 namespace Engine
 {
@@ -189,14 +207,19 @@ namespace Engine
             }
         }
 
-        // 2. 점프 처리 (Jump)
+        // 2. 점프 처리 (Jump Execution)
+        bool justJumped = false;
         if (kcc.JumpRequested && kcc.IsGrounded)
         {
             kcc.Velocity.y = kcc.JumpForce;
             kcc.IsGrounded = false;
             kcc.JumpRequested = false;
+            justJumped = true;
         }
-        kcc.JumpRequested = false;
+        else
+        {
+            kcc.JumpRequested = false;
+        }
 
         // 3. 중력 적용 (Gravity)
         if (!kcc.IsGrounded)
@@ -315,6 +338,50 @@ namespace Engine
         auto& worldTransform = world.get<WorldTransformComponent>(entity);
         TransformSystem::UpdateRootWorld(transform, worldTransform);
         kcc.MoveInput = vec3(0.0f);
+        // 8. 애니메이터 파라미터 자동 주입 (Locomotion)
+        if (kcc.AutoUpdateAnimator)
+        {
+            AnimatorComponent* animator = nullptr;
+            if (kcc.TargetAnimatorEntity != entt::null && world.valid(kcc.TargetAnimatorEntity))
+            {
+                animator = world.try_get<AnimatorComponent>(kcc.TargetAnimatorEntity);
+            }
+            if (!animator)
+            {
+                animator = world.try_get<AnimatorComponent>(entity);
+            }
+            if (!animator)
+            {
+                animator = FindAnimatorInHierarchy(world, entity);
+            }
+            if (animator)
+            {
+                const f32 horizontalSpeed = glm::length(vec2(kcc.Velocity.x, kcc.Velocity.z));
+                if (!kcc.SpeedParamName.empty())
+                {
+                    animator->SetFloat(kcc.SpeedParamName, horizontalSpeed);
+                }
+                if (!kcc.IsGroundedParamName.empty())
+                {
+                    animator->SetBool(kcc.IsGroundedParamName, kcc.IsGrounded);
+                }
+                if (justJumped && !kcc.JumpParamName.empty())
+                {
+                    animator->SetTrigger(kcc.JumpParamName);
+                }
+
+                // [추가]: 실제 이동 속도에 비례하여 발걸음 재생 속도 동적 조절 (발 미끄러짐 및 헛발질 완전 제거)
+                if (kcc.ScalePlayRateWithSpeed && horizontalSpeed > 0.1f)
+                {
+                    const f32 baseSpeed = kcc.IsRunning ? kcc.RunSpeed : kcc.WalkSpeed;
+                    animator->playRate = std::clamp(horizontalSpeed / std::max(baseSpeed, 0.1f), kcc.MinPlayRate, kcc.MaxPlayRate);
+                }
+                else
+                {
+                    animator->playRate = 1.0f;
+                }
+            }
+        }
     }
 
     void KinematicCharacterSystem::OnUpdate(entt::registry& registry, const vector<Scene*>& activeScenes, f32 dt)

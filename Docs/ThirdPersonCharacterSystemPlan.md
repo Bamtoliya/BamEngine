@@ -82,12 +82,21 @@ flowchart TD
   - 부모가 있는 자식 엔티티에 `TransformSystem::UpdateRootWorld`를 무조건 호출하여 부모 변환이 무시되고 로컬 좌표가 월드로 덮어씌워지던 버그 수정.
   - `TransformSystem::TryComposeWorld` 및 `camWorld.CommitWorld`를 통해 부모 행렬을 올바르게 결합하여 스프링암 프로브 구체와 뷰포트 카메라 프러스텀의 위치 불일치 완벽 해소.
 
-### [ ] Phase 3: 애니메이션 시스템(Locomotion) 연동 (진행 중)
+### [x] Phase 3: 애니메이션 시스템(Locomotion) 연동 (완료)
 - **물리 상태의 애니메이터 자동 바인딩**:
   - `KinematicCharacterSystem`에서 본인 또는 자식 스켈레탈 메시의 `AnimatorComponent` 자동 탐색.
   - `Locomotion.animator` 표준 파라미터(`Speed`, `IsGrounded`, `Jump`) 실시간 주입.
+  - 이동 속도 연동 재생 배속(`ScalePlayRateWithSpeed`, `MinPlayRate`, `MaxPlayRate`) 적용으로 발 미끄러짐(Foot Sliding) 방지 및 인스펙터 실시간 조절 연동.
+  - 신규 프로퍼티에 `ALLOW_MISSING` 어노테이션을 부여하여 기존 씬 역직렬화 하위 호환성 확보.
+- **1D 블렌드 트리 및 위상 동기화(Phase Matching)**:
+  - `AnimationEvaluator::EvaluateBlendTree1D`에서 두 클립의 길이가 달라도 발걸음 주기(Normalized Time)를 일치시켜 LERP 합성.
+  - 루프 래핑 시 뒷다리 차기 모션의 조기 잘림을 막고 자연스러운 순환을 위해 마지막 0.05초 구간 0초 포즈와의 미세 Slerp/Mix 루프 스무딩 적용.
+  - `AnimState`에 `LoopBlendDuration` 설정 프로퍼티 추가 및 리플렉션/직렬화 연동.
+- **상태 머신 전이 히스테리시스 안정화**:
+  - `Idle`(`Fox_Survey`) $\leftrightarrow$ `Move`(`Walk` ~ `Run` BlendTree1D) 구조 개편.
+  - 방향 전환 시 감속으로 인한 0초 튕김을 막기 위해 가속 전이(`Speed > 0.3`)와 감속 전이(`Speed < 0.15`) 간 임계값 히스테리시스 적용.
 - **스켈레탈 캐릭터 모델 배치 및 검증**:
-  - 구체 대신 실제 3D 캐릭터 모델(`CesiumMan` 또는 여우 모델 등)을 셋업하여 Idle $\rightarrow$ Walk $\rightarrow$ Run $\rightarrow$ Jump 모션 확인.
+  - 여우(`Fox.glb`) 모델을 셋업하여 Idle $\rightarrow$ Walk $\rightarrow$ Run 및 Shift 달리기 시 모션 블렌딩 검증 완료.
 
 ### [ ] Phase 4: 게임플레이 고도화 (예정)
 - 카메라 충돌 시 벽면 관통 방지 부드러운 줌인/줌아웃 보간.

@@ -259,11 +259,17 @@ void AnimatorRuntimeState::Update(float dt, const Skeleton& skeleton, std::vecto
 	{
 		if (curState->IsBlendTree() && blendSecondaryClip && blendWeight > 0.0f)
 		{
-			AnimationEvaluator::EvaluateBlendedSkinningMatrices(*primaryClip, m_currentStateTime, *blendSecondaryClip, m_currentStateTime, blendWeight, skeleton, outBoneMatrices, curState->isLooping, curState->isLooping);
+			// [위상 동기화 (Phase Matching)]: 두 클립의 길이가 달라도 발걸음 주기(Normalized Time)를 일치시켜 블렌딩
+			const f64 secTps = blendSecondaryClip->GetTicksPerSecond() > 0.0 ? blendSecondaryClip->GetTicksPerSecond() : 25.0;
+			const f64 secDurationSec = blendSecondaryClip->GetDuration() / secTps;
+			const float normTime = (curDurationSec > 0.0) ? (m_currentStateTime / static_cast<float>(curDurationSec)) : 0.0f;
+			const float secondaryTime = (secDurationSec > 0.0) ? (normTime * static_cast<float>(secDurationSec)) : m_currentStateTime;
+
+			AnimationEvaluator::EvaluateBlendedSkinningMatrices(*primaryClip, m_currentStateTime, *blendSecondaryClip, secondaryTime, blendWeight, skeleton, outBoneMatrices, curState->isLooping, curState->isLooping);
 		}
 		else
 		{
-			AnimationEvaluator::EvaluateSkinningMatrices(*primaryClip, skeleton, m_currentStateTime, outBoneMatrices, curState->isLooping);
+			AnimationEvaluator::EvaluateSkinningMatrices(*primaryClip, skeleton, m_currentStateTime, outBoneMatrices, curState->isLooping, curState->loopBlendDuration);
 		}
 	}
 }

@@ -603,6 +603,10 @@ void AnimatorGraphPanel::DrawStateInspector(Engine::AnimState& state)
 
 	if (ImGui::DragFloat(LOCAL_LABEL("PROP_PLAY_RATE").c_str(), &state.playRate, 0.05f, 0.0f, 10.0f)) m_IsDirty = true;
 	if (ImGui::Checkbox(LOCAL_LABEL("PROP_IS_LOOPING").c_str(), &state.isLooping)) m_IsDirty = true;
+	if (state.isLooping)
+	{
+		if (ImGui::SliderFloat("Loop Blend Duration", &state.loopBlendDuration, 0.0f, 0.5f, "%.2fs")) m_IsDirty = true;
+	}
 
 	const bool isDefault = (state.name == m_StateMachine->defaultState);
 	bool defaultToggle = isDefault;

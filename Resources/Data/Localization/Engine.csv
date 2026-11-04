@@ -335,11 +335,16 @@
 ,PROP_IS_SERVER_ONLY,Is Server Only,서버 전용 여부
 ,PROP_IS_TRIGGER,Trigger,트리거
 ,PROP_KCC_AIR_CONTROL,Air Control,공중 제어
+,PROP_KCC_ANIMATOR_ENTITY,Animator Entity,대상 애니메이터 엔티티
+,PROP_KCC_AUTO_UPDATE_ANIMATOR,Auto Update Animator,애니메이터 자동 연동
 ,PROP_KCC_CENTER,Center,중심점
 ,PROP_KCC_GRAVITY,Gravity,중력
 ,PROP_KCC_HEIGHT,Height,높이
 ,PROP_KCC_IS_GROUNDED,Is Grounded,지면 접촉 여부
 ,PROP_KCC_JUMP_FORCE,Jump Force,점프력
+,PROP_KCC_PARAM_IS_GROUNDED,Is Grounded Param Name,접지 파라미터명
+,PROP_KCC_PARAM_JUMP,Jump Param Name,점프 파라미터명
+,PROP_KCC_PARAM_SPEED,Speed Param Name,속도 파라미터명
 ,PROP_KCC_RADIUS,Radius,반경
 ,PROP_KCC_RUN_SPEED,Run Speed,달리기 속도
 ,PROP_KCC_SKIN_WIDTH,Skin Width,스킨 폭
@@ -366,6 +371,7 @@
 ,PROP_LOD2_MESH,LOD 2 Mesh,LOD 2 메시
 ,PROP_LOD2_SCREEN_COVERAGE,LOD 2 Screen Coverage,LOD 2 화면 점유율
 ,PROP_LOOP,Loop,반복
+,PROP_LOOP_BLEND_DURATION,,
 ,PROP_MASS,Mass,질량
 ,PROP_MATERIAL_HANDLE,Material Handle,마테리얼 핸들
 ,PROP_MATRIX,Matrix,매트릭스
@@ -374,10 +380,12 @@
 ,PROP_MAX_HEIGHT,Max Height,최대 높이
 ,PROP_MAX_PARTICLES,Max Particles,최대 파티클 수
 ,PROP_MAX_PITCH,Max Pitch,최대 피치
+,PROP_MAX_PLAY_RATE,Max Play Rate,최대 재생 배속
 ,PROP_MESH_HANDLE,Mesh Handle,메쉬 핸들
 ,PROP_MIN,Min,최솟값
 ,PROP_MIN_DISTANCE,Min Distance,최소 감쇠 거리
 ,PROP_MIN_PITCH,Min Pitch,최소 피치
+,PROP_MIN_PLAY_RATE,Min Play Rate,최소 재생 배속
 ,PROP_MORPH_SPEED,Morph Speed,대류 피어오름 속도
 ,PROP_MOUSE_SENSITIVITY,Mouse Sensitivity,마우스 감도
 ,PROP_NAME,Name,이름
@@ -428,6 +436,7 @@
 ,PROP_ROTATION_SPEED_MIN,Rotation Speed Min,최소 회전 속도
 ,PROP_ROT_THRESHOLD,Rotation Threshold,회전 동기화 오차 한계
 ,PROP_SCALE,Scale,크기
+,PROP_SCALE_PLAY_RATE_WITH_SPEED,Scale Play Rate With Speed,이동 속도 연동 재생 배속
 ,PROP_SEED,Random Seed,난수 시드
 ,PROP_SETTINGS,Settings,설정
 ,PROP_SHADOW_BIAS,Shadow Bias,그림자 바이어스

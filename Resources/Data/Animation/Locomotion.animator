@@ -5,7 +5,7 @@
                 "Key": "Speed",
                 "Value": {
                     "boolValue": false,
-                    "floatValue": 0.0,
+                    "floatValue": 0,
                     "intValue": 0,
                     "type": 0
                 }
@@ -14,41 +14,62 @@
                 "Key": "Jump",
                 "Value": {
                     "boolValue": false,
-                    "floatValue": 0.0,
+                    "floatValue": 0,
                     "intValue": 0,
                     "type": 3
                 }
             }
         ],
-        "defaultState": "Locomotion",
+        "defaultState": "Idle",
         "states": [
             {
                 "blendTree": {
-                    "name": "Locomotion",
-                    "parameterName": "Speed",
-                    "samples": [
-                        { "clip": { "Null": true }, "threshold": 0.0 },
-                        { "clip": { "Null": true }, "threshold": 2.0 },
-                        { "clip": { "Null": true }, "threshold": 6.0 }
-                    ]
-                },
-                "clip": { "Null": true },
-                "isBlendTree": true,
-                "isLooping": true,
-                "name": "Locomotion",
-                "playRate": 1.0
-            },
-            {
-                "blendTree": {
-                    "name": "",
+                    "name": "Idle",
                     "parameterName": "",
                     "samples": []
                 },
-                "clip": { "Null": true },
+                "clip": {
+                    "AssetKey": "Resources/Model/Fox_Survey.bamanim",
+                    "AssetPath": "Resources/Model/Fox_Survey.bamanim",
+                    "Null": false
+                },
                 "isBlendTree": false,
-                "isLooping": false,
-                "name": "Jump",
-                "playRate": 1.0
+                "isLooping": true,
+                "name": "Idle",
+                "notifies": [],
+                "playRate": 1
+            },
+            {
+                "blendTree": {
+                    "name": "LocomotionBlendTree",
+                    "parameterName": "Speed",
+                    "samples": [
+                        {
+                            "clip": {
+                                "AssetKey": "Resources/Model/Fox_Walk.bamanim",
+                                "AssetPath": "Resources/Model/Fox_Walk.bamanim",
+                                "Null": false
+                            },
+                            "threshold": 5.5
+                        },
+                        {
+                            "clip": {
+                                "AssetKey": "Resources/Model/Fox_Run.bamanim",
+                                "AssetPath": "Resources/Model/Fox_Run.bamanim",
+                                "Null": false
+                            },
+                            "threshold": 8
+                        }
+                    ]
+                },
+                "clip": {
+                    "Null": true
+                },
+                "isBlendTree": true,
+                "isLooping": true,
+                "name": "Move",
+                "notifies": [],
+                "playRate": 1
             }
         ],
         "transitions": [
@@ -56,23 +77,29 @@
                 "conditions": [
                     {
                         "mode": 0,
-                        "parameterName": "Jump",
-                        "threshold": 0.0
+                        "parameterName": "Speed",
+                        "threshold": 0.30000001192092896
                     }
                 ],
-                "duration": 0.15,
-                "exitTime": 0.0,
+                "duration": 0.20000000298023224,
+                "exitTime": 0,
                 "hasExitTime": false,
-                "sourceState": "Locomotion",
-                "targetState": "Jump"
+                "sourceState": "Idle",
+                "targetState": "Move"
             },
             {
-                "conditions": [],
-                "duration": 0.25,
-                "exitTime": 0.85,
-                "hasExitTime": true,
-                "sourceState": "Jump",
-                "targetState": "Locomotion"
+                "conditions": [
+                    {
+                        "mode": 1,
+                        "parameterName": "Speed",
+                        "threshold": 0.15000000596046448
+                    }
+                ],
+                "duration": 0.20000000298023224,
+                "exitTime": 0,
+                "hasExitTime": false,
+                "sourceState": "Move",
+                "targetState": "Idle"
             }
         ]
     }

@@ -35,6 +35,43 @@ Use one entry per meaningful change.
 
 ---
 
+## [2026-11-05] 3인칭 캐릭터 Locomotion 애니메이션 블렌딩 고도화 및 모델 재임포트 핫 리로드
+
+- Area: Animation | Physics | Resource | Editor | Docs
+- Type: Feature | Fix | Refactor | Docs
+- Owner: @user & @assistant
+- 관련 파일:
+  - Docs/ThirdPersonCharacterSystemPlan.md
+  - Docs/InteractiveModelImportPreviewPlan.md
+  - Docs/DevelopmentPriorities.md
+  - Docs/ImplementationLog.md
+  - Engine/Source/Resource/Model/Private/AnimationEvaluator.cpp
+  - Engine/Source/Resource/Model/Public/AnimationEvaluator.h
+  - Engine/Source/Resource/Model/Private/AnimatorStateMachine.cpp
+  - Engine/Source/Resource/Model/Public/AnimatorStateMachine.h
+  - Engine/Source/Core/Public/Components/Physics/CharacterControllerComponent.h
+  - Engine/Source/System/Physics/Private/KinematicCharacterSystem.cpp
+  - Engine/Source/System/Physics/Private/ThirdPersonControllerSystem.cpp
+  - Editor/Source/AssetManager/Importer/Private/ModelImporter.cpp
+  - Editor/Source/AssetManager/Importer/Public/ModelImporter.h
+  - Editor/Source/AssetManager/Importer/Private/ModelImportModal.cpp
+  - Editor/Source/AssetManager/Importer/Public/ModelImportModal.h
+  - Resources/Data/Animation/Locomotion.animator
+  - Resources/Data/Localization/Engine.csv
+  - Resources/Scenes/RaytracingScene3.json
+- 구현 내용 및 동기:
+  1. 1D 블렌드 트리 위상 동기화 (Phase Matching): 클립 간 길이가 다른 Walk와 Run 클립을 정규화 시간(Normalized Time) 기준으로 일치시켜 LERP 보간함으로써 발걸음이 어긋나는 현상 제거.
+  2. 미세 루프 크로스페이드 (Loop Smoothing): 비반복 모션 잘림 방지를 위해 마지막 0.05초 구간 동안 0초 포즈와 미세 보간하여 루프 래핑 시 뚝 끊기는 문제 해결.
+  3. 이동 속도 연동 애니메이션 재생 배속: CharacterControllerComponent의 이동 속도(horizontalSpeed)를 기반으로 애니메이터의 PlayRate를 동적 스케일링하여 발 미끄러짐(Foot Sliding) 및 급감속 시 발길질 현상 방지. 인스펙터 실시간 조절(ScalePlayRateWithSpeed, MinPlayRate, MaxPlayRate) 지원.
+  4. 역직렬화 하위 호환성 확보: 신규 추가된 프로퍼티에 ALLOW_MISSING 어노테이션을 부여하여 구버전 씬(RaytracingScene3.json) 로드 시 실패 에러(code=1) 방어.
+  5. 모델 재임포트 인플레이스 핫 리로드: ModelImporter에서 기존 리소스 핸들이 유효할 경우 Reload(key)를 호출하여 MaterialInstance registration failed 및 0xC0000005 크래시 원천 차단.
+  6. 대화형 모델 임포트 모달(ModelImportModal) 클래스 분리 및 뷰포트 프리뷰 인프라 연동.
+- 검증:
+  - Fox 모델 기반 Idle -> Walk -> Run 실시간 이동 및 방향 전환, 감속, Shift 달리기 시 모션 블렌딩과 자연스러운 루프 재생 확인.
+  - RaytracingScene3.json 로드 및 인스펙터 슬라이더 조절 정상 작동 확인.
+
+---
+
 ## [2026-11-04] 3인칭 캐릭터 컨트롤러, 스프링암 카메라 및 KCC 물리 안정화 (ThirdPersonCharacterSystemPlan)
 
 - Area: Physics | Camera | Engine | Editor | Docs
