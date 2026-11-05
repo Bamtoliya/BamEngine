@@ -229,97 +229,93 @@ namespace Editor
 	{
 		if (!m_PreviewScene) return;
 
-		// 1. 카메라 입력 처리 (휠 줌은 뷰포트 호버 시에만 허용)
+		// 1. 카메라 입력 처리
 		if (m_CameraController && (m_IsFocused || m_IsHovered))
 		{
 			m_CameraController->HandleInput(dt, m_IsHovered);
 		}
 
 		auto& reg = m_PreviewScene->GetRegistry();
-
-		// 2. 프리뷰 씬 내부의 AnimatorComponent 실시간 애니메이션 틱 및 스키닝 행렬 평가
 		auto animView = reg.view<Engine::AnimatorComponent>();
+
 		for (auto animEntity : animView)
 		{
 			auto& animator = animView.get<Engine::AnimatorComponent>(animEntity);
 			const auto* skeleton = FindSkeletonInHierarchy(reg, animEntity);
 			if (!skeleton) continue;
 
-			const Engine::Animation* baseClip = nullptr;
-			float baseTime = animator.currentTime;
-			bool isLoopingBase = animator.isLooping;
+			auto& localPose = animator.localBonePose;
+			localPose.clear();
 
+			// 2. 베이스 로컬 포즈 평가
 			if (animator.isPlaying && animator.runtimeState.HasStateMachine())
 			{
-				animator.runtimeState.Update(dt * animator.playRate, *skeleton, animator.finalBoneMatrices);
+				animator.runtimeState.UpdateLocalPose(dt * animator.playRate, *skeleton, localPose);
 				animator.currentTime = animator.runtimeState.GetStateTime();
-				baseTime = animator.currentTime;
-				baseClip = animator.runtimeState.GetCurrentClip();
-				if (const auto& sm = animator.runtimeState.GetStateMachine())
-				{
-					if (const auto* st = sm->FindState(animator.runtimeState.GetCurrentStateName()))
-					{
-						isLoopingBase = st->isLooping;
-					}
-				}
+
+				// 독립 미리보기에서는 게임플레이 노티파이를 실행하지 않는다.
 				(void)animator.runtimeState.PopTriggeredNotifies();
 			}
 			else if (animator.isPlaying && animator.currentClip.Get())
 			{
-				auto* clip = animator.currentClip.Get();
+				const auto* clip = animator.currentClip.Get();
 				const f64 tps = clip->GetTicksPerSecond() > 0.0 ? clip->GetTicksPerSecond() : 25.0;
-				const f32 durationSec = clip->GetDuration() > 0.0 ? static_cast<f32>(clip->GetDuration() / tps) : 0.0f;
+				const f32 durationSec = clip->GetDuration() > 0.0
+					? static_cast<f32>(clip->GetDuration() / tps) : 0.0f;
+
 				animator.currentTime += dt * animator.playRate;
 				if (!animator.isLooping && durationSec > 0.0f && animator.currentTime >= durationSec)
 				{
 					animator.currentTime = durationSec;
 					animator.isPlaying = false;
 				}
-				baseClip = clip;
-				Engine::AnimationEvaluator::EvaluateSkinningMatrices(*clip, *skeleton, baseTime, animator.finalBoneMatrices, animator.isLooping);
+
+				Engine::AnimationEvaluator::EvaluateLocalPose(*clip, *skeleton,
+					animator.currentTime, localPose, animator.isLooping);
 			}
 			else
 			{
-				// 애니메이션이 없거나 정지 상태인 경우: 원본 기본 T-포즈(바인드 포즈) 유지
-				const auto* skeletonPtr = skeleton;
-				const uint32 boneCount = skeletonPtr ? static_cast<uint32>(skeletonPtr->GetBones().size()) : 0;
-				if (boneCount > 0)
-				{
-					if (animator.finalBoneMatrices.size() != boneCount)
-						animator.finalBoneMatrices.resize(boneCount, glm::identity<mat4>());
-					std::fill(animator.finalBoneMatrices.begin(), animator.finalBoneMatrices.end(), glm::identity<mat4>());
-				}
+				// 기존 미리보기 정책: 정지 상태 또는 클립이 없으면 단위 스키닝 행렬 사용
+				animator.finalBoneMatrices.assign(skeleton->GetBones().size(), glm::identity<Engine::mat4>());
+				continue;
 			}
 
-			// 상위 오버레이 레이어 & 본 마스킹 합성 (Phase 5)
-			if (baseClip)
+			if (localPose.empty()) continue;
+
+			// 3. 기존 포즈 위에 레이어를 배열 순서대로 누적 합성
+			for (auto& layer : animator.layers)
 			{
-				for (auto& layer : animator.layers)
+				if (!layer.isPlaying || layer.weight <= 0.0f) continue;
+
+				const auto* layerClip = layer.clip.Get();
+				if (!layerClip) continue;
+
+				if (layer.mask.boneWeights.size() != skeleton->GetBones().size())
 				{
-					if (!layer.isPlaying || layer.weight <= 0.0f) continue;
-					auto* layerClip = layer.clip.Get();
-					if (!layerClip) continue;
-
-					if (layer.mask.boneWeights.size() != skeleton->GetBones().size())
-					{
-						layer.mask.BuildWeights(*skeleton);
-					}
-
-					const f64 layerTps = layerClip->GetTicksPerSecond() > 0.0 ? layerClip->GetTicksPerSecond() : 25.0;
-					const f32 layerDuration = layerClip->GetDuration() > 0.0 ? static_cast<f32>(layerClip->GetDuration() / layerTps) : 0.0f;
-					layer.currentTime += dt * layer.playRate;
-					if (!layer.isLooping && layerDuration > 0.0f && layer.currentTime >= layerDuration)
-					{
-						layer.currentTime = layerDuration;
-						layer.isPlaying = false;
-					}
-
-					Engine::AnimationEvaluator::EvaluateMaskedSkinningMatrices(*baseClip, baseTime, *layerClip, layer.currentTime, layer.mask.boneWeights, layer.weight, *skeleton, animator.finalBoneMatrices, isLoopingBase, layer.isLooping);
+					layer.mask.BuildWeights(*skeleton);
 				}
+
+				const f64 layerTps = layerClip->GetTicksPerSecond() > 0.0
+					? layerClip->GetTicksPerSecond() : 25.0;
+				const f32 layerDuration = layerClip->GetDuration() > 0.0
+					? static_cast<f32>(layerClip->GetDuration() / layerTps) : 0.0f;
+
+				layer.currentTime += dt * layer.playRate;
+				if (!layer.isLooping && layerDuration > 0.0f && layer.currentTime >= layerDuration)
+				{
+					layer.currentTime = layerDuration;
+					layer.isPlaying = false;
+				}
+
+				Engine::AnimationEvaluator::ApplyMaskedLocalPose(*layerClip, layer.currentTime,
+					layer.mask.boneWeights, layer.weight, *skeleton, localPose, layer.isLooping);
 			}
+
+			// 4. 모든 합성이 끝난 뒤 최종 스키닝 행렬 생성
+			Engine::AnimationEvaluator::BuildSkinningMatrices(*skeleton, localPose, animator.finalBoneMatrices);
 		}
 
-		// 3. 씬 변환 계층 및 조명 GPU 버퍼 갱신
+		// 5. 씬 변환 계층과 조명 GPU 버퍼 갱신
 		Engine::TransformSystem::UpdateHierarchy(reg);
 
 		const auto& saved = EditorSettingsService::Get().GetPreferences().PreviewLightIntensity;

@@ -90,14 +90,75 @@ bool TransitionCondition::Evaluate(const AnimatorParameters& params) const
 	}
 }
 
+namespace
+{
+	bool MatchAnimatorConditionList(const std::vector<TransitionCondition>& conditions,
+		ETransitionConditionLogic logic, const AnimatorParameters& params)
+	{
+		if (conditions.empty()) return false;
+
+		const auto matches = [&](const TransitionCondition& condition)
+			{
+				return condition.Evaluate(params);
+			};
+
+		if (logic == ETransitionConditionLogic::Any)
+			return std::any_of(conditions.begin(), conditions.end(), matches);
+
+		return std::all_of(conditions.begin(), conditions.end(), matches);
+	}
+}
+
 bool AnimTransition::CanTransition(float currentNormalizedTime, const AnimatorParameters& params) const
 {
-	if (hasExitTime && currentNormalizedTime < exitTime) return false;
-	for (const auto& cond : conditions)
+	if (fromAnyState && conditions.empty() && conditionGroups.empty()) return false;
+	if (!fromAnyState && hasExitTime && currentNormalizedTime < exitTime) return false;
+
+	if (conditionGroups.empty())
+		return conditions.empty() || MatchAnimatorConditionList(conditions, conditionLogic, params);
+
+	const bool requireAll = groupLogic == ETransitionConditionLogic::All;
+
+	if (!conditions.empty() && MatchAnimatorConditionList(conditions, conditionLogic, params) != requireAll)
+		return !requireAll;
+
+	for (const auto& group : conditionGroups)
 	{
-		if (!cond.Evaluate(params)) return false;
+		if (MatchAnimatorConditionList(group.conditions, group.conditionLogic, params) != requireAll)
+			return !requireAll;
 	}
-	return true;
+
+	return requireAll;
+}
+
+void AnimTransition::ConsumeMatchedTriggers(AnimatorParameters& params) const
+{
+	std::vector<const std::string*> matched;
+	const auto& values = params.GetAll();
+
+	const auto collect = [&](const std::vector<TransitionCondition>& list, ETransitionConditionLogic logic)
+		{
+			if (!MatchAnimatorConditionList(list, logic, params)) return;
+
+			for (const auto& condition : list)
+			{
+				const auto it = values.find(condition.parameterName);
+				if (it == values.end() || it->second.type != EAnimatorParamType::Trigger ||
+					!it->second.boolValue || !condition.Evaluate(params))
+				{
+					continue;
+				}
+
+				matched.push_back(&condition.parameterName);
+			}
+		};
+
+	collect(conditions, conditionLogic);
+	for (const auto& group : conditionGroups)
+		collect(group.conditions, group.conditionLogic);
+
+	for (const auto* name : matched)
+		params.ResetTrigger(*name);
 }
 
 const AnimState* AnimatorStateMachine::FindState(const std::string& name) const
@@ -112,10 +173,19 @@ const AnimState* AnimatorStateMachine::FindState(const std::string& name) const
 std::vector<const AnimTransition*> AnimatorStateMachine::GetTransitionsFrom(const std::string& stateName) const
 {
 	std::vector<const AnimTransition*> result;
-	for (const auto& tr : transitions)
+
+	for (const auto& transition : transitions)
 	{
-		if (tr.sourceState == stateName) result.push_back(&tr);
+		if (transition.fromAnyState && transition.targetState != stateName)
+			result.push_back(&transition);
 	}
+
+	for (const auto& transition : transitions)
+	{
+		if (!transition.fromAnyState && transition.sourceState == stateName)
+			result.push_back(&transition);
+	}
+
 	return result;
 }
 
@@ -129,6 +199,8 @@ void AnimatorRuntimeState::BindStateMachine(const std::shared_ptr<AnimatorStateM
 	m_isTransitioning = false;
 	m_parameters.GetAll() = sm->defaultParameters;
 	m_triggeredNotifies.clear();
+	m_currentBlendInput.reset();
+	m_targetBlendInput.reset();
 }
 void AnimatorRuntimeState::Reset()
 {
@@ -139,139 +211,290 @@ void AnimatorRuntimeState::Reset()
 	m_isTransitioning = false;
 	m_targetStateName.clear();
 	m_triggeredNotifies.clear();
+	m_currentBlendInput.reset();
+	m_targetBlendInput.reset();
 	if (m_stateMachine) m_currentStateName = m_stateMachine->defaultState;
 }
 
-void AnimatorRuntimeState::Update(float dt, const Skeleton& skeleton, std::vector<mat4>& outBoneMatrices)
+namespace
 {
-	if (!m_stateMachine) return;
-	const auto* curState = m_stateMachine->FindState(m_currentStateName);
-	if (!curState) return;
-
-	// 1. 현재 상태의 주 애니메이션 클립 및 지속 시간 계산
-	const Animation* primaryClip = nullptr;
-	const Animation* blendSecondaryClip = nullptr;
-	float blendWeight = 0.0f;
-
-	if (curState->IsBlendTree())
+	struct AnimatorMotion
 	{
-		const float paramVal = m_parameters.GetFloat(curState->blendTree.parameterName);
-		curState->blendTree.Evaluate(paramVal, primaryClip, blendSecondaryClip, blendWeight);
-	}
-	else
+		const Animation* Primary = nullptr;
+		const Animation* Secondary = nullptr;
+		f32 SecondaryWeight = 0.0f;
+		f64 Duration = 0.0;
+		std::array<BlendClipWeight2D, 4> Corners{};
+	};
+
+	f64 AnimatorClipDuration(const Animation& clip)
 	{
-		primaryClip = curState->clip.Get();
+		const f64 tps = clip.GetTicksPerSecond() > 0.0 ? clip.GetTicksPerSecond() : 25.0;
+		return clip.GetDuration() / tps;
 	}
 
-	if (!primaryClip) return;
-
-	const f64 curDurationSec = primaryClip->GetDuration() / (primaryClip->GetTicksPerSecond() > 0.0 ? primaryClip->GetTicksPerSecond() : 25.0);
-	const float normalizedTime = curDurationSec > 0.0 ? static_cast<float>(m_currentStateTime / curDurationSec) : 0.0f;
-
-	// 2. 전이 조건 평가 (전이 중이 아닐 때만 새 전이 검사)
-	if (!m_isTransitioning)
+	AnimatorMotion ResolveAnimatorMotion(const AnimState& state, const AnimatorParameters& parameters, std::optional<vec2>& blendInput, f32 dt)
 	{
-		const auto transitions = m_stateMachine->GetTransitionsFrom(m_currentStateName);
-		for (const auto* tr : transitions)
+		AnimatorMotion motion;
+
+		if (state.IsBlendTree2D())
 		{
-			if (tr->CanTransition(normalizedTime, m_parameters))
+			const auto& tree = state.blendTree2D;
+			const auto& values = parameters.GetAll();
+			const auto x = values.find(tree.parameterX);
+			const auto y = values.find(tree.parameterY);
+			if (x == values.end() || y == values.end() ||
+				x->second.type != EAnimatorParamType::Float || y->second.type != EAnimatorParamType::Float)
 			{
-				m_isTransitioning = true;
-				m_targetStateName = tr->targetState;
-				m_targetStateTime = 0.0f;
-				m_transitionElapsed = 0.0f;
-				m_transitionDuration = std::max(0.001f, tr->duration);
-
-				for (const auto& cond : tr->conditions)
-				{
-					m_parameters.ResetTrigger(cond.parameterName);
-				}
-				break;
+				return {};
 			}
-		}
-	}
 
-	// 3. 시간 진행, 노티파이 검출 및 비반복 루프 처리
-	const float prevTime = m_currentStateTime;
-	m_currentStateTime += dt * curState->playRate;
-	if (curState->isLooping && curDurationSec > 0.0)
-	{
-		const float dur = static_cast<float>(curDurationSec);
-		const float wrappedTime = std::fmod(m_currentStateTime, dur);
-		CheckAndTriggerNotifies(*curState, prevTime, (m_currentStateTime >= dur ? wrappedTime : m_currentStateTime), dur, true);
-		m_currentStateTime = wrappedTime;
-	}
-	else if (curDurationSec > 0.0)
-	{
-		const float dur = static_cast<float>(curDurationSec);
-		const float clampedTime = std::min(m_currentStateTime, dur);
-		CheckAndTriggerNotifies(*curState, prevTime, clampedTime, dur, false);
-		m_currentStateTime = clampedTime;
-	}
-	else
-	{
-		CheckAndTriggerNotifies(*curState, prevTime, m_currentStateTime, 0.0f, false);
-	}
-	m_previousStateTime = m_currentStateTime;
-	// 4. 포즈 평가 및 블렌딩
-	if (m_isTransitioning)
-	{
-		const auto* targetState = m_stateMachine->FindState(m_targetStateName);
-		const Animation* targetClip = nullptr;
-		if (targetState)
-		{
-			if (targetState->IsBlendTree())
+			const f32 rawX = x->second.floatValue;
+			const f32 rawY = y->second.floatValue;
+
+			if (!std::isfinite(rawX) || !std::isfinite(rawY) ||
+				!std::isfinite(tree.minX) || !std::isfinite(tree.maxX) || tree.minX >= tree.maxX ||
+				!std::isfinite(tree.minY) || !std::isfinite(tree.maxY) || tree.minY >= tree.maxY)
 			{
-				const Animation* secClip = nullptr;
-				float secWeight = 0.0f;
-				targetState->blendTree.Evaluate(m_parameters.GetFloat(targetState->blendTree.parameterName), targetClip, secClip, secWeight);
+				return {};
+			}
+
+			const vec2 desired(
+				std::clamp(rawX, tree.minX, tree.maxX),
+				std::clamp(rawY, tree.minY, tree.maxY));
+
+			if (blendInput)
+			{
+				constexpr f32 halfLife = 0.08f;
+				const f32 alpha = std::isfinite(dt) && dt > 0.0f ? 1.0f - std::exp2(-dt / halfLife) : 0.0f;
+				const vec2 previous(
+					std::clamp(blendInput->x, tree.minX, tree.maxX),
+					std::clamp(blendInput->y, tree.minY, tree.maxY));
+
+				blendInput = glm::mix(previous, desired, alpha);
 			}
 			else
 			{
-				targetClip = targetState->clip.Get();
+				blendInput = desired;
 			}
+
+			if (!tree.Evaluate(blendInput->x, blendInput->y, motion.Corners))
+				return {};
+
+			for (const auto& sample : motion.Corners)
+			{
+				if (!sample.Clip) continue;
+				motion.Primary = sample.Clip;
+				break;
+			}
+
+			const std::array<const ResourceHandle<Animation>*, 4> corners{
+				&tree.clip00, &tree.clip10, &tree.clip01, &tree.clip11
+			};
+			for (const auto* corner : corners)
+			{
+				const auto* clip = corner->Get();
+				if (!clip) continue;
+
+				const f64 duration = AnimatorClipDuration(*clip);
+				if (duration > 0.0)
+				{
+					motion.Duration = duration;
+					break;
+				}
+			}
+			return motion;
 		}
-		if (targetClip)
+
+		blendInput.reset();
+
+		if (state.IsBlendTree())
 		{
-			m_targetStateTime += dt * targetState->playRate;
-			const f64 targetDurationSec = targetClip->GetDuration() / (targetClip->GetTicksPerSecond() > 0.0 ? targetClip->GetTicksPerSecond() : 25.0);
-			if (!targetState->isLooping && targetDurationSec > 0.0)
-			{
-				m_targetStateTime = std::min(m_targetStateTime, static_cast<float>(targetDurationSec));
-			}
-			m_transitionElapsed += dt;
-			const float alpha = m_transitionElapsed / m_transitionDuration;
-			AnimationEvaluator::EvaluateBlendedSkinningMatrices(*primaryClip, m_currentStateTime, *targetClip, m_targetStateTime, alpha, skeleton, outBoneMatrices, curState->isLooping, targetState->isLooping);
-			if (alpha >= 1.0f)
-			{
-				m_currentStateName = m_targetStateName;
-				m_currentStateTime = m_targetStateTime;
-				m_isTransitioning = false;
-			}
+			const f32 value = parameters.GetFloat(state.blendTree.parameterName);
+			state.blendTree.Evaluate(value, motion.Primary, motion.Secondary, motion.SecondaryWeight);
 		}
 		else
 		{
-			m_isTransitioning = false;
-			AnimationEvaluator::EvaluateSkinningMatrices(*primaryClip, skeleton, m_currentStateTime, outBoneMatrices, curState->isLooping);
+			motion.Primary = state.clip.Get();
 		}
+
+		if (motion.Primary)
+			motion.Duration = AnimatorClipDuration(*motion.Primary);
+
+		return motion;
+	}
+
+	void EvaluateAnimatorMotion(const AnimState& state, const AnimatorMotion& motion, f32 time,
+		const Skeleton& skeleton, std::vector<BoneLocalPose>& pose, std::vector<BoneLocalPose>& scratch)
+	{
+		const f32 phase = motion.Duration > 0.0 ? time / static_cast<f32>(motion.Duration) : 0.0f;
+		const auto timeFor = [&](const Animation& clip)
+			{
+				const f64 duration = AnimatorClipDuration(clip);
+				return duration > 0.0 ? phase * static_cast<f32>(duration) : time;
+			};
+
+		if (state.IsBlendTree2D())
+		{
+			f32 totalWeight = 0.0f;
+			for (const auto& sample : motion.Corners)
+			{
+				if (!sample.Clip) continue;
+
+				auto& sampledPose = totalWeight > 0.0f ? scratch : pose;
+				AnimationEvaluator::EvaluateLocalPose(*sample.Clip, skeleton, timeFor(*sample.Clip),
+					sampledPose, state.isLooping, state.loopBlendDuration);
+
+				if (totalWeight > 0.0f)
+				{
+					const f32 weight = sample.Weight / (totalWeight + sample.Weight);
+					for (size_t i = 0; i < pose.size(); ++i)
+						pose[i] = AnimationEvaluator::BlendBoneLocalPose(pose[i], scratch[i], weight);
+				}
+				totalWeight += sample.Weight;
+			}
+			return;
+		}
+
+		if (motion.Secondary && motion.SecondaryWeight > 0.0f)
+		{
+			AnimationEvaluator::EvaluateBlendedLocalPose(*motion.Primary, time,
+				*motion.Secondary, timeFor(*motion.Secondary), motion.SecondaryWeight,
+				skeleton, pose, state.isLooping, state.isLooping);
+		}
+		else
+		{
+			AnimationEvaluator::EvaluateLocalPose(*motion.Primary, skeleton, time, pose,
+				state.isLooping, state.loopBlendDuration);
+		}
+	}
+}
+
+void AnimatorRuntimeState::UpdateLocalPose(float dt, const Skeleton& skeleton,
+	std::vector<BoneLocalPose>& outLocalPose)
+{
+	outLocalPose.clear();
+	if (!m_stateMachine) return;
+
+	const auto* current = m_stateMachine->FindState(m_currentStateName);
+	if (!current) return;
+
+	const auto motion = ResolveAnimatorMotion(*current, m_parameters, m_currentBlendInput, dt);
+	if (!motion.Primary) return;
+
+	const f64 duration = motion.Duration;
+	const f32 normalizedTime = duration > 0.0 ? m_currentStateTime / static_cast<f32>(duration) : 0.0f;
+
+	const AnimState* target = nullptr;
+	AnimatorMotion targetMotion;
+
+	if (m_isTransitioning)
+	{
+		target = m_stateMachine->FindState(m_targetStateName);
+		if (target)
+			targetMotion = ResolveAnimatorMotion(*target, m_parameters, m_targetBlendInput, dt);
 	}
 	else
 	{
-		if (curState->IsBlendTree() && blendSecondaryClip && blendWeight > 0.0f)
+		for (const auto* transition : m_stateMachine->GetTransitionsFrom(m_currentStateName))
 		{
-			// [위상 동기화 (Phase Matching)]: 두 클립의 길이가 달라도 발걸음 주기(Normalized Time)를 일치시켜 블렌딩
-			const f64 secTps = blendSecondaryClip->GetTicksPerSecond() > 0.0 ? blendSecondaryClip->GetTicksPerSecond() : 25.0;
-			const f64 secDurationSec = blendSecondaryClip->GetDuration() / secTps;
-			const float normTime = (curDurationSec > 0.0) ? (m_currentStateTime / static_cast<float>(curDurationSec)) : 0.0f;
-			const float secondaryTime = (secDurationSec > 0.0) ? (normTime * static_cast<float>(secDurationSec)) : m_currentStateTime;
+			if (!transition->CanTransition(normalizedTime, m_parameters)) continue;
 
-			AnimationEvaluator::EvaluateBlendedSkinningMatrices(*primaryClip, m_currentStateTime, *blendSecondaryClip, secondaryTime, blendWeight, skeleton, outBoneMatrices, curState->isLooping, curState->isLooping);
-		}
-		else
-		{
-			AnimationEvaluator::EvaluateSkinningMatrices(*primaryClip, skeleton, m_currentStateTime, outBoneMatrices, curState->isLooping, curState->loopBlendDuration);
+			const auto* candidate = m_stateMachine->FindState(transition->targetState);
+			if (!candidate) continue;
+
+			std::optional<vec2> candidateInput;
+			if (m_currentBlendInput && candidate->IsBlendTree2D() &&
+				current->blendTree2D.parameterX == candidate->blendTree2D.parameterX &&
+				current->blendTree2D.parameterY == candidate->blendTree2D.parameterY)
+			{
+				candidateInput = m_currentBlendInput;
+			}
+
+			const auto candidateMotion = ResolveAnimatorMotion(*candidate, m_parameters, candidateInput, 0.0f);
+			if (!candidateMotion.Primary) continue;
+
+			target = candidate;
+			targetMotion = candidateMotion;
+			m_isTransitioning = true;
+			m_targetStateName = transition->targetState;
+			m_targetStateTime = 0.0f;
+			m_targetBlendInput = candidateInput;
+			m_transitionElapsed = 0.0f;
+			m_transitionDuration = std::max(0.001f, transition->duration);
+
+			transition->ConsumeMatchedTriggers(m_parameters);
+			break;
 		}
 	}
+
+	const f32 prevTime = m_currentStateTime;
+	m_currentStateTime += dt * current->playRate;
+
+	if (current->isLooping && duration > 0.0)
+	{
+		const f32 limit = static_cast<f32>(duration);
+		const f32 wrappedTime = std::fmod(m_currentStateTime, limit);
+		const f32 notifyTime = m_currentStateTime >= limit ? wrappedTime : m_currentStateTime;
+		CheckAndTriggerNotifies(*current, prevTime, notifyTime, limit, true);
+		m_currentStateTime = wrappedTime;
+	}
+	else if (duration > 0.0)
+	{
+		const f32 limit = static_cast<f32>(duration);
+		m_currentStateTime = std::min(m_currentStateTime, limit);
+		CheckAndTriggerNotifies(*current, prevTime, m_currentStateTime, limit, false);
+	}
+	else
+	{
+		CheckAndTriggerNotifies(*current, prevTime, m_currentStateTime, 0.0f, false);
+	}
+	m_previousStateTime = m_currentStateTime;
+
+	if (m_isTransitioning)
+	{
+		if (targetMotion.Primary)
+		{
+			m_targetStateTime += dt * target->playRate;
+			if (!target->isLooping && targetMotion.Duration > 0.0)
+				m_targetStateTime = std::min(m_targetStateTime, static_cast<f32>(targetMotion.Duration));
+
+			m_transitionElapsed += dt;
+			const f32 alpha = std::clamp(m_transitionElapsed / m_transitionDuration, 0.0f, 1.0f);
+
+			if (alpha >= 1.0f)
+			{
+				EvaluateAnimatorMotion(*target, targetMotion, m_targetStateTime,
+					skeleton, outLocalPose, m_blendSamplePose);
+				m_currentStateName = m_targetStateName;
+				m_currentStateTime = m_targetStateTime;
+				m_currentBlendInput = m_targetBlendInput;
+				m_targetBlendInput.reset();
+				m_isTransitioning = false;
+				return;
+			}
+
+			EvaluateAnimatorMotion(*current, motion, m_currentStateTime,
+				skeleton, outLocalPose, m_blendSamplePose);
+
+			if (alpha > 0.0f)
+			{
+				EvaluateAnimatorMotion(*target, targetMotion, m_targetStateTime,
+					skeleton, m_transitionTargetPose, m_blendSamplePose);
+
+				for (size_t i = 0; i < outLocalPose.size(); ++i)
+				{
+					outLocalPose[i] = AnimationEvaluator::BlendBoneLocalPose(
+						outLocalPose[i], m_transitionTargetPose[i], alpha);
+				}
+			}
+			return;
+		}
+
+		m_isTransitioning = false;
+	}
+
+	EvaluateAnimatorMotion(*current, motion, m_currentStateTime, skeleton, outLocalPose, m_blendSamplePose);
 }
 
 void AnimatorRuntimeState::CheckAndTriggerNotifies(const AnimState& state, float prevTime, float newTime, float duration, bool isLooping)
@@ -354,15 +577,8 @@ bool AnimatorStateMachine::LoadFromFile(const std::string& filePath)
 const Animation* AnimatorRuntimeState::GetCurrentClip() const
 {
 	if (!m_stateMachine) return nullptr;
-	const auto* st = m_stateMachine->FindState(m_currentStateName);
-	if (!st) return nullptr;
-	if (st->IsBlendTree())
-	{
-		const Animation* primary = nullptr;
-		const Animation* secondary = nullptr;
-		float weight = 0.0f;
-		st->blendTree.Evaluate(m_parameters.GetFloat(st->blendTree.parameterName), primary, secondary, weight);
-		return primary;
-	}
-	return st->clip.Get();
+
+	const auto* state = m_stateMachine->FindState(m_currentStateName);
+	auto blendInput = m_currentBlendInput;
+	return state ? ResolveAnimatorMotion(*state, m_parameters, blendInput, 0.0f).Primary : nullptr;
 }

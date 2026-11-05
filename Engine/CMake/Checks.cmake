@@ -78,3 +78,10 @@ endif()
 if(BUILD_TESTING)
     add_test(NAME SplineCurveCheck COMMAND SplineCurveCheck)
 endif()
+
+add_executable(BlendTree2DCheck examples/BlendTree2DCheck.cpp)
+target_link_libraries(BlendTree2DCheck PRIVATE BamEngine::Engine)
+
+if(BUILD_TESTING)
+    add_test(NAME BlendTree2DCheck COMMAND BlendTree2DCheck)
+endif()

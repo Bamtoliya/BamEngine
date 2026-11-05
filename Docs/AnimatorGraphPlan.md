@@ -1,11 +1,11 @@
 # 애니메이터 그래프와 애니메이션 상태 머신 개발 계획
 
-- 작성일: 2026-11-01 (갱신: 2026-11-03)
-- 상태: Phase 1~5 코어 및 레이어드 애니메이션/본 마스킹/노티파이/제네릭 컨테이너 인스펙터 구현 완료 / 그래프 패널 프리뷰 뷰포트 내 레이어 합성 및 2D 블렌드 미완료 (2026-11-03 런타임 검증)
+- 작성일: 2026-11-01 (갱신: 2026-11-05)
+- 상태: 2D 사각 블렌드, 독립 프리뷰의 레이어 합성, 조건 그룹과 `Any State` 저작 기능 구현. `BlendTree2DCheck` 통과. 에디터에서 저장·재열기와 레이어 합성의 시각 확인은 후속이다.
 - 공통 기준: [EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md), [SourceOrganizationGuidelines.md](SourceOrganizationGuidelines.md)
 - 선행 기반: [EngineDevelopmentPlan.md](EngineDevelopmentPlan.md) 9·10절, [GraphFoundation.md](GraphFoundation.md), [GraphPanel.md](GraphPanel.md), [VisualScriptingBlueprintPlan.md](VisualScriptingBlueprintPlan.md)
 - 통합 우선순위 연결: [DevelopmentPriorities.md](DevelopmentPriorities.md) (P2-D 및 P3/P4 애니메이션 및 콘텐츠 확장)
-- 최신 근거: [코드·문서 점검](CodeDocumentationAudit-2026-11-02.md) F01·F06·F07·F11. 이번 갱신에서 빌드·UI·GPU 검증은 하지 않았다.
+- 근거: [코드·문서 점검](CodeDocumentationAudit-2026-11-02.md) F01·F06·F07·F11 및 [구현 기록](ImplementationLog.md).
 
 ---
 
@@ -26,31 +26,25 @@
 
 ## 2. 현재 상태와 갭 분석 (Gap Analysis)
 
-### 2.1 이미 구축된 기반 (2026-11-02 정적 대조 / 전체 완료 기준과 구분)
+### 2.1 이미 구축된 기반
 - **애니메이션 원천 데이터:** `Engine/Source/Resource/Model/Public/Animation.h`, `Skeleton.h`, `Bone.h`에 뼈 계층, 포지션/로테이션/스케일 키프레임, 지속 시간(`Duration`), `TicksPerSecond` 정의 완비.
 - **런타임 포즈 평가 및 GPU 스키닝 (Phase 1 기본 구현):** `AnimationEvaluator`, `AnimatorComponent`, `AnimationSystem`, `MeshRenderSystem`과 Renderer의 스키닝 제출이 있다. `InstantiateModel()`은 루트에 Animator, 하위 메시 노드에 SkinnedMeshRenderer를 생성한다. 재생 경계·부분 트랙 정확성은 별도 잔여다.
-- **애니메이션 상태 머신 및 1D 블렌드 트리 (Phase 2~3 기본 구현):** `AnimatorParameters`, `AnimTransition`, `AnimState`, `AnimatorStateMachine`, `BlendTree1D` 및 `.animator` JSON 읽기/쓰기가 있다. `AnimState::blendTree`는 힙 동적 할당과 타입별 특수화 직렬화 코덱을 배제하기 위해 값 타입(`BlendTree1D blendTree;`, 방안 B)으로 소유하며, 향후 스마트 포인터 일반화 직렬화(방안 C)는 `ReflectionArchiveGuidelines.md` 8절의 장기 아키텍처 계획으로 분리한다. 파일 보호·ASM 제어 의미와 2D 블렌드는 미완료다.
-- **에디터 시각 저작 패널 (`AnimatorGraphPanel`, Phase 4 기본 UI):** 메뉴바/퀵툴바, 파라미터·상태·전이 편집과 활성 상태 표시 코드가 있다. 현재 캔버스는 ImGui/ImDrawList 기반 자체 구현이며, 저장/교체 보호·입력 일원화·독립 프리뷰는 남아 있다.
+- **상태 머신 및 블렌드 트리:** `AnimState`는 `BlendTree1D`와 `BlendTree2D`를 값으로 소유한다. `.animator`는 리플렉션으로 읽고 쓰며, 새 필드를 생략한 구버전 데이터는 기본값으로 복원한다.
+- **에디터 시각 저작 패널:** `AnimatorGraphPanel`은 자체 `ImDrawList` 캔버스, 저장·문서 교체 보호, 파라미터·상태·전이 편집과 독립 3D 프리뷰를 제공한다.
 - **비주얼 스크립팅 연동 인프라:** `GraphGameplayLibrary`에 `Animator.Play/Pause/Stop/SetPlayRate/SetTime/IsPlaying/GetCurrentTime` 및 `Animator.SetFloat/SetInt/SetBool/SetTrigger/GetFloat/GetBool` 노드가 등록되었고, `EGraphPinType::String` 지원(`d3fc6bd2`)을 통해 블루프린트에서 문자열 파라미터 이름을 직접 전달할 수 있음.
 - **2D 프레임 애니메이션:** 독립 `SpriteAnimation` 에셋(`.spriteanim`), `SpriteAnimationComponent`/`System`, 전용 `SpriteAnimationEditor` 구축 완료.
 
-### 2.2 애니메이터 그래프 완성을 위해 남은 핵심 과제 (2026-11-02 정적 갱신)
-1. **기존 계층 연결 검증·파일 보호·재생 정확성:**
-   - `Scene::InstantiateModel()`은 모델 루트 엔티티(`rootHandle`)에 `AnimatorComponent`를 부착하고, 하위 노드 엔티티(`handle`/`meshEntity`)에 `SkinnedMeshRendererComponent`를 부착한다.
-   - 현재 `AnimationSystem`은 Animator의 하위 Skeleton을 검색하고 `MeshRenderSystem`은 자신/부모의 Animator를 찾는다. 직렬화되는 `controllerPath` 변경 시 자동 로드를 시도한다. 이 연결을 새로 구현할 필요는 없다.
-   - 남은 문제는 상대 컨트롤러 경로·실패 후 재시도, 비반복 종료·부분 트랙·ASM 제어, 패널의 저장/로드 실패 및 미저장 교체 보호다. 상세 근거·확인 조건은 점검 문서 F01·F06·F07을 따른다.
-2. **2D 블렌드 트리 (2D Blend Space):**
-   - 현재 1D 블렌드 트리(`BlendTree1D`)까지 구현되어 있으며, 이동 방향(`Direction`)과 속도(`Speed`) 2축을 조합하는 2D 블렌드 노드는 후속 확장 대상이다.
-3. **고급 게임플레이 연동 및 패널 내 3D 프리뷰 뷰포트 (Phase 5):**
-   - 특정 프레임 도달 시 사운드/이펙트를 발송하는 애니메이션 노티파이(`AnimNotify`).
-   - 상체/하체 분리 재생을 위한 레이어드 애니메이션 및 본 마스킹(`BoneMask`).
-   - `AnimatorGraphPanel` 내부의 독립 3D 모델 실시간 프리뷰 뷰포트.
+### 2.2 남은 핵심 과제
+
+1. 에디터에서 `Any State`와 일반 전이가 함께 있는 컨트롤러를 저장·재열기하고, 두 출발 상태에서 같은 트리거로 전이하는지 확인한다.
+2. 독립 프리뷰의 2D 블렌드와 본 마스크 합성을 실제 모델로 확인하고, 에셋을 공유하는 엔티티 사이에서 프리뷰 조작이 격리되는지 검증한다.
+3. 애니메이터 캔버스를 `imgui-node-editor`로 전환한다. 2D 블렌드 샘플의 임의 배치와 삼각망 보간은 이후 확장으로 둔다.
 
 ---
 
 ## 3. 단계별 개발 로드맵
 
-아래 세부 목록은 목표를 포함한다. 예시 타입명·imgui-node-editor 재사용·독립 프리뷰 등 모든 항목이 현재 구현되었다는 뜻은 아니다.
+아래 세부 목록은 단계별 목표와 구현 상태를 함께 기록한다. 현재 검증 범위는 2절과 구현 기록을 따른다.
 현재 구현은 2.1절, 미완료 결함과 검증 범위는 2.2절 및 연결한 점검 문서를 따른다.
 
 2026-11-02 실행 순서 조정: 파일 저장 결과/미저장 교체 보호 → 상대 경로·재시도 → 비반복/부분 트랙·ASM 제어 → 다중 인스턴스/지원 실행 경로 확인 → 고급 기능으로 진행한다.
@@ -107,7 +101,7 @@ flowchart TD
 
 ---
 
-### Phase 3. 포즈 블렌딩 및 1D/2D 블렌드 트리 (1D 구현 / 2D 미구현)
+### Phase 3. 포즈 블렌딩 및 1D/2D 블렌드 트리
 - **목적:** 불연속적인 상태 전이뿐 아니라, 속도나 방향과 같은 연속적인 파라미터에 따라 복수의 클립 포즈를 가중치로 합성한다.
 - **세부 내용:**
   - **포즈 합성기 (`PoseBlender`):**
@@ -117,23 +111,23 @@ flowchart TD
     - 단일 파라미터(예: `Speed`) 축에 여러 클립 배치 (예: 0=Idle, 2=Walk, 6=Run).
     - 입력값 위치에 인접한 두 클립을 찾아 정규화된 가중치로 실시간 합성.
   - **2D Blend Tree (Blend Space 2D):**
-    - 두 개 파라미터(예: `Direction`, `Speed`) 축에 2D 삼각망(Delaunay Triangulation) 또는 사각 보간을 구성하여 전방/후방/좌/우 이동 클립 합성.
+    - 두 Float 파라미터로 네 코너의 가중치를 계산하고, 공통 위상에서 샘플링한 로컬 포즈를 합성한다. 사각 보간과 X·Y 보간이 구현돼 있다.
 - **완료 기준:** 캐릭터가 멈춰 있다가 달릴 때 Idle → Walk → Run이 끊김 없이 매끄럽게 가속도에 맞춰 보간되어 재생된다.
 
 ---
 
-### Phase 4. 에디터 저작 패널 (`AnimatorGraphPanel`) (파일 보호·모달·입력 정합성 완료 / 캔버스 UI 일원화·독립 프리뷰 후속)
+### Phase 4. 에디터 저작 패널 (`AnimatorGraphPanel`)
 - **목적:** 기획자 및 아티스트가 코드를 작성하지 않고도 시각적으로 상태 머신과 파라미터를 저작하는 전문 GUI를 제공한다.
 - **2026-11-02 구현 완료:**
   - 원자적 파일 저장/로드 및 실패 결과 전파(F01 단계 1), `AnimState::blendTree` 값 타입(방안 B) 직렬화 안정화.
   - New/Open/종료 시 미저장 변경사항 보호 모달(`Save/Discard/Cancel`) 및 포커스 기반 단축키(Ctrl+S, Ctrl+N, Ctrl+O) 연동(F01 단계 2).
   - ESC 취소, 마우스 좌표/드래그/패닝의 `InputManager` 일원화 및 표시 문자열 `Editor.csv` 로캘 키 연동(F11 단계 3).
+- **2026-11-05 구현:**
+  - 독립 3D 모델 프리뷰와 2D 블렌드 그래프 조작, 기본 상태 재시작, 현재 상태 및 전이 목적지·진행률 표시.
+  - 조건 그룹의 AND·OR 설정, 목적지 상태에서 `Any State` 전이 추가, 상태 이름 중복 방지와 이름 확정 시 전이 참조 갱신.
 - **후속 계획 과제 (사용자 확정):**
   - **캔버스 UI 토대 일원화 (`imgui-node-editor` 전환):** 현재의 자체 `ImDrawList` 수동 렌더링을 `GraphPanel`과 동일한 `imgui-node-editor` 프레임워크로 마이그레이션.
     - 데이터 모델(`AnimatorStateMachine`)은 독립적으로 보존하면서, 무한 줌/패닝, 다중 노드 마퀴(Marquee) 선택, 박스 드래그, 정렬 단축키 등 블루프린트와 일관된 조작감 제공.
-  - 특별 노드: `Any State`(어느 상태에서든 조건 만족 시 전이).
-  - 런타임 전이 진행률 게이지 또는 파티클 펄스 시각화.
-  - 독립 3D 모델 실시간 프리뷰 뷰포트 (`PreviewViewport`).
 
 ---
 
@@ -156,15 +150,7 @@ flowchart TD
     - `AnimatorComponent::layers` 다중 레이어(`AnimatorLayer`) 구조체 및 제어 API (`PlayLayer`, `StopLayer`, `SetLayerWeight`, `GetLayerWeight`) 제공.
     - `ReflectionPropertyDrawer`에 리플렉션 제네릭 컨테이너(`std::vector<T>`) 에디터 구현: 인스펙터에서 `[+]` 버튼으로 레이어를 추가/삭제하고, 각 레이어의 가중치, 마스크 본(`b_Spine01_02`, `Skeleton_torso_joint_1`), 클립을 직접 편집 가능.
     - Fox 모델(베이스: `Fox_Walk`, 레이어: `Fox_Survey`, 마스크: `b_Spine01_02`)을 통해 상·하체 분리 블렌딩 런타임 검증 완료.
-- **남은 과제 및 후속 개선점 (사용자 피드백 반영):**
-  1. **AnimatorGraphPanel 독립 프리뷰 뷰포트의 레이어 블렌딩 미반영:**
-     - 현재 씬 뷰포트에서는 정상 블렌딩 재생되나, 컨트롤러 패널(`AnimatorGraphPanel`) 내부의 독립 미리보기 뷰포트는 단일 활성 상태 또는 1D 블렌드 트리만 샘플링하므로, 레이어드 마스킹 합성 결과를 독립 프리뷰 뷰포트에서도 함께 미리볼 수 있도록 뷰포트 합성 파이프라인 확장 필요.
-  2. **2D 블렌드 트리 (Blend Space 2D):**
-     - 이동 속도와 방향 2축 삼각망 보간.
-  3. **캔버스 UI 토대 일원화 (`imgui-node-editor` 마이그레이션):**
-     - 무한 줌/패닝, 박스 드래그 선택 등 블루프린트와 일관된 조작감 통일.
-  4. **Any State 노드:**
-     - 어느 상태에서든 조건 만족 시 즉시 전이.
+- **2026-11-05 프리뷰 합성:** `PreviewViewportWidget`은 베이스 로컬 포즈 위에 본 마스크 레이어를 순서대로 합성한 후 스키닝 행렬을 만든다. 실제 모델에서 베이스 블렌드와 여러 레이어가 함께 재생되는 결과는 추가 확인한다.
 
 ---
 
@@ -241,9 +227,10 @@ struct AnimatorRuntimeState
 
 - [x] **런타임 클립 재생:** 3D 캐릭터 모델에 단일 클립을 적용했을 때 관절 왜곡 없이 정확한 포즈로 스키닝 렌더링되는가? (`AnimationEvaluator`, `MeshRenderSystem` GPU 스키닝 구조화 버퍼 바인딩 완료)
 - [x] **상태 전이 및 크로스페이드:** Idle에서 Walk로 전이할 때 관절이 튀지 않고 지정된 시간 동안 부드럽게 보간되는가? (로컬 TRS 최단 경로 쿼터니언 slerp 크로스페이드 완료)
-- [x] **파라미터 및 트리거:** Trigger 파라미터가 1회 전이 후 즉각 소모(Consume)되어 무한 루프가 발생하지 않는가? (`ConsumeTriggers()` 및 전이 후 자동 리셋 완료)
+- [x] **파라미터 및 트리거:** 재생 가능한 목적지에 전이를 시작할 때 일치한 트리거를 소모한다. 목적지를 평가할 수 없으면 다음 전이를 검사한다. (`BlendTree2DCheck`)
 - [x] **다중 인스턴스 격리:** 동일한 에셋을 공유하는 두 엔티티가 서로 다른 파라미터를 가질 때 간섭 없이 독립 동작하는가? (`AnimatorRuntimeState` 독립 인스턴스 격리 완료)
-- [x] **에디터 UI 및 직렬화:** 노드 배치와 트랜지션 연결이 JSON으로 정상 저장·로드되며, 실행 중 활성 상태가 시각적으로 모니터링되는가? (`AnimatorGraphPanel` 18절 메뉴바/툴바/파라미터독/트랜지션인스펙터 및 네온 하이라이트 디버깅 완료)
+- [x] **전이 직렬화:** `Any State` 플래그와 트리거 조건이 JSON 왕복에서 복원되고, 플래그가 없는 구버전 전이는 일반 전이로 읽힌다. (`BlendTree2DCheck`)
+- [ ] **에디터 저장·재열기:** 일반 전이와 `Any State`를 함께 편집하고 저장한 뒤 연결선·조건을 확인한다.
 - [x] **애니메이션 노티파이 (AnimNotify):** 타임라인 특정 프레임에서 알림 이벤트가 누락 없이 발동하며 인스펙터에서 편집 및 직렬화되는가? (2026-11-03 완료)
 - [x] **레이어드 애니메이션 & 본 마스킹:** 상·하체 분리 재생(예: 걷기 + 둘러보기)이 본 마스크 가중치에 따라 왜곡 없이 블렌딩되는가? (2026-11-03 Fox 모델 런타임 검증 완료)
 - [x] **리플렉션 제네릭 컨테이너 인스펙터:** `std::vector<AnimatorLayer>`를 포함한 컨테이너 속성이 인스펙터에서 직접 요소 추가/삭제 및 하위 프로퍼티 편집이 가능한가? (2026-11-03 `ReflectionPropertyDrawer` 완료)

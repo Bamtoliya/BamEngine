@@ -6,9 +6,13 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include "ResourceHandle.h"
+#include <optional>
+#include <tuple>
 
 BEGIN(Engine)
 class Entity;
+class Model;
 END
 
 BEGIN(Editor)
@@ -41,15 +45,18 @@ private:
 	void UpdatePreview(f32 dt);
 	void DrawPreviewSection(float width, float height);
 	void SyncPreviewStateMachine();
+	bool ReplacePreviewModel(const Engine::ResourceHandle<Engine::Model>& requested);
 
 	void DrawParametersTab();
+	void DrawPreviewParameters();
 	void DrawCanvas();
-	void DrawTransitions(ImDrawList* drawList, const ImVec2& canvasPos);
+	void DrawTransitions(ImDrawList* drawList, const ImVec2& canvasPos, const ImVec2& anyStatePos);
 	void DrawCanvasContextMenu();
 	void DrawSelectionInspector();
 	void DrawStateInspector(Engine::AnimState& state);
+	void DrawBlend2DPreview(const Engine::AnimState& state);
 	void DrawTransitionInspector(Engine::AnimTransition& transition);
-
+	void RenameParameter(const std::string& oldName, const std::string& newName);
 public:
 	enum class EPendingAction { None, New, Open, Close };
 	void RequestNew();
@@ -64,6 +71,8 @@ private:
 	void ExecutePendingAction();
 	void DrawConfirmModal();
 
+	void AddState(const ImVec2& position);
+
 private:
 	std::shared_ptr<Engine::AnimatorStateMachine> m_StateMachine;
 	std::string m_CurrentFilePath;
@@ -72,6 +81,8 @@ private:
 	// 3D 프리뷰 뷰포트 & 모델
 	PreviewViewportWidget m_PreviewWidget;
 	Engine::Entity* m_PreviewModelEntity = nullptr;
+	Engine::ResourceHandle<Engine::Model> m_PreviewModel;
+	std::optional<Engine::ResourceHandle<Engine::Model>> m_PendingPreviewModel;
 	bool m_ShowPreviewViewport = true;
 
 	// UI 선택 및 조작 상태
@@ -90,6 +101,8 @@ private:
 
 	inline static AnimatorGraphPanel* s_ActivePanel = nullptr;
 	EPendingAction m_PendingAction = EPendingAction::None;
+	std::string m_ParameterRenameDraft;
+	std::string m_StateRenameDraft;
 };
 
 END

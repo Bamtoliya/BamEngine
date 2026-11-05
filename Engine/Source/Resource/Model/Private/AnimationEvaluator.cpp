@@ -148,107 +148,157 @@ void AnimationEvaluator::SampleLocalTRS(const Animation& animation, const unorde
 	}
 }
 
-void AnimationEvaluator::EvaluateSkinningMatrices(const Animation& animation, const Skeleton& skeleton, f32 timeInSeconds, std::vector<mat4>& outBoneMatrices, bool isLooping, float loopBlendDuration)
+void AnimationEvaluator::EvaluateLocalPose(const Animation& animation, const Skeleton& skeleton,
+	f32 timeInSeconds, std::vector<BoneLocalPose>& outPose, bool isLooping, float loopBlendDuration)
 {
 	const auto& bones = skeleton.GetBones();
-	const uint32 boneCount = static_cast<uint32>(bones.size());
-	if (boneCount == 0) { outBoneMatrices.clear(); return; }
-	if (outBoneMatrices.size() != boneCount) outBoneMatrices.resize(boneCount, glm::identity<mat4>());
-	const auto& tracks = animation.GetTracks();
+	outPose.resize(bones.size());
+
 	unordered_map<wstring, const AnimationTrack*> trackMap;
-	for (const auto& track : tracks) trackMap[track.TargetBoneName] = &track;
-	std::vector<mat4> combinedTransforms(boneCount, glm::identity<mat4>());
-	for (uint32 i = 0; i < boneCount; ++i)
+	for (const auto& track : animation.GetTracks())
+		trackMap[track.TargetBoneName] = &track;
+
+	for (size_t i = 0; i < bones.size(); ++i)
 	{
-		const auto& bone = bones[i];
-		vec3 pos; quat rot; vec3 scl;
-		SampleLocalTRS(animation, trackMap, bone, timeInSeconds, pos, rot, scl, isLooping, loopBlendDuration);
-		const mat4 localTransform = glm::translate(mat4(1.0f), pos) * glm::toMat4(rot) * glm::scale(mat4(1.0f), scl);
-		if (bone.ParentIndex >= 0 && static_cast<uint32>(bone.ParentIndex) < boneCount)
-			combinedTransforms[i] = combinedTransforms[bone.ParentIndex] * localTransform;
-		else
-			combinedTransforms[i] = localTransform;
-		outBoneMatrices[i] = combinedTransforms[i] * bone.OffsetMatrix;
+		auto& pose = outPose[i];
+		SampleLocalTRS(animation, trackMap, bones[i], timeInSeconds,
+			pose.Position, pose.Rotation, pose.Scale, isLooping, loopBlendDuration);
 	}
 }
-void AnimationEvaluator::EvaluateBlendedSkinningMatrices(const Animation& clipA, f32 timeA, const Animation& clipB, f32 timeB, f32 alpha, const Skeleton& skeleton, std::vector<mat4>& outBoneMatrices, bool isLoopingA, bool isLoopingB)
+
+BoneLocalPose AnimationEvaluator::BlendBoneLocalPose(const BoneLocalPose& from, const BoneLocalPose& to, f32 weight)
 {
+	return {
+		glm::mix(from.Position, to.Position, weight),
+		glm::normalize(glm::slerp(from.Rotation, to.Rotation, weight)),
+		glm::mix(from.Scale, to.Scale, weight)
+	};
+}
+
+void AnimationEvaluator::EvaluateBlendedLocalPose(const Animation& clipA, f32 timeA,
+	const Animation& clipB, f32 timeB, f32 alpha, const Skeleton& skeleton,
+	std::vector<BoneLocalPose>& outPose, bool isLoopingA, bool isLoopingB)
+{
+	const f32 weight = std::clamp(alpha, 0.0f, 1.0f);
+	if (weight <= 0.0f)
+	{
+		EvaluateLocalPose(clipA, skeleton, timeA, outPose, isLoopingA);
+		return;
+	}
+	if (weight >= 1.0f)
+	{
+		EvaluateLocalPose(clipB, skeleton, timeB, outPose, isLoopingB);
+		return;
+	}
+
 	const auto& bones = skeleton.GetBones();
-	const uint32 boneCount = static_cast<uint32>(bones.size());
-	if (boneCount == 0) { outBoneMatrices.clear(); return; }
-	if (outBoneMatrices.size() != boneCount) outBoneMatrices.resize(boneCount, glm::identity<mat4>());
-	const f32 clampedAlpha = std::clamp(alpha, 0.0f, 1.0f);
-	if (clampedAlpha <= 0.0f) { EvaluateSkinningMatrices(clipA, skeleton, timeA, outBoneMatrices, isLoopingA); return; }
-	if (clampedAlpha >= 1.0f) { EvaluateSkinningMatrices(clipB, skeleton, timeB, outBoneMatrices, isLoopingB); return; }
+	outPose.resize(bones.size());
+
 	unordered_map<wstring, const AnimationTrack*> trackMapA;
-	for (const auto& track : clipA.GetTracks()) trackMapA[track.TargetBoneName] = &track;
 	unordered_map<wstring, const AnimationTrack*> trackMapB;
-	for (const auto& track : clipB.GetTracks()) trackMapB[track.TargetBoneName] = &track;
-	std::vector<mat4> combinedTransforms(boneCount, glm::identity<mat4>());
-	for (uint32 i = 0; i < boneCount; ++i)
+	for (const auto& track : clipA.GetTracks())
+		trackMapA[track.TargetBoneName] = &track;
+	for (const auto& track : clipB.GetTracks())
+		trackMapB[track.TargetBoneName] = &track;
+
+	for (size_t i = 0; i < bones.size(); ++i)
 	{
-		const auto& bone = bones[i];
-		vec3 posA, posB; quat rotA, rotB; vec3 sclA, sclB;
-		SampleLocalTRS(clipA, trackMapA, bone, timeA, posA, rotA, sclA, isLoopingA);
-		SampleLocalTRS(clipB, trackMapB, bone, timeB, posB, rotB, sclB, isLoopingB);
-		const vec3 blendedPos = glm::mix(posA, posB, clampedAlpha);
-		const quat blendedRot = glm::normalize(glm::slerp(rotA, rotB, clampedAlpha));
-		const vec3 blendedScl = glm::mix(sclA, sclB, clampedAlpha);
-		const mat4 localTransform = glm::translate(mat4(1.0f), blendedPos) * glm::toMat4(blendedRot) * glm::scale(mat4(1.0f), blendedScl);
-		if (bone.ParentIndex >= 0 && static_cast<uint32>(bone.ParentIndex) < boneCount)
-			combinedTransforms[i] = combinedTransforms[bone.ParentIndex] * localTransform;
-		else
-			combinedTransforms[i] = localTransform;
-		outBoneMatrices[i] = combinedTransforms[i] * bone.OffsetMatrix;
+		BoneLocalPose a, b;
+		SampleLocalTRS(clipA, trackMapA, bones[i], timeA,
+			a.Position, a.Rotation, a.Scale, isLoopingA);
+		SampleLocalTRS(clipB, trackMapB, bones[i], timeB,
+			b.Position, b.Rotation, b.Scale, isLoopingB);
+
+		outPose[i] = BlendBoneLocalPose(a, b, weight);
 	}
 }
-void AnimationEvaluator::EvaluateMaskedSkinningMatrices(const Animation& baseClip, f32 baseTime, const Animation& layerClip, f32 layerTime, const std::vector<float>& boneMaskWeights, f32 layerAlpha, const Skeleton& skeleton, std::vector<mat4>& outBoneMatrices, bool isLoopingBase, bool isLoopingLayer)
+
+void AnimationEvaluator::ApplyMaskedLocalPose(const Animation& layerClip, f32 layerTime,
+	const std::vector<float>& boneMaskWeights, f32 layerAlpha, const Skeleton& skeleton,
+	std::vector<BoneLocalPose>& inOutPose, bool isLoopingLayer)
 {
 	const auto& bones = skeleton.GetBones();
-	const uint32 boneCount = static_cast<uint32>(bones.size());
-	if (boneCount == 0) { outBoneMatrices.clear(); return; }
-	if (outBoneMatrices.size() != boneCount) outBoneMatrices.resize(boneCount, glm::identity<mat4>());
-
-	const f32 clampedLayerAlpha = std::clamp(layerAlpha, 0.0f, 1.0f);
-	if (clampedLayerAlpha <= 0.0f) { EvaluateSkinningMatrices(baseClip, skeleton, baseTime, outBoneMatrices, isLoopingBase); return; }
-
-	unordered_map<wstring, const AnimationTrack*> trackMapBase;
-	for (const auto& track : baseClip.GetTracks()) trackMapBase[track.TargetBoneName] = &track;
-	unordered_map<wstring, const AnimationTrack*> trackMapLayer;
-	for (const auto& track : layerClip.GetTracks()) trackMapLayer[track.TargetBoneName] = &track;
-
-	std::vector<mat4> combinedTransforms(boneCount, glm::identity<mat4>());
-	for (uint32 i = 0; i < boneCount; ++i)
+	if (inOutPose.size() != bones.size())
 	{
-		const auto& bone = bones[i];
-		const float maskWeight = (i < boneMaskWeights.size()) ? boneMaskWeights[i] : 0.0f;
-		const float finalWeight = std::clamp(maskWeight * clampedLayerAlpha, 0.0f, 1.0f);
-
-		vec3 pos; quat rot; vec3 scl;
-		if (finalWeight <= 0.0f)
-		{
-			SampleLocalTRS(baseClip, trackMapBase, bone, baseTime, pos, rot, scl, isLoopingBase);
-		}
-		else if (finalWeight >= 1.0f)
-		{
-			SampleLocalTRS(layerClip, trackMapLayer, bone, layerTime, pos, rot, scl, isLoopingLayer);
-		}
-		else
-		{
-			vec3 posA, posB; quat rotA, rotB; vec3 sclA, sclB;
-			SampleLocalTRS(baseClip, trackMapBase, bone, baseTime, posA, rotA, sclA, isLoopingBase);
-			SampleLocalTRS(layerClip, trackMapLayer, bone, layerTime, posB, rotB, sclB, isLoopingLayer);
-			pos = glm::mix(posA, posB, finalWeight);
-			rot = glm::normalize(glm::slerp(rotA, rotB, finalWeight));
-			scl = glm::mix(sclA, sclB, finalWeight);
-		}
-
-		const mat4 localTransform = glm::translate(mat4(1.0f), pos) * glm::toMat4(rot) * glm::scale(mat4(1.0f), scl);
-		if (bone.ParentIndex >= 0 && static_cast<uint32>(bone.ParentIndex) < boneCount)
-			combinedTransforms[i] = combinedTransforms[bone.ParentIndex] * localTransform;
-		else
-			combinedTransforms[i] = localTransform;
-
-		outBoneMatrices[i] = combinedTransforms[i] * bone.OffsetMatrix;
+		inOutPose.clear();
+		return;
 	}
+
+	const f32 alpha = std::clamp(layerAlpha, 0.0f, 1.0f);
+	if (alpha <= 0.0f) return;
+
+	unordered_map<wstring, const AnimationTrack*> trackMap;
+	for (const auto& track : layerClip.GetTracks())
+		trackMap[track.TargetBoneName] = &track;
+
+	for (size_t i = 0; i < bones.size(); ++i)
+	{
+		const float mask = i < boneMaskWeights.size() ? boneMaskWeights[i] : 0.0f;
+		const float weight = std::clamp(mask * alpha, 0.0f, 1.0f);
+		if (weight <= 0.0f) continue;
+
+		BoneLocalPose layer;
+		SampleLocalTRS(layerClip, trackMap, bones[i], layerTime,
+			layer.Position, layer.Rotation, layer.Scale, isLoopingLayer);
+
+		inOutPose[i] = BlendBoneLocalPose(inOutPose[i], layer, weight);
+	}
+}
+
+void AnimationEvaluator::BuildSkinningMatrices(const Skeleton& skeleton,
+	const std::vector<BoneLocalPose>& localPose, std::vector<mat4>& outBoneMatrices)
+{
+	const auto& bones = skeleton.GetBones();
+	if (localPose.size() != bones.size())
+	{
+		outBoneMatrices.clear();
+		return;
+	}
+
+	outBoneMatrices.resize(bones.size());
+
+	// 첫 순회에서는 오프셋을 적용하지 않은 계층 변환을 보관한다.
+	for (size_t i = 0; i < bones.size(); ++i)
+	{
+		const auto& pose = localPose[i];
+		const mat4 local = glm::translate(mat4(1.0f), pose.Position) *
+			glm::toMat4(pose.Rotation) * glm::scale(mat4(1.0f), pose.Scale);
+		const int32 parent = bones[i].ParentIndex;
+		if (parent >= 0 && static_cast<size_t>(parent) < i)
+			outBoneMatrices[i] = outBoneMatrices[parent] * local;
+		else
+			outBoneMatrices[i] = local;
+	}
+
+	// 자식의 계층 변환 계산이 끝난 뒤 스키닝 오프셋을 적용한다.
+	for (size_t i = 0; i < bones.size(); ++i)
+		outBoneMatrices[i] *= bones[i].OffsetMatrix;
+}
+
+void AnimationEvaluator::EvaluateSkinningMatrices(const Animation& animation, const Skeleton& skeleton,
+	f32 timeInSeconds, std::vector<mat4>& outBoneMatrices, bool isLooping, float loopBlendDuration)
+{
+	std::vector<BoneLocalPose> pose;
+	EvaluateLocalPose(animation, skeleton, timeInSeconds, pose, isLooping, loopBlendDuration);
+	BuildSkinningMatrices(skeleton, pose, outBoneMatrices);
+}
+
+void AnimationEvaluator::EvaluateBlendedSkinningMatrices(const Animation& clipA, f32 timeA,
+	const Animation& clipB, f32 timeB, f32 alpha, const Skeleton& skeleton,
+	std::vector<mat4>& outBoneMatrices, bool isLoopingA, bool isLoopingB)
+{
+	std::vector<BoneLocalPose> pose;
+	EvaluateBlendedLocalPose(clipA, timeA, clipB, timeB, alpha, skeleton, pose, isLoopingA, isLoopingB);
+	BuildSkinningMatrices(skeleton, pose, outBoneMatrices);
+}
+
+void AnimationEvaluator::EvaluateMaskedSkinningMatrices(const Animation& baseClip, f32 baseTime,
+	const Animation& layerClip, f32 layerTime, const std::vector<float>& boneMaskWeights,
+	f32 layerAlpha, const Skeleton& skeleton, std::vector<mat4>& outBoneMatrices,
+	bool isLoopingBase, bool isLoopingLayer)
+{
+	std::vector<BoneLocalPose> pose;
+	EvaluateLocalPose(baseClip, skeleton, baseTime, pose, isLoopingBase);
+	ApplyMaskedLocalPose(layerClip, layerTime, boneMaskWeights, layerAlpha, skeleton, pose, isLoopingLayer);
+	BuildSkinningMatrices(skeleton, pose, outBoneMatrices);
 }

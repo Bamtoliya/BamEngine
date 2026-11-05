@@ -5,6 +5,7 @@
 #include "Animation.h"
 #include "AnimatorStateMachine.h"
 #include "BoneMask.h"
+#include "AnimationEvaluator.h"
 
 namespace Engine
 {
@@ -64,7 +65,9 @@ namespace Engine
 
 		// 셰이더 및 스키닝에 사용할 최종 뼈 변환 행렬 목록
 		PROPERTY(READONLY, NOSERIALIZE)
-			std::vector<mat4> finalBoneMatrices;
+		std::vector<mat4> finalBoneMatrices;
+
+		std::vector<BoneLocalPose> localBonePose;
 
 		// 애니메이션 상태 머신 런타임 인스턴스 (비직렬화)
 		AnimatorRuntimeState runtimeState;

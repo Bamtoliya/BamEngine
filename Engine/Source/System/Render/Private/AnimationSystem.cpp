@@ -54,7 +54,8 @@ void AnimationSystem::OnUpdate(entt::registry& registry, const vector<Scene*>& a
 		for (auto entity : view)
 		{
 			const auto* flag = world.try_get<FlagComponent>(entity);
-			if (flag && (!flag->IsActiveInHierarchy() || HasFlag(flag->effectiveFlags, EEntityFlag::Paused) ||
+			if (flag && (!flag->IsActiveInHierarchy() ||
+				HasFlag(flag->effectiveFlags, EEntityFlag::Paused) ||
 				HasFlag(flag->effectiveFlags, EEntityFlag::Dead)))
 			{
 				continue;
@@ -62,7 +63,7 @@ void AnimationSystem::OnUpdate(entt::registry& registry, const vector<Scene*>& a
 
 			auto& animator = view.get<AnimatorComponent>(entity);
 
-			// 1. 인스펙터 또는 씬 직렬화로 설정된 .animator 컨트롤러 경로 자동 로드 동기화
+			// 1. 컨트롤러 경로 변경 동기화
 			if (animator.controllerPath != animator.loadedControllerPath)
 			{
 				if (animator.controllerPath.empty())
@@ -73,84 +74,86 @@ void AnimationSystem::OnUpdate(entt::registry& registry, const vector<Scene*>& a
 				}
 				else if (!animator.LoadController(animator.controllerPath))
 				{
-					// 로드 실패 시 매 프레임 디스크 재시도 폭주를 막기 위해 시도 경로 기록
+					// 기존 정책: 같은 실패 경로를 매 프레임 다시 로드하지 않는다.
 					animator.loadedControllerPath = animator.controllerPath;
 				}
 			}
 
-			// 2. 자신 또는 자식 엔티티의 SkinnedMeshRendererComponent에서 스켈레톤 탐색
+			// 2. 스켈레톤과 재생 상태 확인
 			const auto* skeleton = FindSkeletonInHierarchy(world, entity);
 			if (!skeleton || !animator.isPlaying) continue;
 
-			// 3. 베이스 레이어(ASM 또는 단일 클립) 평가
-			const Animation* baseClip = nullptr;
-			float baseTime = animator.currentTime;
-			bool isLoopingBase = animator.isLooping;
+			auto& localPose = animator.localBonePose;
+			localPose.clear();
 
+			// 3. 베이스 로컬 포즈 평가
 			if (animator.runtimeState.HasStateMachine())
 			{
-				animator.runtimeState.Update(dt * animator.playRate, *skeleton, animator.finalBoneMatrices);
+				animator.runtimeState.UpdateLocalPose(dt * animator.playRate, *skeleton, localPose);
 				animator.currentTime = animator.runtimeState.GetStateTime();
-				baseTime = animator.currentTime;
-				baseClip = animator.runtimeState.GetCurrentClip();
-				if (const auto* st = animator.runtimeState.GetStateMachine()->FindState(animator.runtimeState.GetCurrentStateName()))
-				{
-					isLoopingBase = st->isLooping;
-				}
 
-				// 트리거된 노티파이 이벤트 디스패치
 				auto notifies = animator.runtimeState.PopTriggeredNotifies();
 				for (const auto& ev : notifies)
 				{
-					for (const auto& cb : animator.notifyCallbacks) { if (cb) cb(entity, ev); }
+					for (const auto& cb : animator.notifyCallbacks)
+					{
+						if (cb) cb(entity, ev);
+					}
 				}
 			}
 			else
 			{
-				baseClip = animator.currentClip.Get();
-				if (baseClip)
+				const auto* baseClip = animator.currentClip.Get();
+				if (!baseClip) continue;
+
+				const f64 tps = baseClip->GetTicksPerSecond() > 0.0 ? baseClip->GetTicksPerSecond() : 25.0;
+				const f32 durationSec = baseClip->GetDuration() > 0.0
+					? static_cast<f32>(baseClip->GetDuration() / tps) : 0.0f;
+
+				animator.currentTime += dt * animator.playRate;
+				if (!animator.isLooping && durationSec > 0.0f && animator.currentTime >= durationSec)
 				{
-					const f64 tps = baseClip->GetTicksPerSecond() > 0.0 ? baseClip->GetTicksPerSecond() : 25.0;
-					const f32 durationSec = baseClip->GetDuration() > 0.0 ? static_cast<f32>(baseClip->GetDuration() / tps) : 0.0f;
-					animator.currentTime += dt * animator.playRate;
-					if (!animator.isLooping && durationSec > 0.0f && animator.currentTime >= durationSec)
-					{
-						animator.currentTime = durationSec;
-						animator.isPlaying = false;
-					}
-					baseTime = animator.currentTime;
-					AnimationEvaluator::EvaluateSkinningMatrices(*baseClip, *skeleton, baseTime, animator.finalBoneMatrices, animator.isLooping);
+					animator.currentTime = durationSec;
+					animator.isPlaying = false;
 				}
+
+				AnimationEvaluator::EvaluateLocalPose(*baseClip, *skeleton,
+					animator.currentTime, localPose, animator.isLooping);
 			}
 
-			// 4. 상위 오버레이 레이어(Layered Animation) 마스킹 합성
-			if (baseClip)
+			if (localPose.empty()) continue;
+
+			// 4. 기존 포즈 위에 레이어를 배열 순서대로 누적 합성
+			for (auto& layer : animator.layers)
 			{
-				for (auto& layer : animator.layers)
+				if (!layer.isPlaying || layer.weight <= 0.0f) continue;
+
+				const auto* layerClip = layer.clip.Get();
+				if (!layerClip) continue;
+
+				if (layer.mask.boneWeights.size() != skeleton->GetBones().size())
 				{
-					if (!layer.isPlaying || layer.weight <= 0.0f) continue;
-					auto* layerClip = layer.clip.Get();
-					if (!layerClip) continue;
-
-					// 스켈레톤 본 개수에 맞게 마스크 가중치 캐시 갱신
-					if (layer.mask.boneWeights.size() != skeleton->GetBones().size())
-					{
-						layer.mask.BuildWeights(*skeleton);
-					}
-
-					// 레이어 타임라인 진행 및 비루프 재생 종료 검출
-					const f64 layerTps = layerClip->GetTicksPerSecond() > 0.0 ? layerClip->GetTicksPerSecond() : 25.0;
-					const f32 layerDuration = layerClip->GetDuration() > 0.0 ? static_cast<f32>(layerClip->GetDuration() / layerTps) : 0.0f;
-					layer.currentTime += dt * layer.playRate;
-					if (!layer.isLooping && layerDuration > 0.0f && layer.currentTime >= layerDuration)
-					{
-						layer.currentTime = layerDuration;
-						layer.isPlaying = false;
-					}
-
-					AnimationEvaluator::EvaluateMaskedSkinningMatrices(*baseClip, baseTime, *layerClip, layer.currentTime, layer.mask.boneWeights, layer.weight, *skeleton, animator.finalBoneMatrices, isLoopingBase, layer.isLooping);
+					layer.mask.BuildWeights(*skeleton);
 				}
+
+				const f64 layerTps = layerClip->GetTicksPerSecond() > 0.0
+					? layerClip->GetTicksPerSecond() : 25.0;
+				const f32 layerDuration = layerClip->GetDuration() > 0.0
+					? static_cast<f32>(layerClip->GetDuration() / layerTps) : 0.0f;
+
+				layer.currentTime += dt * layer.playRate;
+				if (!layer.isLooping && layerDuration > 0.0f && layer.currentTime >= layerDuration)
+				{
+					layer.currentTime = layerDuration;
+					layer.isPlaying = false;
+				}
+
+				AnimationEvaluator::ApplyMaskedLocalPose(*layerClip, layer.currentTime,
+					layer.mask.boneWeights, layer.weight, *skeleton, localPose, layer.isLooping);
 			}
+
+			// 5. 모든 합성이 끝난 뒤 최종 스키닝 행렬 생성
+			AnimationEvaluator::BuildSkinningMatrices(*skeleton, localPose, animator.finalBoneMatrices);
 		}
 	}
 }

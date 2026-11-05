@@ -5,11 +5,13 @@
 #include "Animation.h"
 #include "Skeleton.h"
 #include "BlendTree1D.h"
+#include "BlendTree2D.h"
 #include "Reflection/ReflectionMacro.h"
 #include <string>
 #include <vector>
 #include <unordered_map>
 #include <memory>
+#include "AnimationEvaluator.h"
 
 BEGIN(Engine)
 
@@ -120,6 +122,14 @@ struct ENGINE_API AnimState
 	PROPERTY(EDITABLE)
 		BlendTree1D blendTree;
 
+	PROPERTY(EDITABLE, ALLOW_MISSING)
+	bool useBlendTree2D = false;
+
+	PROPERTY(EDITABLE, ALLOW_MISSING)
+	BlendTree2D blendTree2D;
+
+	bool IsBlendTree2D() const { return isBlendTree && useBlendTree2D; }
+
 	PROPERTY(EDITABLE)
 		float playRate = 1.0f;
 
@@ -133,6 +143,25 @@ struct ENGINE_API AnimState
 	std::vector<AnimNotify> notifies;
 
 	bool IsBlendTree() const { return isBlendTree; }
+};
+
+ENUM()
+enum class ETransitionConditionLogic : uint8
+{
+	All,
+	Any
+};
+
+STRUCT()
+struct ENGINE_API TransitionConditionGroup
+{
+	REFLECT_BODY()
+
+		PROPERTY(EDITABLE)
+		ETransitionConditionLogic conditionLogic = ETransitionConditionLogic::All;
+
+	PROPERTY(EDITABLE)
+		std::vector<TransitionCondition> conditions;
 };
 
 STRUCT()
@@ -158,7 +187,20 @@ struct ENGINE_API AnimTransition
 	PROPERTY(EDITABLE)
 		std::vector<TransitionCondition> conditions;
 
+	PROPERTY(EDITABLE, ALLOW_MISSING)
+		ETransitionConditionLogic conditionLogic = ETransitionConditionLogic::All;
+
+	PROPERTY(EDITABLE, ALLOW_MISSING)
+		ETransitionConditionLogic groupLogic = ETransitionConditionLogic::All;
+
+	PROPERTY(EDITABLE, ALLOW_MISSING)
+		std::vector<TransitionConditionGroup> conditionGroups;
+
+	PROPERTY(EDITABLE, ALLOW_MISSING)
+		bool fromAnyState = false;
+
 	bool CanTransition(float currentNormalizedTime, const AnimatorParameters& params) const;
+	void ConsumeMatchedTriggers(AnimatorParameters& params) const;
 };
 
 CLASS()
@@ -194,7 +236,7 @@ public:
 	bool HasStateMachine() const { return m_stateMachine != nullptr; }
 	const std::shared_ptr<AnimatorStateMachine>& GetStateMachine() const { return m_stateMachine; }
 
-	void Update(float dt, const Skeleton& skeleton, std::vector<mat4>& outBoneMatrices);
+	void UpdateLocalPose(float dt, const Skeleton& skeleton, std::vector<BoneLocalPose>& outLocalPose);
 
 	void SetFloat(const std::string& name, float value) { m_parameters.SetFloat(name, value); }
 	void SetInt(const std::string& name, int32 value) { m_parameters.SetInt(name, value); }
@@ -206,8 +248,13 @@ public:
 	bool GetBool(const std::string& name) const { return m_parameters.GetBool(name); }
 
 	const std::string& GetCurrentStateName() const { return m_currentStateName; }
+	[[nodiscard]] std::optional<vec2> GetCurrentBlendInput() const { return m_currentBlendInput; }
 	const Animation* GetCurrentClip() const;
 	bool IsTransitioning() const { return m_isTransitioning; }
+	std::string_view GetTransitionTargetStateName() const
+	{
+		return m_isTransitioning ? std::string_view{ m_targetStateName } : std::string_view{};
+	}
 	float GetTransitionProgress() const { return m_transitionDuration > 0.0f ? (m_transitionElapsed / m_transitionDuration) : 1.0f; }
 
 	float GetStateTime() const { return m_currentStateTime; }
@@ -234,6 +281,10 @@ private:
 
 	float m_previousStateTime = 0.0f;
 	std::vector<AnimNotifyEvent> m_triggeredNotifies;
+	std::vector<BoneLocalPose> m_transitionTargetPose;
+	std::vector<BoneLocalPose> m_blendSamplePose;
+	std::optional<vec2> m_currentBlendInput;
+	std::optional<vec2> m_targetBlendInput;
 	void CheckAndTriggerNotifies(const AnimState& state, float prevTime, float newTime, float duration, bool isLooping);
 };
 

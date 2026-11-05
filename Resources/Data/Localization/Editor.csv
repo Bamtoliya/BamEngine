@@ -1414,11 +1414,50 @@ Viewport,View,View,보기
 Viewport,ViewerTitle,{} Viewer,{} 뷰어
 Viewport,World,World,월드
 Viewport,ZIndex,Z-Index,Z 순서
+AnimatorGraph,DefaultParameters,Default Parameters,기본 파라미터
+AnimatorGraph,PreviewParameters,Preview Parameters,프리뷰 파라미터
+AnimatorGraph,PreviewUnavailable,Preview controls are unavailable.,프리뷰를 제어할 수 없습니다.
+AnimatorGraph,PreviewModel,Preview Model,프리뷰 모델
+AnimatorGraph,PreviewModelChangeFailed,Could not change the preview model. Check the log.,프리뷰 모델을 변경하지 못했습니다. 로그를 확인하세요.
+AnimatorGraph,ParameterNameInvalid,Enter a nonempty and unique parameter name.,이름을 입력하세요. 다른 파라미터와 중복될 수 없습니다.
 Settings,PreviewLighting,Preview Lighting,프리뷰 조명
 Settings,PreviewKeyLight,Key Light,주광
 Settings,PreviewFillLight,Fill Light,보조광
 Settings,PreviewRimLight,Rim Light,역광
 PreviewViewport,LightingApplyScope,Apply saves these settings for all previews.,적용하면 모든 프리뷰의 조명 설정으로 저장됩니다.
+AnimatorGraph,MotionType,Motion Type,동작 유형
+AnimatorGraph,BlendTree2D,2D Blend Tree,2D 블렌드 트리
+AnimatorGraph,Blend2DParameterX,X Parameter,X 파라미터
+AnimatorGraph,Blend2DParameterY,Y Parameter,Y 파라미터
+AnimatorGraph,Blend2DRangeX,X Range (Min / Max),X 범위 (최소 / 최대)
+AnimatorGraph,Blend2DRangeY,Y Range (Min / Max),Y 범위 (최소 / 최대)
+AnimatorGraph,Blend2DCorner,X {:.2f} / Y {:.2f},X {:.2f} / Y {:.2f}
+AnimatorGraph,Blend2DAxesRequired,Assign a Float parameter to each axis.,각 축에 실수 파라미터를 지정하세요.
+AnimatorGraph,Blend2DRangeInvalid,Each axis needs a finite minimum below its maximum.,각 축의 최소·최대는 유한한 값이어야 하며 최소가 최대보다 작아야 합니다.
+AnimatorGraph,Blend2DCornersIncomplete,Assign all four clips to preview the entire range.,전체 범위를 재생하려면 네 모서리에 클립을 지정하세요.
+AnimatorGraph,ConditionLogic,Condition Logic,조건 결합 방식
+AnimatorGraph,ConditionAll,All Conditions (AND),모두 만족 (AND)
+AnimatorGraph,ConditionAny,Any Condition (OR),하나 이상 만족 (OR)
+AnimatorGraph,AddConditionGroup,Add Condition Group,조건 그룹 추가
+AnimatorGraph,GroupLogic,Group Logic,그룹 결합 방식
+AnimatorGraph,ConditionGroupTitle,Condition Group {},조건 그룹 {}
+AnimatorGraph,EmptyConditionGroup,Add a condition to activate this group.,그룹을 활성화하려면 조건을 추가하세요.
+AnimatorGraph,Blend2DPreviewTitle,2D Blend Preview,2D 블렌드 미리보기
+AnimatorGraph,Blend2DTarget,Target (ring) X {:.2f} / Y {:.2f},목표 (테두리) X {:.2f} / Y {:.2f}
+AnimatorGraph,Blend2DSampled,Smoothed (dot) X {:.2f} / Y {:.2f},보간값 (점) X {:.2f} / Y {:.2f}
+AnimatorGraph,Blend2DWeights,00 {:.0f}%  10 {:.0f}%  01 {:.0f}%  11 {:.0f}%,00 {:.0f}%  10 {:.0f}%  01 {:.0f}%  11 {:.0f}%
+AnimatorGraph,Blend2DDragHint,Drag the plot to adjust the preview input.,그래프를 드래그해 프리뷰 입력을 조절하세요.
+AnimatorGraph,Blend2DDragSharedAxis,Assign different parameters to X and Y to drag the plot.,그래프를 드래그하려면 X와 Y에 서로 다른 파라미터를 지정하세요.
+AnimatorGraph,PreviewRestart,Restart Preview,프리뷰 다시 시작
+AnimatorGraph,PreviewRestartNeedsEntry,Set a default entry state to restart the preview.,프리뷰를 다시 시작하려면 기본 진입 상태를 지정하세요.
+AnimatorGraph,PreviewCurrentState,Current state {},현재 상태 {}
+AnimatorGraph,PreviewTransitionStatus,Transition {} → {} ({:.0f}%),전이 {} → {} ({:.0f}%)
+AnimatorGraph,PreviewPlaybackPaused,Preview paused (bind pose),프리뷰 일시정지 (바인드 포즈)
+AnimatorGraph,PreviewStateMissing,No active preview state.,활성 프리뷰 상태가 없습니다.
+AnimatorGraph,AnyState,Any State,모든 상태
+AnimatorGraph,MakeAnyStateTransition,Add Transition from Any State,모든 상태에서 전이 추가
+AnimatorGraph,AnyStateNeedsCondition,Add a condition to enable this transition.,이 전이를 활성화하려면 조건을 추가하세요.
+AnimatorGraph,StateNameInvalid,Enter a nonempty and unique state name.,상태 이름을 입력하세요. 다른 상태와 중복될 수 없습니다.
 History,Command.MoveSplinePoint,Move Spline Point,스플라인 제어점 이동
 Spline,InvalidData,Spline requires 1-64 finite points; closed curves require at least 3.,스플라인에는 유한한 좌표의 제어점 1~64개가 필요합니다. 닫힌 곡선에는 최소 3개가 필요합니다.
 Spline,PointHint,"Control point {}: select, then use the translation or roll rotation gizmo.",제어점 {}: 선택한 뒤 이동 또는 롤 회전 기즈모로 조작합니다.
