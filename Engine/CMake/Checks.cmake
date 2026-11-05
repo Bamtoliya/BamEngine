@@ -66,3 +66,15 @@ endif()
 if(BUILD_TESTING)
     add_test(NAME CollisionGeometryCheck COMMAND CollisionGeometryCheck)
 endif()
+
+add_executable(SplineCurveCheck examples/SplineCurveCheck.cpp)
+target_link_libraries(SplineCurveCheck PRIVATE BamEngine::Engine)
+set_target_properties(SplineCurveCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
+
+if(MSVC)
+    target_compile_options(SplineCurveCheck PRIVATE /utf-8 /Zc:preprocessor)
+endif()
+
+if(BUILD_TESTING)
+    add_test(NAME SplineCurveCheck COMMAND SplineCurveCheck)
+endif()

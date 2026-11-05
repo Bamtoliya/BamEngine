@@ -26,94 +26,124 @@ namespace
 		return TryGetHeightmapSize(terrain.Resolution, axisCount, sampleCount) &&
 			terrain.HeightData.size() == sampleCount;
 	}
+
+	struct TerrainGridMeshLayout
+	{
+		uint32 Columns = 0;
+		uint32 Rows = 0;
+		uint32 VertexCount = 0;
+		uint32 IndexCount = 0;
+	};
+
+	bool TryGetTerrainGridMeshLayout(uint32 segmentsX, uint32 segmentsZ, TerrainGridMeshLayout& layout)
+	{
+		if (segmentsX == 0 || segmentsZ == 0)
+			return false;
+
+		constexpr uint64 maxBytes = (std::numeric_limits<uint32>::max)();
+		constexpr uint64 maxVertices = maxBytes / std::max(sizeof(Engine::VertexPosition), sizeof(Engine::VertexMaterial));
+		constexpr uint64 maxQuads = maxBytes / (6 * sizeof(uint32));
+
+		const uint64 columns = static_cast<uint64>(segmentsX) + 1;
+		const uint64 rows = static_cast<uint64>(segmentsZ) + 1;
+		const uint64 quads = static_cast<uint64>(segmentsX) * segmentsZ;
+
+		if (columns > maxVertices / rows || quads > maxQuads)
+			return false;
+
+		layout.Columns = static_cast<uint32>(columns);
+		layout.Rows = static_cast<uint32>(rows);
+		layout.VertexCount = static_cast<uint32>(columns * rows);
+		layout.IndexCount = static_cast<uint32>(quads * 6);
+		return true;
+	}
 }
 
 Mesh* TerrainUtility::CreateGridMesh(float width, float length, uint32 resolution)
 {
-	uint32 vertCountX = 0;
-	std::size_t sampleCount = 0;
+	return CreateGridMesh(width, length, resolution, resolution, false);
+}
 
-	if (!std::isfinite(width) || width <= 0.f ||
-		!std::isfinite(length) || length <= 0.f ||
-		!TryGetGridLayout(resolution, vertCountX, sampleCount))
+Mesh* TerrainUtility::CreateGridMesh(float width, float length, uint32 segmentsX, uint32 segmentsZ, bool reverseWinding)
+{
+	TerrainGridMeshLayout layout;
+	if (!std::isfinite(width) || width <= 0.0f || !std::isfinite(length) || length <= 0.0f ||
+		!TryGetTerrainGridMeshLayout(segmentsX, segmentsZ, layout))
 		return nullptr;
 
-	const float dx = width / static_cast<float>(resolution);
-	const float dz = length / static_cast<float>(resolution);
+	const float dx = width / static_cast<float>(segmentsX);
+	const float dz = length / static_cast<float>(segmentsZ);
 	const float startX = -width * 0.5f;
 	const float startZ = -length * 0.5f;
 
-	if (!std::isfinite(dx) || dx <= 0.f || !std::isfinite(dz) || dz <= 0.f ||
-		!std::isfinite(startX + static_cast<float>(resolution) * dx) ||
-		!std::isfinite(startZ + static_cast<float>(resolution) * dz))
+	if (!std::isfinite(dx) || dx <= 0.0f || !std::isfinite(dz) || dz <= 0.0f ||
+		!std::isfinite(startX + static_cast<float>(segmentsX) * dx) ||
+		!std::isfinite(startZ + static_cast<float>(segmentsZ) * dz))
 		return nullptr;
 
-	const uint32 vertCountZ = vertCountX;
-	const uint32 totalVertices = static_cast<uint32>(sampleCount);
-	const uint32 totalQuads = resolution * resolution;
-	const uint32 totalIndices = totalQuads * 6;
+	std::vector<VertexPosition> positions(layout.VertexCount);
+	std::vector<VertexMaterial> materials(layout.VertexCount);
+	std::vector<uint32> indices(layout.IndexCount);
 
-	std::vector<VertexPosition> positions(totalVertices);
-	std::vector<VertexMaterial> materials(totalVertices);
-	std::vector<uint32> indices(totalIndices);
-
-	// 여기부터 기존 정점 생성 부분을 유지합니다.
-
-	// 1. 정점 데이터 생성 (XZ 평면, Y=0, UV는 0.0 ~ 1.0)
-	uint32 vIdx = 0;
-	for (uint32 z = 0; z < vertCountZ; ++z)
+	uint32 vertexIndex = 0;
+	for (uint32 z = 0; z < layout.Rows; ++z)
 	{
 		const float currentZ = startZ + static_cast<float>(z) * dz;
-		const float v = static_cast<float>(z) / static_cast<float>(resolution);
+		const float v = static_cast<float>(z) / static_cast<float>(segmentsZ);
 
-		for (uint32 x = 0; x < vertCountX; ++x)
+		for (uint32 x = 0; x < layout.Columns; ++x)
 		{
 			const float currentX = startX + static_cast<float>(x) * dx;
-			const float u = static_cast<float>(x) / static_cast<float>(resolution);
+			const float u = static_cast<float>(x) / static_cast<float>(segmentsX);
+			positions[vertexIndex].position = vec3(currentX, 0.0f, currentZ);
 
-			positions[vIdx].position = vec3(currentX, 0.0f, currentZ);
-			materials[vIdx].texCoord = vec2(u, v);
-			materials[vIdx].normal = vec3(0.0f, 1.0f, 0.0f);
-			materials[vIdx].tangent = vec3(1.0f, 0.0f, 0.0f);
-			materials[vIdx].binormal = vec3(0.0f, 0.0f, 1.0f);
-			materials[vIdx].color = vec4(1.0f);
-			++vIdx;
+			auto& material = materials[vertexIndex];
+			material.texCoord = vec2(u, v);
+			material.normal = vec3(0.0f, 1.0f, 0.0f);
+			material.tangent = vec3(1.0f, 0.0f, 0.0f);
+			material.binormal = vec3(0.0f, 0.0f, 1.0f);
+			material.color = vec4(1.0f);
+			++vertexIndex;
 		}
 	}
 
-	// 2. 인덱스 데이터 생성 (시계 방향 와인딩)
-	uint32 iIdx = 0;
-	for (uint32 z = 0; z < resolution; ++z)
-	{
-		for (uint32 x = 0; x < resolution; ++x)
+	uint32 index = 0;
+	const auto appendTriangle = [&](uint32 a, uint32 b, uint32 c)
 		{
-			const uint32 i0 = z * vertCountX + x;
+			if (reverseWinding)
+				std::swap(b, c);
+
+			indices[index++] = a;
+			indices[index++] = b;
+			indices[index++] = c;
+		};
+
+	for (uint32 z = 0; z < segmentsZ; ++z)
+	{
+		for (uint32 x = 0; x < segmentsX; ++x)
+		{
+			const uint32 i0 = z * layout.Columns + x;
 			const uint32 i1 = i0 + 1;
-			const uint32 i2 = (z + 1) * vertCountX + x;
+			const uint32 i2 = i0 + layout.Columns;
 			const uint32 i3 = i2 + 1;
 
-			// 첫 번째 삼각형 (i0 -> i2 -> i1)
-			indices[iIdx++] = i0;
-			indices[iIdx++] = i2;
-			indices[iIdx++] = i1;
-
-			// 두 번째 삼각형 (i1 -> i2 -> i3)
-			indices[iIdx++] = i1;
-			indices[iIdx++] = i2;
-			indices[iIdx++] = i3;
+			appendTriangle(i0, i2, i1);
+			appendTriangle(i1, i2, i3);
 		}
 	}
 
-	// 3. BamEngine MeshCreateDesc 구성
 	MeshCreateDesc desc{};
-	desc.Streams[static_cast<uint32>(EMeshStream::Position)] = { positions.data(), totalVertices, sizeof(VertexPosition) };
-	desc.Streams[static_cast<uint32>(EMeshStream::Material)] = { materials.data(), totalVertices, sizeof(VertexMaterial) };
+	desc.Streams[static_cast<uint32>(EMeshStream::Position)] =
+	{ positions.data(), layout.VertexCount, sizeof(VertexPosition) };
+	desc.Streams[static_cast<uint32>(EMeshStream::Material)] =
+	{ materials.data(), layout.VertexCount, sizeof(VertexMaterial) };
 	desc.IndexData = indices.data();
-	desc.IndexCount = totalIndices;
+	desc.IndexCount = layout.IndexCount;
 	desc.IndexStride = sizeof(uint32);
 	desc.BoundingBoxMin = vec3(startX, 0.0f, startZ);
 	desc.BoundingBoxMax = vec3(-startX, 0.0f, -startZ);
-	desc.Flags = EMeshFlag::KeepRawData | EMeshFlag::HasPosition | EMeshFlag::HasNormal | EMeshFlag::HasTexCoord | EMeshFlag::HasTangent;
+	desc.Flags = EMeshFlag::KeepRawData | EMeshFlag::HasPosition | EMeshFlag::HasNormal |
+		EMeshFlag::HasTexCoord | EMeshFlag::HasTangent;
 
 	return Mesh::Create(&desc);
 }
@@ -382,13 +412,11 @@ bool TerrainUtility::ResampleHeightData(const std::vector<f32>& source, uint32 s
 
 bool TerrainUtility::TryGetGridLayout(uint32 resolution, uint32& axisCount, std::size_t& sampleCount)
 {
-	if (!TryGetHeightmapSize(resolution, axisCount, sampleCount))
+	TerrainGridMeshLayout layout;
+	if (!TryGetTerrainGridMeshLayout(resolution, resolution, layout))
 		return false;
 
-	const uint64 maxBytes = (std::numeric_limits<uint32>::max)();
-	const uint64 quadCount = static_cast<uint64>(resolution) * resolution;
-
-	return sampleCount <= maxBytes / sizeof(VertexPosition) &&
-		sampleCount <= maxBytes / sizeof(VertexMaterial) &&
-		quadCount <= maxBytes / (6 * sizeof(uint32));
+	axisCount = layout.Columns;
+	sampleCount = layout.VertexCount;
+	return true;
 }

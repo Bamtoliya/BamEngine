@@ -692,3 +692,34 @@
 ,Variable not found in executor:,Variable not found in executor:,실행기에서 변수를 찾을 수 없습니다:
 ,Variable not found.,Variable not found.,변수를 찾을 수 없습니다.
 ,Variable with this name already exists.,Variable with this name already exists.,같은 이름의 변수가 이미 있습니다.
+,CATEGORY_SPLINE,Spline,스플라인
+,Engine::ESplineMeshBuildStatus.DeformationFailed,Mesh deformation failed,메시 변형 실패
+,Engine::ESplineMeshBuildStatus.FoldedSection,The deformed section folds or collapses,굽이 안쪽에서 변형 단면이 접히거나 붕괴함
+,Engine::ESplineMeshBuildStatus.InvalidPath,Invalid spline path,유효하지 않은 스플라인 경로
+,Engine::ESplineMeshBuildStatus.MissingMaterial,Material unavailable,머티리얼을 사용할 수 없음
+,Engine::ESplineMeshBuildStatus.MissingSourceMesh,Source mesh unavailable,원본 메시를 사용할 수 없음
+,Engine::ESplineMeshBuildStatus.NoOutput,No generated geometry,생성된 형상 없음
+,Engine::ESplineMeshBuildStatus.NotEvaluated,Not evaluated,평가 전
+,Engine::ESplineMeshBuildStatus.PlacementFailed,Repeated placement failed,반복 배치 실패
+,Engine::ESplineMeshBuildStatus.Ready,Generated,생성 완료
+,Engine::ESplineMeshBuildStatus.SourceLimitExceeded,Source mesh exceeds vertex or index limit,원본 메시의 정점 또는 인덱스 한도 초과
+,Engine::ESplineMeshBuildStatus.StartDistanceAtOrPastEnd,Start distance must be before path end,시작 거리는 경로 끝보다 앞이어야 함
+,Engine::ESplineMeshBuildStatus.ZeroSourceZLength,Source mesh has no length along local Z,원본 메시의 로컬 Z 길이가 0임
+,PROP_SPLINE_ALIGN_TO_MOVEMENT,Face Movement Direction,이동 방향 바라보기
+,PROP_SPLINE_BUILD_ERROR,Build Error,생성 오류
+,PROP_SPLINE_CLOSED,Closed Curve,닫힌 곡선
+,PROP_SPLINE_CURRENT_DISTANCE,Current Distance,현재 거리
+,PROP_SPLINE_DEFORM_TO_PATH,Deform Along Spline,경로를 따라 변형
+,PROP_SPLINE_INITIAL_UP,Initial Up Direction (world),초기 위쪽 방향 (월드)
+,PROP_SPLINE_INSTANCE_COUNT,Generated Instances,생성된 조각 수
+,PROP_SPLINE_LAST_BUILD_STATUS,Last Build Status,마지막 생성 상태
+,PROP_SPLINE_POINTS,Control Points,제어점
+,PROP_SPLINE_ROLL,Roll (degrees),롤 (도)
+,PROP_SPLINE_SPACING,Spacing (world units),배치 간격 (월드 단위)
+,PROP_SPLINE_SPEED,Speed (world units/s),이동 속도 (월드 단위/초)
+,PROP_SPLINE_START_DISTANCE,Start Distance,시작 거리
+,PROP_SPLINE_UV_REPEAT_DISTANCE,UV Repeat Distance (0 = Source UV),UV 반복 거리 (0 = 원본 UV)
+,STRUCT_SPLINE,Spline,스플라인
+,STRUCT_SPLINE_FOLLOWER,Spline Follower,스플라인 추종
+,STRUCT_SPLINE_MESH,Spline Mesh Repetition,스플라인 메시 반복
+,STRUCT_SPLINE_POINT,Spline Point,스플라인 제어점

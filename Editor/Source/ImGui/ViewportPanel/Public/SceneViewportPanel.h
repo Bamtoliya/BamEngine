@@ -5,6 +5,7 @@
 #include "Grid.h"
 #include "ViewportDeferredPipeline.h"
 #include "SceneEditHistory.h"
+#include "SplineComponent.h"
 #pragma push_macro("COLOR")
 #undef COLOR
 
@@ -54,6 +55,7 @@ public:
 	void ToggleSnap() { m_GizmoUseSnap = !m_GizmoUseSnap; }
 	void ToggleGrid() { m_Grid.Toggle(); }
 	void FocusSelectedEntity();
+	void SelectSplinePoint(Engine::Scene* scene, entt::entity entity, int index);
 private:
 	inline static SceneViewportPanel* s_ActiveSceneViewport = nullptr;
 #pragma endregion
@@ -129,6 +131,34 @@ private:
 private:
 	std::optional<CameraBuffer> GetActiveCameraBuffer();
 	void HandleTerrainSculpting(bool imageHovered);
+
+#pragma region Spline
+private:
+	void DrawSelectedSpline(Engine::Scene* scene);
+	bool DrawSplinePointEditor(bool imageHovered);
+	void ResetSplinePointSelection();
+	void StopSplinePointDrag();
+
+	ImGuizmo::OPERATION m_SplinePointDragOperation = static_cast<ImGuizmo::OPERATION>(0);
+	mat4 m_SplinePointDragOwnerWorld{ 1.0f };
+
+	Engine::Scene* m_SplinePointScene = nullptr;
+	entt::entity m_SplinePointEntity = entt::null;
+	uint64 m_SplinePointOwnerId = 0;
+	uint64 m_SplinePointRevision = 0;
+	int m_SplinePointIndex = -1;
+
+	std::vector<Engine::SplinePoint> m_SplinePointExpected;
+	bool m_SplinePointWasUsing = false;
+	bool m_SplinePointBlockUntilRelease = false;
+
+	static constexpr size_t MaxSplinePreviewSegments = 256;
+
+	std::vector<Engine::SplinePoint> m_SplinePreviewSource;
+	std::vector<vec3> m_SplinePreviewSamples;
+	bool m_SplinePreviewClosed = false;
+	bool m_SplinePreviewCached = false;
+#pragma endregion
 
 #pragma region Member Variables
 private:

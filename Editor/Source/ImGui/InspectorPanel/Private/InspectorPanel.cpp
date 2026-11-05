@@ -27,6 +27,9 @@
 #include "FileDialogs.h"
 #include "Components/Render/ActionTimelineComponent.h"
 #include "AnimationTimelinePanel.h"
+#include "SplineComponent.h"
+#include "SceneViewportPanel.h"
+#include "SplineCurve.h"
 
 InspectorPanel::InspectorPanel(uint32 panelId) : m_PanelId(panelId)
 {
@@ -647,6 +650,11 @@ void InspectorPanel::DrawCommonFlags(Engine::Scene& scene, std::span<const entt:
 		ImGui::TextDisabled("%s", LOCAL_CSTR("Inspector.MultiEditUnavailable"));
 }
 
+static bool IsInvalidSplineClose(const Engine::SplineComponent& spline, bool wasClosed)
+{
+	return !wasClosed && spline.Closed && !spline.IsValid();
+}
+
 void InspectorPanel::DrawCommonReflectedProperties(Engine::Scene& scene, std::span<const entt::entity> entities, const Engine::ComponentReflectionEntry& entry)
 {
 	if (entities.empty() || !entry.ReflectionType || !entry.Edit || !entry.Has) return;
@@ -679,6 +687,8 @@ void InspectorPanel::DrawCommonReflectedProperties(Engine::Scene& scene, std::sp
 	std::string selectionId = std::to_string(history.Revision());
 	std::vector<reflection::ObjectView> objects;
 	std::vector<const ReflectionObjectEditSettings*> settings;
+	const bool isSpline = entry.Type == std::type_index(typeid(Engine::SplineComponent));
+	std::vector<std::pair<Engine::SplineComponent*, bool>> splineStates;
 
 	for (const auto entity : entities)
 	{
@@ -686,6 +696,11 @@ void InspectorPanel::DrawCommonReflectedProperties(Engine::Scene& scene, std::sp
 		const auto* identity = world.try_get<Engine::IDComponent>(entity);
 		if (!identity || identity->id == 0) return;
 
+		if (isSpline)
+		{
+			auto& spline = world.get<Engine::SplineComponent>(entity);
+			splineStates.emplace_back(&spline, spline.Closed);
+		}
 		objects.push_back(entry.Edit(world, entity));
 		settings.push_back(&GetReflectionEntityEditState(world, entity).Components[type.QualifiedName]);
 		selectionId += "/" + std::to_string(identity->id);
@@ -717,6 +732,21 @@ void InspectorPanel::DrawCommonReflectedProperties(Engine::Scene& scene, std::sp
 
 	if (!changed) return;
 
+	const bool rejectedSplineClose = std::any_of(splineStates.begin(), splineStates.end(), [](const auto& state)
+		{
+			return IsInvalidSplineClose(*state.first, state.second);
+		});
+
+	if (rejectedSplineClose)
+	{
+		for (const auto& [spline, wasClosed] : splineStates)
+			spline->Closed = wasClosed;
+
+		NotificationManager::Get().AddNotification(
+			LOCAL("STRUCT_SPLINE"), LOCAL("Spline.InvalidData"), ELogLevel::Warn);
+		return;
+	}
+
 	for (const auto entity : entities)
 	{
 		if (entry.Type == std::type_index(typeid(Engine::CameraComponent)))
@@ -736,6 +766,53 @@ EResult InspectorPanel::SetSelectedEntity(Engine::Entity* entity)
 {
 	SelectionManager::Get().SetSelectedEntity(entity);
 	return EResult::Success;
+}
+
+static bool TryInitializeAppendedSplinePoint(Engine::SplineComponent& spline)
+{
+	auto& points = spline.Points;
+	if (points.empty() || points.size() > Engine::SplineComponent::MaxControlPoints)
+		return false;
+
+	const size_t oldCount = points.size() - 1;
+	if (oldCount == 0)
+		return true;
+
+	auto& added = points.back();
+	const auto& last = points[oldCount - 1];
+
+	if (spline.Closed && oldCount >= 3)
+	{
+		std::array<glm::vec3, Engine::SplineComponent::MaxControlPoints> positions{};
+		for (size_t i = 0; i < oldCount; ++i)
+			positions[i] = points[i].Position;
+
+		const double parameter = 1.0 - 0.5 / static_cast<double>(oldCount);
+		const auto previousPositions = std::span<const glm::vec3>(positions.data(), oldCount);
+		Engine::SplineSample sample;
+		if (!Engine::SplineCurve::Evaluate(previousPositions, true, parameter, sample))
+			return false;
+
+		added.Position = sample.Position;
+		added.RollDegrees = std::lerp(last.RollDegrees, points.front().RollDegrees, 0.5f);
+		return std::isfinite(added.RollDegrees);
+	}
+
+	glm::dvec3 step(0.0, 0.0, 1.0);
+	if (oldCount >= 2 && last.Position != points[oldCount - 2].Position)
+		step = glm::dvec3(last.Position) - glm::dvec3(points[oldCount - 2].Position);
+
+	const glm::dvec3 position = glm::dvec3(last.Position) + step;
+	const double limit = (std::numeric_limits<float>::max)();
+	for (int axis = 0; axis < 3; ++axis)
+	{
+		if (!std::isfinite(position[axis]) || std::abs(position[axis]) > limit)
+			return false;
+	}
+
+	added.Position = glm::vec3(position);
+	added.RollDegrees = last.RollDegrees;
+	return added.Position != last.Position && std::isfinite(added.RollDegrees);
 }
 
 void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
@@ -1276,6 +1353,80 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 					if (!timeline.timelinePath.empty()) timelinePanel->LoadFromFile(timeline.timelinePath);
 				}
 			}
+		}
+		else if (object.Is<Engine::SplineComponent>())
+		{
+			auto& spline = world.get<Engine::SplineComponent>(handle);
+			const auto previousPoints = spline.Points;
+			const bool previousClosed = spline.Closed;
+			const bool wasValid = spline.IsValid();
+
+			changed = ReflectionPropertyDrawer::DrawObject(type, object, registry, &componentSettings, drawHeaderMenu);
+
+			int addedIndex = -1;
+			if (spline.Points.size() == previousPoints.size() + 1)
+			{
+				if (TryInitializeAppendedSplinePoint(spline))
+				{
+					addedIndex = static_cast<int>(spline.Points.size() - 1);
+				}
+				else
+				{
+					spline.Points.pop_back();
+					changed = spline.Points != previousPoints || spline.Closed != previousClosed;
+					NotificationManager::Get().AddNotification(
+						LOCAL("STRUCT_SPLINE"), LOCAL("Spline.PointEditRejected"), ELogLevel::Warn);
+				}
+			}
+			if (IsInvalidSplineClose(spline, previousClosed))
+			{
+				spline.Closed = previousClosed;
+				changed = spline.Points != previousPoints;
+				NotificationManager::Get().AddNotification(
+					LOCAL("STRUCT_SPLINE"), LOCAL("Spline.InvalidData"), ELogLevel::Warn);
+			}
+			if (wasValid && spline.Points.size() < previousPoints.size() && !spline.IsValid())
+			{
+				spline.Points = previousPoints;
+				changed = spline.Closed != previousClosed;
+				NotificationManager::Get().AddNotification(
+					LOCAL("STRUCT_SPLINE"), LOCAL("Spline.InvalidData"), ELogLevel::Warn);
+			}
+			if (changed)
+			{
+				int editedIndex = -1;
+				bool structureChanged = previousPoints.size() != spline.Points.size();
+
+				if (!structureChanged)
+				{
+					for (size_t i = 0; i < spline.Points.size(); ++i)
+					{
+						if (previousPoints[i] == spline.Points[i])
+							continue;
+
+						if (editedIndex >= 0)
+						{
+							structureChanged = true;
+							break;
+						}
+
+						editedIndex = static_cast<int>(i);
+					}
+				}
+
+				if (auto* viewport = SceneViewportPanel::GetActiveSceneViewport())
+				{
+					if (addedIndex >= 0)
+						viewport->SelectSplinePoint(scene, handle, addedIndex);
+					else if (structureChanged)
+						viewport->SelectSplinePoint(scene, handle, -1);
+					else if (editedIndex >= 0)
+						viewport->SelectSplinePoint(scene, handle, editedIndex);
+				}
+			}
+
+			if (!spline.IsValid())
+				ImGui::TextWrapped("%s", LOCAL_CSTR("Spline.InvalidData"));
 		}
 		else changed = ReflectionPropertyDrawer::DrawObject(type, object, registry, &componentSettings, drawHeaderMenu);
 

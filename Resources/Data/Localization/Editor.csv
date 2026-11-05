@@ -1419,3 +1419,10 @@ Settings,PreviewKeyLight,Key Light,주광
 Settings,PreviewFillLight,Fill Light,보조광
 Settings,PreviewRimLight,Rim Light,역광
 PreviewViewport,LightingApplyScope,Apply saves these settings for all previews.,적용하면 모든 프리뷰의 조명 설정으로 저장됩니다.
+History,Command.MoveSplinePoint,Move Spline Point,스플라인 제어점 이동
+Spline,InvalidData,Spline requires 1-64 finite points; closed curves require at least 3.,스플라인에는 유한한 좌표의 제어점 1~64개가 필요합니다. 닫힌 곡선에는 최소 3개가 필요합니다.
+Spline,PointHint,"Control point {}: select, then use the translation or roll rotation gizmo.",제어점 {}: 선택한 뒤 이동 또는 롤 회전 기즈모로 조작합니다.
+Spline,PointMoveRejected,The point could not be converted to valid local coordinates.,제어점을 유효한 로컬 좌표로 변환할 수 없습니다.
+History,Command.RotateSplinePoint,Rotate Spline Point,스플라인 제어점 회전
+Spline,PointEditRejected,The point edit could not be applied.,제어점 편집을 적용할 수 없습니다.
+Spline,RollUnavailable,A valid spline tangent and roll value are required.,유효한 스플라인 접선과 롤 값이 필요합니다.

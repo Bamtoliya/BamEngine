@@ -11,6 +11,8 @@
 #include "SceneDocument.h"
 #include "SceneManager.h"
 #include "EditorDocumentController.h"
+#include "SplineComponent.h"
+#include "SplineMeshComponent.h"
 
 namespace
 {
@@ -220,6 +222,71 @@ namespace
         ScenePtr other(Engine::Scene::Create());
         history.Synchronize(other.get(), true);
         Check(!history.CanUndo(), "scene switch");
+    }
+    void SplinePointHistory()
+    {
+        ScenePtr scene(Engine::Scene::Create());
+        auto& world = scene->GetRegistry();
+        const auto handle = Add(*scene, L"spline").GetEntityHandle();
+        const std::array targets{ handle };
+
+        auto& spline = world.emplace<Engine::SplineComponent>(handle);
+        spline.Points = {
+            Engine::SplinePoint{ glm::vec3(0.0f) },
+            Engine::SplinePoint{ glm::vec3(0.0f, 0.0f, 4.0f) }
+        };
+        world.emplace<Engine::StaticMeshRendererComponent>(handle);
+        world.emplace<Engine::SplineMeshComponent>(handle);
+
+        Editor::SceneEditHistory history;
+        history.ResetDocument(scene.get(), true);
+
+        const auto buildMatrices = [&]()
+            {
+                std::vector<glm::mat4> matrices;
+                const auto& path = world.get<Engine::SplineComponent>(handle);
+                const auto& settings = world.get<Engine::SplineMeshComponent>(handle);
+                Check(settings.BuildMatrices(path, glm::mat4(1.0f), matrices), "spline placement failed");
+                return matrices;
+            };
+
+        const auto originalPoints = spline.Points;
+        const auto originalMatrices = buildMatrices();
+        for (float z : { 5.0f, 6.0f, 7.0f })
+        {
+            auto before = Editor::SceneEditSnapshot::Capture(*scene, targets);
+            spline.Points.back().Position.z = z;
+            history.Record(std::move(before), Editor::SceneEditSnapshot::Capture(*scene, targets),
+                "History.Command.MoveSplinePoint", true);
+        }
+        history.Flush();
+        Check(history.Commands().GetUndoCount() == 1, "spline drag split into multiple commands");
+
+        const auto movedPoints = spline.Points;
+        const auto movedMatrices = buildMatrices();
+        Check(movedMatrices.size() > originalMatrices.size(), "spline move did not extend placement");
+
+        auto beforeRoll = Editor::SceneEditSnapshot::Capture(*scene, targets);
+        spline.Points.front().RollDegrees = 90.0f;
+        history.Record(std::move(beforeRoll), Editor::SceneEditSnapshot::Capture(*scene, targets),
+            "History.Command.RotateSplinePoint");
+        const auto rolledPoints = spline.Points;
+        const auto rolledMatrices = buildMatrices();
+        Check(rolledMatrices != movedMatrices, "spline roll did not change placement");
+
+        const auto checkState = [&](const auto& points, const auto& matrices, const char* message)
+            {
+                Check(world.get<Engine::SplineComponent>(handle).Points == points && buildMatrices() == matrices, message);
+            };
+
+        Check(history.Undo(), "spline roll undo failed");
+        checkState(movedPoints, movedMatrices, "spline roll undo restored the wrong state");
+        Check(history.Undo(), "spline move undo failed");
+        checkState(originalPoints, originalMatrices, "spline move undo restored the wrong state");
+        Check(history.Redo(), "spline move redo failed");
+        checkState(movedPoints, movedMatrices, "spline move redo restored the wrong state");
+        Check(history.Redo(), "spline roll redo failed");
+        checkState(rolledPoints, rolledMatrices, "spline roll redo restored the wrong state");
     }
     void StructureAndIdentity()
     {
@@ -674,6 +741,7 @@ int main()
         HistoryStateIdentity();
         SceneDocumentState();
         ComponentAndGesture();
+        SplinePointHistory();
         StructureAndIdentity();
         DuplicateHierarchyRejection();
         FailureAndLifetime();

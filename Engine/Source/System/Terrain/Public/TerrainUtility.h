@@ -29,6 +29,7 @@ class ENGINE_API TerrainUtility
 public:
 	// 지정한 가로/세로 크기와 분할 해상도로 XZ 평면 그리드 Mesh를 생성하여 반환합니다.
 	static Mesh* CreateGridMesh(float width, float length, uint32 resolution);
+	static Mesh* CreateGridMesh(float width, float length, uint32 segmentsX, uint32 segmentsZ, bool reverseWinding);
 	// 월드 피킹 좌표와 브러시 파라미터를 기반으로 CPU 높이 데이터를 갱신합니다.
 	static bool ApplyBrush(TerrainComponent& terrain, const glm::vec3& hitWorldPos, const glm::mat4& worldMatrix, const TerrainBrushParams& params, float dt);
 	// 이미지 파일(PNG, JPG 등)로부터 높이맵 데이터를 읽어와 terrain.HeightData에 채우고 GPU 동기화를 요청합니다.

@@ -38,6 +38,7 @@
 #include "PrefabModeManager.h"
 #include "Model.h"
 #include "ResourceManager.h"
+#include "SplineCurve.h"
 
 #pragma region Helper
 struct LightingPassData
@@ -57,33 +58,31 @@ static_assert(offsetof(LightingPassData, Cloud) == 336);
 static_assert(offsetof(LightingPassData, SunDirection) == 464);
 static_assert(offsetof(LightingPassData, PlanetRadius) == 476);
 
-static bool WorldToViewportScreen(
-	const vec3& worldPos,
-	const mat4& viewProj,
-	const ImVec2& imageScreenPos,
-	const ImVec2& imageSize,
-	ImVec2& outScreenPos)
+static bool WorldToViewportScreen(const vec3& worldPos, const mat4& viewProj,
+	const ImVec2& imageScreenPos, const ImVec2& imageSize, ImVec2& outScreenPos)
 {
-	vec4 clip = viewProj * vec4(worldPos, 1.0f);
-
-	if (glm::abs(clip.w) < 0.000001f || clip.w <= 0.0f)
+	if (!std::isfinite(imageSize.x) || !std::isfinite(imageSize.y) ||
+		imageSize.x <= 0.0f || imageSize.y <= 0.0f)
 		return false;
 
-	vec3 ndc = vec3(clip) / clip.w;
-
-	const bool inDepthGL = (ndc.z >= -1.0f && ndc.z <= 1.0f);
-	const bool inDepthVK = (ndc.z >= 0.0f && ndc.z <= 1.0f);
-	if (!(inDepthGL || inDepthVK))
+	const vec4 clip = viewProj * vec4(worldPos, 1.0f);
+	if (!std::isfinite(clip.x) || !std::isfinite(clip.y) ||
+		!std::isfinite(clip.z) || !std::isfinite(clip.w) || clip.w <= 0.000001f)
 		return false;
 
-	if (ndc.x < -1.0f || ndc.x > 1.0f || ndc.y < -1.0f || ndc.y > 1.0f)
+	const vec3 ndc = vec3(clip) / clip.w;
+	if (ndc.z < 0.0f || ndc.z > 1.0f ||
+		ndc.x < -1.0f || ndc.x > 1.0f || ndc.y < -1.0f || ndc.y > 1.0f)
 		return false;
 
-	const float u = ndc.x * 0.5f + 0.5f;
-	const float v = 1.0f - (ndc.y * 0.5f + 0.5f);
+	const ImVec2 candidate(
+		imageScreenPos.x + (ndc.x * 0.5f + 0.5f) * imageSize.x,
+		imageScreenPos.y + (0.5f - ndc.y * 0.5f) * imageSize.y);
 
-	outScreenPos.x = imageScreenPos.x + u * imageSize.x;
-	outScreenPos.y = imageScreenPos.y + v * imageSize.y;
+	if (!std::isfinite(candidate.x) || !std::isfinite(candidate.y))
+		return false;
+
+	outScreenPos = candidate;
 	return true;
 }
 
@@ -125,6 +124,62 @@ static bool IsSceneOverlayVisible(const Engine::FlagComponent& flag)
 {
 	return flag.IsActiveInHierarchy() && flag.IsVisibleInHierarchy() &&
 		!HasFlag(flag.effectiveFlags, Engine::EEntityFlag::Dead);
+}
+
+static bool TryTransformSplinePoint(const glm::dmat4& matrix, const vec3& position, vec3& result)
+{
+	const glm::dvec4 transformed = matrix * glm::dvec4(position, 1.0);
+	const double limit = static_cast<double>((std::numeric_limits<float>::max)());
+
+	if (!std::isfinite(transformed.x) || !std::isfinite(transformed.y) || !std::isfinite(transformed.z) ||
+		std::abs(transformed.x) > limit || std::abs(transformed.y) > limit || std::abs(transformed.z) > limit)
+		return false;
+
+	result = vec3(transformed);
+	return true;
+}
+
+static bool TryBuildSplineRollGizmo(const Engine::SplineComponent& spline, size_t index,
+	const mat4& ownerWorld, const vec3& worldPosition, mat4& result)
+{
+	if (!spline.IsValid() || spline.Points.size() < 2 || index >= spline.Points.size())
+		return false;
+
+	std::array<vec3, Engine::SplineComponent::MaxControlPoints> positions{};
+	for (size_t i = 0; i < spline.Points.size(); ++i)
+		positions[i] = spline.Points[i].Position;
+
+	const size_t segmentCount = spline.Closed ? spline.Points.size() : spline.Points.size() - 1;
+	const double parameter = static_cast<double>(index) / static_cast<double>(segmentCount);
+
+	Engine::SplineSample sample;
+	if (!Engine::SplineCurve::Evaluate(
+		std::span<const vec3>(positions.data(), spline.Points.size()), spline.Closed, parameter, sample))
+		return false;
+
+	glm::dvec3 forward = glm::dmat3(ownerWorld) * glm::dvec3(sample.Tangent);
+	const double length = glm::length(forward);
+	if (!std::isfinite(length) || length <= 0.0)
+		return false;
+
+	forward /= length;
+
+	// 링의 평면을 구성합니다. 조작 축은 forward 하나만 사용합니다.
+	const glm::dvec3 referenceUp = std::abs(forward.y) < 0.99 ?
+		glm::dvec3(0.0, 1.0, 0.0) : glm::dvec3(1.0, 0.0, 0.0);
+	const glm::dvec3 right = glm::normalize(glm::cross(referenceUp, forward));
+	const glm::dvec3 up = glm::cross(forward, right);
+
+	const double radians = glm::radians(std::remainder(static_cast<double>(spline.Points[index].RollDegrees), 360.0));
+	const double cosine = std::cos(radians);
+	const double sine = std::sin(radians);
+
+	result = mat4(1.0f);
+	result[0] = vec4(vec3(right * cosine + up * sine), 0.0f);
+	result[1] = vec4(vec3(up * cosine - right * sine), 0.0f);
+	result[2] = vec4(vec3(forward), 0.0f);
+	result[3] = vec4(worldPosition, 1.0f);
+	return true;
 }
 #pragma endregion
 
@@ -196,6 +251,9 @@ void SceneViewportPanel::PreparePipelines()
 
 void SceneViewportPanel::Free()
 {
+	ResetSplinePointSelection();
+	if (s_ActiveSceneViewport == this)
+		s_ActiveSceneViewport = nullptr;
 	__super::Free();
 	m_Grid.Free();
 	m_DebugRenderer.Free();
@@ -304,17 +362,27 @@ void SceneViewportPanel::Update(f32 dt)
 	else
 		m_DisplayRTName = m_SelectedRTName;
 
+	// 채널 프리뷰를 제출하기 직전에 추가
+	const auto* displayRT = RenderTargetManager::Get().GetRenderTarget(m_DisplayRTName);
+	const auto* displayTexture = displayRT ? displayRT->GetTexture() : nullptr;
+	const bool canDrawSceneOverlays = displayTexture &&
+		HasFlag(displayTexture->GetUsage(), Engine::ETextureUsage::RenderTarget);
+
 	if (m_ChannelView != EViewportChannelView::RGBA)
 	{
 		m_ChannelFilter.SetChannelView(m_ChannelView);
 		m_ChannelFilter.SubmitChannelPreviewPass(m_DisplayRTName, m_DisplayRTName);
 	}
 
-	if (cameraBuffer.has_value() && *m_Grid.GetVisible())
-		m_Grid.SubmitGrid(*cameraBuffer, IsOrthographic(), m_DisplayRTName, m_OwnedRTNames[6]);
+	// 기존 격자·디버그 선 제출 블록을 교체
+	if (cameraBuffer.has_value() && canDrawSceneOverlays)
+	{
+		if (*m_Grid.GetVisible())
+			m_Grid.SubmitGrid(*cameraBuffer, IsOrthographic(), m_DisplayRTName, m_OwnedRTNames[6]);
 
-	if (cameraBuffer.has_value() && *m_DebugRenderer.GetDrawCollidersPtr())
+		DrawSelectedSpline(activeScene);
 		m_DebugRenderer.SubmitDebugDraw(*cameraBuffer, m_DisplayRTName);
+	}
 
 	MouseInput();
 }
@@ -404,7 +472,8 @@ void SceneViewportPanel::DrawCustomViewport()
 {
 	m_Focused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
 	m_Hovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows);
-	if (m_Focused) s_ActiveSceneViewport = this;
+	if (m_Focused || !s_ActiveSceneViewport)
+		s_ActiveSceneViewport = this;
 	Application::Get().GetEditHistory().AllowShortcuts(m_Focused);
 	PrefabModeManager::Get().DrawViewportBanner();
 	BaseViewportPanel::DrawCustomViewport();
@@ -465,8 +534,10 @@ void SceneViewportPanel::DrawCustomViewport()
 
 	if (Scene* scene = SceneManager::Get().GetCurrentScene())
 		scene->UpdateHierarchyFlags();
-	DrawImGuizmo();
 	DrawImViewGuizmo();
+	const bool splineOwnsInput = DrawSplinePointEditor(imageHovered);
+	if (!splineOwnsInput)
+		DrawImGuizmo();
 	// UIOverlay 패스가 켜져 있을 때만 에디터 뷰포트 아이콘 오버레이를 표시!
 	if (auto* uiPass = RenderPassManager::Get().GetRenderPassByID(m_UIOverlayPassID); !uiPass || uiPass->IsEnabled())
 	{
@@ -474,8 +545,11 @@ void SceneViewportPanel::DrawCustomViewport()
 		DrawCameraOverlay();
 	}
 	DrawSelectionLocked();
-	CapturePickingRequest(imageHovered);
-	HandleTerrainSculpting(imageHovered);
+	if (!splineOwnsInput)
+	{
+		CapturePickingRequest(imageHovered);
+		HandleTerrainSculpting(imageHovered);
+	}
 }
 
 void SceneViewportPanel::DrawPickingMenu()
@@ -1554,3 +1628,468 @@ void SceneViewportPanel::FocusSelectedEntity()
 	if (m_CameraController)
 		m_CameraController->FocusEntity(SelectionManager::Get().GetPrimarySelectedEntity());
 }
+
+#pragma region Spline
+void SceneViewportPanel::DrawSelectedSpline(Engine::Scene* scene)
+{
+	auto* selected = SelectionManager::Get().GetPrimarySelectedEntity();
+	if (!scene || !selected || selected->GetScene() != scene)
+		return;
+
+	auto& world = scene->GetRegistry();
+	const auto entity = selected->GetEntityHandle();
+	if (!world.valid(entity))
+		return;
+
+	const auto* spline = world.try_get<Engine::SplineComponent>(entity);
+	if (!spline || !spline->IsValid())
+		return;
+
+	mat4 worldMatrix;
+	if (!Engine::TransformSystem::TryGetWorldMatrix(world, entity, worldMatrix))
+		return;
+
+	if (!m_SplinePreviewCached || m_SplinePreviewClosed != spline->Closed ||
+		m_SplinePreviewSource != spline->Points)
+	{
+		m_SplinePreviewSource = spline->Points;
+		m_SplinePreviewClosed = spline->Closed;
+		m_SplinePreviewCached = true;
+		m_SplinePreviewSamples.clear();
+
+		std::vector<vec3> points;
+		points.reserve(spline->Points.size());
+		for (const auto& point : spline->Points)
+			points.push_back(point.Position);
+
+		if (points.size() == 1)
+		{
+			m_SplinePreviewSamples.push_back(points.front());
+		}
+		else
+		{
+			const size_t segmentCount = spline->Closed ? points.size() : points.size() - 1;
+			const size_t samplesPerSegment = std::min(size_t{ 16 }, MaxSplinePreviewSegments / segmentCount);
+			const size_t sampleCount = segmentCount * samplesPerSegment;
+
+			std::vector<vec3> samples(sampleCount + 1);
+			for (size_t i = 0; i <= sampleCount; ++i)
+			{
+				Engine::SplineSample sample;
+				const f64 parameter = static_cast<f64>(i) / static_cast<f64>(sampleCount);
+				if (!Engine::SplineCurve::Evaluate(points, spline->Closed, parameter, sample))
+					return;
+
+				samples[i] = sample.Position;
+			}
+
+			m_SplinePreviewSamples = std::move(samples);
+		}
+	}
+
+	if (m_SplinePreviewSamples.empty())
+		return;
+
+	const glm::dmat4 transform(worldMatrix);
+	const auto toWorld = [&transform](const vec3& local, vec3& result) -> bool
+		{
+			return TryTransformSplinePoint(transform, local, result);
+		};
+
+	std::array<vec3, MaxSplinePreviewSegments + 1> curvePositions{};
+	std::array<vec3, Engine::SplineComponent::MaxControlPoints> controlPositions{};
+
+	for (size_t i = 0; i < m_SplinePreviewSamples.size(); ++i)
+	{
+		if (!toWorld(m_SplinePreviewSamples[i], curvePositions[i]))
+			return;
+	}
+
+	for (size_t i = 0; i < spline->Points.size(); ++i)
+	{
+		if (!toWorld(spline->Points[i].Position, controlPositions[i]))
+			return;
+	}
+
+	const vec4 curveColor(0.1f, 0.9f, 1.0f, 1.0f);
+	const vec4 pointColor(1.0f, 0.75f, 0.15f, 1.0f);
+
+	for (size_t i = 1; i < m_SplinePreviewSamples.size(); ++i)
+		m_DebugRenderer.DrawLine(curvePositions[i - 1], curvePositions[i], curveColor);
+
+	constexpr float markerSize = 0.08f;
+	for (size_t i = 0; i < spline->Points.size(); ++i)
+	{
+		const auto& position = controlPositions[i];
+		m_DebugRenderer.DrawLine(position - vec3(markerSize, 0.0f, 0.0f), position + vec3(markerSize, 0.0f, 0.0f), pointColor);
+		m_DebugRenderer.DrawLine(position - vec3(0.0f, markerSize, 0.0f), position + vec3(0.0f, markerSize, 0.0f), pointColor);
+		m_DebugRenderer.DrawLine(position - vec3(0.0f, 0.0f, markerSize), position + vec3(0.0f, 0.0f, markerSize), pointColor);
+	}
+}
+
+void SceneViewportPanel::StopSplinePointDrag()
+{
+	if (!m_SplinePointWasUsing)
+		return;
+
+	Application::Get().GetEditHistory().Flush();
+
+	// 외부 편집으로 중단된 ImGuizmo 드래그 상태도 종료합니다.
+	ImGuizmo::Enable(false);
+	ImGuizmo::Enable(true);
+
+	m_SplinePointWasUsing = false;
+	m_SplinePointBlockUntilRelease = InputManager::Get().IsMouseButtonPressed(EMouseButton::Left);
+}
+
+void SceneViewportPanel::ResetSplinePointSelection()
+{
+	StopSplinePointDrag();
+
+	m_SplinePointScene = nullptr;
+	m_SplinePointEntity = entt::null;
+	m_SplinePointOwnerId = 0;
+	m_SplinePointRevision = 0;
+	m_SplinePointIndex = -1;
+	m_SplinePointExpected.clear();
+}
+
+void SceneViewportPanel::SelectSplinePoint(Engine::Scene* scene, entt::entity entity, int index)
+{
+	auto& history = Application::Get().GetEditHistory();
+	auto* selected = SelectionManager::Get().GetPrimarySelectedEntity();
+
+	if (!PIEManager::Get().IsEditing() || !history.Enabled() || !scene || !selected ||
+		selected->GetScene() != scene || selected->GetEntityHandle() != entity)
+		return;
+
+	auto& world = scene->GetRegistry();
+	if (!world.valid(entity))
+		return;
+
+	const auto* spline = world.try_get<Engine::SplineComponent>(entity);
+	const auto* identity = world.try_get<Engine::IDComponent>(entity);
+
+	if (!spline || !identity || spline->Points.size() > Engine::SplineComponent::MaxControlPoints)
+		return;
+
+	StopSplinePointDrag();
+
+	m_SplinePointScene = scene;
+	m_SplinePointEntity = entity;
+	m_SplinePointOwnerId = identity->id;
+	m_SplinePointRevision = history.Revision();
+	m_SplinePointExpected = spline->Points;
+	m_SplinePointIndex = index >= 0 && static_cast<size_t>(index) < spline->Points.size() ? index : -1;
+
+	if (m_SplinePointIndex >= 0 &&
+		m_GizmoOperation != ImGuizmo::TRANSLATE && m_GizmoOperation != ImGuizmo::ROTATE)
+		m_GizmoOperation = ImGuizmo::TRANSLATE;
+}
+
+bool SceneViewportPanel::DrawSplinePointEditor(bool imageHovered)
+{
+	auto& input = InputManager::Get();
+	auto& history = Application::Get().GetEditHistory();
+
+	if (!input.IsMouseButtonPressed(EMouseButton::Left))
+		m_SplinePointBlockUntilRelease = false;
+
+	auto* scene = SceneManager::Get().GetCurrentScene();
+	auto* selected = SelectionManager::Get().GetPrimarySelectedEntity();
+
+	if (!PIEManager::Get().IsEditing() || !history.Enabled() ||
+		!scene || !selected || selected->GetScene() != scene ||
+		(TerrainEditor::Get() && TerrainEditor::Get()->IsSculptingActive()))
+	{
+		ResetSplinePointSelection();
+		return m_SplinePointBlockUntilRelease;
+	}
+
+	auto& world = scene->GetRegistry();
+	const auto entity = selected->GetEntityHandle();
+	auto* spline = world.valid(entity) ? world.try_get<Engine::SplineComponent>(entity) : nullptr;
+	const auto* identity = world.valid(entity) ? world.try_get<Engine::IDComponent>(entity) : nullptr;
+
+	if (!spline || !identity || spline->Points.empty() ||
+		spline->Points.size() > Engine::SplineComponent::MaxControlPoints)
+	{
+		ResetSplinePointSelection();
+		return m_SplinePointBlockUntilRelease;
+	}
+
+	const bool ownerChanged = m_SplinePointScene != scene || m_SplinePointEntity != entity ||
+		m_SplinePointOwnerId != identity->id;
+
+	if (ownerChanged)
+	{
+		ResetSplinePointSelection();
+
+		m_SplinePointScene = scene;
+		m_SplinePointEntity = entity;
+		m_SplinePointOwnerId = identity->id;
+		m_SplinePointRevision = history.Revision();
+		m_SplinePointExpected = spline->Points;
+	}
+	else if (m_SplinePointRevision != history.Revision() || m_SplinePointExpected != spline->Points)
+	{
+		StopSplinePointDrag();
+
+		// 값 편집은 같은 인덱스를 유지하고, 추가·삭제는 선택을 해제합니다.
+		if (m_SplinePointExpected.size() != spline->Points.size() ||
+			(m_SplinePointIndex >= 0 && static_cast<size_t>(m_SplinePointIndex) >= spline->Points.size()))
+			m_SplinePointIndex = -1;
+
+		m_SplinePointRevision = history.Revision();
+		m_SplinePointExpected = spline->Points;
+	}
+
+	if (m_SplinePointBlockUntilRelease)
+		return true;
+
+	const auto camera = GetActiveCameraBuffer();
+	mat4 ownerWorld;
+	if (!camera || !TransformSystem::TryGetWorldMatrix(world, entity, ownerWorld))
+	{
+		ResetSplinePointSelection();
+		return m_SplinePointBlockUntilRelease;
+	}
+
+	const glm::dmat4 ownerMatrix(ownerWorld);
+	std::array<vec3, Engine::SplineComponent::MaxControlPoints> worldPoints{};
+	std::array<ImVec2, Engine::SplineComponent::MaxControlPoints> screenPoints{};
+	std::array<bool, Engine::SplineComponent::MaxControlPoints> visible{};
+
+	const auto mouse = input.GetScreenMousePosition();
+	const float radius = std::max(5.0f, ImGui::GetFontSize() * 0.35f);
+	float nearestDistance = radius * radius * 2.25f;
+	double nearestDepth = (std::numeric_limits<double>::max)();
+	int hoveredPoint = -1;
+
+	for (size_t i = 0; i < spline->Points.size(); ++i)
+	{
+		if (!TryTransformSplinePoint(ownerMatrix, spline->Points[i].Position, worldPoints[i]))
+		{
+			ResetSplinePointSelection();
+			return m_SplinePointBlockUntilRelease;
+		}
+
+		visible[i] = WorldToViewportScreen(
+			worldPoints[i], camera->viewProjMatrix, m_ImageScreenPos, m_ImageSize, screenPoints[i]);
+
+		if (!visible[i])
+			continue;
+
+		const float dx = mouse.x - screenPoints[i].x;
+		const float dy = mouse.y - screenPoints[i].y;
+		const float distance = dx * dx + dy * dy;
+		const double depth = glm::length(glm::dvec3(worldPoints[i]) - glm::dvec3(camera->cameraPosition));
+
+		if (distance < nearestDistance ||
+			(std::abs(distance - nearestDistance) < 0.01f && depth < nearestDepth))
+		{
+			nearestDistance = distance;
+			nearestDepth = depth;
+			hoveredPoint = static_cast<int>(i);
+		}
+	}
+
+	auto* drawList = ImGui::GetWindowDrawList();
+	drawList->PushClipRect(m_ImageScreenPos,
+		ImVec2(m_ImageScreenPos.x + m_ImageSize.x, m_ImageScreenPos.y + m_ImageSize.y), true);
+
+	for (size_t i = 0; i < spline->Points.size(); ++i)
+	{
+		if (!visible[i])
+			continue;
+
+		const bool selectedPoint = static_cast<int>(i) == m_SplinePointIndex;
+		const ImU32 color = selectedPoint ? IM_COL32(255, 180, 40, 255) : IM_COL32(60, 210, 240, 255);
+		drawList->AddCircleFilled(screenPoints[i], radius, color);
+		drawList->AddCircle(screenPoints[i], radius, IM_COL32(20, 25, 30, 255), 0, 1.5f);
+	}
+
+	drawList->PopClipRect();
+
+	const bool navigating = input.IsAltPressed() || input.IsMouseButtonPressed(EMouseButton::Right) ||
+		input.IsMouseButtonPressed(EMouseButton::Middle) || ImViewGuizmo::IsOver() || ImViewGuizmo::IsUsing();
+
+	bool gizmoOver = false;
+	bool usingNow = false;
+	const double determinant = glm::determinant(ownerMatrix);
+	const bool invertible = std::isfinite(determinant) && determinant != 0.0;
+
+	const bool translating = m_GizmoOperation == ImGuizmo::TRANSLATE;
+	const bool rotating = m_GizmoOperation == ImGuizmo::ROTATE;
+
+	if (m_SplinePointWasUsing &&
+		(m_SplinePointDragOperation != m_GizmoOperation || m_SplinePointDragOwnerWorld != ownerWorld ||
+			navigating || ImGui::GetIO().WantTextInput))
+		StopSplinePointDrag();
+
+	if (m_SplinePointBlockUntilRelease)
+		return true;
+
+	if (m_SplinePointIndex >= 0 && (translating || rotating))
+	{
+		const size_t index = static_cast<size_t>(m_SplinePointIndex);
+		mat4 pointWorld = ownerWorld;
+		pointWorld[3] = vec4(worldPoints[index], 1.0f);
+
+		const bool ready = rotating ?
+			TryBuildSplineRollGizmo(*spline, index, ownerWorld, worldPoints[index], pointWorld) : invertible;
+
+		if (ready)
+		{
+			ImGui::PushID(this);
+			ImGui::PushID(static_cast<const void*>(scene));
+			ImGui::PushID(std::to_string(identity->id).c_str());
+			ImGui::PushID(m_SplinePointIndex);
+
+			ImGuizmo::SetID(static_cast<int>(ImGui::GetID("SplinePointGizmo")));
+			ImGuizmo::SetOrthographic(IsOrthographic());
+			ImGuizmo::SetDrawlist();
+			ImGuizmo::SetRect(m_ImageScreenPos.x, m_ImageScreenPos.y, m_ImageSize.x, m_ImageSize.y);
+
+			// 다른 뷰포트나 다른 대상의 진행 중 드래그를 중단하지 않습니다.
+			const bool anotherGizmoUsing = ImGuizmo::IsUsingAny() && !ImGuizmo::IsUsing();
+
+			if (!anotherGizmoUsing)
+			{
+				const auto& preferences = EditorSettingsService::Get().GetPreferences();
+				const float snapStep = rotating ? preferences.GizmoSnapRotation : preferences.GizmoSnapTranslation;
+				const vec3 snap(snapStep);
+				const bool useSnap = (m_GizmoUseSnap || input.IsCtrlPressed()) &&
+					std::isfinite(snapStep) && snapStep > 0.0f;
+
+				const bool allowInput = !navigating && !ImGui::GetIO().WantTextInput &&
+					(imageHovered || m_SplinePointWasUsing);
+				const mat4 beforeMatrix = pointWorld;
+
+				// Inspector 편집 중에도 표시하되, 뷰포트 밖에서는 조작하지 않습니다.
+				ImGuizmo::Enable(allowInput);
+				const bool changed = ImGuizmo::Manipulate(
+					glm::value_ptr(camera->viewMatrix), glm::value_ptr(camera->projMatrix),
+					rotating ? ImGuizmo::ROTATE_Z : ImGuizmo::TRANSLATE,
+					rotating ? ImGuizmo::LOCAL : m_GizmoMode, glm::value_ptr(pointWorld), nullptr,
+					useSnap ? glm::value_ptr(snap) : nullptr);
+
+				gizmoOver = allowInput && ImGuizmo::IsOver();
+				usingNow = allowInput && ImGuizmo::IsUsing() &&
+					input.IsMouseButtonPressed(EMouseButton::Left);
+				ImGuizmo::Enable(true);
+
+				if (usingNow && !m_SplinePointWasUsing)
+				{
+					history.Flush();
+					m_SplinePointDragOperation = m_GizmoOperation;
+					m_SplinePointDragOwnerWorld = ownerWorld;
+				}
+
+				if (changed)
+				{
+					const auto previous = spline->Points[index];
+					auto candidate = previous;
+					bool valid = true;
+
+					if (rotating)
+					{
+						const glm::dvec3 beforeRight(beforeMatrix[0]);
+						const glm::dvec3 afterRight(pointWorld[0]);
+						const glm::dvec3 axis(beforeMatrix[2]);
+
+						const double sine = glm::dot(axis, glm::cross(beforeRight, afterRight));
+						const double cosine = glm::dot(beforeRight, afterRight);
+						const double delta = glm::degrees(std::atan2(sine, cosine));
+						const double roll = static_cast<double>(previous.RollDegrees) + delta;
+						const double limit = static_cast<double>((std::numeric_limits<float>::max)());
+
+						valid = std::isfinite(roll) && std::abs(roll) <= limit;
+						if (valid)
+							candidate.RollDegrees = static_cast<f32>(roll);
+					}
+					else
+					{
+						valid = TryTransformSplinePoint(
+							glm::inverse(ownerMatrix), vec3(pointWorld[3]), candidate.Position);
+					}
+
+					bool applied = false;
+					if (valid && candidate != previous)
+					{
+						const std::array targets{ entity };
+						auto before = SceneEditSnapshot::Capture(*scene, targets);
+
+						if (before)
+						{
+							spline->Points[index] = candidate;
+							auto after = spline->IsValid() ?
+								SceneEditSnapshot::Capture(*scene, targets) : SceneEditSnapshot{};
+
+							if (after)
+							{
+								const char* label = rotating ?
+									"History.Command.RotateSplinePoint" : "History.Command.MoveSplinePoint";
+								history.Record(std::move(before), std::move(after), label, true);
+								m_SplinePointExpected = spline->Points;
+								m_SplinePointRevision = history.Revision();
+								applied = true;
+
+								auto& prefab = PrefabModeManager::Get();
+								if (prefab.IsInPrefabMode() && prefab.GetPrefabScene() == scene)
+									prefab.MarkDirty();
+							}
+							else
+							{
+								spline->Points[index] = previous;
+							}
+						}
+					}
+
+					if (!valid || (candidate != previous && !applied))
+						ImGui::SetTooltip("%s", LOCAL_CSTR("Spline.PointEditRejected"));
+				}
+			}
+
+			ImGui::PopID();
+			ImGui::PopID();
+			ImGui::PopID();
+			ImGui::PopID();
+		}
+		else if (rotating && imageHovered && hoveredPoint == m_SplinePointIndex)
+		{
+			ImGui::SetTooltip("%s", LOCAL_CSTR("Spline.RollUnavailable"));
+		}
+	}
+	else if (m_SplinePointWasUsing)
+	{
+		StopSplinePointDrag();
+	}
+
+	if (m_SplinePointWasUsing && !usingNow)
+		history.Flush();
+
+	m_SplinePointWasUsing = usingNow;
+
+	if (imageHovered && hoveredPoint >= 0 && !usingNow)
+		ImGui::SetTooltip("%s", LOCAL_FMT("Spline.PointHint", hoveredPoint).c_str());
+
+	const bool canSelect = imageHovered && ImGui::IsWindowHovered() &&
+		!ImGui::IsAnyItemActive() && !ImGui::GetIO().WantTextInput && !navigating &&
+		!usingNow && !gizmoOver && !ImGuizmo::IsUsingAny();
+
+	if (canSelect && input.IsMouseButtonDown(EMouseButton::Left))
+	{
+		m_SplinePointIndex = hoveredPoint;
+		if (hoveredPoint >= 0)
+		{
+			if (m_GizmoOperation != ImGuizmo::TRANSLATE && m_GizmoOperation != ImGuizmo::ROTATE)
+				m_GizmoOperation = ImGuizmo::TRANSLATE;
+			m_PickingRequest.pending = false;
+		}
+	}
+
+	return m_SplinePointIndex >= 0;
+}
+
+#pragma endregion

@@ -102,6 +102,43 @@ namespace
 
 		return 0;
 	}
+
+	int CheckRectangularGridMesh()
+	{
+		using namespace Engine;
+
+		const auto release = [](Mesh* mesh)
+			{
+				mesh->Free();
+				delete mesh;
+			};
+
+		std::unique_ptr<Mesh, decltype(release)> grid(TerrainUtility::CreateGridMesh(2.0f, 3.0f, 2, 3, true), release);
+		if (!grid || grid->GetVertexCount() != 12 || grid->GetIndexCount() != 36 ||
+			grid->GetIndexStride() != sizeof(uint32))
+			return Fail("Rectangular grid has incorrect buffer dimensions.");
+
+		const auto& raw = grid->GetRawIndexData();
+		if (raw.size() != 36 * sizeof(uint32))
+			return Fail("Rectangular grid index buffer has an incorrect byte count.");
+
+		std::array<uint32, 6> lastCell{};
+		std::memcpy(lastCell.data(), raw.data() + 30 * sizeof(uint32), sizeof(lastCell));
+		if (lastCell != std::array<uint32, 6>{ 7, 8, 10, 8, 11, 10 })
+			return Fail("Rectangular grid row stride or reversed winding is incorrect.");
+
+		std::unique_ptr<Mesh, decltype(release)> legacy(TerrainUtility::CreateGridMesh(2.0f, 2.0f, 2), release);
+		if (!legacy || legacy->GetVertexCount() != 9 || legacy->GetIndexCount() != 24 ||
+			legacy->GetRawIndexData().size() != 24 * sizeof(uint32))
+			return Fail("Legacy square grid dimensions changed.");
+
+		std::array<uint32, 6> firstCell{};
+		std::memcpy(firstCell.data(), legacy->GetRawIndexData().data(), sizeof(firstCell));
+		if (firstCell != std::array<uint32, 6>{ 0, 3, 1, 1, 3, 4 })
+			return Fail("Legacy square grid winding changed.");
+
+		return 0;
+	}
 }
 
 int main()
@@ -151,6 +188,9 @@ int main()
 	if (!rejected(invalid, 1, 2)) return Fail("Infinite height was accepted.");
 
 	if (const int checkResult = CheckHeightDirtyRegions(); checkResult != 0)
+		return checkResult;
+
+	if (const int checkResult = CheckRectangularGridMesh(); checkResult != 0)
 		return checkResult;
 
 	std::cout << "Terrain data checks passed.\n";

@@ -9,6 +9,9 @@
 #include "MaterialInterface.h"
 #include "Sprite.h"
 #include "Collision.h"
+#include "SplineComponent.h"
+#include "SplineMeshComponent.h"
+#include "SplineMeshDeformCache.h"
 
 IMPLEMENT_SINGLETON(PickingManager)
 
@@ -168,7 +171,45 @@ Entity* PickingManager::PickEntityByRay(const Ray& ray, f32 maxDistance, HitResu
 
 			if (const auto* renderer = world.try_get<StaticMeshRendererComponent>(entity))
 			{
-				if (renderer->materialHandle.Get()) testMesh(renderer->meshHandle.Get(), transform.worldMatrix);
+				Mesh* mesh = renderer->meshHandle.Get();
+
+				if (renderer->materialHandle.Get())
+				{
+					if (const auto* splineMesh = world.try_get<SplineMeshComponent>(entity);
+						splineMesh && splineMesh->DeformToPath)
+					{
+						const auto instance = SplineMeshDeformCache::Find(world, entity, transform.worldMatrix);
+						testMesh(instance.Geometry.get(), instance.WorldMatrix);
+					}
+					else if (splineMesh)
+					{
+						const auto* spline = world.try_get<SplineComponent>(entity);
+						std::vector<mat4> matrices;
+
+						if (mesh && !mesh->IsDynamic() && !mesh->IsSkinned() && spline &&
+							splineMesh->BuildMatrices(*spline, transform.worldMatrix, matrices))
+						{
+							const BoundingBox localBounds(mesh->GetMin(), mesh->GetMax());
+
+							const bool validBounds = std::all_of(matrices.begin(), matrices.end(),
+								[&localBounds](const mat4& matrix)
+								{
+									BoundingBox worldBounds;
+									return localBounds.TryTransformToAABB(matrix, worldBounds);
+								});
+
+							if (validBounds)
+							{
+								for (const auto& matrix : matrices)
+									testMesh(mesh, matrix);
+							}
+						}
+					}
+					else
+					{
+						testMesh(mesh, transform.worldMatrix);
+					}
+				}
 			}
 			if (const auto* renderer = world.try_get<SpriteRendererComponent>(entity))
 			{

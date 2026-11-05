@@ -1,6 +1,9 @@
 ﻿#include "MeshRenderSystem.h"
 #include "CoreComponents.h"
 #include "RenderComponents.h"
+#include "SplineComponent.h"
+#include "SplineMeshComponent.h"
+#include "RenderCommands.h"
 #include "ResourceHandle.h"
 #include "Mesh.h"
 #include "Material.h"
@@ -9,6 +12,85 @@
 #include "PickingManager.h"
 #include "ResourceManager.h"
 #include "FrustumCuller.h"
+#include "SplineMeshDeformCache.h"
+
+namespace
+{
+    using namespace Engine;
+
+    struct SplineMeshRenderCache
+    {
+        std::vector<SplinePoint> Points;
+        bool Closed = false;
+        mat4 WorldMatrix{ 1.0f };
+        SplineMeshComponent Settings;
+
+        bool Attempted = false;
+        bool Ready = false;
+
+        std::vector<mat4> Matrices;
+        std::vector<StaticDrawCommand> Commands;
+    };
+
+    struct SplineMeshSceneCache
+    {
+        std::unordered_map<entt::entity, SplineMeshRenderCache> Entries;
+    };
+
+    bool PrepareSplineMeshCommands(SplineMeshRenderCache& cache, const SplineComponent& spline,
+        const SplineMeshComponent& settings, const mat4& worldMatrix,
+        Mesh& mesh, MaterialInterface& material, uint32 pickingId)
+    {
+        cache.Commands.clear();
+
+        if (!spline.IsValid() || mesh.IsDynamic() || mesh.IsSkinned())
+            return false;
+
+        const bool unchanged = cache.Attempted &&
+            cache.Points == spline.Points && cache.Closed == spline.Closed &&
+            cache.WorldMatrix == worldMatrix &&
+            cache.Settings.Spacing == settings.Spacing &&
+            cache.Settings.StartDistance == settings.StartDistance &&
+            cache.Settings.InitialUp == settings.InitialUp &&
+            cache.Settings.InstanceScale == settings.InstanceScale;
+
+        if (!unchanged)
+        {
+            cache.Points = spline.Points;
+            cache.Closed = spline.Closed;
+            cache.WorldMatrix = worldMatrix;
+            cache.Settings = settings;
+            cache.Attempted = true;
+            cache.Ready = settings.BuildMatrices(spline, worldMatrix, cache.Matrices);
+        }
+
+        if (!cache.Ready)
+            return false;
+
+        const BoundingBox localBounds(mesh.GetMin(), mesh.GetMax());
+        cache.Commands.reserve(cache.Matrices.size());
+
+        for (const auto& matrix : cache.Matrices)
+        {
+            BoundingBox worldBounds;
+            if (!localBounds.TryTransformToAABB(matrix, worldBounds))
+            {
+                cache.Commands.clear();
+                return false;
+            }
+
+            StaticDrawCommand command;
+            command.mesh = &mesh;
+            command.material = &material;
+            command.worldMatrix = matrix;
+            command.worldBounds = worldBounds;
+            command.pickingId = pickingId;
+            cache.Commands.push_back(command);
+        }
+
+        return true;
+    }
+}
 
 EResult MeshRenderSystem::Initialize(void* arg)
 {
@@ -79,7 +161,19 @@ void MeshRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& 
     {
         if (!scene) continue;
 
-        auto view = scene->GetRegistry().view<StaticMeshRendererComponent, WorldTransformComponent, FlagComponent>();
+        auto& sceneWorld = scene->GetRegistry();
+        SplineMeshDeformCache::Prune(sceneWorld);
+        auto& splineMeshes = sceneWorld.ctx().emplace<SplineMeshSceneCache>();
+
+        std::erase_if(splineMeshes.Entries, [&sceneWorld](const auto& item)
+            {
+                return !sceneWorld.valid(item.first) ||
+                    !sceneWorld.all_of<SplineComponent, SplineMeshComponent, StaticMeshRendererComponent,
+                    WorldTransformComponent, FlagComponent>(item.first) ||
+                    sceneWorld.get<SplineMeshComponent>(item.first).DeformToPath;
+            });
+
+        auto view = sceneWorld.view<StaticMeshRendererComponent, WorldTransformComponent, FlagComponent>();
         for (auto [entity, meshRenderer, worldTransform, flag] : view.each())
         {
             if (!flag.IsActiveInHierarchy() || !flag.IsVisibleInHierarchy() ||
@@ -90,6 +184,82 @@ void MeshRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& 
 
             Mesh* baseMesh = meshRenderer.meshHandle.Get();
             MaterialInterface* material = meshRenderer.materialHandle.Get();
+            if (auto* splineMesh = sceneWorld.try_get<SplineMeshComponent>(entity))
+            {
+                using BuildStatus = ESplineMeshBuildStatus;
+                const auto finishBuild = [&](BuildStatus status, uint32 count = 0)
+                    {
+                        splineMesh->LastBuildStatus = status;
+                        splineMesh->GeneratedCount = count;
+                        splineMesh->HasBuildError = status != BuildStatus::Ready && status != BuildStatus::NoOutput;
+                    };
+
+                const auto* spline = sceneWorld.try_get<SplineComponent>(entity);
+                if (!spline)
+                {
+                    finishBuild(BuildStatus::InvalidPath);
+                    continue;
+                }
+                if (!baseMesh)
+                {
+                    finishBuild(BuildStatus::MissingSourceMesh);
+                    continue;
+                }
+                if (!material)
+                {
+                    finishBuild(BuildStatus::MissingMaterial);
+                    continue;
+                }
+
+                const uint32 pickingId = PickingManager::Get().RegisterPickingEntity(scene, entity);
+                StaticDrawCommand deformedCommand;
+                std::span<const StaticDrawCommand> commands;
+
+                if (splineMesh->DeformToPath)
+                {
+                    auto instance = SplineMeshDeformCache::GetOrBuild(sceneWorld, entity, worldTransform.worldMatrix);
+                    if (!instance.Geometry)
+                    {
+                        finishBuild(spline->IsValid() ? instance.BuildStatus : BuildStatus::InvalidPath);
+                        continue;
+                    }
+
+                    deformedCommand.ownedMesh = std::move(instance.Geometry);
+                    deformedCommand.mesh = deformedCommand.ownedMesh.get();
+                    deformedCommand.material = material;
+                    deformedCommand.worldMatrix = instance.WorldMatrix;
+                    deformedCommand.worldBounds = instance.WorldBounds;
+                    deformedCommand.pickingId = pickingId;
+                    commands = std::span<const StaticDrawCommand>(&deformedCommand, 1);
+                }
+                else
+                {
+                    auto& cache = splineMeshes.Entries[entity];
+                    if (!PrepareSplineMeshCommands(cache, *spline, *splineMesh, worldTransform.worldMatrix,*baseMesh, *material, pickingId))
+                    {
+                        finishBuild(spline->IsValid() ? BuildStatus::PlacementFailed : BuildStatus::InvalidPath);
+                        continue;
+                    }
+
+                    commands = std::span<const StaticDrawCommand>(cache.Commands);
+                }
+
+                finishBuild(commands.empty() ? BuildStatus::NoOutput : BuildStatus::Ready, static_cast<uint32>(commands.size()));
+
+                for (const auto& target : targets)
+                {
+                    if (target.pass->GetPassType() == ERenderPassType::Shadow && !meshRenderer.castShadow)
+                        continue;
+
+                    if (!target.pass->IsAcceptsBlendMode(material->GetBlendMode()))
+                        continue;
+
+                    for (const auto& command : commands)
+                        renderer.SubmitStatic(command, target.pass->GetID());
+                }
+
+                continue;
+            }
             if (!baseMesh || !material) continue;
 
             auto* lodGroup = scene->GetRegistry().try_get<LODGroupComponent>(entity);

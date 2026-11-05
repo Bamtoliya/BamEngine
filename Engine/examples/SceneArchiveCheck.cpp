@@ -19,6 +19,9 @@
 #include <memory>
 #include "Collision.h"
 #include <cmath>
+#include "SplineComponent.h"
+#include "SplineFollowerComponent.h"
+#include "SplineMeshComponent.h"
 
 namespace
 {
@@ -147,6 +150,28 @@ namespace
     bool CheckFileRoundTrip(const wchar_t* path)
     {
         auto original = MakeScene();
+        auto& sourceWorld = original->GetRegistry();
+        const auto sourceRoot = original->FindEntityById(RootId)->GetEntityHandle();
+        const auto sourceChild = original->FindEntityById(FirstChildId)->GetEntityHandle();
+
+        auto& spline = sourceWorld.emplace<Engine::SplineComponent>(sourceRoot);
+        spline.Closed = true;
+        spline.Points[1].Position = glm::vec3(3.0f, 1.0f, 4.0f);
+        spline.Points[1].RollDegrees = 450.0f;
+
+        sourceWorld.emplace<Engine::StaticMeshRendererComponent>(sourceRoot);
+        auto& mesh = sourceWorld.emplace<Engine::SplineMeshComponent>(sourceRoot);
+        mesh.DeformToPath = true;
+        mesh.UVRepeatDistance = 2.5;
+        mesh.GeneratedCount = 7;
+        mesh.HasBuildError = true;
+
+        auto& follower = sourceWorld.emplace<Engine::SplineFollowerComponent>(sourceChild);
+        follower.Speed = -3.0f;
+        follower.StartDistance = 1.25;
+        follower.Loop = true;
+        follower.AlignToMovement = true;
+        follower.CurrentDistance = 4.0;
         Archive writer;
         if (!original->WriteArchive(writer) || !writer.SaveToFile(path))
             return Fail("Scene file write failed.");
@@ -157,6 +182,24 @@ namespace
         ScenePtr restored(output);
         if (!result || restored == nullptr) return Fail("Scene candidate creation failed.");
         if (!CheckRestored(*restored, *original)) return false;
+        auto& restoredWorld = restored->GetRegistry();
+        const auto restoredRoot = restored->FindEntityById(RootId)->GetEntityHandle();
+        const auto restoredChild = restored->FindEntityById(FirstChildId)->GetEntityHandle();
+
+        const auto* restoredSpline = restoredWorld.try_get<Engine::SplineComponent>(restoredRoot);
+        if (!restoredSpline || !restoredSpline->Closed || restoredSpline->Points != spline.Points)
+            return Fail("Spline points, roll, or closed state changed after loading.");
+
+        const auto* restoredMesh = restoredWorld.try_get<Engine::SplineMeshComponent>(restoredRoot);
+        if (!restoredMesh || !restoredMesh->DeformToPath || restoredMesh->UVRepeatDistance != 2.5 ||
+            restoredMesh->GeneratedCount != 0 || restoredMesh->HasBuildError)
+            return Fail("Spline mesh settings or transient state changed after loading.");
+
+        const auto* restoredFollower = restoredWorld.try_get<Engine::SplineFollowerComponent>(restoredChild);
+        if (!restoredFollower || !restoredFollower->AlignToMovement || !restoredFollower->Loop ||
+            restoredFollower->Speed != -3.0f || restoredFollower->StartDistance != 1.25 ||
+            restoredFollower->CurrentDistance != 0.0)
+            return Fail("Spline follower settings or transient state changed after loading.");
         Engine::Scene* occupied = original.get();
         if (Engine::Scene::CreateFromArchive(reader, occupied).Code != archive::ArchiveErrorCode::InvalidOperation ||
             occupied != original.get())

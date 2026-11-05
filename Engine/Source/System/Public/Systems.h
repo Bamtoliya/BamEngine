@@ -21,3 +21,4 @@
 #include "NetworkSystem.h"
 #include "KinematicCharacterSystem.h"
 #include "ThirdPersonControllerSystem.h"
+#include "SplineFollowSystem.h"

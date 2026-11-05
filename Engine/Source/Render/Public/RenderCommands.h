@@ -30,6 +30,7 @@ struct StaticDrawCommand
 	uint32 pickingId = 0;
 	std::optional<BoundingBox> worldBounds{};
 	std::optional<HeightfieldDrawData> heightfield{};
+	std::shared_ptr<Mesh> ownedMesh;
 };
 
 struct SkinnedDrawCommand

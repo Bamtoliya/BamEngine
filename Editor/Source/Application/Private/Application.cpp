@@ -420,7 +420,7 @@ EResult Application::InitializeSystem()
         ThirdPersonControllerSystem,
         ParticleSystem, ActionTimelineSystem, NetworkSystem, KinematicCharacterSystem,
         CameraSystem, SpringArmSystem, LightSystem, UIRenderSystem,
-        AudioSystem, TerrainSystem, PhysicsSystem, GraphSystem > ();
+        AudioSystem, TerrainSystem, PhysicsSystem, GraphSystem, SplineFollowSystem > ();
 
     return success ? EResult::Success : EResult::Fail;
 }
@@ -710,6 +710,10 @@ void Application::InitializeMeshes()
 #pragma region Terrain
     Mesh* gridMesh = TerrainUtility::CreateGridMesh(128.0f, 128.0f, 128);
     ResourceManager::Get().AddResource<Mesh>(L"TerrainGridMesh", gridMesh);
+    if (Mesh* strip = TerrainUtility::CreateGridMesh(0.25f, 4.0f, 1, 128, /*reverseWinding=*/true))
+    {
+        resourceManager.AddResource<Mesh>(L"SplineTestStrip", strip);
+    }
 #pragma endregion
 
 }
