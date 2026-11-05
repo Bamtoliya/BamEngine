@@ -30,6 +30,7 @@
 #include "AudioManager.h"
 #include "Components/Render/ActionTimelineComponent.h"
 #include "Components/Core/NameComponent.h"
+#include "ShortcutManager.h"
 
 namespace Editor
 {
@@ -68,26 +69,41 @@ namespace Editor
 		const float frameStep = 1.0f / m_FPS;
 		m_CurrentTime = std::clamp(m_CurrentTime + static_cast<float>(step) * frameStep, 0.0f, m_Duration);
 	}
+	bool AnimationTimelinePanel::CanDeleteSelected() const
+	{
+		if (!m_Open || m_IsDraggingItem || m_IsScrubbing || m_Selection.TrackIndex < 0)
+			return false;
+
+		if (m_Selection.Type == ETimelineSelectionType::NotifyMarker)
+		{
+			if (m_Selection.TrackIndex >= static_cast<int>(m_NotifyTracks.size()))
+				return false;
+
+			const auto& notifies = m_NotifyTracks[m_Selection.TrackIndex].Notifies;
+			return m_Selection.ItemIndex >= 0 && m_Selection.ItemIndex < static_cast<int>(notifies.size());
+		}
+
+		return m_Selection.Type == ETimelineSelectionType::CameraShot &&
+			m_Selection.TrackIndex < static_cast<int>(m_CameraTracks.size());
+	}
+
 	void AnimationTimelinePanel::DeleteSelected()
 	{
-		if (m_Selection.Type == ETimelineSelectionType::NotifyMarker &&
-			m_Selection.TrackIndex >= 0 && m_Selection.TrackIndex < static_cast<int>(m_NotifyTracks.size()))
+		if (!CanDeleteSelected())
+			return;
+
+		if (m_Selection.Type == ETimelineSelectionType::NotifyMarker)
 		{
 			auto& notifies = m_NotifyTracks[m_Selection.TrackIndex].Notifies;
-			if (m_Selection.ItemIndex >= 0 && m_Selection.ItemIndex < static_cast<int>(notifies.size()))
-			{
-				notifies.erase(notifies.begin() + m_Selection.ItemIndex);
-				m_Selection = {};
-				m_IsDirty = true;
-			}
+			notifies.erase(notifies.begin() + m_Selection.ItemIndex);
 		}
-		else if (m_Selection.Type == ETimelineSelectionType::CameraShot &&
-			m_Selection.TrackIndex >= 0 && m_Selection.TrackIndex < static_cast<int>(m_CameraTracks.size()))
+		else
 		{
 			m_CameraTracks.erase(m_CameraTracks.begin() + m_Selection.TrackIndex);
-			m_Selection = {};
-			m_IsDirty = true;
 		}
+
+		m_Selection = {};
+		m_IsDirty = true;
 	}
 
 	void AnimationTimelinePanel::SetupPreviewScene()
@@ -567,6 +583,10 @@ namespace Editor
 
 	void AnimationTimelinePanel::Draw()
 	{
+		m_Focused = false;
+		m_Hovered = false;
+
+
 		if (!m_Open) return;
 
 		ImGui::SetNextWindowSize(ImVec2(1060.0f, 660.0f), ImGuiCond_FirstUseEver);
@@ -577,6 +597,7 @@ namespace Editor
 
 		if (ImGui::Begin(title.c_str(), &m_Open, windowFlags))
 		{
+			m_Hovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows);
 			m_Focused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
 
 			DrawToolbar();
@@ -606,7 +627,7 @@ namespace Editor
 			if (ImGui::IsItemHovered()) ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
 			if (ImGui::IsItemActive())
 			{
-				m_InspectorWidth -= ImGui::GetIO().MouseDelta.x;
+				m_InspectorWidth -= Engine::InputManager::Get().GetMouseDelta().x;
 				m_InspectorWidth = std::clamp(m_InspectorWidth, 180.0f, std::max(180.0f, availWidth - 250.0f));
 			}
 			ImGui::PopStyleColor(3);
@@ -626,7 +647,7 @@ namespace Editor
 			if (ImGui::IsItemHovered()) ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);
 			if (ImGui::IsItemActive())
 			{
-				m_TimelineHeight -= ImGui::GetIO().MouseDelta.y;
+				m_TimelineHeight -= Engine::InputManager::Get().GetMouseDelta().y;
 				m_TimelineHeight = std::clamp(m_TimelineHeight, 130.0f, std::max(130.0f, availHeight - 140.0f));
 			}
 			ImGui::PopStyleColor(3);
@@ -640,12 +661,12 @@ namespace Editor
 	void AnimationTimelinePanel::DrawToolbar()
 	{
 		// 파일 [Open] & [Save]
-		if (ImGui::Button(ICON_FA_FOLDER_OPEN " Open"))
+		if (ImGui::Button((ICON_FA_FOLDER_OPEN " " + LOCAL_LABEL("EditorCommon.Open")).c_str()))
 		{
 			std::wstring selectedPath;
 			std::vector<FileDialogFilter> filters = {
-				{ L"Action Timeline Asset (*.actiontimeline.json)", L"*.actiontimeline.json" },
-				{ L"All Files (*.*)", L"*.*" }
+				{ Engine::StrToWStr(LOCAL("FileDialog.ActionTimelineFiles")), L"*.actiontimeline.json" },
+				{ Engine::StrToWStr(LOCAL("FileDialog.AllFiles")), L"*.*" }
 			};
 			if (FileDialogs::OpenFileDialog(selectedPath, filters, L"Resources/Animation"))
 			{
@@ -655,7 +676,7 @@ namespace Editor
 		if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("Timeline.OpenTimeline"));
 		ImGui::SameLine();
 
-		if (ImGui::Button(ICON_FA_FLOPPY_DISK " Save"))
+		if (ImGui::Button((ICON_FA_FLOPPY_DISK " " + LOCAL_LABEL("EditorCommon.Save")).c_str()))
 		{
 			if (!m_CurrentAssetPath.empty())
 			{
@@ -665,10 +686,10 @@ namespace Editor
 			{
 				std::wstring savePath;
 				std::vector<FileDialogFilter> filters = {
-					{ L"Action Timeline Asset (*.actiontimeline.json)", L"*.actiontimeline.json" }
+					{ Engine::StrToWStr(LOCAL("FileDialog.ActionTimelineFiles")), L"*.actiontimeline.json" }
 				};
 				std::wstring defaultName = Engine::StrToWStr(m_CurrentClipName) + L".actiontimeline.json";
-				if (FileDialogs::SaveFileDialog(savePath, filters, defaultName, L"Resources/Animation"))
+				if (FileDialogs::SaveFileDialog(savePath, filters, defaultName, L"actiontimeline.json"))
 				{
 					SaveToFile(Engine::WStrToStr(savePath));
 				}
@@ -713,27 +734,29 @@ namespace Editor
 
 		const int currentFrame = static_cast<int>(m_CurrentTime * m_FPS);
 		const int totalFrames = static_cast<int>(m_Duration * m_FPS);
-		ImGui::TextColored(ImVec4(0.3f, 0.9f, 0.5f, 1.0f), "%.2fs / %.2fs", m_CurrentTime, m_Duration);
+		const std::string timeLabel = LOCAL_FMT("Timeline.TimeCounter", m_CurrentTime, m_Duration);
+		ImGui::TextColored(ImVec4(0.3f, 0.9f, 0.5f, 1.0f), "%s", timeLabel.c_str());
 		ImGui::SameLine();
-		ImGui::TextDisabled("(Frame: %d / %d)", currentFrame, totalFrames);
+		const std::string frameLabel = LOCAL_FMT("Timeline.FrameCounter", currentFrame, totalFrames);
+		ImGui::TextDisabled("%s", frameLabel.c_str());
 
 		ImGui::SameLine();
 		ImGui::TextDisabled("|");
 		ImGui::SameLine();
 
-		if (ImGui::Button(ICON_FA_ARROWS_ROTATE  " Sync Entity"))
+		if (ImGui::Button((ICON_FA_ARROWS_ROTATE " " + LOCAL_LABEL("Timeline.SyncEntity")).c_str()))
 		{
 			SyncFromSelectedEntity();
 		}
 		if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("Timeline.SyncTooltip"));
 		ImGui::SameLine();
 
-		if (ImGui::Button(ICON_FA_FOLDER_OPEN " Model..."))
+		if (ImGui::Button((ICON_FA_FOLDER_OPEN " " + LOCAL_LABEL("Timeline.SelectModel")).c_str()))
 		{
 			std::wstring selectedPath;
 			std::vector<FileDialogFilter> filters = {
-				{ L"Model Files (*.bammodel, *.glb)", L"*.bammodel;*.glb" },
-				{ L"All Files (*.*)", L"*.*" }
+				{ Engine::StrToWStr(LOCAL("FileDialog.ModelFiles")), L"*.bammodel;*.glb" },
+				{ Engine::StrToWStr(LOCAL("FileDialog.AllFiles")), L"*.*" }
 			};
 			if (FileDialogs::OpenFileDialog(selectedPath, filters, L"Resources/Model"))
 			{
@@ -787,12 +810,24 @@ namespace Editor
 		ImGui::SameLine();
 		ImGui::TextDisabled("|");
 		ImGui::SameLine();
-		ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.4f, 1.0f), "Zoom: %.1fx", m_TimelineZoom);
+		const std::string zoomLabel = LOCAL_FMT("Timeline.ZoomFactor", m_TimelineZoom);
+		ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.4f, 1.0f), "%s", zoomLabel.c_str());
 		ImGui::SameLine();
-		if (ImGui::Button(ICON_FA_MAXIMIZE " Fit"))
+		auto& shortcuts = ShortcutManager::Get();
+		const std::string zoomResetLabel = std::string(ICON_FA_MAXIMIZE " ") + LOCAL_LABEL("Timeline.ZoomReset");
+
+		ImGui::BeginDisabled(!shortcuts.CanExecuteAction("Timeline.ZoomReset"));
+		if (ImGui::Button(zoomResetLabel.c_str()))
+			shortcuts.ExecuteAction("Timeline.ZoomReset");
+		ImGui::EndDisabled();
+
+		if (ImGui::IsItemHovered())
 		{
-			m_TimelineZoom = 1.0f;
-			m_ViewStartTime = 0.0f;
+			const char* hint = shortcuts.GetShortcutHint("Timeline.ZoomReset");
+			if (hint && hint[0] != '\0')
+				ImGui::SetTooltip("%s (%s)", LOCAL_CSTR("Timeline.ZoomReset"), hint);
+			else
+				ImGui::SetTooltip("%s", LOCAL_CSTR("Timeline.ZoomReset"));
 		}
 
 		ImGui::SameLine(ImGui::GetWindowWidth() - 110.0f);
@@ -865,7 +900,7 @@ namespace Editor
 						{
 							drawList->AddCircle(sPos, 8.0f, IM_COL32(255, 220, 50, 240), 12, 2.0f);
 							drawList->AddCircleFilled(sPos, 4.0f, IM_COL32(255, 100, 50, 255), 10);
-							std::string label = notify.SocketBoneName.empty() ? "(Root)" : notify.SocketBoneName;
+							std::string label = notify.SocketBoneName.empty() ? LOCAL("Timeline.Root") : notify.SocketBoneName;
 							drawList->AddText(ImVec2(sPos.x + 10.0f, sPos.y - 8.0f), IM_COL32(255, 230, 100, 230), label.c_str());
 						}
 					}
@@ -873,16 +908,15 @@ namespace Editor
 
 				if (m_TriggerToastTimer > 0.0f)
 				{
-					char toastBuf[128];
-					snprintf(toastBuf, sizeof(toastBuf), ICON_FA_BELL " Triggered: %s", m_LastTriggeredNotifyName.c_str());
-					const ImVec2 textSize = ImGui::CalcTextSize(toastBuf);
+					const std::string toastText = std::string(ICON_FA_BELL " ") + LOCAL_FMT("Timeline.NotifyTriggered", m_LastTriggeredNotifyName);
+					const ImVec2 textSize = ImGui::CalcTextSize(toastText.c_str());
 					const ImVec2 bannerMin(cursorPos.x + (avail.x - textSize.x) * 0.5f - 16.0f, cursorPos.y + 16.0f);
 					const ImVec2 bannerMax(bannerMin.x + textSize.x + 32.0f, bannerMin.y + textSize.y + 12.0f);
 					const f32 toastAlpha = std::min(1.0f, m_TriggerToastTimer);
 
 					drawList->AddRectFilled(bannerMin, bannerMax, IM_COL32(25, 30, 40, static_cast<int>(220 * toastAlpha)), 6.0f);
 					drawList->AddRect(bannerMin, bannerMax, IM_COL32(255, 180, 50, static_cast<int>(240 * toastAlpha)), 6.0f, 0, 1.5f);
-					drawList->AddText(ImVec2(bannerMin.x + 16.0f, bannerMin.y + 6.0f), IM_COL32(255, 220, 120, static_cast<int>(255 * toastAlpha)), toastBuf);
+					drawList->AddText(ImVec2(bannerMin.x + 16.0f, bannerMin.y + 6.0f), IM_COL32(255, 220, 120, static_cast<int>(255 * toastAlpha)), toastText.c_str());
 				}
 
 				if (ImGui::IsItemHovered())
@@ -902,7 +936,7 @@ namespace Editor
 						m_CamTarget += right * (-delta.x * 0.005f * m_CamDistance);
 						m_CamTarget.y += delta.y * 0.005f * m_CamDistance;
 					}
-					const float wheel = ImGui::GetIO().MouseWheel;
+					const float wheel = Engine::InputManager::Get().GetMouseScrollDeltaY();
 					if (wheel != 0.0f)
 					{
 						m_CamDistance = std::clamp(m_CamDistance - wheel * 0.35f, 0.5f, 25.0f);
@@ -924,7 +958,9 @@ namespace Editor
 		if (m_Selection.Type == ETimelineSelectionType::None)
 		{
 			ImGui::Spacing();
-			ImGui::TextDisabled("Select a Marker or Camera Shot\nin the tracks to edit properties.");
+			ImGui::PushTextWrapPos(0.0f);
+			ImGui::TextDisabled("%s", LOCAL_CSTR("Timeline.InspectorSelectionHint"));
+			ImGui::PopTextWrapPos();
 			return;
 		}
 
@@ -952,131 +988,149 @@ namespace Editor
 	{
 		char nameBuf[64];
 		snprintf(nameBuf, sizeof(nameBuf), "%s", notify.Name.c_str());
-		if (ImGui::InputText(LOCAL_CSTR("Timeline.NotifyName"), nameBuf, sizeof(nameBuf))) { notify.Name = nameBuf; }
+		if (ImGui::InputText(LOCAL_LABEL("Timeline.NotifyName").c_str(), nameBuf, sizeof(nameBuf)))
+			notify.Name = nameBuf;
 
-		ImGui::SliderFloat(LOCAL_CSTR("Timeline.TriggerTime"), &notify.TriggerTime, 0.0f, m_Duration, "%.2fs");
+		ImGui::SliderFloat(LOCAL_LABEL("Timeline.TriggerTime").c_str(), &notify.TriggerTime, 0.0f, m_Duration, "%.2fs");
 
-		const char* typeNames[] = { "Particle FX", "Sound FX", "Custom Event" };
+		const std::string typeNames[] = {
+			LOCAL("Timeline.NotifyTypeParticle"), LOCAL("Timeline.NotifyTypeSound"), LOCAL("Timeline.NotifyTypeCustomEvent")
+		};
+		const char* typeItems[] = { typeNames[0].c_str(), typeNames[1].c_str(), typeNames[2].c_str() };
 		int currentType = static_cast<int>(notify.Type);
-		if (ImGui::Combo(LOCAL_CSTR("Timeline.NotifyType"), &currentType, typeNames, IM_ARRAYSIZE(typeNames)))
-		{
+		if (ImGui::Combo(LOCAL_LABEL("Timeline.NotifyType").c_str(), &currentType, typeItems, IM_ARRAYSIZE(typeItems)))
 			notify.Type = static_cast<Engine::EAnimNotifyType>(currentType);
-		}
 
 		auto* model = m_TargetModel.Get();
 		auto skeleton = model ? model->GetSkeleton() : Engine::ResourceHandle<Engine::Skeleton>();
 		if (skeleton.IsValid())
 		{
 			const auto& bones = skeleton->GetBones();
-			std::string currentBoneDisplay = notify.SocketBoneName.empty() ? "(Root / None)" : notify.SocketBoneName;
-			if (ImGui::BeginCombo(LOCAL_CSTR("Timeline.SocketBone"), currentBoneDisplay.c_str()))
+			const std::string currentBoneDisplay = notify.SocketBoneName.empty()
+				? LOCAL("Timeline.RootOrNone") : notify.SocketBoneName;
+
+			if (ImGui::BeginCombo(LOCAL_LABEL("Timeline.SocketBone").c_str(), currentBoneDisplay.c_str()))
 			{
-				if (ImGui::Selectable("(Root / None)", notify.SocketBoneName.empty())) { notify.SocketBoneName = ""; }
+				if (ImGui::Selectable(LOCAL_LABEL("Timeline.RootOrNone").c_str(), notify.SocketBoneName.empty()))
+					notify.SocketBoneName.clear();
+
 				for (const auto& bone : bones)
 				{
-					std::string boneNameStr = Engine::WStrToStr(bone.Name);
-					const bool isSel = (notify.SocketBoneName == boneNameStr);
-					if (ImGui::Selectable(boneNameStr.c_str(), isSel)) { notify.SocketBoneName = boneNameStr; }
-					if (isSel) ImGui::SetItemDefaultFocus();
+					const std::string boneNameStr = Engine::WStrToStr(bone.Name);
+					const bool isSel = notify.SocketBoneName == boneNameStr;
+					if (ImGui::Selectable(boneNameStr.c_str(), isSel))
+						notify.SocketBoneName = boneNameStr;
+
+					if (isSel)
+						ImGui::SetItemDefaultFocus();
 				}
 				ImGui::EndCombo();
 			}
 		}
 
-		ImGui::DragFloat3(LOCAL_CSTR("Timeline.OffsetPos"), &notify.OffsetPosition.x, 0.02f, -10.0f, 10.0f, "%.2f");
+		ImGui::DragFloat3(LOCAL_LABEL("Timeline.OffsetPos").c_str(), &notify.OffsetPosition.x, 0.02f, -10.0f, 10.0f, "%.2f");
 
 		if (notify.Type == Engine::EAnimNotifyType::Particle)
 		{
 			ImGui::Separator();
-			ImGui::ColorEdit4(LOCAL_CSTR("Timeline.ParticleColor"), &notify.ParticleColor.x, ImGuiColorEditFlags_NoInputs);
+			ImGui::ColorEdit4(LOCAL_LABEL("Timeline.ParticleColor").c_str(), &notify.ParticleColor.x, ImGuiColorEditFlags_NoInputs);
+
 			int count = static_cast<int>(notify.BurstCount);
-			if (ImGui::SliderInt(LOCAL_CSTR("Timeline.BurstCount"), &count, 5, 80)) { notify.BurstCount = static_cast<uint32>(count); }
-			ImGui::SliderFloat("Speed", &notify.ParticleSpeed, 0.2f, 5.0f, "%.1f");
-			ImGui::SliderFloat("Size", &notify.ParticleSize, 0.02f, 0.5f, "%.2f");
+			if (ImGui::SliderInt(LOCAL_LABEL("Timeline.BurstCount").c_str(), &count, 5, 80))
+				notify.BurstCount = static_cast<uint32>(count);
+
+			ImGui::SliderFloat(LOCAL_LABEL("Timeline.ParticleSpeed").c_str(), &notify.ParticleSpeed, 0.2f, 5.0f, "%.1f");
+			ImGui::SliderFloat(LOCAL_LABEL("PROP_SIZE").c_str(), &notify.ParticleSize, 0.02f, 0.5f, "%.2f");
 		}
 		else if (notify.Type == Engine::EAnimNotifyType::Sound)
 		{
 			ImGui::Separator();
-			ImGui::Text("Audio: %s", notify.SoundPath.empty() ? "(None)" : std::filesystem::path(notify.SoundPath).filename().string().c_str());
-			if (ImGui::Button(ICON_FA_FOLDER_OPEN " Select Sound..."))
+
+			std::string soundName = LOCAL("EditorCommon.None");
+			if (!notify.SoundPath.empty())
+			{
+				const std::filesystem::path soundFile(Engine::StrToWStr(notify.SoundPath));
+				soundName = Engine::WStrToStr(soundFile.filename().wstring());
+			}
+
+			const std::string soundLabel = LOCAL_FMT("Timeline.SoundFile", soundName);
+			ImGui::TextUnformatted(soundLabel.c_str());
+
+			const std::string selectSoundLabel = std::string(ICON_FA_FOLDER_OPEN " ") + LOCAL_LABEL("Timeline.SelectSound");
+			if (ImGui::Button(selectSoundLabel.c_str()))
 			{
 				std::wstring soundPath;
-				std::vector<FileDialogFilter> filters = {
-					{ L"Audio Files (*.wav, *.mp3, *.ogg)", L"*.wav;*.mp3;*.ogg" },
-					{ L"All Files (*.*)", L"*.*" }
+				const std::vector<FileDialogFilter> filters = {
+					{ Engine::StrToWStr(LOCAL("FileDialog.AudioFiles")), L"*.wav;*.mp3;*.ogg" },
+					{ Engine::StrToWStr(LOCAL("FileDialog.AllFiles")), L"*.*" }
 				};
+
 				if (FileDialogs::OpenFileDialog(soundPath, filters, L"Resources/Audio"))
-				{
 					notify.SoundPath = Engine::WStrToStr(soundPath);
-				}
 			}
-			ImGui::SliderFloat("Volume", &notify.SoundVolume, 0.0f, 2.0f, "%.2f");
+
+			ImGui::SliderFloat(LOCAL_LABEL("PROP_VOLUME").c_str(), &notify.SoundVolume, 0.0f, 2.0f, "%.2f");
 		}
 		else if (notify.Type == Engine::EAnimNotifyType::CustomEvent)
 		{
 			ImGui::Separator();
 			char tagBuf[64];
 			snprintf(tagBuf, sizeof(tagBuf), "%s", notify.EventTag.c_str());
-			if (ImGui::InputText("Event Tag", tagBuf, sizeof(tagBuf))) { notify.EventTag = tagBuf; }
+			if (ImGui::InputText(LOCAL_LABEL("Timeline.EventTag").c_str(), tagBuf, sizeof(tagBuf)))
+				notify.EventTag = tagBuf;
 		}
 
 		ImGui::Spacing();
 		ImGui::Separator();
 
-		const std::string triggerTestLabel = std::string(ICON_FA_PLAY " ") + LOCAL_CSTR("Timeline.TriggerTest");
+		const std::string triggerTestLabel = std::string(ICON_FA_PLAY " ") + LOCAL_LABEL("Timeline.TriggerTest");
 		if (ImGui::Button(triggerTestLabel.c_str()))
 		{
 			TriggerNotify(notify);
 		}
 		ImGui::SameLine();
-		const std::string deleteLabel = std::string(ICON_FA_TRASH " ") + LOCAL_CSTR("Timeline.DeleteNotify");
+		const std::string deleteLabel = std::string(ICON_FA_TRASH " ") + LOCAL_LABEL("Timeline.DeleteNotify");
+		ImGui::BeginDisabled(!CanDeleteSelected());
 		if (ImGui::Button(deleteLabel.c_str()))
-		{
-			if (m_Selection.TrackIndex >= 0 && m_Selection.TrackIndex < static_cast<int>(m_NotifyTracks.size()))
-			{
-				auto& notifies = m_NotifyTracks[m_Selection.TrackIndex].Notifies;
-				if (m_Selection.ItemIndex >= 0 && m_Selection.ItemIndex < static_cast<int>(notifies.size()))
-				{
-					notifies.erase(notifies.begin() + m_Selection.ItemIndex);
-					m_Selection = {};
-				}
-			}
-		}
+			DeleteSelected();
+		ImGui::EndDisabled();
 	}
 
 	void AnimationTimelinePanel::DrawCameraShotInspector(Engine::TimelineCameraTrack& camShot)
 	{
 		char nameBuf[64];
 		snprintf(nameBuf, sizeof(nameBuf), "%s", camShot.TrackName.c_str());
-		if (ImGui::InputText("Shot Name", nameBuf, sizeof(nameBuf))) { camShot.TrackName = nameBuf; }
+		if (ImGui::InputText(LOCAL_LABEL("Timeline.CameraShotName").c_str(), nameBuf, sizeof(nameBuf)))
+			camShot.TrackName = nameBuf;
 
-		ImGui::Checkbox("Active", &camShot.IsActive);
-		ImGui::SliderFloat("Start Time (s)", &camShot.StartTime, 0.0f, m_Duration, "%.2fs");
-		ImGui::SliderFloat("Duration (s)", &camShot.Duration, 0.05f, 5.0f, "%.2fs");
-		ImGui::SliderFloat("Target FOV", &camShot.TargetFOV, 15.0f, 90.0f, "%.1f deg");
-		ImGui::SliderFloat("Shake Intensity", &camShot.ShakeIntensity, 0.0f, 1.5f, "%.2f");
+		ImGui::Checkbox(LOCAL_LABEL("PROP_ENABLED").c_str(), &camShot.IsActive);
+		ImGui::SliderFloat(LOCAL_LABEL("Timeline.CameraShotStartTime").c_str(), &camShot.StartTime, 0.0f, m_Duration, "%.2fs");
+		ImGui::SliderFloat(LOCAL_LABEL("Timeline.CameraShotDuration").c_str(), &camShot.Duration, 0.05f, 5.0f, "%.2fs");
+		ImGui::SliderFloat(LOCAL_LABEL("Timeline.CameraShotTargetFOV").c_str(), &camShot.TargetFOV, 15.0f, 90.0f, "%.1f deg");
+		ImGui::SliderFloat(LOCAL_LABEL("Timeline.CameraShotShakeIntensity").c_str(), &camShot.ShakeIntensity, 0.0f, 1.5f, "%.2f");
 
 		auto* model = m_TargetModel.Get();
 		auto skeleton = model ? model->GetSkeleton() : Engine::ResourceHandle<Engine::Skeleton>();
 		if (skeleton.IsValid())
 		{
 			const auto& bones = skeleton->GetBones();
-			std::string currentBoneDisplay = camShot.FocusBoneName.empty() ? "(Root / None)" : camShot.FocusBoneName;
-			if (ImGui::BeginCombo("Focus Bone", currentBoneDisplay.c_str()))
+			const std::string currentBoneDisplay = camShot.FocusBoneName.empty()
+				? LOCAL("Timeline.RootOrNone") : camShot.FocusBoneName;
+
+			if (ImGui::BeginCombo(LOCAL_LABEL("Timeline.CameraShotFocusBone").c_str(), currentBoneDisplay.c_str()))
 			{
-				if (ImGui::Selectable("(Root / None)", camShot.FocusBoneName.empty()))
-				{
-					camShot.FocusBoneName = "";
-				}
+				if (ImGui::Selectable(LOCAL_LABEL("Timeline.RootOrNone").c_str(), camShot.FocusBoneName.empty()))
+					camShot.FocusBoneName.clear();
+
 				for (const auto& bone : bones)
 				{
-					std::string boneNameStr = Engine::WStrToStr(bone.Name);
-					const bool isSel = (camShot.FocusBoneName == boneNameStr);
-					if (ImGui::Selectable(boneNameStr.c_str(), isSel))
-					{
+					const std::string boneNameStr = Engine::WStrToStr(bone.Name);
+					const bool isSelected = camShot.FocusBoneName == boneNameStr;
+					if (ImGui::Selectable(boneNameStr.c_str(), isSelected))
 						camShot.FocusBoneName = boneNameStr;
-					}
-					if (isSel) ImGui::SetItemDefaultFocus();
+
+					if (isSelected)
+						ImGui::SetItemDefaultFocus();
 				}
 				ImGui::EndCombo();
 			}
@@ -1084,49 +1138,24 @@ namespace Editor
 
 		ImGui::Spacing();
 		ImGui::Separator();
-		if (ImGui::Button(ICON_FA_TRASH " Delete Shot"))
-		{
-			if (m_Selection.TrackIndex >= 0 && m_Selection.TrackIndex < static_cast<int>(m_CameraTracks.size()))
-			{
-				m_CameraTracks.erase(m_CameraTracks.begin() + m_Selection.TrackIndex);
-				m_Selection = {};
-			}
-		}
+		const std::string deleteLabel = std::string(ICON_FA_TRASH " ") + LOCAL_LABEL("EditorCommon.Delete");
+		ImGui::BeginDisabled(!CanDeleteSelected());
+		if (ImGui::Button(deleteLabel.c_str()))
+			DeleteSelected();
+		ImGui::EndDisabled();
 	}
 
 	void AnimationTimelinePanel::DrawTimelineTrackArea()
 	{
-		// Delete / Backspace 키로 현재 선택된 노티파이 또는 카메라 샷 삭제
-		if (ImGui::IsKeyPressed(ImGuiKey_Delete) || ImGui::IsKeyPressed(ImGuiKey_Backspace))
-		{
-			if (m_Selection.Type == ETimelineSelectionType::NotifyMarker &&
-				m_Selection.TrackIndex >= 0 && m_Selection.TrackIndex < static_cast<int>(m_NotifyTracks.size()))
-			{
-				auto& notifies = m_NotifyTracks[m_Selection.TrackIndex].Notifies;
-				if (m_Selection.ItemIndex >= 0 && m_Selection.ItemIndex < static_cast<int>(notifies.size()))
-				{
-					notifies.erase(notifies.begin() + m_Selection.ItemIndex);
-					m_Selection = {};
-					m_IsDirty = true;
-				}
-			}
-			else if (m_Selection.Type == ETimelineSelectionType::CameraShot &&
-				m_Selection.TrackIndex >= 0 && m_Selection.TrackIndex < static_cast<int>(m_CameraTracks.size()))
-			{
-				m_CameraTracks.erase(m_CameraTracks.begin() + m_Selection.TrackIndex);
-				m_Selection = {};
-				m_IsDirty = true;
-			}
-		}
-
 		ImGui::BeginChild("##TimelineTracksScrollArea", ImVec2(0.0f, 0.0f), false, ImGuiWindowFlags_AlwaysVerticalScrollbar);
 
 		ImDrawList* drawList = ImGui::GetWindowDrawList();
 		const ImVec2 contentMin = ImGui::GetCursorScreenPos();
 		const ImVec2 contentSize = ImGui::GetContentRegionAvail();
-		const ImVec2 mousePos = ImGui::GetIO().MousePos;
-		const bool isMouseDown = ImGui::IsMouseDown(ImGuiMouseButton_Left);
-		const bool isMouseClicked = ImGui::IsMouseClicked(ImGuiMouseButton_Left);
+		auto& input = Engine::InputManager::Get();
+		const auto mousePos = input.GetScreenMousePosition();
+		const bool isMouseDown = input.IsMouseButtonPressed(Engine::EMouseButton::Left);
+		const bool isMouseClicked = input.IsMouseButtonDown(Engine::EMouseButton::Left);
 
 		// ── [스플리터 위젯] InvisibleButton 배치 후 원래 커서 좌표를 복원하여 가로 스크롤바 발생 원천 제거! ──
 		const float rulerHeight = 26.0f;
@@ -1146,7 +1175,7 @@ namespace Editor
 		}
 		if (isSplitterActive && isMouseDown)
 		{
-			m_TrackHeaderWidth += ImGui::GetIO().MouseDelta.x;
+			m_TrackHeaderWidth += input.GetMouseDelta().x;
 			m_TrackHeaderWidth = std::clamp(m_TrackHeaderWidth, 90.0f, std::min(450.0f, contentSize.x - 120.0f));
 		}
 
@@ -1164,12 +1193,14 @@ namespace Editor
 		ImGui::InvisibleButton("##TimelineRulerHitbox", ImVec2(timelineWidth, rulerHeight));
 		const bool isRulerHovered = ImGui::IsItemHovered();
 
-		const bool isOverTimelineArea = (mousePos.x >= contentMin.x && mousePos.x <= timelineMax.x && mousePos.y >= contentMin.y && mousePos.y <= timelineMax.y);
+		const bool isOverTimelineArea = ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem) &&
+			mousePos.x >= contentMin.x && mousePos.x <= timelineMax.x &&
+			mousePos.y >= contentMin.y && mousePos.y <= timelineMax.y;
 
 		// 마우스 휠 줌(Zoom) & 중간클릭 패닝(Pan)
 		if (isOverTimelineArea)
 		{
-			const float wheel = ImGui::GetIO().MouseWheel;
+			const float wheel = input.GetMouseScrollDeltaY();
 			if (wheel != 0.0f)
 			{
 				const float mouseX = mousePos.x;
@@ -1183,18 +1214,12 @@ namespace Editor
 				m_ViewStartTime = std::clamp(mouseTime - ratio * newVisibleDuration, 0.0f, std::max(0.0f, m_Duration - newVisibleDuration));
 			}
 
-			if (ImGui::IsMouseDragging(ImGuiMouseButton_Middle) || (ImGui::IsKeyDown(ImGuiMod_Alt) && ImGui::IsMouseDragging(ImGuiMouseButton_Right)))
+			if (input.IsMouseButtonDragging(Engine::EMouseButton::Middle) || (input.IsAltPressed() && input.IsMouseButtonDragging(Engine::EMouseButton::Right)))
 			{
-				const float deltaX = ImGui::GetIO().MouseDelta.x;
+				const float deltaX = input.GetMouseDelta().x;
 				const float visibleDuration = (m_Duration > 0.0f) ? (m_Duration / m_TimelineZoom) : 1.0f;
 				const float deltaTime = -(deltaX / timelineWidth) * visibleDuration;
 				m_ViewStartTime = std::clamp(m_ViewStartTime + deltaTime, 0.0f, std::max(0.0f, m_Duration - visibleDuration));
-			}
-
-			if (ImGui::IsKeyPressed(ImGuiKey_F))
-			{
-				m_TimelineZoom = 1.0f;
-				m_ViewStartTime = 0.0f;
 			}
 		}
 
@@ -1219,7 +1244,8 @@ namespace Editor
 		const ImVec2 cornerMin(contentMin.x, contentMin.y);
 		const ImVec2 cornerMax(timelineMin.x, rulerMax.y);
 		drawList->AddRectFilled(cornerMin, cornerMax, IM_COL32(24, 26, 30, 255));
-		drawList->AddText(ImVec2(cornerMin.x + 8.0f, cornerMin.y + 5.0f), IM_COL32(170, 180, 195, 255), ICON_FA_LAYER_GROUP " Tracks");
+		const std::string tracksLabel = std::string(ICON_FA_LAYER_GROUP " ") + LOCAL("Timeline.Tracks");
+		drawList->AddText(ImVec2(cornerMin.x + 8.0f, cornerMin.y + 5.0f), IM_COL32(170, 180, 195, 255), tracksLabel.c_str());
 		drawList->AddLine(ImVec2(cornerMin.x, rulerMax.y), rulerMax, IM_COL32(50, 54, 62, 255));
 
 		// 헤더와 본체 사이의 수직 스플리터 라인 (활성/호버 시 하이라이트)
@@ -1266,8 +1292,9 @@ namespace Editor
 		drawList->PopClipRect();
 
 		// ── 트랙 아래 빈 공간 또는 눈금자 우클릭 시 트랙 추가 메뉴 ──
-		const bool isRulerRightClicked = (isRulerHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Right));
-		const bool isEmptyAreaRightClicked = (mousePos.x >= contentMin.x && mousePos.x <= timelineMax.x && mousePos.y > currentY && mousePos.y <= timelineMax.y && ImGui::IsMouseClicked(ImGuiMouseButton_Right));
+		const bool isRulerRightClicked = (isRulerHovered && input.IsMouseButtonDown(Engine::EMouseButton::Right));
+		const bool isEmptyAreaRightClicked = isOverTimelineArea && mousePos.y > currentY &&
+			input.IsMouseButtonDown(Engine::EMouseButton::Right);
 
 		if (isRulerRightClicked || isEmptyAreaRightClicked)
 		{
@@ -1277,21 +1304,21 @@ namespace Editor
 		{
 			const float clickTime = ScreenXToTime(mousePos.x, timelineMin.x, timelineWidth);
 
-			if (ImGui::MenuItem(ICON_FA_PLUS " Add FX Track"))
+			if (ImGui::MenuItem((ICON_FA_PLUS " " + LOCAL_LABEL("Timeline.AddFXTrack")).c_str()))
 			{
 				Engine::TimelineNotifyTrack newTrack{};
 				newTrack.TrackName = "FX_Track_" + std::to_string(m_NotifyTracks.size() + 1);
 				m_NotifyTracks.push_back(newTrack);
 				m_IsDirty = true;
 			}
-			if (ImGui::MenuItem(ICON_FA_MUSIC " Add Audio Track"))
+			if (ImGui::MenuItem((ICON_FA_MUSIC " " + LOCAL_LABEL("Timeline.AddAudioTrack")).c_str()))
 			{
 				Engine::TimelineNotifyTrack newTrack{};
 				newTrack.TrackName = "Audio_Track_" + std::to_string(m_NotifyTracks.size() + 1);
 				m_NotifyTracks.push_back(newTrack);
 				m_IsDirty = true;
 			}
-			if (ImGui::MenuItem(ICON_FA_VIDEO " Add Camera Shot Track"))
+			if (ImGui::MenuItem((ICON_FA_VIDEO " " + LOCAL_LABEL("Timeline.AddCameraShotTrack")).c_str()))
 			{
 				Engine::TimelineCameraTrack newCam{};
 				newCam.TrackName = "Cam_Shot_" + std::to_string(m_CameraTracks.size() + 1);
@@ -1303,12 +1330,7 @@ namespace Editor
 			}
 
 			ImGui::Separator();
-			if (ImGui::MenuItem(ICON_FA_MAXIMIZE " Reset Zoom (Fit)"))
-			{
-				m_TimelineZoom = 1.0f;
-				m_ViewStartTime = 0.0f;
-			}
-
+			ACTION_MENU_ITEM((ICON_FA_MAXIMIZE " " + LOCAL_LABEL("Timeline.ZoomReset")).c_str(), "Timeline.ZoomReset");
 			ImGui::EndPopup();
 		}
 
@@ -1351,7 +1373,7 @@ namespace Editor
 		const ImVec2 headerMin(trackMin.x - m_TrackHeaderWidth, trackMin.y);
 		const ImVec2 headerMax(trackMin.x, trackMax.y);
 		drawList->AddRectFilled(headerMin, headerMax, IM_COL32(35, 38, 44, 255));
-		drawList->AddText(ImVec2(headerMin.x + 8.0f, headerMin.y + 7.0f), IM_COL32(200, 210, 225, 255), ICON_FA_PERSON_RUNNING " Pose");
+		drawList->AddText(ImVec2(headerMin.x + 8.0f, headerMin.y + 7.0f), IM_COL32(200, 210, 225, 255), (std::string(ICON_FA_PERSON_RUNNING " ") + LOCAL("Timeline.Pose")).c_str());
 
 		// 본체 영역 ImGui 히트박스 배치 (마우스 클릭 소비로 창 이동 원천 차단)
 		ImGui::SetCursorScreenPos(trackMin);
@@ -1377,9 +1399,11 @@ namespace Editor
 		drawList->AddRectFilled(headerMin, headerMax, IM_COL32(30, 33, 38, 255));
 
 		const float headerCenterY = (headerMin.y + headerMax.y) * 0.5f;
-		const ImVec2 mousePos = ImGui::GetIO().MousePos;
-		const bool isMouseDown = ImGui::IsMouseDown(ImGuiMouseButton_Left);
-		const bool isMouseClicked = ImGui::IsMouseClicked(ImGuiMouseButton_Left);
+		auto& input = Engine::InputManager::Get();
+		const auto mousePos = input.GetScreenMousePosition();
+		const bool isMouseDown = input.IsMouseButtonPressed(Engine::EMouseButton::Left);
+		const bool windowHovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
+		const bool isMouseClicked = windowHovered && input.IsMouseButtonDown(Engine::EMouseButton::Left);
 
 		// 1. 트랙 헤더 Mute 아이콘 버튼 (x + 10.0f, 수직 중앙 정렬)
 		const char* muteIcon = track.IsMuted ? ICON_FA_VOLUME_XMARK : ICON_FA_VOLUME_HIGH;
@@ -1388,10 +1412,11 @@ namespace Editor
 		const ImVec2 muteBtnPos(headerMin.x + 10.0f, headerCenterY - muteSize.y * 0.5f);
 		drawList->AddText(muteBtnPos, muteColor, muteIcon);
 
-		const bool isMuteHovered = (mousePos.x >= headerMin.x + 8.0f && mousePos.x <= headerMin.x + 32.0f && mousePos.y >= headerMin.y && mousePos.y <= headerMax.y);
+		const bool isMuteHovered = windowHovered && (mousePos.x >= headerMin.x + 8.0f && mousePos.x <= headerMin.x + 32.0f && mousePos.y >= headerMin.y && mousePos.y <= headerMax.y);
 		if (isMuteHovered && isMouseClicked)
 		{
 			track.IsMuted = !track.IsMuted;
+			m_IsDirty = true;
 		}
 
 		// 2. 트랙 성격 아이콘 (x + 40.0f: Mute 버튼과 30px의 넉넉한 간격 확보, 수직 중앙 정렬)
@@ -1436,31 +1461,38 @@ namespace Editor
 		}
 
 		// 4. 트랙 헤더 영역 우클릭 컨텍스트 메뉴
-		const bool isHeaderHovered = ImGui::IsMouseHoveringRect(headerMin, headerMax);
-		if (isHeaderHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Right))
+		const bool isHeaderHovered = (mousePos.x >= headerMin.x && mousePos.x <= headerMax.x && mousePos.y >= headerMin.y && mousePos.y <= headerMax.y && ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem));
+		if (isHeaderHovered && input.IsMouseButtonDown(Engine::EMouseButton::Right))
 		{
 			ImGui::OpenPopup(("##HeaderPopup_" + std::to_string(trackIdx)).c_str());
 		}
 		if (ImGui::BeginPopup(("##HeaderPopup_" + std::to_string(trackIdx)).c_str()))
 		{
-			if (ImGui::MenuItem(ICON_FA_PEN " Rename Track"))
+			if (ImGui::MenuItem((ICON_FA_PEN " " + LOCAL_LABEL("EditorCommon.Rename")).c_str()))
 			{
 				m_RenamingTrackIndex = trackIdx;
 				snprintf(m_RenameBuf, sizeof(m_RenameBuf), "%s", track.TrackName.c_str());
 			}
-			if (ImGui::MenuItem(track.IsMuted ? ICON_FA_VOLUME_HIGH " Unmute" : ICON_FA_VOLUME_XMARK " Mute"))
+			const char* muteMenuKey = track.IsMuted ? "Timeline.UnmuteTrack" : "Timeline.MuteTrack";
+			const char* muteMenuIcon = track.IsMuted ? ICON_FA_VOLUME_HIGH : ICON_FA_VOLUME_XMARK;
+			const std::string muteMenuLabel = std::string(muteMenuIcon) + " " + LOCAL(muteMenuKey) + "###ToggleTrackMute";
+			if (ImGui::MenuItem(muteMenuLabel.c_str()))
 			{
 				track.IsMuted = !track.IsMuted;
+				m_IsDirty = true;
 			}
-			if (ImGui::MenuItem(ICON_FA_COPY " Duplicate Track"))
+			if (ImGui::MenuItem((ICON_FA_COPY " " + LOCAL_LABEL("Hierarchy.Duplicate")).c_str()))
 			{
 				Engine::TimelineNotifyTrack copyTrack = track;
 				copyTrack.TrackName += "_Copy";
 				m_NotifyTracks.push_back(copyTrack);
 				m_IsDirty = true;
+
+				ImGui::EndPopup();
+				return;
 			}
 			ImGui::Separator();
-			if (ImGui::MenuItem(ICON_FA_TRASH " Delete Track"))
+			if (ImGui::MenuItem((ICON_FA_TRASH " " + LOCAL_LABEL("EditorCommon.Delete")).c_str()))
 			{
 				m_NotifyTracks.erase(m_NotifyTracks.begin() + trackIdx);
 				m_Selection = {};
@@ -1499,7 +1531,7 @@ namespace Editor
 			const ImVec2 pRight(markerX + markerHalfSize, centerY);
 			const ImVec2 pBottom(markerX, centerY + markerHalfSize);
 			const ImVec2 pLeft(markerX - markerHalfSize, centerY);
-			const bool isMarkerHovered = (std::abs(mousePos.x - markerX) <= markerHalfSize + 2.5f && std::abs(mousePos.y - centerY) <= markerHalfSize + 2.5f);
+			const bool isMarkerHovered = isTrackHovered && (std::abs(mousePos.x - markerX) <= markerHalfSize + 2.5f && std::abs(mousePos.y - centerY) <= markerHalfSize + 2.5f);
 			if (isMarkerHovered) anyMarkerHovered = true;
 			const bool isSelected = (m_Selection.Type == ETimelineSelectionType::NotifyMarker && m_Selection.TrackIndex == trackIdx && m_Selection.ItemIndex == static_cast<int>(nIdx));
 			// 마커 클릭 시 잡은 지점(Time Offset) 기록
@@ -1526,10 +1558,10 @@ namespace Editor
 			{
 				ImGui::BeginTooltip();
 				ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "[%s]", notify.Name.c_str());
-				ImGui::Text("Time: %.2fs | Socket: %s", notify.TriggerTime, notify.SocketBoneName.empty() ? "(Root)" : notify.SocketBoneName.c_str());
+				ImGui::Text(LOCAL_CSTR("Timeline.MarkerTimeSocket"), notify.TriggerTime, notify.SocketBoneName.empty() ? LOCAL_CSTR("Timeline.Root") : notify.SocketBoneName.c_str());
 				if (notify.Type == Engine::EAnimNotifyType::Sound && !notify.SoundPath.empty())
 				{
-					ImGui::TextDisabled("Sound: %s", std::filesystem::path(notify.SoundPath).filename().string().c_str());
+					ImGui::TextDisabled(LOCAL_CSTR("Timeline.Sound"), Engine::WStrToStr(std::filesystem::path(Engine::StrToWStr(notify.SoundPath)).filename().wstring()).c_str());
 				}
 				ImGui::EndTooltip();
 			}
@@ -1545,7 +1577,7 @@ namespace Editor
 			m_Selection = {};
 		}
 		// 8. 트랙 빈 공간 더블클릭 시 새 마커 추가
-		if (isTrackHovered && !anyMarkerHovered && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+		if (isTrackHovered && !anyMarkerHovered && input.IsMouseButtonDoubleClicked(Engine::EMouseButton::Left))
 		{
 			const float clickTime = ScreenXToTime(mousePos.x, trackMin.x, timelineWidth);
 			Engine::AnimNotifyData newMarker{};
@@ -1558,7 +1590,7 @@ namespace Editor
 			m_IsDirty = true;
 		}
 		// 9. 트랙 바디 우클릭 컨텍스트 메뉴
-		if (isTrackHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Right))
+		if (isTrackHovered && input.IsMouseButtonDown(Engine::EMouseButton::Right))
 		{
 			ImGui::OpenPopup(("##BodyPopup_" + std::to_string(trackIdx)).c_str());
 		}
@@ -1571,9 +1603,11 @@ namespace Editor
 		drawList->AddRectFilled(headerMin, headerMax, IM_COL32(38, 30, 42, 255));
 
 		const float headerCenterY = (headerMin.y + headerMax.y) * 0.5f;
-		const ImVec2 mousePos = ImGui::GetIO().MousePos;
-		const bool isMouseDown = ImGui::IsMouseDown(ImGuiMouseButton_Left);
-		const bool isMouseClicked = ImGui::IsMouseClicked(ImGuiMouseButton_Left);
+		auto& input = Engine::InputManager::Get();
+		const auto mousePos = input.GetScreenMousePosition();
+		const bool isMouseDown = input.IsMouseButtonPressed(Engine::EMouseButton::Left);
+		const bool windowHovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
+		const bool isMouseClicked = windowHovered && input.IsMouseButtonDown(Engine::EMouseButton::Left);
 
 		// 1. 카메라 활성화/비활성화 아이콘 토글 (x + 10.0f, 수직 중앙 정렬)
 		const char* activeIcon = camTrack.IsActive ? ICON_FA_EYE : ICON_FA_EYE_SLASH;
@@ -1582,10 +1616,11 @@ namespace Editor
 		const ImVec2 activeBtnPos(headerMin.x + 10.0f, headerCenterY - eyeSize.y * 0.5f);
 		drawList->AddText(activeBtnPos, activeColor, activeIcon);
 
-		const bool isActiveHovered = (mousePos.x >= headerMin.x + 8.0f && mousePos.x <= headerMin.x + 32.0f && mousePos.y >= headerMin.y && mousePos.y <= headerMax.y);
+		const bool isActiveHovered = windowHovered && (mousePos.x >= headerMin.x + 8.0f && mousePos.x <= headerMin.x + 32.0f && mousePos.y >= headerMin.y && mousePos.y <= headerMax.y);
 		if (isActiveHovered && isMouseClicked)
 		{
 			camTrack.IsActive = !camTrack.IsActive;
+			m_IsDirty = true;
 		}
 
 		// 2. 카메라 트랙 아이콘 (x + 40.0f: 눈 아이콘과 30px 간격 확보, 수직 중앙 정렬)
@@ -1599,19 +1634,23 @@ namespace Editor
 		drawList->AddText(ImVec2(headerMin.x + 72.0f, headerCenterY - nameSize.y * 0.5f), textColor, camTrack.TrackName.c_str());
 
 		// 4. 트랙 헤더 우클릭 컨텍스트 메뉴
-		const bool isHeaderHovered = ImGui::IsMouseHoveringRect(headerMin, headerMax);
-		if (isHeaderHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Right))
+		const bool isHeaderHovered = (mousePos.x >= headerMin.x && mousePos.x <= headerMax.x && mousePos.y >= headerMin.y && mousePos.y <= headerMax.y && ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem));
+		if (isHeaderHovered && input.IsMouseButtonDown(Engine::EMouseButton::Right))
 		{
 			ImGui::OpenPopup(("##CamHeaderPopup_" + std::to_string(camIdx)).c_str());
 		}
 		if (ImGui::BeginPopup(("##CamHeaderPopup_" + std::to_string(camIdx)).c_str()))
 		{
-			if (ImGui::MenuItem(camTrack.IsActive ? ICON_FA_EYE_SLASH " Deactivate Shot" : ICON_FA_EYE " Activate Shot"))
+			const char* activeMenuKey = camTrack.IsActive ? "Timeline.DeactivateShot" : "Timeline.ActivateShot";
+			const char* activeMenuIcon = camTrack.IsActive ? ICON_FA_EYE_SLASH : ICON_FA_EYE;
+			const std::string activeMenuLabel = std::string(activeMenuIcon) + " " + LOCAL(activeMenuKey) + "###ToggleShotActive";
+			if (ImGui::MenuItem(activeMenuLabel.c_str()))
 			{
 				camTrack.IsActive = !camTrack.IsActive;
+				m_IsDirty = true;
 			}
 			ImGui::Separator();
-			if (ImGui::MenuItem(ICON_FA_TRASH " Delete Shot Track"))
+			if (ImGui::MenuItem((ICON_FA_TRASH " " + LOCAL_LABEL("EditorCommon.Delete")).c_str()))
 			{
 				m_CameraTracks.erase(m_CameraTracks.begin() + camIdx);
 				m_Selection = {};
@@ -1640,20 +1679,20 @@ namespace Editor
 		const ImVec2 shotMax(shotEndX, trackMax.y - 4.0f);
 
 		const bool isSelected = (m_Selection.Type == ETimelineSelectionType::CameraShot && m_Selection.TrackIndex == camIdx);
-		const bool isShotHovered = (mousePos.x >= shotMin.x && mousePos.x <= shotMax.x && mousePos.y >= shotMin.y && mousePos.y <= shotMax.y);
+		const bool isShotHovered = isTrackHovered && (mousePos.x >= shotMin.x && mousePos.x <= shotMax.x && mousePos.y >= shotMin.y && mousePos.y <= shotMax.y);
 
 		drawList->AddRectFilled(shotMin, shotMax, isSelected ? IM_COL32(160, 70, 220, 230) : IM_COL32(110, 45, 160, 210), 4.0f);
 		drawList->AddRect(shotMin, shotMax, isSelected ? IM_COL32(255, 255, 255, 255) : IM_COL32(200, 140, 240, 200), 4.0f, 0, isSelected ? 2.0f : 1.0f);
 
 		// ── 샷 라벨 렌더링 (디센더 보정 -1.0f 적용으로 완벽한 수직 중앙 정렬) ──
-		const char* shotLabel = ICON_FA_VIDEO " Shot";
-		const ImVec2 labelSize = ImGui::CalcTextSize(shotLabel);
+		const std::string shotLabel = std::string(ICON_FA_VIDEO " ") + LOCAL("Timeline.Shot");
+		const ImVec2 labelSize = ImGui::CalcTextSize(shotLabel.c_str());
 		const float shotCenterY = (shotMin.y + shotMax.y) * 0.5f;
 		const float labelPosY = shotCenterY - labelSize.y * 0.5f - 1.0f;
 
 		if (shotMax.x - shotMin.x > labelSize.x + 12.0f)
 		{
-			drawList->AddText(ImVec2(shotMin.x + 8.0f, labelPosY), IM_COL32(255, 255, 255, 245), shotLabel);
+			drawList->AddText(ImVec2(shotMin.x + 8.0f, labelPosY), IM_COL32(255, 255, 255, 245), shotLabel.c_str());
 		}
 		drawList->PopClipRect();
 

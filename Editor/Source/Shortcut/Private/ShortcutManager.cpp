@@ -1,6 +1,5 @@
 ﻿#include "ShortcutManager.h"
 #include "InputManager.h"
-#include "imgui.h"
 #include "Editor_Macros.h"
 #include "ConfigManager.h"
 
@@ -99,8 +98,8 @@ std::string ShortcutManager::FindConflict(
         if (bindingIt == m_ActiveBindings.end() || bindingIt->second != chord)
             continue;
 
-        // Global 문맥이거나 동일한 Local 문맥인 경우 충돌로 판정
-        if (action.Context == EShortcutContext::Global || context == EShortcutContext::Global || action.Context == context)
+        // Local actions override Global actions; only actions in the same context compete.
+        if (action.Context == context)
         {
             return id;
         }
@@ -128,8 +127,9 @@ void ShortcutManager::ProcessShortcuts(EShortcutContext activeContext, bool supp
                 if (!action->CanExecute || action->CanExecute())
                 {
                     if (action->ExecuteHandler) action->ExecuteHandler();
-                    return;
                 }
+                // A disabled local command must not fall through to a scene command.
+                return;
             }
         }
     }

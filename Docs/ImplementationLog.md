@@ -35,6 +35,61 @@ Use one entry per meaningful change.
 
 ---
 
+## [2026-11-05] 로캘·입력·단축키 정합성 보완과 자동 감사 확대
+
+- Area: Editor | UI | Tools | Build | Docs
+- Type: Fix | Cleanup | Docs
+- 관련 기준: [EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md) 14절,
+  [EditorWorkflowAndInteractionPlan.md](EditorWorkflowAndInteractionPlan.md) 2.4절·5절.
+- 동기:
+  - 메뉴에 표시한 키와 등록 액션이 다르거나, 노드 에디터의 기본 키 처리가 재바인딩을 우회하는 경로를 제거한다.
+  - 고정 문구가 배열·직접 그리기·파일 필터를 통해 번역 조회를 우회하는 위치와 ImGui 입력 직접 조회를 정리한다.
+- 구현:
+  - 타임라인·스프라이트·성능·네트워크·리소스 참조 패널, 설정과 파일 필터의 고정 문구를 로캘 키로 연결한다.
+    `Editor.csv`와 `Engine.csv`를 원본으로 사용하며 영어·한국어 JSON은 CSV 변환 도구로 생성한다.
+  - 메뉴·툴팁의 키 안내는 `GetShortcutHint()`로 조회하고, 바인딩 해제 시 빈 단축키를 안전하게 처리한다.
+  - `Graph.AddNode`와 `Graph.Validate`를 등록한다. 노드 에디터의 `EnableShortcuts(false)`로 기본 Delete·F·Space 경로를 차단한다.
+    그래프 삭제·정렬·복제·코멘트 생성은 자기 문서의 에디터 문맥을 설정하고 호출 후 기존 문맥을 복원한다.
+  - `Viewport.Focus`는 현재 프리뷰, 그래프, UI 캔버스, 씬 대상으로 전달한다. UI 캔버스는 별도 `UIViewport` 문맥을 사용한다.
+  - 같은 문맥의 동일 키만 충돌로 판단하며 로컬 액션을 Global 액션보다 우선한다.
+    로컬 액션이 비활성이어도 같은 키의 씬 명령이 대신 실행되지 않게 하고, 팝업 중 중앙 단축키 평가를 억제한다.
+  - 키·마우스 상태와 화면 위치·이동량·휠은 InputManager를 사용한다.
+    그래프 우클릭은 캔버스에서 시작하고 끝나는 경우로 제한하고, 타임라인은 창 호버·트랙 영역으로 클릭을 제한한다.
+  - 카메라 연속 이동, 텍스트·드래그 취소와 바인딩 수집은 InputManager를 사용하는 상태 처리로 유지한다.
+    ImGui 위젯 반환값·호버·포커스·활성 상태는 UI 문맥으로 사용한다.
+- 자동 검사:
+  - `audit_localization.py`는 Engine·Editor·Client·존재하는 Shared 소스의 표시 문자열, 키 누락, 빈 번역과 모든 CSV의 중복 키 위치를 검사한다.
+    콤보·트리·검색 힌트·직접 그린 텍스트·메뉴의 고정 단축키 안내도 검사한다.
+  - 리터럴 액션 참조의 미등록 여부와 ImGui 키·마우스 직접 조회 검사를 추가한다.
+    동적 식별자 전체의 유효성이나 실제 UI 동작까지 증명하는 검사는 아니다.
+  - 감사기 회귀 테스트 14개와 `ShortcutManagerCheck`를 추가·보완한다.
+    단축키 검사는 문맥 우선순위, 비활성 로컬 명령 격리, 입력 억제, 재바인딩과 힌트 해제를 다룬다.
+- 검증 근거:
+  - 당시 작업 트리에서 Editor Debug 빌드와 `AuditLocalization` 통과.
+    소스 587개·CSV 키 2,172개 검사에서 누락·빈 번역·중복·검사 대상 고정 문구·미등록 액션·ImGui 입력 직접 조회 지적 0건.
+  - `InputManagerCheck`, `ShortcutManagerCheck`, `GraphMessageLocalizationCheck`, `LocalizationAuditUtility` CTest 4개 통과.
+    `LocalizationAuditUtility`에는 Python 회귀 테스트 14개가 포함된다. 전체 CTest 실행 결과로 확대하지 않는다.
+  - 등록 액션 68개를 대조하여 같은 문맥의 기본 바인딩 중복이 없음을 정적 확인했다.
+    영어·한국어 생성 JSON도 당시 작업 트리의 CSV 키 2,172개와 일치했다.
+  - 위 수치는 별도 진행 중인 변경도 포함한 작업 트리 기준이다.
+    이번 커밋은 썸네일·핫리로드·스플라인 변경을 제외하며 생성 JSON도 커밋에 포함한 CSV에 맞춘다.
+  - 커밋할 인덱스의 소스·사전을 별도 임시 디렉터리로 추출해 다시 검사했다.
+    소스 578개·키 2,162개에서 엄격 감사 지적 0건, 감사기 테스트 14개 통과, 양 언어 CSV/JSON 일치를 확인했다.
+    별도 빌드 디렉터리에서 이 인덱스만으로 C++ 전체 빌드를 다시 수행한 것은 아니다.
+- 재현 명령 (PowerShell, 저장소 루트):
+
+  ```powershell
+  $bamCMake = (Select-String out/build/x64-debug/CMakeCache.txt '^CMAKE_COMMAND:INTERNAL=').Line.Split('=', 2)[1]
+  & $bamCMake --build out/build/x64-debug --config Debug --target Editor InputManagerCheck ShortcutManagerCheck GraphMessageLocalizationCheck GenerateLocalization AuditLocalization --parallel 4
+  ctest --test-dir out/build/x64-debug -C Debug -R '^(InputManagerCheck|ShortcutManagerCheck|GraphMessageLocalizationCheck|LocalizationAuditUtility)$' --output-on-failure
+  ```
+
+  기존 빌드 디렉터리는 캐시에 기록된 CMake 실행 파일을 사용한다. 다른 버전의 CMake 모듈이 섞이면 재구성이 실패할 수 있다.
+- 미검증·후속 확인:
+  - 실제 UI에서 언어 전환, 재바인딩·해제 후 메뉴/툴팁, 텍스트 입력·팝업 중 명령 억제를 확인한다.
+  - 그래프 캔버스 밖 우클릭, 분리 창·DPI별 좌표, 타임라인 클릭·드래그·휠과 각 프리뷰 포커스를 확인한다.
+  - 외부 라이브러리의 개발자 UI·사용자 콘텐츠·기술 식별자는 이번 고정 문구 번역 범위와 구분한다.
+
 ## [2026-11-05] 에디터 인스펙터 및 편집이력창 반응형 UI와 텍스트 클리핑 방지 고도화
 
 - Area: Editor | UI | Docs

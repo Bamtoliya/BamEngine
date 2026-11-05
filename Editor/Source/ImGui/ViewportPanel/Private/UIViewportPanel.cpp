@@ -1,5 +1,6 @@
 ﻿#include "UIViewportPanel.h"
 #include "InputManager.h"
+#include "ShortcutManager.h"
 #include "Application.h"
 #include "SceneManager.h"
 #include "CoreComponents.h"
@@ -195,7 +196,13 @@ void Editor::UIViewportPanel::DrawCustomOptions()
         m_Panning = false;
         if (m_Interaction) m_Interaction->Cancel();
     }
-    if (ImGui::Button(LOCAL_LABEL("Viewport.Fit").c_str())) m_FitPending = true;
+    if (ImGui::Button(LOCAL_LABEL("Viewport.Fit").c_str())) FocusCanvas();
+    if (ImGui::IsItemHovered())
+    {
+        const char* hint = ShortcutManager::Get().GetShortcutHint("Viewport.Focus");
+        if (hint && *hint) ImGui::SetTooltip("%s (%s)", LOCAL_CSTR("Viewport.Fit"), hint);
+        else ImGui::SetTooltip("%s", LOCAL_CSTR("Viewport.Fit"));
+    }
     if (ImGui::Button("100%"))
     {
         m_View.zoom = 1.0f;
@@ -515,10 +522,21 @@ void Editor::UIViewportPanel::DrawSelection(ImDrawList* drawList)
     }
 }
 
+bool Editor::UIViewportPanel::CanFocusCanvas() const
+{
+    return m_Open && HasTarget() && !m_Panning && m_Drag.mode == DragMode::None;
+}
+
+void Editor::UIViewportPanel::FocusCanvas()
+{
+    if (!CanFocusCanvas()) return;
+    if (m_Interaction) m_Interaction->Cancel();
+    m_FitPending = true;
+}
+
 void Editor::UIViewportPanel::HandleInput(bool hovered)
 {
     const auto mouse = InputManager::Get().GetScreenMousePosition();
-    auto& io = ImGui::GetIO();
     if (hovered && InputManager::Get().IsMouseButtonDown(EMouseButton::Middle) && m_Drag.mode == DragMode::None) m_Panning = true;
     if (!InputManager::Get().IsMouseButtonPressed(EMouseButton::Middle) || !m_Focused) m_Panning = false;
     if (m_Panning)
@@ -530,11 +548,6 @@ void Editor::UIViewportPanel::HandleInput(bool hovered)
     {
         if (m_Interaction) m_Interaction->Cancel();
         m_View.ZoomAt(mouse, std::pow(1.15f, InputManager::Get().GetMouseScrollDeltaY()));
-    }
-    if (hovered && InputManager::Get().IsKeyButtonDown(EKeyCode::F) && !io.WantTextInput && m_Drag.mode == DragMode::None)
-    {
-        if (m_Interaction) m_Interaction->Cancel();
-        m_View.Fit(m_CanvasSize);
     }
     if (m_InteractionPreview) { m_Drag = {}; HandleInteraction(hovered); return; }
     if (!m_LayoutValid || !HasTarget()) { m_Drag = {}; return; }

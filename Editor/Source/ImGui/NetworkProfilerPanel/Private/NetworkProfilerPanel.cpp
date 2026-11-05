@@ -59,7 +59,7 @@ void NetworkProfilerPanel::Draw()
     if (!m_Open) return;
 
     ImGui::SetNextWindowSize(ImVec2(520, 480), ImGuiCond_FirstUseEver);
-    if (!ImGui::Begin("Network Profiler##Window", &m_Open))
+    if (!ImGui::Begin(LOCAL_LABEL("UI_NETWORK_PROFILER_PANEL").c_str(), &m_Open))
     {
         ImGui::End();
         return;
@@ -70,7 +70,7 @@ void NetworkProfilerPanel::Draw()
 
     if (!netSystem)
     {
-        ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "NetworkSystem is not registered in SystemManager.");
+        ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), LOCAL_CSTR("NetworkProfiler.SystemUnavailable"));
         ImGui::End();
         return;
     }
@@ -100,31 +100,31 @@ void NetworkProfilerPanel::DrawSessionControl(Engine::NetworkSystem* netSystem)
     auto& driver = netSystem->GetDriver();
     auto mode = driver.GetNetworkMode();
 
-    ImGui::Text("Session Mode: ");
+    ImGui::Text(LOCAL_CSTR("NetworkProfiler.SessionMode"));
     ImGui::SameLine();
     if (mode == Engine::Network::ENetworkMode::Standalone)
-        ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "[ Standalone ]");
+        ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), LOCAL_CSTR("NetworkProfiler.Standalone"));
     else if (mode == Engine::Network::ENetworkMode::DedicatedServer)
-        ImGui::TextColored(ImVec4(0.2f, 0.9f, 0.2f, 1.0f), "[ Server Running ]");
+        ImGui::TextColored(ImVec4(0.2f, 0.9f, 0.2f, 1.0f), LOCAL_CSTR("NetworkProfiler.ServerRunning"));
     else if (mode == Engine::Network::ENetworkMode::Client)
-        ImGui::TextColored(ImVec4(0.3f, 0.7f, 1.0f, 1.0f), "[ Client Connected ]");
+        ImGui::TextColored(ImVec4(0.3f, 0.7f, 1.0f, 1.0f), LOCAL_CSTR("NetworkProfiler.ClientConnected"));
 
     ImGui::Spacing();
 
     if (mode == Engine::Network::ENetworkMode::Standalone)
     {
-        ImGui::InputInt("Port##NetPort", &m_ServerPort);
-        if (ImGui::Button("Host Server", ImVec2(120, 26)))
+        ImGui::InputInt(LOCAL_LABEL("NetworkProfiler.Port").c_str(), &m_ServerPort);
+        if (ImGui::Button(LOCAL_LABEL("UI_NETWORK_HOST_SERVER").c_str(), ImVec2(120, 26)))
         {
             driver.StartServer(static_cast<std::uint16_t>(m_ServerPort));
         }
 
         ImGui::SameLine();
         ImGui::SetNextItemWidth(140);
-        ImGui::InputText("IP##NetIP", m_ServerAddressBuffer, sizeof(m_ServerAddressBuffer));
+        ImGui::InputText(LOCAL_LABEL("NetworkProfiler.IPAddress").c_str(), m_ServerAddressBuffer, sizeof(m_ServerAddressBuffer));
 
         ImGui::SameLine();
-        if (ImGui::Button("Connect", ImVec2(100, 26)))
+        if (ImGui::Button(LOCAL_LABEL("UI_NETWORK_CONNECT").c_str(), ImVec2(100, 26)))
         {
             Engine::Network::NetworkAddress targetAddr(m_ServerAddressBuffer, static_cast<std::uint16_t>(m_ServerPort));
             driver.ConnectToServer(targetAddr);
@@ -132,7 +132,7 @@ void NetworkProfilerPanel::DrawSessionControl(Engine::NetworkSystem* netSystem)
     }
     else
     {
-        if (ImGui::Button("Disconnect / Stop", ImVec2(150, 26)))
+        if (ImGui::Button(LOCAL_LABEL("UI_NETWORK_DISCONNECT").c_str(), ImVec2(150, 26)))
         {
             driver.Stop(Engine::Network::EDisconnectReason::Requested);
         }
@@ -141,16 +141,16 @@ void NetworkProfilerPanel::DrawSessionControl(Engine::NetworkSystem* netSystem)
 
 void NetworkProfilerPanel::DrawTrafficMetrics(Engine::NetworkSystem* netSystem)
 {
-    ImGui::Text("Network Traffic:");
-    ImGui::BulletText("Outbound: %.2f KB/s", m_BytesSentPerSec / 1024.0f);
+    ImGui::Text(LOCAL_CSTR("NetworkProfiler.NetworkTraffic"));
+    ImGui::BulletText(LOCAL_CSTR("NetworkProfiler.OutboundKbS"), m_BytesSentPerSec / 1024.0f);
     ImGui::SameLine(240);
-    ImGui::BulletText("Inbound: %.2f KB/s", m_BytesReceivedPerSec / 1024.0f);
+    ImGui::BulletText(LOCAL_CSTR("NetworkProfiler.InboundKbS"), m_BytesReceivedPerSec / 1024.0f);
 }
 
 void NetworkProfilerPanel::DrawPingGraph(Engine::NetworkSystem* netSystem)
 {
     float currentRTT = netSystem->GetDriver().GetSmoothedRTT();
-    ImGui::Text("Latency (RTT): %.1f ms", currentRTT);
+    ImGui::Text(LOCAL_CSTR("NetworkProfiler.LatencyRttMs"), currentRTT);
 
     float maxPing = *std::max_element(m_PingHistory.begin(), m_PingHistory.end());
     maxPing = std::max(100.0f, maxPing * 1.2f);
@@ -161,14 +161,14 @@ void NetworkProfilerPanel::DrawPingGraph(Engine::NetworkSystem* netSystem)
 
 void NetworkProfilerPanel::DrawConnectedClientsTable(Engine::NetworkSystem* netSystem)
 {
-    ImGui::Text("Connected Clients:");
+    ImGui::Text(LOCAL_CSTR("NetworkProfiler.ConnectedClients"));
     // ImGuiTableFlags_Resizable 추가
     if (ImGui::BeginTable("ClientsTable", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable))
     {
-        ImGui::TableSetupColumn("Client ID", ImGuiTableColumnFlags_WidthFixed, 80.0f);
-        ImGui::TableSetupColumn("Remote Address", ImGuiTableColumnFlags_WidthStretch);
-        ImGui::TableSetupColumn("State", ImGuiTableColumnFlags_WidthFixed, 90.0f);
-        ImGui::TableSetupColumn("Ping (RTT)", ImGuiTableColumnFlags_WidthFixed, 90.0f);
+        ImGui::TableSetupColumn(LOCAL_LABEL("UI_NETWORK_CLIENT_ID").c_str(), ImGuiTableColumnFlags_WidthFixed, 80.0f);
+        ImGui::TableSetupColumn(LOCAL_LABEL("UI_NETWORK_REMOTE_ADDR").c_str(), ImGuiTableColumnFlags_WidthStretch);
+        ImGui::TableSetupColumn(LOCAL_LABEL("UI_NETWORK_STATE").c_str(), ImGuiTableColumnFlags_WidthFixed, 90.0f);
+        ImGui::TableSetupColumn(LOCAL_LABEL("NetworkProfiler.PingRtt").c_str(), ImGuiTableColumnFlags_WidthFixed, 90.0f);
         ImGui::TableHeadersRow();
 
         // 1번 클라이언트부터 등록된 세션 순회
@@ -185,7 +185,7 @@ void NetworkProfilerPanel::DrawConnectedClientsTable(Engine::NetworkSystem* netS
             ImGui::Text("%s", conn->GetAddress().ToString().c_str());
 
             ImGui::TableSetColumnIndex(2);
-            ImGui::TextColored(ImVec4(0.2f, 0.9f, 0.2f, 1.0f), "Connected");
+            ImGui::TextColored(ImVec4(0.2f, 0.9f, 0.2f, 1.0f), LOCAL_CSTR("NetworkProfiler.Connected"));
 
             ImGui::TableSetColumnIndex(3);
             ImGui::Text("%.1f ms", conn->GetSmoothedRTT());

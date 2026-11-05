@@ -15,6 +15,9 @@ namespace Editor
         void Free() override;
         void Update(f32 dt) override;
         void Draw() override;
+        EShortcutContext GetShortcutContext() const override { return EShortcutContext::UIViewport; }
+        bool CanFocusCanvas() const;
+        void FocusCanvas();
 
     protected:
         void DrawCustomOptions() override;

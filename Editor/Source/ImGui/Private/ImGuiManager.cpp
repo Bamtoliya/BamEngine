@@ -25,6 +25,7 @@
 #include "DirectX12Texture.h"
 #include "SceneDocument.h"
 #include "ConfigManager.h"
+#include "PreviewViewportWidget.h"
 
 #pragma region Imgui Header
 #include "imgui.h"
@@ -275,6 +276,7 @@ void ImGuiManager::Begin()
 	ImGui::NewFrame();
 	ImGuizmo::BeginFrame();
 }
+	PreviewViewportWidget::BeginShortcutFrame();
 
 void ImGuiManager::End()
 {
@@ -347,7 +349,8 @@ void ImGuiManager::Draw()
 		history.Flush();
 
 		const bool suppressed = ImGui::GetIO().WantTextInput || m_DocumentController->HasPendingAction() ||
-			EditorSettingsService::Get().IsWindowChangePending() || ShortcutManager::Get().IsCapturing();
+			EditorSettingsService::Get().IsWindowChangePending() || ShortcutManager::Get().IsCapturing() ||
+			ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel);
 		EShortcutContext activeContext = EShortcutContext::Global;
 		for (const auto* panel : m_ImGuiPanels)
 		{

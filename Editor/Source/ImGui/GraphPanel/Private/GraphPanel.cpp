@@ -209,26 +209,16 @@ void GraphPanel::DrawMenuBar()
 	// 2. [편집 (Edit)] 메뉴
 	if (ImGui::BeginMenu(LOCAL_LABEL("UI_EDIT").c_str()))
 	{
-		if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.AddNode").c_str(), "Space"))
-		{
-			const auto mouse = InputManager::Get().GetScreenMousePosition();
-			m_AddPosition = ed::ScreenToCanvas(ImVec2(mouse.x, mouse.y));
-			PrepareNodeMenu();
-			m_OpenNodePopup = true;
-		}
-		const bool hasSelection = !GetDocument().SelectedNodes.empty() || !GetDocument().SelectedLinks.empty();
-		if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.Delete").c_str(), "Del", false, hasSelection))
-			DeleteSelection();
+		ACTION_MENU_ITEM(LOCAL_LABEL("GraphPanel.AddNode").c_str(), "Graph.AddNode");
+		ACTION_MENU_ITEM(LOCAL_LABEL("GraphPanel.Delete").c_str(), "Graph.Delete");
 		ImGui::Separator();
-		if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.Validate").c_str(), "F7"))
-			RefreshValidation();
+		ACTION_MENU_ITEM(LOCAL_LABEL("GraphPanel.Validate").c_str(), "Graph.Validate");
 		ImGui::EndMenu();
 	}
 	// 3. [보기 (View)] 메뉴
 	if (ImGui::BeginMenu(LOCAL_LABEL("UI_WINDOW").c_str()))
 	{
-		if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.ResetView").c_str(), "F"))
-			ed::NavigateToContent(0.5f);
+		ACTION_MENU_ITEM(LOCAL_LABEL("GraphPanel.ResetView").c_str(), "Viewport.Focus");
 		ImGui::Separator();
 		if (ImGui::BeginMenu(LOCAL_LABEL("GraphPanel.Connection").c_str()))
 		{
@@ -600,7 +590,7 @@ void GraphPanel::DrawNodeMenu()
 		const auto* definition = m_Registry.Find(candidate.Type);
 		if (!definition) continue;
 		const string name = definition->DisplayName.empty() ? candidate.Type : LOCAL(definition->DisplayName);
-		const string categoryRaw = definition->Category.empty() ? "General" : definition->Category;
+		const string categoryRaw = definition->Category.empty() ? "UI_GENERAL" : definition->Category;
 		string label = LOCAL(categoryRaw) + " / " + name;
 		if (!candidate.Pin.empty())
 		{

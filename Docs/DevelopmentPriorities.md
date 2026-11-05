@@ -200,6 +200,12 @@ Engine·Render·Editor·Client 계획에서 무엇을 먼저 연결하고 무엇
 
 ### P1-G. 에디터 워크플로·상호작용 개선 및 단축키 일원화 (EditorWorkflowAndInteractionPlan)
 
+- **2026-11-05 추가 정리 (코드·자동 검증 완료, 실제 UI 회귀 확인 대기)**:
+  - 로캘 조회·InputManager·등록 액션·동적 단축키 힌트를 보완하고, 그래프 라이브러리 기본 단축키 우회와 비활성 로컬 명령의 Global 실행을 차단했다.
+  - Editor Debug 빌드·엄격 감사·관련 CTest 4개를 통과했다. 전체 CTest 및 실제 UI 검증 완료를 뜻하지 않는다.
+  - 재바인딩·언어 전환·분리 창/DPI·캔버스 밖 우클릭의 실제 조작 확인을 남긴다.
+    범위와 근거는 [ImplementationLog.md](ImplementationLog.md)의 2026-11-05 로캘·입력·단축키 기록과
+    [EditorWorkflowAndInteractionPlan.md](EditorWorkflowAndInteractionPlan.md) 5절을 따른다.
 - **2026-11-04 현황 (구현 및 검증 완료)**:
   - **PIE 에디터 시점 분리**: PIE 실행 중에도 `Scene View`는 에디터 카메라 조작(Orbit, Pan, Fly) 및 기즈모 디버깅을 상시 유지하고, 게임 실행 화면은 `Game View`를 자동 오픈/포커스하여 분리 표시. PIE 종료 시 `Scene View`로 포커스 자동 복원.
   - **계층 패널 ↔ 인스펙터 연계**: 계층 패널에서 엔티티 클릭 시 숨겨진 인스펙터 탭을 즉시 최상위로 전면화(`Focus()`)하며, 기존 엔티티별 스크롤 유지 맵(`m_EntityScrollMap`) 보존.

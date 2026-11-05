@@ -1,5 +1,6 @@
 ﻿#include "ConsolePanel.h"
 #include "InputManager.h"
+#include "EditorSettings.h"
 
 #pragma region Loop
 void ConsolePanel::Draw()

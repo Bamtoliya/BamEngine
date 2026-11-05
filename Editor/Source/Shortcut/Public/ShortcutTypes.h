@@ -16,6 +16,7 @@ enum class EShortcutContext : uint8
     PrefabEditor,
     SpriteAnimationEditor,
     ContentBrowser,
+    UIViewport,
     Count
 };
 

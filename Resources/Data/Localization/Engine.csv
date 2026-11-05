@@ -371,7 +371,7 @@
 ,PROP_LOD2_MESH,LOD 2 Mesh,LOD 2 메시
 ,PROP_LOD2_SCREEN_COVERAGE,LOD 2 Screen Coverage,LOD 2 화면 점유율
 ,PROP_LOOP,Loop,반복
-,PROP_LOOP_BLEND_DURATION,,
+,PROP_LOOP_BLEND_DURATION,Loop Blend Duration (s),루프 블렌드 시간 (초)
 ,PROP_MASS,Mass,질량
 ,PROP_MATERIAL_HANDLE,Material Handle,마테리얼 핸들
 ,PROP_MATRIX,Matrix,매트릭스

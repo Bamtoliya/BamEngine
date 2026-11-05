@@ -364,7 +364,8 @@ namespace Editor
 			const float searchInputWidth = ImGui::GetContentRegionAvail().x - clearBtnWidth - sliderWidth - (spacing * 2.0f);
 
 			ImGui::SetNextItemWidth(searchInputWidth);
-			ImGui::InputTextWithHint("##ResourceSearchInput", "Search resources...", s_SearchBuffer, sizeof(s_SearchBuffer));
+			const std::string searchHint = LocalizeInspectorText("ResourcePicker.SearchHint");
+			ImGui::InputTextWithHint("##ResourceSearchInput", searchHint.c_str(), s_SearchBuffer, sizeof(s_SearchBuffer));
 
 			ImGui::SameLine();
 			if (ImGui::Button(ICON_FA_XMARK "##ClearSearch", ImVec2(clearBtnWidth, 0.0f)))
@@ -374,7 +375,11 @@ namespace Editor
 			ImGui::SetNextItemWidth(sliderWidth);
 			ImGui::SliderFloat("##ThumbSizeSlider", &s_ThumbnailSize, 40.0f, 120.0f, "%.0f px");
 			if (ImGui::IsItemHovered())
-				ImGui::SetTooltip("Thumbnail Size (40px ~ 120px)");
+			{
+				const std::string thumbnailHint = fmt::format(
+					fmt::runtime(LocalizeInspectorText("ResourcePicker.ThumbnailSizeHint")), 40, 120);
+				ImGui::SetTooltip("%s", thumbnailHint.c_str());
+			}
 
 			const std::string searchStr = s_SearchBuffer;
 			auto matchesFilter = [&](std::string_view name, std::string_view path) -> bool
@@ -558,7 +563,7 @@ namespace Editor
 						ImGui::GetColorU32(isNoneSelected ? ImVec4(1.0f, 0.82f, 0.35f, 1.0f) : ImGui::GetStyleColorVec4(ImGuiCol_Text)),
 						LocalizeInspectorText("UI_RESOURCE_CLEAR").c_str());
 					drawList->AddText(ImVec2(textStartX, cursorPos.y + 26.0f),
-						ImGui::GetColorU32(ImGuiCol_TextDisabled), "Unbind / Clear current resource");
+						ImGui::GetColorU32(ImGuiCol_TextDisabled), LocalizeInspectorText("ResourcePicker.ClearHint").c_str());
 
 					if (isNoneSelected)
 					{

@@ -311,7 +311,7 @@ void GraphPanel::DrawDebugToolbar()
 	ImGui::SameLine(0.0f, 12.0f);
 
 	// ── 2행 구획 B: PIE 라이브 디버그 관찰 ──
-	ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.3f, 1.0f), "[PIE]");
+	ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.3f, 1.0f), LOCAL_CSTR("GraphPanel.PieBadge"));
 	ImGui::SameLine();
 
 	auto* scene = SceneManager::IsCreated() ? SceneManager::Get().GetCurrentScene() : nullptr;

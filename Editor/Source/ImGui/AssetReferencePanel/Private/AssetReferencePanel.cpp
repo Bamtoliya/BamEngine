@@ -47,17 +47,18 @@ namespace Editor
 
         ImGui::SameLine();
         ImGui::SetNextItemWidth(120.0f);
-        const char* filterItems[] = { "All", "Missing", "External", "Invalid Ext" };
+        const std::string filterLabels[] = { LOCAL("AssetRef.FilterAll"), LOCAL("AssetRef.FilterMissing"), LOCAL("AssetRef.FilterExternal"), LOCAL("AssetRef.FilterInvalid") };
+        const char* filterItems[] = { filterLabels[0].c_str(), filterLabels[1].c_str(), filterLabels[2].c_str(), filterLabels[3].c_str() };
         ImGui::Combo("##FilterType", &m_FilterType, filterItems, IM_ARRAYSIZE(filterItems));
 
         ImGui::SameLine();
         ImGui::SetNextItemWidth(200.0f);
-        ImGui::InputTextWithHint("##SearchFilter", "Search path...", m_SearchFilter, sizeof(m_SearchFilter));
+        ImGui::InputTextWithHint("##SearchFilter", LOCAL_CSTR("AssetRef.SearchHint"), m_SearchFilter, sizeof(m_SearchFilter));
 
         if (!m_StatusMessage.empty())
         {
             ImGui::SameLine();
-            ImGui::TextColored(ImVec4(0.3f, 0.9f, 0.4f, 1.0f), "%s", m_StatusMessage.c_str());
+            ImGui::TextColored(ImVec4(0.3f, 0.9f, 0.4f, 1.0f), "%s", LOCAL_FMT(m_StatusMessage, m_FixedCount).c_str());
         }
     }
 
@@ -82,21 +83,21 @@ namespace Editor
             if (issue.CanAutoFix) ++fixableCount;
         }
 
-        ImGui::Text("Total Issues: %zu | ", m_Issues.size());
+        ImGui::Text(LOCAL_CSTR("AssetRef.TotalIssues"), m_Issues.size());
         ImGui::SameLine();
-        ImGui::TextColored(ImVec4(0.95f, 0.3f, 0.3f, 1.0f), "Missing: %zu", missingCount);
-        ImGui::SameLine();
-        ImGui::Text(" | ");
-        ImGui::SameLine();
-        ImGui::TextColored(ImVec4(0.95f, 0.7f, 0.2f, 1.0f), "External: %zu", extCount);
+        ImGui::TextColored(ImVec4(0.95f, 0.3f, 0.3f, 1.0f), LOCAL_CSTR("AssetRef.Missing"), missingCount);
         ImGui::SameLine();
         ImGui::Text(" | ");
         ImGui::SameLine();
-        ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.3f, 1.0f), "Invalid Ext: %zu", invalidExtCount);
+        ImGui::TextColored(ImVec4(0.95f, 0.7f, 0.2f, 1.0f), LOCAL_CSTR("AssetRef.External"), extCount);
         ImGui::SameLine();
         ImGui::Text(" | ");
         ImGui::SameLine();
-        ImGui::TextColored(ImVec4(0.3f, 0.9f, 0.4f, 1.0f), "Auto-Fixable: %zu", fixableCount);
+        ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.3f, 1.0f), LOCAL_CSTR("AssetRef.InvalidExt"), invalidExtCount);
+        ImGui::SameLine();
+        ImGui::Text(" | ");
+        ImGui::SameLine();
+        ImGui::TextColored(ImVec4(0.3f, 0.9f, 0.4f, 1.0f), LOCAL_CSTR("AssetRef.AutoFixable"), fixableCount);
     }
 
     void AssetReferencePanel::DrawIssuesTable()
@@ -106,12 +107,12 @@ namespace Editor
 
         if (ImGui::BeginTable("##IssuesTable", 6, flags))
         {
-            ImGui::TableSetupColumn("Type", ImGuiTableColumnFlags_WidthFixed, 90.0f);
-            ImGui::TableSetupColumn("Source Asset", ImGuiTableColumnFlags_WidthStretch, 0.25f);
-            ImGui::TableSetupColumn("Property", ImGuiTableColumnFlags_WidthFixed, 80.0f);
-            ImGui::TableSetupColumn("Target Reference", ImGuiTableColumnFlags_WidthStretch, 0.35f);
-            ImGui::TableSetupColumn("Suggested Fix", ImGuiTableColumnFlags_WidthStretch, 0.30f);
-            ImGui::TableSetupColumn("Action", ImGuiTableColumnFlags_WidthFixed, 65.0f);
+            ImGui::TableSetupColumn(LOCAL_LABEL("Metrics.Type").c_str(), ImGuiTableColumnFlags_WidthFixed, 90.0f);
+            ImGui::TableSetupColumn(LOCAL_LABEL("AssetRef.SourceAsset").c_str(), ImGuiTableColumnFlags_WidthStretch, 0.25f);
+            ImGui::TableSetupColumn(LOCAL_LABEL("UI_PROPERTY").c_str(), ImGuiTableColumnFlags_WidthFixed, 80.0f);
+            ImGui::TableSetupColumn(LOCAL_LABEL("AssetRef.TargetReference").c_str(), ImGuiTableColumnFlags_WidthStretch, 0.35f);
+            ImGui::TableSetupColumn(LOCAL_LABEL("AssetRef.SuggestedFix").c_str(), ImGuiTableColumnFlags_WidthStretch, 0.30f);
+            ImGui::TableSetupColumn(LOCAL_LABEL("Shortcuts.ColAction").c_str(), ImGuiTableColumnFlags_WidthFixed, 65.0f);
             ImGui::TableHeadersRow();
 
             for (size_t i = 0; i < m_Issues.size(); ++i)
@@ -138,11 +139,11 @@ namespace Editor
                 // Column 0: Type
                 ImGui::TableSetColumnIndex(0);
                 if (issue.IssueType == EAssetReferenceIssueType::MissingFile)
-                    ImGui::TextColored(ImVec4(0.95f, 0.3f, 0.3f, 1.0f), "%s Missing", ICON_FA_TRIANGLE_EXCLAMATION);
+                    ImGui::TextColored(ImVec4(0.95f, 0.3f, 0.3f, 1.0f), LOCAL_CSTR("AssetRef.MissingStatus"), ICON_FA_TRIANGLE_EXCLAMATION);
                 else if (issue.IssueType == EAssetReferenceIssueType::ExternalAbsolutePath)
-                    ImGui::TextColored(ImVec4(0.95f, 0.7f, 0.2f, 1.0f), "%s External", ICON_FA_ARROW_UP_RIGHT_FROM_SQUARE);
+                    ImGui::TextColored(ImVec4(0.95f, 0.7f, 0.2f, 1.0f), LOCAL_CSTR("AssetRef.ExternalStatus"), ICON_FA_ARROW_UP_RIGHT_FROM_SQUARE);
                 else
-                    ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.3f, 1.0f), "%s InvalidExt", ICON_FA_FILE_CIRCLE_QUESTION);
+                    ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.3f, 1.0f), LOCAL_CSTR("AssetRef.InvalidExtensionStatus"), ICON_FA_FILE_CIRCLE_QUESTION);
 
                 // Column 1: Source Asset
                 ImGui::TableSetColumnIndex(1);
@@ -161,7 +162,7 @@ namespace Editor
                 if (!issue.SuggestedFix.empty())
                     ImGui::TextColored(ImVec4(0.3f, 0.9f, 0.4f, 1.0f), "%s", issue.SuggestedFix.string().c_str());
                 else
-                    ImGui::TextDisabled("None");
+                    ImGui::TextDisabled(LOCAL_CSTR("EditorCommon.None"));
 
                 // Column 5: Action
                 ImGui::TableSetColumnIndex(5);
@@ -188,7 +189,7 @@ namespace Editor
     {
         m_Issues = AssetReferenceValidator::ValidateAllResources();
         m_HasScanned = true;
-        m_StatusMessage = "Scan completed.";
+        m_StatusMessage = "AssetRef.ScanCompleted";
     }
 
     void AssetReferencePanel::FixSelectedIssue(size_t index)
@@ -196,15 +197,17 @@ namespace Editor
         if (index >= m_Issues.size()) return;
         if (AssetReferenceValidator::FixIssue(m_Issues[index]))
         {
-            m_StatusMessage = "Fixed 1 issue.";
             RunValidation();
+            m_FixedCount = 1;
+            m_StatusMessage = "AssetRef.FixedIssues";
         }
     }
 
     void AssetReferencePanel::FixAllSafe()
     {
         const size_t fixedCount = AssetReferenceValidator::FixAllSafeIssues(m_Issues);
-        m_StatusMessage = "Fixed " + std::to_string(fixedCount) + " issues.";
         RunValidation();
+        m_FixedCount = fixedCount;
+        m_StatusMessage = "AssetRef.FixedIssues";
     }
 }

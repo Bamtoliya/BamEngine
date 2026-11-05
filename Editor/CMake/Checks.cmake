@@ -57,6 +57,15 @@ target_link_libraries(GraphMessageLocalizationCheck PRIVATE BamEngine::Engine)
 add_dependencies(GraphMessageLocalizationCheck GenerateLocalization)
 set_target_properties(GraphMessageLocalizationCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
 
+add_executable(ShortcutManagerCheck examples/ShortcutManagerCheck.cpp
+    Source/Shortcut/Private/ShortcutManager.cpp Source/Shortcut/Private/ShortcutChord.cpp)
+target_include_directories(ShortcutManagerCheck PRIVATE ${EDITOR_PUBLIC_INCLUDE_DIRS}
+    "${EDITOR_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/ThirdParty")
+target_link_libraries(ShortcutManagerCheck PRIVATE BamEngine::Engine imgui::imgui)
+target_precompile_headers(ShortcutManagerCheck PRIVATE
+    "${CMAKE_SOURCE_DIR}/Engine/Source/Core/Public/Engine_Includes.h")
+set_target_properties(ShortcutManagerCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
+
 add_executable(HierarchyEditorCheck examples/HierarchyEditorCheck.cpp
     Source/ImGui/HierarchyPanel/Private/EntityHierarchyView.cpp
     Source/Clipboard/Private/EntityClipboard.cpp
@@ -88,6 +97,7 @@ set_target_properties(ReflectionInspectorCheck PROPERTIES UNITY_BUILD OFF FOLDER
 set_target_properties(TransformEditorCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
 
 if(BUILD_TESTING)
+    add_test(NAME ShortcutManagerCheck COMMAND ShortcutManagerCheck)
     add_test(NAME GraphMessageLocalizationCheck COMMAND GraphMessageLocalizationCheck)
     set_tests_properties(GraphMessageLocalizationCheck PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
     add_test(NAME TransformInheritanceCheck COMMAND TransformInheritanceCheck)
@@ -102,6 +112,7 @@ if(BUILD_TESTING)
 endif()
 
 if(MSVC)
+    target_compile_options(ShortcutManagerCheck PRIVATE /utf-8)
     target_compile_options(GraphMessageLocalizationCheck PRIVATE /utf-8)
     target_compile_options(TransformInheritanceCheck PRIVATE /utf-8)
     target_compile_options(GraphPaletteCheck PRIVATE /utf-8)

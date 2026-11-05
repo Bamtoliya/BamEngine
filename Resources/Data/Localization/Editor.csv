@@ -624,7 +624,7 @@ TerrainEditor,DefaultName,Terrain,지형
 MaterialPreview,Sphere,Sphere,구체
 MaterialPreview,Cube,Cube,큐브
 MaterialPreview,Plane,Plane,평면
-MaterialPreview,Navigation,L-Drag: Orbit | R-Drag+WASD: Fly | M-Drag: Pan | Wheel: Zoom | [F]: Reset,왼쪽 드래그: 궤도 회전 | 오른쪽 드래그+WASD: 이동 | 가운데 드래그: 화면 이동 | 휠: 확대/축소 | F: 초기화
+MaterialPreview,Navigation,L-Drag: Orbit | R-Drag+WASD: Fly | M-Drag: Pan | Wheel: Zoom,왼쪽 드래그: 궤도 회전 | 오른쪽 드래그+WASD: 이동 | 가운데 드래그: 화면 이동 | 휠: 확대/축소
 Notification,MaterialReloaded,Material Reloaded,머티리얼을 다시 불러왔습니다
 Notification,MaterialNotLoaded,Material Not Loaded,메모리에 로드된 머티리얼이 없습니다
 Notification,InstanceCreated,Instance Created,인스턴스를 생성했습니다
@@ -1021,6 +1021,8 @@ Inspector,ValuePreviewUnavailable,Value preview unavailable,값 미리보기를 
 Shortcuts,Conflict,Conflict: {} is already assigned to {},단축키 충돌: {}은(는) 이미 {}에 지정되어 있습니다
 History,Title,History,편집 이력
 History,ActionShortcut,{} ({}),{} ({})
+ResourcePicker,SearchHint,Search resources...,리소스 검색...
+ResourcePicker,ThumbnailSizeHint,Thumbnail Size ({}px ~ {}px),썸네일 크기 ({}px ~ {}px)
 History,Clear,Clear History,이력 비우기
 History,Cleared,Command history cleared.,명령 이력을 비웠습니다.
 History,UnsavedChanges,[Unsaved Changes],[저장되지 않은 변경 사항]
@@ -1125,7 +1127,7 @@ Action,Viewport.GizmoRotate,Rotate,회전 기즈모
 Action,Viewport.GizmoScale,Scale,스케일 기즈모
 Action,Viewport.ToggleCoord,Toggle Local / World,로컬 / 월드 좌표계 전환
 Action,Viewport.ToggleSnap,Toggle Grid Snap,그리드 스냅 토글
-Action,Viewport.Focus,Focus Selected,선택 오브젝트로 포커스
+Action,Viewport.Focus,Focus Target,대상 포커스
 Action,Viewport.ToggleLock,Toggle Selection Lock,선택 잠금 토글
 Action,Viewport.ToggleGrid,Toggle Grid,그리드 표시 토글
 Action,Graph.AlignTop,Align Top,위쪽 정렬
@@ -1208,7 +1210,7 @@ Console,ColSource,Source,소스
 Settings,Btn.ResetDefaults,Reset to Defaults,기본값으로 복원
 Settings,Btn.Discard,Discard Changes,변경 취소
 Settings,Btn.Apply,Apply,적용
-Viewport,RealtimeTooltip,Toggle Realtime Preview (Ctrl+R),실시간 프리뷰 토글 (Ctrl+R)
+Viewport,RealtimeTooltip,Toggle Realtime Preview,실시간 프리뷰 토글
 Action,Viewport.ToggleRealtime,Toggle Realtime,실시간 프리뷰 토글
 Viewport,Realtime,Realtime,실시간
 Timeline,PanelTitle,Animation Timeline,애니메이션 타임라인
@@ -1240,9 +1242,21 @@ Timeline,OpenTimeline,Open Timeline Asset,타임라인 에셋 열기
 Timeline,SaveSuccess,Timeline asset saved successfully.,타임라인 에셋이 성공적으로 저장되었습니다.
 Timeline,LoadSuccess,Timeline asset loaded successfully.,타임라인 에셋을 성공적으로 불러왔습니다.
 PreviewViewport,GridToggle,Toggle Grid,그리드 표시 전환
-PreviewViewport,Focus,Focus Target (F),타깃 포커스 (F)
+PreviewViewport,Focus,Focus Target,타깃 포커스
+PreviewViewport,ShowBindPose,Show Bind Pose,바인드 포즈 표시
+PreviewViewport,PlayMotion,Play Motion,모션 재생
 AnimatorGraph,BlendTree1D,Blend Tree 1D,1D 블렌드 트리
 Hierarchy,PrefabRootDeleteBlocked,Root entity of a prefab instance cannot be deleted directly.,프리팹 인스턴스의 루트 엔티티는 직접 삭제할 수 없습니다.
+Timeline,CameraShotName,Shot Name,샷 이름
+Timeline,CameraShotStartTime,Start Time (s),시작 시간 (초)
+Timeline,CameraShotDuration,Duration (s),지속 시간 (초)
+Timeline,CameraShotTargetFOV,Target FOV,목표 시야각
+Timeline,CameraShotShakeIntensity,Shake Intensity,흔들림 강도
+Timeline,CameraShotFocusBone,Focus Bone,포커스 본
+Timeline,RootOrNone,(Root / None),(루트 / 없음)
+Timeline,NotifyTypeParticle,Particle FX,파티클 효과
+Timeline,NotifyTypeSound,Sound FX,사운드 효과
+Timeline,NotifyTypeCustomEvent,Custom Event,사용자 정의 이벤트
 SpriteAnimation,NoFrames,No Frames,프레임 없음
 SpriteAnimation,Timeline,Timeline,타임라인
 SpriteAnimation,Previewing,Previewing...,미리보기 중...
@@ -1341,3 +1355,137 @@ ModelImport,TextureMissing,File not found - using base color,파일을 찾지 �
 ModelImport,TextureLoadFailed,Loading failed,불러오기 실패
 ModelImport,TextureInfoEmpty,No texture details available,표시할 텍스처 정보가 없습니다
 ModelImport,TextureMaterialsDisabled,Material import is disabled,머티리얼 임포트가 꺼져 있습니다
+Timeline,ParticleSpeed,Particle Speed,입자 속도
+Timeline,SoundFile,Audio: {},오디오: {}
+Timeline,SelectSound,Select Sound...,사운드 선택...
+Timeline,EventTag,Event Tag,이벤트 태그
+FileDialog,AudioFiles,"Audio Files (*.wav, *.mp3, *.ogg)","오디오 파일 (*.wav, *.mp3, *.ogg)"
+Timeline,Tracks,Tracks,트랙
+Timeline,AddFXTrack,Add FX Track,이펙트 트랙 추가
+Timeline,AddAudioTrack,Add Audio Track,오디오 트랙 추가
+Timeline,AddCameraShotTrack,Add Camera Shot Track,카메라 샷 트랙 추가
+Timeline,MuteTrack,Mute,음소거
+Timeline,UnmuteTrack,Unmute,음소거 해제
+Timeline,ActivateShot,Activate Shot,샷 활성화
+Timeline,DeactivateShot,Deactivate Shot,샷 비활성화
+EditorCommon,Close,Close,닫기
+Timeline,OpenInEditor,Open in Timeline Editor,타임라인 에디터에서 열기
+MaterialEditor,BaseMaterialMissing,Base material is missing. Select a base material below.,원본 머티리얼이 없습니다. 아래에서 원본 머티리얼을 선택하세요.
+MaterialEditor,BaseMaterialSlot,Base Material,원본 머티리얼
+Timeline,SyncEntity,Sync Entity,엔티티 동기화
+Timeline,SelectModel,Model...,모델 선택...
+Timeline,TimeCounter,{:.2f}s / {:.2f}s,{:.2f}초 / {:.2f}초
+Timeline,FrameCounter,(Frame: {} / {}),(프레임: {} / {})
+Timeline,ZoomFactor,Zoom: {:.1f}x,확대: {:.1f}배
+FileDialog,ActionTimelineFiles,Action Timeline Asset (*.actiontimeline.json),액션 타임라인 에셋 (*.actiontimeline.json)
+FileDialog,ModelFiles,"Model Files (*.bammodel, *.glb)","모델 파일 (*.bammodel, *.glb)"
+Timeline,InspectorSelectionHint,Select a marker or camera shot in the tracks to edit its properties.,트랙에서 마커나 카메라 샷을 선택하여 속성을 편집하세요.
+Timeline,NotifyTriggered,Triggered: {},발동: {}
+ModelImportModal,TextureDimensions,%u x %u,%u × %u
+AnimatorGraph,TogglePreview,Toggle 3D Preview Viewport,3D 프리뷰 표시 전환
+AssetRef,Missing,Missing: %zu,누락: %zu
+AssetRef,External,External: %zu,외부 경로: %zu
+AssetRef,InvalidExt,Invalid Ext: %zu,잘못된 확장자: %zu
+AssetRef,AutoFixable,Auto-Fixable: %zu,자동 수정 가능: %zu
+AssetRef,SourceAsset,Source Asset,원본 에셋
+AssetRef,TargetReference,Target Reference,참조 대상
+AssetRef,SuggestedFix,Suggested Fix,수정 제안
+AssetRef,MissingStatus,%s Missing,%s 누락
+AssetRef,ExternalStatus,%s External,%s 외부 경로
+AssetRef,InvalidExtensionStatus,%s InvalidExt,%s 잘못된 확장자
+GraphPanel,PieBadge,[PIE],[PIE]
+GraphPanel,ShaderBadge,[Shader],[셰이더]
+Inspector,ElapsedSeconds,(%.2fs),(%.2f초)
+Metrics,Performance,PERFORMANCE,성능
+Metrics,Good,[ GOOD ],[ 양호 ]
+Metrics,Warn,[ WARN ],[ 주의 ]
+Metrics,Poor,[ POOR ],[ 낮음 ]
+Metrics,Fps,%.1f FPS,%.1f FPS
+Metrics,FrameMsAvg,Frame: %.2f ms (Avg: %.2f),프레임: %.2f ms (평균: %.2f)
+Metrics,CloseDetail,Close Detail,상세 닫기
+Metrics,ViewDetails,View Details ->,상세 보기 →
+Metrics,GpuRendering,GPU RENDERING,GPU 렌더링
+Metrics,Fail,[ FAIL ],[ 실패 ]
+Metrics,Ok,[ OK ],[ 정상 ]
+Metrics,Draws,Draws: %llu,그리기 호출: %llu
+Metrics,GpuTimeMsVerts,GPU Time: %.2f ms | Verts: %llu,GPU 시간: %.2f ms / 정점: %llu
+Metrics,MemoryCache,MEMORY & CACHE,메모리 및 캐시
+Metrics,Healthy,[ HEALTHY ],[ 정상 ]
+Metrics,ActiveSlots,Active: %llu / %llu slots,활성 슬롯: %llu / %llu
+Metrics,ModelsTextures,Models: %llu | Textures: %llu,모델: %llu / 텍스처: %llu
+Metrics,TasksEngine,TASKS & ENGINE,작업 및 엔진
+Metrics,Busy,[ BUSY ],[ 처리 중 ]
+Metrics,Idle,[ IDLE ],[ 대기 ]
+Metrics,PassesScenes,Passes: %zu | Scenes: %zu,패스: %zu / 씬: %zu
+Metrics,TasksActiveDone,Tasks: %llu Active / %llu Done,작업: %llu개 진행 / %llu개 완료
+Metrics,Network,NETWORK,네트워크
+Metrics,Offline,[ OFFLINE ],[ 오프라인 ]
+Metrics,ModeStandalone,Mode: Standalone,모드: 독립 실행
+Metrics,TrafficKbS,Traffic: 0.0 KB/s,트래픽: 0.0 KB/s
+Metrics,Online,[ ONLINE ],[ 온라인 ]
+Metrics,PingMs,Ping: %.1f ms,지연 시간: %.1f ms
+Metrics,ServerPort,Server: Port %u,서버: 포트 %u
+Metrics,StatusConnected,Status: Connected,상태: 연결됨
+Metrics,CloseDetailX,[ Close Detail X ],[ 상세 닫기 X ]
+Metrics,NetworkSystemUnavailable,NetworkSystem is not registered.,네트워크 시스템이 등록되지 않았습니다.
+Metrics,NetworkDriverStatus,Network Driver Status: %s,네트워크 드라이버 상태: %s
+Metrics,SmoothedRttMs,Smoothed RTT: %.2f ms,평활 왕복 지연: %.2f ms
+Metrics,HostingOnPort,Hosting on Port: %u,호스팅 포트: %u
+NetworkProfiler,SystemUnavailable,NetworkSystem is not registered in SystemManager.,시스템 관리자에 네트워크 시스템이 등록되지 않았습니다.
+NetworkProfiler,SessionMode,Session Mode:,세션 모드:
+NetworkProfiler,Standalone,[ Standalone ],[ 독립 실행 ]
+NetworkProfiler,ServerRunning,[ Server Running ],[ 서버 실행 중 ]
+NetworkProfiler,ClientConnected,[ Client Connected ],[ 클라이언트 연결됨 ]
+NetworkProfiler,Port,Port,포트
+NetworkProfiler,IPAddress,IP,IP 주소
+NetworkProfiler,NetworkTraffic,Network Traffic:,네트워크 트래픽:
+NetworkProfiler,OutboundKbS,Outbound: %.2f KB/s,송신: %.2f KB/s
+NetworkProfiler,InboundKbS,Inbound: %.2f KB/s,수신: %.2f KB/s
+NetworkProfiler,LatencyRttMs,Latency (RTT): %.1f ms,왕복 지연: %.1f ms
+NetworkProfiler,ConnectedClients,Connected Clients:,연결된 클라이언트:
+NetworkProfiler,PingRtt,Ping (RTT),왕복 지연
+NetworkProfiler,Connected,Connected,연결됨
+MaterialEditor,TextureRegister,t%u,t%u
+SpriteAnimation,Frame,Frame: %d / %d,프레임: %d / %d
+SpriteAnimation,Fps,FPS,FPS
+SpriteAnimation,ResetView,Reset View,보기 초기화
+SpriteAnimation,Zoom,Zoom: %.0f%%,확대: %.0f%%
+SpriteAnimation,AddFrame,Add Frame,프레임 추가
+SpriteAnimation,EmptyFramesHint,No frames in animation. Click 'Add Frame' above.,애니메이션에 프레임이 없습니다. 위의 프레임 추가 버튼을 누르세요.
+Settings,StyleHelp,"Modify colors, roundings, and paddings directly. Click [Save Custom Style] or [Apply] to persist.","색상, 모서리와 여백을 편집하고 사용자 스타일 저장 또는 적용을 눌러 저장하세요."
+Settings,DockLayoutHelp,Default Docking Layout state is tracked in Workspace.json.,기본 도킹 배치는 Workspace.json에 저장됩니다.
+Timeline,MarkerTimeSocket,Time: %.2fs | Socket: %s,시간: %.2f초 / 부착 본: %s
+Timeline,Sound,Sound: %s,사운드: %s
+Timeline,Pose,Pose,포즈
+Timeline,Shot,Shot,샷
+Timeline,Root,(Root),(루트)
+AssetRef,TotalIssues,Total Issues: %zu | ,전체 문제: %zu |
+AssetRef,FilterAll,All,전체
+AssetRef,FilterMissing,Missing,누락
+AssetRef,FilterExternal,External,외부 경로
+AssetRef,FilterInvalid,Invalid Ext,잘못된 확장자
+AssetRef,SearchHint,Search path...,경로 검색...
+AssetRef,ScanCompleted,Scan completed.,검사가 완료됐습니다.
+AssetRef,FixedIssues,Fixed {} issues.,문제 {}개를 수정했습니다.
+SpriteAnimation,Loop,Loop,반복
+SpriteAnimation,Once,Once,한 번
+SpriteAnimation,PingPong,PingPong,왕복
+SpriteAnimation,PlayMode,Mode,재생 방식
+SpriteAnimation,FrameDuration,Duration,프레임 지속 시간
+Metrics,DetailPerformance,Detailed Performance Inspection,상세 성능 검사
+Metrics,DetailRendering,Detailed GPU Rendering & Passes,GPU 렌더링 및 패스 상세
+Metrics,DetailMemory,Detailed Resource Memory Inspection,리소스 메모리 상세
+Metrics,DetailTasks,Detailed Engine & Task Queue Inspection,엔진 및 작업 큐 상세
+Metrics,DetailNetwork,Detailed Network Session Inspection,네트워크 세션 상세
+NetworkProfiler,ServerMode,Dedicated Server,전용 서버
+NetworkProfiler,ClientMode,Client Connected,클라이언트 연결됨
+NetworkProfiler,StandaloneMode,Standalone,독립 실행
+FileDialog,FontFiles,Font Files (*.ttf;*.otf),글꼴 파일 (*.ttf;*.otf)
+FileDialog,EditorSceneFiles,Scene Files (*.bamscene.json;*.json),씬 파일 (*.bamscene.json;*.json)
+SpriteAnimation,FrameLabel,Frame #{},프레임 #{}
+ResourcePicker,ClearHint,Unbind / Clear current resource,현재 리소스 연결 해제
+Inspector,SearchEntity,Search entity...,엔티티 검색...
+Settings,UnlimitedFPS,Unlimited,무제한
+Settings,MinimumLogLevel,Minimum Log Level,최소 로그 수준
+Settings,ThemeLight,Light,라이트
+Settings,ThemeClassic,Classic,클래식

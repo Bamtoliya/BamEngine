@@ -8,7 +8,6 @@
 #include "TransformSystem.h"
 #include "CameraSystem.h"
 #include "InputManager.h"
-#include "SelectionManager.h"
 
 #include <glm/gtx/norm.hpp>
 
@@ -197,12 +196,6 @@ void EditorCameraController::HandleInput(Engine::f32 dt, bool allowScroll)
         if (KEY_PRESSED(Engine::EKeyCode::D)) moveDirection += Engine::vec3(1.0f, 0.0f, 0.0f);
         if (KEY_PRESSED(Engine::EKeyCode::Q)) moveDirection += Engine::vec3(0.0f, 1.0f, 0.0f);
         if (KEY_PRESSED(Engine::EKeyCode::E)) moveDirection -= Engine::vec3(0.0f, 1.0f, 0.0f);
-
-        if (KEY_PRESSED(Engine::EKeyCode::F))
-        {
-            FocusEntity(SelectionManager::Get().GetPrimarySelectedEntity());
-            changed = true;
-        }
     }
 
     if (glm::length2(moveDirection) > 0.001f)

@@ -53,6 +53,11 @@ public:
 	[[nodiscard]] const std::wstring& GetDisplayRTName() const { return m_DisplayRTName; }
 	[[nodiscard]] Engine::RHITexture* GetPreviewRHITexture() const;
 
+	static void BeginShortcutFrame() { s_ShortcutTarget = nullptr; }
+	static PreviewViewportWidget* GetShortcutTarget() { return s_ShortcutTarget; }
+	bool CanFocusTarget() const;
+	void RefocusTarget();
+
 private:
 	void CheckResize(uint32 targetWidth, uint32 targetHeight);
 	void DrawOverlayToolbar();
@@ -78,6 +83,9 @@ private:
 	// UI 상호작용 상태
 	bool m_IsHovered = false;
 	bool m_IsFocused = false;
+	inline static PreviewViewportWidget* s_ShortcutTarget = nullptr;
+	Engine::vec3 m_FocusPosition = Engine::vec3(0.0f);
+	Engine::f32 m_FocusDistance = 3.0f;
 };
 
 END

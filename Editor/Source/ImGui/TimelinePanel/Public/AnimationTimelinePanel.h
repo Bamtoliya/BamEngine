@@ -81,6 +81,7 @@ public:
 	void GoToLastFrame() { m_CurrentTime = m_Duration; m_IsPlaying = false; }
 	void ToggleLoop() { m_IsLooping = !m_IsLooping; }
 	void ResetZoom() { m_TimelineZoom = 1.0f; m_ViewStartTime = 0.0f; }
+	bool CanDeleteSelected() const;
 	void DeleteSelected();
 
 private:

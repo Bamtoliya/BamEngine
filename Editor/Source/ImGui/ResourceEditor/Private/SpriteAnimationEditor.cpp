@@ -1,4 +1,5 @@
 ﻿#include "SpriteAnimationEditor.h"
+#include "InputManager.h"
 #include "ImGuiManager.h"
 #include "ResourceManager.h"
 #include "NotificationManager.h"
@@ -182,12 +183,12 @@ void SpriteAnimationEditor::DrawToolbar()
 	}
 	ImGui::SameLine();
 
-	ImGui::Text("Frame: %d / %d", m_CurrentFrameIndex + 1, std::max<int32>(anim->GetFrameCount(), 1));
+	ImGui::Text(LOCAL_CSTR("SpriteAnimation.Frame"), m_CurrentFrameIndex + 1, std::max<int32>(anim->GetFrameCount(), 1));
 	ImGui::SameLine();
 
 	ImGui::SetNextItemWidth(90.0f);
 	f32 fps = anim->GetFPS();
-	if (ImGui::DragFloat("FPS", &fps, 0.5f, 1.0f, 60.0f, "%.1f"))
+	if (ImGui::DragFloat(LOCAL_LABEL("SpriteAnimation.Fps").c_str(), &fps, 0.5f, 1.0f, 60.0f, "%.1f"))
 	{
 		anim->SetFPS(fps);
 		m_IsDirty = true;
@@ -196,15 +197,16 @@ void SpriteAnimationEditor::DrawToolbar()
 
 	ImGui::SetNextItemWidth(110.0f);
 	int32 playMode = static_cast<int32>(anim->GetPlayMode());
-	const char* modeNames[] = { "Loop", "Once", "PingPong" };
-	if (ImGui::Combo("Mode", &playMode, modeNames, IM_ARRAYSIZE(modeNames)))
+	const std::string modeLabels[] = { LOCAL("SpriteAnimation.Loop"), LOCAL("SpriteAnimation.Once"), LOCAL("SpriteAnimation.PingPong") };
+	const char* modeNames[] = { modeLabels[0].c_str(), modeLabels[1].c_str(), modeLabels[2].c_str() };
+	if (ImGui::Combo(LOCAL_LABEL("SpriteAnimation.PlayMode").c_str(), &playMode, modeNames, IM_ARRAYSIZE(modeNames)))
 	{
 		anim->SetPlayMode(static_cast<Engine::ESpriteAnimationPlayMode>(playMode));
 		m_IsDirty = true;
 	}
 	ImGui::SameLine();
 
-	if (ImGui::SmallButton("Reset View"))
+	if (ImGui::SmallButton(LOCAL_LABEL("SpriteAnimation.ResetView").c_str()))
 	{
 		m_Zoom = 2.0f;
 		m_PanOffset = ImVec2(0.0f, 0.0f);
@@ -238,15 +240,16 @@ void SpriteAnimationEditor::DrawPreviewCanvas(f32 availWidth, f32 availHeight)
 	}
 
 	// 2. 마우스 줌 & 패닝
+	auto& input = Engine::InputManager::Get();
 	if (ImGui::IsWindowHovered())
 	{
-		if (ImGui::IsMouseDragging(ImGuiMouseButton_Right) || ImGui::IsMouseDragging(ImGuiMouseButton_Middle))
+		if (input.IsMouseButtonDragging(Engine::EMouseButton::Right) || input.IsMouseButtonDragging(Engine::EMouseButton::Middle))
 		{
-			const ImVec2 delta = ImGui::GetIO().MouseDelta;
+			const auto delta = input.GetMouseDelta();
 			m_PanOffset.x += delta.x;
 			m_PanOffset.y += delta.y;
 		}
-		const float wheel = ImGui::GetIO().MouseWheel;
+		const float wheel = input.GetMouseScrollDeltaY();
 		if (wheel != 0.0f)
 			m_Zoom = std::clamp(m_Zoom + wheel * 0.25f, 0.25f, 16.0f);
 	}
@@ -289,7 +292,7 @@ void SpriteAnimationEditor::DrawPreviewCanvas(f32 availWidth, f32 availHeight)
 	}
 
 	ImGui::SetCursorPos(ImVec2(8.0f, 8.0f));
-	ImGui::TextColored(ImVec4(0.85f, 0.85f, 0.85f, 1.0f), "Zoom: %.0f%%", m_Zoom * 100.0f);
+	ImGui::TextColored(ImVec4(0.85f, 0.85f, 0.85f, 1.0f), LOCAL_CSTR("SpriteAnimation.Zoom"), m_Zoom * 100.0f);
 
 	ImGui::EndChild();
 }
@@ -307,7 +310,7 @@ void SpriteAnimationEditor::DrawFramesList(f32 availWidth, f32 availHeight)
 		return;
 	}
 
-	if (ImGui::Button(ICON_FA_PLUS " Add Frame", ImVec2(-1.0f, 26.0f)))
+	if (ImGui::Button((std::string(ICON_FA_PLUS " ") + LOCAL_LABEL("SpriteAnimation.AddFrame")).c_str(), ImVec2(-1.0f, 26.0f)))
 	{
 		anim->AddFrame(Engine::ResourceHandle<Engine::Sprite>(), 1.0f);
 		m_IsDirty = true;
@@ -320,7 +323,7 @@ void SpriteAnimationEditor::DrawFramesList(f32 availWidth, f32 availHeight)
 		const bool isSelected = (i == m_CurrentFrameIndex);
 		if (isSelected) ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.2f, 0.45f, 0.7f, 0.6f));
 
-		const std::string headerLabel = "Frame #" + std::to_string(i);
+		const std::string headerLabel = LOCAL_FMT("SpriteAnimation.FrameLabel", i) + "###Frame";
 		if (ImGui::Selectable(headerLabel.c_str(), isSelected, 0, ImVec2(ImGui::GetContentRegionAvail().x - 70.0f, 0.0f)))
 		{
 			m_CurrentFrameIndex = i;
@@ -350,7 +353,7 @@ void SpriteAnimationEditor::DrawFramesList(f32 availWidth, f32 availHeight)
 		}
 
 		ImGui::SetNextItemWidth(90.0f);
-		if (ImGui::DragFloat("Duration", &frames[i].frameDuration, 0.1f, 0.1f, 10.0f, "%.1fx"))
+		if (ImGui::DragFloat(LOCAL_LABEL("SpriteAnimation.FrameDuration").c_str(), &frames[i].frameDuration, 0.1f, 0.1f, 10.0f, "%.1fx"))
 			m_IsDirty = true;
 
 		ImGui::Separator();
@@ -366,7 +369,7 @@ void SpriteAnimationEditor::DrawFilmstrip(f32 height)
 	auto* anim = GetAnimation();
 	if (!anim || anim->GetFrameCount() == 0)
 	{
-		ImGui::TextDisabled("No frames in animation. Click 'Add Frame' above.");
+		ImGui::TextDisabled(LOCAL_CSTR("SpriteAnimation.EmptyFramesHint"));
 		ImGui::EndChild();
 		return;
 	}

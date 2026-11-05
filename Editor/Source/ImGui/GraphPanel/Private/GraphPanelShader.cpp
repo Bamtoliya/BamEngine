@@ -127,7 +127,7 @@ void GraphPanel::DrawShaderToolbar()
 {
 	if (m_Domain != EGraphDomain::Shader) return;
 
-	ImGui::TextColored(ImVec4(0.35f, 0.78f, 1.0f, 1.0f), "[Shader]");
+	ImGui::TextColored(ImVec4(0.35f, 0.78f, 1.0f, 1.0f), LOCAL_CSTR("GraphPanel.ShaderBadge"));
 	ImGui::SameLine();
 
 	if (ImGui::Button(LOCAL_LABEL("GraphPanel.GenerateHlsl").c_str())) GenerateShaderSource();

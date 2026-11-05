@@ -279,13 +279,13 @@ namespace
 			}
 
 			ImGui::SetNextItemWidth(-1.0f);
-			ImGui::InputTextWithHint("##Search", "Search entity...", searchBuffer, sizeof(searchBuffer));
+			ImGui::InputTextWithHint("##Search", LOCAL_CSTR("Inspector.SearchEntity"), searchBuffer, sizeof(searchBuffer));
 			ImGui::Separator();
 
 			// 상단 검색창은 고정하고, 하단 목록만 스크롤되도록 Child 윈도우 구성
 			if (ImGui::BeginChild("##EntityScrollRegion", ImVec2(0.0f, 0.0f), false, ImGuiWindowFlags_None))
 			{
-				if (ImGui::Selectable("None", value == entt::null))
+				if (ImGui::Selectable(LOCAL_LABEL("EditorCommon.None").c_str(), value == entt::null))
 				{
 					value = entt::null;
 					changed = true;

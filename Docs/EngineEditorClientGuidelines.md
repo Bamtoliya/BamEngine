@@ -378,7 +378,14 @@ Editor는 프로젝트의 대상 플랫폼과 빌드 구성을 선택하고
   - 각 액션은 식별자(`Id`), 로캘 키(`DisplayNameKey`, `CategoryKey`), 유효 문맥(`EShortcutContext`: Global, Viewport, Hierarchy 등), 기본 키 바인딩(`DefaultChord`), 실행 조건(`CanExecute`)과 핸들러(`ExecuteHandler`)를 명시적으로 갖춘다.
   - 글로벌하게 동작해야 하는 단축키(예: 어디서든 씬 오브젝트로 시점을 맞추는 `F`, 저장 `Ctrl+S`, 실행 취소 `Ctrl+Z` 등)는 `EShortcutContext::Global`을 부여하고, 특정 창 내부 전용 기능(예: 계층 패널 내부 이름 변경 `F2`, 뷰포트 내부 기즈모 모드 전환 `1~3` 등)은 해당 패널의 `EShortcutContext`를 명확히 분리한다.
 - 모든 UI 메뉴(툴바, 컨텍스트 메뉴, 팝업)의 단축키 힌트 표시는 `ShortcutManager::Get().GetShortcutHint("Action.Id")`를 통해 동적으로 조회하여, 사용자가 설정을 변경하더라도 항상 최신 바인딩이 표시되도록 한다.
+- 같은 문맥의 동일 바인딩은 충돌로 처리한다. 서로 다른 패널 문맥은 독립적이며, 로컬 액션은 같은 키의 Global 액션보다 우선한다.
+  일치하는 로컬 액션의 `CanExecute`가 false여도 Global 액션으로 넘어가지 않는다. 예를 들어 프리팹 저장 불가 상태에서 씬이 대신 저장되어서는 안 된다.
+- 그래프의 노드 에디터 라이브러리 기본 단축키는 `EnableShortcuts(false)`로 차단한다. 라이브러리의 Delete·F·Space 처리에 의존하지 않고 등록 액션과 메뉴를 연결한다.
+  화면 맞춤은 공통 `Viewport.Focus`가 현재 프리뷰·그래프·UI 캔버스·씬 문맥으로 전달한다.
 - 패널 단위의 임시 하드코딩 키 처리는 허용되지 않으며, 단축키 추가·수정 시에는 `EditorActionRegistry.cpp` 등록과 `Editor.csv` 로캘 키 연동을 기본으로 함께 진행한다.
+- 키 바인딩 수집, 텍스트 편집 취소, 진행 중 드래그 취소와 카메라의 연속 이동·보조 키는 명령 단축키와 구분한다.
+  이 상태 처리는 InputManager의 샘플을 사용하고 해당 UI의 활성·포커스·호버 문맥으로 제한한다. ImGui의 텍스트 입력·팝업 처리 자체는 기존 위젯 경로를 유지한다.
+  `WantTextInput`·창 포커스·항목 활성 상태는 UI 문맥이며, 상대 마우스 전환 시 ImGui 포인터를 숨기는 상태 쓰기는 입력 조회가 아니다.
 
 ### 완료와 리뷰에서 확인할 사항
 

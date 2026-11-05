@@ -7,8 +7,11 @@ BamEngine 다국어(Localization) 및 리플렉션 키 정적 감사 도구
 검사 기능:
 1. 누락 키 (Missing Keys): 코드에서 LOCAL(...) / DISPLAY_NAME 등으로 불렀으나 CSV에 없는 키
 2. 미번역 항목 (Untranslated): CSV에 키는 있으나 English 또는 Korean이 비어있는 행
-3. 하드코딩된 UI (Hardcoded UI): Engine·Editor의 ImGui 표시 문자열과 알림 제목·본문
+3. 하드코딩된 UI (Hardcoded UI): 자체 소스의 ImGui 표시 문자열·단축키 힌트와 알림 제목·본문
 4. 고아 키 (Orphan Keys, 옵션): CSV에 존재하지만 소스코드 어디에서도 사용되지 않는 키
+5. 중복 키: 모든 CSV 원본에서 중복된 키와 전체 위치
+6. 미등록 액션: 단축키 힌트·명령 호출의 리터럴 액션 ID
+7. ImGui 입력 직접 조회: 키·마우스 상태 API와 IO 필드 (UI 문맥과 백엔드 상태 쓰기는 제외)
 """
 
 import os
@@ -24,10 +27,28 @@ RE_LOCAL = re.compile(r'(?<![:\w])(LOCAL|LOCAL_CSTR|LOCAL_LABEL|LOCAL_FMT|Locali
 RE_REFL = re.compile(r'\b(DISPLAY_NAME|CATEGORY|TOOLTIP)\s*\(\s*"([^"]+)"')
 RE_CPP_TOKEN = re.compile(r'"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'|//[^\n]*|/\*[\s\S]*?\*/')
 RE_IMGUI = re.compile(r'\bImGui::(Text\w*|BulletText|Button|SmallButton|Checkbox|MenuItem|BeginMenu|'
-    r'Begin|BeginPopupModal|BeginCombo|CollapsingHeader|Selectable|RadioButton|TableSetupColumn|'
-    r'Slider\w*|Drag(?:Float|Int|Scalar)\w*|Input\w*|ColorEdit\w*|Set(?:Item)?Tooltip)\s*\(')
+    r'Begin|BeginPopupModal|BeginCombo|Combo|ListBox|TreeNode(?:Ex)?|CollapsingHeader|Selectable|RadioButton|TableSetupColumn|'
+    r'Slider\w*|Drag(?:Float|Int|Scalar)\w*|Input\w*|ColorEdit\w*|PlotLines|PlotHistogram|Set(?:Item)?Tooltip)\s*\(')
 RE_PRINTF = re.compile(r'%(?:[-+ #0]*\d*(?:\.\d+)?(?:hh|ll|[hlzjtL])?[a-zA-Z]|%)')
 RE_NOTIFICATION = re.compile(r'\b(AddNotification)\s*\(')
+RE_DRAW_TEXT = re.compile(r'->(AddText)\s*\(')
+
+
+def nonlocal_key_positions(source: str):
+    """Action IDs and workspace keys are identifiers, not localization references."""
+    positions = set()
+    calls = re.compile(r'\b(GetShortcutHint|ExecuteAction|CanExecuteAction|FindAction|GetActiveChord|'
+        r'SetSplitter|GetSplitter|ACTION_MENU_ITEM|DrawActionTooltip)\s*\(')
+    for match in calls.finditer(source):
+        args = call_arguments(source, match.end())
+        index = 1 if match[1] in ('ACTION_MENU_ITEM', 'DrawActionTooltip') else 0
+        if len(args) <= index:
+            continue
+        offset = match.end() + sum(len(arg) + 1 for arg in args[:index])
+        positions.update(offset + token.start() for token in re.finditer(r'"(?:\\.|[^"\\])*"', args[index]))
+    for match in re.finditer(r'\.Id\s*=\s*("[^"\n]+")', source):
+        positions.add(match.start(1))
+    return positions
 
 
 def strip_comments(source: str) -> str:
@@ -59,10 +80,23 @@ def call_arguments(source: str, start: int):
 
 def find_hardcoded_ui(source: str):
     source = strip_comments(source)
-    for match in chain(RE_IMGUI.finditer(source), RE_NOTIFICATION.finditer(source)):
+    for match in chain(RE_IMGUI.finditer(source), RE_NOTIFICATION.finditer(source), RE_DRAW_TEXT.finditer(source)):
         name = match[1]
         args = call_arguments(source, match.end())
-        indices = (0, 1) if name == 'AddNotification' else (1,) if name == 'TextColored' else (0,)
+        if name in ('AddNotification', 'InputTextWithHint', 'MenuItem'):
+            indices = (0, 1)
+        elif name == 'AddText':
+            indices = (4,) if len(args) >= 5 else (2,)
+        elif name == 'TextColored':
+            indices = (1,)
+        elif name in ('Combo', 'ListBox'):
+            indices = (0, 2)
+        elif name == 'TreeNodeEx':
+            indices = (2,) if len(args) >= 3 else (0,)
+        elif name == 'TreeNode':
+            indices = (1,) if len(args) >= 2 else (0,)
+        else:
+            indices = (0,)
         for index in indices:
             if len(args) > index:
                 for text in hardcoded_literals(args[index]):
@@ -71,7 +105,7 @@ def find_hardcoded_ui(source: str):
 
 def hardcoded_literals(expression: str):
     # Remove localized subexpressions, but still inspect other ternary branches.
-    localized = re.compile(r'\b(?:LOCAL\w*|LocalizeInspectorText|GetText|Text)\s*\(')
+    localized = re.compile(r'\b(?:LOCAL\w*|LocalizeInspectorText|GetText|Text|GetShortcutHint)\s*\(')
     while wrapped := localized.search(expression):
         nested = call_arguments(expression, wrapped.end())
         length = sum(len(arg) for arg in nested) + max(len(nested) - 1, 0) + 1
@@ -114,7 +148,8 @@ def load_csv_catalog(file_path: Path):
         reader = csv.reader(f)
         header = next(reader, None)
         group = ""
-        for line_no, row in enumerate(reader, start=2):
+        for row in reader:
+            line_no = reader.line_num
             if not row or len(row) < 2:
                 continue
             group = row[0].strip() or group
@@ -133,6 +168,57 @@ def load_csv_catalog(file_path: Path):
 
     return catalog, empty_entries
 
+
+def duplicate_catalog_keys(files):
+    locations = {}
+    for file_path in files:
+        if not file_path.is_file():
+            continue
+        group = ''
+        with file_path.open(encoding='utf-8-sig', newline='') as stream:
+            reader = csv.reader(stream)
+            next(reader, None)
+            for row in reader:
+                if len(row) < 2:
+                    continue
+                group = row[0].strip() or group
+                key = row[1].strip()
+                if key:
+                    full_key = f'{group}.{key}' if group else key
+                    locations.setdefault(full_key, []).append((file_path.name, reader.line_num))
+    return {key: spots for key, spots in locations.items() if len(spots) > 1}
+
+
+def find_unregistered_actions(sources):
+    """Check literal action references against all action registrations, including menu helpers."""
+    sources = {path: strip_comments(source) for path, source in sources.items()}
+    registered = {match[1] for source in sources.values()
+        for match in re.finditer(r'\.Id\s*=\s*"([^"\n]+)"', source)}
+    calls = re.compile(r'\b(GetShortcutHint|ExecuteAction|CanExecuteAction|FindAction|GetActiveChord|'
+        r'ACTION_MENU_ITEM|DrawActionTooltip)\s*\(')
+    for path, source in sources.items():
+        for match in calls.finditer(source):
+            args = call_arguments(source, match.end())
+            index = 1 if match[1] in ('ACTION_MENU_ITEM', 'DrawActionTooltip') else 0
+            if len(args) <= index:
+                continue
+            action = re.fullmatch(r'\s*"([^"\n]+)"\s*', args[index])
+            if action and action[1] not in registered:
+                yield path, source.count('\n', 0, match.start()) + 1, match[1], action[1]
+
+
+def find_imgui_input_reads(source):
+    source = strip_comments(source)
+    calls = re.compile(r'\bImGui::(?:IsKey\w*|IsMouse\w*|GetMouse(?:Pos\w*|DragDelta|ClickedCount)|'
+        r'GetKey(?:Index|PressedAmount|Data))\s*\(')
+    for match in calls.finditer(source):
+        # IsMousePosValid is also a raw pointer-state query; window/item hover APIs are intentionally allowed.
+        yield source.count('\n', 0, match.start()) + 1, match[0].rstrip('(').strip()
+    fields = re.compile(r'\b(?:ImGui::GetIO\(\)|io)\.(?:Key(?:Ctrl|Shift|Alt|Super)|'
+        r'Mouse(?:Pos|Delta|WheelH?|Down))\b(?!\s*=(?!=))')
+    for match in fields.finditer(source):
+        yield source.count('\n', 0, match.start()) + 1, match[0]
+
 def is_dynamic_prefix_matched(prefix: str, catalog: dict) -> bool:
     """Console.Level. 처럼 동적으로 런타임에 접미사가 붙는 키 접두사 검증"""
     if not prefix.endswith("."):
@@ -144,23 +230,26 @@ def is_dynamic_prefix_matched(prefix: str, catalog: dict) -> bool:
 
 def audit_project(root_dir: Path, check_orphans: bool = False, strict: bool = False):
     loc_dir = root_dir / "Resources" / "Data" / "Localization"
-    engine_csv = loc_dir / "Engine.csv"
-    editor_csv = loc_dir / "Editor.csv"
-
-    cat_engine, empty_engine = load_csv_catalog(engine_csv)
-    cat_editor, empty_editor = load_csv_catalog(editor_csv)
-
-    combined_catalog = {**cat_engine, **cat_editor}
+    catalog_paths = sorted(loc_dir.glob('*.csv'))
+    combined_catalog, all_empty = {}, []
+    for path in catalog_paths:
+        catalog, empty = load_csv_catalog(path)
+        combined_catalog.update(catalog)
+        all_empty.extend(empty)
     catalog_groups = {key.split('.', 1)[0] for key in combined_catalog if '.' in key}
-    all_empty = empty_engine + empty_editor
+    duplicates = duplicate_catalog_keys(catalog_paths)
 
     missing_keys = []
     hardcoded_ui = []
     referenced_keys = set()
+    sources = {}
+    imgui_input_reads = []
 
     scan_dirs = [
         root_dir / "Editor" / "Source",
-        root_dir / "Engine" / "Source"
+        root_dir / "Engine" / "Source",
+        root_dir / "Client" / "Source",
+        root_dir / "Shared" / "Source"
     ]
 
     scanned_file_count = 0
@@ -182,6 +271,14 @@ def audit_project(root_dir: Path, check_orphans: bool = False, strict: bool = Fa
                         lines = source.splitlines()
                 except Exception:
                     continue
+                sources[rel_path] = source
+                imgui_input_reads.extend((rel_path, line, expression)
+                    for line, expression in find_imgui_input_reads(source))
+                for field in re.finditer(r'\b(DisplayNameKey|CategoryKey)\s*=\s*"([^"\n]+)"', source):
+                    key = field[2]
+                    referenced_keys.add(key)
+                    if key not in combined_catalog:
+                        missing_keys.append((rel_path, source.count('\n', 0, field.start()) + 1, field[1], key))
 
                 for line_idx, line in enumerate(lines, start=1):
                     # 1. LOCAL(...) 매크로 키 검사
@@ -206,8 +303,11 @@ def audit_project(root_dir: Path, check_orphans: bool = False, strict: bool = Fa
                     hardcoded_ui.append((rel_path, line_idx, fn_name, lit_text))
 
                 # Keys also arrive through arrays, display-name fields and graph diagnostics.
+                identifier_positions = nonlocal_key_positions(source)
                 for token in RE_CPP_TOKEN.finditer(source):
                     if not token[0].startswith('"'):
+                        continue
+                    if token.start() in identifier_positions:
                         continue
                     key = token[0][1:-1].strip()
                     indirect_key = key.startswith('UI_') or ('Editor' in rel_path.parts and bool(
@@ -219,6 +319,8 @@ def audit_project(root_dir: Path, check_orphans: bool = False, strict: bool = Fa
                     referenced_keys.add(key)
                     if key not in combined_catalog and not is_dynamic_prefix_matched(key, combined_catalog):
                         missing_keys.append((rel_path, source.count('\n', 0, token.start()) + 1, 'Indirect', key))
+
+    unregistered_actions = list(find_unregistered_actions(sources))
 
     # 결과 리포트 출력
     print("=" * 80)
@@ -262,6 +364,27 @@ def audit_project(root_dir: Path, check_orphans: bool = False, strict: bool = Fa
     else:
         print("[V] Hardcoded UI Strings: None in checked UI calls")
 
+    if duplicates:
+        print(f"[!] DUPLICATE CSV KEYS ({len(duplicates)} keys):")
+        for key, spots in sorted(duplicates.items()):
+            print(f"    - {key}: " + ', '.join(f'{file}:{line}' for file, line in spots))
+    else:
+        print('[V] Duplicate CSV Keys: None')
+
+    if unregistered_actions:
+        print(f'[!] UNREGISTERED ACTION REFERENCES ({len(unregistered_actions)} locations):')
+        for path, line, call, action in unregistered_actions:
+            print(f'    - {path}:{line} [{call}] -> {action}')
+    else:
+        print('[V] Unregistered Shortcut Actions: None in literal action references')
+
+    if imgui_input_reads:
+        print(f'[!] RAW IMGUI INPUT READS ({len(imgui_input_reads)} locations):')
+        for path, line, expression in imgui_input_reads:
+            print(f'    - {path}:{line} -> {expression}')
+    else:
+        print('[V] Raw ImGui Input Reads: None in checked APIs')
+
     # 4. 고아 키 검사 (옵션)
     if check_orphans:
         orphan_keys = [k for k in combined_catalog.keys() if k not in referenced_keys and "." not in k]
@@ -275,8 +398,8 @@ def audit_project(root_dir: Path, check_orphans: bool = False, strict: bool = Fa
 
     print("=" * 80)
     if strict:
-        return 1 if (missing_keys or all_empty or hardcoded_ui) else 0
-    return 1 if (missing_keys or all_empty) else 0
+        return 1 if (missing_keys or all_empty or hardcoded_ui or duplicates or unregistered_actions or imgui_input_reads) else 0
+    return 1 if (missing_keys or all_empty or duplicates or unregistered_actions or imgui_input_reads) else 0
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Audit BamEngine Localization")

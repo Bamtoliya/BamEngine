@@ -29,6 +29,7 @@ private:
     int m_FilterType = 0; // 0: All, 1: Missing, 2: External, 3: InvalidExt
     char m_SearchFilter[128] = "";
     std::string m_StatusMessage;
+    size_t m_FixedCount = 0;
 };
 
 END

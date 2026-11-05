@@ -500,7 +500,7 @@ void MaterialEditor::DrawTextureBindings()
 			ImGui::TableSetColumnIndex(0);
 			if (row.isOverridden || row.hasBase)
 			{
-				ImGui::Text("t%u", row.slot);
+				ImGui::Text(LOCAL_CSTR("MaterialEditor.TextureRegister"), row.slot);
 				if (!baseMat && row.isOverridden)
 				{
 					ImGui::SameLine();
@@ -519,7 +519,7 @@ void MaterialEditor::DrawTextureBindings()
 			}
 			else
 			{
-				ImGui::TextDisabled("t%u", row.slot);
+				ImGui::TextDisabled(LOCAL_CSTR("MaterialEditor.TextureRegister"), row.slot);
 			}
 
 			// Column 1: Name (상태 표시)

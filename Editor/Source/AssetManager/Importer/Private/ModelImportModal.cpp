@@ -801,7 +801,7 @@ namespace Editor
 			? m_TempMaterials[materialIndex].Get() : nullptr;
 
 		const auto* texture = m_PreviewReady && material ? material->GetTextureBySlot(0) : nullptr;
-		const auto* rhiTexture = texture ? texture->GetRHITexture() : nullptr;
+		auto* rhiTexture = texture ? texture->GetRHITexture() : nullptr;
 
 		if (!rhiTexture || rhiTexture->GetDimension() != Engine::ETextureDimension::Texture2D ||
 			rhiTexture->GetWidth() == 0 || rhiTexture->GetHeight() == 0)
@@ -832,7 +832,7 @@ namespace Editor
 		{
 			ImGui::BeginTooltip();
 			ImGui::Image(textureId, fitSize(ImGui::GetFontSize() * 18.0f));
-			ImGui::TextDisabled("%u x %u", rhiTexture->GetWidth(), rhiTexture->GetHeight());
+			ImGui::TextDisabled(LOCAL_CSTR("ModelImportModal.TextureDimensions"), rhiTexture->GetWidth(), rhiTexture->GetHeight());
 			ImGui::EndTooltip();
 		}
 	}

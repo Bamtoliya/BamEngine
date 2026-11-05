@@ -30,11 +30,15 @@ public:
 public:
 	virtual EShortcutContext GetShortcutContext() const override { return EShortcutContext::GraphEditor; }
 	static GraphPanel* GetActiveGraphPanel() { return s_ActiveGraphPanel; }
-	void AlignNodes(char dir) { AlignSelectedNodes(dir); }
-	void DuplicateSelectedNodes() { DuplicateSelection(); }
-	void CreateCommentBox() { CreateCommentBoxFromSelection(); }
-	void DeleteSelectedElements() { DeleteSelection(); }
+	bool CanUseCanvas() const { return m_Open && m_Ready; }
+	void AlignNodes(char dir);
+	void DuplicateSelectedNodes();
+	void CreateCommentBox();
+	void DeleteSelectedElements();
 	void ToggleBreakpointOnSelected();
+	void OpenAddNodeMenu();
+	void ValidateGraph() { RefreshValidation(); }
+	void ResetCanvasView();
 	bool CanRunExecution() const;
 	void RunExecution();
 	bool CanPauseExecution() const;

@@ -78,18 +78,18 @@ void MetricsPanel::DrawCardPerformance(float cardWidth)
     ImGui::PushStyleColor(ImGuiCol_ChildBg, isSelected ? ImVec4(0.15f, 0.25f, 0.35f, 0.8f) : ImVec4(0.14f, 0.14f, 0.16f, 0.7f));
     ImGui::BeginChild("Card_Performance", ImVec2(cardWidth, 125.0f), true, ImGuiWindowFlags_NoScrollbar);
 
-    ImGui::TextColored(ImVec4(0.3f, 0.8f, 1.0f, 1.0f), "PERFORMANCE");
+    ImGui::TextColored(ImVec4(0.3f, 0.8f, 1.0f, 1.0f), LOCAL_CSTR("Metrics.Performance"));
     ImGui::SameLine(cardWidth - 75.0f);
     const float fps = m_AverageMs > 0.0f ? 1000.0f / m_AverageMs : 0.0f;
-    if (fps >= 55.0f) ImGui::TextColored(ImVec4(0.2f, 0.9f, 0.2f, 1.0f), "[ GOOD ]");
-    else if (fps >= 30.0f) ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "[ WARN ]");
-    else ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "[ POOR ]");
+    if (fps >= 55.0f) ImGui::TextColored(ImVec4(0.2f, 0.9f, 0.2f, 1.0f), LOCAL_CSTR("Metrics.Good"));
+    else if (fps >= 30.0f) ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), LOCAL_CSTR("Metrics.Warn"));
+    else ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), LOCAL_CSTR("Metrics.Poor"));
 
-    ImGui::Text("%.1f FPS", fps);
-    ImGui::TextDisabled("Frame: %.2f ms (Avg: %.2f)", m_CurrentMs, m_AverageMs);
+    ImGui::Text(LOCAL_CSTR("Metrics.Fps"), fps);
+    ImGui::TextDisabled(LOCAL_CSTR("Metrics.FrameMsAvg"), m_CurrentMs, m_AverageMs);
 
     ImGui::Spacing();
-    if (ImGui::SmallButton(isSelected ? "Close Detail" : "View Details ->##Perf"))
+    if (ImGui::SmallButton((LOCAL(isSelected ? "Metrics.CloseDetail" : "Metrics.ViewDetails") + "###Details").c_str()))
     {
         m_SelectedDomain = isSelected ? EMetricsDomain::None : EMetricsDomain::Performance;
     }
@@ -104,16 +104,16 @@ void MetricsPanel::DrawCardRendering(float cardWidth)
     ImGui::PushStyleColor(ImGuiCol_ChildBg, isSelected ? ImVec4(0.15f, 0.25f, 0.35f, 0.8f) : ImVec4(0.14f, 0.14f, 0.16f, 0.7f));
     ImGui::BeginChild("Card_Rendering", ImVec2(cardWidth, 125.0f), true, ImGuiWindowFlags_NoScrollbar);
 
-    ImGui::TextColored(ImVec4(0.4f, 0.9f, 0.4f, 1.0f), "GPU RENDERING");
+    ImGui::TextColored(ImVec4(0.4f, 0.9f, 0.4f, 1.0f), LOCAL_CSTR("Metrics.GpuRendering"));
     ImGui::SameLine(cardWidth - 75.0f);
-    if (m_DisplaySnapshot.RenderFailed) ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "[ FAIL ]");
-    else ImGui::TextColored(ImVec4(0.2f, 0.9f, 0.2f, 1.0f), "[ OK ]");
+    if (m_DisplaySnapshot.RenderFailed) ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), LOCAL_CSTR("Metrics.Fail"));
+    else ImGui::TextColored(ImVec4(0.2f, 0.9f, 0.2f, 1.0f), LOCAL_CSTR("Metrics.Ok"));
 
-    ImGui::Text("Draws: %llu", m_DisplaySnapshot.GetTotalDrawCalls());
-    ImGui::TextDisabled("GPU Time: %.2f ms | Verts: %llu", m_DisplaySnapshot.TotalGPUTimeMs, m_DisplaySnapshot.SubmittedVertices);
+    ImGui::Text(LOCAL_CSTR("Metrics.Draws"), m_DisplaySnapshot.GetTotalDrawCalls());
+    ImGui::TextDisabled(LOCAL_CSTR("Metrics.GpuTimeMsVerts"), m_DisplaySnapshot.TotalGPUTimeMs, m_DisplaySnapshot.SubmittedVertices);
 
     ImGui::Spacing();
-    if (ImGui::SmallButton(isSelected ? "Close Detail" : "View Details ->##Render"))
+    if (ImGui::SmallButton((LOCAL(isSelected ? "Metrics.CloseDetail" : "Metrics.ViewDetails") + "###Details").c_str()))
     {
         m_SelectedDomain = isSelected ? EMetricsDomain::None : EMetricsDomain::Rendering;
     }
@@ -128,17 +128,17 @@ void MetricsPanel::DrawCardMemory(float cardWidth)
     ImGui::PushStyleColor(ImGuiCol_ChildBg, isSelected ? ImVec4(0.15f, 0.25f, 0.35f, 0.8f) : ImVec4(0.14f, 0.14f, 0.16f, 0.7f));
     ImGui::BeginChild("Card_Memory", ImVec2(cardWidth, 125.0f), true, ImGuiWindowFlags_NoScrollbar);
 
-    ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.3f, 1.0f), "MEMORY & CACHE");
+    ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.3f, 1.0f), LOCAL_CSTR("Metrics.MemoryCache"));
     ImGui::SameLine(cardWidth - 75.0f);
-    ImGui::TextColored(ImVec4(0.2f, 0.9f, 0.2f, 1.0f), "[ HEALTHY ]");
+    ImGui::TextColored(ImVec4(0.2f, 0.9f, 0.2f, 1.0f), LOCAL_CSTR("Metrics.Healthy"));
 
-    ImGui::Text("Active: %llu / %llu slots", m_ResourceMetrics.ActiveResources, m_ResourceMetrics.TotalSlots);
+    ImGui::Text(LOCAL_CSTR("Metrics.ActiveSlots"), m_ResourceMetrics.ActiveResources, m_ResourceMetrics.TotalSlots);
     const auto modelCount = m_ResourceMetrics.CountsByType[static_cast<size_t>(Engine::EResourceType::Model)];
     const auto texCount = m_ResourceMetrics.CountsByType[static_cast<size_t>(Engine::EResourceType::Texture)];
-    ImGui::TextDisabled("Models: %llu | Textures: %llu", modelCount, texCount);
+    ImGui::TextDisabled(LOCAL_CSTR("Metrics.ModelsTextures"), modelCount, texCount);
 
     ImGui::Spacing();
-    if (ImGui::SmallButton(isSelected ? "Close Detail" : "View Details ->##Mem"))
+    if (ImGui::SmallButton((LOCAL(isSelected ? "Metrics.CloseDetail" : "Metrics.ViewDetails") + "###Details").c_str()))
     {
         m_SelectedDomain = isSelected ? EMetricsDomain::None : EMetricsDomain::Memory;
     }
@@ -153,16 +153,16 @@ void MetricsPanel::DrawCardEngineTasks(float cardWidth)
     ImGui::PushStyleColor(ImGuiCol_ChildBg, isSelected ? ImVec4(0.15f, 0.25f, 0.35f, 0.8f) : ImVec4(0.14f, 0.14f, 0.16f, 0.7f));
     ImGui::BeginChild("Card_EngineTasks", ImVec2(cardWidth, 125.0f), true, ImGuiWindowFlags_NoScrollbar);
 
-    ImGui::TextColored(ImVec4(0.8f, 0.4f, 1.0f, 1.0f), "TASKS & ENGINE");
+    ImGui::TextColored(ImVec4(0.8f, 0.4f, 1.0f, 1.0f), LOCAL_CSTR("Metrics.TasksEngine"));
     ImGui::SameLine(cardWidth - 75.0f);
-    if (m_AssetTaskMetrics.Outstanding > 0) ImGui::TextColored(ImVec4(0.3f, 0.7f, 1.0f, 1.0f), "[ BUSY ]");
-    else ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "[ IDLE ]");
+    if (m_AssetTaskMetrics.Outstanding > 0) ImGui::TextColored(ImVec4(0.3f, 0.7f, 1.0f, 1.0f), LOCAL_CSTR("Metrics.Busy"));
+    else ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), LOCAL_CSTR("Metrics.Idle"));
 
-    ImGui::Text("Passes: %zu | Scenes: %zu", m_RegisteredPassCount, m_ActiveSceneCount);
-    ImGui::TextDisabled("Tasks: %llu Active / %llu Done", m_AssetTaskMetrics.Outstanding, m_AssetTaskMetrics.GetCompleted());
+    ImGui::Text(LOCAL_CSTR("Metrics.PassesScenes"), m_RegisteredPassCount, m_ActiveSceneCount);
+    ImGui::TextDisabled(LOCAL_CSTR("Metrics.TasksActiveDone"), m_AssetTaskMetrics.Outstanding, m_AssetTaskMetrics.GetCompleted());
 
     ImGui::Spacing();
-    if (ImGui::SmallButton(isSelected ? "Close Detail" : "View Details ->##Tasks"))
+    if (ImGui::SmallButton((LOCAL(isSelected ? "Metrics.CloseDetail" : "Metrics.ViewDetails") + "###Details").c_str()))
     {
         m_SelectedDomain = isSelected ? EMetricsDomain::None : EMetricsDomain::EngineTasks;
     }
@@ -177,29 +177,29 @@ void MetricsPanel::DrawCardNetwork(float cardWidth)
     ImGui::PushStyleColor(ImGuiCol_ChildBg, isSelected ? ImVec4(0.15f, 0.25f, 0.35f, 0.8f) : ImVec4(0.14f, 0.14f, 0.16f, 0.7f));
     ImGui::BeginChild("Card_Network", ImVec2(cardWidth, 125.0f), true, ImGuiWindowFlags_NoScrollbar);
 
-    ImGui::TextColored(ImVec4(0.2f, 0.85f, 0.85f, 1.0f), "NETWORK");
+    ImGui::TextColored(ImVec4(0.2f, 0.85f, 0.85f, 1.0f), LOCAL_CSTR("Metrics.Network"));
     ImGui::SameLine(cardWidth - 75.0f);
 
     auto* sysMgr = &Engine::SystemManager::Get();
     auto* netSystem = sysMgr ? sysMgr->GetSystem<Engine::NetworkSystem>() : nullptr;
     if (!netSystem || netSystem->GetDriver().GetNetworkMode() == Engine::Network::ENetworkMode::Standalone)
     {
-        ImGui::TextDisabled("[ OFFLINE ]");
-        ImGui::Text("Mode: Standalone");
-        ImGui::TextDisabled("Traffic: 0.0 KB/s");
+        ImGui::TextDisabled(LOCAL_CSTR("Metrics.Offline"));
+        ImGui::Text(LOCAL_CSTR("Metrics.ModeStandalone"));
+        ImGui::TextDisabled(LOCAL_CSTR("Metrics.TrafficKbS"));
     }
     else
     {
-        ImGui::TextColored(ImVec4(0.2f, 0.9f, 0.2f, 1.0f), "[ ONLINE ]");
+        ImGui::TextColored(ImVec4(0.2f, 0.9f, 0.2f, 1.0f), LOCAL_CSTR("Metrics.Online"));
         if (netSystem->GetDriver().IsClient())
-            ImGui::Text("Ping: %.1f ms", netSystem->GetDriver().GetSmoothedRTT());
+            ImGui::Text(LOCAL_CSTR("Metrics.PingMs"), netSystem->GetDriver().GetSmoothedRTT());
         else
-            ImGui::Text("Server: Port %u", netSystem->GetDriver().GetConfig().ServerPort);
-        ImGui::TextDisabled("Status: Connected");
+            ImGui::Text(LOCAL_CSTR("Metrics.ServerPort"), netSystem->GetDriver().GetConfig().ServerPort);
+        ImGui::TextDisabled(LOCAL_CSTR("Metrics.StatusConnected"));
     }
 
     ImGui::Spacing();
-    if (ImGui::SmallButton(isSelected ? "Close Detail" : "View Details ->##Net"))
+    if (ImGui::SmallButton((LOCAL(isSelected ? "Metrics.CloseDetail" : "Metrics.ViewDetails") + "###Details").c_str()))
     {
         m_SelectedDomain = isSelected ? EMetricsDomain::None : EMetricsDomain::Network;
     }
@@ -213,17 +213,17 @@ void MetricsPanel::DrawDetailedInspectionView()
     std::string domainTitle;
     switch (m_SelectedDomain)
     {
-    case EMetricsDomain::Performance: domainTitle = "Detailed Performance Inspection"; break;
-    case EMetricsDomain::Rendering:   domainTitle = "Detailed GPU Rendering & Passes"; break;
-    case EMetricsDomain::Memory:      domainTitle = "Detailed Resource Memory Inspection"; break;
-    case EMetricsDomain::EngineTasks: domainTitle = "Detailed Engine & Task Queue Inspection"; break;
-    case EMetricsDomain::Network:     domainTitle = "Detailed Network Session Inspection"; break;
+    case EMetricsDomain::Performance: domainTitle = LOCAL_CSTR("Metrics.DetailPerformance"); break;
+    case EMetricsDomain::Rendering:   domainTitle = LOCAL_CSTR("Metrics.DetailRendering"); break;
+    case EMetricsDomain::Memory:      domainTitle = LOCAL_CSTR("Metrics.DetailMemory"); break;
+    case EMetricsDomain::EngineTasks: domainTitle = LOCAL_CSTR("Metrics.DetailTasks"); break;
+    case EMetricsDomain::Network:     domainTitle = LOCAL_CSTR("Metrics.DetailNetwork"); break;
     default: break;
     }
 
     ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.3f, 1.0f), ">> %s", domainTitle.c_str());
     ImGui::SameLine(ImGui::GetContentRegionAvail().x - 110.0f);
-    if (ImGui::Button("[ Close Detail X ]"))
+    if (ImGui::Button(LOCAL_LABEL("Metrics.CloseDetailX").c_str()))
     {
         m_SelectedDomain = EMetricsDomain::None;
         return;
@@ -269,19 +269,19 @@ void MetricsPanel::DrawNetworkMetrics()
     auto* netSystem = sysMgr ? sysMgr->GetSystem<Engine::NetworkSystem>() : nullptr;
     if (!netSystem)
     {
-        ImGui::TextDisabled("NetworkSystem is not registered.");
+        ImGui::TextDisabled(LOCAL_CSTR("Metrics.NetworkSystemUnavailable"));
         return;
     }
 
     auto& driver = netSystem->GetDriver();
-    ImGui::Text("Network Driver Status: %s", driver.IsServer() ? "Dedicated Server" : (driver.IsClient() ? "Client Connected" : "Standalone"));
+    ImGui::Text(LOCAL_CSTR("Metrics.NetworkDriverStatus"), driver.IsServer() ? LOCAL_CSTR("NetworkProfiler.ServerMode") : (driver.IsClient() ? LOCAL_CSTR("NetworkProfiler.ClientMode") : LOCAL_CSTR("NetworkProfiler.StandaloneMode")));
     if (driver.IsClient())
     {
-        ImGui::BulletText("Smoothed RTT: %.2f ms", driver.GetSmoothedRTT());
+        ImGui::BulletText(LOCAL_CSTR("Metrics.SmoothedRttMs"), driver.GetSmoothedRTT());
     }
     else if (driver.IsServer())
     {
-        ImGui::BulletText("Hosting on Port: %u", driver.GetConfig().ServerPort);
+        ImGui::BulletText(LOCAL_CSTR("Metrics.HostingOnPort"), driver.GetConfig().ServerPort);
     }
 }
 

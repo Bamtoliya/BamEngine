@@ -552,7 +552,7 @@ void UnifiedSettingsPanel::DrawCategoryGeneral()
         if (ImGui::Button(LOCAL_LABEL("Settings.FontBrowse").c_str()))
         {
             std::wstring selectedPath;
-            if (FileDialogs::OpenFileDialog(selectedPath, { { L"Font Files (*.ttf;*.otf)", L"*.ttf;*.otf" } }))
+            if (FileDialogs::OpenFileDialog(selectedPath, { { Engine::StrToWStr(LOCAL("FileDialog.FontFiles")), L"*.ttf;*.otf" } }))
             {
                 m_DraftCustomFontPath = WStrToStr(selectedPath);
                 m_FontDirty = true;
@@ -597,12 +597,9 @@ void UnifiedSettingsPanel::DrawCategoryTheme()
     if (ImGui::CollapsingHeader(LOCAL_CSTR("Settings.Theme"), ImGuiTreeNodeFlags_DefaultOpen))
     {
         ImGui::Spacing();
-        const char* themes[] = {
-            "BamEngine Dark (Default)",
-            "Light",
-            "Classic",
-            "Custom (User Saved)"
-        };
+        const std::string themeLabels[] = { LOCAL("Settings.ThemeBamEngine"), LOCAL("Settings.ThemeLight"),
+            LOCAL("Settings.ThemeClassic"), LOCAL("Settings.ThemeCustom") };
+        const char* themes[] = { themeLabels[0].c_str(), themeLabels[1].c_str(), themeLabels[2].c_str(), themeLabels[3].c_str() };
         int currentThemeIdx = 0;
         if (m_DraftTheme == "Light") currentThemeIdx = 1;
         else if (m_DraftTheme == "Classic") currentThemeIdx = 2;
@@ -641,7 +638,7 @@ void UnifiedSettingsPanel::DrawCategoryTheme()
     if (ImGui::CollapsingHeader(LOCAL_CSTR("Settings.StyleEditor"), ImGuiTreeNodeFlags_DefaultOpen))
     {
         ImGui::Spacing();
-        ImGui::TextDisabled("Modify colors, roundings, and paddings directly. Click [Save Custom Style] or [Apply] to persist.");
+        ImGui::TextDisabled(LOCAL_CSTR("Settings.StyleHelp"));
         ImGui::Spacing();
         ImGui::ShowStyleEditor(&ImGui::GetStyle());
         m_DraftTheme = "Custom";
@@ -670,7 +667,8 @@ void UnifiedSettingsPanel::DrawCategoryGraphic()
     {
         ImGui::Spacing();
         const int fpsOptions[] = { 0, 30, 60, 120, 144, 240 };
-        const char* fpsLabels[] = { "Unlimited", "30 FPS", "60 FPS", "120 FPS", "144 FPS", "240 FPS" };
+        const std::string unlimitedLabel = LOCAL("Settings.UnlimitedFPS");
+        const char* fpsLabels[] = { unlimitedLabel.c_str(), "30 FPS", "60 FPS", "120 FPS", "144 FPS", "240 FPS" };
         int currentFpsIdx = 0;
         for (int i = 0; i < IM_ARRAYSIZE(fpsOptions); ++i)
         {
@@ -919,10 +917,11 @@ void UnifiedSettingsPanel::DrawCategoryEditor()
     if (ImGui::CollapsingHeader(LOCAL_CSTR("Settings.Logging"), ImGuiTreeNodeFlags_DefaultOpen))
     {
         ImGui::Spacing();
-        const char* logLevels[] = { "Trace", "Info", "Warn", "Error", "Fatal" };
+        const std::string levelLabels[] = { LOCAL("Console.Level.Trace"), LOCAL("Console.Level.Info"), LOCAL("Console.Level.Warn"), LOCAL("Console.Level.Error"), LOCAL("Console.Level.Fatal") };
+        const char* logLevels[] = { levelLabels[0].c_str(), levelLabels[1].c_str(), levelLabels[2].c_str(), levelLabels[3].c_str(), levelLabels[4].c_str() };
         int currentLevelIdx = static_cast<int>(m_DraftLogLevel);
         ImGui::SetNextItemWidth(200.0f);
-        if (ImGui::Combo("Minimum Log Level", &currentLevelIdx, logLevels, IM_ARRAYSIZE(logLevels)))
+        if (ImGui::Combo(LOCAL_LABEL("Settings.MinimumLogLevel").c_str(), &currentLevelIdx, logLevels, IM_ARRAYSIZE(logLevels)))
         {
             m_DraftLogLevel = static_cast<Engine::ELogLevel>(currentLevelIdx);
             m_EditorDirty = true;
@@ -1110,7 +1109,7 @@ void UnifiedSettingsPanel::DrawCategoryWorkspace()
     if (ImGui::CollapsingHeader(LOCAL_CSTR("Settings.SectionDockingLayout"), ImGuiTreeNodeFlags_DefaultOpen))
     {
         ImGui::Spacing();
-        ImGui::TextDisabled("Default Docking Layout state is tracked in Workspace.json.");
+        ImGui::TextDisabled(LOCAL_CSTR("Settings.DockLayoutHelp"));
         ImGui::Spacing();
     }
 }
@@ -1150,7 +1149,7 @@ void UnifiedSettingsPanel::DrawCategoryProjectSettings()
         {
             std::wstring scenePath;
             const auto scenesDir = projectRoot / "Resources" / "Scenes";
-            if (FileDialogs::OpenFileDialog(scenePath, { { L"Scene Files (*.bamscene.json;*.json)", L"*.bamscene.json;*.json" } }, scenesDir.wstring()))
+            if (FileDialogs::OpenFileDialog(scenePath, { { Engine::StrToWStr(LOCAL("FileDialog.EditorSceneFiles")), L"*.bamscene.json;*.json" } }, scenesDir.wstring()))
             {
                 std::error_code ec;
                 const auto relPath = std::filesystem::relative(scenePath, projectRoot, ec);

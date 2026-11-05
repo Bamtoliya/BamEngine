@@ -57,8 +57,8 @@
 
 ### 2.4 단축키 및 컨텍스트 메뉴 일원화
 - **`EditorActionRegistry`**:
-  - `Viewport.Focus`: `EShortcutContext::Global`로 승격. 활성 뷰포트가 없으면 `L"Scene View"` 패널을 폴백으로 찾아 카메라 포커스 실행.
-  - `Hierarchy.Rename`: `EShortcutContext::Hierarchy`, 단축키 `F2`. 계층 패널의 `TriggerSelectedEntityRename()` 호출.
+  - `Viewport.Focus`: `EShortcutContext::Global`. 현재 프리뷰·그래프·UI 캔버스 문맥에 우선 전달하고, 씬 대상으로는 활성 뷰포트 또는 `L"Scene View"`를 사용한다.
+  - `Hierarchy.Rename`: `EShortcutContext::Global`, 기본 단축키 `F2`. 계층 패널의 `TriggerSelectedEntityRename()`을 호출하며 콘텐츠 브라우저는 로컬 `Edit.Rename`으로 분리한다.
 - **`EntityHierarchyView`**:
   - `FocusEntity`, `CreateChild`, `Duplicate`, `Unparent`, `StartRename` 액션 바인딩.
   - 인라인 Rename 시 `ImGui::InputText` 제공 및 포커스 부여 (`ImGui::SetKeyboardFocusHere()`).
@@ -99,3 +99,23 @@
    - 계층 패널에서 엔티티 선택 후 `F2`를 누르면 해당 노드에 인라인 텍스트 입력창이 열리고 엔터/포커스 아웃 시 이름이 즉시 반영됨 (Undo/Redo 지원).
 5. **컨텍스트 메뉴**:
    - 계층 패널 엔티티 우클릭 시 Focus(F), Rename(F2), Create Child Empty, Duplicate(Ctrl+D), Move to Root 메뉴가 단축키 힌트와 함께 정상 작동함.
+
+
+## 5. 2026-11-05 로캘·입력·단축키 보완 상태
+
+이번 보완은 코드 반영과 자동 검증까지 수행했다. 4절의 조작 시나리오를 이번 변경에서 다시 통과한 것으로 해석하지 않는다.
+자세한 변경·검증 명령·범위는 [ImplementationLog.md](ImplementationLog.md)의 같은 날짜 로캘·입력·단축키 기록을 따른다.
+
+- 중앙 등록: 액션 68개를 대조했다. `Graph.AddNode`(기본 Space), `Graph.Validate`(기본 F7)를 등록하고 그래프 메뉴의 고정 키 문자열을 제거했다.
+- 노드 에디터: `EnableShortcuts(false)`로 기본 Delete·F 등 재바인딩 우회를 차단한다. 삭제·정렬·복제·코멘트 액션은 자기 문서의 에디터 문맥으로 실행한다.
+- 문맥: 같은 문맥의 바인딩만 충돌로 처리하며 로컬 액션을 우선한다. 비활성 로컬 액션의 키는 Global 명령으로 전달하지 않는다.
+  텍스트 입력·키 수집·팝업 등 UI 문맥의 억제는 중앙 평가 경로를 사용한다.
+- 입력·표시: InputManager 입력 샘플, 동적 `GetShortcutHint()`와 CSV 원본 번역을 적용한다.
+  카메라 연속 이동·텍스트/드래그 취소·키 수집은 상태 처리이며, ImGui 위젯 반환값·호버·포커스는 UI 문맥으로 유지한다.
+- 자동 검증: Editor Debug 빌드·`AuditLocalization` 및 관련 CTest 4개 통과. 감사기 회귀 테스트 14개 포함.
+- 실제 UI 회귀 확인 대기:
+  - 단축키를 변경·해제한 뒤 메뉴·툴팁·실행 키가 일치하는지 확인한다.
+  - 그래프·애니메이터·타임라인·프리팹·스프라이트 편집 문맥에서 로컬 명령이 씬 저장/삭제로 넘어가지 않는지 확인한다.
+  - 텍스트 입력·팝업·드래그 중 단축키 충돌과 언어 전환 시 편집 상태·ImGui ID 유지를 확인한다.
+  - 그래프 캔버스 밖에서 시작하거나 끝난 우클릭이 메뉴를 열지 않는지 확인한다.
+  - 분리 창·DPI별 타임라인 클릭/드래그/휠과 프리뷰·그래프·UI·씬의 포커스 대상을 확인한다.

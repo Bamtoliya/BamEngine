@@ -1,4 +1,5 @@
-﻿#include "PreviewViewportWidget.h"
+﻿#include "InputManager.h"
+#include "PreviewViewportWidget.h"
 #include "EditorCameraController.h"
 #include "Scene.h"
 #include "Entity.h"
@@ -19,6 +20,7 @@
 #include "AnimationEvaluator.h"
 #include "Skeleton.h"
 #include "Components/Core/HierarchyComponent.h"
+#include "ShortcutManager.h"
 
 namespace Editor
 {
@@ -96,6 +98,12 @@ namespace Editor
 
 	void PreviewViewportWidget::Free()
 	{
+		if (s_ShortcutTarget == this)
+			s_ShortcutTarget = nullptr;
+
+		m_IsHovered = false;
+		m_IsFocused = false;
+
 		m_Grid.Free();
 		m_PostProcessChain.Free();
 		m_Pipeline.Free();
@@ -161,6 +169,8 @@ namespace Editor
 		if (!m_CameraController) return;
 		auto* transform = m_CameraController->GetTransformComponent();
 		if (!transform) return;
+		m_FocusPosition = targetPos;
+		m_FocusDistance = distance;
 
 		// 기존: Yaw 0도 (모델의 등 뒤에서 바라봄)
 		// 수정: Yaw 160도 (모델의 정면 대각선 얼짱 각도에서 얼굴을 바라봄!)
@@ -408,7 +418,7 @@ namespace Editor
 			ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight | ImGuiButtonFlags_MouseButtonMiddle);
 
 		m_IsHovered = ImGui::IsItemHovered();
-		if (m_IsHovered && (ImGui::IsMouseClicked(ImGuiMouseButton_Right) || ImGui::IsMouseClicked(ImGuiMouseButton_Middle) || ImGui::IsMouseClicked(ImGuiMouseButton_Left)))
+		if (m_IsHovered && (Engine::InputManager::Get().IsMouseButtonDown(Engine::EMouseButton::Right) || Engine::InputManager::Get().IsMouseButtonDown(Engine::EMouseButton::Middle) || Engine::InputManager::Get().IsMouseButtonDown(Engine::EMouseButton::Left)))
 		{
 			ImGui::SetWindowFocus();
 			m_IsFocused = true;
@@ -417,6 +427,8 @@ namespace Editor
 		{
 			m_IsFocused = false;
 		}
+		if (m_IsHovered && ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows))
+			s_ShortcutTarget = this;
 
 		// 2. 뷰포트 렌더타깃 이미지 렌더링
 		ImGui::SetCursorPos(startCursor);
@@ -438,6 +450,9 @@ namespace Editor
 
 	void PreviewViewportWidget::DrawOverlayToolbar()
 	{
+		if (ImGui::IsWindowHovered() && ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows))
+			s_ShortcutTarget = this;
+
 		ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
 		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.12f, 0.12f, 0.12f, 0.75f));
 
@@ -452,13 +467,26 @@ namespace Editor
 		ImGui::SameLine();
 
 		// 카메라 포커스 버튼
+		auto& shortcuts = ShortcutManager::Get();
+
+		ImGui::BeginDisabled(!CanFocusTarget());
 		if (ImGui::Button(ICON_FA_CROSSHAIRS))
 		{
-			FocusTarget(Engine::vec3(0.0f, 0.5f, 0.0f), 3.0f);
+			s_ShortcutTarget = this;
+			shortcuts.ExecuteAction("Viewport.Focus");
 		}
-		if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("PreviewViewport.Focus"));
+		ImGui::EndDisabled();
 
-		// 씬에 애니메이터가 있다면 [T-포즈 / 재생] 토글 버튼 제공
+		if (ImGui::IsItemHovered())
+		{
+			const char* hint = shortcuts.GetShortcutHint("Viewport.Focus");
+			if (hint && hint[0] != '\0')
+				ImGui::SetTooltip("%s (%s)", LOCAL_CSTR("PreviewViewport.Focus"), hint);
+			else
+				ImGui::SetTooltip("%s", LOCAL_CSTR("PreviewViewport.Focus"));
+		}
+
+		// 씬에 애니메이터가 있다면 바인드 포즈 / 재생 토글 버튼 제공
 		if (m_PreviewScene)
 		{
 			auto animView = m_PreviewScene->GetRegistry().view<Engine::AnimatorComponent>();
@@ -471,7 +499,11 @@ namespace Editor
 				{
 					anim.isPlaying = !anim.isPlaying;
 				}
-				if (ImGui::IsItemHovered()) ImGui::SetTooltip(anim.isPlaying ? "Switch to T-Pose" : "Play Motion");
+				if (ImGui::IsItemHovered())
+				{
+					const char* tooltipKey = anim.isPlaying ? "PreviewViewport.ShowBindPose" : "PreviewViewport.PlayMotion";
+					ImGui::SetTooltip("%s", LOCAL_CSTR(tooltipKey));
+				}
 			}
 		}
 
@@ -484,5 +516,18 @@ namespace Editor
 		auto& rtm = Engine::RenderTargetManager::Get();
 		auto* colorRT = rtm.GetRenderTarget(m_DisplayRTName);
 		return colorRT ? colorRT->GetTexture() : nullptr;
+	}
+
+	bool PreviewViewportWidget::CanFocusTarget() const
+	{
+		return m_PreviewScene && m_CameraController && m_CameraController->GetTransformComponent();
+	}
+
+	void PreviewViewportWidget::RefocusTarget()
+	{
+		if (!CanFocusTarget())
+			return;
+
+		FocusTarget(m_FocusPosition, m_FocusDistance);
 	}
 }

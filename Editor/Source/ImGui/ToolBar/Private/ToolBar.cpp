@@ -29,6 +29,30 @@
 #include "ModuleBuildManager.h"
 
 
+namespace
+{
+	void DrawActionTooltip(const char* titleKey, const char* actionId, const std::string& details = {})
+	{
+		std::string tooltip = LOCAL(titleKey);
+		const char* hint = ShortcutManager::Get().GetShortcutHint(actionId);
+
+		if (hint && hint[0] != '\0')
+		{
+			tooltip += " (";
+			tooltip += hint;
+			tooltip += ')';
+		}
+
+		if (!details.empty())
+		{
+			tooltip += '\n';
+			tooltip += details;
+		}
+
+		ImGui::SetTooltip("%s", tooltip.c_str());
+	}
+}
+
 void ToolBar::Draw(SDL_Window* window)
 {
 	if (ImGui::BeginMainMenuBar())
@@ -443,7 +467,7 @@ void ToolBar::DrawPlayControls()
 	if (state != EPlayState::Edit) ImGui::BeginDisabled();
 	if (ImGui::Button(ICON_FA_PLAY, ImVec2(btnWidth, 0))) pie.StartPlay();
 	if (state != EPlayState::Edit) ImGui::EndDisabled();
-	if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s (%s)", LOCAL_CSTR("ToolBar.PlayTooltip"), ShortcutManager::Get().GetShortcutHint("PIE.Play"));
+	if (ImGui::IsItemHovered()) DrawActionTooltip("ToolBar.PlayTooltip", "PIE.Play");
 	ImGui::PopID();
 
 	ImGui::SameLine();
@@ -454,12 +478,12 @@ void ToolBar::DrawPlayControls()
 	if (state == EPlayState::Pause)
 	{
 		if (ImGui::Button(ICON_FA_PLAY, ImVec2(btnWidth, 0))) pie.Resume();
-		if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s (%s)", LOCAL_CSTR("ToolBar.ResumeTooltip"), ShortcutManager::Get().GetShortcutHint("PIE.PauseResume"));
+		if (ImGui::IsItemHovered()) DrawActionTooltip("ToolBar.ResumeTooltip", "PIE.PauseResume");
 	}
 	else
 	{
 		if (ImGui::Button(ICON_FA_PAUSE, ImVec2(btnWidth, 0))) pie.Pause();
-		if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s (%s)", LOCAL_CSTR("ToolBar.PauseTooltip"), ShortcutManager::Get().GetShortcutHint("PIE.PauseResume"));
+		if (ImGui::IsItemHovered()) DrawActionTooltip("ToolBar.PauseTooltip", "PIE.PauseResume");
 	}
 	if (state == EPlayState::Edit) ImGui::EndDisabled();
 	ImGui::PopID();
@@ -471,7 +495,7 @@ void ToolBar::DrawPlayControls()
 	if (state == EPlayState::Edit) ImGui::BeginDisabled();
 	if (ImGui::Button(ICON_FA_STOP, ImVec2(btnWidth, 0))) pie.Stop();
 	if (state == EPlayState::Edit) ImGui::EndDisabled();
-	if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s (%s)", LOCAL_CSTR("ToolBar.StopTooltip"), ShortcutManager::Get().GetShortcutHint("PIE.Stop"));
+	if (ImGui::IsItemHovered()) DrawActionTooltip("ToolBar.StopTooltip", "PIE.Stop");
 	ImGui::PopID();
 }
 #pragma endregion
@@ -562,8 +586,7 @@ void ToolBar::DrawFooterControls()
 	if (compiling) ImGui::EndDisabled();
 	if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
 	{
-		const char* title = LOCAL_CSTR(compiling ? "ToolBar.ModuleCompiling" : "ToolBar.ModuleCompile");
-		ImGui::SetTooltip("%s (%s)\n%s", title, ShortcutManager::Get().GetShortcutHint("Build.CompileModule"), LOCAL_CSTR("ToolBar.ModuleCompileTooltip"));
+		DrawActionTooltip(compiling ? "ToolBar.ModuleCompiling" : "ToolBar.ModuleCompile", "Build.CompileModule", LOCAL("ToolBar.ModuleCompileTooltip"));
 	}
 	ImGui::PopID();
 
@@ -586,8 +609,8 @@ void ToolBar::DrawFooterControls()
 		moduleReloader.ReloadModule();
 	if (ImGui::IsItemHovered())
 	{
-		ImGui::SetTooltip("%s (%s)\n%s", LOCAL_CSTR("ToolBar.ModuleReload"), ShortcutManager::Get().GetShortcutHint("Build.ReloadModule"),
-			LOCAL_FMT("ToolBar.ReloadModuleTooltip", moduleReloader.GetReloadIndex()).c_str());
+		DrawActionTooltip("ToolBar.ModuleReload", "Build.ReloadModule",
+			LOCAL_FMT("ToolBar.ReloadModuleTooltip", moduleReloader.GetReloadIndex()));
 	}
 	ImGui::PopID();
 
@@ -610,7 +633,7 @@ void ToolBar::DrawFooterControls()
 		shaderReloader.RequestRecompileAll();
 	if (ImGui::IsItemHovered())
 	{
-		ImGui::SetTooltip("%s (%s)\n%s", LOCAL_CSTR("ToolBar.ShaderReload"), ShortcutManager::Get().GetShortcutHint("Build.ReloadShaders"), LOCAL_CSTR("ToolBar.ShaderReloadTooltip"));
+		DrawActionTooltip("ToolBar.ShaderReload", "Build.ReloadShaders", LOCAL("ToolBar.ShaderReloadTooltip"));
 	}
 	ImGui::PopID();
 }

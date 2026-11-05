@@ -500,11 +500,11 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
                     action.NewName = Engine::StrToWStr(m_RenameBuffer);
                     m_RenamingEntity = entt::null;
                 }
-                else if (ImGui::IsKeyPressed(ImGuiKey_Escape))
+                else if (Engine::InputManager::Get().IsKeyButtonDown(Engine::EKeyCode::Escape))
                 {
                     m_RenamingEntity = entt::null;
                 }
-                else if (ImGui::IsItemDeactivated() && !ImGui::IsKeyPressed(ImGuiKey_Escape))
+                else if (ImGui::IsItemDeactivated() && !Engine::InputManager::Get().IsKeyButtonDown(Engine::EKeyCode::Escape))
                 {
                     action.RenameEntity = entity;
                     action.NewName = Engine::StrToWStr(m_RenameBuffer);

@@ -12,6 +12,7 @@
 #include "Model.h"
 #include "MaterialInterface.h"
 #include "ShortcutManager.h"
+#include "EditorSettings.h"
 
 
 AnimatorGraphPanel::AnimatorGraphPanel()
@@ -231,7 +232,7 @@ void AnimatorGraphPanel::DrawToolbar()
 	{
 		m_ShowPreviewViewport = !m_ShowPreviewViewport;
 	}
-	if (ImGui::IsItemHovered()) ImGui::SetTooltip("Toggle 3D Preview Viewport");
+	if (ImGui::IsItemHovered()) ImGui::SetTooltip(LOCAL_CSTR("AnimatorGraph.TogglePreview"));
 
 	if (ImGui::Button((ICON_FA_PLUS " " + LOCAL_LABEL("AnimatorGraph.CreateState")).c_str()))
 	{
@@ -634,7 +635,7 @@ void AnimatorGraphPanel::DrawStateInspector(Engine::AnimState& state)
 	if (ImGui::Checkbox(LOCAL_LABEL("PROP_IS_LOOPING").c_str(), &state.isLooping)) m_IsDirty = true;
 	if (state.isLooping)
 	{
-		if (ImGui::SliderFloat("Loop Blend Duration", &state.loopBlendDuration, 0.0f, 0.5f, "%.2fs")) m_IsDirty = true;
+		if (ImGui::SliderFloat(LOCAL_LABEL("PROP_LOOP_BLEND_DURATION").c_str(), &state.loopBlendDuration, 0.0f, 0.5f, "%.2fs")) m_IsDirty = true;
 	}
 
 	const bool isDefault = (state.name == m_StateMachine->defaultState);

@@ -22,6 +22,8 @@
 #include "PrefabEditorPanel.h"
 #include "SpriteAnimationEditor.h"
 #include "ContentBrowserPanel.h"
+#include "PreviewViewportWidget.h"
+#include "UIViewportPanel.h"
 
 BEGIN(Editor)
 
@@ -145,6 +147,10 @@ void EditorActionRegistry::RegisterAll()
         .CanExecute = []() {
             const auto* animatorPanel = AnimatorGraphPanel::GetActivePanel();
             if (animatorPanel && animatorPanel->IsOpen() && animatorPanel->IsFocused())
+                return false;
+
+            const auto* timelinePanel = AnimationTimelinePanel::GetActivePanel();
+            if (timelinePanel && timelinePanel->IsOpen() && timelinePanel->IsFocused())
                 return false;
 
             auto& history = Application::Get().GetEditHistory();
@@ -396,22 +402,54 @@ void EditorActionRegistry::RegisterAll()
     });
 
     sm.RegisterAction({
-        .Id = "Viewport.Focus",
-        .DisplayNameKey = "Action.Viewport.Focus",
-        .CategoryKey = "Shortcuts.CategoryViewport",
-        .Context = EShortcutContext::Global, // 전역 어디서든 F로 포커스 가능
-        .DefaultChord = ShortcutChord(Engine::EKeyCode::F),
-        .ExecuteHandler = []() {
-            SceneViewportPanel* vp = SceneViewportPanel::GetActiveSceneViewport();
-            if (!vp)
-                vp = dynamic_cast<SceneViewportPanel*>(ImGuiManager::Get().GetImGuiPanel(L"Scene View"));
-            if (vp)
-                vp->FocusSelectedEntity();
-        },
-        .CanExecute = []() {
-            auto& h = Application::Get().GetEditHistory();
-            return h.ShortcutsAllowed() && !SelectionManager::Get().GetSelectedEntities().empty();
+    .Id = "Viewport.Focus",
+    .DisplayNameKey = "Action.Viewport.Focus",
+    .CategoryKey = "Shortcuts.CategoryViewport",
+    .Context = EShortcutContext::Global,
+    .DefaultChord = ShortcutChord(Engine::EKeyCode::F),
+    .ExecuteHandler = []() {
+        if (auto* preview = PreviewViewportWidget::GetShortcutTarget())
+        {
+            preview->RefocusTarget();
+            return;
         }
+
+        auto* graph = GraphPanel::GetActiveGraphPanel();
+        if (graph && graph->CanUseCanvas() && graph->IsFocused())
+        {
+            graph->ResetCanvasView();
+            return;
+        }
+
+        auto* ui = dynamic_cast<UIViewportPanel*>(ImGuiManager::Get().GetImGuiPanel(L"UI View"));
+        if (ui && ui->IsOpen() && ui->IsFocused())
+        {
+            ui->FocusCanvas();
+            return;
+        }
+
+        auto* viewport = SceneViewportPanel::GetActiveSceneViewport();
+        if (!viewport)
+            viewport = dynamic_cast<SceneViewportPanel*>(ImGuiManager::Get().GetImGuiPanel(L"Scene View"));
+
+        if (viewport)
+            viewport->FocusSelectedEntity();
+    },
+    .CanExecute = []() {
+        if (const auto* preview = PreviewViewportWidget::GetShortcutTarget())
+            return preview->CanFocusTarget();
+
+        const auto* graph = GraphPanel::GetActiveGraphPanel();
+        if (graph && graph->CanUseCanvas() && graph->IsFocused())
+            return true;
+
+        const auto* ui = dynamic_cast<UIViewportPanel*>(ImGuiManager::Get().GetImGuiPanel(L"UI View"));
+        if (ui && ui->IsOpen() && ui->IsFocused())
+            return ui->CanFocusCanvas();
+
+        auto& history = Application::Get().GetEditHistory();
+        return history.ShortcutsAllowed() && !SelectionManager::Get().GetSelectedEntities().empty();
+    }
         });
 
     sm.RegisterAction({
@@ -459,6 +497,34 @@ void EditorActionRegistry::RegisterAll()
     // [Graph Editor Actions] (GraphEditor Context)
     // =========================================================================================
     sm.RegisterAction({
+        .Id = "Graph.AddNode",
+        .DisplayNameKey = "GraphPanel.AddNode",
+        .CategoryKey = "Shortcuts.CategoryGraph",
+        .Context = EShortcutContext::GraphEditor,
+        .DefaultChord = ShortcutChord(Engine::EKeyCode::Space),
+        .ExecuteHandler = []() {
+            if (auto* panel = GraphPanel::GetActiveGraphPanel()) panel->OpenAddNodeMenu();
+        },
+        .CanExecute = []() {
+            const auto* panel = GraphPanel::GetActiveGraphPanel();
+            return panel && panel->CanUseCanvas() && panel->IsFocused();
+        }
+    });
+    sm.RegisterAction({
+        .Id = "Graph.Validate",
+        .DisplayNameKey = "GraphPanel.Validate",
+        .CategoryKey = "Shortcuts.CategoryGraph",
+        .Context = EShortcutContext::GraphEditor,
+        .DefaultChord = ShortcutChord(Engine::EKeyCode::F7),
+        .ExecuteHandler = []() {
+            if (auto* panel = GraphPanel::GetActiveGraphPanel()) panel->ValidateGraph();
+        },
+        .CanExecute = []() {
+            const auto* panel = GraphPanel::GetActiveGraphPanel();
+            return panel && panel->CanUseCanvas() && panel->IsFocused();
+        }
+    });
+    sm.RegisterAction({
         .Id = "Graph.AlignTop",
         .DisplayNameKey = "Action.Graph.AlignTop",
         .CategoryKey = "Shortcuts.CategoryGraph",
@@ -466,6 +532,10 @@ void EditorActionRegistry::RegisterAll()
         .DefaultChord = ShortcutChord(Engine::EKeyCode::W, EModifierKey::Shift),
         .ExecuteHandler = []() {
             if (auto* gp = GraphPanel::GetActiveGraphPanel()) gp->AlignNodes('W');
+        },
+        .CanExecute = []() {
+            const auto* panel = GraphPanel::GetActiveGraphPanel();
+            return panel && panel->CanUseCanvas();
         }
     });
 
@@ -477,6 +547,10 @@ void EditorActionRegistry::RegisterAll()
         .DefaultChord = ShortcutChord(Engine::EKeyCode::S, EModifierKey::Shift),
         .ExecuteHandler = []() {
             if (auto* gp = GraphPanel::GetActiveGraphPanel()) gp->AlignNodes('S');
+        },
+        .CanExecute = []() {
+            const auto* panel = GraphPanel::GetActiveGraphPanel();
+            return panel && panel->CanUseCanvas();
         }
     });
 
@@ -488,6 +562,10 @@ void EditorActionRegistry::RegisterAll()
         .DefaultChord = ShortcutChord(Engine::EKeyCode::A, EModifierKey::Shift),
         .ExecuteHandler = []() {
             if (auto* gp = GraphPanel::GetActiveGraphPanel()) gp->AlignNodes('A');
+        },
+        .CanExecute = []() {
+            const auto* panel = GraphPanel::GetActiveGraphPanel();
+            return panel && panel->CanUseCanvas();
         }
     });
 
@@ -499,6 +577,10 @@ void EditorActionRegistry::RegisterAll()
         .DefaultChord = ShortcutChord(Engine::EKeyCode::D, EModifierKey::Shift),
         .ExecuteHandler = []() {
             if (auto* gp = GraphPanel::GetActiveGraphPanel()) gp->AlignNodes('D');
+        },
+        .CanExecute = []() {
+            const auto* panel = GraphPanel::GetActiveGraphPanel();
+            return panel && panel->CanUseCanvas();
         }
     });
 
@@ -510,6 +592,10 @@ void EditorActionRegistry::RegisterAll()
         .DefaultChord = ShortcutChord(Engine::EKeyCode::H, EModifierKey::Shift),
         .ExecuteHandler = []() {
             if (auto* gp = GraphPanel::GetActiveGraphPanel()) gp->AlignNodes('H');
+        },
+        .CanExecute = []() {
+            const auto* panel = GraphPanel::GetActiveGraphPanel();
+            return panel && panel->CanUseCanvas();
         }
     });
 
@@ -521,6 +607,10 @@ void EditorActionRegistry::RegisterAll()
         .DefaultChord = ShortcutChord(Engine::EKeyCode::V, EModifierKey::Shift),
         .ExecuteHandler = []() {
             if (auto* gp = GraphPanel::GetActiveGraphPanel()) gp->AlignNodes('V');
+        },
+        .CanExecute = []() {
+            const auto* panel = GraphPanel::GetActiveGraphPanel();
+            return panel && panel->CanUseCanvas();
         }
     });
 
@@ -532,6 +622,10 @@ void EditorActionRegistry::RegisterAll()
         .DefaultChord = ShortcutChord(Engine::EKeyCode::D, EModifierKey::Ctrl),
         .ExecuteHandler = []() {
             if (auto* gp = GraphPanel::GetActiveGraphPanel()) gp->DuplicateSelectedNodes();
+        },
+        .CanExecute = []() {
+            const auto* panel = GraphPanel::GetActiveGraphPanel();
+            return panel && panel->CanUseCanvas();
         }
     });
 
@@ -543,6 +637,10 @@ void EditorActionRegistry::RegisterAll()
         .DefaultChord = ShortcutChord(Engine::EKeyCode::C),
         .ExecuteHandler = []() {
             if (auto* gp = GraphPanel::GetActiveGraphPanel()) gp->CreateCommentBox();
+        },
+        .CanExecute = []() {
+            const auto* panel = GraphPanel::GetActiveGraphPanel();
+            return panel && panel->CanUseCanvas();
         }
     });
 
@@ -554,6 +652,10 @@ void EditorActionRegistry::RegisterAll()
         .DefaultChord = ShortcutChord(Engine::EKeyCode::Delete),
         .ExecuteHandler = []() {
             if (auto* gp = GraphPanel::GetActiveGraphPanel()) gp->DeleteSelectedElements();
+        },
+        .CanExecute = []() {
+            const auto* panel = GraphPanel::GetActiveGraphPanel();
+            return panel && panel->CanUseCanvas();
         }
     });
 
@@ -776,24 +878,34 @@ void EditorActionRegistry::RegisterAll()
         }
         });
     sm.RegisterAction({
-        .Id = "Timeline.ZoomReset",
-        .DisplayNameKey = "Action.Timeline.ZoomReset",
-        .CategoryKey = "Shortcuts.CategoryTimeline",
-        .Context = EShortcutContext::AnimationTimeline,
-        .DefaultChord = ShortcutChord(Engine::EKeyCode::F),
-        .ExecuteHandler = []() {
-            if (auto* panel = AnimationTimelinePanel::GetActivePanel()) panel->ResetZoom();
-        }
+    .Id = "Timeline.ZoomReset",
+    .DisplayNameKey = "Action.Timeline.ZoomReset",
+    .CategoryKey = "Shortcuts.CategoryTimeline",
+    .Context = EShortcutContext::AnimationTimeline,
+    .DefaultChord = ShortcutChord(Engine::EKeyCode::F),
+    .ExecuteHandler = []() {
+        if (auto* panel = AnimationTimelinePanel::GetActivePanel())
+            panel->ResetZoom();
+    },
+    .CanExecute = []() {
+        const auto* panel = AnimationTimelinePanel::GetActivePanel();
+        return panel && panel->IsOpen();
+    }
         });
     sm.RegisterAction({
-        .Id = "Timeline.DeleteSelected",
-        .DisplayNameKey = "Action.Timeline.DeleteSelected",
-        .CategoryKey = "Shortcuts.CategoryTimeline",
-        .Context = EShortcutContext::AnimationTimeline,
-        .DefaultChord = ShortcutChord(Engine::EKeyCode::Delete),
-        .ExecuteHandler = []() {
-            if (auto* panel = AnimationTimelinePanel::GetActivePanel()) panel->DeleteSelected();
-        }
+    .Id = "Timeline.DeleteSelected",
+    .DisplayNameKey = "Action.Timeline.DeleteSelected",
+    .CategoryKey = "Shortcuts.CategoryTimeline",
+    .Context = EShortcutContext::AnimationTimeline,
+    .DefaultChord = ShortcutChord(Engine::EKeyCode::Delete),
+    .ExecuteHandler = []() {
+        if (auto* panel = AnimationTimelinePanel::GetActivePanel())
+            panel->DeleteSelected();
+    },
+    .CanExecute = []() {
+        const auto* panel = AnimationTimelinePanel::GetActivePanel();
+        return panel && panel->CanDeleteSelected();
+    }
         });
 
     // ── [Edit / Editor Actions] ──

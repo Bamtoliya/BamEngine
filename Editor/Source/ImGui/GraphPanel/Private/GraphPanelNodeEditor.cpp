@@ -6,6 +6,15 @@
 #include <imgui_node_editor.h>
 namespace ed = ax::NodeEditor;
 
+namespace
+{
+	struct RestoreEditorContext
+	{
+		ed::EditorContext* Previous = ed::GetCurrentEditor();
+		~RestoreEditorContext() { ed::SetCurrentEditor(Previous); }
+	};
+}
+
 #pragma region Context
 void GraphPanel::ActivateDocument()
 {
@@ -33,7 +42,61 @@ void GraphPanel::ActivateDocument()
 		style.FlowMarkerDistance = 28.0f;
 	}
 	ed::SetCurrentEditor(document.Context);
+	// Keyboard commands are owned by ShortcutManager, including the library's default Delete and F.
+	ed::EnableShortcuts(false);
 	ed::GetStyle().LinkStrength = (m_WireStyle == EWireStyle::Straight) ? 0.0f : 100.0f;
+}
+
+void GraphPanel::OpenAddNodeMenu()
+{
+	if (!CanUseCanvas()) return;
+	const RestoreEditorContext restore;
+	ActivateDocument();
+	const auto mouse = Engine::InputManager::Get().GetScreenMousePosition();
+	m_AddPosition = ed::ScreenToCanvas(ImVec2(mouse.x, mouse.y));
+	m_AddSource = {};
+	PrepareNodeMenu();
+	m_OpenNodePopup = true;
+}
+
+void GraphPanel::ResetCanvasView()
+{
+	if (!CanUseCanvas()) return;
+	const RestoreEditorContext restore;
+	ActivateDocument();
+	ed::NavigateToContent(0.5f);
+}
+
+void GraphPanel::AlignNodes(char dir)
+{
+	if (!CanUseCanvas()) return;
+	const RestoreEditorContext restore;
+	ActivateDocument();
+	AlignSelectedNodes(dir);
+}
+
+void GraphPanel::DuplicateSelectedNodes()
+{
+	if (!CanUseCanvas()) return;
+	const RestoreEditorContext restore;
+	ActivateDocument();
+	DuplicateSelection();
+}
+
+void GraphPanel::CreateCommentBox()
+{
+	if (!CanUseCanvas()) return;
+	const RestoreEditorContext restore;
+	ActivateDocument();
+	CreateCommentBoxFromSelection();
+}
+
+void GraphPanel::DeleteSelectedElements()
+{
+	if (!CanUseCanvas()) return;
+	const RestoreEditorContext restore;
+	ActivateDocument();
+	DeleteSelection();
 }
 void GraphPanel::SuspendDocument()
 {
@@ -83,7 +146,12 @@ void GraphPanel::DrawCanvas(float height)
 		m_ContextClickStartedOnCanvas = false;
 
 	const ed::LinkId hoveredLinkId = ed::GetHoveredLink();
-	if (hoveredLinkId && input.IsMouseButtonDoubleClicked(Engine::EMouseButton::Left))
+	if (canvasHovered && hoveredLinkId && input.IsAltPressed() && input.IsMouseButtonDown(Engine::EMouseButton::Left))
+	{
+		// Preserve the pointer gesture while the library's keyboard shortcuts are disabled.
+		ed::DeleteLink(hoveredLinkId);
+	}
+	else if (canvasHovered && hoveredLinkId && input.IsMouseButtonDoubleClicked(Engine::EMouseButton::Left))
 	{
 		const auto mouse = input.GetScreenMousePosition();
 		const ImVec2 canvasPos = ed::ScreenToCanvas(ImVec2(mouse.x, mouse.y));
@@ -129,39 +197,10 @@ void GraphPanel::DrawCanvas(float height)
 			ImGui::OpenPopup("##GraphCanvasMenu");
 		}
 	}
-	const bool menuOpen = ImGui::IsPopupOpen("##GraphCanvasMenu") || ImGui::IsPopupOpen("##GraphNodeMenu") ||
-		ImGui::IsPopupOpen("##GraphLinkMenu") || ImGui::IsPopupOpen("##GraphPinMenu") || m_OpenNodePopup;
-	const bool canvasFocused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
-	// ── 단축키 처리 ──
-	if (false && canvasFocused && !menuOpen && !ImGui::GetIO().WantTextInput) // Handled via ShortcutManager (GraphEditor Context)
+	if (m_OpenNodePopup)
 	{
-		const bool shift = ImGui::GetIO().KeyShift || Engine::InputManager::Get().IsShiftPressed();
-		const bool ctrl = ImGui::GetIO().KeyCtrl || Engine::InputManager::Get().IsCtrlPressed();
-		if (shift)
-		{
-			if (InputManager::Get().IsKeyButtonDown(EKeyCode::W)) AlignSelectedNodes('W');
-			else if (InputManager::Get().IsKeyButtonDown(EKeyCode::S)) AlignSelectedNodes('S');
-			else if (InputManager::Get().IsKeyButtonDown(EKeyCode::A)) AlignSelectedNodes('A');
-			else if (InputManager::Get().IsKeyButtonDown(EKeyCode::D)) AlignSelectedNodes('D');
-			else if (InputManager::Get().IsKeyButtonDown(EKeyCode::H)) AlignSelectedNodes('H');
-			else if (InputManager::Get().IsKeyButtonDown(EKeyCode::V)) AlignSelectedNodes('V');
-		}
-		else if (ctrl)
-		{
-			if (InputManager::Get().IsKeyButtonDown(EKeyCode::D)) DuplicateSelection();
-		}
-		else if (InputManager::Get().IsKeyButtonDown(EKeyCode::C))
-		{
-			CreateCommentBoxFromSelection();
-		}
-		else if (InputManager::Get().IsKeyButtonDown(EKeyCode::Delete) || ImGui::IsKeyPressed(ImGuiKey_Delete))
-		{
-			DeleteSelection();
-		}
-		else if (InputManager::Get().IsKeyButtonDown(EKeyCode::F9))
-		{
-			if (!document.SelectedNodes.empty()) ToggleBreakpoint(document.SelectedNodes.front());
-		}
+		m_OpenNodePopup = false;
+		ImGui::OpenPopup("##GraphCanvasMenu");
 	}
 	// ── 1. 빈 캔버스 우클릭 메뉴 ──
 	if (ImGui::BeginPopup("##GraphCanvasMenu"))
@@ -881,7 +920,7 @@ void GraphPanel::DrawCommentNode(const GraphNode& node)
 			document.CommentTexts[node.Id] = m_CommentEditBuffer;
 			m_EditingCommentNode = 0;
 		}
-		if (!ImGui::IsItemActive() && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+		if (!ImGui::IsItemActive() && Engine::InputManager::Get().IsMouseButtonDown(Engine::EMouseButton::Left))
 		{
 			document.CommentTexts[node.Id] = m_CommentEditBuffer;
 			m_EditingCommentNode = 0;
@@ -893,7 +932,7 @@ void GraphPanel::DrawCommentNode(const GraphNode& node)
 		ImGui::TextUnformatted(commentText.c_str());
 		ImGui::PopStyleColor();
 
-		if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+		if (ImGui::IsItemHovered() && Engine::InputManager::Get().IsMouseButtonDoubleClicked(Engine::EMouseButton::Left))
 		{
 			m_EditingCommentNode = node.Id;
 			strncpy_s(m_CommentEditBuffer, commentText.c_str(), sizeof(m_CommentEditBuffer) - 1);

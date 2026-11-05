@@ -1045,8 +1045,8 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 			{
 				std::wstring selectedPath;
 				const std::vector<FileDialogFilter> filters{
-					{ L"Animator Controller (*.animator)", L"*.animator" },
-					{ L"JSON Files (*.json)", L"*.json" }
+					{ Engine::StrToWStr(LOCAL("FileDialog.AnimatorFiles")), L"*.animator" },
+					{ Engine::StrToWStr(LOCAL("FileDialog.JsonFiles")), L"*.json" }
 				};
 				if (FileDialogs::OpenFileDialog(selectedPath, filters))
 				{
@@ -1237,8 +1237,8 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 			{
 				std::wstring selectedPath;
 				const std::vector<FileDialogFilter> filters{
-					{ L"Action Timeline Asset (*.actiontimeline.json)", L"*.actiontimeline.json" },
-					{ L"All Files (*.*)", L"*.*" }
+					{ Engine::StrToWStr(LOCAL("FileDialog.ActionTimelineFiles")), L"*.actiontimeline.json" },
+					{ Engine::StrToWStr(LOCAL("FileDialog.AllFiles")), L"*.*" }
 				};
 				if (FileDialogs::OpenFileDialog(selectedPath, filters, L"Resources/Animation"))
 				{
@@ -1264,7 +1264,7 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 				timeline.Stop();
 			}
 			ImGui::SameLine();
-			ImGui::TextDisabled("(%.2fs)", timeline.currentTime);
+			ImGui::TextDisabled(LOCAL_CSTR("Inspector.ElapsedSeconds"), timeline.currentTime);
 
 			// 3. 에디터 타임라인 패널 원클릭 편집 연동 버튼
 			ImGui::Spacing();

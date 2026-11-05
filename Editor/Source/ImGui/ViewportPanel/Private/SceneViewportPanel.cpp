@@ -316,7 +316,6 @@ void SceneViewportPanel::Update(f32 dt)
 	if (cameraBuffer.has_value() && *m_DebugRenderer.GetDrawCollidersPtr())
 		m_DebugRenderer.SubmitDebugDraw(*cameraBuffer, m_DisplayRTName);
 
-	KeyboardInput();
 	MouseInput();
 }
 
@@ -1274,17 +1273,6 @@ void SceneViewportPanel::SubmitUIOverlayPass(const wstring& currentRT)
 #pragma endregion
 
 #pragma region Inputs
-void SceneViewportPanel::KeyboardInput()
-{
-	if (false && KEY_PRESSED(EKeyCode::LShift))
-	{
-		if (KEY_DOWN("1")) m_GizmoOperation = ImGuizmo::OPERATION::TRANSLATE;
-		if (KEY_DOWN("2")) m_GizmoOperation = ImGuizmo::OPERATION::ROTATE;
-		if (KEY_DOWN("3")) m_GizmoOperation = ImGuizmo::OPERATION::SCALE;
-		if (KEY_DOWN(EKeyCode::L)) SelectionManager::Get().TogglePrimarySelectionLock();
-	}
-
-}
 void SceneViewportPanel::MouseInput()
 {
 	SDL_Window* window = static_cast<SDL_Window*>(Renderer::Get().GetRHI()->GetWindowHandle());
