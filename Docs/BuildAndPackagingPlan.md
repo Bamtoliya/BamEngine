@@ -1,6 +1,6 @@
 # 다음 목표: Client 실행 설정과 빌드·패키징
 
-- 작성일: 2026-10-24 (최종 갱신: 2026-11-03)
+- 작성일: 2026-10-24 (최종 갱신: 2026-11-05)
 - 상태: 일부 구현 / 실행 루트·설정 기반 시작 씬 연결 반영, F03·F04 패키징 수집 및 Standalone Client 독립 실행 검증 완료 (시작 매니페스트·실패 정책 잔여)
 - 관련 지침: [EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md)의 3절, 12절, 13절
 - 직렬화 지침: [ReflectionArchiveGuidelines.md](ReflectionArchiveGuidelines.md)
@@ -84,8 +84,9 @@ Editor에서 제작하고 저장한 프로젝트를 배포 폴더로 구성하�
 ### 4단계: Stage와 Package
 
 - 전용 출력 폴더에 실행 파일, Engine DLL, 필요한 런타임 DLL과 프로젝트 모듈을 수집한다.
+- [ResourceAndAssetSeparationPlan.md](ResourceAndAssetSeparationPlan.md)의 원칙에 따라, 런타임 필수 엔진 빌트인 리소스(`Engine/Resources/`)와 시작 씬이 참조하는 프로젝트 애셋(`Assets/`)을 분리 수집한다.
 - 프로젝트 설정, 시작 씬, 시작 매니페스트와 실행 리소스를 경로 규칙에 맞게 배치한다.
-- Editor 개인 설정, `.bam/User` 작업 상태와 개발 로그는 배포 대상에서 제외한다.
+- Editor 개인 설정, `.bam/User` 작업 상태, 에디터 전용 리소스(`Editor.csv`, 에디터 아이콘/셰이더 등), 미사용 원본 테스트 파일(`.zip`, `.blend`) 및 개발 로그는 배포 대상에서 제외한다.
 - 첫 완료 목표는 실행 가능한 배포 폴더로 삼는다. 압축 배포나 설치 프로그램은 이후 범위로 둔다.
 
 ## 5. 초기 배포 폴더 후보
@@ -100,10 +101,9 @@ Package/
 ├─ GameModule.dll            # 해당 프로젝트가 사용하는 경우
 ├─ Config/
 │  └─ Project.json
-└─ Resources/
-   ├─ Config/Startup/
-   ├─ Scenes/
-   └─ 실행에 필요한 리소스
+├─ Engine/
+│  └─ Resources/             # 런타임 최소 엔진 빌트인 리소스 (Shaders, Textures, Meshes, Localization)
+└─ Assets/                   # 프로젝트 사용자 애셋 (Scenes, Models, Materials 등)
 ```
 
 ## 6. 완료 검증

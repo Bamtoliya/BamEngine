@@ -308,6 +308,7 @@ Engine·Render·Editor·Client 계획에서 무엇을 먼저 연결하고 무엇
 - Engine 9·10절 및 [AnimatorGraphPlan.md](AnimatorGraphPlan.md): 기존 스켈레탈 평가·ASM·1D 블렌드·저작 UI·계층 연결의 정확성과 저장 보호를 검증한 뒤, Phase 5(AnimNotify, 레이어/본 마스크), [AnimationTimelineEditorPlan.md](AnimationTimelineEditorPlan.md)의 애니메이션·이펙트·노티파이 통합 타임라인 저작 도구 및 런타임 재생 시스템(Phase 1~5 완료), 2D 블렌드·소켓·IK·리타게팅을 확장한다.
 - Engine 11절: 실제 요구에 맞는 텍스트 스크립트 언어/VM 선택·엔진 바인딩·배포. 네이티브 모듈과 지원 범위를 구분한다.
 - ImGui 10·11·14절: 독립 프리팹 편집, 참조 색인·누락 검사, 임포트 옵션·재임포트, 검색·썸네일·미리보기와 비용 제한.
+- 빌트인 리소스와 사용자 애셋 분리 보관 파이프라인 ([ResourceAndAssetSeparationPlan.md](ResourceAndAssetSeparationPlan.md)): `Engine/Resources/` 불변 시스템 자원과 `Assets/` 가변 사용자 콘텐츠의 물리 분리, 가상 마운트 URI(`Engine://`, `Project://`) 해석 계층, 에디터 콘텐츠 브라우저 읽기 전용 보호 및 패키징 시 경량 배포 연동을 구축한다.
 - 모델 임포터 자동 메쉬 LOD 생성 파이프라인 ([InteractiveModelImportPreviewPlan.md](InteractiveModelImportPreviewPlan.md) Phase 5): `meshoptimizer`(`meshopt_simplify`) 라이브러리를 도입하여 QEM 기반 정점/UV 경계 보존 메쉬 간소화 수행, `_LOD1.bammesh` 자동 디스크 베이킹 및 `LODGroupComponent` 화면 커버리지 임계값 자동 구성을 연결한다.
 - 텍스처 밉맵(Mipmap) 체인 구축 및 GPU 블록 압축(BC7/DDS) ([RenderingDevelopmentPlan.md](RenderingDevelopmentPlan.md) S2-D): CPU `stb_image_resize2` 기반 Mip 0 ~ Mip N 런타임 다운샘플링 체인 생성 및 RHI 다중 서브리소스 업로드(`UploadTextureData`)를 지원하고, 에셋 임포트 시 `DirectXTex`(`texconv`) 오프라인 BC7/DDS 베이킹 파이프라인을 구축하여 원거리 텍스처 앨리어싱 해소 및 VRAM 대역폭을 최적화한다.
 - Engine 14절: 해당 예제에 필요한 캐릭터 이동·게임 저장·카메라·오디오·UI 위젯·타일맵·비동기 로딩을 작은 흐름으로 연결한다.
@@ -484,6 +485,11 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
   - 현재 `Texture.cpp`의 단일 밉(Mip 0) 하드코딩 및 `DirectX12RHI::UploadTextureData`의 서브리소스 1개 제약을 해소.
   - 런타임: `stb_image_resize2` 기반 CPU 밉맵 체인 생성 및 RHI 다중 서브리소스 순회 업로드.
   - 오프라인/임포트: `DirectXTex`(`texconv`)를 활용한 BC7/BC5 블록 압축 및 밉맵 내장 `.dds` 에셋 베이킹 파이프라인 구축.
+- **빌트인 리소스와 사용자 애셋 분리 보관 파이프라인 — P3 / 에셋 아키텍처 ([ResourceAndAssetSeparationPlan.md](ResourceAndAssetSeparationPlan.md))**:
+  - `Engine/Resources/` 불변 시스템 자원(기본 셰이더, 프리미티브 메시, 기본 텍스처, 엔진 로캘)과 `Assets/` 가변 사용자 콘텐츠(씬, 임포트 모델, 텍스처, 오디오, 머티리얼)의 물리 디렉터리 분리.
+  - `ResourceManager` 및 `PlatformPath`에 가상 마운트 URI(`Engine://`, `Project://`) 해석 계층 구축 및 레거시 상대 경로 하위 호환 매핑.
+  - 에디터 `ContentBrowserPanel`의 `Show Engine Content` 뷰 토글 옵션 및 빌트인 자원 읽기 전용 보호 적용.
+  - `PackageClient.ps1` 연동: 에디터 전용 리소스 및 미사용 원본 테스트 파일 제외, 런타임 필수 엔진 자원과 프로젝트 에셋 분리 수집.
 
 ### 10.8 사용 조건에 따라 먼저 처리할 경로
 
