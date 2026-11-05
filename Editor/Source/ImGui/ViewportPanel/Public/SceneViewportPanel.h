@@ -119,7 +119,6 @@ private:
 
 #pragma region Inputs
 private:
-private:
 	void MouseInput();
 	void CapturePickingRequest(bool imageHovered);
 	void ProcessPickingRequest();

@@ -39,6 +39,7 @@
 #include "Model.h"
 #include "ResourceManager.h"
 #include "SplineCurve.h"
+#include "ImGuiManager.h"
 
 #pragma region Helper
 struct LightingPassData
@@ -667,12 +668,20 @@ void SceneViewportPanel::DrawGizmoMenu()
 			float snapR = prefs.GizmoSnapRotation;
 			float snapS = prefs.GizmoSnapScale;
 
-			if (ImGui::DragFloat(LOCAL_LABEL("Viewport.SnapTranslation").c_str(), &snapT, 0.1f, 0.01f, 100.0f, "%.2f"))
-				settings.SetGizmoSnapTranslation(snapT);
-			if (ImGui::DragFloat(LOCAL_LABEL("Viewport.SnapRotation").c_str(), &snapR, 1.0f, 1.0f, 180.0f, "%.1f deg"))
-				settings.SetGizmoSnapRotation(snapR);
-			if (ImGui::DragFloat(LOCAL_LABEL("Viewport.SnapScale").c_str(), &snapS, 0.05f, 0.01f, 10.0f, "%.2f"))
-				settings.SetGizmoSnapScale(snapS);
+			bool changed = false;
+			changed |= ImGui::DragFloat(LOCAL_LABEL("Viewport.SnapTranslation").c_str(), &snapT,
+				0.1f, 0.01f, 100.0f, "%.2f");
+			changed |= ImGui::DragFloat(LOCAL_LABEL("Viewport.SnapRotation").c_str(), &snapR,
+				1.0f, 1.0f, 180.0f, "%.1f deg");
+			changed |= ImGui::DragFloat(LOCAL_LABEL("Viewport.SnapScale").c_str(), &snapS,
+				0.05f, 0.01f, 10.0f, "%.2f");
+
+			if (changed)
+			{
+				const auto result = settings.SetGizmoSnapping(snapT, snapR, snapS);
+				if (!result.Applied || result.SaveStatus != EEditorSettingsSaveStatus::Saved)
+					ImGuiManager::Get().NotifySettingsChange(result);
+			}
 		}
 		ImGui::EndMenu(); // 1번만 호출되도록 정리
 	}

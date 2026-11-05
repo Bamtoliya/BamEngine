@@ -78,20 +78,22 @@ void MaterialEditor::SetTargetResource(const std::filesystem::path& assetPath)
 
 void MaterialEditor::Update(f32 dt)
 {
-	// 1. 창이 닫혔거나 다른 탭 뒤에 숨겨진 경우 프리뷰 제출 완전 차단 (0 FPS)
 	if (!m_Open || !m_IsVisibleOnScreen || !m_Material)
 		return;
-	// 2. 마우스 조작이나 파라미터 변경이 없는 정적 상태에서는 프레임 쓰로틀링 (5 FPS)
+	// [안전 방어]: 베이스 머티리얼이 없는 인스턴스는 렌더러 크래시 방지를 위해 프리뷰 제출 차단
+	auto* inst = dynamic_cast<Engine::MaterialInstance*>(m_Material);
+	if (inst && !inst->GetBaseMaterial())
+		return;
 	if (m_PreviewDirtyTimer > 0.0f)
 	{
 		m_PreviewDirtyTimer -= dt;
-		m_PreviewRenderer.Submit(m_Material, dt); // 활성 조작 중: 60 FPS
+		m_PreviewRenderer.Submit(m_Material, dt);
 	}
 	else
 	{
 		static float s_IdleTimer = 0.0f;
 		s_IdleTimer += dt;
-		if (s_IdleTimer >= 0.2f) // 평소 대기 상태: 0.2초(5 FPS)마다 1회만 제출
+		if (s_IdleTimer >= 0.2f)
 		{
 			s_IdleTimer = 0.0f;
 			m_PreviewRenderer.Submit(m_Material, dt);
@@ -180,6 +182,8 @@ void MaterialEditor::DrawToolbar()
 		if (result == EResult::Success)
 		{
 			m_IsDirty = false;
+			if (AssetCache::IsCreated())
+				AssetCache::Get().RequestInvalidate(m_TargetResourcePath);
 			EDITOR_LOG_INFO("Material saved: {}", pathStr);
 		}
 		else
@@ -194,6 +198,10 @@ void MaterialEditor::DrawToolbar()
 		if (m_Material->Reload(m_TargetResourcePath) == EResult::Success)
 		{
 			m_IsDirty = false;
+
+			if (AssetCache::IsCreated())
+				AssetCache::Get().RequestInvalidate(m_TargetResourcePath);
+
 			EDITOR_LOG_INFO("Material reverted: {}", m_TargetResourcePath.string());
 		}
 	}
@@ -218,8 +226,26 @@ void MaterialEditor::DrawPipelineSettings()
 	auto* inst = dynamic_cast<Engine::MaterialInstance*>(m_Material);
 	if (inst)
 	{
-		std::string baseName = GetResourceDisplayName(inst->GetBaseMaterial());
-		ImGui::Text("%s", LOCAL_FMT("MaterialEditor.BaseMaterial", baseName).c_str());
+		auto baseHandle = inst->GetBaseMaterialHandle();
+		Engine::Material* baseMat = inst->GetBaseMaterial();
+		if (!baseMat)
+		{
+			// 베이스 머티리얼 누락 시 경고 배너 표시
+			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.4f, 0.2f, 1.0f));
+			ImGui::TextWrapped(ICON_FA_TRIANGLE_EXCLAMATION " %s", LOCAL_CSTR("MaterialEditor.BaseMaterialMissing"));
+			ImGui::PopStyleColor();
+		}
+		ImGui::AlignTextToFramePadding();
+		ImGui::Text("%s:", LOCAL_CSTR("MaterialEditor.BaseMaterialSlot"));
+		ImGui::SameLine();
+		// 베이스 머티리얼을 다시 연결할 수 있는 피커 슬롯 제공
+		ImGui::PushID("BaseMaterialSlot");
+		if (Editor::DrawInspectorResourcePicker(baseHandle, true))
+		{
+			inst->SetBaseMaterial(baseHandle);
+			m_IsDirty = true;
+		}
+		ImGui::PopID();
 		ImGui::Separator();
 	}
 

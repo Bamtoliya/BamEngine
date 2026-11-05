@@ -2,8 +2,6 @@
 
 #include "ReflectionInspectorSupport.h"
 #include "Functions.h"
-#include "AssetCache.h"
-#include "ImGuiManager.h"
 #include "IconsFontAwesome7.h"
 #include <imgui.h>
 #include <fmt/format.h>
@@ -33,6 +31,9 @@ namespace Editor
 {
 	namespace Detail
 	{
+		Engine::RHITexture* GetResourcePickerThumbnail(const std::filesystem::path& assetPath);
+		ImTextureID GetResourcePickerTextureID(Engine::RHITexture* texture);
+
 		template<typename T>
 		inline bool IsResourceExtensionCompatible(std::string_view filenameOrExt)
 		{
@@ -168,7 +169,7 @@ namespace Editor
 			{
 				const auto& path = resource->GetPath().empty() ? resource->GetKey() : resource->GetPath();
 				if (!path.empty())
-					result.Texture = AssetCache::Get().GetThumbnail(Engine::PlatformPath::ResolveProjectRelative(path));
+					result.Texture = GetResourcePickerThumbnail(Engine::PlatformPath::ResolveProjectRelative(path));
 			}
 
 			if (result.Texture != nullptr &&
@@ -221,7 +222,7 @@ namespace Editor
 
 			const auto thumbnail = Detail::GetResourceFieldThumbnail(current);
 			const auto textureID = thumbnail.Texture != nullptr ?
-				ImGuiManager::Get().GetImGuiTextureID(thumbnail.Texture) : ImTextureID{};
+				Detail::GetResourcePickerTextureID(thumbnail.Texture) : ImTextureID{};
 
 			const float imageWidth = thumbnail.Texture != nullptr ?
 				thumbnail.Texture->GetWidth() * (thumbnail.UV1.x - thumbnail.UV0.x) : 0.0f;
@@ -327,8 +328,13 @@ namespace Editor
 				for (const auto& entry : manager.GetDebugSnapshot())
 				{
 					const auto handle = manager.FindHandleByKey(entry.Key);
-					if (dynamic_cast<T*>(manager.GetResource(handle)) != nullptr)
-						loadedNormalizedKeys.insert(Detail::NormalizeResourceKey(entry.Key));
+					if (dynamic_cast<T*>(manager.GetResource(handle)) == nullptr)
+						continue;
+
+					const auto& resourcePath = entry.Path.empty() ? entry.Key : entry.Path;
+					const auto absolutePath = Engine::PlatformPath::ResolveProjectRelative(resourcePath);
+					const auto relativePath = Engine::PlatformPath::ToProjectRelative(absolutePath);
+					loadedNormalizedKeys.insert(Detail::NormalizeResourceKey(relativePath.wstring()));
 				}
 
 				std::error_code ec;
@@ -338,13 +344,18 @@ namespace Editor
 					for (const auto& fileEntry : std::filesystem::recursive_directory_iterator(resDir, std::filesystem::directory_options::skip_permission_denied, ec))
 					{
 						if (!fileEntry.is_regular_file()) continue;
-						const auto filename = fileEntry.path().filename().string();
+
+						const auto assetPath = fileEntry.path();
+						const auto filename = Engine::WStrToStr(assetPath.filename().wstring());
 						if (!Detail::IsResourceExtensionCompatible<T>(filename)) continue;
-						const auto normKey = Detail::NormalizeResourceKey(fileEntry.path().wstring());
+
+						const auto relativePath = Engine::PlatformPath::ToProjectRelative(assetPath);
+						const auto normKey = Detail::NormalizeResourceKey(relativePath.wstring());
 						if (loadedNormalizedKeys.contains(normKey)) continue;
+
 						s_CachedDiskFiles.push_back({
-							fileEntry.path().filename().string(),
-							Engine::WStrToStr(normKey),
+							filename,
+							Engine::WStrToStr(assetPath.wstring()),
 							normKey
 							});
 					}
@@ -411,6 +422,15 @@ namespace Editor
 						ImGuiSelectableFlags_AllowDoubleClick, ImVec2(availWidth, itemHeight));
 					const bool isHovered = ImGui::IsItemHovered();
 
+					if (!ImGui::IsItemVisible())
+					{
+						if (clicked)
+							onSelect();
+
+						ImGui::PopID();
+						return;
+					}
+
 					ImDrawList* drawList = ImGui::GetWindowDrawList();
 
 					// 1) 좌측 대형 썸네일 박스
@@ -421,8 +441,8 @@ namespace Editor
 					ImTextureID texID = 0;
 					if (!assetPath.empty())
 					{
-						if (auto* rhiTex = AssetCache::Get().GetThumbnail(assetPath))
-							texID = ImGuiManager::Get().GetImGuiTextureID(rhiTex);
+						if (auto* rhiTex = Detail::GetResourcePickerThumbnail(assetPath))
+							texID = Detail::GetResourcePickerTextureID(rhiTex);
 					}
 
 					if (texID)
@@ -582,9 +602,9 @@ namespace Editor
 				{
 					const auto handle = manager.FindHandleByKey(entry.Key);
 					if (dynamic_cast<T*>(manager.GetResource(handle)) == nullptr) continue;
-					const auto normStr = Engine::WStrToStr(Detail::NormalizeResourceKey(entry.Key));
-					const std::filesystem::path p(normStr);
-					if (matchesFilter(p.filename().string(), p.parent_path().generic_string()))
+					const std::filesystem::path p(Detail::NormalizeResourceKey(entry.Key));
+					if (matchesFilter(Engine::WStrToStr(p.filename().wstring()),
+						Engine::WStrToStr(p.parent_path().generic_wstring())))
 						++loadedMatchCount;
 				}
 
@@ -598,9 +618,9 @@ namespace Editor
 
 					const auto normKey = Detail::NormalizeResourceKey(entry.Key);
 					const auto normStr = Engine::WStrToStr(normKey);
-					const std::filesystem::path p(normStr);
-					const std::string filename = p.filename().string();
-					const std::string parentPath = p.parent_path().generic_string();
+					const std::filesystem::path p(normKey);
+					const std::string filename = Engine::WStrToStr(p.filename().wstring());
+					const std::string parentPath = Engine::WStrToStr(p.parent_path().generic_wstring());
 
 					if (!matchesFilter(filename, parentPath)) continue;
 
@@ -625,8 +645,8 @@ namespace Editor
 				size_t diskMatchCount = 0;
 				for (const auto& file : s_CachedDiskFiles)
 				{
-					const std::filesystem::path p(file.FullPath);
-					if (matchesFilter(file.Filename, p.parent_path().generic_string()))
+					const std::filesystem::path p(file.Key);
+					if (matchesFilter(file.Filename, Engine::WStrToStr(p.parent_path().generic_wstring())))
 						++diskMatchCount;
 				}
 
@@ -635,8 +655,8 @@ namespace Editor
 
 				for (const auto& file : s_CachedDiskFiles)
 				{
-					const std::filesystem::path p(file.FullPath);
-					const std::string parentPath = p.parent_path().generic_string();
+					const std::filesystem::path p(file.Key);
+					const std::string parentPath = Engine::WStrToStr(p.parent_path().generic_wstring());
 					if (!matchesFilter(file.Filename, parentPath)) continue;
 
 					const bool isSelected = false;

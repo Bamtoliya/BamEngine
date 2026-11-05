@@ -13,6 +13,20 @@
 #include <limits>
 #include <utility>
 #include <cstdint>
+#include "ResourcePicker.h"
+
+namespace Editor::Detail
+{
+    Engine::RHITexture* GetResourcePickerThumbnail(const std::filesystem::path&)
+    {
+        return nullptr;
+    }
+
+    ImTextureID GetResourcePickerTextureID(Engine::RHITexture*)
+    {
+        return ImTextureID{};
+    }
+}
 
 namespace
 {

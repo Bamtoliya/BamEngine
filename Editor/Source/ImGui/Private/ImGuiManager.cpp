@@ -183,6 +183,7 @@ EResult ImGuiManager::InitializeImGui()
 
 void ImGuiManager::Free()
 {
+	ReleaseFrameTextures();
 	if (m_ImGuiContext)
 		ImGui::SetCurrentContext(m_ImGuiContext);
 	m_WorkspacePanels.clear();
@@ -259,6 +260,7 @@ void ImGuiManager::Begin()
 {
 	// Apply language/style changes before any ImGui window is submitted for this frame.
 	m_ToolBar.ApplyPendingLanguageChange();
+	ReleaseFrameTextures();
 	// [Future RHI] 교체 포인트
 	switch (m_RHIType)
 	{
@@ -276,9 +278,9 @@ void ImGuiManager::Begin()
 
 	ImGui_ImplSDL3_NewFrame();
 	ImGui::NewFrame();
+	PreviewViewportWidget::BeginShortcutFrame();
 	ImGuizmo::BeginFrame();
 }
-	PreviewViewportWidget::BeginShortcutFrame();
 
 void ImGuiManager::End()
 {
@@ -1070,22 +1072,38 @@ void ImGuiManager::ShutdownImGuiMetal()
 #pragma endregion
 
 #pragma region Helper
-ImTextureID ImGuiManager::GetImGuiTextureID(const RHITexture* texture) const
+ImTextureID ImGuiManager::GetImGuiTextureID(Engine::RHITexture* texture)
 {
-	if (!texture) return ImTextureID();
+	if (texture == nullptr) return ImTextureID{};
+
+	ImTextureID textureID{};
+
 	switch (m_RHIType)
 	{
 	case ERHIType::SDLGPU:
-		return (ImTextureID)(texture->GetNativeHandle());
+		textureID = (ImTextureID)texture->GetNativeHandle();
+		break;
 	case ERHIType::DirectX12:
 	{
-		const DirectX12Texture* dx12Texture = static_cast<const DirectX12Texture*>(texture);
-		const D3D12_GPU_DESCRIPTOR_HANDLE srvHandle = (dx12Texture)->GetSRVGPUHandle();
-		return srvHandle.ptr;
+		const auto* dxTexture = static_cast<const Engine::DirectX12Texture*>(texture);
+		textureID = dxTexture->GetSRVGPUHandle().ptr;
+		break;
 	}
 	default:
-		return ImTextureID();
+		break;
 	}
+
+	if (textureID != ImTextureID{} && m_FrameTextures.insert(texture).second)
+		texture->AddRef();
+
+	return textureID;
+}
+void ImGuiManager::ReleaseFrameTextures()
+{
+	for (auto* texture : m_FrameTextures)
+		texture->Release();
+
+	m_FrameTextures.clear();
 }
 #pragma endregion
 

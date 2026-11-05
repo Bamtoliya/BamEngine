@@ -1258,7 +1258,7 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 					ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.2f, 1.0f), "%s", LOCAL_CSTR("Animator.MissingRendererWarning"));
 				}
 			}
-			}
+		}
 		else if (object.Is<Engine::ParticleEmitterComponent>())
 		{
 			changed = ReflectionPropertyDrawer::DrawObject(type, object, registry, &componentSettings, drawHeaderMenu);

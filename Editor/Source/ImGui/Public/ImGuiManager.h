@@ -5,6 +5,11 @@
 #include <SDL3/SDL.h>
 #include "EditorSettings.h"
 #include "EditorDocumentController.h"
+#include <unordered_set>
+
+BEGIN(Engine)
+class RHITexture;
+END
 
 BEGIN(Editor)
 struct EditorSettingsChangeResult;
@@ -105,8 +110,10 @@ public:
 
 #pragma region Helper
 public:
-	ImTextureID GetImGuiTextureID(const class RHITexture* texture) const;
+	ImTextureID GetImGuiTextureID(Engine::RHITexture* texture);
 	bool IsMainWindowDragArea(const SDL_Point& point) const { return m_ToolBar.IsMainWindowDragArea(point); }
+private:
+	void ReleaseFrameTextures();
 #pragma endregion
 
 #pragma region Settings
@@ -153,6 +160,7 @@ private:
 	bool m_PlatformBackendInitialized = false;
 	bool m_RendererBackendInitialized = false;
 	std::unique_ptr<EditorDocumentController> m_DocumentController;
+	std::unordered_set<Engine::RHITexture*> m_FrameTextures;
 #pragma region DirectX12
 	struct ID3D12DescriptorHeap* m_ImGuiSrvDescHeap = nullptr;
 	uint32 m_ImGuiSrvDescriptorSize = 0;
