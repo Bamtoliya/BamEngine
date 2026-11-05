@@ -475,14 +475,21 @@ EResult Renderer::RenderMeshes(const vector<StaticDrawCommand>& commands, Render
 
 			if (batchMaterial != lastMaterial || batchMesh != lastMesh)
 			{
-				if (IsFailure(BindMeshPipeline(batchMesh, batchMaterial, passType, pipelineDesc)))
-					return EResult::Fail;
+				const auto bindResult = BindMeshPipeline(batchMesh, batchMaterial, passType, pipelineDesc);
+				if (bindResult != EResult::Success)
+				{
+					// [결함 격리]: 특정 머티리얼 오류로 전체 프레임 렌더링이 멈추지 않도록 해당 배치만 스킵
+					instanceBatch.clear();
+					return EResult::Success;
+				}
 			}
-
 			if (batchMaterial != lastMaterial)
 			{
-				if (IsFailure(batchMaterial->Bind(2)))
-					return EResult::Fail;
+				if (batchMaterial->Bind(2) != EResult::Success)
+				{
+					instanceBatch.clear();
+					return EResult::Success;
+				}
 				lastMaterial = batchMaterial;
 			}
 
@@ -1019,11 +1026,18 @@ EResult Renderer::PrepareMeshPipelineDesc(Mesh* mesh, MaterialInterface* materia
 EResult Renderer::BindMeshPipeline(Mesh* mesh, MaterialInterface* material, ERenderPassType passType, RHIPipelineDesc& desc)
 {
 	const auto result = PrepareMeshPipelineDesc(mesh, material, passType, desc);
-	if (IsFailure(result)) return result;
-
+	if (result != EResult::Success)
+	{
+		static std::unordered_set<std::string> s_LoggedInvalidMaterials;
+		const std::string matKey = material ? WStrToStr(material->GetKey()) : "null";
+		if (s_LoggedInvalidMaterials.insert(matKey).second)
+		{
+			BAM_LOG(Warn, "Renderer", "BindMeshPipeline", "Failed to prepare pipeline for material: '{}' (Missing VS/PS). Skipping draw call.", matKey);
+		}
+		return result;
+	}
 	auto* pipeline = PipelineManager::Get().GetOrCreatePipeline(desc);
 	if (!pipeline) return EResult::Fail;
-
 	return m_RHI->BindPipeline(pipeline);
 }
 

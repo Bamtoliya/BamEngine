@@ -275,23 +275,26 @@ EResult ReflectionRegistry::Initialize(void*)
     if (!RegisterGeneratedTypes(m_Registry, m_RegistrationResult) || !RegisterComponentOperations() ||
         !registeredHandles ||
         !archive_graph::RegisterValueCodec(m_Codecs) ||
-        !m_Codecs.Register<entt::entity>(
-            [](archive::IArchive& ar, std::string_view key, const entt::entity& value) -> archive::ArchiveResult
-            {
-                return ar.Write(key, static_cast<std::uint32_t>(entt::to_integral(value)));
-            },
-            [](const archive::IArchive& ar, std::string_view key, entt::entity& value) -> archive::ArchiveResult
-            {
-                std::uint32_t id = 0;
-                auto res = ar.Read(key, id);
-                if (res) value = static_cast<entt::entity>(id);
-                return res;
-            }) ||
         !m_Codecs.Register<glm::vec2>(archive_glm::WriteVec2, archive_glm::ReadVec2) ||
         !m_Codecs.Register<glm::vec3>(archive_glm::WriteVec3, archive_glm::ReadVec3) ||
         !m_Codecs.Register<glm::vec4>(archive_glm::WriteVec4, archive_glm::ReadVec4) ||
         !m_Codecs.Register<glm::quat>(archive_glm::WriteQuat, archive_glm::ReadQuat) ||
         !m_Codecs.Register<glm::mat4>(archive_glm::WriteMat4, archive_glm::ReadMat4) ||
+        !m_Codecs.Register<entt::entity>(
+            [](archive::IArchive& ar, std::string_view key, const entt::entity& value) -> archive::ArchiveResult
+            {
+                return ar.Write(key, static_cast<std::uint32_t>(value));
+            },
+            [](const archive::IArchive& ar, std::string_view key, entt::entity& value) -> archive::ArchiveResult
+            {
+                std::uint32_t id = static_cast<std::uint32_t>(entt::null);
+                const auto result = ar.Read(key, id);
+                if (result)
+                {
+                    value = static_cast<entt::entity>(id);
+                }
+                return result;
+            }) ||
         !m_Codecs.Register<ColliderShape>(
             [this](archive::IArchive& ar, std::string_view key, const ColliderShape& value)
             {

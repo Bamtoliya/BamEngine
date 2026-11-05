@@ -182,50 +182,55 @@ Shader* MaterialInstance::GetVertexShader(ERenderPassType passType) const
 {
 	if (HasPassShader(passType) || (passType == ERenderPassType::Geometry && m_VertexShaderHandle))
 		return MaterialInterface::GetVertexShader(passType);
-
-	return m_BaseMaterialHandle ? m_BaseMaterialHandle.Get()->GetVertexShader(passType) : nullptr;
+	Material* baseMat = GetBaseMaterial();
+	return baseMat ? baseMat->GetVertexShader(passType) : nullptr;
 }
-
 Shader* MaterialInstance::GetPixelShader(ERenderPassType passType) const
 {
 	if (HasPassShader(passType) || (passType == ERenderPassType::Geometry && m_PixelShaderHandle))
 		return MaterialInterface::GetPixelShader(passType);
-
-	return m_BaseMaterialHandle ? m_BaseMaterialHandle.Get()->GetPixelShader(passType) : nullptr;
+	Material* baseMat = GetBaseMaterial();
+	return baseMat ? baseMat->GetPixelShader(passType) : nullptr;
 }
-
 void MaterialInstance::SetVertexShaderHandle(const ResourceHandle<Shader>& shader)
 {
 	m_VertexShaderHandle = shader;
 }
-
 void MaterialInstance::SetPixelShaderHandle(const ResourceHandle<Shader>& shader)
 {
 	m_PixelShaderHandle = shader;
 }
-
 #pragma endregion
-
 #pragma region Pipeline
 EBlendMode MaterialInstance::GetBlendMode() const
 {
-	return HasFlag(m_OverrideFlags, EPipelineOverrideFlag::BlendMode) ? m_BlendMode : (m_BaseMaterialHandle ? m_BaseMaterialHandle.Get()->GetBlendMode() : EBlendMode::Opaque);
+	if (HasFlag(m_OverrideFlags, EPipelineOverrideFlag::BlendMode)) return m_BlendMode;
+	Material* baseMat = GetBaseMaterial();
+	return baseMat ? baseMat->GetBlendMode() : EBlendMode::Opaque;
 }
-ECullMode  MaterialInstance::GetCullMode() const
+ECullMode MaterialInstance::GetCullMode() const
 {
-	return HasFlag(m_OverrideFlags, EPipelineOverrideFlag::CullMode) ? m_CullMode : (m_BaseMaterialHandle ? m_BaseMaterialHandle.Get()->GetCullMode() : ECullMode::Back);
+	if (HasFlag(m_OverrideFlags, EPipelineOverrideFlag::CullMode)) return m_CullMode;
+	Material* baseMat = GetBaseMaterial();
+	return baseMat ? baseMat->GetCullMode() : ECullMode::Back;
 }
-EFillMode  MaterialInstance::GetFillMode() const
+EFillMode MaterialInstance::GetFillMode() const
 {
-	return HasFlag(m_OverrideFlags, EPipelineOverrideFlag::FillMode) ? m_FillMode : (m_BaseMaterialHandle ? m_BaseMaterialHandle.Get()->GetFillMode() : EFillMode::Solid);
+	if (HasFlag(m_OverrideFlags, EPipelineOverrideFlag::FillMode)) return m_FillMode;
+	Material* baseMat = GetBaseMaterial();
+	return baseMat ? baseMat->GetFillMode() : EFillMode::Solid;
 }
 EDepthMode MaterialInstance::GetDepthMode() const
 {
-	return HasFlag(m_OverrideFlags, EPipelineOverrideFlag::DepthMode) ? m_DepthMode : (m_BaseMaterialHandle ? m_BaseMaterialHandle.Get()->GetDepthMode() : EDepthMode::ReadWrite);
+	if (HasFlag(m_OverrideFlags, EPipelineOverrideFlag::DepthMode)) return m_DepthMode;
+	Material* baseMat = GetBaseMaterial();
+	return baseMat ? baseMat->GetDepthMode() : EDepthMode::ReadWrite;
 }
 ECompareOp MaterialInstance::GetDepthCompareOp() const
 {
-	return HasFlag(m_OverrideFlags, EPipelineOverrideFlag::DepthCompareOp) ? m_DepthCompareOp : (m_BaseMaterialHandle ? m_BaseMaterialHandle.Get()->GetDepthCompareOp() : ECompareOp::Less);
+	if (HasFlag(m_OverrideFlags, EPipelineOverrideFlag::DepthCompareOp)) return m_DepthCompareOp;
+	Material* baseMat = GetBaseMaterial();
+	return baseMat ? baseMat->GetDepthCompareOp() : ECompareOp::Less;
 }
 
 void MaterialInstance::SetBlendMode(EBlendMode mode)
