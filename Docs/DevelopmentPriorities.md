@@ -308,6 +308,8 @@ Engine·Render·Editor·Client 계획에서 무엇을 먼저 연결하고 무엇
 - Engine 9·10절 및 [AnimatorGraphPlan.md](AnimatorGraphPlan.md): 기존 스켈레탈 평가·ASM·1D 블렌드·저작 UI·계층 연결의 정확성과 저장 보호를 검증한 뒤, Phase 5(AnimNotify, 레이어/본 마스크), [AnimationTimelineEditorPlan.md](AnimationTimelineEditorPlan.md)의 애니메이션·이펙트·노티파이 통합 타임라인 저작 도구 및 런타임 재생 시스템(Phase 1~5 완료), 2D 블렌드·소켓·IK·리타게팅을 확장한다.
 - Engine 11절: 실제 요구에 맞는 텍스트 스크립트 언어/VM 선택·엔진 바인딩·배포. 네이티브 모듈과 지원 범위를 구분한다.
 - ImGui 10·11·14절: 독립 프리팹 편집, 참조 색인·누락 검사, 임포트 옵션·재임포트, 검색·썸네일·미리보기와 비용 제한.
+- 모델 임포터 자동 메쉬 LOD 생성 파이프라인 ([InteractiveModelImportPreviewPlan.md](InteractiveModelImportPreviewPlan.md) Phase 5): `meshoptimizer`(`meshopt_simplify`) 라이브러리를 도입하여 QEM 기반 정점/UV 경계 보존 메쉬 간소화 수행, `_LOD1.bammesh` 자동 디스크 베이킹 및 `LODGroupComponent` 화면 커버리지 임계값 자동 구성을 연결한다.
+- 텍스처 밉맵(Mipmap) 체인 구축 및 GPU 블록 압축(BC7/DDS) ([RenderingDevelopmentPlan.md](RenderingDevelopmentPlan.md) S2-D): CPU `stb_image_resize2` 기반 Mip 0 ~ Mip N 런타임 다운샘플링 체인 생성 및 RHI 다중 서브리소스 업로드(`UploadTextureData`)를 지원하고, 에셋 임포트 시 `DirectXTex`(`texconv`) 오프라인 BC7/DDS 베이킹 파이프라인을 구축하여 원거리 텍스처 앨리어싱 해소 및 VRAM 대역폭을 최적화한다.
 - Engine 14절: 해당 예제에 필요한 캐릭터 이동·게임 저장·카메라·오디오·UI 위젯·타일맵·비동기 로딩을 작은 흐름으로 연결한다.
 - Engine 14절 M 및 [NetworkFoundationPlan.md](NetworkFoundationPlan.md): 소켓 전송 계층(`INetworkTransport`)과 바이너리 패킷 프로토콜, 세션 라이프사이클(Connect/Disconnect/Ping) 기초를 구축하고, ECS 엔티티 리플리케이션(`NetworkIdentity`, `NetworkTransform`)과 RPC로 확장한다. 멀티플레이 전체를 강화학습이나 V-Tuber의 필수 선행 조건으로 묶지 않는다.
 - Render M1: Compute 기반과 S3 이후 GPU 가시 명령·간접 그리기→Hi-Z를 CPU 기준 경로와 비교한다.
@@ -474,6 +476,14 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
   - 1D 블렌드 트리(Walk ~ Run) 내 Normalized Time 기반 위상 동기화(Phase Matching) 및 루프 끝-시작 0.05초 크로스페이드 스무딩 구현.
   - 이동 속도 연동 재생 배속(`ScalePlayRateWithSpeed`, `MinPlayRate`, `MaxPlayRate`) 적용으로 발 미끄러짐 방지 및 히스테리시스 전이 조건 안정화.
   - 리플렉션 역직렬화 하위 호환성(`ALLOW_MISSING`) 확보 및 Fox 모델 실시간 이동 검증 완료 (2026-11-05 완료).
+- **모델 임포트 시 자동 메쉬 LOD 생성 파이프라인 — P3 / Phase 5 ([InteractiveModelImportPreviewPlan.md](InteractiveModelImportPreviewPlan.md))**:
+  - `meshoptimizer`(`meshopt_simplify`) 기반 QEM 메쉬 간소화 알고리즘 도입.
+  - 임포트 옵션(`GenerateLODs`, `LODCount`, `LODReductionRates`)에 따라 `Model_Mesh_LOD1.bammesh` 파생 에셋 자동 영속화.
+  - 엔티티 인스턴스화 시 `LODGroupComponent` 자동 장착 및 기존 `MeshRenderSystem`의 다중 뷰포트/패스별 화면 커버리지 렌더링에 자동 연동.
+- **텍스처 밉맵 체인 및 GPU 블록 압축 파이프라인 — P3 / S2-D ([RenderingDevelopmentPlan.md](RenderingDevelopmentPlan.md))**:
+  - 현재 `Texture.cpp`의 단일 밉(Mip 0) 하드코딩 및 `DirectX12RHI::UploadTextureData`의 서브리소스 1개 제약을 해소.
+  - 런타임: `stb_image_resize2` 기반 CPU 밉맵 체인 생성 및 RHI 다중 서브리소스 순회 업로드.
+  - 오프라인/임포트: `DirectXTex`(`texconv`)를 활용한 BC7/BC5 블록 압축 및 밉맵 내장 `.dds` 에셋 베이킹 파이프라인 구축.
 
 ### 10.8 사용 조건에 따라 먼저 처리할 경로
 

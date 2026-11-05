@@ -41,6 +41,7 @@ IBL처럼 비교적 독립적인 화질 개선은 측정·바인딩 기반이 �
   - [Shader/BINDING_LAYOUT.md](Shader/BINDING_LAYOUT.md)를 `DirectX12RHI::CreateRootSignature()`의 실제 `space0`~`space3`(Root Parameter `[0]`~`[10]`) 구조와 일치하도록 갱신했다.
   - `MaterialInterface::Bind()`에서 G-Buffer 슬롯(0: Diffuse, 1: Normal, 2: PBR, 3: Emission) 점유 여부를 추적하고, 미지정 슬롯을 안전한 기본 더미 텍스처(`white1x1`, `blue1x1`, `black1x1`)로 리셋하여 이전 드로우콜의 텍스처 잔류 누수 현상을 즉시 차단했다 (후속으로 S2-C 플래그 기반 샘플링 분기 계획 수립).
   - `SDLGPURHI`는 `DrawIndexedInstanced`(`NotImplemented`), `BindInstanceBuffer`, Compute 인터페이스가 미구현 상태로, 미지원 시 안전 폴백 경로를 유지한다.
+  - **텍스처 밉맵 상태:** 현재 `Texture.cpp` 및 `DirectX12RHI`는 `MipLevels == 1` 단일 레벨만 지원하여 원거리 텍스처 앨리어싱(자글거림) 및 캐시 미스가 존재하며, 후속으로 S2-D 밉맵 체인 생성 및 RHI 다중 서브리소스 업로드 계획을 수립했다.
 - **S3 (정적 메시 인스턴싱, 다중 패스 독립 LOD 및 GPU 스키닝 제출 — 구현 및 배칭 실측 완료)**:
   - `InstanceData`(`worldMatrix`, `normalMatrix`, `pickingID`), `LODGroupComponent`가 추가되었다.
   - `MeshRenderSystem::OnSubmit()`에서 `PassTarget` 구조체를 통해 활성 뷰포트/패스별 고유 카메라(위치, `projY`) 기준으로 독립적인 화면 덮개 비율(Screen Coverage) + 히스테리시스 LOD를 평가·제출하며, 주 뷰포트(`isPrimaryGeometry`)일 때만 `lodGroup->currentLODIndex`를 갱신하여 보조 패스로 인한 LOD 상태 오염을 차단했다.
@@ -141,6 +142,24 @@ IBL처럼 비교적 독립적인 화질 개선은 측정·바인딩 기반이 �
   - 텍스처가 바인딩되지 않은 슬롯의 GPU 메모리 텍스처 페치(Texture Fetch) 대역폭을 0으로 절감한다.
 
 **완료 기준:** 텍스처가 없는 머티리얼에서 이전 드로우콜의 텍스처 오염이나 하얗게 새는 현상이 발생하지 않고, 머티리얼 그래프에서 연결된 상수 컬러 및 채널 분리 데이터가 G-Buffer와 최종 라이팅에 정확히 반영된다.
+
+### S2-D. 텍스처 밉맵(Mipmap) 체인 구축 및 GPU 블록 압축(BC7/DDS) 파이프라인
+
+**목적:** 원본 해상도(Mip 0) 단일 텍스처 사용으로 인한 원거리 텍스처 앨리어싱(자글거림) 및 텍스처 캐시 미스를 해결하고, VRAM 대역폭과 렌더링 성능을 최적화한다.
+
+- **현재 한계:**
+  - `Texture.cpp`에서 `header.mipLevels = 1;`로 하드코딩되어 있으며, CPU 밉맵 다운샘플링이 부재함.
+  - DirectX 12 RHI는 드라이버 레벨의 자동 밉맵 생성(D3D11 `GenerateMips`)을 지원하지 않으므로, `DirectX12RHI::UploadTextureData`에서 `resourceDesc.MipLevels != 1`을 거부하고 0번 서브리소스만 업로드함.
+- **개선 계획:**
+  1. **CPU 런타임 밉맵 체인 생성 및 RHI 다중 서브리소스 업로드**:
+     - `stb_image_resize2` 또는 자체 박스 필터를 활용하여 텍스처 로드 시 Mip 0 ~ Mip N 체인을 메모리에 생성.
+     - `RHITextureDesc::mipLevels`를 $\lfloor\log_2(\max(W, H))\rfloor + 1$로 계산.
+     - `DirectX12RHI::UploadTextureData`를 확장하여 각 밉 레벨(서브리소스)별 크기와 피치를 계산하고 모든 밉 레벨을 GPU에 전송.
+  2. **에디터 임포트 파이프라인 (DDS / BC7 블록 압축 베이킹)**:
+     - 런타임 CPU 밉맵 생성 오버헤드를 제거하기 위해, 에디터 모델/텍스처 임포트 단계에서 DirectXTex(`texconv`) 기반의 오프라인 베이킹 파이프라인 구축.
+     - PNG/JPG 텍스처를 GPU 친화적인 블록 압축 포맷(Albedo/Normal: BC7, PBR Mask: BC4/BC5) 및 밉맵이 포함된 `.dds` 파일로 자동 변환하여 VRAM 사용량을 1/4로 절감.
+
+**완료 기준:** 원거리 텍스처 샘플링 시 지글거림이 사라지고 삼선형(Trilinear) 또는 이방성(Anisotropic) 필터링이 정상 적용되며, 다중 밉 레벨 텍스처가 D3D12 서브리소스 검증 오류 없이 렌더링된다.
 
 ### S3. 정적 메시 인스턴싱과 기본 LOD
 

@@ -107,6 +107,26 @@
 
 ---
 
+### Phase 5: 모델 임포트 시 자동 메쉬 LOD 생성 파이프라인 (Auto LOD Generation)
+
+- **도입 배경**:
+  - 런타임 렌더링 레이어에는 `LODGroupComponent`와 `MeshRenderSystem`의 화면 커버리지(Screen Coverage) + 히스테리시스 기반 LOD 전환 파이프라인이 완성되어 있으나, 외부 모델 임포트 시 수동으로 LOD를 제작하지 않으면 이 시스템을 활용할 수 없음.
+  - 모델 임포트 시점에 원본(LOD0)으로부터 간소화된 메쉬를 알고리즘으로 자동 생성하여 에셋 파이프라인의 완성도를 높임.
+- **핵심 기술 및 라이브러리**:
+  - 게임 엔진 업계 표준인 **`meshoptimizer` (`meshopt_simplify`)** 도입.
+  - 정점 락킹(UV Seam 및 본 가중치 경계선 보존)을 지원하는 Quadric Error Metrics(QEM) 알고리즘 기반 메쉬 간소화.
+- **임포트 옵션 확장 (`ModelImportDesc` / `ModelImportModal`)**:
+  - `bool GenerateLODs = true;`: 자동 LOD 생성 활성화 여부
+  - `uint32 LODCount = 3;`: 생성할 LOD 단계 수 (최대 4단계)
+  - `std::vector<float> LODReductionRates = { 0.5f, 0.25f, 0.12f };`: 각 단계별 목표 삼각형 수 비율
+  - `float TargetError = 0.01f;`: 허용 가능한 최대 기하 오차(Error Metric)
+- **에셋 및 엔티티 연동**:
+  - 임포트 시 원본 메쉬(`ModelName_Mesh.bammesh`) 외에 파생 메쉬 파일(`ModelName_Mesh_LOD1.bammesh`, `_LOD2.bammesh`)을 자동 디스크 영속화.
+  - `.bammodel` 및 씬 인스턴스화 시 엔티티에 `LODGroupComponent`를 자동 부착하고 화면 비율 임계값(`screenCoverageThresholds`)을 자동 초기화.
+
+
+---
+
 ## 4. 완료 기준 (Acceptance Criteria)
 
 1. **시각적 정확성**:
