@@ -44,6 +44,7 @@ public:
 
 private:
 	void SetupStudioScene();
+	void RefreshStudioLights();
 	[[nodiscard]] CameraBuffer CalculateAutoFramingCamera(const vec3& bMin, const vec3& bMax) const;
 	[[nodiscard]] Engine::MaterialInterface* GetDefaultPreviewMaterial() const;
 private:
@@ -56,10 +57,12 @@ private:
 	// 프리뷰 전용 독립 씬 및 엔티티
 	Engine::Scene* m_Scene = nullptr;
 	entt::entity m_MeshEntity = entt::null;
-	entt::entity m_LightEntity = entt::null;
 
 	// 기본 프리뷰 메쉬 (Sphere)
 	Engine::ResourceHandle<Engine::Mesh> m_SphereMesh;
+
+	// 빛
+	std::array<entt::entity, 3> m_StudioLights{ entt::null, entt::null, entt::null };
 };
 
 END

@@ -205,50 +205,11 @@ void BaseViewportPanel::DrawRenderTargetMenu()
 }
 void BaseViewportPanel::DrawChannelViewButton(float rightReservedWidth)
 {
-	const float btnHeight = ImGui::GetFrameHeight();
-	const ImVec2 buttonSize(btnHeight, btnHeight);
-	const float buttonSpacing = 0.0f;
+	const float channelGroupWidth = ImGui::GetFrameHeight() * 4.0f;
 	const float rightPadding = ImGui::GetStyle().WindowPadding.x;
-
-	const float channelGroupWidth = buttonSize.x * 4.0f + buttonSpacing * 3.0f;
 	ImGui::SameLine(ImGui::GetWindowWidth() - rightReservedWidth - channelGroupWidth - rightPadding);
 
-	auto toggleFlag = [this](EViewportChannelView flag)
-		{
-			const uint8 current = static_cast<uint8>(m_ChannelView);
-			const uint8 bit = static_cast<uint8>(flag);
-			if ((current & bit) != 0)
-				m_ChannelView = static_cast<EViewportChannelView>(current & ~bit);
-			else
-				m_ChannelView = static_cast<EViewportChannelView>(current | bit);
-		};
-
-	auto drawToggleButton = [&](const char* label, EViewportChannelView flag, const ImVec4& activeColor)
-		{
-			const bool isActive = HasFlag(m_ChannelView, flag);
-			if (isActive)
-				ImGui::PushStyleColor(ImGuiCol_Button, activeColor);
-			else
-				ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyle().Colors[ImGuiCol_FrameBg]);
-
-			if (ImGui::Button(label, buttonSize))
-				toggleFlag(flag);
-
-			ImGui::PopStyleColor();
-		};
-
-	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(buttonSpacing, 0.0f));
-	ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 0.0f);
-
-	drawToggleButton("R", EViewportChannelView::R, ImVec4(0.75f, 0.20f, 0.20f, 1.0f));
-	ImGui::SameLine();
-	drawToggleButton("G", EViewportChannelView::G, ImVec4(0.20f, 0.65f, 0.20f, 1.0f));
-	ImGui::SameLine();
-	drawToggleButton("B", EViewportChannelView::B, ImVec4(0.20f, 0.35f, 0.80f, 1.0f));
-	ImGui::SameLine();
-	drawToggleButton("A", EViewportChannelView::A, ImVec4(0.55f, 0.55f, 0.55f, 1.0f));
-
-	ImGui::PopStyleVar(2);
+	ChannelFilter::DrawButtons(m_ChannelView);
 }
 void BaseViewportPanel::DrawRTItemContextMenu(const wstring& rtName)
 {

@@ -8,6 +8,7 @@
 #include <entt/entt.hpp>
 #include <memory>
 #include <string>
+#include "ChannelFilter.h"
 
 BEGIN(Engine)
 class Scene;
@@ -61,6 +62,8 @@ public:
 private:
 	void CheckResize(uint32 targetWidth, uint32 targetHeight);
 	void DrawOverlayToolbar();
+	void DrawRenderTargetPopup();
+	void DrawPreviewLightingPopup();
 
 private:
 	std::wstring m_Id;
@@ -86,6 +89,15 @@ private:
 	inline static PreviewViewportWidget* s_ShortcutTarget = nullptr;
 	Engine::vec3 m_FocusPosition = Engine::vec3(0.0f);
 	Engine::f32 m_FocusDistance = 3.0f;
+
+	// 빛
+	std::optional<std::array<float, 3>> m_PreviewLightDraft;
+	std::array<entt::entity, 3> m_StudioLights{ entt::null, entt::null, entt::null };
+
+	// 채널 필터링
+	std::wstring m_SelectedRTName;
+	ChannelFilter m_ChannelFilter;
+	EViewportChannelView m_ChannelView = EViewportChannelView::RGBA;
 };
 
 END

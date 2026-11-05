@@ -1414,3 +1414,8 @@ Viewport,View,View,보기
 Viewport,ViewerTitle,{} Viewer,{} 뷰어
 Viewport,World,World,월드
 Viewport,ZIndex,Z-Index,Z 순서
+Settings,PreviewLighting,Preview Lighting,프리뷰 조명
+Settings,PreviewKeyLight,Key Light,주광
+Settings,PreviewFillLight,Fill Light,보조광
+Settings,PreviewRimLight,Rim Light,역광
+PreviewViewport,LightingApplyScope,Apply saves these settings for all previews.,적용하면 모든 프리뷰의 조명 설정으로 저장됩니다.

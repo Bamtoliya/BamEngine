@@ -611,6 +611,18 @@ EditorSettingsChangeResult EditorSettingsService::SetEditorPreferences(const Edi
     return ApplyAndSavePreferences(preferences);
 }
 
+EditorSettingsChangeResult EditorSettingsService::SetPreviewLightIntensity(const std::array<float, 3>& intensities)
+{
+    EditorPreferences candidate = m_EditorPreferences;
+    candidate.PreviewLightIntensity = intensities;
+
+    if (!candidate.HasValidValues())
+        return {};
+
+    m_EditorPreferences.PreviewLightIntensity = intensities;
+    return { true, SavePreferences() };
+}
+
 EEditorSettingsSaveStatus EditorSettingsService::SavePreferences() const
 {
     return WriteEditorSettingsFile(

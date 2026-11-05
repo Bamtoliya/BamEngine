@@ -109,6 +109,7 @@ public:
     [[nodiscard]] EditorSettingsChangeResult SetGizmoSnapRotation(float snap);
     [[nodiscard]] EditorSettingsChangeResult SetGizmoSnapScale(float snap);
     [[nodiscard]] EditorSettingsChangeResult SetEditorPreferences(const EditorPreferences& preferences);
+    [[nodiscard]] EditorSettingsChangeResult SetPreviewLightIntensity(const std::array<float, 3>& intensities);
 
     [[nodiscard]] std::vector<EditorViewportResolutionSnapshot> GetViewportResolutionStates() const;
 

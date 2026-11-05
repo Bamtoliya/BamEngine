@@ -1,4 +1,5 @@
 ﻿#include "ThumbnailRenderer.h"
+#include "EditorSettingsService.h"
 #include "Scene.h"
 #include "TransformComponent.h"
 #include "WorldTransformComponent.h"
@@ -37,7 +38,6 @@ void ThumbnailRenderer::Free()
 	}
 
 	m_MeshEntity = entt::null;
-	m_LightEntity = entt::null;
 	m_SphereMesh = {};
 	m_Initialized = false;
 }
@@ -76,7 +76,7 @@ void ThumbnailRenderer::SetupStudioScene()
 	if (!m_Scene) return;
 	auto& registry = m_Scene->GetRegistry();
 	// 방향성 조명 생성 헬퍼 람다
-	auto createDirLight = [&](const vec3& euler, const vec3& color, f32 intensity, bool specular) -> entt::entity
+	auto createDirLight = [&](const vec3& euler, const vec3& color, bool specular) -> entt::entity
 		{
 			entt::entity e = registry.create();
 			auto& trans = registry.emplace<Engine::TransformComponent>(e);
@@ -85,7 +85,6 @@ void ThumbnailRenderer::SetupStudioScene()
 			flag.flags = Engine::EEntityFlag::Active | Engine::EEntityFlag::Visible;
 			auto& comp = registry.emplace<Engine::LightComponent>(e);
 			comp.LightType = Engine::ELightType::Directional;
-			comp.Intensity = intensity;
 			comp.Color = color;
 			comp.Flags = Engine::ELightFlags::UseInDeferredRendering | Engine::ELightFlags::AffectDiffuse;
 			if (specular) comp.Flags |= Engine::ELightFlags::AffectSpecular;
@@ -94,11 +93,9 @@ void ThumbnailRenderer::SetupStudioScene()
 		};
 	// 1. 스튜디오 3점 조명(Key, Fill, Rim Light) 배치
 	// 1) Key Light (주광): 카메라 시선(정면 우측 상단)에서 모델 앞면을 화사하게 비춤
-	m_LightEntity = createDirLight(vec3(30.0f, 25.0f, 0.0f), vec3(1.0f, 0.98f, 0.95f), 2.8f, true);
-	// 2) Fill Light (보조광): 반대편(정면 좌측)에서 비추어 그림자 진 부분의 디테일 확보
-	createDirLight(vec3(15.0f, -45.0f, 0.0f), vec3(0.85f, 0.92f, 1.0f), 1.5f, false);
-	// 3) Rim Light (윤곽광): 모델 뒤쪽 위에서 비추어 외곽선(실루엣)과 입체감 극대화
-	createDirLight(vec3(45.0f, 160.0f, 0.0f), vec3(0.95f, 0.98f, 1.0f), 2.2f, true);
+	m_StudioLights[0] = createDirLight(vec3(30.0f, 25.0f, 0.0f), vec3(1.0f, 0.98f, 0.95f), true);
+	m_StudioLights[1] = createDirLight(vec3(15.0f, -45.0f, 0.0f), vec3(0.85f, 0.92f, 1.0f), false);
+	m_StudioLights[2] = createDirLight(vec3(45.0f, 160.0f, 0.0f), vec3(0.95f, 0.98f, 1.0f), true);
 	// 2. 프리뷰 대상 구체(Sphere) 메쉬 엔티티 생성
 	m_MeshEntity = registry.create();
 	registry.emplace<Engine::TransformComponent>(m_MeshEntity);
@@ -109,7 +106,21 @@ void ThumbnailRenderer::SetupStudioScene()
 	meshComp.meshHandle = m_SphereMesh;
 	meshComp.castShadow = true;
 	// 계층 구조 및 라이트 GPU 버퍼 캐시 갱신
+	RefreshStudioLights();
+}
+
+void ThumbnailRenderer::RefreshStudioLights()
+{
+	auto& registry = m_Scene->GetRegistry();
 	Engine::TransformSystem::UpdateHierarchy(registry);
+
+	const auto& intensities = EditorSettingsService::Get().GetPreferences().PreviewLightIntensity;
+	for (std::size_t i = 0; i < m_StudioLights.size(); ++i)
+	{
+		if (auto* light = registry.try_get<Engine::LightComponent>(m_StudioLights[i]))
+			light->Intensity = intensities[i];
+	}
+
 	Engine::LightSystem::UpdateLights(registry);
 }
 
@@ -150,8 +161,7 @@ bool ThumbnailRenderer::SubmitMaterial(Engine::MaterialInterface* material)
 	meshComp->materialHandle = handle;
 
 	// 트랜스폼 및 조명 시스템 갱신
-	Engine::TransformSystem::UpdateHierarchy(registry);
-	Engine::LightSystem::UpdateLights(registry);
+	RefreshStudioLights();
 
 	// 스튜디오 카메라 설정 (스튜디오 구체를 정면 약간 위에서 응시)
 	const vec3 target = vec3(0.0f);
@@ -242,8 +252,7 @@ bool ThumbnailRenderer::SubmitMesh(Engine::Mesh* mesh, Engine::MaterialInterface
 {
 	if (!m_Initialized) Setup(128);
 	if (!m_Initialized || !mesh || !m_Scene) return false;
-	Engine::TransformSystem::UpdateHierarchy(m_Scene->GetRegistry());
-	Engine::LightSystem::UpdateLights(m_Scene->GetRegistry());
+	RefreshStudioLights();
 	if (!material)
 	{
 		auto& rm = Engine::ResourceManager::Get();
@@ -281,8 +290,7 @@ bool ThumbnailRenderer::SubmitModel(Engine::Model* model)
 {
 	if (!m_Initialized) Setup(128);
 	if (!m_Initialized || !model || !m_Scene) return false;
-	Engine::TransformSystem::UpdateHierarchy(m_Scene->GetRegistry());
-	Engine::LightSystem::UpdateLights(m_Scene->GetRegistry());
+	RefreshStudioLights();
 	const auto& nodes = model->GetNodes();
 	const auto& meshes = model->GetMeshes();
 	if (meshes.empty()) return false;

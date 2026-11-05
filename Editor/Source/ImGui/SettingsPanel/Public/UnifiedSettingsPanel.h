@@ -112,6 +112,10 @@ private:
     bool m_DraftAutoSaveEnabled = true;
     int32 m_DraftAutoSaveIntervalMinutes = 5;
     float m_DraftCameraFOV = 60.0f;
+
+    //Preview 변수
+    std::array<float, 3> m_DraftPreviewLightIntensity{};
+    bool m_PreviewLightingDirty = false;
 };
 
 END

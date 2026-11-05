@@ -65,8 +65,16 @@ namespace Editor
             float GizmoSnapRotation = 15.0f;
         PROPERTY(META("Optional", true))
             float GizmoSnapScale = 0.1f;
+        static constexpr float MaxPreviewLightIntensity = 10.0f;
+        PROPERTY(META("Optional", true))
+            std::array<float, 3> PreviewLightIntensity{ 2.8f, 0.5f, 2.2f };
         [[nodiscard]] bool HasValidValues() const
         {
+            for (const float intensity : PreviewLightIntensity)
+            {
+                if (!std::isfinite(intensity) || intensity < 0.0f || intensity > MaxPreviewLightIntensity)
+                    return false;
+            }
             return SchemaVersion == CurrentSchemaVersion && (Language == "English" || Language == "Korean") &&
                 std::isfinite(UIScale) && UIScale >= MinUIScale && UIScale <= MaxUIScale &&
                 TargetFPS >= 0 && TargetFPS <= MaxTargetFPS &&

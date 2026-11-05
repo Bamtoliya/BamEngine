@@ -139,3 +139,33 @@ RenderTarget* ChannelFilter::GetChannelPreviewRT() const
 {
 	return Engine::RenderTargetManager::Get().GetRenderTarget(m_ChannelPreviewRTName);
 }
+
+void ChannelFilter::DrawButtons(EViewportChannelView& view)
+{
+    const float height = ImGui::GetFrameHeight();
+    const ImVec2 buttonSize(height, height);
+
+    const auto drawButton = [&](const char* label, EViewportChannelView flag, const ImVec4& activeColor)
+        {
+            const bool active = HasFlag(view, flag);
+            ImGui::PushStyleColor(ImGuiCol_Button, active ? activeColor : ImGui::GetStyle().Colors[ImGuiCol_FrameBg]);
+
+            if (ImGui::Button(label, buttonSize))
+                view = static_cast<EViewportChannelView>(static_cast<uint8>(view) ^ static_cast<uint8>(flag));
+
+            ImGui::PopStyleColor();
+        };
+
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 0.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 0.0f);
+
+    drawButton("R", EViewportChannelView::R, ImVec4(0.75f, 0.20f, 0.20f, 1.0f));
+    ImGui::SameLine();
+    drawButton("G", EViewportChannelView::G, ImVec4(0.20f, 0.65f, 0.20f, 1.0f));
+    ImGui::SameLine();
+    drawButton("B", EViewportChannelView::B, ImVec4(0.20f, 0.35f, 0.80f, 1.0f));
+    ImGui::SameLine();
+    drawButton("A", EViewportChannelView::A, ImVec4(0.55f, 0.55f, 0.55f, 1.0f));
+
+    ImGui::PopStyleVar(2);
+}

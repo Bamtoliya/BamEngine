@@ -23,7 +23,7 @@ UnifiedSettingsPanel::UnifiedSettingsPanel()
 bool UnifiedSettingsPanel::IsAnyDirty() const
 {
     return m_LanguageDirty || m_UIScaleDirty || m_WindowDirty || m_TargetFPSDirty || m_VSyncDirty ||
-        m_EditorDirty || m_WorkspaceDirty || m_ProjectSettingsDirty || m_FontDirty || !m_ViewportDrafts.empty();
+        m_EditorDirty || m_WorkspaceDirty || m_ProjectSettingsDirty || m_FontDirty || !m_ViewportDrafts.empty() || m_PreviewLightingDirty;
 }
 
 void UnifiedSettingsPanel::Update(f32 dt)
@@ -166,6 +166,10 @@ void UnifiedSettingsPanel::ResetDrafts()
     // 카메라
     m_DraftCameraSpeed = prefs.CameraSpeed;
     m_DraftCameraFOV = prefs.CameraFOV;
+
+    //Preview
+    m_DraftPreviewLightIntensity = prefs.PreviewLightIntensity;
+    m_PreviewLightingDirty = false;
 }
 
 void UnifiedSettingsPanel::ResetToDefaults()
@@ -187,13 +191,15 @@ void UnifiedSettingsPanel::ResetToDefaults()
     m_UIScaleDirty = true;
     m_FontDirty = true;
     m_EditorDirty = true;
+    m_DraftPreviewLightIntensity = defPrefs.PreviewLightIntensity;
+    m_PreviewLightingDirty = true;
 }
 
 void UnifiedSettingsPanel::ApplySettings()
 {
     auto& settings = EditorSettingsService::Get();
 
-    if (m_LanguageDirty || m_UIScaleDirty || m_FontDirty || m_EditorDirty)
+    if (m_LanguageDirty || m_UIScaleDirty || m_FontDirty || m_EditorDirty || m_PreviewLightingDirty)
     {
         EditorPreferences candidate = settings.GetPreferences();
         candidate.Theme = m_DraftTheme;
@@ -206,8 +212,14 @@ void UnifiedSettingsPanel::ApplySettings()
         candidate.GizmoSnapTranslation = m_DraftGizmoSnapTranslation;
         candidate.GizmoSnapRotation = m_DraftGizmoSnapRotation;
         candidate.GizmoSnapScale = m_DraftGizmoSnapScale;
+        if (m_PreviewLightingDirty)
+            candidate.PreviewLightIntensity = m_DraftPreviewLightIntensity;
+
         const auto result = settings.SetEditorPreferences(candidate);
         ImGuiManager::Get().NotifySettingsChange(result);
+
+        if (result.Applied)
+            m_PreviewLightingDirty = false;
         // 폰트 크기 즉각 실시간 반영!
         ImGuiManager::Get().UpdateFontScale(m_DraftFontSize);
         // 테마 및 커스텀 스타일 저장 & 적용
@@ -314,17 +326,34 @@ void UnifiedSettingsPanel::Draw()
     const float contentHeight = ImGui::GetContentRegionAvail().y - footerHeight;
 
     // 1. 좌측 카테고리 사이드바
-    ImGui::BeginChild("SettingsSidebarRegion", ImVec2(m_SidebarWidth, contentHeight), true, ImGuiWindowFlags_HorizontalScrollbar);
+    const float splitterThickness = 4.0f;
+    const float spacingX = ImGui::GetStyle().ItemSpacing.x;
+    const float availableWidth = ImGui::GetContentRegionAvail().x;
+    const float paneWidth = std::max(1.0f, availableWidth - splitterThickness - spacingX * 2.0f);
+    const float halfWidth = paneWidth * 0.5f;
+
+    const float minSidebarWidth = std::min(180.0f, halfWidth);
+    const float minContentWidth = std::max(halfWidth, std::min(200.0f, paneWidth - minSidebarWidth));
+    const float maxSidebarWidth = paneWidth - minContentWidth;
+
+    float sidebarWidth = std::clamp(m_SidebarWidth, minSidebarWidth, maxSidebarWidth);
+    float contentWidth = paneWidth - sidebarWidth;
+    const float previousSidebarWidth = sidebarWidth;
+
+    ImGui::BeginChild("SettingsSidebarRegion", ImVec2(sidebarWidth, contentHeight),
+        true, ImGuiWindowFlags_HorizontalScrollbar);
     DrawSidebar();
     ImGui::EndChild();
+
     ImGui::SameLine();
-    // 2. 공통 스플리터 헬퍼 적용 (수동 코드 20줄 -> 2줄로 간소화)
-    const float minWidth = 180.0f;
-    const float maxWidth = (std::max)(minWidth, ImGui::GetWindowWidth() * 0.5f);
-    float dummyContentWidth = ImGui::GetContentRegionAvail().x - m_SidebarWidth - 4.0f;
-    Editor::SplitterV("##SidebarSplitter", &m_SidebarWidth, &dummyContentWidth, minWidth, 200.0f, contentHeight);
+    if (Editor::SplitterV("##SidebarSplitter", &sidebarWidth, &contentWidth,
+        minSidebarWidth, minContentWidth, contentHeight, splitterThickness) &&
+        sidebarWidth != previousSidebarWidth)
+    {
+        m_SidebarWidth = sidebarWidth;
+    }
+
     ImGui::SameLine();
-    // 3. 우측 설정 상세 컨텐츠 영역
     ImGui::BeginChild("SettingsContentRegion", ImVec2(0.0f, contentHeight), true);
     DrawContentArea();
     ImGui::EndChild();
@@ -904,15 +933,6 @@ void UnifiedSettingsPanel::DrawCategoryEditor()
             m_EditorDirty = true;
         ImGui::Spacing();
     }
-    // 2. 뷰포트 탐색 카메라 속도
-    if (ImGui::CollapsingHeader(LOCAL_CSTR("Settings.CameraMovement"), ImGuiTreeNodeFlags_DefaultOpen))
-    {
-        ImGui::Spacing();
-        ImGui::SetNextItemWidth(200.0f);
-        if (ImGui::SliderFloat(LOCAL_LABEL("Viewport.CameraSpeed").c_str(), &m_DraftCameraSpeed, 1.0f, 500.0f, "%.1f"))
-            m_EditorDirty = true;
-        ImGui::Spacing();
-    }
     // 3. 최소 콘솔 로그 레벨
     if (ImGui::CollapsingHeader(LOCAL_CSTR("Settings.Logging"), ImGuiTreeNodeFlags_DefaultOpen))
     {
@@ -928,17 +948,39 @@ void UnifiedSettingsPanel::DrawCategoryEditor()
         }
         ImGui::Spacing();
     }
-    // 4. 카메라 화각
+    // 카메라 이동 속도 및 화각
     if (ImGui::CollapsingHeader(LOCAL_CSTR("Settings.CameraMovement"), ImGuiTreeNodeFlags_DefaultOpen))
     {
         ImGui::Spacing();
+
         ImGui::SetNextItemWidth(200.0f);
-        if (ImGui::SliderFloat(LOCAL_LABEL("Viewport.CameraSpeed").c_str(), &m_DraftCameraSpeed, 1.0f, 500.0f, "%.1f"))
+        if (ImGui::SliderFloat(LOCAL_LABEL("Viewport.CameraSpeed").c_str(),
+            &m_DraftCameraSpeed, 1.0f, 500.0f, "%.1f"))
             m_EditorDirty = true;
+
         ImGui::SetNextItemWidth(200.0f);
-        if (ImGui::SliderFloat(LOCAL_LABEL("Settings.CameraFOV").c_str(), &m_DraftCameraFOV, 30.0f, 120.0f, "%.0f deg"))
+        if (ImGui::SliderFloat(LOCAL_LABEL("Settings.CameraFOV").c_str(),
+            &m_DraftCameraFOV, 30.0f, 120.0f, "%.0f deg"))
             m_EditorDirty = true;
+
         ImGui::Spacing();
+    }
+
+	// 5. 뷰포트 미리보기 조명 강도
+    if (ImGui::CollapsingHeader(LOCAL_LABEL("Settings.PreviewLighting").c_str()))
+    {
+        constexpr const char* keys[] = {
+            "Settings.PreviewKeyLight", "Settings.PreviewFillLight", "Settings.PreviewRimLight"
+        };
+
+        if (!m_PreviewLightingDirty)
+            m_DraftPreviewLightIntensity = EditorSettingsService::Get().GetPreferences().PreviewLightIntensity;
+
+        for (std::size_t i = 0; i < m_DraftPreviewLightIntensity.size(); ++i)
+        {
+            m_PreviewLightingDirty |= ImGui::SliderFloat(LOCAL_LABEL(keys[i]).c_str(), &m_DraftPreviewLightIntensity[i],
+                0.0f, EditorPreferences::MaxPreviewLightIntensity, "%.2f");
+        }
     }
 }
 void UnifiedSettingsPanel::DrawCategoryWorkspace()

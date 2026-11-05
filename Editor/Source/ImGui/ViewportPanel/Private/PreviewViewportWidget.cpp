@@ -21,7 +21,8 @@
 #include "Skeleton.h"
 #include "Components/Core/HierarchyComponent.h"
 #include "ShortcutManager.h"
-
+#include "EditorSettingsService.h"
+#include "Functions.h"
 namespace Editor
 {
 
@@ -68,6 +69,7 @@ namespace Editor
 		m_Pipeline.Initialize(m_Id, m_Width, m_Height, false);
 		m_PostProcessChain.Initialize(m_Id + L"_PP");
 		m_PostProcessChain.PrepareResources(m_Width, m_Height);
+		m_ChannelFilter.Initialize(m_Id);
 		m_DisplayRTName = m_Pipeline.GetFinalColorRTName();
 
 		// 3. 바닥 그리드 초기화
@@ -106,6 +108,9 @@ namespace Editor
 
 		m_Grid.Free();
 		m_PostProcessChain.Free();
+		m_ChannelFilter.Free();
+		m_SelectedRTName.clear();
+		m_ChannelView = EViewportChannelView::RGBA;
 		m_Pipeline.Free();
 
 		Engine::Safe_Release(m_CameraController);
@@ -156,9 +161,10 @@ namespace Editor
 			};
 
 		// 3점 스튜디오 조명 (Key: 주광, Fill: 보조광, Rim: 역광)
-		createDirLight(Engine::vec3(30.0f, 25.0f, 0.0f), Engine::vec3(1.0f, 0.98f, 0.95f), 2.8f, true);
-		createDirLight(Engine::vec3(15.0f, -45.0f, 0.0f), Engine::vec3(0.85f, 0.92f, 1.0f), 1.5f, false);
-		createDirLight(Engine::vec3(45.0f, 160.0f, 0.0f), Engine::vec3(0.95f, 0.98f, 1.0f), 2.2f, true);
+		const auto& intensities = EditorSettingsService::Get().GetPreferences().PreviewLightIntensity;
+		m_StudioLights[0] = createDirLight(Engine::vec3(30.0f, 25.0f, 0.0f), Engine::vec3(1.0f, 0.98f, 0.95f), intensities[0], true);
+		m_StudioLights[1] = createDirLight(Engine::vec3(15.0f, -45.0f, 0.0f), Engine::vec3(0.85f, 0.92f, 1.0f), intensities[1], false);
+		m_StudioLights[2] = createDirLight(Engine::vec3(45.0f, 160.0f, 0.0f), Engine::vec3(0.95f, 0.98f, 1.0f), intensities[2], true);
 
 		Engine::TransformSystem::UpdateHierarchy(reg);
 		Engine::LightSystem::UpdateLights(reg);
@@ -209,6 +215,8 @@ namespace Editor
 
 		m_Pipeline.Resize(m_Width, m_Height);
 		m_PostProcessChain.Resize(m_Width, m_Height);
+		if (m_ChannelFilter.GetChannelPreviewRT())
+			(void)m_ChannelFilter.Resize(m_Pipeline.GetFinalColorRTName());
 
 		if (m_CameraController)
 		{
@@ -313,6 +321,15 @@ namespace Editor
 
 		// 3. 씬 변환 계층 및 조명 GPU 버퍼 갱신
 		Engine::TransformSystem::UpdateHierarchy(reg);
+
+		const auto& saved = EditorSettingsService::Get().GetPreferences().PreviewLightIntensity;
+		const auto& intensities = m_PreviewLightDraft ? *m_PreviewLightDraft : saved;
+		for (std::size_t i = 0; i < m_StudioLights.size(); ++i)
+		{
+			if (auto* light = reg.try_get<Engine::LightComponent>(m_StudioLights[i]))
+				light->Intensity = intensities[i];
+		}
+
 		Engine::LightSystem::UpdateLights(reg);
 	}
 
@@ -378,10 +395,22 @@ namespace Editor
 			}
 		}
 
-		// 3. 후처리 체인 (ACES 톤매핑 및 감마 보정) 먼저 실행
-		m_DisplayRTName = m_PostProcessChain.ExecuteChain(dt, m_Pipeline.GetFinalColorRTName());
-		// 4. 바닥 그리드 제출 (최종 화면 출력 RT인 m_DisplayRTName 위에 렌더링)
-		if (m_ShowGrid)
+		const bool showFinalOutput = m_SelectedRTName.empty();
+		m_DisplayRTName = showFinalOutput
+			? m_PostProcessChain.ExecuteChain(dt, m_Pipeline.GetFinalColorRTName())
+			: m_SelectedRTName;
+
+		auto channelView = m_ChannelView;
+		if (!showFinalOutput && channelView == EViewportChannelView::RGBA)
+			channelView = EViewportChannelView::RGB;
+
+		if (channelView != EViewportChannelView::RGBA)
+		{
+			m_ChannelFilter.SetChannelView(channelView);
+			m_ChannelFilter.SubmitChannelPreviewPass(m_DisplayRTName, m_DisplayRTName);
+		}
+
+		if (showFinalOutput && m_ShowGrid)
 		{
 			m_Grid.SubmitGrid(cameraBuffer, m_CameraController->IsOrthographic(),
 				m_DisplayRTName, m_Pipeline.GetDepthRTName());
@@ -438,7 +467,12 @@ namespace Editor
 		ImGui::SetCursorPos(ImVec2(startCursor.x + 8.0f, startCursor.y + 8.0f));
 		const ImGuiWindowFlags toolbarFlags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBackground |
 			ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav;
-		if (ImGui::BeginChild("##OverlayToolbarChild", ImVec2(120.0f, 32.0f), false, toolbarFlags))
+		const auto& style = ImGui::GetStyle();
+		const float frameHeight = ImGui::GetFrameHeight();
+		const ImVec2 toolbarSize(
+			frameHeight * 5.0f + style.ItemSpacing.x * 4.0f + style.WindowPadding.x * 2.0f,
+			frameHeight + style.WindowPadding.y * 2.0f);
+		if (ImGui::BeginChild("##OverlayToolbarChild", toolbarSize, false, toolbarFlags))
 		{
 			DrawOverlayToolbar();
 		}
@@ -455,6 +489,11 @@ namespace Editor
 
 		ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
 		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.12f, 0.12f, 0.12f, 0.75f));
+
+		DrawRenderTargetPopup();
+		ImGui::SameLine();
+		DrawPreviewLightingPopup();
+		ImGui::SameLine();
 
 		// 그리드 On/Off 토글 버튼
 		const char* gridIcon = m_ShowGrid ? ICON_FA_BORDER_ALL : ICON_FA_BORDER_NONE;
@@ -529,5 +568,100 @@ namespace Editor
 			return;
 
 		FocusTarget(m_FocusPosition, m_FocusDistance);
+	}
+
+	void PreviewViewportWidget::DrawRenderTargetPopup()
+	{
+		if (ImGui::Button(ICON_FA_LAYER_GROUP "##PreviewRenderTargets"))
+			ImGui::OpenPopup("##PreviewRenderTargets");
+
+		if (ImGui::IsItemHovered())
+			ImGui::SetTooltip("%s", LOCAL_CSTR("Viewport.RenderTargetsMenu"));
+
+		if (!ImGui::BeginPopup("##PreviewRenderTargets"))
+			return;
+
+		if (ImGui::Selectable(LOCAL_LABEL("Viewport.FinalOutput").c_str(), m_SelectedRTName.empty(),
+			ImGuiSelectableFlags_NoAutoClosePopups))
+		{
+			m_SelectedRTName.clear();
+		}
+
+		const std::wstring prefix = m_Id.empty() ? L"VP_" : m_Id + L"_";
+		for (const auto& name : m_Pipeline.GetOwnedRTNames())
+		{
+			if (name == m_Pipeline.GetShadowDepthRTName() || name == m_Pipeline.GetPointShadowDepthRTName())
+				continue;
+
+			const auto shortName = name.starts_with(prefix) ? name.substr(prefix.size()) : name;
+			const auto label = Engine::WStrToStr(shortName);
+
+			ImGui::PushID(label.c_str());
+			if (ImGui::Selectable(label.c_str(), m_SelectedRTName == name, ImGuiSelectableFlags_NoAutoClosePopups))
+				m_SelectedRTName = name;
+			ImGui::PopID();
+		}
+
+		ImGui::Separator();
+		ChannelFilter::DrawButtons(m_ChannelView);
+		ImGui::EndPopup();
+	}
+
+	void PreviewViewportWidget::DrawPreviewLightingPopup()
+	{
+		constexpr const char* popupId = "##PreviewLightingPopup";
+		auto& settings = EditorSettingsService::Get();
+
+		if (ImGui::Button(ICON_FA_LIGHTBULB "##PreviewLighting"))
+		{
+			m_PreviewLightDraft = settings.GetPreferences().PreviewLightIntensity;
+			ImGui::OpenPopup(popupId);
+		}
+
+		if (ImGui::IsItemHovered())
+			ImGui::SetTooltip("%s", LOCAL_CSTR("Settings.PreviewLighting"));
+
+		if (!ImGui::BeginPopup(popupId))
+		{
+			m_PreviewLightDraft.reset();
+			return;
+		}
+
+		auto& draft = *m_PreviewLightDraft;
+		constexpr const char* keys[] = {
+			"Settings.PreviewKeyLight", "Settings.PreviewFillLight", "Settings.PreviewRimLight"
+		};
+
+		for (std::size_t i = 0; i < draft.size(); ++i)
+		{
+			ImGui::SetNextItemWidth(ImGui::GetFontSize() * 12.0f);
+			ImGui::SliderFloat(LOCAL_LABEL(keys[i]).c_str(), &draft[i],
+				0.0f, EditorPreferences::MaxPreviewLightIntensity, "%.2f");
+		}
+
+		if (ImGui::Button(LOCAL_LABEL("Settings.Btn.ResetDefaults").c_str()))
+			draft = EditorPreferences{}.PreviewLightIntensity;
+
+		ImGui::Separator();
+		ImGui::TextUnformatted(LOCAL_CSTR("PreviewViewport.LightingApplyScope"));
+
+		ImGui::BeginDisabled(draft == settings.GetPreferences().PreviewLightIntensity);
+		if (ImGui::Button(LOCAL_LABEL("EditorCommon.Apply").c_str()))
+		{
+			const auto result = settings.SetPreviewLightIntensity(draft);
+			ImGuiManager::Get().NotifySettingsChange(result);
+			if (result.Applied)
+				ImGui::CloseCurrentPopup();
+		}
+		ImGui::EndDisabled();
+
+		ImGui::SameLine();
+		if (ImGui::Button(LOCAL_LABEL("EditorCommon.Cancel").c_str()))
+			ImGui::CloseCurrentPopup();
+
+		ImGui::EndPopup();
+
+		if (!ImGui::IsPopupOpen(popupId))
+			m_PreviewLightDraft.reset();
 	}
 }
