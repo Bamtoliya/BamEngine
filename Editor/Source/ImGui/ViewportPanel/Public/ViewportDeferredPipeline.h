@@ -19,7 +19,7 @@ public:
 	~ViewportDeferredPipeline();
 
 	// 1. 초기화: 뷰포트 고유 접두사(예: L"SceneView_", L"GameView_")와 해상도로 RT 및 Pass 생성
-	void Initialize(const std::wstring& viewportPrefix, uint32 width, uint32 height, bool acceptSceneMeshes = true);
+	bool Initialize(const std::wstring& viewportPrefix, uint32 width, uint32 height, bool acceptSceneMeshes = true);
 	void Free();
 
 	// 2. 해상도 리사이즈: 뷰포트 패널 크기가 바뀔 때 RT 리사이즈 (ShadowDepth 제외)

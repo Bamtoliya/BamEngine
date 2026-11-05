@@ -25,9 +25,6 @@ public:
 	EResult Initialize(void* arg = nullptr);
 	void Free() override;
 
-	// 128x128 오프스크린 뷰포트 파이프라인 및 스튜디오 씬 초기화
-	void Setup(uint32 size = 128);
-
 	// 머티리얼 1회 렌더링 제출 (구체 메쉬에 머티리얼을 바인딩하고 오프스크린 파이프라인에 Submit)
 	bool SubmitMaterial(Engine::MaterialInterface* material);
 
@@ -49,7 +46,6 @@ private:
 	[[nodiscard]] Engine::MaterialInterface* GetDefaultPreviewMaterial() const;
 private:
 	uint32 m_Size = 128;
-	bool m_Initialized = false;
 
 	// 128x128 오프스크린 디퍼드 렌더링 파이프라인
 	ViewportDeferredPipeline m_Pipeline;

@@ -3,6 +3,8 @@
 #include "Editor_Includes.h"
 #include <list>
 #include <deque>
+#include <future>
+#include <vector>
 
 BEGIN(Editor)
 class AssetCache : public Base
@@ -34,6 +36,12 @@ public:
 	static constexpr size_t MAX_CACHE_BYTES = 64 * 1024 * 1024;   // 최대 VRAM 캐시 예산 (64 MB)
 	static constexpr size_t MAX_UPLOADS_PER_FRAME = 4;           // 프레임당 최대 GPU 텍스처 생성 수
 	static constexpr int32 MAX_THUMBNAIL_DIM = 128;              // 썸네일 최대 가로/세로 해상도
+	static constexpr size_t MAX_DECODE_WORKERS = 2;
+	static constexpr size_t MAX_THUMBNAIL_SOURCE_BYTES = 32 * 1024 * 1024;
+	static constexpr size_t MAX_THUMBNAIL_RGBA_BYTES = 64 * 1024 * 1024;
+	static constexpr int32 MAX_THUMBNAIL_SOURCE_DIM = 8192;
+	static constexpr size_t MAX_PENDING_3D_REQUESTS = 32;
+	static constexpr size_t MAX_3D_REQUESTS_PER_FRAME = 1;
 
 private:
 	struct CacheEntry
@@ -51,7 +59,15 @@ private:
 		std::vector<uint8_t> Data;
 	};
 
-	std::optional<ThumbnailUploadTask> LoadImageThumbnail(const filesystem::path& assetPath);
+	struct ThumbnailDecodeWorker
+	{
+		std::string AssetPath;
+		Engine::uint64 RequestId = 0;
+		std::future<std::optional<ThumbnailUploadTask>> Future;
+	};
+
+	static std::optional<ThumbnailUploadTask> LoadImageThumbnail(const filesystem::path& assetPath);
+	void CollectFinishedThumbnailWorkers();
 	std::optional<ThumbnailUploadTask> LoadModelThumbnail(const filesystem::path& assetPath);
 
 private:
@@ -90,9 +106,11 @@ private:
 	std::unordered_map<std::string, Engine::uint64> m_LoadingPaths;
 	Engine::uint64 m_NextRequestId = 0;
 
-	// 완료 결과와 무효화 요청만 이 뮤텍스로 보호합니다.
+	// 메인 스레드에서 작업을 등록하고 완료 결과를 회수합니다.
+	std::vector<ThumbnailDecodeWorker> m_DecodeWorkers;
+
+	// 다른 스레드에서는 무효화 요청만 전달합니다.
 	std::mutex m_UploadMutex;
-	std::vector<ThumbnailUploadTask> m_UploadTasks;
 	std::unordered_set<std::string> m_PendingInvalidations;
 #pragma endregion
 };

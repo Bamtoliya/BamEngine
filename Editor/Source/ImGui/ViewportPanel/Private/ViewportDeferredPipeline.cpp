@@ -42,15 +42,39 @@ ViewportDeferredPipeline::~ViewportDeferredPipeline()
 	Free();
 }
 
-void ViewportDeferredPipeline::Initialize(const std::wstring& viewportPrefix, uint32 width, uint32 height, bool acceptSceneMeshes)
+bool ViewportDeferredPipeline::Initialize(const std::wstring& viewportPrefix, uint32 width, uint32 height,
+	bool acceptSceneMeshes)
 {
-	m_Prefix = viewportPrefix.empty() ? L"VP_" : (viewportPrefix + L"_");
+	if (width == 0 || height == 0)
+		return false;
+
+	m_Prefix = viewportPrefix.empty() ? L"VP_" : viewportPrefix + L"_";
 	m_Width = width;
 	m_Height = height;
 	m_AcceptSceneMeshes = acceptSceneMeshes;
+
 	CreateRenderTargets(width, height);
-	RegisterRenderPasses();
 	CreateLightingPipeline();
+
+	bool ready = m_LightingPipeline != nullptr && m_LightingPipeline->GetNativeHandle() != nullptr;
+	auto& targets = Engine::RenderTargetManager::Get();
+
+	for (const auto& name : m_OwnedRTNames)
+	{
+		auto* target = targets.GetRenderTarget(name);
+		if (target == nullptr || target->GetTexture() == nullptr ||
+			target->GetTexture()->GetNativeHandle() == nullptr)
+			ready = false;
+	}
+
+	if (!ready)
+	{
+		Free();
+		return false;
+	}
+
+	RegisterRenderPasses();
+	return true;
 }
 
 void ViewportDeferredPipeline::Free()
@@ -173,11 +197,22 @@ void ViewportDeferredPipeline::RegisterRenderPasses()
 
 void ViewportDeferredPipeline::CreateLightingPipeline()
 {
-	auto& rm = Engine::ResourceManager::Get();
-	RHIPipelineDesc pd = {};
+	m_LightingPipeline = nullptr;
+
+	auto& manager = Engine::ResourceManager::Get();
+	const auto vs = manager.GetResourceHandle<Engine::Shader>(L"FullscreenQuadVS");
+	const auto ps = manager.GetResourceHandle<Engine::Shader>(L"LightingPS");
+
+	if (!vs.IsValid() || !ps.IsValid() || !vs.Get() || !ps.Get())
+		return;
+
+	if (!vs->GetRHIShader() || !ps->GetRHIShader())
+		return;
+
+	RHIPipelineDesc pd{};
 	pd.pipelineType = Engine::EPipelineType::Graphics;
-	pd.vertexShader = rm.GetResourceHandle<Engine::Shader>(L"FullscreenQuadVS")->GetRHIShader();
-	pd.pixelShader = rm.GetResourceHandle<Engine::Shader>(L"LightingPS")->GetRHIShader();
+	pd.vertexShader = vs->GetRHIShader();
+	pd.pixelShader = ps->GetRHIShader();
 	pd.colorAttachmentCount = 1;
 	pd.colorAttachmentFormats[0] = Engine::ETextureFormat::R16G16B16A16_FLOAT;
 	pd.depthStencilAttachmentFormat = Engine::ETextureFormat::UNKNOWN;
@@ -186,6 +221,7 @@ void ViewportDeferredPipeline::CreateLightingPipeline()
 	pd.topology = Engine::ETopology::TriangleList;
 	pd.cullMode = Engine::ECullMode::None;
 	pd.blendState = Engine::BlendState{};
+
 	m_LightingPipeline = Engine::PipelineManager::Get().GetOrCreatePipeline(pd);
 }
 

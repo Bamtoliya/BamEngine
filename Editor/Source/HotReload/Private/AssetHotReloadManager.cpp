@@ -9,6 +9,8 @@
 #include "Logger.h"
 #include "NotificationManager.h"
 #include "PlatformPath.h"
+#include "AssetCache.h"
+#include "Functions.h"
 
 namespace
 {
@@ -60,21 +62,42 @@ namespace
 		AssetHotReloadManager* m_Manager = nullptr;
 	};
 
-	std::wstring MeshFileKey(const std::filesystem::path& filePath)
+	std::wstring AssetFileKey(const std::filesystem::path& filePath)
 	{
-		if (filePath.empty())
-			return {};
+		if (filePath.empty()) return {};
+
+		const auto absolutePath = Engine::PlatformPath::ResolveProjectRelative(filePath);
 
 		std::error_code ec;
-		const auto normalized = std::filesystem::weakly_canonical(filePath, ec);
-		if (ec)
-			return {};
+		const auto normalized = std::filesystem::weakly_canonical(absolutePath, ec);
+		if (ec) return {};
 
 		auto key = normalized.generic_wstring();
 		for (wchar_t& character : key)
 			character = static_cast<wchar_t>(std::towlower(character));
 
 		return key;
+	}
+
+	bool MatchesResourceFile(const Engine::Resource& resource, const std::wstring& targetKey)
+	{
+		const auto& path = resource.GetPath().empty() ? resource.GetKey() : resource.GetPath();
+		return !path.empty() && AssetFileKey(path) == targetKey;
+	}
+
+	void RequestThumbnailRefresh(const std::filesystem::path& changedPath, const Engine::Resource* resource = nullptr)
+	{
+		if (!Editor::AssetCache::IsCreated()) return;
+
+		auto& cache = Editor::AssetCache::Get();
+		cache.RequestInvalidate(changedPath);
+
+		if (resource != nullptr)
+		{
+			const auto& path = resource->GetPath().empty() ? resource->GetKey() : resource->GetPath();
+			if (!path.empty())
+				cache.RequestInvalidate(path);
+		}
 	}
 }
 
@@ -161,80 +184,71 @@ void AssetHotReloadManager::Update()
 
 void AssetHotReloadManager::ProcessModifiedTexture(const std::filesystem::path& texturePath)
 {
-	Engine::ResourceManager& rm = Engine::ResourceManager::Get();
-	auto textureHandles = rm.GetResourceHandles<Engine::Texture>();
+	const auto fullPath = Engine::PlatformPath::ResolveProjectRelative(texturePath);
+	const auto targetKey = AssetFileKey(fullPath);
+	if (targetKey.empty()) return;
 
-	std::string targetStem = texturePath.stem().string();
-	for (char& c : targetStem) c = static_cast<char>(tolower(c));
+	auto& manager = Engine::ResourceManager::Get();
+	bool matched = false;
 
-	bool reloadedAny = false;
-	for (const auto& handle : textureHandles)
+	for (const auto& handle : manager.GetResourceHandles<Engine::Texture>())
 	{
-		Engine::Texture* tex = static_cast<Engine::Texture*>(rm.GetResource(handle));
-		if (!tex) continue;
+		auto* texture = dynamic_cast<Engine::Texture*>(manager.GetResource(handle));
+		if (texture == nullptr || !MatchesResourceFile(*texture, targetKey))
+			continue;
 
-		std::filesystem::path resKeyPath = tex->GetKey();
-		std::filesystem::path resFilePath = tex->GetPath();
+		matched = true;
 
-		std::string keyStem = resKeyPath.stem().string();
-		for (char& c : keyStem) c = static_cast<char>(tolower(c));
+		if (!IsSuccess(texture->Reload(fullPath)))
+			continue;
 
-		std::string fileStem = resFilePath.stem().string();
-		for (char& c : fileStem) c = static_cast<char>(tolower(c));
+		RequestThumbnailRefresh(fullPath, texture);
 
-		const bool isMatch = !fileStem.empty() ? (fileStem == targetStem) : (keyStem == targetStem);
-
-		if (isMatch)
-		{
-			if (IsSuccess(tex->Reload()))
-			{
-				reloadedAny = true;
-				// 방금 만든 우측 하단 토스트 알림 연동!
-				NotificationManager::Get().AddNotification(LOCAL("Notification.TextureHotReloaded"),
-					LOCAL_FMT("Notification.ReloadedFile", texturePath.filename().string()), ELogLevel::Info, 3.0f);
-			}
-		}
+		NotificationManager::Get().AddNotification(LOCAL("Notification.TextureHotReloaded"),
+			LOCAL_FMT("Notification.ReloadedFile", Engine::WStrToStr(fullPath.filename().wstring())),
+			ELogLevel::Info, 3.0f);
 	}
+
+	// 로드된 리소스 없이 콘텐츠 브라우저 썸네일만 존재할 수도 있습니다.
+	if (!matched)
+		RequestThumbnailRefresh(fullPath);
 }
 
 void AssetHotReloadManager::ProcessModifiedMaterial(const std::filesystem::path& materialPath)
 {
-	Engine::ResourceManager& rm = Engine::ResourceManager::Get();
+	const auto fullPath = Engine::PlatformPath::ResolveProjectRelative(materialPath);
+	const auto targetKey = AssetFileKey(fullPath);
+	if (targetKey.empty()) return;
 
-	std::string targetStem = materialPath.filename().string();
-	for (char& c : targetStem) c = static_cast<char>(tolower(c));
-	if (targetStem.ends_with(".json")) targetStem = targetStem.substr(0, targetStem.length() - 5);
-	if (targetStem.ends_with(".bammat")) targetStem = targetStem.substr(0, targetStem.length() - 7);
-	if (targetStem.ends_with(".bammatinst")) targetStem = targetStem.substr(0, targetStem.length() - 11);
+	auto& manager = Engine::ResourceManager::Get();
+	bool matched = false;
 
-	auto matHandles = rm.GetResourceHandles<Engine::Material>();
-	auto instHandles = rm.GetResourceHandles<Engine::MaterialInstance>();
-
-	auto tryReload = [&](const std::vector<Engine::Handle>& handles) {
-		for (const auto& handle : handles)
+	auto tryReload = [&](const std::vector<Engine::Handle>& handles)
 		{
-			auto* mat = static_cast<Engine::MaterialInterface*>(rm.GetResource(handle));
-			if (!mat) continue;
-
-			std::string keyStem = std::filesystem::path(mat->GetKey()).stem().string();
-			for (char& c : keyStem) c = static_cast<char>(tolower(c));
-
-			std::string fileStem = std::filesystem::path(mat->GetPath()).stem().string();
-			for (char& c : fileStem) c = static_cast<char>(tolower(c));
-
-			if (keyStem == targetStem || fileStem == targetStem)
+			for (const auto& handle : handles)
 			{
-				if (IsSuccess(mat->Reload(materialPath)))
-				{
-					NotificationManager::Get().AddNotification(LOCAL("Notification.MaterialHotReloaded"),
-						LOCAL_FMT("Notification.ReloadedFile", materialPath.filename().string()), ELogLevel::Info, 3.0f);
-				}
+				auto* material = dynamic_cast<Engine::MaterialInterface*>(manager.GetResource(handle));
+				if (material == nullptr || !MatchesResourceFile(*material, targetKey))
+					continue;
+
+				matched = true;
+
+				if (!IsSuccess(material->Reload(fullPath)))
+					continue;
+
+				RequestThumbnailRefresh(fullPath, material);
+
+				NotificationManager::Get().AddNotification(LOCAL("Notification.MaterialHotReloaded"),
+					LOCAL_FMT("Notification.ReloadedFile", Engine::WStrToStr(fullPath.filename().wstring())),
+					ELogLevel::Info, 3.0f);
 			}
-		}
 		};
 
-	tryReload(matHandles);
-	tryReload(instHandles);
+	tryReload(manager.GetResourceHandles<Engine::Material>());
+	tryReload(manager.GetResourceHandles<Engine::MaterialInstance>());
+
+	if (!matched)
+		RequestThumbnailRefresh(fullPath);
 }
 
 void AssetHotReloadManager::ProcessModifiedLocalization(const std::filesystem::path& locPath)
@@ -263,7 +277,7 @@ void AssetHotReloadManager::ProcessModifiedLocalization(const std::filesystem::p
 
 void AssetHotReloadManager::ProcessModifiedMesh(const std::filesystem::path& meshPath)
 {
-	const auto targetKey = MeshFileKey(meshPath);
+	const auto targetKey = AssetFileKey(meshPath);
 	if (targetKey.empty())
 		return;
 
@@ -285,7 +299,7 @@ void AssetHotReloadManager::ProcessModifiedMesh(const std::filesystem::path& mes
 			continue;
 
 		const auto& resourcePath = mesh->GetPath().empty() ? mesh->GetKey() : mesh->GetPath();
-		if (MeshFileKey(std::filesystem::path(resourcePath)) != targetKey)
+		if (AssetFileKey(std::filesystem::path(resourcePath)) != targetKey)
 			continue;
 
 		matched = true;
@@ -296,9 +310,13 @@ void AssetHotReloadManager::ProcessModifiedMesh(const std::filesystem::path& mes
 			continue;
 		}
 
+		RequestThumbnailRefresh(meshPath, mesh);
 		NotificationManager::Get().AddNotification(LOCAL("Notification.MeshHotReloaded"),
 			LOCAL_FMT("Notification.ReloadedFile", meshPath.filename().string()), ELogLevel::Info, 3.0f);
 	}
+
+	if (!matched)
+		RequestThumbnailRefresh(meshPath);
 
 	if (matched && allSucceeded && hasState)
 		m_MeshFileStates.insert_or_assign(targetKey, currentState);
@@ -317,7 +335,7 @@ bool AssetHotReloadManager::ReadMeshFileState(const std::filesystem::path& fileP
 
 void AssetHotReloadManager::RecordMeshFileState(const std::filesystem::path& filePath)
 {
-	const auto key = MeshFileKey(filePath);
+	const auto key = AssetFileKey(filePath);
 	if (key.empty())
 		return;
 

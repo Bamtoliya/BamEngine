@@ -35,6 +35,7 @@
 #include "EditorSettingsService.h"
 #include "PrefabModeManager.h"
 #include "SceneViewportPanel.h"
+#include "ThumbnailRenderer.h"
 
 IMPLEMENT_SINGLETON(Application)
 
@@ -83,6 +84,9 @@ EResult Application::Initialize(void* arg)
 		return fail("IntializeRenderer", EResult::Fail);
     if (!InitializeResources())
         return fail("InitializeResources", EResult::Fail);
+
+    if (!ThumbnailRenderer::Create())
+        BAM_LOG(Warn, "Editor", "Asset", "Thumbnail renderer is unavailable; asset icons will be used.");
 
     if (!InitializeImGui())
         return fail("InitializeImGui", EResult::Fail);

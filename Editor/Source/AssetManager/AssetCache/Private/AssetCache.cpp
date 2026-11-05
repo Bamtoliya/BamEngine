@@ -17,6 +17,12 @@
 #include "PlatformPath.h"
 #include <fstream>
 #include <limits>
+#include "MaterialInstance.h"
+#include <unordered_map>
+#include <unordered_set>
+#include <vector>
+#include <chrono>
+#include <memory>
 
 namespace
 {
@@ -26,6 +32,98 @@ namespace
 
         const auto absolutePath = Engine::PlatformPath::ResolveProjectRelative(path);
         return Engine::WStrToStr(absolutePath.generic_wstring());
+    }
+
+    std::string ThumbnailResourceKey(const Engine::Resource* resource)
+    {
+        if (resource == nullptr) return {};
+
+        const auto& path = resource->GetPath().empty() ? resource->GetKey() : resource->GetPath();
+        return ThumbnailCacheKey(path);
+    }
+
+    void ExpandThumbnailInvalidations(std::unordered_set<std::string>& invalidations)
+    {
+        if (invalidations.empty() || !Engine::ResourceManager::IsCreated())
+            return;
+
+        auto& manager = Engine::ResourceManager::Get();
+        std::unordered_map<std::string, std::vector<std::string>> dependents;
+        std::unordered_set<std::string> materialKeys;
+        std::unordered_set<std::string> fallbackPreviews;
+
+        auto addDependency = [&](const Engine::Resource* dependency, const std::string& ownerKey)
+            {
+                const auto dependencyKey = ThumbnailResourceKey(dependency);
+                if (!dependencyKey.empty() && dependencyKey != ownerKey)
+                    dependents[dependencyKey].push_back(ownerKey);
+            };
+
+        for (const auto& entry : manager.GetDebugSnapshot())
+        {
+            auto* resource = manager.GetResource(manager.FindHandleByKey(entry.Key));
+            const auto ownerKey = ThumbnailResourceKey(resource);
+            if (resource == nullptr || ownerKey.empty())
+                continue;
+
+            if (auto* material = dynamic_cast<Engine::MaterialInterface*>(resource))
+            {
+                materialKeys.insert(ownerKey);
+
+                for (const auto& binding : material->GetTextureBindings())
+                    addDependency(binding.texture.Get(), ownerKey);
+
+                if (auto* instance = dynamic_cast<Engine::MaterialInstance*>(material))
+                    addDependency(instance->GetBaseMaterial(), ownerKey);
+            }
+            else if (auto* sprite = dynamic_cast<Engine::Sprite*>(resource))
+            {
+                addDependency(sprite->GetTexture(), ownerKey);
+            }
+            else if (auto* model = dynamic_cast<Engine::Model*>(resource))
+            {
+                const auto meshes = model->GetMeshes();
+
+                for (size_t i = 0; i < meshes.size(); ++i)
+                {
+                    addDependency(meshes[i].Get(), ownerKey);
+
+                    const auto material = model->GetMeshMaterial(static_cast<Engine::uint32>(i));
+                    if (meshes[i].Get() != nullptr && material.Get() == nullptr)
+                        fallbackPreviews.insert(ownerKey);
+                }
+
+                for (const auto& material : model->GetMaterials())
+                    addDependency(material.Get(), ownerKey);
+            }
+            else if (dynamic_cast<Engine::Mesh*>(resource) != nullptr)
+            {
+                fallbackPreviews.insert(ownerKey);
+            }
+        }
+
+        std::vector<std::string> pending(invalidations.begin(), invalidations.end());
+        bool materialChanged = false;
+
+        for (size_t i = 0; i < pending.size(); ++i)
+        {
+            if (materialKeys.contains(pending[i]))
+                materialChanged = true;
+
+            const auto found = dependents.find(pending[i]);
+            if (found == dependents.end())
+                continue;
+
+            for (const auto& ownerKey : found->second)
+            {
+                if (invalidations.insert(ownerKey).second)
+                    pending.push_back(ownerKey);
+            }
+        }
+
+        // 기본 재질을 사용하는 프리뷰는 재질 변경 시 보수적으로 갱신합니다.
+        if (materialChanged)
+            invalidations.insert(fallbackPreviews.begin(), fallbackPreviews.end());
     }
 
     // F12: 고해상도 원본 이미지를 썸네일 해상도로 안전하게 축소하는 Bilinear 다운샘플러
@@ -82,27 +180,31 @@ EResult AssetCache::Initialize(void* arg)
 
 void AssetCache::Free()
 {
+    for (auto& worker : m_DecodeWorkers)
+    {
+        if (worker.Future.valid())
+            worker.Future.wait();
+    }
+
+    m_DecodeWorkers.clear();
     ClearAll();
 }
 
 void AssetCache::Update()
 {
-    std::vector<ThumbnailUploadTask> tasks;
+    CollectFinishedThumbnailWorkers();
+
     std::unordered_set<std::string> invalidations;
 
     {
         std::lock_guard lock(m_UploadMutex);
-        tasks.swap(m_UploadTasks);
         invalidations.swap(m_PendingInvalidations);
     }
 
-    // 같은 프레임에 변경 요청과 완료 결과가 들어오면 변경부터 반영합니다.
+    ExpandThumbnailInvalidations(invalidations);
+
     for (const auto& path : invalidations)
         ClearCache(Engine::Utf8ToPath(path));
-
-    // 새로 도착한 태스크들을 메인 스레드 업로드 대기열에 추가
-    for (auto& task : tasks)
-        m_PendingUploadQueue.push_back(std::move(task));
 
     RHI* rhi = Renderer::IsCreated() ? Renderer::Get().GetRHI() : nullptr;
 
@@ -198,20 +300,18 @@ void AssetCache::EvictOldest()
 
 void AssetCache::ProcessPending3DThumbnail()
 {
-    if (!ThumbnailRenderer::IsCreated()) return;
-
-    auto& thumbRenderer = ThumbnailRenderer::Get();
+    auto* thumbRenderer = ThumbnailRenderer::IsCreated() ? &ThumbnailRenderer::Get() : nullptr;
 
     // 1단계: 이전 프레임에서 제출한 렌더링 결과물이 있으면 텍스처 복제하여 캐시에 등록
     if (m_CaptureState == ECaptureState::Rendering)
     {
         const auto loading = m_LoadingPaths.find(m_CurrentCapturingKey);
-        const bool isCurrent = loading != m_LoadingPaths.end() &&
+        const bool isCurrent = thumbRenderer != nullptr && loading != m_LoadingPaths.end() &&
             loading->second == m_CurrentCapturingRequestId;
 
         if (isCurrent)
         {
-            RHITexture* newTexture = thumbRenderer.CreateThumbnailTexture();
+            RHITexture* newTexture = thumbRenderer->CreateThumbnailTexture();
             m_LoadingPaths.erase(loading);
 
             const size_t byteSize = newTexture != nullptr ?
@@ -232,7 +332,10 @@ void AssetCache::ProcessPending3DThumbnail()
     }
 
     // 2단계: 대기열에서 다음 에셋 1개를 꺼내어 타입별 자동 프레이밍 렌더링 제출
-    while (!m_Pending3DQueue.empty() && m_CaptureState == ECaptureState::Idle)
+    for (size_t processed = 0;
+        processed < MAX_3D_REQUESTS_PER_FRAME && !m_Pending3DQueue.empty() &&
+        m_CaptureState == ECaptureState::Idle;
+        ++processed)
     {
         const auto request = std::move(m_Pending3DQueue.front());
         m_Pending3DQueue.pop();
@@ -261,9 +364,16 @@ void AssetCache::ProcessPending3DThumbnail()
         const bool isMat = ext == ".bammat" || ext == ".bammatinst" || ext == ".mat" ||
             filename.ends_with(".bammat.json") || filename.ends_with(".bammatinst.json");
         const bool isModel = ext == ".bammodel" || filename.ends_with(".bammodel.json");
-        const bool isMesh = ext == ".bammesh" || ext == ".fbx" || ext == ".glb" || ext == ".gltf" || ext == ".obj" || filename.ends_with(".bammesh.json");
+        const bool isMesh = ext == ".bammesh" || filename.ends_with(".bammesh.json");
         const bool isTex = ext == ".bamtex" || filename.ends_with(".bamtex.json");
         const bool isSprite = ext == ".bamsprite" || filename.ends_with(".bamsprite.json");
+
+        if ((isMat || isModel || isMesh) && thumbRenderer == nullptr)
+        {
+            m_LoadingPaths.erase(key);
+            InsertToCache(key, nullptr, 0);
+            continue;
+        }
 
         if (isTex)
         {
@@ -321,7 +431,7 @@ void AssetCache::ProcessPending3DThumbnail()
                 auto loaded = rm.LoadFile(relPath);
                 if (loaded.IsValid()) handle = Engine::ResourceHandle<Engine::MaterialInterface>(loaded);
             }
-            if (handle.IsValid() && handle.Get()) submitSuccess = thumbRenderer.SubmitMaterial(handle.Get());
+            if (handle.IsValid() && handle.Get()) submitSuccess = thumbRenderer->SubmitMaterial(handle.Get());
         }
         else if (isModel)
         {
@@ -331,7 +441,7 @@ void AssetCache::ProcessPending3DThumbnail()
                 auto loaded = rm.LoadFile(relPath);
                 if (loaded.IsValid()) handle = Engine::ResourceHandle<Engine::Model>(loaded);
             }
-            if (handle.IsValid() && handle.Get()) submitSuccess = thumbRenderer.SubmitModel(handle.Get());
+            if (handle.IsValid() && handle.Get()) submitSuccess = thumbRenderer->SubmitModel(handle.Get());
         }
         else if (isMesh)
         {
@@ -341,7 +451,7 @@ void AssetCache::ProcessPending3DThumbnail()
                 auto loaded = rm.LoadFile(relPath);
                 if (loaded.IsValid()) handle = Engine::ResourceHandle<Engine::Mesh>(loaded);
             }
-            if (handle.IsValid() && handle.Get()) submitSuccess = thumbRenderer.SubmitMesh(handle.Get());
+            if (handle.IsValid() && handle.Get()) submitSuccess = thumbRenderer->SubmitMesh(handle.Get());
         }
 
         if (submitSuccess)
@@ -369,7 +479,6 @@ RHITexture* AssetCache::GetThumbnail(const filesystem::path& assetPath)
 
     if (auto cached = m_ThumbnailCache.find(key); cached != m_ThumbnailCache.end())
     {
-        // F12: 접근 시 LRU 리스트 맨 앞으로 갱신
         m_LruList.splice(m_LruList.begin(), m_LruList, cached->second.LruIt);
         return cached->second.Texture;
     }
@@ -388,13 +497,16 @@ RHITexture* AssetCache::GetThumbnail(const filesystem::path& assetPath)
     const bool isImage = ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga" || ext == ".bmp";
     const bool isMaterial = ext == ".bammat" || ext == ".bammatinst" || ext == ".mat" ||
         filename.ends_with(".bammat.json") || filename.ends_with(".bammatinst.json");
-    const bool isModelOrMesh = ext == ".bammodel" || ext == ".bammesh" || ext == ".glb" || ext == ".gltf" || ext == ".fbx" || ext == ".obj" ||
+    const bool isModelOrMesh = ext == ".bammodel" || ext == ".bammesh" ||
         filename.ends_with(".bammodel.json") || filename.ends_with(".bammesh.json");
     const bool isTextureOrSprite = ext == ".bamtex" || ext == ".bamsprite" ||
         filename.ends_with(".bamtex.json") || filename.ends_with(".bamsprite.json");
 
     if (isMaterial || isModelOrMesh || isTextureOrSprite)
     {
+        if (m_Pending3DQueue.size() >= MAX_PENDING_3D_REQUESTS)
+            return nullptr;
+
         const Engine::uint64 requestId = ++m_NextRequestId;
         m_LoadingPaths.emplace(key, requestId);
         m_Pending3DQueue.push(Thumbnail3DRequest{ key, requestId });
@@ -407,38 +519,20 @@ RHITexture* AssetCache::GetThumbnail(const filesystem::path& assetPath)
         return nullptr;
     }
 
+    if (m_DecodeWorkers.size() >= MAX_DECODE_WORKERS)
+        return nullptr;
+
     const Engine::uint64 requestId = ++m_NextRequestId;
     m_LoadingPaths.emplace(key, requestId);
 
     try
     {
-        std::thread([this, key, requestId, isImage]()
+        auto future = std::async(std::launch::async, [key]()
             {
-                ThumbnailUploadTask task;
+                return AssetCache::LoadImageThumbnail(Engine::Utf8ToPath(key));
+            });
 
-                try
-                {
-                    const filesystem::path path = Engine::Utf8ToPath(key);
-                    auto decoded = isImage ? LoadImageThumbnail(path) : LoadModelThumbnail(path);
-                    if (decoded) task = std::move(*decoded);
-                }
-                catch (const std::exception& error)
-                {
-                    BAM_LOG(Error, "Editor", "Asset", "Thumbnail generation failed: path={}, error={}", key, error.what());
-                }
-                catch (...)
-                {
-                    BAM_LOG(Error, "Editor", "Asset", "Thumbnail generation threw an unknown exception: path={}", key);
-                }
-
-                task.AssetPath = key;
-                task.RequestId = requestId;
-
-                {
-                    std::lock_guard lock(m_UploadMutex);
-                    m_UploadTasks.push_back(std::move(task));
-                }
-            }).detach();
+        m_DecodeWorkers.push_back(ThumbnailDecodeWorker{ key, requestId, std::move(future) });
     }
     catch (...)
     {
@@ -492,11 +586,8 @@ void AssetCache::ClearAll()
     m_CurrentCacheBytes = 0;
     m_PendingUploadQueue.clear();
 
-    std::vector<ThumbnailUploadTask> discarded;
-
     {
         std::lock_guard lock(m_UploadMutex);
-        discarded.swap(m_UploadTasks);
         m_PendingInvalidations.clear();
     }
 }
@@ -508,8 +599,17 @@ std::optional<AssetCache::ThumbnailUploadTask> AssetCache::LoadImageThumbnail(co
     if (!file.is_open()) return std::nullopt;
 
     const std::streamsize size = file.tellg();
-    if (size <= 0 || size > static_cast<std::streamsize>((std::numeric_limits<int>::max)()))
+    if (size <= 0) return std::nullopt;
+
+    const auto key = ThumbnailCacheKey(fullPath);
+
+    if (size > static_cast<std::streamsize>(MAX_THUMBNAIL_SOURCE_BYTES) ||
+        size > static_cast<std::streamsize>((std::numeric_limits<int>::max)()))
+    {
+        BAM_LOG(Warn, "Editor", "Asset",
+            "Thumbnail source exceeds file size limit: path={}, bytes={}", key, size);
         return std::nullopt;
+    }
 
     file.seekg(0, std::ios::beg);
 
@@ -517,42 +617,109 @@ std::optional<AssetCache::ThumbnailUploadTask> AssetCache::LoadImageThumbnail(co
     if (!file.read(reinterpret_cast<char*>(encodedData.data()), size))
         return std::nullopt;
 
-    int32 width = 0, height = 0, channels = 0;
-    stbi_uc* data = stbi_load_from_memory(encodedData.data(), static_cast<int>(size),
-        &width, &height, &channels, 4);
+    const int encodedSize = static_cast<int>(size);
+    int width = 0, height = 0, channels = 0;
 
-    if (data)
+    if (!stbi_info_from_memory(encodedData.data(), encodedSize, &width, &height, &channels))
+        return std::nullopt;
+
+    if (width <= 0 || height <= 0)
+        return std::nullopt;
+
+    if (width > MAX_THUMBNAIL_SOURCE_DIM || height > MAX_THUMBNAIL_SOURCE_DIM)
     {
-        ThumbnailUploadTask task;
-        task.AssetPath = ThumbnailCacheKey(assetPath);
-
-        // F12: 원본 이미지가 썸네일 해상도(128×128)를 초과하면 종횡비를 유지하며 다운샘플링
-        if (width > MAX_THUMBNAIL_DIM || height > MAX_THUMBNAIL_DIM)
-        {
-            const float aspect = static_cast<float>(width) / static_cast<float>(height);
-            int32 targetW = MAX_THUMBNAIL_DIM;
-            int32 targetH = MAX_THUMBNAIL_DIM;
-            if (aspect >= 1.0f)
-                targetH = std::max(1, static_cast<int32>(MAX_THUMBNAIL_DIM / aspect));
-            else
-                targetW = std::max(1, static_cast<int32>(MAX_THUMBNAIL_DIM * aspect));
-
-            task.Width = targetW;
-            task.Height = targetH;
-            task.Data = DownsampleRGBA(data, width, height, targetW, targetH);
-            stbi_image_free(data);
-        }
-        else
-        {
-            task.Width = width;
-            task.Height = height;
-            task.Data.assign(data, data + (static_cast<size_t>(width) * height * 4));
-            stbi_image_free(data);
-        }
-
-        return task;
+        BAM_LOG(Warn, "Editor", "Asset",
+            "Thumbnail source exceeds dimension limit: path={}, size={}x{}", key, width, height);
+        return std::nullopt;
     }
-    return std::nullopt;
+
+    const Engine::uint64 rgbaBytes = static_cast<Engine::uint64>(width) * height * STBI_rgb_alpha;
+    if (rgbaBytes > MAX_THUMBNAIL_RGBA_BYTES)
+    {
+        BAM_LOG(Warn, "Editor", "Asset",
+            "Thumbnail source exceeds RGBA size limit: path={}, bytes={}", key, rgbaBytes);
+        return std::nullopt;
+    }
+
+    int decodedWidth = 0, decodedHeight = 0;
+    std::unique_ptr<stbi_uc, decltype(&stbi_image_free)> pixels(
+        stbi_load_from_memory(encodedData.data(), encodedSize, &decodedWidth, &decodedHeight,
+            &channels, STBI_rgb_alpha),
+        stbi_image_free);
+
+    if (!pixels || decodedWidth != width || decodedHeight != height)
+        return std::nullopt;
+
+    ThumbnailUploadTask task;
+    task.AssetPath = key;
+
+    if (width > MAX_THUMBNAIL_DIM || height > MAX_THUMBNAIL_DIM)
+    {
+        const float aspect = static_cast<float>(width) / static_cast<float>(height);
+        int32 targetW = MAX_THUMBNAIL_DIM;
+        int32 targetH = MAX_THUMBNAIL_DIM;
+
+        if (aspect >= 1.0f)
+            targetH = std::max(1, static_cast<int32>(MAX_THUMBNAIL_DIM / aspect));
+        else
+            targetW = std::max(1, static_cast<int32>(MAX_THUMBNAIL_DIM * aspect));
+
+        task.Width = targetW;
+        task.Height = targetH;
+        task.Data = DownsampleRGBA(pixels.get(), width, height, targetW, targetH);
+    }
+    else
+    {
+        task.Width = width;
+        task.Height = height;
+        task.Data.assign(pixels.get(), pixels.get() + static_cast<size_t>(rgbaBytes));
+    }
+
+    return task;
+}
+
+void AssetCache::CollectFinishedThumbnailWorkers()
+{
+    for (auto it = m_DecodeWorkers.begin(); it != m_DecodeWorkers.end();)
+    {
+        if (it->Future.wait_for(std::chrono::seconds(0)) != std::future_status::ready)
+        {
+            ++it;
+            continue;
+        }
+
+        const auto loading = m_LoadingPaths.find(it->AssetPath);
+        if (loading == m_LoadingPaths.end() || loading->second != it->RequestId)
+        {
+            it = m_DecodeWorkers.erase(it);
+            continue;
+        }
+
+        ThumbnailUploadTask task;
+
+        try
+        {
+            auto decoded = it->Future.get();
+            if (decoded)
+                task = std::move(*decoded);
+        }
+        catch (const std::exception& error)
+        {
+            BAM_LOG(Error, "Editor", "Asset",
+                "Thumbnail decode failed: path={}, error={}", it->AssetPath, error.what());
+        }
+        catch (...)
+        {
+            BAM_LOG(Error, "Editor", "Asset",
+                "Thumbnail decode threw an unknown exception: path={}", it->AssetPath);
+        }
+
+        task.AssetPath = it->AssetPath;
+        task.RequestId = it->RequestId;
+        m_PendingUploadQueue.push_back(std::move(task));
+
+        it = m_DecodeWorkers.erase(it);
+    }
 }
 
 std::optional<AssetCache::ThumbnailUploadTask> AssetCache::LoadModelThumbnail(const filesystem::path& assetPath)

@@ -1,5 +1,4 @@
 ﻿#include "ThumbnailRenderer.h"
-#include "EditorSettingsService.h"
 #include "Scene.h"
 #include "TransformComponent.h"
 #include "WorldTransformComponent.h"
@@ -15,56 +14,52 @@
 #include "Shader.h"
 #include "RenderPassManager.h"
 #include "RenderPass.h"
+#include "EditorSettingsService.h"
 
 IMPLEMENT_SINGLETON(ThumbnailRenderer)
 
 EResult ThumbnailRenderer::Initialize(void* arg)
 {
-	// 스타트업 셰이더가 로드되기 전이므로 여기서 즉시 Setup하지 않고,
-	// 첫 렌더링 요청 시점에 지연 초기화(Lazy Init)합니다.
+	auto& manager = Engine::ResourceManager::Get();
+	const auto vs = manager.GetResourceHandle<Engine::Shader>(L"FullscreenQuadVS");
+	const auto ps = manager.GetResourceHandle<Engine::Shader>(L"LightingPS");
+
+	if (!vs.Get() || !ps.Get())
+		return EResult::FileNotFound;
+
+	if (!vs->GetRHIShader() || !ps->GetRHIShader())
+		return EResult::Fail;
+
+	m_SphereMesh = manager.GetResourceHandle<Engine::Mesh>(L"SphereMesh");
+	if (!m_SphereMesh.Get())
+		return EResult::FileNotFound;
+
+	SetupStudioScene();
+	if (m_Scene == nullptr || m_MeshEntity == entt::null)
+	{
+		Free();
+		return EResult::Fail;
+	}
+
+	if (!m_Pipeline.Initialize(L"ThumbPreview", m_Size, m_Size, false))
+	{
+		Free();
+		return EResult::Fail;
+	}
+
 	return EResult::Success;
 }
 
 void ThumbnailRenderer::Free()
 {
-	if (!m_Initialized) return;
+	if (!m_Pipeline.GetOwnedRTNames().empty())
+		m_Pipeline.Free();
 
-	m_Pipeline.Free();
-
-	if (m_Scene)
-	{
-		Engine::Safe_Release(m_Scene);
-		m_Scene = nullptr;
-	}
+	Engine::Safe_Release(m_Scene);
+	m_Scene = nullptr;
 
 	m_MeshEntity = entt::null;
 	m_SphereMesh = {};
-	m_Initialized = false;
-}
-
-void ThumbnailRenderer::Setup(uint32 size)
-{
-	if (m_Initialized) return;
-
-	// 필수 셰이더 로드 여부 방어 검사 (아직 로드 전이면 초기화 보류)
-	auto& rm = Engine::ResourceManager::Get();
-	auto vs = rm.GetResourceHandle<Engine::Shader>(L"FullscreenQuadVS");
-	auto ps = rm.GetResourceHandle<Engine::Shader>(L"LightingPS");
-	if (!vs.IsValid() || !ps.IsValid() || !vs.Get() || !ps.Get())
-		return;
-
-	m_Size = size;
-
-	// 1. 128x128 오프스크린 파이프라인 초기화 (acceptSceneMeshes=false 로 메인 씬 유입 차단)
-	m_Pipeline.Initialize(L"ThumbPreview", m_Size, m_Size, false);
-
-	// 2. 엔진 내장 구체(Sphere) 메쉬 로드
-	m_SphereMesh = rm.GetResourceHandle<Engine::Mesh>(L"SphereMesh");
-
-	// 3. 프리뷰 전용 독립 씬 및 스튜디오 조명/메쉬 구축
-	SetupStudioScene();
-
-	m_Initialized = true;
 }
 
 void ThumbnailRenderer::SetupStudioScene()
@@ -126,14 +121,7 @@ void ThumbnailRenderer::RefreshStudioLights()
 
 bool ThumbnailRenderer::SubmitMaterial(Engine::MaterialInterface* material)
 {
-	// 최초 요청 시점에 안전하게 파이프라인 지연 생성
-	if (!m_Initialized)
-	{
-		Setup(128);
-	}
-
-	if (!m_Initialized || !material || !m_Scene || m_MeshEntity == entt::null)
-		return false;
+	if (material == nullptr) return false;
 	Engine::TransformSystem::UpdateHierarchy(m_Scene->GetRegistry());
 	Engine::LightSystem::UpdateLights(m_Scene->GetRegistry());
 
@@ -153,7 +141,8 @@ bool ThumbnailRenderer::SubmitMaterial(Engine::MaterialInterface* material)
 
 	// 2. 엔진의 공식 검증 함수로 파이프라인 생성 가능 여부 최종 확인
 	auto* geomPass = Engine::RenderPassManager::Get().GetRenderPassByID(m_Pipeline.GetGeometryPassID());
-	if (geomPass && !Engine::Renderer::Get().ValidateMeshMaterial(mesh, material, geomPass))
+	if (geomPass == nullptr ||
+		Engine::Renderer::Get().ValidateMeshMaterial(mesh, material, geomPass) != Engine::EResult::Success)
 		return false;
 
 	// 대상 머티리얼 바인딩
@@ -189,19 +178,18 @@ bool ThumbnailRenderer::SubmitMaterial(Engine::MaterialInterface* material)
 	cameraBuffer.time = 0.0f;
 
 	// 128x128 오프스크린 파이프라인에 카메라 버퍼 및 씬 등록
+	auto* transComp = registry.try_get<Engine::WorldTransformComponent>(m_MeshEntity);
+	if (transComp == nullptr)
+		return false;
+
 	m_Pipeline.Submit(cameraBuffer, m_Scene);
 
-	// acceptSceneMeshes=false 이므로 프리뷰 메쉬 드로우 커맨드를 파이프라인의 GeometryPass에 직접 제출
-	auto* transComp = registry.try_get<Engine::WorldTransformComponent>(m_MeshEntity);
-	if (transComp)
-	{
-		Engine::StaticDrawCommand cmd{};
-		cmd.mesh = mesh;
-		cmd.material = material;
-		cmd.worldMatrix = transComp->worldMatrix;
-		cmd.pickingId = 0;
-		Engine::Renderer::Get().SubmitStatic(cmd, m_Pipeline.GetGeometryPassID());
-	}
+	Engine::StaticDrawCommand cmd{};
+	cmd.mesh = mesh;
+	cmd.material = material;
+	cmd.worldMatrix = transComp->worldMatrix;
+	cmd.pickingId = 0;
+	Engine::Renderer::Get().SubmitStatic(cmd, m_Pipeline.GetGeometryPassID());
 
 	return true;
 }
@@ -250,8 +238,7 @@ CameraBuffer ThumbnailRenderer::CalculateAutoFramingCamera(const vec3& bMin, con
 }
 bool ThumbnailRenderer::SubmitMesh(Engine::Mesh* mesh, Engine::MaterialInterface* material)
 {
-	if (!m_Initialized) Setup(128);
-	if (!m_Initialized || !mesh || !m_Scene) return false;
+	if (mesh == nullptr) return false;
 	RefreshStudioLights();
 	if (!material)
 	{
@@ -262,7 +249,8 @@ bool ThumbnailRenderer::SubmitMesh(Engine::Mesh* mesh, Engine::MaterialInterface
 	}
 	if (!material) return false;
 	auto* geomPass = Engine::RenderPassManager::Get().GetRenderPassByID(m_Pipeline.GetGeometryPassID());
-	if (geomPass && Engine::Renderer::Get().ValidateMeshMaterial(mesh, material, geomPass) != Engine::EResult::Success)
+	if (geomPass == nullptr ||
+		Engine::Renderer::Get().ValidateMeshMaterial(mesh, material, geomPass) != Engine::EResult::Success)
 		return false;
 	const CameraBuffer camBuf = CalculateAutoFramingCamera(mesh->GetMin(), mesh->GetMax());
 	m_Pipeline.Submit(camBuf, m_Scene);
@@ -288,8 +276,7 @@ bool ThumbnailRenderer::SubmitMesh(Engine::Mesh* mesh, Engine::MaterialInterface
 }
 bool ThumbnailRenderer::SubmitModel(Engine::Model* model)
 {
-	if (!m_Initialized) Setup(128);
-	if (!m_Initialized || !model || !m_Scene) return false;
+	if (model == nullptr) return false;
 	RefreshStudioLights();
 	const auto& nodes = model->GetNodes();
 	const auto& meshes = model->GetMeshes();
@@ -332,7 +319,6 @@ bool ThumbnailRenderer::SubmitModel(Engine::Model* model)
 	}
 	if (!hasValidBounds) { totalMin = vec3(-1.0f); totalMax = vec3(1.0f); }
 	const CameraBuffer camBuf = CalculateAutoFramingCamera(totalMin, totalMax);
-	m_Pipeline.Submit(camBuf, m_Scene);
 	auto* defaultMat = GetDefaultPreviewMaterial();
 	auto& rm = Engine::ResourceManager::Get();
 	auto skinMatHandle = rm.GetResourceHandle<Engine::MaterialInterface>(L"Resources/Material/SkinningMaterial.bammat.json");
@@ -342,53 +328,70 @@ bool ThumbnailRenderer::SubmitModel(Engine::Model* model)
 		if (loaded.IsValid()) skinMatHandle = Engine::ResourceHandle<Engine::MaterialInterface>(loaded);
 	}
 	auto* geomPass = Engine::RenderPassManager::Get().GetRenderPassByID(m_Pipeline.GetGeometryPassID());
+	if (geomPass == nullptr)
+		return false;
+
+	auto& renderer = Engine::Renderer::Get();
+	bool submitted = false;
+
 	for (size_t i = 0; i < nodes.size(); ++i)
 	{
 		for (uint32 meshIdx : nodes[i].MeshIndices)
 		{
-			if (meshIdx < meshes.size() && meshes[meshIdx].IsValid() && meshes[meshIdx].Get())
+			if (meshIdx >= meshes.size())
+				continue;
+
+			auto* mesh = meshes[meshIdx].Get();
+			if (mesh == nullptr)
+				continue;
+
+			const auto materialHandle = model->GetMeshMaterial(meshIdx);
+			auto* material = materialHandle.Get();
+
+			if (material == nullptr)
+				material = mesh->IsSkinned() && skinMatHandle.IsValid() ? skinMatHandle.Get() : defaultMat;
+
+			if (material == nullptr ||
+				renderer.ValidateMeshMaterial(mesh, material, geomPass) != Engine::EResult::Success)
+				continue;
+
+			if (!submitted)
+				m_Pipeline.Submit(camBuf, m_Scene);
+
+			if (mesh->IsSkinned())
 			{
-				Engine::Mesh* m = meshes[meshIdx].Get();
-				auto matHandle = model->GetMeshMaterial(meshIdx);
-				Engine::MaterialInterface* mat = matHandle.IsValid() ? matHandle.Get() : nullptr;
-				if (!mat) mat = (m->IsSkinned() && skinMatHandle.IsValid()) ? skinMatHandle.Get() : defaultMat;
-				if (mat && geomPass && Engine::Renderer::Get().ValidateMeshMaterial(m, mat, geomPass) == Engine::EResult::Success)
-				{
-					if (m->IsSkinned())
-					{
-						Engine::SkinnedDrawCommand cmd{};
-						cmd.mesh = m;
-						cmd.material = mat;
-						cmd.worldMatrix = worldTransforms[i];
-						cmd.pickingId = 0;
-						Engine::Renderer::Get().SubmitSkinned(cmd, m_Pipeline.GetGeometryPassID());
-					}
-					else
-					{
-						Engine::StaticDrawCommand cmd{};
-						cmd.mesh = m;
-						cmd.material = mat;
-						cmd.worldMatrix = worldTransforms[i];
-						cmd.pickingId = 0;
-						Engine::Renderer::Get().SubmitStatic(cmd, m_Pipeline.GetGeometryPassID());
-					}
-				}
+				Engine::SkinnedDrawCommand cmd{};
+				cmd.mesh = mesh;
+				cmd.material = material;
+				cmd.worldMatrix = worldTransforms[i];
+				cmd.pickingId = 0;
+				renderer.SubmitSkinned(cmd, m_Pipeline.GetGeometryPassID());
 			}
+			else
+			{
+				Engine::StaticDrawCommand cmd{};
+				cmd.mesh = mesh;
+				cmd.material = material;
+				cmd.worldMatrix = worldTransforms[i];
+				cmd.pickingId = 0;
+				renderer.SubmitStatic(cmd, m_Pipeline.GetGeometryPassID());
+			}
+
+			submitted = true;
 		}
 	}
-	return true;
+
+	return submitted;
 }
 
 Engine::RHITexture* ThumbnailRenderer::GetFinalTexture() const
 {
-	if (!m_Initialized) return nullptr;
 	auto* rt = Engine::RenderTargetManager::Get().GetRenderTarget(m_Pipeline.GetFinalColorRTName());
 	return rt ? rt->GetTexture() : nullptr;
 }
 
 Engine::RHITexture* ThumbnailRenderer::CreateThumbnailTexture() const
 {
-	if (!m_Initialized) return nullptr;
 	auto* finalTex = GetFinalTexture();
 	if (!finalTex) return nullptr;
 

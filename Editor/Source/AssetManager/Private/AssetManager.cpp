@@ -62,7 +62,6 @@ EResult AssetManager::Initialize(void* arg)
 		return EResult::Fail;
 	}
 
-	ThumbnailRenderer::Create();
 	return EResult::Success;
 }
 void AssetManager::Free()
