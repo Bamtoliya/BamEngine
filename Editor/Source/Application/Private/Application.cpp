@@ -290,10 +290,8 @@ EResult Application::InitializeWindow(const ApplicationCreateInfo& createInfo)
             }
 
             // --- 2. 타이틀 바 (드래그) 판정 ---
-            const int titleBarHeight = 36;
-            const int leftMenuAreaWidth = 350;
-            const int rightButtonAreaWidth = 150;
-            if (area->y < titleBarHeight)
+            if (ImGui::GetCurrentContext() && ImGuiManager::IsCreated() &&
+                ImGuiManager::Get().IsMainWindowDragArea(*area))
             {
                 // [개선] 상단 영역 위에 다른 ImGui 패널 창(플로팅 창/팝업 등)이 올라와 있다면,
                 // 패널 조작이 최우선이므로 메인 윈도우 드래그를 양보합니다.
@@ -311,12 +309,8 @@ EResult Application::InitializeWindow(const ApplicationCreateInfo& createInfo)
                         }
                     }
                 }
-                // 메뉴와 우측 제어 버튼(-ㅁX) 사이의 순수 타이틀바 빈 공간만 메인 창 드래그 허용
-                if (area->x > leftMenuAreaWidth && area->x < (winWidth - rightButtonAreaWidth))
-                {
-                    return SDL_HITTEST_DRAGGABLE;
-                }
-                return SDL_HITTEST_NORMAL;
+                // ToolBar measures the actual menu/button boundaries each frame, including locale and scale changes.
+                return SDL_HITTEST_DRAGGABLE;
             }
             return SDL_HITTEST_NORMAL;
             }, nullptr);

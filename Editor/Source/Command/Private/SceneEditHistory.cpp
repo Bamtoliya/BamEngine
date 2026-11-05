@@ -400,7 +400,7 @@ void Editor::SceneEditHistory::Record(SceneEditSnapshot before, SceneEditSnapsho
     if (!before || !after || before.Scene() != after.Scene())
     {
         NotifyUntrackedChange();
-        m_Error = "UI_HISTORY_CAPTURE_FAILED";
+        m_Error = "History.CaptureFailed";
         return;
     }
     if (merge && m_Pending && m_Pending->Label() == label && m_Pending->After.SameScope(before))
@@ -469,7 +469,7 @@ bool Editor::SceneEditHistory::Undo()
     ++m_Revision;
     const bool result = m_Commands.Undo();
     if (AfterReplay) AfterReplay();
-    m_Error = result ? "" : "UI_HISTORY_REPLAY_FAILED";
+    m_Error = result ? "" : "History.ReplayFailed";
     return result;
 }
 
@@ -480,7 +480,7 @@ bool Editor::SceneEditHistory::Redo()
     ++m_Revision;
     const bool result = m_Commands.Redo();
     if (AfterReplay) AfterReplay();
-    m_Error = result ? "" : "UI_HISTORY_REPLAY_FAILED";
+    m_Error = result ? "" : "History.ReplayFailed";
     return result;
 }
 

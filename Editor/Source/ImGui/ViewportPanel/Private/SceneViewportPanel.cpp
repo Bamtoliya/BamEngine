@@ -437,7 +437,7 @@ void SceneViewportPanel::DrawCustomViewport()
 						Engine::Entity* root = nullptr;
 						if (currentScene->InstantiateModel(*model, mat, root) == Engine::EResult::Success && root)
 						{
-							if (before) history.Record(std::move(before), SceneEditSnapshot::Capture(*currentScene), "UI_HISTORY_CREATE");
+							if (before) history.Record(std::move(before), SceneEditSnapshot::Capture(*currentScene), "History.Command.CreateEntity");
 							SelectionManager::Get().SetSelectedEntity(root);
 						}
 					}
@@ -453,7 +453,7 @@ void SceneViewportPanel::DrawCustomViewport()
 					auto before = history.Enabled() ? SceneEditSnapshot::Capture(*currentScene) : SceneEditSnapshot{};
 					if (SceneManager::Get().InstantiatePrefab(ar, p.wstring(), spawned, nullptr) == Engine::EResult::Success && spawned)
 					{
-						if (before) history.Record(std::move(before), SceneEditSnapshot::Capture(*currentScene), "UI_HISTORY_INSTANTIATE_PREFAB");
+						if (before) history.Record(std::move(before), SceneEditSnapshot::Capture(*currentScene), "History.Command.InstantiatePrefab");
 						SelectionManager::Get().SetSelectedEntity(spawned);
 						NotificationManager::Get().AddNotification(LOCAL("ResourceType.Prefab"), LOCAL_FMT("Notification.PrefabInstantiated", p.stem().string()), ELogLevel::Info, 3.0f);
 					}
@@ -497,7 +497,7 @@ void SceneViewportPanel::DrawPickingMenu()
 #pragma region Options Bar
 void SceneViewportPanel::DrawSceneRenderTargetMenu()
 {
-	if (ImGui::BeginMenu(LOCAL_CSTR("UI_RENDER_TARGET")))
+	if (ImGui::BeginMenu(LOCAL_CSTR("Viewport.RenderTargetsMenu")))
 	{
 		if (ImGui::MenuItem(LOCAL_LABEL("Viewport.FinalOutput").c_str(), nullptr, m_ShowFinalComposed))
 		{
@@ -565,14 +565,14 @@ void SceneViewportPanel::DrawSceneRenderTargetMenu()
 
 void SceneViewportPanel::DrawGizmoMenu()
 {
-	if (ImGui::BeginMenu(LOCAL_CSTR("UI_GIZMO")))
+	if (ImGui::BeginMenu(LOCAL_CSTR("Viewport.GizmoMenu")))
 	{
 		auto& sm = ShortcutManager::Get();
-		if (ImGui::MenuItem(LOCAL_LABEL("Viewport.Translate").c_str(), sm.GetShortcutHint("Viewport.GizmoTranslate"), m_GizmoOperation == ImGuizmo::TRANSLATE))
+		if (ImGui::MenuItem(LOCAL_LABEL("Action.Viewport.GizmoTranslate").c_str(), sm.GetShortcutHint("Viewport.GizmoTranslate"), m_GizmoOperation == ImGuizmo::TRANSLATE))
 			m_GizmoOperation = ImGuizmo::TRANSLATE;
-		if (ImGui::MenuItem(LOCAL_LABEL("Viewport.Rotate").c_str(), sm.GetShortcutHint("Viewport.GizmoRotate"), m_GizmoOperation == ImGuizmo::ROTATE))
+		if (ImGui::MenuItem(LOCAL_LABEL("Action.Viewport.GizmoRotate").c_str(), sm.GetShortcutHint("Viewport.GizmoRotate"), m_GizmoOperation == ImGuizmo::ROTATE))
 			m_GizmoOperation = ImGuizmo::ROTATE;
-		if (ImGui::MenuItem(LOCAL_LABEL("Viewport.ScaleOperation").c_str(), sm.GetShortcutHint("Viewport.GizmoScale"), m_GizmoOperation == ImGuizmo::SCALE))
+		if (ImGui::MenuItem(LOCAL_LABEL("Action.Viewport.GizmoScale").c_str(), sm.GetShortcutHint("Viewport.GizmoScale"), m_GizmoOperation == ImGuizmo::SCALE))
 			m_GizmoOperation = ImGuizmo::SCALE;
 		ImGui::Separator();
 		if (ImGui::MenuItem(LOCAL_LABEL("Viewport.Local").c_str(), nullptr, m_GizmoMode == ImGuizmo::LOCAL))
@@ -606,7 +606,7 @@ void SceneViewportPanel::DrawGizmoMenu()
 
 void SceneViewportPanel::DrawDebugMenu()
 {
-	if (ImGui::BeginMenu(LOCAL_CSTR("UI_DEBUG")))
+	if (ImGui::BeginMenu(LOCAL_CSTR("Viewport.DebugMenu")))
 	{
 		ImGui::MenuItem(LOCAL_LABEL("Viewport.ShowGrid").c_str(), nullptr, m_Grid.GetVisible());
 		ImGui::MenuItem(LOCAL_LABEL("Viewport.ShowCollider").c_str(), nullptr, m_DebugRenderer.GetDrawCollidersPtr());
@@ -622,7 +622,7 @@ void SceneViewportPanel::DrawPostProcessMenu()
 // SceneViewportPanel.cpp의 DrawRenderPassMenu (약 564번째 줄 교체)
 void SceneViewportPanel::DrawRenderPassMenu()
 {
-	if (ImGui::BeginMenu(LOCAL_CSTR("UI_PASS")))
+	if (ImGui::BeginMenu(LOCAL_CSTR("Viewport.RenderPassesMenu")))
 	{
 		auto& rpMgr = RenderPassManager::Get();
 		for (auto& pass : m_PassOptions)
@@ -796,7 +796,7 @@ void SceneViewportPanel::DrawImGuizmo()
 	{
 		if (TransformPropertyEditor::ApplyWorldMatrix(world, entity, worldMatrix, editMode))
 		{
-			history.Record(std::move(before), SceneEditSnapshot::Capture(*scene, targets), "UI_HISTORY_TRANSFORM", true);
+			history.Record(std::move(before), SceneEditSnapshot::Capture(*scene, targets), "History.Command.Transform", true);
 			if (PrefabModeManager::Get().IsInPrefabMode())
 				PrefabModeManager::Get().MarkDirty();
 		}
@@ -1145,7 +1145,7 @@ bool SceneViewportPanel::SyncPostProcess(Scene& scene, entt::entity entity, cons
 	{
 		m_PostProcessChain.CompleteSceneRestore(false);
 
-		NotificationManager::Get().AddNotification(LOCAL("UI_POST_FX"),
+		NotificationManager::Get().AddNotification(LOCAL("PostProcess.MenuTitle"),
 			LOCAL("PostProcess.RestoreUnavailable"), ELogLevel::Warn);
 	}
 
@@ -1172,7 +1172,7 @@ bool SceneViewportPanel::SyncPostProcess(Scene& scene, entt::entity entity, cons
 			const char* key = m_PostProcessStateUsable
 				? "PostProcess.ApplyFailed" : "PostProcess.RestoreFailed";
 
-			NotificationManager::Get().AddNotification(LOCAL("UI_POST_FX"), LOCAL(key), ELogLevel::Error);
+			NotificationManager::Get().AddNotification(LOCAL("PostProcess.MenuTitle"), LOCAL(key), ELogLevel::Error);
 		};
 
 	auto& pipeline = m_PostProcessChain.GetPipeline();
@@ -1211,7 +1211,7 @@ bool SceneViewportPanel::SyncPostProcess(Scene& scene, entt::entity entity, cons
 		{
 			m_PostProcessChain.CompleteSceneRestore(true);
 
-			NotificationManager::Get().AddNotification(LOCAL("UI_POST_FX"),
+			NotificationManager::Get().AddNotification(LOCAL("PostProcess.MenuTitle"),
 				LOCAL("PostProcess.SceneRestored"), ELogLevel::Info);
 		}
 
@@ -1259,7 +1259,7 @@ void SceneViewportPanel::SubmitPostProcessPass(f32 dt, uint32& slot, std::wstrin
 	if (m_PostProcessChain.TakeSceneRestoreRequest())
 	{
 		m_PostProcessChain.CompleteSceneRestore(false);
-		NotificationManager::Get().AddNotification(LOCAL("UI_POST_FX"), LOCAL("PostProcess.RestoreUnavailable"), ELogLevel::Warn);
+		NotificationManager::Get().AddNotification(LOCAL("PostProcess.MenuTitle"), LOCAL("PostProcess.RestoreUnavailable"), ELogLevel::Warn);
 	}
 
 	// 씬에 활성화된 PostProcessComponent가 없더라도, 선형 HDR 버퍼의 안전한 변환을 위해 기본 톤매핑 체인을 실행

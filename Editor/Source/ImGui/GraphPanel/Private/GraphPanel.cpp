@@ -193,7 +193,7 @@ void GraphPanel::DrawMenuBar()
 	if (!ImGui::BeginMenuBar()) return;
 	// 1. [파일 (File)] 메뉴
 	auto& sm = ShortcutManager::Get();
-	if (ImGui::BeginMenu(LOCAL_LABEL("UI_FILE").c_str()))
+	if (ImGui::BeginMenu(LOCAL_LABEL("EditorMenu.File").c_str()))
 	{
 		if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.Open").c_str(), sm.GetShortcutHint("Graph.Open")))
 		{
@@ -207,7 +207,7 @@ void GraphPanel::DrawMenuBar()
 		ImGui::EndMenu();
 	}
 	// 2. [편집 (Edit)] 메뉴
-	if (ImGui::BeginMenu(LOCAL_LABEL("UI_EDIT").c_str()))
+	if (ImGui::BeginMenu(LOCAL_LABEL("EditorMenu.Edit").c_str()))
 	{
 		ACTION_MENU_ITEM(LOCAL_LABEL("GraphPanel.AddNode").c_str(), "Graph.AddNode");
 		ACTION_MENU_ITEM(LOCAL_LABEL("GraphPanel.Delete").c_str(), "Graph.Delete");
@@ -216,7 +216,7 @@ void GraphPanel::DrawMenuBar()
 		ImGui::EndMenu();
 	}
 	// 3. [보기 (View)] 메뉴
-	if (ImGui::BeginMenu(LOCAL_LABEL("UI_WINDOW").c_str()))
+	if (ImGui::BeginMenu(LOCAL_LABEL("EditorMenu.View").c_str()))
 	{
 		ACTION_MENU_ITEM(LOCAL_LABEL("GraphPanel.ResetView").c_str(), "Viewport.Focus");
 		ImGui::Separator();
@@ -590,7 +590,7 @@ void GraphPanel::DrawNodeMenu()
 		const auto* definition = m_Registry.Find(candidate.Type);
 		if (!definition) continue;
 		const string name = definition->DisplayName.empty() ? candidate.Type : LOCAL(definition->DisplayName);
-		const string categoryRaw = definition->Category.empty() ? "UI_GENERAL" : definition->Category;
+		const string categoryRaw = definition->Category.empty() ? "EditorCommon.General" : definition->Category;
 		string label = LOCAL(categoryRaw) + " / " + name;
 		if (!candidate.Pin.empty())
 		{

@@ -178,7 +178,7 @@ void HierarchyPanel::Draw()
 {
     m_EntityTree.ReleaseFinishedDrag();
     if (!m_Open) return;
-    const string windowTitle = LOCAL("UI_HIERARCHY") + "###HierarchyPanel";
+    const string windowTitle = LOCAL("Hierarchy.Title") + "###HierarchyPanel";
     if (!ImGui::Begin(windowTitle.c_str(), &m_Open))
     {
         ImGui::End();
@@ -214,8 +214,8 @@ void HierarchyPanel::Draw()
         m_LastHierarchyPrimary = entt::null;
 		m_RangeAnchorId = 0;
         m_HierarchyMessage.clear();
-        ImGui::TextUnformatted(LOCAL_CSTR("UI_NO_SCENE_LOADED"));
-		if (SceneManager::IsCreated() && ImGui::Button(LOCAL_CSTR("UI_CREATE_NEW_SCENE")))
+        ImGui::TextUnformatted(LOCAL_CSTR("EditorDocument.NoSceneLoaded"));
+		if (SceneManager::IsCreated() && ImGui::Button(LOCAL_CSTR("EditorDocument.CreateNewScene")))
 		{
 			ToolBar::NewScene();
 		}
@@ -266,7 +266,7 @@ void HierarchyPanel::DrawSceneTitle(Scene* scene)
 			const auto name = StrToWStr(m_RenameBuffer);
 			if (scene->GetName() != name && Application::Get().GetEditHistory().Enabled())
 			{
-				SceneEditScope edit(Application::Get().GetEditHistory(), *scene, "UI_HISTORY_RENAME");
+				SceneEditScope edit(Application::Get().GetEditHistory(), *scene, "History.Command.RenameScene");
 				scene->SetName(name);
 			}
 			m_RenamingId = nullptr;
@@ -324,7 +324,7 @@ void HierarchyPanel::DrawSceneContextMenu(Scene* scene)
 			catch (const std::exception& error)
 			{
 				EDITOR_LOG_ERROR("Entity creation failed: {}", error.what());
-				m_HierarchyMessage = "UI_HIERARCHY_EDIT_FAILED";
+				m_HierarchyMessage = "Hierarchy.EditFailed";
 			}
 		}
 		if (ImGui::MenuItem(LOCAL_LABEL("Hierarchy.AddCanvas").c_str()))
@@ -473,7 +473,7 @@ void HierarchyPanel::DrawEntityHierarchy(Scene* scene)
 
 				if (deleted)
 				{
-					history.Record(std::move(before), SceneEditSnapshot::Capture(*scene), "UI_HISTORY_DELETE");
+					history.Record(std::move(before), SceneEditSnapshot::Capture(*scene), "History.Command.DeleteEntity");
 
 					auto& prefabMode = PrefabModeManager::Get();
 					if (prefabMode.IsInPrefabMode() && prefabMode.GetPrefabScene() == scene)
@@ -490,7 +490,7 @@ void HierarchyPanel::DrawEntityHierarchy(Scene* scene)
 		auto before = history.Enabled() ? SceneEditSnapshot::Capture(*scene) : SceneEditSnapshot{};
 		if (scene->MoveSiblingOrder(target, dir))
 		{
-			if (before) history.Record(std::move(before), SceneEditSnapshot::Capture(*scene), "UI_HISTORY_REORDER");
+			if (before) history.Record(std::move(before), SceneEditSnapshot::Capture(*scene), "History.Command.ReorderEntities");
 			m_RevealEntity = target;
 		}
 	}
@@ -503,7 +503,7 @@ void HierarchyPanel::DrawEntityHierarchy(Scene* scene)
 			auto before = history.Enabled() ? SceneEditSnapshot::Capture(*scene) : SceneEditSnapshot{};
 			flagComp->ToggleVisible();
 			scene->UpdateHierarchyFlags();
-			if (before) history.Record(std::move(before), SceneEditSnapshot::Capture(*scene), "UI_HISTORY_PROPERTY");
+			if (before) history.Record(std::move(before), SceneEditSnapshot::Capture(*scene), "History.Command.EditProperty");
 		}
 	}
 	if (action.ToggleActive != entt::null)
@@ -515,7 +515,7 @@ void HierarchyPanel::DrawEntityHierarchy(Scene* scene)
 			auto before = history.Enabled() ? SceneEditSnapshot::Capture(*scene) : SceneEditSnapshot{};
 			flagComp->SetActive(!flagComp->IsActive());
 			scene->UpdateHierarchyFlags();
-			if (before) history.Record(std::move(before), SceneEditSnapshot::Capture(*scene), "UI_HISTORY_PROPERTY");
+			if (before) history.Record(std::move(before), SceneEditSnapshot::Capture(*scene), "History.Command.EditProperty");
 		}
 	}
 	if (action.SaveAsPrefab != entt::null)
@@ -551,7 +551,7 @@ void HierarchyPanel::DrawEntityHierarchy(Scene* scene)
 		auto before = history.Enabled() ? SceneEditSnapshot::Capture(*scene) : SceneEditSnapshot{};
 		scene->GetRegistry().remove<Engine::PrefabInstanceComponent>(action.UnpackPrefab);
 		if (before)
-			history.Record(std::move(before), SceneEditSnapshot::Capture(*scene), "UI_HISTORY_UNPACK_PREFAB");
+			history.Record(std::move(before), SceneEditSnapshot::Capture(*scene), "History.Command.UnpackPrefab");
 		NotificationManager::Get().AddNotification(LOCAL("ResourceType.Prefab"), LOCAL("Notification.PrefabUnpacked"), ELogLevel::Info, 3.0f);
 	}
 	if (action.FocusEntity != entt::null)
@@ -605,7 +605,7 @@ void HierarchyPanel::DrawEntityHierarchy(Scene* scene)
 			const auto result = scene->ReparentEntity(*child, nullptr);
 			if (result == EntityReparentResult::Success)
 			{
-				if (before) history.Record(std::move(before), SceneEditSnapshot::Capture(*scene), "UI_HISTORY_REPARENT");
+				if (before) history.Record(std::move(before), SceneEditSnapshot::Capture(*scene), "History.Command.Reparent");
 				m_RevealEntity = action.Unparent;
 			}
 		}
@@ -620,20 +620,20 @@ void HierarchyPanel::DrawEntityHierarchy(Scene* scene)
 
 		if (action.DropPrefabTarget != entt::null && !parentEntity)
 		{
-			m_HierarchyMessage = "UI_HIERARCHY_BAD_DROP";
+			m_HierarchyMessage = "Hierarchy.StaleEntityDrop";
 			return;
 		}
 
 		auto before = SceneEditSnapshot::Capture(*scene);
 		if (!before)
 		{
-			m_HierarchyMessage = "UI_HISTORY_CAPTURE_FAILED";
+			m_HierarchyMessage = "History.CaptureFailed";
 			return;
 		}
 
 		if (SceneManager::Get().InstantiatePrefab(ar, action.DropPrefabFile, spawned, parentEntity) == Engine::EResult::Success && spawned)
 		{
-			if (before) history.Record(std::move(before), SceneEditSnapshot::Capture(*scene), "UI_HISTORY_INSTANTIATE_PREFAB");
+			if (before) history.Record(std::move(before), SceneEditSnapshot::Capture(*scene), "History.Command.InstantiatePrefab");
 			SelectionManager::Get().SetSelectedEntity(spawned);
 			NotificationManager::Get().AddNotification(LOCAL("ResourceType.Prefab"), LOCAL_FMT("Notification.PrefabInstantiated", WStrToStr(std::filesystem::path(action.DropPrefabFile).stem().wstring())), ELogLevel::Info, 3.0f);
 			m_RevealEntity = spawned->GetEntityHandle();
@@ -648,7 +648,7 @@ void HierarchyPanel::DrawEntityHierarchy(Scene* scene)
 		}
 	}
     if (action.RejectedDrop)
-        m_HierarchyMessage = "UI_HIERARCHY_BAD_DROP";
+        m_HierarchyMessage = "Hierarchy.StaleEntityDrop";
     if (action.Move)
     {
         auto& history = Application::Get().GetEditHistory();
@@ -663,22 +663,22 @@ void HierarchyPanel::DrawEntityHierarchy(Scene* scene)
         switch (result)
         {
         case EntityReparentResult::Success:
-            history.Record(std::move(before), SceneEditSnapshot::Capture(*scene), "UI_HISTORY_REPARENT");
+            history.Record(std::move(before), SceneEditSnapshot::Capture(*scene), "History.Command.Reparent");
             m_RevealEntity = action.Move->Child;
             [[fallthrough]];
         case EntityReparentResult::Unchanged: m_HierarchyMessage.clear(); break;
         case EntityReparentResult::Cycle:
-            m_HierarchyMessage = "UI_HIERARCHY_CYCLE";
+            m_HierarchyMessage = "Hierarchy.CycleRejected";
             break;
         case EntityReparentResult::InvalidTransform:
-            m_HierarchyMessage = "UI_HIERARCHY_TRANSFORM";
+            m_HierarchyMessage = "Hierarchy.PreserveTransformFailed";
             break;
         case EntityReparentResult::DepthLimit:
-            m_HierarchyMessage = "UI_HIERARCHY_DEPTH"; break;
+            m_HierarchyMessage = "Hierarchy.DepthLimitReached"; break;
         default:
-            m_HierarchyMessage = "UI_HIERARCHY_EDIT_FAILED"; break;
+            m_HierarchyMessage = "Hierarchy.EditFailed"; break;
         }
-        if (editLocked) m_HierarchyMessage = "UI_TRANSFORM_UNLOCK_REPARENT";
+        if (editLocked) m_HierarchyMessage = "Inspector.TransformUnlockBeforeReparent";
     }
 	if (action.Copy)
 	{
@@ -709,7 +709,7 @@ void HierarchyPanel::DrawEntityHierarchy(Scene* scene)
 			auto before = history.Enabled() ? SceneEditSnapshot::Capture(*scene) : SceneEditSnapshot{};
 			nameComp->name = action.NewName;
 			if (before)
-				history.Record(std::move(before), SceneEditSnapshot::Capture(*scene), "UI_HISTORY_PROPERTY");
+				history.Record(std::move(before), SceneEditSnapshot::Capture(*scene), "History.Command.EditProperty");
 			auto& prefabMode = PrefabModeManager::Get();
 			if (prefabMode.IsInPrefabMode() && prefabMode.GetPrefabScene() == scene)
 				prefabMode.MarkDirty();
@@ -789,7 +789,7 @@ bool HierarchyPanel::DeleteSelectedEntities(Engine::Scene* scene)
 	}
 	if (deleted)
 	{
-		history.Record(std::move(before), SceneEditSnapshot::Capture(*scene), "UI_HISTORY_DELETE");
+		history.Record(std::move(before), SceneEditSnapshot::Capture(*scene), "History.Command.DeleteEntity");
 		if (prefabMode.IsInPrefabMode() && prefabMode.GetPrefabScene() == scene)
 			prefabMode.MarkDirty();
 	}

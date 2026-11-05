@@ -186,7 +186,7 @@ namespace Editor
 		auto& manager = Engine::ResourceManager::Get();
 		auto* current = manager.GetResource(value.GetRawHandle());
 		const auto label = current != nullptr ? Engine::WStrToStr(current->GetKey()) :
-			LocalizeInspectorText("UI_RESOURCE_NONE");
+			LocalizeInspectorText("ResourcePicker.None");
 
 		bool changed = false;
 		const auto errorId = ImGui::GetID("DropFailed");
@@ -543,7 +543,7 @@ namespace Editor
 						ImGui::CloseCurrentPopup();
 					}
 					if (ImGui::IsItemHovered())
-						ImGui::SetTooltip("%s", LocalizeInspectorText("UI_RESOURCE_CLEAR").c_str());
+						ImGui::SetTooltip("%s", LocalizeInspectorText("ResourcePicker.Clear").c_str());
 
 					ImDrawList* drawList = ImGui::GetWindowDrawList();
 					const ImVec2 thumbMin = ImVec2(cursorPos.x + 4.0f, cursorPos.y + 4.0f);
@@ -561,7 +561,7 @@ namespace Editor
 					const float textStartX = thumbMax.x + 12.0f;
 					drawList->AddText(ImVec2(textStartX, cursorPos.y + 6.0f),
 						ImGui::GetColorU32(isNoneSelected ? ImVec4(1.0f, 0.82f, 0.35f, 1.0f) : ImGui::GetStyleColorVec4(ImGuiCol_Text)),
-						LocalizeInspectorText("UI_RESOURCE_CLEAR").c_str());
+						LocalizeInspectorText("ResourcePicker.Clear").c_str());
 					drawList->AddText(ImVec2(textStartX, cursorPos.y + 26.0f),
 						ImGui::GetColorU32(ImGuiCol_TextDisabled), LocalizeInspectorText("ResourcePicker.ClearHint").c_str());
 
@@ -662,7 +662,7 @@ namespace Editor
 		ImGui::GetStateStorage()->SetBool(errorId, failed);
 
 		if (failed)
-			ImGui::TextDisabled("%s", LocalizeInspectorText("UI_RESOURCE_REJECTED").c_str());
+			ImGui::TextDisabled("%s", LocalizeInspectorText("ResourcePicker.Rejected").c_str());
 
 		return changed;
 	}

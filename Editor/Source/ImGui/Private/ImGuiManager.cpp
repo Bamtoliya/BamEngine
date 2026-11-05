@@ -257,6 +257,8 @@ void ImGuiManager::Update(f32 dt)
 
 void ImGuiManager::Begin()
 {
+	// Apply language/style changes before any ImGui window is submitted for this frame.
+	m_ToolBar.ApplyPendingLanguageChange();
 	// [Future RHI] 교체 포인트
 	switch (m_RHIType)
 	{
@@ -1183,7 +1185,7 @@ bool ImGuiManager::RequestSceneAction(ESceneDocumentAction action, std::filesyst
 	if (action == ESceneDocumentAction::Close && !SceneManager::Get().GetCurrentScene())
 	{
 		NotificationManager::Get().AddNotification(LOCAL("EditorDocument.Title"),
-			LOCAL("UI_NO_SCENE_LOADED"), ELogLevel::Warn);
+			LOCAL("EditorDocument.NoSceneLoaded"), ELogLevel::Warn);
 		return false;
 	}
 

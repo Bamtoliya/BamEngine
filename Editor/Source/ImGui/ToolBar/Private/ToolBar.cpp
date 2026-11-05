@@ -55,6 +55,7 @@ namespace
 
 void ToolBar::Draw(SDL_Window* window)
 {
+	m_MainMenuBarLayout = {};
 	if (ImGui::BeginMainMenuBar())
 	{
 		ImGui::SetCursorPos(ImVec2(8.0f, ImGui::GetCursorPosY())); // 좌측 여백
@@ -67,6 +68,12 @@ void ToolBar::Draw(SDL_Window* window)
 		DrawWindowMenu();
 		DrawHelpMenu();
 
+		const ImVec2 viewportPos = ImGui::GetMainViewport()->Pos;
+		const ImVec2 barPos = ImGui::GetWindowPos();
+		m_MainMenuBarLayout.Top = barPos.y - viewportPos.y;
+		m_MainMenuBarLayout.Bottom = m_MainMenuBarLayout.Top + ImGui::GetWindowHeight();
+		m_MainMenuBarLayout.MenusEndX = ImGui::GetCursorScreenPos().x - viewportPos.x;
+		m_MainMenuBarLayout.WindowButtonsBeginX = barPos.x - viewportPos.x + ImGui::GetWindowWidth();
 		DrawWindowControls(window);
 
 		ImGui::EndMainMenuBar();
@@ -111,25 +118,30 @@ void ToolBar::Draw(SDL_Window* window)
 	ImGui::PopStyleVar(2);
 }
 
+bool ToolBar::IsMainWindowDragArea(const SDL_Point& point) const
+{
+	return m_MainMenuBarLayout.IsDragArea(static_cast<float>(point.x), static_cast<float>(point.y));
+}
+
 
 #pragma region FileMenu
 void ToolBar::DrawFileMenu()
 {
-	if (ImGui::BeginMenu(LOCAL_CSTR("UI_FILE")))
+	if (ImGui::BeginMenu(LOCAL_LABEL("EditorMenu.File").c_str()))
 	{
-		ACTION_MENU_ITEM(LOCAL_CSTR("UI_EXIT"), "File.Exit");
+		ACTION_MENU_ITEM(LOCAL_CSTR("Action.File.Exit"), "File.Exit");
 		if (false)
 		{
 			SDL_Event quit_event;
 			quit_event.type = SDL_EVENT_QUIT;
 			SDL_PushEvent(&quit_event);
 		}
-		ACTION_MENU_ITEM(LOCAL_CSTR("UI_IMPORT_ASSET"), "File.ImportAsset");
+		ACTION_MENU_ITEM(LOCAL_CSTR("Action.File.ImportAsset"), "File.ImportAsset");
 		if (false)
 		{
 			ImportAsset();
 		}
-		if (ImGui::MenuItem(LOCAL_CSTR("UI_LOAD_RESOURCE"), ""))
+		if (ImGui::MenuItem(LOCAL_CSTR("ResourceEditor.LoadResource"), ""))
 		{
 			LoadResourceFile();
 		}
@@ -206,10 +218,10 @@ void ToolBar::LoadResourceFile()
 #pragma region EditMenu
 void ToolBar::DrawEditMenu()
 {
-	if (ImGui::BeginMenu(LOCAL_CSTR("UI_EDIT")))
+	if (ImGui::BeginMenu(LOCAL_LABEL("EditorMenu.Edit").c_str()))
 	{
-		ACTION_MENU_ITEM(LOCAL_CSTR("UI_UNDO"), "Edit.Undo");
-		ACTION_MENU_ITEM(LOCAL_CSTR("UI_REDO"), "Edit.Redo");
+		ACTION_MENU_ITEM(LOCAL_CSTR("EditorCommon.Undo"), "Edit.Undo");
+		ACTION_MENU_ITEM(LOCAL_CSTR("EditorCommon.Redo"), "Edit.Redo");
 		ImGui::Separator();
 		ACTION_MENU_ITEM(LOCAL_CSTR("EditorCommon.Copy"), "Edit.Copy");
 		ACTION_MENU_ITEM(LOCAL_CSTR("EditorCommon.Paste"), "Edit.Paste");
@@ -229,10 +241,10 @@ void ToolBar::DrawEditMenu()
 #pragma region SceneMenu
 void ToolBar::DrawSceneMenu()
 {
-	if (ImGui::BeginMenu(LOCAL_CSTR("UI_SCENE")))
+	if (ImGui::BeginMenu(LOCAL_LABEL("Viewport.Scene").c_str()))
 	{
-		ACTION_MENU_ITEM(LOCAL_CSTR("UI_NEW_SCENE"), "File.NewScene");
-		ACTION_MENU_ITEM(LOCAL_CSTR("UI_SAVE_SCENE"), "File.SaveScene");
+		ACTION_MENU_ITEM(LOCAL_CSTR("Action.File.NewScene"), "File.NewScene");
+		ACTION_MENU_ITEM(LOCAL_CSTR("Action.File.SaveScene"), "File.SaveScene");
 		auto* document = Application::Get().GetSceneDocument();
 		const bool canSave = PIEManager::Get().IsEditing() && document && document->CanSave();
 
@@ -242,9 +254,9 @@ void ToolBar::DrawSceneMenu()
 
 		if (document && document->HasUnsavedChanges())
 			ImGui::TextUnformatted(LOCAL_CSTR("EditorDocument.Modified"));
-		ACTION_MENU_ITEM(LOCAL_CSTR("UI_LOAD_SCENE"), "File.LoadScene");
+		ACTION_MENU_ITEM(LOCAL_CSTR("Action.File.LoadScene"), "File.LoadScene");
 		ImGui::Separator();
-		ACTION_MENU_ITEM(LOCAL_CSTR("UI_CLOSE_SCENE"), "File.CloseScene");
+		ACTION_MENU_ITEM(LOCAL_CSTR("Action.File.CloseScene"), "File.CloseScene");
 		if (false)
 		{
 			ImGuiManager::Get().RequestCloseScene();
@@ -319,7 +331,7 @@ void ToolBar::DrawWindowMenu()
 {
 	auto& gui = ImGuiManager::Get();
 
-	if (ImGui::BeginMenu(LOCAL_CSTR("UI_WINDOW")))
+	if (ImGui::BeginMenu(LOCAL_LABEL("EditorMenu.Window").c_str()))
 	{
 		if (ImGui::MenuItem(LOCAL_LABEL("Settings.CategoryGraphic").c_str()))
 		{
@@ -406,24 +418,34 @@ void ToolBar::DrawNewViewportPopup()
 #pragma endregion
 
 #pragma region HelpMenu
+void ToolBar::ApplyPendingLanguageChange()
+{
+	if (!m_PendingLanguage) return;
+	const auto language = *m_PendingLanguage;
+	m_PendingLanguage.reset();
+	if (language == LocalizationManager::Get().GetCurrentLanguage()) return;
+	const auto result = EditorSettingsService::Get().SetEditorLanguage(language);
+	ImGuiManager::Get().NotifySettingsChange(result);
+}
+
 void ToolBar::DrawHelpMenu()
 {
-	if (ImGui::BeginMenu(LOCAL_LABEL("UI_HELP").c_str()))
+	if (ImGui::BeginMenu(LOCAL_LABEL("EditorMenu.Help").c_str()))
 	{
-		if (ImGui::BeginMenu(LOCAL_LABEL("UI_LANGUAGE").c_str()))
+		if (ImGui::BeginMenu(LOCAL_LABEL("Settings.Language").c_str()))
 		{
 			const auto current = LocalizationManager::Get().GetCurrentLanguage();
 
-			if (ImGui::MenuItem(LOCAL_LABEL("UI_ENGLISH").c_str(), nullptr, current == ELocalizationLanguage::English))
+			if (ImGui::MenuItem(LOCAL_LABEL("Settings.LanguageEnglish").c_str(), nullptr, current == ELocalizationLanguage::English))
 			{
-				const auto result = EditorSettingsService::Get().SetEditorLanguage(ELocalizationLanguage::English);
-				ImGuiManager::Get().NotifySettingsChange(result);
+				if (current != ELocalizationLanguage::English)
+					m_PendingLanguage = ELocalizationLanguage::English;
 			}
 
-			if (ImGui::MenuItem(LOCAL_LABEL("UI_KOREAN").c_str(), nullptr, current == ELocalizationLanguage::Korean))
+			if (ImGui::MenuItem(LOCAL_LABEL("Settings.LanguageKorean").c_str(), nullptr, current == ELocalizationLanguage::Korean))
 			{
-				const auto result = EditorSettingsService::Get().SetEditorLanguage(ELocalizationLanguage::Korean);
-				ImGuiManager::Get().NotifySettingsChange(result);
+				if (current != ELocalizationLanguage::Korean)
+					m_PendingLanguage = ELocalizationLanguage::Korean;
 			}
 
 			ImGui::EndMenu();
@@ -651,6 +673,7 @@ void ToolBar::DrawWindowControls(SDL_Window* window)
 
 	// 💡 우측 끝으로 커서 이동 (드래그 할 수 있는 빈 공간을 확보합니다)
 	ImGui::SameLine(ImGui::GetWindowWidth() - totalButtonAreaWidth);
+	m_MainMenuBarLayout.WindowButtonsBeginX = ImGui::GetCursorScreenPos().x - ImGui::GetMainViewport()->Pos.x;
 
 	// 타이틀바와 어울리도록 버튼 배경을 투명하게 만듭니다.
 	ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));

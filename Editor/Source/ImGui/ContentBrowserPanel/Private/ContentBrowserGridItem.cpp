@@ -338,7 +338,7 @@ namespace
 		const Engine::EResult result = Engine::SceneManager::Get().InstantiatePrefab(ar, path.wstring(), spawnedEntity, parent);
 		if (result == Engine::EResult::Success && spawnedEntity)
 		{
-			if (before) history.Record(std::move(before), SceneEditSnapshot::Capture(*currentScene), "UI_HISTORY_INSTANTIATE_PREFAB");
+			if (before) history.Record(std::move(before), SceneEditSnapshot::Capture(*currentScene), "History.Command.InstantiatePrefab");
 			SelectionManager::Get().SetSelectedEntity(spawnedEntity);
 			NotificationManager::Get().AddNotification(LOCAL("ResourceType.Prefab"), LOCAL_FMT("Notification.PrefabInstantiated", path.stem().string()), ELogLevel::Info, 3.0f);
 			return true;
@@ -577,7 +577,7 @@ void ContentBrowserGridItem::ContextMenu(const std::filesystem::path& path,
 		if (!isDir && IsSceneFile(path))
 		{
 			ImGui::Separator();
-			if (ImGui::MenuItem((ICON_FA_FOLDER_OPEN " " + LOCAL_LABEL("UI_LOAD_SCENE")).c_str()))
+			if (ImGui::MenuItem((ICON_FA_FOLDER_OPEN " " + LOCAL_LABEL("Action.File.LoadScene")).c_str()))
 			{
 				OpenSceneFromFile(path);
 			}

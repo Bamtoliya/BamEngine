@@ -18,6 +18,7 @@
 AnimatorGraphPanel::AnimatorGraphPanel()
 {
 	m_Name = L"Animator Graph";
+	m_DisplayNameKey = "AnimatorGraph.Title";
 	m_CanvasScrolling = ImVec2(0.0f, 0.0f);
 	ExecuteNew();
 	InitializePreview();
@@ -170,7 +171,7 @@ void AnimatorGraphPanel::DrawMenuBar()
 {
 	if (ImGui::BeginMenuBar())
 	{
-		if (ImGui::BeginMenu(LOCAL_CSTR("EditorCommon.File")))
+		if (ImGui::BeginMenu(LOCAL_CSTR("EditorMenu.File")))
 		{
 			auto& sm = ShortcutManager::Get();
 			if (ImGui::MenuItem((ICON_FA_FILE " " + LOCAL_LABEL("EditorCommon.New")).c_str(), sm.GetShortcutHint("Animator.New")))
@@ -184,13 +185,13 @@ void AnimatorGraphPanel::DrawMenuBar()
 			ImGui::EndMenu();
 		}
 
-		if (ImGui::BeginMenu(LOCAL_CSTR("EditorCommon.Edit")))
+		if (ImGui::BeginMenu(LOCAL_CSTR("EditorMenu.Edit")))
 		{
 			ACTION_MENU_ITEM((ICON_FA_TRASH " " + LOCAL_LABEL("EditorCommon.Delete")).c_str(), "Animator.DeleteSelection");
 			ImGui::EndMenu();
 		}
 
-		if (ImGui::BeginMenu(LOCAL_CSTR("UI_VIEW")))
+		if (ImGui::BeginMenu(LOCAL_CSTR("EditorMenu.View")))
 		{
 			if (ImGui::MenuItem(LOCAL_LABEL("AnimatorGraph.ResetView").c_str()))
 				m_CanvasScrolling = ImVec2(0.0f, 0.0f);

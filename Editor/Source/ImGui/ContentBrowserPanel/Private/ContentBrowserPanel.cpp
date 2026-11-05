@@ -133,7 +133,7 @@ static void ResolveConflict(const FileDropConflict& conflict, int action)
 
 EResult ContentBrowserPanel::Initialize(void* arg)
 {
-	m_Name = L"Content Browser"; m_DisplayNameKey = "UI_CONTENT_BROWSER";
+	m_Name = L"Content Browser"; m_DisplayNameKey = "ContentBrowser.Title";
 	const auto projectRoot = EditorSettingsService::IsCreated() ? EditorSettingsService::Get().GetProjectRoot() : Engine::PlatformPath::GetExecutableDirectory();
 	m_RootPath = projectRoot / "Resources";
 	m_CurrentDirectory = m_RootPath;
@@ -170,7 +170,7 @@ void ContentBrowserPanel::Draw()
 	if (!m_Open)
 		return;
 
-	const string windowTitle = LOCAL("UI_CONTENT_BROWSER") + "###ContentBrowserPanel";
+	const string windowTitle = LOCAL("ContentBrowser.Title") + "###ContentBrowserPanel";
 	if (!ImGui::Begin(windowTitle.c_str(), &m_Open))
 	{
 		ImGui::End();

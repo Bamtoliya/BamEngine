@@ -309,7 +309,7 @@ void Editor::UIViewportPanel::SetZIndex(entt::entity entity, std::int32_t zIndex
     auto before = SceneEditSnapshot::Capture(*m_TargetScene, targets);
     if (!before) return;
     world.get_or_emplace<UIRenderOrderComponent>(entity).zIndex = zIndex;
-    history.Record(std::move(before), SceneEditSnapshot::Capture(*m_TargetScene, targets), "UI_HISTORY_UI_ORDER", true);
+    history.Record(std::move(before), SceneEditSnapshot::Capture(*m_TargetScene, targets), "History.Command.UIRenderOrder", true);
     m_Drag = {};
     m_PendingEdit.reset();
     if (m_Interaction) m_Interaction->Cancel();
@@ -365,7 +365,7 @@ void Editor::UIViewportPanel::DrawCanvasMenu()
         auto& canvas = m_TargetScene->GetRegistry().get<CanvasComponent>(m_TargetCanvas);
         const auto size = UILayout::IsValid(canvas) ? canvas.referenceResolution : m_CanvasSize;
         int resolution[] = { int(size.x), int(size.y) };
-        if (ImGui::InputInt2(LOCAL_LABEL("UI_RESOLUTION").c_str(), resolution))
+        if (ImGui::InputInt2(LOCAL_LABEL("Viewport.Resolution").c_str(), resolution))
         {
             CanvasComponent candidate = canvas;
             candidate.referenceResolution = vec2(resolution[0], resolution[1]);
@@ -388,7 +388,7 @@ void Editor::UIViewportPanel::DrawCanvasMenu()
             }
         if (changed)
             history.Record(std::move(before), SceneEditSnapshot::Capture(*m_TargetScene, targets),
-                "UI_HISTORY_CANVAS", true);
+                "History.Command.CanvasResolution", true);
     }
     ImGui::EndMenu();
 }
@@ -684,5 +684,5 @@ void Editor::UIViewportPanel::ApplyPendingEdit()
     *current = edit.after;
     std::vector<UIElementLayout> layouts;
     if (!UILayout::Build(world, m_TargetCanvas, layouts)) { *current = edit.before; m_Drag = {}; }
-    else history.Record(std::move(before), SceneEditSnapshot::Capture(*m_TargetScene, targets), "UI_HISTORY_UI", true);
+    else history.Record(std::move(before), SceneEditSnapshot::Capture(*m_TargetScene, targets), "History.Command.UITransform", true);
 }

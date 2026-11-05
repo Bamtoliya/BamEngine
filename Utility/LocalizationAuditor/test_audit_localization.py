@@ -3,7 +3,8 @@ import unittest
 from pathlib import Path
 
 from audit_localization import (duplicate_catalog_keys, find_hardcoded_ui, find_imgui_input_reads,
-    find_unregistered_actions, load_csv_catalog, nonlocal_key_positions, RE_CPP_TOKEN, strip_comments)
+    find_unregistered_actions, load_csv_catalog, nonlocal_key_positions, RE_CPP_TOKEN, strip_comments,
+    editor_catalog_layout_issues, find_panel_display_name_issues)
 
 
 class LocalizationAuditTests(unittest.TestCase):
@@ -92,6 +93,44 @@ class LocalizationAuditTests(unittest.TestCase):
             duplicates = duplicate_catalog_keys([first, second])
         self.assertEqual(duplicates, {'Panel.A': [('Editor.csv', 2), ('Editor.csv', 3), ('Engine.csv', 2)],
             'Panel.B': [('Editor.csv', 4), ('Editor.csv', 5)]})
+
+    def test_editor_groups_are_explicit_without_repeated_prefixes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'Editor.csv'
+            path.write_text('Group,Key,English,Korean\n,Panel.Title,Title,제목\n'
+                'Panel,Title,Title,제목\nPanel,Panel.Title,Title,제목\n'
+                ',Hint,Hint,힌트\nAction,Viewport.Focus,Focus,포커스\n', encoding='utf-8')
+            issues = list(editor_catalog_layout_issues(path))
+        self.assertEqual([line for line, _, _ in issues], [2, 4, 5])
+
+    def test_action_identifier_is_not_a_locale_reference_during_rename(self):
+        source = '''sm.RegisterAction({ .Id = "Viewport.Focus", .DisplayNameKey = "Action.Viewport.Focus" });
+            sm.GetShortcutHint("Viewport.Focus");
+            ACTION_MENU_ITEM(LOCAL_LABEL("Viewport.Focus"), "Viewport.Focus");'''
+        identifiers = nonlocal_key_positions(source)
+        visible = [token[0] for token in RE_CPP_TOKEN.finditer(source) if token.start() not in identifiers]
+        self.assertEqual(visible, ['"Action.Viewport.Focus"', '"Viewport.Focus"'])
+
+    def test_panel_name_fallback_requires_localized_display_name(self):
+        sources = {'Editor/Source/AnimatorGraphPanel.h': 'class AnimatorGraphPanel : public IImGui {};',
+            'Editor/Source/AnimatorGraphPanel.cpp': '''AnimatorGraphPanel::AnimatorGraphPanel() {
+                m_Name = L"Animator Graph";
+            } void AnimatorGraphPanel::Draw() { ImGui::Begin(GetDisplayName().c_str()); }'''}
+        self.assertEqual([issue[3] for issue in find_panel_display_name_issues(sources)], ['Animator Graph'])
+        sources['Editor/Source/AnimatorGraphPanel.cpp'] += 'm_DisplayNameKey = "AnimatorGraph.Title";'
+        self.assertEqual(list(find_panel_display_name_issues(sources)), [])
+
+    def test_viewport_descriptor_and_custom_names_do_not_require_fixed_caption_keys(self):
+        sources = {'Editor/Source/BaseViewportPanel.h': '''class BaseViewportPanel : public IImGui {
+                BaseViewportPanel() { m_Name = L"Base Viewport"; }
+            };''', 'Editor/Source/BaseViewportPanel.cpp': 'm_DisplayNameKey = desc->DisplayNameKey;',
+            'Editor/Source/SceneViewportPanel.h': '''class SceneViewportPanel : public BaseViewportPanel {
+                SceneViewportPanel() { m_Name = L"Scene Viewport"; }
+            };''', 'Editor/Source/CustomPanel.h': '''class CustomPanel : public IImGui {
+                CustomPanel() { m_Name = L"Custom"; }
+                string GetDisplayName() const override { return document.Name; }
+            };'''}
+        self.assertEqual(list(find_panel_display_name_issues(sources)), [])
 
     def test_missing_action_in_menu_helper_and_direct_calls(self):
         sources = {'Registry.cpp': 'sm.RegisterAction({ .Id = "Graph.Save" });',

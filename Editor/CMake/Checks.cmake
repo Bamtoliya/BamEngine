@@ -9,8 +9,9 @@ add_executable(TransformInheritanceCheck examples/TransformInheritanceCheck.cpp
     Source/ImGui/InspectorPanel/Private/TransformPropertyEditor.cpp
     Source/Command/Private/CommandHistory.cpp Source/Command/Private/SceneEditHistory.cpp)
 target_include_directories(TransformInheritanceCheck PRIVATE "${EDITOR_SOURCE_DIR}/Command/Public"
-    "${EDITOR_SOURCE_DIR}/ImGui/InspectorPanel/Public")
-target_link_libraries(TransformInheritanceCheck PRIVATE BamEngine::Engine)
+    "${EDITOR_SOURCE_DIR}/ImGui/InspectorPanel/Public" ${EDITOR_PUBLIC_INCLUDE_DIRS}
+    "${EDITOR_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/ThirdParty")
+target_link_libraries(TransformInheritanceCheck PRIVATE BamEngine::Engine imgui::imgui)
 target_precompile_headers(TransformInheritanceCheck PRIVATE
     "${CMAKE_SOURCE_DIR}/Engine/Source/Core/Public/Engine_Includes.h")
 set_target_properties(TransformInheritanceCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
@@ -23,11 +24,12 @@ add_executable(EditorHistoryCheck examples/EditorHistoryCheck.cpp
     Source/Document/Private/EditorDocumentController.cpp)
 
 target_include_directories(EditorHistoryCheck PRIVATE
+    ${EDITOR_PUBLIC_INCLUDE_DIRS} "${EDITOR_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/ThirdParty"
     "${EDITOR_SOURCE_DIR}/Command/Public"
     "${EDITOR_SOURCE_DIR}/Document/Public"
     "${EDITOR_SOURCE_DIR}/FileDialog/Public"
     "${EDITOR_SOURCE_DIR}/ImGui/InspectorPanel/Public")
-target_link_libraries(EditorHistoryCheck PRIVATE BamEngine::Engine)
+target_link_libraries(EditorHistoryCheck PRIVATE BamEngine::Engine imgui::imgui)
 target_precompile_headers(EditorHistoryCheck PRIVATE
     "${CMAKE_SOURCE_DIR}/Engine/Source/Core/Public/Engine_Includes.h")
 set_target_properties(EditorHistoryCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
@@ -66,6 +68,11 @@ target_precompile_headers(ShortcutManagerCheck PRIVATE
     "${CMAKE_SOURCE_DIR}/Engine/Source/Core/Public/Engine_Includes.h")
 set_target_properties(ShortcutManagerCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
 
+add_executable(MainMenuBarLayoutCheck examples/MainMenuBarLayoutCheck.cpp)
+target_include_directories(MainMenuBarLayoutCheck PRIVATE "${EDITOR_SOURCE_DIR}/ImGui/ToolBar/Public" "${EDITOR_SOURCE_DIR}")
+target_link_libraries(MainMenuBarLayoutCheck PRIVATE BamEngine::Engine imgui::imgui)
+set_target_properties(MainMenuBarLayoutCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
+
 add_executable(HierarchyEditorCheck examples/HierarchyEditorCheck.cpp
     Source/ImGui/HierarchyPanel/Private/EntityHierarchyView.cpp
     Source/Clipboard/Private/EntityClipboard.cpp
@@ -97,6 +104,8 @@ set_target_properties(ReflectionInspectorCheck PROPERTIES UNITY_BUILD OFF FOLDER
 set_target_properties(TransformEditorCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
 
 if(BUILD_TESTING)
+    add_test(NAME MainMenuBarLayoutCheck COMMAND MainMenuBarLayoutCheck)
+    set_tests_properties(MainMenuBarLayoutCheck PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
     add_test(NAME ShortcutManagerCheck COMMAND ShortcutManagerCheck)
     add_test(NAME GraphMessageLocalizationCheck COMMAND GraphMessageLocalizationCheck)
     set_tests_properties(GraphMessageLocalizationCheck PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
@@ -112,6 +121,7 @@ if(BUILD_TESTING)
 endif()
 
 if(MSVC)
+    target_compile_options(MainMenuBarLayoutCheck PRIVATE /utf-8)
     target_compile_options(ShortcutManagerCheck PRIVATE /utf-8)
     target_compile_options(GraphMessageLocalizationCheck PRIVATE /utf-8)
     target_compile_options(TransformInheritanceCheck PRIVATE /utf-8)

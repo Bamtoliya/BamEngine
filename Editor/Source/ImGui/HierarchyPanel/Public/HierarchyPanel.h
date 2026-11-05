@@ -10,7 +10,7 @@ BEGIN(Editor)
 class HierarchyPanel : public IImGui
 {
 public:
-	HierarchyPanel() { m_Name = L"Hierarchy Panel"; m_DisplayNameKey = "UI_HIERARCHY"; }
+	HierarchyPanel() { m_Name = L"Hierarchy Panel"; m_DisplayNameKey = "Hierarchy.Title"; }
 	virtual ~HierarchyPanel() = default;
 public:
 	virtual EShortcutContext GetShortcutContext() const override { return EShortcutContext::Hierarchy; }

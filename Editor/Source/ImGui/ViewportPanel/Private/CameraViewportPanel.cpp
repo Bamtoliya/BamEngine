@@ -81,7 +81,7 @@ void CameraViewportPanel::DrawCameraMenu()
 	auto* camera = m_CameraController->GetCameraComponent();
 	if (!transform || !camera) return;
 
-	const string menuTitle = string(ICON_FA_CAMERA " ") + LOCAL("UI_CAMERA") + "###CameraMenu";
+	const string menuTitle = string(ICON_FA_CAMERA " ") + LOCAL("Viewport.CameraMenu") + "###CameraMenu";
 	if (ImGui::BeginMenu(menuTitle.c_str()))
 	{
 		ImGui::TextDisabled("%s", LOCAL_CSTR("Viewport.CameraTransform"));

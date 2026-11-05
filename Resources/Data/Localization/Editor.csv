@@ -1,1491 +1,1416 @@
 ﻿Group,Key,English,Korean
-,ModelImport.Pitch180,Pitch 180°,상하 반전 (Pitch 180°)
-,ModelImport.Yaw180,Yaw 180°,헤딩 반전 (Yaw 180°)
-,ModelImport.Reset,Reset,초기화
-,ModelImport.ScalePoint01,0.01x,0.01배
-,ModelImport.Scale1,1.0x,1.0배
-,ModelImport.Scale100,100x,100배
-,ContentBrowser.ReimportWithOptions,Re-import with Options...,옵션과 함께 다시 임포트...
-,ContentBrowser.ReimportFromSource,Re-import from Source...,원본 파일로부터 다시 임포트...
-,UI_NETWORK_PROFILER_PANEL,Network Profiler,네트워크 프로파일러
-,UI_NETWORK_SESSION_MODE,Session Mode,세션 모드
-,UI_NETWORK_STANDALONE,Standalone,스탠드얼론
-,UI_NETWORK_SERVER_RUNNING,Server Running,서버 실행 중
-,UI_NETWORK_CLIENT_CONNECTED,Client Connected,클라이언트 접속됨
-,UI_NETWORK_HOST_SERVER,Host Server,서버 호스팅
-,UI_NETWORK_CONNECT,Connect,서버 접속
-,UI_NETWORK_DISCONNECT,Disconnect / Stop,접속 해제 / 중지
-,UI_NETWORK_TRAFFIC,Network Traffic,네트워크 트래픽
-,UI_NETWORK_OUTBOUND,Outbound,송신
-,UI_NETWORK_INBOUND,Inbound,수신
-,UI_NETWORK_LATENCY_RTT,Latency (RTT),지연 시간 (RTT)
-,UI_NETWORK_CONNECTED_CLIENTS,Connected Clients,접속된 클라이언트
-,UI_NETWORK_CLIENT_ID,Client ID,클라이언트 ID
-,UI_NETWORK_REMOTE_ADDR,Remote Address,원격 주소
-,UI_NETWORK_STATE,State,상태
-,UI_NETWORK_PING,Ping,핑
-,Particle.ActiveCount,Active Particles,활성 파티클 수
-,Particle.Play,Play,재생
-,Particle.Pause,Pause,일시정지
-,Particle.Stop,Stop,정지
-,Particle.Reset,Reset,초기화
-,Particle.BurstNow,Burst Now,즉시 버스트
-,NODE_ANIMATOR_SET_LAYER_WEIGHT,Set Animator Layer Weight,애니메이터 레이어 가중치 설정
-,NODE_ANIMATOR_GET_LAYER_WEIGHT,Get Animator Layer Weight,애니메이터 레이어 가중치 가져오기
-,NODE_ANIMATOR_STOP_LAYER,Stop Animator Layer,애니메이터 레이어 중지
-,PROP_ANIMATOR_LAYERS,Animation Layers,애니메이션 레이어 목록
-,UI_ASSET_REFERENCE_PANEL,Asset Reference Checker,에셋 참조 검사기
-,AssetRef.ScanAll,Scan Resources,에셋 참조 검사
-,AssetRef.FixSafe,Fix Safe Issues,안전 항목 자동 복구
-,AssetRef.ScanRequired,Click Scan to inspect resource references.,검사 버튼을 눌러 에셋 참조를 검사하십시오.
-,AssetRef.BtnFix,Fix,복구
-,AnimatorGraph.Entry,ENTRY ->,진입 (ENTRY) ->
-,AnimatorGraph.Clip,Clip,클립
-,AnimatorGraph.NoMotion,No Motion,동작 없음
-,AnimatorGraph.ParamFloat,Float,실수 (Float)
-,AnimatorGraph.ParamInt,Int,정수 (Int)
-,AnimatorGraph.ParamBool,Bool,불리언 (Bool)
-,AnimatorGraph.CancelEsc,Cancel (ESC),취소 (ESC)
-,AnimatorGraph.CondGreater,Greater (>),보다 큼 (>)
-,AnimatorGraph.CondLess,Less (<),보다 작음 (<)
-,AnimatorGraph.CondEqual,Equal (==),같음 (==)
-,AnimatorGraph.CondNotEqual,NotEqual (!=),같지 않음 (!=)
-,AnimatorGraph.CondIfTrue,IfTrue,참일 때 (True)
-,AnimatorGraph.CondIfFalse,IfFalse,거짓일 때 (False)
-,UI_VIEW,View,보기
-,AnimatorGraph.ResetView,Reset Canvas View,캔버스 뷰 초기화
-,AnimatorGraph.TransitionInspector,Transition Inspector,전이 속성 인스펙터
-,AnimatorGraph.Duration,Duration,전이 지속 시간
-,AnimatorGraph.HasExitTime,Has Exit Time,종료 시간 전이 사용
-,AnimatorGraph.ExitTime,Exit Time,종료 시점 비율
-,AnimatorGraph.Conditions,Conditions,전이 조건식
-,AnimatorGraph.MakeTransition,Make Transition,전이 연결선 만들기
-,AnimatorGraph.CreateState,Create State,새 상태 노드 생성
-,AnimatorGraph.SelectTargetToConnect,Click target node to connect transition,연결할 대상 노드를 클릭하세요
-,AnimatorGraph.Title,Animator Graph,애니메이터 그래프
-,AnimatorGraph.Unsaved,Unsaved Controller,저장되지 않은 컨트롤러
-,AnimatorGraph.NodeInspector,Node Inspector,노드 인스펙터
-,AnimatorGraph.SetDefaultState,Default Entry State,기본 진입 상태로 설정
-,AnimatorGraph.UseBlendTree,Use 1D Blend Tree,1D 블렌드 트리 사용
-,AnimatorGraph.Parameter,Parameter,매개변수
-,AnimatorGraph.Samples,Samples,샘플 수
-,AnimatorGraph.NoNodeSelected,No node selected.,선택된 노드가 없습니다.
-,AnimatorGraph.Notifies,Animation Notifies,애니메이션 알림 (Notifies)
-,AnimatorGraph.NotifyName,Notify Name,알림 이름
-,AnimatorGraph.NotifyTime,Trigger Time (s),발동 시간 (초)
-,AnimatorGraph.NotifyPayload,Payload / Parameter,전달 데이터 / 파라미터
-,Animator.StateMachine,State Machine,상태 머신
-,Animator.CurrentState,Current State,현재 상태
-,Animator.Parameters,Parameters,매개변수
-,Animator.Trigger,Trigger,트리거
-,Unsupported graph data version.,Unsupported graph data version.,지원하지 않는 그래프 데이터 버전입니다.
-,UI_HISTORY_PASTE,Paste Entities,엔티티 붙여넣기
-,UI_HISTORY_INSTANTIATE_PREFAB,Instantiate Prefab,프리팹 배치
-,UI_DELETE_SELECTED_ENTITIES,Delete Selected Entities,선택한 엔티티 삭제
-,UI_HISTORY_UNPACK_PREFAB,Unpack Prefab,프리팹 연결 해제
-,Graph data domain does not match this graph.,Graph data domain does not match this graph.,그래프 데이터의 도메인이 현재 그래프와 일치하지 않습니다.
-,Variable name cannot be empty.,Variable name cannot be empty.,변수 이름은 비워 둘 수 없습니다.
-,Variable with this name already exists.,Variable with this name already exists.,같은 이름의 변수가 이미 있습니다.
-,Variable not found.,Variable not found.,변수를 찾을 수 없습니다.
-,Variable not found in executor:,Variable not found in executor:,실행기에서 변수를 찾을 수 없습니다:
-,Pass through execution or data wire cleanly.,Pass through execution or data wire cleanly.,실행선이나 데이터선을 중간에서 연결해 경로를 정리합니다.
-,Node ID must be non-zero.,Node ID must be non-zero.,노드 ID는 0일 수 없습니다.
-,Duplicate node ID.,Duplicate node ID.,노드 ID가 중복되었습니다.
-,Next node ID must exceed existing node IDs.,Next node ID must exceed existing node IDs.,다음 노드 ID는 기존 노드 ID보다 커야 합니다.
-,Link ID must be non-zero.,Link ID must be non-zero.,연결 ID는 0일 수 없습니다.
-,Duplicate link ID.,Duplicate link ID.,연결 ID가 중복되었습니다.
-,Next link ID must exceed existing link IDs.,Next link ID must exceed existing link IDs.,다음 연결 ID는 기존 연결 ID보다 커야 합니다.
-,UI_HISTORY_REORDER,Reorder Entities,엔티티 순서 변경
-,UI_HISTORY_PROPERTY,Edit Property,속성 편집
-,UI_HIERARCHY_NO_MATCH,No matching entities found.,일치하는 엔티티가 없습니다.
-,UI_HIERARCHY_MOVE_UP,Move Up,위로 이동
-,UI_HIERARCHY_MOVE_DOWN,Move Down,아래로 이동
-,UI_ADD_COMPONENT,Add Component,컴포넌트 추가
-,UI_PROPERTY,Property,속성
-,UI_VALUE,Value,값
-,UI_RESOLUTION,Resolution,해상도
-,UI_RENDER_TARGET,Render Target,렌더 타겟
-,UI_GIZMO,Gizmo,기즈모
-,UI_TRANSFORM_LOCK_ALL,Lock Transform Editing,Transform 편집 전체 잠금
-,UI_TRANSFORM_LOCK_POSITION,Lock Position,위치 잠금
-,UI_TRANSFORM_LOCK_ROTATION,Lock Rotation,회전 잠금
-,UI_TRANSFORM_LOCK_SCALE,Lock Scale,크기 잠금
-,UI_TRANSFORM_REJECTED,Transform change rejected. Current pose was preserved.,Transform 변경을 적용할 수 없어 현재 자세를 유지합니다.
-,UI_TRANSFORM_UNLOCK_REPARENT,Unlock the transform before changing its parent.,부모를 변경하려면 Transform 편집 잠금을 해제하세요.
-,Engine::ETransformAbsolute.None,Inherit All,전체 상속
-,Engine::ETransformAbsolute.Position,Absolute Position,위치 독립
-,Engine::ETransformAbsolute.Rotation,Absolute Rotation,회전 독립
-,Engine::ETransformAbsolute.Scale,Absolute Scale,크기 독립
-,Engine::ETransformAbsolute.All,Independent Transform,Transform 전체 독립
-,UI_PASS,Passes,패스
-,UI_DEBUG,Debug,디버그
-,UI_CAMERA,Camera,카메라
-,UI_FILE,File,파일
-,UI_EDIT,Edit,수정
-,UI_UNDO,Undo,실행 취소
-,UI_REDO,Redo,다시 실행
-,UI_DELETE_ENTITY,Delete entity and children,엔티티와 자식 삭제
-,UI_HISTORY_PROPERTIES,Properties,속성 편집
-,UI_HISTORY_TRANSFORM,Transform,변환
-,UI_HISTORY_COMPONENT,Add component,컴포넌트 추가
-,UI_HISTORY_REPARENT,Change parent,부모 변경
-,UI_HISTORY_CREATE,Create entity,엔티티 생성
-,UI_HISTORY_DELETE,Delete entity,엔티티 삭제
-,UI_HISTORY_RENAME,Rename scene,씬 이름 변경
-,UI_HISTORY_CANVAS,Canvas resolution,캔버스 해상도
-,UI_HISTORY_UI,UI transform,UI 변환
-,UI_HISTORY_UI_ORDER,UI render order,UI 렌더 순서
-,UI_HISTORY_CAPTURE_FAILED,History cleared because the change could not be captured.,변경을 기록할 수 없어 이전 이력을 비웠습니다.
-,UI_HISTORY_REPLAY_FAILED,The target or hierarchy changed. History position was preserved.,대상이나 계층이 바뀌어 복원하지 못했습니다. 이력 위치는 유지합니다.
-,UI_SCENE,Scene,씬
-,UI_WINDOW,Window,창
-,UI_HELP,Help,도움
-,UI_EXIT,Exit,종료
-,UI_IMPORT_ASSET,Import Asset,애셋 임포트
-,UI_LOAD_RESOURCE,Load Resource,리소스 로드
-,UI_SETTINGS,Settings,설정
-,UI_NEW_SCENE,New Scene,새 씬
-,UI_SAVE_SCENE,Save Scene,씬 저장하기
-,UI_LOAD_SCENE,Load Scene,씬 불러오기
-,UI_CLOSE_SCENE,Close Scene,씬 종료하기
-,UI_CONSOLE,Console,콘솔
-,UI_CONTENT_BROWSER,Content Browser,콘텐츠 브라우저
-,UI_HIERARCHY,Hierarchy,계층
-,UI_LANGUAGE,Language,언어
-,UI_KOREAN,Korean,한국어
-,UI_ENGLISH,English,English
-,UI_INSPECTOR,Inspector,인스펙터
-,UI_CREATE_NEW_SCENE,Create New Scene,새 씬 생성하기
-,UI_NO_SCENE_LOADED,No Scene Loaded,로드된 씬이 없습니다.
-,UI_RESOURCE_MANGER_INSPECTOR,Resource Manager,리소스 매니저
-,UI_ENGINE_METRICS_PANEL,Engine Metrics,엔진 통계
-,UI_PLAY,Play,재생
-,UI_STOP,Stop,정지
-,UI_PAUSE,Pause,일시정지
-,UI_RESUME,Resume,재개
-,UI_AUDIO,Audio,오디오
-,UI_AUDIO_PLAYING,Playing...,재생 중...
-,UI_AUDIO_STOPPED,Stopped,정지됨
-,UI_GENERAL,General,일반
-,UI_RESOURCE_NONE,None (drop a resource),없음 (리소스를 놓으세요)
-,UI_RESOURCE_CLEAR,Clear,연결 해제
-,UI_RESOURCE_REJECTED,Resource type mismatch or load failed.,리소스 종류가 다르거나 불러오지 못했습니다.
-,UI_INVALID_PROPERTY,Invalid value was rejected.,유효하지 않은 값은 반영하지 않았습니다.
-,UI_ADD_VALUE,Add value,값 추가
-,UI_HIERARCHY_INVALID,Invalid hierarchy links; shown without repair.,잘못된 계층 관계가 있습니다. 원본을 유지한 채 표시합니다.
-,UI_HIERARCHY_EMPTY,No entities.,엔티티가 없습니다.
-,UI_HIERARCHY_ROOT_DROP,Drop here to move to root,여기에 놓으면 루트로 이동합니다
-,UI_HIERARCHY_BAD_DROP,This entity is no longer in the current scene.,현재 씬에 없는 엔티티입니다.
-,UI_HIERARCHY_CYCLE,An entity cannot be parented to itself or its descendants.,자신이나 자손을 부모로 지정할 수 없습니다.
-,UI_HIERARCHY_TRANSFORM,Cannot preserve the world transform under this parent.,이 부모에서는 현재 월드 변환을 유지할 수 없습니다.
-,UI_HIERARCHY_DEPTH,The hierarchy would exceed its depth limit.,계층의 최대 깊이를 초과합니다.
-,UI_HIERARCHY_EDIT_FAILED,The hierarchy is invalid; no changes were made.,계층 관계가 올바르지 않아 변경하지 않았습니다.
-,UI_VALUE_UNAVAILABLE,Value unavailable,값을 읽을 수 없습니다.
-,UI_ELEMENT_COUNT,{} elements,요소 {}개
-,UI_SIZE_UNAVAILABLE,Size unavailable,크기를 읽을 수 없습니다.
-,UI_RESET_TO_DEFAULT,Reset to Default,기본값으로 재설정
-,UI_VALUE_PREVIEW_UNAVAILABLE,Value preview unavailable,값 미리보기를 사용할 수 없습니다
-,UI_POST_FX,Post FX,후처리
-,UI_OPEN_POST_PROCESS_PANEL,Open Post-Process Panel...,후처리 패널 열기...
-Transform,Hirarchy_AddGameObject,Add GameObject,게임 오브젝트 추가+
-Transform,Position,Position,위치
-Transform,Rotation,Rotation,회전
-Transform,Scale,Scale,크기
-Transform,EulerRotation,Euler Rotation,회전(각도)
-ContentBrowser,Cancel,Cancel,취소
-ContentBrowser,Overwrite,OverWrite,덮어쓰기
-ContentBrowser,CreateCopy,Create Copy,복사본 생성
-ContentBrowser,Skip,Skip,건너뛰기
+Action,Animator.SaveAs,Save Controller As...,다른 이름으로 컨트롤러 저장...
+Action,Build.CompileModule,Compile Game Module,게임 모듈 컴파일
+Action,Build.ReloadModule,Reload Game Module,게임 모듈 핫 리로드
+Action,Build.ReloadShaders,Recompile Shaders,셰이더 전체 재컴파일
+Action,Edit.Delete,Delete,삭제
+Action,Edit.Deselect,Deselect All,선택 해제
+Action,Edit.Duplicate,Duplicate,복제
+Action,Edit.Rename,Rename,이름 변경
+Action,Editor.OpenSettings,Preferences / Settings,환경설정
+Action,File.CloseScene,Close Scene,씬 닫기
+Action,File.Exit,Exit,에디터 종료
+Action,File.ImportAsset,Import Asset...,에셋 가져오기...
+Action,File.LoadScene,Load Scene,씬 불러오기
+Action,File.NewScene,New Scene,새 씬
+Action,File.SaveScene,Save Scene,씬 저장하기
+Action,File.SaveSceneAs,Save Scene As...,다른 이름으로 씬 저장...
+Action,Graph.AddNode,Add Node,노드 추가
+Action,Graph.AlignBottom,Align Bottom,아래쪽 정렬
+Action,Graph.AlignLeft,Align Left,왼쪽 정렬
+Action,Graph.AlignRight,Align Right,오른쪽 정렬
+Action,Graph.AlignTop,Align Top,위쪽 정렬
+Action,Graph.CreateComment,Create Comment Box,코멘트 박스 생성
+Action,Graph.Delete,Delete Elements,선택 항목 삭제
+Action,Graph.DistributeHoriz,Distribute Horizontally,가로 균등 분배
+Action,Graph.DistributeVert,Distribute Vertically,세로 균등 분배
+Action,Graph.Duplicate,Duplicate Nodes,노드 복제
+Action,Graph.Open,Open Graph,그래프 열기
+Action,Graph.Pause,Pause Graph,그래프 일시정지
+Action,Graph.Run,Run Graph,그래프 실행
+Action,Graph.SaveAs,Save Graph As...,다른 이름으로 그래프 저장...
+Action,Graph.Step,Step Execution,단계별 실행
+Action,Graph.Stop,Stop Execution,실행 중지
+Action,Graph.ToggleBreakpoint,Toggle Breakpoint,중단점 설정/해제
+Action,Graph.Validate,Validate Graph,그래프 검증
+Action,PIE.PauseResume,Pause / Resume,일시정지 / 재개
+Action,PIE.Play,Play,재생
+Action,PIE.Stop,Stop,정지
+Action,Timeline.DeleteSelected,Delete Selected Item,선택 항목 삭제
+Action,Timeline.FirstFrame,First Frame,첫 프레임
+Action,Timeline.LastFrame,Last Frame,마지막 프레임
+Action,Timeline.NextFrame,Next Frame,다음 프레임
+Action,Timeline.PlayPause,Play / Pause,재생 / 일시정지
+Action,Timeline.PrevFrame,Previous Frame,이전 프레임
+Action,Timeline.ToggleLoop,Toggle Loop,루프 토글
+Action,Timeline.ZoomReset,Reset Zoom,줌 초기화
+Action,Viewport.Focus,Focus Target,대상 포커스
+Action,Viewport.GizmoRotate,Rotate,회전 기즈모
+Action,Viewport.GizmoScale,Scale,스케일 기즈모
+Action,Viewport.GizmoSelect,Select Mode,선택 모드
+Action,Viewport.GizmoTranslate,Translate,이동 기즈모
+Action,Viewport.ToggleCoord,Toggle Local / World,로컬 / 월드 좌표계 전환
+Action,Viewport.ToggleGrid,Toggle Grid,그리드 표시 토글
+Action,Viewport.ToggleLock,Toggle Selection Lock,선택 잠금 토글
+Action,Viewport.ToggleRealtime,Toggle Realtime,실시간 프리뷰 토글
+Action,Viewport.ToggleSnap,Toggle Grid Snap,그리드 스냅 토글
+Animator,ControllerPath,Controller Path,컨트롤러 경로
+Animator,CurrentState,Current State,현재 상태
+Animator,MissingRendererWarning,Requires SkinnedMeshRendererComponent with Skeleton to animate.,스켈레톤이 포함된 SkinnedMeshRendererComponent가 필요합니다.
+Animator,New,New Controller,새 컨트롤러
+Animator,NoClipAssigned,No animation clip assigned.,할당된 애니메이션 클립이 없습니다.
+Animator,Open,Open Controller,컨트롤러 열기
+Animator,Parameters,Parameters,매개변수
+Animator,Pause,Pause,일시정지
+Animator,Preview,Preview,미리보기
+Animator,Previewing,Previewing,미리보기 재생 중
+Animator,Reset,Reset,초기화
+Animator,Save,Save Controller,컨트롤러 저장
+Animator,StateMachine,State Machine,상태 머신
+Animator,Stop,Stop,정지
+Animator,Stopped,Stopped,정지됨
+Animator,Timeline,Timeline,타임라인
+Animator,Trigger,Trigger,트리거
+AnimatorGraph,BlendTree1D,Blend Tree 1D,1D 블렌드 트리
+AnimatorGraph,CancelEsc,Cancel (ESC),취소 (ESC)
+AnimatorGraph,Clip,Clip,클립
+AnimatorGraph,CondEqual,Equal (==),같음 (==)
+AnimatorGraph,CondGreater,Greater (>),보다 큼 (>)
+AnimatorGraph,CondIfFalse,IfFalse,거짓일 때 (False)
+AnimatorGraph,CondIfTrue,IfTrue,참일 때 (True)
+AnimatorGraph,CondLess,Less (<),보다 작음 (<)
+AnimatorGraph,CondNotEqual,NotEqual (!=),같지 않음 (!=)
+AnimatorGraph,Conditions,Conditions,전이 조건식
+AnimatorGraph,CreateState,Create State,새 상태 노드 생성
+AnimatorGraph,Duration,Duration,전이 지속 시간
+AnimatorGraph,Entry,ENTRY ->,진입 (ENTRY) ->
+AnimatorGraph,ExitTime,Exit Time,종료 시점 비율
+AnimatorGraph,HasExitTime,Has Exit Time,종료 시간 전이 사용
+AnimatorGraph,MakeTransition,Make Transition,전이 연결선 만들기
+AnimatorGraph,NoMotion,No Motion,동작 없음
+AnimatorGraph,NoNodeSelected,No node selected.,선택된 노드가 없습니다.
+AnimatorGraph,NodeInspector,Node Inspector,노드 인스펙터
+AnimatorGraph,Notifies,Animation Notifies,애니메이션 알림 (Notifies)
+AnimatorGraph,NotifyName,Notify Name,알림 이름
+AnimatorGraph,NotifyPayload,Payload / Parameter,전달 데이터 / 파라미터
+AnimatorGraph,NotifyTime,Trigger Time (s),발동 시간 (초)
+AnimatorGraph,ParamBool,Bool,불리언 (Bool)
+AnimatorGraph,ParamFloat,Float,실수 (Float)
+AnimatorGraph,ParamInt,Int,정수 (Int)
+AnimatorGraph,Parameter,Parameter,매개변수
+AnimatorGraph,ResetView,Reset Canvas View,캔버스 뷰 초기화
+AnimatorGraph,Samples,Samples,샘플 수
+AnimatorGraph,SelectTargetToConnect,Click target node to connect transition,연결할 대상 노드를 클릭하세요
+AnimatorGraph,SetDefaultState,Default Entry State,기본 진입 상태로 설정
+AnimatorGraph,Title,Animator Graph,애니메이터 그래프
+AnimatorGraph,TogglePreview,Toggle 3D Preview Viewport,3D 프리뷰 표시 전환
+AnimatorGraph,TransitionInspector,Transition Inspector,전이 속성 인스펙터
+AnimatorGraph,Unsaved,Unsaved Controller,저장되지 않은 컨트롤러
+AnimatorGraph,UseBlendTree,Use 1D Blend Tree,1D 블렌드 트리 사용
+AssetRef,AutoFixable,Auto-Fixable: %zu,자동 수정 가능: %zu
+AssetRef,BtnFix,Fix,복구
+AssetRef,External,External: %zu,외부 경로: %zu
+AssetRef,ExternalStatus,%s External,%s 외부 경로
+AssetRef,FilterAll,All,전체
+AssetRef,FilterExternal,External,외부 경로
+AssetRef,FilterInvalid,Invalid Ext,잘못된 확장자
+AssetRef,FilterMissing,Missing,누락
+AssetRef,FixAction,Fix Action,복구 동작
+AssetRef,FixSafe,Fix Safe Issues,안전 항목 자동 복구
+AssetRef,FixedIssues,Fixed {} issues.,문제 {}개를 수정했습니다.
+AssetRef,InvalidExt,Invalid Ext: %zu,잘못된 확장자: %zu
+AssetRef,InvalidExtensionStatus,%s InvalidExt,%s 잘못된 확장자
+AssetRef,IssueType,Issue Type,문제 유형
+AssetRef,Missing,Missing: %zu,누락: %zu
+AssetRef,MissingStatus,%s Missing,%s 누락
+AssetRef,ScanAll,Scan Resources,에셋 참조 검사
+AssetRef,ScanCompleted,Scan completed.,검사가 완료됐습니다.
+AssetRef,ScanRequired,Click Scan to inspect resource references.,검사 버튼을 눌러 에셋 참조를 검사하십시오.
+AssetRef,SearchHint,Search path...,경로 검색...
+AssetRef,SourceAsset,Source Asset,원본 에셋
+AssetRef,SuggestedFix,Suggested Fix,수정 제안
+AssetRef,TargetReference,Target Reference,참조 대상
+AssetRef,Title,Asset Reference Checker,에셋 참조 검사기
+AssetRef,TotalIssues,Total Issues: %zu | ,전체 문제: %zu |
+AudioPreview,Playing,Playing...,재생 중...
+AudioPreview,Stopped,Stopped,정지됨
+AudioPreview,Title,Audio,오디오
+Console,AllSources,All sources,모든 발생 주체
+Console,AutoScrollOff,Auto-scroll: OFF,자동 스크롤: 꺼짐
+Console,AutoScrollOn,Auto-scroll: ON,자동 스크롤: 켜짐
+Console,ClearHistory,Clear console history,콘솔 기록 지우기
+Console,ColCategory,Category,카테고리
+Console,ColMessage,Message,메시지
+Console,ColSource,Source,소스
+Console,ColTimeLevel,Time / Level,시간 / 레벨
+Console,CollapseDuplicates,Collapse duplicates,중복 묶기
+Console,CopyHint,Right-click to copy message,우클릭하면 메시지를 복사합니다.
+Console,EmptySource,Unspecified source,발생 주체 미지정
+Console,Levels,Levels ({}/{}),로그 수준 ({}/{})
+Console,Status,Rows: {}   Stored logs: {}   Dropped: {}   Expired: {},표시 행: {}   보관 로그: {}   수집 누락: {}   오래된 항목 제거: {}
+Console,Title,Console,콘솔
 ContentBrowser,ApplyToAll,Apply To All,전체적용
+ContentBrowser,Assets,Assets,에셋
+ContentBrowser,BakeToBinary,Bake to Binary,바이너리로 변환
+ContentBrowser,Cancel,Cancel,취소
+ContentBrowser,ClearSearch,Clear,지우기
+ContentBrowser,CreateCopy,Create Copy,복사본 생성
+ContentBrowser,CreateEmptyMaterial,Create Empty Material,빈 머티리얼 생성
+ContentBrowser,CreateMaterialInstance,Create Material Instance,머티리얼 인스턴스 생성
+ContentBrowser,CreateSprite,Create Sprite,스프라이트 생성
+ContentBrowser,Data,Data,데이터
+ContentBrowser,EditPrefab,Edit Prefab,프리팹 편집
+ContentBrowser,EmptyFolder,Folder is empty,폴더가 비어 있습니다
+ContentBrowser,ExportToJson,Export to JSON,JSON으로 내보내기
 ContentBrowser,FileConflictMessage,A file with the same name already exists in the destination.\nWhat would you like to do?,대상 위치에 이미 동일한 이름의 항목이 존재합니다:
 ContentBrowser,FileConflictPopup,File Conflict,파일 충돌
-GraphPanel,Title,Graph,그래프
-GraphPanel,Logic,Logic,로직
-GraphPanel,Shader,Shader,셰이더
-GraphPanel,AddNode,Add node,노드 추가
-GraphPanel,SearchNodes,Search nodes or categories...,노드 이름·분류 검색...
-GraphPanel,NoMatchingNodes,No compatible nodes match the search.,조건에 맞는 노드가 없습니다.
-GraphPanel,ConnectFrom,Connect from output,출력 핀에서 연결
-GraphPanel,ConnectTo,Connect to input,입력 핀으로 연결
-GraphPanel,RequiredValue,Required input - set a value or connect a pin.,필수 입력 - 값을 지정하거나 핀을 연결하세요.
-GraphPanel,NoObservedValue,Not observed,관측값 없음
-GraphPanel,Validate,Validate,검사
-GraphPanel,ResetView,Reset view,화면 초기화
-GraphPanel,Delete,Delete,삭제
-GraphPanel,Connection,Connection,연결
-GraphPanel,Disconnect,Disconnect,연결 해제
-GraphPanel,SelectHint,Select a node or connection to edit it.,편집할 노드나 연결을 선택하세요.
-GraphPanel,MultipleSelection,Multiple items selected. Delete removes all selected items.,여러 항목을 선택했습니다. 삭제하면 선택한 항목을 모두 제거합니다.
-GraphPanel,Connected,Connected - source takes precedence,연결됨 - 연결된 소스를 사용합니다
-GraphPanel,ObjectLinkOnly,Requires a matching object output connection.,일치하는 객체 타입의 출력 핀을 연결해야 합니다.
-GraphPanel,UseValue,Use value,값 지정
-GraphPanel,ResetValue,Reset to definition,정의의 기본값으로 복원
-GraphPanel,Validation,Validation,검사 결과
-GraphPanel,Valid,No structural errors. Execution is not checked.,구조 오류가 없습니다. 실행 여부는 검사하지 않습니다.
-GraphPanel,SessionOnly,Session only - Logic preview is available. Saving is not available.,현재 세션에서 로직 실행을 미리 볼 수 있습니다. 저장은 아직 지원하지 않습니다.
-GraphPanel,Controls,Drag pins to empty space to search nodes | Middle drag to pan | Ctrl for multiple selection,핀을 빈 곳에 놓아 노드 검색 | 가운데 버튼으로 화면 이동 | Ctrl로 다중 선택
-GraphPanel,Empty,Add a node from the toolbar or the right-click menu.,상단 버튼이나 우클릭 메뉴에서 노드를 추가하세요.
-GraphPanel,NoEntry,Add a Start or Update event.,Start 또는 Update 이벤트를 추가하세요.
-GraphPanel,Run,Run / Resume,실행 / 계속
-GraphPanel,Pause,Pause,일시정지
-GraphPanel,Step,Step,한 단계
-GraphPanel,Stop,Stop,중지
-GraphPanel,ResetInstance,Reset instance,실행 상태 초기화
-GraphPanel,ExecutionTrace,Execution trace,실행 추적
-GraphPanel,Idle,Idle,실행 전
-GraphPanel,Paused,Paused,일시정지
-GraphPanel,Running,Running,실행 중
-GraphPanel,Completed,Completed,실행 완료
-GraphPanel,Stopped,Stopped,중지됨
-GraphPanel,Failed,Failed,실행 실패
-GraphPanel,RemainingBudget,Remaining budget,남은 실행 예산
-GraphPanel,Result,Last result,마지막 결과
-GraphPanel,LastObserved,Last observed value,마지막 관측값
-GraphPanel,StepInterval,Task interval (seconds),작업 간격(초)
-GraphPanel,EventDelta,Update delta (seconds),Update 시간 간격(초)
-GraphPanel,TaskBudget,Tasks per event,이벤트당 실행 예산
-GraphPanel,FollowTrace,Follow latest trace,최신 흐름 따라가기
-GraphPanel,TraceEnter,Enter,진입
-GraphPanel,TraceLeave,Leave,복귀
-GraphPanel,TraceLink,Link,연결 통과
-GraphPanel,TraceValue,Value,값
-GraphPanel,TraceIteration,Iteration,반복
-GraphPanel,TraceError,Error,오류
-GraphPanel,PreviewScope,Logic preview uses an execution snapshot. Editing resets it. Click a trace to pause and inspect.,로직 복사본을 실행합니다. 편집하면 실행 상태가 초기화됩니다. 기록을 클릭하면 일시정지하고 위치와 값을 확인할 수 있습니다.
-EditorCommon,Width,Width,너비
-EditorCommon,Height,Height,높이
-EditorCommon,Name,Name,이름
-EditorCommon,Create,Create,생성
-EditorCommon,Cancel,Cancel,취소
-EditorCommon,Reset,Reset,초기화
-EditorCommon,Refresh,Refresh,새로고침
-EditorCommon,All,All,전체
-EditorCommon,None,None,없음
-EditorCommon,Other,Other,기타
-EditorCommon,Unknown,Unknown,알 수 없음
-EditorCommon,Rename,Rename,이름 변경
-EditorCommon,Delete,Delete,삭제
-EditorCommon,CopyPath,Copy Path,경로 복사
-EditorCommon,ShowInExplorer,Show in Explorer,탐색기에서 보기
-EditorCommon,NewFolder,New Folder,새 폴더
-EditorCommon,Save,Save,저장
-EditorCommon,Search,Search...,검색...
-ResourceType,Texture,Texture,텍스처
-ResourceType,Sprite,Sprite,스프라이트
-ResourceType,Material,Material,머티리얼
-ResourceType,MaterialInstance,MaterialInstance,머티리얼 인스턴스
-ResourceType,Shader,Shader,셰이더
-ResourceType,Mesh,Mesh,메시
-ResourceType,Model,Model,모델
-ResourceType,Animation,Animation,애니메이션
-ResourceType,AudioClip,AudioClip,오디오 클립
-ResourceType,Skeleton,Skeleton,스켈레톤
-ResourceType,Prefab,Prefab,프리팹
-ResourceType,Script,Script,스크립트
-ResourceType,Scene,Scene,씬
-ResourceType,Save,Save,저장 데이터
-ToolBar,DisplaySettings,Display Settings,화면 설정
-ToolBar,NewViewportPanel,New Viewport Panel,새 뷰포트 패널
-ToolBar,Panels,Panels,패널
-ToolBar,Fullscreen,Fullscreen,전체 화면
-ToolBar,ApplyResolution,Apply Resolution,해상도 적용
-ToolBar,UIScale,UI Scale,UI 배율
-ToolBar,ApplyFPS,Apply FPS,FPS 적용
-ToolBar,PlayTooltip,Play (Enter PIE),재생 (PIE 시작)
-ToolBar,ResumeTooltip,Resume: 게임 로직 재개,계속: 게임 로직 재개
-ToolBar,PauseTooltip,"Pause: 게임 정지, 에디터 조작 가능","일시정지: 게임 정지, 에디터 조작 가능"
-ToolBar,StopTooltip,Stop (restore scene),중지 (씬 복원)
-Viewport,AllRenderTargets,All RenderTargets,모든 렌더 타깃
-Viewport,FreePanelSize,Free (Panel Size),패널 크기에 맞춤
-Viewport,Custom,Custom...,사용자 지정...
-Viewport,AspectRatio,Aspect Ratio,종횡비
-Viewport,RenderSize,Render: {} x {},렌더링: {} x {}
-Viewport,Scale,Scale: {:.0f}%,배율: {:.0f}%
-Viewport,Picking,Picking,선택 판정
-Viewport,GPUId,GPU ID,GPU ID
-Viewport,RayBounds,Ray bounds (broad phase),광선과 경계 검사 (넓은 단계)
-Viewport,RayBoundsHint,Tests mesh bounds. Triangle surfaces and sprite transparency are not tested.,메시 경계를 검사합니다. 삼각형 표면과 스프라이트 투명도는 검사하지 않습니다.
-Viewport,FinalOutput,FinalRT,최종 출력
-Viewport,Translate,Translate (W),이동 (W)
-Viewport,Rotate,Rotate (E),회전 (E)
-Viewport,ScaleOperation,Scale (R),크기 (R)
-Viewport,Local,Local,로컬
-Viewport,World,World,월드
-Viewport,SnapToGrid,Snap to Grid,격자에 맞추기
-Viewport,ShowBounds,Show Bounds,경계 표시
-Viewport,SnapTranslation,Snap Translation,이동 스냅 간격
-Viewport,SnapRotation,Snap Rotation,회전 스냅 간격
-Viewport,SnapScale,Snap Scale,크기 스냅 간격
-Viewport,ShowGrid,Show Grid,격자 표시
-Viewport,ShowCollider,Show Collider,콜라이더 표시
-Viewport,TransformRejected,Transform edit rejected: the result cannot be represented by local TRS.,변환 편집을 거부했습니다. 결과를 로컬 이동·회전·크기로 표현할 수 없습니다.
-Viewport,Interact,Interact,상호작용
-Viewport,Fit,Fit,화면에 맞춤
-Viewport,Snap,Snap,스냅
-Viewport,Grid,Grid,격자
-Viewport,Pixel,Pixel,픽셀
-Viewport,GridStep,Grid step (px),격자 간격 (px)
-Viewport,BypassSnap,Hold Alt to bypass snapping.,Alt를 누르면 스냅을 일시 해제합니다.
-Viewport,View,View,보기
-Viewport,SafeArea,Safe area (5% guide),안전 영역 (5% 가이드)
-Viewport,Anchors,Anchors,앵커
-Viewport,Channels,Channels,채널
-Viewport,Canvas,Canvas,캔버스
-Viewport,NewCanvas,New Canvas,새 캔버스
-Viewport,AddImage,Add Image,이미지 추가
-Viewport,AddButton,Add Button,버튼 추가
-PostProcess,Effects,Effects,효과
-Inspector,NoSelection,No Entity selected.,선택된 엔티티가 없습니다.
-Inspector,NoScene,Entity has no Scene.,엔티티에 씬이 없습니다.
-Inspector,EntityUnavailable,Entity is no longer available.,엔티티를 더 이상 사용할 수 없습니다.
-Inspector,Components,Components,컴포넌트
-Inspector,RotationRestored,Invalid rotation was restored.,잘못된 회전값을 이전 값으로 복원했습니다.
-Inspector,LayoutRejected,Invalid UI layout values were rejected.,잘못된 UI 레이아웃 값은 반영하지 않았습니다.
-Inspector,CanvasInvalidated,The edit would invalidate the canvas layout.,이 편집은 캔버스 레이아웃을 무효화하므로 적용할 수 없습니다.
-Inspector,RotationRejected,Invalid rotation input was rejected.,잘못된 회전 입력은 반영하지 않았습니다.
-Inspector,ReflectionUnavailable,Component reflection is unavailable.,컴포넌트 리플렉션을 사용할 수 없습니다.
-Inspector,NoReflectedComponents,No reflected components.,리플렉션에 등록된 컴포넌트가 없습니다.
-Inspector,RegistrationUnavailable,Component registration is unavailable.,컴포넌트 등록 정보를 사용할 수 없습니다.
-Inspector,AxisReset,Reset {} to {:.3f},{}축을 {:.3f}(으)로 초기화
-Inspector,EditSettings,Edit settings,편집 설정
-Inspector,Snap,Snap,스냅
-Inspector,SnapStep,Snap step,스냅 간격
-Inspector,WheelHint,Wheel: change value,휠: 값 변경
-Inspector,FastWheelHint,Shift + wheel: x10,Shift + 휠: 10배 간격으로 변경
-Inspector,AxisResetHint,Axis button / middle click: reset,축 버튼 / 가운데 클릭: 초기화
-Inspector,UnsupportedType,Unsupported type,지원하지 않는 자료형
-TextureInspector,Title,Texture Inspector,텍스처 인스펙터
-TextureInspector,FileName,File Name: {},파일 이름: {}
-TextureInspector,Resolution,Resolution: {} x {},해상도: {} x {}
-TextureInspector,MipLevels,Mip Levels: {},밉 레벨: {}
-TextureInspector,Dimension,Dimension: {},차원: {}
-TextureInspector,MetadataFailed,Failed to load metadata!,메타데이터를 불러오지 못했습니다.
-TextureInspector,ImportSettings,Import Settings,임포트 설정
-TextureInspector,TargetFormat,Target Format,대상 포맷
-TextureInspector,CompressionFlags,Compression Flags:,압축 옵션:
-TextureInspector,SpriteGeneration,Sprite Generation,스프라이트 생성
-TextureInspector,AutoSprite,Auto-Generate Sprite (.bamsprite),스프라이트 자동 생성 (.bamsprite)
-TextureInspector,Importing,Importing... Please wait,임포트 중... 잠시 기다려 주세요
-TextureInspector,Import,Import / Re-Compress,임포트 / 다시 압축
-TextureInspector,ImportResult,Import Result,임포트 결과
-TextureInspector,SpriteConverted,Texture & Sprite have been successfully converted asynchronously!,텍스처와 스프라이트의 비동기 변환이 완료되었습니다.
-TextureInspector,TextureConverted,Texture has been successfully converted to .bamtex asynchronously!,텍스처를 .bamtex로 비동기 변환했습니다.
-EditorCommon,OK,OK,확인
-ContentBrowser,Importing,Importing {} Asset(s) in background...,백그라운드에서 에셋 {}개를 임포트하고 있습니다...
-ContentBrowser,Folders,Folders,폴더
-ContentBrowser,Files,Files,파일
-ContentBrowser,CreateSprite,Create Sprite,스프라이트 생성
-ContentBrowser,CreateEmptyMaterial,Create Empty Material,빈 머티리얼 생성
-ContentBrowser,FolderType,Type: Folder,종류: 폴더
 ContentBrowser,FileType,Type: {} File,종류: {} 파일
+ContentBrowser,Files,Files,파일
+ContentBrowser,Folder,Folder,폴더
+ContentBrowser,FolderType,Type: Folder,종류: 폴더
+ContentBrowser,Folders,Folders,폴더
+ContentBrowser,Importing,Importing {} Asset(s) in background...,백그라운드에서 에셋 {}개를 임포트하고 있습니다...
+ContentBrowser,InstantiatePrefab,Instantiate in Scene,씬에 인스턴스화
+ContentBrowser,Multiple,Multiple ({}),여러 종류 ({})
+ContentBrowser,NoMatchingAssets,No matching assets.,표시할 에셋이 없습니다.
+ContentBrowser,NoSearchResults,No search results found,검색 결과가 없습니다
+ContentBrowser,OpenBaseMaterial,Open Base Material,기본 머티리얼 열기
+ContentBrowser,Overwrite,OverWrite,덮어쓰기
+ContentBrowser,RecompileAllShaders,Recompile All Shaders,모든 셰이더 다시 컴파일
+ContentBrowser,RecompileShader,Recompile Shader,셰이더 다시 컴파일
+ContentBrowser,Reimport,Reimport,다시 임포트
+ContentBrowser,ReimportFromSource,Re-import from Source...,원본 파일로부터 다시 임포트...
+ContentBrowser,ReimportWithOptions,Re-import with Options...,옵션과 함께 다시 임포트...
+ContentBrowser,ReloadMaterial,Reload Material,머티리얼 다시 불러오기
+ContentBrowser,ReloadMesh,Reload Mesh,메시 다시 불러오기
+ContentBrowser,ReloadTexture,Reload Texture,텍스처 다시 불러오기
+ContentBrowser,ScopeAll,Scope: All,범위: 전체
+ContentBrowser,ScopeAllHint,Searching all resource folders (Recursive),모든 리소스 폴더와 하위 폴더를 검색합니다.
+ContentBrowser,ScopeCurrent,Scope: Current,범위: 현재 폴더
+ContentBrowser,ScopeCurrentHint,Searching current directory only,현재 폴더만 검색합니다.
 ContentBrowser,SizeBytes,Size: {} Bytes,크기: {} 바이트
 ContentBrowser,SizeKB,Size: {} KB,크기: {} KB
 ContentBrowser,SizeMB,Size: {:.2f} MB,크기: {:.2f} MB
-ContentBrowser,CreateMaterialInstance,Create Material Instance,머티리얼 인스턴스 생성
-ContentBrowser,OpenBaseMaterial,Open Base Material,기본 머티리얼 열기
-Hierarchy,RenameScene,Rename Scene,씬 이름 변경
-Hierarchy,SceneName,Scene: {},씬: {}
-Hierarchy,AddEntity,Add Entity,엔티티 추가
-Hierarchy,AddCanvas,Add UI Canvas,UI 캔버스 추가
-Hierarchy,AddPrimitive,Add Primitive Entity,기본 도형 엔티티 추가
-Hierarchy,AddSprite,Add Sprite Entity,스프라이트 엔티티 추가
-Hierarchy,AddTerrain,Terrain,터레인
-Hierarchy,AddLight,Add Light Entity,라이트 엔티티 추가
-Hierarchy,Action,Action: {},작업 대상: {}
-Hierarchy,Duplicate,Duplicate,복제
-Hierarchy,Active,Is Active,활성화
-Hierarchy,Visible,Visible,표시
-Hierarchy,CreateChild,Create Child Empty,빈 자식 생성
-Hierarchy,MoveToRoot,Move to Root,루트로 이동
-Console,ClearHistory,Clear console history,콘솔 기록 지우기
-Console,Levels,Levels ({}/{}),로그 수준 ({}/{})
-Console,Status,Rows: {}   Stored logs: {}   Dropped: {}   Expired: {},표시 행: {}   보관 로그: {}   수집 누락: {}   오래된 항목 제거: {}
-Console,CopyHint,Right-click to copy message,우클릭하면 메시지를 복사합니다.
-Metrics,PauseCapture,Pause capture,수집 일시정지
-Metrics,PauseHint,Freeze metrics only; the engine keeps running.,통계 수집만 멈춥니다. 엔진은 계속 실행됩니다.
-Metrics,ResetHistory,Reset history,기록 초기화
-Metrics,NoSamples,No frame samples.,수집한 프레임이 없습니다.
-Metrics,AverageFPS,Average FPS: {:.1f},평균 FPS: {:.1f}
-Metrics,CurrentFrame,Current frame,현재 프레임
-Metrics,Average,Average,평균
-Metrics,Minimum,Minimum,최소
-Metrics,Maximum,Maximum,최대
-Metrics,FPSCap,FPS cap: {}  ({:.3f} ms),FPS 제한: {}  ({:.3f} ms)
-Metrics,FPSUnlimited,FPS cap: Unlimited,FPS 제한: 무제한
-Metrics,FrameInterval,Frame interval (ms),프레임 간격 (ms)
-Metrics,RecentFrames,Recent {} frames,최근 {}개 프레임
-Metrics,FrameTimeHint,Includes frame limiting and waits. This is not CPU or GPU execution time.,프레임 제한과 대기 시간을 포함합니다. CPU나 GPU 실행 시간이 아닙니다.
-Metrics,EngineState,Engine state,엔진 상태
-Metrics,ActiveScenes,Active scenes: {},활성 씬: {}
-Metrics,RegisteredPasses,Registered render passes: {},등록된 렌더 패스: {}
-Metrics,RHIDraws,RHI draw commands — heaviest frame in last 0.5 s,RHI 그리기 명령 — 최근 0.5초 중 가장 무거운 프레임
-Metrics,NoCapture,No completed capture.,완료된 수집 결과가 없습니다.
-Metrics,RenderFailed,Render failed: partial counts,렌더링 실패: 일부 집계만 표시합니다
-Metrics,DrawCalls,Draw calls: {},그리기 호출: {}
-Metrics,DrawBreakdown,Non-indexed: {} / Indexed: {},인덱스 미사용: {} / 인덱스 사용: {}
-Metrics,Vertices,Submitted vertices (non-indexed): {},제출한 정점 (인덱스 미사용): {}
-Metrics,Indices,Submitted indices: {},제출한 인덱스: {}
-Metrics,DrawHint,Counts engine RHI draws. Excludes direct ImGui backend draws and texture blits.,엔진의 RHI 그리기를 집계합니다. ImGui 백엔드의 직접 그리기와 텍스처 블릿은 제외합니다.
-Metrics,Resources,Resources,리소스
-Metrics,ResourceSummary,Loaded: {}   Slots: {}   Reusable: {},로딩됨: {}   슬롯: {}   재사용 가능: {}
-Metrics,Type,Type,종류
-Metrics,Count,Count,개수
-Metrics,RefreshInterval,Refresh interval: 0.5 seconds,갱신 간격: 0.5초
-Metrics,AssetTasks,Asset tasks,에셋 작업
-Metrics,Outstanding,Outstanding: {},미수집·실행 중: {}
-Metrics,Completed,Completed: {},완료: {}
-Metrics,Succeeded,Succeeded: {},성공: {}
-Metrics,Failed,Failed: {},실패: {}
-Metrics,TaskHint,Outstanding includes running tasks and results not yet collected. Counts cover registered async tasks.,미수집·실행 중에는 실행 중인 작업과 아직 수집하지 않은 결과가 포함됩니다. 등록된 비동기 작업을 집계합니다.
-ResourceInspector,Showing,Showing {} / {} registered resources,등록된 리소스 {} / {}개 표시
-ResourceInspector,Auto,Auto,자동 갱신
-ResourceInspector,RefreshHint,Refresh every 0.5 seconds,0.5초마다 갱신합니다
-ResourceInspector,Search,"Search type, key or path...",종류·키·경로 검색...
-ResourceInspector,Type,Type,종류
-ResourceInspector,Key,Key,키
-ResourceInspector,Path,Path,경로
-ResourceInspector,Refs,Refs,참조 수
-ResourceInspector,KeyCaption,Key:,키:
-ResourceInspector,PathCaption,Path:,경로:
-ResourceInspector,Slot,Slot: {} / Generation: {},슬롯: {} / 세대: {}
-ResourceInspector,CopyKey,Copy Key,키 복사
-ResourceInspector,None,(none),(없음)
-ResourceEditor,Target,Target: {},대상: {}
-Viewport,SceneTitle,Scene View,씬 뷰
-Viewport,UITitle,UI View,UI 뷰
-Viewport,ViewerTitle,{} Viewer,{} 뷰어
-Viewport,OpenInViewport,"Open ""{}"" in new viewport","""{}""을(를) 새 뷰포트에서 열기"
-Viewport,NewName,New Viewport,새 뷰포트
-ResourceEditor,TextureTitle,Texture Editor,텍스처 편집기
-ResourceEditor,ModelTitle,Model Editor,모델 편집기
-ResourceEditor,ShaderTitle,Shader Editor,셰이더 편집기
-ResourceEditor,SpriteTitle,Sprite Editor,스프라이트 편집기
-ResourceEditor,SpriteAnimationTitle,Sprite Animation Editor,스프라이트 애니메이션 에디터
-ResourceEditor,KeyFrames,Key Frames,키 프레임 목록
-PostProcess,ToneMapping,Tone Mapping (ACES),톤 매핑 (ACES)
+ContentBrowser,Skip,Skip,건너뛰기
+ContentBrowser,Title,Content Browser,콘텐츠 브라우저
+EditorCommon,All,All,전체
+EditorCommon,Apply,Apply,적용
+EditorCommon,Cancel,Cancel,취소
+EditorCommon,Clear,Clear,지우기
+EditorCommon,Close,Close,닫기
+EditorCommon,Copy,Copy,복사
+EditorCommon,CopyPath,Copy Path,경로 복사
+EditorCommon,Create,Create,생성
+EditorCommon,Delete,Delete,삭제
+EditorCommon,General,General,일반
+EditorCommon,Height,Height,높이
+EditorCommon,Name,Name,이름
+EditorCommon,New,New,새로 만들기
+EditorCommon,NewFolder,New Folder,새 폴더
+EditorCommon,None,None,없음
+EditorCommon,OK,OK,확인
+EditorCommon,Off,OFF,꺼짐
+EditorCommon,On,ON,켜짐
+EditorCommon,Open,Open,열기
+EditorCommon,OpenWithDefaultProgram,Open with Default Program,기본 프로그램으로 열기
+EditorCommon,Other,Other,기타
+EditorCommon,Paste,Paste,붙여넣기
+EditorCommon,PasteAsChild,Paste As Child,자식으로 붙여넣기
+EditorCommon,Pause,Pause,일시정지
+EditorCommon,Play,Play,재생
+EditorCommon,Property,Property,속성
+EditorCommon,Redo,Redo,다시 실행
+EditorCommon,Refresh,Refresh,새로고침
+EditorCommon,Rename,Rename,이름 변경
+EditorCommon,Reset,Reset,초기화
+EditorCommon,Resume,Resume,재개
+EditorCommon,Save,Save,저장
+EditorCommon,SaveAs,Save As...,다른 이름으로 저장...
+EditorCommon,Search,Search...,검색...
+EditorCommon,ShowInExplorer,Show in Explorer,탐색기에서 보기
+EditorCommon,Stop,Stop,정지
+EditorCommon,Type,Type,타입
+EditorCommon,Undo,Undo,실행 취소
+EditorCommon,Unknown,Unknown,알 수 없음
+EditorCommon,Value,Value,값
+EditorCommon,Width,Width,너비
+EditorDocument,ConfirmTitle,Unsaved Changes,미저장 변경
+EditorDocument,CreateNewScene,Create New Scene,새 씬 생성하기
+EditorDocument,Discard,Discard,버리기
+EditorDocument,Modified,Unsaved changes,미저장 변경 있음
+EditorDocument,NoSceneLoaded,No Scene Loaded,로드된 씬이 없습니다.
+EditorDocument,OperationBusy,Another document operation is in progress.,다른 문서 작업을 처리 중입니다.
+EditorDocument,OperationFailed,Could not complete the document operation. Check the log.,문서 작업을 완료하지 못했습니다. 로그를 확인하세요.
+EditorDocument,Processing,Preparing the document operation...,문서 작업을 준비하고 있습니다...
+EditorDocument,Save,Save,저장
+EditorDocument,SaveAs,Save As...,다른 이름으로 저장...
+EditorDocument,SaveFailed,Could not save the document. Check the log.,문서를 저장하지 못했습니다. 로그를 확인하세요.
+EditorDocument,SaveUnavailable,The document cannot be saved right now.,현재 문서를 저장할 수 없습니다.
+EditorDocument,Saved,Saved: {},저장했습니다: {}
+EditorDocument,SceneActionUnavailable,Stop play mode before changing the scene.,씬을 변경하려면 플레이 모드를 종료하세요.
+EditorDocument,SceneClosed,Closed the scene.,씬을 닫았습니다.
+EditorDocument,SceneCreated,Created a new scene.,새 씬을 생성했습니다.
+EditorDocument,SceneOpened,Opened scene: {},씬을 열었습니다: {}
+EditorDocument,Title,Documents,문서
+EditorDocument,UnsavedMessage,Save changes to {} before continuing?,계속하기 전에 {}의 변경 사항을 저장하시겠습니까?
+EditorDocument,Untitled,Untitled document,이름 없는 문서
+EditorMenu,Edit,Edit,편집
+EditorMenu,File,File,파일
+EditorMenu,Help,Help,도움
+EditorMenu,View,View,보기
+EditorMenu,Window,Window,창
+EditorSettings,ApplyFailed,Could not apply the settings. Check the log.,설정을 적용하지 못했습니다. 로그를 확인하세요.
+EditorSettings,KeepWindowChange,Keep Changes,변경 유지
+EditorSettings,PathUnavailable,Storage path unavailable,저장 경로를 사용할 수 없습니다
+EditorSettings,PreferencesSaveBlocked,User preference saving is blocked. Changes apply only to this session.,개인 설정 파일 저장이 차단돼 있습니다. 변경값은 현재 실행에만 적용됩니다.
+EditorSettings,PreferencesStartupFallback,User preferences could not be restored. Started with defaults; preference saving is blocked.,개인 설정을 복원하지 못해 기본값으로 시작했습니다. 개인 설정 파일 저장이 차단됩니다.
+EditorSettings,SaveFailed,Applied for this session. Saving failed. Check the log.,현재 세션에 적용했습니다. 저장에 실패했습니다. 로그를 확인하세요.
+EditorSettings,Saved,Settings applied and saved.,설정을 적용하고 저장했습니다.
+EditorSettings,SessionOnly,Applied for this session. File saving is unavailable.,현재 세션에 적용했습니다. 설정 파일을 저장할 수 없습니다.
+EditorSettings,SettingsFilePath,Settings file: {},설정 파일: {}
+EditorSettings,SettingsRecoveryHint,Close the editor and inspect the file or path. Back up existing files before making changes and restart after recovery.,에디터를 종료한 뒤 파일과 경로를 확인하세요. 기존 파일은 수정 전에 백업하고 복구 후 다시 실행하세요.
+EditorSettings,Title,Editor Settings,에디터 설정
+EditorSettings,WindowApplied,Requested window state and output buffer size verified.,요청한 창 상태와 출력 버퍼 크기를 확인했습니다.
+EditorSettings,WindowApplyTimedOut,The requested window state or output buffer size was not observed in time.,제한 시간 안에 요청한 창 상태 또는 출력 버퍼 크기를 확인하지 못했습니다.
+EditorSettings,WindowApplying,Waiting for the window change...,창 변경이 완료되기를 기다리는 중입니다.
+EditorSettings,WindowCaptureBlocked,Apply and confirm usable window settings to resume automatic window capture.,사용 가능한 창 설정을 다시 적용하고 유지 여부를 확정하면 자동 캡처가 재개됩니다.
+EditorSettings,WindowConfirmMessage,Keep these window settings? Reverting in {} seconds.,이 창 설정을 유지하시겠습니까? {}초 뒤 이전 설정으로 되돌립니다.
+EditorSettings,WindowConfirmTitle,Keep Window Settings,창 설정 유지
+EditorSettings,WindowConfirmationTimedOut,No confirmation was received in time. Previous settings were restored.,확인 시간이 지나 이전 창 설정으로 복원했습니다.
+EditorSettings,WindowConfirmed,Window settings confirmed and saved.,창 설정을 확정하고 저장했습니다.
+EditorSettings,WindowRequestFailed,Window change request processing failed. Check the log.,창 변경 요청 처리에 실패했습니다. 로그를 확인하세요.
+EditorSettings,WindowRequestRejected,Invalid window settings or another request is pending.,창 설정 값이 잘못되었거나 다른 요청을 처리 중입니다.
+EditorSettings,WindowRequestSubmitted,Window change request submitted. Completion has not been confirmed.,창 변경 요청을 전달했습니다. 아직 적용 완료를 확인하지 않았습니다.
+EditorSettings,WindowRestoreFailed,Could not restore the previous window settings. Automatic window capture is suspended.,이전 창 설정을 복원하지 못했습니다. 창 상태 자동 캡처를 중단했습니다.
+EditorSettings,WindowReverted,Restored the previous window settings.,이전 창 설정으로 복원했습니다.
+EditorSettings,WorkspaceSaveBlocked,Workspace saving is blocked. Changes apply only to this session.,작업 공간 파일 저장이 차단돼 있습니다. 변경값은 현재 실행에만 적용됩니다.
+EditorSettings,WorkspaceStartupFallback,The workspace could not be restored. Started with defaults; workspace saving is blocked.,작업 공간을 복원하지 못해 기본값으로 시작했습니다. 작업 공간 파일 저장이 차단됩니다.
+FileDialog,ActionTimelineFiles,Action Timeline Asset (*.actiontimeline.json),액션 타임라인 에셋 (*.actiontimeline.json)
+FileDialog,AllFiles,All Files (*.*),모든 파일 (*.*)
+FileDialog,AnimatorFiles,Animator Controller Files (*.animator),애니메이터 컨트롤러 파일 (*.animator)
 FileDialog,AssetFiles,Asset Files,에셋 파일
+FileDialog,AudioFiles,"Audio Files (*.wav, *.mp3, *.ogg)","오디오 파일 (*.wav, *.mp3, *.ogg)"
+FileDialog,EditorSceneFiles,Scene Files (*.bamscene.json;*.json),씬 파일 (*.bamscene.json;*.json)
+FileDialog,FontFiles,Font Files (*.ttf;*.otf),글꼴 파일 (*.ttf;*.otf)
+FileDialog,GraphFiles,Graph Files (*.json),그래프 파일 (*.json)
+FileDialog,ImageFiles,Image Files,이미지 파일
+FileDialog,JsonFiles,JSON Files (*.json),JSON 파일 (*.json)
+FileDialog,ModelFiles,"Model Files (*.bammodel, *.glb)","모델 파일 (*.bammodel, *.glb)"
+FileDialog,PngFiles,PNG Images (*.png),PNG 이미지 (*.png)
+FileDialog,PrefabFiles,Prefab Files (*.bamprefab.json),프리팹 파일 (*.bamprefab.json)
 FileDialog,ResourceFiles,Resource Files,리소스 파일
 FileDialog,SceneFiles,Scene Files (*.json),씬 파일 (*.json)
-FileDialog,AllFiles,All Files (*.*),모든 파일 (*.*)
-Viewport,FreeAspect,Free,자유 비율
-ContentBrowser,Assets,Assets,에셋
-ContentBrowser,Data,Data,데이터
-ContentBrowser,Multiple,Multiple ({}),여러 종류 ({})
-ContentBrowser,Folder,Folder,폴더
-Console,AutoScrollOn,Auto-scroll: ON,자동 스크롤: 켜짐
-Console,AutoScrollOff,Auto-scroll: OFF,자동 스크롤: 꺼짐
-Console.Level,Trace,Trace,추적
-Console.Level,Info,Info,정보
-Console.Level,Warn,Warn,경고
-Console.Level,Error,Error,오류
-Console.Level,Fatal,Fatal,치명적 오류
-Console.Level,Unknown,Unknown,알 수 없음
-ResourceType,Unknown,Unknown,알 수 없음
-ResourceInspector,EmptyKey,(empty key),(빈 키)
-ResourceInspector,NoPath,(no path recorded),(기록된 경로 없음)
-Inspector,WriteFailed,Write failed: {},쓰기 실패: {}
-Inspector,UnlockAxis,Unlock {},{}축 잠금 해제
-Inspector,LockAxis,Lock {},{}축 잠금
-TextureInspector,BC4,BC4 (Grayscale),BC4 (회색조)
-TextureInspector,BC5,BC5 (Normal),BC5 (노멀)
-TextureInspector,BC7,BC7 (High Quality),BC7 (고품질)
-TextureInspector,GenerateMipMaps,Generate MipMaps,밉맵 생성
-TextureInspector,HighQuality,High Quality (Parallel),고품질 (병렬)
-TextureInspector,UseGPU,Use GPU Compression,GPU 압축 사용
-TextureInspector,SRGB,SRGB Color Space,sRGB 색 공간
-TextureInspector,FlipY,Flip Y Axis,Y축 뒤집기
-TextureInspector,PremultiplyAlpha,Premultiply Alpha,알파 미리 곱하기
-TextureInspector,NormalMap,Normal Map Mode,노멀 맵 모드
+GraphPanel,AddNode,Add node,노드 추가
+GraphPanel,AddReroute,Add Reroute Node,리루트 노드 추가
+GraphPanel,AddVariable,Add Variable,변수 추가
+GraphPanel,AddVariableGet,+Get,+읽기
+GraphPanel,AddVariableSet,+Set,+쓰기
+GraphPanel,Alignment,Alignment,정렬
+GraphPanel,ArchiveErrorDetail,Archive error {0} / Field: {1},아카이브 오류 {0} / 필드: {1}
+GraphPanel,BreakAllPinLinks,Break All Pin Links,모든 핀 연결 해제
+GraphPanel,BreakLink,Break Link,연결 해제
+GraphPanel,BreakPinLinks,Break Links to {},{} 핀의 연결 해제
+GraphPanel,BuildTarget,Target: {},대상: {}
 GraphPanel,Canvas,Canvas,캔버스
-GraphPanel,Properties,Properties,속성
-GraphPanel,SourceUnavailable,Source pin is unavailable.,연결 시작 핀을 사용할 수 없습니다.
-GraphPanel,SourceRequired,A connection candidate requires a source pin.,연결 후보에는 시작 핀이 필요합니다.
-GraphPanel,IdExhausted,Node editor ID space is exhausted.,노드 편집기의 ID 공간이 소진되었습니다.
-Viewport,Order,Order,표시 순서
-Viewport,OrderSelectionHint,Select a UI element or Canvas.,UI 요소나 캔버스를 선택하세요.
-Viewport,ZIndex,Z-Index,Z 순서
-Viewport,IncreaseZ,Z +1,Z 순서 +1
-Viewport,DecreaseZ,Z -1,Z 순서 -1
-Viewport,BringToFront,Bring to Front,맨 앞으로
-Viewport,SendToBack,Send to Back,맨 뒤로
-Viewport,CanvasOrderHint,Canvas order within this scene.,이 씬 안에서의 캔버스 표시 순서입니다.
-Viewport,ElementOrderHint,Higher Z renders later among siblings. Children stay with their parent.,형제 중 Z 값이 클수록 나중에 그려집니다. 자식은 부모와 함께 표시됩니다.
-Inspector,UnknownProperty,Unknown property,알 수 없는 속성
-Viewport,SelectionLocked,Selection Locked,선택 잠김
-Viewport,CreateCanvasHint,Create a Canvas from the Canvas menu in an open scene.,열린 씬에서 캔버스 메뉴를 통해 캔버스를 생성하세요.
-Viewport,CanvasUnavailable,Canvas layout is invalid or awaiting render.,캔버스 레이아웃이 올바르지 않거나 렌더링을 기다리고 있습니다.
-Viewport,PointerEnter,Enter,진입
-Viewport,PointerExit,Exit,벗어남
-Viewport,PointerDown,Down,누름
-Viewport,PointerUp,Up,놓음
-Viewport,PointerClick,Click,클릭
-Viewport,PointerCancel,Cancel,취소
-Viewport,Resolution4K,3840 x 2160 (4K UHD),3840 x 2160 (4K UHD)
-Viewport,ResolutionQHD,2560 x 1440 (QHD),2560 x 1440 (QHD)
-Viewport,ResolutionFHD,1920 x 1080 (FHD),1920 x 1080 (FHD)
-Viewport,ResolutionHD,1280 x 720 (HD),1280 x 720 (HD)
-Viewport,ResolutionSD,854 x 480 (SD),854 x 480 (SD)
-Viewport,ResolutionIPhone,1170 x 2532 (iPhone 14),1170 x 2532 (iPhone 14)
-Viewport,ResolutionPortrait,1080 x 1920 (Portrait FHD),1080 x 1920 (세로 FHD)
-GraphPanel,ReflectionConflict,Reflection source conflict: {}::{},리플렉션 소스 충돌: {}::{}
-Viewport,CanvasSize,Canvas {:.0f} x {:.0f} | {:.0f}%,캔버스 {:.0f} x {:.0f} | {:.0f}%
-Viewport,InteractionStatus,Interact | Clicks: {} | {},상호작용 | 클릭 수: {} | {}
-Viewport,PointerEvent,{} | Entity {},{} | 엔티티 {}
-Viewport,CameraTransform,Camera Transform,카메라 트랜스폼
-Viewport,CameraPosition,Position,위치
-Viewport,CameraRotation,Rotation,회전
-Viewport,CameraOptics,Camera Optics,카메라 광학
-Viewport,CameraFOV,FOV,시야각 (FOV)
-Viewport,CameraOrthographicSize,Size,직교 크기
-Viewport,CameraSpeed,Move Speed,이동 속도
-Viewport,CameraResetOrigin,Reset to Origin,원점으로 리셋
-Viewport,CameraTopView,Top View,상단 뷰 (Top)
-ToolBar,AutoReload,Auto,자동
-ToolBar,ShaderReload,Shader Reload,셰이더 리로드
-ToolBar,ReloadModuleTooltip,Reload GameModule DLL (Version: {}),GameModule DLL 다시 로드 (버전: {})
-ToolBar,AutoReloadTooltip,Automatically reload when GameModule.dll is compiled,GameModule.dll 컴파일 시 자동 다시 로드
-ToolBar,ShaderReloadTooltip,Recompile & Hot-Swap All Shaders,모든 셰이더 재컴파일 및 핫스왑
-Inspector,ActiveStateTooltip,Active State,활성 상태
-Inspector,LockedTooltip,Locked to current entity,현재 엔티티에 고정
-Inspector,UnlockedTooltip,Unlocked (follows selection),고정 해제 (선택 대상 추적)
-Inspector,LockProperty,Lock property,속성 편집 잠금
-Inspector,UnlockProperty,Unlock property,속성 편집 잠금 해제
-Hierarchy,HiddenByParent,Hidden by parent hierarchy.,부모 계층에 의해 숨겨짐
-Hierarchy,ToggleVisibility,Toggle Visibility,표시 여부 전환
-Hierarchy,DeactivatedByParent,Deactivated by parent hierarchy.,부모 계층에 의해 비활성화됨
-Hierarchy,ToggleActive,Toggle Active,활성 여부 전환
-MaterialEditor,PipelineSettings,Pipeline Settings,파이프라인 설정
-MaterialEditor,Parameters,Parameters,매개변수
-MaterialEditor,UnsupportedType,Unsupported Type,지원되지 않는 타입
-ResourceEditor,MaterialTitle,Material Editor,머티리얼 편집기
-MaterialEditor,LoadFailed,Failed to load material resource: {},머티리얼 리소스를 로드할 수 없습니다: {}
-MaterialEditor,Retry,Retry,다시 시도
-MaterialEditor,Save,Save,저장
-MaterialEditor,Revert,Revert,되돌리기
-MaterialEditor,Modified,Modified,수정됨
-MaterialEditor,BaseMaterial,Base Material: {},기본 머티리얼: {}
-MaterialEditor,BlendMode,Blend Mode,블렌드 모드
-MaterialEditor,CullMode,Cull Mode,컬링 모드
-MaterialEditor,FillMode,Fill Mode,채우기 모드
-MaterialEditor,DepthMode,Depth Mode,깊이 모드
-MaterialEditor,DepthCompareOp,Depth Compare Op,깊이 비교 연산
-MaterialEditor,ShaderSettings,Shader Settings,셰이더 설정
-MaterialEditor,DefaultShaders,--- Default Shaders ---,--- 기본 셰이더 ---
-MaterialEditor,DefaultVS,Default VS,기본 정점 셰이더
-MaterialEditor,DefaultPS,Default PS,기본 픽셀 셰이더
-MaterialEditor,PassSpecificShaders,--- Pass Specific Shaders ---,--- 패스별 셰이더 ---
-MaterialEditor,PassType,Pass Type,패스 종류
-MaterialEditor,VertexShader,Vertex Shader,정점 셰이더
-MaterialEditor,PixelShader,Pixel Shader,픽셀 셰이더
-MaterialEditor,DropShader,(Drop Shader),(셰이더 드래그 & 드롭)
-MaterialEditor,AddPassShader,Add Pass Shader,패스 셰이더 추가
-MaterialEditor,TextureBindings,Texture Bindings,텍스처 바인딩
-MaterialEditor,Slot,Slot,슬롯
-MaterialEditor,Name,Name,이름
-MaterialEditor,Preview,Preview,미리보기
-MaterialEditor,TextureDragDrop,Texture (Drag & Drop),텍스처 (드래그 & 드롭)
-MaterialEditor,DropTexture,(Drop texture here),(여기에 텍스처 드래그 & 드롭)
-MaterialEditor,AddBinding,Add Binding,바인딩 추가
-MaterialEditor,SlotNameHint,Slot Name,슬롯 이름
-MaterialEditor,Value,Value,값
-MaterialEditor,ParamNameHint,Param Name,파라미터 이름
-MaterialEditor,AddParam,Add Param,파라미터 추가
-Hierarchy,Light,Light,라이트
-Hierarchy,AddDirectionalLight,Directional Light,디렉셔널 라이트
-Hierarchy,AddPointLight,Point Light,포인트 라이트
-Hierarchy,AddSpotLight,Spot Light,스포트 라이트
-Hierarchy,AddSkyLight,Sky Light,스카이 라이트
-Inspector,MoveUp,Move Up,위로 이동
-Inspector,MoveDown,Move Down,아래로 이동
-Inspector,RemoveComponent,Remove Component,컴포넌트 제거
-ContentBrowser,BakeToBinary,Bake to Binary,바이너리로 변환
-ContentBrowser,ExportToJson,Export to JSON,JSON으로 내보내기
-ContentBrowser,ReloadMaterial,Reload Material,머티리얼 다시 불러오기
-ContentBrowser,ReloadMesh,Reload Mesh,메시 다시 불러오기
-ContentBrowser,Reimport,Reimport,다시 임포트
-ContentBrowser,ReloadTexture,Reload Texture,텍스처 다시 불러오기
-ContentBrowser,RecompileAllShaders,Recompile All Shaders,모든 셰이더 다시 컴파일
-ContentBrowser,RecompileShader,Recompile Shader,셰이더 다시 컴파일
-TerrainEditor,NoScene,No active scene.,활성 씬이 없습니다.
-TerrainEditor,NoSelection,No terrain selected. Select a Terrain entity in Hierarchy.,계층 패널에서 지형 엔티티를 선택하세요.
-TerrainEditor,SculptOn,Sculpting: ON (Click to Disable),지형 조형: 켜짐 (클릭하여 끄기)
-TerrainEditor,SculptOff,Sculpting: OFF (Click to Enable),지형 조형: 꺼짐 (클릭하여 켜기)
-TerrainEditor,BrushMode,Brush Mode,브러시 모드
-TerrainEditor,Raise,Raise,올리기
-TerrainEditor,Lower,Lower,내리기
-TerrainEditor,Smooth,Smooth,부드럽게
-TerrainEditor,Flatten,Flatten,평탄화
-TerrainEditor,Radius,Radius,반경
-TerrainEditor,Strength,Strength,강도
-TerrainEditor,Falloff,Falloff,감쇠
-TerrainEditor,TargetHeight,Target Height,목표 높이
-TerrainEditor,Target,Target: {},대상: {}
-TerrainEditor,DefaultName,Terrain,지형
-MaterialPreview,Sphere,Sphere,구체
-MaterialPreview,Cube,Cube,큐브
-MaterialPreview,Plane,Plane,평면
-MaterialPreview,Navigation,L-Drag: Orbit | R-Drag+WASD: Fly | M-Drag: Pan | Wheel: Zoom,왼쪽 드래그: 궤도 회전 | 오른쪽 드래그+WASD: 이동 | 가운데 드래그: 화면 이동 | 휠: 확대/축소
-Notification,MaterialReloaded,Material Reloaded,머티리얼을 다시 불러왔습니다
-Notification,MaterialNotLoaded,Material Not Loaded,메모리에 로드된 머티리얼이 없습니다
-Notification,InstanceCreated,Instance Created,인스턴스를 생성했습니다
-Notification,OpenBaseMaterial,Open Base Material,기본 머티리얼 열기
-Notification,BaseMaterialNotFound,Base Material Not Found,기본 머티리얼을 찾을 수 없습니다
-Notification,MeshReloaded,Mesh Reloaded,메시를 다시 불러왔습니다
-Notification,MeshNotLoaded,Mesh Not Loaded,메모리에 로드된 메시가 없습니다
-Notification,ModelReimported,Model Reimported,모델을 다시 임포트했습니다
-Notification,ReimportFailed,Reimport Failed,다시 임포트하지 못했습니다
-Notification,TextureReloaded,Texture Reloaded,텍스처를 다시 불러왔습니다
-Notification,TextureNotLoaded,Texture Not Loaded,메모리에 로드된 텍스처가 없습니다
-Notification,BakeFailed,Bake Failed,바이너리 변환 실패
-Notification,BakeSucceeded,Bake to Binary Success,바이너리 변환 성공
-Notification,ExportFailed,Export Failed,내보내기 실패
-Notification,ExportSucceeded,Export to JSON Success,JSON 내보내기 성공
-Notification,TextureHotReloaded,Texture Hot-Swapped,텍스처 핫 리로드 완료
-Notification,MaterialHotReloaded,Material Hot-Swapped,머티리얼 핫 리로드 완료
-Notification,MeshHotReloaded,Mesh Hot-Swapped,메시 핫 리로드 완료
-Notification,LocalizationReloaded,Localization Hot-Reloaded,번역 데이터 핫 리로드 완료
-Notification,CompilingModule,Compiling GameModule in background...,GameModule 컴파일을 시작합니다...
-Notification,CompileSuccess,GameModule compilation succeeded!,GameModule 컴파일 완료 및 핫로드 준비 완료!
-Notification,CompileFailed,GameModule compilation failed! Check console log.,GameModule 컴파일 실패! 콘솔 로그를 확인하세요.
-Notification,ShaderCompileError,Shader Compile Error,셰이더 컴파일 오류
-Notification,ShaderHotReloaded,Shader Hot-Swapped,셰이더 핫 리로드 완료
-Notification,ReloadedFile,{} reloaded.,{} 파일을 다시 불러왔습니다.
-Notification,InactiveFile,{} is not currently active in memory.,{} 파일이 현재 메모리에 로드되어 있지 않습니다.
-Notification,ReimportedFile,{} reimported successfully.,{} 파일을 다시 임포트했습니다.
-Notification,ReimportFailedFile,Failed to reimport {}.,{} 파일을 다시 임포트하지 못했습니다.
-Notification,CreatedFile,{} created.,{} 파일을 생성했습니다.
-Notification,JsonLoadFailed,Failed to load JSON resource: {},JSON 리소스를 불러오지 못했습니다: {}
-Notification,BinaryLoadFailed,Failed to load binary resource: {},바이너리 리소스를 불러오지 못했습니다: {}
-Notification,BinarySaveFailed,Failed to save binary resource: {},바이너리 리소스를 저장하지 못했습니다: {}
-Notification,JsonSaveFailed,Failed to save JSON resource: {},JSON 리소스를 저장하지 못했습니다: {}
-ToolBar,TargetFPS,Target FPS,목표 프레임 속도
-TerrainEditor,Title,Terrain Editor,지형 편집기
-ToolBar,ModuleReload,Hot Reload,핫 리로드
-ToolBar,ModuleCompile,Compile,컴파일
-ToolBar,ModuleCompiling,Compiling...,컴파일 중...
-ToolBar,ModuleCompileTooltip,Build GameModule C++ source in the background.,GameModule C++ 소스를 백그라운드에서 빌드합니다.
-ToolBar,AutoCompile,Auto-Compile,자동 컴파일
-ToolBar,AutoCompileTooltip,Automatically trigger background build on C++ source save.,C++ 소스 파일 저장 시 자동으로 백그라운드 빌드를 수행합니다.
-MaterialOption,Opaque,Opaque,불투명
-MaterialOption,Masked,Masked,마스크
-MaterialOption,Translucent,Translucent,반투명
-MaterialOption,Additive,Additive,가산
-MaterialOption,None,None,없음
-MaterialOption,Front,Front,앞면
-MaterialOption,Back,Back,뒷면
-MaterialOption,Solid,Solid,채움
-MaterialOption,Wireframe,Wireframe,와이어프레임
-MaterialOption,ReadOnly,ReadOnly,읽기 전용
-MaterialOption,ReadWrite,ReadWrite,읽기 및 쓰기
-MaterialOption,Never,Never,항상 실패
-MaterialOption,Less,Less,작음
-MaterialOption,Equal,Equal,같음
-MaterialOption,LessEqual,LessEqual,작거나 같음
-MaterialOption,Greater,Greater,큼
-MaterialOption,NotEqual,NotEqual,다름
-MaterialOption,GreaterEqual,GreaterEqual,크거나 같음
-MaterialOption,Always,Always,항상 통과
-MaterialOption,Custom,Custom,사용자 정의
-MaterialOption,Geometry,Geometry,지오메트리
-MaterialOption,Lighting,Lighting,조명
-MaterialOption,Shadow,Shadow,그림자
-MaterialOption,Forward,Forward,포워드
-MaterialOption,ForwardTransparent,ForwardTransparent,포워드 투명
-MaterialOption,PostProcess,PostProcess,후처리
-MaterialOption,UI,UI,사용자 인터페이스
-MaterialOption,Unknown,Unknown,알 수 없음
-MaterialEditor,NoResource,(None),(없음)
-MaterialEditor,EmptyResourceKey,(Empty),(빈 키)
-MaterialOption,NonPremultiplied,Non-premultiplied Alpha,비사전 곱 알파
-MaterialOption,Decal,Decal,데칼
-Shortcuts,Title,Keyboard Shortcuts,단축키 설정
-Shortcuts,Search,Search Shortcuts...,단축키 검색...
-Shortcuts,ResetAll,Reset All to Default,모두 기본값으로 복원
-Shortcuts,ColAction,Action,명령
-Shortcuts,ColCategory,Category,분류
-Shortcuts,ColShortcut,Shortcut,단축키
-Shortcuts,ColReset,Reset,복원
-Shortcuts,PressKey,Press any key...,키 입력 대기 중...
-Shortcuts,Reset,Reset,초기화
-Viewport,GameTitle,Game,게임
-TerrainEditor,HeightmapFile,Heightmap File,하이트맵 파일
-TerrainEditor,ImportHeightmap,Import Heightmap,하이트맵 임포트
-TerrainEditor,ExportHeightmap,Export Heightmap,하이트맵 익스포트
-TerrainEditor,ResetTerrain,Reset Terrain,지형 초기화
-TerrainEditor,Sculpt,Sculpt,조각
-Console,AllSources,All sources,모든 발생 주체
-Console,EmptySource,Unspecified source,발생 주체 미지정
-Inspector,MultipleSelection,{} entities selected,{}개 엔티티 선택
-Inspector,CommonComponents,Common Components,공통 컴포넌트
-Inspector,NoCommonComponents,No common components to display.,표시할 공통 컴포넌트가 없습니다.
-Inspector,LocalFlagsHint,Edits local flags. Parent hierarchy may still disable or hide an entity.,자체 상태를 편집합니다. 부모 계층에 의해 비활성화되거나 숨겨질 수 있습니다.
-Inspector,MixedFlagsHint,Values differ. Click to turn this option on for all selected entities.,값이 서로 다릅니다. 클릭하면 선택된 모든 엔티티에서 이 항목을 켭니다.
-Inspector,MultiEditUnavailable,Bulk editing is unavailable because its history could not be captured.,편집 이력을 구성할 수 없어 일괄 편집을 사용할 수 없습니다.
-Inspector,MixedValues,Multiple values,서로 다른 값
-Inspector,MultiPositionHint,Press Enter to set only this axis. Position uses parent space or world space when position inheritance is disabled.,Enter로 편집한 축만 적용합니다. 위치는 부모 기준이며 위치 독립 설정이면 월드 기준입니다.
-Inspector,MultiTransformPolicyHint,Use matching inheritance and snap settings. Unlock the edited axis on every selected entity.,선택 대상의 해당 변환 상속 설정과 스냅 설정을 맞추고 모든 대상에서 편집할 축의 잠금을 해제하세요.
-Inspector,MultiTransformRejected,Transform edit rejected. Previous values were preserved.,변환을 적용할 수 없어 이전 값을 유지합니다.
-Inspector,MultiScaleHint,Press Enter to set only this scale axis. Zero and negative values are allowed when the hierarchy remains valid.,Enter로 편집한 크기 축만 적용합니다. 계층이 유효하면 0과 음수도 사용할 수 있습니다.
-Inspector,MultiRotationHint,Press Enter to set one Euler angle in degrees. The entered angle and other Euler axis values are preserved.,Enter로 도 단위 Euler 각도를 설정합니다. 입력한 누적 각도와 나머지 축 값은 유지합니다.
-GraphPanel,Save,Save,저장
-GraphPanel,SaveAs,Save As...,다른 이름으로 저장...
-GraphPanel,NoFile,No file path selected.,저장 경로가 지정되지 않았습니다.
-GraphPanel,FilePath,File: {0},파일: {0}
-GraphPanel,SaveScope,Save includes nodes and connections and input values. Node layout is not saved.,노드·연결·입력값을 저장합니다. 노드 배치는 저장하지 않습니다.
+GraphPanel,CheckDxil,Check DXIL,DXIL 검사
+GraphPanel,CheckMaterialDxil,Check Material DXIL,머티리얼 DXIL 검사
+GraphPanel,CheckSpirv,Check SPIR-V,SPIR-V 검사
+GraphPanel,CompileAll,Compile All,모두 컴파일
+GraphPanel,Completed,Completed,실행 완료
+GraphPanel,ConfirmOpen,Replace Current Graph,현재 그래프 교체
+GraphPanel,ConnectFrom,Connect from output,출력 핀에서 연결
+GraphPanel,ConnectTo,Connect to input,입력 핀으로 연결
+GraphPanel,Connected,Connected - source takes precedence,연결됨 - 연결된 소스를 사용합니다
+GraphPanel,Connection,Connection,연결
+GraphPanel,Controls,Drag pins to empty space to search nodes | Middle drag to pan | Ctrl for multiple selection,핀을 빈 곳에 놓아 노드 검색 | 가운데 버튼으로 화면 이동 | Ctrl로 다중 선택
+GraphPanel,CreateCommentBox,Create Comment Box (Group),코멘트 상자 생성 (그룹)
+GraphPanel,CreateRuntimeMaterial,Create Session Material,세션 머티리얼 생성
+GraphPanel,CreateVariable,Create Variable,변수 생성
+GraphPanel,DebugEntity,Debug: Entity #{},디버그: 엔티티 #{}
+GraphPanel,DebugEntityHint,Select an active actor to visualize live execution wire flow and watch pin values.,실행 중인 액터를 선택하면 연결선의 실행 흐름과 핀 값을 관찰할 수 있습니다.
+GraphPanel,DebugNamedEntity,Debug: {} (#{}),디버그: {} (#{})
+GraphPanel,DebugNone,Debug: [None],디버그: [없음]
+GraphPanel,Delete,Delete,삭제
+GraphPanel,Disconnect,Disconnect,연결 해제
+GraphPanel,Empty,Add a node from the toolbar or the right-click menu.,상단 버튼이나 우클릭 메뉴에서 노드를 추가하세요.
+GraphPanel,EntityLabel,Entity #{},엔티티 #{}
+GraphPanel,EventDelta,Update delta (seconds),Update 시간 간격(초)
+GraphPanel,ExecutionTrace,Execution trace,실행 추적
+GraphPanel,Failed,Failed,실행 실패
+GraphPanel,FileDomainMismatch,The file domain differs from the current tab. Select the matching domain tab and try again.,파일의 도메인이 현재 탭과 다릅니다. 해당 도메인 탭을 선택한 뒤 다시 불러오세요.
 GraphPanel,FileFailed,Graph file operation failed at stage: {0}. Hover for details.,그래프 파일 처리 실패: {0}. 마우스를 올리면 상세 내용을 확인할 수 있습니다.
+GraphPanel,FilePath,File: {0},파일: {0}
+GraphPanel,FileStageDeserialize,Deserialization,역직렬화
+GraphPanel,FileStageRead,File reading,파일 읽기
+GraphPanel,FileStageReplace,Destination file replacement,대상 파일 교체
+GraphPanel,FileStageSerialize,Serialization,직렬화
 GraphPanel,FileStageUnknown,Unknown,알 수 없음
 GraphPanel,FileStageValidate,Graph validation,그래프 검증
-GraphPanel,FileStageSerialize,Serialization,직렬화
-GraphPanel,FileStageRead,File reading,파일 읽기
-GraphPanel,FileStageDeserialize,Deserialization,역직렬화
 GraphPanel,FileStageWrite,Temporary file writing,임시 파일 쓰기
-GraphPanel,FileStageReplace,Destination file replacement,대상 파일 교체
-GraphPanel,ArchiveErrorDetail,Archive error {0} / Field: {1},아카이브 오류 {0} / 필드: {1}
-GraphPanel,GraphErrorDetail,Graph error {0} / Node: {1} / Pin: {2} / {3},그래프 오류 {0} / 노드: {1} / 핀: {2} / {3}
-GraphPanel,SystemErrorDetail,System error {0}: {1},시스템 오류 {0}: {1}
-FileDialog,GraphFiles,Graph Files (*.json),그래프 파일 (*.json)
-GraphPanel,Open,Open...,불러오기...
-GraphPanel,ConfirmOpen,Replace Current Graph,현재 그래프 교체
-GraphPanel,ReplaceWarning,The current graph will be replaced. Unsaved changes will be lost.,현재 그래프를 교체합니다. 저장하지 않은 변경 내용은 사라집니다.
-GraphPanel,ReplaceCurrent,Continue,계속
-GraphPanel,FileDomainMismatch,The file domain differs from the current tab. Select the matching domain tab and try again.,파일의 도메인이 현재 탭과 다릅니다. 해당 도메인 탭을 선택한 뒤 다시 불러오세요.
-GraphPanel,UnregisteredNode,The node type is not registered.,등록되지 않은 노드 유형입니다.
-Inspector,MultiPropertyWriteFailed,Could not apply this property to every selected entity.,선택 대상 전체에 이 속성을 적용하지 못했습니다.
-Inspector,MultiFloatHint,Press Enter to apply this value to all selected entities. Registered ranges are enforced.,Enter로 선택 대상 전체에 값을 적용합니다. 등록된 범위 밖의 값은 범위에 맞춰 보정합니다.
-Inspector,MultiFloatValidationRequired,Bulk numeric editing requires component validation and is not available here yet.,이 컴포넌트의 숫자 일괄 편집은 별도 검증 연결이 필요하여 아직 지원하지 않습니다.
+GraphPanel,FollowTrace,Follow latest trace,최신 흐름 따라가기
 GraphPanel,GenerateHlsl,Generate HLSL,HLSL 생성
-GraphPanel,CheckDxil,Check DXIL,DXIL 검사
-GraphPanel,CheckSpirv,Check SPIR-V,SPIR-V 검사
-GraphPanel,ShaderBuild,Shader Build,셰이더 생성·컴파일
-GraphPanel,ShaderIdle,Generate HLSL or run a compilation check.,HLSL을 생성하거나 컴파일 검사를 실행하세요.
-GraphPanel,ShaderChanged,The graph changed. Regenerate or compile to update the result.,그래프가 변경되었습니다. 다시 생성하거나 컴파일하세요.
-GraphPanel,ShaderGenerationFailed,Shader generation failed. See the graph diagnostic.,셰이더 생성에 실패했습니다. 그래프 진단을 확인하세요.
-GraphPanel,ShaderSourceReady,HLSL source was generated.,HLSL 소스를 생성했습니다.
-GraphPanel,ShaderCompilePassed,The compilation check passed.,컴파일 검사를 통과했습니다.
-GraphPanel,ShaderCompileFailed,The compilation check failed. See the details below.,컴파일 검사에 실패했습니다. 아래 상세 내용을 확인하세요.
-GraphPanel,ShaderCompileOnly,Compile to check the shader or build a DirectX12 color preview.,셰이더를 컴파일 검사하거나 DirectX12 색상 미리보기를 생성하세요.
-GraphPanel,ShaderLastGood,Last successful compilation: {0} / {1} bytes,마지막 성공 결과: {0} / {1}바이트
-GraphPanel,ShaderArtifact,Output: {0},출력 파일: {0}
 GraphPanel,GeneratedHlsl,Generated HLSL,HLSL 생성 결과
-GraphPanel,ShaderOldSource,This source is from an earlier graph state.,현재 표시된 소스는 이전 그래프 상태에서 생성되었습니다.
-GraphPanel,PreviewShader,Preview Shader,셰이더 미리보기
-GraphPanel,ShaderPreviewReady,The GPU preview is ready.,GPU 미리보기를 생성했습니다.
-GraphPanel,ShaderPreviewFailed,Could not replace the preview. Any previous preview is retained.,미리보기를 교체하지 못했습니다. 이전 미리보기가 있으면 유지합니다.
-GraphPanel,ShaderPreviewUnavailable,Shader preview currently requires an active DirectX12 renderer.,현재 셰이더 미리보기에는 활성 DirectX12 렌더러가 필요합니다.
-GraphPanel,ShaderPreviewVertexMissing,The fullscreen vertex shader is unavailable.,전체 화면 정점 셰이더를 사용할 수 없습니다.
-GraphPanel,ShaderPreviewShaderFailed,Could not create the GPU pixel shader.,GPU 픽셀 셰이더를 생성하지 못했습니다.
-GraphPanel,ShaderPreviewPipelineFailed,Could not create the preview pipeline. Check the engine log.,미리보기 파이프라인을 생성하지 못했습니다. 엔진 로그를 확인하세요.
-GraphPanel,ShaderPreviewTargetFailed,Could not create a unique preview render target.,미리보기 전용 렌더 타깃을 생성하지 못했습니다.
-GraphPanel,ShaderPreviewPassFailed,Could not create the preview render pass.,미리보기 렌더 패스를 생성하지 못했습니다.
-GraphPanel,ShaderPreviewDrawFailed,Could not render or display the shader preview.,셰이더 미리보기를 렌더링하거나 표시하지 못했습니다.
-GraphPanel,ShaderPreviewOld,This preview was built from an earlier graph state.,이 미리보기는 이전 그래프 상태에서 생성되었습니다.
-GraphPanel,CheckMaterialDxil,Check Material DXIL,머티리얼 DXIL 검사
+GraphPanel,GraphErrorDetail,Graph error {0} / Node: {1} / Pin: {2} / {3},그래프 오류 {0} / 노드: {1} / 핀: {2} / {3}
+GraphPanel,IdExhausted,Node editor ID space is exhausted.,노드 편집기의 ID 공간이 소진되었습니다.
+GraphPanel,Idle,Idle,실행 전
+GraphPanel,LastObserved,Last observed value,마지막 관측값
+GraphPanel,Logic,Logic,로직
 GraphPanel,MaterialShaderBuild,Material Shader,머티리얼 셰이더
-GraphPanel,MaterialShaderReady,Material shader compilation passed.,머티리얼 셰이더 컴파일을 통과했습니다.
 GraphPanel,MaterialShaderFailed,Material shader compilation failed. Any previous successful result is retained.,머티리얼 셰이더 컴파일에 실패했습니다. 이전 성공 결과가 있으면 유지합니다.
-GraphPanel,MaterialShaderScope,Unlit GBuffer shader for a material geometry pass.,머티리얼 지오메트리 패스용 Unlit GBuffer 셰이더입니다.
 GraphPanel,MaterialShaderOld,This is the last successful material result. Run the check again to validate the current state.,마지막으로 성공한 머티리얼 결과입니다. 현재 상태를 확인하려면 다시 검사하세요.
-GraphPanel,CreateRuntimeMaterial,Create Session Material,세션 머티리얼 생성
-GraphPanel,RuntimeMaterialReady,The session material is ready. Assign it in the Inspector.,세션 머티리얼을 생성했습니다. Inspector에서 할당하세요.
-GraphPanel,RuntimeMaterialFailed,Material creation failed. Any previous material is retained.,머티리얼 생성에 실패했습니다. 이전 머티리얼이 있으면 유지합니다.
-GraphPanel,RuntimeMaterialUnavailable,Material creation requires DirectX12 and initialized rendering resources.,머티리얼 생성에는 DirectX12와 초기화된 렌더링 리소스가 필요합니다.
-GraphPanel,RuntimeMaterialDependencies,A required mesh or shader or texture or sampler is unavailable.,필요한 메시 또는 셰이더 또는 텍스처 또는 샘플러를 사용할 수 없습니다.
-GraphPanel,RuntimeMaterialPassMissing,An active GBuffer geometry pass is required. Open a scene viewport and check its camera.,활성 GBuffer 지오메트리 패스가 필요합니다. 씬 뷰포트를 열고 카메라를 확인하세요.
+GraphPanel,MaterialShaderReady,Material shader compilation passed.,머티리얼 셰이더 컴파일을 통과했습니다.
+GraphPanel,MaterialShaderScope,Unlit GBuffer shader for a material geometry pass.,머티리얼 지오메트리 패스용 Unlit GBuffer 셰이더입니다.
+GraphPanel,MenuBuild,Build,빌드
+GraphPanel,MenuMaterial,Material,머티리얼
+GraphPanel,MenuMore,More...,더 보기...
+GraphPanel,MenuMoreTooltip,Additional actions and overflow tools,추가 작업 및 오버플로우 도구
+GraphPanel,MultipleSelection,Multiple items selected. Delete removes all selected items.,여러 항목을 선택했습니다. 삭제하면 선택한 항목을 모두 제거합니다.
+GraphPanel,NoEntry,Add a Start or Update event.,Start 또는 Update 이벤트를 추가하세요.
+GraphPanel,NoFile,No file path selected.,저장 경로가 지정되지 않았습니다.
+GraphPanel,NoMatchingNodes,No compatible nodes match the search.,조건에 맞는 노드가 없습니다.
+GraphPanel,NoObservedValue,Not observed,관측값 없음
+GraphPanel,NoVariables,No variables defined.,정의된 변수가 없습니다.
+GraphPanel,ObjectLinkOnly,Requires a matching object output connection.,일치하는 객체 타입의 출력 핀을 연결해야 합니다.
+GraphPanel,Open,Open...,불러오기...
+GraphPanel,Pause,Pause,일시정지
+GraphPanel,Paused,Paused,일시정지
+GraphPanel,PieBadge,[PIE],[PIE]
+GraphPanel,PieEntitySelectHint,Select an active entity in the scene to observe its live execution wire pulse and values.,씬에서 활성 엔티티를 선택하여 실시간 실행 와이어 흐름과 핀 값을 관찰합니다.
+GraphPanel,PieHeader,PIE Live Watch,PIE 관찰
+GraphPanel,PieNoBinding,No entity has GraphBindingComponent.,GraphBindingComponent를 가진 엔티티가 없습니다.
+GraphPanel,PieNotRunning,PIE not running,PIE 미실행
+GraphPanel,PieObserving,Observing: {},관찰 중: {}
+GraphPanel,PieTargetEntity,Target Entity,관찰 대상 엔티티
+GraphPanel,PinSummary,Pin: {} ({}),핀: {} ({})
+GraphPanel,PreviewHeader,Preview,실행 미리보기
+GraphPanel,PreviewHint,Local execution preview inside panel. Does not affect scene entities.,패널 내부 미리보기 실행입니다. 씬 엔티티에 영향을 주지 않습니다.
+GraphPanel,PreviewScope,Logic preview uses an execution snapshot. Editing resets it. Click a trace to pause and inspect.,로직 복사본을 실행합니다. 편집하면 실행 상태가 초기화됩니다. 기록을 클릭하면 일시정지하고 위치와 값을 확인할 수 있습니다.
+GraphPanel,PreviewShader,Preview Shader,셰이더 미리보기
+GraphPanel,PromoteVariable,Promote to Variable,변수로 승격
+GraphPanel,Properties,Properties,속성
+GraphPanel,ReflectionConflict,Reflection source conflict: {}::{},리플렉션 소스 충돌: {}::{}
+GraphPanel,RemainingBudget,Remaining budget,남은 실행 예산
+GraphPanel,RemoveBreakpoint,Remove Breakpoint,중단점 제거
+GraphPanel,ReplaceCurrent,Continue,계속
+GraphPanel,ReplaceWarning,The current graph will be replaced. Unsaved changes will be lost.,현재 그래프를 교체합니다. 저장하지 않은 변경 내용은 사라집니다.
+GraphPanel,RequiredValue,Required input - set a value or connect a pin.,필수 입력 - 값을 지정하거나 핀을 연결하세요.
+GraphPanel,ResetInstance,Reset instance,실행 상태 초기화
+GraphPanel,ResetValue,Reset to definition,정의의 기본값으로 복원
+GraphPanel,ResetView,Reset view,화면 초기화
+GraphPanel,Result,Last result,마지막 결과
+GraphPanel,Run,Run / Resume,실행 / 계속
+GraphPanel,Running,Running,실행 중
 GraphPanel,RuntimeMaterialCollision,The generated resource key is already in use.,생성할 리소스 키가 이미 사용 중입니다.
-GraphPanel,RuntimeMaterialResourceFailed,Could not create resources matching the compiled material shader.,컴파일된 머티리얼 셰이더와 일치하는 리소스를 생성하지 못했습니다.
-GraphPanel,RuntimeMaterialPipelineFailed,Material pipeline validation failed. Check the engine log.,머티리얼 파이프라인 검사에 실패했습니다. 엔진 로그를 확인하세요.
-GraphPanel,RuntimeMaterialScope,Session only. Assign this material in the Inspector; it cannot be restored after restarting.,세션용입니다. Inspector에서 할당할 수 있으며 재시작 후에는 복원되지 않습니다.
+GraphPanel,RuntimeMaterialDependencies,A required mesh or shader or texture or sampler is unavailable.,필요한 메시 또는 셰이더 또는 텍스처 또는 샘플러를 사용할 수 없습니다.
+GraphPanel,RuntimeMaterialFailed,Material creation failed. Any previous material is retained.,머티리얼 생성에 실패했습니다. 이전 머티리얼이 있으면 유지합니다.
 GraphPanel,RuntimeMaterialKey,Created material: {0},생성된 머티리얼: {0}
 GraphPanel,RuntimeMaterialOld,This is an earlier result. Create another material and select its new entry to apply the current graph.,이전 생성 결과입니다. 현재 그래프를 적용하려면 머티리얼을 다시 생성하고 새 항목을 선택하세요.
+GraphPanel,RuntimeMaterialPassMissing,An active GBuffer geometry pass is required. Open a scene viewport and check its camera.,활성 GBuffer 지오메트리 패스가 필요합니다. 씬 뷰포트를 열고 카메라를 확인하세요.
+GraphPanel,RuntimeMaterialPipelineFailed,Material pipeline validation failed. Check the engine log.,머티리얼 파이프라인 검사에 실패했습니다. 엔진 로그를 확인하세요.
+GraphPanel,RuntimeMaterialReady,The session material is ready. Assign it in the Inspector.,세션 머티리얼을 생성했습니다. Inspector에서 할당하세요.
+GraphPanel,RuntimeMaterialResourceFailed,Could not create resources matching the compiled material shader.,컴파일된 머티리얼 셰이더와 일치하는 리소스를 생성하지 못했습니다.
+GraphPanel,RuntimeMaterialScope,Session only. Assign this material in the Inspector; it cannot be restored after restarting.,세션용입니다. Inspector에서 할당할 수 있으며 재시작 후에는 복원되지 않습니다.
+GraphPanel,RuntimeMaterialUnavailable,Material creation requires DirectX12 and initialized rendering resources.,머티리얼 생성에는 DirectX12와 초기화된 렌더링 리소스가 필요합니다.
+GraphPanel,Save,Save,저장
+GraphPanel,SaveAs,Save As...,다른 이름으로 저장...
+GraphPanel,SaveScope,Save includes nodes and connections and input values. Node layout is not saved.,노드·연결·입력값을 저장합니다. 노드 배치는 저장하지 않습니다.
+GraphPanel,SearchNodes,Search nodes or categories...,노드 이름·분류 검색...
+GraphPanel,SelectHint,Select a node or connection to edit it.,편집할 노드나 연결을 선택하세요.
+GraphPanel,SessionOnly,Session only - Logic preview is available. Saving is not available.,현재 세션에서 로직 실행을 미리 볼 수 있습니다. 저장은 아직 지원하지 않습니다.
+GraphPanel,Shader,Shader,셰이더
+GraphPanel,ShaderArtifact,Output: {0},출력 파일: {0}
+GraphPanel,ShaderBadge,[Shader],[셰이더]
+GraphPanel,ShaderBuild,Shader Build,셰이더 생성·컴파일
+GraphPanel,ShaderChanged,The graph changed. Regenerate or compile to update the result.,그래프가 변경되었습니다. 다시 생성하거나 컴파일하세요.
+GraphPanel,ShaderCompileAndPreview,Compile & Preview,컴파일 및 미리보기
+GraphPanel,ShaderCompileFailed,The compilation check failed. See the details below.,컴파일 검사에 실패했습니다. 아래 상세 내용을 확인하세요.
+GraphPanel,ShaderCompileOnly,Compile to check the shader or build a DirectX12 color preview.,셰이더를 컴파일 검사하거나 DirectX12 색상 미리보기를 생성하세요.
+GraphPanel,ShaderCompilePassed,The compilation check passed.,컴파일 검사를 통과했습니다.
+GraphPanel,ShaderGenerationFailed,Shader generation failed. See the graph diagnostic.,셰이더 생성에 실패했습니다. 그래프 진단을 확인하세요.
+GraphPanel,ShaderIdle,Generate HLSL or run a compilation check.,HLSL을 생성하거나 컴파일 검사를 실행하세요.
+GraphPanel,ShaderLastGood,Last successful compilation: {0} / {1} bytes,마지막 성공 결과: {0} / {1}바이트
+GraphPanel,ShaderOldSource,This source is from an earlier graph state.,현재 표시된 소스는 이전 그래프 상태에서 생성되었습니다.
+GraphPanel,ShaderPreviewDrawFailed,Could not render or display the shader preview.,셰이더 미리보기를 렌더링하거나 표시하지 못했습니다.
+GraphPanel,ShaderPreviewFailed,Could not replace the preview. Any previous preview is retained.,미리보기를 교체하지 못했습니다. 이전 미리보기가 있으면 유지합니다.
+GraphPanel,ShaderPreviewOld,This preview was built from an earlier graph state.,이 미리보기는 이전 그래프 상태에서 생성되었습니다.
+GraphPanel,ShaderPreviewPassFailed,Could not create the preview render pass.,미리보기 렌더 패스를 생성하지 못했습니다.
+GraphPanel,ShaderPreviewPipelineFailed,Could not create the preview pipeline. Check the engine log.,미리보기 파이프라인을 생성하지 못했습니다. 엔진 로그를 확인하세요.
+GraphPanel,ShaderPreviewReady,The GPU preview is ready.,GPU 미리보기를 생성했습니다.
+GraphPanel,ShaderPreviewShaderFailed,Could not create the GPU pixel shader.,GPU 픽셀 셰이더를 생성하지 못했습니다.
+GraphPanel,ShaderPreviewTargetFailed,Could not create a unique preview render target.,미리보기 전용 렌더 타깃을 생성하지 못했습니다.
+GraphPanel,ShaderPreviewTitle,Shader Preview,셰이더 미리보기
+GraphPanel,ShaderPreviewUnavailable,Shader preview currently requires an active DirectX12 renderer.,현재 셰이더 미리보기에는 활성 DirectX12 렌더러가 필요합니다.
+GraphPanel,ShaderPreviewVertexMissing,The fullscreen vertex shader is unavailable.,전체 화면 정점 셰이더를 사용할 수 없습니다.
+GraphPanel,ShaderSourceReady,HLSL source was generated.,HLSL 소스를 생성했습니다.
+GraphPanel,SourceRequired,A connection candidate requires a source pin.,연결 후보에는 시작 핀이 필요합니다.
+GraphPanel,SourceUnavailable,Source pin is unavailable.,연결 시작 핀을 사용할 수 없습니다.
+GraphPanel,Step,Step,한 단계
+GraphPanel,StepInterval,Task interval (seconds),작업 간격(초)
+GraphPanel,Stop,Stop,중지
+GraphPanel,Stopped,Stopped,중지됨
+GraphPanel,SystemErrorDetail,System error {0}: {1},시스템 오류 {0}: {1}
+GraphPanel,TaskBudget,Tasks per event,이벤트당 실행 예산
+GraphPanel,Title,Graph,그래프
+GraphPanel,TraceEnter,Enter,진입
+GraphPanel,TraceError,Error,오류
+GraphPanel,TraceIteration,Iteration,반복
+GraphPanel,TraceLeave,Leave,복귀
+GraphPanel,TraceLink,Link,연결 통과
+GraphPanel,TraceValue,Value,값
+GraphPanel,UnregisteredNode,The node type is not registered.,등록되지 않은 노드 유형입니다.
+GraphPanel,UseValue,Use value,값 지정
+GraphPanel,Valid,No structural errors. Execution is not checked.,구조 오류가 없습니다. 실행 여부는 검사하지 않습니다.
+GraphPanel,Validate,Validate,검사
+GraphPanel,Validation,Validation,검사 결과
+GraphPanel,Variables,Variables,변수
+GraphPanel,WireCurved,Wire: All Curved,와이어: 모두 곡선
+GraphPanel,WireCurvedHint,All wires use Bezier curves. Click to switch styles.,모든 연결선을 베지어 곡선으로 표시합니다. 클릭하면 표시 방식을 전환합니다.
+GraphPanel,WireElectronic,Wire: Electronic,와이어: 혼합
+GraphPanel,WireElectronicHint,Execution wires are straight and data wires are curved. Click to switch styles.,실행선은 직선이고 데이터선은 곡선입니다. 클릭하면 표시 방식을 전환합니다.
+GraphPanel,WireStraight,Wire: All Straight,와이어: 모두 직선
+GraphPanel,WireStraightHint,All execution and data wires are straight. Click to switch styles.,실행선과 데이터선을 모두 직선으로 표시합니다. 클릭하면 표시 방식을 전환합니다.
+GraphPanel,WireStyle,Wire Style,와이어 스타일
+GraphPanel,WireStyleCurved,All Curved,모두 곡선
+GraphPanel,WireStyleElectronic,Electronic (Hybrid),전자 노드 (하이브리드)
+GraphPanel,WireStyleStraight,All Straight,모두 직선
+GraphPanel,WireStyleTooltip,Select wire connection rendering style,와이어 연결 렌더링 스타일을 선택합니다.
+GraphicsSettings,ApplyUIScale,Apply UI Scale,UI 배율 적용
+GraphicsSettings,ApplyVSync,Apply and Save VSync,VSync 적용 및 저장
+GraphicsSettings,ApplyViewport,Apply and Save Viewport,뷰포트 적용 및 저장
+GraphicsSettings,InvalidWindowSize,Width must be 320-16384 and height 240-16384.,너비는 320-16384 높이는 240-16384 범위여야 합니다.
+GraphicsSettings,NoViewport,No supported viewport is available.,설정할 수 있는 뷰포트가 없습니다.
+GraphicsSettings,ReloadApplied,Reload Applied Values,현재 적용값 다시 불러오기
+GraphicsSettings,ReloadViewport,Reload Viewport Values,뷰포트 편집값 되돌리기
+GraphicsSettings,TargetViewport,Target Viewport,대상 뷰포트
+GraphicsSettings,Title,Graphics Settings,그래픽 설정
+GraphicsSettings,VSync,VSync,VSync
+GraphicsSettings,VSyncHint,Applies to the shared editor and PIE output. The FPS limit is separate.,에디터와 PIE가 공유하는 화면 출력에 적용됩니다. 목표 FPS 제한은 별도입니다.
+GraphicsSettings,VSyncPending,Applying VSync...,VSync를 적용하고 있습니다...
+GraphicsSettings,VSyncPreferenceMismatch,The current output differs from the VSync preference.,현재 출력 상태가 VSync 설정값과 다릅니다.
+GraphicsSettings,VSyncRequestRejected,The VSync change cannot be requested right now.,현재 VSync 변경을 요청할 수 없습니다.
+GraphicsSettings,VSyncSaved,VSync applied and saved.,VSync를 적용하고 저장했습니다.
+GraphicsSettings,VSyncUnsupported,The selected VSync setting is not supported.,선택한 VSync 설정을 지원하지 않습니다.
+GraphicsSettings,ViewportApplied,Current Settings,현재 적용값
+GraphicsSettings,ViewportAspectValue,Aspect ratio: {},종횡비: {}
+GraphicsSettings,ViewportCustom,Custom,사용자 지정
+GraphicsSettings,ViewportDraft,Draft Settings,편집값
+GraphicsSettings,ViewportMode,Resolution Mode,해상도 모드
+GraphicsSettings,ViewportModeValue,Resolution mode: {},해상도 모드: {}
+GraphicsSettings,ViewportPending,Applying viewport settings...,뷰포트 설정을 적용하고 있습니다...
+GraphicsSettings,ViewportPreset,Preset,프리셋
+GraphicsSettings,ViewportReferenceSize,Reference resolution: {} x {},기준 해상도: {} x {}
+GraphicsSettings,ViewportRequestRejected,The viewport change cannot be requested right now.,현재 뷰포트 변경을 요청할 수 없습니다.
+GraphicsSettings,ViewportRestoreFailed,Viewport render targets could not be restored.,뷰포트 렌더 타깃을 복구하지 못했습니다.
+GraphicsSettings,ViewportSaved,Viewport settings applied and saved.,뷰포트 설정을 적용하고 저장했습니다.
+GraphicsSettings,ViewportTitle,Viewport Resolution,뷰포트 해상도
+Hierarchy,Action,Action: {},작업 대상: {}
+Hierarchy,Active,Is Active,활성화
+Hierarchy,AddCanvas,Add UI Canvas,UI 캔버스 추가
+Hierarchy,AddDirectionalLight,Directional Light,디렉셔널 라이트
+Hierarchy,AddEntity,Add Entity,엔티티 추가
+Hierarchy,AddLight,Add Light Entity,라이트 엔티티 추가
+Hierarchy,AddPointLight,Point Light,포인트 라이트
+Hierarchy,AddPrimitive,Add Primitive Entity,기본 도형 엔티티 추가
+Hierarchy,AddSkyLight,Sky Light,스카이 라이트
+Hierarchy,AddSpotLight,Spot Light,스포트 라이트
+Hierarchy,AddSprite,Add Sprite Entity,스프라이트 엔티티 추가
+Hierarchy,AddTerrain,Terrain,터레인
+Hierarchy,CreateChild,Create Child Empty,빈 자식 생성
+Hierarchy,CycleRejected,An entity cannot be parented to itself or its descendants.,자신이나 자손을 부모로 지정할 수 없습니다.
+Hierarchy,DeactivatedByParent,Deactivated by parent hierarchy.,부모 계층에 의해 비활성화됨
+Hierarchy,DeleteEntityAndChildren,Delete entity and children,엔티티와 자식 삭제
+Hierarchy,DeleteSelectedEntities,Delete Selected Entities,선택한 엔티티 삭제
+Hierarchy,DepthLimitReached,The hierarchy would exceed its depth limit.,계층의 최대 깊이를 초과합니다.
+Hierarchy,DropPrefabRoot,Drop here to add a prefab at the scene root,여기에 놓으면 씬 루트에 프리팹을 추가합니다
+Hierarchy,Duplicate,Duplicate,복제
+Hierarchy,EditFailed,The hierarchy is invalid; no changes were made.,계층 관계가 올바르지 않아 변경하지 않았습니다.
+Hierarchy,Empty,No entities.,엔티티가 없습니다.
 Hierarchy,EntityFallback,Entity {},엔티티 {}
-Console,CollapseDuplicates,Collapse duplicates,중복 묶기
-Viewport,NoUsableCamera,No usable active camera in the scene.,씬에 사용할 수 있는 활성 카메라가 없습니다.
-ResourceEditor,InstantiateModel,Add Model to Scene,모델을 씬에 배치
+Hierarchy,FocusSelected,Focus Selected,선택 오브젝트로 포커스
+Hierarchy,HiddenByParent,Hidden by parent hierarchy.,부모 계층에 의해 숨겨짐
+Hierarchy,InvalidLinks,Invalid hierarchy links; shown without repair.,잘못된 계층 관계가 있습니다. 원본을 유지한 채 표시합니다.
+Hierarchy,Light,Light,라이트
+Hierarchy,MoveDown,Move Down,아래로 이동
+Hierarchy,MoveToRoot,Move to Root,루트로 이동
+Hierarchy,MoveUp,Move Up,위로 이동
+Hierarchy,NoMatchingEntities,No matching entities found.,일치하는 엔티티가 없습니다.
+Hierarchy,PrefabRootDeleteBlocked,Root entity of a prefab instance cannot be deleted directly.,프리팹 인스턴스의 루트 엔티티는 직접 삭제할 수 없습니다.
+Hierarchy,PreserveTransformFailed,Cannot preserve the world transform under this parent.,이 부모에서는 현재 월드 변환을 유지할 수 없습니다.
+Hierarchy,RenameScene,Rename Scene,씬 이름 변경
+Hierarchy,RootDropHint,Drop here to move to root,여기에 놓으면 루트로 이동합니다
+Hierarchy,SceneName,Scene: {},씬: {}
+Hierarchy,StaleEntityDrop,This entity is no longer in the current scene.,현재 씬에 없는 엔티티입니다.
+Hierarchy,Title,Hierarchy,계층
+Hierarchy,ToggleActive,Toggle Active,활성 여부 전환
+Hierarchy,ToggleVisibility,Toggle Visibility,표시 여부 전환
+Hierarchy,Visible,Visible,표시
+History,ActionShortcut,{} ({}),{} ({})
+History,AllChangesSaved,[All Changes Saved],[모든 변경 사항 저장됨]
+History,CaptureFailed,History cleared because the change could not be captured.,변경을 기록할 수 없어 이전 이력을 비웠습니다.
+History,Clear,Clear History,이력 비우기
+History,Cleared,Command history cleared.,명령 이력을 비웠습니다.
+History,Command.AddComponent,Add component,컴포넌트 추가
+History,Command.CanvasResolution,Canvas resolution,캔버스 해상도
+History,Command.CreateEntity,Create entity,엔티티 생성
+History,Command.DeleteEntity,Delete entity,엔티티 삭제
+History,Command.EditProperties,Properties,속성 편집
+History,Command.EditProperty,Edit Property,속성 편집
+History,Command.InstantiatePrefab,Instantiate Prefab,프리팹 배치
+History,Command.PasteEntities,Paste Entities,엔티티 붙여넣기
+History,Command.RenameScene,Rename scene,씬 이름 변경
+History,Command.ReorderEntities,Reorder Entities,엔티티 순서 변경
+History,Command.Reparent,Change parent,부모 변경
+History,Command.Transform,Transform,변환
+History,Command.UIRenderOrder,UI render order,UI 렌더 순서
+History,Command.UITransform,UI transform,UI 변환
+History,Command.UnpackPrefab,Unpack Prefab,프리팹 연결 해제
+History,CommandAction,Command Action,명령
+History,Current,>> Current,>> 현재
+History,InitialState,[Initial State],[초기 상태]
+History,ReplayFailed,The target or hierarchy changed. History position was preserved.,대상이나 계층이 바뀌어 복원하지 못했습니다. 이력 위치는 유지합니다.
+History,SavedColumn,Saved,저장 여부
+History,SavedMarker,[Saved],[저장됨]
+History,Status,Status,상태
+History,Title,History,편집 이력
+History,Unnamed,Unnamed Command,이름 없는 명령
+History,UnsavedChanges,[Unsaved Changes],[저장되지 않은 변경 사항]
+Inspector,ActiveStateTooltip,Active State,활성 상태
+Inspector,AddComponent,Add Component,컴포넌트 추가
+Inspector,AddValue,Add value,값 추가
+Inspector,AxisReset,Reset {} to {:.3f},{}축을 {:.3f}(으)로 초기화
+Inspector,AxisResetHint,Axis button / middle click: reset,축 버튼 / 가운데 클릭: 초기화
+Inspector,CanvasInvalidated,The edit would invalidate the canvas layout.,이 편집은 캔버스 레이아웃을 무효화하므로 적용할 수 없습니다.
+Inspector,CommonComponents,Common Components,공통 컴포넌트
+Inspector,Components,Components,컴포넌트
+Inspector,EditSettings,Edit settings,편집 설정
+Inspector,ElapsedSeconds,(%.2fs),(%.2f초)
+Inspector,ElementCount,{} elements,요소 {}개
+Inspector,EntityUnavailable,Entity is no longer available.,엔티티를 더 이상 사용할 수 없습니다.
+Inspector,FastWheelHint,Shift + wheel: x10,Shift + 휠: 10배 간격으로 변경
+Inspector,InvalidValue,Invalid value was rejected.,유효하지 않은 값은 반영하지 않았습니다.
+Inspector,LayoutRejected,Invalid UI layout values were rejected.,잘못된 UI 레이아웃 값은 반영하지 않았습니다.
+Inspector,LocalFlagsHint,Edits local flags. Parent hierarchy may still disable or hide an entity.,자체 상태를 편집합니다. 부모 계층에 의해 비활성화되거나 숨겨질 수 있습니다.
+Inspector,LockAxis,Lock {},{}축 잠금
+Inspector,LockProperty,Lock property,속성 편집 잠금
+Inspector,LockedTooltip,Locked to current entity,현재 엔티티에 고정
+Inspector,MixedFlagsHint,Values differ. Click to turn this option on for all selected entities.,값이 서로 다릅니다. 클릭하면 선택된 모든 엔티티에서 이 항목을 켭니다.
+Inspector,MixedValues,Multiple values,서로 다른 값
+Inspector,MoveDown,Move Down,아래로 이동
+Inspector,MoveUp,Move Up,위로 이동
+Inspector,MultiEditUnavailable,Bulk editing is unavailable because its history could not be captured.,편집 이력을 구성할 수 없어 일괄 편집을 사용할 수 없습니다.
+Inspector,MultiFloatHint,Press Enter to apply this value to all selected entities. Registered ranges are enforced.,Enter로 선택 대상 전체에 값을 적용합니다. 등록된 범위 밖의 값은 범위에 맞춰 보정합니다.
+Inspector,MultiFloatValidationRequired,Bulk numeric editing requires component validation and is not available here yet.,이 컴포넌트의 숫자 일괄 편집은 별도 검증 연결이 필요하여 아직 지원하지 않습니다.
+Inspector,MultiPositionHint,Press Enter to set only this axis. Position uses parent space or world space when position inheritance is disabled.,Enter로 편집한 축만 적용합니다. 위치는 부모 기준이며 위치 독립 설정이면 월드 기준입니다.
+Inspector,MultiPropertyWriteFailed,Could not apply this property to every selected entity.,선택 대상 전체에 이 속성을 적용하지 못했습니다.
+Inspector,MultiRotationHint,Press Enter to set one Euler angle in degrees. The entered angle and other Euler axis values are preserved.,Enter로 도 단위 Euler 각도를 설정합니다. 입력한 누적 각도와 나머지 축 값은 유지합니다.
+Inspector,MultiScaleHint,Press Enter to set only this scale axis. Zero and negative values are allowed when the hierarchy remains valid.,Enter로 편집한 크기 축만 적용합니다. 계층이 유효하면 0과 음수도 사용할 수 있습니다.
+Inspector,MultiTransformPolicyHint,Use matching inheritance and snap settings. Unlock the edited axis on every selected entity.,선택 대상의 해당 변환 상속 설정과 스냅 설정을 맞추고 모든 대상에서 편집할 축의 잠금을 해제하세요.
+Inspector,MultiTransformRejected,Transform edit rejected. Previous values were preserved.,변환을 적용할 수 없어 이전 값을 유지합니다.
+Inspector,MultipleSelection,{} entities selected,{}개 엔티티 선택
+Inspector,NoCommonComponents,No common components to display.,표시할 공통 컴포넌트가 없습니다.
+Inspector,NoReflectedComponents,No reflected components.,리플렉션에 등록된 컴포넌트가 없습니다.
+Inspector,NoScene,Entity has no Scene.,엔티티에 씬이 없습니다.
+Inspector,NoSelection,No Entity selected.,선택된 엔티티가 없습니다.
+Inspector,ReflectionUnavailable,Component reflection is unavailable.,컴포넌트 리플렉션을 사용할 수 없습니다.
+Inspector,RegistrationUnavailable,Component registration is unavailable.,컴포넌트 등록 정보를 사용할 수 없습니다.
+Inspector,RemoveComponent,Remove Component,컴포넌트 제거
+Inspector,ResetToDefault,Reset to Default,기본값으로 재설정
+Inspector,RotationRejected,Invalid rotation input was rejected.,잘못된 회전 입력은 반영하지 않았습니다.
+Inspector,RotationRestored,Invalid rotation was restored.,잘못된 회전값을 이전 값으로 복원했습니다.
+Inspector,SearchEntity,Search entity...,엔티티 검색...
+Inspector,SizeUnavailable,Size unavailable,크기를 읽을 수 없습니다.
+Inspector,Snap,Snap,스냅
+Inspector,SnapStep,Snap step,스냅 간격
+Inspector,Title,Inspector,인스펙터
+Inspector,TransformLockAll,Lock Transform Editing,Transform 편집 전체 잠금
+Inspector,TransformLockPosition,Lock Position,위치 잠금
+Inspector,TransformLockRotation,Lock Rotation,회전 잠금
+Inspector,TransformLockScale,Lock Scale,크기 잠금
+Inspector,TransformRejected,Transform change rejected. Current pose was preserved.,Transform 변경을 적용할 수 없어 현재 자세를 유지합니다.
+Inspector,TransformUnlockBeforeReparent,Unlock the transform before changing its parent.,부모를 변경하려면 Transform 편집 잠금을 해제하세요.
+Inspector,UnknownProperty,Unknown property,알 수 없는 속성
+Inspector,UnlockAxis,Unlock {},{}축 잠금 해제
+Inspector,UnlockProperty,Unlock property,속성 편집 잠금 해제
+Inspector,UnlockedTooltip,Unlocked (follows selection),고정 해제 (선택 대상 추적)
+Inspector,UnsupportedType,Unsupported type,지원하지 않는 자료형
+Inspector,ValuePreviewUnavailable,Value preview unavailable,값 미리보기를 사용할 수 없습니다
+Inspector,ValueUnavailable,Value unavailable,값을 읽을 수 없습니다.
+Inspector,WheelHint,Wheel: change value,휠: 값 변경
+Inspector,WriteFailed,Write failed: {},쓰기 실패: {}
+LogLevel,Error,Error,오류
+LogLevel,Fatal,Fatal,치명적 오류
+LogLevel,Info,Info,정보
+LogLevel,Trace,Trace,추적
+LogLevel,Unknown,Unknown,알 수 없음
+LogLevel,Warn,Warn,경고
+MaterialEditor,AddBinding,Add Binding,바인딩 추가
+MaterialEditor,AddBindingAtSlot,{} (Slot {}),{} (슬롯 {})
+MaterialEditor,AddParam,Add Param,파라미터 추가
+MaterialEditor,AddPassShader,Add Pass Shader,패스 셰이더 추가
+MaterialEditor,BaseBinding,{} (Base),{} (원본)
+MaterialEditor,BaseMaterial,Base Material: {},기본 머티리얼: {}
+MaterialEditor,BaseMaterialMissing,Base material is missing. Select a base material below.,원본 머티리얼이 없습니다. 아래에서 원본 머티리얼을 선택하세요.
+MaterialEditor,BaseMaterialSlot,Base Material,원본 머티리얼
+MaterialEditor,BlendMode,Blend Mode,블렌드 모드
+MaterialEditor,ColorType,{} (Color),{} (색상)
+MaterialEditor,CullMode,Cull Mode,컬링 모드
+MaterialEditor,DefaultPS,Default PS,기본 픽셀 셰이더
+MaterialEditor,DefaultShaders,--- Default Shaders ---,--- 기본 셰이더 ---
+MaterialEditor,DefaultVS,Default VS,기본 정점 셰이더
+MaterialEditor,DepthCompareOp,Depth Compare Op,깊이 비교 연산
+MaterialEditor,DepthMode,Depth Mode,깊이 모드
+MaterialEditor,DropShader,(Drop Shader),(셰이더 드래그 & 드롭)
+MaterialEditor,DropTexture,(Drop texture here),(여기에 텍스처 드래그 & 드롭)
+MaterialEditor,EmptyResourceKey,(Empty),(빈 키)
+MaterialEditor,FillMode,Fill Mode,채우기 모드
+MaterialEditor,InheritedFromBase,Inherited from Base Material,원본 머티리얼에서 상속됨
+MaterialEditor,LoadFailed,Failed to load material resource: {},머티리얼 리소스를 로드할 수 없습니다: {}
+MaterialEditor,Modified,Modified,수정됨
+MaterialEditor,Name,Name,이름
+MaterialEditor,NoResource,(None),(없음)
+MaterialEditor,OverriddenInInstance,Overridden in Instance,인스턴스에서 재정의됨
+MaterialEditor,ParamNameHint,Param Name,파라미터 이름
+MaterialEditor,Parameters,Parameters,매개변수
+MaterialEditor,PassSpecificShaders,--- Pass Specific Shaders ---,--- 패스별 셰이더 ---
+MaterialEditor,PassType,Pass Type,패스 종류
+MaterialEditor,PipelineSettings,Pipeline Settings,파이프라인 설정
+MaterialEditor,PixelShader,Pixel Shader,픽셀 셰이더
+MaterialEditor,Preview,Preview,미리보기
+MaterialEditor,Retry,Retry,다시 시도
+MaterialEditor,Revert,Revert,되돌리기
+MaterialEditor,Save,Save,저장
+MaterialEditor,ShaderSettings,Shader Settings,셰이더 설정
+MaterialEditor,Slot,Slot,슬롯
+MaterialEditor,SlotNameHint,Slot Name,슬롯 이름
+MaterialEditor,TextureBindings,Texture Bindings,텍스처 바인딩
+MaterialEditor,TextureDragDrop,Texture (Drag & Drop),텍스처 (드래그 & 드롭)
+MaterialEditor,TextureRegister,t%u,t%u
+MaterialEditor,UnsupportedType,Unsupported Type,지원되지 않는 타입
+MaterialEditor,Value,Value,값
+MaterialEditor,VertexShader,Vertex Shader,정점 셰이더
+MaterialOption,Additive,Additive,가산
+MaterialOption,Always,Always,항상 통과
+MaterialOption,Back,Back,뒷면
+MaterialOption,Custom,Custom,사용자 정의
+MaterialOption,Decal,Decal,데칼
+MaterialOption,Equal,Equal,같음
+MaterialOption,Forward,Forward,포워드
+MaterialOption,ForwardTransparent,ForwardTransparent,포워드 투명
+MaterialOption,Front,Front,앞면
+MaterialOption,Geometry,Geometry,지오메트리
+MaterialOption,Greater,Greater,큼
+MaterialOption,GreaterEqual,GreaterEqual,크거나 같음
+MaterialOption,Less,Less,작음
+MaterialOption,LessEqual,LessEqual,작거나 같음
+MaterialOption,Lighting,Lighting,조명
+MaterialOption,Masked,Masked,마스크
+MaterialOption,Never,Never,항상 실패
+MaterialOption,NonPremultiplied,Non-premultiplied Alpha,비사전 곱 알파
+MaterialOption,None,None,없음
+MaterialOption,NotEqual,NotEqual,다름
+MaterialOption,Opaque,Opaque,불투명
+MaterialOption,PostProcess,PostProcess,후처리
+MaterialOption,ReadOnly,ReadOnly,읽기 전용
+MaterialOption,ReadWrite,ReadWrite,읽기 및 쓰기
+MaterialOption,Shadow,Shadow,그림자
+MaterialOption,Solid,Solid,채움
+MaterialOption,Translucent,Translucent,반투명
+MaterialOption,UI,UI,사용자 인터페이스
+MaterialOption,Unknown,Unknown,알 수 없음
+MaterialOption,Wireframe,Wireframe,와이어프레임
+MaterialPreview,Cube,Cube,큐브
+MaterialPreview,Navigation,L-Drag: Orbit | R-Drag+WASD: Fly | M-Drag: Pan | Wheel: Zoom,왼쪽 드래그: 궤도 회전 | 오른쪽 드래그+WASD: 이동 | 가운데 드래그: 화면 이동 | 휠: 확대/축소
+MaterialPreview,Plane,Plane,평면
+MaterialPreview,Sphere,Sphere,구체
+Metrics,ActiveScenes,Active scenes: {},활성 씬: {}
+Metrics,ActiveSlots,Active: %llu / %llu slots,활성 슬롯: %llu / %llu
+Metrics,AllocatedDescriptors,Allocated Descriptors: {},할당된 디스크립터: {}
+Metrics,AssetTasks,Asset tasks,에셋 작업
+Metrics,Average,Average,평균
+Metrics,AverageFPS,Average FPS: {:.1f},평균 FPS: {:.1f}
+Metrics,Busy,[ BUSY ],[ 처리 중 ]
+Metrics,CPUTime,CPU (ms),CPU (ms)
+Metrics,CloseDetail,Close Detail,상세 닫기
+Metrics,CloseDetailX,[ Close Detail X ],[ 상세 닫기 X ]
+Metrics,Completed,Completed: {},완료: {}
+Metrics,ComputeShader,Compute Shader: {},컴퓨트 셰이더: {}
+Metrics,Count,Count,개수
+Metrics,CurrentFrame,Current frame,현재 프레임
+Metrics,DXRRaytracing,DXR Raytracing: {},DXR 레이 트레이싱: {}
+Metrics,DedicatedVRAM,Dedicated VRAM: {} MB,전용 VRAM: {} MB
+Metrics,DescriptorIndexing,Descriptor Indexing (Bindless): {},디스크립터 인덱싱 (바인드리스): {}
+Metrics,DetailMemory,Detailed Resource Memory Inspection,리소스 메모리 상세
+Metrics,DetailNetwork,Detailed Network Session Inspection,네트워크 세션 상세
+Metrics,DetailPerformance,Detailed Performance Inspection,상세 성능 검사
+Metrics,DetailRendering,Detailed GPU Rendering & Passes,GPU 렌더링 및 패스 상세
+Metrics,DetailTasks,Detailed Engine & Task Queue Inspection,엔진 및 작업 큐 상세
+Metrics,DrawBreakdown,Non-indexed: {} / Indexed: {},인덱스 미사용: {} / 인덱스 사용: {}
+Metrics,DrawCalls,Draw calls: {},그리기 호출: {}
+Metrics,DrawHint,Counts engine RHI draws. Excludes direct ImGui backend draws and texture blits.,엔진의 RHI 그리기를 집계합니다. ImGui 백엔드의 직접 그리기와 텍스처 블릿은 제외합니다.
+Metrics,Draws,Draws: %llu,그리기 호출: %llu
+Metrics,EngineState,Engine state,엔진 상태
+Metrics,FPSCap,FPS cap: {}  ({:.3f} ms),FPS 제한: {}  ({:.3f} ms)
+Metrics,FPSUnlimited,FPS cap: Unlimited,FPS 제한: 무제한
+Metrics,Fail,[ FAIL ],[ 실패 ]
+Metrics,Failed,Failed: {},실패: {}
+Metrics,Fps,%.1f FPS,%.1f FPS
+Metrics,FrameInterval,Frame interval (ms),프레임 간격 (ms)
+Metrics,FrameMsAvg,Frame: %.2f ms (Avg: %.2f),프레임: %.2f ms (평균: %.2f)
+Metrics,FrameTimeHint,Includes frame limiting and waits. This is not CPU or GPU execution time.,프레임 제한과 대기 시간을 포함합니다. CPU나 GPU 실행 시간이 아닙니다.
+Metrics,GPUTime,GPU (ms),GPU (ms)
+Metrics,Good,[ GOOD ],[ 양호 ]
+Metrics,GpuRendering,GPU RENDERING,GPU 렌더링
+Metrics,GpuTimeMsVerts,GPU Time: %.2f ms | Verts: %llu,GPU 시간: %.2f ms / 정점: %llu
+Metrics,HardwareCapabilities,Hardware Capabilities:,하드웨어 지원 기능:
+Metrics,Healthy,[ HEALTHY ],[ 정상 ]
+Metrics,HostingOnPort,Hosting on Port: %u,호스팅 포트: %u
+Metrics,Idle,[ IDLE ],[ 대기 ]
+Metrics,Indices,Submitted indices: {},제출한 인덱스: {}
+Metrics,IndirectDraw,Indirect Draw: {},간접 그리기: {}
+Metrics,Maximum,Maximum,최대
+Metrics,MemoryCache,MEMORY & CACHE,메모리 및 캐시
+Metrics,MeshShader,Mesh Shader: {},메시 셰이더: {}
+Metrics,Minimum,Minimum,최소
+Metrics,ModeStandalone,Mode: Standalone,모드: 독립 실행
+Metrics,ModelsTextures,Models: %llu | Textures: %llu,모델: %llu / 텍스처: %llu
+Metrics,Network,NETWORK,네트워크
+Metrics,NetworkDriverStatus,Network Driver Status: %s,네트워크 드라이버 상태: %s
+Metrics,NetworkSystemUnavailable,NetworkSystem is not registered.,네트워크 시스템이 등록되지 않았습니다.
+Metrics,NoCapture,No completed capture.,완료된 수집 결과가 없습니다.
+Metrics,NoSamples,No frame samples.,수집한 프레임이 없습니다.
+Metrics,NotSupported,Not Supported,미지원
+Metrics,Offline,[ OFFLINE ],[ 오프라인 ]
+Metrics,Ok,[ OK ],[ 정상 ]
+Metrics,Online,[ ONLINE ],[ 온라인 ]
+Metrics,Outstanding,Outstanding: {},미수집·실행 중: {}
+Metrics,PassesScenes,Passes: %zu | Scenes: %zu,패스: %zu / 씬: %zu
+Metrics,PauseCapture,Pause capture,수집 일시정지
+Metrics,PauseHint,Freeze metrics only; the engine keeps running.,통계 수집만 멈춥니다. 엔진은 계속 실행됩니다.
+Metrics,Performance,PERFORMANCE,성능
+Metrics,PingMs,Ping: %.1f ms,지연 시간: %.1f ms
+Metrics,Poor,[ POOR ],[ 낮음 ]
+Metrics,RHIDraws,RHI draw commands — heaviest frame in last 0.5 s,RHI 그리기 명령 — 최근 0.5초 중 가장 무거운 프레임
+Metrics,RecentFrames,Recent {} frames,최근 {}개 프레임
+Metrics,RefreshInterval,Refresh interval: 0.5 seconds,갱신 간격: 0.5초
+Metrics,RegisteredPasses,Registered render passes: {},등록된 렌더 패스: {}
+Metrics,RenderFailed,Render failed: partial counts,렌더링 실패: 일부 집계만 표시합니다
+Metrics,RenderPass,Render Pass,렌더 패스
+Metrics,RenderTimes,Render Times:,렌더링 시간:
+Metrics,ResetHistory,Reset history,기록 초기화
+Metrics,ResourceSummary,Loaded: {}   Slots: {}   Reusable: {},로딩됨: {}   슬롯: {}   재사용 가능: {}
+Metrics,Resources,Resources,리소스
+Metrics,ServerPort,Server: Port %u,서버: 포트 %u
+Metrics,SmoothedRttMs,Smoothed RTT: %.2f ms,평활 왕복 지연: %.2f ms
+Metrics,StatusConnected,Status: Connected,상태: 연결됨
+Metrics,Succeeded,Succeeded: {},성공: {}
+Metrics,Supported,Supported,지원
+Metrics,SupportedTier1Plus,Supported (Tier 1+),지원 (Tier 1 이상)
+Metrics,SupportedTier1_0Plus,Supported (Tier 1.0+),지원 (Tier 1.0 이상)
+Metrics,SupportedTier3,Supported (Tier 3),지원 (Tier 3)
+Metrics,TaskHint,Outstanding includes running tasks and results not yet collected. Counts cover registered async tasks.,미수집·실행 중에는 실행 중인 작업과 아직 수집하지 않은 결과가 포함됩니다. 등록된 비동기 작업을 집계합니다.
+Metrics,TasksActiveDone,Tasks: %llu Active / %llu Done,작업: %llu개 진행 / %llu개 완료
+Metrics,TasksEngine,TASKS & ENGINE,작업 및 엔진
+Metrics,Tier1Or2,Tier 1/2,Tier 1/2
+Metrics,Title,Engine Metrics,엔진 통계
+Metrics,TotalCPUSubmit,Total CPU Submit: {:.2f} ms,CPU 전체 제출 시간: {:.2f} ms
+Metrics,TotalGPUExecute,Total GPU Execute: {:.2f} ms,GPU 전체 실행 시간: {:.2f} ms
+Metrics,TrafficKbS,Traffic: 0.0 KB/s,트래픽: 0.0 KB/s
+Metrics,Type,Type,종류
+Metrics,VRAMDescriptors,VRAM & Descriptors:,VRAM 및 디스크립터:
+Metrics,Vertices,Submitted vertices (non-indexed): {},제출한 정점 (인덱스 미사용): {}
+Metrics,ViewDetails,View Details ->,상세 보기 →
+Metrics,Warn,[ WARN ],[ 주의 ]
+ModelEditor,EditModeOnly,Material assignments can be edited and saved after stopping PIE.,PIE를 종료하면 머티리얼 연결을 편집하고 저장할 수 있습니다.
 ModelEditor,MaterialSlot,Material Slot {},머티리얼 슬롯 {}
 ModelEditor,NoModel,Open an imported .bammodel resource. If loading failed check the log.,임포트된 .bammodel 리소스를 여세요. 로드 실패 시 로그를 확인하세요.
 ModelEditor,NoSlots,No material slots. Older models may need to be imported again.,머티리얼 슬롯이 없습니다. 이전 모델은 다시 임포트해야 할 수 있습니다.
 ModelEditor,PendingSave,Material assignments changed. Save the model to keep them.,머티리얼 연결이 변경됐습니다. 유지하려면 모델을 저장하세요.
-ModelEditor,Saved,Model saved.,모델을 저장했습니다.
+ModelEditor,RetryLoad,Retry Loading Model,모델 다시 불러오기
 ModelEditor,SaveFailed,Failed to save the model. Check the log.,모델 저장에 실패했습니다. 로그를 확인하세요.
-ModelEditor,EditModeOnly,Material assignments can be edited and saved after stopping PIE.,PIE를 종료하면 머티리얼 연결을 편집하고 저장할 수 있습니다.
-ToolBar,TargetFPSHint,0 disables the FPS limit. Range: 0-1000.,0은 FPS 제한을 해제합니다. 입력 범위: 0~1000.
+ModelEditor,Saved,Model saved.,모델을 저장했습니다.
+ModelImport,AlbedoReferences,Albedo Textures,Albedo 텍스처
+ModelImport,AnimationAndRig,Animation & Rigging,애니메이션 및 릭
+ModelImport,FlipUVs,Flip UVs (V-Axis),UV V축 반전
+ModelImport,FlipWinding,Flip Winding Order,면 와인딩 순서 반전
+ModelImport,ImportAnimations,Import Animations,애니메이션 임포트
+ModelImport,ImportBtn,Import,임포트
+ModelImport,ImportMaterials,Import Materials,머티리얼 임포트
+ModelImport,ImportMeshes,Import Meshes,메시 임포트
+ModelImport,ImportSkeleton,Import Skeleton,스켈레톤 임포트
+ModelImport,LeftHanded,Convert to Left-Handed,왼손 좌표계 변환
+ModelImport,MeshesAndMaterials,Meshes & Materials,메시 및 머티리얼
+ModelImport,ModalTitle,Model Import Options,모델 임포트 옵션
+ModelImport,Pitch180,Pitch 180°,상하 반전 (Pitch 180°)
+ModelImport,PreviewFailed,Preview unavailable. Check the console for details.,프리뷰를 표시할 수 없습니다. 콘솔에서 원인을 확인하세요.
+ModelImport,PreviewPending,Preparing preview...,프리뷰 준비 중...
+ModelImport,Reset,Reset,초기화
+ModelImport,Rotation,Rotation Offset (Pitch/Yaw/Roll),회전 오프셋 (X/Y/Z)
+ModelImport,Scale,Uniform Scale,스케일 배율
+ModelImport,Scale1,1.0x,1.0배
+ModelImport,Scale100,100x,100배
+ModelImport,ScalePoint01,0.01x,0.01배
+ModelImport,TextureEmbeddedLocation,Embedded in the model,모델 파일 내부 이미지
+ModelImport,TextureInfoEmpty,No texture details available,표시할 텍스처 정보가 없습니다
+ModelImport,TextureLoadFailed,Loading failed,불러오기 실패
+ModelImport,TextureLoaded,Loaded successfully,불러오기 성공
+ModelImport,TextureMaterialFallback,Material {},머티리얼 {}
+ModelImport,TextureMaterialsDisabled,Material import is disabled,머티리얼 임포트가 꺼져 있습니다
+ModelImport,TextureMissing,File not found - using base color,파일을 찾지 못해 기본색 사용
+ModelImport,TextureNone,None,없음
+ModelImport,TextureNotProcessed,Not processed,처리 전
+ModelImport,TextureReference,Source reference,원본 참조
+ModelImport,TextureResolved,Resolved file,찾은 파일
+ModelImport,TextureStatus,Last load result,마지막 로드 결과
+ModelImport,TextureUnused,No texture reference,텍스처 참조 없음
+ModelImport,Transform,Transform & Coordinates,변환 및 좌표계
+ModelImport,Yaw180,Yaw 180°,헤딩 반전 (Yaw 180°)
+ModelImportModal,TextureDimensions,%u x %u,%u × %u
+NetworkDisplay,ClientConnected,Client Connected,클라이언트 연결됨
+NetworkDisplay,DedicatedServer,Dedicated Server,전용 서버
+NetworkDisplay,Standalone,Standalone,독립 실행
+NetworkProfiler,ClientConnected,[ Client Connected ],[ 클라이언트 연결됨 ]
+NetworkProfiler,ClientID,Client ID,클라이언트 ID
+NetworkProfiler,Connect,Connect,서버 접속
+NetworkProfiler,Connected,Connected,연결됨
+NetworkProfiler,ConnectedClients,Connected Clients:,연결된 클라이언트:
+NetworkProfiler,Disconnect,Disconnect / Stop,접속 해제 / 중지
+NetworkProfiler,HostServer,Host Server,서버 호스팅
+NetworkProfiler,IPAddress,IP,IP 주소
+NetworkProfiler,InboundKbS,Inbound: %.2f KB/s,수신: %.2f KB/s
+NetworkProfiler,InboundLabel,Inbound,수신
+NetworkProfiler,LatencyLabel,Latency (RTT),지연 시간 (RTT)
+NetworkProfiler,LatencyRttMs,Latency (RTT): %.1f ms,왕복 지연: %.1f ms
+NetworkProfiler,NetworkTraffic,Network Traffic:,네트워크 트래픽:
+NetworkProfiler,OutboundKbS,Outbound: %.2f KB/s,송신: %.2f KB/s
+NetworkProfiler,OutboundLabel,Outbound,송신
+NetworkProfiler,Ping,Ping,핑
+NetworkProfiler,PingRtt,Ping (RTT),왕복 지연
+NetworkProfiler,Port,Port,포트
+NetworkProfiler,RemoteAddress,Remote Address,원격 주소
+NetworkProfiler,ServerRunning,[ Server Running ],[ 서버 실행 중 ]
+NetworkProfiler,ServerRunningLabel,Server Running,서버 실행 중
+NetworkProfiler,SessionMode,Session Mode:,세션 모드:
+NetworkProfiler,Standalone,[ Standalone ],[ 독립 실행 ]
+NetworkProfiler,State,State,상태
+NetworkProfiler,SystemUnavailable,NetworkSystem is not registered in SystemManager.,시스템 관리자에 네트워크 시스템이 등록되지 않았습니다.
+NetworkProfiler,Title,Network Profiler,네트워크 프로파일러
+Notification,BakeFailed,Bake Failed,바이너리 변환 실패
+Notification,BakeSucceeded,Bake to Binary Success,바이너리 변환 성공
+Notification,BaseMaterialNotFound,Base Material Not Found,기본 머티리얼을 찾을 수 없습니다
+Notification,BinaryLoadFailed,Failed to load binary resource: {},바이너리 리소스를 불러오지 못했습니다: {}
+Notification,BinarySaveFailed,Failed to save binary resource: {},바이너리 리소스를 저장하지 못했습니다: {}
+Notification,CompileFailed,GameModule compilation failed! Check console log.,GameModule 컴파일 실패! 콘솔 로그를 확인하세요.
+Notification,CompileSuccess,GameModule compilation succeeded!,GameModule 컴파일 완료 및 핫로드 준비 완료!
+Notification,CompilingModule,Compiling GameModule in background...,GameModule 컴파일을 시작합니다...
+Notification,CreatedFile,{} created.,{} 파일을 생성했습니다.
+Notification,EnterPrefabMode,Entered Prefab Mode: {},프리팹 편집 모드 진입: {}
+Notification,EntitiesCopied,Copied {} entities,엔티티 {}개 복사됨
+Notification,EntitiesPasteFailed,Failed to paste entities,엔티티 붙여넣기 실패
+Notification,EntitiesPasted,Pasted {} entities,엔티티 {}개 붙여넣기 완료
+Notification,ExportFailed,Export Failed,내보내기 실패
+Notification,ExportSucceeded,Export to JSON Success,JSON 내보내기 성공
+Notification,HistoryTitle,Notification History,알림 히스토리
+Notification,HistoryTooltip,View notification history,알림 히스토리 확인
+Notification,InactiveFile,{} is not currently active in memory.,{} 파일이 현재 메모리에 로드되어 있지 않습니다.
+Notification,InstanceCreated,Instance Created,인스턴스를 생성했습니다
+Notification,JsonLoadFailed,Failed to load JSON resource: {},JSON 리소스를 불러오지 못했습니다: {}
+Notification,JsonSaveFailed,Failed to save JSON resource: {},JSON 리소스를 저장하지 못했습니다: {}
 Notification,LoadResourceFailed,Resource load failed,리소스 불러오기 실패
 Notification,LoadResourceSucceeded,Resource loaded,리소스 불러오기 완료
+Notification,LocalizationReloaded,Localization Hot-Reloaded,번역 데이터 핫 리로드 완료
+Notification,MaterialHotReloaded,Material Hot-Swapped,머티리얼 핫 리로드 완료
+Notification,MaterialNotLoaded,Material Not Loaded,메모리에 로드된 머티리얼이 없습니다
+Notification,MaterialReloaded,Material Reloaded,머티리얼을 다시 불러왔습니다
+Notification,MeshHotReloaded,Mesh Hot-Swapped,메시 핫 리로드 완료
+Notification,MeshNotLoaded,Mesh Not Loaded,메모리에 로드된 메시가 없습니다
+Notification,MeshReloaded,Mesh Reloaded,메시를 다시 불러왔습니다
+Notification,ModelReimported,Model Reimported,모델을 다시 임포트했습니다
+Notification,NoHistory,No notification history.,지나간 알림이 없습니다.
+Notification,OpenBaseMaterial,Open Base Material,기본 머티리얼 열기
+Notification,OpenExternalFailed,Failed to open file with default program: {},기본 프로그램으로 파일을 열지 못했습니다: {}
+Notification,PrefabApplied,Prefab changes applied: {},프리팹 원본에 적용 완료: {}
+Notification,PrefabInstantiateFailed,Failed to instantiate prefab: {},프리팹 인스턴스화 실패: {}
+Notification,PrefabInstantiated,Prefab instantiated: {},프리팹 인스턴스화 완료: {}
+Notification,PrefabReverted,Prefab reverted to original asset.,프리팹을 원본 상태로 복원했습니다.
+Notification,PrefabSaveFailed,Failed to save prefab: {},프리팹 저장 실패: {}
+Notification,PrefabSaved,Prefab saved: {},프리팹 저장 완료: {}
+Notification,PrefabUnpacked,Prefab unpacked successfully.,프리팹 연결을 해제했습니다.
+Notification,ReimportFailed,Reimport Failed,다시 임포트하지 못했습니다
+Notification,ReimportFailedFile,Failed to reimport {}.,{} 파일을 다시 임포트하지 못했습니다.
+Notification,ReimportedFile,{} reimported successfully.,{} 파일을 다시 임포트했습니다.
+Notification,ReloadedFile,{} reloaded.,{} 파일을 다시 불러왔습니다.
 Notification,ResourceLoadFailed,Failed to load resource: {},리소스를 불러오지 못했습니다: {}
 Notification,ResourceLoadSucceeded,Loaded resource: {},리소스를 불러왔습니다: {}
-ContentBrowser,NoMatchingAssets,No matching assets.,표시할 에셋이 없습니다.
-PostProcess,OpenPanel,Open Post-Process Panel...,후처리 패널 열기...
-PostProcess,ColorAdjustments,Color Adjustments,색상 조정
-PostProcess,Vignette,Vignette,비네팅
-PostProcess,Saturation,Saturation,채도
-PostProcess,Contrast,Contrast,대비
-PostProcess,Brightness,Brightness,밝기
-PostProcess,Intensity,Intensity,강도
-PostProcess,Smoothness,Smoothness,부드러움
-PostProcess,Roundness,Roundness,원형도
-PostProcess,Preset,Preset,프리셋
-PostProcess,Viewport,Viewport,뷰포트
-PostProcess,NoViewport,No active viewport with post-processing pipeline found.,후처리 파이프라인이 있는 활성 뷰포트를 찾을 수 없습니다.
-PostProcess,SelectEffectPrompt,Select an effect from the pipeline list to edit parameters.,파라미터를 편집하려면 파이프라인 목록에서 효과를 선택하십시오.
-PostProcess,NoEffects,No post-processing effects registered.,등록된 후처리 효과가 없습니다.
-PostProcess,NoParameters,No configurable parameters.,설정 가능한 파라미터가 없습니다.
-PostProcess,SelectPresetPrompt,Select Preset...,프리셋 선택...
-PostProcess,EnterPresetName,Enter Preset Name:,프리셋 이름 입력:
-PostProcess,SavePresetTitle,Save Preset,프리셋 저장
+Notification,SaveFailed,Save failed: {},저장 실패: {}
+Notification,Saved,Saved: {},저장됨: {}
+Notification,ShaderCompileError,Shader Compile Error,셰이더 컴파일 오류
+Notification,ShaderHotReloaded,Shader Hot-Swapped,셰이더 핫 리로드 완료
+Notification,TextureHotReloaded,Texture Hot-Swapped,텍스처 핫 리로드 완료
+Notification,TextureNotLoaded,Texture Not Loaded,메모리에 로드된 텍스처가 없습니다
+Notification,TextureReloaded,Texture Reloaded,텍스처를 다시 불러왔습니다
+Notification,TotalCount,Total Notifications,전체 알림
+Particle,ActiveCount,Active Particles,활성 파티클 수
+Particle,BurstNow,Burst Now,즉시 버스트
+Particle,Pause,Pause,일시정지
+Particle,Play,Play,재생
+Particle,Reset,Reset,초기화
+Particle,Stop,Stop,정지
 PostProcess,Active,Active,활성
-PostProcess,Name,Name,이름
-PostProcess,Label,Label,라벨
-PostProcess,Value,Value,값
-PostProcess,Reset,Reset,초기화
-PostProcess,Unsupported,Unsupported,미지원
-EditorDocument,SaveAs,Save As...,다른 이름으로 저장...
-EditorDocument,Modified,Unsaved changes,미저장 변경 있음
-EditorDocument,SaveFailed,Could not save the document. Check the log.,문서를 저장하지 못했습니다. 로그를 확인하세요.
-EditorDocument,Title,Documents,문서
-EditorDocument,ConfirmTitle,Unsaved Changes,미저장 변경
-EditorDocument,UnsavedMessage,Save changes to {} before continuing?,계속하기 전에 {}의 변경 사항을 저장하시겠습니까?
-EditorDocument,Untitled,Untitled document,이름 없는 문서
-EditorDocument,Save,Save,저장
-EditorDocument,Discard,Discard,버리기
-EditorDocument,Processing,Preparing the document operation...,문서 작업을 준비하고 있습니다...
-EditorDocument,OperationFailed,Could not complete the document operation. Check the log.,문서 작업을 완료하지 못했습니다. 로그를 확인하세요.
-PostProcess,DeletePreset,Delete Preset,프리셋 삭제
-PostProcess,ConfirmDelete,Delete preset '{}'?,정말 '{}' 프리셋을 삭제하시겠습니까?
-PostProcess,ResetPipeline,Reset All to Default,기본값으로 전체 초기화
-EditorSettings,Title,Editor Settings,에디터 설정
-EditorSettings,ApplyFailed,Could not apply the settings. Check the log.,설정을 적용하지 못했습니다. 로그를 확인하세요.
-EditorSettings,SessionOnly,Applied for this session. File saving is unavailable.,현재 세션에 적용했습니다. 설정 파일을 저장할 수 없습니다.
-EditorSettings,SaveFailed,Applied for this session. Saving failed. Check the log.,현재 세션에 적용했습니다. 저장에 실패했습니다. 로그를 확인하세요.
-GraphicsSettings,Title,Graphics Settings,그래픽 설정
-GraphicsSettings,ApplyUIScale,Apply UI Scale,UI 배율 적용
-GraphicsSettings,InvalidWindowSize,Width must be 320-16384 and height 240-16384.,너비는 320-16384 높이는 240-16384 범위여야 합니다.
-GraphicsSettings,ReloadApplied,Reload Applied Values,현재 적용값 다시 불러오기
-EditorSettings,WindowRequestSubmitted,Window change request submitted. Completion has not been confirmed.,창 변경 요청을 전달했습니다. 아직 적용 완료를 확인하지 않았습니다.
-EditorSettings,WindowRequestFailed,Window change request processing failed. Check the log.,창 변경 요청 처리에 실패했습니다. 로그를 확인하세요.
-EditorSettings,WindowRequestRejected,Invalid window settings or another request is pending.,창 설정 값이 잘못되었거나 다른 요청을 처리 중입니다.
-EditorSettings,WindowApplied,Requested window state and output buffer size verified.,요청한 창 상태와 출력 버퍼 크기를 확인했습니다.
-EditorSettings,WindowApplying,Waiting for the window change...,창 변경이 완료되기를 기다리는 중입니다.
-EditorSettings,WindowApplyTimedOut,The requested window state or output buffer size was not observed in time.,제한 시간 안에 요청한 창 상태 또는 출력 버퍼 크기를 확인하지 못했습니다.
-EditorDocument,Saved,Saved: {},저장했습니다: {}
-EditorDocument,SaveUnavailable,The document cannot be saved right now.,현재 문서를 저장할 수 없습니다.
-EditorDocument,SceneOpened,Opened scene: {},씬을 열었습니다: {}
-EditorDocument,SceneCreated,Created a new scene.,새 씬을 생성했습니다.
-EditorDocument,SceneClosed,Closed the scene.,씬을 닫았습니다.
-EditorDocument,OperationBusy,Another document operation is in progress.,다른 문서 작업을 처리 중입니다.
-EditorDocument,SceneActionUnavailable,Stop play mode before changing the scene.,씬을 변경하려면 플레이 모드를 종료하세요.
-EditorSettings,WindowConfirmTitle,Keep Window Settings,창 설정 유지
-EditorSettings,WindowConfirmMessage,Keep these window settings? Reverting in {} seconds.,이 창 설정을 유지하시겠습니까? {}초 뒤 이전 설정으로 되돌립니다.
-EditorSettings,KeepWindowChange,Keep Changes,변경 유지
-EditorSettings,WindowConfirmed,Window settings confirmed and saved.,창 설정을 확정하고 저장했습니다.
-EditorSettings,WindowReverted,Restored the previous window settings.,이전 창 설정으로 복원했습니다.
-EditorSettings,WindowConfirmationTimedOut,No confirmation was received in time. Previous settings were restored.,확인 시간이 지나 이전 창 설정으로 복원했습니다.
-EditorSettings,WindowRestoreFailed,Could not restore the previous window settings. Automatic window capture is suspended.,이전 창 설정을 복원하지 못했습니다. 창 상태 자동 캡처를 중단했습니다.
-EditorSettings,WindowCaptureBlocked,Apply and confirm usable window settings to resume automatic window capture.,사용 가능한 창 설정을 다시 적용하고 유지 여부를 확정하면 자동 캡처가 재개됩니다.
+PostProcess,AppliedToScene,Post-processing settings applied to the scene. Save the scene to write them to disk.,후처리 설정을 씬에 반영했습니다. 씬을 저장하면 파일에 기록됩니다.
 PostProcess,ApplyFailed,Could not apply post-processing settings. Previous runtime settings were preserved.,후처리 설정을 적용하지 못했습니다. 이전 실행 설정을 유지합니다.
-PostProcess,RestoreFailed,Could not restore post-processing settings. Rendering continues without post-processing.,후처리 설정을 복원하지 못했습니다. 후처리 없이 렌더링합니다.
 PostProcess,ApplyToScene,Apply to Scene,씬에 적용
 PostProcess,ApplyToSceneHint,Apply panel edits to the scene before saving.,패널 편집값을 씬에 적용한 뒤 씬을 저장하세요.
-PostProcess,AppliedToScene,Post-processing settings applied to the scene. Save the scene to write them to disk.,후처리 설정을 씬에 반영했습니다. 씬을 저장하면 파일에 기록됩니다.
-PostProcess,SceneApplyFailed,Could not capture post-processing settings. The scene was not changed.,후처리 설정을 수집하지 못했습니다. 씬 데이터는 변경하지 않았습니다.
-PostProcess,NoActiveComponent,No enabled PostProcessComponent in the current scene.,현재 씬에 활성화된 후처리 컴포넌트가 없습니다.
-PostProcess,PreviewPreset,Preview Preset,미리보기 프리셋
-PostProcess,PresetLoadFailed,Could not load preset: {},프리셋을 불러오지 못했습니다: {}
-PostProcess,PresetDeleteFailed,Could not delete preset: {},프리셋을 삭제하지 못했습니다: {}
-PostProcess,PresetSaved,Saved preset: {},프리셋을 저장했습니다: {}
-PostProcess,PresetSaveFailed,Could not save preset: {},프리셋을 저장하지 못했습니다: {}
+PostProcess,Brightness,Brightness,밝기
+PostProcess,ColorAdjustments,Color Adjustments,색상 조정
+PostProcess,ConfirmDelete,Delete preset '{}'?,정말 '{}' 프리셋을 삭제하시겠습니까?
+PostProcess,Contrast,Contrast,대비
+PostProcess,DeletePreset,Delete Preset,프리셋 삭제
+PostProcess,Effects,Effects,효과
+PostProcess,EnterPresetName,Enter Preset Name:,프리셋 이름 입력:
+PostProcess,Intensity,Intensity,강도
 PostProcess,InvalidPresetName,Enter a file name without folder paths or invalid characters.,폴더 경로와 사용할 수 없는 문자를 제외한 파일 이름을 입력하세요.
+PostProcess,Label,Label,라벨
+PostProcess,MenuTitle,Post FX,후처리
+PostProcess,MoveEffectDown,Move Effect Down,효과를 아래로 이동
+PostProcess,MoveEffectUp,Move Effect Up,효과를 위로 이동
+PostProcess,Name,Name,이름
+PostProcess,NoActiveComponent,No enabled PostProcessComponent in the current scene.,현재 씬에 활성화된 후처리 컴포넌트가 없습니다.
+PostProcess,NoEffects,No post-processing effects registered.,등록된 후처리 효과가 없습니다.
+PostProcess,NoParameters,No configurable parameters.,설정 가능한 파라미터가 없습니다.
+PostProcess,NoViewport,No active viewport with post-processing pipeline found.,후처리 파이프라인이 있는 활성 뷰포트를 찾을 수 없습니다.
+PostProcess,OpenPanel,Open Post-Process Panel...,후처리 패널 열기...
+PostProcess,Preset,Preset,프리셋
+PostProcess,PresetDeleteFailed,Could not delete preset: {},프리셋을 삭제하지 못했습니다: {}
+PostProcess,PresetListFailed,Could not refresh the preset list. Previous entries were kept.,프리셋 목록을 새로고침하지 못했습니다. 이전 목록을 유지합니다.
+PostProcess,PresetLoadFailed,Could not load preset: {},프리셋을 불러오지 못했습니다: {}
+PostProcess,PresetSaveFailed,Could not save preset: {},프리셋을 저장하지 못했습니다: {}
+PostProcess,PresetSaved,Saved preset: {},프리셋을 저장했습니다: {}
+PostProcess,PreviewPreset,Preview Preset,미리보기 프리셋
+PostProcess,Reset,Reset,초기화
+PostProcess,ResetPipeline,Reset All to Default,기본값으로 전체 초기화
+PostProcess,RestoreFailed,Could not restore post-processing settings. Rendering continues without post-processing.,후처리 설정을 복원하지 못했습니다. 후처리 없이 렌더링합니다.
 PostProcess,RestoreSceneSettings,Restore Scene Settings,씬 설정으로 되돌리기
-PostProcess,SceneRestored,Preview restored to the current scene settings.,미리보기를 현재 씬 설정으로 되돌렸습니다.
 PostProcess,RestoreUnavailable,The scene or active post-processing target changed or is unavailable.,씬이나 활성 후처리 대상이 변경됐거나 존재하지 않아 복원하지 못했습니다.
+PostProcess,Roundness,Roundness,원형도
+PostProcess,Saturation,Saturation,채도
+PostProcess,SavePresetTitle,Save Preset,프리셋 저장
+PostProcess,SceneApplyFailed,Could not capture post-processing settings. The scene was not changed.,후처리 설정을 수집하지 못했습니다. 씬 데이터는 변경하지 않았습니다.
+PostProcess,SceneRestored,Preview restored to the current scene settings.,미리보기를 현재 씬 설정으로 되돌렸습니다.
+PostProcess,SceneSourceDefault,Scene settings: Defaults,씬 설정: 기본값
 PostProcess,SceneSourceInline,Scene settings: Custom values,씬 설정: 직접 편집값
 PostProcess,SceneSourcePreset,Scene settings: Preset '{}',씬 설정: 프리셋 '{}'
-PostProcess,SceneSourceDefault,Scene settings: Defaults,씬 설정: 기본값
-PostProcess,PresetListFailed,Could not refresh the preset list. Previous entries were kept.,프리셋 목록을 새로고침하지 못했습니다. 이전 목록을 유지합니다.
-GraphicsSettings,VSync,VSync,VSync
-GraphicsSettings,ApplyVSync,Apply and Save VSync,VSync 적용 및 저장
-GraphicsSettings,VSyncHint,Applies to the shared editor and PIE output. The FPS limit is separate.,에디터와 PIE가 공유하는 화면 출력에 적용됩니다. 목표 FPS 제한은 별도입니다.
-GraphicsSettings,VSyncUnsupported,The selected VSync setting is not supported.,선택한 VSync 설정을 지원하지 않습니다.
-GraphicsSettings,VSyncPending,Applying VSync...,VSync를 적용하고 있습니다...
-GraphicsSettings,VSyncRequestRejected,The VSync change cannot be requested right now.,현재 VSync 변경을 요청할 수 없습니다.
-GraphicsSettings,VSyncSaved,VSync applied and saved.,VSync를 적용하고 저장했습니다.
-GraphicsSettings,VSyncPreferenceMismatch,The current output differs from the VSync preference.,현재 출력 상태가 VSync 설정값과 다릅니다.
-GraphicsSettings,ViewportTitle,Viewport Resolution,뷰포트 해상도
-GraphicsSettings,TargetViewport,Target Viewport,대상 뷰포트
-GraphicsSettings,NoViewport,No supported viewport is available.,설정할 수 있는 뷰포트가 없습니다.
-GraphicsSettings,ViewportModeValue,Resolution mode: {},해상도 모드: {}
-GraphicsSettings,ViewportPreset,Preset,프리셋
-GraphicsSettings,ViewportCustom,Custom,사용자 지정
-GraphicsSettings,ViewportReferenceSize,Reference resolution: {} x {},기준 해상도: {} x {}
-GraphicsSettings,ViewportAspectValue,Aspect ratio: {},종횡비: {}
-Viewport,RenderTargetsUnavailable,Render targets are unavailable. Change the resolution to retry.,렌더 타깃을 준비하지 못했습니다. 해상도를 변경해 다시 시도하세요.
-GraphicsSettings,ViewportApplied,Current Settings,현재 적용값
-GraphicsSettings,ViewportDraft,Draft Settings,편집값
-GraphicsSettings,ViewportMode,Resolution Mode,해상도 모드
-GraphicsSettings,ApplyViewport,Apply and Save Viewport,뷰포트 적용 및 저장
-GraphicsSettings,ReloadViewport,Reload Viewport Values,뷰포트 편집값 되돌리기
-GraphicsSettings,ViewportPending,Applying viewport settings...,뷰포트 설정을 적용하고 있습니다...
-GraphicsSettings,ViewportSaved,Viewport settings applied and saved.,뷰포트 설정을 적용하고 저장했습니다.
-GraphicsSettings,ViewportRequestRejected,The viewport change cannot be requested right now.,현재 뷰포트 변경을 요청할 수 없습니다.
-GraphicsSettings,ViewportRestoreFailed,Viewport render targets could not be restored.,뷰포트 렌더 타깃을 복구하지 못했습니다.
-EditorSettings,PreferencesStartupFallback,User preferences could not be restored. Started with defaults; preference saving is blocked.,개인 설정을 복원하지 못해 기본값으로 시작했습니다. 개인 설정 파일 저장이 차단됩니다.
-EditorSettings,WorkspaceStartupFallback,The workspace could not be restored. Started with defaults; workspace saving is blocked.,작업 공간을 복원하지 못해 기본값으로 시작했습니다. 작업 공간 파일 저장이 차단됩니다.
-EditorSettings,PreferencesSaveBlocked,User preference saving is blocked. Changes apply only to this session.,개인 설정 파일 저장이 차단돼 있습니다. 변경값은 현재 실행에만 적용됩니다.
-EditorSettings,WorkspaceSaveBlocked,Workspace saving is blocked. Changes apply only to this session.,작업 공간 파일 저장이 차단돼 있습니다. 변경값은 현재 실행에만 적용됩니다.
-EditorSettings,SettingsFilePath,Settings file: {},설정 파일: {}
-EditorSettings,PathUnavailable,Storage path unavailable,저장 경로를 사용할 수 없습니다
-EditorSettings,SettingsRecoveryHint,Close the editor and inspect the file or path. Back up existing files before making changes and restart after recovery.,에디터를 종료한 뒤 파일과 경로를 확인하세요. 기존 파일은 수정 전에 백업하고 복구 후 다시 실행하세요.
-EditorCommon,OpenWithDefaultProgram,Open with Default Program,기본 프로그램으로 열기
-EditorSettings,Saved,Settings applied and saved.,설정을 적용하고 저장했습니다.
-UI,SAVE_AS_PREFAB,Save As Prefab...,프리팹으로 저장...
-ContentBrowser,InstantiatePrefab,Instantiate in Scene,씬에 인스턴스화
-Notification,PrefabSaved,Prefab saved: {},프리팹 저장 완료: {}
-Notification,PrefabSaveFailed,Failed to save prefab: {},프리팹 저장 실패: {}
-Notification,PrefabInstantiated,Prefab instantiated: {},프리팹 인스턴스화 완료: {}
-Notification,PrefabInstantiateFailed,Failed to instantiate prefab: {},프리팹 인스턴스화 실패: {}
-EditorCommon,Copy,Copy,복사
-EditorCommon,Paste,Paste,붙여넣기
-EditorCommon,PasteAsChild,Paste As Child,자식으로 붙여넣기
-Notification,EntitiesCopied,Copied {} entities,엔티티 {}개 복사됨
-Notification,EntitiesPasted,Pasted {} entities,엔티티 {}개 붙여넣기 완료
-Notification,EntitiesPasteFailed,Failed to paste entities,엔티티 붙여넣기 실패
-ResourceEditor,PrefabTitle,Prefab Editor,프리팹 에디터
-ContentBrowser,EditPrefab,Edit Prefab,프리팹 편집
+PostProcess,SelectEffectPrompt,Select an effect from the pipeline list to edit parameters.,파라미터를 편집하려면 파이프라인 목록에서 효과를 선택하십시오.
+PostProcess,SelectPresetPrompt,Select Preset...,프리셋 선택...
+PostProcess,Smoothness,Smoothness,부드러움
+PostProcess,ToneMapping,Tone Mapping (ACES),톤 매핑 (ACES)
+PostProcess,Unsupported,Unsupported,미지원
+PostProcess,Value,Value,값
+PostProcess,Viewport,Viewport,뷰포트
+PostProcess,Vignette,Vignette,비네팅
+Prefab,ApplyAll,Apply All,원본에 모두 적용 (Apply All)
+Prefab,ChildOf,(Child of {}),({}의 자식)
+Prefab,MissingAsset,Missing Prefab,프리팹을 찾을 수 없음
+Prefab,Open,Open,열기
+Prefab,Overrides,Overrides,오버라이드
+Prefab,OverridesHeader,Prefab Overrides Management,프리팹 오버라이드 관리
+Prefab,RevertAll,Revert All,원본 상태로 되돌리기 (Revert All)
+Prefab,SaveAs,Save As Prefab...,프리팹으로 저장...
+Prefab,Select,Select,선택
+Prefab,Unpack,Unpack Prefab,프리팹 연결 해제 (Unpack)
+PrefabEditor,CloseConfirmTitle,Unsaved Prefab Changes,저장되지 않은 프리팹 변경 사항
+PrefabEditor,ExitConfirmTitle,Exit Prefab Mode,프리팹 편집 모드 종료
 PrefabEditor,Hierarchy,Prefab Hierarchy,프리팹 계층 구조
 PrefabEditor,Inspector,Prefab Inspector,프리팹 인스펙터
 PrefabEditor,NoEntitySelected,No entity selected.,선택된 엔티티가 없습니다.
 PrefabEditor,NoPrefabLoaded,No prefab loaded.,로드된 프리팹이 없습니다.
+PrefabEditor,Revert,Revert to Saved,변경 취소 및 다시 로드
 PrefabEditor,Save,Save,저장
 PrefabEditor,SaveAs,Save As...,다른 이름으로 저장...
-PrefabEditor,Revert,Revert to Saved,변경 취소 및 다시 로드
 PrefabEditor,UnsavedChangesPrompt,Prefab has unsaved changes. Do you want to save them?,프리팹에 저장되지 않은 변경사항이 있습니다. 저장하시겠습니까?
-FileDialog,PrefabFiles,Prefab Files (*.bamprefab.json),프리팹 파일 (*.bamprefab.json)
-FileDialog,JsonFiles,JSON Files (*.json),JSON 파일 (*.json)
-FileDialog,ImageFiles,Image Files,이미지 파일
-FileDialog,PngFiles,PNG Images (*.png),PNG 이미지 (*.png)
 PrefabMode,BackToScene,Back to Scene,씬으로 복귀
 PrefabMode,Title,Prefab Mode,프리팹 격리 편집 모드
-Notification,EnterPrefabMode,Entered Prefab Mode: {},프리팹 편집 모드 진입: {}
-Prefab,Open,Open,열기
-Prefab,Select,Select,선택
-Prefab,Overrides,Overrides,오버라이드
-Prefab,OverridesHeader,Prefab Overrides Management,프리팹 오버라이드 관리
-Prefab,ApplyAll,Apply All,원본에 모두 적용 (Apply All)
-Prefab,RevertAll,Revert All,원본 상태로 되돌리기 (Revert All)
-Prefab,Unpack,Unpack Prefab,프리팹 연결 해제 (Unpack)
-Notification,PrefabApplied,Prefab changes applied: {},프리팹 원본에 적용 완료: {}
-Notification,PrefabReverted,Prefab reverted to original asset.,프리팹을 원본 상태로 복원했습니다.
-Notification,PrefabUnpacked,Prefab unpacked successfully.,프리팹 연결을 해제했습니다.
-UI,HISTORY_UNPACK_PREFAB,Unpack Prefab,프리팹 연결 해제
-EditorCommon,Type,Type,타입
-GraphPanel,WireElectronic,Wire: Electronic,와이어: 혼합
-GraphPanel,WireStraight,Wire: All Straight,와이어: 모두 직선
-GraphPanel,WireCurved,Wire: All Curved,와이어: 모두 곡선
-GraphPanel,WireElectronicHint,Execution wires are straight and data wires are curved. Click to switch styles.,실행선은 직선이고 데이터선은 곡선입니다. 클릭하면 표시 방식을 전환합니다.
-GraphPanel,WireStraightHint,All execution and data wires are straight. Click to switch styles.,실행선과 데이터선을 모두 직선으로 표시합니다. 클릭하면 표시 방식을 전환합니다.
-GraphPanel,WireCurvedHint,All wires use Bezier curves. Click to switch styles.,모든 연결선을 베지어 곡선으로 표시합니다. 클릭하면 표시 방식을 전환합니다.
-GraphPanel,Variables,Variables,변수
-GraphPanel,NoVariables,No variables defined.,정의된 변수가 없습니다.
-GraphPanel,AddVariableGet,+Get,+읽기
-GraphPanel,AddVariableSet,+Set,+쓰기
-GraphPanel,AddVariable,Add Variable,변수 추가
-GraphPanel,CreateVariable,Create Variable,변수 생성
-GraphPanel,DebugNone,Debug: [None],디버그: [없음]
-GraphPanel,DebugNamedEntity,Debug: {} (#{}),디버그: {} (#{})
-GraphPanel,DebugEntity,Debug: Entity #{},디버그: 엔티티 #{}
-GraphPanel,EntityLabel,Entity #{},엔티티 #{}
-GraphPanel,DebugEntityHint,Select an active actor to visualize live execution wire flow and watch pin values.,실행 중인 액터를 선택하면 연결선의 실행 흐름과 핀 값을 관찰할 수 있습니다.
-GraphPanel,CreateCommentBox,Create Comment Box (Group),코멘트 상자 생성 (그룹)
-GraphPanel,AddReroute,Add Reroute Node,리루트 노드 추가
-GraphPanel,BreakLink,Break Link,연결 해제
-GraphPanel,BreakAllPinLinks,Break All Pin Links,모든 핀 연결 해제
-GraphPanel,RemoveBreakpoint,Remove Breakpoint,중단점 제거
-GraphPanel,ToggleBreakpoint,Toggle Breakpoint,중단점 설정/해제
-GraphPanel,Alignment,Alignment,정렬
-GraphPanel,AlignTop,Align Top,위쪽 정렬
-GraphPanel,AlignBottom,Align Bottom,아래쪽 정렬
-GraphPanel,AlignLeft,Align Left,왼쪽 정렬
-GraphPanel,AlignRight,Align Right,오른쪽 정렬
-GraphPanel,DistributeHorizontal,Distribute Horizontally,가로 간격 균등 배치
-GraphPanel,DistributeVertical,Distribute Vertically,세로 간격 균등 배치
-GraphPanel,PinSummary,Pin: {} ({}),핀: {} ({})
-GraphPanel,BreakPinLinks,Break Links to {},{} 핀의 연결 해제
-GraphPanel,PromoteVariable,Promote to Variable,변수로 승격
-ContentBrowser,ScopeAll,Scope: All,범위: 전체
-ContentBrowser,ScopeCurrent,Scope: Current,범위: 현재 폴더
-ContentBrowser,ScopeAllHint,Searching all resource folders (Recursive),모든 리소스 폴더와 하위 폴더를 검색합니다.
-ContentBrowser,ScopeCurrentHint,Searching current directory only,현재 폴더만 검색합니다.
-ResourcePicker,LoadedInMemory,Loaded in Memory:,메모리에 로드된 리소스:
-ResourcePicker,ProjectFiles,Project Files (On Disk):,프로젝트 파일 (디스크):
-ResourcePicker,DiskFile,{} [Disk],{} [디스크]
-Inspector,ValuePreviewUnavailable,Value preview unavailable,값 미리보기를 사용할 수 없습니다
-Shortcuts,Conflict,Conflict: {} is already assigned to {},단축키 충돌: {}은(는) 이미 {}에 지정되어 있습니다
-History,Title,History,편집 이력
-History,ActionShortcut,{} ({}),{} ({})
-ResourcePicker,SearchHint,Search resources...,리소스 검색...
-ResourcePicker,ThumbnailSizeHint,Thumbnail Size ({}px ~ {}px),썸네일 크기 ({}px ~ {}px)
-History,Clear,Clear History,이력 비우기
-History,Cleared,Command history cleared.,명령 이력을 비웠습니다.
-History,UnsavedChanges,[Unsaved Changes],[저장되지 않은 변경 사항]
-History,AllChangesSaved,[All Changes Saved],[모든 변경 사항 저장됨]
-History,Status,Status,상태
-History,CommandAction,Command Action,명령
-History,SavedColumn,Saved,저장 여부
-History,Current,>> Current,>> 현재
-History,InitialState,[Initial State],[초기 상태]
-History,SavedMarker,[Saved],[저장됨]
-Metrics,RenderTimes,Render Times:,렌더링 시간:
-Metrics,TotalCPUSubmit,Total CPU Submit: {:.2f} ms,CPU 전체 제출 시간: {:.2f} ms
-Metrics,TotalGPUExecute,Total GPU Execute: {:.2f} ms,GPU 전체 실행 시간: {:.2f} ms
-Metrics,RenderPass,Render Pass,렌더 패스
-Metrics,CPUTime,CPU (ms),CPU (ms)
-Metrics,GPUTime,GPU (ms),GPU (ms)
-Metrics,VRAMDescriptors,VRAM & Descriptors:,VRAM 및 디스크립터:
-Metrics,DedicatedVRAM,Dedicated VRAM: {} MB,전용 VRAM: {} MB
-Metrics,AllocatedDescriptors,Allocated Descriptors: {},할당된 디스크립터: {}
-Metrics,HardwareCapabilities,Hardware Capabilities:,하드웨어 지원 기능:
-Metrics,ComputeShader,Compute Shader: {},컴퓨트 셰이더: {}
-Metrics,IndirectDraw,Indirect Draw: {},간접 그리기: {}
-Metrics,MeshShader,Mesh Shader: {},메시 셰이더: {}
-Metrics,DXRRaytracing,DXR Raytracing: {},DXR 레이 트레이싱: {}
-Metrics,DescriptorIndexing,Descriptor Indexing (Bindless): {},디스크립터 인덱싱 (바인드리스): {}
-Metrics,Supported,Supported,지원
-Metrics,NotSupported,Not Supported,미지원
-Metrics,SupportedTier1Plus,Supported (Tier 1+),지원 (Tier 1 이상)
-Metrics,SupportedTier1_0Plus,Supported (Tier 1.0+),지원 (Tier 1.0 이상)
-Metrics,SupportedTier3,Supported (Tier 3),지원 (Tier 3)
-Metrics,Tier1Or2,Tier 1/2,Tier 1/2
-MaterialEditor,OverriddenInInstance,Overridden in Instance,인스턴스에서 재정의됨
-MaterialEditor,BaseBinding,{} (Base),{} (원본)
-MaterialEditor,InheritedFromBase,Inherited from Base Material,원본 머티리얼에서 상속됨
-MaterialEditor,AddBindingAtSlot,{} (Slot {}),{} (슬롯 {})
-MaterialEditor,ColorType,{} (Color),{} (색상)
-PrefabEditor,CloseConfirmTitle,Unsaved Prefab Changes,저장되지 않은 프리팹 변경 사항
-PrefabEditor,ExitConfirmTitle,Exit Prefab Mode,프리팹 편집 모드 종료
-QtEditor,ViewportPending,Engine viewport integration pending,엔진 뷰포트 연결 대기 중
+PreviewViewport,Focus,Focus Target,타깃 포커스
+PreviewViewport,GridToggle,Toggle Grid,그리드 표시 전환
+PreviewViewport,PlayMotion,Play Motion,모션 재생
+PreviewViewport,ShowBindPose,Show Bind Pose,바인드 포즈 표시
 QtEditor,ScenePending,Scene binding pending,씬 연결 대기 중
 QtEditor,SelectionPending,Selection binding pending,선택 대상 연결 대기 중
-History,Unnamed,Unnamed Command,이름 없는 명령
-Prefab,MissingAsset,Missing Prefab,프리팹을 찾을 수 없음
-Prefab,ChildOf,(Child of {}),({}의 자식)
-Hierarchy,DropPrefabRoot,Drop here to add a prefab at the scene root,여기에 놓으면 씬 루트에 프리팹을 추가합니다
-GraphPanel,MenuFile,File,문서
-GraphPanel,MenuEdit,Edit,편집
-GraphPanel,MenuView,View,보기
-GraphPanel,MenuMore,More...,더 보기...
-GraphPanel,WireStyle,Wire Style,와이어 스타일
-GraphPanel,WireStyleElectronic,Electronic (Hybrid),전자 노드 (하이브리드)
-GraphPanel,WireStyleStraight,All Straight,모두 직선
-GraphPanel,WireStyleCurved,All Curved,모두 곡선
-GraphPanel,WireStyleTooltip,Select wire connection rendering style,와이어 연결 렌더링 스타일을 선택합니다.
-GraphPanel,MenuMoreTooltip,Additional actions and overflow tools,추가 작업 및 오버플로우 도구
-GraphPanel,PreviewHeader,Preview,실행 미리보기
-GraphPanel,PreviewHint,Local execution preview inside panel. Does not affect scene entities.,패널 내부 미리보기 실행입니다. 씬 엔티티에 영향을 주지 않습니다.
-GraphPanel,PieHeader,PIE Live Watch,PIE 관찰
-GraphPanel,PieTargetEntity,Target Entity,관찰 대상 엔티티
-GraphPanel,PieNotRunning,PIE not running,PIE 미실행
-GraphPanel,PieNoBinding,No entity has GraphBindingComponent.,GraphBindingComponent를 가진 엔티티가 없습니다.
-GraphPanel,PieObserving,Observing: {},관찰 중: {}
-GraphPanel,PieEntitySelectHint,Select an active entity in the scene to observe its live execution wire pulse and values.,씬에서 활성 엔티티를 선택하여 실시간 실행 와이어 흐름과 핀 값을 관찰합니다.
-GraphPanel,MenuBuild,Build,빌드
-GraphPanel,MenuMaterial,Material,머티리얼
-GraphPanel,BuildTarget,Target: {},대상: {}
-GraphPanel,CompileAll,Compile All,모두 컴파일
-GraphPanel,ShaderCompileAndPreview,Compile & Preview,컴파일 및 미리보기
-ContentBrowser,NoSearchResults,No search results found,검색 결과가 없습니다
-ContentBrowser,ClearSearch,Clear,지우기
-ContentBrowser,EmptyFolder,Folder is empty,폴더가 비어 있습니다
-Notification,OpenExternalFailed,Failed to open file with default program: {},기본 프로그램으로 파일을 열지 못했습니다: {}
-Animator,NoClipAssigned,No animation clip assigned.,할당된 애니메이션 클립이 없습니다.
-Animator,Timeline,Timeline,타임라인
-Animator,Previewing,Previewing,미리보기 재생 중
-Animator,Stopped,Stopped,정지됨
-Animator,Preview,Preview,미리보기
-Animator,Pause,Pause,일시정지
-Animator,Stop,Stop,정지
-Animator,Reset,Reset,초기화
-Animator,MissingRendererWarning,Requires SkinnedMeshRendererComponent with Skeleton to animate.,스켈레톤이 포함된 SkinnedMeshRendererComponent가 필요합니다.
-Shortcuts,CategoryPIE,Play & Simulation,재생 및 시뮬레이션
-Shortcuts,CategoryBuild,Build & Hot Reload,빌드 및 핫 리로드
-Shortcuts,CategoryViewport,Viewport,뷰포트
-Shortcuts,CategoryGraph,Graph Editor,그래프 에디터
-Action,File.SaveSceneAs,Save Scene As...,다른 이름으로 씬 저장...
-Action,File.CloseScene,Close Scene,씬 닫기
-Action,File.ImportAsset,Import Asset...,에셋 가져오기...
-Action,File.Exit,Exit,에디터 종료
-Action,Edit.Duplicate,Duplicate,복제
-Action,Edit.Delete,Delete,삭제
-Action,Edit.Deselect,Deselect All,선택 해제
-Action,PIE.Play,Play,재생
-Action,PIE.PauseResume,Pause / Resume,일시정지 / 재개
-Action,PIE.Stop,Stop,정지
-Action,Build.CompileModule,Compile Game Module,게임 모듈 컴파일
-Action,Build.ReloadModule,Reload Game Module,게임 모듈 핫 리로드
-Action,Build.ReloadShaders,Recompile Shaders,셰이더 전체 재컴파일
-Action,Viewport.GizmoSelect,Select Mode,선택 모드
-Action,Viewport.GizmoTranslate,Translate,이동 기즈모
-Action,Viewport.GizmoRotate,Rotate,회전 기즈모
-Action,Viewport.GizmoScale,Scale,스케일 기즈모
-Action,Viewport.ToggleCoord,Toggle Local / World,로컬 / 월드 좌표계 전환
-Action,Viewport.ToggleSnap,Toggle Grid Snap,그리드 스냅 토글
-Action,Viewport.Focus,Focus Target,대상 포커스
-Action,Viewport.ToggleLock,Toggle Selection Lock,선택 잠금 토글
-Action,Viewport.ToggleGrid,Toggle Grid,그리드 표시 토글
-Action,Graph.AlignTop,Align Top,위쪽 정렬
-Action,Graph.AlignBottom,Align Bottom,아래쪽 정렬
-Action,Graph.AlignLeft,Align Left,왼쪽 정렬
-Action,Graph.AlignRight,Align Right,오른쪽 정렬
-Action,Graph.DistributeHoriz,Distribute Horizontally,가로 균등 분배
-Action,Graph.DistributeVert,Distribute Vertically,세로 균등 분배
-Action,Graph.Duplicate,Duplicate Nodes,노드 복제
-Action,Graph.CreateComment,Create Comment Box,코멘트 박스 생성
-Action,Graph.Delete,Delete Elements,선택 항목 삭제
-Action,Graph.ToggleBreakpoint,Toggle Breakpoint,중단점 설정/해제
-EditorCommon,On,ON,켜짐
-EditorCommon,Off,OFF,꺼짐
-EditorCommon,Open,Open,열기
-EditorCommon,New,New,새로 만들기
-EditorCommon,File,File,파일
-EditorCommon,Edit,Edit,편집
-EditorCommon,SaveAs,Save As...,다른 이름으로 저장...
-EditorMenu,File,File,파일
-Notification,HistoryTitle,Notification History,알림 히스토리
-Notification,TotalCount,Total Notifications,전체 알림
-Notification,NoHistory,No notification history.,지나간 알림이 없습니다.
-Notification,HistoryTooltip,View notification history,알림 히스토리 확인
-EditorCommon,Clear,Clear,지우기
-Settings,Title,Settings,설정
-Settings,CategoryGeneral,General,일반
-Settings,CategoryGraphic,Graphic & Display,그래픽 및 화면
-Settings,CategoryEditor,Editor Environment,에디터 환경
-Settings,CategoryWorkspace,Workspace,작업 공간
-Settings,CategoryShortcuts,Shortcuts,단축키
-Settings,CategoryProjectSettings,Project Settings,프로젝트 설정
-Settings,ResetDefaults,Reset to Defaults,기본값 복원
-EditorCommon,Apply,Apply,적용
-FileDialog,AnimatorFiles,Animator Controller Files (*.animator),애니메이터 컨트롤러 파일 (*.animator)
-Settings,GizmoSnapping,Gizmo Snapping,기즈모 스냅
-Settings,CameraMovement,Camera Movement,카메라 조작
-Settings,Logging,Logging,로깅
-Settings,GroupSystem,System & Display,시스템 및 화면
-Settings,GroupEditor,Editor & Workspace,에디터 및 작업 공간
-Settings,GroupProject,Project,프로젝트
-Settings,SectionLanguage,Language & Localization,언어 및 로캘
-Settings,SectionAppearance,Appearance & Scaling,디스플레이 배율
-Settings,SectionDisplayResolution,Window & Resolution,창 및 디스플레이
-Settings,SectionFrameSync,Framerate & Sync,프레임 레이트 및 동기화
-Settings,SectionLayoutPresets,Layout & Presets,레이아웃 및 프리셋
-Settings,SectionViewportResolution,Viewport Resolution,뷰포트 해상도
-Settings,SectionContentBrowser,Content Browser,콘텐츠 브라우저
-Settings,SectionDockingLayout,Docking & Layout,도킹 및 레이아웃
-Settings,ThumbnailSize,Thumbnail Size,썸네일 크기
-Settings,ProjectMetadata,Project Metadata,프로젝트 메타데이터
-Settings,ProjectName,Project Name,프로젝트 이름
-Settings,StartupScene,Startup Scene,시작 씬
+QtEditor,ViewportPending,Engine viewport integration pending,엔진 뷰포트 연결 대기 중
+ResourceEditor,InstantiateModel,Add Model to Scene,모델을 씬에 배치
+ResourceEditor,KeyFrames,Key Frames,키 프레임 목록
+ResourceEditor,LoadResource,Load Resource,리소스 로드
+ResourceEditor,MaterialTitle,Material Editor,머티리얼 편집기
+ResourceEditor,ModelTitle,Model Editor,모델 편집기
+ResourceEditor,PrefabTitle,Prefab Editor,프리팹 에디터
+ResourceEditor,ShaderTitle,Shader Editor,셰이더 편집기
+ResourceEditor,SpriteAnimationTitle,Sprite Animation Editor,스프라이트 애니메이션 에디터
+ResourceEditor,SpriteTitle,Sprite Editor,스프라이트 편집기
+ResourceEditor,Target,Target: {},대상: {}
+ResourceEditor,TextureTitle,Texture Editor,텍스처 편집기
+ResourceInspector,Auto,Auto,자동 갱신
+ResourceInspector,CopyKey,Copy Key,키 복사
+ResourceInspector,EmptyKey,(empty key),(빈 키)
+ResourceInspector,Key,Key,키
+ResourceInspector,KeyCaption,Key:,키:
+ResourceInspector,NoPath,(no path recorded),(기록된 경로 없음)
+ResourceInspector,None,(none),(없음)
+ResourceInspector,Path,Path,경로
+ResourceInspector,PathCaption,Path:,경로:
+ResourceInspector,RefreshHint,Refresh every 0.5 seconds,0.5초마다 갱신합니다
+ResourceInspector,Refs,Refs,참조 수
+ResourceInspector,Search,"Search type, key or path...",종류·키·경로 검색...
+ResourceInspector,Showing,Showing {} / {} registered resources,등록된 리소스 {} / {}개 표시
+ResourceInspector,Slot,Slot: {} / Generation: {},슬롯: {} / 세대: {}
+ResourceInspector,Title,Resource Manager,리소스 매니저
+ResourceInspector,Type,Type,종류
+ResourcePicker,Clear,Clear,연결 해제
+ResourcePicker,ClearHint,Unbind / Clear current resource,현재 리소스 연결 해제
+ResourcePicker,DiskFile,{} [Disk],{} [디스크]
+ResourcePicker,LoadedInMemory,Loaded in Memory:,메모리에 로드된 리소스:
+ResourcePicker,None,None (drop a resource),없음 (리소스를 놓으세요)
+ResourcePicker,ProjectFiles,Project Files (On Disk):,프로젝트 파일 (디스크):
+ResourcePicker,Rejected,Resource type mismatch or load failed.,리소스 종류가 다르거나 불러오지 못했습니다.
+ResourcePicker,SearchHint,Search resources...,리소스 검색...
+ResourcePicker,ThumbnailSizeHint,Thumbnail Size ({}px ~ {}px),썸네일 크기 ({}px ~ {}px)
+ResourceType,Animation,Animation,애니메이션
+ResourceType,AudioClip,AudioClip,오디오 클립
+ResourceType,Material,Material,머티리얼
+ResourceType,MaterialInstance,MaterialInstance,머티리얼 인스턴스
+ResourceType,Mesh,Mesh,메시
+ResourceType,Model,Model,모델
+ResourceType,Prefab,Prefab,프리팹
+ResourceType,Save,Save,저장 데이터
+ResourceType,Scene,Scene,씬
+ResourceType,Script,Script,스크립트
+ResourceType,Shader,Shader,셰이더
+ResourceType,Skeleton,Skeleton,스켈레톤
+ResourceType,Sprite,Sprite,스프라이트
+ResourceType,Texture,Texture,텍스처
+ResourceType,Unknown,Unknown,알 수 없음
 Settings,AssetDirectory,Asset Directory,에셋 디렉터리
-Settings,CustomFont,Custom Font,사용자 지정 폰트
-Settings,FontBrowse,Browse...,찾아보기...
-Settings,FontReset,Reset Font,기본 폰트로 복원
-Settings,ProjectRoot,Project Root,프로젝트 루트
-Settings,ShaderDirectory,Shader Source Directory,셰이더 소스 경로
-Settings,SectionAutoSave,Auto-save,자동 저장
 Settings,AutoSaveEnabled,Enable Auto-save,자동 저장 활성화
 Settings,AutoSaveInterval,Interval (Minutes),저장 주기 (분)
-Settings,Theme,Theme Preset,테마 프리셋
-Settings,CameraFOV,Field of View (FOV),카메라 화각 (FOV)
 Settings,BrowseFolder,Browse...,폴더 찾아보기...
 Settings,BrowseScene,Browse...,씬 찾아보기...
-Settings,SectionFont,Font & Typography,폰트 및 타이포그래피
-Settings,FontSize,Font Size,폰트 크기
-Settings,CategoryTheme,Theme & Style,테마 및 스타일
-Settings,ThemeBamEngine,BamEngine Dark (Default),BamEngine 다크 (기본)
-Settings,StyleEditor,Style Customizer,스타일 상세 편집
-Settings,ResetCustomStyle,Reset to Default Style,기본 스타일로 복원
-Settings,SaveCustomStyle,Save Custom Style,커스텀 스타일 저장
-Settings,ThemeCustom,Custom (User Saved),사용자 정의 (Custom)
-Settings,StyleSavedNotification,Custom style saved successfully.,커스텀 스타일이 성공적으로 저장되었습니다.
-Console,ColTimeLevel,Time / Level,시간 / 레벨
-Console,ColCategory,Category,카테고리
-Console,ColMessage,Message,메시지
-Console,ColSource,Source,소스
-Settings,Btn.ResetDefaults,Reset to Defaults,기본값으로 복원
-Settings,Btn.Discard,Discard Changes,변경 취소
 Settings,Btn.Apply,Apply,적용
-Viewport,RealtimeTooltip,Toggle Realtime Preview,실시간 프리뷰 토글
-Action,Viewport.ToggleRealtime,Toggle Realtime,실시간 프리뷰 토글
-Viewport,Realtime,Realtime,실시간
-Timeline,PanelTitle,Animation Timeline,애니메이션 타임라인
-Timeline,PreviewPlaceholder,3D Viewport Preview Area,3D 뷰포트 프리뷰 영역
-Timeline,TrackTitle,Timeline Tracks & Notifies,타임라인 트랙 및 노티파이
-Timeline,FirstFrame,First Frame,첫 프레임
-Timeline,PrevFrame,Previous Frame (Step Back),이전 프레임
-Timeline,NextFrame,Next Frame (Step Forward),다음 프레임
-Timeline,LastFrame,Last Frame,마지막 프레임
-Timeline,Loop,Toggle Loop,루프 반복 토글
-Timeline,Duration,Clip Duration (sec),클립 전체 길이 (초)
-Timeline,PlaybackSpeed,Playback Speed,재생 배속
-Timeline,AnimTrack,Anim Clip,애니메이션
-Timeline,NotifyTrack,FX / Notifies,이펙트/노티파이
-Timeline,SyncTooltip,Sync with selected entity in Scene,씬에서 선택된 엔티티와 동기화
-Timeline,AddParticleNotify,Add Particle Notify (FX),파티클 이펙트 노티파이 추가
-Timeline,AddSoundNotify,Add Sound Notify,사운드 노티파이 추가
-Timeline,AddEventNotify,Add Gameplay Event,게임플레이 이벤트 노티파이 추가
-Timeline,NotifyInspector,Notify Properties,노티파이 속성
-Timeline,SocketBone,Socket Bone,부착 본(Bone)
-Timeline,OffsetPos,Offset Position,오프셋 위치
-Timeline,ParticleColor,Particle Color,파티클 색상
-Timeline,BurstCount,Burst Count,방출 입자 수
-Timeline,TriggerTest,Trigger Test,즉시 발동 테스트
-Timeline,DeleteNotify,Delete Marker,노티파이 삭제
-Timeline,SaveTimeline,Save Timeline Asset,타임라인 에셋 저장
-Timeline,SaveAsTimeline,Save Timeline As...,다른 이름으로 저장...
-Timeline,OpenTimeline,Open Timeline Asset,타임라인 에셋 열기
-Timeline,SaveSuccess,Timeline asset saved successfully.,타임라인 에셋이 성공적으로 저장되었습니다.
-Timeline,LoadSuccess,Timeline asset loaded successfully.,타임라인 에셋을 성공적으로 불러왔습니다.
-PreviewViewport,GridToggle,Toggle Grid,그리드 표시 전환
-PreviewViewport,Focus,Focus Target,타깃 포커스
-PreviewViewport,ShowBindPose,Show Bind Pose,바인드 포즈 표시
-PreviewViewport,PlayMotion,Play Motion,모션 재생
-AnimatorGraph,BlendTree1D,Blend Tree 1D,1D 블렌드 트리
-Hierarchy,PrefabRootDeleteBlocked,Root entity of a prefab instance cannot be deleted directly.,프리팹 인스턴스의 루트 엔티티는 직접 삭제할 수 없습니다.
-Timeline,CameraShotName,Shot Name,샷 이름
-Timeline,CameraShotStartTime,Start Time (s),시작 시간 (초)
-Timeline,CameraShotDuration,Duration (s),지속 시간 (초)
-Timeline,CameraShotTargetFOV,Target FOV,목표 시야각
-Timeline,CameraShotShakeIntensity,Shake Intensity,흔들림 강도
-Timeline,CameraShotFocusBone,Focus Bone,포커스 본
-Timeline,RootOrNone,(Root / None),(루트 / 없음)
-Timeline,NotifyTypeParticle,Particle FX,파티클 효과
-Timeline,NotifyTypeSound,Sound FX,사운드 효과
-Timeline,NotifyTypeCustomEvent,Custom Event,사용자 정의 이벤트
-SpriteAnimation,NoFrames,No Frames,프레임 없음
-SpriteAnimation,Timeline,Timeline,타임라인
-SpriteAnimation,Previewing,Previewing...,미리보기 중...
-SpriteAnimation,Pause,Pause,일시정지
-SpriteAnimation,Stop,Stop,정지
-SpriteAnimation,Stopped,Stopped,정지됨
-SpriteAnimation,Preview,Preview,미리보기
-SpriteAnimation,Reset,Reset,초기화
-SpriteAnimation,MissingRendererWarning,Requires SpriteRenderer component to preview.,미리보기를 위해 SpriteRenderer 컴포넌트가 필요합니다.
-Animator,ControllerPath,Controller Path,컨트롤러 경로
-Timeline,AssetFile,Timeline Asset,타임라인 에셋
-Notification,Saved,Saved: {},저장됨: {}
-Notification,SaveFailed,Save failed: {},저장 실패: {}
-Shortcuts,ConflictWarning,Shortcut conflict: {},단축키 충돌: {}
-Timeline,NotifyName,Notify Name,노티파이 이름
-Timeline,TriggerTime,Trigger Time (s),발동 시간 (초)
-Timeline,NotifyType,Notify Type,노티파이 유형
-Animator,Save,Save Controller,컨트롤러 저장
-Animator,New,New Controller,새 컨트롤러
-Animator,Open,Open Controller,컨트롤러 열기
-Timeline,PlayPause,Play / Pause,재생 / 일시정지
+Settings,Btn.Discard,Discard Changes,변경 취소
+Settings,Btn.ResetDefaults,Reset to Defaults,기본값으로 복원
+Settings,CameraFOV,Field of View (FOV),카메라 화각 (FOV)
+Settings,CameraMovement,Camera Movement,카메라 조작
+Settings,CategoryEditor,Editor Environment,에디터 환경
+Settings,CategoryGeneral,General,일반
+Settings,CategoryGraphic,Graphic & Display,그래픽 및 화면
+Settings,CategoryProjectSettings,Project Settings,프로젝트 설정
+Settings,CategoryShortcuts,Shortcuts,단축키
+Settings,CategoryTheme,Theme & Style,테마 및 스타일
+Settings,CategoryWorkspace,Workspace,작업 공간
+Settings,CustomFont,Custom Font,사용자 지정 폰트
+Settings,DockLayoutHelp,Default Docking Layout state is tracked in Workspace.json.,기본 도킹 배치는 Workspace.json에 저장됩니다.
+Settings,FontBrowse,Browse...,찾아보기...
+Settings,FontReset,Reset Font,기본 폰트로 복원
+Settings,FontSize,Font Size,폰트 크기
+Settings,GizmoSnapping,Gizmo Snapping,기즈모 스냅
+Settings,GroupEditor,Editor & Workspace,에디터 및 작업 공간
+Settings,GroupProject,Project,프로젝트
+Settings,GroupSystem,System & Display,시스템 및 화면
+Settings,Language,Language,언어
+Settings,LanguageEnglish,English,English
+Settings,LanguageKorean,Korean,한국어
+Settings,Logging,Logging,로깅
+Settings,MinimumLogLevel,Minimum Log Level,최소 로그 수준
+Settings,ProjectMetadata,Project Metadata,프로젝트 메타데이터
+Settings,ProjectName,Project Name,프로젝트 이름
+Settings,ProjectRoot,Project Root,프로젝트 루트
+Settings,ResetCustomStyle,Reset to Default Style,기본 스타일로 복원
+Settings,ResetDefaults,Reset to Defaults,기본값 복원
+Settings,SaveCustomStyle,Save Custom Style,커스텀 스타일 저장
+Settings,SectionAppearance,Appearance & Scaling,디스플레이 배율
+Settings,SectionAutoSave,Auto-save,자동 저장
+Settings,SectionContentBrowser,Content Browser,콘텐츠 브라우저
+Settings,SectionDisplayResolution,Window & Resolution,창 및 디스플레이
+Settings,SectionDockingLayout,Docking & Layout,도킹 및 레이아웃
+Settings,SectionFont,Font & Typography,폰트 및 타이포그래피
+Settings,SectionFrameSync,Framerate & Sync,프레임 레이트 및 동기화
+Settings,SectionLanguage,Language & Localization,언어 및 로캘
+Settings,SectionLayoutPresets,Layout & Presets,레이아웃 및 프리셋
+Settings,SectionViewportResolution,Viewport Resolution,뷰포트 해상도
+Settings,ShaderDirectory,Shader Source Directory,셰이더 소스 경로
+Settings,StartupScene,Startup Scene,시작 씬
+Settings,StyleEditor,Style Customizer,스타일 상세 편집
+Settings,StyleHelp,"Modify colors, roundings, and paddings directly. Click [Save Custom Style] or [Apply] to persist.","색상, 모서리와 여백을 편집하고 사용자 스타일 저장 또는 적용을 눌러 저장하세요."
+Settings,StyleSavedNotification,Custom style saved successfully.,커스텀 스타일이 성공적으로 저장되었습니다.
+Settings,Theme,Theme Preset,테마 프리셋
+Settings,ThemeBamEngine,BamEngine Dark (Default),BamEngine 다크 (기본)
+Settings,ThemeClassic,Classic,클래식
+Settings,ThemeCustom,Custom (User Saved),사용자 정의 (Custom)
+Settings,ThemeLight,Light,라이트
+Settings,ThumbnailSize,Thumbnail Size,썸네일 크기
+Settings,Title,Settings,설정
+Settings,UnlimitedFPS,Unlimited,무제한
+Shortcuts,CategoryBuild,Build & Hot Reload,빌드 및 핫 리로드
+Shortcuts,CategoryGraph,Graph Editor,그래프 에디터
+Shortcuts,CategoryPIE,Play & Simulation,재생 및 시뮬레이션
 Shortcuts,CategoryTimeline,Timeline,타임라인
-Timeline,ToggleLoop,Toggle Loop,루프 토글
-Timeline,ZoomReset,Reset Zoom,줌 초기화
-Timeline,DeleteSelected,Delete Selected Keyframe,선택한 키프레임 삭제
-Viewport,GizmoSelect,Select Mode,선택 모드
-Viewport,GizmoTranslate,Translate,이동 기즈모
-Viewport,GizmoRotate,Rotate,회전 기즈모
-Viewport,GizmoScale,Scale,스케일 기즈모
-Viewport,ToggleCoord,Toggle Local / World,로컬 / 월드 좌표계 전환
-Viewport,ToggleSnap,Toggle Grid Snap,그리드 스냅 토글
-Viewport,Focus,Focus Selected,선택 오브젝트로 포커스
-Viewport,ToggleLock,Toggle Selection Lock,선택 잠금 토글
-Viewport,ToggleGrid,Toggle Grid,그리드 표시 토글
-Viewport,ToggleRealtime,Toggle Realtime,실시간 프리뷰 토글
-Action,Timeline.PlayPause,Play / Pause,재생 / 일시정지
-Action,Timeline.PrevFrame,Previous Frame,이전 프레임
-Action,Timeline.NextFrame,Next Frame,다음 프레임
-Action,Timeline.FirstFrame,First Frame,첫 프레임
-Action,Timeline.LastFrame,Last Frame,마지막 프레임
-Action,Timeline.ToggleLoop,Toggle Loop,루프 토글
-Action,Timeline.ZoomReset,Reset Zoom,줌 초기화
-Action,Timeline.DeleteSelected,Delete Selected Keyframe,선택한 키프레임 삭제
-Action,Animator.SaveAs,Save Controller As...,다른 이름으로 컨트롤러 저장...
-Action,Edit.Rename,Rename,이름 변경
-Action,Editor.OpenSettings,Preferences / Settings,환경설정
-Action,Graph.Open,Open Graph,그래프 열기
-Action,Graph.SaveAs,Save Graph As...,다른 이름으로 그래프 저장...
-Action,Graph.Run,Run Graph,그래프 실행
-Action,Graph.Pause,Pause Graph,그래프 일시정지
-Action,Graph.Step,Step Execution,단계별 실행
-Action,Graph.Stop,Stop Execution,실행 중지
-Action,Graph.Validate,Validate Graph,그래프 검증
-Action,Graph.AddNode,Add Node,노드 추가
-UI,ModelImport.ModalTitle,Model Import Options,모델 임포트 옵션
-UI,ModelImport.Transform,Transform & Coordinates,변환 및 좌표계
-UI,ModelImport.Scale,Uniform Scale,스케일 배율
-UI,ModelImport.Rotation,Rotation Offset (Pitch/Yaw/Roll),회전 오프셋 (X/Y/Z)
-UI,ModelImport.LeftHanded,Convert to Left-Handed,왼손 좌표계 변환
-UI,ModelImport.FlipUVs,Flip UVs (V-Axis),UV V축 반전
-UI,ModelImport.FlipWinding,Flip Winding Order,면 와인딩 순서 반전
-UI,ModelImport.MeshesAndMaterials,Meshes & Materials,메쉬 및 머티리얼
-UI,ModelImport.ImportMeshes,Import Meshes,메쉬 임포트
-UI,ModelImport.ImportMaterials,Import Materials,머티리얼 임포트
-UI,ModelImport.AnimationAndRig,Animation & Rigging,애니메이션 및 릭
-UI,ModelImport.ImportSkeleton,Import Skeleton,스켈레톤 임포트
-UI,ModelImport.ImportAnimations,Import Animations,애니메이션 임포트
-UI,ModelImport.ImportBtn,Import,임포트
-ModelImport,ModalTitle,Model Import Options,모델 임포트 옵션
-ModelImport,Transform,Transform & Coordinates,변환 및 좌표계
-ModelImport,Scale,Uniform Scale,스케일 배율
-ModelImport,Rotation,Rotation Offset (Pitch/Yaw/Roll),회전 오프셋 (X/Y/Z)
-ModelImport,LeftHanded,Convert to Left-Handed,왼손 좌표계 변환
-ModelImport,FlipUVs,Flip UVs (V-Axis),UV V축 반전
-ModelImport,FlipWinding,Flip Winding Order,면 와인딩 순서 반전
-ModelImport,MeshesAndMaterials,Meshes & Materials,메시 및 머티리얼
-ModelImport,ImportMeshes,Import Meshes,메시 임포트
-ModelImport,ImportMaterials,Import Materials,머티리얼 임포트
-ModelImport,AnimationAndRig,Animation & Rigging,애니메이션 및 릭
-ModelImport,ImportSkeleton,Import Skeleton,스켈레톤 임포트
-ModelImport,ImportAnimations,Import Animations,애니메이션 임포트
-ModelImport,ImportBtn,Import,임포트
-ModelImport,PreviewPending,Preparing preview...,프리뷰 준비 중...
-ModelImport,PreviewFailed,Preview unavailable. Check the console for details.,프리뷰를 표시할 수 없습니다. 콘솔에서 원인을 확인하세요.
-ModelImport,AlbedoReferences,Albedo Textures,Albedo 텍스처
-ModelImport,TextureMaterialFallback,Material {},머티리얼 {}
-ModelImport,TextureReference,Source reference,원본 참조
-ModelImport,TextureResolved,Resolved file,찾은 파일
-ModelImport,TextureStatus,Last load result,마지막 로드 결과
-ModelImport,TextureNone,None,없음
-ModelImport,TextureEmbeddedLocation,Embedded in the model,모델 파일 내부 이미지
-ModelImport,TextureNotProcessed,Not processed,처리 전
-ModelImport,TextureUnused,No texture reference,텍스처 참조 없음
-ModelImport,TextureLoaded,Loaded successfully,불러오기 성공
-ModelImport,TextureMissing,File not found - using base color,파일을 찾지 못해 기본색 사용
-ModelImport,TextureLoadFailed,Loading failed,불러오기 실패
-ModelImport,TextureInfoEmpty,No texture details available,표시할 텍스처 정보가 없습니다
-ModelImport,TextureMaterialsDisabled,Material import is disabled,머티리얼 임포트가 꺼져 있습니다
-Timeline,ParticleSpeed,Particle Speed,입자 속도
-Timeline,SoundFile,Audio: {},오디오: {}
-Timeline,SelectSound,Select Sound...,사운드 선택...
-Timeline,EventTag,Event Tag,이벤트 태그
-FileDialog,AudioFiles,"Audio Files (*.wav, *.mp3, *.ogg)","오디오 파일 (*.wav, *.mp3, *.ogg)"
-Timeline,Tracks,Tracks,트랙
-Timeline,AddFXTrack,Add FX Track,이펙트 트랙 추가
-Timeline,AddAudioTrack,Add Audio Track,오디오 트랙 추가
-Timeline,AddCameraShotTrack,Add Camera Shot Track,카메라 샷 트랙 추가
-Timeline,MuteTrack,Mute,음소거
-Timeline,UnmuteTrack,Unmute,음소거 해제
-Timeline,ActivateShot,Activate Shot,샷 활성화
-Timeline,DeactivateShot,Deactivate Shot,샷 비활성화
-EditorCommon,Close,Close,닫기
-Timeline,OpenInEditor,Open in Timeline Editor,타임라인 에디터에서 열기
-MaterialEditor,BaseMaterialMissing,Base material is missing. Select a base material below.,원본 머티리얼이 없습니다. 아래에서 원본 머티리얼을 선택하세요.
-MaterialEditor,BaseMaterialSlot,Base Material,원본 머티리얼
-Timeline,SyncEntity,Sync Entity,엔티티 동기화
-Timeline,SelectModel,Model...,모델 선택...
-Timeline,TimeCounter,{:.2f}s / {:.2f}s,{:.2f}초 / {:.2f}초
-Timeline,FrameCounter,(Frame: {} / {}),(프레임: {} / {})
-Timeline,ZoomFactor,Zoom: {:.1f}x,확대: {:.1f}배
-FileDialog,ActionTimelineFiles,Action Timeline Asset (*.actiontimeline.json),액션 타임라인 에셋 (*.actiontimeline.json)
-FileDialog,ModelFiles,"Model Files (*.bammodel, *.glb)","모델 파일 (*.bammodel, *.glb)"
-Timeline,InspectorSelectionHint,Select a marker or camera shot in the tracks to edit its properties.,트랙에서 마커나 카메라 샷을 선택하여 속성을 편집하세요.
-Timeline,NotifyTriggered,Triggered: {},발동: {}
-ModelImportModal,TextureDimensions,%u x %u,%u × %u
-AnimatorGraph,TogglePreview,Toggle 3D Preview Viewport,3D 프리뷰 표시 전환
-AssetRef,Missing,Missing: %zu,누락: %zu
-AssetRef,External,External: %zu,외부 경로: %zu
-AssetRef,InvalidExt,Invalid Ext: %zu,잘못된 확장자: %zu
-AssetRef,AutoFixable,Auto-Fixable: %zu,자동 수정 가능: %zu
-AssetRef,SourceAsset,Source Asset,원본 에셋
-AssetRef,TargetReference,Target Reference,참조 대상
-AssetRef,SuggestedFix,Suggested Fix,수정 제안
-AssetRef,MissingStatus,%s Missing,%s 누락
-AssetRef,ExternalStatus,%s External,%s 외부 경로
-AssetRef,InvalidExtensionStatus,%s InvalidExt,%s 잘못된 확장자
-GraphPanel,PieBadge,[PIE],[PIE]
-GraphPanel,ShaderBadge,[Shader],[셰이더]
-Inspector,ElapsedSeconds,(%.2fs),(%.2f초)
-Metrics,Performance,PERFORMANCE,성능
-Metrics,Good,[ GOOD ],[ 양호 ]
-Metrics,Warn,[ WARN ],[ 주의 ]
-Metrics,Poor,[ POOR ],[ 낮음 ]
-Metrics,Fps,%.1f FPS,%.1f FPS
-Metrics,FrameMsAvg,Frame: %.2f ms (Avg: %.2f),프레임: %.2f ms (평균: %.2f)
-Metrics,CloseDetail,Close Detail,상세 닫기
-Metrics,ViewDetails,View Details ->,상세 보기 →
-Metrics,GpuRendering,GPU RENDERING,GPU 렌더링
-Metrics,Fail,[ FAIL ],[ 실패 ]
-Metrics,Ok,[ OK ],[ 정상 ]
-Metrics,Draws,Draws: %llu,그리기 호출: %llu
-Metrics,GpuTimeMsVerts,GPU Time: %.2f ms | Verts: %llu,GPU 시간: %.2f ms / 정점: %llu
-Metrics,MemoryCache,MEMORY & CACHE,메모리 및 캐시
-Metrics,Healthy,[ HEALTHY ],[ 정상 ]
-Metrics,ActiveSlots,Active: %llu / %llu slots,활성 슬롯: %llu / %llu
-Metrics,ModelsTextures,Models: %llu | Textures: %llu,모델: %llu / 텍스처: %llu
-Metrics,TasksEngine,TASKS & ENGINE,작업 및 엔진
-Metrics,Busy,[ BUSY ],[ 처리 중 ]
-Metrics,Idle,[ IDLE ],[ 대기 ]
-Metrics,PassesScenes,Passes: %zu | Scenes: %zu,패스: %zu / 씬: %zu
-Metrics,TasksActiveDone,Tasks: %llu Active / %llu Done,작업: %llu개 진행 / %llu개 완료
-Metrics,Network,NETWORK,네트워크
-Metrics,Offline,[ OFFLINE ],[ 오프라인 ]
-Metrics,ModeStandalone,Mode: Standalone,모드: 독립 실행
-Metrics,TrafficKbS,Traffic: 0.0 KB/s,트래픽: 0.0 KB/s
-Metrics,Online,[ ONLINE ],[ 온라인 ]
-Metrics,PingMs,Ping: %.1f ms,지연 시간: %.1f ms
-Metrics,ServerPort,Server: Port %u,서버: 포트 %u
-Metrics,StatusConnected,Status: Connected,상태: 연결됨
-Metrics,CloseDetailX,[ Close Detail X ],[ 상세 닫기 X ]
-Metrics,NetworkSystemUnavailable,NetworkSystem is not registered.,네트워크 시스템이 등록되지 않았습니다.
-Metrics,NetworkDriverStatus,Network Driver Status: %s,네트워크 드라이버 상태: %s
-Metrics,SmoothedRttMs,Smoothed RTT: %.2f ms,평활 왕복 지연: %.2f ms
-Metrics,HostingOnPort,Hosting on Port: %u,호스팅 포트: %u
-NetworkProfiler,SystemUnavailable,NetworkSystem is not registered in SystemManager.,시스템 관리자에 네트워크 시스템이 등록되지 않았습니다.
-NetworkProfiler,SessionMode,Session Mode:,세션 모드:
-NetworkProfiler,Standalone,[ Standalone ],[ 독립 실행 ]
-NetworkProfiler,ServerRunning,[ Server Running ],[ 서버 실행 중 ]
-NetworkProfiler,ClientConnected,[ Client Connected ],[ 클라이언트 연결됨 ]
-NetworkProfiler,Port,Port,포트
-NetworkProfiler,IPAddress,IP,IP 주소
-NetworkProfiler,NetworkTraffic,Network Traffic:,네트워크 트래픽:
-NetworkProfiler,OutboundKbS,Outbound: %.2f KB/s,송신: %.2f KB/s
-NetworkProfiler,InboundKbS,Inbound: %.2f KB/s,수신: %.2f KB/s
-NetworkProfiler,LatencyRttMs,Latency (RTT): %.1f ms,왕복 지연: %.1f ms
-NetworkProfiler,ConnectedClients,Connected Clients:,연결된 클라이언트:
-NetworkProfiler,PingRtt,Ping (RTT),왕복 지연
-NetworkProfiler,Connected,Connected,연결됨
-MaterialEditor,TextureRegister,t%u,t%u
-SpriteAnimation,Frame,Frame: %d / %d,프레임: %d / %d
-SpriteAnimation,Fps,FPS,FPS
-SpriteAnimation,ResetView,Reset View,보기 초기화
-SpriteAnimation,Zoom,Zoom: %.0f%%,확대: %.0f%%
+Shortcuts,CategoryViewport,Viewport,뷰포트
+Shortcuts,ColAction,Action,명령
+Shortcuts,ColCategory,Category,분류
+Shortcuts,ColReset,Reset,복원
+Shortcuts,ColShortcut,Shortcut,단축키
+Shortcuts,Conflict,Conflict: {} is already assigned to {},단축키 충돌: {}은(는) 이미 {}에 지정되어 있습니다
+Shortcuts,ConflictWarning,Shortcut conflict: {},단축키 충돌: {}
+Shortcuts,PressKey,Press any key...,키 입력 대기 중...
+Shortcuts,Reset,Reset,초기화
+Shortcuts,ResetAll,Reset All to Default,모두 기본값으로 복원
+Shortcuts,Search,Search Shortcuts...,단축키 검색...
+Shortcuts,Title,Keyboard Shortcuts,단축키 설정
 SpriteAnimation,AddFrame,Add Frame,프레임 추가
 SpriteAnimation,EmptyFramesHint,No frames in animation. Click 'Add Frame' above.,애니메이션에 프레임이 없습니다. 위의 프레임 추가 버튼을 누르세요.
-Settings,StyleHelp,"Modify colors, roundings, and paddings directly. Click [Save Custom Style] or [Apply] to persist.","색상, 모서리와 여백을 편집하고 사용자 스타일 저장 또는 적용을 눌러 저장하세요."
-Settings,DockLayoutHelp,Default Docking Layout state is tracked in Workspace.json.,기본 도킹 배치는 Workspace.json에 저장됩니다.
-Timeline,MarkerTimeSocket,Time: %.2fs | Socket: %s,시간: %.2f초 / 부착 본: %s
-Timeline,Sound,Sound: %s,사운드: %s
-Timeline,Pose,Pose,포즈
-Timeline,Shot,Shot,샷
-Timeline,Root,(Root),(루트)
-AssetRef,TotalIssues,Total Issues: %zu | ,전체 문제: %zu |
-AssetRef,FilterAll,All,전체
-AssetRef,FilterMissing,Missing,누락
-AssetRef,FilterExternal,External,외부 경로
-AssetRef,FilterInvalid,Invalid Ext,잘못된 확장자
-AssetRef,SearchHint,Search path...,경로 검색...
-AssetRef,ScanCompleted,Scan completed.,검사가 완료됐습니다.
-AssetRef,FixedIssues,Fixed {} issues.,문제 {}개를 수정했습니다.
+SpriteAnimation,Fps,FPS,FPS
+SpriteAnimation,Frame,Frame: %d / %d,프레임: %d / %d
+SpriteAnimation,FrameDuration,Duration,프레임 지속 시간
+SpriteAnimation,FrameLabel,Frame #{},프레임 #{}
 SpriteAnimation,Loop,Loop,반복
+SpriteAnimation,MissingRendererWarning,Requires SpriteRenderer component to preview.,미리보기를 위해 SpriteRenderer 컴포넌트가 필요합니다.
+SpriteAnimation,NoFrames,No Frames,프레임 없음
 SpriteAnimation,Once,Once,한 번
+SpriteAnimation,Pause,Pause,일시정지
 SpriteAnimation,PingPong,PingPong,왕복
 SpriteAnimation,PlayMode,Mode,재생 방식
-SpriteAnimation,FrameDuration,Duration,프레임 지속 시간
-Metrics,DetailPerformance,Detailed Performance Inspection,상세 성능 검사
-Metrics,DetailRendering,Detailed GPU Rendering & Passes,GPU 렌더링 및 패스 상세
-Metrics,DetailMemory,Detailed Resource Memory Inspection,리소스 메모리 상세
-Metrics,DetailTasks,Detailed Engine & Task Queue Inspection,엔진 및 작업 큐 상세
-Metrics,DetailNetwork,Detailed Network Session Inspection,네트워크 세션 상세
-NetworkProfiler,ServerMode,Dedicated Server,전용 서버
-NetworkProfiler,ClientMode,Client Connected,클라이언트 연결됨
-NetworkProfiler,StandaloneMode,Standalone,독립 실행
-FileDialog,FontFiles,Font Files (*.ttf;*.otf),글꼴 파일 (*.ttf;*.otf)
-FileDialog,EditorSceneFiles,Scene Files (*.bamscene.json;*.json),씬 파일 (*.bamscene.json;*.json)
-SpriteAnimation,FrameLabel,Frame #{},프레임 #{}
-ResourcePicker,ClearHint,Unbind / Clear current resource,현재 리소스 연결 해제
-Inspector,SearchEntity,Search entity...,엔티티 검색...
-Settings,UnlimitedFPS,Unlimited,무제한
-Settings,MinimumLogLevel,Minimum Log Level,최소 로그 수준
-Settings,ThemeLight,Light,라이트
-Settings,ThemeClassic,Classic,클래식
+SpriteAnimation,Preview,Preview,미리보기
+SpriteAnimation,Previewing,Previewing...,미리보기 중...
+SpriteAnimation,Reset,Reset,초기화
+SpriteAnimation,ResetView,Reset View,보기 초기화
+SpriteAnimation,Stop,Stop,정지
+SpriteAnimation,Stopped,Stopped,정지됨
+SpriteAnimation,Timeline,Timeline,타임라인
+SpriteAnimation,Zoom,Zoom: %.0f%%,확대: %.0f%%
+TerrainEditor,BrushMode,Brush Mode,브러시 모드
+TerrainEditor,DefaultName,Terrain,지형
+TerrainEditor,ExportHeightmap,Export Heightmap,하이트맵 익스포트
+TerrainEditor,Falloff,Falloff,감쇠
+TerrainEditor,Flatten,Flatten,평탄화
+TerrainEditor,HeightmapFile,Heightmap File,하이트맵 파일
+TerrainEditor,ImportHeightmap,Import Heightmap,하이트맵 임포트
+TerrainEditor,Lower,Lower,내리기
+TerrainEditor,NoScene,No active scene.,활성 씬이 없습니다.
+TerrainEditor,NoSelection,No terrain selected. Select a Terrain entity in Hierarchy.,계층 패널에서 지형 엔티티를 선택하세요.
+TerrainEditor,Radius,Radius,반경
+TerrainEditor,Raise,Raise,올리기
+TerrainEditor,ResetTerrain,Reset Terrain,지형 초기화
+TerrainEditor,Sculpt,Sculpt,조각
+TerrainEditor,SculptOff,Sculpting: OFF (Click to Enable),지형 조형: 꺼짐 (클릭하여 켜기)
+TerrainEditor,SculptOn,Sculpting: ON (Click to Disable),지형 조형: 켜짐 (클릭하여 끄기)
+TerrainEditor,Smooth,Smooth,부드럽게
+TerrainEditor,Strength,Strength,강도
+TerrainEditor,Target,Target: {},대상: {}
+TerrainEditor,TargetHeight,Target Height,목표 높이
+TerrainEditor,Title,Terrain Editor,지형 편집기
+TextureInspector,AutoSprite,Auto-Generate Sprite (.bamsprite),스프라이트 자동 생성 (.bamsprite)
+TextureInspector,BC4,BC4 (Grayscale),BC4 (회색조)
+TextureInspector,BC5,BC5 (Normal),BC5 (노멀)
+TextureInspector,BC7,BC7 (High Quality),BC7 (고품질)
+TextureInspector,CompressionFlags,Compression Flags:,압축 옵션:
+TextureInspector,Dimension,Dimension: {},차원: {}
+TextureInspector,FileName,File Name: {},파일 이름: {}
+TextureInspector,FlipY,Flip Y Axis,Y축 뒤집기
+TextureInspector,GenerateMipMaps,Generate MipMaps,밉맵 생성
+TextureInspector,HighQuality,High Quality (Parallel),고품질 (병렬)
+TextureInspector,Import,Import / Re-Compress,임포트 / 다시 압축
+TextureInspector,ImportResult,Import Result,임포트 결과
+TextureInspector,ImportSettings,Import Settings,임포트 설정
+TextureInspector,Importing,Importing... Please wait,임포트 중... 잠시 기다려 주세요
+TextureInspector,MetadataFailed,Failed to load metadata!,메타데이터를 불러오지 못했습니다.
+TextureInspector,MipLevels,Mip Levels: {},밉 레벨: {}
+TextureInspector,NormalMap,Normal Map Mode,노멀 맵 모드
+TextureInspector,PremultiplyAlpha,Premultiply Alpha,알파 미리 곱하기
+TextureInspector,Resolution,Resolution: {} x {},해상도: {} x {}
+TextureInspector,SRGB,SRGB Color Space,sRGB 색 공간
+TextureInspector,SpriteConverted,Texture & Sprite have been successfully converted asynchronously!,텍스처와 스프라이트의 비동기 변환이 완료되었습니다.
+TextureInspector,SpriteGeneration,Sprite Generation,스프라이트 생성
+TextureInspector,TargetFormat,Target Format,대상 포맷
+TextureInspector,TextureConverted,Texture has been successfully converted to .bamtex asynchronously!,텍스처를 .bamtex로 비동기 변환했습니다.
+TextureInspector,Title,Texture Inspector,텍스처 인스펙터
+TextureInspector,UseGPU,Use GPU Compression,GPU 압축 사용
+Timeline,ActivateShot,Activate Shot,샷 활성화
+Timeline,AddAudioTrack,Add Audio Track,오디오 트랙 추가
+Timeline,AddCameraShotTrack,Add Camera Shot Track,카메라 샷 트랙 추가
+Timeline,AddEventNotify,Add Gameplay Event,게임플레이 이벤트 노티파이 추가
+Timeline,AddFXTrack,Add FX Track,이펙트 트랙 추가
+Timeline,AddParticleNotify,Add Particle Notify (FX),파티클 이펙트 노티파이 추가
+Timeline,AddSoundNotify,Add Sound Notify,사운드 노티파이 추가
+Timeline,AnimTrack,Anim Clip,애니메이션
+Timeline,AssetFile,Timeline Asset,타임라인 에셋
+Timeline,BurstCount,Burst Count,방출 입자 수
+Timeline,CameraShotDuration,Duration (s),지속 시간 (초)
+Timeline,CameraShotFocusBone,Focus Bone,포커스 본
+Timeline,CameraShotName,Shot Name,샷 이름
+Timeline,CameraShotShakeIntensity,Shake Intensity,흔들림 강도
+Timeline,CameraShotStartTime,Start Time (s),시작 시간 (초)
+Timeline,CameraShotTargetFOV,Target FOV,목표 시야각
+Timeline,DeactivateShot,Deactivate Shot,샷 비활성화
+Timeline,DeleteNotify,Delete Marker,노티파이 삭제
+Timeline,Duration,Clip Duration (sec),클립 전체 길이 (초)
+Timeline,EventTag,Event Tag,이벤트 태그
+Timeline,FrameCounter,(Frame: {} / {}),(프레임: {} / {})
+Timeline,InspectorSelectionHint,Select a marker or camera shot in the tracks to edit its properties.,트랙에서 마커나 카메라 샷을 선택하여 속성을 편집하세요.
+Timeline,LoadSuccess,Timeline asset loaded successfully.,타임라인 에셋을 성공적으로 불러왔습니다.
+Timeline,Loop,Toggle Loop,루프 반복 토글
+Timeline,MarkerTimeSocket,Time: %.2fs | Socket: %s,시간: %.2f초 / 부착 본: %s
+Timeline,MuteTrack,Mute,음소거
+Timeline,NotifyInspector,Notify Properties,노티파이 속성
+Timeline,NotifyName,Notify Name,노티파이 이름
+Timeline,NotifyTrack,FX / Notifies,이펙트/노티파이
+Timeline,NotifyTriggered,Triggered: {},발동: {}
+Timeline,NotifyType,Notify Type,노티파이 유형
+Timeline,NotifyTypeCustomEvent,Custom Event,사용자 정의 이벤트
+Timeline,NotifyTypeParticle,Particle FX,파티클 효과
+Timeline,NotifyTypeSound,Sound FX,사운드 효과
+Timeline,OffsetPos,Offset Position,오프셋 위치
+Timeline,OpenInEditor,Open in Timeline Editor,타임라인 에디터에서 열기
+Timeline,OpenTimeline,Open Timeline Asset,타임라인 에셋 열기
+Timeline,PanelTitle,Animation Timeline,애니메이션 타임라인
+Timeline,ParticleColor,Particle Color,파티클 색상
+Timeline,ParticleSpeed,Particle Speed,입자 속도
+Timeline,PlaybackSpeed,Playback Speed,재생 배속
+Timeline,Pose,Pose,포즈
+Timeline,PreviewPlaceholder,3D Viewport Preview Area,3D 뷰포트 프리뷰 영역
+Timeline,Root,(Root),(루트)
+Timeline,RootOrNone,(Root / None),(루트 / 없음)
+Timeline,SaveAsTimeline,Save Timeline As...,다른 이름으로 저장...
+Timeline,SaveSuccess,Timeline asset saved successfully.,타임라인 에셋이 성공적으로 저장되었습니다.
+Timeline,SaveTimeline,Save Timeline Asset,타임라인 에셋 저장
+Timeline,SelectModel,Model...,모델 선택...
+Timeline,SelectSound,Select Sound...,사운드 선택...
+Timeline,Shot,Shot,샷
+Timeline,SocketBone,Socket Bone,부착 본(Bone)
+Timeline,Sound,Sound: %s,사운드: %s
+Timeline,SoundFile,Audio: {},오디오: {}
+Timeline,SyncEntity,Sync Entity,엔티티 동기화
+Timeline,SyncTooltip,Sync with selected entity in Scene,씬에서 선택된 엔티티와 동기화
+Timeline,TimeCounter,{:.2f}s / {:.2f}s,{:.2f}초 / {:.2f}초
+Timeline,TrackTitle,Timeline Tracks & Notifies,타임라인 트랙 및 노티파이
+Timeline,Tracks,Tracks,트랙
+Timeline,TriggerTest,Trigger Test,즉시 발동 테스트
+Timeline,TriggerTime,Trigger Time (s),발동 시간 (초)
+Timeline,UnmuteTrack,Unmute,음소거 해제
+Timeline,ZoomFactor,Zoom: {:.1f}x,확대: {:.1f}배
+ToolBar,ApplyFPS,Apply FPS,FPS 적용
+ToolBar,ApplyResolution,Apply Resolution,해상도 적용
+ToolBar,AutoCompile,Auto-Compile,자동 컴파일
+ToolBar,AutoCompileTooltip,Automatically trigger background build on C++ source save.,C++ 소스 파일 저장 시 자동으로 백그라운드 빌드를 수행합니다.
+ToolBar,AutoReload,Auto,자동
+ToolBar,AutoReloadTooltip,Automatically reload when GameModule.dll is compiled,GameModule.dll 컴파일 시 자동 다시 로드
+ToolBar,DisplaySettings,Display Settings,화면 설정
+ToolBar,Fullscreen,Fullscreen,전체 화면
+ToolBar,ModuleCompile,Compile,컴파일
+ToolBar,ModuleCompileTooltip,Build GameModule C++ source in the background.,GameModule C++ 소스를 백그라운드에서 빌드합니다.
+ToolBar,ModuleCompiling,Compiling...,컴파일 중...
+ToolBar,ModuleReload,Hot Reload,핫 리로드
+ToolBar,NewViewportPanel,New Viewport Panel,새 뷰포트 패널
+ToolBar,Panels,Panels,패널
+ToolBar,PauseTooltip,"Pause: 게임 정지, 에디터 조작 가능","일시정지: 게임 정지, 에디터 조작 가능"
+ToolBar,PlayTooltip,Play (Enter PIE),재생 (PIE 시작)
+ToolBar,ReloadModuleTooltip,Reload GameModule DLL (Version: {}),GameModule DLL 다시 로드 (버전: {})
+ToolBar,ResumeTooltip,Resume: 게임 로직 재개,계속: 게임 로직 재개
+ToolBar,ShaderReload,Shader Reload,셰이더 리로드
+ToolBar,ShaderReloadTooltip,Recompile & Hot-Swap All Shaders,모든 셰이더 재컴파일 및 핫스왑
+ToolBar,StopTooltip,Stop (restore scene),중지 (씬 복원)
+ToolBar,TargetFPS,Target FPS,목표 프레임 속도
+ToolBar,TargetFPSHint,0 disables the FPS limit. Range: 0-1000.,0은 FPS 제한을 해제합니다. 입력 범위: 0~1000.
+ToolBar,UIScale,UI Scale,UI 배율
+Transform,EulerRotation,Euler Rotation,회전(각도)
+Transform,Hirarchy_AddGameObject,Add GameObject,게임 오브젝트 추가+
+Transform,Position,Position,위치
+Transform,Rotation,Rotation,회전
+Transform,Scale,Scale,크기
+Viewport,AddButton,Add Button,버튼 추가
+Viewport,AddImage,Add Image,이미지 추가
+Viewport,AllRenderTargets,All RenderTargets,모든 렌더 타깃
+Viewport,Anchors,Anchors,앵커
+Viewport,AspectRatio,Aspect Ratio,종횡비
+Viewport,BringToFront,Bring to Front,맨 앞으로
+Viewport,BypassSnap,Hold Alt to bypass snapping.,Alt를 누르면 스냅을 일시 해제합니다.
+Viewport,CameraFOV,FOV,시야각 (FOV)
+Viewport,CameraMenu,Camera,카메라
+Viewport,CameraOptics,Camera Optics,카메라 광학
+Viewport,CameraOrthographicSize,Size,직교 크기
+Viewport,CameraPosition,Position,위치
+Viewport,CameraResetOrigin,Reset to Origin,원점으로 리셋
+Viewport,CameraRotation,Rotation,회전
+Viewport,CameraSpeed,Move Speed,이동 속도
+Viewport,CameraTopView,Top View,상단 뷰 (Top)
+Viewport,CameraTransform,Camera Transform,카메라 트랜스폼
+Viewport,Canvas,Canvas,캔버스
+Viewport,CanvasOrderHint,Canvas order within this scene.,이 씬 안에서의 캔버스 표시 순서입니다.
+Viewport,CanvasSize,Canvas {:.0f} x {:.0f} | {:.0f}%,캔버스 {:.0f} x {:.0f} | {:.0f}%
+Viewport,CanvasUnavailable,Canvas layout is invalid or awaiting render.,캔버스 레이아웃이 올바르지 않거나 렌더링을 기다리고 있습니다.
+Viewport,Channels,Channels,채널
+Viewport,CreateCanvasHint,Create a Canvas from the Canvas menu in an open scene.,열린 씬에서 캔버스 메뉴를 통해 캔버스를 생성하세요.
+Viewport,Custom,Custom...,사용자 지정...
+Viewport,DebugMenu,Debug,디버그
+Viewport,DecreaseZ,Z -1,Z 순서 -1
+Viewport,ElementOrderHint,Higher Z renders later among siblings. Children stay with their parent.,형제 중 Z 값이 클수록 나중에 그려집니다. 자식은 부모와 함께 표시됩니다.
+Viewport,FinalOutput,FinalRT,최종 출력
+Viewport,Fit,Fit,화면에 맞춤
+Viewport,FreeAspect,Free,자유 비율
+Viewport,FreePanelSize,Free (Panel Size),패널 크기에 맞춤
+Viewport,GPUId,GPU ID,GPU ID
+Viewport,GameTitle,Game,게임
+Viewport,GizmoMenu,Gizmo,기즈모
+Viewport,Grid,Grid,격자
+Viewport,GridStep,Grid step (px),격자 간격 (px)
+Viewport,IncreaseZ,Z +1,Z 순서 +1
+Viewport,Interact,Interact,상호작용
+Viewport,InteractionStatus,Interact | Clicks: {} | {},상호작용 | 클릭 수: {} | {}
+Viewport,Local,Local,로컬
+Viewport,NewCanvas,New Canvas,새 캔버스
+Viewport,NewName,New Viewport,새 뷰포트
+Viewport,NoUsableCamera,No usable active camera in the scene.,씬에 사용할 수 있는 활성 카메라가 없습니다.
+Viewport,OpenInViewport,"Open ""{}"" in new viewport","""{}""을(를) 새 뷰포트에서 열기"
+Viewport,Order,Order,표시 순서
+Viewport,OrderSelectionHint,Select a UI element or Canvas.,UI 요소나 캔버스를 선택하세요.
+Viewport,Picking,Picking,선택 판정
+Viewport,Pixel,Pixel,픽셀
+Viewport,PointerCancel,Cancel,취소
+Viewport,PointerClick,Click,클릭
+Viewport,PointerDown,Down,누름
+Viewport,PointerEnter,Enter,진입
+Viewport,PointerEvent,{} | Entity {},{} | 엔티티 {}
+Viewport,PointerExit,Exit,벗어남
+Viewport,PointerUp,Up,놓음
+Viewport,RayBounds,Ray bounds (broad phase),광선과 경계 검사 (넓은 단계)
+Viewport,RayBoundsHint,Tests mesh bounds. Triangle surfaces and sprite transparency are not tested.,메시 경계를 검사합니다. 삼각형 표면과 스프라이트 투명도는 검사하지 않습니다.
+Viewport,Realtime,Realtime,실시간
+Viewport,RealtimeTooltip,Toggle Realtime Preview,실시간 프리뷰 토글
+Viewport,RenderPassesMenu,Passes,패스
+Viewport,RenderSize,Render: {} x {},렌더링: {} x {}
+Viewport,RenderTargetsMenu,Render Target,렌더 타겟
+Viewport,RenderTargetsUnavailable,Render targets are unavailable. Change the resolution to retry.,렌더 타깃을 준비하지 못했습니다. 해상도를 변경해 다시 시도하세요.
+Viewport,Resolution,Resolution,해상도
+Viewport,Resolution4K,3840 x 2160 (4K UHD),3840 x 2160 (4K UHD)
+Viewport,ResolutionFHD,1920 x 1080 (FHD),1920 x 1080 (FHD)
+Viewport,ResolutionHD,1280 x 720 (HD),1280 x 720 (HD)
+Viewport,ResolutionIPhone,1170 x 2532 (iPhone 14),1170 x 2532 (iPhone 14)
+Viewport,ResolutionPortrait,1080 x 1920 (Portrait FHD),1080 x 1920 (세로 FHD)
+Viewport,ResolutionQHD,2560 x 1440 (QHD),2560 x 1440 (QHD)
+Viewport,ResolutionSD,854 x 480 (SD),854 x 480 (SD)
+Viewport,SafeArea,Safe area (5% guide),안전 영역 (5% 가이드)
+Viewport,Scale,Scale: {:.0f}%,배율: {:.0f}%
+Viewport,Scene,Scene,씬
+Viewport,SceneTitle,Scene View,씬 뷰
+Viewport,SelectionLocked,Selection Locked,선택 잠김
+Viewport,SendToBack,Send to Back,맨 뒤로
+Viewport,ShowBounds,Show Bounds,경계 표시
+Viewport,ShowCollider,Show Collider,콜라이더 표시
+Viewport,ShowGrid,Show Grid,격자 표시
+Viewport,Snap,Snap,스냅
+Viewport,SnapRotation,Snap Rotation,회전 스냅 간격
+Viewport,SnapScale,Snap Scale,크기 스냅 간격
+Viewport,SnapToGrid,Snap to Grid,격자에 맞추기
+Viewport,SnapTranslation,Snap Translation,이동 스냅 간격
+Viewport,TransformRejected,Transform edit rejected: the result cannot be represented by local TRS.,변환 편집을 거부했습니다. 결과를 로컬 이동·회전·크기로 표현할 수 없습니다.
+Viewport,UITitle,UI View,UI 뷰
+Viewport,View,View,보기
+Viewport,ViewerTitle,{} Viewer,{} 뷰어
+Viewport,World,World,월드
+Viewport,ZIndex,Z-Index,Z 순서

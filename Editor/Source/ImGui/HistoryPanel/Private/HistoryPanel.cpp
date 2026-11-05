@@ -54,15 +54,15 @@ void HistoryPanel::Draw()
 			if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
 			{
 				if (undoHint && undoHint[0] != '\0')
-					ImGui::SetTooltip("%s (%s)", LOCAL_CSTR("UI_UNDO"), undoHint);
+					ImGui::SetTooltip("%s (%s)", LOCAL_CSTR("EditorCommon.Undo"), undoHint);
 				else
-					ImGui::SetTooltip("%s", LOCAL_CSTR("UI_UNDO"));
+					ImGui::SetTooltip("%s", LOCAL_CSTR("EditorCommon.Undo"));
 			}
 		}
 		else
 		{
 			const std::string undoText = (undoHint && undoHint[0] != '\0') ?
-				LOCAL_FMT("History.ActionShortcut", LOCAL("UI_UNDO"), undoHint) : LOCAL("UI_UNDO");
+				LOCAL_FMT("History.ActionShortcut", LOCAL("EditorCommon.Undo"), undoHint) : LOCAL("EditorCommon.Undo");
 			const std::string undoLabel = undoText + "###HistoryUndo";
 			if (ImGui::Button(undoLabel.c_str()))
 				history.Undo();
@@ -80,15 +80,15 @@ void HistoryPanel::Draw()
 			if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
 			{
 				if (redoHint && redoHint[0] != '\0')
-					ImGui::SetTooltip("%s (%s)", LOCAL_CSTR("UI_REDO"), redoHint);
+					ImGui::SetTooltip("%s (%s)", LOCAL_CSTR("EditorCommon.Redo"), redoHint);
 				else
-					ImGui::SetTooltip("%s", LOCAL_CSTR("UI_REDO"));
+					ImGui::SetTooltip("%s", LOCAL_CSTR("EditorCommon.Redo"));
 			}
 		}
 		else
 		{
 			const std::string redoText = (redoHint && redoHint[0] != '\0') ?
-				LOCAL_FMT("History.ActionShortcut", LOCAL("UI_REDO"), redoHint) : LOCAL("UI_REDO");
+				LOCAL_FMT("History.ActionShortcut", LOCAL("EditorCommon.Redo"), redoHint) : LOCAL("EditorCommon.Redo");
 			const std::string redoLabel = redoText + "###HistoryRedo";
 			if (ImGui::Button(redoLabel.c_str()))
 				history.Redo();

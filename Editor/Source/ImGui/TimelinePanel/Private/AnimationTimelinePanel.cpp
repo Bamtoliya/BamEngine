@@ -703,11 +703,11 @@ namespace Editor
 		const float frameStep = 1.0f / m_FPS;
 
 		if (ImGui::Button(ICON_FA_BACKWARD_FAST)) { m_CurrentTime = 0.0f; }
-		if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("Timeline.FirstFrame"));
+		if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("Action.Timeline.FirstFrame"));
 		ImGui::SameLine();
 
 		if (ImGui::Button(ICON_FA_BACKWARD)) { m_CurrentTime = std::max(0.0f, m_CurrentTime - frameStep); }
-		if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("Timeline.PrevFrame"));
+		if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("Action.Timeline.PrevFrame"));
 		ImGui::SameLine();
 
 		const char* playIcon = m_IsPlaying ? ICON_FA_PAUSE : ICON_FA_PLAY;
@@ -715,11 +715,11 @@ namespace Editor
 		ImGui::SameLine();
 
 		if (ImGui::Button(ICON_FA_FORWARD)) { m_CurrentTime = std::min(m_Duration, m_CurrentTime + frameStep); }
-		if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("Timeline.NextFrame"));
+		if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("Action.Timeline.NextFrame"));
 		ImGui::SameLine();
 
 		if (ImGui::Button(ICON_FA_FORWARD_FAST)) { m_CurrentTime = m_Duration; m_IsPlaying = false; }
-		if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("Timeline.LastFrame"));
+		if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("Action.Timeline.LastFrame"));
 		ImGui::SameLine();
 
 		const bool wasLooping = m_IsLooping;
@@ -814,7 +814,7 @@ namespace Editor
 		ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.4f, 1.0f), "%s", zoomLabel.c_str());
 		ImGui::SameLine();
 		auto& shortcuts = ShortcutManager::Get();
-		const std::string zoomResetLabel = std::string(ICON_FA_MAXIMIZE " ") + LOCAL_LABEL("Timeline.ZoomReset");
+		const std::string zoomResetLabel = std::string(ICON_FA_MAXIMIZE " ") + LOCAL_LABEL("Action.Timeline.ZoomReset");
 
 		ImGui::BeginDisabled(!shortcuts.CanExecuteAction("Timeline.ZoomReset"));
 		if (ImGui::Button(zoomResetLabel.c_str()))
@@ -825,9 +825,9 @@ namespace Editor
 		{
 			const char* hint = shortcuts.GetShortcutHint("Timeline.ZoomReset");
 			if (hint && hint[0] != '\0')
-				ImGui::SetTooltip("%s (%s)", LOCAL_CSTR("Timeline.ZoomReset"), hint);
+				ImGui::SetTooltip("%s (%s)", LOCAL_CSTR("Action.Timeline.ZoomReset"), hint);
 			else
-				ImGui::SetTooltip("%s", LOCAL_CSTR("Timeline.ZoomReset"));
+				ImGui::SetTooltip("%s", LOCAL_CSTR("Action.Timeline.ZoomReset"));
 		}
 
 		ImGui::SameLine(ImGui::GetWindowWidth() - 110.0f);
@@ -1330,7 +1330,7 @@ namespace Editor
 			}
 
 			ImGui::Separator();
-			ACTION_MENU_ITEM((ICON_FA_MAXIMIZE " " + LOCAL_LABEL("Timeline.ZoomReset")).c_str(), "Timeline.ZoomReset");
+			ACTION_MENU_ITEM((ICON_FA_MAXIMIZE " " + LOCAL_LABEL("Action.Timeline.ZoomReset")).c_str(), "Timeline.ZoomReset");
 			ImGui::EndPopup();
 		}
 

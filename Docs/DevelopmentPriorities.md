@@ -234,7 +234,7 @@ Engine·Render·Editor·Client 계획에서 무엇을 먼저 연결하고 무엇
     - **프리팹 1단계 (생성·배치)**: 계층 패널 `Save As Prefab...`, 콘텐츠 브라우저 큐브 식별, 드래그 앤 드롭 인스턴스화 및 Undo/Redo.
     - **프리팹 2단계 (격리 편집 모드)**: `PrefabModeManager` 뷰포트 격리 편집 모드(메인 씬 보존, 메인 뷰포트·기즈모 100% 활용, 상단 복귀/저장 배너).
     - **프리팹 3단계 (원본 연결 및 오버라이드 관리)**: 단일 원천 루트 전용 `PrefabInstanceComponent`, 계층 패널 청록색 강조 및 컨텍스트 메뉴(Open/Select/Unpack), 인스펙터 상단 프리팹 헤더 바 및 Overrides 팝업(Apply All, Revert All, Unpack).
-    - **엔티티 다중 복사·붙여넣기 (17절 완료)**: `EntityClipboard` 메모리 직렬화, 조상 필터링, 원래 계층/형제 순서 보존, 원자적 단일 Undo(`UI_HISTORY_PASTE`), 단축키(`Ctrl+C`/`Ctrl+V`/`Ctrl+Shift+V`) 및 다중 삭제(`DeleteEntities`, `Delete` 키).
+    - **엔티티 다중 복사·붙여넣기 (17절 완료)**: `EntityClipboard` 메모리 직렬화, 조상 필터링, 원래 계층/형제 순서 보존, 원자적 단일 Undo(`History.Command.PasteEntities`), 단축키(`Ctrl+C`/`Ctrl+V`/`Ctrl+Shift+V`) 및 다중 삭제(`DeleteEntities`, `Delete` 키).
     - **그래프 패널 상단 도구 모음 메뉴바 리팩터링 (2026-11-01 구현 완료)**:
       - 기존 2단 버튼 나열 방식을 제거하고 `ImGuiWindowFlags_MenuBar` 기반 상단 메뉴바(`File`, `Edit`, `View`, `Graph Mode`, `Debug/Build`)와 1줄 퀵 액세스 툴바로 재설계하여 캔버스 작업 공간 대폭 확보.
     - **씬 레벨 독립 Collider Raycast API (2026-11-01 구현 완료)**:

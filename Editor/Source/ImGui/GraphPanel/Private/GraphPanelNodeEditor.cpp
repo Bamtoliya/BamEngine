@@ -251,7 +251,7 @@ void GraphPanel::DrawCanvas(float height)
 		if (targetNodeId != 0)
 		{
 			const bool isBp = HasBreakpoint(targetNodeId);
-			const char* breakpointKey = isBp ? "GraphPanel.RemoveBreakpoint" : "GraphPanel.ToggleBreakpoint";
+			const char* breakpointKey = isBp ? "GraphPanel.RemoveBreakpoint" : "Action.Graph.ToggleBreakpoint";
 			if (ImGui::MenuItem(LOCAL_LABEL(breakpointKey).c_str(), sm.GetShortcutHint("Graph.ToggleBreakpoint")))
 				ToggleBreakpoint(targetNodeId);
 		}
@@ -260,14 +260,14 @@ void GraphPanel::DrawCanvas(float height)
 			ImGui::Separator();
 			if (ImGui::BeginMenu(LOCAL_LABEL("GraphPanel.Alignment").c_str()))
 			{
-				if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.AlignTop").c_str(), sm.GetShortcutHint("Graph.AlignTop"))) AlignSelectedNodes('W');
-				if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.AlignBottom").c_str(), sm.GetShortcutHint("Graph.AlignBottom"))) AlignSelectedNodes('S');
-				if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.AlignLeft").c_str(), sm.GetShortcutHint("Graph.AlignLeft"))) AlignSelectedNodes('A');
-				if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.AlignRight").c_str(), sm.GetShortcutHint("Graph.AlignRight"))) AlignSelectedNodes('D');
+				if (ImGui::MenuItem(LOCAL_LABEL("Action.Graph.AlignTop").c_str(), sm.GetShortcutHint("Graph.AlignTop"))) AlignSelectedNodes('W');
+				if (ImGui::MenuItem(LOCAL_LABEL("Action.Graph.AlignBottom").c_str(), sm.GetShortcutHint("Graph.AlignBottom"))) AlignSelectedNodes('S');
+				if (ImGui::MenuItem(LOCAL_LABEL("Action.Graph.AlignLeft").c_str(), sm.GetShortcutHint("Graph.AlignLeft"))) AlignSelectedNodes('A');
+				if (ImGui::MenuItem(LOCAL_LABEL("Action.Graph.AlignRight").c_str(), sm.GetShortcutHint("Graph.AlignRight"))) AlignSelectedNodes('D');
 				const bool canDistribute = document.SelectedNodes.size() >= 3;
-				if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.DistributeHorizontal").c_str(), sm.GetShortcutHint("Graph.DistributeHoriz"), false, canDistribute))
+				if (ImGui::MenuItem(LOCAL_LABEL("Action.Graph.DistributeHoriz").c_str(), sm.GetShortcutHint("Graph.DistributeHoriz"), false, canDistribute))
 					AlignSelectedNodes('H');
-				if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.DistributeVertical").c_str(), sm.GetShortcutHint("Graph.DistributeVert"), false, canDistribute))
+				if (ImGui::MenuItem(LOCAL_LABEL("Action.Graph.DistributeVert").c_str(), sm.GetShortcutHint("Graph.DistributeVert"), false, canDistribute))
 					AlignSelectedNodes('V');
 				ImGui::EndMenu();
 			}

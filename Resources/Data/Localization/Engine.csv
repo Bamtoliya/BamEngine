@@ -670,3 +670,25 @@
 ,Value is not a string.,Value is not a string.,값이 문자열이 아닙니다.
 ,Value is outside the native int32 range.,Value is outside the native int32 range.,값이 네이티브 int32 범위를 벗어났습니다.
 ,Xor,Xor,XOR
+,Duplicate link ID.,Duplicate link ID.,연결 ID가 중복되었습니다.
+,Duplicate node ID.,Duplicate node ID.,노드 ID가 중복되었습니다.
+,Engine::ETransformAbsolute.All,Independent Transform,Transform 전체 독립
+,Engine::ETransformAbsolute.None,Inherit All,전체 상속
+,Engine::ETransformAbsolute.Position,Absolute Position,위치 독립
+,Engine::ETransformAbsolute.Rotation,Absolute Rotation,회전 독립
+,Engine::ETransformAbsolute.Scale,Absolute Scale,크기 독립
+,Graph data domain does not match this graph.,Graph data domain does not match this graph.,그래프 데이터의 도메인이 현재 그래프와 일치하지 않습니다.
+,Link ID must be non-zero.,Link ID must be non-zero.,연결 ID는 0일 수 없습니다.
+,NODE_ANIMATOR_GET_LAYER_WEIGHT,Get Animator Layer Weight,애니메이터 레이어 가중치 가져오기
+,NODE_ANIMATOR_SET_LAYER_WEIGHT,Set Animator Layer Weight,애니메이터 레이어 가중치 설정
+,NODE_ANIMATOR_STOP_LAYER,Stop Animator Layer,애니메이터 레이어 중지
+,Next link ID must exceed existing link IDs.,Next link ID must exceed existing link IDs.,다음 연결 ID는 기존 연결 ID보다 커야 합니다.
+,Next node ID must exceed existing node IDs.,Next node ID must exceed existing node IDs.,다음 노드 ID는 기존 노드 ID보다 커야 합니다.
+,Node ID must be non-zero.,Node ID must be non-zero.,노드 ID는 0일 수 없습니다.
+,PROP_ANIMATOR_LAYERS,Animation Layers,애니메이션 레이어 목록
+,Pass through execution or data wire cleanly.,Pass through execution or data wire cleanly.,실행선이나 데이터선을 중간에서 연결해 경로를 정리합니다.
+,Unsupported graph data version.,Unsupported graph data version.,지원하지 않는 그래프 데이터 버전입니다.
+,Variable name cannot be empty.,Variable name cannot be empty.,변수 이름은 비워 둘 수 없습니다.
+,Variable not found in executor:,Variable not found in executor:,실행기에서 변수를 찾을 수 없습니다:
+,Variable not found.,Variable not found.,변수를 찾을 수 없습니다.
+,Variable with this name already exists.,Variable with this name already exists.,같은 이름의 변수가 이미 있습니다.

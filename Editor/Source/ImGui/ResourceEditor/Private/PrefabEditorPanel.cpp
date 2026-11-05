@@ -159,7 +159,7 @@ void PrefabEditorPanel::DrawToolbar()
 {
     if (ImGui::BeginMenuBar())
     {
-        if (ImGui::BeginMenu(LOCAL_LABEL("UI_FILE").c_str()))
+        if (ImGui::BeginMenu(LOCAL_LABEL("EditorMenu.File").c_str()))
         {
             ACTION_MENU_ITEM(LOCAL_LABEL("PrefabEditor.Save").c_str(), "Prefab.Save");
 

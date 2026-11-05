@@ -31,7 +31,7 @@
 InspectorPanel::InspectorPanel(uint32 panelId) : m_PanelId(panelId)
 {
 	m_Name = panelId == 0 ? L"Inspector" : L"Inspector " + std::to_wstring(panelId + 1);
-	m_DisplayNameKey = "UI_INSPECTOR";
+	m_DisplayNameKey = "Inspector.Title";
 }
 
 void InspectorPanel::Draw()
@@ -40,8 +40,8 @@ void InspectorPanel::Draw()
 	if (m_FocusRequested)
 		ImGui::SetNextWindowFocus();
 	const string windowTitle = m_PanelId == 0 ?
-		LOCAL("UI_INSPECTOR") + "###InspectorPanel" :
-		fmt::format("{} #{}###InspectorPanel_{}", LOCAL("UI_INSPECTOR"), m_PanelId + 1, m_PanelId);
+		LOCAL("Inspector.Title") + "###InspectorPanel" :
+		fmt::format("{} #{}###InspectorPanel_{}", LOCAL("Inspector.Title"), m_PanelId + 1, m_PanelId);
 	if (ImGui::Begin(windowTitle.c_str(), &m_Open))
 	{
 		if (m_FocusRequested)
@@ -544,7 +544,7 @@ void InspectorPanel::DrawCommonTransformVector(Engine::Scene& scene, std::span<c
 						storage->SetInt(errorId, 1);
 					else if (result == TransformBatchResult::Changed)
 					{
-						history.Record(std::move(before), SceneEditSnapshot::Capture(scene, entities), "UI_HISTORY_TRANSFORM");
+						history.Record(std::move(before), SceneEditSnapshot::Capture(scene, entities), "History.Command.Transform");
 
 						auto& prefabMode = PrefabModeManager::Get();
 						if (prefabMode.IsInPrefabMode() && prefabMode.GetPrefabScene() == &scene)
@@ -632,7 +632,7 @@ void InspectorPanel::DrawCommonFlags(Engine::Scene& scene, std::span<const entt:
 			scene.UpdateHierarchyFlags();
 
 			auto after = SceneEditSnapshot::Capture(scene, entities);
-			history.Record(before, after, "UI_HISTORY_PROPERTY");
+			history.Record(before, after, "History.Command.EditProperty");
 			before = std::move(after);
 
 			auto& prefabMode = PrefabModeManager::Get();
@@ -725,7 +725,7 @@ void InspectorPanel::DrawCommonReflectedProperties(Engine::Scene& scene, std::sp
 			world.get<Engine::LightComponent>(entity).InvalidateCache();
 	}
 
-	history.Record(std::move(before), SceneEditSnapshot::Capture(scene, entities), "UI_HISTORY_PROPERTY");
+	history.Record(std::move(before), SceneEditSnapshot::Capture(scene, entities), "History.Command.EditProperty");
 
 	auto& prefabMode = PrefabModeManager::Get();
 	if (prefabMode.IsInPrefabMode() && prefabMode.GetPrefabScene() == &scene)
@@ -861,7 +861,7 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 				registry, &componentSettings, drawHeaderMenu)) return false;
 			if (!TryCommitInspectorCollider(current, std::move(candidate)))
 			{
-				ImGui::TextDisabled("%s", LocalizeInspectorText("UI_INVALID_PROPERTY").c_str());
+				ImGui::TextDisabled("%s", LocalizeInspectorText("Inspector.InvalidValue").c_str());
 				return false;
 			}
 			return true;
@@ -897,7 +897,7 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 				registry, &componentSettings, drawHeaderMenu))
 			{
 				changed = TransformPropertyEditor::ApplyCandidate(world, handle, candidate);
-				if (!changed) ImGui::TextDisabled("%s", LOCAL("UI_TRANSFORM_REJECTED").c_str());
+				if (!changed) ImGui::TextDisabled("%s", LOCAL("Inspector.TransformRejected").c_str());
 			}
 		}
 		else if (object.Is<Engine::CanvasComponent>()) changed = drawUI.operator() < Engine::CanvasComponent > ();
@@ -913,17 +913,17 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 			ImGui::Spacing();
 			if (audioSource.IsPlaying())
 			{
-				ImGui::TextColored(ImVec4(0.2f, 0.9f, 0.2f, 1.f), "%s", LOCAL_CSTR("UI_AUDIO_PLAYING"));
+				ImGui::TextColored(ImVec4(0.2f, 0.9f, 0.2f, 1.f), "%s", LOCAL_CSTR("AudioPreview.Playing"));
 				ImGui::SameLine();
-				if (ImGui::Button(LOCAL_LABEL("UI_STOP").c_str())) audioSource.Stop();
+				if (ImGui::Button(LOCAL_LABEL("EditorCommon.Stop").c_str())) audioSource.Stop();
 				ImGui::SameLine();
-				if (ImGui::Button(LOCAL_LABEL("UI_PAUSE").c_str())) audioSource.Pause();
+				if (ImGui::Button(LOCAL_LABEL("EditorCommon.Pause").c_str())) audioSource.Pause();
 			}
 			else
 			{
-				ImGui::TextDisabled("%s", LOCAL_CSTR("UI_AUDIO_STOPPED"));
+				ImGui::TextDisabled("%s", LOCAL_CSTR("AudioPreview.Stopped"));
 				ImGui::SameLine();
-				if (ImGui::Button(LOCAL_LABEL("UI_PLAY").c_str())) audioSource.Play();
+				if (ImGui::Button(LOCAL_LABEL("EditorCommon.Play").c_str())) audioSource.Play();
 			}
 		}
 		else if (object.Is<Engine::SpriteAnimationComponent>())
@@ -1312,7 +1312,7 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 	}
 	if (anyChanged)
 	{
-		history.Record(std::move(before), SceneEditSnapshot::Capture(*scene, targets), "UI_HISTORY_PROPERTIES", true);
+		history.Record(std::move(before), SceneEditSnapshot::Capture(*scene, targets), "History.Command.EditProperties", true);
 
 		auto& prefabMode = PrefabModeManager::Get();
 		if (prefabMode.IsInPrefabMode() && prefabMode.GetPrefabScene() == scene)
@@ -1342,7 +1342,7 @@ void InspectorPanel::DrawAddComponentButton(Engine::Entity& entity)
 		return;
 
 	const ImVec2 buttonSize(ImGui::GetContentRegionAvail().x, 0.0f);
-	if (ImGui::Button(LOCAL("UI_ADD_COMPONENT").c_str(), buttonSize))
+	if (ImGui::Button(LOCAL("Inspector.AddComponent").c_str(), buttonSize))
 	{
 		ImGui::OpenPopup("EntityAddComponentPopup");
 	}
@@ -1405,7 +1405,7 @@ void InspectorPanel::DrawAddComponentPopup(Engine::Entity& entity)
                 auto before = SceneEditSnapshot::Capture(*scene, targets);
 				if (before && entry.TryAdd(world, handle))
 				{
-					history.Record(std::move(before), SceneEditSnapshot::Capture(*scene, targets), "UI_HISTORY_COMPONENT");
+					history.Record(std::move(before), SceneEditSnapshot::Capture(*scene, targets), "History.Command.AddComponent");
 
 					auto& prefabMode = PrefabModeManager::Get();
 					if (prefabMode.IsInPrefabMode() && prefabMode.GetPrefabScene() == scene)

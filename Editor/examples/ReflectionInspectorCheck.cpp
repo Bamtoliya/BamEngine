@@ -634,8 +634,8 @@ namespace
         {
             static_cast<void>(localization.SetCurrentLanguage(language));
             for (const auto* key : { "CATEGORY_CORE", "CATEGORY_RENDER", "CATEGORY_PHYSICS_2D",
-                "CATEGORY_PHYSICS_3D", "STRUCT_CAMERA", "STRUCT_COLLIDER", "UI_GENERAL", "UI_RESOURCE_NONE",
-                "UI_RESOURCE_CLEAR", "UI_RESOURCE_REJECTED", "UI_INVALID_PROPERTY", "UI_ADD_VALUE" })
+                "CATEGORY_PHYSICS_3D", "STRUCT_CAMERA", "STRUCT_COLLIDER", "EditorCommon.General", "ResourcePicker.None",
+                "ResourcePicker.Clear", "ResourcePicker.Rejected", "Inspector.InvalidValue", "Inspector.AddValue" })
             {
                 const auto text = localization.GetText(std::string(key));
                 if (text.empty() || text == key) return Fail("An Inspector label is missing from generated catalogs.");

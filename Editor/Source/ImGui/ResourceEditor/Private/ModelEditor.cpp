@@ -138,7 +138,7 @@ void ModelEditor::Draw()
 				const bool canEdit = PIEManager::Get().IsEditing();
 
 				ImGui::BeginDisabled(!canEdit);
-				if (ImGui::Button((ICON_FA_FLOPPY_DISK " " + LOCAL_LABEL("MaterialEditor.Save")).c_str()))
+				if (ImGui::Button((ICON_FA_FLOPPY_DISK " " + LOCAL_LABEL("EditorCommon.Save")).c_str()))
 					SaveModel();
 				ImGui::EndDisabled();
 
@@ -166,7 +166,7 @@ void ModelEditor::Draw()
 			else
 			{
 				ImGui::TextWrapped("%s", LOCAL("ModelEditor.NoModel").c_str());
-				if (ImGui::Button(LOCAL_LABEL("MaterialEditor.Retry").c_str()))
+				if (ImGui::Button(LOCAL_LABEL("ModelEditor.RetryLoad").c_str()))
 					SetTargetResource(m_TargetResourcePath);
 			}
 		}
@@ -209,7 +209,7 @@ void ModelEditor::InstantiateModel()
 		return;
 	}
 
-	history.Record(std::move(before), SceneEditSnapshot::Capture(*scene), "UI_HISTORY_CREATE");
+	history.Record(std::move(before), SceneEditSnapshot::Capture(*scene), "History.Command.CreateEntity");
 	SelectionManager::Get().SetSelectedEntity(root);
 }
 
@@ -252,7 +252,7 @@ void ModelEditor::DrawMaterialSlots(Model& model, bool canEdit)
 		{
 			const EResult result = model.SetMaterial(static_cast<uint32>(i), candidate);
 			m_StatusKey = result == EResult::Success ?
-				"ModelEditor.PendingSave" : "UI_RESOURCE_REJECTED";
+				"ModelEditor.PendingSave" : "ResourcePicker.Rejected";
 
 			// 슬롯 머티리얼 변경 시 3D 프리뷰 모델 실시간 재인스턴스화
 			if (result == EResult::Success)

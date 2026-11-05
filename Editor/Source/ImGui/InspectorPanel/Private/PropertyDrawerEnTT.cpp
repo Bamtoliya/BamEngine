@@ -24,7 +24,7 @@ bool PropertyDrawerEnTT::DrawPropertyTable(entt::meta_any& instance, const entt:
     {
         // 다국어 변경 시에도 컬럼 폭이 유지되도록 ##Name, ##Value 부여
         const std::string colName = LOCAL("EditorCommon.Name") + "##Name";
-        const std::string colValue = LOCAL("UI_VALUE") + "##Value";
+        const std::string colValue = LOCAL("EditorCommon.Value") + "##Value";
         ImGui::TableSetupColumn(colName.c_str(), ImGuiTableColumnFlags_WidthFixed, 120.0f);
         ImGui::TableSetupColumn(colValue.c_str(), ImGuiTableColumnFlags_WidthStretch);
         for (auto [id, data] : type.data())

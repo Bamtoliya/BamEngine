@@ -8,7 +8,7 @@ namespace Editor
     AssetReferencePanel::AssetReferencePanel()
     {
         m_Name = L"AssetReferenceChecker";
-        m_DisplayNameKey = "UI_ASSET_REFERENCE_PANEL";
+        m_DisplayNameKey = "AssetRef.Title";
     }
 
     void AssetReferencePanel::Draw()
@@ -107,12 +107,12 @@ namespace Editor
 
         if (ImGui::BeginTable("##IssuesTable", 6, flags))
         {
-            ImGui::TableSetupColumn(LOCAL_LABEL("Metrics.Type").c_str(), ImGuiTableColumnFlags_WidthFixed, 90.0f);
+            ImGui::TableSetupColumn(LOCAL_LABEL("AssetRef.IssueType").c_str(), ImGuiTableColumnFlags_WidthFixed, 90.0f);
             ImGui::TableSetupColumn(LOCAL_LABEL("AssetRef.SourceAsset").c_str(), ImGuiTableColumnFlags_WidthStretch, 0.25f);
-            ImGui::TableSetupColumn(LOCAL_LABEL("UI_PROPERTY").c_str(), ImGuiTableColumnFlags_WidthFixed, 80.0f);
+            ImGui::TableSetupColumn(LOCAL_LABEL("EditorCommon.Property").c_str(), ImGuiTableColumnFlags_WidthFixed, 80.0f);
             ImGui::TableSetupColumn(LOCAL_LABEL("AssetRef.TargetReference").c_str(), ImGuiTableColumnFlags_WidthStretch, 0.35f);
             ImGui::TableSetupColumn(LOCAL_LABEL("AssetRef.SuggestedFix").c_str(), ImGuiTableColumnFlags_WidthStretch, 0.30f);
-            ImGui::TableSetupColumn(LOCAL_LABEL("Shortcuts.ColAction").c_str(), ImGuiTableColumnFlags_WidthFixed, 65.0f);
+            ImGui::TableSetupColumn(LOCAL_LABEL("AssetRef.FixAction").c_str(), ImGuiTableColumnFlags_WidthFixed, 65.0f);
             ImGui::TableHeadersRow();
 
             for (size_t i = 0; i < m_Issues.size(); ++i)

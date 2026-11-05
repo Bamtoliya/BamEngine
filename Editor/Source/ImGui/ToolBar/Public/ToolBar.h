@@ -2,12 +2,15 @@
 
 #include "Base.h"
 #include "BaseViewportPanel.h"
+#include "MainMenuBarLayout.h"
 
 BEGIN(Editor)
 class ToolBar
 {
 public:
 	void Draw(SDL_Window* window);
+	void ApplyPendingLanguageChange();
+	bool IsMainWindowDragArea(const SDL_Point& point) const;
 	float GetPlayBarHeight() const;
 	float GetFooterBarHeight() const;
 
@@ -62,6 +65,8 @@ public:
 
 #pragma region Variables
 private:
+	MainMenuBarLayout m_MainMenuBarLayout;
+	std::optional<ELocalizationLanguage> m_PendingLanguage;
 	bool m_ShowNewViewportPopup = false;
 	ViewportPanelDesc m_newViewportDesc;
 	char m_NewViewportNameBuf[256] = "Viewport";

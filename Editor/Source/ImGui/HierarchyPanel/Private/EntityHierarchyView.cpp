@@ -526,7 +526,7 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
             }
             if (entity == reveal) ImGui::SetScrollHereY();
             if (tree.Invalid.contains(entity) && ImGui::IsItemHovered())
-                ImGui::SetTooltip("%s", Text("UI_HIERARCHY_INVALID", "Invalid hierarchy links; shown without repair.").c_str());
+                ImGui::SetTooltip("%s", Text("Hierarchy.InvalidLinks", "Invalid hierarchy links; shown without repair.").c_str());
 
             // --- 1. [핵심] TreeNodeEx에 Drag & Drop 및 우클릭 메뉴를 먼저 바인딩 ---
             const auto* id = world.try_get<Engine::IDComponent>(entity);
@@ -555,7 +555,7 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
                 const auto* link = world.try_get<Engine::HierarchyComponent>(entity);
                 const bool hasParent = link && link->parent != entt::null;
                 // 1. 씬 뷰포트에서 포커스 (단축키 힌트 동적 조회)
-                if (ImGui::MenuItem((std::string(ICON_FA_CROSSHAIRS " ") + LOCAL("Action.Viewport.Focus")).c_str(),
+                if (ImGui::MenuItem((std::string(ICON_FA_CROSSHAIRS " ") + LOCAL("Hierarchy.FocusSelected")).c_str(),
                     sm.GetShortcutHint("Viewport.Focus")))
                     action.FocusEntity = entity;
                 // 2. 이름 변경 (단축키 힌트 동적 조회)
@@ -579,7 +579,7 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
                     action.PasteAsChild = entity;
                 ImGui::Separator();
                 // 4. 프리팹 관련
-                if (ImGui::MenuItem((std::string(ICON_FA_CUBES " ") + Text("UI.SAVE_AS_PREFAB", "Save As Prefab...")).c_str()))
+                if (ImGui::MenuItem((std::string(ICON_FA_CUBES " ") + Text("Prefab.SaveAs", "Save As Prefab...")).c_str()))
                     action.SaveAsPrefab = entity;
                 const entt::entity prefabRoot = FindPrefabRootHandle(world, entity);
                 if (prefabRoot != entt::null)
@@ -600,9 +600,9 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
                 if (hasParent)
                 {
                     ImGui::Separator();
-                    if (ImGui::MenuItem(Text("UI_HIERARCHY_MOVE_UP", "Move Up").c_str()))
+                    if (ImGui::MenuItem(Text("Hierarchy.MoveUp", "Move Up").c_str()))
                         action.MoveUp = entity;
-                    if (ImGui::MenuItem(Text("UI_HIERARCHY_MOVE_DOWN", "Move Down").c_str()))
+                    if (ImGui::MenuItem(Text("Hierarchy.MoveDown", "Move Down").c_str()))
                         action.MoveDown = entity;
                     if (ImGui::MenuItem((std::string(ICON_FA_ARROW_UP_FROM_BRACKET " ") + LOCAL("Hierarchy.MoveToRoot")).c_str()))
                         action.Unparent = entity;
@@ -613,9 +613,9 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
                 const size_t selectedCount = selected.size();
                 std::string deleteLabel;
                 if (isEntitySelected && selectedCount > 1)
-                    deleteLabel = Text("UI_DELETE_SELECTED_ENTITIES", "Delete selected entities") + " (" + std::to_string(selectedCount) + ")";
+                    deleteLabel = Text("Hierarchy.DeleteSelectedEntities", "Delete selected entities") + " (" + std::to_string(selectedCount) + ")";
                 else
-                    deleteLabel = Text("UI_DELETE_ENTITY", "Delete entity and children");
+                    deleteLabel = Text("Hierarchy.DeleteEntityAndChildren", "Delete entity and children");
                 if (ImGui::MenuItem((std::string(ICON_FA_TRASH " ") + deleteLabel).c_str(), ShortcutManager::Get().GetShortcutHint("Edit.Delete")))
                 {
                     if (isEntitySelected && selectedCount > 1)
@@ -685,22 +685,22 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
         };
     if (!tree.Invalid.empty())
         ImGui::TextDisabled("%s",
-            Text("UI_HIERARCHY_INVALID", "Invalid hierarchy links; shown without repair.").c_str());
+            Text("Hierarchy.InvalidLinks", "Invalid hierarchy links; shown without repair.").c_str());
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(ImGui::GetStyle().ItemSpacing.x, 0.0f));
     for (const auto root : tree.Roots) draw(draw, root);
     ImGui::PopStyleVar();
 
     if (isFiltering && matchingEntities.empty())
-        ImGui::TextDisabled("%s", Text("UI_HIERARCHY_NO_MATCH", "No matching entities found.").c_str());
+        ImGui::TextDisabled("%s", Text("Hierarchy.NoMatchingEntities", "No matching entities found.").c_str());
     else if (tree.Roots.empty())
-        ImGui::TextDisabled("%s", Text("UI_HIERARCHY_EMPTY", "No entities.").c_str());
+        ImGui::TextDisabled("%s", Text("Hierarchy.Empty", "No entities.").c_str());
     const auto* payload = ImGui::GetDragDropPayload();
     const bool entityDrag = payload && payload->IsDataType(EntityPayload);
     const bool assetDrag = payload && payload->IsDataType("CONTENT_BROWSER_ITEM");
 
     if (!locked && (entityDrag || assetDrag))
     {
-        const char* labelKey = assetDrag ? "Hierarchy.DropPrefabRoot" : "UI_HIERARCHY_ROOT_DROP";
+        const char* labelKey = assetDrag ? "Hierarchy.DropPrefabRoot" : "Hierarchy.RootDropHint";
         const std::string label = Text(labelKey) + "###HierarchyRootDrop";
         const float height = std::max(ImGui::GetFrameHeight() * 1.5f, ImGui::GetContentRegionAvail().y);
 

@@ -11,10 +11,10 @@ void PostProcessChain::Free()
 
 void PostProcessChain::DrawImGuiMenu()
 {
-	if (ImGui::BeginMenu(LOCAL_LABEL("UI_POST_FX").c_str()))
+	if (ImGui::BeginMenu(LOCAL_LABEL("PostProcess.MenuTitle").c_str()))
 	{
 		// 1. PostProcessPanel 열기 바로가기
-		if (ImGui::MenuItem(LOCAL_LABEL("UI_OPEN_POST_PROCESS_PANEL").c_str()))
+		if (ImGui::MenuItem(LOCAL_LABEL("PostProcess.OpenPanel").c_str()))
 		{
 			if (auto* panel = ImGuiManager::Get().GetImGuiPanel(L"Post Process"))
 				panel->Open();

@@ -45,11 +45,11 @@ Engine::EResult QtManager::Initialize(void* arg)
 	viewport->setAlignment(Qt::AlignCenter);
 	window->setCentralWidget(viewport);
 
-	auto* hierarchyDock = new QDockWidget(text("UI_HIERARCHY"), window);
+	auto* hierarchyDock = new QDockWidget(text("Hierarchy.Title"), window);
 	hierarchyDock->setObjectName("HierarchyDock");
 
 	auto* hierarchyTree = new QTreeWidget(hierarchyDock);
-	hierarchyTree->setHeaderLabel(text("UI_SCENE"));
+	hierarchyTree->setHeaderLabel(text("Viewport.Scene"));
 
 	auto* sceneItem = new QTreeWidgetItem(hierarchyTree);
 	sceneItem->setText(0, text("QtEditor.ScenePending"));
@@ -57,7 +57,7 @@ Engine::EResult QtManager::Initialize(void* arg)
 	hierarchyDock->setWidget(hierarchyTree);
 	window->addDockWidget(Qt::LeftDockWidgetArea, hierarchyDock);
 
-	auto* inspectorDock = new QDockWidget(text("UI_INSPECTOR"), window);
+	auto* inspectorDock = new QDockWidget(text("Inspector.Title"), window);
 	inspectorDock->setObjectName("InspectorDock");
 	inspectorDock->setWidget(new QLabel(text("QtEditor.SelectionPending"), inspectorDock));
 	window->addDockWidget(Qt::RightDockWidgetArea, inspectorDock);

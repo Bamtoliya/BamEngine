@@ -527,7 +527,7 @@ void UnifiedSettingsPanel::DrawCategoryGeneral()
         const char* languages[] = { "한국어 (Korean)", "English" };
         int currentLangIdx = (m_DraftLanguage == ELocalizationLanguage::English) ? 1 : 0;
         ImGui::SetNextItemWidth(200.0f);
-        if (ImGui::Combo(LOCAL_LABEL("UI_LANGUAGE").c_str(), &currentLangIdx, languages, IM_ARRAYSIZE(languages)))
+        if (ImGui::Combo(LOCAL_LABEL("Settings.Language").c_str(), &currentLangIdx, languages, IM_ARRAYSIZE(languages)))
         {
             m_DraftLanguage = (currentLangIdx == 1) ? ELocalizationLanguage::English : ELocalizationLanguage::Korean;
             m_LanguageDirty = true;
@@ -791,7 +791,7 @@ void UnifiedSettingsPanel::DrawCategoryShortcuts()
     std::map<std::string, std::vector<std::string>> categorizedActions;
     for (const auto& [id, action] : actions)
     {
-        const std::string catKey = action.CategoryKey.empty() ? "UI_GENERAL" : action.CategoryKey;
+        const std::string catKey = action.CategoryKey.empty() ? "EditorCommon.General" : action.CategoryKey;
         categorizedActions[catKey].push_back(id);
     }
 
@@ -917,7 +917,7 @@ void UnifiedSettingsPanel::DrawCategoryEditor()
     if (ImGui::CollapsingHeader(LOCAL_CSTR("Settings.Logging"), ImGuiTreeNodeFlags_DefaultOpen))
     {
         ImGui::Spacing();
-        const std::string levelLabels[] = { LOCAL("Console.Level.Trace"), LOCAL("Console.Level.Info"), LOCAL("Console.Level.Warn"), LOCAL("Console.Level.Error"), LOCAL("Console.Level.Fatal") };
+        const std::string levelLabels[] = { LOCAL("LogLevel.Trace"), LOCAL("LogLevel.Info"), LOCAL("LogLevel.Warn"), LOCAL("LogLevel.Error"), LOCAL("LogLevel.Fatal") };
         const char* logLevels[] = { levelLabels[0].c_str(), levelLabels[1].c_str(), levelLabels[2].c_str(), levelLabels[3].c_str(), levelLabels[4].c_str() };
         int currentLevelIdx = static_cast<int>(m_DraftLogLevel);
         ImGui::SetNextItemWidth(200.0f);

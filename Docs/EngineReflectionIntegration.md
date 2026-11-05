@@ -125,7 +125,7 @@ JSON과 BEVE는 같은 씬 형식과 리플렉션 처리 경로를 사용한다.
 ## Inspector 속성 편집
 
 Inspector는 컴포넌트마다 멤버를 다시 나열하지 않고 ReflectionPropertyDrawer를 사용한다.
-PROPERTY의 Category를 기준으로 배경 없는 트리 그룹을 만들고, Category가 없으면 UI_GENERAL 그룹을 사용한다.
+PROPERTY의 Category를 기준으로 배경 없는 트리 그룹을 만들고, Category가 없으면 `EditorCommon.General` 그룹을 사용한다.
 컴포넌트는 배경이 있는 헤더로 구분한다. 속성·값의 제목 행과 표 배경·구분선은 표시하지 않고 2열 정렬만 유지한다.
 AddComponent 버튼은 패널의 사용 가능한 가로 너비를 채운다.
 그룹 ID는 번역 전 키와 타입·프로퍼티 경로로 구분한다. 언어를 바꾸어도 접힘 상태를 유지한다.

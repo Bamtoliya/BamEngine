@@ -646,12 +646,12 @@ BamEngine의 우선 기준은 작은 게임의 제작·저장·실행·배포 �
 - **조상 필터링 (중복 방지)**: Hierarchy에서 부모와 자식이 동시에 선택된 경우, 조상 노드만 복사 루트로 선별하여 자식이 중복 복제되지 않도록 필터링한다.
 - **원래 계층 및 형제 순서 보존**: 복사된 서브트리 내부의 부모-자식 관계와 형제 순서가 완벽히 보존된다.
 - **새 ID 자동 발급**: 붙여넣기 시 `Scene::CreateEntities`를 통해 고유한 영구 엔티티 ID를 새로 발급하여 ID 충돌을 원천 차단한다.
-- **단일 원자적 Undo/Redo**: 여러 개의 엔티티가 한 번에 붙여넣어지더라도 `UI_HISTORY_PASTE` 단일 스냅샷으로 묶여 `Ctrl+Z` 한 번으로 일괄 제거되고 `Ctrl+Y`로 일괄 복원된다.
+- **단일 원자적 Undo/Redo**: 여러 개의 엔티티가 한 번에 붙여넣어지더라도 `History.Command.PasteEntities` 단일 스냅샷으로 묶여 `Ctrl+Z` 한 번으로 일괄 제거되고 `Ctrl+Y`로 일괄 복원된다.
 - **붙여넣기 후 자동 선택**: 생성된 신규 루트 엔티티들이 자동으로 선택되어 붙여넣기 직후 바로 기즈모 조작이 가능하다.
 - **단축키 및 메뉴 연동**:
   - `Ctrl+C`: 선택된 엔티티 복사 (`EditorCommon.Copy`)
   - `Ctrl+V`: 동일 부모 또는 씬 루트에 붙여넣기 (`EditorCommon.Paste`)
-  - `Ctrl+Shift+V`: 선택한 엔티티의 자식으로 붙여넣기 (`UI_HIERARCHY_PASTE_AS_CHILD`)
+  - `Ctrl+Shift+V`: 선택한 엔티티의 자식으로 붙여넣기 (`Edit.PasteAsChild`)
 - **계층 패널 다중 삭제 지원**: `Delete` 키 및 컨텍스트 메뉴를 통한 `EntityHierarchyAction::DeleteEntities` 다중 일괄 삭제 기능도 함께 완성되었다.
 
 ### 후속 범위와 완료 검증

@@ -106,6 +106,7 @@ public:
 #pragma region Helper
 public:
 	ImTextureID GetImGuiTextureID(const class RHITexture* texture) const;
+	bool IsMainWindowDragArea(const SDL_Point& point) const { return m_ToolBar.IsMainWindowDragArea(point); }
 #pragma endregion
 
 #pragma region Settings

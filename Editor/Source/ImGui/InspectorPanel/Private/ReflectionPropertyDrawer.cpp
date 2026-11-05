@@ -510,7 +510,7 @@ namespace
 				// 우클릭 시 "Reset to Default" 메뉴 제공
 				if (hasReset && ImGui::BeginPopupContextItem("ScalarSettings", ImGuiPopupFlags_MouseButtonRight))
 				{
-					if (ImGui::MenuItem(LOCAL_CSTR("UI_RESET_TO_DEFAULT"), nullptr, false, candidate != resetValue))
+					if (ImGui::MenuItem(LOCAL_CSTR("Inspector.ResetToDefault"), nullptr, false, candidate != resetValue))
 					{
 						candidate = resetValue;
 						changed = true;
@@ -655,7 +655,7 @@ namespace
 			{
 				ImGui::TextUnformatted(label.c_str());
 				ImGui::SameLine();
-				ImGui::TextDisabled("%s", LOCAL_CSTR("UI_VALUE_UNAVAILABLE"));
+				ImGui::TextDisabled("%s", LOCAL_CSTR("Inspector.ValueUnavailable"));
 				ImGui::PopID();
 				continue;
 			}
@@ -745,7 +745,7 @@ namespace
 
 			const int error = storage->GetInt(errorId, 0);
 			if (error == 1)
-				ImGui::TextDisabled("%s", LOCAL_CSTR("UI_INVALID_PROPERTY"));
+				ImGui::TextDisabled("%s", LOCAL_CSTR("Inspector.InvalidValue"));
 			else if (error == 2)
 				ImGui::TextDisabled("%s", LOCAL_CSTR("Inspector.MultiPropertyWriteFailed"));
 
@@ -1073,7 +1073,7 @@ namespace Editor
 		{
 			if (!GetReflectionDrawerBoolMetadata(property.Metadata, "Visible", true)) continue;
 			if (!EvaluateEditCondition(property, type, object, registry)) continue; // 추가: 조건 거짓이면 카테고리 집계 제외
-			const auto category = InspectorMetadataText(property.Metadata, "Category", "UI_GENERAL");
+			const auto category = InspectorMetadataText(property.Metadata, "Category", "EditorCommon.General");
 			if (std::ranges::find(categories, category) == categories.end()) categories.push_back(category);
 		}
 		for (const auto& category : categories)
@@ -1093,7 +1093,7 @@ namespace Editor
 				ImGui::TableSetupColumn("##Value", ImGuiTableColumnFlags_WidthStretch);
 				for (const auto& property : type.Properties)
 				{
-					if (InspectorMetadataText(property.Metadata, "Category", "UI_GENERAL") != category) continue;
+					if (InspectorMetadataText(property.Metadata, "Category", "EditorCommon.General") != category) continue;
 					if (!GetReflectionDrawerBoolMetadata(property.Metadata, "Visible", true)) continue;
 					if (!EvaluateEditCondition(property, type, object, registry)) continue;
 					const std::string displayName = GetReflectionDrawerDisplayName(property.Metadata, property.Name);
@@ -1154,7 +1154,7 @@ namespace Editor
 
 		if (!read)
 		{
-			ImGui::TextDisabled("%s", LOCAL("UI_VALUE_UNAVAILABLE").c_str());
+			ImGui::TextDisabled("%s", LOCAL("Inspector.ValueUnavailable").c_str());
 			ImGui::PopID();
 			return false;
 		}
@@ -1321,7 +1321,7 @@ namespace Editor
 				if (ImGui::SmallButton("X")) removed = tag;
 				ImGui::PopID();
 			}
-			if (ImGui::Button(LocalizeInspectorText("UI_ADD_VALUE").c_str())) ImGui::OpenPopup("AddTag");
+			if (ImGui::Button(LocalizeInspectorText("Inspector.AddValue").c_str())) ImGui::OpenPopup("AddTag");
 			if (ImGui::BeginPopup("AddTag"))
 			{
 				// Normal Inspector calls store input per entity and component in world.ctx().
@@ -1350,7 +1350,7 @@ namespace Editor
 		{
 			const auto sizeResult = property.TryGetSize(object);
 			const std::size_t count = sizeResult ? sizeResult.Size : 0;
-			const auto preview = sizeResult ? LOCAL_FMT("UI_ELEMENT_COUNT", count) : LOCAL("UI_SIZE_UNAVAILABLE");
+			const auto preview = sizeResult ? LOCAL_FMT("Inspector.ElementCount", count) : LOCAL("Inspector.SizeUnavailable");
 
 			const auto* elementType = registry ? registry->FindType(property.GetElementCppType()) : nullptr;
 			const bool isObjectSequence = (elementType != nullptr) && property.CanEditElementObject();
@@ -1370,7 +1370,7 @@ namespace Editor
 						changed = true;
 					}
 				}
-				if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("UI_ADD_VALUE"));
+				if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("Inspector.AddValue"));
 			}
 
 			if (nodeOpen)

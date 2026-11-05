@@ -14,7 +14,7 @@ void MetricsPanel::Draw()
 {
     if (!m_Open) return;
 
-    const string windowTitle = LOCAL("UI_ENGINE_METRICS_PANEL") + "###EngineMetricsPanel";
+    const string windowTitle = LOCAL("Metrics.Title") + "###EngineMetricsPanel";
     if (ImGui::Begin(windowTitle.c_str(), &m_Open))
     {
         m_Focused = ImGui::IsWindowFocused();
@@ -274,7 +274,7 @@ void MetricsPanel::DrawNetworkMetrics()
     }
 
     auto& driver = netSystem->GetDriver();
-    ImGui::Text(LOCAL_CSTR("Metrics.NetworkDriverStatus"), driver.IsServer() ? LOCAL_CSTR("NetworkProfiler.ServerMode") : (driver.IsClient() ? LOCAL_CSTR("NetworkProfiler.ClientMode") : LOCAL_CSTR("NetworkProfiler.StandaloneMode")));
+    ImGui::Text(LOCAL_CSTR("Metrics.NetworkDriverStatus"), driver.IsServer() ? LOCAL_CSTR("NetworkDisplay.DedicatedServer") : (driver.IsClient() ? LOCAL_CSTR("NetworkDisplay.ClientConnected") : LOCAL_CSTR("NetworkDisplay.Standalone")));
     if (driver.IsClient())
     {
         ImGui::BulletText(LOCAL_CSTR("Metrics.SmoothedRttMs"), driver.GetSmoothedRTT());

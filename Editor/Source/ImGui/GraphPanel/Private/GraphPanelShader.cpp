@@ -241,7 +241,7 @@ void GraphPanel::DrawShaderPreview()
 	auto& build = m_Shader.ShaderBuild;
 	if (!build.Preview) return;
 
-	ImGui::SeparatorText(LOCAL_CSTR("MaterialEditor.Preview"));
+	ImGui::SeparatorText(LOCAL_CSTR("GraphPanel.ShaderPreviewTitle"));
 
 	if (!build.SourceCurrent || build.Preview->GetSource() != build.Source)
 		ImGui::TextWrapped("%s", LOCAL_CSTR("GraphPanel.ShaderPreviewOld"));

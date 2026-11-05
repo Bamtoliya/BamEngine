@@ -438,7 +438,7 @@ namespace
         Check(Edit::SetVectorAxis(world, targets, Mode::Scale, 0, 2) == Result::Changed, "batch history edit");
         auto after = Editor::SceneEditSnapshot::Capture(*scene, targets);
         Check(bool(after), "batch after snapshot");
-        history.Record(std::move(before), std::move(after), "UI_HISTORY_TRANSFORM");
+        history.Record(std::move(before), std::move(after), "History.Command.Transform");
         Check(history.Undo() && ta.scale == glm::vec3(1) && tb.scale == glm::vec3(1), "batch scale undo");
         Check(history.Redo() && ta.scale == glm::vec3(2, 1, 1) && tb.scale == glm::vec3(2, 1, 1), "batch scale redo");
     }
@@ -500,7 +500,7 @@ namespace
         Check(Edit::SetVectorAxis(world, targets, Mode::Rotation, 2, 720) == Result::Changed, "rotation history edit");
         auto after = Editor::SceneEditSnapshot::Capture(*scene, targets);
         Check(bool(after), "rotation after snapshot");
-        history.Record(std::move(before), std::move(after), "UI_HISTORY_TRANSFORM");
+        history.Record(std::move(before), std::move(after), "History.Command.Transform");
 
         Check(history.Undo() && ta.eulerRotation == savedA.eulerRotation &&
             tb.eulerRotation == savedB.eulerRotation && ta.rotation == savedA.rotation &&

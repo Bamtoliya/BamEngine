@@ -92,7 +92,7 @@ bool EntityClipboard::CopySelected(Engine::Scene* scene)
 
     if (!s_Clipboard.empty())
     {
-        NotificationManager::Get().AddNotification(LOCAL("UI_EDIT"), LOCAL_FMT("Notification.EntitiesCopied", s_Clipboard.size()), ELogLevel::Info, 2.0f);
+        NotificationManager::Get().AddNotification(LOCAL("EditorMenu.Edit"), LOCAL_FMT("Notification.EntitiesCopied", s_Clipboard.size()), ELogLevel::Info, 2.0f);
         return true;
     }
     return false;
@@ -127,11 +127,11 @@ bool EntityClipboard::Paste(Engine::Scene* scene, Engine::Entity* targetParent)
 
     if (spawnedRoots.empty())
     {
-        NotificationManager::Get().AddNotification(LOCAL("UI_EDIT"), LOCAL("Notification.EntitiesPasteFailed"), ELogLevel::Error, 3.0f);
+        NotificationManager::Get().AddNotification(LOCAL("EditorMenu.Edit"), LOCAL("Notification.EntitiesPasteFailed"), ELogLevel::Error, 3.0f);
         return false;
     }
 
-    if (before) history.Record(std::move(before), SceneEditSnapshot::Capture(*scene), "UI_HISTORY_PASTE");
+    if (before) history.Record(std::move(before), SceneEditSnapshot::Capture(*scene), "History.Command.PasteEntities");
 
     SelectionManager::Get().ClearSelection();
     for (auto* entity : spawnedRoots)
@@ -139,6 +139,6 @@ bool EntityClipboard::Paste(Engine::Scene* scene, Engine::Entity* targetParent)
         SelectionManager::Get().AddToSelection(entity);
     }
 
-    NotificationManager::Get().AddNotification(LOCAL("UI_EDIT"), LOCAL_FMT("Notification.EntitiesPasted", spawnedRoots.size()), ELogLevel::Info, 2.0f);
+    NotificationManager::Get().AddNotification(LOCAL("EditorMenu.Edit"), LOCAL_FMT("Notification.EntitiesPasted", spawnedRoots.size()), ELogLevel::Info, 2.0f);
     return true;
 }

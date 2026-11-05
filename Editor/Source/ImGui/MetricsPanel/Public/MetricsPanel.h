@@ -26,7 +26,7 @@ enum class EMetricsDomain : std::uint8_t
 class MetricsPanel : public IImGui
 {
 public:
-    MetricsPanel() { m_Name = L"Metrics"; m_DisplayNameKey = "UI_ENGINE_METRICS_PANEL"; }
+    MetricsPanel() { m_Name = L"Metrics"; m_DisplayNameKey = "Metrics.Title"; }
     virtual ~MetricsPanel() override = default;
     virtual void Draw() override;
     virtual void Update(f32 dt) override;

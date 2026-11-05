@@ -23,7 +23,7 @@ namespace
 PostProcessPanel::PostProcessPanel()
 {
 	m_Name = L"Post Process";
-	m_DisplayNameKey = "UI_POST_FX";
+	m_DisplayNameKey = "PostProcess.MenuTitle";
 }
 
 void PostProcessPanel::Update(f32)
@@ -48,7 +48,7 @@ void PostProcessPanel::Draw()
 
 	ImGui::SetNextWindowSize(ImVec2(340.f, 480.f), ImGuiCond_FirstUseEver);
 
-	const string windowTitle = LOCAL("UI_POST_FX") + "###PostProcessPanel";
+	const string windowTitle = LOCAL("PostProcess.MenuTitle") + "###PostProcessPanel";
 	if (!ImGui::Begin(windowTitle.c_str(), &m_Open))
 	{
 		ImGui::End();
@@ -60,7 +60,7 @@ void PostProcessPanel::Draw()
 		m_SelectedEffectIndex = 0;
 		m_SelectedPresetName.clear();
 
-		ImGui::TextDisabled("%s", LOCAL_CSTR("UI_NO_SCENE_LOADED"));
+		ImGui::TextDisabled("%s", LOCAL_CSTR("EditorDocument.NoSceneLoaded"));
 		ImGui::End();
 		return;
 	}
@@ -182,7 +182,7 @@ void PostProcessPanel::RefreshPresetList()
 	{
 		EDITOR_LOG_ERROR("Could not refresh post-process preset list: {}", error.message());
 
-		NotificationManager::Get().AddNotification(LOCAL("UI_POST_FX"),
+		NotificationManager::Get().AddNotification(LOCAL("PostProcess.MenuTitle"),
 			LOCAL("PostProcess.PresetListFailed"), ELogLevel::Error);
 		return;
 	}
@@ -286,7 +286,7 @@ void PostProcessPanel::DrawPipelineList(PostProcessChain* chain)
 	const ImVec2 btnSize(ImGui::GetContentRegionAvail().x * 0.5f - 4.f, 0.f);
 
 	if (!canMoveUp) ImGui::BeginDisabled(true);
-	const string moveUpText = string(ICON_FA_ARROW_UP " ") + LOCAL_LABEL("Inspector.MoveUp");
+	const string moveUpText = string(ICON_FA_ARROW_UP " ") + LOCAL_LABEL("PostProcess.MoveEffectUp");
 	if (ImGui::Button(moveUpText.c_str(), btnSize))
 	{
 		std::swap(effects[m_SelectedEffectIndex], effects[m_SelectedEffectIndex - 1]);
@@ -297,7 +297,7 @@ void PostProcessPanel::DrawPipelineList(PostProcessChain* chain)
 	ImGui::SameLine();
 
 	if (!canMoveDown) ImGui::BeginDisabled(true);
-	const string moveDownText = string(ICON_FA_ARROW_DOWN " ") + LOCAL_LABEL("Inspector.MoveDown");
+	const string moveDownText = string(ICON_FA_ARROW_DOWN " ") + LOCAL_LABEL("PostProcess.MoveEffectDown");
 	if (ImGui::Button(moveDownText.c_str(), btnSize))
 	{
 		std::swap(effects[m_SelectedEffectIndex], effects[m_SelectedEffectIndex + 1]);
@@ -482,7 +482,7 @@ void PostProcessPanel::DrawPresetToolbar(PostProcessChain* chain)
 				{
 					EDITOR_LOG_ERROR("Could not load post-process preset: {}", presetName);
 
-					NotificationManager::Get().AddNotification(LOCAL("UI_POST_FX"),
+					NotificationManager::Get().AddNotification(LOCAL("PostProcess.MenuTitle"),
 						LOCAL_FMT("PostProcess.PresetLoadFailed", presetName), ELogLevel::Error);
 				}
 			}
@@ -567,7 +567,7 @@ void PostProcessPanel::DrawPresetToolbar(PostProcessChain* chain)
 				m_SelectedPresetName = presetName;
 				m_PresetListNeedsRefresh = true;
 
-				NotificationManager::Get().AddNotification(LOCAL("UI_POST_FX"),
+				NotificationManager::Get().AddNotification(LOCAL("PostProcess.MenuTitle"),
 					LOCAL_FMT("PostProcess.PresetSaved", presetName), ELogLevel::Info);
 
 				ImGui::CloseCurrentPopup();
@@ -579,7 +579,7 @@ void PostProcessPanel::DrawPresetToolbar(PostProcessChain* chain)
 
 				EDITOR_LOG_ERROR("Could not save post-process preset: {}", presetName);
 
-				NotificationManager::Get().AddNotification(LOCAL("UI_POST_FX"),
+				NotificationManager::Get().AddNotification(LOCAL("PostProcess.MenuTitle"),
 					LOCAL_FMT("PostProcess.PresetSaveFailed", presetName), ELogLevel::Error);
 			}
 		}
@@ -615,7 +615,7 @@ void PostProcessPanel::DrawPresetToolbar(PostProcessChain* chain)
 				{
 					EDITOR_LOG_ERROR("Could not delete post-process preset '{}': {}", presetToDelete, error.message());
 
-					NotificationManager::Get().AddNotification(LOCAL("UI_POST_FX"),
+					NotificationManager::Get().AddNotification(LOCAL("PostProcess.MenuTitle"),
 						LOCAL_FMT("PostProcess.PresetDeleteFailed", presetToDelete), ELogLevel::Error);
 				}
 				else
@@ -702,7 +702,7 @@ void PostProcessPanel::DrawSceneApplyButton(PostProcessChain* chain)
 
 		if (!chain->GetPipeline().SaveToString(settings))
 		{
-			NotificationManager::Get().AddNotification(LOCAL("UI_POST_FX"),
+			NotificationManager::Get().AddNotification(LOCAL("PostProcess.MenuTitle"),
 				LOCAL("PostProcess.SceneApplyFailed"), ELogLevel::Error);
 		}
 		else
@@ -715,7 +715,7 @@ void PostProcessPanel::DrawSceneApplyButton(PostProcessChain* chain)
 				component.PipelineSettings.swap(settings);
 			}
 
-			NotificationManager::Get().AddNotification(LOCAL("UI_POST_FX"),
+			NotificationManager::Get().AddNotification(LOCAL("PostProcess.MenuTitle"),
 				LOCAL("PostProcess.AppliedToScene"), ELogLevel::Info);
 		}
 	}

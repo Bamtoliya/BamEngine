@@ -183,7 +183,7 @@ void BaseViewportPanel::DrawCustomOptions()
 void BaseViewportPanel::DrawRenderTargetMenu()
 {
 	
-	if (ImGui::BeginMenu(LOCAL_CSTR("UI_RENDER_TARGET")))
+	if (ImGui::BeginMenu(LOCAL_CSTR("Viewport.RenderTargetsMenu")))
 	{
 		if (ImGui::BeginMenu(LOCAL_LABEL("Viewport.AllRenderTargets").c_str()))
 		{
@@ -352,7 +352,7 @@ EResult BaseViewportPanel::ResizeRenderTargets(uint32 width, uint32 height)
 }
 void BaseViewportPanel::DrawResolutionMenu()
 {
-	if (!ImGui::BeginMenu(LOCAL_LABEL("UI_RESOLUTION").c_str()))
+	if (!ImGui::BeginMenu(LOCAL_LABEL("Viewport.Resolution").c_str()))
 		return;
 
 	auto state = CaptureResolutionState();

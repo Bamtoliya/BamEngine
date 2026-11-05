@@ -4,7 +4,7 @@ BEGIN(Editor)
 
 ResourceManagerInspector::ResourceManagerInspector()
 {
-    m_Name = L"Resource Manager"; m_DisplayNameKey = "UI_RESOURCE_MANGER_INSPECTOR";
+    m_Name = L"Resource Manager"; m_DisplayNameKey = "ResourceInspector.Title";
 }
 
 void ResourceManagerInspector::Update(f32 dt)
@@ -82,7 +82,7 @@ void ResourceManagerInspector::Draw()
     if (!m_Open)
         return;
 
-    const string windowTitle = LOCAL("UI_RESOURCE_MANGER_INSPECTOR") + "###ResourceManagerInspector";
+    const string windowTitle = LOCAL("ResourceInspector.Title") + "###ResourceManagerInspector";
 
     if (ImGui::Begin(windowTitle.c_str(), &m_Open))
     {

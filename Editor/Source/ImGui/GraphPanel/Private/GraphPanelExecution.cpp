@@ -286,7 +286,7 @@ void GraphPanel::DrawExecutionTrace()
 void GraphPanel::DrawExecutionMenu()
 {
 	if (m_Domain != EGraphDomain::Logic) return;
-	if (!ImGui::BeginMenu(LOCAL_LABEL("UI_DEBUG").c_str())) return;
+	if (!ImGui::BeginMenu(LOCAL_LABEL("Viewport.DebugMenu").c_str())) return;
 
 	ACTION_MENU_ITEM(LOCAL_LABEL("GraphPanel.Run").c_str(), "Graph.Run");
 	ACTION_MENU_ITEM(LOCAL_LABEL("GraphPanel.Pause").c_str(), "Graph.Pause");

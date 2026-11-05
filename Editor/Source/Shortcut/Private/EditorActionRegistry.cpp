@@ -36,8 +36,8 @@ void EditorActionRegistry::RegisterAll()
     // =========================================================================================
     sm.RegisterAction({
         .Id = "Edit.Undo",
-        .DisplayNameKey = "UI_UNDO",
-        .CategoryKey = "UI_EDIT",
+        .DisplayNameKey = "EditorCommon.Undo",
+        .CategoryKey = "EditorMenu.Edit",
         .Context = EShortcutContext::Global,
         .DefaultChord = ShortcutChord(Engine::EKeyCode::Z, EModifierKey::Ctrl),
         .ExecuteHandler = []() { Application::Get().GetEditHistory().Undo(); },
@@ -50,8 +50,8 @@ void EditorActionRegistry::RegisterAll()
 
     sm.RegisterAction({
         .Id = "Edit.Redo",
-        .DisplayNameKey = "UI_REDO",
-        .CategoryKey = "UI_EDIT",
+        .DisplayNameKey = "EditorCommon.Redo",
+        .CategoryKey = "EditorMenu.Edit",
         .Context = EShortcutContext::Global,
         .DefaultChord = ShortcutChord(Engine::EKeyCode::Y, EModifierKey::Ctrl),
         .ExecuteHandler = []() { Application::Get().GetEditHistory().Redo(); },
@@ -65,7 +65,7 @@ void EditorActionRegistry::RegisterAll()
     sm.RegisterAction({
         .Id = "Edit.Copy",
         .DisplayNameKey = "EditorCommon.Copy",
-        .CategoryKey = "UI_EDIT",
+        .CategoryKey = "EditorMenu.Edit",
         .Context = EShortcutContext::Global,
         .DefaultChord = ShortcutChord(Engine::EKeyCode::C, EModifierKey::Ctrl),
         .ExecuteHandler = []() {
@@ -82,7 +82,7 @@ void EditorActionRegistry::RegisterAll()
     sm.RegisterAction({
         .Id = "Edit.Paste",
         .DisplayNameKey = "EditorCommon.Paste",
-        .CategoryKey = "UI_EDIT",
+        .CategoryKey = "EditorMenu.Edit",
         .Context = EShortcutContext::Global,
         .DefaultChord = ShortcutChord(Engine::EKeyCode::V, EModifierKey::Ctrl),
         .ExecuteHandler = []() {
@@ -98,7 +98,7 @@ void EditorActionRegistry::RegisterAll()
     sm.RegisterAction({
         .Id = "Edit.PasteAsChild",
         .DisplayNameKey = "EditorCommon.PasteAsChild",
-        .CategoryKey = "UI_EDIT",
+        .CategoryKey = "EditorMenu.Edit",
         .Context = EShortcutContext::Global,
         .DefaultChord = ShortcutChord(Engine::EKeyCode::V, EModifierKey::Ctrl | EModifierKey::Shift),
         .ExecuteHandler = []() {
@@ -117,7 +117,7 @@ void EditorActionRegistry::RegisterAll()
     sm.RegisterAction({
         .Id = "Edit.Duplicate",
         .DisplayNameKey = "Action.Edit.Duplicate",
-        .CategoryKey = "UI_EDIT",
+        .CategoryKey = "EditorMenu.Edit",
         .Context = EShortcutContext::Global,
         .DefaultChord = ShortcutChord(Engine::EKeyCode::D, EModifierKey::Ctrl),
         .ExecuteHandler = []() {
@@ -137,7 +137,7 @@ void EditorActionRegistry::RegisterAll()
     sm.RegisterAction({
         .Id = "Edit.Delete",
         .DisplayNameKey = "Action.Edit.Delete",
-        .CategoryKey = "UI_EDIT",
+        .CategoryKey = "EditorMenu.Edit",
         .Context = EShortcutContext::Global,
         .DefaultChord = ShortcutChord(Engine::EKeyCode::Delete),
         .ExecuteHandler = []() {
@@ -163,7 +163,7 @@ void EditorActionRegistry::RegisterAll()
     sm.RegisterAction({
         .Id = "Edit.Deselect",
         .DisplayNameKey = "Action.Edit.Deselect",
-        .CategoryKey = "UI_EDIT",
+        .CategoryKey = "EditorMenu.Edit",
         .Context = EShortcutContext::Global,
         .DefaultChord = ShortcutChord(Engine::EKeyCode::Escape),
         .ExecuteHandler = []() { SelectionManager::Get().ClearSelection(); },
@@ -175,8 +175,8 @@ void EditorActionRegistry::RegisterAll()
     // =========================================================================================
     sm.RegisterAction({
         .Id = "File.NewScene",
-        .DisplayNameKey = "UI_NEW_SCENE",
-        .CategoryKey = "UI_SCENE",
+        .DisplayNameKey = "Action.File.NewScene",
+        .CategoryKey = "Viewport.Scene",
         .Context = EShortcutContext::Global,
         .DefaultChord = ShortcutChord(Engine::EKeyCode::N, EModifierKey::Ctrl),
         .ExecuteHandler = []() { ToolBar::NewScene(); },
@@ -185,8 +185,8 @@ void EditorActionRegistry::RegisterAll()
 
     sm.RegisterAction({
         .Id = "File.SaveScene",
-        .DisplayNameKey = "UI_SAVE_SCENE",
-        .CategoryKey = "UI_SCENE",
+        .DisplayNameKey = "Action.File.SaveScene",
+        .CategoryKey = "Viewport.Scene",
         .Context = EShortcutContext::Global,
         .DefaultChord = ShortcutChord(Engine::EKeyCode::S, EModifierKey::Ctrl),
         .ExecuteHandler = []() { ToolBar::SaveScene(); },
@@ -209,7 +209,7 @@ void EditorActionRegistry::RegisterAll()
     sm.RegisterAction({
         .Id = "File.SaveSceneAs",
         .DisplayNameKey = "Action.File.SaveSceneAs",
-        .CategoryKey = "UI_SCENE",
+        .CategoryKey = "Viewport.Scene",
         .Context = EShortcutContext::Global,
         .DefaultChord = ShortcutChord(Engine::EKeyCode::S, EModifierKey::Ctrl | EModifierKey::Shift),
         .ExecuteHandler = []() { ToolBar::SaveScene(true); },
@@ -221,8 +221,8 @@ void EditorActionRegistry::RegisterAll()
 
     sm.RegisterAction({
         .Id = "File.LoadScene",
-        .DisplayNameKey = "UI_LOAD_SCENE",
-        .CategoryKey = "UI_SCENE",
+        .DisplayNameKey = "Action.File.LoadScene",
+        .CategoryKey = "Viewport.Scene",
         .Context = EShortcutContext::Global,
         .DefaultChord = ShortcutChord(Engine::EKeyCode::O, EModifierKey::Ctrl),
         .ExecuteHandler = []() { ToolBar::LoadScene(); },
@@ -232,7 +232,7 @@ void EditorActionRegistry::RegisterAll()
     sm.RegisterAction({
         .Id = "File.CloseScene",
         .DisplayNameKey = "Action.File.CloseScene",
-        .CategoryKey = "UI_SCENE",
+        .CategoryKey = "Viewport.Scene",
         .Context = EShortcutContext::Global,
         .DefaultChord = ShortcutChord(Engine::EKeyCode::W, EModifierKey::Ctrl),
         .ExecuteHandler = []() { ImGuiManager::Get().RequestCloseScene(); },
@@ -242,7 +242,7 @@ void EditorActionRegistry::RegisterAll()
     sm.RegisterAction({
         .Id = "File.ImportAsset",
         .DisplayNameKey = "Action.File.ImportAsset",
-        .CategoryKey = "UI_FILE",
+        .CategoryKey = "EditorMenu.File",
         .Context = EShortcutContext::Global,
         .DefaultChord = ShortcutChord(Engine::EKeyCode::I, EModifierKey::Ctrl),
         .ExecuteHandler = []() { ToolBar::ImportAsset(); }
@@ -251,7 +251,7 @@ void EditorActionRegistry::RegisterAll()
     sm.RegisterAction({
         .Id = "File.Exit",
         .DisplayNameKey = "Action.File.Exit",
-        .CategoryKey = "UI_FILE",
+        .CategoryKey = "EditorMenu.File",
         .Context = EShortcutContext::Global,
         .DefaultChord = ShortcutChord(Engine::EKeyCode::F4, EModifierKey::Alt),
         .ExecuteHandler = []() {
@@ -455,7 +455,7 @@ void EditorActionRegistry::RegisterAll()
     sm.RegisterAction({
         .Id = "Hierarchy.Rename",
         .DisplayNameKey = "EditorCommon.Rename",
-        .CategoryKey = "UI_HIERARCHY",
+        .CategoryKey = "Hierarchy.Title",
         .Context = EShortcutContext::Global, // 계층 및 뷰포트 어디서든 선택된 엔티티 F2 이름 변경 지원
         .DefaultChord = ShortcutChord(Engine::EKeyCode::F2),
         .ExecuteHandler = []() {
@@ -912,7 +912,7 @@ void EditorActionRegistry::RegisterAll()
     sm.RegisterAction({
         .Id = "Editor.OpenSettings",
         .DisplayNameKey = "Action.Editor.OpenSettings",
-        .CategoryKey = "UI_FILE",
+        .CategoryKey = "EditorMenu.File",
         .Context = EShortcutContext::Global,
         .DefaultChord = ShortcutChord(Engine::EKeyCode::Comma, EModifierKey::Ctrl),
         .ExecuteHandler = []() {
@@ -994,7 +994,7 @@ void EditorActionRegistry::RegisterAll()
     sm.RegisterAction({
     .Id = "Edit.Rename",
     .DisplayNameKey = "EditorCommon.Rename",
-    .CategoryKey = "UI_CONTENT_BROWSER",
+    .CategoryKey = "ContentBrowser.Title",
     .Context = EShortcutContext::ContentBrowser,
     .DefaultChord = ShortcutChord(Engine::EKeyCode::F2),
     .ExecuteHandler = []() {

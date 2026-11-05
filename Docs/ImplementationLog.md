@@ -35,6 +35,74 @@ Use one entry per meaningful change.
 
 ---
 
+## [2026-11-05] Help 언어 전환 후 메뉴 클릭과 창 드래그 판정 보완
+
+- Area: Editor | UI | Build | Docs
+- Type: Fix | Docs
+- 문제와 확인 범위:
+  - Help 메뉴에서 언어를 변경한 뒤 Help/도움의 첫 클릭이 반응하지 않는 현상이 보고됐다.
+  - ImGui 메뉴만 분리한 합성 클릭 검사에서는 기존 흐름도 통과했다. 이 결과만으로 실제 창 문제를 해결했다고 판단하지 않았다.
+  - Application의 SDL hit-test가 메뉴 영역을 왼쪽 350px, 제목줄을 36px, 우측 버튼을 150px로 고정하고 있었다.
+    언어·글꼴 배율로 Help가 350px 경계를 넘으면 네이티브 창 드래그 영역으로 잘못 분류할 수 있다.
+- 구현:
+  - `ToolBar`가 매 프레임 실제 메뉴 끝·창 제어 버튼 시작·메뉴바 높이를 측정한다.
+    `MainMenuBarLayout`은 주 뷰포트를 기준으로 SDL 클라이언트 좌표의 빈 제목줄 영역만 드래그 대상으로 판정한다.
+  - Application의 hit-test가 `ImGuiManager`를 통해 이 영역을 사용하도록 연결했다.
+    기존 창 가장자리 리사이즈와 상단 플로팅 패널 입력 양보는 유지한다.
+  - File·Edit·Scene·Window도 Help와 같이 `LOCAL_LABEL`로 고정 ID를 사용한다.
+  - Help 언어 선택은 `ToolBar`에 예약하고 `ImGuiManager::Begin()`에서 NewFrame 전에 설정 서비스로 적용한다.
+    같은 언어를 다시 고르면 저장·알림·스타일 재적용을 요청하지 않는다.
+- 검증:
+  - `MainMenuBarLayoutCheck`는 실제 ImGui와 번역 사전을 사용한 합성 입력으로 한국어↔영어 전환 뒤 첫 Help 클릭을 검사한다.
+    0.75·1.0·1.5·2.0 글꼴 배율, 메뉴 오른쪽 경계, 창 버튼·메뉴바 밖·빈/겹친 드래그 영역을 다룬다.
+  - 동일한 클릭 중 2개는 이전 350px 판정에서 창 드래그로 분류됐으며, 실제 영역 판정에서는 메뉴 클릭 검사를 통과했다.
+  - 작업 트리의 Editor Debug 빌드와 `MainMenuBarLayoutCheck`·`LocalizationAuditUtility`·`ShortcutManagerCheck`가 통과했다.
+  - 실제 OS 창에서는 Help에서 한국어↔영어를 전환한 뒤 첫 클릭, 빈 제목줄 드래그, 가장자리 리사이즈를 각각 확인해야 한다.
+    모니터를 옮겨 DPI가 바뀐 뒤에도 같은 조작을 확인한다.
+
+## [2026-11-05] 로캘 키 소유권과 에디터 사전 정리
+
+- Area: Editor | UI | Tools | Build | Docs
+- Type: Cleanup | Fix | Docs
+- 적용 범위:
+  - 엔진 소유 키를 Editor.csv에서 Engine.csv로 이동한 뒤, 에디터 키와 그 사용처만 정리한다.
+  - 이전 커밋에 등록된 Engine.csv의 기존 671개 키와 영어·한국어 번역을 그대로 유지했다.
+    스플라인·썸네일·렌더링·애니메이터 프리뷰 변경은 별도 작업 트리 변경으로 구분했다.
+- 사전 소유권:
+  - 엔진 소유 키 22개를 최종 키와 번역을 유지한 채 Engine.csv로 옮겼다.
+    Animator 메타데이터 4개, `Engine::ETransformAbsolute.*` 열거형 표시 5개, 그래프 진단·설명 13개다.
+  - Engine.csv의 기존 내용 뒤에 이동 행을 추가해 총 693개 키로 구성했다.
+- 에디터 정리:
+  - 기존 168개 키 중 109개는 기능 소유자를 드러내는 이름으로 바꾸고, 같은 역할의 59개는 기존·대표 키에 통합했다.
+    `UI.ModelImport.*` 14개 중복 계열과 중복 메뉴·명령 표시 키를 포함한다.
+  - Editor.csv는 1,490개에서 1,415개 항목으로 정리했다. 모든 행에 Group을 명시하고 Group·Key 순으로 정렬했다.
+    기존 188개 빈 Group 행을 정리했다. 엔진 루트 키는 기존 표기를 따른다.
+  - 공통 어휘·메뉴·이력 명령·리소스 피커·로그 수준을 각각 `EditorCommon`, `EditorMenu`, `History.Command`, `ResourcePicker`, `LogLevel`로 정리했다.
+    에디터 내 공통 네트워크 표시는 `NetworkDisplay`가 소유한다.
+  - 에셋 참조의 문제 유형/복구 동작, 모델 다시 불러오기, 셰이더 미리보기와 후처리 효과 이동에 문맥별 키 6개를 추가했다.
+    `Metrics.Type`·`Shortcuts.ColAction`·`MaterialEditor.*`·`Inspector.MoveUp/Down`의 부적절한 다른 패널 재사용을 제거했다.
+  - 전이 시간과 프레임 지속 시간, 밝은 테마와 조명, 저장 명령과 저장 데이터 유형은 분리 유지했다.
+    계층의 `Hierarchy.FocusSelected`도 공통 포커스 명령 이름과 구분한다.
+  - 타임라인 삭제 명령은 실제 노티파이·카메라 샷 선택 삭제에 맞춰 'Delete Selected Item / 선택 항목 삭제'로 표시한다.
+- 호환성과 검증:
+  - 에디터 소스와 예제의 사용처를 함께 변경했다. 단축키 액션 ID와 기본 바인딩은 변경 전과 일치한다.
+  - 패널의 고정 창 ID는 유지한다. 네트워크 프로파일러는 번역 키를 바꿔도 이전 창 ID를 명시적으로 유지해 도킹 배치가 바뀌지 않도록 했다.
+    개별 컨트롤 키 변경에 따른 실제 UI 상태는 별도 조작 확인이 필요하다.
+  - 후속 제목 점검에서 AnimatorGraphPanel의 `m_DisplayNameKey` 미설정으로 내부 이름이 그대로 표시되는 누락을 확인했다.
+    기존 `AnimatorGraph.Title`을 연결하고, 감사기에 고정 IImGui 패널의 GetDisplayName fallback 검사와 회귀 테스트를 추가했다.
+  - 영어·한국어 JSON은 기존 CSV 변환기의 `--strict` 경로로 생성했다. 직접 수정하지 않았다.
+  - 감사기에 Editor.csv의 명시적 Group과 중복 접두사 검사를 추가했다. 제목 fallback 보완을 포함한 Python 회귀 테스트 18개를 통과했다.
+    Engine.csv의 루트 키 규칙은 이 검사 대상으로 삼지 않는다.
+  - 작업 트리의 Editor Debug, ReflectionInspectorCheck, GraphMessageLocalizationCheck, EditorHistoryCheck, TransformInheritanceCheck 빌드 통과.
+    기존 엔진 사전을 자동 정렬하는 의존 타깃을 실행하지 않도록 MSBuild의 `/p:BuildProjectReferences=false`를 사용했다.
+    엔진 전체 재빌드 결과로 해석하지 않는다.
+  - 기존 이력 검사 타깃의 누락된 에디터 include·ImGui 의존성을 Editor/CMake/Checks.cmake에서 보완했다.
+  - 관련 CTest 7개 통과: InputManagerCheck, LocalizationAuditUtility, ShortcutManagerCheck, GraphMessageLocalizationCheck,
+    TransformInheritanceCheck, EditorHistoryCheck, ReflectionInspectorCheck.
+  - 커밋 대상만 반영한 스냅샷에서 엄격 감사와 Python 테스트 18개를 통과했다. 생성 JSON은 Test.csv를 포함한
+    전체 2,109개 키에서 CSV와 일치했다. C++ 빌드와 CTest 결과는 작업 트리 기준이며, 분리한 스냅샷은 정적으로 확인했다.
+  - 실제 에디터 UI에서 언어 전환·도킹·단축키 재바인딩 조작은 별도 확인이 필요하다.
+
 ## [2026-11-05] 로캘·입력·단축키 정합성 보완과 자동 감사 확대
 
 - Area: Editor | UI | Tools | Build | Docs

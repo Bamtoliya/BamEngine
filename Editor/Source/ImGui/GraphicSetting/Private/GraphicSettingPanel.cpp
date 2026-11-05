@@ -236,7 +236,7 @@ void GraphicSettingPanel::Draw()
 
 		ImGui::BeginDisabled(windowPending || settings.IsVSyncChangePending() || settings.IsViewportResolutionChangePending());
 
-		ImGui::TextUnformatted(LOCAL_CSTR("UI_RESOLUTION"));
+		ImGui::TextUnformatted(LOCAL_CSTR("Viewport.Resolution"));
 
 		ImGui::BeginDisabled(m_Fullscreen);
 		m_WindowDirty |= ImGui::InputInt(LOCAL_LABEL("EditorCommon.Width").c_str(), &m_WindowWidth);

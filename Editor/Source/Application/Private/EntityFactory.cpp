@@ -15,7 +15,7 @@
 Entity& EntityFactory::CreateCanvasEntity(Scene* scene, const wstring& name)
 {
 	if (!scene) throw std::invalid_argument("Canvas creation requires a scene.");
-	SceneEditScope edit(Application::Get().GetEditHistory(), *scene, "UI_HISTORY_CREATE");
+	SceneEditScope edit(Application::Get().GetEditHistory(), *scene, "History.Command.CreateEntity");
 	Entity& entity = scene->CreateEntity();
 	auto& world = scene->GetRegistry();
 	const auto handle = entity.GetEntityHandle();
@@ -35,7 +35,7 @@ Entity& EntityFactory::CreateUIImageEntity(Scene* scene, Entity& parent, const w
 	auto& world = scene->GetRegistry();
 	if (!world.all_of<HierarchyComponent>(parent.GetEntityHandle()))
 		throw std::invalid_argument("UI parent requires a hierarchy component.");
-	SceneEditScope edit(Application::Get().GetEditHistory(), *scene, "UI_HISTORY_CREATE");
+	SceneEditScope edit(Application::Get().GetEditHistory(), *scene, "History.Command.CreateEntity");
 	Entity& entity = scene->CreateEntity();
 	const auto handle = entity.GetEntityHandle();
 	world.emplace<NameComponent>(handle, name);
@@ -53,7 +53,7 @@ Entity& EntityFactory::CreateUIImageEntity(Scene* scene, Entity& parent, const w
 Entity& EntityFactory::CreateUIButtonEntity(Scene* scene, Entity& parent, const wstring& name)
 {
 	if (!scene) throw std::invalid_argument("UI Button creation requires a scene.");
-	SceneEditScope edit(Application::Get().GetEditHistory(), *scene, "UI_HISTORY_CREATE");
+	SceneEditScope edit(Application::Get().GetEditHistory(), *scene, "History.Command.CreateEntity");
 	Entity& entity = CreateUIImageEntity(scene, parent, name);
 	scene->GetRegistry().emplace<UIButtonComponent>(entity.GetEntityHandle());
 	return entity;
@@ -61,7 +61,7 @@ Entity& EntityFactory::CreateUIButtonEntity(Scene* scene, Entity& parent, const 
 
 Entity& EntityFactory::CreateEmptyEntity(Scene* scene, const wstring& name)
 {
-	SceneEditScope edit(Application::Get().GetEditHistory(), *scene, "UI_HISTORY_CREATE");
+	SceneEditScope edit(Application::Get().GetEditHistory(), *scene, "History.Command.CreateEntity");
 	Entity& entity = scene->CreateEntity();
 	scene->AddComponent<HierarchyComponent>(entity);
 	scene->AddComponent<NameComponent>(entity, name);

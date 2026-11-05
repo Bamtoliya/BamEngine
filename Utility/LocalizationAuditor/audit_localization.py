@@ -189,6 +189,23 @@ def duplicate_catalog_keys(files):
     return {key: spots for key, spots in locations.items() if len(spots) > 1}
 
 
+def editor_catalog_layout_issues(file_path):
+    """Editor rows explicitly own their namespace; Engine root/metadata keys keep their existing contract."""
+    if not file_path.is_file():
+        return
+    with file_path.open(encoding='utf-8-sig', newline='') as stream:
+        reader = csv.DictReader(stream)
+        for row in reader:
+            key = (row.get('Key') or '').strip()
+            if not key:
+                continue
+            group = (row.get('Group') or '').strip()
+            if not group:
+                yield reader.line_num, key, 'Editor keys require an explicit Group'
+            elif key.startswith(group + '.'):
+                yield reader.line_num, key, 'Key repeats its Group prefix'
+
+
 def find_unregistered_actions(sources):
     """Check literal action references against all action registrations, including menu helpers."""
     sources = {path: strip_comments(source) for path, source in sources.items()}
@@ -207,6 +224,29 @@ def find_unregistered_actions(sources):
                 yield path, source.count('\n', 0, match.start()) + 1, match[1], action[1]
 
 
+def find_panel_display_name_issues(sources):
+    """Catch fixed IImGui names exposed through GetDisplayName's untranslated fallback."""
+    sources = {Path(path): strip_comments(source) for path, source in sources.items()}
+    for path, header in sources.items():
+        if path.suffix != '.h' or 'Editor' not in path.parts:
+            continue
+        for declaration in re.finditer(r'\bclass\s+(\w+)(?:\s+final)?\s*:\s*public\s+IImGui\b', header):
+            name = declaration[1]
+            # Inspect the class's header and implementation together. Derived viewport names
+            # are supplied by BaseViewportPanel's descriptor and are not fixed panel captions.
+            files = [(p, text) for p, text in sources.items() if p.stem == name]
+            combined = '\n'.join(text for _, text in files)
+            if re.search(r'\bm_DisplayNameKey\s*=', combined):
+                continue
+            if re.search(r'GetDisplayName\([^)]*\)\s*const\s*override|::GetDisplayName\s*\(', combined):
+                continue
+            for owner, source in files:
+                literal = re.search(r'\bm_Name\s*=\s*L?"([^"\n]+)"', source)
+                if literal:
+                    yield owner, source.count('\n', 0, literal.start()) + 1, name, literal[1]
+                    break
+
+
 def find_imgui_input_reads(source):
     source = strip_comments(source)
     calls = re.compile(r'\bImGui::(?:IsKey\w*|IsMouse\w*|GetMouse(?:Pos\w*|DragDelta|ClickedCount)|'
@@ -220,7 +260,7 @@ def find_imgui_input_reads(source):
         yield source.count('\n', 0, match.start()) + 1, match[0]
 
 def is_dynamic_prefix_matched(prefix: str, catalog: dict) -> bool:
-    """Console.Level. 처럼 동적으로 런타임에 접미사가 붙는 키 접두사 검증"""
+    """LogLevel. 처럼 동적으로 런타임에 접미사가 붙는 키 접두사 검증"""
     if not prefix.endswith("."):
         return False
     for k in catalog.keys():
@@ -238,6 +278,7 @@ def audit_project(root_dir: Path, check_orphans: bool = False, strict: bool = Fa
         all_empty.extend(empty)
     catalog_groups = {key.split('.', 1)[0] for key in combined_catalog if '.' in key}
     duplicates = duplicate_catalog_keys(catalog_paths)
+    editor_layout_issues = list(editor_catalog_layout_issues(loc_dir / 'Editor.csv'))
 
     missing_keys = []
     hardcoded_ui = []
@@ -321,6 +362,7 @@ def audit_project(root_dir: Path, check_orphans: bool = False, strict: bool = Fa
                         missing_keys.append((rel_path, source.count('\n', 0, token.start()) + 1, 'Indirect', key))
 
     unregistered_actions = list(find_unregistered_actions(sources))
+    panel_display_name_issues = list(find_panel_display_name_issues(sources))
 
     # 결과 리포트 출력
     print("=" * 80)
@@ -371,6 +413,20 @@ def audit_project(root_dir: Path, check_orphans: bool = False, strict: bool = Fa
     else:
         print('[V] Duplicate CSV Keys: None')
 
+    if editor_layout_issues:
+        print(f'[!] EDITOR CATALOG LAYOUT ({len(editor_layout_issues)} locations):')
+        for line, key, reason in editor_layout_issues:
+            print(f'    - Editor.csv:{line} [{key}] -> {reason}')
+    else:
+        print('[V] Editor Catalog Groups: Explicit, without repeated prefixes')
+
+    if panel_display_name_issues:
+        print(f'[!] UNLOCALIZED PANEL DISPLAY NAMES ({len(panel_display_name_issues)} locations):')
+        for path, line, panel, name in panel_display_name_issues:
+            print(f'    - {path}:{line} [{panel}] -> {name}')
+    else:
+        print('[V] Fixed Panel Display Names: No untranslated fallback in checked classes')
+
     if unregistered_actions:
         print(f'[!] UNREGISTERED ACTION REFERENCES ({len(unregistered_actions)} locations):')
         for path, line, call, action in unregistered_actions:
@@ -398,8 +454,10 @@ def audit_project(root_dir: Path, check_orphans: bool = False, strict: bool = Fa
 
     print("=" * 80)
     if strict:
-        return 1 if (missing_keys or all_empty or hardcoded_ui or duplicates or unregistered_actions or imgui_input_reads) else 0
-    return 1 if (missing_keys or all_empty or duplicates or unregistered_actions or imgui_input_reads) else 0
+        return 1 if (missing_keys or all_empty or hardcoded_ui or duplicates or editor_layout_issues or panel_display_name_issues or
+            unregistered_actions or imgui_input_reads) else 0
+    return 1 if (missing_keys or all_empty or duplicates or editor_layout_issues or panel_display_name_issues or
+        unregistered_actions or imgui_input_reads) else 0
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Audit BamEngine Localization")

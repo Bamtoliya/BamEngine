@@ -8,7 +8,7 @@ void ConsolePanel::Draw()
     if (!m_Open)
         return;
 
-    const string windowTitle = LOCAL("UI_CONSOLE") + "###ConsolePanel";
+    const string windowTitle = LOCAL("Console.Title") + "###ConsolePanel";
     if (ImGui::Begin(windowTitle.c_str(), &m_Open))
     {
 
@@ -154,7 +154,7 @@ void ConsolePanel::DrawLevelFilter()
 
             ImGui::PushStyleColor(ImGuiCol_Text, LevelColor(level));
 
-            const std::string label = fmt::format("{} {}###Level_{}", LevelIcon(level), LOCAL("Console.Level." + std::string(LevelName(level))), static_cast<int>(level));
+            const std::string label = fmt::format("{} {}###Level_{}", LevelIcon(level), LOCAL("LogLevel." + std::string(LevelName(level))), static_cast<int>(level));
             ImGui::Checkbox(label.c_str(), &m_ShowLevels[i]);
 
             ImGui::PopStyleColor();

@@ -74,7 +74,7 @@ void ShortcutSettingsPanel::DrawActionTable()
         for (const auto& [id, action] : actions)
         {
             const std::string displayName = action.DisplayNameKey.empty() ? id : LOCAL(action.DisplayNameKey);
-            const std::string category = action.CategoryKey.empty() ? LOCAL("UI_GENERAL") : LOCAL(action.CategoryKey);
+            const std::string category = action.CategoryKey.empty() ? LOCAL("EditorCommon.General") : LOCAL(action.CategoryKey);
             const ShortcutChord activeChord = shortcuts.GetActiveChord(id);
             const std::string chordText = activeChord.IsValid() ? activeChord.ToString() : LOCAL("EditorCommon.None");
 

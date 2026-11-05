@@ -12,7 +12,7 @@ BEGIN(Editor)
 NetworkProfilerPanel::NetworkProfilerPanel()
 {
     m_Name = L"Network Profiler";
-    m_DisplayNameKey = "UI_NETWORK_PROFILER_PANEL";
+    m_DisplayNameKey = "NetworkProfiler.Title";
     m_PingHistory.fill(0.0f);
 }
 
@@ -59,7 +59,8 @@ void NetworkProfilerPanel::Draw()
     if (!m_Open) return;
 
     ImGui::SetNextWindowSize(ImVec2(520, 480), ImGuiCond_FirstUseEver);
-    if (!ImGui::Begin(LOCAL_LABEL("UI_NETWORK_PROFILER_PANEL").c_str(), &m_Open))
+    const std::string windowTitle = LOCAL("NetworkProfiler.Title") + "###UI_NETWORK_PROFILER_PANEL";
+    if (!ImGui::Begin(windowTitle.c_str(), &m_Open))
     {
         ImGui::End();
         return;
@@ -114,7 +115,7 @@ void NetworkProfilerPanel::DrawSessionControl(Engine::NetworkSystem* netSystem)
     if (mode == Engine::Network::ENetworkMode::Standalone)
     {
         ImGui::InputInt(LOCAL_LABEL("NetworkProfiler.Port").c_str(), &m_ServerPort);
-        if (ImGui::Button(LOCAL_LABEL("UI_NETWORK_HOST_SERVER").c_str(), ImVec2(120, 26)))
+        if (ImGui::Button(LOCAL_LABEL("NetworkProfiler.HostServer").c_str(), ImVec2(120, 26)))
         {
             driver.StartServer(static_cast<std::uint16_t>(m_ServerPort));
         }
@@ -124,7 +125,7 @@ void NetworkProfilerPanel::DrawSessionControl(Engine::NetworkSystem* netSystem)
         ImGui::InputText(LOCAL_LABEL("NetworkProfiler.IPAddress").c_str(), m_ServerAddressBuffer, sizeof(m_ServerAddressBuffer));
 
         ImGui::SameLine();
-        if (ImGui::Button(LOCAL_LABEL("UI_NETWORK_CONNECT").c_str(), ImVec2(100, 26)))
+        if (ImGui::Button(LOCAL_LABEL("NetworkProfiler.Connect").c_str(), ImVec2(100, 26)))
         {
             Engine::Network::NetworkAddress targetAddr(m_ServerAddressBuffer, static_cast<std::uint16_t>(m_ServerPort));
             driver.ConnectToServer(targetAddr);
@@ -132,7 +133,7 @@ void NetworkProfilerPanel::DrawSessionControl(Engine::NetworkSystem* netSystem)
     }
     else
     {
-        if (ImGui::Button(LOCAL_LABEL("UI_NETWORK_DISCONNECT").c_str(), ImVec2(150, 26)))
+        if (ImGui::Button(LOCAL_LABEL("NetworkProfiler.Disconnect").c_str(), ImVec2(150, 26)))
         {
             driver.Stop(Engine::Network::EDisconnectReason::Requested);
         }
@@ -165,9 +166,9 @@ void NetworkProfilerPanel::DrawConnectedClientsTable(Engine::NetworkSystem* netS
     // ImGuiTableFlags_Resizable 추가
     if (ImGui::BeginTable("ClientsTable", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable))
     {
-        ImGui::TableSetupColumn(LOCAL_LABEL("UI_NETWORK_CLIENT_ID").c_str(), ImGuiTableColumnFlags_WidthFixed, 80.0f);
-        ImGui::TableSetupColumn(LOCAL_LABEL("UI_NETWORK_REMOTE_ADDR").c_str(), ImGuiTableColumnFlags_WidthStretch);
-        ImGui::TableSetupColumn(LOCAL_LABEL("UI_NETWORK_STATE").c_str(), ImGuiTableColumnFlags_WidthFixed, 90.0f);
+        ImGui::TableSetupColumn(LOCAL_LABEL("NetworkProfiler.ClientID").c_str(), ImGuiTableColumnFlags_WidthFixed, 80.0f);
+        ImGui::TableSetupColumn(LOCAL_LABEL("NetworkProfiler.RemoteAddress").c_str(), ImGuiTableColumnFlags_WidthStretch);
+        ImGui::TableSetupColumn(LOCAL_LABEL("NetworkProfiler.State").c_str(), ImGuiTableColumnFlags_WidthFixed, 90.0f);
         ImGui::TableSetupColumn(LOCAL_LABEL("NetworkProfiler.PingRtt").c_str(), ImGuiTableColumnFlags_WidthFixed, 90.0f);
         ImGui::TableHeadersRow();
 
