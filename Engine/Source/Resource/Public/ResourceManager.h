@@ -83,6 +83,8 @@ public:
 	bool IsValid(const Handle& handle);
 	Resource* GetResource(const Handle& handle);
 	Handle FindHandleByKey(const wstring& key);
+	static wstring ResolveFileKey(const std::filesystem::path& filePath);
+	Handle FindHandleByFilePath(const std::filesystem::path& filePath);
 #pragma endregion
 
 #pragma region Slot Management

@@ -5,6 +5,17 @@
 
 namespace
 {
+	std::filesystem::path ResolveResourceLoadPath(const std::filesystem::path& filePath)
+	{
+		if (filePath.is_absolute())
+			return filePath;
+
+		if (Engine::Runtime::IsCreated())
+			return Engine::Runtime::Get().ResolveProjectRelativePath(filePath);
+
+		return std::filesystem::absolute(filePath);
+	}
+
 	std::wstring ToProjectRelativePath(const std::wstring& inputPath)
 	{
 		namespace fs = std::filesystem;
@@ -410,6 +421,18 @@ Handle ResourceManager::FindHandleByKey(const wstring& key)
 {
 	uint64 hash = RunTimeHash(NormalizePath(key));
 	return FindHandle(hash);
+}
+wstring ResourceManager::ResolveFileKey(const std::filesystem::path& filePath)
+{
+	if (filePath.empty())
+		return {};
+
+	return ToProjectRelativePath(ResolveResourceLoadPath(filePath).wstring());
+}
+Handle ResourceManager::FindHandleByFilePath(const std::filesystem::path& filePath)
+{
+	const auto key = ResolveFileKey(filePath);
+	return key.empty() ? Handle{} : FindHandleByKey(key);
 }
 #pragma endregion
 

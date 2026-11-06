@@ -423,7 +423,7 @@ EResult Texture::Reload(const std::filesystem::path& filePath)
 	if (targetPath.is_relative() && Runtime::IsCreated())
 		targetPath = Runtime::Get().ResolveProjectRelativePath(targetPath);
 
-	const std::string path = targetPath.string();
+	const auto path = Engine::WStrToStr(targetPath.wstring());
 
 	std::ifstream file(targetPath, std::ios::binary | std::ios::ate);
 	if (!file.is_open())
@@ -442,18 +442,24 @@ EResult Texture::Reload(const std::filesystem::path& filePath)
 	if (!file.read(reinterpret_cast<char*>(buffer.data()), size))
 		return EResult::Fail;
 
-	const EResult result = InitializeFromEncodedMemory(buffer);
+	const EResult result = ReloadFromEncodedMemory(buffer);
 	if (IsFailure(result))
 	{
 		ENGINE_LOG_ERROR("[Texture Hot Reload] Image decode or GPU upload failed: {}", path);
 		return result;
 	}
 
-	IncreaseVersion();
-
 	ENGINE_LOG_INFO("[Texture Hot Reload] Successfully reloaded: {} ({}x{})",
 		path, m_CachedHeader.width, m_CachedHeader.height);
 
 	return EResult::Success;
+}
+EResult Texture::ReloadFromEncodedMemory(const vector<uint8>& encodedData)
+{
+	const auto result = InitializeFromEncodedMemory(encodedData);
+	if (result == EResult::Success)
+		IncreaseVersion();
+
+	return result;
 }
 #pragma endregion

@@ -20,6 +20,63 @@ namespace Editor
 {
 	struct ModelFinalizeState
 	{
+		~ModelFinalizeState() noexcept;
+		struct OutputReservation
+		{
+			struct DirectoryLess
+			{
+				bool operator()(const wstring& lhs, const wstring& rhs) const noexcept
+				{
+					return CompareStringOrdinal(lhs.c_str(), -1, rhs.c_str(), -1, TRUE) == CSTR_LESS_THAN;
+				}
+			};
+
+			OutputReservation() = default;
+			OutputReservation(const OutputReservation&) = delete;
+			OutputReservation& operator=(const OutputReservation&) = delete;
+
+			EResult Acquire(const filesystem::path& outputDir)
+			{
+				std::error_code ec;
+				const auto absolutePath = Engine::PlatformPath::ResolveProjectRelative(outputDir);
+				const auto canonicalPath = filesystem::weakly_canonical(absolutePath, ec);
+				if (ec)
+				{
+					BAM_LOG(Error, "Editor", "Asset", "Cannot resolve import output: path={}, error={}",
+						WStrToStr(absolutePath.wstring()), ec.message());
+					return EResult::Fail;
+				}
+
+				auto key = canonicalPath.generic_wstring();
+				if (!key.empty() && key.back() == L'/' && canonicalPath.has_relative_path())
+					key.pop_back();
+
+				std::lock_guard lock(s_Mutex);
+				if (!s_ActiveDirectories.insert(key).second)
+				{
+					BAM_LOG(Error, "Editor", "Asset", "Another model import is using output directory: {}", WStrToStr(key));
+					return EResult::AlreadyInitialized;
+				}
+
+				m_Key.swap(key);
+				return EResult::Success;
+			}
+
+			~OutputReservation()
+			{
+				if (m_Key.empty())
+					return;
+
+				std::lock_guard lock(s_Mutex);
+				s_ActiveDirectories.erase(m_Key);
+			}
+
+		private:
+			inline static std::mutex s_Mutex;
+			inline static std::set<wstring, DirectoryLess> s_ActiveDirectories;
+			wstring m_Key;
+		};
+
 		struct ResourceDeleter
 		{
 			void operator()(Resource* resource) const
@@ -51,11 +108,32 @@ namespace Editor
 			}
 		};
 
+		struct MeshBackup
+		{
+			filesystem::path Directory;
+			filesystem::path File;
+			bool Owned = false;
+			bool Keep = false;
+
+			~MeshBackup()
+			{
+				if (!Owned || Keep)
+					return;
+
+				std::error_code ec;
+				filesystem::remove(File, ec);
+				filesystem::remove(Directory, ec);
+			}
+		};
+
 		struct SavedMesh
 		{
 			archive::ArchiveResult Result;
 			std::unique_ptr<StagedFile> File;
+			filesystem::path PublishedPath;
+			std::unique_ptr<MeshBackup> Backup;
 			size_t ByteCount = 0;
+			double SnapshotMs = 0.0;
 			double WorkerMs = 0.0;
 			double WriteMs = 0.0;
 			double ReleaseMs = 0.0;
@@ -72,12 +150,24 @@ namespace Editor
 			MeshOwner Resource;
 		};
 
+		OutputReservation Output;
 		ModelImportDesc Settings;
 		ModelCreateDesc ModelDesc;
+		ResourceHandle<Material> BaseMaterial;
 		std::vector<PendingMesh> Meshes;
 		unordered_map<wstring, uint32> NameCounts;
 		size_t NextMesh = 0;
-		size_t NextSave = 0;
+		std::vector<SavedMesh> StagedMeshes;
+		size_t NextPublish = 0;
+		struct MeshReloadBackup
+		{
+			Handle Existing;
+			uint64 GeometryVersion;
+			std::unique_ptr<archive::BeveArchive> Snapshot;
+		};
+
+		std::vector<MeshReloadBackup> ReloadedMeshes;
+		bool MeshCommitComplete = false;
 		double SnapshotMs = 0.0;
 		std::future<SavedMesh> Saving;
 	};
@@ -131,7 +221,8 @@ namespace
 		if (!saveToFile)
 			return EResult::Success;
 		std::error_code ec;
-		const bool exists = filesystem::exists(filesystem::path(key), ec);
+		const auto targetPath = Engine::PlatformPath::ResolveProjectRelative(filesystem::path(key));
+		const bool exists = filesystem::exists(targetPath, ec);
 		if (ec)
 		{
 			BAM_LOG(Error, "Editor", "Asset", "Failed to inspect import output: path={}, error={}",
@@ -143,6 +234,171 @@ namespace
 			BAM_LOG(Error, "Editor", "Asset", "Import output already exists: {}", WStrToStr(key));
 			return EResult::AlreadyInitialized;
 		}
+		if (exists && !filesystem::is_regular_file(targetPath, ec))
+		{
+			BAM_LOG(Error, "Editor", "Asset", "Import output is not a regular file: {}", WStrToStr(targetPath.wstring()));
+			return EResult::Fail;
+		}
+		return EResult::Success;
+	}
+
+	filesystem::path MakeImportStagingPath(const filesystem::path& target)
+	{
+		// 모델 임포트 확정 단계는 메인 스레드에서 실행합니다.
+		static Engine::uint64 serial = 0;
+		auto stagingPath = target;
+		const auto stamp = std::chrono::steady_clock::now().time_since_epoch().count();
+		stagingPath += ".bamimport-" + std::to_string(++serial) + "-" + std::to_string(stamp) + ".tmp";
+		return stagingPath;
+	}
+
+	EResult SaveEmbeddedTexture(const filesystem::path& target, const vector<uint8>& bytes)
+	{
+		if (std::cmp_greater(bytes.size(), (std::numeric_limits<std::streamsize>::max)()))
+			return EResult::InvalidArgument;
+
+		ModelFinalizeState::StagedFile staged;
+		staged.Path = MakeImportStagingPath(target);
+		std::ofstream file(staged.Path, std::ios::out | std::ios::binary | std::ios::noreplace);
+		if (!file)
+			return EResult::Fail;
+
+		staged.Owned = true;
+		file.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+		file.close();
+		if (!file)
+			return EResult::Fail;
+
+		std::error_code ec;
+		filesystem::rename(staged.Path, target, ec);
+		if (ec)
+			return EResult::Fail;
+
+		staged.Owned = false;
+		return EResult::Success;
+	}
+
+	bool BackupMeshOutput(ModelFinalizeState::SavedMesh& saved, std::error_code& ec)
+	{
+		const auto status = filesystem::symlink_status(saved.PublishedPath, ec);
+		if (ec == std::errc::no_such_file_or_directory)
+			ec.clear();
+		if (ec)
+			return false;
+		if (!filesystem::exists(status))
+			return true;
+		if (!filesystem::is_regular_file(status))
+		{
+			ec = std::make_error_code(std::errc::invalid_argument);
+			return false;
+		}
+
+		auto backup = std::make_unique<ModelFinalizeState::MeshBackup>();
+		backup->Directory = MakeImportStagingPath(saved.PublishedPath);
+		backup->File = backup->Directory / L"original.bak";
+
+		if (!filesystem::create_directory(backup->Directory, ec))
+		{
+			if (!ec)
+				ec = std::make_error_code(std::errc::file_exists);
+			return false;
+		}
+
+		backup->Owned = true;
+		if (!filesystem::copy_file(saved.PublishedPath, backup->File, filesystem::copy_options::none, ec))
+			return false;
+
+		saved.Backup = std::move(backup);
+		return true;
+	}
+
+	void RollbackPublishedMeshes(ModelFinalizeState& state)
+	{
+		while (state.NextPublish > 0)
+		{
+			auto& saved = state.StagedMeshes[--state.NextPublish];
+			std::error_code ec;
+
+			if (saved.Backup)
+			{
+				saved.Backup->Keep = true;
+				filesystem::rename(saved.Backup->File, saved.PublishedPath, ec);
+				if (!ec)
+					saved.Backup->Keep = false;
+			}
+			else
+			{
+				const auto status = filesystem::symlink_status(saved.PublishedPath, ec);
+				if (ec == std::errc::no_such_file_or_directory)
+					ec.clear();
+				if (!ec && filesystem::exists(status))
+				{
+					if (filesystem::is_regular_file(status))
+						filesystem::remove(saved.PublishedPath, ec);
+					else
+						ec = std::make_error_code(std::errc::invalid_argument);
+				}
+			}
+
+			if (ec)
+			{
+				const auto backupPath = saved.Backup ? WStrToStr(saved.Backup->File.wstring()) : std::string{};
+				BAM_LOG(Error, "Editor", "Asset", "Mesh rollback failed: path={}, backup={}, error={}",
+					WStrToStr(saved.PublishedPath.wstring()), backupPath, ec.message());
+			}
+			else if (HotReloadManager::IsCreated())
+			{
+				HotReloadManager::Get().GetAssetReloader().RecordMeshFileState(saved.PublishedPath);
+			}
+		}
+	}
+
+	void RollbackReloadedMeshes(ModelFinalizeState& state)
+	{
+		auto& manager = ResourceManager::Get();
+
+		while (!state.ReloadedMeshes.empty())
+		{
+			auto backup = std::move(state.ReloadedMeshes.back());
+			state.ReloadedMeshes.pop_back();
+
+			auto* mesh = dynamic_cast<Mesh*>(manager.GetResource(backup.Existing));
+			if (!mesh || mesh->GetGeometryVersion() == backup.GeometryVersion)
+				continue;
+
+			const auto result = mesh->ReadArchive(*backup.Snapshot);
+			if (!result)
+			{
+				BAM_LOG(Error, "Editor", "Asset", "Mesh memory rollback failed: key={}, code={}, field={}",
+					WStrToStr(mesh->GetKey()), static_cast<int>(result.Code), result.Field);
+				continue;
+			}
+
+			mesh->IncreaseVersion();
+		}
+	}
+
+	EResult ApplyReimport(Resource* existing, const Resource& imported, bool savedToFile)
+	{
+		if (existing == nullptr || typeid(*existing) != typeid(imported))
+			return EResult::InvalidArgument;
+
+		if (savedToFile)
+			return existing->Reload(Engine::PlatformPath::ResolveProjectRelative(imported.GetPath()));
+
+		archive::BeveArchive snapshot;
+		auto result = imported.WriteArchive(snapshot);
+		if (result)
+			result = existing->ReadArchive(snapshot);
+
+		if (!result)
+		{
+			BAM_LOG(Error, "Editor", "Asset", "In-memory reimport failed: key={}, code={}, field={}",
+				WStrToStr(imported.GetKey()), static_cast<int>(result.Code), result.Field);
+			return EResult::Fail;
+		}
+
+		existing->IncreaseVersion();
 		return EResult::Success;
 	}
 
@@ -201,8 +457,24 @@ namespace
 			auto existingHandle = manager.FindHandleByKey(mesh.Key);
 			if (settings.Overwrite && manager.IsValid(existingHandle))
 			{
-				if (auto* existingMesh = static_cast<Mesh*>(manager.GetResource(existingHandle)))
-					existingMesh->Reload(mesh.Key); // 안전한 인플레이스 핫 리로드
+				auto* existingMesh = dynamic_cast<Mesh*>(manager.GetResource(existingHandle));
+				if (!existingMesh)
+					return EResult::InvalidArgument;
+
+				auto snapshot = std::make_unique<archive::BeveArchive>();
+				const auto snapshotResult = existingMesh->WriteArchive(*snapshot);
+				if (!snapshotResult)
+				{
+					BAM_LOG(Error, "Editor", "Asset", "Failed to snapshot mesh: key={}, code={}, field={}",
+						WStrToStr(mesh.Key), static_cast<int>(snapshotResult.Code), snapshotResult.Field);
+					return EResult::Fail;
+				}
+
+				state.ReloadedMeshes.push_back({ existingHandle, existingMesh->GetGeometryVersion(), std::move(snapshot) });
+				const auto result = ApplyReimport(existingMesh, *mesh.Resource, settings.SaveToFile);
+				if (result != EResult::Success)
+					return result;
+
 				modelDesc.Meshes.push_back(ResourceHandle<Mesh>(existingHandle));
 				continue;
 			}
@@ -264,8 +536,9 @@ namespace
 			auto existingSkelHandle = manager.FindHandleByKey(skelKey);
 			if (settings.Overwrite && manager.IsValid(existingSkelHandle))
 			{
-				if (auto* existingSkel = static_cast<Skeleton*>(manager.GetResource(existingSkelHandle)))
-					existingSkel->Reload(skelKey);
+				const auto result = ApplyReimport(manager.GetResource(existingSkelHandle), *skeleton, settings.SaveToFile);
+				if (result != EResult::Success)
+					return result;
 
 				modelDesc.Skeleton = ResourceHandle<Skeleton>(existingSkelHandle);
 			}
@@ -359,8 +632,9 @@ namespace
 				auto existingAnimHandle = manager.FindHandleByKey(animKey);
 				if (settings.Overwrite && manager.IsValid(existingAnimHandle))
 				{
-					if (auto* existingAnim = static_cast<Animation*>(manager.GetResource(existingAnimHandle)))
-						existingAnim->Reload(animKey);
+					const auto result = ApplyReimport(manager.GetResource(existingAnimHandle), *animation, settings.SaveToFile);
+					if (result != EResult::Success)
+						return result;
 
 					modelDesc.Animations.push_back(ResourceHandle<Animation>(existingAnimHandle));
 				}
@@ -379,79 +653,110 @@ namespace
 
 		if (HasFlag(settings.ImportOptions, EModelImportOption::Materials) && !data.Materials.empty())
 		{
-			// 스켈레탈 메시 여부에 따라 기본 부모 머티리얼 선택 (.bammat.json 지정)
-			const bool hasSkeleton = modelDesc.Skeleton.IsValid();
-			const wstring baseMatPath = hasSkeleton
-				? L"Resources/Material/SkinningMaterial.bammat.json"
-				: L"Resources/Material/DefaultMaterial.bammat.json";
-			ResourceHandle<Material> baseMat = manager.GetResourceHandle<Material>(baseMatPath);
-			if (!baseMat.IsValid() || !baseMat.Get())
-			{
-				auto loaded = manager.LoadFile(baseMatPath);
-				if (loaded.IsValid()) baseMat = ResourceHandle<Material>(loaded);
-			}
-			if (!baseMat.IsValid() || !baseMat.Get())
-			{
-				BAM_LOG(Error, "Editor", "Asset", "Base material load failed (required): {}", WStrToStr(baseMatPath));
-				return EResult::Fail;
-			}
+			const auto& baseMat = state.BaseMaterial;
 
 			// 텍스처 로드/추출 헬퍼 람다
-			auto resolveTexture = [&](const Tools::ModelConversion::TextureBindingInfo& info,
-				const wstring& matStem, const wstring& slotName) -> ResourceHandle<Texture>
+			auto bindTexture = [&](MaterialInstance& material, uint32 slot,
+				const Tools::ModelConversion::TextureBindingInfo& info, const wstring& matStem,
+				const wchar_t* slotName) -> EResult
 				{
-					if (info.Path.empty() && info.EmbeddedData.empty()) return {};
+					if (info.Path.empty() && info.EmbeddedData.empty())
+						return EResult::Success;
 
+					const bool embedded = info.IsEmbedded && !info.EmbeddedData.empty();
 					filesystem::path texFilePath;
-					if (info.IsEmbedded && !info.EmbeddedData.empty())
+					bool wroteEmbeddedFile = false;
+
+					if (embedded)
 					{
-						// 임베디드 텍스처를 PNG 파일로 디스크에 저장 (Overwrite 정책 반영)
-						const wstring texStem = matStem + L"_" + slotName + L".png";
-						texFilePath = outputDir / texStem;
+						texFilePath = Engine::PlatformPath::ResolveProjectRelative(outputDir / (matStem + L"_" + slotName + L".png"));
+
+						if (!settings.SaveToFile)
+						{
+							const auto texKey = ResourceManager::ResolveFileKey(texFilePath);
+							auto handle = manager.FindHandleByKey(texKey);
+
+							if (manager.IsValid(handle))
+							{
+								auto* texture = dynamic_cast<Texture*>(manager.GetResource(handle));
+								if (!texture)
+									return EResult::InvalidArgument;
+
+								if (settings.Overwrite)
+								{
+									const auto result = texture->ReloadFromEncodedMemory(info.EmbeddedData);
+									if (result != EResult::Success)
+										return result;
+								}
+							}
+							else
+							{
+								auto* texture = Texture::CreateFromEncodedMemory(info.EmbeddedData, texKey);
+								if (!texture)
+									return EResult::Fail;
+
+								const auto registered = manager.AddResource<Texture>(texKey, texture);
+								if (!registered.IsValid() || registered.Get() != texture)
+									return EResult::Fail;
+
+								handle = registered.GetRawHandle();
+								rollback.Handles.push_back(handle);
+							}
+
+							material.SetTextureBySlot(slot, ResourceHandle<Texture>(handle));
+							return EResult::Success;
+						}
 
 						std::error_code ec;
 						const bool exists = filesystem::exists(texFilePath, ec);
-						if (exists && !settings.Overwrite)
+						const bool shouldWrite = !exists || settings.Overwrite;
+						const auto result = ec ? EResult::Fail
+							: (shouldWrite ? SaveEmbeddedTexture(texFilePath, info.EmbeddedData) : EResult::Success);
+
+						if (result != EResult::Success)
 						{
-							// 이미 존재하고 덮어쓰기가 아니면 기존 파일을 재사용합니다.
+							BAM_LOG(Error, "Editor", "Asset", "Embedded texture save failed: path={}, result={}",
+								WStrToStr(texFilePath.wstring()), ResultToString(result));
+							return result;
 						}
-						else
-						{
-							std::ofstream file(texFilePath, std::ios::binary | std::ios::trunc);
-							if (!file.is_open())
-							{
-								BAM_LOG(Error, "Editor", "Asset", "Failed to open embedded texture file for writing: {}", texFilePath.string());
-								return {};
-							}
-							file.write(reinterpret_cast<const char*>(info.EmbeddedData.data()), static_cast<std::streamsize>(info.EmbeddedData.size()));
-							file.close();
-							if (!file)
-							{
-								BAM_LOG(Error, "Editor", "Asset", "Failed to write embedded texture: {}", texFilePath.string());
-								return {};
-							}
-						}
+						wroteEmbeddedFile = shouldWrite;
 					}
-					else if (!info.Path.empty())
+					else
 					{
 						texFilePath = ModelImporter::ResolveExternalTexturePath(data.SourcePath, outputDir, info.Path);
-
 						if (texFilePath.empty())
+						{
 							BAM_LOG(Warn, "Editor", "Asset", "External texture not found: {}", info.Path);
+							return EResult::Success;
+						}
 					}
 
-					if (!texFilePath.empty())
+					const wstring texKey = NormalizePath(texFilePath.wstring());
+					auto handle = embedded ? manager.FindHandleByFilePath(texFilePath) : manager.FindHandleByKey(texKey);
+					const bool alreadyLoaded = manager.IsValid(handle);
+					if (!alreadyLoaded)
+						handle = manager.LoadFile(texKey);
+
+					auto* texture = dynamic_cast<Texture*>(manager.GetResource(handle));
+					if (!texture)
+						return embedded ? EResult::Fail : EResult::Success;
+
+					if (wroteEmbeddedFile && alreadyLoaded)
 					{
-						const wstring texKey = NormalizePath(texFilePath.wstring());
-						auto handle = manager.GetResourceHandle<Texture>(texKey);
-						if (!handle.IsValid() || !handle.Get())
+						const auto result = texture->Reload(texFilePath);
+						if (result != EResult::Success)
 						{
-							auto loaded = manager.LoadFile(texKey);
-							if (loaded.IsValid()) handle = ResourceHandle<Texture>(loaded);
+							BAM_LOG(Error, "Editor", "Asset", "Embedded texture reload failed: path={}, result={}",
+								WStrToStr(texFilePath.wstring()), ResultToString(result));
+							return result;
 						}
-						return handle;
 					}
-					return {};
+
+					if (wroteEmbeddedFile && AssetCache::IsCreated())
+						AssetCache::Get().RequestInvalidate(texFilePath);
+
+					material.SetTextureBySlot(slot, ResourceHandle<Texture>(handle));
+					return EResult::Success;
 				};
 
 			for (size_t matIdx = 0; matIdx < data.Materials.size(); ++matIdx)
@@ -468,14 +773,6 @@ namespace
 				}
 
 				auto existingMatHandle = manager.FindHandleByKey(matKey);
-				if (settings.Overwrite && manager.IsValid(existingMatHandle))
-				{
-					if (auto* existingMat = static_cast<MaterialInstance*>(manager.GetResource(existingMatHandle)))
-						existingMat->Reload(matKey);
-					if (matIdx < modelDesc.Materials.size())
-						modelDesc.Materials[matIdx] = ResourceHandle<MaterialInterface>(existingMatHandle);
-					continue;
-				}
 				MaterialInstanceDesc matDesc;
 				matDesc.Key = matKey;
 				matDesc.Path = matKey;
@@ -490,14 +787,14 @@ namespace
 				}
 
 				// 슬롯별 텍스처 바인딩
-				if (auto albedo = resolveTexture(srcMat.BaseColorTexture, matStem, L"Albedo"))
-					matInst->SetTextureBySlot(0, albedo);
-				if (auto normal = resolveTexture(srcMat.NormalTexture, matStem, L"Normal"))
-					matInst->SetTextureBySlot(1, normal);
-				if (auto orm = resolveTexture(srcMat.MetallicRoughnessTexture, matStem, L"ORM"))
-					matInst->SetTextureBySlot(2, orm);
-				if (auto emissive = resolveTexture(srcMat.EmissiveTexture, matStem, L"Emissive"))
-					matInst->SetTextureBySlot(3, emissive);
+				if (const auto result = bindTexture(*matInst, 0, srcMat.BaseColorTexture, matStem, L"Albedo"); result != EResult::Success)
+					return result;
+				if (const auto result = bindTexture(*matInst, 1, srcMat.NormalTexture, matStem, L"Normal"); result != EResult::Success)
+					return result;
+				if (const auto result = bindTexture(*matInst, 2, srcMat.MetallicRoughnessTexture, matStem, L"ORM"); result != EResult::Success)
+					return result;
+				if (const auto result = bindTexture(*matInst, 3, srcMat.EmissiveTexture, matStem, L"Emissive"); result != EResult::Success)
+					return result;
 
 				// PBR 기본 인자 설정 (BaseColor 등)
 				matInst->SetFloat4("BaseColor", vec4(srcMat.BaseColorFactor[0], srcMat.BaseColorFactor[1], srcMat.BaseColorFactor[2], srcMat.BaseColorFactor[3]));
@@ -513,6 +810,17 @@ namespace
 				}
 
 				MaterialInstance* instPtr = matInst.get();
+				if (settings.Overwrite && manager.IsValid(existingMatHandle))
+				{
+					const auto result = ApplyReimport(manager.GetResource(existingMatHandle), *matInst, settings.SaveToFile);
+					if (result != EResult::Success)
+						return result;
+
+					if (matIdx < modelDesc.Materials.size())
+						modelDesc.Materials[matIdx] = ResourceHandle<MaterialInterface>(existingMatHandle);
+
+					continue;
+				}
 				auto matHandle = manager.AddResource<MaterialInstance>(matKey, matInst.release());
 				if (!matHandle.IsValid() || matHandle.Get() != instPtr)
 				{
@@ -543,8 +851,9 @@ namespace
 		auto existingModelHandle = manager.FindHandleByKey(modelKey);
 		if (settings.Overwrite && manager.IsValid(existingModelHandle))
 		{
-			if (auto* existingModel = static_cast<Model*>(manager.GetResource(existingModelHandle)))
-				existingModel->Reload(modelKey);
+			const auto result = ApplyReimport(manager.GetResource(existingModelHandle), *model, settings.SaveToFile);
+			if (result != EResult::Success)
+				return result;
 		}
 		else
 		{
@@ -559,6 +868,7 @@ namespace
 		}
 
 		rollback.Committed = true;
+		state.MeshCommitComplete = true;
 
 		BAM_LOG(Info, "Editor", "Asset", "Model import finished: meshes={}, nodes={}, has_skeleton={}, animations={}, key={}",
 			modelDesc.Meshes.size(), modelDesc.Nodes.size(), modelDesc.Skeleton.IsValid(),
@@ -639,6 +949,27 @@ namespace
 	}
 }
 
+Editor::ModelFinalizeState::~ModelFinalizeState() noexcept
+{
+	if (MeshCommitComplete || NextPublish == 0)
+		return;
+
+	try
+	{
+		RollbackPublishedMeshes(*this);
+	}
+	catch (...)
+	{
+		for (size_t i = 0; i < NextPublish; ++i)
+		{
+			if (auto& backup = StagedMeshes[i].Backup)
+				backup->Keep = true;
+		}
+
+		std::fputs("Model import shutdown rollback interrupted. Remaining mesh backups were kept.\n", stderr);
+	}
+}
+
 EResult ModelImporter::Import(const filesystem::path& sourcePath, const filesystem::path& destDir, void* arg)
 {
 	std::unique_ptr<ImportJob> job;
@@ -705,6 +1036,12 @@ std::optional<EResult> ModelImporter::FinalizeOneStep(ModelImportTask& task)
 	using Clock = std::chrono::steady_clock;
 	const auto finish = [&task](EResult result) -> std::optional<EResult>
 		{
+			if (result != EResult::Success && task.m_FinalizeState && !task.m_FinalizeState->MeshCommitComplete)
+			{
+				RollbackPublishedMeshes(*task.m_FinalizeState);
+				RollbackReloadedMeshes(*task.m_FinalizeState);
+			}
+
 			task.m_FinalizeState.reset();
 			return result;
 		};
@@ -729,6 +1066,9 @@ std::optional<EResult> ModelImporter::FinalizeOneStep(ModelImportTask& task)
 			auto& state = *task.m_FinalizeState;
 			state.Settings = request.Settings;
 
+			if (const auto result = state.Output.Acquire(outputDir); result != EResult::Success)
+				return finish(result);
+
 			auto& desc = state.ModelDesc;
 			const wstring stem = SanitizeFileName(data.SourcePath.stem().wstring());
 			desc.Key = NormalizePath((outputDir / (stem + L".bammodel")).wstring());
@@ -738,6 +1078,27 @@ std::optional<EResult> ModelImporter::FinalizeOneStep(ModelImportTask& task)
 				result != EResult::Success)
 			{
 				return finish(result);
+			}
+
+			const auto options = state.Settings.ImportOptions;
+			if (HasFlag(options, EModelImportOption::Materials) && !data.Materials.empty())
+			{
+				const bool importsSkeleton = HasFlag(options, EModelImportOption::Skeleton) && !data.Bones.empty();
+				const wstring baseMatPath = importsSkeleton
+					? L"Resources/Material/SkinningMaterial.bammat.json"
+					: L"Resources/Material/DefaultMaterial.bammat.json";
+
+				auto handle = manager.FindHandleByFilePath(baseMatPath);
+				if (!manager.IsValid(handle))
+					handle = manager.LoadFile(baseMatPath);
+
+				if (!dynamic_cast<Material*>(manager.GetResource(handle)))
+				{
+					BAM_LOG(Error, "Editor", "Asset", "Required base material unavailable: {}", WStrToStr(baseMatPath));
+					return finish(EResult::Fail);
+				}
+
+				state.BaseMaterial = ResourceHandle<Material>(handle);
 			}
 
 			desc.Nodes.reserve(data.Nodes.size());
@@ -761,7 +1122,7 @@ std::optional<EResult> ModelImporter::FinalizeOneStep(ModelImportTask& task)
 			if (state.Settings.SaveToFile)
 			{
 				std::error_code ec;
-				filesystem::create_directories(outputDir, ec);
+				filesystem::create_directories(Engine::PlatformPath::ResolveProjectRelative(outputDir), ec);
 				if (ec)
 					return finish(EResult::Fail);
 			}
@@ -840,9 +1201,10 @@ std::optional<EResult> ModelImporter::FinalizeOneStep(ModelImportTask& task)
 			return std::nullopt;
 		}
 
-		if (state->Settings.SaveToFile && state->NextSave < state->Meshes.size())
+		if (state->Settings.SaveToFile && state->StagedMeshes.size() < state->Meshes.size())
 		{
-			const auto& mesh = state->Meshes[state->NextSave];
+			const auto& mesh = state->Meshes[state->StagedMeshes.size()];
+			const auto meshPath = Engine::PlatformPath::ResolveProjectRelative(filesystem::path(mesh.Key));
 
 			if (!state->Saving.valid())
 			{
@@ -866,11 +1228,7 @@ std::optional<EResult> ModelImporter::FinalizeOneStep(ModelImportTask& task)
 				}
 
 				// 이 함수는 메인 스레드에서 실행합니다.
-				static Engine::uint64 stagingSerial = 0;
-
-				filesystem::path stagingPath(mesh.Key);
-				stagingPath += ".bamimport-" + std::to_string(++stagingSerial) + "-" +
-					std::to_string(Clock::now().time_since_epoch().count()) + ".tmp";
+				auto stagingPath = MakeImportStagingPath(meshPath);
 
 				state->Saving = std::async(
 					std::launch::async, EncodeAndStageMesh, std::move(snapshot), std::move(stagingPath));
@@ -892,6 +1250,28 @@ std::optional<EResult> ModelImporter::FinalizeOneStep(ModelImportTask& task)
 			if (!saved.File || !saved.File->Owned)
 				return finish(EResult::Fail);
 
+			saved.SnapshotMs = state->SnapshotMs;
+			state->StagedMeshes.push_back(std::move(saved));
+			return std::nullopt;
+		}
+
+		if (state->Settings.SaveToFile && state->NextPublish < state->StagedMeshes.size())
+		{
+			if (state->NextPublish == 0)
+			{
+				for (const auto& pendingMesh : state->Meshes)
+				{
+					const auto result = ValidateImportOutput(manager, pendingMesh.Key, true, state->Settings.Overwrite);
+					if (result != EResult::Success)
+						return finish(result);
+				}
+			}
+			const auto& mesh = state->Meshes[state->NextPublish];
+			auto& saved = state->StagedMeshes[state->NextPublish];
+			const auto meshPath = Engine::PlatformPath::ResolveProjectRelative(filesystem::path(mesh.Key));
+
+			// 여기서 기존 publishStart 선언과 파일 교체 코드가 이어집니다.
+
 			const auto publishStart = Clock::now();
 
 			// 저장하는 동안 다른 요청이 최종 출력을 만들었는지 다시 검사합니다.
@@ -902,11 +1282,14 @@ std::optional<EResult> ModelImporter::FinalizeOneStep(ModelImportTask& task)
 			}
 
 			std::error_code ec;
-			if (state->Settings.Overwrite)
+			saved.PublishedPath = meshPath;
+			if (!BackupMeshOutput(saved, ec))
 			{
-				filesystem::remove(filesystem::path(mesh.Key), ec); // 기존 파일 먼저 삭제 후 rename
+				BAM_LOG(Error, "Editor", "Asset", "Failed to back up mesh: path={}, error={}",
+					WStrToStr(meshPath.wstring()), ec.message());
+				return finish(EResult::Fail);
 			}
-			filesystem::rename(saved.File->Path, filesystem::path(mesh.Key), ec);
+			filesystem::rename(saved.File->Path, meshPath, ec);
 
 			if (ec)
 			{
@@ -916,9 +1299,10 @@ std::optional<EResult> ModelImporter::FinalizeOneStep(ModelImportTask& task)
 			}
 
 			saved.File->Owned = false;
+			++state->NextPublish;
 
 			if (HotReloadManager::IsCreated())
-				HotReloadManager::Get().GetAssetReloader().RecordMeshFileState(filesystem::path(mesh.Key));
+				HotReloadManager::Get().GetAssetReloader().RecordMeshFileState(meshPath);
 
 			const double publishMs =
 				std::chrono::duration<double, std::milli>(Clock::now() - publishStart).count();
@@ -926,10 +1310,9 @@ std::optional<EResult> ModelImporter::FinalizeOneStep(ModelImportTask& task)
 			BAM_LOG(Info, "Editor", "Asset",
 				"Model mesh save timing: path={}, bytes={}, snapshot_ms={:.3f}, worker_ms={:.3f}, "
 				"write_ms={:.3f}, release_ms={:.3f}, publish_ms={:.3f}",
-				WStrToStr(mesh.Key), saved.ByteCount, state->SnapshotMs, saved.WorkerMs,
+				WStrToStr(mesh.Key), saved.ByteCount, saved.SnapshotMs, saved.WorkerMs,
 				saved.WriteMs, saved.ReleaseMs, publishMs);
 
-			++state->NextSave;
 			return std::nullopt;
 		}
 
@@ -946,7 +1329,7 @@ std::optional<EResult> ModelImporter::FinalizeOneStep(ModelImportTask& task)
 	}
 	catch (...)
 	{
-		task.m_FinalizeState.reset();
+		finish(EResult::Fail);
 		throw;
 	}
 }
