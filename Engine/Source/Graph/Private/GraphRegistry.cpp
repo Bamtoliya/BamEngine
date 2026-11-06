@@ -175,6 +175,14 @@ GraphDiagnostic GraphRegistry::RegisterBuiltins()
 		{ "Event.Start", logic, { { "exec", Direction::Output, Type::Execution, {} } } },
 		{ "Event.Update", logic, {
 			{ "exec", Direction::Output, Type::Execution, {} }, { "delta", Direction::Output, Type::Float, {} } } },
+		{ "Event.OnActionPressed", logic, {
+			{ "mapId", Direction::Input, Type::String, std::string{ "Gameplay" }, {}, "PIN_INPUT_MAP_ID", true },
+			{ "actionId", Direction::Input, Type::String, std::string{}, {}, "PIN_INPUT_ACTION_ID", true },
+			{ "exec", Direction::Output, Type::Execution, {} } } },
+		{ "Event.OnActionReleased", logic, {
+			{ "mapId", Direction::Input, Type::String, std::string{ "Gameplay" }, {}, "PIN_INPUT_MAP_ID", true },
+			{ "actionId", Direction::Input, Type::String, std::string{}, {}, "PIN_INPUT_ACTION_ID", true },
+			{ "exec", Direction::Output, Type::Execution, {} } } },
 		{ "Flow.Branch", logic, {
 			{ "exec", Direction::Input, Type::Execution, {} }, { "condition", Direction::Input, Type::Bool, false },
 			{ "true", Direction::Output, Type::Execution, {} }, { "false", Direction::Output, Type::Execution, {} } } },

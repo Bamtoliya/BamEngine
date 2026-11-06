@@ -24,6 +24,22 @@ struct ENGINE_API GraphRuntimeState
 	std::vector<GraphNodeId> triggerExitNodes;
 	bool hasStarted = false;
 	bool isValid = true;
+
+	enum class ActionEventPhase
+	{
+		Pressed,
+		Released
+	};
+
+	struct ActionEventEntry
+	{
+		GraphNodeId Node = 0;
+		std::string MapId;
+		std::string ActionId;
+		ActionEventPhase Phase = ActionEventPhase::Pressed;
+	};
+
+	std::vector<ActionEventEntry> actionEventEntries;
 };
 
 class ENGINE_API GraphSystem : public ISystem

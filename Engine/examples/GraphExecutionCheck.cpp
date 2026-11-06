@@ -163,6 +163,26 @@ void CheckMathGraph(const GraphRegistry& registry, const reflection::Registry& r
 	Expect(enteredYes && !enteredNo && sawLink, "Trace did not reflect the chosen execution path.");
 }
 
+void CheckActionEventEntry(const GraphRegistry& registry, const std::string& type)
+{
+	Graph graph;
+	const auto entry = Add(graph, registry, type);
+	const auto result = Add(graph, registry, "Logic.IntResult");
+	Accept(graph.SetInputValue(registry, { entry, "actionId" }, std::string{ "Jump" }));
+	Accept(graph.SetInputValue(registry, { result, "value" }, std::int64_t{ 1 }));
+	Link(graph, registry, entry, "exec", result, "exec");
+
+	GraphExecutor executor;
+	Accept(executor.Load(graph, registry));
+
+	for (int attempt = 0; attempt < 2; ++attempt)
+	{
+		Dispatch(executor, entry);
+		const auto* value = std::get_if<std::int64_t>(&executor.GetResult());
+		Expect(value && *value == 1, "Action event did not execute its connected output.");
+	}
+}
+
 void CheckUpdateMovement(const GraphRegistry& registry)
 {
 	Graph graph(EGraphDomain::Logic);
@@ -438,6 +458,8 @@ int main()
 		CheckNativeInvocation(reflection);
 		CheckMathGraph(registry, reflection);
 		CheckUpdateMovement(registry);
+		CheckActionEventEntry(registry, "Event.OnActionPressed");
+		CheckActionEventEntry(registry, "Event.OnActionReleased");
 		CheckLoops(registry, reflection);
 		CheckStateAndSequence(registry);
 		CheckGateFlipFlopAndStop(registry);

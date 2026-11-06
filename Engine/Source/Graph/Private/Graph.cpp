@@ -83,6 +83,8 @@ GraphDiagnostic Graph::CheckConnection(const GraphRegistry& registry, const Grap
 		return { EGraphError::InvalidDirection, from.Node, from.Pin, 0, "Connection must start at an output pin." };
 	if (input->Direction != EGraphPinDirection::Input)
 		return { EGraphError::InvalidDirection, to.Node, to.Pin, 0, "Connection must end at an input pin." };
+	if (input->LiteralOnly)
+		return { EGraphError::InvalidDirection, to.Node, to.Pin, 0, "This input accepts only a literal value." };
 	if (output->Type != input->Type || output->ObjectType != input->ObjectType)
 		return { EGraphError::TypeMismatch, to.Node, to.Pin, 0, "Pin types must match exactly; conversions are explicit." };
 	const bool execution = output->Type == EGraphPinType::Execution;

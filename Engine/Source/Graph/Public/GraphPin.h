@@ -15,6 +15,7 @@ struct GraphPin
 	// Object pins require an exact reflected owner name; they accept links, never literal values.
 	std::string ObjectType;
 	std::string DisplayName;
+	bool LiteralOnly = false;
 };
 
 STRUCT()

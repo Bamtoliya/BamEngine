@@ -241,7 +241,7 @@ GraphDiagnostic RegisterProperty(GraphRegistry& graph, const reflection::TypeInf
 	node.DisplayName = "Get " + displayName;
 	node.Reflection = { EGraphReflectionKind::PropertyGet, owner.QualifiedName, property.Name, {} };
 	node.Pins = { TargetPin(owner.QualifiedName), { "result", Direction::Output, *type, {} } };
-	auto result = graph.RegisterOrUpdate(std::move(node));
+	auto result = graph.RegisterOrUpdate(node);
 	if (!result.Succeeded()) { result.Message = location + ": " + result.Message; return result; }
 	if (!readWrite) return {};
 	node.Type = id + ".Set";

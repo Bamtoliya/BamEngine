@@ -6,7 +6,7 @@
 #include "Scene.h"
 #include "Logger.h"
 #include "PlatformPath.h"
-
+#include "InputManager.h"
 namespace
 {
 	Scene* s_CurrentScene = nullptr;
@@ -15,6 +15,44 @@ namespace
 #ifdef BAM_EDITOR
 	GraphSystem::NodeExecuteHook s_NodeExecuteHook = nullptr;
 #endif
+
+	std::vector<GraphRuntimeState::ActionEventEntry> CollectActionEventEntries(const Graph& graph, const GraphRegistry& registry)
+	{
+		using Phase = GraphRuntimeState::ActionEventPhase;
+		std::vector<GraphRuntimeState::ActionEventEntry> entries;
+
+		for (const auto& node : graph.GetNodes())
+		{
+			const bool released = node.Type == "Event.OnActionReleased";
+			if (!released && node.Type != "Event.OnActionPressed")
+				continue;
+
+			const auto readText = [&](const char* key) -> std::string
+				{
+					const auto found = node.InputValues.find(key);
+					if (found != node.InputValues.end())
+						return std::get<std::string>(found->second);
+
+					const auto* pin = registry.FindPin(node.Type, key);
+					return pin ? std::get<std::string>(pin->DefaultValue) : std::string{};
+				};
+
+			auto mapId = readText("mapId");
+			auto actionId = readText("actionId");
+			if (!mapId.empty() && !actionId.empty())
+			{
+				const auto phase = released ? Phase::Released : Phase::Pressed;
+				entries.push_back({ node.Id, std::move(mapId), std::move(actionId), phase });
+			}
+		}
+
+		std::stable_partition(entries.begin(), entries.end(), [](const auto& entry)
+			{
+				return entry.Phase == Phase::Pressed;
+			});
+
+		return entries;
+	}
 }
 
 Scene* GraphSystem::GetCurrentScene() { return s_CurrentScene; }
@@ -174,7 +212,7 @@ void GraphSystem::OnUpdate(entt::registry& globalRegistry, const vector<Scene*>&
 					else if (node.Type == "Event.OnTriggerStay") newState.triggerStayNodes.push_back(node.Id);
 					else if (node.Type == "Event.OnTriggerExit") newState.triggerExitNodes.push_back(node.Id);
 				}
-
+				newState.actionEventEntries = CollectActionEventEntries(*graphTemplate, m_Registry);
 				runtime = &world.emplace_or_replace<GraphRuntimeState>(entity, std::move(newState));
 			}
 
@@ -202,6 +240,38 @@ void GraphSystem::OnUpdate(entt::registry& globalRegistry, const vector<Scene*>&
 						}
 					}
 					runtime->hasStarted = true;
+				}
+
+				if (InputManager::IsCreated())
+				{
+					const auto& input = InputManager::Get();
+					for (const auto& entry : runtime->actionEventEntries)
+					{
+						const bool triggered = entry.Phase == GraphRuntimeState::ActionEventPhase::Pressed
+							? input.WasActionPressed(entry.MapId, entry.ActionId)
+							: input.WasActionReleased(entry.MapId, entry.ActionId);
+						if (!triggered)
+							continue;
+
+						if (!runtime->executor.Begin(entry.Node, dt).Succeeded())
+							continue;
+
+						runtime->executor.Resume();
+						while (runtime->executor.GetState() == EGraphExecutionState::Running)
+							runtime->executor.Tick();
+
+						if (runtime->executor.GetDiagnostic().Code == EGraphError::ExecutionLimit)
+						{
+							runtime->isValid = false;
+							break;
+						}
+					}
+				}
+
+				if (!runtime->isValid)
+				{
+					ClearCurrentContext();
+					continue;
 				}
 
 				// 2. Event.Update (Tick) 매 프레임 디스패치
@@ -335,7 +405,7 @@ void GraphSystem::ReloadReflectedNodes(const std::vector<Scene*>& activeScenes)
 			{
 				runtime.executor.SetVariable(name, val);
 			}
-
+			runtime.actionEventEntries = CollectActionEventEntries(*graphTemplate, m_Registry);
 			runtime.hasStarted = wasStarted;
 			runtime.isValid = true;
 		}

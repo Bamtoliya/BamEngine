@@ -21,8 +21,12 @@
             },
             {
                 "Id": 3,
-                "Type": "Input.GetAxisVertical",
-                "InputValues": []
+                "Type": "Input.GetActionAxis",
+                "InputValues": [
+                    { "Key": "mapId", "Value": { "Type": "String", "Value": "Gameplay" } },
+                    { "Key": "positiveActionId", "Value": { "Type": "String", "Value": "MoveForward" } },
+                    { "Key": "negativeActionId", "Value": { "Type": "String", "Value": "MoveBackward" } }
+                ]
             },
             {
                 "Id": 4,

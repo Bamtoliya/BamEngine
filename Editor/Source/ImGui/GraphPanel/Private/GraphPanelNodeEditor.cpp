@@ -496,13 +496,16 @@ void GraphPanel::DrawNode(const GraphNode& node)
 		if (dataStraight) ed::PushStyleVar(ed::StyleVar_LinkStrength, 0.0f);
 		for (const auto* inPin : dataInputs)
 		{
-			const int id = found->second.Pins.at(inPin->Key);
-			const ImVec4 pinColor = ImGui::ColorConvertU32ToFloat4(PinColor(inPin->Type));
-			ed::BeginPin(id, ed::PinKind::Input);
-			ed::PinPivotAlignment(ImVec2(0.0f, 0.5f));
-			ImGui::TextColored(pinColor, ICON_FA_CIRCLE);
-			ed::EndPin();
-			ImGui::SameLine(0.0f, 6.0f);
+			if (!inPin->LiteralOnly)
+			{
+				const int id = found->second.Pins.at(inPin->Key);
+				const ImVec4 pinColor = ImGui::ColorConvertU32ToFloat4(PinColor(inPin->Type));
+				ed::BeginPin(id, ed::PinKind::Input);
+				ed::PinPivotAlignment(ImVec2(0.0f, 0.5f));
+				ImGui::TextColored(pinColor, ICON_FA_CIRCLE);
+				ed::EndPin();
+				ImGui::SameLine(0.0f, 6.0f);
+			}
 			const auto pinText = localization.GetTextForDisplay(inPin->DisplayName);
 			const char* label = inPin->DisplayName.empty() ? inPin->Key.c_str() : pinText.c_str();
 			ImGui::TextUnformatted(label);

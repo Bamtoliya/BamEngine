@@ -35,6 +35,14 @@ Use one entry per meaningful change.
 
 ---
 
+## [2026-11-06] 게임 입력 액션과 로직 그래프 연동
+
+- **Editor/PIE 기반.** 통합 설정의 입력 액션 위젯에서 액션과 복수 바인딩을 편집해 [Config/InputActions.json](../Config/InputActions.json)에 저장한다. PIE 시작 시 설정을 `InputManager`에 적용한다. 3인칭 컨트롤러의 이동·점프·달리기·오빗 입력과 `CubeController` 예제 그래프의 이동은 액션 ID를 사용한다.
+- **그래프 입력 이벤트.** `Event.OnActionPressed`와 `Event.OnActionReleased`를 추가했다. 두 이벤트의 맵·액션 ID는 노드에서 직접 편집하는 문자열이다. `GraphSystem`은 그래프 로드와 리플렉션 리로드 시 엔티티별 이벤트 목록을 구성하고, 같은 프레임에서는 눌림을 해제보다 먼저 실행한다. 동작 계약과 재현 절차는 [GraphExecution.md](GraphExecution.md#입력-액션-이벤트)에서 확인한다.
+- **리플렉션 등록 수정.** 읽기·쓰기가 가능한 프로퍼티의 Get 노드를 등록할 때 노드 정의를 복사해 Set 노드에 필요한 도메인과 메타데이터를 보존한다. 기존 실패는 `graph_checks::Counter::Value: Node type and at least one domain are required.`였다.
+- **검증 기록.** 2026-11-06 11:33의 Debug `GraphExecutionCheck` 통과 로그를 확인했다. 이 검사는 두 액션 이벤트를 실행기에서 각각 반복 호출하고 연결된 `exec` 결과를 확인한다. 실제 입력에서 `GraphSystem`까지의 전달, 에디터 재실행 후 저장 복원, PIE 포커스 전환은 수동 검증이 남아 있다.
+- **인수인계.** 현재 `Gameplay` 맵에 `Sprint`와 `OrbitCamera` 바인딩을 보완하고, `MoveRight=A`와 `MoveLeft=D`가 의도한 배치인지 확인한다. 이후 `InputManagerCheck`·`EditorSettingsCheck`와 PIE에서 이동·달리기·오빗·그래프 이벤트를 확인하면 키보드·마우스 1차를 마감할 수 있다. Client 입력 설정 연결은 [빌드·패키징](BuildAndPackagingPlan.md) 단계에 두고, 게임패드와 아날로그 축은 [엔진 개발 계획](EngineDevelopmentPlan.md)의 후속 범위로 둔다. 프로젝트 전체 점검과 우선순위 재조정은 [DevelopmentPriorities.md](DevelopmentPriorities.md)에서 이어간다.
+
 ## [2026-11-06] 엔진·에디터 공용 처리와 설정 위젯 정리
 
 - **에디터.** `MetricsPanel`의 계측 영역과 `UnifiedSettingsPanel`의 설정 영역을 각각 위젯으로 분리했다. 통합 설정에서 단축키와 게임 입력 액션을 편집하며, 게임 입력 설정은 PIE 시작 시 적용한다. `Ctrl+W`는 포커스된 패널을 닫고 `Ctrl+Shift+W`는 씬 닫기 명령으로 사용한다. 리소스 편집기의 창 제목 조립과 콘텐츠 브라우저의 이름 변경 입력을 공용화했다.
