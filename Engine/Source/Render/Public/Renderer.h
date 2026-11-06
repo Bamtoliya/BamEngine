@@ -87,6 +87,7 @@ public:
 	void RegisterUICanvas(class Scene* scene, entt::entity canvas, RenderPass* renderPass);
 	void UnregisterViewportCamera(RenderPassID passID);
 	vector<ViewportCameraInfo>& GetActiveViewportCameras() { return m_ViewportCameras; }
+	vector<ViewportCameraInfo> CollectGeometryViewportCameras() const;
 #pragma endregion
 
 #pragma region Binding

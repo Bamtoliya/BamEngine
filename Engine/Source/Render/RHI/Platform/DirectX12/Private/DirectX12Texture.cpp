@@ -6,16 +6,7 @@
 EResult DirectX12Texture::Initialize(const DESC& desc)
 {
     if (desc.format == ETextureFormat::UNKNOWN) return EResult::InvalidArgument;
-    m_Width = desc.width;
-    m_Height = desc.height;
-    m_Depth = desc.depth;
-    m_MipLevels = desc.mipLevels;
-    m_ArraySize = desc.arraySize;
-    m_SampleCount = desc.sampleCount;
-    m_Format = desc.format;
-    m_Dimension = desc.dimension;
-    m_Usage = desc.usage;
-    m_sRGB = desc.sRGB;
+    ApplyCommonTextureDesc(desc);
     m_ClearColor = desc.clearColor;
     m_ClearDepth = desc.clearDepth;
     m_ClearStencil = desc.clearStencil;

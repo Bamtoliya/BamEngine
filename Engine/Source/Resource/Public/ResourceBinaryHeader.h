@@ -29,6 +29,23 @@ enum class EResourceType : uint32
 	ActionTimeline,
 };
 
+inline constexpr const char* GetResourceBinaryExtension(EResourceType type) noexcept
+{
+	switch (type)
+	{
+	case EResourceType::Material:         return ".bammat";
+	case EResourceType::MaterialInstance: return ".bammatinst";
+	case EResourceType::Mesh:             return ".bammesh";
+	case EResourceType::Sprite:           return ".bamsprite";
+	case EResourceType::Skeleton:         return ".bamskel";
+	case EResourceType::Animation:        return ".bamanim";
+	case EResourceType::Model:            return ".bammodel";
+	case EResourceType::Texture:          return ".bamtex";
+	case EResourceType::Shader:           return ".bamshader";
+	default:                              return ".beve";
+	}
+}
+
 STRUCT()
 struct ENGINE_API ResourceBinaryHeader
 {

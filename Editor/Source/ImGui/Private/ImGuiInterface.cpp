@@ -14,3 +14,15 @@ void IImGui::RestoreState(const EditorWorkspace& workspace)
 	if (found != workspace.PanelOpenStates.end())
 		SetOpen(found->second);
 }
+
+bool IImGui::BeginPanelWindow(const char* title, bool& open, ImGuiWindowFlags flags)
+{
+	const bool visible = ImGui::Begin(title, &open, flags);
+	m_PanelWindowId = ImGui::GetCurrentWindowRead()->ID;
+
+	if (m_CloseRequestFrame == ImGui::GetFrameCount())
+		open = false;
+
+	m_CloseRequestFrame = -1;
+	return visible;
+}

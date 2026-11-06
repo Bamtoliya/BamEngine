@@ -5,32 +5,9 @@
 #define MAX_LIGHTS_PER_TILE 256
 
 Texture2D gPosition : register(t4, space3);
-ByteAddressBuffer gLightBuffer : register(t6, space3);
 
 RWStructuredBuffer<uint2> g_TileLightGrid : register(u0, space3); // x: startIndex, y: lightCount
 RWStructuredBuffer<uint> g_TileLightIndexList : register(u1, space3); // 선별된 광원 인덱스 배열
-
-static const uint LIGHT_BUFFER_HEADER_SIZE = 16u;
-static const uint LIGHT_BUFFER_STRIDE = 80u;
-
-Light LoadLight(uint lightIndex)
-{
-    uint address = LIGHT_BUFFER_HEADER_SIZE + lightIndex * LIGHT_BUFFER_STRIDE;
-    Light light;
-    light.Position = asfloat(gLightBuffer.Load3(address));
-    light.Intensity = asfloat(gLightBuffer.Load(address + 12u));
-    light.Direction = asfloat(gLightBuffer.Load3(address + 16u));
-    light.Range = asfloat(gLightBuffer.Load(address + 28u));
-    light.Color = asfloat(gLightBuffer.Load3(address + 32u));
-    light.PackedFlags = gLightBuffer.Load(address + 44u);
-    light.AttenuationCoeff = asfloat(gLightBuffer.Load3(address + 48u));
-    light.ShadowStrength = asfloat(gLightBuffer.Load(address + 60u));
-    light.SpotInnerCos = asfloat(gLightBuffer.Load(address + 64u));
-    light.SpotOuterCos = asfloat(gLightBuffer.Load(address + 68u));
-    light.SpotFalloff = asfloat(gLightBuffer.Load(address + 72u));
-    light.Pad1 = asfloat(gLightBuffer.Load(address + 76u));
-    return light;
-}
 
 groupshared uint s_MinZ;
 groupshared uint s_MaxZ;

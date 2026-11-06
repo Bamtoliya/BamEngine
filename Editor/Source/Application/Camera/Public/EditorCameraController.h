@@ -3,6 +3,7 @@
 #include "Editor_Includes.h"
 #include "Components/Render/CameraComponent.h"
 #include <entt/entt.hpp>
+#include "InputMap.h"
 
 BEGIN(Engine)
 class Scene;
@@ -24,6 +25,7 @@ public:
     void Free() override;
 
     void HandleInput(Engine::f32 dt, bool allowScroll = true);
+    void HandleInput(Engine::f32 dt, bool allowScroll, std::optional<Engine::EMouseButton> dragButton);
     void SetControlRotation(const Engine::vec3& eulerAngles);
     void SyncControlRotationFromTransform();
     void FocusEntity(Engine::Entity* targetEntity);
@@ -50,7 +52,8 @@ public:
     void SetZoomSpeed3D(Engine::f32 speed) { m_ZoomSpeed3D = speed; }
     void SetZoomSpeed2D(Engine::f32 speed) { m_ZoomSpeed2D = speed; }
     void SetFOVZoom(bool zoomType) { m_IsFOVZoom = zoomType; }
-
+private:
+    void ApplyInput(Engine::f32 dt, bool allowScroll, bool isLMB, bool isMMB, bool isRMB);
 private:
     Engine::Scene* m_EditorScene = nullptr;
     entt::entity m_CameraEntity = entt::null;

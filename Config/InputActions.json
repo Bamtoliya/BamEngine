@@ -1,0 +1,61 @@
+{
+    "Settings": {
+        "Maps": [
+            {
+                "Actions": [
+                    {
+                        "Id": "Jump",
+                        "Type": "Button"
+                    },
+                    {
+                        "Id": "MoveForward",
+                        "Type": "Button"
+                    },
+                    {
+                        "Id": "MoveBackward",
+                        "Type": "Button"
+                    },
+                    {
+                        "Id": "MoveRight",
+                        "Type": "Button"
+                    },
+                    {
+                        "Id": "MoveLeft",
+                        "Type": "Button"
+                    }
+                ],
+                "Bindings": [
+                    {
+                        "ActionId": "Jump",
+                        "Key": "Space"
+                    },
+                    {
+                        "ActionId": "Jump",
+                        "Key": "J"
+                    },
+                    {
+                        "ActionId": "Jump",
+                        "Key": "K"
+                    },
+                    {
+                        "ActionId": "MoveForward",
+                        "Key": "Up"
+                    },
+                    {
+                        "ActionId": "MoveBackward",
+                        "Key": "S"
+                    },
+                    {
+                        "ActionId": "MoveRight",
+                        "Key": "A"
+                    },
+                    {
+                        "ActionId": "MoveLeft",
+                        "Key": "D"
+                    }
+                ],
+                "Id": "Gameplay"
+            }
+        ]
+    }
+}

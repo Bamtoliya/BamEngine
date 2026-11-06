@@ -5,12 +5,27 @@
 #include "AudioManager.h"
 #include "ImGuiManager.h"
 #include <archive/JsonArchive.h>
+#include "EditorSettingsService.h"
+#include "InputActionSettings.h"
+#include "InputManager.h"
 
 IMPLEMENT_SINGLETON(PIEManager)
 
 void PIEManager::StartPlay()
 {
     if (m_State != EPlayState::Edit) return;
+
+
+    //Input Settings
+    {
+        Engine::InputActionSettings inputSettings;
+        if (!EditorSettingsService::Get().LoadInputActionSettings(inputSettings) ||
+            !Engine::InputManager::Get().SetInputActionSettings(inputSettings))
+        {
+            return;
+        }
+    }
+
     // 0. 에디터 프리뷰 사운드 정리
     Engine::AudioManager::Get().StopAllSounds();
     // 1. 선택 해제 및 씬 스냅샷 저장

@@ -123,7 +123,7 @@ void GraphPanel::Draw()
 	}
 	const string windowTitle = LOCAL("GraphPanel.Title") + "###GraphPanel";
 	ImGui::SetNextWindowSize(ImVec2(1000.0f, 650.0f), ImGuiCond_FirstUseEver);
-	if (ImGui::Begin(windowTitle.c_str(), &m_Open, ImGuiWindowFlags_MenuBar))
+	if (BeginPanelWindow(windowTitle.c_str(), m_Open, ImGuiWindowFlags_MenuBar))
 	{
 		m_Focused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
 		if (m_Focused) s_ActiveGraphPanel = this;

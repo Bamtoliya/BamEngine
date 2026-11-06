@@ -55,6 +55,7 @@
 ,CATEGORY_SHADOW,Shadow,그림자
 ,CATEGORY_SKY,Sky,하늘
 ,CATEGORY_SKY_COLOR,Sky Color,하늘 색상
+,CATEGORY_SPLINE,Spline,스플라인
 ,CATEGORY_SUN_DISC,Sun Disc,태양 원반
 ,CATEGORY_TEXTURE,Texture,텍스처
 ,CATEGORY_TIME_OF_DAY,Time of Day,하루 시간
@@ -91,6 +92,8 @@
 ,Destroy Actor,Destroy Actor,액터 파괴
 ,Details,Details,세부 정보
 ,Division by zero.,Division by zero.,0으로 나눌 수 없습니다.
+,Duplicate link ID.,Duplicate link ID.,연결 ID가 중복되었습니다.
+,Duplicate node ID.,Duplicate node ID.,노드 ID가 중복되었습니다.
 ,ENUM_ATTENUATION_MODE,Attenuation Mode,감쇠 모드
 ,ENUM_CAMERA_TYPE,Camera Type,카메라 타입
 ,ENUM_ENTITY_FLAG,Entity Flags,엔티티 플래그
@@ -98,6 +101,23 @@
 ,ENUM_LIGHT_FLAGS,Light Flags,조명 플래그
 ,ENUM_LIGHT_TYPE,Light Type,조명 타입
 ,ENUM_TRANSFORM_ABSOLUTE,Absolute Transform Channels,월드 기준 Transform 채널
+,Engine::ESplineMeshBuildStatus.DeformationFailed,Mesh deformation failed,메시 변형 실패
+,Engine::ESplineMeshBuildStatus.FoldedSection,The deformed section folds or collapses,굽이 안쪽에서 변형 단면이 접히거나 붕괴함
+,Engine::ESplineMeshBuildStatus.InvalidPath,Invalid spline path,유효하지 않은 스플라인 경로
+,Engine::ESplineMeshBuildStatus.MissingMaterial,Material unavailable,머티리얼을 사용할 수 없음
+,Engine::ESplineMeshBuildStatus.MissingSourceMesh,Source mesh unavailable,원본 메시를 사용할 수 없음
+,Engine::ESplineMeshBuildStatus.NoOutput,No generated geometry,생성된 형상 없음
+,Engine::ESplineMeshBuildStatus.NotEvaluated,Not evaluated,평가 전
+,Engine::ESplineMeshBuildStatus.PlacementFailed,Repeated placement failed,반복 배치 실패
+,Engine::ESplineMeshBuildStatus.Ready,Generated,생성 완료
+,Engine::ESplineMeshBuildStatus.SourceLimitExceeded,Source mesh exceeds vertex or index limit,원본 메시의 정점 또는 인덱스 한도 초과
+,Engine::ESplineMeshBuildStatus.StartDistanceAtOrPastEnd,Start distance must be before path end,시작 거리는 경로 끝보다 앞이어야 함
+,Engine::ESplineMeshBuildStatus.ZeroSourceZLength,Source mesh has no length along local Z,원본 메시의 로컬 Z 길이가 0임
+,Engine::ETransformAbsolute.All,Independent Transform,Transform 전체 독립
+,Engine::ETransformAbsolute.None,Inherit All,전체 상속
+,Engine::ETransformAbsolute.Position,Absolute Position,위치 독립
+,Engine::ETransformAbsolute.Rotation,Absolute Rotation,회전 독립
+,Engine::ETransformAbsolute.Scale,Absolute Scale,크기 독립
 ,Entity,Entity,엔티티
 ,Execution budget exhausted.,Execution budget exhausted.,실행 예산을 모두 사용했습니다.
 ,Execution is not implemented for node type:,Execution is not implemented for node type:,실행이 구현되지 않은 노드 유형:
@@ -128,6 +148,7 @@
 ,Get Last Hit Normal,Get Last Hit Normal,마지막 히트 법선 가져오기
 ,Get Linear Velocity,Get Linear Velocity,선속도 가져오기
 ,Graph annotations belong on FUNCTION or PROPERTY declarations.,Graph annotations belong on FUNCTION or PROPERTY declarations.,그래프 어노테이션은 FUNCTION 또는 PROPERTY 선언에 지정해야 합니다.
+,Graph data domain does not match this graph.,Graph data domain does not match this graph.,그래프 데이터의 도메인이 현재 그래프와 일치하지 않습니다.
 ,Graph file not found: '{}',Graph file not found: '{}',그래프 파일을 찾을 수 없습니다: '{}'
 ,"Graph parameters require unique, non-empty names.","Graph parameters require unique, non-empty names.",그래프 매개변수에는 비어 있지 않은 고유 이름이 필요합니다.
 ,Input,Input,입력
@@ -161,6 +182,7 @@
 ,Layout,Layout,레이아웃
 ,Lerp (Float),Lerp (Float),선형 보간 (Float)
 ,Lighting,Lighting,조명
+,Link ID must be non-zero.,Link ID must be non-zero.,연결 ID는 0일 수 없습니다.
 ,Link ID space is exhausted.,Link ID space is exhausted.,연결 ID를 더 이상 할당할 수 없습니다.
 ,Link does not exist.,Link does not exist.,연결이 존재하지 않습니다.
 ,Load a graph and finish or stop current execution first.,Load a graph and finish or stop current execution first.,그래프를 로드하고 현재 실행을 완료하거나 중지하십시오.
@@ -180,19 +202,29 @@
 ,NODE_ANIMATOR_GET_BOOL,Get Animator Bool,애니메이터 불리언 가져오기
 ,NODE_ANIMATOR_GET_CURRENT_TIME,Get 3D Animation Time,3D 애니메이션 현재 시간 가져오기
 ,NODE_ANIMATOR_GET_FLOAT,Get Animator Float,애니메이터 실수 가져오기
+,NODE_ANIMATOR_GET_LAYER_WEIGHT,Get Animator Layer Weight,애니메이터 레이어 가중치 가져오기
 ,NODE_ANIMATOR_IS_PLAYING,Is 3D Animation Playing,3D 애니메이션 재생 중 여부
 ,NODE_ANIMATOR_PAUSE,Pause 3D Animation,3D 애니메이션 일시정지
 ,NODE_ANIMATOR_PLAY,Play 3D Animation,3D 애니메이션 재생
 ,NODE_ANIMATOR_SET_BOOL,Set Animator Bool,애니메이터 불리언 설정
 ,NODE_ANIMATOR_SET_FLOAT,Set Animator Float,애니메이터 실수 설정
 ,NODE_ANIMATOR_SET_INT,Set Animator Int,애니메이터 정수 설정
+,NODE_ANIMATOR_SET_LAYER_WEIGHT,Set Animator Layer Weight,애니메이터 레이어 가중치 설정
 ,NODE_ANIMATOR_SET_PLAY_RATE,Set 3D Animation Play Rate,3D 애니메이션 재생 속도 설정
 ,NODE_ANIMATOR_SET_TIME,Set 3D Animation Time,3D 애니메이션 재생 시간 설정
 ,NODE_ANIMATOR_SET_TRIGGER,Set Animator Trigger,애니메이터 트리거 설정
 ,NODE_ANIMATOR_STOP,Stop 3D Animation,3D 애니메이션 중지
+,NODE_ANIMATOR_STOP_LAYER,Stop Animator Layer,애니메이터 레이어 중지
+,NODE_INPUT_GET_ACTION_AXIS,Get Input Action Axis,입력 액션 축 값 가져오기
+,NODE_INPUT_IS_ACTION_HELD,Is Input Action Held,입력 액션을 누르는 중
+,NODE_INPUT_WAS_ACTION_PRESSED,Was Input Action Pressed,입력 액션을 누른 순간
+,NODE_INPUT_WAS_ACTION_RELEASED,Was Input Action Released,입력 액션을 놓은 순간
 ,Native argument type mismatch.,Native argument type mismatch.,네이티브 인자의 자료형이 일치하지 않습니다.
+,Next link ID must exceed existing link IDs.,Next link ID must exceed existing link IDs.,다음 연결 ID는 기존 연결 ID보다 커야 합니다.
+,Next node ID must exceed existing node IDs.,Next node ID must exceed existing node IDs.,다음 노드 ID는 기존 노드 ID보다 커야 합니다.
 ,No execution binding for node type:,No execution binding for node type:,실행 바인딩이 없는 노드 유형:
 ,No matching dynamic free/static function binding.,No matching dynamic free/static function binding.,일치하는 동적 자유 함수 또는 정적 함수 바인딩이 없습니다.
+,Node ID must be non-zero.,Node ID must be non-zero.,노드 ID는 0일 수 없습니다.
 ,Node ID space is exhausted.,Node ID space is exhausted.,노드 ID를 더 이상 할당할 수 없습니다.
 ,Node does not exist.,Node does not exist.,노드가 존재하지 않습니다.
 ,Node produced a non-finite or incorrectly typed value.,Node produced a non-finite or incorrectly typed value.,노드가 유한하지 않거나 자료형이 잘못된 값을 반환했습니다.
@@ -209,6 +241,10 @@
 ,Only data inputs have default values.,Only data inputs have default values.,데이터 입력에만 기본값이 있습니다.
 ,Only object pins can specify an object type.,Only object pins can specify an object type.,객체 핀에만 객체 자료형을 지정할 수 있습니다.
 ,Output is not available in this execution context:,Output is not available in this execution context:,현재 실행 문맥에서 사용할 수 없는 출력:
+,PIN_INPUT_ACTION_ID,Action ID,액션 ID
+,PIN_INPUT_MAP_ID,Map ID,맵 ID
+,PIN_INPUT_NEGATIVE_ACTION_ID,Negative Action ID,음의 방향 액션 ID
+,PIN_INPUT_POSITIVE_ACTION_ID,Positive Action ID,양의 방향 액션 ID
 ,POST_PROCESS_BLOOM,Bloom,블룸
 ,POST_PROCESS_CHROMATIC_ABERRATION,Chromatic Aberration,색수차
 ,POST_PROCESS_COLOR_ADJUSTMENTS,Color Adjustments,색상 조정
@@ -228,6 +264,7 @@
 ,PROP_ANGULAR_DAMPING,Angular Damping,각 감쇠
 ,PROP_ANGULAR_VELOCITY,Angular Velocity,각속도
 ,PROP_ANIMATION_CLIP,Animation Clip,애니메이션 클립
+,PROP_ANIMATOR_LAYERS,Animation Layers,애니메이션 레이어 목록
 ,PROP_ASPECT_RATIO,Aspect Ratio,비율
 ,PROP_ATTENUATION_COEFFICIENTS,Attenuation Coefficients,감쇠 계수
 ,PROP_ATTENUATION_MODE,Attenuation Mode,감쇠 모드
@@ -426,7 +463,7 @@
 ,PROP_RATIO,Ratio,비율
 ,PROP_RAYCAST_TARGET,Raycast Target,레이캐스트 타깃
 ,PROP_RENDER,Render,렌더링
-,PROP_REQUIRE_RIGHT_CLICK_ROTATE,Require Right Click to Rotate,우클릭 시에만 회전
+,PROP_REQUIRE_RIGHT_CLICK_ROTATE,Require Orbit Camera Action,카메라 회전 액션 필요
 ,PROP_RESOLUTION,Resolution,해상도
 ,PROP_RESTITUTION,Restitution,반발력
 ,PROP_REST_LENGTH,Rest Length,기준 거리
@@ -456,6 +493,20 @@
 ,PROP_SOCKET_OFFSET,Socket Offset,소켓 오프셋
 ,PROP_SPEED_MAX,Initial Speed Max,최대 초기 속력
 ,PROP_SPEED_MIN,Initial Speed Min,최소 초기 속력
+,PROP_SPLINE_ALIGN_TO_MOVEMENT,Face Movement Direction,이동 방향 바라보기
+,PROP_SPLINE_BUILD_ERROR,Build Error,생성 오류
+,PROP_SPLINE_CLOSED,Closed Curve,닫힌 곡선
+,PROP_SPLINE_CURRENT_DISTANCE,Current Distance,현재 거리
+,PROP_SPLINE_DEFORM_TO_PATH,Deform Along Spline,경로를 따라 변형
+,PROP_SPLINE_INITIAL_UP,Initial Up Direction (world),초기 위쪽 방향 (월드)
+,PROP_SPLINE_INSTANCE_COUNT,Generated Instances,생성된 조각 수
+,PROP_SPLINE_LAST_BUILD_STATUS,Last Build Status,마지막 생성 상태
+,PROP_SPLINE_POINTS,Control Points,제어점
+,PROP_SPLINE_ROLL,Roll (degrees),롤 (도)
+,PROP_SPLINE_SPACING,Spacing (world units),배치 간격 (월드 단위)
+,PROP_SPLINE_SPEED,Speed (world units/s),이동 속도 (월드 단위/초)
+,PROP_SPLINE_START_DISTANCE,Start Distance,시작 거리
+,PROP_SPLINE_UV_REPEAT_DISTANCE,UV Repeat Distance (0 = Source UV),UV 반복 거리 (0 = 원본 UV)
 ,PROP_SPOT_FALLOFF_EXPONENT,Falloff Exponent,감쇠 지수
 ,PROP_SPOT_INNER_ANGLE,Inner Angle,내부 각도
 ,PROP_SPOT_OUTER_ANGLE,Outer Angle,외부 각도
@@ -505,6 +556,7 @@
 ,Parameter,Parameter,매개변수
 ,Pass enter to exit only while the gate is open.,Pass enter to exit only while the gate is open.,게이트가 열려 있을 때만 enter를 exit로 전달합니다.
 ,Pass once until reset; state belongs to the graph instance.,Pass once until reset; state belongs to the graph instance.,초기화할 때까지 한 번만 통과합니다. 상태는 그래프 인스턴스에 속합니다.
+,Pass through execution or data wire cleanly.,Pass through execution or data wire cleanly.,실행선이나 데이터선을 중간에서 연결해 경로를 정리합니다.
 ,Pause 3D Animation,Pause 3D Animation,3D 애니메이션 일시정지
 ,Pause Sprite Animation,Pause Sprite Animation,스프라이트 애니메이션 일시정지
 ,Physics,Physics,물리
@@ -584,6 +636,10 @@
 ,STRUCT_SKINNED_MESH_RENDERER,Skinned Mesh Renderer,스킨드 메시 렌더러
 ,STRUCT_SKY_ATMOSPHERE,Sky Atmosphere,하늘 대기
 ,STRUCT_SPHERE_SHAPE,Sphere Shape,구 형상
+,STRUCT_SPLINE,Spline,스플라인
+,STRUCT_SPLINE_FOLLOWER,Spline Follower,스플라인 추종
+,STRUCT_SPLINE_MESH,Spline Mesh Repetition,스플라인 메시 반복
+,STRUCT_SPLINE_POINT,Spline Point,스플라인 제어점
 ,STRUCT_SPRING_ARM,Spring Arm,스프링 암
 ,STRUCT_SPRITE_ANIMATION,Sprite Animation,스프라이트 애니메이션
 ,STRUCT_SPRITE_RENDERER,Sprite Renderer,스프라이트 렌더러
@@ -660,6 +716,7 @@
 ,Unknown script error on entity {},Unknown script error on entity {},엔티티 {}의 알 수 없는 스크립트 오류
 ,Unregistered node type:,Unregistered node type:,등록되지 않은 노드 유형:
 ,Unsupported by-value parameter:,Unsupported by-value parameter:,지원하지 않는 값 전달 매개변수:
+,Unsupported graph data version.,Unsupported graph data version.,지원하지 않는 그래프 데이터 버전입니다.
 ,Unsupported native return value.,Unsupported native return value.,지원하지 않는 네이티브 반환값입니다.
 ,Unsupported node domain:,Unsupported node domain:,지원하지 않는 노드 도메인:
 ,Unsupported property type:,Unsupported property type:,지원하지 않는 속성 자료형:
@@ -669,57 +726,8 @@
 ,VIGNETTE_SMOOTHNESS,Smoothness,부드러움
 ,Value is not a string.,Value is not a string.,값이 문자열이 아닙니다.
 ,Value is outside the native int32 range.,Value is outside the native int32 range.,값이 네이티브 int32 범위를 벗어났습니다.
-,Xor,Xor,XOR
-,Duplicate link ID.,Duplicate link ID.,연결 ID가 중복되었습니다.
-,Duplicate node ID.,Duplicate node ID.,노드 ID가 중복되었습니다.
-,Engine::ETransformAbsolute.All,Independent Transform,Transform 전체 독립
-,Engine::ETransformAbsolute.None,Inherit All,전체 상속
-,Engine::ETransformAbsolute.Position,Absolute Position,위치 독립
-,Engine::ETransformAbsolute.Rotation,Absolute Rotation,회전 독립
-,Engine::ETransformAbsolute.Scale,Absolute Scale,크기 독립
-,Graph data domain does not match this graph.,Graph data domain does not match this graph.,그래프 데이터의 도메인이 현재 그래프와 일치하지 않습니다.
-,Link ID must be non-zero.,Link ID must be non-zero.,연결 ID는 0일 수 없습니다.
-,NODE_ANIMATOR_GET_LAYER_WEIGHT,Get Animator Layer Weight,애니메이터 레이어 가중치 가져오기
-,NODE_ANIMATOR_SET_LAYER_WEIGHT,Set Animator Layer Weight,애니메이터 레이어 가중치 설정
-,NODE_ANIMATOR_STOP_LAYER,Stop Animator Layer,애니메이터 레이어 중지
-,Next link ID must exceed existing link IDs.,Next link ID must exceed existing link IDs.,다음 연결 ID는 기존 연결 ID보다 커야 합니다.
-,Next node ID must exceed existing node IDs.,Next node ID must exceed existing node IDs.,다음 노드 ID는 기존 노드 ID보다 커야 합니다.
-,Node ID must be non-zero.,Node ID must be non-zero.,노드 ID는 0일 수 없습니다.
-,PROP_ANIMATOR_LAYERS,Animation Layers,애니메이션 레이어 목록
-,Pass through execution or data wire cleanly.,Pass through execution or data wire cleanly.,실행선이나 데이터선을 중간에서 연결해 경로를 정리합니다.
-,Unsupported graph data version.,Unsupported graph data version.,지원하지 않는 그래프 데이터 버전입니다.
 ,Variable name cannot be empty.,Variable name cannot be empty.,변수 이름은 비워 둘 수 없습니다.
 ,Variable not found in executor:,Variable not found in executor:,실행기에서 변수를 찾을 수 없습니다:
 ,Variable not found.,Variable not found.,변수를 찾을 수 없습니다.
 ,Variable with this name already exists.,Variable with this name already exists.,같은 이름의 변수가 이미 있습니다.
-,CATEGORY_SPLINE,Spline,스플라인
-,Engine::ESplineMeshBuildStatus.DeformationFailed,Mesh deformation failed,메시 변형 실패
-,Engine::ESplineMeshBuildStatus.FoldedSection,The deformed section folds or collapses,굽이 안쪽에서 변형 단면이 접히거나 붕괴함
-,Engine::ESplineMeshBuildStatus.InvalidPath,Invalid spline path,유효하지 않은 스플라인 경로
-,Engine::ESplineMeshBuildStatus.MissingMaterial,Material unavailable,머티리얼을 사용할 수 없음
-,Engine::ESplineMeshBuildStatus.MissingSourceMesh,Source mesh unavailable,원본 메시를 사용할 수 없음
-,Engine::ESplineMeshBuildStatus.NoOutput,No generated geometry,생성된 형상 없음
-,Engine::ESplineMeshBuildStatus.NotEvaluated,Not evaluated,평가 전
-,Engine::ESplineMeshBuildStatus.PlacementFailed,Repeated placement failed,반복 배치 실패
-,Engine::ESplineMeshBuildStatus.Ready,Generated,생성 완료
-,Engine::ESplineMeshBuildStatus.SourceLimitExceeded,Source mesh exceeds vertex or index limit,원본 메시의 정점 또는 인덱스 한도 초과
-,Engine::ESplineMeshBuildStatus.StartDistanceAtOrPastEnd,Start distance must be before path end,시작 거리는 경로 끝보다 앞이어야 함
-,Engine::ESplineMeshBuildStatus.ZeroSourceZLength,Source mesh has no length along local Z,원본 메시의 로컬 Z 길이가 0임
-,PROP_SPLINE_ALIGN_TO_MOVEMENT,Face Movement Direction,이동 방향 바라보기
-,PROP_SPLINE_BUILD_ERROR,Build Error,생성 오류
-,PROP_SPLINE_CLOSED,Closed Curve,닫힌 곡선
-,PROP_SPLINE_CURRENT_DISTANCE,Current Distance,현재 거리
-,PROP_SPLINE_DEFORM_TO_PATH,Deform Along Spline,경로를 따라 변형
-,PROP_SPLINE_INITIAL_UP,Initial Up Direction (world),초기 위쪽 방향 (월드)
-,PROP_SPLINE_INSTANCE_COUNT,Generated Instances,생성된 조각 수
-,PROP_SPLINE_LAST_BUILD_STATUS,Last Build Status,마지막 생성 상태
-,PROP_SPLINE_POINTS,Control Points,제어점
-,PROP_SPLINE_ROLL,Roll (degrees),롤 (도)
-,PROP_SPLINE_SPACING,Spacing (world units),배치 간격 (월드 단위)
-,PROP_SPLINE_SPEED,Speed (world units/s),이동 속도 (월드 단위/초)
-,PROP_SPLINE_START_DISTANCE,Start Distance,시작 거리
-,PROP_SPLINE_UV_REPEAT_DISTANCE,UV Repeat Distance (0 = Source UV),UV 반복 거리 (0 = 원본 UV)
-,STRUCT_SPLINE,Spline,스플라인
-,STRUCT_SPLINE_FOLLOWER,Spline Follower,스플라인 추종
-,STRUCT_SPLINE_MESH,Spline Mesh Repetition,스플라인 메시 반복
-,STRUCT_SPLINE_POINT,Spline Point,스플라인 제어점
+,Xor,Xor,XOR

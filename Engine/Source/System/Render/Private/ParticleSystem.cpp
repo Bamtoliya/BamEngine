@@ -189,24 +189,7 @@ void Engine::ParticleSystem::OnSubmit(entt::registry& registry, const vector<Sce
 {
 	auto& renderer = Renderer::Get();
 
-	struct GeometryTarget
-	{
-		RenderPass* pass = nullptr;
-		CameraBuffer cameraBuffer;
-	};
-	vector<GeometryTarget> geometryTargets;
-
-	for (const auto& viewport : renderer.GetActiveViewportCameras())
-	{
-		RenderPass* pass = viewport.renderPass;
-		if (!pass || !viewport.hasCamera || pass->GetPassType() != ERenderPassType::Geometry) continue;
-
-		auto it = std::find_if(geometryTargets.begin(), geometryTargets.end(),
-			[pass](const GeometryTarget& t) { return t.pass == pass; });
-		if (it == geometryTargets.end())
-			geometryTargets.push_back({ pass, viewport.cameraBuffer });
-	}
-
+	const auto geometryTargets = renderer.CollectGeometryViewportCameras();
 	if (geometryTargets.empty()) return;
 
 	auto& resourceManager = ResourceManager::Get();
@@ -234,7 +217,7 @@ void Engine::ParticleSystem::OnSubmit(entt::registry& registry, const vector<Sce
 
 			for (const auto& target : geometryTargets)
 			{
-				if (!target.pass->IsAcceptsBlendMode(material->GetBlendMode())) continue;
+				if (!target.renderPass->IsAcceptsBlendMode(material->GetBlendMode())) continue;
 
 				// 빌보드 기저 벡터를 루프 밖에서 1회만 계산
 				vec3 camRight = glm::normalize(vec3(target.cameraBuffer.invViewMatrix[0]));
@@ -269,7 +252,7 @@ void Engine::ParticleSystem::OnSubmit(entt::registry& registry, const vector<Sce
 					command.worldMatrix = worldMatrix;
 					command.pickingId = pickingId;
 
-					renderer.SubmitSprite(command, target.pass->GetID());
+					renderer.SubmitSprite(command, target.renderPass->GetID());
 				}
 			}
 		}

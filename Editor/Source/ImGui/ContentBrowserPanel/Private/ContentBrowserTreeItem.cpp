@@ -5,6 +5,7 @@
 #include "ImGuiManager.h"
 #include "ShortcutManager.h"
 #include "Editor_Macros.h"
+#include "ContentBrowserRename.h"
 
 bool ContentBrowserTreeItem::DrawNode(
 	const std::filesystem::path& path,
@@ -123,29 +124,5 @@ void ContentBrowserTreeItem::ContextMenu(const std::filesystem::path& path, cons
 void ContentBrowserTreeItem::DrawRename(const std::filesystem::path& path, std::filesystem::path& outRenamingPath, char* renameBuffer, size_t renameBufferSize, std::filesystem::path& currentDirectory)
 {
 	ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
-	if (ImGui::InputText("##TreeRenameInput", renameBuffer, renameBufferSize, ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll))
-	{
-		std::filesystem::path newPath = path.parent_path() / reinterpret_cast<const char8_t*>(renameBuffer);
-		if (renameBuffer[0] != '\0' && !std::filesystem::exists(newPath))
-		{
-			try {
-				std::filesystem::rename(path, newPath);
-				if (currentDirectory == path) currentDirectory = newPath;
-			}
-			catch (...) {}
-		}
-		outRenamingPath.clear();
-	}
-
-	if (ImGui::IsItemVisible() && !ImGui::IsAnyItemActive())
-		ImGui::SetKeyboardFocusHere(-1);
-
-	if (ImGui::IsItemDeactivated() && !ImGui::IsItemDeactivatedAfterEdit())
-	{
-		outRenamingPath.clear();
-	}
-	else if (KEY_DOWN(EKeyCode::Escape))
-	{
-		outRenamingPath.clear();
-	}
+	Editor::ContentBrowser::DrawRenameInput("##TreeRenameInput", path, outRenamingPath, renameBuffer, renameBufferSize, currentDirectory);
 }

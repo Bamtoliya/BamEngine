@@ -34,6 +34,43 @@ namespace Editor
         return ImGui::SplitterBehavior(bb, id, ImGuiAxis_X, size1, size2, min_size1, min_size2, hover_extend);
     }
 
+    template<typename DrawSidebar, typename DrawContent>
+    inline void DrawSidebarLayout(const char* sidebarId, const char* splitterId, const char* contentId,
+        float& preferredSidebarWidth, float height, float minSidebarWidth, float minContentWidth,
+        DrawSidebar&& drawSidebar, DrawContent&& drawContent)
+    {
+        constexpr float splitterThickness = 4.0f;
+        const float spacing = ImGui::GetStyle().ItemSpacing.x;
+        const float availableWidth = ImGui::GetContentRegionAvail().x;
+        const float paneWidth = std::max(1.0f, availableWidth - splitterThickness - spacing * 2.0f);
+        const float halfWidth = paneWidth * 0.5f;
+
+        const float minSidebar = std::min(minSidebarWidth, halfWidth);
+        const float minContent = std::clamp(minContentWidth, halfWidth, paneWidth - minSidebar);
+        float sidebarWidth = std::clamp(preferredSidebarWidth, minSidebar, paneWidth - minContent);
+        float contentWidth = paneWidth - sidebarWidth;
+        const float previousSidebarWidth = sidebarWidth;
+
+        if (ImGui::BeginChild(sidebarId, ImVec2(sidebarWidth, height),
+            ImGuiChildFlags_Borders, ImGuiWindowFlags_HorizontalScrollbar))
+        {
+            drawSidebar();
+        }
+        ImGui::EndChild();
+
+        ImGui::SameLine();
+        if (SplitterV(splitterId, &sidebarWidth, &contentWidth, minSidebar, minContent, height, splitterThickness) &&
+            sidebarWidth != previousSidebarWidth)
+        {
+            preferredSidebarWidth = sidebarWidth;
+        }
+
+        ImGui::SameLine();
+        if (ImGui::BeginChild(contentId, ImVec2(0.0f, height), ImGuiChildFlags_Borders))
+            drawContent();
+        ImGui::EndChild();
+    }
+
     /**
      * @brief ImGui 순정 SplitterBehavior 기반 수평 스플리터 (상하 분할)
      * @param str_id 위젯 고유 식별자 (예: "##BottomSplitter")

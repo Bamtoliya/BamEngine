@@ -99,7 +99,7 @@ void SpriteAnimationEditor::Draw()
 	title += "###" + WStrToStr(m_Name);
 
 	ImGui::SetNextWindowSize(ImVec2(800.0f, 600.0f), ImGuiCond_FirstUseEver);
-	if (ImGui::Begin(title.c_str(), &m_Open, ImGuiWindowFlags_MenuBar))
+	if (BeginPanelWindow(title.c_str(), m_Open, ImGuiWindowFlags_MenuBar))
 	{
 		m_Focused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
 		m_Hovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows);

@@ -31,52 +31,24 @@ if(MSVC)
     target_compile_options(SceneArchiveCheck PRIVATE /utf-8)
 endif()
 
-add_executable(TerrainDataCheck examples/TerrainDataCheck.cpp)
-target_link_libraries(TerrainDataCheck PRIVATE BamEngine::Engine)
-set_target_properties(TerrainDataCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
+foreach(check_target IN ITEMS
+    TerrainDataCheck
+    Physics2DCheck
+    CollisionGeometryCheck
+    SplineCurveCheck
+)
+    add_executable(${check_target} examples/${check_target}.cpp)
+    target_link_libraries(${check_target} PRIVATE BamEngine::Engine)
+    set_target_properties(${check_target} PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
 
-if(MSVC)
-    target_compile_options(TerrainDataCheck PRIVATE /utf-8 /Zc:preprocessor)
-endif()
+    if(MSVC)
+        target_compile_options(${check_target} PRIVATE /utf-8 /Zc:preprocessor)
+    endif()
 
-if(BUILD_TESTING)
-    add_test(NAME TerrainDataCheck COMMAND TerrainDataCheck)
-endif()
-
-add_executable(Physics2DCheck examples/Physics2DCheck.cpp)
-target_link_libraries(Physics2DCheck PRIVATE BamEngine::Engine)
-set_target_properties(Physics2DCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
-
-if(MSVC)
-    target_compile_options(Physics2DCheck PRIVATE /utf-8 /Zc:preprocessor)
-endif()
-
-if(BUILD_TESTING)
-    add_test(NAME Physics2DCheck COMMAND Physics2DCheck)
-endif()
-
-add_executable(CollisionGeometryCheck examples/CollisionGeometryCheck.cpp)
-target_link_libraries(CollisionGeometryCheck PRIVATE BamEngine::Engine)
-set_target_properties(CollisionGeometryCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
-
-if(MSVC)
-    target_compile_options(CollisionGeometryCheck PRIVATE /utf-8 /Zc:preprocessor)
-endif()
-
-if(BUILD_TESTING)
-    add_test(NAME CollisionGeometryCheck COMMAND CollisionGeometryCheck)
-endif()
-add_executable(SplineCurveCheck examples/SplineCurveCheck.cpp)
-target_link_libraries(SplineCurveCheck PRIVATE BamEngine::Engine)
-set_target_properties(SplineCurveCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
-
-if(MSVC)
-    target_compile_options(SplineCurveCheck PRIVATE /utf-8 /Zc:preprocessor)
-endif()
-
-if(BUILD_TESTING)
-    add_test(NAME SplineCurveCheck COMMAND SplineCurveCheck)
-endif()
+    if(BUILD_TESTING)
+        add_test(NAME ${check_target} COMMAND ${check_target})
+    endif()
+endforeach()
 
 add_executable(BlendTree2DCheck examples/BlendTree2DCheck.cpp)
 target_link_libraries(BlendTree2DCheck PRIVATE BamEngine::Engine)

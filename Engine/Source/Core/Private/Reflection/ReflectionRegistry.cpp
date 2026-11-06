@@ -188,45 +188,12 @@ namespace
         std::string name, std::string category, Engine::ComponentReflectionEntry::AddFunc add = nullptr,
         bool userAddable = true)
     {
-        Engine::ComponentReflectionEntry entry;
-        entry.Type = std::type_index(typeid(T));
-        entry.StorageId = entt::type_hash<T>::value();
-        entry.StorageTypeName = entt::type_id<T>().name();
-        entry.Name = std::move(name);
-        entry.Category = std::move(category);
-        entry.ReflectionType = registry.FindType<T>();
-        entry.UserAddable = userAddable;
-        entry.Has = [](const entt::registry& world, entt::entity entity)
-        {
-            const auto* storage = world.storage(entt::type_hash<T>::value());
-            const auto& type = entt::type_id<T>();
-            return world.valid(entity) && storage != nullptr && storage->info().hash() == type.hash() &&
-                storage->info().name() == type.name() && storage->contains(entity);
-        };
-        entry.Add = add != nullptr ? add : &AddComponentValue<T>;
+        auto entry = Engine::detail::BuildComponentEntry<T>(registry, std::move(name), std::move(category),
+            add != nullptr ? add : &AddComponentValue<T>, userAddable);
+
         entry.Edit = &ComponentObject<T, entt::registry>;
         entry.View = &ComponentObject<T, const entt::registry>;
         entry.Read = &ReadComponentValue<T>;
-        if constexpr (std::is_default_constructible_v<T>)
-        {
-            entry.Default = []() -> reflection::ObjectView
-                {
-                    static const T s_Default{};
-                    return reflection::ObjectView::From(s_Default);
-                };
-        }
-        entry.Copy = [](const entt::registry& source, entt::entity from, entt::registry& target, entt::entity to)
-        {
-            if constexpr (std::is_copy_constructible_v<T> && std::is_copy_assignable_v<T>)
-            {
-                if (!source.valid(from) || !target.valid(to) || !source.all_of<T>(from)) return false;
-                if constexpr (entt::component_traits<T>::page_size == 0) target.emplace_or_replace<T>(to);
-                else target.emplace_or_replace<T>(to, source.get<T>(from));
-                return true;
-            }
-            return false;
-        };
-        entry.Remove = [](entt::registry& world, entt::entity entity) { world.remove<T>(entity); };
         return entry;
     }
 

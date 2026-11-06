@@ -68,7 +68,7 @@ void AnimatorGraphPanel::Draw()
 	if (m_IsDirty) windowFlags |= ImGuiWindowFlags_UnsavedDocument;
 
 	bool openState = m_Open;
-	const bool isVisible = ImGui::Begin(title.c_str(), &openState, windowFlags);
+	const bool isVisible = BeginPanelWindow(title.c_str(), openState, windowFlags);
 
 	if (!openState)
 	{

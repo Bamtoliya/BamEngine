@@ -137,55 +137,50 @@ def is_ignored_imgui_literal(text: str) -> bool:
         return True
     return False
 
-def load_csv_catalog(file_path: Path):
-    catalog = {}
-    empty_entries = []
-
+def _iter_catalog_rows(file_path: Path, *, newline):
     if not file_path.is_file():
-        return catalog, empty_entries
+        return
 
-    with open(file_path, "r", encoding="utf-8-sig") as f:
-        reader = csv.reader(f)
-        header = next(reader, None)
+    with file_path.open(encoding="utf-8-sig", newline=newline) as stream:
+        reader = csv.reader(stream)
+        next(reader, None)
         group = ""
+
         for row in reader:
-            line_no = reader.line_num
-            if not row or len(row) < 2:
+            if len(row) < 2:
                 continue
+
             group = row[0].strip() or group
             key = row[1].strip()
-            en = row[2].strip() if len(row) > 2 else ""
-            ko = row[3].strip() if len(row) > 3 else ""
-
             if not key:
                 continue
 
             full_key = f"{group}.{key}" if group else key
-            catalog[full_key] = (en, ko, file_path.name, line_no)
+            yield full_key, row, reader.line_num
 
-            if not en or not ko:
-                empty_entries.append((file_path.name, line_no, full_key, en, ko))
+
+def load_csv_catalog(file_path: Path):
+    catalog = {}
+    empty_entries = []
+
+    for key, row, line_no in _iter_catalog_rows(file_path, newline=None):
+        en = row[2].strip() if len(row) > 2 else ""
+        ko = row[3].strip() if len(row) > 3 else ""
+        catalog[key] = (en, ko, file_path.name, line_no)
+
+        if not en or not ko:
+            empty_entries.append((file_path.name, line_no, key, en, ko))
 
     return catalog, empty_entries
 
 
 def duplicate_catalog_keys(files):
     locations = {}
+
     for file_path in files:
-        if not file_path.is_file():
-            continue
-        group = ''
-        with file_path.open(encoding='utf-8-sig', newline='') as stream:
-            reader = csv.reader(stream)
-            next(reader, None)
-            for row in reader:
-                if len(row) < 2:
-                    continue
-                group = row[0].strip() or group
-                key = row[1].strip()
-                if key:
-                    full_key = f'{group}.{key}' if group else key
-                    locations.setdefault(full_key, []).append((file_path.name, reader.line_num))
+        for key, _, line_no in _iter_catalog_rows(file_path, newline=""):
+            locations.setdefault(key, []).append((file_path.name, line_no))
+
     return {key: spots for key, spots in locations.items() if len(spots) > 1}
 
 

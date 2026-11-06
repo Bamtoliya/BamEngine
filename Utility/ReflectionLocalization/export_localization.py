@@ -106,12 +106,12 @@ def load_catalogs(directory, base_path):
     if not found_base:
         raise ValueError(f"Base CSV was not found in the catalog directory: {base_path}")
 
-        if duplicate_locations:
-            messages = [f"Duplicate keys ({len(duplicate_locations)}):"]
-            for key, locations in sorted(duplicate_locations.items()):
-                positions = ", ".join(f"{path}:{line}" for path, line in locations)
-                messages.append(f"  - {key!r}: {positions}")
-            raise ValueError("\n".join(messages))
+    if duplicate_locations:
+        messages = [f"Duplicate keys ({len(duplicate_locations)}):"]
+        for key, locations in sorted(duplicate_locations.items()):
+            positions = ", ".join(f"{path}:{line}" for path, line in locations)
+            messages.append(f"  - {key!r}: {positions}")
+        raise ValueError("\n".join(messages))
 
     return owners, base_rows
 

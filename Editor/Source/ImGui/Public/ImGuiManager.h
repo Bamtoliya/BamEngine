@@ -52,6 +52,8 @@ public:
 	IImGui* GetImGuiPanel(const wstring& name);
 	vector<IImGui*> GetImGuiPanels(const wstring& name);
 	const vector<IImGui*>& GetImGuiPanels() const { return m_ImGuiPanels; }
+	IImGui* GetFocusedClosablePanel() const;
+	void RequestCloseFocusedPanel();
 private:
 	EResult CreateDefaultPanels();
 private:
@@ -119,7 +121,6 @@ private:
 #pragma region Settings
 public:
 	void NotifySettingsChange(const EditorSettingsChangeResult& result);
-
 #pragma endregion
 
 

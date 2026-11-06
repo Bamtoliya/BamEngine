@@ -32,7 +32,7 @@ void HistoryPanel::Draw()
 	const ImGuiWindowFlags flags = hasUnsaved ? ImGuiWindowFlags_UnsavedDocument : ImGuiWindowFlags_None;
 
 	const std::string windowTitle = GetDisplayName() + "###HistoryPanel";
-	if (ImGui::Begin(windowTitle.c_str(), &m_Open, flags))
+	if (BeginPanelWindow(windowTitle.c_str(), m_Open))
 	{
 		const float availWidth = ImGui::GetContentRegionAvail().x;
 		constexpr float kCompactBreakpoint = 360.0f;

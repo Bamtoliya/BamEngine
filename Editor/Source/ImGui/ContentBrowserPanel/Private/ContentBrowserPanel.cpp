@@ -171,7 +171,7 @@ void ContentBrowserPanel::Draw()
 		return;
 
 	const string windowTitle = LOCAL("ContentBrowser.Title") + "###ContentBrowserPanel";
-	if (!ImGui::Begin(windowTitle.c_str(), &m_Open))
+	if (BeginPanelWindow(windowTitle.c_str(), m_Open))
 	{
 		ImGui::End();
 		return;

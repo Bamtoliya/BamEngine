@@ -9,6 +9,7 @@
 #include "CameraSystem.h"
 #include "PIEManager.h"
 #include "LocalizationManager.h"
+#include "InputManager.h"
 
 void GameViewportPanel::Initialize(void* arg)
 {
@@ -129,7 +130,61 @@ void GameViewportPanel::Update(f32 dt)
 
 void GameViewportPanel::Draw()
 {
+	m_GameplayImageWindowId = 0;
+	m_ImageSize = ImVec2(0.0f, 0.0f);
 	__super::Draw();
+}
+
+bool GameViewportPanel::HitTestGameplayImage(const vec2& screenPosition) const
+{
+	if (!m_Open || !m_IsVisibleOnScreen || m_GameplayImageWindowId == 0 ||
+		m_ImageSize.x <= 0.0f || m_ImageSize.y <= 0.0f)
+	{
+		return false;
+	}
+
+	const ImVec2 point(screenPosition.x, screenPosition.y);
+	const ImRect imageRect(m_ImageScreenPos,
+		ImVec2(m_ImageScreenPos.x + m_ImageSize.x, m_ImageScreenPos.y + m_ImageSize.y));
+	if (!imageRect.Contains(point))
+		return false;
+
+	ImGuiWindow* hoveredWindow = nullptr;
+	ImGuiWindow* hoveredWindowUnderMovingWindow = nullptr;
+	ImGui::FindHoveredWindowEx(point, true, &hoveredWindow, &hoveredWindowUnderMovingWindow);
+
+	return hoveredWindow && hoveredWindow->ID == m_GameplayImageWindowId &&
+		hoveredWindow->InnerClipRect.Contains(point);
+}
+
+uint32 GameViewportPanel::UpdateGameplayMouseButtons(Engine::InputManager& input, bool enabled)
+{
+	if (!enabled)
+	{
+		m_GameplayMouseButtons = 0;
+		return 0;
+	}
+
+	uint32 frameButtons = 0;
+	for (uint32 index = 0; index < static_cast<uint32>(Engine::EMouseButton::Count); ++index)
+	{
+		const auto button = static_cast<Engine::EMouseButton>(index);
+		const auto bit = uint32{ 1 } << index;
+
+		if (input.IsMouseButtonDown(button))
+		{
+			m_GameplayMouseButtons &= ~bit;
+			const auto position = input.GetMouseButtonDownScreenPosition(button);
+			if (position && HitTestGameplayImage(*position))
+				m_GameplayMouseButtons |= bit;
+		}
+
+		frameButtons |= m_GameplayMouseButtons & bit;
+		if (!input.IsMouseButtonPressed(button))
+			m_GameplayMouseButtons &= ~bit;
+	}
+
+	return frameButtons;
 }
 
 void GameViewportPanel::DrawCustomViewport()
@@ -137,6 +192,7 @@ void GameViewportPanel::DrawCustomViewport()
 	if (m_HasActiveCamera)
 	{
 		DrawRenderTargetImage(m_DisplayRTName);
+		m_GameplayImageWindowId = ImGui::GetCurrentWindowRead()->ID;
 		return;
 	}
 

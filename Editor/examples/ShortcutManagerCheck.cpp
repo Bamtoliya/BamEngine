@@ -1,4 +1,5 @@
-#include "ShortcutManager.h"
+﻿#include "ShortcutManager.h"
+#include "InputManager.h"
 #include <SDL3/SDL.h>
 #include <iostream>
 #include <string_view>

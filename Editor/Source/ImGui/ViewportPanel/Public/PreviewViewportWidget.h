@@ -9,6 +9,7 @@
 #include <memory>
 #include <string>
 #include "ChannelFilter.h"
+#include "InputMap.h"
 
 BEGIN(Engine)
 class Scene;
@@ -89,6 +90,7 @@ private:
 	inline static PreviewViewportWidget* s_ShortcutTarget = nullptr;
 	Engine::vec3 m_FocusPosition = Engine::vec3(0.0f);
 	Engine::f32 m_FocusDistance = 3.0f;
+	std::optional<Engine::EMouseButton> m_CameraDragButton;
 
 	// 빛
 	std::optional<std::array<float, 3>> m_PreviewLightDraft;

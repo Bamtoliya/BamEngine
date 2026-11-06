@@ -85,20 +85,21 @@ namespace Engine
             f32 armYaw = 0.0f;
             if (arm)
             {
-                const bool canRotate = !ctrl.RequireRightClickToRotate || input.IsMouseButtonPressed(EMouseButton::Right);
-                if (canRotate)
+                vec2 mouseDelta(0.0f);
+                if (!ctrl.RequireRightClickToRotate)
+                    mouseDelta = input.GetActionMapMouseDelta("Gameplay");
+                else if (input.IsActionHeld("Gameplay", "OrbitCamera"))
+                    mouseDelta = input.GetMouseDelta();
+
+                if (glm::length(mouseDelta) > 0.0001f)
                 {
-                    const vec2 mouseDelta = input.GetMouseDelta();
-                    if (glm::length(mouseDelta) > 0.0001f)
-                    {
-                        arm->Yaw += mouseDelta.x * ctrl.MouseSensitivity;
-                        const f32 pitchSign = ctrl.InvertPitch ? 1.0f : -1.0f;
-                        arm->Pitch += mouseDelta.y * ctrl.MouseSensitivity * pitchSign;
-                        arm->Pitch = std::clamp(arm->Pitch, arm->MinPitch, arm->MaxPitch);
-                    }
+                    arm->Yaw += mouseDelta.x * ctrl.MouseSensitivity;
+                    const f32 pitchSign = ctrl.InvertPitch ? 1.0f : -1.0f;
+                    arm->Pitch += mouseDelta.y * ctrl.MouseSensitivity * pitchSign;
+                    arm->Pitch = std::clamp(arm->Pitch, arm->MinPitch, arm->MaxPitch);
                 }
 
-                const f32 scrollY = input.GetMouseScrollDeltaY();
+                const f32 scrollY = input.GetActionMapMouseScrollDeltaY("Gameplay");
                 if (std::abs(scrollY) > 0.001f)
                 {
                     arm->TargetArmLength = std::clamp(arm->TargetArmLength - scrollY * ctrl.ZoomSensitivity, 0.5f, 50.0f);
@@ -112,23 +113,22 @@ namespace Engine
             const vec3 camForward = glm::normalize(yawRot * vec3(0.0f, 0.0f, 1.0f));
             const vec3 camRight = glm::normalize(yawRot * vec3(1.0f, 0.0f, 0.0f));
 
-            // 4. 키보드 WASD 입력 수집 및 이동 벡터 산출
+            // 4. 이동 액션으로 카메라 기준 이동 방향 계산
             vec3 moveDir = vec3(0.0f);
-            if (input.IsKeyButtonPressed(EKeyCode::W)) moveDir += camForward;
-            if (input.IsKeyButtonPressed(EKeyCode::S)) moveDir -= camForward;
-            if (input.IsKeyButtonPressed(EKeyCode::D)) moveDir += camRight;
-            if (input.IsKeyButtonPressed(EKeyCode::A)) moveDir -= camRight;
+            if (input.IsActionHeld("Gameplay", "MoveForward")) moveDir += camForward;
+            if (input.IsActionHeld("Gameplay", "MoveBackward")) moveDir -= camForward;
+            if (input.IsActionHeld("Gameplay", "MoveRight")) moveDir += camRight;
+            if (input.IsActionHeld("Gameplay", "MoveLeft")) moveDir -= camRight;
 
             if (glm::length2(moveDir) > 0.0001f)
                 moveDir = glm::normalize(moveDir);
 
-            // 5. 달리기 배율 적용 및 KCC 이동 요청
-            const bool isSprinting = input.IsShiftPressed();
+            const bool isSprinting = input.IsActionHeld("Gameplay", "Sprint");
             const f32 speedFactor = isSprinting ? ctrl.SprintMultiplier : 1.0f;
             kcc.Move(moveDir * speedFactor, isSprinting);
 
             // 6. 점프 처리 (스페이스바)
-            if (input.IsKeyButtonDown(EKeyCode::Space))
+            if (input.WasActionPressed("Gameplay", "Jump"))
             {
                 kcc.Jump();
             }

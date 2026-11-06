@@ -36,26 +36,7 @@ void SpriteRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>
     auto& renderer = Renderer::Get();
 
     // 뷰포트별 패스와 카메라 정보를 함께 보관
-    struct GeometryTarget
-    {
-        RenderPass* pass = nullptr;
-        CameraBuffer cameraBuffer;
-    };
-    vector<GeometryTarget> geometryTargets;
-
-    for (const auto& viewport : renderer.GetActiveViewportCameras())
-    {
-        RenderPass* pass = viewport.renderPass;
-        if (!pass || !viewport.hasCamera || pass->GetPassType() != ERenderPassType::Geometry) continue;
-
-        auto it = std::find_if(geometryTargets.begin(), geometryTargets.end(),
-            [pass](const GeometryTarget& t) { return t.pass == pass; });
-        if (it == geometryTargets.end())
-        {
-            geometryTargets.push_back({ pass, viewport.cameraBuffer });
-        }
-    }
-
+    const auto geometryTargets = renderer.CollectGeometryViewportCameras();
     if (geometryTargets.empty()) return;
 
     for (Scene* scene : activeScenes)
@@ -111,7 +92,7 @@ void SpriteRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>
 
             for (const auto& target : geometryTargets)
             {
-                if (!target.pass->IsAcceptsBlendMode(material->GetBlendMode())) continue;
+                if (!target.renderPass->IsAcceptsBlendMode(material->GetBlendMode())) continue;
 
                 mat4 finalWorldMatrix = worldTransform.worldMatrix;
 
@@ -161,7 +142,7 @@ void SpriteRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>
                 }
 
                 command.worldMatrix = finalWorldMatrix * quadMatrix;
-                renderer.SubmitSprite(command, target.pass->GetID());
+                renderer.SubmitSprite(command, target.renderPass->GetID());
             }
         }
     }

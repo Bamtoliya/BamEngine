@@ -84,7 +84,7 @@ void ResourceManagerInspector::Draw()
 
     const string windowTitle = LOCAL("ResourceInspector.Title") + "###ResourceManagerInspector";
 
-    if (ImGui::Begin(windowTitle.c_str(), &m_Open))
+    if (BeginPanelWindow(windowTitle.c_str(), m_Open))
     {
         if (!m_HasSnapshot)
             Refresh();

@@ -15,57 +15,14 @@ void MaterialInterface::Free()
 
 EResult MaterialInterface::Reload(const std::filesystem::path& filePath)
 {
-    std::filesystem::path targetPath = filePath;
-    if (targetPath.empty())
-        targetPath = m_Path.empty() ? std::filesystem::path(m_Key) : std::filesystem::path(m_Path);
+    const auto result = Resource::Reload(filePath);
+    if (result != EResult::FileNotFound)
+        return result;
 
-    std::error_code ec;
-    if (!std::filesystem::exists(targetPath, ec))
-    {
-        if (std::filesystem::exists(targetPath.string() + ".json", ec))
-            targetPath = targetPath.string() + ".json";
-        else
-            return EResult::FileNotFound;
-    }
-
-    archive::ArchiveResult result;
-    std::string ext = targetPath.extension().string();
-    for (char& c : ext) c = static_cast<char>(tolower(c));
-
-    if (ext == ".json")
-    {
-        archive::JsonArchive ar;
-        result = ar.LoadFromFile(targetPath);
-        if (!result)
-        {
-            ENGINE_LOG_ERROR("[Material Hot Reload] Failed to load JSON archive: {}", targetPath.string());
-            return EResult::Fail;
-        }
-        result = ReadArchive(ar);
-    }
-    else
-    {
-        // .beve, .bammat, .bammatinst 등 BEVE 바이너리 아카이브 포맷
-        archive::BeveArchive ar;
-        result = ar.LoadFromFile(targetPath);
-        if (!result)
-        {
-            ENGINE_LOG_ERROR("[Material Hot Reload] Failed to load binary archive: {}", targetPath.string());
-            return EResult::Fail;
-        }
-        result = ReadArchive(ar);
-    }
-
-    if (!result)
-    {
-        ENGINE_LOG_ERROR("[Material Hot Reload] Failed to read archive data: {}", targetPath.string());
-        return EResult::Fail;
-    }
-
-    OnPostLoad();
-    IncreaseVersion();
-    ENGINE_LOG_INFO("[Material Hot Reload] Successfully reloaded: {}", targetPath.string());
-    return EResult::Success;
+    const auto& storedPath = m_Path.empty() ? m_Key : m_Path;
+    auto fallbackPath = filePath.empty() ? std::filesystem::path(storedPath) : filePath;
+    fallbackPath += L".json";
+    return Resource::Reload(fallbackPath);
 }
 #pragma endregion
 
@@ -286,6 +243,34 @@ void MaterialInterface::ResetAllParameters()
         if (!param.defaultValue.empty())
             param.data = param.defaultValue;
     }
+}
+
+void MaterialInterface::ApplyParameterConstants(MaterialConstants& outConstants) const
+{
+    const auto findParameter = [this](const string& name) -> const MaterialParameter*
+        {
+            const auto it = m_Parameters.find(name);
+            return it != m_Parameters.end() ? &it->second : nullptr;
+        };
+
+    if (const auto* baseColor = findParameter("BaseColor"); baseColor && baseColor->data.size() >= sizeof(vec4))
+        outConstants.baseColor = *reinterpret_cast<const vec4*>(baseColor->data.data());
+    else
+        outConstants.baseColor = GetParameter<vec4>("Color", outConstants.baseColor);
+
+    outConstants.roughness = GetParameter<float>("Roughness", outConstants.roughness);
+    outConstants.metallic = GetParameter<float>("Metallic", outConstants.metallic);
+    outConstants.cavity = GetParameter<float>("Cavity", outConstants.cavity);
+    outConstants.ao = GetParameter<float>("AO", outConstants.ao);
+
+    const auto* emissive = findParameter("EmissiveColor");
+    if (!emissive) emissive = findParameter("Emission");
+    if (!emissive) return;
+
+    if (emissive->data.size() >= sizeof(vec4))
+        outConstants.emissiveColor = vec3(*reinterpret_cast<const vec4*>(emissive->data.data()));
+    else if (emissive->data.size() >= sizeof(vec3))
+        outConstants.emissiveColor = *reinterpret_cast<const vec3*>(emissive->data.data());
 }
 
 #pragma endregion
@@ -590,49 +575,7 @@ void MaterialInterface::BuildMaterialConstants(MaterialConstants& outConstants) 
         }
     }
 
-    // 2. 파라미터가 등록되어 있다면 상수 값 반영 (없으면 기본값 유지)
-    auto findParam = [this](const string& key) -> const MaterialParameter* {
-        auto it = m_Parameters.find(key);
-        return (it != m_Parameters.end()) ? &it->second : nullptr;
-        };
-
-    // Albedo / BaseColor
-    if (const auto* p = findParam("BaseColor"); p && p->data.size() >= sizeof(vec4))
-        outConstants.baseColor = *reinterpret_cast<const vec4*>(p->data.data());
-    else if (const auto* p2 = findParam("Color"); p2 && p2->data.size() >= sizeof(vec4))
-        outConstants.baseColor = *reinterpret_cast<const vec4*>(p2->data.data());
-
-    // Roughness
-    if (const auto* p = findParam("Roughness"); p && p->data.size() >= sizeof(float))
-        outConstants.roughness = *reinterpret_cast<const float*>(p->data.data());
-
-    // Metallic
-    if (const auto* p = findParam("Metallic"); p && p->data.size() >= sizeof(float))
-        outConstants.metallic = *reinterpret_cast<const float*>(p->data.data());
-
-    // Cavity
-    if (const auto* p = findParam("Cavity"); p && p->data.size() >= sizeof(float))
-        outConstants.cavity = *reinterpret_cast<const float*>(p->data.data());
-
-    // AO
-    if (const auto* p = findParam("AO"); p && p->data.size() >= sizeof(float))
-        outConstants.ao = *reinterpret_cast<const float*>(p->data.data());
-
-    // EmissiveColor
-    if (const auto* p = findParam("EmissiveColor"); p)
-    {
-        if (p->data.size() >= sizeof(vec4))
-            outConstants.emissiveColor = vec3(*reinterpret_cast<const vec4*>(p->data.data()));
-        else if (p->data.size() >= sizeof(vec3))
-            outConstants.emissiveColor = *reinterpret_cast<const vec3*>(p->data.data());
-    }
-    else if (const auto* p2 = findParam("Emission"); p2)
-    {
-        if (p2->data.size() >= sizeof(vec4))
-            outConstants.emissiveColor = vec3(*reinterpret_cast<const vec4*>(p2->data.data()));
-        else if (p2->data.size() >= sizeof(vec3))
-            outConstants.emissiveColor = *reinterpret_cast<const vec3*>(p2->data.data());
-    }
+    ApplyParameterConstants(outConstants);
 }
 
 EResult MaterialInterface::Bind(uint32 slot)

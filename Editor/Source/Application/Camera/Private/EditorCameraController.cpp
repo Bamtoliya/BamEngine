@@ -78,138 +78,15 @@ void EditorCameraController::Free()
 
 void EditorCameraController::HandleInput(Engine::f32 dt, bool allowScroll)
 {
-    auto* transform = GetTransformComponent();
-    auto* camera = GetCameraComponent();
-    if (transform == nullptr || camera == nullptr)
-        return;
+    auto& input = Engine::InputManager::Get();
+    ApplyInput(dt, allowScroll, input.IsMouseButtonPressed(Engine::EMouseButton::Left),
+        input.IsMouseButtonPressed(Engine::EMouseButton::Middle), input.IsMouseButtonPressed(Engine::EMouseButton::Right));
+}
 
-    Engine::InputManager& inputManager = Engine::InputManager::Get();
-    const Engine::f32 mouseX = inputManager.GetMouseDelta().x;
-    const Engine::f32 mouseY = inputManager.GetMouseDelta().y;
-    const Engine::vec2 mouseScrollDelta = inputManager.GetMouseScrollDelta();
-    const Engine::f32 rotationSpeed = 0.3f;
-    Engine::f32 movementSpeed = m_CameraSpeed * dt;
-    Engine::vec3 moveDirection = Engine::vec3(0.0f);
-    bool changed = false;
-
-    const bool isAlt = KEY_PRESSED(Engine::EKeyCode::LAlt) || KEY_PRESSED(Engine::EKeyCode::RAlt);
-    const bool isLMB = MOUSE_BUTTON_PRESSED(Engine::EMouseButton::Left);
-    const bool isMMB = MOUSE_BUTTON_PRESSED(Engine::EMouseButton::Middle);
-    const bool isRMB = MOUSE_BUTTON_PRESSED(Engine::EMouseButton::Right);
-
-    // 카메라와 피벗 간의 거리
-    Engine::vec3 toCamera = transform->position - m_PivotPoint;
-    float dist = glm::length(toCamera);
-    if (dist < 0.1f) dist = 0.1f;
-
-    // 1. 마우스 휠 줌 (뷰포트에 호버되어 있을 때만 허용)
-    if (allowScroll && mouseScrollDelta.y != 0.0f)
-    {
-        if (IsPerspective())
-        {
-            if (m_IsFOVZoom)
-            {
-                const Engine::f32 newFOV = std::clamp(camera->FOV - (mouseScrollDelta.y * m_ZoomSpeed3D), 1.0f, 170.0f);
-                if (camera->FOV != newFOV)
-                {
-                    camera->FOV = newFOV;
-                    camera->InvalidateCache();
-                    changed = true;
-                }
-            }
-            else
-            {
-                const Engine::vec3 forward = transform->GetLocalForward();
-                if (transform->SetLocalPosition(transform->position + forward * (mouseScrollDelta.y * m_ZoomSpeed3D)))
-                    changed = true;
-            }
-        }
-        else
-        {
-            const Engine::f32 newOrthoSize = std::max(camera->OrthographicSize - (mouseScrollDelta.y * m_ZoomSpeed2D), 0.1f);
-            if (camera->OrthographicSize != newOrthoSize)
-            {
-                camera->OrthographicSize = newOrthoSize;
-                camera->InvalidateCache();
-                changed = true;
-            }
-        }
-    }
-
-    if (IsPerspective())
-    {
-        // 2. [Alt + LMB] 타깃 중심 궤도 회전 (Orbit)
-        if (isAlt && isLMB)
-        {
-            m_ControlRotation.y += mouseX * rotationSpeed;
-            m_ControlRotation.x = std::clamp(m_ControlRotation.x + mouseY * rotationSpeed, -89.0f, 89.0f);
-            m_ControlRotation.z = 0.0f;
-
-            const float pitchRad = glm::radians(m_ControlRotation.x);
-            const float yawRad = glm::radians(m_ControlRotation.y);
-            Engine::vec3 forward;
-            forward.x = sinf(yawRad) * cosf(pitchRad);
-            forward.y = -sinf(pitchRad);
-            forward.z = cosf(yawRad) * cosf(pitchRad);
-
-            (void)transform->SetLocalPosition(m_PivotPoint - forward * dist);
-            (void)transform->SetEulerRotation(m_ControlRotation);
-            changed = true;
-        }
-        // 3. [Alt + MMB] 또는 [MMB 단독] 시점 평면 패닝 (Pan)
-        else if (isMMB)
-        {
-            const float panFactor = dist * 0.002f;
-            const Engine::vec3 right = transform->GetLocalRight();
-            const Engine::vec3 up = transform->GetLocalUp();
-            const Engine::vec3 panDelta = (-right * mouseX + up * mouseY) * panFactor;
-
-            (void)transform->SetLocalPosition(transform->position + panDelta);
-            m_PivotPoint += panDelta;
-            changed = true;
-        }
-        // 4. [Alt + RMB] 부드러운 줌 드래그
-        else if (isAlt && isRMB)
-        {
-            const float zoomDelta = (mouseX - mouseY) * 0.02f * dist;
-            dist = std::max(dist + zoomDelta, 0.2f);
-            (void)transform->SetLocalPosition(m_PivotPoint - transform->GetLocalForward() * dist);
-            changed = true;
-        }
-        // 5. [RMB 단독] 1인칭 프리 플라이 회전
-        else if (isRMB)
-        {
-            m_ControlRotation.y += mouseX * rotationSpeed;
-            m_ControlRotation.x = std::clamp(m_ControlRotation.x + mouseY * rotationSpeed, -89.0f, 89.0f);
-            m_ControlRotation.z = 0.0f;
-
-            if (transform->SetEulerRotation(m_ControlRotation))
-                changed = true;
-
-            m_PivotPoint = transform->position + transform->GetLocalForward() * dist;
-        }
-
-        // WASDQE 1인칭 이동
-        if (KEY_PRESSED(Engine::EKeyCode::W)) moveDirection += Engine::vec3(0.0f, 0.0f, 1.0f);
-        if (KEY_PRESSED(Engine::EKeyCode::S)) moveDirection -= Engine::vec3(0.0f, 0.0f, 1.0f);
-        if (KEY_PRESSED(Engine::EKeyCode::A)) moveDirection -= Engine::vec3(1.0f, 0.0f, 0.0f);
-        if (KEY_PRESSED(Engine::EKeyCode::D)) moveDirection += Engine::vec3(1.0f, 0.0f, 0.0f);
-        if (KEY_PRESSED(Engine::EKeyCode::Q)) moveDirection += Engine::vec3(0.0f, 1.0f, 0.0f);
-        if (KEY_PRESSED(Engine::EKeyCode::E)) moveDirection -= Engine::vec3(0.0f, 1.0f, 0.0f);
-    }
-
-    if (glm::length2(moveDirection) > 0.001f)
-    {
-        moveDirection = glm::normalize(moveDirection);
-        if (transform->TranslateLocal(moveDirection * movementSpeed))
-        {
-            m_PivotPoint += moveDirection * movementSpeed;
-            changed = true;
-        }
-    }
-
-    if (changed)
-        RefreshMatrices();
+void EditorCameraController::HandleInput(Engine::f32 dt, bool allowScroll, std::optional<Engine::EMouseButton> dragButton)
+{
+    ApplyInput(dt, allowScroll, dragButton == Engine::EMouseButton::Left,
+        dragButton == Engine::EMouseButton::Middle, dragButton == Engine::EMouseButton::Right);
 }
 
 void EditorCameraController::SetControlRotation(const Engine::vec3& eulerAngles)
@@ -368,4 +245,137 @@ void EditorCameraController::RefreshMatrices()
     auto& registry = m_EditorScene->GetRegistry();
     Engine::TransformSystem::UpdateHierarchy(registry);
     Engine::CameraSystem::UpdateCameras(registry);
+}
+
+void EditorCameraController::ApplyInput(Engine::f32 dt, bool allowScroll, bool isLMB, bool isMMB, bool isRMB)
+{
+    auto* transform = GetTransformComponent();
+    auto* camera = GetCameraComponent();
+    if (transform == nullptr || camera == nullptr)
+        return;
+
+    Engine::InputManager& inputManager = Engine::InputManager::Get();
+    const Engine::f32 mouseX = inputManager.GetMouseDelta().x;
+    const Engine::f32 mouseY = inputManager.GetMouseDelta().y;
+    const Engine::vec2 mouseScrollDelta = inputManager.GetMouseScrollDelta();
+    const Engine::f32 rotationSpeed = 0.3f;
+    Engine::f32 movementSpeed = m_CameraSpeed * dt;
+    Engine::vec3 moveDirection = Engine::vec3(0.0f);
+    bool changed = false;
+
+    const bool isAlt = KEY_PRESSED(Engine::EKeyCode::LAlt) || KEY_PRESSED(Engine::EKeyCode::RAlt);
+
+    // 카메라와 피벗 간의 거리
+    Engine::vec3 toCamera = transform->position - m_PivotPoint;
+    float dist = glm::length(toCamera);
+    if (dist < 0.1f) dist = 0.1f;
+
+    // 1. 마우스 휠 줌 (뷰포트에 호버되어 있을 때만 허용)
+    if (allowScroll && mouseScrollDelta.y != 0.0f)
+    {
+        if (IsPerspective())
+        {
+            if (m_IsFOVZoom)
+            {
+                const Engine::f32 newFOV = std::clamp(camera->FOV - (mouseScrollDelta.y * m_ZoomSpeed3D), 1.0f, 170.0f);
+                if (camera->FOV != newFOV)
+                {
+                    camera->FOV = newFOV;
+                    camera->InvalidateCache();
+                    changed = true;
+                }
+            }
+            else
+            {
+                const Engine::vec3 forward = transform->GetLocalForward();
+                if (transform->SetLocalPosition(transform->position + forward * (mouseScrollDelta.y * m_ZoomSpeed3D)))
+                    changed = true;
+            }
+        }
+        else
+        {
+            const Engine::f32 newOrthoSize = std::max(camera->OrthographicSize - (mouseScrollDelta.y * m_ZoomSpeed2D), 0.1f);
+            if (camera->OrthographicSize != newOrthoSize)
+            {
+                camera->OrthographicSize = newOrthoSize;
+                camera->InvalidateCache();
+                changed = true;
+            }
+        }
+    }
+
+    if (IsPerspective())
+    {
+        // 2. [Alt + LMB] 타깃 중심 궤도 회전 (Orbit)
+        if (isAlt && isLMB)
+        {
+            m_ControlRotation.y += mouseX * rotationSpeed;
+            m_ControlRotation.x = std::clamp(m_ControlRotation.x + mouseY * rotationSpeed, -89.0f, 89.0f);
+            m_ControlRotation.z = 0.0f;
+
+            const float pitchRad = glm::radians(m_ControlRotation.x);
+            const float yawRad = glm::radians(m_ControlRotation.y);
+            Engine::vec3 forward;
+            forward.x = sinf(yawRad) * cosf(pitchRad);
+            forward.y = -sinf(pitchRad);
+            forward.z = cosf(yawRad) * cosf(pitchRad);
+
+            (void)transform->SetLocalPosition(m_PivotPoint - forward * dist);
+            (void)transform->SetEulerRotation(m_ControlRotation);
+            changed = true;
+        }
+        // 3. [Alt + MMB] 또는 [MMB 단독] 시점 평면 패닝 (Pan)
+        else if (isMMB)
+        {
+            const float panFactor = dist * 0.002f;
+            const Engine::vec3 right = transform->GetLocalRight();
+            const Engine::vec3 up = transform->GetLocalUp();
+            const Engine::vec3 panDelta = (-right * mouseX + up * mouseY) * panFactor;
+
+            (void)transform->SetLocalPosition(transform->position + panDelta);
+            m_PivotPoint += panDelta;
+            changed = true;
+        }
+        // 4. [Alt + RMB] 부드러운 줌 드래그
+        else if (isAlt && isRMB)
+        {
+            const float zoomDelta = (mouseX - mouseY) * 0.02f * dist;
+            dist = std::max(dist + zoomDelta, 0.2f);
+            (void)transform->SetLocalPosition(m_PivotPoint - transform->GetLocalForward() * dist);
+            changed = true;
+        }
+        // 5. [RMB 단독] 1인칭 프리 플라이 회전
+        else if (isRMB)
+        {
+            m_ControlRotation.y += mouseX * rotationSpeed;
+            m_ControlRotation.x = std::clamp(m_ControlRotation.x + mouseY * rotationSpeed, -89.0f, 89.0f);
+            m_ControlRotation.z = 0.0f;
+
+            if (transform->SetEulerRotation(m_ControlRotation))
+                changed = true;
+
+            m_PivotPoint = transform->position + transform->GetLocalForward() * dist;
+        }
+
+        // WASDQE 1인칭 이동
+        if (KEY_PRESSED(Engine::EKeyCode::W)) moveDirection += Engine::vec3(0.0f, 0.0f, 1.0f);
+        if (KEY_PRESSED(Engine::EKeyCode::S)) moveDirection -= Engine::vec3(0.0f, 0.0f, 1.0f);
+        if (KEY_PRESSED(Engine::EKeyCode::A)) moveDirection -= Engine::vec3(1.0f, 0.0f, 0.0f);
+        if (KEY_PRESSED(Engine::EKeyCode::D)) moveDirection += Engine::vec3(1.0f, 0.0f, 0.0f);
+        if (KEY_PRESSED(Engine::EKeyCode::Q)) moveDirection += Engine::vec3(0.0f, 1.0f, 0.0f);
+        if (KEY_PRESSED(Engine::EKeyCode::E)) moveDirection -= Engine::vec3(0.0f, 1.0f, 0.0f);
+    }
+
+    if (glm::length2(moveDirection) > 0.001f)
+    {
+        moveDirection = glm::normalize(moveDirection);
+        if (transform->TranslateLocal(moveDirection * movementSpeed))
+        {
+            m_PivotPoint += moveDirection * movementSpeed;
+            changed = true;
+        }
+    }
+
+    if (changed)
+        RefreshMatrices();
 }

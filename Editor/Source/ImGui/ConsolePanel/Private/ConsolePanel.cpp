@@ -9,7 +9,7 @@ void ConsolePanel::Draw()
         return;
 
     const string windowTitle = LOCAL("Console.Title") + "###ConsolePanel";
-    if (ImGui::Begin(windowTitle.c_str(), &m_Open))
+    if (BeginPanelWindow(windowTitle.c_str(), m_Open))
     {
 
         m_Focused = ImGui::IsWindowFocused();

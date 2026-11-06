@@ -8,18 +8,7 @@
 EResult SDLGPUTexture::Initialize(const RHITextureDesc& desc)
 {
 	if (desc.format == ETextureFormat::UNKNOWN || !m_IsOwned) return EResult::Success;
-
-	m_Width = desc.width;
-	m_Height = desc.height;
-	m_Depth = desc.depth;
-	m_MipLevels = desc.mipLevels;
-	m_ArraySize = desc.arraySize;
-	
-	m_SampleCount = desc.sampleCount;
-	m_Format = desc.format;
-	m_Dimension = desc.dimension;
-	m_Usage = desc.usage;
-	m_sRGB = desc.sRGB;
+	ApplyCommonTextureDesc(desc);
 
 	SDL_GPUTextureCreateInfo createInfo{};
 	createInfo.width = m_Width;

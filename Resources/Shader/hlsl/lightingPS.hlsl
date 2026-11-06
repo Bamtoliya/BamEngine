@@ -54,7 +54,6 @@ Texture2D gPBR : register(t2, space3);
 Texture2D gEmission : register(t3, space3);
 Texture2D gPosition : register(t4, space3);
 Texture2D gShadowDepth : register(t5, space3);
-ByteAddressBuffer gLightBuffer : register(t6, space3);
 TextureCube gPointShadowDepth : register(t7, space3);
 StructuredBuffer<uint2> gTileLightGrid : register(t8, space3);
 StructuredBuffer<uint>  gTileLightIndexList : register(t9, space3);
@@ -66,30 +65,7 @@ Texture2D<float4> gCloudWeatherMap : register(t1, space1);
 SamplerState gCloudSampler : register(s0, space1);
 
 static const float PI = 3.14159265359f;
-static const uint LIGHT_BUFFER_HEADER_SIZE = 16u;
-static const uint LIGHT_BUFFER_STRIDE = 80u;
 static const uint INVALID_LIGHT_INDEX = 0xFFFFFFFFu;
-
-Light LoadLight(uint lightIndex)
-{
-	uint address = LIGHT_BUFFER_HEADER_SIZE + lightIndex * LIGHT_BUFFER_STRIDE;
-	Light light;
-
-	light.Position = asfloat(gLightBuffer.Load3(address));
-	light.Intensity = asfloat(gLightBuffer.Load(address + 12u));
-	light.Direction = asfloat(gLightBuffer.Load3(address + 16u));
-	light.Range = asfloat(gLightBuffer.Load(address + 28u));
-	light.Color = asfloat(gLightBuffer.Load3(address + 32u));
-	light.PackedFlags = gLightBuffer.Load(address + 44u);
-	light.AttenuationCoeff = asfloat(gLightBuffer.Load3(address + 48u));
-	light.ShadowStrength = asfloat(gLightBuffer.Load(address + 60u));
-	light.SpotInnerCos = asfloat(gLightBuffer.Load(address + 64u));
-	light.SpotOuterCos = asfloat(gLightBuffer.Load(address + 68u));
-	light.SpotFalloff = asfloat(gLightBuffer.Load(address + 72u));
-	light.Pad1 = asfloat(gLightBuffer.Load(address + 76u));
-
-	return light;
-}
 
 uint FindAtmosphereSunLightIndex(uint numLights)
 {

@@ -54,7 +54,7 @@ void BaseViewportPanel::Draw()
 	ImGuiWindowFlags window_flags = ImGuiWindowFlags_MenuBar;
 	const string windowID = GetDisplayName() + "###" + m_WindowID;
 	// ImGui::Begin이 false를 반환하면 다른 탭 뒤에 완전히 숨겨진 상태입니다.
-	if (ImGui::Begin(windowID.c_str(), &m_Open, window_flags))
+	if (BeginPanelWindow(windowID.c_str(), m_Open, window_flags))
 	{
 		if (m_FocusRequested)
 		{

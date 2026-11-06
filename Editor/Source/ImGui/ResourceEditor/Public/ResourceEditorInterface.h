@@ -20,6 +20,11 @@ public:
 public:
 	virtual void Draw() BAM_PURE;
 protected:
+    string BuildResourceWindowTitle() const
+    {
+        return GetDisplayName() + " - " + GetTargetResource().filename().string() + "###" + WStrToStr(GetName());
+    }
+protected:
     std::filesystem::path m_TargetResourcePath;
 };
 END

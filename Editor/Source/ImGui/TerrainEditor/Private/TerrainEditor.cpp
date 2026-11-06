@@ -27,7 +27,7 @@ void TerrainEditor::Draw()
 {
 	if (!m_Open) return;
 
-	if (ImGui::Begin(LOCAL_LABEL("TerrainEditor.Title").c_str(), &m_Open))
+	if (BeginPanelWindow(LOCAL_LABEL("TerrainEditor.Title").c_str(), m_Open))
 	{
 		Engine::Scene* scene = SceneManager::Get().GetCurrentScene();
 		if (!scene)

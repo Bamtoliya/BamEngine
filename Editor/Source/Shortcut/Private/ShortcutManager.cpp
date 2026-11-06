@@ -109,7 +109,7 @@ std::string ShortcutManager::FindConflict(
 
 void ShortcutManager::ProcessShortcuts(EShortcutContext activeContext, bool suppressed)
 {
-    if (suppressed || m_IsCapturing || m_SuppressProcessOnce)
+    if (suppressed || IsCapturing() || m_SuppressProcessOnce)
     {
         m_SuppressProcessOnce = false;
         return;

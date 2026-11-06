@@ -70,36 +70,7 @@ void MaterialInstance::BuildMaterialConstants(MaterialConstants& outConstants) c
 		}
 	}
 	// 3. 인스턴스 자신의 파라미터 오버라이드 반영
-	auto findParam = [this](const string& key) -> const MaterialParameter* {
-		auto it = m_Parameters.find(key);
-		return (it != m_Parameters.end()) ? &it->second : nullptr;
-		};
-	if (const auto* p = findParam("BaseColor"); p && p->data.size() >= sizeof(vec4))
-		outConstants.baseColor = *reinterpret_cast<const vec4*>(p->data.data());
-	else if (const auto* p2 = findParam("Color"); p2 && p2->data.size() >= sizeof(vec4))
-		outConstants.baseColor = *reinterpret_cast<const vec4*>(p2->data.data());
-	if (const auto* p = findParam("Roughness"); p && p->data.size() >= sizeof(float))
-		outConstants.roughness = *reinterpret_cast<const float*>(p->data.data());
-	if (const auto* p = findParam("Metallic"); p && p->data.size() >= sizeof(float))
-		outConstants.metallic = *reinterpret_cast<const float*>(p->data.data());
-	if (const auto* p = findParam("Cavity"); p && p->data.size() >= sizeof(float))
-		outConstants.cavity = *reinterpret_cast<const float*>(p->data.data());
-	if (const auto* p = findParam("AO"); p && p->data.size() >= sizeof(float))
-		outConstants.ao = *reinterpret_cast<const float*>(p->data.data());
-	if (const auto* p = findParam("EmissiveColor"); p)
-	{
-		if (p->data.size() >= sizeof(vec4))
-			outConstants.emissiveColor = vec3(*reinterpret_cast<const vec4*>(p->data.data()));
-		else if (p->data.size() >= sizeof(vec3))
-			outConstants.emissiveColor = *reinterpret_cast<const vec3*>(p->data.data());
-	}
-	else if (const auto* p2 = findParam("Emission"); p2)
-	{
-		if (p2->data.size() >= sizeof(vec4))
-			outConstants.emissiveColor = vec3(*reinterpret_cast<const vec4*>(p2->data.data()));
-		else if (p2->data.size() >= sizeof(vec3))
-			outConstants.emissiveColor = *reinterpret_cast<const vec3*>(p2->data.data());
-	}
+	ApplyParameterConstants(outConstants);
 }
 
 EResult MaterialInstance::Bind(uint32 slot)

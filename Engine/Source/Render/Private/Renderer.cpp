@@ -933,6 +933,20 @@ void Renderer::UnregisterViewportCamera(RenderPassID passID)
 	m_ViewportCameras.erase(std::remove_if(m_ViewportCameras.begin(), m_ViewportCameras.end(),
 		[passID](const ViewportCameraInfo& info) { return info.renderPass->GetID() == passID; }), m_ViewportCameras.end());
 }
+vector<ViewportCameraInfo> Renderer::CollectGeometryViewportCameras() const
+{
+	vector<ViewportCameraInfo> targets;
+	for (const auto& viewport : m_ViewportCameras)
+	{
+		auto* pass = viewport.renderPass;
+		if (!pass || !viewport.hasCamera || pass->GetPassType() != ERenderPassType::Geometry) continue;
+
+		if (std::ranges::find(targets, pass, &ViewportCameraInfo::renderPass) == targets.end())
+			targets.push_back(viewport);
+	}
+
+	return targets;
+}
 #pragma endregion
 
 #pragma region Binding

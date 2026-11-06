@@ -146,6 +146,37 @@ namespace
         return {};
     }
 
+    archive::ArchiveResult WriteEntityRecords(archive::IArchive& object, const entt::registry& world, const std::vector<SceneEntityRecord>& entities)
+    {
+        return object.WriteObjectArray("Entities", entities, [&](archive::IArchive& value, const SceneEntityRecord& entity)
+            -> archive::ArchiveResult
+            {
+                auto field = value.Write("Id", entity.Id);
+                if (!field) return field;
+
+                if (entity.HasHierarchy)
+                {
+                    field = value.WriteObject("Hierarchy", entity, [](archive::IArchive& relation, const SceneEntityRecord& record)
+                        -> archive::ArchiveResult
+                        {
+                            auto link = relation.Write("Parent", record.Parent);
+                            if (link) link = relation.WriteArray("Children", record.Children);
+                            return link;
+                        });
+                    if (!field) return field;
+                }
+
+                return value.WriteObjectArray("Components", entity.Components,
+                    [&](archive::IArchive& component, const auto* entry) -> archive::ArchiveResult
+                    {
+                        auto data = component.Write("Type", entry->ReflectionType->QualifiedName);
+                        if (data) data = Engine::ReflectionRegistry::Get().WriteComponent(
+                            component, "Data", world, entity.Handle, entry->Type);
+                        return data;
+                    });
+            });
+    }
+
     archive::ArchiveResult ReadComponents(archive::IArchive& ar, entt::registry& world, entt::entity handle)
     {
         const auto& registry = Engine::ReflectionRegistry::Get();
@@ -167,6 +198,48 @@ namespace
             if (!enabled) return { archive::ArchiveErrorCode::InvalidValue, "Type" };
             return registry.ReadComponent(component, "Data", world, handle, entry->Type);
         });
+    }
+
+    template<typename CreateEntity>
+    archive::ArchiveResult ReadEntityRecords(const archive::IArchive& object, entt::registry& world, uint64& nextEntityId, std::vector<SceneEntityRecord>& entities, CreateEntity&& createEntity)
+    {
+        std::unordered_set<uint64> ids;
+        return object.ReadObjectArray("Entities", [&](archive::IArchive& value, std::size_t) -> archive::ArchiveResult
+            {
+                SceneEntityRecord entity;
+                auto data = value.Read("Id", entity.Id);
+                if (!data) return data;
+                if (entity.Id == 0 || ids.contains(entity.Id))
+                    return { archive::ArchiveErrorCode::InvalidValue, "Id" };
+
+                while (ids.contains(nextEntityId))
+                {
+                    nextEntityId = nextEntityId == (std::numeric_limits<uint64>::max)() ? 1 : nextEntityId + 1;
+                }
+
+                entity.Handle = createEntity(nextEntityId);
+                world.get<Engine::IDComponent>(entity.Handle).id = entity.Id;
+                ids.insert(entity.Id);
+
+                data = value.HasField("Hierarchy", entity.HasHierarchy);
+                if (!data) return data;
+                if (entity.HasHierarchy)
+                {
+                    bool relation = false;
+                    data = value.ReadObject("Hierarchy", relation, [&](archive::IArchive& hierarchy, bool&)
+                        -> archive::ArchiveResult
+                        {
+                            auto link = hierarchy.Read("Parent", entity.Parent);
+                            if (link) link = hierarchy.ReadArray("Children", entity.Children);
+                            return link;
+                        });
+                    if (!data) return data;
+                }
+
+                data = ReadComponents(value, world, entity.Handle);
+                if (data) entities.push_back(std::move(entity));
+                return data;
+            });
     }
 
     template<typename Writer>
@@ -271,31 +344,7 @@ archive::ArchiveResult Scene::WriteArchive(archive::IArchive& ar) const
         if (written) written = object.Write("Name", m_Name);
         if (written) written = object.Write("Active", IsActive());
         if (!written) return written;
-        return object.WriteObjectArray("Entities", entities, [&](archive::IArchive& value, const auto& entity)
-            -> archive::ArchiveResult
-        {
-            auto field = value.Write("Id", entity.Id);
-            if (!field) return field;
-            if (entity.HasHierarchy)
-            {
-                field = value.WriteObject("Hierarchy", entity, [](archive::IArchive& relation, const auto& record)
-                    -> archive::ArchiveResult
-                {
-                    auto link = relation.Write("Parent", record.Parent);
-                    if (link) link = relation.WriteArray("Children", record.Children);
-                    return link;
-                });
-                if (!field) return field;
-            }
-            return value.WriteObjectArray("Components", entity.Components,
-                [&](archive::IArchive& component, const auto* entry) -> archive::ArchiveResult
-            {
-                auto data = component.Write("Type", entry->ReflectionType->QualifiedName);
-                if (data) data = ReflectionRegistry::Get().WriteComponent(
-                    component, "Data", m_LocalRegistry, entity.Handle, entry->Type);
-                return data;
-            });
-        });
+        return WriteEntityRecords(object, m_LocalRegistry, entities);
     });
 }
 
@@ -308,7 +357,6 @@ archive::ArchiveResult Scene::CreateFromArchive(const archive::IArchive& ar, Sce
         return { archive::ArchiveErrorCode::InvalidOperation, "Scene" };
     candidate->m_LocalRegistry.ctx().emplace<DeferredComponentTransformUpdate>();
     std::vector<SceneEntityRecord> entities;
-    std::unordered_set<uint64> ids;
     bool unused = false;
     ResourceReferenceSet resourceReferences;
     auto result = ar.ReadObject("Scene", unused, [&](archive::IArchive& object, bool&) -> archive::ArchiveResult
@@ -326,42 +374,8 @@ archive::ArchiveResult Scene::CreateFromArchive(const archive::IArchive& ar, Sce
         if (!field) return field;
         candidate->SetActive(active);
         PreloadDocumentResources("Scene", resourceReferences);
-        return object.ReadObjectArray("Entities", [&](archive::IArchive& value, std::size_t)
-            -> archive::ArchiveResult
-        {
-            SceneEntityRecord entity;
-            auto data = value.Read("Id", entity.Id);
-            if (!data) return data;
-            if (entity.Id == 0 || ids.contains(entity.Id))
-                return { archive::ArchiveErrorCode::InvalidValue, "Id" };
-
-            while (ids.contains(candidate->m_NextEntityId))
-            {
-                candidate->m_NextEntityId = candidate->m_NextEntityId == (std::numeric_limits<uint64>::max)() ?
-                    1 : candidate->m_NextEntityId + 1;
-            }
-
-            entity.Handle = candidate->CreateEntityWithId(candidate->m_NextEntityId).GetEntityHandle();
-            candidate->m_LocalRegistry.get<IDComponent>(entity.Handle).id = entity.Id;
-            ids.insert(entity.Id);
-            data = value.HasField("Hierarchy", entity.HasHierarchy);
-            if (!data) return data;
-            if (entity.HasHierarchy)
-            {
-                bool relation = false;
-                data = value.ReadObject("Hierarchy", relation, [&](archive::IArchive& hierarchy, bool&)
-                    -> archive::ArchiveResult
-                {
-                    auto link = hierarchy.Read("Parent", entity.Parent);
-                    if (link) link = hierarchy.ReadArray("Children", entity.Children);
-                    return link;
-                });
-                if (!data) return data;
-            }
-            data = ReadComponents(value, candidate->m_LocalRegistry, entity.Handle);
-            if (data) entities.push_back(std::move(entity));
-            return data;
-        });
+        return ReadEntityRecords(object, candidate->m_LocalRegistry, candidate->m_NextEntityId, entities,
+            [&](uint64 id) { return candidate->CreateEntityWithId(id).GetEntityHandle(); });
     });
     if (!result) return result;
     candidate->m_LocalRegistry.ctx().erase<DeferredComponentTransformUpdate>();
@@ -462,31 +476,7 @@ archive::ArchiveResult Scene::WritePrefabArchive(archive::IArchive& ar, const En
         auto written = object.Write("Version", SceneArchiveVersion);
         if (written) written = object.Write("RootId", uint64(1));
         if (!written) return written;
-        return object.WriteObjectArray("Entities", entities, [&](archive::IArchive& value, const auto& entity)
-            -> archive::ArchiveResult
-        {
-            auto field = value.Write("Id", entity.Id);
-            if (!field) return field;
-            if (entity.HasHierarchy)
-            {
-                field = value.WriteObject("Hierarchy", entity, [](archive::IArchive& relation, const auto& record)
-                    -> archive::ArchiveResult
-                {
-                    auto link = relation.Write("Parent", record.Parent);
-                    if (link) link = relation.WriteArray("Children", record.Children);
-                    return link;
-                });
-                if (!field) return field;
-            }
-            return value.WriteObjectArray("Components", entity.Components,
-                [&](archive::IArchive& component, const auto* entry) -> archive::ArchiveResult
-            {
-                auto data = component.Write("Type", entry->ReflectionType->QualifiedName);
-                if (data) data = ReflectionRegistry::Get().WriteComponent(
-                    component, "Data", m_LocalRegistry, entity.Handle, entry->Type);
-                return data;
-            });
-        });
+        return WriteEntityRecords(object, m_LocalRegistry, entities);
     });
 }
 
@@ -505,7 +495,6 @@ archive::ArchiveResult Scene::InstantiatePrefabArchive(const archive::IArchive& 
         return { archive::ArchiveErrorCode::InvalidOperation, "Prefab" };
     staging->m_LocalRegistry.ctx().emplace<DeferredComponentTransformUpdate>();
     std::vector<SceneEntityRecord> entities;
-    std::unordered_set<uint64> ids;
     uint64 rootId = 0;
     bool unused = false;
     ResourceReferenceSet resourceReferences;
@@ -523,42 +512,8 @@ archive::ArchiveResult Scene::InstantiatePrefabArchive(const archive::IArchive& 
         if (rootId == 0)
             return { archive::ArchiveErrorCode::InvalidValue, "RootId" };
         PreloadDocumentResources("Prefab", resourceReferences);
-        return object.ReadObjectArray("Entities", [&](archive::IArchive& value, std::size_t)
-            -> archive::ArchiveResult
-        {
-            SceneEntityRecord entity;
-            auto data = value.Read("Id", entity.Id);
-            if (!data) return data;
-            if (entity.Id == 0 || ids.contains(entity.Id))
-                return { archive::ArchiveErrorCode::InvalidValue, "Id" };
-
-            while (ids.contains(staging->m_NextEntityId))
-            {
-                staging->m_NextEntityId = staging->m_NextEntityId == (std::numeric_limits<uint64>::max)() ?
-                    1 : staging->m_NextEntityId + 1;
-            }
-
-            entity.Handle = staging->CreateEntityWithId(staging->m_NextEntityId).GetEntityHandle();
-            staging->m_LocalRegistry.get<IDComponent>(entity.Handle).id = entity.Id;
-            ids.insert(entity.Id);
-            data = value.HasField("Hierarchy", entity.HasHierarchy);
-            if (!data) return data;
-            if (entity.HasHierarchy)
-            {
-                bool relation = false;
-                data = value.ReadObject("Hierarchy", relation, [&](archive::IArchive& hierarchy, bool&)
-                    -> archive::ArchiveResult
-                {
-                    auto link = hierarchy.Read("Parent", entity.Parent);
-                    if (link) link = hierarchy.ReadArray("Children", entity.Children);
-                    return link;
-                });
-                if (!data) return data;
-            }
-            data = ReadComponents(value, staging->m_LocalRegistry, entity.Handle);
-            if (data) entities.push_back(std::move(entity));
-            return data;
-        });
+        return ReadEntityRecords(object, staging->m_LocalRegistry, staging->m_NextEntityId, entities,
+            [&](uint64 id) { return staging->CreateEntityWithId(id).GetEntityHandle(); });
     });
     if (!result) return result;
     staging->m_LocalRegistry.ctx().erase<DeferredComponentTransformUpdate>();

@@ -122,7 +122,7 @@ void PrefabEditorPanel::Draw()
     title += "###PrefabEditorPanel";
 
     ImGui::SetNextWindowSize(ImVec2(800, 600), ImGuiCond_FirstUseEver);
-    if (!ImGui::Begin(title.c_str(), &m_Open, ImGuiWindowFlags_MenuBar))
+    if (!BeginPanelWindow(title.c_str(), m_Open, ImGuiWindowFlags_MenuBar))
     {
         ImGui::End();
         return;

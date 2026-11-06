@@ -49,7 +49,7 @@ void PostProcessPanel::Draw()
 	ImGui::SetNextWindowSize(ImVec2(340.f, 480.f), ImGuiCond_FirstUseEver);
 
 	const string windowTitle = LOCAL("PostProcess.MenuTitle") + "###PostProcessPanel";
-	if (!ImGui::Begin(windowTitle.c_str(), &m_Open))
+	if (BeginPanelWindow(windowTitle.c_str(), m_Open))
 	{
 		ImGui::End();
 		return;

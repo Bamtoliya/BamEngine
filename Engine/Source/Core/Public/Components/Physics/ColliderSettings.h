@@ -2,6 +2,7 @@
 
 #include "Types.h"
 #include <reflection/Annotations.h>
+#include <cmath>
 
 namespace Engine
 {
@@ -24,5 +25,11 @@ namespace Engine
         uint32 CollisionLayer = 1u;
         PROPERTY(EDITABLE, DISPLAY_NAME("PROP_COLLISION_MASK"))
         uint32 CollisionMask = 0xFFFFFFFFu;
+
+        bool HasValidParameters() const
+        {
+            return std::isfinite(Friction) && Friction >= 0.f &&
+                std::isfinite(Restitution) && Restitution >= 0.f && Restitution <= 1.f;
+        }
     };
 }

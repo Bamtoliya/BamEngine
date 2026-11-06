@@ -33,7 +33,8 @@ public:
     void ProcessShortcuts(EShortcutContext activeContext = EShortcutContext::Global, bool suppressed = false);
 
     void SetCapturing(bool capturing) { m_IsCapturing = capturing; }
-    bool IsCapturing() const { return m_IsCapturing; }
+    bool IsCapturing() const { return m_IsCapturing || m_IsInputActionCapturing; }
+    void SetInputActionCapturing(bool capturing) { m_IsInputActionCapturing = capturing; }
     void SuppressNextProcess() { m_SuppressProcessOnce = true; }
 
     // 액션 실행 및 가능 여부 (UI 클릭 시 호출)
@@ -60,6 +61,7 @@ private:
     std::unordered_map<std::string, std::string> m_StoredOverrides;
     bool m_CanSaveConfig = false;
     bool m_IsCapturing = false;
+    bool m_IsInputActionCapturing = false;
     bool m_SuppressProcessOnce = false;
 };
 

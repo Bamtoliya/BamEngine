@@ -108,10 +108,10 @@ void MaterialEditor::Draw()
 		m_IsVisibleOnScreen = false;
 		return;
 	}
-	const std::string title = GetDisplayName() + " - " + m_TargetResourcePath.filename().string() + "###" + WStrToStr(m_Name);
+	const auto title = BuildResourceWindowTitle();
 	ImGui::SetNextWindowSize(ImVec2(1000.0f, 650.0f), ImGuiCond_FirstUseEver);
 	// 가려진 탭이면 Begin이 false를 반환합니다.
-	if (ImGui::Begin(title.c_str(), &m_Open))
+	if (BeginPanelWindow(title.c_str(), m_Open))
 	{
 		m_IsVisibleOnScreen = true;
 		// 마우스가 에디터 위에 있거나 포커스된 경우 프리뷰 갱신 타이머 연장 (0.5초 동안 활성 렌더링)

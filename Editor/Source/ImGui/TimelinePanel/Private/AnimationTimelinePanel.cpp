@@ -524,15 +524,8 @@ namespace Editor
 		m_CachedView = view;
 		m_CachedProj = proj;
 
-		CameraBuffer cameraBuffer = {};
-		cameraBuffer.viewMatrix = view;
-		cameraBuffer.invViewMatrix = glm::inverse(view);
-		cameraBuffer.projMatrix = proj;
-		cameraBuffer.invProjMatrix = glm::inverse(proj);
-		cameraBuffer.viewProjMatrix = proj * view;
-		cameraBuffer.invViewProjMatrix = glm::inverse(cameraBuffer.viewProjMatrix);
-		cameraBuffer.cameraPosition = eye;
-		cameraBuffer.time = static_cast<f32>(Engine::TimeManager::Get().GetTotalTime());
+		const auto frameTime = static_cast<f32>(Engine::TimeManager::Get().GetTotalTime());
+		const auto cameraBuffer = CameraBuffer::FromMatrices(view, proj, eye, frameTime);
 
 		m_Pipeline.Submit(cameraBuffer, m_PreviewScene);
 
@@ -595,7 +588,7 @@ namespace Editor
 		ImGuiWindowFlags windowFlags = ImGuiWindowFlags_NoScrollbar;
 		if (m_IsDraggingItem || m_IsScrubbing || m_IsDraggingHeaderSplitter) windowFlags |= ImGuiWindowFlags_NoMove;
 
-		if (ImGui::Begin(title.c_str(), &m_Open, windowFlags))
+		if (BeginPanelWindow(title.c_str(), m_Open, windowFlags))
 		{
 			m_Hovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows);
 			m_Focused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);

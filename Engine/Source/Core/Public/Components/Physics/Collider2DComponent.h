@@ -100,9 +100,7 @@ namespace Engine
         [[nodiscard]]
         bool SetSettings(const ColliderSettings& settings)
         {
-            if (!std::isfinite(settings.Friction) || settings.Friction < 0.f ||
-                !std::isfinite(settings.Restitution) ||
-                settings.Restitution < 0.f || settings.Restitution > 1.f)
+            if (!settings.HasValidParameters())
             {
                 return false;
             }

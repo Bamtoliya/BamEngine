@@ -18,9 +18,8 @@
 #include "ShortcutManager.h"
 #include "ModelImportModal.h"
 #include "ContentBrowserPanel.h"
-#include "ImGuiManager.h"
-#include "ShortcutManager.h"
 #include "Editor_Macros.h"
+#include "ContentBrowserRename.h"
 
 namespace
 {
@@ -353,23 +352,6 @@ namespace
 	{
 		return Editor::ImGuiManager::Get().RequestOpenScene(path);
 	}
-	const char* GetBinaryExtension(Engine::EResourceType type)
-	{
-		using namespace Engine;
-		switch (type)
-		{
-		case EResourceType::Material:         return ".bammat";
-		case EResourceType::MaterialInstance: return ".bammatinst";
-		case EResourceType::Mesh:             return ".bammesh";
-		case EResourceType::Sprite:           return ".bamsprite";
-		case EResourceType::Skeleton:         return ".bamskel";
-		case EResourceType::Animation:        return ".bamanim";
-		case EResourceType::Model:            return ".bammodel";
-		case EResourceType::Texture:          return ".bamtex";
-		case EResourceType::Shader:           return ".bamshader";
-		default:                              return ".beve";
-		}
-	}
 	void OpenAssetOrFolder(const std::filesystem::path& path, bool isDirectory, std::filesystem::path& currentDirectory, char* searchBuffer)
 	{
 		if (isDirectory)
@@ -669,29 +651,7 @@ void ContentBrowserGridItem::DrawRename(const std::filesystem::path& path, f32 t
 	ImGui::SetCursorPosY(ImGui::GetCursorPosY() - ImGui::GetStyle().ItemSpacing.y);
 	float width = (currentDirectory == path.parent_path()) ? thumbnailSize : ImGui::GetContentRegionAvail().x * 0.8f;
 	ImGui::SetNextItemWidth(width);
-	if (ImGui::InputText("##RenameInput", renameBuffer, renameBufferSize, ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll))
-	{
-		std::filesystem::path newPath = path.parent_path() / reinterpret_cast<const char8_t*>(renameBuffer);
-		if (renameBuffer[0] != '\0' && !std::filesystem::exists(newPath))
-		{
-			try {
-				std::filesystem::rename(path, newPath);
-				if (currentDirectory == path) currentDirectory = newPath;
-			}
-			catch (...) {}
-		}
-		outRenamingPath.clear();
-	}
-	if (ImGui::IsItemVisible() && !ImGui::IsAnyItemActive())
-		ImGui::SetKeyboardFocusHere(-1);
-	if (ImGui::IsItemDeactivated() && !ImGui::IsItemDeactivatedAfterEdit())
-	{
-		outRenamingPath.clear();
-	}
-	else if (KEY_DOWN(EKeyCode::Escape))
-	{
-		outRenamingPath.clear();
-	}
+	Editor::ContentBrowser::DrawRenameInput("##RenameInput", path, outRenamingPath, renameBuffer, renameBufferSize, currentDirectory);
 }
 void ContentBrowserGridItem::DrawNameBox(const std::filesystem::directory_entry& directoryEntry, const std::filesystem::path& rootPath, f32 thumbnailSize, std::filesystem::path& currentDirectory, char* searchBuffer)
 {
@@ -1096,7 +1056,7 @@ bool ContentBrowserGridItem::ConvertJsonToBinary(const std::filesystem::path& pa
 	Engine::EResourceType assetType = PeekResourceType(path);
 
 	// 2. 해당 타입에 맞는 표준 바이너리 확장자 결정
-	std::string binExt = GetBinaryExtension(assetType);
+	std::string binExt = Engine::GetResourceBinaryExtension(assetType);
 
 	// 3. 출력 경로 결정 (Wood.json -> Wood.bammat, foo.bammat.json -> foo.bammat)
 	std::string baseStem = path.stem().string();

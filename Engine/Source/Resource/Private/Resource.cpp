@@ -119,39 +119,45 @@ archive::ArchiveResult Resource::ReadArchive(const archive::IArchive& ar)
 }
 EResult Resource::Reload(const std::filesystem::path& filePath)
 {
-	std::filesystem::path targetPath = filePath;
-	if (targetPath.empty())
-		targetPath = m_Path.empty() ? std::filesystem::path(m_Key) : std::filesystem::path(m_Path);
+	const auto& storedPath = m_Path.empty() ? m_Key : m_Path;
+	const auto targetPath = filePath.empty() ? std::filesystem::path(storedPath) : filePath;
 
 	std::error_code ec;
 	if (!std::filesystem::exists(targetPath, ec))
 		return EResult::FileNotFound;
 
-	archive::ArchiveResult result;
-	std::string ext = targetPath.extension().string();
-	for (char& c : ext) c = static_cast<char>(tolower(c));
+	auto extension = targetPath.extension().wstring();
+	std::transform(extension.begin(), extension.end(), extension.begin(), ::towlower);
 
-	if (ext == ".json")
+	const auto reloadArchive = [&](archive::IArchive& ar) -> EResult
+		{
+			const char* stage = "load archive";
+			auto result = ar.LoadFromFile(targetPath);
+			if (result)
+			{
+				stage = "deserialize resource";
+				result = ReadArchive(ar);
+			}
+
+			const auto path = WStrToStr(targetPath.wstring());
+			if (!result)
+			{
+				ENGINE_LOG_ERROR("[Resource Hot Reload] Failed: stage={}, path={}, code={}, field={}",
+					stage, path, static_cast<int>(result.Code), result.Field);
+				return EResult::Fail;
+			}
+
+			IncreaseVersion();
+			ENGINE_LOG_INFO("[Resource Hot Reload] Successfully reloaded: {}", path);
+			return EResult::Success;
+		};
+
+	if (extension == L".json")
 	{
 		archive::JsonArchive ar;
-		result = ar.LoadFromFile(targetPath);
-		if (result) result = ReadArchive(ar);
-	}
-	else
-	{
-		// .beve 또는 엔진 바이너리 아카이브(.bammesh, .bammat 등)
-		archive::BeveArchive ar;
-		result = ar.LoadFromFile(targetPath);
-		if (result) result = ReadArchive(ar);
+		return reloadArchive(ar);
 	}
 
-	if (!result)
-	{
-		ENGINE_LOG_ERROR("[Resource Hot Reload] Failed to reload: stage=read, path={}", targetPath.string());
-		return EResult::Fail;
-	}
-
-	IncreaseVersion();
-	ENGINE_LOG_INFO("[Resource Hot Reload] Successfully reloaded: {}", targetPath.string());
-	return EResult::Success;
+	archive::BeveArchive ar;
+	return reloadArchive(ar);
 }

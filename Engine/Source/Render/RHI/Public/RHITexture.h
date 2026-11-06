@@ -67,6 +67,20 @@ public:
 		return desc;
 	}
 protected:
+	void ApplyCommonTextureDesc(const RHITextureDesc& desc)
+	{
+		m_Width = desc.width;
+		m_Height = desc.height;
+		m_Depth = desc.depth;
+		m_MipLevels = desc.mipLevels;
+		m_ArraySize = desc.arraySize;
+		m_SampleCount = desc.sampleCount;
+		m_Format = desc.format;
+		m_Dimension = desc.dimension;
+		m_Usage = desc.usage;
+		m_sRGB = desc.sRGB;
+	}
+protected:
 	uint32 m_Width			= { 0 };
 	uint32 m_Height			= { 0 };
 	uint32 m_Depth			= { 0 };

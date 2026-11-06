@@ -210,6 +210,9 @@ public:
 	void ResetParameter(const string& name);
 	void ResetAllParameters();
 
+protected:
+	void ApplyParameterConstants(MaterialConstants& outConstants) const;
+
 private:
 	// 다음 파라미터가 배치될 최적의 정렬 오프셋을 계산하는 내부 헬퍼
 	uint32 CalculateNextOffset(size_t typeSize, size_t alignment) const;

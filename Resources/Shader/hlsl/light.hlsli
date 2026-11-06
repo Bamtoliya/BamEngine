@@ -36,6 +36,32 @@ struct Light
     float   Pad1;
 };
 
+ByteAddressBuffer gLightBuffer : register(t6, space3);
+
+static const uint LIGHT_BUFFER_HEADER_SIZE = 16u;
+static const uint LIGHT_BUFFER_STRIDE = 80u;
+
+Light LoadLight(uint lightIndex)
+{
+    const uint address = LIGHT_BUFFER_HEADER_SIZE + lightIndex * LIGHT_BUFFER_STRIDE;
+    Light light;
+
+    light.Position = asfloat(gLightBuffer.Load3(address));
+    light.Intensity = asfloat(gLightBuffer.Load(address + 12u));
+    light.Direction = asfloat(gLightBuffer.Load3(address + 16u));
+    light.Range = asfloat(gLightBuffer.Load(address + 28u));
+    light.Color = asfloat(gLightBuffer.Load3(address + 32u));
+    light.PackedFlags = gLightBuffer.Load(address + 44u);
+    light.AttenuationCoeff = asfloat(gLightBuffer.Load3(address + 48u));
+    light.ShadowStrength = asfloat(gLightBuffer.Load(address + 60u));
+    light.SpotInnerCos = asfloat(gLightBuffer.Load(address + 64u));
+    light.SpotOuterCos = asfloat(gLightBuffer.Load(address + 68u));
+    light.SpotFalloff = asfloat(gLightBuffer.Load(address + 72u));
+    light.Pad1 = asfloat(gLightBuffer.Load(address + 76u));
+
+    return light;
+}
+
 uint GetLightType(uint flags)
 {
     return (flags >> 24u) & 0x3u;

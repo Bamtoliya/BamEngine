@@ -45,7 +45,7 @@ void InspectorPanel::Draw()
 	const string windowTitle = m_PanelId == 0 ?
 		LOCAL("Inspector.Title") + "###InspectorPanel" :
 		fmt::format("{} #{}###InspectorPanel_{}", LOCAL("Inspector.Title"), m_PanelId + 1, m_PanelId);
-	if (ImGui::Begin(windowTitle.c_str(), &m_Open))
+	if (BeginPanelWindow(windowTitle.c_str(), m_Open))
 	{
 		if (m_FocusRequested)
 		{

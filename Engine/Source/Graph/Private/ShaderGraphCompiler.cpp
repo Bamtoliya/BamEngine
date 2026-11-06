@@ -273,30 +273,28 @@ namespace Engine
 
 			return { EGraphError::UnsupportedCompilation, outputPin.Node, outputPin.Pin, 0, "ShaderGraph.UnsupportedNode" };
 		}
+
+		GraphDiagnostic ResolveShaderOutputColor(const Graph& graph, const GraphRegistry& registry,
+			const GraphNode*& outputNode, std::vector<GraphPinReference>& callStack, std::string& outColor)
+		{
+			const auto diagnostic = ValidateShaderGraph(graph, registry, outputNode);
+			if (!diagnostic.Succeeded()) return diagnostic;
+
+			const char* colorPin = outputNode->Type == "Shader.MaterialOutput" ? "baseColor" : "color";
+			return ResolveInputExpression(graph, registry, { outputNode->Id, colorPin },
+				EGraphPinType::Float4, callStack, outColor);
+		}
 	}
 
 	GraphDiagnostic ShaderGraphCompiler::GenerateColorHlsl(
 		const Graph& graph, const GraphRegistry& registry, std::string& outSource)
 	{
 		const GraphNode* outputNode = nullptr;
-		const auto diag = ValidateShaderGraph(graph, registry, outputNode);
-		if (!diag.Succeeded()) return diag;
-
 		std::string colorLiteral;
 		std::vector<GraphPinReference> callStack;
 
-		if (outputNode->Type == "Shader.ColorOutput")
-		{
-			const auto res = ResolveInputExpression(
-				graph, registry, { outputNode->Id, "color" }, EGraphPinType::Float4, callStack, colorLiteral);
-			if (!res.Succeeded()) return res;
-		}
-		else if (outputNode->Type == "Shader.MaterialOutput")
-		{
-			const auto res = ResolveInputExpression(
-				graph, registry, { outputNode->Id, "baseColor" }, EGraphPinType::Float4, callStack, colorLiteral);
-			if (!res.Succeeded()) return res;
-		}
+		const auto diagnostic = ResolveShaderOutputColor(graph, registry, outputNode, callStack, colorLiteral);
+		if (!diagnostic.Succeeded()) return diagnostic;
 
 		std::string source = "float4 main() : SV_Target0\n{\n\treturn " + colorLiteral + ";\n}\n";
 		outSource.swap(source);
@@ -307,24 +305,11 @@ namespace Engine
 		const Graph& graph, const GraphRegistry& registry, std::string& outSource)
 	{
 		const GraphNode* outputNode = nullptr;
-		const auto diag = ValidateShaderGraph(graph, registry, outputNode);
-		if (!diag.Succeeded()) return diag;
-
 		std::string colorLiteral;
 		std::vector<GraphPinReference> callStack;
 
-		if (outputNode->Type == "Shader.ColorOutput")
-		{
-			const auto res = ResolveInputExpression(
-				graph, registry, { outputNode->Id, "color" }, EGraphPinType::Float4, callStack, colorLiteral);
-			if (!res.Succeeded()) return res;
-		}
-		else if (outputNode->Type == "Shader.MaterialOutput")
-		{
-			const auto res = ResolveInputExpression(
-				graph, registry, { outputNode->Id, "baseColor" }, EGraphPinType::Float4, callStack, colorLiteral);
-			if (!res.Succeeded()) return res;
-		}
+		const auto diagnostic = ResolveShaderOutputColor(graph, registry, outputNode, callStack, colorLiteral);
+		if (!diagnostic.Succeeded()) return diagnostic;
 
 		std::string source = R"(#include "shading_flags.hlsli"
 
@@ -371,49 +356,39 @@ PS_OUTPUT main(PS_INPUT input)
 		const Graph& graph, const GraphRegistry& registry, std::string& outSource)
 	{
 		const GraphNode* outputNode = nullptr;
-		const auto diag = ValidateShaderGraph(graph, registry, outputNode);
-		if (!diag.Succeeded()) return diag;
+		std::string baseColor;
+		std::vector<GraphPinReference> callStack;
 
-		std::string baseColor = "float4(1.00000000e+00f, 1.00000000e+00f, 1.00000000e+00f, 1.00000000e+00f)";
+		const auto diagnostic = ResolveShaderOutputColor(graph, registry, outputNode, callStack, baseColor);
+		if (!diagnostic.Succeeded()) return diagnostic;
+
 		std::string roughness = "2.00000000e-01f";
 		std::string metallic = "0.00000000e+00f";
 		std::string cavity = "5.00000000e-01f";
 		std::string ao = "1.00000000e+00f";
 		std::string emissive = "float3(0.00000000e+00f, 0.00000000e+00f, 0.00000000e+00f)";
 
-		std::vector<GraphPinReference> callStack;
-
-		if (outputNode->Type == "Shader.ColorOutput")
+		if (outputNode->Type == "Shader.MaterialOutput")
 		{
-			const auto res = ResolveInputExpression(
-				graph, registry, { outputNode->Id, "color" }, EGraphPinType::Float4, callStack, baseColor);
-			if (!res.Succeeded()) return res;
-		}
-		else if (outputNode->Type == "Shader.MaterialOutput")
-		{
-			auto res = ResolveInputExpression(
-				graph, registry, { outputNode->Id, "baseColor" }, EGraphPinType::Float4, callStack, baseColor);
-			if (!res.Succeeded()) return res;
-
-			res = ResolveInputExpression(
+			auto result = ResolveInputExpression(
 				graph, registry, { outputNode->Id, "roughness" }, EGraphPinType::Float, callStack, roughness);
-			if (!res.Succeeded()) return res;
+			if (!result.Succeeded()) return result;
 
-			res = ResolveInputExpression(
+			result = ResolveInputExpression(
 				graph, registry, { outputNode->Id, "metallic" }, EGraphPinType::Float, callStack, metallic);
-			if (!res.Succeeded()) return res;
+			if (!result.Succeeded()) return result;
 
-			res = ResolveInputExpression(
+			result = ResolveInputExpression(
 				graph, registry, { outputNode->Id, "cavity" }, EGraphPinType::Float, callStack, cavity);
-			if (!res.Succeeded()) return res;
+			if (!result.Succeeded()) return result;
 
-			res = ResolveInputExpression(
+			result = ResolveInputExpression(
 				graph, registry, { outputNode->Id, "ao" }, EGraphPinType::Float, callStack, ao);
-			if (!res.Succeeded()) return res;
+			if (!result.Succeeded()) return result;
 
-			res = ResolveInputExpression(
+			result = ResolveInputExpression(
 				graph, registry, { outputNode->Id, "emissive" }, EGraphPinType::Float3, callStack, emissive);
-			if (!res.Succeeded()) return res;
+			if (!result.Succeeded()) return result;
 		}
 
 		std::string source = R"(#include "shading_flags.hlsli"

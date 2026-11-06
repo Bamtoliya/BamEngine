@@ -11,6 +11,9 @@
 
 #include <SDL3/SDL_filesystem.h>
 #include "PlatformPath.h"
+#include "InputActionSettings.h"
+#include "InputManager.h"
+#include "ReflectionRegistry.h"
 
 namespace
 {
@@ -187,6 +190,44 @@ bool EditorSettingsService::LoadProjectSettings(const reflection::Registry& regi
             const std::filesystem::path manifest(value.StartupManifestPath);
             return !manifest.empty() && !manifest.has_root_name() && !manifest.has_root_directory();
         }, "ProjectSettings");
+}
+
+bool EditorSettingsService::LoadInputActionSettings(Engine::InputActionSettings& out) const
+{
+    if (m_ProjectRoot.empty()) return false;
+
+    Engine::InputActionSettings candidate;
+    candidate.Maps.push_back({
+    "Gameplay",
+    {
+        { "Jump", "Button" }, { "Sprint", "Button" },
+        { "MoveForward", "Button" }, { "MoveBackward", "Button" },
+        { "MoveLeft", "Button" }, { "MoveRight", "Button" }
+    },
+    {
+        { "Jump", "Space" }, { "Sprint", "LShift" }, { "Sprint", "RShift" },
+        { "MoveForward", "W" }, { "MoveBackward", "S" },
+        { "MoveLeft", "A" }, { "MoveRight", "D" }
+    }
+        });
+
+    const auto path = m_ProjectRoot / "Config" / "InputActions.json";
+    const auto& registry = Engine::ReflectionRegistry::Get().GetRegistry();
+    if (!ReadEditorSettingsFile(candidate, path, registry, Engine::InputManager::ValidateInputActionSettings, "InputActions"))
+        return false;
+
+    out = std::move(candidate);
+    return true;
+}
+
+EEditorSettingsSaveStatus EditorSettingsService::SaveInputActionSettings(const Engine::InputActionSettings& settings) const
+{
+    if (m_ProjectRoot.empty() || !Engine::InputManager::ValidateInputActionSettings(settings))
+        return EEditorSettingsSaveStatus::Failed;
+
+    const auto path = m_ProjectRoot / "Config" / "InputActions.json";
+    const auto& registry = Engine::ReflectionRegistry::Get().GetRegistry();
+    return WriteEditorSettingsFile(settings, path, registry, true, "InputActions");
 }
 
 EEditorSettingsSaveStatus EditorSettingsService::SaveProjectSettings(const Engine::ProjectSettings& settings)

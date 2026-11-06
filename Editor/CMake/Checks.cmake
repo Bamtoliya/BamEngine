@@ -59,8 +59,10 @@ target_link_libraries(GraphMessageLocalizationCheck PRIVATE BamEngine::Engine)
 add_dependencies(GraphMessageLocalizationCheck GenerateLocalization)
 set_target_properties(GraphMessageLocalizationCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
 
-add_executable(ShortcutManagerCheck examples/ShortcutManagerCheck.cpp
-    Source/Shortcut/Private/ShortcutManager.cpp Source/Shortcut/Private/ShortcutChord.cpp)
+add_executable(ShortcutManagerCheck
+    examples/ShortcutManagerCheck.cpp
+    Source/Shortcut/Private/ShortcutManager.cpp
+)
 target_include_directories(ShortcutManagerCheck PRIVATE ${EDITOR_PUBLIC_INCLUDE_DIRS}
     "${EDITOR_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/ThirdParty")
 target_link_libraries(ShortcutManagerCheck PRIVATE BamEngine::Engine imgui::imgui)

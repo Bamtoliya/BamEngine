@@ -556,6 +556,7 @@ History,Command.DeleteEntity,Delete entity,엔티티 삭제
 History,Command.EditProperties,Properties,속성 편집
 History,Command.EditProperty,Edit Property,속성 편집
 History,Command.InstantiatePrefab,Instantiate Prefab,프리팹 배치
+History,Command.MoveSplinePoint,Move Spline Point,스플라인 제어점 이동
 History,Command.PasteEntities,Paste Entities,엔티티 붙여넣기
 History,Command.RenameScene,Rename scene,씬 이름 변경
 History,Command.ReorderEntities,Reorder Entities,엔티티 순서 변경
@@ -1163,6 +1164,9 @@ Shortcuts,Reset,Reset,초기화
 Shortcuts,ResetAll,Reset All to Default,모두 기본값으로 복원
 Shortcuts,Search,Search Shortcuts...,단축키 검색...
 Shortcuts,Title,Keyboard Shortcuts,단축키 설정
+Spline,InvalidData,Spline requires 1-64 finite points; closed curves require at least 3.,스플라인에는 유한한 좌표의 제어점 1~64개가 필요합니다. 닫힌 곡선에는 최소 3개가 필요합니다.
+Spline,PointHint,"Control point {}: select, then use the translation or roll rotation gizmo.",제어점 {}: 선택한 뒤 이동 또는 롤 회전 기즈모로 조작합니다.
+Spline,PointMoveRejected,The point could not be converted to valid local coordinates.,제어점을 유효한 로컬 좌표로 변환할 수 없습니다.
 SpriteAnimation,AddFrame,Add Frame,프레임 추가
 SpriteAnimation,EmptyFramesHint,No frames in animation. Click 'Add Frame' above.,애니메이션에 프레임이 없습니다. 위의 프레임 추가 버튼을 누르세요.
 SpriteAnimation,Fps,FPS,FPS
@@ -1414,6 +1418,9 @@ Viewport,View,View,보기
 Viewport,ViewerTitle,{} Viewer,{} 뷰어
 Viewport,World,World,월드
 Viewport,ZIndex,Z-Index,Z 순서
+History,Command.RotateSplinePoint,Rotate Spline Point,스플라인 제어점 회전
+Spline,PointEditRejected,The point edit could not be applied.,제어점 편집을 적용할 수 없습니다.
+Spline,RollUnavailable,A valid spline tangent and roll value are required.,유효한 스플라인 접선과 롤 값이 필요합니다.
 AnimatorGraph,DefaultParameters,Default Parameters,기본 파라미터
 AnimatorGraph,PreviewParameters,Preview Parameters,프리뷰 파라미터
 AnimatorGraph,PreviewUnavailable,Preview controls are unavailable.,프리뷰를 제어할 수 없습니다.
@@ -1458,10 +1465,19 @@ AnimatorGraph,AnyState,Any State,모든 상태
 AnimatorGraph,MakeAnyStateTransition,Add Transition from Any State,모든 상태에서 전이 추가
 AnimatorGraph,AnyStateNeedsCondition,Add a condition to enable this transition.,이 전이를 활성화하려면 조건을 추가하세요.
 AnimatorGraph,StateNameInvalid,Enter a nonempty and unique state name.,상태 이름을 입력하세요. 다른 상태와 중복될 수 없습니다.
-History,Command.MoveSplinePoint,Move Spline Point,스플라인 제어점 이동
-Spline,InvalidData,Spline requires 1-64 finite points; closed curves require at least 3.,스플라인에는 유한한 좌표의 제어점 1~64개가 필요합니다. 닫힌 곡선에는 최소 3개가 필요합니다.
-Spline,PointHint,"Control point {}: select, then use the translation or roll rotation gizmo.",제어점 {}: 선택한 뒤 이동 또는 롤 회전 기즈모로 조작합니다.
-Spline,PointMoveRejected,The point could not be converted to valid local coordinates.,제어점을 유효한 로컬 좌표로 변환할 수 없습니다.
-History,Command.RotateSplinePoint,Rotate Spline Point,스플라인 제어점 회전
-Spline,PointEditRejected,The point edit could not be applied.,제어점 편집을 적용할 수 없습니다.
-Spline,RollUnavailable,A valid spline tangent and roll value are required.,유효한 스플라인 접선과 롤 값이 필요합니다.
+InputActions,Title,Input Actions,입력 액션
+InputActions,AddBinding,Add Binding,바인딩 추가
+InputActions,LoadFailed,Could not load InputActions.json. See the editor log.,입력 액션 설정을 불러오지 못했습니다. 에디터 로그를 확인하세요.
+InputActions,SaveFailed,Could not save input actions. Your changes are still available.,입력 액션 설정을 저장하지 못했습니다. 편집 내용은 유지됩니다.
+InputActions,NextPlay,Saved changes take effect the next time you start Play.,저장한 변경은 다음 플레이 시작부터 적용됩니다.
+InputActions,RecordKey,Record Key Input,키 입력으로 등록
+InputActions,PressChord,Press a key or key combination. Tap a modifier to bind it alone. Esc to cancel.,키 또는 키 조합을 누르세요. 보조키만 등록하려면 눌렀다 떼세요. Esc로 취소합니다.
+InputActions,ChangeBinding,Change key,키 변경
+InputActions,DuplicateBinding,This binding is already assigned to the action.,이 액션에 이미 등록된 바인딩입니다.
+InputActions,ActionId,Action ID,액션 ID
+InputActions,AddAction,Add Action,액션 추가
+InputActions,DeleteAction,Delete Action,액션 삭제
+InputActions,Bindings,Bindings,바인딩
+InputActions,Manage,Manage,관리
+Action,Window.CloseFocusedPanel,Close Focused Panel,포커스된 패널 닫기
+InputActions,MouseCaptureArea,Click here with the mouse button to bind,등록할 마우스 버튼으로 여기를 누르세요

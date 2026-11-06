@@ -1,7 +1,4 @@
-﻿#pragma once
-
-#include "PipelineManager.h"
-#include "PipelineManager.h"
+﻿#include "PipelineManager.h"
 
 IMPLEMENT_SINGLETON(PipelineManager)
 

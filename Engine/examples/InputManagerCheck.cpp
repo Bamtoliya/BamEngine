@@ -1,6 +1,7 @@
 ﻿#include "InputManager.h"
 #include <SDL3/SDL.h>
 #include <iostream>
+#include "InputActionSettings.h"
 
 int main()
 {
@@ -59,6 +60,97 @@ int main()
     if (input.GetMouseScrollDelta() != vec2(0.0f)) return 9;
     if (input.IsMouseButtonDown(EMouseButton::Count) || input.IsMouseButtonDragging(EMouseButton::Count) ||
         input.IsKeyButtonPressed(static_cast<EKeyCode>(SDL_SCANCODE_COUNT))) return 10;
+
+    InputActionSettings settings;
+    settings.Maps.push_back({
+        "Gameplay",
+        { { "Jump", "Button" }, { "ModifiedJump", "Button" } },
+        { { "Jump", "J" }, { "Jump", "K" }, { "Jump", "Mouse:Right" }, { "ModifiedJump", "Ctrl+J" } }
+        });
+
+    if (!input.SetInputActionSettings(settings)) return 11;
+    input.EvaluateActionMap("Gameplay", true);
+
+    auto invalidSettings = settings;
+    invalidSettings.Maps.front().Bindings.push_back({ "MissingAction", "L" });
+    if (input.SetInputActionSettings(invalidSettings)) return 12;
+
+    const auto tapKey = [&input](SDL_Scancode scancode, SDL_Keymod modifiers = SDL_KMOD_NONE)
+        {
+            SDL_Event keyEvent{};
+            keyEvent.type = SDL_EVENT_KEY_DOWN;
+            keyEvent.key.scancode = scancode;
+            keyEvent.key.mod = modifiers;
+            input.ProcessEvent(keyEvent);
+
+            keyEvent.type = SDL_EVENT_KEY_UP;
+            input.ProcessEvent(keyEvent);
+            input.Update(0.016f);
+        };
+
+    tapKey(SDL_SCANCODE_J);
+    input.EvaluateActionMap("Gameplay", true);
+    if (!input.WasActionPressed("Gameplay", "Jump") ||
+        input.WasActionPressed("Gameplay", "ModifiedJump")) return 13;
+
+    tapKey(SDL_SCANCODE_K);
+    input.EvaluateActionMap("Gameplay", true);
+    if (!input.WasActionPressed("Gameplay", "Jump")) return 14;
+
+    tapKey(SDL_SCANCODE_J, SDL_KMOD_LCTRL);
+    input.EvaluateActionMap("Gameplay", true);
+    if (input.WasActionPressed("Gameplay", "Jump") ||
+        !input.WasActionPressed("Gameplay", "ModifiedJump")) return 15;
+
+    tapKey(SDL_SCANCODE_J);
+    input.EvaluateActionMap("Gameplay", false);
+    if (input.WasActionPressed("Gameplay", "Jump") ||
+        input.IsActionHeld("Gameplay", "Jump")) return 16;
+
+    input.Update(0.016f);
+    input.EvaluateActionMap("Gameplay", true);
+
+    SDL_Event mouseTap{};
+    mouseTap.type = SDL_EVENT_MOUSE_BUTTON_DOWN;
+    mouseTap.button.button = SDL_BUTTON_RIGHT;
+    input.ProcessEvent(mouseTap);
+
+    mouseTap.type = SDL_EVENT_MOUSE_BUTTON_UP;
+    input.ProcessEvent(mouseTap);
+    input.Update(0.016f);
+
+    input.EvaluateActionMap("Gameplay", true);
+    if (!input.WasActionPressed("Gameplay", "Jump") ||
+        input.IsActionHeld("Gameplay", "Jump")) return 17;
+
+    constexpr uint32 leftMouseOnly = uint32{ 1 } << static_cast<uint32>(EMouseButton::Left);
+
+    mouseTap.type = SDL_EVENT_MOUSE_BUTTON_DOWN;
+    input.ProcessEvent(mouseTap);
+    mouseTap.type = SDL_EVENT_MOUSE_BUTTON_UP;
+    input.ProcessEvent(mouseTap);
+    input.Update(0.016f);
+
+    input.EvaluateActionMap("Gameplay", true, { .AllowedButtons = leftMouseOnly });
+    if (input.WasActionPressed("Gameplay", "Jump") ||
+        input.IsActionHeld("Gameplay", "Jump")) return 18;
+
+    tapKey(SDL_SCANCODE_J);
+    input.EvaluateActionMap("Gameplay", true, { .AllowedButtons = leftMouseOnly });
+    if (!input.WasActionPressed("Gameplay", "Jump")) return 19;
+
+    if (!input.WasActionReleased("Gameplay", "Jump")) return 20;
+
+    input.Update(0.016f);
+    input.EvaluateActionMap("Gameplay", true);
+    if (input.WasActionReleased("Gameplay", "Jump")) return 21;
+
+    tapKey(SDL_SCANCODE_J);
+    input.EvaluateActionMap("Gameplay", false);
+    if (input.WasActionReleased("Gameplay", "Jump")) return 22;
+
+    std::cout << "Input action validation, multiple bindings, chord priority and disabled map checks passed.\n";
+
     std::cout << "Input frame edges, short taps, repeat filtering, all mouse buttons and wheel checks passed.\n";
     return 0;
 }

@@ -13,6 +13,7 @@ public:
 	virtual ~IImGui() = default;
 	virtual void Draw() BAM_PURE;
 	virtual void Update(f32 dt) {}
+	virtual bool ShouldUpdateWhenClosed() const { return false; }
 	virtual void ProcessEvent(const SDL_Event* event) {}
 public:
 	bool IsOpen() const { return m_Open; }
@@ -31,11 +32,17 @@ public:
 	virtual void CaptureState(EditorWorkspace& workspace) const;
 	virtual void RestoreState(const EditorWorkspace& workspace);
 protected:
+	bool BeginPanelWindow(const char* title, bool& open, ImGuiWindowFlags flags = ImGuiWindowFlags_None);
+protected:
 	bool m_Open = true;
 	bool m_Focused = false;
 	bool m_Hovered = false;
 	bool m_FocusRequested = false;
 	wstring m_Name = L"ImGui Panel";
 	string m_DisplayNameKey;
+private:
+	friend class ImGuiManager;
+	ImGuiID m_PanelWindowId = 0;
+	int32 m_CloseRequestFrame = -1;
 };
 END

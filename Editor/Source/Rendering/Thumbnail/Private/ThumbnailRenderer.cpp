@@ -167,15 +167,7 @@ bool ThumbnailRenderer::SubmitMaterial(Engine::MaterialInterface* material)
 	const mat4 view = glm::lookAtLH(eye, target, vec3(0.0f, 1.0f, 0.0f));
 	const mat4 proj = glm::perspectiveLH_ZO(glm::radians(45.0f), 1.0f, 0.1f, 100.0f);
 
-	CameraBuffer cameraBuffer = {};
-	cameraBuffer.viewMatrix = view;
-	cameraBuffer.invViewMatrix = glm::inverse(view);
-	cameraBuffer.projMatrix = proj;
-	cameraBuffer.invProjMatrix = glm::inverse(proj);
-	cameraBuffer.viewProjMatrix = proj * view;
-	cameraBuffer.invViewProjMatrix = glm::inverse(cameraBuffer.viewProjMatrix);
-	cameraBuffer.cameraPosition = eye;
-	cameraBuffer.time = 0.0f;
+	const auto cameraBuffer = CameraBuffer::FromMatrices(view, proj, eye, 0.0f);
 
 	// 128x128 오프스크린 파이프라인에 카메라 버퍼 및 씬 등록
 	auto* transComp = registry.try_get<Engine::WorldTransformComponent>(m_MeshEntity);
@@ -225,16 +217,7 @@ CameraBuffer ThumbnailRenderer::CalculateAutoFramingCamera(const vec3& bMin, con
 	const vec3 eye = center + offset;
 	const mat4 view = glm::lookAtLH(eye, center, vec3(0.0f, 1.0f, 0.0f));
 	const mat4 proj = glm::perspectiveLH_ZO(fovY, 1.0f, std::max(distance * 0.01f, 0.05f), distance * 15.0f);
-	CameraBuffer camBuf{};
-	camBuf.viewMatrix = view;
-	camBuf.invViewMatrix = glm::inverse(view);
-	camBuf.projMatrix = proj;
-	camBuf.invProjMatrix = glm::inverse(proj);
-	camBuf.viewProjMatrix = proj * view;
-	camBuf.invViewProjMatrix = glm::inverse(camBuf.viewProjMatrix);
-	camBuf.cameraPosition = eye;
-	camBuf.time = 0.0f;
-	return camBuf;
+	return CameraBuffer::FromMatrices(view, proj, eye, 0.0f);
 }
 bool ThumbnailRenderer::SubmitMesh(Engine::Mesh* mesh, Engine::MaterialInterface* material)
 {

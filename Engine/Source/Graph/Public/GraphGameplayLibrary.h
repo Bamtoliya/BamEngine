@@ -72,6 +72,44 @@ namespace Engine::GraphGameplay
 		return InputManager::Get().IsKeyButtonPressed(EKeyCode::Space);
 	}
 
+	FUNCTION(GRAPH_PURE("Input.WasActionPressed"), DISPLAY_NAME("NODE_INPUT_WAS_ACTION_PRESSED"), CATEGORY("Input"),
+		GRAPH_PIN_NAME("mapId", "PIN_INPUT_MAP_ID"), GRAPH_PIN_DEFAULT("mapId", "Gameplay"),
+		GRAPH_PIN_NAME("actionId", "PIN_INPUT_ACTION_ID"), GRAPH_PIN_DEFAULT("actionId", ""))
+		inline bool WasActionPressed(std::string mapId, std::string actionId)
+	{
+		return InputManager::Get().WasActionPressed(mapId, actionId);
+	}
+
+	FUNCTION(GRAPH_PURE("Input.WasActionReleased"), DISPLAY_NAME("NODE_INPUT_WAS_ACTION_RELEASED"), CATEGORY("Input"),
+		GRAPH_PIN_NAME("mapId", "PIN_INPUT_MAP_ID"), GRAPH_PIN_DEFAULT("mapId", "Gameplay"),
+		GRAPH_PIN_NAME("actionId", "PIN_INPUT_ACTION_ID"), GRAPH_PIN_DEFAULT("actionId", ""))
+		inline bool WasActionReleased(std::string mapId, std::string actionId)
+	{
+		return InputManager::Get().WasActionReleased(mapId, actionId);
+	}
+
+	FUNCTION(GRAPH_PURE("Input.IsActionHeld"), DISPLAY_NAME("NODE_INPUT_IS_ACTION_HELD"), CATEGORY("Input"),
+		GRAPH_PIN_NAME("mapId", "PIN_INPUT_MAP_ID"), GRAPH_PIN_DEFAULT("mapId", "Gameplay"),
+		GRAPH_PIN_NAME("actionId", "PIN_INPUT_ACTION_ID"), GRAPH_PIN_DEFAULT("actionId", ""))
+		inline bool IsActionHeld(std::string mapId, std::string actionId)
+	{
+		return InputManager::Get().IsActionHeld(mapId, actionId);
+	}
+
+	FUNCTION(GRAPH_PURE("Input.GetActionAxis"), DISPLAY_NAME("NODE_INPUT_GET_ACTION_AXIS"), CATEGORY("Input"),
+		GRAPH_PIN_NAME("mapId", "PIN_INPUT_MAP_ID"), GRAPH_PIN_DEFAULT("mapId", "Gameplay"),
+		GRAPH_PIN_NAME("positiveActionId", "PIN_INPUT_POSITIVE_ACTION_ID"),
+		GRAPH_PIN_DEFAULT("positiveActionId", ""),
+		GRAPH_PIN_NAME("negativeActionId", "PIN_INPUT_NEGATIVE_ACTION_ID"),
+		GRAPH_PIN_DEFAULT("negativeActionId", ""))
+		inline float GetActionAxis(std::string mapId, std::string positiveActionId, std::string negativeActionId)
+	{
+		const auto& input = InputManager::Get();
+		const bool positiveHeld = input.IsActionHeld(mapId, positiveActionId);
+		const bool negativeHeld = input.IsActionHeld(mapId, negativeActionId);
+		return static_cast<float>(positiveHeld) - static_cast<float>(negativeHeld);
+	}
+
 	FUNCTION(GRAPH_PURE("Input.IsKeyPressed"), DISPLAY_NAME("Is Key Pressed"), CATEGORY("Input"),
 		GRAPH_PIN_DEFAULT("keyCode", 0))
 		inline bool IsKeyPressed(std::int64_t keyCode)

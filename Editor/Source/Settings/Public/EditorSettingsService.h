@@ -10,6 +10,7 @@ BEGIN(Engine)
 class RHI;
 class TimeManager;
 class LocalizationManager;
+struct InputActionSettings;
 END
 
 BEGIN(Editor)
@@ -73,7 +74,9 @@ public:
 public:
     bool LoadForStartup(std::uint32_t defaultWidth, std::uint32_t defaultHeight);
     bool LoadProjectSettings(const reflection::Registry& registry);
+    bool LoadInputActionSettings(Engine::InputActionSettings& out) const;
     EEditorSettingsSaveStatus SaveProjectSettings(const Engine::ProjectSettings& settings);
+    EEditorSettingsSaveStatus SaveInputActionSettings(const Engine::InputActionSettings& settings) const;
 
     void CaptureWindowState(const EditorApplicationState& state);
     void CaptureWorkspace(ImGuiManager& gui);

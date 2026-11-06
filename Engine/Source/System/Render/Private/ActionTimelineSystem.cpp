@@ -13,28 +13,13 @@
 #include "Scene.h"
 #include "PlatformPath.h"
 #include <cmath>
+#include "AnimationSceneQuery.h"
+#include "Skeleton.h"
 
 namespace Engine
 {
 	namespace
 	{
-		// 스켈레톤 탐색 헬퍼
-		const Skeleton* FindSkeletonInHierarchy(const entt::registry& world, entt::entity root)
-		{
-			if (const auto* skinned = world.try_get<SkinnedMeshRendererComponent>(root))
-			{
-				if (const auto* skeleton = skinned->skeletonHandle.Get()) return skeleton;
-			}
-			const auto* hierarchy = world.try_get<HierarchyComponent>(root);
-			if (!hierarchy) return nullptr;
-			for (entt::entity child : hierarchy->children)
-			{
-				if (!world.valid(child)) continue;
-				if (const auto* skeleton = FindSkeletonInHierarchy(world, child)) return skeleton;
-			}
-			return nullptr;
-		}
-
 		// 본 소켓 월드 좌표 계산 헬퍼
 		vec3 ComputeSocketWorldPos(const entt::registry& world, entt::entity entity, const std::string& boneName, const vec3& offset)
 		{

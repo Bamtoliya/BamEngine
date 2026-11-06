@@ -98,10 +98,9 @@ void ModelEditor::Draw()
 	if (!m_Open)
 		return;
 
-	const string title = GetDisplayName() + " - " + m_TargetResourcePath.filename().string() +
-		"###" + WStrToStr(m_Name);
+	const auto title = BuildResourceWindowTitle();
 
-	if (ImGui::Begin(title.c_str(), &m_Open))
+	if (BeginPanelWindow(title.c_str(), m_Open))
 	{
 		auto& history = Application::Get().GetEditHistory();
 		history.AllowShortcuts(ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows));

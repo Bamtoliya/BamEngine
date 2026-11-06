@@ -234,10 +234,23 @@ void EditorActionRegistry::RegisterAll()
         .DisplayNameKey = "Action.File.CloseScene",
         .CategoryKey = "Viewport.Scene",
         .Context = EShortcutContext::Global,
-        .DefaultChord = ShortcutChord(Engine::EKeyCode::W, EModifierKey::Ctrl),
+        .DefaultChord = ShortcutChord(Engine::EKeyCode::W, EModifierKey::Ctrl | EModifierKey::Shift),
         .ExecuteHandler = []() { ImGuiManager::Get().RequestCloseScene(); },
         .CanExecute = []() { return PIEManager::Get().IsEditing(); }
     });
+
+    sm.RegisterAction({
+    .Id = "Window.CloseFocusedPanel",
+    .DisplayNameKey = "Action.Window.CloseFocusedPanel",
+    .CategoryKey = "EditorMenu.Window",
+    .Context = EShortcutContext::Global,
+    .DefaultChord = ShortcutChord(Engine::EKeyCode::W, EModifierKey::Ctrl),
+    .ExecuteHandler = []() { ImGuiManager::Get().RequestCloseFocusedPanel(); },
+    .CanExecute = []() {
+        return PIEManager::Get().IsEditing() &&
+            ImGuiManager::Get().GetFocusedClosablePanel() != nullptr;
+    }
+        });
 
     sm.RegisterAction({
         .Id = "File.ImportAsset",

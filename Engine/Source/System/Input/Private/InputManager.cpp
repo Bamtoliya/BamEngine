@@ -2,8 +2,34 @@
 
 #include "InputManager.h"
 #include "SDL3/SDL.h"
+#include "InputActionSettings.h"
+#include "Logger.h"
 
 IMPLEMENT_SINGLETON(InputManager)
+
+#pragma region Helper
+namespace
+{
+	uint8 MakeModifierMask(bool ctrl, bool shift, bool alt)
+	{
+		return static_cast<uint8>(
+			(ctrl ? Engine::EModifierKey::Ctrl : Engine::EModifierKey::None) |
+			(shift ? Engine::EModifierKey::Shift : Engine::EModifierKey::None) |
+			(alt ? Engine::EModifierKey::Alt : Engine::EModifierKey::None));
+	}
+
+	std::optional<vec2> ToInputScreenPosition(SDL_WindowID windowId, f32 x, f32 y)
+	{
+		auto* window = SDL_GetWindowFromID(windowId);
+		int windowX = 0;
+		int windowY = 0;
+		if (!window || !SDL_GetWindowPosition(window, &windowX, &windowY))
+			return std::nullopt;
+
+		return vec2(static_cast<f32>(windowX) + x, static_cast<f32>(windowY) + y);
+	}
+}
+#pragma endregion
 
 #pragma region Constructor&Destructor
 EResult InputManager::Initialize(void* arg)
@@ -28,6 +54,7 @@ void InputManager::Update(f32 dt)
 	m_KeyRepeatEvents = m_PendingKeyRepeat;
 	m_MouseDownEvents = m_PendingMouseDown;
 	m_MouseUpEvents = m_PendingMouseUp;
+	m_KeyDownModifiers = m_PendingKeyDownModifiers;
 	m_PendingKeyDown.fill(false);
 	m_PendingKeyUp.fill(false);
 	m_PendingKeyRepeat.fill(false);
@@ -124,6 +151,8 @@ void InputManager::Update(f32 dt)
 	m_MousePosition = newMousePosition;
 	m_MouseScrollDelta = m_AccmulatedMouseScrollDelta;
 	m_AccmulatedMouseScrollDelta = vec2(0.f);
+	m_MouseWheelSamples.swap(m_PendingMouseWheelSamples);
+	m_PendingMouseWheelSamples.clear();
 }
 #pragma endregion
 
@@ -193,6 +222,14 @@ bool InputManager::IsMouseButtonDown(EMouseButton button)
 		return false;
 	}
 	return m_MouseDownEvents[buttonIndex] || (m_CurrentMouseButtonStates[buttonIndex] && !m_PreviousMouseButtonStates[buttonIndex]);
+}
+std::optional<vec2> InputManager::GetMouseButtonDownScreenPosition(EMouseButton button) const
+{
+	const auto index = static_cast<uint32>(button);
+	if (index >= m_MouseDownScreenPositions.size() || !m_MouseDownEvents[index])
+		return std::nullopt;
+
+	return m_MouseDownScreenPositions[index];
 }
 bool InputManager::IsMouseButtonUp(EMouseButton button)
 {
@@ -267,6 +304,9 @@ void InputManager::ProcessEvent(const SDL_Event& event)
 			else
 			{
 				m_PendingKeyDown[index] = true;
+				const auto modifiers = event.key.mod;
+				m_PendingKeyDownModifiers[index] = MakeModifierMask(
+					(modifiers & SDL_KMOD_CTRL) != 0, (modifiers & SDL_KMOD_SHIFT) != 0, (modifiers & SDL_KMOD_ALT) != 0);
 			}
 		}
 	}
@@ -276,14 +316,212 @@ void InputManager::ProcessEvent(const SDL_Event& event)
 		if (button != EMouseButton::Count)
 		{
 			const auto index = static_cast<uint32>(button);
-			if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN) m_PendingMouseDown[index] = true;
-			else m_PendingMouseUp[index] = true;
+			if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN)
+			{
+				m_PendingMouseDown[index] = true;
+				m_MouseDownScreenPositions[index] = ToInputScreenPosition(event.button.windowID, event.button.x, event.button.y);
+			}
+			else
+			{
+				m_PendingMouseUp[index] = true;
+			}
 		}
 	}
 	if (event.type == SDL_EVENT_MOUSE_WHEEL)
 	{
-		m_AccmulatedMouseScrollDelta.x += static_cast<f32>(event.wheel.x);
-		m_AccmulatedMouseScrollDelta.y += static_cast<f32>(event.wheel.y);
+		m_AccmulatedMouseScrollDelta.x += event.wheel.x;
+		m_AccmulatedMouseScrollDelta.y += event.wheel.y;
+
+		const auto position = ToInputScreenPosition(event.wheel.windowID, event.wheel.mouse_x, event.wheel.mouse_y);
+		if (position)
+			m_PendingMouseWheelSamples.push_back({ *position, event.wheel.y });
 	}
+}
+#pragma endregion
+
+#pragma region Input Actions
+bool InputManager::ValidateInputActionSettings(const InputActionSettings& settings)
+{
+	return BuildActionMaps(settings).has_value();
+}
+
+bool InputManager::SetInputActionSettings(const InputActionSettings& settings)
+{
+	auto maps = BuildActionMaps(settings);
+	if (!maps) return false;
+
+	m_ActionMaps = std::move(*maps);
+	return true;
+}
+
+std::optional<InputManager::ActionMaps> InputManager::BuildActionMaps(const InputActionSettings& settings)
+{
+	ActionMaps maps;
+	const auto reject = [](std::string_view map, std::string_view action, std::string_view reason)
+		{
+			ENGINE_LOG_ERROR("Invalid input mapping in '{}', action '{}': {}", map, action, reason);
+			return std::nullopt;
+		};
+
+	for (const auto& source : settings.Maps)
+	{
+		const auto [map, inserted] = maps.try_emplace(source.Id);
+		if (source.Id.empty() || !inserted)
+			return reject(source.Id, "", "empty or duplicate map ID");
+
+		auto& actions = map->second.Actions;
+		for (const auto& action : source.Actions)
+		{
+			if (action.Type != "Button")
+				return reject(source.Id, action.Id, "unsupported action type");
+			if (action.Id.empty() || !actions.try_emplace(action.Id).second)
+				return reject(source.Id, action.Id, "empty or duplicate action ID");
+		}
+
+		for (const auto& binding : source.Bindings)
+		{
+			const auto action = actions.find(binding.ActionId);
+			if (action == actions.end())
+				return reject(source.Id, binding.ActionId, "binding references an unknown action");
+			constexpr std::string_view mousePrefix = "Mouse:";
+			if (binding.Key.starts_with(mousePrefix))
+			{
+				const auto button = StringToEngineMouseButton(binding.Key.substr(mousePrefix.size()));
+				if (button == EMouseButton::Count)
+					return reject(source.Id, binding.ActionId, "invalid mouse button: " + binding.Key);
+
+				auto& buttons = action->second.MouseButtons;
+				if (std::ranges::find(buttons, button) != buttons.end())
+					return reject(source.Id, binding.ActionId, "duplicate mouse button: " + binding.Key);
+
+				buttons.push_back(button);
+				continue;
+			}
+			const KeyChord chord = KeyChord::FromString(binding.Key);
+			if (!chord.IsValid())
+				return reject(source.Id, binding.ActionId, "invalid chord: " + binding.Key);
+
+			auto& chords = action->second.Chords;
+			if (std::find(chords.begin(), chords.end(), chord) != chords.end())
+				return reject(source.Id, binding.ActionId, "duplicate chord: " + binding.Key);
+
+			chords.push_back(chord);
+			if (chord.Modifiers != 0)
+				map->second.ModifiedChords.emplace(chord.Key, chord.Modifiers);
+		}
+	}
+
+	return maps;
+}
+
+void InputManager::EvaluateActionMap(std::string_view mapId, bool enabled, const InputActionMapMouseInput& mouse)
+{
+	const auto map = m_ActionMaps.find(mapId);
+	if (map == m_ActionMaps.end()) return;
+
+	auto& state = map->second;
+	const bool wasEnabled = state.Enabled;
+	state.Enabled = enabled;
+	state.MouseInput = enabled ? mouse : InputActionMapMouseInput{};
+
+	const auto matches = [&state](const KeyChord& chord, uint8 modifiers)
+		{
+			if (chord.Modifiers != 0)
+				return chord.Modifiers == modifiers;
+
+			return !state.ModifiedChords.contains({ chord.Key, modifiers });
+		};
+
+	const auto isMouseAllowed = [allowedMouseButtons = mouse.AllowedButtons](EMouseButton button)
+		{
+			const auto bit = uint32{ 1 } << static_cast<uint32>(button);
+			return (allowedMouseButtons & bit) != 0;
+		};
+
+	const uint8 heldModifiers = GetKeyboardModifiers();
+	for (auto& [id, action] : state.Actions)
+	{
+		const bool wasHeld = action.Held;
+		action.Pressed = enabled && wasEnabled && !action.Held &&
+			(std::ranges::any_of(action.Chords, [&](const KeyChord& chord)
+				{
+					return IsKeyButtonDown(chord.Key) && matches(chord, GetKeyDownModifiers(chord.Key));
+				}) || std::ranges::any_of(action.MouseButtons, [&](EMouseButton button)
+					{
+						return isMouseAllowed(button) && IsMouseButtonDown(button);
+					}));
+
+				action.Held = enabled &&
+					(std::ranges::any_of(action.Chords, [&](const KeyChord& chord)
+						{
+							return IsKeyButtonPressed(chord.Key) && matches(chord, heldModifiers);
+						}) || std::ranges::any_of(action.MouseButtons, [&](EMouseButton button)
+							{
+								return isMouseAllowed(button) && IsMouseButtonPressed(button);
+							}));
+						action.Released = enabled && wasEnabled && !action.Held && (wasHeld || action.Pressed);
+	}
+}
+
+f32 InputManager::GetActionMapMouseScrollDeltaY(std::string_view mapId) const
+{
+	const auto map = m_ActionMaps.find(mapId);
+	return map != m_ActionMaps.end() && map->second.Enabled ? map->second.MouseInput.ScrollDeltaY : 0.0f;
+}
+
+vec2 InputManager::GetActionMapMouseDelta(std::string_view mapId) const
+{
+	const auto map = m_ActionMaps.find(mapId);
+	return map != m_ActionMaps.end() && map->second.Enabled ? map->second.MouseInput.MotionDelta : vec2(0.0f);
+}
+
+bool InputManager::WasActionPressed(std::string_view mapId, std::string_view actionId) const
+{
+	const auto map = m_ActionMaps.find(mapId);
+	if (map == m_ActionMaps.end() || !map->second.Enabled) return false;
+
+	const auto action = map->second.Actions.find(actionId);
+	return action != map->second.Actions.end() && action->second.Pressed;
+}
+
+bool InputManager::WasActionReleased(std::string_view mapId, std::string_view actionId) const
+{
+	const auto map = m_ActionMaps.find(mapId);
+	if (map == m_ActionMaps.end() || !map->second.Enabled)
+		return false;
+
+	const auto action = map->second.Actions.find(actionId);
+	return action != map->second.Actions.end() && action->second.Released;
+}
+
+bool InputManager::IsActionHeld(std::string_view mapId, std::string_view actionId) const
+{
+	const auto map = m_ActionMaps.find(mapId);
+	if (map == m_ActionMaps.end() || !map->second.Enabled)
+		return false;
+
+	const auto action = map->second.Actions.find(actionId);
+	return action != map->second.Actions.end() && action->second.Held;
+}
+
+bool InputManager::HasKeyboardFocus() const
+{
+	return SDL_GetKeyboardFocus() != nullptr;
+}
+#pragma endregion
+
+#pragma region KeyChord
+uint8 InputManager::GetKeyboardModifiers()
+{
+	return MakeModifierMask(IsCtrlPressed(), IsShiftPressed(), IsAltPressed());
+}
+
+uint8 InputManager::GetKeyDownModifiers(EKeyCode key)
+{
+	const auto index = static_cast<uint32>(key);
+	if (index < m_KeyDownEvents.size() && m_KeyDownEvents[index])
+		return m_KeyDownModifiers[index];
+
+	return GetKeyboardModifiers();
 }
 #pragma endregion

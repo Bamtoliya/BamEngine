@@ -18,7 +18,7 @@ namespace Editor
         ImGui::SetNextWindowSize(ImVec2(800.0f, 500.0f), ImGuiCond_FirstUseEver);
         const std::string title = LOCAL_CSTR(m_DisplayNameKey.c_str()) + std::string("###AssetRefPanel");
 
-        if (ImGui::Begin(title.c_str(), &m_Open))
+        if (BeginPanelWindow(title.c_str(), m_Open))
         {
             DrawToolbar();
             ImGui::Separator();

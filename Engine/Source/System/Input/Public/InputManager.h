@@ -2,6 +2,7 @@
 
 #include "Base.h"
 #include "InputMap.h"
+#include "KeyChord.h"
 
 using namespace std;
 
@@ -29,6 +30,15 @@ struct MouseStateData
 };
 
 BEGIN(Engine)
+struct InputActionSettings;
+
+struct InputActionMapMouseInput
+{
+	uint32 AllowedButtons = ~uint32{ 0 };
+	f32 ScrollDeltaY = 0.0f;
+	vec2 MotionDelta = vec2(0.0f);
+};
+
 class ENGINE_API InputManager : public Base
 {
 	DECLARE_SINGLETON(InputManager)
@@ -63,6 +73,14 @@ public:
 #pragma endregion
 
 #pragma region Mouse
+public:
+	struct MouseWheelSample
+	{
+		vec2 ScreenPosition;
+		f32 DeltaY;
+	};
+
+	const std::vector<MouseWheelSample>& GetMouseWheelSamples() const { return m_MouseWheelSamples; }
 public:
 	bool IsMouseButtonDown(EMouseButton button);
 	bool IsMouseButtonUp(EMouseButton button);	
@@ -105,16 +123,42 @@ public:
 	void ProcessEvent(const SDL_Event& event);
 #pragma endregion
 
+#pragma region Input Actions
+public:
+	bool SetInputActionSettings(const InputActionSettings& settings);
+	std::optional<vec2> GetMouseButtonDownScreenPosition(EMouseButton button) const;
+	void EvaluateActionMap(std::string_view mapId, bool enabled, const InputActionMapMouseInput& mouse = {});
+	vec2 GetActionMapMouseDelta(std::string_view mapId) const;
+	f32 GetActionMapMouseScrollDeltaY(std::string_view mapId) const;
+	bool WasActionPressed(std::string_view mapId, std::string_view actionId) const;
+	bool WasActionReleased(std::string_view mapId, std::string_view actionId) const;
+	bool IsActionHeld(std::string_view mapId, std::string_view actionId) const;
+	bool HasKeyboardFocus() const;
+	static bool ValidateInputActionSettings(const InputActionSettings& settings);
+#pragma endregion
+
+#pragma region KeyChord
+public:
+	uint8 GetKeyDownModifiers(EKeyCode key);
+private:
+	uint8 GetKeyboardModifiers();
+#pragma endregion
+
+
 #pragma region Member Variables
 private:
 	array<uint8, SDL_SCANCODE_COUNT> m_CurrentKeyStates{}, m_PreviousKeyStates{};
 	array<bool, SDL_SCANCODE_COUNT> m_KeyDownEvents{}, m_KeyUpEvents{}, m_KeyRepeatEvents{};
 	array<bool, SDL_SCANCODE_COUNT> m_PendingKeyDown{}, m_PendingKeyUp{}, m_PendingKeyRepeat{};
+	array<uint8, SDL_SCANCODE_COUNT> m_KeyDownModifiers{}, m_PendingKeyDownModifiers{};
 
 	array<uint8, static_cast<uint32>(EMouseButton::Count)> m_CurrentMouseButtonStates{};
 	array<uint8, static_cast<uint32>(EMouseButton::Count)> m_PreviousMouseButtonStates{};
 	array<bool, static_cast<uint32>(EMouseButton::Count)> m_MouseDownEvents{}, m_MouseUpEvents{};
 	array<bool, static_cast<uint32>(EMouseButton::Count)> m_PendingMouseDown{}, m_PendingMouseUp{};
+	std::vector<MouseWheelSample> m_MouseWheelSamples, m_PendingMouseWheelSamples;
+	std::array<std::optional<vec2>, static_cast<std::size_t>(EMouseButton::Count)> m_MouseDownScreenPositions{};
+
 
 	vec2 m_MousePosition = vec2(0.f);
 	vec2 m_ScreenMousePosition = vec2(0.f);
@@ -132,6 +176,27 @@ private:
 
 	array<MouseStateData, static_cast<uint32>(EMouseButton::Count)> m_MouseButtonStatesData = {};
 	array<bool, static_cast<uint32>(EMouseButton::Count)> m_CurrentDoubleClicks = {false,};
+private:// Input Action Maps
+	struct ButtonActionState
+	{
+		std::vector<KeyChord> Chords;
+		std::vector<EMouseButton> MouseButtons;
+		bool Held = false;
+		bool Pressed = false;
+		bool Released = false;
+	};
+
+	struct ActionMapState
+	{
+		std::map<std::string, ButtonActionState, std::less<>> Actions;
+		std::set<std::pair<EKeyCode, uint8>> ModifiedChords;
+		bool Enabled = false;
+		InputActionMapMouseInput MouseInput;
+	};
+
+	using ActionMaps = std::map<std::string, ActionMapState, std::less<>>;
+	static std::optional<ActionMaps> BuildActionMaps(const InputActionSettings& settings);
+	ActionMaps m_ActionMaps;
 #pragma endregion
 };
 END

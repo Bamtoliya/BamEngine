@@ -247,8 +247,8 @@ void ImGuiManager::Update(f32 dt)
 
 	for (auto& panel : m_ImGuiPanels)
 	{
-		if (!panel->IsOpen())
-			continue; // <-- 닫힌 패널은 Update 연산 스킵
+		if (!panel->IsOpen() && !panel->ShouldUpdateWhenClosed())
+			continue;
 
 		panel->Update(dt);
 	}
@@ -528,7 +528,6 @@ EResult ImGuiManager::CreateDefaultPanels()
 	ContentBrowserPanel* contentBrowserPanel = new ContentBrowserPanel();
 	contentBrowserPanel->Initialize();
 	AddImGuiPanel(contentBrowserPanel);
-	AddImGuiPanel(new ShortcutSettingsPanel());
 	AddImGuiPanel(new ConsolePanel());
 	AddImGuiPanel(new MetricsPanel());
 	AddImGuiPanel(new GraphPanel());
@@ -546,22 +545,6 @@ EResult ImGuiManager::CreateDefaultPanels()
 	ModelImportModal* modelImportModal = new ModelImportModal();
 	modelImportModal->Initialize();
 	AddImGuiPanel(modelImportModal);
-	
-	GraphicSettingPanelDesc graphicsDesc;
-	graphicsDesc.Window = m_Window;
-
-	auto* graphicsPanel = new GraphicSettingPanel();
-	auto graphicsResult = graphicsPanel->Initialize(&graphicsDesc);
-
-	if (graphicsResult == EResult::Success)
-		graphicsResult = AddImGuiPanel(graphicsPanel);
-
-	if (graphicsResult != EResult::Success)
-	{
-		Safe_Release(graphicsPanel);
-		return graphicsResult;
-	}
-	// CreateResourceEditors()를 먼저 호출한 뒤 m_WorkspacePanels를 확정합니다.
 	CreateResourceEditors();
 	m_WorkspacePanels = m_PendingAddPanels;
 	return EResult::Success;
@@ -1376,5 +1359,32 @@ void ImGuiManager::SynchronizeSceneDocumentAccess()
 		if (readOnly)
 			m_DocumentController->CancelForDocument(application.GetSceneDocumentId());
 	}
+}
+#pragma endregion
+
+#pragma region MyRegion
+IImGui* ImGuiManager::GetFocusedClosablePanel() const
+{
+	const auto* context = ImGui::GetCurrentContext();
+	if (!context || !context->NavWindow)
+		return nullptr;
+
+	const auto* window = context->NavWindow->RootWindow;
+	if (window->LastFrameActive != ImGui::GetFrameCount() || !window->HasCloseButton)
+		return nullptr;
+
+	for (auto* panel : m_ImGuiPanels)
+	{
+		if (panel && panel->IsOpen() && panel->m_PanelWindowId == window->ID)
+			return panel;
+	}
+
+	return nullptr;
+}
+
+void ImGuiManager::RequestCloseFocusedPanel()
+{
+	if (auto* panel = GetFocusedClosablePanel())
+		panel->m_CloseRequestFrame = ImGui::GetFrameCount() + 1;
 }
 #pragma endregion

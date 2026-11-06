@@ -30,6 +30,7 @@ struct EditorAction
     std::function<void()> ExecuteHandler;
     std::function<bool()> CanExecute; // 실행 가능 여부 (미지정 시 항상 true)
     bool AllowRepeat = false;
+    bool WhileHeld = false;
 };
 
 END

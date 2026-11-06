@@ -4,6 +4,10 @@
 #include "ViewportDeferredPipeline.h"
 #include "PostProcess.h"
 
+BEGIN(Engine)
+class InputManager;
+END
+
 BEGIN(Editor)
 
 struct GameViewportPanelDesc : public ViewportPanelDesc
@@ -27,6 +31,9 @@ public:
 	virtual PostProcessChain* GetPostProcessChain() override { return &m_PostProcessChain; }
 	virtual const PostProcessChain* GetPostProcessChain() const override { return &m_PostProcessChain; }
 
+public:
+	bool HitTestGameplayImage(const vec2& screenPosition) const;
+	uint32 UpdateGameplayMouseButtons(Engine::InputManager& input, bool enabled);
 protected:
 	virtual void DrawCustomViewport() override;
 	virtual void DrawCustomOptions() override;
@@ -45,6 +52,8 @@ private:
 	entt::entity m_LastPostProcessEntity = entt::null;
 	bool m_PostProcessStateUsable = true;
 	bool m_HasActiveCamera = false;
+	ImGuiID m_GameplayImageWindowId = 0;
+	uint32 m_GameplayMouseButtons = 0;
 };
 
 END

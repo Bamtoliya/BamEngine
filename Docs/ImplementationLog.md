@@ -35,6 +35,14 @@ Use one entry per meaningful change.
 
 ---
 
+## [2026-11-06] 엔진·에디터 공용 처리와 설정 위젯 정리
+
+- **에디터.** `MetricsPanel`의 계측 영역과 `UnifiedSettingsPanel`의 설정 영역을 각각 위젯으로 분리했다. 통합 설정에서 단축키와 게임 입력 액션을 편집하며, 게임 입력 설정은 PIE 시작 시 적용한다. `Ctrl+W`는 포커스된 패널을 닫고 `Ctrl+Shift+W`는 씬 닫기 명령으로 사용한다. 리소스 편집기의 창 제목 조립과 콘텐츠 브라우저의 이름 변경 입력을 공용화했다.
+- **리소스와 씬.** Editor와 Client가 기본 메시 등록을 공유한다. 바이너리 확장자 판정, 리소스 로더 등록과 리로드의 공통 처리를 정리했다. 머티리얼은 상수 조립을 공유하고 인스턴스는 개별 오버라이드를 적용한다. 씬과 프리팹이 엔티티 레코드 읽기·쓰기를 재사용하며, 컴포넌트 등록 정보는 공용 빌더로 조립한다.
+- **애니메이션과 렌더링.** 런타임과 프리뷰가 스켈레톤 조회와 포즈 갱신을 공유한다. 스프라이트와 파티클의 Geometry 패스 선택, 썸네일과 타임라인의 카메라 버퍼 조립, 텍스처 공통 메타데이터 초기화를 한곳에 모았다. SDL GPU 드로우 버퍼 바인딩, 셰이더 출력 핀 해석, 조명 구조체와 ACES 계산의 중복도 정리했다.
+- **물리와 도구.** 2D·3D 콜라이더의 마찰과 반발 계수는 `ColliderSettings`에서 검증한다. 로캘 내보내기는 중복 키의 모든 위치를 보고하고 기존 출력을 보존한다. 감사 도구의 CSV 순회와 동일한 설정을 쓰는 엔진 CMake 검사 타깃 네 개의 선언을 공용화했다.
+- **검증.** 2026-11-06 작업 트리에서 Editor·Client Debug 빌드와 CTest 12개가 통과했다. `InputManagerCheck`, `ShortcutManagerCheck`, `EditorSettingsCheck`, `SceneArchiveCheck`, `TerrainDataCheck`, `Physics2DCheck`, `CollisionGeometryCheck`, `SplineCurveCheck`, `BlendTree2DCheck`, `ShaderGraphCheck`, `ReflectionLocalizationUtility`, `LocalizationAuditUtility`를 실행했다. 에디터 UI 조작과 GPU 출력은 실행 검증 범위에 포함되지 않았다.
+
 ## [2026-11-05] 스플라인 경로 편집 및 메시 생성
 
 - **경로와 추종.** 엔티티 로컬 제어점을 Catmull–Rom으로 평가하고, 변환을 반영한 거리표로 속도·반복·역방향 이동을 처리한다. `AlignToMovement`는 직접 부모 경로의 접선과 포인트 롤을 사용한다. 옵션 기본값은 꺼짐이며, 구버전 씬에 롤과 변형 설정이 없으면 기본값으로 읽는다.

@@ -179,7 +179,7 @@ void HierarchyPanel::Draw()
     m_EntityTree.ReleaseFinishedDrag();
     if (!m_Open) return;
     const string windowTitle = LOCAL("Hierarchy.Title") + "###HierarchyPanel";
-    if (!ImGui::Begin(windowTitle.c_str(), &m_Open))
+	if (BeginPanelWindow(windowTitle.c_str(), m_Open))
     {
         ImGui::End();
         return;

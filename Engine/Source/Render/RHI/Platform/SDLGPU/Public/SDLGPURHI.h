@@ -116,6 +116,9 @@ public:
 	virtual void* GetCurrentCommandBuffer() const override { return m_CurrentCommandBuffer; }
 #pragma endregion
 
+private:
+	EResult BindDrawBuffers();
+
 #pragma region Variables
 private:
 	SDL_Window* m_Window = { nullptr };

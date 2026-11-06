@@ -5,23 +5,6 @@
 
 namespace
 {
-	static const wchar_t* GetResourceBinaryExtension(Engine::EResourceType type)
-	{
-		switch (type)
-		{
-		case Engine::EResourceType::Material:         return L".bammat";
-		case Engine::EResourceType::MaterialInstance: return L".bammatinst";
-		case Engine::EResourceType::Mesh:             return L".bammesh";
-		case Engine::EResourceType::Sprite:           return L".bamsprite";
-		case Engine::EResourceType::Skeleton:         return L".bamskel";
-		case Engine::EResourceType::Animation:        return L".bamanim";
-		case Engine::EResourceType::Model:            return L".bammodel";
-		case Engine::EResourceType::Texture:          return L".bamtex";
-		case Engine::EResourceType::Shader:           return L".bamshader";
-		default:                                      return L".beve";
-		}
-	}
-
 	std::wstring ToProjectRelativePath(const std::wstring& inputPath)
 	{
 		namespace fs = std::filesystem;
@@ -173,42 +156,34 @@ Handle ResourceManager::LoadFile(const string& filePath)
 }
 void ResourceManager::RegisterExplicitLoader()
 {
-	auto textureLoader = [this](wstring key, wstring path) -> Handle
-		{
-			TextureCreateDesc desc;
-			desc.Key = key;
-			desc.Path = key;
-			return this->LoadResource<Texture>(&desc).GetRawHandle();
-		};
+	const auto registerSimpleLoader = [this]<typename ResourceType, typename Desc>(
+		std::initializer_list<const wchar_t*> extensions)
+	{
+		const auto loader = [this](wstring key, wstring) -> Handle
+			{
+				Desc desc;
+				desc.Key = key;
+				desc.Path = key;
+				return this->LoadResource<ResourceType>(&desc).GetRawHandle();
+			};
 
-	auto spriteLoader = [this](wstring key, wstring path) -> Handle
-		{
-			SpriteCreateDesc desc;
-			desc.Key = key;
-			desc.Path = key;
-			return this->LoadResource<Sprite>(&desc).GetRawHandle();
-		};
+		for (const wchar_t* extension : extensions)
+			m_LoaderRegistry[extension] = loader;
+	};
 
-	auto materialLoader = [this](wstring key, wstring path) -> Handle
-		{
-			MaterialDesc desc;
-			desc.Key = key;
-			desc.Path = key;
-			return this->LoadResource<Material>(&desc).GetRawHandle();
-		};
+	registerSimpleLoader.operator() < Texture, TextureCreateDesc > ({ L".png", L".jpg", L".bmp", L".tga", L".jpeg", L".bamtex" });
+	registerSimpleLoader.operator() < Sprite, SpriteCreateDesc > ({ L".bamsprite" });
+	registerSimpleLoader.operator() < Material, MaterialDesc > ({ L".bammat" });
+	registerSimpleLoader.operator() < MaterialInstance, MaterialInstanceDesc > ({ L".bammatinst" });
+	registerSimpleLoader.operator() < Mesh, MeshCreateDesc > ({ L".bammesh" });
+	registerSimpleLoader.operator() < Skeleton, SkeletonCreateDesc > ({ L".bamskel", L".bamskeleton" });
+	registerSimpleLoader.operator() < Animation, AnimationCreateDesc > ({ L".bamanim" });
+	registerSimpleLoader.operator() < Model, ModelCreateDesc > ({ L".bammodel" });
+	registerSimpleLoader.operator() < AudioClip, AudioClipCreateDesc > ({ L".wav", L".mp3", L".ogg" });
 
-	auto materialInstanceLoader = [this](wstring key, wstring path) -> Handle
+	const auto shaderLoader = [this](wstring key, wstring) -> Handle
 		{
-			MaterialInstanceDesc desc;
-			desc.Key = key;
-			desc.Path = key;
-			return this->LoadResource<MaterialInstance>(&desc).GetRawHandle();
-		};
-
-	auto shaderLoader = [this](wstring key, wstring path) -> Handle
-		{
-			namespace fs = std::filesystem;
-			fs::path filePath(key);
+			const std::filesystem::path filePath(key);
 			wstring ext = filePath.extension().wstring();
 			std::transform(ext.begin(), ext.end(), ext.begin(), ::towlower);
 
@@ -216,7 +191,6 @@ void ResourceManager::RegisterExplicitLoader()
 			desc.Key = key;
 			desc.Path = key;
 
-			// .cso / .spv 실행용 바이너리를 직접 로드할 때 스테이지 및 경로 설정
 			if (ext == L".cso" || ext == L".dxil" || ext == L".spv")
 			{
 				wstring stem = filePath.stem().wstring();
@@ -232,77 +206,8 @@ void ResourceManager::RegisterExplicitLoader()
 			return this->LoadResource<Shader>(&desc).GetRawHandle();
 		};
 
-	auto meshLoader = [this](wstring key, wstring path) -> Handle
-		{
-			MeshCreateDesc desc;
-			desc.Key = key;
-			desc.Path = key;
-			return this->LoadResource<Mesh>(&desc).GetRawHandle();
-		};
-
-	auto skeletonLoader = [this](wstring key, wstring path) -> Handle
-		{
-			SkeletonCreateDesc desc;
-			desc.Key = key;
-			desc.Path = key;
-			return this->LoadResource<Skeleton>(&desc).GetRawHandle();
-		};
-
-	auto animationLoader = [this](wstring key, wstring path) -> Handle
-		{
-			AnimationCreateDesc desc;
-			desc.Key = key;
-			desc.Path = key;
-			return this->LoadResource<Animation>(&desc).GetRawHandle();
-		};
-
-	auto modelLoader = [this](wstring key, wstring path) -> Handle
-		{
-			ModelCreateDesc desc;
-			desc.Key = key;
-			desc.Path = key;
-			return this->LoadResource<Model>(&desc).GetRawHandle();
-		};
-
-	auto audioLoader = [this](wstring key, wstring path) -> Handle
-		{
-			AudioClipCreateDesc desc;
-			desc.Key = key;
-			desc.Path = key;
-			return this->LoadResource<AudioClip>(&desc).GetRawHandle();
-		};
-
-	m_LoaderRegistry[L".png"] = textureLoader;
-	m_LoaderRegistry[L".jpg"] = textureLoader;
-	m_LoaderRegistry[L".bmp"] = textureLoader;
-	m_LoaderRegistry[L".tga"] = textureLoader;
-	m_LoaderRegistry[L".jpeg"] = textureLoader;
-	m_LoaderRegistry[L".bamtex"] = textureLoader;
-
-	m_LoaderRegistry[L".bamsprite"] = spriteLoader;
-
-	m_LoaderRegistry[L".bammat"] = materialLoader;
-
-
-	m_LoaderRegistry[L".bamshader"] = shaderLoader;
-	m_LoaderRegistry[L".cso"] = shaderLoader;
-	m_LoaderRegistry[L".dxil"] = shaderLoader;
-	m_LoaderRegistry[L".spv"] = shaderLoader;
-
-	m_LoaderRegistry[L".bammatinst"] = materialInstanceLoader;
-
-	m_LoaderRegistry[L".bammesh"] = meshLoader;
-
-	m_LoaderRegistry[L".bamskel"] = skeletonLoader;
-	m_LoaderRegistry[L".bamskeleton"] = skeletonLoader;
-
-	m_LoaderRegistry[L".bamanim"] = animationLoader;
-
-	m_LoaderRegistry[L".bammodel"] = modelLoader;
-
-	m_LoaderRegistry[L".wav"] = audioLoader;
-	m_LoaderRegistry[L".mp3"] = audioLoader;
-	m_LoaderRegistry[L".ogg"] = audioLoader;
+	for (const wchar_t* extension : { L".bamshader", L".cso", L".dxil", L".spv" })
+		m_LoaderRegistry[extension] = shaderLoader;
 }
 EResult ResourceManager::DestroyResource(const Handle& handle)
 {
@@ -679,7 +584,7 @@ Engine::EResult Engine::ResourceManager::SaveAllRegisteredResources(bool saveAsB
 		{
 			// 기존 .json 제거 후 바이너리 전용 확장자로 치환
 			if (outPath.extension() == ".json") outPath.replace_extension();
-			outPath += GetResourceBinaryExtension(res->m_ResourceType);
+			outPath += Engine::GetResourceBinaryExtension(res->m_ResourceType);
 		}
 		else
 		{
