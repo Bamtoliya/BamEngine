@@ -1,11 +1,12 @@
 ﻿#pragma once
 #include "SpriteEditor.h"
+#include "Functions.h"
 
 bool SpriteEditor::IsSupported(const std::filesystem::path& assetPath) const
 {
     const auto ext = assetPath.extension().wstring();
     return ext == L".bamsprite" ||
-        ToLowerStr(Engine::WStrToStr(assetPath.filename().wstring())).ends_with(".bamsprite.json");
+        Engine::ToLowerStr(Engine::WStrToStr(assetPath.filename().wstring())).ends_with(".bamsprite.json");
 }
 
 void SpriteEditor::Draw()

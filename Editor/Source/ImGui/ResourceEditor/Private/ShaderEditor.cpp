@@ -1,11 +1,12 @@
 ﻿#pragma once
 #include "ShaderEditor.h"
+#include "Functions.h"
 
 bool ShaderEditor::IsSupported(const std::filesystem::path& assetPath) const
 {
     const auto ext = assetPath.extension().wstring();
     return ext == L".bamshader" || ext == L".hlsl" || ext == L".glsl" || ext == L".cso" ||
-        ToLowerStr(Engine::WStrToStr(assetPath.filename().wstring())).ends_with(".bamshader.json");
+        Engine::ToLowerStr(Engine::WStrToStr(assetPath.filename().wstring())).ends_with(".bamshader.json");
 }
 
 void ShaderEditor::Draw()

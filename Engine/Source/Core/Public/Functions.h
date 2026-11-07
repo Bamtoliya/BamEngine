@@ -89,6 +89,18 @@ namespace Engine
 		return path;
 	}
 
+	inline string ToLowerStr(string str)
+	{
+		for (char& c : str) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+		return str;
+	}
+
+	inline wstring ToLowerWStr(wstring str)
+	{
+		for (wchar_t& c : str) c = static_cast<wchar_t>(std::towlower(c));
+		return str;
+	}
+
 	// FNV-1a 64-bit Hash Function for compile-time string hashing
 	consteval uint64 CompileTimeHash(std::string_view str) noexcept
 	{

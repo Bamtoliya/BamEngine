@@ -46,4 +46,14 @@ namespace Editor::Detail
 		ImGui::EndPopup();
 		return openRequested;
 	}
+
+	bool RequestOpenResourceEditor(const std::filesystem::path& resourcePath)
+	{
+		auto& manager = ImGuiManager::Get();
+		const auto resolvedTarget = manager.ResolveResourceEditorTarget(resourcePath);
+		const auto effectivePath = resolvedTarget.empty() ? resourcePath : resolvedTarget;
+		if (manager.CanOpenResourceEditor(effectivePath))
+			return manager.RequestOpenResourceEditor(effectivePath);
+		return false;
+	}
 }

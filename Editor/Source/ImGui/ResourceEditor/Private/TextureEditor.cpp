@@ -1,15 +1,16 @@
 ﻿#pragma once
 #include "TextureEditor.h"
+#include "Functions.h"
 #include "AssetCache.h"
 #include "ImGuiManager.h"
 #include "RHITexture.h"
 
 bool TextureEditor::IsSupported(const std::filesystem::path& assetPath) const
 {
-    const auto ext = ToLowerStr(Engine::WStrToStr(assetPath.extension().wstring()));
+    const auto ext = Engine::ToLowerStr(Engine::WStrToStr(assetPath.extension().wstring()));
     return ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".bmp" || ext == ".tga" ||
         ext == ".dds" || ext == ".hdr" ||
-        ext == ".bamtex" || ToLowerStr(Engine::WStrToStr(assetPath.filename().wstring())).ends_with(".bamtex.json");
+        ext == ".bamtex" || Engine::ToLowerStr(Engine::WStrToStr(assetPath.filename().wstring())).ends_with(".bamtex.json");
 }
 
 void TextureEditor::Draw()

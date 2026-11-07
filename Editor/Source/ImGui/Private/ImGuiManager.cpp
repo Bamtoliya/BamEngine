@@ -12,6 +12,7 @@
 #pragma endregion
 
 #include "PlatformPath.h"
+#include "Functions.h"
 #include "ImGuiManager.h"
 #include "Application.h"
 #include "SceneManager.h"

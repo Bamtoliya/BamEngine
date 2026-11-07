@@ -182,6 +182,7 @@ namespace Editor
 		}
 
 		bool DrawResourceContextMenu(const std::filesystem::path& resourcePath);
+		bool RequestOpenResourceEditor(const std::filesystem::path& resourcePath);
 	}
 
 	template<typename T>
@@ -211,13 +212,8 @@ namespace Editor
 
 		if (current != nullptr && fieldHovered && InputManager::Get().IsMouseButtonDoubleClicked(EMouseButton::Left))
 		{
-			auto& imguiMgr = ImGuiManager::Get();
 			const auto resPath = current->GetPath().empty() ? current->GetKey() : current->GetPath();
-			const auto effective = imguiMgr.ResolveResourceEditorTarget(resPath);
-			if (imguiMgr.CanOpenResourceEditor(effective))
-			{
-				imguiMgr.RequestOpenResourceEditor(effective);
-			}
+			Detail::RequestOpenResourceEditor(resPath);
 		}
 
 		if (showThumbnail && ImGui::IsItemVisible())
