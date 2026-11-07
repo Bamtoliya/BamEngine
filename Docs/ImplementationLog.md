@@ -24,8 +24,9 @@ This document tracks implementation details, architectural decisions, and techni
      - `Docs/DevelopmentPriorities.md` 11절을 최신 구현 상태로 갱신하여 완료된 우선순위 0·1 내역 기록 및 다음 기능 트랙(A~D) 제시.
 - 검증 결과:
   - **CMake Debug 빌드 (`x64-debug`) 및 CTest 전체 29개 단위 검사**: 29/29 Passed (100% 통과).
+  - **PackageClient.ps1 보안 가드 동작 검증**: `-OutputDir "Client"` 및 저장소 외부 임의 디렉터리(`"C:/TempTest"`) 지정 시 디렉터리 삭제 전 `Security Violation` 예외 발생 및 스크립트 중단 정상 확인.
 - 미검증 항목:
-  - `PackageClient.ps1` 실제 패키징 스크립트 실행 및 결과 폴더의 Standalone 클라이언트 바이너리 구동.
+  - `PackageClient.ps1` 정상 인자 전달 시의 실제 파일 패키징 완주 및 결과 폴더 내 Standalone 클라이언트 바이너리 독립 실행.
 
 ### [2026-11-07] 프로젝트 파일 트리 구조 정규화 및 도구·리소스 루트 정리
 
