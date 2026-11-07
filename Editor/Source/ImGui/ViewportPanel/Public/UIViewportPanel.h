@@ -11,7 +11,6 @@ namespace Editor
     {
     public:
         UIViewportPanel() { m_Name = L"UI View"; }
-        void Initialize(void* arg = nullptr) override;
         void Free() override;
         void Update(f32 dt) override;
         void Draw() override;
@@ -20,6 +19,7 @@ namespace Editor
         void FocusCanvas();
 
     protected:
+        EResult OnInitialize(void* arg) override;
         void DrawCustomOptions() override;
         void DrawCustomViewport() override;
 

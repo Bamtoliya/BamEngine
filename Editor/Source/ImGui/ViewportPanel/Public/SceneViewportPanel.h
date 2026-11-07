@@ -37,8 +37,8 @@ class SceneViewportPanel : public CameraViewportPanel
 public:
 	SceneViewportPanel() { m_Name = L"Scene Viewport"; }
 	virtual ~SceneViewportPanel() = default;
-public:
-	virtual void Initialize(void* arg = nullptr) override;
+protected:
+	EResult OnInitialize(void* arg) override;
 public:
 	virtual void Free();
 	virtual PostProcessChain* GetPostProcessChain() override { return &m_PostProcessChain; }

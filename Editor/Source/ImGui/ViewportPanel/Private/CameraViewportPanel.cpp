@@ -7,11 +7,12 @@
 #include "EditorSettings.h"
 
 #pragma region Constructor&Destructor
-void CameraViewportPanel::Initialize(void* arg)
+EResult CameraViewportPanel::OnInitialize(void* arg)
 {
-	if (!arg) return;
-	__super::Initialize(arg);
 	CAST_DESC
+	const EResult result = BaseViewportPanel::OnInitialize(static_cast<ViewportPanelDesc*>(desc));
+	if (result != EResult::Success)
+		return result;
 
 	Engine::CameraComponent cameraSettings{};
 	cameraSettings.CameraType = desc->IsPerspective ? Engine::ECameraType::Perspective : Engine::ECameraType::Orthographic;
@@ -20,6 +21,7 @@ void CameraViewportPanel::Initialize(void* arg)
 
 	m_CameraController = EditorCameraController::Create(m_Name + L"_Camera", cameraSettings);
 	m_OwnCamera = (m_CameraController != nullptr);
+	return EResult::Success;
 }
 
 void CameraViewportPanel::Free()

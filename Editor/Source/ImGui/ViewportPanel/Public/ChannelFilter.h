@@ -46,6 +46,7 @@ public:
 	const wstring& GetChannelPreviewRTName() const { return m_ChannelPreviewRTName; }
 	RenderTarget* GetChannelPreviewRT() const;
 	bool IsReady() const { return (m_ChannelPreviewPassID != INVALID_PASS_ID) && (m_ChannelPreviewPipeline != nullptr); }
+	[[nodiscard]] static bool CanSampleAsTexture2D(const Engine::RHITexture* texture);
 
 	static void DrawButtons(EViewportChannelView& view);
 private:

@@ -9,15 +9,16 @@
 #include "EditorSettings.h"
 
 #pragma region Contructor&Destructor
-void BaseViewportPanel::Initialize(void* arg)
+EResult BaseViewportPanel::OnInitialize(void* arg)
 {
-	if (!arg) return;
+	if (!arg) return EResult::InvalidArgument;
 	CAST_DESC
 	m_Name = desc->Name;
 	m_DisplayNameKey = desc->DisplayNameKey;
 	m_WindowID = WStrToStr(m_Name);
 	m_ChannelFilter.Initialize(m_Name);
-	m_SelectedRTName = L"";
+	m_SelectedRTName = desc->InitialRenderTargetName;
+	return EResult::Success;
 }
 void BaseViewportPanel::Free()
 {
@@ -87,6 +88,7 @@ void BaseViewportPanel::DrawCustomViewport()
 }
 void BaseViewportPanel::DrawRenderTargetImage(const wstring& rtName)
 {
+	m_ImageSize = ImVec2(0.f, 0.f);
 	if (!m_RenderTargetsValid)
 	{
 		m_Focused = false;
@@ -113,6 +115,14 @@ void BaseViewportPanel::DrawRenderTargetImage(const wstring& rtName)
 		RHITexture* texture = currentRT->GetTexture();
 		if (texture)
 		{
+			if (!ChannelFilter::CanSampleAsTexture2D(texture))
+			{
+				m_Focused = false;
+				m_Hovered = false;
+				ImGui::TextWrapped("%s", LOCAL_CSTR("Viewport.RenderTargetPreviewUnsupported"));
+				return;
+			}
+
 			f32 imageWidth = (f32)currentRT->GetWidth();
 			f32 imageHeight = (f32)currentRT->GetHeight();
 
@@ -228,11 +238,14 @@ void BaseViewportPanel::DrawRTItemContextMenu(const wstring& rtName)
 			desc.Name = panelName;
 			desc.RenderTargetWidth = m_RenderWidth;
 			desc.RenderTargetHeight = m_RenderHeight;
+			desc.InitialRenderTargetName = rtName;
 
-			BaseViewportPanel* panel = new BaseViewportPanel();
-			panel->Initialize(&desc);
-			panel->SetSelectedRenderTarget(rtName);  // ← 아래에서 추가할 setter
-			ImGuiManager::Get().AddImGuiPanel(panel);
+			auto* panel = new BaseViewportPanel();
+			if (const EResult result = panel->Initialize(&desc); result != EResult::Success)
+			{
+				Safe_Release(panel);
+				EDITOR_LOG_ERROR("Render target viewer initialization failed: {}", ResultToString(result));
+			}
 		}
 		ImGui::EndPopup();
 	}

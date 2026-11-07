@@ -45,6 +45,7 @@ struct ViewportPanelDesc
 	string DisplayNameKey;
 	uint32 RenderTargetWidth = 1920;
 	uint32 RenderTargetHeight = 1080;
+	wstring InitialRenderTargetName;
 };
 
 BEGIN(Editor)
@@ -56,8 +57,9 @@ class BaseViewportPanel : public IImGui
 public:
 	BaseViewportPanel() { m_Name = L"Base Viewport Panel"; }
 	virtual ~BaseViewportPanel() = default;
-	virtual void Initialize(void* arg = nullptr);
 	virtual void Free();
+protected:
+	EResult OnInitialize(void* arg) override;
 #pragma endregion
 
 #pragma region Loop
@@ -70,9 +72,9 @@ public:
 public:
 	string GetDisplayName() const override { return m_IsRenderTargetViewer ? LOCAL_FMT("Viewport.ViewerTitle", WStrToStr(m_SelectedRTName)) : IImGui::GetDisplayName(); };
 	virtual EShortcutContext GetShortcutContext() const override { return EShortcutContext::Viewport; }
-	void SetSelectedRenderTarget(const wstring& rtName) { m_SelectedRTName = rtName; }
 	virtual PostProcessChain* GetPostProcessChain() { return nullptr; }
 	virtual const PostProcessChain* GetPostProcessChain() const { return nullptr; }
+	EPanelMenuCategory GetPanelMenuCategory() const override { return EPanelMenuCategory::Viewport; }
 #pragma endregion
 
 #pragma region Draw Image

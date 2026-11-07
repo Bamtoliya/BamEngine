@@ -185,11 +185,14 @@ static bool TryBuildSplineRollGizmo(const Engine::SplineComponent& spline, size_
 #pragma endregion
 
 #pragma region Contructor&Destructor
-void SceneViewportPanel::Initialize(void* arg)
+EResult SceneViewportPanel::OnInitialize(void* arg)
 {
-	__super::Initialize(arg);
 	CAST_DESC
-		m_RenderWidth = desc->RenderTargetWidth;
+	const EResult result = CameraViewportPanel::OnInitialize(static_cast<CameraViewportPanelDesc*>(desc));
+	if (result != EResult::Success)
+		return result;
+
+	m_RenderWidth = desc->RenderTargetWidth;
 	m_RenderHeight = desc->RenderTargetHeight;
 #pragma region Prepare RenderPass And Pipelines
 	m_Pipeline.Initialize(m_Name, m_RenderWidth, m_RenderHeight, true);
@@ -201,6 +204,7 @@ void SceneViewportPanel::Initialize(void* arg)
 	if (!m_PostProcessChain.GetPipeline().SaveToString(m_DefaultPostProcessSettings))
 		EDITOR_LOG_ERROR("Default post-process settings could not be captured: {}", WStrToStr(m_Name));
 	m_SelectedRTName = m_LightingColorName;
+	return EResult::Success;
 }
 void SceneViewportPanel::PrepareRenderTargetsAndPasses(uint32 width, uint32 height)
 {
@@ -471,6 +475,7 @@ void SceneViewportPanel::DrawCustomOptions()
 
 void SceneViewportPanel::DrawCustomViewport()
 {
+
 	m_Focused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
 	m_Hovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows);
 	if (m_Focused || !s_ActiveSceneViewport)
@@ -478,6 +483,8 @@ void SceneViewportPanel::DrawCustomViewport()
 	Application::Get().GetEditHistory().AllowShortcuts(m_Focused);
 	PrefabModeManager::Get().DrawViewportBanner();
 	BaseViewportPanel::DrawCustomViewport();
+	if (m_ImageSize.x <= 0.f || m_ImageSize.y <= 0.f)
+		return;
 	const bool imageHovered = ImGui::IsItemHovered();
 
 	if (ImGui::BeginDragDropTarget())
@@ -505,7 +512,7 @@ void SceneViewportPanel::DrawCustomViewport()
 						auto& history = Application::Get().GetEditHistory();
 						auto before = history.Enabled() ? SceneEditSnapshot::Capture(*currentScene) : SceneEditSnapshot{};
 						Engine::Entity* root = nullptr;
-						if (currentScene->InstantiateModel(*model, mat, root) == Engine::EResult::Success && root)
+						if (currentScene->InstantiateLinkedModel(model, mat, root) == Engine::EResult::Success && root)
 						{
 							if (before) history.Record(std::move(before), SceneEditSnapshot::Capture(*currentScene), "History.Command.CreateEntity");
 							SelectionManager::Get().SetSelectedEntity(root);

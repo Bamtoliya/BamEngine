@@ -60,6 +60,9 @@ EResult ChannelFilter::EnsureChannelPreviewRT(const wstring& sourceRTName)
     if (!source || !source->GetTexture())
         return EResult::Fail;
 
+    if (!CanSampleAsTexture2D(source->GetTexture()))
+        return EResult::NotImplemented;
+
     auto* target = rtMgr.GetRenderTarget(m_ChannelPreviewRTName);
 
     if (!target)
@@ -80,22 +83,25 @@ EResult ChannelFilter::EnsureChannelPreviewRT(const wstring& sourceRTName)
 
 EResult ChannelFilter::Resize(const wstring& sourceRTName)
 {
-    return EnsureChannelPreviewRT(sourceRTName);
+    const auto result = EnsureChannelPreviewRT(sourceRTName);
+    return result == EResult::NotImplemented ? EResult::Success : result;
 }
 
 void ChannelFilter::SubmitChannelPreviewPass(const wstring& sourceRTName, wstring& outRTName)
 {
     outRTName = sourceRTName;
 
-    if (sourceRTName.empty())
+    if (sourceRTName.empty() || sourceRTName == m_ChannelPreviewRTName)
         return;
+
     if (m_ChannelView == EViewportChannelView::RGBA)
         return;
     if (!IsReady())
         return;
 
-    if (!EnsureChannelPreviewRT(sourceRTName))
+    if (EnsureChannelPreviewRT(sourceRTName) != EResult::Success)
         return;
+
     RenderTarget* dst = GetChannelPreviewRT();
     if (!dst)
         return;
@@ -112,8 +118,9 @@ void ChannelFilter::SubmitChannelPreviewPass(const wstring& sourceRTName, wstrin
         [this, capturedRead, capturedFlags](f32 dt, Engine::RenderPass* pass) -> EResult
         {
             auto* src = Engine::RenderTargetManager::Get().GetRenderTarget(capturedRead);
-            if (!src || !src->GetTexture())
-                return EResult::Fail;
+            auto* texture = src ? src->GetTexture() : nullptr;
+            if (!CanSampleAsTexture2D(texture))
+                return EResult::Success;
 
             auto* rhi = Engine::Renderer::Get().GetRHI();
             ChannelViewData channelData = { capturedFlags };
@@ -125,7 +132,7 @@ void ChannelFilter::SubmitChannelPreviewPass(const wstring& sourceRTName, wstrin
                 return EResult::Fail;
 
             auto* sampler = Engine::SamplerManager::Get().GetDefaultSampler();
-            if (IsFailure(rhi->BindTextureSampler(src->GetTexture(), sampler, MAX_MATERIAL_TEXTURE_SLOTS)))
+            if (IsFailure(rhi->BindTextureSampler(texture, sampler, MAX_MATERIAL_TEXTURE_SLOTS)))
                 return EResult::Fail;
 
             return rhi->Draw(3);
@@ -138,6 +145,15 @@ void ChannelFilter::SubmitChannelPreviewPass(const wstring& sourceRTName, wstrin
 RenderTarget* ChannelFilter::GetChannelPreviewRT() const
 {
 	return Engine::RenderTargetManager::Get().GetRenderTarget(m_ChannelPreviewRTName);
+}
+
+bool ChannelFilter::CanSampleAsTexture2D(const Engine::RHITexture* texture)
+{
+    return texture &&
+        texture->GetDimension() == Engine::ETextureDimension::Texture2D &&
+        texture->GetArraySize() == 1 &&
+        texture->GetSampleCount() == Engine::ETextureSampleCount::TextureSampleCount1 &&
+        Engine::HasFlag(texture->GetUsage(), Engine::ETextureUsage::Sampler);
 }
 
 void ChannelFilter::DrawButtons(EViewportChannelView& view)

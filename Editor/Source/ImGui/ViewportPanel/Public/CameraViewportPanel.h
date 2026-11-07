@@ -25,8 +25,8 @@ protected:
 public:
 	CameraViewportPanel() { m_Name = L"Viewport Panel with Camera"; };
 	virtual ~CameraViewportPanel() = default;
-public:
-	virtual void Initialize(void* arg = nullptr);
+protected:
+	EResult OnInitialize(void* arg) override;
 public:
 	virtual void Free();
 #pragma endregion

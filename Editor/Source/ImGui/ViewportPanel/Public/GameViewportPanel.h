@@ -22,7 +22,6 @@ public:
 	virtual ~GameViewportPanel() = default;
 
 public:
-	virtual void Initialize(void* arg = nullptr) override;
 	virtual void Free() override;
 
 public:
@@ -35,6 +34,7 @@ public:
 	bool HitTestGameplayImage(const vec2& screenPosition) const;
 	uint32 UpdateGameplayMouseButtons(Engine::InputManager& input, bool enabled);
 protected:
+	EResult OnInitialize(void* arg) override;
 	virtual void DrawCustomViewport() override;
 	virtual void DrawCustomOptions() override;
 	EResult ResizeRenderTargets(uint32 width, uint32 height) override;

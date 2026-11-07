@@ -35,9 +35,12 @@ namespace
     }
 }
 
-void Editor::UIViewportPanel::Initialize(void* arg)
+EResult Editor::UIViewportPanel::OnInitialize(void* arg)
 {
-    BaseViewportPanel::Initialize(arg);
+    const EResult result = BaseViewportPanel::OnInitialize(arg);
+    if (result != EResult::Success)
+        return result;
+
     m_CanvasRTName = m_Name + L"_VirtualCanvas";
     RenderTargetDesc desc{};
     desc.name = m_CanvasRTName;
@@ -52,6 +55,7 @@ void Editor::UIViewportPanel::Initialize(void* arg)
         vec4(0.0f, 0.0f, 0.0f, -1.0f), 200, ERenderSortType::None, ERenderPassType::UI,
         EBlendMode::Opaque | EBlendMode::Masked | EBlendMode::AlphaBlend | EBlendMode::NonPremultiplied);
     m_SelectedRTName = m_CanvasRTName;
+    return EResult::Success;
 }
 
 void Editor::UIViewportPanel::Free()

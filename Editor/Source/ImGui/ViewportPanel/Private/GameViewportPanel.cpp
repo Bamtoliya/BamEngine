@@ -11,10 +11,12 @@
 #include "LocalizationManager.h"
 #include "InputManager.h"
 
-void GameViewportPanel::Initialize(void* arg)
+EResult GameViewportPanel::OnInitialize(void* arg)
 {
-	__super::Initialize(arg);
 	CAST_DESC
+	const EResult result = BaseViewportPanel::OnInitialize(static_cast<ViewportPanelDesc*>(desc));
+	if (result != EResult::Success)
+		return result;
 
 	// 뷰포트 디퍼드 파이프라인 초기화 (접두사: L"GameView")
 	m_Pipeline.Initialize(m_Name, m_RenderWidth, m_RenderHeight);
@@ -22,6 +24,7 @@ void GameViewportPanel::Initialize(void* arg)
 	m_PostProcessChain.PrepareResources(m_RenderWidth, m_RenderHeight); // <-- 이 줄 추가
 	m_PostProcessChain.GetPipeline().SaveToString(m_DefaultPostProcessSettings);
 	m_SelectedRTName = m_DisplayRTName = m_Pipeline.GetFinalColorRTName();
+	return EResult::Success;
 }
 
 void GameViewportPanel::Free()
