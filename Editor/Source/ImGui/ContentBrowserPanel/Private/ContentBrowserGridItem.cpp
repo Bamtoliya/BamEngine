@@ -1,6 +1,5 @@
 ﻿#pragma once
 #include "ImGuiManager.h"
-#include "ResourceEditorInterface.h"
 #include "ContentBrowserGridItem.h"
 #include "SelectionManager.h"
 #include "ModelImporter.h"
@@ -20,6 +19,8 @@
 #include "ContentBrowserPanel.h"
 #include "Editor_Macros.h"
 #include "ContentBrowserRename.h"
+#include "InputManager.h"
+#include <algorithm>
 
 namespace
 {
@@ -374,18 +375,8 @@ namespace
 		}
 		// 3. 일반 리소스 에디터 패널 오픈
 		Editor::SelectionManager::Get().SetSelectedAsset(path);
-		for (auto* panel : Editor::ImGuiManager::Get().GetImGuiPanels())
-		{
-			if (auto* resEditor = dynamic_cast<Editor::ResourceEditorInterface*>(panel))
-			{
-				if (resEditor->IsSupported(path))
-				{
-					resEditor->SetTargetResource(path);
-					resEditor->Open();
-					return;
-				}
-			}
-		}
+		if (Editor::ImGuiManager::Get().RequestOpenResourceEditor(path))
+			return;
 		// 4. 지원하는 내부 에디터가 없는 일반 파일/소스 파일: OS 기본 연결 프로그램으로 열기
 		const std::wstring absPath = std::filesystem::absolute(path).wstring();
 		HINSTANCE result = ShellExecuteW(nullptr, L"open", absPath.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
@@ -396,39 +387,83 @@ namespace
 		}
 	}
 }
-bool ContentBrowserGridItem::Draw(const std::filesystem::directory_entry& directoryEntry,
-	const std::filesystem::path& rootPath, ImTextureID thumbnailTexID, f32 thumbnailSize, f32 padding,
-	std::filesystem::path& outRenamingPath, char* renameBuffer, size_t renameBufferSize,
-	std::filesystem::path& currentDirectory, char* searchBuffer)
+float ContentBrowserGridItem::GetNameBoxHeight()
 {
-	const float filledSize = thumbnailSize;
+	return std::max(ImGui::GetTextLineHeight() * 2.0f + 12.0f, ImGui::GetFrameHeight());
+}
+
+bool ContentBrowserGridItem::Draw(const std::filesystem::directory_entry& directoryEntry,
+	const std::filesystem::path& rootPath, ImTextureID thumbnailTexID, f32 thumbnailSize,
+	ImGuiSelectionUserData itemId, bool selected, std::filesystem::path& outRenamingPath,
+	char* renameBuffer, size_t renameBufferSize, std::filesystem::path& currentDirectory, char* searchBuffer)
+{
 	const auto& path = directoryEntry.path();
-	auto relativePath = path.lexically_relative(rootPath);
-	std::filesystem::path payloadPath = rootPath.filename() / relativePath;
+	const bool renaming = (outRenamingPath == path);
+	const float nameHeight = GetNameBoxHeight();
+	const ImVec2 tileMin = ImGui::GetCursorScreenPos();
+	const ImVec2 nameMin(tileMin.x, tileMin.y + thumbnailSize);
+	const ImVec2 tileMax(tileMin.x + thumbnailSize, nameMin.y + nameHeight);
+
 	ImGui::PushID(path.string().c_str());
-	Thumbnail(directoryEntry, thumbnailTexID, filledSize, padding);
-	const bool thumbnailActive = ImGui::IsItemActive();
-	ToolTip(directoryEntry);
-	ContextMenu(path, outRenamingPath, renameBuffer, renameBufferSize, currentDirectory, searchBuffer);
-	const bool contextMenuOpen = ImGui::IsPopupOpen("##AssetContextMenu");
-	const bool dragging = DragAndDropTarget(payloadPath);
-	if (ImGui::IsItemHovered() && MOUSE_BUTTON_DOUBLE_CLICK(EMouseButton::Left))
-		OpenAssetOrFolder(path, directoryEntry.is_directory(), currentDirectory, searchBuffer);
+	// 타일 사이에 박스 선택을 시작할 여백을 남긴다.
+	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 0.0f));
+	ImGui::BeginDisabled(renaming);
+	ImGui::SetNextItemSelectionUserData(itemId);
+	ImGui::Selectable("##AssetTile", selected, ImGuiSelectableFlags_None,
+		ImVec2(thumbnailSize, thumbnailSize + nameHeight));
+	ImGui::EndDisabled();
+	ImGui::PopStyleVar();
+
+	const bool active = ImGui::IsItemActive();
+	const bool hovered = ImGui::IsItemHovered();
+	const bool visible = ImGui::IsItemVisible();
+	if (ImGui::IsItemToggledSelection())
+		selected = !selected;
+
+	bool contextMenuOpen = false;
+	bool dragging = false;
+	if (!renaming)
+	{
+		auto& input = InputManager::Get();
+		const bool open = hovered && input.IsMouseButtonDoubleClicked(EMouseButton::Left) &&
+			!input.IsCtrlPressed() && !input.IsShiftPressed();
+
+		ToolTip(directoryEntry);
+		ContextMenu(path, outRenamingPath, renameBuffer, renameBufferSize, currentDirectory, searchBuffer);
+		contextMenuOpen = ImGui::IsPopupOpen("##AssetContextMenu");
+		const auto payloadPath = rootPath.filename() / path.lexically_relative(rootPath);
+		dragging = DragAndDropTarget(payloadPath);
+		if (open && !dragging)
+			OpenAssetOrFolder(path, directoryEntry.is_directory(), currentDirectory, searchBuffer);
+	}
+
+	if (visible)
+		DrawThumbnail(directoryEntry, thumbnailTexID, thumbnailSize, tileMin);
+
 	if (outRenamingPath == path)
 	{
-		DrawRename(path, filledSize, outRenamingPath, renameBuffer, renameBufferSize, currentDirectory);
+		ImGui::SetCursorScreenPos(nameMin);
+		DrawRename(path, thumbnailSize, outRenamingPath, renameBuffer, renameBufferSize, currentDirectory);
 	}
-	else
+	else if (visible)
 	{
-		DrawNameBox(directoryEntry, rootPath, filledSize, currentDirectory, searchBuffer);
+		DrawNameBox(directoryEntry, nameMin, thumbnailSize, nameHeight);
 	}
+
+	if (visible && selected)
+	{
+		ImGui::GetWindowDrawList()->AddRect(tileMin, tileMax, ImGui::GetColorU32(ImGuiCol_CheckMark),
+			4.0f, ImDrawFlags_None, 2.0f);
+	}
+
 	ImGui::PopID();
-	return thumbnailActive || contextMenuOpen || dragging;
+	return active || contextMenuOpen || dragging;
 }
-void ContentBrowserGridItem::Thumbnail(const std::filesystem::directory_entry& directoryEntry, ImTextureID thumbnailTexID, f32 thumbnailSize, f32 padding)
+
+void ContentBrowserGridItem::DrawThumbnail(const std::filesystem::directory_entry& directoryEntry,
+	ImTextureID thumbnailTexID, float thumbnailSize, const ImVec2& cursorPos)
 {
 	const AssetVisualDesc visual = DescribeAssetVisual(directoryEntry.path(), directoryEntry.is_directory());
-	ImVec2 cursorPos = ImGui::GetCursorScreenPos();
 	ImDrawList* drawList = ImGui::GetWindowDrawList();
 	if (!thumbnailTexID)
 	{
@@ -446,38 +481,24 @@ void ContentBrowserGridItem::Thumbnail(const std::filesystem::directory_entry& d
 		// 썸네일 이미지가 있는 경우에도 배경 틴트를 은은하게 깔아 투명 텍스처/스프라이트 가독성을 높입니다.
 		drawList->AddRectFilled(cursorPos, ImVec2(cursorPos.x + thumbnailSize, cursorPos.y + thumbnailSize),
 			ImGui::GetColorU32(ImVec4(visual.BgColor.x, visual.BgColor.y, visual.BgColor.z, 0.18f)), 4.0f, ImDrawFlags_RoundCornersTop);
-	}
-	ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
-	ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(1.0f, 1.0f, 1.0f, 0.1f));
-	ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(1.0f, 1.0f, 1.0f, 0.2f));
-	ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
-	std::string buttonId = "##Btn_" + directoryEntry.path().filename().string();
-	if (thumbnailTexID)
-	{
-		ImGui::ImageButton(buttonId.c_str(), thumbnailTexID, { thumbnailSize, thumbnailSize });
-	}
-	else
-	{
-		ImGui::Button(buttonId.c_str(), { thumbnailSize, thumbnailSize });
+		drawList->AddImage(thumbnailTexID, cursorPos, ImVec2(cursorPos.x + thumbnailSize, cursorPos.y + thumbnailSize));
 	}
 	// 썸네일 하단 2px 타입 액센트 스트립 (썸네일 유무와 무관하게 리소스 종류를 한눈에 식별)
 	drawList->AddRectFilled(
 		ImVec2(cursorPos.x, cursorPos.y + thumbnailSize - 2.0f),
 		ImVec2(cursorPos.x + thumbnailSize, cursorPos.y + thumbnailSize),
 		ImGui::GetColorU32(visual.AccentColor));
-	ImGui::PopStyleVar();
-	ImGui::PopStyleColor(3);
 }
 void ContentBrowserGridItem::ContextMenu(const std::filesystem::path& path,
 	std::filesystem::path& outRenamingPath, char* renameBuffer, size_t renameBufferSize,
 	std::filesystem::path& currentDirectory, char* searchBuffer)
 {
-	const bool isDir = std::filesystem::is_directory(path);
 	auto* browser = dynamic_cast<ContentBrowserPanel*>(ImGuiManager::Get().GetImGuiPanel(L"Content Browser"));
 	if (browser && ImGui::IsItemHovered())
 		browser->SetRenameTarget(path);
 	if (ImGui::BeginPopupContextItem("##AssetContextMenu"))
 	{
+		const bool isDir = std::filesystem::is_directory(path);
 		if (browser)
 			browser->SetRenameTarget(path);
 		// 1. 최상단 [열기]: 더블클릭과 동일한 공통 동작
@@ -648,23 +669,18 @@ bool ContentBrowserGridItem::DragAndDropTarget(const std::filesystem::path& rela
 }
 void ContentBrowserGridItem::DrawRename(const std::filesystem::path& path, f32 thumbnailSize, std::filesystem::path& outRenamingPath, char* renameBuffer, size_t renameBufferSize, std::filesystem::path& currentDirectory)
 {
-	ImGui::SetCursorPosY(ImGui::GetCursorPosY() - ImGui::GetStyle().ItemSpacing.y);
 	float width = (currentDirectory == path.parent_path()) ? thumbnailSize : ImGui::GetContentRegionAvail().x * 0.8f;
 	ImGui::SetNextItemWidth(width);
 	Editor::ContentBrowser::DrawRenameInput("##RenameInput", path, outRenamingPath, renameBuffer, renameBufferSize, currentDirectory);
 }
-void ContentBrowserGridItem::DrawNameBox(const std::filesystem::directory_entry& directoryEntry, const std::filesystem::path& rootPath, f32 thumbnailSize, std::filesystem::path& currentDirectory, char* searchBuffer)
+void ContentBrowserGridItem::DrawNameBox(const std::filesystem::directory_entry& directoryEntry,
+	const ImVec2& boxMin, float boxWidth, float boxHeight)
 {
 	const auto& path = directoryEntry.path();
 	const AssetVisualDesc visual = DescribeAssetVisual(path, directoryEntry.is_directory());
 	const std::string& filenameString = visual.CleanName;
 	const std::string& typeStr = visual.BadgeText;
-	float boxWidth = thumbnailSize;
-	float boxHeight = ImGui::GetTextLineHeight() * 2.0f + 12.0f;
 	ImVec2 typeTextSize = ImGui::CalcTextSize(typeStr.c_str());
-	ImVec2 cursorPos = ImGui::GetCursorScreenPos();
-	cursorPos.y -= ImGui::GetStyle().ItemSpacing.y;
-	ImVec2 boxMin = cursorPos;
 	ImVec2 boxMax = ImVec2(boxMin.x + boxWidth, boxMin.y + boxHeight);
 	ImDrawList* drawList = ImGui::GetWindowDrawList();
 	// 1. 네임 박스 배경
@@ -694,11 +710,6 @@ void ContentBrowserGridItem::DrawNameBox(const std::filesystem::directory_entry&
 		? ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled)
 		: ImVec4(visual.AccentColor.x, visual.AccentColor.y, visual.AccentColor.z, 0.90f);
 	drawList->AddText(typePos, ImGui::GetColorU32(badgeColor), typeStr.c_str());
-	// 5. 공간 점유 및 더블 클릭 인터랙션
-	ImGui::SetCursorScreenPos(boxMin);
-	ImGui::Dummy(ImVec2(boxWidth, boxHeight));
-	if (ImGui::IsItemHovered() && MOUSE_BUTTON_DOUBLE_CLICK(EMouseButton::Left))
-		OpenAssetOrFolder(directoryEntry.path(), directoryEntry.is_directory(), currentDirectory, searchBuffer);
 }
 
 void ContentBrowserGridItem::ContextMenu_Material(const std::filesystem::path& path)
@@ -840,20 +851,7 @@ void ContentBrowserGridItem::ContextMenu_Material(const std::filesystem::path& p
 				if (std::filesystem::exists(baseMatPath))
 				{
 					SelectionManager::Get().SetSelectedAsset(baseMatPath);
-					for (auto* panel : ImGuiManager::Get().GetImGuiPanels())
-					{
-						if (auto* resEditor = dynamic_cast<ResourceEditorInterface*>(panel))
-						{
-							if (resEditor->IsSupported(baseMatPath))
-							{
-								resEditor->SetTargetResource(baseMatPath);
-								resEditor->Open();
-								break;
-							}
-						}
-					}
-					NotificationManager::Get().AddNotification(LOCAL("Notification.OpenBaseMaterial"),
-						baseMatPath.filename().string(), ELogLevel::Info, 2.0f);
+					ImGuiManager::Get().RequestOpenResourceEditor(baseMatPath);
 				}
 				else
 				{

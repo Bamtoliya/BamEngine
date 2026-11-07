@@ -13,6 +13,8 @@
 #include "EditorSettingsService.h"
 #include "ShortcutManager.h"
 #include "ModelImportModal.h"
+#include <algorithm>
+#include <utility>
 
 using namespace std;
 
@@ -131,7 +133,7 @@ static void ResolveConflict(const FileDropConflict& conflict, int action)
 	catch (...) {}
 }
 
-EResult ContentBrowserPanel::Initialize(void* arg)
+EResult ContentBrowserPanel::OnInitialize(void*)
 {
 	m_Name = L"Content Browser"; m_DisplayNameKey = "ContentBrowser.Title";
 	const auto projectRoot = EditorSettingsService::IsCreated() ? EditorSettingsService::Get().GetProjectRoot() : Engine::PlatformPath::GetExecutableDirectory();
@@ -170,11 +172,20 @@ void ContentBrowserPanel::Draw()
 	if (!m_Open)
 		return;
 
+	if (m_FocusRequested)
+		ImGui::SetNextWindowFocus();
+
 	const string windowTitle = LOCAL("ContentBrowser.Title") + "###ContentBrowserPanel";
-	if (BeginPanelWindow(windowTitle.c_str(), m_Open))
+	if (!BeginPanelWindow(windowTitle.c_str(), m_Open))
 	{
 		ImGui::End();
 		return;
+	}
+
+	if (m_FocusRequested)
+	{
+		ImGui::SetWindowFocus();
+		m_FocusRequested = false;
 	}
 
 	m_Focused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
@@ -315,7 +326,7 @@ void ContentBrowserPanel::DrawDirectoryGrid()
 	bool enterPressed = SearchBar();
 	ImGui::Separator();
 
-	if (ImGui::BeginChild("GridArea", ImVec2(0, 0), false))
+	if (ImGui::BeginChild("GridArea", ImVec2(0, 0), ImGuiChildFlags_None, ImGuiWindowFlags_NoMove))
 	{
 		if (ImGui::IsWindowHovered() && InputManager::Get().IsCtrlPressed())
 		{
@@ -330,10 +341,10 @@ void ContentBrowserPanel::DrawDirectoryGrid()
 			}
 		}
 
-		GridViewContextMenu(m_CurrentDirectory);
 		DrawGrid(enterPressed);
-		ImGui::EndChild();
+		GridViewContextMenu(m_CurrentDirectory);
 	}
+	ImGui::EndChild();
 }
 
 void ContentBrowserPanel::GridViewContextMenu(const filesystem::path& path)
@@ -528,22 +539,95 @@ void ContentBrowserPanel::ContentFilter()
 }
 #pragma endregion
 
-void ContentBrowserPanel::DrawGridItem(const filesystem::directory_entry& directoryEntry)
+void ContentBrowserPanel::DrawGridItem(const filesystem::directory_entry& directoryEntry, ImGuiSelectionUserData itemId)
 {
 	const auto& path = directoryEntry.path();
 
 	ImTextureID thumbnailTexID = 0;
-	if (!directoryEntry.is_directory())
+	if (ImGui::IsRectVisible(ImVec2(m_ThumbnailSize, m_ThumbnailSize)) && !directoryEntry.is_directory())
 	{
 		thumbnailTexID = ImGuiManager::Get().GetImGuiTextureID(AssetCache::Get().GetThumbnail(path));
 	}
 
 	const bool keepAlive = ContentBrowserGridItem::Draw(directoryEntry, m_RootPath, thumbnailTexID,
-		m_ThumbnailSize, m_Padding, m_RenamingPath, m_RenameBuffer, sizeof(m_RenameBuffer),
-		m_CurrentDirectory, m_SearchBuffer);
+		m_ThumbnailSize, itemId, m_SelectedGridIds.contains(itemId), m_RenamingPath, m_RenameBuffer,
+		sizeof(m_RenameBuffer), m_CurrentDirectory, m_SearchBuffer);
 
 	if (keepAlive)
 		m_InteractionPaths.push_back(path);
+}
+
+void ContentBrowserPanel::SyncGridSelection(const vector<const filesystem::directory_entry*>& entries)
+{
+	const bool sameOrder = std::equal(entries.begin(), entries.end(), m_GridSelectionItems.begin(),
+		m_GridSelectionItems.end(), [](const auto* entry, const GridSelectionItem& item)
+		{
+			return entry->path() == item.Path;
+		});
+	if (sameOrder)
+		return;
+
+	// 목록이 바뀌어도 남아 있는 경로의 선택 ID는 유지한다.
+	std::unordered_map<filesystem::path, ImGuiSelectionUserData> previousIds;
+	previousIds.reserve(m_GridSelectionItems.size());
+	for (auto& item : m_GridSelectionItems)
+		previousIds.emplace(std::move(item.Path), item.Id);
+
+	m_GridSelectionItems.clear();
+	m_GridSelectionItems.reserve(entries.size());
+	m_GridSelectionIndices.clear();
+	m_GridSelectionIndices.reserve(entries.size());
+	for (const auto* entry : entries)
+	{
+		const auto& path = entry->path();
+		const auto previous = previousIds.find(path);
+		const auto id = previous != previousIds.end() ? previous->second : m_NextGridSelectionId++;
+		m_GridSelectionIndices.emplace(id, static_cast<int>(m_GridSelectionItems.size()));
+		m_GridSelectionItems.push_back({ path, id });
+	}
+
+	std::erase_if(m_SelectedGridIds, [this](ImGuiSelectionUserData id)
+	{
+		return !m_GridSelectionIndices.contains(id);
+	});
+}
+
+void ContentBrowserPanel::ApplyGridSelectionRequests(const ImGuiMultiSelectIO& selection)
+{
+	for (const auto& request : selection.Requests)
+	{
+		if (request.Type == ImGuiSelectionRequestType_SetAll)
+		{
+			m_SelectedGridIds.clear();
+			if (request.Selected)
+			{
+				for (const auto& item : m_GridSelectionItems)
+					m_SelectedGridIds.insert(item.Id);
+			}
+			continue;
+		}
+
+		if (request.Type != ImGuiSelectionRequestType_SetRange)
+			continue;
+
+		const auto first = m_GridSelectionIndices.find(request.RangeFirstItem);
+		const auto last = m_GridSelectionIndices.find(request.RangeLastItem);
+		if (first == m_GridSelectionIndices.end() && last == m_GridSelectionIndices.end())
+			continue;
+
+		// Shift 기준이 사라진 프레임에는 남아 있는 끝점만 처리한다.
+		const int firstIndex = first != m_GridSelectionIndices.end() ? first->second : last->second;
+		const int lastIndex = last != m_GridSelectionIndices.end() ? last->second : firstIndex;
+		const auto [begin, end] = std::minmax(firstIndex, lastIndex);
+		for (int index = begin; index <= end; ++index)
+		{
+			const auto id = m_GridSelectionItems[index].Id;
+			if (request.Selected)
+				m_SelectedGridIds.insert(id);
+			else
+				m_SelectedGridIds.erase(id);
+		}
+	}
 }
 
 void ContentBrowserPanel::DrawGrid(bool enterPressed)
@@ -604,8 +688,32 @@ void ContentBrowserPanel::DrawGrid(bool enterPressed)
 			entries.push_back(&entry);
 	}
 
-	// Editor/Source/ImGui/ContentBrowserPanel/Private/ContentBrowserPanel.cpp
-// 583행 ~ 588행 부근 DrawGrid() 내부 교체
+	SyncGridSelection(entries);
+
+	int revealIndex = -1;
+	if (m_RevealScrollPending)
+	{
+		for (int index = 0; index < static_cast<int>(entries.size()); ++index)
+		{
+			if (entries[index]->path().lexically_normal() == m_RevealedAssetPath)
+			{
+				revealIndex = index;
+				break;
+			}
+		}
+
+		if (revealIndex < 0)
+			m_RevealScrollPending = false;
+	}
+
+	const int itemCount = static_cast<int>(entries.size());
+	// 타일은 마우스를 뗄 때 선택하여 타일에서 시작하는 기존 드롭과 구분한다.
+	const ImGuiMultiSelectFlags selectionFlags = ImGuiMultiSelectFlags_ScopeWindow | ImGuiMultiSelectFlags_BoxSelect2d |
+		ImGuiMultiSelectFlags_ClearOnClickVoid | ImGuiMultiSelectFlags_SelectOnClickRelease |
+		ImGuiMultiSelectFlags_NoSelectAll | ImGuiMultiSelectFlags_NoSelectOnRightClick;
+	const auto* selection = ImGui::BeginMultiSelect(selectionFlags, static_cast<int>(m_SelectedGridIds.size()), itemCount);
+	ApplyGridSelectionRequests(*selection);
+	const auto rangeSource = m_GridSelectionIndices.find(selection->RangeSrcItem);
 
 	if (entries.empty())
 	{
@@ -624,13 +732,13 @@ void ContentBrowserPanel::DrawGrid(bool enterPressed)
 		{
 			ImGui::TextDisabled("%s", LOCAL_CSTR("ContentBrowser.EmptyFolder"));
 		}
+		ApplyGridSelectionRequests(*ImGui::EndMultiSelect());
 		return;
 	}
 
 	const float cellSize = m_ThumbnailSize + m_Padding;
 	const float panelWidth = ImGui::GetContentRegionAvail().x;
 	const int columnCount = std::clamp(static_cast<int>(panelWidth / cellSize), 1, 64);
-	const int itemCount = static_cast<int>(entries.size());
 	const int rowCount = (itemCount + columnCount - 1) / columnCount;
 
 	ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ImVec2(m_Padding * 0.5f, m_Padding * 0.5f));
@@ -639,6 +747,7 @@ void ContentBrowserPanel::DrawGrid(bool enterPressed)
 	if (!ImGui::BeginTable("ContentBrowserTable", columnCount, flags))
 	{
 		ImGui::PopStyleVar();
+		ApplyGridSelectionRequests(*ImGui::EndMultiSelect());
 		return;
 	}
 
@@ -646,11 +755,15 @@ void ContentBrowserPanel::DrawGrid(bool enterPressed)
 		ImGui::TableSetupColumn("##AssetColumn", ImGuiTableColumnFlags_WidthFixed, m_ThumbnailSize);
 
 	// 이름 변경 입력창도 같은 행 높이 안에 들어가도록 최소 높이를 확보합니다.
-	const float nameHeight = std::max(ImGui::GetTextLineHeight() * 2.0f + 12.0f, ImGui::GetFrameHeight());
+	const float nameHeight = ContentBrowserGridItem::GetNameBoxHeight();
 	const float rowHeight = std::ceil(m_ThumbnailSize + nameHeight + ImGui::GetStyle().CellPadding.y * 2.0f);
 
 	ImGuiListClipper clipper;
 	clipper.Begin(rowCount, rowHeight);
+	if (rangeSource != m_GridSelectionIndices.end())
+		clipper.IncludeItemByIndex(rangeSource->second / columnCount);
+	if (revealIndex >= 0)
+		clipper.IncludeItemByIndex(revealIndex / columnCount);
 
 	if (!m_RenamingPath.empty() || !interactionPaths.empty())
 	{
@@ -678,13 +791,27 @@ void ContentBrowserPanel::DrawGrid(bool enterPressed)
 					break;
 
 				ImGui::TableSetColumnIndex(column);
-				DrawGridItem(*entries[index]);
+				const ImVec2 tileMin = ImGui::GetCursorScreenPos();
+				DrawGridItem(*entries[index], m_GridSelectionItems[index].Id);
+
+				if (!m_RevealedAssetPath.empty() && entries[index]->path().lexically_normal() == m_RevealedAssetPath)
+				{
+					const ImVec2 tileMax(tileMin.x + m_ThumbnailSize, tileMin.y + m_ThumbnailSize);
+					ImGui::GetWindowDrawList()->AddRect(tileMin, tileMax, ImGui::GetColorU32(ImGuiCol_CheckMark), 4.0f);
+
+					if (index == revealIndex)
+					{
+						ImGui::SetScrollHereY(0.5f);
+						m_RevealScrollPending = false;
+					}
+				}
 			}
 		}
 	}
 
 	ImGui::EndTable();
 	ImGui::PopStyleVar();
+	ApplyGridSelectionRequests(*ImGui::EndMultiSelect());
 }
 
 void ContentBrowserPanel::FileConfilictPopup()
@@ -752,6 +879,40 @@ void ContentBrowserPanel::FileConfilictPopup()
 #pragma endregion
 
 #pragma region Helper
+bool ContentBrowserPanel::RequestRevealAsset(const filesystem::path& resourcePath)
+{
+	if (resourcePath.empty())
+		return false;
+
+	auto absolutePath = Engine::PlatformPath::ResolveProjectRelative(resourcePath);
+	std::error_code error;
+	if (!filesystem::is_regular_file(absolutePath, error))
+	{
+		const auto resolved = ImGuiManager::Get().ResolveResourceEditorTarget(resourcePath);
+		if (!resolved.empty() && filesystem::is_regular_file(resolved, error))
+			absolutePath = resolved;
+		else
+			return false;
+	}
+
+	const auto relativePath = filesystem::relative(absolutePath, m_RootPath, error);
+	if (error || relativePath.empty() || relativePath.has_root_path() || *relativePath.begin() == L"..")
+		return false;
+
+	m_RevealedAssetPath = (m_RootPath / relativePath).lexically_normal();
+	m_CurrentDirectory = m_RevealedAssetPath.parent_path();
+	m_RevealScrollPending = true;
+	m_NeedToExpandTree = true;
+
+	m_SearchBuffer[0] = '\0';
+	m_LastSearchString.clear();
+	m_SearchResults.clear();
+	m_FilterMask = 0;
+
+	RequestRefresh();
+	Focus();
+	return true;
+}
 void ContentBrowserPanel::RefreshCacheIfNeeded()
 {
 	const bool fileSystemChanged = m_NeedsCacheRefresh.exchange(false);

@@ -3,6 +3,8 @@
 #include "Editor_Includes.h"
 #include "ImGuiInterface.h"
 #include <efsw/efsw.hpp>
+#include <unordered_map>
+#include <unordered_set>
 #include "ModelImporter.h"
 #include "PreviewViewportWidget.h"
 
@@ -27,7 +29,6 @@ class ContentBrowserPanel : public IImGui
 public:
 	ContentBrowserPanel() = default;
 	virtual ~ContentBrowserPanel() = default;
-	virtual EResult Initialize(void* arg = nullptr);
 	virtual void Update(f32 dt) override;
 	virtual void Draw() override;
 	virtual void ProcessEvent(const SDL_Event* event) override;
@@ -43,7 +44,12 @@ public:
 	void RestoreViewState(const std::string& relativeDirectory, float thumbnailSize);
 	std::string GetRelativeDirectory() const;
 	float GetThumbnailSize() const { return m_ThumbnailSize; }
+	bool RequestRevealAsset(const filesystem::path& resourcePath);
+	EPanelMenuCategory GetPanelMenuCategory() const override { return EPanelMenuCategory::Assets; }
 #pragma endregion
+
+private:
+	EResult OnInitialize(void* arg) override;
 
 #pragma region TreeView
 private:
@@ -64,7 +70,9 @@ private:
 private:
 	void ContentFilter();
 private:
-	void DrawGridItem(const filesystem::directory_entry& directoryEntry);
+	void DrawGridItem(const filesystem::directory_entry& directoryEntry, ImGuiSelectionUserData itemId);
+	void SyncGridSelection(const vector<const filesystem::directory_entry*>& entries);
+	void ApplyGridSelectionRequests(const ImGuiMultiSelectIO& selection);
 private:
 	void FileConfilictPopup();
 #pragma endregion
@@ -95,6 +103,16 @@ private:
 	filesystem::path m_RenamingPath;
 	vector<filesystem::path> m_InteractionPaths;
 	char m_RenameBuffer[256];
+private:
+	struct GridSelectionItem
+	{
+		filesystem::path Path;
+		ImGuiSelectionUserData Id;
+	};
+	vector<GridSelectionItem> m_GridSelectionItems;
+	std::unordered_map<ImGuiSelectionUserData, int> m_GridSelectionIndices;
+	std::unordered_set<ImGuiSelectionUserData> m_SelectedGridIds;
+	ImGuiSelectionUserData m_NextGridSelectionId = 0;
 private:
 	f32 m_ThumbnailSize = 64.0f;
 	f32 m_Padding = 16.0f;
@@ -127,6 +145,9 @@ private:
 	bool m_IsImportModalActive = false;
 	PreviewViewportWidget m_ImportPreviewWidget;
 	Engine::Entity* m_ImportPreviewEntity = nullptr;
+private:
+	filesystem::path m_RevealedAssetPath;
+	bool m_RevealScrollPending = false;
 #pragma endregion
 };
 END
