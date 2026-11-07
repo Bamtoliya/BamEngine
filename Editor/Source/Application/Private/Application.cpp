@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "Application.h"
 #include <SDL3/SDL.h>
 #include <archive/JsonArchive.h>
@@ -359,6 +359,7 @@ EResult Application::InitializeRuntime(const ApplicationCreateInfo& createInfo)
     // EditorSettingsService가 파악한 프로젝트 루트와 설정을 주입
     runtimeDesc.ProjectRoot = EditorSettingsService::Get().GetProjectRoot();
     runtimeDesc.AssetRoot = EditorSettingsService::Get().GetProjectSettings().AssetDirectory;
+    runtimeDesc.EngineResourceRoot = EditorSettingsService::Get().GetProjectSettings().EngineResourceDirectory;
 
     switch (runtimeDesc.RendererDesc.rhiType)
     {
@@ -422,7 +423,7 @@ EResult Application::InitializeSystem()
     };
 
     const bool success = addSystems.operator() <
-        TransformSystem, MeshRenderSystem, SpriteRenderSystem, SpriteAnimationSystem, AnimationSystem,
+        TransformSystem, MeshRenderSystem, SpriteRenderSystem, SpriteAnimationSystem, TilemapRenderSystem, AnimationSystem,
         ThirdPersonControllerSystem,
         ParticleSystem, ActionTimelineSystem, NetworkSystem, KinematicCharacterSystem,
         CameraSystem, SpringArmSystem, LightSystem, UIRenderSystem,
@@ -687,8 +688,17 @@ void Application::Run(int argc, char* argv[])
 
         if (PIEManager::Get().IsPlaying())
         {
-            while (timeManager.IsFixedUpdateReady())
+            constexpr int maxSubSteps = 2;
+            int subStepsRan = 0;
+            while (timeManager.IsFixedUpdateReady() && subStepsRan < maxSubSteps)
+            {
                 m_Runtime->FixedUpdate(timeManager.GetFixedStep());
+                subStepsRan++;
+            }
+            if (subStepsRan >= maxSubSteps)
+            {
+                while (timeManager.IsFixedUpdateReady()) {}
+            }
 
             m_Runtime->Update(dt, false);
             m_Runtime->LateUpdate(dt);
@@ -714,6 +724,7 @@ void Application::Run(int argc, char* argv[])
             m_Runtime->LateUpdate(dt);
         }
         m_Runtime->Render(dt);
+
         if (m_QuitApproved)
             bIsRunning = false;
     }

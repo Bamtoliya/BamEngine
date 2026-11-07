@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "Macro.h"
 #include "Structs.h"
@@ -16,6 +16,7 @@ namespace Engine
 		static bool Raycast(const Ray& ray, const vec3& v0, const vec3& v1, const vec3& v2, HitResult& outHitResult, f32 maxDistance = FLT_MAX);
 		static bool Raycast(const Ray& ray, const class Mesh& mesh, const mat4& worldMatrix, HitResult& outHitResult, f32 maxDistance = FLT_MAX);
 		static bool Raycast(const Ray& ray, const BoundingSphere& sphere, HitResult& outHitResult, f32 maxDistance = FLT_MAX);
+		static bool Raycast(const Ray& ray, const Capsule& capsule, HitResult& outHitResult, f32 maxDistance = FLT_MAX);
 		static bool Raycast(const Ray& ray, const TerrainComponent& terrain, const mat4& worldMatrix, HitResult& outHitResult, f32 maxDistance = FLT_MAX);
 	public:
 		static bool Contains(const Rect& rect, const vec2& point);
@@ -66,10 +67,21 @@ namespace Engine
 		static bool Intersects(const BoundingBox& a, const BoundingBox& b, const mat4& worldMatrixb, HitResult& outHitResult);
 		static bool Intersects(const BoundingBox& a, const mat4& worldMatrixa, const BoundingBox& b, const mat4& worldMatrixb);
 		static bool Intersects(const BoundingBox& a, const mat4& worldMatrixa, const BoundingBox& b, const mat4& worldMatrixb, HitResult& outHitResult);
+		static bool Intersects(const Capsule& capsule, const BoundingBox& box);
+		static bool Intersects(const Capsule& capsule, const BoundingBox& box, HitResult& outHitResult);
+		static bool Intersects(const BoundingBox& box, const Capsule& capsule) { return Intersects(capsule, box); }
+		static bool Intersects(const BoundingBox& box, const Capsule& capsule, HitResult& outHitResult) { return Intersects(capsule, box, outHitResult); }
+		static bool Intersects(const Capsule& capsule, const BoundingBox& box, const mat4& worldMatrixBox, HitResult& outHitResult);
+		static bool Intersects3D(const Capsule& a, const Capsule& b);
+		static bool Intersects3D(const Capsule& a, const Capsule& b, HitResult& outHitResult);
 	public:
 		static bool Sweep(const BoundingBox& box, const vec3& direction, f32 distance, const BoundingBox& obstacle, HitResult& outHitResult);
 		static bool Sweep(const BoundingBox& box, const vec3& direction, f32 distance, const BoundingSphere& obstacle, HitResult& outHitResult);
 		static bool Sweep(const BoundingSphere& sphere, const vec3& direction, f32 distance, const BoundingBox& obstacle, HitResult& outHitResult);
 		static bool Sweep(const BoundingSphere& sphere, const vec3& direction, f32 distance, const BoundingSphere& obstacle, HitResult& outHitResult);
+		static bool Sweep(const Capsule& capsule, const vec3& direction, f32 distance, const BoundingBox& obstacle, HitResult& outHitResult);
+		static bool Sweep(const Capsule& capsule, const vec3& direction, f32 distance, const BoundingBox& obstacle, const mat4& worldMatrixObstacle, HitResult& outHitResult);
+		static bool Sweep(const Capsule& capsule, const vec3& direction, f32 distance, const BoundingSphere& obstacle, HitResult& outHitResult);
+		static bool Sweep(const Capsule& capsule, const vec3& direction, f32 distance, const Capsule& obstacle, HitResult& outHitResult);
 	};
 }

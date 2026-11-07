@@ -368,6 +368,42 @@ void DebugRenderer::RegisterColliderDebug(const CameraBuffer& cameraBuffer)
 				}
 			}, collider2D.GetShape());
 	}
+
+	// 4. JointComponent 3D 연결선 및 앵커 핀 렌더링
+	for (auto [entity, joint, tr, flag] : registry.view<JointComponent, WorldTransformComponent, FlagComponent>().each())
+	{
+		if (!HasFlag(flag.flags, EEntityFlag::Active) || HasFlag(flag.flags, EEntityFlag::Dead) || !joint.Enabled) continue;
+		const vec3 worldAnchorA = vec3(tr.worldMatrix * vec4(joint.LocalAnchor, 1.0f));
+		DrawSphere(worldAnchorA, 0.05f, vec4(1.0f, 0.85f, 0.1f, 1.0f));
+
+		if (joint.ConnectedEntity != entt::null && registry.valid(joint.ConnectedEntity))
+		{
+			if (const auto* targetTr = registry.try_get<WorldTransformComponent>(joint.ConnectedEntity))
+			{
+				const vec3 worldAnchorB = vec3(targetTr->worldMatrix * vec4(joint.ConnectedLocalAnchor, 1.0f));
+				DrawSphere(worldAnchorB, 0.05f, vec4(1.0f, 0.85f, 0.1f, 1.0f));
+				DrawLine(worldAnchorA, worldAnchorB, vec4(1.0f, 0.9f, 0.2f, 0.95f));
+			}
+		}
+	}
+
+	// 5. Joint2DComponent 2D 연결선 및 앵커 핀 렌더링
+	for (auto [entity, joint2D, tr, flag] : registry.view<Joint2DComponent, WorldTransformComponent, FlagComponent>().each())
+	{
+		if (!HasFlag(flag.flags, EEntityFlag::Active) || HasFlag(flag.flags, EEntityFlag::Dead) || !joint2D.Enabled) continue;
+		const vec3 worldAnchorA = vec3(tr.worldMatrix * vec4(joint2D.LocalAnchor, 0.0f, 1.0f));
+		DrawSphere(worldAnchorA, 0.04f, vec4(1.0f, 0.65f, 0.1f, 1.0f));
+
+		if (joint2D.ConnectedEntity != entt::null && registry.valid(joint2D.ConnectedEntity))
+		{
+			if (const auto* targetTr = registry.try_get<WorldTransformComponent>(joint2D.ConnectedEntity))
+			{
+				const vec3 worldAnchorB = vec3(targetTr->worldMatrix * vec4(joint2D.ConnectedLocalAnchor, 0.0f, 1.0f));
+				DrawSphere(worldAnchorB, 0.04f, vec4(1.0f, 0.65f, 0.1f, 1.0f));
+				DrawLine(worldAnchorA, worldAnchorB, vec4(1.0f, 0.7f, 0.2f, 0.95f));
+			}
+		}
+	}
 }
 #pragma region Draw Functions
 void DebugRenderer::DrawLine(const vec3& start, const vec3& end, const vec4& color)

@@ -385,6 +385,26 @@
                 "Components": [
                     {
                         "Data": {
+                            "m_Offset": [0, 0, 0],
+                            "m_Settings": {
+                                "CollisionLayer": 1,
+                                "CollisionMask": 4294967295,
+                                "Enabled": true,
+                                "Friction": 0.5,
+                                "IsTrigger": false,
+                                "Restitution": 0
+                            },
+                            "m_Shape": {
+                                "ShapeData": {
+                                    "Size": [2, 2, 2]
+                                },
+                                "ShapeType": 0
+                            }
+                        },
+                        "Type": "Engine::ColliderComponent"
+                    },
+                    {
+                        "Data": {
                             "flags": 3
                         },
                         "Type": "Engine::FlagComponent"
@@ -432,9 +452,9 @@
                     {
                         "Data": {
                             "absolute": 0,
-                            "eulerRotation": [0, -24.995468139648438, 0],
+                            "eulerRotation": [16.001235961914062, -19.460494995117188, -40.72072982788086],
                             "position": [-3, 3, -1],
-                            "rotation": [0, -0.21640101075172424, 0, 0.9763045907020569],
+                            "rotation": [0.07038071006536484, -0.20463690161705017, -0.3175269663333893, 0.9232263565063477],
                             "scale": [1, 6, 2]
                         },
                         "Type": "Engine::TransformComponent"
@@ -643,6 +663,77 @@
                     },
                     {
                         "Data": {
+                            "billboardMode": 1,
+                            "buoyancy": 2,
+                            "burstCount": 0,
+                            "burstInterval": 1,
+                            "collisionMode": 2,
+                            "collisionRadius": 0.05000000074505806,
+                            "collisionResponse": 1,
+                            "colorEnd": [1, 0.10000000149011612, 0, 0],
+                            "colorStart": [1, 0.800000011920929, 0.20000000298023224, 1],
+                            "curlNoiseFrequency": 0.4000000059604645,
+                            "curlNoiseScrollSpeed": 0.5,
+                            "curlNoiseStrength": 1.5,
+                            "drag": 0.5,
+                            "emissionDirection": [0, 0, 0],
+                            "emissionRate": 50,
+                            "enableCurlNoise": true,
+                            "floorHeight": 0,
+                            "friction": 0.20000000298023224,
+                            "gravity": [0, 0, 0],
+                            "initialSpeedMax": 3,
+                            "initialSpeedMin": 1,
+                            "lifetimeMax": 2,
+                            "lifetimeMin": 1,
+                            "materialHandle": {
+                                "AssetKey": "Resources/Material/ParticleMaterial_AlphaBlend.bammat.json",
+                                "AssetPath": "Resources/Material/ParticleMaterial_AlphaBlend.bammat.json",
+                                "Null": false
+                            },
+                            "maxCollisionChecksPerFrame": 100,
+                            "maxParticles": 1000,
+                            "meshHandle": {
+                                "AssetKey": "QuadMesh",
+                                "AssetPath": "QuadMesh",
+                                "Null": false
+                            },
+                            "minBounceSpeed": 0.15000000596046448,
+                            "playState": 0,
+                            "restitution": 0.6000000238418579,
+                            "rotationSpeedMax": 1,
+                            "rotationSpeedMin": -1,
+                            "seed": 1337,
+                            "simulationSpace": 0,
+                            "sizeEnd": [1, 1],
+                            "sizeStart": [0.20000000298023224, 0.20000000298023224],
+                            "spreadAngleDegrees": 30,
+                            "textureHandle": {
+                                "AssetKey": "Resources/Texture/Particle_Smoke.png",
+                                "AssetPath": "Resources/Texture/Particle_Smoke.png",
+                                "Null": false
+                            },
+                            "useFixedSeed": false,
+                            "warmupTime": 0,
+                            "wind": [3, 0, 0]
+                        },
+                        "Type": "Engine::ParticleEmitterComponent"
+                    },
+                    {
+                        "Data": {
+                            "AngularDamping": 0,
+                            "AngularVelocity": [0, 0, 0],
+                            "BodyType": 2,
+                            "FreezeRotation": false,
+                            "GravityScale": 1,
+                            "LinearDamping": 0,
+                            "LinearVelocity": [0, 0, 0],
+                            "Mass": 1
+                        },
+                        "Type": "Engine::RigidBodyComponent"
+                    },
+                    {
+                        "Data": {
                             "castShadow": true,
                             "materialHandle": {
                                 "AssetKey": "Resources/Model/Fox_fox_material.bammatinst",
@@ -680,7 +771,7 @@
                         "Data": {
                             "absolute": 0,
                             "eulerRotation": [0, 0, 0],
-                            "position": [1, 9.152555465698242, -9.558938026428223],
+                            "position": [-1.6125380992889404, 10.653020858764648, -1.374372959136963],
                             "rotation": [0, 0, 0, 1],
                             "scale": [1, 1, 1]
                         },
@@ -1127,7 +1218,7 @@
                         "Data": {
                             "absolute": 0,
                             "eulerRotation": [210, -180, -180],
-                            "position": [1, 19.152549743652344, -26.87944984436035],
+                            "position": [-1.6125383377075195, 20.65302085876465, -18.694883346557617],
                             "rotation": [0.2588190734386444, 0, 0, 0.965925931930542],
                             "scale": [0.6666669845581055, 0.6666666865348816, 0.6666669845581055]
                         },
@@ -1148,8 +1239,16 @@
                 "AssetPath": "CubeMesh"
             },
             {
+                "AssetKey": "QuadMesh",
+                "AssetPath": "QuadMesh"
+            },
+            {
                 "AssetKey": "Resources/Material/GBufferMaterial.bammat.json",
                 "AssetPath": "Resources/Material/GBufferMaterial.bammat.json"
+            },
+            {
+                "AssetKey": "Resources/Material/ParticleMaterial_AlphaBlend.bammat.json",
+                "AssetPath": "Resources/Material/ParticleMaterial_AlphaBlend.bammat.json"
             },
             {
                 "AssetKey": "Resources/Material/SkyMaterial.bammat.json",
@@ -1170,6 +1269,10 @@
             {
                 "AssetKey": "Resources/Model/Fox_fox_material.bammatinst",
                 "AssetPath": "Resources/Model/Fox_fox_material.bammatinst"
+            },
+            {
+                "AssetKey": "Resources/Texture/Particle_Smoke.png",
+                "AssetPath": "Resources/Texture/Particle_Smoke.png"
             },
             {
                 "AssetKey": "SphereMesh",

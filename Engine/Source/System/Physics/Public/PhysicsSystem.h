@@ -1,10 +1,11 @@
-﻿#pragma once
+#pragma once
 
 #include "Engine_Includes.h"
 #include "System.h"
 #include "TriggerEvent.h"
 #include "Structs/HitResult.h"
 #include "Structs/Ray.h"
+#include "Components/Physics/PhysicsSettings.h"
 #include <functional>
 
 BEGIN(Engine)
@@ -36,6 +37,9 @@ public:
 	virtual void Free() override;
 public:
 	virtual void OnFixedUpdate(entt::registry& registry, const vector<Scene*>& activeScenes, f32 dt) override;
+public:
+	static const PhysicsSettings& GetSettings();
+	static void SetSettings(const PhysicsSettings& settings);
 public:
 	static bool Overlap2D(const Entity& entityA, const Entity& entityB, HitResult& outHitResult);
 	static bool Overlap3D(const Scene& scene, entt::entity entityA, entt::entity entityB, HitResult& outHitResult);

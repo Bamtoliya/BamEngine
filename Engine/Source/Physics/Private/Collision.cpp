@@ -892,6 +892,87 @@ bool Collision::Raycast(const Ray& ray, const BoundingSphere& sphere, HitResult&
 	return TryCommitCollisionRayHit(point, normal, distance, outHitResult);
 }
 
+bool Collision::Raycast(const Ray& ray, const Capsule& capsule, HitResult& outHitResult, f32 maxDistance)
+{
+	outHitResult.Reset();
+
+	glm::dvec3 origin, direction;
+	if (!TryPrepareCollisionRay(ray, maxDistance, origin, direction) || !capsule.IsValid())
+		return false;
+
+	if (capsule.Contains(ray.origin))
+		return TryCommitCollisionRayHit(origin, -direction, 0.0, outHitResult);
+
+	double bestDistance = maxDistance;
+	glm::dvec3 bestPoint(0.0);
+	glm::dvec3 bestNormal(0.0);
+	bool found = false;
+
+	const auto testSphere = [&](const glm::dvec3& center, double radius) {
+		const glm::dvec3 toCenter = center - origin;
+		const double radiusSq = radius * radius;
+		const double proj = glm::dot(toCenter, direction);
+		if (proj < 0.0) return;
+		const glm::dvec3 perp = toCenter - direction * proj;
+		const double perpSq = glm::dot(perp, perp);
+		if (perpSq > radiusSq) return;
+		const double halfChord = std::sqrt(glm::max(radiusSq - perpSq, 0.0));
+		const double dist = proj - halfChord;
+		if (dist >= 0.0 && dist < bestDistance)
+		{
+			bestDistance = dist;
+			bestPoint = origin + direction * dist;
+			const glm::dvec3 sNorm = bestPoint - center;
+			const double len = glm::length(sNorm);
+			bestNormal = len > 0.0 ? sNorm / len : -direction;
+			found = true;
+		}
+	};
+
+	testSphere(glm::dvec3(capsule.pointA), capsule.radius);
+	testSphere(glm::dvec3(capsule.pointB), capsule.radius);
+
+	const glm::dvec3 pA(capsule.pointA);
+	const glm::dvec3 pB(capsule.pointB);
+	const glm::dvec3 seg = pB - pA;
+	const double segLen = glm::length(seg);
+	if (segLen > 1.0e-6)
+	{
+		const glm::dvec3 axis = seg / segLen;
+		const glm::dvec3 m = origin - pA;
+		const glm::dvec3 vd = direction - axis * glm::dot(direction, axis);
+		const glm::dvec3 vm = m - axis * glm::dot(m, axis);
+		const double a = glm::dot(vd, vd);
+		const double b = glm::dot(vd, vm);
+		const double c = glm::dot(vm, vm) - static_cast<double>(capsule.radius) * capsule.radius;
+		const double discr = b * b - a * c;
+		if (a > 1.0e-12 && discr >= 0.0)
+		{
+			const double root = std::sqrt(discr);
+			const double t0 = (-b - root) / a;
+			if (t0 >= 0.0 && t0 < bestDistance)
+			{
+				const glm::dvec3 hitP = origin + direction * t0;
+				const double h = glm::dot(hitP - pA, axis);
+				if (h >= 0.0 && h <= segLen)
+				{
+					bestDistance = t0;
+					bestPoint = hitP;
+					const glm::dvec3 radial = hitP - (pA + axis * h);
+					const double rLen = glm::length(radial);
+					bestNormal = rLen > 0.0 ? radial / rLen : -direction;
+					found = true;
+				}
+			}
+		}
+	}
+
+	if (!found || bestDistance > maxDistance)
+		return false;
+
+	return TryCommitCollisionRayHit(bestPoint, bestNormal, bestDistance, outHitResult);
+}
+
 bool Collision::Raycast(const Ray& ray, const TerrainComponent& terrain, const mat4& worldMatrix, HitResult& outHitResult, f32 maxDistance)
 {
 	outHitResult.Reset();
@@ -1813,6 +1894,202 @@ bool Collision::Intersects(const BoundingSphere& sphere, const Capsule& capsule,
 }
 #pragma endregion
 
+static void ClosestPointsSegmentSegment3D(const glm::dvec3& p1, const glm::dvec3& q1,
+	const glm::dvec3& p2, const glm::dvec3& q2, glm::dvec3& c1, glm::dvec3& c2)
+{
+	const glm::dvec3 d1 = q1 - p1;
+	const glm::dvec3 d2 = q2 - p2;
+	const glm::dvec3 r = p1 - p2;
+	const double a = glm::dot(d1, d1);
+	const double e = glm::dot(d2, d2);
+	const double f = glm::dot(d2, r);
+
+	double s = 0.0, t = 0.0;
+	if (a <= 1.0e-12 && e <= 1.0e-12)
+	{
+		c1 = p1;
+		c2 = p2;
+		return;
+	}
+	if (a <= 1.0e-12)
+	{
+		s = 0.0;
+		t = glm::clamp(f / e, 0.0, 1.0);
+	}
+	else
+	{
+		const double c = glm::dot(d1, r);
+		if (e <= 1.0e-12)
+		{
+			t = 0.0;
+			s = glm::clamp(-c / a, 0.0, 1.0);
+		}
+		else
+		{
+			const double b = glm::dot(d1, d2);
+			const double denom = a * e - b * b;
+			if (denom != 0.0)
+				s = glm::clamp((b * f - c * e) / denom, 0.0, 1.0);
+			else
+				s = 0.0;
+			t = (b * s + f) / e;
+			if (t < 0.0)
+			{
+				t = 0.0;
+				s = glm::clamp(-c / a, 0.0, 1.0);
+			}
+			else if (t > 1.0)
+			{
+				t = 1.0;
+				s = glm::clamp((b - c) / a, 0.0, 1.0);
+			}
+		}
+	}
+	c1 = p1 + d1 * s;
+	c2 = p2 + d2 * t;
+}
+
+static void ClosestPointSegmentAABB3D(const glm::dvec3& pA, const glm::dvec3& pB,
+	const glm::dvec3& bMin, const glm::dvec3& bMax, glm::dvec3& outSegPoint, glm::dvec3& outBoxPoint)
+{
+	const auto distSqAtT = [&](double t) {
+		const glm::dvec3 p = pA + (pB - pA) * t;
+		const glm::dvec3 q = glm::clamp(p, bMin, bMax);
+		const glm::dvec3 diff = p - q;
+		return glm::dot(diff, diff);
+	};
+
+	double left = 0.0;
+	double right = 1.0;
+	for (int iter = 0; iter < 16; ++iter)
+	{
+		const double m1 = left + (right - left) / 3.0;
+		const double m2 = right - (right - left) / 3.0;
+		if (distSqAtT(m1) < distSqAtT(m2))
+			right = m2;
+		else
+			left = m1;
+	}
+
+	const double bestT = (left + right) * 0.5;
+	outSegPoint = pA + (pB - pA) * bestT;
+	outBoxPoint = glm::clamp(outSegPoint, bMin, bMax);
+}
+
+bool Collision::Intersects(const Capsule& capsule, const BoundingBox& box)
+{
+	HitResult hit{};
+	return Intersects(capsule, box, hit);
+}
+
+bool Collision::Intersects(const Capsule& capsule, const BoundingBox& box, HitResult& outHitResult)
+{
+	outHitResult.Reset();
+	if (!capsule.IsValid() || !box.IsValid())
+		return false;
+
+	glm::dvec3 segPt, boxPt;
+	ClosestPointSegmentAABB3D(glm::dvec3(capsule.pointA), glm::dvec3(capsule.pointB),
+		glm::dvec3(box.min), glm::dvec3(box.max), segPt, boxPt);
+
+	const glm::dvec3 diff = segPt - boxPt;
+	const double distSq = glm::dot(diff, diff);
+	const double r = capsule.radius;
+	if (distSq > r * r)
+		return false;
+
+	const double dist = std::sqrt(distSq);
+	glm::dvec3 normal(0.0, 1.0, 0.0);
+	if (dist > 1.0e-6)
+	{
+		normal = diff / dist;
+	}
+	else
+	{
+		const glm::dvec3 bMin(box.min);
+		const glm::dvec3 bMax(box.max);
+		double minPen = segPt.x - bMin.x;
+		normal = glm::dvec3(-1.0, 0.0, 0.0);
+		if (bMax.x - segPt.x < minPen) { minPen = bMax.x - segPt.x; normal = glm::dvec3(1.0, 0.0, 0.0); }
+		if (segPt.y - bMin.y < minPen) { minPen = segPt.y - bMin.y; normal = glm::dvec3(0.0, -1.0, 0.0); }
+		if (bMax.y - segPt.y < minPen) { minPen = bMax.y - segPt.y; normal = glm::dvec3(0.0, 1.0, 0.0); }
+		if (segPt.z - bMin.z < minPen) { minPen = segPt.z - bMin.z; normal = glm::dvec3(0.0, 0.0, -1.0); }
+		if (bMax.z - segPt.z < minPen) { minPen = bMax.z - segPt.z; normal = glm::dvec3(0.0, 0.0, 1.0); }
+	}
+
+	outHitResult.point = vec3(boxPt);
+	outHitResult.normal = vec3(normal);
+	outHitResult.denetrationDepth = static_cast<f32>(r - dist);
+	outHitResult.distance = static_cast<f32>(dist);
+	outHitResult.hasHit = true;
+	return true;
+}
+
+bool Collision::Intersects(const Capsule& capsule, const BoundingBox& box, const mat4& worldMatrixBox, HitResult& outHitResult)
+{
+	outHitResult.Reset();
+	if (!capsule.IsValid() || !box.IsValid())
+		return false;
+
+	const mat4 invMat = glm::inverse(worldMatrixBox);
+	const vec3 localPointA = vec3(invMat * vec4(capsule.pointA, 1.0f));
+	const vec3 localPointB = vec3(invMat * vec4(capsule.pointB, 1.0f));
+	const f32 scale = glm::length(vec3(worldMatrixBox[0]));
+	const f32 localRadius = scale > 1.0e-6f ? capsule.radius / scale : capsule.radius;
+
+	const Capsule localCap(localPointA, localPointB, localRadius);
+	HitResult localHit{};
+	if (!Intersects(localCap, box, localHit))
+		return false;
+
+	const vec3 worldPt = vec3(worldMatrixBox * vec4(localHit.point, 1.0f));
+	const mat3 normMat = glm::transpose(glm::inverse(mat3(worldMatrixBox)));
+	vec3 worldNorm = normMat * localHit.normal;
+	const f32 nLen = glm::length(worldNorm);
+	worldNorm = nLen > 1.0e-6f ? worldNorm / nLen : vec3(0.0f, 1.0f, 0.0f);
+
+	outHitResult.point = worldPt;
+	outHitResult.normal = worldNorm;
+	outHitResult.denetrationDepth = localHit.denetrationDepth * scale;
+	outHitResult.distance = localHit.distance * scale;
+	outHitResult.hasHit = true;
+	return true;
+}
+
+bool Collision::Intersects3D(const Capsule& a, const Capsule& b)
+{
+	HitResult hit{};
+	return Intersects3D(a, b, hit);
+}
+
+bool Collision::Intersects3D(const Capsule& a, const Capsule& b, HitResult& outHitResult)
+{
+	outHitResult.Reset();
+	if (!a.IsValid() || !b.IsValid())
+		return false;
+
+	glm::dvec3 cA, cB;
+	ClosestPointsSegmentSegment3D(glm::dvec3(a.pointA), glm::dvec3(a.pointB),
+		glm::dvec3(b.pointA), glm::dvec3(b.pointB), cA, cB);
+
+	const glm::dvec3 diff = cA - cB;
+	const double distSq = glm::dot(diff, diff);
+	const double rSum = static_cast<double>(a.radius) + b.radius;
+	if (distSq > rSum * rSum)
+		return false;
+
+	const double dist = std::sqrt(distSq);
+	const glm::dvec3 normal = dist > 1.0e-6 ? diff / dist : glm::dvec3(0.0, 1.0, 0.0);
+	const glm::dvec3 point = cB + normal * static_cast<double>(b.radius);
+
+	outHitResult.point = vec3(point);
+	outHitResult.normal = vec3(normal);
+	outHitResult.denetrationDepth = static_cast<f32>(rSum - dist);
+	outHitResult.distance = static_cast<f32>(dist);
+	outHitResult.hasHit = true;
+	return true;
+}
+
 #pragma region Sweep
 
 // 첫 도형이 direction 방향으로 최대 distance만큼 평행 이동할 때의 최초 접촉을 검사합니다.
@@ -1961,4 +2238,173 @@ bool Collision::Sweep(const BoundingBox& box, const vec3& direction, f32 distanc
 	const glm::dvec3 point = relativePoint - relativeDirection * hitDistance;
 	return TryCommitCollisionRayHit(point, -relativeNormal, hitDistance, outHitResult);
 }
+bool Collision::Sweep(const Capsule& capsule, const vec3& direction, f32 distance, const BoundingSphere& obstacle, HitResult& outHitResult)
+{
+	outHitResult.Reset();
+	if (!capsule.IsValid() || !obstacle.IsValid() || distance <= 0.0f)
+		return false;
+
+	const Capsule expandedCap(capsule.pointA, capsule.pointB, capsule.radius + obstacle.radius);
+	const Ray ray(obstacle.center, -direction);
+	HitResult rayHit{};
+	if (!Raycast(ray, expandedCap, rayHit, distance))
+		return false;
+
+	outHitResult.distance = rayHit.distance;
+	outHitResult.point = obstacle.center - direction * rayHit.distance - rayHit.normal * obstacle.radius;
+	outHitResult.normal = -rayHit.normal;
+	outHitResult.hasHit = true;
+	return true;
+}
+
+bool Collision::Sweep(const Capsule& capsule, const vec3& direction, f32 distance, const BoundingBox& obstacle, HitResult& outHitResult)
+{
+	outHitResult.Reset();
+	if (!capsule.IsValid() || !obstacle.IsValid() || distance <= 0.0f)
+		return false;
+
+	const vec3 unitDir = glm::normalize(direction);
+	HitResult initialHit{};
+	if (Intersects(capsule, obstacle, initialHit))
+	{
+		outHitResult = initialHit;
+		outHitResult.distance = 0.0f;
+		outHitResult.normal = -unitDir;
+		return true;
+	}
+
+	double left = 0.0;
+	double right = distance;
+	bool everHit = false;
+
+	for (int iter = 0; iter < 12; ++iter)
+	{
+		const double mid = (left + right) * 0.5;
+		const vec3 offset = unitDir * static_cast<f32>(mid);
+		const Capsule moved(capsule.pointA + offset, capsule.pointB + offset, capsule.radius);
+		HitResult temp{};
+		if (Intersects(moved, obstacle, temp))
+		{
+			right = mid;
+			everHit = true;
+		}
+		else
+		{
+			left = mid;
+		}
+	}
+
+	if (!everHit)
+		return false;
+
+	const f32 hitDist = static_cast<f32>(right);
+	const vec3 offset = unitDir * hitDist;
+	const Capsule moved(capsule.pointA + offset, capsule.pointB + offset, capsule.radius);
+	if (!Intersects(moved, obstacle, outHitResult))
+		return false;
+
+	outHitResult.distance = hitDist;
+	return true;
+}
+
+bool Collision::Sweep(const Capsule& capsule, const vec3& direction, f32 distance, const BoundingBox& obstacle, const mat4& worldMatrixObstacle, HitResult& outHitResult)
+{
+	outHitResult.Reset();
+	if (!capsule.IsValid() || !obstacle.IsValid() || distance <= 0.0f)
+		return false;
+
+	const vec3 unitDir = glm::normalize(direction);
+	HitResult initialHit{};
+	if (Intersects(capsule, obstacle, worldMatrixObstacle, initialHit))
+	{
+		outHitResult = initialHit;
+		outHitResult.distance = 0.0f;
+		outHitResult.normal = -unitDir;
+		return true;
+	}
+
+	double left = 0.0;
+	double right = distance;
+	bool everHit = false;
+
+	for (int iter = 0; iter < 12; ++iter)
+	{
+		const double mid = (left + right) * 0.5;
+		const vec3 offset = unitDir * static_cast<f32>(mid);
+		const Capsule moved(capsule.pointA + offset, capsule.pointB + offset, capsule.radius);
+		HitResult temp{};
+		if (Intersects(moved, obstacle, worldMatrixObstacle, temp))
+		{
+			right = mid;
+			everHit = true;
+		}
+		else
+		{
+			left = mid;
+		}
+	}
+
+	if (!everHit)
+		return false;
+
+	const f32 hitDist = static_cast<f32>(right);
+	const vec3 offset = unitDir * hitDist;
+	const Capsule moved(capsule.pointA + offset, capsule.pointB + offset, capsule.radius);
+	if (!Intersects(moved, obstacle, worldMatrixObstacle, outHitResult))
+		return false;
+
+	outHitResult.distance = hitDist;
+	return true;
+}
+
+bool Collision::Sweep(const Capsule& capsule, const vec3& direction, f32 distance, const Capsule& obstacle, HitResult& outHitResult)
+{
+	outHitResult.Reset();
+	if (!capsule.IsValid() || !obstacle.IsValid() || distance <= 0.0f)
+		return false;
+
+	const vec3 unitDir = glm::normalize(direction);
+	HitResult initialHit{};
+	if (Intersects3D(capsule, obstacle, initialHit))
+	{
+		outHitResult = initialHit;
+		outHitResult.distance = 0.0f;
+		outHitResult.normal = -unitDir;
+		return true;
+	}
+
+	double left = 0.0;
+	double right = distance;
+	bool everHit = false;
+
+	for (int iter = 0; iter < 12; ++iter)
+	{
+		const double mid = (left + right) * 0.5;
+		const vec3 offset = unitDir * static_cast<f32>(mid);
+		const Capsule moved(capsule.pointA + offset, capsule.pointB + offset, capsule.radius);
+		HitResult temp{};
+		if (Intersects3D(moved, obstacle, temp))
+		{
+			right = mid;
+			everHit = true;
+		}
+		else
+		{
+			left = mid;
+		}
+	}
+
+	if (!everHit)
+		return false;
+
+	const f32 hitDist = static_cast<f32>(right);
+	const vec3 offset = unitDir * hitDist;
+	const Capsule moved(capsule.pointA + offset, capsule.pointB + offset, capsule.radius);
+	if (!Intersects3D(moved, obstacle, outHitResult))
+		return false;
+
+	outHitResult.distance = hitDist;
+	return true;
+}
+
 #pragma endregion

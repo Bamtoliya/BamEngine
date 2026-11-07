@@ -1,4 +1,4 @@
-﻿#include "KinematicCharacterSystem.h"
+#include "KinematicCharacterSystem.h"
 #include "Scene.h"
 #include "Collision.h"
 #include "PhysicsSystem.h"
@@ -8,8 +8,10 @@
 #include "Components/Core/FlagComponent.h"
 #include "Components/Core/HierarchyComponent.h"
 #include "Components/Physics/ColliderComponent.h"
+#include "Mesh.h"
 #include "Components/Render/TerrainComponent.h"
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtx/norm.hpp>
 #include <algorithm>
 #include "Components/Render/AnimatorComponent.h"
 
@@ -28,7 +30,6 @@ namespace
         return nullptr;
     }
 }
-
 
 namespace Engine
 {
@@ -89,9 +90,9 @@ namespace Engine
             {
                 if (!box->HasValidParameters()) continue;
                 const vec3 halfSize = box->Size * 0.5f;
-                const BoundingBox localBox(-halfSize, halfSize);
-                BoundingBox obstacle{};
-                if (!localBox.TryTransformToAABB(colliderWorld, obstacle)) continue;
+                const vec3 worldCenter = vec3(colliderWorld[3]);
+                const vec3 extent = glm::abs(vec3(colliderWorld[0])) * halfSize.x + glm::abs(vec3(colliderWorld[1])) * halfSize.y + glm::abs(vec3(colliderWorld[2])) * halfSize.z;
+                const BoundingBox obstacle(worldCenter - extent, worldCenter + extent);
 
                 HitResult tempHit{};
                 if (Collision::Sweep(charBox, direction, closestDist, obstacle, tempHit) &&
@@ -105,13 +106,12 @@ namespace Engine
             else if (const auto* sphere = std::get_if<SphereShape>(&collider.GetShape()))
             {
                 if (!sphere->HasValidParameters()) continue;
-                const f32 maxScale = glm::max(glm::max(glm::length(vec3(colliderWorld[0])),
-                    glm::length(vec3(colliderWorld[1]))), glm::length(vec3(colliderWorld[2])));
+                const f32 maxScale = glm::max(glm::length(vec3(colliderWorld[0])), glm::max(glm::length(vec3(colliderWorld[1])), glm::length(vec3(colliderWorld[2]))));
                 const vec3 worldCenter = vec3(colliderWorld[3]);
                 const BoundingSphere obstacle(worldCenter, sphere->Radius * maxScale);
-
                 HitResult tempHit{};
-                if (Collision::Sweep(charBox, direction, closestDist, obstacle, tempHit) &&
+                const Capsule charCap = kcc.GetWorldCapsule(fromPos);
+                if (Collision::Sweep(charCap, direction, closestDist, obstacle, tempHit) &&
                     tempHit.hasHit && tempHit.distance < closestDist)
                 {
                     closestDist = tempHit.distance;
@@ -119,38 +119,57 @@ namespace Engine
                     hasHit = true;
                 }
             }
-        }
-
-        // 지형(TerrainComponent) 레이캐스트 충돌 검사
-        auto terrainView = world.view<TerrainComponent, WorldTransformComponent>();
-        for (auto entity : terrainView)
-        {
-            if (entity == ignoreEntity) continue;
-            const auto& terrain = terrainView.get<TerrainComponent>(entity);
-            const auto& worldTransform = terrainView.get<WorldTransformComponent>(entity);
-
-            const vec3 bottomCenter = fromPos + kcc.Center - vec3(0.0f, kcc.Height * 0.5f - kcc.Radius, 0.0f);
-            Ray sweepRay(bottomCenter, direction);
-            HitResult terrainHit{};
-            if (Collision::Raycast(sweepRay, terrain, worldTransform.worldMatrix, terrainHit, closestDist) &&
-                terrainHit.hasHit && terrainHit.distance < closestDist)
+            else if (const auto* capsule = std::get_if<CapsuleShape>(&collider.GetShape()))
             {
-                closestDist = terrainHit.distance;
-                outHit = terrainHit;
-                hasHit = true;
+                if (!capsule->HasValidParameters()) continue;
+                const f32 halfSegment = std::max(0.0f, (capsule->Height * 0.5f) - capsule->Radius);
+                const f32 scaleXZ = glm::max(glm::length(vec3(colliderWorld[0])), glm::length(vec3(colliderWorld[2])));
+                const vec3 pA = vec3(colliderWorld * vec4(0.0f, -halfSegment, 0.0f, 1.0f));
+                const vec3 pB = vec3(colliderWorld * vec4(0.0f, halfSegment, 0.0f, 1.0f));
+                const Capsule obstacleCap(pA, pB, capsule->Radius * scaleXZ);
+                HitResult tempHit{};
+                const Capsule charCap = kcc.GetWorldCapsule(fromPos);
+                if (Collision::Sweep(charCap, direction, closestDist, obstacleCap, tempHit) &&
+                    tempHit.hasHit && tempHit.distance < closestDist)
+                {
+                    closestDist = tempHit.distance;
+                    outHit = tempHit;
+                    hasHit = true;
+                }
+            }
+            else if (const auto* meshShape = std::get_if<MeshShape>(&collider.GetShape()))
+            {
+                if (meshShape->HasMesh())
+                {
+                    if (auto* mesh = meshShape->MeshHandle.Get())
+                    {
+                        HitResult tempHit{};
+                        const vec3 bottomCenter = fromPos + kcc.Center - vec3(0.0f, kcc.Height * 0.5f - kcc.Radius, 0.0f);
+                        const Ray sweepRay(bottomCenter, direction);
+                        if (Collision::Raycast(sweepRay, *mesh, colliderWorld, tempHit, closestDist) &&
+                            tempHit.hasHit && tempHit.distance < closestDist)
+                        {
+                            closestDist = tempHit.distance;
+                            outHit = tempHit;
+                            hasHit = true;
+                        }
+                    }
+                }
             }
         }
 
         return hasHit;
     }
 
-    bool KinematicCharacterSystem::DetectGround(const Scene& scene, const CharacterControllerComponent& kcc, const vec3& currentPos, HitResult& outGroundHit, entt::entity ignoreEntity)
+    bool KinematicCharacterSystem::DetectGround(const Scene& scene, const CharacterControllerComponent& kcc,
+        const vec3& currentPos, HitResult& outGroundHit, entt::entity ignoreEntity, entt::entity* outHitEntity)
     {
         outGroundHit.Reset();
+        if (outHitEntity) *outHitEntity = entt::null;
+
         const vec3 bottomSphere = currentPos + kcc.Center - vec3(0.0f, kcc.Height * 0.5f - kcc.Radius, 0.0f);
         const f32 snapMargin = kcc.IsGrounded ? 0.15f : 0.02f;
         const f32 checkDist = kcc.Radius + kcc.SkinWidth + snapMargin;
-
         Ray downRay(bottomSphere, vec3(0.0f, -1.0f, 0.0f));
         RaycastQuery query{};
         query.maxDistance = checkDist;
@@ -162,6 +181,7 @@ namespace Engine
         if (PhysicsSystem::Raycast(scene, downRay, sceneHit, query) && sceneHit.Hit.hasHit)
         {
             outGroundHit = sceneHit.Hit;
+            if (outHitEntity) *outHitEntity = sceneHit.Entity;
             return true;
         }
 
@@ -175,130 +195,202 @@ namespace Engine
         vec3 currentPos = transform.position;
         const f32 footOffset = kcc.Center.y - (kcc.Height * 0.5f);
 
-        // 1. 이미 땅을 밟고 있을 때만 지면 굴곡을 추적하여 발바닥 높이 유지 (Ground Snapping)
+        // 0. 무빙 플랫폼(Moving Platform) 위치/회전 상속
+        if (kcc.IsGrounded && kcc.GroundEntity != entt::null && world.valid(kcc.GroundEntity))
+        {
+            if (const auto* groundTransform = world.try_get<TransformComponent>(kcc.GroundEntity))
+            {
+                const vec3 groundPos = groundTransform->position;
+                const quat groundRot = groundTransform->rotation;
+
+                // 위치 이동 상속
+                const vec3 deltaPlatformPos = groundPos - kcc.LastGroundPos;
+                currentPos += deltaPlatformPos;
+
+                // 플랫폼 중심 기준 회전 상속
+                const quat deltaPlatformRot = groundRot * glm::inverse(kcc.LastGroundRot);
+                if (glm::length2(deltaPlatformRot - quat(1.0f, 0.0f, 0.0f, 0.0f)) > 1.0e-6f)
+                {
+                    const vec3 offsetFromCenter = currentPos - groundPos;
+                    const vec3 rotatedOffset = deltaPlatformRot * offsetFromCenter;
+                    currentPos = groundPos + rotatedOffset;
+
+                    transform.rotation = glm::normalize(deltaPlatformRot * transform.rotation);
+                    std::ignore = transform.SetEulerRotation(glm::degrees(glm::eulerAngles(transform.rotation)));
+                }
+
+                kcc.LastGroundPos = groundPos;
+                kcc.LastGroundRot = groundRot;
+            }
+            else
+            {
+                kcc.GroundEntity = entt::null;
+            }
+        }
+        else
+        {
+            kcc.GroundEntity = entt::null;
+        }
+
+        // 1. 이미 착지 상태일 때 발바닥 스냅 (Ground Snapping)
         if (kcc.IsGrounded)
         {
             HitResult groundHit{};
-            const bool foundGround = DetectGround(scene, kcc, currentPos, groundHit, entity);
+            entt::entity hitEntity = entt::null;
+            const bool foundGround = DetectGround(scene, kcc, currentPos, groundHit, entity, &hitEntity);
             if (foundGround && groundHit.normal.y > 0.0f)
             {
                 const f32 cosAngle = glm::clamp(glm::dot(groundHit.normal, vec3(0.0f, 1.0f, 0.0f)), -1.0f, 1.0f);
                 const f32 slopeAngle = glm::degrees(std::acos(cosAngle));
                 if (slopeAngle <= kcc.SlopeLimitDegrees)
                 {
+                    currentPos.y = groundHit.point.y - footOffset;
+                    kcc.Velocity.y = 0.0f;
                     kcc.IsGrounded = true;
                     kcc.GroundNormal = groundHit.normal;
                     kcc.GroundAngle = slopeAngle;
-                    currentPos.y = groundHit.point.y - footOffset;
+                    if (hitEntity != entt::null)
+                    {
+                        kcc.GroundEntity = hitEntity;
+                        if (const auto* gt = world.try_get<TransformComponent>(hitEntity))
+                        {
+                            kcc.LastGroundPos = gt->position;
+                            kcc.LastGroundRot = gt->rotation;
+                        }
+                    }
                 }
                 else
                 {
                     kcc.IsGrounded = false;
-                    const vec3 slideDir = glm::normalize(vec3(groundHit.normal.x, 0.0f, groundHit.normal.z));
-                    kcc.Velocity += slideDir * 9.81f * dt;
+                    kcc.GroundEntity = entt::null;
                 }
             }
             else
             {
-                // 지면이 끊기면 공중(낙하) 상태로 자연스럽게 전환
                 kcc.IsGrounded = false;
-                kcc.GroundNormal = vec3(0.0f, 1.0f, 0.0f);
-                kcc.GroundAngle = 0.0f;
+                kcc.GroundEntity = entt::null;
             }
         }
 
-        // 2. 점프 처리 (Jump Execution)
+        // 2. 점프 처리
         bool justJumped = false;
-        if (kcc.JumpRequested && kcc.IsGrounded)
+        if (kcc.JumpRequested)
         {
-            kcc.Velocity.y = kcc.JumpForce;
-            kcc.IsGrounded = false;
-            kcc.JumpRequested = false;
-            justJumped = true;
-        }
-        else
-        {
+            if (kcc.IsGrounded)
+            {
+                kcc.Velocity.y = kcc.JumpForce;
+                kcc.IsGrounded = false;
+                kcc.GroundEntity = entt::null;
+                justJumped = true;
+            }
             kcc.JumpRequested = false;
         }
 
-        // 3. 중력 적용 (Gravity)
+        // 3. 중력 가속도 적용 (체공 중일 때만)
         if (!kcc.IsGrounded)
         {
             kcc.Velocity.y += kcc.Gravity * dt;
-            kcc.Velocity.y = glm::max(kcc.Velocity.y, -50.0f);
         }
 
-        // 4. 수평 입력 속도 보간 (Desired Velocity)
+        // 4. 수평 이동 목표 속도 산출
         vec3 inputDir = kcc.MoveInput;
-        const f32 inputLen = glm::length(inputDir);
-        if (inputLen > 1.0f) inputDir /= inputLen;
+        if (glm::length2(inputDir) > 1.0e-4f)
+        {
+            inputDir = glm::normalize(vec3(inputDir.x, 0.0f, inputDir.z));
+        }
+        else
+        {
+            inputDir = vec3(0.0f);
+        }
 
         const f32 targetSpeed = kcc.IsRunning ? kcc.RunSpeed : kcc.WalkSpeed;
-        const vec3 targetHorizVel = inputDir * targetSpeed;
-        const f32 control = kcc.IsGrounded ? 1.0f : kcc.AirControl;
-        kcc.Velocity.x = glm::mix(kcc.Velocity.x, targetHorizVel.x, glm::clamp(15.0f * control * dt, 0.0f, 1.0f));
-        kcc.Velocity.z = glm::mix(kcc.Velocity.z, targetHorizVel.z, glm::clamp(15.0f * control * dt, 0.0f, 1.0f));
+        const vec3 desiredHorizVel = inputDir * targetSpeed;
 
-        // 5. 수평 이동 및 장애물 슬라이딩 (Sweep & Slide with Step-Up)
-        vec3 horizMove = vec3(kcc.Velocity.x, 0.0f, kcc.Velocity.z) * dt;
-        if (kcc.IsGrounded && kcc.GroundAngle > 0.5f)
+        if (kcc.IsGrounded)
         {
-            horizMove = horizMove - glm::dot(horizMove, kcc.GroundNormal) * kcc.GroundNormal;
+            kcc.Velocity.x = desiredHorizVel.x;
+            kcc.Velocity.z = desiredHorizVel.z;
+        }
+        else
+        {
+            // 체공 중 AirControl 보간
+            kcc.Velocity.x = glm::mix(kcc.Velocity.x, desiredHorizVel.x, glm::clamp(kcc.AirControl * 10.0f * dt, 0.0f, 1.0f));
+            kcc.Velocity.z = glm::mix(kcc.Velocity.z, desiredHorizVel.z, glm::clamp(kcc.AirControl * 10.0f * dt, 0.0f, 1.0f));
         }
 
-        vec3 remainingMove = horizMove;
-        kcc.IsStepping = false;
+        // 5. 수평 이동 및 장애물 슬라이딩 (Slide & Step-up)
+        vec3 horizMove = vec3(kcc.Velocity.x, 0.0f, kcc.Velocity.z) * dt;
+        f32 horizDist = glm::length(horizMove);
 
-        for (int iter = 0; iter < 3 && glm::length(remainingMove) > 1.0e-4f; ++iter)
+        if (horizDist > 1.0e-5f)
         {
-            const f32 moveDist = glm::length(remainingMove);
-            const vec3 moveDir = remainingMove / moveDist;
-            HitResult hit{};
+            vec3 moveDir = horizMove / horizDist;
+            f32 remainingDist = horizDist;
+            const int maxBounces = 3;
 
-            if (SweepCharacter(scene, kcc, currentPos, moveDir, moveDist, hit, entity))
+            for (int bounce = 0; bounce < maxBounces && remainingDist > 1.0e-5f; ++bounce)
             {
-                bool stepped = false;
-                // 계단/턱 오르기 (Step-Up)
-                if (kcc.IsGrounded && kcc.StepOffset > 0.01f && hit.normal.y < 0.3f)
+                HitResult hit{};
+                if (SweepCharacter(scene, kcc, currentPos, moveDir, remainingDist, hit, entity))
                 {
-                    const vec3 stepUpPos = currentPos + vec3(0.0f, kcc.StepOffset, 0.0f);
-                    HitResult upHit{};
-                    if (!SweepCharacter(scene, kcc, currentPos, vec3(0.0f, 1.0f, 0.0f), kcc.StepOffset, upHit, entity))
+                    const f32 travelDist = glm::max(0.0f, hit.distance - kcc.SkinWidth);
+                    currentPos += moveDir * travelDist;
+                    remainingDist -= travelDist;
+
+                    // 계단/턱 오르기 (Step-Up)
+                    bool stepped = false;
+                    if (kcc.IsGrounded && kcc.StepOffset > 0.001f)
                     {
-                        const f32 fwdDist = glm::min(moveDist, 0.2f);
-                        HitResult fwdHit{};
-                        if (!SweepCharacter(scene, kcc, stepUpPos, moveDir, fwdDist, fwdHit, entity))
+                        const vec3 stepUpPos = currentPos + vec3(0.0f, kcc.StepOffset, 0.0f);
+                        HitResult stepHit{};
+                        if (!SweepCharacter(scene, kcc, stepUpPos, moveDir, remainingDist, stepHit, entity))
                         {
-                            const vec3 fwdPos = stepUpPos + moveDir * fwdDist;
-                            HitResult downHit{};
-                            if (SweepCharacter(scene, kcc, fwdPos, vec3(0.0f, -1.0f, 0.0f), kcc.StepOffset + 0.05f, downHit, entity))
+                            HitResult groundHit{};
+                            const vec3 forwardPos = stepUpPos + moveDir * remainingDist;
+                            if (SweepCharacter(scene, kcc, forwardPos, vec3(0.0f, -1.0f, 0.0f), kcc.StepOffset + kcc.SkinWidth, groundHit, entity))
                             {
-                                currentPos = fwdPos - vec3(0.0f, downHit.distance, 0.0f);
-                                remainingMove = vec3(0.0f);
+                                currentPos = forwardPos;
+                                currentPos.y = groundHit.point.y - footOffset;
                                 stepped = true;
-                                kcc.IsStepping = true;
+                                remainingDist = 0.0f;
                             }
                         }
                     }
-                }
 
-                if (!stepped)
-                {
-                    const f32 safeDist = glm::max(0.0f, hit.distance - kcc.SkinWidth);
-                    currentPos += moveDir * safeDist;
-                    remainingMove = remainingMove - moveDir * hit.distance;
-                    remainingMove = remainingMove - glm::dot(remainingMove, hit.normal) * hit.normal;
+                    if (!stepped)
+                    {
+                        // 벽 슬라이딩 (법선 평면 투영)
+                        vec3 wallNormal = hit.normal;
+                        wallNormal.y = 0.0f;
+                        if (glm::length2(wallNormal) > 1.0e-4f)
+                        {
+                            wallNormal = glm::normalize(wallNormal);
+                            moveDir = moveDir - wallNormal * glm::dot(moveDir, wallNormal);
+                            if (glm::length2(moveDir) > 1.0e-4f)
+                            {
+                                moveDir = glm::normalize(moveDir);
+                            }
+                            else
+                            {
+                                break;
+                            }
+                        }
+                        else
+                        {
+                            break;
+                        }
+                    }
                 }
-            }
-            else
-            {
-                currentPos += remainingMove;
-                break;
+                else
+                {
+                    currentPos += moveDir * remainingDist;
+                    remainingDist = 0.0f;
+                }
             }
         }
 
-        // 6. 수직 이동 적용 (Vertical Movement)
-        if (std::abs(kcc.Velocity.y) > 1.0e-4f)
+        // 6. 수직 이동 및 천장/바닥 충돌
+        if (!kcc.IsGrounded)
         {
             const f32 vertDelta = kcc.Velocity.y * dt;
             if (vertDelta > 0.0f)
@@ -318,13 +410,25 @@ namespace Engine
             {
                 HitResult fallHit{};
                 const f32 fallDist = -vertDelta;
-                // 공중에서 떨어지다가 바닥과 실제로 닿는 순간에만 착지!
                 if (SweepCharacter(scene, kcc, currentPos, vec3(0.0f, -1.0f, 0.0f), fallDist, fallHit, entity))
                 {
                     currentPos.y = fallHit.point.y - footOffset;
                     kcc.Velocity.y = 0.0f;
                     kcc.IsGrounded = true;
                     kcc.GroundNormal = fallHit.normal;
+
+                    // 착지 시 지면 엔티티 탐색
+                    entt::entity landingEntity = entt::null;
+                    HitResult landingHit{};
+                    if (DetectGround(scene, kcc, currentPos, landingHit, entity, &landingEntity) && landingEntity != entt::null)
+                    {
+                        kcc.GroundEntity = landingEntity;
+                        if (const auto* gt = world.try_get<TransformComponent>(landingEntity))
+                        {
+                            kcc.LastGroundPos = gt->position;
+                            kcc.LastGroundRot = gt->rotation;
+                        }
+                    }
                 }
                 else
                 {
@@ -338,6 +442,7 @@ namespace Engine
         auto& worldTransform = world.get<WorldTransformComponent>(entity);
         TransformSystem::UpdateRootWorld(transform, worldTransform);
         kcc.MoveInput = vec3(0.0f);
+
         // 8. 애니메이터 파라미터 자동 주입 (Locomotion)
         if (kcc.AutoUpdateAnimator)
         {
@@ -354,6 +459,7 @@ namespace Engine
             {
                 animator = FindAnimatorInHierarchy(world, entity);
             }
+
             if (animator)
             {
                 const f32 horizontalSpeed = glm::length(vec2(kcc.Velocity.x, kcc.Velocity.z));
@@ -370,7 +476,6 @@ namespace Engine
                     animator->SetTrigger(kcc.JumpParamName);
                 }
 
-                // [추가]: 실제 이동 속도에 비례하여 발걸음 재생 속도 동적 조절 (발 미끄러짐 및 헛발질 완전 제거)
                 if (kcc.ScalePlayRateWithSpeed && horizontalSpeed > 0.1f)
                 {
                     const f32 baseSpeed = kcc.IsRunning ? kcc.RunSpeed : kcc.WalkSpeed;
@@ -384,7 +489,7 @@ namespace Engine
         }
     }
 
-    void KinematicCharacterSystem::OnUpdate(entt::registry& registry, const vector<Scene*>& activeScenes, f32 dt)
+    void KinematicCharacterSystem::OnFixedUpdate(entt::registry& registry, const vector<Scene*>& activeScenes, f32 dt)
     {
         (void)registry;
         if (!std::isfinite(dt) || dt <= 0.0f) return;
