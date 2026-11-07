@@ -48,6 +48,7 @@ namespace Tools::ModelConversion
         std::vector<std::uint32_t> Indices;
         std::array<float, 3> BoundsMin{};
         std::array<float, 3> BoundsMax{};
+        std::vector<MeshData> LODs;
     };
 
     struct NodeData
@@ -136,6 +137,12 @@ namespace Tools::ModelConversion
         bool FlipWindingOrder = false;
         bool FlipPitch = false;
         bool FlipHeading = false;
+
+        // Auto LOD Generation Options
+        bool GenerateLODs = true;
+        std::uint32_t LODCount = 3;
+        std::vector<float> LODReductionRates = { 0.5f, 0.25f };
+        float TargetError = 0.02f;
     };
 
     enum class Error

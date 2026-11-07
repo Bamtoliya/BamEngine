@@ -1,4 +1,4 @@
-﻿#include "AnimationEvaluator.h"
+#include "AnimationEvaluator.h"
 #include <glm/gtx/quaternion.hpp>
 #include <algorithm>
 
@@ -271,6 +271,24 @@ void AnimationEvaluator::BuildSkinningMatrices(const Skeleton& skeleton,
 	}
 
 	// 자식의 계층 변환 계산이 끝난 뒤 스키닝 오프셋을 적용한다.
+	for (size_t i = 0; i < bones.size(); ++i)
+		outBoneMatrices[i] *= bones[i].OffsetMatrix;
+}
+
+void AnimationEvaluator::EvaluateBindPoseSkinningMatrices(const Skeleton& skeleton, std::vector<mat4>& outBoneMatrices)
+{
+	const auto& bones = skeleton.GetBones();
+	outBoneMatrices.resize(bones.size());
+
+	for (size_t i = 0; i < bones.size(); ++i)
+	{
+		const int32 parent = bones[i].ParentIndex;
+		if (parent >= 0 && static_cast<size_t>(parent) < i)
+			outBoneMatrices[i] = outBoneMatrices[parent] * bones[i].LocalTransform;
+		else
+			outBoneMatrices[i] = bones[i].LocalTransform;
+	}
+
 	for (size_t i = 0; i < bones.size(); ++i)
 		outBoneMatrices[i] *= bones[i].OffsetMatrix;
 }

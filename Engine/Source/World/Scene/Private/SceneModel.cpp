@@ -2,6 +2,7 @@
 #include "Model.h"
 #include "MaterialInterface.h"
 #include "CoreComponents.h"
+#include "LODGroupComponent.h"
 #include "StaticMeshRendererComponent.h"
 #include "SkinnedMeshRendererComponent.h"
 #include "AnimatorComponent.h"
@@ -47,7 +48,8 @@ namespace Engine
 		}
 
 		void AddModelMeshRenderer(entt::registry& world, entt::entity entity, const ResourceHandle<Mesh>& mesh,
-			const ResourceHandle<MaterialInterface>& material, const ResourceHandle<Skeleton>& skeleton)
+			const ResourceHandle<MaterialInterface>& material, const ResourceHandle<Skeleton>& skeleton,
+			const ResourceHandle<Mesh>& lod1 = {}, const ResourceHandle<Mesh>& lod2 = {})
 		{
 			if (skeleton.IsValid())
 			{
@@ -62,16 +64,27 @@ namespace Engine
 				renderer.meshHandle = mesh;
 				renderer.materialHandle = material;
 			}
+
+			if (lod1.IsValid() || lod2.IsValid())
+			{
+				auto& lodComp = world.emplace<LODGroupComponent>(entity);
+				lodComp.lod1Mesh = lod1;
+				lodComp.lod2Mesh = lod2;
+				lodComp.lod1ScreenCoverage = 0.25f;
+				lodComp.lod2ScreenCoverage = 0.08f;
+				lodComp.hysteresisMargin = 0.02f;
+			}
 		}
 
 		void InitializeLinkedModelMesh(entt::registry& world, entt::entity entity, entt::entity parent,
 			const wstring& nodeKey, const wstring& attachmentKey, const ResourceHandle<Mesh>& mesh,
-			const ResourceHandle<MaterialInterface>& material, const ResourceHandle<Skeleton>& skeleton)
+			const ResourceHandle<MaterialInterface>& material, const ResourceHandle<Skeleton>& skeleton,
+			const ResourceHandle<Mesh>& lod1 = {}, const ResourceHandle<Mesh>& lod2 = {})
 		{
 			const auto name = std::filesystem::path(mesh->GetPath()).stem().wstring();
 			InitializeModelEntity(world, entity, name, TransformComponent{});
 			AttachModelEntity(world, entity, parent);
-			AddModelMeshRenderer(world, entity, mesh, material, skeleton);
+			AddModelMeshRenderer(world, entity, mesh, material, skeleton, lod1, lod2);
 
 			auto& source = world.emplace<ModelSourceComponent>(entity);
 			source.sourceNodeKey = nodeKey;
@@ -231,10 +244,12 @@ namespace Engine
 				const uint32 meshIndex = node.MeshIndices[j];
 				const auto& mesh = meshes[meshIndex];
 				const auto assignedMaterial = ResolveModelMeshMaterial(model, meshIndex, material);
+				const auto lod1 = model.GetMeshLOD(meshIndex, 1);
+				const auto lod2 = model.GetMeshLOD(meshIndex, 2);
 
 				if (!linked && j == 0)
 				{
-					AddModelMeshRenderer(world, entity, mesh, assignedMaterial, skeleton);
+					AddModelMeshRenderer(world, entity, mesh, assignedMaterial, skeleton, lod1, lod2);
 					continue;
 				}
 
@@ -243,14 +258,14 @@ namespace Engine
 				{
 					const auto attachmentKey = j < node.MeshAttachmentKeys.size() ? node.MeshAttachmentKeys[j] : wstring{};
 					InitializeLinkedModelMesh(world, meshEntity, entity, node.SourceNodeKey, attachmentKey,
-						mesh, assignedMaterial, skeleton);
+						mesh, assignedMaterial, skeleton, lod1, lod2);
 				}
 				else
 				{
 					const auto name = std::filesystem::path(mesh->GetPath()).stem().wstring();
 					InitializeModelEntity(world, meshEntity, name, TransformComponent{});
 					AttachModelEntity(world, meshEntity, entity);
-					AddModelMeshRenderer(world, meshEntity, mesh, assignedMaterial, skeleton);
+					AddModelMeshRenderer(world, meshEntity, mesh, assignedMaterial, skeleton, lod1, lod2);
 				}
 			}
 		}

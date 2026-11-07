@@ -1,6 +1,7 @@
-﻿project(ModelConverter LANGUAGES CXX)
+project(ModelConverter LANGUAGES CXX)
 
 find_package(assimp CONFIG REQUIRED)
+find_package(meshoptimizer CONFIG REQUIRED)
 
 add_library(ModelConverter STATIC
     Public/ModelConverter.h
@@ -14,7 +15,7 @@ target_include_directories(ModelConverter PUBLIC
 )
 
 target_compile_features(ModelConverter PUBLIC cxx_std_20)
-target_link_libraries(ModelConverter PRIVATE assimp::assimp)
+target_link_libraries(ModelConverter PRIVATE assimp::assimp meshoptimizer::meshoptimizer)
 
 set_target_properties(ModelConverter PROPERTIES
     FOLDER "Tools"

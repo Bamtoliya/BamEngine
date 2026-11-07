@@ -1,5 +1,7 @@
 ﻿#include "ModelConverter.h"
 
+#include <meshoptimizer.h>
+
 #include <assimp/Importer.hpp>
 #include <assimp/postprocess.h>
 #include <assimp/scene.h>
@@ -48,6 +50,128 @@ namespace Tools::ModelConversion
             return std::all_of(values.begin(), values.end(), [](float value) { return std::isfinite(value); });
         }
     }
+
+        void GenerateMeshLODs(MeshData& mesh, const Options& options)
+        {
+            if (!options.GenerateLODs || options.LODCount <= 1 || mesh.Indices.empty() || mesh.Vertices.empty())
+                return;
+
+            const size_t sourceIndexCount = mesh.Indices.size();
+            const size_t sourceVertexCount = mesh.Vertices.size();
+            const size_t lodLevelsToGenerate = std::min<size_t>(
+                static_cast<size_t>(options.LODCount - 1),
+                options.LODReductionRates.size());
+
+            mesh.LODs.reserve(lodLevelsToGenerate);
+
+            for (size_t lodIdx = 0; lodIdx < lodLevelsToGenerate; ++lodIdx)
+            {
+                const float targetRatio = options.LODReductionRates[lodIdx];
+                if (targetRatio <= 0.0f || targetRatio >= 1.0f)
+                    continue;
+
+                size_t targetIndexCount = static_cast<size_t>(static_cast<float>(sourceIndexCount) * targetRatio);
+                targetIndexCount = (targetIndexCount / 3) * 3;
+                if (targetIndexCount < 3)
+                    targetIndexCount = 3;
+
+                // 원거리 LOD일수록 화면 크기가 작아지므로 허용 기하 오차를 점진적으로 확대 (LOD1: ~3~5%, LOD2: ~8~15%)
+                const float stepMultiplier = lodIdx == 0 ? 2.5f : 6.0f;
+                const float lodTargetError = std::clamp(options.TargetError * stepMultiplier, 0.01f, 0.30f);
+
+                std::vector<unsigned int> destinationIndices(sourceIndexCount);
+                float resultError = 0.0f;
+                size_t simplifiedIndexCount = meshopt_simplify(
+                    destinationIndices.data(),
+                    mesh.Indices.data(),
+                    sourceIndexCount,
+                    &mesh.Vertices[0].Position[0],
+                    sourceVertexCount,
+                    sizeof(VertexData),
+                    targetIndexCount,
+                    lodTargetError,
+                    0,
+                    &resultError
+                );
+
+                // UV Seam이나 비다양체 에지로 인해 목표치에 충분히 도달하지 못한 경우 meshopt_simplifySloppy로 추가 축소
+                const size_t acceptableThreshold = static_cast<size_t>(static_cast<double>(targetIndexCount) * 1.15);
+                if (simplifiedIndexCount > acceptableThreshold)
+                {
+                    std::vector<unsigned int> sloppyIndices(sourceIndexCount);
+                    float sloppyError = 0.0f;
+                    const size_t sloppyCount = meshopt_simplifySloppy(
+                        sloppyIndices.data(),
+                        mesh.Indices.data(),
+                        sourceIndexCount,
+                        &mesh.Vertices[0].Position[0],
+                        sourceVertexCount,
+                        sizeof(VertexData),
+                        targetIndexCount,
+                        lodTargetError * 1.5f,
+                        &sloppyError
+                    );
+
+                    if (sloppyCount > 0 && sloppyCount < simplifiedIndexCount)
+                    {
+                        simplifiedIndexCount = sloppyCount;
+                        destinationIndices = std::move(sloppyIndices);
+                    }
+                }
+
+                if (simplifiedIndexCount > 0 && simplifiedIndexCount < sourceIndexCount)
+                {
+                    destinationIndices.resize(simplifiedIndexCount);
+
+                    std::vector<unsigned int> remap(sourceVertexCount);
+                    const size_t uniqueVertexCount = meshopt_generateVertexRemap(
+                        remap.data(),
+                        destinationIndices.data(),
+                        simplifiedIndexCount,
+                        mesh.Vertices.data(),
+                        sourceVertexCount,
+                        sizeof(VertexData)
+                    );
+
+                    MeshData lodMesh;
+                    lodMesh.Name = mesh.Name + "_LOD" + std::to_string(lodIdx + 1);
+                    lodMesh.MaterialIndex = mesh.MaterialIndex;
+                    lodMesh.HasSkinning = mesh.HasSkinning;
+                    lodMesh.Vertices.resize(uniqueVertexCount);
+                    lodMesh.Indices.resize(simplifiedIndexCount);
+
+                    meshopt_remapVertexBuffer(
+                        lodMesh.Vertices.data(),
+                        mesh.Vertices.data(),
+                        sourceVertexCount,
+                        sizeof(VertexData),
+                        remap.data()
+                    );
+
+                    meshopt_remapIndexBuffer(
+                        lodMesh.Indices.data(),
+                        destinationIndices.data(),
+                        simplifiedIndexCount,
+                        remap.data()
+                    );
+
+                    if (!lodMesh.Vertices.empty())
+                    {
+                        lodMesh.BoundsMin = lodMesh.BoundsMax = lodMesh.Vertices[0].Position;
+                        for (const auto& v : lodMesh.Vertices)
+                        {
+                            for (size_t a = 0; a < 3; ++a)
+                            {
+                                lodMesh.BoundsMin[a] = std::min(lodMesh.BoundsMin[a], v.Position[a]);
+                                lodMesh.BoundsMax[a] = std::max(lodMesh.BoundsMax[a], v.Position[a]);
+                            }
+                        }
+                    }
+
+                    mesh.LODs.push_back(std::move(lodMesh));
+                }
+            }
+        }
 
     Result ConvertStaticModel(const std::filesystem::path& path, const Options& options)
     {
@@ -381,6 +505,7 @@ namespace Tools::ModelConversion
                 }
             }
 
+            GenerateMeshLODs(mesh, options);
             model.Meshes.push_back(std::move(mesh));
         }
 

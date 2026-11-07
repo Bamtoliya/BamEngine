@@ -573,6 +573,22 @@ namespace Editor
 							else m_Desc.ImportOptions &= ~EModelImportOption::Animations;
 						}
 					}
+
+					ImGui::Spacing();
+
+					// Auto LOD Generation 옵션
+					if (ImGui::CollapsingHeader(LOCAL_LABEL("ModelImport.LODOptions").c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+					{
+						ImGui::Checkbox(LOCAL_LABEL("ModelImport.GenerateLODs").c_str(), &m_Desc.GenerateLODs);
+						if (m_Desc.GenerateLODs)
+						{
+							ImGui::Indent();
+							ImGui::SliderFloat(LOCAL_LABEL("ModelImport.LOD1Reduction").c_str(), &m_Desc.LOD1Reduction, 0.10f, 0.90f, "%.2f");
+							ImGui::SliderFloat(LOCAL_LABEL("ModelImport.LOD2Reduction").c_str(), &m_Desc.LOD2Reduction, 0.05f, 0.50f, "%.2f");
+							ImGui::SliderFloat(LOCAL_LABEL("ModelImport.TargetError").c_str(), &m_Desc.TargetError, 0.005f, 0.10f, "%.3f");
+							ImGui::Unindent();
+						}
+					}
 				}, previewFlags, /*reserveHalfForContent=*/false);
 
 			ImGui::Spacing();

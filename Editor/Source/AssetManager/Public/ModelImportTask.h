@@ -27,6 +27,8 @@ namespace Editor
 
         glm::vec3 BoundsMin{};
         glm::vec3 BoundsMax{};
+
+        std::vector<PreparedModelMesh> LODs;
     };
 
     struct PreparedModelData

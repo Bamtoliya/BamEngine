@@ -1,4 +1,4 @@
-﻿#include "AnimationSystem.h"
+#include "AnimationSystem.h"
 #include "Components/Render/AnimatorComponent.h"
 #include "Components/Render/SkinnedMeshRendererComponent.h"
 #include "Components/Core/FlagComponent.h"
@@ -62,10 +62,26 @@ void AnimationSystem::OnUpdate(entt::registry& registry, const vector<Scene*>& a
 
 			// 2. 스켈레톤과 재생 상태 확인
 			const auto* skeleton = FindSkeletonInHierarchy(world, entity);
-			if (!skeleton || !animator.isPlaying) continue;
+			if (!skeleton) continue;
+
+			if (!animator.isPlaying)
+			{
+				if (animator.finalBoneMatrices.empty())
+				{
+					Engine::AnimationEvaluator::EvaluateBindPoseSkinningMatrices(*skeleton, animator.finalBoneMatrices);
+				}
+				continue;
+			}
 
 			const auto source = Engine::UpdateAnimatorBasePose(animator, *skeleton, dt);
-			if (source == Engine::EAnimatorBasePoseSource::None) continue;
+			if (source == Engine::EAnimatorBasePoseSource::None)
+			{
+				if (animator.finalBoneMatrices.empty())
+				{
+					Engine::AnimationEvaluator::EvaluateBindPoseSkinningMatrices(*skeleton, animator.finalBoneMatrices);
+				}
+				continue;
+			}
 
 			if (source == Engine::EAnimatorBasePoseSource::StateMachine)
 			{

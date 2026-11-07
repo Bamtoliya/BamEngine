@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "Engine_Includes.h"
 #include "Animation.h"
@@ -16,6 +16,8 @@ class ENGINE_API AnimationEvaluator
 public:
 	// 현재 시간(초)에 맞춰 스켈레톤의 각 뼈에 대한 최종 스키닝 행렬(Combined * Offset)을 계산합니다.
 	static void EvaluateSkinningMatrices(const Animation& animation, const Skeleton& skeleton, f32 timeInSeconds, std::vector<mat4>& outBoneMatrices, bool isLooping = true, float loopBlendDuration = 0.05f);
+	// 스켈레톤의 바인드 포즈(T-포즈)에 대한 최종 스키닝 행렬(GlobalBind * Offset)을 계산합니다.
+	static void EvaluateBindPoseSkinningMatrices(const Skeleton& skeleton, std::vector<mat4>& outBoneMatrices);
 	// 두 애니메이션 클립의 포즈를 alpha(0.0~1.0) 가중치로 선형/구면선형 보간하여 최종 스키닝 행렬을 계산합니다.
 	static void EvaluateBlendedSkinningMatrices(const Animation& clipA, f32 timeA, const Animation& clipB, f32 timeB, f32 alpha, const Skeleton& skeleton, std::vector<mat4>& outBoneMatrices, bool isLoopingA = true, bool isLoopingB = true);
 	// 베이스 클립과 오버레이 레이어 클립을 본 마스크 가중치(0.0~1.0) 및 레이어 알파로 합성하여 최종 스키닝 행렬을 계산합니다.

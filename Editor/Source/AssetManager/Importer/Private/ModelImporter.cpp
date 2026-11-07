@@ -148,6 +148,8 @@ namespace Editor
 		{
 			wstring Key;
 			MeshOwner Resource;
+			size_t OriginalMeshIndex = 0;
+			uint32 LODLevel = 0;
 		};
 
 		OutputReservation Output;
@@ -510,10 +512,12 @@ namespace
 
 		RegistrationRollback rollback{ manager, {}, false };
 		rollback.Handles.reserve(pending.size() + 1 + data.Animations.size() + data.Materials.size());
-		modelDesc.Meshes.reserve(pending.size());
+		modelDesc.Meshes.reserve(data.Meshes.size());
+		modelDesc.MeshLODs.resize(data.Meshes.size());
 
 		for (auto& mesh : pending)
 		{
+			ResourceHandle<Mesh> meshHandle;
 			auto existingHandle = manager.FindHandleByKey(mesh.Key);
 			if (settings.Overwrite && manager.IsValid(existingHandle))
 			{
@@ -535,21 +539,36 @@ namespace
 				if (result != EResult::Success)
 					return result;
 
-				modelDesc.Meshes.push_back(ResourceHandle<Mesh>(existingHandle));
-				continue;
+				meshHandle = ResourceHandle<Mesh>(existingHandle);
+			}
+			else
+			{
+				Mesh* instance = mesh.Resource.get();
+				meshHandle = manager.AddResource<Mesh>(mesh.Key, mesh.Resource.release());
+
+				if (!meshHandle.IsValid())
+					return EResult::Fail;
+
+				if (meshHandle.Get() != instance)
+					return EResult::AlreadyInitialized;
+
+				rollback.Handles.push_back(meshHandle.GetRawHandle());
 			}
 
-			Mesh* instance = mesh.Resource.get();
-			auto handle = manager.AddResource<Mesh>(mesh.Key, mesh.Resource.release());
-
-			if (!handle.IsValid())
-				return EResult::Fail;
-
-			if (handle.Get() != instance)
-				return EResult::AlreadyInitialized;
-
-			rollback.Handles.push_back(handle.GetRawHandle());
-			modelDesc.Meshes.push_back(std::move(handle));
+			if (mesh.LODLevel == 0)
+			{
+				modelDesc.Meshes.push_back(meshHandle);
+			}
+			else if (mesh.LODLevel == 1)
+			{
+				if (mesh.OriginalMeshIndex < modelDesc.MeshLODs.size())
+					modelDesc.MeshLODs[mesh.OriginalMeshIndex].LOD1Mesh = meshHandle;
+			}
+			else if (mesh.LODLevel == 2)
+			{
+				if (mesh.OriginalMeshIndex < modelDesc.MeshLODs.size())
+					modelDesc.MeshLODs[mesh.OriginalMeshIndex].LOD2Mesh = meshHandle;
+			}
 		}
 
 		// 스켈레톤 생성 및 저장 (.bamskel)
@@ -1154,7 +1173,8 @@ std::optional<EResult> ModelImporter::FinalizeOneStep(ModelImportTask& task)
 			desc.Nodes.reserve(data.Nodes.size());
 			desc.Materials.resize(data.MaterialCount);
 			desc.MeshMaterialIndices.reserve(data.Meshes.size());
-			state.Meshes.reserve(data.Meshes.size());
+			desc.MeshLODs.resize(data.Meshes.size());
+			state.Meshes.reserve(data.Meshes.size() * 3);
 
 			for (const auto& mesh : data.Meshes)
 				desc.MeshMaterialIndices.push_back(mesh.MaterialIndex);
@@ -1265,7 +1285,56 @@ std::optional<EResult> ModelImporter::FinalizeOneStep(ModelImportTask& task)
 			if (!mesh)
 				return finish(EResult::Fail);
 
-			state->Meshes.push_back({ key, std::move(mesh) });
+			state->Meshes.push_back({ key, std::move(mesh), state->NextMesh, 0 });
+
+			// 파생 LOD 메시가 있는 경우 LOD 1, LOD 2 메시도 생성 및 등록
+			for (size_t lodIdx = 0; lodIdx < source.LODs.size(); ++lodIdx)
+			{
+				const auto& lodSource = source.LODs[lodIdx];
+				const auto lodVertexCount = lodSource.Positions.size();
+				const auto lodIndexCount = lodSource.Indices.size();
+				if (lodVertexCount == 0 || lodIndexCount == 0)
+					continue;
+
+				const bool lodHasSkinWeights = !lodSource.SkinWeights.empty();
+				const wstring lodKey = NormalizePath((outputDir / (stem + L"_LOD" + std::to_wstring(lodIdx + 1) + L".bammesh")).wstring());
+
+				if (const EResult result = ValidateImportOutput(manager, lodKey, state->Settings.SaveToFile, state->Settings.Overwrite);
+					result != EResult::Success)
+				{
+					return finish(result);
+				}
+
+				MeshCreateDesc lodDesc;
+				lodDesc.Key = lodKey;
+				lodDesc.Path = lodKey;
+				lodDesc.Streams[static_cast<uint32>(EMeshStream::Position)] = {
+					const_cast<VertexPosition*>(lodSource.Positions.data()), static_cast<uint32>(lodVertexCount), sizeof(VertexPosition)
+				};
+				lodDesc.Streams[static_cast<uint32>(EMeshStream::Material)] = {
+					const_cast<VertexMaterial*>(lodSource.Attributes.data()), static_cast<uint32>(lodVertexCount), sizeof(VertexMaterial)
+				};
+				if (lodHasSkinWeights)
+				{
+					lodDesc.Flags |= EMeshFlag::Dynamic;
+					lodDesc.Streams[static_cast<uint32>(EMeshStream::SkinData)] = {
+						const_cast<VertexSkinData*>(lodSource.SkinWeights.data()), static_cast<uint32>(lodVertexCount), sizeof(VertexSkinData)
+					};
+					lodDesc.SkinBindingSignature = state->SkinBindingSignature;
+				}
+				lodDesc.IndexData = const_cast<uint32*>(lodSource.Indices.data());
+				lodDesc.IndexCount = static_cast<uint32>(lodIndexCount);
+				lodDesc.IndexStride = sizeof(uint32);
+				lodDesc.BoundingBoxMin = lodSource.BoundsMin;
+				lodDesc.BoundingBoxMax = lodSource.BoundsMax;
+
+				ModelFinalizeState::MeshOwner lodMeshOwner(Mesh::Create(&lodDesc));
+				if (lodMeshOwner)
+				{
+					state->Meshes.push_back({ lodKey, std::move(lodMeshOwner), state->NextMesh, static_cast<uint32>(lodIdx + 1) });
+				}
+			}
+
 			++state->NextMesh;
 			return std::nullopt;
 		}
@@ -1413,6 +1482,10 @@ Tools::ModelConversion::Options ModelImporter::MakeConversionOptions(const Model
 	options.RotationOffset = desc.RotationOffset;
 	options.FlipPitch = desc.FlipPitch;
 	options.FlipHeading = desc.FlipHeading;
+	options.GenerateLODs = desc.GenerateLODs;
+	options.LODCount = desc.LODCount;
+	options.LODReductionRates = { desc.LOD1Reduction, desc.LOD2Reduction };
+	options.TargetError = desc.TargetError;
 	return options;
 }
 

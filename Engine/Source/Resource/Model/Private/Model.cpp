@@ -17,6 +17,7 @@ EResult Model::Initialize(void* arg)
     m_Skeleton = desc->Skeleton;
     m_Animations = desc->Animations;
 	m_MeshMaterialIndices = desc->MeshMaterialIndices;
+	m_MeshLODs = desc->MeshLODs;
     return OnPostLoad();
 }
 
@@ -40,6 +41,7 @@ void Model::Free()
 	m_Skeleton.Reset();
 	m_Animations.clear();
 	m_MeshMaterialIndices.clear();
+	m_MeshLODs.clear();
 }
 
 EResult Model::OnPostLoad()
@@ -165,6 +167,7 @@ archive::ArchiveResult Model::ReadArchive(const archive::IArchive& ar)
 	m_MeshMaterialIndices = std::move(candidate.m_MeshMaterialIndices);
 	m_Skeleton = std::move(candidate.m_Skeleton);
 	m_Animations = std::move(candidate.m_Animations);
+	m_MeshLODs = std::move(candidate.m_MeshLODs);
 
 	return result;
 }

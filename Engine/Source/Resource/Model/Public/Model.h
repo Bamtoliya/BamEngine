@@ -34,6 +34,18 @@ struct ENGINE_API ModelNode
 	vector<wstring> MeshAttachmentKeys;
 };
 
+STRUCT()
+struct ENGINE_API ModelMeshLOD
+{
+	REFLECT_BODY()
+
+	PROPERTY(ALLOW_MISSING)
+	ResourceHandle<Mesh> LOD1Mesh;
+
+	PROPERTY(ALLOW_MISSING)
+	ResourceHandle<Mesh> LOD2Mesh;
+};
+
 struct ModelCreateDesc : public ResourceCreateDesc
 {
 	vector<ModelNode> Nodes;
@@ -42,6 +54,7 @@ struct ModelCreateDesc : public ResourceCreateDesc
 	ResourceHandle<Skeleton> Skeleton;
 	vector<ResourceHandle<Animation>> Animations;
 	vector<uint32> MeshMaterialIndices;
+	vector<ModelMeshLOD> MeshLODs;
 };
 
 CLASS()
@@ -77,6 +90,23 @@ public:
 	const vector<ModelNode>& GetNodes() const { return m_Nodes; }
 	const vector<uint32>& GetMeshMaterialIndices() const { return m_MeshMaterialIndices; }
 	ResourceHandle<MaterialInterface> GetMeshMaterial(uint32 meshIndex) const;
+	const vector<ModelMeshLOD>& GetMeshLODs() const { return m_MeshLODs; }
+	ResourceHandle<Mesh> GetMeshLOD(uint32 meshIndex, uint32 lodLevel) const
+	{
+		if (lodLevel == 0 && meshIndex < m_Meshes.size()) return m_Meshes[meshIndex];
+		if (meshIndex >= m_MeshLODs.size()) return {};
+		if (lodLevel == 1) return m_MeshLODs[meshIndex].LOD1Mesh;
+		if (lodLevel == 2) return m_MeshLODs[meshIndex].LOD2Mesh;
+		return {};
+	}
+	bool HasLODs() const
+	{
+		for (const auto& lod : m_MeshLODs)
+		{
+			if (lod.LOD1Mesh.IsValid() || lod.LOD2Mesh.IsValid()) return true;
+		}
+		return false;
+	}
 #pragma endregion
 
 #pragma region Setter
@@ -104,6 +134,8 @@ private:
 	vector<ResourceHandle<Animation>> m_Animations;
 	PROPERTY()
 	vector<uint32> m_MeshMaterialIndices;
+	PROPERTY(ALLOW_MISSING)
+	vector<ModelMeshLOD> m_MeshLODs;
 #pragma endregion
 };
 END

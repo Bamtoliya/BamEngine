@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "ResourceEditorInterface.h"
 #include "Model.h"
@@ -6,6 +6,7 @@
 
 BEGIN(Engine)
 class Entity;
+struct AnimatorComponent;
 END
 
 BEGIN(Editor)
@@ -28,13 +29,23 @@ public:
 private:
 	void SetupPreviewModel();
 	void InstantiateModel();
+	void DrawMenuBar();
+	void DrawToolbar();
+	void DrawModelInfo(Engine::Model& model);
 	void DrawMaterialSlots(Engine::Model& model, bool canEdit);
+	void DrawAnimations(Engine::Model& model);
+	void DrawLODInfo(Engine::Model& model);
+	void SetForcedLOD(int lod);
 	void SaveModel();
+	[[nodiscard]] Engine::AnimatorComponent* GetPreviewAnimator() const;
+	void SelectAnimation(int index, bool autoPlay = true);
 
 private:
 	Engine::ResourceHandle<Engine::Model> m_ModelHandle;
 	string m_StatusKey;
 	bool m_IsDirty = false;
+	int m_SelectedAnimIndex = 0;
+	int m_ForcedLOD = -1; // -1: Auto, 0: LOD0, 1: LOD1, 2: LOD2
 
 	// 3D 프리뷰 뷰포트 & 엔티티
 	PreviewViewportWidget m_PreviewWidget;

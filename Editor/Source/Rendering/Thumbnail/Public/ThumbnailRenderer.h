@@ -61,6 +61,9 @@ private:
 
 	// 빛
 	std::array<entt::entity, 3> m_StudioLights{ entt::null, entt::null, entt::null };
+
+	// 스킨드 썸네일 제출 시 비동기 렌더링 수명을 보장하기 위한 바인드 포즈 행렬 버퍼
+	std::vector<mat4> m_BindPoseMatrices;
 };
 
 END

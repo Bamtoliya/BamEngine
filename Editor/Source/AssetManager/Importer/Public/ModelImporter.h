@@ -72,6 +72,13 @@ struct ModelImportDesc
 	bool Overwrite = true;
 	bool FlipPitch = false;
 	bool FlipHeading = false;
+
+	// Auto LOD Generation Options
+	bool GenerateLODs = true;
+	uint32 LODCount = 3;
+	float LOD1Reduction = 0.5f;
+	float LOD2Reduction = 0.25f;
+	float TargetError = 0.02f;
 };
 
 BEGIN(Editor)

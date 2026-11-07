@@ -49,45 +49,44 @@ namespace Editor
 
             constexpr auto maxBufferBytes = (std::numeric_limits<Engine::uint32>::max)();
 
-            for (auto& sourceMesh : source.Meshes)
+            auto convertMesh = [&](Tools::ModelConversion::MeshData& srcMesh) -> std::optional<PreparedModelMesh>
             {
-                const auto vertexCount = sourceMesh.Vertices.size();
-                const auto indexCount = sourceMesh.Indices.size();
-                const bool hasSkinning = importSkeleton && sourceMesh.HasSkinning && !prepared.Bones.empty();
+                const auto vertexCount = srcMesh.Vertices.size();
+                const auto indexCount = srcMesh.Indices.size();
+                const bool hasSkinning = importSkeleton && srcMesh.HasSkinning && !prepared.Bones.empty();
 
-                // 현재 Mesh/RHI의 버퍼 크기 인자는 uint32입니다.
                 if (vertexCount > maxBufferBytes / sizeof(Engine::VertexPosition) ||
                     vertexCount > maxBufferBytes / sizeof(Engine::VertexMaterial) ||
                     (hasSkinning && vertexCount > maxBufferBytes / sizeof(Engine::VertexSkinData)) ||
                     indexCount > maxBufferBytes / sizeof(Engine::uint32))
                 {
-                    return fail(ConversionError::LimitExceeded, "A mesh exceeds the RHI buffer size limit.");
+                    return std::nullopt;
                 }
 
-                PreparedModelMesh mesh;
-                mesh.Name = std::move(sourceMesh.Name);
-                mesh.MaterialIndex = sourceMesh.MaterialIndex;
-                mesh.BoundsMin = {
-                    sourceMesh.BoundsMin[0], sourceMesh.BoundsMin[1], sourceMesh.BoundsMin[2]
+                PreparedModelMesh outMesh;
+                outMesh.Name = std::move(srcMesh.Name);
+                outMesh.MaterialIndex = srcMesh.MaterialIndex;
+                outMesh.BoundsMin = {
+                    srcMesh.BoundsMin[0], srcMesh.BoundsMin[1], srcMesh.BoundsMin[2]
                 };
-                mesh.BoundsMax = {
-                    sourceMesh.BoundsMax[0], sourceMesh.BoundsMax[1], sourceMesh.BoundsMax[2]
+                outMesh.BoundsMax = {
+                    srcMesh.BoundsMax[0], srcMesh.BoundsMax[1], srcMesh.BoundsMax[2]
                 };
 
-                mesh.Positions.resize(vertexCount);
-                mesh.Attributes.resize(vertexCount);
+                outMesh.Positions.resize(vertexCount);
+                outMesh.Attributes.resize(vertexCount);
                 if (hasSkinning)
-                    mesh.SkinWeights.resize(vertexCount);
+                    outMesh.SkinWeights.resize(vertexCount);
 
                 for (std::size_t i = 0; i < vertexCount; ++i)
                 {
-                    const auto& vertex = sourceMesh.Vertices[i];
+                    const auto& vertex = srcMesh.Vertices[i];
 
-                    mesh.Positions[i].position = {
+                    outMesh.Positions[i].position = {
                         vertex.Position[0], vertex.Position[1], vertex.Position[2]
                     };
 
-                    auto& attributes = mesh.Attributes[i];
+                    auto& attributes = outMesh.Attributes[i];
                     attributes.normal = { vertex.Normal[0], vertex.Normal[1], vertex.Normal[2] };
                     attributes.texCoord = { vertex.TexCoord[0], vertex.TexCoord[1] };
                     attributes.tangent = { vertex.Tangent[0], vertex.Tangent[1], vertex.Tangent[2] };
@@ -96,7 +95,7 @@ namespace Editor
 
                     if (hasSkinning)
                     {
-                        auto& skin = mesh.SkinWeights[i];
+                        auto& skin = outMesh.SkinWeights[i];
                         skin.boneIDs = {
                             vertex.BoneIndices[0], vertex.BoneIndices[1],
                             vertex.BoneIndices[2], vertex.BoneIndices[3]
@@ -108,10 +107,28 @@ namespace Editor
                     }
                 }
 
-                mesh.Indices = std::move(sourceMesh.Indices);
+                outMesh.Indices = std::move(srcMesh.Indices);
+                std::vector<Tools::ModelConversion::VertexData>{}.swap(srcMesh.Vertices);
 
-                // 현재 메시의 원본 정점 메모리를 작업 스레드에서 해제합니다.
-                std::vector<Tools::ModelConversion::VertexData>{}.swap(sourceMesh.Vertices);
+                return outMesh;
+            };
+
+            for (auto& sourceMesh : source.Meshes)
+            {
+                auto maybeMesh = convertMesh(sourceMesh);
+                if (!maybeMesh)
+                    return fail(ConversionError::LimitExceeded, "A mesh exceeds the RHI buffer size limit.");
+
+                PreparedModelMesh mesh = std::move(*maybeMesh);
+
+                // LOD 메시 처리
+                mesh.LODs.reserve(sourceMesh.LODs.size());
+                for (auto& srcLOD : sourceMesh.LODs)
+                {
+                    auto maybeLOD = convertMesh(srcLOD);
+                    if (maybeLOD)
+                        mesh.LODs.push_back(std::move(*maybeLOD));
+                }
 
                 prepared.Meshes.push_back(std::move(mesh));
             }

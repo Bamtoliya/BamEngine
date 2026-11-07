@@ -138,9 +138,9 @@ namespace Editor
 				(void)trans.SetEulerRotation(euler);
 			};
 
-		createDirLight(vec3(35.0f, 30.0f, 0.0f), vec3(1.0f, 0.98f, 0.95f), 3.0f, true);
-		createDirLight(vec3(20.0f, -60.0f, 0.0f), vec3(0.85f, 0.92f, 1.0f), 1.6f, false);
-		createDirLight(vec3(45.0f, 160.0f, 0.0f), vec3(0.95f, 0.98f, 1.0f), 2.2f, true);
+		createDirLight(vec3(30.0f, 195.0f, 0.0f), vec3(1.0f, 0.98f, 0.95f), 3.0f, true);
+		createDirLight(vec3(15.0f, 120.0f, 0.0f), vec3(0.85f, 0.92f, 1.0f), 1.6f, false);
+		createDirLight(vec3(45.0f, 20.0f, 0.0f), vec3(0.95f, 0.98f, 1.0f), 2.2f, true);
 
 		Engine::TransformSystem::UpdateHierarchy(registry);
 		Engine::LightSystem::UpdateLights(registry);
@@ -512,6 +512,14 @@ namespace Editor
 				Engine::AnimationEvaluator::EvaluateSkinningMatrices(*clip, *skel, m_CurrentTime, m_BoneMatrices, m_IsLooping);
 			}
 		}
+		else if (skeleton.IsValid())
+		{
+			auto* skel = skeleton.Get();
+			if (skel)
+			{
+				Engine::AnimationEvaluator::EvaluateBindPoseSkinningMatrices(*skel, m_BoneMatrices);
+			}
+		}
 
 		vec3 offset;
 		offset.x = m_CamDistance * cosf(m_CamPitch) * sinf(m_CamYaw);
@@ -554,7 +562,8 @@ namespace Editor
 							Engine::SkinnedDrawCommand cmd{};
 							cmd.mesh = mesh;
 							cmd.material = mat;
-							cmd.worldMatrix = node.LocalTransform;
+							if (mat) mat->BuildMaterialConstants(cmd.materialConstants);
+							cmd.worldMatrix = mat4(1.0f);
 							cmd.boneMatrices = &m_BoneMatrices;
 							Engine::Renderer::Get().SubmitSkinned(cmd, m_Pipeline.GetGeometryPassID());
 						}

@@ -1,4 +1,4 @@
-﻿#include "ThumbnailRenderer.h"
+#include "ThumbnailRenderer.h"
 #include "Scene.h"
 #include "TransformComponent.h"
 #include "WorldTransformComponent.h"
@@ -16,6 +16,7 @@
 #include "RenderPass.h"
 #include "EditorSettingsService.h"
 #include "PreviewCameraDefaults.h"
+#include "AnimationEvaluator.h"
 
 IMPLEMENT_SINGLETON(ThumbnailRenderer)
 
@@ -89,9 +90,9 @@ void ThumbnailRenderer::SetupStudioScene()
 		};
 	// 1. 스튜디오 3점 조명(Key, Fill, Rim Light) 배치
 	// 1) Key Light (주광): 카메라 시선(정면 우측 상단)에서 모델 앞면을 화사하게 비춤
-	m_StudioLights[0] = createDirLight(vec3(30.0f, 25.0f, 0.0f), vec3(1.0f, 0.98f, 0.95f), true);
-	m_StudioLights[1] = createDirLight(vec3(15.0f, -45.0f, 0.0f), vec3(0.85f, 0.92f, 1.0f), false);
-	m_StudioLights[2] = createDirLight(vec3(45.0f, 160.0f, 0.0f), vec3(0.95f, 0.98f, 1.0f), true);
+	m_StudioLights[0] = createDirLight(vec3(30.0f, 195.0f, 0.0f), vec3(1.0f, 0.98f, 0.95f), true);
+	m_StudioLights[1] = createDirLight(vec3(15.0f, 120.0f, 0.0f), vec3(0.85f, 0.92f, 1.0f), false);
+	m_StudioLights[2] = createDirLight(vec3(45.0f, 20.0f, 0.0f), vec3(0.95f, 0.98f, 1.0f), true);
 	// 2. 프리뷰 대상 구체(Sphere) 메쉬 엔티티 생성
 	m_MeshEntity = registry.create();
 	registry.emplace<Engine::TransformComponent>(m_MeshEntity);
@@ -153,29 +154,16 @@ bool ThumbnailRenderer::SubmitMaterial(Engine::MaterialInterface* material)
 	// 트랜스폼 및 조명 시스템 갱신
 	RefreshStudioLights();
 
-	// 스튜디오 카메라 설정 (스튜디오 구체를 정면 약간 위에서 응시)
-	const vec3 target = vec3(0.0f);
-	const f32 distance = 3.5f;
-	const f32 pitch = 0.25f;
-	const f32 yaw = 0.5f;
-
-	vec3 offset;
-	offset.x = distance * cosf(pitch) * sinf(yaw);
-	offset.y = distance * sinf(pitch);
-	offset.z = -distance * cosf(pitch) * cosf(yaw);
-
-	const vec3 eye = target + offset;
-	const mat4 view = glm::lookAtLH(eye, target, vec3(0.0f, 1.0f, 0.0f));
-	const mat4 proj = glm::perspectiveLH_ZO(glm::radians(45.0f), 1.0f, 0.1f, 100.0f);
-
-	const auto cameraBuffer = CameraBuffer::FromMatrices(view, proj, eye, 0.0f);
+	const auto camera = CalculateAutoFramingCamera({ mesh->GetMin(), mesh->GetMax() });
+	if (!camera)
+		return false;
 
 	// 128x128 오프스크린 파이프라인에 카메라 버퍼 및 씬 등록
 	auto* transComp = registry.try_get<Engine::WorldTransformComponent>(m_MeshEntity);
 	if (transComp == nullptr)
 		return false;
 
-	m_Pipeline.Submit(cameraBuffer, m_Scene);
+	m_Pipeline.Submit(*camera, m_Scene);
 
 	Engine::StaticDrawCommand cmd{};
 	cmd.mesh = mesh;
@@ -204,7 +192,8 @@ Engine::MaterialInterface* ThumbnailRenderer::GetDefaultPreviewMaterial() const
 std::optional<CameraBuffer> ThumbnailRenderer::CalculateAutoFramingCamera(const Engine::BoundingBox& bounds) const
 {
 	constexpr float fieldOfView = Editor::PreviewCameraDefaults::FieldOfViewDegrees;
-	const auto framing = Editor::PreviewCameraDefaults::CalculateFraming(bounds, 1.0f, fieldOfView);
+	const auto framing = Editor::PreviewCameraDefaults::CalculateFraming(bounds, 1.0f, fieldOfView,
+		Editor::PreviewCameraDefaults::ThumbnailFramingMargin);
 	if (!framing)
 		return std::nullopt;
 
@@ -229,7 +218,43 @@ bool ThumbnailRenderer::SubmitMesh(Engine::Mesh* mesh, Engine::MaterialInterface
 	if (geomPass == nullptr ||
 		Engine::Renderer::Get().ValidateMeshMaterial(mesh, material, geomPass) != Engine::EResult::Success)
 		return false;
-	const auto camera = CalculateAutoFramingCamera({ mesh->GetMin(), mesh->GetMax() });
+
+	m_BindPoseMatrices.clear();
+	Engine::BoundingBox renderBounds(mesh->GetMin(), mesh->GetMax());
+
+	if (mesh->IsSkinned())
+	{
+		auto& rm = Engine::ResourceManager::Get();
+		const std::filesystem::path meshPath(mesh->GetPath().empty() ? mesh->GetKey() : mesh->GetPath());
+		if (!meshPath.empty())
+		{
+			const auto parentDir = meshPath.parent_path();
+			const auto stem = meshPath.stem().wstring();
+			const auto underscorePos = stem.find(L'_');
+			const auto modelPrefix = underscorePos != std::wstring::npos ? stem.substr(0, underscorePos) : stem;
+
+			const auto candidatePath = parentDir / (modelPrefix + L"_Skeleton.bamskel");
+			auto skelHandle = rm.GetResourceHandle<Engine::Skeleton>(candidatePath.wstring());
+			if (!skelHandle.IsValid())
+			{
+				auto loaded = rm.LoadFile(candidatePath.wstring());
+				if (loaded.IsValid()) skelHandle = Engine::ResourceHandle<Engine::Skeleton>(loaded);
+			}
+
+			if (skelHandle.IsValid() && skelHandle.Get() && mesh->IsSkinCompatibleWith(*skelHandle.Get()))
+			{
+				Engine::AnimationEvaluator::EvaluateBindPoseSkinningMatrices(*skelHandle.Get(), m_BindPoseMatrices);
+				if (!m_BindPoseMatrices.empty())
+				{
+					Engine::BoundingBox transformedBounds;
+					if (renderBounds.TryTransformToAABB(m_BindPoseMatrices[0], transformedBounds))
+						renderBounds = transformedBounds;
+				}
+			}
+		}
+	}
+
+	const auto camera = CalculateAutoFramingCamera(renderBounds);
 	if (!camera)
 		return false;
 	m_Pipeline.Submit(*camera, m_Scene);
@@ -238,7 +263,9 @@ bool ThumbnailRenderer::SubmitMesh(Engine::Mesh* mesh, Engine::MaterialInterface
 		Engine::SkinnedDrawCommand cmd{};
 		cmd.mesh = mesh;
 		cmd.material = material;
+		if (material) material->BuildMaterialConstants(cmd.materialConstants);
 		cmd.worldMatrix = mat4(1.0f);
+		cmd.boneMatrices = m_BindPoseMatrices.empty() ? nullptr : &m_BindPoseMatrices;
 		cmd.pickingId = 0;
 		Engine::Renderer::Get().SubmitSkinned(cmd, m_Pipeline.GetGeometryPassID());
 	}
@@ -306,6 +333,13 @@ bool ThumbnailRenderer::SubmitModel(Engine::Model* model)
 	auto& renderer = Engine::Renderer::Get();
 	bool submitted = false;
 
+	m_BindPoseMatrices.clear();
+	const auto skeletonHandle = model->GetSkeleton();
+	if (skeletonHandle.IsValid() && skeletonHandle.Get())
+	{
+		Engine::AnimationEvaluator::EvaluateBindPoseSkinningMatrices(*skeletonHandle.Get(), m_BindPoseMatrices);
+	}
+
 	for (size_t i = 0; i < nodes.size(); ++i)
 	{
 		for (uint32 meshIdx : nodes[i].MeshIndices)
@@ -335,7 +369,9 @@ bool ThumbnailRenderer::SubmitModel(Engine::Model* model)
 				Engine::SkinnedDrawCommand cmd{};
 				cmd.mesh = mesh;
 				cmd.material = material;
-				cmd.worldMatrix = worldTransforms[i];
+				if (material) material->BuildMaterialConstants(cmd.materialConstants);
+				cmd.worldMatrix = m_BindPoseMatrices.empty() ? worldTransforms[i] : mat4(1.0f);
+				cmd.boneMatrices = m_BindPoseMatrices.empty() ? nullptr : &m_BindPoseMatrices;
 				cmd.pickingId = 0;
 				renderer.SubmitSkinned(cmd, m_Pipeline.GetGeometryPassID());
 			}
