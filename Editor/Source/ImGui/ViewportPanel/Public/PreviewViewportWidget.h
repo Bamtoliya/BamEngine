@@ -57,11 +57,15 @@ public:
 	// ── 텍스처 조회 ──
 	[[nodiscard]] const std::wstring& GetDisplayRTName() const { return m_DisplayRTName; }
 	[[nodiscard]] Engine::RHITexture* GetPreviewRHITexture() const;
+	[[nodiscard]] PostProcessChain& GetPostProcessChain() { return m_PostProcessChain; }
+	[[nodiscard]] const PostProcessChain& GetPostProcessChain() const { return m_PostProcessChain; }
 
 	static void BeginShortcutFrame() { s_ShortcutTarget = nullptr; }
 	static PreviewViewportWidget* GetShortcutTarget() { return s_ShortcutTarget; }
 	bool CanFocusTarget() const;
 	void RefocusTarget();
+	void ToggleGrid() { m_ShowGrid = !m_ShowGrid; }
+	[[nodiscard]] bool IsGridVisible() const { return m_ShowGrid; }
 
 private:
 	bool TryGetModelBounds(entt::entity root, Engine::BoundingBox& bounds) const;

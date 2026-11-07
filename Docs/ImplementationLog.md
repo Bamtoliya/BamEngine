@@ -2,6 +2,168 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-08] 빌트인 기본 메시 1m 단위 크기 정규화 및 3D 물리 시뮬레이션·PIE 프레임레이트 최적화
+
+- Area: Engine | Physics | Resource | Editor | Scene
+- Type: Fix | Optimization | Performance
+- 주요 변경 내역:
+  1. **빌트인 기본 도형 메시(`QuadMesh`, `CubeMesh`, `SphereMesh`) 1m 단위 크기 정규화 (`BuiltInPrimitiveMeshes.cpp`)**:
+     - 기존에 `[-1.0, 1.0]`(가로·세로·높이 2m, 구 반지름 1m)로 생성되어 `ColliderComponent`의 기본 단위 크기(`BoxShape.Size = [1, 1, 1]`, `SphereShape.Radius = 0.5`)와 2배 차이가 나던 문제를 해결하기 위해, 세 기본 도형 모두 `[-0.5, 0.5]`(`radius = 0.5f`) 1m 단위 크기로 통일.
+     - `Scale = (1, 1, 1)`일 때 3D 렌더링 메시와 물리 콜라이더 와이어프레임이 1:1로 정확히 일치하도록 개선.
+  2. **`PhysicsPlayground.json` 씬 포맷 복구 및 단위 콜라이더 동기화 (`Resources/Scenes/PhysicsPlayground.json`)**:
+     - 씬 직렬화 헤더(`Format`, `Version`, `Name`, `NextEntityId`, `Hierarchy`) 보강 및 전 엔티티의 `BoxShape.Size = [1, 1, 1]`, `SphereShape.Radius = 0.5` 단위 규격 일괄 적용.
+  3. **3D 물리 솔버(`PhysicsSystem::OnFixedUpdate`) 및 캐릭터 스윕(`KinematicCharacterSystem::SweepCharacter`) 병목 해소**:
+     - 강체 적분 루프 내 중복 하향 레이캐스트(박스 반높이를 무시하여 바닥에 콜라이더가 파묻히고 매 스텝 22회 전체 씬 레이캐스트를 유발하던 블록) 제거.
+     - 8꼭짓점 `double` 행렬 변환(`TryTransformToAABB`) 대신 중심점 변환 + 축별 절댓값 내적(`glm::abs`)으로 월드 AABB를 즉시 계산하는 `ComputeColliderWorldAABB3D` 도입.
+     - 솔버 루프 진입 전 활성 비트리거 3D 콜라이더를 평탄화된 `ColliderProxy3D` 배열로 1회 수집하여, 내부 $O(N^2)$ 루프의 EnTT 다중 뷰 반복자 및 `try_get`/`get` 조회 오버헤드를 전면 제거하고 AABB 광역 검사 및 캐시된 `worldAABB` 협역 교차 판정 적용.
+     - `ResolvePhysicsContact3D`: 침투 깊이가 허용 오차(`penetrationSlop = 0.001`) 이하인 안정 접촉 상태에서 불필요한 `TransformSystem::UpdateRootWorld` 행렬 재계산 조기 반환 처리.
+     - `CollectPhysicsTriggerEvents3D`: 트리거 후보 인덱스를 선별하여 비트리거 간 불필요한 $O(N^2)$ 순회 제거.
+  4. **PIE 고정 업데이트 죽음의 소용돌이(Spiral of Death) 방어 (`Application.cpp`)**:
+     - 프레임당 최대 고정 업데이트 횟수를 `maxSubSteps = 2`로 제한하고 초과 누적 시간을 소진하여 일시적 프레임 지연이 연쇄 프레임 드랍으로 이어지지 않도록 방어.
+  5. **실행 검증 결과**:
+     - `PhysicsPlayground` 씬 Play 모드 기준 `PhysicsSystem::OnFixedUpdate` 소요 시간이 `25.55 ms -> 1.85 ms`로 단축되었으며, 프레임레이트가 기존 `8~9 FPS`에서 **`75~85 FPS`**로 안정화됨을 확인.
+
+### [2026-11-08] 에셋 아키텍처 해석계층: 텍스처 로더 경로 역참조 결함 수정 및 가상 마운트 URI 파이프라인 완결
+
+- Area: Core | Resource | Texture | Audio | Render
+- Type: Bugfix | Stability | Architecture
+- 문제 분석:
+  - 에디터 기동 시 `StartupResourceLoader`에서 텍스처 사전 로드(`LoadFile`) 도중 `Texture.cpp:219 (File Not Found)` 크래시 발생.
+  - 원인 1: `ResourceManager::RegisterExplicitLoader`의 `registerSimpleLoader` 람다가 `LoadFile`에서 넘겨준 디스크 절대 경로(`path`)를 무시하고 가상 식별자 키(`key`)를 `desc.Path`에 대입하여, `desc.Path`가 `Project://Textures/...` 등의 가상 URI로 오염됨.
+  - 원인 2: `Texture::Initialize` 및 `Reload`에서 `m_Path`가 가상 URI(`Project://...`)일 때 `Runtime::ResolveProjectRelativePath`를 거치면서 `ProjectRoot / "Project://..."`라는 잘못된 경로로 결합되어 파일 오픈 실패.
+- 수정 내역:
+  1. `ResourceManager.cpp`:
+     - `registerSimpleLoader` 및 `shaderLoader`: `desc.Path = path.empty() ? key : path;`로 수정하여 실제 물리 절대 경로를 정확히 보존 및 전달.
+  2. `Texture.cpp`:
+     - `Initialize` 및 `Reload`: `PlatformPath::ResolveUri`를 직접 호출하여 `m_Path`가 가상 URI, 상대 경로, 절대 경로 어떤 형식이어도 정확한 디스크 물리 경로로 해석하도록 수정.
+  3. `AudioClip.cpp`, `DirectX12Shader.cpp`, `Resource.cpp`:
+     - `PlatformPath::ResolveUri`를 적용하여 오디오, 셰이더 바이트코드, 일반 리소스 리로드에서도 가상 URI 경로를 일원화 지원.
+  4. `Application.cpp`:
+     - `runtimeDesc.EngineResourceRoot`에 에디터 설정의 `EngineResourceDirectory`를 안전하게 주입.
+
+
+### [2026-11-08] 렌더링 트랙 A: 텍스처 밉맵(Mipmap) 체인 구축, CPU 런타임 다운샘플링 및 D3D12 다중 서브리소스 업로드 완결 (S2-D)
+
+- Area: Render | RHI | DirectX12 | Resource | Architecture
+- Type: Feature | Optimization | Performance
+- 주요 변경 내역:
+  1. **텍스처 밉 레벨 계산 및 헤더/직렬화 다중 밉 지원 (`Texture.h/.cpp`, `TextureBinaryHeader`)**:
+     - `Texture::CalculateMipLevels(width, height)`: 텍스처 크기 기준 $1 + \lfloor\log_2(\max(W, H))\rfloor$ 밉 레벨 수 계산기 구현 (경계 조건: 0, 1x1, 비정방형 해상도 방어).
+     - `TextureCreateDesc`: `generateMips = true` 기본 옵션 추가 (UI/픽셀 아트 등 단일 밉 텍스처 선택적 비활성화 지원).
+     - `ValidateTextureHeader`: `header.mipLevels >= 1` 다중 밉 레이아웃 허용 및 전체 밉 레벨 바이트 크기 총합($\sum W_m \times H_m \times 4$) 정밀 검증.
+  2. **`stb_image_resize2` 기반 CPU 런타임 밉맵 체인 다운샘플링 (`Texture.cpp`)**:
+     - `Texture::InitializeFromEncodedMemory`: Mip 0 원본 픽셀 디코드 후, Mip 1 ~ Mip N-1까지 연속 메모리 버퍼 상에서 이전 밉($m-1$)을 소스로 단계별 $1/2$ 선형(`stbir_resize_uint8_linear`, `STBIR_RGBA`) 다운샘플링 수행.
+     - 메모리 오버헤드 $\approx 1.333\times$ 수준에서 고품질 Mip 0 ~ Mip N 연속 픽셀 데이터 생성.
+  3. **DirectX 12 RHI 다중 서브리소스 순회 업로드 (`DirectX12RHI.cpp`)**:
+     - `DirectX12RHI::UploadTextureData`:
+       - `desc.mipLevels == 0` 방어 및 `resourceDesc.MipLevels != desc.mipLevels` 검증.
+       - D3D12 드라이버 `GetCopyableFootprints`에 `numSubresources = desc.mipLevels`를 전달하여 256바이트 RowPitch 및 512바이트 PlacementAlignment가 반영된 각 서브리소스별 풋프린트 레이아웃 일괄 획득.
+       - CPU 연속 밉 체인 픽셀 데이터를 각 서브리소스 오프셋(`footprints[mip].Offset`) 및 피치에 맞춰 업로드 버퍼에 순회 패킹.
+       - `copyList->CopyTextureRegion`을 전체 밉 레벨에 대해 순회 호출하여 GPU 목적지 텍스처의 `SubresourceIndex = mip`로 일괄 복사.
+       - 단일 밉(`mipLevels == 1`) 및 기존 `TerrainSystem`의 부분 업로드(`dstX, dstY`) 하위 호환성 100% 보존.
+  4. **삼선형 필터링(Trilinear Filtering) 자동 연동 (`DirectX12Sampler.cpp`, `SamplerManager.cpp`)**:
+     - `SamplerManager`의 기본 샘플러(`MipFilter = Linear`, `MaxLOD = D3D12_FLOAT32_MAX`)와 결합되어, 원거리 텍스처 샘플링 시 에일리어싱/자글거림(Shimmering) 0% 제거 및 부드러운 밉 레벨 보간 달성.
+  5. **단위 테스트 `TextureMipmapCheck` 신설 및 CTest 등록 (`TextureMipmapCheck.cpp`, `Checks.cmake`)**:
+     - 밉 레벨 수 경계값 계산(1x1~4096x4096), CPU 밉 체인 다운샘플링 색상 보존율, 256x128 9-level 밉 체인 바이트 크기(174,764 바이트) 전수 검증.
+
+### [2026-11-08] 트랙 D: 스프라이트 시트 슬라이싱, 원클릭 액션 애니메이션 연동, 9-Slice/Tiled/Filled 렌더링, 픽셀 퍼펙트 카메라 및 2D 타일맵 시스템 완비 (Phase 1~4)
+
+- Area: Engine | Render | Editor | 2D | Animation | Localization
+- Type: Feature | Architecture | UX
+- 주요 변경 내역:
+  1. **Phase 1: 스프라이트 시트 슬라이서 & 에디터 (SpriteEditor.h/.cpp) 및 원클릭 액션 애니메이션 클립 생성 위저드**:
+     - SpriteEditor: 체커보드 배경, 텍스처 줌 & 팬, 슬라이스 사각 테두리 시각화, 피벗 십자선 및 9-Slice 보더 라인을 갖춘 전용 에디터 구현.
+     - 3대 슬라이스 알고리즘 구축: GridByCellSize (셀 픽셀 WxH 균등 격자), GridByCellCount (행/열 개수 균등 분할), Automatic (알파 클러스터 검출).
+     - 원클릭 액션 애니메이션 생성 위저드 (DrawCreateAnimationModal): 슬라이스된 프레임들로부터 단일 클립 또는 행(Row)별 다중 클립(Idle, Walk, Attack, Die 등)을 원클릭으로 .spriteanim 에셋으로 일괄 추출.
+     - Sprite.h/.cpp: 9-Slice용 m_Border (Left, Right, Top, Bottom) 필드 및 리플렉션/접근자 추가.
+  2. **Phase 2: 스프라이트 렌더링 모드 확장 (SpriteRendererComponent.h, SpriteRenderSystem.cpp)**:
+     - ESpriteDrawMode: 기존에 Simple 외에 스킵되던 Sliced, Tiled, Filled 렌더링 파이프라인 전면 구축.
+     - Sliced (9-Slice): 보더 인셋에 맞춰 모서리 4개(고정 비율), 변 4개(단방향 확장), 중앙 1개(양방향 확장) 등 9개 사각 패치 동적 분할 렌더링.
+     - Tiled: 목표 크기에 맞춰 스프라이트를 늘리지 않고 바둑판식으로 쿼드 반복 배치 렌더링.
+     - Filled: Horizontal 및 Vertical 모드에서 진행도(fillAmount, 0.0 ~ 1.0)에 따라 정점 크기 및 UV를 클리핑하여 체력바/게이지 렌더링 지원.
+     - 2D 정렬 순서(sortingLayerID, orderInLayer) 필드 확장.
+  3. **Phase 3: 픽셀 퍼펙트 카메라 및 서브픽셀 스냅 (PixelPerfectCameraComponent.h, CameraSystem.cpp)**:
+     - PixelPerfectCameraComponent: 기준 가상 해상도(refResolutionX, refResolutionY), 에셋 assetsPPU, 서브픽셀 스냅(snapSubpixel) 정의.
+     - CameraSystem: 직교 투영 카메라 위치를 1/PPU 단위 정수 격자로 스냅(floor(X * PPU + 0.5) / PPU)하여 카메라 이동 시 텍스처 픽셀 경계 떨림(Jittering & Shimmering) 0% 제거.
+  4. **Phase 4: 청크 기반 2D 타일맵 시스템 (TilemapComponent.h, TilemapRenderSystem.h/.cpp, TilePalettePanel.h/.cpp)**:
+     - TilemapComponent: 16x16 타일 블록 단위 스파스 청크 해시맵(std::unordered_map<uint64_t, TilemapChunk>), 셀 좌표 <-> 월드 좌표 변환 및 SetTile/GetTile/ClearTile API 구축.
+     - TilemapRenderSystem: 활성 청크 내 타일들을 배치 순회하며 SpriteDrawCommand로 고속 렌더링.
+     - TilePalettePanel: 툴바(Paint B, Erase E, BoxFill U, Picker I), 썸네일 그리드, 드래그 앤 드롭 팔레트 등록을 지원하는 전용 타일 팔레트 에디터 구축 및 ImGuiManager 메뉴 등록.
+  5. **로캘 동기화 및 무결점 정적 감사 통과**:
+     - Editor.csv, Engine.csv에 신규 키 39개 등록 후 localizationcsvtojson.py 동기화 (총 2,401개 키).
+     - audit_localization.py --strict 0건 위반으로 완벽 통과 (627개 파일 전수 검증).
+
+### [2026-11-08] 파티클 & 이펙트 시스템: 물리 충돌, 컬 노이즈 연기 역학, 모듈형 에셋화 및 독립 이펙트 에디터 완결 (Phase 1~5)
+
+- Area: Engine | Render | FX | Physics | Editor | Localization
+- Type: Feature | Architecture | Content | Tools
+- 주요 변경 내역:
+  1. **Phase 1: 물리 충돌 & 반발(Bounce) 및 바닥 상호작용 (`ParticleEmitterComponent.h`, `ParticleSystem.cpp`)**:
+     - `EParticleCollisionMode` (`None`, `FloorPlane`, `PhysicsRaycast`), `EParticleCollisionResponse` (`Bounce`, `Slide`, `DieOnContact`, `Stop`) 신설.
+     - `FloorPlane` 고속 평면 충돌(지면 침투 방지 fraction $t_{\text{hit}}$ 계산) 및 `PhysicsRaycast` 실시간 선분 충돌(프레임당 최대 검사 횟수 가드) 구현.
+     - 법선 탄성 반발 벡터 $\vec{v}' = \vec{v} - (1 + e)(\vec{v} \cdot \vec{N})\vec{N}$, 수평 마찰 감쇠 및 임계치 이하 시 미끄러짐/정지 전환.
+  2. **Phase 2: 공간 연기 확산 역학 (부력, 3D 무발산 컬 노이즈, 외력 드래그)**:
+     - 중력과 독립적인 수직 부력($\vec{a}_{\text{buoyancy}} = (0, b, 0)$) 적분.
+     - 결정론적 O(1) 비트 해시 기반 3D 그래디언트 노이즈 및 무발산(Divergence-Free) 3D 컬 노이즈($\nabla \times \vec{\Psi}$) 벡터장 계산기 구현으로 유기적 와류 형성.
+     - 전역 바람(Global Wind) 상대 속도 기반 공기 저항 드래그 감쇠 구현.
+  3. **이펙트 리소스 및 셰이더/머티리얼 파이프라인 정비**:
+     - `Resources/Texture/`: `Particle_SoftCircle.png`, `Particle_Smoke.png`, `Particle_Spark.png`, `Particle_Ring.png` 4종 고품질 RGBA 에셋 구축.
+     - `Resources/Shader/`: `gbufferSpritePS.hlsl`, `gbuffer_sprite.frag`에 파티클 발광(Emission) 출력 채널을 연결하여 HDR 블룸과 자동 연동.
+     - `Resources/Material/`: `ParticleMaterial_Additive.bammat.json`, `ParticleMaterial_AlphaBlend.bammat.json` 신설 (`Masked` 블렌드 및 `ReadOnly` 깊이 모드로 GBuffer 지오메트리 패스 호환 보장).
+     - `MaterialEditor.cpp`: `fillModes` 배열 역전 버그 수정.
+  4. **Phase 3 아키텍처 리팩터링: 엔진 코어 경량화 및 충돌 이벤트 큐 분리**:
+     - C++ 하드코딩성 서브 버스트/충격파 변수를 전면 제거하고 컴포넌트를 코어 물리 프리미티브만 남기도록 다이어트.
+     - `ParticleCollisionEvent` 구조체 신설: 충돌 위치, 법선, 속도, 시각 기록 및 매 프레임 `ClearEvents()` 자동 정리.
+     - `UpdateEmitter`에서 충돌 감지 시 `collisionEvents` 버퍼에 O(1) 기록.
+     - 구체적인 시각 효과(스파크 연쇄, 지면 충격파 링 등)는 에디터 및 Phase 4 모듈형 에셋(`ParticleEffect`)에서 이미터들을 조합하도록 명확한 책임 분리 확립.
+  5. **로캘 키 및 씬 하위 호환성 보장**:
+     - `Resources/Data/Localization/Engine.csv`, `Editor.csv`에 물리 충돌, 컬 노이즈 및 에디터 로캘 키 등록.
+     - 모든 신규 프로퍼티에 `ALLOW_MISSING`을 적용하여 구버전 씬 역직렬화 시 `ArchiveErrorCode::MissingField` 방어.
+  6. **Phase 4: 모듈형 아키텍처 및 독립 에셋화 (`ParticleEffect` Asset, `ParticleEffectComponent`)**:
+     - `ResourceBinaryHeader.h`: `EResourceType::ParticleEffect` (확장자 `.bameffect`) 신설.
+     - `ParticleEffect.h/.cpp`: 모듈형 이미터 데이터 구조체(`ParticleEmitterData`: 트리거, 방출, 역학, 물리 충돌, 빌보드/지면디스크 렌더링) 및 `JsonArchive` 파일 입출력 완비.
+     - `ParticleEffectComponent.h`: 다중 이미터 런타임 인스턴스 배열(`instances`) 및 재생 속도/상태 제어 지원.
+     - `ParticleSystem.cpp`: 지속 방출/물리 적분 및 `OnParentCollision` 이벤트 스폰 체이닝을 처리하는 2단계 파이프라인 및 일괄 GPU 렌더링 제출 연동.
+     - `Resources/Effect/Explosion_Fireball.bameffect.json`: 메인 발사체 -> 지면 충격파 링 -> 충돌 스파크 -> 연기 퍼프 4중 체이닝 풀 스펙 예제 에셋 제작.
+  7. **Phase 5: 독립 프리뷰 전용 이펙트 에디터 (`ParticleEditorPanel.h/.cpp`)**:
+     - `ResourceEditorInterface` 상속 전용 이펙트 저작 패널 신설.
+     - `PreviewViewportWidget` 기반 독립 오프스크린 씬: 스튜디오 라이팅, 마우스 궤도 카메라, Non-PIE 실시간 뷰포트 렌더링.
+     - 상단 툴바: Play/Pause, Step(+0.033s), Restart, 0.1x~3.0x 배속 조절, 카메라 포커스 리셋, 활성 파티클 통계(`Total`, `Time`) 실시간 출력.
+     - 3열 스플릿 레이아웃: 좌측 이미터 리스트(추가/삭제/활성화 토글/트리거 라벨), 중앙 독립 3D 뷰포트, 우측 모듈 스택 인스펙터(트리거/방출/수명속도/외력/충돌/크기회전/색상머티리얼 피커).
+     - `ImGuiManager` 및 에셋 브라우저 연동: `.bameffect`, `.bameffect.json` 더블클릭 시 자동 오픈 지원.
+     - 로캘 원본 `Editor.csv` 동기화 및 `audit_localization.py --strict` 0건 결함 통과.
+
+### [2026-11-08] 에셋 아키텍처: 가상 마운트 URI (Engine://, Project://) 해석 계층 및 단위 테스트 구축 (트랙 C Phase 1~2)
+
+- Area: Core | Resource | Architecture | Config
+- Type: Feature | Architecture | Safety
+- 주요 변경 내역:
+  1. **`PlatformPath` 가상 마운트 URI(`Engine://`, `Project://`) 해석 계층 구축**:
+     - `PlatformPath.h/.cpp`:
+       - `SetEngineResourceRoot` / `GetEngineResourceRoot`: 엔진 시스템 빌트인 리소스 루트(`Engine/Resources`, 과도기 폴백 `Resources`) 관리.
+       - `SetProjectAssetRoot` / `GetProjectAssetRoot`: 프로젝트 사용자 에셋 루트(`Assets`, 과도기 폴백 `Resources`) 관리.
+       - `IsEngineUri`, `IsProjectUri`, `IsVirtualUri`: 대소문자 무관(`engine://`, `project://`, `asset://`) 가상 URI 판별기 구현.
+       - `ResolveUri`: 가상 URI를 물리 디스크 절대 경로로 안전하게 해석.
+         - 디렉터리 트래버설(`..`) 탐색 탈출 방어: 마운트 루트를 벗어나는 악의적/비정상 경로를 차단하고 안전한 루트로 격리.
+         - 레거시 상대 경로 하위 호환(4단계 폴백): `ProjectAssetRoot` 실존 검사 -> `EngineResourceRoot` 실존 검사 -> `Resources/` 접두어 제거 후 재검색 -> 기본 프로젝트 루트 결합 순서로 기존 씬, 머티리얼, 텍스처 참조 100% 무파괴 호환.
+       - `ToVirtualUri`: 물리 디스크 경로를 마운트 소속에 따라 `Engine://...` 또는 `Project://...`로 자동 정규화 역변환. 과도기(동일 폴더) 시 내장 시스템 파일(셰이더, 로캘, 폰트) 화이트리스트 분별 지원.
+       - `IsReadOnlyTarget`: 엔진 시스템 자원(`Engine://` 또는 `EngineResourceRoot`)에 대한 임의 쓰기/수정 방어 가드 구현.
+  2. **`ResourceManager` 가상 URI 로드 및 읽기 전용 보호 연동**:
+     - `ResourceManager.cpp`:
+       - `ResolveResourceLoadPath`: `PlatformPath::ResolveUri`를 직접 호출하여 URI 및 상대 경로를 일원화 해석.
+       - `ToProjectRelativePath`: 가상 URI(`Engine://...`, `Project://...`) 보존 및 정규화.
+       - `LoadFile`: URI 입력 시 `PlatformPath::ResolveUri`로 디스크 실존 경로를 도출하고, 고유 키는 정규화된 URI/상대 경로로 유지.
+       - `SaveToJsonFile` / `SaveToBeveFile`: `PlatformPath::IsReadOnlyTarget` 검사를 통해 `Engine://` 빌트인 시스템 자원에 대한 덮어쓰기 저장 시도를 사전 차단(`EResult::AccessDenied`).
+  3. **`ProjectSettings` (`Config.h`) 및 `Runtime` 경로 주입 연결**:
+     - `Config.h`: `ProjectSettings`에 `EngineResourceDirectory = "Engine/Resources"` 필드 신설 (`AssetDirectory = "Resources"`와 병행).
+     - `Runtime.h/.cpp`: `RUNTIMEDESC`에 `EngineResourceRoot` 추가 및 초기화 시 `PlatformPath::SetProjectAssetRoot`, `PlatformPath::SetEngineResourceRoot`에 자동 주입.
+  4. **단위 테스트 `VirtualPathCheck` 신설 및 CTest 등록**:
+     - `Engine/examples/VirtualPathCheck.cpp`:
+       - 모의 격리 디렉터리 기반 7개 핵심 시나리오(마운트 루트 설정, URI 판별, URI 해석, 디렉터리 탈출 방어, ToVirtualUri 역변환, 읽기 전용 검사, 레거시 폴백) 전수 자동 검증.
+     - `Engine/CMake/Checks.cmake`: `VirtualPathCheck` 실행 파일 및 `add_test` 등록.
+  5. **무결점 로컬라이제이션 검사 유지**:
+     - `audit_localization.py --strict` 621개 파일, 2,334개 키 100% 통과 유지.
+
 ### [2026-11-07] 모델 파이프라인 자동 메시 LOD 생성 및 ModelEditor 실시간 LOD 뷰어 구축 (우선순위 3번 트랙 B)
 
 - Area: Pipeline | Tool | Editor | Resource | Render
@@ -38,27 +200,36 @@ This document tracks implementation details, architectural decisions, and techni
      - `audit_localization.py --strict` 0건 위반으로 완벽 통과 (621개 파일 전수 검증).
 
 
-### [2026-11-07] 트랙 A: 3D 형상 물리 충돌·스윕 완비, KCC 안정화 및 3D RigidBody 시뮬레이터 구축
+### [2026-11-08] 트랙 A: 3D 형상 물리 충돌·스윕 완비, KCC 안정화, 조인트 제약조건 해결기 및 3D RigidBody 시뮬레이터 완결
 
-- Area: Engine | Physics | KCC | Architecture
-- Type: Feature | Fix | Stability
+- Area: Engine | Physics | KCC | Architecture | Scene
+- Type: Feature | Fix | Stability | Content
 - 주요 변경 내역:
-  1. **3D Capsule 충돌·스윕·레이캐스트 알고리즘 완비 (`Collision.h/.cpp`)**:
-     - `Collision::Raycast(Ray, Capsule, ...)`: 캡슐의 원통 측면 및 양 끝 반구에 대한 닫힌 형태(closed form)의 정확한 광선 교차 판정 추가.
-     - `Collision::Intersects(Capsule, BoundingBox)`: 선분과 AABB/OBB 간 3D 최근접점 거리 계산을 통한 정밀 교차 판정(침투 깊이, 법선, 접점) 및 OBB 월드 변환 지원.
-     - `Collision::Intersects3D(Capsule, Capsule)`: 두 3D 캡슐 간 최단 거리 및 접촉 판정 완비.
-     - `Collision::Sweep(Capsule, ...)`: Sphere(민코프스키 합 역방향 레이캐스트), Box/OBB 및 Capsule 대상 연속 충돌 스윕(Bisection Search) 함수 4종 완비.
-  2. **물리 시스템 3D 형상 질의 및 트리거 버그 수정 (`PhysicsSystem.h/.cpp`)**:
-     - `TestColliderHit`: `ColliderComponent`에 `CapsuleShape`가 설정되었을 때 레이캐스트가 누락되던 결함 수정.
-     - `Overlap3D`: KCC vs Box 판정 시 중심점 포함 여부(`Contains(Center)`)로 검사하여 모서리 충돌을 놓치던 심각한 결함을 제거하고, `Collision::Intersects` 기반 정확한 OBB 교차 판정으로 전면 교체. CapsuleShape 및 MeshShape 콜라이더 간의 전수 오버랩 분기 완비.
-     - 2D 회전 역학 연결: `RigidBody2DComponent`의 `AccumulatedTorque` 소비, `InverseInertia` 자동 계산 및 Z축 각속도/회전 적분 연결.
-     - 3D 강체 시뮬레이터 구축: `RigidBodyComponent` 뷰를 `OnFixedUpdate`에 신설하여 중력 낙하, 선속도/외력 적분, 정적 바닥/지형 충돌 접지 및 각속도 회전 적분을 실제로 수행하도록 구현.
-  3. **키네마틱 캐릭터 컨트롤러(KCC) 고도화 (`KinematicCharacterSystem.h/.cpp`)**:
-     - `KinematicCharacterSystem`을 가변 프레임(`OnUpdate`)에서 물리 고정 틱(`OnFixedUpdate`)으로 이관하여 FPS 변동에 따른 터널링 및 물리 오차 원천 차단.
-     - `SweepCharacter`: 장애물 검사 시 `CapsuleShape` 및 `MeshShape` 콜라이더 분기를 추가하고, 캐릭터 본인도 캡슐 스윕(`Collision::Sweep`)을 사용하도록 정밀화.
-  4. **전역 물리 설정 구조체 신설 (`PhysicsSettings.h`, `PhysicsComponent.h`, `Engine.csv`)**:
-     - `PhysicsSettings`: 2D/3D 전역 중력 벡터, 고정 타임스텝(`FixedTimeStep = 0.02f`), 물리 솔버 반복 횟수 및 32개 레이어 이름 정의.
-     - `PhysicsSystem::GetSettings()`, `SetSettings()` 정적 인터페이스 노출 및 `Engine.csv` 로캘 키 7종 등록.
+  1. **3D Capsule 충돌·스윕·레이캐스트 알고리즘 완비 (Collision.h/.cpp)**:
+     - Collision::Raycast(Ray, Capsule, ...): 캡슐의 원통 측면 및 양 끝 반구에 대한 닫힌 형태(closed form)의 정확한 광선 교차 판정 추가.
+     - Collision::Intersects(Capsule, BoundingBox): 선분과 AABB/OBB 간 3D 최근접점 거리 계산을 통한 정밀 교차 판정(침투 깊이, 법선, 접점) 및 OBB 월드 변환 지원.
+     - Collision::Intersects3D(Capsule, Capsule): 두 3D 캡슐 간 최단 거리 및 접촉 판정 완비.
+     - Collision::Sweep(Capsule, ...): Sphere(민코프스키 합 역방향 레이캐스트), Box/OBB 및 Capsule 대상 연속 충돌 스윕(Bisection Search) 함수 4종 완비.
+  2. **물리 시스템 3D 형상 질의 및 트리거 버그 수정 (PhysicsSystem.h/.cpp)**:
+     - TestColliderHit: ColliderComponent에 CapsuleShape가 설정되었을 때 레이캐스트가 누락되던 결함 수정.
+     - Overlap3D: KCC vs Box 판정 시 중심점 포함 여부(Contains(Center))로 검사하여 모서리 충돌을 놓치던 심각한 결함을 제거하고, Collision::Intersects 기반 정확한 OBB 교차 판정으로 전면 교체. CapsuleShape 및 MeshShape 콜라이더 간의 전수 오버랩 분기 완비.
+     - 2D 회전 역학 연결: RigidBody2DComponent의 AccumulatedTorque 소비, InverseInertia 자동 계산 및 Z축 각속도/회전 적분 연결.
+     - 3D 강체 시뮬레이터 구축: RigidBodyComponent 뷰를 OnFixedUpdate에 신설하여 중력 낙하, 선속도/외력 적분, 정적 바닥/지형 충돌 접지 및 각속도 회전 적분을 실제로 수행하도록 구현.
+  3. **키네마틱 캐릭터 컨트롤러(KCC) 고도화 및 무빙 플랫폼 연동 (KinematicCharacterSystem.h/.cpp, CharacterControllerComponent.h)**:
+     - KinematicCharacterSystem을 가변 프레임(OnUpdate)에서 물리 고정 틱(OnFixedUpdate)으로 이관하여 FPS 변동에 따른 터널링 및 물리 오차 원천 차단.
+     - SweepCharacter: 장애물 검사 시 CapsuleShape 및 MeshShape 콜라이더 분기를 추가하고, 캐릭터 본인도 캡슐 스윕(Collision::Sweep)을 사용하도록 정밀화.
+     - DetectGround: 접촉 지면 엔티티(outHitEntity)를 반환하도록 시그니처 확장.
+     - **무빙 플랫폼(Moving Platform) 상속**: 캐릭터가 이동하거나 회전하는 플랫폼 위에 서 있을 때, 플랫폼의 이동량 및 플랫폼 중심 기준 공전/자전 회전을 완벽하게 상속하여 미끄러짐 없이 함께 움직이도록 구현.
+  4. **조인트(Joint) 제약조건 해결기 구현 (Joint2DComponent, JointComponent, DebugRenderer.cpp)**:
+     - ResolveJoints2D 및 ResolveJoints3D: 위치 기반 역학(XPBD) 거리 제약조건 오차 보정 및 진동 방지 상대 속도 댐핑 임펄스 적용.
+     - DebugRenderer: JointComponent 및 Joint2DComponent의 앵커 핀 및 연결선 와이어프레임 시각화 구현.
+  5. **3D 강체 충돌 반발·마찰 및 침투 해결기 (ResolvePhysicsContact3D)**:
+     - Dynamic vs Dynamic, Dynamic vs Static 3D 콜라이더 간의 탄성 반발(Restitution), 쿨롱 마찰(Friction) 및 비침투 위치 보정 루프를 OnFixedUpdate에 완비.
+  6. **전역 물리 설정 구조체 신설 (PhysicsSettings.h, PhysicsComponent.h, Engine.csv)**:
+     - PhysicsSettings: 2D/3D 전역 중력 벡터, 고정 타임스텝(FixedTimeStep = 0.02f), 물리 솔버 반복 횟수 및 32개 레이어 이름 정의.
+     - PhysicsSystem::GetSettings(), SetSettings() 정적 인터페이스 노출 및 Engine.csv 로캘 키 7종 등록.
+  7. **종합 물리 테스트 씬 구축 (Resources/Scenes/PhysicsPlayground.json)**:
+     - 지면, 계단(StepOffset 검증), 경사로(25° 보행/55° 미끄러짐), 무빙 플랫폼, 3D 진자 조인트, 쌓여 있는 Dynamic RigidBody 박스들, 3인칭 플레이어 캐릭터 배치.
 
 ### [2026-11-07] ModelEditor 내장 애니메이션 클립 선택·재생 및 정밀 타임라인 제어 기능 추가
 
@@ -3174,3 +3345,67 @@ Use this as the primary execution list until a playable 2D vertical slice is com
       - 연기, 흙먼지, 안개, 물보라용. 깊이 쓰기를 꺼서(Z-Write Off) 입자끼리 가려지는 아티팩트 없이 부드럽게 배경과 투명 합성.
   - `Engine/Source/System/Render/Private/ParticleSystem.cpp`:
     - `OnSubmit` 기본 머티리얼 폴백을 `ParticleMaterial_AlphaBlend`로 우선 연결하여 컴포넌트 추가 시 기본적으로 부드러운 투명 합성이 적용되도록 개선.
+
+
+## 2026-11-08 — [Bugfix] MaterialEditor FillMode 인덱스 역전 수정 및 파티클 머티리얼 GeometryPass 수락 동기화
+
+- **버그 1: MaterialEditor 채움(FillMode) 옵션 반대 표시 수정**
+  - **원인:** `EFillMode` enum 순서는 `Wireframe=0`, `Solid=1`인데, `MaterialEditor.cpp`의 콤보 텍스트 배열 `fillModes`가 `{ "Solid", "Wireframe" }`으로 정의되어 있어 UI 선택 인덱스와 enum 값이 정반대로 동작함.
+  - **수정:** `fillModes[] = { "MaterialOption.Wireframe", "MaterialOption.Solid" };`로 순서 수정 완료.
+- **버그 2: 신규 파티클 머티리얼 적용 시 파티클이 렌더링되지 않던 문제 수정**
+  - **원인:** 현재 파티클 렌더링 파이프라인(`ParticleSystem::OnSubmit`)은 디퍼드 `GeometryPass`를 통해 제출되는데, `GeometryPass`는 오직 `Opaque(1)`와 `Masked(16)` 블렌드 모드만 수락함(`IsAcceptsBlendMode`). 신규 머티리얼의 `m_BlendMode`가 `Additive(4)` 또는 `AlphaBlend(2)`로 설정되어 있어 `IsAcceptsBlendMode` 검사에서 탈락되어 전체 렌더링이 스킵되었음.
+  - **수정:**
+    - `ParticleMaterial_Additive.bammat.json` 및 `ParticleMaterial_AlphaBlend.bammat.json`의 `m_BlendMode`를 `16 (Masked)`로 설정하여 `GeometryPass`에서 정상 렌더링되도록 동기화.
+    - 깊이 모드는 `m_DepthMode: 1 (ReadOnly)`를 유지하여 파티클끼리 가리지 않고 겹쳐지도록 보장하고, `gbufferSpritePS.hlsl`의 `output.Emission`을 통해 발광 및 블룸 효과 정상 연동.
+
+## 2026-11-08 — [Bugfix] UI 뷰 SpriteMaterial 바인딩 크래시 방어 및 컨텐츠 브라우저 ↔ 스프라이트/타일 팔레트 연동 구축
+
+- **버그 1: UI View에서 UIImageComponent에 SpriteMaterial 바인딩 시 렌더러 크래시(브레이크) 수정**
+  - **원인:**
+    - `SpriteMaterial.bammat.json`은 3D 디퍼드 G-Buffer 패스 전용(`GBufferSpriteVS`, `GBufferSpritePS`)으로, 4개 렌더타깃 출력 및 정점 버퍼 입력을 기대함.
+    - `UI View`는 `ERenderPassType::UI`이며 단일 렌더타깃과 `Draw(6)` 절차적 정점 셰이더(`UIVS.hlsl`)를 사용함.
+    - `UIImageComponent`가 비어있을 때 기본 머티리얼이 없어 렌더링되지 않던 문제 때문에 사용자가 `SpriteMaterial`을 할당하였고, 렌더 타깃 포맷/수량 불일치 및 InputLayout 부재로 D3D12 PSO 생성 및 Draw 시 브레이크/크래시가 발생함.
+  - **수정:**
+    - `Engine/Source/System/Render/Private/UIRenderSystem.cpp`: `UIImageComponent`의 `materialHandle`이 비어있거나 UI 패스 서명에 맞지 않는 3D 머티리얼인 경우 기본 `Resources/Material/UIMaterial.bammat.json`으로 자동 안전 폴백.
+    - `Engine/Source/Render/Private/Renderer.cpp`: `RenderUIImages`에서 비호환 머티리얼 바인딩 실패 시 크래시 없이 기본 `UIMaterial`로 안전하게 폴백 바인딩하고 드로우콜을 계속 진행하도록 2중 방어벽 구축.
+    - `UIImageComponent`의 `spriteHandle`과 UV 변환(`uvTransform`)이 `UIVS`의 `UvRect`에 정확히 매핑되어, 슬라이스된 스프라이트의 부분 UV도 UI 상에 왜곡 없이 완벽 렌더링되도록 보장.
+
+- **버그 2: 컨텐츠 브라우저에서 텍스처/스프라이트 그리드 아이템을 스프라이트 에디터 또는 타일 팔레트에 올렸을 때 미작동 문제 수정**
+  - **원인:**
+    - 컨텐츠 브라우저는 드래그 페이로드를 `"CONTENT_BROWSER_ITEM"`으로 전송하나, `TilePalettePanel`은 `"ASSET_PATH"`를 수신 대기하고 있었고 목록이 비어있을 때만 드롭 타깃을 열어두었음.
+    - `SpriteEditor`에는 에셋 드래그 앤 드롭 타깃(`BeginDragDropTarget`)이 아예 구현되어 있지 않았음.
+    - 컨텐츠 브라우저에서 텍스처 우클릭 시 `SpriteEditor`로 바로 연결하는 메뉴가 없었음.
+  - **수정:**
+    - `Editor/Source/ImGui/TilemapEditor/Public/TilePalettePanel.h`, `Private/TilePalettePanel.cpp`:
+      - `CONTENT_BROWSER_ITEM`과 `ASSET_PATH` 페이로드를 모두 수신하도록 일원화.
+      - 타일 목록 유무와 무관하게 패널 전체에서 언제든 드롭 가능하도록 전역 드롭 존 구축.
+      - `AddAssetToPalette`: `.bamsprite`뿐만 아니라 `.png`, `.jpg`, `.dds`, `.bamtex` 등 이미지 파일을 드롭하면 해당 디렉터리의 슬라이스 스프라이트들을 자동 탐색하여 일괄 등록하거나, 없으면 기본 스프라이트를 즉시 생성하여 팔레트에 등록.
+      - 팔레트 타일 개별 우클릭 삭제(`Delete`) 및 전체 초기화(`Trash`) 액션 추가.
+    - `Editor/Source/ImGui/ResourceEditor/Private/SpriteEditor.cpp`:
+      - 캔버스 및 창 전역에 `CONTENT_BROWSER_ITEM` 드롭 타깃 구축.
+      - 컨텐츠 브라우저에서 텍스처나 스프라이트를 드래그하여 놓으면 즉시 `SetTargetResource`로 로드되어 슬라이스/애니메이션 작업 상태로 진입.
+      - 텍스처가 없을 때 점선 안내 박스 및 드롭 가이드 텍스트 시각화.
+    - `Editor/Source/ImGui/ContentBrowserPanel/Private/ContentBrowserGridItem.cpp`:
+      - 텍스처 및 스프라이트 우클릭 컨텍스트 메뉴에 `Open in Sprite Editor` (스프라이트 에디터에서 열기) 및 `Add to Tile Palette` (타일 팔레트에 추가) 메뉴 추가.
+    - `Resources/Data/Localization/Editor.csv`:
+      - `ContentBrowser.OpenInSpriteEditor`, `ContentBrowser.AddToTilePalette`, `TilePalette.AddedTiles` 신규 로캘 키 3종 등록 및 `localizationcsvtojson.py` 동기화 완료 (`audit_localization.py --strict` 100% 통과).
+- **버그 3: SpriteEditor에서 텍스처 직접 로드 시 '유효한 텍스처가 로드되지 않았습니다' 오류 및 초기 빈 상태 UX 개선**
+  - **원인:**
+    - `SpriteEditor::LoadTextureAndSlices`에서 텍스처 에셋을 로드할 때 `rm.LoadFile` 대신 `rm.LoadResource<Texture>(&texDesc)`를 호출함. `LoadResource`는 직렬화 아카이브(JsonArchive/BeveArchive)를 역직렬화하는 메서드이므로 raw 이미지 파일(.png 등)을 아카이브로 읽으려다 실패하여 텍스처 핸들이 비어있게 됨.
+    - 에디터 상단 메뉴 `Window -> Panels -> Assets -> Sprite Editor`로 열었을 때는 대상 리소스가 지정되지 않은 빈 상태이므로 `m_TextureHandle`이 비어 화면에 경고 문구가 표시됨.
+  - **수정:**
+    - `Editor/Source/ImGui/ResourceEditor/Private/SpriteEditor.cpp`:
+      - `LoadTextureAndSlices`: 텍스처 로드 시 `rm.LoadFile(normPath)`를 호출하여 이미지 디코드 및 RHI GPU 텍스처 생성을 정상 수행하도록 수정.
+      - 메뉴바(`File -> Open Texture...`) 및 툴바에 **`Open Texture...` (`텍스처 열기...`)** 버튼 추가 (`FileDialogs::OpenFileDialog` 연동).
+      - 캔버스 중앙 점선 드롭 가이드 내에 **`[ 텍스처 열기... ]` 버튼**을 직접 배치하여, 에디터만 단독으로 열었을 때도 파일 탐색기에서 원하는 이미지를 즉시 선택 및 로드할 수 있도록 UX 대폭 개선.
+    - `Resources/Data/Localization/Editor.csv`: `SpriteEditor.OpenTexture` 로캘 키 추가 및 JSON 동기화 완료.
+- **개선 4: 스프라이트(.bamsprite / .bamsprite.json) 썸네일을 잘린 영역(Region UV) 및 비율만큼만 렌더링하도록 전수 수정**
+  - **원인:**
+    - `ContentBrowserGridItem::DrawThumbnail` 및 `ResourcePicker.h`의 리소스 선택 팝업(`drawResourceItem`, 호버 툴팁)에서 `AddImage` / `ImGui::Image` 호출 시 UV 좌표를 전달하지 않아 기본값 `(0,0)~(1,1)`로 원본 스프라이트 시트 전체가 정사각형에 찌그러져 표시됨.
+    - `SpriteEditor::SaveSlices`에서 디스크 파일만 저장하고 이미 `ResourceManager` 메모리에 로드된 `Sprite` 인스턴스의 `Region`/`Pivot`/`Border`를 갱신하지 않아 에디터 재시작 전까지 변경된 슬라이스 영역이 썸네일에 즉시 반영되지 않음.
+  - **수정:**
+    - `Editor/Source/ImGui/ContentBrowserPanel/Private/ContentBrowserGridItem.cpp`: `DrawThumbnail`에서 스프라이트 에셋의 `GetUVTransform()`(`uv0`, `uv1`)과 잘린 픽셀 가로세로 비율(`cropW : cropH`)을 계산하여 타일 중앙에 비율 왜곡 없이 잘린 영역만 렌더링하도록 수정.
+    - `Editor/Source/ImGui/Public/ResourcePicker.h`: 리소스 선택 팝업 목록 좌측 썸네일 및 마우스 호버 128x128 툴팁에서 `Sprite`의 잘린 UV(`UV0`, `UV1`)와 종횡비를 적용하여 렌더링하도록 수정.
+    - `Editor/Source/ImGui/ResourceEditor/Private/SpriteEditor.cpp`:
+      - 우측 사이드바 `Selected Slice Properties` 상단에 잘린 영역과 비율을 실시간으로 보여주는 96x96 크롭 썸네일 프리뷰 박스 추가.
+      - `SaveSlices`: `.bamsprite.json` 및 `.bamsprite` 저장 후 메모리에 로드된 `Sprite` 인스턴스의 `SetRegion`, `SetPivot`, `SetBorder`, `SetTexture`를 즉시 호출하여 재시작 없이 모든 뷰포트와 썸네일에 실시간 반영.

@@ -1,4 +1,4 @@
-﻿#include "InputManager.h"
+#include "InputManager.h"
 #include "PreviewViewportWidget.h"
 #include "EditorCameraController.h"
 #include "PreviewCameraDefaults.h"
@@ -27,6 +27,7 @@
 #include "Functions.h"
 #include "AnimationSceneQuery.h"
 #include "AnimatorPoseUpdate.h"
+#include "ParticleSystem.h"
 #include <vector>
 
 PreviewViewportWidget::~PreviewViewportWidget()
@@ -145,9 +146,9 @@ void PreviewViewportWidget::SetupDefaultStudioLighting()
 
 	// 3점 스튜디오 조명 (Key: 주광, Fill: 보조광, Rim: 역광)
 	const auto& intensities = EditorSettingsService::Get().GetPreferences().PreviewLightIntensity;
-	m_StudioLights[0] = createDirLight(Engine::vec3(30.0f, 25.0f, 0.0f), Engine::vec3(1.0f, 0.98f, 0.95f), intensities[0], true);
-	m_StudioLights[1] = createDirLight(Engine::vec3(15.0f, -45.0f, 0.0f), Engine::vec3(0.85f, 0.92f, 1.0f), intensities[1], false);
-	m_StudioLights[2] = createDirLight(Engine::vec3(45.0f, 160.0f, 0.0f), Engine::vec3(0.95f, 0.98f, 1.0f), intensities[2], true);
+	m_StudioLights[0] = createDirLight(Engine::vec3(30.0f, 195.0f, 0.0f), Engine::vec3(1.0f, 0.98f, 0.95f), intensities[0], true);
+	m_StudioLights[1] = createDirLight(Engine::vec3(15.0f, 120.0f, 0.0f), Engine::vec3(0.85f, 0.92f, 1.0f), intensities[1], false);
+	m_StudioLights[2] = createDirLight(Engine::vec3(45.0f, 20.0f, 0.0f), Engine::vec3(0.95f, 0.98f, 1.0f), intensities[2], true);
 
 	Engine::TransformSystem::UpdateHierarchy(reg);
 	Engine::LightSystem::UpdateLights(reg);
@@ -283,7 +284,7 @@ void PreviewViewportWidget::BeginFrame(Engine::f32 dt)
 		const auto source = Engine::UpdateAnimatorBasePose(animator, *skeleton, dt);
 		if (source == Engine::EAnimatorBasePoseSource::None)
 		{
-			animator.finalBoneMatrices.assign(skeleton->GetBones().size(), glm::identity<Engine::mat4>());
+			Engine::AnimationEvaluator::EvaluateBindPoseSkinningMatrices(*skeleton, animator.finalBoneMatrices);
 			continue;
 		}
 
@@ -353,23 +354,40 @@ void PreviewViewportWidget::Submit(Engine::f32 dt)
 		auto* mat = skinnedComp.materialHandle.Get();
 		if (mesh && mat)
 		{
-			auto* animator = reg.try_get<Engine::AnimatorComponent>(entity);
+			entt::entity animEntity = Engine::FindAnimatorEntityInAncestors(reg, entity);
+			auto* animator = animEntity != entt::null ? reg.try_get<Engine::AnimatorComponent>(animEntity) : nullptr;
 			if (!animator)
 			{
 				auto animView = reg.view<Engine::AnimatorComponent>();
-				if (!animView.empty()) animator = &animView.get<Engine::AnimatorComponent>(animView.front());
+				if (!animView.empty())
+				{
+					animEntity = animView.front();
+					animator = &animView.get<Engine::AnimatorComponent>(animEntity);
+				}
 			}
 			const auto* boneMatrices = (animator && !animator->finalBoneMatrices.empty()) ? &animator->finalBoneMatrices : nullptr;
+
+			Engine::mat4 renderWorldMatrix = transComp.worldMatrix;
+			if (animEntity != entt::null)
+			{
+				if (const auto* animWorld = reg.try_get<Engine::WorldTransformComponent>(animEntity))
+					renderWorldMatrix = animWorld->worldMatrix;
+			}
 
 			Engine::SkinnedDrawCommand cmd{};
 			cmd.mesh = mesh;
 			cmd.material = mat;
-			cmd.worldMatrix = transComp.worldMatrix;
+			if (mat) mat->BuildMaterialConstants(cmd.materialConstants);
+			cmd.worldMatrix = renderWorldMatrix;
 			cmd.boneMatrices = boneMatrices;
 			cmd.pickingId = 0;
 			Engine::Renderer::Get().SubmitSkinned(cmd, geomPassId);
 		}
 	}
+
+	// 파티클 시스템 제출 (프리뷰 씬 내 파티클 에미터/이펙트 렌더링)
+	Engine::ParticleSystem::SubmitSceneParticles(m_PreviewScene, cameraBuffer, m_Pipeline.GetGeometryPassID());
+	Engine::ParticleSystem::SubmitSceneParticles(m_PreviewScene, cameraBuffer, m_Pipeline.GetForwardTransparentPassID());
 
 	const bool showFinalOutput = m_SelectedRTName.empty();
 	m_DisplayRTName = showFinalOutput
@@ -442,7 +460,7 @@ void PreviewViewportWidget::Draw(const ImVec2& size)
 	const auto& io = ImGui::GetIO();
 
 	m_IsHovered = ImGui::IsItemHovered();
-	m_IsFocused = ImGui::IsWindowFocused();
+	m_IsFocused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
 	const bool canNavigate = !io.WantTextInput && !io.AppFocusLost;
 
 	if (!canNavigate || !m_IsFocused || !ImGui::IsItemActive())
@@ -462,7 +480,7 @@ void PreviewViewportWidget::Draw(const ImVec2& size)
 	if (m_CameraDragButton && !input.IsMouseButtonPressed(*m_CameraDragButton))
 		m_CameraDragButton.reset();
 
-	if (canNavigate && m_IsHovered && m_IsFocused)
+	if (canNavigate && (m_IsHovered || m_IsFocused))
 		s_ShortcutTarget = this;
 
 	if (m_CameraController && canNavigate && (m_IsHovered || m_CameraDragButton))
@@ -493,7 +511,7 @@ void PreviewViewportWidget::Draw(const ImVec2& size)
 
 void PreviewViewportWidget::DrawOverlayToolbar()
 {
-	if (ImGui::IsWindowHovered() && ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows))
+	if (ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows) || ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows))
 		s_ShortcutTarget = this;
 
 	ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
@@ -508,9 +526,17 @@ void PreviewViewportWidget::DrawOverlayToolbar()
 	const char* gridIcon = m_ShowGrid ? ICON_FA_BORDER_ALL : ICON_FA_BORDER_NONE;
 	if (ImGui::Button(gridIcon))
 	{
-		m_ShowGrid = !m_ShowGrid;
+		ToggleGrid();
 	}
-	if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("PreviewViewport.GridToggle"));
+	if (ImGui::IsItemHovered())
+	{
+		auto& sm = ShortcutManager::Get();
+		const char* hint = sm.GetShortcutHint("Viewport.ToggleGrid");
+		if (hint && hint[0] != '\0')
+			ImGui::SetTooltip("%s (%s)", LOCAL_CSTR("PreviewViewport.GridToggle"), hint);
+		else
+			ImGui::SetTooltip("%s", LOCAL_CSTR("PreviewViewport.GridToggle"));
+	}
 
 	ImGui::SameLine();
 

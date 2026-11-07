@@ -457,15 +457,56 @@ namespace Editor
 					drawList->AddRectFilled(thumbMin, thumbMax, ImGui::GetColorU32(ImVec4(0.12f, 0.12f, 0.12f, 0.95f)), 6.0f);
 
 					ImTextureID texID = 0;
+					ImVec2 uv0(0.0f, 0.0f);
+					ImVec2 uv1(1.0f, 1.0f);
+					ImVec2 imgMin = thumbMin;
+					ImVec2 imgMax = thumbMax;
+					ImVec2 tooltipImgSize(128.0f, 128.0f);
+
 					if (!assetPath.empty())
 					{
 						if (auto* rhiTex = Detail::GetResourcePickerThumbnail(assetPath))
 							texID = Detail::GetResourcePickerTextureID(rhiTex);
+
+						if constexpr (std::is_same_v<T, Engine::Sprite>)
+						{
+							Engine::Handle spHandle = manager.FindHandleByFilePath(assetPath);
+							if (!spHandle.IsValid())
+							{
+								const std::wstring rel = Engine::PlatformPath::ToProjectRelative(assetPath).wstring();
+								spHandle = manager.FindHandleByKey(rel);
+								if (!spHandle.IsValid() && rel.size() > 5 && rel.ends_with(L".json"))
+									spHandle = manager.FindHandleByKey(rel.substr(0, rel.size() - 5));
+							}
+							if (auto* sp = dynamic_cast<Engine::Sprite*>(manager.GetResource(spHandle)))
+							{
+								const auto fieldThumb = Detail::GetResourceFieldThumbnail(sp);
+								if (fieldThumb.Texture)
+								{
+									texID = Detail::GetResourcePickerTextureID(fieldThumb.Texture);
+									uv0 = fieldThumb.UV0;
+									uv1 = fieldThumb.UV1;
+
+									const float cropW = static_cast<float>(fieldThumb.Texture->GetWidth()) * (uv1.x - uv0.x);
+									const float cropH = static_cast<float>(fieldThumb.Texture->GetHeight()) * (uv1.y - uv0.y);
+									if (cropW > 0.0f && cropH > 0.0f)
+									{
+										const float scale = thumbSize / std::max(cropW, cropH);
+										const ImVec2 fitSize(cropW * scale, cropH * scale);
+										imgMin = ImVec2(thumbMin.x + (thumbSize - fitSize.x) * 0.5f, thumbMin.y + (thumbSize - fitSize.y) * 0.5f);
+										imgMax = ImVec2(imgMin.x + fitSize.x, imgMin.y + fitSize.y);
+
+										const float tipScale = 128.0f / std::max(cropW, cropH);
+										tooltipImgSize = ImVec2(cropW * tipScale, cropH * tipScale);
+									}
+								}
+							}
+						}
 					}
 
 					if (texID)
 					{
-						drawList->AddImage(texID, thumbMin, thumbMax);
+						drawList->AddImage(texID, imgMin, imgMax, uv0, uv1);
 					}
 					else
 					{
@@ -546,7 +587,7 @@ namespace Editor
 						ImGui::BeginTooltip();
 						if (texID)
 						{
-							ImGui::Image(texID, ImVec2(128.0f, 128.0f));
+							ImGui::Image(texID, tooltipImgSize, uv0, uv1);
 							ImGui::Separator();
 						}
 						ImGui::Text("%s", displayName.c_str());

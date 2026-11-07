@@ -972,15 +972,22 @@ void AnimatorGraphPanel::DrawSelectionInspector()
 
 void AnimatorGraphPanel::DrawStateInspector(Engine::AnimState& state)
 {
+	// ── 0. 노드 헤더 타이틀 및 인라인 이름 변경 ──
 	ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "%s", LOCAL_CSTR("AnimatorGraph.NodeInspector"));
-	ImGui::Separator();
-
-	ImGui::TextWrapped("%s", state.name.c_str());
-	if (ImGui::SmallButton(LOCAL_LABEL("EditorCommon.Rename").c_str()))
+	ImGui::SameLine();
+	if (state.name == m_StateMachine->defaultState)
+	{
+		ImGui::TextColored(ImVec4(0.2f, 0.9f, 0.4f, 1.0f), "[%s]", LOCAL_CSTR("AnimatorGraph.Entry"));
+		ImGui::SameLine();
+	}
+	ImGui::Text("%s", state.name.c_str());
+	ImGui::SameLine();
+	if (ImGui::SmallButton((ICON_FA_PEN_TO_SQUARE "##RenameStateBtn")))
 	{
 		m_StateRenameDraft = state.name;
 		ImGui::OpenPopup("RenameState");
 	}
+	if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("EditorCommon.Rename"));
 
 	if (ImGui::BeginPopup("RenameState"))
 	{
@@ -1035,51 +1042,84 @@ void AnimatorGraphPanel::DrawStateInspector(Engine::AnimState& state)
 		ImGui::EndPopup();
 	}
 
-	if (ImGui::DragFloat(LOCAL_LABEL("PROP_PLAY_RATE").c_str(), &state.playRate, 0.05f, 0.0f, 10.0f)) m_IsDirty = true;
-	if (ImGui::Checkbox(LOCAL_LABEL("PROP_IS_LOOPING").c_str(), &state.isLooping)) m_IsDirty = true;
-	if (state.isLooping)
-	{
-		if (ImGui::SliderFloat(LOCAL_LABEL("PROP_LOOP_BLEND_DURATION").c_str(), &state.loopBlendDuration, 0.0f, 0.5f, "%.2fs")) m_IsDirty = true;
-	}
+	ImGui::Separator();
 
-	const bool isDefault = (state.name == m_StateMachine->defaultState);
-	bool defaultToggle = isDefault;
-	if (ImGui::Checkbox(LOCAL_LABEL("AnimatorGraph.SetDefaultState").c_str(), &defaultToggle) && defaultToggle)
+	// ── 1. 상태 기본 속성 (State Properties) ──
+	if (ImGui::CollapsingHeader((ICON_FA_SLIDERS " " + LOCAL("AnimatorGraph.StateProperties")).c_str(), ImGuiTreeNodeFlags_DefaultOpen))
 	{
-		m_StateMachine->defaultState = state.name;
-		m_IsDirty = true;
+		if (ImGui::BeginTable("##StatePropertiesTable", 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp))
+		{
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextDisabled("%s", LOCAL_CSTR("PROP_PLAY_RATE"));
+			ImGui::TableSetColumnIndex(1);
+			if (ImGui::DragFloat("##StatePlayRate", &state.playRate, 0.05f, 0.0f, 10.0f, "%.2f")) m_IsDirty = true;
+
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextDisabled("%s", LOCAL_CSTR("PROP_IS_LOOPING"));
+			ImGui::TableSetColumnIndex(1);
+			if (ImGui::Checkbox("##StateIsLooping", &state.isLooping)) m_IsDirty = true;
+
+			if (state.isLooping)
+			{
+				ImGui::TableNextRow();
+				ImGui::TableSetColumnIndex(0);
+				ImGui::TextDisabled("%s", LOCAL_CSTR("PROP_LOOP_BLEND_DURATION"));
+				ImGui::TableSetColumnIndex(1);
+				if (ImGui::SliderFloat("##StateLoopDuration", &state.loopBlendDuration, 0.0f, 0.5f, "%.2fs")) m_IsDirty = true;
+			}
+
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextDisabled("%s", LOCAL_CSTR("AnimatorGraph.SetDefaultState"));
+			ImGui::TableSetColumnIndex(1);
+			const bool isDefault = (state.name == m_StateMachine->defaultState);
+			bool defaultToggle = isDefault;
+			if (ImGui::Checkbox("##SetDefaultStateToggle", &defaultToggle) && defaultToggle)
+			{
+				m_StateMachine->defaultState = state.name;
+				m_IsDirty = true;
+			}
+
+			ImGui::EndTable();
+		}
 	}
 
 	ImGui::Spacing();
-	ImGui::Separator();
 
-	const std::string motionTypes[] = {
-	LOCAL("AnimatorGraph.Clip"),
-	LOCAL("AnimatorGraph.BlendTree1D"),
-	LOCAL("AnimatorGraph.BlendTree2D")
-	};
-	const int currentType = state.IsBlendTree2D() ? 2 : (state.IsBlendTree() ? 1 : 0);
-
-	if (ImGui::BeginCombo(LOCAL_LABEL("AnimatorGraph.MotionType").c_str(), motionTypes[currentType].c_str()))
+	// ── 2. 모션 설정 (Motion Configuration) ──
+	if (ImGui::CollapsingHeader((ICON_FA_PERSON_RUNNING " " + LOCAL("AnimatorGraph.MotionConfiguration")).c_str(), ImGuiTreeNodeFlags_DefaultOpen))
 	{
-		for (int i = 0; i < 3; ++i)
-		{
-			ImGui::PushID(i);
-			const std::string label = motionTypes[i] + "###MotionTypeOption";
-			const bool selected = currentType == i;
-			if (ImGui::Selectable(label.c_str(), selected) && !selected)
-			{
-				state.isBlendTree = i != 0;
-				state.useBlendTree2D = i == 2;
-				m_IsDirty = true;
-			}
-			if (selected) ImGui::SetItemDefaultFocus();
-			ImGui::PopID();
-		}
-		ImGui::EndCombo();
-	}
+		const std::string motionTypes[] = {
+			LOCAL("AnimatorGraph.Clip"),
+			LOCAL("AnimatorGraph.BlendTree1D"),
+			LOCAL("AnimatorGraph.BlendTree2D")
+		};
+		const int currentType = state.IsBlendTree2D() ? 2 : (state.IsBlendTree() ? 1 : 0);
 
-	const auto drawFloatParameter = [&](const char* labelKey, std::string& name)
+		ImGui::TextDisabled("%s", LOCAL_CSTR("AnimatorGraph.MotionType"));
+		ImGui::SameLine();
+		if (ImGui::BeginCombo("##MotionTypeCombo", motionTypes[currentType].c_str()))
+		{
+			for (int i = 0; i < 3; ++i)
+			{
+				ImGui::PushID(i);
+				const std::string label = motionTypes[i] + "###MotionTypeOption";
+				const bool selected = currentType == i;
+				if (ImGui::Selectable(label.c_str(), selected) && !selected)
+				{
+					state.isBlendTree = i != 0;
+					state.useBlendTree2D = i == 2;
+					m_IsDirty = true;
+				}
+				if (selected) ImGui::SetItemDefaultFocus();
+				ImGui::PopID();
+			}
+			ImGui::EndCombo();
+		}
+
+		const auto drawFloatParameter = [&](const char* labelKey, std::string& name)
 		{
 			const auto& parameters = m_StateMachine->defaultParameters;
 			const std::string preview = name.empty() ? LOCAL("EditorCommon.None") : name;
@@ -1114,155 +1154,258 @@ void AnimatorGraphPanel::DrawStateInspector(Engine::AnimState& state)
 			return !name.empty() && it != parameters.end() && it->second.type == Engine::EAnimatorParamType::Float;
 		};
 
-	if (!state.IsBlendTree())
-	{
-		ImGui::TextUnformatted(LOCAL_CSTR("PROP_ANIMATION_CLIP"));
-		ImGui::PushID("StateMotionClip");
-		if (Editor::DrawInspectorResourcePicker(state.clip, true)) m_IsDirty = true;
-		ImGui::PopID();
-	}
-	else if (state.IsBlendTree2D())
-	{
-		auto& tree = state.blendTree2D;
-		DrawBlend2DPreview(state);
-
-		const bool hasX = drawFloatParameter("AnimatorGraph.Blend2DParameterX", tree.parameterX);
-		const bool hasY = drawFloatParameter("AnimatorGraph.Blend2DParameterY", tree.parameterY);
-		if (!hasX || !hasY)
-			ImGui::TextWrapped("%s", LOCAL_CSTR("AnimatorGraph.Blend2DAxesRequired"));
-
-		const auto drawRange = [&](const char* labelKey, float& minimum, float& maximum)
-			{
-				float range[2] = { minimum, maximum };
-				if (ImGui::DragFloat2(LOCAL_LABEL(labelKey).c_str(), range, 0.05f))
-				{
-					minimum = range[0];
-					maximum = range[1];
-					m_IsDirty = true;
-				}
-			};
-
-		drawRange("AnimatorGraph.Blend2DRangeX", tree.minX, tree.maxX);
-		drawRange("AnimatorGraph.Blend2DRangeY", tree.minY, tree.maxY);
-
-		if (!std::isfinite(tree.minX) || !std::isfinite(tree.maxX) || tree.minX >= tree.maxX ||
-			!std::isfinite(tree.minY) || !std::isfinite(tree.maxY) || tree.minY >= tree.maxY)
+		if (!state.IsBlendTree())
 		{
-			ImGui::TextWrapped("%s", LOCAL_CSTR("AnimatorGraph.Blend2DRangeInvalid"));
-		}
-
-		const auto drawCorner = [&](int id, float x, float y, Engine::ResourceHandle<Engine::Animation>& clip)
-			{
-				ImGui::PushID(id);
-				const auto label = LOCAL_FMT("AnimatorGraph.Blend2DCorner", x, y);
-				ImGui::TextUnformatted(label.c_str());
-				if (Editor::DrawInspectorResourcePicker(clip, true)) m_IsDirty = true;
-				ImGui::PopID();
-			};
-
-		ImGui::Spacing();
-		drawCorner(0, tree.minX, tree.minY, tree.clip00);
-		drawCorner(1, tree.maxX, tree.minY, tree.clip10);
-		drawCorner(2, tree.minX, tree.maxY, tree.clip01);
-		drawCorner(3, tree.maxX, tree.maxY, tree.clip11);
-
-		if (!tree.clip00.IsValid() || !tree.clip10.IsValid() || !tree.clip01.IsValid() || !tree.clip11.IsValid())
-			ImGui::TextWrapped("%s", LOCAL_CSTR("AnimatorGraph.Blend2DCornersIncomplete"));
-	}
-	else
-	{
-		drawFloatParameter("AnimatorGraph.Parameter", state.blendTree.parameterName);
-
-		ImGui::Spacing();
-		ImGui::Text("%s (%d)", LOCAL_CSTR("AnimatorGraph.Samples"),
-			static_cast<int>(state.blendTree.samples.size()));
-		ImGui::SameLine(ImGui::GetContentRegionAvail().x - 24.0f);
-
-		if (ImGui::Button(ICON_FA_PLUS "##AddBlendSample"))
-		{
-			const float nextThreshold = state.blendTree.samples.empty()
-				? 0.0f : state.blendTree.samples.back().threshold + 1.0f;
-			state.blendTree.AddSample(nextThreshold, {});
-			m_IsDirty = true;
-		}
-
-		int sampleToRemove = -1;
-		bool needSort = false;
-		for (size_t i = 0; i < state.blendTree.samples.size(); ++i)
-		{
-			auto& sample = state.blendTree.samples[i];
-			ImGui::PushID(static_cast<int>(i));
-			ImGui::SetNextItemWidth(75.0f);
-			if (ImGui::DragFloat("##SampleThreshold", &sample.threshold, 0.05f))
-			{
-				needSort = true;
-				m_IsDirty = true;
-			}
-			ImGui::SameLine();
-			ImGui::SetNextItemWidth(140.0f);
-			if (Editor::DrawInspectorResourcePicker(sample.clip, true)) m_IsDirty = true;
-			ImGui::SameLine();
-			if (ImGui::SmallButton(ICON_FA_TRASH "##DelSample")) sampleToRemove = static_cast<int>(i);
+			ImGui::Spacing();
+			ImGui::TextDisabled("%s", LOCAL_CSTR("PROP_ANIMATION_CLIP"));
+			ImGui::PushID("StateMotionClip");
+			if (Editor::DrawInspectorResourcePicker(state.clip, true)) m_IsDirty = true;
 			ImGui::PopID();
 		}
+		else if (state.IsBlendTree2D())
+		{
+			auto& tree = state.blendTree2D;
+			DrawBlend2DPreview(state);
 
-		if (sampleToRemove >= 0 && sampleToRemove < static_cast<int>(state.blendTree.samples.size()))
-		{
-			state.blendTree.samples.erase(state.blendTree.samples.begin() + sampleToRemove);
-			m_IsDirty = true;
+			ImGui::Spacing();
+			if (ImGui::BeginTable("##Blend2DParamsTable", 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp))
+			{
+				ImGui::TableNextRow();
+				ImGui::TableSetColumnIndex(0);
+				ImGui::TextDisabled("%s", LOCAL_CSTR("AnimatorGraph.Blend2DParameterX"));
+				ImGui::TableSetColumnIndex(1);
+				const bool hasX = drawFloatParameter("AnimatorGraph.Blend2DParameterX", tree.parameterX);
+
+				ImGui::TableNextRow();
+				ImGui::TableSetColumnIndex(0);
+				ImGui::TextDisabled("%s", LOCAL_CSTR("AnimatorGraph.Blend2DParameterY"));
+				ImGui::TableSetColumnIndex(1);
+				const bool hasY = drawFloatParameter("AnimatorGraph.Blend2DParameterY", tree.parameterY);
+
+				if (!hasX || !hasY)
+				{
+					ImGui::TableNextRow();
+					ImGui::TableSetColumnIndex(0);
+					ImGui::TableSetColumnIndex(1);
+					ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%s", LOCAL_CSTR("AnimatorGraph.Blend2DAxesRequired"));
+				}
+
+				const auto drawRangeRow = [&](const char* labelKey, float& minimum, float& maximum)
+				{
+					ImGui::TableNextRow();
+					ImGui::TableSetColumnIndex(0);
+					ImGui::TextDisabled("%s", LOCAL_CSTR(labelKey));
+					ImGui::TableSetColumnIndex(1);
+					float range[2] = { minimum, maximum };
+					if (ImGui::DragFloat2(LOCAL_LABEL(labelKey).c_str(), range, 0.05f))
+					{
+						minimum = range[0];
+						maximum = range[1];
+						m_IsDirty = true;
+					}
+				};
+
+				drawRangeRow("AnimatorGraph.Blend2DRangeX", tree.minX, tree.maxX);
+				drawRangeRow("AnimatorGraph.Blend2DRangeY", tree.minY, tree.maxY);
+
+				if (!std::isfinite(tree.minX) || !std::isfinite(tree.maxX) || tree.minX >= tree.maxX ||
+					!std::isfinite(tree.minY) || !std::isfinite(tree.maxY) || tree.minY >= tree.maxY)
+				{
+					ImGui::TableNextRow();
+					ImGui::TableSetColumnIndex(0);
+					ImGui::TableSetColumnIndex(1);
+					ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%s", LOCAL_CSTR("AnimatorGraph.Blend2DRangeInvalid"));
+				}
+
+				ImGui::EndTable();
+			}
+
+			// 2x2 Corner Clips Grid Layout
+			ImGui::Spacing();
+			ImGui::TextDisabled("%s", LOCAL_CSTR("AnimatorGraph.Blend2DWeights"));
+			if (ImGui::BeginTable("##Blend2DCornersGrid", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp))
+			{
+				const auto drawCornerCell = [&](int id, float x, float y, Engine::ResourceHandle<Engine::Animation>& clip)
+				{
+					ImGui::PushID(id);
+					const auto label = LOCAL_FMT("AnimatorGraph.Blend2DCorner", x, y);
+					ImGui::TextColored(ImVec4(0.85f, 0.85f, 0.85f, 1.0f), "%s", label.c_str());
+					if (Editor::DrawInspectorResourcePicker(clip, true)) m_IsDirty = true;
+					ImGui::PopID();
+				};
+
+				// Top Row: (-X, +Y) and (+X, +Y)
+				ImGui::TableNextRow();
+				ImGui::TableSetColumnIndex(0);
+				drawCornerCell(2, tree.minX, tree.maxY, tree.clip01);
+				ImGui::TableSetColumnIndex(1);
+				drawCornerCell(3, tree.maxX, tree.maxY, tree.clip11);
+
+				// Bottom Row: (-X, -Y) and (+X, -Y)
+				ImGui::TableNextRow();
+				ImGui::TableSetColumnIndex(0);
+				drawCornerCell(0, tree.minX, tree.minY, tree.clip00);
+				ImGui::TableSetColumnIndex(1);
+				drawCornerCell(1, tree.maxX, tree.minY, tree.clip10);
+
+				ImGui::EndTable();
+			}
+
+			if (!tree.clip00.IsValid() || !tree.clip10.IsValid() || !tree.clip01.IsValid() || !tree.clip11.IsValid())
+			{
+				ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.2f, 1.0f), "%s", LOCAL_CSTR("AnimatorGraph.Blend2DCornersIncomplete"));
+			}
 		}
-		if (needSort) state.blendTree.SortSamples();
+		else
+		{
+			drawFloatParameter("AnimatorGraph.Parameter", state.blendTree.parameterName);
+
+			ImGui::Spacing();
+			ImGui::Text("%s (%d)", LOCAL_CSTR("AnimatorGraph.Samples"),
+				static_cast<int>(state.blendTree.samples.size()));
+			ImGui::SameLine(ImGui::GetContentRegionAvail().x - 24.0f);
+
+			if (ImGui::Button(ICON_FA_PLUS "##AddBlendSample"))
+			{
+				const float nextThreshold = state.blendTree.samples.empty()
+					? 0.0f : state.blendTree.samples.back().threshold + 1.0f;
+				state.blendTree.AddSample(nextThreshold, {});
+				m_IsDirty = true;
+			}
+
+			int sampleToRemove = -1;
+			bool needSort = false;
+			if (ImGui::BeginTable("##BlendSamplesTable", 3, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp))
+			{
+				ImGui::TableSetupColumn(LOCAL_CSTR("AnimatorGraph.Threshold"), ImGuiTableColumnFlags_WidthFixed, 80.0f);
+				ImGui::TableSetupColumn(LOCAL_CSTR("AnimatorGraph.Clip"), ImGuiTableColumnFlags_WidthStretch);
+				ImGui::TableSetupColumn(LOCAL_CSTR("EditorCommon.Delete"), ImGuiTableColumnFlags_WidthFixed, 30.0f);
+				ImGui::TableHeadersRow();
+
+				for (size_t i = 0; i < state.blendTree.samples.size(); ++i)
+				{
+					auto& sample = state.blendTree.samples[i];
+					ImGui::PushID(static_cast<int>(i));
+
+					ImGui::TableNextRow();
+					ImGui::TableSetColumnIndex(0);
+					if (ImGui::DragFloat("##SampleThreshold", &sample.threshold, 0.05f))
+					{
+						needSort = true;
+						m_IsDirty = true;
+					}
+
+					ImGui::TableSetColumnIndex(1);
+					if (Editor::DrawInspectorResourcePicker(sample.clip, true)) m_IsDirty = true;
+
+					ImGui::TableSetColumnIndex(2);
+					if (ImGui::SmallButton(ICON_FA_TRASH "##DelSample")) sampleToRemove = static_cast<int>(i);
+
+					ImGui::PopID();
+				}
+				ImGui::EndTable();
+			}
+
+			if (sampleToRemove >= 0 && sampleToRemove < static_cast<int>(state.blendTree.samples.size()))
+			{
+				state.blendTree.samples.erase(state.blendTree.samples.begin() + sampleToRemove);
+				m_IsDirty = true;
+			}
+			if (needSort) state.blendTree.SortSamples();
+		}
 	}
-	// 애니메이션 노티파이 (Notifies) 저작 섹션
+
 	ImGui::Spacing();
-	ImGui::Separator();
-	ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "%s (%d)", LOCAL_CSTR("AnimatorGraph.Notifies"), static_cast<int>(state.notifies.size()));
-	ImGui::SameLine(ImGui::GetContentRegionAvail().x - 24.0f);
-	if (ImGui::Button(ICON_FA_PLUS "##AddNotify"))
+
+	// ── 3. 애니메이션 노티파이 (Notifies) ──
+	if (ImGui::CollapsingHeader((ICON_FA_BELL " " + LOCAL("AnimatorGraph.Notifies")).c_str(), ImGuiTreeNodeFlags_DefaultOpen))
 	{
-		state.notifies.push_back(Engine::AnimNotify{ "NewNotify", 0.0f, "" });
-		m_IsDirty = true;
-	}
-	int notifyToRemove = -1;
-	for (size_t i = 0; i < state.notifies.size(); ++i)
-	{
-		auto& notify = state.notifies[i];
-		ImGui::PushID(static_cast<int>(i));
-		// 발동 시간 (초)
-		ImGui::SetNextItemWidth(65.0f);
-		if (ImGui::DragFloat("##NotifyTime", &notify.triggerTime, 0.02f, 0.0f, 60.0f, "%.2fs")) m_IsDirty = true;
-		if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("AnimatorGraph.NotifyTime"));
-		// 노티파이 식별 이름
-		ImGui::SameLine();
-		ImGui::SetNextItemWidth(100.0f);
-		char nameBuf[64] = {};
-		std::strncpy(nameBuf, notify.name.c_str(), sizeof(nameBuf) - 1);
-		if (ImGui::InputText("##NotifyName", nameBuf, sizeof(nameBuf)))
+		ImGui::TextDisabled("%s: %d", LOCAL_CSTR("AnimatorGraph.Notifies"), static_cast<int>(state.notifies.size()));
+		ImGui::SameLine(ImGui::GetContentRegionAvail().x - 24.0f);
+		if (ImGui::Button(ICON_FA_PLUS "##AddNotify"))
 		{
-			notify.name = nameBuf;
+			state.notifies.push_back(Engine::AnimNotify{ "NewNotify", 0.0f, "" });
 			m_IsDirty = true;
 		}
-		if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("AnimatorGraph.NotifyName"));
-		// 페이로드 (추가 데이터)
-		ImGui::SameLine();
-		ImGui::SetNextItemWidth(90.0f);
-		char payloadBuf[128] = {};
-		std::strncpy(payloadBuf, notify.payload.c_str(), sizeof(payloadBuf) - 1);
-		if (ImGui::InputText("##NotifyPayload", payloadBuf, sizeof(payloadBuf)))
+
+		int notifyToRemove = -1;
+		if (!state.notifies.empty() && ImGui::BeginTable("##NotifiesTable", 4, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp))
 		{
-			notify.payload = payloadBuf;
+			ImGui::TableSetupColumn(LOCAL_CSTR("AnimatorGraph.NotifyTime"), ImGuiTableColumnFlags_WidthFixed, 75.0f);
+			ImGui::TableSetupColumn(LOCAL_CSTR("AnimatorGraph.NotifyName"), ImGuiTableColumnFlags_WidthFixed, 100.0f);
+			ImGui::TableSetupColumn(LOCAL_CSTR("AnimatorGraph.NotifyPayload"), ImGuiTableColumnFlags_WidthStretch);
+			ImGui::TableSetupColumn(LOCAL_CSTR("EditorCommon.Delete"), ImGuiTableColumnFlags_WidthFixed, 28.0f);
+			ImGui::TableHeadersRow();
+
+			for (size_t i = 0; i < state.notifies.size(); ++i)
+			{
+				auto& notify = state.notifies[i];
+				ImGui::PushID(static_cast<int>(i));
+
+				ImGui::TableNextRow();
+				ImGui::TableSetColumnIndex(0);
+				if (ImGui::DragFloat("##NotifyTime", &notify.triggerTime, 0.02f, 0.0f, 60.0f, "%.2fs")) m_IsDirty = true;
+
+				ImGui::TableSetColumnIndex(1);
+				char nameBuf[64] = {};
+				std::strncpy(nameBuf, notify.name.c_str(), sizeof(nameBuf) - 1);
+				if (ImGui::InputText("##NotifyName", nameBuf, sizeof(nameBuf)))
+				{
+					notify.name = nameBuf;
+					m_IsDirty = true;
+				}
+
+				ImGui::TableSetColumnIndex(2);
+				char payloadBuf[128] = {};
+				std::strncpy(payloadBuf, notify.payload.c_str(), sizeof(payloadBuf) - 1);
+				if (ImGui::InputText("##NotifyPayload", payloadBuf, sizeof(payloadBuf)))
+				{
+					notify.payload = payloadBuf;
+					m_IsDirty = true;
+				}
+
+				ImGui::TableSetColumnIndex(3);
+				if (ImGui::SmallButton(ICON_FA_TRASH "##DelNotify")) notifyToRemove = static_cast<int>(i);
+
+				ImGui::PopID();
+			}
+			ImGui::EndTable();
+		}
+
+		if (notifyToRemove >= 0 && notifyToRemove < static_cast<int>(state.notifies.size()))
+		{
+			state.notifies.erase(state.notifies.begin() + notifyToRemove);
 			m_IsDirty = true;
 		}
-		if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("AnimatorGraph.NotifyPayload"));
-		// 삭제 버튼
-		ImGui::SameLine();
-		if (ImGui::SmallButton(ICON_FA_TRASH "##DelNotify")) notifyToRemove = static_cast<int>(i);
-		ImGui::PopID();
 	}
-	if (notifyToRemove >= 0 && notifyToRemove < static_cast<int>(state.notifies.size()))
+
+	ImGui::Spacing();
+
+	// ── 4. 트랜지션 목록 (Transitions) ──
+	if (ImGui::CollapsingHeader((ICON_FA_ARROWS_SPLIT_UP_AND_LEFT " " + LOCAL("AnimatorGraph.Transitions")).c_str(), ImGuiTreeNodeFlags_DefaultOpen))
 	{
-		state.notifies.erase(state.notifies.begin() + notifyToRemove);
-		m_IsDirty = true;
+		int count = 0;
+		for (size_t i = 0; i < m_StateMachine->transitions.size(); ++i)
+		{
+			const auto& tr = m_StateMachine->transitions[i];
+			if (tr.sourceState == state.name || tr.targetState == state.name)
+			{
+				count++;
+				ImGui::PushID(static_cast<int>(i));
+				const bool isSelected = (m_SelectedTransitionIndex == static_cast<int>(i));
+				const std::string label = (tr.fromAnyState ? "[Any] " : (tr.sourceState + " ")) + "-> " + tr.targetState;
+				if (ImGui::Selectable(label.c_str(), isSelected))
+				{
+					m_SelectedTransitionIndex = static_cast<int>(i);
+					m_SelectedStateIndex = -1;
+				}
+				ImGui::PopID();
+			}
+		}
+		if (count == 0)
+		{
+			ImGui::TextDisabled("%s", LOCAL_CSTR("AnimatorGraph.NoNodeSelected"));
+		}
 	}
 }
 

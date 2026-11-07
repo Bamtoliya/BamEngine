@@ -498,9 +498,14 @@ void EditorActionRegistry::RegisterAll()
         .Id = "Viewport.ToggleGrid",
         .DisplayNameKey = "Action.Viewport.ToggleGrid",
         .CategoryKey = "Shortcuts.CategoryViewport",
-        .Context = EShortcutContext::Viewport,
+        .Context = EShortcutContext::Global,
         .DefaultChord = ShortcutChord(Engine::EKeyCode::G),
         .ExecuteHandler = []() {
+            if (auto* preview = PreviewViewportWidget::GetShortcutTarget())
+            {
+                preview->ToggleGrid();
+                return;
+            }
             if (auto* vp = SceneViewportPanel::GetActiveSceneViewport())
                 vp->ToggleGrid();
         }

@@ -452,8 +452,9 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
             }
 
             const auto& children = tree.Children.at(entity);
-            auto flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick |
-                ImGuiTreeNodeFlags_SpanFullWidth | ImGuiTreeNodeFlags_FramePadding;
+            const bool isCanvas = world.all_of<Engine::CanvasComponent>(entity);
+            auto flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanFullWidth | ImGuiTreeNodeFlags_FramePadding;
+            if (!isCanvas) flags |= ImGuiTreeNodeFlags_OpenOnDoubleClick;
             if (std::ranges::find(selected, entity) != selected.end()) flags |= ImGuiTreeNodeFlags_Selected;
             if (children.empty()) flags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
             PushEntityId(world, entity);
@@ -524,6 +525,12 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
                 action.Toggle = input.IsCtrlPressed();
                 action.Range = input.IsShiftPressed();
             }
+            if (!locked && m_RenamingEntity != entity && isCanvas &&
+                ImGui::IsItemHovered() && !ImGui::IsItemToggledOpen() &&
+                ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+            {
+                action.OpenUIEditor = entity;
+            }
             if (entity == reveal) ImGui::SetScrollHereY();
             if (tree.Invalid.contains(entity) && ImGui::IsItemHovered())
                 ImGui::SetTooltip("%s", Text("Hierarchy.InvalidLinks", "Invalid hierarchy links; shown without repair.").c_str());
@@ -558,6 +565,11 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
                 if (ImGui::MenuItem((std::string(ICON_FA_CROSSHAIRS " ") + LOCAL("Hierarchy.FocusSelected")).c_str(),
                     sm.GetShortcutHint("Viewport.Focus")))
                     action.FocusEntity = entity;
+                if (isCanvas)
+                {
+                    if (ImGui::MenuItem((std::string(ICON_FA_WINDOW_MAXIMIZE " ") + Text("Hierarchy.OpenInUIEditor", "Open in UI Editor")).c_str()))
+                        action.OpenUIEditor = entity;
+                }
                 // 2. 이름 변경 (단축키 힌트 동적 조회)
                 if (ImGui::MenuItem((std::string(ICON_FA_PEN " ") + LOCAL("EditorCommon.Rename")).c_str(),
                     sm.GetShortcutHint("Hierarchy.Rename")))

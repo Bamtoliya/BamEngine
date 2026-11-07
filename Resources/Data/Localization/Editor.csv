@@ -534,6 +534,7 @@ Hierarchy,MoveDown,Move Down,아래로 이동
 Hierarchy,MoveToRoot,Move to Root,루트로 이동
 Hierarchy,MoveUp,Move Up,위로 이동
 Hierarchy,NoMatchingEntities,No matching entities found.,일치하는 엔티티가 없습니다.
+Hierarchy,OpenInUIEditor,Open in UI Editor,UI 편집 패널에서 열기
 Hierarchy,PrefabRootDeleteBlocked,Root entity of a prefab instance cannot be deleted directly.,프리팹 인스턴스의 루트 엔티티는 직접 삭제할 수 없습니다.
 Hierarchy,PreserveTransformFailed,Cannot preserve the world transform under this parent.,이 부모에서는 현재 월드 변환을 유지할 수 없습니다.
 Hierarchy,RenameScene,Rename Scene,씬 이름 변경
@@ -689,6 +690,13 @@ MaterialEditor,TextureRegister,t%u,t%u
 MaterialEditor,UnsupportedType,Unsupported Type,지원되지 않는 타입
 MaterialEditor,Value,Value,값
 MaterialEditor,VertexShader,Vertex Shader,정점 셰이더
+MaterialEditor,Cube,Cube,큐브 (Cube)
+MaterialEditor,Plane,Plane,평면 (Plane)
+MaterialEditor,PreviewMesh,Preview Mesh,프리뷰 메시
+MaterialEditor,ResetCamera,Reset Camera,카메라 초기화
+MaterialEditor,Sphere,Sphere,구체 (Sphere)
+MaterialEditor,ToggleGrid,Toggle Grid,그리드 표시 전환
+MaterialEditor,ViewMenu,View,보기
 MaterialOption,Additive,Additive,가산
 MaterialOption,Always,Always,항상 통과
 MaterialOption,Back,Back,뒷면
@@ -829,6 +837,28 @@ ModelEditor,PendingSave,Material assignments changed. Save the model to keep the
 ModelEditor,RetryLoad,Retry Loading Model,모델 다시 불러오기
 ModelEditor,SaveFailed,Failed to save the model. Check the log.,모델 저장에 실패했습니다. 로그를 확인하세요.
 ModelEditor,Saved,Model saved.,모델을 저장했습니다.
+ModelEditor,Animations,Embedded Animations,내장 애니메이션
+ModelEditor,BoneCount,Bones,본 수
+ModelEditor,Focus,Focus (F),모델에 포커스 (F)
+ModelEditor,HasSkeleton,Yes,있음
+ModelEditor,MaterialSlots,Material Slots,머티리얼 슬롯
+ModelEditor,MeshCount,Meshes,메시 수
+ModelEditor,ModelInfo,Model Information,모델 정보
+ModelEditor,NodeCount,Nodes,노드 수
+ModelEditor,NoSkeleton,None (Static Mesh),없음 (스태틱 메시)
+ModelEditor,Placement,Scene Placement,씬 배치
+ModelEditor,SkeletonInfo,Skeleton,스켈레톤
+ModelEditor,ToggleGrid,Toggle Grid (G),그리드 표시 전환 (G)
+ModelEditor,ClipName,Clip Name,클립 이름
+ModelEditor,Duration,Duration,재생 시간
+ModelEditor,EmbeddedClips,Embedded Clips,내장 클립 목록
+ModelEditor,LoopAnimation,Loop,반복 재생
+ModelEditor,PauseClip,Pause,일시정지
+ModelEditor,PlayClip,Play,재생
+ModelEditor,PlayRate,Speed,배속
+ModelEditor,SelectClip,Select Clip,클립 선택
+ModelEditor,StopAndReset,Stop (T-Pose),정지 (T-포즈)
+ModelEditor,SecondsFormat,{:.2f}s,{:.2f}초
 ModelImport,AlbedoReferences,Albedo Textures,Albedo 텍스처
 ModelImport,AnimationAndRig,Animation & Rigging,애니메이션 및 릭
 ModelImport,FlipUVs,Flip UVs (V-Axis),UV V축 반전
@@ -1042,6 +1072,10 @@ ResourceEditor,KeyFrames,Key Frames,키 프레임 목록
 ResourceEditor,LoadResource,Load Resource,리소스 로드
 ResourceEditor,MaterialTitle,Material Editor,머티리얼 편집기
 ResourceEditor,ModelTitle,Model Editor,모델 편집기
+ResourceEditor,ParticleTitle,Particle Effect Editor,파티클 이펙트 편집기
+ResourceEditor,NoResource,No resource loaded.,로드된 리소스가 없습니다.
+ResourceEditor,SaveSuccess,Saved effect successfully.,이펙트를 저장했습니다.
+ResourceEditor,SaveFailed,Failed to save effect.,이펙트 저장에 실패했습니다.
 ResourceEditor,OpenBlocked,Save changes to {} before opening another asset.,다른 에셋을 열기 전에 {}의 변경 사항을 저장하세요.
 ResourceEditor,PrefabTitle,Prefab Editor,프리팹 에디터
 ResourceEditor,ShaderTitle,Shader Editor,셰이더 편집기
@@ -1467,6 +1501,10 @@ AnimatorGraph,AnyState,Any State,모든 상태
 AnimatorGraph,MakeAnyStateTransition,Add Transition from Any State,모든 상태에서 전이 추가
 AnimatorGraph,AnyStateNeedsCondition,Add a condition to enable this transition.,이 전이를 활성화하려면 조건을 추가하세요.
 AnimatorGraph,StateNameInvalid,Enter a nonempty and unique state name.,상태 이름을 입력하세요. 다른 상태와 중복될 수 없습니다.
+AnimatorGraph,MotionConfiguration,Motion Configuration,모션 설정
+AnimatorGraph,StateProperties,State Properties,상태 속성
+AnimatorGraph,Threshold,Threshold,임계값
+AnimatorGraph,Transitions,Transitions,전이 목록
 InputActions,Title,Input Actions,입력 액션
 InputActions,AddBinding,Add Binding,바인딩 추가
 InputActions,LoadFailed,Could not load InputActions.json. See the editor log.,입력 액션 설정을 불러오지 못했습니다. 에디터 로그를 확인하세요.
@@ -1497,3 +1535,160 @@ EditorMenu,PanelSceneEditing,Scene Editing,씬 편집
 EditorMenu,PanelAssets,Assets,에셋
 EditorMenu,PanelGraphAnimation,Graphs & Animation,그래프·애니메이션
 EditorMenu,PanelDiagnostics,Diagnostics,진단
+ModelImport,LODOptions,Mesh LOD Auto Generation,메시 LOD 자동 생성
+ModelImport,GenerateLODs,Enable Auto LOD Generation,LOD 자동 생성 활성화
+ModelImport,LOD1Reduction,LOD 1 Target Ratio,LOD 1 목표 삼각형 비율
+ModelImport,LOD2Reduction,LOD 2 Target Ratio,LOD 2 목표 삼각형 비율
+ModelEditor,LODHeader,Mesh LOD (Level of Detail),메시 LOD (Level of Detail)
+ModelEditor,LODAuto,Auto (Distance),Auto (자동 거리)
+ModelEditor,LOD0,LOD 0 (Original),LOD 0 (원본)
+ModelEditor,LOD1,LOD 1,LOD 1
+ModelEditor,LOD2,LOD 2,LOD 2
+ModelEditor,SelectLOD,Select Preview LOD,프리뷰 LOD 선택
+ModelEditor,NoLODsAvailable,No LOD meshes available for this model.,이 모델에 등록된 파생 LOD가 없습니다.
+ModelEditor,LODLevel,LOD,LOD
+ModelEditor,Triangles,Triangles,삼각형 수
+ModelEditor,Vertices,Vertices,정점 수
+ModelEditor,Reduction,Ratio,비율
+ModelEditor,Action,Action,동작
+ModelEditor,ViewLOD,View,보기
+ModelEditor,ResetAutoLOD,Restore Auto LOD,Auto 모드로 복원
+ModelEditor,LOD0Label,LOD 0,LOD 0
+ModelEditor,LOD1Label,LOD 1,LOD 1
+ModelEditor,LOD2Label,LOD 2,LOD 2
+ModelEditor,TotalModel,Total Combined,전체 모델 합산
+ModelEditor,PartBreakdown,Per-Part LOD Details,파츠별 LOD 상세
+ModelEditor,PartName,Part Name,파츠 이름
+ModelImport,TargetError,Max Geometric Error,최대 기하 오차 허용치
+
+SpriteEditor,SliceModalTitle,Slice Sprite Sheet,스프라이트 시트 슬라이스
+SpriteEditor,SliceMethod,Slice Method,슬라이스 방식
+SpriteEditor,GridByCellSize,Grid By Cell Size,셀 크기 기준 그리드
+SpriteEditor,GridByCellCount,Grid By Cell Count,행/열 개수 기준 그리드
+SpriteEditor,Automatic,Automatic (Alpha),알파 채널 자동 검출
+SpriteEditor,CellSize,Cell Size (px),셀 크기 (픽셀)
+SpriteEditor,CellCount,Cell Count (Cols x Rows),행/열 개수 (열 x 행)
+SpriteEditor,Offset,Offset (px),오프셋 (픽셀)
+SpriteEditor,Padding,Padding (px),패딩 (픽셀)
+SpriteEditor,DefaultPivot,Default Pivot,기본 피벗
+SpriteEditor,ExecuteSlice,Slice,슬라이스 실행
+SpriteEditor,ApplySlices,Apply Slices,슬라이스 적용 및 저장
+SpriteEditor,CreateAnimModalTitle,Create Sprite Animation,스프라이트 애니메이션 생성
+SpriteEditor,AnimModeSingle,Single Animation Clip,단일 애니메이션 클립
+SpriteEditor,AnimModeRow,Row-by-Row Multi Clips,행 단위 분할 클립
+SpriteEditor,ClipName,Clip Name,클립 이름
+SpriteEditor,RowNames,Row Action Names,행별 액션 이름 목록
+SpriteEditor,GenerateAnim,Generate Animations,애니메이션 일괄 생성
+SpriteEditor,SelectedSlice,Selected Slice Properties,선택된 슬라이스 속성
+SpriteEditor,SliceList,Slices List,슬라이스 목록
+SpriteEditor,DeleteSlice,Delete Slice,슬라이스 삭제
+SpriteEditor,Border,9-Slice Border (L/R/T/B),9-Slice 보더 (좌/우/상/하)
+SpriteEditor,FitView,Fit View,화면 맞춤
+SpriteEditor,OneToOne,1:1 Zoom,1:1 배율
+SpriteEditor,ClearSlices,Clear All Slices,모든 슬라이스 초기화
+SpriteEditor,SliceCountFormat,%zu Slices,%zu개 슬라이스
+SpriteEditor,NoSlices,No slices defined. Click 'Slice...' to partition texture.,정의된 슬라이스가 없습니다. 'Slice...'를 눌러 텍스처를 분할하세요.
+SpriteEditor,GenerateAnimSuccess,Successfully created animation clips!,스프라이트 애니메이션 클립이 성공적으로 생성되었습니다!
+SpriteEditor,NoTextureLoaded,No valid texture loaded.,유효한 텍스처가 로드되지 않았습니다.
+SpriteEditor,PivotLabel,Pivot,피벗
+SpriteEditor,NoSliceSelected,No slice selected.,선택된 슬라이스가 없습니다.
+SpriteEditor,IndexHeader,#,#
+SpriteEditor,NameHeader,Name,이름
+SpriteEditor,SizeHeader,Size,크기
+SpriteEditor,AutoDesc,Automatic alpha cluster detection.,알파 채널 연결 요소를 탐색하여 바운딩 박스를 자동 검출합니다.
+SpriteEditor,RowHelp,Comma separated: Idle, Walk, Attack, Die,쉼표로 구분하여 액션 이름 입력 (예: Idle, Walk, Attack, Die)
+SpriteEditor,FpsLabel,FPS,FPS
+SpriteEditor,PlayModeLabel,Play Mode,재생 모드
+SpriteEditor,PivotCenter,Center,중앙
+SpriteEditor,PivotBottom,Bottom,하단
+SpriteEditor,PivotTop,Top,상단
+SpriteEditor,PivotLeft,Left,좌측
+SpriteEditor,PivotRight,Right,우측
+SpriteEditor,XYLabel,X / Y,X / Y
+SpriteEditor,WHLabel,W / H,너비 / 높이
+SpriteEditor,ResolutionFormat,(%ux%u),(%ux%u)
+SpriteEditor,SizeFormat,%.0fx%.0f,%.0fx%.0f
+TilePalette,Title,Tile Palette,타일 팔레트
+TilePalette,PaintTool,Paint (B),페인트 브러시 (B)
+TilePalette,EraseTool,Erase (E),지우개 (E)
+TilePalette,BoxTool,Box Fill (U),사각형 채우기 (U)
+TilePalette,PickerTool,Pick (I),스포이트 (I)
+TilePalette,SelectTexture,Select Palette Texture,팔레트 텍스처 선택
+TilePalette,NoSprites,No tiles in palette. Drag texture or sprites here.,팔레트에 타일이 없습니다. 텍스처나 스프라이트를 드래그하세요.
+TilePalette,ActiveBrush,Active Brush:,선택된 브러시:
+TilePalette,ThumbnailSize,Thumbnail Size,썸네일 크기
+TilePalette,AddedTiles,Added {0} tiles to palette,팔레트에 {0}개 타일을 추가했습니다
+ContentBrowser,OpenInSpriteEditor,Open in Sprite Editor,스프라이트 에디터에서 열기
+ContentBrowser,AddToTilePalette,Add to Tile Palette,타일 팔레트에 추가
+ParticleEditor,CategoryIdentification,Identification & Trigger,식별 및 발동 조건
+ParticleEditor,CategoryLifetime,Lifetime & Velocity,수명 및 속도
+ParticleEditor,CategoryForces,Forces & Turbulence,환경 외력 및 난류
+ParticleEditor,CategoryCollision,Physics Collision,물리 충돌
+ParticleEditor,CategorySizeRotation,Size & Rotation,크기 및 회전
+ParticleEditor,CategoryColorMaterial,Color & Material,색상 및 머티리얼
+ParticleEditor,PropName,Name,이름
+ParticleEditor,PropTriggerMode,Trigger Mode,발동 모드
+ParticleEditor,PropParentEmitter,Parent Emitter,부모 이미터
+ParticleEditor,PropTriggerBurstCount,Trigger Burst Count,발동 생성 개수
+ParticleEditor,PropAlignToSurfaceNormal,Align Normal,표면 법선 정렬
+ParticleEditor,PropInheritParentVelocity,Inherit Velocity,부모 속도 상속
+ParticleEditor,PropInheritRatio,Inherit Ratio,상속 비율
+ParticleEditor,PropEmissionRate,Emission Rate,방출률
+ParticleEditor,PropBurstCount,Burst Count,버스트 개수
+ParticleEditor,PropBurstInterval,Burst Interval,버스트 주기
+ParticleEditor,PropMaxParticles,Max Particles,최대 파티클 수
+ParticleEditor,PropLifetimeRange,Lifetime (Min/Max),수명 범위 (최소/최대)
+ParticleEditor,PropSpeedRange,Speed (Min/Max),속도 범위 (최소/최대)
+ParticleEditor,PropDirection,Direction,방출 방향
+ParticleEditor,PropSpreadAngle,Spread Angle,확산 각도
+ParticleEditor,PropGravity,Gravity,중력
+ParticleEditor,PropBuoyancy,Buoyancy,부력
+ParticleEditor,PropDrag,Drag,공기 저항
+ParticleEditor,PropWind,Wind,바람
+ParticleEditor,PropEnableCurlNoise,Curl Noise (Turbulence),컬 노이즈 (난류)
+ParticleEditor,PropNoiseStrength,Noise Strength,노이즈 강도
+ParticleEditor,PropNoiseFrequency,Noise Frequency,노이즈 주파수
+ParticleEditor,PropNoiseSpeed,Noise Speed,노이즈 스크롤 속도
+ParticleEditor,PropCollisionMode,Collision Mode,충돌 모드
+ParticleEditor,PropCollisionResponse,Response,충돌 반응
+ParticleEditor,PropRestitution,Restitution (Bounce),반발 계수 (탄성)
+ParticleEditor,PropMinBounceSpeed,Min Bounce Speed,최소 바운스 속도
+ParticleEditor,PropFriction,Friction,마찰력
+ParticleEditor,PropFloorHeight,Floor Height,가상 바닥 높이
+ParticleEditor,PropCollisionRadius,Collision Radius,충돌 반경
+ParticleEditor,PropSizeStart,Size Start,시작 크기
+ParticleEditor,PropSizeEnd,Size End,종료 크기
+ParticleEditor,PropRotationSpeedRange,Rot Speed (Min/Max),회전 속도 (최소/최대)
+ParticleEditor,PropColorStart,Color Start,시작 색상
+ParticleEditor,PropColorEnd,Color End,종료 색상
+ParticleEditor,PropTexture,Texture,텍스처
+ParticleEditor,PropMaterial,Material,머티리얼
+ParticleEditor,PropAlignToSurfaceDisk,Flat Ring Align,바닥 링 평면 정렬
+ParticleEditor,TriggerContinuous,Continuous (Rate/Burst),연속 방출 (비율/버스트)
+ParticleEditor,TriggerOnCollision,On Parent Collision,부모 파티클 충돌 시
+ParticleEditor,TriggerOnDeath,On Parent Death,부모 파티클 소멸 시
+ParticleEditor,CollisionNone,None,없음
+ParticleEditor,CollisionFloorPlane,Floor Plane,가상 바닥면
+ParticleEditor,CollisionPhysicsRaycast,Physics Raycast,물리 레이캐스트
+ParticleEditor,ResponseBounce,Bounce,바운스 (튕김)
+ParticleEditor,ResponseSlide,Slide,미끄러짐
+ParticleEditor,ResponseDie,Die on Contact,접촉 시 즉시 소멸
+ParticleEditor,ResponseStop,Stop,정지
+ParticleEditor,TooltipPlay,Play,재생
+ParticleEditor,TooltipPause,Pause,일시정지
+ParticleEditor,TooltipRestart,Restart Simulation,시뮬레이션 재시작
+ParticleEditor,TooltipStep,Step Frame (+0.033s),프레임 진행 (+0.033초)
+ParticleEditor,TooltipPlayRate,Playback Rate,재생 배속
+ParticleEditor,TooltipFocus,Reset Camera Focus,카메라 포커스 초기화
+ParticleEditor,TooltipAddEmitter,Add New Emitter,새 이미터 추가
+ParticleEditor,TooltipDeleteEmitter,Delete Emitter,이미터 삭제
+ParticleEditor,NoEmitterSelected,Select an emitter to inspect.,검사할 이미터를 선택하십시오.
+ParticleEditor,StatsFormat,| Total: {0} | Time: {1:.2f}s,| 총 활성: {0}개 | 경과: {1:.2f}초
+SpriteEditor,OpenTexture,Open Texture...,텍스처 열기...
+ParticleEditor,MenuNew,New Effect,새 이펙트
+ParticleEditor,MenuOpen,Open Effect...,이펙트 열기...
+ParticleEditor,MenuSaveAs,Save As...,다른 이름으로 저장...
+ParticleEditor,MenuUndo,Undo,실행 취소
+ParticleEditor,MenuRedo,Redo,다시 실행
+ParticleEditor,FileDialogFilter,Particle Effect (*.bameffect.json),파티클 이펙트 (*.bameffect.json)
+ParticleEditor,NewEmitterName,New_Emitter,새_이미터

@@ -17,6 +17,7 @@ namespace Editor
         EShortcutContext GetShortcutContext() const override { return EShortcutContext::UIViewport; }
         bool CanFocusCanvas() const;
         void FocusCanvas();
+        void SetTarget(Engine::Scene* scene, entt::entity canvas);
 
     protected:
         EResult OnInitialize(void* arg) override;
@@ -24,7 +25,6 @@ namespace Editor
         void DrawCustomViewport() override;
 
     private:
-        void SetTarget(Engine::Scene* scene, entt::entity canvas);
         void ResolveTarget();
         bool HasTarget() const;
         void DrawCanvasMenu();

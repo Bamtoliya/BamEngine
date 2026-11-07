@@ -1061,27 +1061,34 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 		else if (object.Is<Engine::Collider2DComponent>()) changed = drawCollider.operator() < Engine::Collider2DComponent > ();
 		else if (object.Is<Engine::AudioSourceComponent>())
 		{
-			changed = ReflectionPropertyDrawer::DrawObject(type, object, registry, &componentSettings);
-			auto& audioSource = world.get<Engine::AudioSourceComponent>(handle);
-			ImGui::Spacing();
-			if (audioSource.IsPlaying())
+			bool isOpen = false;
+			changed = ReflectionPropertyDrawer::DrawObject(type, object, registry, &componentSettings, drawHeaderMenu, &isOpen);
+			if (isOpen)
 			{
-				ImGui::TextColored(ImVec4(0.2f, 0.9f, 0.2f, 1.f), "%s", LOCAL_CSTR("AudioPreview.Playing"));
-				ImGui::SameLine();
-				if (ImGui::Button(LOCAL_LABEL("EditorCommon.Stop").c_str())) audioSource.Stop();
-				ImGui::SameLine();
-				if (ImGui::Button(LOCAL_LABEL("EditorCommon.Pause").c_str())) audioSource.Pause();
-			}
-			else
-			{
-				ImGui::TextDisabled("%s", LOCAL_CSTR("AudioPreview.Stopped"));
-				ImGui::SameLine();
-				if (ImGui::Button(LOCAL_LABEL("EditorCommon.Play").c_str())) audioSource.Play();
+				auto& audioSource = world.get<Engine::AudioSourceComponent>(handle);
+				ImGui::Spacing();
+				if (audioSource.IsPlaying())
+				{
+					ImGui::TextColored(ImVec4(0.2f, 0.9f, 0.2f, 1.f), "%s", LOCAL_CSTR("AudioPreview.Playing"));
+					ImGui::SameLine();
+					if (ImGui::Button(LOCAL_LABEL("EditorCommon.Stop").c_str())) audioSource.Stop();
+					ImGui::SameLine();
+					if (ImGui::Button(LOCAL_LABEL("EditorCommon.Pause").c_str())) audioSource.Pause();
+				}
+				else
+				{
+					ImGui::TextDisabled("%s", LOCAL_CSTR("AudioPreview.Stopped"));
+					ImGui::SameLine();
+					if (ImGui::Button(LOCAL_LABEL("EditorCommon.Play").c_str())) audioSource.Play();
+				}
 			}
 		}
 		else if (object.Is<Engine::SpriteAnimationComponent>())
 		{
-			changed = ReflectionPropertyDrawer::DrawObject(type, object, registry, &componentSettings, drawHeaderMenu);
+			bool isOpen = false;
+			changed = ReflectionPropertyDrawer::DrawObject(type, object, registry, &componentSettings, drawHeaderMenu, &isOpen);
+			if (isOpen)
+			{
 			auto& anim = world.get<Engine::SpriteAnimationComponent>(handle);
 			auto* renderer = world.try_get<Engine::SpriteRendererComponent>(handle);
 			ImGui::Spacing();
@@ -1157,10 +1164,15 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 					ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.2f, 1.0f), "%s", LOCAL_CSTR("SpriteAnimation.MissingRendererWarning"));
 				}
 			}
+			}
 		}
 		else if (object.Is<Engine::AnimatorComponent>())
 		{
-			changed = ReflectionPropertyDrawer::DrawObject(type, object, registry, &componentSettings, drawHeaderMenu);
+			componentSettings.HiddenProperties.insert("controllerPath");
+			bool isOpen = false;
+			changed = ReflectionPropertyDrawer::DrawObject(type, object, registry, &componentSettings, drawHeaderMenu, &isOpen);
+			if (isOpen)
+			{
 			auto& animator = world.get<Engine::AnimatorComponent>(handle);
 			auto findSkinnedRenderer = [&](auto& self, entt::entity cur) -> Engine::SkinnedMeshRendererComponent*
 				{
@@ -1334,10 +1346,14 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 					ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.2f, 1.0f), "%s", LOCAL_CSTR("Animator.MissingRendererWarning"));
 				}
 			}
+			}
 		}
 		else if (object.Is<Engine::ParticleEmitterComponent>())
 		{
-			changed = ReflectionPropertyDrawer::DrawObject(type, object, registry, &componentSettings, drawHeaderMenu);
+			bool isOpen = false;
+			changed = ReflectionPropertyDrawer::DrawObject(type, object, registry, &componentSettings, drawHeaderMenu, &isOpen);
+			if (isOpen)
+			{
 			auto& emitter = world.get<Engine::ParticleEmitterComponent>(handle);
 			ImGui::Spacing();
 			ImGui::Separator();
@@ -1365,10 +1381,14 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 			{
 				emitter.Reset();
 			}
+			}
 		}
 		else if (object.Is<Engine::ActionTimelineComponent>())
 		{
-			changed = ReflectionPropertyDrawer::DrawObject(type, object, registry, &componentSettings, drawHeaderMenu);
+			bool isOpen = false;
+			changed = ReflectionPropertyDrawer::DrawObject(type, object, registry, &componentSettings, drawHeaderMenu, &isOpen);
+			if (isOpen)
+			{
 			auto& timeline = world.get<Engine::ActionTimelineComponent>(handle);
 			ImGui::Spacing();
 			ImGui::Separator();
@@ -1428,6 +1448,7 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 					timelinePanel->Open();
 					if (!timeline.timelinePath.empty()) timelinePanel->LoadFromFile(timeline.timelinePath);
 				}
+			}
 			}
 		}
 		else if (object.Is<Engine::SplineComponent>())

@@ -32,6 +32,7 @@ namespace Editor
     {
         entt::entity Clicked = entt::null;
         entt::entity FocusEntity = entt::null;
+        entt::entity OpenUIEditor = entt::null;
         entt::entity CreateChild = entt::null;
         entt::entity Unparent = entt::null;
         entt::entity StartRename = entt::null;

@@ -1028,9 +1028,13 @@ namespace Editor
 
 	bool ReflectionPropertyDrawer::DrawObject(const reflection::TypeInfo& type, const reflection::ObjectView& object,
 		const reflection::Registry* registry, ReflectionObjectEditSettings* editSettings,
-		std::function<void()> onHeaderContextMenu)
+		std::function<void()> onHeaderContextMenu, bool* outIsOpen)
 	{
-		if (!IsVisible(type)) return false;
+		if (!IsVisible(type))
+		{
+			if (outIsOpen) *outIsOpen = false;
+			return false;
+		}
 
 		ImGui::PushID(type.QualifiedName.c_str());
 
@@ -1039,6 +1043,7 @@ namespace Editor
 
 		const std::string headerLabel = displayName + "###ObjectHeader";
 		const bool open = ImGui::CollapsingHeader(headerLabel.c_str(), ImGuiTreeNodeFlags_DefaultOpen);
+		if (outIsOpen) *outIsOpen = open;
 
 		// [중요] CollapsingHeader 바로 직후에 호출해야 헤더바에만 정확히 우클릭 메뉴가 바인딩됩니다.
 		if (onHeaderContextMenu && ImGui::BeginPopupContextItem("##HeaderContextMenu"))
@@ -1071,6 +1076,7 @@ namespace Editor
 		std::vector<std::string> categories;
 		for (const auto& property : type.Properties)
 		{
+			if (editSettings && editSettings->HiddenProperties.contains(property.Name)) continue;
 			if (!GetReflectionDrawerBoolMetadata(property.Metadata, "Visible", true)) continue;
 			if (!EvaluateEditCondition(property, type, object, registry)) continue; // 추가: 조건 거짓이면 카테고리 집계 제외
 			const auto category = InspectorMetadataText(property.Metadata, "Category", "EditorCommon.General");
@@ -1093,6 +1099,7 @@ namespace Editor
 				ImGui::TableSetupColumn("##Value", ImGuiTableColumnFlags_WidthStretch);
 				for (const auto& property : type.Properties)
 				{
+					if (editSettings && editSettings->HiddenProperties.contains(property.Name)) continue;
 					if (InspectorMetadataText(property.Metadata, "Category", "EditorCommon.General") != category) continue;
 					if (!GetReflectionDrawerBoolMetadata(property.Metadata, "Visible", true)) continue;
 					if (!EvaluateEditCondition(property, type, object, registry)) continue;

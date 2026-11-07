@@ -32,6 +32,7 @@ Engine·Render·Editor·Client 계획에서 무엇을 먼저 연결하고 무엇
 - [Utf8PathHandlingPlan.md](Utf8PathHandlingPlan.md): UTF-8 파일 경로, 다국어('새 폴더' 등) 입출력 및 비동기 파일 감시자(efsw) 크래시 방어 계획.
 - [EditorWorkflowAndInteractionPlan.md](EditorWorkflowAndInteractionPlan.md): PIE 에디터 시점 분리, 계층/인스펙터 전면화 연계, F/F2 상호작용 및 단축키(ShortcutManager) 일원화 계획.
 - [ParticleAndEffectSystemPlan.md](ParticleAndEffectSystemPlan.md): 모듈형 파티클 & 비주얼 이펙트 시스템, 물리 충돌/기류 상호작용 및 독립 에디터 계획.
+- [SpriteAnd2DSystemPlan.md](SpriteAnd2DSystemPlan.md): 스프라이트 시트 슬라이싱, 9-Slice/Filled 렌더링, 픽셀 퍼펙트 카메라, 2D 타일맵 시스템 및 애니메이션 자동 연동 계획.
 
 전체 작업 선택은 이 문서, 기능 내부의 구현 순서·실패 정책은 상세 계획을 따른다.
 새 사용자 결정이 우선하며 충돌이 생기면 이 문서와 해당 계획을 함께 갱신한다.
@@ -547,10 +548,15 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
 
 ### 11.3 안정화 다음 기능 선택 (차기 4개 트랙)
 
-- **트랙 A (렌더링 품질 — S2-D)**: 텍스처 밉맵(Mipmap) 체인 생성 및 RHI 다중 서브리소스 업로드 (`stb_image_resize2` 기반 CPU 밉맵 생성 및 다중 서브리소스 순회 업로드).
-- **트랙 B (모델 파이프라인 — InteractiveModelImport Phase 5)**: `meshoptimizer`(`meshopt_simplify`) 기반 자동 메시 LOD 생성 파이프라인.
-- **트랙 C (에셋 아키텍처 — ResourceAndAssetSeparation Phase 1~2)**: 가상 마운트 URI(`Engine://`, `Project://`) 경로 해석 계층 및 단위 테스트 구축 (물리 폴더 이동 전 선행).
-- **트랙 D (2D 제작 워크플로 — Engine 14절 L)**: 스프라이트 Fill / 9-Slice 또는 기본 2D 타일맵.
+- **트랙 A (렌더링 품질 — S2-D) [완료: 2026-11-08]**: 텍스처 밉맵(Mipmap) 체인 생성 및 RHI 다중 서브리소스 업로드 (`stb_image_resize2` 기반 CPU 밉맵 체인 생성, `DirectX12RHI` 다중 서브리소스 업로드, 삼선형 필터링 연동 및 `TextureMipmapCheck` 단위 테스트 완결).
+- **트랙 B (모델 파이프라인 — InteractiveModelImport Phase 5) [완료: 2026-11-07]**: `meshoptimizer`(`meshopt_simplify`) 기반 자동 메시 LOD 생성 파이프라인 및 `ModelEditor` 실시간 LOD 검사기 완결.
+- **트랙 C (에셋 아키텍처 — ResourceAndAssetSeparation Phase 1~2) [완료: 2026-11-08]**: 가상 마운트 URI(`Engine://`, `Project://`) 경로 해석 계층(`PlatformPath`, `ResourceManager`, `Config`, `Runtime`) 및 단위 테스트(`VirtualPathCheck`) 구축 완료 (물리 폴더 이동 전 선행 준비 완결).
+- **트랙 D (2D 제작 워크플로 — [SpriteAnd2DSystemPlan.md](SpriteAnd2DSystemPlan.md)) [진행 중]**:
+  - Phase 1: 스프라이트 에디터(`SpriteEditor`) 인터랙티브 시트 슬라이싱(Cell Size, Cell Count, Auto Alpha) 및 원클릭 액션 애니메이션 클립(`.spriteanim`) 자동 생성 위저드.
+  - Phase 2: 스프라이트 렌더링 모드 확장(Sliced 9-Slice, Tiled, Filled) 및 2D Sorting Layer & Order in Layer.
+  - Phase 3: 픽셀 퍼펙트 카메라(`PixelPerfectCameraComponent`), 서브픽셀 카메라 스냅 및 정수배 업스케일 렌더링.
+  - Phase 4: 청크 기반 2D 타일맵(`TilemapComponent`), 동적 메시 배칭 렌더링(`TilemapRenderSystem`) 및 씬 뷰포트 타일 팔레트(`TilePalettePanel`).
+  - Phase 5: 스프라이트 아틀라스 팩킹 및 런타임 동적 스프라이트 배처(`SpriteBatcher`).
 
 ### 11.4 상태·검증 기록 규칙
 

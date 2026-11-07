@@ -19,6 +19,8 @@
 #include "ContentBrowserPanel.h"
 #include "Editor_Macros.h"
 #include "ContentBrowserRename.h"
+#include "SpriteEditor.h"
+#include "TilePalettePanel.h"
 #include "InputManager.h"
 #include <algorithm>
 
@@ -481,7 +483,56 @@ void ContentBrowserGridItem::DrawThumbnail(const std::filesystem::directory_entr
 		// 썸네일 이미지가 있는 경우에도 배경 틴트를 은은하게 깔아 투명 텍스처/스프라이트 가독성을 높입니다.
 		drawList->AddRectFilled(cursorPos, ImVec2(cursorPos.x + thumbnailSize, cursorPos.y + thumbnailSize),
 			ImGui::GetColorU32(ImVec4(visual.BgColor.x, visual.BgColor.y, visual.BgColor.z, 0.18f)), 4.0f, ImDrawFlags_RoundCornersTop);
-		drawList->AddImage(thumbnailTexID, cursorPos, ImVec2(cursorPos.x + thumbnailSize, cursorPos.y + thumbnailSize));
+
+		ImVec2 uv0(0.0f, 0.0f);
+		ImVec2 uv1(1.0f, 1.0f);
+		ImVec2 imgMin = cursorPos;
+		ImVec2 imgMax(cursorPos.x + thumbnailSize, cursorPos.y + thumbnailSize);
+
+		const auto& path = directoryEntry.path();
+		const std::string lowerFilename = ToLowerAscii(path.filename().string());
+		if (lowerFilename.ends_with(".bamsprite") || lowerFilename.ends_with(".bamsprite.json"))
+		{
+			auto& rm = Engine::ResourceManager::Get();
+			Engine::Handle handle = rm.FindHandleByFilePath(path);
+			if (!handle.IsValid())
+			{
+				const std::wstring relPath = Engine::PlatformPath::ToProjectRelative(path).wstring();
+				handle = rm.FindHandleByKey(relPath);
+				if (!handle.IsValid() && lowerFilename.ends_with(".bamsprite.json"))
+				{
+					handle = rm.FindHandleByKey(relPath.substr(0, relPath.size() - 5));
+				}
+			}
+			if (auto* sprite = dynamic_cast<Engine::Sprite*>(rm.GetResource(handle)))
+			{
+				const vec4 uv = sprite->GetUVTransform();
+				if (std::isfinite(uv.x) && std::isfinite(uv.y) && std::isfinite(uv.z) && std::isfinite(uv.w) && uv.z > 0.0f && uv.w > 0.0f)
+				{
+					uv0 = ImVec2(uv.x, uv.y);
+					uv1 = ImVec2(uv.x + uv.z, uv.y + uv.w);
+
+					if (auto* tex = sprite->GetTexture())
+					{
+						if (auto* rhiTex = tex->GetRHITexture())
+						{
+							const float cropW = static_cast<float>(rhiTex->GetWidth()) * uv.z;
+							const float cropH = static_cast<float>(rhiTex->GetHeight()) * uv.w;
+							if (cropW > 0.0f && cropH > 0.0f)
+							{
+								const float scale = thumbnailSize / (std::max)(cropW, cropH);
+								const ImVec2 fitSize(cropW * scale, cropH * scale);
+								imgMin = ImVec2(cursorPos.x + (thumbnailSize - fitSize.x) * 0.5f,
+									cursorPos.y + (thumbnailSize - fitSize.y) * 0.5f);
+								imgMax = ImVec2(imgMin.x + fitSize.x, imgMin.y + fitSize.y);
+							}
+						}
+					}
+				}
+			}
+		}
+
+		drawList->AddImage(thumbnailTexID, imgMin, imgMax, uv0, uv1);
 	}
 	// 썸네일 하단 2px 타입 액센트 스트립 (썸네일 유무와 무관하게 리소스 종류를 한눈에 식별)
 	drawList->AddRectFilled(
@@ -567,9 +618,16 @@ void ContentBrowserGridItem::ContextMenu(const std::filesystem::path& path,
 				ContextMenu_Model(path);
 			}
 			else if (filename.ends_with(".png") || filename.ends_with(".jpg") ||
-				filename.ends_with(".tga") || filename.ends_with(".jpeg") || filename.ends_with(".bmp"))
+				filename.ends_with(".tga") || filename.ends_with(".jpeg") || filename.ends_with(".bmp") ||
+				filename.ends_with(".dds") || filename.ends_with(".bamtex") || filename.ends_with(".bamtex.json") ||
+				peekedType == Engine::EResourceType::Texture)
 			{
 				ContextMenu_Texture(path);
+			}
+			else if (filename.ends_with(".bamsprite") || filename.ends_with(".bamsprite.json") ||
+				peekedType == Engine::EResourceType::Sprite)
+			{
+				ContextMenu_Sprite(path);
 			}
 			else if (filename.ends_with(".hlsl") || filename.ends_with(".vert") ||
 				filename.ends_with(".frag") || filename.ends_with(".comp") || filename.ends_with(".hlsli"))
@@ -950,9 +1008,50 @@ void ContentBrowserGridItem::ContextMenu_Model(const std::filesystem::path& path
 	}
 }
 
+void ContentBrowserGridItem::ContextMenu_Sprite(const std::filesystem::path& path)
+{
+	ImGui::Separator();
+	if (ImGui::MenuItem((ICON_FA_CROP_SIMPLE " " + LOCAL_LABEL("ContentBrowser.OpenInSpriteEditor")).c_str()))
+	{
+		if (auto* spriteEditor = dynamic_cast<SpriteEditor*>(ImGuiManager::Get().GetImGuiPanel(L"Sprite Editor")))
+		{
+			spriteEditor->Open();
+			spriteEditor->Focus();
+			spriteEditor->SetTargetResource(path);
+		}
+	}
+	if (ImGui::MenuItem((ICON_FA_BORDER_ALL " " + LOCAL_LABEL("ContentBrowser.AddToTilePalette")).c_str()))
+	{
+		if (auto* tilePalette = dynamic_cast<TilePalettePanel*>(ImGuiManager::Get().GetImGuiPanel(L"Tile Palette")))
+		{
+			tilePalette->Open();
+			tilePalette->Focus();
+			tilePalette->AddAssetToPalette(path);
+		}
+	}
+}
+
 void ContentBrowserGridItem::ContextMenu_Texture(const std::filesystem::path& path)
 {
 	ImGui::Separator();
+	if (ImGui::MenuItem((ICON_FA_CROP_SIMPLE " " + LOCAL_LABEL("ContentBrowser.OpenInSpriteEditor")).c_str()))
+	{
+		if (auto* spriteEditor = dynamic_cast<SpriteEditor*>(ImGuiManager::Get().GetImGuiPanel(L"Sprite Editor")))
+		{
+			spriteEditor->Open();
+			spriteEditor->Focus();
+			spriteEditor->SetTargetResource(path);
+		}
+	}
+	if (ImGui::MenuItem((ICON_FA_BORDER_ALL " " + LOCAL_LABEL("ContentBrowser.AddToTilePalette")).c_str()))
+	{
+		if (auto* tilePalette = dynamic_cast<TilePalettePanel*>(ImGuiManager::Get().GetImGuiPanel(L"Tile Palette")))
+		{
+			tilePalette->Open();
+			tilePalette->Focus();
+			tilePalette->AddAssetToPalette(path);
+		}
+	}
 	if (ImGui::MenuItem((ICON_FA_ROTATE " " + LOCAL_LABEL("ContentBrowser.ReloadTexture")).c_str()))
 	{
 		Engine::ResourceManager& rm = Engine::ResourceManager::Get();

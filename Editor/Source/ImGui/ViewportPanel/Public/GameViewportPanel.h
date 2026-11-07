@@ -46,6 +46,7 @@ private:
 private:
 	ViewportDeferredPipeline m_Pipeline;
 	PostProcessChain m_PostProcessChain;
+	RenderPassID m_UIOverlayPassID = INVALID_PASS_ID;
 	string m_DefaultPostProcessSettings;
 	string m_LastPostProcessPreset;
 	string m_LastPostProcessSettings;

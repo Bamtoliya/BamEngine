@@ -10,6 +10,8 @@
 #include "PIEManager.h"
 #include "LocalizationManager.h"
 #include "InputManager.h"
+#include "Renderer.h"
+#include "RenderPassManager.h"
 
 EResult GameViewportPanel::OnInitialize(void* arg)
 {
@@ -23,12 +25,23 @@ EResult GameViewportPanel::OnInitialize(void* arg)
 	m_PostProcessChain.Initialize(m_Name);
 	m_PostProcessChain.PrepareResources(m_RenderWidth, m_RenderHeight); // <-- 이 줄 추가
 	m_PostProcessChain.GetPipeline().SaveToString(m_DefaultPostProcessSettings);
+
+	RenderPassManager& rpMgr = RenderPassManager::Get();
+	m_UIOverlayPassID = rpMgr.RegisterRenderPass(
+		m_Name + L"_UIOverlayPass", {}, L"",
+		ERenderPassLoadOperation::RPLO_Load, ERenderPassStoreOperation::RPSO_Store,
+		ERenderPassLoadOperation::RPLO_Load, ERenderPassStoreOperation::RPSO_Store,
+		vec4(0.f, 0.f, 0.f, -1.f), 200, ERenderSortType::FrontToBack, ERenderPassType::UI,
+		EBlendMode::Opaque | EBlendMode::Masked | EBlendMode::AlphaBlend | EBlendMode::Additive | EBlendMode::NonPremultiplied);
+
 	m_SelectedRTName = m_DisplayRTName = m_Pipeline.GetFinalColorRTName();
 	return EResult::Success;
 }
 
 void GameViewportPanel::Free()
 {
+	Renderer::Get().ClearRenderQueue(m_UIOverlayPassID);
+	Renderer::Get().UnregisterViewportCamera(m_UIOverlayPassID);
 	m_PostProcessChain.Free();
 	m_Pipeline.Free();
 	__super::Free();
@@ -119,9 +132,11 @@ void GameViewportPanel::Update(f32 dt)
 
 	Engine::Scene* activeScene = Engine::SceneManager::Get().GetCurrentScene();
 	m_Pipeline.Submit(*cameraBuffer, activeScene);
+	Renderer::Get().RegisterViewportCamera(RenderPassManager::Get().GetRenderPassByID(m_UIOverlayPassID));
 	std::wstring currentRT = m_Pipeline.GetFinalColorRTName();
 
 	SubmitPostProcessPass(dt, currentRT);
+	RenderPassManager::Get().GetRenderPassByID(m_UIOverlayPassID)->SetColorAttachments({ currentRT });
 	m_DisplayRTName = currentRT;
 
 	if (m_ChannelView != EViewportChannelView::RGBA)

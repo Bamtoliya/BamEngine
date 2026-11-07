@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <array>
 #include <string>
@@ -28,6 +28,7 @@ namespace Editor
     struct ReflectionObjectEditSettings
     {
         std::unordered_set<std::string> ReadOnlyProperties;
+        std::unordered_set<std::string> HiddenProperties;
         std::unordered_map<std::string, ReflectionVectorEditSettings> Vectors;
         std::unordered_map<std::string, std::string> TextBuffers;
     };

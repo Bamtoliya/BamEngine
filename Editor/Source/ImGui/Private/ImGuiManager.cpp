@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "InputManager.h"
 #include "ShortcutManager.h"
 #include <archive/JsonArchive.h>
@@ -26,6 +26,7 @@
 #include "ResourceManager.h"
 #include "ResourceEditorInterface.h"
 #include "TerrainEditor.h"
+#include "TilePalettePanel.h"
 
 #include "DirectX12Texture.h"
 #include "SceneDocument.h"
@@ -737,6 +738,7 @@ EResult ImGuiManager::CreateDefaultPanels()
 		!InitializePanel(new AssetReferencePanel()) ||
 		!InitializePanel(new AnimationTimelinePanel()) ||
 		!InitializePanel(new NetworkProfilerPanel()) ||
+		!InitializePanel(new TilePalettePanel()) ||
 		!InitializePanel(new ModelImportModal()))
 		return EResult::Fail;
 
@@ -760,7 +762,8 @@ EResult ImGuiManager::CreateResourceEditors()
 		!initializeClosed(new SpriteEditor()) ||
 		!initializeClosed(new SpriteAnimationEditor()) ||
 		!initializeClosed(new MaterialEditor()) ||
-		!initializeClosed(new PrefabEditorPanel()))
+		!initializeClosed(new PrefabEditorPanel()) ||
+		!initializeClosed(new ParticleEditorPanel()))
 		return EResult::Fail;
 
 	return EResult::Success;

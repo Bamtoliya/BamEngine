@@ -24,6 +24,7 @@
 #include "Components/Core/PrefabInstanceComponent.h"
 #include "SceneViewportPanel.h"
 #include "InspectorPanel.h"
+#include "UIViewportPanel.h"
 
 
 static bool CheckboxTristate(const char* label, bool* v, bool is_mixed)
@@ -563,6 +564,17 @@ void HierarchyPanel::DrawEntityHierarchy(Scene* scene)
 			vp = dynamic_cast<SceneViewportPanel*>(ImGuiManager::Get().GetImGuiPanel(L"Scene View"));
 		if (vp)
 			vp->FocusSelectedEntity();
+	}
+	if (action.OpenUIEditor != entt::null)
+	{
+		if (auto* ent = scene->FindEntity(action.OpenUIEditor))
+			selection.SetSelectedEntity(ent);
+		if (auto* ui = dynamic_cast<UIViewportPanel*>(ImGuiManager::Get().GetImGuiPanel(L"UI View")))
+		{
+			ui->Focus();
+			ui->SetTarget(scene, action.OpenUIEditor);
+			ui->FocusCanvas();
+		}
 	}
 	if (action.CreateChild != entt::null)
 	{

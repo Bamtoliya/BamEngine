@@ -1,4 +1,4 @@
-Group,Key,English,Korean
+﻿Group,Key,English,Korean
 ,A non-empty stable GRAPH_ID is required.,A non-empty stable GRAPH_ID is required.,비어 있지 않은 고정 GRAPH_ID가 필요합니다.
 ,A pure node must return a value.,A pure node must return a value.,순수 노드는 값을 반환해야 합니다.
 ,Abs (Float),Abs (Float),절댓값 (Float)
@@ -261,6 +261,8 @@ Group,Key,English,Korean
 ,PROP_ACCUMULATED_FORCE,Accumulated Force,누적 힘
 ,PROP_ACCUMULATED_TORQUE,Accumulated Torque,누적 토크
 ,PROP_ALBEDO,Albedo,알베도 (반사색)
+,PROP_ALIGN_TO_SURFACE_DISK,Align To Surface Disk,표면 밀착 디스크 렌더링
+,PROP_ALIGN_TO_SURFACE_NORMAL,Align To Surface Normal,표면 법선 방향 정렬
 ,PROP_ANCHOR_MAX,Anchor Max,앵커 최대
 ,PROP_ANCHOR_MIN,Anchor Min,앵커 최소
 ,PROP_ANCHOR_POSITION,Anchor Position,앵커 위치
@@ -269,6 +271,7 @@ Group,Key,English,Korean
 ,PROP_ANIMATION_CLIP,Animation Clip,애니메이션 클립
 ,PROP_ANIMATOR_LAYERS,Animation Layers,애니메이션 레이어 목록
 ,PROP_ASPECT_RATIO,Aspect Ratio,비율
+,PROP_ASSETS_PPU,Assets PPU,에셋 PPU
 ,PROP_ATTENUATION_COEFFICIENTS,Attenuation Coefficients,감쇠 계수
 ,PROP_ATTENUATION_MODE,Attenuation Mode,감쇠 모드
 ,PROP_AUDIO_CLIP,Audio Clip,오디오 클립
@@ -280,13 +283,14 @@ Group,Key,English,Korean
 ,PROP_BODY_TYPE,Body Type,강체 종류
 ,PROP_BONE,Bone,본
 ,PROP_BRDF_LUT,BRDF Lookup Texture,BRDF 조회 텍스처
+,PROP_BUOYANCY,Buoyancy,부력 (상승 가속도)
 ,PROP_BURST_COUNT,Burst Count,버스트 방출량
 ,PROP_BURST_INTERVAL,Burst Interval,버스트 주기
-,PROP_BUOYANCY,Buoyancy,부력 (상승 가속도)
 ,PROP_CAMERA_LAG_SPEED,Camera Lag Speed,카메라 지연 속도
 ,PROP_CAMERA_TYPE,Camera Type,카메라 타입
 ,PROP_CASCADE_SPLIT_LAMBDA,Cascade Split Lambda,캐스케이드 분할 가중치
 ,PROP_CAST_SHADOW,Cast Shadow,그림자
+,PROP_CELL_SIZE,Cell Size,셀 크기
 ,PROP_CENTER,Center,중심
 ,PROP_CLOUD_ALTITUDE,Cloud Altitude,구름 고도
 ,PROP_CLOUD_COVERAGE,Cloud Coverage,구름 덮개
@@ -324,7 +328,9 @@ Group,Key,English,Korean
 ,PROP_DRAG,Drag,공기 저항
 ,PROP_DRAW_MODE,Draw Mode,그리기 모드
 ,PROP_EFFECTIVE_FLAG,Effective Flags,유효 플래그
+,PROP_EFFECT_HANDLE,Effect Asset,이펙트 에셋
 ,PROP_EMISSION_RATE,Emission Rate,방출률 (초당)
+,PROP_EMITTERS,Emitters,이미터 목록
 ,PROP_EMIT_DIRECTION,Direction,방출 방향
 ,PROP_ENABLED,Enabled,활성화
 ,PROP_ENABLE_CAMERA_LAG,Enable Camera Lag,카메라 지연 활성화
@@ -335,7 +341,10 @@ Group,Key,English,Korean
 ,PROP_EULER_ROTATION,EulerRotation,회전(각도)
 ,PROP_EXTINCTION,Extinction Factor,빛 흡수 계수
 ,PROP_FAR_PLANE,Far Plane,원거리 평면
+,PROP_FILL_AMOUNT,Fill Amount,채우기 진행도
+,PROP_FILL_METHOD,Fill Method,채우기 방식
 ,PROP_FILL_MODE,Fill Mode,채우기 모드
+,PROP_FIXED_TIMESTEP,Fixed Timestep,고정 타임스텝
 ,PROP_FLAG,Flags,상태
 ,PROP_FLAGS,Flags,상태
 ,PROP_FLIPX,FlipX,X 반전
@@ -357,6 +366,8 @@ Group,Key,English,Korean
 ,PROP_FRICTION,Friction,마찰
 ,PROP_FRONT_FACE,Front Face,전면 방향
 ,PROP_GRAPH_FILE,Graph File,그래프 파일
+,PROP_GRAVITY_2D,2D Gravity,2D 중력
+,PROP_GRAVITY_3D,3D Gravity,3D 중력
 ,PROP_GRAVITY_MODIFIER,Gravity,중력
 ,PROP_GRAVITY_SCALE,Gravity Scale,중력 배율
 ,PROP_GROUND_COLOR,Ground Color,지면 색상
@@ -369,6 +380,8 @@ Group,Key,English,Korean
 ,PROP_ID,ID,ID
 ,PROP_INDIRECT_INTENSITY,Indirect Intensity,간접 강도
 ,PROP_INFORMATION,Information,정보
+,PROP_INHERIT_PARENT_VELOCITY,Inherit Parent Velocity,부모 속도 상속
+,PROP_INHERIT_VELOCITY_RATIO,Inherit Velocity Ratio,속도 상속 비율
 ,PROP_INPUT_ENABLED,Input Enabled,입력 활성화
 ,PROP_INTENSITY,Intensity,강도
 ,PROP_INTERACTABLE,Interactable,상호작용
@@ -404,6 +417,7 @@ Group,Key,English,Korean
 ,PROP_LANGUAGE,Language,언어
 ,PROP_LAYER_BOTTOM,Layer Bottom Altitude,구름 시작 고도
 ,PROP_LAYER_HEIGHT,Layer Height,구름층 두께
+,PROP_LAYER_NAMES,Layer Names,레이어 이름 목록
 ,PROP_LEFT,Left,좌측
 ,PROP_LENGTH,Length,길이
 ,PROP_LIFETIME_MAX,Lifetime Max,최대 수명
@@ -445,11 +459,13 @@ Group,Key,English,Korean
 ,PROP_NORMAL,Normal,법선
 ,PROP_NORMAL_COLOR,Normal Color,기본 색
 ,PROP_OFFSET,Offset,오프셋
+,PROP_ORDER_IN_LAYER,Order in Layer,레이어 내 순서
 ,PROP_ORIENT_ROTATION_TO_MOVEMENT,Orient Rotation to Movement,이동 방향으로 회전 정렬
 ,PROP_ORIGIN,Origin,원점
 ,PROP_ORTHOGRAPHIC_SIZE,Orthographic Size,직교 투영 크기
 ,PROP_OWNER_CLIENT_ID,Owner Client ID,소유자 클라이언트 ID
 ,PROP_PARAMETERS,Parameters,매개변수
+,PROP_PARENT_EMITTER_INDEX,Parent Emitter Index,부모 이미터 인덱스
 ,PROP_PASS_SHADERS,Pass Shaders,패스별 셰이더
 ,PROP_PIPELINE_SETTINGS,Pipeline Settings,파이프라인 설정
 ,PROP_PITCH,Pitch,피치
@@ -464,6 +480,7 @@ Group,Key,English,Korean
 ,PROP_POINT_A,Point A,시작점 A
 ,PROP_POINT_B,Point B,끝점 B
 ,PROP_POSITION,Position,위치
+,PROP_POSITION_ITERATIONS,Position Iterations,위치 반복 횟수
 ,PROP_POS_THRESHOLD,Position Threshold,위치 동기화 오차 한계
 ,PROP_POWDER_EFFECT,Powder Effect,파우더 슈가 효과
 ,PROP_PREFAB_PATH,Prefab Path,프리팹 파일 경로
@@ -476,6 +493,8 @@ Group,Key,English,Korean
 ,PROP_RANGE,Range,범위
 ,PROP_RATIO,Ratio,비율
 ,PROP_RAYCAST_TARGET,Raycast Target,레이캐스트 타깃
+,PROP_REF_RESOLUTION_X,Ref Resolution X,기준 가상 해상도 X
+,PROP_REF_RESOLUTION_Y,Ref Resolution Y,기준 가상 해상도 Y
 ,PROP_RENDER,Render,렌더링
 ,PROP_REQUIRE_RIGHT_CLICK_ROTATE,Require Orbit Camera Action,카메라 회전 액션 필요
 ,PROP_RESOLUTION,Resolution,해상도
@@ -504,7 +523,9 @@ Group,Key,English,Korean
 ,PROP_SIZE_START,Start Size,시작 크기
 ,PROP_SKELETON_HANDLE,Skeleton Handle,스켈레톤 핸들
 ,PROP_SKY_INTENSITY,Sky Intensity,하늘 강도
+,PROP_SNAP_SUBPIXEL,Snap Subpixel,서브픽셀 스냅
 ,PROP_SOCKET_OFFSET,Socket Offset,소켓 오프셋
+,PROP_SORTING_LAYER,Sorting Layer,정렬 레이어
 ,PROP_SPEED_MAX,Initial Speed Max,최대 초기 속력
 ,PROP_SPEED_MIN,Initial Speed Min,최소 초기 속력
 ,PROP_SPLINE_ALIGN_TO_MOVEMENT,Face Movement Direction,이동 방향 바라보기
@@ -550,8 +571,11 @@ Group,Key,English,Korean
 ,PROP_TIME_OF_DAY,Time of Day,하루 시간
 ,PROP_TOP,Top,상단
 ,PROP_TRANSFORM_ABSOLUTE,World Channels (Ignore Parent),월드 기준 채널 (부모 상속 해제)
+,PROP_TRIGGER_BURST_COUNT,Trigger Burst Count,트리거 버스트 수
+,PROP_TRIGGER_MODE,Trigger Mode,발화 조건(트리거)
 ,PROP_UNBOUND,Unbound,전역 적용
 ,PROP_USE_FIXED_SEED,Use Fixed Seed,고정 시드 사용
+,PROP_VELOCITY_ITERATIONS,Velocity Iterations,속도 반복 횟수
 ,PROP_VERTEX_SHADER,Vertex Shader,버텍스 셰이더
 ,PROP_VERTEX_SHADER_HANDLE,Vertex Shader Handle,버텍스 셰이더 핸들
 ,PROP_VOLUME,Volume,볼륨
@@ -559,8 +583,8 @@ Group,Key,English,Korean
 ,PROP_WEATHER_SIZE,Weather Map Size,웨더 맵 군집 크기
 ,PROP_WIDTH,Width,너비
 ,PROP_WIND_DIR,Wind Direction,바람 방향
-,PROP_WIND_SPEED,Wind Speed,바람 속도
 ,PROP_WIND_FORCE,Wind Force,바람 외력 (방향 및 세기)
+,PROP_WIND_SPEED,Wind Speed,바람 속도
 ,PROP_WORLDMATRIX,World Matrix,월드 매트릭스
 ,PROP_WORLD_MATRIX,World Matrix,월드 매트릭스
 ,PROP_WORLD_TRANSFORM,World Transform,월드 트랜스폼
@@ -640,7 +664,10 @@ Group,Key,English,Korean
 ,STRUCT_NATIVE_SCRIPT,Native Script,네이티브 스크립트
 ,STRUCT_NETWORK_IDENTITY,Network Identity,네트워크 식별자
 ,STRUCT_NETWORK_TRANSFORM,Network Transform,네트워크 트랜스폼
+,STRUCT_PARTICLE_EFFECT,Particle Effect,파티클 이펙트
 ,STRUCT_PARTICLE_EMITTER,Particle Emitter,파티클 이미터
+,STRUCT_PHYSICS_SETTINGS,Physics Settings,물리 설정
+,STRUCT_PIXEL_PERFECT_CAMERA,Pixel Perfect Camera,픽셀 퍼펙트 카메라
 ,STRUCT_POST_PROCESS,Post Process,포스트 프로세스
 ,STRUCT_PREFAB_INSTANCE,Prefab Instance,프리팹 인스턴스
 ,STRUCT_RAY,Ray,광선
@@ -662,6 +689,7 @@ Group,Key,English,Korean
 ,STRUCT_TAG,Tags,태그
 ,STRUCT_TERRAIN,Terrain,지형
 ,STRUCT_THIRD_PERSON_CONTROLLER,Third Person Controller,3인칭 컨트롤러
+,STRUCT_TILEMAP,Tilemap,타일맵
 ,STRUCT_TRANSFORM,Transform,트랜스폼
 ,STRUCT_TRIGGER_CALLBACK,Trigger Callback,트리거 콜백
 ,STRUCT_UI_INTERACTION_STATE,UI Interaction State,UI 상호작용 상태
