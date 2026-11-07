@@ -1,8 +1,8 @@
 ﻿#pragma once
 
-#include "Reflection/ComponentAnnotations.h"
+#include "ComponentAnnotations.h"
 
-#include "Interface/EnumBit.h"
+#include "EnumBit.h"
 
 #include <cstdint>
 

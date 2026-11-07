@@ -4,7 +4,7 @@
 #include <iostream>
 #include <limits>
 #include "AnimatorStateMachine.h"
-#include "Reflection/ReflectionRegistry.h"
+#include "ReflectionRegistry.h"
 #include <archive/JsonArchive.h>
 #include <reflection_archive/ReflectionArchiveAdapter.h>
 

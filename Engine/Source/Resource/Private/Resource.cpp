@@ -1,5 +1,5 @@
 ﻿#include "Resource.h"
-#include "Reflection/ReflectionRegistry.h"
+#include "ReflectionRegistry.h"
 #include <reflection_archive/ReflectionArchiveAdapter.h>
 #include <archive/JsonArchive.h>
 #include <archive/BeveArchive.h>

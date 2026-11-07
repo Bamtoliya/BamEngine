@@ -1,6 +1,6 @@
 ﻿#pragma once
 
-#include "Reflection/ComponentAnnotations.h"
+#include "ComponentAnnotations.h"
 #include "Structs/Capsule.h"
 #include "Structs/BoundingBox.h"
 #include <glm/glm.hpp>

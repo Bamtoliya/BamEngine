@@ -1,7 +1,7 @@
 ﻿#pragma once
 
 #include "Types.h"
-#include "Reflection/ComponentAnnotations.h"
+#include "ComponentAnnotations.h"
 
 namespace Engine
 {

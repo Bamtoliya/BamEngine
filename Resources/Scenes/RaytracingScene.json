@@ -2070,8 +2070,8 @@
                                 "Null": false
                             },
                             "meshHandle": {
-                                "AssetKey": "Resources/Road-subdi_road-straight.001.bammesh",
-                                "AssetPath": "Resources/Road-subdi_road-straight.001.bammesh",
+                                "AssetKey": "Resources/Model/Road-subdi_road-straight.001.bammesh",
+                                "AssetPath": "Resources/Model/Road-subdi_road-straight.001.bammesh",
                                 "Null": false
                             }
                         },
@@ -2134,8 +2134,8 @@
                 "AssetPath": "Resources/Model/Fox_fox_material.bammatinst"
             },
             {
-                "AssetKey": "Resources/Road-subdi_road-straight.001.bammesh",
-                "AssetPath": "Resources/Road-subdi_road-straight.001.bammesh"
+                "AssetKey": "Resources/Model/Road-subdi_road-straight.001.bammesh",
+                "AssetPath": "Resources/Model/Road-subdi_road-straight.001.bammesh"
             },
             {
                 "AssetKey": "Resources/kenney_city-kit-roads/Models/GLB format/road-straight_colormap.bammatinst",

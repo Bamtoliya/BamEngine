@@ -1,6 +1,6 @@
 ﻿#pragma once
 #include "Engine_API.h"
-#include "Reflection/ReflectionMacro.h"
+#include "ReflectionMacro.h"
 #include <glm/glm.hpp>
 
 using namespace Engine;

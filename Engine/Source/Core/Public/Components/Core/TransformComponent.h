@@ -1,7 +1,7 @@
 ﻿#pragma once
 
-#include "Reflection/ComponentAnnotations.h"
-#include "Interface/EnumBit.h"
+#include "ComponentAnnotations.h"
+#include "EnumBit.h"
 
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>

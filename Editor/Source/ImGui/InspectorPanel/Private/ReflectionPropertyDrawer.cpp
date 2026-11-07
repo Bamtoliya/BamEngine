@@ -12,7 +12,7 @@
 
 #include "Editor_Macros.h"
 #include "LocalizationManager.h"
-#include "Reflection/ReflectionRegistry.h"
+#include "ReflectionRegistry.h"
 #include "ReflectionInspectorSupport.h"
 #include "PhysicsComponent.h"
 #include <imgui_stdlib.h>

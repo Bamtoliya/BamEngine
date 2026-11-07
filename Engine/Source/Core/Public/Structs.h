@@ -4,7 +4,7 @@
 #include "RenderTypes.h"
 #include "Structs/Ray.h"
 #include "Structs/Rect.h"
-#include "Structs/Vertex.h"
+#include "Vertex.h"
 #include "Structs/HitResult.h"
 #include "Structs/BoundingBox.h"
 #include "Structs/BoundingSphere.h"

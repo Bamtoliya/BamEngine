@@ -1,0 +1,16 @@
+﻿#pragma once
+
+#include "Types.h"
+#include "Functions.h"
+#include "Macro.h"
+#include "Result.h"
+#include "EnumBit.h"
+#include "TypeIdentityInterface.h"
+
+#include <reflection/Annotations.h>
+
+#define REFLECT_CLASS() \
+    REFLECT_BODY() \
+    DECLARE_TYPE_ID()
+
+#define COLOR COLOR_PROPERTY

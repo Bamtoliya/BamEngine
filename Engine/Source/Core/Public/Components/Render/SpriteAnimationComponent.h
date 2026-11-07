@@ -1,6 +1,6 @@
 ﻿#pragma once
 
-#include "Reflection/ComponentAnnotations.h"
+#include "ComponentAnnotations.h"
 #include "ResourceHandle.h"
 #include "Sprite.h"
 #include "SpriteAnimation.h"

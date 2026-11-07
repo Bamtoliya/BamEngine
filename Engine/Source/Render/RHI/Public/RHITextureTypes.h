@@ -1,7 +1,7 @@
 ﻿#pragma once
 
 #include "Base.h"
-#include "Reflection/ReflectionMacro.h"
+#include "ReflectionMacro.h"
 
 BEGIN(Engine)
 

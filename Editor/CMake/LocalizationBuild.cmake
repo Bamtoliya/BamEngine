@@ -1,7 +1,7 @@
-﻿# --- CMake/LocalizationBuild.cmake ---
+# --- CMake/LocalizationBuild.cmake ---
 
 set(LOCALIZATION_DIR "${CMAKE_SOURCE_DIR}/Resources/Data/Localization")
-set(LOCALIZATION_SCRIPT "${CMAKE_SOURCE_DIR}/Utility/CSVToJsonConverter/localizationcsvtojson.py")
+set(LOCALIZATION_SCRIPT "${CMAKE_SOURCE_DIR}/Tools/Codegen/CSVToJsonConverter/localizationcsvtojson.py")
 file(GLOB LOCALIZATION_CSV_FILES CONFIGURE_DEPENDS "${LOCALIZATION_DIR}/*.csv")
 
 set(LOCALIZATION_OUTPUTS
@@ -23,7 +23,7 @@ add_custom_target(GenerateLocalization ALL DEPENDS ${LOCALIZATION_OUTPUTS})
 add_dependencies(GenerateLocalization ExportReflectionLocalization)
 
 # --- 다국어 및 UI 하드코딩 정적 감사 타깃 ---
-set(LOCALIZATION_AUDIT_SCRIPT "${CMAKE_SOURCE_DIR}/Utility/LocalizationAuditor/audit_localization.py")
+set(LOCALIZATION_AUDIT_SCRIPT "${CMAKE_SOURCE_DIR}/Tools/Audit/LocalizationAuditor/audit_localization.py")
 
 add_custom_target(AuditLocalization
     COMMAND ${Python3_EXECUTABLE} "${LOCALIZATION_AUDIT_SCRIPT}" --root "${CMAKE_SOURCE_DIR}" --strict
@@ -35,5 +35,5 @@ add_custom_target(AuditLocalization
 if(BUILD_TESTING)
     add_test(NAME LocalizationAuditUtility
         COMMAND "${Python3_EXECUTABLE}" -B -m unittest discover
-            -s "${CMAKE_SOURCE_DIR}/Utility/LocalizationAuditor" -p "test_*.py" -v)
+            -s "${CMAKE_SOURCE_DIR}/Tools/Audit/LocalizationAuditor" -p "test_*.py" -v)
 endif()

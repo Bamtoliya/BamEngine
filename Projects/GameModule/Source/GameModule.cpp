@@ -1,10 +1,10 @@
 ﻿// Projects/GameModule/Source/GameModule.cpp
-#include "Module/ModuleInterface.h"
+#include "ModuleInterface.h"
 #include "Logger.h"
 #include "SystemManager.h"
 #include "SkyAtmosphereSystem.h"
 #include "GameGameplayLibrary.h"
-#include "Reflection/ReflectionRegistry.h"
+#include "ReflectionRegistry.h"
 #include "GameModule.gen.h"
 
 class GameModule final : public Engine::IModule

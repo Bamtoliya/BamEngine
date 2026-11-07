@@ -1,6 +1,39 @@
-﻿# BamEngine Implementation Log
+# BamEngine Implementation Log
 
 This document tracks implementation details, architectural decisions, and technical debt.
+
+### [2026-11-07] 프로젝트 파일 트리 구조 정규화 및 도구·리소스 루트 정리
+
+- Area: Engine | Editor | Tools | Build | Resource | Docs
+- Type: Refactor | Cleanup | Docs
+- 기준 커밋: `f2941d14` (기존 미커밋 변경 `MaterialEditor.cpp`, `ModelEditor.cpp`는 보존하고 커밋 대상에서 분리)
+- 주요 변경 내역:
+  1. **무위험 클린업 및 미사용/빈 파일 제거**:
+     - 저장소 루트의 빈 폴더(`Bin/`, `Server/`, `Shared/`), `Editor/Source/Generated/`, 구형 미추적 `Engine/Generated/` 및 하위 IDE 캐시(`Projects/.vs/`, `Projects/Reflection/.vs/`) 제거.
+     - 구현 및 참조가 없는 `Engine/Source/Physics/Public/PhysicsManager.h`, `Engine/Source/System/Time/Public/TimerManager.h`, `Editor/Source/AssetManager/Importer/Public/AudioImporter.h`, `MaterialImporter.h`, `Editor/Source/ImGui/InspectorPanel/Public/SpriteInspector.h`, `Editor/Source/Rendering/PostProcess/Public/PostProcessInterface.h`, `Editor/Source/ImGui/ViewportPanel`의 빈 `EditorViewportPanel.h/.cpp`, `Editor/Source/ImGui/Managers` 내 3바이트 빈 파일 8개(`MangerInspectorInterface.h/.cpp` 등) 제거.
+     - `Editor/Source/ImGui/ResourceEditor`의 `PrefabEditorPanel.h/.cpp`를 `Editor/Source/ImGui/PrefabEditor/Public|Private/`로 이동하여 프리팹 편집 UI 위치 일원화.
+     - Unity 빌드 묶음 변경 시 드러난 `Engine/Source/Core/Public/Functions.h`의 `<cctype>`, `<cwctype>` 인클루드 누락 보완.
+  2. **`Engine/Source` 계층 정규화 및 소유권 이관 ([SourceOrganizationGuidelines.md](SourceOrganizationGuidelines.md) 10절 반영)**:
+     - `Core/Public/Interface/*` $\rightarrow$ `Core/Interface/Public/*`
+     - `Core/Public|Private/Module/*` $\rightarrow$ `Core/Module/Public|Private/*`
+     - `Core/Public|Private/Reflection/*` $\rightarrow$ `Core/Reflection/Public|Private/*`
+     - `Core/Public/Structs/Vertex.h` + `Core/Private/Vertex.cpp` $\rightarrow$ `Render/Public/Vertex.h` + `Render/Private/Vertex.cpp`
+     - `Utility/Picking/Public|Private/PickingManager.*` $\rightarrow$ `Render/Picking/Public|Private/PickingManager.*` (및 `Engine/Source/Utility` 제거)
+     - `Engine/CMake/ReflectionBuild.cmake`, `Projects/GameModule/CMakeLists.txt` 및 관련 헤더 `#include` 경로 정규화.
+  3. **`Tools/` + `Utility/` 일원화 및 `Resources/` 루트 정돈**:
+     - 최상위 `Utility/`를 `Tools/` 하위(`Tools/Codegen/CSVToJsonConverter`, `Tools/Codegen/ReflectionLocalization`, `Tools/Audit/LocalizationAuditor`, `Tools/Scripts/`, `Tools/VSSnippets/`)로 통합하고, 기존 `Tools/` 내 변환기·코드젠도 `Tools/Converters/`(`ModelConverter`, `TextureConverter`), `Tools/Codegen/`(`ReflectionTool`, `GraphCompiler`)으로 분류.
+     - 루트 `CMakeLists.txt`, `Engine/CMake/LocalizationExport.cmake`, `Editor/CMake/LocalizationBuild.cmake`, `AssetHotReloadManager.cpp`, `test_export_localization.py`의 도구 경로 갱신.
+     - `Resources/` 루트에 산재된 `Road-subdi*`, `Road.glb`를 `Resources/Model/`로(`RaytracingScene.json` 참조 경로 동기화), `GraphMovement.json`을 `Resources/Scripts/`로 이동하고, 미참조 손상 테스트 파일(`Resources/rgba2x2*`) 및 `Resources/Material/` 내 구형 미참조 중복 파일(`SpriteMaterial.beve`, `SpriteMaterialBeve.json`, `SpriteMaterial.materialInstance`, `SpriteMaterial.json`, `SpriteMaterialInstance.bammatinst`, `GBufferMaterial.bammat`) 제거.
+- 검증 결과:
+  - **로캘 정적 감사 및 Python 도구 단위 테스트**:
+    - `python -B Tools/Audit/LocalizationAuditor/audit_localization.py --root . --strict` 통과 (620개 파일 / 2,235개 키, 위반 0건).
+    - `LocalizationAuditTests`(18개) 및 `LocalizationExportTests`(7개) 전체 통과.
+  - **CMake 구성 및 Debug 빌드 (`x64-debug`)**:
+    - `Engine`, `Editor`, `Client`, `GameModule`, `ModelConverter`, `TextureConverter` Debug 빌드 및 링크 성공 (종료 코드 0).
+  - **CTest (`out/build/x64-debug -C Debug`)**:
+    - 29개 중 25개 통과 (`ArchiveExample`, `ReflectionLocalizationUtility`, `InputManagerCheck`, `UIInteractionCheck`, `UILayoutCheck`, `SceneReflectionCheck`, `SceneArchiveCheck`, `TerrainDataCheck`, `Physics2DCheck`, `CollisionGeometryCheck`, `SplineCurveCheck`, `BlendTree2DCheck`, `GraphExecutionCheck`, `ShaderGraphCheck`, `LocalizationAuditUtility`, `MainMenuBarLayoutCheck`, `ShortcutManagerCheck`, `GraphMessageLocalizationCheck`, `TransformInheritanceCheck`, `GraphPaletteCheck`, `EditorHistoryCheck`, `CanvasViewCheck`, `PickingMathCheck`, `TransformEditorCheck`, `EditorSettingsCheck`).
+    - 기존 미반영 Check 타깃 4건(`GraphFoundationCheck`, `GraphReflectionCheck`, `HierarchyEditorCheck`, `ReflectionInspectorCheck`)은 이번 경로 이동과 무관한 선행 변경(리소스 피커 분리 등)에 의한 실패임을 확인.
+  - **미검증 항목**: Release 구성 전체 빌드, 에디터/클라이언트 실제 창 실행 및 GPU 렌더링·프리팹 편집 UI 수동 조작 확인.
 
 ### [2026-11-07] 모델 바운드 기준 화면 맞춤
 

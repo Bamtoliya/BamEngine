@@ -2,7 +2,7 @@
 
 #include "Engine_Includes.h"
 #include "InputMap.h"
-#include "Interface/EnumBit.h"
+#include "EnumBit.h"
 
 BEGIN(Engine)
 class InputManager;

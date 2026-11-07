@@ -1,7 +1,7 @@
 ﻿#pragma once
 
 #include "Macro.h"
-#include "Interface/Delegate.h"
+#include "Delegate.h"
 #include <unordered_map>
 #include <typeindex>
 #include <memory>

@@ -1,7 +1,9 @@
-﻿#pragma once
+#pragma once
 
 #include "Types.h"
 #include <algorithm>
+#include <cctype>
+#include <cwctype>
 #include <filesystem>
 #include <type_traits>
 

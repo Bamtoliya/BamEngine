@@ -1,6 +1,6 @@
 ﻿#include "ActionTimelineAsset.h"
 #include "PlatformPath.h"
-#include "Reflection/ReflectionRegistry.h"
+#include "ReflectionRegistry.h"
 #include <archive/JsonArchive.h>
 #include <reflection_archive/ReflectionArchiveAdapter.h>
 

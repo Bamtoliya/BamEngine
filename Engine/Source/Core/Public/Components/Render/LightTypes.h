@@ -2,7 +2,7 @@
 
 #include <reflection/Annotations.h>
 #include "Types.h"
-#include "Interface/EnumBit.h"
+#include "EnumBit.h"
 
 namespace Engine
 {

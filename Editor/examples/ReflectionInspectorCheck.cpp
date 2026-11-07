@@ -2,7 +2,7 @@
 #include "ReflectionInspectorSupport.h"
 #include "ReflectionPropertyDrawer.h"
 #include "InputManager.h"
-#include "Reflection/ReflectionRegistry.h"
+#include "ReflectionRegistry.h"
 #include "CoreComponents.h"
 #include "RenderComponents.h"
 #include "PhysicsComponent.h"

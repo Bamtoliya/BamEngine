@@ -1,7 +1,7 @@
 ﻿#include "Scene.h"
 #include "Components/Core/NameComponent.h"
 #include "Components/Core/TransformComponent.h"
-#include "Reflection/ReflectionRegistry.h"
+#include "ReflectionRegistry.h"
 #include <archive/JsonArchive.h>
 #include <archive/BeveArchive.h>
 #include "CoreComponents.h"

@@ -1,7 +1,7 @@
 # 소스 분류·의존성과 파일 조직 가이드
 
-- 작성일: 2026-10-24
-- 상태: 적용 기준 / 기존 파일의 이동·리팩터링 완료를 의미하지 않는다.
+- 작성일: 2026-10-24 (최종 갱신: 2026-11-07)
+- 상태: 적용 기준 / 2026-11-07 `Core` 하위 계층(`Interface`, `Module`, `Reflection`), `Render`(`Vertex`, `Picking`), `Editor/ImGui/PrefabEditor`, `Tools/` 일원화 및 미사용 선언 파일 정리를 반영했다. 남은 도메인별 서비스·리소스 이관은 점진적으로 적용한다.
 - 공통 지침: [EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md)
 - 작업 순서: [DevelopmentPriorities.md](DevelopmentPriorities.md)
 - 직렬화 경계: [ReflectionArchiveGuidelines.md](ReflectionArchiveGuidelines.md)
@@ -161,22 +161,24 @@ MyRegion 같은 임시 영역명과 의미 없는 반복 구분을 정리하고 
 멤버 이동은 초기화 순서·객체 배치·반사 정보·저장 형식·GPU 전달 배치에 미치는 영향을 확인한 뒤 진행한다.
 함수 선언 순서 정리와 이진 헤더·상수 버퍼 필드 재배치를 같은 가독성 수정으로 취급하지 않는다.
 
-## 10. 현재 코드의 이관 후보와 적용 경계
+## 10. 현재 코드의 이관 현황과 남은 적용 경계
 
-아래는 2026-10-24 정적 조사에 근거한 후보이며 파일 이동이 완료됐다는 뜻이 아니다.
+아래는 2026-10-24 정적 조사 후보에 대한 2026-11-07 반영 상태와 남은 후보의 구분이다.
 
-- Core/Reflection·Module: 기능/Public·Private 순서 통일. ReflectionRegistry의 엔진 통합 책임은 별도로 표시한다.
-- Core/Structs/Vertex와 Core/Private/Vertex: Render의 정점·입력 레이아웃 소유 위치와 헤더/구현 경로를 맞춘다.
-  SceneUBO는 오브젝트 전달 데이터로 구분하고 바인딩·필드 배치를 보존한다.
-- Resource/Shader의 공통 타입·반사 처리: RHI와 리소스가 사용할 Render 공통 계약을 검토한다.
-  ReflectSPIRV의 SDLGPU 사용을 보존하며 반사 전체를 Editor로 옮기지 않는다.
-- System의 서비스와 ECS 처리: Input·Time·Audio 서비스는 기능이 소유하고 공통 스케줄러만 공통 실행 기반에 둔다.
-- System/Terrain의 TerrainUtility: 공용 지형 계산·브러시·이미지 입출력과 ECS 갱신의 책임을 구분한다.
+### 2026-11-07 반영 완료 항목
+- **Core/Interface·Module·Reflection**: `Core/Public|Private/<SubDomain>`에서 `Core/<SubDomain>/Public|Private`(`Core/Interface/Public`, `Core/Module/Public|Private`, `Core/Reflection/Public|Private`)로 계층 순서를 통일하고, `Engine/CMake/ReflectionBuild.cmake` 및 관련 `#include` 경로를 정규화했다. `ReflectionRegistry`의 엔진 통합 책임은 그대로 유지한다.
+- **Vertex 소유 위치 이동**: `Core/Public/Structs/Vertex.h`와 `Core/Private/Vertex.cpp`를 `Render/Public/Vertex.h`와 `Render/Private/Vertex.cpp`로 이동하여 헤더·구현 경로와 `Render` 소유권을 일치시켰다.
+- **Utility/Picking 이관**: `Engine/Source/Utility/Picking`의 `PickingManager.h/.cpp`를 `Engine/Source/Render/Picking/Public|Private/`로 이동하고 `Engine/Source/Utility` 빈 상위 폴더를 제거했다.
+- **미사용 선언·빈 파일 정리**: 구현 및 참조가 없는 `Engine/Source/Physics/Public/PhysicsManager.h`, `Engine/Source/System/Time/Public/TimerManager.h`, `Editor/Source/AssetManager/Importer/Public/AudioImporter.h`, `MaterialImporter.h`, `Editor/Source/ImGui/InspectorPanel/Public/SpriteInspector.h`, `Editor/Source/Rendering/PostProcess/Public/PostProcessInterface.h`, `Editor/Source/ImGui/ViewportPanel`의 빈 `EditorViewportPanel.h/.cpp`, `Editor/Source/ImGui/Managers` 내 3바이트 빈 파일 8개(`MangerInspectorInterface.*` 등) 및 루트 빈 폴더(`Bin/`, `Server/`, `Shared/`, `Editor/Source/Generated/`)를 제거했다.
+- **Editor 프리팹 패널 통합 및 Tools 일원화**: `Editor/Source/ImGui/ResourceEditor`의 `PrefabEditorPanel.h/.cpp`를 `Editor/Source/ImGui/PrefabEditor/Public|Private/`로 통합하고, 최상위 `Utility/`의 코드젠·감사·보조 스크립트를 `Tools/`(`Tools/Converters/`, `Tools/Codegen/`, `Tools/Audit/`, `Tools/Scripts/`, `Tools/VSSnippets/`)로 일원화했다.
+
+### 남은 점진적 검토 후보
+- **Resource/Shader의 공통 타입·반사 처리**: RHI와 리소스가 사용할 Render 공통 계약을 검토한다.
+  `ReflectSPIRV`의 SDLGPU 사용을 보존하며 반사 전체를 Editor로 옮기지 않는다.
+- **System의 서비스와 ECS 처리**: Input·Time·Audio 서비스는 기능 확장에 맞춰 도메인 소유로 분리할 수 있으며 공통 스케줄러만 공통 실행 기반에 둔다.
+- **System/Terrain의 TerrainUtility**: 공용 지형 계산·브러시·이미지 입출력과 ECS 갱신의 책임을 구분한다.
   분류 정리를 이유로 필요한 처리까지 Editor 전용으로 만들지 않는다.
-- Utility/Picking: 렌더 피킹 ID·패스·프레임 관리의 소유 후보는 Render/Picking이다.
-  Collider 기반 게임 질의는 Physics 또는 World 연결 경계에서 별도로 제공한다.
-- Interface의 Delegate와 EventBus: 이벤트 기능의 관계를 반영한다. Handle·Result·EnumBit은 실제 역할로 분류한다.
-- PhysicsManager·TimerManager 등 선언만 남은 후보: 호출·생성·외부 사용과 유지 의도를 확인한 뒤 이관·정리한다.
+- **Interface의 Delegate와 EventBus**: 이벤트 기능 확장 시 관계를 반영한다. Handle·Result·EnumBit은 `Core/Interface/Public`에서 기반 계약으로 유지한다.
 
 파일이 여러 영역에 있다는 사실만으로 결함으로 판단하지 않는다.
 현재 Resource/Model의 에셋 데이터와 Scene의 책임별 구현 파일은 관련 기능을 실제로 확장할 때 재평가한다.

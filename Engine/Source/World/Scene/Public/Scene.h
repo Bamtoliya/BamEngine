@@ -1,10 +1,10 @@
 ﻿#pragma once
 
 #include "Base.h"
-#include "Reflection/ReflectionMacro.h"
+#include "ReflectionMacro.h"
 #include "Entity.h"
 #include "TypeIdentityInterface.h"
-#include "Reflection/ReflectionRegistry.h"
+#include "ReflectionRegistry.h"
 #include <archive/ArchiveResult.h>
 #include "ResourceHandle.h"
 

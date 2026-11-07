@@ -39,7 +39,7 @@ reflection_generate(
     MODULE BamEngine
     TYPE_LIST_METADATA Component
     CXX_STANDARD 23
-    REGISTRY_HEADER "${ENGINE_SOURCE_DIR}/Core/Public/Reflection/ReflectionRegistry.h"
+    REGISTRY_HEADER "${ENGINE_SOURCE_DIR}/Core/Reflection/Public/ReflectionRegistry.h"
     REGISTRY_TYPE Engine::ReflectionRegistry
     HEADERS ${ENGINE_REFLECTION_HEADERS}
     HEADER_INCLUDE_ROOT "${ENGINE_SOURCE_DIR}"

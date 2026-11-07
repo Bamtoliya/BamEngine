@@ -1,7 +1,7 @@
 ﻿#pragma once
 
 #include "Engine_Includes.h"
-#include "Reflection/ReflectionMacro.h"
+#include "ReflectionMacro.h"
 
 #include "Components/Core/NameComponent.h"
 #include "Components/Core/TagComponent.h"

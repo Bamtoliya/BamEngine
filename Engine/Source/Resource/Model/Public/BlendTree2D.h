@@ -3,7 +3,7 @@
 #include "Engine_Includes.h"
 #include "Animation.h"
 #include "ResourceHandle.h"
-#include "Reflection/ReflectionMacro.h"
+#include "ReflectionMacro.h"
 #include <array>
 
 BEGIN(Engine)

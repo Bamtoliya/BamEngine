@@ -1,7 +1,7 @@
 ﻿#pragma once
 
 #include "HotReloaderInterface.h"
-#include "Module/ModuleInterface.h"
+#include "ModuleInterface.h"
 #include <efsw/efsw.hpp>
 
 BEGIN(Editor)

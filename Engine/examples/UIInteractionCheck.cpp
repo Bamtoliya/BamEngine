@@ -1,7 +1,7 @@
 ﻿#include "UIEventSystem.h"
 #include "Scene.h"
 #include "CoreComponents.h"
-#include "Reflection/ReflectionRegistry.h"
+#include "ReflectionRegistry.h"
 #include <archive/JsonArchive.h>
 #include <iostream>
 #include <limits>

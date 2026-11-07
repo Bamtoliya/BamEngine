@@ -1,7 +1,7 @@
 ﻿#include "TransformPropertyEditor.h"
 #include "CoreComponents.h"
 #include "TransformSystem.h"
-#include "Reflection/ReflectionRegistry.h"
+#include "ReflectionRegistry.h"
 
 #include <reflection/Registry.h>
 

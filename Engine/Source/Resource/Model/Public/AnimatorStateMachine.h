@@ -6,7 +6,7 @@
 #include "Skeleton.h"
 #include "BlendTree1D.h"
 #include "BlendTree2D.h"
-#include "Reflection/ReflectionMacro.h"
+#include "ReflectionMacro.h"
 #include <string>
 #include <vector>
 #include <unordered_map>

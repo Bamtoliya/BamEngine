@@ -2,7 +2,7 @@
 
 #include "Base.h"
 #include "EnumBit.h"
-#include "Reflection/ReflectionMacro.h"
+#include "ReflectionMacro.h"
 
 BEGIN(Engine)
 

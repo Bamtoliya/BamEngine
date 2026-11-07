@@ -1,6 +1,6 @@
 ﻿#include "AnimatorStateMachine.h"
 #include "AnimationEvaluator.h"
-#include "Reflection/ReflectionRegistry.h"
+#include "ReflectionRegistry.h"
 #include <archive/JsonArchive.h>
 #include <reflection_archive/ReflectionArchiveAdapter.h>
 #include "PlatformPath.h"

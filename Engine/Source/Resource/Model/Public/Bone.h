@@ -2,7 +2,7 @@
 
 #include "Engine_API.h"
 #include "Types.h"
-#include "Reflection/ReflectionMacro.h"
+#include "ReflectionMacro.h"
 
 STRUCT()
 struct ENGINE_API Bone

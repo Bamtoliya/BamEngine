@@ -1,4 +1,4 @@
-﻿#include "AssetHotReloadManager.h"
+#include "AssetHotReloadManager.h"
 #include "ShaderHotReloadManager.h"
 #include "LocalizationManager.h"
 #include "ResourceManager.h"
@@ -272,7 +272,7 @@ void AssetHotReloadManager::ProcessModifiedLocalization(const std::filesystem::p
 	// .csv 파일이 수정된 경우 파이썬 변환 스크립트 실행
 	if (LowerAscii(locPath.extension().wstring()) == L".csv")
 	{
-		std::filesystem::path scriptPath = std::filesystem::current_path() / "Utility/CSVToJsonConverter/localizationcsvtojson.py";
+		std::filesystem::path scriptPath = std::filesystem::current_path() / "Tools/Codegen/CSVToJsonConverter/localizationcsvtojson.py";
 		if (std::filesystem::exists(scriptPath))
 		{
 			std::string cmd = "python \"" + scriptPath.string() + "\" --input \"Resources/Data/Localization\" --output \"Resources/Data/Localization\"";

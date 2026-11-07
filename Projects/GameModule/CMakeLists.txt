@@ -1,4 +1,4 @@
-﻿# Projects/GameModule/CMakeLists.txt
+# Projects/GameModule/CMakeLists.txt
 project(GameModule)
 
 set(GAME_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Source")
@@ -38,7 +38,7 @@ target_precompile_headers(GameModule PRIVATE
     <Engine_API.h>
     <Logger.h>
     <SystemManager.h>
-    <Reflection/ReflectionRegistry.h>
+    <ReflectionRegistry.h>
 )
 
 # ==============================================================================

@@ -7,7 +7,7 @@ if(NOT _engine_metadata_files)
 endif()
 
 set(_reflection_localization_script
-    "${CMAKE_SOURCE_DIR}/Utility/ReflectionLocalization/export_localization.py"
+    "${CMAKE_SOURCE_DIR}/Tools/Codegen/ReflectionLocalization/export_localization.py"
 )
 
 set(_reflection_localization_csv
@@ -34,6 +34,6 @@ add_dependencies(ExportReflectionLocalization Engine)
 if(BUILD_TESTING)
     add_test(NAME ReflectionLocalizationUtility
         COMMAND "${Python3_EXECUTABLE}" -B -m unittest discover
-            -s "${CMAKE_SOURCE_DIR}/Utility/ReflectionLocalization" -p "test_*.py" -v
+            -s "${CMAKE_SOURCE_DIR}/Tools/Codegen/ReflectionLocalization" -p "test_*.py" -v
     )
 endif()

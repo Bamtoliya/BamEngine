@@ -1,6 +1,6 @@
 ﻿#pragma once
 
-#include "Reflection/ComponentAnnotations.h"
+#include "ComponentAnnotations.h"
 #include "ResourceHandle.h"
 #include "Animation.h"
 #include "AnimatorStateMachine.h"

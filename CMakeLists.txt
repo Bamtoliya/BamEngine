@@ -1,4 +1,4 @@
-﻿cmake_minimum_required(VERSION 3.21)
+cmake_minimum_required(VERSION 3.21)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -33,8 +33,8 @@ endif()
 
 add_subdirectory(Engine)
 
-add_subdirectory(Tools/ModelConverter)
-add_subdirectory(Tools/TextureConverter)
+add_subdirectory(Tools/Converters/ModelConverter)
+add_subdirectory(Tools/Converters/TextureConverter)
 
 if(BAMENGINE_WITH_EDITOR)
     add_subdirectory(Editor)
