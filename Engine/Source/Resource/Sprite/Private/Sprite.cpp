@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "Sprite.h"
 #include "ResourceManager.h"
 
@@ -23,6 +23,7 @@ EResult Sprite::Initialize(void* arg)
 	
 	m_Region = desc->region;
 	m_Pivot = desc->pivot;
+	m_Border = desc->border;
 	return EResult::Success;
 }
 
@@ -103,6 +104,12 @@ EResult Sprite::SetRegion(const Rect& region)
 EResult Sprite::SetPivot(const vec2& pivot)
 {
 	m_Pivot = pivot;
+	IncreaseVersion();
+	return EResult::Success;
+}
+EResult Sprite::SetBorder(const vec4& border)
+{
+	m_Border = border;
 	IncreaseVersion();
 	return EResult::Success;
 }

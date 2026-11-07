@@ -1,8 +1,10 @@
-﻿#include "CameraSystem.h"
+#include "CameraSystem.h"
 #include "Components/Render/CameraComponent.h"
+#include "Components/Camera/PixelPerfectCameraComponent.h"
 #include "Components/Core/WorldTransformComponent.h"
 
 #include <glm/ext/matrix_clip_space.hpp>
+#include <cmath>
 
 namespace
 {
@@ -109,9 +111,27 @@ bool CameraSystem::UpdateCamera(entt::registry& registry, entt::entity entity)
 		return false;
 
 	CameraBuffer result{};
-	result.viewMatrix = glm::inverse(worldMatrix);
-	result.invViewMatrix = worldMatrix;
-	result.cameraPosition = vec3(worldMatrix[3]);
+	mat4 finalWorld = worldMatrix;
+	vec3 camPos = vec3(worldMatrix[3]);
+
+	// ── 픽셀 퍼펙트 카메라 연동 (Sub-pixel Snapping) ──
+	const auto* pixelPerfect = registry.try_get<PixelPerfectCameraComponent>(entity);
+	if (pixelPerfect && camera.CameraType == ECameraType::Orthographic && pixelPerfect->assetsPPU > 0.0f)
+	{
+		if (pixelPerfect->snapSubpixel)
+		{
+			const f32 ppu = pixelPerfect->assetsPPU;
+			camPos.x = std::floor(camPos.x * ppu + 0.5f) / ppu;
+			camPos.y = std::floor(camPos.y * ppu + 0.5f) / ppu;
+
+			finalWorld[3][0] = camPos.x;
+			finalWorld[3][1] = camPos.y;
+		}
+	}
+
+	result.viewMatrix = glm::inverse(finalWorld);
+	result.invViewMatrix = finalWorld;
+	result.cameraPosition = camPos;
 
 	if (camera.CameraType == ECameraType::Perspective)
 	{

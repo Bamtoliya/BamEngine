@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "ComponentAnnotations.h"
 #include "ResourceHandle.h"
@@ -16,6 +16,14 @@ namespace Engine
 		Sliced,
 		Tiled,
 		Filled
+	};
+
+	ENUM()
+	enum class ESpriteFillMethod : uint8
+	{
+		Horizontal = 0,
+		Vertical,
+		Radial360
 	};
 
 	ENUM()
@@ -43,6 +51,24 @@ namespace Engine
 
 		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_BILLBOARD_MODE"))
 		ESpriteBillboardMode billboardMode = ESpriteBillboardMode::None;
+
+		// ── 9-Slice / Tiled 전용 크기 ──
+		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_SIZE"))
+		vec2 size = vec2(1.0f, 1.0f);
+
+		// ── Filled 모드 전용 설정 ──
+		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_FILL_METHOD"))
+		ESpriteFillMethod fillMethod = ESpriteFillMethod::Horizontal;
+
+		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_FILL_AMOUNT"))
+		f32 fillAmount = 1.0f; // 0.0 ~ 1.0
+
+		// ── 2D 정렬 순서 ──
+		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_SORTING_LAYER"))
+		int32 sortingLayerID = 0;
+
+		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_ORDER_IN_LAYER"))
+		int32 orderInLayer = 0;
 
 		PROPERTY(EDITABLE, COLOR_PROPERTY, DISPLAY_NAME("PROP_COLOR"))
 		vec4 color = vec4(1.f);

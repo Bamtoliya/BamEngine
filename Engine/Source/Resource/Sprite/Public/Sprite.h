@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "Texture.h"
 #include "ResourceHandle.h"
@@ -9,6 +9,7 @@ struct SpriteCreateDesc : public ResourceCreateDesc
 	wstring texturePath = L"";
 	Engine::Rect region = { 0.f, 0.f, 0.f, 0.f };
 	vec2 pivot = { 0.5f, 0.5f };
+	vec4 border = { 0.f, 0.f, 0.f, 0.f }; // Left, Right, Top, Bottom (9-Slice용)
 };
 
 BEGIN(Engine)
@@ -55,6 +56,12 @@ public:
 	EResult SetPivot(const vec2& pivot);
 #pragma endregion
 
+#pragma region Border Management
+public:
+	vec4 GetBorder() const { return m_Border; }
+	EResult SetBorder(const vec4& border);
+#pragma endregion
+
 #pragma region Texture Management
 public:
 	Texture* GetTexture() { return m_Texture.Get(); }
@@ -72,6 +79,9 @@ private:
 
 	PROPERTY(DEFAULT(vec2(0.5f, 0.5f)))
 	vec2 m_Pivot = { 0.5f, 0.5f };
+
+	PROPERTY(DEFAULT(vec4(0.f, 0.f, 0.f, 0.f)))
+	vec4 m_Border = { 0.f, 0.f, 0.f, 0.f }; // Left, Right, Top, Bottom (픽셀 인셋)
 
 	PROPERTY(DEFAULT(100.f))
 	f32 m_PixelPerUnit = { DEFAULT_PPU };
