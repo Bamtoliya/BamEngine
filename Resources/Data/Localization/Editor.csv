@@ -1042,6 +1042,7 @@ ResourceEditor,KeyFrames,Key Frames,키 프레임 목록
 ResourceEditor,LoadResource,Load Resource,리소스 로드
 ResourceEditor,MaterialTitle,Material Editor,머티리얼 편집기
 ResourceEditor,ModelTitle,Model Editor,모델 편집기
+ResourceEditor,OpenBlocked,Save changes to {} before opening another asset.,다른 에셋을 열기 전에 {}의 변경 사항을 저장하세요.
 ResourceEditor,PrefabTitle,Prefab Editor,프리팹 에디터
 ResourceEditor,ShaderTitle,Shader Editor,셰이더 편집기
 ResourceEditor,SpriteAnimationTitle,Sprite Animation Editor,스프라이트 애니메이션 에디터
@@ -1069,6 +1070,7 @@ ResourcePicker,ClearHint,Unbind / Clear current resource,현재 리소스 연결
 ResourcePicker,DiskFile,{} [Disk],{} [디스크]
 ResourcePicker,LoadedInMemory,Loaded in Memory:,메모리에 로드된 리소스:
 ResourcePicker,None,None (drop a resource),없음 (리소스를 놓으세요)
+ResourcePicker,OpenInEditor,Open in Editor,편집기에서 열기
 ResourcePicker,ProjectFiles,Project Files (On Disk):,프로젝트 파일 (디스크):
 ResourcePicker,Rejected,Resource type mismatch or load failed.,리소스 종류가 다르거나 불러오지 못했습니다.
 ResourcePicker,SearchHint,Search resources...,리소스 검색...
@@ -1481,3 +1483,17 @@ InputActions,Bindings,Bindings,바인딩
 InputActions,Manage,Manage,관리
 Action,Window.CloseFocusedPanel,Close Focused Panel,포커스된 패널 닫기
 InputActions,MouseCaptureArea,Click here with the mouse button to bind,등록할 마우스 버튼으로 여기를 누르세요
+Viewport,RenderTargetPreviewUnsupported,This render target cannot be previewed as a 2D image.,이 렌더 타깃은 2D 이미지로 미리 볼 수 없습니다.
+ResourcePicker,RevealInContentBrowser,Show in Content Browser,콘텐츠 브라우저에서 찾기
+ResourcePicker,RevealFailed,This asset could not be located in the Content Browser.,콘텐츠 브라우저에서 이 에셋을 찾을 수 없습니다.
+Inspector,RefreshModelMaterials,Refresh Model Parts,원본 모델 부품 갱신
+Inspector,ModelMaterialRefreshConflict,The model parts or rig no longer match the instance. Nothing was changed.,원본 모델의 부품 또는 리그가 인스턴스와 일치하지 않아 변경하지 않았습니다.
+Inspector,ModelMaterialRefreshFailed,Could not apply the model part change.,모델 부품 변경을 적용하지 못했습니다.
+Inspector,UseModelMaterial,Use Model Material,원본 머티리얼 사용
+Inspector,UseModelMesh,Use Model Mesh,원본 메시 사용
+Inspector,SkinnedPartMeshRejected,The mesh could not be applied to this part. Select a mesh bound to the current rig.,이 부품에 메시를 적용하지 못했습니다. 현재 리그에 바인딩된 메시를 선택하세요.
+EditorMenu,PanelViewports,Viewports,뷰포트
+EditorMenu,PanelSceneEditing,Scene Editing,씬 편집
+EditorMenu,PanelAssets,Assets,에셋
+EditorMenu,PanelGraphAnimation,Graphs & Animation,그래프·애니메이션
+EditorMenu,PanelDiagnostics,Diagnostics,진단
