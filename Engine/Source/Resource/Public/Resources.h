@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "Resource.h"
 #include "Mesh.h"
@@ -13,3 +13,4 @@
 #include "Script.h"
 #include "AudioClip.h"
 #include "ActionTimelineAsset.h"
+#include "ParticleEffect.h"

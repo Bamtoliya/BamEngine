@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "TransformSystem.h"
 #include "CameraSystem.h"
@@ -14,6 +14,7 @@
 #include "MeshRenderSystem.h"
 #include "SpriteRenderSystem.h"
 #include "SpriteAnimationSystem.h"
+#include "TilemapRenderSystem.h"
 #include "AnimationSystem.h"
 #include "ParticleSystem.h"
 #include "ActionTimelineSystem.h"

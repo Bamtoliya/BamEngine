@@ -1,8 +1,10 @@
 ﻿#include "MaterialEditor.h"
+#include "ShortcutManager.h"
 #include "Material.h"
 #include "MaterialInstance.h"
 #include "ResourceManager.h"
 #include "PlatformPath.h"
+#include "Functions.h"
 #include "ImGuiManager.h"
 #include "Logger.h"
 #include "LocalizationManager.h"
@@ -27,12 +29,6 @@ namespace
 		return ImGui::Combo(label, selected, items.data(), static_cast<int>(N));
 	}
 
-	std::string ToLowerStr(std::string str)
-	{
-		for (char& c : str) c = static_cast<char>(tolower(c));
-		return str;
-	}
-
 	std::string GetResourceDisplayName(const Engine::Resource* res)
 	{
 		if (!res) return LOCAL("MaterialEditor.NoResource");
@@ -51,7 +47,7 @@ MaterialEditor::MaterialEditor()
 
 bool MaterialEditor::IsSupported(const std::filesystem::path& assetPath) const
 {
-	const std::string name = ToLowerStr(Engine::WStrToStr(assetPath.filename().wstring()));
+	const std::string name = Engine::ToLowerStr(Engine::WStrToStr(assetPath.filename().wstring()));
 	return name.ends_with(".bammat.json") || name.ends_with(".bammatinst.json") ||
 		name.ends_with(".bammat") || name.ends_with(".bammatinst") ||
 		name.ends_with(".mat");
@@ -113,7 +109,7 @@ void MaterialEditor::Draw()
 	const auto title = BuildResourceWindowTitle();
 	ImGui::SetNextWindowSize(ImVec2(1000.0f, 650.0f), ImGuiCond_FirstUseEver);
 	// 가려진 탭이면 Begin이 false를 반환합니다.
-	if (BeginPanelWindow(title.c_str(), m_Open))
+	if (BeginPanelWindow(title.c_str(), m_Open, ImGuiWindowFlags_MenuBar))
 	{
 		m_IsVisibleOnScreen = true;
 		// 마우스가 에디터 위에 있거나 포커스된 경우 프리뷰 갱신 타이머 연장 (0.5초 동안 활성 렌더링)
@@ -130,7 +126,7 @@ void MaterialEditor::Draw()
 			return;
 		}
 
-		// 툴바 (저장 버튼 등)
+		DrawMenuBar();
 		DrawToolbar();
 		ImGui::Separator();
 		const float availWidth = ImGui::GetContentRegionAvail().x;
@@ -168,11 +164,89 @@ void MaterialEditor::Draw()
 	ImGui::End();
 }
 
+void MaterialEditor::DrawMenuBar()
+{
+	if (!ImGui::BeginMenuBar()) return;
+
+	if (ImGui::BeginMenu(LOCAL_LABEL("EditorMenu.File").c_str()))
+	{
+		const bool canSave = m_Material != nullptr;
+		ImGui::BeginDisabled(!canSave);
+		auto& sm = ShortcutManager::Get();
+		if (ImGui::MenuItem((ICON_FA_FLOPPY_DISK " " + LOCAL_LABEL("EditorCommon.Save")).c_str(), sm.GetShortcutHint("Animator.Save")))
+		{
+			const std::string pathStr = m_TargetResourcePath.string();
+			EResult result = EResult::Fail;
+			if (pathStr.ends_with(".json"))
+				result = Engine::ResourceManager::Get().SaveToJsonFile(m_Material, m_TargetResourcePath.wstring());
+			else
+				result = Engine::ResourceManager::Get().SaveToBinaryFile(m_Material, m_TargetResourcePath.wstring());
+
+			if (result == EResult::Success)
+			{
+				m_IsDirty = false;
+				if (AssetCache::IsCreated())
+					AssetCache::Get().RequestInvalidate(m_TargetResourcePath);
+				EDITOR_LOG_INFO("Material saved: {}", pathStr);
+			}
+			else
+			{
+				EDITOR_LOG_ERROR("Failed to save material: {}", pathStr);
+			}
+		}
+
+		if (ImGui::MenuItem((ICON_FA_ROTATE_LEFT " " + LOCAL_LABEL("MaterialEditor.Revert")).c_str()))
+		{
+			if (m_Material->Reload(m_TargetResourcePath) == EResult::Success)
+			{
+				m_IsDirty = false;
+				if (AssetCache::IsCreated())
+					AssetCache::Get().RequestInvalidate(m_TargetResourcePath);
+				EDITOR_LOG_INFO("Material reverted: {}", m_TargetResourcePath.string());
+			}
+		}
+		ImGui::EndDisabled();
+
+		ImGui::EndMenu();
+	}
+
+	if (ImGui::BeginMenu(LOCAL_LABEL("MaterialEditor.ViewMenu").c_str()))
+	{
+		auto& sm = ShortcutManager::Get();
+		if (ImGui::MenuItem((ICON_FA_CROSSHAIRS " " + LOCAL_LABEL("MaterialEditor.ResetCamera")).c_str(), sm.GetShortcutHint("Viewport.Focus")))
+		{
+			m_PreviewRenderer.GetWidget().FocusTarget(Engine::vec3(0.0f, 0.0f, 0.0f), 3.0f);
+		}
+
+		if (ImGui::MenuItem((ICON_FA_BORDER_ALL " " + LOCAL_LABEL("MaterialEditor.ToggleGrid")).c_str(), sm.GetShortcutHint("Viewport.ToggleGrid"), m_PreviewRenderer.GetWidget().IsGridVisible()))
+		{
+			m_PreviewRenderer.GetWidget().ToggleGrid();
+		}
+
+		ImGui::Separator();
+		if (ImGui::BeginMenu(LOCAL_LABEL("MaterialEditor.PreviewMesh").c_str()))
+		{
+			const auto currentType = m_PreviewRenderer.GetPreviewMeshType();
+			if (ImGui::MenuItem(LOCAL_LABEL("MaterialEditor.Sphere").c_str(), nullptr, currentType == EPreviewMeshType::Sphere))
+				m_PreviewRenderer.SetPreviewMeshType(EPreviewMeshType::Sphere);
+			if (ImGui::MenuItem(LOCAL_LABEL("MaterialEditor.Cube").c_str(), nullptr, currentType == EPreviewMeshType::Cube))
+				m_PreviewRenderer.SetPreviewMeshType(EPreviewMeshType::Cube);
+			if (ImGui::MenuItem(LOCAL_LABEL("MaterialEditor.Plane").c_str(), nullptr, currentType == EPreviewMeshType::Plane))
+				m_PreviewRenderer.SetPreviewMeshType(EPreviewMeshType::Plane);
+			ImGui::EndMenu();
+		}
+
+		ImGui::EndMenu();
+	}
+
+	ImGui::EndMenuBar();
+}
+
 void MaterialEditor::DrawToolbar()
 {
 	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f, 4.0f));
 
-	if (ImGui::Button((ICON_FA_FLOPPY_DISK " " + LOCAL("MaterialEditor.Save")).c_str()))
+	if (ImGui::Button(ICON_FA_FLOPPY_DISK "##SaveMaterial"))
 	{
 		const std::string pathStr = m_TargetResourcePath.string();
 		EResult result = EResult::Fail;
@@ -193,31 +267,48 @@ void MaterialEditor::DrawToolbar()
 			EDITOR_LOG_ERROR("Failed to save material: {}", pathStr);
 		}
 	}
+	if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("EditorCommon.Save"));
 
 	ImGui::SameLine();
-	if (ImGui::Button((ICON_FA_ROTATE_LEFT " " + LOCAL("MaterialEditor.Revert")).c_str()))
+	if (ImGui::Button(ICON_FA_ROTATE_LEFT "##RevertMaterial"))
 	{
-		if (m_Material->Reload(m_TargetResourcePath) == EResult::Success)
+		if (m_Material && m_Material->Reload(m_TargetResourcePath) == EResult::Success)
 		{
 			m_IsDirty = false;
-
 			if (AssetCache::IsCreated())
 				AssetCache::Get().RequestInvalidate(m_TargetResourcePath);
-
 			EDITOR_LOG_INFO("Material reverted: {}", m_TargetResourcePath.string());
 		}
 	}
+	if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("MaterialEditor.Revert"));
 
 	ImGui::SameLine();
-	if (m_IsDirty)
-	{
-		ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.2f, 1.0f), "[%s]", LOCAL_CSTR("MaterialEditor.Modified"));
-		ImGui::SameLine();
-	}
+	ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
+	ImGui::SameLine();
 
-	ImGui::TextDisabled("%s", m_TargetResourcePath.string().c_str());
+	if (ImGui::Button(ICON_FA_CROSSHAIRS "##FocusMaterial"))
+	{
+		m_PreviewRenderer.GetWidget().FocusTarget(Engine::vec3(0.0f, 0.0f, 0.0f), 3.0f);
+	}
+	if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("MaterialEditor.ResetCamera"));
+
+	ImGui::SameLine();
+	if (ImGui::Button(ICON_FA_BORDER_ALL "##ToggleGridMaterial"))
+	{
+		m_PreviewRenderer.GetWidget().ToggleGrid();
+	}
+	if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("MaterialEditor.ToggleGrid"));
+
+	ImGui::SameLine();
+	ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
+	ImGui::SameLine();
+
+	// 파일 상태 배지
+	const std::string fileName = m_TargetResourcePath.empty()
+		? LOCAL("AnimatorGraph.Unsaved") : m_TargetResourcePath.filename().string();
+	ImGui::TextDisabled("[%s%s]", fileName.c_str(), m_IsDirty ? " *" : "");
+
 	ImGui::PopStyleVar();
-	ImGui::Separator();
 }
 
 void MaterialEditor::DrawPipelineSettings()
@@ -278,7 +369,7 @@ void MaterialEditor::DrawPipelineSettings()
 
 	// Fill Mode
 	int fillIdx = static_cast<int>(m_Material->GetFillMode());
-	const char* fillModes[] = { "MaterialOption.Solid", "MaterialOption.Wireframe" };
+	const char* fillModes[] = { "MaterialOption.Wireframe", "MaterialOption.Solid" };
 	if (LocalizedCombo(LOCAL_LABEL("MaterialEditor.FillMode").c_str(), &fillIdx, fillModes))
 	{
 		m_Material->SetFillMode(static_cast<Engine::EFillMode>(fillIdx));
@@ -429,8 +520,8 @@ void MaterialEditor::DrawTextureBindings()
 
 	if (ps)
 	{
-		const std::string psKey = ToLowerStr(WStrToStr(ps->GetKey()));
-		const std::string psPath = ToLowerStr(WStrToStr(ps->GetSpirvPath()));
+		const std::string psKey = Engine::ToLowerStr(WStrToStr(ps->GetKey()));
+		const std::string psPath = Engine::ToLowerStr(WStrToStr(ps->GetSpirvPath()));
 		const std::string combined = psKey + " " + psPath;
 
 		if (combined.find("gbuffer") != std::string::npos)

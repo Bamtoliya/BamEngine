@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "SpriteEditor.h"
 #include "SpriteAnimationEditor.h"
@@ -7,3 +7,4 @@
 #include "ShaderEditor.h"
 #include "MaterialEditor.h"
 #include "PrefabEditorPanel.h"
+#include "ParticleEditorPanel.h"

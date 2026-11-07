@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "ResourceEditorInterface.h"
 #include "MaterialInterface.h"
@@ -25,6 +25,7 @@ public:
 	virtual void RestoreState(const EditorWorkspace& workspace) override;
 
 private:
+	void DrawMenuBar();
 	void DrawToolbar();
 	void DrawPipelineSettings();
 	void DrawShaderSettings();

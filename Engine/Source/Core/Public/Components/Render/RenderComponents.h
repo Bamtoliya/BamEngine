@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "Components/Render/CameraComponent.h"
 #include "Components/Render/LightComponent.h"
@@ -14,3 +14,4 @@
 #include "Components/Render/SpriteAnimationComponent.h"
 #include "Components/Render/AnimatorComponent.h"
 #include "Components/Render/ParticleEmitterComponent.h"
+#include "Components/Render/TilemapComponent.h"

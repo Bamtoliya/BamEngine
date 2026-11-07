@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "Editor_Includes.h"
 #include "ResourceHandle.h"
@@ -32,6 +32,10 @@ public:
 	void DrawUI(Engine::MaterialInterface* material);
 
 	[[nodiscard]] Engine::RHITexture* GetPreviewRHITexture() const { return m_Widget.GetPreviewRHITexture(); }
+	[[nodiscard]] PreviewViewportWidget& GetWidget() { return m_Widget; }
+	[[nodiscard]] const PreviewViewportWidget& GetWidget() const { return m_Widget; }
+	[[nodiscard]] EPreviewMeshType GetPreviewMeshType() const { return m_CurrentMeshType; }
+	void SetPreviewMeshType(EPreviewMeshType type) { m_CurrentMeshType = type; }
 
 private:
 	void UpdatePreviewMesh(Engine::MaterialInterface* material);

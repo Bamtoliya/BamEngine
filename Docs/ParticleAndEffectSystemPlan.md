@@ -1,7 +1,7 @@
 # 모듈형 파티클 & 비주얼 이펙트 시스템 및 에디터 개발 계획 (Modular Particle & VFX System and Editor Plan)
 
 - **작성일:** 2026-11-07
-- **상태:** Phase 1, Phase 2 구현 완료 / Phase 3 대기
+- **상태:** Phase 1 ~ Phase 5 전체 구현 완료
 - **공통 기준:** [EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md), [SourceOrganizationGuidelines.md](SourceOrganizationGuidelines.md)
 - **연계 계획:** [EngineDevelopmentPlan.md](EngineDevelopmentPlan.md) 4절(나이아가라형 파티클 시스템), [AnimationTimelineEditorPlan.md](AnimationTimelineEditorPlan.md)(비-PIE 프리뷰 루프 및 타임라인 FX), [DevelopmentPriorities.md](DevelopmentPriorities.md)
 
@@ -86,29 +86,35 @@ flowchart TD
   4. 시간에 따른 노이즈 장 스크롤 속도(`curlNoiseScrollSpeed`) 지원.
 - **완료 기준:** 바닥에서 발생한 연기가 장애물과 기류를 타고 퍼져나가며, 위로 떠오르다 자연스럽게 흩어지는 비주얼 완성.
 
-### Phase 3: 이벤트 체이닝 & 표면 상호작용 (Events & Decals)
-- **목표:** 한 입자의 충돌/사망 사건이 다른 서브 이미터나 지면 데칼로 이어지는 연쇄 효과 구현.
+### Phase 3: 이벤트 방출 기반 경량화 & 충돌 이벤트 큐 (완료 및 리팩터링)
+- **목표:** 엔진 코어는 가벼운 물리/역학 적분과 이벤트 방출에 집중하고, 구체적인 시각 효과(스파크/충격파 등)의 조합은 에디터와 모듈형 에셋 영역으로 위임.
 - **주요 작업:**
-  1. 파티클 생명주기 이벤트(`OnSpawn`, `OnCollision`, `OnDeath`) 페이로드 정의.
-  2. 서브 이미터 스폰(Event Spawner): 충돌 시 파편 버스트, 미사일 궤적 연기 생성.
-  3. 표면 데칼(그을음/피/젖음) 투영 및 물 파문(Water Splash) 연동.
-- **완료 기준:** 하나의 이펙트 실행으로 발사 $\rightarrow$ 충돌 $\rightarrow$ 파편 튐 $\rightarrow$ 바닥 자국의 풀 체인이 자동으로 연쇄 동작.
+  1. `ParticleEmitterComponent` C++ 하드코딩 변수 다이어트 (컴포넌트 비대화 해소).
+  2. 프레임 단위 충돌 이벤트 구조체(`ParticleCollisionEvent`: 접촉 위치 $\vec{P}$, 법선 $\vec{N}$, 속도 $\vec{V}$, 시각 $t$) 정의.
+  3. `UpdateEmitter`에서 충돌 발생 시 `collisionEvents` 버퍼에 O(1) 기록 및 매 프레임 `ClearEvents()` 자동 정리.
+  4. 다중 이미터 간의 이벤트 체이닝(Parent OnCollision $\rightarrow$ Child Spawn) 및 지면 충격파/스파크 조합은 Phase 4 모듈형 에셋에서 조립하도록 책임 분리.
+- **완료 기준:** 컴포넌트가 최소한의 물리 프리미티브와 이벤트 버퍼만 유지하여, 저작 도구(에디터)에서 무한히 확장 가능한 깔끔한 기반 확립.
 
-### Phase 4: 모듈형 아키텍처 및 독립 에셋화 (`ParticleEffect` Asset)
-- **목표:** 단일 컴포넌트 구조에서 나이아가라 스타일의 모듈식 에셋 구조로 아키텍처 전환.
+### Phase 4: 모듈형 아키텍처 및 독립 에셋화 (`ParticleEffect` Asset) (구현 완료)
+- **목표:** 단일 컴포넌트 하드코딩 구조에서 나이아가라 스타일의 다중 이미터 조합형 `.bameffect` 에셋 구조로 아키텍처 전환 완료.
 - **주요 작업:**
-  1. 데이터 구조 분리: `ParticleSpawnModule`, `ParticleUpdateModule`, `ParticleCollisionModule`, `ParticleRendererModule`.
-  2. 다중 이미터를 포함하는 `.effect` 독립 에셋 정의 및 JSON 직렬화/역직렬화(Archive) 완비.
-- **완료 기준:** 여러 프리팹/엔티티에서 동일한 `.effect` 에셋을 참조하여 일관된 효과를 재생.
+  1. `EResourceType::ParticleEffect` (확장자 `.bameffect`) 에셋 타입 신설 및 `Resource` 계층 편입.
+  2. `ParticleEmitterData`: 식별/트리거 체이닝, 방출, 역학(부력/바람/컬노이즈), 물리 충돌, 렌더링(빌보드/지면 디스크) 모듈형 데이터 정의.
+  3. `ParticleEffect` 클래스: 다중 이미터 컬렉션 및 `JsonArchive` 기반 입출력(`SaveToFile`, `LoadFromFile`) 완비.
+  4. `ParticleEffectComponent` 신설: 씬 엔티티에 에셋을 장착하여 재생 속도, 인스턴스별 RNG/버퍼 격리 실행 지원.
+  5. `ParticleSystem`: 2단계 파이프라인(지속 방출/물리 적분 $\rightarrow$ `OnParentCollision` 이벤트 스폰 체이닝) 및 인스턴스 일괄 드로우콜 제출 연동.
+  6. 예제 에셋 제작: `Resources/Effect/Explosion_Fireball.bameffect.json` (메인 발사체 $\rightarrow$ 지면 충격파 링 $\rightarrow$ 충돌 스파크 $\rightarrow$ 연기 퍼프 풀 체인).
+- **완료 기준:** 여러 프리팹/엔티티에서 동일한 `.bameffect` 에셋을 참조하여 다중 이미터 연쇄 효과를 일관되게 재생 검증.
 
-### Phase 5: 독립 프리뷰 및 전용 이펙트 에디터 (`ParticleEditorPanel`)
+### Phase 5: 독립 프리뷰 및 전용 이펙트 에디터 (`ParticleEditorPanel`) (구현 완료)
 - **목표:** 메인 씬의 방해 없이 이펙트를 실시간으로 편집하고 프레임 단위로 미세 조정하는 독립 저작 도구 구축.
 - **주요 작업:**
-  1. 격리된 프리뷰 뷰포트(`PreviewScene`): 메인 씬 오염 없는 독립 오프스크린 씬 (그리드, 암실 라이팅, 마우스 궤도 카메라, Non-PIE 실시간 루프).
-  2. 타임라인 및 재생 제어기: Play, Pause, Step, 배속 조절, 고정 시드 기반 결정론적 스크러빙(Scrubbing).
-  3. 모듈 스택 및 ImGui 커브/그래디언트 편집 UI.
-  4. 성능 프로파일러: 활성 입자 수, 드로우 콜, CPU 시뮬레이션 소요 시간(ms) 실시간 모니터링.
-- **완료 기준:** 에디터 패널 안에서 이펙트 제작, 실시간 타임라인 검증, 저장 및 씬 배치까지 원스톱 워크플로우 완성.
+  1. 격리된 프리뷰 뷰포트(`PreviewViewportWidget`): 메인 씬 오염 없는 독립 오프스크린 씬 (그리드, 스튜디오 라이팅, 마우스 궤도 카메라, Non-PIE 실시간 뷰포트 렌더링).
+  2. 타임라인 및 재생 제어기: 상단 툴바에 Play/Pause 토글, Step(+0.033s), 배속 조절(0.1x~3.0x), Restart, 카메라 포커스 리셋, 활성 파티클 통계 출력 완비.
+  3. 좌측 이미터 리스트 패널: 이미터 추가/삭제/활성화 토글 및 트리거 모드(Continuous, Collision, Death) 시각화.
+  4. 우측 모듈 스택 인스펙터 패널: 식별/트리거 체이닝, 수명/속도, 외력(부력/바람/컬노이즈), 물리 충돌(바운스/마찰/바닥높이), 크기/회전, 색상/머티리얼(리소스 피커 연동).
+  5. 에디터 통합 및 리소스 등록: `ResourceEditorInterface` 상속, 에셋 브라우저 더블클릭(`.bameffect`, `.bameffect.json`) 시 자동 오픈 및 `ImGuiManager` 메뉴 등록.
+- **완료 기준:** 에디터 패널 안에서 이펙트 제작, 실시간 뷰포트 검증, 디스크 저장 및 씬 배치까지 원스톱 워크플로우 완성.
 
 ---
 
