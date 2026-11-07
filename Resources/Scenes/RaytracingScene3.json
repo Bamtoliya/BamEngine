@@ -610,13 +610,16 @@
                             "AutoUpdateAnimator": true,
                             "Center": [0, 0, 0],
                             "CollisionMask": 4294967295,
-                            "Gravity": 0,
+                            "Gravity": -15,
                             "Height": 2,
                             "IsGroundedParamName": "IsGrounded",
                             "JumpForce": 7,
                             "JumpParamName": "Jump",
+                            "MaxPlayRate": 1.2000000476837158,
+                            "MinPlayRate": 0.4000000059604645,
                             "Radius": 1,
                             "RunSpeed": 8,
+                            "ScalePlayRateWithSpeed": true,
                             "SkinWidth": 0.05000000074505806,
                             "SlopeLimitDegrees": 45,
                             "SpeedParamName": "Speed",
@@ -679,7 +682,7 @@
                             "eulerRotation": [0, 0, 0],
                             "position": [1, 9.152555465698242, -9.558938026428223],
                             "rotation": [0, 0, 0, 1],
-                            "scale": [0.10000000149011612, 0.10000000149011612, 0.10000000149011612]
+                            "scale": [1, 1, 1]
                         },
                         "Type": "Engine::TransformComponent"
                     }
@@ -1124,7 +1127,7 @@
                         "Data": {
                             "absolute": 0,
                             "eulerRotation": [210, -180, -180],
-                            "position": [1, 19.15256690979004, -26.879451751708984],
+                            "position": [1, 19.152549743652344, -26.87944984436035],
                             "rotation": [0.2588190734386444, 0, 0, 0.965925931930542],
                             "scale": [0.6666669845581055, 0.6666666865348816, 0.6666669845581055]
                         },

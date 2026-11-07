@@ -1672,7 +1672,7 @@
                             "absolute": 0,
                             "eulerRotation": [0, 0, -6.171761512756348],
                             "position": [24.24032211303711, 0, 0],
-                            "rotation": [0, 0, -0.0538327731192112, 0.9985500574111938],
+                            "rotation": [0, 0, -0.053832780569791794, 0.9985500574111938],
                             "scale": [1, 1, 1]
                         },
                         "Type": "Engine::TransformComponent"
@@ -2015,6 +2015,84 @@
                     "Parent": 24
                 },
                 "Id": 50
+            },
+            {
+                "Components": [
+                    {
+                        "Data": {
+                            "flags": 3
+                        },
+                        "Type": "Engine::FlagComponent"
+                    },
+                    {
+                        "Data": {
+                            "name": "Entity"
+                        },
+                        "Type": "Engine::NameComponent"
+                    },
+                    {
+                        "Data": {
+                            "Closed": true,
+                            "Points": [
+                                {
+                                    "Position": [1.0405323505401611, -0.9187498092651367, -2.3021974563598633],
+                                    "RollDegrees": 1.6888926029205322
+                                },
+                                {
+                                    "Position": [4.601326942443848, 0, 5.731022357940674],
+                                    "RollDegrees": 0
+                                },
+                                {
+                                    "Position": [10.343466758728027, -0.1421957015991211, -1.4507745504379272],
+                                    "RollDegrees": 0
+                                }
+                            ]
+                        },
+                        "Type": "Engine::SplineComponent"
+                    },
+                    {
+                        "Data": {
+                            "DeformToPath": true,
+                            "InitialUp": [0, 1, 0],
+                            "InstanceScale": [1, 1, 1],
+                            "Spacing": 2,
+                            "StartDistance": 0,
+                            "UVRepeatDistance": 0
+                        },
+                        "Type": "Engine::SplineMeshComponent"
+                    },
+                    {
+                        "Data": {
+                            "castShadow": true,
+                            "materialHandle": {
+                                "AssetKey": "Resources/kenney_city-kit-roads/Models/GLB format/road-straight_colormap.bammatinst",
+                                "AssetPath": "Resources/kenney_city-kit-roads/Models/GLB format/road-straight_colormap.bammatinst",
+                                "Null": false
+                            },
+                            "meshHandle": {
+                                "AssetKey": "Resources/Road-subdi_road-straight.001.bammesh",
+                                "AssetPath": "Resources/Road-subdi_road-straight.001.bammesh",
+                                "Null": false
+                            }
+                        },
+                        "Type": "Engine::StaticMeshRendererComponent"
+                    },
+                    {
+                        "Data": {
+                            "absolute": 0,
+                            "eulerRotation": [0, 0, 0],
+                            "position": [-1.7167173624038696, 11.23758316040039, -0.7225252389907837],
+                            "rotation": [0, 0, 0, 1],
+                            "scale": [1, 1, 1]
+                        },
+                        "Type": "Engine::TransformComponent"
+                    }
+                ],
+                "Hierarchy": {
+                    "Children": [],
+                    "Parent": 0
+                },
+                "Id": 51
             }
         ],
         "Name": "RaytracingScene",
@@ -2054,6 +2132,14 @@
             {
                 "AssetKey": "Resources/Model/Fox_fox_material.bammatinst",
                 "AssetPath": "Resources/Model/Fox_fox_material.bammatinst"
+            },
+            {
+                "AssetKey": "Resources/Road-subdi_road-straight.001.bammesh",
+                "AssetPath": "Resources/Road-subdi_road-straight.001.bammesh"
+            },
+            {
+                "AssetKey": "Resources/kenney_city-kit-roads/Models/GLB format/road-straight_colormap.bammatinst",
+                "AssetPath": "Resources/kenney_city-kit-roads/Models/GLB format/road-straight_colormap.bammatinst"
             },
             {
                 "AssetKey": "SphereMesh",
