@@ -130,15 +130,15 @@ std::filesystem::path ResolvePath(const std::wstring& virtualKey)
 ## 4. 단계별 구현 순서
 
 ### Phase 1: 기반 경로 계약 및 디렉터리 분리 (준비 단계)
-- [ ] `ProjectSettings`(`Engine/Source/Core/Config/Public/Config.h`)에 `EngineResourceDirectory` 경로 설정 항목 정립.
-- [ ] URI 식별자·물리 경로·직렬화 표현을 구분하고 기존 `Resources/...` 대응, 외부 경로 거부, 빌트인 쓰기 금지, 실패 시 롤백 계약을 먼저 정한다.
-- [ ] 실제 파일을 이동하지 않고 참조 목록과 대표 씬/머티리얼/컨트롤러를 확보한다. 물리 이동은 Phase 3-B 이후다(2026-11-06 A10).
+- [x] `ProjectSettings`(`Engine/Source/Core/Config/Public/Config.h`)에 `EngineResourceDirectory` 경로 설정 항목 정립. [완료: 2026-11-08]
+- [x] URI 식별자·물리 경로·직렬화 표현을 구분하고 기존 `Resources/...` 대응, 외부 경로 거부, 빌트인 쓰기 금지, 실패 시 롤백 계약을 먼저 정한다. [완료: 2026-11-08]
+- [x] 실제 파일을 이동하지 않고 참조 목록과 대표 씬/머티리얼/컨트롤러를 확보한다. 물리 이동은 Phase 3-B 이후다(2026-11-06 A10). [완료: 2026-11-08]
 
 ### Phase 2: `ResourceManager` 및 가상 마운트 해석 계층 구현
-- [ ] 먼저 기존 물리 위치에 마운트를 연결해 새 해석과 기존 참조가 같은 리소스를 가리키는지 확인한다. 현재 PlatformPath의 경로 결합을 URI 구현으로 간주하지 않는다.
-- [ ] `PlatformPath` 및 `ResourceManager`에 가상 스킴(`Engine://`, `Project://`) 해석 로직 구현.
-- [ ] 기존 상대 경로를 올바른 가상 스킴으로 변환하는 하위 호환 폴백 및 경고 로깅 추가.
-- [ ] 직렬화/역직렬화(`archive_reflection`) 시 가상 URI 포맷으로 저장/복원되도록 정규화.
+- [x] 먼저 기존 물리 위치에 마운트를 연결해 새 해석과 기존 참조가 같은 리소스를 가리키는지 확인한다. 현재 PlatformPath의 경로 결합을 URI 구현으로 간주하지 않는다. [완료: 2026-11-08]
+- [x] `PlatformPath` 및 `ResourceManager`에 가상 스킴(`Engine://`, `Project://`) 해석 로직 구현. [완료: 2026-11-08]
+- [x] 기존 상대 경로를 올바른 가상 스킴으로 변환하는 하위 호환 폴백 및 경고 로깅 추가. [완료: 2026-11-08]
+- [x] 직렬화/역직렬화(`archive_reflection`) 시 가상 URI 포맷으로 저장/복원되도록 정규화. [완료: 2026-11-08]
 
 ### Phase 3: 에디터 툴 및 콘텐츠 브라우저 연동
 - [ ] `ContentBrowserPanel`에 `Assets/` 단독 뷰 및 `Show Engine Content` 토글 옵션 적용.

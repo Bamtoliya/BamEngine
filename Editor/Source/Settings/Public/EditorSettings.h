@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <reflection/Annotations.h>
 
@@ -67,7 +67,7 @@ namespace Editor
             float GizmoSnapScale = 0.1f;
         static constexpr float MaxPreviewLightIntensity = 10.0f;
         PROPERTY(META("Optional", true))
-            std::array<float, 3> PreviewLightIntensity{ 2.8f, 0.5f, 2.2f };
+            std::array<float, 3> PreviewLightIntensity{ 3.0f, 1.2f, 1.5f };
         [[nodiscard]] bool HasValidValues() const
         {
             for (const float intensity : PreviewLightIntensity)

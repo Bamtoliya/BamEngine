@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "ResourceManager.h"
 #include "Resources.h"
 #include "Runtime.h"
@@ -7,17 +7,18 @@ namespace
 {
 	std::filesystem::path ResolveResourceLoadPath(const std::filesystem::path& filePath)
 	{
-		if (filePath.is_absolute())
-			return filePath;
-
-		if (Engine::Runtime::IsCreated())
-			return Engine::Runtime::Get().ResolveProjectRelativePath(filePath);
-
-		return std::filesystem::absolute(filePath);
+		return Engine::PlatformPath::ResolveUri(filePath);
 	}
 
 	std::wstring ToProjectRelativePath(const std::wstring& inputPath)
 	{
+		if (Engine::PlatformPath::IsVirtualUri(inputPath))
+			return NormalizePath(inputPath);
+
+		const auto uri = Engine::PlatformPath::ToVirtualUri(inputPath);
+		if (!uri.empty() && Engine::PlatformPath::IsVirtualUri(uri))
+			return NormalizePath(uri);
+
 		namespace fs = std::filesystem;
 
 		std::error_code ec;
@@ -113,16 +114,8 @@ Handle ResourceManager::LoadFile(const wstring& filePath)
 {
 	namespace fs = std::filesystem;
 
-	fs::path absolutePath(filePath);
-	if (!absolutePath.is_absolute())
-	{
-		if (Runtime::IsCreated())
-			absolutePath = Runtime::Get().ResolveProjectRelativePath(absolutePath);
-		else
-			absolutePath = fs::absolute(absolutePath);
-	}
-
-	const wstring relativePath = ToProjectRelativePath(absolutePath.wstring());
+	fs::path absolutePath = PlatformPath::ResolveUri(filePath);
+	const wstring relativePath = ToProjectRelativePath(filePath);
 
 	if (!fs::exists(absolutePath))
 	{
@@ -170,11 +163,11 @@ void ResourceManager::RegisterExplicitLoader()
 	const auto registerSimpleLoader = [this]<typename ResourceType, typename Desc>(
 		std::initializer_list<const wchar_t*> extensions)
 	{
-		const auto loader = [this](wstring key, wstring) -> Handle
+		const auto loader = [this](wstring key, wstring path) -> Handle
 			{
 				Desc desc;
 				desc.Key = key;
-				desc.Path = key;
+				desc.Path = path.empty() ? key : path;
 				return this->LoadResource<ResourceType>(&desc).GetRawHandle();
 			};
 
@@ -191,16 +184,18 @@ void ResourceManager::RegisterExplicitLoader()
 	registerSimpleLoader.operator() < Animation, AnimationCreateDesc > ({ L".bamanim" });
 	registerSimpleLoader.operator() < Model, ModelCreateDesc > ({ L".bammodel" });
 	registerSimpleLoader.operator() < AudioClip, AudioClipCreateDesc > ({ L".wav", L".mp3", L".ogg" });
+	registerSimpleLoader.operator() < ParticleEffect, ParticleEffectCreateDesc > ({ L".bameffect", L".effect" });
 
-	const auto shaderLoader = [this](wstring key, wstring) -> Handle
+	const auto shaderLoader = [this](wstring key, wstring path) -> Handle
 		{
-			const std::filesystem::path filePath(key);
+			const std::wstring effectivePath = path.empty() ? key : path;
+			const std::filesystem::path filePath(effectivePath);
 			wstring ext = filePath.extension().wstring();
 			std::transform(ext.begin(), ext.end(), ext.begin(), ::towlower);
 
 			ShaderDesc desc;
 			desc.Key = key;
-			desc.Path = key;
+			desc.Path = effectivePath;
 
 			if (ext == L".cso" || ext == L".dxil" || ext == L".spv")
 			{
@@ -210,8 +205,8 @@ void ResourceManager::RegisterExplicitLoader()
 				else if (stem.ends_with(L"PS") || stem.ends_with(L"_PS")) desc.shaderType = EShaderType::Fragment;
 				else if (stem.ends_with(L"CS") || stem.ends_with(L"_CS")) desc.shaderType = EShaderType::Compute;
 
-				if (ext == L".spv") desc.spirvPath = key;
-				else desc.dxilPath = key;
+				if (ext == L".spv") desc.spirvPath = effectivePath;
+				else desc.dxilPath = effectivePath;
 			}
 
 			return this->LoadResource<Shader>(&desc).GetRawHandle();
@@ -539,9 +534,12 @@ EResult ResourceManager::SaveToJsonFile(Resource* resource, const wstring& fileP
 {
 	if (!resource || filePath.empty())
 		return EResult::InvalidArgument;
-	std::filesystem::path targetPath(filePath);
-	if (targetPath.is_relative())
-		targetPath = PlatformPath::ResolveProjectRelative(targetPath);
+	if (PlatformPath::IsReadOnlyTarget(filePath))
+	{
+		ENGINE_LOG_ERROR("Resource save failed: target is read-only (Engine:// or system directory), path=\"{}\"", WStrToStr(filePath));
+		return EResult::AccessDenied;
+	}
+	std::filesystem::path targetPath = PlatformPath::ResolveUri(filePath);
 	if (targetPath.has_parent_path())
 	{
 		std::error_code ec;
@@ -564,9 +562,12 @@ EResult ResourceManager::SaveToBeveFile(Resource* resource, const wstring& fileP
 {
 	if (!resource || filePath.empty())
 		return EResult::InvalidArgument;
-	std::filesystem::path targetPath(filePath);
-	if (targetPath.is_relative())
-		targetPath = PlatformPath::ResolveProjectRelative(targetPath);
+	if (PlatformPath::IsReadOnlyTarget(filePath))
+	{
+		ENGINE_LOG_ERROR("Resource save failed: target is read-only (Engine:// or system directory), path=\"{}\"", WStrToStr(filePath));
+		return EResult::AccessDenied;
+	}
+	std::filesystem::path targetPath = PlatformPath::ResolveUri(filePath);
 	if (targetPath.has_parent_path())
 	{
 		std::error_code ec;

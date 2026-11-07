@@ -126,18 +126,11 @@ EResult Resource::Reload(const std::filesystem::path& filePath)
 	std::error_code ec;
 	if (!std::filesystem::exists(targetPath, ec))
 	{
-		if (targetPath.is_relative())
-		{
-			const auto resolved = PlatformPath::ResolveProjectRelative(targetPath);
-			if (std::filesystem::exists(resolved, ec))
-				targetPath = resolved;
-			else
-				return EResult::FileNotFound;
-		}
+		const auto resolved = PlatformPath::ResolveUri(targetPath);
+		if (std::filesystem::exists(resolved, ec))
+			targetPath = resolved;
 		else
-		{
 			return EResult::FileNotFound;
-		}
 	}
 
 	auto extension = targetPath.extension().wstring();

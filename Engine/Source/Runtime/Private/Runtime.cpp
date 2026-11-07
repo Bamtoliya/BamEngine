@@ -20,7 +20,11 @@ EResult Runtime::Initialize(void* arg)
 
 	m_ProjectRoot = runtimeDesc->ProjectRoot.empty() ? PlatformPath::GetExecutableDirectory() : PlatformPath::Normalize(runtimeDesc->ProjectRoot);
 	m_AssetRoot = runtimeDesc->AssetRoot.empty() ? "Resources" : PlatformPath::Normalize(runtimeDesc->AssetRoot);
+	m_EngineResourceRoot = runtimeDesc->EngineResourceRoot.empty() ? "Engine/Resources" : PlatformPath::Normalize(runtimeDesc->EngineResourceRoot);
+
 	PlatformPath::SetProjectRoot(m_ProjectRoot);
+	PlatformPath::SetProjectAssetRoot(m_AssetRoot.is_absolute() ? m_AssetRoot : m_ProjectRoot / m_AssetRoot);
+	PlatformPath::SetEngineResourceRoot(m_EngineResourceRoot.is_absolute() ? m_EngineResourceRoot : m_ProjectRoot / m_EngineResourceRoot);
 
 	RendererDesc rendererDesc = runtimeDesc->RendererDesc;
 

@@ -27,6 +27,7 @@ typedef struct RuntimeCreateInfo
 	// 호스트가 결정하여 엔진에 전달하는 경로들 (엔진 독립성 유지)
 	std::filesystem::path ProjectRoot;
 	std::filesystem::path AssetRoot = "Resources";
+	std::filesystem::path EngineResourceRoot = "Engine/Resources";
 } RUNTIMEDESC;
 
 class ENGINE_API Runtime : public Base
@@ -55,6 +56,7 @@ public:
 public:
 	const std::filesystem::path& GetProjectRoot() const { return m_ProjectRoot; }
 	const std::filesystem::path& GetAssetRoot() const { return m_AssetRoot; }
+	const std::filesystem::path& GetEngineResourceRoot() const { return m_EngineResourceRoot; }
 	// 상대 경로를 주입받은 ProjectRoot 기준 절대 경로로 안전하게 결합
 	std::filesystem::path ResolveProjectRelativePath(const std::filesystem::path& relativePath) const
 	{
@@ -86,6 +88,7 @@ private:
 private:
 	std::filesystem::path m_ProjectRoot;
 	std::filesystem::path m_AssetRoot;
+	std::filesystem::path m_EngineResourceRoot;
 #pragma endregion
 };
 

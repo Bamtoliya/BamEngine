@@ -1,4 +1,5 @@
 ﻿#include "AudioClip.h"
+#include "PlatformPath.h"
 #include "AudioManager.h"
 #include "Functions.h"
 #include "Logger.h"
@@ -41,7 +42,7 @@ EResult AudioClip::Initialize(void* arg)
 	mode |= (m_IsLoop ? FMOD_LOOP_NORMAL : FMOD_LOOP_OFF);
 	mode |= (m_IsStream ? FMOD_CREATESTREAM : FMOD_CREATESAMPLE);
 
-	string narrowPath = WStrToStr(m_Path);
+	string narrowPath = WStrToStr(PlatformPath::ResolveUri(m_Path).wstring());
 	FMOD_RESULT result = FMOD_OK;
 
 	if (m_IsStream)

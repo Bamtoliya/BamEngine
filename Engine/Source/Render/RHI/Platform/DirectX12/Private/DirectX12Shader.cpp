@@ -11,9 +11,7 @@ EResult DirectX12Shader::Initialize(const DESC& desc)
 	}
 	else if (!desc.filePath.empty())
 	{
-		std::filesystem::path shaderPath(desc.filePath);
-		if (shaderPath.is_relative())
-			shaderPath = PlatformPath::ResolveProjectRelative(shaderPath);
+		std::filesystem::path shaderPath = PlatformPath::ResolveUri(desc.filePath);
 		ifstream file(shaderPath, ios::binary | ios::ate);
 		if (!file.is_open())
 		{

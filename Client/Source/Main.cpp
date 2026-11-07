@@ -202,6 +202,7 @@ private:
         if (!systemManager.AddSystem<MeshRenderSystem>()) return EResult::Fail;
         if (!systemManager.AddSystem<SpriteRenderSystem>()) return EResult::Fail;
         if (!systemManager.AddSystem<SpriteAnimationSystem>()) return EResult::Fail;
+        if (!systemManager.AddSystem<TilemapRenderSystem>()) return EResult::Fail;
         if (!systemManager.AddSystem<AnimationSystem>()) return EResult::Fail;
         if (!systemManager.AddSystem<ParticleSystem>()) return EResult::Fail;
         if (!systemManager.AddSystem<ActionTimelineSystem>()) return EResult::Fail;

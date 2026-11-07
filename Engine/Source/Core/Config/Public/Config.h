@@ -1,4 +1,4 @@
-﻿// Engine/Source/Core/Config/Public/Config.h
+// Engine/Source/Core/Config/Public/Config.h
 
 #pragma once
 
@@ -21,6 +21,9 @@ namespace Engine
 
         PROPERTY(META("Optional", true))
         std::string AssetDirectory = "Resources";
+
+        PROPERTY(META("Optional", true))
+        std::string EngineResourceDirectory = "Engine/Resources";
 
         PROPERTY()
         std::string StartupManifestPath = "Resources/Config/Startup/StartupManifest.json";
