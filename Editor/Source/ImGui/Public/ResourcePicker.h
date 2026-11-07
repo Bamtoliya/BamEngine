@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "ReflectionInspectorSupport.h"
+#include "InputManager.h"
 #include "Functions.h"
 #include "IconsFontAwesome7.h"
 #include <imgui.h>
@@ -179,11 +180,14 @@ namespace Editor
 
 			return result;
 		}
+
+		bool DrawResourceContextMenu(const std::filesystem::path& resourcePath);
 	}
 
 	template<typename T>
 	bool DrawInspectorResourcePicker(Engine::ResourceHandle<T>& value, bool canEdit, bool showThumbnail = true)
 	{
+		ImGui::PushID(&value);
 		auto& manager = Engine::ResourceManager::Get();
 		auto* current = manager.GetResource(value.GetRawHandle());
 		const auto label = current != nullptr ? Engine::WStrToStr(current->GetKey()) :
@@ -198,12 +202,23 @@ namespace Editor
 		const auto& style = ImGui::GetStyle();
 		const float thumbnailSize = ImGui::GetTextLineHeight() * 2.0f + style.ItemInnerSpacing.y;
 		const float fieldHeight = showThumbnail ? thumbnailSize + style.FramePadding.y * 2.0f : 0.0f;
-		const auto button = showThumbnail ? std::string("###ResourcePicker") : label + "###ResourcePicker";
+		const auto button = showThumbnail ? std::string("###PickerButton") : label + "###PickerButton";
 
 		if (ImGui::Button(button.c_str(), ImVec2(-1.0f, fieldHeight)))
 			ImGui::OpenPopup("ResourceChoices");
 
 		const bool fieldHovered = ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled);
+
+		if (current != nullptr && fieldHovered && InputManager::Get().IsMouseButtonDoubleClicked(EMouseButton::Left))
+		{
+			auto& imguiMgr = ImGuiManager::Get();
+			const auto resPath = current->GetPath().empty() ? current->GetKey() : current->GetPath();
+			const auto effective = imguiMgr.ResolveResourceEditorTarget(resPath);
+			if (imguiMgr.CanOpenResourceEditor(effective))
+			{
+				imguiMgr.RequestOpenResourceEditor(effective);
+			}
+		}
 
 		if (showThumbnail && ImGui::IsItemVisible())
 		{
@@ -297,6 +312,9 @@ namespace Editor
 			ImGui::EndDragDropTarget();
 		}
 
+		if (current != nullptr)
+			Detail::DrawResourceContextMenu(current->GetPath().empty() ? current->GetKey() : current->GetPath());
+
 		if (fieldHovered)
 			ImGui::SetTooltip("%s", label.c_str());
 
@@ -309,7 +327,7 @@ namespace Editor
 			struct DiskAssetEntry
 			{
 				std::string Filename;
-				std::string FullPath;
+				std::filesystem::path FullPath;
 				std::wstring Key;
 			};
 			static std::vector<DiskAssetEntry> s_CachedDiskFiles;
@@ -355,7 +373,7 @@ namespace Editor
 
 						s_CachedDiskFiles.push_back({
 							filename,
-							Engine::WStrToStr(assetPath.wstring()),
+							assetPath,
 							normKey
 							});
 					}
@@ -409,6 +427,7 @@ namespace Editor
 			ImGui::Separator();
 
 			// ── 3. 대형 썸네일 + 3단 텍스트 항목 렌더링 람다 ──
+			bool openEditorRequested = false;
 			auto drawResourceItem = [&](const std::string& uniqueId, const std::string& displayName,
 				const std::string& subPath, const std::filesystem::path& assetPath, bool isSelected, auto onSelect)
 				{
@@ -430,6 +449,9 @@ namespace Editor
 						ImGui::PopID();
 						return;
 					}
+
+					if (Detail::DrawResourceContextMenu(assetPath))
+						openEditorRequested = true;
 
 					ImDrawList* drawList = ImGui::GetWindowDrawList();
 
@@ -523,7 +545,7 @@ namespace Editor
 					}
 
 					// 4) 마우스 호버 시 128x128 대형 프리뷰 툴팁 제공
-					if (isHovered)
+					if (isHovered && !openEditorRequested)
 					{
 						ImGui::BeginTooltip();
 						if (texID)
@@ -626,7 +648,9 @@ namespace Editor
 
 					const bool isSelected = (handle == value.GetRawHandle());
 					const std::string uniqueId = "Mem_" + normStr;
-					drawResourceItem(uniqueId, filename, parentPath, p, isSelected, [&]()
+					const auto& resourcePath = entry.Path.empty() ? entry.Key : entry.Path;
+					drawResourceItem(uniqueId, filename, parentPath,
+						Engine::PlatformPath::ResolveProjectRelative(resourcePath), isSelected, [&]()
 						{
 							changed = TryAssignInspectorResource(value, handle);
 							failed = !changed;
@@ -660,8 +684,8 @@ namespace Editor
 					if (!matchesFilter(file.Filename, parentPath)) continue;
 
 					const bool isSelected = false;
-					const std::string uniqueId = "Disk_" + file.FullPath;
-					drawResourceItem(uniqueId, file.Filename, parentPath, p, isSelected, [&]()
+					const std::string uniqueId = "Disk_" + Engine::WStrToStr(file.FullPath.wstring());
+					drawResourceItem(uniqueId, file.Filename, parentPath, file.FullPath, isSelected, [&]()
 						{
 							const auto handle = manager.LoadFile(file.Key);
 							changed = TryAssignInspectorResource(value, handle);
@@ -675,6 +699,8 @@ namespace Editor
 			}
 			ImGui::EndChild();
 
+			if (openEditorRequested)
+				ImGui::CloseCurrentPopup();
 			ImGui::EndPopup();
 		}
 
@@ -684,6 +710,7 @@ namespace Editor
 		if (failed)
 			ImGui::TextDisabled("%s", LocalizeInspectorText("ResourcePicker.Rejected").c_str());
 
+		ImGui::PopID();
 		return changed;
 	}
 }

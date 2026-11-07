@@ -12,6 +12,7 @@ class RHITexture;
 END
 
 BEGIN(Editor)
+class ResourceEditorInterface;
 struct EditorSettingsChangeResult;
 struct ImGuiManagerDesc
 {
@@ -45,19 +46,25 @@ public:
 #pragma region ImGui Management
 private:
 	EResult InitializeImGui();
-public:
+	friend class IImGui;
 	EResult AddImGuiPanel(IImGui* panel);
+public:
 	EResult RemoveImGuiPanel(IImGui* panel);
 public:
 	IImGui* GetImGuiPanel(const wstring& name);
 	vector<IImGui*> GetImGuiPanels(const wstring& name);
 	const vector<IImGui*>& GetImGuiPanels() const { return m_ImGuiPanels; }
+	std::filesystem::path ResolveResourceEditorTarget(const std::filesystem::path& path) const;
+	bool CanOpenResourceEditor(const std::filesystem::path& path) const;
+	bool RequestOpenResourceEditor(const std::filesystem::path& path);
 	IImGui* GetFocusedClosablePanel() const;
 	void RequestCloseFocusedPanel();
 private:
 	EResult CreateDefaultPanels();
 private:
 	EResult CreateResourceEditors();
+	ResourceEditorInterface* FindResourceEditor(const std::filesystem::path& path) const;
+	void OpenPendingResourceEditor();
 #pragma endregion
 
 #pragma region SDLGPU3
@@ -176,6 +183,7 @@ private:
 	vector<IImGui*> m_ImGuiPanels;
 	vector<IImGui*> m_PendingAddPanels;
 	vector<IImGui*> m_PendingRemovePanels;
+	std::filesystem::path m_PendingResourceEditorPath;
 	ImGuiStyle m_BaseStyle{};
 	float m_UIScale = 1.0f;
 	vector<IImGui*> m_WorkspacePanels;

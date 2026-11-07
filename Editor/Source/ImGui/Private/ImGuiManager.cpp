@@ -6,7 +6,9 @@
 #include "ModelImportModal.h"
 
 #pragma region Third Library
+#include <algorithm>
 #include <fmt/core.h>
+#include <utility>
 #pragma endregion
 
 #include "PlatformPath.h"
@@ -20,6 +22,8 @@
 #include "ImGuiPanels.h"
 #include "NotificationManager.h"
 #include "ResourceEditors.h"
+#include "ResourceManager.h"
+#include "ResourceEditorInterface.h"
 #include "TerrainEditor.h"
 
 #include "DirectX12Texture.h"
@@ -345,6 +349,7 @@ void ImGuiManager::Draw()
 		}
 	}
 	m_PendingRemovePanels.clear();
+	OpenPendingResourceEditor();
 	ImGui::ShowMetricsWindow();
 	SynchronizeSceneDocumentAccess();
 	if (!ImGui::IsAnyItemActive() && !ImGuizmo::IsUsing() &&
@@ -456,11 +461,32 @@ void ImGuiManager::MainDockspace()
 #pragma endregion
 
 #pragma region ImGui Management
+namespace
+{
+	bool InitializePanel(IImGui* panel, void* arg = nullptr)
+	{
+		const EResult result = panel->Initialize(arg);
+		if (result == EResult::Success)
+			return true;
+
+		EDITOR_LOG_ERROR("Panel initialization failed: panel={}, result={}", WStrToStr(panel->GetName()),
+			ResultToString(result));
+		Safe_Release(panel);
+		return false;
+	}
+}
+
 EResult ImGuiManager::AddImGuiPanel(IImGui* panel)
 {
-	if (!panel) return EResult::InvalidArgument;
-    m_PendingAddPanels.push_back(panel);
-    return EResult::Success;
+	if (!panel)
+		return EResult::InvalidArgument;
+
+	if (std::find(m_ImGuiPanels.begin(), m_ImGuiPanels.end(), panel) != m_ImGuiPanels.end() ||
+		std::find(m_PendingAddPanels.begin(), m_PendingAddPanels.end(), panel) != m_PendingAddPanels.end())
+		return EResult::AlreadyInitialized;
+
+	m_PendingAddPanels.push_back(panel);
+	return EResult::Success;
 }
 
 EResult ImGuiManager::RemoveImGuiPanel(IImGui* panel)
@@ -494,6 +520,178 @@ vector<IImGui*> ImGuiManager::GetImGuiPanels(const wstring& name)
 	}
 	return panels;
 }
+ResourceEditorInterface* ImGuiManager::FindResourceEditor(const std::filesystem::path& path) const
+{
+	for (auto* panel : m_ImGuiPanels)
+	{
+		auto* editor = dynamic_cast<ResourceEditorInterface*>(panel);
+		if (editor && editor->IsSupported(path))
+			return editor;
+	}
+	return nullptr;
+}
+
+std::filesystem::path ImGuiManager::ResolveResourceEditorTarget(const std::filesystem::path& path) const
+{
+	if (path.empty())
+		return {};
+
+	std::error_code ec;
+
+	// 1. 이미 존재하는 정규 파일인지 확인
+	auto direct = Engine::PlatformPath::ResolveProjectRelative(path);
+	if (std::filesystem::is_regular_file(direct, ec))
+		return direct;
+
+	// 2. Resources/ 접두사가 누락된 경우 확인
+	const bool startsWithResources = (path.native().rfind(L"Resources", 0) == 0) ||
+		(path.generic_wstring().rfind(L"Resources/", 0) == 0);
+	if (!startsWithResources)
+	{
+		auto withRes = Engine::PlatformPath::ResolveProjectRelative(std::filesystem::path("Resources") / path);
+		if (std::filesystem::is_regular_file(withRes, ec))
+			return withRes;
+	}
+
+	// 3. 확장자가 생략되었거나 다른 확장자로 디스크에 존재하는 경우 (.bammat.json, .bammatinst.json 등)
+	std::vector<std::filesystem::path> bases;
+	bases.push_back(direct);
+	if (!startsWithResources)
+		bases.push_back(Engine::PlatformPath::ResolveProjectRelative(std::filesystem::path("Resources") / path));
+
+	for (const auto& base : bases)
+	{
+		const wchar_t* extensions[] = {
+			L".json",
+			L".bammat.json", L".bammat",
+			L".bammatinst.json", L".bammatinst", L".mat",
+			L".bammodel.json", L".bammodel",
+			L".bamtex.json", L".bamtex",
+			L".bamsprite.json", L".bamsprite",
+			L".bamshader.json", L".bamshader",
+			L".bamprefab.json", L".bamprefab",
+			L".png", L".jpg", L".jpeg", L".dds", L".tga", L".bmp", L".hdr",
+			L".fbx", L".obj", L".gltf", L".glb"
+		};
+		for (const wchar_t* ext : extensions)
+		{
+			auto cand = std::filesystem::path(base.wstring() + ext);
+			if (std::filesystem::is_regular_file(cand, ec))
+				return cand;
+		}
+
+		auto candJson = std::filesystem::path(base.wstring() + L".json");
+		if (std::filesystem::is_regular_file(candJson, ec))
+			return candJson;
+
+		// 메쉬(.bammesh / .bammesh.json)인 경우: 같은 디렉터리의 부모 .bammodel 탐색
+		const auto extStr = Engine::ToLowerStr(Engine::WStrToStr(base.extension().wstring()));
+		const auto filenameStr = Engine::ToLowerStr(Engine::WStrToStr(base.filename().wstring()));
+		if (extStr == ".bammesh" || filenameStr.ends_with(".bammesh.json"))
+		{
+			auto stem = base.stem().wstring();
+			if (filenameStr.ends_with(".bammesh.json"))
+			{
+				std::filesystem::path p(stem);
+				stem = p.stem().wstring();
+			}
+
+			auto candModel1 = base.parent_path() / (stem + L".bammodel");
+			if (std::filesystem::is_regular_file(candModel1, ec)) return candModel1;
+			auto candModel2 = base.parent_path() / (stem + L".bammodel.json");
+			if (std::filesystem::is_regular_file(candModel2, ec)) return candModel2;
+
+			auto underscorePos = stem.find(L'_');
+			if (underscorePos != std::wstring::npos)
+			{
+				auto modelStem = stem.substr(0, underscorePos);
+				auto candModel3 = base.parent_path() / (modelStem + L".bammodel");
+				if (std::filesystem::is_regular_file(candModel3, ec)) return candModel3;
+				auto candModel4 = base.parent_path() / (modelStem + L".bammodel.json");
+				if (std::filesystem::is_regular_file(candModel4, ec)) return candModel4;
+				auto candModel5 = base.parent_path() / (modelStem + L".glb");
+				if (std::filesystem::is_regular_file(candModel5, ec)) return candModel5;
+				auto candModel6 = base.parent_path() / (modelStem + L".fbx");
+				if (std::filesystem::is_regular_file(candModel6, ec)) return candModel6;
+			}
+		}
+	}
+
+	// 4. ResourceManager에서 키로 등록된 리소스의 실제 경로 탐색
+	if (Engine::ResourceManager::IsCreated())
+	{
+		auto& rm = Engine::ResourceManager::Get();
+		auto handle = rm.FindHandleByKey(path.wstring());
+		if (handle.IsValid())
+		{
+			auto* res = rm.GetResource(handle);
+			if (res && !res->GetPath().empty() && res->GetPath() != path.wstring())
+			{
+				auto recursiveTarget = ResolveResourceEditorTarget(res->GetPath());
+				if (!recursiveTarget.empty())
+					return recursiveTarget;
+			}
+		}
+	}
+
+	return {};
+}
+
+bool ImGuiManager::CanOpenResourceEditor(const std::filesystem::path& path) const
+{
+	if (path.empty())
+		return false;
+
+	const auto target = ResolveResourceEditorTarget(path);
+	const auto effectivePath = target.empty() ? Engine::PlatformPath::ResolveProjectRelative(path) : target;
+	std::error_code error;
+	return std::filesystem::is_regular_file(effectivePath, error) && FindResourceEditor(effectivePath) != nullptr;
+}
+
+bool ImGuiManager::RequestOpenResourceEditor(const std::filesystem::path& path)
+{
+	const auto target = ResolveResourceEditorTarget(path);
+	const auto effectivePath = target.empty() ? Engine::PlatformPath::ResolveProjectRelative(path) : target;
+	if (!CanOpenResourceEditor(effectivePath))
+		return false;
+
+	SelectionManager::Get().SetSelectedAsset(effectivePath);
+	m_PendingResourceEditorPath = effectivePath;
+	return true;
+}
+
+void ImGuiManager::OpenPendingResourceEditor()
+{
+	if (m_PendingResourceEditorPath.empty())
+		return;
+
+	const auto path = std::exchange(m_PendingResourceEditorPath, {});
+	auto* editor = FindResourceEditor(path);
+	if (!editor)
+		return;
+
+	const auto& target = editor->GetTargetResource();
+	std::error_code error;
+	const auto current = Engine::PlatformPath::ResolveProjectRelative(target);
+	const bool sameTarget = !target.empty() && (current == path || std::filesystem::equivalent(current, path, error));
+
+	if (!sameTarget)
+	{
+		if (editor->HasUnsavedResourceChanges())
+		{
+			NotificationManager::Get().AddNotification(LOCAL("ResourcePicker.OpenInEditor"),
+				LOCAL_FMT("ResourceEditor.OpenBlocked", Engine::WStrToStr(target.filename().wstring())), ELogLevel::Warn);
+			return;
+		}
+
+		editor->SetTargetResource(path);
+	}
+
+	editor->Focus();
+	if (auto* window = ImGui::FindWindowByID(editor->m_PanelWindowId))
+		ImGui::FocusWindow(window, ImGuiFocusRequestFlags_UnlessBelowModal);
+}
+
 EResult ImGuiManager::CreateDefaultPanels()
 {
 	SceneViewportPanelDesc scenePanelDesc;
@@ -504,80 +702,65 @@ EResult ImGuiManager::CreateDefaultPanels()
 	scenePanelDesc.IsSceneCamera = false;
 	scenePanelDesc.IsPerspective = true;
 	scenePanelDesc.CameraType = EViewportCameraType::Orthographic;
-	SceneViewportPanel* viewportPanel = new SceneViewportPanel();
-	viewportPanel->Initialize(&scenePanelDesc);
-	AddImGuiPanel(viewportPanel);
+	if (!InitializePanel(new SceneViewportPanel(), &scenePanelDesc))
+		return EResult::Fail;
+
 	ViewportPanelDesc UIViewportPanelDesc;
 	UIViewportPanelDesc.Name = L"UI View";
 	UIViewportPanelDesc.DisplayNameKey = "Viewport.UITitle";
 	UIViewportPanelDesc.RenderTargetWidth = g_WindowWidth;
 	UIViewportPanelDesc.RenderTargetHeight = g_WindowHeight;
-	UIViewportPanel* uiViewportPanel = new UIViewportPanel();
-	uiViewportPanel->Initialize(&UIViewportPanelDesc);
-	AddImGuiPanel(uiViewportPanel);
+	if (!InitializePanel(new UIViewportPanel(), &UIViewportPanelDesc))
+		return EResult::Fail;
+
 	GameViewportPanelDesc gamePanelDesc;
 	gamePanelDesc.Name = L"Game View";
 	gamePanelDesc.DisplayNameKey = "Viewport.GameTitle";
 	gamePanelDesc.RenderTargetWidth = g_WindowWidth;
 	gamePanelDesc.RenderTargetHeight = g_WindowHeight;
-	GameViewportPanel* gameViewportPanel = new GameViewportPanel();
-	gameViewportPanel->Initialize(&gamePanelDesc);
-	AddImGuiPanel(gameViewportPanel);
-	AddImGuiPanel(new InspectorPanel());
-	AddImGuiPanel(new HierarchyPanel());
-	ContentBrowserPanel* contentBrowserPanel = new ContentBrowserPanel();
-	contentBrowserPanel->Initialize();
-	AddImGuiPanel(contentBrowserPanel);
-	AddImGuiPanel(new ConsolePanel());
-	AddImGuiPanel(new MetricsPanel());
-	AddImGuiPanel(new GraphPanel());
-	AddImGuiPanel(new ResourceManagerInspector());
-	AddImGuiPanel(new TerrainEditor());
-	AddImGuiPanel(new PostProcessPanel());
-	AddImGuiPanel(new AnimatorGraphPanel());
-	HistoryPanel* historyPanel = new HistoryPanel();
-	historyPanel->Initialize();
-	AddImGuiPanel(historyPanel);
-	AddImGuiPanel(new UnifiedSettingsPanel());
-	AddImGuiPanel(new AssetReferencePanel());
-	AddImGuiPanel(new AnimationTimelinePanel());
-	AddImGuiPanel(new NetworkProfilerPanel());
-	ModelImportModal* modelImportModal = new ModelImportModal();
-	modelImportModal->Initialize();
-	AddImGuiPanel(modelImportModal);
-	CreateResourceEditors();
+	if (!InitializePanel(new GameViewportPanel(), &gamePanelDesc))
+		return EResult::Fail;
+
+	if (!InitializePanel(new InspectorPanel()) ||
+		!InitializePanel(new HierarchyPanel()) ||
+		!InitializePanel(new ContentBrowserPanel()) ||
+		!InitializePanel(new ConsolePanel()) ||
+		!InitializePanel(new MetricsPanel()) ||
+		!InitializePanel(new GraphPanel()) ||
+		!InitializePanel(new ResourceManagerInspector()) ||
+		!InitializePanel(new TerrainEditor()) ||
+		!InitializePanel(new PostProcessPanel()) ||
+		!InitializePanel(new AnimatorGraphPanel()) ||
+		!InitializePanel(new HistoryPanel()) ||
+		!InitializePanel(new UnifiedSettingsPanel()) ||
+		!InitializePanel(new AssetReferencePanel()) ||
+		!InitializePanel(new AnimationTimelinePanel()) ||
+		!InitializePanel(new NetworkProfilerPanel()) ||
+		!InitializePanel(new ModelImportModal()))
+		return EResult::Fail;
+
+	if (const EResult result = CreateResourceEditors(); result != EResult::Success)
+		return result;
+
 	m_WorkspacePanels = m_PendingAddPanels;
 	return EResult::Success;
 }
 EResult ImGuiManager::CreateResourceEditors()
 {
-	TextureEditor* textureEditor = new TextureEditor();
-	textureEditor->Close();
-	AddImGuiPanel(textureEditor);
+	const auto initializeClosed = [](IImGui* panel)
+	{
+		panel->Close();
+		return InitializePanel(panel);
+	};
 
-	ModelEditor* modelEditor = new ModelEditor();
-	modelEditor->Close();
-	AddImGuiPanel(modelEditor);
-
-	ShaderEditor* shaderEditor = new ShaderEditor();
-	shaderEditor->Close();
-	AddImGuiPanel(shaderEditor);
-
-	SpriteEditor* spriteEditor = new SpriteEditor();
-	spriteEditor->Close();
-	AddImGuiPanel(spriteEditor);
-
-	SpriteAnimationEditor* spriteAnimEditor = new SpriteAnimationEditor();
-	spriteAnimEditor->Close();
-	AddImGuiPanel(spriteAnimEditor);
-
-	MaterialEditor* materialEditor = new MaterialEditor();
-	materialEditor->Close();
-	AddImGuiPanel(materialEditor);
-
-	PrefabEditorPanel* prefabEditor = new PrefabEditorPanel();
-	prefabEditor->Close();
-	AddImGuiPanel(prefabEditor);
+	if (!initializeClosed(new TextureEditor()) ||
+		!initializeClosed(new ModelEditor()) ||
+		!initializeClosed(new ShaderEditor()) ||
+		!initializeClosed(new SpriteEditor()) ||
+		!initializeClosed(new SpriteAnimationEditor()) ||
+		!initializeClosed(new MaterialEditor()) ||
+		!initializeClosed(new PrefabEditorPanel()))
+		return EResult::Fail;
 
 	return EResult::Success;
 }

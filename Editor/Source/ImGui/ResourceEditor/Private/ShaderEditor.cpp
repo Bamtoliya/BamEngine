@@ -4,7 +4,8 @@
 bool ShaderEditor::IsSupported(const std::filesystem::path& assetPath) const
 {
     const auto ext = assetPath.extension().wstring();
-    return ext == L".bamshader" || ext == L".hlsl" || ext == L".glsl";
+    return ext == L".bamshader" || ext == L".hlsl" || ext == L".glsl" || ext == L".cso" ||
+        ToLowerStr(Engine::WStrToStr(assetPath.filename().wstring())).ends_with(".bamshader.json");
 }
 
 void ShaderEditor::Draw()
@@ -14,7 +15,7 @@ void ShaderEditor::Draw()
 
     if (BeginPanelWindow(title.c_str(), m_Open))
     {
-        ImGui::Text("%s", LOCAL_FMT("ResourceEditor.Target", m_TargetResourcePath.string().c_str()).c_str());
+        ImGui::Text("%s", LOCAL_FMT("ResourceEditor.Target", Engine::WStrToStr(m_TargetResourcePath.wstring())).c_str());
     }
     ImGui::End();
 }

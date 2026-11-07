@@ -2,6 +2,45 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-07] 모델 바운드 기준 화면 맞춤
+
+- 임포트 모달과 모델 에디터에서 모델을 열거나 포커스 명령을 실행하면 정적·스킨드 메시의 바운드에 현재 노드 변환을 적용해 합친다. 배율·회전 편집 중에는 카메라 시점을 유지하고 포커스 시 새 바운드를 사용한다.
+- 프리뷰와 모델·메시 썸네일이 같은 거리와 클리핑 평면 공식을 쓴다. 종횡비에 맞춰 가로·세로 중 좁은 시야각으로 계산한다. Fox의 바운드 꼭짓점 8개를 배율 3종과 종횡비 4종에서 화면 안으로 투영하는지 수식으로 확인했다. 실제 Editor에서 좁은 패널, 스케일 변경 후 포커스, 썸네일 표시를 확인해야 한다. [임포트 프리뷰 계획과 완료 기준](InteractiveModelImportPreviewPlan.md)
+
+### [2026-11-07] 모델 임포트 및 프리뷰의 정면 기준 통일
+
+- GLB와 glTF는 왼손 변환과 와인딩 반전을 기본으로 적용한다. Assimp가 Z를 반사한 뒤 Y축으로 180°를 돌려 `+Y` 위쪽과 `+Z` 정면을 유지한다.
+- 상하·헤딩 반전을 메시, 노드, 본 오프셋, 애니메이션 위치 및 회전 키에 같은 축 보정으로 적용한다. 수동 XYZ 회전은 모델 배치용 루트에서 처리한다.
+- 모델·메시 썸네일과 공용 프리뷰 카메라가 `+Z` 정면 대각선 방향을 공유한다. 축 보정 조합의 행렬·쿼터니언 계산을 확인했다. Debug Editor에서 Fox 재임포트 후 컬링, 썸네일, 직접 바인딩 재생 확인을 남겨 둔다. [임포트 프리뷰 계획과 완료 기준](InteractiveModelImportPreviewPlan.md)
+
+### [2026-11-07] 모델 임포트 옵션 배치와 애니메이션 스케일 수정
+
+- 모델 임포트 모달에서 파일명과 경로를 줄바꿈하고, 패널 너비에 따라 스케일 프리셋과 X/Y/Z 입력을 재배치한다. 기존 로캘 키로 상하·헤딩 체크박스를 표시하며 프리뷰와 최종 임포트는 같은 회전 값을 사용한다.
+- 임포트 배율을 루트 Transform에만 넣었던 초기 수정을 정정했다. 메시 정점, 모델·본·본 오프셋의 이동 성분과 애니메이션 위치 키에 같은 배율을 베이크한다. 원본 회전·스케일 키를 유지해 엔티티 Scale `1`에서도 메시 직접 바인딩에 임포트 배율이 반영되게 한다. 모델 루트의 임포트 스케일은 제거해 모델 배치에서도 한 번만 적용한다. 회전 오프셋은 모델 루트에서 처리한다. 기존 에셋은 원본에서 다시 임포트해야 수정이 반영된다.
+- 코드 경로와 변경분을 정적으로 확인했다. `0.01`, `0.1`, `1`, `100`에 대해 이동 성분과 정점을 함께 환산한 계층·본 오프셋 곱이 원본 결과의 동일 배율이 되는지 메모리상의 행렬 계산으로 확인했다. C++ 변환기 실행을 검증한 결과는 아니다. Debug Editor 빌드, 모달 너비 조절, 메시 직접 바인딩과 모델 신규 배치의 재생은 확인이 필요하다. [임포트 프리뷰 계획과 완료 기준](InteractiveModelImportPreviewPlan.md)
+
+### [2026-11-06] 코드·개발 원칙 점검과 개발 우선순위 재평가
+
+- Area: Docs | Editor | Build | Render | Resource
+- Type: Docs
+- 기준: `main` / `ecca09da` 및 기존 미커밋 작업. 사용자 승인에 따라 Markdown만 수정했다.
+- 결과: [CodeDocumentationAudit-2026-11-06.md](CodeDocumentationAudit-2026-11-06.md)에 A01~A10의 위치·조건·영향·최소 개선·완료 조건을 기록했다.
+- 우선순위: [DevelopmentPriorities 11절](DevelopmentPriorities.md)에 출력 삭제/생성 안전성 → 에셋 감시자 UTF-8 → RT 진단 차원 보호 → splitter 선호값 보존을 배치했다. 다수 광원·2D 샘플·재임포트·Client 배포는 사용 조건을 구분했다.
+- 계획 반영: Engine/ImGui/Rendering/BuildAndPackaging/Utf8PathHandling/ResourceAndAssetSeparation 계획과 바인딩 문서를 정정했다. 기존 2D 타일맵·위젯 분리 작업은 유지했다. 에셋 분리는 호환 경로 검증 후 물리 이동으로 조정했다.
+- 정적 감사: `python -B Utility/LocalizationAuditor/audit_localization.py --root . --strict` 종료 0, 634개 파일/2,219개 키에서 검사 대상 위반 없음. PowerShell New-Item 인자 메타데이터를 조회해 LiteralPath 미지원도 확인했다. 파일 생성 없는 읽기 전용 조사다.
+- 한계: C++/Python/PowerShell 소스·에셋 수정, 빌드/CTest, 패키징, GPU/UI 실행, 성능 측정은 수행하지 않았다. A01~A06의 런타임 보완은 아직 제안 상태다. 이전 실행 기록을 현재 전체 통과로 확대하지 않았다.
+
+## [2026-11-07] 리소스 피커 우클릭 및 더블 클릭 에디터 열기 연동 보완
+
+- 스마트 대상 경로 해결(`ResolveResourceEditorTarget`): 확장자가 생략된 리소스 키(`GBufferMaterial`), 단일/복합 확장자 불일치(`*.bammat` vs `*.bammat.json`), `Resources/` 접두사 누락, `ResourceManager` 등록 키 역조회를 모두 대응하도록 개선했다.
+- 메쉬 에디터 연동: `.bammesh` / `.bammesh.json` 선택 시 동일 디렉터리의 부모 모델(`.bammodel`, `.bammodel.json`, `.glb`, `.fbx`)을 자동 탐색하여 모델 에디터(`ModelEditor`)로 연결되도록 지원했다.
+- 에디터 지원 확장자 보강: `TextureEditor`(`.dds`, `.hdr`), `MaterialEditor`(`.mat`), `ShaderEditor`(`.cso`, `.bamshader.json`)의 `IsSupported` 판정을 보강했다.
+- 피커 상호작용 및 UI 포커스 개선:
+  - 인스펙터 리소스 피커 슬롯별 `ImGui::PushID(&value)` 격리로 다중 슬롯 간 ID/컨텍스트 메뉴 충돌을 방지했다.
+  - 인스펙터 리소스 슬롯 좌클릭 더블 클릭 시 에디터 즉시 열기를 지원하고, 우클릭 컨텍스트 메뉴에서 `에디터에서 열기`, `콘텐츠 브라우저에서 찾기`, `경로 복사`가 정상 동작하도록 보장했다.
+  - `IImGui::BeginPanelWindow`에서 `m_FocusRequested` 플래그를 감지하여 도킹 탭 뒤에 숨겨진 에디터 패널도 즉시 전면으로 활성화되도록 보장했다.
+- 검증 상태: 소스 정적 분석 및 경로 변환 로직 검증 완료. Debug 에디터 빌드 후 인스펙터 및 리소스 선택 창에서의 실제 우클릭/더블클릭 동작 확인 필요.
+
 ## 1. Entry Template
 
 Use one entry per meaningful change.
@@ -34,6 +73,18 @@ Use one entry per meaningful change.
   - Links to PR/issues/screenshots.
 
 ---
+
+## [2026-11-07] 콘텐츠 브라우저 그리드 다중 선택
+
+- 썸네일과 이름을 하나의 선택 타일로 묶고 Dear ImGui 다중 선택을 연결했다. 빈 공간 드래그, Ctrl+클릭 토글, Shift+클릭 범위 선택을 지원한다. 에셋 타일의 드롭 페이로드는 기존 단일 경로 형식을 사용한다.
+- 검색·필터로 만들어진 그리드 순서로 범위를 계산하고, 경로가 남아 있는 항목의 선택 ID를 유지한다. 기존 행 클리퍼에 범위 시작 행을 포함했다. [그리드 선택 동작](ImGuiDevelopmentPlan.md#f-콘텐츠-브라우저-그리드-다중-선택)
+- 변경 파일의 공백 검사와 설치된 ImGui 1.92.5 선언 대조를 마쳤다. 전체 로캘 엄격 감사는 이번 변경 밖의 `ResourcePicker.OpenInEditor`, `ResourceEditor.OpenBlocked` 키 누락으로 실패했다. 에디터 빌드와 실제 UI 확인은 남아 있다.
+
+## [2026-11-07] ImGui 패널 초기화 후 자동 등록
+
+- `IImGui::Initialize()`가 패널별 `OnInitialize()` 성공 후 한 번만 등록한다. 초기화 실패 시 생성한 호출자가 해제하고, 성공 시 관리자가 생성 참조를 넘겨받는다. 렌더 타깃 뷰어는 초기화 인자로 표시할 타깃을 전달한다.
+- 시작 시 등록하던 기본 패널과 리소스 편집기 26개의 순서 및 워크스페이스 대상 목록을 유지했다. 새 뷰포트와 렌더 타깃 뷰어도 공통 초기화를 사용한다. [패널 등록 규약](ImGuiDevelopmentPlan.md#패널-초기화와-등록)
+- 정적 확인으로 직접 등록 호출이 공통 초기화 한 곳에만 남은 점, 시작 시 패널 26개의 순서, 동적 뷰포트 생성 두 경로를 대조했다. 읽기 전용 로캘 엄격 감사에서 635개 소스·2,233개 키에 대해 검사 대상 위반이 없었다. 에디터 빌드·실행, 메뉴 토글 및 워크스페이스 복원은 수동 확인이 남아 있다.
 
 ## [2026-11-07] 모델 재임포트 출력 보호와 메시 복구
 

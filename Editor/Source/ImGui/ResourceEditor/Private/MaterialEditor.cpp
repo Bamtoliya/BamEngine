@@ -2,6 +2,7 @@
 #include "Material.h"
 #include "MaterialInstance.h"
 #include "ResourceManager.h"
+#include "PlatformPath.h"
 #include "ImGuiManager.h"
 #include "Logger.h"
 #include "LocalizationManager.h"
@@ -50,9 +51,10 @@ MaterialEditor::MaterialEditor()
 
 bool MaterialEditor::IsSupported(const std::filesystem::path& assetPath) const
 {
-	const std::string name = ToLowerStr(assetPath.filename().string());
+	const std::string name = ToLowerStr(Engine::WStrToStr(assetPath.filename().wstring()));
 	return name.ends_with(".bammat.json") || name.ends_with(".bammatinst.json") ||
-		name.ends_with(".bammat") || name.ends_with(".bammatinst");
+		name.ends_with(".bammat") || name.ends_with(".bammatinst") ||
+		name.ends_with(".mat");
 }
 
 void MaterialEditor::SetTargetResource(const std::filesystem::path& assetPath)
@@ -62,7 +64,7 @@ void MaterialEditor::SetTargetResource(const std::filesystem::path& assetPath)
 	m_MaterialHandle = {};
 	m_IsDirty = false;
 
-	const std::wstring relPath = std::filesystem::relative(assetPath).wstring();
+	const std::wstring relPath = Engine::PlatformPath::ToProjectRelative(assetPath).wstring();
 	auto& rm = Engine::ResourceManager::Get();
 
 	m_MaterialHandle = rm.GetResourceHandle<Engine::MaterialInterface>(relPath);
