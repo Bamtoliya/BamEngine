@@ -1,8 +1,10 @@
-﻿#pragma once
+#pragma once
 
 #include "System.h"
 
 BEGIN(Engine)
+class Scene;
+
 class ENGINE_API ParticleSystem : public ISystem
 {
 private:
@@ -19,7 +21,7 @@ public:
 	virtual void OnSubmit(entt::registry& registry, const vector<Scene*>& activeScenes, f32 dt) override;
 
 private:
-	void UpdateEmitter(struct ParticleEmitterComponent& emitter, const struct WorldTransformComponent& transform, f32 dt);
+	void UpdateEmitter(Scene* scene, struct ParticleEmitterComponent& emitter, const struct WorldTransformComponent& transform, f32 dt);
 	void SpawnParticle(struct ParticleEmitterComponent& emitter, const struct WorldTransformComponent& transform);
 
 	virtual uint8 GetExecutionPhases() const override { return static_cast<uint8>(ESystemPhase::Presentation); }

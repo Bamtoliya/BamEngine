@@ -2,6 +2,68 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-07] GPU 스키닝 이중 회전(Double Transform) 방지 및 바인드 포즈 행렬 정규화
+
+- Area: Engine | Editor | Render | Animation
+- Type: Fix | Architecture
+- 주요 변경 내역:
+  1. **스킨드 메시 렌더러의 WorldMatrix 루트 일원화**:
+     - `MeshRenderSystem.cpp`, `PreviewViewportWidget.cpp`: GPU 스키닝을 거친 정점(`skinMatrix * Position`)은 스켈레톤의 최상위 본 공간(모델 루트 공간)으로 이미 변환되므로, `SkinnedDrawCommand.worldMatrix`를 자식 메시 엔티티의 월드 행렬이 아닌 조상 엔티티의 `AnimatorComponent`(모델 루트) 월드 행렬로 일원화. 이를 통해 glTF/Assimp의 $Z$-Up 보정 회전 노드(`Z_UP`, `Armature`)가 본 계층과 메시 엔티티에서 중복 곱해지던 **이중 회전(Double Transform) 버그를 원천 해결**.
+     - `AnimationTimelinePanel.cpp`: 타임라인 프리뷰에서 스킨드 메시 제출 시 `cmd.worldMatrix = mat4(1.0f);`로 지정하여 동일하게 이중 로컬 변환 방지.
+  2. **바인드 포즈(T-포즈) 스키닝 행렬 정규화**:
+     - `AnimationEvaluator.h/.cpp`: `EvaluateBindPoseSkinningMatrices(const Skeleton&, std::vector<mat4>&)` 추가. 스켈레톤의 `LocalTransform`을 계층 누적한 `GlobalBindTransform`에 각 본의 `OffsetMatrix`를 곱해 순수 바인드 포즈 스키닝 행렬을 생성.
+     - `PreviewViewportWidget.cpp`: `source == EAnimatorBasePoseSource::None`(애니메이션 정지)일 때 모든 본 행렬을 임의의 `Identity`로 덮어쓰던 꼼수를 제거하고, `EvaluateBindPoseSkinningMatrices`를 호출하여 실제 바인드 포즈 행렬을 평가하도록 교정.
+     - `AnimationSystem.cpp`: 씬 런타임에서 재생 중이 아니거나 초기화 시점에 `finalBoneMatrices`가 비어있을 때 `EvaluateBindPoseSkinningMatrices`로 바인드 포즈를 초기화하여, 씬 인스턴스화 시 T-포즈가 즉시 똑바로 표시되도록 보장.
+     - `ThumbnailRenderer.h/.cpp`:
+       - `SubmitModel` 및 `SubmitMesh`에서 전달하는 `m_BindPoseMatrices`를 `ThumbnailRenderer` 클래스 멤버 변수로 승격하여, `AssetCache`의 비동기(다음 프레임) GPU 캡처 시점까지 수명을 완벽히 보장.
+       - `SubmitMesh`: 단일 스킨드 메시(`.bammesh`) 렌더링 시 동일 디렉터리의 호환 스켈레톤(`*_Skeleton.bamskel`)을 자동 탐색하여 바인드 포즈 행렬 및 $Y$-Up 바운딩 박스를 계산하도록 보강함으로써, 모델 썸네일(`CesiumMan.bammodel`)뿐 아니라 메시 썸네일(`CesiumMan_Cesium_Man.bammesh`)까지 똑바로 선 T-포즈로 렌더링되도록 수정.
+
+### [2026-11-07] 썸네일 3D 오브젝트 포커스 거리 최적화 (프레임 내 오브젝트 크기 확대)
+
+- Area: Editor | Render | UX
+- Type: Enhancement | UX
+- 주요 변경 내역:
+  1. **썸네일 전용 프레이밍 마진 분리 및 포커스 거리 단축**:
+     - `PreviewCameraDefaults.h`: 기본 뷰포트 F키 포커스 마진(`DefaultFramingMargin = 1.35`)과 썸네일 전용 마진(`ThumbnailFramingMargin = 1.08`)을 분리 정의하고, `CalculateFraming`에 `margin` 파라미터를 추가.
+     - `ThumbnailRenderer.cpp`: `CalculateAutoFramingCamera`에서 `ThumbnailFramingMargin`(1.08)을 적용하여, AABB 외접 구체(Bounding Sphere) 기준 카메라 거리를 약 22% 단축.
+     - 모델(Model), 단일 메시(Mesh), 머티리얼 구체(Material Sphere) 등 모든 3D 썸네일에서 오브젝트가 128x128 타일 프레임 안에 약 25% 더 큼직하고 시원하게 꽉 차면서도 테두리 밖으로 잘리지 않도록 뷰를 최적화.
+
+### [2026-11-07] 리소스 에디터 UI 표준화(메뉴바·툴바·인스펙터 구조화) 및 썸네일·프리뷰 전면 조명·스킨드 머티리얼 전달 복구
+
+- Area: Editor | Render | Shortcut | Localization | Docs
+- Type: Feature | Fix | UX | Refactor
+- 주요 변경 내역:
+  1. **썸네일 및 프리뷰 스튜디오 조명 전면 정렬 및 표준 프레이밍 통일**:
+     - `ThumbnailRenderer.cpp`, `PreviewViewportWidget.cpp`, `AnimationTimelinePanel.cpp`: 프리뷰 카메라 시선(`Yaw = 160°`, $+Z$ 전방에서 대각선으로 모델을 바라봄)에 맞추어 주광(Key Light: `(30°, 195°, 0°)`, 시점 우측 상단), 보조광(Fill Light: `(15°, 120°, 0°)`, 시점 좌측 상단), 역광(Rim Light: `(45°, 20°, 0°)`, 모델 후면 상단)의 각도를 전면 정합.
+     - `ThumbnailRenderer::SubmitMaterial`: 구체 머티리얼 썸네일 촬영 시 역방향($-Z$)으로 설정되어 있던 커스텀 오프셋 계산식을 모델·메시와 동일한 `CalculateAutoFramingCamera` 표준 카메라로 일원화하여, 모든 썸네일(모델, 메시, 머티리얼 구체)의 정면이 일관되게 밝게 조명되도록 수정.
+     - `EditorSettings.h`: `PreviewLightIntensity` 기본값을 `{ 3.0f, 1.2f, 1.5f }`로 튜닝하여 카메라를 마주보는 정면 좌우의 디퓨즈/스펙큘러 음영을 화사하게 개선.
+  2. **스킨드 메시 렌더러 상수 폴백 및 프리뷰/썸네일 머티리얼 상수 전달**:
+     - `Renderer::RenderSkinnedMeshes`: `command.materialConstants.materialFlags == 0`일 때 `command.material->BuildMaterialConstants(drawConstants)`로 자동 폴백하여 텍스처 플래그 누락 시에도 PBR/디퓨즈 텍스처가 정상 바인딩되도록 안전장치 구축.
+     - `PreviewViewportWidget.cpp`, `ThumbnailRenderer.cpp`, `AnimationTimelinePanel.cpp`: `SkinnedDrawCommand` 제출 시 `material->BuildMaterialConstants(cmd.materialConstants)`를 명시적으로 전달.
+  3. **프리뷰 뷰포트 포커스(F 키) 및 그리드 토글(G 키) 단축키 타깃팅 개선**:
+     - `PreviewViewportWidget.cpp`: `ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows)`로 자식 창 포커스를 정확히 감지하고, `m_IsHovered || m_IsFocused` 조건에서 `s_ShortcutTarget = this`를 활성화하여 마우스 호버 또는 패널 포커스 상태에서 `F` 키 입력 시 프리뷰 위젯의 모델 AABB로 카메라가 즉시 정렬되도록 교정.
+     - `PreviewViewportWidget.h/.cpp`: `ToggleGrid()`, `IsGridVisible()` 메서드 및 툴바 툴팁 단축키 힌트(`Viewport.ToggleGrid`) 연동.
+     - `EditorActionRegistry.cpp`: `Viewport.ToggleGrid` 액션을 `EShortcutContext::Global`로 전환하고 `PreviewViewportWidget::GetShortcutTarget()`을 우선 지원하도록 연동.
+  4. **리소스 에디터 일관된 템플릿 표준화 (건의사항 4번)**:
+     - **공통 포맷 확립**: 모든 리소스 에디터가 상단 `MenuBar`(`File`, `Edit`, `View`), 1줄 퀵 액세스 `Toolbar`(`Save`, `Focus (F)`, `Toggle Grid (G)`, 주요 액션, 파일 상태 배지 `[AssetName.ext *]`), 그리고 접이식 섹션(`CollapsingHeader`) 기반의 구조화된 인스펙터를 공유하도록 표준화.
+     - **ModelEditor**:
+       - `ImGuiWindowFlags_MenuBar` 및 `DrawMenuBar()` 추가: `File`(`Save`, `RetryLoad`), `Edit`(`InstantiateModel`), `View`(`Focus (F)`, `ToggleGrid (G)`).
+       - `DrawToolbar()` 추가: `[Save]` (Ctrl+S), `[Focus]` (F), `[Toggle Grid]` (G), `|`, `[Instantiate Model]`, `|`, 파일 상태 배지.
+       - 디테일 패널을 접이식 헤더 섹션으로 구조화: `▼ 모델 정보` (메시 수, 노드 수, 스켈레톤 본 수 2열 테이블), `▼ 머티리얼 슬롯` (슬롯별 리소스 피커), `▼ 내장 애니메이션` (클립 목록), `▼ 씬 배치` (인스턴스화 버튼 및 가이드).
+     - **MaterialEditor**:
+       - `ImGuiWindowFlags_MenuBar` 및 `DrawMenuBar()` 추가: `File`(`Save`, `Revert`), `View`(`ResetCamera (F)`, `ToggleGrid (G)`, `PreviewMesh` 서브메뉴: Sphere/Cube/Plane).
+       - `DrawToolbar()` 통일: `[Save]`, `[Revert]`, `|`, `[ResetCamera]`, `[ToggleGrid]`, `|`, 파일 상태 배지.
+       - `MaterialPreviewRenderer.h`: `GetWidget()`, `GetPreviewMeshType()`, `SetPreviewMeshType()` 공개 인터페이스 제공.
+     - **AnimatorGraphPanel**:
+       - `DrawStateInspector()` 전면 디자인 개선: 노드 상단에 상태 이름 및 엔트리 상태 배지(`[ENTRY ->]`), 인라인 이름 변경 버튼 배치.
+       - `▼ 상태 속성`: 2열 테이블(`PROP_PLAY_RATE`, `PROP_IS_LOOPING`, `PROP_LOOP_BLEND_DURATION`, `기본 진입 상태로 설정`).
+       - `▼ 모션 설정`: 모션 종류 콤보(클립 / 1D 블렌드 트리 / 2D 블렌드 트리). 2D 블렌드 트리는 프리뷰 캔버스, 파라미터 X/Y 및 범위 테이블, 그리고 4개 모서리 클립을 2D 데카르트 좌표계에 일치하는 $2 	imes 2$ 그리드 테이블(상단: 좌측 `(-X, +Y)`, 우측 `(+X, +Y)`, 하단: 좌측 `(-X, -Y)`, 우측 `(+X, -Y)`)로 시각적으로 정렬. 1D 블렌드 트리는 임계값·클립·삭제 3열 테이블로 구성.
+       - `▼ 애니메이션 알림(Notifies)`: 시간·이름·파라미터·삭제 4열 테이블로 구조화.
+       - `▼ 전이 목록(Transitions)`: 해당 상태와 연결된 인/아웃 전이를 한눈에 확인하고 즉시 선택할 수 있는 빠른 탐색 목록 제공.
+  5. **로캘 및 정적 감사 완전 통과**:
+     - `Resources/Data/Localization/Editor.csv`에 신규 키 23개 추가 후 `localizationcsvtojson.py`로 JSON 동기화.
+     - `python -B Tools/Audit/LocalizationAuditor/audit_localization.py --root . --strict` 무결점 통과 (620개 파일, 2,258개 키, 위반 0건).
+
 ### [2026-11-07] 스킨드 메시 부품별 외형 교체 및 일시 효과(피격 발광) 수명 분리·드로우별 상수 렌더러 연동 (1·2·3단계 완료)
 
 - Area: Engine | Render | Resource | Docs
@@ -2940,3 +3002,53 @@ Use this as the primary execution list until a playable 2D vertical slice is com
   - `Engine` 및 `Editor` 빌드 에러 없이 통과.
   - 에디터 그래프 캔버스 우클릭 메뉴에서 `OnTriggerEnter`, `OnTriggerStay`, `OnTriggerExit` 노드 정상 노출 및 배치 확인.
   - C++ 람다, 네이티브 스크립트, 비주얼 스크립트 노드로의 이벤트 전달 경로 확보.
+
+
+## 2026-11-07 — 모듈형 파티클 & 비주얼 이펙트 시스템 계획 수립 및 1단계 물리 충돌(FloorPlane / Raycast) 구현
+
+- **작업 범위:**
+  - `Docs/ParticleAndEffectSystemPlan.md`: 모듈형 파티클 & 비주얼 이펙트 시스템 및 에디터 개발 계획 수립 (Phase 1 ~ Phase 5).
+  - `Docs/DevelopmentPriorities.md`: 신규 계획 문서 등록.
+  - `Engine/Source/Core/Public/Components/Render/ParticleEmitterComponent.h`:
+    - `EParticleCollisionMode` 열거형(`None`, `FloorPlane`, `PhysicsRaycast`) 정의.
+    - `EParticleCollisionResponse` 열거형(`Bounce`, `Slide`, `DieOnContact`, `Stop`) 정의.
+    - 충돌 및 반발/마찰 프로퍼티(`collisionMode`, `collisionResponse`, `restitution`, `friction`, `floorHeight`, `collisionRadius`, `minBounceSpeed`, `maxCollisionChecksPerFrame`) 추가 및 리플렉션 등록.
+    - `Particle` 구조체에 `bounceCount` 추가.
+  - `Engine/Source/System/Render/Public/ParticleSystem.h`, `Private/ParticleSystem.cpp`:
+    - `UpdateEmitter`에 `Scene* scene` 전달 인터페이스 확장.
+    - `FloorPlane` 초경량 고속 바닥 충돌 및 침투(Tunneling) 방어, 정확한 접촉점 및 시간 분율($t_{\text{hit}}$) 계산.
+    - `PhysicsRaycast` 모드에서 `PhysicsSystem::Raycast`를 통한 월드 콜라이더 선분 충돌 및 프레임당 최대 호출 수 상한 방어.
+    - 탄성 반발($\vec{v}' = \vec{v} - (1+e)(\vec{v}\cdot\vec{N})\vec{N}$), 접선 마찰 감쇠, 최소 바운스 속도 임계치에 따른 바닥 밀착/슬라이딩, 접촉 시 즉시 소멸(`DieOnContact`) 분기 완비.
+    - 로컬 및 월드 시뮬레이션 공간(`EParticleSimulationSpace`) 상호 변환 지원.
+  - `Resources/Data/Localization/Engine.csv`:
+    - `CATEGORY_PARTICLE_COLLISION`, `PROP_COLLISION_MODE`, `PROP_COLLISION_RADIUS`, `PROP_COLLISION_RESPONSE`, `PROP_FLOOR_HEIGHT`, `PROP_MAX_COLLISION_CHECKS`, `PROP_MIN_BOUNCE_SPEED` 로캘 키 등록.
+- **확인 필요 사항 (사용자 실행):**
+  - 빌드 검증: C++ 엔진 및 리플렉션 빌드 정상 통과 여부.
+  - 에디터 인스펙터: `ParticleEmitterComponent`에 `Collision & Interaction` 카테고리 및 신규 충돌 파라미터 노출 확인.
+  - FloorPlane 바운스: `FloorPlane` 모드에서 파티클이 바닥($y=0$)에 부딪혀 통통 튀며 마찰로 감쇠하는지 확인.
+  - Raycast 바운스: 경사면/박스 콜라이더 위로 파티클을 발사했을 때 표면 법선에 맞춰 튕겨나가는지 확인.
+
+
+## 2026-11-07 — 파티클 2단계: 공간 연기 확산 역학 (부력, 3D 무발산 컬 노이즈 와류, 바람 외력) 구현
+
+- **작업 범위:**
+  - `Engine/Source/Core/Public/Components/Render/ParticleEmitterComponent.h`:
+    - 수명 및 역학 카테고리에 부력(`buoyancy`), 바람 외력(`wind`), 컬 노이즈 토글(`enableCurlNoise`), 노이즈 강도(`curlNoiseStrength`), 주파수(`curlNoiseFrequency`), 스크롤 속도(`curlNoiseScrollSpeed`) 추가 및 리플렉션 등록.
+  - `Engine/Source/System/Render/Private/ParticleSystem.cpp`:
+    - **3D 무발산 컬 노이즈(Divergence-Free Curl Noise) 구현:**
+      - 비트 연산 기반 결정론적 3D 그래디언트 노이즈 `Noise3D` 및 `FastHash3D` 구현 (힙 할당 및 텍스처 조회 0).
+      - 중앙 차분(Central Difference) 기반 회도($\vec{v}_{\text{curl}} = \nabla \times \vec{\Psi}$) 벡터 산출로 유체의 비압축성 소용돌이(Turbulence) 생성 (입자 뭉침 원천 차단).
+      - 시간에 따른 3D 노이즈 공간 스크롤(`scrollTime`) 연동으로 살아 움직이는 대기 기류 표현.
+    - **부력 및 바람 외력 적분:**
+      - 중력과 부력 가속도 합성 ($\vec{a} = \vec{g} + (0, b, 0)$).
+      - 공기 저항 계수(`drag`)와 바람 속도(`wind`) 간의 상대 속도 드래그 감쇠 구현 ($\vec{a}_{\text{drag}} = (\vec{w} - \vec{v}) \times \text{drag}$).
+      - 와류와 충돌 모드(`FloorPlane`, `PhysicsRaycast`)의 상호작용: 소용돌이치며 퍼져나가는 연기가 벽이나 바닥에 부딪히면 뚫지 않고 벽면을 타고 미끄러지도록(`Slide`) 유기적 통합.
+  - `Resources/Data/Localization/Engine.csv`:
+    - `PROP_BUOYANCY`, `PROP_ENABLE_CURL_NOISE`, `PROP_CURL_NOISE_STRENGTH`, `PROP_CURL_NOISE_FREQUENCY`, `PROP_CURL_NOISE_SCROLL_SPEED`, `PROP_WIND_FORCE` 로캘 키 원본 등록.
+  - `Docs/ParticleAndEffectSystemPlan.md`: Phase 2 완료 및 상태 갱신.
+- **확인 필요 사항 (사용자 실행):**
+  - 빌드 검증: C++ 엔진 정상 빌드 여부.
+  - 부력(Buoyancy) 검증: `Buoyancy`를 양수(예: $5.0$)로 주었을 때 파티클이 위로 피어오르는지 확인.
+  - 바람(Wind) 검증: `Wind Force`에 $(5, 0, 0)$을 주었을 때 파티클들이 바람 방향으로 휘날리는지 확인.
+  - 컬 노이즈(Curl Noise) 검증: `Enable Turbulence`를 켜고 `Strength` $2.0$, `Frequency` $0.5$ 설정 시 입자들이 뭉치지 않고 유체처럼 소용돌이치며 퍼져나가는지 확인.
+  - 벽면 슬라이딩 검증: 소용돌이치는 연기가 콜라이더 벽면에 부딪혔을 때 뚫지 않고 벽면을 감싸듯 타고 흐르는지 확인.

@@ -31,6 +31,7 @@ Engine·Render·Editor·Client 계획에서 무엇을 먼저 연결하고 무엇
 - [InteractiveModelImportPreviewPlan.md](InteractiveModelImportPreviewPlan.md): 대화형 3D 모델 임포트 프리뷰 시스템, 실시간 축/스케일 변환 및 뷰포트 일원화 계획.
 - [Utf8PathHandlingPlan.md](Utf8PathHandlingPlan.md): UTF-8 파일 경로, 다국어('새 폴더' 등) 입출력 및 비동기 파일 감시자(efsw) 크래시 방어 계획.
 - [EditorWorkflowAndInteractionPlan.md](EditorWorkflowAndInteractionPlan.md): PIE 에디터 시점 분리, 계층/인스펙터 전면화 연계, F/F2 상호작용 및 단축키(ShortcutManager) 일원화 계획.
+- [ParticleAndEffectSystemPlan.md](ParticleAndEffectSystemPlan.md): 모듈형 파티클 & 비주얼 이펙트 시스템, 물리 충돌/기류 상호작용 및 독립 에디터 계획.
 
 전체 작업 선택은 이 문서, 기능 내부의 구현 순서·실패 정책은 상세 계획을 따른다.
 새 사용자 결정이 우선하며 충돌이 생기면 이 문서와 해당 계획을 함께 갱신한다.

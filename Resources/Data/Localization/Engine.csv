@@ -1,4 +1,4 @@
-﻿Group,Key,English,Korean
+Group,Key,English,Korean
 ,A non-empty stable GRAPH_ID is required.,A non-empty stable GRAPH_ID is required.,비어 있지 않은 고정 GRAPH_ID가 필요합니다.
 ,A pure node must return a value.,A pure node must return a value.,순수 노드는 값을 반환해야 합니다.
 ,Abs (Float),Abs (Float),절댓값 (Float)
@@ -40,6 +40,7 @@
 ,CATEGORY_LIGHTING,Lighting,조명
 ,CATEGORY_NETWORK,Network,네트워크
 ,CATEGORY_PARAMETER,Parameter,매개변수
+,CATEGORY_PARTICLE_COLLISION,Collision & Interaction,물리 충돌 및 상호작용
 ,CATEGORY_PARTICLE_COLOR,Color & Alpha,색상 및 알파
 ,CATEGORY_PARTICLE_EMISSION,Emission,방출
 ,CATEGORY_PARTICLE_MOTION,Lifetime & Dynamics,수명 및 역학
@@ -281,6 +282,7 @@
 ,PROP_BRDF_LUT,BRDF Lookup Texture,BRDF 조회 텍스처
 ,PROP_BURST_COUNT,Burst Count,버스트 방출량
 ,PROP_BURST_INTERVAL,Burst Interval,버스트 주기
+,PROP_BUOYANCY,Buoyancy,부력 (상승 가속도)
 ,PROP_CAMERA_LAG_SPEED,Camera Lag Speed,카메라 지연 속도
 ,PROP_CAMERA_TYPE,Camera Type,카메라 타입
 ,PROP_CASCADE_SPLIT_LAMBDA,Cascade Split Lambda,캐스케이드 분할 가중치
@@ -292,6 +294,9 @@
 ,PROP_CLOUD_SPEED,Cloud Speed,구름 속도
 ,PROP_COLLISION_LAYER,Collision Layer,충돌 레이어
 ,PROP_COLLISION_MASK,Collision Mask,충돌 마스크
+,PROP_COLLISION_MODE,Collision Mode,충돌 모드
+,PROP_COLLISION_RADIUS,Collision Radius,충돌 반경
+,PROP_COLLISION_RESPONSE,Collision Response,충돌 응답
 ,PROP_COLOR,Color,색
 ,PROP_COLOR_END,End Color,종료 색상
 ,PROP_COLOR_START,Start Color,시작 색상
@@ -301,6 +306,9 @@
 ,PROP_CONTROLLER_PATH,Controller Path,애니메이터 컨트롤러 경로
 ,PROP_COVERAGE,Cloud Coverage,구름 커버리지
 ,PROP_CULL_MODE,Cull Mode,컬링 모드
+,PROP_CURL_NOISE_FREQUENCY,Turbulence Frequency,와류 주파수
+,PROP_CURL_NOISE_SCROLL_SPEED,Turbulence Speed,와류 흐름 속도
+,PROP_CURL_NOISE_STRENGTH,Turbulence Strength,와류 강도
 ,PROP_CURRENT_ARM_LENGTH,Current Arm Length,현재 암 길이
 ,PROP_CURRENT_FRAME,Current Frame,현재 프레임
 ,PROP_CURRENT_TIME,Current Time,현재 재생 시간
@@ -322,6 +330,7 @@
 ,PROP_ENABLE_CAMERA_LAG,Enable Camera Lag,카메라 지연 활성화
 ,PROP_ENABLE_CLOUDS,Enable Clouds,구름 활성화
 ,PROP_ENABLE_COLLISION,Enable Collision,충돌 허용
+,PROP_ENABLE_CURL_NOISE,Enable Turbulence,와류(컬 노이즈) 활성화
 ,PROP_ENABLE_TIME_CYCLE,Enable Time Cycle,시간 주기 활성화
 ,PROP_EULER_ROTATION,EulerRotation,회전(각도)
 ,PROP_EXTINCTION,Extinction Factor,빛 흡수 계수
@@ -331,6 +340,7 @@
 ,PROP_FLAGS,Flags,상태
 ,PROP_FLIPX,FlipX,X 반전
 ,PROP_FLIPY,FlipY,Y 반전
+,PROP_FLOOR_HEIGHT,Floor Height,바닥 높이
 ,PROP_FOG_COLOR,Fog Color,안개 색상
 ,PROP_FOG_DENSITY,Fog Density,안개 밀도
 ,PROP_FOG_END_DIST,Fog End Distance,안개 종료 거리
@@ -415,6 +425,7 @@
 ,PROP_MATERIAL_HANDLE,Material Handle,마테리얼 핸들
 ,PROP_MATRIX,Matrix,매트릭스
 ,PROP_MAX,Max,최댓값
+,PROP_MAX_COLLISION_CHECKS,Max Checks Per Frame,프레임당 최대 충돌 검사 수
 ,PROP_MAX_DISTANCE,Max Distance,최대 감쇠 거리
 ,PROP_MAX_HEIGHT,Max Height,최대 높이
 ,PROP_MAX_PARTICLES,Max Particles,최대 파티클 수
@@ -422,6 +433,7 @@
 ,PROP_MAX_PLAY_RATE,Max Play Rate,최대 재생 배속
 ,PROP_MESH_HANDLE,Mesh Handle,메쉬 핸들
 ,PROP_MIN,Min,최솟값
+,PROP_MIN_BOUNCE_SPEED,Min Bounce Speed,최소 바운스 속도
 ,PROP_MIN_DISTANCE,Min Distance,최소 감쇠 거리
 ,PROP_MIN_PITCH,Min Pitch,최소 피치
 ,PROP_MIN_PLAY_RATE,Min Play Rate,최소 재생 배속
@@ -548,6 +560,7 @@
 ,PROP_WIDTH,Width,너비
 ,PROP_WIND_DIR,Wind Direction,바람 방향
 ,PROP_WIND_SPEED,Wind Speed,바람 속도
+,PROP_WIND_FORCE,Wind Force,바람 외력 (방향 및 세기)
 ,PROP_WORLDMATRIX,World Matrix,월드 매트릭스
 ,PROP_WORLD_MATRIX,World Matrix,월드 매트릭스
 ,PROP_WORLD_TRANSFORM,World Transform,월드 트랜스폼
