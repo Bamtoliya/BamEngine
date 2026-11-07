@@ -1,4 +1,4 @@
-﻿param(
+param(
     [string]$Config = "Debug",
     [string]$OutputDir = "out/package/Client"
 )
@@ -33,12 +33,17 @@ if ($Root.StartsWith($ResolvedOutput, [System.StringComparison]::OrdinalIgnoreCa
 }
 
 # [가드 3] 프로젝트 핵심 소스/데이터 디렉터리 삭제 차단
-$ForbiddenDirectories = @("Engine", "Editor", "Resources", "Config", "Tools", "Projects", "Docs", ".git", "Bin")
+$ForbiddenDirectories = @("Engine", "Editor", "Client", "Resources", "Config", "Tools", "Projects", "Docs", ".git", "Bin")
 foreach ($forbidden in $ForbiddenDirectories) {
     $forbiddenPath = [System.IO.Path]::Combine($Root, $forbidden)
     if ($ResolvedOutput -eq $forbiddenPath -or $ResolvedOutput.StartsWith("$forbiddenPath\", [System.StringComparison]::OrdinalIgnoreCase) -or $ResolvedOutput.StartsWith("$forbiddenPath/", [System.StringComparison]::OrdinalIgnoreCase)) {
         throw "Security Violation: OutputDir cannot be inside core project directory: '$forbiddenPath'"
     }
+}
+
+# [가드 4] 프로젝트 저장소 외부의 임의 디렉터리 삭제 방지 (안전하게 프로젝트 하위 디렉터리만 허용)
+if (-not $ResolvedOutput.StartsWith("$Root\", [System.StringComparison]::OrdinalIgnoreCase) -and -not $ResolvedOutput.StartsWith("$Root/", [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw "Security Violation: OutputDir must be located inside the repository: '$ResolvedOutput'"
 }
 
 # ── 2. 소스 바이너리 경로 다단계 자동 탐색 (F04) ──
@@ -73,8 +78,8 @@ if (Test-Path -LiteralPath $ResolvedOutput) {
     Write-Host "Cleaning existing output directory: $ResolvedOutput" -ForegroundColor Yellow
     Remove-Item -LiteralPath $ResolvedOutput -Recurse -Force
 }
-New-Item -ItemType Directory -LiteralPath $ResolvedOutput -Force | Out-Null
-New-Item -ItemType Directory -LiteralPath (Join-Path $ResolvedOutput "Logs") -Force | Out-Null
+New-Item -ItemType Directory -Path $ResolvedOutput -Force | Out-Null
+New-Item -ItemType Directory -Path (Join-Path $ResolvedOutput "Logs") -Force | Out-Null
 
 # ── 4. 실행 바이너리 및 필수 DLL 복사 ──
 $RequiredBinaries = @("Client.exe", "Engine.dll", "GameModule.dll", "SDL3.dll")
@@ -102,7 +107,7 @@ foreach ($file in $OptionalBinaries) {
 
 # ── 5. 프로젝트 설정 파일 복사 (F04 핵심: Config/Project.json) ──
 $TargetConfig = Join-Path $ResolvedOutput "Config"
-New-Item -ItemType Directory -LiteralPath $TargetConfig -Force | Out-Null
+New-Item -ItemType Directory -Path $TargetConfig -Force | Out-Null
 
 $ProjectJsonPath = Join-Path $Root "Config/Project.json"
 if (Test-Path -LiteralPath $ProjectJsonPath) {
@@ -127,7 +132,7 @@ $ResourcesToCopy = @(
 )
 
 $TargetRes = Join-Path $ResolvedOutput "Resources"
-New-Item -ItemType Directory -LiteralPath $TargetRes -Force | Out-Null
+New-Item -ItemType Directory -Path $TargetRes -Force | Out-Null
 
 foreach ($folder in $ResourcesToCopy) {
     $srcFolder = Join-Path $Root "Resources/$folder"

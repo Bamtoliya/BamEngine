@@ -266,17 +266,15 @@ void AssetHotReloadManager::ProcessModifiedMaterial(const std::filesystem::path&
 
 void AssetHotReloadManager::ProcessModifiedLocalization(const std::filesystem::path& locPath)
 {
-	std::string ext = locPath.extension().string();
-	for (char& c : ext) c = static_cast<char>(tolower(c));
-
 	// .csv 파일이 수정된 경우 파이썬 변환 스크립트 실행
 	if (LowerAscii(locPath.extension().wstring()) == L".csv")
 	{
+		std::error_code ec;
 		std::filesystem::path scriptPath = std::filesystem::current_path() / "Tools/Codegen/CSVToJsonConverter/localizationcsvtojson.py";
-		if (std::filesystem::exists(scriptPath))
+		if (std::filesystem::exists(scriptPath, ec))
 		{
-			std::string cmd = "python \"" + scriptPath.string() + "\" --input \"Resources/Data/Localization\" --output \"Resources/Data/Localization\"";
-			system(cmd.c_str());
+			std::wstring cmd = L"python \"" + scriptPath.wstring() + L"\" --input \"Resources/Data/Localization\" --output \"Resources/Data/Localization\"";
+			_wsystem(cmd.c_str());
 		}
 	}
 

@@ -1,4 +1,4 @@
-﻿add_executable(TransformEditorCheck
+add_executable(TransformEditorCheck
     examples/TransformEditorCheck.cpp Source/ImGui/InspectorPanel/Private/TransformPropertyEditor.cpp
 )
 
@@ -77,10 +77,8 @@ set_target_properties(MainMenuBarLayoutCheck PROPERTIES UNITY_BUILD OFF FOLDER "
 
 add_executable(HierarchyEditorCheck examples/HierarchyEditorCheck.cpp
     Source/ImGui/HierarchyPanel/Private/EntityHierarchyView.cpp
-    Source/Clipboard/Private/EntityClipboard.cpp
     Source/Shortcut/Private/ShortcutManager.cpp
     Source/Selection/Private/SelectionManager.cpp
-    Source/ImGui/PrefabEditor/Private/PrefabModeManager.cpp
 )
 target_include_directories(HierarchyEditorCheck PRIVATE
     ${EDITOR_PUBLIC_INCLUDE_DIRS}

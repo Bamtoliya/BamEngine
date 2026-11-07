@@ -1,4 +1,4 @@
-﻿#include "GraphReflection.h"
+#include "GraphReflection.h"
 #include "GraphValue.h"
 #include <reflection/Registry.h>
 
@@ -112,7 +112,7 @@ GraphPin TargetPin(const std::string& owner)
 }
 
 GraphDiagnostic RegisterFunction(GraphRegistry& graph, const reflection::FunctionInfo& function,
-	const std::string& owner, const std::string& member)
+	const std::string& owner, const std::string& member, bool updateExisting)
 {
 	const auto& metadata = function.Metadata;
 	if (!HasGraphMetadata(metadata)) return {};
@@ -203,13 +203,30 @@ GraphDiagnostic RegisterFunction(GraphRegistry& graph, const reflection::Functio
 	else if (pure)
 		return Invalid(location, "A pure node must return a value.");
 	if (callable) node.Pins.push_back({ "then", Direction::Output, Type::Execution, {} });
-	auto result = graph.RegisterOrUpdate(std::move(node));
+
+	const auto* existing = graph.Find(node.Type);
+	GraphDiagnostic result;
+	if (updateExisting || (existing && existing->Reflection.Kind == EGraphReflectionKind::None &&
+		std::find(existing->Domains.begin(), existing->Domains.end(), EGraphDomain::Shader) != existing->Domains.end()))
+	{
+		if (existing)
+		{
+			// 셰이더/공통 빌트인 노드에 CPU 실행 리플렉션 바인딩을 결합할 경우, 빌트인의 기존 도메인(예: Shader)을 유지합니다.
+			node.Domains = existing->Domains;
+		}
+		result = graph.RegisterOrUpdate(std::move(node));
+	}
+	else
+	{
+		result = graph.Register(std::move(node));
+	}
+
 	if (!result.Succeeded()) result.Message = location + ": " + result.Message;
 	return result;
 }
 
 GraphDiagnostic RegisterProperty(GraphRegistry& graph, const reflection::TypeInfo& owner,
-	const reflection::PropertyInfo& property)
+	const reflection::PropertyInfo& property, bool updateExisting)
 {
 	const auto& metadata = property.Metadata;
 	if (!HasGraphMetadata(metadata)) return {};
@@ -241,7 +258,7 @@ GraphDiagnostic RegisterProperty(GraphRegistry& graph, const reflection::TypeInf
 	node.DisplayName = "Get " + displayName;
 	node.Reflection = { EGraphReflectionKind::PropertyGet, owner.QualifiedName, property.Name, {} };
 	node.Pins = { TargetPin(owner.QualifiedName), { "result", Direction::Output, *type, {} } };
-	auto result = graph.RegisterOrUpdate(node);
+	auto result = updateExisting ? graph.RegisterOrUpdate(node) : graph.Register(node);
 	if (!result.Succeeded()) { result.Message = location + ": " + result.Message; return result; }
 	if (!readWrite) return {};
 	node.Type = id + ".Set";
@@ -249,7 +266,7 @@ GraphDiagnostic RegisterProperty(GraphRegistry& graph, const reflection::TypeInf
 	node.Reflection.Kind = EGraphReflectionKind::PropertySet;
 	node.Pins = { { "exec", Direction::Input, Type::Execution, {} }, TargetPin(owner.QualifiedName),
 		{ "value", Direction::Input, *type, {} }, { "then", Direction::Output, Type::Execution, {} } };
-	result = graph.RegisterOrUpdate(std::move(node));
+	result = updateExisting ? graph.RegisterOrUpdate(std::move(node)) : graph.Register(std::move(node));
 	if (!result.Succeeded()) result.Message = location + ": " + result.Message;
 	return result;
 }
@@ -257,12 +274,12 @@ GraphDiagnostic RegisterProperty(GraphRegistry& graph, const reflection::TypeInf
 
 namespace Engine
 {
-GraphDiagnostic RegisterReflectedGraphNodes(GraphRegistry& graph, const reflection::Registry& reflection)
+GraphDiagnostic RegisterReflectedGraphNodes(GraphRegistry& graph, const reflection::Registry& reflection, bool updateExisting)
 {
 	GraphRegistry candidate = graph;
 	for (const auto& entry : reflection.GetFreeFunctions())
 	{
-		auto result = RegisterFunction(candidate, *entry.Function, {}, std::string(entry.QualifiedName));
+		auto result = RegisterFunction(candidate, *entry.Function, {}, std::string(entry.QualifiedName), updateExisting);
 		if (!result.Succeeded()) return result;
 	}
 	for (const auto* type : reflection.GetTypes())
@@ -271,12 +288,12 @@ GraphDiagnostic RegisterReflectedGraphNodes(GraphRegistry& graph, const reflecti
 			return Invalid(type->QualifiedName, "Graph annotations belong on FUNCTION or PROPERTY declarations.");
 		for (const auto& function : type->Functions)
 		{
-			auto result = RegisterFunction(candidate, function, type->QualifiedName, function.Name);
+			auto result = RegisterFunction(candidate, function, type->QualifiedName, function.Name, updateExisting);
 			if (!result.Succeeded()) return result;
 		}
 		for (const auto& property : type->Properties)
 		{
-			auto result = RegisterProperty(candidate, *type, property);
+			auto result = RegisterProperty(candidate, *type, property, updateExisting);
 			if (!result.Succeeded()) return result;
 		}
 	}

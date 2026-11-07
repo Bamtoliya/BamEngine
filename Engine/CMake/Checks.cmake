@@ -1,17 +1,22 @@
-﻿add_executable(SceneReflectionCheck examples/SceneReflectionCheck.cpp)
+add_executable(SceneReflectionCheck examples/SceneReflectionCheck.cpp)
 target_link_libraries(SceneReflectionCheck PRIVATE BamEngine::Engine)
+set_target_properties(SceneReflectionCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
 
 add_executable(SceneArchiveCheck examples/SceneArchiveCheck.cpp)
 target_link_libraries(SceneArchiveCheck PRIVATE BamEngine::Engine)
+set_target_properties(SceneArchiveCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
 
 add_executable(UILayoutCheck examples/UILayoutCheck.cpp)
 target_link_libraries(UILayoutCheck PRIVATE BamEngine::Engine)
+set_target_properties(UILayoutCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
 
 add_executable(UIInteractionCheck examples/UIInteractionCheck.cpp)
 target_link_libraries(UIInteractionCheck PRIVATE BamEngine::Engine)
+set_target_properties(UIInteractionCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
 
 add_executable(InputManagerCheck examples/InputManagerCheck.cpp)
 target_link_libraries(InputManagerCheck PRIVATE BamEngine::Engine)
+set_target_properties(InputManagerCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
 
 if(BUILD_TESTING)
     add_test(NAME InputManagerCheck COMMAND InputManagerCheck)

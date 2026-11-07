@@ -1,4 +1,4 @@
-﻿#include "Scene.h"
+#include "Scene.h"
 #include "SceneManager.h"
 #include "CoreComponents.h"
 #include "PhysicsComponent.h"
@@ -22,6 +22,8 @@
 #include "SplineComponent.h"
 #include "SplineFollowerComponent.h"
 #include "SplineMeshComponent.h"
+#include "Vertex.h"
+#include "PlatformPath.h"
 
 namespace
 {
@@ -1329,6 +1331,620 @@ namespace
 
         return true;
     }
+
+    bool CheckLinkedModelPartMeshOverrideAndReimportRoundTrip()
+    {
+        auto& rm = Engine::ResourceManager::Get();
+
+        const std::wstring cleanupFiles[] = {
+            L"part-test-skel.bamskel.json", L"part-head.bammesh.json", L"part-body.bammesh.json",
+            L"part-armor.bammesh.json", L"part-incompatible.bammesh.json", L"part-head.bammat.json",
+            L"part-body.bammat.json", L"part-armor.bammat.json", L"part-character.bammodel.json"
+        };
+        const auto cleanup = [&cleanupFiles]()
+        {
+            for (const auto& path : cleanupFiles)
+            {
+                std::error_code ec;
+                std::filesystem::remove(path, ec);
+                std::filesystem::remove(Engine::PlatformPath::ResolveProjectRelative(path), ec);
+            }
+        };
+        cleanup();
+
+        // 1. 스켈레톤 준비 및 리그 시그니처 계산
+        SkeletonCreateDesc skelDesc{};
+        skelDesc.Key = L"part-test-skel.bamskel.json";
+        skelDesc.Path = L"part-test-skel.bamskel.json";
+        Bone rootBone{};
+        rootBone.Name = L"RootBone";
+        rootBone.ParentIndex = -1;
+        skelDesc.Bones.push_back(rootBone);
+        const uint64 skinSignature = Engine::Skeleton::ComputeSkinBindingSignature(skelDesc.Bones);
+        auto skelHandle = rm.AddResource<Engine::Skeleton>(skelDesc.Key, Engine::Skeleton::Create(&skelDesc));
+        if (!skelHandle.IsValid() || Engine::IsFailure(rm.SaveToJsonFile(skelHandle.Get(), skelDesc.Path)))
+        {
+            cleanup();
+            return Fail("Failed to create skeleton for linked part test.");
+        }
+
+        // 2. 메시 생성 헬퍼
+        Engine::VertexPosition positions[3] = {
+            { { 0.0f, 0.0f, 0.0f } }, { { 1.0f, 0.0f, 0.0f } }, { { 0.0f, 1.0f, 0.0f } }
+        };
+        Engine::VertexSkinData skinData[3] = {
+            { { 0, 0, 0, 0 }, { 1.0f, 0.0f, 0.0f, 0.0f } },
+            { { 0, 0, 0, 0 }, { 1.0f, 0.0f, 0.0f, 0.0f } },
+            { { 0, 0, 0, 0 }, { 1.0f, 0.0f, 0.0f, 0.0f } }
+        };
+        uint32 indices[3] = { 0, 1, 2 };
+
+        const auto createSkinMesh = [&](const std::wstring& key, uint64 signature, bool withSkinData)
+            -> Engine::ResourceHandle<Engine::Mesh>
+        {
+            MeshCreateDesc desc{};
+            desc.Key = key;
+            desc.Path = key;
+            desc.Streams[(uint32)Engine::EMeshStream::Position] = { positions, 3, sizeof(Engine::VertexPosition) };
+            if (withSkinData)
+                desc.Streams[(uint32)Engine::EMeshStream::SkinData] = { skinData, 3, sizeof(Engine::VertexSkinData) };
+            desc.IndexData = indices;
+            desc.IndexCount = 3;
+            desc.IndexStride = sizeof(uint32);
+            desc.SkinBindingSignature = signature;
+            auto handle = rm.AddResource<Engine::Mesh>(desc.Key, Engine::Mesh::Create(&desc));
+            if (handle.IsValid())
+                rm.SaveToJsonFile(handle.Get(), key);
+            return handle;
+        };
+
+        const auto headMesh = createSkinMesh(L"part-head.bammesh.json", skinSignature, true);
+        const auto bodyMesh = createSkinMesh(L"part-body.bammesh.json", skinSignature, true);
+        const auto armorMesh = createSkinMesh(L"part-armor.bammesh.json", skinSignature, true);
+        const auto incompatibleMesh = createSkinMesh(L"part-incompatible.bammesh.json", skinSignature + 999, true);
+
+        if (!headMesh.IsValid() || !bodyMesh.IsValid() || !armorMesh.IsValid() || !incompatibleMesh.IsValid())
+        {
+            cleanup();
+            return Fail("Failed to create meshes for linked part test.");
+        }
+
+        // 3. 머티리얼 준비
+        Engine::MaterialDesc matDesc{};
+        matDesc.CullMode = Engine::ECullMode::None;
+
+        const auto createMat = [&](const std::wstring& key, float roughness)
+            -> Engine::ResourceHandle<Engine::Material>
+        {
+            matDesc.Key = key;
+            matDesc.Path = key;
+            auto handle = rm.AddResource<Engine::Material>(matDesc.Key, Engine::Material::Create(&matDesc));
+            if (handle.IsValid())
+            {
+                handle->SetFloat("Roughness", roughness);
+                rm.SaveToJsonFile(handle.Get(), key);
+            }
+            return handle;
+        };
+
+        const auto headMat = createMat(L"part-head.bammat.json", 0.5f);
+        const auto bodyMat = createMat(L"part-body.bammat.json", 0.8f);
+        const auto armorMat = createMat(L"part-armor.bammat.json", 0.1f);
+        if (!headMat.IsValid() || !bodyMat.IsValid() || !armorMat.IsValid())
+        {
+            cleanup();
+            return Fail("Failed to create materials for linked part test.");
+        }
+
+        // 4. 멀티 파트 모델 생성 (Node 0: Head, Node 1: Body)
+        ModelCreateDesc modelDesc{};
+        modelDesc.Key = L"part-character.bammodel.json";
+        modelDesc.Path = L"part-character.bammodel.json";
+        modelDesc.Skeleton = skelHandle;
+        modelDesc.Meshes = { headMesh, bodyMesh };
+        modelDesc.Materials = { headMat, bodyMat };
+        modelDesc.MeshMaterialIndices = { 0, 1 };
+
+        Engine::ModelNode headNode;
+        headNode.Name = L"Head";
+        headNode.SourceNodeKey = L"1:Head";
+        headNode.MeshIndices = { 0 };
+        headNode.MeshAttachmentKeys = { L"HeadMesh" };
+
+        Engine::ModelNode bodyNode;
+        bodyNode.Name = L"Body";
+        bodyNode.SourceNodeKey = L"2:Body";
+        bodyNode.MeshIndices = { 1 };
+        bodyNode.MeshAttachmentKeys = { L"BodyMesh" };
+
+        modelDesc.Nodes = { headNode, bodyNode };
+
+        auto charModel = rm.AddResource<Engine::Model>(modelDesc.Key, Engine::Model::Create(&modelDesc));
+        if (!charModel.IsValid() || Engine::IsFailure(rm.SaveToJsonFile(charModel.Get(), modelDesc.Path)))
+        {
+            cleanup();
+            return Fail("Failed to create multi-part character model.");
+        }
+
+        // 5. 씬에 인스턴스화
+        ScenePtr scene(Engine::Scene::Create());
+        Engine::Entity* charRoot = nullptr;
+        if (!scene || scene->InstantiateLinkedModel(charModel, headMat, charRoot) != Engine::EResult::Success || !charRoot)
+        {
+            cleanup();
+            return Fail("Failed to instantiate linked multi-part model.");
+        }
+
+        const auto findPart = [](const Engine::Entity& root, const std::wstring& nodeKey, const std::wstring& partKey)
+            -> entt::entity
+        {
+            const auto& reg = root.GetScene()->GetRegistry();
+            const auto rootEntity = root.GetEntityHandle();
+            const auto* link = reg.try_get<Engine::HierarchyComponent>(rootEntity);
+            if (!link) return entt::null;
+
+            for (auto nodeEntity : link->children)
+            {
+                if (!reg.valid(nodeEntity)) continue;
+                const auto* nodeLink = reg.try_get<Engine::HierarchyComponent>(nodeEntity);
+                if (!nodeLink) continue;
+
+                for (auto meshEntity : nodeLink->children)
+                {
+                    if (!reg.valid(meshEntity)) continue;
+                    const auto* src = reg.try_get<Engine::ModelSourceComponent>(meshEntity);
+                    if (src && src->isMeshAttachment && src->sourceNodeKey == nodeKey && src->meshAttachmentKey == partKey)
+                        return meshEntity;
+                }
+            }
+            return entt::null;
+        };
+
+        const auto headPart = findPart(*charRoot, L"1:Head", L"HeadMesh");
+        const auto bodyPart = findPart(*charRoot, L"2:Body", L"BodyMesh");
+        if (headPart == entt::null || bodyPart == entt::null)
+        {
+            cleanup();
+            return Fail("Failed to find head or body parts in instantiated model.");
+        }
+
+        auto& world = scene->GetRegistry();
+        auto* bodyEntity = scene->FindEntity(bodyPart);
+        if (!bodyEntity)
+        {
+            cleanup();
+            return Fail("Body entity not found in scene.");
+        }
+
+        // 6. 스켈레톤 비호환 메시 교체 시도 -> 반드시 거부(EResult::InvalidArgument)되어야 함!
+        if (scene->ReplaceLinkedSkinnedPartMesh(*bodyEntity, incompatibleMesh) != Engine::EResult::InvalidArgument)
+        {
+            cleanup();
+            return Fail("ReplaceLinkedSkinnedPartMesh did not reject incompatible skeleton mesh.");
+        }
+
+        if (world.get<Engine::SkinnedMeshRendererComponent>(bodyPart).meshHandle != bodyMesh)
+        {
+            cleanup();
+            return Fail("Incompatible mesh replacement modified the existing mesh.");
+        }
+
+        // 7. 호환되는 갑옷 메시 및 머티리얼로 교체
+        if (scene->ReplaceLinkedSkinnedPartMesh(*bodyEntity, armorMesh) != Engine::EResult::Success)
+        {
+            cleanup();
+            return Fail("Failed to replace linked skinned part with compatible armor mesh.");
+        }
+
+        auto& bodyRenderer = world.get<Engine::SkinnedMeshRendererComponent>(bodyPart);
+        auto& bodySource = world.get<Engine::ModelSourceComponent>(bodyPart);
+        if (bodyRenderer.meshHandle != armorMesh || bodySource.useModelMesh)
+        {
+            cleanup();
+            return Fail("Body part mesh or useModelMesh flag was not properly updated.");
+        }
+
+        bodyRenderer.materialHandle = armorMat;
+        bodySource.useModelMaterial = false;
+
+        const auto rootId = world.get<Engine::IDComponent>(charRoot->GetEntityHandle()).id;
+
+        // 8. 씬 직렬화 및 역직렬화 (라운드트립 검증)
+        archive::JsonArchive sceneArchive;
+        if (!scene->WriteArchive(sceneArchive))
+        {
+            cleanup();
+            return Fail("Failed to write scene archive with mesh override.");
+        }
+
+        Engine::Scene* loadedRaw = nullptr;
+        if (!Engine::Scene::CreateFromArchive(sceneArchive, loadedRaw) || !loadedRaw)
+        {
+            cleanup();
+            return Fail("Failed to load scene from archive with mesh override.");
+        }
+
+        ScenePtr loaded(loadedRaw);
+        auto* loadedRoot = loaded->FindEntityById(rootId);
+        if (!loadedRoot)
+        {
+            cleanup();
+            return Fail("Loaded root entity not found.");
+        }
+
+        const auto loadedHead = findPart(*loadedRoot, L"1:Head", L"HeadMesh");
+        const auto loadedBody = findPart(*loadedRoot, L"2:Body", L"BodyMesh");
+        if (loadedHead == entt::null || loadedBody == entt::null)
+        {
+            cleanup();
+            return Fail("Loaded scene lost part identities.");
+        }
+
+        auto& loadedWorld = loaded->GetRegistry();
+        const auto& loadedHeadRenderer = loadedWorld.get<Engine::SkinnedMeshRendererComponent>(loadedHead);
+        const auto& loadedHeadSource = loadedWorld.get<Engine::ModelSourceComponent>(loadedHead);
+        const auto& loadedBodyRenderer = loadedWorld.get<Engine::SkinnedMeshRendererComponent>(loadedBody);
+        const auto& loadedBodySource = loadedWorld.get<Engine::ModelSourceComponent>(loadedBody);
+
+        if (loadedHeadRenderer.meshHandle != headMesh || !loadedHeadSource.useModelMesh ||
+            loadedHeadRenderer.materialHandle != headMat || !loadedHeadSource.useModelMaterial)
+        {
+            cleanup();
+            return Fail("Unchanged head part was corrupted across round trip.");
+        }
+
+        if (loadedBodyRenderer.meshHandle != armorMesh || loadedBodySource.useModelMesh ||
+            loadedBodyRenderer.materialHandle != armorMat || loadedBodySource.useModelMaterial)
+        {
+            cleanup();
+            return Fail("Body part mesh/material overrides were not preserved across round trip.");
+        }
+
+        // 9. 원본 모델의 노드/메시 순서를 바꿔 재임포트 시뮬레이션
+        ModelCreateDesc reorderedDesc = modelDesc;
+        reorderedDesc.Meshes = { bodyMesh, headMesh };
+        reorderedDesc.Materials = { bodyMat, headMat };
+        reorderedDesc.MeshMaterialIndices = { 0, 1 };
+
+        Engine::ModelNode reorderedHeadNode = headNode;
+        reorderedHeadNode.MeshIndices = { 1 };
+
+        Engine::ModelNode reorderedBodyNode = bodyNode;
+        reorderedBodyNode.MeshIndices = { 0 };
+
+        reorderedDesc.Key = L"part-character-reordered-temp.bammodel.json";
+        reorderedDesc.Path = modelDesc.Path;
+        reorderedDesc.Nodes = { reorderedBodyNode, reorderedHeadNode };
+
+        auto tempHandle = rm.AddResource<Engine::Model>(reorderedDesc.Key, Engine::Model::Create(&reorderedDesc));
+        if (!tempHandle.IsValid() || Engine::IsFailure(rm.SaveToJsonFile(tempHandle.Get(), modelDesc.Path)))
+        {
+            if (tempHandle.IsValid()) static_cast<void>(rm.DestroyResource(tempHandle.GetRawHandle()));
+            cleanup();
+            return Fail("Failed to write reordered model JSON.");
+        }
+        static_cast<void>(rm.DestroyResource(tempHandle.GetRawHandle()));
+
+        const auto modelResolvedPath = Engine::PlatformPath::ResolveProjectRelative(modelDesc.Path);
+        if (Engine::IsFailure(charModel->Reload(modelResolvedPath)))
+        {
+            cleanup();
+            return Fail("Failed to reload reordered character model.");
+        }
+
+        bool refreshedChanged = false;
+        if (loaded->RefreshLinkedModelParts(*loadedRoot, refreshedChanged) != Engine::EResult::Success)
+        {
+            cleanup();
+            return Fail("RefreshLinkedModelParts failed after model reorder.");
+        }
+
+        if (loadedWorld.get<Engine::SkinnedMeshRendererComponent>(loadedBody).meshHandle != armorMesh ||
+            loadedWorld.get<Engine::ModelSourceComponent>(loadedBody).useModelMesh ||
+            loadedWorld.get<Engine::SkinnedMeshRendererComponent>(loadedBody).materialHandle != armorMat ||
+            loadedWorld.get<Engine::ModelSourceComponent>(loadedBody).useModelMaterial)
+        {
+            cleanup();
+            return Fail("Body overrides did not survive model node/mesh reordering.");
+        }
+
+        if (loadedWorld.get<Engine::SkinnedMeshRendererComponent>(loadedHead).meshHandle != headMesh ||
+            !loadedWorld.get<Engine::ModelSourceComponent>(loadedHead).useModelMesh ||
+            loadedWorld.get<Engine::SkinnedMeshRendererComponent>(loadedHead).materialHandle != headMat ||
+            !loadedWorld.get<Engine::ModelSourceComponent>(loadedHead).useModelMaterial)
+        {
+            cleanup();
+            return Fail("Head identity was corrupted after model node/mesh reordering.");
+        }
+
+        // 10. 모델 원본 메시 및 머티리얼로 복원
+        auto* loadedBodyEntity = loaded->FindEntity(loadedBody);
+        if (!loadedBodyEntity)
+        {
+            cleanup();
+            return Fail("Loaded body entity not found for restore.");
+        }
+
+        bool restoredMesh = false;
+        if (loaded->RestoreLinkedModelPartMesh(*loadedBodyEntity, restoredMesh) != Engine::EResult::Success ||
+            !restoredMesh || !loadedWorld.get<Engine::ModelSourceComponent>(loadedBody).useModelMesh ||
+            loadedWorld.get<Engine::SkinnedMeshRendererComponent>(loadedBody).meshHandle != bodyMesh)
+        {
+            cleanup();
+            return Fail("Failed to restore body part to reordered source model mesh.");
+        }
+
+        bool restoredMat = false;
+        if (loaded->RestoreLinkedModelPartMaterial(*loadedBodyEntity, restoredMat) != Engine::EResult::Success ||
+            !restoredMat || !loadedWorld.get<Engine::ModelSourceComponent>(loadedBody).useModelMaterial ||
+            loadedWorld.get<Engine::SkinnedMeshRendererComponent>(loadedBody).materialHandle != bodyMat)
+        {
+            cleanup();
+            return Fail("Failed to restore body part to reordered source model material.");
+        }
+
+        cleanup();
+        return true;
+    }
+
+    bool CheckSkinnedMeshRuntimeEquipmentAndTemporaryEffects()
+    {
+        auto& rm = Engine::ResourceManager::Get();
+
+        const std::wstring cleanupFiles[] = {
+            L"runtime-effect-skel.bamskel.json", L"runtime-iron.bammesh.json",
+            L"runtime-leather.bammesh.json", L"runtime-incompatible.bammesh.json",
+            L"runtime-shared.bammat.json", L"runtime-special.bammat.json"
+        };
+        const auto cleanup = [&cleanupFiles]()
+        {
+            for (const auto& path : cleanupFiles)
+            {
+                std::error_code ec;
+                std::filesystem::remove(path, ec);
+                std::filesystem::remove(Engine::PlatformPath::ResolveProjectRelative(path), ec);
+            }
+        };
+        cleanup();
+
+        // 1. 스켈레톤 준비
+        SkeletonCreateDesc skelDesc{};
+        skelDesc.Key = L"runtime-effect-skel.bamskel.json";
+        skelDesc.Path = L"runtime-effect-skel.bamskel.json";
+        Bone rootBone{};
+        rootBone.Name = L"RootBone";
+        rootBone.ParentIndex = -1;
+        skelDesc.Bones.push_back(rootBone);
+        const uint64 skinSignature = Engine::Skeleton::ComputeSkinBindingSignature(skelDesc.Bones);
+        auto skelHandle = rm.AddResource<Engine::Skeleton>(skelDesc.Key, Engine::Skeleton::Create(&skelDesc));
+        if (!skelHandle.IsValid())
+        {
+            cleanup();
+            return Fail("Failed to create skeleton for runtime effect test.");
+        }
+
+        // 2. 메시 생성
+        Engine::VertexPosition positions[3] = {
+            { { 0.0f, 0.0f, 0.0f } }, { { 1.0f, 0.0f, 0.0f } }, { { 0.0f, 1.0f, 0.0f } }
+        };
+        Engine::VertexSkinData skinData[3] = {
+            { { 0, 0, 0, 0 }, { 1.0f, 0.0f, 0.0f, 0.0f } },
+            { { 0, 0, 0, 0 }, { 1.0f, 0.0f, 0.0f, 0.0f } },
+            { { 0, 0, 0, 0 }, { 1.0f, 0.0f, 0.0f, 0.0f } }
+        };
+        uint32 indices[3] = { 0, 1, 2 };
+
+        const auto createMesh = [&](const std::wstring& key, uint64 signature, bool withSkin)
+            -> Engine::ResourceHandle<Engine::Mesh>
+        {
+            MeshCreateDesc desc{};
+            desc.Key = key;
+            desc.Path = key;
+            desc.Streams[(uint32)Engine::EMeshStream::Position] = { positions, 3, sizeof(Engine::VertexPosition) };
+            if (withSkin)
+                desc.Streams[(uint32)Engine::EMeshStream::SkinData] = { skinData, 3, sizeof(Engine::VertexSkinData) };
+            desc.IndexData = indices;
+            desc.IndexCount = 3;
+            desc.IndexStride = sizeof(uint32);
+            desc.SkinBindingSignature = signature;
+            auto handle = rm.AddResource<Engine::Mesh>(desc.Key, Engine::Mesh::Create(&desc));
+            if (handle.IsValid())
+                rm.SaveToJsonFile(handle.Get(), key);
+            return handle;
+        };
+
+        const auto ironMesh = createMesh(L"runtime-iron.bammesh.json", skinSignature, true);
+        const auto leatherMesh = createMesh(L"runtime-leather.bammesh.json", skinSignature, true);
+        const auto incompatibleMesh = createMesh(L"runtime-incompatible.bammesh.json", skinSignature + 888, true);
+        if (!ironMesh.IsValid() || !leatherMesh.IsValid() || !incompatibleMesh.IsValid())
+        {
+            cleanup();
+            return Fail("Failed to create meshes for runtime effect test.");
+        }
+
+        // 3. 머티리얼 생성 (공유 머티리얼 및 전용 머티리얼)
+        Engine::MaterialDesc matDesc{};
+        matDesc.CullMode = Engine::ECullMode::None;
+        const auto createMat = [&](const std::wstring& key, float roughness)
+            -> Engine::ResourceHandle<Engine::Material>
+        {
+            matDesc.Key = key;
+            matDesc.Path = key;
+            auto handle = rm.AddResource<Engine::Material>(matDesc.Key, Engine::Material::Create(&matDesc));
+            if (handle.IsValid())
+            {
+                handle->SetFloat("Roughness", roughness);
+                rm.SaveToJsonFile(handle.Get(), key);
+            }
+            return handle;
+        };
+
+        const auto sharedMat = createMat(L"runtime-shared.bammat.json", 0.5f);
+        const auto specialMat = createMat(L"runtime-special.bammat.json", 0.8f);
+        if (!sharedMat.IsValid() || !specialMat.IsValid())
+        {
+            cleanup();
+            return Fail("Failed to create materials for runtime effect test.");
+        }
+
+        // 4. 씬에 같은 머티리얼을 공유하는 두 캐릭터 엔티티 생성
+        ScenePtr scene(Engine::Scene::Create());
+        auto& world = scene->GetRegistry();
+
+        const auto entityA = AddSpatialEntity(*scene, 201, L"CharacterA", { 0.0f, 0.0f, 0.0f });
+        auto& compA = world.emplace<Engine::SkinnedMeshRendererComponent>(entityA);
+        compA.meshHandle = ironMesh;
+        compA.materialHandle = sharedMat;
+        compA.skeletonHandle = skelHandle;
+
+        const auto entityB = AddSpatialEntity(*scene, 202, L"CharacterB", { 2.0f, 0.0f, 0.0f });
+        auto& compB = world.emplace<Engine::SkinnedMeshRendererComponent>(entityB);
+        compB.meshHandle = ironMesh;
+        compB.materialHandle = sharedMat;
+        compB.skeletonHandle = skelHandle;
+
+        // 5. 초기 상태 검증: 둘 다 기본 철갑옷과 공유 머티리얼, 발광값 0
+        Engine::Mesh* meshA = nullptr;
+        Engine::MaterialInterface* matA = nullptr;
+        Engine::MaterialConstants constA{};
+        compA.ResolveRenderState(meshA, matA, constA);
+
+        Engine::Mesh* meshB = nullptr;
+        Engine::MaterialInterface* matB = nullptr;
+        Engine::MaterialConstants constB{};
+        compB.ResolveRenderState(meshB, matB, constB);
+
+        if (meshA != ironMesh.Get() || matA != sharedMat.Get() || constA.emissiveColor != glm::vec3(0.0f) ||
+            meshB != ironMesh.Get() || matB != sharedMat.Get() || constB.emissiveColor != glm::vec3(0.0f))
+        {
+            cleanup();
+            return Fail("Initial state of shared material characters was incorrect.");
+        }
+
+        // 6. 캐릭터 A에만 피격 발광 적용 (Red 발광, duration 1.0초, requestId 101)
+        Engine::SkinnedMaterialParameterOverride hitEffect{};
+        hitEffect.emissiveColor = glm::vec3(2.0f, 0.0f, 0.0f);
+        compA.ApplyParameterOverride(hitEffect, 1.0f, 101);
+
+        compA.ResolveRenderState(meshA, matA, constA);
+        compB.ResolveRenderState(meshB, matB, constB);
+
+        // A만 발광하고 B는 영향을 받지 않아야 함! (독립성 검증)
+        if (constA.emissiveColor != glm::vec3(2.0f, 0.0f, 0.0f) || constB.emissiveColor != glm::vec3(0.0f))
+        {
+            cleanup();
+            return Fail("Hit effect contaminated shared material instance across characters.");
+        }
+
+        // 7. 발광 도중 캐릭터 A의 런타임 갑옷 교체
+        // 7-a. 스켈레톤 비호환 메시 장착 시도 -> 거부 확인
+        if (compA.EquipRuntimeMesh(incompatibleMesh) != Engine::EResult::InvalidArgument ||
+            compA.runtimeEquipment.isEquipped)
+        {
+            cleanup();
+            return Fail("EquipRuntimeMesh accepted incompatible skeleton mesh.");
+        }
+
+        // 7-b. 호환 가죽갑옷으로 장착 교체
+        if (compA.EquipRuntimeMesh(leatherMesh, specialMat) != Engine::EResult::Success ||
+            !compA.runtimeEquipment.isEquipped)
+        {
+            cleanup();
+            return Fail("EquipRuntimeMesh failed to equip compatible armor mesh.");
+        }
+
+        compA.ResolveRenderState(meshA, matA, constA);
+        // 가죽갑옷과 전용 머티리얼로 교체되었으나, 피격 발광 효과는 그대로 유지되어야 함!
+        if (meshA != leatherMesh.Get() || matA != specialMat.Get() ||
+            constA.emissiveColor != glm::vec3(2.0f, 0.0f, 0.0f))
+        {
+            cleanup();
+            return Fail("Armor replacement during hit effect did not preserve ongoing effect.");
+        }
+
+        // 8. 연속 피격 및 만료 타이머/요청 ID 갱신 검증
+        compA.UpdateTemporaryEffects(0.5f);
+        if (!compA.temporaryEffect.isActive || compA.temporaryEffect.remainingTime > 0.6f)
+        {
+            cleanup();
+            return Fail("UpdateTemporaryEffects did not progress remaining time.");
+        }
+
+        // 새 피격 도착으로 만료 시각 1.0초 리셋 및 ID 102 갱신
+        compA.ApplyParameterOverride(hitEffect, 1.0f, 102);
+        if (compA.temporaryEffect.requestId != 102 || compA.temporaryEffect.remainingTime != 1.0f)
+        {
+            cleanup();
+            return Fail("Consecutive hit effect did not renew expiration timer or requestId.");
+        }
+
+        // 이전 요청 ID(101)로 해제 시도 -> ID 불일치로 해제되지 않아야 함!
+        compA.ClearTemporaryEffect(101);
+        if (!compA.temporaryEffect.isActive)
+        {
+            cleanup();
+            return Fail("Obsolete requestId prematurely cleared the renewed temporary effect.");
+        }
+
+        // 9. 피격 효과 만료 -> 발광은 꺼지고 새 갑옷(가죽갑옷)은 그대로 유지!
+        compA.UpdateTemporaryEffects(1.5f);
+        if (compA.temporaryEffect.isActive)
+        {
+            cleanup();
+            return Fail("Temporary effect did not expire after duration elapsed.");
+        }
+
+        compA.ResolveRenderState(meshA, matA, constA);
+        compB.ResolveRenderState(meshB, matB, constB);
+
+        if (meshA != leatherMesh.Get() || matA != specialMat.Get() ||
+            constA.emissiveColor != glm::vec3(0.0f))
+        {
+            cleanup();
+            return Fail("New armor was not preserved after hit effect ended.");
+        }
+
+        if (meshB != ironMesh.Get() || matB != sharedMat.Get() || constB.emissiveColor != glm::vec3(0.0f))
+        {
+            cleanup();
+            return Fail("Character B state was corrupted by Character A lifecycle.");
+        }
+
+        // 10. 씬 직렬화/역직렬화 후 수명 분리 검증 (런타임 장비는 씬에 저장되지 않아야 함)
+        archive::JsonArchive runtimeArchive;
+        if (!scene->WriteArchive(runtimeArchive))
+        {
+            cleanup();
+            return Fail("Failed to write scene archive with runtime equipment.");
+        }
+
+        Engine::Scene* reloadedRaw = nullptr;
+        if (!Engine::Scene::CreateFromArchive(runtimeArchive, reloadedRaw) || !reloadedRaw)
+        {
+            cleanup();
+            return Fail("Failed to reload scene with runtime equipment.");
+        }
+
+        ScenePtr reloaded(reloadedRaw);
+        auto* reloadedActorA = reloaded->FindEntityById(201);
+        if (!reloadedActorA)
+        {
+            cleanup();
+            return Fail("Reloaded actor A not found.");
+        }
+
+        const auto& reloadedCompA = reloaded->GetRegistry().get<Engine::SkinnedMeshRendererComponent>(
+            reloadedActorA->GetEntityHandle());
+        if (reloadedCompA.meshHandle != ironMesh || reloadedCompA.materialHandle != sharedMat ||
+            reloadedCompA.runtimeEquipment.isEquipped || reloadedCompA.temporaryEffect.isActive)
+        {
+            cleanup();
+            return Fail("Runtime equipment or temporary effect leaked into saved scene.");
+        }
+
+        cleanup();
+        return true;
+    }
 }
 
 int main()
@@ -1346,7 +1962,8 @@ int main()
         !CheckManagerAndWriteFailure() || !CheckEmptyScene() || !CheckHierarchyDepthAndIds() ||
         !CheckResourceRuntimeVersion() || !CheckShaderBinaryPaths() || !CheckMeshArchiveValidation() ||
         !CheckResourceReferenceReading() || !CheckRejectedResourceReferenceDocuments() ||
-        !CheckResourcesAndHandlesRoundTrip() || !CheckPrefabRoundTrip())
+        !CheckResourcesAndHandlesRoundTrip() || !CheckLinkedModelPartMeshOverrideAndReimportRoundTrip() ||
+        !CheckSkinnedMeshRuntimeEquipmentAndTemporaryEffects() || !CheckPrefabRoundTrip())
         return 1;
     std::cout << "Scene file, persistent ID, hierarchy, resource handle, resource archive, and prefab checks passed.\n";
     return 0;

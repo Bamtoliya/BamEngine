@@ -1,4 +1,4 @@
-﻿#include "Engine_Includes.h"
+#include "Engine_Includes.h"
 #include "ReflectionInspectorSupport.h"
 #include "ReflectionPropertyDrawer.h"
 #include "InputManager.h"
@@ -25,6 +25,16 @@ namespace Editor::Detail
     ImTextureID GetResourcePickerTextureID(Engine::RHITexture*)
     {
         return ImTextureID{};
+    }
+
+    bool DrawResourceContextMenu(const std::filesystem::path&)
+    {
+        return false;
+    }
+
+    bool RequestOpenResourceEditor(const std::filesystem::path&)
+    {
+        return false;
     }
 }
 

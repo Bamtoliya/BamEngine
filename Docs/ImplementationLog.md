@@ -2,6 +2,31 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-07] CTest 단위 검사 전체(29/29) 정상화 및 잔여 감사 결함(A01~A03) 해결 (우선순위 0·1 완료)
+
+- Area: Engine | Editor | Tools | Build | Docs
+- Type: Fix | Cleanup | Security | Docs
+- 기준 커밋: `c470483c`
+- 주요 변경 내역:
+  1. **CTest 회귀 4종 복구 및 전체 단위 검사(29/29) 정상화 [우선순위 0]**:
+     - `Graph::ImportData`: 트랜잭션 롤백, 버전 검증(`UnsupportedVersion`), 노드 ID 0/중복/범위 검증 복원으로 `GraphFoundationCheck` 통과.
+     - `GraphReflection`: 공통 빌트인 노드(`Math.MakeFloat3`, `Math.MakeFloat4`)에 CPU 리플렉션 실행 바인딩을 주입하는 경우에만 도메인 보존 결합(`RegisterOrUpdate`)을 허용하고, 리플렉션 간 중복 시도(`Check.Counter.Value.Set` 등)는 엄격히 차단하여 `GraphReflectionCheck`, `GraphExecutionCheck`, `ShaderGraphCheck` 동시 통과.
+     - `ReflectionInspectorCheck`: 리소스 피커 컨텍스트 메뉴용 `DrawResourceContextMenu`/`RequestOpenResourceEditor` 스텁 추가로 링크 오류 해결.
+     - `HierarchyEditorCheck`: 불필요한 무거운 의존성(`EntityClipboard`, `PrefabModeManager`)을 CMake 타깃에서 제거하고 최소 스텁으로 고립시켜 링크 오류 해결.
+     - `SceneArchiveCheck`: `Model` 리소스의 소멸자 접근 권한(`friend class ResourceManager`) 및 `rm.DestroyResource(tempModel)` 표준 경로 일원화, 타깃 `UNITY_BUILD OFF` 부여로 MSVC 유니티 중복 컴파일 해소.
+  2. **에셋 감시자 UTF-8·예외 경계 보완 (A03) [우선순위 1]**:
+     - `AssetHotReloadManager.cpp`의 `ProcessModifiedLocalization`에서 미사용 narrow `.string()` 제거 및 `scriptPath.wstring()` + `_wsystem` 호출로 비-ASCII/다국어 프로젝트 경로 안전성 확보.
+  3. **패키징 삭제 범위 보호 및 New-Item 호환성 교정 (A01·A02) [우선순위 1]**:
+     - `PackageClient.ps1`의 `$ForbiddenDirectories`에 소스 디렉터리 `"Client"` 추가.
+     - `[가드 4]` 프로젝트 저장소 외부 임의 디렉터리 삭제 방지 가드 구축.
+     - PowerShell 5.1 표준에 맞춰 `New-Item -ItemType Directory`의 `-LiteralPath`를 `-Path`로 교정.
+  4. **우선순위 및 작업 현황 문서 동기화 [우선순위 1]**:
+     - `Docs/DevelopmentPriorities.md` 11절을 최신 구현 상태로 갱신하여 완료된 우선순위 0·1 내역 기록 및 다음 기능 트랙(A~D) 제시.
+- 검증 결과:
+  - **CMake Debug 빌드 (`x64-debug`) 및 CTest 전체 29개 단위 검사**: 29/29 Passed (100% 통과).
+- 미검증 항목:
+  - `PackageClient.ps1` 실제 패키징 스크립트 실행 및 결과 폴더의 Standalone 클라이언트 바이너리 구동.
+
 ### [2026-11-07] 프로젝트 파일 트리 구조 정규화 및 도구·리소스 루트 정리
 
 - Area: Engine | Editor | Tools | Build | Resource | Docs

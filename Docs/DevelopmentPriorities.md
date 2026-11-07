@@ -510,37 +510,49 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
 
 코드 직접 수정·빌드·테스트 권한은 사용자 요청과 AGENTS.md를 따르며 이 문서가 실행 허가를 대신하지 않는다.
 
-## 11. 현재 작업 트리 기준 우선순위 재평가 (2026-11-06)
+## 11. 현재 작업 트리 기준 우선순위 재평가 (2026-11-07 갱신)
 
-근거는 [이번 점검 A01~A10](CodeDocumentationAudit-2026-11-06.md)이다. 10절의 과거 완료 기록보다 이 절의 잔여 범위와 작업 순서를 우선한다. 심각도는 피해의 크기, 아래 순서는 사용 경로·선행 조건을 포함한 추천이다. 소스 수정은 아직 수행하지 않았다.
+근거는 [2026-11-06 점검 A01~A10](CodeDocumentationAudit-2026-11-06.md) 및 2026-11-07 우선순위 0~1 구현이다. 10절의 과거 완료 기록보다 이 절의 잔여 범위와 작업 순서를 우선한다.
 
-### 11.1 먼저 처리할 작은 안정화
+### 11.1 선행 안정화 및 결함 해결 내역 [우선순위 0·1 완료]
 
-1. **에셋 감시자 UTF-8·예외 경계 — A03 / P0-F.** 감시 등록·콜백 변환, 공용 디바운스 큐의 `filesystem::path` 보존, 메인 스레드의 확장자 분류와 리로드 경로를 점검한다. 한글·이모지 파일과 다국어 프로젝트 루트에서 실제 이벤트를 확인한다.
-2. **RT 진단의 입력 차원 보호 — A04 / P1-E.** 미지원 큐브맵 입력 차단을 먼저 적용하고 필요 시 면 선택과 2D 변환을 추가한다. 모든 RT 및 채널 전환을 GPU에서 검증한다.
-3. **모델 편집·임포트 splitter 저장값 보존 — A05 / P1-B.** 표시값과 선호값을 분리한다. 좁은 창·복원·재열기 검증 후 위젯 분리와 대시보드 UI 확장을 진행한다.
-4. **타일 컬링 디스패치 범위 — S4 / A06 후속.** 큰 타일 버퍼를 재사용하더라도 현재 G-Buffer 위치 텍스처에 맞는 그룹만 실행한다. 해상도 축소·복원과 서로 다른 크기의 씬·게임 뷰에서 조명 일관성을 확인한다.
-
-각 단계는 별도로 변경하고 확인한다. Client 실행·배포 관련 작업은 빌드·패키징 단계에서 묶어 진행한다.
+1. **CTest 회귀 4종 복구 및 전체 단위 검사(29/29) 정상화 [완료] (2026-11-07)**:
+   - `Graph::ImportData`: 트랜잭션 롤백, 버전 검증(`UnsupportedVersion`), 노드 ID 0/중복/범위 검증 복원으로 `GraphFoundationCheck` 통과.
+   - `GraphReflection`: 공통 빌트인 노드(`Math.MakeFloat3`, `Math.MakeFloat4`)에 CPU 리플렉션 실행 바인딩을 주입하는 경우에만 도메인 보존 결합(`RegisterOrUpdate`)을 허용하고, 리플렉션 간 중복 시도(`Check.Counter.Value.Set` 등)는 엄격히 차단하여 `GraphReflectionCheck`, `GraphExecutionCheck`, `ShaderGraphCheck` 동시 통과.
+   - `ReflectionInspectorCheck`: 리소스 피커 컨텍스트 메뉴용 `DrawResourceContextMenu`/`RequestOpenResourceEditor` 스텁 추가로 링크 오류 해결.
+   - `HierarchyEditorCheck`: 불필요한 무거운 의존성(`EntityClipboard`, `PrefabModeManager`)을 CMake 타깃에서 제거하고 최소 스텁으로 고립시켜 링크 오류 해결.
+   - `SceneArchiveCheck`: `Model` 리소스의 소멸자 접근 권한(`friend class ResourceManager`) 및 `rm.DestroyResource(tempModel)` 표준 경로 일원화, 타깃 `UNITY_BUILD OFF` 부여로 중복 컴파일 해소.
+2. **에셋 감시자 UTF-8·예외 경계 — A03 / P0-F [완료] (2026-11-07)**:
+   - `TextureFileListener` 콜백의 `Utf8ToPath` 및 `try-catch` 경계 적용 완료.
+   - `ProcessModifiedLocalization`의 미사용 narrow `.string()` 제거 및 `scriptPath.wstring()` + `_wsystem` 호출로 비-ASCII/다국어 프로젝트 경로 안전성 확보 완료.
+3. **RT 진단의 입력 차원 보호 — A04 / P1-E [완료] (2026-11-06)**:
+   - `ChannelFilter::CanSampleAsTexture2D` 플래그 검사(2D, 1-Array, Non-MSAA, Sampler), `BaseViewportPanel`의 미지원 큐브맵(`PointShadowDepth`) 2D 오버레이 차단 및 안내 문구 표시 완료.
+4. **모델 편집·임포트 splitter 저장값 보존 — A05 / P1-B [완료] (2026-11-06)**:
+   - `ModelEditor`, `ModelImportModal`, `ConsolePanel`에서 `Editor::DrawSidebarLayout` 및 드래그 상태 조건 분기를 통해 표시 클램프와 저장 선호 폭/높이 분리 완료.
+5. **타일 컬링 디스패치 범위 — S4 / A06 후속 [완료] (2026-11-06)**:
+   - `LightManager::DispatchLightCulling`에서 버퍼 할당 크기가 아닌 실제 G-Buffer 위치 텍스처 크기(`rtWidth`, `rtHeight`) 기준으로 디스패치 그룹 수 계산 일치 완료.
+6. **패키징 삭제 범위 보호 및 New-Item 수정 — A01·A02 / F03 [완료] (2026-11-07)**:
+   - `PackageClient.ps1`의 ``에 소스 디렉터리 `"Client"` 추가.
+   - `[가드 4]` 프로젝트 저장소 외부 임의 디렉터리 삭제 방지 가드 구축.
+   - PowerShell 표준에 맞춰 `New-Item -ItemType Directory`의 `-LiteralPath`를 `-Path`로 교정 완료.
+7. **에셋 압축률 왜곡 원인 제거 — A07 [완료] (2026-11-07)**:
+   - 비정상 92바이트 PNG 파일(`Resources/rgba2x2*`) 제거 완료.
 
 ### 11.2 사용 조건에 따라 앞당길 작업
 
-- **다수 광원 지원 확장 — A06/F10.** 현행 씬 광원 업로드 상한은 32개다. 이 상한을 확장할 때 CPU 버퍼 용량·셰이더 순회 범위와 타일당 256개 초과 계측·폴백을 함께 검증한다.
-- **재임포트 작업**: 현재 미커밋 변경의 Overwrite/SaveToFile 조합, 기존 핸들 유지, 중간 파일 저장/부모 머티리얼 실패를 확인한다. 정적 검토만으로 다중 파일 트랜잭션 완료를 선언하지 않는다.
+- **다수 광원 지원 확장 — A06 본체 / F10**: 현행 씬 광원 업로드 상한은 32개다. 이 상한을 확장할 때 CPU 버퍼 용량·셰이더 순회 범위와 타일당 256개 초과 계측·폴백을 함께 검증한다.
+- **재임포트 작업**: Overwrite/SaveToFile 조합, 기존 핸들 유지, 중간 파일 저장/부모 머티리얼 실패를 확인한다. 정적 검토만으로 다중 파일 트랜잭션 완료를 선언하지 않는다.
 - **2D 제작 예제**: 로그에 남은 구형 sprite/texture 로드 실패의 현재 재현 여부를 먼저 확인한다. 현행 로더 문제와 오래된 샘플 데이터 문제를 분리한 뒤 Engine 14절 L의 Simple/Filled 또는 기본 TileMap 중 필요한 작은 예제로 진행한다.
-- **Client 빌드·패키징 단계까지 보류 — A01·A02·A08.** 배포 작업을 시작할 때 관리 출력 범위 제한과 삭제 없는 경로 판정부터 진행한다. 필수 입력 사전 검사, 디렉터리 생성과 staging 교체를 보완한 뒤 설정 누락 정책, 시작 매니페스트·에셋 루트, 필수 자원 수집·저장소 밖 실행을 같은 단계에서 검증한다.
 
-### 11.3 안정화 다음 기능 선택
+### 11.3 안정화 다음 기능 선택 (차기 4개 트랙)
 
-- **기존 기능의 완료 시나리오**: 애니메이터 레이어·2D 블렌드 저장/재열기, 스플라인 편집/Undo/Redo/PIE, 실제 모델 재임포트 등 이미 구현한 사용 경로의 남은 검증을 먼저 좁힌다. 과거 단위 검사 통과를 전체 UI/GPU 완료로 확대하지 않는다.
-- **텍스처 품질 경로**: 원거리 텍스처 문제가 실제 목표 장면에서 확인되면 Render S2-D의 다중 서브리소스 업로드와 밉 체인부터 진행한다. BC 압축 베이킹은 그 다음이며 정확한 메모리·시간 측정을 남긴다. 자동 메시 LOD는 별도의 기하 비용이 확인될 때 선택한다.
-- **에셋 분리 — A10**: 경로·URI·호환 계약을 먼저 검증하고 파일 이동은 작은 묶음으로 뒤에 진행한다. 기존 PlatformPath/ResourceManager 소비 경로를 확장하며 중복 경로 서비스를 만들지 않는다. 전체 폴더 이동은 새 기능의 일괄 선행 조건이 아니다.
-- **2D 그리기/타일맵**: 기존에 작성된 Engine 14절 L 계획을 유지한다. Fill/9-slice와 기본 셀 배치는 독립적으로 가능하고 자동 타일은 셀 편집·저장 이후다.
-- **후순위**: ImGui 23절 대시보드·24절 위젯 분리, 상태 머신 캔버스 마이그레이션, 고급 RPC/예측, GPU 파티클·Bindless·GI는 현재 결함 또는 구체적 콘텐츠/측정 요구가 없는 한 위 안정화보다 뒤에 둔다. 장기 목표는 삭제하지 않는다.
+- **트랙 A (렌더링 품질 — S2-D)**: 텍스처 밉맵(Mipmap) 체인 생성 및 RHI 다중 서브리소스 업로드 (`stb_image_resize2` 기반 CPU 밉맵 생성 및 다중 서브리소스 순회 업로드).
+- **트랙 B (모델 파이프라인 — InteractiveModelImport Phase 5)**: `meshoptimizer`(`meshopt_simplify`) 기반 자동 메시 LOD 생성 파이프라인.
+- **트랙 C (에셋 아키텍처 — ResourceAndAssetSeparation Phase 1~2)**: 가상 마운트 URI(`Engine://`, `Project://`) 경로 해석 계층 및 단위 테스트 구축 (물리 폴더 이동 전 선행).
+- **트랙 D (2D 제작 워크플로 — Engine 14절 L)**: 스프라이트 Fill / 9-Slice 또는 기본 2D 타일맵.
 
 ### 11.4 상태·검증 기록 규칙
 
-- A07 성능 표현과 A08/A09 문서 불일치는 이번 문서 수정으로 정정했다. 이는 관련 런타임 결함 수정이나 성능 검증 완료가 아니다.
-- 로캘 감사는 634개 파일/2,219개 키에서 위반 없음. 새 UI는 기존 키 재사용 또는 Editor.csv/Engine.csv 원본에 추가하고, 명령 단축키는 ShortcutManager에 등록한다. 키 중복·동적 힌트·언어 전환과 UI 문맥을 해당 작업에서 확인한다.
-- 기준 커밋, 미커밋 범위, 구성, 검사 이름과 실제 실행 개수, 실패 시나리오, UI/GPU 미검증을 기록한다. Debug LastTest의 GraphExecutionCheck 한 건을 전체 29개 통과로 표시하지 않는다.
+- 2026-11-07 기준 CMake Debug 빌드 및 CTest 전체 29개 테스트(29/29 Passed) 100% 통과 확인 완료.
+- 기준 커밋, 미커밋 범위, 구성, 검사 이름과 실제 실행 개수, 실패 시나리오, UI/GPU 미검증을 기록한다.
 - 소스 전면 이동·싱글턴 전면 교체·모든 문서의 장기 목표 구현을 완료 조건으로 추가하지 않는다.

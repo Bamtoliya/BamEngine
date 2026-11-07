@@ -1,4 +1,4 @@
-﻿#include "GraphSystem.h"
+#include "GraphSystem.h"
 #include "GraphFile.h"
 #include "GraphReflection.h"
 #include "ReflectionRegistry.h"
@@ -358,7 +358,7 @@ void GraphSystem::ReloadReflectedNodes(const std::vector<Scene*>& activeScenes)
 
 	// 1. 전역 노드 레지스트리의 리플렉션 노드 재생성
 	m_Registry.ClearReflectedNodes();
-	const auto reflectDiag = RegisterReflectedGraphNodes(m_Registry, reflection);
+	const auto reflectDiag = RegisterReflectedGraphNodes(m_Registry, reflection, true);
 	if (!reflectDiag.Succeeded())
 	{
 		BAM_LOG(Error, "GraphSystem", "HotSwap", "RegisterReflectedGraphNodes failed: {}", reflectDiag.Message);

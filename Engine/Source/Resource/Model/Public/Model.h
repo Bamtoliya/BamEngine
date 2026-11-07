@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "Resource.h"
 #include "ResourceHandle.h"
@@ -50,6 +50,7 @@ class ENGINE_API Model : public Resource
 	REFLECT_CLASS()
 	DECLARE_RESOURCE(Model)
 	using DESC = ModelCreateDesc;
+	friend class ResourceManager;
 #pragma region Constrcutor&Destructor
 private:
 	Model() : Resource(EResourceType::Model) {}

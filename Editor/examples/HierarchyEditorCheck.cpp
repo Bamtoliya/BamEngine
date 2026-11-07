@@ -1,14 +1,27 @@
-﻿#include "Engine_Includes.h"
+#include "Engine_Includes.h"
 #include "EntityHierarchyView.h"
 #include "Scene.h"
 #include "CoreComponents.h"
 #include "TransformSystem.h"
 #include "LocalizationManager.h"
 #include "InputManager.h"
+#include "EntityClipboard.h"
+#include "PrefabModeManager.h"
 #include <archive/JsonArchive.h>
 #include <imgui.h>
 #include <iostream>
 #include <memory>
+
+namespace Editor
+{
+    bool EntityClipboard::HasData() { return false; }
+
+    PrefabModeManager::~PrefabModeManager() = default;
+    EResult PrefabModeManager::Initialize(void*) { return EResult::Success; }
+    void PrefabModeManager::Free() {}
+    bool PrefabModeManager::EnterPrefabMode(const std::filesystem::path&) { return false; }
+    IMPLEMENT_LAZY_SINGLETON(PrefabModeManager)
+}
 
 namespace
 {

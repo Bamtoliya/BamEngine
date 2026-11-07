@@ -1,5 +1,7 @@
-﻿#include "Graph.h"
+#include "Graph.h"
 #include "GraphValue.h"
+#include <unordered_set>
+#include <utility>
 
 const GraphNode* Graph::FindNode(GraphNodeId id) const
 {
@@ -213,15 +215,55 @@ GraphData Graph::ExportData() const
 
 GraphDiagnostic Graph::ImportData(const GraphRegistry& registry, const GraphData& data)
 {
-	if (data.Domain != m_Domain)
-		return { EGraphError::UnsupportedDomain, 0, {}, 0, "Graph data domain does not match this graph." };
-	m_NextNodeId = data.NextNodeId;
-	m_NextLinkId = data.NextLinkId;
-	m_Nodes = data.Nodes;
-	m_Links = data.Links;
-	m_Variables = data.Variables;
-	const auto errors = Validate(registry);
-	return errors.empty() ? GraphDiagnostic{} : errors.front();
+	if (data.Version != GraphData::CurrentVersion)
+		return { EGraphError::UnsupportedVersion, 0, {}, 0, "Unsupported graph data version." };
+
+	std::unordered_set<GraphNodeId> nodeIds;
+	for (const auto& node : data.Nodes)
+	{
+		if (node.Id == 0)
+			return { EGraphError::InvalidDocument, node.Id, {}, 0, "Node ID must be non-zero." };
+
+		if (!nodeIds.insert(node.Id).second)
+			return { EGraphError::DuplicateNodeId, node.Id, {}, 0, "Duplicate node ID." };
+
+		if (data.NextNodeId != 0 && node.Id >= data.NextNodeId)
+			return { EGraphError::InvalidDocument, node.Id, {}, 0, "Next node ID must exceed existing node IDs." };
+	}
+
+	std::unordered_set<GraphLinkId> linkIds;
+	for (const auto& link : data.Links)
+	{
+		if (link.Id == 0)
+			return { EGraphError::InvalidDocument, 0, {}, link.Id, "Link ID must be non-zero." };
+
+		if (!linkIds.insert(link.Id).second)
+			return { EGraphError::DuplicateLinkId, 0, {}, link.Id, "Duplicate link ID." };
+
+		if (data.NextLinkId != 0 && link.Id >= data.NextLinkId)
+			return { EGraphError::InvalidDocument, 0, {}, link.Id, "Next link ID must exceed existing link IDs." };
+	}
+
+	Graph candidate(data.Domain);
+	candidate.m_NextNodeId = data.NextNodeId;
+	candidate.m_NextLinkId = data.NextLinkId;
+	candidate.m_Nodes = data.Nodes;
+	candidate.m_Links = data.Links;
+	candidate.m_Variables = data.Variables;
+
+	for (const auto& diagnostic : candidate.Validate(registry))
+	{
+		if (diagnostic.Code != EGraphError::MissingRequiredInput)
+			return diagnostic;
+	}
+
+	m_Nodes.swap(candidate.m_Nodes);
+	m_Links.swap(candidate.m_Links);
+	m_Variables.swap(candidate.m_Variables);
+	m_Domain = candidate.m_Domain;
+	m_NextNodeId = candidate.m_NextNodeId;
+	m_NextLinkId = candidate.m_NextLinkId;
+	return {};
 }
 
 const GraphVariable* Graph::FindVariable(const std::string& name) const
