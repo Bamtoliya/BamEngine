@@ -29,6 +29,8 @@ public:
 #pragma region Getter
 public:
 	const vector<Bone>& GetBones() const { return m_Bones; }
+	[[nodiscard]] static uint64 ComputeSkinBindingSignature(std::span<const Bone> bones);
+	[[nodiscard]] uint64 GetSkinBindingSignature() const { return ComputeSkinBindingSignature(m_Bones); }
 	const unordered_map<wstring, uint32>& GetBoneMap() const { return m_BoneMap; }
 	uint32 GetBoneIndex(const wstring& boneName) const;
 	wstring GetBoneName(uint32 boneIndex) const;

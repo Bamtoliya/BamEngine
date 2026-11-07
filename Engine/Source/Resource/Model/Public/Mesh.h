@@ -5,7 +5,7 @@
 #include "Vertex.h"
 
 BEGIN(Engine)
-
+class Skeleton;
 ENUM()
 enum class EMeshFlag : uint8
 {
@@ -50,6 +50,8 @@ struct MeshCreateDesc : public ResourceCreateDesc
 	vec3 BoundingBoxMax = { 0.0f, 0.0f, 0.0f };
 
 	EMeshFlag Flags = { EMeshFlag::KeepRawData };
+
+	uint64 SkinBindingSignature = 0;
 };
 
 
@@ -136,6 +138,7 @@ public:
 	const MeshRaycastBVH& GetRaycastBVH() const;
 public:
 	[[nodiscard]] bool IsSkinned() const { return m_VertexBuffers[(uint32)EMeshStream::SkinData] != nullptr; }
+	[[nodiscard]] bool IsSkinCompatibleWith(const Skeleton& skeleton) const;
 #pragma endregion
 
 #pragma region Setter
@@ -203,6 +206,9 @@ protected:
 	vec3 m_BoundingBoxMin = { 0.0f, 0.0f, 0.0f };
 	PROPERTY(CATEGORY("PROP_INFORMATION"), READONLY)
 	vec3 m_BoundingBoxMax = { 0.0f, 0.0f, 0.0f };
+
+	PROPERTY(READONLY, ALLOW_MISSING)
+	uint64 m_SkinBindingSignature = 0;
 
 	uint32 m_ActiveBufferCount = { 0 };
 	vector<InputLayoutDesc> m_CachedInputLayouts;

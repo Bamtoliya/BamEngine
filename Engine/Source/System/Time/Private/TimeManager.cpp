@@ -37,7 +37,8 @@ void TimeManager::Update()
         const f32 targetFrameTime = 1.0f / static_cast<f32>(m_TargetFPS);
         if (elapsedTime < targetFrameTime)
         {
-            const auto sleepDuration = std::chrono::duration<f32>(targetFrameTime - elapsedTime);
+            const auto sleepDuration = std::chrono::duration_cast<std::chrono::steady_clock::duration>(
+                std::chrono::duration<double>(targetFrameTime - elapsedTime));
             std::this_thread::sleep_for(sleepDuration);
             currentTime = std::chrono::steady_clock::now();
             elapsedTime = std::chrono::duration<f32>(currentTime - m_LastTime).count();

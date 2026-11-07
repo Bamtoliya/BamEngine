@@ -26,6 +26,12 @@ struct ENGINE_API ModelNode
 
 	PROPERTY()
 	vector<uint32> MeshIndices;
+
+	PROPERTY(ALLOW_MISSING)
+	wstring SourceNodeKey;
+
+	PROPERTY(ALLOW_MISSING)
+	vector<wstring> MeshAttachmentKeys;
 };
 
 struct ModelCreateDesc : public ResourceCreateDesc

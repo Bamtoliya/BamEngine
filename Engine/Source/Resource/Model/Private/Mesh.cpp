@@ -101,7 +101,7 @@ EResult Mesh::Initialize(void* arg)
 
 	// 5. Bind용 캐싱 배열 구축
 	RebuildCachedBuffers();
-
+	m_SkinBindingSignature = desc->SkinBindingSignature;
 	return EResult::Success;
 }
 
@@ -119,6 +119,7 @@ Mesh* Mesh::Create(void* arg)
 
 void Mesh::Free()
 {
+	m_SkinBindingSignature = 0;
 	++m_GeometryVersion;
 	m_RaycastBVH = {};
 	m_RaycastBVHVersion = 0;
@@ -340,6 +341,8 @@ EResult Mesh::SetStreamBuffer(EMeshStream stream, void* data, uint32 count, uint
 	m_RawData[idx] = std::move(raw);
 	m_StreamCounts[idx] = count;
 	m_StreamStrides[idx] = stride;
+	if (stream == EMeshStream::SkinData)
+		m_SkinBindingSignature = 0;
 
 	if (positionStream)
 	{
@@ -386,6 +389,7 @@ EResult Mesh::SetIndexBuffer(void* data, uint32 indexCount, uint32 stride)
 archive::ArchiveResult Mesh::ReadArchive(const archive::IArchive& ar)
 {
 	Mesh candidate(*this);
+	candidate.m_SkinBindingSignature = 0;
 
 	// 복사된 GPU 포인터의 소유권은 원본에 남긴다.
 	for (auto& buffer : candidate.m_VertexBuffers) buffer = nullptr;
@@ -419,7 +423,7 @@ archive::ArchiveResult Mesh::ReadArchive(const archive::IArchive& ar)
 	swap(m_BoundingBoxMax, candidate.m_BoundingBoxMax);
 	swap(m_ActiveBufferCount, candidate.m_ActiveBufferCount);
 	swap(m_CachedInputLayouts, candidate.m_CachedInputLayouts);
-
+	swap(m_SkinBindingSignature, candidate.m_SkinBindingSignature);
 	++m_GeometryVersion;
 	return {};
 }
@@ -500,3 +504,11 @@ void Mesh::RebuildCachedBuffers()
 	}
 }
 #pragma endregion
+
+bool Engine::Mesh::IsSkinCompatibleWith(const Skeleton& skeleton) const
+{
+	const auto skinCount = GetStreamCount(EMeshStream::SkinData);
+	return m_SkinBindingSignature != 0 && skinCount != 0 && skinCount == GetVertexCount() &&
+		GetStreamStride(EMeshStream::SkinData) == sizeof(VertexSkinData) &&
+		m_SkinBindingSignature == skeleton.GetSkinBindingSignature();
+}

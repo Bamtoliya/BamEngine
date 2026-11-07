@@ -151,6 +151,11 @@ namespace
             auto result = archive_reflection::ReadObject(ar, key, *entry.ReflectionType, candidate, &registry, codecs);
             if (!result)
                 return result;
+            if constexpr (std::is_same_v<T, Engine::JointComponent> || std::is_same_v<T, Engine::Joint2DComponent>)
+            {
+                if (candidate.ConnectedEntity != entt::null)
+                    return { archive::ArchiveErrorCode::UnsupportedType, "ConnectedEntity" };
+            }
             if (!ValidateComponent(candidate))
                 return { archive::ArchiveErrorCode::InvalidValue, std::string(key) };
 
@@ -336,7 +341,8 @@ bool ReflectionRegistry::RegisterComponentOperations()
             if (info == nullptr)
                 return false;
             constexpr bool addable = !std::is_same_v<T, IDComponent> && !std::is_same_v<T, WorldTransformComponent> &&
-                !std::is_same_v<T, UIInteractionStateComponent>;
+                !std::is_same_v<T, UIInteractionStateComponent> && !std::is_same_v<T, ModelInstanceComponent> &&
+                !std::is_same_v<T, ModelSourceComponent>;
             entries.push_back(MakeComponentEntry<T>(m_Registry, MetadataText(*info, "DisplayName", info->QualifiedName),
                 MetadataText(*info, "Category", "Core"), nullptr, addable));
             return true;
@@ -490,6 +496,13 @@ archive::ArchiveResult ReflectionRegistry::WriteComponent(archive::IArchive& ar,
     auto result = archive_reflection::IsSerializationEnabled(entry->ReflectionType->Metadata, key, enabled);
     if (!result || !enabled)
         return result;
+    if ((type == std::type_index(typeid(JointComponent)) &&
+        world.get<JointComponent>(entity).ConnectedEntity != entt::null) ||
+        (type == std::type_index(typeid(Joint2DComponent)) &&
+            world.get<Joint2DComponent>(entity).ConnectedEntity != entt::null))
+    {
+        return { archive::ArchiveErrorCode::UnsupportedType, "ConnectedEntity" };
+    }
     codecs = codecs != nullptr ? codecs : &m_Codecs;
     if (type == std::type_index(typeid(TransformComponent)))
     {

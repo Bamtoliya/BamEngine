@@ -644,6 +644,13 @@ namespace
         modelDesc.Materials = { matHandle };
         modelDesc.Skeleton = skelHandle;
         modelDesc.Animations = { animHandle };
+        Engine::ModelNode node;
+        node.Name = L"Body";
+        node.SourceNodeKey = L"4:Body";
+        node.MeshIndices = { 0 };
+        node.MeshAttachmentKeys = { L"BodyMesh" };
+        modelDesc.Nodes.push_back(std::move(node));
+        modelDesc.MeshMaterialIndices = { 0 };
         auto modelHandle = rm.AddResource<Engine::Model>(modelDesc.Key, Engine::Model::Create(&modelDesc));
         if (!modelHandle.IsValid() || Engine::IsFailure(rm.SaveToJsonFile(modelHandle.Get(), L"test-model.bammodel.json")))
             return Fail("Model creation or JSON archive save failed.");
@@ -983,6 +990,79 @@ namespace
             restoredSkinned.skeletonHandle->GetBoneIndex(L"RootBone") != 0 ||
             restoredShape == nullptr || !restoredShape->MeshHandle.IsValid())
             return Fail("Restored scene ResourceHandle components did not preserve referenced assets.");
+
+        ScenePtr linked(Engine::Scene::Create());
+        const auto originalMaterial = reloadedMaterials[0];
+        const auto newMaterial = restoredStatic.materialHandle;
+
+        Engine::Entity* rootA = nullptr;
+        Engine::Entity* rootB = nullptr;
+        if (!linked || linked->InstantiateLinkedModel(reloadedModel, originalMaterial, rootA) != Engine::EResult::Success ||
+            linked->InstantiateLinkedModel(reloadedModel, originalMaterial, rootB) != Engine::EResult::Success ||
+            !rootA || !rootB)
+            return Fail("Linked model placement failed.");
+
+        const auto findBodyMesh = [](const Engine::Entity& root) -> entt::entity
+            {
+                const auto& world = root.GetScene()->GetRegistry();
+                const auto* rootLink = world.try_get<Engine::HierarchyComponent>(root.GetEntityHandle());
+                if (!rootLink || rootLink->children.size() != 1 || !world.valid(rootLink->children[0]))
+                    return entt::null;
+
+                const auto* nodeLink = world.try_get<Engine::HierarchyComponent>(rootLink->children[0]);
+                if (!nodeLink || nodeLink->children.size() != 1 || !world.valid(nodeLink->children[0]))
+                    return entt::null;
+
+                const auto mesh = nodeLink->children[0];
+                const auto* source = world.try_get<Engine::ModelSourceComponent>(mesh);
+                return source && source->isMeshAttachment && source->sourceNodeKey == L"4:Body" &&
+                    source->meshAttachmentKey == L"BodyMesh" && world.all_of<Engine::SkinnedMeshRendererComponent>(mesh)
+                    ? mesh : entt::null;
+            };
+
+        const auto partA = findBodyMesh(*rootA);
+        const auto partB = findBodyMesh(*rootB);
+        if (partA == entt::null || partB == entt::null || partA == partB)
+            return Fail("Linked model part identities were not created.");
+
+        auto& linkedWorld = linked->GetRegistry();
+        linkedWorld.get<Engine::ModelSourceComponent>(partB).useModelMaterial = false;
+        if (newMaterial == originalMaterial || reloadedModel->SetMaterial(0, newMaterial) != Engine::EResult::Success)
+            return Fail("Could not change the source model material for the test.");
+
+        bool changedA = false;
+        bool changedB = false;
+        if (linked->RefreshLinkedModelParts(*rootA, changedA) != Engine::EResult::Success || !changedA ||
+            linked->RefreshLinkedModelParts(*rootB, changedB) != Engine::EResult::Success || changedB ||
+            linkedWorld.get<Engine::SkinnedMeshRendererComponent>(partA).materialHandle != newMaterial ||
+            linkedWorld.get<Engine::SkinnedMeshRendererComponent>(partB).materialHandle != originalMaterial)
+            return Fail("Model refresh did not preserve the per-instance material override.");
+
+        const auto rootBId = linkedWorld.get<Engine::IDComponent>(rootB->GetEntityHandle()).id;
+        archive::JsonArchive linkedArchive;
+        Engine::Scene* reopenedRaw = nullptr;
+        if (!linked->WriteArchive(linkedArchive) || !Engine::Scene::CreateFromArchive(linkedArchive, reopenedRaw) || !reopenedRaw)
+            return Fail("Linked model scene round trip failed.");
+
+        ScenePtr reopened(reopenedRaw);
+        auto* reopenedRoot = reopened->FindEntityById(rootBId);
+        const auto reopenedPart = reopenedRoot ? findBodyMesh(*reopenedRoot) : entt::null;
+        if (reopenedPart == entt::null)
+            return Fail("Linked model part identity did not survive the scene round trip.");
+
+        auto& reopenedWorld = reopened->GetRegistry();
+        auto* partEntity = reopened->FindEntity(reopenedPart);
+        bool restoredMaterial = false;
+        if (!partEntity || reopenedWorld.get<Engine::ModelSourceComponent>(reopenedPart).useModelMaterial ||
+            reopenedWorld.get<Engine::SkinnedMeshRendererComponent>(reopenedPart).materialHandle != originalMaterial ||
+            reopened->RestoreLinkedModelPartMaterial(*partEntity, restoredMaterial) != Engine::EResult::Success ||
+            !restoredMaterial || !reopenedWorld.get<Engine::ModelSourceComponent>(reopenedPart).useModelMaterial ||
+            reopenedWorld.get<Engine::SkinnedMeshRendererComponent>(reopenedPart).materialHandle != newMaterial)
+            return Fail("The restored part could not return to the source model material.");
+
+        if (reloadedModel->SetMaterial(0, originalMaterial) != Engine::EResult::Success)
+            return Fail("Could not restore the test model material.");
+
         return true;
     }
 

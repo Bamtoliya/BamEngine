@@ -13,6 +13,7 @@
 #include "ResourceManager.h"
 #include "FrustumCuller.h"
 #include "SplineMeshDeformCache.h"
+#include "AnimationSceneQuery.h"
 
 namespace
 {
@@ -328,17 +329,6 @@ void MeshRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& 
 
         // 3. 스킨드 메시(SkinnedMeshRendererComponent) 순회 및 렌더러 제출
         auto& world = scene->GetRegistry();
-        auto findAnimatorInAncestors = [&world](entt::entity startEntity) -> const AnimatorComponent*
-            {
-                entt::entity cur = startEntity;
-                while (cur != entt::null && world.valid(cur))
-                {
-                    if (const auto* anim = world.try_get<AnimatorComponent>(cur)) return anim;
-                    const auto* hierarchy = world.try_get<HierarchyComponent>(cur);
-                    cur = hierarchy ? hierarchy->parent : entt::null;
-                }
-                return nullptr;
-            };
 
         auto skinnedView = world.view<SkinnedMeshRendererComponent, WorldTransformComponent, FlagComponent>();
         for (auto [entity, skinnedRenderer, worldTransform, flag] : skinnedView.each())
@@ -350,7 +340,8 @@ void MeshRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& 
             if (!mesh || !material) continue;
 
             // 자신 또는 부모(루트) 계층의 AnimatorComponent에서 계산된 본 행렬 목록 참조
-            const auto* animator = findAnimatorInAncestors(entity);
+            const auto animatorEntity = FindAnimatorEntityInAncestors(world, entity);
+            const auto* animator = animatorEntity != entt::null ? world.try_get<AnimatorComponent>(animatorEntity) : nullptr;
             const std::vector<mat4>* boneMatrices = (animator && !animator->finalBoneMatrices.empty())
                 ? &animator->finalBoneMatrices : nullptr;
 

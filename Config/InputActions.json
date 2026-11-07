@@ -39,7 +39,7 @@
                     },
                     {
                         "ActionId": "MoveForward",
-                        "Key": "Up"
+                        "Key": "W"
                     },
                     {
                         "ActionId": "MoveBackward",
@@ -47,11 +47,11 @@
                     },
                     {
                         "ActionId": "MoveRight",
-                        "Key": "A"
+                        "Key": "D"
                     },
                     {
                         "ActionId": "MoveLeft",
-                        "Key": "D"
+                        "Key": "A"
                     }
                 ],
                 "Id": "Gameplay"

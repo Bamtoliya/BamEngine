@@ -319,7 +319,12 @@ EResult LightManager::DispatchLightCulling(const CameraBuffer& cameraBuffer, RHI
 		return EResult::Fail;
 
 	// 5. 디스패치 실행 (16x16 픽셀 타일 격자)
-	if (IsFailure(m_RHI->Dispatch(m_TileCountX, m_TileCountY, 1)))
+	// 셰이더의 16×16 타일 크기와 일치해야 합니다.
+	constexpr uint32 tileSize = 16u;
+	const uint32 dispatchTilesX = (rtWidth + tileSize - 1u) / tileSize;
+	const uint32 dispatchTilesY = (rtHeight + tileSize - 1u) / tileSize;
+
+	if (IsFailure(m_RHI->Dispatch(dispatchTilesX, dispatchTilesY, 1)))
 		return EResult::Fail;
 
 	// 6. UAV 배리어 동기화 (컴퓨트 쓰기 완료 후 픽셀 셰이더 읽기 전환)

@@ -14,6 +14,7 @@ END
 
 BEGIN(Engine)
 class Model;
+class Mesh;
 class MaterialInterface;
 
 enum class EntityReparentResult { Success, Unchanged, InvalidEntity, InvalidHierarchy, Cycle, InvalidTransform, DepthLimit };
@@ -109,9 +110,18 @@ public:
 		return ReflectionRegistry::Get().ForEachComponent(m_LocalRegistry, entity.GetEntityHandle(), visitor);
 	}
 	[[nodiscard]] EResult InstantiateModel(const Model& model, const ResourceHandle<MaterialInterface>& material, Entity*& outRoot);
+	[[nodiscard]] EResult InstantiateLinkedModel(const ResourceHandle<Model>& sourceModel, const ResourceHandle<MaterialInterface>& material, Entity*& outRoot);
+	[[nodiscard]] EResult RefreshLinkedModelParts(const Entity& root, bool& changed);
+	[[nodiscard]] EResult RestoreLinkedModelPartMaterial(const Entity& part, bool& changed);
+	[[nodiscard]] EResult RestoreLinkedModelPartMesh(const Entity& part, bool& changed);
+	[[nodiscard]] EResult ReplaceLinkedSkinnedPartMesh(const Entity& part, const ResourceHandle<Mesh>& replacement);
 private:
+	enum class EModelPartRefresh { All, RestoreMaterial, RestoreMesh };
 	std::vector<entt::entity> CreateEntities(std::size_t count);
 	Entity& CreateEntityWithId(uint64 id);
+	EResult InstantiateModelInternal(const Model& model, const ResourceHandle<Model>& sourceModel, const ResourceHandle<MaterialInterface>& material, Entity*& outRoot);
+	EResult RestoreLinkedModelPart(const Entity& part, EModelPartRefresh mode, bool& changed);
+	EResult RefreshLinkedModelPartsInternal(const Entity& root, entt::entity restorePart, EModelPartRefresh mode, bool& changed);
 #pragma endregion
 
 #pragma region Flag Mangement

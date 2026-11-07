@@ -63,6 +63,8 @@ EResult Model::OnPostLoad()
 		}
 	}
 
+	std::unordered_set<wstring> sourceNodeKeys;
+
 	for (size_t nodeIndex = 0; nodeIndex < m_Nodes.size(); ++nodeIndex)
 	{
 		const auto& node = m_Nodes[nodeIndex];
@@ -73,6 +75,25 @@ EResult Model::OnPostLoad()
 		{
 			ENGINE_LOG_ERROR("Invalid model node parent: node={}, parent={}", nodeIndex, node.ParentIndex);
 			return EResult::InvalidArgument;
+		}
+
+		if (node.SourceNodeKey.empty())
+		{
+			if (!node.MeshAttachmentKeys.empty())
+				return EResult::InvalidArgument;
+		}
+		else
+		{
+			if (!sourceNodeKeys.insert(node.SourceNodeKey).second ||
+				node.MeshAttachmentKeys.size() != node.MeshIndices.size())
+				return EResult::InvalidArgument;
+
+			std::unordered_set<wstring> attachmentKeys;
+			for (const auto& key : node.MeshAttachmentKeys)
+			{
+				if (!key.empty() && !attachmentKeys.insert(key).second)
+					return EResult::InvalidArgument;
+			}
 		}
 
 		for (const uint32 meshIndex : node.MeshIndices)

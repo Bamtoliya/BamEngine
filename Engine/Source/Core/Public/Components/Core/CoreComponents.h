@@ -11,3 +11,4 @@
 #include "Components/Core/WorldTransformComponent.h"
 #include "Components/Core/HierarchyComponent.h"
 #include "Components/Core/PrefabInstanceComponent.h"
+#include "Components/Core/ModelInstanceComponent.h"
