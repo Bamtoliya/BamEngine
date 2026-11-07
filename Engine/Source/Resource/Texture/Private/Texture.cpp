@@ -5,8 +5,11 @@
 #include "Renderer.h"
 #include "ResourceManager.h"
 #include "Runtime.h"
+#include "PlatformPath.h"
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
+#define STB_IMAGE_RESIZE_IMPLEMENTATION
+#include <stb_image_resize2.h>
 #include <reflection_archive/ReflectionArchiveAdapter.h>
 
 ETextureFormat ToTextureFormat(uint32 channels, bool sRGB)
@@ -26,7 +29,7 @@ archive::ArchiveResult ValidateTextureHeader(const TextureBinaryHeader& header, 
 {
 	const bool isValid2D = (header.dimension == ETextureDimension::Texture2D && header.depth == 1);
 	const bool isValid3D = (header.dimension == ETextureDimension::Texture3D && header.depth >= 1);
-	if ((!isValid2D && !isValid3D) || header.mipLevels != 1 || header.arraySize != 1)
+	if ((!isValid2D && !isValid3D) || header.mipLevels < 1 || header.arraySize != 1)
 		return { archive::ArchiveErrorCode::UnsupportedType, "Texture.TextureHeader.Layout" };
 	if (header.format != ETextureFormat::R8G8B8A8_UNORM)
 		return { archive::ArchiveErrorCode::UnsupportedType, "Texture.TextureHeader.format" };
@@ -34,12 +37,42 @@ archive::ArchiveResult ValidateTextureHeader(const TextureBinaryHeader& header, 
 		return { archive::ArchiveErrorCode::InvalidValue, "Texture.TextureHeader.Size" };
 	if (!std::isfinite(ppu) || ppu <= 0.f)
 		return { archive::ArchiveErrorCode::InvalidValue, "Texture.PixelPerUnit" };
-	const uint64 sliceBytes = static_cast<uint64>(header.width) * 4 * header.height;
-	const uint64 totalBytes = sliceBytes * header.depth;
+
+	uint64 totalBytes = 0;
+	if (header.dimension == ETextureDimension::Texture2D)
+	{
+		uint32 curW = header.width;
+		uint32 curH = header.height;
+		for (uint32 m = 0; m < header.mipLevels; ++m)
+		{
+			totalBytes += static_cast<uint64>(curW) * 4 * curH;
+			curW = (std::max)(1u, curW >> 1);
+			curH = (std::max)(1u, curH >> 1);
+		}
+	}
+	else
+	{
+		const uint64 sliceBytes = static_cast<uint64>(header.width) * 4 * header.height;
+		totalBytes = sliceBytes * header.depth;
+	}
+
 	if (totalBytes > std::numeric_limits<uint32>::max())
 		return { archive::ArchiveErrorCode::InvalidValue, "Texture.TextureHeader.dataSize" };
 	byteCount = static_cast<uint32>(totalBytes);
 	return {};
+}
+
+uint32 Texture::CalculateMipLevels(uint32 width, uint32 height)
+{
+	if (width == 0 || height == 0) return 1;
+	uint32 maxDim = (std::max)(width, height);
+	uint32 levels = 1;
+	while (maxDim > 1)
+	{
+		maxDim >>= 1;
+		++levels;
+	}
+	return levels;
 }
 
 #pragma region Constructor&Destructor
@@ -64,9 +97,7 @@ EResult Texture::Initialize(void* arg)
 	if (!rhi)
 		return EResult::Fail;
 
-	std::filesystem::path fullPath = m_Path;
-	if (fullPath.is_relative() && Runtime::IsCreated())
-		fullPath = Runtime::Get().ResolveProjectRelativePath(fullPath);
+	std::filesystem::path fullPath = PlatformPath::ResolveUri(m_Path);
 
 	std::ifstream file(fullPath, std::ios::binary | std::ios::ate);
 	if (!file.is_open())
@@ -82,10 +113,10 @@ EResult Texture::Initialize(void* arg)
 	if (!file.read(reinterpret_cast<char*>(buffer.data()), size))
 		return EResult::Fail;
 
-	return InitializeFromEncodedMemory(buffer);
+	return InitializeFromEncodedMemory(buffer, desc->generateMips);
 }
 
-EResult Texture::InitializeFromEncodedMemory(const vector<uint8>& encodedData)
+EResult Texture::InitializeFromEncodedMemory(const vector<uint8>& encodedData, bool generateMips)
 {
 	if (encodedData.empty() || encodedData.size() > static_cast<size_t>((std::numeric_limits<int>::max)()))
 		return EResult::InvalidArgument;
@@ -108,7 +139,7 @@ EResult Texture::InitializeFromEncodedMemory(const vector<uint8>& encodedData)
 	header.width = static_cast<uint32>(width);
 	header.height = static_cast<uint32>(height);
 	header.depth = 1;
-	header.mipLevels = 1;
+	header.mipLevels = (generateMips && (width > 1 || height > 1)) ? CalculateMipLevels(header.width, header.height) : 1;
 	header.arraySize = 1;
 	header.format = ETextureFormat::R8G8B8A8_UNORM;
 	header.dimension = ETextureDimension::Texture2D;
@@ -129,7 +160,35 @@ EResult Texture::InitializeFromEncodedMemory(const vector<uint8>& encodedData)
 		return EResult::Fail;
 
 	header.dataSize = byteCount;
-	vector<uint8> pixelData(pixels.get(), pixels.get() + byteCount);
+	vector<uint8> pixelData(byteCount);
+
+	const uint32 mip0Bytes = header.width * header.height * 4;
+	std::memcpy(pixelData.data(), pixels.get(), mip0Bytes);
+
+	if (header.mipLevels > 1)
+	{
+		uint32 prevOffset = 0;
+		uint32 prevW = header.width;
+		uint32 prevH = header.height;
+
+		for (uint32 m = 1; m < header.mipLevels; ++m)
+		{
+			const uint32 curW = (std::max)(1u, header.width >> m);
+			const uint32 curH = (std::max)(1u, header.height >> m);
+			const uint32 curOffset = prevOffset + prevW * prevH * 4;
+
+			const uint8* prevPixels = pixelData.data() + prevOffset;
+			uint8* curPixels = pixelData.data() + curOffset;
+
+			stbir_resize_uint8_linear(prevPixels, static_cast<int>(prevW), static_cast<int>(prevH), 0,
+				curPixels, static_cast<int>(curW), static_cast<int>(curH), 0,
+				STBIR_RGBA);
+
+			prevOffset = curOffset;
+			prevW = curW;
+			prevH = curH;
+		}
+	}
 
 	RHITextureDesc textureDesc{};
 	textureDesc.width = header.width;
@@ -196,12 +255,12 @@ Texture* Texture::CreateFromRHITexture(RHITexture* rhiTexture, const wstring& ke
 	return instance;
 }
 
-Texture* Texture::CreateFromEncodedMemory(const vector<uint8>& encodedData, const wstring& key)
+Texture* Texture::CreateFromEncodedMemory(const vector<uint8>& encodedData, const wstring& key, bool generateMips)
 {
 	std::unique_ptr<Texture> instance(new Texture());
 	instance->m_Key = NormalizePath(key);
 
-	if (IsFailure(instance->InitializeFromEncodedMemory(encodedData)))
+	if (IsFailure(instance->InitializeFromEncodedMemory(encodedData, generateMips)))
 	{
 		instance->Free();
 		return nullptr;
@@ -420,8 +479,7 @@ EResult Texture::Reload(const std::filesystem::path& filePath)
 	RHI* rhi = Renderer::Get().GetRHI();
 	if (!rhi) return EResult::Fail;
 
-	if (targetPath.is_relative() && Runtime::IsCreated())
-		targetPath = Runtime::Get().ResolveProjectRelativePath(targetPath);
+	targetPath = PlatformPath::ResolveUri(targetPath);
 
 	const auto path = Engine::WStrToStr(targetPath.wstring());
 
@@ -454,9 +512,9 @@ EResult Texture::Reload(const std::filesystem::path& filePath)
 
 	return EResult::Success;
 }
-EResult Texture::ReloadFromEncodedMemory(const vector<uint8>& encodedData)
+EResult Texture::ReloadFromEncodedMemory(const vector<uint8>& encodedData, bool generateMips)
 {
-	const auto result = InitializeFromEncodedMemory(encodedData);
+	const auto result = InitializeFromEncodedMemory(encodedData, generateMips);
 	if (result == EResult::Success)
 		IncreaseVersion();
 

@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "Engine_API.h"
 #include "ReflectionMacro.h"
@@ -27,6 +27,7 @@ enum class EResourceType : uint32
 	Save,
 	SpriteAnimation,
 	ActionTimeline,
+	ParticleEffect,
 };
 
 inline constexpr const char* GetResourceBinaryExtension(EResourceType type) noexcept
@@ -42,6 +43,7 @@ inline constexpr const char* GetResourceBinaryExtension(EResourceType type) noex
 	case EResourceType::Model:            return ".bammodel";
 	case EResourceType::Texture:          return ".bamtex";
 	case EResourceType::Shader:           return ".bamshader";
+	case EResourceType::ParticleEffect:   return ".bameffect";
 	default:                              return ".beve";
 	}
 }

@@ -193,16 +193,21 @@ EResult BloomEffect::SubmitPass(f32 dt, RenderPassID passID, const wstring& sour
 
 	CreateMipRenderTargets(src->GetWidth(), src->GetHeight());
 
+	SamplerDesc clampDesc{};
+	clampDesc.AddressU = ESamplerAddressMode::Clamp;
+	clampDesc.AddressV = ESamplerAddressMode::Clamp;
+	clampDesc.AddressW = ESamplerAddressMode::Clamp;
+	RHISampler* clampSampler = SamplerManager::Get().GetOrCreateSampler(clampDesc);
+
 	// 1. Pass 121: Prefilter (sourceRT -> DownRT[0])
 	Renderer::Get().SubmitCustomCommand(
-		[this, capturedSource = sourceRT](f32 dt, RenderPass* pass) -> EResult
+		[this, capturedSource = sourceRT, clampSampler](f32 dt, RenderPass* pass) -> EResult
 		{
 			auto* srcRT = RenderTargetManager::Get().GetRenderTarget(capturedSource);
 			if (!srcRT || !srcRT->GetTexture()) return EResult::Fail;
 			auto* rhi = Renderer::Get().GetRHI();
-			auto* sampler = SamplerManager::Get().GetDefaultSampler();
 
-			if (IsFailure(rhi->BindTextureSampler(srcRT->GetTexture(), sampler, 16))) return EResult::Fail;
+			if (IsFailure(rhi->BindTextureSampler(srcRT->GetTexture(), clampSampler, 16))) return EResult::Fail;
 
 			struct PrefilterBuffer { f32 threshold; f32 softKnee; f32 _pad[2]; } cb = { m_Threshold, m_SoftKnee, {} };
 			if (IsFailure(rhi->BindConstantBuffer(&cb, sizeof(cb), 2))) return EResult::Fail;
@@ -214,14 +219,13 @@ EResult BloomEffect::SubmitPass(f32 dt, RenderPassID passID, const wstring& sour
 	for (uint32 i = 0; i < BLOOM_MIP_LEVELS - 1; ++i)
 	{
 		Renderer::Get().SubmitCustomCommand(
-			[this, readIdx = i](f32 dt, RenderPass* pass) -> EResult
+			[this, readIdx = i, clampSampler](f32 dt, RenderPass* pass) -> EResult
 			{
 				auto* readRT = RenderTargetManager::Get().GetRenderTarget(m_DownRTNames[readIdx]);
 				if (!readRT || !readRT->GetTexture()) return EResult::Fail;
 				auto* rhi = Renderer::Get().GetRHI();
-				auto* sampler = SamplerManager::Get().GetDefaultSampler();
 
-				if (IsFailure(rhi->BindTextureSampler(readRT->GetTexture(), sampler, 16))) return EResult::Fail;
+				if (IsFailure(rhi->BindTextureSampler(readRT->GetTexture(), clampSampler, 16))) return EResult::Fail;
 				if (IsFailure(rhi->BindPipeline(m_DownsamplePipeline))) return EResult::Fail;
 				return rhi->Draw(3);
 			}, m_DownPassIDs[i]);
@@ -232,14 +236,13 @@ EResult BloomEffect::SubmitPass(f32 dt, RenderPassID passID, const wstring& sour
 	{
 		const uint32 readMip = BLOOM_MIP_LEVELS - 1 - i; // 3 -> 2 -> 1
 		Renderer::Get().SubmitCustomCommand(
-			[this, readIdx = readMip](f32 dt, RenderPass* pass) -> EResult
+			[this, readIdx = readMip, clampSampler](f32 dt, RenderPass* pass) -> EResult
 			{
 				auto* readRT = RenderTargetManager::Get().GetRenderTarget(m_DownRTNames[readIdx]);
 				if (!readRT || !readRT->GetTexture()) return EResult::Fail;
 				auto* rhi = Renderer::Get().GetRHI();
-				auto* sampler = SamplerManager::Get().GetDefaultSampler();
 
-				if (IsFailure(rhi->BindTextureSampler(readRT->GetTexture(), sampler, 16))) return EResult::Fail;
+				if (IsFailure(rhi->BindTextureSampler(readRT->GetTexture(), clampSampler, 16))) return EResult::Fail;
 
 				struct UpsampleBuffer { f32 scatter; f32 _pad[3]; } cb = { m_Scatter, {} };
 				if (IsFailure(rhi->BindConstantBuffer(&cb, sizeof(cb), 2))) return EResult::Fail;
@@ -250,7 +253,7 @@ EResult BloomEffect::SubmitPass(f32 dt, RenderPassID passID, const wstring& sour
 
 	// 4. Pass 130 (메인 슬롯): Final Composite (sourceRT + DownRT[0] -> writeRT)
 	Renderer::Get().SubmitCustomCommand(
-		[this, capturedSource = sourceRT](f32 dt, RenderPass* pass) -> EResult
+		[this, capturedSource = sourceRT, clampSampler](f32 dt, RenderPass* pass) -> EResult
 		{
 			auto& rtMgr = RenderTargetManager::Get();
 			auto* srcRT = rtMgr.GetRenderTarget(capturedSource);
@@ -258,10 +261,9 @@ EResult BloomEffect::SubmitPass(f32 dt, RenderPassID passID, const wstring& sour
 			if (!srcRT || !bloomRT || !srcRT->GetTexture() || !bloomRT->GetTexture()) return EResult::Fail;
 
 			auto* rhi = Renderer::Get().GetRHI();
-			auto* sampler = SamplerManager::Get().GetDefaultSampler();
 
-			if (IsFailure(rhi->BindTextureSampler(srcRT->GetTexture(), sampler, 16))) return EResult::Fail;
-			if (IsFailure(rhi->BindTextureSampler(bloomRT->GetTexture(), sampler, 17))) return EResult::Fail;
+			if (IsFailure(rhi->BindTextureSampler(srcRT->GetTexture(), clampSampler, 16))) return EResult::Fail;
+			if (IsFailure(rhi->BindTextureSampler(bloomRT->GetTexture(), clampSampler, 17))) return EResult::Fail;
 
 			struct BloomCompositeBuffer { f32 intensity; f32 _pad[3]; } cb = { m_Intensity, {} };
 			if (IsFailure(rhi->BindConstantBuffer(&cb, sizeof(cb), 2))) return EResult::Fail;

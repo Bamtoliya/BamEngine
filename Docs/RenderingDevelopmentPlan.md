@@ -149,19 +149,18 @@ IBL처럼 비교적 독립적인 화질 개선은 측정·바인딩 기반이 �
 
 **목적:** 원본 해상도(Mip 0) 단일 텍스처 사용으로 인한 원거리 텍스처 앨리어싱(자글거림) 및 텍스처 캐시 미스를 해결하고, VRAM 대역폭과 렌더링 성능을 최적화한다.
 
-- **현재 한계:**
-  - `Texture.cpp`에서 `header.mipLevels = 1;`로 하드코딩되어 있으며, CPU 밉맵 다운샘플링이 부재함.
-  - DirectX 12 RHI는 드라이버 레벨의 자동 밉맵 생성(D3D11 `GenerateMips`)을 지원하지 않으므로, `DirectX12RHI::UploadTextureData`에서 `resourceDesc.MipLevels != 1`을 거부하고 0번 서브리소스만 업로드함.
-- **개선 계획:**
-  1. **CPU 런타임 밉맵 체인 생성 및 RHI 다중 서브리소스 업로드**:
-     - `stb_image_resize2` 또는 자체 박스 필터를 활용하여 텍스처 로드 시 Mip 0 ~ Mip N 체인을 메모리에 생성.
-     - `RHITextureDesc::mipLevels`를 $\lfloor\log_2(\max(W, H))\rfloor + 1$로 계산.
-     - `DirectX12RHI::UploadTextureData`를 확장하여 각 밉 레벨(서브리소스)별 크기와 피치를 계산하고 모든 밉 레벨을 GPU에 전송.
-  2. **에디터 임포트 파이프라인 (DDS / BC7 블록 압축 베이킹)**:
+- **개선 계획 및 구현 현황:**
+  1. **CPU 런타임 밉맵 체인 생성 및 RHI 다중 서브리소스 업로드 [완료 (2026-11-08)]**:
+     - `Texture.h/.cpp`: `CalculateMipLevels` ($1 + \lfloor\log_2(\max(W, H))\rfloor$), `TextureCreateDesc::generateMips`, `ValidateTextureHeader` 다중 밉 크기 정합성 검증 추가.
+     - `stb_image_resize2` (`stbir_resize_uint8_linear`, `STBIR_RGBA`) 기반으로 Mip 0에서 순차적으로 $1/2$ 다운샘플링하여 Mip 1 ~ Mip N-1 픽셀 체인을 연속 메모리 버퍼에 생성.
+     - `DirectX12RHI::UploadTextureData`: D3D12 `GetCopyableFootprints`로 서브리소스별 풋프린트 레이아웃(256B 피치 정렬)을 일괄 획득하여 단일 업로드 버퍼에 순회 패킹 후, 모든 밉 슬라이스(`SubresourceIndex = mip`)로 일괄 복사.
+     - `DirectX12Sampler` 및 `SamplerManager`: 기본 삼선형(Trilinear, `MipFilter = Linear`, `MaxLOD = D3D12_FLOAT32_MAX`) 필터링과 자동 연동.
+     - 단위 테스트 `TextureMipmapCheck` 신설 및 CTest 등록 완결.
+  2. **에디터 임포트 파이프라인 (DDS / BC7 블록 압축 베이킹) [후속 과제]**:
      - 런타임 CPU 밉맵 생성 오버헤드를 제거하기 위해, 에디터 모델/텍스처 임포트 단계에서 DirectXTex(`texconv`) 기반의 오프라인 베이킹 파이프라인 구축.
      - PNG/JPG 텍스처를 GPU 블록 압축 포맷 및 밉맵을 포함한 `.dds`로 변환한다. 포맷·채널 의미·밉 체인·할당 정렬별 품질과 실제 VRAM을 비교하며 고정된 1/4 절감을 완료 근거로 사용하지 않는다.
 
-**완료 기준:** 원거리 텍스처 샘플링 시 지글거림이 사라지고 삼선형(Trilinear) 또는 이방성(Anisotropic) 필터링이 정상 적용되며, 다중 밉 레벨 텍스처가 D3D12 서브리소스 검증 오류 없이 렌더링된다.
+**완료 기준:** 원거리 텍스처 샘플링 시 지글거림이 사라지고 삼선형(Trilinear) 또는 이방성(Anisotropic) 필터링이 정상 적용되며, 다중 밉 레벨 텍스처가 D3D12 서브리소스 검증 오류 없이 렌더링된다. (1단계 CPU 체인 및 D3D12 다중 서브리소스 업로드 달성)
 
 ### S3. 정적 메시 인스턴싱과 기본 LOD
 

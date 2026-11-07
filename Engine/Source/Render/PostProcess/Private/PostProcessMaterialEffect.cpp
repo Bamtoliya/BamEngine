@@ -83,14 +83,17 @@ EResult PostProcessMaterialEffect::SubmitPass(f32 dt, RenderPassID passID, const
 
 	UpdateParameterBuffer();
 
-	Renderer::Get().SubmitCustomCommand(
-		[this, capturedRead = sourceRT](f32 dt, RenderPass* pass) -> EResult
+	Renderer::Get().SubmitCustomCommand([this, capturedRead = sourceRT](f32 dt, RenderPass* pass) -> EResult
 		{
 			auto* src = RenderTargetManager::Get().GetRenderTarget(capturedRead);
 			if (!src || !src->GetTexture()) return EResult::Fail;
 
 			auto* rhi = Renderer::Get().GetRHI();
-			auto* sampler = SamplerManager::Get().GetDefaultSampler();
+			SamplerDesc clampDesc{};
+			clampDesc.AddressU = ESamplerAddressMode::Clamp;
+			clampDesc.AddressV = ESamplerAddressMode::Clamp;
+			clampDesc.AddressW = ESamplerAddressMode::Clamp;
+			auto* sampler = SamplerManager::Get().GetOrCreateSampler(clampDesc);
 
 			// 1. 이전 패스 출력 화면 텍스처 바인딩 (space3, t0 / slot 16)
 			if (IsFailure(rhi->BindTextureSampler(src->GetTexture(), sampler, MAX_MATERIAL_TEXTURE_SLOTS)))

@@ -790,9 +790,22 @@ EResult Renderer::RenderUIImages(const vector<UIImageDrawCommand>& commands, Ren
 		if (material != lastMaterial)
 		{
 			if (IsFailure(BindMeshPipeline(nullptr, material, passType, pipelineDesc)))
-				return EResult::Fail;
-
-			lastMaterial = material;
+			{
+				auto fallbackHandle = ResourceManager::Get().GetResourceHandle<MaterialInterface>(L"Resources/Material/UIMaterial.bammat.json");
+				MaterialInterface* fallbackMat = fallbackHandle.Get();
+				if (fallbackMat && fallbackMat != material && IsSuccess(BindMeshPipeline(nullptr, fallbackMat, passType, pipelineDesc)))
+				{
+					lastMaterial = fallbackMat;
+				}
+				else
+				{
+					continue;
+				}
+			}
+			else
+			{
+				lastMaterial = material;
+			}
 		}
 		if (command.canvasSize != lastCanvasSize)
 		{

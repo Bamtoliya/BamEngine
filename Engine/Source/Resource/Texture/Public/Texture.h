@@ -10,6 +10,7 @@ struct TextureCreateDesc : public ResourceCreateDesc
 	Engine::ETextureDimension dimension = Engine::ETextureDimension::Texture2D;
 	Engine::ETextureUsage usage = Engine::ETextureUsage::Sampler;
 	bool sRGB = false;
+	bool generateMips = true;
 };
 
 CLASS()
@@ -22,14 +23,15 @@ class ENGINE_API Texture final : public Resource
 private:
 	Texture() : Resource(EResourceType::Texture) {}
 	EResult Initialize(void* arg = nullptr) override;
-	EResult InitializeFromEncodedMemory(const vector<uint8>& encodedData);
+	EResult InitializeFromEncodedMemory(const vector<uint8>& encodedData, bool generateMips = true);
 public:
 	virtual ~Texture() = default;
 public:
+	static uint32 CalculateMipLevels(uint32 width, uint32 height);
 	static Texture* Create(void* arg = nullptr);
 	static Texture* Create(const TextureBinaryHeader& header, const vector<uint8>& pixelData, const wstring& key = L"");
 	static Texture* CreateFromRHITexture(RHITexture* rhiTexture, const wstring& key = L"");
-	static Texture* CreateFromEncodedMemory(const vector<uint8>& encodedData, const wstring& key = L"");
+	static Texture* CreateFromEncodedMemory(const vector<uint8>& encodedData, const wstring& key = L"", bool generateMips = true);
 	virtual void Free() override;
 #pragma endregion
 
@@ -68,7 +70,7 @@ public:
 	[[nodiscard]] archive::ArchiveResult WriteArchive(archive::IArchive& ar) const override;
 	[[nodiscard]] archive::ArchiveResult ReadArchive(const archive::IArchive& ar) override;
 	EResult Reload(const std::filesystem::path& filePath = {}) override;
-	EResult ReloadFromEncodedMemory(const vector<uint8>& encodedData);
+	EResult ReloadFromEncodedMemory(const vector<uint8>& encodedData, bool generateMips = true);
 private:
 	[[nodiscard]] uint32 GetArchiveFormatVersion() const noexcept override { return 1; }
 #pragma endregion

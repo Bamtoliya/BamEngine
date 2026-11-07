@@ -1,10 +1,12 @@
-﻿#include "UIRenderSystem.h"
+#include "UIRenderSystem.h"
 #include "UILayout.h"
 #include "UIEventSystem.h"
 #include "Renderer.h"
 #include "RenderPass.h"
 #include "ResourceManager.h"
 #include "CoreComponents.h"
+#include "Sprite.h"
+#include "Material.h"
 
 Engine::UIRenderSystem* Engine::UIRenderSystem::Create(void* arg)
 {
@@ -42,7 +44,27 @@ void Engine::UIRenderSystem::OnSubmit(entt::registry& registry, const vector<Sce
                 {
                     const auto* image = world.try_get<UIImageComponent>(layout.entity);
                     if (!layout.visible || !image || !UILayout::IsValid(*image) || image->color.a <= 0.0f) continue;
-                    auto* material = image->materialHandle.Get();
+
+                    // UI 패스 전용 머티리얼 결정: 비어있거나 3D용 머티리얼(SpriteMaterial 등)이 지정된 경우 기본 UIMaterial로 안전 폴백
+                    auto defaultUIMat = ResourceManager::Get().GetResourceHandle<MaterialInterface>(L"Resources/Material/UIMaterial.bammat.json");
+                    ResourceHandle<MaterialInterface> effectiveMatHandle = image->materialHandle;
+                    MaterialInterface* material = effectiveMatHandle.Get();
+                    if (!material)
+                    {
+                        effectiveMatHandle = defaultUIMat;
+                        material = defaultUIMat.Get();
+                    }
+                    else
+                    {
+                        // UI 패스 셰이더(SV_VertexID 기반 UIVS)가 아닌 정점 버퍼 입력을 기대하는 VS가 지정된 경우 안전하게 UIMaterial로 대체
+                        Shader* vs = material->GetVertexShader(ERenderPassType::UI);
+                        if (!vs || (vs->GetKey().find(L"ui") == std::wstring::npos && vs->GetKey().find(L"UI") == std::wstring::npos))
+                        {
+                            effectiveMatHandle = defaultUIMat;
+                            material = defaultUIMat.Get();
+                        }
+                    }
+
                     if (!material || !pass->IsAcceptsBlendMode(material->GetBlendMode())) continue;
                     Sprite* sprite = image->spriteHandle.Get();
                     // Missing assigned assets must not silently turn into a different image.
@@ -52,7 +74,7 @@ void Engine::UIRenderSystem::OnSubmit(entt::registry& registry, const vector<Sce
                     if (!texture || !texture->GetRHITexture()) continue;
                     UIImageDrawCommand command;
                     command.textureHandle = sprite ? sprite->GetTextureHandle() : white;
-                    command.materialHandle = image->materialHandle;
+                    command.materialHandle = effectiveMatHandle;
                     command.worldMatrix = layout.renderMatrix;
                     command.color = image->color * UIEventSystem::GetButtonTint(world, layout.entity);
                     command.uvTransform = sprite ? sprite->GetUVTransform() : glm::vec4(0.0f, 0.0f, 1.0f, 1.0f);

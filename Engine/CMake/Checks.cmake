@@ -61,3 +61,27 @@ target_link_libraries(BlendTree2DCheck PRIVATE BamEngine::Engine)
 if(BUILD_TESTING)
     add_test(NAME BlendTree2DCheck COMMAND BlendTree2DCheck)
 endif()
+
+add_executable(VirtualPathCheck examples/VirtualPathCheck.cpp)
+target_link_libraries(VirtualPathCheck PRIVATE BamEngine::Engine)
+set_target_properties(VirtualPathCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
+
+if(MSVC)
+    target_compile_options(VirtualPathCheck PRIVATE /utf-8)
+endif()
+
+if(BUILD_TESTING)
+    add_test(NAME VirtualPathCheck COMMAND VirtualPathCheck)
+endif()
+
+add_executable(TextureMipmapCheck examples/TextureMipmapCheck.cpp)
+target_link_libraries(TextureMipmapCheck PRIVATE BamEngine::Engine)
+set_target_properties(TextureMipmapCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
+
+if(MSVC)
+    target_compile_options(TextureMipmapCheck PRIVATE /utf-8)
+endif()
+
+if(BUILD_TESTING)
+    add_test(NAME TextureMipmapCheck COMMAND TextureMipmapCheck)
+endif()

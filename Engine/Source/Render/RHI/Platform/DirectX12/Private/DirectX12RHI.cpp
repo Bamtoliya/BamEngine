@@ -818,7 +818,7 @@ EResult DirectX12RHI::UploadTextureData(RHITexture* texture, const RHITextureDes
     const bool isSupportedFormat = (desc.format == ETextureFormat::R8G8B8A8_UNORM || desc.format == ETextureFormat::R32_FLOAT);
     if (!isSupportedFormat ||
         (desc.dimension != ETextureDimension::Texture2D && !is3D) ||
-        desc.mipLevels != 1 ||
+        desc.mipLevels == 0 ||
         desc.arraySize != 1 ||
         depth == 0 ||
         desc.sampleCount != ETextureSampleCount::TextureSampleCount1 ||
@@ -828,10 +828,13 @@ EResult DirectX12RHI::UploadTextureData(RHITexture* texture, const RHITextureDes
         return EResult::InvalidArgument;
     }
 
-    const UINT64 sourceRowBytes = UINT64(desc.width) * 4;
+    if (is3D && desc.mipLevels != 1)
+    {
+        return EResult::InvalidArgument;
+    }
 
-    if ((!is3D && desc.depth != 1) ||
-        sourceRowBytes > UINT64(desc.dataSize) / desc.height / depth)
+    // 부분 업로드는 단일 밉(mipLevels == 1)일 때만 지원
+    if ((dstX != 0 || dstY != 0) && desc.mipLevels > 1)
     {
         return EResult::InvalidArgument;
     }
@@ -850,11 +853,16 @@ EResult DirectX12RHI::UploadTextureData(RHITexture* texture, const RHITextureDes
 
     if (resourceDesc.Dimension != expectedDimension ||
         dxTexture->GetFormat() != desc.format ||
-        resourceDesc.MipLevels != 1 ||
+        resourceDesc.MipLevels != desc.mipLevels ||
         resourceDesc.SampleDesc.Count != 1 ||
         (!is3D && resourceDesc.DepthOrArraySize != 1) ||
         UINT64(dstX) + desc.width > resourceDesc.Width ||
         UINT64(dstY) + desc.height > resourceDesc.Height)
+    {
+        return EResult::InvalidArgument;
+    }
+
+    if (desc.mipLevels > 1 && (desc.width != resourceDesc.Width || desc.height != resourceDesc.Height))
     {
         return EResult::InvalidArgument;
     }
@@ -868,26 +876,38 @@ EResult DirectX12RHI::UploadTextureData(RHITexture* texture, const RHITextureDes
         return EResult::InvalidArgument;
     }
 
+    const UINT bytesPerPixel = (desc.format == ETextureFormat::R32_FLOAT) ? 4 : 4;
+    const UINT numSubresources = desc.mipLevels;
+
     D3D12_RESOURCE_DESC copyDesc = resourceDesc;
     copyDesc.Alignment = 0;
     copyDesc.Width = desc.width;
     copyDesc.Height = desc.height;
+    copyDesc.MipLevels = static_cast<UINT16>(desc.mipLevels);
 
-    D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint = {};
-    UINT rowCount = 0;
-    UINT64 rowBytes = 0;
+    std::vector<D3D12_PLACED_SUBRESOURCE_FOOTPRINT> footprints(numSubresources);
+    std::vector<UINT> numRows(numSubresources);
+    std::vector<UINT64> rowSizesInBytes(numSubresources);
     UINT64 uploadBytes = 0;
 
     m_Device->GetCopyableFootprints(
-        &copyDesc, 0, 1, 0, &footprint, &rowCount, &rowBytes, &uploadBytes);
+        &copyDesc, 0, numSubresources, 0,
+        footprints.data(), numRows.data(), rowSizesInBytes.data(), &uploadBytes);
 
-    if (rowCount != desc.height ||
-        rowBytes != sourceRowBytes ||
-        footprint.Footprint.Depth != depth ||
-        uploadBytes == 0 ||
-        uploadBytes == UINT64_MAX)
+    if (uploadBytes == 0 || uploadBytes == UINT64_MAX)
     {
         return EResult::Fail;
+    }
+
+    if (desc.mipLevels == 1)
+    {
+        const UINT64 sourceRowBytes = UINT64(desc.width) * bytesPerPixel;
+        if (numRows[0] != desc.height ||
+            rowSizesInBytes[0] != sourceRowBytes ||
+            footprints[0].Footprint.Depth != depth)
+        {
+            return EResult::Fail;
+        }
     }
 
     // 2. 프레임별 업로드 버퍼를 재사용합니다.
@@ -922,30 +942,44 @@ EResult DirectX12RHI::UploadTextureData(RHITexture* texture, const RHITextureDes
             return EResult::Fail;
     }
 
-    // 3. CPU 픽셀 → 업로드 버퍼 (3D 슬라이스 루프 지원)
+    // 3. CPU 픽셀 → 업로드 버퍼 (모든 밉 레벨 및 3D 슬라이스 순회)
     void* mapped = nullptr;
     D3D12_RANGE readRange = { 0, 0 };
 
     if (FAILED(uploadBuffer->Map(0, &readRange, &mapped)))
         return EResult::Fail;
 
-    auto* dst = static_cast<std::uint8_t*>(mapped) + footprint.Offset;
+    auto* mappedBase = static_cast<std::uint8_t*>(mapped);
     const auto* src = static_cast<const std::uint8_t*>(desc.data);
-    const SIZE_T slicePitchDst = SIZE_T(footprint.Footprint.RowPitch) * footprint.Footprint.Height;
-    const SIZE_T slicePitchSrc = SIZE_T(sourceRowBytes) * desc.height;
+    UINT64 srcOffset = 0;
 
-    for (UINT z = 0; z < depth; ++z)
+    for (UINT mip = 0; mip < desc.mipLevels; ++mip)
     {
-        auto* dstSlice = dst + z * slicePitchDst;
-        const auto* srcSlice = src + z * slicePitchSrc;
+        const UINT curW = (std::max)(1u, desc.width >> mip);
+        const UINT curH = (std::max)(1u, desc.height >> mip);
+        const UINT curDepth = is3D ? (std::max)(1u, depth >> mip) : 1;
+        const UINT64 sourceRowBytes = UINT64(curW) * bytesPerPixel;
+        const auto& fp = footprints[mip];
 
-        for (UINT y = 0; y < rowCount; ++y)
+        auto* dstSub = mappedBase + fp.Offset;
+        const SIZE_T slicePitchDst = SIZE_T(fp.Footprint.RowPitch) * fp.Footprint.Height;
+        const SIZE_T slicePitchSrc = SIZE_T(sourceRowBytes) * curH;
+
+        for (UINT z = 0; z < curDepth; ++z)
         {
-            std::memcpy(
-                dstSlice + SIZE_T(y) * footprint.Footprint.RowPitch,
-                srcSlice + SIZE_T(y) * static_cast<SIZE_T>(sourceRowBytes),
-                static_cast<SIZE_T>(sourceRowBytes));
+            auto* dstSlice = dstSub + z * slicePitchDst;
+            const auto* srcSlice = src + srcOffset + z * slicePitchSrc;
+
+            for (UINT y = 0; y < numRows[mip]; ++y)
+            {
+                std::memcpy(
+                    dstSlice + SIZE_T(y) * fp.Footprint.RowPitch,
+                    srcSlice + SIZE_T(y) * sourceRowBytes,
+                    static_cast<SIZE_T>(sourceRowBytes));
+            }
         }
+
+        srcOffset += slicePitchSrc * curDepth;
     }
 
     uploadBuffer->Unmap(0, nullptr);
@@ -991,18 +1025,21 @@ EResult DirectX12RHI::UploadTextureData(RHITexture* texture, const RHITextureDes
         copyList->ResourceBarrier(1, &barrier);
     }
 
-    // 6. 업로드 버퍼 → 텍스처
-    D3D12_TEXTURE_COPY_LOCATION source = {};
-    source.pResource = uploadBuffer.Get();
-    source.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
-    source.PlacedFootprint = footprint;
+    // 6. 업로드 버퍼 → 텍스처 (모든 서브리소스 복사)
+    for (UINT mip = 0; mip < desc.mipLevels; ++mip)
+    {
+        D3D12_TEXTURE_COPY_LOCATION sourceLoc = {};
+        sourceLoc.pResource = uploadBuffer.Get();
+        sourceLoc.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+        sourceLoc.PlacedFootprint = footprints[mip];
 
-    D3D12_TEXTURE_COPY_LOCATION target = {};
-    target.pResource = destination;
-    target.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
-    target.SubresourceIndex = 0;
+        D3D12_TEXTURE_COPY_LOCATION targetLoc = {};
+        targetLoc.pResource = destination;
+        targetLoc.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+        targetLoc.SubresourceIndex = mip;
 
-    copyList->CopyTextureRegion(&target, dstX, dstY, 0, &source, nullptr);
+        copyList->CopyTextureRegion(&targetLoc, (mip == 0 ? dstX : 0), (mip == 0 ? dstY : 0), 0, &sourceLoc, nullptr);
+    }
 
     // 7. 셰이더(VS/PS)에서 읽을 수 있도록 전환
     barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
