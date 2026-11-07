@@ -1,4 +1,4 @@
-﻿#include "MeshRenderSystem.h"
+#include "MeshRenderSystem.h"
 #include "CoreComponents.h"
 #include "RenderComponents.h" 
 #include "SplineComponent.h"
@@ -335,8 +335,13 @@ void MeshRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& 
         {
             if (!flag.IsActiveInHierarchy() || !flag.IsVisibleInHierarchy() ||
                 HasFlag(flag.effectiveFlags, EEntityFlag::Dead)) continue;
-            Mesh* mesh = skinnedRenderer.meshHandle.Get();
-            MaterialInterface* material = skinnedRenderer.materialHandle.Get();
+
+            skinnedRenderer.UpdateTemporaryEffects(dt);
+
+            Mesh* mesh = nullptr;
+            MaterialInterface* material = nullptr;
+            MaterialConstants constants{};
+            skinnedRenderer.ResolveRenderState(mesh, material, constants);
             if (!mesh || !material) continue;
 
             // 자신 또는 부모(루트) 계층의 AnimatorComponent에서 계산된 본 행렬 목록 참조
@@ -348,6 +353,7 @@ void MeshRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& 
             SkinnedDrawCommand command;
             command.mesh = mesh;
             command.material = material;
+            command.materialConstants = constants;
             command.worldMatrix = worldTransform.worldMatrix;
             command.boneMatrices = boneMatrices;
             command.pickingId = PickingManager::Get().RegisterPickingEntity(scene, entity);

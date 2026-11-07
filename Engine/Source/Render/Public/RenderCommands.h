@@ -1,8 +1,9 @@
-﻿#pragma once
+#pragma once
 
 #include "Engine_Includes.h"
 #include "ResourceHandle.h"
 #include "Structs.h"
+#include "MaterialInterface.h"
 
 BEGIN(Engine)
 
@@ -37,6 +38,7 @@ struct SkinnedDrawCommand
 {
 	class Mesh* mesh = { nullptr };
 	class MaterialInterface* material = { nullptr };
+	MaterialConstants materialConstants{};
 	mat4 worldMatrix = { glm::identity<mat4>() };
 	const std::vector<mat4>* boneMatrices = { nullptr };
 	RenderObjectId objectId{};

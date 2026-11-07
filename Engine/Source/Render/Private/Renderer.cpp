@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "Renderer.h"
 //RHI
@@ -629,6 +629,10 @@ EResult Renderer::RenderSkinnedMeshes(f32 dt, vector<SkinnedDrawCommand>& comman
 				return EResult::Fail;
 			lastMaterial = command.material;
 		}
+		// 드로우별 머티리얼 상수 버퍼 바인딩 (slot 2: b0, space3)
+		// 머티리얼을 공유하더라도 개별 드로우의 상수(피격 발광, 파라미터 오버라이드 등)가 독립 적용되도록 보장
+		if (IsFailure(m_RHI->BindConstantBuffer(&command.materialConstants, sizeof(MaterialConstants), 2)))
+			return EResult::Fail;
 		if (command.mesh != lastMesh)
 		{
 			if (IsFailure(command.mesh->Bind(0)))

@@ -1,9 +1,10 @@
-﻿#include "Resource.h"
+#include "Resource.h"
 #include "ReflectionRegistry.h"
 #include <reflection_archive/ReflectionArchiveAdapter.h>
 #include <archive/JsonArchive.h>
 #include <archive/BeveArchive.h>
 #include "Logger.h"
+#include "PlatformPath.h"
 
 namespace
 {
@@ -120,11 +121,24 @@ archive::ArchiveResult Resource::ReadArchive(const archive::IArchive& ar)
 EResult Resource::Reload(const std::filesystem::path& filePath)
 {
 	const auto& storedPath = m_Path.empty() ? m_Key : m_Path;
-	const auto targetPath = filePath.empty() ? std::filesystem::path(storedPath) : filePath;
+	auto targetPath = filePath.empty() ? std::filesystem::path(storedPath) : filePath;
 
 	std::error_code ec;
 	if (!std::filesystem::exists(targetPath, ec))
-		return EResult::FileNotFound;
+	{
+		if (targetPath.is_relative())
+		{
+			const auto resolved = PlatformPath::ResolveProjectRelative(targetPath);
+			if (std::filesystem::exists(resolved, ec))
+				targetPath = resolved;
+			else
+				return EResult::FileNotFound;
+		}
+		else
+		{
+			return EResult::FileNotFound;
+		}
+	}
 
 	auto extension = targetPath.extension().wstring();
 	std::transform(extension.begin(), extension.end(), extension.begin(), ::towlower);

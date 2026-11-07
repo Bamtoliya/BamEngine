@@ -2,6 +2,39 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-07] 스킨드 메시 부품별 외형 교체 및 일시 효과(피격 발광) 수명 분리·드로우별 상수 렌더러 연동 (1·2·3단계 완료)
+
+- Area: Engine | Render | Resource | Docs
+- Type: Feature | Architecture | Test | Docs
+- 주요 변경 내역:
+  1. **[1단계] 부품 식별자 기반 저장 외형 교체 및 재임포트 순서 변경 회귀 검증**:
+     - `SceneArchiveCheck.cpp`에 `CheckLinkedModelPartMeshOverrideAndReimportRoundTrip` 추가.
+     - 스켈레톤 리그 비호환 메시 교체 거부(`InvalidArgument`) 및 기존 메시 보호 검증.
+     - 호환 갑옷 메시 교체 및 `useModelMesh = false` 오버라이드 전이, 씬 JSON 직렬화/역직렬화 라운드트립 보존 검증.
+     - 모델 원본의 노드 배치 순서 및 메시 인덱스가 반전(`Body: 0, Head: 1`)된 재임포트 상황에서도 `(sourceNodeKey, meshAttachmentKey)` 매핑을 통해 개별 부품의 오버라이드 외형이 정확히 유지됨을 확인.
+     - `RestoreLinkedModelPartMesh` 및 `RestoreLinkedModelPartMaterial`을 통한 모델 원본 에셋 복원 검증.
+     - `Resource::Reload()`에 대상 경로가 작업 디렉토리에 바로 존재하지 않는 상대 경로일 때 `PlatformPath::ResolveProjectRelative`를 자동 해석하는 안전장치 보강.
+  2. **[2단계] 런타임 장비 교체와 일시 머티리얼 수명 분리**:
+     - `SkinnedMeshRendererComponent.h`에 런타임 전용 상태 구조체 `SkinnedRuntimeEquipment` 및 `SkinnedTemporaryEffect` / `SkinnedMaterialParameterOverride` 정의 (씬 직렬화 제외).
+     - `EquipRuntimeMesh()` / `UnequipRuntimeMesh()`: 런타임 플레이 중 장착된 외형을 관리하며, 스켈레톤 호환성(`IsSkinCompatibleWith`)을 사전 검증하여 비호환 메시 장착을 차단.
+     - `ApplyTemporaryMaterial()`, `ApplyParameterOverride()`, `ClearTemporaryEffect()`, `UpdateTemporaryEffects()`: 피격·상태이상 등 일시 효과와 만료 시각(`remainingTime`), 요청 추적용 `requestId` 관리.
+     - `ResolveRenderState()`: 1단계 기본 외형 $\rightarrow$ 2단계 런타임 장비 $\rightarrow$ 3단계 일시 효과 순의 3계층 상태 결정 파이프라인 구축. 효과 시작 전 머티리얼을 저장·복원하는 방식 대신 상위 일시 상태만 만료 해제하도록 설계하여, 피격 발광 도중 갑옷을 교체하더라도 효과 종료 시 착용한 새 갑옷이 그대로 유지되는 상태 일관성 확보.
+  3. **[3단계] 드로우별 머티리얼 상수 전달 및 렌더러 GPU 상태 누수 차단**:
+     - `RenderCommands.h`: `SkinnedDrawCommand`에 `MaterialConstants materialConstants{}` 필드 추가.
+     - `MeshRenderSystem.cpp`: 스킨드 메시 순회 시 `skinnedRenderer.UpdateTemporaryEffects(dt)`를 갱신하고, `ResolveRenderState()`로 계산된 최종 `mesh`, `material`, `materialConstants`를 커맨드에 실어 제출.
+     - `Renderer.cpp`: `RenderSkinnedMeshes()`에서 매 드로우마다 `m_RHI->BindConstantBuffer(&command.materialConstants, sizeof(MaterialConstants), 2)`(b0, space3 머티리얼 상수 버퍼 슬롯)를 바인딩하도록 수정. 동일 머티리얼을 공유하는 다수 캐릭터 간 피격 발광 상수가 다음 정상 캐릭터로 누수되는 문제를 원천 차단.
+  4. **통합 회귀 테스트 (`SceneArchiveCheck.cpp`)**:
+     - `CheckSkinnedMeshRuntimeEquipmentAndTemporaryEffects()` 추가:
+       - 동일 머티리얼을 공유하는 캐릭터 A, B 중 A에만 피격 발광(`emissiveColor = (2, 0, 0)`) 적용 시 B의 상수 간섭 없음 검증.
+       - A가 발광 중인 상태에서 비호환 메시 장착 거부 및 호환 가죽갑옷 장착 교체 성공 검증.
+       - 갑옷 교체 후에도 발광이 유지되고, 연속 피격 시 만료 시각 갱신 및 `requestId`가 올바르게 갱신/보호되는지 검증.
+       - 피격 효과 만료 후 발광은 꺼지고 교체한 새 가죽갑옷 외형이 그대로 유지됨을 검증.
+       - 씬 저장/로드 라운드트립 후 런타임 장비와 일시 효과가 씬 파일로 누출되지 않고 기본 씬 외형으로 복원됨을 검증.
+- 검증 결과:
+  - `SceneArchiveCheck` 단위 테스트 100% 통과 (14개 하위 검사 전체 성공).
+- 미검증 항목:
+  - 실제 실행 중인 에디터 뷰포트/PIE 환경에서의 복수 캐릭터 동시 렌더링 및 런타임 게임플레이 스크립트 연동.
+
 ### [2026-11-07] CTest 단위 검사 전체(29/29) 정상화 및 잔여 감사 결함(A01~A03) 해결 (우선순위 0·1 완료)
 
 - Area: Engine | Editor | Tools | Build | Docs
