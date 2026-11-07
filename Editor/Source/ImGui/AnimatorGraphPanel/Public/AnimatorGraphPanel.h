@@ -31,6 +31,7 @@ public:
 	virtual void CaptureState(EditorWorkspace& workspace) const override;
 	virtual void RestoreState(const EditorWorkspace& workspace) override;
 public:
+	EPanelMenuCategory GetPanelMenuCategory() const override { return EPanelMenuCategory::GraphAnimation; }
 	virtual EShortcutContext GetShortcutContext() const override { return EShortcutContext::AnimatorGraph; }
 	static AnimatorGraphPanel* GetActivePanel() { return s_ActivePanel; }
 	bool CanDeleteSelection() const;
@@ -90,6 +91,7 @@ private:
 	int m_SelectedTransitionIndex = -1;
 	int m_ConnectingSourceIndex = -1;
 	int m_DraggingStateIndex = -1;
+	bool m_IsCanvasPanning = false;
 
 	// 노드 위치 및 스크롤
 	ImVec2 m_CanvasScrolling = ImVec2(0.0f, 0.0f);

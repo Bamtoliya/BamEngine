@@ -28,6 +28,26 @@
                     "parameterName": "",
                     "samples": []
                 },
+                "blendTree2D": {
+                    "clip00": {
+                        "Null": true
+                    },
+                    "clip01": {
+                        "Null": true
+                    },
+                    "clip10": {
+                        "Null": true
+                    },
+                    "clip11": {
+                        "Null": true
+                    },
+                    "maxX": 1,
+                    "maxY": 1,
+                    "minX": 0,
+                    "minY": 0,
+                    "parameterX": "",
+                    "parameterY": ""
+                },
                 "clip": {
                     "AssetKey": "Resources/Model/Fox_Survey.bamanim",
                     "AssetPath": "Resources/Model/Fox_Survey.bamanim",
@@ -35,9 +55,11 @@
                 },
                 "isBlendTree": false,
                 "isLooping": true,
+                "loopBlendDuration": 0.05000000074505806,
                 "name": "Idle",
                 "notifies": [],
-                "playRate": 1
+                "playRate": 1,
+                "useBlendTree2D": false
             },
             {
                 "blendTree": {
@@ -58,22 +80,46 @@
                                 "AssetPath": "Resources/Model/Fox_Run.bamanim",
                                 "Null": false
                             },
-                            "threshold": 8
+                            "threshold": 7.5
                         }
                     ]
+                },
+                "blendTree2D": {
+                    "clip00": {
+                        "Null": true
+                    },
+                    "clip01": {
+                        "Null": true
+                    },
+                    "clip10": {
+                        "Null": true
+                    },
+                    "clip11": {
+                        "Null": true
+                    },
+                    "maxX": 1,
+                    "maxY": 1,
+                    "minX": 0,
+                    "minY": 0,
+                    "parameterX": "",
+                    "parameterY": ""
                 },
                 "clip": {
                     "Null": true
                 },
                 "isBlendTree": true,
                 "isLooping": true,
+                "loopBlendDuration": 0.05000000074505806,
                 "name": "Move",
                 "notifies": [],
-                "playRate": 1
+                "playRate": 1,
+                "useBlendTree2D": false
             }
         ],
         "transitions": [
             {
+                "conditionGroups": [],
+                "conditionLogic": 0,
                 "conditions": [
                     {
                         "mode": 0,
@@ -82,12 +128,16 @@
                     }
                 ],
                 "duration": 0.20000000298023224,
-                "exitTime": 0,
-                "hasExitTime": false,
+                "exitTime": 1,
+                "fromAnyState": false,
+                "groupLogic": 0,
+                "hasExitTime": true,
                 "sourceState": "Idle",
                 "targetState": "Move"
             },
             {
+                "conditionGroups": [],
+                "conditionLogic": 0,
                 "conditions": [
                     {
                         "mode": 1,
@@ -96,8 +146,10 @@
                     }
                 ],
                 "duration": 0.20000000298023224,
-                "exitTime": 0,
-                "hasExitTime": false,
+                "exitTime": 1,
+                "fromAnyState": false,
+                "groupLogic": 0,
+                "hasExitTime": true,
                 "sourceState": "Move",
                 "targetState": "Idle"
             }

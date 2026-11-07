@@ -610,9 +610,23 @@ void AnimatorGraphPanel::DrawCanvas()
 	const auto screenMouse = Engine::InputManager::Get().GetScreenMousePosition();
 	const ImVec2 mousePos(screenMouse.x, screenMouse.y);
 	// 캔버스 영역 위에서 마우스 휠 클릭(Middle 버튼) 드래그 시 캔버스 패닝 이동
-	if (ImGui::IsWindowHovered() && Engine::InputManager::Get().IsMouseButtonPressed(Engine::EMouseButton::Middle))
+	auto& input = Engine::InputManager::Get();
+	const auto& io = ImGui::GetIO();
+	const auto middle = Engine::EMouseButton::Middle;
+	const bool canPan = !io.WantTextInput && !io.AppFocusLost;
+
+	if (!canPan || !input.IsMouseButtonPressed(middle) || !ImGui::IsWindowFocused())
+		m_IsCanvasPanning = false;
+
+	if (canPan && ImGui::IsWindowHovered() && !ImGui::IsAnyItemActive() && input.IsMouseButtonDown(middle))
 	{
-		const auto delta = Engine::InputManager::Get().GetMouseDelta();
+		ImGui::SetWindowFocus();
+		m_IsCanvasPanning = true;
+	}
+
+	if (m_IsCanvasPanning)
+	{
+		const auto delta = input.GetMouseDelta();
 		m_CanvasScrolling.x += delta.x;
 		m_CanvasScrolling.y += delta.y;
 	}
