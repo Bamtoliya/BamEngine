@@ -37,7 +37,9 @@ namespace Editor
     template<typename DrawSidebar, typename DrawContent>
     inline void DrawSidebarLayout(const char* sidebarId, const char* splitterId, const char* contentId,
         float& preferredSidebarWidth, float height, float minSidebarWidth, float minContentWidth,
-        DrawSidebar&& drawSidebar, DrawContent&& drawContent)
+        DrawSidebar&& drawSidebar, DrawContent&& drawContent,
+        ImGuiWindowFlags sidebarWindowFlags = ImGuiWindowFlags_HorizontalScrollbar,
+        bool reserveHalfForContent = true)
     {
         constexpr float splitterThickness = 4.0f;
         const float spacing = ImGui::GetStyle().ItemSpacing.x;
@@ -46,13 +48,12 @@ namespace Editor
         const float halfWidth = paneWidth * 0.5f;
 
         const float minSidebar = std::min(minSidebarWidth, halfWidth);
-        const float minContent = std::clamp(minContentWidth, halfWidth, paneWidth - minSidebar);
+        const float minContent = std::clamp(minContentWidth, reserveHalfForContent ? halfWidth : 0.0f, paneWidth - minSidebar);
         float sidebarWidth = std::clamp(preferredSidebarWidth, minSidebar, paneWidth - minContent);
         float contentWidth = paneWidth - sidebarWidth;
         const float previousSidebarWidth = sidebarWidth;
 
-        if (ImGui::BeginChild(sidebarId, ImVec2(sidebarWidth, height),
-            ImGuiChildFlags_Borders, ImGuiWindowFlags_HorizontalScrollbar))
+        if (ImGui::BeginChild(sidebarId, ImVec2(sidebarWidth, height), ImGuiChildFlags_Borders, sidebarWindowFlags))
         {
             drawSidebar();
         }

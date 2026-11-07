@@ -60,7 +60,7 @@ void NetworkProfilerPanel::Draw()
 
     ImGui::SetNextWindowSize(ImVec2(520, 480), ImGuiCond_FirstUseEver);
     const std::string windowTitle = LOCAL("NetworkProfiler.Title") + "###UI_NETWORK_PROFILER_PANEL";
-    if (BeginPanelWindow(windowTitle.c_str(), m_Open))
+    if (!BeginPanelWindow(windowTitle.c_str(), m_Open))
     {
         ImGui::End();
         return;

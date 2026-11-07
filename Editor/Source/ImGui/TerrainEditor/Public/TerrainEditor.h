@@ -15,7 +15,7 @@ public:
 	virtual void Draw() override;
 
 	static TerrainEditor* Get() { return s_Instance; }
-
+	EPanelMenuCategory GetPanelMenuCategory() const override { return EPanelMenuCategory::SceneEditing; }
 	bool IsSculptingActive() const { return m_Open && m_IsSculpting; }
 	const Engine::TerrainBrushParams& GetBrushParams() const { return m_BrushParams; }
 	Engine::Entity* GetTargetTerrainEntity() const { return m_TargetEntity; }

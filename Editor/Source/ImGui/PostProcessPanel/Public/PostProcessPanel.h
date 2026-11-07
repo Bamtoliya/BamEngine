@@ -14,7 +14,7 @@ public:
 public:
 	void Update(f32 dt) override;
 	void Draw() override;
-
+	EPanelMenuCategory GetPanelMenuCategory() const override { return EPanelMenuCategory::SceneEditing; }
 private:
 	void RefreshPresetList();
 	void DrawPresetToolbar(PostProcessChain* chain);

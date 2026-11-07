@@ -28,6 +28,7 @@ public:
 	[[nodiscard]] Engine::GraphDiagnostic RegisterNode(Engine::GraphNodeDefinition definition);
 	[[nodiscard]] Engine::GraphDiagnostic RegisterReflectionNodes(const reflection::Registry& registry);
 public:
+	EPanelMenuCategory GetPanelMenuCategory() const override { return EPanelMenuCategory::GraphAnimation; }
 	virtual EShortcutContext GetShortcutContext() const override { return EShortcutContext::GraphEditor; }
 	static GraphPanel* GetActiveGraphPanel() { return s_ActiveGraphPanel; }
 	bool CanUseCanvas() const { return m_Open && m_Ready; }

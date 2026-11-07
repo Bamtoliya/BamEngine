@@ -13,7 +13,7 @@ public:
 
     void Update(f32 dt) override;
     void Draw() override;
-
+    EPanelMenuCategory GetPanelMenuCategory() const override { return EPanelMenuCategory::Diagnostics; }
 private:
     struct ResourceRow
     {

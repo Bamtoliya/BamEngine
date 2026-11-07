@@ -54,10 +54,12 @@ public:
 	virtual void Draw() override;
 	virtual EShortcutContext GetShortcutContext() const override { return EShortcutContext::AnimationTimeline; }
 	// ── ResourceEditorInterface 구현 (콘텐츠 브라우저 더블클릭 연동) ──
+	EPanelMenuCategory GetPanelMenuCategory() const override { return EPanelMenuCategory::GraphAnimation; }
+	bool HasUnsavedResourceChanges() const override { return m_IsDirty; }
 	virtual bool IsSupported(const std::filesystem::path& assetPath) const override
 	{
 		const std::string ext = assetPath.extension().string();
-		const std::string name = assetPath.filename().string();
+		const std::string name = WStrToStr(assetPath.filename().wstring());
 		return (ext == ".actiontimeline" || name.ends_with(".actiontimeline.json"));
 	}
 	virtual void SetTargetResource(const std::filesystem::path& assetPath) override
@@ -71,7 +73,6 @@ public:
 	bool LoadFromFile(const std::string& filePath);
 	virtual void CaptureState(EditorWorkspace& workspace) const override;
 	virtual void RestoreState(const EditorWorkspace& workspace) override;
-
 public:
 	static AnimationTimelinePanel* GetActivePanel() { return s_ActivePanel; }
 	// ── 단축키 조작 인터페이스 ──

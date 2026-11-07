@@ -15,12 +15,6 @@ HistoryPanel::HistoryPanel()
 	m_Open = false;
 }
 
-EResult HistoryPanel::Initialize(void* arg)
-{
-	(void)arg;
-	return EResult::Success;
-}
-
 void HistoryPanel::Draw()
 {
 	if (!m_Open) return;
@@ -32,7 +26,7 @@ void HistoryPanel::Draw()
 	const ImGuiWindowFlags flags = hasUnsaved ? ImGuiWindowFlags_UnsavedDocument : ImGuiWindowFlags_None;
 
 	const std::string windowTitle = GetDisplayName() + "###HistoryPanel";
-	if (BeginPanelWindow(windowTitle.c_str(), m_Open))
+	if (BeginPanelWindow(windowTitle.c_str(), m_Open, flags))
 	{
 		const float availWidth = ImGui::GetContentRegionAvail().x;
 		constexpr float kCompactBreakpoint = 360.0f;

@@ -20,7 +20,7 @@ public:
 
     virtual void Draw() override;
     virtual void Update(f32 dt) override;
-
+    EPanelMenuCategory GetPanelMenuCategory() const override { return EPanelMenuCategory::Diagnostics; }
 private:
     void DrawSessionControl(Engine::NetworkSystem* netSystem);
     void DrawTrafficMetrics(Engine::NetworkSystem* netSystem);

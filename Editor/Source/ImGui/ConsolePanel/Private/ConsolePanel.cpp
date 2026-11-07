@@ -9,7 +9,8 @@ void ConsolePanel::Draw()
         return;
 
     const string windowTitle = LOCAL("Console.Title") + "###ConsolePanel";
-    if (BeginPanelWindow(windowTitle.c_str(), m_Open))
+    const auto windowFlags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
+    if (BeginPanelWindow(windowTitle.c_str(), m_Open, windowFlags))
     {
 
         m_Focused = ImGui::IsWindowFocused();
@@ -310,7 +311,12 @@ void ConsolePanel::DrawLog()
     const bool hasSelection = (m_SelectedRowIndex >= 0 && m_SelectedRowIndex < static_cast<int>(m_Items.size()));
     const float splitterHeight = 6.0f;
     const float spacingY = ImGui::GetStyle().ItemSpacing.y;
-    const float totalAvailY = ImGui::GetContentRegionAvail().y;
+    const ImVec2 avail = ImGui::GetContentRegionAvail();
+    if (avail.x < 1.0f || avail.y < 1.0f)
+        return;
+
+    const float contentWidth = std::floor(avail.x);
+    const float totalAvailY = avail.y;
     if (totalAvailY < 1.0f) return;
 
     const float minTableHeight = (std::max)(60.0f, rowHeight * 2.0f);
@@ -321,7 +327,6 @@ void ConsolePanel::DrawLog()
 
     const float activeDetailHeight = showDetail
         ? std::clamp(m_DetailViewHeight, minDetailHeight, maxDetailHeight) : 0.0f;
-    if (showDetail) m_DetailViewHeight = activeDetailHeight;
 
     const float tableHeight = totalAvailY - activeDetailHeight - (showDetail ? detailOverhead : 0.0f);
 
@@ -331,7 +336,7 @@ void ConsolePanel::DrawLog()
         ImGuiTableFlags_BordersInnerV |
         ImGuiTableFlags_ScrollY |
         ImGuiTableFlags_SizingFixedFit;
-    const ImVec2 tableSize(0.0f, tableHeight);
+    const ImVec2 tableSize(contentWidth, tableHeight);
 
     if (ImGui::BeginTable("ConsoleLogTable", 4, tableFlags, tableSize))
     {
@@ -363,47 +368,28 @@ void ConsolePanel::DrawLog()
     // ── 하단 로그 상세 보기 창 및 상하 인터랙티브 스플리터 ──
     if (showDetail)
     {
-        // 1. 수직 스플리터 바 (드래그로 높이 조절)
         const ImVec2 splitterPos = ImGui::GetCursorScreenPos();
-        const float splitterWidth = ImGui::GetContentRegionAvail().x;
+        const float splitterWidth = contentWidth;
 
-        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.35f, 0.60f, 0.95f, 0.35f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.35f, 0.60f, 0.95f, 0.65f));
+        float resizedTableHeight = tableHeight;
+        float resizedDetailHeight = activeDetailHeight;
+        const bool dragging = Editor::SplitterH("##ConsoleDetailSplitter", &resizedTableHeight, &resizedDetailHeight,
+            minTableHeight, minDetailHeight, splitterWidth, splitterHeight, 0.0f);
 
-        ImGui::Button("##ConsoleDetailSplitter", ImVec2(-1.0f, splitterHeight));
+        if (dragging && resizedDetailHeight != activeDetailHeight)
+            m_DetailViewHeight = resizedDetailHeight;
 
-        const bool isSplitterHovered = ImGui::IsItemHovered();
-        const bool isSplitterActive = ImGui::IsItemActive();
-
-        if (isSplitterHovered || isSplitterActive)
-            ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);
-
-        if (isSplitterActive)
-        {
-            const float deltaY = InputManager::Get().GetMouseDelta().y;
-            m_DetailViewHeight = std::clamp(activeDetailHeight - deltaY, minDetailHeight, maxDetailHeight);
-        }
-        ImGui::PopStyleColor(3);
-
-        // 스플리터 시각 구분선 및 중앙 핸들 렌더링
-        ImDrawList* drawList = ImGui::GetWindowDrawList();
-        const ImU32 lineColor = ImGui::GetColorU32(isSplitterActive
-            ? ImVec4(0.40f, 0.75f, 1.0f, 0.95f)
-            : (isSplitterHovered ? ImVec4(0.35f, 0.65f, 0.95f, 0.70f) : ImGui::GetStyleColorVec4(ImGuiCol_Separator)));
-        const float midY = splitterPos.y + splitterHeight * 0.5f;
-        drawList->AddLine(ImVec2(splitterPos.x, midY), ImVec2(splitterPos.x + splitterWidth, midY), lineColor, 1.2f);
-
-        // 중앙 알약 그립 핸들
-        const float handleW = 40.0f;
-        const float handleH = 3.0f;
-        const ImVec2 handleMin(splitterPos.x + (splitterWidth - handleW) * 0.5f, midY - handleH * 0.5f);
-        const ImVec2 handleMax(handleMin.x + handleW, handleMin.y + handleH);
-        drawList->AddRectFilled(handleMin, handleMax, lineColor, 2.0f);
+        const float gripWidth = std::min(40.0f, splitterWidth);
+        const float centerX = splitterPos.x + splitterWidth * 0.5f;
+        const float centerY = splitterPos.y + splitterHeight * 0.5f + (resizedTableHeight - tableHeight);
+        const ImU32 gripColor = ImGui::GetColorU32(dragging ? ImGuiCol_Text : ImGuiCol_TextDisabled);
+        ImGui::GetWindowDrawList()->AddRectFilled(
+            ImVec2(centerX - gripWidth * 0.5f, centerY - 1.5f),
+            ImVec2(centerX + gripWidth * 0.5f, centerY + 1.5f), gripColor, 2.0f);
 
         // 2. 상세 뷰 본문
         const auto& selected = m_Items[m_SelectedRowIndex];
-        if (ImGui::BeginChild("LogDetailView", ImVec2(0.0f, activeDetailHeight), true, ImGuiWindowFlags_None))
+        if (ImGui::BeginChild("LogDetailView", ImVec2(contentWidth, activeDetailHeight), true, ImGuiWindowFlags_None))
         {
             // 상단 메타 정보 헤더
             DrawLevelBadge(selected.Entry.Level);
@@ -420,17 +406,33 @@ void ConsolePanel::DrawLog()
             }
 
             // 우측 상단 액션 버튼: [복사], [✕ 닫기]
-            const float closeBtnW = 24.0f;
-            const float copyBtnW = 56.0f;
-            const float rightPad = closeBtnW + copyBtnW + ImGui::GetStyle().ItemSpacing.x * 2.0f;
-            ImGui::SameLine(ImGui::GetWindowWidth() - rightPad);
+            const std::string copyLabel = std::string(ICON_FA_COPY " ") + LOCAL("EditorCommon.Copy");
+            const char* closeLabel = ICON_FA_XMARK "##CloseDetail";
+            const auto& style = ImGui::GetStyle();
 
-            if (ImGui::SmallButton((std::string(ICON_FA_COPY " ") + LOCAL("EditorCommon.Copy")).c_str()))
+            const float copyWidth = ImGui::CalcTextSize(copyLabel.c_str(), nullptr, true).x + style.FramePadding.x * 2.0f;
+            const float closeWidth = ImGui::CalcTextSize(closeLabel, nullptr, true).x + style.FramePadding.x * 2.0f;
+            const float buttonsWidth = copyWidth + style.ItemSpacing.x + closeWidth;
+
+            const float availableWidth = ImGui::GetContentRegionAvail().x;
+            const float leftX = ImGui::GetCursorScreenPos().x;
+            const float buttonsX = leftX + std::max(0.0f, availableWidth - buttonsWidth);
+            const bool buttonsFit = buttonsWidth <= availableWidth;
+
+            if (buttonsFit && ImGui::GetItemRectMax().x + style.ItemSpacing.x <= buttonsX)
+                ImGui::SameLine();
+
+            ImGui::SetCursorScreenPos(ImVec2(buttonsX, ImGui::GetCursorScreenPos().y));
+
+            if (ImGui::SmallButton(copyLabel.c_str()))
                 ImGui::SetClipboardText(selected.Entry.Message.c_str());
             if (ImGui::IsItemHovered())
                 ImGui::SetTooltip("%s", LOCAL_CSTR("Console.CopyHint"));
-            ImGui::SameLine();
-            if (ImGui::SmallButton(ICON_FA_XMARK "##CloseDetail"))
+
+            if (buttonsFit)
+                ImGui::SameLine();
+
+            if (ImGui::SmallButton(closeLabel))
                 m_SelectedRowIndex = -1;
             if (ImGui::IsItemHovered())
                 ImGui::SetTooltip("%s", LOCAL_CSTR("EditorCommon.Close"));

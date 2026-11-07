@@ -25,7 +25,7 @@ public:
 
     void Draw() override;
     void Update(f32 dt) override;
-
+    EPanelMenuCategory GetPanelMenuCategory() const override { return EPanelMenuCategory::Diagnostics; }
 private:
     void DrawToolbar();
     void DrawDashboardCards();

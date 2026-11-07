@@ -6,11 +6,23 @@
 #include "ImGuiSplitter.h"
 
 BEGIN(Editor)
+enum class EPanelMenuCategory
+{
+	Viewport,
+	SceneEditing,
+	Assets,
+	GraphAnimation,
+	Diagnostics,
+	Other,
+	Hidden
+};
 struct EditorWorkspace;
 class IImGui : public Engine::Base
 {
 public:
 	virtual ~IImGui() = default;
+	// 성공하면 ImGuiManager가 생성 참조를 넘겨받고, 실패하면 호출자가 해제한다.
+	[[nodiscard]] EResult Initialize(void* arg = nullptr);
 	virtual void Draw() BAM_PURE;
 	virtual void Update(f32 dt) {}
 	virtual bool ShouldUpdateWhenClosed() const { return false; }
@@ -28,11 +40,13 @@ public:
 	const wstring& GetName() const { return m_Name; }
 	void SetName(const wstring& name) { m_Name = name; m_DisplayNameKey.clear(); }
 	virtual string GetDisplayName() const { return m_DisplayNameKey.empty() ? WStrToStr(m_Name) : LOCAL(m_DisplayNameKey); }
+	virtual EPanelMenuCategory GetPanelMenuCategory() const { return EPanelMenuCategory::Other; }
 public:
 	virtual void CaptureState(EditorWorkspace& workspace) const;
 	virtual void RestoreState(const EditorWorkspace& workspace);
 protected:
 	bool BeginPanelWindow(const char* title, bool& open, ImGuiWindowFlags flags = ImGuiWindowFlags_None);
+	virtual EResult OnInitialize(void*) { return EResult::Success; }
 protected:
 	bool m_Open = true;
 	bool m_Focused = false;
@@ -42,6 +56,7 @@ protected:
 	string m_DisplayNameKey;
 private:
 	friend class ImGuiManager;
+	bool m_Registered = false;
 	ImGuiID m_PanelWindowId = 0;
 	int32 m_CloseRequestFrame = -1;
 };

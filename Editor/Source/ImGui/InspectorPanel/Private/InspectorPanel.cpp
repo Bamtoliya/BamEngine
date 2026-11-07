@@ -88,7 +88,11 @@ void InspectorPanel::Draw()
 		DrawHeaderBar(targetEntity, targets.size());
 
 		if (targetEntity != nullptr && targets.size() <= 1)
+		{
 			DrawPrefabHeaderBar(*targetEntity);
+			DrawModelMaterialRefresh(*targetEntity);
+		}
+			
 
 		// 3. 스크롤 가능한 본문 영역 (ImGui::BeginChild)
 		if (ImGui::BeginChild("InspectorPropertiesScrollArea", ImVec2(0, 0), false, ImGuiWindowFlags_None))
@@ -371,6 +375,78 @@ void InspectorPanel::DrawPrefabHeaderBar(Engine::Entity& entity)
 
 	ImGui::Spacing();
 	ImGui::Separator();
+}
+
+void InspectorPanel::DrawModelMaterialRefresh(Engine::Entity& entity)
+{
+	auto* scene = entity.GetScene();
+	if (!scene)
+		return;
+
+	const auto& world = scene->GetRegistry();
+	const auto handle = entity.GetEntityHandle();
+	if (!world.valid(handle))
+		return;
+
+	const bool isRoot = world.all_of<Engine::ModelInstanceComponent>(handle);
+	const auto* source = world.try_get<Engine::ModelSourceComponent>(handle);
+	const bool isPart = !isRoot && source && source->isMeshAttachment;
+	const bool canRestoreMaterial = isPart && !source->useModelMaterial;
+	const bool canRestoreMesh = isPart && !source->useModelMesh &&
+		world.all_of<Engine::SkinnedMeshRendererComponent>(handle);
+
+	if (!isRoot && !canRestoreMaterial && !canRestoreMesh)
+		return;
+
+	using Command = Engine::EResult(Engine::Scene::*)(const Engine::Entity&, bool&);
+	Command command = nullptr;
+	const char* actionKey = nullptr;
+
+	auto& history = Application::Get().GetEditHistory();
+	ImGui::BeginDisabled(!history.Enabled());
+
+	if (isRoot && ImGui::Button(LOCAL_LABEL("Inspector.RefreshModelMaterials").c_str()))
+	{
+		command = &Engine::Scene::RefreshLinkedModelParts;
+		actionKey = "Inspector.RefreshModelMaterials";
+	}
+	if (canRestoreMaterial && ImGui::Button(LOCAL_LABEL("Inspector.UseModelMaterial").c_str()))
+	{
+		command = &Engine::Scene::RestoreLinkedModelPartMaterial;
+		actionKey = "Inspector.UseModelMaterial";
+	}
+	if (canRestoreMesh && ImGui::Button(LOCAL_LABEL("Inspector.UseModelMesh").c_str()))
+	{
+		command = &Engine::Scene::RestoreLinkedModelPartMesh;
+		actionKey = "Inspector.UseModelMesh";
+	}
+
+	ImGui::EndDisabled();
+	if (!command || !history.Enabled())
+		return;
+
+	auto before = SceneEditSnapshot::Capture(*scene);
+	if (!before)
+		return;
+
+	bool changed = false;
+	const auto result = (scene->*command)(entity, changed);
+	if (result != Engine::EResult::Success)
+	{
+		const auto message = result == Engine::EResult::NotImplemented
+			? LOCAL("Inspector.ModelMaterialRefreshConflict")
+			: LOCAL("Inspector.ModelMaterialRefreshFailed");
+		NotificationManager::Get().AddNotification(LOCAL(actionKey), message, ELogLevel::Warn);
+		return;
+	}
+
+	if (!changed)
+		return;
+
+	history.Record(std::move(before), SceneEditSnapshot::Capture(*scene), actionKey);
+	auto& prefabMode = PrefabModeManager::Get();
+	if (prefabMode.IsInPrefabMode() && prefabMode.GetPrefabScene() == scene)
+		prefabMode.MarkDirty();
 }
 
 void InspectorPanel::DrawCommonComponents(Engine::Scene& scene, std::span<const entt::entity> entities)
@@ -1428,7 +1504,47 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 			if (!spline.IsValid())
 				ImGui::TextWrapped("%s", LOCAL_CSTR("Spline.InvalidData"));
 		}
-		else changed = ReflectionPropertyDrawer::DrawObject(type, object, registry, &componentSettings, drawHeaderMenu);
+		else if (auto* source = world.try_get<Engine::ModelSourceComponent>(handle);
+			source && source->isMeshAttachment && object.Is<Engine::SkinnedMeshRendererComponent>())
+		{
+			auto& current = world.get<Engine::SkinnedMeshRendererComponent>(handle);
+			auto candidate = current;
+			auto settings = componentSettings;
+			settings.ReadOnlyProperties.insert("skeletonHandle");
+
+			if (ReflectionPropertyDrawer::DrawObject(type, reflection::ObjectView::From(candidate),
+				registry, &settings, drawHeaderMenu))
+			{
+				if (candidate.meshHandle != current.meshHandle &&
+					scene->ReplaceLinkedSkinnedPartMesh(entity, candidate.meshHandle) != Engine::EResult::Success)
+				{
+					ImGui::TextDisabled("%s", LOCAL_CSTR("Inspector.SkinnedPartMeshRejected"));
+				}
+				else
+				{
+					if (candidate.materialHandle != current.materialHandle)
+						source->useModelMaterial = false;
+					current.materialHandle = std::move(candidate.materialHandle);
+					current.castShadow = candidate.castShadow;
+					changed = true;
+				}
+			}
+		}
+		else if (auto* source = world.try_get<Engine::ModelSourceComponent>(handle);
+			source && source->isMeshAttachment &&
+			(object.Is<Engine::SkinnedMeshRendererComponent>() || object.Is<Engine::StaticMeshRendererComponent>()))
+			{
+				auto& material = object.Is<Engine::SkinnedMeshRendererComponent>()
+					? world.get<Engine::SkinnedMeshRendererComponent>(handle).materialHandle
+					: world.get<Engine::StaticMeshRendererComponent>(handle).materialHandle;
+
+				const auto previousMaterial = material;
+				changed = ReflectionPropertyDrawer::DrawObject(type, object, registry, &componentSettings, drawHeaderMenu);
+				if (changed && material != previousMaterial)
+					source->useModelMaterial = false;
+}
+		else
+			changed = ReflectionPropertyDrawer::DrawObject(type, object, registry, &componentSettings, drawHeaderMenu);
 
 		if (changed && object.Is<Engine::CameraComponent>()) world.get<Engine::CameraComponent>(handle).InvalidateCache();
 		if (changed && object.Is<Engine::LightComponent>()) world.get<Engine::LightComponent>(handle).InvalidateCache();

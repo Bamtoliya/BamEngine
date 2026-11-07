@@ -22,7 +22,7 @@ private:
     void RunValidation();
     void FixSelectedIssue(size_t index);
     void FixAllSafe();
-
+    EPanelMenuCategory GetPanelMenuCategory() const override { return EPanelMenuCategory::Assets; }
 private:
     std::vector<AssetReferenceIssue> m_Issues;
     bool m_HasScanned = false;

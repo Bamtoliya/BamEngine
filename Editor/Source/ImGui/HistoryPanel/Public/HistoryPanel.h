@@ -9,9 +9,8 @@ class HistoryPanel final : public IImGui
 public:
 	HistoryPanel();
 	~HistoryPanel() override = default;
-
-	EResult Initialize(void* arg = nullptr);
 	void Draw() override;
+	EPanelMenuCategory GetPanelMenuCategory() const override { return EPanelMenuCategory::SceneEditing; }
 };
 
 END

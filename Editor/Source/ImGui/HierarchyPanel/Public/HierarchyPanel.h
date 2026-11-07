@@ -9,31 +9,43 @@ BEGIN(Editor)
 
 class HierarchyPanel : public IImGui
 {
+
+#pragma region Constructor&Destructor
 public:
 	HierarchyPanel() { m_Name = L"Hierarchy Panel"; m_DisplayNameKey = "Hierarchy.Title"; }
 	virtual ~HierarchyPanel() = default;
-public:
-	virtual EShortcutContext GetShortcutContext() const override { return EShortcutContext::Hierarchy; }
-	static bool DeleteSelectedEntities(class Engine::Scene* scene);
-	void TriggerSelectedEntityRename();
-	virtual void Draw() override;
 	virtual void Free() override { m_EntityTree.ResetDrag(); __super::Free(); }
+#pragma endregion
+
+#pragma region Draw
+public:
+	virtual void Draw() override;
 private:
 	void DrawSceneTitle(class Scene* scene);
 private:
 	template<typename T>
 	bool DrawRenameBox(T* target, ImGuiTreeNodeFlags flags, bool isSelected,
-						function<void()> onDragDrop = nullptr,
-						function<void()> onContextMenu = nullptr);
+		function<void()> onDragDrop = nullptr,
+		function<void()> onContextMenu = nullptr);
 private:
 	void DrawSceneContextMenu(class Scene* scene);
-
 private:
 	void DrawEntityHierarchy(class Scene* scene);
 	void DrawEntityName(const wstring& name, bool isSelected);
 	void DrawEntityRenameBox(class Entity* entity, bool isSelected);
 private:
 	void DrawEntityContextMenu(class Entity* entity);
+#pragma endregion
+
+#pragma region Getter
+public:
+	EPanelMenuCategory GetPanelMenuCategory() const override { return EPanelMenuCategory::SceneEditing; }
+	virtual EShortcutContext GetShortcutContext() const override { return EShortcutContext::Hierarchy; }
+	static bool DeleteSelectedEntities(class Engine::Scene* scene);
+	void TriggerSelectedEntityRename();
+#pragma endregion	
+	
+
 
 #pragma region Variables
 private:

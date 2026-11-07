@@ -20,13 +20,14 @@ public:
 
     void Draw() override;
     EResult SetSelectedEntity(Engine::Entity* entity);
-
+    EPanelMenuCategory GetPanelMenuCategory() const override { return EPanelMenuCategory::SceneEditing; }
     [[nodiscard]] bool IsLocked() const { return m_IsLocked; }
     void SetLocked(bool locked) { m_IsLocked = locked; }
 
 private:
     void DrawHeaderBar(Engine::Entity* currentEntity, std::size_t selectionCount);
     void DrawPrefabHeaderBar(Engine::Entity& entity);
+    void DrawModelMaterialRefresh(Engine::Entity& entity);
     void DrawCommonComponents(Engine::Scene& scene, std::span<const entt::entity> entities);
     void DrawCommonTransformVector(Engine::Scene& scene, std::span<const entt::entity> entities, TransformEditMode mode);
     void DrawCommonFlags(Engine::Scene& scene, std::span<const entt::entity> entities);

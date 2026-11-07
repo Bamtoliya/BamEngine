@@ -346,18 +346,33 @@ void ToolBar::DrawWindowMenu()
 
 		if (ImGui::BeginMenu(LOCAL_LABEL("ToolBar.Panels").c_str()))
 		{
-			for (auto* panel : gui.GetImGuiPanels())
-			{
-				bool open = panel->IsOpen();
+			const auto drawCategory = [&gui](EPanelMenuCategory category, const string& label)
+				{
+					if (!ImGui::BeginMenu(label.c_str()))
+						return;
 
-				ImGui::PushID(panel);
-				const string label = panel->GetDisplayName() + "###Panel";
+					for (auto* panel : gui.GetImGuiPanels())
+					{
+						if (panel->GetPanelMenuCategory() != category)
+							continue;
 
-				if (ImGui::MenuItem(label.c_str(), nullptr, &open))
-					panel->SetOpen(open);
+						bool open = panel->IsOpen();
+						ImGui::PushID(panel);
+						const string panelLabel = panel->GetDisplayName() + "###Panel";
+						if (ImGui::MenuItem(panelLabel.c_str(), nullptr, &open))
+							panel->SetOpen(open);
+						ImGui::PopID();
+					}
 
-				ImGui::PopID();
-			}
+					ImGui::EndMenu();
+				};
+
+			drawCategory(EPanelMenuCategory::Viewport, LOCAL_LABEL("EditorMenu.PanelViewports"));
+			drawCategory(EPanelMenuCategory::SceneEditing, LOCAL_LABEL("EditorMenu.PanelSceneEditing"));
+			drawCategory(EPanelMenuCategory::Assets, LOCAL_LABEL("EditorMenu.PanelAssets"));
+			drawCategory(EPanelMenuCategory::GraphAnimation, LOCAL_LABEL("EditorMenu.PanelGraphAnimation"));
+			drawCategory(EPanelMenuCategory::Diagnostics, LOCAL_LABEL("EditorMenu.PanelDiagnostics"));
+			drawCategory(EPanelMenuCategory::Other, LOCAL_LABEL("EditorCommon.Other"));
 
 			ImGui::EndMenu();
 		}
@@ -400,10 +415,14 @@ void ToolBar::DrawNewViewportPopup()
 		if (ImGui::Button(LOCAL_LABEL("EditorCommon.Create").c_str()))
 		{
 			m_newViewportDesc.Name = StrToWStr(m_NewViewportNameBuf);
-			BaseViewportPanel* newPanel = new BaseViewportPanel();
-			newPanel->Initialize(&m_newViewportDesc);
-			ImGuiManager::Get().AddImGuiPanel(newPanel);
-			ImGui::CloseCurrentPopup();
+			auto* panel = new BaseViewportPanel();
+			if (const EResult result = panel->Initialize(&m_newViewportDesc); result == EResult::Success)
+				ImGui::CloseCurrentPopup();
+			else
+			{
+				Safe_Release(panel);
+				BAM_LOG(Error, "Editor", "UI", "Viewport initialization failed: {}", ResultToString(result));
+			}
 		}
 		ImGui::SameLine();
 		if (ImGui::Button(LOCAL_LABEL("EditorCommon.Cancel").c_str()))
