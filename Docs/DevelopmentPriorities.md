@@ -1,8 +1,8 @@
 # 통합 개발 우선순위와 완료 기준
 
-- 작성일: 2026-10-24 (최종 갱신: 2026-11-05)
+- 작성일: 2026-10-24 (최종 갱신: 2026-11-06)
 - 상태: 2026-11-05 단계 1(F02), 단계 2(F05, F06, F07, F08), 단계 3(P1-E/3-A, 3-B), 단계 4(F12), 빌드/배포(F13, F04) 및 강화학습(F09) 구현 반영, Standalone Client 독립 실행 및 Unity 빌드 정합성 검증 완료, 단일 CPU 파티클 시스템 1단계 코어(Engine 4절) 구축, AnimationTimelineEditorPlan(에디터 저작 도구 및 런타임 액션 타임라인 재생 시스템 Phase 1~5) 구축 완료, 네트워크 기초 파이프라인 및 키네마틱 캐릭터 컨트롤러 구축 완료, 3인칭 캐릭터 Locomotion 1D 블렌드 트리 위상 동기화(Phase Matching) 및 루프 크로스페이드·속도 연동 재생 배속 완성, 모델 재임포트 인플레이스 핫 리로드 및 대화형 3D 임포트 모달(ModelImportModal) 구축 완료.
-- 최신 근거: [코드·문서 정합성과 잔여 위험 점검](CodeDocumentationAudit-2026-11-02.md). 구현 반영과 전체 완료 기준 통과를 구분한다.
+- 최신 근거: [2026-11-06 코드·원칙·계획 점검](CodeDocumentationAudit-2026-11-06.md). **현재 작업 선택은 11절을 우선한다.** 위 상태와 10절의 완료 표시는 당시 기록이며 A01~A10의 현행 잔여 사항을 해소한 뜻이 아니다.
 - 공통 기준: [EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md)
 - 분류와 이관: [SourceOrganizationGuidelines.md](SourceOrganizationGuidelines.md), [BuildConfigurationAndPreprocessing.md](BuildConfigurationAndPreprocessing.md)
 
@@ -89,11 +89,11 @@ Engine·Render·Editor·Client 계획에서 무엇을 먼저 연결하고 무엇
 ### P0-F. 다국어(UTF-8) 파일 경로 및 외부 비동기 파일 감시자 안정화 (Utf8PathHandlingPlan)
 
 - **2026-11-04 현황 (구현 및 안정화 완료)**:
-  - Windows 환경에서 다이얼로그나 탐색기로 '새 폴더' 등 한글 경로를 생성할 때 efsw 콜백에서 MSVC std::filesystem::path로의 narrow 문자열 디코딩 불일치(CP_ACP vs UTF-8, Win32 1113 오류)로 발생하던 크래시를 전수 차단.
+  - 열거한 파일 감시자와 UI 경로에 UTF-8 변환을 반영했다. 2026-11-06 점검에서는 AssetHotReloadManager의 narrow 재변환·예외 경계가 남아 있어 모든 감시자 차단 완료로 보지 않는다(A03).
   - Engine::Utf8ToPath(Functions.h) 단일 진실의 원천 구축.
   - ContentBrowserFileListener, ModuleSourceFileListener, ModuleHotReloadFileListener, ShaderFileListener의 handleFileAction 경로 생성 전수 교정 및 try-catch 예외 방어벽 구축.
   - Content Browser 인라인 리네임(DrawRename)의 renameBuffer, 외부 드롭(OnExteranalDropped), AssetCache 3D 썸네일 경로 변환의 UTF-8 안전화 및 Wide String 결합(wstring) 적용 완료.
-- 완료 기준: 한글/다국어 파일명 및 경로 생성, 수정, 리네임, 드래그앤드롭 시 프로세스 비정상 종료 없이 정상 동작. (달성)
+- 완료 기준: 한글/다국어 파일명 및 경로 생성, 수정, 리네임, 드래그앤드롭과 에셋 감시 콜백이 정상 동작한다. 기존 네 리스너의 기록과 A03 잔여 검증을 구분한다.
 
 전체 폴더 재배치·싱글턴 전면 교체·엔진 다중 DLL 분리는 P0의 완료 조건이 아니다.
 
@@ -311,7 +311,7 @@ Engine·Render·Editor·Client 계획에서 무엇을 먼저 연결하고 무엇
 - 빌트인 리소스와 사용자 애셋 분리 보관 파이프라인 ([ResourceAndAssetSeparationPlan.md](ResourceAndAssetSeparationPlan.md)): `Engine/Resources/` 불변 시스템 자원과 `Assets/` 가변 사용자 콘텐츠의 물리 분리, 가상 마운트 URI(`Engine://`, `Project://`) 해석 계층, 에디터 콘텐츠 브라우저 읽기 전용 보호 및 패키징 시 경량 배포 연동을 구축한다.
 - 모델 임포터 자동 메쉬 LOD 생성 파이프라인 ([InteractiveModelImportPreviewPlan.md](InteractiveModelImportPreviewPlan.md) Phase 5): `meshoptimizer`(`meshopt_simplify`) 라이브러리를 도입하여 QEM 기반 정점/UV 경계 보존 메쉬 간소화 수행, `_LOD1.bammesh` 자동 디스크 베이킹 및 `LODGroupComponent` 화면 커버리지 임계값 자동 구성을 연결한다.
 - 텍스처 밉맵(Mipmap) 체인 구축 및 GPU 블록 압축(BC7/DDS) ([RenderingDevelopmentPlan.md](RenderingDevelopmentPlan.md) S2-D): CPU `stb_image_resize2` 기반 Mip 0 ~ Mip N 런타임 다운샘플링 체인 생성 및 RHI 다중 서브리소스 업로드(`UploadTextureData`)를 지원하고, 에셋 임포트 시 `DirectXTex`(`texconv`) 오프라인 BC7/DDS 베이킹 파이프라인을 구축하여 원거리 텍스처 앨리어싱 해소 및 VRAM 대역폭을 최적화한다.
-- Engine 14절: 해당 예제에 필요한 캐릭터 이동·게임 저장·카메라·오디오·UI 위젯·타일맵·비동기 로딩을 작은 흐름으로 연결한다.
+- Engine 14절: 해당 예제에 필요한 캐릭터 이동·게임 저장·카메라·오디오·UI 위젯·타일맵·비동기 로딩을 작은 흐름으로 연결한다. 2D 제작은 [스프라이트 그리기 모드와 2D 타일맵](EngineDevelopmentPlan.md#l-스프라이트-그리기-모드와-2d-타일맵)의 그리기 모드와 기본 타일 배치를 독립적으로 검증하고, 배치와 저장 이후 이웃 규칙을 연결한다.
 - Engine 14절 M 및 [NetworkFoundationPlan.md](NetworkFoundationPlan.md): 소켓 전송 계층(`INetworkTransport`)과 바이너리 패킷 프로토콜, 세션 라이프사이클(Connect/Disconnect/Ping) 기초를 구축하고, ECS 엔티티 리플리케이션(`NetworkIdentity`, `NetworkTransform`)과 RPC로 확장한다. 멀티플레이 전체를 강화학습이나 V-Tuber의 필수 선행 조건으로 묶지 않는다.
 - Render M1: Compute 기반과 S3 이후 GPU 가시 명령·간접 그리기→Hi-Z를 CPU 기준 경로와 비교한다.
 - Render M2: 바인딩 병목·명령 구성 제약이 측정될 때 Bindless를 추가한다.
@@ -405,12 +405,12 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
 - **완료 기준**: 현재 재현되는 실패와 과거 로그를 구분할 수 있다. 작업마다 관련 검사를 수행하며, 매 단계에서 무관한 전체 검사를 반복하지 않는다.
 - 이 문서 작성에서 빌드·검사·재현을 실행한 것은 아니다.
 
-### 10.3 단계 1 — 편집 데이터와 출력 보호 [완료]
+### 10.3 단계 1 — 편집 데이터와 출력 보호 [당시 구현 기록 / 삭제 보호 재개]
 
 1. **AnimatorGraphPanel 저장 보호 — P1-A / F01·F11 [완료]**
    - 원자적 파일 저장/로드 및 실패 결과 전파(Step 1), New/Open/종료 미저장 보호 모달(Step 2), InputManager 및 로캘 일원화(Step 3) 완료 (2026-11-02).
    - **후속 대기 과제 (목록 등록)**: GraphPanel과의 캔버스 UI 토대 일원화(`imgui-node-editor` 기반 캔버스 마이그레이션)는 데이터 안전성 확보 후 고도화 스프린트에서 착수.
-2. **패키징 삭제 범위의 최소 보호 — P2-E / F03 [완료]**
+2. **패키징 삭제 범위의 최소 보호 — P2-E / F03 [부분 반영 / A01·A02 잔여]**
    - 입력/출력 절대 경로 정규화, 프로젝트 저장소 루트(`$Root`)·드라이브 루트·핵심 디렉터리(`Engine`, `Editor`, `Resources` 등) 삭제 차단 가드 구축.
    - `-LiteralPath` 적용 및 필수 바이너리 누락 시 패키징 중단 예외 처리 완료.
    - **검증 완료**: `.`, `Resources`, `C:\` 전달 시 삭제 수행 전 `Security Violation` 예외 정상 차단 확인.
@@ -420,7 +420,7 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
    - `ValidateImportOutput` 패턴 및 `SaveToBinaryFile` 반환값 검증을 머티리얼에도 적용하여 파일 저장 실패 은폐 원천 차단 완료.
    - **완료 기준 달성**: 머티리얼 저장 실패 시 임포트 전체가 성공으로 표시되지 않고 즉시 실패를 전파하며, 재임포트 결과가 Overwrite 정책과 일치한다.
 
-각 작업은 독립된 작은 변경으로 검토하여 단계 1의 전체 항목이 완료되었다.
+각 작업은 독립된 작은 변경으로 검토한다. 2026-11-06 현재 출력 삭제 보호와 패키징 생성 실패(A01·A02)가 남아 단계 1 전체 완료로 보지 않는다.
 
 ### 10.4 단계 2 — 기존 리소스·재생·시작 경로의 정확성 [완료]
 
@@ -432,7 +432,7 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
   - 부분 트랙 누락 채널에서 0/identity 대신 본의 원래 바인드 로컬 TRS를 분해하여 보존하도록 `SampleLocalTRS` 보완.
   - ASM `isLooping` 제어, `Stop()` 시간 리셋 및 `controllerPath` 상대 경로 정규화 완료.
 - **기존 Client의 실패 보고 — P2-E / F05 일부 [완료]**:
-  - `ConfigManager::Load` 반환 결과(`ConfigLoadResult`) 검증을 통해 설정 파일 부재/손상 시 원인 로깅 및 안전 종료 처리.
+  - `ConfigManager::Load` 반환 결과를 검사한다. 현행은 설정 파일 부재 시 경고·기본값 성공, 파싱 실패 시 실패 반환이다. 배포의 누락 정책은 A08에 따라 별도 확정한다.
   - `SchemaVersion` 유효성(0 검사) 및 최대 지원 버전 초과 검사 추가, 시작 씬 부재 시 명확한 `FileNotFound` 반환 연결 완료.
 
 ### 10.5 단계 3 — 머티리얼 기능 확장 (P1-E / 렌더링 S2-C) [완료]
@@ -447,8 +447,8 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
 ### 10.6 단계 4 — 제작 안정성과 작업량 제한 (P1-D / P3 준비)
 
 - **썸네일 축소·캐시/업로드 예산 — F12 [완료]**:
-  - `LoadImageThumbnail` 내 128×128 Bilinear 다운샘플러 도입으로 고해상도 이미지 디코드 메모리 99% 절감 (2026-11-03).
-  - 메인 스레드 대기열(`m_PendingUploadQueue`)을 통한 프레임당 최대 4개 업로드 스로틀링으로 프레임 드랍(Hitch) 제거.
+  - `LoadImageThumbnail`에서 원본 디코드 후 최대 128×128로 축소해 보관·업로드 데이터를 제한한다. 원본 디코드 피크 감소율을 뜻하지 않는다(A07).
+  - 메인 스레드 대기열에서 프레임당 최대 4개 업로드를 처리한다. hitch 제거 여부는 프레임 시간 측정으로 확인한다.
   - LRU 기반 최대 256개 항목 / 최대 64MB VRAM 바이트 예산 퇴거(Eviction) 메커니즘 구축 완료.
 - **참조 검증·재임포트 완성 및 바이너리 머티리얼 조사 — F02 잔여 [완료]**:
   - `PlatformPath::ToProjectRelative` 유틸리티 추가 및 `ModelImporter::CreateJob`에서 에셋 출력 경로의 절대 경로 하드코딩 방지 완료.
@@ -497,7 +497,7 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
   - `IRLEnvironment`/`CartPoleEnvironment`의 `seed=0` 재현성(std::optional<uint64_t>)을 수정하여 `reset(seed=0)`의 동일 상태 초기화 보장 (2026-11-03).
   - `RLServer.cpp`에 Glaze JSON 파서, 소켓 부분 전송 방지 `SendAll` 루프, 64KB 버퍼 상한 가드 구축.
   - `bam_gym_env.py` 순수 표준 라이브러리 폴백 및 `sample()` 메서드 `self` 바인딩 에러 수정 완료.
-- **배포 작업 — F04·F05 잔여 [완료]**:
+- **배포 작업 — F04·F05 [과거 실행 기록 / A01·A02·A08 잔여]**:
   - `PackageClient.ps1`의 멀티 구성 프리셋(`bin/$Config`, `bin` 등) `$BinDirCandidates` 다단계 자동 탐색 구축.
   - `$Root/Config/Project.json` 필수 설정 및 `Resources` 하위 핵심 에셋 온전한 수집 자동화 및 Standalone Client 독립 실행 검증 완료.
 - **Release 에디터의 모듈 컴파일 — F13 [완료]**:
@@ -509,3 +509,38 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
 한 F 항목을 여러 단계로 나눴다면 남은 범위를 명시하고 전체를 조기에 완료 처리하지 않는다.
 
 코드 직접 수정·빌드·테스트 권한은 사용자 요청과 AGENTS.md를 따르며 이 문서가 실행 허가를 대신하지 않는다.
+
+## 11. 현재 작업 트리 기준 우선순위 재평가 (2026-11-06)
+
+근거는 [이번 점검 A01~A10](CodeDocumentationAudit-2026-11-06.md)이다. 10절의 과거 완료 기록보다 이 절의 잔여 범위와 작업 순서를 우선한다. 심각도는 피해의 크기, 아래 순서는 사용 경로·선행 조건을 포함한 추천이다. 소스 수정은 아직 수행하지 않았다.
+
+### 11.1 먼저 처리할 작은 안정화
+
+1. **에셋 감시자 UTF-8·예외 경계 — A03 / P0-F.** 감시 등록·콜백 변환, 공용 디바운스 큐의 `filesystem::path` 보존, 메인 스레드의 확장자 분류와 리로드 경로를 점검한다. 한글·이모지 파일과 다국어 프로젝트 루트에서 실제 이벤트를 확인한다.
+2. **RT 진단의 입력 차원 보호 — A04 / P1-E.** 미지원 큐브맵 입력 차단을 먼저 적용하고 필요 시 면 선택과 2D 변환을 추가한다. 모든 RT 및 채널 전환을 GPU에서 검증한다.
+3. **모델 편집·임포트 splitter 저장값 보존 — A05 / P1-B.** 표시값과 선호값을 분리한다. 좁은 창·복원·재열기 검증 후 위젯 분리와 대시보드 UI 확장을 진행한다.
+4. **타일 컬링 디스패치 범위 — S4 / A06 후속.** 큰 타일 버퍼를 재사용하더라도 현재 G-Buffer 위치 텍스처에 맞는 그룹만 실행한다. 해상도 축소·복원과 서로 다른 크기의 씬·게임 뷰에서 조명 일관성을 확인한다.
+
+각 단계는 별도로 변경하고 확인한다. Client 실행·배포 관련 작업은 빌드·패키징 단계에서 묶어 진행한다.
+
+### 11.2 사용 조건에 따라 앞당길 작업
+
+- **다수 광원 지원 확장 — A06/F10.** 현행 씬 광원 업로드 상한은 32개다. 이 상한을 확장할 때 CPU 버퍼 용량·셰이더 순회 범위와 타일당 256개 초과 계측·폴백을 함께 검증한다.
+- **재임포트 작업**: 현재 미커밋 변경의 Overwrite/SaveToFile 조합, 기존 핸들 유지, 중간 파일 저장/부모 머티리얼 실패를 확인한다. 정적 검토만으로 다중 파일 트랜잭션 완료를 선언하지 않는다.
+- **2D 제작 예제**: 로그에 남은 구형 sprite/texture 로드 실패의 현재 재현 여부를 먼저 확인한다. 현행 로더 문제와 오래된 샘플 데이터 문제를 분리한 뒤 Engine 14절 L의 Simple/Filled 또는 기본 TileMap 중 필요한 작은 예제로 진행한다.
+- **Client 빌드·패키징 단계까지 보류 — A01·A02·A08.** 배포 작업을 시작할 때 관리 출력 범위 제한과 삭제 없는 경로 판정부터 진행한다. 필수 입력 사전 검사, 디렉터리 생성과 staging 교체를 보완한 뒤 설정 누락 정책, 시작 매니페스트·에셋 루트, 필수 자원 수집·저장소 밖 실행을 같은 단계에서 검증한다.
+
+### 11.3 안정화 다음 기능 선택
+
+- **기존 기능의 완료 시나리오**: 애니메이터 레이어·2D 블렌드 저장/재열기, 스플라인 편집/Undo/Redo/PIE, 실제 모델 재임포트 등 이미 구현한 사용 경로의 남은 검증을 먼저 좁힌다. 과거 단위 검사 통과를 전체 UI/GPU 완료로 확대하지 않는다.
+- **텍스처 품질 경로**: 원거리 텍스처 문제가 실제 목표 장면에서 확인되면 Render S2-D의 다중 서브리소스 업로드와 밉 체인부터 진행한다. BC 압축 베이킹은 그 다음이며 정확한 메모리·시간 측정을 남긴다. 자동 메시 LOD는 별도의 기하 비용이 확인될 때 선택한다.
+- **에셋 분리 — A10**: 경로·URI·호환 계약을 먼저 검증하고 파일 이동은 작은 묶음으로 뒤에 진행한다. 기존 PlatformPath/ResourceManager 소비 경로를 확장하며 중복 경로 서비스를 만들지 않는다. 전체 폴더 이동은 새 기능의 일괄 선행 조건이 아니다.
+- **2D 그리기/타일맵**: 기존에 작성된 Engine 14절 L 계획을 유지한다. Fill/9-slice와 기본 셀 배치는 독립적으로 가능하고 자동 타일은 셀 편집·저장 이후다.
+- **후순위**: ImGui 23절 대시보드·24절 위젯 분리, 상태 머신 캔버스 마이그레이션, 고급 RPC/예측, GPU 파티클·Bindless·GI는 현재 결함 또는 구체적 콘텐츠/측정 요구가 없는 한 위 안정화보다 뒤에 둔다. 장기 목표는 삭제하지 않는다.
+
+### 11.4 상태·검증 기록 규칙
+
+- A07 성능 표현과 A08/A09 문서 불일치는 이번 문서 수정으로 정정했다. 이는 관련 런타임 결함 수정이나 성능 검증 완료가 아니다.
+- 로캘 감사는 634개 파일/2,219개 키에서 위반 없음. 새 UI는 기존 키 재사용 또는 Editor.csv/Engine.csv 원본에 추가하고, 명령 단축키는 ShortcutManager에 등록한다. 키 중복·동적 힌트·언어 전환과 UI 문맥을 해당 작업에서 확인한다.
+- 기준 커밋, 미커밋 범위, 구성, 검사 이름과 실제 실행 개수, 실패 시나리오, UI/GPU 미검증을 기록한다. Debug LastTest의 GraphExecutionCheck 한 건을 전체 29개 통과로 표시하지 않는다.
+- 소스 전면 이동·싱글턴 전면 교체·모든 문서의 장기 목표 구현을 완료 조건으로 추가하지 않는다.

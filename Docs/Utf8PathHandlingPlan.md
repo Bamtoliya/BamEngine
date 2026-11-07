@@ -1,7 +1,7 @@
 # UTF-8 파일 경로 및 다국어 입출력 안정화 계획 (Utf8PathHandlingPlan)
 
 - 작성일: 2026-11-04
-- 상태: 계획 및 구현 진행
+- 상태: 열거한 네 리스너와 UI 경로 반영 / AssetHotReloadManager 잔여 경계 발견(2026-11-06, A03)
 - 관련 기준: [EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md), [DevelopmentPriorities.md](DevelopmentPriorities.md)
 
 ---
@@ -65,6 +65,12 @@
 - [x] **Phase 4: 썸네일 캐시 및 파일 결합 Wide String 유지 보완**
   - `Editor/Source/AssetManager/AssetCache/Private/AssetCache.cpp`
   - `Editor/Source/ImGui/ContentBrowserPanel/Private/ContentBrowserGridItem.cpp` (스프라이트/JSON 생성 경로)
+- [ ] **Phase 4-B: 에셋 감시자 경계 보완 (2026-11-06 추가)**
+  - `AssetHotReloadManager.cpp`의 `TextureFileListener`도 대상에 포함한다. `u8path` 이후 `filename().string()`으로 되돌리는 판정 함수와 `addWatch(m_WatchDirectory.string())`를 교정한다.
+  - 기존 `Utf8ToPath`/`WStrToStr`를 재사용하고 콜백 예외 방어·감시 등록 실패 보고를 연결한다. 상세 근거는 [A03](CodeDocumentationAudit-2026-11-06.md#a03--높음--에셋-감시자에-다국어-변환과-예외-경계가-남음).
+  - `IHotReloader::NotifyFileModified`의 `filePath.string()` 변환도 제거한다. 디바운스 키와 수집 결과를 `std::filesystem::path`로 유지하고 에셋 유형 판정과 리로드 로그의 경로 변환을 함께 확인한다.
+  - `Texture::Reload`는 이미 path로 파일을 읽는다. 읽기 전 로그용 `targetPath.string()`을 UTF-8로 바꾼다. 로캘 CSV 변환기의 CWD·외부 프로세스 실행 경계는 별도 검증 대상으로 기록한다.
+  - 한글뿐 아니라 시스템 코드페이지로 표현 불가능한 문자·이모지 파일명과 다국어 프로젝트 루트를 검증한다.
 - [ ] **Phase 5: 빌드 검증 및 문서화, 커밋**
   - 전체 빌드 통과 확인
   - `Docs/DevelopmentPriorities.md`, `Docs/ImplementationLog.md` 기록 및 Git 커밋

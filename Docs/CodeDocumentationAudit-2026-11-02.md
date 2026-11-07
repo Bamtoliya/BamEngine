@@ -1,5 +1,7 @@
 # 코드·문서 정합성과 잔여 위험 점검 — 2026-11-02
 
+> 이 문서는 당시 조사와 이후 해결 기록을 보관한다. 현행 판단은 [2026-11-06 점검](CodeDocumentationAudit-2026-11-06.md)과 [통합 계획 11절](DevelopmentPriorities.md)을 따른다. F03/F04의 패키징 완료는 A01/A02, F12의 디코드 메모리 99%·hitch 제거 표현은 A07, F05의 설정 누락 실패 설명은 A08로 재평가했다. 아래 과거 완료·미완료 문구를 현재 작업 트리 전체 상태로 확대하지 않는다.
+
 - 기준: `main`, `0dea2d8b` 및 점검 시점의 작업 트리. 문서 수정 전 `git -c core.fsmonitor=false status --short` 결과는 비어 있었다.
 - 방법: 소스·호출부·설정·CMake·관련 Docs·기존 로그의 정적 대조.
 - 변경 권한: Markdown 작성·수정만 사용했다. C++·Python·PowerShell·설정·에셋은 변경하지 않았다.

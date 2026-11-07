@@ -26,7 +26,7 @@ GLSL `layout(set = 2, binding = 0)`.
 | `3` | Pass-specific constants, G-Buffer/Shadow/Light SRVs, Samplers, and Compute UAVs | `[5]` Root CBV (`b0, space3`)<br>`[6]` Root CBV (`b1, space3`)<br>`[7]` SRV Table (`t0-t15, space3`)<br>`[8]` Sampler Table (`s0-s7, space3`)<br>`[9]` Root UAV (`u0, space3`)<br>`[10]` Root UAV (`u1, space3`) | `b0`: `FogData` / PostProcess params / `CullingConstants` / GeometryPass `MaterialConstants` (RHI CBV slot `2`)<br>`b1`: `LightingPassData` / Shadow / Sky data (RHI CBV slot `3`) ... |
 
 > **Note on Skinning & Backend Parity (2026-10-30)**:
-> - Legacy `boneMatrices` (`t0, space0`) is not currently declared in `DirectX12RHI::CreateRootSignature()`. When skeletal skinning (P2-D) is connected, its SRV/CBV slot must be assigned without colliding with `space0`–`space3` above.
+> - **2026-11-06 정정:** 현재 `skinningVS.hlsl`의 `boneMatrices`는 `t0, space2`를 사용한다. `Renderer.cpp`는 본 행렬을 `BindInstanceBuffer(..., sizeof(mat4))`로 제출하고 D3D12 root parameter `[4]`가 이를 받는다. 같은 슬롯은 정적 인스턴싱의 `InstanceData`에도 사용되므로 드로우의 셰이더와 stride 계약을 맞춘다. 두 데이터의 동시 사용 지원을 의미하지 않는다. 과거 `t0, space0` 미연결 설명을 현재 상태로 적용하지 않는다.
 > - `SDLGPURHI` currently implements graphics CBV/texture/sampler bindings (`space0`, `space1`, `space2` CBV, `space3` CBV/SRV/Sampler), while `DrawIndexedInstanced`, `BindInstanceBuffer` (`t0, space2`), and Compute UAV/Dispatch (`u0-u1, space3`) are currently D3D12-only.
 
 ## D3D12 Root Signature Layout (`DirectX12RHI.cpp`)

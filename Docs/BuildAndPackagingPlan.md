@@ -1,12 +1,12 @@
 # 다음 목표: Client 실행 설정과 빌드·패키징
 
-- 작성일: 2026-10-24 (최종 갱신: 2026-11-05)
-- 상태: 일부 구현 / 실행 루트·설정 기반 시작 씬 연결 반영, F03·F04 패키징 수집 및 Standalone Client 독립 실행 검증 완료 (시작 매니페스트·실패 정책 잔여)
+- 작성일: 2026-10-24 (최종 갱신: 2026-11-06)
+- 상태: 일부 구현 / 실행 루트·설정 기반 시작 씬 연결 반영. 과거 독립 실행 기록은 유지하되 현행 패키징은 A01·A02 수정 전 완료로 보지 않는다(2026-11-06).
 - 관련 지침: [EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md)의 3절, 12절, 13절
 - 직렬화 지침: [ReflectionArchiveGuidelines.md](ReflectionArchiveGuidelines.md)
 - 분류·이관 기준: [SourceOrganizationGuidelines.md](SourceOrganizationGuidelines.md)
 - 통합 우선순위: [DevelopmentPriorities.md](DevelopmentPriorities.md)의 P2-E
-- 최신 대조: [2026-11-02 코드·문서 점검](CodeDocumentationAudit-2026-11-02.md) F03~F06. 이번 갱신에서 새 빌드·실행·패키징은 하지 않았다.
+- 최신 대조: [2026-11-06 점검](CodeDocumentationAudit-2026-11-06.md) A01·A02·A08·A10. 이번 갱신에서 새 빌드·실행·패키징은 하지 않았다.
 
 ## 1. 진행 결정
 
@@ -19,7 +19,7 @@
 2026-11-02 우선순위 조정에서는 **삭제 범위 보호(F03)**와 **기존 Client의 설정 실패 보고(F05 일부)**를 작은 안정화 작업으로 분리한다.
 바이너리/설정/참조 수집(F04), 매니페스트·에셋 루트·배포 렌더 경로와 Cook/Stage/Package는 배포 재개 경로에서 진행한다.
 전체 배포 완료를 다른 제작·렌더링·애니메이션 작업의 공통 선행 조건으로 두지 않는다.
-세부 실행 조건은 [DevelopmentPriorities.md 10절](DevelopmentPriorities.md)을 따른다.
+2026-11-06 사용자 결정에 따라 A01·A02의 출력 안전성과 A08의 Client 설정 정책을 포함한 Client 실행·배포 작업은 빌드·패키징 단계에서 함께 진행한다. 통합 작업 순서는 [DevelopmentPriorities.md 11절](DevelopmentPriorities.md)을 따른다.
 
 이 문서는 코드 반영 범위와 남은 개발 목표를 함께 기록한다. 1~2단계 전체나 배포 검증 완료를 의미하지 않는다.
 현재 에디터 설정 저장·복원 작업과 Client 배포 작업의 범위를 구분한다.
@@ -32,13 +32,13 @@
 - Editor는 `ConfigManager`로 프로젝트 설정을 읽고 `StartupManifestPath`를 시작 리소스 로드에 사용한다.
 - Client는 실행 파일 위치와 프로젝트 마커로 루트를 찾고 Runtime/PlatformPath에 주입한다.
 - `LoadProjectSettings()`가 설정을 읽고 `LoadStartupScene()`이 지정한 씬을 선택한다. 빈 값일 때만 NewScene2로 폴백한다.
-- 설정 로드 결과·스키마 버전은 검사하지 않고, `StartupManifestPath`와 `AssetDirectory`는 Client 시작 흐름에 반영하지 않는다.
+- 설정 로드 결과·스키마 버전을 검사한다. `NotFound`는 경고 후 기본값으로 성공, 파싱 실패는 실패, 0 또는 지원 초과 버전은 InvalidArgument다. `StartupManifestPath`와 `AssetDirectory`의 시작 흐름 연결은 잔여 목표다.
 - Client에 기본 프리미티브 메시 등록·카메라 선택·시스템 등록과 단일 백버퍼 Forward 패스가 있다.
   Editor의 디퍼드·조명·HDR/후처리와 동등한 렌더링 경로는 아니다.
 - `Client/CMakeLists.txt`의 Visual Studio 디버거 작업 디렉터리는 소스 루트다. 해당 타깃에 과거 `BAMENGINE_PROJECT_ROOT` 정의는 없다.
 - `StartupResourceLoader`는 현재 Editor의 AssetManager 소스 영역에 있다.
   Client에서 재사용할 범위와 의존성은 빌드·패키징 작업에서 검토한다.
-- Tools/Scripts/PackageClient.ps1은 2026-11-03 F03(출력 경로 절대 정규화 및 파괴적 삭제 방어) 및 F04(구성별 바이너리 다단계 자동 탐색, Config/Project.json 및 핵심 런타임 리소스 수집 자동화, 필수 파일 누락 시 중단 예외) 반영이 완료되어 독립 실행 배포 패키지 구축이 검증되었다.
+- `PackageClient.ps1`에는 바이너리 탐색·설정 수집·일부 경로 삭제 거부가 있다. 그러나 `Client`/`Utility`와 임의 외부 출력 삭제를 막지 못하며, 기존 출력 삭제 후 `New-Item -LiteralPath`에서 실패할 수 있다. 과거 독립 실행 기록은 현행 스크립트 성공의 근거가 아니다(A01·A02).
 
 기존 ImplementationLog에는 다른 CWD에서 Client 초기화·지오메트리 표시를 확인한 기록이 있다.
 이번 갱신은 소스와 기존 로그의 대조이며 해당 실행이나 저장소 밖 배포를 새로 검증한 결과가 아니다.
@@ -55,6 +55,13 @@ Editor에서 제작하고 저장한 프로젝트를 배포 폴더로 구성하�
 - 같은 빌드·패키징 처리를 Editor UI 밖에서도 호출할 수 있게 구성한다.
 
 ## 4. 구현 순서
+
+### 선행 안전성 보완 (2026-11-06)
+
+- 빌드·패키징 단계가 시작되면 A01/A02를 먼저 처리한다. 출력은 관리 영역의 전용 하위 폴더로 제한하고 실제 경로·입력 겹침을 검증한다.
+- 모든 필수 바이너리·설정을 기존 출력 삭제 전에 검사한다. 지원되는 디렉터리 생성 API로 staging을 만든 뒤 성공한 결과만 교체한다.
+- 경로 거부 검사는 삭제 없이 수행하며 소스 경로를 실제 재귀 삭제하는 테스트를 하지 않는다.
+- A08에 따라 배포의 설정 누락 실패 정책을 확정한다. 현행 기본값 폴백을 문서만으로 변경 완료 처리하지 않는다.
 
 ### 1단계: 실행 경로와 설정 계약 — 경로 헬퍼 반영 / 실패 정책 미완료
 
@@ -113,7 +120,7 @@ Package/
 - [ ] `StartupScenePath`를 바꾸면 해당 씬이 선택된다.
 - [ ] 시작 리소스와 씬의 에셋 참조가 복원되고 실제 화면·입력·필요한 게임 동작을 확인한다.
 - [ ] Editor 실행 파일과 개인 작업 상태 없이 Client가 실행된다.
-- [ ] 설정 누락, 잘못된 버전과 존재하지 않는 시작 씬에서 원인을 기록하고 실패한다.
+- [ ] 설정 누락은 현행 기본값 폴백과 배포용 실패 정책을 구분해 확정·검증한다. 파싱 실패·잘못된 버전·존재하지 않는 시작 씬은 실패 결과를 확인한다.
 - [ ] 필수 리소스나 프로젝트 모듈 누락 시 원인을 확인할 수 있다.
 - [ ] 빌드, 배포 폴더 생성, 실제 실행 결과를 각각 기록한다.
 - [ ] 패키징 출력 경로가 소스/리소스/드라이브 루트이면 삭제 전 거부한다.

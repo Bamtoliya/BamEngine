@@ -131,10 +131,11 @@ std::filesystem::path ResolvePath(const std::wstring& virtualKey)
 
 ### Phase 1: 기반 경로 계약 및 디렉터리 분리 (준비 단계)
 - [ ] `ProjectSettings`(`Engine/Source/Core/Config/Public/Config.h`)에 `EngineResourceDirectory` 경로 설정 항목 정립.
-- [ ] `Engine/Resources/` 디렉터리를 신설하고 필수 코어 자원(기본 셰이더, 기본 프리미티브 메시, 기본 텍스처, 로컬라이제이션 CSV)을 1차 이동.
-- [ ] `Assets/` 디렉터리를 신설하고 프로젝트 테스트 에셋(씬, 임포트 모델, 사용자 머티리얼 등)을 이동.
+- [ ] URI 식별자·물리 경로·직렬화 표현을 구분하고 기존 `Resources/...` 대응, 외부 경로 거부, 빌트인 쓰기 금지, 실패 시 롤백 계약을 먼저 정한다.
+- [ ] 실제 파일을 이동하지 않고 참조 목록과 대표 씬/머티리얼/컨트롤러를 확보한다. 물리 이동은 Phase 3-B 이후다(2026-11-06 A10).
 
 ### Phase 2: `ResourceManager` 및 가상 마운트 해석 계층 구현
+- [ ] 먼저 기존 물리 위치에 마운트를 연결해 새 해석과 기존 참조가 같은 리소스를 가리키는지 확인한다. 현재 PlatformPath의 경로 결합을 URI 구현으로 간주하지 않는다.
 - [ ] `PlatformPath` 및 `ResourceManager`에 가상 스킴(`Engine://`, `Project://`) 해석 로직 구현.
 - [ ] 기존 상대 경로를 올바른 가상 스킴으로 변환하는 하위 호환 폴백 및 경고 로깅 추가.
 - [ ] 직렬화/역직렬화(`archive_reflection`) 시 가상 URI 포맷으로 저장/복원되도록 정규화.
@@ -144,7 +145,16 @@ std::filesystem::path ResolvePath(const std::wstring& virtualKey)
 - [ ] `Engine://` 리소스에 대한 읽기 전용 보호(삭제/이동 방지) 및 복사/인스턴스 생성 편의 기능 추가.
 - [ ] `ResourcePicker`의 카테고리 필터(`Project` / `Engine Built-in`) 분리.
 
+### Phase 3-B: 소비자 검증 후 작은 묶음의 물리 이관
+
+- [ ] 감시자·임포터·피커·썸네일·시작 설정의 경로 해석을 먼저 연결한다. 빌트인 로캘 원본은 CSV를 유지하며 생성 JSON을 직접 편집하지 않는다.
+- [ ] `Engine/Resources/`와 `Assets/`로 작은 에셋 묶음을 이관하고 참조 변환·저장/재열기·재임포트·핫리로드를 확인한다. 실패 시 원래 파일/참조로 돌아갈 수 있게 한다.
+- [ ] 시작 씬의 정적 참조 외에 동적 로드 자원의 명시적 포함 정책을 정의한다. 폴더 이동만으로 패키징 수집이 완성됐다고 보지 않는다.
+
+이 순서는 [통합 계획 11절](DevelopmentPriorities.md)의 안전성 작업 이후에 적용한다. 전체 물리 이관을 다른 기능의 필수 선행 조건으로 두지 않는다. 근거는 [이번 점검 A10](CodeDocumentationAudit-2026-11-06.md)이다.
+
 ### Phase 4: 배포 스크립트 및 패키징 연동 검증
+- [ ] 배포 재개 시 A01·A02의 출력 보호·생성 실패를 먼저 보완한다. 이번 계획 변경으로 배포 보류를 자동 해제하지 않는다.
 - [ ] `PackageClient.ps1` 스크립트를 갱신하여 `Engine/Resources/` 런타임 필수 리소스와 `Assets/` 프로젝트 에셋을 각각 분리 수집하도록 개선.
 - [ ] 배포 폴더에서 Client가 `Engine://` 및 `Project://`를 정상적으로 마운트하여 독립 실행되는지 검증.
 

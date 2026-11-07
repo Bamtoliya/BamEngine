@@ -1,6 +1,6 @@
 # 엔진 기능 개발 계획
 
-- 작성일: 2026-10-24 (최종 갱신: 2026-11-02)
+- 작성일: 2026-10-24 (최종 갱신: 2026-11-06)
 - 상태: 개발 목표 및 2026-11-01 구현 현황 반영 / 기능별 구현·실행·성능 검증은 별도 기록
 - 최종 결과물: 2D·3D 게임, AI 강화학습 시뮬레이터, 2D·3D V-Tuber 실행·방송 및 모델·리깅 제작 도구
 - 범위: 공통 실행 기반, 게임 제작 모듈, 학습 환경·외부 학습 연동, 아바타 제작·추적·표현·출력
@@ -232,6 +232,8 @@ Niagara 에셋 호환이나 같은 수준의 기능 전체 구현을 초기 완�
 
 완료 예제: 같은 클립을 두 엔티티가 서로 다른 속도와 시작 시간으로 재생하고, 저장·복원·일시정지·낮은 FPS에서 결과가 일치한다.
 
+Sprite의 정적 그리기 모드와 타일맵 제작은 [14절 L](#l-스프라이트-그리기-모드와-2d-타일맵)에서 다룬다.
+
 ## 9. 애니메이션 재생·포즈 평가·스키닝
 
 ### 1단계: 클립 재생과 Transform/속성 트랙
@@ -321,6 +323,7 @@ Niagara 에셋 호환이나 같은 수준의 기능 전체 구현을 초기 완�
 ## 12. 권장 진행 순서와 의존 관계
 
 전체 공통 기반·렌더링·Editor·결과물별 작업의 선택은 [DevelopmentPriorities.md](DevelopmentPriorities.md)를 따른다.
+2026-11-06 재평가에서는 해당 문서 11절의 안전성 안정화를 먼저 적용한다. 아래 목록은 기능 의존 관계이며 이미 구현한 파티클·스플라인·애니메이터를 다시 처음부터 구현하는 대기열이 아니다. 기존 기능의 저장/재열기·PIE·실패 경로 검증과 신규 확장을 구분한다. 14절 L의 2D 그리기/타일맵 목표는 유지하며, 해당 예제 착수 시 기존 sprite/texture 로드 오류 기록의 현재 재현 여부부터 확인한다.
 Client 시작 설정과 배포는 BuildAndPackagingPlan의 기존 보류 상태를 유지하며, 아래 순서가 이를 자동 재개하지 않는다.
 
 기존 편집 데이터 보호·리소스 참조·배포 목표를 유지하면서 아래 기능을 작은 예제로 완성한다.
@@ -448,11 +451,40 @@ Client 시작 설정과 배포는 BuildAndPackagingPlan의 기존 보류 상태�
 - V-Tuber용 마이크 캡처·레벨/음소·장치 선택·오디오 타임스탬프는 재생과 별도 경로로 추가한다.
 - 완료 예제: 장면 변경·장치 변경·음소거와 과도한 동시 소리에서 정한 믹스·채널 수·지연을 유지한다.
 
-### L. 2D 타일맵
+### L. 스프라이트 그리기 모드와 2D 타일맵
 
-- TileSet·레이어·셀 편집·자동 연결·청크 배칭·충돌/내비게이션 생성을 지원한다.
-- 완료 예제: 제작한 맵을 저장·실행하고 일부 셀 수정 시 관련 청크만 갱신한다.
-  3D Terrain 기능을 2D TileMap의 대체로 취급하지 않는다.
+2026-11-06 소스 기준으로 월드 스프라이트의 `ESpriteDrawMode`에는 `Simple`, `Sliced`, `Tiled`, `Filled`가 선언되어 있다. `SpriteRenderSystem::OnSubmit()`은 `Simple`만 제출한다. `UIImageComponent`의 이미지는 현재 RectTransform 영역에 사각형으로 표시한다. Sprite 에셋의 영역·Pivot·PPU와 기존 Flipbook을 출발점으로 삼는다. 아래 그리기 모드 확장과 TileSet·TileMap은 개발 목표다. 그리기 모드와 기본 타일 배치는 독립적으로 착수할 수 있다. 자동 타일은 셀 편집과 저장 경로를 갖춘 뒤 연결한다.
+
+#### 1단계. Sprite와 UI Image의 그리기 모드
+
+- **Simple**은 현재 기본 표시와 기존 씬의 동작을 유지한다. 월드 스프라이트는 PPU와 Pivot을, UI Image는 RectTransform의 영역을 사용한다.
+- **Filled**는 이미지 크기를 유지하면서 비율 `0~1`만큼만 노출한다. 체력바의 가로·세로 Fill과 시작 방향부터 연결하고, 이후 쿨다운에 쓸 Radial 90°·180°·360° 및 시계·반시계 방향을 확장한다. 크롭한 모양에 맞게 UV를 계산한다.
+- **Sliced**는 Sprite 에셋에 좌·우·상·하 테두리 픽셀을 지정하는 9-slice다. 모서리 크기를 유지하고 가장자리와 중앙을 늘린다. 대상 영역이 두 테두리의 합보다 작으면 테두리를 비례 축소해 겹치지 않게 한다.
+- **Tiled**는 지정한 영역에 한 Sprite를 원래 타일 크기로 반복한다. 끝에 남은 공간에는 마지막 조각만 잘라 표시한다. 테두리가 있으면 9-slice 모서리를 유지하고 가장자리와 중앙을 반복할 수 있게 확장한다. 아틀라스에서는 지정한 Sprite 영역 내부에서만 반복하고 필터링 시 주변 이미지가 섞이지 않는지 확인한다.
+- 공유 Sprite 에셋은 이미지 영역·테두리 같은 제작 데이터를 보관한다. 표시 크기·Fill 비율·반복 설정은 각 컴포넌트가 소유한다. Sprite 편집기와 Inspector에 해당 모드의 설정과 미리보기를 연결하고, 새 필드가 없는 씬은 기존 기본값으로 복원한다.
+
+#### 2단계. TileSet과 타일 배치
+
+- **TileSet**은 텍스처 시트에서 셀 크기·여백·간격으로 타일을 자르고, 각 타일에 안정적인 ID를 부여한다. 팔레트의 표시 순서와 저장 ID를 분리해 타일 순서가 바뀌어도 맵 참조를 유지한다.
+- **TileMap**은 직교 사각 그리드의 정수 좌표와 레이어별 셀을 저장한다. 3D Terrain과 별도의 제작·실행 경로를 사용한다. 배경·플레이 영역·전경을 레이어로 나누고, 가시성·잠금·그리기 순서를 편집한다. 타일은 셀 데이터로 보관하고 렌더링에서는 동일 텍스처·재질·레이어의 제출을 묶는다.
+- 에디터는 Tile Palette와 Scene View의 셀 하이라이트를 연결한다. 단일 셀 칠하기·드래그·지우기·스포이트부터 적용하고, 선·사각형·연결 영역 채우기(Bucket Fill), 여러 타일을 묶은 스탬프, 회전·반전을 후속 도구로 둔다. Bucket Fill은 활성 레이어의 유효 맵 범위 안에서 같은 값의 연결된 셀을 채운다.
+- 한 번의 붓질·채우기·지우기는 Undo/Redo 한 단위로 기록한다. 씬 편집 이력에 연결하며, 포인터 위치·드래그는 `InputManager`, 명령 단축키는 `ShortcutManager`의 기존 경로를 사용한다. 도구명·상태·오류 표시는 `Editor.csv` 로캘 키로 관리한다.
+
+#### 3단계. 이웃 기반 자동 타일 (Autotile)
+
+- 자동 타일 브러시는 셀에 지형 또는 연결 그룹을 기록한다. 규칙 평가가 이웃의 그룹을 비교해 끝·직선·모서리·교차점에 맞는 Sprite를 선택한다. 최초 범위는 상하좌우 4방향 연결이며, 대각선까지 읽는 8방향 규칙과 서로 다른 지형 사이의 전이는 후속 범위다.
+- 셀을 놓거나 지울 때 해당 셀과 규칙 반경의 이웃만 다시 평가한다. 청크 경계를 넘는 이웃도 포함한다. 규칙 우선순위와 기본 타일을 정해 같은 셀 배치에서 결과가 일치하게 하고, 누락된 규칙은 기본 타일과 편집기 진단으로 드러낸다.
+- 배치 데이터에는 지형 그룹이나 수동 타일 ID를 저장하고, 계산된 외형은 다시 만들 수 있게 한다. 도로를 나란히 놓되 연결하지 않는 경우를 위해 수동 지정 셀을 보존한다. Undo/Redo와 재로드에도 같은 규칙 평가 경로를 사용한다.
+
+#### 4단계. 규모 확장과 완료 기준
+
+- 셀 수가 늘어나면 렌더 데이터를 청크로 관리하고 변경 셀이 속한 청크와 실제로 영향을 받은 이웃 청크만 갱신한다. 타일 충돌 속성과 2D 충돌 생성, 내비게이션·가림, 애니메이션·가중치 변형은 기본 배치와 저장이 검증된 뒤 확장한다.
+- 체력바의 Fill 비율 `0`, `0.5`, `1`, 패널 리사이즈의 9-slice 모서리, 반복 바닥의 아틀라스 경계와 마지막 조각을 확인한다.
+- 배경·지면 두 레이어로 작은 맵을 만든다. 도로를 직선에서 코너·교차로로 변경하고 가운데 셀을 지웠을 때 이웃 모양이 갱신되는지 확인한다. 청크 경계, 수동 지정, Undo/Redo, 저장·재열기, PIE의 표시를 비교하고 Client 재생에서도 같은 저장 데이터를 해석하는지 확인한다.
+
+- 이미지 그리기 모드와 스프라이트 9-slice 참고 자료. [Unity UI Image.Type](https://docs.unity3d.com/Packages/com.unity.ugui@2.0/api/UnityEngine.UI.Image.Type.html), [Unity SpriteRenderer.drawMode](https://docs.unity3d.com/6000.0/Documentation/ScriptReference/SpriteRenderer-drawMode.html)
+- 타일 팔레트와 레이어 편집, Paint·Erase·Fill 참고 자료. [Unreal Paper 2D Tile Sets / Tile Maps](https://dev.epicgames.com/documentation/en-us/unreal-engine/paper-2d-tile-sets-and-tile-maps-in-unreal-engine), [Godot Using TileMaps](https://docs.godotengine.org/en/stable/tutorials/2d/using_tilemaps.html)
+- 이웃 규칙과 지형 연결 참고 자료. [Unity Rule Tile](https://docs.unity3d.com/Packages/com.unity.2d.tilemap.extras@4.0/manual/RuleTile.html#Usage), [Godot Using TileSets](https://docs.godotengine.org/en/stable/tutorials/2d/using_tilesets.html#creating-terrain-sets-autotiling)
 
 ### M. 네트워크·멀티플레이 (상세 계획: [NetworkFoundationPlan.md](NetworkFoundationPlan.md))
 

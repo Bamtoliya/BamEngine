@@ -90,3 +90,9 @@ Engine/Generated/
 Projects/Reflection/dependencies/
 __pycache__/
 *.pyc
+
+# External Asset Archives
+*.zip
+Resources/KayKit_Adventurers_2.0_FREE/
+Resources/asphalt_02_4k.blend/
+Resources/kenney_city-kit-roads/
