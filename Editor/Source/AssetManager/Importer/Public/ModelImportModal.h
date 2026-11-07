@@ -27,7 +27,6 @@ public:
 
 	static ModelImportModal* Get() { return s_Instance; }
 
-	virtual EResult Initialize(void* arg = nullptr);
 	virtual void Free() override;
 	virtual void Update(f32 dt) override;
 	virtual void Draw() override;
@@ -36,8 +35,9 @@ public:
 
 	virtual void CaptureState(EditorWorkspace& workspace) const override;
 	virtual void RestoreState(const EditorWorkspace& workspace) override;
-
+	EPanelMenuCategory GetPanelMenuCategory() const override { return EPanelMenuCategory::Hidden; }
 private:
+	EResult OnInitialize(void* arg) override;
 	void LoadPreviewModel(bool focusCamera);
 	bool UpdatePreviewTransform();
 	void ClearPreview();
@@ -53,6 +53,7 @@ private:
 		bool Embedded = false;
 	};
 
+	void DrawTransformOptions();
 	void DrawTextureReferences();
 	void DrawAlbedoThumbnail(size_t materialIndex, float maxEdge);
 

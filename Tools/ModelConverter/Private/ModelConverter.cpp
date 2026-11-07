@@ -5,6 +5,7 @@
 #include <assimp/scene.h>
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <limits>
 #include <unordered_map>
@@ -20,22 +21,24 @@ namespace Tools::ModelConversion
             return { code, std::move(message), std::nullopt };
         }
 
-        std::array<float, 3> CopyVector(const aiVector3D& value)
+        std::array<float, 3> CopyVector(const aiVector3D& value,
+            const aiVector3D& axisSign = aiVector3D(1.0f, 1.0f, 1.0f), float scale = 1.0f)
         {
             return {
-                static_cast<float>(value.x),
-                static_cast<float>(value.y),
-                static_cast<float>(value.z)
+                static_cast<float>(value.x * axisSign.x) * scale,
+                static_cast<float>(value.y * axisSign.y) * scale,
+                static_cast<float>(value.z * axisSign.z) * scale
             };
         }
 
-        std::array<float, 16> CopyMatrixColumnMajor(const aiMatrix4x4& matrix)
+        std::array<float, 16> CopyMatrixColumnMajor(const aiMatrix4x4& matrix, float translationScale = 1.0f)
         {
             return {
                 static_cast<float>(matrix.a1), static_cast<float>(matrix.b1), static_cast<float>(matrix.c1), static_cast<float>(matrix.d1),
                 static_cast<float>(matrix.a2), static_cast<float>(matrix.b2), static_cast<float>(matrix.c2), static_cast<float>(matrix.d2),
                 static_cast<float>(matrix.a3), static_cast<float>(matrix.b3), static_cast<float>(matrix.c3), static_cast<float>(matrix.d3),
-                static_cast<float>(matrix.a4), static_cast<float>(matrix.b4), static_cast<float>(matrix.c4), static_cast<float>(matrix.d4)
+                static_cast<float>(matrix.a4) * translationScale, static_cast<float>(matrix.b4) * translationScale,
+                static_cast<float>(matrix.c4) * translationScale, static_cast<float>(matrix.d4)
             };
         }
 
@@ -48,6 +51,9 @@ namespace Tools::ModelConversion
 
     Result ConvertStaticModel(const std::filesystem::path& path, const Options& options)
     {
+        if (!std::isfinite(options.UniformScale) || options.UniformScale <= 0.0f)
+            return Fail(Error::InvalidData, "Import scale must be finite and positive.");
+
         std::error_code ec;
         const auto sourcePath = std::filesystem::absolute(path, ec).lexically_normal();
 
@@ -80,6 +86,18 @@ namespace Tools::ModelConversion
 
         if (scene->mNumMeshes == 0 || !scene->mMeshes)
             return Fail(Error::InvalidData, "The model contains no meshes.");
+
+        std::string extension = sourcePath.extension().string();
+        for (char& character : extension)
+            character = static_cast<char>(std::tolower(static_cast<unsigned char>(character)));
+
+        // Assimp mirrors Z for left-handed conversion. Turning glTF around Y preserves its +Z front.
+        const bool gltfHeadingCorrection = options.ConvertToLeftHanded && (extension == ".gltf" || extension == ".glb");
+        const bool flipHeading = options.FlipHeading != gltfHeadingCorrection;
+        const aiVector3D axisSign(flipHeading ? -1.0f : 1.0f, options.FlipPitch ? -1.0f : 1.0f,
+            flipHeading != options.FlipPitch ? -1.0f : 1.0f);
+        aiMatrix4x4 orientation;
+        aiMatrix4x4::Scaling(axisSign, orientation);
 
         ModelData model;
         model.SourcePath = sourcePath;
@@ -118,20 +136,20 @@ namespace Tools::ModelConversion
             NodeData node;
             node.Name = source.mName.C_Str();
             node.ParentIndex = current.ParentIndex;
-            aiMatrix4x4 localMat = source.mTransformation;
+            aiMatrix4x4 localMat = orientation * source.mTransformation * orientation;
             if (current.ParentIndex == -1)
             {
-                aiMatrix4x4 rotX, rotY, rotZ, scaleMat;
+                aiMatrix4x4 rotX, rotY, rotZ;
                 const float radX = options.RotationOffset[0] * (3.14159265359f / 180.0f);
                 const float radY = options.RotationOffset[1] * (3.14159265359f / 180.0f);
                 const float radZ = options.RotationOffset[2] * (3.14159265359f / 180.0f);
                 aiMatrix4x4::RotationX(radX, rotX);
                 aiMatrix4x4::RotationY(radY, rotY);
                 aiMatrix4x4::RotationZ(radZ, rotZ);
-                aiMatrix4x4::Scaling(aiVector3D(options.UniformScale, options.UniformScale, options.UniformScale), scaleMat);
-                localMat = scaleMat * rotZ * rotY * rotX * localMat;
+                localMat = rotZ * rotY * rotX * localMat;
             }
-            node.LocalTransform = CopyMatrixColumnMajor(localMat);
+            // Uniform import scale changes asset units, so scale translations and mesh positions together.
+            node.LocalTransform = CopyMatrixColumnMajor(localMat, options.UniformScale);
             if (!IsFinite(node.LocalTransform))
                 return Fail(Error::InvalidData, "A node transform contains a non-finite value.");
 
@@ -169,7 +187,7 @@ namespace Tools::ModelConversion
                 const std::string boneName = bone->mName.C_Str();
                 if (!boneName.empty() && boneOffsetMap.find(boneName) == boneOffsetMap.end())
                 {
-                    const auto offsetMat = CopyMatrixColumnMajor(bone->mOffsetMatrix);
+                    const auto offsetMat = CopyMatrixColumnMajor(orientation * bone->mOffsetMatrix * orientation, options.UniformScale);
                     if (!IsFinite(offsetMat))
                         return Fail(Error::InvalidData, "A bone offset matrix contains a non-finite value.");
                     boneOffsetMap.emplace(boneName, offsetMat);
@@ -187,7 +205,10 @@ namespace Tools::ModelConversion
                 BoneData bone;
                 bone.Name = node.Name.empty() ? ("Bone_" + std::to_string(nodeIdx)) : node.Name;
                 bone.ParentIndex = node.ParentIndex;
-                bone.LocalTransform = node.LocalTransform;
+                // Keep the manual placement rotation out of the skeleton's bind pose.
+                bone.LocalTransform = node.ParentIndex < 0
+                    ? CopyMatrixColumnMajor(orientation * scene->mRootNode->mTransformation * orientation, options.UniformScale)
+                    : node.LocalTransform;
 
                 const auto offsetIt = boneOffsetMap.find(bone.Name);
                 if (offsetIt != boneOffsetMap.end())
@@ -241,8 +262,8 @@ namespace Tools::ModelConversion
             for (unsigned int vertexIndex = 0; vertexIndex < source->mNumVertices; ++vertexIndex)
             {
                 auto& vertex = mesh.Vertices[vertexIndex];
-                vertex.Position = CopyVector(source->mVertices[vertexIndex]);
-                vertex.Normal = CopyVector(source->mNormals[vertexIndex]);
+                vertex.Position = CopyVector(source->mVertices[vertexIndex], axisSign, options.UniformScale);
+                vertex.Normal = CopyVector(source->mNormals[vertexIndex], axisSign);
 
                 if (source->HasTextureCoords(0))
                 {
@@ -252,8 +273,8 @@ namespace Tools::ModelConversion
 
                 if (source->HasTangentsAndBitangents())
                 {
-                    vertex.Tangent = CopyVector(source->mTangents[vertexIndex]);
-                    vertex.Bitangent = CopyVector(source->mBitangents[vertexIndex]);
+                    vertex.Tangent = CopyVector(source->mTangents[vertexIndex], axisSign);
+                    vertex.Bitangent = CopyVector(source->mBitangents[vertexIndex], axisSign);
                 }
 
                 if (source->HasVertexColors(0))
@@ -452,8 +473,14 @@ namespace Tools::ModelConversion
                 {
                     const auto& key = channel->mPositionKeys[k];
                     VectorKeyData vk{ static_cast<float>(key.mTime), CopyVector(key.mValue) };
-                    if (std::isfinite(vk.Time) && IsFinite(vk.Value))
-                        track.PositionKeys.push_back(vk);
+                    if (!std::isfinite(vk.Time) || !IsFinite(vk.Value))
+                        continue;
+
+                    vk.Value = CopyVector(key.mValue, axisSign, options.UniformScale);
+                    if (!IsFinite(vk.Value))
+                        return Fail(Error::InvalidData, "A scaled animation position contains a non-finite value.");
+
+                    track.PositionKeys.push_back(vk);
                 }
 
                 track.RotationKeys.reserve(channel->mNumRotationKeys);
@@ -463,8 +490,8 @@ namespace Tools::ModelConversion
                     QuatKeyData qk;
                     qk.Time = static_cast<float>(key.mTime);
                     qk.Value = {
-                        static_cast<float>(key.mValue.x), static_cast<float>(key.mValue.y),
-                        static_cast<float>(key.mValue.z), static_cast<float>(key.mValue.w)
+                        static_cast<float>(key.mValue.x * axisSign.x), static_cast<float>(key.mValue.y * axisSign.y),
+                        static_cast<float>(key.mValue.z * axisSign.z), static_cast<float>(key.mValue.w)
                     };
                     if (std::isfinite(qk.Time) && IsFinite(qk.Value))
                         track.RotationKeys.push_back(qk);

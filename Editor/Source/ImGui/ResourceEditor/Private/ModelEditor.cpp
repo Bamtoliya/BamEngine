@@ -26,10 +26,19 @@ ModelEditor::~ModelEditor()
 	m_PreviewWidget.Free();
 }
 
+namespace
+{
+	bool IsImportedModelFile(const std::filesystem::path& path)
+	{
+		const auto name = ToLowerStr(Engine::WStrToStr(path.filename().wstring()));
+		return name.ends_with(".bammodel") || name.ends_with(".bammodel.json");
+	}
+}
+
 bool ModelEditor::IsSupported(const std::filesystem::path& assetPath) const
 {
 	const auto ext = assetPath.extension().wstring();
-	return ext == L".fbx" || ext == L".obj" || ext == L".gltf" || ext == L".glb" || ext == L".bammodel";
+	return ext == L".fbx" || ext == L".obj" || ext == L".gltf" || ext == L".glb" || IsImportedModelFile(assetPath);
 }
 
 void ModelEditor::Update(f32 dt)
@@ -88,9 +97,9 @@ void ModelEditor::SetupPreviewModel()
 			animator->isPlaying = false;
 			animator->currentTime = 0.0f;
 		}
+		if (!m_PreviewWidget.SetModelFocusTarget(*m_PreviewEntity))
+			EDITOR_LOG_ERROR("Failed to frame the preview model.");
 	}
-	// 모델 중심 쿼터뷰 포커싱
-	m_PreviewWidget.FocusTarget(Engine::vec3(0.0f, 0.5f, 0.0f), 3.0f);
 }
 
 void ModelEditor::Draw()
@@ -105,71 +114,53 @@ void ModelEditor::Draw()
 		auto& history = Application::Get().GetEditHistory();
 		history.AllowShortcuts(ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows));
 
-		const float availWidth = ImGui::GetContentRegionAvail().x;
-		const float availHeight = ImGui::GetContentRegionAvail().y;
-
-		// 가이드라인 17절: 최소/최대 분할 너비 클램핑
-		const float minLeft = 250.0f;
-		const float minRight = 280.0f;
-		const float maxLeft = std::max(minLeft, availWidth - minRight - 12.0f);
-		m_LeftPaneWidth = std::clamp(m_LeftPaneWidth, minLeft, maxLeft);
-
-		// ── [좌측] 3D 뷰포트 ──
-		const ImGuiWindowFlags vpFlags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
-		if (ImGui::BeginChild("##ModelViewportPane", ImVec2(m_LeftPaneWidth, availHeight), true, vpFlags))
-		{
-			m_PreviewWidget.Draw(ImVec2(m_LeftPaneWidth - 16.0f, availHeight - 16.0f));
-		}
-		ImGui::EndChild();
-		ImGui::SameLine();
-		// ── [스플리터] 공통 헬퍼 단 1줄 적용 ──
-		float detailsWidth = (std::max)(minRight, availWidth - m_LeftPaneWidth - 4.0f);
-		Editor::SplitterV("##ModelSplitter", &m_LeftPaneWidth, &detailsWidth, minLeft, minRight, availHeight);
-		ImGui::SameLine();
-		// ── [우측] 머티리얼 슬롯 & 디테일 패널 ──
-		if (ImGui::BeginChild("##ModelDetailsPane", ImVec2(0.0f, availHeight), true))
-		{
-			ImGui::Text("%s", LOCAL_FMT("ResourceEditor.Target", m_TargetResourcePath.string()).c_str());
-			ImGui::Separator();
-
-			if (auto* model = m_ModelHandle.Get())
+		const float height = ImGui::GetContentRegionAvail().y;
+		const auto previewFlags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
+		Editor::DrawSidebarLayout("##ModelViewportPane", "##ModelSplitter", "##ModelDetailsPane",
+			m_LeftPaneWidth, height, 250.0f, 280.0f,
+			[this] { m_PreviewWidget.Draw(); },
+			[this, &history]
 			{
-				const bool canEdit = PIEManager::Get().IsEditing();
-
-				ImGui::BeginDisabled(!canEdit);
-				if (ImGui::Button((ICON_FA_FLOPPY_DISK " " + LOCAL_LABEL("EditorCommon.Save")).c_str()))
-					SaveModel();
-				ImGui::EndDisabled();
-
-				if (!canEdit)
-					ImGui::TextDisabled("%s", LOCAL("ModelEditor.EditModeOnly").c_str());
-
+				ImGui::Text("%s", LOCAL_FMT("ResourceEditor.Target", m_TargetResourcePath.string()).c_str());
 				ImGui::Separator();
 
-				const auto modelKey = WStrToStr(model->GetKey());
-				ImGui::PushID(modelKey.c_str());
-				DrawMaterialSlots(*model, canEdit);
-				ImGui::PopID();
+				if (auto* model = m_ModelHandle.Get())
+				{
+					const bool canEdit = PIEManager::Get().IsEditing();
 
-				ImGui::Separator();
+					ImGui::BeginDisabled(!canEdit);
+					if (ImGui::Button((ICON_FA_FLOPPY_DISK " " + LOCAL_LABEL("EditorCommon.Save")).c_str()))
+						SaveModel();
+					ImGui::EndDisabled();
 
-				const bool canPlace = history.Enabled() && SceneManager::Get().GetCurrentScene();
-				ImGui::BeginDisabled(!canPlace);
-				if (ImGui::Button((ICON_FA_PLUS " " + LOCAL_LABEL("ResourceEditor.InstantiateModel")).c_str()))
-					InstantiateModel();
-				ImGui::EndDisabled();
+					if (!canEdit)
+						ImGui::TextDisabled("%s", LOCAL("ModelEditor.EditModeOnly").c_str());
 
-				if (!m_StatusKey.empty())
-					ImGui::TextWrapped("%s", LOCAL(m_StatusKey).c_str());
-			}
-			else
-			{
-				ImGui::TextWrapped("%s", LOCAL("ModelEditor.NoModel").c_str());
-				if (ImGui::Button(LOCAL_LABEL("ModelEditor.RetryLoad").c_str()))
-					SetTargetResource(m_TargetResourcePath);
-			}
-		}
-		ImGui::EndChild();
+					ImGui::Separator();
+
+					const auto modelKey = WStrToStr(model->GetKey());
+					ImGui::PushID(modelKey.c_str());
+					DrawMaterialSlots(*model, canEdit);
+					ImGui::PopID();
+
+					ImGui::Separator();
+
+					const bool canPlace = history.Enabled() && SceneManager::Get().GetCurrentScene();
+					ImGui::BeginDisabled(!canPlace);
+					if (ImGui::Button((ICON_FA_PLUS " " + LOCAL_LABEL("ResourceEditor.InstantiateModel")).c_str()))
+						InstantiateModel();
+					ImGui::EndDisabled();
+
+					if (!m_StatusKey.empty())
+						ImGui::TextWrapped("%s", LOCAL(m_StatusKey).c_str());
+				}
+				else
+				{
+					ImGui::TextWrapped("%s", LOCAL("ModelEditor.NoModel").c_str());
+					if (ImGui::Button(LOCAL_LABEL("ModelEditor.RetryLoad").c_str()))
+						SetTargetResource(m_TargetResourcePath);
+				}
+			}, previewFlags, /*reserveHalfForContent=*/false);
 	}
 	ImGui::End();
 }
@@ -200,7 +191,7 @@ void ModelEditor::InstantiateModel()
 	}
 
 	Entity* root = nullptr;
-	const EResult result = scene->InstantiateModel(*model, material, root);
+	const EResult result = scene->InstantiateLinkedModel(model, material, root);
 
 	if (result != EResult::Success)
 	{
@@ -217,8 +208,9 @@ void ModelEditor::SetTargetResource(const std::filesystem::path& assetPath)
 	ResourceEditorInterface::SetTargetResource(assetPath);
 	m_ModelHandle.Reset();
 	m_StatusKey.clear();
+	m_IsDirty = false;
 
-	if (assetPath.extension() != L".bammodel")
+	if (!IsImportedModelFile(assetPath))
 		return;
 
 	auto& manager = ResourceManager::Get();
@@ -256,6 +248,7 @@ void ModelEditor::DrawMaterialSlots(Model& model, bool canEdit)
 			// 슬롯 머티리얼 변경 시 3D 프리뷰 모델 실시간 재인스턴스화
 			if (result == EResult::Success)
 			{
+				m_IsDirty = true;
 				SetupPreviewModel();
 			}
 		}
@@ -270,7 +263,10 @@ void ModelEditor::SaveModel()
 	if (!model || !PIEManager::Get().IsEditing())
 		return;
 
-	const EResult result = ResourceManager::Get().SaveToBinaryFile(model, m_TargetResourcePath.wstring());
+	auto& manager = ResourceManager::Get();
+	const auto path = m_TargetResourcePath.wstring();
+	const bool isJson = ToLowerStr(Engine::WStrToStr(m_TargetResourcePath.extension().wstring())) == ".json";
+	const EResult result = isJson ? manager.SaveToJsonFile(model, path) : manager.SaveToBinaryFile(model, path);
 	if (result != EResult::Success)
 	{
 		m_StatusKey = "ModelEditor.SaveFailed";
@@ -280,6 +276,7 @@ void ModelEditor::SaveModel()
 	}
 
 	m_StatusKey = "ModelEditor.Saved";
+	m_IsDirty = false;
 }
 void ModelEditor::CaptureState(EditorWorkspace& workspace) const
 {

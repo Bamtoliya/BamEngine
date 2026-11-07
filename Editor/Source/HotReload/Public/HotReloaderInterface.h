@@ -25,7 +25,7 @@ protected:
 
 private:
     mutable std::mutex m_QueueMutex;
-    std::unordered_map<std::string, std::chrono::steady_clock::time_point> m_PendingFiles;
+    std::unordered_map<std::filesystem::path, std::chrono::steady_clock::time_point> m_PendingFiles;
     bool m_AutoReload = true;
 };
 

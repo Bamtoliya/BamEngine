@@ -1,8 +1,10 @@
 ﻿#include "InputManager.h"
 #include "PreviewViewportWidget.h"
 #include "EditorCameraController.h"
+#include "PreviewCameraDefaults.h"
 #include "Scene.h"
 #include "Entity.h"
+#include "Mesh.h"
 #include "Renderer.h"
 #include "RenderTargetManager.h"
 #include "RenderTarget.h"
@@ -25,6 +27,7 @@
 #include "Functions.h"
 #include "AnimationSceneQuery.h"
 #include "AnimatorPoseUpdate.h"
+#include <vector>
 
 PreviewViewportWidget::~PreviewViewportWidget()
 {
@@ -60,7 +63,7 @@ void PreviewViewportWidget::Initialize(const std::wstring& widgetId, uint32 widt
 	// 4. 에디터 카메라 컨트롤러 초기화 (에디터 표준 조작계)
 	Engine::CameraComponent cameraSettings{};
 	cameraSettings.CameraType = Engine::ECameraType::Perspective;
-	cameraSettings.FOV = 45.0f;
+	cameraSettings.FOV = Editor::PreviewCameraDefaults::FieldOfViewDegrees;
 	cameraSettings.NearPlane = 0.1f;
 	cameraSettings.FarPlane = 1000.0f;
 	cameraSettings.AspectRatio = static_cast<f32>(m_Width) / static_cast<f32>(m_Height);
@@ -83,6 +86,8 @@ void PreviewViewportWidget::Free()
 
 	m_IsHovered = false;
 	m_IsFocused = false;
+	m_FocusModel = entt::null;
+	m_ModelFocusPending = false;
 
 	m_Grid.Free();
 	m_PostProcessChain.Free();
@@ -150,31 +155,91 @@ void PreviewViewportWidget::SetupDefaultStudioLighting()
 
 void PreviewViewportWidget::FocusTarget(const Engine::vec3& targetPos, Engine::f32 distance)
 {
-	if (!m_CameraController) return;
-	auto* transform = m_CameraController->GetTransformComponent();
-	if (!transform) return;
+	m_FocusModel = entt::null;
+	m_ModelFocusPending = false;
 	m_FocusPosition = targetPos;
 	m_FocusDistance = distance;
+	ApplyFocus(targetPos, distance);
+}
 
-	// 기존: Yaw 0도 (모델의 등 뒤에서 바라봄)
-	// 수정: Yaw 160도 (모델의 정면 대각선 얼짱 각도에서 얼굴을 바라봄!)
-	const Engine::f32 pitchDeg = 15.0f;
-	const Engine::f32 yawDeg = 160.0f; // 180도 완전 정면 또는 150~160도 쿼터뷰
-	const Engine::f32 pitchRad = glm::radians(pitchDeg);
-	const Engine::f32 yawRad = glm::radians(yawDeg);
+bool PreviewViewportWidget::SetModelFocusTarget(const Engine::Entity& model, bool refocus)
+{
+	if (!m_PreviewScene || model.GetScene() != m_PreviewScene)
+		return false;
 
-	// 카메라의 시선 방향 벡터
-	Engine::vec3 forwardDir;
-	forwardDir.x = sinf(yawRad) * cosf(pitchRad);
-	forwardDir.y = -sinf(pitchRad);
-	forwardDir.z = cosf(yawRad) * cosf(pitchRad);
+	const auto root = model.GetEntityHandle();
+	Engine::BoundingBox bounds;
+	if (!TryGetModelBounds(root, bounds) || (refocus && !FrameModelBounds(bounds)))
+		return false;
 
-	// 카메라 위치: 타깃으로부터 시선 반대 방향으로 물러남 (모델 앞쪽 +Z 영역에 카메라 배치)
-	const Engine::vec3 cameraPos = targetPos - forwardDir * distance;
+	m_FocusModel = root;
+	m_ModelFocusPending = refocus;
+	return true;
+}
+
+bool PreviewViewportWidget::TryGetModelBounds(entt::entity root, Engine::BoundingBox& bounds) const
+{
+	const auto& registry = m_PreviewScene->GetRegistry();
+	if (!registry.valid(root))
+		return false;
+
+	std::vector<entt::entity> pending{ root };
+	bool hasBounds = false;
+	while (!pending.empty())
+	{
+		const auto entity = pending.back();
+		pending.pop_back();
+		if (const auto* hierarchy = registry.try_get<Engine::HierarchyComponent>(entity))
+			pending.insert(pending.end(), hierarchy->children.begin(), hierarchy->children.end());
+
+		const Engine::Mesh* mesh = nullptr;
+		if (const auto* renderer = registry.try_get<Engine::StaticMeshRendererComponent>(entity))
+			mesh = renderer->meshHandle.Get();
+		else if (const auto* skinned = registry.try_get<Engine::SkinnedMeshRendererComponent>(entity))
+			mesh = skinned->meshHandle.Get();
+
+		const auto* transform = registry.try_get<Engine::WorldTransformComponent>(entity);
+		if (!mesh || !transform)
+			continue;
+
+		Engine::BoundingBox worldBounds;
+		if (!Engine::BoundingBox(mesh->GetMin(), mesh->GetMax()).TryTransformToAABB(transform->worldMatrix, worldBounds))
+			return false;
+
+		bounds.min = hasBounds ? glm::min(bounds.min, worldBounds.min) : worldBounds.min;
+		bounds.max = hasBounds ? glm::max(bounds.max, worldBounds.max) : worldBounds.max;
+		hasBounds = true;
+	}
+	return hasBounds;
+}
+
+bool PreviewViewportWidget::FrameModelBounds(const Engine::BoundingBox& bounds)
+{
+	auto* camera = m_CameraController ? m_CameraController->GetCameraComponent() : nullptr;
+	if (!camera)
+		return false;
+
+	const auto framing = Editor::PreviewCameraDefaults::CalculateFraming(bounds, camera->AspectRatio, camera->FOV);
+	if (!framing)
+		return false;
+
+	camera->NearPlane = framing->NearPlane;
+	camera->FarPlane = framing->FarPlane;
+	ApplyFocus(framing->Center, framing->Distance);
+	return true;
+}
+
+void PreviewViewportWidget::ApplyFocus(const Engine::vec3& targetPos, Engine::f32 distance)
+{
+	auto* transform = m_CameraController ? m_CameraController->GetTransformComponent() : nullptr;
+	if (!transform) return;
+
+	const Engine::vec3 cameraPos = targetPos - Editor::PreviewCameraDefaults::GetForward() * distance;
 
 	(void)transform->SetLocalPosition(cameraPos);
 	m_CameraController->SetPivotPoint(targetPos);
-	m_CameraController->SetControlRotation(Engine::vec3(pitchDeg, yawDeg, 0.0f));
+	m_CameraController->SetControlRotation(Engine::vec3(Editor::PreviewCameraDefaults::PitchDegrees,
+		Editor::PreviewCameraDefaults::YawDegrees, 0.0f));
 	m_CameraController->RefreshMatrices();
 }
 
@@ -334,12 +399,27 @@ void PreviewViewportWidget::Draw(const ImVec2& size)
 	const uint32 targetWidth = static_cast<uint32>(std::max(avail.x, 64.0f));
 	const uint32 targetHeight = static_cast<uint32>(std::max(avail.y, 64.0f));
 	CheckResize(targetWidth, targetHeight);
+	if (m_ModelFocusPending)
+	{
+		m_ModelFocusPending = false;
+		RefocusTarget();
+	}
 
 	auto& rtm = Engine::RenderTargetManager::Get();
 	auto* colorRT = rtm.GetRenderTarget(m_DisplayRTName);
 	if (!colorRT || !colorRT->GetTexture())
 	{
 		ImGui::Dummy(avail);
+		return;
+	}
+
+	if (!ChannelFilter::CanSampleAsTexture2D(colorRT->GetTexture()))
+	{
+		m_SelectedRTName.clear();
+		m_IsHovered = false;
+		m_IsFocused = false;
+		m_CameraDragButton.reset();
+		ImGui::TextWrapped("%s", LOCAL_CSTR("Viewport.RenderTargetPreviewUnsupported"));
 		return;
 	}
 
@@ -488,7 +568,8 @@ Engine::RHITexture* PreviewViewportWidget::GetPreviewRHITexture() const
 
 bool PreviewViewportWidget::CanFocusTarget() const
 {
-	return m_PreviewScene && m_CameraController && m_CameraController->GetTransformComponent();
+	return m_PreviewScene && m_CameraController && m_CameraController->GetTransformComponent() &&
+		(m_FocusModel == entt::null || m_PreviewScene->GetRegistry().valid(m_FocusModel));
 }
 
 void PreviewViewportWidget::RefocusTarget()
@@ -496,7 +577,15 @@ void PreviewViewportWidget::RefocusTarget()
 	if (!CanFocusTarget())
 		return;
 
-	FocusTarget(m_FocusPosition, m_FocusDistance);
+	if (m_FocusModel == entt::null)
+	{
+		ApplyFocus(m_FocusPosition, m_FocusDistance);
+		return;
+	}
+
+	Engine::BoundingBox bounds;
+	if (TryGetModelBounds(m_FocusModel, bounds))
+		FrameModelBounds(bounds);
 }
 
 void PreviewViewportWidget::DrawRenderTargetPopup()

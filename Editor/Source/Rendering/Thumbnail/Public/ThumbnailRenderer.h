@@ -5,11 +5,13 @@
 #include "Mesh.h"
 #include "MaterialInterface.h"
 #include "ViewportDeferredPipeline.h"
+#include <optional>
 
 BEGIN(Engine)
 class Scene;
 class RHITexture;
 class Model;
+struct BoundingBox;
 END
 
 BEGIN(Editor)
@@ -42,7 +44,7 @@ public:
 private:
 	void SetupStudioScene();
 	void RefreshStudioLights();
-	[[nodiscard]] CameraBuffer CalculateAutoFramingCamera(const vec3& bMin, const vec3& bMax) const;
+	[[nodiscard]] std::optional<CameraBuffer> CalculateAutoFramingCamera(const Engine::BoundingBox& bounds) const;
 	[[nodiscard]] Engine::MaterialInterface* GetDefaultPreviewMaterial() const;
 private:
 	uint32 m_Size = 128;

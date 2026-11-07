@@ -33,8 +33,8 @@ bool PrefabEditorPanel::IsSupported(const std::filesystem::path& assetPath) cons
     if (ext == ".bamprefab" || ext == ".prefab") return true;
     if (ext != ".json") return false;
 
-    std::string filename = assetPath.filename().string();
-    for (char& c : filename) c = static_cast<char>(tolower(c));
+    std::string filename = WStrToStr(assetPath.filename().wstring());
+    for (char& c : filename) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
     return filename.ends_with(".bamprefab.json") || filename.ends_with(".prefab.json");
 }
 

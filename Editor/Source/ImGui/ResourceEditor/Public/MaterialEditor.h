@@ -17,6 +17,7 @@ public:
 
 public:
 	virtual bool IsSupported(const std::filesystem::path& assetPath) const override;
+	bool HasUnsavedResourceChanges() const override { return m_IsDirty; }
 	virtual void SetTargetResource(const std::filesystem::path& assetPath) override;
 	virtual void Update(f32 dt) override; // 렌더 패스 실행 전 커맨드 사전 제출용
 	virtual void Draw() override;

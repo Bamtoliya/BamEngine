@@ -16,6 +16,7 @@ public:
 	void SaveAnimation();
 public:
 	virtual bool IsSupported(const std::filesystem::path& assetPath) const override;
+	bool HasUnsavedResourceChanges() const override { return m_IsDirty; }
 	virtual void SetTargetResource(const std::filesystem::path& assetPath) override;
 	virtual void Update(f32 dt) override;
 	virtual void Draw() override;

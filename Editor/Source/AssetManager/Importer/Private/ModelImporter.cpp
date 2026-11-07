@@ -170,6 +170,9 @@ namespace Editor
 		bool MeshCommitComplete = false;
 		double SnapshotMs = 0.0;
 		std::future<SavedMesh> Saving;
+
+		std::vector<Bone> SkeletonBones;
+		uint64 SkinBindingSignature = 0;
 	};
 }
 
@@ -184,6 +187,63 @@ namespace
 				ch = L'_';
 		}
 		return name;
+	}
+
+	void AssignModelSourceKeys(const Editor::PreparedModelData& data, ModelCreateDesc& desc)
+	{
+		std::vector<wstring> paths(desc.Nodes.size());
+		std::unordered_map<wstring, size_t> pathCounts;
+
+		for (size_t i = 0; i < desc.Nodes.size(); ++i)
+		{
+			const auto& node = desc.Nodes[i];
+			if (node.Name.empty() || node.ParentIndex < -1)
+				continue;
+
+			wstring path;
+			if (node.ParentIndex >= 0)
+			{
+				const auto parent = static_cast<size_t>(node.ParentIndex);
+				if (parent >= i || paths[parent].empty())
+					continue;
+				path = paths[parent];
+			}
+
+			path += std::to_wstring(node.Name.size()) + L":" + node.Name;
+			paths[i] = std::move(path);
+			++pathCounts[paths[i]];
+		}
+
+		for (size_t i = 0; i < desc.Nodes.size(); ++i)
+		{
+			auto& node = desc.Nodes[i];
+			if (paths[i].empty() || pathCounts.at(paths[i]) != 1)
+				continue;
+			if (node.ParentIndex >= 0 && desc.Nodes[static_cast<size_t>(node.ParentIndex)].SourceNodeKey.empty())
+				continue;
+
+			node.SourceNodeKey = paths[i];
+			node.MeshAttachmentKeys.resize(node.MeshIndices.size());
+			std::unordered_map<wstring, size_t> meshNameCounts;
+
+			for (size_t j = 0; j < node.MeshIndices.size(); ++j)
+			{
+				const auto meshIndex = node.MeshIndices[j];
+				if (meshIndex >= data.Meshes.size() || data.Meshes[meshIndex].Name.empty())
+					continue;
+
+				auto& key = node.MeshAttachmentKeys[j];
+				key = StrToWStr(data.Meshes[meshIndex].Name);
+				if (!key.empty())
+					++meshNameCounts[key];
+			}
+
+			for (auto& key : node.MeshAttachmentKeys)
+			{
+				if (!key.empty() && meshNameCounts.at(key) != 1)
+					key.clear();
+			}
+		}
 	}
 
 	wstring MakeUniqueStem(const wstring& sourceStem, const wstring& itemKey, const wstring& fallbackPrefix, uint32 serial, unordered_map<wstring, uint32>& nameCounts)
@@ -507,17 +567,7 @@ namespace
 			SkeletonCreateDesc skelDesc;
 			skelDesc.Key = skelKey;
 			skelDesc.Path = skelKey;
-			skelDesc.Bones.reserve(data.Bones.size());
-
-			for (const auto& srcBone : data.Bones)
-			{
-				Bone bone;
-				bone.Name = StrToWStr(srcBone.Name);
-				bone.ParentIndex = srcBone.ParentIndex;
-				bone.OffsetMatrix = ArrayToGlmMat4(srcBone.OffsetMatrix);
-				bone.LocalTransform = ArrayToGlmMat4(srcBone.LocalTransform);
-				skelDesc.Bones.push_back(std::move(bone));
-			}
+			skelDesc.Bones = std::move(state.SkeletonBones);
 
 			SkeletonOwner skeleton(Skeleton::Create(&skelDesc));
 			if (!skeleton)
@@ -1119,6 +1169,24 @@ std::optional<EResult> ModelImporter::FinalizeOneStep(ModelImportTask& task)
 				desc.Nodes.push_back(std::move(node));
 			}
 
+			AssignModelSourceKeys(data, desc);
+
+			if (HasFlag(options, EModelImportOption::Skeleton) && !data.Bones.empty())
+			{
+				state.SkeletonBones.reserve(data.Bones.size());
+				for (const auto& srcBone : data.Bones)
+				{
+					Bone bone;
+					bone.Name = StrToWStr(srcBone.Name);
+					bone.ParentIndex = srcBone.ParentIndex;
+					bone.OffsetMatrix = ArrayToGlmMat4(srcBone.OffsetMatrix);
+					bone.LocalTransform = ArrayToGlmMat4(srcBone.LocalTransform);
+					state.SkeletonBones.push_back(std::move(bone));
+				}
+
+				state.SkinBindingSignature = Skeleton::ComputeSkinBindingSignature(state.SkeletonBones);
+			}
+
 			if (state.Settings.SaveToFile)
 			{
 				std::error_code ec;
@@ -1174,6 +1242,7 @@ std::optional<EResult> ModelImporter::FinalizeOneStep(ModelImportTask& task)
 				desc.Streams[static_cast<uint32>(EMeshStream::SkinData)] = {
 					source.SkinWeights.data(), static_cast<uint32>(vertexCount), sizeof(VertexSkinData)
 				};
+				desc.SkinBindingSignature = state->SkinBindingSignature;
 			}
 			desc.IndexData = source.Indices.data();
 			desc.IndexCount = static_cast<uint32>(indexCount);
@@ -1342,21 +1411,9 @@ Tools::ModelConversion::Options ModelImporter::MakeConversionOptions(const Model
 	options.FlipWindingOrder = HasFlag(desc.PostProcessFlags, EModelPostProcessFlag::FlipWindingOrder);
 	options.UniformScale = desc.UniformScale;
 	options.RotationOffset = desc.RotationOffset;
+	options.FlipPitch = desc.FlipPitch;
+	options.FlipHeading = desc.FlipHeading;
 	return options;
-}
-
-ModelImportDesc ModelImporter::GetDefaultDesc(const std::filesystem::path& sourcePath)
-{
-	ModelImportDesc desc{};
-	std::string ext = sourcePath.extension().string();
-	for (char& c : ext) c = static_cast<char>(tolower(c));
-
-	// glTF 포맷은 자체 Y-Up이므로 Assimp의 MakeLeftHanded가 쿼터니언을 비트는 현상 방지
-	if (ext == ".gltf" || ext == ".glb")
-	{
-		desc.PostProcessFlags &= ~EModelPostProcessFlag::MakeLeftHanded;
-	}
-	return desc;
 }
 
 EResult ModelImporter::CreateJob(const filesystem::path& sourcePath, const filesystem::path& destDir, void* arg, std::unique_ptr<ImportJob>& outJob)

@@ -15,6 +15,7 @@
 #include "RenderPassManager.h"
 #include "RenderPass.h"
 #include "EditorSettingsService.h"
+#include "PreviewCameraDefaults.h"
 
 IMPLEMENT_SINGLETON(ThumbnailRenderer)
 
@@ -200,23 +201,16 @@ Engine::MaterialInterface* ThumbnailRenderer::GetDefaultPreviewMaterial() const
 	return handle.Get();
 }
 
-CameraBuffer ThumbnailRenderer::CalculateAutoFramingCamera(const vec3& bMin, const vec3& bMax) const
+std::optional<CameraBuffer> ThumbnailRenderer::CalculateAutoFramingCamera(const Engine::BoundingBox& bounds) const
 {
-	const vec3 center = (bMin + bMax) * 0.5f;
-	const vec3 extents = (bMax - bMin) * 0.5f;
-	float radius = glm::length(extents);
-	if (radius < 0.001f || !std::isfinite(radius)) radius = 1.0f;
-	const float fovY = glm::radians(45.0f);
-	const float distance = (radius / std::sin(fovY * 0.5f)) * 1.35f;
-	const float pitch = glm::radians(22.0f);
-	const float yaw = glm::radians(35.0f);
-	vec3 offset;
-	offset.x = distance * std::cos(pitch) * std::sin(yaw);
-	offset.y = distance * std::sin(pitch);
-	offset.z = -distance * std::cos(pitch) * std::cos(yaw);
-	const vec3 eye = center + offset;
-	const mat4 view = glm::lookAtLH(eye, center, vec3(0.0f, 1.0f, 0.0f));
-	const mat4 proj = glm::perspectiveLH_ZO(fovY, 1.0f, std::max(distance * 0.01f, 0.05f), distance * 15.0f);
+	constexpr float fieldOfView = Editor::PreviewCameraDefaults::FieldOfViewDegrees;
+	const auto framing = Editor::PreviewCameraDefaults::CalculateFraming(bounds, 1.0f, fieldOfView);
+	if (!framing)
+		return std::nullopt;
+
+	const vec3 eye = framing->Center - Editor::PreviewCameraDefaults::GetForward() * framing->Distance;
+	const mat4 view = glm::lookAtLH(eye, framing->Center, vec3(0.0f, 1.0f, 0.0f));
+	const mat4 proj = glm::perspectiveLH_ZO(glm::radians(fieldOfView), 1.0f, framing->NearPlane, framing->FarPlane);
 	return CameraBuffer::FromMatrices(view, proj, eye, 0.0f);
 }
 bool ThumbnailRenderer::SubmitMesh(Engine::Mesh* mesh, Engine::MaterialInterface* material)
@@ -235,8 +229,10 @@ bool ThumbnailRenderer::SubmitMesh(Engine::Mesh* mesh, Engine::MaterialInterface
 	if (geomPass == nullptr ||
 		Engine::Renderer::Get().ValidateMeshMaterial(mesh, material, geomPass) != Engine::EResult::Success)
 		return false;
-	const CameraBuffer camBuf = CalculateAutoFramingCamera(mesh->GetMin(), mesh->GetMax());
-	m_Pipeline.Submit(camBuf, m_Scene);
+	const auto camera = CalculateAutoFramingCamera({ mesh->GetMin(), mesh->GetMax() });
+	if (!camera)
+		return false;
+	m_Pipeline.Submit(*camera, m_Scene);
 	if (mesh->IsSkinned())
 	{
 		Engine::SkinnedDrawCommand cmd{};
@@ -271,37 +267,30 @@ bool ThumbnailRenderer::SubmitModel(Engine::Model* model)
 		worldTransforms[i] = (node.ParentIndex >= 0 && static_cast<size_t>(node.ParentIndex) < i)
 			? worldTransforms[node.ParentIndex] * node.LocalTransform : node.LocalTransform;
 	}
-	vec3 totalMin(std::numeric_limits<float>::max());
-	vec3 totalMax(std::numeric_limits<float>::lowest());
+	Engine::BoundingBox bounds;
 	bool hasValidBounds = false;
 	for (size_t i = 0; i < nodes.size(); ++i)
 	{
 		for (uint32 meshIdx : nodes[i].MeshIndices)
 		{
-			if (meshIdx < meshes.size() && meshes[meshIdx].IsValid() && meshes[meshIdx].Get())
-			{
-				Engine::Mesh* m = meshes[meshIdx].Get();
-				const vec3 mMin = m->GetMin();
-				const vec3 mMax = m->GetMax();
-				const mat4& M = worldTransforms[i];
-				const vec3 corners[8] = {
-					vec3(mMin.x, mMin.y, mMin.z), vec3(mMax.x, mMin.y, mMin.z),
-					vec3(mMin.x, mMax.y, mMin.z), vec3(mMax.x, mMax.y, mMin.z),
-					vec3(mMin.x, mMin.y, mMax.z), vec3(mMax.x, mMin.y, mMax.z),
-					vec3(mMin.x, mMax.y, mMax.z), vec3(mMax.x, mMax.y, mMax.z)
-				};
-				for (int c = 0; c < 8; ++c)
-				{
-					const vec3 wPos = vec3(M * vec4(corners[c], 1.0f));
-					totalMin = glm::min(totalMin, wPos);
-					totalMax = glm::max(totalMax, wPos);
-				}
-				hasValidBounds = true;
-			}
+			const auto* mesh = meshIdx < meshes.size() ? meshes[meshIdx].Get() : nullptr;
+			if (!mesh)
+				continue;
+
+			Engine::BoundingBox worldBounds;
+			if (!Engine::BoundingBox(mesh->GetMin(), mesh->GetMax()).TryTransformToAABB(worldTransforms[i], worldBounds))
+				return false;
+
+			bounds.min = hasValidBounds ? glm::min(bounds.min, worldBounds.min) : worldBounds.min;
+			bounds.max = hasValidBounds ? glm::max(bounds.max, worldBounds.max) : worldBounds.max;
+			hasValidBounds = true;
 		}
 	}
-	if (!hasValidBounds) { totalMin = vec3(-1.0f); totalMax = vec3(1.0f); }
-	const CameraBuffer camBuf = CalculateAutoFramingCamera(totalMin, totalMax);
+	if (!hasValidBounds)
+		return false;
+	const auto camera = CalculateAutoFramingCamera(bounds);
+	if (!camera)
+		return false;
 	auto* defaultMat = GetDefaultPreviewMaterial();
 	auto& rm = Engine::ResourceManager::Get();
 	auto skinMatHandle = rm.GetResourceHandle<Engine::MaterialInterface>(L"Resources/Material/SkinningMaterial.bammat.json");
@@ -339,7 +328,7 @@ bool ThumbnailRenderer::SubmitModel(Engine::Model* model)
 				continue;
 
 			if (!submitted)
-				m_Pipeline.Submit(camBuf, m_Scene);
+				m_Pipeline.Submit(*camera, m_Scene);
 
 			if (mesh->IsSkinned())
 			{

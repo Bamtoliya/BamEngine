@@ -14,50 +14,66 @@
 
 namespace
 {
-	bool IsSupportedImageExtension(const std::string& ext)
+	enum class EAssetReloadKind { Unsupported, Texture, Material, Mesh, Localization };
+
+	std::wstring LowerAscii(std::wstring value)
 	{
-		return ext == ".png" || ext == ".jpg" || ext == ".jpeg" ||
-			ext == ".tga" || ext == ".bmp" || ext == ".dds";
+		for (wchar_t& ch : value)
+		{
+			if (ch >= L'A' && ch <= L'Z')
+				ch += L'a' - L'A';
+		}
+		return value;
 	}
 
-	bool IsSupportedMaterialExtension(const std::filesystem::path& path)
+	EAssetReloadKind ClassifyAssetReload(const std::filesystem::path& path)
 	{
-		std::string filename = path.filename().string();
-		for (char& c : filename) c = static_cast<char>(tolower(c));
-		return filename.ends_with(".bammat.json") || filename.ends_with(".bammatinst.json") ||
-			filename.ends_with(".bammat") || filename.ends_with(".bammatinst");
+		const auto ext = LowerAscii(path.extension().wstring());
+		if (ext == L".png" || ext == L".jpg" || ext == L".jpeg" ||
+			ext == L".tga" || ext == L".bmp" || ext == L".dds")
+			return EAssetReloadKind::Texture;
+
+		const auto name = LowerAscii(path.filename().wstring());
+		if (name.ends_with(L".bammat.json") || name.ends_with(L".bammatinst.json") ||
+			name.ends_with(L".bammat") || name.ends_with(L".bammatinst"))
+			return EAssetReloadKind::Material;
+
+		if (name.ends_with(L".bammesh") || name.ends_with(L".bammesh.json"))
+			return EAssetReloadKind::Mesh;
+
+		if (name == L"korean.json" || name == L"english.json" || name.ends_with(L".csv"))
+			return EAssetReloadKind::Localization;
+
+		return EAssetReloadKind::Unsupported;
 	}
-	bool IsSupportedMeshExtension(const std::filesystem::path& path)
-	{
-		std::string filename = path.filename().string();
-		for (char& c : filename) c = static_cast<char>(tolower(c));
-		return filename.ends_with(".bammesh") || filename.ends_with(".bammesh.json");
-	}
-	bool IsSupportedLocalizationExtension(const std::filesystem::path& path)
-	{
-		std::string filename = path.filename().string();
-		for (char& c : filename) c = static_cast<char>(tolower(c));
-		return filename == "korean.json" || filename == "english.json" || filename.ends_with(".csv");
-	}
+
 	class TextureFileListener : public efsw::FileWatchListener
 	{
 	public:
-		TextureFileListener(AssetHotReloadManager* manager) : m_Manager(manager) {}
-		void handleFileAction(efsw::WatchID watchid, const std::string& dir, const std::string& filename,
-			efsw::Action action, std::string oldFilename) override
+		explicit TextureFileListener(AssetHotReloadManager* manager) : m_Manager(manager) {}
+
+		void handleFileAction(efsw::WatchID, const std::string& dir, const std::string& filename,
+			efsw::Action action, std::string) override
 		{
-			if (action == efsw::Actions::Modified || action == efsw::Actions::Add)
+			if (action != efsw::Actions::Modified && action != efsw::Actions::Add)
+				return;
+
+			try
 			{
-				const auto fullPath = std::filesystem::u8path(dir) / std::filesystem::u8path(filename);
-				std::string ext = fullPath.extension().string();
-				for (char& c : ext) c = static_cast<char>(tolower(c));
-				if (IsSupportedImageExtension(ext) || IsSupportedMaterialExtension(fullPath) ||
-					IsSupportedMeshExtension(fullPath) || IsSupportedLocalizationExtension(fullPath))
-				{
-					m_Manager->NotifyFileModified(fullPath);
-				}
+				const auto path = Engine::Utf8ToPath(dir) / Engine::Utf8ToPath(filename);
+				if (ClassifyAssetReload(path) != EAssetReloadKind::Unsupported)
+					m_Manager->NotifyFileModified(path);
+			}
+			catch (const std::exception& error)
+			{
+				EDITOR_LOG_WARN("[Asset Hot Reload] Ignored file event: {}, {}", filename, error.what());
+			}
+			catch (...)
+			{
+				EDITOR_LOG_WARN("[Asset Hot Reload] Ignored file event: {}", filename);
 			}
 		}
+
 	private:
 		AssetHotReloadManager* m_Manager = nullptr;
 	};
@@ -110,19 +126,30 @@ std::filesystem::path AssetHotReloadManager::ResolveTextureDirectory()
 EResult AssetHotReloadManager::Initialize(void* arg)
 {
 	m_WatchDirectory = ResolveTextureDirectory();
+	const auto watchPath = Engine::WStrToStr(m_WatchDirectory.wstring());
+
 	std::error_code ec;
-	if (!std::filesystem::exists(m_WatchDirectory, ec))
+	if (!std::filesystem::is_directory(m_WatchDirectory, ec))
 	{
-		EDITOR_LOG_WARN("[Texture Hot Reload] Resources directory does not exist: {}", m_WatchDirectory.string());
+		EDITOR_LOG_WARN("[Asset Hot Reload] Watch directory unavailable: {}, code={}", watchPath, ec.value());
 		return EResult::Success;
 	}
 
-	m_FileWatcher = new efsw::FileWatcher();
-	m_FileListener = new TextureFileListener(this);
-	m_WatchID = m_FileWatcher->addWatch(m_WatchDirectory.string(), m_FileListener, true);
-	m_FileWatcher->watch();
+	auto listener = std::make_unique<TextureFileListener>(this);
+	auto watcher = std::make_unique<efsw::FileWatcher>();
+	const auto watchID = watcher->addWatch(watchPath, listener.get(), true);
+	if (watchID <= 0)
+	{
+		EDITOR_LOG_WARN("[Asset Hot Reload] Failed to register watch: {}, code={}", watchPath, watchID);
+		return EResult::Success;
+	}
 
-	EDITOR_LOG_INFO("[Texture Hot Reload] Watching directory: {}", m_WatchDirectory.string());
+	watcher->watch();
+	m_WatchID = watchID;
+	m_FileListener = listener.release();
+	m_FileWatcher = watcher.release();
+
+	EDITOR_LOG_INFO("[Asset Hot Reload] Watching directory: {}", watchPath);
 	return EResult::Success;
 }
 
@@ -155,29 +182,15 @@ AssetHotReloadManager* AssetHotReloadManager::Create(void* arg)
 
 void AssetHotReloadManager::Update()
 {
-	const auto readyFiles = CollectReadyFiles(std::chrono::milliseconds(300));
-
-	for (const auto& file : readyFiles)
+	for (const auto& file : CollectReadyFiles(std::chrono::milliseconds(300)))
 	{
-		std::string ext = file.extension().string();
-		for (char& c : ext)
-			c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
-
-		if (IsSupportedImageExtension(ext))
+		switch (ClassifyAssetReload(file))
 		{
-			ProcessModifiedTexture(file);
-		}
-		else if (IsSupportedMaterialExtension(file))
-		{
-			ProcessModifiedMaterial(file);
-		}
-		else if (IsSupportedMeshExtension(file))
-		{
-			ProcessModifiedMesh(file);
-		}
-		else if (IsSupportedLocalizationExtension(file))
-		{
-			ProcessModifiedLocalization(file);
+		case EAssetReloadKind::Texture: ProcessModifiedTexture(file); break;
+		case EAssetReloadKind::Material: ProcessModifiedMaterial(file); break;
+		case EAssetReloadKind::Mesh: ProcessModifiedMesh(file); break;
+		case EAssetReloadKind::Localization: ProcessModifiedLocalization(file); break;
+		case EAssetReloadKind::Unsupported: break;
 		}
 	}
 }
@@ -257,7 +270,7 @@ void AssetHotReloadManager::ProcessModifiedLocalization(const std::filesystem::p
 	for (char& c : ext) c = static_cast<char>(tolower(c));
 
 	// .csv 파일이 수정된 경우 파이썬 변환 스크립트 실행
-	if (ext == ".csv")
+	if (LowerAscii(locPath.extension().wstring()) == L".csv")
 	{
 		std::filesystem::path scriptPath = std::filesystem::current_path() / "Utility/CSVToJsonConverter/localizationcsvtojson.py";
 		if (std::filesystem::exists(scriptPath))
@@ -269,9 +282,9 @@ void AssetHotReloadManager::ProcessModifiedLocalization(const std::filesystem::p
 
 	if (IsSuccess(Engine::LocalizationManager::Get().ReloadData()))
 	{
-		EDITOR_LOG_INFO("[HotReload] Localization reloaded: {}", locPath.filename().string());
+		EDITOR_LOG_INFO("[HotReload] Localization reloaded: {}", Engine::WStrToStr(locPath.filename().wstring()));
 		NotificationManager::Get().AddNotification(LOCAL("Notification.LocalizationReloaded"),
-			LOCAL_FMT("Notification.ReloadedFile", locPath.filename().string()), ELogLevel::Info, 3.0f);
+			LOCAL_FMT("Notification.ReloadedFile", Engine::WStrToStr(locPath.filename().wstring())), ELogLevel::Info, 3.0f);
 	}
 }
 
@@ -312,7 +325,7 @@ void AssetHotReloadManager::ProcessModifiedMesh(const std::filesystem::path& mes
 
 		RequestThumbnailRefresh(meshPath, mesh);
 		NotificationManager::Get().AddNotification(LOCAL("Notification.MeshHotReloaded"),
-			LOCAL_FMT("Notification.ReloadedFile", meshPath.filename().string()), ELogLevel::Info, 3.0f);
+			LOCAL_FMT("Notification.ReloadedFile", Engine::WStrToStr(meshPath.filename().wstring())), ELogLevel::Info, 3.0f);
 	}
 
 	if (!matched)

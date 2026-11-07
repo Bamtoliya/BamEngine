@@ -130,9 +130,12 @@ namespace Tools::ModelConversion
     {
         bool FlipUVs = true;
         bool ConvertToLeftHanded = false;
+        // Bake a positive unit conversion into geometry, node/bone translations and animation positions.
         float UniformScale = 1.0f;
         std::array<float, 3> RotationOffset{ 0.0f, 0.0f, 0.0f };
         bool FlipWindingOrder = false;
+        bool FlipPitch = false;
+        bool FlipHeading = false;
     };
 
     enum class Error

@@ -16,7 +16,7 @@ void IHotReloader::NotifyFileModified(const std::filesystem::path& filePath)
     if (!m_AutoReload)
         return;
 
-    m_PendingFiles[filePath.string()] = std::chrono::steady_clock::now();
+    m_PendingFiles[filePath] = std::chrono::steady_clock::now();
 }
 
 bool IHotReloader::IsAutoReloadEnabled() const

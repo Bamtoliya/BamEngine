@@ -4,17 +4,15 @@
 #include "AssetManager.h"
 #include "Scene.h"
 #include "Components/Core/TransformComponent.h"
-#include "Components/Render/StaticMeshRendererComponent.h"
 #include "Components/Render/AnimatorComponent.h"
 #include "IconsFontAwesome7.h"
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <algorithm>
+#include <cfloat>
 #include "ModelImportTask.h"
 #include "Model.h"
 #include "TransformSystem.h"
-#include "BoundingBox.h"
-#include "Components/Core/WorldTransformComponent.h"
 #include "MaterialInstance.h"
 #include "Texture.h"
 #include "ImGuiManager.h"
@@ -29,9 +27,8 @@ namespace Editor
 		m_Open = false;
 	}
 
-	EResult ModelImportModal::Initialize(void* arg)
+	EResult ModelImportModal::OnInitialize(void*)
 	{
-		(void)arg;
 		m_PreviewWidget.Initialize(L"ModelImportModalPreview", 380, 380, true);
 		return EResult::Success;
 	}
@@ -51,7 +48,7 @@ namespace Editor
 
 		m_SourcePath = sourcePath;
 		m_DestDir = destDir;
-		m_Desc = ModelImporter::GetDefaultDesc(sourcePath);
+		m_Desc = {};
 		m_Desc.Overwrite = true;
 
 		m_PreviewReady = false;
@@ -285,6 +282,8 @@ namespace Editor
 			request.Settings.ImportOptions |= EModelImportOption::Materials;
 		request.Settings.UniformScale = 1.0f;
 		request.Settings.RotationOffset = { 0.0f, 0.0f, 0.0f };
+		request.Settings.FlipPitch = false;
+		request.Settings.FlipHeading = false;
 
 		ModelImportTask task(std::move(request));
 		if (task.Prepare() != EResult::Success)
@@ -415,47 +414,11 @@ namespace Editor
 			return;
 		}
 
-		auto& registry = m_PreviewWidget.GetRegistry();
-		auto view = registry.view<Engine::StaticMeshRendererComponent, Engine::WorldTransformComponent>();
-
-		Engine::BoundingBox bounds;
-		bool hasBounds = false;
-
-		for (auto entity : view)
+		if (!m_PreviewWidget.SetModelFocusTarget(*m_PreviewEntity, focusCamera))
 		{
-			const auto& renderer = view.get<Engine::StaticMeshRendererComponent>(entity);
-			const auto& world = view.get<Engine::WorldTransformComponent>(entity);
-			const auto* mesh = renderer.meshHandle.Get();
-			if (!mesh) continue;
-
-			const Engine::BoundingBox localBounds(mesh->GetMin(), mesh->GetMax());
-			Engine::BoundingBox worldBounds;
-			if (!localBounds.TryTransformToAABB(world.worldMatrix, worldBounds))
-			{
-				fail("preview bounds transformation failed");
-				return;
-			}
-
-			if (!hasBounds)
-			{
-				bounds = worldBounds;
-				hasBounds = true;
-			}
-			else
-			{
-				bounds.min = glm::min(bounds.min, worldBounds.min);
-				bounds.max = glm::max(bounds.max, worldBounds.max);
-			}
-		}
-
-		if (!hasBounds)
-		{
-			fail("preview contains no renderable meshes");
+			fail("preview model framing failed");
 			return;
 		}
-
-		if (focusCamera)
-			m_PreviewWidget.FocusTarget(bounds.Center(), std::max(glm::length(bounds.Extent()) * 3.0f, 2.0f));
 
 		m_PreviewReady = true;
 	}
@@ -473,11 +436,15 @@ namespace Editor
 		if (!candidate.SetLocalScale(Engine::vec3(m_Desc.UniformScale)))
 			return false;
 
-		const auto rotX = glm::angleAxis(glm::radians(m_Desc.RotationOffset[0]), Engine::vec3(1.0f, 0.0f, 0.0f));
-		const auto rotY = glm::angleAxis(glm::radians(m_Desc.RotationOffset[1]), Engine::vec3(0.0f, 1.0f, 0.0f));
-		const auto rotZ = glm::angleAxis(glm::radians(m_Desc.RotationOffset[2]), Engine::vec3(0.0f, 0.0f, 1.0f));
+		const auto& rotation = m_Desc.RotationOffset;
+		const auto rotX = glm::angleAxis(glm::radians(rotation[0]), Engine::vec3(1.0f, 0.0f, 0.0f));
+		const auto rotY = glm::angleAxis(glm::radians(rotation[1]), Engine::vec3(0.0f, 1.0f, 0.0f));
+		const auto rotZ = glm::angleAxis(glm::radians(rotation[2]), Engine::vec3(0.0f, 0.0f, 1.0f));
+		const Engine::quat identity(1.0f, 0.0f, 0.0f, 0.0f);
+		const auto pitch = m_Desc.FlipPitch ? Engine::quat(0.0f, 1.0f, 0.0f, 0.0f) : identity;
+		const auto heading = m_Desc.FlipHeading ? Engine::quat(0.0f, 0.0f, 1.0f, 0.0f) : identity;
 
-		if (!candidate.SetLocalRotation(rotZ * rotY * rotX))
+		if (!candidate.SetLocalRotation(rotZ * rotY * rotX * heading * pitch))
 			return false;
 
 		return Engine::TransformSystem::TryCommitTransform(registry, entity, std::move(candidate));
@@ -538,135 +505,75 @@ namespace Editor
 		bool popupOpen = true;
 		if (ImGui::BeginPopupModal(modalTitle.c_str(), &popupOpen, ImGuiWindowFlags_NoScrollbar))
 		{
-			const float availWidth = ImGui::GetContentRegionAvail().x;
-			const float availHeight = ImGui::GetContentRegionAvail().y - 45.0f;
-
-			const float minLeft = 280.0f;
-			const float minRight = 360.0f;
-			const float maxLeft = std::max(minLeft, availWidth - minRight - 12.0f);
-			m_SplitterWidth = std::clamp(m_SplitterWidth, minLeft, maxLeft);
-
-			// ── [좌측] 3D 프리뷰 뷰포트 ──
-			const ImGuiWindowFlags vpFlags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
-			if (ImGui::BeginChild("##ImportPreviewPane", ImVec2(m_SplitterWidth, availHeight), true, vpFlags))
-			{
-				m_PreviewWidget.Draw(ImVec2(m_SplitterWidth - 16.0f, availHeight - 16.0f));
-			}
-			ImGui::EndChild();
-			ImGui::SameLine();
-			// ── [스플리터] 공통 헬퍼 적용 ──
-			float optionsWidth = (std::max)(minRight, availWidth - m_SplitterWidth - 4.0f);
-			Editor::SplitterV("##ImportModalSplitter", &m_SplitterWidth, &optionsWidth, minLeft, minRight, availHeight);
-			ImGui::SameLine();
-			if (ImGui::BeginChild("##ImportOptionsPane", ImVec2(0.0f, availHeight), true))
-			{
-				const std::string sourceName = Engine::WStrToStr(m_SourcePath.filename().wstring());
-				const std::string sourcePath = Engine::WStrToStr(m_SourcePath.wstring());
-
-				ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), ICON_FA_CUBE " %s", sourceName.c_str());
-				ImGui::TextWrapped("%s", sourcePath.c_str());
-
-				ImGui::Spacing();
-				ImGui::Separator();
-				ImGui::Spacing();
-
-				// Transform 옵션
-				if (ImGui::CollapsingHeader(LOCAL_CSTR("ModelImport.Transform"), ImGuiTreeNodeFlags_DefaultOpen))
+			const float height = std::max(1.0f, ImGui::GetContentRegionAvail().y - 45.0f);
+			const auto previewFlags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
+			Editor::DrawSidebarLayout("##ImportPreviewPane", "##ImportModalSplitter", "##ImportOptionsPane",
+				m_SplitterWidth, height, 280.0f, 360.0f,
+				[this] { m_PreviewWidget.Draw(); },
+				[this]
 				{
-					if (ImGui::DragFloat(LOCAL_LABEL("ModelImport.Scale").c_str(), &m_Desc.UniformScale, 0.01f, 0.0001f, 1000.0f, "%.4f"))
-						UpdatePreviewTransform();
+					const std::string sourceName = Engine::WStrToStr(m_SourcePath.filename().wstring());
+					const std::string sourcePath = Engine::WStrToStr(m_SourcePath.wstring());
 
-					ImGui::SameLine();
-					if (ImGui::SmallButton(LOCAL_CSTR("ModelImport.ScalePoint01"))) { m_Desc.UniformScale = 0.01f; UpdatePreviewTransform(); }
-					ImGui::SameLine();
-					if (ImGui::SmallButton(LOCAL_CSTR("ModelImport.Scale1"))) { m_Desc.UniformScale = 1.0f; UpdatePreviewTransform(); }
-					ImGui::SameLine();
-					if (ImGui::SmallButton(LOCAL_CSTR("ModelImport.Scale100"))) { m_Desc.UniformScale = 100.0f; UpdatePreviewTransform(); }
+					ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.4f, 0.8f, 1.0f, 1.0f));
+					ImGui::TextWrapped(ICON_FA_CUBE " %s", sourceName.c_str());
+					ImGui::PopStyleColor();
+					ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+					ImGui::TextWrapped("%s", sourcePath.c_str());
+					ImGui::PopStyleColor();
 
-					if (ImGui::DragFloat3(LOCAL_LABEL("ModelImport.Rotation").c_str(), m_Desc.RotationOffset.data(), 1.0f, -360.0f, 360.0f, "%.1f deg"))
-						UpdatePreviewTransform();
+					ImGui::Spacing();
+					ImGui::Separator();
+					ImGui::Spacing();
 
-					ImGui::SameLine();
-					if (ImGui::SmallButton(LOCAL_CSTR("ModelImport.Pitch180"))) { m_Desc.RotationOffset[0] = 180.0f; UpdatePreviewTransform(); }
-					ImGui::SameLine();
-					if (ImGui::SmallButton(LOCAL_CSTR("ModelImport.Yaw180"))) { m_Desc.RotationOffset[1] = 180.0f; UpdatePreviewTransform(); }
-					ImGui::SameLine();
-					if (ImGui::SmallButton(LOCAL_CSTR("ModelImport.Reset"))) { m_Desc.RotationOffset = { 0.0f, 0.0f, 0.0f }; UpdatePreviewTransform(); }
+					if (ImGui::CollapsingHeader(LOCAL_LABEL("ModelImport.Transform").c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+						DrawTransformOptions();
 
-					bool leftHanded = HasFlag(m_Desc.PostProcessFlags, EModelPostProcessFlag::MakeLeftHanded);
-					if (ImGui::Checkbox(LOCAL_LABEL("ModelImport.LeftHanded").c_str(), &leftHanded))
+					ImGui::Spacing();
+
+					// Meshes & Materials 옵션
+					if (ImGui::CollapsingHeader(LOCAL_LABEL("ModelImport.MeshesAndMaterials").c_str(), ImGuiTreeNodeFlags_DefaultOpen))
 					{
-						if (leftHanded) m_Desc.PostProcessFlags |= EModelPostProcessFlag::MakeLeftHanded;
-						else m_Desc.PostProcessFlags &= ~EModelPostProcessFlag::MakeLeftHanded;
+						bool importMeshes = HasFlag(m_Desc.ImportOptions, EModelImportOption::Meshes);
+						if (ImGui::Checkbox(LOCAL_LABEL("ModelImport.ImportMeshes").c_str(), &importMeshes))
+						{
+							if (importMeshes) m_Desc.ImportOptions |= EModelImportOption::Meshes;
+							else m_Desc.ImportOptions &= ~EModelImportOption::Meshes;
+						}
 
-						m_PreviewReloadRequested = true;
+						bool importMats = HasFlag(m_Desc.ImportOptions, EModelImportOption::Materials);
+						if (ImGui::Checkbox(LOCAL_LABEL("ModelImport.ImportMaterials").c_str(), &importMats))
+						{
+							if (importMats) m_Desc.ImportOptions |= EModelImportOption::Materials;
+							else m_Desc.ImportOptions &= ~EModelImportOption::Materials;
+
+							m_PreviewReloadRequested = true;
+						}
 					}
 
-					bool flipUVs = HasFlag(m_Desc.PostProcessFlags, EModelPostProcessFlag::FlipUVs);
-					if (ImGui::Checkbox(LOCAL_LABEL("ModelImport.FlipUVs").c_str(), &flipUVs))
+					ImGui::Spacing();
+
+					DrawTextureReferences();
+					ImGui::Spacing();
+
+					// Animation & Rig 옵션
+					if (ImGui::CollapsingHeader(LOCAL_LABEL("ModelImport.AnimationAndRig").c_str(), ImGuiTreeNodeFlags_DefaultOpen))
 					{
-						if (flipUVs) m_Desc.PostProcessFlags |= EModelPostProcessFlag::FlipUVs;
-						else m_Desc.PostProcessFlags &= ~EModelPostProcessFlag::FlipUVs;
+						bool importSkel = HasFlag(m_Desc.ImportOptions, EModelImportOption::Skeleton);
+						if (ImGui::Checkbox(LOCAL_LABEL("ModelImport.ImportSkeleton").c_str(), &importSkel))
+						{
+							if (importSkel) m_Desc.ImportOptions |= EModelImportOption::Skeleton;
+							else m_Desc.ImportOptions &= ~EModelImportOption::Skeleton;
+						}
 
-						m_PreviewReloadRequested = true;
+						bool importAnims = HasFlag(m_Desc.ImportOptions, EModelImportOption::Animations);
+						if (ImGui::Checkbox(LOCAL_LABEL("ModelImport.ImportAnimations").c_str(), &importAnims))
+						{
+							if (importAnims) m_Desc.ImportOptions |= EModelImportOption::Animations;
+							else m_Desc.ImportOptions &= ~EModelImportOption::Animations;
+						}
 					}
-
-					bool flipWinding = HasFlag(m_Desc.PostProcessFlags, EModelPostProcessFlag::FlipWindingOrder);
-					if (ImGui::Checkbox(LOCAL_LABEL("ModelImport.FlipWinding").c_str(), &flipWinding))
-					{
-						if (flipWinding) m_Desc.PostProcessFlags |= EModelPostProcessFlag::FlipWindingOrder;
-						else m_Desc.PostProcessFlags &= ~EModelPostProcessFlag::FlipWindingOrder;
-
-						m_PreviewReloadRequested = true;
-					}
-				}
-
-				ImGui::Spacing();
-
-				// Meshes & Materials 옵션
-				if (ImGui::CollapsingHeader(LOCAL_CSTR("ModelImport.MeshesAndMaterials"), ImGuiTreeNodeFlags_DefaultOpen))
-				{
-					bool importMeshes = HasFlag(m_Desc.ImportOptions, EModelImportOption::Meshes);
-					if (ImGui::Checkbox(LOCAL_LABEL("ModelImport.ImportMeshes").c_str(), &importMeshes))
-					{
-						if (importMeshes) m_Desc.ImportOptions |= EModelImportOption::Meshes;
-						else m_Desc.ImportOptions &= ~EModelImportOption::Meshes;
-					}
-
-					bool importMats = HasFlag(m_Desc.ImportOptions, EModelImportOption::Materials);
-					if (ImGui::Checkbox(LOCAL_LABEL("ModelImport.ImportMaterials").c_str(), &importMats))
-					{
-						if (importMats) m_Desc.ImportOptions |= EModelImportOption::Materials;
-						else m_Desc.ImportOptions &= ~EModelImportOption::Materials;
-
-						m_PreviewReloadRequested = true;
-					}
-				}
-
-				ImGui::Spacing();
-
-				DrawTextureReferences();
-				ImGui::Spacing();
-
-				// Animation & Rig 옵션
-				if (ImGui::CollapsingHeader(LOCAL_CSTR("ModelImport.AnimationAndRig"), ImGuiTreeNodeFlags_DefaultOpen))
-				{
-					bool importSkel = HasFlag(m_Desc.ImportOptions, EModelImportOption::Skeleton);
-					if (ImGui::Checkbox(LOCAL_LABEL("ModelImport.ImportSkeleton").c_str(), &importSkel))
-					{
-						if (importSkel) m_Desc.ImportOptions |= EModelImportOption::Skeleton;
-						else m_Desc.ImportOptions &= ~EModelImportOption::Skeleton;
-					}
-
-					bool importAnims = HasFlag(m_Desc.ImportOptions, EModelImportOption::Animations);
-					if (ImGui::Checkbox(LOCAL_LABEL("ModelImport.ImportAnimations").c_str(), &importAnims))
-					{
-						if (importAnims) m_Desc.ImportOptions |= EModelImportOption::Animations;
-						else m_Desc.ImportOptions &= ~EModelImportOption::Animations;
-					}
-				}
-			}
-			ImGui::EndChild();
+				}, previewFlags, /*reserveHalfForContent=*/false);
 
 			ImGui::Spacing();
 			ImGui::Separator();
@@ -707,6 +614,87 @@ namespace Editor
 		}
 	}
 
+	void ModelImportModal::DrawTransformOptions()
+	{
+		ImGui::TextWrapped("%s", LOCAL_CSTR("ModelImport.Scale"));
+		ImGui::SetNextItemWidth(-FLT_MIN);
+		bool transformChanged = ImGui::DragFloat("###ModelImport.Scale", &m_Desc.UniformScale, 0.01f, 0.0001f, 1000.0f,
+			"%.4f", ImGuiSliderFlags_AlwaysClamp);
+
+		struct ScalePreset
+		{
+			const char* LabelKey;
+			float Scale;
+		};
+		constexpr ScalePreset presets[] = {
+			{ "ModelImport.ScalePoint01", 0.01f }, { "ModelImport.Scale1", 1.0f }, { "ModelImport.Scale100", 100.0f }
+		};
+		const auto& style = ImGui::GetStyle();
+		const float rightEdge = ImGui::GetCursorScreenPos().x + ImGui::GetContentRegionAvail().x;
+		for (const auto& preset : presets)
+		{
+			const auto label = LOCAL_LABEL(preset.LabelKey);
+			const float buttonWidth = ImGui::CalcTextSize(label.c_str(), nullptr, true).x + style.FramePadding.x * 2.0f;
+			if (&preset != &presets[0] && ImGui::GetItemRectMax().x + style.ItemSpacing.x + buttonWidth <= rightEdge)
+				ImGui::SameLine();
+
+			if (ImGui::SmallButton(label.c_str()))
+			{
+				m_Desc.UniformScale = preset.Scale;
+				transformChanged = true;
+			}
+		}
+
+		ImGui::Spacing();
+		ImGui::TextWrapped("%s", LOCAL_CSTR("ModelImport.Rotation"));
+		constexpr const char* axisIds[] = { "##RotationX", "##RotationY", "##RotationZ" };
+		constexpr const char* axisFormats[] = { "X %.1f deg", "Y %.1f deg", "Z %.1f deg" };
+		const float axisWidth = ImGui::CalcTextSize("X -360.0 deg").x + style.FramePadding.x * 2.0f;
+		const bool axesFitOnOneLine = ImGui::GetContentRegionAvail().x >= axisWidth * 3.0f + style.ItemInnerSpacing.x * 2.0f;
+		for (size_t axis = 0; axis < m_Desc.RotationOffset.size(); ++axis)
+		{
+			if (axesFitOnOneLine && axis != 0)
+				ImGui::SameLine(0.0f, style.ItemInnerSpacing.x);
+			ImGui::SetNextItemWidth(axesFitOnOneLine ? axisWidth : -FLT_MIN);
+			transformChanged |= ImGui::DragFloat(axisIds[axis], &m_Desc.RotationOffset[axis], 1.0f, -360.0f, 360.0f, axisFormats[axis]);
+		}
+
+		transformChanged |= ImGui::Checkbox(LOCAL_LABEL("ModelImport.Pitch180").c_str(), &m_Desc.FlipPitch);
+		transformChanged |= ImGui::Checkbox(LOCAL_LABEL("ModelImport.Yaw180").c_str(), &m_Desc.FlipHeading);
+		if (ImGui::SmallButton(LOCAL_LABEL("ModelImport.Reset").c_str()))
+		{
+			m_Desc.RotationOffset = {};
+			m_Desc.FlipPitch = false;
+			m_Desc.FlipHeading = false;
+			transformChanged = true;
+		}
+		if (transformChanged)
+			UpdatePreviewTransform();
+
+		ImGui::Spacing();
+		ImGui::Separator();
+		const auto drawPostProcessOption = [this](const char* labelKey, EModelPostProcessFlag flag)
+		{
+			bool enabled = HasFlag(m_Desc.PostProcessFlags, flag);
+			if (!ImGui::Checkbox(LOCAL_LABEL(labelKey).c_str(), &enabled))
+				return false;
+
+			if (enabled) m_Desc.PostProcessFlags |= flag;
+			else m_Desc.PostProcessFlags &= ~flag;
+			m_PreviewReloadRequested = true;
+			return true;
+		};
+		if (drawPostProcessOption("ModelImport.LeftHanded", EModelPostProcessFlag::MakeLeftHanded))
+		{
+			if (HasFlag(m_Desc.PostProcessFlags, EModelPostProcessFlag::MakeLeftHanded))
+				m_Desc.PostProcessFlags |= EModelPostProcessFlag::FlipWindingOrder;
+			else
+				m_Desc.PostProcessFlags &= ~EModelPostProcessFlag::FlipWindingOrder;
+		}
+		drawPostProcessOption("ModelImport.FlipUVs", EModelPostProcessFlag::FlipUVs);
+		drawPostProcessOption("ModelImport.FlipWinding", EModelPostProcessFlag::FlipWindingOrder);
+	}
+
 	void ModelImportModal::DrawTextureReferences()
 	{
 		if (!ImGui::CollapsingHeader(LOCAL_LABEL("ModelImport.AlbedoReferences").c_str(),
@@ -743,7 +731,11 @@ namespace Editor
 			ImGui::PushID(static_cast<int>(i));
 
 			const auto flags = i == 0 ? ImGuiTreeNodeFlags_DefaultOpen : ImGuiTreeNodeFlags_None;
-			if (ImGui::TreeNodeEx("##AlbedoReference", flags, "%s", materialName.c_str()))
+			const float labelWidth = ImGui::GetContentRegionAvail().x - ImGui::GetTreeNodeToLabelSpacing();
+			const bool detailsOpen = ImGui::TreeNodeEx("##AlbedoReference", flags, "%s", materialName.c_str());
+			if (ImGui::CalcTextSize(materialName.c_str()).x > labelWidth)
+				ImGui::SetItemTooltip("%s", materialName.c_str());
+			if (detailsOpen)
 			{
 				const auto drawDetails = [&info]()
 					{

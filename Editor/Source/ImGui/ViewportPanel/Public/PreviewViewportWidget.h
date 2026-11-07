@@ -10,10 +10,12 @@
 #include <string>
 #include "ChannelFilter.h"
 #include "InputMap.h"
+#include "ImGuiSplitter.h"
 
 BEGIN(Engine)
 class Scene;
 class Entity;
+struct BoundingBox;
 END
 
 BEGIN(Editor)
@@ -38,6 +40,7 @@ public:
 	// ── 카메라 & 조작 인터페이스 ──
 	[[nodiscard]] EditorCameraController* GetCameraController() const { return m_CameraController; }
 	void FocusTarget(const Engine::vec3& targetPos, Engine::f32 distance = 3.5f);
+	bool SetModelFocusTarget(const Engine::Entity& model, bool refocus = true);
 	void SetCameraSpeed(Engine::f32 speed);
 
 	// ── 프레임 틱 및 렌더링 ──
@@ -61,6 +64,9 @@ public:
 	void RefocusTarget();
 
 private:
+	bool TryGetModelBounds(entt::entity root, Engine::BoundingBox& bounds) const;
+	bool FrameModelBounds(const Engine::BoundingBox& bounds);
+	void ApplyFocus(const Engine::vec3& targetPos, Engine::f32 distance);
 	void CheckResize(uint32 targetWidth, uint32 targetHeight);
 	void DrawOverlayToolbar();
 	void DrawRenderTargetPopup();
@@ -90,6 +96,8 @@ private:
 	inline static PreviewViewportWidget* s_ShortcutTarget = nullptr;
 	Engine::vec3 m_FocusPosition = Engine::vec3(0.0f);
 	Engine::f32 m_FocusDistance = 3.0f;
+	entt::entity m_FocusModel = entt::null;
+	bool m_ModelFocusPending = false;
 	std::optional<Engine::EMouseButton> m_CameraDragButton;
 
 	// 빛

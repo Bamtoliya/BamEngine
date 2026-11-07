@@ -18,6 +18,7 @@ public:
 
 public:
 	bool IsSupported(const std::filesystem::path& assetPath) const override;
+	bool HasUnsavedResourceChanges() const override { return m_IsDirty; }
 	void SetTargetResource(const std::filesystem::path& assetPath) override;
 	void Draw() override;
 	virtual void Update(f32 dt) override;
@@ -33,6 +34,7 @@ private:
 private:
 	Engine::ResourceHandle<Engine::Model> m_ModelHandle;
 	string m_StatusKey;
+	bool m_IsDirty = false;
 
 	// 3D 프리뷰 뷰포트 & 엔티티
 	PreviewViewportWidget m_PreviewWidget;
