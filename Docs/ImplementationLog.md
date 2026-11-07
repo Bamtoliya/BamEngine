@@ -2,6 +2,82 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-07] 모델 파이프라인 자동 메시 LOD 생성 및 ModelEditor 실시간 LOD 뷰어 구축 (우선순위 3번 트랙 B)
+
+- Area: Pipeline | Tool | Editor | Resource | Render
+- Type: Feature | Optimization | UX
+- 주요 변경 내역:
+  1. **`meshoptimizer`(`meshopt_simplify`) 기반 자동 메시 LOD 생성 엔진 도입**:
+     - `vcpkg.json`: `meshoptimizer` 공식 패키지 의존성 추가.
+     - `Tools/Converters/ModelConverter/CMakeLists.txt`: `meshoptimizer::meshoptimizer` 패키지 검색 및 라이브러리 링크 연결.
+     - `ModelConverter.h/.cpp`:
+       - `Tools::ModelConversion::Options` 및 `MeshData`에 `std::vector<MeshData> LODs` 필드 신설.
+       - Quadric Error Metrics(QEM) 기반 정밀 단순화 함수 `GenerateMeshLODs(MeshData&, const Options&)` 구현.
+       - `meshopt_simplify`로 목표 비율(LOD1: 50%, LOD2: 25%)에 맞춘 인덱스 간소화 수행 후, `meshopt_generateVertexRemap` / `meshopt_remapVertexBuffer` / `meshopt_remapIndexBuffer`를 거쳐 사용되지 않는 정점을 컴팩트하게 정리하고 노멀, UV, 본 가중치(Skinning) 등 모든 정점 속성을 안전하게 보존.
+       - 원거리 LOD 오차 확장 및 `meshopt_simplifySloppy` 2단계 폴백 도입: 고정 1% 오차에 묶여 로우폴리/UV Seam 부품이 조기 중단되던 현상을 해결하여, LOD1(50%) 및 LOD2(25%) 목표치까지 적극적 감축 달성.
+  2. **에셋 파이프라인 스테이징·영속화 및 엔티티 연동**:
+     - `ModelImportTask.h/.cpp`: 원본 메시와 함께 파생 LOD 메시를 `PreparedModelMesh.LODs`로 비동기 변환.
+     - `ModelImporter.h/.cpp`:
+       - `ModelImportDesc`에 `GenerateLODs`, `LODCount`, `LOD1Reduction`, `LOD2Reduction`, `TargetError` 설정 확장.
+       - `FinalizeOneStep`: 파생 LOD 메시(`_LOD1.bammesh`, `_LOD2.bammesh`)를 디스크에 자동 생성·스테이징·비동기 직렬화. 기존 롤백/백업/재임포트(인플레이스 리로드) 메커니즘을 동일하게 상속.
+     - `Model.h/.cpp`:
+       - `ModelMeshLOD` 구조체 신설 및 `Model` 클래스에 `m_MeshLODs`(`PROPERTY(ALLOW_MISSING)`) 추가로 완벽한 파일 하위 호환성 보장.
+       - `GetMeshLOD(meshIndex, lodLevel)`, `HasLODs()` 접근자 제공.
+     - `SceneModel.cpp`:
+       - 씬에 모델 인스턴스화 시 파생 LOD 메시가 존재하면 `LODGroupComponent`를 엔티티에 자동 장착하고 `lod1Mesh`, `lod2Mesh`, 화면 점유율 임계치(`0.25f`, `0.08f`), 히스테리시스(`0.02f`)를 자동 설정하여 `MeshRenderSystem`의 거리/커버리지 기반 LOD 전환과 자동 연동.
+  3. **`ModelImportModal` LOD 설정 인터페이스 추가**:
+     - `ModelImportModal.cpp`: [LOD Options] CollapsingHeader 신설, LOD 자동 생성 토글 및 슬라이더(`LOD1Reduction`, `LOD2Reduction`) 제공.
+  4. **`ModelEditor` 실시간 LOD 검사기 및 강제 프리뷰 뷰어 구축**:
+     - `ModelEditor.h/.cpp`:
+       - 상단 툴바에 빠른 LOD 모드 전환 콤보박스 (`[Auto (Distance)]`, `[LOD 0 (Original)]`, `[LOD 1]`, `[LOD 2]`) 배치.
+       - 디테일 패널에 [Mesh LOD (Level of Detail)] 전용 테이블 신설: 각 LOD 레벨별 트라이앵글 수, 버텍스 수, 감축률(%) 한눈에 비교 및 즉시 확인 가능한 `[View]` 버튼 제공.
+       - `SetForcedLOD(int lod)`: 프리뷰 씬 내 모든 스킨드/스태틱 메시 렌더러를 실시간으로 순회하여 선택된 LOD 메시로 즉시 교체(Zero-Lag 60 FPS 프리뷰). Auto 복원 시 기본 LOD0 및 `LODGroupComponent`로 즉각 원복.
+     - `DrawAnimations`: 재생 버튼 라벨 3항 연산자에서 임시 `std::string`의 `.c_str()` 조기 소멸로 인한 Dangling Pointer 크래시(`ImGui::ItemAdd`) 결함 수정.
+  5. **로캘 원본 동기화 및 무결점 정적 감사 통과**:
+     - `Resources/Data/Localization/Editor.csv`에 `ModelImport.LODOptions`, `GenerateLODs`, `ModelEditor.LODHeader`, `LODAuto`, `LOD0Label`, `Triangles`, `Vertices`, `Reduction` 등 21개 키 추가 및 `localizationcsvtojson.py` 동기화 (총 2,309개 키).
+     - `audit_localization.py --strict` 0건 위반으로 완벽 통과 (621개 파일 전수 검증).
+
+
+### [2026-11-07] 트랙 A: 3D 형상 물리 충돌·스윕 완비, KCC 안정화 및 3D RigidBody 시뮬레이터 구축
+
+- Area: Engine | Physics | KCC | Architecture
+- Type: Feature | Fix | Stability
+- 주요 변경 내역:
+  1. **3D Capsule 충돌·스윕·레이캐스트 알고리즘 완비 (`Collision.h/.cpp`)**:
+     - `Collision::Raycast(Ray, Capsule, ...)`: 캡슐의 원통 측면 및 양 끝 반구에 대한 닫힌 형태(closed form)의 정확한 광선 교차 판정 추가.
+     - `Collision::Intersects(Capsule, BoundingBox)`: 선분과 AABB/OBB 간 3D 최근접점 거리 계산을 통한 정밀 교차 판정(침투 깊이, 법선, 접점) 및 OBB 월드 변환 지원.
+     - `Collision::Intersects3D(Capsule, Capsule)`: 두 3D 캡슐 간 최단 거리 및 접촉 판정 완비.
+     - `Collision::Sweep(Capsule, ...)`: Sphere(민코프스키 합 역방향 레이캐스트), Box/OBB 및 Capsule 대상 연속 충돌 스윕(Bisection Search) 함수 4종 완비.
+  2. **물리 시스템 3D 형상 질의 및 트리거 버그 수정 (`PhysicsSystem.h/.cpp`)**:
+     - `TestColliderHit`: `ColliderComponent`에 `CapsuleShape`가 설정되었을 때 레이캐스트가 누락되던 결함 수정.
+     - `Overlap3D`: KCC vs Box 판정 시 중심점 포함 여부(`Contains(Center)`)로 검사하여 모서리 충돌을 놓치던 심각한 결함을 제거하고, `Collision::Intersects` 기반 정확한 OBB 교차 판정으로 전면 교체. CapsuleShape 및 MeshShape 콜라이더 간의 전수 오버랩 분기 완비.
+     - 2D 회전 역학 연결: `RigidBody2DComponent`의 `AccumulatedTorque` 소비, `InverseInertia` 자동 계산 및 Z축 각속도/회전 적분 연결.
+     - 3D 강체 시뮬레이터 구축: `RigidBodyComponent` 뷰를 `OnFixedUpdate`에 신설하여 중력 낙하, 선속도/외력 적분, 정적 바닥/지형 충돌 접지 및 각속도 회전 적분을 실제로 수행하도록 구현.
+  3. **키네마틱 캐릭터 컨트롤러(KCC) 고도화 (`KinematicCharacterSystem.h/.cpp`)**:
+     - `KinematicCharacterSystem`을 가변 프레임(`OnUpdate`)에서 물리 고정 틱(`OnFixedUpdate`)으로 이관하여 FPS 변동에 따른 터널링 및 물리 오차 원천 차단.
+     - `SweepCharacter`: 장애물 검사 시 `CapsuleShape` 및 `MeshShape` 콜라이더 분기를 추가하고, 캐릭터 본인도 캡슐 스윕(`Collision::Sweep`)을 사용하도록 정밀화.
+  4. **전역 물리 설정 구조체 신설 (`PhysicsSettings.h`, `PhysicsComponent.h`, `Engine.csv`)**:
+     - `PhysicsSettings`: 2D/3D 전역 중력 벡터, 고정 타임스텝(`FixedTimeStep = 0.02f`), 물리 솔버 반복 횟수 및 32개 레이어 이름 정의.
+     - `PhysicsSystem::GetSettings()`, `SetSettings()` 정적 인터페이스 노출 및 `Engine.csv` 로캘 키 7종 등록.
+
+### [2026-11-07] ModelEditor 내장 애니메이션 클립 선택·재생 및 정밀 타임라인 제어 기능 추가
+
+- Area: Editor | Animation | UX | Localization
+- Type: Feature | UX
+- 주요 변경 내역:
+  1. **내장 애니메이션 클립 인터랙티브 선택 및 프리뷰 연동**:
+     - `ModelEditor.h/.cpp`: `m_SelectedAnimIndex`, `GetPreviewAnimator()`, `SelectAnimation(int, bool)` 구현.
+     - `DrawAnimations`: 기존의 단순 텍스트 나열에서 3열 테이블(`[Play/Pause]`, `[ClipName]`, `[Duration]`) 기반 인터랙티브 셀렉터블 리스트로 전면 개편. 클릭 시 즉시 해당 클립으로 `AnimatorComponent.currentClip`을 교체하고 자동 재생/일시정지 동기화.
+     - 선택된 클립에 대한 **정밀 재생 제어 패널** 제공:
+       - `[Play / Pause]` 토글 및 `[Stop (T-Pose)]` 리셋 버튼
+       - 현재 재생 시간 및 총 길이를 보여주는 인터랙티브 타임라인 슬라이더 (`currentTime / durationSec`)
+       - 루프 토글(`isLooping`) 및 재생 속도 조절 슬라이더(`playRate`, 0.1x ~ 3.0x)
+  2. **상단 툴바 퀵 애니메이션 컨트롤러 추가**:
+     - `ModelEditor::DrawToolbar`: 모델에 애니메이션이 있는 경우 툴바에 빠른 `[Play/Pause]` 버튼 및 클립 선택 콤보박스(`ImGui::BeginCombo`)를 배치하여, 디테일 패널 스크롤 없이도 상단 툴바에서 3D 뷰포트를 주시하며 즉시 클립을 교체·재생할 수 있도록 UX 개선.
+  3. **로캘 키 추가 및 무결점 정적 감사 통과**:
+     - `Resources/Data/Localization/Editor.csv`에 `ModelEditor.ClipName`, `Duration`, `EmbeddedClips`, `LoopAnimation`, `PauseClip`, `PlayClip`, `PlayRate`, `SelectClip`, `StopAndReset`, `SecondsFormat` 10개 키 추가 및 JSON 동기화.
+     - `audit_localization.py --strict` 0건 위반으로 완벽 통과 (620개 파일, 2,281개 키).
+
 ### [2026-11-07] GPU 스키닝 이중 회전(Double Transform) 방지 및 바인드 포즈 행렬 정규화
 
 - Area: Engine | Editor | Render | Animation
@@ -581,7 +657,8 @@ Use one entry per meaningful change.
 - 구현 및 해결 내용 요약:
   1. **3D 충돌체 및 스윕 판정 정상화 (PhysicsSystem.cpp, KinematicCharacterSystem.cpp)**:
      - PhysicsSystem::TestColliderHit의 BoundingBox 중심을 (0,0,0) ~ Size*0.5에서 [-halfSize, halfSize]로 정상화하고 SphereShape 스케일 반영.
-     - 발바닥 오프셋(ootOffset = Center.y - Height*0.5)을 계산하여 중심 피벗 메시(구체 등)가 바닥 패널 위에 정확히 안착하도록 보정.
+     - 발바닥 오프셋(
+ootOffset = Center.y - Height*0.5)을 계산하여 중심 피벗 메시(구체 등)가 바닥 패널 위에 정확히 안착하도록 보정.
      - 수평 이동 스윕 시 발바닥 여유 마진을 적용하여 바닥과의 불필요한 마찰 걸림(Stuck) 제거.
   2. **프레임 레이트 동기화 및 부드러운 이동 (KinematicCharacterSystem.cpp)**:
      - KCC 물리 갱신을 OnFixedUpdate에서 OnUpdate(dt)로 전환하여 디스플레이 주사율(144Hz 등)과 1:1로 부드럽게 동기화, 화면 떨림을 완벽히 제거.
@@ -3052,3 +3129,48 @@ Use this as the primary execution list until a playable 2D vertical slice is com
   - 바람(Wind) 검증: `Wind Force`에 $(5, 0, 0)$을 주었을 때 파티클들이 바람 방향으로 휘날리는지 확인.
   - 컬 노이즈(Curl Noise) 검증: `Enable Turbulence`를 켜고 `Strength` $2.0$, `Frequency` $0.5$ 설정 시 입자들이 뭉치지 않고 유체처럼 소용돌이치며 퍼져나가는지 확인.
   - 벽면 슬라이딩 검증: 소용돌이치는 연기가 콜라이더 벽면에 부딪혔을 때 뚫지 않고 벽면을 감싸듯 타고 흐르는지 확인.
+
+
+## 2026-11-07 — [Hotfix] ParticleEmitterComponent 신규 프로퍼티 하위 호환성 (ALLOW_MISSING) 적용
+
+- **원인 분석:**
+  - 씬 역직렬화(`archive_reflection::ReadObject`) 시 프로퍼티에 `ALLOW_MISSING` 메타데이터가 없으면 누락된 필드에 대해 `ArchiveErrorCode::MissingField`(code=1)를 반환하며 씬 로드가 중단됨.
+  - Phase 1/Phase 2에서 추가된 프로퍼티들(`buoyancy`, `wind`, `enableCurlNoise`, `collisionMode` 등)이 기존 저장된 씬 파일(`RaytracingScene3.json` 등)에 존재하지 않아 로드 오류 발생.
+- **수정 내용:**
+  - `Engine/Source/Core/Public/Components/Render/ParticleEmitterComponent.h`:
+    - 신규 추가된 모든 물리/역학/충돌 프로퍼티에 `ALLOW_MISSING` 매크로 추가.
+    - 기존 씬 파일 로드 시 누락된 필드가 있어도 C++ 기본값으로 정상 초기화되도록 하위 호환성 보장.
+
+
+## 2026-11-08 — 이펙트 전용 텍스처 리소스 4종 생성 및 기본 폴백 파이프라인 구축
+
+- **작업 범위:**
+  - **신규 텍스처 에셋 생성 (512x512 RGBA 32-bit):**
+    - `Resources/Texture/Particle_SoftCircle.png`: 안티앨리어싱 가우시안 곡선 기반의 방사형 부드러운 원형 텍스처 (기본 파티클, 불씨, 마법 구체).
+    - `Resources/Texture/Particle_Smoke.png`: 다중 옥타브 프랙탈 펄린 노이즈와 원형 비네팅 마스크를 합성한 유기적 연기 덩어리 텍스처 (연기, 안개, 흙먼지).
+    - `Resources/Texture/Particle_Spark.png`: 고밀도 중앙 코어와 십자 및 45도 대각선 지향성 플레어를 결합한 스파크 텍스처 (바닥 튀는 불꽃, 용접 스파크).
+    - `Resources/Texture/Particle_Ring.png`: 부드러운 가우시안 프로파일을 가진 동심원 링 텍스처 (착지 충격파, 수면 파문).
+  - `Engine/Source/System/Render/Private/ParticleSystem.cpp`:
+    - `OnSubmit` 렌더 제출 단계에서 `textureHandle`이 비어 있을 경우 `Particle_SoftCircle.png`를 기본 텍스처로 자동 폴백.
+    - `materialHandle`이 비어 있을 경우 `SpriteMaterial.bammat.json`으로 자동 폴백.
+    - 이제 사용자가 엔티티에 컴포넌트 추가 시 흰 사각형(`white1x1`)이 아닌 부드러운 원형 파티클로 즉시 렌더링되도록 개선.
+
+
+## 2026-11-08 — 이펙트 전용 머티리얼 2종 (Additive, AlphaBlend) 구축 및 HDR 발광(Emission) 셰이더 연동
+
+- **작업 범위:**
+  - **셰이더 발광(Emission) 및 HDR 블룸 연동:**
+    - `Resources/Shader/hlsl/gbufferSpritePS.hlsl`:
+      - 기존 `output.Emission = float4(0, 0, 0, 0)` 고정을 해제하고, `output.Emission = float4(texColor.rgb * input.Color.a, 1.0f)` 출력.
+      - 파티클의 색상과 알파가 강할수록 발광(Emission) 버퍼에 빛 에너지를 방출하여 HDR 블룸 후처리(`bloomPrefilterPS`)와 실시간 연동.
+    - `Resources/Shader/glsl/gbuffer_sprite.frag`:
+      - GLSL 셰이더에도 `outEmission = vec4(texColor.rgb * inColor.a, 1.0)` 대칭 적용.
+  - **신규 파티클 전용 머티리얼 2종 생성:**
+    - `Resources/Material/ParticleMaterial_Additive.bammat.json`:
+      - 블렌드 모드 `Additive` (`m_BlendMode: 4`), 깊이 모드 `ReadOnly` (`m_DepthMode: 1`).
+      - 불꽃, 스파크, 섬광, 마법 이펙트용. 입자가 겹칠수록 점점 더 밝아지며 눈부신 섬광 표현.
+    - `Resources/Material/ParticleMaterial_AlphaBlend.bammat.json`:
+      - 블렌드 모드 `AlphaBlend` (`m_BlendMode: 2`), 깊이 모드 `ReadOnly` (`m_DepthMode: 1`).
+      - 연기, 흙먼지, 안개, 물보라용. 깊이 쓰기를 꺼서(Z-Write Off) 입자끼리 가려지는 아티팩트 없이 부드럽게 배경과 투명 합성.
+  - `Engine/Source/System/Render/Private/ParticleSystem.cpp`:
+    - `OnSubmit` 기본 머티리얼 폴백을 `ParticleMaterial_AlphaBlend`로 우선 연결하여 컴포넌트 추가 시 기본적으로 부드러운 투명 합성이 적용되도록 개선.

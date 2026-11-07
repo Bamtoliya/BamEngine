@@ -354,7 +354,16 @@ void MeshRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& 
             command.mesh = mesh;
             command.material = material;
             command.materialConstants = constants;
-            command.worldMatrix = worldTransform.worldMatrix;
+            // 스킨드 메시 정점은 본 행렬에 의해 스켈레톤/애니메이터 루트 공간으로 변환되므로,
+            // DrawCommand의 월드 행렬은 자식 메시 엔티티가 아닌 애니메이터(루트) 엔티티의 월드 행렬을 사용하여 이중 변환(Double Transform)을 방지합니다.
+            mat4 renderWorldMatrix = worldTransform.worldMatrix;
+            if (animatorEntity != entt::null)
+            {
+                if (const auto* animWorld = world.try_get<WorldTransformComponent>(animatorEntity))
+                    renderWorldMatrix = animWorld->worldMatrix;
+            }
+
+            command.worldMatrix = renderWorldMatrix;
             command.boneMatrices = boneMatrices;
             command.pickingId = PickingManager::Get().RegisterPickingEntity(scene, entity);
 
