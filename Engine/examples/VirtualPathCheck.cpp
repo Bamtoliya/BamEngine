@@ -21,7 +21,7 @@ using namespace Engine;
 
 #define EXPECT_EQ(a, b) \
     if ((a) != (b)) { \
-        std::cerr << "Equality failed: " << (a) << " != " << (b) << " at line " << __LINE__ << std::endl; \
+        std::cerr << "Equality failed: " << fs::path(a).string() << " != " << fs::path(b).string() << " at line " << __LINE__ << std::endl; \
         return __LINE__; \
     }
 
@@ -137,6 +137,21 @@ int main()
         // "Resources/Textures/Hero.png" 상대 경로 -> mockAssetRoot에서 stripped 경로로 탐지되어야 함
         const auto resolvedResTexture = PlatformPath::ResolveUri(L"Resources/Textures/Hero.png");
         EXPECT_EQ(resolvedResTexture, dummyProjectTexture);
+    }
+
+    // 8. 과도기 단일 폴더(engineRoot == projectRoot) 환경에서의 빌트인 읽기 전용 판별 검증
+    {
+        const fs::path sharedRoot = PlatformPath::Normalize(tempRoot / "Resources");
+        fs::create_directories(sharedRoot / "Shader", ec);
+        fs::create_directories(sharedRoot / "Textures", ec);
+        PlatformPath::SetEngineResourceRoot(sharedRoot);
+        PlatformPath::SetProjectAssetRoot(sharedRoot);
+
+        EXPECT_TRUE(PlatformPath::IsReadOnlyTarget(sharedRoot / "Shader"));
+        EXPECT_TRUE(PlatformPath::IsReadOnlyTarget(sharedRoot / "Shader/LightingPS.hlsl"));
+        EXPECT_TRUE(PlatformPath::IsReadOnlyTarget(sharedRoot / "Material/DefaultMaterial.bammat.json"));
+        EXPECT_FALSE(PlatformPath::IsReadOnlyTarget(sharedRoot / "Textures/Hero.png"));
+        EXPECT_FALSE(PlatformPath::IsReadOnlyTarget(sharedRoot / "Material/CustomUserMat.bammat.json"));
     }
 
     std::cout << "[VirtualPathCheck] All virtual path and URI tests passed successfully!" << std::endl;

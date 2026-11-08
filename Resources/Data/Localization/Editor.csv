@@ -1,4 +1,4 @@
-﻿Group,Key,English,Korean
+Group,Key,English,Korean
 Action,Animator.SaveAs,Save Controller As...,다른 이름으로 컨트롤러 저장...
 Action,Build.CompileModule,Compile Game Module,게임 모듈 컴파일
 Action,Build.ReloadModule,Reload Game Module,게임 모듈 핫 리로드
@@ -191,6 +191,11 @@ ContentBrowser,ScopeCurrentHint,Searching current directory only,현재 폴더�
 ContentBrowser,SizeBytes,Size: {} Bytes,크기: {} 바이트
 ContentBrowser,SizeKB,Size: {} KB,크기: {} KB
 ContentBrowser,SizeMB,Size: {:.2f} MB,크기: {:.2f} MB
+ContentBrowser,ShowEngineContent,Show Engine Content,엔진 콘텐츠 표시
+ContentBrowser,EngineContent,Engine Content,엔진 콘텐츠
+ContentBrowser,EngineReadOnlyBadge,Engine Built-in (Read-Only),엔진 내장 리소스 (읽기 전용)
+ContentBrowser,ReadOnlyProtected,Cannot modify or import into a read-only Engine Content directory.,읽기 전용 엔진 콘텐츠 폴더는 수정하거나 파일을 가져올 수 없습니다.
+ContentBrowser,CopyToProjectAssets,Copy to Project Assets,프로젝트 에셋으로 복사본 생성
 ContentBrowser,Skip,Skip,건너뛰기
 ContentBrowser,Title,Content Browser,콘텐츠 브라우저
 EditorCommon,All,All,전체
@@ -1107,6 +1112,9 @@ ResourcePicker,None,None (drop a resource),없음 (리소스를 놓으세요)
 ResourcePicker,OpenInEditor,Open in Editor,편집기에서 열기
 ResourcePicker,ProjectFiles,Project Files (On Disk):,프로젝트 파일 (디스크):
 ResourcePicker,Rejected,Resource type mismatch or load failed.,리소스 종류가 다르거나 불러오지 못했습니다.
+ResourcePicker,ScopeAll,All,전체
+ResourcePicker,ScopeProject,Project,프로젝트
+ResourcePicker,ScopeEngine,Engine Built-in,엔진 내장
 ResourcePicker,SearchHint,Search resources...,리소스 검색...
 ResourcePicker,ThumbnailSizeHint,Thumbnail Size ({}px ~ {}px),썸네일 크기 ({}px ~ {}px)
 ResourceType,Animation,Animation,애니메이션

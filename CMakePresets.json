@@ -1,4 +1,4 @@
-﻿  {
+  {
     "version": 3,
     "configurePresets": [
       {
@@ -32,6 +32,7 @@
         "cacheVariables": {
           "CMAKE_BUILD_TYPE": "Debug",
           "CMAKE_CONFIGURATION_TYPES": "Debug",
+          "BAMENGINE_BUILD_REFLECTION_CHECK": "ON",
           "BAMENGINE_BUILD_GRAPH_CHECK": "ON",
           "ARCHIVE_BUILD_EXAMPLE": "ON"
         },

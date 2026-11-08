@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "ContentBrowserTreeItem.h"
 #include "ContentBrowserPanel.h"
@@ -40,13 +40,16 @@ bool ContentBrowserTreeItem::DrawNode(
 		baseFlags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
 	}
 
+	const bool isReadOnly = Engine::PlatformPath::IsReadOnlyTarget(path);
 	std::string filename = path.filename().string();
 	std::string icon = (isSelected && hasChildDirectory) ? ICON_FA_FOLDER_OPEN : ICON_FA_FOLDER;
-	if (path == rootPath) icon = ICON_FA_DATABASE;
+	if (path == rootPath)
+		icon = isReadOnly ? ICON_FA_GEARS : ICON_FA_DATABASE;
 
 	bool isRenaming = (outRenamingPath == path);
-	std::string label = isRenaming ? "" : (icon + " " + filename);
-	if (path == rootPath && !isRenaming) label = ICON_FA_DATABASE " " + LOCAL("ContentBrowser.Assets");
+	std::string label = isRenaming ? "" : (icon + " " + filename + (isReadOnly && path != rootPath ? (" " ICON_FA_LOCK) : ""));
+	if (path == rootPath && !isRenaming)
+		label = icon + " " + (isReadOnly ? LOCAL("ContentBrowser.EngineContent") : LOCAL("ContentBrowser.Assets"));
 
 	// 트리 노드 렌더링
 	bool opened = ImGui::TreeNodeEx((void*)std::hash<std::string>{}(path.string()), baseFlags, "%s", label.c_str());
@@ -82,7 +85,9 @@ void ContentBrowserTreeItem::ContextMenu(const std::filesystem::path& path, cons
 			browser->SetRenameTarget(path);
 
 		currentDirectory = path;
+		const bool isReadOnly = Engine::PlatformPath::IsReadOnlyTarget(path);
 
+		ImGui::BeginDisabled(isReadOnly);
 		if (ImGui::MenuItem((ICON_FA_PLUS " " + LOCAL_LABEL("EditorCommon.NewFolder")).c_str()))
 		{
 			std::filesystem::path newFolderPath = path / "NewFolder";
@@ -95,6 +100,7 @@ void ContentBrowserTreeItem::ContextMenu(const std::filesystem::path& path, cons
 		}
 
 		ACTION_MENU_ITEM((ICON_FA_PEN " " + LOCAL_LABEL("EditorCommon.Rename")).c_str(), "Edit.Rename");
+		ImGui::EndDisabled();
 
 		ImGui::Separator();
 
@@ -111,10 +117,14 @@ void ContentBrowserTreeItem::ContextMenu(const std::filesystem::path& path, cons
 		ImGui::Separator();
 
 		if (ImGui::MenuItem((ICON_FA_TRASH " " + LOCAL_LABEL("EditorCommon.Delete")).c_str(), nullptr, false,
-			path != rootPath))
+			path != rootPath && !isReadOnly))
 		{
-			// TODO: 삭제 로직
-			TODO("TreeItem ContextMenu 삭제 로직 만들어야함")
+			std::error_code ec;
+			if (currentDirectory == path)
+				currentDirectory = path.parent_path();
+			std::filesystem::remove_all(path, ec);
+			if (browser)
+				browser->RequestRefresh();
 		}
 
 		ImGui::EndPopup();

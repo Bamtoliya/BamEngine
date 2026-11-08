@@ -2,6 +2,39 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-08] 에셋 아키텍처 Phase 3: 콘텐츠 브라우저 Engine Content 분리·읽기 전용 보호, ResourcePicker 카테고리 필터 구축 및 헤드리스 테스트 안정화
+
+- Area: Editor | ContentBrowser | ResourcePicker | Core | Resource | Localization | Tests
+- Type: Feature | Architecture | Safety | UX | Bugfix
+- 주요 변경 내역:
+  1. **`PlatformPath` 과도기 및 물리 분리 환경의 `IsReadOnlyTarget` 판별 강화 (`PlatformPath.cpp`, `PlatformPath.h`)**:
+     - 물리 폴더 분리(`engineRoot != projectRoot`) 시 `EngineResourceRoot` 하위를 읽기 전용으로 판별할 뿐 아니라, 과도기 공유 폴더(`Resources/`) 환경에서도 빌트인 시스템 디렉터리(`Shader`, `Font`, `Data/Localization`) 및 코어 기본 머티리얼(`DefaultMaterial`, `SkinningMaterial`, `SkyMaterial`, `PostProcessDefaultMaterial`)을 `Engine://` 읽기 전용 대상으로 일관되게 판별.
+     - 문자열 리터럴 인자(`const wchar_t*`, `const char*`)에 대한 오버로드 모호성을 해소하여 호출 안전성 확보.
+     - `VirtualPathCheck.cpp`에 과도기 공유 폴더 환경의 읽기 전용 판별 단위 테스트 추가.
+  2. **`ContentBrowserPanel` — `Show Engine Content` 뷰 토글 및 멀티 루트 지원 (`ContentBrowserPanel.h/.cpp`)**:
+     - 상단 필터 메뉴에 `Show Engine Content` 토글 체크박스 추가 및 워크스페이스(`EditorWorkspace`) 상태 영속화 연결.
+     - `Show Engine Content` 해제 시 엔진 빌트인 시스템 폴더/파일을 디렉터리 트리·그리드·검색 결과에서 숨겨 사용자 프로젝트 에셋만 깔끔하게 노출.
+     - 물리 폴더가 분리된 경우 좌측 디렉터리 트리에 `Project Content`와 `Engine Content` 루트를 분리 표시하고 `GetActiveRootForPath`를 통해 브레드크럼 주소 표시줄 및 뒤로가기 동작 일원화.
+     - 읽기 전용 엔진 폴더에서 `New Folder`, `Create Empty Material`, 이름 변경(`CanRenameTarget`), 외부 파일 드롭(`OnExteranalDropped`) 원천 차단 및 보호 알림 연동.
+  3. **`ContentBrowserTreeItem` & `ContentBrowserGridItem` — 읽기 전용 시각 배지 및 프로젝트 에셋 복사 유도 (`ContentBrowserTreeItem.cpp`, `ContentBrowserGridItem.cpp`)**:
+     - 엔진 빌트인 항목 썸네일 좌상단 자물쇠 배지(`ICON_FA_LOCK`), 트리 노드 자물쇠 아이콘 및 툴팁 읽기 전용 안내(`ContentBrowser.EngineReadOnlyBadge`) 표시.
+     - 컨텍스트 메뉴에서 읽기 전용 항목의 `Rename`, `Delete`, `BakeToBinary`, `ExportToJson` 비활성화.
+     - 읽기 전용 파일 우클릭 시 프로젝트 에셋 폴더로 안전하게 복사본을 생성하는 `Copy to Project Assets` 메뉴 추가 및 빌트인 머티리얼의 `Create Material Instance` 생성 경로를 프로젝트 에셋 폴더로 유도.
+  4. **`ResourcePicker.h` — 카테고리 범위 탭 (`All` / `Project` / `Engine Built-in`) 분리**:
+     - 리소스 피커 상단에 `All`, `Project`, `Engine Built-in` 3단 범위 필터 버튼 바 추가.
+     - 절차적 내장 리소스(`CubeMesh`, `SphereMesh`, `QuadMesh`, `White1x1` 등) 및 `Engine://` 리소스를 `[Engine]` 태그와 함께 분리 필터링 지원.
+  5. **`Texture` 및 `ResourceManager` 헤드리스 단위 테스트 호환성·수명 주기 결함 수정 (`Texture.cpp`, `ResourceManager.cpp`)**:
+     - `Texture.cpp`: `Initialize(void* arg)`, `InitializeFromEncodedMemory`, `ReadArchive`, `Reload`에서 `Renderer::IsCreated()` 검사를 적용하고, 그래픽 디바이스가 없는 헤드리스 단위 테스트 환경(`rhi == nullptr`)에서도 이미지 디코딩 및 CPU 캐시(`m_CachedHeader`, `m_TempData`)를 정상 유지하여 리소스 로딩이 성공하도록 개선.
+     - `ResourceManager.cpp`: `LoadFile` 진입 시 기존 등록된 리소스 핸들을 선조회하여 중복 로드를 방지하고, `AllocateSlot`의 초기 `RefCount = 1`을 보장하여 임시 핸들 소멸 시 리소스가 즉시 파괴되는 수명 주기 결함 해결.
+  6. **로캘 엄격 감사 무결성 달성 및 에디터 입력 일원화 (`Editor.csv`, `EntityHierarchyView.cpp`)**:
+     - Phase 3 관련 로캘 키 8건(`ContentBrowser.ShowEngineContent`, `ContentBrowser.EngineReadOnlyBadge`, `ContentBrowser.CopyToProject`, `ResourcePicker.ScopeAll`, `ResourcePicker.ScopeProject`, `ResourcePicker.ScopeEngine` 등) 추가 및 CSV-JSON 동기화 완료.
+     - `EntityHierarchyView.cpp`의 ImGui 직접 마우스 입력 조회를 `Engine::InputManager`로 일원화.
+- 실제 검증 결과:
+  - `python Tools/Audit/LocalizationAuditor/audit_localization.py --strict`: 632개 파일 및 2478개 키 전수 검사 통과 (결함 0건).
+  - `ctest --test-dir out/build/x64-debug -C Debug -R "VirtualPathCheck|ReflectionInspectorCheck" --output-on-failure`:
+    - `VirtualPathCheck`: Passed (0.10 sec)
+    - `ReflectionInspectorCheck`: Passed (0.19 sec) (2/2 Passed, 100%)
+
 ### [2026-11-08] 빌트인 기본 메시 1m 단위 크기 정규화 및 3D 물리 시뮬레이션·PIE 프레임레이트 최적화
 
 - Area: Engine | Physics | Resource | Editor | Scene

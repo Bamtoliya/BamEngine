@@ -1,4 +1,4 @@
-﻿#include "EntityHierarchyView.h"
+#include "EntityHierarchyView.h"
 #include "InputManager.h"
 #include "Scene.h"
 #include "CoreComponents.h"
@@ -527,7 +527,7 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
             }
             if (!locked && m_RenamingEntity != entity && isCanvas &&
                 ImGui::IsItemHovered() && !ImGui::IsItemToggledOpen() &&
-                ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+                Engine::InputManager::Get().IsMouseButtonDoubleClicked(Engine::EMouseButton::Left))
             {
                 action.OpenUIEditor = entity;
             }

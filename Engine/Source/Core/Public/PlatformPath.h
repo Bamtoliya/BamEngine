@@ -37,6 +37,8 @@ namespace Engine
         static std::filesystem::path ResolveUri(const std::filesystem::path& pathOrUri);
         static std::filesystem::path ResolveUri(const std::wstring& pathOrUri);
         static std::filesystem::path ResolveUri(const std::string& pathOrUri);
+        static std::filesystem::path ResolveUri(const wchar_t* pathOrUri) { return ResolveUri(std::wstring(pathOrUri ? pathOrUri : L"")); }
+        static std::filesystem::path ResolveUri(const char* pathOrUri) { return ResolveUri(std::string(pathOrUri ? pathOrUri : "")); }
 
         // 물리 디스크 경로를 가상 URI("Engine://...", "Project://...")로 안전하게 정규화
         static std::wstring ToVirtualUri(const std::filesystem::path& physicalPath);
@@ -45,6 +47,8 @@ namespace Engine
         static bool IsReadOnlyTarget(const std::filesystem::path& pathOrUri);
         static bool IsReadOnlyTarget(const std::wstring& pathOrUri);
         static bool IsReadOnlyTarget(const std::string& pathOrUri);
+        static bool IsReadOnlyTarget(const wchar_t* pathOrUri) { return IsReadOnlyTarget(std::wstring(pathOrUri ? pathOrUri : L"")); }
+        static bool IsReadOnlyTarget(const char* pathOrUri) { return IsReadOnlyTarget(std::string(pathOrUri ? pathOrUri : "")); }
 
         // 상대 경로를 프로젝트 루트 기준 절대 경로로 안전하게 결합
         static std::filesystem::path ResolveProjectRelative(const std::filesystem::path& relativePath);

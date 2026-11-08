@@ -141,9 +141,9 @@ std::filesystem::path ResolvePath(const std::wstring& virtualKey)
 - [x] 직렬화/역직렬화(`archive_reflection`) 시 가상 URI 포맷으로 저장/복원되도록 정규화. [완료: 2026-11-08]
 
 ### Phase 3: 에디터 툴 및 콘텐츠 브라우저 연동
-- [ ] `ContentBrowserPanel`에 `Assets/` 단독 뷰 및 `Show Engine Content` 토글 옵션 적용.
-- [ ] `Engine://` 리소스에 대한 읽기 전용 보호(삭제/이동 방지) 및 복사/인스턴스 생성 편의 기능 추가.
-- [ ] `ResourcePicker`의 카테고리 필터(`Project` / `Engine Built-in`) 분리.
+- [x] `ContentBrowserPanel`에 `Assets/` 단독 뷰 및 `Show Engine Content` 토글 옵션 적용. [완료: 2026-11-08]
+- [x] `Engine://` 리소스에 대한 읽기 전용 보호(삭제/이동 방지) 및 복사/인스턴스 생성 편의 기능 추가. [완료: 2026-11-08]
+- [x] `ResourcePicker`의 카테고리 필터(`Project` / `Engine Built-in`) 분리. [완료: 2026-11-08]
 
 ### Phase 3-B: 소비자 검증 후 작은 묶음의 물리 이관
 

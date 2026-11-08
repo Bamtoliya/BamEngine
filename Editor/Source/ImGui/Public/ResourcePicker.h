@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "ReflectionInspectorSupport.h"
 #include "InputManager.h"
@@ -170,7 +170,7 @@ namespace Editor
 			{
 				const auto& path = resource->GetPath().empty() ? resource->GetKey() : resource->GetPath();
 				if (!path.empty())
-					result.Texture = GetResourcePickerThumbnail(Engine::PlatformPath::ResolveProjectRelative(path));
+					result.Texture = GetResourcePickerThumbnail(Engine::PlatformPath::ResolveUri(path));
 			}
 
 			if (result.Texture != nullptr &&
@@ -325,10 +325,24 @@ namespace Editor
 				std::string Filename;
 				std::filesystem::path FullPath;
 				std::wstring Key;
+				bool IsEngineAsset = false;
 			};
 			static std::vector<DiskAssetEntry> s_CachedDiskFiles;
 			static char s_SearchBuffer[128] = "";
 			static float s_ThumbnailSize = 64.0f; // 기본 64px (기존 36px 대비 1.8배 확대)
+			static int s_CategoryScope = 0; // 0: All, 1: Project, 2: Engine Built-in
+
+			auto isLoadedEntryEngineBuiltIn = [](const std::wstring& key, const std::wstring& path) -> bool
+				{
+					const auto& target = path.empty() ? key : path;
+					if (Engine::PlatformPath::IsReadOnlyTarget(target))
+						return true;
+					std::error_code ec;
+					const auto resolved = Engine::PlatformPath::ResolveUri(target);
+					if (resolved.empty() || !std::filesystem::exists(resolved, ec))
+						return true; // CubeMesh, SphereMesh, White1x1 등 절차적 내장 리소스
+					return false;
+				};
 
 			const bool isAppearing = ImGui::IsWindowAppearing();
 
@@ -346,34 +360,45 @@ namespace Editor
 						continue;
 
 					const auto& resourcePath = entry.Path.empty() ? entry.Key : entry.Path;
-					const auto absolutePath = Engine::PlatformPath::ResolveProjectRelative(resourcePath);
+					const auto absolutePath = Engine::PlatformPath::ResolveUri(resourcePath);
 					const auto relativePath = Engine::PlatformPath::ToProjectRelative(absolutePath);
 					loadedNormalizedKeys.insert(Detail::NormalizeResourceKey(relativePath.wstring()));
 				}
 
-				std::error_code ec;
-				const std::filesystem::path resDir = Engine::PlatformPath::ResolveProjectRelative("Resources");
-				if (std::filesystem::exists(resDir, ec))
-				{
-					for (const auto& fileEntry : std::filesystem::recursive_directory_iterator(resDir, std::filesystem::directory_options::skip_permission_denied, ec))
+				auto scanDirectoryRoot = [&](const std::filesystem::path& rootDir)
 					{
-						if (!fileEntry.is_regular_file()) continue;
+						std::error_code ec;
+						if (rootDir.empty() || !std::filesystem::exists(rootDir, ec))
+							return;
 
-						const auto assetPath = fileEntry.path();
-						const auto filename = Engine::WStrToStr(assetPath.filename().wstring());
-						if (!Detail::IsResourceExtensionCompatible<T>(filename)) continue;
+						for (const auto& fileEntry : std::filesystem::recursive_directory_iterator(
+							rootDir, std::filesystem::directory_options::skip_permission_denied, ec))
+						{
+							if (!fileEntry.is_regular_file()) continue;
 
-						const auto relativePath = Engine::PlatformPath::ToProjectRelative(assetPath);
-						const auto normKey = Detail::NormalizeResourceKey(relativePath.wstring());
-						if (loadedNormalizedKeys.contains(normKey)) continue;
+							const auto assetPath = fileEntry.path();
+							const auto filename = Engine::WStrToStr(assetPath.filename().wstring());
+							if (!Detail::IsResourceExtensionCompatible<T>(filename)) continue;
 
-						s_CachedDiskFiles.push_back({
-							filename,
-							assetPath,
-							normKey
-							});
-					}
-				}
+							const auto relativePath = Engine::PlatformPath::ToProjectRelative(assetPath);
+							const auto normKey = Detail::NormalizeResourceKey(relativePath.wstring());
+							if (loadedNormalizedKeys.contains(normKey)) continue;
+							loadedNormalizedKeys.insert(normKey);
+
+							s_CachedDiskFiles.push_back({
+								filename,
+								assetPath,
+								normKey,
+								Engine::PlatformPath::IsReadOnlyTarget(assetPath)
+								});
+						}
+					};
+
+				const auto projectAssetRoot = Engine::PlatformPath::GetProjectAssetRoot();
+				const auto engineResourceRoot = Engine::PlatformPath::GetEngineResourceRoot();
+				scanDirectoryRoot(projectAssetRoot);
+				if (engineResourceRoot != projectAssetRoot)
+					scanDirectoryRoot(engineResourceRoot);
 			}
 
 			// ── 2. 상단 툴바: [돋보기] [검색창] [X] [크기 슬라이더] ──
@@ -406,9 +431,35 @@ namespace Editor
 				ImGui::SetTooltip("%s", thumbnailHint.c_str());
 			}
 
+			// ── 2-B. 카테고리 필터 버튼 바 (All / Project / Engine Built-in) ──
+			{
+				const std::string scopeAllLabel = LocalizeInspectorText("ResourcePicker.ScopeAll") + "###ScopeAll";
+				const std::string scopeProjLabel = ICON_FA_DATABASE " " + LocalizeInspectorText("ResourcePicker.ScopeProject") + "###ScopeProject";
+				const std::string scopeEngLabel = ICON_FA_GEARS " " + LocalizeInspectorText("ResourcePicker.ScopeEngine") + "###ScopeEngine";
+
+				auto drawScopeTab = [&](const std::string& btnLabel, int scopeIndex)
+					{
+						const bool active = (s_CategoryScope == scopeIndex);
+						if (active)
+							ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
+						if (ImGui::SmallButton(btnLabel.c_str()))
+							s_CategoryScope = scopeIndex;
+						if (active)
+							ImGui::PopStyleColor();
+					};
+
+				drawScopeTab(scopeAllLabel, 0);
+				ImGui::SameLine();
+				drawScopeTab(scopeProjLabel, 1);
+				ImGui::SameLine();
+				drawScopeTab(scopeEngLabel, 2);
+			}
+
 			const std::string searchStr = s_SearchBuffer;
-			auto matchesFilter = [&](std::string_view name, std::string_view path) -> bool
+			auto matchesFilter = [&](std::string_view name, std::string_view path, bool isEngineAsset) -> bool
 				{
+					if (s_CategoryScope == 1 && isEngineAsset) return false;
+					if (s_CategoryScope == 2 && !isEngineAsset) return false;
 					if (searchStr.empty()) return true;
 					auto toLower = [](std::string_view s) {
 						std::string res;
@@ -661,9 +712,10 @@ namespace Editor
 				{
 					const auto handle = manager.FindHandleByKey(entry.Key);
 					if (dynamic_cast<T*>(manager.GetResource(handle)) == nullptr) continue;
+					const bool isEngine = isLoadedEntryEngineBuiltIn(entry.Key, entry.Path);
 					const std::filesystem::path p(Detail::NormalizeResourceKey(entry.Key));
 					if (matchesFilter(Engine::WStrToStr(p.filename().wstring()),
-						Engine::WStrToStr(p.parent_path().generic_wstring())))
+						Engine::WStrToStr(p.parent_path().generic_wstring()), isEngine))
 						++loadedMatchCount;
 				}
 
@@ -675,19 +727,23 @@ namespace Editor
 					const auto handle = manager.FindHandleByKey(entry.Key);
 					if (dynamic_cast<T*>(manager.GetResource(handle)) == nullptr) continue;
 
+					const bool isEngine = isLoadedEntryEngineBuiltIn(entry.Key, entry.Path);
 					const auto normKey = Detail::NormalizeResourceKey(entry.Key);
 					const auto normStr = Engine::WStrToStr(normKey);
 					const std::filesystem::path p(normKey);
 					const std::string filename = Engine::WStrToStr(p.filename().wstring());
 					const std::string parentPath = Engine::WStrToStr(p.parent_path().generic_wstring());
 
-					if (!matchesFilter(filename, parentPath)) continue;
+					if (!matchesFilter(filename, parentPath, isEngine)) continue;
 
 					const bool isSelected = (handle == value.GetRawHandle());
 					const std::string uniqueId = "Mem_" + normStr;
 					const auto& resourcePath = entry.Path.empty() ? entry.Key : entry.Path;
-					drawResourceItem(uniqueId, filename, parentPath,
-						Engine::PlatformPath::ResolveProjectRelative(resourcePath), isSelected, [&]()
+					const std::string displaySubPath = isEngine
+						? (parentPath.empty() ? "[Engine]" : ("[Engine] " + parentPath))
+						: parentPath;
+					drawResourceItem(uniqueId, filename, displaySubPath,
+						Engine::PlatformPath::ResolveUri(resourcePath), isSelected, [&]()
 						{
 							changed = TryAssignInspectorResource(value, handle);
 							failed = !changed;
@@ -707,7 +763,7 @@ namespace Editor
 				for (const auto& file : s_CachedDiskFiles)
 				{
 					const std::filesystem::path p(file.Key);
-					if (matchesFilter(file.Filename, Engine::WStrToStr(p.parent_path().generic_wstring())))
+					if (matchesFilter(file.Filename, Engine::WStrToStr(p.parent_path().generic_wstring()), file.IsEngineAsset))
 						++diskMatchCount;
 				}
 
@@ -718,11 +774,14 @@ namespace Editor
 				{
 					const std::filesystem::path p(file.Key);
 					const std::string parentPath = Engine::WStrToStr(p.parent_path().generic_wstring());
-					if (!matchesFilter(file.Filename, parentPath)) continue;
+					if (!matchesFilter(file.Filename, parentPath, file.IsEngineAsset)) continue;
 
 					const bool isSelected = false;
 					const std::string uniqueId = "Disk_" + Engine::WStrToStr(file.FullPath.wstring());
-					drawResourceItem(uniqueId, file.Filename, parentPath, file.FullPath, isSelected, [&]()
+					const std::string displaySubPath = file.IsEngineAsset
+						? (parentPath.empty() ? "[Engine]" : ("[Engine] " + parentPath))
+						: parentPath;
+					drawResourceItem(uniqueId, file.Filename, displaySubPath, file.FullPath, isSelected, [&]()
 						{
 							const auto handle = manager.LoadFile(file.Key);
 							changed = TryAssignInspectorResource(value, handle);

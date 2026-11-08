@@ -1,4 +1,4 @@
-﻿#include "ReflectionRegistry.h"
+#include "ReflectionRegistry.h"
 #include "BamEngine.gen.h"
 #include "CoreComponents.h"
 #include "Resources.h"
@@ -435,7 +435,7 @@ void ComponentReflectionEntry::EnsureDependencies(entt::registry& world, entt::e
             {
                 if (!other.Has(world, entity))
                 {
-                    other.TryAdd(world, entity); // 재귀적으로 연쇄 의존성까지 안전하게 추가됨
+                    static_cast<void>(other.TryAdd(world, entity)); // 재귀적으로 연쇄 의존성까지 안전하게 추가됨
                 }
                 break;
             }

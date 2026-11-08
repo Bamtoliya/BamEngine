@@ -114,8 +114,22 @@ Handle ResourceManager::LoadFile(const wstring& filePath)
 {
 	namespace fs = std::filesystem;
 
-	fs::path absolutePath = PlatformPath::ResolveUri(filePath);
+	Handle existing = FindHandleByKey(filePath);
+	if (existing.IsValid())
+		return existing;
+
 	const wstring relativePath = ToProjectRelativePath(filePath);
+	if (!relativePath.empty() && relativePath != filePath)
+	{
+		existing = FindHandleByKey(relativePath);
+		if (existing.IsValid())
+			return existing;
+	}
+
+	fs::path absolutePath = PlatformPath::ResolveUri(filePath);
+	existing = FindHandleByFilePath(absolutePath.wstring());
+	if (existing.IsValid())
+		return existing;
 
 	if (!fs::exists(absolutePath))
 	{
@@ -478,7 +492,7 @@ Handle ResourceManager::AllocateSlot(Resource* resource)
 	if (m_FreeSlots.empty())
 	{
 		index = static_cast<uint32>(m_Resources.size());
-		m_Resources.emplace_back();
+		m_Resources.push_back(ResourceSlot());
 	}
 	else
 	{
@@ -494,7 +508,10 @@ Handle ResourceManager::AllocateSlot(Resource* resource)
 
 Resource* ResourceManager::FreeSlotInternal(uint32 slotIndex)
 {
-	if (slotIndex >= m_Resources.size() || !m_Resources[slotIndex].IsActive) return nullptr;
+	if (slotIndex >= m_Resources.size() || !m_Resources[slotIndex].IsActive)
+	{
+		return nullptr;
+	}
 
 	Resource* resource = m_Resources[slotIndex].Instance;
 	if(resource)

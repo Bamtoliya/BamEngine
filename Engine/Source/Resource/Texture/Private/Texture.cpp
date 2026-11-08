@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <archive/ArchiveInterface.h>
 #include "Texture.h"
@@ -93,9 +93,6 @@ EResult Texture::Initialize(void* arg)
 		return EResult::NotImplemented;
 	}
 
-	RHI* rhi = Renderer::Get().GetRHI();
-	if (!rhi)
-		return EResult::Fail;
 
 	std::filesystem::path fullPath = PlatformPath::ResolveUri(m_Path);
 
@@ -122,7 +119,6 @@ EResult Texture::InitializeFromEncodedMemory(const vector<uint8>& encodedData, b
 		return EResult::InvalidArgument;
 
 	RHI* rhi = Renderer::IsCreated() ? Renderer::Get().GetRHI() : nullptr;
-	if (!rhi) return EResult::Fail;
 
 	const int encodedSize = static_cast<int>(encodedData.size());
 	int width = 0;
@@ -190,20 +186,24 @@ EResult Texture::InitializeFromEncodedMemory(const vector<uint8>& encodedData, b
 		}
 	}
 
-	RHITextureDesc textureDesc{};
-	textureDesc.width = header.width;
-	textureDesc.height = header.height;
-	textureDesc.depth = header.depth;
-	textureDesc.mipLevels = header.mipLevels;
-	textureDesc.arraySize = header.arraySize;
-	textureDesc.format = header.format;
-	textureDesc.dimension = header.dimension;
-	textureDesc.usage = ETextureUsage::Sampler;
-	textureDesc.data = pixelData.data();
-	textureDesc.dataSize = byteCount;
+	RHITexture* texture = nullptr;
+	if (rhi)
+	{
+		RHITextureDesc textureDesc{};
+		textureDesc.width = header.width;
+		textureDesc.height = header.height;
+		textureDesc.depth = header.depth;
+		textureDesc.mipLevels = header.mipLevels;
+		textureDesc.arraySize = header.arraySize;
+		textureDesc.format = header.format;
+		textureDesc.dimension = header.dimension;
+		textureDesc.usage = ETextureUsage::Sampler;
+		textureDesc.data = pixelData.data();
+		textureDesc.dataSize = byteCount;
 
-	RHITexture* texture = rhi->CreateTexture(textureDesc);
-	if (!texture) return EResult::Fail;
+		texture = rhi->CreateTexture(textureDesc);
+		if (!texture) return EResult::Fail;
+	}
 
 	Safe_Release(m_RHITexture);
 	m_RHITexture = texture;
@@ -445,25 +445,26 @@ archive::ArchiveResult Texture::ReadArchive(const archive::IArchive& ar)
 		return result;
 
 	// Renderer 초기화 후, 프레임 렌더링 전에 호출합니다.
-	RHI* rhi = Renderer::Get().GetRHI();
-	if (!rhi)
-		return { archive::ArchiveErrorCode::InvalidOperation, "Texture.RHI" };
+	RHI* rhi = Renderer::IsCreated() ? Renderer::Get().GetRHI() : nullptr;
+	RHITexture* texture = nullptr;
+	if (rhi)
+	{
+		RHITextureDesc textureDesc;
+		textureDesc.width = textureHeader.width;
+		textureDesc.height = textureHeader.height;
+		textureDesc.depth = textureHeader.depth;
+		textureDesc.mipLevels = textureHeader.mipLevels;
+		textureDesc.arraySize = textureHeader.arraySize;
+		textureDesc.format = textureHeader.format;
+		textureDesc.dimension = textureHeader.dimension;
+		textureDesc.usage = ETextureUsage::Sampler;
+		textureDesc.data = pixelData.data();
+		textureDesc.dataSize = textureHeader.dataSize;
 
-	RHITextureDesc textureDesc;
-	textureDesc.width = textureHeader.width;
-	textureDesc.height = textureHeader.height;
-	textureDesc.depth = textureHeader.depth;
-	textureDesc.mipLevels = textureHeader.mipLevels;
-	textureDesc.arraySize = textureHeader.arraySize;
-	textureDesc.format = textureHeader.format;
-	textureDesc.dimension = textureHeader.dimension;
-	textureDesc.usage = ETextureUsage::Sampler;
-	textureDesc.data = pixelData.data();
-	textureDesc.dataSize = textureHeader.dataSize;
-
-	RHITexture* texture = rhi->CreateTexture(textureDesc);
-	if (!texture)
-		return { archive::ArchiveErrorCode::InvalidOperation, "Texture.GPUUpload" };
+		texture = rhi->CreateTexture(textureDesc);
+		if (!texture)
+			return { archive::ArchiveErrorCode::InvalidOperation, "Texture.GPUUpload" };
+	}
 
 	m_CachedHeader = textureHeader;
 	m_TempData = std::move(pixelData);
@@ -476,8 +477,6 @@ EResult Texture::Reload(const std::filesystem::path& filePath)
 {
 	std::filesystem::path targetPath = filePath.empty() ? std::filesystem::path(m_Path) : filePath;
 	if (targetPath.empty()) return EResult::InvalidArgument;
-	RHI* rhi = Renderer::Get().GetRHI();
-	if (!rhi) return EResult::Fail;
 
 	targetPath = PlatformPath::ResolveUri(targetPath);
 

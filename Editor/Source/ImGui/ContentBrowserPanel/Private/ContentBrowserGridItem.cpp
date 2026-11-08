@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "ImGuiManager.h"
 #include "ContentBrowserGridItem.h"
 #include "SelectionManager.h"
@@ -539,6 +539,16 @@ void ContentBrowserGridItem::DrawThumbnail(const std::filesystem::directory_entr
 		ImVec2(cursorPos.x, cursorPos.y + thumbnailSize - 2.0f),
 		ImVec2(cursorPos.x + thumbnailSize, cursorPos.y + thumbnailSize),
 		ImGui::GetColorU32(visual.AccentColor));
+
+	// 엔진 빌트인 읽기 전용 리소스인 경우 좌상단에 자물쇠 배지 표시
+	if (Engine::PlatformPath::IsReadOnlyTarget(directoryEntry.path()))
+	{
+		const ImVec2 lockBadgeMin(cursorPos.x + 3.0f, cursorPos.y + 3.0f);
+		const ImVec2 lockBadgeMax(cursorPos.x + 21.0f, cursorPos.y + 21.0f);
+		drawList->AddRectFilled(lockBadgeMin, lockBadgeMax, ImGui::GetColorU32(ImVec4(0.10f, 0.10f, 0.10f, 0.82f)), 4.0f);
+		drawList->AddText(ImVec2(lockBadgeMin.x + 3.0f, lockBadgeMin.y + 2.0f),
+			ImGui::GetColorU32(ImVec4(0.95f, 0.78f, 0.25f, 1.0f)), ICON_FA_LOCK);
+	}
 }
 void ContentBrowserGridItem::ContextMenu(const std::filesystem::path& path,
 	std::filesystem::path& outRenamingPath, char* renameBuffer, size_t renameBufferSize,
@@ -550,6 +560,7 @@ void ContentBrowserGridItem::ContextMenu(const std::filesystem::path& path,
 	if (ImGui::BeginPopupContextItem("##AssetContextMenu"))
 	{
 		const bool isDir = std::filesystem::is_directory(path);
+		const bool isReadOnly = Engine::PlatformPath::IsReadOnlyTarget(path);
 		if (browser)
 			browser->SetRenameTarget(path);
 		// 1. 최상단 [열기]: 더블클릭과 동일한 공통 동작
@@ -579,11 +590,56 @@ void ContentBrowserGridItem::ContextMenu(const std::filesystem::path& path,
 			}
 		}
 		ImGui::Separator();
-		// 4. [이름 변경], [경로 복사]
+		// 4. [이름 변경], [경로 복사], [프로젝트 에셋으로 복사]
+		ImGui::BeginDisabled(isReadOnly);
 		ACTION_MENU_ITEM((ICON_FA_PEN " " + LOCAL_LABEL("EditorCommon.Rename")).c_str(), "Edit.Rename");
+		ImGui::EndDisabled();
 
 		if (ImGui::MenuItem((ICON_FA_COPY " " + LOCAL_LABEL("EditorCommon.CopyPath")).c_str()))
 			ImGui::SetClipboardText(path.string().c_str());
+
+		if (isReadOnly && !isDir)
+		{
+			if (ImGui::MenuItem((ICON_FA_FILE_IMPORT " " + LOCAL_LABEL("ContentBrowser.CopyToProjectAssets")).c_str()))
+			{
+				std::error_code copyEc;
+				const auto projectAssetRoot = Engine::PlatformPath::GetProjectAssetRoot();
+				const auto engineRoot = Engine::PlatformPath::GetEngineResourceRoot();
+				std::filesystem::path targetDir = projectAssetRoot;
+				if (engineRoot != projectAssetRoot)
+				{
+					const auto relParent = path.parent_path().lexically_relative(engineRoot);
+					if (!relParent.empty() && !relParent.native().starts_with(L".."))
+						targetDir = projectAssetRoot / relParent;
+				}
+				else
+				{
+					targetDir = path.parent_path();
+				}
+				std::filesystem::create_directories(targetDir, copyEc);
+
+				std::string rawFilename = path.filename().string();
+				std::string stem = path.stem().string();
+				std::string ext = path.extension().string();
+				if (ToLowerAscii(rawFilename).ends_with(".bammat.json"))
+				{
+					stem = rawFilename.substr(0, rawFilename.size() - 12);
+					ext = ".bammat.json";
+				}
+				std::filesystem::path copyDest = targetDir / (stem + "_ProjectCopy" + ext);
+				int suffix = 1;
+				while (std::filesystem::exists(copyDest, copyEc))
+				{
+					copyDest = targetDir / (stem + "_ProjectCopy_" + std::to_string(suffix++) + ext);
+				}
+				if (std::filesystem::copy_file(path, copyDest, std::filesystem::copy_options::none, copyEc))
+				{
+					NotificationManager::Get().AddNotification(LOCAL("ContentBrowser.Title"),
+						copyDest.filename().string(), ELogLevel::Info, 3.0f);
+					if (browser) browser->RequestRefresh();
+				}
+			}
+		}
 		if (!isDir && IsPrefabFile(path))
 		{
 			ImGui::Separator();
@@ -654,22 +710,27 @@ void ContentBrowserGridItem::ContextMenu(const std::filesystem::path& path,
 			if (isConvertibleJson || (filename.ends_with(".json") && PeekResourceType(path) != Engine::EResourceType::Unknown))
 			{
 				ImGui::Separator();
+				ImGui::BeginDisabled(isReadOnly);
 				if (ImGui::MenuItem((ICON_FA_FILE_EXPORT " " + LOCAL_LABEL("ContentBrowser.BakeToBinary")).c_str()))
 				{
 					ConvertJsonToBinary(path);
 				}
+				ImGui::EndDisabled();
 			}
 			else if ((filename.find(".bam") != std::string::npos && !filename.ends_with(".json") && !filename.ends_with(".bamprefab")) ||
 				filename.ends_with(".beve"))
 			{
 				ImGui::Separator();
+				ImGui::BeginDisabled(isReadOnly);
 				if (ImGui::MenuItem((ICON_FA_FILE_CODE " " + LOCAL_LABEL("ContentBrowser.ExportToJson")).c_str()))
 				{
 					ConvertBinaryToJson(path);
 				}
+				ImGui::EndDisabled();
 			}
 		}
 		ImGui::Separator();
+		ImGui::BeginDisabled(isReadOnly);
 		if (ImGui::MenuItem((ICON_FA_TRASH " " + LOCAL_LABEL("EditorCommon.Delete")).c_str()))
 		{
 			std::error_code ec;
@@ -680,6 +741,7 @@ void ContentBrowserGridItem::ContextMenu(const std::filesystem::path& path,
 			if (ec) EDITOR_LOG_ERROR("Failed to delete asset {}: {}", path.string(), ec.message());
 			else EDITOR_LOG_INFO("Deleted asset: {}", path.string());
 		}
+		ImGui::EndDisabled();
 		ImGui::EndPopup();
 	}
 }
@@ -692,6 +754,10 @@ void ContentBrowserGridItem::ToolTip(const std::filesystem::directory_entry& dir
 		const AssetVisualDesc visual = DescribeAssetVisual(path, directoryEntry.is_directory());
 		ImGui::BeginTooltip();
 		ImGui::TextUnformatted(filenameString.c_str());
+		if (Engine::PlatformPath::IsReadOnlyTarget(path))
+		{
+			ImGui::TextColored(ImVec4(0.95f, 0.78f, 0.25f, 1.0f), ICON_FA_LOCK " %s", LOCAL_CSTR("ContentBrowser.EngineReadOnlyBadge"));
+		}
 		ImGui::Separator();
 		if (directoryEntry.is_directory())
 		{
@@ -836,11 +902,20 @@ void ContentBrowserGridItem::ContextMenu_Material(const std::filesystem::path& p
 			std::wstring baseStem = path.stem().wstring();
 			if (baseStem.ends_with(L".bammat")) baseStem = baseStem.substr(0, baseStem.length() - 7);
 
-			std::filesystem::path instPath = path.parent_path() / (baseStem + L".bammatinst.json");
+			std::filesystem::path targetDir = path.parent_path();
+			if (Engine::PlatformPath::IsReadOnlyTarget(path) &&
+				Engine::PlatformPath::GetEngineResourceRoot() != Engine::PlatformPath::GetProjectAssetRoot())
+			{
+				targetDir = Engine::PlatformPath::GetProjectAssetRoot() / "Material";
+				std::error_code dirEc;
+				std::filesystem::create_directories(targetDir, dirEc);
+			}
+
+			std::filesystem::path instPath = targetDir / (baseStem + L".bammatinst.json");
 			int suffix = 1;
 			while (std::filesystem::exists(instPath))
 			{
-				instPath = path.parent_path() /
+				instPath = targetDir /
 					(baseStem + L"_" + std::to_wstring(suffix++) + L".bammatinst.json");
 			}
 

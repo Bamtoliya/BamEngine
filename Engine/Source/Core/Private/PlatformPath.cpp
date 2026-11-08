@@ -46,6 +46,19 @@ namespace Engine
             if (nativeStr.starts_with(L"..") || rel.is_absolute()) return false;
             return true;
         }
+
+        bool IsBuiltInRelativeResourcePath(std::wstring_view relStr)
+        {
+            return (StartsWithIgnoreCase(relStr, L"shader") && (relStr.size() == 6 || relStr[6] == L'/')) ||
+                (StartsWithIgnoreCase(relStr, L"shaders") && (relStr.size() == 7 || relStr[7] == L'/')) ||
+                (StartsWithIgnoreCase(relStr, L"data/localization") && (relStr.size() == 17 || relStr[17] == L'/')) ||
+                (StartsWithIgnoreCase(relStr, L"font") && (relStr.size() == 4 || relStr[4] == L'/')) ||
+                (StartsWithIgnoreCase(relStr, L"fonts") && (relStr.size() == 5 || relStr[5] == L'/')) ||
+                StartsWithIgnoreCase(relStr, L"material/defaultmaterial.") ||
+                StartsWithIgnoreCase(relStr, L"material/skinningmaterial.") ||
+                StartsWithIgnoreCase(relStr, L"material/skymaterial.") ||
+                StartsWithIgnoreCase(relStr, L"material/postprocessdefault");
+        }
     }
 
     void PlatformPath::SetProjectRoot(const std::filesystem::path& root)
@@ -56,7 +69,19 @@ namespace Engine
     const std::filesystem::path& PlatformPath::GetProjectRoot()
     {
         if (s_ProjectRoot.empty())
-            s_ProjectRoot = GetExecutableDirectory();
+        {
+            std::error_code ec;
+            const auto cwd = std::filesystem::current_path(ec);
+            if (!ec && std::filesystem::exists(cwd / "CMakeLists.txt", ec) &&
+                (std::filesystem::is_directory(cwd / "Resources", ec) || std::filesystem::is_directory(cwd / "Assets", ec)))
+            {
+                s_ProjectRoot = Normalize(cwd);
+            }
+            else
+            {
+                s_ProjectRoot = GetExecutableDirectory();
+            }
+        }
         return s_ProjectRoot;
     }
 
@@ -192,6 +217,10 @@ namespace Engine
                 return strippedEngine;
         }
 
+        const auto inCwd = Normalize(std::filesystem::current_path(ec) / fsPath);
+        if (!ec && std::filesystem::exists(inCwd, ec))
+            return inCwd;
+
         return ResolveProjectRelative(fsPath);
     }
 
@@ -229,23 +258,6 @@ namespace Engine
             return L"Project://" + rel.generic_wstring();
         }
 
-        if (IsSubpathOf(norm, engineRoot) || norm == engineRoot)
-        {
-            auto rel = norm.lexically_relative(engineRoot);
-            const std::wstring relStr = rel.generic_wstring();
-
-            if (StartsWithIgnoreCase(relStr, L"shader/") ||
-                StartsWithIgnoreCase(relStr, L"shaders/") ||
-                StartsWithIgnoreCase(relStr, L"data/localization/engine.csv") ||
-                StartsWithIgnoreCase(relStr, L"font/") ||
-                StartsWithIgnoreCase(relStr, L"fonts/"))
-            {
-                return L"Engine://" + relStr;
-            }
-
-            return L"Project://" + relStr;
-        }
-
         return ToProjectRelative(norm).generic_wstring();
     }
 
@@ -264,6 +276,8 @@ namespace Engine
     {
         if (IsEngineUri(pathOrUri))
             return true;
+        if (IsProjectUri(pathOrUri))
+            return false;
 
         const auto resolved = ResolveUri(pathOrUri);
         const auto engineRoot = GetEngineResourceRoot();
@@ -274,7 +288,13 @@ namespace Engine
             return IsSubpathOf(resolved, engineRoot) || resolved == engineRoot;
         }
 
-        return IsEngineUri(pathOrUri);
+        if (IsSubpathOf(resolved, engineRoot))
+        {
+            const auto rel = resolved.lexically_relative(engineRoot);
+            return IsBuiltInRelativeResourcePath(rel.generic_wstring());
+        }
+
+        return false;
     }
 
     std::filesystem::path PlatformPath::ResolveProjectRelative(const std::filesystem::path& relativePath)

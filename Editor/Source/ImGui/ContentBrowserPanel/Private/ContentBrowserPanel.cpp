@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "InputManager.h"
 #include "ContentBrowserPanel.h"
 #include "ContentBrowserGridItem.h"
@@ -13,6 +13,7 @@
 #include "EditorSettingsService.h"
 #include "ShortcutManager.h"
 #include "ModelImportModal.h"
+#include "NotificationManager.h"
 #include <algorithm>
 #include <utility>
 
@@ -137,7 +138,12 @@ EResult ContentBrowserPanel::OnInitialize(void*)
 {
 	m_Name = L"Content Browser"; m_DisplayNameKey = "ContentBrowser.Title";
 	const auto projectRoot = EditorSettingsService::IsCreated() ? EditorSettingsService::Get().GetProjectRoot() : Engine::PlatformPath::GetExecutableDirectory();
-	m_RootPath = projectRoot / "Resources";
+	m_RootPath = Engine::PlatformPath::GetProjectAssetRoot();
+	if (m_RootPath.empty())
+		m_RootPath = projectRoot / "Resources";
+	m_EngineRootPath = Engine::PlatformPath::GetEngineResourceRoot();
+	if (m_EngineRootPath.empty())
+		m_EngineRootPath = m_RootPath;
 	m_CurrentDirectory = m_RootPath;
 	m_LastDirectory = m_CurrentDirectory;
 	m_NeedToExpandTree = true;
@@ -145,6 +151,9 @@ EResult ContentBrowserPanel::OnInitialize(void*)
 	m_FileWatcher = new efsw::FileWatcher();
 	m_FileListener = new ContentBrowserFileListener(&m_NeedsCacheRefresh);
 	m_WatchID = m_FileWatcher->addWatch(m_RootPath.string(), m_FileListener, true);
+	std::error_code ec;
+	if (m_EngineRootPath != m_RootPath && std::filesystem::is_directory(m_EngineRootPath, ec))
+		m_EngineWatchID = m_FileWatcher->addWatch(m_EngineRootPath.string(), m_FileListener, true);
 	m_FileWatcher->watch();
 	m_AsyncCompletionHandle = AssetManager::Get().OnAsyncCompleted().AddLambda([this]()
 		{
@@ -152,6 +161,35 @@ EResult ContentBrowserPanel::OnInitialize(void*)
 		});
 	m_ImportPreviewWidget.Initialize(L"ImportModalPreview", 380, 380, true);
 	return EResult::Success;
+}
+
+void ContentBrowserPanel::SetShowEngineContent(bool show)
+{
+	if (m_ShowEngineContent == show)
+		return;
+	m_ShowEngineContent = show;
+	m_CachedSubdirectories.clear();
+	if (!m_ShowEngineContent && Engine::PlatformPath::IsReadOnlyTarget(m_CurrentDirectory))
+	{
+		m_CurrentDirectory = m_RootPath;
+		m_NeedToExpandTree = true;
+	}
+	RequestRefresh();
+}
+
+const filesystem::path& ContentBrowserPanel::GetActiveRootForPath(const filesystem::path& path) const
+{
+	if (!m_EngineRootPath.empty() && m_EngineRootPath != m_RootPath)
+	{
+		const auto normPath = Engine::PlatformPath::Normalize(path);
+		const auto normEngine = Engine::PlatformPath::Normalize(m_EngineRootPath);
+		if (normPath == normEngine)
+			return m_EngineRootPath;
+		const auto rel = normPath.lexically_relative(normEngine);
+		if (!rel.empty() && !rel.is_absolute() && !rel.native().starts_with(L".."))
+			return m_EngineRootPath;
+	}
+	return m_RootPath;
 }
 
 void ContentBrowserPanel::Update(f32 dt)
@@ -210,7 +248,14 @@ void ContentBrowserPanel::Draw()
 		ImGui::TableNextRow();
 		ImGui::TableNextColumn();
 		ImGui::BeginChild("TreeArea", ImVec2(0, 0), false);
-		DrawDirectoryTree(m_RootPath);
+		DrawDirectoryTree(m_RootPath, m_RootPath);
+		std::error_code treeEc;
+		if (m_ShowEngineContent && !m_EngineRootPath.empty() && m_EngineRootPath != m_RootPath &&
+			std::filesystem::is_directory(m_EngineRootPath, treeEc))
+		{
+			ImGui::Separator();
+			DrawDirectoryTree(m_EngineRootPath, m_EngineRootPath);
+		}
 		ImGui::EndChild();
 		ImGui::TableNextColumn();
 		DrawDirectoryGrid();
@@ -237,6 +282,7 @@ void ContentBrowserPanel::Free()
 	// 감시 스레드가 종료될 때까지 리스너와 패널 상태를 유지합니다.
 	Safe_Delete(m_FileWatcher);
 	m_WatchID = 0;
+	m_EngineWatchID = 0;
 	Safe_Delete(m_FileListener);
 
 	if (m_AsyncCompletionHandle != 0 && AssetManager::IsCreated())
@@ -251,7 +297,11 @@ bool ContentBrowserPanel::CanRenameTarget() const
 	if (!m_Open || m_RenameTargetPath.empty() || !m_RenamingPath.empty())
 		return false;
 
-	const auto relative = m_RenameTargetPath.lexically_normal().lexically_relative(m_RootPath.lexically_normal());
+	if (Engine::PlatformPath::IsReadOnlyTarget(m_RenameTargetPath))
+		return false;
+
+	const auto& activeRoot = GetActiveRootForPath(m_RenameTargetPath);
+	const auto relative = m_RenameTargetPath.lexically_normal().lexically_relative(activeRoot.lexically_normal());
 	if (relative.empty() || relative == "." || relative.is_absolute() || *relative.begin() == "..")
 		return false;
 
@@ -275,7 +325,7 @@ void ContentBrowserPanel::RenameTarget()
 }
 
 #pragma region TreeView
-void ContentBrowserPanel::DrawDirectoryTree(const filesystem::path& path)
+void ContentBrowserPanel::DrawDirectoryTree(const filesystem::path& path, const filesystem::path& rootPath)
 {
 	auto it = m_CachedSubdirectories.find(path);
 	if (it == m_CachedSubdirectories.end())
@@ -285,7 +335,11 @@ void ContentBrowserPanel::DrawDirectoryTree(const filesystem::path& path)
 		for (const auto& directoryEntry : filesystem::directory_iterator(path, ec))
 		{
 			if (!ec && directoryEntry.is_directory(ec))
+			{
+				if (!m_ShowEngineContent && Engine::PlatformPath::IsReadOnlyTarget(directoryEntry.path()))
+					continue;
 				subDirs.push_back(directoryEntry.path());
+			}
 		}
 		it = m_CachedSubdirectories.emplace(path, std::move(subDirs)).first;
 	}
@@ -294,7 +348,7 @@ void ContentBrowserPanel::DrawDirectoryTree(const filesystem::path& path)
 	const bool isSelected = (m_CurrentDirectory == path);
 	bool shouldDrawChildren = ContentBrowserTreeItem::DrawNode(
 		path,
-		m_RootPath,
+		rootPath,
 		hasChildDirectory,
 		isSelected,
 		m_NeedToExpandTree,
@@ -306,7 +360,7 @@ void ContentBrowserPanel::DrawDirectoryTree(const filesystem::path& path)
 	if (shouldDrawChildren)
 	{
 		for (const auto& childPath : childDirectories)
-			DrawDirectoryTree(childPath);
+			DrawDirectoryTree(childPath, rootPath);
 		ImGui::TreePop();
 	}
 }
@@ -351,6 +405,8 @@ void ContentBrowserPanel::GridViewContextMenu(const filesystem::path& path)
 {
 	if (ImGui::BeginPopupContextWindow("GridContextMenu", ImGuiPopupFlags_MouseButtonRight | ImGuiPopupFlags_NoOpenOverItems))
 	{
+		const bool isReadOnly = Engine::PlatformPath::IsReadOnlyTarget(path);
+		ImGui::BeginDisabled(isReadOnly);
 		if (ImGui::BeginMenu((ICON_FA_PLUS " " + LOCAL_LABEL("EditorCommon.Create")).c_str()))
 		{
 			if (ImGui::MenuItem((ICON_FA_FOLDER " " + LOCAL_LABEL("EditorCommon.NewFolder")).c_str()))
@@ -371,6 +427,7 @@ void ContentBrowserPanel::GridViewContextMenu(const filesystem::path& path)
 
 			ImGui::EndMenu();
 		}
+		ImGui::EndDisabled();
 		
 
 		ImGui::Separator();
@@ -390,7 +447,8 @@ void ContentBrowserPanel::GridViewContextMenu(const filesystem::path& path)
 #pragma region Header Bar
 void ContentBrowserPanel::BackButton()
 {
-	bool isRoot = (m_CurrentDirectory == m_RootPath);
+	const auto& activeRoot = GetActiveRootForPath(m_CurrentDirectory);
+	bool isRoot = (m_CurrentDirectory == activeRoot);
 
 	if (isRoot) ImGui::BeginDisabled();
 
@@ -422,20 +480,25 @@ void ContentBrowserPanel::AddressBar()
 	ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
 	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(2.0f, 0.0f));
 
+	const auto& activeRoot = GetActiveRootForPath(m_CurrentDirectory);
+	const bool isEngineRoot = (!m_EngineRootPath.empty() && m_EngineRootPath != m_RootPath && activeRoot == m_EngineRootPath);
+
 	// 현재 경로를 분해하여 노드 리스트 생성
 	std::vector<std::filesystem::path> nodes;
 	std::filesystem::path current = m_CurrentDirectory;
-	while (current != m_RootPath && !current.empty() && current != current.parent_path())
+	while (current != activeRoot && !current.empty() && current != current.parent_path())
 	{
 		nodes.push_back(current);
 		current = current.parent_path();
 	}
-	nodes.push_back(m_RootPath);
+	nodes.push_back(activeRoot);
 	std::reverse(nodes.begin(), nodes.end()); // Root부터 시작하도록 순서 뒤집기
 
 	for (size_t i = 0; i < nodes.size(); ++i)
 	{
-		std::string name = (i == 0) ? LOCAL("ContentBrowser.Assets") : nodes[i].filename().string();
+		std::string name = (i == 0)
+			? (isEngineRoot ? LOCAL("ContentBrowser.EngineContent") : LOCAL("ContentBrowser.Assets"))
+			: nodes[i].filename().string();
 		name += "###" + std::to_string(static_cast<int>(i));
 
 		// 경로의 폴더 이름을 클릭하면 해당 경로로 즉시 이동
@@ -534,6 +597,13 @@ void ContentBrowserPanel::ContentFilter()
 					m_FilterMask &= ~(1 << i);
 			}
 		}
+
+		ImGui::Separator();
+		bool showEngine = m_ShowEngineContent;
+		if (ImGui::Checkbox((ICON_FA_GEARS " " + LOCAL_LABEL("ContentBrowser.ShowEngineContent")).c_str(), &showEngine))
+		{
+			SetShowEngineContent(showEngine);
+		}
 		ImGui::EndCombo();
 	}
 }
@@ -549,7 +619,8 @@ void ContentBrowserPanel::DrawGridItem(const filesystem::directory_entry& direct
 		thumbnailTexID = ImGuiManager::Get().GetImGuiTextureID(AssetCache::Get().GetThumbnail(path));
 	}
 
-	const bool keepAlive = ContentBrowserGridItem::Draw(directoryEntry, m_RootPath, thumbnailTexID,
+	const auto& activeRoot = GetActiveRootForPath(path);
+	const bool keepAlive = ContentBrowserGridItem::Draw(directoryEntry, activeRoot, thumbnailTexID,
 		m_ThumbnailSize, itemId, m_SelectedGridIds.contains(itemId), m_RenamingPath, m_RenameBuffer,
 		sizeof(m_RenameBuffer), m_CurrentDirectory, m_SearchBuffer);
 
@@ -648,11 +719,25 @@ void ContentBrowserPanel::DrawGrid(bool enterPressed)
 			if (m_SearchAllFolders)
 			{
 				// 전체 리소스 폴더 재귀 검색
+				std::error_code searchEc;
 				for (const auto& entry : filesystem::recursive_directory_iterator(
-					m_RootPath, filesystem::directory_options::skip_permission_denied))
+					m_RootPath, filesystem::directory_options::skip_permission_denied, searchEc))
 				{
+					if (!m_ShowEngineContent && Engine::PlatformPath::IsReadOnlyTarget(entry.path()))
+						continue;
 					if (StringContainsCaseInsensitive(entry.path().filename().string(), searchStr))
 						m_SearchResults.push_back(entry);
+				}
+
+				if (m_ShowEngineContent && !m_EngineRootPath.empty() && m_EngineRootPath != m_RootPath &&
+					std::filesystem::is_directory(m_EngineRootPath, searchEc))
+				{
+					for (const auto& entry : filesystem::recursive_directory_iterator(
+						m_EngineRootPath, filesystem::directory_options::skip_permission_denied, searchEc))
+					{
+						if (StringContainsCaseInsensitive(entry.path().filename().string(), searchStr))
+							m_SearchResults.push_back(entry);
+					}
 				}
 			}
 			else
@@ -661,6 +746,8 @@ void ContentBrowserPanel::DrawGrid(bool enterPressed)
 				for (const auto& entry : filesystem::directory_iterator(
 					m_CurrentDirectory, filesystem::directory_options::skip_permission_denied))
 				{
+					if (!m_ShowEngineContent && Engine::PlatformPath::IsReadOnlyTarget(entry.path()))
+						continue;
 					if (StringContainsCaseInsensitive(entry.path().filename().string(), searchStr))
 						m_SearchResults.push_back(entry);
 				}
@@ -684,6 +771,8 @@ void ContentBrowserPanel::DrawGrid(bool enterPressed)
 
 	for (const auto& entry : source)
 	{
+		if (!m_ShowEngineContent && Engine::PlatformPath::IsReadOnlyTarget(entry.path()))
+			continue;
 		if (PassesFilter(entry, m_FilterMask))
 			entries.push_back(&entry);
 	}
@@ -884,7 +973,7 @@ bool ContentBrowserPanel::RequestRevealAsset(const filesystem::path& resourcePat
 	if (resourcePath.empty())
 		return false;
 
-	auto absolutePath = Engine::PlatformPath::ResolveProjectRelative(resourcePath);
+	auto absolutePath = Engine::PlatformPath::ResolveUri(resourcePath);
 	std::error_code error;
 	if (!filesystem::is_regular_file(absolutePath, error))
 	{
@@ -895,11 +984,15 @@ bool ContentBrowserPanel::RequestRevealAsset(const filesystem::path& resourcePat
 			return false;
 	}
 
-	const auto relativePath = filesystem::relative(absolutePath, m_RootPath, error);
+	if (Engine::PlatformPath::IsReadOnlyTarget(absolutePath) && !m_ShowEngineContent)
+		SetShowEngineContent(true);
+
+	const auto& activeRoot = GetActiveRootForPath(absolutePath);
+	const auto relativePath = filesystem::relative(absolutePath, activeRoot, error);
 	if (error || relativePath.empty() || relativePath.has_root_path() || *relativePath.begin() == L"..")
 		return false;
 
-	m_RevealedAssetPath = (m_RootPath / relativePath).lexically_normal();
+	m_RevealedAssetPath = (activeRoot / relativePath).lexically_normal();
 	m_CurrentDirectory = m_RevealedAssetPath.parent_path();
 	m_RevealScrollPending = true;
 	m_NeedToExpandTree = true;
@@ -949,6 +1042,13 @@ void ContentBrowserPanel::RefreshCacheIfNeeded()
 }
 void ContentBrowserPanel::OnExteranalDropped(const vector<string>& droppedFiles)
 {
+	if (Engine::PlatformPath::IsReadOnlyTarget(m_CurrentDirectory))
+	{
+		NotificationManager::Get().AddNotification(LOCAL("ContentBrowser.Title"),
+			LOCAL("ContentBrowser.ReadOnlyProtected"), ELogLevel::Warn, 3.0f);
+		return;
+	}
+
 	for (const string& filepathStr : droppedFiles)
 	{
 		filesystem::path sourcePath(reinterpret_cast<const char8_t*>(filepathStr.c_str()));
@@ -1036,11 +1136,13 @@ void ContentBrowserPanel::CaptureState(EditorWorkspace& workspace) const
 
 	workspace.ContentBrowserDirectory = GetRelativeDirectory();
 	workspace.ContentBrowserThumbnailSize = GetThumbnailSize();
+	workspace.SetSplitter("ContentBrowser.ShowEngineContent", m_ShowEngineContent ? 1.0f : 0.0f);
 }
 
 void ContentBrowserPanel::RestoreState(const EditorWorkspace& workspace)
 {
 	IImGui::RestoreState(workspace);
+	m_ShowEngineContent = workspace.GetSplitter("ContentBrowser.ShowEngineContent", 0.0f) > 0.5f;
 	RestoreViewState(workspace.ContentBrowserDirectory, workspace.ContentBrowserThumbnailSize);
 }
 #pragma endregion

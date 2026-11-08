@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "Editor_Includes.h"
 #include "ImGuiInterface.h"
@@ -45,6 +45,10 @@ public:
 	std::string GetRelativeDirectory() const;
 	float GetThumbnailSize() const { return m_ThumbnailSize; }
 	bool RequestRevealAsset(const filesystem::path& resourcePath);
+	bool IsShowingEngineContent() const { return m_ShowEngineContent; }
+	void SetShowEngineContent(bool show);
+	const filesystem::path& GetEngineRootPath() const { return m_EngineRootPath; }
+	const filesystem::path& GetActiveRootForPath(const filesystem::path& path) const;
 	EPanelMenuCategory GetPanelMenuCategory() const override { return EPanelMenuCategory::Assets; }
 #pragma endregion
 
@@ -53,7 +57,7 @@ private:
 
 #pragma region TreeView
 private:
-	void DrawDirectoryTree(const filesystem::path& path);
+	void DrawDirectoryTree(const filesystem::path& path, const filesystem::path& rootPath);
 #pragma endregion
 
 #pragma region GridView
@@ -95,9 +99,11 @@ public:
 #pragma region Member Variable
 private:
 	filesystem::path m_RootPath;
+	filesystem::path m_EngineRootPath;
 	filesystem::path m_CurrentDirectory;
 	filesystem::path m_LastDirectory;
 	bool m_NeedToExpandTree = false;
+	bool m_ShowEngineContent = false;
 private:
 	filesystem::path m_RenameTargetPath;
 	filesystem::path m_RenamingPath;
@@ -129,6 +135,7 @@ private:
 	filesystem::path m_LastWatchedDirectory;
 	efsw::FileWatcher* m_FileWatcher = nullptr;
 	efsw::WatchID m_WatchID = 0;
+	efsw::WatchID m_EngineWatchID = 0;
 	class ContentBrowserFileListener* m_FileListener = nullptr;
 	atomic<bool> m_NeedsCacheRefresh = { false };
 private:
