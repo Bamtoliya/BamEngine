@@ -9,6 +9,7 @@ namespace Engine
 {
     static std::filesystem::path s_ProjectRoot;
     static std::filesystem::path s_EngineResourceRoot;
+    static std::filesystem::path s_EditorResourceRoot;
     static std::filesystem::path s_ProjectAssetRoot;
 
     namespace
@@ -57,7 +58,22 @@ namespace Engine
                 StartsWithIgnoreCase(relStr, L"material/defaultmaterial.") ||
                 StartsWithIgnoreCase(relStr, L"material/skinningmaterial.") ||
                 StartsWithIgnoreCase(relStr, L"material/skymaterial.") ||
-                StartsWithIgnoreCase(relStr, L"material/postprocessdefault");
+                StartsWithIgnoreCase(relStr, L"material/postprocessdefault") ||
+                StartsWithIgnoreCase(relStr, L"material/missingmaterial.") ||
+                StartsWithIgnoreCase(relStr, L"material/spritematerial.") ||
+                StartsWithIgnoreCase(relStr, L"material/particlematerial_") ||
+                StartsWithIgnoreCase(relStr, L"material/uimaterial.") ||
+                StartsWithIgnoreCase(relStr, L"material/transparentmaterial.") ||
+                StartsWithIgnoreCase(relStr, L"texture/white1x1.") ||
+                StartsWithIgnoreCase(relStr, L"texture/black1x1.") ||
+                StartsWithIgnoreCase(relStr, L"texture/blue1x1.") ||
+                StartsWithIgnoreCase(relStr, L"texture/magenta1x1.") ||
+                StartsWithIgnoreCase(relStr, L"texture/green1x1.") ||
+                StartsWithIgnoreCase(relStr, L"texture/defaultchecker.") ||
+                StartsWithIgnoreCase(relStr, L"texture/defaultnormal.") ||
+                StartsWithIgnoreCase(relStr, L"texture/defaultpbr.") ||
+                StartsWithIgnoreCase(relStr, L"texture/missingtexture.") ||
+                StartsWithIgnoreCase(relStr, L"texture/particle_");
         }
     }
 
@@ -133,6 +149,29 @@ namespace Engine
         return s_EngineResourceRoot;
     }
 
+    void PlatformPath::SetEditorResourceRoot(const std::filesystem::path& root)
+    {
+        s_EditorResourceRoot = Normalize(root);
+    }
+
+    const std::filesystem::path& PlatformPath::GetEditorResourceRoot()
+    {
+        if (s_EditorResourceRoot.empty())
+        {
+            auto candidate = Normalize(GetProjectRoot() / "Editor/Resources");
+            std::error_code ec;
+            if (std::filesystem::is_directory(candidate, ec))
+            {
+                s_EditorResourceRoot = candidate;
+            }
+            else
+            {
+                s_EditorResourceRoot = Normalize(GetProjectRoot() / "Resources");
+            }
+        }
+        return s_EditorResourceRoot;
+    }
+
     void PlatformPath::SetProjectAssetRoot(const std::filesystem::path& root)
     {
         s_ProjectAssetRoot = Normalize(root);
@@ -166,6 +205,16 @@ namespace Engine
         return StartsWithIgnoreCase(uri, "engine://");
     }
 
+    bool PlatformPath::IsEditorUri(const std::wstring& uri)
+    {
+        return StartsWithIgnoreCase(uri, L"editor://");
+    }
+
+    bool PlatformPath::IsEditorUri(const std::string& uri)
+    {
+        return StartsWithIgnoreCase(uri, "editor://");
+    }
+
     bool PlatformPath::IsProjectUri(const std::wstring& uri)
     {
         return StartsWithIgnoreCase(uri, L"project://") || StartsWithIgnoreCase(uri, L"asset://");
@@ -178,12 +227,12 @@ namespace Engine
 
     bool PlatformPath::IsVirtualUri(const std::wstring& uri)
     {
-        return IsEngineUri(uri) || IsProjectUri(uri);
+        return IsEngineUri(uri) || IsEditorUri(uri) || IsProjectUri(uri);
     }
 
     bool PlatformPath::IsVirtualUri(const std::string& uri)
     {
-        return IsEngineUri(uri) || IsProjectUri(uri);
+        return IsEngineUri(uri) || IsEditorUri(uri) || IsProjectUri(uri);
     }
 
     std::filesystem::path PlatformPath::ResolveUri(const std::wstring& pathOrUri)
@@ -197,6 +246,17 @@ namespace Engine
             if (!IsSubpathOf(resolved, GetEngineResourceRoot()) && resolved != GetEngineResourceRoot())
             {
                 return GetEngineResourceRoot();
+            }
+            return resolved;
+        }
+
+        if (IsEditorUri(pathOrUri))
+        {
+            const std::wstring sub = pathOrUri.substr(9);
+            const auto resolved = Normalize(GetEditorResourceRoot() / sub);
+            if (!IsSubpathOf(resolved, GetEditorResourceRoot()) && resolved != GetEditorResourceRoot())
+            {
+                return GetEditorResourceRoot();
             }
             return resolved;
         }
@@ -228,6 +288,10 @@ namespace Engine
         if (std::filesystem::exists(inEngine, ec))
             return inEngine;
 
+        const auto inEditor = Normalize(GetEditorResourceRoot() / fsPath);
+        if (std::filesystem::exists(inEditor, ec))
+            return inEditor;
+
         auto normRel = Normalize(fsPath);
         const std::wstring relStr = normRel.generic_wstring();
         if (StartsWithIgnoreCase(relStr, L"resources/"))
@@ -240,6 +304,10 @@ namespace Engine
             const auto strippedEngine = Normalize(GetEngineResourceRoot() / stripped);
             if (std::filesystem::exists(strippedEngine, ec))
                 return strippedEngine;
+
+            const auto strippedEditor = Normalize(GetEditorResourceRoot() / stripped);
+            if (std::filesystem::exists(strippedEditor, ec))
+                return strippedEditor;
         }
 
         const auto inCwd = Normalize(std::filesystem::current_path(ec) / fsPath);
@@ -299,24 +367,27 @@ namespace Engine
 
     bool PlatformPath::IsReadOnlyTarget(const std::wstring& pathOrUri)
     {
-        if (IsEngineUri(pathOrUri))
+        if (IsEngineUri(pathOrUri) || IsEditorUri(pathOrUri))
             return true;
         if (IsProjectUri(pathOrUri))
             return false;
 
         const auto resolved = ResolveUri(pathOrUri);
         const auto engineRoot = GetEngineResourceRoot();
+        const auto editorRoot = GetEditorResourceRoot();
         const auto projectRoot = GetProjectAssetRoot();
 
-        if (engineRoot != projectRoot)
+        if (IsSubpathOf(resolved, engineRoot) || resolved == engineRoot)
         {
-            return IsSubpathOf(resolved, engineRoot) || resolved == engineRoot;
-        }
-
-        if (IsSubpathOf(resolved, engineRoot))
-        {
+            if (engineRoot != projectRoot)
+                return true;
             const auto rel = resolved.lexically_relative(engineRoot);
             return IsBuiltInRelativeResourcePath(rel.generic_wstring());
+        }
+
+        if (IsSubpathOf(resolved, editorRoot) || resolved == editorRoot)
+        {
+            return true;
         }
 
         return false;

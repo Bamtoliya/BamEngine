@@ -159,6 +159,7 @@ int main()
         // 커스텀 목 루트 초기화 -> 실제 디스크 환경 자동 감지
         PlatformPath::SetProjectRoot({});
         PlatformPath::SetEngineResourceRoot({});
+        PlatformPath::SetEditorResourceRoot({});
         PlatformPath::SetProjectAssetRoot({});
 
         const fs::path engineRoot = PlatformPath::GetEngineResourceRoot();
@@ -187,12 +188,37 @@ int main()
         const auto resolvedLegacyLoc = PlatformPath::ResolveUri(L"Resources/Data/Localization/English.json");
         EXPECT_EQ(resolvedLegacyLoc, PlatformPath::Normalize(engineRoot / "Data/Localization/English.json"));
 
+        // 10. 빌트인 텍스처 및 확장 머티리얼 해석 검증
+        auto resolvedWhite = PlatformPath::ResolveUri(L"Engine://Texture/white1x1.png");
+        EXPECT_TRUE(fs::exists(resolvedWhite));
+        auto resolvedChecker = PlatformPath::ResolveUri(L"Engine://Texture/DefaultChecker.png");
+        EXPECT_TRUE(fs::exists(resolvedChecker));
+        auto resolvedSpriteMat = PlatformPath::ResolveUri(L"Engine://Material/SpriteMaterial.bammat.json");
+        EXPECT_TRUE(fs::exists(resolvedSpriteMat));
+
+        // 11. Assets/ 프로젝트 에셋 루트 및 레거시 상대 경로 해석 검증
+        EXPECT_TRUE(fs::exists(projectRoot / "Scenes/RaytracingScene.json"));
+        const auto resolvedLegacyScene = PlatformPath::ResolveUri(L"Resources/Scenes/RaytracingScene.json");
+        EXPECT_EQ(resolvedLegacyScene, PlatformPath::Normalize(projectRoot / "Scenes/RaytracingScene.json"));
+        const auto resolvedProjectScene = PlatformPath::ResolveUri(L"Project://Scenes/RaytracingScene.json");
+        EXPECT_EQ(resolvedProjectScene, PlatformPath::Normalize(projectRoot / "Scenes/RaytracingScene.json"));
+
+        // 12. Editor:// 가상 마운트 URI 및 에디터 로캘 해석 검증
+        const auto resolvedEditorLoc = PlatformPath::ResolveUri(L"Editor://Data/Localization/English.json");
+        EXPECT_TRUE(fs::exists(resolvedEditorLoc));
+        EXPECT_TRUE(PlatformPath::IsReadOnlyTarget(L"Editor://Data/Localization/English.json"));
+        EXPECT_TRUE(PlatformPath::IsReadOnlyTarget(resolvedEditorLoc));
+
         // 읽기 전용 판별 검증
         EXPECT_TRUE(PlatformPath::IsReadOnlyTarget(L"Engine://Shader/hlsl/defaultVS.hlsl"));
         EXPECT_TRUE(PlatformPath::IsReadOnlyTarget(L"Resources/Shader/hlsl/defaultVS.hlsl"));
         EXPECT_TRUE(PlatformPath::IsReadOnlyTarget(L"Resources/Material/DefaultMaterial.bammat.json"));
+        EXPECT_TRUE(PlatformPath::IsReadOnlyTarget(L"Resources/Material/SpriteMaterial.bammat.json"));
+        EXPECT_TRUE(PlatformPath::IsReadOnlyTarget(L"Resources/Texture/white1x1.png"));
+        EXPECT_TRUE(PlatformPath::IsReadOnlyTarget(L"Resources/Texture/DefaultChecker.png"));
         EXPECT_TRUE(PlatformPath::IsReadOnlyTarget(L"Engine://Data/Localization/English.json"));
         EXPECT_TRUE(PlatformPath::IsReadOnlyTarget(L"Resources/Data/Localization/English.json"));
+        EXPECT_FALSE(PlatformPath::IsReadOnlyTarget(L"Assets/Material/GBufferMaterial.bammat.json"));
         EXPECT_FALSE(PlatformPath::IsReadOnlyTarget(L"Resources/Material/GBufferMaterial.bammat.json"));
     }
 

@@ -294,7 +294,8 @@ void AssetHotReloadManager::ProcessModifiedLocalization(const std::filesystem::p
 		std::filesystem::path scriptPath = std::filesystem::current_path() / "Tools/Codegen/CSVToJsonConverter/localizationcsvtojson.py";
 		if (std::filesystem::exists(scriptPath, ec))
 		{
-			std::wstring cmd = L"python \"" + scriptPath.wstring() + L"\" --input \"Resources/Data/Localization\" --output \"Resources/Data/Localization\"";
+			const auto parentDir = locPath.parent_path();
+			std::wstring cmd = L"python \"" + scriptPath.wstring() + L"\" --input \"" + parentDir.wstring() + L"\" --output \"" + parentDir.wstring() + L"\"";
 			_wsystem(cmd.c_str());
 		}
 	}

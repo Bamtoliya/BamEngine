@@ -15,7 +15,7 @@ namespace Editor
         {
             static const std::unordered_set<std::string> builtins = {
                 "FullscreenQuad", "FullscreenQuadVS", "LightingPS", "DefaultPS", "DefaultVS",
-                "SphereMesh", "QuadMesh", "CubeMesh", "__SkyMesh_Sphere__", "MaterialPreviewPS",
+                "SphereMesh", "QuadMesh", "CubeMesh", "PlaneMesh", "CylinderMesh", "CapsuleMesh", "__SkyMesh_Sphere__", "MaterialPreviewPS",
                 "ShadowDepthPS", "ShadowDepthVS", "ShadowDepthSkinningVS", "GBufferPS", "GBufferVS",
                 "GBufferSkinningVS", "SkyPS", "SkyVS", "TerrainPS", "TerrainVS", "UIPS", "UIVS"
             };

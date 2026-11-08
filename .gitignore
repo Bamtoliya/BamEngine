@@ -68,6 +68,8 @@ Gemini
 imgui.ini
 Resources/kenney_game-icons
 Resources/Model
+Assets/kenney_game-icons
+Assets/Model
 Engine/Resources/Fonts
 Gemini.md
 *.bamshader
@@ -98,3 +100,6 @@ __pycache__/
 Resources/KayKit_Adventurers_2.0_FREE/
 Resources/asphalt_02_4k.blend/
 Resources/kenney_city-kit-roads/
+Assets/KayKit_Adventurers_2.0_FREE/
+Assets/asphalt_02_4k.blend/
+Assets/kenney_city-kit-roads/

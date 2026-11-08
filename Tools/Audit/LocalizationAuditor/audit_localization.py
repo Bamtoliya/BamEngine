@@ -264,10 +264,19 @@ def is_dynamic_prefix_matched(prefix: str, catalog: dict) -> bool:
     return False
 
 def audit_project(root_dir: Path, check_orphans: bool = False, strict: bool = False):
-    loc_dir = root_dir / "Engine" / "Resources" / "Data" / "Localization"
-    if not loc_dir.exists():
-        loc_dir = root_dir / "Resources" / "Data" / "Localization"
-    catalog_paths = sorted(loc_dir.glob('*.csv'))
+    loc_dirs = [
+        root_dir / "Engine" / "Resources" / "Data" / "Localization",
+        root_dir / "Editor" / "Resources" / "Data" / "Localization"
+    ]
+    catalog_paths = []
+    for d in loc_dirs:
+        if d.exists():
+            catalog_paths.extend(sorted(d.glob('*.csv')))
+    if not catalog_paths:
+        legacy_dir = root_dir / "Resources" / "Data" / "Localization"
+        if legacy_dir.exists():
+            catalog_paths = sorted(legacy_dir.glob('*.csv'))
+
     combined_catalog, all_empty = {}, []
     for path in catalog_paths:
         catalog, empty = load_csv_catalog(path)
@@ -275,7 +284,11 @@ def audit_project(root_dir: Path, check_orphans: bool = False, strict: bool = Fa
         all_empty.extend(empty)
     catalog_groups = {key.split('.', 1)[0] for key in combined_catalog if '.' in key}
     duplicates = duplicate_catalog_keys(catalog_paths)
-    editor_layout_issues = list(editor_catalog_layout_issues(loc_dir / 'Editor.csv'))
+
+    editor_csv_path = root_dir / "Editor" / "Resources" / "Data" / "Localization" / "Editor.csv"
+    if not editor_csv_path.exists():
+        editor_csv_path = root_dir / "Engine" / "Resources" / "Data" / "Localization" / "Editor.csv"
+    editor_layout_issues = list(editor_catalog_layout_issues(editor_csv_path)) if editor_csv_path.exists() else []
 
     missing_keys = []
     hardcoded_ui = []

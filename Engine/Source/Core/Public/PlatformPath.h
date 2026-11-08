@@ -21,6 +21,10 @@ namespace Engine
         static void SetEngineResourceRoot(const std::filesystem::path& root);
         static const std::filesystem::path& GetEngineResourceRoot();
 
+        // 에디터 시스템 리소스 루트 ("Editor://")
+        static void SetEditorResourceRoot(const std::filesystem::path& root);
+        static const std::filesystem::path& GetEditorResourceRoot();
+
         // 사용자 프로젝트 애셋 루트 ("Project://", "Asset://")
         static void SetProjectAssetRoot(const std::filesystem::path& root);
         static const std::filesystem::path& GetProjectAssetRoot();
@@ -28,6 +32,8 @@ namespace Engine
         // 가상 URI 스키마 판별
         static bool IsEngineUri(const std::wstring& uri);
         static bool IsEngineUri(const std::string& uri);
+        static bool IsEditorUri(const std::wstring& uri);
+        static bool IsEditorUri(const std::string& uri);
         static bool IsProjectUri(const std::wstring& uri);
         static bool IsProjectUri(const std::string& uri);
         static bool IsVirtualUri(const std::wstring& uri);

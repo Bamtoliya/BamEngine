@@ -14,6 +14,7 @@
 #include <utility>
 #include <cstdint>
 #include "ResourcePicker.h"
+#include "PlatformPath.h"
 
 namespace Editor::Detail
 {
@@ -650,8 +651,14 @@ namespace
         if (!binding || binding->Name != "STRUCT_CAMERA" || binding->Category != "CATEGORY_RENDER")
             return Fail("AddComponent bindings do not use generated localization keys.");
         auto& localization = Engine::LocalizationManager::Get();
-        if (localization.RegisterLocalizationData(L"Resources/Data/Localization/English.json") != EResult::Success ||
-            localization.RegisterLocalizationData(L"Resources/Data/Localization/Korean.json") != EResult::Success ||
+        const auto engEngine = Engine::PlatformPath::ResolveUri(L"Engine://Data/Localization/English.json").wstring();
+        const auto korEngine = Engine::PlatformPath::ResolveUri(L"Engine://Data/Localization/Korean.json").wstring();
+        const auto engEditor = Engine::PlatformPath::ResolveUri(L"Editor://Data/Localization/English.json").wstring();
+        const auto korEditor = Engine::PlatformPath::ResolveUri(L"Editor://Data/Localization/Korean.json").wstring();
+        if (localization.RegisterLocalizationData(engEngine) != EResult::Success ||
+            localization.RegisterLocalizationData(korEngine) != EResult::Success ||
+            localization.RegisterLocalizationData(engEditor) != EResult::Success ||
+            localization.RegisterLocalizationData(korEditor) != EResult::Success ||
             localization.LoadData() != EResult::Success)
             return Fail("Generated localization catalogs could not be loaded.");
         for (const auto language : { ELocalizationLanguage::English, ELocalizationLanguage::Korean })

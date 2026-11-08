@@ -1,29 +1,44 @@
 # --- CMake/LocalizationBuild.cmake ---
 
-if(EXISTS "${CMAKE_SOURCE_DIR}/Engine/Resources/Data/Localization")
-    set(LOCALIZATION_DIR "${CMAKE_SOURCE_DIR}/Engine/Resources/Data/Localization")
-else()
-    set(LOCALIZATION_DIR "${CMAKE_SOURCE_DIR}/Resources/Data/Localization")
-endif()
 set(LOCALIZATION_SCRIPT "${CMAKE_SOURCE_DIR}/Tools/Codegen/CSVToJsonConverter/localizationcsvtojson.py")
-file(GLOB LOCALIZATION_CSV_FILES CONFIGURE_DEPENDS "${LOCALIZATION_DIR}/*.csv")
 
-set(LOCALIZATION_OUTPUTS
-    "${LOCALIZATION_DIR}/English.json"
-    "${LOCALIZATION_DIR}/Korean.json"
+# 1. Engine Localization
+set(ENGINE_LOCALIZATION_DIR "${CMAKE_SOURCE_DIR}/Engine/Resources/Data/Localization")
+file(GLOB ENGINE_LOCALIZATION_CSV_FILES CONFIGURE_DEPENDS "${ENGINE_LOCALIZATION_DIR}/*.csv")
+set(ENGINE_LOCALIZATION_OUTPUTS
+    "${ENGINE_LOCALIZATION_DIR}/English.json"
+    "${ENGINE_LOCALIZATION_DIR}/Korean.json"
 )
 
 add_custom_command(
-    OUTPUT ${LOCALIZATION_OUTPUTS}
-    COMMAND ${Python3_EXECUTABLE} "${LOCALIZATION_SCRIPT}" --input "${LOCALIZATION_DIR}" --output "${LOCALIZATION_DIR}"
+    OUTPUT ${ENGINE_LOCALIZATION_OUTPUTS}
+    COMMAND ${Python3_EXECUTABLE} "${LOCALIZATION_SCRIPT}" --input "${ENGINE_LOCALIZATION_DIR}" --output "${ENGINE_LOCALIZATION_DIR}"
     DEPENDS
         "${LOCALIZATION_SCRIPT}"
-        ${LOCALIZATION_CSV_FILES}
+        ${ENGINE_LOCALIZATION_CSV_FILES}
     WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
-    COMMENT "Generating localization JSON files"
+    COMMENT "Generating Engine localization JSON files"
 )
 
-add_custom_target(GenerateLocalization ALL DEPENDS ${LOCALIZATION_OUTPUTS})
+# 2. Editor Localization
+set(EDITOR_LOCALIZATION_DIR "${CMAKE_SOURCE_DIR}/Editor/Resources/Data/Localization")
+file(GLOB EDITOR_LOCALIZATION_CSV_FILES CONFIGURE_DEPENDS "${EDITOR_LOCALIZATION_DIR}/*.csv")
+set(EDITOR_LOCALIZATION_OUTPUTS
+    "${EDITOR_LOCALIZATION_DIR}/English.json"
+    "${EDITOR_LOCALIZATION_DIR}/Korean.json"
+)
+
+add_custom_command(
+    OUTPUT ${EDITOR_LOCALIZATION_OUTPUTS}
+    COMMAND ${Python3_EXECUTABLE} "${LOCALIZATION_SCRIPT}" --input "${EDITOR_LOCALIZATION_DIR}" --output "${EDITOR_LOCALIZATION_DIR}"
+    DEPENDS
+        "${LOCALIZATION_SCRIPT}"
+        ${EDITOR_LOCALIZATION_CSV_FILES}
+    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    COMMENT "Generating Editor localization JSON files"
+)
+
+add_custom_target(GenerateLocalization ALL DEPENDS ${ENGINE_LOCALIZATION_OUTPUTS} ${EDITOR_LOCALIZATION_OUTPUTS})
 add_dependencies(GenerateLocalization ExportReflectionLocalization)
 
 # --- 다국어 및 UI 하드코딩 정적 감사 타깃 ---

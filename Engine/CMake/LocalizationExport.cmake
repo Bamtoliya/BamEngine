@@ -10,14 +10,20 @@ set(_reflection_localization_script
     "${CMAKE_SOURCE_DIR}/Tools/Codegen/ReflectionLocalization/export_localization.py"
 )
 
+if(EXISTS "${CMAKE_SOURCE_DIR}/Engine/Resources/Data/Localization")
+    set(_reflection_catalog_dir "${CMAKE_SOURCE_DIR}/Engine/Resources/Data/Localization")
+else()
+    set(_reflection_catalog_dir "${CMAKE_SOURCE_DIR}/Resources/Data/Localization")
+endif()
+
 set(_reflection_localization_csv
-    "${CMAKE_SOURCE_DIR}/Resources/Data/Localization/Engine.csv"
+    "${_reflection_catalog_dir}/Engine.csv"
 )
 
 add_custom_target(ExportReflectionLocalization ALL
     COMMAND "${Python3_EXECUTABLE}" "${_reflection_localization_script}"
         --input ${_engine_metadata_files}
-        --catalog-dir "${CMAKE_SOURCE_DIR}/Resources/Data/Localization"
+        --catalog-dir "${_reflection_catalog_dir}"
         --base Engine.csv
         --output "${_reflection_localization_csv}"
         --in-place

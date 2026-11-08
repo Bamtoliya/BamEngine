@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "LocalizationManager.h"
+#include "PlatformPath.h"
 
 IMPLEMENT_SINGLETON(LocalizationManager)
 
@@ -80,8 +81,9 @@ EResult LocalizationManager::ReloadData()
 
 EResult LocalizationManager::RegisterLocalizationData(const wstring& filePath)
 {
-	if(!filesystem::exists(filePath)) return EResult::FileNotFound;
-	m_RegisteredFiles.push_back(filePath);
+	const auto resolved = PlatformPath::ResolveUri(filePath);
+	if (!filesystem::exists(resolved)) return EResult::FileNotFound;
+	m_RegisteredFiles.push_back(resolved.wstring());
 	return EResult::Success;
 }
 

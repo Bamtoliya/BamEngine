@@ -150,7 +150,7 @@ std::filesystem::path ResolvePath(const std::wstring& virtualKey)
 - [x] Step 1: 감시자·임포터·피커·썸네일·시작 설정의 경로 해석을 먼저 연결한다 (`PlatformPath::ResolveUri` 일원화). [완료: 2026-11-08]
 - [x] Step 2 (배치 1): `Engine/Resources/Shader/` 및 기본 머티리얼 이관, 참조 변환·저장/재열기·재임포트·핫리로드 확인. [완료: 2026-11-08]
 - [x] Step 3 (배치 2): `Engine/Resources/Fonts/`, `Data/Localization/` 원본/JSON 및 도구 체인 이관 및 로캘 감사 통과. [완료: 2026-11-08]
-- [ ] Step 4 (배치 3): 사용자 프로젝트 에셋(`Assets/`) 분리 정책 수립 및 시작 씬/동적 로드 자원 참조 무결성 검증.
+- [x] Step 4 (배치 3): 엔진 빌트인 리소스 대폭 보강 및 사용자 프로젝트 에셋(`Assets/`) 완전 물리 이관 완료. [완료: 2026-11-08]
 
 이 순서는 [통합 계획 11절](DevelopmentPriorities.md)의 안전성 작업 이후에 적용한다. 전체 물리 이관을 다른 기능의 필수 선행 조건으로 두지 않는다. 근거는 [이번 점검 A10](CodeDocumentationAudit-2026-11-06.md)이다.
 

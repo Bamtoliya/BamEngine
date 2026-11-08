@@ -2,6 +2,57 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-08] 로캘 아키텍처 혁신: Engine(엔진 코어)과 Editor(에디터 전용) 로컬라이제이션 완전 물리 분리 및 3계층 가상 마운트 URI(Editor://) 확립
+
+- Area: Engine | Editor | Core | Localization | Build | Tests
+- Type: Architecture | Feature | Refactor | Safety
+- 주요 변경 내역:
+  1. **`Engine`과 `Editor` 로컬라이제이션 물리 디렉터리 및 번역본 완전 분리**:
+     - `Engine/Resources/Data/Localization/`: `Engine.csv`, `Test.csv` 전용 -> `English.json`, `Korean.json` (778개 키: 컴포넌트 리플렉션, 속성 카테고리, 엔진 코어 진단).
+     - `Editor/Resources/Data/Localization/`: `Editor.csv` 전용 -> `English.json`, `Korean.json` (1,700개 키: 메뉴바, 툴팁, 인스펙터, 패널 UI 문구).
+     - 순수 게임 런타임(Client) 배포 패키징 시 에디터 UI 번역본이 0바이트로 완전히 배제되어 경량화 및 내부 문자열 보호 달성.
+  2. **`PlatformPath` 3계층 가상 마운트 URI (`Editor://`) 아키텍처 확립 (`PlatformPath.h/.cpp`)**:
+     - `GetEditorResourceRoot()` (`Editor/Resources/`), `IsEditorUri()` (`Editor://`) 신설.
+     - `Engine://` (엔진 코어 자원), `Editor://` (에디터 전용 자원), `Project://` (사용자 프로젝트 에셋) 3계층 가상 마운트 해석 지원.
+     - `EditorResourceRoot` 하위 및 `Editor://` URI에 대해서도 콘텐츠 브라우저 읽기 전용 가드(`IsReadOnlyTarget`) 완전 구현(가상 URI 판별 및 물리 서브패스 검사 일원화).
+  3. **CMake 빌드 파이프라인 및 정적 감사 도구 멀티 타깃 개편**:
+     - `LocalizationBuild.cmake`: Engine과 Editor의 CSV 파일들을 각각 독립 변환하는 커스텀 커맨드 구성 및 `GenerateLocalization` 통합 타깃 연결.
+     - `audit_localization.py`: 분리된 두 디렉터리를 자동 순회하여 전수 교차 검증하도록 확장 (632개 파일, 2,478개 키 100% 무결성 통과).
+  4. **에디터 런타임 및 단위 테스트 다중 카탈로그 등록 일원화**:
+     - `Application.cpp`: `Engine://Data/Localization/...`과 `Editor://Data/Localization/...`을 순차 등록하여 `LocalizationManager`에서 단일 메모리 해시맵으로 투명 병합.
+     - `ReflectionInspectorCheck`, `GraphMessageLocalizationCheck`, `MainMenuBarLayoutCheck`, `VirtualPathCheck`: 분리된 엔진 및 에디터 로캘 카탈로그를 함께 등록하도록 호출부 정규화.
+- 실제 검증 결과:
+  - `python Tools/Audit/LocalizationAuditor/audit_localization.py --strict`: 632개 파일 및 2,478개 키 전수 검사 통과 (결함 0건, 100% Passed).
+  - CTest: `VirtualPathCheck`, `ReflectionInspectorCheck` 단위 테스트 100% 통과 (Passed).
+
+### [2026-11-08] 에셋 아키텍처 Phase 3-B (Step 4 완결): 엔진 기본 리소스(텍스처·머티리얼·메시·기즈모) 대폭 보강 및 프로젝트 에셋(Assets/) 완전 물리 분리
+
+- Area: Engine | Core | Resource | Model | Editor | Tests
+- Type: Feature | Architecture | Safety | Refactor
+- 주요 변경 내역:
+  1. **엔진 빌트인 리소스 대폭 보강 및 `Engine/Resources/` 이관**:
+     - 1x1 단색 텍스처 5종(`white1x1.png/json`, `black1x1.png`, `blue1x1.png`, `magenta1x1.png`, `green1x1.png`) 및 기본 파티클 텍스처 4종(`Particle_SoftCircle.png`, `Particle_Ring.png`, `Particle_Smoke.png`, `Particle_Spark.png`)을 `Engine/Resources/Texture/`로 이관.
+     - 신규 유틸리티 텍스처 구축: UV 언랩/텍셀 밀도 검사용 `DefaultChecker.png`(512x512, 32px 타일 체커보드), 법선 평면 `DefaultNormal.png`(128x128), 기본 `DefaultPBR.png`, 로드 실패 에러 경고용 `MissingTexture.png`.
+     - 뷰포트 기즈모/엔티티 아이콘 일원화: 불필요한 디스크 텍스처를 배제하고 메모리 상주 Font Awesome 6 벡터 아이콘(`ICON_FA_CAMERA`, `ICON_FA_LIGHTBULB`, `ICON_FA_SUN`, `ICON_FA_VOLUME_HIGH`, `ICON_FA_FLAG` 등)을 재사용하도록 정책화하여 런타임/패키지 경량화 달성.
+     - 코어 빌트인 머티리얼 일원화: `SpriteMaterial`, `SpriteMaterialInstance`, `ParticleMaterial_AlphaBlend`, `ParticleMaterial_Additive`, `UIMaterial`, `TransparentMaterial`, `MissingMaterial`, `PostProcessDefaultMaterial`을 `Engine/Resources/Material/`에 구축.
+  2. **절차적 기본 메시 프리셋 확장 (`BuiltInPrimitiveMeshes.cpp`, `AssetReferenceValidator.cpp`)**:
+     - 기존 `QuadMesh`, `CubeMesh`, `SphereMesh`에 이어 `PlaneMesh`(1m x 1m XZ 평면), `CylinderMesh`(반지름 0.5m, 높이 1m 원기둥), `CapsuleMesh`(반지름 0.25m, 전체 높이 1m 캡슐) 3종 절차적 메시를 추가 구현하고 `AssetReferenceValidator.cpp` 화이트리스트에 등록.
+  3. **프로젝트 에셋 디렉터리(`Assets/`) 완전 물리 이관 및 소비자 경로 정규화**:
+     - `Resources/`에 남아 있던 순수 프로젝트 자산(Audio, Config, Data, Effect, Icon, Material, Model, Prefab, Scenes, Scripts, Texture 및 외부 에셋 아카이브)을 `Assets/` 아래로 완전 물리 이관.
+     - `Application.cpp`: `StartupManifestPath` 및 시작 씬(`RestoreLastEditedScene`) 로드 시 `PlatformPath::ResolveUri`를 거치도록 교체하여 상대 경로/가상 URI 투명 해석 지원.
+     - `PlatformPath.cpp`: `IsBuiltInRelativeResourcePath`에 신규 엔진 텍스처 및 머티리얼 등록하여 읽기 전용 판별 일원화.
+     - `.gitignore`: `Assets/` 하위 모델 및 대용량 에셋 아카이브 무시 규칙 동기화.
+  5. **`LocalizationManager` 및 `ReflectionInspectorCheck` 경로 해석 정규화**:
+     - `LocalizationManager::RegisterLocalizationData`: 등록 파일 경로에 대해 `PlatformPath::ResolveUri`를 적용하여 `Resources/Data/Localization/...` 상대 경로와 `Engine://Data/Localization/...` 가상 URI 모두 분리된 엔진 물리 경로로 올바르게 찾아 열 수 있도록 개선.
+     - `ReflectionInspectorCheck.cpp`: `RegisterLocalizationData` 호출 시 `PlatformPath::ResolveUri`를 통해 정규화된 경로를 명시하여 헤드리스 단위 테스트에서 로캘 카탈로그 로드 실패 결함 해결.
+  4. **가상 URI 및 물리 분리 무결성 단위 테스트 (`VirtualPathCheck.cpp`)**:
+     - Case 10 & 11 추가: `Engine://Texture/DefaultChecker.png`, `Engine://Material/SpriteMaterial.bammat.json`, `Project://Scenes/RaytracingScene.json` 및 레거시 `Resources/Scenes/...` 상대 경로가 분리된 `Assets/` 물리 위치로 100% 일치 해석됨을 정량 검증.
+- 실제 검증 결과:
+  - `python Tools/Audit/LocalizationAuditor/audit_localization.py --strict`: 632개 파일 및 2478개 키 전수 검사 통과 (결함 0건, 100% Passed).
+  - CTest: `VirtualPathCheck` (Case 1~11), `ReflectionInspectorCheck` 100% 통과 (Passed).
+- 미검증 항목:
+  - 에디터 실제 구동 시 `Assets/` 프로젝트 에셋 트리 및 신규 기본 메시/텍스처 렌더링 확인.
+
 ### [2026-11-08] 에셋 아키텍처 Phase 3-B (Step 1~3): 코어 셰이더·기본 머티리얼·폰트·로캘 물리 이관 및 도구 체인 연동
 
 - Area: Engine | Core | Resource | Editor | Localization | Shader | Tests

@@ -504,18 +504,41 @@ EResult Application::InitializeLogger()
 EResult Application::InitializeLocalization()
 {
 	LocalizationManager* localizationManager = LocalizationManager::Create();
-    const auto englishPath = Engine::PlatformPath::ResolveUri(L"Engine://Data/Localization/English.json");
-    if (IsFailure(localizationManager->RegisterLocalizationData(englishPath.wstring())))
+
+    // 1. Engine 코어 로캘 카탈로그 등록
+    const auto engEngine = Engine::PlatformPath::ResolveUri(L"Engine://Data/Localization/English.json");
+    if (IsFailure(localizationManager->RegisterLocalizationData(engEngine.wstring())))
     {
-        BAM_LOG(Error, "Editor", "Application", "Failed to register English localization data: {}", englishPath.string());
+        BAM_LOG(Error, "Editor", "Application", "Failed to register Engine English localization data: {}", engEngine.string());
         return EResult::Fail;
     }
-    const auto koreanPath = Engine::PlatformPath::ResolveUri(L"Engine://Data/Localization/Korean.json");
-    if (IsFailure(localizationManager->RegisterLocalizationData(koreanPath.wstring())))
+    const auto korEngine = Engine::PlatformPath::ResolveUri(L"Engine://Data/Localization/Korean.json");
+    if (IsFailure(localizationManager->RegisterLocalizationData(korEngine.wstring())))
     {
-        BAM_LOG(Error, "Editor", "Application", "Failed to register Korean localization data: {}", koreanPath.string());
+        BAM_LOG(Error, "Editor", "Application", "Failed to register Engine Korean localization data: {}", korEngine.string());
         return EResult::Fail;
     }
+
+    // 2. Editor 전용 로캘 카탈로그 등록
+    const auto engEditor = Engine::PlatformPath::ResolveUri(L"Editor://Data/Localization/English.json");
+    if (std::filesystem::exists(engEditor))
+    {
+        if (IsFailure(localizationManager->RegisterLocalizationData(engEditor.wstring())))
+        {
+            BAM_LOG(Error, "Editor", "Application", "Failed to register Editor English localization data: {}", engEditor.string());
+            return EResult::Fail;
+        }
+    }
+    const auto korEditor = Engine::PlatformPath::ResolveUri(L"Editor://Data/Localization/Korean.json");
+    if (std::filesystem::exists(korEditor))
+    {
+        if (IsFailure(localizationManager->RegisterLocalizationData(korEditor.wstring())))
+        {
+            BAM_LOG(Error, "Editor", "Application", "Failed to register Editor Korean localization data: {}", korEditor.string());
+            return EResult::Fail;
+        }
+    }
+
     if(IsFailure(localizationManager->LoadData()))
     {
         BAM_LOG(Error, "Editor", "Application", "Failed to load localization data");
@@ -534,7 +557,7 @@ bool Application::InitializeResources()
     InitializeMeshes();
 
     const auto manifestPath =
-        EditorSettingsService::Get().GetProjectRoot() / std::filesystem::path(EditorSettingsService::Get().GetProjectSettings().StartupManifestPath);
+        Engine::PlatformPath::ResolveUri(EditorSettingsService::Get().GetProjectSettings().StartupManifestPath);
 
     return StartupResourceLoader::LoadPipeline(manifestPath);
 }
@@ -802,9 +825,7 @@ void Application::RestoreLastEditedScene()
 
     try
     {
-        auto path = std::filesystem::u8path(storedPath);
-        if (path.is_relative())
-            path = EditorSettingsService::Get().GetProjectRoot() / path;
+        auto path = Engine::PlatformPath::ResolveUri(std::filesystem::u8path(storedPath));
 
         path = path.lexically_normal();
 

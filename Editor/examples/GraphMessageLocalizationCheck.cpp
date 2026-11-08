@@ -9,8 +9,10 @@ int main()
     if (!LocalizationManager::Create()) return 1;
     struct Scope { ~Scope() { LocalizationManager::Destroy(); } } scope;
     auto& localization = LocalizationManager::Get();
-    localization.RegisterLocalizationData(L"Resources/Data/Localization/English.json");
-    localization.RegisterLocalizationData(L"Resources/Data/Localization/Korean.json");
+    localization.RegisterLocalizationData(L"Engine://Data/Localization/English.json");
+    localization.RegisterLocalizationData(L"Engine://Data/Localization/Korean.json");
+    localization.RegisterLocalizationData(L"Editor://Data/Localization/English.json");
+    localization.RegisterLocalizationData(L"Editor://Data/Localization/Korean.json");
     if (Engine::IsFailure(localization.LoadData())) return 2;
     localization.SetCurrentLanguage(ELocalizationLanguage::English);
     if (Editor::LocalizeGraphMessage("Division by zero.") != "Division by zero.") return 3;
