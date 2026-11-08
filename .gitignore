@@ -68,7 +68,7 @@ Gemini
 imgui.ini
 Resources/kenney_game-icons
 Resources/Model
-Resources/Fonts
+Engine/Resources/Fonts
 Gemini.md
 *.bamshader
 *.bamsprite
@@ -85,6 +85,8 @@ Logs/
 .vscode/
 Resources/Shader/bin/
 Resources/Shader/spirv/
+Engine/Resources/Shader/bin/
+Engine/Resources/Shader/spirv/
 Engine/Generated/
 
 Projects/Reflection/dependencies/

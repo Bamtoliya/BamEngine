@@ -1,6 +1,10 @@
 # --- CMake/LocalizationBuild.cmake ---
 
-set(LOCALIZATION_DIR "${CMAKE_SOURCE_DIR}/Resources/Data/Localization")
+if(EXISTS "${CMAKE_SOURCE_DIR}/Engine/Resources/Data/Localization")
+    set(LOCALIZATION_DIR "${CMAKE_SOURCE_DIR}/Engine/Resources/Data/Localization")
+else()
+    set(LOCALIZATION_DIR "${CMAKE_SOURCE_DIR}/Resources/Data/Localization")
+endif()
 set(LOCALIZATION_SCRIPT "${CMAKE_SOURCE_DIR}/Tools/Codegen/CSVToJsonConverter/localizationcsvtojson.py")
 file(GLOB LOCALIZATION_CSV_FILES CONFIGURE_DEPENDS "${LOCALIZATION_DIR}/*.csv")
 

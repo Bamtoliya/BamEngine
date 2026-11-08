@@ -98,7 +98,7 @@ namespace
 
 std::filesystem::path ShaderHotReloadManager::ResolveShaderSourceDirectory()
 {
-	return Engine::PlatformPath::ResolveProjectRelative("Resources/Shader/hlsl");
+	return Engine::PlatformPath::ResolveUri(L"Engine://Shader/hlsl");
 }
 
 #pragma region Constructor&Destrcutor
@@ -277,10 +277,10 @@ void ShaderHotReloadManager::ProcessModifiedFile(const std::filesystem::path& hl
 	{
 		ShaderDesc desc;
 		const std::wstring stemW = hlslPath.stem().wstring();
-		desc.Key = L"Resources/Shader/" + stemW;
+		desc.Key = L"Engine://Shader/" + stemW;
 		desc.shaderType = shaderType;
-		desc.dxilPath = L"Resources/Shader/bin/dxil/" + stemW + L".cso";
-		desc.spirvPath = L"Resources/Shader/bin/spirv/" + stemW + L".spv";
+		desc.dxilPath = Engine::PlatformPath::ResolveUri(L"Engine://Shader/bin/dxil/" + stemW + L".cso").wstring();
+		desc.spirvPath = Engine::PlatformPath::ResolveUri(L"Engine://Shader/bin/spirv/" + stemW + L".spv").wstring();
 		desc.Path = (rhiType == Engine::ERHIType::DirectX12) ? desc.dxilPath : desc.spirvPath;
 		auto newHandle = rm.LoadResource<Engine::Shader>(&desc);
 		if (newHandle.IsValid())

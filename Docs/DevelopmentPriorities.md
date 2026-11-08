@@ -546,7 +546,7 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
 - **재임포트 작업**: Overwrite/SaveToFile 조합, 기존 핸들 유지, 중간 파일 저장/부모 머티리얼 실패를 확인한다. 정적 검토만으로 다중 파일 트랜잭션 완료를 선언하지 않는다.
 - **2D 제작 예제**: 로그에 남은 구형 sprite/texture 로드 실패의 현재 재현 여부를 먼저 확인한다. 현행 로더 문제와 오래된 샘플 데이터 문제를 분리한 뒤 Engine 14절 L의 Simple/Filled 또는 기본 TileMap 중 필요한 작은 예제로 진행한다.
 
-### 11.3 안정화 다음 기능 선택 (차기 4개 트랙)
+### 11.3 안정화 다음 기능 선택 (차기 5개 트랙)
 
 - **트랙 A (렌더링 품질 — S2-D) [완료: 2026-11-08]**: 텍스처 밉맵(Mipmap) 체인 생성 및 RHI 다중 서브리소스 업로드 (`stb_image_resize2` 기반 CPU 밉맵 체인 생성, `DirectX12RHI` 다중 서브리소스 업로드, 삼선형 필터링 연동 및 `TextureMipmapCheck` 단위 테스트 완결).
 - **트랙 B (모델 파이프라인 — InteractiveModelImport Phase 5) [완료: 2026-11-07]**: `meshoptimizer`(`meshopt_simplify`) 기반 자동 메시 LOD 생성 파이프라인 및 `ModelEditor` 실시간 LOD 검사기 완결.
@@ -557,6 +557,11 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
   - Phase 3: 픽셀 퍼펙트 카메라(`PixelPerfectCameraComponent`), 서브픽셀 카메라 스냅 및 정수배 업스케일 렌더링.
   - Phase 4: 청크 기반 2D 타일맵(`TilemapComponent`), 동적 메시 배칭 렌더링(`TilemapRenderSystem`) 및 씬 뷰포트 타일 팔레트(`TilePalettePanel`).
   - Phase 5: 스프라이트 아틀라스 팩킹 및 런타임 동적 스프라이트 배처(`SpriteBatcher`).
+- **트랙 E (모듈 및 플러그인 GUI 제어 파이프라인 — PluginManagerPanel, [ImGuiDevelopmentPlan 26절](ImGuiDevelopmentPlan.md#26-플러그인-및-모듈-관리-패널pluginmanagerpanel-구축-계획)) [대기]**:
+  - Phase 1: `IEditorPanelPlugin` 공통 인터페이스 수립 및 `ImGui::SetCurrentContext` 주입 규약 확립.
+  - Phase 2: `PluginManagerPanel` 에디터 패널 신설 (모듈 목록, 로드/언로드 상태 뱃지, 수동 리로드/빌드 툴바).
+  - Phase 3: `ModuleBuildManager`의 비동기 컴파일 콘솔 출력을 캡처하여 패널 내 실시간 빌드 로그 뷰로 파이프라이닝.
+  - Phase 4: 패널 플러그인의 핫리로드 및 `EditorWorkspace` 연동(열린 플러그인 패널 복원 및 상태 캐싱).
 
 ### 11.4 상태·검증 기록 규칙
 

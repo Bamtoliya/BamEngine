@@ -38,6 +38,7 @@
 #include "ThumbnailRenderer.h"
 #include "BuiltInPrimitiveMeshes.h"
 #include "GameViewportPanel.h"
+#include "PlatformPath.h"
 
 IMPLEMENT_SINGLETON(Application)
 
@@ -503,15 +504,16 @@ EResult Application::InitializeLogger()
 EResult Application::InitializeLocalization()
 {
 	LocalizationManager* localizationManager = LocalizationManager::Create();
-    const auto projectRoot = EditorSettingsService::Get().GetProjectRoot();
-    if (IsFailure(localizationManager->RegisterLocalizationData((projectRoot / "Resources/Data/Localization/English.json").wstring())))
+    const auto englishPath = Engine::PlatformPath::ResolveUri(L"Engine://Data/Localization/English.json");
+    if (IsFailure(localizationManager->RegisterLocalizationData(englishPath.wstring())))
     {
-        BAM_LOG(Error, "Editor", "Application", "Failed to register English localization data");
+        BAM_LOG(Error, "Editor", "Application", "Failed to register English localization data: {}", englishPath.string());
         return EResult::Fail;
     }
-    if (IsFailure(localizationManager->RegisterLocalizationData((projectRoot / "Resources/Data/Localization/Korean.json").wstring())))
+    const auto koreanPath = Engine::PlatformPath::ResolveUri(L"Engine://Data/Localization/Korean.json");
+    if (IsFailure(localizationManager->RegisterLocalizationData(koreanPath.wstring())))
     {
-        BAM_LOG(Error, "Editor", "Application", "Failed to register Korean localization data");
+        BAM_LOG(Error, "Editor", "Application", "Failed to register Korean localization data: {}", koreanPath.string());
         return EResult::Fail;
     }
     if(IsFailure(localizationManager->LoadData()))

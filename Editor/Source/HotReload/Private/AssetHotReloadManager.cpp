@@ -119,37 +119,55 @@ namespace
 
 std::filesystem::path AssetHotReloadManager::ResolveTextureDirectory()
 {
-	return Engine::PlatformPath::ResolveProjectRelative("Resources");
+	return Engine::PlatformPath::GetProjectAssetRoot();
 }
 
 #pragma region Constructor&Destructor
 EResult AssetHotReloadManager::Initialize(void* arg)
 {
 	m_WatchDirectory = ResolveTextureDirectory();
+	m_EngineWatchDirectory = Engine::PlatformPath::GetEngineResourceRoot();
 	const auto watchPath = Engine::WStrToStr(m_WatchDirectory.wstring());
 
+	auto watcher = std::make_unique<efsw::FileWatcher>();
+	auto listener = std::make_unique<TextureFileListener>(this);
+
 	std::error_code ec;
-	if (!std::filesystem::is_directory(m_WatchDirectory, ec))
+	if (std::filesystem::is_directory(m_WatchDirectory, ec))
+	{
+		m_WatchID = watcher->addWatch(watchPath, listener.get(), true);
+		if (m_WatchID <= 0)
+		{
+			EDITOR_LOG_WARN("[Asset Hot Reload] Failed to register watch: {}, code={}", watchPath, m_WatchID);
+		}
+		else
+		{
+			EDITOR_LOG_INFO("[Asset Hot Reload] Watching project directory: {}", watchPath);
+		}
+	}
+	else
 	{
 		EDITOR_LOG_WARN("[Asset Hot Reload] Watch directory unavailable: {}, code={}", watchPath, ec.value());
-		return EResult::Success;
 	}
 
-	auto listener = std::make_unique<TextureFileListener>(this);
-	auto watcher = std::make_unique<efsw::FileWatcher>();
-	const auto watchID = watcher->addWatch(watchPath, listener.get(), true);
-	if (watchID <= 0)
+	if (m_EngineWatchDirectory != m_WatchDirectory && std::filesystem::is_directory(m_EngineWatchDirectory, ec))
 	{
-		EDITOR_LOG_WARN("[Asset Hot Reload] Failed to register watch: {}, code={}", watchPath, watchID);
-		return EResult::Success;
+		const auto engineWatchPath = Engine::WStrToStr(m_EngineWatchDirectory.wstring());
+		m_EngineWatchID = watcher->addWatch(engineWatchPath, listener.get(), true);
+		if (m_EngineWatchID <= 0)
+		{
+			EDITOR_LOG_WARN("[Asset Hot Reload] Failed to register engine watch: {}, code={}", engineWatchPath, m_EngineWatchID);
+		}
+		else
+		{
+			EDITOR_LOG_INFO("[Asset Hot Reload] Watching engine directory: {}", engineWatchPath);
+		}
 	}
 
 	watcher->watch();
-	m_WatchID = watchID;
 	m_FileListener = listener.release();
 	m_FileWatcher = watcher.release();
 
-	EDITOR_LOG_INFO("[Asset Hot Reload] Watching directory: {}", watchPath);
 	return EResult::Success;
 }
 
@@ -158,11 +176,14 @@ void AssetHotReloadManager::Free()
 	if (m_FileWatcher)
 	{
 		if (m_WatchID != 0) m_FileWatcher->removeWatch(m_WatchID);
+		if (m_EngineWatchID != 0) m_FileWatcher->removeWatch(m_EngineWatchID);
 		delete m_FileWatcher;
 		m_FileWatcher = nullptr;
 	}
 	delete m_FileListener;
 	m_FileListener = nullptr;
+	m_WatchID = 0;
+	m_EngineWatchID = 0;
 	m_MeshFileStates.clear();
 	__super::Free();
 }

@@ -92,10 +92,9 @@ EResult ImGuiManager::Initialize(void* arg)
 		if (prefs.FontSize >= 10.0f && prefs.FontSize <= 48.0f)
 			fontSize = prefs.FontSize; // 설정된 폰트 크기 반영
 	}
-	const auto projectRoot = Engine::Runtime::IsCreated() ? Engine::Runtime::Get().GetProjectRoot() : Engine::PlatformPath::GetExecutableDirectory();
 	vector<std::filesystem::path> iconsFontPaths;
-	iconsFontPaths.push_back(projectRoot / "Resources/Fonts/fontawesome-free-7.1.0-desktop/otfs/Font Awesome 7 Free-Solid-900.otf");
-	iconsFontPaths.push_back(projectRoot / "Resources/Fonts/fontawesome-free-7.1.0-desktop/otfs/Font Awesome 7 Free-Regular-400.otf");
+	iconsFontPaths.push_back(Engine::PlatformPath::ResolveUri(L"Engine://Fonts/fontawesome-free-7.1.0-desktop/otfs/Font Awesome 7 Free-Solid-900.otf"));
+	iconsFontPaths.push_back(Engine::PlatformPath::ResolveUri(L"Engine://Fonts/fontawesome-free-7.1.0-desktop/otfs/Font Awesome 7 Free-Regular-400.otf"));
 
 	
 	if (std::filesystem::exists(fontPath))

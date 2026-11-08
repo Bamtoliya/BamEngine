@@ -70,17 +70,42 @@ namespace Engine
     {
         if (s_ProjectRoot.empty())
         {
+            auto checkRoot = [](const std::filesystem::path& dir) -> bool {
+                std::error_code ec;
+                return std::filesystem::exists(dir / "CMakeLists.txt", ec) &&
+                    (std::filesystem::is_directory(dir / "Engine", ec) ||
+                     std::filesystem::is_directory(dir / "Resources", ec) ||
+                     std::filesystem::is_directory(dir / "Assets", ec));
+            };
+
             std::error_code ec;
-            const auto cwd = std::filesystem::current_path(ec);
-            if (!ec && std::filesystem::exists(cwd / "CMakeLists.txt", ec) &&
-                (std::filesystem::is_directory(cwd / "Resources", ec) || std::filesystem::is_directory(cwd / "Assets", ec)))
+            auto cur = std::filesystem::current_path(ec);
+            while (!cur.empty())
             {
-                s_ProjectRoot = Normalize(cwd);
+                if (checkRoot(cur))
+                {
+                    s_ProjectRoot = Normalize(cur);
+                    return s_ProjectRoot;
+                }
+                const auto parent = cur.parent_path();
+                if (parent == cur) break;
+                cur = parent;
             }
-            else
+
+            cur = GetExecutableDirectory();
+            while (!cur.empty())
             {
-                s_ProjectRoot = GetExecutableDirectory();
+                if (checkRoot(cur))
+                {
+                    s_ProjectRoot = Normalize(cur);
+                    return s_ProjectRoot;
+                }
+                const auto parent = cur.parent_path();
+                if (parent == cur) break;
+                cur = parent;
             }
+
+            s_ProjectRoot = GetExecutableDirectory();
         }
         return s_ProjectRoot;
     }

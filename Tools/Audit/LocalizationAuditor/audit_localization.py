@@ -264,7 +264,9 @@ def is_dynamic_prefix_matched(prefix: str, catalog: dict) -> bool:
     return False
 
 def audit_project(root_dir: Path, check_orphans: bool = False, strict: bool = False):
-    loc_dir = root_dir / "Resources" / "Data" / "Localization"
+    loc_dir = root_dir / "Engine" / "Resources" / "Data" / "Localization"
+    if not loc_dir.exists():
+        loc_dir = root_dir / "Resources" / "Data" / "Localization"
     catalog_paths = sorted(loc_dir.glob('*.csv'))
     combined_catalog, all_empty = {}, []
     for path in catalog_paths:

@@ -1077,3 +1077,39 @@ BamEngine의 우선 기준은 작은 게임의 제작·저장·실행·배포 �
 - **A07 썸네일**: 원본 디코드 뒤 축소와 워커/메모리 상한을 구분한다. 캐시 전면 재작성보다 실제 탐색의 CPU 피크·업로드·프레임 시간을 측정한다.
 - 새 안내는 기존 키 재사용 또는 Editor.csv에 영어/한국어를 추가한다. 명령 단축키는 EditorActionRegistry와 동적 힌트에 연결한다. 정적 감사는 실제 언어 전환·UI/GPU 검증을 대신하지 않는다.
 - 근거·완료 조건: [이번 점검 A04·A05·A07](CodeDocumentationAudit-2026-11-06.md). 소스 수정 및 실행 검증은 별도다.
+
+## 26. 플러그인 및 모듈 관리 패널(PluginManagerPanel) 구축 계획
+
+- **배경**: 현재 `Projects/GameModule` 컴파일 및 핫리로드 트리거가 하단 푸터 바의 작은 아이콘 버튼 5종에만 의존하고 있어, 다중 모듈이나 동적 패널 플러그인이 확장될 때 로드 상태, 빌드 에러 원인, 제공 컴포넌트 목록을 한눈에 파악하기 어렵다.
+- **목표**: 언리얼 엔진의 `Plugins` 브라우저 및 Unity의 `Package Manager`를 벤치마크하여, 감지된 모듈과 에디터 패널 플러그인을 시각적으로 확인하고 개별 제어할 수 있는 전용 관리 패널(`PluginManagerPanel`)을 구축한다.
+
+### 26.1 화면 레이아웃 (마스터-디테일 2열 구조)
+
+- **좌측: 모듈 및 플러그인 목록 (Master List, 260px 폭)**:
+  - 상단 필터: 검색창, 카테고리 콤보 (`All`, `Game Logic`, `Editor Tools / Panels`, `Experimental`).
+  - 목록 카드: 각 모듈의 아이콘, 표시명, 버전, 현재 상태 뱃지 (`Loaded` 초록, `Unloaded` 회색, `Failed` 빨강, `Compiling` 노랑).
+- **우측: 상세 인스펙터 및 제어 독 (Detail View)**:
+  - **헤더 툴바**:
+    - `[Reload]` (원클릭 핫리로드 강제 트리거)
+    - `[Rebuild & Reload]` (백그라운드 MSBuild 컴파일 후 핫리로드)
+    - `[Load / Unload]` 토글 버튼
+    - `Auto-Reload on Save` 체크박스
+  - **메타데이터 속성표**:
+    - 모듈 식별자, 원본 DLL 경로, 현재 로드된 섀도우 복사본 경로(`Temp/HotReload/...`).
+    - 제공 중인 에디터 패널 목록(체크박스로 해당 패널 표시/숨김 토글).
+    - 리플렉션 등록된 컴포넌트/시스템/비주얼 스크립팅 노드 개수.
+    - 핫리로드 통계: 총 리로드 횟수(`ReloadIndex`), 마지막 컴파일 소요 시간(ms).
+  - **실시간 빌드 콘솔 뷰 (Build & Diagnostic Log)**:
+    - 백그라운드 컴파일러(MSBuild/Clang)의 콘솔 출력 전문 실시간 스트리밍.
+    - 컴파일 실패 시 에러 코드(C2065 등), 파일 경로, 라인 번호 하이라이트 및 클릭 시 IDE 열기 연동.
+
+### 26.2 생명주기 및 안전성 제어 정책
+
+1. **안전한 수동 언로드(Safe Unload)**:
+   - 사용자가 UI에서 `[Unload]`를 클릭할 경우, 해당 모듈이 제공한 에디터 패널(`IImGui`)을 `ImGuiManager`에서 즉시 등록 해제하고, 활성 씬 내의 모듈 컴포넌트를 비활성화하거나 임시 캐싱한 후 DLL 핸들을 해제한다.
+2. **에러 격리 및 복구 안내**:
+   - 컴파일 실패나 핫리로드 충돌 시 에디터가 죽지 않고 `Failed` 상태로 전환되며, 빌드 콘솔 뷰에 붉은색 에러 로그와 함께 `[Retry Compile]` 버튼을 띄워 복구를 유도한다.
+3. **진입 경로 및 단축키**:
+   - 메뉴바: `Window -> Panels -> Plugin Manager` 및 `Edit -> Plugins`.
+   - 로캘 연동: `PluginManager.Title`, `PluginManager.Reload`, `PluginManager.StatusLoaded` 등 `Editor.csv` 그룹 신설.
+

@@ -154,6 +154,48 @@ int main()
         EXPECT_FALSE(PlatformPath::IsReadOnlyTarget(sharedRoot / "Material/CustomUserMat.bammat.json"));
     }
 
+    // 9. 실제 물리 이관(Shader, Material, Fonts, Localization) 자동 감지 및 하위호환 검증
+    {
+        // 커스텀 목 루트 초기화 -> 실제 디스크 환경 자동 감지
+        PlatformPath::SetProjectRoot({});
+        PlatformPath::SetEngineResourceRoot({});
+        PlatformPath::SetProjectAssetRoot({});
+
+        const fs::path engineRoot = PlatformPath::GetEngineResourceRoot();
+        const fs::path projectRoot = PlatformPath::GetProjectAssetRoot();
+
+        EXPECT_TRUE(fs::exists(engineRoot / "Shader/hlsl/defaultVS.hlsl"));
+        EXPECT_TRUE(fs::exists(engineRoot / "Material/DefaultMaterial.bammat.json"));
+        EXPECT_TRUE(fs::exists(engineRoot / "Fonts/fontawesome-free-7.1.0-desktop/otfs/Font Awesome 7 Free-Solid-900.otf"));
+        EXPECT_TRUE(fs::exists(engineRoot / "Data/Localization/English.json"));
+        EXPECT_TRUE(fs::exists(engineRoot / "Data/Localization/Korean.json"));
+
+        // 가상 URI 해석 검증
+        const auto resolvedEngineShader = PlatformPath::ResolveUri(L"Engine://Shader/hlsl/defaultVS.hlsl");
+        EXPECT_EQ(resolvedEngineShader, PlatformPath::Normalize(engineRoot / "Shader/hlsl/defaultVS.hlsl"));
+
+        // 레거시 Resources/ 상대 경로 -> Engine/Resources 이관 위치로 자동 해석 검증
+        const auto resolvedLegacyShader = PlatformPath::ResolveUri(L"Resources/Shader/hlsl/defaultVS.hlsl");
+        EXPECT_EQ(resolvedLegacyShader, PlatformPath::Normalize(engineRoot / "Shader/hlsl/defaultVS.hlsl"));
+
+        const auto resolvedLegacyMat = PlatformPath::ResolveUri(L"Resources/Material/DefaultMaterial.bammat.json");
+        EXPECT_EQ(resolvedLegacyMat, PlatformPath::Normalize(engineRoot / "Material/DefaultMaterial.bammat.json"));
+
+        const auto resolvedEngineFont = PlatformPath::ResolveUri(L"Engine://Fonts/fontawesome-free-7.1.0-desktop/otfs/Font Awesome 7 Free-Solid-900.otf");
+        EXPECT_EQ(resolvedEngineFont, PlatformPath::Normalize(engineRoot / "Fonts/fontawesome-free-7.1.0-desktop/otfs/Font Awesome 7 Free-Solid-900.otf"));
+
+        const auto resolvedLegacyLoc = PlatformPath::ResolveUri(L"Resources/Data/Localization/English.json");
+        EXPECT_EQ(resolvedLegacyLoc, PlatformPath::Normalize(engineRoot / "Data/Localization/English.json"));
+
+        // 읽기 전용 판별 검증
+        EXPECT_TRUE(PlatformPath::IsReadOnlyTarget(L"Engine://Shader/hlsl/defaultVS.hlsl"));
+        EXPECT_TRUE(PlatformPath::IsReadOnlyTarget(L"Resources/Shader/hlsl/defaultVS.hlsl"));
+        EXPECT_TRUE(PlatformPath::IsReadOnlyTarget(L"Resources/Material/DefaultMaterial.bammat.json"));
+        EXPECT_TRUE(PlatformPath::IsReadOnlyTarget(L"Engine://Data/Localization/English.json"));
+        EXPECT_TRUE(PlatformPath::IsReadOnlyTarget(L"Resources/Data/Localization/English.json"));
+        EXPECT_FALSE(PlatformPath::IsReadOnlyTarget(L"Resources/Material/GBufferMaterial.bammat.json"));
+    }
+
     std::cout << "[VirtualPathCheck] All virtual path and URI tests passed successfully!" << std::endl;
     return 0;
 }

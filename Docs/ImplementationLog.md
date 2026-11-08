@@ -2,6 +2,36 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-08] 에셋 아키텍처 Phase 3-B (Step 1~3): 코어 셰이더·기본 머티리얼·폰트·로캘 물리 이관 및 도구 체인 연동
+
+- Area: Engine | Core | Resource | Editor | Localization | Shader | Tests
+- Type: Feature | Architecture | Safety | Refactor
+- 주요 변경 내역:
+  1. **하드코딩 소비자 경로의 `PlatformPath::ResolveUri` 일원화 (`Application.cpp`, `ImGuiManager.cpp`, `ShaderHotReloadManager.cpp`)**:
+     - `Application.cpp`: 로캘 데이터 로드 시 `projectRoot / "Resources/Data/Localization/..."` 대신 `PlatformPath::ResolveUri(L"Engine://Data/Localization/English.json")` 및 `Korean.json`으로 교체.
+     - `ImGuiManager.cpp`: Font Awesome 폰트 로드 경로를 `PlatformPath::ResolveUri(L"Engine://Fonts/...")`로 일원화.
+     - `ShaderHotReloadManager.cpp`: HLSL 셰이더 소스 디렉터리 경로를 `PlatformPath::ResolveUri(L"Engine://Shader/hlsl")`로 갱신하여 물리 분리 환경에서도 핫리로드 트리거 정상 작동 보장.
+  2. **`AssetHotReloadManager` 멀티 디렉터리 감시 지원 (`AssetHotReloadManager.h/.cpp`)**:
+     - 기존 단일 `m_RootPath` 감시에서 `m_EngineWatchID`를 추가하여 `GetProjectAssetRoot()`와 `GetEngineResourceRoot()`를 모두 감시하도록 확장. 물리 디렉터리가 분리되더라도 엔진 리소스와 프로젝트 에셋 양쪽의 파일 변경(핫리로드)을 누락 없이 감지.
+  3. **배치 1 물리 이관 — 엔진 셰이더 및 코어 기본 머티리얼 (`git mv`)**:
+     - `Resources/Shader/` 전체 -> `Engine/Resources/Shader/` 물리 이관.
+     - 기본 머티리얼 3종(`DefaultMaterial.bammat.json`, `SkinningMaterial.bammat.json`, `SkyMaterial.bammat.json`) -> `Engine/Resources/Material/` 이관.
+     - `.gitignore`에 `Engine/Resources/Shader/bin/` 및 `Engine/Resources/Shader/spirv/` 추가하여 컴파일된 셰이더 바이너리 추적 방지.
+  4. **배치 2 물리 이관 — 엔진 폰트, 로컬라이제이션 원본 및 도구 체인 연동**:
+     - `Resources/Fonts/` -> `Engine/Resources/Fonts/` 물리 이동 및 `.gitignore` 갱신.
+     - `Resources/Data/Localization/` 원본 CSV/XLSX 및 생성 JSON -> `Engine/Resources/Data/Localization/` 물리 이관.
+     - `LocalizationBuild.cmake`: `LOCALIZATION_DIR`을 `Engine/Resources/Data/Localization` 우선 탐색 후 `Resources/Data/Localization` 폴백하도록 개선.
+     - `localizationcsvtojson.py`, `audit_localization.py`: 기본 탐색 경로를 `Engine/Resources/Data/Localization` 우선으로 갱신하여 도구 체인 일관성 유지.
+  5. **`PlatformPath` 부모 디렉터리 상향 탐색(Walk-Up) 강화 및 물리 분리 검증 단위 테스트 (`PlatformPath.cpp`, `VirtualPathCheck.cpp`)**:
+     - `PlatformPath::GetProjectRoot()`: CTest 및 단위 테스트 실행 환경(`out/build/x64-debug`, `bin/Debug` 등 하위 디렉터리)에서도 저장소 루트(`CMakeLists.txt`, `Engine/` 소유)를 정확히 판별할 수 있도록 상향 디렉터리 탐색 루프 도입.
+     - `VirtualPathCheck.cpp` Case 9 추가: 셰이더, 기본 머티리얼, 폰트, 로캘이 `Engine/Resources/`에 물리 분리되었을 때 `Engine://` URI 및 기존 `Resources/...` 레거시 상대 경로 모두 단절 없이 정확한 절대 경로로 해석됨을 정량 검증.
+- 실제 검증 결과:
+  - `python Tools/Audit/LocalizationAuditor/audit_localization.py --strict`: 632개 파일 및 2478개 키 전수 검사 통과 (결함 0건, 100% Passed).
+  - CTest (`VirtualPathCheck`, `ReflectionInspectorCheck`): 전 케이스 통과 (100% Passed).
+- 미검증 항목:
+  - 에디터 실제 구동 시 HLSL 실시간 핫리로드 반응(사용자 직접 확인 필요).
+  - 프로젝트 사용자 전용 에셋 디렉터리(`Assets/`) 확립 및 잔여 리소스 이관(Step 4 진행 대상).
+
 ### [2026-11-08] 에셋 아키텍처 Phase 3: 콘텐츠 브라우저 Engine Content 분리·읽기 전용 보호, ResourcePicker 카테고리 필터 구축 및 헤드리스 테스트 안정화
 
 - Area: Editor | ContentBrowser | ResourcePicker | Core | Resource | Localization | Tests

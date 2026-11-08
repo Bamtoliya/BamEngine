@@ -11,7 +11,8 @@ import sys
 
 def main():
     parser = argparse.ArgumentParser(description='Convert CSV to JSON with Duplicate & Missing Key Check.')
-    parser.add_argument('--input', '-i', default='Resources/Data/Localization', help='Input directory or single CSV file.')
+    default_input = 'Engine/Resources/Data/Localization' if os.path.isdir('Engine/Resources/Data/Localization') else 'Resources/Data/Localization'
+    parser.add_argument('--input', '-i', default=default_input, help='Input directory or single CSV file.')
     parser.add_argument('--output', '-o', default=None, help='Output directory or file path.')
     parser.add_argument('--strict', action='store_true', help='Fail conversion if missing translations are detected.')
     
