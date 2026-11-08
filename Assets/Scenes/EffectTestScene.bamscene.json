@@ -1,0 +1,541 @@
+{
+    "Scene": {
+        "Active": true,
+        "Entities": [
+            {
+                "Components": [
+                    {
+                        "Data": {
+                            "AspectRatio": 1.7777777910232544,
+                            "CameraType": 0,
+                            "FOV": 60,
+                            "FarPlane": 1000,
+                            "IsMainCamera": true,
+                            "NearPlane": 0.10000000149011612,
+                            "OrthographicSize": 5
+                        },
+                        "Type": "Engine::CameraComponent"
+                    },
+                    {
+                        "Data": {
+                            "flags": 3
+                        },
+                        "Type": "Engine::FlagComponent"
+                    },
+                    {
+                        "Data": {
+                            "name": "Main Camera"
+                        },
+                        "Type": "Engine::NameComponent"
+                    },
+                    {
+                        "Data": {
+                            "absolute": 0,
+                            "eulerRotation": [
+                                0,
+                                0,
+                                0
+                            ],
+                            "position": [
+                                0,
+                                1.2999999523162842,
+                                -4.5
+                            ],
+                            "rotation": [
+                                0,
+                                0,
+                                0,
+                                1
+                            ],
+                            "scale": [
+                                1,
+                                1,
+                                1
+                            ]
+                        },
+                        "Type": "Engine::TransformComponent"
+                    }
+                ],
+                "Hierarchy": {
+                    "Children": [],
+                    "Parent": 0
+                },
+                "Id": 1
+            },
+            {
+                "Components": [
+                    {
+                        "Data": {
+                            "flags": 3
+                        },
+                        "Type": "Engine::FlagComponent"
+                    },
+                    {
+                        "Data": {
+                            "AttenuationCoefficients": [
+                                1,
+                                0.09000000357627869,
+                                0.03200000151991844
+                            ],
+                            "AttenuationMode": 0,
+                            "CascadeSplitLambda": 0.75,
+                            "Color": [
+                                1,
+                                0.9800000190734863,
+                                0.9200000166893005
+                            ],
+                            "Flags": 61,
+                            "GroundColor": [
+                                0.07999999821186066,
+                                0.07999999821186066,
+                                0.10000000149011612
+                            ],
+                            "IndirectIntensity": 0.4000000059604645,
+                            "Intensity": 1,
+                            "IsEnabled": true,
+                            "LightType": 1,
+                            "LightingLayerMask": 4294967295,
+                            "Range": 50,
+                            "ShadowBias": 0.0010000000474974513,
+                            "ShadowMaxDistance": 100,
+                            "ShadowNormalBias": 0.009999999776482582,
+                            "ShadowRange": 50,
+                            "ShadowSlopeBias": 0.004999999888241291,
+                            "ShadowStrength": 0.6000000238418579,
+                            "SpotFalloffExponent": 1,
+                            "SpotInnerAngle": 15,
+                            "SpotOuterAngle": 30
+                        },
+                        "Type": "Engine::LightComponent"
+                    },
+                    {
+                        "Data": {
+                            "name": "Directional Light"
+                        },
+                        "Type": "Engine::NameComponent"
+                    },
+                    {
+                        "Data": {
+                            "absolute": 0,
+                            "eulerRotation": [
+                                45,
+                                -30,
+                                0
+                            ],
+                            "position": [
+                                0,
+                                5,
+                                -5
+                            ],
+                            "rotation": [
+                                0.36964380741119385,
+                                -0.2391175925731659,
+                                0.09904580563306808,
+                                0.8923991322517395
+                            ],
+                            "scale": [
+                                1,
+                                1,
+                                1
+                            ]
+                        },
+                        "Type": "Engine::TransformComponent"
+                    }
+                ],
+                "Hierarchy": {
+                    "Children": [],
+                    "Parent": 0
+                },
+                "Id": 2
+            },
+            {
+                "Components": [
+                    {
+                        "Data": {
+                            "flags": 3
+                        },
+                        "Type": "Engine::FlagComponent"
+                    },
+                    {
+                        "Data": {
+                            "name": "Ground Plane"
+                        },
+                        "Type": "Engine::NameComponent"
+                    },
+                    {
+                        "Data": {
+                            "castShadow": false,
+                            "materialHandle": {
+                                "AssetKey": "Project://Material/GBufferMaterial.bammat.json",
+                                "AssetPath": "I:\\BamtoliyaGithub\\BamEngine\\Assets\\Material\\GBufferMaterial.bammat.json",
+                                "Null": false
+                            },
+                            "meshHandle": {
+                                "AssetKey": "PlaneMesh",
+                                "AssetPath": "PlaneMesh",
+                                "Null": false
+                            }
+                        },
+                        "Type": "Engine::StaticMeshRendererComponent"
+                    },
+                    {
+                        "Data": {
+                            "absolute": 0,
+                            "eulerRotation": [
+                                180,
+                                0,
+                                0
+                            ],
+                            "position": [
+                                0,
+                                0,
+                                0
+                            ],
+                            "rotation": [
+                                1,
+                                0,
+                                0,
+                                6.123234262925839e-17
+                            ],
+                            "scale": [
+                                10,
+                                1,
+                                10
+                            ]
+                        },
+                        "Type": "Engine::TransformComponent"
+                    }
+                ],
+                "Hierarchy": {
+                    "Children": [],
+                    "Parent": 0
+                },
+                "Id": 3
+            },
+            {
+                "Components": [
+                    {
+                        "Data": {
+                            "flags": 3
+                        },
+                        "Type": "Engine::FlagComponent"
+                    },
+                    {
+                        "Data": {
+                            "name": "2D Sprite Animation"
+                        },
+                        "Type": "Engine::NameComponent"
+                    },
+                    {
+                        "Data": {
+                            "animation": {
+                                "AssetKey": "Project://Texture/Animation.spriteanim",
+                                "AssetPath": "I:\\BamtoliyaGithub\\BamEngine\\Assets\\Texture\\Animation.spriteanim",
+                                "Null": false
+                            },
+                            "autoDeactivateOnFinish": false,
+                            "autoDestroyOnFinish": false,
+                            "frames": [],
+                            "framesPerSecond": 12,
+                            "isPlaying": true,
+                            "playMode": 0,
+                            "playRate": 1
+                        },
+                        "Type": "Engine::SpriteAnimationComponent"
+                    },
+                    {
+                        "Data": {
+                            "billboardMode": 0,
+                            "color": [
+                                1,
+                                1,
+                                1,
+                                1
+                            ],
+                            "drawMode": 0,
+                            "fillAmount": 1,
+                            "fillMethod": 0,
+                            "flipX": false,
+                            "flipY": false,
+                            "materialHandle": {
+                                "AssetKey": "Engine://Material/SpriteMaterial.bammat.json",
+                                "AssetPath": "I:\\BamtoliyaGithub\\BamEngine\\Engine\\Resources\\Material\\SpriteMaterial.bammat.json",
+                                "Null": false
+                            },
+                            "meshHandle": {
+                                "AssetKey": "QuadMesh",
+                                "AssetPath": "QuadMesh",
+                                "Null": false
+                            },
+                            "offset": [
+                                0,
+                                0
+                            ],
+                            "orderInLayer": 0,
+                            "size": [
+                                1,
+                                1
+                            ],
+                            "sortingLayerID": 0,
+                            "spriteHandle": {
+                                "AssetKey": "Project://Texture/uv1_00.bamsprite.json",
+                                "AssetPath": "I:\\BamtoliyaGithub\\BamEngine\\Assets\\Texture\\uv1_00.bamsprite.json",
+                                "Null": false
+                            },
+                            "tiling": [
+                                1,
+                                1
+                            ]
+                        },
+                        "Type": "Engine::SpriteRendererComponent"
+                    },
+                    {
+                        "Data": {
+                            "absolute": 0,
+                            "eulerRotation": [
+                                0,
+                                0,
+                                0
+                            ],
+                            "position": [
+                                -1.399999976158142,
+                                1.2000000476837158,
+                                0
+                            ],
+                            "rotation": [
+                                0,
+                                0,
+                                0,
+                                1
+                            ],
+                            "scale": [
+                                1,
+                                1,
+                                1
+                            ]
+                        },
+                        "Type": "Engine::TransformComponent"
+                    }
+                ],
+                "Hierarchy": {
+                    "Children": [],
+                    "Parent": 0
+                },
+                "Id": 4
+            },
+            {
+                "Components": [
+                    {
+                        "Data": {
+                            "flags": 3
+                        },
+                        "Type": "Engine::FlagComponent"
+                    },
+                    {
+                        "Data": {
+                            "name": "Particle Fireball Effect"
+                        },
+                        "Type": "Engine::NameComponent"
+                    },
+                    {
+                        "Data": {
+                            "effectHandle": {
+                                "AssetKey": "Project://Effect/Explosion_Fireball.bameffect.json",
+                                "AssetPath": "I:\\BamtoliyaGithub\\BamEngine\\Assets\\Effect\\Explosion_Fireball.bameffect.json",
+                                "Null": false
+                            },
+                            "playRate": 1,
+                            "playState": 0
+                        },
+                        "Type": "Engine::ParticleEffectComponent"
+                    },
+                    {
+                        "Data": {
+                            "absolute": 0,
+                            "eulerRotation": [
+                                0,
+                                0,
+                                0
+                            ],
+                            "position": [
+                                1.399999976158142,
+                                0.800000011920929,
+                                0
+                            ],
+                            "rotation": [
+                                0,
+                                0,
+                                0,
+                                1
+                            ],
+                            "scale": [
+                                1,
+                                1,
+                                1
+                            ]
+                        },
+                        "Type": "Engine::TransformComponent"
+                    }
+                ],
+                "Hierarchy": {
+                    "Children": [],
+                    "Parent": 0
+                },
+                "Id": 5
+            },
+            {
+                "Components": [
+                    {
+                        "Data": {
+                            "flags": 3
+                        },
+                        "Type": "Engine::FlagComponent"
+                    },
+                    {
+                        "Data": {
+                            "name": "PostProcessVolume"
+                        },
+                        "Type": "Engine::NameComponent"
+                    },
+                    {
+                        "Data": {
+                            "IsEnabled": true,
+                            "IsUnbound": true,
+                            "PipelineSettings": "{\n    \"Effects\": [\n        {\n            \"Enabled\": true,\n            \"Name\": \"Bloom\",\n            \"Parameters\": {\n                \"Intensity\": 1.5,\n                \"Scatter\": 0.699999988079071,\n                \"SoftKnee\": 0.5,\n                \"Threshold\": 0.800000011920929\n            }\n        },\n        {\n            \"Enabled\": true,\n            \"Name\": \"Tone Mapping (ACES)\",\n            \"Parameters\": {\n                \"Exposure\": 1,\n                \"Gamma\": 2.200000047683716\n            }\n        },\n        {\n            \"Enabled\": false,\n            \"Name\": \"Color Adjustments\",\n            \"Parameters\": {\n                \"Brightness\": 0,\n                \"Contrast\": 1,\n                \"Saturation\": 1\n            }\n        },\n        {\n            \"Enabled\": false,\n            \"Name\": \"Vignette\",\n            \"Parameters\": {\n                \"Intensity\": 0.4000000059604645,\n                \"Roundness\": 1,\n                \"Smoothness\": 0.5\n            }\n        },\n        {\n            \"Enabled\": false,\n            \"Name\": \"Chromatic Aberration\",\n            \"Parameters\": {\n                \"Falloff\": 1.5,\n                \"Intensity\": 0.004999999888241291\n            }\n        },\n        {\n            \"Enabled\": false,\n            \"Name\": \"Film Grain\",\n            \"Parameters\": {\n                \"Intensity\": 0.05000000074505806,\n                \"LuminanceBias\": 0.5,\n                \"Scale\": 1\n            }\n        },\n        {\n            \"Enabled\": false,\n            \"Name\": \"Lens Distortion\",\n            \"Parameters\": {\n                \"CubicDistortion\": 0,\n                \"Distortion\": 0,\n                \"Scale\": 1\n            }\n        },\n        {\n            \"Enabled\": false,\n            \"Name\": \"Sharpen\",\n            \"Parameters\": {\n                \"Sharpness\": 0.5\n            }\n        }\n    ]\n}",
+                            "PresetName": "DefaultPreset",
+                            "Priority": 0
+                        },
+                        "Type": "Engine::PostProcessComponent"
+                    },
+                    {
+                        "Data": {
+                            "absolute": 0,
+                            "eulerRotation": [
+                                0,
+                                0,
+                                0
+                            ],
+                            "position": [
+                                0,
+                                0,
+                                0
+                            ],
+                            "rotation": [
+                                0,
+                                0,
+                                0,
+                                1
+                            ],
+                            "scale": [
+                                1,
+                                1,
+                                1
+                            ]
+                        },
+                        "Type": "Engine::TransformComponent"
+                    }
+                ],
+                "Hierarchy": {
+                    "Children": [],
+                    "Parent": 0
+                },
+                "Id": 6
+            },
+            {
+                "Components": [
+                    {
+                        "Data": {
+                            "effectHandle": {
+                                "Key": "Project://Effect/Fireball_Explosion_Composite.bamvfx.json"
+                            },
+                            "isPlaying": true,
+                            "isLooping": true,
+                            "playRate": 1.0
+                        },
+                        "Type": "Engine::CompositeVFXComponent"
+                    },
+                    {
+                        "Data": {
+                            "flags": 3
+                        },
+                        "Type": "Engine::FlagComponent"
+                    },
+                    {
+                        "Data": {
+                            "name": "Composite VFX Fireball Explosion"
+                        },
+                        "Type": "Engine::NameComponent"
+                    },
+                    {
+                        "Data": {
+                            "absolute": 0,
+                            "eulerRotation": [
+                                0.0,
+                                0.0,
+                                0.0
+                            ],
+                            "position": [
+                                2.5,
+                                0.5,
+                                0.0
+                            ],
+                            "rotation": [
+                                0.0,
+                                0.0,
+                                0.0,
+                                1.0
+                            ],
+                            "scale": [
+                                1.0,
+                                1.0,
+                                1.0
+                            ]
+                        },
+                        "Type": "Engine::TransformComponent"
+                    }
+                ],
+                "Hierarchy": {
+                    "Children": [],
+                    "Parent": 0
+                },
+                "Id": 7
+            }
+        ],
+        "Name": "EffectTestScene",
+        "ResourceReferences": [
+            {
+                "AssetKey": "Engine://Material/SpriteMaterial.bammat.json",
+                "AssetPath": "I:\\BamtoliyaGithub\\BamEngine\\Engine\\Resources\\Material\\SpriteMaterial.bammat.json"
+            },
+            {
+                "AssetKey": "PlaneMesh",
+                "AssetPath": "PlaneMesh"
+            },
+            {
+                "AssetKey": "Project://Effect/Explosion_Fireball.bameffect.json",
+                "AssetPath": "I:\\BamtoliyaGithub\\BamEngine\\Assets\\Effect\\Explosion_Fireball.bameffect.json"
+            },
+            {
+                "AssetKey": "Project://Effect/Fireball_Explosion_Composite.bamvfx.json",
+                "AssetPath": "I:\\\\BamtoliyaGithub\\\\BamEngine\\\\Assets\\\\Effect\\\\Fireball_Explosion_Composite.bamvfx.json"
+            },
+            {
+                "AssetKey": "Project://Material/GBufferMaterial.bammat.json",
+                "AssetPath": "I:\\BamtoliyaGithub\\BamEngine\\Assets\\Material\\GBufferMaterial.bammat.json"
+            },
+            {
+                "AssetKey": "Project://Texture/Animation.spriteanim",
+                "AssetPath": "I:\\BamtoliyaGithub\\BamEngine\\Assets\\Texture\\Animation.spriteanim"
+            },
+            {
+                "AssetKey": "Project://Texture/uv1_00.bamsprite.json",
+                "AssetPath": "I:\\BamtoliyaGithub\\BamEngine\\Assets\\Texture\\uv1_00.bamsprite.json"
+            },
+            {
+                "AssetKey": "QuadMesh",
+                "AssetPath": "QuadMesh"
+            }
+        ],
+        "Version": 1
+    }
+}

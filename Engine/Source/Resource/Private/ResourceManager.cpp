@@ -199,6 +199,9 @@ void ResourceManager::RegisterExplicitLoader()
 	registerSimpleLoader.operator() < Model, ModelCreateDesc > ({ L".bammodel" });
 	registerSimpleLoader.operator() < AudioClip, AudioClipCreateDesc > ({ L".wav", L".mp3", L".ogg" });
 	registerSimpleLoader.operator() < ParticleEffect, ParticleEffectCreateDesc > ({ L".bameffect", L".effect" });
+	registerSimpleLoader.operator() < SpriteAnimation, SpriteAnimationCreateDesc > ({ L".spriteanim", L".bamspriteanim" });
+	registerSimpleLoader.operator() < ActionTimelineAsset, ActionTimelineCreateDesc > ({ L".bamtimeline", L".actiontimeline" });
+	registerSimpleLoader.operator() < CompositeEffect, CompositeEffectCreateDesc > ({ L".bamvfx", L".vfx" });
 
 	const auto shaderLoader = [this](wstring key, wstring path) -> Handle
 		{

@@ -14,4 +14,6 @@
 #include "Components/Render/SpriteAnimationComponent.h"
 #include "Components/Render/AnimatorComponent.h"
 #include "Components/Render/ParticleEmitterComponent.h"
+#include "Components/Render/ParticleEffectComponent.h"
+#include "Components/Render/CompositeVFXComponent.h"
 #include "Components/Render/TilemapComponent.h"

@@ -1,4 +1,4 @@
-﻿#include "ReflectionPropertyDrawer.h"
+#include "ReflectionPropertyDrawer.h"
 #include "InputManager.h"
 #include "Functions.h"
 
@@ -1294,6 +1294,9 @@ namespace Editor
 		INSPECTOR_RESOURCE(Shader)
 		INSPECTOR_RESOURCE(Animation)
 		INSPECTOR_RESOURCE(AudioClip)
+		INSPECTOR_RESOURCE(SpriteAnimation)
+		INSPECTOR_RESOURCE(ParticleEffect)
+		INSPECTOR_RESOURCE(CompositeEffect)
 #undef INSPECTOR_RESOURCE
 		else if (const auto* current = read.Value.Get<entt::entity>())
 		{

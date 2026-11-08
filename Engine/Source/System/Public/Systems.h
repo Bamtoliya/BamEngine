@@ -18,6 +18,7 @@
 #include "AnimationSystem.h"
 #include "ParticleSystem.h"
 #include "ActionTimelineSystem.h"
+#include "CompositeVFXSystem.h"
 
 #include "NetworkSystem.h"
 #include "KinematicCharacterSystem.h"

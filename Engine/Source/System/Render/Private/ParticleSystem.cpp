@@ -1,7 +1,9 @@
 #include "ParticleSystem.h"
 #include "Components/Render/ParticleEmitterComponent.h"
 #include "Components/Render/ParticleEffectComponent.h"
+#include "Components/Render/CompositeVFXComponent.h"
 #include "ParticleEffect.h"
+#include "CompositeEffect.h"
 #include "CoreComponents.h"
 #include "RenderComponents.h"
 #include "ResourceManager.h"
@@ -763,7 +765,7 @@ void Engine::ParticleSystem::SubmitSceneParticles(Scene* scene, const CameraBuff
 
 		if (!mesh || !material || !texture) continue;
 		if (!texture->GetRHITexture() || !mesh->GetIndexBuffer()) continue;
-		if (renderPass && renderPass->GetAcceptedBlendModes() != EBlendMode::None && !renderPass->IsAcceptsBlendMode(material->GetBlendMode())) continue;
+		if (renderPass && !renderPass->IsAcceptsBlendMode(material->GetBlendMode())) continue;
 
 		const uint32 pickingId = PickingManager::Get().RegisterPickingEntity(scene, entity);
 		const bool isWorldSpace = (emitter.simulationSpace == EParticleSimulationSpace::World);
@@ -777,21 +779,46 @@ void Engine::ParticleSystem::SubmitSceneParticles(Scene* scene, const CameraBuff
 			const f32 halfW = p.size.x * 0.5f;
 			const f32 halfH = p.size.y * 0.5f;
 
-			vec3 axisX = (camRight * cosR + camUp * sinR) * halfW;
-			vec3 axisY = (-camRight * sinR + camUp * cosR) * halfH;
-
 			mat4 worldMatrix(1.0f);
-			worldMatrix[0] = vec4(axisX, 0.0f);
-			worldMatrix[1] = vec4(axisY, 0.0f);
-			worldMatrix[2] = vec4(camForward, 0.0f);
-			worldMatrix[3] = vec4(worldPos, 1.0f);
+			if (emitter.billboardMode == ESpriteBillboardMode::None)
+			{
+				const vec3 axisX = vec3(cosR, sinR, 0.0f) * halfW;
+				const vec3 axisY = vec3(-sinR, cosR, 0.0f) * halfH;
+				worldMatrix[0] = vec4(axisX, 0.0f);
+				worldMatrix[1] = vec4(axisY, 0.0f);
+				worldMatrix[2] = vec4(0.0f, 0.0f, 1.0f, 0.0f);
+				worldMatrix[3] = vec4(worldPos, 1.0f);
+			}
+			else
+			{
+				const vec3 axisX = (camRight * cosR + camUp * sinR) * halfW;
+				const vec3 axisY = (-camRight * sinR + camUp * cosR) * halfH;
+				worldMatrix[0] = vec4(axisX, 0.0f);
+				worldMatrix[1] = vec4(axisY, 0.0f);
+				worldMatrix[2] = vec4(camForward, 0.0f);
+				worldMatrix[3] = vec4(worldPos, 1.0f);
+			}
+
+			vec4 uvTransform = vec4(0.0f, 0.0f, 1.0f, 1.0f);
+			if (emitter.subUVColumns > 1 || emitter.subUVRows > 1)
+			{
+				const uint32 totalFrames = emitter.subUVColumns * emitter.subUVRows;
+				const f32 normAge = p.GetNormalizedAge();
+				const f32 cycledAge = std::fmod(normAge * (std::max)(1.0f, emitter.subUVCycles), 1.0f);
+				const uint32 frameIndex = (std::min)(static_cast<uint32>(cycledAge * totalFrames), totalFrames - 1);
+				const uint32 col = frameIndex % emitter.subUVColumns;
+				const uint32 row = frameIndex / emitter.subUVColumns;
+				const f32 uSize = 1.0f / static_cast<f32>(emitter.subUVColumns);
+				const f32 vSize = 1.0f / static_cast<f32>(emitter.subUVRows);
+				uvTransform = vec4(col * uSize, row * vSize, uSize, vSize);
+			}
 
 			SpriteDrawCommand command;
 			command.mesh = mesh;
 			command.texture = texture;
 			command.material = material;
 			command.color = p.color;
-			command.uvTransform = vec4(0.0f, 0.0f, 1.0f, 1.0f);
+			command.uvTransform = uvTransform;
 			command.worldMatrix = worldMatrix;
 			command.pickingId = pickingId;
 
@@ -822,7 +849,7 @@ void Engine::ParticleSystem::SubmitSceneParticles(Scene* scene, const CameraBuff
 
 			if (!mesh || !material || !texture) continue;
 			if (!texture->GetRHITexture() || !mesh->GetIndexBuffer()) continue;
-			if (renderPass && renderPass->GetAcceptedBlendModes() != EBlendMode::None && !renderPass->IsAcceptsBlendMode(material->GetBlendMode())) continue;
+			if (renderPass && !renderPass->IsAcceptsBlendMode(material->GetBlendMode())) continue;
 
 			const bool isWorldSpace = (emitterData.simulationSpace == EParticleSimulationSpace::World);
 
@@ -847,13 +874,38 @@ void Engine::ParticleSystem::SubmitSceneParticles(Scene* scene, const CameraBuff
 					const f32 halfW = p.size.x * 0.5f;
 					const f32 halfH = p.size.y * 0.5f;
 
-					vec3 axisX = (camRight * cosR + camUp * sinR) * halfW;
-					vec3 axisY = (-camRight * sinR + camUp * cosR) * halfH;
+					if (emitterData.billboardMode == ESpriteBillboardMode::None)
+					{
+						const vec3 axisX = vec3(cosR, sinR, 0.0f) * halfW;
+						const vec3 axisY = vec3(-sinR, cosR, 0.0f) * halfH;
+						worldMatrix[0] = vec4(axisX, 0.0f);
+						worldMatrix[1] = vec4(axisY, 0.0f);
+						worldMatrix[2] = vec4(0.0f, 0.0f, 1.0f, 0.0f);
+						worldMatrix[3] = vec4(worldPos, 1.0f);
+					}
+					else
+					{
+						const vec3 axisX = (camRight * cosR + camUp * sinR) * halfW;
+						const vec3 axisY = (-camRight * sinR + camUp * cosR) * halfH;
+						worldMatrix[0] = vec4(axisX, 0.0f);
+						worldMatrix[1] = vec4(axisY, 0.0f);
+						worldMatrix[2] = vec4(camForward, 0.0f);
+						worldMatrix[3] = vec4(worldPos, 1.0f);
+					}
+				}
 
-					worldMatrix[0] = vec4(axisX, 0.0f);
-					worldMatrix[1] = vec4(axisY, 0.0f);
-					worldMatrix[2] = vec4(camForward, 0.0f);
-					worldMatrix[3] = vec4(worldPos, 1.0f);
+				vec4 uvTransform = vec4(0.0f, 0.0f, 1.0f, 1.0f);
+				if (emitterData.subUVColumns > 1 || emitterData.subUVRows > 1)
+				{
+					const uint32 totalFrames = emitterData.subUVColumns * emitterData.subUVRows;
+					const f32 normAge = p.GetNormalizedAge();
+					const f32 cycledAge = std::fmod(normAge * (std::max)(1.0f, emitterData.subUVCycles), 1.0f);
+					const uint32 frameIndex = (std::min)(static_cast<uint32>(cycledAge * totalFrames), totalFrames - 1);
+					const uint32 col = frameIndex % emitterData.subUVColumns;
+					const uint32 row = frameIndex / emitterData.subUVColumns;
+					const f32 uSize = 1.0f / static_cast<f32>(emitterData.subUVColumns);
+					const f32 vSize = 1.0f / static_cast<f32>(emitterData.subUVRows);
+					uvTransform = vec4(col * uSize, row * vSize, uSize, vSize);
 				}
 
 				SpriteDrawCommand command;
@@ -861,11 +913,118 @@ void Engine::ParticleSystem::SubmitSceneParticles(Scene* scene, const CameraBuff
 				command.texture = texture;
 				command.material = material;
 				command.color = p.color;
-				command.uvTransform = vec4(0.0f, 0.0f, 1.0f, 1.0f);
+				command.uvTransform = uvTransform;
 				command.worldMatrix = worldMatrix;
 				command.pickingId = pickingId;
 
 				renderer.SubmitSprite(command, targetPassId);
+			}
+		}
+	}
+
+	// 3. 복합 비주얼 이펙트(CompositeVFXComponent) 내의 파티클 트랙 순회 제출
+	auto vfxView = scene->GetRegistry().view<CompositeVFXComponent, WorldTransformComponent, FlagComponent>();
+	for (auto [entity, vfxComp, transform, flag] : vfxView.each())
+	{
+		if (!flag.IsActiveInHierarchy() || !flag.IsVisibleInHierarchy() || HasFlag(flag.effectiveFlags, EEntityFlag::Dead)) continue;
+		CompositeEffect* effect = vfxComp.effectHandle.Get();
+		if (!effect) continue;
+
+		const auto& pTracks = effect->GetParticleTracks();
+		const uint32 pickingId = PickingManager::Get().RegisterPickingEntity(scene, entity);
+
+		for (size_t tIdx = 0; tIdx < pTracks.size() && tIdx < vfxComp.particleRuntimes.size(); ++tIdx)
+		{
+			const auto& track = pTracks[tIdx];
+			const auto& rt = vfxComp.particleRuntimes[tIdx];
+			if (!track.enabled || track.isMuted) continue;
+
+			ParticleEffect* subEffect = track.effectHandle.Get();
+			if (!subEffect) continue;
+
+			const auto& emitters = subEffect->GetEmitters();
+			for (size_t eIdx = 0; eIdx < emitters.size() && eIdx < rt.emitterInstances.size(); ++eIdx)
+			{
+				const auto& emitterData = emitters[eIdx];
+				const auto& inst = rt.emitterInstances[eIdx];
+				if (!emitterData.enabled || inst.particles.empty()) continue;
+
+				Mesh* mesh = emitterData.meshHandle.Get() ? emitterData.meshHandle.Get() : defaultQuadMesh;
+				MaterialInterface* material = emitterData.materialHandle.Get() ? emitterData.materialHandle.Get() : defaultMaterial;
+				Texture* texture = emitterData.textureHandle.Get() ? emitterData.textureHandle.Get() : defaultTexture;
+
+				if (!mesh || !material || !texture) continue;
+				if (!texture->GetRHITexture() || !mesh->GetIndexBuffer()) continue;
+				if (renderPass && !renderPass->IsAcceptsBlendMode(material->GetBlendMode())) continue;
+
+				const bool isWorldSpace = (emitterData.simulationSpace == EParticleSimulationSpace::World);
+
+				for (const auto& p : inst.particles)
+				{
+					const vec3 worldPos = isWorldSpace ? p.position : vec3(transform.worldMatrix * vec4(p.position, 1.0f));
+
+					mat4 worldMatrix(1.0f);
+					if (emitterData.alignToSurfaceDisk)
+					{
+						const f32 halfW = p.size.x * 0.5f;
+						const f32 halfH = p.size.y * 0.5f;
+						worldMatrix[0] = vec4(halfW, 0.0f, 0.0f, 0.0f);
+						worldMatrix[1] = vec4(0.0f, 0.0f, halfH, 0.0f);
+						worldMatrix[2] = vec4(0.0f, 1.0f, 0.0f, 0.0f);
+						worldMatrix[3] = vec4(worldPos + vec3(0.0f, 0.015f, 0.0f), 1.0f);
+					}
+					else
+					{
+						const f32 cosR = std::cos(p.rotation);
+						const f32 sinR = std::sin(p.rotation);
+						const f32 halfW = p.size.x * 0.5f;
+						const f32 halfH = p.size.y * 0.5f;
+
+						if (emitterData.billboardMode == ESpriteBillboardMode::None)
+						{
+							const vec3 axisX = vec3(cosR, sinR, 0.0f) * halfW;
+							const vec3 axisY = vec3(-sinR, cosR, 0.0f) * halfH;
+							worldMatrix[0] = vec4(axisX, 0.0f);
+							worldMatrix[1] = vec4(axisY, 0.0f);
+							worldMatrix[2] = vec4(0.0f, 0.0f, 1.0f, 0.0f);
+							worldMatrix[3] = vec4(worldPos, 1.0f);
+						}
+						else
+						{
+							const vec3 axisX = (camRight * cosR + camUp * sinR) * halfW;
+							const vec3 axisY = (-camRight * sinR + camUp * cosR) * halfH;
+							worldMatrix[0] = vec4(axisX, 0.0f);
+							worldMatrix[1] = vec4(axisY, 0.0f);
+							worldMatrix[2] = vec4(camForward, 0.0f);
+							worldMatrix[3] = vec4(worldPos, 1.0f);
+						}
+					}
+
+					vec4 uvTransform = vec4(0.0f, 0.0f, 1.0f, 1.0f);
+					if (emitterData.subUVColumns > 1 || emitterData.subUVRows > 1)
+					{
+						const uint32 totalFrames = emitterData.subUVColumns * emitterData.subUVRows;
+						const f32 normAge = p.GetNormalizedAge();
+						const f32 cycledAge = std::fmod(normAge * (std::max)(1.0f, emitterData.subUVCycles), 1.0f);
+						const uint32 frameIndex = (std::min)(static_cast<uint32>(cycledAge * totalFrames), totalFrames - 1);
+						const uint32 col = frameIndex % emitterData.subUVColumns;
+						const uint32 row = frameIndex / emitterData.subUVColumns;
+						const f32 uSize = 1.0f / static_cast<f32>(emitterData.subUVColumns);
+						const f32 vSize = 1.0f / static_cast<f32>(emitterData.subUVRows);
+						uvTransform = vec4(col * uSize, row * vSize, uSize, vSize);
+					}
+
+					SpriteDrawCommand command;
+					command.mesh = mesh;
+					command.texture = texture;
+					command.material = material;
+					command.color = p.color;
+					command.uvTransform = uvTransform;
+					command.worldMatrix = worldMatrix;
+					command.pickingId = pickingId;
+
+					renderer.SubmitSprite(command, targetPassId);
+				}
 			}
 		}
 	}

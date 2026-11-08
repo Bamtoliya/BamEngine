@@ -14,3 +14,5 @@
 #include "AudioClip.h"
 #include "ActionTimelineAsset.h"
 #include "ParticleEffect.h"
+#include "SpriteAnimation.h"
+#include "CompositeEffect.h"

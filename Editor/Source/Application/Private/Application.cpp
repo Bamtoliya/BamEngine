@@ -79,7 +79,7 @@ EResult Application::Initialize(void* arg)
     if (!preferencesPath.empty())
         shortcutDesc.ConfigPath = preferencesPath.parent_path() / "EditorShortcuts.json";
 
-    shortcutDesc.LegacyPath = editorService.GetProjectRoot() / "Resources" / "Config" / "EditorShortcuts.json";
+    shortcutDesc.LegacyPath = Engine::PlatformPath::ResolveUri("Config/EditorShortcuts.json");
 
     if (!ShortcutManager::Create(&shortcutDesc))
         return fail("ShortcutManager", EResult::Fail);
@@ -322,7 +322,7 @@ EResult Application::InitializeWindow(const ApplicationCreateInfo& createInfo)
             return SDL_HITTEST_NORMAL;
             }, nullptr);
 
-        const auto iconPath = (EditorSettingsService::Get().GetProjectRoot() / "Resources" / "icon.bmp").u8string();
+        const auto iconPath = Engine::PlatformPath::ResolveUri("Icon.bmp").u8string();
         SDL_Surface* iconSurface = SDL_LoadBMP(reinterpret_cast<const char*>(iconPath.c_str()));
 
         if (iconSurface)
@@ -426,7 +426,7 @@ EResult Application::InitializeSystem()
     const bool success = addSystems.operator() <
         TransformSystem, MeshRenderSystem, SpriteRenderSystem, SpriteAnimationSystem, TilemapRenderSystem, AnimationSystem,
         ThirdPersonControllerSystem,
-        ParticleSystem, ActionTimelineSystem, NetworkSystem, KinematicCharacterSystem,
+        ParticleSystem, ActionTimelineSystem, CompositeVFXSystem, NetworkSystem, KinematicCharacterSystem,
         CameraSystem, SpringArmSystem, LightSystem, UIRenderSystem,
         AudioSystem, TerrainSystem, PhysicsSystem, GraphSystem, SplineFollowSystem > ();
 
@@ -553,6 +553,23 @@ bool Application::InitializeResources()
 {
     if (!EditorSettingsService::Get().LoadProjectSettings(ReflectionRegistry::Get().GetRegistry()))
         return false;
+
+    const auto& projectSettings = EditorSettingsService::Get().GetProjectSettings();
+    const auto& projectRoot = EditorSettingsService::Get().GetProjectRoot();
+    if (!projectSettings.AssetDirectory.empty())
+    {
+        Engine::PlatformPath::SetProjectAssetRoot(
+            std::filesystem::path(projectSettings.AssetDirectory).is_absolute()
+                ? projectSettings.AssetDirectory
+                : projectRoot / projectSettings.AssetDirectory);
+    }
+    if (!projectSettings.EngineResourceDirectory.empty())
+    {
+        Engine::PlatformPath::SetEngineResourceRoot(
+            std::filesystem::path(projectSettings.EngineResourceDirectory).is_absolute()
+                ? projectSettings.EngineResourceDirectory
+                : projectRoot / projectSettings.EngineResourceDirectory);
+    }
 
     InitializeMeshes();
 

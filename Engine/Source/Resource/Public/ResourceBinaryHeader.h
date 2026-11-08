@@ -28,6 +28,7 @@ enum class EResourceType : uint32
 	SpriteAnimation,
 	ActionTimeline,
 	ParticleEffect,
+	CompositeEffect,
 };
 
 inline constexpr const char* GetResourceBinaryExtension(EResourceType type) noexcept
@@ -44,6 +45,7 @@ inline constexpr const char* GetResourceBinaryExtension(EResourceType type) noex
 	case EResourceType::Texture:          return ".bamtex";
 	case EResourceType::Shader:           return ".bamshader";
 	case EResourceType::ParticleEffect:   return ".bameffect";
+	case EResourceType::CompositeEffect:  return ".bamvfx";
 	default:                              return ".beve";
 	}
 }

@@ -32,6 +32,11 @@
 #include "SceneDocument.h"
 #include "ConfigManager.h"
 #include "PreviewViewportWidget.h"
+#include "EntityFactory.h"
+#include "Components/Render/CameraComponent.h"
+#include "Components/Core/TransformComponent.h"
+#include "Components/Render/LightComponent.h"
+#include "Components/Render/PostProcessComponent.h"
 
 #pragma region Imgui Header
 #include "imgui.h"
@@ -327,6 +332,7 @@ void ImGuiManager::Draw()
 	SynchronizeSceneDocumentAccess();
 	history.BeginFrame();
 	DrawDocumentConfirmation();
+	DrawNewSceneDialog();
 	MainDockspace();
 	history.Synchronize(SceneManager::Get().GetCurrentScene(), PIEManager::Get().CanEdit());
 
@@ -762,7 +768,8 @@ EResult ImGuiManager::CreateResourceEditors()
 		!initializeClosed(new SpriteAnimationEditor()) ||
 		!initializeClosed(new MaterialEditor()) ||
 		!initializeClosed(new PrefabEditorPanel()) ||
-		!initializeClosed(new ParticleEditorPanel()))
+		!initializeClosed(new ParticleEditorPanel()) ||
+		!initializeClosed(new VFXEditorPanel()))
 		return EResult::Fail;
 
 	return EResult::Success;
@@ -1338,9 +1345,115 @@ void ImGuiManager::CaptureWorkspace(EditorWorkspace& workspace)
 #pragma endregion
 
 #pragma region Document
+namespace
+{
+	void SetupBasicSceneEntities(Engine::Scene* scene)
+	{
+		if (!scene) return;
+
+		// 1. Main Camera
+		Entity& camEntity = EntityFactory::CreateEmptyEntity(scene, L"Main Camera");
+		auto& cam = scene->AddComponent<CameraComponent>(camEntity);
+		cam.CameraType = ECameraType::Perspective;
+		cam.FOV = 60.0f;
+		cam.NearPlane = 0.1f;
+		cam.FarPlane = 1000.0f;
+		cam.IsMainCamera = true;
+		auto& camTrans = scene->GetComponent<TransformComponent>(camEntity);
+		camTrans.position = vec3(0.0f, 1.3f, -4.5f);
+		camTrans.eulerRotation = vec3(0.0f, 0.0f, 0.0f);
+		camTrans.rotation = quat(1.0f, 0.0f, 0.0f, 0.0f);
+
+		// 2. Directional Light
+		Entity& lightEntity = EntityFactory::CreateLightEntity(scene, L"Directional Light", L"Directional");
+		auto& lightTrans = scene->GetComponent<TransformComponent>(lightEntity);
+		lightTrans.position = vec3(0.0f, 5.0f, -5.0f);
+		lightTrans.eulerRotation = vec3(45.0f, -30.0f, 0.0f);
+		lightTrans.rotation = glm::quat(glm::radians(lightTrans.eulerRotation));
+
+		// 3. PostProcessVolume (Bloom & ToneMapping)
+		Entity& ppEntity = EntityFactory::CreateEmptyEntity(scene, L"PostProcessVolume");
+		auto& ppComp = scene->AddComponent<PostProcessComponent>(ppEntity);
+		ppComp.IsEnabled = true;
+		ppComp.IsUnbound = true;
+		ppComp.PresetName = "DefaultPreset";
+		ppComp.PipelineSettings = "{\n    \"Effects\": [\n        {\n            \"Enabled\": true,\n            \"Name\": \"Bloom\",\n            \"Parameters\": {\n                \"Intensity\": 1,\n                \"Scatter\": 0.699999988079071,\n                \"SoftKnee\": 0.5,\n                \"Threshold\": 0.800000011920929\n            }\n        },\n        {\n            \"Enabled\": true,\n            \"Name\": \"Tone Mapping (ACES)\",\n            \"Parameters\": {\n                \"Exposure\": 1,\n                \"Gamma\": 2.200000047683716\n            }\n        }\n    ]\n}";
+
+		// 4. Ground Plane
+		Entity& planeEntity = EntityFactory::CreatePrimitiveEntity(scene, L"Ground Plane", L"PlaneMesh", L"Project://Material/GBufferMaterial.bammat.json");
+		auto& planeTrans = scene->GetComponent<TransformComponent>(planeEntity);
+		planeTrans.position = vec3(0.0f, 0.0f, 0.0f);
+		planeTrans.scale = vec3(10.0f, 1.0f, 10.0f);
+	}
+}
+
 bool ImGuiManager::RequestNewScene()
 {
-	return RequestSceneAction(ESceneDocumentAction::New);
+	if (!PIEManager::Get().IsEditing())
+	{
+		NotificationManager::Get().AddNotification(LOCAL("EditorDocument.Title"),
+			LOCAL("EditorDocument.SceneActionUnavailable"), ELogLevel::Warn);
+		return false;
+	}
+
+	if (m_DocumentController->IsBusy())
+	{
+		NotificationManager::Get().AddNotification(LOCAL("EditorDocument.Title"),
+			LOCAL("EditorDocument.OperationBusy"), ELogLevel::Warn);
+		return false;
+	}
+
+	m_ShowNewSceneDialog = true;
+	return true;
+}
+
+bool ImGuiManager::ExecuteNewScene(ESceneTemplate templateType)
+{
+	if (!PIEManager::Get().IsEditing())
+	{
+		NotificationManager::Get().AddNotification(LOCAL("EditorDocument.Title"),
+			LOCAL("EditorDocument.SceneActionUnavailable"), ELogLevel::Warn);
+		return false;
+	}
+
+	if (m_DocumentController->IsBusy())
+	{
+		NotificationManager::Get().AddNotification(LOCAL("EditorDocument.Title"),
+			LOCAL("EditorDocument.OperationBusy"), ELogLevel::Warn);
+		return false;
+	}
+
+	auto& application = Application::Get();
+	std::vector<EditorDocumentId> documents;
+
+	if (application.GetSceneDocumentId() != InvalidEditorDocumentId)
+		documents.push_back(application.GetSceneDocumentId());
+
+	return m_DocumentController->RequestAction(std::move(documents),
+		[templateType](const std::vector<EditorDocumentId>&) -> EResult
+		{
+			if (!PIEManager::Get().IsEditing())
+				return EResult::AccessDenied;
+
+			auto& scenes = SceneManager::Get();
+			EResult result = scenes.NewScene();
+			if (result != EResult::Success)
+				return result;
+
+			Scene* currentScene = scenes.GetCurrentScene();
+			if (currentScene && templateType == ESceneTemplate::Basic)
+			{
+				SetupBasicSceneEntities(currentScene);
+			}
+
+			SelectionManager::Get().ClearSelection(true);
+			Application::Get().AdoptSceneDocument(std::filesystem::path{});
+
+			NotificationManager::Get().AddNotification(LOCAL("EditorDocument.Title"),
+				LOCAL("EditorDocument.SceneCreated"), ELogLevel::Info);
+
+			return EResult::Success;
+		});
 }
 
 bool ImGuiManager::RequestOpenScene(const std::filesystem::path& path)
@@ -1533,6 +1646,87 @@ void ImGuiManager::DrawDocumentConfirmation()
 
 	ImGui::EndPopup();
 }
+void ImGuiManager::DrawNewSceneDialog()
+{
+	const std::string modalTitle = LOCAL("EditorDocument.NewSceneDialogTitle") + "###NewSceneTemplateModal";
+
+	if (m_ShowNewSceneDialog)
+	{
+		ImGui::OpenPopup(modalTitle.c_str());
+		m_ShowNewSceneDialog = false;
+	}
+
+	ImGui::SetNextWindowSize(ImVec2(480.0f, 0.0f), ImGuiCond_Appearing);
+	if (!ImGui::BeginPopupModal(modalTitle.c_str(), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+		return;
+
+	ImGui::TextUnformatted(LOCAL_CSTR("EditorDocument.NewSceneTemplatePrompt"));
+	ImGui::Spacing();
+	ImGui::Separator();
+	ImGui::Spacing();
+
+	// 1. Basic (3D) Template
+	const bool isBasic = (m_SelectedSceneTemplate == ESceneTemplate::Basic);
+	if (ImGui::Selectable(LOCAL_CSTR("EditorDocument.TemplateBasic"), isBasic, ImGuiSelectableFlags_DontClosePopups))
+	{
+		m_SelectedSceneTemplate = ESceneTemplate::Basic;
+	}
+	if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+	{
+		m_SelectedSceneTemplate = ESceneTemplate::Basic;
+		ExecuteNewScene(m_SelectedSceneTemplate);
+		ImGui::CloseCurrentPopup();
+		ImGui::EndPopup();
+		return;
+	}
+	ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]);
+	ImGui::TextWrapped("  %s", LOCAL_CSTR("EditorDocument.TemplateBasicDesc"));
+	ImGui::PopStyleColor();
+
+	ImGui::Spacing();
+
+	// 2. Empty Scene Template
+	const bool isEmpty = (m_SelectedSceneTemplate == ESceneTemplate::Empty);
+	if (ImGui::Selectable(LOCAL_CSTR("EditorDocument.TemplateEmpty"), isEmpty, ImGuiSelectableFlags_DontClosePopups))
+	{
+		m_SelectedSceneTemplate = ESceneTemplate::Empty;
+	}
+	if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+	{
+		m_SelectedSceneTemplate = ESceneTemplate::Empty;
+		ExecuteNewScene(m_SelectedSceneTemplate);
+		ImGui::CloseCurrentPopup();
+		ImGui::EndPopup();
+		return;
+	}
+	ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]);
+	ImGui::TextWrapped("  %s", LOCAL_CSTR("EditorDocument.TemplateEmptyDesc"));
+	ImGui::PopStyleColor();
+
+	ImGui::Spacing();
+	ImGui::Separator();
+	ImGui::Spacing();
+
+	const float btnWidth = 100.0f;
+	const float availX = ImGui::GetContentRegionAvail().x;
+	ImGui::SetCursorPosX(ImGui::GetCursorPosX() + availX - (btnWidth * 2.0f + ImGui::GetStyle().ItemSpacing.x));
+
+	if (ImGui::Button(LOCAL_LABEL("EditorDocument.Create").c_str(), ImVec2(btnWidth, 0.0f)))
+	{
+		ExecuteNewScene(m_SelectedSceneTemplate);
+		ImGui::CloseCurrentPopup();
+	}
+
+	ImGui::SameLine();
+
+	if (ImGui::Button(LOCAL_LABEL("EditorCommon.Cancel").c_str(), ImVec2(btnWidth, 0.0f)))
+	{
+		ImGui::CloseCurrentPopup();
+	}
+
+	ImGui::EndPopup();
+}
+
 void ImGuiManager::SynchronizeSceneDocumentAccess()
 {
 	auto& application = Application::Get();

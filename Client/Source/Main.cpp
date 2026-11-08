@@ -1,4 +1,4 @@
-﻿#define SDL_MAIN_HANDLED
+#define SDL_MAIN_HANDLED
 #include <SDL3/SDL_main.h>
 #include <archive/JsonArchive.h>
 
@@ -206,6 +206,7 @@ private:
         if (!systemManager.AddSystem<AnimationSystem>()) return EResult::Fail;
         if (!systemManager.AddSystem<ParticleSystem>()) return EResult::Fail;
         if (!systemManager.AddSystem<ActionTimelineSystem>()) return EResult::Fail;
+        if (!systemManager.AddSystem<CompositeVFXSystem>()) return EResult::Fail;
         if (!systemManager.AddSystem<KinematicCharacterSystem>()) return EResult::Fail;
         if (!systemManager.AddSystem<NetworkSystem>()) return EResult::Fail;
         if (!systemManager.AddSystem<UIRenderSystem>()) return EResult::Fail;

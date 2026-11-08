@@ -1,4 +1,4 @@
-﻿#include "SpriteAnimationSystem.h"
+#include "SpriteAnimationSystem.h"
 #include "Components/Render/SpriteAnimationComponent.h"
 #include "Components/Render/SpriteRendererComponent.h"
 #include "Scene.h"
@@ -24,6 +24,7 @@ void SpriteAnimationSystem::OnUpdate(entt::registry& registry, const vector<Scen
 		if (!scene || !scene->IsActive() || scene->IsPaused()) continue;
 		auto& world = scene->GetRegistry();
 		auto view = world.view<SpriteAnimationComponent, SpriteRendererComponent>();
+		std::vector<entt::entity> toDestroy;
 		for (auto entity : view)
 		{
 			const auto* flag = world.try_get<FlagComponent>(entity);
@@ -35,7 +36,17 @@ void SpriteAnimationSystem::OnUpdate(entt::registry& registry, const vector<Scen
 			auto& anim = view.get<SpriteAnimationComponent>(entity);
 			auto& renderer = view.get<SpriteRendererComponent>(entity);
 			const int32 frameCount = anim.GetEffectiveFrameCount();
-			if (!anim.isPlaying || frameCount <= 0) continue;
+			if (frameCount <= 0) continue;
+
+			if (!anim.isPlaying)
+			{
+				if (anim.currentFrameIndex >= 0 && anim.currentFrameIndex < frameCount)
+				{
+					auto curSprite = anim.GetSpriteAtFrame(anim.currentFrameIndex);
+					if (curSprite.IsValid()) renderer.spriteHandle = curSprite;
+				}
+				continue;
+			}
 
 			if (frameCount == 1)
 			{
@@ -119,6 +130,29 @@ void SpriteAnimationSystem::OnUpdate(entt::registry& registry, const vector<Scen
 			if (stepCount >= maxSteps) anim.elapsedTime = 0.0f;
 			if (anim.currentFrameIndex >= 0 && anim.currentFrameIndex < frameCount)
 				renderer.spriteHandle = anim.GetSpriteAtFrame(anim.currentFrameIndex);
+
+			if (anim.isFinished)
+			{
+				if (anim.autoDeactivateOnFinish)
+				{
+					if (auto* flagComp = world.try_get<FlagComponent>(entity))
+					{
+						flagComp->SetActive(false);
+					}
+				}
+				if (anim.autoDestroyOnFinish)
+				{
+					toDestroy.push_back(entity);
+				}
+			}
+		}
+
+		for (auto destroyEnt : toDestroy)
+		{
+			if (auto* entObj = scene->FindEntity(destroyEnt))
+			{
+				(void)scene->DestroyEntity(*entObj);
+			}
 		}
 	}
 }

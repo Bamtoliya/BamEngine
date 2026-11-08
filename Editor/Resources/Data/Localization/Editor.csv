@@ -155,9 +155,14 @@ ContentBrowser,BakeToBinary,Bake to Binary,바이너리로 변환
 ContentBrowser,Cancel,Cancel,취소
 ContentBrowser,ClearSearch,Clear,지우기
 ContentBrowser,CreateCopy,Create Copy,복사본 생성
+ContentBrowser,CreateEffect,Create Particle Effect,파티클 이펙트 생성
 ContentBrowser,CreateEmptyMaterial,Create Empty Material,빈 머티리얼 생성
+ContentBrowser,CreateGraph,Create Visual Script,비주얼 스크립트 생성
 ContentBrowser,CreateMaterialInstance,Create Material Instance,머티리얼 인스턴스 생성
+ContentBrowser,CreatePrefab,Create Prefab,프리팹 생성
+ContentBrowser,CreateScene,Create Scene,씬 생성
 ContentBrowser,CreateSprite,Create Sprite,스프라이트 생성
+ContentBrowser,CreateTimeline,Create Action Timeline,액션 타임라인 생성
 ContentBrowser,Data,Data,데이터
 ContentBrowser,EditPrefab,Edit Prefab,프리팹 편집
 ContentBrowser,EmptyFolder,Folder is empty,폴더가 비어 있습니다
@@ -193,6 +198,8 @@ ContentBrowser,SizeKB,Size: {} KB,크기: {} KB
 ContentBrowser,SizeMB,Size: {:.2f} MB,크기: {:.2f} MB
 ContentBrowser,ShowEngineContent,Show Engine Content,엔진 콘텐츠 표시
 ContentBrowser,EngineContent,Engine Content,엔진 콘텐츠
+ContentBrowser,EngineResources,Engine Resources,엔진 리소스
+ContentBrowser,EditorResources,Editor Resources,에디터 리소스
 ContentBrowser,EngineReadOnlyBadge,Engine Built-in (Read-Only),엔진 내장 리소스 (읽기 전용)
 ContentBrowser,ReadOnlyProtected,Cannot modify or import into a read-only Engine Content directory.,읽기 전용 엔진 콘텐츠 폴더는 수정하거나 파일을 가져올 수 없습니다.
 ContentBrowser,CopyToProjectAssets,Copy to Project Assets,프로젝트 에셋으로 복사본 생성
@@ -241,6 +248,12 @@ EditorCommon,Value,Value,값
 EditorCommon,Width,Width,너비
 EditorDocument,ConfirmTitle,Unsaved Changes,미저장 변경
 EditorDocument,CreateNewScene,Create New Scene,새 씬 생성하기
+EditorDocument,NewSceneDialogTitle,New Scene,새 씬 만들기
+EditorDocument,NewSceneTemplatePrompt,Select a template for the new scene:,새 씬의 템플릿을 선택하십시오:
+EditorDocument,TemplateBasic,Basic (3D),기본 (3D)
+EditorDocument,TemplateBasicDesc,Includes Main Camera, Directional Light, Post-Process Volume, and Ground Plane.,메인 카메라, 방향성 라이트, 후처리 볼륨, 바닥 평면이 기본 배치됩니다.
+EditorDocument,TemplateEmpty,Empty Scene,빈 씬
+EditorDocument,TemplateEmptyDesc,A completely empty scene with no entities.,오브젝트가 없는 완전히 비어있는 씬입니다.
 EditorDocument,Discard,Discard,버리기
 EditorDocument,Modified,Unsaved changes,미저장 변경 있음
 EditorDocument,NoSceneLoaded,No Scene Loaded,로드된 씬이 없습니다.
@@ -510,9 +523,19 @@ GraphicsSettings,ViewportSaved,Viewport settings applied and saved.,뷰포트 �
 GraphicsSettings,ViewportTitle,Viewport Resolution,뷰포트 해상도
 Hierarchy,Action,Action: {},작업 대상: {}
 Hierarchy,Active,Is Active,활성화
+Hierarchy,3DObjects,3D Object,3D 오브젝트
+Hierarchy,Cube,Cube,큐브
+Hierarchy,Sphere,Sphere,스피어
+Hierarchy,Cylinder,Cylinder,실린더
+Hierarchy,Quad,Quad,평면 (Quad)
+Hierarchy,Lights,Light,라이트
+Hierarchy,2DObjects,2D Object,2D 오브젝트
+Hierarchy,Sprite,Sprite,스프라이트
+Hierarchy,UI,UI,UI
 Hierarchy,AddCanvas,Add UI Canvas,UI 캔버스 추가
 Hierarchy,AddDirectionalLight,Directional Light,디렉셔널 라이트
 Hierarchy,AddEntity,Add Entity,엔티티 추가
+Hierarchy,AddEntityTooltip,Create Entity,엔티티 생성
 Hierarchy,AddLight,Add Light Entity,라이트 엔티티 추가
 Hierarchy,AddPointLight,Point Light,포인트 라이트
 Hierarchy,AddPrimitive,Add Primitive Entity,기본 도형 엔티티 추가
@@ -1011,6 +1034,8 @@ PostProcess,MoveEffectDown,Move Effect Down,효과를 아래로 이동
 PostProcess,MoveEffectUp,Move Effect Up,효과를 위로 이동
 PostProcess,Name,Name,이름
 PostProcess,NoActiveComponent,No enabled PostProcessComponent in the current scene.,현재 씬에 활성화된 후처리 컴포넌트가 없습니다.
+PostProcess,CreateVolume,Create Post-Process Volume,후처리 볼륨 생성
+PostProcess,VolumeCreated,Post-process volume created in the scene.,씬에 후처리 볼륨을 생성했습니다.
 PostProcess,NoEffects,No post-processing effects registered.,등록된 후처리 효과가 없습니다.
 PostProcess,NoParameters,No configurable parameters.,설정 가능한 파라미터가 없습니다.
 PostProcess,NoViewport,No active viewport with post-processing pipeline found.,후처리 파이프라인이 있는 활성 뷰포트를 찾을 수 없습니다.
@@ -1527,6 +1552,11 @@ InputActions,AddAction,Add Action,액션 추가
 InputActions,DeleteAction,Delete Action,액션 삭제
 InputActions,Bindings,Bindings,바인딩
 InputActions,Manage,Manage,관리
+InputActions,AddCategory,Add Category,카테고리 추가
+InputActions,DeleteCategory,Delete Category,카테고리 삭제
+InputActions,CategoryName,Category Name,카테고리 이름
+InputActions,NewCategoryHint,Enter new category name...,새 카테고리 이름 입력...
+InputActions,DuplicateCategory,Category with this name already exists.,이미 존재하는 카테고리 이름입니다.
 Action,Window.CloseFocusedPanel,Close Focused Panel,포커스된 패널 닫기
 InputActions,MouseCaptureArea,Click here with the mouse button to bind,등록할 마우스 버튼으로 여기를 누르세요
 Viewport,RenderTargetPreviewUnsupported,This render target cannot be previewed as a 2D image.,이 렌더 타깃은 2D 이미지로 미리 볼 수 없습니다.
@@ -1604,6 +1634,8 @@ SpriteEditor,IndexHeader,#,#
 SpriteEditor,NameHeader,Name,이름
 SpriteEditor,SizeHeader,Size,크기
 SpriteEditor,AutoDesc,Automatic alpha cluster detection.,알파 채널 연결 요소를 탐색하여 바운딩 박스를 자동 검출합니다.
+SpriteEditor,AlphaThreshold,Alpha Threshold,알파 임계값
+SpriteEditor,MinPixelArea,Min Pixel Area (px),최소 픽셀 면적 (픽셀)
 SpriteEditor,RowHelp,Comma separated: Idle, Walk, Attack, Die,쉼표로 구분하여 액션 이름 입력 (예: Idle, Walk, Attack, Die)
 SpriteEditor,FpsLabel,FPS,FPS
 SpriteEditor,PlayModeLabel,Play Mode,재생 모드
@@ -1700,3 +1732,56 @@ ParticleEditor,MenuUndo,Undo,실행 취소
 ParticleEditor,MenuRedo,Redo,다시 실행
 ParticleEditor,FileDialogFilter,Particle Effect (*.bameffect.json),파티클 이펙트 (*.bameffect.json)
 ParticleEditor,NewEmitterName,New_Emitter,새_이미터
+,ResourceEditor.CompositeVFXTitle,Composite VFX Editor,통합 비주얼 이펙트 에디터
+VFXEditor,Title,Composite VFX Editor,통합 비주얼 이펙트 에디터
+VFXEditor,Tracks,VFX Tracks,VFX 트랙
+VFXEditor,AddTrack,Add Track,트랙 추가
+VFXEditor,CreateNewEffect,Create New Effect,새 이펙트 생성
+VFXEditor,NoEffectLoaded,No Composite Effect loaded.,로드된 복합 이펙트가 없습니다.
+VFXEditor,NoTracks,No tracks in this effect.,이펙트에 등록된 트랙이 없습니다.
+VFXEditor,AddPrompt,Click '+ Add Track' above to add:,상단의 '+ 트랙 추가'를 눌러 트랙을 추가하세요:
+VFXEditor,AddSpriteTrack,2D Sprite Flipbook Track,2D 스프라이트 플립북 트랙
+VFXEditor,AddParticleTrack,Particle Emitter Track,파티클 이미터 트랙
+VFXEditor,AddLightTrack,Light Flash Track,라이트 섬광 트랙
+VFXEditor,AddMeshTrack,Shockwave Mesh Track,충격파 메쉬 트랙
+VFXEditor,AddSoundTrack,Audio Sound Track,오디오 사운드 트랙
+VFXEditor,TrackInspector,Track Inspector,트랙 인스펙터
+VFXEditor,SelectTrackPrompt,Select a track to inspect.,편집할 트랙을 선택하세요.
+VFXEditor,PropTrackName,Track Name,트랙 이름
+VFXEditor,PropEnabled,Enabled,활성화
+VFXEditor,PropMuted,Muted,음소거
+VFXEditor,PropStartTime,Start Time,시작 시간
+VFXEditor,PropDuration,Duration,지속 시간
+VFXEditor,PropPlaySpeed,Play Speed,재생 배속
+VFXEditor,PropLoop,Loop,반복 재생
+VFXEditor,PropAnimation,Sprite Animation,스프라이트 애니메이션
+VFXEditor,PropMaterial,Material,머티리얼
+VFXEditor,PropBillboard,Billboard Mode,빌보드 모드
+VFXEditor,PropPosition,Position,위치
+VFXEditor,PropRotation,Rotation,회전
+VFXEditor,PropScale,Scale,크기
+VFXEditor,PropColorTint,Color Tint,색상 틴트
+VFXEditor,PropSortingOrder,Sorting Order,정렬 순서
+VFXEditor,PropEffect,Particle Effect,파티클 이펙트
+VFXEditor,PropLightColor,Light Color,조명 색상
+VFXEditor,PropPeakIntensity,Peak Intensity,최대 강도
+VFXEditor,PropRadius,Radius,조명 반경
+VFXEditor,PropAttackTime,Attack Time,어택 시간
+VFXEditor,PropDecayTime,Decay Time,디케이 시간
+VFXEditor,PropMesh,Mesh,메쉬
+VFXEditor,PropScaleStart,Scale Start,시작 크기
+VFXEditor,PropScaleEnd,Scale End,종료 크기
+VFXEditor,PropColorStart,Color Start,시작 색상
+VFXEditor,PropColorEnd,Color End,종료 색상
+VFXEditor,PropUVScroll,UV Scroll,UV 스크롤
+VFXEditor,PropAudioClip,Audio Clip,오디오 클립
+VFXEditor,PropVolume,Volume,음량
+VFXEditor,PropPitch,Pitch,피치
+VFXEditor,Play,Play,재생
+VFXEditor,Pause,Pause,일시정지
+VFXEditor,Restart,Restart,처음부터 재생
+VFXEditor,Speed,Speed,재생 배속
+VFXEditor,DurationTotal,Duration,전체 재생 시간
+VFXEditor,AutoDuration,Auto Dur,길이 자동 계산
+VFXEditor,TimelineUnavailable,Timeline unavailable - No Effect loaded.,타임라인을 사용할 수 없음 - 로드된 이펙트가 없습니다.
+VFXEditor,SaveSuccess,Effect saved successfully.,이펙트를 저장했습니다.

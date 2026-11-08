@@ -2,6 +2,348 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-09] 복합 비주얼 이펙트 시스템(Composite Visual Effect) 및 통합 저작 도구(VFXEditorPanel) 구축과 타임라인·인스펙터 UX 고도화
+
+- Area: Engine | Editor | Resource | VFX | Render | UI | Localization
+- Type: Feature | Architecture | UX | Fix
+- 주요 변경 내역:
+  1. **복합 비주얼 이펙트 에셋 및 런타임 오케스트레이션 시스템 구현 (`CompositeEffect`, `CompositeVFXComponent`, `CompositeVFXSystem`)**:
+     - `Engine/Source/Resource/VFX/Public/CompositeEffect.h`, `Private/CompositeEffect.cpp` 신설: 다형적 멀티 트랙(2D 스프라이트 플립북, 파티클 이미터, 동적 포인트 조명 섬광, 3D 메쉬 이펙트, 오디오 사운드)을 단일 에셋 규격(`.bamvfx`, `.bamvfx.json`, `EResourceType::CompositeEffect`)으로 통합 직렬화.
+     - `Engine/Source/Core/Public/Components/Render/CompositeVFXComponent.h`: 엔티티 부착형 복합 VFX 컴포넌트 신설. 재생 속도, 루프, 시간 진행, 파티클 런타임 및 조명 컴포넌트 자동 동기화 관리.
+     - `Engine/Source/System/Render/Public/CompositeVFXSystem.h`, `Private/CompositeVFXSystem.cpp`: 시간축 기반 시뮬레이션 및 렌더링 오케스트레이터.
+       - 스프라이트 플립북: `SpriteAnimation` 연동 및 카메라 빌보드 회전 계산 후 `Renderer::SubmitSprite` 제출.
+       - 동적 조명 섬광: 엔티티의 `LightComponent`와 동기화하여 attack/decay 커브에 따른 실시간 점광원 강도/반경 제어.
+       - 파티클 이미터: `ParticleSystem::UpdateEffectComponent` 및 `SubmitSceneParticles`를 통해 복합 VFX 내 파티클 동시 시뮬레이션 및 렌더링.
+     - 엔진, 에디터(`Application.cpp`), 클라이언트(`Main.cpp`)의 시스템 매니저에 `CompositeVFXSystem` 등록 완료.
+  2. **통합 비주얼 이펙트 에디터 패널 구현 (`VFXEditorPanel.h/.cpp`)**:
+     - `ResourceEditorInterface` 상속 및 `CreateResourceEditors` 등록으로 콘텐츠 브라우저에서 `.bamvfx` / `.bamvfx.json` 에셋 더블클릭 시 자동 로드 및 단독 편집 창 활성화.
+     - **3D 뷰포트 프리뷰 (`PreviewViewportWidget`)**: 실시간 블룸(Bloom) 및 스튜디오 조명이 적용된 독립 3D 뷰포트. `GeometryPass` 및 `ForwardTransparentPass` 양쪽 모두에 복합 VFX를 제출하여 반투명/파티클/스프라이트 완벽 렌더링.
+     - **견고한 에셋 로드 및 자동 생성 폴백**: `ResourceManager` 로드 실패 시에도 디스크 파일 직접 로드 폴백 및 신규 이펙트 자동 생성(`NewEffect`)으로 패널 먹통 상태 원천 방지.
+  3. **사용자 피드백 반영 및 타임라인·인스펙터 UX 고도화**:
+     - **타임라인 헤더 드래그 조절 스플리터 탑재**: `m_TimelineHeaderWidth`(기본 200px) 신설 및 120px~450px 범위의 수평 스플리터(`##TimelineHeaderSplitter`) 구현.
+     - **트랙 이름 클리핑 및 호버 툴팁**: `drawList->PushClipRect`로 긴 트랙 이름이 트랙 바 영역을 침범하지 않도록 클리핑하고, 마우스 호버 시 전체 트랙 이름 툴팁 표시.
+     - **좌측 트랙 패널 가로 스크롤 제거**: `[+ 트랙 추가]` 버튼의 너비 클램프 및 `Selectable` 너비 최적화로 불필요한 가로 스크롤 완전 제거.
+     - **인스펙터 2열 테이블화**: `ImGui::BeginTable` 기반으로 1열(속성 이름 레이블, 좌측 정렬)과 2열(속성 편집 위젯, 너비 100%)을 배치하고 마우스 드래그로 너비 조절 가능하도록 전면 리팩토링.
+     - **스프라이트 플립북 잔상 버그 해결**: 비반복 플립북(`!track.loop`)이 애니메이션 총 길이(`animDuration`)에 도달(`animEvalTime >= animDuration`)하는 순간 즉시 렌더링을 중단하도록 수정하여 재생 완료 후 마지막 프레임이 화면에 영구히 남는 결함 해결.
+  4. **로캘 원본 데이터(`Editor.csv`) 규격 일원화**:
+     - `Editor/Resources/Data/Localization/Editor.csv`에 `VFXEditor` 카테고리 53개 키(영문/한국어) 정식 등록.
+     - 에디터 패널 타이틀, 메뉴바, 툴바 버튼, 트랙 추가 메뉴, 인스펙터 테이블 레이블에 `LOCAL_CSTR(...)` 매크로 일원화 적용.
+  5. **샘플 에셋 및 테스트 씬 구축**:
+     - `Assets/Effect/Fireball_Explosion_Composite.bamvfx.json`: 올바른 `AssetHeader`(`MagicNumber: 6072351289621954882`, `ResourceType: 18`) 및 `ResourceHandle` 형식으로 생성.
+     - `Assets/Scenes/EffectTestScene.bamscene.json`: 복합 이펙트 테스트 엔티티 배치.
+- 검증 기준:
+  - `Fireball_Explosion_Composite.bamvfx.json` 더블클릭 시 `VFXEditorPanel`이 열리며 3D 뷰포트, 트랙 리스트, 타임라인, 인스펙터가 정상 표시되어야 함.
+  - 타임라인 헤더 너비를 마우스로 드래그하여 조절할 수 있고, 긴 트랙 이름이 트랙 바와 겹치지 않아야 함.
+  - 좌측 트랙 리스트 패널에 가로 스크롤바가 발생하지 않아야 함.
+  - 우측 인스펙터에서 속성 이름이 왼쪽에 오고 위젯이 오른쪽에 오는 2열 테이블 구조로 조작 가능해야 함.
+  - 스프라이트 플립북 재생 종료 후 화면에 마지막 프레임 잔상이 남지 않아야 함.
+
+### [2026-11-09] 새 씬 생성 시 템플릿 선택 다이얼로그(Basic 3D / Empty Scene) 구현 및 EntityFactory를 통한 PostProcessVolume 생성 수정
+
+- Area: Editor | Scene | Document | UI | Localization
+- Type: Feature | Fix | UX
+- 주요 변경 내역:
+  1. **`PostProcessPanel.cpp` 컴파일 에러 수정 (`PostProcessPanel.cpp`)**:
+     - `Scene::CreateEntity(name)` 호출 불가(인수 0개 시그니처) 결함을 `EntityFactory::CreateEmptyEntity(scene, L"PostProcessVolume")` 호출로 교정.
+     - `Hierarchy`, `Transform`, `WorldTransform`, `Flag`, `Name` 컴포넌트 자동 구성 및 `SceneEditHistory`(Undo/Redo) 정상 연동 완료.
+  2. **새 씬 생성 템플릿 선택 모달 다이얼로그 탑재 (`ImGuiManager.h/.cpp`)**:
+     - `ESceneTemplate` 열거형 추가 (`Basic`, `Empty`).
+     - 메뉴 `File -> New Scene`, `Ctrl+N` 단축키, Hierarchy 패널의 `New Scene` 버튼 클릭 시 바로 씬을 교체하지 않고 템플릿 선택 팝업(`DrawNewSceneDialog`) 노출.
+     - **Basic (3D) 템플릿**:
+       - 메인 카메라(Perspective FOV 60), 방향성 라이트(햇빛 색상), 언바운드 포스트 프로세스 볼륨(Bloom ON, ToneMapping ON), 바닥 평면(PlaneMesh 10x10) 자동 배치.
+     - **Empty 템플릿**:
+       - 엔티티가 전혀 없는 순수 빈 씬 생성.
+     - 더블클릭 또는 `[생성]` 버튼으로 직관적 선택 가능.
+     - 기존 미저장 문서 확인(`EditorDocumentController`)과 자연스럽게 연계.
+  3. **로캘 원본 CSV 키 추가 (`Editor/Resources/Data/Localization/Editor.csv`)**:
+     - `EditorDocument.NewSceneDialogTitle`, `EditorDocument.NewSceneTemplatePrompt`, `EditorDocument.TemplateBasic`, `EditorDocument.TemplateBasicDesc`, `EditorDocument.TemplateEmpty`, `EditorDocument.TemplateEmptyDesc` 등록.
+- 검증 기준:
+  - `File -> New Scene` (Ctrl+N) 실행 시 템플릿 선택 모달 팝업이 표시되어야 함.
+  - `Basic (3D)` 선택 후 생성 시 카메라, 방향성 라이트, 후처리 볼륨, 바닥이 배치된 상태로 새 씬이 열려야 함.
+  - `Empty Scene` 선택 후 생성 시 완전히 비어 있는 씬이 열려야 함.
+  - 현재 씬에 미저장 변경사항이 있을 때 기존의 저장 확인 대화상자가 먼저 정상 작동해야 함.
+
+### [2026-11-09] 포스트 프로세싱 Source of Truth 아키텍처 정립, 이펙트 테스트 씬 볼륨 배치 및 프리뷰 뷰포트 파티클 누수 차단
+
+- Area: Engine | Editor | Render | PostProcess | Particle | Scene
+- Type: Fix | Architecture | UX
+- 주요 변경 내역:
+  1. **파티클 에디터 패널로의 메인 씬 파티클 유출 버그 교정 (`ParticleSystem.cpp`)**:
+     - 766행 및 850행의 블렌드 모드 가드 조건식 수정:
+       `if (renderPass && !renderPass->IsAcceptsBlendMode(material->GetBlendMode())) continue;`
+     - `PreviewViewportWidget`의 `GeometryPass`는 메인 씬 유입 방지를 위해 `acceptedBlendModes = EBlendMode::None`으로 등록되어 있으나, 기존 `!= EBlendMode::None` 검사로 인해 차단 필터가 무력화되던 논리 오류 완전 해결.
+  2. **포스트 프로세싱 단일 진실의 원천(Source of Truth) 확립**:
+     - 뷰포트 간 강제 결합(임시 메모리 미러링)을 지양하고, 씬 데이터(`PostProcessComponent`)를 유일한 단일 진실의 원천으로 유지.
+     - `GameViewportPanel`은 스탠드얼론 런타임과 100% 동일하게 씬의 활성 `PostProcessComponent` 설정만을 충실하게 반영.
+     - `PostProcessPanel`의 조작(프리셋 선택, 파이프라인 리셋, 슬라이더 변경)이 활성 `PostProcessComponent`에 실시간으로 반영되도록 개선하여, `Apply to Scene` 버튼을 누르기 전이라도 씬 데이터가 즉시 갱신되어 게임 뷰와 씬 뷰 모두 실시간으로 동기화되도록 연동.
+     - 씬에 `PostProcessComponent`가 없을 경우를 대비해 `PostProcessPanel`에 `Create Post-Process Volume` 원클릭 생성 버튼 탑재.
+     - 로캘 원본 CSV(`Editor/Resources/Data/Localization/Editor.csv`)에 `PostProcess.CreateVolume` 및 `PostProcess.VolumeCreated` 키 추가.
+  3. **`EffectTestScene.bamscene.json`에 PostProcessVolume 배치**:
+     - 블룸(Bloom)이 활성화(`Enabled: true`, `Intensity: 1.5`, `Threshold: 0.8`)된 `PostProcessVolume` 엔티티 추가.
+     - 게임 뷰포트에서 이펙트 테스트 씬을 실행할 때 파티클 및 스프라이트 이펙트에 영롱한 블룸 광휘 효과가 정상 렌더링되도록 구현 완료.
+- 검증 기준:
+  - `EffectTestScene.bamscene.json`을 열었을 때 파티클 에디터 패널에 아무 에셋도 로드하지 않았다면 프리뷰 화면에 메인 씬 파티클이 침범하지 않아야 함.
+  - 게임 뷰포트에서 `EffectTestScene` 실행 시 블룸 효과가 적용되어 이펙트가 빛나야 함.
+  - `PostProcessPanel`에서 프리셋이나 슬라이더를 조작했을 때 게임 뷰에서도 동일하게 실시간 반영되어야 함.
+
+### [2026-11-09] 콘텐츠 브라우저 더블클릭 연동 확장: GraphPanel 및 AnimatorGraphPanel의 ResourceEditorInterface 통합 및 SpriteAnimation 복합 확장자 지원
+
+- Area: Editor | ContentBrowser | ResourceEditor | Graph | Animation | 2D
+- Type: Feature | Architecture | UX
+- 주요 변경 내역:
+  1. **`GraphPanel`의 `ResourceEditorInterface` 통합 (`GraphPanel.h/.cpp`)**:
+     - 기존 `IImGui` 직접 상속에서 `ResourceEditorInterface` 상속으로 전환.
+     - `IsSupported()` 가상 함수 구현으로 `.bamgraph.json`, `.graph.json`, `.bamgraph`, `.graph` 에셋 지원.
+     - `SetTargetResource(path)` 및 `LoadDocument(path)` 구현으로 콘텐츠 브라우저에서 노드 그래프 더블클릭 시 `ImGuiManager::RequestOpenResourceEditor()` 파이프라인을 통해 에디터 캔버스에 자동 로드 및 윈도우 포커스.
+     - 파일 내부의 `EGraphDomain`(`Logic` 또는 `Shader`)에 맞춰 에디터 모드를 자동 전환하는 지능형 도메인 적응 로직 탑재.
+     - 윈도우 제목에 현재 열려있는 그래프 파일명 표시.
+  2. **`AnimatorGraphPanel`의 `ResourceEditorInterface` 통합 (`AnimatorGraphPanel.h/.cpp`)**:
+     - 기존 `IImGui` 직접 상속에서 `ResourceEditorInterface` 상속으로 전환.
+     - `IsSupported()` 가상 함수 구현으로 `.bamanimator.json`, `.animator.json`, `.bamanimator`, `.animator` 에셋 지원.
+     - `SetTargetResource(path)` 및 `LoadFromFile(path)` 구현으로 콘텐츠 브라우저에서 애니메이터 컨트롤러 더블클릭 시 상태 머신 자동 로드 및 3D 프리뷰 동기화.
+     - `SaveDocument()` 및 `OpenDocument()` 다이얼로그 필터를 `.bamanimator.json` 표준 규격으로 일원화.
+     - 윈도우 제목에 현재 열려있는 애니메이터 파일명 표시.
+  3. **`SpriteAnimationEditor`의 복합 확장자 지원 확장 (`SpriteAnimationEditor.cpp`)**:
+     - `IsSupported()`에서 단일 확장자(`.spriteanim`, `.bamspriteanim`)뿐만 아니라 복합 확장자(`*.bamspriteanim.json`, `*.spriteanim.json`)도 인식하도록 개선.
+- 검증 기준:
+  - 콘텐츠 브라우저에서 `Assets/Scripts/CubeController.bamgraph.json` 또는 `GraphMovement.bamgraph.json` 더블클릭 시 외부 프로그램(메모장)으로 빠지지 않고 에디터 내부의 `GraphPanel`이 즉시 포커스되며 노드 캔버스가 열려야 함.
+  - 애니메이터 컨트롤러 에셋 더블클릭 시 에디터 내부의 `AnimatorGraphPanel`이 열리고 상태 머신이 로드되어야 함.
+  - 스프라이트 애니메이션 복합 확장자 에셋(`.bamspriteanim.json`) 더블클릭 시 `SpriteAnimationEditor`가 정상적으로 열려야 함.
+
+### [2026-11-09] 리소스 에셋 확장자 체계화 (.bam*.json 전면 적용) 및 리소스 로더·참조 경로·하위 호환성 강화
+
+- Area: Engine | Editor | Resource | Scene | Graph | Timeline | Texture
+- Type: Refactor | Architecture | Feature
+- 주요 변경 내역:
+  1. **리소스 에셋 확장자 독자 규격(`.bam*.json`) 전면 마이그레이션**:
+     - 씬 에셋 15개: `Assets/Scenes/<Name>.json` -> `Assets/Scenes/<Name>.bamscene.json` (중복 파일 정리 완료)
+     - 비주얼 스크립트 그래프 2개: `Assets/Scripts/<Name>.json` -> `Assets/Scripts/<Name>.bamgraph.json` (`CubeController`, `GraphMovement`)
+     - 액션 타임라인 1개: `Assets/Data/Animation/Timeline/Survey.actiontimeline.json` -> `Survey.bamtimeline.json`
+     - 텍스처 디스크립터 2개:
+       - `Assets/Texture/SampleTexture.json` -> `SampleTexture.bamtex.json`
+       - `Engine/Resources/Texture/white1x1.json` -> `white1x1.bamtex.json`
+  2. **설정 및 참조 파일 경로 동기화**:
+     - `Config/Project.json`: `"StartupScenePath"`를 `"Scenes/RaytracingScene.bamscene.json"`으로 갱신.
+     - `Engine/Source/Core/Config/Public/Config.h`: 기본값 `StartupScenePath`를 `"Scenes/RaytracingScene.bamscene.json"`으로 동기화.
+     - `.bam/User/Workspace.json`: `"LastScenePath"`를 `"Assets/Scenes/PhysicsPlayground.bamscene.json"`으로 갱신.
+     - `Engine/examples/VirtualPathCheck.cpp`: 경로 확인 테스트 대상 `RaytracingScene.bamscene.json`으로 갱신.
+     - `Assets/Prefab/Large Floor Sphere.bamprefab.json`: `graphFile` 경로를 `"Resources/Scripts/CubeController.bamgraph.json"`으로 갱신.
+     - `Assets/Scenes/RaytracingScene.bamscene.json`: `graphFile` 경로를 `"Resources/Scripts/CubeController.bamgraph.json"`으로 갱신.
+  3. **Scene 및 Graph 런타임 하위 호환(Fallback) 로딩 메커니즘 구축**:
+     - `SceneManager::LoadScene`: 파일이 존재하지 않고 확장자가 `.json`인 경우, 디스크의 동일 이름 `.bamscene.json` 에셋을 자동 탐색하여 레거시 경로 호출도 투명하게 성공하도록 보장.
+     - `GraphSystem::GetOrLoadGraph`: `.json` 파일 경로 요청 시 `.bamgraph.json` 에셋을 fallback으로 자동 탐색하여 기존 프리팹이나 씬에서 구 확장자를 참조하더라도 끊김 없는 바인딩 보장.
+  4. **에디터 다이얼로그 필터 및 패널 확장자 확장**:
+     - `GraphPanel.cpp`:
+       - 파일 필터: `L"*.bamgraph.json;*.json"` (구버전과 신규 확장자 모두 지원)
+       - 기본 저장 파일명 및 확장자: `LogicGraph.bamgraph.json` / `ShaderGraph.bamgraph.json`, `L"bamgraph.json"`
+     - `AnimationTimelinePanel.h/.cpp`:
+       - `IsSupported()`에서 `.bamtimeline.json` 및 `.bamtimeline` 인식 확장.
+       - 파일 필터: `L"*.bamtimeline.json;*.actiontimeline.json"`, 기본 저장 확장자 `L"bamtimeline.json"`.
+     - `InspectorPanel.cpp`: 타임라인 필터에 `L"*.bamtimeline.json;*.actiontimeline.json"` 지원.
+  5. **ActionTimelineAsset의 ResourceManager 완전 통합**:
+     - `ResourceManager::RegisterExplicitLoader`: `ActionTimelineAsset`을 `registerSimpleLoader`에 등록 (`.bamtimeline`, `.actiontimeline`).
+     - `ActionTimelineAsset::Initialize`: `desc->Path` 전달 시 `LoadFromFile()` 자동 호출로 `ResourceManager::Get().LoadFile()`을 통한 캐싱 및 핸들 획득 파이프라인 완성.
+     - `ActionTimelineAsset::LoadFromFile`: `PlatformPath::ResolveUri` 지원으로 가상 URI(`Project://`, `Engine://`) 및 절대 경로 완벽 대응.
+- 검증 기준:
+  - 에디터 실행 시 스타트업 씬(`RaytracingScene.bamscene.json`)과 마지막 편집 씬이 경고 없이 로드되어야 함.
+  - 콘텐츠 브라우저에서 씬, 그래프, 타임라인, 텍스처 에셋의 전용 배지(SCENE, GRAPH, TIMELINE, TEX)와 아이콘이 올바르게 표시되고 더블클릭 시 전용 에디터로 열려야 함.
+  - 그래프 저장/열기 및 타임라인 저장/열기 시 `*.bam*.json` 확장자가 기본으로 적용되어야 함.
+
+### [2026-11-09] 핫 리로드 인터페이스(`IHotReloader`) 다중 후보 경로/환경변수 지원 아키텍처 일반화 및 셰이더 핫 리로드 매니저 완전 통합 (컴파일 에러 C2065 해결)
+
+- Area: Editor | HotReload | Shader | Architecture
+- Type: Refactor | Architecture | Bugfix
+- 주요 변경 내역:
+  1. **핫 리로드 기반 인터페이스(`IHotReloader`) 다중 경로 후보 관리 표준화**:
+     - `HotReloaderInterface.h/.cpp`: 핫 리로더 최상위 인터페이스에 가상 URI, 환경변수(`PATH` 형식 세미콜론 분리 목록), 개별 디렉터리 경로를 등록/관리하는 표준 메서드군 신설 (`AddWatchPath`, `AddWatchPaths`, `AddWatchPathsFromString`, `AddWatchPathsFromEnvironment`, `RemoveWatchPath`, `ClearWatchPaths`, `GetWatchPaths`).
+     - `Engine://`, `Project://` 가상 URI를 물리 절대경로로 자동 해석(`PlatformPath::ResolveUri`) 및 정규화(`Normalize`) 후 중복 등록 방지.
+     - 가상 수명주기 훅 `OnWatchPathAdded(resolvedPath)`, `OnWatchPathRemoved(resolvedPath)` 제공으로 파생 클래스가 파일 감시자(`efsw`)를 자연스럽게 연동할 수 있도록 설계.
+  2. **`ShaderHotReloadManager` 완전 통합 및 컴파일 오류(C2065 `m_WatchDirectory`) 해결**:
+     - 251행/253행에서 헤더 파일(`.hlsli`) 수정 시 단일 변수 `m_WatchDirectory`를 참조하여 발생하던 C2065 미정의 식별자 에러 해결.
+     - `GetWatchPaths()`를 순회하여 등록된 모든 디렉터리(`Engine://Shader/hlsl`, `Project://Shader/hlsl`, `Project://Shader`, `BAM_SHADER_PATH` 환경변수 등)의 영향을 받는 `.hlsl` 셰이더를 빠짐없이 감지 및 재컴파일하도록 수정.
+     - `RegisterDefaultCandidates()`를 통해 기본 3대 경로 및 환경변수 자동 바인딩.
+     - `OnWatchPathAdded/Removed`를 통해 `m_WatchIdMap[resolvedPath] = watchId` 형태로 파일 워치를 동적 등록/해제 관리.
+- 검증 기준:
+  - MSVC 컴파일 시 `ShaderHotReloadManager.cpp`의 C2065 에러 없이 빌드가 정상 성공해야 함.
+  - 엔진 셰이더와 프로젝트 에셋 셰이더 수정 시 핫 리로드가 정상 감지되어야 함.
+
+
+
+### [2026-11-09] 2D 스프라이트 애니메이션 런타임 및 에디터 프리뷰 재생 파이프라인 완성: ResourceManager 로더 등록, JSON 아카이브 라우팅 및 Presentation 페이즈 틱 연동
+
+- Area: Engine | Resource | System | 2D | Animation | Editor
+- Type: Bugfix | Architecture | Pipeline
+- 주요 변경 내역:
+  1. **`ResourceManager`의 `SpriteAnimation` 명시적 로더 등록 (`ResourceManager.cpp`)**:
+     - `RegisterExplicitLoader`에 `registerSimpleLoader.operator()<SpriteAnimation, SpriteAnimationCreateDesc>({ L".spriteanim", L".bamspriteanim" });`를 등록하여, 에디터 및 런타임에서 `.spriteanim` / `.bamspriteanim` 파일 경로를 통한 리소스 생성 및 핸들 조회가 실패하던 결함 해결.
+  2. **`ResourceManager.inl`의 JSON 아카이브 로딩 대상 확장**:
+     - 기존 `if (extension == L".json")` 조건에 `extension == L".spriteanim" || extension == L".effect"`를 추가하여, 확장자가 `.json`이 아닌 JSON 형식 텍스트 에셋(`.spriteanim`)도 `JsonArchive` 파이프라인을 통해 온전히 역직렬화되도록 수정.
+  3. **`SpriteAnimation::Initialize`의 디스크 파일 직접 로드 안전장치(Fail-Safe)**:
+     - `Initialize(void* arg)`에서 `desc->frames`가 비어 있고 `desc->Path`가 주어졌을 때 `LoadFromFile(desc->Path)`를 자동 호출하도록 구현하여, 리소스 생성 경로와 무관하게 100% 무결한 프레임 시퀀스 복원 보장.
+  4. **`SpriteAnimationSystem`의 에디터 뷰포트 프리뷰 연동 (`SpriteAnimationSystem.h/.cpp`)**:
+     - `GetExecutionPhases()`를 기본값 `Gameplay`에서 `ESystemPhase::All`(`Gameplay | Presentation`)로 오버라이드하여, Play(PIE) 모드뿐만 아니라 에디터 편집 모드(뷰포트 Realtime 활성화 시)에서도 매 틱마다 `OnUpdate`가 호출되도록 개선.
+     - `!anim.isPlaying` 정지 상태이거나 프레임 1개인 경우에도 현재 인덱스(`currentFrameIndex`)에 해당하는 스프라이트를 `renderer.spriteHandle`에 상시 동기화하도록 보완하여, 에셋을 할당하는 즉시 뷰포트와 인스펙터에 첫 프레임이 나타나고 인스펙터 슬라이더 조작 시 즉각 프리뷰되도록 개선.
+- 검증 기준:
+  - `SpriteAnimationComponent`에 `.spriteanim` 에셋 할당 시 유효한 프레임 수와 첫 프레임 스프라이트가 뷰포트 `SpriteRendererComponent`에 즉시 반영되는지 확인.
+  - 상단 툴바의 Play 버튼(PIE 실행) 또는 씬 뷰포트의 `Realtime` 토글 활성화 시 스프라이트 애니메이션이 FPS 설정에 맞추어 부드럽게 재생되는지 확인.
+
+
+### [2026-11-09] 콘텐츠 브라우저 엔진/에디터 리소스 상위 배치 및 하위 파일/폴더 표시 복원, CMake 잘못된 루트 Resources 생성 제거, 셰이더 핫 리로드 다중 경로(Engine + Assets/Shader) 감시 체계 구축
+
+- Area: Editor | ContentBrowser | HotReload | Shader | Build | CMake
+- Type: Bugfix | Feature | Architecture
+- 주요 변경 내역:
+  1. **콘텐츠 브라우저 엔진·에디터 리소스 표시 복원 및 상위 배치 (`ContentBrowserPanel.cpp`)**:
+     - 원인 해결: `m_ShowEngineContent`가 워크스페이스 세팅 복원(`RestoreState`) 시 `0.0f`로 로드되거나 가드 조건으로 인해 `DrawDirectoryTree` 및 `DrawGrid`에서 읽기 전용 타깃(`Engine/Resources`, `Editor/Resources`) 하위 항목이 전부 `continue`되어 비어 보이던 결함 수정.
+     - `rootPath` 및 `m_CurrentDirectory`가 엔진 또는 에디터 리소스 루트일 경우(`isInsideEngineOrEditor`), 읽기 전용 가드와 무관하게 모든 하위 폴더와 파일이 온전히 렌더링되도록 수정.
+     - 트리 뷰(`TreeArea`) 순서 변경: `Engine Resources` $\rightarrow$ `Editor Resources` $\rightarrow$ `Assets` 순으로 상위에 나란히 배치하여 직관적 접근 보장.
+     - `RestoreState`의 `ContentBrowser.ShowEngineContent` 기본값을 `1.0f`로 변경.
+  2. **루트 `Resources/` 폴더 생성 버그 수정 및 정리 (`Engine/CMake/ShaderBuild.cmake`)**:
+     - `SHADER_SOURCE_DIR`가 `${CMAKE_CURRENT_SOURCE_DIR}/../Resources/Shader`로 잘못 설정되어 프로젝트 루트에 불필요한 빈 `Resources/Shader/bin/...` 폴더를 생성하던 문제를 `${CMAKE_CURRENT_SOURCE_DIR}/Resources/Shader`로 올바르게 교정.
+     - 프로젝트 루트에 남아있던 빈 `Resources/` 폴더 완전 삭제.
+  3. **셰이더 핫 리로드 다중 감시 경로 시스템 구축 (`ShaderHotReloadManager.h/.cpp`)**:
+     - 기존 단일 `m_WatchID` 구조를 `std::vector<std::filesystem::path> m_WatchDirectories` 및 `std::vector<efsw::WatchID> m_WatchIDs` 다중 경로 감시 아키텍처로 확장.
+     - `RegisterWatchDirectory(const std::filesystem::path&)` 및 `UnregisterWatchDirectory` 동적 등록 API 신설.
+     - 기본 감시 경로 자동 등록: 엔진 시스템 셰이더(`Engine://Shader/hlsl`)뿐만 아니라 프로젝트 에셋 셰이더(`Assets/Shader/hlsl` 또는 `Assets/Shader`)를 함께 등록하여 프로젝트 레벨의 커스텀 셰이더 수정 시에도 자동 핫 리로드 보장.
+     - `RecompileAll()`에서 등록된 모든 디렉터리를 재귀 순회하여 일괄 재컴파일하도록 개선.
+- 검증 기준:
+  - 콘텐츠 브라우저에서 `Engine Resources`와 `Editor Resources`가 상단에 표시되고, 클릭 및 확장 시 내부의 머티리얼, 셰이더, 로캘 등 하위 파일/폴더가 정상 표시되는지 확인.
+  - CMake 재구성/빌드 시 프로젝트 루트에 빈 `Resources/` 폴더가 더 이상 생성되지 않는지 확인.
+  - `Assets/Shader/`에 HLSL 파일 배치 후 수정 시 핫 리로드 알림 및 컴파일이 정상 트리거되는지 확인.
+
+
+
+### [2026-11-09] 에디터 UX 정밀화: 계층 패널 씬 타이틀바 우측 엔티티 생성(+) 버튼 재배치 및 콘텐츠 브라우저 3대 최상위 마운트 루트(Assets, Engine Resources, Editor Resources) 상시 노출 완비
+
+- Area: Editor | Hierarchy | ContentBrowser | UX | Localization
+- Type: Refactor | Feature | UX
+- 주요 변경 내역:
+  1. **계층 패널(`HierarchyPanel`) 엔티티 생성 버튼 재배치**:
+     - 상단 검색창 좌측의 `[+]` 버튼을 제거하여 검색창이 패널 너비를 온전히 활용하도록 복원.
+     - 씬 이름 타이틀바(`DrawSceneTitle`) 우측 끝에 `ICON_FA_PLUS` 단독 툴버튼을 배치하여 씬 헤더와의 시각적 통일성 및 직관적인 생성 UX 확립.
+  2. **콘텐츠 브라우저(`ContentBrowserPanel`) 3대 최상위 마운트 루트 상시 노출**:
+     - `m_EditorRootPath`(`PlatformPath::GetEditorResourceRoot()`) 및 `GetEditorRootPath()` 신규 추가.
+     - 좌측 폴더 트리(`TreeArea`)에 `Assets`(프로젝트 에셋), `Engine Resources`(엔진 내장 리소스), `Editor Resources`(에디터 내장 리소스) 3개 루트를 구분선과 함께 기본 상시 노출하도록 구조 개편 (`m_ShowEngineContent = true`).
+     - 트리 노드(`ContentBrowserTreeItem.cpp`)에서 각 루트별 고유 아이콘(`ICON_FA_DATABASE`, `ICON_FA_GEARS`, `ICON_FA_TOOLBOX`)과 로캘 이름 연결.
+     - `GetActiveRootForPath` 및 주소표시줄(`AddressBar`), 전체 폴더 검색(`ScopeAll`)에 `m_EditorRootPath`를 완전 통합.
+  3. **다국어 로캘 키 동기화 (`Editor.csv`)**:
+     - `ContentBrowser.EngineResources`, `ContentBrowser.EditorResources` 추가.
+- 검증 기준:
+  - 계층 패널 씬 이름 우측 끝에 `+` 버튼이 노출되고 클릭 시 엔티티 프리셋 생성 팝업이 정상 작동하는지 확인.
+  - 콘텐츠 브라우저 좌측 트리에 `Assets`, `Engine Resources`, `Editor Resources` 3개 최상위 루트가 표시되고, 각 루트 폴더를 클릭했을 때 해당 경로로 탐색 및 주소표시줄에 해당 루트명이 표시되는지 확인.
+
+
+
+### [2026-11-08] 에디터 저작 워크플로우 강화: 파일 다이얼로그 컨텍스트별 독립 경로 기억/디폴트 폴더 매핑, 계층 패널 [+] 프리셋 엔티티 생성, 콘텐츠 브라우저 엔진 저작 리소스 신규 생성 및 에셋 파이프라인/크래시 복원 규격화
+
+- Area: Editor | FileDialog | ContentBrowser | Hierarchy | Architecture | Guidelines
+- Type: Feature | Architecture | UX
+- 주요 변경 내역:
+  1. **파일 다이얼로그(`FileDialogs`) 컨텍스트별 독립 경로 기억 및 기본 폴더 스마트 매핑**:
+     - `FileDialogContext.h`: `EFileDialogContext`에 `ParticleOpen/Save`, `SpriteOpen/Save`, `TimelineOpen/Save`, `ModelImport`, `MaterialOpen/Save`, `PrefabOpen` 등 10종의 세부 컨텍스트 신설.
+     - `FileDialogs.h/.cpp`: Windows `IFileDialog::SetClientGuid`를 활용하여 각 기능/에디터별로 Windows 레지스트리에 마지막 방문 경로를 완벽히 독립적으로 영구 저장.
+     - `GetDefaultFolderForContext`: 첫 방문 시 또는 유효 경로가 없을 때 프로젝트 에셋 루트 기준 최적의 기본 폴더(`Assets/Scenes/`, `Assets/Effect/`, `Assets/Texture/`, `Assets/Data/Animation/Timeline/`, `Assets/Source/`, `Assets/Material/`, `Assets/Prefab/`)를 자동으로 바인딩.
+     - `ParticleEditorPanel`, `SpriteEditor`, `AnimationTimelinePanel`, `ToolBar` 등의 다이얼로그 호출부에 해당 컨텍스트 적용.
+  2. **계층 패널(`HierarchyPanel`) 상단 `[+]` 프리셋 엔티티 생성 버튼 신설**:
+     - 상단 검색창 좌측에 정사각형 `[+]` 툴 버튼 배치 및 `DrawEntityCreationMenu` 구현.
+     - 빈 엔티티 생성, 3D 오브젝트(Cube, Sphere, Cylinder, Quad), 조명(Directional, Point, Spot), 2D 오브젝트(Sprite), UI Canvas, Terrain 등 빈번히 쓰이는 엔티티 프리셋을 원클릭으로 생성 가능하도록 통합.
+     - 씬 빈 영역 우클릭 메뉴와 상단 `[+]` 버튼 메뉴의 동기화 및 단일화.
+  3. **콘텐츠 브라우저(`ContentBrowserPanel`) 엔진 저작 리소스 7종 생성 기능 구현**:
+     - `GridViewContextMenu` 내 `Create` 서브메뉴 확장: Material, Material Instance, Scene, Prefab, Visual Script Graph, Animation Timeline, Particle Effect 생성 지원.
+     - `GenerateUniqueAssetPath`: 이름 충돌 방지 번호 매김(`NewMaterial`, `NewMaterial_1` 등) 구현.
+     - 템플릿 파일 생성 즉시 `RequestRefresh()` 호출 및 `SetRenameTarget()`으로 F2 인라인 이름 편집 모드에 자동 진입.
+  4. **다국어 로캘 키 원본 동기화 (`Editor.csv`)**:
+     - `ContentBrowser.CreateEffect`, `CreateGraph`, `CreatePrefab`, `CreateScene`, `CreateTimeline` 및 `Hierarchy.AddEntityTooltip`, `3DObjects`, `Cube`, `Sphere`, `Cylinder`, `Quad`, `Lights`, `2DObjects`, `Sprite` 등록.
+  5. **아키텍처 및 파이프라인 규격화 (문서 6종 갱신/신설)**:
+     - `Docs/EngineEditorClientGuidelines.md`: 독자 리소스 확장자 이중화(`*.bam*` / `*.bam*.json`), 가상 마운트 루트(`Engine://`, `Project://`), 하이브리드 모델 에셋 정리 규칙 명문화.
+     - `Docs/BuildConfigurationAndPreprocessing.md`: 클라이언트 빌드 시 엔진 내 에디터/디버그 코드 스트립 시 No-Op 스텁, 매크로 증발, ABI 보존 4대 설계 패턴 수립.
+     - `Docs/CrashHandlingAndRecoveryPlan.md`: SEH 미니덤프와 5분 주기 하트비트 스냅샷을 결합한 2단계 복원 아키텍처 신설.
+     - `Docs/DevelopmentPriorities.md`: 상기 작업 목록의 우선순위 공식 등재.
+- 검증 기준:
+  - 파일 다이얼로그 실행 시 파티클 에디터는 `Assets/Effect`, 스프라이트 에디터는 `Assets/Texture`, 씬 저장은 `Assets/Scenes`가 기본으로 열리고, 폴더 이동 후 재호출 시 각 창이 마지막 폴더를 독립적으로 기억하는지 확인.
+  - 계층 패널 `[+]` 버튼 및 콘텐츠 브라우저 우클릭 생성 동작 확인.
+  - 빌드 및 실행 확인 (사용자 수동 검증).
+
+
+
+### [2026-11-08] 2D 스프라이트 렌더링 및 에디터 연동 정밀화: 인스펙터 SpriteAnimation 리소스 피커 연결, 표준 PPU(100.0) 스케일링 체계화 및 GBuffer Unlit 과노출 버그 해결
+
+- Area: Editor | Engine | Resource | 2D | Render | Shader
+- Type: Bugfix | Architecture | Quality
+- 주요 변경 내역:
+  1. **인스펙터 `SpriteAnimation` & `ParticleEffect` 리소스 피커 완비**:
+     - `ReflectionPropertyDrawer.cpp`: `INSPECTOR_RESOURCE` 매크로 목록에 `SpriteAnimation`과 `ParticleEffect`를 신규 등록하여, 인스펙터에서 `ResourceHandle<SpriteAnimation>`(`SpriteAnimationComponent.animation`) 및 `ResourceHandle<ParticleEffect>`가 "값 미리보기를 사용할 수 없습니다" fallback 대신 검색·선택·미리보기가 가능한 표준 리소스 피커로 즉시 연동되도록 개선.
+     - `ResourcePicker.h`: `SpriteAnimation`(`.bamspriteanim`, `.spriteanim`, `ICON_FA_FILM`, 민트색) 및 `ParticleEffect`(`.bameffect`, `.effect`, `ICON_FA_WAND_MAGIC_SPARKLES`, 주황색)의 확장자 판별식과 시각적 비주얼(아이콘/배지) 특수화 추가.
+     - `Resources.h`: 공통 리소스 헤더에 `#include "SpriteAnimation.h"` 추가.
+  2. **스프라이트 PPU(Pixels Per Unit) 표준화 (100.0f 규격화)**:
+     - `Macro.h`: 상용 2D 엔진 표준에 맞추어 `#define DEFAULT_PPU 100.f`로 수정 (기존 `1.f`로 인해 $128 \times 128$ 픽셀 스프라이트가 128미터 거대 쿼드로 렌더링되던 문제 원천 해결).
+     - `Sprite.h` / `Sprite.cpp`: `SpriteCreateDesc`에 `pixelPerUnit = DEFAULT_PPU` 추가, `Sprite::Initialize`에서 PPU 초기화 및 `SetPixelPerUnit(f32 ppu)` 갱신 API 신설.
+     - `SpriteSlicingService.h` / `SpriteEditor.cpp`: `SpriteSliceParameters`에 `pixelPerUnit = 100.0f` 추가, 슬라이스 모달에 PPU 조절 필드 배치, 슬라이스 저장 시 각 스프라이트 에셋에 PPU 기록 및 로드된 인스턴스 실시간 반영.
+     - 기존 생성된 `Assets/Texture/uv1*.bamsprite.json` 파일들의 `m_PixelPerUnit`을 100으로 일괄 마이그레이션.
+  3. **GBuffer Unlit 스프라이트 과노출(2배 밝기) 및 라이팅 왜곡 해결**:
+     - `gbufferSpritePS.hlsl` / `gbuffer_sprite.frag`: 기존에 `output.Diffuse`와 `output.Emission`에 동일한 `texColor.rgb`를 중복 기록하여 `lightingPS`의 `albedo + emission` 경로에서 2배로 하얗게 타버리던 결함 수정.
+     - 일반 스프라이트는 `output.Emission = float4(0, 0, 0, 1)`로 설정하여 원본 텍스처 색상이 1:1로 정확하게 출력되도록 보장하고, `color > 1.0`인 HDR 발광 파티클에 대해서만 초과분을 Emission으로 전달하여 자연스러운 블룸을 유지하도록 개선.
+- 검증 기준:
+  - `SpriteSlicingCheck` CTest 단위 테스트 통과 (`params.pixelPerUnit == 100.0f`).
+  - 에디터 인스펙터에서 `SpriteAnimationComponent`의 애니메이션 필드가 정상 리소스 피커로 표시되고 드롭다운/선택이 가능해야 함.
+  - 뷰포트에서 스프라이트가 1.28m 적정 크기로 렌더링되고 과노출 없이 원본 색상으로 표시되어야 함.
+
+
+### [2026-11-08] 2D 제작 워크플로우(트랙 D Phase 1) 및 2D 이펙트 시스템: 스프라이트 슬라이싱 서비스(SpriteSlicingService)와 알파 BFS 자동 분할 구축, 스프라이트 플립북 원샷 자동 수명 제어 및 2D 파티클 Sub-UV 애니메이션 연동
+
+- Area: Editor | Engine | Resource | 2D | FX | Render | Localization
+- Type: Feature | Architecture | Safety
+- 주요 변경 내역:
+  1. **스프라이트 슬라이싱 서비스 신설 및 0-패딩(Zero-Padding) 네이밍 확립 (`SpriteSlicingService.h/.cpp`)**:
+     - `GridByCellSize`, `GridByCellCount`, `Automatic` 3대 슬라이싱 알고리즘을 UI 독립형 순수 로직 서비스로 캡슐화.
+     - 0-패딩(Zero-Padding) 네이밍 체계: 총 슬라이스 수량에 맞춘 자릿수 포맷팅(`uv1_00`, `uv1_01`, ..., `uv1_63`)을 적용하여 파일 정렬 시 10의 자리와 1의 자리가 교차하는 사전식 정렬 결함 원천 해결.
+     - `baseName` 정제를 통해 `uv1.bamsprite_01` 같은 중복 태그를 제거하고 `uv1_01.bamsprite` 형태의 깔끔한 파일명 생성 보장.
+     - `ContentBrowserPanel.cpp`: `StrCmpLogicalW`를 이용한 폴더 우선 및 자연 정렬(Natural Sort) 도입으로 윈도우 탐색기와 완벽히 동일한 정렬 뷰 제공.
+     - `Automatic` 알파 클러스터링: RGBA8 CPU 픽셀 데이터를 8방향 BFS(Flood-Fill)로 순회하여 불규칙한 스프라이트 섬(Island)의 바운딩 박스(AABB) 자동 추출, `minPixelArea`를 통한 단일 픽셀 노이즈 제거, 행/열 순서 정렬 및 순차 넘버링 구현.
+     - 파일(`.png` 등) 및 메모리 버퍼 직접 슬라이싱 API 제공.
+  2. **스프라이트 에디터(`SpriteEditor.h/.cpp`) 연동 및 애니메이션 위저드 강화**:
+     - `SpriteEditor`의 슬라이싱 로직을 `SpriteSlicingService`로 일원화하고, `DrawSliceModal`에 알파 임계값(`alphaThreshold`)과 최소 면적(`minPixelArea`) 조절 슬라이더 추가.
+     - `GenerateAnimation`: 슬라이스된 에셋의 저장 확장자(`.bamsprite.json` / `.bamsprite`)를 동적으로 판별하여 단일/다중 행 클립 생성 시 유효한 리소스 핸들을 안전하게 취득하도록 개선.
+  3. **스프라이트 플립북 원샷 2D 이펙트 자동 수명 주기 (`SpriteAnimationComponent.h`, `SpriteAnimationSystem.cpp`)**:
+     - `autoDeactivateOnFinish`(완료 시 엔티티 비활성화, 오브젝트 풀링 지원) 및 `autoDestroyOnFinish`(완료 시 엔티티 자동 파괴) 속성 신설 및 리플렉션 등록.
+     - `SpriteAnimationSystem`에서 순회 도중 `scene->FindEntity` 후 일괄 안전 파괴를 적용하여 entt iterator 무효화 없는 안전한 자동 수명 관리 보장.
+  4. **2D 파티클 평면 정렬 및 Sub-UV 플립북 애니메이션 (`ParticleEmitterComponent.h`, `ParticleEffect.h`, `ParticleSystem.cpp`)**:
+     - `billboardMode == ESpriteBillboardMode::None`: 카메라 3D 빌보드 대신 2D 게임 평면(XY 평면 $Z=0$, Z축 회전 $p.rotation$)에 일치된 쿼드 생성 지원.
+     - Sub-UV (Flipbook Texture Sheet) 파티클: `subUVColumns`, `subUVRows`, `subUVCycles`를 기반으로 파티클 수명 정규화 시간($t$)에 따라 UV 변환 오프셋/스케일을 계산하여 절차적 시트 애니메이션 드로우 커맨드 제출.
+  5. **헤드리스 단위 테스트 `SpriteSlicingCheck` 신설 및 CTest 등록 (`SpriteSlicingCheck.cpp`, `Editor/CMake/Checks.cmake`)**:
+     - $64x64$ 크기의 셀 크기 분할, $128x64$의 행열 분할, $16x16$ 메모리 픽셀 버퍼에서의 2개 아일랜드 검출 및 1픽셀 노이즈 필터링 검증 테스트 작성 및 CTest 등록.
+  6. **로컬라이제이션 원본 CSV 동기화**:
+     - `Engine/Resources/Data/Localization/Engine.csv`: `PROP_AUTO_DEACTIVATE_ON_FINISH`, `PROP_AUTO_DESTROY_ON_FINISH`, `PROP_SUBUV_COLUMNS`, `PROP_SUBUV_ROWS`, `PROP_SUBUV_CYCLES` 추가.
+     - `Editor/Resources/Data/Localization/Editor.csv`: `SpriteEditor.AlphaThreshold`, `SpriteEditor.MinPixelArea` 추가.
+- 실제 검증 결과 및 미검증 항목:
+  - Unity 빌드 및 헤더 정합성 수정:
+    - `SpriteSlicingService.h`: 엔진 표준 프리컴파일드/공통 헤더인 `#include "Engine_Includes.h"` 및 `Structs/Rect.h`로 정규화.
+    - `CommandHistory.h`: 최상단에 `#include "Editor_Includes.h"`를 선행 포함하여 `Delegate.h`의 `using namespace std;`에 의한 `unity_2_cxx.cxx`의 Windows SDK `byte` 모호성 충돌(C2872) 해결.
+    - `stb_image` 단일 독립 TU(`StbImageImpl.cpp`) 신설 및 중복/미구현 링커 에러(LNK2019/LNK2005) 근본 해결:
+      - `ContentBrowserPanel.cpp`에 하드코딩되어 있던 `#define STB_IMAGE_IMPLEMENTATION`을 제거하고 전용 구현 파일(`StbImageImpl.cpp`)로 추출.
+      - `Editor/CMakeLists.txt`에서 `StbImageImpl.cpp`에 `SKIP_UNITY_BUILD_INCLUSION ON`을 지정하여 Unity 빌드 컴파일 오염 차단.
+      - `Checks.cmake`의 `SpriteSlicingCheck` 소스 목록에 `StbImageImpl.cpp`를 연결하여 `stbi_load_from_memory`, `stbi_image_free` 미참조 링크 에러 해결.
+  - 검증 완료: 정적 코드 정합성, 리플렉션 속성 매크로 매칭, 메모리 버퍼 슬라이싱 알고리즘 설계.
+  - 미검증 항목: 빌드 및 CTest 단위 테스트 실행 (사용자 실행 권한 원칙에 따라 사용자 확인 대기).
+
+
+### [2026-11-08] 에셋 아키텍처 연동 안정화: 에디터 프리로드 파이프라인(StartupResourceLoader) 가상 경로 일원화, 머티리얼 인스턴스 참조 복구 및 에디터 구동 검증 통과
+
+- Area: Editor | Core | Resource | Material | Config
+- Type: Bugfix | Architecture | Safety
+- 주요 변경 내역:
+  1. **`StartupResourceLoader.cpp`의 가상 경로(`PlatformPath::ResolveUri`) 전면 적용**:
+     - 기존 `projectRoot / path` 직접 결합을 제거하고 `PlatformPath::ResolveUri`를 거치도록 일원화하여 `Assets/Config/Startup/` 매니페스트 및 파이프라인 단계별 텍스처, 셰이더, 메시, 머티리얼, 머티리얼 인스턴스 전 파일이 `Assets/`와 `Engine/Resources/`에서 투명하게 로드되도록 개선.
+  2. **`Config/Project.json` 및 `Config.h` 경로 정규화**:
+     - `ProjectSettings`의 `AssetDirectory`("Assets"), `EngineResourceDirectory`("Engine/Resources")를 명시하고, `StartupManifestPath`("Config/Startup/StartupManifest.json"), `StartupScenePath`("Scenes/RaytracingScene.json")를 최신 분리 규약으로 동기화.
+     - `Application::InitializeResources`에서 프로젝트 설정 로드 후 `PlatformPath::SetProjectAssetRoot`와 `SetEngineResourceRoot`를 즉시 갱신하도록 안전장치 추가.
+  3. **`ResourceHandleArchiveAdapter.h` 및 `PlatformPath::ToVirtualUri` 참조 해석 강화**:
+     - `ResolveResourceHandle`에서 `FindHandleByFilePath` 교차 조회를 추가하고, 디스크 폴백 시 `PlatformPath::ResolveUri`를 적용하여 확장자 없는 레거시 키나 물리 분리된 머티리얼 인스턴스 역직렬화 실패(`code=2, field=ResourceReference`) 원천 차단.
+     - `SpriteMaterialInstance.bammatinst.json`과 `SpriteMaterial.bammat.json`의 키와 경로를 표준 확장자 규약으로 정규화.
+- 실제 검증 결과:
+  - CTest (`VirtualPathCheck`, `ReflectionInspectorCheck`): 100% Passed.
+  - 에디터 빌드(`Editor.vcxproj`) 및 실행(`Editor.exe`): `[StartupLoader] Preload pipeline completed successfully.` 확인 및 에디터 메인 창 정상 구동 통과.
+
 ### [2026-11-08] 비주얼 이펙트 아키텍처: 계층형 통합 모델 (VFX Composite / Track-based Orchestrator) 설계 완료
 
 - Area: Engine | Render | FX | Editor | Architecture

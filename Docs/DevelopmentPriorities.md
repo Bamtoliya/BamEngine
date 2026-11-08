@@ -34,6 +34,7 @@ Engine·Render·Editor·Client 계획에서 무엇을 먼저 연결하고 무엇
 - [ParticleAndEffectSystemPlan.md](ParticleAndEffectSystemPlan.md): 모듈형 파티클 & 비주얼 이펙트 시스템, 물리 충돌/기류 상호작용 및 독립 에디터 계획.
 - [CompositeVisualEffectPlan.md](CompositeVisualEffectPlan.md): 계층형 통합 비주얼 이펙트 시스템(VFX Composite), 메쉬 이펙트/트레일/라이트 섬광 및 트랙 기반 오케스트레이터 계획.
 - [SpriteAnd2DSystemPlan.md](SpriteAnd2DSystemPlan.md): 스프라이트 시트 슬라이싱, 9-Slice/Filled 렌더링, 픽셀 퍼펙트 카메라, 2D 타일맵 시스템 및 애니메이션 자동 연동 계획.
+- [CrashHandlingAndRecoveryPlan.md](CrashHandlingAndRecoveryPlan.md): 비정상 종료 진단(SEH/미니덤프, 크래시 리포트) 및 에디터 하트비트 자동 저장/작업 복원 계획.
 
 전체 작업 선택은 이 문서, 기능 내부의 구현 순서·실패 정책은 상세 계획을 따른다.
 새 사용자 결정이 우선하며 충돌이 생기면 이 문서와 해당 계획을 함께 갱신한다.
@@ -545,6 +546,8 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
 
 - **다수 광원 지원 확장 — A06 본체 / F10**: 현행 씬 광원 업로드 상한은 32개다. 이 상한을 확장할 때 CPU 버퍼 용량·셰이더 순회 범위와 타일당 256개 초과 계측·폴백을 함께 검증한다.
 - **재임포트 작업**: Overwrite/SaveToFile 조합, 기존 핸들 유지, 중간 파일 저장/부모 머티리얼 실패를 확인한다. 정적 검토만으로 다중 파일 트랜잭션 완료를 선언하지 않는다.
+- **클라이언트 빌드 시 에디터·디버그 코드 스트립 및 안전 실행 보장 (No-Op 스텁화 / ABI 보호)**: 엔진 내 에디터 및 디버깅 전용 함수를 식별하고, 클라이언트 DLL/바이너리 빌드 시 전처리기로 완전히 제거(Strip)하되 링크 오류 및 널 크래시를 방지하기 위해 No-Op 인라인 스텁 및 안전 매크로를 적용한다. 코어 데이터 구조의 ABI 불변성과 호출부 널 안전성을 보장한다. (참조: [BuildConfigurationAndPreprocessing.md](BuildConfigurationAndPreprocessing.md) 3.1절)
+- **비정상 종료 진단(크래시 리포터) 및 에디터 작업 복원 시스템 (Crash Recovery)**: Windows SEH 및 미니덤프(`MiniDumpWriteDump`) 연동, 블랙박스 로그 플러시, 구조화된 크래시 리포트(`.crash.json`), 5분 주기 하트비트 자동 저장(Heartbeat Auto-Save) 및 차기 실행 시 복원 마법사 구축. (참조: [CrashHandlingAndRecoveryPlan.md](CrashHandlingAndRecoveryPlan.md))
 - **2D 제작 예제**: 로그에 남은 구형 sprite/texture 로드 실패의 현재 재현 여부를 먼저 확인한다. 현행 로더 문제와 오래된 샘플 데이터 문제를 분리한 뒤 Engine 14절 L의 Simple/Filled 또는 기본 TileMap 중 필요한 작은 예제로 진행한다.
 
 ### 11.3 안정화 다음 기능 선택 (차기 5개 트랙)
@@ -563,13 +566,9 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
   - Phase 2: `PluginManagerPanel` 에디터 패널 신설 (모듈 목록, 로드/언로드 상태 뱃지, 수동 리로드/빌드 툴바).
   - Phase 3: `ModuleBuildManager`의 비동기 컴파일 콘솔 출력을 캡처하여 패널 내 실시간 빌드 로그 뷰로 파이프라이닝.
   - Phase 4: 패널 플러그인의 핫리로드 및 `EditorWorkspace` 연동(열린 플러그인 패널 복원 및 상태 캐싱).
-- **트랙 F (계층형 통합 비주얼 이펙트 시스템 — [CompositeVisualEffectPlan.md](CompositeVisualEffectPlan.md)) [설계 완료 / 대기]**:
-  - 배경: 기존 파티클(입자) 중심 시스템에서 메쉬 이펙트(마법진, 충격파 링, UV 스크롤)와 순간 조명 섬광, 사운드를 타임라인 시간축으로 오케스트레이션하는 계층형 통합 아키텍처 채택.
-  - 선행 조건: 2D 기반 스프라이트 애니메이션(트랙 D) 작업 완료 후 착수.
-  - Phase 1: `MeshFXData` 구조체, UV 스크롤/디졸브 셰이더 및 포워드 투명 패스 렌더링 구축.
-  - Phase 2: 복합 이펙트 컨테이너(`VisualEffectAsset`) 및 런타임 오케스트레이터(`VisualEffectComponent`) 구축.
-  - Phase 3: 에디터 패널 멀티 트랙 UI 및 타임라인 스크러빙 뷰 연동.
-  - Phase 4: 조명 섬광(`LightFlash`) 및 검기 슬래시용 트레일(`TrailFX`) 단계적 통합.
+- **트랙 F (계층형 통합 비주얼 이펙트 시스템 — [CompositeVisualEffectPlan.md](CompositeVisualEffectPlan.md)) [완료]**:
+  - 배경: 기존 파티클(입자) 중심 시스템에서 스프라이트 플립북, 메쉬 이펙트(마법진, 충격파 링, UV 스크롤), 순간 조명 섬광, 사운드를 타임라인 시간축으로 오케스트레이션하는 계층형 통합 아키텍처 채택.
+  - 완료 내역: `CompositeEffect` 에셋(JSON 아카이브), `CompositeVFXComponent` 및 `CompositeVFXSystem` 런타임 오케스트레이터, 독립 3D 뷰포트·타임라인 스크러빙·2열 테이블 인스펙터 지원 `VFXEditorPanel` 및 로캘 동기화 완료.
 
 ### 11.4 상태·검증 기록 규칙
 

@@ -26,6 +26,9 @@ namespace Engine
 	class Shader;
 	class Animation;
 	class Skeleton;
+	class SpriteAnimation;
+	class ParticleEffect;
+	class CompositeEffect;
 }
 
 namespace Editor
@@ -92,6 +95,18 @@ namespace Editor
 			{
 				return endsWith(".bamskel") || endsWith(".bamskel.json") || endsWith(".bamskeleton");
 			}
+			else if constexpr (std::is_same_v<T, Engine::SpriteAnimation>)
+			{
+				return endsWith(".bamspriteanim") || endsWith(".bamspriteanim.json") || endsWith(".spriteanim") || endsWith(".spriteanim.json");
+			}
+			else if constexpr (std::is_same_v<T, Engine::ParticleEffect>)
+			{
+				return endsWith(".bameffect") || endsWith(".bameffect.json") || endsWith(".effect") || endsWith(".effect.json");
+			}
+			else if constexpr (std::is_same_v<T, Engine::CompositeEffect>)
+			{
+				return endsWith(".bamvfx") || endsWith(".bamvfx.json") || endsWith(".vfx") || endsWith(".vfx.json");
+			}
 			else
 			{
 				return true;
@@ -131,6 +146,12 @@ namespace Editor
 				return { ICON_FA_BONE, ImVec4(0.88f, 0.85f, 0.75f, 1.0f), "SKELETON" };
 			else if constexpr (std::is_same_v<T, Engine::Shader>)
 				return { ICON_FA_CODE, ImVec4(0.78f, 0.48f, 0.98f, 1.0f), "SHADER" };
+			else if constexpr (std::is_same_v<T, Engine::SpriteAnimation>)
+				return { ICON_FA_FILM, ImVec4(0.35f, 0.90f, 0.65f, 1.0f), "SPRITE ANIM" };
+			else if constexpr (std::is_same_v<T, Engine::ParticleEffect>)
+				return { ICON_FA_WAND_MAGIC_SPARKLES, ImVec4(1.0f, 0.55f, 0.10f, 1.0f), "VFX" };
+			else if constexpr (std::is_same_v<T, Engine::CompositeEffect>)
+				return { ICON_FA_WAND_MAGIC_SPARKLES, ImVec4(0.95f, 0.40f, 0.90f, 1.0f), "COMPOSITE VFX" };
 			else
 				return { ICON_FA_FILE, ImVec4(0.65f, 0.65f, 0.65f, 1.0f), "ASSET" };
 		}

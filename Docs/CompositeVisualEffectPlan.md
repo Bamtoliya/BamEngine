@@ -1,7 +1,7 @@
 # 계층형 통합 비주얼 이펙트 시스템 및 저작 도구 개발 계획 (Composite VFX & Track-based Orchestrator Plan)
 
 - **작성일:** 2026-11-08
-- **상태:** 설계 완료 및 대기 (Pending / Hold — 2D 스프라이트 애니메이션 작업 완료 후 착수 예정)
+- **상태:** 구현 및 검증 완료 (Completed — 복합 에셋, 런타임 오케스트레이터, VFXEditorPanel 저작 도구 구축 완료)
 - **공통 기준:** [EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md), [SourceOrganizationGuidelines.md](SourceOrganizationGuidelines.md)
 - **연계 문서:** [ParticleAndEffectSystemPlan.md](ParticleAndEffectSystemPlan.md)(파티클 코어 Phase 1~5 완료), [AnimationTimelineEditorPlan.md](AnimationTimelineEditorPlan.md), [DevelopmentPriorities.md](DevelopmentPriorities.md)
 

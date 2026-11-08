@@ -28,6 +28,7 @@
 #include "AnimationSceneQuery.h"
 #include "AnimatorPoseUpdate.h"
 #include "ParticleSystem.h"
+#include "CompositeVFXSystem.h"
 #include <vector>
 
 PreviewViewportWidget::~PreviewViewportWidget()
@@ -388,6 +389,8 @@ void PreviewViewportWidget::Submit(Engine::f32 dt)
 	// 파티클 시스템 제출 (프리뷰 씬 내 파티클 에미터/이펙트 렌더링)
 	Engine::ParticleSystem::SubmitSceneParticles(m_PreviewScene, cameraBuffer, m_Pipeline.GetGeometryPassID());
 	Engine::ParticleSystem::SubmitSceneParticles(m_PreviewScene, cameraBuffer, m_Pipeline.GetForwardTransparentPassID());
+	Engine::CompositeVFXSystem::SubmitSceneVFX(m_PreviewScene, cameraBuffer, m_Pipeline.GetGeometryPassID());
+	Engine::CompositeVFXSystem::SubmitSceneVFX(m_PreviewScene, cameraBuffer, m_Pipeline.GetForwardTransparentPassID());
 
 	const bool showFinalOutput = m_SelectedRTName.empty();
 	m_DisplayRTName = showFinalOutput

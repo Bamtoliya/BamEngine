@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 template<typename T, typename... Args>
 ResourceHandle<T> ResourceManager::LoadResource(Args&&... args)
@@ -71,7 +71,7 @@ ResourceHandle<T> ResourceManager::LoadResource(Args&&... args)
 			return ResourceHandle<T>(resourceHandle);
 		};
 
-	if (extension == L".json")
+	if (extension == L".json" || extension == L".spriteanim" || extension == L".effect" || extension == L".bamvfx" || extension == L".vfx")
 	{
 		archive::JsonArchive ar;
 		return loadArchive(ar);
