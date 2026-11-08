@@ -2,6 +2,20 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-08] 비주얼 이펙트 아키텍처: 계층형 통합 모델 (VFX Composite / Track-based Orchestrator) 설계 완료
+
+- Area: Engine | Render | FX | Editor | Architecture
+- Type: Architecture | Design | Documentation
+- 주요 내용:
+  1. **설계 방향성 확정:**
+     - 단순 파티클 시뮬레이터에서 메쉬 이펙트(마법진, 충격파 링, 왜곡 구체, UV 스크롤), 조명 섬광(Light Flash), 사운드(SFX), 트레일(Trail/Ribbon)을 단일 시간축에서 오케스트레이션하는 **계층형 통합 모델(VFX Composite)** 공식 채택.
+  2. **설계 문서화 완료 (`Docs/CompositeVisualEffectPlan.md`):**
+     - 에셋 계층(`VisualEffectAsset`), 런타임 오케스트레이터(`VisualEffectComponent`), 서브시스템 분리 및 포워드 투명 렌더링(`ForwardTransparentPass`) 파이프라인 규약 수립.
+     - `ParticleEditorPanel`을 멀티 트랙 타임라인 에디터(`VFXEditorPanel`)로 점진적 확장하는 4단계 로드맵(Phase 1~4) 수립.
+  3. **진행 순서 및 대기(Hold) 상태 등록:**
+     - `Docs/DevelopmentPriorities.md` 11.3절에 **트랙 F**로 정식 등록.
+     - 사용자 지시에 따라 2D 스프라이트 애니메이션(트랙 D) 작업 완료 후 본 계층형 통합 이펙트 구현에 착수하도록 대기(Hold) 상태로 관리.
+
 ### [2026-11-08] 로캘 아키텍처 혁신: Engine(엔진 코어)과 Editor(에디터 전용) 로컬라이제이션 완전 물리 분리 및 3계층 가상 마운트 URI(Editor://) 확립
 
 - Area: Engine | Editor | Core | Localization | Build | Tests

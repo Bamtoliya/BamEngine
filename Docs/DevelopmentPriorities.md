@@ -32,6 +32,7 @@ Engine·Render·Editor·Client 계획에서 무엇을 먼저 연결하고 무엇
 - [Utf8PathHandlingPlan.md](Utf8PathHandlingPlan.md): UTF-8 파일 경로, 다국어('새 폴더' 등) 입출력 및 비동기 파일 감시자(efsw) 크래시 방어 계획.
 - [EditorWorkflowAndInteractionPlan.md](EditorWorkflowAndInteractionPlan.md): PIE 에디터 시점 분리, 계층/인스펙터 전면화 연계, F/F2 상호작용 및 단축키(ShortcutManager) 일원화 계획.
 - [ParticleAndEffectSystemPlan.md](ParticleAndEffectSystemPlan.md): 모듈형 파티클 & 비주얼 이펙트 시스템, 물리 충돌/기류 상호작용 및 독립 에디터 계획.
+- [CompositeVisualEffectPlan.md](CompositeVisualEffectPlan.md): 계층형 통합 비주얼 이펙트 시스템(VFX Composite), 메쉬 이펙트/트레일/라이트 섬광 및 트랙 기반 오케스트레이터 계획.
 - [SpriteAnd2DSystemPlan.md](SpriteAnd2DSystemPlan.md): 스프라이트 시트 슬라이싱, 9-Slice/Filled 렌더링, 픽셀 퍼펙트 카메라, 2D 타일맵 시스템 및 애니메이션 자동 연동 계획.
 
 전체 작업 선택은 이 문서, 기능 내부의 구현 순서·실패 정책은 상세 계획을 따른다.
@@ -550,7 +551,7 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
 
 - **트랙 A (렌더링 품질 — S2-D) [완료: 2026-11-08]**: 텍스처 밉맵(Mipmap) 체인 생성 및 RHI 다중 서브리소스 업로드 (`stb_image_resize2` 기반 CPU 밉맵 체인 생성, `DirectX12RHI` 다중 서브리소스 업로드, 삼선형 필터링 연동 및 `TextureMipmapCheck` 단위 테스트 완결).
 - **트랙 B (모델 파이프라인 — InteractiveModelImport Phase 5) [완료: 2026-11-07]**: `meshoptimizer`(`meshopt_simplify`) 기반 자동 메시 LOD 생성 파이프라인 및 `ModelEditor` 실시간 LOD 검사기 완결.
-- **트랙 C (에셋 아키텍처 — ResourceAndAssetSeparation Phase 1~2) [완료: 2026-11-08]**: 가상 마운트 URI(`Engine://`, `Project://`) 경로 해석 계층(`PlatformPath`, `ResourceManager`, `Config`, `Runtime`) 및 단위 테스트(`VirtualPathCheck`) 구축 완료 (물리 폴더 이동 전 선행 준비 완결).
+- **트랙 C (에셋 아키텍처 — ResourceAndAssetSeparation Phase 1~3-B) [완료: 2026-11-08]**: 가상 마운트 URI(`Engine://`, `Editor://`, `Project://`) 해석 계층 구축, 빌트인 리소스 보강, 에디터 로캘 분리 및 `Assets/` 물리 폴더 완전 이관 완결. (※ Phase 4 배포 패키징 연동은 2026-11-08 사용자 결정에 따라 핵심 기능 구현 완료 후 최종 배포 단계로 최대한 뒤로 보류)
 - **트랙 D (2D 제작 워크플로 — [SpriteAnd2DSystemPlan.md](SpriteAnd2DSystemPlan.md)) [진행 중]**:
   - Phase 1: 스프라이트 에디터(`SpriteEditor`) 인터랙티브 시트 슬라이싱(Cell Size, Cell Count, Auto Alpha) 및 원클릭 액션 애니메이션 클립(`.spriteanim`) 자동 생성 위저드.
   - Phase 2: 스프라이트 렌더링 모드 확장(Sliced 9-Slice, Tiled, Filled) 및 2D Sorting Layer & Order in Layer.
@@ -562,6 +563,13 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
   - Phase 2: `PluginManagerPanel` 에디터 패널 신설 (모듈 목록, 로드/언로드 상태 뱃지, 수동 리로드/빌드 툴바).
   - Phase 3: `ModuleBuildManager`의 비동기 컴파일 콘솔 출력을 캡처하여 패널 내 실시간 빌드 로그 뷰로 파이프라이닝.
   - Phase 4: 패널 플러그인의 핫리로드 및 `EditorWorkspace` 연동(열린 플러그인 패널 복원 및 상태 캐싱).
+- **트랙 F (계층형 통합 비주얼 이펙트 시스템 — [CompositeVisualEffectPlan.md](CompositeVisualEffectPlan.md)) [설계 완료 / 대기]**:
+  - 배경: 기존 파티클(입자) 중심 시스템에서 메쉬 이펙트(마법진, 충격파 링, UV 스크롤)와 순간 조명 섬광, 사운드를 타임라인 시간축으로 오케스트레이션하는 계층형 통합 아키텍처 채택.
+  - 선행 조건: 2D 기반 스프라이트 애니메이션(트랙 D) 작업 완료 후 착수.
+  - Phase 1: `MeshFXData` 구조체, UV 스크롤/디졸브 셰이더 및 포워드 투명 패스 렌더링 구축.
+  - Phase 2: 복합 이펙트 컨테이너(`VisualEffectAsset`) 및 런타임 오케스트레이터(`VisualEffectComponent`) 구축.
+  - Phase 3: 에디터 패널 멀티 트랙 UI 및 타임라인 스크러빙 뷰 연동.
+  - Phase 4: 조명 섬광(`LightFlash`) 및 검기 슬래시용 트레일(`TrailFX`) 단계적 통합.
 
 ### 11.4 상태·검증 기록 규칙
 
