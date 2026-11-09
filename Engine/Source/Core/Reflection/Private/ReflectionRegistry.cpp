@@ -310,11 +310,13 @@ bool ReflectionRegistry::RegisterComponentOperations()
     append.template operator()<FlagComponent>("Flags", "Core");
     append.template operator()<TransformComponent>("Transform", "Core", &AddSpatialComponent<TransformComponent>);
     append.template operator()<CameraComponent>("Camera", "Rendering", &AddSpatialComponent<CameraComponent>);
+    append.template operator()<PixelPerfectCameraComponent>("Pixel Perfect Camera", "Camera", &AddSpatialComponent<PixelPerfectCameraComponent>);
     append.template operator()<SpringArmComponent>("Spring Arm", "Camera", &AddSpatialComponent<SpringArmComponent>);
     append.template operator()<LightComponent>("Light", "Rendering", &AddSpatialComponent<LightComponent>);
     append.template operator()<StaticMeshRendererComponent>( "Static Mesh Renderer", "Rendering", &AddSpatialComponent<StaticMeshRendererComponent>);
     append.template operator()<LODGroupComponent>("LOD Group", "Rendering", &AddSpatialComponent<LODGroupComponent>);
     append.template operator()<SpriteRendererComponent>("Sprite Renderer", "Rendering", &AddSpatialComponent<SpriteRendererComponent>);
+    append.template operator()<TilemapComponent>("Tilemap", "Rendering", &AddSpatialComponent<TilemapComponent>);
     append.template operator()<SkinnedMeshRendererComponent>("Skinned Mesh Renderer", "Rendering", &AddSpatialComponent<SkinnedMeshRendererComponent>);
     append.template operator()<AnimatorComponent>("Animator", "Rendering", &AddSpatialComponent<AnimatorComponent>);
     append.template operator()<RigidBodyComponent>("Rigid Body", "Physics 3D", &AddSpatialComponent<RigidBodyComponent>);

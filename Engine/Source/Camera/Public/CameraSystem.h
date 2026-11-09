@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "System.h"
 
@@ -16,8 +16,8 @@ public:
 
 public:
 	void OnLateUpdate(entt::registry& globalRegistry, const vector<Scene*>& activeScenes, f32 dt) override;
-	static void UpdateCameras(entt::registry& registry);
-	static bool UpdateCamera(entt::registry& registry, entt::entity entity);
+	static void UpdateCameras(entt::registry& registry, uint32 viewportWidth = 0, uint32 viewportHeight = 0);
+	static bool UpdateCamera(entt::registry& registry, entt::entity entity, uint32 viewportWidth = 0, uint32 viewportHeight = 0);
 };
 
 END

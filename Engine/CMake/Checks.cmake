@@ -85,3 +85,39 @@ endif()
 if(BUILD_TESTING)
     add_test(NAME TextureMipmapCheck COMMAND TextureMipmapCheck)
 endif()
+
+add_executable(PixelPerfectCameraCheck examples/PixelPerfectCameraCheck.cpp)
+target_link_libraries(PixelPerfectCameraCheck PRIVATE BamEngine::Engine)
+set_target_properties(PixelPerfectCameraCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
+
+if(MSVC)
+    target_compile_options(PixelPerfectCameraCheck PRIVATE /utf-8)
+endif()
+
+if(BUILD_TESTING)
+    add_test(NAME PixelPerfectCameraCheck COMMAND PixelPerfectCameraCheck)
+endif()
+
+add_executable(TilemapCheck examples/TilemapCheck.cpp)
+target_link_libraries(TilemapCheck PRIVATE BamEngine::Engine)
+set_target_properties(TilemapCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
+
+if(MSVC)
+    target_compile_options(TilemapCheck PRIVATE /utf-8)
+endif()
+
+if(BUILD_TESTING)
+    add_test(NAME TilemapCheck COMMAND TilemapCheck)
+endif()
+
+add_executable(SpriteAtlasCheck examples/SpriteAtlasCheck.cpp)
+target_link_libraries(SpriteAtlasCheck PRIVATE BamEngine::Engine)
+set_target_properties(SpriteAtlasCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
+
+if(MSVC)
+    target_compile_options(SpriteAtlasCheck PRIVATE /utf-8)
+endif()
+
+if(BUILD_TESTING)
+    add_test(NAME SpriteAtlasCheck COMMAND SpriteAtlasCheck)
+endif()

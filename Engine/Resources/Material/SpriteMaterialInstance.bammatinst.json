@@ -5,8 +5,8 @@
         "Version": 0
     },
     "m_BaseMaterialHandle": {
-        "AssetKey": "Resources/Material/SpriteMaterial",
-        "AssetPath": "",
+        "AssetKey": "Resources/Material/SpriteMaterial.bammat.json",
+        "AssetPath": "Resources/Material/SpriteMaterial.bammat.json",
         "Null": false
     },
     "m_BlendMode": 1,
@@ -15,11 +15,11 @@
     "m_DepthMode": 0,
     "m_FillMode": 1,
     "m_FrontFace": 0,
-    "m_Key": "Resources/Material/SpriteMaterialInstance",
+    "m_Key": "Resources/Material/SpriteMaterialInstance.bammatinst.json",
     "m_OverrideFlags": 0,
     "m_Parameters": [],
     "m_PassShaders": [],
-    "m_Path": "",
+    "m_Path": "Resources/Material/SpriteMaterialInstance.bammatinst.json",
     "m_PixelShaderHandle": {
         "Null": true
     },

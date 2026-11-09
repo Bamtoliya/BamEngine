@@ -10,6 +10,7 @@ struct SpriteCreateDesc : public ResourceCreateDesc
 	Engine::Rect region = { 0.f, 0.f, 0.f, 0.f };
 	vec2 pivot = { 0.5f, 0.5f };
 	vec4 border = { 0.f, 0.f, 0.f, 0.f }; // Left, Right, Top, Bottom (9-Slice용)
+	f32 pixelPerUnit = DEFAULT_PPU;
 };
 
 BEGIN(Engine)
@@ -40,6 +41,7 @@ public:
 public:
 	vec4 GetUVTransform();
 	f32 GetPixelPerUnit() const { return m_PixelPerUnit; }
+	void SetPixelPerUnit(f32 ppu) { m_PixelPerUnit = ppu; IncreaseVersion(); }
 	bool TryGetQuadMatrix(mat4& matrix) const;
 #pragma endregion
 

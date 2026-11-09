@@ -22,7 +22,16 @@ namespace Engine
 		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_SNAP_SUBPIXEL"))
 		bool snapSubpixel = true; // 서브픽셀 위치 스냅으로 카메라 이동 시 떨림(Jittering) 방지
 
-		PROPERTY(READONLY)
+		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_UPSCALE_RT"))
+		bool upscaleRT = true; // 가상 저해상도 렌더타깃에 렌더 후 정수배 업스케일
+
+		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_CROP_FRAME_X"))
+		bool cropFrameX = false; // X축 필러박스 정수비 클리핑
+
+		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_CROP_FRAME_Y"))
+		bool cropFrameY = false; // Y축 레터박스 정수비 클리핑
+
+		PROPERTY(READONLY, DISPLAY_NAME("PROP_CURRENT_ZOOM"))
 		int32 currentZoom = 1; // 계산된 정수 줌 배율 (1x, 2x, 3x ...)
 	};
 }

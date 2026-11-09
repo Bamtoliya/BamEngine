@@ -262,7 +262,7 @@ std::optional<CameraBuffer> GameViewportPanel::FindActiveGameCameraBuffer()
 			const f32 previousAspectRatio = camera.AspectRatio;
 			camera.AspectRatio = aspectRatio;
 
-			if (!Engine::CameraSystem::UpdateCamera(registry, entity))
+			if (!Engine::CameraSystem::UpdateCamera(registry, entity, m_RenderWidth, m_RenderHeight))
 			{
 				camera.AspectRatio = previousAspectRatio;
 				continue;

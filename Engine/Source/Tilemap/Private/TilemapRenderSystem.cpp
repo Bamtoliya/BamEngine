@@ -8,6 +8,8 @@
 #include "RenderPass.h"
 #include "Scene.h"
 #include "PickingManager.h"
+#include "ResourceManager.h"
+#include <algorithm>
 
 namespace Engine
 {
@@ -53,8 +55,31 @@ void TilemapRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*
 		{
 			if (!flag.IsActiveInHierarchy() || !flag.IsVisibleInHierarchy() || HasFlag(flag.effectiveFlags, EEntityFlag::Dead)) continue;
 
+			// 씬 로드 후 저장된 타일 목록으로부터 런타임 청크 자동 복원
+			if (tilemap.chunks.empty() && !tilemap.savedTiles.empty())
+			{
+				const_cast<TilemapComponent&>(tilemap).RestoreFromSavedTiles();
+			}
+
 			Mesh* mesh = tilemap.meshHandle.Get();
 			MaterialInterface* material = tilemap.materialHandle.Get();
+
+			if (!mesh)
+			{
+				static ResourceHandle<Mesh> defaultMesh = ResourceManager::Get().GetResourceHandle<Mesh>(L"Engine://Mesh/Quad");
+				if (!defaultMesh.IsValid())
+					defaultMesh = ResourceManager::Get().GetResourceHandle<Mesh>(L"Resources/Mesh/Quad.bammesh");
+				mesh = defaultMesh.Get();
+			}
+
+			if (!material)
+			{
+				static ResourceHandle<MaterialInterface> defaultMat = ResourceManager::Get().GetResourceHandle<MaterialInterface>(L"Engine://Material/SpriteMaterial");
+				if (!defaultMat.IsValid())
+					defaultMat = ResourceManager::Get().GetResourceHandle<MaterialInterface>(L"Resources/Material/SpriteMaterial.bammat.json");
+				material = defaultMat.Get();
+			}
+
 			if (!mesh || !material) continue;
 
 			const mat4& worldMatrix = worldTransform.worldMatrix;

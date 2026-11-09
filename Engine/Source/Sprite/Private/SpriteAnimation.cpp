@@ -10,6 +10,10 @@ EResult SpriteAnimation::Initialize(void* arg)
 		m_FramesPerSecond = (desc->framesPerSecond > 0.0f) ? desc->framesPerSecond : 12.0f;
 		m_PlayMode = desc->playMode;
 		m_Frames = desc->frames;
+		if (m_Frames.empty() && !desc->Path.empty())
+		{
+			LoadFromFile(desc->Path);
+		}
 	}
 	return EResult::Success;
 }

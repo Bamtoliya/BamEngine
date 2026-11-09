@@ -131,6 +131,13 @@ private:
 private:
 	std::optional<CameraBuffer> GetActiveCameraBuffer();
 	void HandleTerrainSculpting(bool imageHovered);
+	bool HandleTilemapPainting(bool imageHovered);
+
+private:
+	bool m_IsTilemapPaintingActive = false;
+	bool m_TilemapStrokeModified = false;
+	vec2 m_TileBoxFillStartCell{ 0.0f, 0.0f };
+	bool m_IsTileBoxFillDragging = false;
 
 #pragma region Spline
 private:

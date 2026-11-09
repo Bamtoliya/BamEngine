@@ -16,3 +16,4 @@
 #include "ParticleEffect.h"
 #include "SpriteAnimation.h"
 #include "CompositeEffect.h"
+#include "SpriteAtlas.h"

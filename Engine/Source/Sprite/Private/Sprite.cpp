@@ -24,6 +24,7 @@ EResult Sprite::Initialize(void* arg)
 	m_Region = desc->region;
 	m_Pivot = desc->pivot;
 	m_Border = desc->border;
+	m_PixelPerUnit = desc->pixelPerUnit > 0.0f ? desc->pixelPerUnit : DEFAULT_PPU;
 	return EResult::Success;
 }
 

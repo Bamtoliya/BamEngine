@@ -1,4 +1,5 @@
 #include "TilePalettePanel.h"
+#include "EditorUI.h"
 #include "ImGuiManager.h"
 #include "ResourceManager.h"
 #include "NotificationManager.h"
@@ -152,54 +153,36 @@ void TilePalettePanel::Draw()
 
 void TilePalettePanel::DrawToolbar()
 {
-	// 1. 브러시 모드 토글 버튼들
-	const bool isPaint = (m_BrushMode == ETileBrushMode::Paint);
-	const bool isErase = (m_BrushMode == ETileBrushMode::Erase);
-	const bool isBox = (m_BrushMode == ETileBrushMode::BoxFill);
-	const bool isPicker = (m_BrushMode == ETileBrushMode::Picker);
+    const auto drawTool = [&](const char* id, const char* icon, const char* key, ETileBrushMode mode, bool sameLine)
+    {
+        EditorUI::IconButtonOptions options;
+        options.Active = m_BrushMode == mode;
+        options.SameLine = sameLine;
+        if (EditorUI::IconButton(id, icon, key, options))
+            m_BrushMode = mode;
+    };
+    drawTool("Paint", ICON_FA_PAINTBRUSH, "TilePalette.PaintTool", ETileBrushMode::Paint, false);
+    drawTool("Erase", ICON_FA_ERASER, "TilePalette.EraseTool", ETileBrushMode::Erase, true);
+    drawTool("BoxFill", ICON_FA_SQUARE, "TilePalette.BoxTool", ETileBrushMode::BoxFill, true);
+    drawTool("Picker", ICON_FA_EYE_DROPPER, "TilePalette.PickerTool", ETileBrushMode::Picker, true);
 
-	if (isPaint) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 1.0f, 1.0f));
-	if (ImGui::Button(ICON_FA_PAINTBRUSH "##Paint")) m_BrushMode = ETileBrushMode::Paint;
-	if (isPaint) ImGui::PopStyleColor();
-	if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("TilePalette.PaintTool"));
+    const float sliderWidth = ImGui::GetFontSize() * 5.0f;
+    EditorUI::SameLineIfFits(sliderWidth);
+    ImGui::SetNextItemWidth(std::min(sliderWidth, std::max(1.0f, ImGui::GetContentRegionAvail().x)));
+    ImGui::SliderFloat("##TileSize", &m_TileThumbnailSize, 24.0f, 96.0f, "%.0fpx");
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("%s", LOCAL_CSTR("TilePalette.ThumbnailSize"));
 
-	ImGui::SameLine();
-	if (isErase) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 1.0f, 1.0f));
-	if (ImGui::Button(ICON_FA_ERASER "##Erase")) m_BrushMode = ETileBrushMode::Erase;
-	if (isErase) ImGui::PopStyleColor();
-	if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("TilePalette.EraseTool"));
-
-	ImGui::SameLine();
-	if (isBox) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 1.0f, 1.0f));
-	if (ImGui::Button(ICON_FA_SQUARE "##BoxFill")) m_BrushMode = ETileBrushMode::BoxFill;
-	if (isBox) ImGui::PopStyleColor();
-	if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("TilePalette.BoxTool"));
-
-	ImGui::SameLine();
-	if (isPicker) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 1.0f, 1.0f));
-	if (ImGui::Button(ICON_FA_EYE_DROPPER "##Picker")) m_BrushMode = ETileBrushMode::Picker;
-	if (isPicker) ImGui::PopStyleColor();
-	if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("TilePalette.PickerTool"));
-
-	ImGui::SameLine();
-	ImGui::TextDisabled("|");
-	ImGui::SameLine();
-
-	// 썸네일 크기 슬라이더
-	ImGui::SetNextItemWidth(70.0f);
-	ImGui::SliderFloat("##TileSize", &m_TileThumbnailSize, 24.0f, 96.0f, "%.0fpx");
-	if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("TilePalette.ThumbnailSize"));
-
-	ImGui::SameLine();
-	if (!m_PaletteSprites.empty())
-	{
-		if (ImGui::Button(ICON_FA_TRASH_CAN "##ClearPalette"))
-		{
-			m_PaletteSprites.clear();
-			m_SelectedSprite = {};
-		}
-		if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("EditorCommon.Clear"));
-	}
+    if (!m_PaletteSprites.empty())
+    {
+        EditorUI::IconButtonOptions options;
+        options.SameLine = true;
+        if (EditorUI::IconButton("ClearPalette", ICON_FA_TRASH_CAN, "EditorCommon.Clear", options))
+        {
+            m_PaletteSprites.clear();
+            m_SelectedSprite = {};
+        }
+    }
 }
 
 void TilePalettePanel::DrawPaletteGrid()

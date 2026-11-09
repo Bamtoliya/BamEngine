@@ -551,6 +551,7 @@
 ,PROP_SPRITE,Sprite,스프라이트
 ,PROP_SPRITE_ANIMATION,Sprite Animation,스프라이트 애니메이션
 ,PROP_SPRITE_HANDLE,Sprite Handle,스프라이트 핸들
+,PROP_SPRITE_TRACKS,Sprite Tracks,스프라이트 트랙
 ,PROP_SUN_COLOR,Sun Color,태양 색상
 ,PROP_SUN_INTENSITY,Sun Intensity,태양 강도
 ,PROP_SUN_LATITUDE,Sun Latitude,태양 위도
@@ -684,6 +685,7 @@
 ,STRUCT_SPLINE_POINT,Spline Point,스플라인 제어점
 ,STRUCT_SPRING_ARM,Spring Arm,스프링 암
 ,STRUCT_SPRITE_ANIMATION,Sprite Animation,스프라이트 애니메이션
+,STRUCT_SPRITE_ATLAS,Sprite Atlas,스프라이트 아틀라스
 ,STRUCT_SPRITE_RENDERER,Sprite Renderer,스프라이트 렌더러
 ,STRUCT_STATIC_MESH_RENDERER,Static Mesh Renderer,정적 메쉬 렌더러
 ,STRUCT_TAG,Tags,태그

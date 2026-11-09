@@ -39,6 +39,7 @@
 #include "PrefabModeManager.h"
 #include "Model.h"
 #include "ResourceManager.h"
+#include "TilePalettePanel.h"
 #include "SplineCurve.h"
 #include "ImGuiManager.h"
 
@@ -528,7 +529,8 @@ void SceneViewportPanel::DrawCustomViewport()
 		scene->UpdateHierarchyFlags();
 	DrawImViewGuizmo();
 	const bool splineOwnsInput = DrawSplinePointEditor(imageHovered);
-	if (!splineOwnsInput)
+	const bool tilemapOwnsInput = HandleTilemapPainting(imageHovered);
+	if (!splineOwnsInput && !tilemapOwnsInput)
 		DrawImGuizmo();
 	// UIOverlay 패스가 켜져 있을 때만 에디터 뷰포트 아이콘 오버레이를 표시!
 	if (auto* uiPass = RenderPassManager::Get().GetRenderPassByID(m_UIOverlayPassID); !uiPass || uiPass->IsEnabled())
@@ -537,7 +539,7 @@ void SceneViewportPanel::DrawCustomViewport()
 		DrawCameraOverlay();
 	}
 	DrawSelectionLocked();
-	if (!splineOwnsInput)
+	if (!splineOwnsInput && !tilemapOwnsInput)
 	{
 		CapturePickingRequest(imageHovered);
 		HandleTerrainSculpting(imageHovered);
@@ -1621,6 +1623,240 @@ void SceneViewportPanel::HandleTerrainSculpting(bool imageHovered)
 			m_SculptModified = true;
 		}
 	}
+}
+
+
+bool SceneViewportPanel::HandleTilemapPainting(bool imageHovered)
+{
+	auto* palette = dynamic_cast<TilePalettePanel*>(ImGuiManager::Get().GetImGuiPanel(L"Tile Palette"));
+	if (!palette || !palette->IsOpen())
+	{
+		m_IsTilemapPaintingActive = false;
+		m_IsTileBoxFillDragging = false;
+		return false;
+	}
+
+	Scene* activeScene = SceneManager::Get().GetCurrentScene();
+	if (!activeScene) return false;
+
+	Entity* targetEntity = SelectionManager::Get().GetPrimarySelectedEntity();
+	auto& registry = activeScene->GetRegistry();
+
+	Engine::TilemapComponent* tilemap = nullptr;
+	Engine::WorldTransformComponent* worldTransform = nullptr;
+
+	if (targetEntity && targetEntity->GetScene() == activeScene)
+	{
+		tilemap = registry.try_get<Engine::TilemapComponent>(targetEntity->GetEntityHandle());
+		worldTransform = registry.try_get<Engine::WorldTransformComponent>(targetEntity->GetEntityHandle());
+	}
+
+	if (!tilemap || !worldTransform)
+	{
+		auto view = registry.view<Engine::TilemapComponent, Engine::WorldTransformComponent, Engine::FlagComponent>();
+		for (auto [ent, tm, wt, flag] : view.each())
+		{
+			if (flag.IsActiveInHierarchy() && !HasFlag(flag.effectiveFlags, Engine::EEntityFlag::Dead))
+			{
+				tilemap = &tm;
+				worldTransform = &wt;
+				break;
+			}
+		}
+	}
+
+	if (!tilemap || !worldTransform)
+	{
+		m_IsTilemapPaintingActive = false;
+		m_IsTileBoxFillDragging = false;
+		return false;
+	}
+
+	if (imageHovered && !ImGui::GetIO().WantTextInput)
+	{
+		if (ImGui::IsKeyPressed(ImGuiKey_B, false)) palette->SetBrushMode(ETileBrushMode::Paint);
+		else if (ImGui::IsKeyPressed(ImGuiKey_E, false)) palette->SetBrushMode(ETileBrushMode::Erase);
+		else if (ImGui::IsKeyPressed(ImGuiKey_U, false)) palette->SetBrushMode(ETileBrushMode::BoxFill);
+		else if (ImGui::IsKeyPressed(ImGuiKey_I, false)) palette->SetBrushMode(ETileBrushMode::Picker);
+	}
+
+	Engine::Ray ray;
+	float maxDist = 2000.0f;
+	const auto screenMouse = InputManager::Get().GetScreenMousePosition();
+	const ImVec2 mousePos(screenMouse.x, screenMouse.y);
+	if (!ScreenPosToRay(mousePos, ray, maxDist)) return false;
+
+	const mat4& worldMatrix = worldTransform->worldMatrix;
+	const vec3 planeNormal = glm::normalize(vec3(worldMatrix[2]));
+	const vec3 planePoint = vec3(worldMatrix[3]);
+
+	const float denom = glm::dot(ray.direction, planeNormal);
+	if (std::abs(denom) < 1e-5f) return false;
+
+	const float t = glm::dot(planePoint - ray.origin, planeNormal) / denom;
+	if (t < 0.0f || t > maxDist) return false;
+
+	const vec3 hitWorldPos = ray.origin + ray.direction * t;
+	const mat4 invWorld = glm::inverse(worldMatrix);
+	const vec4 localHit = invWorld * vec4(hitWorldPos, 1.0f);
+
+	const vec2 cellCoord = tilemap->WorldToCell(vec2(localHit.x, localHit.y));
+	const int32 cellX = static_cast<int32>(cellCoord.x);
+	const int32 cellY = static_cast<int32>(cellCoord.y);
+
+	const std::optional<CameraBuffer> cameraBuffer = GetActiveCameraBuffer();
+	if (!cameraBuffer.has_value()) return false;
+
+	ImDrawList* drawList = ImGui::GetWindowDrawList();
+	const ETileBrushMode brushMode = palette->GetBrushMode();
+	const auto selectedSprite = palette->GetSelectedSprite();
+
+	auto getCellScreenQuad = [&](int32 cx, int32 cy, ImVec2 outScreen[4]) -> bool
+	{
+		const vec2 cellSize = tilemap->cellSize;
+		const vec2 minLocal = tilemap->CellToWorld(cx, cy);
+		const vec2 maxLocal = minLocal + cellSize;
+
+		const vec3 corners[4] = {
+			vec3(worldMatrix * vec4(minLocal.x, minLocal.y, 0.0f, 1.0f)),
+			vec3(worldMatrix * vec4(maxLocal.x, minLocal.y, 0.0f, 1.0f)),
+			vec3(worldMatrix * vec4(maxLocal.x, maxLocal.y, 0.0f, 1.0f)),
+			vec3(worldMatrix * vec4(minLocal.x, maxLocal.y, 0.0f, 1.0f))
+		};
+
+		for (int i = 0; i < 4; ++i)
+		{
+			if (!WorldToViewportScreen(corners[i], cameraBuffer->viewProjMatrix, m_ImageScreenPos, m_ImageSize, outScreen[i]))
+				return false;
+		}
+		return true;
+	};
+
+	if (imageHovered)
+	{
+		ImU32 highlightColor = IM_COL32(255, 220, 50, 220);
+		if (brushMode == ETileBrushMode::Erase) highlightColor = IM_COL32(255, 60, 60, 220);
+		else if (brushMode == ETileBrushMode::BoxFill) highlightColor = IM_COL32(50, 220, 255, 220);
+		else if (brushMode == ETileBrushMode::Picker) highlightColor = IM_COL32(200, 100, 255, 220);
+
+		if (m_IsTileBoxFillDragging && brushMode == ETileBrushMode::BoxFill)
+		{
+			const int32 startX = static_cast<int32>(m_TileBoxFillStartCell.x);
+			const int32 startY = static_cast<int32>(m_TileBoxFillStartCell.y);
+			const int32 x0 = std::min(startX, cellX);
+			const int32 x1 = std::max(startX, cellX);
+			const int32 y0 = std::min(startY, cellY);
+			const int32 y1 = std::max(startY, cellY);
+
+			for (int32 y = y0; y <= y1; ++y)
+			{
+				for (int32 x = x0; x <= x1; ++x)
+				{
+					ImVec2 quad[4];
+					if (getCellScreenQuad(x, y, quad))
+					{
+						drawList->AddPolyline(quad, 4, highlightColor, ImDrawFlags_Closed, 1.5f);
+					}
+				}
+			}
+		}
+		else
+		{
+			ImVec2 quad[4];
+			if (getCellScreenQuad(cellX, cellY, quad))
+			{
+				if (brushMode == ETileBrushMode::Paint && selectedSprite.IsValid() && selectedSprite.Get())
+				{
+					auto* sp = selectedSprite.Get();
+					if (auto* tex = sp->GetTexture(); tex && tex->GetRHITexture())
+					{
+						const ImTextureID texID = ImGuiManager::Get().GetImGuiTextureID(tex->GetRHITexture());
+						const vec4 uv = sp->GetUVTransform();
+						drawList->AddImageQuad(texID, quad[0], quad[1], quad[2], quad[3],
+							ImVec2(uv.x, uv.y + uv.w), ImVec2(uv.x + uv.z, uv.y + uv.w),
+							ImVec2(uv.x + uv.z, uv.y), ImVec2(uv.x, uv.y),
+							IM_COL32(255, 255, 255, 140));
+					}
+				}
+				drawList->AddPolyline(quad, 4, highlightColor, ImDrawFlags_Closed, 2.0f);
+			}
+		}
+	}
+
+	const bool leftDown = InputManager::Get().IsMouseButtonDown(EMouseButton::Left);
+	const bool leftPressed = InputManager::Get().IsMouseButtonPressed(EMouseButton::Left);
+	const bool rightPressed = InputManager::Get().IsMouseButtonPressed(EMouseButton::Right);
+
+	if (rightPressed) return false;
+
+	if (imageHovered && leftDown)
+	{
+		m_IsTilemapPaintingActive = true;
+		if (brushMode == ETileBrushMode::BoxFill)
+		{
+			m_TileBoxFillStartCell = vec2(static_cast<f32>(cellX), static_cast<f32>(cellY));
+			m_IsTileBoxFillDragging = true;
+		}
+	}
+
+	if (m_IsTilemapPaintingActive && leftPressed && imageHovered)
+	{
+		if (brushMode == ETileBrushMode::Paint)
+		{
+			if (selectedSprite.IsValid())
+			{
+				tilemap->SetTile(cellX, cellY, selectedSprite);
+				m_TilemapStrokeModified = true;
+			}
+		}
+		else if (brushMode == ETileBrushMode::Erase)
+		{
+			tilemap->ClearTile(cellX, cellY);
+			m_TilemapStrokeModified = true;
+		}
+		else if (brushMode == ETileBrushMode::Picker)
+		{
+			const TileCell* cell = tilemap->GetTile(cellX, cellY);
+			if (cell && cell->sprite.IsValid())
+			{
+				palette->SetSelectedSprite(cell->sprite);
+				palette->SetBrushMode(ETileBrushMode::Paint);
+			}
+		}
+	}
+
+	if (m_IsTilemapPaintingActive && !leftPressed)
+	{
+		if (m_IsTileBoxFillDragging && brushMode == ETileBrushMode::BoxFill && selectedSprite.IsValid())
+		{
+			const int32 startX = static_cast<int32>(m_TileBoxFillStartCell.x);
+			const int32 startY = static_cast<int32>(m_TileBoxFillStartCell.y);
+			const int32 x0 = std::min(startX, cellX);
+			const int32 x1 = std::max(startX, cellX);
+			const int32 y0 = std::min(startY, cellY);
+			const int32 y1 = std::max(startY, cellY);
+
+			for (int32 y = y0; y <= y1; ++y)
+			{
+				for (int32 x = x0; x <= x1; ++x)
+				{
+					tilemap->SetTile(x, y, selectedSprite);
+				}
+			}
+			m_TilemapStrokeModified = true;
+			m_IsTileBoxFillDragging = false;
+		}
+
+		if (m_TilemapStrokeModified)
+		{
+			tilemap->SyncSavedTiles();
+			m_TilemapStrokeModified = false;
+		}
+
+		m_IsTilemapPaintingActive = false;
+	}
+
+	return imageHovered && (m_IsTilemapPaintingActive || (brushMode != ETileBrushMode::Picker && selectedSprite.IsValid()));
 }
 
 void SceneViewportPanel::FocusSelectedEntity()

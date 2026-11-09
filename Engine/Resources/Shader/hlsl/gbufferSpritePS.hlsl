@@ -35,8 +35,10 @@ PS_OUTPUT main(PS_INPUT input)
     // 2D 스프라이트는 Z축을 바라보는 기본 노멀(0, 0, 1 -> 0.5, 0.5, 1.0)과 Unlit 플래그(1.0f) 저장
     output.Normal = float4(0.5f, 0.5f, 1.0f, PackShadingData(SHADING_MODEL_UNLIT, 0u));
     output.PBR = float4(1.0f, 0.0f, 0.0f, 1.0f);
-    // 파티클/스프라이트 자체 발광 (HDR 블룸 연동: 알파에 비례하여 자연스러운 발광 감쇠)
-    output.Emission = float4(texColor.rgb * input.Color.a, 1.0f);
+    // 일반 스프라이트 과노출(albedo + emission 중복 더하기) 방지: 기본 Emission은 0
+    // HDR 발광(파티클 등 color > 1.0)일 때만 초과분을 Emission으로 전달하여 블룸 연동
+    float3 hdrEmission = max(texColor.rgb - float3(1.0f, 1.0f, 1.0f), float3(0.0f, 0.0f, 0.0f));
+    output.Emission = float4(hdrEmission, 1.0f);
     output.Position = float4(input.WorldPos, input.PickingId);
     return output;
 }

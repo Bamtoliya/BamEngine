@@ -24,7 +24,8 @@ void main() {
     outDiffuse  = texColor;
     outNormal   = vec4(inNormal * 0.5 + 0.5, 0.0);
     outPBR      = vec4(1.0, 0.0, 0.0, 1.0);  // 풀 러프니스, 비금속
-    // 파티클/스프라이트 자체 발광 (HDR 블룸 연동: 알파에 비례하여 자연스러운 발광 감쇠)
-    outEmission = vec4(texColor.rgb * inColor.a, 1.0);
+    // 일반 스프라이트 과노출 방지: 기본 Emission 0, HDR 초과분만 Emission으로 전달
+    vec3 hdrEmission = max(texColor.rgb - vec3(1.0), vec3(0.0));
+    outEmission = vec4(hdrEmission, 1.0);
     outPosition = vec4(inWorldPos, inPickingId);
 }

@@ -107,6 +107,13 @@ This document tracks implementation details, architectural decisions, and techni
 - 편집 가능한 씬의 활성 볼륨이 있을 때만 씬에 반영한다. 직렬화·스냅샷 실패 시 씬 값은 보존하고, 프리셋 파일 작업과 뷰포트 선택은 씬 이력에서 분리한다.
 - [에디터 씬 Undo/Redo](EditorUndoRedo.md)에 적용 범위를 기록했다. 코드상 편집 진입점과 실패 복원 경로를 대조했으며 빌드, CTest, 에디터 Undo/Redo와 저장 확인은 사용자 검증 항목이다.
 
+### [2026-11-09] 스프라이트 슬라이스와 애니메이션 클립 저장 실패 처리
+
+- `SpriteEditor::SaveSlices`가 성공한 슬라이스의 핸들을 반환하도록 변경했다. 쓰기 성공 이후에 해당 메모리 리소스를 갱신하고, 첫 실패에서 중단해 클립 생성으로 이어지지 않도록 했다.
+- 단일·행별 클립은 같은 슬라이스 저장 결과를 사용한다. 출력 이름을 검사하고 개별 클립의 쓰기 결과를 확인한다. 실패하면 기존 로캘 키로 대상 이름을 알리고 생성 모달의 입력을 유지한다.
+- [2D 제작 계획의 저장 실패와 재시도](SpriteAnd2DSystemPlan.md#13-저장-실패와-재시도)에 부분 성공 파일과 재시도 정책을 기록했다.
+- 코드상 저장 성공·실패 분기, 결과 전달, 알림과 모달 닫힘 경로를 대조했다. 에디터 빌드, CTest, 실제 쓰기 실패와 UI 검증은 사용자가 수행할 확인 항목으로 남아 있다.
+
 ### [2026-11-09] 엔진 파일 내부 구성 기준과 에디터 헤더 경로 갱신
 
 - 범위는 엔진 소스 조직 지침과 에디터 소스·검사 코드의 include다.
@@ -114,6 +121,107 @@ This document tracks implementation details, architectural decisions, and techni
 - 엔진 파일 이동에 맞춰 에디터의 41개 파일에서 include 83곳을 갱신했다. 컴포넌트 경로 61곳, `WorldComponents.h` 이름 21곳, `Rect.h` 경로 1곳이다.
 - 정적 확인에서 갱신한 이름마다 대응하는 엔진 공개 헤더가 하나씩 존재했고, 에디터 소스와 검사 코드에서 대상 이전 참조가 사라진 것을 확인했다.
 - 빌드와 CTest 실행 결과는 아직 없다. 에디터 타깃과 관련 검사로 컴파일·실행을 확인한다. 같은 이전 참조는 `Client` 2곳과 `Projects` 15곳에 남아 있다.
+
+### [2026-11-09] 2D 스프라이트 시스템 Phase 5의 아틀라스 배치와 CPU 버킷 기반
+
+- Area: Engine | Render | Resource | 2D | Sprite | Optimization | Localization | Testing
+- Type: Feature | Architecture | Math | Optimization
+- 주요 변경 내역:
+  1. **스프라이트 아틀라스 에셋 (`SpriteAtlas`)**:
+     - `PackMaxRects`: BSSF(Best Short Side Fit) 및 면적 정렬 휴리스틱을 채택한 MaxRects 2D Bin Packing 알고리즘 구현.
+     - 여유 직사각형을 분할하고 중복 영역을 가지치기한다. 패킹 검사는 대상 영역의 겹침과 경계를 확인한다.
+     - 패킹된 각 스프라이트의 픽셀 영역(`pixelRegion`) 및 $[0, 1]$ 정규화 UV 좌표(`uvTransform`) 자동 산출.
+     - `TryGetEntry`, `HasEntry` 고속 해시 맵 조회 지원.
+  2. **CPU 스프라이트 버킷 (`SpriteBatcher`)**:
+     - 머티리얼·텍스처·패스별로 쿼드의 정점과 인덱스를 모은다. `SpriteRenderSystem`에 배처 멤버가 있으며 실제 제출은 기존 `SubmitSprite()` 경로를 사용한다.
+  3. **검사 타깃 (`Engine/examples/SpriteAtlasCheck.cpp`)**:
+     - 10개 항목의 패킹·겹침·UV 경계와 100개 쿼드가 2개 CPU 버킷에 모이는 경우를 검사한다. 코드의 98회 절감 수치는 명령 수에서 버킷 수를 뺀 기대값이다.
+  4. **로캘 및 리플렉션 연동**:
+     - `Engine.csv`에 `STRUCT_SPRITE_ATLAS`, `PROP_ATLAS_TEXTURE`, `PROP_ATLAS_ENTRIES` 추가 및 `localizationcsvtojson.py` 동기화 완료 (총 829개 키).
+     - `Resources.h`에 `SpriteAtlas.h` 포함.
+
+### [2026-11-09] 2D 스프라이트 시스템 Phase 4 구현 완료: 청크 기반 2D 타일맵 시스템(TilemapComponent & TilemapRenderSystem), 씬 뷰포트 인터랙티브 타일 페인팅 및 타일 팔레트(TilePalettePanel) 연동
+
+- Area: Engine | Editor | Render | 2D | Tilemap | Viewport | UI | Testing
+- Type: Feature | Architecture | Integration
+- 주요 변경 내역:
+  1. **청크 기반 타일맵 데이터 구조 및 직렬화 (`TilemapComponent`)**:
+     - $16 \times 16$ 타일 블록 단위 `TilemapChunk` 구조 및 64비트 정수 청크 키(`MakeChunkKey(cx, cy)`) 기반 스파스(Sparse) 해시맵 저장소 구축. 무한 좌표계 타일맵 지원.
+     - `SavedTile` 구조체 및 `SyncSavedTiles()` / `RestoreFromSavedTiles()` 구현: 씬 저장 시 유효 타일들만 직렬화하고 로드 시 런타임 청크로 자동 복원.
+     - `CellToWorld(x, y)` 및 `WorldToCell(worldPos)` 정밀 좌표 변환 (음수 좌표계 대응).
+     - `ReflectionRegistry.cpp`에 `TilemapComponent` 등록하여 에디터 인스펙터 편집 및 Add Component(`Rendering`) 지원.
+  2. **`TilemapRenderSystem` 렌더링 파이프라인 및 fallback**:
+     - 머티리얼 및 메시 핸들 미지정 시 기본 쿼드 메시(`Builtin/Quad` / `Resources/Mesh/Quad.bammesh`) 및 스프라이트 머티리얼(`SpriteMaterial`) 자동 fallback 처리.
+     - 씬 로드 후 첫 프레임 시 `savedTiles`로부터 런타임 청크 자동 복원 연동.
+     - 각 타일의 UVTransform, 틴트 컬러, 피킹 ID를 반영한 `SpriteDrawCommand` 고속 제출.
+  3. **씬 뷰포트 실시간 타일 페인팅 연동 (`SceneViewportPanel`)**:
+     - `HandleTilemapPainting`: 뷰포트 마우스 레이와 타일맵 2D 평면(Z=0)의 실시간 교차점 계산.
+     - 타일 그리드 스냅 박스(노란색/빨간색/시안색/보라색) 및 선택된 스프라이트 반투명(알파 0.5f) 배치 미리보기 렌더링.
+     - 브러시 4대 모드 완전 연동:
+       - **Paint (B)**: 좌클릭 드래그로 타일 연속 배치
+       - **Erase (E)**: 좌클릭 드래그로 타일 지우기
+       - **Box Fill (U)**: 시작 셀부터 끝 셀까지 사각형 영역 일괄 채우기
+       - **Picker (I)**: 마우스가 가리키는 타일의 스프라이트를 스포이트로 복사 후 Paint 모드로 자동 전환
+     - 마우스 입력 충돌 방지: 타일맵 페인팅 활성화 시 기즈모 조작 및 오브젝트 피킹 자동 차단.
+  4. **타일 팔레트 에디터 패널 (`TilePalettePanel`)**:
+     - 콘텐츠 브라우저에서 텍스처/스프라이트 드래그 앤 드롭으로 팔레트 자동 로드.
+     - 툴바 브러시 모드 토글(B, E, U, I), 썸네일 크기 조절 슬라이더, 개별 타일 우클릭 삭제.
+  5. **단위 검증 (`Engine/examples/TilemapCheck.cpp`)**:
+     - 좌표 변환(양수/음수), 4대 사분면 청크 분할, `ClearTile`, `SyncSavedTiles`/`RestoreFromSavedTiles` 4대 시나리오 자동 검증 타깃 신설.
+
+### [2026-11-09] 2D 스프라이트 시스템 Phase 3 구현 완료: 픽셀 퍼펙트 카메라(Pixel Perfect Camera), 정수 줌 배율 자동 동기화 및 서브픽셀 지터링 방지 스냅
+
+- Area: Engine | Render | Camera | 2D | Sprite | Editor | Viewport | Localization | Testing
+- Type: Feature | Architecture | Math | Integration
+- 주요 변경 내역:
+  1. **`PixelPerfectCameraComponent` 구조체 확장**:
+     - `assetsPPU` (기본 16.0f): 단위 월드 거리(1 Unit) 당 픽셀 밀도 정의.
+     - `refResolutionX` (기본 320), `refResolutionY` (기본 180): 레트로 픽셀 아트 타깃 가상 해상도.
+     - `snapSubpixel` (기본 true): 부동소수점 카메라 이동 시 화면 픽셀 격자 단위 스냅 활성화 플래그.
+     - `upscaleRT` (기본 true), `cropFrameX` (기본 false), `cropFrameY` (기본 false): 가상 렌더타깃 및 정수비 레터박스/필러박스 클리핑 제어.
+     - `currentZoom` (읽기 전용): 뷰포트 해상도에 맞춰 실시간으로 동기화되는 정수 줌 배율($1\times, 2\times, 3\times \dots$).
+  2. **정수 줌 배율(Integer Scale) 및 `OrthographicSize` 자동 동기화 알고리즘 (`CameraSystem`)**:
+     - 뷰포트 실제 해상도 $(W_v, H_v)$와 타깃 레퍼런스 해상도 $(W_{ref}, H_{ref})$ 비교:
+       $$\text{Zoom} = \max\left(1, \min\left(\lfloor W_v / W_{ref} \rfloor, \lfloor H_v / H_{ref} \rfloor\right)\right)$$
+     - 화면상의 1개 스프라이트 텍셀이 정확히 $\text{Zoom}$개의 화면 픽셀을 차지하도록 월드 높이 `OrthographicSize` 자동 계산:
+       $$\text{OrthographicSize} = \frac{H_v}{\text{assetsPPU} \times \text{Zoom}}$$
+     - 뷰포트 창 크기가 가변적이거나 비정규 종횡비(예: 1400x900)인 환경에서도 텍셀 비율이 찌그러지지 않고 $1:\text{Zoom}$ 정수 비율로 완벽 고정.
+  3. **서브픽셀 카메라 스냅 (Sub-pixel Position Snapping)**:
+     - 카메라 월드 위치를 유효 화면 픽셀 밀도($\text{effectivePPU} = \text{assetsPPU} \times \text{Zoom}$) 격자로 스냅:
+       $$X_{snapped} = \frac{\lfloor X_{world} \times \text{effectivePPU} + 0.5 \rfloor}{\text{effectivePPU}}, \quad Y_{snapped} = \frac{\lfloor Y_{world} \times \text{effectivePPU} + 0.5 \rfloor}{\text{effectivePPU}}$$
+     - 이를 통해 부드러운 카메라 이동(Smooth follow) 중에도 텍스처 텍셀 경계가 래스터라이저의 화면 픽셀 경계와 $100\%$ 일치하여 서브픽셀 떨림(Jittering & Shimmering) $0\%$ 달성.
+  4. **에디터 및 리플렉션 연동**:
+     - `GameViewportPanel::FindActiveGameCameraBuffer()`에서 `m_RenderWidth`, `m_RenderHeight`를 `CameraSystem::UpdateCamera`로 전달하여 뷰포트 리사이즈 실시간 반영.
+     - `ReflectionRegistry.cpp`에 `PixelPerfectCameraComponent` 등록하여 인스펙터 편집 및 Add Component 메뉴 노출.
+     - `Engine.csv`에 신규 로캘 키 추가 및 `localizationcsvtojson.py` 동기화 완료 (826개 키).
+  5. **단위 검증 (`Engine/examples/PixelPerfectCameraCheck.cpp`)**:
+     - 1080p, 720p 정수 줌 배율, 비정규 900p 보수적 줌 배율, 서브픽셀 좌표 스냅, `cropFrame` 바운드 고정 5대 시나리오 자동 검증 타깃 신설.
+
+### [2026-11-09] 2D 스프라이트 시스템 Phase 1 & 2 완성: 인터랙티브 스프라이트 시트 3대 슬라이서, 원클릭 애니메이션 생성 위저드 및 9-Slice / Tiled / Filled 렌더링
+
+- Area: Editor | Engine | Resource | 2D | Sprite | Render | UI | Localization
+- Type: Feature | Architecture | Integration
+- 주요 변경 내역:
+  1. **스프라이트 시트 3대 슬라이싱 서비스 (`SpriteSlicingService`) 구축**:
+     - `GridByCellSize`: 고정 가로/세로 픽셀 크기($W, H$) 및 오프셋/패딩 기반 균등 격자 분할.
+     - `GridByCellCount`: 행/열 분할 수($\text{Cols} \times \text{Rows}$) 기반 텍스처 전체 해상도 분할.
+     - `Automatic`: CPU RGBA8 픽셀 버퍼 순회 및 `alphaThreshold` 초과 픽셀에 대한 8방향 BFS Flood-Fill 클러스터링 알고리즘. `minPixelArea` 노이즈 필터링 및 행/열 시각적 순서 자동 정렬, $0$-패딩 형식 식별자(`Sprite_00`, `Sprite_01`) 부여.
+     - 단위 검증: `Editor/examples/SpriteSlicingCheck.cpp`를 통해 3대 슬라이싱 알고리즘 검증 완료.
+  2. **스프라이트 에디터(`SpriteEditor`) 인터랙티브 저작 환경**:
+     - 체커보드 배경 캔버스, 마우스 우클릭/휠 기반 줌($0.1\times \sim 16.0\times$) 및 팬, 실제 픽셀($1:1$) 및 화면 맞춤(`FitView`).
+     - 슬라이스 박스 와이어프레임, 피벗 크로스헤어(십자선), 9-Slice 4방향 가이드라인 시각화 및 마우스 클릭 선택.
+     - `[Apply Slices]`: 슬라이스된 각 구획을 독립 `.bamsprite.json` 에셋으로 일괄 저장 및 콘텐츠 브라우저/리소스 매니저 동기화.
+  3. **원클릭 애니메이션 클립 생성 위저드 (Auto Action Generator)**:
+     - 단일 클립 모드(`SingleClip`): 슬라이스들을 순서대로 연결한 단일 `.spriteanim` 생성.
+     - 행 단위 분할 모드(`RowByRowClips`): 텍스처 시트의 각 행(Row)을 감지하여 `Idle`, `Walk`, `Attack`, `Die` 등 개별 애니메이션 클립으로 1클릭 일괄 분할 추출.
+  4. **스프라이트 렌더링 4대 모드 (`SpriteRenderSystem`) 완결**:
+     - `Simple`: 기본 단일 쿼드 렌더링.
+     - `Sliced` (9-Slice): 4방향 보더 인셋(`m_Border`: L, R, T, B)을 유지하여 모서리 왜곡 없는 9개 패치 쿼드 생성.
+     - `Tiled`: 텍스처를 늘리지 않고 지정 크기만큼 바둑판식으로 반복 타일링.
+     - `Filled`: `fillAmount`($0.0 \sim 1.0$)에 따른 수평/수직/방사형 게이지 채우기 클리핑.
+  5. **로캘 및 빌드 파이프라인 정합성**:
+     - `Editor.csv`의 `SpriteEditor.*` 키 40여 종 정합성 검증 및 `localizationcsvtojson.py` 동기화 완료.
+     - `Editor/CMakeLists.txt` 내 `StbImageImpl.cpp`의 `SKIP_UNITY_BUILD_INCLUSION` 가드 유지.
 
 
 ### [2026-11-09] 복합 비주얼 이펙트 시스템(Composite Visual Effect) 및 통합 저작 도구(VFXEditorPanel) 구축과 타임라인·인스펙터 UX 고도화

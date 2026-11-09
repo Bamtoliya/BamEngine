@@ -82,13 +82,13 @@ void CameraSystem::OnLateUpdate(entt::registry& globalRegistry, const vector<Sce
 	}
 }
 
-void CameraSystem::UpdateCameras(entt::registry& registry)
+void CameraSystem::UpdateCameras(entt::registry& registry, uint32 viewportWidth, uint32 viewportHeight)
 {
 	for (const auto entity : registry.view<CameraComponent>())
-		UpdateCamera(registry, entity);
+		UpdateCamera(registry, entity, viewportWidth, viewportHeight);
 }
 
-bool CameraSystem::UpdateCamera(entt::registry& registry, entt::entity entity)
+bool CameraSystem::UpdateCamera(entt::registry& registry, entt::entity entity, uint32 viewportWidth, uint32 viewportHeight)
 {
 	if (!registry.valid(entity)) return false;
 
@@ -97,6 +97,43 @@ bool CameraSystem::UpdateCamera(entt::registry& registry, entt::entity entity)
 
 	auto& camera = *component;
 	camera.InvalidateCache();
+
+	auto* pixelPerfect = registry.try_get<PixelPerfectCameraComponent>(entity);
+
+	// ── 픽셀 퍼펙트 카메라 연동 1단계: 정수 줌(Integer Zoom) 및 OrthographicSize 자동 계산 ──
+	if (pixelPerfect && camera.CameraType == ECameraType::Orthographic && pixelPerfect->assetsPPU > 0.0f)
+	{
+		uint32 vpW = viewportWidth;
+		uint32 vpH = viewportHeight;
+
+		if (vpW == 0 || vpH == 0)
+		{
+			if (camera.AspectRatio > 0.0f)
+			{
+				vpH = 1080;
+				vpW = static_cast<uint32>(std::round(1080.0f * camera.AspectRatio));
+			}
+			else
+			{
+				vpW = 1920;
+				vpH = 1080;
+			}
+		}
+
+		const int32 refX = std::max(1, pixelPerfect->refResolutionX);
+		const int32 refY = std::max(1, pixelPerfect->refResolutionY);
+
+		const int32 zoomX = std::max(1, static_cast<int32>(vpW) / refX);
+		const int32 zoomY = std::max(1, static_cast<int32>(vpH) / refY);
+
+		int32 calculatedZoom = std::min(zoomX, zoomY);
+		if (calculatedZoom < 1) calculatedZoom = 1;
+
+		pixelPerfect->currentZoom = calculatedZoom;
+
+		// 뷰포트 세로 픽셀을 정수 줌 배율로 균등 분할하여 1:Zoom 정수배 픽셀 매칭 보장
+		camera.OrthographicSize = static_cast<f32>(vpH) / (pixelPerfect->assetsPPU * static_cast<f32>(calculatedZoom));
+	}
 
 	const auto* worldTransform = registry.try_get<WorldTransformComponent>(entity);
 	if (!worldTransform || !IsValidCameraProjection(camera))
@@ -114,18 +151,21 @@ bool CameraSystem::UpdateCamera(entt::registry& registry, entt::entity entity)
 	mat4 finalWorld = worldMatrix;
 	vec3 camPos = vec3(worldMatrix[3]);
 
-	// ── 픽셀 퍼펙트 카메라 연동 (Sub-pixel Snapping) ──
-	const auto* pixelPerfect = registry.try_get<PixelPerfectCameraComponent>(entity);
+	// ── 픽셀 퍼펙트 카메라 연동 2단계: 서브픽셀 카메라 스냅 (Sub-pixel Position Snapping) ──
 	if (pixelPerfect && camera.CameraType == ECameraType::Orthographic && pixelPerfect->assetsPPU > 0.0f)
 	{
 		if (pixelPerfect->snapSubpixel)
 		{
-			const f32 ppu = pixelPerfect->assetsPPU;
-			camPos.x = std::floor(camPos.x * ppu + 0.5f) / ppu;
-			camPos.y = std::floor(camPos.y * ppu + 0.5f) / ppu;
+			// 화면 픽셀 단위 격자로 카메라 위치를 스냅하여 서브픽셀 떨림(Jittering & Shimmering) 0% 달성
+			const f32 effectivePPU = pixelPerfect->assetsPPU * static_cast<f32>(pixelPerfect->currentZoom);
+			if (effectivePPU > 0.0f)
+			{
+				camPos.x = std::floor(camPos.x * effectivePPU + 0.5f) / effectivePPU;
+				camPos.y = std::floor(camPos.y * effectivePPU + 0.5f) / effectivePPU;
 
-			finalWorld[3][0] = camPos.x;
-			finalWorld[3][1] = camPos.y;
+				finalWorld[3][0] = camPos.x;
+				finalWorld[3][1] = camPos.y;
+			}
 		}
 	}
 
@@ -140,8 +180,21 @@ bool CameraSystem::UpdateCamera(entt::registry& registry, entt::entity entity)
 	}
 	else
 	{
-		const f32 halfHeight = camera.OrthographicSize * 0.5f;
-		const f32 halfWidth = halfHeight * camera.AspectRatio;
+		f32 halfHeight = camera.OrthographicSize * 0.5f;
+		f32 halfWidth = halfHeight * camera.AspectRatio;
+
+		if (pixelPerfect && pixelPerfect->assetsPPU > 0.0f)
+		{
+			if (pixelPerfect->cropFrameY)
+			{
+				halfHeight = (static_cast<f32>(pixelPerfect->refResolutionY) / pixelPerfect->assetsPPU) * 0.5f;
+			}
+			if (pixelPerfect->cropFrameX)
+			{
+				halfWidth = (static_cast<f32>(pixelPerfect->refResolutionX) / pixelPerfect->assetsPPU) * 0.5f;
+			}
+		}
+
 		result.projMatrix = glm::orthoLH_ZO(
 			-halfWidth, halfWidth, -halfHeight, halfHeight, camera.NearPlane, camera.FarPlane);
 	}

@@ -5,39 +5,12 @@
 #include "Texture.h"
 #include "Sprite.h"
 #include "SpriteAnimation.h"
+#include "SpriteSlicingService.h"
+#include <optional>
 #include <vector>
 #include <string>
 
 BEGIN(Editor)
-
-struct SpriteSliceInfo
-{
-	std::string name;                          // 슬라이스 식별자 (예: "Player_0")
-	Engine::Rect region = { 0.f, 0.f, 0.f, 0.f }; // 픽셀 영역 (left, top, width, height)
-	vec2 pivot = { 0.5f, 0.5f };               // 피벗 (0.0 ~ 1.0)
-	vec4 border = { 0.f, 0.f, 0.f, 0.f };      // 9-Slice 인셋 (L, R, T, B)
-};
-
-enum class ESpriteSliceMethod : uint8
-{
-	GridByCellSize,
-	GridByCellCount,
-	Automatic
-};
-
-struct SpriteSliceParameters
-{
-	ESpriteSliceMethod method = ESpriteSliceMethod::GridByCellSize;
-	int cellSizeX = 32;
-	int cellSizeY = 32;
-	int cellCountCols = 4;
-	int cellCountRows = 4;
-	int offsetX = 0;
-	int offsetY = 0;
-	int paddingX = 0;
-	int paddingY = 0;
-	vec2 defaultPivot = { 0.5f, 0.5f };
-};
 
 enum class EAutoAnimGenerationMode : uint8
 {
@@ -64,19 +37,21 @@ public:
 	virtual bool IsSupported(const std::filesystem::path& assetPath) const override;
 	virtual void SetTargetResource(const std::filesystem::path& assetPath) override;
 	virtual bool HasUnsavedResourceChanges() const override { return m_IsDirty; }
-	virtual void Draw() override;
 
 private:
-	void DrawMenuBar();
-	void DrawToolbar();
+	void DrawCustomToolbar() override;
+	void DrawCustomQuickAccess() override;
+	void DrawCustomContent() override;
+	ImVec2 GetInitialResourceWindowSize() const override { return ImVec2(900.0f, 650.0f); }
 	void DrawCanvas(float availWidth, float availHeight);
 	void DrawSidebar(float availWidth, float availHeight);
 	void DrawSliceModal();
 	void DrawCreateAnimationModal();
 
 	void ExecuteSlice(const SpriteSliceParameters& params);
-	void SaveSlices();
-	void GenerateAnimation(const SpriteAutoAnimParameters& params);
+	void ApplySlices();
+	std::optional<std::vector<ResourceHandle<Engine::Sprite>>> SaveSlices();
+	bool GenerateAnimation(const SpriteAutoAnimParameters& params);
 	void LoadTextureAndSlices(const std::filesystem::path& path);
 	void FitView(float canvasW, float canvasH, float texW, float texH);
 

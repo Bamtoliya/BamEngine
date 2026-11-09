@@ -1635,6 +1635,8 @@
         "SpriteEditor.NameHeader": "이름",
         "SpriteEditor.SizeHeader": "크기",
         "SpriteEditor.AutoDesc": "알파 채널 연결 요소를 탐색하여 바운딩 박스를 자동 검출합니다.",
+        "SpriteEditor.AlphaThreshold": "알파 임계값",
+        "SpriteEditor.MinPixelArea": "최소 픽셀 면적 (픽셀)",
         "SpriteEditor.RowHelp": "Walk",
         "SpriteEditor.FpsLabel": "FPS",
         "SpriteEditor.PlayModeLabel": "재생 모드",

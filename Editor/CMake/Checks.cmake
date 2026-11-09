@@ -163,3 +163,27 @@ if(BUILD_TESTING)
     add_test(NAME EditorSettingsCheck COMMAND EditorSettingsCheck
         "${CMAKE_CURRENT_BINARY_DIR}/editor-settings-check")
 endif()
+
+
+add_executable(SpriteSlicingCheck
+    examples/SpriteSlicingCheck.cpp
+    Source/AssetManager/Private/SpriteSlicingService.cpp
+    Source/AssetManager/Private/StbImageImpl.cpp
+)
+target_include_directories(SpriteSlicingCheck PRIVATE
+    "${EDITOR_SOURCE_DIR}/AssetManager/Public"
+    "${EDITOR_SOURCE_DIR}"
+    "${CMAKE_SOURCE_DIR}/ThirdParty"
+)
+target_link_libraries(SpriteSlicingCheck PRIVATE BamEngine::Engine)
+target_precompile_headers(SpriteSlicingCheck PRIVATE
+    "${CMAKE_SOURCE_DIR}/Engine/Source/Core/Public/Engine_Includes.h")
+set_target_properties(SpriteSlicingCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
+if(MSVC)
+    target_compile_options(SpriteSlicingCheck PRIVATE /utf-8)
+endif()
+
+if(BUILD_TESTING)
+    add_test(NAME SpriteSlicingCheck COMMAND SpriteSlicingCheck)
+    set_tests_properties(SpriteSlicingCheck PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+endif()

@@ -1635,6 +1635,8 @@
         "SpriteEditor.NameHeader": "Name",
         "SpriteEditor.SizeHeader": "Size",
         "SpriteEditor.AutoDesc": "Automatic alpha cluster detection.",
+        "SpriteEditor.AlphaThreshold": "Alpha Threshold",
+        "SpriteEditor.MinPixelArea": "Min Pixel Area (px)",
         "SpriteEditor.RowHelp": "Comma separated: Idle",
         "SpriteEditor.FpsLabel": "FPS",
         "SpriteEditor.PlayModeLabel": "Play Mode",

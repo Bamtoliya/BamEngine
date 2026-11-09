@@ -47,6 +47,11 @@ add_executable(Editor
 # ==============================================================================
 # 4. Target Properties & Compilation Settings
 # ==============================================================================
+set_source_files_properties(
+    "${EDITOR_SOURCE_DIR}/AssetManager/Private/StbImageImpl.cpp"
+    PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON
+)
+
 set_target_properties(Editor PROPERTIES
     UNITY_BUILD ON
     FOLDER "Applications"

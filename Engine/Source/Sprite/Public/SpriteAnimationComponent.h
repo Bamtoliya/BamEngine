@@ -31,6 +31,12 @@ namespace Engine
 		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_PLAY_MODE"))
 			ESpriteAnimationPlayMode playMode = ESpriteAnimationPlayMode::Loop;
 
+		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_AUTO_DEACTIVATE_ON_FINISH"))
+			bool autoDeactivateOnFinish = false;
+
+		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_AUTO_DESTROY_ON_FINISH"))
+			bool autoDestroyOnFinish = false;
+
 		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_IS_PLAYING"))
 			bool isPlaying = true;
 
