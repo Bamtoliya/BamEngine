@@ -123,20 +123,35 @@ const Graph* GraphSystem::GetOrLoadGraph(const std::wstring& path)
 	// 레지스트리 초기화 보장
 	OnInitialize();
 	// ── 스마트 경로 탐색 (프로젝트 루트 기준 결합) ──
+	auto tryResolveFallback = [](std::filesystem::path& p) -> bool {
+		if (std::filesystem::exists(p)) return true;
+		const std::string ext = p.extension().string();
+		if (ext == ".json")
+		{
+			const std::string stem = p.stem().string();
+			if (!stem.ends_with(".bamgraph"))
+			{
+				const auto candidate = p.parent_path() / (stem + ".bamgraph.json");
+				if (std::filesystem::exists(candidate)) { p = candidate; return true; }
+			}
+		}
+		return false;
+	};
+
 	std::filesystem::path targetPath(path);
 	if (targetPath.is_relative())
 		targetPath = PlatformPath::ResolveProjectRelative(targetPath);
-	if (!std::filesystem::exists(targetPath))
+	if (!tryResolveFallback(targetPath))
 	{
 		// 1. Resources/Scripts/ 아래에서 검색
-		const auto scriptsPath = PlatformPath::ResolveProjectRelative(std::filesystem::path(L"Resources/Scripts") / path);
-		if (std::filesystem::exists(scriptsPath))
+		auto scriptsPath = PlatformPath::ResolveProjectRelative(std::filesystem::path(L"Resources/Scripts") / path);
+		if (tryResolveFallback(scriptsPath))
 			targetPath = scriptsPath;
 		// 2. Resources/ 아래에서 검색
 		else
 		{
-			const auto resPath = PlatformPath::ResolveProjectRelative(std::filesystem::path(L"Resources") / path);
-			if (std::filesystem::exists(resPath))
+			auto resPath = PlatformPath::ResolveProjectRelative(std::filesystem::path(L"Resources") / path);
+			if (tryResolveFallback(resPath))
 				targetPath = resPath;
 		}
 	}

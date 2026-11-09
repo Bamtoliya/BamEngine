@@ -54,13 +54,13 @@ BamEngine/
 │     └─ Localization/             # Engine.csv, Editor.csv (엔진/에디터 표준 번역 데이터)
 │
 ├─ Assets/                         # [사용자 프로젝트 애셋 (Project:// 또는 Asset://)]
-│  ├─ Scenes/                      # 사용자 저장 씬 (.json)
-│  ├─ Models/                      # 임포트된 모델 (.bammodel, .bammesh)
-│  ├─ Textures/                    # 프로젝트 텍스처 (.png, .dds)
+│  ├─ Scenes/                      # 사용자 저장 씬 (.bamscene.json, 레거시 .json)
+│  ├─ Models/                      # 임포트된 모델 (.bammodel.json / .bammodel, .bammesh)
+│  ├─ Textures/                    # 프로젝트 텍스처 (.png, .dds, .bamtex.json)
 │  ├─ Materials/                   # 사용자 머티리얼 및 머티리얼 인스턴스 (.bammat.json, .bammatinst.json)
 │  ├─ Animations/                  # 애니메이션 클립, .animator 상태 머신 에셋
 │  ├─ Audio/                       # 배경음, 효과음 에셋
-│  └─ Prefabs/                     # 엔티티 프리팹 에셋
+│  └─ Prefabs/                     # 엔티티 프리팹 에셋 (.bamprefab.json)
 │
 └─ Config/
    └─ Project.json                 # 프로젝트 설정 (AssetDirectory: "Assets", EngineResourceDirectory: "Engine/Resources")
@@ -154,7 +154,10 @@ std::filesystem::path ResolvePath(const std::wstring& virtualKey)
 
 이 순서는 [통합 계획 11절](DevelopmentPriorities.md)의 안전성 작업 이후에 적용한다. 전체 물리 이관을 다른 기능의 필수 선행 조건으로 두지 않는다. 근거는 [이번 점검 A10](CodeDocumentationAudit-2026-11-06.md)이다.
 
-### Phase 4: 배포 스크립트 및 패키징 연동 검증
+### Phase 4: 배포 스크립트 및 패키징 연동 검증 [최대한 뒤로 보류]
+
+> [!NOTE]
+> **2026-11-08 사용자 결정**: Phase 4(배포 스크립트 `PackageClient.ps1` 갱신 및 독립 실행형 Client 패키징 연동 검증)는 핵심 기능(2D 시스템, 플러그인 등) 개발 완료 후 최종 배포 단계까지 최대한 뒤로 미룬다.
 - [ ] 배포 재개 시 A01·A02의 출력 보호·생성 실패를 먼저 보완한다. 이번 계획 변경으로 배포 보류를 자동 해제하지 않는다.
 - [ ] `PackageClient.ps1` 스크립트를 갱신하여 `Engine/Resources/` 런타임 필수 리소스와 `Assets/` 프로젝트 에셋을 각각 분리 수집하도록 개선.
 - [ ] 배포 폴더에서 Client가 `Engine://` 및 `Project://`를 정상적으로 마운트하여 독립 실행되는지 검증.
@@ -167,3 +170,8 @@ std::filesystem::path ResolvePath(const std::wstring& virtualKey)
 2. **참조 불변성**: 가상 URI(`Engine://`, `Project://`)를 통해 프로젝트 파일의 위치가 변경되어도 리소스 간 참조가 깨지지 않는다.
 3. **에디터 안전성**: 에디터에서 엔진 빌트인 리소스를 실수로 삭제하거나 덮어쓸 수 없으며, 일반 작업 시에는 프로젝트 에셋만 깔끔하게 노출된다.
 4. **패키징 검증**: `PackageClient.ps1` 실행 시 에디터 전용 리소스와 미사용 테스트 에셋이 배포본에 포함되지 않고 경량 패키지가 정상 동작한다.
+
+## 2026-11-10 시작 경로와 에디터 탐색 확인
+
+- 프로젝트 설정은 `Assets`와 `Engine/Resources`를 구분한다. 에디터의 시작 매니페스트와 하위 설정은 URI 해석을 거치며, 파일 대화상자는 열기·저장 문맥에 따라 프로젝트 에셋 폴더를 선택한다.
+- 현재 체크아웃에서는 `Config/Startup/StartupManifest.json`이 확인되지 않았고, 로컬의 시작 씬은 Git에서 제외된 `Assets` 아래에 있다. Editor와 Client가 같은 프로젝트 설정에서 시작 매니페스트와 씬을 찾는지, 기존 `.json` 경로의 복합 확장자 대체가 작동하는지 실행 검증이 필요하다.

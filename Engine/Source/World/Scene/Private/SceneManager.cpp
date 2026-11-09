@@ -105,6 +105,20 @@ EResult SceneManager::LoadScene(archive::IArchive& ar, const wstring& filePath)
 	std::filesystem::path targetPath(filePath);
 	if (targetPath.is_relative())
 		targetPath = PlatformPath::ResolveProjectRelative(targetPath);
+	if (!std::filesystem::exists(targetPath))
+	{
+		const std::string ext = targetPath.extension().string();
+		if (ext == ".json")
+		{
+			const std::string stem = targetPath.stem().string();
+			if (!stem.ends_with(".bamscene"))
+			{
+				const auto candidatePath = targetPath.parent_path() / (stem + ".bamscene.json");
+				if (std::filesystem::exists(candidatePath))
+					targetPath = candidatePath;
+			}
+		}
+	}
 	Scene* candidate = nullptr;
 	auto result = ar.LoadFromFile(targetPath);
 	if (result) result = Scene::CreateFromArchive(ar, candidate);

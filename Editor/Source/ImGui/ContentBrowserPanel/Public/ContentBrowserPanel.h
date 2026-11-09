@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "Editor_Includes.h"
 #include "ImGuiInterface.h"
@@ -48,6 +48,7 @@ public:
 	bool IsShowingEngineContent() const { return m_ShowEngineContent; }
 	void SetShowEngineContent(bool show);
 	const filesystem::path& GetEngineRootPath() const { return m_EngineRootPath; }
+	const filesystem::path& GetEditorRootPath() const { return m_EditorRootPath; }
 	const filesystem::path& GetActiveRootForPath(const filesystem::path& path) const;
 	EPanelMenuCategory GetPanelMenuCategory() const override { return EPanelMenuCategory::Assets; }
 #pragma endregion
@@ -68,14 +69,14 @@ private:
 	void RefreshButton();
 	void DrawDirectoryGrid();
 	void GridViewContextMenu(const filesystem::path& path);
-	void AddressBar();
+	void AddressBar(float width);
 private:
 	bool SearchBar();
 private:
 	void ContentFilter();
 private:
 	void DrawGridItem(const filesystem::directory_entry& directoryEntry, ImGuiSelectionUserData itemId);
-	void SyncGridSelection(const vector<const filesystem::directory_entry*>& entries);
+	void RebuildGridItems(const vector<filesystem::directory_entry>& source);
 	void ApplyGridSelectionRequests(const ImGuiMultiSelectIO& selection);
 private:
 	void FileConfilictPopup();
@@ -86,7 +87,14 @@ private:
 	void RefreshCacheIfNeeded();
 	void OnExteranalDropped(const vector<string>& droppedFiles);
 private:
+	filesystem::path GenerateUniqueAssetPath(const filesystem::path& directory, const wstring& baseStem, const wstring& extension);
 	void CreateEmptyMaterial(const filesystem::path& path);
+	void CreateEmptyMaterialInstance(const filesystem::path& path);
+	void CreateEmptyScene(const filesystem::path& path);
+	void CreateEmptyPrefab(const filesystem::path& path);
+	void CreateEmptyGraph(const filesystem::path& path);
+	void CreateEmptyTimeline(const filesystem::path& path);
+	void CreateEmptyParticleEffect(const filesystem::path& path);
 #pragma endregion
 
 #pragma region Workspace Settings
@@ -100,10 +108,11 @@ public:
 private:
 	filesystem::path m_RootPath;
 	filesystem::path m_EngineRootPath;
+	filesystem::path m_EditorRootPath;
 	filesystem::path m_CurrentDirectory;
 	filesystem::path m_LastDirectory;
 	bool m_NeedToExpandTree = false;
-	bool m_ShowEngineContent = false;
+	bool m_ShowEngineContent = true;
 private:
 	filesystem::path m_RenameTargetPath;
 	filesystem::path m_RenamingPath;
@@ -114,7 +123,12 @@ private:
 	{
 		filesystem::path Path;
 		ImGuiSelectionUserData Id;
+		size_t SourceIndex;
 	};
+	bool m_GridItemsDirty = true;
+	bool m_GridUsesSearch = false;
+	bool m_GridShowsEngineContent = true;
+	uint32 m_GridFilterMask = 0;
 	vector<GridSelectionItem> m_GridSelectionItems;
 	std::unordered_map<ImGuiSelectionUserData, int> m_GridSelectionIndices;
 	std::unordered_set<ImGuiSelectionUserData> m_SelectedGridIds;
@@ -136,6 +150,7 @@ private:
 	efsw::FileWatcher* m_FileWatcher = nullptr;
 	efsw::WatchID m_WatchID = 0;
 	efsw::WatchID m_EngineWatchID = 0;
+	efsw::WatchID m_EditorWatchID = 0;
 	class ContentBrowserFileListener* m_FileListener = nullptr;
 	atomic<bool> m_NeedsCacheRefresh = { false };
 private:

@@ -1,6 +1,4 @@
-// Engine/Source/Core/Config/Public/Config.h
-
-#pragma once
+﻿#pragma once
 
 #include <reflection/Annotations.h>
 #include <cstdint>
@@ -20,18 +18,18 @@ namespace Engine
         std::string ProjectName = "Untitled";
 
         PROPERTY(META("Optional", true))
-        std::string AssetDirectory = "Resources";
+        std::string AssetDirectory = "Assets";
 
         PROPERTY(META("Optional", true))
         std::string EngineResourceDirectory = "Engine/Resources";
 
         PROPERTY()
-        std::string StartupManifestPath = "Resources/Config/Startup/StartupManifest.json";
+        std::string StartupManifestPath = "Config/Startup/StartupManifest.json";
 
         PROPERTY(META("Optional", true))
-        std::string StartupScenePath;
+        std::string StartupScenePath = "Scenes/RaytracingScene.bamscene.json";
 
         PROPERTY(META("Optional", true))
-        std::string ShaderSourceDirectory = "Resources/Shader/hlsl";
+        std::string ShaderSourceDirectory = "Engine/Resources/Shader/hlsl";
     };
 }

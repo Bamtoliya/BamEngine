@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 namespace Editor
 {
@@ -14,6 +14,16 @@ namespace Editor
         GraphSave = 6,
         PrefabSave = 7,
         HeightmapOpen = 8,
-        HeightmapSave = 9
+        HeightmapSave = 9,
+        ParticleOpen = 10,
+        ParticleSave = 11,
+        SpriteOpen = 12,
+        SpriteSave = 13,
+        TimelineOpen = 14,
+        TimelineSave = 15,
+        ModelImport = 16,
+        MaterialOpen = 17,
+        MaterialSave = 18,
+        PrefabOpen = 19
     };
 }

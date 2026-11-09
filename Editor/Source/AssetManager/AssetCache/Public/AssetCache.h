@@ -10,21 +10,24 @@ BEGIN(Editor)
 class AssetCache : public Base
 {
 	DECLARE_SINGLETON(AssetCache)
-
 #pragma region Constructor&Destructor
 private:
 	AssetCache() = default;
 	virtual ~AssetCache() = default;
 	EResult Initialize(void* arg = nullptr);
+public:
 	virtual void Free() override;
+#pragma endregion
 
+#pragma region Loop
 public:
 	void Update();
 #pragma endregion
 
 #pragma region Thumbnail Management
 public:
-	RHITexture* GetThumbnail(const filesystem::path& assetPath);
+	RHITexture* GetThumbnail(const filesystem::path& assetPath, Engine::Handle* spriteHandle = nullptr);
+
 	// 어느 스레드에서든 호출할 수 있습니다.
 	void RequestInvalidate(const filesystem::path& assetPath);
 	void ClearCache(const filesystem::path& assetPath);
@@ -47,6 +50,7 @@ private:
 	struct CacheEntry
 	{
 		RHITexture* Texture = nullptr;
+		Engine::Handle SpriteHandle;
 		size_t ByteSize = 0;
 		std::list<std::string>::iterator LruIt;
 	};
@@ -72,7 +76,7 @@ private:
 
 private:
 	void ProcessPending3DThumbnail();
-	void InsertToCache(const std::string& key, RHITexture* texture, size_t byteSize = 0);
+	void InsertToCache(const std::string& key, RHITexture* texture, size_t byteSize = 0, Engine::Handle spriteHandle = {});
 	void EvictOldest();
 
 	enum class ECaptureState : uint8

@@ -1,8 +1,9 @@
-﻿#include "ProjectSettingsWidget.h"
+#include "ProjectSettingsWidget.h"
 #include "EditorSettingsService.h"
 #include "FileDialogs.h"
 #include "Functions.h"
 #include "LocalizationManager.h"
+#include "EditorUI.h"
 
 void ProjectSettingsWidget::ReloadDraft(const EditorSettingsService& settings)
 {
@@ -39,63 +40,86 @@ void ProjectSettingsWidget::Draw(const EditorSettingsService& settings)
 
     const auto& projectRoot = settings.GetProjectRoot();
 
-    ImGui::Spacing();
-    ImGui::TextDisabled("%s: %s", LOCAL_CSTR("Settings.ProjectRoot"), projectRoot.string().c_str());
-    ImGui::Spacing();
-
-    const auto drawText = [this](const std::string& label, std::string& draft, auto& buffer)
-        {
-            strncpy_s(buffer, draft.c_str(), sizeof(buffer));
-            ImGui::SetNextItemWidth(300.0f);
-            if (ImGui::InputText(label.c_str(), buffer, sizeof(buffer)))
-            {
-                draft = buffer;
-                m_Dirty = true;
-            }
-        };
-
-    const auto assignSelectedPath = [&](std::string& draft, const std::wstring& selectedPath)
-        {
-            std::error_code ec;
-            const auto relativePath = std::filesystem::relative(selectedPath, projectRoot, ec);
-            draft = ec ? Engine::WStrToStr(selectedPath) : relativePath.generic_string();
-            m_Dirty = true;
-        };
-
-    char nameBuffer[256];
-    drawText(LOCAL_LABEL("Settings.ProjectName"), m_DraftProjectName, nameBuffer);
-
-    char sceneBuffer[512];
-    drawText(LOCAL_LABEL("Settings.StartupScene"), m_DraftStartupScenePath, sceneBuffer);
-
-    ImGui::SameLine();
-    if (ImGui::Button((LOCAL("Settings.BrowseScene") + "###BrowseStartupScene").c_str()))
+    if (EditorUI::BeginPropertyTable("##ProjectSettingsTable"))
     {
-        std::wstring scenePath;
-        const auto scenesDir = projectRoot / "Resources" / "Scenes";
-        if (FileDialogs::OpenFileDialog(scenePath,
-            { { Engine::StrToWStr(LOCAL("FileDialog.EditorSceneFiles")), L"*.bamscene.json;*.json" } },
-            scenesDir.wstring()))
-        {
-            assignSelectedPath(m_DraftStartupScenePath, scenePath);
-        }
-    }
-
-    const auto drawFolderPicker = [&](const std::string& label, const char* buttonId, std::string& draft)
-        {
-            char buffer[256];
-            drawText(label, draft, buffer);
-
-            ImGui::SameLine();
-            if (ImGui::Button((LOCAL("Settings.BrowseFolder") + buttonId).c_str()))
+        const auto assignSelectedPath = [&](std::string& draft, const std::wstring& selectedPath)
             {
-                std::wstring folderPath;
-                if (FileDialogs::OpenFolderDialog(folderPath, projectRoot.wstring()))
-                    assignSelectedPath(draft, folderPath);
-            }
-        };
+                std::error_code ec;
+                const auto relativePath = std::filesystem::relative(selectedPath, projectRoot, ec);
+                draft = ec ? Engine::WStrToStr(selectedPath) : relativePath.generic_string();
+                m_Dirty = true;
+            };
 
-    drawFolderPicker(LOCAL_LABEL("Settings.AssetDirectory"), "###BrowseAssetDir", m_DraftAssetDirectory);
-    drawFolderPicker(LOCAL_LABEL("Settings.ShaderDirectory"), "###BrowseShaderDir", m_DraftShaderSourceDirectory);
+        // 1. Project Root
+        EditorUI::PropertyRow("Settings.ProjectRoot");
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextDisabled("%s", projectRoot.string().c_str());
+
+        // 2. Project Name
+        EditorUI::PropertyRow("Settings.ProjectName");
+        char nameBuffer[256];
+        strncpy_s(nameBuffer, m_DraftProjectName.c_str(), sizeof(nameBuffer));
+        ImGui::SetNextItemWidth(-FLT_MIN);
+        if (ImGui::InputText("###ProjectName", nameBuffer, sizeof(nameBuffer)))
+        {
+            m_DraftProjectName = nameBuffer;
+            m_Dirty = true;
+        }
+
+        // 3. Startup Scene
+        EditorUI::PropertyRow("Settings.StartupScene");
+        const std::string browseSceneBtnText = LOCAL("Settings.BrowseScene");
+        const float browseSceneBtnW = ImGui::CalcTextSize(browseSceneBtnText.c_str()).x + ImGui::GetStyle().FramePadding.x * 2.0f + 8.0f;
+        char sceneBuffer[512];
+        strncpy_s(sceneBuffer, m_DraftStartupScenePath.c_str(), sizeof(sceneBuffer));
+        ImGui::SetNextItemWidth(std::max(100.0f, ImGui::GetContentRegionAvail().x - browseSceneBtnW - ImGui::GetStyle().ItemSpacing.x));
+        if (ImGui::InputText("###StartupScene", sceneBuffer, sizeof(sceneBuffer)))
+        {
+            m_DraftStartupScenePath = sceneBuffer;
+            m_Dirty = true;
+        }
+        ImGui::SameLine();
+        if (ImGui::Button((browseSceneBtnText + "###BrowseStartupScene").c_str(), ImVec2(browseSceneBtnW, 0.0f)))
+        {
+            std::wstring scenePath;
+            const auto scenesDir = projectRoot / "Resources" / "Scenes";
+            if (FileDialogs::OpenFileDialog(scenePath,
+                { { Engine::StrToWStr(LOCAL("FileDialog.EditorSceneFiles")), L"*.bamscene.json;*.json" } },
+                scenesDir.wstring()))
+            {
+                assignSelectedPath(m_DraftStartupScenePath, scenePath);
+            }
+        }
+
+        const auto drawFolderRow = [&](const char* labelKey, const char* inputId, const char* buttonId, std::string& draft)
+            {
+                EditorUI::PropertyRow(labelKey);
+                const std::string browseFolderBtnText = LOCAL("Settings.BrowseFolder");
+                const float browseFolderBtnW = ImGui::CalcTextSize(browseFolderBtnText.c_str()).x + ImGui::GetStyle().FramePadding.x * 2.0f + 8.0f;
+                char buffer[256];
+                strncpy_s(buffer, draft.c_str(), sizeof(buffer));
+                ImGui::SetNextItemWidth(std::max(100.0f, ImGui::GetContentRegionAvail().x - browseFolderBtnW - ImGui::GetStyle().ItemSpacing.x));
+                if (ImGui::InputText(inputId, buffer, sizeof(buffer)))
+                {
+                    draft = buffer;
+                    m_Dirty = true;
+                }
+                ImGui::SameLine();
+                if (ImGui::Button((browseFolderBtnText + buttonId).c_str(), ImVec2(browseFolderBtnW, 0.0f)))
+                {
+                    std::wstring folderPath;
+                    if (FileDialogs::OpenFolderDialog(folderPath, projectRoot.wstring()))
+                        assignSelectedPath(draft, folderPath);
+                }
+            };
+
+        // 4. Asset Directory
+        drawFolderRow("Settings.AssetDirectory", "###AssetDirectory", "###BrowseAssetDir", m_DraftAssetDirectory);
+
+        // 5. Shader Directory
+        drawFolderRow("Settings.ShaderDirectory", "###ShaderDirectory", "###BrowseShaderDir", m_DraftShaderSourceDirectory);
+
+        EditorUI::EndPropertyTable();
+    }
     ImGui::Spacing();
 }

@@ -41,15 +41,33 @@ bool ContentBrowserTreeItem::DrawNode(
 	}
 
 	const bool isReadOnly = Engine::PlatformPath::IsReadOnlyTarget(path);
+	auto* browser = dynamic_cast<ContentBrowserPanel*>(ImGuiManager::Get().GetImGuiPanel(L"Content Browser"));
+	const bool isEngineRoot = (browser && path == browser->GetEngineRootPath());
+	const bool isEditorRoot = (browser && path == browser->GetEditorRootPath());
+
 	std::string filename = path.filename().string();
 	std::string icon = (isSelected && hasChildDirectory) ? ICON_FA_FOLDER_OPEN : ICON_FA_FOLDER;
 	if (path == rootPath)
-		icon = isReadOnly ? ICON_FA_GEARS : ICON_FA_DATABASE;
+	{
+		if (isEngineRoot)
+			icon = ICON_FA_GEARS;
+		else if (isEditorRoot)
+			icon = ICON_FA_TOOLBOX;
+		else
+			icon = ICON_FA_DATABASE;
+	}
 
 	bool isRenaming = (outRenamingPath == path);
 	std::string label = isRenaming ? "" : (icon + " " + filename + (isReadOnly && path != rootPath ? (" " ICON_FA_LOCK) : ""));
 	if (path == rootPath && !isRenaming)
-		label = icon + " " + (isReadOnly ? LOCAL("ContentBrowser.EngineContent") : LOCAL("ContentBrowser.Assets"));
+	{
+		if (isEngineRoot)
+			label = icon + " " + LOCAL("ContentBrowser.EngineResources");
+		else if (isEditorRoot)
+			label = icon + " " + LOCAL("ContentBrowser.EditorResources");
+		else
+			label = icon + " " + LOCAL("ContentBrowser.Assets");
+	}
 
 	// 트리 노드 렌더링
 	bool opened = ImGui::TreeNodeEx((void*)std::hash<std::string>{}(path.string()), baseFlags, "%s", label.c_str());

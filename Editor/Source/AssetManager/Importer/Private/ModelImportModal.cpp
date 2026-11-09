@@ -1,4 +1,5 @@
 ﻿#include "ModelImportModal.h"
+#include "EditorUI.h"
 #include "ModelConverter.h"
 #include "ResourceManager.h"
 #include "AssetManager.h"
@@ -505,7 +506,14 @@ namespace Editor
 		bool popupOpen = true;
 		if (ImGui::BeginPopupModal(modalTitle.c_str(), &popupOpen, ImGuiWindowFlags_NoScrollbar))
 		{
-			const float height = std::max(1.0f, ImGui::GetContentRegionAvail().y - 45.0f);
+			const bool canImport = m_PreviewReady && !m_PreviewReloadRequested &&
+				HasFlag(m_Desc.ImportOptions, EModelImportOption::Meshes);
+			EditorUI::DialogAction actions[] = {
+				{ "EditorCommon.Cancel" }, { "ModelImport.ImportBtn", canImport }
+			};
+			const float footerHeight = EditorUI::GetDialogButtonBarHeight(actions, IM_ARRAYSIZE(actions)) +
+				ImGui::GetStyle().ItemSpacing.y * 5.0f + 1.0f;
+			const float height = std::max(1.0f, ImGui::GetContentRegionAvail().y - footerHeight);
 			const auto previewFlags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
 			Editor::DrawSidebarLayout("##ImportPreviewPane", "##ImportModalSplitter", "##ImportOptionsPane",
 				m_SplitterWidth, height, 280.0f, 360.0f,
@@ -595,26 +603,12 @@ namespace Editor
 			ImGui::Separator();
 			ImGui::Spacing();
 
-			// 하단 버튼
-			const bool canImport = m_PreviewReady && !m_PreviewReloadRequested &&
+			actions[1].Enabled = m_PreviewReady && !m_PreviewReloadRequested &&
 				HasFlag(m_Desc.ImportOptions, EModelImportOption::Meshes);
-
-			ImGui::BeginDisabled(!canImport);
-
-			const std::string importLabel = ICON_FA_DOWNLOAD " " + LOCAL_LABEL("ModelImport.ImportBtn");
-			if (ImGui::Button(importLabel.c_str(), ImVec2(120.0f, 0.0f)))
+			const int action = EditorUI::DialogButtonBar("ModelImportActions", actions, IM_ARRAYSIZE(actions));
+			if (action >= 0)
 			{
-				m_ImportRequested = true;
-				m_CloseRequested = true;
-				ImGui::CloseCurrentPopup();
-			}
-
-			ImGui::EndDisabled();
-
-			ImGui::SameLine(0.0f, 10.0f);
-			if (ImGui::Button(LOCAL_CSTR("EditorCommon.Cancel"), ImVec2(100.0f, 0.0f)))
-			{
-				m_ImportRequested = false;
+				m_ImportRequested = action == 1;
 				m_CloseRequested = true;
 				ImGui::CloseCurrentPopup();
 			}

@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "ResourceManager.h"
 #include <archive/ArchiveInterface.h>
@@ -13,9 +13,13 @@ namespace archive_resource
     {
         auto handle = manager.FindHandleByKey(assetKey);
         if (manager.IsValid(handle)) return handle;
+        handle = manager.FindHandleByFilePath(assetKey);
+        if (manager.IsValid(handle)) return handle;
         if (!assetPath.empty())
         {
             handle = manager.FindHandleByKey(assetPath);
+            if (manager.IsValid(handle)) return handle;
+            handle = manager.FindHandleByFilePath(assetPath);
             if (manager.IsValid(handle)) return handle;
         }
 
@@ -27,10 +31,13 @@ namespace archive_resource
             L".json", L".beve"
         };
 
-        // 1. 이미 로드된 리소스 중 확장자가 붙은 키 탐색
+        // 1. 이미 로드된 리소스 중 확장자가 붙은 키 또는 파일 경로 탐색
         for (const auto& ext : candidateExtensions)
         {
-            handle = manager.FindHandleByKey(assetKey + std::wstring(ext));
+            const auto candidate = assetKey + std::wstring(ext);
+            handle = manager.FindHandleByKey(candidate);
+            if (manager.IsValid(handle)) return handle;
+            handle = manager.FindHandleByFilePath(candidate);
             if (manager.IsValid(handle)) return handle;
         }
 
@@ -42,18 +49,22 @@ namespace archive_resource
             stripped.replace_extension();
             handle = manager.FindHandleByKey(stripped.wstring());
             if (manager.IsValid(handle)) return handle;
+            handle = manager.FindHandleByFilePath(stripped.wstring());
+            if (manager.IsValid(handle)) return handle;
             handle = manager.FindHandleByKey(assetKey + L".json");
             if (manager.IsValid(handle)) return handle;
+            handle = manager.FindHandleByFilePath(assetKey + L".json");
+            if (manager.IsValid(handle)) return handle;
             handle = manager.FindHandleByKey(assetKey + L".beve");
+            if (manager.IsValid(handle)) return handle;
+            handle = manager.FindHandleByFilePath(assetKey + L".beve");
             if (manager.IsValid(handle)) return handle;
         }
 
         // 2. assetPath가 있으면 파일 로드 시도
         if (!assetPath.empty())
         {
-            std::filesystem::path fsPath(assetPath);
-            if (fsPath.is_relative() && Runtime::IsCreated())
-                fsPath = Runtime::Get().ResolveProjectRelativePath(fsPath);
+            const auto fsPath = Engine::PlatformPath::ResolveUri(assetPath);
             const std::wstring pathExt = fsPath.extension().wstring();
             if (pathExt.rfind(L".bam", 0) == 0)
             {
@@ -62,16 +73,26 @@ namespace archive_resource
                 if (std::filesystem::exists(fsPath.wstring() + L".beve"))
                     return manager.LoadFile(assetPath + L".beve");
             }
-            handle = manager.LoadFile(assetPath);
-            if (manager.IsValid(handle)) return handle;
+            if (std::filesystem::exists(fsPath))
+            {
+                handle = manager.LoadFile(assetPath);
+                if (manager.IsValid(handle)) return handle;
+            }
+            for (const auto& ext : candidateExtensions)
+            {
+                const auto candidateWithExt = Engine::PlatformPath::ResolveUri(assetPath + std::wstring(ext));
+                if (std::filesystem::exists(candidateWithExt))
+                {
+                    handle = manager.LoadFile(assetPath + std::wstring(ext));
+                    if (manager.IsValid(handle)) return handle;
+                }
+            }
         }
         // 3. assetPath가 비어있고 assetKey만 있을 때, 디스크 파일 탐색 및 자동 로드
         if (!assetKey.empty())
         {
+            const auto keyFsPath = Engine::PlatformPath::ResolveUri(assetKey);
             std::error_code error;
-            std::filesystem::path keyFsPath(assetKey);
-            if (keyFsPath.is_relative() && Runtime::IsCreated())
-                keyFsPath = Runtime::Get().ResolveProjectRelativePath(keyFsPath);
             if (std::filesystem::is_regular_file(keyFsPath, error))
             {
                 handle = manager.LoadFile(assetKey);
@@ -79,8 +100,8 @@ namespace archive_resource
             }
             for (const auto& ext : candidateExtensions)
             {
-                std::filesystem::path candidatePath = keyFsPath.wstring() + std::wstring(ext);
-                if (std::filesystem::exists(candidatePath))
+                const auto candidateWithExt = Engine::PlatformPath::ResolveUri(assetKey + std::wstring(ext));
+                if (std::filesystem::exists(candidateWithExt))
                 {
                     handle = manager.LoadFile(assetKey + std::wstring(ext));
                     if (manager.IsValid(handle)) return handle;
@@ -90,10 +111,10 @@ namespace archive_resource
 
         for (const auto& ext : candidateExtensions)
         {
-            const std::wstring candidatePath = assetKey + std::wstring(ext);
+            const auto candidatePath = Engine::PlatformPath::ResolveUri(assetKey + std::wstring(ext));
             if (std::filesystem::exists(candidatePath))
             {
-                handle = manager.LoadFile(candidatePath);
+                handle = manager.LoadFile(assetKey + std::wstring(ext));
                 if (manager.IsValid(handle)) return handle;
             }
         }

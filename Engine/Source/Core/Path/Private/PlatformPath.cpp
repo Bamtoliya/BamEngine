@@ -335,14 +335,21 @@ namespace Engine
         const std::wstring rawStr = physicalPath.wstring();
         if (IsVirtualUri(rawStr)) return rawStr;
 
-        const auto norm = Normalize(physicalPath);
+        const auto norm = physicalPath.is_absolute() ? Normalize(physicalPath) : ResolveUri(physicalPath);
         const auto engineRoot = GetEngineResourceRoot();
+        const auto editorRoot = GetEditorResourceRoot();
         const auto projectRoot = GetProjectAssetRoot();
 
         if (engineRoot != projectRoot && (IsSubpathOf(norm, engineRoot) || norm == engineRoot))
         {
             auto rel = norm.lexically_relative(engineRoot);
             return L"Engine://" + rel.generic_wstring();
+        }
+
+        if (editorRoot != projectRoot && (IsSubpathOf(norm, editorRoot) || norm == editorRoot))
+        {
+            auto rel = norm.lexically_relative(editorRoot);
+            return L"Editor://" + rel.generic_wstring();
         }
 
         if (projectRoot != engineRoot && (IsSubpathOf(norm, projectRoot) || norm == projectRoot))

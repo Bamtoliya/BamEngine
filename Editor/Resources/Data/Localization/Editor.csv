@@ -1,4 +1,5 @@
 Group,Key,English,Korean
+ContentBrowser,ParentFolder,Go to parent folder,상위 폴더로 이동
 Action,Animator.SaveAs,Save Controller As...,다른 이름으로 컨트롤러 저장...
 Action,Build.CompileModule,Compile Game Module,게임 모듈 컴파일
 Action,Build.ReloadModule,Reload Game Module,게임 모듈 핫 리로드

@@ -226,7 +226,7 @@ void ToolBar::LoadResourceFile()
 	wstring filePath;
 	if (!FileDialogs::OpenFileDialog(filePath, {
 	{ StrToWStr(LOCAL("FileDialog.ResourceFiles")), L"*.bam*;*.json;*.beve" }
-		}, L"Resources", EFileDialogContext::ResourceOpen))
+		}, L"", EFileDialogContext::ResourceOpen))
 		return;
 
 	auto& manager = ResourceManager::Get();
@@ -347,7 +347,7 @@ void ToolBar::LoadScene()
 	std::wstring filePath;
 	if (!FileDialogs::OpenFileDialog(filePath,
 		{ { StrToWStr(LOCAL("FileDialog.SceneFiles")), L"*.bamscene.json;*.json" } },
-		L"Resources\\Scenes", EFileDialogContext::SceneOpen))
+		L"", EFileDialogContext::SceneOpen))
 	{
 		return;
 	}

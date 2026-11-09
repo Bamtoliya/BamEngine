@@ -1,8 +1,10 @@
-﻿{
+{
   "Settings": {
     "SchemaVersion": 1,
     "ProjectName": "BamEngine",
-    "StartupManifestPath": "Resources/Config/Startup/StartupManifest.json",
-    "StartupScenePath": "Resources/Scenes/RaytracingScene.json"
+    "AssetDirectory": "Assets",
+    "EngineResourceDirectory": "Engine/Resources",
+    "StartupManifestPath": "Config/Startup/StartupManifest.json",
+    "StartupScenePath": "Scenes/RaytracingScene.bamscene.json"
   }
 }

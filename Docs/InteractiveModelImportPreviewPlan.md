@@ -138,6 +138,43 @@
 
 ---
 
+### Phase 6: 하이브리드 모델 에셋 정리 파이프라인 (Hybrid Source-to-Asset Pipeline)
+
+- **도입 배경**:
+  - 기존 임포트 방식은 `outputDir` 단일 폴더에 복합 모델, 개별 메시(LOD1/LOD2 포함), 스켈레톤, 애니메이션, 머티리얼 인스턴스, 임베디드 텍스처, 원본 파일이 모두 1차원 평탄(Flat)하게 풀려 수십~수백 개의 파일로 폴더를 어지럽히는 문제가 발생함.
+  - 이를 해결하기 위해 **방안 B(DCC 원본 Source 격리)**와 **방안 A(엔진 에셋 하위 폴더 자동 분류)**를 결합한 **하이브리드 파이프라인**을 구축함.
+- **아키텍처 및 디렉터리 레이아웃**:
+  ```text
+  Assets/
+  ├─ Source/                              # [방안 B: 원본 소스 보관소 (배포 패키징 자동 제외)]
+  │  └─ Models/
+  │     └─ Characters/
+  │        └─ Barbarian.glb               # 원본 DCC 파일 (Blender 등에서 수정/유지)
+  │
+  └─ Models/                              # [방안 A: 엔진 런타임 가공 에셋]
+     └─ Characters/
+        └─ Barbarian/                     # [모델 전용 격리 폴더]
+           ├─ Barbarian.bammodel          # ⭐️ [주 에셋] 엔티티에 바인딩할 복합 모델
+           ├─ Barbarian_Skeleton.bamskel  # 스켈레톤 에셋
+           ├─ Meshes/                     # [메시 격리] *.bammesh 및 파생 LOD 메시
+           ├─ Materials/                  # [머티리얼 격리] *.bammatinst.json
+           ├─ Textures/                   # [텍스처 격리] 추출된 임베디드 텍스처 (*.png)
+           └─ Animations/                 # [애니메이션 격리] *.bamanim 클립들
+  ```
+- **옵션 및 UI 확장 (`ModelImportDesc` / `ModelImportModal`)**:
+  - `enum class EModelFolderLayout : uint32` 정의:
+    - `Flat`: 기존 호환용 단일 폴더 출력
+    - `DedicatedWithSubfolders`: 모델 전용 폴더 및 역할별 서브폴더(`Meshes/`, `Materials/` 등) 자동 분류 (기본값)
+  - `bool CopySourceToSourceDirectory = true;`: 원본 GLB/FBX를 `Assets/Source/Models/...`로 자동 아카이빙하고 작업 폴더를 깔끔하게 유지하는 옵션.
+- **원본 추적(Source Tracking) 및 재임포트(Re-import)**:
+  - `.bammodel` 내부 메타데이터에 원본 소스 파일의 가상 URI(`Project://Source/Models/.../Model.glb`)를 기록.
+  - 외부 DCC 툴에서 원본을 수정하여 덮어썼을 때, 에디터 콘텐츠 브라우저에서 `.bammodel` 우클릭 [Re-import] 실행 시 기존 서브폴더 구조를 유지하며 인플레이스(In-place) 핫 리로드 갱신.
+- **콘텐츠 브라우저 UI 연계**:
+  - 모델 폴더 내부 진입 시 `*.bammodel`과 서브폴더만 보이므로 시각적 피로도 100% 해소.
+  - 상단 필터 바에 `Primary Assets Only` 토글을 제공하여 씬 배치용 대표 에셋 중심 탐색 지원.
+
+---
+
 ## 4. 완료 기준 (Acceptance Criteria)
 
 1. **시각적 정확성**:
@@ -156,3 +193,6 @@
    - `RaytracingScene3`의 Fox 메시 직접 바인딩과 `.bammodel` 신규 배치를 각각 엔티티 Scale `1`로 확인한다. 재생 전후 배율이 유지되고, 모델 배치에서 임포트 배율이 중복 적용되지 않아야 한다. 기존 에셋은 원본에서 같은 배율로 재임포트한다.
    - `Fox.glb`를 기본 좌표계 옵션으로 다시 임포트한다. 임포트 모달과 모델·메시 썸네일에서 얼굴이 보이는지 확인하고, 씬에서 메시를 직접 바인딩해 이동 방향과 애니메이션 포즈를 확인한다. 상하·헤딩 토글을 각각 켜면 같은 회전이 프리뷰, 모델 배치, 메시 직접 바인딩에 적용되어야 한다.
    - Fox를 `1`과 `0.1`로 미리 보고 포커스를 다시 잡는다. 임포트 모달과 모델 에디터를 세로로 좁혀도 포커스 시 모델 전체가 들어가야 하며, 썸네일은 두 배율에서 비슷한 화면 비율을 유지해야 한다.
+5. **하이브리드 디렉터리 정리 및 소스 추적**:
+   - 하이브리드 레이아웃 임포트 시 대상 위치 아래 모델 전용 폴더와 `Meshes/`, `Materials/`, `Textures/`, `Animations/`가 자동 생성되어 파일들이 분류되어야 한다.
+   - 복합 모델(`.bammodel`)에는 원본 소스 경로가 보존되어 원본 수정 후 재임포트 시 서브폴더 구조를 깨지 않고 갱신되어야 한다.

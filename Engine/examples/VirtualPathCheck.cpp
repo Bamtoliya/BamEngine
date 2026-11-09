@@ -197,11 +197,11 @@ int main()
         EXPECT_TRUE(fs::exists(resolvedSpriteMat));
 
         // 11. Assets/ 프로젝트 에셋 루트 및 레거시 상대 경로 해석 검증
-        EXPECT_TRUE(fs::exists(projectRoot / "Scenes/RaytracingScene.json"));
-        const auto resolvedLegacyScene = PlatformPath::ResolveUri(L"Resources/Scenes/RaytracingScene.json");
-        EXPECT_EQ(resolvedLegacyScene, PlatformPath::Normalize(projectRoot / "Scenes/RaytracingScene.json"));
-        const auto resolvedProjectScene = PlatformPath::ResolveUri(L"Project://Scenes/RaytracingScene.json");
-        EXPECT_EQ(resolvedProjectScene, PlatformPath::Normalize(projectRoot / "Scenes/RaytracingScene.json"));
+        EXPECT_TRUE(fs::exists(projectRoot / "Scenes/RaytracingScene.bamscene.json"));
+        const auto resolvedLegacyScene = PlatformPath::ResolveUri(L"Resources/Scenes/RaytracingScene.bamscene.json");
+        EXPECT_EQ(resolvedLegacyScene, PlatformPath::Normalize(projectRoot / "Scenes/RaytracingScene.bamscene.json"));
+        const auto resolvedProjectScene = PlatformPath::ResolveUri(L"Project://Scenes/RaytracingScene.bamscene.json");
+        EXPECT_EQ(resolvedProjectScene, PlatformPath::Normalize(projectRoot / "Scenes/RaytracingScene.bamscene.json"));
 
         // 12. Editor:// 가상 마운트 URI 및 에디터 로캘 해석 검증
         const auto resolvedEditorLoc = PlatformPath::ResolveUri(L"Editor://Data/Localization/English.json");

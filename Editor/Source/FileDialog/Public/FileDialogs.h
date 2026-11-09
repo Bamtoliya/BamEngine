@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "Editor_Includes.h"
 #include "FileDialogContext.h"
@@ -16,6 +16,10 @@ public:
     static bool SaveFileDialog(wstring& outPath, const vector<FileDialogFilter>& filters = {},
         wstring_view defaultFileName = L"", wstring_view defaultExt = L"",
         EFileDialogContext context = EFileDialogContext::General);
+
+    static bool SaveFileDialog(wstring& outPath, const vector<FileDialogFilter>& filters,
+        wstring_view defaultFileName, wstring_view defaultExt,
+        wstring_view initialDir, EFileDialogContext context = EFileDialogContext::General);
 
     static bool OpenFileDialog(wstring& outPath, const vector<FileDialogFilter>& filters = {},
         wstring_view initialDir = L"", EFileDialogContext context = EFileDialogContext::General);

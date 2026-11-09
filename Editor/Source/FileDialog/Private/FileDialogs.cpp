@@ -1,5 +1,6 @@
-﻿#include "FileDialogs.h"
+#include "FileDialogs.h"
 #include "Editor_Macros.h"
+#include "PlatformPath.h"
 
 #pragma comment(lib, "ole32.lib")
 #pragma comment(lib, "shell32.lib")
@@ -7,9 +8,62 @@
 
 namespace
 {
+    static std::filesystem::path GetDefaultFolderForContext(Editor::EFileDialogContext context)
+    {
+        const auto& assetRoot = Engine::PlatformPath::GetProjectAssetRoot();
+        if (assetRoot.empty())
+            return {};
+
+        std::filesystem::path target;
+        switch (context)
+        {
+        case Editor::EFileDialogContext::SceneOpen:
+        case Editor::EFileDialogContext::SceneSave:
+            target = assetRoot / "Scenes";
+            break;
+        case Editor::EFileDialogContext::ParticleOpen:
+        case Editor::EFileDialogContext::ParticleSave:
+            target = assetRoot / "Effect";
+            break;
+        case Editor::EFileDialogContext::SpriteOpen:
+        case Editor::EFileDialogContext::SpriteSave:
+            target = assetRoot / "Texture";
+            break;
+        case Editor::EFileDialogContext::TimelineOpen:
+        case Editor::EFileDialogContext::TimelineSave:
+            target = assetRoot / "Data/Animation/Timeline";
+            break;
+        case Editor::EFileDialogContext::GraphOpen:
+        case Editor::EFileDialogContext::GraphSave:
+            target = assetRoot / "Scripts";
+            break;
+        case Editor::EFileDialogContext::PrefabOpen:
+        case Editor::EFileDialogContext::PrefabSave:
+            target = assetRoot / "Prefab";
+            break;
+        case Editor::EFileDialogContext::ResourceImport:
+        case Editor::EFileDialogContext::ModelImport:
+            target = assetRoot / "Source";
+            break;
+        case Editor::EFileDialogContext::MaterialOpen:
+        case Editor::EFileDialogContext::MaterialSave:
+            target = assetRoot / "Material";
+            break;
+        default:
+            target = assetRoot;
+            break;
+        }
+
+        std::error_code ec;
+        if (std::filesystem::is_directory(target, ec))
+            return target;
+
+        return assetRoot;
+    }
+
     static bool ShowDialog(wstring& outPath, bool save, bool pickFolders,
         const vector<FileDialogFilter>& filters, wstring_view defaultFileName,
-        wstring_view defaultExt, wstring_view initialDir, EFileDialogContext context)
+        wstring_view defaultExt, wstring_view initialDir, Editor::EFileDialogContext context)
     {
         struct FileDialogComScope
         {
@@ -64,22 +118,25 @@ namespace
         if (FAILED(result))
             return fail("SetOptions", result);
 
-        const wstring allFilesName = StrToWStr(LOCAL("FileDialog.AllFiles"));
-        vector<COMDLG_FILTERSPEC> specifications;
-
-        if (filters.empty())
+        if (!pickFolders)
         {
-            specifications.push_back({ allFilesName.c_str(), L"*.*" });
-        }
-        else
-        {
-            for (const auto& filter : filters)
-                specifications.push_back({ filter.Name.c_str(), filter.Pattern.c_str() });
-        }
+            const wstring allFilesName = StrToWStr(LOCAL("FileDialog.AllFiles"));
+            vector<COMDLG_FILTERSPEC> specifications;
 
-        result = dialog->SetFileTypes(static_cast<UINT>(specifications.size()), specifications.data());
-        if (FAILED(result))
-            return fail("SetFileTypes", result);
+            if (filters.empty())
+            {
+                specifications.push_back({ allFilesName.c_str(), L"*.*" });
+            }
+            else
+            {
+                for (const auto& filter : filters)
+                    specifications.push_back({ filter.Name.c_str(), filter.Pattern.c_str() });
+            }
+
+            result = dialog->SetFileTypes(static_cast<UINT>(specifications.size()), specifications.data());
+            if (FAILED(result))
+                return fail("SetFileTypes", result);
+        }
 
         const wstring fileName(defaultFileName);
         if (!fileName.empty())
@@ -90,19 +147,37 @@ namespace
         }
 
         const wstring extension(defaultExt);
-        if (!extension.empty())
+        if (!pickFolders && !extension.empty())
         {
             result = dialog->SetDefaultExtension(extension.c_str());
             if (FAILED(result))
                 return fail("SetDefaultExtension", result);
         }
 
+        std::filesystem::path resolvedDir;
         if (!initialDir.empty())
+        {
+            std::filesystem::path candidate(initialDir);
+            if (candidate.is_relative())
+            {
+                candidate = Engine::PlatformPath::ResolveProjectRelative(candidate);
+            }
+            std::error_code ec;
+            if (std::filesystem::is_directory(candidate, ec))
+                resolvedDir = candidate;
+        }
+
+        if (resolvedDir.empty())
+        {
+            resolvedDir = GetDefaultFolderForContext(context);
+        }
+
+        if (!resolvedDir.empty())
         {
             try
             {
                 std::error_code error;
-                const auto directory = std::filesystem::absolute(std::filesystem::path(initialDir), error);
+                const auto directory = std::filesystem::absolute(resolvedDir, error);
 
                 if (!error)
                 {
@@ -148,17 +223,29 @@ namespace
     }
 }
 
-bool FileDialogs::SaveFileDialog(wstring& outPath, const vector<FileDialogFilter>& filters,
-    wstring_view defaultFileName, wstring_view defaultExt, EFileDialogContext context)
+namespace Editor
 {
-    return ShowDialog(outPath, true, false, filters, defaultFileName, defaultExt, L"", context);
-}
-bool FileDialogs::OpenFileDialog(wstring& outPath, const vector<FileDialogFilter>& filters,
-    wstring_view initialDir, EFileDialogContext context)
-{
-    return ShowDialog(outPath, false, false, filters, L"", L"", initialDir, context);
-}
-bool FileDialogs::OpenFolderDialog(wstring& outPath, wstring_view initialDir, EFileDialogContext context)
-{
-    return ShowDialog(outPath, false, true, {}, L"", L"", initialDir, context);
+    bool FileDialogs::SaveFileDialog(wstring& outPath, const vector<FileDialogFilter>& filters,
+        wstring_view defaultFileName, wstring_view defaultExt, EFileDialogContext context)
+    {
+        return ShowDialog(outPath, true, false, filters, defaultFileName, defaultExt, L"", context);
+    }
+
+    bool FileDialogs::SaveFileDialog(wstring& outPath, const vector<FileDialogFilter>& filters,
+        wstring_view defaultFileName, wstring_view defaultExt,
+        wstring_view initialDir, EFileDialogContext context)
+    {
+        return ShowDialog(outPath, true, false, filters, defaultFileName, defaultExt, initialDir, context);
+    }
+
+    bool FileDialogs::OpenFileDialog(wstring& outPath, const vector<FileDialogFilter>& filters,
+        wstring_view initialDir, EFileDialogContext context)
+    {
+        return ShowDialog(outPath, false, false, filters, L"", L"", initialDir, context);
+    }
+
+    bool FileDialogs::OpenFolderDialog(wstring& outPath, wstring_view initialDir, EFileDialogContext context)
+    {
+        return ShowDialog(outPath, false, true, {}, L"", L"", initialDir, context);
+    }
 }

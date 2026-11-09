@@ -189,7 +189,9 @@ void AssetCache::Free()
     m_DecodeWorkers.clear();
     ClearAll();
 }
+#pragma endregion
 
+#pragma region Loop
 void AssetCache::Update()
 {
     CollectFinishedThumbnailWorkers();
@@ -253,233 +255,25 @@ void AssetCache::Update()
     // 3D 1프레임 오프스크린 캡처 파이프라인 처리
     ProcessPending3DThumbnail();
 }
-
-void AssetCache::InsertToCache(const std::string& key, RHITexture* texture, size_t byteSize)
-{
-    // 이미 캐시되어 있던 항목이면 이전 리소스 정리
-    if (auto it = m_ThumbnailCache.find(key); it != m_ThumbnailCache.end())
-    {
-        m_CurrentCacheBytes -= it->second.ByteSize;
-        Safe_Release(it->second.Texture);
-        m_LruList.erase(it->second.LruIt);
-        m_ThumbnailCache.erase(it);
-    }
-
-    // F12: 캐시 항목 수 또는 VRAM 바이트 예산 초과 시 LRU 순으로 오래된 텍스처 퇴거
-    while (!m_LruList.empty() &&
-        (m_ThumbnailCache.size() >= MAX_CACHE_ENTRIES ||
-            (texture && m_CurrentCacheBytes + byteSize > MAX_CACHE_BYTES)))
-    {
-        EvictOldest();
-    }
-
-    m_LruList.push_front(key);
-    CacheEntry entry;
-    entry.Texture = texture;
-    entry.ByteSize = texture ? byteSize : 0;
-    entry.LruIt = m_LruList.begin();
-
-    m_CurrentCacheBytes += entry.ByteSize;
-    m_ThumbnailCache.emplace(key, entry);
-}
-
-void AssetCache::EvictOldest()
-{
-    if (m_LruList.empty()) return;
-
-    const std::string oldestKey = m_LruList.back();
-    m_LruList.pop_back();
-
-    if (auto it = m_ThumbnailCache.find(oldestKey); it != m_ThumbnailCache.end())
-    {
-        m_CurrentCacheBytes -= it->second.ByteSize;
-        Safe_Release(it->second.Texture);
-        m_ThumbnailCache.erase(it);
-    }
-}
-
-void AssetCache::ProcessPending3DThumbnail()
-{
-    auto* thumbRenderer = ThumbnailRenderer::IsCreated() ? &ThumbnailRenderer::Get() : nullptr;
-
-    // 1단계: 이전 프레임에서 제출한 렌더링 결과물이 있으면 텍스처 복제하여 캐시에 등록
-    if (m_CaptureState == ECaptureState::Rendering)
-    {
-        const auto loading = m_LoadingPaths.find(m_CurrentCapturingKey);
-        const bool isCurrent = thumbRenderer != nullptr && loading != m_LoadingPaths.end() &&
-            loading->second == m_CurrentCapturingRequestId;
-
-        if (isCurrent)
-        {
-            RHITexture* newTexture = thumbRenderer->CreateThumbnailTexture();
-            m_LoadingPaths.erase(loading);
-
-            const size_t byteSize = newTexture != nullptr ?
-                static_cast<size_t>(MAX_THUMBNAIL_DIM) * MAX_THUMBNAIL_DIM * 4 : 0;
-
-            InsertToCache(m_CurrentCapturingKey, newTexture, byteSize);
-        }
-        else
-        {
-            BAM_LOG(Trace, "Editor", "Asset",
-                "Discarded stale 3D thumbnail: path={}, request={}",
-                m_CurrentCapturingKey, m_CurrentCapturingRequestId);
-        }
-
-        m_CurrentCapturingKey.clear();
-        m_CurrentCapturingRequestId = 0;
-        m_CaptureState = ECaptureState::Idle;
-    }
-
-    // 2단계: 대기열에서 다음 에셋 1개를 꺼내어 타입별 자동 프레이밍 렌더링 제출
-    for (size_t processed = 0;
-        processed < MAX_3D_REQUESTS_PER_FRAME && !m_Pending3DQueue.empty() &&
-        m_CaptureState == ECaptureState::Idle;
-        ++processed)
-    {
-        const auto request = std::move(m_Pending3DQueue.front());
-        m_Pending3DQueue.pop();
-
-        const auto& key = request.AssetPath;
-        const auto loading = m_LoadingPaths.find(key);
-
-        if (loading == m_LoadingPaths.end() || loading->second != request.RequestId ||
-            m_ThumbnailCache.contains(key))
-            continue;
-
-        const filesystem::path path = Engine::Utf8ToPath(key);
-        std::string ext = Engine::WStrToStr(path.extension().wstring());
-        for (char& c : ext)
-            c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-
-        std::string filename = Engine::WStrToStr(path.filename().wstring());
-        for (char& c : filename)
-            c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-
-        const std::wstring relPath = Engine::PlatformPath::ToProjectRelative(path).wstring();
-
-        auto& rm = Engine::ResourceManager::Get();
-        bool submitSuccess = false;
-
-        const bool isMat = ext == ".bammat" || ext == ".bammatinst" || ext == ".mat" ||
-            filename.ends_with(".bammat.json") || filename.ends_with(".bammatinst.json");
-        const bool isModel = ext == ".bammodel" || filename.ends_with(".bammodel.json");
-        const bool isMesh = ext == ".bammesh" || filename.ends_with(".bammesh.json");
-        const bool isTex = ext == ".bamtex" || filename.ends_with(".bamtex.json");
-        const bool isSprite = ext == ".bamsprite" || filename.ends_with(".bamsprite.json");
-
-        if ((isMat || isModel || isMesh) && thumbRenderer == nullptr)
-        {
-            m_LoadingPaths.erase(key);
-            InsertToCache(key, nullptr, 0);
-            continue;
-        }
-
-        if (isTex)
-        {
-            auto handle = rm.GetResourceHandle<Engine::Texture>(relPath);
-            if (!handle.IsValid())
-            {
-                auto loaded = rm.LoadFile(relPath);
-                if (loaded.IsValid()) handle = Engine::ResourceHandle<Engine::Texture>(loaded);
-            }
-            if (handle.IsValid() && handle.Get())
-            {
-                if (auto* rhiTex = handle.Get()->GetRHITexture())
-                {
-                    Engine::Safe_AddRef(rhiTex);
-                    InsertToCache(key, rhiTex, 0);
-                    m_LoadingPaths.erase(key);
-                    continue;
-                }
-            }
-            InsertToCache(key, nullptr, 0);
-            m_LoadingPaths.erase(key);
-            continue;
-        }
-        else if (isSprite)
-        {
-            auto handle = rm.GetResourceHandle<Engine::Sprite>(relPath);
-            if (!handle.IsValid())
-            {
-                auto loaded = rm.LoadFile(relPath);
-                if (loaded.IsValid()) handle = Engine::ResourceHandle<Engine::Sprite>(loaded);
-            }
-            if (handle.IsValid() && handle.Get())
-            {
-                if (auto* tex = handle.Get()->GetTexture())
-                {
-                    if (auto* rhiTex = tex->GetRHITexture())
-                    {
-                        Engine::Safe_AddRef(rhiTex);
-                        InsertToCache(key, rhiTex, 0);
-                        m_LoadingPaths.erase(key);
-                        continue;
-                    }
-                }
-            }
-            InsertToCache(key, nullptr, 0);
-            m_LoadingPaths.erase(key);
-            continue;
-        }
-
-        if (isMat)
-        {
-            auto handle = rm.GetResourceHandle<Engine::MaterialInterface>(relPath);
-            if (!handle.IsValid())
-            {
-                auto loaded = rm.LoadFile(relPath);
-                if (loaded.IsValid()) handle = Engine::ResourceHandle<Engine::MaterialInterface>(loaded);
-            }
-            if (handle.IsValid() && handle.Get()) submitSuccess = thumbRenderer->SubmitMaterial(handle.Get());
-        }
-        else if (isModel)
-        {
-            auto handle = rm.GetResourceHandle<Engine::Model>(relPath);
-            if (!handle.IsValid())
-            {
-                auto loaded = rm.LoadFile(relPath);
-                if (loaded.IsValid()) handle = Engine::ResourceHandle<Engine::Model>(loaded);
-            }
-            if (handle.IsValid() && handle.Get()) submitSuccess = thumbRenderer->SubmitModel(handle.Get());
-        }
-        else if (isMesh)
-        {
-            auto handle = rm.GetResourceHandle<Engine::Mesh>(relPath);
-            if (!handle.IsValid())
-            {
-                auto loaded = rm.LoadFile(relPath);
-                if (loaded.IsValid()) handle = Engine::ResourceHandle<Engine::Mesh>(loaded);
-            }
-            if (handle.IsValid() && handle.Get()) submitSuccess = thumbRenderer->SubmitMesh(handle.Get());
-        }
-
-        if (submitSuccess)
-        {
-            m_CurrentCapturingKey = key;
-            m_CurrentCapturingRequestId = request.RequestId;
-            m_CaptureState = ECaptureState::Rendering;
-            break;
-        }
-        else
-        {
-            m_LoadingPaths.erase(key);
-            InsertToCache(key, nullptr, 0);
-        }
-    }
-}
 #pragma endregion
 
 #pragma region Thumbnail Management
-RHITexture* AssetCache::GetThumbnail(const filesystem::path& assetPath)
+RHITexture* AssetCache::GetThumbnail(const filesystem::path& assetPath, Handle* spriteHandle)
 {
     const std::string key = ThumbnailCacheKey(assetPath);
     if (key.empty())
         return nullptr;
 
+    if (spriteHandle)
+        *spriteHandle = {};
+
+    // 기존 캐시 적중 분기 교체
     if (auto cached = m_ThumbnailCache.find(key); cached != m_ThumbnailCache.end())
     {
         m_LruList.splice(m_LruList.begin(), m_LruList, cached->second.LruIt);
+        if (spriteHandle)
+            *spriteHandle = cached->second.SpriteHandle;
+
         return cached->second.Texture;
     }
 
@@ -775,5 +569,221 @@ std::optional<AssetCache::ThumbnailUploadTask> AssetCache::LoadModelThumbnail(co
     }
     CoUninitialize();
     return std::nullopt;
+}
+
+void AssetCache::InsertToCache(const std::string& key, RHITexture* texture, size_t byteSize, Engine::Handle spriteHandle)
+{
+    // 이미 캐시되어 있던 항목이면 이전 리소스 정리
+    if (auto it = m_ThumbnailCache.find(key); it != m_ThumbnailCache.end())
+    {
+        m_CurrentCacheBytes -= it->second.ByteSize;
+        Safe_Release(it->second.Texture);
+        m_LruList.erase(it->second.LruIt);
+        m_ThumbnailCache.erase(it);
+    }
+
+    // F12: 캐시 항목 수 또는 VRAM 바이트 예산 초과 시 LRU 순으로 오래된 텍스처 퇴거
+    while (!m_LruList.empty() &&
+        (m_ThumbnailCache.size() >= MAX_CACHE_ENTRIES ||
+            (texture && m_CurrentCacheBytes + byteSize > MAX_CACHE_BYTES)))
+    {
+        EvictOldest();
+    }
+
+    m_LruList.push_front(key);
+    CacheEntry entry;
+    entry.Texture = texture;
+    entry.ByteSize = texture ? byteSize : 0;
+    entry.LruIt = m_LruList.begin();
+	entry.SpriteHandle = spriteHandle;
+
+    m_CurrentCacheBytes += entry.ByteSize;
+    m_ThumbnailCache.emplace(key, entry);
+}
+
+void AssetCache::EvictOldest()
+{
+    if (m_LruList.empty()) return;
+
+    const std::string oldestKey = m_LruList.back();
+    m_LruList.pop_back();
+
+    if (auto it = m_ThumbnailCache.find(oldestKey); it != m_ThumbnailCache.end())
+    {
+        m_CurrentCacheBytes -= it->second.ByteSize;
+        Safe_Release(it->second.Texture);
+        m_ThumbnailCache.erase(it);
+    }
+}
+
+void AssetCache::ProcessPending3DThumbnail()
+{
+    auto* thumbRenderer = ThumbnailRenderer::IsCreated() ? &ThumbnailRenderer::Get() : nullptr;
+
+    // 1단계: 이전 프레임에서 제출한 렌더링 결과물이 있으면 텍스처 복제하여 캐시에 등록
+    if (m_CaptureState == ECaptureState::Rendering)
+    {
+        const auto loading = m_LoadingPaths.find(m_CurrentCapturingKey);
+        const bool isCurrent = thumbRenderer != nullptr && loading != m_LoadingPaths.end() &&
+            loading->second == m_CurrentCapturingRequestId;
+
+        if (isCurrent)
+        {
+            RHITexture* newTexture = thumbRenderer->CreateThumbnailTexture();
+            m_LoadingPaths.erase(loading);
+
+            const size_t byteSize = newTexture != nullptr ?
+                static_cast<size_t>(MAX_THUMBNAIL_DIM) * MAX_THUMBNAIL_DIM * 4 : 0;
+
+            InsertToCache(m_CurrentCapturingKey, newTexture, byteSize);
+        }
+        else
+        {
+            BAM_LOG(Trace, "Editor", "Asset",
+                "Discarded stale 3D thumbnail: path={}, request={}",
+                m_CurrentCapturingKey, m_CurrentCapturingRequestId);
+        }
+
+        m_CurrentCapturingKey.clear();
+        m_CurrentCapturingRequestId = 0;
+        m_CaptureState = ECaptureState::Idle;
+    }
+
+    // 2단계: 대기열에서 다음 에셋 1개를 꺼내어 타입별 자동 프레이밍 렌더링 제출
+    for (size_t processed = 0;
+        processed < MAX_3D_REQUESTS_PER_FRAME && !m_Pending3DQueue.empty() &&
+        m_CaptureState == ECaptureState::Idle;
+        ++processed)
+    {
+        const auto request = std::move(m_Pending3DQueue.front());
+        m_Pending3DQueue.pop();
+
+        const auto& key = request.AssetPath;
+        const auto loading = m_LoadingPaths.find(key);
+
+        if (loading == m_LoadingPaths.end() || loading->second != request.RequestId ||
+            m_ThumbnailCache.contains(key))
+            continue;
+
+        const filesystem::path path = Engine::Utf8ToPath(key);
+        std::string ext = Engine::WStrToStr(path.extension().wstring());
+        for (char& c : ext)
+            c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+
+        std::string filename = Engine::WStrToStr(path.filename().wstring());
+        for (char& c : filename)
+            c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+
+        const std::wstring relPath = Engine::PlatformPath::ToProjectRelative(path).wstring();
+
+        auto& rm = Engine::ResourceManager::Get();
+        bool submitSuccess = false;
+
+        const bool isMat = ext == ".bammat" || ext == ".bammatinst" || ext == ".mat" ||
+            filename.ends_with(".bammat.json") || filename.ends_with(".bammatinst.json");
+        const bool isModel = ext == ".bammodel" || filename.ends_with(".bammodel.json");
+        const bool isMesh = ext == ".bammesh" || filename.ends_with(".bammesh.json");
+        const bool isTex = ext == ".bamtex" || filename.ends_with(".bamtex.json");
+        const bool isSprite = ext == ".bamsprite" || filename.ends_with(".bamsprite.json");
+
+        if ((isMat || isModel || isMesh) && thumbRenderer == nullptr)
+        {
+            m_LoadingPaths.erase(key);
+            InsertToCache(key, nullptr, 0);
+            continue;
+        }
+
+        if (isTex)
+        {
+            auto handle = rm.GetResourceHandle<Engine::Texture>(relPath);
+            if (!handle.IsValid())
+            {
+                auto loaded = rm.LoadFile(relPath);
+                if (loaded.IsValid()) handle = Engine::ResourceHandle<Engine::Texture>(loaded);
+            }
+            if (handle.IsValid() && handle.Get())
+            {
+                if (auto* rhiTex = handle.Get()->GetRHITexture())
+                {
+                    Engine::Safe_AddRef(rhiTex);
+                    InsertToCache(key, rhiTex, 0);
+                    m_LoadingPaths.erase(key);
+                    continue;
+                }
+            }
+            InsertToCache(key, nullptr, 0);
+            m_LoadingPaths.erase(key);
+            continue;
+        }
+        else if (isSprite)
+        {
+            auto handle = rm.GetResourceHandle<Engine::Sprite>(relPath);
+            if (!handle.IsValid())
+            {
+                auto loaded = rm.LoadFile(relPath);
+                if (loaded.IsValid()) handle = Engine::ResourceHandle<Engine::Sprite>(loaded);
+            }
+            if (handle.IsValid() && handle.Get())
+            {
+                if (auto* tex = handle.Get()->GetTexture())
+                {
+                    if (auto* rhiTex = tex->GetRHITexture())
+                    {
+                        Engine::Safe_AddRef(rhiTex);
+                        InsertToCache(key, rhiTex, 0, handle.GetRawHandle());
+                        m_LoadingPaths.erase(key);
+                        continue;
+                    }
+                }
+            }
+            InsertToCache(key, nullptr, 0);
+            m_LoadingPaths.erase(key);
+            continue;
+        }
+
+        if (isMat)
+        {
+            auto handle = rm.GetResourceHandle<Engine::MaterialInterface>(relPath);
+            if (!handle.IsValid())
+            {
+                auto loaded = rm.LoadFile(relPath);
+                if (loaded.IsValid()) handle = Engine::ResourceHandle<Engine::MaterialInterface>(loaded);
+            }
+            if (handle.IsValid() && handle.Get()) submitSuccess = thumbRenderer->SubmitMaterial(handle.Get());
+        }
+        else if (isModel)
+        {
+            auto handle = rm.GetResourceHandle<Engine::Model>(relPath);
+            if (!handle.IsValid())
+            {
+                auto loaded = rm.LoadFile(relPath);
+                if (loaded.IsValid()) handle = Engine::ResourceHandle<Engine::Model>(loaded);
+            }
+            if (handle.IsValid() && handle.Get()) submitSuccess = thumbRenderer->SubmitModel(handle.Get());
+        }
+        else if (isMesh)
+        {
+            auto handle = rm.GetResourceHandle<Engine::Mesh>(relPath);
+            if (!handle.IsValid())
+            {
+                auto loaded = rm.LoadFile(relPath);
+                if (loaded.IsValid()) handle = Engine::ResourceHandle<Engine::Mesh>(loaded);
+            }
+            if (handle.IsValid() && handle.Get()) submitSuccess = thumbRenderer->SubmitMesh(handle.Get());
+        }
+
+        if (submitSuccess)
+        {
+            m_CurrentCapturingKey = key;
+            m_CurrentCapturingRequestId = request.RequestId;
+            m_CaptureState = ECaptureState::Rendering;
+            break;
+        }
+        else
+        {
+            m_LoadingPaths.erase(key);
+            InsertToCache(key, nullptr, 0);
+        }
+    }
 }
 #pragma endregion

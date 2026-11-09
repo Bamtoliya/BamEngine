@@ -4,6 +4,7 @@
 #include "Renderer.h"
 #include "Logger.h"
 #include "EditorSettingsService.h"
+#include "PlatformPath.h"
 #include <glaze/glaze.hpp>
 
 namespace Editor::StartupConfig
@@ -75,9 +76,7 @@ namespace Editor::StartupConfig
 
 		for (const auto& path : paths)
 		{
-			std::filesystem::path fullPath = path;
-			if (fullPath.is_relative())
-				fullPath = projectRoot / fullPath;
+			const auto fullPath = Engine::PlatformPath::ResolveUri(path);
 
 			if (!resourceManager.LoadFile(fullPath.wstring()).IsValid())
 			{
@@ -92,16 +91,17 @@ namespace Editor::StartupConfig
 	template<typename T>
 	static bool ReadManifest(const std::filesystem::path& path, std::string_view category, T& manifest)
 	{
+		const auto resolved = Engine::PlatformPath::ResolveUri(path);
 		std::string content;
-		if (!ReadJsonFile(path, content))
+		if (!ReadJsonFile(resolved, content))
 		{
-			EDITOR_LOG_ERROR("[StartupLoader] Failed to read {} manifest: {}", category, path.string());
+			EDITOR_LOG_ERROR("[StartupLoader] Failed to read {} manifest: {}", category, resolved.string());
 			return false;
 		}
 
 		if (glz::read_json(manifest, content))
 		{
-			EDITOR_LOG_ERROR("[StartupLoader] Failed to parse {} manifest: {}", category, path.string());
+			EDITOR_LOG_ERROR("[StartupLoader] Failed to parse {} manifest: {}", category, resolved.string());
 			return false;
 		}
 
@@ -123,9 +123,9 @@ bool Editor::StartupResourceLoader::LoadPipeline(const std::filesystem::path& ma
 	const auto projectRoot = EditorSettingsService::Get().GetProjectRoot();
 	for (const auto& step : manifest.Pipeline)
 	{
-		std::filesystem::path configPath = step.Config;
-		if (configPath.is_relative())
-			configPath = projectRoot / configPath;
+		const std::filesystem::path configPath = Engine::PlatformPath::ResolveUri(step.Config);
+
+
 
 		bool stepSuccess = false;
 
@@ -192,9 +192,9 @@ bool Editor::StartupResourceLoader::LoadShaders(const std::filesystem::path& con
 
 		std::string path = isSdlGpu ? item.SpirvPath : item.DxilPath;
 		if (path.empty()) path = item.DxilPath;
-		std::filesystem::path shaderPath = path;
-		if (shaderPath.is_relative())
-			shaderPath = projectRoot / shaderPath;
+		const std::filesystem::path shaderPath = Engine::PlatformPath::ResolveUri(path);
+
+
 		desc.Path = shaderPath.wstring();
 		desc.shaderType = (item.Type == "Fragment" || item.Type == "Pixel")
 			? EShaderType::Fragment : EShaderType::Vertex;

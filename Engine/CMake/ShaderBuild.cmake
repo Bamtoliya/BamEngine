@@ -20,7 +20,7 @@ message(STATUS "디버그 - 현재 CMake가 인식한 VULKAN_SDK: '$ENV{VULKAN_S
 message(STATUS "디버그 - 최종적으로 찾은 DXC_COMPILER 경로: '${DXC_COMPILER}'")
 
 # 2. 셰이더 소스 폴더 세팅 (.hlsl, .hlsli 스캔)
-set(SHADER_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../Resources/Shader")
+set(SHADER_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Resources/Shader")
 file(GLOB_RECURSE HLSL_SOURCES CONFIGURE_DEPENDS "${SHADER_SOURCE_DIR}/*.hlsl")
 file(GLOB_RECURSE HLSL_INCLUDES CONFIGURE_DEPENDS "${SHADER_SOURCE_DIR}/*.hlsli")
 
