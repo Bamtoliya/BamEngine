@@ -1800,6 +1800,50 @@ VFXEditor,PropFadeStartTime,Fade Start,페이드 시작
 VFXEditor,PropAmplitude,Amplitude,진폭
 VFXEditor,PropFrequency,Frequency,주파수
 VFXEditor,PropShakeRadius,Shake Radius,감쇠 반경
+EditorMenu,Plugins,Plugins,플러그인
+PluginManager,Title,Plugins & Modules,플러그인 및 모듈 관리자
+PluginManager,SearchPlaceholder,Search plugins...,플러그인 검색...
+PluginManager,CategoryAll,All,전체
+PluginManager,CategoryGameLogic,Game Logic,게임 로직
+PluginManager,CategoryEditorTools,Editor Tools,에디터 도구
+PluginManager,CategoryExperimental,Experimental,실험 기능
+PluginManager,StatusLoaded,Loaded,로드됨
+PluginManager,StatusUnloaded,Unloaded,언로드됨
+PluginManager,StatusCompiling,Compiling,컴파일 중
+PluginManager,StatusFailed,Failed,실패
+PluginManager,NoMatchingPlugins,No matching plugins found,일치하는 플러그인이 없습니다
+PluginManager,SelectModuleHint,Select a plugin or module from the left list.,좌측 목록에서 플러그인 또는 모듈을 선택하세요.
+PluginManager,Reload,Reload,핫 리로드
+PluginManager,RebuildAndReload,Rebuild & Reload,다시 빌드 및 리로드
+PluginManager,Load,Load,로드
+PluginManager,Unload,Unload,언로드
+PluginManager,AutoReloadOnSave,Auto-Reload on Save,저장 시 자동 리로드
+PluginManager,AutoCompileOnSave,Auto-Compile on Save,저장 시 자동 컴파일
+PluginManager,SpriteAnimationToolsDescription,Reloadable sprite animation editor tools. Saving source files can rebuild the panel DLL.,스프라이트 애니메이션 편집 도구입니다. 소스 파일을 저장하면 패널 DLL을 다시 빌드할 수 있습니다.
+PluginManager,ResourcePluginUnavailable,The resource panel plugin could not be loaded. See the editor log.,리소스 패널 플러그인을 불러오지 못했습니다. 에디터 로그를 확인하세요.
+PluginManager,RecompileAllShaders,Recompile All Shaders,셰이더 전체 재컴파일
+PluginManager,AutoReloadShaders,Auto-Reload Shaders,셰이더 자동 리로드
+PluginManager,AutoReloadAssets,Auto-Reload Assets,에셋 자동 리로드
+PluginManager,OpenPanel,Open Panel,패널 열기
+PluginManager,ClosePanel,Close Panel,패널 닫기
+PluginManager,MetadataHeader,Module Information,모듈 정보
+PluginManager,PropIdentifier,Identifier,식별자
+PluginManager,PropOriginalDll,Original DLL Path,원본 DLL 경로
+PluginManager,PropShadowDll,Shadow DLL Path,섀도우 DLL 경로
+PluginManager,PropSourceDir,Source Directory,소스 코드 디렉터리
+PluginManager,PropReloadCount,Reload Count,리로드 횟수
+PluginManager,PropBuildStatus,Build Status,빌드 상태
+PluginManager,PropWatchPaths,Watch Directories,감시 디렉터리
+PluginManager,PropAssociatedPanel,Associated Panel,연동 패널
+PluginManager,FeaturesHeader,Provided Features & Components,제공 기능 및 컴포넌트
+PluginManager,FeatureSystems,Gameplay Systems,게임플레이 시스템
+PluginManager,FeatureComponents,Registered Components,등록된 컴포넌트
+PluginManager,ShowPanelInWorkspace,Show panel in editor workspace,에디터 작업공간에 패널 표시
+PluginManager,CoreEnginePipelineFeature,Core engine runtime pipeline watcher,엔진 핵심 런타임 파이프라인 감시자
+PluginManager,BuildConsoleHeader,Build & Diagnostic Console,빌드 및 진단 콘솔
+PluginManager,RetryCompile,Retry Compile,컴파일 다시 시도
+PluginManager,AutoScroll,Auto-scroll,자동 스크롤
+PluginManager,NoBuildOutput,No build output recorded yet.,기록된 빌드 출력이 없습니다.
 Help,TriggerCrashTest,Trigger Crash (Diagnostics Test),크래시 유발 (진단 및 복원 테스트)
 Recovery,ModalTitle,Crash Recovery & Work Restoration,비정상 종료 감지 및 작업 복원
 Recovery,CrashDetectedMessage,The previous editor session terminated unexpectedly. A recoverable snapshot has been detected:,이전 에디터 세션이 예기치 않게 종료되었습니다. 복원 가능한 작업 스냅샷이 감지되었습니다:
@@ -1846,3 +1890,9 @@ EffectTimeline,Properties,Properties,속성
 EffectTimeline,EditRange,Edit Timeline Range,타임라인 구간 편집
 EffectTimeline,OpenEmission,Emission has no fixed end,방출 종료 미지정
 EffectTimeline,Emitter,Emitter,이미터
+PanelLifecycleProbe,Title,Panel lifecycle probe,패널 수명 진단
+PanelLifecycleProbe,Frame,ImGui frame {0},ImGui 프레임 {0}
+PanelLifecycleProbe,Register,Load DLL,DLL 로드
+PanelLifecycleProbe,Remove,Unload DLL,DLL 언로드
+PanelLifecycleProbe,DrawCount,DLL draw calls {0},DLL 그리기 호출 {0}회
+PanelLifecycleProbe,Reload,Reload DLL,DLL 다시 로드

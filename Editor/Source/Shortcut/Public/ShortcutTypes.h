@@ -14,7 +14,7 @@ enum class EShortcutContext : uint8
     Hierarchy,      // 씬 하이어라키 패널 활성 시
     AnimationTimeline, // 애니메이션 타임라인 패널 활성 시
     PrefabEditor,
-    SpriteAnimationEditor,
+    PluginResource,
     ContentBrowser,
     UIViewport,
     ParticleTimeline,
@@ -33,6 +33,7 @@ struct EditorAction
     std::function<bool()> CanExecute; // 실행 가능 여부 (미지정 시 항상 true)
     bool AllowRepeat = false;
     bool WhileHeld = false;
+    std::wstring PanelScope;
 };
 
 END

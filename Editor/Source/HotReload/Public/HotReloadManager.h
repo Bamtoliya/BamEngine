@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "HotReloaderInterface.h"
+#include <unordered_map>
 
 BEGIN(Editor)
 class ModuleHotReloadManager;
@@ -25,11 +26,13 @@ public:
     [[nodiscard]] ShaderHotReloadManager& GetShaderReloader();
     [[nodiscard]] AssetHotReloadManager& GetAssetReloader();
 	[[nodiscard]] ModuleBuildManager& GetModuleBuilder();
+    [[nodiscard]] ModuleBuildManager* GetEditorPluginBuilder(const std::string& target) const;
 private:
     ModuleHotReloadManager* m_ModuleReloader = nullptr;
     ShaderHotReloadManager* m_ShaderReloader = nullptr;
     AssetHotReloadManager* m_AssetReloader = nullptr;
 	ModuleBuildManager* m_ModuleBuilder = nullptr;
+    std::unordered_map<std::string, ModuleBuildManager*> m_EditorPluginBuilders;
 };
 
 END

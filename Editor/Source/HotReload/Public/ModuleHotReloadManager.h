@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "HotReloaderInterface.h"
 #include "ModuleInterface.h"
@@ -32,6 +32,7 @@ public:
     [[nodiscard]] Engine::IModule* GetModule() const { return m_CurrentModule; }
     [[nodiscard]] uint32 GetReloadIndex() const { return m_ReloadIndex; }
     [[nodiscard]] const std::filesystem::path& GetOriginalDllPath() const { return m_OriginalDllPath; }
+    [[nodiscard]] const std::filesystem::path& GetCurrentShadowDllPath() const { return m_CurrentShadowDllPath; }
 
 public:
     using PostReloadCallback = std::function<void()>;

@@ -9,6 +9,7 @@
 #pragma region Third Library
 #include <algorithm>
 #include <fmt/core.h>
+#include <fstream>
 #include <utility>
 #pragma endregion
 
@@ -26,8 +27,10 @@
 #include "ResourceEditors.h"
 #include "ResourceManager.h"
 #include "ResourceEditorInterface.h"
+#include "PluginResourceEditor.h"
 #include "TerrainEditor.h"
 #include "TilePalettePanel.h"
+#include "PluginManagerPanel.h"
 #include "RecoveryManager.h"
 
 #include "DirectX12Texture.h"
@@ -172,6 +175,8 @@ EResult ImGuiManager::Initialize(void* arg)
 
 	m_DocumentController = std::make_unique<EditorDocumentController>(Application::Get().GetDocuments());
 	EditorActionRegistry::RegisterAll();
+	for (auto* panel : m_PluginResourceEditors)
+		panel->RegisterSaveAction();
 
 	return EResult::Success;
 }
@@ -196,6 +201,7 @@ void ImGuiManager::Free()
 	if (m_ImGuiContext)
 		ImGui::SetCurrentContext(m_ImGuiContext);
 	m_WorkspacePanels.clear();
+	m_PluginResourceEditors.clear();
 	m_PendingRemovePanels.clear();
 
 	for (auto& panel : m_PendingAddPanels)
@@ -371,6 +377,7 @@ void ImGuiManager::Draw()
 			EditorSettingsService::Get().IsWindowChangePending() || ShortcutManager::Get().IsCapturing() ||
 			ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel);
 		EShortcutContext activeContext = EShortcutContext::Global;
+		std::wstring_view activePanel;
 		for (const auto* panel : m_ImGuiPanels)
 		{
 			if (panel && panel->IsOpen() && panel->IsFocused())
@@ -379,11 +386,12 @@ void ImGuiManager::Draw()
 				if (ctx != EShortcutContext::Global)
 				{
 					activeContext = ctx;
+					activePanel = panel->GetName();
 					break;
 				}
 			}
 		}
-		ShortcutManager::Get().ProcessShortcuts(activeContext, suppressed);
+		ShortcutManager::Get().ProcessShortcuts(activeContext, suppressed, activePanel);
 
 		if (const auto result = m_DocumentController->ProcessPendingSave())
 		{
@@ -488,6 +496,36 @@ EResult ImGuiManager::AddImGuiPanel(IImGui* panel)
 	return EResult::Success;
 }
 
+IImGui* ImGuiManager::FindRegisteredPanel(const wstring& id) const
+{
+	const auto matches = [&id](const IImGui* panel) { return panel->GetName() == id; };
+	const auto active = std::find_if(m_ImGuiPanels.begin(), m_ImGuiPanels.end(), matches);
+	if (active != m_ImGuiPanels.end())
+		return *active;
+
+	const auto pending = std::find_if(m_PendingAddPanels.begin(), m_PendingAddPanels.end(), matches);
+	return pending != m_PendingAddPanels.end() ? *pending : nullptr;
+}
+
+EResult ImGuiManager::RegisterImGuiPanel(const wstring& id, IImGui* (*createPanel)())
+{
+	if (id.empty() || !createPanel)
+		return EResult::InvalidArgument;
+	if (FindRegisteredPanel(id))
+		return EResult::AlreadyInitialized;
+
+	auto* panel = createPanel();
+	if (!panel)
+		return EResult::Fail;
+	if (panel->GetName() != id)
+	{
+		Safe_Release(panel);
+		return EResult::InvalidArgument;
+	}
+
+	return InitializePanel(panel) ? EResult::Success : EResult::Fail;
+}
+
 EResult ImGuiManager::RemoveImGuiPanel(IImGui* panel)
 {
 	if (!panel)
@@ -503,6 +541,8 @@ EResult ImGuiManager::RemoveImGuiPanel(IImGui* panel)
 		return EResult::Success;
 
 	std::erase(m_WorkspacePanels, panel);
+	if (auto* plugin = dynamic_cast<PluginResourceEditor*>(panel))
+		std::erase(m_PluginResourceEditors, plugin);
 	m_PendingRemovePanels.push_back(panel);
 	return EResult::Success;
 }
@@ -750,6 +790,8 @@ EResult ImGuiManager::CreateDefaultPanels()
 
 	if (const EResult result = CreateResourceEditors(); result != EResult::Success)
 		return result;
+	if (!InitializePanel(new PluginManagerPanel()))
+		return EResult::Fail;
 
 	m_WorkspacePanels = m_PendingAddPanels;
 	return EResult::Success;
@@ -766,14 +808,42 @@ EResult ImGuiManager::CreateResourceEditors()
 		!initializeClosed(new ModelEditor()) ||
 		!initializeClosed(new ShaderEditor()) ||
 		!initializeClosed(new SpriteEditor()) ||
-		!initializeClosed(new SpriteAnimationEditor()) ||
 		!initializeClosed(new MaterialEditor()) ||
 		!initializeClosed(new PrefabEditorPanel()) ||
 		!initializeClosed(new ParticleEditorPanel()) ||
 		!initializeClosed(new VFXEditorPanel()))
 		return EResult::Fail;
 
+	std::ifstream catalog(Engine::PlatformPath::GetExecutableDirectory() / "EditorResourcePlugins.txt");
+	std::string line;
+	while (std::getline(catalog, line))
+	{
+		if (line.empty())
+			continue;
+		const auto separator = line.find('|');
+		const auto target = line.substr(0, separator);
+		if (separator == std::string::npos || separator + 1 == line.size() || target.empty() ||
+			target.find_first_not_of("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-") !=
+				std::string::npos || GetPluginResourceEditor(target))
+		{
+			EDITOR_LOG_WARN("Invalid or duplicate resource plugin entry: {}", line);
+			continue;
+		}
+
+		const auto path = std::filesystem::u8path(line.substr(separator + 1));
+		auto* plugin = new PluginResourceEditor(target, path);
+		if (initializeClosed(plugin))
+			m_PluginResourceEditors.push_back(plugin);
+	}
+
 	return EResult::Success;
+}
+
+PluginResourceEditor* ImGuiManager::GetPluginResourceEditor(std::string_view target) const
+{
+	const auto found = std::find_if(m_PluginResourceEditors.begin(), m_PluginResourceEditors.end(),
+		[target](const PluginResourceEditor* panel) { return panel->GetTarget() == target; });
+	return found != m_PluginResourceEditors.end() ? *found : nullptr;
 }
 #pragma endregion
 

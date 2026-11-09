@@ -1,4 +1,4 @@
-#include "ShaderHotReloadManager.h"
+﻿#include "ShaderHotReloadManager.h"
 #include "ResourceManager.h"
 #include "Shader.h"
 #include "Renderer.h"
@@ -96,29 +96,54 @@ namespace
 	};
 }
 
-std::filesystem::path ShaderHotReloadManager::ResolveShaderSourceDirectory()
+void ShaderHotReloadManager::RegisterDefaultCandidates()
 {
-	return Engine::PlatformPath::ResolveUri(L"Engine://Shader/hlsl");
+	// 1. 엔진 시스템 빌트인 셰이더 경로 (Engine://Shader/hlsl)
+	AddWatchPath(L"Engine://Shader/hlsl");
+
+	// 2. 사용자 프로젝트 애셋 셰이더 경로 (Project://Shader/hlsl 또는 Project://Shader)
+	AddWatchPath(L"Project://Shader/hlsl");
+	AddWatchPath(L"Project://Shader");
+
+	// 3. 환경 변수 기반 셰이더 경로 등록 (예: BAM_SHADER_PATH="C:/CustomShaders;D:/Plugins/Shader")
+	AddWatchPathsFromEnvironment("BAM_SHADER_PATH");
 }
 
 #pragma region Constructor&Destrcutor
 EResult ShaderHotReloadManager::Initialize(void* arg)
 {
-	m_WatchDirectory = ResolveShaderSourceDirectory();
-	std::error_code ec;
-	if (!std::filesystem::exists(m_WatchDirectory, ec))
-	{
-		EDITOR_LOG_WARN("[Shader Hot Reload] Shader directory does not exist: {}", m_WatchDirectory.string());
-		return EResult::Success;
-	}
-
 	m_FileWatcher = new efsw::FileWatcher();
 	m_FileListener = new ShaderFileListener(this);
-	m_WatchID = m_FileWatcher->addWatch(m_WatchDirectory.string(), m_FileListener, true);
-	m_FileWatcher->watch();
 
-	EDITOR_LOG_INFO("[Shader Hot Reload] Watching directory: {}", m_WatchDirectory.string());
+	RegisterDefaultCandidates();
+
+	m_FileWatcher->watch();
 	return EResult::Success;
+}
+
+void ShaderHotReloadManager::OnWatchPathAdded(const std::filesystem::path& resolvedPath)
+{
+	if (!m_FileWatcher || !m_FileListener) return;
+
+	const efsw::WatchID watchId = m_FileWatcher->addWatch(resolvedPath.string(), m_FileListener, true);
+	if (watchId > 0)
+	{
+		m_WatchIdMap[resolvedPath] = watchId;
+		EDITOR_LOG_INFO("[Shader Hot Reload] Watching directory: {}", resolvedPath.string());
+	}
+}
+
+void ShaderHotReloadManager::OnWatchPathRemoved(const std::filesystem::path& resolvedPath)
+{
+	if (!m_FileWatcher) return;
+
+	auto it = m_WatchIdMap.find(resolvedPath);
+	if (it != m_WatchIdMap.end())
+	{
+		m_FileWatcher->removeWatch(it->second);
+		m_WatchIdMap.erase(it);
+		EDITOR_LOG_INFO("[Shader Hot Reload] Stopped watching directory: {}", resolvedPath.string());
+	}
 }
 
 ShaderHotReloadManager* ShaderHotReloadManager::Create()
@@ -137,7 +162,11 @@ void ShaderHotReloadManager::Free()
 {
 	if (m_FileWatcher)
 	{
-		if (m_WatchID != 0) m_FileWatcher->removeWatch(m_WatchID);
+		for (const auto& [path, watchId] : m_WatchIdMap)
+		{
+			if (watchId != 0) m_FileWatcher->removeWatch(watchId);
+		}
+		m_WatchIdMap.clear();
 		delete m_FileWatcher;
 		m_FileWatcher = nullptr;
 	}
@@ -182,9 +211,11 @@ void ShaderHotReloadManager::Update()
 	if (!modifiedHeaderKeys.empty())
 	{
 		std::error_code ec;
-		if (std::filesystem::exists(m_WatchDirectory, ec))
+		for (const auto& watchDir : GetWatchPaths())
 		{
-			for (const auto& entry : std::filesystem::directory_iterator(m_WatchDirectory, ec))
+			if (!std::filesystem::exists(watchDir, ec)) continue;
+
+			for (const auto& entry : std::filesystem::recursive_directory_iterator(watchDir, ec))
 			{
 				if (!entry.is_regular_file(ec) || ToLowerCopy(entry.path().extension().string()) != ".hlsl")
 					continue;
@@ -263,30 +294,47 @@ void ShaderHotReloadManager::ProcessModifiedFile(const std::filesystem::path& hl
 			{
 				reloadedAny = true;
 				EDITOR_LOG_INFO("[Shader Hot Reload] Hot-swapped: {} (Key: {}, {} bytes)",
-					hlslPath.filename().string(), WStrToStr(shader->GetKey()), result.Bytecode.size());
-				// 초록색 성공 토스트 등록 (3초간 유지)
-				NotificationManager::Get().AddNotification(
-					LOCAL("Notification.ShaderHotReloaded"),
-					LOCAL_FMT("Notification.ReloadedFile", hlslPath.filename().string()),
-					ELogLevel::Info, 3.0f);
+					hlslPath.filename().string(), Engine::WStrToStr(shader->GetKey()), result.Bytecode.size());
+			}
+			else
+			{
+				EDITOR_LOG_ERROR("[Shader Hot Reload] Failed to update bytecode for shader '{}'",
+					Engine::WStrToStr(shader->GetKey()));
 			}
 		}
 	}
 
-	if (!reloadedAny)
+	if (reloadedAny)
+	{
+		NotificationManager::Get().AddNotification(
+			LOCAL("Notification.ShaderHotReloaded"),
+			LOCAL_FMT("Notification.ReloadedFile", hlslPath.filename().string()),
+			ELogLevel::Info, 3.0f);
+	}
+	else
 	{
 		ShaderDesc desc;
 		const std::wstring stemW = hlslPath.stem().wstring();
-		desc.Key = L"Engine://Shader/" + stemW;
+		desc.Key = Engine::PlatformPath::ToVirtualUri(hlslPath);
+		if (desc.Key.empty())
+		{
+			desc.Key = L"Engine://Shader/" + stemW;
+		}
 		desc.shaderType = shaderType;
-		desc.dxilPath = Engine::PlatformPath::ResolveUri(L"Engine://Shader/bin/dxil/" + stemW + L".cso").wstring();
-		desc.spirvPath = Engine::PlatformPath::ResolveUri(L"Engine://Shader/bin/spirv/" + stemW + L".spv").wstring();
-		desc.Path = (rhiType == Engine::ERHIType::DirectX12) ? desc.dxilPath : desc.spirvPath;
+		if (rhiType == Engine::ERHIType::DirectX12)
+		{
+			desc.dxilPath = result.OutputPath.wstring();
+		}
+		else
+		{
+			desc.spirvPath = result.OutputPath.wstring();
+		}
+		desc.Path = result.OutputPath.wstring();
 		auto newHandle = rm.LoadResource<Engine::Shader>(&desc);
 		if (newHandle.IsValid())
 		{
 			EDITOR_LOG_INFO("[Shader Hot Reload] Compiled and registered new shader: {} (Key: {}, {} bytes)",
-				hlslPath.filename().string(), WStrToStr(desc.Key), result.Bytecode.size());
+				hlslPath.filename().string(), Engine::WStrToStr(desc.Key), result.Bytecode.size());
 			NotificationManager::Get().AddNotification(
 				LOCAL("Notification.ShaderHotReloaded"),
 				LOCAL_FMT("Notification.ReloadedFile", hlslPath.filename().string()),
@@ -298,13 +346,16 @@ void ShaderHotReloadManager::ProcessModifiedFile(const std::filesystem::path& hl
 void ShaderHotReloadManager::RecompileAll()
 {
 	std::error_code ec;
-	if (!std::filesystem::exists(m_WatchDirectory, ec)) return;
-
-	for (const auto& entry : std::filesystem::directory_iterator(m_WatchDirectory, ec))
+	for (const auto& dir : GetWatchPaths())
 	{
-		if (entry.is_regular_file() && entry.path().extension() == ".hlsl")
+		if (!std::filesystem::exists(dir, ec)) continue;
+
+		for (const auto& entry : std::filesystem::recursive_directory_iterator(dir, ec))
 		{
-			ProcessModifiedFile(entry.path());
+			if (entry.is_regular_file(ec) && entry.path().extension() == ".hlsl")
+			{
+				ProcessModifiedFile(entry.path());
+			}
 		}
 	}
 }

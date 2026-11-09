@@ -1,6 +1,19 @@
 # BamEngine Implementation Log
 
 This document tracks implementation details, architectural decisions, and technical debt.
+### [2026-11-10] DLL 리소스 패널 공용 등록
+
+- Sprite 전용 Editor 클래스와 패널·단축키·빌드 관리자 분기를 제거했다. CMake가 생성한 목록과 DLL의 공용 V1 진입점으로 리소스 패널을 등록한다.
+- Sprite DLL이 에셋 열기, 저장과 편집 세션을 소유한다. 교체 시 미저장 값과 UI 상태, 엔진 리소스 핸들을 새 세션에 넘긴 뒤 이전 DLL을 해제한다.
+- 기존 창 이름, 저장 액션 ID와 Workspace 분할 키를 유지했다. 소스 참조와 변경부 공백은 정적으로 확인했으며 빌드, F5 교체와 편집·저장 회귀 확인은 미실시다.
+
+### [2026-11-10] 스프라이트 애니메이션 편집기 DLL
+
+- `EditorSpriteAnimationTools` 타깃으로 메뉴, 퀵액세스, 프리뷰, 프레임 목록, 필름스트립과 재생 갱신을 이관했다. Editor는 리소스와 미저장 상태, 파일 저장, 단축키, 도킹과 Workspace 상태를 소유한다.
+- 진단 패널과 편집기가 DLL·PDB 섀도 복사 로더를 공유한다. 편집기 DLL은 V1 진입점, 구조 크기와 필수 콜백을 확인한 뒤 교체한다. 동일한 엔진 헤더, ImGui와 툴체인을 사용하는 내부 인터페이스다.
+- 플러그인 소스 저장과 관리자의 빌드 버튼은 Sprite 전용 타깃을 백그라운드에서 빌드한다. 완료 후 다음 편집기 갱신에서 교체한다. 빌드 도중 감지된 파일 변경은 다음 빌드에 남기고, 후보 검증 실패 시 기존 모듈을 유지한다.
+- 소스 경로와 호출 연결을 정적으로 확인했다. Debug 빌드, F5 심볼 로드, 프리뷰·프레임 편집·저장, 미저장 상태를 유지하는 자동 교체, 잘못된 DLL과 연속 저장 검증은 사용자 실행 확인이 남아 있다.
+
 ### [2026-11-09] 리소스 편집기 공통 세 줄 헤더
 
 - `ResourceEditorInterface::Draw()`가 창 제목, 메뉴 툴바, 퀵액세스, 본문 순서를 관리한다. 하위 편집기는 `DrawCustomToolbar`, `DrawCustomQuickAccess`, `DrawCustomContent`를 구현하고 각 영역의 내용을 정한다.

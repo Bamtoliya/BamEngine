@@ -265,6 +265,11 @@ void ToolBar::DrawEditMenu()
 			if (auto* panel = dynamic_cast<UnifiedSettingsPanel*>(ImGuiManager::Get().GetImGuiPanel(L"UnifiedSettings")))
 				panel->OpenWithCategory(EUnifiedSettingsCategory::Shortcuts);
 		}
+		if (ImGui::MenuItem(LOCAL_LABEL("EditorMenu.Plugins").c_str()))
+		{
+			if (auto* panel = ImGuiManager::Get().GetImGuiPanel(L"PluginManager"))
+				panel->SetOpen(true);
+		}
 		ImGui::EndMenu();
 	}
 }

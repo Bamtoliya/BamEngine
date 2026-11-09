@@ -6,6 +6,7 @@
 #include "EditorSettings.h"
 #include "EditorDocumentController.h"
 #include <unordered_set>
+#include <string_view>
 
 BEGIN(Engine)
 class RHITexture;
@@ -13,6 +14,7 @@ END
 
 BEGIN(Editor)
 class ResourceEditorInterface;
+class PluginResourceEditor;
 struct EditorSettingsChangeResult;
 struct ImGuiManagerDesc
 {
@@ -51,11 +53,14 @@ public:
 	EResult AddImGuiPanel(IImGui* panel);
 	EResult RemoveImGuiPanel(IImGui* panel);
 public:
-	EResult RemoveImGuiPanel(IImGui* panel);
+	IImGui* FindRegisteredPanel(const wstring& id) const;
+	EResult RegisterImGuiPanel(const wstring& id, IImGui* (*createPanel)());
 public:
 	IImGui* GetImGuiPanel(const wstring& name);
 	vector<IImGui*> GetImGuiPanels(const wstring& name);
 	const vector<IImGui*>& GetImGuiPanels() const { return m_ImGuiPanels; }
+	const vector<PluginResourceEditor*>& GetPluginResourceEditors() const { return m_PluginResourceEditors; }
+	PluginResourceEditor* GetPluginResourceEditor(std::string_view target) const;
 	std::filesystem::path ResolveResourceEditorTarget(const std::filesystem::path& path) const;
 	bool CanOpenResourceEditor(const std::filesystem::path& path) const;
 	bool RequestOpenResourceEditor(const std::filesystem::path& path);
@@ -201,6 +206,7 @@ private:
 	ImGuiStyle m_BaseStyle{};
 	float m_UIScale = 1.0f;
 	vector<IImGui*> m_WorkspacePanels;
+	vector<PluginResourceEditor*> m_PluginResourceEditors;
 #pragma endregion
 #pragma endregion
 };

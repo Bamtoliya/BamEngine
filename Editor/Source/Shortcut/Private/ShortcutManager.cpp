@@ -36,7 +36,15 @@ bool ShortcutManager::RegisterAction(const EditorAction& action)
         return false;
 
     m_Actions.emplace(action.Id, action);
-    m_ActiveBindings.emplace(action.Id, action.DefaultChord);
+    auto chord = action.DefaultChord;
+    const auto stored = m_StoredOverrides.find(action.Id);
+    if (stored != m_StoredOverrides.end())
+    {
+        const auto overrideChord = ShortcutChord::FromString(stored->second);
+        if (overrideChord.ToString() == stored->second)
+            chord = overrideChord;
+    }
+    m_ActiveBindings.emplace(action.Id, chord);
     return true;
 }
 
@@ -89,6 +97,7 @@ std::string ShortcutManager::FindConflict(
     if (!chord.IsValid())
         return "";
 
+    const auto* excluded = FindAction(excludeActionId);
     for (const auto& [id, action] : m_Actions)
     {
         if (id == excludeActionId)
@@ -99,7 +108,7 @@ std::string ShortcutManager::FindConflict(
             continue;
 
         // Local actions override Global actions; only actions in the same context compete.
-        if (action.Context == context)
+        if (action.Context == context && (!excluded || action.PanelScope == excluded->PanelScope))
         {
             return id;
         }
@@ -107,7 +116,7 @@ std::string ShortcutManager::FindConflict(
     return "";
 }
 
-void ShortcutManager::ProcessShortcuts(EShortcutContext activeContext, bool suppressed)
+void ShortcutManager::ProcessShortcuts(EShortcutContext activeContext, bool suppressed, std::wstring_view activePanel)
 {
     if (suppressed || IsCapturing() || m_SuppressProcessOnce)
     {
@@ -122,6 +131,7 @@ void ShortcutManager::ProcessShortcuts(EShortcutContext activeContext, bool supp
         {
             const auto* action = FindAction(id);
             if (!action || action->Context != activeContext) continue;
+            if (!action->PanelScope.empty() && action->PanelScope != activePanel) continue;
             if (chord.Evaluate(input, action->AllowRepeat))
             {
                 if (!action->CanExecute || action->CanExecute())

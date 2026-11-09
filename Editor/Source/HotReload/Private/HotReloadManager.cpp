@@ -1,9 +1,11 @@
-﻿#include "HotReloadManager.h"
+#include "HotReloadManager.h"
 #include "ModuleHotReloadManager.h"
 #include "ShaderHotReloadManager.h"
 #include "AssetHotReloadManager.h"
 #include "ModuleBuildManager.h"
 #include "PlatformPath.h"
+#include "ImGuiManager.h"
+#include "PluginResourceEditor.h"
 
 static std::filesystem::path ResolveProjectRoot()
 {
@@ -48,11 +50,39 @@ EResult HotReloadManager::Initialize(void*)
     const std::filesystem::path buildDir = ResolveBuildDirectory(projectRoot);
     m_ModuleBuilder = ModuleBuildManager::Create(projectRoot, buildDir);
     if (!m_ModuleBuilder) { Free(); return EResult::Fail; }
+    std::error_code ec;
+    if (ImGuiManager::IsCreated() && std::filesystem::is_regular_file(buildDir / "CMakeCache.txt", ec))
+    {
+        for (const auto* panel : ImGuiManager::Get().GetPluginResourceEditors())
+        {
+            const auto& source = panel->GetSourceDirectory();
+            if (!std::filesystem::is_directory(projectRoot / source, ec))
+                continue;
+
+            const auto& target = panel->GetTarget();
+            auto* builder = ModuleBuildManager::Create(
+                projectRoot, buildDir, source, std::wstring(target.begin(), target.end()));
+            if (!builder)
+                continue;
+
+            builder->SetBuildCompletedCallback([target](bool success, const std::string&)
+            {
+                if (!success || !ImGuiManager::IsCreated())
+                    return;
+                if (auto* editor = ImGuiManager::Get().GetPluginResourceEditor(target))
+                    editor->RequestReload();
+            });
+            m_EditorPluginBuilders.emplace(target, builder);
+        }
+    }
     return EResult::Success;
 }
 
 void HotReloadManager::Free()
 {
+    for (auto& [target, builder] : m_EditorPluginBuilders)
+        Safe_Release(builder);
+    m_EditorPluginBuilders.clear();
     Safe_Release(m_AssetReloader);
     Safe_Release(m_ShaderReloader);
     Safe_Release(m_ModuleReloader);
@@ -69,6 +99,8 @@ void HotReloadManager::Update()
     {
         if (reloader) reloader->Update();
     }
+    for (const auto& [target, builder] : m_EditorPluginBuilders)
+        builder->Update();
 }
 
 #pragma region Getter
@@ -96,3 +128,9 @@ ModuleBuildManager& HotReloadManager::GetModuleBuilder()
     return *m_ModuleBuilder;
 }
 #pragma endregion
+
+ModuleBuildManager* HotReloadManager::GetEditorPluginBuilder(const std::string& target) const
+{
+    const auto found = m_EditorPluginBuilders.find(target);
+    return found != m_EditorPluginBuilders.end() ? found->second : nullptr;
+}

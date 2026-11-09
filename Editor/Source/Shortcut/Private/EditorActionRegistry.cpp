@@ -22,7 +22,7 @@
 #include "VFXEditorPanel.h"
 #include "UnifiedSettingsPanel.h"
 #include "PrefabEditorPanel.h"
-#include "SpriteAnimationEditor.h"
+#include "PluginResourceEditor.h"
 #include "ContentBrowserPanel.h"
 #include "PreviewViewportWidget.h"
 #include "UIViewportPanel.h"
@@ -198,10 +198,11 @@ void EditorActionRegistry::RegisterAll()
             if (prefabPanel && prefabPanel->IsOpen() && prefabPanel->IsFocused())
                 return false;
 
-            const auto* spritePanel = dynamic_cast<SpriteAnimationEditor*>(
-                ImGuiManager::Get().GetImGuiPanel(L"Sprite Animation Editor"));
-            if (spritePanel && spritePanel->IsOpen() && spritePanel->IsFocused())
-                return false;
+            for (const auto* panel : ImGuiManager::Get().GetPluginResourceEditors())
+            {
+                if (panel->HasSaveAction() && panel->IsOpen() && panel->IsFocused())
+                    return false;
+            }
 
             const auto* document = Application::Get().GetSceneDocument();
             return PIEManager::Get().IsEditing() && document && document->CanSave();
@@ -1033,24 +1034,6 @@ void EditorActionRegistry::RegisterAll()
                 const auto* panel = dynamic_cast<PrefabEditorPanel*>(ImGuiManager::Get().GetImGuiPanel(L"Prefab Editor"));
                 return panel && panel->CanSaveDocument();
             }
-        });
-
-    sm.RegisterAction({
-    .Id = "SpriteAnimation.Save",
-    .DisplayNameKey = "EditorCommon.Save",
-    .CategoryKey = "ResourceEditor.SpriteAnimationTitle",
-    .Context = EShortcutContext::SpriteAnimationEditor,
-    .DefaultChord = ShortcutChord(Engine::EKeyCode::S, EModifierKey::Ctrl),
-    .ExecuteHandler = []() {
-        auto* panel = dynamic_cast<SpriteAnimationEditor*>(
-            ImGuiManager::Get().GetImGuiPanel(L"Sprite Animation Editor"));
-        if (panel) panel->SaveAnimation();
-    },
-    .CanExecute = []() {
-        const auto* panel = dynamic_cast<SpriteAnimationEditor*>(
-            ImGuiManager::Get().GetImGuiPanel(L"Sprite Animation Editor"));
-        return panel && panel->CanSaveAnimation();
-    }
         });
 
     sm.RegisterAction({

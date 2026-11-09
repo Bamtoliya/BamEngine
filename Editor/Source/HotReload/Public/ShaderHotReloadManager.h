@@ -1,8 +1,9 @@
-﻿#pragma once
+#pragma once
 
 #include "HotReloaderInterface.h"
 #include "ShaderCompiler.h"
 #include <efsw/efsw.hpp>
+#include <unordered_map>
 
 BEGIN(Editor)
 
@@ -23,17 +24,22 @@ public:
 	void RequestRecompileAll() { m_PendingRecompileAll = true; }
 	void RecompileAll();
 	void RecompileFile(const std::filesystem::path& hlslPath) { ProcessModifiedFile(hlslPath); }
-	[[nodiscard]] const std::filesystem::path& GetWatchDirectory() const { return m_WatchDirectory; }
+
+	// 레거시 호환용 단일 경로 게터
+	[[nodiscard]] std::filesystem::path GetWatchDirectory() const { return GetWatchPaths().empty() ? std::filesystem::path() : GetWatchPaths().front(); }
+
+protected:
+	void OnWatchPathAdded(const std::filesystem::path& resolvedPath) override;
+	void OnWatchPathRemoved(const std::filesystem::path& resolvedPath) override;
 
 private:
 	void ProcessModifiedFile(const std::filesystem::path& hlslPath);
-	std::filesystem::path ResolveShaderSourceDirectory();
+	void RegisterDefaultCandidates();
 
 private:
 	efsw::FileWatcher* m_FileWatcher = nullptr;
 	efsw::FileWatchListener* m_FileListener = nullptr;
-	efsw::WatchID m_WatchID = 0;
-	std::filesystem::path m_WatchDirectory;
+	std::unordered_map<std::filesystem::path, efsw::WatchID> m_WatchIdMap;
 	std::atomic<bool> m_PendingRecompileAll = false;
 };
 

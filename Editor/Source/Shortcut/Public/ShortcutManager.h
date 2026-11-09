@@ -2,6 +2,7 @@
 
 #include "Editor_Includes.h"
 #include "ShortcutTypes.h"
+#include <string_view>
 
 BEGIN(Editor)
 
@@ -30,7 +31,8 @@ public:
     std::string FindConflict(const ShortcutChord& chord, EShortcutContext context, const std::string& excludeActionId = "") const;
 
     // ImGui 의존성 없이, 외부에서 억제 여부(suppressed)를 받아 순수하게 판정
-    void ProcessShortcuts(EShortcutContext activeContext = EShortcutContext::Global, bool suppressed = false);
+    void ProcessShortcuts(EShortcutContext activeContext = EShortcutContext::Global, bool suppressed = false,
+        std::wstring_view activePanel = {});
 
     void SetCapturing(bool capturing) { m_IsCapturing = capturing; }
     bool IsCapturing() const { return m_IsCapturing || m_IsInputActionCapturing; }

@@ -1,10 +1,9 @@
-﻿#pragma once
+#pragma once
 
 #include "HotReloaderInterface.h"
 #include <efsw/efsw.hpp>
 #include <thread>
 #include <atomic>
-#include <mutex>
 #include <vector>
 
 BEGIN(Editor)
@@ -17,9 +16,11 @@ class ModuleBuildManager final : public IHotReloader
 private:
     ModuleBuildManager() = default;
     virtual ~ModuleBuildManager() = default;
-    EResult Initialize(const std::filesystem::path& projectRoot, const std::filesystem::path& buildDir);
+    EResult Initialize(const std::filesystem::path& projectRoot, const std::filesystem::path& buildDir,
+        const std::filesystem::path& sourceDir, const std::wstring& targetName);
 public:
-    static ModuleBuildManager* Create(const std::filesystem::path& projectRoot, const std::filesystem::path& buildDir);
+    static ModuleBuildManager* Create(const std::filesystem::path& projectRoot, const std::filesystem::path& buildDir,
+        const std::filesystem::path& sourceDir = "Projects/GameModule/Source", const std::wstring& targetName = L"GameModule");
     void Free() override;
 #pragma endregion
 
@@ -36,6 +37,7 @@ public:
     [[nodiscard]] EModuleBuildStatus GetStatus() const { return m_Status; }
     [[nodiscard]] bool IsCompiling() const { return m_Status == EModuleBuildStatus::Compiling; }
     [[nodiscard]] const std::string& GetLastBuildOutput() const { return m_LastBuildOutput; }
+    [[nodiscard]] bool IsLastBuildSuccessful() const { return m_LastBuildSuccess; }
     [[nodiscard]] const std::filesystem::path& GetSourceDirectory() const { return m_SourceDir; }
 
     void SetBuildCompletedCallback(std::function<void(bool success, const std::string& output)> callback)
@@ -54,15 +56,17 @@ private:
     std::filesystem::path m_ProjectRoot;
     std::filesystem::path m_BuildDir;
     std::filesystem::path m_SourceDir;
+    std::wstring m_TargetName;
 
     std::atomic<EModuleBuildStatus> m_Status = EModuleBuildStatus::Idle;
 
     // 비동기 빌드 스레드 및 결과
     std::thread m_BuildThread;
     std::string m_LastBuildOutput;
-    std::mutex m_OutputMutex;
+    std::string m_PendingBuildOutput;
     std::atomic<bool> m_HasNewResult = false;
     bool m_LastBuildSuccess = false;
+    bool m_PendingBuildSuccess = false;
 
     std::function<void(bool success, const std::string& output)> m_OnBuildCompleted;
 

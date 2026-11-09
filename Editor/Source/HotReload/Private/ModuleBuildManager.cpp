@@ -3,6 +3,7 @@
 #include "ModuleHotReloadManager.h"
 #include "NotificationManager.h"
 #include "LocalizationManager.h"
+#include <mutex>
 #include <windows.h>
 
 BEGIN(Editor)
@@ -29,11 +30,13 @@ private:
 };
 
 #pragma region Constructor&Destructor
-EResult ModuleBuildManager::Initialize(const std::filesystem::path& projectRoot, const std::filesystem::path& buildDir)
+EResult ModuleBuildManager::Initialize(const std::filesystem::path& projectRoot, const std::filesystem::path& buildDir,
+    const std::filesystem::path& sourceDir, const std::wstring& targetName)
 {
     m_ProjectRoot = projectRoot;
     m_BuildDir = buildDir;
-    m_SourceDir = m_ProjectRoot / "Projects" / "GameModule" / "Source";
+    m_SourceDir = m_ProjectRoot / sourceDir;
+    m_TargetName = targetName;
 
     if (std::filesystem::exists(m_SourceDir))
     {
@@ -41,7 +44,7 @@ EResult ModuleBuildManager::Initialize(const std::filesystem::path& projectRoot,
     }
     else
     {
-        EDITOR_LOG_WARN("[ModuleBuildManager] GameModule source directory not found: {}", m_SourceDir.string());
+        EDITOR_LOG_WARN("[ModuleBuildManager] Source directory not found: {}", WStrToStr(m_SourceDir.wstring()));
     }
 
     return EResult::Success;
@@ -54,10 +57,11 @@ void ModuleBuildManager::Free()
     __super::Free();
 }
 
-ModuleBuildManager* ModuleBuildManager::Create(const std::filesystem::path& projectRoot, const std::filesystem::path& buildDir)
+ModuleBuildManager* ModuleBuildManager::Create(const std::filesystem::path& projectRoot,
+    const std::filesystem::path& buildDir, const std::filesystem::path& sourceDir, const std::wstring& targetName)
 {
     ModuleBuildManager* instance = new ModuleBuildManager();
-    if (instance->Initialize(projectRoot, buildDir) != EResult::Success)
+    if (instance->Initialize(projectRoot, buildDir, sourceDir, targetName) != EResult::Success)
     {
         instance->Free();
         delete instance;
@@ -72,9 +76,15 @@ void ModuleBuildManager::StartWatching(const std::filesystem::path& sourceDir)
     StopWatching();
     m_FileWatcher = new efsw::FileWatcher();
     m_FileListener = new ModuleSourceFileListener(this);
-    m_WatchID = m_FileWatcher->addWatch(sourceDir.string(), m_FileListener, true);
-    m_FileWatcher->watch();
-    EDITOR_LOG_INFO("[ModuleBuildManager] Watching GameModule source directory: {}", sourceDir.string());
+    const auto sourceUtf8 = sourceDir.u8string();
+    m_WatchID = m_FileWatcher->addWatch(std::string(sourceUtf8.begin(), sourceUtf8.end()), m_FileListener, true);
+    if (m_WatchID > 0)
+    {
+        m_FileWatcher->watch();
+        EDITOR_LOG_INFO("[ModuleBuildManager] Watching {}", WStrToStr(sourceDir.wstring()));
+    }
+    else
+        EDITOR_LOG_WARN("[ModuleBuildManager] Watch failed: {}", WStrToStr(sourceDir.wstring()));
 }
 
 void ModuleBuildManager::StopWatching()
@@ -95,44 +105,39 @@ void ModuleBuildManager::StopWatching()
 
 void ModuleBuildManager::Update()
 {
-    // 1. IHotReloader의 디바운스 큐를 통해 준비된 파일 수집 (저장 후 500ms 경과 시 반환)
-    const auto readyFiles = CollectReadyFiles(std::chrono::milliseconds(200));
-    if (!readyFiles.empty() && m_Status != EModuleBuildStatus::Compiling)
-    {
-        RequestBuild();
-    }
-
-    // 2. 비동기 빌드 완료 처리 (메인 스레드에서 안전하게 콜백/알림 호출)
     if (m_HasNewResult.exchange(false))
     {
         if (m_BuildThread.joinable()) m_BuildThread.join();
 
-        std::string outputCopy;
-        {
-            std::lock_guard<std::mutex> lock(m_OutputMutex);
-            outputCopy = m_LastBuildOutput;
-        }
+        m_LastBuildOutput = std::move(m_PendingBuildOutput);
+        m_LastBuildSuccess = m_PendingBuildSuccess;
 
         if (m_LastBuildSuccess)
         {
             m_Status = EModuleBuildStatus::Succeeded;
-            EDITOR_LOG_INFO("[ModuleBuildManager] GameModule compiled successfully! Triggering hot-reload...");
+            EDITOR_LOG_INFO("[ModuleBuildManager] {} build succeeded", WStrToStr(m_TargetName));
             NotificationManager::Get().AddNotification(
                 LOCAL("ToolBar.ModuleCompile"), LOCAL("Notification.CompileSuccess"), ELogLevel::Info, 3.0f);
 
             // 빌드가 완전히 끝났으므로 안전하게 모듈 핫로드 실행
-            HotReloadManager::Get().GetModuleReloader().ReloadModule();
+            if (m_TargetName == L"GameModule")
+                HotReloadManager::Get().GetModuleReloader().ReloadModule();
         }
         else
         {
             m_Status = EModuleBuildStatus::Failed;
-            EDITOR_LOG_ERROR("[ModuleBuildManager] GameModule compile failed:\n{}", outputCopy);
+            EDITOR_LOG_ERROR("[ModuleBuildManager] {} build failed:\n{}", WStrToStr(m_TargetName), m_LastBuildOutput);
             NotificationManager::Get().AddNotification(
                 LOCAL("ToolBar.ModuleCompile"), LOCAL("Notification.CompileFailed"), ELogLevel::Error, 5.0f);
         }
 
-        if (m_OnBuildCompleted) m_OnBuildCompleted(m_LastBuildSuccess, outputCopy);
+        if (m_OnBuildCompleted) m_OnBuildCompleted(m_LastBuildSuccess, m_LastBuildOutput);
+        return;
     }
+
+    // Leave saves queued while the current build is running.
+    if (!IsCompiling() && !CollectReadyFiles(std::chrono::milliseconds(200)).empty())
+        RequestBuild();
 }
 
 bool ModuleBuildManager::RequestBuild()
@@ -142,7 +147,7 @@ bool ModuleBuildManager::RequestBuild()
     if (m_BuildThread.joinable()) m_BuildThread.join();
 
     m_Status = EModuleBuildStatus::Compiling;
-    EDITOR_LOG_INFO("[ModuleBuildManager] Starting background build for GameModule...");
+    EDITOR_LOG_INFO("[ModuleBuildManager] Starting background build for {}", WStrToStr(m_TargetName));
     NotificationManager::Get().AddNotification(
         LOCAL("ToolBar.ModuleCompile"), LOCAL("Notification.CompilingModule"), ELogLevel::Info, 2.0f);
 
@@ -152,30 +157,34 @@ bool ModuleBuildManager::RequestBuild()
 
 void ModuleBuildManager::ExecuteBuildAsync()
 {
-    // 1. 디버거가 PDB를 잡고 있어 발생하는 LNK1201 에러 방지 (기존 PDB를 임시 이름으로 변경)
-    const std::filesystem::path binDir = m_BuildDir / "bin" /
-#ifdef _DEBUG
-        "Debug";
-#else
-        "Release";
-#endif
-    std::error_code ec;
-    const std::filesystem::path pdbPath = binDir / "GameModule.pdb";
-    if (std::filesystem::exists(pdbPath, ec))
-    {
-        const std::filesystem::path oldPdb = binDir / (L"GameModule_old_" + std::to_wstring(GetTickCount64()) + L".pdb");
-        std::filesystem::rename(pdbPath, oldPdb, ec);
-    }
-    // 2. cmake.exe --build <buildDir> --target GameModule --config Debug
-    std::wstring cmd = L"cmake.exe --build \"" + m_BuildDir.wstring() + L"\" --target GameModule";
-#ifdef _DEBUG
-    cmd += L" --config Debug";
-#else
-    cmd += L" --config Release";
-#endif
+    // Both builders share a generated build tree.
+    static std::mutex buildTreeMutex;
+    const std::lock_guard buildLock(buildTreeMutex);
 
-    // 핵심 최적화: 이미 빌드된 엔진/에디터 등 20개 프로젝트 의존성 검사를 스킵하고 멀티코어로 즉시 빌드
+#ifdef _DEBUG
+    constexpr auto config = L"Debug";
+#else
+    constexpr auto config = L"Release";
+#endif
+    if (m_TargetName == L"GameModule")
+    {
+        const auto binDir = m_BuildDir / "bin" / config;
+        std::error_code ec;
+        const auto pdbPath = binDir / "GameModule.pdb";
+        if (std::filesystem::exists(pdbPath, ec))
+        {
+            const auto oldPdb = binDir / (L"GameModule_old_" + std::to_wstring(GetTickCount64()) + L".pdb");
+            std::filesystem::rename(pdbPath, oldPdb, ec);
+        }
+    }
+    std::wstring cmd = L"\"";
+    cmd += BAM_EDITOR_CMAKE_COMMAND;
+    cmd += L"\" --build \"" + m_BuildDir.wstring() + L"\" --target " + m_TargetName + L" --config " + config;
+
+#if defined(BAM_EDITOR_MSBUILD)
+    // The loaded host already has the dependencies for a plugin-only build.
     cmd += L" -- /p:BuildProjectReferences=false /m";
+#endif
 
     SECURITY_ATTRIBUTES sa{};
     sa.nLength = sizeof(SECURITY_ATTRIBUTES);
@@ -184,7 +193,8 @@ void ModuleBuildManager::ExecuteBuildAsync()
     HANDLE hReadPipe = nullptr, hWritePipe = nullptr;
     if (!CreatePipe(&hReadPipe, &hWritePipe, &sa, 0))
     {
-        m_LastBuildSuccess = false;
+        m_PendingBuildOutput = "Failed to create the cmake output pipe.";
+        m_PendingBuildSuccess = false;
         m_HasNewResult = true;
         return;
     }
@@ -201,7 +211,7 @@ void ModuleBuildManager::ExecuteBuildAsync()
     cmdBuffer.push_back(L'\0');
 
     std::string capturedOutput;
-    const BOOL success = CreateProcessW(nullptr, cmdBuffer.data(), nullptr, nullptr, TRUE,
+    const BOOL success = CreateProcessW(BAM_EDITOR_CMAKE_COMMAND, cmdBuffer.data(), nullptr, nullptr, TRUE,
         CREATE_NO_WINDOW, nullptr, m_ProjectRoot.c_str(), &si, &pi);
 
     CloseHandle(hWritePipe);
@@ -223,21 +233,17 @@ void ModuleBuildManager::ExecuteBuildAsync()
         CloseHandle(pi.hProcess);
         CloseHandle(pi.hThread);
 
-        m_LastBuildSuccess = (exitCode == 0);
+        m_PendingBuildSuccess = (exitCode == 0);
     }
     else
     {
         capturedOutput = "Failed to launch cmake process.";
-        m_LastBuildSuccess = false;
+        m_PendingBuildSuccess = false;
     }
 
     CloseHandle(hReadPipe);
 
-    {
-        std::lock_guard<std::mutex> lock(m_OutputMutex);
-        m_LastBuildOutput = std::move(capturedOutput);
-    }
-
+    m_PendingBuildOutput = std::move(capturedOutput);
     m_HasNewResult = true;
 }
 

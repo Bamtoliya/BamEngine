@@ -44,6 +44,15 @@ add_executable(Editor
     ${EDITOR_SOURCES}
 )
 
+if(WIN32)
+    target_compile_definitions(Editor PRIVATE "BAM_EDITOR_CMAKE_COMMAND=L\"${CMAKE_COMMAND}\"")
+    if(CMAKE_GENERATOR MATCHES "^Visual Studio")
+        target_compile_definitions(Editor PRIVATE BAM_EDITOR_MSBUILD)
+    endif()
+endif()
+
+add_subdirectory(Plugins)
+
 # ==============================================================================
 # 4. Target Properties & Compilation Settings
 # ==============================================================================

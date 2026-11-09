@@ -20,7 +20,7 @@ public:
     }
     EPanelMenuCategory GetPanelMenuCategory() const override { return EPanelMenuCategory::Assets; }
 public:
-	void Draw() override;
+	void Draw() final;
 protected:
     virtual ImVec2 GetInitialResourceWindowSize() const { return {}; }
     virtual ImGuiWindowFlags GetResourceWindowFlags() const { return ImGuiWindowFlags_None; }
@@ -28,7 +28,7 @@ protected:
     virtual string BuildResourceWindowTitle() const;
     virtual void DrawCustomToolbar();
     virtual void DrawCustomQuickAccess() {}
-    virtual void DrawCustomContent() {}
+    virtual void DrawCustomContent() = 0;
     virtual void OnResourceWindowVisibility(bool) {}
     virtual void OnResourceCloseRequested() { m_Open = false; }
     virtual void AfterResourceWindow() {}
