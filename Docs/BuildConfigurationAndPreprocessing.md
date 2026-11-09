@@ -67,6 +67,51 @@ flowchart TD
 | **`BAM_EDITOR`**<br>(또는 `BAM_WITH_EDITOR`) | Editor 타깃 빌드 시 정의<br>(Debug, Release 모두) | - 뷰포트 기즈모/디버그 라인 (`DebugVertex`)<br>- 그래프 노드 펄스 실행기 조회 (`GetDebugExecutor`)<br>- 마우스 피킹 ID 버퍼 계산 (`pickingId`)<br>- 리소스 메모리 스냅샷 (`GetDebugSnapshot`) | - 독립형 Client 전용 런타임 로직 |
 | **`BAM_SHIPPING`** | 최종 배포용 Client 타깃 빌드 시 정의 | - 모든 치트, 콘솔 커맨드, 디버그 로깅 완전 스트립 | - 에디터 또는 개발용 클라이언트 |
 
+### 3.1 에디터·디버그 코드 스트립 시 안정적 실행 보장 원칙 (Stability While Stripped)
+
+엔진에 추가된 에디터 전용 기능이나 디버깅 헬퍼 함수들은 클라이언트용 DLL/바이너리 빌드 시(`BAM_EDITOR=0` 또는 Client 타깃) 전처리기로 완전히 제거(Strip)되어야 한다. 그러나 **코드를 단순히 날려버리는 것으로 인해 클라이언트 실행이 불안정해지거나 빌드가 파손되어서는 안 된다.**
+
+#### 단순 제거 시의 위험 요소
+1. **링크 및 컴파일 오류**: 클라이언트 게임플레이 로직이나 공유 모듈에서 해당 함수를 호출하고 있을 때 정의 누락(`Unresolved External Symbol`)으로 빌드가 파손됨.
+2. **ABI(Application Binary Interface) 불일치 크래시**: 클래스나 구조체 내부에 `#if BAM_EDITOR`로 멤버 변수를 제거하면 엔진 DLL과 클라이언트 EXE 간 메모리 오프셋/크기가 달라져 힙 손상(`0xC0000005`)이 발생함.
+3. **런타임 널 포인터 역참조**: 에디터 전용 객체나 서비스를 조회하는 코드가 클라이언트 환경에서 `nullptr`을 반환받았을 때 예외 처리 없이 접근하여 크래시 발생.
+
+#### 안정적 실행을 위한 4대 설계 패턴
+
+1. **인라인 무동작 스텁 (No-Op / Dummy Inline Stub)**:
+   - 비-에디터(Client) 환경에서 함수 선언 자체를 지우지 않고, 헤더에서 빈 본문(`{}`)이나 기본 안전값(`return nullptr;`, `return true;`, `return EResult::Success;`)을 반환하는 `inline` 스텁으로 대체한다.
+   - 컴파일러 최적화(`/O2`) 시 호출 자체가 Zero-Cost로 인라인 제거되어 런타임 오버헤드가 없으면서도, 호출부 코드는 매크로 분기 없이 컴파일 안전성이 유지된다.
+   ```cpp
+   #if defined(BAM_EDITOR) && BAM_EDITOR
+       void NotifyAssetModified(const std::wstring& assetKey);
+       class IDebugExecutor* GetDebugExecutor();
+   #else
+       inline void NotifyAssetModified(const std::wstring&) {}
+       inline class IDebugExecutor* GetDebugExecutor() { return nullptr; }
+   #endif
+   ```
+2. **매크로 캡슐화 (Macro-wrapped Debug Calls)**:
+   - 기즈모 그리기, 프로파일링 태그, 디버그 라인 출력 등 반환값이 필요 없는 도구 호출은 매크로로 감싸서 클라이언트 빌드에서는 `((void)0)`으로 완전히 증발시킨다.
+   ```cpp
+   #if defined(BAM_EDITOR) && BAM_EDITOR
+       #define BAM_DEBUG_DRAW_LINE(start, end, color) Engine::DebugRenderer::DrawLine(start, end, color)
+   #else
+       #define BAM_DEBUG_DRAW_LINE(start, end, color) ((void)0)
+   #endif
+   ```
+3. **방어적 널 안전성 계약 (Null-Safety Contract)**:
+   - 에디터 전용 서비스나 디버거 인터페이스를 반환하는 API는 클라이언트 환경에서 반드시 `nullptr`을 반환하도록 계약을 수립한다.
+   - 해당 API를 소비하는 코드는 반환값이 유효할 때만 실행하도록 방어적 널 검사를 필수로 수행한다:
+   ```cpp
+   if (auto* debugger = system->GetDebugExecutor())
+   {
+       debugger->OnNodeExecuted(nodeId);
+   }
+   ```
+4. **메모리 레이아웃 및 ABI 불변성 유지**:
+   - 컴포넌트, 엔티티, 코어 리소스의 크기와 멤버 오프셋을 빌드 구성에 따라 변경하지 않는다.
+   - 에디터 전용 상태가 필요할 경우 코어 컴포넌트에 `#if BAM_EDITOR` 멤버를 넣지 않고, 별도의 에디터 전용 컴포넌트(`EditorMetadataComponent` 등)로 분리하여 코어 데이터 구조의 ABI 일관성을 보장한다.
+
 ---
 
 ## 4. 엔진 소스 내 디버그 코드 현황 및 정비 과제 (2026-11-02 정적 갱신)
@@ -109,6 +154,8 @@ flowchart TD
 - [x] Engine은 옵션이 켜지면 `PUBLIC BAM_EDITOR=1`을 제공한다.
 - [ ] 같은 구성에서 Engine을 링크하는 Client에도 정의가 전파된다. Client 타깃 이름만으로 Editor API가 빠졌다고 판단하지 않는다.
 - [ ] 별도 Editor OFF 구성의 Engine·Client·프로젝트 모듈을 빌드하고 헤더/ABI 일치를 확인한다.
+- [ ] 엔진 내 에디터/디버그 전용 함수들을 식별하고, Client 빌드 시 No-Op 스텁 또는 `((void)0)` 매크로로 대체하여 링크 오류 없이 안전하게 실행되는지 검증한다.
+- [ ] 에디터 전용 인터페이스 반환 함수(예: 디버그 실행기, 핫리로드 리스너 등)의 호출부 널 안전성(`nullptr` 검사)을 전수 점검한다.
 - [ ] `BAM_SHIPPING` 정의, Shipping의 디버그 코드/로깅 제거 범위를 확정하고 검증한다.
 - [ ] `DebugVertex` 등 다른 도구 코드의 제거 범위는 실제 소비자 기준으로 결정한다.
 

@@ -1,6 +1,13 @@
 # BamEngine Implementation Log
 
 This document tracks implementation details, architectural decisions, and technical debt.
+
+### [2026-11-10] 변경 분류와 검증 범위
+
+- 엔진 소스 이관을 먼저 분리했다. 에디터 공용 UI를 바탕으로 리소스 경로·콘텐츠 탐색, 후처리 편집, 2D 제작, 이펙트 타임라인, 크래시 복원, 에디터 플러그인과 GameplayScore 예제를 각각 기록한다.
+- 이번 정리에서는 파일 이동, 호출부, CMake·검사 타깃 참조와 Git 변경 범위를 정적으로 확인했다. 아래 기존 항목의 구현·기대 결과와 이번 정리의 실행 검증을 구분한다. 빌드, CTest, Editor·Client 실행과 GPU 측정은 수행하지 않았다.
+- 프로젝트 시작 매니페스트의 로컬 존재 여부와 Editor·Client 시작 경로를 확인해야 한다. 진단 플러그인과 GameplayScore의 DLL 진입점은 각 소비자와 함께 확인해야 한다. 2D 아틀라스는 배치·UV와 CPU 버킷까지이며 드로우콜 감소 수치는 측정하지 않았다.
+
 ### [2026-11-10] 플러그인 생성 템플릿 설계 개정
 
 - [공용 플러그인 아키텍처](EditorPluginArchitecturePlan.md)에 Blank, Editor Standalone Window, Third Party Library, Game Feature (Content Only) 생성 템플릿을 정리했다.
@@ -134,6 +141,12 @@ This document tracks implementation details, architectural decisions, and techni
 - 단일 입력 요소는 값 열의 남은 너비를 사용한다. 사용자 지정 해상도의 폭·높이 입력은 구분 문자와 간격을 제외한 너비를 균등 분배한다.
 - 기존 ID·로캘 키·초안 갱신·해상도 요청·비활성화·범위 제한을 유지했다. 파일에 이미 존재하던 변경은 보존했다.
 - 정적 코드 확인을 수행했다. 빌드·테스트·에디터 실행은 프로젝트 지침에 따라 수행하지 않았다. 실제 디자인과 입력 동작은 사용자 검증이 필요하다. 검증 항목은 [ImGui 계획 24절](ImGuiDevelopmentPlan.md#24-패널-위젯-분리-후보)에 기록했다.
+
+### [2026-11-09] 스프라이트와 썸네일 드로우콜 최적화 계획
+
+- 현행 `RenderSprite()`는 스프라이트·타일 명령마다 `DrawIndexed()`를 호출한다. `SpriteBatcher`의 CPU 버킷과 `SpriteAtlasCheck`의 기대값은 런타임 드로우 측정과 구분했다. `SpriteAtlas`는 배치·UV를 계산하며, 아틀라스 픽셀 생성과 제출 연결은 후속 작업이다.
+- 같은 시트에서 기준을 측정한 후 패스별 기본 쿼드 인스턴싱을 연결하고, 여러 텍스처가 배치를 분리할 때 아틀라스를 추가하는 순서를 기록했다. [스프라이트 계획 Phase 5](SpriteAnd2DSystemPlan.md#phase-5-스프라이트-아틀라스-및-드로우콜-배칭)
+- 콘텐츠 브라우저는 ImGui 명령을 별도로 측정하고, 공유 시트에서도 명령이 나뉘는지 확인한 뒤 레이어 묶기와 에디터 썸네일 아틀라스를 검토한다. 코드와 검사 범위를 정적으로 대조했다. 실제 드로우 수와 프레임 시간은 구현 후 검증 항목이다. [ImGui 계획 14-D](ImGuiDevelopmentPlan.md#콘텐츠-브라우저-썸네일-드로우콜-최적화)
 
 ### [2026-11-09] 콘텐츠 브라우저 썸네일 표시 중 프레임 저하 기록
 
@@ -4197,3 +4210,82 @@ Use this as the primary execution list until a playable 2D vertical slice is com
     - `Editor/Source/ImGui/ResourceEditor/Private/SpriteEditor.cpp`:
       - 우측 사이드바 `Selected Slice Properties` 상단에 잘린 영역과 비율을 실시간으로 보여주는 96x96 크롭 썸네일 프리뷰 박스 추가.
       - `SaveSlices`: `.bamsprite.json` 및 `.bamsprite` 저장 후 메모리에 로드된 `Sprite` 인스턴스의 `SetRegion`, `SetPivot`, `SetBorder`, `SetTexture`를 즉시 호출하여 재시작 없이 모든 뷰포트와 썸네일에 실시간 반영.
+
+
+## 2026-11-09: 트랙 E 플러그인 및 모듈 관리 패널 (PluginManagerPanel) 구축 완료
+
+- **작업 범위**:
+  - Editor/Source/ImGui/PluginManager/Public/PluginManagerPanel.h (신설)
+  - Editor/Source/ImGui/PluginManager/Private/PluginManagerPanel.cpp (신설)
+  - Editor/Source/ImGui/Private/ImGuiManager.cpp (PluginManagerPanel 등록)
+  - Editor/Source/ImGui/ToolBar/Private/ToolBar.cpp (Edit -> Plugins 메뉴 항목 연동)
+  - Editor/Source/HotReload/Public/ModuleHotReloadManager.h (GetCurrentShadowDllPath 게터 추가)
+  - Editor/Source/HotReload/Public/ModuleBuildManager.h (IsLastBuildSuccessful 게터 추가)
+  - Editor/Resources/Data/Localization/Editor.csv (PluginManager.* 로캘 키 40여 종 추가)
+  - Editor/Resources/Data/Localization/English.json, Korean.json (동기화 완료)
+  - Docs/ImGuiDevelopmentPlan.md (26절 구현 완료 갱신)
+  - Docs/DevelopmentPriorities.md (트랙 E 구현 완료 갱신)
+- **배경 및 목적**:
+  - 기존 에디터 하단 푸터 바의 작은 아이콘 버튼 5종에만 의존하던 C++ 게임플레이 모듈 및 핫리로드 파이프라인 제어를 언리얼 엔진 Plugins / Unity Package Manager 수준의 전용 GUI 패널(PluginManagerPanel)로 승격.
+  - 모듈별 로드/언로드/컴파일/실패 상태, DLL 경로, 리로드 통계, 제공 기능(컴포넌트 및 시스템)을 한눈에 파악하고 즉각적인 수동/자동 제어 및 에러 복구 파이프라인 제공.
+- **핵심 구현 내역**:
+  1. **마스터-디테일 2열 레이아웃 (Master-Detail View)**:
+     - **좌측 마스터 리스트 (270px)**:
+       - 검색 필터(ImGuiTextFilter) 및 4대 카테고리 콤보 필터(All, Game Logic, Editor Tools / Panels, Experimental).
+       - 모듈 카드 렌더링: 아이콘, 모듈명, 버전, 상태 뱃지(Loaded 초록, Unloaded 회색, Compiling 노랑, Failed 빨강).
+       - 검색 결과가 없을 때의 Empty State 중앙 안내.
+     - **우측 상세 인스펙터 (Detail View)**:
+       - **헤더 툴바**: [Reload], [Rebuild & Reload], [Load / Unload], Auto-Reload on Save, Auto-Compile on Save 실시간 토글.
+       - **메타데이터 속성표**: 식별자, 원본 DLL 경로, 섀도우 복사본 경로(Temp/HotReload/...), 소스 디렉터리, 리로드 횟수, 빌드 상태.
+       - **제공 기능 및 컴포넌트**: GameModule의 게임플레이 시스템(SkyAtmosphereSystem) 및 Engine::ReflectionRegistry 등록 컴포넌트(SkyAtmosphereComponent 등) 동적 열거.
+       - **실시간 빌드 콘솔 뷰 (Build & Diagnostic Log)**: ModuleBuildManager의 비동기 컴파일러 콘솔 출력 전문 렌더링, rror/FAILED 빨간색 하이라이트, warning 노란색 하이라이트, [Retry Compile] 에러 복구 버튼, [Copy Log], Auto-scroll 지원.
+  2. **모듈 지원 범위**:
+     - Projects/GameModule (C++ 게임플레이 모듈)
+     - ShaderHotReload (런타임 HLSL/DXIL 컴파일 파이프라인)
+     - AssetHotReload (텍스처, 머티리얼, 메시, 로캘 에셋 감시자)
+     - 에디터 내장 플러그인(TilemapEditor, SpriteEditor, AnimatorGraph, PrefabEditor, TerrainEditor 등)
+  3. **메뉴 및 로캘 일원화**:
+     - 상단 메뉴바 Edit -> Plugins 및 Window -> Panels -> Diagnostics -> Plugin Manager 진입로 연결.
+     - Editor.csv에 PluginManager.* 40여 종의 다국어 번역 키를 추가하고 localizationcsvtojson.py를 통해 JSON 완벽 동기화.
+
+
+## 2026-11-09: 비정상 종료 진단(CrashHandler) 및 작업 복원 시스템(RecoveryManager) 구축 완료
+
+- **작업 범위**:
+  - `Engine/CMakeLists.txt` (`dbghelp.lib` 링크 추가)
+  - `Engine/Source/Core/Logging/Public/Logger.h`, `Private/Logger.cpp` (`Logger::Flush()` 메서드 구현)
+  - `Engine/Source/Core/Diagnostics/Public/CrashHandler.h` (신설)
+  - `Engine/Source/Core/Diagnostics/Private/CrashHandler_Win32.cpp` (신설)
+  - `Editor/Source/Recovery/Public/RecoveryManager.h` (신설)
+  - `Editor/Source/Recovery/Private/RecoveryManager.cpp` (신설)
+  - `Editor/Source/Application/Private/Application.cpp` (`CrashHandler` 및 `RecoveryManager` 수명주기/업데이트 바인딩)
+  - `Editor/Source/ImGui/Private/ImGuiManager.cpp` (`RecoveryManager::DrawRecoveryModal()` 모달 연동)
+  - `Editor/Source/ImGui/ToolBar/Private/ToolBar.cpp` (`Help -> Trigger Crash` 수동 검증 메뉴 항목 연동)
+  - `Editor/Resources/Data/Localization/Editor.csv` (`Recovery.*`, `Help.TriggerCrashTest` 로캘 키 11종 추가)
+  - `Editor/Resources/Data/Localization/English.json`, `Korean.json` (동기화 완료)
+  - `Docs/CrashHandlingAndRecoveryPlan.md` (전 단계 구현 완료 갱신)
+  - `Docs/DevelopmentPriorities.md` (트랙 G 완료 갱신)
+- **배경 및 목적**:
+  - 엔진/에디터 구동 중 널 포인터 역참조(`0xC0000005`), 스택 오버플로 등으로 크래시 발생 시 터미널/창이 즉각 증발하여 원인 규명이 불가능하던 결함 해결.
+  - 작업 중이던 씬과 컴포넌트의 미저장 데이터가 영구 소실되지 않도록 2단계 방어 체계(Tier 1 주기적 자동 저장 + Tier 2 크래시 비상 스냅샷) 및 에디터 재시작 시 원클릭 복원 마법사 구축.
+- **핵심 구현 내역**:
+  1. **크래시 감지 및 미니덤프 생성 (`CrashHandler`)**:
+     - `SetUnhandledExceptionFilter`, `std::set_terminate`, `_set_purecall_handler`, `_set_invalid_parameter_handler`를 등록하여 Windows SEH 및 CRT 런타임 예외를 일원화하여 포착.
+     - 크래시 발생 시 중복 진입 방지(`s_IsHandlingCrash`) 및 버퍼링된 로그 즉시 디스크 플러시(`Logger::Flush()`).
+     - `DbgHelp.dll`의 `MiniDumpWriteDump`를 호출하여 `<ProjectRoot>/Logs/Crashes/BamEngine_Crash_YYYYMMDD_HHMMSS.dmp` 생성 (에디터 타깃 시 `MiniDumpWithDataSegs`, `MiniDumpWithProcessThreadData` 등 정밀 디버깅 플래그 적용).
+     - `StackWalk64` 및 `SymFromAddr`, `SymGetLineFromAddr64`를 통해 크래시 당시 스택 프레임의 함수명, 파일 경로, 라인 번호를 추출하고 JSON 형태의 진단 리포트(`.crash.json`) 영속화.
+  2. **2단계 작업 복원 시스템 (`RecoveryManager`)**:
+     - **Tier 1 (주기적 하트비트 자동 저장)**:
+       - 에디터 메인 루프에서 5분(300초, 사용자 설정 가능) 주기로 `SceneDocument`의 `HasUnsavedChanges()`를 감지.
+       - 미저장 변경 사항이 존재할 경우 `Temp/Recovery/AutoSave_<SceneName>.bamscene.json`으로 스냅샷 저장.
+       - 직접 덮어쓰지 않고 `.tmp` 파일 생성 후 완료 시 교체하는 원자적 쓰기(Atomic Write)를 적용하여 저장 도중 크래시가 발생해도 기존 복원 데이터 훼손 방지.
+     - **Tier 2 (크래시 순간 비상 스냅샷)**:
+       - `CrashHandler`의 예외 필터 진입 시 가장 먼저 등록된 `EmergencyCallback`을 트리거하여, 힙 파손 위험 전 활성 씬의 비상 스냅샷(`Emergency_Snapshot.bamscene.json`)과 `Session.lock` 상태(`Status: Crashed`)를 즉시 덤프.
+  3. **세션 라이프사이클 및 복원 마법사 모달 (`DrawRecoveryModal`)**:
+     - 에디터 시작 시 `Temp/Session.lock` 생성(PID, 시작 시각 기록), 정상 종료 시 삭제.
+     - 기동 시 잔존하는 `Session.lock`을 통해 이전 세션의 비정상 종료를 감지하고, `Temp/Recovery/`에 유효한 복원 스냅샷이 감지되면 "비정상 종료 감지 및 작업 복원" ImGui 모달 다이얼로그를 자동 팝업.
+     - 스냅샷 씬 이름, 저장 시각, 저장 사유(비상 스냅샷 / 주기적 자동 저장) 표시.
+     - `[복원하여 열기]` 클릭 시 스냅샷 데이터를 로드하고 원본 씬 문서 경로로 즉시 채택하여 중단 없는 작업 재개 보장.
+     - `[무시하고 새 작업]` 클릭 시 스냅샷 및 메타데이터 안전 폐기.
+  4. **수동 진단 테스트 및 검증 지원**:
+     - 상단 메뉴바 `Help -> Trigger Crash (Diagnostics Test)` 메뉴를 통해 의도적 널 포인터 크래시를 유발하여 미니덤프 생성 및 복원 마법사를 즉시 검증 가능.

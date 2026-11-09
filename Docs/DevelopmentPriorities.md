@@ -168,7 +168,7 @@ Engine·Render·Editor·Client 계획에서 무엇을 먼저 연결하고 무엇
     - 컨텍스트 메뉴 상단 `열기`, `기본 프로그램으로 열기`, `탐색기에서 표시(Show in Explorer)` 유니코드 안전화(`ShellExecuteW`).
     - 검색창 검색 범위 토글(`현재 폴더` vs `전체 리소스 폴더`), 검색 결과 0개 시 명확한 안내 및 `검색 지우기` 버튼 연동.
   - **남은 항목**:
-    1. 에셋 썸네일 축소 생성 및 캐시 예산 제한(14-D).
+    1. 썸네일 표시가 끝난 뒤에도 지속되는 콘텐츠 브라우저 프레임 저하 계측. 축소 생성과 캐시 예산은 10.6절에 기록되어 있으며, [ImGui 계획 14-D](ImGuiDevelopmentPlan.md#콘텐츠-브라우저-썸네일-드로우콜-최적화)에서 ImGui 명령 분리와 아틀라스 필요성을 판단한다.
     2. 피커의 CWD 의존 스캔과 Shader 복합 확장자 누락, 모델 임포트의 머티리얼 저장 실패/재임포트 처리([점검 F02·F06·F12](CodeDocumentationAudit-2026-11-02.md)).
 - 완료 기준: JSON/바이너리의 같은 콘텐츠 타입을 구분하고, 리소스 피커가 프레임 드랍 없이 해당 핸들 타입(`T`)과 호환되는 에셋만 디스크에서 즉각 선별·표시하며, 미로드 에셋 선택·검색 범위 전환·손상/미지원 처리가 동작한다.
 
@@ -555,20 +555,29 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
 - **트랙 A (렌더링 품질 — S2-D) [완료: 2026-11-08]**: 텍스처 밉맵(Mipmap) 체인 생성 및 RHI 다중 서브리소스 업로드 (`stb_image_resize2` 기반 CPU 밉맵 체인 생성, `DirectX12RHI` 다중 서브리소스 업로드, 삼선형 필터링 연동 및 `TextureMipmapCheck` 단위 테스트 완결).
 - **트랙 B (모델 파이프라인 — InteractiveModelImport Phase 5) [완료: 2026-11-07]**: `meshoptimizer`(`meshopt_simplify`) 기반 자동 메시 LOD 생성 파이프라인 및 `ModelEditor` 실시간 LOD 검사기 완결.
 - **트랙 C (에셋 아키텍처 — ResourceAndAssetSeparation Phase 1~3-B) [완료: 2026-11-08]**: 가상 마운트 URI(`Engine://`, `Editor://`, `Project://`) 해석 계층 구축, 빌트인 리소스 보강, 에디터 로캘 분리 및 `Assets/` 물리 폴더 완전 이관 완결. (※ Phase 4 배포 패키징 연동은 2026-11-08 사용자 결정에 따라 핵심 기능 구현 완료 후 최종 배포 단계로 최대한 뒤로 보류)
-- **트랙 D (2D 제작 워크플로 — [SpriteAnd2DSystemPlan.md](SpriteAnd2DSystemPlan.md)) [진행 중]**:
-  - Phase 1: 스프라이트 에디터(`SpriteEditor`) 인터랙티브 시트 슬라이싱(Cell Size, Cell Count, Auto Alpha) 및 원클릭 액션 애니메이션 클립(`.spriteanim`) 자동 생성 위저드.
-  - Phase 2: 스프라이트 렌더링 모드 확장(Sliced 9-Slice, Tiled, Filled) 및 2D Sorting Layer & Order in Layer.
-  - Phase 3: 픽셀 퍼펙트 카메라(`PixelPerfectCameraComponent`), 서브픽셀 카메라 스냅 및 정수배 업스케일 렌더링.
-  - Phase 4: 청크 기반 2D 타일맵(`TilemapComponent`), 동적 메시 배칭 렌더링(`TilemapRenderSystem`) 및 씬 뷰포트 타일 팔레트(`TilePalettePanel`).
-  - Phase 5: 스프라이트 아틀라스 팩킹 및 런타임 동적 스프라이트 배처(`SpriteBatcher`).
-- **트랙 E (모듈 및 플러그인 GUI 제어 파이프라인 — PluginManagerPanel, [ImGuiDevelopmentPlan 26절](ImGuiDevelopmentPlan.md#26-플러그인-및-모듈-관리-패널pluginmanagerpanel-구축-계획)) [대기]**:
-  - Phase 1: `IEditorPanelPlugin` 공통 인터페이스 수립 및 `ImGui::SetCurrentContext` 주입 규약 확립.
-  - Phase 2: `PluginManagerPanel` 에디터 패널 신설 (모듈 목록, 로드/언로드 상태 뱃지, 수동 리로드/빌드 툴바).
-  - Phase 3: `ModuleBuildManager`의 비동기 컴파일 콘솔 출력을 캡처하여 패널 내 실시간 빌드 로그 뷰로 파이프라이닝.
-  - Phase 4: 패널 플러그인의 핫리로드 및 `EditorWorkspace` 연동(열린 플러그인 패널 복원 및 상태 캐싱).
-- **트랙 F (계층형 통합 비주얼 이펙트 시스템 — [CompositeVisualEffectPlan.md](CompositeVisualEffectPlan.md)) [완료]**:
-  - 배경: 기존 파티클(입자) 중심 시스템에서 스프라이트 플립북, 메쉬 이펙트(마법진, 충격파 링, UV 스크롤), 순간 조명 섬광, 사운드를 타임라인 시간축으로 오케스트레이션하는 계층형 통합 아키텍처 채택.
-  - 완료 내역: `CompositeEffect` 에셋(JSON 아카이브), `CompositeVFXComponent` 및 `CompositeVFXSystem` 런타임 오케스트레이터, 독립 3D 뷰포트·타임라인 스크러빙·2열 테이블 인스펙터 지원 `VFXEditorPanel` 및 로캘 동기화 완료.
+- **트랙 D (2D 제작 워크플로 — [SpriteAnd2DSystemPlan.md](SpriteAnd2DSystemPlan.md)) [Phase 5 렌더 제출 연결 대기]**:
+  - Phase 1 [완료]: 스프라이트 에디터(`SpriteEditor`) 인터랙티브 시트 3대 슬라이서(Grid by Cell Size, Cell Count, Auto Alpha Connected Components) 및 원클릭 액션 애니메이션 클립(`.spriteanim`) 일괄 생성 위저드 완성.
+  - Phase 2: 스프라이트 렌더링 모드(Simple, Sliced 9-Slice, Tiled, Filled)와 2D 정렬 필드가 있다. 정렬 필드의 렌더 제출 연결은 Phase 5에서 다룬다.
+  - Phase 3 [완료]: 픽셀 퍼펙트 카메라(`PixelPerfectCameraComponent`), 서브픽셀 카메라 스냅(`snapSubpixel`), 가상 레퍼런스 해상도 기준 정수 줌 배율 자동 계산 및 OrthographicSize 완벽 동기화, `GameViewportPanel` 연동 및 `PixelPerfectCameraCheck` 단위 테스트 완성.
+  - Phase 4 [완료]: 2D 타일맵 시스템(`TilemapComponent`), 16x16 청크 분할 및 직렬화/복원, `TilemapRenderSystem` 및 머티리얼/메시 fallback, `TilePalettePanel`(B, E, U, I 브러시 툴바), `SceneViewportPanel` 인터랙티브 실시간 타일 페인팅 및 `TilemapCheck` 단위 테스트 완성.
+  - [Phase 5](SpriteAnd2DSystemPlan.md#phase-5-스프라이트-아틀라스-및-드로우콜-배칭) [기반 구현]: MaxRects 배치 계산, CPU 버킷 및 `SpriteAtlasCheck`가 있다. 같은 시트의 기본 쿼드에서 실제 배칭을 연결·계측하고, 여러 텍스처가 배치를 분리하는 경우 아틀라스 생성·제출을 연결한다.
+- **트랙 E (모듈 및 플러그인 GUI 제어 파이프라인 — PluginManagerPanel, [ImGuiDevelopmentPlan 26절](ImGuiDevelopmentPlan.md#26-플러그인-및-모듈-관리-패널pluginmanagerpanel-구현-완료)) [구현 완료]**:
+  - Phase 1 [완료]: `PluginManagerPanel` 에디터 패널 신설 (`Editor/Source/ImGui/PluginManager/Public/PluginManagerPanel.h`, `Private/PluginManagerPanel.cpp`).
+  - Phase 2 [완료]: 마스터-디테일 2열 레이아웃(좌측 270px 목록 + 필터 + 상태 뱃지, 우측 상세 인스펙터 및 제어 툴바) 구축.
+  - Phase 3 [완료]: `HotReloadManager` 4대 엔진 매니저(`ModuleHotReloadManager`, `ModuleBuildManager`, `ShaderHotReloadManager`, `AssetHotReloadManager`) 및 에디터 패널 플러그인 연동 (`Reload`, `Rebuild & Reload`, `Load / Unload`, `Auto-Reload`).
+  - Phase 4 [완료]: 비동기 컴파일 콘솔 전문 스트리밍, 에러/경고 하이라이트 및 `[Retry Compile]` 에러 복구 파이프라인, 메뉴바(`Edit -> Plugins`, `Window -> Panels -> Diagnostics -> Plugin Manager`) 및 로캘 키 40여 종 연동 완료.
+  - 후속 [설계]: [공용 플러그인 아키텍처](EditorPluginArchitecturePlan.md#6-구현-순서와-완료-기준). 공용 Window/Panel과 Builtin·Custom 발견을 먼저 연결한다. Blank와 Editor Standalone Window 생성, Blank의 Runtime 연결, Third Party Library, Game Feature (Content Only) 순으로 검증한다.
+- **트랙 F (계층형 통합 비주얼 이펙트 시스템 — [CompositeVisualEffectPlan.md](CompositeVisualEffectPlan.md)) [Phase 1~4 전 단계 구현 완료]**:
+  - 배경: 기존 파티클(입자) 중심 시스템에서 스프라이트 플립북, 메쉬 이펙트(마법진, 충격파 링, UV 스크롤), 순간 조명 섬광, 사운드, 트레일, 데칼, 카메라 셰이크를 타임라인 시간축으로 오케스트레이션하는 계층형 통합 아키텍처 채택.
+  - Phase 1 [완료]: `CompositeEffect` 에셋(JSON 아카이브), `CompositeVFXComponent` 및 `CompositeVFXSystem` 런타임 오케스트레이터, 스프라이트 플립북·파티클·라이트 섬광 연동, `VFXEditorPanel` 저작 도구 구축 완료.
+  - Phase 2 [완료]: 메쉬 이펙트(`VFXMeshTrack`) 런타임 렌더링 제출(`ForwardTransparentPass`), 스케일/회전 보간 및 UV 스크롤/컬러 페이드 연동(`SpriteDrawCommand` / `SpriteUBO`), 사운드 트랙(`VFXSoundTrack`) 1회성 정밀 타이밍 트리거 연결 완료.
+  - Phase 3 [완료]: 트레일 / 리본(`VFXTrailTrack`) 정점 히스토리 수집, 테이퍼링 폭 축소 및 방향 정렬 쿼드 세그먼트 고속 렌더링 파이프라인 연계 완료.
+  - Phase 4 [완료]: 지면 투영 데칼(`VFXDecalTrack`) 알파 페이드아웃 투영 및 다축 사인파 감쇠 카메라 셰이크(`VFXCameraShakeTrack`), `VFXEditorPanel` 트랙 인스펙터 편집 전면 지원 완료.
+- **트랙 G (비정상 종료 진단 및 에디터 작업 복원 시스템 — [CrashHandlingAndRecoveryPlan.md](CrashHandlingAndRecoveryPlan.md)) [Phase 1~4 전 단계 구현 완료: 2026-11-09]**:
+  - Phase 1 [완료]: Windows SEH / CRT 예외 가로채기 핸들러(`CrashHandler`), `MiniDumpWriteDump` 기반 `.dmp` 미니덤프 생성, 크래시 순간 `Logger::Flush()` 강제 디스크 동기화 파이프라인 구축.
+  - Phase 2 [완료]: `StackWalk64` / `SymFromAddr` 기반 심볼릭 콜스택 추출 및 타임스탬프 기반 구조화된 `.crash.json` 진단 리포트 자동 생성.
+  - Phase 3 [완료]: Tier 1 하트비트 주기적 자동 저장(`RecoveryManager`), 씬 dirty 상태 감지 시 5분 주기 `.tmp` 임시 파일 안전 교체(원자적 쓰기) 스냅샷 생성.
+  - Phase 4 [완료]: `Temp/Session.lock` 세션 생명주기 관리, 에디터 시작 시 비정상 종료 감지 및 작업 복원 마법사 모달(`DrawRecoveryModal`) 연동, `Help -> Trigger Crash (Diagnostics Test)` 메뉴를 통한 즉각 검증 지원 완료.
 
 ### 11.4 상태·검증 기록 규칙
 
