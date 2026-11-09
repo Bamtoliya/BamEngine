@@ -27,6 +27,7 @@
     bam_add_editor_plugin(EditorPanelLifecycleProbe PanelLifecycleProbe/PanelLifecycleProbe.cpp)
     target_include_directories(EditorPanelLifecycleProbe PRIVATE
        "${EDITOR_SOURCE_DIR}/HotReload/Public"
+        "${CMAKE_SOURCE_DIR}/Engine/Source/Core/Module/Public"
     )
 
     bam_add_resource_panel_plugin(EditorSpriteAnimationTools "${CMAKE_CURRENT_SOURCE_DIR}/SpriteAnimationTools"

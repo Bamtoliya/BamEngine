@@ -2,6 +2,7 @@
 
 #include "Engine_API.h"
 #include "Base.h"
+#include "ModuleApiExport.h"
 
 BEGIN(Engine)
 
@@ -36,10 +37,4 @@ extern "C" {
     extern "C" { \
         __declspec(dllexport) Engine::IModule* CreateModule() { return new ModuleClass(); } \
         __declspec(dllexport) void DestroyModule(Engine::IModule* module) { delete module; } \
-    }
-
-#define EXPORT_PLUGIN_API_ENTRY(EntryPoint, ApiType, ApiInstance) \
-    extern "C" __declspec(dllexport) const ApiType* EntryPoint() noexcept \
-    { \
-        return &(ApiInstance); \
     }

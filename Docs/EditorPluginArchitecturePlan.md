@@ -8,7 +8,7 @@
 ## 1. 현재 구현과 전환 목표
 
 - CMake의 `bam_add_resource_panel_plugin()`이 `EditorResourcePlugins.txt`를 생성한다. `ImGuiManager::CreateResourceEditors()`가 목록을 읽어 `PluginResourceEditor`를 만들고, `HotReloadManager`는 해당 패널 목록으로 빌더를 등록한다. 새 DLL의 발견, 빌드 및 등록이 리소스 편집기 타입에 연결돼 있다. [CMake](../Editor/Plugins/CMakeLists.txt) · [패널 생성](../Editor/Source/ImGui/Private/ImGuiManager.cpp) · [빌더 등록](../Editor/Source/HotReload/Private/HotReloadManager.cpp)
-- Sprite DLL은 에셋 열기·저장과 편집 세션을 소유한다. 현재 호스트는 새 DLL에서 같은 스냅샷 계약을 확인하고, 새 세션 복원 후 이전 세션을 해제한다. 일반 진단 샘플은 같은 섀도 복사 로더에 별도의 진입점을 연결한다. [Sprite 구현](../Editor/Plugins/SpriteAnimationTools/Private/SpriteAnimationTools.cpp) · [리소스 패널 호스트](../Editor/Source/ImGui/ResourceEditor/Private/PluginResourceEditor.cpp) · [진단 샘플](../Editor/Source/ImGui/PanelLifecycleProbe/Private/PanelLifecycleProbe.cpp)
+- Sprite DLL은 에셋 열기·저장과 편집 세션을 소유한다. 현재 호스트는 새 DLL에서 같은 스냅샷 계약을 확인하고, 새 세션 복원 후 이전 세션을 해제한다. 일반 진단 샘플은 같은 섀도 복사 로더에 별도의 진입점을 연결한다. [Sprite 구현](../Editor/Plugins/SpriteAnimationTools/Private/SpriteAnimationTools.cpp) · [리소스 패널 호스트](../Editor/Source/ImGui/ResourceEditor/Private/PluginResourceEditor.cpp) · [진단 패널 호스트](../Editor/Source/ImGui/PanelLifecycleProbe/Private/PluginPanel.cpp)
 - 전환 후에는 공용 호스트가 **플러그인 발견 → 모듈 로드 → 기능 등록**을 처리한다. 일반 패널과 리소스 편집기부터 이 경로를 공유한다. 메뉴·단축키 액션, 속성 편집기, 임포터는 각각 실제 사용처에 맞는 계약을 추가한다.
 - 위 내용은 소스와 문서의 정적 대조 결과다. 이번 설계 작성에서 Editor 빌드, UI 실행 및 성능 계측은 수행하지 않았다.
 
@@ -157,8 +157,10 @@ cmake --build out/build/x64-debug --config Debug --target Editor
 
 Editor 타깃이 GameModule과 예제 DLL을 함께 빌드한다. 시작 후 로그에서 `Base score 100, combo 3: 300`을 찾는다. 다음 연습으로 호출부의 콤보를 `8`로 바꾸면, 예제의 최대 배율이 5이므로 결과는 `500`이다. Client를 확인할 때는 같은 빌드 트리에서 Client 타깃도 빌드한 뒤 두 DLL이 있는 출력 디렉터리의 실행 파일을 사용한다. 별도 배포 패키징은 기존 보류 범위에 둔다.
 
-이 예제의 빌드, 시작 로그와 종료 로그는 사용자 실행 확인 항목이다. 소스 변경의 자동 감지나 실행 중 런타임 플러그인 교체는 이후 검증 단계에 속한다.
+2026-11-10 사용자 Debug 로그에서 `GameplayScore`와 `GameModule`의 DLL 빌드를 확인했다. 시작·종료 로그와 실행 중 교체는 후속 검증 항목이다.
 
 ## 8. 현재 진단 패널 전환 상태 (2026-11-10)
 
-Sprite 리소스 편집기는 CMake 카탈로그의 `ResourcePanelPluginApiV1` 경로를 사용한다. 별도 진단 샘플은 `BamGetEditorPluginV1`으로 창의 ID·제목 키·그리기 콜백을 노출한다. 이 실험은 일반 플러그인 발견이나 패키지 활성화 설계와 구분한다. 스냅샷의 진단 DLL 소스는 내보내기 매크로를 사용하며, 해당 타깃에서 매크로 정의를 볼 수 있도록 연결해야 한다. 진단 타깃의 명시 빌드, API 진입점·등록 계약 검증, 로드·언로드 및 Sprite 편집기의 저장·상태 승계는 사용자 실행 확인이 필요하다.
+Sprite 리소스 편집기는 CMake 카탈로그의 `ResourcePanelPluginApiV1` 경로를 사용한다. 진단 샘플은 `BamGetEditorPluginV1`으로 창의 ID·제목 키·그리기 콜백을 노출하며, 플러그인 관리자가 `PluginPanel`로 이 DLL을 등록한다. 호스트는 크기, 단일 패널 계약, 등록 ID와 콜백을 확인한 뒤 모듈을 교체한다.
+
+진단 DLL은 `ModuleApiExport.h`에서 내보내기 매크로를 가져온다. 런타임 모듈은 `ModuleInterface.h`를 통해 같은 매크로를 사용한다. 2026-11-10 사용자 Debug 로그에서 `Editor`와 `EditorPanelLifecycleProbe`의 빌드 성공을 확인했다. 진단 패널의 등록·다시 로드·제거와 Sprite 편집 세션 승계는 UI 실행 확인이 필요하다.

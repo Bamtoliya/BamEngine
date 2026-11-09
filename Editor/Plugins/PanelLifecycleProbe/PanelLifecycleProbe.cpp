@@ -1,4 +1,5 @@
 ﻿#include "EditorPanelPluginApi.h"
+#include "ModuleApiExport.h"
 
 namespace
 {

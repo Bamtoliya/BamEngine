@@ -1,24 +1,31 @@
-﻿#include "PanelLifecycleProbe.h"
+﻿#include "PluginPanel.h"
+#include "LocalizationManager.h"
 #include "Logger.h"
 #include <utility>
 
 BEGIN(Editor)
 
-EResult PanelLifecycleProbe::OnInitialize(void*)
+PluginPanel::PluginPanel(const wchar_t* id, const wchar_t* dllName, const char* windowId, EPanelMenuCategory category)
+    : m_DllName(dllName), m_WindowId(windowId), m_Category(category)
 {
-	return ReloadModule();
+    m_Name = id;
 }
 
-void PanelLifecycleProbe::Update(f32)
+EResult PluginPanel::OnInitialize(void*)
 {
-	if (std::exchange(m_ReloadPending, false))
-		ReloadModule();
+    return ReloadModule();
 }
 
-EResult PanelLifecycleProbe::ReloadModule()
+void PluginPanel::Update(f32)
+{
+    if (std::exchange(m_ReloadPending, false))
+        ReloadModule();
+}
+
+EResult PluginPanel::ReloadModule()
 {
     EditorPluginModule candidate;
-    if (!candidate.Open(L"EditorPanelLifecycleProbe.dll"))
+    if (!candidate.Open(m_DllName.c_str()))
         return EResult::Fail;
 
     const auto getApi = reinterpret_cast<GetEditorPluginApiV1>(candidate.FindSymbol(EditorPluginEntryV1));
@@ -26,14 +33,14 @@ EResult PanelLifecycleProbe::ReloadModule()
     if (!api || api->Size != sizeof(EditorPluginApiV1) || api->PanelSize != sizeof(PanelRegistrationV1) ||
         api->DrawContextSize != sizeof(PanelDrawContextV1) || api->PanelCount != 1 || !api->Panels)
     {
-        EDITOR_LOG_ERROR("Panel probe has an incompatible V1 plugin API");
+        EDITOR_LOG_ERROR("Editor panel plugin has an incompatible V1 API: {}", WStrToStr(m_DllName));
         return EResult::Fail;
     }
 
     const auto& panel = api->Panels[0];
     if (!panel.Id || m_Name != panel.Id || !panel.TitleKey || !*panel.TitleKey || !panel.Draw)
     {
-        EDITOR_LOG_ERROR("Panel probe registration is invalid");
+        EDITOR_LOG_ERROR("Editor panel plugin registration is invalid: {}", WStrToStr(m_DllName));
         return EResult::Fail;
     }
 
@@ -43,13 +50,12 @@ EResult PanelLifecycleProbe::ReloadModule()
     return EResult::Success;
 }
 
-void PanelLifecycleProbe::Draw()
+void PluginPanel::Draw()
 {
-#if defined(_WIN32)
-	if (!m_Open || !m_Draw)
-		return;
+    if (!m_Open || !m_Draw)
+        return;
 
-    const auto title = GetDisplayName() + "###PanelLifecycleProbe.Title";
+    const auto title = GetDisplayName() + "###" + m_WindowId;
     if (BeginPanelWindow(title.c_str(), m_Open))
     {
         const PanelDrawContextV1 context{
@@ -61,14 +67,13 @@ void PanelLifecycleProbe::Draw()
         };
         m_Draw(context);
     }
-	ImGui::End();
-#endif
+    ImGui::End();
 }
 
-void PanelLifecycleProbe::Free()
+void PluginPanel::Free()
 {
-	m_Draw = nullptr;
-	m_Module.Close();
+    m_Draw = nullptr;
+    m_Module.Close();
 }
 
 END

@@ -1,4 +1,4 @@
-#include "PluginManagerPanel.h"
+﻿#include "PluginManagerPanel.h"
 #include "EditorUI.h"
 #include "ImGuiManager.h"
 #include "HotReloadManager.h"
@@ -13,7 +13,7 @@
 #include <imgui.h>
 #include <algorithm>
 #include <sstream>
-#include "PanelLifecycleProbe.h"
+#include "PluginPanel.h"
 #include "PluginResourceEditor.h"
 
 BEGIN(Editor)
@@ -246,17 +246,23 @@ void PluginManagerPanel::Draw()
 	{
 
 #if defined(_WIN32)
-		// 마스터-디테일 2열 레이아웃
 		if (ImGui::CollapsingHeader(LOCAL_LABEL("PanelLifecycleProbe.Title").c_str()))
 		{
+			static constexpr wchar_t probeId[] = L"Editor.BuiltIn.PanelLifecycleProbe";
+
 			auto& manager = ImGuiManager::Get();
-			auto* probe = dynamic_cast<PanelLifecycleProbe*>(manager.FindRegisteredPanel(PanelLifecycleProbe::Id));
+			auto* probe = dynamic_cast<PluginPanel*>(manager.FindRegisteredPanel(probeId));
 			EditorUI::ToolbarLayout toolbar;
 
 			if (!probe)
 			{
 				if (toolbar.Button("RegisterProbe", ICON_FA_PLUS, "PanelLifecycleProbe.Register"))
-					manager.RegisterImGuiPanel(PanelLifecycleProbe::Id, []() -> IImGui* { return new PanelLifecycleProbe(); });
+				{
+					manager.RegisterImGuiPanel(probeId, []() -> IImGui* {
+						return new PluginPanel(probeId, L"EditorPanelLifecycleProbe.dll",
+							"PanelLifecycleProbe.Title", EPanelMenuCategory::Diagnostics);
+						});
+				}
 			}
 			else
 			{
@@ -268,7 +274,6 @@ void PluginManagerPanel::Draw()
 					manager.RemoveImGuiPanel(probe);
 			}
 		}
-
 #endif
 		DrawMasterList();
 		ImGui::SameLine();
