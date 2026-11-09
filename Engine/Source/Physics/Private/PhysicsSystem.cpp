@@ -1,4 +1,4 @@
-#include "PhysicsSystem.h"
+﻿#include "PhysicsSystem.h"
 #include "Logger.h"
 #include <chrono>
 #include "PhysicsComponent.h"
@@ -1132,6 +1132,9 @@ void PhysicsSystem::OnFixedUpdate(entt::registry& registry, const vector<Scene*>
                     HitResult hit{};
                     if (!IntersectsPhysicsShapes2D(world, entityA, entityB, shapeA, shapeB, hit))
                         continue;
+
+                    if (hit.denetrationDepth > 0.001f)
+                        anyPenetration = true;
 
                     ResolvePhysicsContact(world, entityA, entityB, hit, resolveVelocity);
                 }
