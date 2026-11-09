@@ -15,6 +15,9 @@ target_link_libraries(GameModule PRIVATE
     BamEngine::Engine
 )
 
+target_include_directories(GameModule PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../Plugins/GameplayScore/Public")
+add_dependencies(GameModule GameplayScore)
+
 set_target_properties(GameModule PROPERTIES
     FOLDER "Game"
     UNITY_BUILD OFF

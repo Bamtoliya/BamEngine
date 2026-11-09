@@ -1,6 +1,23 @@
 # BamEngine Implementation Log
 
 This document tracks implementation details, architectural decisions, and technical debt.
+### [2026-11-10] 플러그인 생성 템플릿 설계 개정
+
+- [공용 플러그인 아키텍처](EditorPluginArchitecturePlan.md)에 Blank, Editor Standalone Window, Third Party Library, Game Feature (Content Only) 생성 템플릿을 정리했다.
+- Window와 Panel은 같은 등록 계약을 쓰고 에셋 열기와 저장은 선택 기능으로 붙인다. DLL 패키지와 콘텐츠 전용 패키지의 활성화, Builtin·Custom 발견, 구현 순서와 완료 기준을 설계에 반영했다.
+- 현재 리소스 패널 전용 로딩 경로와 가상 경로 구현을 정적으로 대조했다. 이번 변경은 설계 문서에 한정한다.
+
+### [2026-11-10] GameModule 런타임 플러그인 예제
+
+- `GameplayScore.dll`을 독립 빌드 타깃으로 추가하고, GameModule이 기존 모듈 로더와 버전이 있는 함수 테이블로 콤보 점수를 계산하도록 연결했다.
+- [에디터 플러그인 아키텍처 설계](EditorPluginArchitecturePlan.md#7-gamemodule에서-사용하는-런타임-플러그인)에 Editor·Runtime 모듈 경계, 의존 순서, 예제 문법과 사용자 확인 절차를 추가했다.
+- 대상·진입점·호출 관계를 소스로 대조했다. 실제 빌드와 Editor·Client 실행 확인은 미실시다.
+
+### [2026-11-10] Builtin·Custom 에디터 플러그인 공용 설계
+
+- [에디터 플러그인 아키텍처 설계](EditorPluginArchitecturePlan.md)에 패키지 발견·활성화, DLL 빌드·교체, 패널 및 비패널 기능 등록의 경계를 정리했다.
+- 현재 Sprite 리소스 패널, 진단 샘플과 게임 모듈의 소스 경로를 정적으로 대조했다. 구현 순서와 검증 기준을 문서화했으며 빌드와 Editor 실행은 수행하지 않았다.
+
 ### [2026-11-10] DLL 리소스 패널 공용 등록
 
 - Sprite 전용 Editor 클래스와 패널·단축키·빌드 관리자 분기를 제거했다. CMake가 생성한 목록과 DLL의 공용 V1 진입점으로 리소스 패널을 등록한다.

@@ -1,5 +1,8 @@
 ﻿// Projects/GameModule/Source/GameModule.cpp
 #include "ModuleInterface.h"
+#include "ModuleManager.h"
+#include "PlatformPath.h"
+#include "GameplayScoreApi.h"
 #include "Logger.h"
 #include "SystemManager.h"
 #include "SkyAtmosphereSystem.h"
@@ -15,6 +18,8 @@ public:
 
 	void OnLoad() override
 	{
+		RunGameplayScoreExample();
+
 		// 1. 활성 모듈 태그를 지정하여 리플렉션 심볼 등록
 		if (Engine::ReflectionRegistry::IsCreated())
 		{
@@ -50,6 +55,14 @@ public:
 			const size_t removed = registry.UnregisterModule(GameModuleId);
 			BAM_LOG(Info, "GameModule", "Lifecycle", "[GameModule] Unregistered {} reflection symbols.", removed);
 		}
+
+		if (m_OwnsScoreModule && Engine::ModuleManager::IsCreated())
+		{
+			auto& modules = Engine::ModuleManager::Get();
+			if (modules.IsModuleLoaded(GameplayScore::ModuleName))
+				modules.UnloadModule(GameplayScore::ModuleName);
+			m_OwnsScoreModule = false;
+		}
 	}
 
 	void OnPreHotReload() override
@@ -61,6 +74,42 @@ public:
 	{
 		BAM_LOG(Info, "GameModule", "Lifecycle", "[GameModule] PostHotReload finished.");
 	}
+
+private:
+	void RunGameplayScoreExample()
+	{
+		if (!Engine::ModuleManager::IsCreated())
+			return;
+
+		auto& modules = Engine::ModuleManager::Get();
+		if (!modules.IsModuleLoaded(GameplayScore::ModuleName))
+		{
+			const auto path = Engine::PlatformPath::GetExecutableDirectory() / GameplayScore::DllName;
+			const auto result = modules.LoadModule(GameplayScore::ModuleName, path);
+			if (result != Engine::EResult::Success)
+			{
+				BAM_LOG(Warn, "GameModule", "GameplayScore", "Optional GameplayScore example is unavailable");
+				return;
+			}
+			m_OwnsScoreModule = true;
+		}
+
+		const auto* module = modules.GetModuleInfo(GameplayScore::ModuleName);
+		const auto getApi = module && module->Handle
+			? reinterpret_cast<GameplayScore::GetApiV1Fn>(GetProcAddress(module->Handle, GameplayScore::EntryPoint))
+			: nullptr;
+		const auto* api = getApi ? getApi() : nullptr;
+		if (!api || api->Size != sizeof(GameplayScore::ApiV1) || !api->CalculateComboScore)
+		{
+			BAM_LOG(Warn, "GameModule", "GameplayScore", "GameplayScore V1 API is missing or incompatible");
+			return;
+		}
+
+		const auto score = api->CalculateComboScore(100, 3);
+		BAM_LOG(Info, "GameModule", "GameplayScore", "Base score 100, combo 3: {}", score);
+	}
+
+	bool m_OwnsScoreModule = false;
 };
 
 IMPLEMENT_MODULE(GameModule)
