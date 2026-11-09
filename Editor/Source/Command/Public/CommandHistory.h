@@ -1,9 +1,11 @@
 ﻿#pragma once
 
+#include "Editor_Includes.h"
 #include "Types.h"
 #include <stdexcept>
 #include "Delegate.h"
 #include <algorithm>
+#include <functional>
 #include <memory>
 
 namespace Editor
@@ -22,6 +24,18 @@ namespace Editor
         const std::string& Label() const { return m_Label; }
     private:
         std::string m_Label;
+    };
+
+    class CallbackEditorCommand final : public EditorCommand
+    {
+    public:
+        CallbackEditorCommand(std::string label, std::function<bool()> execute, std::function<bool()> undo)
+            : EditorCommand(std::move(label)), m_Execute(std::move(execute)), m_Undo(std::move(undo)) {}
+        bool Execute() override { return m_Execute(); }
+        bool Undo() override { return m_Undo(); }
+    private:
+        std::function<bool()> m_Execute;
+        std::function<bool()> m_Undo;
     };
 
     class CommandHistory final

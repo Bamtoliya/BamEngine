@@ -19,7 +19,7 @@ private:
 	void RefreshPresetList();
 	void DrawPresetToolbar(PostProcessChain* chain);
 	void DrawPipelineList(PostProcessChain* chain);
-	void DrawEffectInspector(Engine::IPostProcessEffect* effect);
+	void DrawEffectInspector(PostProcessChain& chain, Engine::IPostProcessEffect* effect);
 	void DrawSceneApplyButton(PostProcessChain* chain);
 
 private:

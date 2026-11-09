@@ -1,14 +1,19 @@
-﻿#include "PostProcessPanel.h"
+#include "PostProcessPanel.h"
+#include "EditorUI.h"
 #include "ImGuiManager.h"
 #include "BaseViewportPanel.h"
 #include "PostProcessMaterialEffect.h"
 #include "IconsFontAwesome7.h"
 #include "SceneManager.h"
+#include "Entity.h"
+#include "EntityFactory.h"
 #include "Application.h"
 #include "SceneEditHistory.h"
 #include "PIEManager.h"
 #include "PostProcessComponent.h"
 #include "NotificationManager.h"
+#include <optional>
+#include <string_view>
 
 namespace
 {
@@ -17,6 +22,76 @@ namespace
 		if (!effect) return "";
 		const string& key = effect->GetDisplayNameKey();
 		return key.empty() ? WStrToStr(effect->GetName()) : LOCAL(key);
+	}
+
+	entt::entity FindActivePostProcessEntity(Engine::Scene& scene)
+	{
+		auto view = scene.GetRegistry().view<Engine::PostProcessComponent>();
+		for (auto [entity, component] : view.each())
+		{
+			if (component.IsEnabled)
+				return entity;
+		}
+		return entt::null;
+	}
+
+	void NotifyPostProcessCaptureFailed()
+	{
+		NotificationManager::Get().AddNotification(LOCAL("PostProcess.MenuTitle"),
+			LOCAL("PostProcess.SceneApplyFailed"), ELogLevel::Error);
+	}
+
+	bool ApplyPostProcessToScene(Editor::PostProcessChain& chain, bool merge = false,
+		std::optional<std::string_view> presetName = std::nullopt)
+	{
+		auto* scene = SceneManager::Get().GetCurrentScene();
+		auto& history = Application::Get().GetEditHistory();
+		if (!scene || !PIEManager::Get().IsEditing() || !history.CanFinalizeEditsFor(scene))
+			return true;
+
+		const auto target = FindActivePostProcessEntity(*scene);
+		if (target == entt::null)
+			return true;
+
+		std::string settings;
+		if (!chain.GetPipeline().SaveToString(settings))
+		{
+			NotifyPostProcessCaptureFailed();
+			return false;
+		}
+
+		auto& component = scene->GetRegistry().get<PostProcessComponent>(target);
+		if (component.PipelineSettings == settings && (!presetName || component.PresetName == *presetName))
+			return true;
+
+		const entt::entity targets[] = { target };
+		auto before = Editor::SceneEditSnapshot::Capture(*scene, targets);
+		if (!before)
+		{
+			NotifyPostProcessCaptureFailed();
+			return false;
+		}
+
+		std::string previousPreset;
+		if (presetName)
+		{
+			previousPreset = std::string(*presetName);
+			component.PresetName.swap(previousPreset);
+		}
+		component.PipelineSettings.swap(settings);
+
+		auto after = Editor::SceneEditSnapshot::Capture(*scene, targets);
+		if (!after)
+		{
+			component.PipelineSettings.swap(settings);
+			if (presetName)
+				component.PresetName.swap(previousPreset);
+			NotifyPostProcessCaptureFailed();
+			return false;
+		}
+
+		history.Record(std::move(before), std::move(after), "PostProcess.ApplyToScene", merge);
+		return true;
 	}
 }
 
@@ -54,6 +129,8 @@ void PostProcessPanel::Draw()
 		ImGui::End();
 		return;
 	}
+
+	Application::Get().GetEditHistory().AllowShortcuts(ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows));
 
 	if (!SceneManager::Get().GetCurrentScene())
 	{
@@ -137,7 +214,7 @@ void PostProcessPanel::Draw()
 	auto& effects = chain->GetPipeline().GetEffects();
 	if (m_SelectedEffectIndex >= 0 && m_SelectedEffectIndex < static_cast<int32>(effects.size()))
 	{
-		DrawEffectInspector(effects[m_SelectedEffectIndex]);
+		DrawEffectInspector(*chain, effects[m_SelectedEffectIndex]);
 	}
 	else
 	{
@@ -196,6 +273,7 @@ void PostProcessPanel::DrawPipelineList(PostProcessChain* chain)
 	ImGui::TextUnformatted(LOCAL_CSTR("PostProcess.Effects"));
 
 	auto& effects = chain->GetPipeline().GetEffects();
+	bool changed = false;
 	if (effects.empty())
 	{
 		ImGui::TextDisabled("%s", LOCAL_CSTR("PostProcess.NoEffects"));
@@ -232,7 +310,10 @@ void PostProcessPanel::DrawPipelineList(PostProcessChain* chain)
 			ImGui::TableSetColumnIndex(0);
 			bool enabled = effect->IsEnabled();
 			if (ImGui::Checkbox("##enabled", &enabled))
+			{
 				effect->SetEnabled(enabled);
+				changed = true;
+			}
 
 			// ── Column 1: 효과 이름 (선택 및 드래그 앤 드롭) ──
 			ImGui::TableSetColumnIndex(1);
@@ -273,6 +354,7 @@ void PostProcessPanel::DrawPipelineList(PostProcessChain* chain)
 			effects.erase(effects.begin() + dragSourceIdx);
 			effects.insert(effects.begin() + dragTargetIdx, movingEffect);
 			m_SelectedEffectIndex = dragTargetIdx;
+			changed = true;
 		}
 
 		ImGui::EndTable();
@@ -291,6 +373,7 @@ void PostProcessPanel::DrawPipelineList(PostProcessChain* chain)
 	{
 		std::swap(effects[m_SelectedEffectIndex], effects[m_SelectedEffectIndex - 1]);
 		m_SelectedEffectIndex--;
+		changed = true;
 	}
 	if (!canMoveUp) ImGui::EndDisabled();
 
@@ -302,11 +385,15 @@ void PostProcessPanel::DrawPipelineList(PostProcessChain* chain)
 	{
 		std::swap(effects[m_SelectedEffectIndex], effects[m_SelectedEffectIndex + 1]);
 		m_SelectedEffectIndex++;
+		changed = true;
 	}
 	if (!canMoveDown) ImGui::EndDisabled();
+
+	if (changed)
+		ApplyPostProcessToScene(*chain);
 }
 
-void PostProcessPanel::DrawEffectInspector(Engine::IPostProcessEffect* effect)
+void PostProcessPanel::DrawEffectInspector(PostProcessChain& chain, Engine::IPostProcessEffect* effect)
 {
 	if (!effect) return;
 
@@ -321,6 +408,7 @@ void PostProcessPanel::DrawEffectInspector(Engine::IPostProcessEffect* effect)
 	if (ImGui::Button(resetAllLabel.c_str(), ImVec2(resetAllBtnWidth, 0.f)))
 	{
 		effect->ResetAllParameters();
+		ApplyPostProcessToScene(chain);
 	}
 	ImGui::Separator();
 
@@ -341,6 +429,21 @@ void PostProcessPanel::DrawEffectInspector(Engine::IPostProcessEffect* effect)
 		ImGui::TableSetupColumn(colLabel.c_str(), ImGuiTableColumnFlags_WidthStretch, 0.35f);
 		ImGui::TableSetupColumn(colValue.c_str(), ImGuiTableColumnFlags_WidthStretch, 0.65f);
 		ImGui::TableSetupColumn(colReset.c_str(), ImGuiTableColumnFlags_WidthFixed, ImGui::GetFrameHeight());
+
+		const auto applyParameter = [&](bool changed, auto setValue, bool continuous = true)
+		{
+			auto& history = Application::Get().GetEditHistory();
+			const bool finished = continuous && ImGui::IsItemDeactivatedAfterEdit();
+			if (continuous && ImGui::IsItemActivated())
+				history.Flush();
+			if (changed)
+			{
+				setValue();
+				ApplyPostProcessToScene(chain, continuous && (ImGui::IsItemActive() || finished));
+			}
+			if (finished)
+				history.Flush();
+		};
 
 		for (const auto& [name, param] : params)
 		{
@@ -363,15 +466,15 @@ void PostProcessPanel::DrawEffectInspector(Engine::IPostProcessEffect* effect)
 			case Engine::EMaterialParameterType::Float:
 			{
 				float val = param.data.size() >= sizeof(float) ? *reinterpret_cast<const float*>(param.data.data()) : 0.0f;
-				if (ImGui::SliderFloat("##val", &val, param.minValue, param.maxValue, "%.2f"))
-					effect->SetFloat(name, val);
+				applyParameter(ImGui::SliderFloat("##val", &val, param.minValue, param.maxValue, "%.2f"),
+					[&] { effect->SetFloat(name, val); });
 				break;
 			}
 			case Engine::EMaterialParameterType::Float2:
 			{
 				vec2 val = param.data.size() >= sizeof(vec2) ? *reinterpret_cast<const vec2*>(param.data.data()) : vec2(0.0f, 0.0f);
-				if (ImGui::SliderFloat2("##val", &val.x, param.minValue, param.maxValue, "%.2f"))
-					effect->SetFloat2(name, val);
+				applyParameter(ImGui::SliderFloat2("##val", &val.x, param.minValue, param.maxValue, "%.2f"),
+					[&] { effect->SetFloat2(name, val); });
 				break;
 			}
 			case Engine::EMaterialParameterType::Float3:
@@ -379,13 +482,13 @@ void PostProcessPanel::DrawEffectInspector(Engine::IPostProcessEffect* effect)
 				vec3 val = param.data.size() >= sizeof(vec3) ? *reinterpret_cast<const vec3*>(param.data.data()) : vec3(0.0f, 0.0f, 0.0f);
 				if (param.isColor)
 				{
-					if (ImGui::ColorEdit3("##val", &val.x, ImGuiColorEditFlags_NoInputs))
-						effect->SetFloat3(name, val);
+					applyParameter(ImGui::ColorEdit3("##val", &val.x, ImGuiColorEditFlags_NoInputs),
+						[&] { effect->SetFloat3(name, val); });
 				}
 				else
 				{
-					if (ImGui::SliderFloat3("##val", &val.x, param.minValue, param.maxValue, "%.2f"))
-						effect->SetFloat3(name, val);
+					applyParameter(ImGui::SliderFloat3("##val", &val.x, param.minValue, param.maxValue, "%.2f"),
+						[&] { effect->SetFloat3(name, val); });
 				}
 				break;
 			}
@@ -394,28 +497,27 @@ void PostProcessPanel::DrawEffectInspector(Engine::IPostProcessEffect* effect)
 				vec4 val = param.data.size() >= sizeof(vec4) ? *reinterpret_cast<const vec4*>(param.data.data()) : vec4(0.0f, 0.0f, 0.0f, 0.0f);
 				if (param.isColor)
 				{
-					if (ImGui::ColorEdit4("##val", &val.x, ImGuiColorEditFlags_NoInputs))
-						effect->SetFloat4(name, val);
+					applyParameter(ImGui::ColorEdit4("##val", &val.x, ImGuiColorEditFlags_NoInputs),
+						[&] { effect->SetFloat4(name, val); });
 				}
 				else
 				{
-					if (ImGui::SliderFloat4("##val", &val.x, param.minValue, param.maxValue, "%.2f"))
-						effect->SetFloat4(name, val);
+					applyParameter(ImGui::SliderFloat4("##val", &val.x, param.minValue, param.maxValue, "%.2f"),
+						[&] { effect->SetFloat4(name, val); });
 				}
 				break;
 			}
 			case Engine::EMaterialParameterType::Int:
 			{
 				int val = param.data.size() >= sizeof(int) ? *reinterpret_cast<const int*>(param.data.data()) : 0;
-				if (ImGui::SliderInt("##val", &val, static_cast<int>(param.minValue), static_cast<int>(param.maxValue)))
-					effect->SetInt(name, val);
+				applyParameter(ImGui::SliderInt("##val", &val, static_cast<int>(param.minValue), static_cast<int>(param.maxValue)),
+					[&] { effect->SetInt(name, val); });
 				break;
 			}
 			case Engine::EMaterialParameterType::Bool:
 			{
 				bool val = param.data.size() >= sizeof(bool) ? *reinterpret_cast<const bool*>(param.data.data()) : false;
-				if (ImGui::Checkbox("##val", &val))
-					effect->SetBool(name, val);
+				applyParameter(ImGui::Checkbox("##val", &val), [&] { effect->SetBool(name, val); }, false);
 				break;
 			}
 			default:
@@ -431,6 +533,7 @@ void PostProcessPanel::DrawEffectInspector(Engine::IPostProcessEffect* effect)
 			if (ImGui::Button(ICON_FA_ROTATE_LEFT, ImVec2(ImGui::GetFrameHeight(), ImGui::GetFrameHeight())))
 			{
 				effect->ResetParameter(name);
+				ApplyPostProcessToScene(chain);
 			}
 			if (isDefault) ImGui::EndDisabled();
 
@@ -449,18 +552,15 @@ void PostProcessPanel::DrawPresetToolbar(PostProcessChain* chain)
 
 	const std::string presetDir = PresetDirectory;
 
-	ImGui::TextUnformatted(LOCAL_CSTR("PostProcess.PreviewPreset"));
-	ImGui::SameLine();
-
-	if (ImGui::SmallButton(LOCAL_LABEL("EditorCommon.Refresh").c_str()))
+	EditorUI::ToolbarLayout heading;
+	heading.Text(LOCAL_CSTR("PostProcess.PreviewPreset"), false);
+	if (heading.Icon("RefreshPresets", ICON_FA_ARROWS_ROTATE, "EditorCommon.Refresh"))
 		m_PresetListNeedsRefresh = true;
 
-	// ── 1열: 콤보박스 + 저장(플로피) 버튼 + 삭제(휴지통) 버튼 ──
-	const float iconBtnWidth = ImGui::GetFrameHeight();
-	const float spacing = ImGui::GetStyle().ItemSpacing.x;
-	const float comboWidth = ImGui::GetContentRegionAvail().x - (iconBtnWidth * 2.f + spacing * 2.f);
-
-	ImGui::SetNextItemWidth(comboWidth);
+	EditorUI::ToolbarLayout toolbar;
+	const float buttonWidth = EditorUI::GetIconButtonSize(ICON_FA_FLOPPY_DISK).x +
+		EditorUI::GetIconButtonSize(ICON_FA_TRASH_CAN).x + ImGui::GetStyle().ItemSpacing.x * 2.0f;
+	toolbar.SetNextItemWidth(std::max(ImGui::GetFontSize() * 8.0f, ImGui::GetContentRegionAvail().x - buttonWidth));
 	const char* currentPresetName = m_SelectedPresetName.empty()
 		? LOCAL_CSTR("PostProcess.SelectPresetPrompt") : m_SelectedPresetName.c_str();
 
@@ -476,7 +576,8 @@ void PostProcessPanel::DrawPresetToolbar(PostProcessChain* chain)
 
 				if (chain->GetPipeline().LoadFromFile(fullPath))
 				{
-					m_SelectedPresetName = presetName;
+					if (ApplyPostProcessToScene(*chain, false, std::string_view(presetName)))
+						m_SelectedPresetName = presetName;
 				}
 				else
 				{
@@ -495,8 +596,7 @@ void PostProcessPanel::DrawPresetToolbar(PostProcessChain* chain)
 	}
 
 	// 저장 버튼
-	ImGui::SameLine();
-	if (ImGui::Button(ICON_FA_FLOPPY_DISK "##SavePresetBtn", ImVec2(iconBtnWidth, iconBtnWidth)))
+	if (toolbar.Icon("SavePresetBtn", ICON_FA_FLOPPY_DISK, "PostProcess.SavePresetTitle"))
 	{
 		ImGui::OpenPopup(savePopupTitle.c_str());
 	}
@@ -505,13 +605,12 @@ void PostProcessPanel::DrawPresetToolbar(PostProcessChain* chain)
 	const auto selected = std::find(m_AvailablePresets.begin(), m_AvailablePresets.end(), m_SelectedPresetName);
 	const bool canDelete = selected != m_AvailablePresets.end() && m_SelectedPresetName != "Default";
 
-	ImGui::SameLine();
-	if (!canDelete) ImGui::BeginDisabled(true);
-	if (ImGui::Button(ICON_FA_TRASH_CAN "##DeletePresetBtn", ImVec2(iconBtnWidth, iconBtnWidth)))
+	EditorUI::IconButtonOptions deleteOptions;
+	deleteOptions.Enabled = canDelete;
+	if (toolbar.Icon("DeletePresetBtn", ICON_FA_TRASH_CAN, "PostProcess.DeletePreset", deleteOptions))
 	{
 		ImGui::OpenPopup(deletePopupTitle.c_str());
 	}
-	if (!canDelete) ImGui::EndDisabled();
 
 	// ── 2열: 기본값으로 전체 초기화 버튼 ──
 	ImGui::Spacing();
@@ -519,11 +618,14 @@ void PostProcessPanel::DrawPresetToolbar(PostProcessChain* chain)
 	if (ImGui::Button(resetPipelineLabel.c_str(), ImVec2(ImGui::GetContentRegionAvail().x, 0.f)))
 	{
 		const std::wstring defaultPath = StrToWStr(presetDir + "/Default.json");
-		if (std::filesystem::exists(defaultPath))
+		std::error_code error;
+		const bool hasDefault = std::filesystem::exists(defaultPath, error);
+		bool reset = !error;
+		if (hasDefault)
 		{
-			chain->GetPipeline().LoadFromFile(defaultPath);
+			reset = chain->GetPipeline().LoadFromFile(defaultPath);
 		}
-		else
+		else if (reset)
 		{
 			// Default.json이 없으면 모든 효과 파라미터를 개별 리셋
 			for (auto* effect : chain->GetPipeline().GetEffects())
@@ -531,7 +633,13 @@ void PostProcessPanel::DrawPresetToolbar(PostProcessChain* chain)
 				if (effect) effect->ResetAllParameters();
 			}
 		}
-		m_SelectedPresetName.clear();
+		if (!reset)
+		{
+			NotificationManager::Get().AddNotification(LOCAL("PostProcess.MenuTitle"),
+				LOCAL_FMT("PostProcess.PresetLoadFailed", "Default"), ELogLevel::Error);
+		}
+		else if (ApplyPostProcessToScene(*chain, false, std::string_view{}))
+			m_SelectedPresetName.clear();
 	}
 
 	// ── 프리셋 저장 모달 팝업 ──
@@ -553,9 +661,11 @@ void PostProcessPanel::DrawPresetToolbar(PostProcessChain* chain)
 		ImGui::Separator();
 		ImGui::Spacing();
 
-		ImGui::BeginDisabled(!validName);
-
-		if (ImGui::Button(LOCAL_LABEL("EditorCommon.Save").c_str(), ImVec2(100.f, 0.f)))
+		const EditorUI::DialogAction actions[] = {
+			{ "EditorCommon.Cancel" }, { "EditorCommon.Save", validName }
+		};
+		const int action = EditorUI::DialogButtonBar("SavePresetActions", actions, IM_ARRAYSIZE(actions));
+		if (action == 1)
 		{
 			const auto fullPath = StrToWStr(presetDir + "/" + presetName + ".json");
 
@@ -584,10 +694,8 @@ void PostProcessPanel::DrawPresetToolbar(PostProcessChain* chain)
 			}
 		}
 
-		ImGui::EndDisabled();
-		ImGui::SameLine();
 
-		if (ImGui::Button(LOCAL_LABEL("EditorCommon.Cancel").c_str(), ImVec2(100.f, 0.f)))
+		if (action == 0)
 			ImGui::CloseCurrentPopup();
 
 		ImGui::EndPopup();
@@ -605,7 +713,11 @@ void PostProcessPanel::DrawPresetToolbar(PostProcessChain* chain)
 			ImGui::Separator();
 			ImGui::Spacing();
 
-			if (ImGui::Button(LOCAL_LABEL("EditorCommon.Delete").c_str(), ImVec2(100.f, 0.f)))
+			const EditorUI::DialogAction actions[] = {
+				{ "EditorCommon.Cancel" }, { "EditorCommon.Delete", true, true }
+			};
+			const int action = EditorUI::DialogButtonBar("DeletePresetActions", actions, IM_ARRAYSIZE(actions));
+			if (action == 1)
 			{
 				const std::filesystem::path delPath = StrToWStr(presetDir + "/" + presetToDelete + ".json");
 				std::error_code error;
@@ -625,8 +737,7 @@ void PostProcessPanel::DrawPresetToolbar(PostProcessChain* chain)
 					ImGui::CloseCurrentPopup();
 				}
 			}
-			ImGui::SameLine();
-			if (ImGui::Button(LOCAL_LABEL("EditorCommon.Cancel").c_str(), ImVec2(100.f, 0.f)))
+			if (action == 0)
 			{
 				ImGui::CloseCurrentPopup();
 			}
@@ -648,21 +759,10 @@ void PostProcessPanel::DrawSceneApplyButton(PostProcessChain* chain)
 		return;
 
 	auto& registry = scene->GetRegistry();
-	auto view = registry.view<PostProcessComponent>();
-	entt::entity target = entt::null;
-
-	for (auto [entity, component] : view.each())
-	{
-		if (component.IsEnabled)
-		{
-			target = entity;
-			break;
-		}
-	}
-
+	const auto target = FindActivePostProcessEntity(*scene);
 	auto& history = Application::Get().GetEditHistory();
-	const bool canApply = target != entt::null && PIEManager::Get().IsEditing() &&
-		history.CanFinalizeEditsFor(scene);
+	const bool canEdit = PIEManager::Get().IsEditing() && history.CanFinalizeEditsFor(scene);
+	const bool canApply = target != entt::null && canEdit;
 
 	ImGui::Separator();
 
@@ -687,6 +787,28 @@ void PostProcessPanel::DrawSceneApplyButton(PostProcessChain* chain)
 	else
 	{
 		ImGui::TextDisabled("%s", LOCAL_CSTR("PostProcess.NoActiveComponent"));
+		if (canEdit)
+		{
+			ImGui::Spacing();
+			if (ImGui::Button(LOCAL_LABEL("PostProcess.CreateVolume").c_str()))
+			{
+				std::string settings;
+				if (chain->GetPipeline().SaveToString(settings))
+				{
+					SceneEditScope edit(history, *scene, "PostProcess.CreateVolume");
+					Entity& newEntity = EntityFactory::CreateEmptyEntity(scene, L"PostProcessVolume");
+					auto& ppComp = scene->AddComponent<PostProcessComponent>(newEntity);
+					ppComp.IsEnabled = true;
+					ppComp.IsUnbound = true;
+					ppComp.PipelineSettings = std::move(settings);
+
+					NotificationManager::Get().AddNotification(LOCAL("PostProcess.MenuTitle"),
+						LOCAL("PostProcess.VolumeCreated"), ELogLevel::Info);
+				}
+				else
+					NotifyPostProcessCaptureFailed();
+			}
+		}
 	}
 
 	if (history.HasUnsavedChanges())
@@ -696,28 +818,10 @@ void PostProcessPanel::DrawSceneApplyButton(PostProcessChain* chain)
 
 	ImGui::BeginDisabled(!canApply);
 
-	if (ImGui::Button(LOCAL_LABEL("PostProcess.ApplyToScene").c_str()))
+	if (ImGui::Button(LOCAL_LABEL("PostProcess.ApplyToScene").c_str()) && ApplyPostProcessToScene(*chain))
 	{
-		std::string settings;
-
-		if (!chain->GetPipeline().SaveToString(settings))
-		{
-			NotificationManager::Get().AddNotification(LOCAL("PostProcess.MenuTitle"),
-				LOCAL("PostProcess.SceneApplyFailed"), ELogLevel::Error);
-		}
-		else
-		{
-			auto& component = registry.get<PostProcessComponent>(target);
-
-			if (component.PipelineSettings != settings)
-			{
-				SceneEditScope edit(history, *scene, LOCAL("PostProcess.ApplyToScene"));
-				component.PipelineSettings.swap(settings);
-			}
-
-			NotificationManager::Get().AddNotification(LOCAL("PostProcess.MenuTitle"),
-				LOCAL("PostProcess.AppliedToScene"), ELogLevel::Info);
-		}
+		NotificationManager::Get().AddNotification(LOCAL("PostProcess.MenuTitle"),
+			LOCAL("PostProcess.AppliedToScene"), ELogLevel::Info);
 	}
 
 	ImGui::SameLine();

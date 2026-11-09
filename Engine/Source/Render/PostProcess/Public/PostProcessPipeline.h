@@ -39,6 +39,10 @@ public:
 	bool SaveToString(std::string& outJson) const;
 	bool LoadFromString(std::string_view inJson);
 
+	// 파이프라인 동기화 및 변경 감지 인터페이스
+	uint64 GetVersion() const { return m_Version; }
+	void NotifySettingsChanged() { ++m_Version; }
+	void CopySettingsFrom(const PostProcessPipeline& other);
 private:
 	wstring m_Prefix;
 	vector<IPostProcessEffect*> m_Effects;
@@ -47,6 +51,7 @@ private:
 
 	uint32 m_Width = 0;
 	uint32 m_Height = 0;
+	uint64 m_Version = 1;
 };
 
 END

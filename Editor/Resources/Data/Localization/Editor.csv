@@ -1019,7 +1019,7 @@ PostProcess,Active,Active,활성
 PostProcess,AppliedToScene,Post-processing settings applied to the scene. Save the scene to write them to disk.,후처리 설정을 씬에 반영했습니다. 씬을 저장하면 파일에 기록됩니다.
 PostProcess,ApplyFailed,Could not apply post-processing settings. Previous runtime settings were preserved.,후처리 설정을 적용하지 못했습니다. 이전 실행 설정을 유지합니다.
 PostProcess,ApplyToScene,Apply to Scene,씬에 적용
-PostProcess,ApplyToSceneHint,Apply panel edits to the scene before saving.,패널 편집값을 씬에 적용한 뒤 씬을 저장하세요.
+PostProcess,ApplyToSceneHint,In Edit mode changes apply to the active volume as you edit. Save the scene to keep them.,편집 모드에서는 변경값이 활성 볼륨에 즉시 반영됩니다. 씬을 저장하면 변경값이 유지됩니다.
 PostProcess,Brightness,Brightness,밝기
 PostProcess,ColorAdjustments,Color Adjustments,색상 조정
 PostProcess,ConfirmDelete,Delete preset '{}'?,정말 '{}' 프리셋을 삭제하시겠습니까?

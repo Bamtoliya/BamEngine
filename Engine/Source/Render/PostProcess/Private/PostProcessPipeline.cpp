@@ -593,8 +593,8 @@ archive::ArchiveResult PostProcessPipeline::ReadArchive(const archive::IArchive&
 
 	for (const auto& apply : pendingChanges)
 		apply();
-
 	m_Effects.swap(reorderedEffects);
+	NotifySettingsChanged();
 	return {};
 }
 
@@ -630,5 +630,61 @@ bool PostProcessPipeline::LoadFromString(std::string_view inJson)
 	if (loadRes.Code != archive::ArchiveErrorCode::None) return false;
 	const auto readRes = ReadArchive(reader);
 	return readRes.Code == archive::ArchiveErrorCode::None;
+}
+void PostProcessPipeline::CopySettingsFrom(const PostProcessPipeline& other)
+{
+	vector<IPostProcessEffect*> reorderedEffects;
+	for (const auto* otherEffect : other.m_Effects)
+	{
+		if (!otherEffect) continue;
+		auto it = std::find_if(m_Effects.begin(), m_Effects.end(), [&](IPostProcessEffect* myEffect) {
+			return myEffect && myEffect->GetName() == otherEffect->GetName();
+			});
+		if (it != m_Effects.end())
+		{
+			IPostProcessEffect* myEffect = *it;
+			myEffect->SetEnabled(otherEffect->IsEnabled());
+			for (const auto& [paramName, param] : otherEffect->GetParameters())
+			{
+				switch (param.type)
+				{
+				case EMaterialParameterType::Float:
+					if (param.data.size() >= sizeof(f32))
+						myEffect->SetFloat(paramName, *reinterpret_cast<const f32*>(param.data.data()));
+					break;
+				case EMaterialParameterType::Float2:
+					if (param.data.size() >= sizeof(vec2))
+						myEffect->SetFloat2(paramName, *reinterpret_cast<const vec2*>(param.data.data()));
+					break;
+				case EMaterialParameterType::Float3:
+					if (param.data.size() >= sizeof(vec3))
+						myEffect->SetFloat3(paramName, *reinterpret_cast<const vec3*>(param.data.data()));
+					break;
+				case EMaterialParameterType::Float4:
+					if (param.data.size() >= sizeof(vec4))
+						myEffect->SetFloat4(paramName, *reinterpret_cast<const vec4*>(param.data.data()));
+					break;
+				case EMaterialParameterType::Int:
+					if (param.data.size() >= sizeof(int32))
+						myEffect->SetInt(paramName, *reinterpret_cast<const int32*>(param.data.data()));
+					break;
+				case EMaterialParameterType::Bool:
+					if (param.data.size() >= sizeof(bool))
+						myEffect->SetBool(paramName, *reinterpret_cast<const bool*>(param.data.data()));
+					break;
+				default:
+					break;
+				}
+			}
+			reorderedEffects.push_back(myEffect);
+		}
+	}
+	for (auto* effect : m_Effects)
+	{
+		if (effect && std::find(reorderedEffects.begin(), reorderedEffects.end(), effect) == reorderedEffects.end())
+			reorderedEffects.push_back(effect);
+	}
+	m_Effects.swap(reorderedEffects);
+	NotifySettingsChanged();
 }
 #pragma endregion
