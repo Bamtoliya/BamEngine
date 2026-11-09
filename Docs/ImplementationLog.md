@@ -2,6 +2,13 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-10] Debug 회귀 수정 및 사용자 검증
+
+- `PhysicsSystem`의 위치 보정 반복에 2D 침투도 반영했다. 2D 전용 씬에서 3D 접촉 유무에 따라 보정이 조기 종료되던 경로를 수정했다. 사용자가 실행한 `Physics2DCheck`에서 키네마틱 접촉을 포함한 검사가 통과했다.
+- `TilemapCheck`는 테스트용 `Sprite`를 `ResourceManager`에 등록하고 반환된 핸들로 타일 배치·삭제와 저장 데이터 동기화·복원을 검사한다. `SceneArchiveCheck`는 `managed-scene.json`의 저장·보존 비교·재로드에서 CTest 작업 폴더의 같은 절대 경로를 사용한다. 06:06 Debug CTest 로그에서 두 타깃의 통과를 확인했다. 잘못된 문서와 잘린 JSON의 `SceneManager` 로드 경로에는 상대 경로 불일치가 남아 있다.
+- 진단 DLL 호스트를 `PluginPanel`로 전환하고 내보내기 매크로를 `ModuleApiExport.h`에 분리했다. 첨부한 사용자 로그에서 Editor, `EditorPanelLifecycleProbe`, `GameplayScore` 빌드와 `ShortcutManagerCheck`, `TransformInheritanceCheck` 통과를 확인했다.
+- 검증 기록은 두 차례의 사용자 실행 결과다. 전체 CTest 재실행, 플러그인 UI에서의 로드·교체·제거 및 Client 실행 확인은 이번 기록에 포함되지 않는다.
+
 ### [2026-11-10] 변경 분류와 검증 범위
 
 - 엔진 소스 이관을 먼저 분리했다. 에디터 공용 UI를 바탕으로 리소스 경로·콘텐츠 탐색, 후처리 편집, 2D 제작, 이펙트 타임라인, 크래시 복원, 에디터 플러그인과 GameplayScore 예제를 각각 기록한다.

@@ -1,4 +1,4 @@
-#include "Scene.h"
+﻿#include "Scene.h"
 #include "SceneManager.h"
 #include "WorldComponents.h"
 #include "PhysicsComponent.h"
@@ -297,8 +297,9 @@ namespace
         auto& manager = Engine::SceneManager::Get();
         if (manager.OpenScene(original.get()) != Engine::EResult::Success)
             return Fail("Initial scene activation failed.");
+        const auto scenePath = std::filesystem::current_path() / L"managed-scene.json";
         archive::JsonArchive writer;
-        if (manager.SaveScene(writer, L"managed-scene.json") != Engine::EResult::Success)
+        if (manager.SaveScene(writer, scenePath.wstring()) != Engine::EResult::Success)
             return Fail("SceneManager save failed.");
         std::string before;
         if (!writer.Encode(before) || before.find("WorldTransformComponent") != std::string::npos)
@@ -308,11 +309,11 @@ namespace
         struct UnregisteredStorage { int Value = 0; };
         world.emplace<UnregisteredStorage>(root);
         if (original->WriteArchive(writer).Code != archive::ArchiveErrorCode::UnsupportedType ||
-            manager.SaveScene(writer, L"managed-scene.json") == Engine::EResult::Success)
+            manager.SaveScene(writer, scenePath.wstring()) == Engine::EResult::Success)
             return Fail("Unregistered component storage was silently skipped.");
         archive::JsonArchive disk;
         std::string after, onDisk;
-        if (!writer.Encode(after) || after != before || !disk.LoadFromFile(L"managed-scene.json") ||
+        if (!writer.Encode(after) || after != before || !disk.LoadFromFile(scenePath) ||
             !disk.Encode(onDisk) || onDisk != before)
             return Fail("Rejected serialization changed the document or existing file.");
         world.remove<UnregisteredStorage>(root);
@@ -323,7 +324,7 @@ namespace
             return Fail("Invalid hierarchy was written or changed the existing document.");
         world.get<Engine::HierarchyComponent>(root).children = savedChildren;
         archive::JsonArchive reader;
-        if (manager.LoadScene(reader, L"managed-scene.json") != Engine::EResult::Success ||
+        if (manager.LoadScene(reader, scenePath.wstring()) != Engine::EResult::Success ||
             manager.GetCurrentScene() == original.get() || !CheckRestored(*manager.GetCurrentScene(), *original))
             return Fail("SceneManager did not replace the scene after successful restoration.");
         if (!CheckRejectedDocuments()) return false;

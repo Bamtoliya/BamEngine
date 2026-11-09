@@ -1,6 +1,7 @@
-#include "TilemapComponent.h"
+﻿#include "TilemapComponent.h"
 #include <iostream>
 #include <cmath>
+#include "ResourceManager.h"
 
 namespace
 {
@@ -20,6 +21,25 @@ namespace
 
 int main()
 {
+	if (!ResourceManager::Create())
+		return Fail("Resource manager initialization failed.");
+
+	struct ResourceScope
+	{
+		~ResourceScope() { ResourceManager::Destroy(); }
+	} resourceScope;
+
+	SpriteCreateDesc desc{};
+	desc.Key = L"TilemapCheck.Sprite";
+
+	auto* sprite = Sprite::Create(&desc);
+	if (!sprite)
+		return Fail("Sprite creation failed.");
+
+	const auto dummySprite = ResourceManager::Get().AddResource<Sprite>(desc.Key, sprite);
+	if (!dummySprite.IsValid())
+		return Fail("Sprite registration failed.");
+
 	TilemapComponent tilemap;
 	tilemap.cellSize = vec2(1.0f, 1.0f);
 
@@ -44,9 +64,6 @@ int main()
 
 	// ── Test 2: SetTile, GetTile 및 청크 분할 검증 (양수 & 음수 좌표) ──
 	{
-		// 임의의 가상 스프라이트 핸들 생성 (핸들 ID 1)
-		ResourceHandle<Sprite> dummySprite(1);
-
 		tilemap.SetTile(5, 5, dummySprite, vec4(1.0f, 0.0f, 0.0f, 1.0f));
 		tilemap.SetTile(25, 30, dummySprite, vec4(0.0f, 1.0f, 0.0f, 1.0f));
 		tilemap.SetTile(-5, 10, dummySprite, vec4(0.0f, 0.0f, 1.0f, 1.0f));
