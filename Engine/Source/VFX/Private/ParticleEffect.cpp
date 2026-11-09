@@ -1,6 +1,7 @@
 #include "ParticleEffect.h"
 #include <archive/JsonArchive.h>
 #include <algorithm>
+#include <cmath>
 
 namespace Engine
 {
@@ -62,6 +63,16 @@ namespace Engine
 	void ParticleEffect::ClearEmitters()
 	{
 		m_Emitters.clear();
+	}
+
+	f32 ParticleEffect::GetPlaybackDuration() const
+	{
+		return std::isfinite(m_PlaybackDuration) ? std::max(0.0f, m_PlaybackDuration) : 0.0f;
+	}
+
+	void ParticleEffect::SetPlaybackDuration(f32 duration)
+	{
+		m_PlaybackDuration = std::isfinite(duration) ? std::max(0.0f, duration) : 0.0f;
 	}
 
 	bool ParticleEffect::SaveToFile(const std::wstring& filePath) const

@@ -53,6 +53,13 @@ struct ENGINE_API ParticleEmitterData
 	PROPERTY(EDITABLE, DISPLAY_NAME("PROP_MAX_PARTICLES"))
 	uint32 maxParticles = 500;
 
+	// Zero duration preserves the unbounded emission of existing assets.
+	PROPERTY(EDITABLE, ALLOW_MISSING, DISPLAY_NAME("PROP_EMISSION_START_TIME"))
+	f32 emissionStartTime = 0.0f;
+
+	PROPERTY(EDITABLE, ALLOW_MISSING, DISPLAY_NAME("PROP_EMISSION_DURATION"))
+	f32 emissionDuration = 0.0f;
+
 	PROPERTY(EDITABLE, DISPLAY_NAME("PROP_EMISSION_RATE"))
 	f32 emissionRate = 20.0f;
 
@@ -169,6 +176,15 @@ struct ENGINE_API ParticleEmitterData
 
 	PROPERTY(EDITABLE, DISPLAY_NAME("PROP_ALIGN_TO_SURFACE_DISK"))
 	bool alignToSurfaceDisk = false; // 충격파 링처럼 표면 법선에 밀착된 디스크로 렌더링
+
+	PROPERTY(EDITABLE, ALLOW_MISSING, DISPLAY_NAME("PROP_SUBUV_COLUMNS"))
+	uint32 subUVColumns = 1;
+
+	PROPERTY(EDITABLE, ALLOW_MISSING, DISPLAY_NAME("PROP_SUBUV_ROWS"))
+	uint32 subUVRows = 1;
+
+	PROPERTY(EDITABLE, ALLOW_MISSING, DISPLAY_NAME("PROP_SUBUV_CYCLES"))
+	f32 subUVCycles = 1.0f;
 };
 
 struct ParticleEffectCreateDesc : public ResourceCreateDesc
@@ -203,11 +219,16 @@ public:
 	void InsertEmitter(int32 index, const ParticleEmitterData& emitterData);
 	void RemoveEmitter(int32 index);
 	void ClearEmitters();
+	f32 GetPlaybackDuration() const;
+	void SetPlaybackDuration(f32 duration);
 
 	bool SaveToFile(const std::wstring& filePath) const;
 	bool LoadFromFile(const std::wstring& filePath);
 
 private:
+	PROPERTY(EDITABLE, ALLOW_MISSING, DISPLAY_NAME("PROP_TOTAL_DURATION"))
+	f32 m_PlaybackDuration = 0.0f;
+
 	PROPERTY(EDITABLE, DISPLAY_NAME("PROP_EMITTERS"))
 	std::vector<ParticleEmitterData> m_Emitters;
 };

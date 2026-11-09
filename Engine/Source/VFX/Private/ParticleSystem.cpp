@@ -1,4 +1,4 @@
-#include "ParticleSystem.h"
+﻿#include "ParticleSystem.h"
 #include "ParticleEmitterComponent.h"
 #include "ParticleEffectComponent.h"
 #include "CompositeVFXComponent.h"
@@ -428,7 +428,7 @@ void Engine::ParticleSystem::UpdateEffectComponent(Scene* scene, ParticleEffectC
 	if (emitters.empty()) return;
 
 	const f32 effectiveDt = dt * std::max(effectComp.playRate, 0.0f);
-	if (effectiveDt <= 0.0f) return;
+	if (!std::isfinite(effectiveDt) || effectiveDt <= 0.0f) return;
 
 	// 인스턴스 배열 크기 동기화
 	if (effectComp.instances.size() != emitters.size())
@@ -437,6 +437,17 @@ void Engine::ParticleSystem::UpdateEffectComponent(Scene* scene, ParticleEffectC
 	}
 
 	const mat4& worldMat = transform.worldMatrix;
+	const f32 effectDuration = effect->GetPlaybackDuration();
+	const auto emissionDelta = [&](const ParticleEmitterData& data, const ParticleEmitterInstance& instance)
+	{
+		const f64 start = std::isfinite(data.emissionStartTime) ? std::max(0.0f, data.emissionStartTime) : 0.0;
+		const bool bounded = std::isfinite(data.emissionDuration) && data.emissionDuration > 0.0f;
+		if (start == 0.0 && !bounded && effectDuration <= 0.0f) return effectiveDt;
+		f64 end = bounded ? start + data.emissionDuration : instance.elapsedTime;
+		if (effectDuration > 0.0f) end = std::min(end, static_cast<f64>(effectDuration));
+		const f64 stepStart = instance.elapsedTime - effectiveDt;
+		return static_cast<f32>(std::max(0.0, std::min(end, instance.elapsedTime) - std::max(start, stepStart)));
+	};
 
 	// 1단계: 지속(Continuous) 방출 및 물리/수명 적분
 	for (size_t eIdx = 0; eIdx < emitters.size(); ++eIdx)
@@ -444,23 +455,25 @@ void Engine::ParticleSystem::UpdateEffectComponent(Scene* scene, ParticleEffectC
 		const auto& emitterData = emitters[eIdx];
 		auto& inst = effectComp.instances[eIdx];
 		inst.ClearEvents();
+		inst.elapsedTime += effectiveDt;
 
 		if (!emitterData.enabled) continue;
 
 		// RNG 초기화
 		if (!inst.rngInitialized)
 		{
-			std::random_device rd;
-			inst.rng.seed(rd() + static_cast<uint32>(eIdx * 997));
+			const uint32 seed = effectComp.previewSeed ? *effectComp.previewSeed : std::random_device{}();
+			inst.rng.seed(seed + static_cast<uint32>(eIdx * 997));
 			inst.rngInitialized = true;
 		}
 
 		// 지속 방출 (Continuous 모드일 때)
-		if (effectComp.playState == EParticlePlayState::Playing && emitterData.triggerMode == EParticleEmitterTrigger::Continuous)
+		const float emitDt = emissionDelta(emitterData, inst);
+		if (emitDt > 0.0f && emitterData.triggerMode == EParticleEmitterTrigger::Continuous)
 		{
 			if (emitterData.emissionRate > 0.0f)
 			{
-				inst.emissionAccumulator += effectiveDt;
+				inst.emissionAccumulator += emitDt;
 				f32 spawnInterval = 1.0f / emitterData.emissionRate;
 				while (inst.emissionAccumulator >= spawnInterval && inst.particles.size() < emitterData.maxParticles)
 				{
@@ -471,7 +484,7 @@ void Engine::ParticleSystem::UpdateEffectComponent(Scene* scene, ParticleEffectC
 
 			if (emitterData.burstCount > 0 && emitterData.burstInterval > 0.0f)
 			{
-				inst.burstTimer += effectiveDt;
+				inst.burstTimer += emitDt;
 				if (inst.burstTimer >= emitterData.burstInterval)
 				{
 					inst.burstTimer -= emitterData.burstInterval;
@@ -638,7 +651,7 @@ void Engine::ParticleSystem::UpdateEffectComponent(Scene* scene, ParticleEffectC
 		auto& inst = effectComp.instances[eIdx];
 		if (!emitterData.enabled) continue;
 
-		if (emitterData.triggerMode == EParticleEmitterTrigger::OnParentCollision)
+		if (emissionDelta(emitterData, inst) > 0.0f && emitterData.triggerMode == EParticleEmitterTrigger::OnParentCollision)
 		{
 			const int32 pIdx = emitterData.parentEmitterIndex;
 			if (pIdx >= 0 && pIdx < static_cast<int32>(emitters.size()) && pIdx != static_cast<int32>(eIdx))
@@ -765,7 +778,7 @@ void Engine::ParticleSystem::SubmitSceneParticles(Scene* scene, const CameraBuff
 
 		if (!mesh || !material || !texture) continue;
 		if (!texture->GetRHITexture() || !mesh->GetIndexBuffer()) continue;
-		if (renderPass && !renderPass->IsAcceptsBlendMode(material->GetBlendMode())) continue;
+		if (renderPass && renderPass->GetAcceptedBlendModes() != EBlendMode::None && !renderPass->IsAcceptsBlendMode(material->GetBlendMode())) continue;
 
 		const uint32 pickingId = PickingManager::Get().RegisterPickingEntity(scene, entity);
 		const bool isWorldSpace = (emitter.simulationSpace == EParticleSimulationSpace::World);
@@ -849,7 +862,7 @@ void Engine::ParticleSystem::SubmitSceneParticles(Scene* scene, const CameraBuff
 
 			if (!mesh || !material || !texture) continue;
 			if (!texture->GetRHITexture() || !mesh->GetIndexBuffer()) continue;
-			if (renderPass && !renderPass->IsAcceptsBlendMode(material->GetBlendMode())) continue;
+			if (renderPass && renderPass->GetAcceptedBlendModes() != EBlendMode::None && !renderPass->IsAcceptsBlendMode(material->GetBlendMode())) continue;
 
 			const bool isWorldSpace = (emitterData.simulationSpace == EParticleSimulationSpace::World);
 
@@ -955,7 +968,7 @@ void Engine::ParticleSystem::SubmitSceneParticles(Scene* scene, const CameraBuff
 
 				if (!mesh || !material || !texture) continue;
 				if (!texture->GetRHITexture() || !mesh->GetIndexBuffer()) continue;
-				if (renderPass && !renderPass->IsAcceptsBlendMode(material->GetBlendMode())) continue;
+				if (renderPass && renderPass->GetAcceptedBlendModes() != EBlendMode::None && !renderPass->IsAcceptsBlendMode(material->GetBlendMode())) continue;
 
 				const bool isWorldSpace = (emitterData.simulationSpace == EParticleSimulationSpace::World);
 

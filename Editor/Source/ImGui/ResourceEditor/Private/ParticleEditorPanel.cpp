@@ -1,17 +1,21 @@
 ﻿#include "ParticleEditorPanel.h"
+#include "EditorUI.h"
 #include "Functions.h"
 #include "ResourcePicker.h"
 #include "IconsFontAwesome7.h"
 #include "WorldComponents.h"
 #include "ResourceManager.h"
 #include "InputManager.h"
+#include "ShortcutManager.h"
 #include "Scene.h"
 #include "PlatformPath.h"
 #include "ParticleSystem.h"
 #include "PostProcessPipeline.h"
 #include "FileDialogs.h"
 #include <algorithm>
+#include <cmath>
 #include <fmt/format.h>
+#include "EditorSettings.h"
 
 namespace
 {
@@ -93,6 +97,8 @@ void ParticleEditorPanel::SetTargetResource(const std::filesystem::path& assetPa
 	m_IsDirty = false;
 	m_SelectedEmitterIndex = 0;
 	m_History.Clear();
+	m_Timeline.Drag.reset();
+	m_Timeline.Fit();
 	m_HasPreEditSnapshot = false;
 
 	const std::wstring relPath = Engine::PlatformPath::ToProjectRelative(assetPath).wstring();
@@ -112,11 +118,19 @@ void ParticleEditorPanel::SetTargetResource(const std::filesystem::path& assetPa
 void ParticleEditorPanel::CaptureState(EditorWorkspace& workspace) const
 {
 	IImGui::CaptureState(workspace);
+	workspace.SetSplitter("ParticleEditor.LeftPaneWidth", m_LeftPaneWidth);
+	workspace.SetSplitter("ParticleEditor.RightPaneWidth", m_RightPaneWidth);
+	workspace.SetSplitter("ParticleEditor.TimelineHeight", m_TimelineHeight);
+	workspace.SetSplitter("ParticleEditor.TimelineHeaderWidth", m_Timeline.HeaderWidth);
 }
 
 void ParticleEditorPanel::RestoreState(const EditorWorkspace& workspace)
 {
 	IImGui::RestoreState(workspace);
+	m_LeftPaneWidth = workspace.GetSplitter("ParticleEditor.LeftPaneWidth", m_LeftPaneWidth);
+	m_RightPaneWidth = workspace.GetSplitter("ParticleEditor.RightPaneWidth", m_RightPaneWidth);
+	m_TimelineHeight = workspace.GetSplitter("ParticleEditor.TimelineHeight", m_TimelineHeight);
+	m_Timeline.HeaderWidth = workspace.GetSplitter("ParticleEditor.TimelineHeaderWidth", m_Timeline.HeaderWidth);
 }
 
 std::vector<Engine::ParticleEmitterData> ParticleEditorPanel::CaptureSnapshot() const
@@ -141,22 +155,18 @@ void ParticleEditorPanel::PushSnapshot(const std::string& label)
 
 void ParticleEditorPanel::Undo()
 {
-	if (m_History.CanUndo())
-	{
-		m_History.Undo();
-		m_IsDirty = true;
-		SetupPreview();
-	}
+	if (!m_History.Undo()) return;
+	if (const auto* effect = m_EffectHandle.Get())
+		m_SelectedEmitterIndex = effect->GetEmitterCount() > 0 ?
+			std::clamp(m_SelectedEmitterIndex, 0, effect->GetEmitterCount() - 1) : -1;
 }
 
 void ParticleEditorPanel::Redo()
 {
-	if (m_History.CanRedo())
-	{
-		m_History.Redo();
-		m_IsDirty = true;
-		SetupPreview();
-	}
+	if (!m_History.Redo()) return;
+	if (const auto* effect = m_EffectHandle.Get())
+		m_SelectedEmitterIndex = effect->GetEmitterCount() > 0 ?
+			std::clamp(m_SelectedEmitterIndex, 0, effect->GetEmitterCount() - 1) : -1;
 }
 
 void ParticleEditorPanel::NewEffect()
@@ -185,6 +195,8 @@ void ParticleEditorPanel::NewEffect()
 	m_SelectedEmitterIndex = 0;
 	m_IsDirty = true;
 	m_History.Clear();
+	m_Timeline.Drag.reset();
+	m_Timeline.Fit();
 	m_HasPreEditSnapshot = false;
 	SetupPreview();
 }
@@ -192,7 +204,7 @@ void ParticleEditorPanel::NewEffect()
 void ParticleEditorPanel::OpenEffect()
 {
 	std::wstring openPath;
-	if (FileDialogs::OpenFileDialog(openPath, { { StrToWStr(LOCAL("ParticleEditor.FileDialogFilter")), L"*.bameffect.json;*.bameffect" } }, L"Resources\\Effect"))
+	if (FileDialogs::OpenFileDialog(openPath, { { StrToWStr(LOCAL("ParticleEditor.FileDialogFilter")), L"*.bameffect.json;*.bameffect" } }, L"", EFileDialogContext::ParticleOpen))
 	{
 		SetTargetResource(std::filesystem::path(openPath));
 	}
@@ -201,29 +213,68 @@ void ParticleEditorPanel::OpenEffect()
 void ParticleEditorPanel::SaveEffectAs()
 {
 	std::wstring savePath;
-	if (FileDialogs::SaveFileDialog(savePath, { { StrToWStr(LOCAL("ParticleEditor.FileDialogFilter")), L"*.bameffect.json" } }, L"NewEffect.bameffect.json", L"bameffect.json"))
+	if (FileDialogs::SaveFileDialog(savePath, { { StrToWStr(LOCAL("ParticleEditor.FileDialogFilter")), L"*.bameffect.json" } }, L"NewEffect.bameffect.json", L"bameffect.json", EFileDialogContext::ParticleSave))
 	{
 		m_TargetResourcePath = std::filesystem::path(savePath);
 		SaveEffect();
 	}
 }
 
+float ParticleEditorPanel::GetTimelineDuration() const
+{
+	const auto* effect = m_EffectHandle.Get();
+	if (!effect) return 5.0f;
+	const float explicitDuration = effect->GetPlaybackDuration();
+	if (explicitDuration > 0.0f) return std::max(explicitDuration, EditorUI::MinimumTimelineDuration);
+	float duration = 5.0f;
+	for (const auto& emitter : effect->GetEmitters())
+	{
+		const float end = emitter.emissionStartTime + std::max(0.0f, emitter.emissionDuration);
+		if (std::isfinite(end)) duration = std::max(duration, end);
+	}
+	return duration;
+}
+
 void ParticleEditorPanel::Update(f32 dt)
 {
 	if (!m_Open) return;
-
 	auto* scene = m_PreviewWidget.GetScene();
 	if (m_PreviewEntity && scene && m_EffectHandle.IsValid())
 	{
 		auto& comp = scene->GetComponent<Engine::ParticleEffectComponent>(*m_PreviewEntity);
-		comp.playState = m_IsPlaying ? Engine::EParticlePlayState::Playing : Engine::EParticlePlayState::Paused;
-		comp.playRate = m_PlayRate;
-
-		if (m_IsPlaying)
+		if (m_TimelineSeek)
 		{
-			m_SimulatedTime += dt * m_PlayRate;
-			Engine::ParticleSystem::SimulateSceneParticles(scene, dt * m_PlayRate);
+			const float target = *m_TimelineSeek;
+			comp.Play();
+			comp.playRate = 1.0f;
+			for (int i = 0; i < 32 && m_SimulatedTime + 0.00001f < target; ++i)
+			{
+				const float step = std::min(1.0f / EditorUI::EffectTimelineFPS, target - m_SimulatedTime);
+				Engine::ParticleSystem::SimulateSceneParticles(scene, step);
+				m_SimulatedTime += step;
+			}
+			if (m_SimulatedTime + 0.00001f >= target) m_TimelineSeek.reset();
+			comp.Pause();
 		}
+		else if (m_IsPlaying)
+		{
+			comp.Play();
+			comp.playRate = m_PlayRate;
+			m_FixedPreview = false;
+			const float duration = GetTimelineDuration();
+			const float delta = std::clamp(duration - m_SimulatedTime, 0.0f, std::max(0.0f, dt * m_PlayRate));
+			if (delta > 0.0f)
+			{
+				Engine::ParticleSystem::SimulateSceneParticles(scene, delta / m_PlayRate);
+				m_SimulatedTime += delta;
+			}
+			if (m_SimulatedTime + 0.00001f >= duration)
+			{
+				if (m_IsLooping) RestartSimulation();
+				else { m_IsPlaying = false; comp.Pause(); }
+			}
+		}
+		else comp.Pause();
 	}
 
 	m_PreviewWidget.BeginFrame(dt);
@@ -250,8 +301,8 @@ void ParticleEditorPanel::SetupPreview()
 	comp.effectHandle = m_EffectHandle;
 	comp.playState = m_IsPlaying ? Engine::EParticlePlayState::Playing : Engine::EParticlePlayState::Paused;
 	comp.playRate = m_PlayRate;
-
-	m_SimulatedTime = 0.0f;
+	comp.previewSeed = 1;
+	RestartSimulation();
 }
 
 void ParticleEditorPanel::RestartSimulation()
@@ -260,9 +311,31 @@ void ParticleEditorPanel::RestartSimulation()
 	if (m_PreviewEntity && scene)
 	{
 		auto& comp = scene->GetComponent<Engine::ParticleEffectComponent>(*m_PreviewEntity);
-		comp.Reset();
+		comp.instances.clear();
+		comp.isInitialized = false;
 	}
 	m_SimulatedTime = 0.0f;
+	m_TimelineSeek.reset();
+	m_FixedPreview = true;
+}
+
+void ParticleEditorPanel::ScrubTime(f32 targetTime)
+{
+	const float duration = GetTimelineDuration();
+	if (!std::isfinite(targetTime)) return;
+	if (targetTime < duration)
+		targetTime = std::round(targetTime * EditorUI::EffectTimelineFPS) / EditorUI::EffectTimelineFPS;
+	targetTime = std::clamp(targetTime, 0.0f, duration);
+	m_IsPlaying = false;
+	if (!m_FixedPreview || targetTime + 0.0001f < m_SimulatedTime) RestartSimulation();
+	m_TimelineSeek = targetTime;
+}
+
+void ParticleEditorPanel::InvalidateTimelinePreview()
+{
+	m_FixedPreview = false;
+	ScrubTime(m_TimelineSeek.value_or(m_SimulatedTime));
+	m_IsDirty = true;
 }
 
 void ParticleEditorPanel::SaveEffect()
@@ -288,180 +361,66 @@ void ParticleEditorPanel::SaveEffect()
 	}
 }
 
-void ParticleEditorPanel::Draw()
+void ParticleEditorPanel::DrawCustomContent()
 {
-	if (!m_Open) return;
-
-	ImGui::SetNextWindowSize(ImVec2(1280.0f, 760.0f), ImGuiCond_FirstUseEver);
-	const std::string windowTitle = BuildResourceWindowTitle();
-	if (!ImGui::Begin(windowTitle.c_str(), &m_Open, ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse))
-	{
-		ImGui::End();
-		return;
-	}
-
-	DrawToolbar();
-
-	const ImVec2 contentSize = ImGui::GetContentRegionAvail();
-	const float spacingX = ImGui::GetStyle().ItemSpacing.x;
-	const float splitterWidth = 4.0f;
-	const float totalSeparation = splitterWidth * 2.0f + spacingX * 4.0f;
-	const float minPane = 150.0f;
-
-	// 3열 분할 너비 보정
-	if (m_LeftPaneWidth < minPane) m_LeftPaneWidth = minPane;
-	if (m_RightPaneWidth < minPane) m_RightPaneWidth = minPane;
-
-	float centerWidth = contentSize.x - m_LeftPaneWidth - m_RightPaneWidth - totalSeparation;
-	if (centerWidth < minPane)
-	{
-		centerWidth = minPane;
-		m_LeftPaneWidth = (contentSize.x - centerWidth - totalSeparation) * 0.4f;
-		m_RightPaneWidth = contentSize.x - centerWidth - m_LeftPaneWidth - totalSeparation;
-	}
-
-	// 좌측: 이미터 리스트
-	ImGui::BeginChild("LeftPane", ImVec2(m_LeftPaneWidth, contentSize.y), true);
-	DrawEmitterList();
-	ImGui::EndChild();
-
-	ImGui::SameLine();
-	ImGui::Button("##Splitter1", ImVec2(splitterWidth, contentSize.y));
-	if (ImGui::IsItemActive())
-		m_LeftPaneWidth += Engine::InputManager::Get().GetMouseDelta().x;
-
-	// 중앙: 3D 뷰포트 프리뷰
-	ImGui::SameLine();
-	ImGui::BeginChild("CenterPane", ImVec2(centerWidth, contentSize.y), true);
-	DrawViewport();
-	ImGui::EndChild();
-
-	ImGui::SameLine();
-	ImGui::Button("##Splitter2", ImVec2(splitterWidth, contentSize.y));
-	if (ImGui::IsItemActive())
-		m_RightPaneWidth -= Engine::InputManager::Get().GetMouseDelta().x;
-
-	// 우측: 선택된 이미터 모듈 인스펙터 (폭 0.0f로 남은 공간 100% 채움 -> 가로 스크롤 완전 제거)
-	ImGui::SameLine();
-	ImGui::BeginChild("RightPane", ImVec2(0.0f, contentSize.y), true);
-	DrawEmitterInspector();
-	ImGui::EndChild();
-
-	ImGui::End();
+	EditorUI::DrawEffectEditorLayout(m_LeftPaneWidth, m_RightPaneWidth, m_TimelineHeight,
+		[this] { DrawEmitterList(); }, [this] { DrawViewport(); },
+		[this] { DrawEmitterInspector(); }, [this] { DrawTimeline(); });
 }
 
-void ParticleEditorPanel::DrawToolbar()
+void ParticleEditorPanel::DrawCustomToolbar()
+{
+	const bool hasResource = m_EffectHandle.Get() != nullptr;
+
+	if (ImGui::BeginMenu(LOCAL_CSTR("EditorMenu.File")))
+	{
+		if (ImGui::MenuItem(LOCAL_CSTR("ParticleEditor.MenuNew")))
+			NewEffect();
+		if (ImGui::MenuItem(LOCAL_CSTR("ParticleEditor.MenuOpen")))
+			OpenEffect();
+		ImGui::Separator();
+		if (ImGui::MenuItem(LOCAL_LABEL("EditorCommon.Save").c_str(), ShortcutManager::Get().GetShortcutHint("ParticleTimeline.Save"), false, hasResource && m_IsDirty))
+			SaveEffect();
+		if (ImGui::MenuItem(LOCAL_CSTR("ParticleEditor.MenuSaveAs"), nullptr, false, hasResource))
+			SaveEffectAs();
+		ImGui::EndMenu();
+	}
+
+	if (ImGui::BeginMenu(LOCAL_CSTR("EditorMenu.Edit")))
+	{
+		if (ImGui::MenuItem(LOCAL_LABEL("ParticleEditor.MenuUndo").c_str(), ShortcutManager::Get().GetShortcutHint("ParticleTimeline.Undo"), false, m_History.CanUndo()))
+			Undo();
+		if (ImGui::MenuItem(LOCAL_LABEL("ParticleEditor.MenuRedo").c_str(), ShortcutManager::Get().GetShortcutHint("ParticleTimeline.Redo"), false, m_History.CanRedo()))
+			Redo();
+		ImGui::EndMenu();
+	}
+}
+
+void ParticleEditorPanel::DrawCustomQuickAccess()
 {
 	const bool hasResource = m_EffectHandle.IsValid() && (m_EffectHandle.Get() != nullptr);
 
-	if (ImGui::BeginMenuBar())
-	{
-		if (ImGui::BeginMenu(LOCAL_CSTR("EditorMenu.File")))
-		{
-			if (ImGui::MenuItem(LOCAL_CSTR("ParticleEditor.MenuNew")))
-				NewEffect();
-			if (ImGui::MenuItem(LOCAL_CSTR("ParticleEditor.MenuOpen")))
-				OpenEffect();
-			ImGui::Separator();
-			if (ImGui::MenuItem(LOCAL_CSTR("EditorCommon.Save"), nullptr, false, hasResource && m_IsDirty))
-				SaveEffect();
-			if (ImGui::MenuItem(LOCAL_CSTR("ParticleEditor.MenuSaveAs"), nullptr, false, hasResource))
-				SaveEffectAs();
-			ImGui::EndMenu();
-		}
-
-		if (ImGui::BeginMenu(LOCAL_CSTR("EditorMenu.Edit")))
-		{
-			if (ImGui::MenuItem(LOCAL_CSTR("ParticleEditor.MenuUndo"), nullptr, false, m_History.CanUndo()))
-				Undo();
-			if (ImGui::MenuItem(LOCAL_CSTR("ParticleEditor.MenuRedo"), nullptr, false, m_History.CanRedo()))
-				Redo();
-			ImGui::EndMenu();
-		}
-
-		ImGui::EndMenuBar();
-	}
-
+	EditorUI::ToolbarLayout toolbar;
 	// ── 파일 조작 ──
-	if (ImGui::Button(ICON_FA_FILE "##New", ImVec2(28.0f, 26.0f)))
+	if (toolbar.Icon("New", ICON_FA_FILE, "ParticleEditor.MenuNew"))
 		NewEffect();
-	if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("ParticleEditor.MenuNew"));
 
-	ImGui::SameLine();
-	if (ImGui::Button(ICON_FA_FOLDER_OPEN "##Open", ImVec2(28.0f, 26.0f)))
+	if (toolbar.Icon("Open", ICON_FA_FOLDER_OPEN, "ParticleEditor.MenuOpen"))
 		OpenEffect();
-	if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("ParticleEditor.MenuOpen"));
 
-	ImGui::SameLine();
+	EditorUI::DrawTimelineAction(toolbar, "ParticleTimeline", "Save", ICON_FA_FLOPPY_DISK, "EditorCommon.Save");
+	EditorUI::DrawTimelineAction(toolbar, "ParticleTimeline", "Undo", ICON_FA_ROTATE_LEFT, "EditorCommon.Undo");
+	EditorUI::DrawTimelineAction(toolbar, "ParticleTimeline", "Redo", ICON_FA_ROTATE_RIGHT, "EditorCommon.Redo");
+	EditorUI::DrawTimelineTransport(toolbar, "ParticleTimeline", m_IsPlaying, m_IsLooping);
 	ImGui::BeginDisabled(!hasResource);
-	if (ImGui::Button(ICON_FA_FLOPPY_DISK "##Save", ImVec2(28.0f, 26.0f)))
-		SaveEffect();
-	if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ImGui::SetTooltip("%s", LOCAL_CSTR("EditorCommon.Save"));
-	ImGui::EndDisabled();
-
-	ImGui::SameLine();
-	ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
-	ImGui::SameLine();
-
-	// ── 실행 취소 / 다시 실행 ──
-	ImGui::BeginDisabled(!m_History.CanUndo());
-	if (ImGui::Button(ICON_FA_ARROW_ROTATE_LEFT "##Undo", ImVec2(28.0f, 26.0f)))
-		Undo();
-	if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ImGui::SetTooltip("%s", LOCAL_CSTR("ParticleEditor.MenuUndo"));
-	ImGui::EndDisabled();
-
-	ImGui::SameLine();
-	ImGui::BeginDisabled(!m_History.CanRedo());
-	if (ImGui::Button(ICON_FA_ARROW_ROTATE_RIGHT "##Redo", ImVec2(28.0f, 26.0f)))
-		Redo();
-	if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ImGui::SetTooltip("%s", LOCAL_CSTR("ParticleEditor.MenuRedo"));
-	ImGui::EndDisabled();
-
-	ImGui::SameLine();
-	ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
-	ImGui::SameLine();
-
-	// ── 시뮬레이션 제어 ──
-	ImGui::BeginDisabled(!hasResource);
-	if (ImGui::Button(m_IsPlaying ? ICON_FA_PAUSE "##Pause" : ICON_FA_PLAY "##Play", ImVec2(28.0f, 26.0f)))
-		m_IsPlaying = !m_IsPlaying;
-	if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-		ImGui::SetTooltip("%s", m_IsPlaying ? LOCAL_CSTR("ParticleEditor.TooltipPause") : LOCAL_CSTR("ParticleEditor.TooltipPlay"));
-
-	ImGui::SameLine();
-	if (ImGui::Button(ICON_FA_ROTATE_LEFT "##Restart", ImVec2(28.0f, 26.0f)))
-		RestartSimulation();
-	if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ImGui::SetTooltip("%s", LOCAL_CSTR("ParticleEditor.TooltipRestart"));
-
-	ImGui::SameLine();
-	if (ImGui::Button(ICON_FA_FORWARD_STEP "##Step", ImVec2(28.0f, 26.0f)))
-	{
-		m_IsPlaying = false;
-		m_SimulatedTime += 0.0333f;
-		auto* scene = m_PreviewWidget.GetScene();
-		if (m_PreviewEntity && scene)
-		{
-			auto& comp = scene->GetComponent<Engine::ParticleEffectComponent>(*m_PreviewEntity);
-			comp.playState = Engine::EParticlePlayState::Playing;
-			Engine::ParticleSystem::SimulateSceneParticles(scene, 0.0333f);
-		}
-	}
-	if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ImGui::SetTooltip("%s", LOCAL_CSTR("ParticleEditor.TooltipStep"));
-
-	ImGui::SameLine();
-	ImGui::SetNextItemWidth(90.0f);
+	toolbar.SetNextItemWidth(ImGui::GetFontSize() * 6.0f);
 	ImGui::SliderFloat("##PlayRate", &m_PlayRate, 0.1f, 3.0f, "%.1fx");
 	if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ImGui::SetTooltip("%s", LOCAL_CSTR("ParticleEditor.TooltipPlayRate"));
 
 	ImGui::EndDisabled();
 
-	ImGui::SameLine();
-	ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
-	ImGui::SameLine();
-
-	if (ImGui::Button(ICON_FA_CROSSHAIRS "##Focus", ImVec2(28.0f, 26.0f)))
+	if (toolbar.Icon("Focus", ICON_FA_CROSSHAIRS, "ParticleEditor.TooltipFocus"))
 		m_PreviewWidget.FocusTarget(Engine::vec3(0.0f, 1.0f, 0.0f), 4.5f);
-	if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("ParticleEditor.TooltipFocus"));
 
 	// ── 통계 출력 ──
 	uint32 totalActiveParticles = 0;
@@ -473,17 +432,16 @@ void ParticleEditorPanel::DrawToolbar()
 			totalActiveParticles += static_cast<uint32>(inst.particles.size());
 	}
 
-	ImGui::SameLine();
 	const std::string statsText = fmt::format(fmt::runtime(LOCAL("ParticleEditor.StatsFormat")), totalActiveParticles, m_SimulatedTime);
-	ImGui::TextDisabled("%s", statsText.c_str());
+	toolbar.Text(statsText.c_str());
+	toolbar.Text(LOCAL_FMT("Timeline.TimeCounter", m_TimelineSeek.value_or(m_SimulatedTime), GetTimelineDuration()).c_str());
 
 	if (!m_StatusMessage.empty())
 	{
-		ImGui::SameLine();
-		ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.4f, 1.0f), " - %s", m_StatusMessage.c_str());
+		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.4f, 1.0f, 0.4f, 1.0f));
+		toolbar.Text(m_StatusMessage.c_str(), false);
+		ImGui::PopStyleColor();
 	}
-
-	ImGui::Separator();
 }
 
 void ParticleEditorPanel::DrawEmitterList()
@@ -503,15 +461,8 @@ void ParticleEditorPanel::DrawEmitterList()
 	ImGui::AlignTextToFramePadding();
 	ImGui::Text(ICON_FA_LAYER_GROUP " %s", LOCAL_CSTR("PROP_EMITTERS"));
 
-	const float addBtnWidth = 24.0f;
-	const float headerRightMargin = 8.0f;
-	const float availHeaderWidth = ImGui::GetContentRegionAvail().x;
-	if (availHeaderWidth > addBtnWidth + headerRightMargin)
-		ImGui::SameLine(ImGui::GetCursorPosX() + availHeaderWidth - addBtnWidth - headerRightMargin);
-	else
-		ImGui::SameLine();
-
-	if (ImGui::Button(ICON_FA_PLUS "##AddEmitter", ImVec2(addBtnWidth, 22.0f)))
+	EditorUI::SameLineIfFits(EditorUI::GetIconButtonSize(ICON_FA_PLUS, true).x);
+	if (EditorUI::SmallIconButton("AddEmitter", ICON_FA_PLUS, "EditorCommon.Add"))
 	{
 		auto beforeSnap = CaptureSnapshot();
 		Engine::ParticleEmitterData newEmitter;
@@ -539,9 +490,9 @@ void ParticleEditorPanel::DrawEmitterList()
 	ImGuiTableFlags tableFlags = ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_NoSavedSettings;
 	if (ImGui::BeginTable("##EmitterListTable", 3, tableFlags))
 	{
-		ImGui::TableSetupColumn("##Enabled", ImGuiTableColumnFlags_WidthFixed, 22.0f);
+		ImGui::TableSetupColumn("##Enabled", ImGuiTableColumnFlags_WidthFixed, ImGui::GetFrameHeight());
 		ImGui::TableSetupColumn("##Name", ImGuiTableColumnFlags_WidthStretch);
-		ImGui::TableSetupColumn("##Action", ImGuiTableColumnFlags_WidthFixed, 26.0f);
+		ImGui::TableSetupColumn("##Action", ImGuiTableColumnFlags_WidthFixed, EditorUI::GetIconButtonSize(ICON_FA_TRASH, true).x);
 
 		for (int i = 0; i < static_cast<int>(emitters.size()); ++i)
 		{
@@ -566,24 +517,31 @@ void ParticleEditorPanel::DrawEmitterList()
 
 			// 컬럼 1: 이미터 이름 및 선택 (텍스트가 길어도 컬럼 2로 넘치지 않음)
 			ImGui::TableSetColumnIndex(1);
-			std::string label = em.name.empty() ? ("Emitter " + std::to_string(i)) : em.name;
+			const bool continuous = em.triggerMode == Engine::EParticleEmitterTrigger::Continuous;
+			const char* icon = continuous ? ICON_FA_WAND_MAGIC_SPARKLES : ICON_FA_CIRCLE_NODES;
+			std::string label = std::string(icon) + " " + (em.name.empty() ? LOCAL("EffectTimeline.Emitter") : em.name);
 			if (em.triggerMode == Engine::EParticleEmitterTrigger::OnParentCollision)
 				label += " (" + LOCAL("ParticleEditor.TriggerOnCollision") + ")";
 			else if (em.triggerMode == Engine::EParticleEmitterTrigger::OnParentDeath)
 				label += " (" + LOCAL("ParticleEditor.TriggerOnDeath") + ")";
 
 			bool isSelected = (m_SelectedEmitterIndex == i);
+			label += "###Emitter";
+			ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(
+				continuous ? IM_COL32(230, 130, 40, 220) : IM_COL32(130, 118, 235, 220)));
 			if (ImGui::Selectable(label.c_str(), isSelected, ImGuiSelectableFlags_None))
 			{
 				m_SelectedEmitterIndex = i;
+				m_PreviewWidget.FocusTarget(Engine::vec3(0.0f, 1.0f, 0.0f), 4.5f);
 			}
+			ImGui::PopStyleColor();
 
 			// 컬럼 2: 삭제 아이콘 버튼 (투명 배경 + 호버 시 붉은색 강조, 우측 패딩 자동 확보)
 			ImGui::TableSetColumnIndex(2);
 			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
 			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.2f, 0.2f, 0.4f));
 			ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.9f, 0.1f, 0.1f, 0.7f));
-			if (ImGui::Button(ICON_FA_TRASH "##Delete", ImVec2(22.0f, 20.0f)))
+			if (EditorUI::SmallIconButton("Delete", ICON_FA_TRASH, "EditorCommon.Delete"))
 			{
 				deleteIndex = i;
 			}
@@ -595,22 +553,144 @@ void ParticleEditorPanel::DrawEmitterList()
 		ImGui::EndTable();
 	}
 
-	// 삭제 처리 및 실행 취소 이력 기록
-	if (deleteIndex >= 0 && deleteIndex < static_cast<int>(emitters.size()))
+	if (deleteIndex >= 0)
 	{
-		auto beforeSnap = CaptureSnapshot();
-		effect->RemoveEmitter(deleteIndex);
-		if (m_SelectedEmitterIndex >= static_cast<int>(effect->GetEmitterCount()))
-			m_SelectedEmitterIndex = static_cast<int>(effect->GetEmitterCount()) - 1;
+		m_SelectedEmitterIndex = deleteIndex;
+		DeleteSelectedEmitter();
+	}
+}
 
-		auto afterSnap = CaptureSnapshot();
-		auto cmd = std::make_unique<ParticleEffectCommand>(
-			effect, std::move(beforeSnap), std::move(afterSnap), "Delete Emitter",
-			[this]() { SetupPreview(); m_IsDirty = true; });
-		m_History.Record(std::move(cmd));
+void ParticleEditorPanel::DeleteSelectedEmitter()
+{
+	auto* effect = m_EffectHandle.Get();
+	if (!effect || !effect->GetEmitter(m_SelectedEmitterIndex)) return;
+	const int index = m_SelectedEmitterIndex;
+	auto before = CaptureSnapshot();
+	effect->RemoveEmitter(index);
+	for (auto& emitter : effect->GetEmitters())
+	{
+		if (emitter.parentEmitterIndex == index) emitter.parentEmitterIndex = -1;
+		else if (emitter.parentEmitterIndex > index) --emitter.parentEmitterIndex;
+	}
+	m_SelectedEmitterIndex = std::min(index, effect->GetEmitterCount() - 1);
+	m_History.Record(std::make_unique<ParticleEffectCommand>(effect, std::move(before), CaptureSnapshot(),
+		LOCAL("Action.Timeline.DeleteSelected"), [this] { InvalidateTimelinePreview(); }));
+	m_Timeline.Drag.reset();
+	InvalidateTimelinePreview();
+}
 
-		m_IsDirty = true;
-		SetupPreview();
+void ParticleEditorPanel::DrawTimeline()
+{
+	auto* effect = m_EffectHandle.Get();
+	if (!effect)
+	{
+		EditorUI::EmptyState("VFXEditor.TimelineUnavailable");
+		return;
+	}
+	const float duration = GetTimelineDuration();
+	float minDuration = EditorUI::MinimumTimelineDuration;
+	std::vector<EditorUI::TimelineRow> rows;
+	const auto& emitters = effect->GetEmitters();
+	rows.reserve(emitters.size());
+	for (std::size_t i = 0; i < emitters.size(); ++i)
+	{
+		const auto& emitter = emitters[i];
+		const float start = std::isfinite(emitter.emissionStartTime) ? std::max(0.0f, emitter.emissionStartTime) : 0.0f;
+		const bool bounded = std::isfinite(emitter.emissionDuration) && emitter.emissionDuration > 0.0f;
+		const float end = bounded ? start + emitter.emissionDuration : std::max(start, duration);
+		minDuration = std::max(minDuration, bounded ? end : start + EditorUI::MinimumTimelineDuration);
+		const bool continuous = emitter.triggerMode == Engine::EParticleEmitterTrigger::Continuous;
+		rows.push_back({ i, emitter.name, continuous ? ICON_FA_WAND_MAGIC_SPARKLES : ICON_FA_CIRCLE_NODES,
+			continuous ? IM_COL32(230, 130, 40, 220) : IM_COL32(130, 118, 235, 220), start, end,
+			m_SelectedEmitterIndex == static_cast<int>(i),
+			bounded ? EditorUI::TimelineRowKind::Interval : EditorUI::TimelineRowKind::OpenEnd });
+	}
+	const auto result = EditorUI::DrawEffectTimeline(m_Timeline, rows, duration,
+		m_TimelineSeek.value_or(m_SimulatedTime), minDuration);
+	if (result.Selection)
+	{
+		m_SelectedEmitterIndex = static_cast<int>(*result.Selection);
+		m_PreviewWidget.FocusTarget(Engine::vec3(0.0f, 1.0f, 0.0f), 4.5f);
+	}
+	if (result.Seek) ScrubTime(*result.Seek);
+	if (!result.Commit) return;
+
+	const auto edit = *result.Commit;
+	const auto handle = m_EffectHandle;
+	const float previousTotal = effect->GetPlaybackDuration();
+	if (edit.Mode == EditorUI::TimelineDragMode::Duration)
+	{
+		const auto apply = [this, handle](float value)
+		{
+			auto* target = handle.Get();
+			if (!target) return false;
+			target->SetPlaybackDuration(value);
+			InvalidateTimelinePreview();
+			return true;
+		};
+		m_History.Execute(std::make_unique<CallbackEditorCommand>(LOCAL("Timeline.Duration"),
+			[apply, edit] { return apply(edit.End); }, [apply, previousTotal] { return apply(previousTotal); }));
+		return;
+	}
+
+	const int index = static_cast<int>(edit.Row);
+	const auto* emitter = effect->GetEmitter(index);
+	if (!emitter) return;
+	const float oldStart = emitter->emissionStartTime;
+	const float oldLength = emitter->emissionDuration;
+	const bool resize = edit.Mode == EditorUI::TimelineDragMode::End ||
+		(edit.Mode == EditorUI::TimelineDragMode::Start && oldLength > 0.0f);
+	const float length = resize ? edit.End - edit.Start : oldLength;
+	const float end = edit.Start + std::max(length, EditorUI::MinimumTimelineDuration);
+	const float total = previousTotal > 0.0f ? std::max(previousTotal, end) : 0.0f;
+	const auto apply = [this, handle, index](float start, float duration, float playbackDuration)
+	{
+		auto* target = handle.Get();
+		auto* emitter = target ? target->GetEmitter(index) : nullptr;
+		if (!emitter) return false;
+		emitter->emissionStartTime = start;
+		emitter->emissionDuration = duration;
+		target->SetPlaybackDuration(playbackDuration);
+		InvalidateTimelinePreview();
+		return true;
+	};
+	m_History.Execute(std::make_unique<CallbackEditorCommand>(LOCAL("EffectTimeline.EditRange"),
+		[apply, edit, length, total] { return apply(edit.Start, length, total); },
+		[apply, oldStart, oldLength, previousTotal] { return apply(oldStart, oldLength, previousTotal); }));
+}
+
+bool ParticleEditorPanel::CanExecuteTimelineAction(EditorUI::TimelineAction action) const
+{
+	using enum EditorUI::TimelineAction;
+	const auto* effect = m_EffectHandle.Get();
+	if (!m_Open || !effect || m_Timeline.Drag) return false;
+	if (action == Undo) return m_History.CanUndo();
+	if (action == Redo) return m_History.CanRedo();
+	if (action == Delete) return effect->GetEmitter(m_SelectedEmitterIndex) != nullptr;
+	return true;
+}
+
+void ParticleEditorPanel::ExecuteTimelineAction(EditorUI::TimelineAction action)
+{
+	using enum EditorUI::TimelineAction;
+	if (!CanExecuteTimelineAction(action)) return;
+	const float time = m_TimelineSeek.value_or(m_SimulatedTime);
+	switch (action)
+	{
+	case PlayPause:
+		if (!m_IsPlaying && time >= GetTimelineDuration()) RestartSimulation();
+		m_IsPlaying = !m_IsPlaying;
+		break;
+	case Previous: ScrubTime(time - 1.0f / EditorUI::EffectTimelineFPS); break;
+	case Next: ScrubTime(time + 1.0f / EditorUI::EffectTimelineFPS); break;
+	case First: ScrubTime(0.0f); break;
+	case Last: ScrubTime(GetTimelineDuration()); break;
+	case Loop: m_IsLooping = !m_IsLooping; break;
+	case Fit: m_Timeline.Fit(); break;
+	case Delete: DeleteSelectedEmitter(); break;
+	case Undo: this->Undo(); break;
+	case Redo: this->Redo(); break;
+	case Save: SaveEffect(); break;
 	}
 }
 
@@ -643,11 +723,7 @@ void ParticleEditorPanel::DrawEmitterInspector()
 
 	auto DrawRow = [this, effect](const char* labelKey, auto drawWidget)
 	{
-		ImGui::TableNextRow();
-		ImGui::TableSetColumnIndex(0);
-		ImGui::AlignTextToFramePadding();
-		ImGui::TextUnformatted(LOCAL_CSTR(labelKey));
-		ImGui::TableSetColumnIndex(1);
+		EditorUI::PropertyRow(labelKey);
 		ImGui::SetNextItemWidth(-FLT_MIN);
 
 		drawWidget();

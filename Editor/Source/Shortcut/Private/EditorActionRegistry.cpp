@@ -18,6 +18,8 @@
 #include <SDL3/SDL_events.h>
 #include "AnimatorGraphPanel.h"
 #include "AnimationTimelinePanel.h"
+#include "ParticleEditorPanel.h"
+#include "VFXEditorPanel.h"
 #include "UnifiedSettingsPanel.h"
 #include "PrefabEditorPanel.h"
 #include "SpriteAnimationEditor.h"
@@ -925,6 +927,48 @@ void EditorActionRegistry::RegisterAll()
         return panel && panel->CanDeleteSelected();
     }
         });
+
+    const auto registerEffectTimeline = [&sm](const char* prefix, EShortcutContext context, auto findPanel)
+    {
+        using enum EditorUI::TimelineAction;
+        const auto add = [&](EditorUI::TimelineAction action, const char* name, const char* key, ShortcutChord chord,
+            bool repeat = false)
+        {
+            sm.RegisterAction({
+                .Id = std::string(prefix) + "." + name,
+                .DisplayNameKey = key,
+                .CategoryKey = "Shortcuts.CategoryTimeline",
+                .Context = context,
+                .DefaultChord = chord,
+                .ExecuteHandler = [findPanel, action] {
+                    if (auto* panel = findPanel()) panel->ExecuteTimelineAction(action);
+                },
+                .CanExecute = [findPanel, action] {
+                    const auto* panel = findPanel();
+                    return panel && panel->CanExecuteTimelineAction(action);
+                },
+                .AllowRepeat = repeat
+            });
+        };
+        using Engine::EKeyCode;
+        add(PlayPause, "PlayPause", "Action.Timeline.PlayPause", ShortcutChord(EKeyCode::Space));
+        add(Previous, "PrevFrame", "Action.Timeline.PrevFrame", ShortcutChord(EKeyCode::Left), true);
+        add(Next, "NextFrame", "Action.Timeline.NextFrame", ShortcutChord(EKeyCode::Right), true);
+        add(First, "FirstFrame", "Action.Timeline.FirstFrame", ShortcutChord(EKeyCode::Home));
+        add(Last, "LastFrame", "Action.Timeline.LastFrame", ShortcutChord(EKeyCode::End));
+        add(Loop, "ToggleLoop", "Action.Timeline.ToggleLoop", ShortcutChord(EKeyCode::L, EModifierKey::Ctrl));
+        add(Fit, "ZoomReset", "Action.Timeline.ZoomReset", ShortcutChord(EKeyCode::F));
+        add(Delete, "DeleteSelected", "Action.Timeline.DeleteSelected", ShortcutChord(EKeyCode::Delete));
+        add(Undo, "Undo", "EditorCommon.Undo", ShortcutChord(EKeyCode::Z, EModifierKey::Ctrl));
+        add(Redo, "Redo", "EditorCommon.Redo", ShortcutChord(EKeyCode::Y, EModifierKey::Ctrl));
+        add(Save, "Save", "EditorCommon.Save", ShortcutChord(EKeyCode::S, EModifierKey::Ctrl));
+    };
+    registerEffectTimeline("ParticleTimeline", EShortcutContext::ParticleTimeline, [] {
+        return dynamic_cast<ParticleEditorPanel*>(ImGuiManager::Get().GetImGuiPanel(L"Particle Editor"));
+    });
+    registerEffectTimeline("CompositeTimeline", EShortcutContext::CompositeTimeline, [] {
+        return dynamic_cast<VFXEditorPanel*>(ImGuiManager::Get().GetImGuiPanel(L"Composite VFX Editor"));
+    });
 
     // ── [Edit / Editor Actions] ──
     sm.RegisterAction({

@@ -15,6 +15,7 @@
 #include "SkyAtmosphereComponent.h"
 #include "VolumetricCloudComponent.h"
 #include "LightComponent.h"
+#include "CompositeVFXSystem.h"
 
 namespace
 {
@@ -487,6 +488,8 @@ void ViewportDeferredPipeline::SubmitLightingPass(const CameraBuffer& cameraBuff
 							if (optGpuLight.has_value())
 								gpuLights[count++] = optGpuLight.value();
 						}
+						auto remaining = std::span<GPULight>{ gpuLights + count, MAX_LIGHTS - count };
+						count += Engine::CompositeVFXSystem::CollectFlashLights(*targetScene, remaining);
 					}
 					header->NumLights = count;
 					m_LocalLightBuffer[frameIndex]->SetData(data.data(), totalSize);

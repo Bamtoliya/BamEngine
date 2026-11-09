@@ -14,6 +14,7 @@ BEGIN(Engine)
 class Mesh;
 class MaterialInterface;
 class AudioClip;
+class Texture;
 
 // ── 트랙 유형 열거형 ──
 ENUM()
@@ -23,7 +24,10 @@ enum class EVFXTrackType : uint8
 	ParticleEmitter,    // 파티클 이미터 시스템 (.bameffect)
 	LightFlash,         // 동적 포인트 조명 섬광
 	MeshEffect,         // 마법진, 충격파 링 등 3D 메쉬
-	Sound               // 동기화 효과음
+	Sound,              // 동기화 효과음
+	Trail,              // 검기 슬래시, 투사체 궤적 스트립
+	Decal,              // 지면 투영 데칼
+	CameraShake         // 임팩트 카메라 셰이크
 };
 
 // 1. 2D 스프라이트 플립북 트랙
@@ -241,6 +245,135 @@ struct ENGINE_API VFXSoundTrack
 	f32 pitch = 1.0f;
 };
 
+// 6. 트레일 / 리본 트랙 (검기 슬래시, 투사체 궤적 스트립)
+STRUCT()
+struct ENGINE_API VFXTrailTrack
+{
+	REFLECT_BODY()
+
+	PROPERTY(EDITABLE, DISPLAY_NAME("PROP_TRACK_NAME"))
+	std::string trackName = "Trail FX";
+
+	PROPERTY(EDITABLE, DISPLAY_NAME("PROP_ENABLED"))
+	bool enabled = true;
+
+	PROPERTY(EDITABLE, DISPLAY_NAME("PROP_IS_MUTED"))
+	bool isMuted = false;
+
+	PROPERTY(EDITABLE, DISPLAY_NAME("PROP_START_TIME"))
+	f32 startTime = 0.0f;
+
+	PROPERTY(EDITABLE, DISPLAY_NAME("PROP_DURATION"))
+	f32 duration = 0.8f;
+
+	PROPERTY(EDITABLE, DISPLAY_NAME("PROP_IS_LOOPING"))
+	bool loop = false;
+
+	PROPERTY(EDITABLE, DISPLAY_NAME("PROP_TRAIL_WIDTH"))
+	f32 trailWidth = 0.5f;
+
+	PROPERTY(EDITABLE, DISPLAY_NAME("PROP_LIFETIME"))
+	f32 lifetime = 0.35f;
+
+	PROPERTY(EDITABLE, DISPLAY_NAME("PROP_MIN_VERTEX_DISTANCE"))
+	f32 minVertexDistance = 0.05f;
+
+	PROPERTY(EDITABLE, DISPLAY_NAME("PROP_TAPER_RATIO"))
+	f32 taperRatio = 0.0f;
+
+	PROPERTY(EDITABLE, DISPLAY_NAME("PROP_OFFSET_A"))
+	vec3 localOffsetA = vec3(0.0f, 0.3f, 0.0f);
+
+	PROPERTY(EDITABLE, DISPLAY_NAME("PROP_OFFSET_B"))
+	vec3 localOffsetB = vec3(0.0f, -0.3f, 0.0f);
+
+	PROPERTY(EDITABLE, DISPLAY_NAME("PROP_COLOR_START"))
+	vec4 colorStart = vec4(1.0f, 1.0f, 1.0f, 1.0f);
+
+	PROPERTY(EDITABLE, DISPLAY_NAME("PROP_COLOR_END"))
+	vec4 colorEnd = vec4(1.0f, 1.0f, 1.0f, 0.0f);
+
+	PROPERTY(EDITABLE, DISPLAY_NAME("PROP_TEXTURE_HANDLE"))
+	ResourceHandle<Texture> textureHandle;
+
+	PROPERTY(EDITABLE, DISPLAY_NAME("PROP_MATERIAL_HANDLE"))
+	ResourceHandle<MaterialInterface> materialHandle;
+};
+
+// 7. 지면 투영 데칼 트랙 (그을음, 크레이터, 마법진)
+STRUCT()
+struct ENGINE_API VFXDecalTrack
+{
+	REFLECT_BODY()
+
+	PROPERTY(EDITABLE, DISPLAY_NAME("PROP_TRACK_NAME"))
+	std::string trackName = "Decal FX";
+
+	PROPERTY(EDITABLE, DISPLAY_NAME("PROP_ENABLED"))
+	bool enabled = true;
+
+	PROPERTY(EDITABLE, DISPLAY_NAME("PROP_IS_MUTED"))
+	bool isMuted = false;
+
+	PROPERTY(EDITABLE, DISPLAY_NAME("PROP_START_TIME"))
+	f32 startTime = 0.0f;
+
+	PROPERTY(EDITABLE, DISPLAY_NAME("PROP_DURATION"))
+	f32 duration = 1.5f;
+
+	PROPERTY(EDITABLE, DISPLAY_NAME("PROP_LOCAL_POSITION"))
+	vec3 localPosition = vec3(0.0f, 0.02f, 0.0f);
+
+	PROPERTY(EDITABLE, DISPLAY_NAME("PROP_LOCAL_ROTATION"))
+	vec3 localRotation = vec3(90.0f, 0.0f, 0.0f);
+
+	PROPERTY(EDITABLE, DISPLAY_NAME("PROP_SIZE"))
+	vec2 size = vec2(2.0f, 2.0f);
+
+	PROPERTY(EDITABLE, DISPLAY_NAME("PROP_COLOR_TINT"))
+	vec4 colorTint = vec4(1.0f, 1.0f, 1.0f, 1.0f);
+
+	PROPERTY(EDITABLE, DISPLAY_NAME("PROP_FADE_START_TIME"))
+	f32 fadeStartTime = 1.0f;
+
+	PROPERTY(EDITABLE, DISPLAY_NAME("PROP_TEXTURE_HANDLE"))
+	ResourceHandle<Texture> textureHandle;
+
+	PROPERTY(EDITABLE, DISPLAY_NAME("PROP_MATERIAL_HANDLE"))
+	ResourceHandle<MaterialInterface> materialHandle;
+};
+
+// 8. 카메라 셰이크 트랙 (타격/폭발 임팩트 진동)
+STRUCT()
+struct ENGINE_API VFXCameraShakeTrack
+{
+	REFLECT_BODY()
+
+	PROPERTY(EDITABLE, DISPLAY_NAME("PROP_TRACK_NAME"))
+	std::string trackName = "Camera Shake";
+
+	PROPERTY(EDITABLE, DISPLAY_NAME("PROP_ENABLED"))
+	bool enabled = true;
+
+	PROPERTY(EDITABLE, DISPLAY_NAME("PROP_IS_MUTED"))
+	bool isMuted = false;
+
+	PROPERTY(EDITABLE, DISPLAY_NAME("PROP_START_TIME"))
+	f32 startTime = 0.0f;
+
+	PROPERTY(EDITABLE, DISPLAY_NAME("PROP_DURATION"))
+	f32 duration = 0.3f;
+
+	PROPERTY(EDITABLE, DISPLAY_NAME("PROP_AMPLITUDE"))
+	f32 amplitude = 0.2f;
+
+	PROPERTY(EDITABLE, DISPLAY_NAME("PROP_FREQUENCY"))
+	f32 frequency = 25.0f;
+
+	PROPERTY(EDITABLE, DISPLAY_NAME("PROP_RADIUS"))
+	f32 radius = 0.0f;
+};
+
 // ── 에셋 생성 디스크립터 ──
 struct CompositeEffectCreateDesc : public ResourceCreateDesc
 {
@@ -289,6 +422,15 @@ public:
 	std::vector<VFXSoundTrack>& GetSoundTracks() { return m_SoundTracks; }
 	const std::vector<VFXSoundTrack>& GetSoundTracks() const { return m_SoundTracks; }
 
+	std::vector<VFXTrailTrack>& GetTrailTracks() { return m_TrailTracks; }
+	const std::vector<VFXTrailTrack>& GetTrailTracks() const { return m_TrailTracks; }
+
+	std::vector<VFXDecalTrack>& GetDecalTracks() { return m_DecalTracks; }
+	const std::vector<VFXDecalTrack>& GetDecalTracks() const { return m_DecalTracks; }
+
+	std::vector<VFXCameraShakeTrack>& GetCameraShakeTracks() { return m_CameraShakeTracks; }
+	const std::vector<VFXCameraShakeTrack>& GetCameraShakeTracks() const { return m_CameraShakeTracks; }
+
 	// ── 유틸리티 메서드 ──
 	uint32 GetTotalTrackCount() const;
 	void RecalculateDurationFromTracks();
@@ -319,6 +461,15 @@ private:
 
 	PROPERTY(EDITABLE, DISPLAY_NAME("PROP_SOUND_TRACKS"))
 	std::vector<VFXSoundTrack> m_SoundTracks;
+
+	PROPERTY(EDITABLE, DISPLAY_NAME("PROP_TRAIL_TRACKS"))
+	std::vector<VFXTrailTrack> m_TrailTracks;
+
+	PROPERTY(EDITABLE, DISPLAY_NAME("PROP_DECAL_TRACKS"))
+	std::vector<VFXDecalTrack> m_DecalTracks;
+
+	PROPERTY(EDITABLE, DISPLAY_NAME("PROP_CAMERA_SHAKE_TRACKS"))
+	std::vector<VFXCameraShakeTrack> m_CameraShakeTracks;
 };
 
 END

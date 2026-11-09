@@ -42,7 +42,10 @@ namespace Engine
 			m_ParticleTracks.size() +
 			m_LightTracks.size() +
 			m_MeshTracks.size() +
-			m_SoundTracks.size());
+			m_SoundTracks.size() +
+			m_TrailTracks.size() +
+			m_DecalTracks.size() +
+			m_CameraShakeTracks.size());
 	}
 
 	void CompositeEffect::ClearAllTracks()
@@ -52,6 +55,9 @@ namespace Engine
 		m_LightTracks.clear();
 		m_MeshTracks.clear();
 		m_SoundTracks.clear();
+		m_TrailTracks.clear();
+		m_DecalTracks.clear();
+		m_CameraShakeTracks.clear();
 	}
 
 	void CompositeEffect::RecalculateDurationFromTracks()
@@ -81,6 +87,21 @@ namespace Engine
 		for (const auto& track : m_SoundTracks)
 		{
 			maxTime = std::max(maxTime, track.startTime + 0.5f);
+		}
+
+		for (const auto& track : m_TrailTracks)
+		{
+			maxTime = std::max(maxTime, track.startTime + track.duration);
+		}
+
+		for (const auto& track : m_DecalTracks)
+		{
+			maxTime = std::max(maxTime, track.startTime + track.duration);
+		}
+
+		for (const auto& track : m_CameraShakeTracks)
+		{
+			maxTime = std::max(maxTime, track.startTime + track.duration);
 		}
 
 		if (maxTime > 0.05f)

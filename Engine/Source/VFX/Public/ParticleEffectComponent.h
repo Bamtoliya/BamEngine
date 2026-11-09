@@ -4,6 +4,7 @@
 #include "ResourceHandle.h"
 #include "ParticleEffect.h"
 #include <random>
+#include <optional>
 #include <vector>
 
 namespace Engine
@@ -15,6 +16,7 @@ namespace Engine
 		std::vector<ParticleCollisionEvent> collisionEvents;
 		f32 emissionAccumulator = 0.0f;
 		f32 burstTimer = 0.0f;
+		f64 elapsedTime = 0.0;
 		std::mt19937 rng;
 		bool rngInitialized = false;
 
@@ -24,6 +26,7 @@ namespace Engine
 			collisionEvents.clear();
 			emissionAccumulator = 0.0f;
 			burstTimer = 0.0f;
+			elapsedTime = 0.0;
 		}
 
 		void ClearEvents()
@@ -49,6 +52,7 @@ namespace Engine
 		// 런타임 이미터 인스턴스 배열 (effectHandle의 m_Emitters 크기와 1:1 동기화)
 		std::vector<ParticleEmitterInstance> instances;
 		bool isInitialized = false;
+		std::optional<uint32> previewSeed;
 
 		// 런타임 제어 API
 		void Play() { playState = EParticlePlayState::Playing; }

@@ -11,6 +11,7 @@
 #include "Shader.h"
 #include "RHIPipeline.h"
 #include "RHITexture.h"
+#include "CompositeVFXSystem.h"
 
 IMPLEMENT_SINGLETON(LightManager)
 #pragma region Constructor&Destructor
@@ -156,6 +157,16 @@ EResult LightManager::UpdateLightBuffer(Scene* targetScene)
 			}
 		}
 	}
+
+	for (Scene* scene : scenesToQuery)
+	{
+		if (currentLightIndex >= MAX_LIGHTS) break;
+		if (!scene) continue;
+
+		auto remaining = std::span<GPULight>{ gpuLights + currentLightIndex, MAX_LIGHTS - currentLightIndex };
+		currentLightIndex += CompositeVFXSystem::CollectFlashLights(*scene, remaining);
+	}
+
 	header->NumLights = currentLightIndex;
 	m_LightBuffers[frameIndex]->SetData(data.data(), totalSize);
 	m_BufferDirty[frameIndex] = false;

@@ -22,6 +22,31 @@ namespace Engine
 		}
 	};
 
+	// 트레일 스트립 포인트 샘플 (쌍: A = 팁, B = 베이스)
+	struct VFXTrailSamplePoint
+	{
+		vec3 posA = vec3(0.0f);
+		vec3 posB = vec3(0.0f);
+		f32 age = 0.0f;
+	};
+
+	// 개별 트레일 트랙의 런타임 상태
+	struct VFXTrailTrackRuntime
+	{
+		std::vector<VFXTrailSamplePoint> points;
+		vec3 lastSpawnPosA = vec3(1e9f);
+		vec3 lastSpawnPosB = vec3(1e9f);
+		bool hasLastSpawn = false;
+
+		void Reset()
+		{
+			points.clear();
+			hasLastSpawn = false;
+			lastSpawnPosA = vec3(1e9f);
+			lastSpawnPosB = vec3(1e9f);
+		}
+	};
+
 	STRUCT(COMPONENT, DISPLAY_NAME("STRUCT_COMPOSITE_VFX"), CATEGORY("CATEGORY_RENDER"))
 	struct CompositeVFXComponent
 	{
@@ -44,9 +69,20 @@ namespace Engine
 
 		f32 prevTime = 0.0f;
 		bool isFinished = false;
+		bool previewSeeking = false;
+		std::optional<uint32> previewSeed;
 
 		// 런타임 파티클 트랙 인스턴스 배열 (effectHandle의 m_ParticleTracks와 1:1 대응)
 		std::vector<VFXParticleTrackRuntime> particleRuntimes;
+
+		// 런타임 사운드 트랙 1회 재생 추적 플래그 (effectHandle의 m_SoundTracks와 1:1 대응)
+		std::vector<bool> soundPlayed;
+
+		// 런타임 트레일 트랙 인스턴스 배열 (effectHandle의 m_TrailTracks와 1:1 대응)
+		std::vector<VFXTrailTrackRuntime> trailRuntimes;
+
+		// 런타임 카메라 셰이크 오프셋 누적값
+		vec3 currentCameraShakeOffset = vec3(0.0f);
 
 		// 런타임 동적 조명 합성 상태
 		vec3 activeLightColor = vec3(0.0f);
@@ -88,6 +124,10 @@ namespace Engine
 		{
 			for (auto& rt : particleRuntimes)
 				rt.Reset();
+			for (auto& rt : trailRuntimes)
+				rt.Reset();
+			std::fill(soundPlayed.begin(), soundPlayed.end(), false);
+			currentCameraShakeOffset = vec3(0.0f);
 			hasActiveLight = false;
 		}
 	};

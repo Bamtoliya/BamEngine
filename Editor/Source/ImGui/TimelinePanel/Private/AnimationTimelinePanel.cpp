@@ -1,4 +1,6 @@
-﻿#include "AnimationTimelinePanel.h"
+#include "AnimationTimelinePanel.h"
+#include "EditorUI.h"
+#include "EffectTimelineView.h"
 #include "LocalizationManager.h"
 #include "IconsFontAwesome7.h"
 #include "ResourceManager.h"
@@ -253,16 +255,13 @@ namespace Editor
 
 	float AnimationTimelinePanel::TimeToScreenX(float time, float timelineMinX, float timelineWidth) const
 	{
-		const float visibleDuration = (m_Duration > 0.0f) ? (m_Duration / m_TimelineZoom) : 1.0f;
-		const float normalized = (time - m_ViewStartTime) / visibleDuration;
-		return timelineMinX + normalized * timelineWidth;
+		return EditorUI::MakeTimelineScale(timelineMinX, timelineWidth, m_Duration, m_TimelineZoom, m_ViewStartTime).ToX(time);
 	}
 
 	float AnimationTimelinePanel::ScreenXToTime(float screenX, float timelineMinX, float timelineWidth) const
 	{
-		const float visibleDuration = (m_Duration > 0.0f) ? (m_Duration / m_TimelineZoom) : 1.0f;
-		const float normalized = (screenX - timelineMinX) / timelineWidth;
-		return std::clamp(m_ViewStartTime + normalized * visibleDuration, 0.0f, m_Duration);
+		const auto scale = EditorUI::MakeTimelineScale(timelineMinX, timelineWidth, m_Duration, m_TimelineZoom, m_ViewStartTime);
+		return std::clamp(scale.ToTime(screenX), 0.0f, m_Duration);
 	}
 
 	bool AnimationTimelinePanel::SaveToFile(const std::string& filePath)
@@ -583,177 +582,136 @@ namespace Editor
 		m_DisplayRTName = m_PostProcessChain.ExecuteChain(dt, m_Pipeline.GetFinalColorRTName());
 	}
 
-	void AnimationTimelinePanel::Draw()
+	ImGuiWindowFlags AnimationTimelinePanel::GetResourceWindowFlags() const
 	{
-		m_Focused = false;
-		m_Hovered = false;
-
-
-		if (!m_Open) return;
-
-		ImGui::SetNextWindowSize(ImVec2(1060.0f, 660.0f), ImGuiCond_FirstUseEver);
-		const std::string title = GetDisplayName() + "###AnimationTimelinePanel";
-
-		ImGuiWindowFlags windowFlags = ImGuiWindowFlags_NoScrollbar;
-		if (m_IsDraggingItem || m_IsScrubbing || m_IsDraggingHeaderSplitter) windowFlags |= ImGuiWindowFlags_NoMove;
-
-		if (BeginPanelWindow(title.c_str(), m_Open, windowFlags))
-		{
-			m_Hovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows);
-			m_Focused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
-
-			DrawToolbar();
-			ImGui::Separator();
-
-			const float availWidth = ImGui::GetContentRegionAvail().x;
-			const float availHeight = ImGui::GetContentRegionAvail().y;
-			const float spacingX = ImGui::GetStyle().ItemSpacing.x;
-
-			// ── 1. 상단 높이 계산 및 클램핑 (여백 1px의 오차도 없이 정확히 분할하여 가로 스크롤바 원천 차단) ──
-			const float splitterThickness = 5.0f;
-			const float upperHeight = std::max(120.0f, availHeight - m_TimelineHeight - splitterThickness - 4.0f);
-			const float previewWidth = std::max(150.0f, availWidth - m_InspectorWidth - splitterThickness - spacingX * 2.0f);
-
-			// ── 상단 좌측: 3D 오프스크린 뷰포트 영역 ──
-			ImGui::BeginChild("##ViewportRegion", ImVec2(previewWidth, upperHeight), false);
-			DrawPreviewArea();
-			ImGui::EndChild();
-
-			ImGui::SameLine();
-
-			// ── [스플리터 1] 뷰포트 vs 인스펙터 수직 스플리터 ──
-			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
-			ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.3f, 0.6f, 1.0f, 0.6f));
-			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.6f, 1.0f, 0.35f));
-			ImGui::Button("##VerticalSplitter_Inspector", ImVec2(splitterThickness, upperHeight));
-			if (ImGui::IsItemHovered()) ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
-			if (ImGui::IsItemActive())
-			{
-				m_InspectorWidth -= Engine::InputManager::Get().GetMouseDelta().x;
-				m_InspectorWidth = std::clamp(m_InspectorWidth, 180.0f, std::max(180.0f, availWidth - 250.0f));
-			}
-			ImGui::PopStyleColor(3);
-
-			ImGui::SameLine();
-
-			// ── 상단 우측: 노티파이 속성 인스펙터 영역 ──
-			ImGui::BeginChild("##InspectorRegion", ImVec2(m_InspectorWidth, upperHeight), true);
-			DrawInspector();
-			ImGui::EndChild();
-
-			// ── [스플리터 2] 상단 영역 vs 하단 타임라인 수평 스플리터 ──
-			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.18f, 0.20f, 0.24f, 1.0f));
-			ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.3f, 0.6f, 1.0f, 0.6f));
-			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.6f, 1.0f, 0.35f));
-			ImGui::Button("##HorizontalSplitter_Timeline", ImVec2(-1.0f, splitterThickness));
-			if (ImGui::IsItemHovered()) ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);
-			if (ImGui::IsItemActive())
-			{
-				m_TimelineHeight -= Engine::InputManager::Get().GetMouseDelta().y;
-				m_TimelineHeight = std::clamp(m_TimelineHeight, 130.0f, std::max(130.0f, availHeight - 140.0f));
-			}
-			ImGui::PopStyleColor(3);
-
-			// ── 하단: 다중 트랙 타임라인 영역 ──
-			DrawTimelineTrackArea();
-		}
-		ImGui::End();
+		ImGuiWindowFlags flags = ImGuiWindowFlags_NoScrollbar;
+		if (m_IsDraggingItem || m_IsScrubbing || m_IsDraggingHeaderSplitter) flags |= ImGuiWindowFlags_NoMove;
+		return flags;
 	}
 
-	void AnimationTimelinePanel::DrawToolbar()
+	void AnimationTimelinePanel::DrawCustomContent()
 	{
-		// 파일 [Open] & [Save]
-		if (ImGui::Button((ICON_FA_FOLDER_OPEN " " + LOCAL_LABEL("EditorCommon.Open")).c_str()))
+		const float availWidth = ImGui::GetContentRegionAvail().x;
+		const float availHeight = ImGui::GetContentRegionAvail().y;
+		const float spacingX = ImGui::GetStyle().ItemSpacing.x;
+
+		// ── 1. 상단 높이 계산 및 클램핑 (여백 1px의 오차도 없이 정확히 분할하여 가로 스크롤바 원천 차단) ──
+		const float splitterThickness = 5.0f;
+		const float upperHeight = std::max(120.0f, availHeight - m_TimelineHeight - splitterThickness - 4.0f);
+		const float previewWidth = std::max(150.0f, availWidth - m_InspectorWidth - splitterThickness - spacingX * 2.0f);
+
+		// ── 상단 좌측: 3D 오프스크린 뷰포트 영역 ──
+		ImGui::BeginChild("##ViewportRegion", ImVec2(previewWidth, upperHeight), false);
+		DrawPreviewArea();
+		ImGui::EndChild();
+
+		ImGui::SameLine();
+
+		// ── [스플리터 1] 뷰포트 vs 인스펙터 수직 스플리터 ──
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.3f, 0.6f, 1.0f, 0.6f));
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.6f, 1.0f, 0.35f));
+		ImGui::Button("##VerticalSplitter_Inspector", ImVec2(splitterThickness, upperHeight));
+		if (ImGui::IsItemHovered()) ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+		if (ImGui::IsItemActive())
 		{
-			std::wstring selectedPath;
+			m_InspectorWidth -= Engine::InputManager::Get().GetMouseDelta().x;
+			m_InspectorWidth = std::clamp(m_InspectorWidth, 180.0f, std::max(180.0f, availWidth - 250.0f));
+		}
+		ImGui::PopStyleColor(3);
+
+		ImGui::SameLine();
+
+		// ── 상단 우측: 노티파이 속성 인스펙터 영역 ──
+		ImGui::BeginChild("##InspectorRegion", ImVec2(m_InspectorWidth, upperHeight), true);
+		DrawInspector();
+		ImGui::EndChild();
+
+		// ── [스플리터 2] 상단 영역 vs 하단 타임라인 수평 스플리터 ──
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.18f, 0.20f, 0.24f, 1.0f));
+		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.3f, 0.6f, 1.0f, 0.6f));
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.6f, 1.0f, 0.35f));
+		ImGui::Button("##HorizontalSplitter_Timeline", ImVec2(-1.0f, splitterThickness));
+		if (ImGui::IsItemHovered()) ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);
+		if (ImGui::IsItemActive())
+		{
+			m_TimelineHeight -= Engine::InputManager::Get().GetMouseDelta().y;
+			m_TimelineHeight = std::clamp(m_TimelineHeight, 130.0f, std::max(130.0f, availHeight - 140.0f));
+		}
+		ImGui::PopStyleColor(3);
+
+		// ── 하단: 다중 트랙 타임라인 영역 ──
+		DrawTimelineTrackArea();
+	}
+
+	void AnimationTimelinePanel::DrawCustomToolbar()
+	{
+		if (ImGui::BeginMenu(LOCAL_LABEL("EditorMenu.File").c_str()))
+		{
+			if (ImGui::MenuItem(LOCAL_LABEL("EditorCommon.Open").c_str())) OpenTimelineFile();
+			if (ImGui::MenuItem(LOCAL_LABEL("EditorCommon.Save").c_str())) SaveTimelineFile();
+			ImGui::EndMenu();
+		}
+	}
+
+	void AnimationTimelinePanel::OpenTimelineFile()
+	{
+		std::wstring selectedPath;
+		std::vector<FileDialogFilter> filters = {
+			{ Engine::StrToWStr(LOCAL("FileDialog.ActionTimelineFiles")), L"*.bamtimeline.json;*.actiontimeline.json" },
+			{ Engine::StrToWStr(LOCAL("FileDialog.AllFiles")), L"*.*" }
+		};
+		if (FileDialogs::OpenFileDialog(selectedPath, filters, L"", EFileDialogContext::TimelineOpen))
+		{
+			LoadFromFile(Engine::WStrToStr(selectedPath));
+		}
+	}
+
+	void AnimationTimelinePanel::SaveTimelineFile()
+	{
+		if (!m_CurrentAssetPath.empty())
+		{
+			SaveToFile(m_CurrentAssetPath);
+		}
+		else
+		{
+			std::wstring savePath;
 			std::vector<FileDialogFilter> filters = {
-				{ Engine::StrToWStr(LOCAL("FileDialog.ActionTimelineFiles")), L"*.actiontimeline.json" },
-				{ Engine::StrToWStr(LOCAL("FileDialog.AllFiles")), L"*.*" }
+				{ Engine::StrToWStr(LOCAL("FileDialog.ActionTimelineFiles")), L"*.bamtimeline.json;*.actiontimeline.json" }
 			};
-			if (FileDialogs::OpenFileDialog(selectedPath, filters, L"Resources/Animation"))
+			std::wstring defaultName = Engine::StrToWStr(m_CurrentClipName) + L".bamtimeline.json";
+			if (FileDialogs::SaveFileDialog(savePath, filters, defaultName, L"bamtimeline.json", EFileDialogContext::TimelineSave))
 			{
-				LoadFromFile(Engine::WStrToStr(selectedPath));
+				SaveToFile(Engine::WStrToStr(savePath));
 			}
 		}
-		if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("Timeline.OpenTimeline"));
-		ImGui::SameLine();
+	}
 
-		if (ImGui::Button((ICON_FA_FLOPPY_DISK " " + LOCAL_LABEL("EditorCommon.Save")).c_str()))
-		{
-			if (!m_CurrentAssetPath.empty())
-			{
-				SaveToFile(m_CurrentAssetPath);
-			}
-			else
-			{
-				std::wstring savePath;
-				std::vector<FileDialogFilter> filters = {
-					{ Engine::StrToWStr(LOCAL("FileDialog.ActionTimelineFiles")), L"*.actiontimeline.json" }
-				};
-				std::wstring defaultName = Engine::StrToWStr(m_CurrentClipName) + L".actiontimeline.json";
-				if (FileDialogs::SaveFileDialog(savePath, filters, defaultName, L"actiontimeline.json"))
-				{
-					SaveToFile(Engine::WStrToStr(savePath));
-				}
-			}
-		}
-		if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("Timeline.SaveTimeline"));
-		ImGui::SameLine();
-		ImGui::TextDisabled("|");
-		ImGui::SameLine();
+	void AnimationTimelinePanel::DrawCustomQuickAccess()
+	{
+		EditorUI::ToolbarLayout toolbar;
+		if (toolbar.Icon("Open", ICON_FA_FOLDER_OPEN, "Timeline.OpenTimeline")) OpenTimelineFile();
+		if (toolbar.Icon("Save", ICON_FA_FLOPPY_DISK, "Timeline.SaveTimeline")) SaveTimelineFile();
 
-		const float frameStep = 1.0f / m_FPS;
-
-		if (ImGui::Button(ICON_FA_BACKWARD_FAST)) { m_CurrentTime = 0.0f; }
-		if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("Action.Timeline.FirstFrame"));
-		ImGui::SameLine();
-
-		if (ImGui::Button(ICON_FA_BACKWARD)) { m_CurrentTime = std::max(0.0f, m_CurrentTime - frameStep); }
-		if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("Action.Timeline.PrevFrame"));
-		ImGui::SameLine();
-
-		const char* playIcon = m_IsPlaying ? ICON_FA_PAUSE : ICON_FA_PLAY;
-		if (ImGui::Button(playIcon, ImVec2(32.0f, 0.0f))) { m_IsPlaying = !m_IsPlaying; }
-		ImGui::SameLine();
-
-		if (ImGui::Button(ICON_FA_FORWARD)) { m_CurrentTime = std::min(m_Duration, m_CurrentTime + frameStep); }
-		if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("Action.Timeline.NextFrame"));
-		ImGui::SameLine();
-
-		if (ImGui::Button(ICON_FA_FORWARD_FAST)) { m_CurrentTime = m_Duration; m_IsPlaying = false; }
-		if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("Action.Timeline.LastFrame"));
-		ImGui::SameLine();
-
-		const bool wasLooping = m_IsLooping;
-		if (wasLooping) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.5f, 0.7f, 1.0f));
-		if (ImGui::Button(ICON_FA_REPEAT)) { m_IsLooping = !m_IsLooping; }
-		if (wasLooping) ImGui::PopStyleColor();
-		if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("Timeline.Loop"));
-
-		ImGui::SameLine();
-		ImGui::TextDisabled("|");
-		ImGui::SameLine();
+		EditorUI::DrawTimelineTransport(toolbar, "Timeline", m_IsPlaying, m_IsLooping);
 
 		const int currentFrame = static_cast<int>(m_CurrentTime * m_FPS);
 		const int totalFrames = static_cast<int>(m_Duration * m_FPS);
 		const std::string timeLabel = LOCAL_FMT("Timeline.TimeCounter", m_CurrentTime, m_Duration);
-		ImGui::TextColored(ImVec4(0.3f, 0.9f, 0.5f, 1.0f), "%s", timeLabel.c_str());
-		ImGui::SameLine();
+		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.3f, 0.9f, 0.5f, 1.0f));
+		toolbar.Text(timeLabel.c_str(), false);
+		ImGui::PopStyleColor();
+
 		const std::string frameLabel = LOCAL_FMT("Timeline.FrameCounter", currentFrame, totalFrames);
-		ImGui::TextDisabled("%s", frameLabel.c_str());
+		toolbar.Text(frameLabel.c_str());
 
-		ImGui::SameLine();
-		ImGui::TextDisabled("|");
-		ImGui::SameLine();
-
-		if (ImGui::Button((ICON_FA_ARROWS_ROTATE " " + LOCAL_LABEL("Timeline.SyncEntity")).c_str()))
+		if (toolbar.Button("Sync", ICON_FA_ARROWS_ROTATE, "Timeline.SyncEntity"))
 		{
 			SyncFromSelectedEntity();
 		}
 		if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("Timeline.SyncTooltip"));
-		ImGui::SameLine();
 
-		if (ImGui::Button((ICON_FA_FOLDER_OPEN " " + LOCAL_LABEL("Timeline.SelectModel")).c_str()))
+		if (toolbar.Button("SelectModel", ICON_FA_FOLDER_OPEN, "Timeline.SelectModel"))
 		{
 			std::wstring selectedPath;
 			std::vector<FileDialogFilter> filters = {
@@ -780,8 +738,8 @@ namespace Editor
 			auto anims = model->GetAnimations();
 			if (!anims.empty())
 			{
-				ImGui::SameLine();
-				ImGui::SetNextItemWidth(140.0f);
+
+				toolbar.SetNextItemWidth(ImGui::GetFontSize() * 8.0f);
 				if (ImGui::BeginCombo("##ClipSelect", m_CurrentClipName.c_str()))
 				{
 					for (int i = 0; i < static_cast<int>(anims.size()); ++i)
@@ -809,31 +767,12 @@ namespace Editor
 			}
 		}
 
-		ImGui::SameLine();
-		ImGui::TextDisabled("|");
-		ImGui::SameLine();
 		const std::string zoomLabel = LOCAL_FMT("Timeline.ZoomFactor", m_TimelineZoom);
-		ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.4f, 1.0f), "%s", zoomLabel.c_str());
-		ImGui::SameLine();
-		auto& shortcuts = ShortcutManager::Get();
-		const std::string zoomResetLabel = std::string(ICON_FA_MAXIMIZE " ") + LOCAL_LABEL("Action.Timeline.ZoomReset");
+		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.8f, 0.8f, 0.4f, 1.0f));
+		toolbar.Text(zoomLabel.c_str(), false);
+		ImGui::PopStyleColor();
 
-		ImGui::BeginDisabled(!shortcuts.CanExecuteAction("Timeline.ZoomReset"));
-		if (ImGui::Button(zoomResetLabel.c_str()))
-			shortcuts.ExecuteAction("Timeline.ZoomReset");
-		ImGui::EndDisabled();
-
-		if (ImGui::IsItemHovered())
-		{
-			const char* hint = shortcuts.GetShortcutHint("Timeline.ZoomReset");
-			if (hint && hint[0] != '\0')
-				ImGui::SetTooltip("%s (%s)", LOCAL_CSTR("Action.Timeline.ZoomReset"), hint);
-			else
-				ImGui::SetTooltip("%s", LOCAL_CSTR("Action.Timeline.ZoomReset"));
-		}
-
-		ImGui::SameLine(ImGui::GetWindowWidth() - 110.0f);
-		ImGui::SetNextItemWidth(80.0f);
+		toolbar.SetNextItemWidth(ImGui::GetFontSize() * 5.0f);
 		ImGui::SliderFloat("##Speed", &m_PlaybackSpeed, 0.1f, 2.0f, "%.1fx");
 		if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("Timeline.PlaybackSpeed"));
 	}
@@ -1160,9 +1099,10 @@ namespace Editor
 		const bool isMouseClicked = input.IsMouseButtonDown(Engine::EMouseButton::Left);
 
 		// ── [스플리터 위젯] InvisibleButton 배치 후 원래 커서 좌표를 복원하여 가로 스크롤바 발생 원천 제거! ──
-		const float rulerHeight = 26.0f;
+		const float rulerHeight = ImGui::GetFrameHeightWithSpacing() * 1.25f;
 		const float splitterHitWidth = 8.0f;
-		const ImVec2 splitterPos(contentMin.x + m_TrackHeaderWidth - splitterHitWidth * 0.5f, contentMin.y);
+		const float headerWidth = std::clamp(m_TrackHeaderWidth, 1.0f, std::max(1.0f, contentSize.x * 0.55f));
+		const ImVec2 splitterPos(contentMin.x + headerWidth - splitterHitWidth * 0.5f, contentMin.y);
 
 		const ImVec2 backupCursorPos = ImGui::GetCursorPos();
 		ImGui::SetCursorScreenPos(splitterPos);
@@ -1178,13 +1118,13 @@ namespace Editor
 		if (isSplitterActive && isMouseDown)
 		{
 			m_TrackHeaderWidth += input.GetMouseDelta().x;
-			m_TrackHeaderWidth = std::clamp(m_TrackHeaderWidth, 90.0f, std::min(450.0f, contentSize.x - 120.0f));
+			const float maxHeader = std::max(1.0f, std::min(450.0f, contentSize.x * 0.55f));
+			m_TrackHeaderWidth = std::clamp(m_TrackHeaderWidth, std::min(90.0f, maxHeader), maxHeader);
 		}
 
 		// ── 정확한 너비 산출 (스크롤바 너비 침범 방지) ──
-		const float totalFrames = std::max(1.0f, m_Duration * m_FPS);
-		const float timelineWidth = std::max(10.0f, contentSize.x - m_TrackHeaderWidth - 4.0f);
-		const ImVec2 timelineMin(contentMin.x + m_TrackHeaderWidth, contentMin.y);
+		const float timelineWidth = std::max(1.0f, contentSize.x - headerWidth - 4.0f);
+		const ImVec2 timelineMin(contentMin.x + headerWidth, contentMin.y);
 		const ImVec2 timelineMax(timelineMin.x + timelineWidth, contentMin.y + contentSize.y);
 
 		const ImVec2 rulerMin = timelineMin;
@@ -1200,29 +1140,13 @@ namespace Editor
 			mousePos.y >= contentMin.y && mousePos.y <= timelineMax.y;
 
 		// 마우스 휠 줌(Zoom) & 중간클릭 패닝(Pan)
-		if (isOverTimelineArea)
+		if (isOverTimelineArea && !m_IsScrubbing && !m_IsDraggingItem && !isSplitterActive && mousePos.x >= timelineMin.x)
 		{
-			const float wheel = input.GetMouseScrollDeltaY();
-			if (wheel != 0.0f)
-			{
-				const float mouseX = mousePos.x;
-				const float mouseTime = ScreenXToTime(mouseX, timelineMin.x, timelineWidth);
-				const float ratio = (mouseX - timelineMin.x) / timelineWidth;
-
-				const float zoomFactor = (wheel > 0.0f) ? 1.25f : 0.8f;
-				m_TimelineZoom = std::clamp(m_TimelineZoom * zoomFactor, 1.0f, 40.0f);
-
-				const float newVisibleDuration = (m_Duration > 0.0f) ? (m_Duration / m_TimelineZoom) : 1.0f;
-				m_ViewStartTime = std::clamp(mouseTime - ratio * newVisibleDuration, 0.0f, std::max(0.0f, m_Duration - newVisibleDuration));
-			}
-
-			if (input.IsMouseButtonDragging(Engine::EMouseButton::Middle) || (input.IsAltPressed() && input.IsMouseButtonDragging(Engine::EMouseButton::Right)))
-			{
-				const float deltaX = input.GetMouseDelta().x;
-				const float visibleDuration = (m_Duration > 0.0f) ? (m_Duration / m_TimelineZoom) : 1.0f;
-				const float deltaTime = -(deltaX / timelineWidth) * visibleDuration;
-				m_ViewStartTime = std::clamp(m_ViewStartTime + deltaTime, 0.0f, std::max(0.0f, m_Duration - visibleDuration));
-			}
+			const bool panning = input.IsMouseButtonDragging(Engine::EMouseButton::Middle) ||
+				(input.IsAltPressed() && input.IsMouseButtonDragging(Engine::EMouseButton::Right));
+			const auto scale = EditorUI::MakeTimelineScale(timelineMin.x, timelineWidth, m_Duration, m_TimelineZoom, m_ViewStartTime);
+			EditorUI::NavigateTimeline(mousePos.x, input.GetMouseScrollDeltaY(), panning ? input.GetMouseDelta().x : 0.0f,
+				scale, std::max(m_Duration, EditorUI::MinimumTimelineDuration), m_TimelineZoom, m_ViewStartTime);
 		}
 
 		if (isRulerHovered && isMouseClicked && !m_IsDraggingItem)
@@ -1257,7 +1181,9 @@ namespace Editor
 
 		// ── 눈금자 렌더링 (타임라인 본체 영역만 클리핑) ──
 		drawList->PushClipRect(timelineMin, rulerMax, true);
-		DrawRuler(drawList, rulerMin, rulerMax, totalFrames);
+		EditorUI::DrawTimelineRuler(*drawList,
+			EditorUI::MakeTimelineScale(rulerMin.x, timelineWidth, m_Duration, m_TimelineZoom, m_ViewStartTime),
+			rulerMin.y, rulerMax.y, m_FPS);
 		drawList->PopClipRect();
 
 		// ── 각 트랙 렌더링 (헤더와 본체가 각각 정상 노출됨) ──
@@ -1290,7 +1216,7 @@ namespace Editor
 		// ── 수직 재생 헤드 라인 ──
 		const float curX = TimeToScreenX(m_CurrentTime, timelineMin.x, timelineWidth);
 		drawList->PushClipRect(timelineMin, ImVec2(timelineMax.x, currentY), true);
-		DrawPlayhead(drawList, timelineMin, ImVec2(timelineMax.x, currentY), curX);
+		EditorUI::DrawTimelinePlayhead(*drawList, timelineMin, ImVec2(timelineMax.x, currentY), curX);
 		drawList->PopClipRect();
 
 		// ── 트랙 아래 빈 공간 또는 눈금자 우클릭 시 트랙 추가 메뉴 ──
@@ -1727,65 +1653,9 @@ namespace Editor
 		}
 	}
 
-	void AnimationTimelinePanel::DrawRuler(ImDrawList* drawList, const ImVec2& rulerMin, const ImVec2& rulerMax, float totalFrames)
-	{
-		const float rulerWidth = rulerMax.x - rulerMin.x;
-		drawList->AddRectFilled(rulerMin, rulerMax, IM_COL32(28, 30, 35, 255));
-		drawList->AddLine(ImVec2(rulerMin.x, rulerMax.y), rulerMax, IM_COL32(55, 60, 70, 255));
 
-		const float visibleDuration = (m_Duration > 0.0f) ? (m_Duration / m_TimelineZoom) : 1.0f;
-		const int startFrame = static_cast<int>(std::floor(m_ViewStartTime * m_FPS));
-		const int endFrame = static_cast<int>(std::ceil((m_ViewStartTime + visibleDuration) * m_FPS));
-		const int visibleFrames = std::max(1, endFrame - startFrame);
 
-		const float pxPerFrame = rulerWidth / static_cast<float>(visibleFrames);
 
-		int step = 1;
-		if (pxPerFrame < 3.0f) step = 5;
-		if (pxPerFrame < 1.5f) step = 10;
-		if (pxPerFrame < 0.5f) step = 30;
-		if (pxPerFrame < 0.15f) step = 60;
-
-		const int firstTick = (startFrame / step) * step;
-		for (int f = firstTick; f <= endFrame; f += step)
-		{
-			if (f < 0 || f > static_cast<int>(totalFrames)) continue;
-
-			const float time = static_cast<float>(f) / m_FPS;
-			const float x = TimeToScreenX(time, rulerMin.x, rulerWidth);
-			if (x < rulerMin.x || x > rulerMax.x) continue;
-
-			const bool isMajor = (f % (step * 5) == 0);
-			const float tickHeight = isMajor ? 12.0f : 6.0f;
-
-			drawList->AddLine(ImVec2(x, rulerMax.y - tickHeight), ImVec2(x, rulerMax.y),
-				isMajor ? IM_COL32(180, 190, 205, 255) : IM_COL32(90, 95, 105, 200));
-
-			if (isMajor && x + 25.0f < rulerMax.x)
-			{
-				char frameBuf[16];
-				snprintf(frameBuf, sizeof(frameBuf), "%d", f);
-				drawList->AddText(ImVec2(x + 3.0f, rulerMin.y + 2.0f), IM_COL32(160, 170, 185, 220), frameBuf);
-			}
-		}
-	}
-
-	void AnimationTimelinePanel::DrawPlayhead(ImDrawList* drawList, const ImVec2& trackMin, const ImVec2& trackMax, float curX)
-	{
-		if (curX < trackMin.x || curX > trackMax.x) return;
-
-		const ImU32 playheadColor = IM_COL32(255, 75, 45, 255);
-		drawList->AddLine(ImVec2(curX, trackMin.y), ImVec2(curX, trackMax.y), playheadColor, 1.8f);
-
-		const float headHalfW = 6.0f;
-		const float headH = 10.0f;
-		drawList->AddTriangleFilled(
-			ImVec2(curX - headHalfW, trackMin.y),
-			ImVec2(curX + headHalfW, trackMin.y),
-			ImVec2(curX, trackMin.y + headH),
-			playheadColor
-		);
-	}
 
 	void AnimationTimelinePanel::CaptureState(EditorWorkspace& workspace) const
 	{

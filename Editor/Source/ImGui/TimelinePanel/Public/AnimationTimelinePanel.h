@@ -51,7 +51,6 @@ public:
 	AnimationTimelinePanel();
 	virtual ~AnimationTimelinePanel() override;
 	virtual void Update(f32 dt) override;
-	virtual void Draw() override;
 	virtual EShortcutContext GetShortcutContext() const override { return EShortcutContext::AnimationTimeline; }
 	// ── ResourceEditorInterface 구현 (콘텐츠 브라우저 더블클릭 연동) ──
 	EPanelMenuCategory GetPanelMenuCategory() const override { return EPanelMenuCategory::GraphAnimation; }
@@ -60,7 +59,7 @@ public:
 	{
 		const std::string ext = assetPath.extension().string();
 		const std::string name = WStrToStr(assetPath.filename().wstring());
-		return (ext == ".actiontimeline" || name.ends_with(".actiontimeline.json"));
+		return (ext == ".bamtimeline" || ext == ".actiontimeline" || name.ends_with(".bamtimeline.json") || name.ends_with(".actiontimeline.json"));
 	}
 	virtual void SetTargetResource(const std::filesystem::path& assetPath) override
 	{
@@ -86,7 +85,13 @@ public:
 	void DeleteSelected();
 
 private:
-	void DrawToolbar();
+	void DrawCustomQuickAccess() override;
+	void DrawCustomContent() override;
+	ImVec2 GetInitialResourceWindowSize() const override { return ImVec2(1060.0f, 660.0f); }
+	void DrawCustomToolbar() override;
+	ImGuiWindowFlags GetResourceWindowFlags() const override;
+	void OpenTimelineFile();
+	void SaveTimelineFile();
 	void DrawPreviewArea();
 	void DrawTimelineTrackArea();
 	void DrawInspector();
@@ -96,8 +101,6 @@ private:
 	void SetupPreviewScene();
 	void FreePreviewScene();
 	void RenderPreview(f32 dt);
-	void DrawRuler(struct ImDrawList* drawList, const struct ImVec2& rulerMin, const struct ImVec2& rulerMax, float totalFrames);
-	void DrawPlayhead(struct ImDrawList* drawList, const struct ImVec2& trackMin, const struct ImVec2& trackMax, float curX);
 
 	// 다중 트랙 렌더링 서브루틴
 	void DrawTrackGridLines(struct ImDrawList* drawList, const struct ImVec2& trackMin, const struct ImVec2& trackMax, float timelineWidth);

@@ -12,11 +12,21 @@ EResult ActionTimelineAsset::Initialize(void* arg)
 	if (arg)
 	{
 		CAST_DESC;
-		m_ModelPath = desc->ModelPath;
-		m_ClipName = desc->ClipName;
-		m_Duration = desc->Duration;
-		m_NotifyTracks = desc->NotifyTracks;
-		m_CameraTracks = desc->CameraTracks;
+		if (!desc->Path.empty())
+		{
+			if (!LoadFromFile(WStrToStr(desc->Path)))
+			{
+				return EResult::Fail;
+			}
+		}
+		else
+		{
+			m_ModelPath = desc->ModelPath;
+			m_ClipName = desc->ClipName;
+			m_Duration = desc->Duration;
+			m_NotifyTracks = desc->NotifyTracks;
+			m_CameraTracks = desc->CameraTracks;
+		}
 	}
 	return EResult::Success;
 }
@@ -57,7 +67,9 @@ bool ActionTimelineAsset::SaveToFile(const std::string& filePath) const
 
 bool ActionTimelineAsset::LoadFromFile(const std::string& filePath)
 {
-	const std::filesystem::path fullPath = PlatformPath::ResolveProjectRelative(filePath);
+	std::filesystem::path fullPath = PlatformPath::ResolveUri(filePath);
+	if (!std::filesystem::exists(fullPath))
+		fullPath = PlatformPath::ResolveProjectRelative(filePath);
 	archive::JsonArchive ar;
 	const auto loadRes = ar.LoadFromFile(fullPath);
 	if (!loadRes) return false;

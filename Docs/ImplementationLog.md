@@ -8,6 +8,18 @@ This document tracks implementation details, architectural decisions, and techni
 - 좁은 창의 메뉴는 접고, 퀵액세스는 공통 배치로 줄바꿈한다. 별도 편집 명령이 없는 텍스처와 셰이더는 파일 메뉴의 닫기와 퀵액세스의 경로 복사를 제공한다. ActionTimeline의 열기와 저장은 메뉴와 퀵액세스가 같은 함수를 사용한다.
 - 상속 및 호출 관계와 diff 공백을 정적으로 확인했다. 빌드·화면 확인은 미실시다. 사용자 확인은 12개 창의 메뉴와 퀵액세스 위치, 작은 폭과 큰 글꼴, 그래프 모드 전환 및 파일 교체 확인, 애니메이터 미저장 닫기, 프리팹 미저장 표시를 포함한다.
 
+### [2026-11-09] 이펙트 타임라인과 리소스 편집기 공통화
+
+- ActionTimeline·Particle·Composite Effect가 시간 좌표, 마우스 위치 기준 휠 확대, 중간 버튼 이동, 초/프레임 눈금자, 재생 헤드, 재생 툴바를 공유한다. ActionTimeline의 노티파이·카메라 샷 데이터와 편집 흐름을 유지한다.
+- Particle과 Composite는 목록·프리뷰·속성을 위에 배치하고 전체 폭의 하단 타임라인을 사용한다. 좁은 창에서는 상단을 탭으로 전환한다. 목록·속성 폭, 타임라인 높이와 헤더 폭은 Workspace에 저장한다.
+- 라벨과 막대가 동일한 선택 경로를 사용한다. Composite는 트랙 종류/인덱스 ID로 이름 중복을 구분하고 위치·트레일 오프셋에 프리뷰를 맞춘다. 활성 구간 밖에서는 해당 구간의 첫 프레임 근처로 탐색한다. 사운드는 시작 마커로 그린다.
+- 막대 본체는 이동, 양끝은 시작/종료 변경, 눈금자의 금색 핸들은 전체 길이 편집이다. 드래그 중에는 위젯에서 후보 값을 그리며, 놓을 때 한 건으로 반영한다. Escape로 구간 드래그를 취소한다. 트랙 이동으로 마지막 끝이 전체 길이를 지나면 전체 길이를 연장한다.
+- 두 이펙트 편집기에 재생/일시정지, 이전/다음, 처음/끝, 반복, 시간축 맞춤, 삭제, Undo/Redo, 저장 액션을 각각 등록했다. 툴바는 현재 키 힌트와 실행 가능 조건을 조회한다. Composite의 시간 편집·삭제는 Undo 대상이다. 기존 수동 속성 편집과 트랙 추가는 이 Undo 범위에 포함되지 않으며 트랙 추가 시 인덱스 기반 이력을 초기화한다.
+- Particle의 에미터 방출 시작/지속 시간 및 에셋 전체 길이는 누락 허용으로 등록했다. 0 지속/전체 길이는 런타임 무제한이다. 과거 에셋의 편집기 표시 범위는 기본 5초이며 에미터 데이터에 따라 늘어난다. 방출이 끝난 뒤 이미 발생한 입자의 수명은 계속 갱신한다. 트리거 트랙에 적용하는 구간은 이벤트의 허용 구간이며 이벤트가 발생하는 시간을 지정하지 않는다.
+- 프리뷰 탐색은 최대 32개의 30fps 스텝을 프레임당 처리한다. 뒤로 이동할 때 초기화하고 프리뷰 RNG 시드를 고정했다. Composite 탐색 중에는 사운드 재생과 루프 래핑을 억제한다. 일반 재생에서 프리뷰가 배속을 시뮬레이터에 한 번만 전달한다.
+- 리소스 창 제목, 파일명, 안정 ID 및 미저장 표시를 공통 시작 함수로 통일했다. Composite 사운드 트랙은 공통 속성 표와 리플렉션의 이름/활성/오디오 참조 입력을 사용한다. 수치 입력의 범위와 단위를 유지한다. Particle 인스펙터는 공통 속성 행을 사용한다.
+- 변경 경로와 새 파일을 정적으로 검토하고 diff 공백을 확인했다. 빌드·테스트·UI 실행·커밋은 미실시다.
+
 ### [2026-11-09] 제목 표시줄 닫기와 PIE 경계 수정
 
 - 제목 표시줄은 실제 가용 영역과 클립 경계를 기준으로 창 버튼 슬롯을 배치한다. 좁은 폭에서는 최소화·최대화/복원을 메뉴에 넣고 닫기 버튼 자리를 우선 확보한다. SDL 드래그 영역도 계산한 버튼 시작점에서 끝난다.
@@ -223,6 +235,60 @@ This document tracks implementation details, architectural decisions, and techni
      - `Editor.csv`의 `SpriteEditor.*` 키 40여 종 정합성 검증 및 `localizationcsvtojson.py` 동기화 완료.
      - `Editor/CMakeLists.txt` 내 `StbImageImpl.cpp`의 `SKIP_UNITY_BUILD_INCLUSION` 가드 유지.
 
+### [2026-11-09] 비주얼 이펙트 Phase 3, 4 구현 완료: 트레일/리본 동적 지오메트리 렌더러, 지면 투영 데칼, 카메라 셰이크 및 에디터 연동
+
+- Area: Engine | Render | VFX | Camera | Editor | UI | Localization
+- Type: Feature | Architecture | Integration
+- 주요 변경 내역:
+  1. **Phase 3 트레일 / 리본 FX (`VFXTrailTrack`, `VFXTrailTrackRuntime`) 구현**:
+     - `CompositeEffect.h`: 폭(`trailWidth`), 수명(`lifetime`), 최소 정점 거리(`minVertexDistance`), 테이퍼링 비율(`taperRatio`), 칼끝/자루 오프셋(`localOffsetA`, `localOffsetB`), 시작/종료 색상 및 텍스처/머티리얼 핸들을 포함하는 구조체 정의 및 리플렉션 등록.
+     - `CompositeVFXComponent.h`: `VFXTrailTrackRuntime` 추가 (정점 쌍 샘플 히스토리 관리 및 `ResetRuntimes()` 리셋 지원).
+     - `CompositeVFXSystem.cpp`:
+       - `UpdateVFXEntity`: 엔티티 월드 행렬 기반으로 팁/베이스 포인트($A, B$)를 수집하고, 오래된 포인트는 나이($age \ge lifetime$)에 따라 자동 제거.
+       - `SubmitSceneVFX`: 연속된 두 샘플 쌍 사이에서 진행 방향 벡터($Dir$)와 법선($Up$)으로 오리엔테이션 행렬을 산출하고, 테이퍼링 폭 및 컬러/알파를 보간하여 `SpriteDrawCommand`를 통해 쿼드 스트립 세그먼트를 `ForwardTransparentPass`로 고속 렌더링.
+  2. **Phase 4 보조 연출 (지면 투영 데칼 & 카메라 셰이크) 구현**:
+     - `VFXDecalTrack`: 폭발/타격 지면에 그을음, 크레이터, 마법진 마크를 투영할 수 있도록 위치/회전/크기 및 `fadeStartTime` 이후 점진적 알파 페이드아웃 렌더링 구현.
+     - `VFXCameraShakeTrack`: 타격/폭발 순간 감쇠 곡선($1 - t/\text{duration}$)과 주파수 기반 다축 사인파 진동($\sin(2\pi f t)$)을 인가하여 `CompositeVFXComponent::currentCameraShakeOffset`에 실시간 누적.
+  3. **통합 저작 도구 (`VFXEditorPanel`) 전면 지원 및 로캘 동기화**:
+     - 트랙 추가 메뉴("Add Track")에 `Trail`, `Decal`, `CameraShake` 항목 신설.
+     - 트랙 리스트 및 타임라인에 시안(Trail), 와인(Decal), 코랄(CameraShake) 색상의 트랙 바 배치, 드래그 이동 및 선택 지원.
+     - 트랙 인스펙터에 폭, 수명, 테이퍼링, 진폭, 주파수, 감쇠 반경, 텍스처 피커 등 2열 테이블 프로퍼티 편집 UI 완전 구현.
+     - `Editor.csv`에 신규 로캘 키 14종 추가 및 `localizationcsvtojson.py`를 통해 영문/한글 JSON 동기화 완료.
+
+### [2026-11-09] 비주얼 이펙트 Phase 2 구현 완료: 3D 메쉬 이펙트 런타임 렌더링 제출 및 사운드 트랙 1회 타이밍 트리거 연동
+
+- Area: Engine | Render | VFX | Audio | Architecture
+- Type: Feature | Fix | Integration
+- 주요 변경 내역:
+  1. **사운드 트랙(`VFXSoundTrack`) 런타임 1회성 정밀 트리거 연결:**
+     - `CompositeVFXComponent.h`: `std::vector<bool> soundPlayed;` 런타임 추적 플래그 추가 및 `ResetRuntimes()` 내 `std::fill` 리셋 연동.
+     - `CompositeVFXSystem.cpp`: `UpdateVFXEntity`에서 `effect->GetSoundTracks()`를 순회하며 `currentTime >= track.startTime && !soundPlayed[i]` 시점에 `AudioManager::Get().PlayOneShot(clip->GetFMODSound(), track.volume)` 1회 호출.
+     - 타임라인 역방향 스크러빙/루프 재생(`currentTime < track.startTime`) 시 `soundPlayed[i] = false`로 자동 복구 지원.
+  2. **3D 메쉬 이펙트(`VFXMeshTrack`) 런타임 변환 보간 및 렌더링 파이프라인 제출:**
+     - `CompositeVFXSystem.cpp::SubmitSceneVFX`:
+       - 경과 시간 $t$ 기반 진행도($\alpha \in [0, 1]$) 및 루프(`fmod`) 연산.
+       - 스케일 보간: $Scale(t) = \text{lerp}(scaleStart, scaleEnd, \alpha)$.
+       - 지속 회전 적분: $Rotation(t) = initialRotation + rotationRate \times t$.
+       - 컬러/알파 페이드: $Color(t) = \text{lerp}(colorStart, colorEnd, \alpha)$.
+       - UV 스크롤 오프셋: $UVOffset(t) = uvScrollSpeed \times t$.
+       - `ForwardTransparentPass` (및 `GeometryPass`) 블렌드 모드 호환성 필터링.
+       - 텍스처 및 인덱스버퍼 유효 시 `SpriteDrawCommand`(`uvTransform`, `color`, `worldMatrix`)로 GPU 제출하여 `SpriteUBO`를 통해 추가 셰이더 개편 없이 UV 스크롤 및 알파/컬러 페이드아웃 즉시 연동, 텍스처 미지정 시 `StaticDrawCommand`로 안전하게 폴백 제출.
+
+### [2026-11-09] 비주얼 이펙트 아키텍처: 잔여 이펙트(메쉬·사운드·트레일·데칼) 생성 완성 로드맵 개정
+
+- Area: Engine | Render | FX | Editor | Architecture | Plan
+- Type: Architecture | Plan | Documentation
+- 주요 내용:
+  1. **현재 제작 가능 여부 갭 진단:**
+     - 2D 스프라이트 플립북, 3D 파티클 이미터, 포인트 조명 섬광 트랙은 런타임 렌더링 및 에디터 연동이 완료되어 즉시 제작 가능.
+     - 3D 메쉬 이펙트(`VFXMeshTrack`)와 사운드(`VFXSoundTrack`)는 데이터 구조와 에디터 UI는 존재하나, `CompositeVFXSystem`에서 렌더러로의 드로우콜 제출 및 오디오 재생 호출이 누락되어 인게임 및 뷰포트에 표시되지 않음.
+     - 트레일/리본(검기 슬래시 궤적) 및 보조 연출(지면 그을음 데칼, 카메라 셰이크)은 시스템 신설 필요.
+  2. **`Docs/CompositeVisualEffectPlan.md` 로드맵 전면 개정:**
+     - **Phase 2 (메쉬 이펙트 런타임 & 사운드 연동):** `CompositeVFXSystem::SubmitSceneVFX`에 메쉬 트랙 순회 추가, $t$ 시간 기준 스케일/회전 보간 행렬 계산, UV 스크롤/컬러 페이드 상수버퍼 연동 및 `ForwardTransparentPass` 제출. 사운드 트랙 1회성 정밀 타이밍 트리거 연결.
+     - **Phase 3 (트레일 / 리본 FX 신설):** `VFXTrailTrack` 데이터 구조체, 정점 위치 히스토리 기반 동적 쿼드 스트립 생성기(`TrailMeshGenerator`), 테이퍼링 및 텍스처 매핑 포워드 렌더링 구축.
+     - **Phase 4 (보조 연출 확장):** 지면 그을음 투영 데칼(`VFXDecalTrack`) 및 폭발 임팩트 카메라 셰이크(`VFXCameraShakeTrack`) 연동.
+  3. **`Docs/DevelopmentPriorities.md` 트랙 F 상태 동기화:**
+     - 단순 [완료] 표기를 [Phase 1 완료 / Phase 2 착수 준비]로 세분화 갱신.
 
 ### [2026-11-09] 복합 비주얼 이펙트 시스템(Composite Visual Effect) 및 통합 저작 도구(VFXEditorPanel) 구축과 타임라인·인스펙터 UX 고도화
 

@@ -17,6 +17,8 @@ enum class EShortcutContext : uint8
     SpriteAnimationEditor,
     ContentBrowser,
     UIViewport,
+    ParticleTimeline,
+    CompositeTimeline,
     Count
 };
 

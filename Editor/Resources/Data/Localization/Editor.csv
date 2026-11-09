@@ -1786,6 +1786,20 @@ VFXEditor,DurationTotal,Duration,전체 재생 시간
 VFXEditor,AutoDuration,Auto Dur,길이 자동 계산
 VFXEditor,TimelineUnavailable,Timeline unavailable - No Effect loaded.,타임라인을 사용할 수 없음 - 로드된 이펙트가 없습니다.
 VFXEditor,SaveSuccess,Effect saved successfully.,이펙트를 저장했습니다.
+VFXEditor,AddTrailTrack,Trail / Ribbon Track,트레일 / 리본 트랙
+VFXEditor,AddDecalTrack,Decal Mark Track,지면 투영 데칼 트랙
+VFXEditor,AddCameraShakeTrack,Camera Shake Track,카메라 셰이크 트랙
+VFXEditor,PropTrailWidth,Trail Width,트레일 폭
+VFXEditor,PropLifetime,Lifetime,수명
+VFXEditor,PropMinVertexDistance,Min Vertex Dist,최소 정점 거리
+VFXEditor,PropTaperRatio,Taper Ratio,테이퍼링 비율
+VFXEditor,PropOffsetA,Offset A (Tip),오프셋 A (칼끝)
+VFXEditor,PropOffsetB,Offset B (Base),오프셋 B (칼자루)
+VFXEditor,PropSize,Size,크기
+VFXEditor,PropFadeStartTime,Fade Start,페이드 시작
+VFXEditor,PropAmplitude,Amplitude,진폭
+VFXEditor,PropFrequency,Frequency,주파수
+VFXEditor,PropShakeRadius,Shake Radius,감쇠 반경
 Settings,StyleApplyPresetFirst,Apply the selected preset before editing its style.,선택한 프리셋을 먼저 적용한 뒤 상세 스타일을 편집하세요.
 Settings,StyleSaveFailed,Could not save the style. Your draft is preserved.,스타일을 저장하지 못했습니다. 편집 초안은 유지됩니다.
 Settings,StyleWindowRounding,Window rounding,창 모서리
@@ -1816,3 +1830,8 @@ Viewport,ChannelR,Red Channel,빨강 채널
 Viewport,ChannelG,Green Channel,초록 채널
 Viewport,ChannelB,Blue Channel,파랑 채널
 Viewport,ChannelA,Alpha Channel,알파 채널
+EffectTimeline,Preview,Preview,미리보기
+EffectTimeline,Properties,Properties,속성
+EffectTimeline,EditRange,Edit Timeline Range,타임라인 구간 편집
+EffectTimeline,OpenEmission,Emission has no fixed end,방출 종료 미지정
+EffectTimeline,Emitter,Emitter,이미터
