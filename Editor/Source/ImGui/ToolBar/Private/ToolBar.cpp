@@ -28,6 +28,7 @@
 #include "SceneDocument.h"
 #include "EditorSettingsService.h"
 #include "ModuleBuildManager.h"
+#include "CrashHandler.h"
 #include <cmath>
 
 
@@ -502,6 +503,12 @@ void ToolBar::DrawHelpMenu()
 			}
 
 			ImGui::EndMenu();
+		}
+
+		ImGui::Separator();
+		if (ImGui::MenuItem(LOCAL_LABEL("Help.TriggerCrashTest").c_str()))
+		{
+			Engine::CrashHandler::TriggerCrashForTesting();
 		}
 
 		ImGui::EndMenu();

@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "Engine_API.h"
 #include "Macro.h"
@@ -19,6 +19,7 @@ public:
 public:
 	ENGINE_API static bool Initialize(const std::filesystem::path& filePath);
 	ENGINE_API static void Shutdown();
+	ENGINE_API static void Flush();
 
 	ENGINE_API static void SetMinLevel(ELogLevel level);
 	ENGINE_API static bool IsEnabled(ELogLevel level);

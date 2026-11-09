@@ -1800,6 +1800,17 @@ VFXEditor,PropFadeStartTime,Fade Start,페이드 시작
 VFXEditor,PropAmplitude,Amplitude,진폭
 VFXEditor,PropFrequency,Frequency,주파수
 VFXEditor,PropShakeRadius,Shake Radius,감쇠 반경
+Help,TriggerCrashTest,Trigger Crash (Diagnostics Test),크래시 유발 (진단 및 복원 테스트)
+Recovery,ModalTitle,Crash Recovery & Work Restoration,비정상 종료 감지 및 작업 복원
+Recovery,CrashDetectedMessage,The previous editor session terminated unexpectedly. A recoverable snapshot has been detected:,이전 에디터 세션이 예기치 않게 종료되었습니다. 복원 가능한 작업 스냅샷이 감지되었습니다:
+Recovery,PropSceneName,Scene Name,씬 이름
+Recovery,PropSavedTime,Snapshot Time,스냅샷 시각
+Recovery,PropReason,Save Reason,저장 사유
+Recovery,ReasonEmergency,Emergency Crash Snapshot,비상 크래시 스냅샷
+Recovery,ReasonAutoSave,Heartbeat Auto-Save,주기적 자동 저장
+Recovery,PromptQuestion,Would you like to restore this work session?,이전 작업을 복원하여 여시겠습니까?
+Recovery,RestoreButton,Restore Work,복원하여 열기
+Recovery,DiscardButton,Discard,무시하고 새 작업
 Settings,StyleApplyPresetFirst,Apply the selected preset before editing its style.,선택한 프리셋을 먼저 적용한 뒤 상세 스타일을 편집하세요.
 Settings,StyleSaveFailed,Could not save the style. Your draft is preserved.,스타일을 저장하지 못했습니다. 편집 초안은 유지됩니다.
 Settings,StyleWindowRounding,Window rounding,창 모서리

@@ -1,4 +1,4 @@
-﻿#include "Logger.h"
+#include "Logger.h"
 #pragma push_macro("new")
 #undef new
 #include <fmt/chrono.h>
@@ -71,6 +71,19 @@ ENGINE_API bool Logger::Initialize(const std::filesystem::path& filePath)
 	}
 
 	return true;
+}
+
+ENGINE_API void Logger::Flush()
+{
+	auto& state = GetLoggerState();
+	std::lock_guard lock(state.OutputMutex);
+
+	if (state.File.is_open())
+	{
+		state.File.flush();
+	}
+	std::fflush(stderr);
+	std::fflush(stdout);
 }
 
 ENGINE_API void Logger::Shutdown()

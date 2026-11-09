@@ -28,6 +28,8 @@
 #include "ModuleHotReloadManager.h"
 #include "TerrainComponent.h"
 #include "NotificationManager.h"
+#include "CrashHandler.h"
+#include "RecoveryManager.h"
 #include "IDComponent.h"
 #include "TerrainUtility.h"
 
@@ -53,6 +55,7 @@ EResult Application::Initialize(void* arg)
         return EResult::Fail; 
 
     m_LoggerInitialized = true;
+    Engine::CrashHandler::Initialize();
 
     const auto fail = [this](const char* stage, EResult result)
         {
@@ -142,6 +145,8 @@ EResult Application::Initialize(void* arg)
     if (m_SceneDocumentId == InvalidEditorDocumentId && SceneManager::Get().GetCurrentScene())
         AdoptSceneDocument({});
 
+    RecoveryManagerDesc recoveryDesc{ EditorSettingsService::Get().GetProjectRoot()};
+    RecoveryManager::Create(&recoveryDesc);
     m_InitializationCompleted = true;
     return EResult::Success;
 }
@@ -150,6 +155,12 @@ void Application::Free()
     if (m_InitializationCompleted)
     {
         m_InitializationCompleted = false;
+
+        if (RecoveryManager::IsCreated())
+        {
+            RecoveryManager::Get().Free();
+            RecoveryManager::Destroy();
+        }
 
         if (EditorSettingsService::IsCreated())
             CaptureAndSaveEditorWorkspace();
@@ -218,6 +229,7 @@ void Application::Free()
     if (m_LoggerInitialized)
     {
         BAM_LOG(Info, "Editor", "Application", "Application cleanup finished");
+        Engine::CrashHandler::Shutdown();
         Engine::Logger::Shutdown();
         m_LoggerInitialized = false;
     }
@@ -689,6 +701,8 @@ void Application::Run(int argc, char* argv[])
         AssetManager::Get().Update(dt);
         HotReloadManager::Get().Update();
         NotificationManager::Get().Update(dt);
+        if (RecoveryManager::IsCreated())
+            RecoveryManager::Get().Update(dt);
 
         auto& input = InputManager::Get();
         auto& imgui = ImGuiManager::Get();

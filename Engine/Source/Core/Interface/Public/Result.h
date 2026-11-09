@@ -49,7 +49,7 @@ namespace Engine
 		{
 #if defined(_MSC_VER) && defined(_DEBUG)
 			Logger::Log(ELogLevel::Error, "Engine", "Result", location, "Failure: {} ({}:{} in {})", ResultToString(result), location.file_name(), location.line(), location.function_name());
-			__debugbreak();
+ 			__debugbreak();
 #endif
 			return true;
 		}

@@ -28,6 +28,7 @@
 #include "ResourceEditorInterface.h"
 #include "TerrainEditor.h"
 #include "TilePalettePanel.h"
+#include "RecoveryManager.h"
 
 #include "DirectX12Texture.h"
 #include "SceneDocument.h"
@@ -331,6 +332,10 @@ void ImGuiManager::Draw()
 	history.BeginFrame();
 	DrawDocumentConfirmation();
 	DrawNewSceneDialog();
+	if (RecoveryManager::IsCreated())
+	{
+		RecoveryManager::Get().DrawRecoveryModal();
+	}
 	MainDockspace();
 	history.Synchronize(SceneManager::Get().GetCurrentScene(), PIEManager::Get().CanEdit());
 
