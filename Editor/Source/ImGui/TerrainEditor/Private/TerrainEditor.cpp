@@ -1,4 +1,5 @@
 ﻿#include "TerrainEditor.h"
+#include "EditorUI.h"
 #include "Application.h"
 #include "SceneManager.h"
 #include "SelectionManager.h"
@@ -60,7 +61,7 @@ void TerrainEditor::Draw()
 		}
 		else
 		{
-			ImGui::TextDisabled("%s", LOCAL_CSTR("TerrainEditor.NoSelection"));
+			EditorUI::EmptyState("TerrainEditor.NoSelection");
 			m_IsSculpting = false;
 			ImGui::End();
 			return;

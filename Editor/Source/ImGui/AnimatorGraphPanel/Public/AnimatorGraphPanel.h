@@ -1,6 +1,6 @@
 ﻿#pragma once
 
-#include "ImGuiInterface.h"
+#include "ResourceEditorInterface.h"
 #include "AnimatorStateMachine.h"
 #include "PreviewViewportWidget.h"
 #include <memory>
@@ -17,13 +17,12 @@ END
 
 BEGIN(Editor)
 
-class AnimatorGraphPanel : public IImGui
+class AnimatorGraphPanel : public ResourceEditorInterface
 {
 public:
 	AnimatorGraphPanel();
 	virtual ~AnimatorGraphPanel() override;
 
-	virtual void Draw() override;
 	virtual void Update(f32 dt) override;
 
 	void SetStateMachine(const std::shared_ptr<Engine::AnimatorStateMachine>& sm);
@@ -38,8 +37,14 @@ public:
 	void DeleteSelection();
 private:
 	// GraphPanel 스타일 2단 메뉴/툴바
-	void DrawMenuBar();
-	void DrawToolbar();
+	void DrawCustomToolbar() override;
+	void DrawCustomQuickAccess() override;
+	void DrawCustomContent() override;
+	ImVec2 GetInitialResourceWindowSize() const override { return ImVec2(1000.0f, 600.0f); }
+	void OnResourceWindowVisibility(bool visible) override;
+	string BuildResourceWindowTitle() const override;
+	void OnResourceCloseRequested() override { RequestClose(); }
+	void AfterResourceWindow() override { DrawConfirmModal(); }
 
 	// 3D 프리뷰 및 작업 공간
 	void InitializePreview();
@@ -59,6 +64,11 @@ private:
 	void DrawTransitionInspector(Engine::AnimTransition& transition);
 	void RenameParameter(const std::string& oldName, const std::string& newName);
 public:
+	virtual bool IsSupported(const std::filesystem::path& assetPath) const override;
+	virtual bool HasUnsavedResourceChanges() const override { return m_IsDirty; }
+	virtual void SetTargetResource(const std::filesystem::path& assetPath) override;
+	bool LoadFromFile(const std::filesystem::path& path);
+
 	enum class EPendingAction { None, New, Open, Close };
 	void RequestNew();
 	void RequestOpen();

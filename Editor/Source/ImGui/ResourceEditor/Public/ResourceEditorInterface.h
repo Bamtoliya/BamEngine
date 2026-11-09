@@ -20,13 +20,23 @@ public:
     }
     EPanelMenuCategory GetPanelMenuCategory() const override { return EPanelMenuCategory::Assets; }
 public:
-	virtual void Draw() BAM_PURE;
+	void Draw() override;
 protected:
-    string BuildResourceWindowTitle() const
-    {
-        return GetDisplayName() + " - " + WStrToStr(GetTargetResource().filename().wstring()) + "###" + WStrToStr(GetName());
-    }
-protected:
+    virtual ImVec2 GetInitialResourceWindowSize() const { return {}; }
+    virtual ImGuiWindowFlags GetResourceWindowFlags() const { return ImGuiWindowFlags_None; }
+    virtual string GetResourceWindowId() const { return WStrToStr(GetName()); }
+    virtual string BuildResourceWindowTitle() const;
+    virtual void DrawCustomToolbar();
+    virtual void DrawCustomQuickAccess() {}
+    virtual void DrawCustomContent() {}
+    virtual void OnResourceWindowVisibility(bool) {}
+    virtual void OnResourceCloseRequested() { m_Open = false; }
+    virtual void AfterResourceWindow() {}
+
+    // A panel can scope its own draw context around this call.
+    virtual void DrawResourceFrame();
+    void DrawCopyResourcePath();
+
     std::filesystem::path m_TargetResourcePath;
 };
 END

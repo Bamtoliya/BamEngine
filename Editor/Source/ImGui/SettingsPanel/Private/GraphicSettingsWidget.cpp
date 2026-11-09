@@ -1,4 +1,5 @@
 ﻿#include "GraphicSettingsWidget.h"
+#include "EditorUI.h"
 #include "Application.h"
 #include "EditorSettingsService.h"
 #include "ImGuiManager.h"
@@ -120,19 +121,33 @@ void GraphicSettingsWidget::Draw()
     ImGui::Separator();
     ImGui::Spacing();
 
+    const EditorUI::PropertyTableStyle tableStyle;
+
     if (ImGui::CollapsingHeader(LOCAL_CSTR("Settings.SectionDisplayResolution"), ImGuiTreeNodeFlags_DefaultOpen))
     {
-        ImGui::Spacing();
         ImGui::BeginDisabled(changePending);
-        ImGui::BeginDisabled(m_DraftFullscreen);
+        if (EditorUI::BeginPropertyTable("##GraphicDisplayTable", tableStyle))
+        {
+            // Width
+            EditorUI::PropertyRow("EditorCommon.Width");
+            ImGui::BeginDisabled(m_DraftFullscreen);
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            m_WindowDirty |= ImGui::InputInt("###WindowWidth", &m_DraftWindowWidth, 50, 100);
+            ImGui::EndDisabled();
 
-        ImGui::SetNextItemWidth(120.0f);
-        m_WindowDirty |= ImGui::InputInt(LOCAL_LABEL("EditorCommon.Width").c_str(), &m_DraftWindowWidth, 50, 100);
-        ImGui::SetNextItemWidth(120.0f);
-        m_WindowDirty |= ImGui::InputInt(LOCAL_LABEL("EditorCommon.Height").c_str(), &m_DraftWindowHeight, 50, 100);
+            // Height
+            EditorUI::PropertyRow("EditorCommon.Height");
+            ImGui::BeginDisabled(m_DraftFullscreen);
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            m_WindowDirty |= ImGui::InputInt("###WindowHeight", &m_DraftWindowHeight, 50, 100);
+            ImGui::EndDisabled();
 
-        ImGui::EndDisabled();
-        m_WindowDirty |= ImGui::Checkbox(LOCAL_LABEL("ToolBar.Fullscreen").c_str(), &m_DraftFullscreen);
+            // Fullscreen
+            EditorUI::PropertyRow("ToolBar.Fullscreen");
+            m_WindowDirty |= ImGui::Checkbox("###Fullscreen", &m_DraftFullscreen);
+
+            EditorUI::EndPropertyTable();
+        }
         ImGui::EndDisabled();
 
         const EditorWindowRequest request{ m_DraftWindowWidth, m_DraftWindowHeight, m_DraftFullscreen };
@@ -149,19 +164,28 @@ void GraphicSettingsWidget::Draw()
 
     if (ImGui::CollapsingHeader(LOCAL_CSTR("Settings.SectionFrameSync"), ImGuiTreeNodeFlags_DefaultOpen))
     {
-        ImGui::Spacing();
-        ImGui::SetNextItemWidth(150.0f);
-        m_TargetFPSDirty |= ImGui::DragInt(LOCAL_LABEL("ToolBar.TargetFPS").c_str(), &m_DraftTargetFPS,
-            1.0f, 0, EditorPreferences::MaxTargetFPS, "%d", ImGuiSliderFlags_AlwaysClamp);
+        if (EditorUI::BeginPropertyTable("##GraphicFrameSyncTable", tableStyle))
+        {
+            // Target FPS
+            EditorUI::PropertyRow("ToolBar.TargetFPS");
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            m_TargetFPSDirty |= ImGui::DragInt("###TargetFPS", &m_DraftTargetFPS,
+                1.0f, 0, EditorPreferences::MaxTargetFPS, "%d", ImGuiSliderFlags_AlwaysClamp);
 
-        if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("%s", LOCAL_CSTR("ToolBar.TargetFPSHint"));
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("%s", LOCAL_CSTR("ToolBar.TargetFPSHint"));
+
+            // VSync
+            const auto actualVSync = settings.GetEditorVSync();
+            EditorUI::PropertyRow("GraphicsSettings.VSync");
+            ImGui::BeginDisabled(changePending || !actualVSync);
+            m_VSyncDirty |= ImGui::Checkbox("###VSync", &m_DraftVSync);
+            ImGui::EndDisabled();
+
+            EditorUI::EndPropertyTable();
+        }
 
         const auto actualVSync = settings.GetEditorVSync();
-        ImGui::BeginDisabled(changePending || !actualVSync);
-        m_VSyncDirty |= ImGui::Checkbox(LOCAL_LABEL("GraphicsSettings.VSync").c_str(), &m_DraftVSync);
-        ImGui::EndDisabled();
-
         ImGui::TextWrapped("%s", LOCAL_CSTR("GraphicsSettings.VSyncHint"));
 
         if (actualVSync && *actualVSync != m_DraftVSync && !settings.SupportsEditorVSync(m_DraftVSync))
@@ -219,28 +243,17 @@ void GraphicSettingsWidget::DrawWindowConfirmation(EditorSettingsService& settin
     ImGui::Spacing();
     ImGui::Spacing();
 
-    const float btnWidth = 110.0f;
-    const float btnHeight = 28.0f;
-    const float spacing = ImGui::GetStyle().ItemSpacing.x;
-    const float totalBtnsWidth = (btnWidth * 2) + spacing;
-    const float alignX = ImGui::GetWindowContentRegionMax().x - totalBtnsWidth;
-
-    if (alignX > ImGui::GetCursorPosX())
-        ImGui::SameLine(alignX);
-
-    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.18f, 0.45f, 0.75f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.25f, 0.55f, 0.88f, 1.0f));
-    if (ImGui::Button((std::string(ICON_FA_CHECK " ") + LOCAL("EditorSettings.KeepWindowChange")).c_str(), ImVec2(btnWidth, btnHeight)))
+    const EditorUI::DialogAction actions[] = {
+        { "EditorCommon.Cancel" }, { "EditorSettings.KeepWindowChange" }
+    };
+    const int action = EditorUI::DialogButtonBar("WindowConfirmationActions", actions, IM_ARRAYSIZE(actions));
+    if (action == 1)
     {
         const auto result = settings.ConfirmWindowChange();
         if (result == EResult::Success || !settings.IsAwaitingWindowConfirmation())
             ImGui::CloseCurrentPopup();
     }
-    ImGui::PopStyleColor(2);
-
-    ImGui::SameLine();
-
-    if (ImGui::Button((std::string(ICON_FA_XMARK " ") + LOCAL("EditorCommon.Cancel")).c_str(), ImVec2(btnWidth, btnHeight)))
+    else if (action == 0)
     {
         if (settings.CancelWindowChange() == EResult::Success)
             ImGui::CloseCurrentPopup();

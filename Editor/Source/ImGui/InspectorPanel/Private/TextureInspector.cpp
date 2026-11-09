@@ -1,6 +1,7 @@
 ﻿#pragma	once
 
 #include "TextureInspector.h"
+#include "EditorUI.h"
 #include <DirectXTex.h>
 #include "TextureImporter.h"
 #include "TextureCompressorInterface.h"
@@ -180,7 +181,9 @@ bool TextureInspector::OnInspectorGUI(const std::filesystem::path& assetPath)
             ImGui::Text("%s", LOCAL_CSTR("TextureInspector.TextureConverted"));
 
         ImGui::Separator();
-        if (ImGui::Button(LOCAL_LABEL("EditorCommon.OK").c_str(), ImVec2(120, 0))) { ImGui::CloseCurrentPopup(); }
+        const EditorUI::DialogAction actions[] = { { "EditorCommon.OK" } };
+        if (EditorUI::DialogButtonBar("ImportResultActions", actions, IM_ARRAYSIZE(actions)) == 0)
+            ImGui::CloseCurrentPopup();
         ImGui::EndPopup();
     }
 

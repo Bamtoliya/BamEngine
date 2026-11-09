@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "Renderer.h"
 //RHI
@@ -147,10 +147,19 @@ EResult Renderer::Render(f32 dt)
 			(m_UIImageDrawCommands.find(pid) != m_UIImageDrawCommands.end() && !m_UIImageDrawCommands.at(pid).empty()) ||
 			(m_CustomRenderQueues.find(pid) != m_CustomRenderQueues.end() && !m_CustomRenderQueues.at(pid).empty()) ||
 			hasDelegate;
-		// [수정 복원] 수행할 커맨드가 전혀 없는 패스는 실행하지 않고 스킵!
-		// 뷰포트가 쓰로틀링(15 FPS)으로 렌더링을 쉰 프레임에는 렌더타겟이 지워지지 않고 이전 프레임 결과가 100% 보존됩니다.
-		if (!hasCommands)
+
+		auto jobsIt = jobsPerPass.find(pid);
+		const bool hasJobs = (jobsIt != jobsPerPass.end() && !jobsIt->second.empty());
+		const bool needsClear = (pass->GetLoadOperation() == ERenderPassLoadOperation::RPLO_Clear ||
+			pass->GetStencilLoadOperation() == ERenderPassLoadOperation::RPLO_Clear);
+
+		// [수정] 드로우 커맨드가 없는 패스 스킵 판정:
+		// 1) 뷰포트 카메라(Job)도 없고 커맨드도 없음 -> 쓰로틀링(15 FPS) 등으로 쉰 뷰포트이므로 이전 RT 보존을 위해 완전 스킵!
+		// 2) 카메라는 등록되었으나(활성 뷰포트), 커맨드가 없고 클리어도 불필요한 패스(RPLO_Load 패스 등) -> 스킵!
+		// 3) 카메라는 등록되었으나 커맨드가 없고 RPLO_Clear인 패스(예: 빈 씬의 GeometryPass) -> 스킵하지 않고 진행하여 RT를 클리어! (이전 프레임 잔상 방지)
+		if (!hasCommands && (!hasJobs || !needsClear))
 			continue;
+
 		m_RHI->BeginPassMetrics(pass->GetName());
 
 		auto staticIt = m_StaticDrawCommands.find(pass->GetID());
@@ -166,8 +175,6 @@ EResult Renderer::Render(f32 dt)
 				});
 		}
 		static const vector<ViewportJob> s_DefaultJobs = { ViewportJob{} };
-		auto jobsIt = jobsPerPass.find(pass->GetID());
-		const bool hasJobs = jobsIt != jobsPerPass.end() && !jobsIt->second.empty();
 		const vector<ViewportJob>& jobs = hasJobs ? jobsIt->second : s_DefaultJobs;
 
 		for (const auto& job : jobs)

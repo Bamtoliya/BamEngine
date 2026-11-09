@@ -2,6 +2,7 @@
 #include "Editor_Includes.h"
 #include "InputManager.h"
 #include "LocalizationManager.h"
+#include "EditorUI.h"
 #include "ShortcutManager.h"
 
 void ShortcutSettingsWidget::Draw(const ImGuiTextFilter& searchFilter)
@@ -68,7 +69,7 @@ void ShortcutSettingsWidget::Draw(const ImGuiTextFilter& searchFilter)
         if (ImGui::CollapsingHeader(headerTitle.c_str(), ImGuiTreeNodeFlags_DefaultOpen))
         {
             const std::string tableId = "Table_" + catKey;
-            if (ImGui::BeginTable(tableId.c_str(), 3, tableFlags))
+            if (EditorUI::BeginSettingsTable(tableId.c_str(), 3, tableFlags))
             {
                 ImGui::TableSetupColumn(LOCAL_CSTR("Shortcuts.ColAction"), ImGuiTableColumnFlags_WidthStretch);
                 ImGui::TableSetupColumn(LOCAL_CSTR("Shortcuts.ColShortcut"), ImGuiTableColumnFlags_WidthFixed, 180.0f);
@@ -120,7 +121,7 @@ void ShortcutSettingsWidget::Draw(const ImGuiTextFilter& searchFilter)
                     ImGui::PopID();
                 }
 
-                ImGui::EndTable();
+                EditorUI::EndSettingsTable();
             }
             ImGui::Spacing();
         }

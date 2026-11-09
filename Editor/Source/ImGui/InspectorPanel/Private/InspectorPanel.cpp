@@ -1,5 +1,6 @@
 ﻿#pragma once
 #include "InspectorPanel.h"
+#include "EditorUI.h"
 #include "Application.h"
 #include "SelectionManager.h"
 #include "LocalizationManager.h"
@@ -275,34 +276,12 @@ void InspectorPanel::DrawPrefabHeaderBar(Engine::Entity& entity)
 			LOCAL_FMT("Prefab.ChildOf", prefabFileName).c_str());
 	if (ImGui::IsItemHovered())
 		ImGui::SetTooltip("%s", Engine::WStrToStr(prefabComp->prefabAssetPath).c_str());
-	// [반응형 레이아웃]: 버튼 3개의 총 너비 계산
-	const float btnWidth = 65.0f;
-	const float overridesBtnWidth = 85.0f;
-	const float spacing = ImGui::GetStyle().ItemSpacing.x;
-	const float totalBtnsWidth = (btnWidth * 2) + overridesBtnWidth + (spacing * 2);
-	const float availWidth = ImGui::GetContentRegionAvail().x;
-	// 가용 공간이 충분하면 같은 줄 우측에 정렬하고, 부족하면 다음 줄로 자동 개행(Wrap)
-	if (availWidth >= totalBtnsWidth + spacing)
-	{
-		ImGui::SameLine();
-		const float rightOffset = availWidth - totalBtnsWidth;
-		if (rightOffset > 0.0f)
-			ImGui::SetCursorPosX(ImGui::GetCursorPosX() + rightOffset);
-	}
-	else
-	{
-		ImGui::Spacing(); // 줄바꿈 후 약간의 여백 추가
-	}
-	// [Open] 버튼
-	if (ImGui::Button((std::string(ICON_FA_FOLDER_OPEN " ") + LOCAL("Prefab.Open")).c_str(), ImVec2(btnWidth, 0)))
+	EditorUI::ToolbarLayout toolbar;
+	if (toolbar.Button("OpenPrefab", ICON_FA_FOLDER_OPEN, "Prefab.Open"))
 		PrefabModeManager::Get().EnterPrefabMode(prefabComp->prefabAssetPath);
-	ImGui::SameLine();
-	// [Select] 버튼
-	if (ImGui::Button((std::string(ICON_FA_LOCATION_ARROW " ") + LOCAL("Prefab.Select")).c_str(), ImVec2(btnWidth, 0)))
+	if (toolbar.Button("SelectPrefab", ICON_FA_LOCATION_ARROW, "Prefab.Select"))
 		SelectionManager::Get().SetSelectedAsset(prefabComp->prefabAssetPath);
-	ImGui::SameLine();
-	// [Overrides] 버튼
-	if (ImGui::Button((std::string(LOCAL("Prefab.Overrides")) + " " ICON_FA_CARET_DOWN).c_str(), ImVec2(overridesBtnWidth, 0)))
+	if (toolbar.Button("PrefabOverrides", ICON_FA_CARET_DOWN, "Prefab.Overrides"))
 		ImGui::OpenPopup("PrefabOverridesPopup");
 
 	if (ImGui::BeginPopup("PrefabOverridesPopup"))
@@ -1118,6 +1097,7 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 				static bool s_EditorPreviewActive = false;
 				static entt::entity s_PreviewEntity = entt::null;
 				const bool isPreviewing = (s_EditorPreviewActive && s_PreviewEntity == handle);
+				EditorUI::ToolbarLayout playbackToolbar;
 				if (isPreviewing)
 				{
 					const float dt = ImGui::GetIO().DeltaTime;
@@ -1130,12 +1110,14 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 						anim.currentFrameIndex = (anim.currentFrameIndex + 1) % frameCount;
 						if (renderer) renderer->spriteHandle = anim.frames[anim.currentFrameIndex];
 					}
-					ImGui::TextColored(ImVec4(0.2f, 0.9f, 0.2f, 1.0f), "%s", LOCAL_CSTR("SpriteAnimation.Previewing"));
-					ImGui::SameLine();
-					if (ImGui::Button((ICON_FA_PAUSE " " + LOCAL_LABEL("SpriteAnimation.Pause")).c_str()))
+					ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.2f, 0.9f, 0.2f, 1.0f));
+					playbackToolbar.Text(LOCAL_CSTR("SpriteAnimation.Previewing"), false);
+					ImGui::PopStyleColor();
+
+					if (playbackToolbar.Button("SpriteAnimation.Pause", ICON_FA_PAUSE, "SpriteAnimation.Pause"))
 						s_EditorPreviewActive = false;
-					ImGui::SameLine();
-					if (ImGui::Button((ICON_FA_STOP " " + LOCAL_LABEL("SpriteAnimation.Stop")).c_str()))
+
+					if (playbackToolbar.Button("SpriteAnimation.Stop", ICON_FA_STOP, "SpriteAnimation.Stop"))
 					{
 						s_EditorPreviewActive = false;
 						anim.SetFrame(0);
@@ -1144,15 +1126,15 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 				}
 				else
 				{
-					ImGui::TextDisabled("%s", LOCAL_CSTR("SpriteAnimation.Stopped"));
-					ImGui::SameLine();
-					if (ImGui::Button((ICON_FA_PLAY " " + LOCAL_LABEL("SpriteAnimation.Preview")).c_str()))
+					playbackToolbar.Text(LOCAL_CSTR("SpriteAnimation.Stopped"));
+
+					if (playbackToolbar.Button("SpriteAnimation.Preview", ICON_FA_PLAY, "SpriteAnimation.Preview"))
 					{
 						s_EditorPreviewActive = true;
 						s_PreviewEntity = handle;
 					}
-					ImGui::SameLine();
-					if (ImGui::Button((ICON_FA_ROTATE_LEFT " " + LOCAL_LABEL("SpriteAnimation.Reset")).c_str()))
+
+					if (playbackToolbar.Button("SpriteAnimation.Reset", ICON_FA_ROTATE_LEFT, "SpriteAnimation.Reset"))
 					{
 						anim.SetFrame(0);
 						if (renderer && !anim.frames.empty()) renderer->spriteHandle = anim.frames[0];
@@ -1293,6 +1275,7 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 				static bool s_AnimatorPreviewActive = false;
 				static entt::entity s_AnimatorPreviewEntity = entt::null;
 				const bool isPreviewing = (s_AnimatorPreviewActive && s_AnimatorPreviewEntity == handle);
+				EditorUI::ToolbarLayout playbackToolbar;
 				if (isPreviewing)
 				{
 					const float dt = ImGui::GetIO().DeltaTime;
@@ -1304,12 +1287,14 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 						Engine::AnimationEvaluator::EvaluateSkinningMatrices(*clip, *skeleton,
 							animator.currentTime, animator.finalBoneMatrices);
 					}
-					ImGui::TextColored(ImVec4(0.2f, 0.9f, 0.2f, 1.0f), "%s", LOCAL_CSTR("Animator.Previewing"));
-					ImGui::SameLine();
-					if (ImGui::Button((ICON_FA_PAUSE " " + LOCAL_LABEL("Animator.Pause")).c_str()))
+					ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.2f, 0.9f, 0.2f, 1.0f));
+					playbackToolbar.Text(LOCAL_CSTR("Animator.Previewing"), false);
+					ImGui::PopStyleColor();
+
+					if (playbackToolbar.Button("Animator.Pause", ICON_FA_PAUSE, "Animator.Pause"))
 						s_AnimatorPreviewActive = false;
-					ImGui::SameLine();
-					if (ImGui::Button((ICON_FA_STOP " " + LOCAL_LABEL("Animator.Stop")).c_str()))
+
+					if (playbackToolbar.Button("Animator.Stop", ICON_FA_STOP, "Animator.Stop"))
 					{
 						s_AnimatorPreviewActive = false;
 						animator.currentTime = 0.0f;
@@ -1322,15 +1307,15 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 				}
 				else
 				{
-					ImGui::TextDisabled("%s", LOCAL_CSTR("Animator.Stopped"));
-					ImGui::SameLine();
-					if (ImGui::Button((ICON_FA_PLAY " " + LOCAL_LABEL("Animator.Preview")).c_str()))
+					playbackToolbar.Text(LOCAL_CSTR("Animator.Stopped"));
+
+					if (playbackToolbar.Button("Animator.Preview", ICON_FA_PLAY, "Animator.Preview"))
 					{
 						s_AnimatorPreviewActive = true;
 						s_AnimatorPreviewEntity = handle;
 					}
-					ImGui::SameLine();
-					if (ImGui::Button((ICON_FA_ROTATE_LEFT " " + LOCAL_LABEL("Animator.Reset")).c_str()))
+
+					if (playbackToolbar.Button("Animator.Reset", ICON_FA_ROTATE_LEFT, "Animator.Reset"))
 					{
 						animator.currentTime = 0.0f;
 						if (skeleton)
@@ -1362,22 +1347,23 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 			ImGui::Text("%s: %zu / %u", LOCAL_CSTR("Particle.ActiveCount"), emitter.particles.size(), emitter.maxParticles);
 
 			// 재생 제어 툴바
-			if (ImGui::Button((ICON_FA_PLAY " " + LOCAL_LABEL("Particle.Play")).c_str()))
+			EditorUI::ToolbarLayout playbackToolbar;
+			if (playbackToolbar.Button("Particle.Play", ICON_FA_PLAY, "Particle.Play"))
 			{
 				emitter.Play();
 			}
-			ImGui::SameLine();
-			if (ImGui::Button((ICON_FA_PAUSE " " + LOCAL_LABEL("Particle.Pause")).c_str()))
+
+			if (playbackToolbar.Button("Particle.Pause", ICON_FA_PAUSE, "Particle.Pause"))
 			{
 				emitter.Pause();
 			}
-			ImGui::SameLine();
-			if (ImGui::Button((ICON_FA_STOP " " + LOCAL_LABEL("Particle.Stop")).c_str()))
+
+			if (playbackToolbar.Button("Particle.Stop", ICON_FA_STOP, "Particle.Stop"))
 			{
 				emitter.Stop();
 			}
-			ImGui::SameLine();
-			if (ImGui::Button((ICON_FA_ROTATE_LEFT " " + LOCAL_LABEL("Particle.Reset")).c_str()))
+
+			if (playbackToolbar.Button("Particle.Reset", ICON_FA_ROTATE_LEFT, "Particle.Reset"))
 			{
 				emitter.Reset();
 			}
@@ -1410,7 +1396,7 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 			{
 				std::wstring selectedPath;
 				const std::vector<FileDialogFilter> filters{
-					{ Engine::StrToWStr(LOCAL("FileDialog.ActionTimelineFiles")), L"*.actiontimeline.json" },
+					{ Engine::StrToWStr(LOCAL("FileDialog.ActionTimelineFiles")), L"*.bamtimeline.json;*.actiontimeline.json" },
 					{ Engine::StrToWStr(LOCAL("FileDialog.AllFiles")), L"*.*" }
 				};
 				if (FileDialogs::OpenFileDialog(selectedPath, filters, L"Resources/Animation"))
@@ -1422,22 +1408,25 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 
 			// 2. 런타임 제어 툴바 (Play, Pause, Stop)
 			ImGui::Spacing();
-			if (ImGui::Button((ICON_FA_PLAY " " + LOCAL_LABEL("Particle.Play")).c_str()))
+			EditorUI::ToolbarLayout playbackToolbar;
+			if (playbackToolbar.Button("Particle.Play", ICON_FA_PLAY, "Particle.Play"))
 			{
 				timeline.Play();
 			}
-			ImGui::SameLine();
-			if (ImGui::Button((ICON_FA_PAUSE " " + LOCAL_LABEL("Particle.Pause")).c_str()))
+
+			if (playbackToolbar.Button("Particle.Pause", ICON_FA_PAUSE, "Particle.Pause"))
 			{
 				timeline.Pause();
 			}
-			ImGui::SameLine();
-			if (ImGui::Button((ICON_FA_STOP " " + LOCAL_LABEL("Particle.Stop")).c_str()))
+
+			if (playbackToolbar.Button("Particle.Stop", ICON_FA_STOP, "Particle.Stop"))
 			{
 				timeline.Stop();
 			}
-			ImGui::SameLine();
-			ImGui::TextDisabled(LOCAL_CSTR("Inspector.ElapsedSeconds"), timeline.currentTime);
+
+			ImGuiTextBuffer elapsedText;
+			elapsedText.appendf(LOCAL_CSTR("Inspector.ElapsedSeconds"), timeline.currentTime);
+			playbackToolbar.Text(elapsedText.c_str());
 
 			// 3. 에디터 타임라인 패널 원클릭 편집 연동 버튼
 			ImGui::Spacing();

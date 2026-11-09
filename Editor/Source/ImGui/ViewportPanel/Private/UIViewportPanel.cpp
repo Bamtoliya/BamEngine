@@ -189,6 +189,15 @@ void Editor::UIViewportPanel::Draw()
     if (!m_InteractionUpdated && m_Interaction) m_Interaction->Cancel();
 }
 
+float Editor::UIViewportPanel::GetCustomOptionsWidth() const
+{
+    ImGuiTextBuffer zoom;
+    zoom.appendf("%.0f%%", m_View.zoom * 100.0f);
+    return MeasureOptionLabels({ LOCAL_CSTR("Viewport.Canvas"), LOCAL_CSTR("Viewport.Order"),
+        LOCAL_CSTR("Viewport.Interact"), LOCAL_CSTR("Viewport.Fit"), "100%", zoom.c_str(),
+        LOCAL_CSTR("Viewport.Snap"), LOCAL_CSTR("Viewport.View") }) + ImGui::GetFrameHeight();
+}
+
 void Editor::UIViewportPanel::DrawCustomOptions()
 {
     DrawCanvasMenu();
@@ -231,7 +240,7 @@ void Editor::UIViewportPanel::DrawCustomOptions()
         ImGui::Checkbox(LOCAL_LABEL("Viewport.Anchors").c_str(), &m_ShowAnchors);
         ImGui::EndMenu();
     }
-    DrawChannelViewButton();
+
 }
 
 void Editor::UIViewportPanel::DrawOrderMenu()

@@ -1,4 +1,5 @@
 ﻿#include "ConsolePanel.h"
+#include "EditorUI.h"
 #include "InputManager.h"
 #include "EditorSettings.h"
 
@@ -77,52 +78,29 @@ void ConsolePanel::ClearLog()
 
 void ConsolePanel::DrawOptions()
 {
-    const float buttonSize = ImGui::GetFrameHeight();
-    const ImVec2 size(buttonSize, buttonSize);
-
-    if (ImGui::Button(ICON_FA_TRASH "##ClearLog", size))
+    if (EditorUI::IconButton("ClearLog", ICON_FA_TRASH, "Console.ClearHistory"))
         ClearLog();
 
-    if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("%s", LOCAL_CSTR("Console.ClearHistory"));
-
-    ImGui::SameLine();
-
-    // 활성화된 토글 버튼은 배경색으로 구분합니다.
-    const bool highlighted = m_AutoScroll;
-
-    if (highlighted)
-    {
-        ImGui::PushStyleColor(
-            ImGuiCol_Button,
-            ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
-    }
-
-    if (ImGui::Button(ICON_FA_ANGLES_DOWN "##AutoScroll", size))
+    EditorUI::IconButtonOptions options;
+    options.Active = m_AutoScroll;
+    options.SameLine = true;
+    if (EditorUI::IconButton("AutoScroll", ICON_FA_ANGLES_DOWN,
+        m_AutoScroll ? "Console.AutoScrollOn" : "Console.AutoScrollOff", options))
     {
         m_AutoScroll = !m_AutoScroll;
-
         if (m_AutoScroll)
             m_ScrollToBottom = true;
     }
 
-    if (highlighted)
-        ImGui::PopStyleColor();
-
-    if (ImGui::IsItemHovered())
-    {
-        ImGui::SetTooltip(
-            "%s",
-            m_AutoScroll
-            ? LOCAL_CSTR("Console.AutoScrollOn")
-            : LOCAL_CSTR("Console.AutoScrollOff"));
-    }
-
-    ImGui::SameLine();
-    ImGui::SetNextItemWidth(ImGui::GetFontSize() * 9.5f);
+    const float filterWidth = ImGui::GetFontSize() * 9.5f;
+    EditorUI::SameLineIfFits(filterWidth);
+    ImGui::SetNextItemWidth(std::min(filterWidth, std::max(1.0f, ImGui::GetContentRegionAvail().x)));
     DrawLevelFilter();
-    ImGui::SameLine();
-    ImGui::Checkbox(LOCAL_LABEL("Console.CollapseDuplicates").c_str(), &m_CollapseDuplicates);
+    const auto collapseLabel = LOCAL_LABEL("Console.CollapseDuplicates");
+    const float checkboxWidth = ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x +
+        ImGui::CalcTextSize(collapseLabel.c_str(), nullptr, true).x;
+    EditorUI::SameLineIfFits(checkboxWidth);
+    ImGui::Checkbox(collapseLabel.c_str(), &m_CollapseDuplicates);
 }
 
 void ConsolePanel::DrawLevelFilter()
@@ -204,10 +182,7 @@ void ConsolePanel::DrawSourceFilter()
 
 void ConsolePanel::DrawSearch()
 {
-    ImGui::SetNextItemWidth(-1.0f);
-
-    if (ImGui::InputTextWithHint("##ConsoleSearch", LOCAL_CSTR("EditorCommon.Search"), m_Filter.InputBuf,
-        IM_ARRAYSIZE(m_Filter.InputBuf)))
+    if (EditorUI::SearchBar("ConsoleSearch", m_Filter.InputBuf, IM_ARRAYSIZE(m_Filter.InputBuf)))
     {
         m_Filter.Build();
     }

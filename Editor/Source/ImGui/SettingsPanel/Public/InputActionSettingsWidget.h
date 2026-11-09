@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "Editor_Includes.h"
 #include "InputActionSettings.h"
@@ -40,5 +40,6 @@ private:
     bool m_InputActionsDirty = false;
     std::optional<InputBindingCapture> m_InputBindingCapture;
     std::map<std::string, std::string> m_NewInputActionIds;
+    std::string m_NewCategoryName;
 };
 END

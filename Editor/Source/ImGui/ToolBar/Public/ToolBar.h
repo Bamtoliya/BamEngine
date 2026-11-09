@@ -8,10 +8,9 @@ BEGIN(Editor)
 class ToolBar
 {
 public:
-	void Draw(SDL_Window* window);
+	float Draw(SDL_Window* window); // PIE 바의 실제 하단 화면 좌표.
 	void ApplyPendingLanguageChange();
 	bool IsMainWindowDragArea(const SDL_Point& point) const;
-	float GetPlayBarHeight() const;
 	float GetFooterBarHeight() const;
 
 #pragma region File Menu
@@ -50,6 +49,7 @@ private:
 
 #pragma region Play & Footer Controls
 private:
+	float GetPlayBarHeight() const;
 	void DrawPlayControls();
 	void DrawFooterControls();
 #pragma endregion

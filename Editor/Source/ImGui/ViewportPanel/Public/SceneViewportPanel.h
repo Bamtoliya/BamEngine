@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "CameraViewportPanel.h"
 #include "DebugRenderer.h"
@@ -82,6 +82,7 @@ public:
 #pragma region Custom Draws
 protected:
 	virtual void DrawCustomOptions() override;
+	float GetCustomOptionsWidth() const override;
 	virtual void DrawCustomViewport() override;
 #pragma endregion
 

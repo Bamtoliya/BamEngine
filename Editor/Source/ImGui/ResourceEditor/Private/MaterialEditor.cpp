@@ -1,4 +1,5 @@
 ﻿#include "MaterialEditor.h"
+#include "EditorUI.h"
 #include "ShortcutManager.h"
 #include "Material.h"
 #include "MaterialInstance.h"
@@ -99,74 +100,54 @@ void MaterialEditor::Update(f32 dt)
 	}
 }
 
-void MaterialEditor::Draw()
+void MaterialEditor::OnResourceWindowVisibility(bool visible)
 {
-	if (!m_Open)
-	{
-		m_IsVisibleOnScreen = false;
-		return;
-	}
-	const auto title = BuildResourceWindowTitle();
-	ImGui::SetNextWindowSize(ImVec2(1000.0f, 650.0f), ImGuiCond_FirstUseEver);
-	// 가려진 탭이면 Begin이 false를 반환합니다.
-	if (BeginPanelWindow(title.c_str(), m_Open, ImGuiWindowFlags_MenuBar))
-	{
-		m_IsVisibleOnScreen = true;
-		// 마우스가 에디터 위에 있거나 포커스된 경우 프리뷰 갱신 타이머 연장 (0.5초 동안 활성 렌더링)
-		if (ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows) || ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows))
-		{
-			m_PreviewDirtyTimer = 0.5f;
-		}
-		if (!m_Material)
-		{
-			ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%s", LOCAL_FMT("MaterialEditor.LoadFailed", m_TargetResourcePath.string()).c_str());
-			if (ImGui::Button(LOCAL_CSTR("MaterialEditor.Retry")))
-				SetTargetResource(m_TargetResourcePath);
-			ImGui::End();
-			return;
-		}
-
-		DrawMenuBar();
-		DrawToolbar();
-		ImGui::Separator();
-		const float availWidth = ImGui::GetContentRegionAvail().x;
-		const float splitterThickness = 4.0f;
-		const float spacingX = ImGui::GetStyle().ItemSpacing.x;
-		// 우측 디테일 창 가용 너비 계산 (최소 320px 보장)
-		const float minLeft = 250.0f;
-		const float minRight = 320.0f;
-		float detailsWidth = (std::max)(minRight, availWidth - m_ViewportWidth - splitterThickness - spacingX);
-		// ── [좌측] 3D 머티리얼 뷰포트 ──
-		ImGuiWindowFlags vpFlags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
-		if (ImGui::BeginChild("##MaterialViewportPane", ImVec2(m_ViewportWidth, 0.0f), true, vpFlags))
-		{
-			m_PreviewRenderer.DrawUI(m_Material);
-		}
-		ImGui::EndChild();
-		ImGui::SameLine();
-		// ── [스플리터] 뷰포트 ↔ 디테일 패널 ──
-		Editor::SplitterV("##MaterialSplitter", &m_ViewportWidth, &detailsWidth, minLeft, minRight, 0.0f, splitterThickness);
-		ImGui::SameLine();
-		// ── [우측] 프로퍼티 & 파라미터 패널 (남은 가용 폭 전체 채움) ──
-		if (ImGui::BeginChild("##MaterialDetailsPane", ImVec2(0.0f, 0.0f), true))
-		{
-			DrawPipelineSettings();
-			DrawShaderSettings();
-			DrawTextureBindings();
-			DrawParameters();
-		}
-		ImGui::EndChild();
-	}
-	else
-	{
-		m_IsVisibleOnScreen = false;
-	}
-	ImGui::End();
+	m_IsVisibleOnScreen = visible;
+	if (visible && (m_Focused || m_Hovered)) m_PreviewDirtyTimer = 0.5f;
 }
 
-void MaterialEditor::DrawMenuBar()
+void MaterialEditor::DrawCustomContent()
 {
-	if (!ImGui::BeginMenuBar()) return;
+	if (!m_Material)
+	{
+		ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%s", LOCAL_FMT("MaterialEditor.LoadFailed", m_TargetResourcePath.string()).c_str());
+		if (ImGui::Button(LOCAL_CSTR("MaterialEditor.Retry")))
+			SetTargetResource(m_TargetResourcePath);
+		return;
+	}
+
+	const float availWidth = ImGui::GetContentRegionAvail().x;
+	const float splitterThickness = 4.0f;
+	const float spacingX = ImGui::GetStyle().ItemSpacing.x;
+	// 우측 디테일 창 가용 너비 계산 (최소 320px 보장)
+	const float minLeft = 250.0f;
+	const float minRight = 320.0f;
+	float detailsWidth = (std::max)(minRight, availWidth - m_ViewportWidth - splitterThickness - spacingX);
+	// ── [좌측] 3D 머티리얼 뷰포트 ──
+	ImGuiWindowFlags vpFlags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
+	if (ImGui::BeginChild("##MaterialViewportPane", ImVec2(m_ViewportWidth, 0.0f), true, vpFlags))
+	{
+		m_PreviewRenderer.DrawUI(m_Material);
+	}
+	ImGui::EndChild();
+	ImGui::SameLine();
+	// ── [스플리터] 뷰포트 ↔ 디테일 패널 ──
+	Editor::SplitterV("##MaterialSplitter", &m_ViewportWidth, &detailsWidth, minLeft, minRight, 0.0f, splitterThickness);
+	ImGui::SameLine();
+	// ── [우측] 프로퍼티 & 파라미터 패널 (남은 가용 폭 전체 채움) ──
+	if (ImGui::BeginChild("##MaterialDetailsPane", ImVec2(0.0f, 0.0f), true))
+	{
+		DrawPipelineSettings();
+		DrawShaderSettings();
+		DrawTextureBindings();
+		DrawParameters();
+	}
+	ImGui::EndChild();
+}
+
+void MaterialEditor::DrawCustomToolbar()
+{
+	if (!m_Material) return;
 
 	if (ImGui::BeginMenu(LOCAL_LABEL("EditorMenu.File").c_str()))
 	{
@@ -238,15 +219,15 @@ void MaterialEditor::DrawMenuBar()
 
 		ImGui::EndMenu();
 	}
-
-	ImGui::EndMenuBar();
 }
 
-void MaterialEditor::DrawToolbar()
+void MaterialEditor::DrawCustomQuickAccess()
 {
-	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f, 4.0f));
+	if (!m_Material) return;
 
-	if (ImGui::Button(ICON_FA_FLOPPY_DISK "##SaveMaterial"))
+	EditorUI::ToolbarLayout toolbar;
+
+	if (toolbar.Icon("SaveMaterial", ICON_FA_FLOPPY_DISK, "EditorCommon.Save"))
 	{
 		const std::string pathStr = m_TargetResourcePath.string();
 		EResult result = EResult::Fail;
@@ -267,10 +248,8 @@ void MaterialEditor::DrawToolbar()
 			EDITOR_LOG_ERROR("Failed to save material: {}", pathStr);
 		}
 	}
-	if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("EditorCommon.Save"));
 
-	ImGui::SameLine();
-	if (ImGui::Button(ICON_FA_ROTATE_LEFT "##RevertMaterial"))
+	if (toolbar.Icon("RevertMaterial", ICON_FA_ROTATE_LEFT, "MaterialEditor.Revert"))
 	{
 		if (m_Material && m_Material->Reload(m_TargetResourcePath) == EResult::Success)
 		{
@@ -280,35 +259,23 @@ void MaterialEditor::DrawToolbar()
 			EDITOR_LOG_INFO("Material reverted: {}", m_TargetResourcePath.string());
 		}
 	}
-	if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("MaterialEditor.Revert"));
 
-	ImGui::SameLine();
-	ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
-	ImGui::SameLine();
-
-	if (ImGui::Button(ICON_FA_CROSSHAIRS "##FocusMaterial"))
+	if (toolbar.Icon("FocusMaterial", ICON_FA_CROSSHAIRS, "MaterialEditor.ResetCamera"))
 	{
 		m_PreviewRenderer.GetWidget().FocusTarget(Engine::vec3(0.0f, 0.0f, 0.0f), 3.0f);
 	}
-	if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("MaterialEditor.ResetCamera"));
 
-	ImGui::SameLine();
-	if (ImGui::Button(ICON_FA_BORDER_ALL "##ToggleGridMaterial"))
+	EditorUI::IconButtonOptions gridOptions;
+	gridOptions.Active = m_PreviewRenderer.GetWidget().IsGridVisible();
+	if (toolbar.Icon("ToggleGridMaterial", ICON_FA_BORDER_ALL, "MaterialEditor.ToggleGrid", gridOptions))
 	{
 		m_PreviewRenderer.GetWidget().ToggleGrid();
 	}
-	if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("MaterialEditor.ToggleGrid"));
-
-	ImGui::SameLine();
-	ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
-	ImGui::SameLine();
 
 	// 파일 상태 배지
 	const std::string fileName = m_TargetResourcePath.empty()
 		? LOCAL("AnimatorGraph.Unsaved") : m_TargetResourcePath.filename().string();
-	ImGui::TextDisabled("[%s%s]", fileName.c_str(), m_IsDirty ? " *" : "");
-
-	ImGui::PopStyleVar();
+	toolbar.Text(("[" + fileName + (m_IsDirty ? " *]" : "]")).c_str());
 }
 
 void MaterialEditor::DrawPipelineSettings()
@@ -436,7 +403,7 @@ void MaterialEditor::DrawShaderSettings()
 		ImGui::TableSetupColumn(LOCAL_CSTR("MaterialEditor.PassType"), ImGuiTableColumnFlags_WidthFixed, 110.0f);
 		ImGui::TableSetupColumn(LOCAL_CSTR("MaterialEditor.VertexShader"), ImGuiTableColumnFlags_WidthStretch);
 		ImGui::TableSetupColumn(LOCAL_CSTR("MaterialEditor.PixelShader"), ImGuiTableColumnFlags_WidthStretch);
-		ImGui::TableSetupColumn("##Action", ImGuiTableColumnFlags_WidthFixed, 35.0f);
+		ImGui::TableSetupColumn("##Action", ImGuiTableColumnFlags_WidthFixed, EditorUI::GetIconButtonSize(ICON_FA_TRASH, true).x);
 		ImGui::TableHeadersRow();
 
 		for (size_t i = 0; i < passShaders.size(); ++i)
@@ -466,7 +433,7 @@ void MaterialEditor::DrawShaderSettings()
 
 			// Column 3: 삭제
 			ImGui::TableSetColumnIndex(3);
-			if (ImGui::Button(ICON_FA_TRASH "##RemovePass"))
+			if (EditorUI::SmallIconButton("RemovePass", ICON_FA_TRASH, "EditorCommon.Delete"))
 				passToRemove = typeIdx;
 
 			ImGui::PopID();
@@ -606,7 +573,7 @@ void MaterialEditor::DrawTextureBindings()
 		ImGui::TableSetupColumn(LOCAL_CSTR("MaterialEditor.Name"), ImGuiTableColumnFlags_WidthFixed, 130.0f);
 		ImGui::TableSetupColumn(LOCAL_CSTR("MaterialEditor.Preview"), ImGuiTableColumnFlags_WidthFixed, 75.0f);
 		ImGui::TableSetupColumn(LOCAL_CSTR("MaterialEditor.TextureDragDrop"), ImGuiTableColumnFlags_WidthStretch);
-		ImGui::TableSetupColumn("##Action", ImGuiTableColumnFlags_WidthFixed, 35.0f);
+		ImGui::TableSetupColumn("##Action", ImGuiTableColumnFlags_WidthFixed, EditorUI::GetIconButtonSize(ICON_FA_TRASH, true).x);
 		ImGui::TableHeadersRow();
 
 		for (size_t i = 0; i < rows.size(); ++i)
@@ -689,7 +656,7 @@ void MaterialEditor::DrawTextureBindings()
 			if (baseMat && row.isOverridden && row.hasBase)
 			{
 				// 부모 상속 슬롯을 오버라이드한 경우 -> 되돌리기 버튼 (Revert to Base)
-				if (ImGui::Button(ICON_FA_ROTATE_LEFT "##RevertOverride"))
+				if (EditorUI::SmallIconButton("RevertOverride", ICON_FA_ROTATE_LEFT, "EditorCommon.Reset"))
 					slotToRemove = static_cast<int>(row.slot);
 				if (ImGui::IsItemHovered())
 					ImGui::SetTooltip("%s", LOCAL_CSTR("MaterialEditor.Revert"));
@@ -697,7 +664,7 @@ void MaterialEditor::DrawTextureBindings()
 			else if (row.isOverridden)
 			{
 				// 일반 머티리얼의 등록 슬롯이거나 인스턴스의 추가 커스텀 슬롯 -> 삭제 버튼
-				if (ImGui::Button(ICON_FA_TRASH "##RemoveBinding"))
+				if (EditorUI::SmallIconButton("RemoveBinding", ICON_FA_TRASH, "EditorCommon.Delete"))
 					slotToRemove = static_cast<int>(row.slot);
 			}
 			else
@@ -746,7 +713,7 @@ void MaterialEditor::DrawParameters()
 	{
 		ImGui::TableSetupColumn(LOCAL_CSTR("MaterialEditor.Name"), ImGuiTableColumnFlags_WidthFixed, 140.0f);
 		ImGui::TableSetupColumn(LOCAL_CSTR("MaterialEditor.Value"), ImGuiTableColumnFlags_WidthStretch);
-		ImGui::TableSetupColumn("##Action", ImGuiTableColumnFlags_WidthFixed, 35.0f);
+		ImGui::TableSetupColumn("##Action", ImGuiTableColumnFlags_WidthFixed, EditorUI::GetIconButtonSize(ICON_FA_TRASH, true).x);
 		ImGui::TableHeadersRow();
 
 		for (const auto& [name, param] : params)
@@ -826,7 +793,7 @@ void MaterialEditor::DrawParameters()
 			}
 
 			ImGui::TableSetColumnIndex(2);
-			if (ImGui::Button(ICON_FA_TRASH "##DelParam"))
+			if (EditorUI::SmallIconButton("DelParam", ICON_FA_TRASH, "EditorCommon.Delete"))
 				paramToRemove = name;
 
 			ImGui::PopID();

@@ -42,6 +42,7 @@ public:
 protected:
 	virtual void DrawCustomViewport() override;
 	virtual void DrawCustomOptions() override;
+	float GetCustomOptionsWidth() const override;
 	void DrawCameraMenu();
 #pragma endregion
 
@@ -55,7 +56,8 @@ public:
 
 #pragma region Dimension
 protected:
-	void DrawDimensionToggleButton();
+	float GetProjectionButtonsWidth() const override;
+	void DrawProjectionButtons() override;
 #pragma endregion
 
 #pragma region Workspace State

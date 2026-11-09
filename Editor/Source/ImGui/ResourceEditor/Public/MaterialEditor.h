@@ -20,13 +20,15 @@ public:
 	bool HasUnsavedResourceChanges() const override { return m_IsDirty; }
 	virtual void SetTargetResource(const std::filesystem::path& assetPath) override;
 	virtual void Update(f32 dt) override; // 렌더 패스 실행 전 커맨드 사전 제출용
-	virtual void Draw() override;
 	virtual void CaptureState(EditorWorkspace& workspace) const override;
 	virtual void RestoreState(const EditorWorkspace& workspace) override;
 
 private:
-	void DrawMenuBar();
-	void DrawToolbar();
+	void DrawCustomToolbar() override;
+	void DrawCustomQuickAccess() override;
+	void DrawCustomContent() override;
+	ImVec2 GetInitialResourceWindowSize() const override { return ImVec2(1000.0f, 650.0f); }
+	void OnResourceWindowVisibility(bool visible) override;
 	void DrawPipelineSettings();
 	void DrawShaderSettings();
 	void DrawTextureBindings();

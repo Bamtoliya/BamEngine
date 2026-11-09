@@ -1,7 +1,8 @@
-﻿#include "InputActionSettingsWidget.h"
+#include "InputActionSettingsWidget.h"
 #include "EditorSettingsService.h"
 #include "InputManager.h"
 #include "LocalizationManager.h"
+#include "EditorUI.h"
 #include "NotificationManager.h"
 #include "ShortcutManager.h"
 #include <imgui_stdlib.h>
@@ -11,6 +12,7 @@ void InputActionSettingsWidget::ReloadDraft(EditorSettingsService& settings)
     CancelCapture();
     m_ExpandedAction.reset();
     m_NewInputActionIds.clear();
+    m_NewCategoryName.clear();
 
     m_InputActionsLoaded = settings.LoadInputActionSettings(m_DraftInputActions);
     if (m_InputActionsLoaded)
@@ -111,6 +113,38 @@ void InputActionSettingsWidget::Draw()
             shortcuts.SetInputActionCapturing(true);
         };
 
+    const auto& style = ImGui::GetStyle();
+
+    // 1. 최상단: 새 카테고리(Action Map) 추가 영역
+    ImGui::Spacing();
+    ImGui::BeginDisabled(shortcuts.IsCapturing());
+    const std::string addCatLabel = std::string(ICON_FA_PLUS " ") + LOCAL("InputActions.AddCategory");
+    const float addCatBtnW = ImGui::CalcTextSize(addCatLabel.c_str()).x + style.FramePadding.x * 2.0f + 16.0f;
+    ImGui::SetNextItemWidth(std::max(180.0f, ImGui::GetContentRegionAvail().x - addCatBtnW - style.ItemSpacing.x));
+    ImGui::InputTextWithHint("###NewCategoryInput", LOCAL_CSTR("InputActions.NewCategoryHint"), &m_NewCategoryName);
+
+    ImGui::SameLine();
+    const bool emptyCategory = m_NewCategoryName.find_first_not_of(" \t\r\n") == std::string::npos;
+    const bool duplicateCategory = std::ranges::any_of(m_DraftInputActions.Maps, [this](const auto& m) { return m.Id == m_NewCategoryName; });
+
+    ImGui::BeginDisabled(emptyCategory || duplicateCategory);
+    if (ImGui::Button(addCatLabel.c_str(), ImVec2(addCatBtnW, 0.0f)))
+    {
+        m_DraftInputActions.Maps.push_back({ m_NewCategoryName, {}, {} });
+        m_NewCategoryName.clear();
+        m_InputActionsDirty = true;
+    }
+    ImGui::EndDisabled();
+    ImGui::EndDisabled();
+
+    if (duplicateCategory)
+    {
+        ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%s", LOCAL_CSTR("InputActions.DuplicateCategory"));
+    }
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Spacing();
+
     constexpr ImGuiTableFlags tableFlags =
         ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_SizingStretchProp;
     constexpr ImGuiTreeNodeFlags actionFlags =
@@ -118,42 +152,76 @@ void InputActionSettingsWidget::Draw()
 
     const std::string addBindingLabel = std::string(ICON_FA_PLUS " ") + LOCAL_LABEL("InputActions.AddBinding");
     const std::string changeBindingLabel = LOCAL_LABEL("InputActions.ChangeBinding");
-    const auto& style = ImGui::GetStyle();
     const float editButtonsWidth = ImGui::CalcTextSize(changeBindingLabel.c_str(), nullptr, true).x +
         ImGui::CalcTextSize(ICON_FA_XMARK).x + style.FramePadding.x * 4.0f + style.ItemSpacing.x;
 
     std::vector<std::size_t> bindingIndices;
-    for (auto& map : m_DraftInputActions.Maps)
+    std::optional<std::size_t> removedMapIndex;
+
+    for (std::size_t mapIdx = 0; mapIdx < m_DraftInputActions.Maps.size(); ++mapIdx)
     {
-        if (!ImGui::TreeNodeEx(map.Id.c_str(), ImGuiTreeNodeFlags_DefaultOpen, "%s", map.Id.c_str()))
+        auto& map = m_DraftInputActions.Maps[mapIdx];
+        ImGui::PushID(static_cast<int>(mapIdx));
+
+        const std::string headerTitle = std::string(ICON_FA_FOLDER_OPEN "  ") + map.Id +
+            " (" + std::to_string(map.Actions.size()) + ")###CategoryHeader_" + map.Id;
+
+        const bool isCategoryOpen = ImGui::CollapsingHeader(headerTitle.c_str(), ImGuiTreeNodeFlags_DefaultOpen);
+        if (!isCategoryOpen)
         {
             if (m_InputBindingCapture && m_InputBindingCapture->MapId == map.Id)
                 CancelCapture();
+            ImGui::PopID();
             continue;
         }
 
+        ImGui::Spacing();
+
+        // 카테고리 내부 툴바: 새 액션 추가 및 카테고리 삭제
         auto& newActionId = m_NewInputActionIds[map.Id];
+        const std::string addActionLabel = std::string(ICON_FA_PLUS " ") + LOCAL("InputActions.AddAction");
+        const float addActionBtnW = ImGui::CalcTextSize(addActionLabel.c_str()).x + style.FramePadding.x * 2.0f + 12.0f;
+        const std::string delCatLabel = std::string(ICON_FA_TRASH " ") + LOCAL("InputActions.DeleteCategory");
+        const float delCatBtnW = ImGui::CalcTextSize(delCatLabel.c_str()).x + style.FramePadding.x * 2.0f + 12.0f;
+
         ImGui::BeginDisabled(shortcuts.IsCapturing());
-        ImGui::InputText(LOCAL_LABEL("InputActions.ActionId").c_str(), &newActionId);
+        const float availW = ImGui::GetContentRegionAvail().x;
+        const float inputW = std::max(120.0f, availW - addActionBtnW - delCatBtnW - style.ItemSpacing.x * 2.0f);
+        ImGui::SetNextItemWidth(inputW);
+        ImGui::InputTextWithHint("###NewActionInput", LOCAL_CSTR("InputActions.ActionId"), &newActionId);
 
         const bool emptyId = newActionId.find_first_not_of(" \t\r\n") == std::string::npos;
         const bool duplicateId =
             std::ranges::find(map.Actions, newActionId, &Engine::InputAction::Id) != map.Actions.end();
 
+        ImGui::SameLine();
         ImGui::BeginDisabled(emptyId || duplicateId);
-        if (ImGui::Button(LOCAL_LABEL("InputActions.AddAction").c_str()))
+        if (ImGui::Button(addActionLabel.c_str(), ImVec2(addActionBtnW, 0.0f)))
         {
             map.Actions.push_back({ newActionId, "Button" });
             newActionId.clear();
             m_InputActionsDirty = true;
         }
         ImGui::EndDisabled();
+
+        ImGui::SameLine();
+        if (ImGui::Button(delCatLabel.c_str(), ImVec2(delCatBtnW, 0.0f)))
+        {
+            removedMapIndex = mapIdx;
+        }
         ImGui::EndDisabled();
+
+        if (duplicateId)
+        {
+            ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%s", LOCAL_CSTR("InputActions.DuplicateBinding"));
+        }
+
+        ImGui::Spacing();
 
         std::optional<std::string> removedActionId;
         std::optional<std::size_t> removedBinding;
 
-        if (ImGui::BeginTable("InputActionTable", 2, tableFlags))
+        if (EditorUI::BeginSettingsTable("InputActionTable", 2, tableFlags))
         {
             ImGui::TableSetupColumn(LOCAL_CSTR("InputActions.ActionId"), ImGuiTableColumnFlags_WidthStretch, 1.0f);
             ImGui::TableSetupColumn(LOCAL_CSTR("InputActions.Bindings"), ImGuiTableColumnFlags_WidthStretch, 1.7f);
@@ -287,7 +355,7 @@ void InputActionSettingsWidget::Draw()
                 ImGui::PopID();
             }
 
-            ImGui::EndTable();
+            EditorUI::EndSettingsTable();
         }
 
         if (!m_InputBindingCapture && removedBinding)
@@ -315,7 +383,22 @@ void InputActionSettingsWidget::Draw()
             m_InputActionsDirty = true;
         }
 
-        ImGui::TreePop();
+        ImGui::Spacing();
+        ImGui::PopID();
+    }
+
+    if (removedMapIndex)
+    {
+        const auto& removedMap = m_DraftInputActions.Maps[*removedMapIndex];
+        if (m_InputBindingCapture && m_InputBindingCapture->MapId == removedMap.Id)
+            CancelCapture();
+
+        if (m_ExpandedAction && m_ExpandedAction->MapId == removedMap.Id)
+            m_ExpandedAction.reset();
+
+        m_NewInputActionIds.erase(removedMap.Id);
+        m_DraftInputActions.Maps.erase(m_DraftInputActions.Maps.begin() + static_cast<std::ptrdiff_t>(*removedMapIndex));
+        m_InputActionsDirty = true;
     }
 }
 

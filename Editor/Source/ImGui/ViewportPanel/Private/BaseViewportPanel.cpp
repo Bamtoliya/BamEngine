@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "BaseViewportPanel.h"
+#include "EditorUI.h"
 #include "RenderTargetManager.h"
 #include "SelectionManager.h"
 #include "InputManager.h"
@@ -55,7 +56,10 @@ void BaseViewportPanel::Draw()
 	ImGuiWindowFlags window_flags = ImGuiWindowFlags_MenuBar;
 	const string windowID = GetDisplayName() + "###" + m_WindowID;
 	// ImGui::Begin이 false를 반환하면 다른 탭 뒤에 완전히 숨겨진 상태입니다.
-	if (BeginPanelWindow(windowID.c_str(), m_Open, window_flags))
+	const auto padding = ImGui::GetStyle().FramePadding;
+	ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(padding.x, std::max(padding.y, ImGui::GetFontSize() * 0.15f)));
+	const bool visible = BeginPanelWindow(windowID.c_str(), m_Open, window_flags);
+	if (visible)
 	{
 		if (m_FocusRequested)
 		{
@@ -64,8 +68,9 @@ void BaseViewportPanel::Draw()
 		}
 		m_IsVisibleOnScreen = true;
 		DrawOptionsBar();
-		DrawCustomViewport();
 	}
+	ImGui::PopStyleVar();
+	if (visible) DrawCustomViewport();
 	else
 	{
 		if (m_FocusRequested)
@@ -176,19 +181,77 @@ void BaseViewportPanel::DrawRenderTargetImage(const wstring& rtName)
 #pragma endregion
 
 #pragma region Options Bar
+float BaseViewportPanel::MeasureOptionLabels(std::initializer_list<const char*> labels)
+{
+	const auto& style = ImGui::GetStyle();
+	float width = 0.0f;
+	for (const char* label : labels)
+		width += ImGui::CalcTextSize(label).x + style.ItemSpacing.x * 2.0f + style.FramePadding.x * 2.0f;
+	return width;
+}
+
+float BaseViewportPanel::GetCustomOptionsWidth() const
+{
+	return MeasureOptionLabels({ LOCAL_CSTR("Viewport.Resolution"), LOCAL_CSTR("Viewport.RenderTargetsMenu") });
+}
+
 void BaseViewportPanel::DrawOptionsBar()
 {
-	if (ImGui::BeginMenuBar())
+	if (!ImGui::BeginMenuBar()) return;
+
+	const float channelsWidth = ChannelFilter::GetButtonsWidth();
+	const float projectionWidth = GetProjectionButtonsWidth();
+	const float gap = ImGui::GetStyle().ItemSpacing.x;
+	const float togglesWidth = channelsWidth + (projectionWidth > 0.0f ? projectionWidth + gap : 0.0f);
+	const float right = std::min(ImGui::GetWindowDrawList()->GetClipRectMax().x,
+		ImGui::GetCursorScreenPos().x + ImGui::GetContentRegionAvail().x) - gap;
+	const auto alignRight = [](float edge, float width)
+	{
+		const float offset = edge - ImGui::GetCursorScreenPos().x - width;
+		if (offset > 0.0f) ImGui::SetCursorPosX(ImGui::GetCursorPosX() + offset);
+	};
+
+	if (GetCustomOptionsWidth() + togglesWidth + gap <= right - ImGui::GetCursorScreenPos().x)
+		DrawCustomOptions();
+	else if (ImGui::BeginMenu(ICON_FA_SLIDERS "###ViewportOptions"))
 	{
 		DrawCustomOptions();
+		ImGui::EndMenu();
+	}
+
+	const bool fitsMenuBar = togglesWidth <= right - ImGui::GetCursorScreenPos().x;
+	if (fitsMenuBar)
+	{
+		alignRight(right, togglesWidth);
+		ChannelFilter::DrawButtons(m_ChannelView);
+		if (projectionWidth > 0.0f)
+		{
+			ImGui::SameLine(0.0f, gap);
+			DrawProjectionButtons();
+		}
 	}
 	ImGui::EndMenuBar();
+	if (fitsMenuBar) return;
+
+	// 좁은 창에서도 직접 조작할 수 있게 토글을 메뉴 아래에 배치한다.
+	const float bodyRight = ImGui::GetCursorScreenPos().x + ImGui::GetContentRegionAvail().x - gap;
+	const bool fitsOneRow = togglesWidth <= bodyRight - ImGui::GetCursorScreenPos().x;
+	alignRight(bodyRight, fitsOneRow ? togglesWidth : channelsWidth);
+	ImGui::BeginGroup();
+	ChannelFilter::DrawButtons(m_ChannelView);
+	ImGui::EndGroup();
+	if (projectionWidth > 0.0f)
+	{
+		if (fitsOneRow) ImGui::SameLine();
+		alignRight(bodyRight, projectionWidth);
+		DrawProjectionButtons();
+	}
 }
+
 void BaseViewportPanel::DrawCustomOptions()
 {
 	DrawResolutionMenu();
 	DrawRenderTargetMenu();
-	DrawChannelViewButton();
 }
 void BaseViewportPanel::DrawRenderTargetMenu()
 {
@@ -212,14 +275,6 @@ void BaseViewportPanel::DrawRenderTargetMenu()
 		}
 		ImGui::EndMenu();
 	}
-}
-void BaseViewportPanel::DrawChannelViewButton(float rightReservedWidth)
-{
-	const float channelGroupWidth = ImGui::GetFrameHeight() * 4.0f;
-	const float rightPadding = ImGui::GetStyle().WindowPadding.x;
-	ImGui::SameLine(ImGui::GetWindowWidth() - rightReservedWidth - channelGroupWidth - rightPadding);
-
-	ChannelFilter::DrawButtons(m_ChannelView);
 }
 void BaseViewportPanel::DrawRTItemContextMenu(const wstring& rtName)
 {

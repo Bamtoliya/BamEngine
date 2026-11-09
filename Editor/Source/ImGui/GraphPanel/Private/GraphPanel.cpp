@@ -1,5 +1,7 @@
 ﻿#include "GraphPanel.h"
+#include "EditorUI.h"
 #include "GraphMessageLocalization.h"
+#include "GraphSystem.h"
 #include "LocalizationManager.h"
 #include "ReflectionRegistry.h"
 #include "FileDialogs.h"
@@ -104,16 +106,22 @@ void GraphPanel::Free()
 #pragma endregion
 
 #pragma region Loop
-void GraphPanel::Draw()
+void GraphPanel::OnResourceWindowVisibility(bool visible)
 {
-	if (!m_Open)
+	if (visible)
 	{
-		SuspendDocument();
-		m_Focused = false;
-		m_Hovered = false;
+		if (m_Focused) s_ActiveGraphPanel = this;
 		return;
 	}
 
+	auto* previousContext = ed::GetCurrentEditor();
+	SuspendDocument();
+	if (m_Open || (previousContext != m_Logic.Context && previousContext != m_Shader.Context))
+		ed::SetCurrentEditor(previousContext);
+}
+
+void GraphPanel::DrawResourceFrame()
+{
 	auto* previousContext = ed::GetCurrentEditor();
 	GraphDocument* previousDocument = nullptr;
 	for (auto* document : { &m_Logic, &m_Shader })
@@ -121,76 +129,61 @@ void GraphPanel::Draw()
 		if (previousContext && previousContext == document->Context)
 			previousDocument = document;
 	}
-	const string windowTitle = LOCAL("GraphPanel.Title") + "###GraphPanel";
-	ImGui::SetNextWindowSize(ImVec2(1000.0f, 650.0f), ImGuiCond_FirstUseEver);
-	if (BeginPanelWindow(windowTitle.c_str(), m_Open, ImGuiWindowFlags_MenuBar))
-	{
-		m_Focused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
-		if (m_Focused) s_ActiveGraphPanel = this;
-		m_Hovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows);
-		if (m_Ready)
-		{
-			ActivateDocument();
-			// ── 윈도우 상단 드롭다운 메뉴바 ──
-			DrawMenuBar();
-			// ── 메뉴바 아래 단일 행 퀵 액세스 툴바 ──
-			DrawToolbar();
-			UpdateExecution();
-			UpdateLiveDebugging();
-			ImGui::Separator();
-
-			const float footerHeight = ImGui::GetTextLineHeightWithSpacing() * 2 +
-				ImGui::GetStyle().CellPadding.y * 2 + ImGui::GetStyle().ItemSpacing.y;
-			const float height = std::max(1.0f, ImGui::GetContentRegionAvail().y - footerHeight);
-			ImGui::PushID(static_cast<int>(m_Domain));
-			if (ImGui::BeginTable("##GraphWorkspace", 2, ImGuiTableFlags_Resizable, ImVec2(0.0f, height)))
-			{
-				// 다국어 변경 시에도 캔버스/프로퍼티 비율이 보존되도록 ##Canvas, ##Properties 추가
-				const std::string colCanvas = LOCAL("GraphPanel.Canvas") + "##Canvas";
-				const std::string colProps = LOCAL("GraphPanel.Properties") + "##Properties";
-				ImGui::TableSetupColumn(colCanvas.c_str(), ImGuiTableColumnFlags_WidthStretch, 3.0f);
-				ImGui::TableSetupColumn(colProps.c_str(), ImGuiTableColumnFlags_WidthStretch, 1.0f);
-				ImGui::TableNextColumn();
-				DrawCanvas(height);
-				ImGui::TableNextColumn();
-				if (ImGui::BeginChild("##GraphProperties", ImVec2(0.0f, height)))
-				{
-					DrawProperties();
-					ImGui::Separator();
-					DrawVariables();
-					ImGui::Separator();
-					DrawDiagnostics();
-					ImGui::Separator();
-					DrawExecutionTrace();
-					DrawShaderBuildDetails();
-				}
-				ImGui::EndChild();
-				ImGui::EndTable();
-			}
-			else
-			{
-				SuspendDocument();
-				m_Executor.Pause();
-			}
-			ImGui::PopID();
-		}
-		DrawStatus();
-	}
-	else
-	{
-		SuspendDocument();
-		m_Focused = false;
-		m_Hovered = false;
-	}
-	ImGui::End();
+	if (m_Ready) ActivateDocument();
+	ResourceEditorInterface::DrawResourceFrame();
 	ed::SetCurrentEditor(previousDocument ? previousDocument->Context : previousContext);
+}
+
+void GraphPanel::DrawCustomContent()
+{
+	if (m_Ready)
+	{
+		UpdateExecution();
+		UpdateLiveDebugging();
+
+		const float footerHeight = ImGui::GetTextLineHeightWithSpacing() * 2 +
+			ImGui::GetStyle().CellPadding.y * 2 + ImGui::GetStyle().ItemSpacing.y;
+		const float height = std::max(1.0f, ImGui::GetContentRegionAvail().y - footerHeight);
+		ImGui::PushID(static_cast<int>(m_Domain));
+		if (ImGui::BeginTable("##GraphWorkspace", 2, ImGuiTableFlags_Resizable, ImVec2(0.0f, height)))
+		{
+			// 다국어 변경 시에도 캔버스/프로퍼티 비율이 보존되도록 ##Canvas, ##Properties 추가
+			const std::string colCanvas = LOCAL("GraphPanel.Canvas") + "##Canvas";
+			const std::string colProps = LOCAL("GraphPanel.Properties") + "##Properties";
+			ImGui::TableSetupColumn(colCanvas.c_str(), ImGuiTableColumnFlags_WidthStretch, 3.0f);
+			ImGui::TableSetupColumn(colProps.c_str(), ImGuiTableColumnFlags_WidthStretch, 1.0f);
+			ImGui::TableNextColumn();
+			DrawCanvas(height);
+			ImGui::TableNextColumn();
+			if (ImGui::BeginChild("##GraphProperties", ImVec2(0.0f, height)))
+			{
+				DrawProperties();
+				ImGui::Separator();
+				DrawVariables();
+				ImGui::Separator();
+				DrawDiagnostics();
+				ImGui::Separator();
+				DrawExecutionTrace();
+				DrawShaderBuildDetails();
+			}
+			ImGui::EndChild();
+			ImGui::EndTable();
+		}
+		else
+		{
+			SuspendDocument();
+			m_Executor.Pause();
+		}
+		ImGui::PopID();
+	}
+	DrawStatus();
 }
 #pragma endregion
 
 #pragma region DrawUI
-void GraphPanel::DrawMenuBar()
+void GraphPanel::DrawCustomToolbar()
 {
-	if (!ImGui::BeginMenuBar()) return;
+	if (!m_Ready) return;
 	// 1. [파일 (File)] 메뉴
 	auto& sm = ShortcutManager::Get();
 	if (ImGui::BeginMenu(LOCAL_LABEL("EditorMenu.File").c_str()))
@@ -198,7 +191,7 @@ void GraphPanel::DrawMenuBar()
 		if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.Open").c_str(), sm.GetShortcutHint("Graph.Open")))
 		{
 			if (GetDocument().Data.GetNodes().empty()) OpenDocument();
-			else ImGui::OpenPopup(LOCAL_LABEL("GraphPanel.ConfirmOpen").c_str());
+			else m_ConfirmOpenRequested = true;
 		}
 		if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.Save").c_str(), sm.GetShortcutHint("Graph.Save")))
 			SaveDocument(false);
@@ -260,13 +253,15 @@ void GraphPanel::DrawMenuBar()
 	// 5. 도메인별 전용 메뉴 (Logic: Debug, Shader: Build)
 	if (m_Domain == EGraphDomain::Logic) DrawExecutionMenu();
 	else if (m_Domain == EGraphDomain::Shader) DrawShaderMenu();
-	ImGui::EndMenuBar();
 }
-void GraphPanel::DrawToolbar()
+void GraphPanel::DrawCustomQuickAccess()
 {
+	if (!m_Ready) return;
+
 	// ── 1줄 퀵 액세스 툴바: 도메인 콤보 + 핵심 빠른 실행 액션 + 파일명 ──
 	const char* domainKey = m_Domain == EGraphDomain::Logic ? "GraphPanel.Logic" : "GraphPanel.Shader";
-	ImGui::SetNextItemWidth(ImGui::GetFontSize() * 7.5f);
+	EditorUI::ToolbarLayout toolbar;
+	toolbar.SetNextItemWidth(ImGui::GetFontSize() * 7.5f);
 	if (ImGui::BeginCombo("##GraphDomain", LOCAL_CSTR(domainKey)))
 	{
 		const EGraphDomain domains[]{ EGraphDomain::Logic, EGraphDomain::Shader };
@@ -285,21 +280,17 @@ void GraphPanel::DrawToolbar()
 		}
 		ImGui::EndCombo();
 	}
-	ImGui::SameLine();
-	ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
-	ImGui::SameLine();
 	// 도메인별 퀵 액션 라인
 	if (m_Domain == EGraphDomain::Logic)
 	{
-		DrawExecutionToolbar();
-		DrawDebugToolbar();
+		DrawExecutionToolbar(toolbar);
+		DrawDebugToolbar(toolbar);
 	}
 	else if (m_Domain == EGraphDomain::Shader)
 	{
-		DrawShaderToolbar();
+		DrawShaderToolbar(toolbar);
 	}
-	ImGui::SameLine();
-	DrawFileToolbar();
+	DrawFileToolbar(toolbar);
 }
 
 void GraphPanel::SaveDocument(bool saveAs)
@@ -310,15 +301,15 @@ void GraphPanel::SaveDocument(bool saveAs)
 	if (saveAs || path.empty())
 	{
 		const std::wstring defaultName = path.empty()
-			? (m_Domain == EGraphDomain::Logic ? L"LogicGraph.json" : L"ShaderGraph.json")
+			? (m_Domain == EGraphDomain::Logic ? L"LogicGraph.bamgraph.json" : L"ShaderGraph.bamgraph.json")
 			: path.filename().wstring();
 
 		std::wstring selectedPath;
 		const std::vector<FileDialogFilter> filters{
-			{ StrToWStr(LOCAL("FileDialog.GraphFiles")), L"*.json" }
+			{ StrToWStr(LOCAL("FileDialog.GraphFiles")), L"*.bamgraph.json;*.json" }
 		};
 
-		if (!FileDialogs::SaveFileDialog(selectedPath, filters, defaultName, L"json", EFileDialogContext::GraphSave))
+		if (!FileDialogs::SaveFileDialog(selectedPath, filters, defaultName, L"bamgraph.json", EFileDialogContext::GraphSave))
 			return;
 		path = std::filesystem::path(selectedPath);
 	}
@@ -339,28 +330,34 @@ void GraphPanel::SaveDocument(bool saveAs)
 	if (document.FileResult.Succeeded()) document.FilePath = std::move(path);
 }
 
-void GraphPanel::OpenDocument()
+bool GraphPanel::IsSupported(const std::filesystem::path& assetPath) const
 {
-	std::wstring selectedPath;
-	const std::vector<FileDialogFilter> filters{
-		{ StrToWStr(LOCAL("FileDialog.GraphFiles")), L"*.json" }
-	};
+	const auto ext = assetPath.extension().wstring();
+	const std::string lower = Engine::ToLowerStr(Engine::WStrToStr(assetPath.filename().wstring()));
+	return ext == L".bamgraph" || ext == L".graph" ||
+		lower.ends_with(".bamgraph.json") || lower.ends_with(".graph.json");
+}
 
-	if (!FileDialogs::OpenFileDialog(selectedPath, filters, L"", EFileDialogContext::GraphOpen))
-		return;
+void GraphPanel::SetTargetResource(const std::filesystem::path& assetPath)
+{
+	ResourceEditorInterface::SetTargetResource(assetPath);
+	LoadDocument(assetPath);
+}
 
-	auto& document = GetDocument();
+bool GraphPanel::LoadDocument(const std::filesystem::path& path)
+{
 	if (!ReflectionRegistry::IsCreated())
 	{
+		auto& document = GetDocument();
 		document.FileResult = {
 			EGraphFileStage::Deserialize,
 			{ archive::ArchiveErrorCode::UnsupportedType, "ReflectionRegistry" }
 		};
-		return;
+		return false;
 	}
 
 	GraphDocument candidate(m_Domain);
-	candidate.FilePath = std::filesystem::path(selectedPath);
+	candidate.FilePath = path;
 
 	const auto& reflection = ReflectionRegistry::Get();
 	const auto loaded = LoadGraphJson(candidate.FilePath, candidate.Data, m_Registry,
@@ -368,8 +365,9 @@ void GraphPanel::OpenDocument()
 
 	if (!loaded.Succeeded())
 	{
+		auto& document = GetDocument();
 		document.FileResult = loaded;
-		return;
+		return false;
 	}
 
 	// 로드된 그래프 파일의 변수 노드 스키마 등록
@@ -377,18 +375,15 @@ void GraphPanel::OpenDocument()
 
 	if (candidate.Data.GetDomain() != m_Domain)
 	{
-		document.FileResult = {
-			EGraphFileStage::Validate, {},
-			{ EGraphError::UnsupportedDomain, 0, {}, 0, "GraphPanel.FileDomainMismatch" }
-		};
-		return;
+		m_Domain = candidate.Data.GetDomain();
 	}
 
 	const auto views = BuildDocumentViews(candidate);
 	if (!views.Succeeded())
 	{
+		auto& document = GetDocument();
 		document.FileResult = { EGraphFileStage::Validate, {}, views };
-		return;
+		return false;
 	}
 
 	candidate.Diagnostics = candidate.Data.Validate(m_Registry);
@@ -413,10 +408,12 @@ void GraphPanel::OpenDocument()
 		m_EntryNode = 0;
 	}
 
+	auto& document = GetDocument();
 	std::swap(document, candidate);
 	document.Context = freshContext;
 	if (candidate.Context) ed::DestroyEditor(candidate.Context);
 
+	m_TargetResourcePath = path;
 	m_LastDiagnostic = {};
 	m_AddPosition = ImVec2(40.0f, 40.0f);
 	m_DragPin = 0;
@@ -426,6 +423,20 @@ void GraphPanel::OpenDocument()
 	m_NodeMenuActive = false;
 	m_FocusNodeSearch = false;
 	m_OpenNodePopup = false;
+	return true;
+}
+
+void GraphPanel::OpenDocument()
+{
+	std::wstring selectedPath;
+	const std::vector<FileDialogFilter> filters{
+		{ StrToWStr(LOCAL("FileDialog.GraphFiles")), L"*.bamgraph.json;*.json" }
+	};
+
+	if (!FileDialogs::OpenFileDialog(selectedPath, filters, L"", EFileDialogContext::GraphOpen))
+		return;
+
+	LoadDocument(std::filesystem::path(selectedPath));
 }
 
 GraphDiagnostic GraphPanel::BuildDocumentViews(GraphDocument& document)
@@ -481,9 +492,14 @@ GraphDiagnostic GraphPanel::BuildDocumentViews(GraphDocument& document)
 	return {};
 }
 
-void GraphPanel::DrawFileToolbar()
+void GraphPanel::DrawFileToolbar(EditorUI::ToolbarLayout& toolbar)
 {
 	bool openRequested = false;
+	if (m_ConfirmOpenRequested)
+	{
+		ImGui::OpenPopup(LOCAL_LABEL("GraphPanel.ConfirmOpen").c_str());
+		m_ConfirmOpenRequested = false;
+	}
 	const ImVec2 center = ImGui::GetMainViewport()->GetCenter();
 	ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
 	ImGui::SetNextWindowSize(ImVec2(320.0f, 0.0f), ImGuiCond_Appearing);
@@ -495,13 +511,16 @@ void GraphPanel::DrawFileToolbar()
 		ImGui::Spacing();
 		ImGui::Separator();
 		ImGui::Spacing();
-		if (ImGui::Button(LOCAL_LABEL("GraphPanel.ReplaceCurrent").c_str(), ImVec2(120.0f, 0.0f)))
+		const EditorUI::DialogAction actions[] = {
+			{ "EditorCommon.Cancel" }, { "GraphPanel.ReplaceCurrent", true, true }
+		};
+		const int action = EditorUI::DialogButtonBar("ReplaceGraphActions", actions, IM_ARRAYSIZE(actions));
+		if (action == 1)
 		{
 			ImGui::CloseCurrentPopup();
 			openRequested = true;
 		}
-		ImGui::SameLine(0.0f, 8.0f);
-		if (ImGui::Button(LOCAL_LABEL("EditorCommon.Cancel").c_str(), ImVec2(120.0f, 0.0f)))
+		if (action == 0)
 			ImGui::CloseCurrentPopup();
 		ImGui::EndPopup();
 	}
@@ -510,9 +529,7 @@ void GraphPanel::DrawFileToolbar()
 	const std::string filenameText = document.FilePath.empty()
 		? LOCAL("GraphPanel.NoFile")
 		: WStrToStr(document.FilePath.filename().wstring());
-	ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
-	ImGui::SameLine();
-	ImGui::TextDisabled("[%s]", filenameText.c_str());
+	toolbar.Text(("[" + filenameText + "]").c_str());
 	if (ImGui::IsItemHovered())
 	{
 		const std::string fullPathText = document.FilePath.empty()
@@ -557,14 +574,11 @@ void GraphPanel::DrawNodeMenu()
 		ImGui::TextDisabled("%s: %s / %s", LOCAL_CSTR(key), pin->Key.c_str(),
 			pin->Type == EGraphPinType::Object ? pin->ObjectType.c_str() : PinTypeName(pin->Type));
 	}
-	if (m_FocusNodeSearch)
-	{
-		ImGui::SetKeyboardFocusHere();
-		m_FocusNodeSearch = false;
-	}
-	ImGui::SetNextItemWidth(ImGui::GetFontSize() * 28.0f);
-	ImGui::InputTextWithHint("##NodeSearch", LOCAL_CSTR("GraphPanel.SearchNodes"),
-		m_NodeSearch, IM_ARRAYSIZE(m_NodeSearch));
+	EditorUI::SearchBarOptions searchOptions;
+	searchOptions.Width = ImGui::GetFontSize() * 28.0f;
+	searchOptions.FocusOnDraw = m_FocusNodeSearch;
+	EditorUI::DrawSearchBar("NodeSearch", m_NodeSearch, IM_ARRAYSIZE(m_NodeSearch), "GraphPanel.SearchNodes", searchOptions);
+	m_FocusNodeSearch = false;
 	ImGui::Separator();
 
 	struct NodeEntry

@@ -1,4 +1,5 @@
 ﻿#include "PrefabModeManager.h"
+#include "EditorUI.h"
 #include "SceneManager.h"
 #include "Scene.h"
 #include "Entity.h"
@@ -212,24 +213,18 @@ void PrefabModeManager::DrawMenuBarUI()
 {
     if (!m_IsInPrefabMode) return;
 
-    // [씬으로 복귀] 버튼
-    if (ImGui::Button((std::string(ICON_FA_ARROW_LEFT " ") + LOCAL("PrefabMode.BackToScene")).c_str()))
+    EditorUI::ToolbarLayout toolbar;
+    if (toolbar.Button("BackToScene", ICON_FA_ARROW_LEFT, "PrefabMode.BackToScene"))
     {
         ExitPrefabMode(false);
     }
 
-    ImGui::SameLine();
-    ImGui::TextDisabled("|");
-    ImGui::SameLine();
 
     // 프리팹 이름 및 수정 여부 표시
     std::string title = std::string(ICON_FA_CUBES " ") + LOCAL("PrefabMode.Title") + ": " + m_CurrentPrefabPath.filename().string();
     if (HasUnsavedChanges()) title += " *";
-    ImGui::TextColored(ImVec4(0.35f, 0.85f, 1.0f, 1.0f), "%s", title.c_str());
+    toolbar.Text(title.c_str());
 
-    ImGui::SameLine();
-    ImGui::TextDisabled("|");
-    ImGui::SameLine();
 }
 
 void PrefabModeManager::DrawExitConfirmModal()
@@ -246,20 +241,22 @@ void PrefabModeManager::DrawExitConfirmModal()
         ImGui::TextUnformatted(LOCAL_CSTR("PrefabEditor.UnsavedChangesPrompt"));
         ImGui::Spacing();
 
-        if (ImGui::Button(LOCAL_CSTR("PrefabEditor.Save"), ImVec2(100, 0)) && SavePrefab())
+        const EditorUI::DialogAction actions[] = {
+            { "EditorCommon.Cancel" }, { "EditorDocument.Discard", true, true }, { "PrefabEditor.Save" }
+        };
+        const int action = EditorUI::DialogButtonBar("PrefabCloseActions", actions, IM_ARRAYSIZE(actions));
+        if (action == 2 && SavePrefab())
         {
             ImGui::CloseCurrentPopup();
             ExitPrefabMode(true);
         }
-        ImGui::SameLine();
-        if (ImGui::Button(LOCAL_CSTR("EditorDocument.Discard"), ImVec2(100, 0)))
+        if (action == 1)
         {
             m_HasUnsavedChanges = false;
             ImGui::CloseCurrentPopup();
             ExitPrefabMode(true);
         }
-        ImGui::SameLine();
-        if (ImGui::Button(LOCAL_CSTR("EditorCommon.Cancel"), ImVec2(100, 0)))
+        if (action == 0)
         {
             ImGui::CloseCurrentPopup();
         }

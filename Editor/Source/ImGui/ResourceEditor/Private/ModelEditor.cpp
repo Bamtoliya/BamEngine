@@ -1,4 +1,5 @@
 #pragma once
+#include "EditorUI.h"
 #include "ModelEditor.h"
 #include "ShortcutManager.h"
 #include "Application.h"
@@ -114,10 +115,8 @@ void ModelEditor::SetupPreviewModel()
 	}
 }
 
-void ModelEditor::DrawMenuBar()
+void ModelEditor::DrawCustomToolbar()
 {
-	if (!ImGui::BeginMenuBar()) return;
-
 	if (ImGui::BeginMenu(LOCAL_LABEL("EditorMenu.File").c_str()))
 	{
 		const bool canEdit = PIEManager::Get().IsEditing() && m_ModelHandle.IsValid();
@@ -160,43 +159,37 @@ void ModelEditor::DrawMenuBar()
 
 		ImGui::EndMenu();
 	}
-
-	ImGui::EndMenuBar();
 }
 
-void ModelEditor::DrawToolbar()
+void ModelEditor::DrawCustomQuickAccess()
 {
+	EditorUI::ToolbarLayout toolbar;
 	const bool canEdit = PIEManager::Get().IsEditing() && m_ModelHandle.IsValid();
 
 	ImGui::BeginDisabled(!canEdit);
-	if (ImGui::Button(ICON_FA_FLOPPY_DISK "##SaveModel"))
+	if (toolbar.Icon("SaveModel", ICON_FA_FLOPPY_DISK, "EditorCommon.Save"))
 		SaveModel();
 	ImGui::EndDisabled();
-	if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("EditorCommon.Save"));
 
-	ImGui::SameLine();
-	if (ImGui::Button(ICON_FA_CROSSHAIRS "##FocusModel"))
+	EditorUI::IconButtonOptions focusOptions;
+	focusOptions.ShortcutHint = ShortcutManager::Get().GetShortcutHint("Viewport.Focus");
+	if (toolbar.Icon("FocusModel", ICON_FA_CROSSHAIRS, "PreviewViewport.Focus", focusOptions))
 	{
 		if (m_PreviewEntity) m_PreviewWidget.SetModelFocusTarget(*m_PreviewEntity);
 	}
-	if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("ModelEditor.Focus"));
 
-	ImGui::SameLine();
-	if (ImGui::Button(ICON_FA_BORDER_ALL "##ToggleGrid"))
+	EditorUI::IconButtonOptions gridOptions;
+	gridOptions.Active = m_PreviewWidget.IsGridVisible();
+	gridOptions.ShortcutHint = ShortcutManager::Get().GetShortcutHint("Viewport.ToggleGrid");
+	if (toolbar.Icon("ToggleGrid", ICON_FA_BORDER_ALL, "Action.Viewport.ToggleGrid", gridOptions))
 		m_PreviewWidget.ToggleGrid();
-	if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("ModelEditor.ToggleGrid"));
-
-	ImGui::SameLine();
-	ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
-	ImGui::SameLine();
 
 	auto& history = Application::Get().GetEditHistory();
 	const bool canPlace = history.Enabled() && SceneManager::Get().GetCurrentScene() && m_ModelHandle.IsValid();
 	ImGui::BeginDisabled(!canPlace);
-	if (ImGui::Button((ICON_FA_PLUS " " + LOCAL_LABEL("ResourceEditor.InstantiateModel")).c_str()))
+	if (toolbar.Button("InstantiateModel", ICON_FA_PLUS, "ResourceEditor.InstantiateModel"))
 		InstantiateModel();
 	ImGui::EndDisabled();
-	if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("ResourceEditor.InstantiateModel"));
 
 	if (auto* model = m_ModelHandle.Get())
 	{
@@ -206,22 +199,13 @@ void ModelEditor::DrawToolbar()
 			auto* animator = GetPreviewAnimator();
 			if (animator)
 			{
-				ImGui::SameLine();
-				ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
-				ImGui::SameLine();
-
 				const char* playIcon = animator->isPlaying ? ICON_FA_PAUSE : ICON_FA_PLAY;
-				if (ImGui::Button(playIcon))
+				if (toolbar.Icon("ModelPlayback", playIcon, animator->isPlaying ? "ModelEditor.PauseClip" : "ModelEditor.PlayClip"))
 				{
 					animator->isPlaying = !animator->isPlaying;
 				}
-				if (ImGui::IsItemHovered())
-				{
-					ImGui::SetTooltip("%s", animator->isPlaying ? LOCAL_CSTR("ModelEditor.PauseClip") : LOCAL_CSTR("ModelEditor.PlayClip"));
-				}
 
-				ImGui::SameLine();
-				ImGui::SetNextItemWidth(140.0f);
+				toolbar.SetNextItemWidth(ImGui::GetFontSize() * 10.0f);
 
 				const int validIdx = (m_SelectedAnimIndex >= 0 && m_SelectedAnimIndex < static_cast<int>(animations.size()))
 					? m_SelectedAnimIndex : 0;
@@ -252,16 +236,8 @@ void ModelEditor::DrawToolbar()
 		}
 	}
 
-	ImGui::SameLine();
-	ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
-	ImGui::SameLine();
-
 	if (auto* model = m_ModelHandle.Get())
 	{
-		ImGui::SameLine();
-		ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
-		ImGui::SameLine();
-
 		const bool hasLODs = model->HasLODs();
 		std::string lodLabel;
 		if (m_ForcedLOD < 0) lodLabel = LOCAL("ModelEditor.LODAuto");
@@ -270,7 +246,7 @@ void ModelEditor::DrawToolbar()
 		else lodLabel = LOCAL("ModelEditor.LOD2");
 
 		ImGui::BeginDisabled(!hasLODs);
-		ImGui::SetNextItemWidth(125.0f);
+		toolbar.SetNextItemWidth(ImGui::GetFontSize() * 9.0f);
 		if (ImGui::BeginCombo("##ToolbarLODCombo", (ICON_FA_LAYER_GROUP " " + lodLabel).c_str(), ImGuiComboFlags_HeightRegular))
 		{
 			if (ImGui::Selectable(LOCAL_CSTR("ModelEditor.LODAuto"), m_ForcedLOD == -1))
@@ -290,16 +266,11 @@ void ModelEditor::DrawToolbar()
 		}
 	}
 
-	ImGui::SameLine();
-	ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
-	ImGui::SameLine();
-
 	// 파일 상태 배지
 	const std::string fileName = m_TargetResourcePath.empty()
 		? LOCAL("AnimatorGraph.Unsaved") : m_TargetResourcePath.filename().string();
-	ImGui::TextDisabled("[%s%s]", fileName.c_str(), m_IsDirty ? " *" : "");
+	toolbar.Text(("[" + fileName + (m_IsDirty ? " *]" : "]")).c_str());
 }
-
 
 void ModelEditor::SetForcedLOD(int lod)
 {
@@ -698,69 +669,57 @@ void ModelEditor::DrawAnimations(Engine::Model& model)
 	}
 }
 
-void ModelEditor::Draw()
+void ModelEditor::DrawCustomContent()
 {
-	if (!m_Open)
-		return;
+	auto& history = Application::Get().GetEditHistory();
+	history.AllowShortcuts(m_Focused);
 
-	const auto title = BuildResourceWindowTitle();
 
-	if (BeginPanelWindow(title.c_str(), m_Open, ImGuiWindowFlags_MenuBar))
-	{
-		auto& history = Application::Get().GetEditHistory();
-		history.AllowShortcuts(ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows));
-
-		DrawMenuBar();
-		DrawToolbar();
-		ImGui::Separator();
-
-		const float height = ImGui::GetContentRegionAvail().y;
-		const auto previewFlags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
-		Editor::DrawSidebarLayout("##ModelViewportPane", "##ModelSplitter", "##ModelDetailsPane",
-			m_LeftPaneWidth, height, 250.0f, 280.0f,
-			[this] { m_PreviewWidget.Draw(); },
-			[this, &history]
+	const float height = ImGui::GetContentRegionAvail().y;
+	const auto previewFlags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
+	Editor::DrawSidebarLayout("##ModelViewportPane", "##ModelSplitter", "##ModelDetailsPane",
+		m_LeftPaneWidth, height, 250.0f, 280.0f,
+		[this] { m_PreviewWidget.Draw(); },
+		[this, &history]
+		{
+			if (auto* model = m_ModelHandle.Get())
 			{
-				if (auto* model = m_ModelHandle.Get())
+				const bool canEdit = PIEManager::Get().IsEditing();
+
+				DrawModelInfo(*model);
+				ImGui::Spacing();
+
+				DrawLODInfo(*model);
+				ImGui::Spacing();
+
+				const auto modelKey = WStrToStr(model->GetKey());
+				ImGui::PushID(modelKey.c_str());
+				DrawMaterialSlots(*model, canEdit);
+				ImGui::PopID();
+				ImGui::Spacing();
+
+				DrawAnimations(*model);
+				ImGui::Spacing();
+
+				if (ImGui::CollapsingHeader((ICON_FA_LAYER_GROUP " " + LOCAL("ModelEditor.Placement")).c_str(), ImGuiTreeNodeFlags_DefaultOpen))
 				{
-					const bool canEdit = PIEManager::Get().IsEditing();
+					const bool canPlace = history.Enabled() && SceneManager::Get().GetCurrentScene();
+					ImGui::BeginDisabled(!canPlace);
+					if (ImGui::Button((ICON_FA_PLUS " " + LOCAL_LABEL("ResourceEditor.InstantiateModel")).c_str()))
+						InstantiateModel();
+					ImGui::EndDisabled();
 
-					DrawModelInfo(*model);
-					ImGui::Spacing();
-
-					DrawLODInfo(*model);
-					ImGui::Spacing();
-
-					const auto modelKey = WStrToStr(model->GetKey());
-					ImGui::PushID(modelKey.c_str());
-					DrawMaterialSlots(*model, canEdit);
-					ImGui::PopID();
-					ImGui::Spacing();
-
-					DrawAnimations(*model);
-					ImGui::Spacing();
-
-					if (ImGui::CollapsingHeader((ICON_FA_LAYER_GROUP " " + LOCAL("ModelEditor.Placement")).c_str(), ImGuiTreeNodeFlags_DefaultOpen))
-					{
-						const bool canPlace = history.Enabled() && SceneManager::Get().GetCurrentScene();
-						ImGui::BeginDisabled(!canPlace);
-						if (ImGui::Button((ICON_FA_PLUS " " + LOCAL_LABEL("ResourceEditor.InstantiateModel")).c_str()))
-							InstantiateModel();
-						ImGui::EndDisabled();
-
-						if (!m_StatusKey.empty())
-							ImGui::TextWrapped("%s", LOCAL(m_StatusKey).c_str());
-					}
+					if (!m_StatusKey.empty())
+						ImGui::TextWrapped("%s", LOCAL(m_StatusKey).c_str());
 				}
-				else
-				{
-					ImGui::TextWrapped("%s", LOCAL("ModelEditor.NoModel").c_str());
-					if (ImGui::Button(LOCAL_LABEL("ModelEditor.RetryLoad").c_str()))
-						SetTargetResource(m_TargetResourcePath);
-				}
-			}, previewFlags, /*reserveHalfForContent=*/false);
-	}
-	ImGui::End();
+			}
+			else
+			{
+				ImGui::TextWrapped("%s", LOCAL("ModelEditor.NoModel").c_str());
+				if (ImGui::Button(LOCAL_LABEL("ModelEditor.RetryLoad").c_str()))
+					SetTargetResource(m_TargetResourcePath);
+			}
+		}, previewFlags, /*reserveHalfForContent=*/false);
 }
 
 void ModelEditor::InstantiateModel()

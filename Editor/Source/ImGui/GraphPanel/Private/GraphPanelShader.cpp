@@ -1,4 +1,5 @@
 ﻿#include "GraphPanel.h"
+#include "IconsFontAwesome7.h"
 #include "GraphMessageLocalization.h"
 #include "ShaderGraphCompiler.h"
 #include "LocalizationManager.h"
@@ -123,36 +124,27 @@ void GraphPanel::DrawShaderMenu()
 	ImGui::EndMenu();
 }
 
-void GraphPanel::DrawShaderToolbar()
+void GraphPanel::DrawShaderToolbar(EditorUI::ToolbarLayout& toolbar)
 {
 	if (m_Domain != EGraphDomain::Shader) return;
 
-	ImGui::TextColored(ImVec4(0.35f, 0.78f, 1.0f, 1.0f), LOCAL_CSTR("GraphPanel.ShaderBadge"));
-	ImGui::SameLine();
+	toolbar.Text(LOCAL_CSTR("GraphPanel.ShaderBadge"));
 
-	if (ImGui::Button(LOCAL_LABEL("GraphPanel.GenerateHlsl").c_str())) GenerateShaderSource();
-	ImGui::SameLine();
-	if (ImGui::Button(LOCAL_LABEL("GraphPanel.CheckDxil").c_str()))
+	if (toolbar.Icon("GenerateHlsl", ICON_FA_FILE_CODE, "GraphPanel.GenerateHlsl")) GenerateShaderSource();
+	if (toolbar.Icon("CheckDxil", ICON_FA_FLASK, "GraphPanel.CheckDxil"))
 		CompileShaderGraph(ERHIType::DirectX12);
-	ImGui::SameLine();
-	if (ImGui::Button(LOCAL_LABEL("GraphPanel.CheckSpirv").c_str()))
+	if (toolbar.Icon("CheckSpirv", ICON_FA_FLASK, "GraphPanel.CheckSpirv"))
 		CompileShaderGraph(ERHIType::Vulkan);
 
-	ImGui::SameLine(0.0f, 12.0f);
-	ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
-	ImGui::SameLine(0.0f, 12.0f);
 
-	if (ImGui::Button(LOCAL_LABEL("GraphPanel.PreviewShader").c_str()))
+	if (toolbar.Icon("PreviewShader", ICON_FA_EYE, "GraphPanel.PreviewShader"))
 		BuildShaderPreview();
-	ImGui::SameLine();
-	if (ImGui::Button(LOCAL_LABEL("GraphPanel.CheckMaterialDxil").c_str()))
+	if (toolbar.Icon("CheckMaterialDxil", ICON_FA_MICROCHIP, "GraphPanel.CheckMaterialDxil"))
 		CompileMaterialShader();
-	ImGui::SameLine();
-	if (ImGui::Button(LOCAL_LABEL("GraphPanel.CreateRuntimeMaterial").c_str()))
+	if (toolbar.Icon("CreateRuntimeMaterial", ICON_FA_PLUS, "GraphPanel.CreateRuntimeMaterial"))
 		CreateRuntimeMaterial();
 
-	ImGui::SameLine();
-	ImGui::TextDisabled("(%s)", LOCAL_CSTR("GraphPanel.ShaderCompileOnly"));
+	toolbar.Text(LOCAL_CSTR("GraphPanel.ShaderCompileOnly"));
 }
 
 void GraphPanel::DrawShaderBuildDetails()

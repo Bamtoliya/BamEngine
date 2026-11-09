@@ -1,6 +1,7 @@
 ﻿// 파일: Editor/Source/ImGui/HistoryPanel/Private/HistoryPanel.cpp
 
 #include "HistoryPanel.h"
+#include "EditorUI.h"
 #include "Application.h"
 #include "SceneEditHistory.h"
 #include "NotificationManager.h"
@@ -28,115 +29,23 @@ void HistoryPanel::Draw()
 	const std::string windowTitle = GetDisplayName() + "###HistoryPanel";
 	if (BeginPanelWindow(windowTitle.c_str(), m_Open, flags))
 	{
-		const float availWidth = ImGui::GetContentRegionAvail().x;
-		constexpr float kCompactBreakpoint = 360.0f;
-		const bool isCompact = (availWidth < kCompactBreakpoint);
-		const float frameHeight = ImGui::GetFrameHeight();
-
-		// ShortcutManager에서 최신 동적 단축키 힌트 조회
-		auto& sm = ShortcutManager::Get();
-		const char* undoHint = sm.GetShortcutHint("Edit.Undo");
-		const char* redoHint = sm.GetShortcutHint("Edit.Redo");
-
-		// ── 1. 상단 컨트롤 툴바 (반응형 + 동적 숏컷 힌트) ──
-		// [Undo 버튼]
-		ImGui::BeginDisabled(!history.CanUndo());
-		if (isCompact)
+		EditorUI::ToolbarLayout toolbar;
+		auto& shortcuts = ShortcutManager::Get();
+		EditorUI::IconButtonOptions options;
+		options.Enabled = history.CanUndo();
+		options.ShortcutHint = shortcuts.GetShortcutHint("Edit.Undo");
+		if (toolbar.Icon("HistoryUndo", ICON_FA_ROTATE_LEFT, "EditorCommon.Undo", options)) history.Undo();
+		options.Enabled = history.CanRedo();
+		options.ShortcutHint = shortcuts.GetShortcutHint("Edit.Redo");
+		if (toolbar.Icon("HistoryRedo", ICON_FA_ROTATE_RIGHT, "EditorCommon.Redo", options)) history.Redo();
+		if (toolbar.Button("HistoryClear", ICON_FA_TRASH_CAN, "History.Clear"))
 		{
-			if (ImGui::Button((ICON_FA_ROTATE_LEFT "###HistoryUndo"), ImVec2(frameHeight, frameHeight)))
-				history.Undo();
-			if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-			{
-				if (undoHint && undoHint[0] != '\0')
-					ImGui::SetTooltip("%s (%s)", LOCAL_CSTR("EditorCommon.Undo"), undoHint);
-				else
-					ImGui::SetTooltip("%s", LOCAL_CSTR("EditorCommon.Undo"));
-			}
+			history.Clear();
+			NotificationManager::Get().AddNotification(LOCAL("History.Title"), LOCAL("History.Cleared"), ELogLevel::Info);
 		}
-		else
-		{
-			const std::string undoText = (undoHint && undoHint[0] != '\0') ?
-				LOCAL_FMT("History.ActionShortcut", LOCAL("EditorCommon.Undo"), undoHint) : LOCAL("EditorCommon.Undo");
-			const std::string undoLabel = undoText + "###HistoryUndo";
-			if (ImGui::Button(undoLabel.c_str()))
-				history.Undo();
-		}
-		ImGui::EndDisabled();
-
-		ImGui::SameLine();
-
-		// [Redo 버튼]
-		ImGui::BeginDisabled(!history.CanRedo());
-		if (isCompact)
-		{
-			if (ImGui::Button((ICON_FA_ROTATE_RIGHT "###HistoryRedo"), ImVec2(frameHeight, frameHeight)))
-				history.Redo();
-			if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-			{
-				if (redoHint && redoHint[0] != '\0')
-					ImGui::SetTooltip("%s (%s)", LOCAL_CSTR("EditorCommon.Redo"), redoHint);
-				else
-					ImGui::SetTooltip("%s", LOCAL_CSTR("EditorCommon.Redo"));
-			}
-		}
-		else
-		{
-			const std::string redoText = (redoHint && redoHint[0] != '\0') ?
-				LOCAL_FMT("History.ActionShortcut", LOCAL("EditorCommon.Redo"), redoHint) : LOCAL("EditorCommon.Redo");
-			const std::string redoLabel = redoText + "###HistoryRedo";
-			if (ImGui::Button(redoLabel.c_str()))
-				history.Redo();
-		}
-		ImGui::EndDisabled();
-
-		ImGui::SameLine();
-
-		// [Clear 버튼]
-		if (isCompact)
-		{
-			if (ImGui::Button((ICON_FA_TRASH_CAN "###HistoryClear"), ImVec2(frameHeight, frameHeight)))
-			{
-				history.Clear();
-				NotificationManager::Get().AddNotification(LOCAL("History.Title"), LOCAL("History.Cleared"), ELogLevel::Info);
-			}
-			if (ImGui::IsItemHovered())
-				ImGui::SetTooltip("%s", LOCAL_CSTR("History.Clear"));
-		}
-		else
-		{
-			if (ImGui::Button(LOCAL_LABEL("History.Clear").c_str()))
-			{
-				history.Clear();
-				NotificationManager::Get().AddNotification(LOCAL("History.Title"), LOCAL("History.Cleared"), ELogLevel::Info);
-			}
-		}
-
-		ImGui::SameLine();
-
-		// [저장 상태 표시]
-		ImGui::AlignTextToFramePadding();
-		if (isCompact)
-		{
-			if (hasUnsaved)
-			{
-				ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.2f, 1.0f), ICON_FA_FLOPPY_DISK " *");
-				if (ImGui::IsItemHovered())
-					ImGui::SetTooltip("%s", LOCAL_CSTR("History.UnsavedChanges"));
-			}
-			else
-			{
-				ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.4f, 1.0f), ICON_FA_FLOPPY_DISK);
-				if (ImGui::IsItemHovered())
-					ImGui::SetTooltip("%s", LOCAL_CSTR("History.AllChangesSaved"));
-			}
-		}
-		else
-		{
-			if (hasUnsaved)
-				ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.2f, 1.0f), "%s", LOCAL_CSTR("History.UnsavedChanges"));
-			else
-				ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.4f, 1.0f), "%s", LOCAL_CSTR("History.AllChangesSaved"));
-		}
+		ImGui::PushStyleColor(ImGuiCol_Text, hasUnsaved ? ImVec4(1.0f, 0.6f, 0.2f, 1.0f) : ImVec4(0.3f, 1.0f, 0.4f, 1.0f));
+		toolbar.Text(LOCAL_CSTR(hasUnsaved ? "History.UnsavedChanges" : "History.AllChangesSaved"), false);
+		ImGui::PopStyleColor();
 
 		ImGui::Separator();
 

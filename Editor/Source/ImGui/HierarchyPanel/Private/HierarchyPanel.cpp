@@ -1,5 +1,6 @@
 ﻿#pragma once
 #include "InputManager.h"
+#include "EditorUI.h"
 
 #include "HierarchyPanel.h"
 #include "Application.h"
@@ -193,17 +194,8 @@ void HierarchyPanel::Draw()
     {
         DrawSceneTitle(currentScene);
 
-		const float clearButtonSize = ImGui::GetFrameHeight();
-		const bool hasFilter = m_SearchFilter[0] != '\0';
-		if (hasFilter) ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - clearButtonSize - ImGui::GetStyle().ItemSpacing.x);
-		else ImGui::SetNextItemWidth(-1.0f);
-		ImGui::InputTextWithHint("##HierarchySearch", LOCAL_CSTR("EditorCommon.Search"), m_SearchFilter, sizeof(m_SearchFilter));
-		if (hasFilter)
-		{
-			ImGui::SameLine();
-			if (ImGui::Button(ICON_FA_XMARK "##ClearHierarchySearch", ImVec2(clearButtonSize, clearButtonSize)))
-				m_SearchFilter[0] = '\0';
-		}
+
+		EditorUI::SearchBar("HierarchySearch", m_SearchFilter, sizeof(m_SearchFilter));
 		ImGui::Spacing();
 
 		DrawEntityHierarchy(currentScene);
@@ -306,33 +298,93 @@ void HierarchyPanel::DrawSceneTitle(Scene* scene)
 
 		if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("Hierarchy.RenameScene"));
 
+		// ---------------------------------------------------------------------
+		// 엔티티 생성 버튼 (+) : 씬 이름 행 우측 끝에 배치
+		// ---------------------------------------------------------------------
+		const float buttonSize = ImGui::GetFrameHeight();
+		const float rightX = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - buttonSize;
+		ImGui::SameLine(rightX);
+
+		if (ImGui::Button(ICON_FA_PLUS "##AddEntityBtn", ImVec2(buttonSize, buttonSize)))
+		{
+			ImGui::OpenPopup("AddEntityPopup");
+		}
+		if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("Hierarchy.AddEntityTooltip"));
+
 		ImGui::PopStyleColor(3);
+
+		if (ImGui::BeginPopup("AddEntityPopup"))
+		{
+			DrawEntityCreationMenu(scene);
+			ImGui::EndPopup();
+		}
 	}
 
 	ImGui::Separator();
+}
+
+void HierarchyPanel::DrawEntityCreationMenu(Scene* scene)
+{
+	if (!scene) return;
+
+	if (ImGui::MenuItem((ICON_FA_FILE " " + LOCAL_LABEL("Hierarchy.CreateEmpty")).c_str()))
+	{
+		try { EntityFactory::CreateEmptyEntity(scene); }
+		catch (const std::exception& error) { EDITOR_LOG_ERROR("Entity creation failed: {}", error.what()); m_HierarchyMessage = "Hierarchy.EditFailed"; }
+	}
+	ImGui::Separator();
+
+	if (ImGui::BeginMenu((ICON_FA_CUBES " " + LOCAL_LABEL("Hierarchy.3DObjects")).c_str()))
+	{
+		if (ImGui::MenuItem(LOCAL_LABEL("Hierarchy.Cube").c_str()))
+			EntityFactory::CreatePrimitiveEntity(scene, L"Cube", L"CubeMesh", L"Resources/Material/DefaultMaterial.bammat.json");
+		if (ImGui::MenuItem(LOCAL_LABEL("Hierarchy.Sphere").c_str()))
+			EntityFactory::CreatePrimitiveEntity(scene, L"Sphere", L"SphereMesh", L"Resources/Material/DefaultMaterial.bammat.json");
+		if (ImGui::MenuItem(LOCAL_LABEL("Hierarchy.Cylinder").c_str()))
+			EntityFactory::CreatePrimitiveEntity(scene, L"Cylinder", L"CylinderMesh", L"Resources/Material/DefaultMaterial.bammat.json");
+		if (ImGui::MenuItem(LOCAL_LABEL("Hierarchy.Quad").c_str()))
+			EntityFactory::CreatePrimitiveEntity(scene, L"Quad", L"QuadMesh", L"Resources/Material/DefaultMaterial.bammat.json");
+		ImGui::EndMenu();
+	}
+
+	if (ImGui::BeginMenu((ICON_FA_LIGHTBULB " " + LOCAL_LABEL("Hierarchy.Lights")).c_str()))
+	{
+		if (ImGui::MenuItem(LOCAL_LABEL("Hierarchy.AddDirectionalLight").c_str()))
+			EntityFactory::CreateLightEntity(scene, L"Directional Light", L"Directional");
+		if (ImGui::MenuItem(LOCAL_LABEL("Hierarchy.AddPointLight").c_str()))
+			EntityFactory::CreateLightEntity(scene, L"Point Light", L"Point");
+		if (ImGui::MenuItem(LOCAL_LABEL("Hierarchy.AddSpotLight").c_str()))
+			EntityFactory::CreateLightEntity(scene, L"Spot Light", L"Spot");
+		if (ImGui::MenuItem(LOCAL_LABEL("Hierarchy.AddSkyLight").c_str()))
+			EntityFactory::CreateLightEntity(scene, L"Sky Light", L"Sky");
+		ImGui::EndMenu();
+	}
+
+	if (ImGui::BeginMenu((ICON_FA_IMAGE " " + LOCAL_LABEL("Hierarchy.2DObjects")).c_str()))
+	{
+		if (ImGui::MenuItem(LOCAL_LABEL("Hierarchy.Sprite").c_str()))
+			EntityFactory::CreateSpriteEntity(scene, L"Sprite", L"Resources/Material/SpriteMaterial.bammat.json");
+		ImGui::EndMenu();
+	}
+
+	if (ImGui::BeginMenu((ICON_FA_WINDOW_MAXIMIZE " " + LOCAL_LABEL("Hierarchy.UI")).c_str()))
+	{
+		if (ImGui::MenuItem(LOCAL_LABEL("Hierarchy.AddCanvas").c_str()))
+			EntityFactory::CreateCanvasEntity(scene);
+		ImGui::EndMenu();
+	}
+
+	if (ImGui::MenuItem((ICON_FA_MOUNTAIN " " + LOCAL_LABEL("Hierarchy.AddTerrain")).c_str()))
+	{
+		EntityFactory::CreateTerrainEntity(scene);
+	}
 }
 
 void HierarchyPanel::DrawSceneContextMenu(Scene* scene)
 {
 	if (ImGui::BeginPopupContextWindow("HierarchyContext", ImGuiPopupFlags_MouseButtonRight | ImGuiPopupFlags_NoOpenOverItems))
 	{
-		if (ImGui::MenuItem(LOCAL_LABEL("Hierarchy.AddEntity").c_str()))
-		{
-			try
-			{
-				EntityFactory::CreateEmptyEntity(scene);
-			}
-			catch (const std::exception& error)
-			{
-				EDITOR_LOG_ERROR("Entity creation failed: {}", error.what());
-				m_HierarchyMessage = "Hierarchy.EditFailed";
-			}
-		}
-		if (ImGui::MenuItem(LOCAL_LABEL("Hierarchy.AddCanvas").c_str()))
-		{
-			EntityFactory::CreateCanvasEntity(scene);
-		}
-
+		DrawEntityCreationMenu(scene);
 		ImGui::Separator();
 
 		const bool hasClipboard = EntityClipboard::HasData();

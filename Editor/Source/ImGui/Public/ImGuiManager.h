@@ -47,7 +47,9 @@ public:
 private:
 	EResult InitializeImGui();
 	friend class IImGui;
+public:
 	EResult AddImGuiPanel(IImGui* panel);
+	EResult RemoveImGuiPanel(IImGui* panel);
 public:
 	EResult RemoveImGuiPanel(IImGui* panel);
 public:
@@ -113,6 +115,8 @@ public:
 	void ApplyDefaultDarkStyle();
 	void ApplyTheme(const std::string& theme);
 	[[nodiscard]] bool SaveCustomStyle(const std::filesystem::path& path);
+	[[nodiscard]] bool SaveCustomStyle(const std::filesystem::path& path, const ImGuiStyle& style, float styleScale);
+	[[nodiscard]] ImGuiStyle GetBaseStyle() const { return m_BaseStyle; }
 	[[nodiscard]] bool LoadCustomStyle(const std::filesystem::path& path);
 	[[nodiscard]] std::filesystem::path GetCustomStylePath() const;
 #pragma endregion
@@ -139,7 +143,14 @@ public:
 
 #pragma region Document
 public:
+	enum class ESceneTemplate
+	{
+		Basic, // 기본 (카메라, 라이트, 후처리 볼륨, 바닥 평면)
+		Empty  // 빈 씬
+	};
+
 	bool RequestNewScene();
+	bool ExecuteNewScene(ESceneTemplate templateType);
 	bool RequestOpenScene(const std::filesystem::path& path);
 	bool RequestCloseScene();
 	bool RequestQuit();
@@ -155,6 +166,7 @@ private:
 
 	bool RequestSceneAction(ESceneDocumentAction action, std::filesystem::path path = {});
 	void DrawDocumentConfirmation();
+	void DrawNewSceneDialog();
 	void SynchronizeSceneDocumentAccess();
 #pragma endregion
 
@@ -184,6 +196,8 @@ private:
 	vector<IImGui*> m_PendingAddPanels;
 	vector<IImGui*> m_PendingRemovePanels;
 	std::filesystem::path m_PendingResourceEditorPath;
+	bool m_ShowNewSceneDialog = false;
+	ESceneTemplate m_SelectedSceneTemplate = ESceneTemplate::Basic;
 	ImGuiStyle m_BaseStyle{};
 	float m_UIScale = 1.0f;
 	vector<IImGui*> m_WorkspacePanels;

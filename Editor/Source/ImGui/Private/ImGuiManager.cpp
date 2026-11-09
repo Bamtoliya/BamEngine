@@ -1,5 +1,6 @@
-#pragma once
+﻿#pragma once
 #include "InputManager.h"
+#include "EditorUI.h"
 #include "ShortcutManager.h"
 #include <archive/JsonArchive.h>
 #include "EditorSettingsService.h"
@@ -41,9 +42,6 @@
 #pragma region Imgui Header
 #include "imgui.h"
 #include "imgui_impl_sdl3.h"
-#include "imgui_impl_sdlrenderer3.h"
-#include "imgui_impl_sdlgpu3.h"
-#include "imgui_impl_dx12.h"
 #pragma push_macro("COLOR")
 #undef COLOR
 
@@ -429,41 +427,30 @@ void ImGuiManager::Draw()
 
 void ImGuiManager::MainDockspace()
 {
-	// [1. Fullscreen DockSpace 생성] ----------------------------------
-	// 메인 뷰포트 전체를 덮는 "DockSpace" 윈도우를 만듭니다.
+	const float playBarBottom = m_ToolBar.Draw(m_Window);
 	const ImGuiViewport* viewport = ImGui::GetMainViewport();
-	const float topReserve = m_ToolBar.GetPlayBarHeight();
-	const float bottomReserve = m_ToolBar.GetFooterBarHeight();
-	ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x, viewport->WorkPos.y + topReserve));
-	ImGui::SetNextWindowSize(ImVec2(viewport->WorkSize.x, std::max(1.0f, viewport->WorkSize.y - topReserve - bottomReserve)));
+	const float dockBottom = viewport->WorkPos.y + viewport->WorkSize.y - m_ToolBar.GetFooterBarHeight();
+	ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x, playBarBottom));
+	ImGui::SetNextWindowSize(ImVec2(viewport->WorkSize.x, std::max(1.0f, dockBottom - playBarBottom)));
 	ImGui::SetNextWindowViewport(viewport->ID);
 
-	// 스타일: 라운딩 없음, 테두리 없음, 패딩 없음
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
 
-	// 플래그: 제목 표시줄 없음, 이동/크기조절 불가, 뒤로 보내기(배경역할), 메뉴바 포함
 	ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoDocking;
 	window_flags |= ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove;
 	window_flags |= ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus;
-	window_flags |= ImGuiWindowFlags_NoBackground; // 투명하게 해서 뒤의 게임 화면이 보이게 할 수도 있음 (선택사항)
-	//window_flags |= ImGuiWindowFlags_MenuBar;
+	// [수정] ImGuiWindowFlags_NoBackground를 제거하여 기본 창 배경색(ImGuiCol_WindowBg)이 칠해지도록 함
 
-	// 메인 독스페이스 컨테이너 시작
 	ImGui::Begin("##MainDockSpace", nullptr, window_flags);
-
-	// 스타일 복구
 	ImGui::PopStyleVar(3);
 
-	// DockSpace ID 제출
 	ImGuiID dockspace_id = ImGui::GetID("MyDockSpace");
-	// PassthruCentralNode: 중앙 노드를 투명하게 만들어서, 도킹되지 않은 영역에 게임 씬을 그릴 수 있게 함
-	ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_PassthruCentralNode);
+	// [수정] ImGuiDockNodeFlags_PassthruCentralNode 대신 ImGuiDockNodeFlags_None 사용
+	ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None);
 
-	m_ToolBar.Draw(m_Window);
-
-	ImGui::End(); // MainDockSpace 끝 (이제부터 그리는 창은 이 안에 도킹됨)
+	ImGui::End();
 }
 #pragma endregion
 
@@ -500,6 +487,15 @@ EResult ImGuiManager::RemoveImGuiPanel(IImGui* panel)
 {
 	if (!panel)
 		return EResult::InvalidArgument;
+
+	const bool isActive = std::find(m_ImGuiPanels.begin(), m_ImGuiPanels.end(), panel) != m_ImGuiPanels.end();
+	const bool isPendingAdd = std::find(m_PendingAddPanels.begin(), m_PendingAddPanels.end(), panel) !=
+		m_PendingAddPanels.end();
+	if (!isActive && !isPendingAdd)
+		return EResult::InvalidArgument;
+
+	if (std::find(m_PendingRemovePanels.begin(), m_PendingRemovePanels.end(), panel) != m_PendingRemovePanels.end())
+		return EResult::Success;
 
 	std::erase(m_WorkspacePanels, panel);
 	m_PendingRemovePanels.push_back(panel);
@@ -908,13 +904,17 @@ void ImGuiManager::ApplyTheme(const std::string& theme)
 
 bool ImGuiManager::SaveCustomStyle(const std::filesystem::path& path)
 {
-	if (path.empty())
+	return SaveCustomStyle(path, ImGui::GetStyle(), m_UIScale);
+}
+
+bool ImGuiManager::SaveCustomStyle(const std::filesystem::path& path, const ImGuiStyle& style, float styleScale)
+{
+	if (path.empty() || !std::isfinite(styleScale) || styleScale <= 0.0f)
 		return false;
 
-	const ImGuiStyle& style = ImGui::GetStyle();
 	archive::JsonArchive writer;
 
-	const float invScale = (m_UIScale > 0.0f) ? (1.0f / m_UIScale) : 1.0f;
+	const float invScale = 1.0f / styleScale;
 	(void)writer.Write("WindowRounding", style.WindowRounding * invScale);
 	(void)writer.Write("ChildRounding", style.ChildRounding * invScale);
 	(void)writer.Write("FrameRounding", style.FrameRounding * invScale);
@@ -955,7 +955,6 @@ bool ImGuiManager::SaveCustomStyle(const std::filesystem::path& path)
 		return false;
 	}
 
-	m_BaseStyle = style;
 	BAM_LOG(Info, "Editor", "Style", "Saved custom style to {}", path.string());
 	return true;
 }
@@ -1010,240 +1009,6 @@ bool ImGuiManager::LoadCustomStyle(const std::filesystem::path& path)
 	SetUIScale(m_UIScale);       // m_UIScale(1.25)을 정확히 1번만 적용
 	BAM_LOG(Info, "Editor", "Style", "Loaded custom style from {}", path.string());
 	return true;
-}
-#pragma endregion
-
-#pragma region SDLGPU3 Helper
-EResult ImGuiManager::InitializeImGuiSDLGPU3()
-{
-
-	SDL_GPUDevice* NativeRenderer = reinterpret_cast<SDL_GPUDevice*>(m_RHI->GetNativeRHI());
-
-	if (!ImGui_ImplSDL3_InitForSDLGPU(m_Window))
-	{
-		fmt::print(stderr, "ImGui_ImplSDL3_InitForSDLGPU Failed\n");
-		return EResult::Fail;
-	}
-
-	m_PlatformBackendInitialized = true;
-
-	SDL_GPUTextureFormat swapchainFormat = SDL_GetGPUSwapchainTextureFormat(NativeRenderer, m_Window);
-
-	ImGui_ImplSDLGPU3_InitInfo initInfo = {};
-	initInfo.Device = NativeRenderer;
-	initInfo.ColorTargetFormat = swapchainFormat;
-	initInfo.MSAASamples = SDL_GPU_SAMPLECOUNT_1;
-	initInfo.PresentMode = SDL_GPU_PRESENTMODE_VSYNC;
-	// [Multi-Viewport 처리] 멀티 뷰포트 모드일 때 스왑체인 구성 설정
-	initInfo.SwapchainComposition = SDL_GPU_SWAPCHAINCOMPOSITION_SDR;
-
-	if (!ImGui_ImplSDLGPU3_Init(&initInfo))
-	{
-		fmt::print(stderr, "ImGui_ImplSDLGPU3_Init Failed\n");
-		return EResult::Fail;
-	}
-	m_RendererBackendInitialized = true;
-
-	return EResult::Success;
-}
-void ImGuiManager::SDLGPU3Begin()
-{
-	ImGui_ImplSDLGPU3_NewFrame();
-}
-void ImGuiManager::SDLGPU3End()
-{
-	if (!m_RHI) return;
-
-	SDL_GPUDevice* device = reinterpret_cast<SDL_GPUDevice*>(m_RHI->GetNativeRHI());
-	SDL_GPUCommandBuffer* commandBuffer = static_cast<SDL_GPUCommandBuffer*>(m_RHI->GetCurrentCommandBuffer());
-	ImDrawData* drawData = ImGui::GetDrawData();
-	SDL_GPUTexture* backBufferTexture = static_cast<SDL_GPUTexture*>(m_RHI->GetBackBuffer()->GetNativeHandle());
-
-	ImGui_ImplSDLGPU3_PrepareDrawData(drawData, commandBuffer);
-
-	SDL_GPUColorTargetInfo colorTargetInfo = {};
-	colorTargetInfo.texture = backBufferTexture;
-	colorTargetInfo.load_op = SDL_GPU_LOADOP_LOAD;   // 이미 그려진 화면 유지
-	colorTargetInfo.store_op = SDL_GPU_STOREOP_STORE;
-
-	SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(commandBuffer, &colorTargetInfo, 1, nullptr);
-	
-	ImGui_ImplSDLGPU3_RenderDrawData(drawData, commandBuffer, pass, nullptr);
-	SDL_EndGPURenderPass(pass);
-
-	ImGuiIO& io = ImGui::GetIO();
-	if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
-	{
-		ImGui::UpdatePlatformWindows();
-		ImGui::RenderPlatformWindowsDefault();
-	}
-}
-void ImGuiManager::ShutdownImGuiSDLGPU3()
-{
-	SDL_GPUDevice* device = reinterpret_cast<SDL_GPUDevice*>(m_RHI->GetNativeRHI());
-	SDL_WaitForGPUIdle(device);
-	ImGui_ImplSDLGPU3_Shutdown();
-	// [Multi-Viewport 처리] 모든 추가 창들을 닫음
-}
-#pragma endregion
-
-#pragma region DirectX12 Helper
-EResult ImGuiManager::InitializeImGuiDirectX12()
-{
-	if (!m_RHI) return EResult::Fail;
-
-	DirectX12RHI* dx12RHI = static_cast<DirectX12RHI*>(m_RHI);
-	ID3D12Device* device = static_cast<ID3D12Device*>(dx12RHI->GetNativeRHI());
-
-	if (!ImGui_ImplSDL3_InitForD3D(m_Window))
-	{
-		fmt::print(stderr, "ImGui_ImplSDL3_InitForD3D Failed\n");
-		return EResult::Fail;
-	}
-
-	m_PlatformBackendInitialized = true;
-
-	// [핵심] ImGui 전용 heap 생성 금지, 엔진 SRV heap 공유
-	auto* srvAllocator = dx12RHI->GetSRVAllocator();
-	if (!srvAllocator || !srvAllocator->GetHeap())
-	{
-		fmt::print(stderr, "DX12 SRV allocator/heap is null\n");
-		return EResult::Fail;
-	}
-
-	m_ImGuiSrvDescHeap = srvAllocator->GetHeap();
-	m_ImGuiOwnsSrvHeap = false;
-	m_ImGuiSrvDescriptorSize = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-	IM_ASSERT(m_ImGuiSrvDescriptorSize > 0);
-
-	ImGui_ImplDX12_InitInfo initInfo = {};
-	initInfo.Device = device;
-	initInfo.CommandQueue = dx12RHI->GetCommandQueue();
-	initInfo.NumFramesInFlight = static_cast<int>(m_RHI->GetFrameResourceCount());;
-	initInfo.SrvDescriptorHeap = m_ImGuiSrvDescHeap;
-	initInfo.RTVFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
-	initInfo.DSVFormat = DXGI_FORMAT_UNKNOWN;
-	initInfo.UserData = this;
-
-	initInfo.SrvDescriptorAllocFn = [](ImGui_ImplDX12_InitInfo* info, D3D12_CPU_DESCRIPTOR_HANDLE* out_cpu, D3D12_GPU_DESCRIPTOR_HANDLE* out_gpu)
-		{
-			ImGuiManager* self = static_cast<ImGuiManager*>(info->UserData);
-			IM_ASSERT(self && self->m_RHI);
-
-			auto* dx12RHI = static_cast<DirectX12RHI*>(self->m_RHI);
-			auto* allocator = dx12RHI->GetSRVAllocator();
-			IM_ASSERT(allocator);
-
-			uint32 index = 0;
-			if (!allocator->Allocate(*out_cpu, index))
-			{
-				IM_ASSERT(false && "SRV allocator is out of descriptors.");
-				*out_cpu = {};
-				*out_gpu = {};
-				return;
-			}
-
-			*out_gpu = allocator->GetGPUHandle(index);
-		};
-
-	initInfo.SrvDescriptorFreeFn = [](ImGui_ImplDX12_InitInfo* info, D3D12_CPU_DESCRIPTOR_HANDLE cpu_desc, D3D12_GPU_DESCRIPTOR_HANDLE)
-		{
-			ImGuiManager* self = static_cast<ImGuiManager*>(info->UserData);
-			IM_ASSERT(self && self->m_RHI);
-
-			auto* dx12RHI = static_cast<DirectX12RHI*>(self->m_RHI);
-			auto* allocator = dx12RHI->GetSRVAllocator();
-			IM_ASSERT(allocator);
-
-			auto* heap = allocator->GetHeap();
-			D3D12_CPU_DESCRIPTOR_HANDLE start = heap->GetCPUDescriptorHandleForHeapStart();
-
-			if (cpu_desc.ptr < start.ptr || self->m_ImGuiSrvDescriptorSize == 0)
-				return;
-
-			SIZE_T delta = cpu_desc.ptr - start.ptr;
-			uint32 index = static_cast<uint32>(delta / self->m_ImGuiSrvDescriptorSize);
-			dx12RHI->DeferDescriptorFree(allocator, index);
-		};
-
-	if (!ImGui_ImplDX12_Init(&initInfo))
-	{
-		fmt::print(stderr, "ImGui_ImplDX12_Init Failed\n");
-		return EResult::Fail;
-	}
-
-	m_RendererBackendInitialized = true;
-
-	return EResult::Success;
-}
-void ImGuiManager::DirectX12Begin()
-{
-	ImGui_ImplDX12_NewFrame();
-}
-void ImGuiManager::DirectX12End()
-{
-	DirectX12RHI* dx12RHI = static_cast<DirectX12RHI*>(m_RHI);
-	ID3D12GraphicsCommandList* commandList = dx12RHI->GetCommandList();
-
-	DirectX12Texture* backBuffer = static_cast<DirectX12Texture*>(m_RHI->GetBackBuffer());
-	if (backBuffer && backBuffer->GetCurrentState() != D3D12_RESOURCE_STATE_RENDER_TARGET)
-	{
-		D3D12_RESOURCE_BARRIER barrier = {};
-		barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-		barrier.Transition.pResource = static_cast<ID3D12Resource*>(backBuffer->GetNativeHandle());
-		barrier.Transition.StateBefore = backBuffer->GetCurrentState();
-		barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
-		barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-		commandList->ResourceBarrier(1, &barrier);
-		backBuffer->SetCurrentState(D3D12_RESOURCE_STATE_RENDER_TARGET);
-	}
-
-	D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = backBuffer->GetRTVHandle();
-	commandList->OMSetRenderTargets(1, &rtvHandle, FALSE, nullptr);
-
-	// ImGui용 Descriptor Heap 바인딩
-	ID3D12DescriptorHeap* heaps[] = { m_ImGuiSrvDescHeap };
-	commandList->SetDescriptorHeaps(1, heaps);
-	// ImGui 그리기 명령을 커맨드 리스트에 기록
-	ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), commandList);
-	// 다중 뷰포트(도킹 창 분리) 처리를 위한 업데이트 
-	ImGuiIO& io = ImGui::GetIO();
-	if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
-	{
-		ImGui::UpdatePlatformWindows();
-		ImGui::RenderPlatformWindowsDefault(nullptr, (void*)commandList);
-	}
-}
-void ImGuiManager::ShutdownImGuiDirectX12()
-{
-	auto* dxRHI = static_cast<Engine::DirectX12RHI*>(m_RHI);
-	if (!dxRHI || Engine::IsFailure(dxRHI->WaitForGPU()))
-	{
-		fmt::print(stderr, "GPU synchronization failed before ImGui DX12 shutdown.\n");
-		std::terminate();
-	}
-
-	ImGui_ImplDX12_Shutdown();
-}
-#pragma endregion
-
-#pragma region Vulkan Helper
-EResult ImGuiManager::InitializeImGuiVulkan()
-{
-	return EResult();
-}
-void ImGuiManager::ShutdownImGuiVulkan()
-{
-}
-#pragma endregion
-
-#pragma region Metal Helper
-EResult ImGuiManager::InitializeImGuiMetal()
-{
-	return EResult();
-}
-void ImGuiManager::ShutdownImGuiMetal()
-{
 }
 #pragma endregion
 
@@ -1628,17 +1393,15 @@ void ImGuiManager::DrawDocumentConfirmation()
 	ImGui::TextUnformatted(LOCAL_FMT("EditorDocument.UnsavedMessage", name).c_str());
 	ImGui::Spacing();
 
-	ImGui::BeginDisabled(!document->CanSave());
-	if (ImGui::Button(LOCAL_LABEL("EditorDocument.Save").c_str()))
+	const EditorUI::DialogAction actions[] = {
+		{ "EditorCommon.Cancel" }, { "EditorDocument.Discard", true, true }, { "EditorDocument.Save", document->CanSave() }
+	};
+	const int action = EditorUI::DialogButtonBar("DocumentActions", actions, IM_ARRAYSIZE(actions));
+	if (action == 2)
 		controller.ResolveConfirmation(EDocumentActionChoice::Save);
-	ImGui::EndDisabled();
-
-	ImGui::SameLine();
-	if (ImGui::Button(LOCAL_LABEL("EditorDocument.Discard").c_str()))
+	else if (action == 1)
 		controller.ResolveConfirmation(EDocumentActionChoice::Discard);
-
-	ImGui::SameLine();
-	if (ImGui::Button(LOCAL_LABEL("EditorCommon.Cancel").c_str()))
+	else if (action == 0)
 	{
 		controller.ResolveConfirmation(EDocumentActionChoice::Cancel);
 		ImGui::CloseCurrentPopup();
@@ -1707,22 +1470,17 @@ void ImGuiManager::DrawNewSceneDialog()
 	ImGui::Separator();
 	ImGui::Spacing();
 
-	const float btnWidth = 100.0f;
-	const float availX = ImGui::GetContentRegionAvail().x;
-	ImGui::SetCursorPosX(ImGui::GetCursorPosX() + availX - (btnWidth * 2.0f + ImGui::GetStyle().ItemSpacing.x));
-
-	if (ImGui::Button(LOCAL_LABEL("EditorDocument.Create").c_str(), ImVec2(btnWidth, 0.0f)))
+	const EditorUI::DialogAction actions[] = {
+		{ "EditorCommon.Cancel" }, { "EditorDocument.Create" }
+	};
+	const int action = EditorUI::DialogButtonBar("NewSceneActions", actions, IM_ARRAYSIZE(actions));
+	if (action == 1)
 	{
 		ExecuteNewScene(m_SelectedSceneTemplate);
 		ImGui::CloseCurrentPopup();
 	}
-
-	ImGui::SameLine();
-
-	if (ImGui::Button(LOCAL_LABEL("EditorCommon.Cancel").c_str(), ImVec2(btnWidth, 0.0f)))
-	{
+	else if (action == 0)
 		ImGui::CloseCurrentPopup();
-	}
 
 	ImGui::EndPopup();
 }

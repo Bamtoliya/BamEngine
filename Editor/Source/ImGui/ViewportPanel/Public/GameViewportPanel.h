@@ -51,6 +51,7 @@ private:
 	string m_LastPostProcessPreset;
 	string m_LastPostProcessSettings;
 	entt::entity m_LastPostProcessEntity = entt::null;
+	uint64 m_LastSyncedScenePipelineVersion = 0;
 	bool m_PostProcessStateUsable = true;
 	bool m_HasActiveCamera = false;
 	ImGuiID m_GameplayImageWindowId = 0;

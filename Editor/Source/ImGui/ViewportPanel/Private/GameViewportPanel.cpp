@@ -1,4 +1,4 @@
-﻿#include "GameViewportPanel.h"
+#include "GameViewportPanel.h"
 #include "SceneManager.h"
 #include "Scene.h"
 #include "CameraComponent.h"
@@ -12,6 +12,7 @@
 #include "InputManager.h"
 #include "Renderer.h"
 #include "RenderPassManager.h"
+#include "SceneViewportPanel.h"
 
 EResult GameViewportPanel::OnInitialize(void* arg)
 {
@@ -225,7 +226,7 @@ void GameViewportPanel::DrawCustomOptions()
 {
 	DrawResolutionMenu();
 	DrawRenderTargetMenu();
-	DrawChannelViewButton();
+
 }
 
 std::optional<CameraBuffer> GameViewportPanel::FindActiveGameCameraBuffer()

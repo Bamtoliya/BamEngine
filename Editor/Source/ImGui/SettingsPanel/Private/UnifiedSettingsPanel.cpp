@@ -1,6 +1,7 @@
 ﻿#include "UnifiedSettingsPanel.h"
 #include "EditorSettingsService.h"
 #include "ImGuiManager.h"
+#include "EditorUI.h"
 #include "LocalizationManager.h"
 #include "NotificationManager.h"
 
@@ -81,11 +82,20 @@ void UnifiedSettingsPanel::ApplySettings()
         m_Theme.WriteDraft(candidate);
         m_EditorEnvironment.WriteDraft(candidate);
 
+        if (!candidate.HasValidValues())
+        {
+            ImGuiManager::Get().NotifySettingsChange(EditorSettingsChangeResult{});
+            return;
+        }
+
+        if (!m_Theme.SaveDraftStyle())
+            return;
+
         const auto result = settings.SetEditorPreferences(candidate);
         ImGuiManager::Get().NotifySettingsChange(result);
         m_EditorEnvironment.FinishApply(result.Applied);
         m_General.FinishApply(result.Applied);
-        m_Theme.FinishApply();
+        m_Theme.FinishApply(result.Applied && result.SaveStatus == EEditorSettingsSaveStatus::Saved);
     }
 
     m_Graphics.Apply(settings);
@@ -126,7 +136,11 @@ void UnifiedSettingsPanel::Draw()
         return;
     }
 
-    m_SearchFilter.Draw(LOCAL_CSTR("Shortcuts.Search"), 300.0f);
+    if (EditorUI::SearchBar("UnifiedSettingsSearch", m_SearchFilter.InputBuf,
+        IM_ARRAYSIZE(m_SearchFilter.InputBuf), "Shortcuts.Search"))
+    {
+        m_SearchFilter.Build();
+    }
     ImGui::Separator();
 
     const float footerHeight = ImGui::GetFrameHeightWithSpacing() + 8.0f;
@@ -138,7 +152,13 @@ void UnifiedSettingsPanel::Draw()
         [this]
         {
             DrawSettingsStorageStatus();
+
+            const float spacingUnit = ImGui::GetFontSize();
+            const ImVec2 cellPadding(spacingUnit * 0.5f, spacingUnit * 0.3f);
+
+            ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, cellPadding);
             DrawContentArea();
+            ImGui::PopStyleVar();
         });
 
     ImGui::Separator();

@@ -1,4 +1,4 @@
-﻿#include "EditorActionRegistry.h"
+#include "EditorActionRegistry.h"
 #include "ShortcutManager.h"
 #include "Application.h"
 #include "ToolBar.h"

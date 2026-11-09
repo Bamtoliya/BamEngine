@@ -1,4 +1,5 @@
 ﻿#include "GraphPanel.h"
+#include "IconsFontAwesome7.h"
 #include "GraphMessageLocalization.h"
 #include "LocalizationManager.h"
 #include "PIEManager.h"
@@ -109,13 +110,12 @@ void GraphPanel::StopExecution()
 	m_Executor.Stop();
 }
 
-void GraphPanel::DrawExecutionToolbar()
+void GraphPanel::DrawExecutionToolbar(EditorUI::ToolbarLayout& toolbar)
 {
 	if (m_Domain != EGraphDomain::Logic) return;
 
 	// ── 2행 구획 A: 실행 미리보기 (Preview) ──
-	ImGui::TextColored(ImVec4(0.35f, 0.78f, 1.0f, 1.0f), "[%s]", LOCAL_CSTR("GraphPanel.ExecutionTrace"));
-	ImGui::SameLine();
+	toolbar.Text(LOCAL_CSTR("GraphPanel.ExecutionTrace"));
 
 	const auto state = m_Executor.GetState();
 	const bool busy = state == EGraphExecutionState::Running || state == EGraphExecutionState::Paused;
@@ -129,7 +129,7 @@ void GraphPanel::DrawExecutionToolbar()
 	}
 
 	ImGui::BeginDisabled(busy);
-	ImGui::SetNextItemWidth(ImGui::GetFontSize() * 12.0f);
+	toolbar.SetNextItemWidth(ImGui::GetFontSize() * 12.0f);
 	const string preview = entry ? fmt::format("{} #{}", entry->Type, entry->Id) : LOCAL("GraphPanel.NoEntry");
 	if (ImGui::BeginCombo("##GraphEntry", preview.c_str()))
 	{
@@ -143,31 +143,20 @@ void GraphPanel::DrawExecutionToolbar()
 	}
 	ImGui::EndDisabled();
 
-	ImGui::SameLine();
-	ImGui::BeginDisabled(!CanRunExecution());
-	if (ImGui::Button(LOCAL_LABEL("GraphPanel.Run").c_str()))
-		RunExecution();
-	ImGui::EndDisabled();
+	auto& shortcuts = ShortcutManager::Get();
+	const auto drawAction = [&](const char* id, const char* icon, const char* tooltip)
+	{
+		EditorUI::IconButtonOptions options;
+		options.Enabled = shortcuts.CanExecuteAction(id);
+		options.ShortcutHint = shortcuts.GetShortcutHint(id);
+		if (toolbar.Icon(id, icon, tooltip, options)) shortcuts.ExecuteAction(id);
+	};
+	drawAction("Graph.Run", ICON_FA_PLAY, "GraphPanel.Run");
+	drawAction("Graph.Pause", ICON_FA_PAUSE, "GraphPanel.Pause");
+	drawAction("Graph.Step", ICON_FA_FORWARD_STEP, "GraphPanel.Step");
+	drawAction("Graph.Stop", ICON_FA_STOP, "GraphPanel.Stop");
 
-	ImGui::SameLine();
-	ImGui::BeginDisabled(!CanPauseExecution());
-	if (ImGui::Button(LOCAL_LABEL("GraphPanel.Pause").c_str()))
-		PauseExecution();
-	ImGui::EndDisabled();
-
-	ImGui::SameLine();
-	ImGui::BeginDisabled(!CanStepExecution());
-	if (ImGui::Button(LOCAL_LABEL("GraphPanel.Step").c_str()))
-		StepExecution();
-	ImGui::EndDisabled();
-
-	ImGui::BeginDisabled(!CanStopExecution());
-	if (ImGui::Button(LOCAL_LABEL("GraphPanel.Stop").c_str()))
-		StopExecution();
-	ImGui::EndDisabled();
-
-	ImGui::SameLine();
-	if (ImGui::Button(LOCAL_CSTR("GraphPanel.ResetInstance")))
+	if (toolbar.Icon("ResetInstance", ICON_FA_ROTATE_LEFT, "GraphPanel.ResetInstance"))
 	{
 		InvalidateExecution();
 		m_LastDiagnostic = {};
@@ -302,17 +291,13 @@ void GraphPanel::DrawExecutionMenu()
 
 	ImGui::EndMenu();
 }
-void GraphPanel::DrawDebugToolbar()
+void GraphPanel::DrawDebugToolbar(EditorUI::ToolbarLayout& toolbar)
 {
 	if (m_Domain != Engine::EGraphDomain::Logic) return;
 
-	ImGui::SameLine(0.0f, 12.0f);
-	ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
-	ImGui::SameLine(0.0f, 12.0f);
 
 	// ── 2행 구획 B: PIE 라이브 디버그 관찰 ──
-	ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.3f, 1.0f), LOCAL_CSTR("GraphPanel.PieBadge"));
-	ImGui::SameLine();
+	toolbar.Text(LOCAL_CSTR("GraphPanel.PieBadge"));
 
 	auto* scene = SceneManager::IsCreated() ? SceneManager::Get().GetCurrentScene() : nullptr;
 	std::string previewName = LOCAL("GraphPanel.DebugNone");
@@ -329,7 +314,7 @@ void GraphPanel::DrawDebugToolbar()
 		m_DebugEntity = entt::null;
 	}
 
-	ImGui::SetNextItemWidth(ImGui::GetFontSize() * 15.0f);
+	toolbar.SetNextItemWidth(ImGui::GetFontSize() * 15.0f);
 	if (ImGui::BeginCombo("##DebugEntity", previewName.c_str()))
 	{
 		if (ImGui::Selectable(LOCAL_LABEL("EditorCommon.None").c_str(), m_DebugEntity == entt::null))

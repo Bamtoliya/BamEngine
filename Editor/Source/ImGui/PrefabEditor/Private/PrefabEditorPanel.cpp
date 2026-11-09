@@ -1,4 +1,5 @@
 ﻿#include "PrefabEditorPanel.h"
+#include "EditorUI.h"
 #include "Scene.h"
 #include "Entity.h"
 #include "WorldComponents.h"
@@ -111,28 +112,8 @@ bool PrefabEditorPanel::SaveDocument()
     return SavePrefab(m_TargetResourcePath);
 }
 
-void PrefabEditorPanel::Draw()
+void PrefabEditorPanel::DrawCustomContent()
 {
-    m_Focused = false;
-    m_Hovered = false;
-    if (!m_Open) return;
-
-    std::string title = (m_TargetResourcePath.empty() ? LOCAL("ResourceEditor.PrefabTitle") : m_TargetResourcePath.filename().string());
-    if (m_HasUnsavedChanges) title += " *";
-    title += "###PrefabEditorPanel";
-
-    ImGui::SetNextWindowSize(ImVec2(800, 600), ImGuiCond_FirstUseEver);
-    if (!BeginPanelWindow(title.c_str(), m_Open, ImGuiWindowFlags_MenuBar))
-    {
-        ImGui::End();
-        return;
-    }
-
-    m_Focused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
-    m_Hovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows);
-
-    DrawToolbar();
-
     if (m_PrefabScene && m_RootEntity)
     {
         const float hierarchyWidth = 260.0f;
@@ -152,48 +133,43 @@ void PrefabEditorPanel::Draw()
     }
 
     DrawCloseConfirmModal();
-    ImGui::End();
 }
 
-void PrefabEditorPanel::DrawToolbar()
+void PrefabEditorPanel::DrawCustomToolbar()
 {
-    if (ImGui::BeginMenuBar())
+    if (ImGui::BeginMenu(LOCAL_LABEL("EditorMenu.File").c_str()))
     {
-        if (ImGui::BeginMenu(LOCAL_LABEL("EditorMenu.File").c_str()))
+        ACTION_MENU_ITEM(LOCAL_LABEL("PrefabEditor.Save").c_str(), "Prefab.Save");
+
+        if (ImGui::MenuItem(LOCAL_LABEL("PrefabEditor.SaveAs").c_str(), nullptr, false, m_RootEntity != nullptr))
         {
-            ACTION_MENU_ITEM(LOCAL_LABEL("PrefabEditor.Save").c_str(), "Prefab.Save");
-
-            if (ImGui::MenuItem(LOCAL_LABEL("PrefabEditor.SaveAs").c_str(), nullptr, false, m_RootEntity != nullptr))
-            {
-                std::wstring outPath;
-                std::vector<FileDialogFilter> filters = {
-                    { StrToWStr(LOCAL("FileDialog.PrefabFiles")), L"*.bamprefab.json" }
-                };
-                if (FileDialogs::SaveFileDialog(outPath, filters, m_TargetResourcePath.filename().wstring(), L"bamprefab.json"))
-                    SavePrefab(std::filesystem::path(outPath));
-            }
-
-            if (ImGui::MenuItem(LOCAL_LABEL("PrefabEditor.Revert").c_str(), nullptr, false, m_HasUnsavedChanges))
-                LoadPrefab();
-
-            ImGui::EndMenu();
+            std::wstring outPath;
+            std::vector<FileDialogFilter> filters = {
+                { StrToWStr(LOCAL("FileDialog.PrefabFiles")), L"*.bamprefab.json" }
+            };
+            if (FileDialogs::SaveFileDialog(outPath, filters, m_TargetResourcePath.filename().wstring(), L"bamprefab.json"))
+                SavePrefab(std::filesystem::path(outPath));
         }
-        ImGui::EndMenuBar();
-    }
 
-    // 상단 단축 버튼 행
+        if (ImGui::MenuItem(LOCAL_LABEL("PrefabEditor.Revert").c_str(), nullptr, false, m_HasUnsavedChanges))
+            LoadPrefab();
+
+        ImGui::EndMenu();
+    }
+}
+
+void PrefabEditorPanel::DrawCustomQuickAccess()
+{
+    EditorUI::ToolbarLayout toolbar;
     ImGui::BeginDisabled(!CanSaveDocument());
-    if (ImGui::Button((ICON_FA_FLOPPY_DISK " " + LOCAL_LABEL("PrefabEditor.Save")).c_str()))
+    if (toolbar.Button("PrefabEditor.Save", ICON_FA_FLOPPY_DISK, "PrefabEditor.Save"))
         SaveDocument();
     ImGui::EndDisabled();
 
-    ImGui::SameLine();
-    if (ImGui::Button((ICON_FA_ROTATE_LEFT " " + LOCAL_LABEL("PrefabEditor.Revert")).c_str()))
+    if (toolbar.Button("PrefabEditor.Revert", ICON_FA_ROTATE_LEFT, "PrefabEditor.Revert"))
         LoadPrefab();
 
-    ImGui::SameLine();
-    ImGui::TextDisabled("| %s", m_TargetResourcePath.string().c_str());
-    ImGui::Separator();
+    toolbar.Text(m_TargetResourcePath.string().c_str());
 }
 
 void PrefabEditorPanel::DrawPrefabHierarchy()
@@ -299,23 +275,24 @@ void PrefabEditorPanel::DrawCloseConfirmModal()
         ImGui::TextUnformatted(LOCAL_CSTR("PrefabEditor.UnsavedChangesPrompt"));
         ImGui::Spacing();
 
-        if (ImGui::Button(LOCAL_CSTR("PrefabEditor.Save"), ImVec2(100, 0)))
+        const EditorUI::DialogAction actions[] = {
+            { "EditorCommon.Cancel" }, { "EditorDocument.Discard", true, true }, { "PrefabEditor.Save" }
+        };
+        const int action = EditorUI::DialogButtonBar("PrefabCloseActions", actions, IM_ARRAYSIZE(actions));
+        if (action == 2 && SavePrefab(m_TargetResourcePath))
         {
-            SavePrefab(m_TargetResourcePath);
             ImGui::CloseCurrentPopup();
             if (!m_PendingOpenPath.empty()) { SetTargetResource(m_PendingOpenPath); m_PendingOpenPath.clear(); }
         }
 
-        ImGui::SameLine();
-        if (ImGui::Button(LOCAL_CSTR("EditorDocument.Discard"), ImVec2(100, 0)))
+        if (action == 1)
         {
             m_HasUnsavedChanges = false;
             ImGui::CloseCurrentPopup();
             if (!m_PendingOpenPath.empty()) { SetTargetResource(m_PendingOpenPath); m_PendingOpenPath.clear(); }
         }
 
-        ImGui::SameLine();
-        if (ImGui::Button(LOCAL_CSTR("EditorCommon.Cancel"), ImVec2(100, 0)))
+        if (action == 0)
         {
             m_PendingOpenPath.clear();
             ImGui::CloseCurrentPopup();

@@ -1,6 +1,6 @@
 ﻿#pragma once
 
-#include "ImGuiInterface.h"
+#include "ResourceEditorInterface.h"
 #include "Graph.h"
 #include "GraphNodePalette.h"
 #include "GraphReflection.h"
@@ -14,14 +14,13 @@ namespace ax::NodeEditor { struct EditorContext; }
 BEGIN(Editor)
 enum class EWireStyle : int { Curved = 0, ElectronicHybrid = 1, Straight = 2 };
 class GraphShaderPreview;
-class GraphPanel : public IImGui
+class GraphPanel : public ResourceEditorInterface
 {
 public:
 	GraphPanel();
 	virtual ~GraphPanel() override;
 	GraphPanel(const GraphPanel&) = delete;
 	GraphPanel& operator=(const GraphPanel&) = delete;
-	virtual void Draw() override;
 	virtual void Free() override;
 
 	const Engine::Graph& GetGraph() const;
@@ -97,17 +96,26 @@ private:
 
 #pragma region DrawUI
 private:
-	void DrawMenuBar();
-	void DrawToolbar();
-	void DrawFileToolbar();
+	void DrawCustomToolbar() override;
+	void DrawCustomQuickAccess() override;
+	void DrawCustomContent() override;
+	ImVec2 GetInitialResourceWindowSize() const override { return ImVec2(1000.0f, 650.0f); }
+	void OnResourceWindowVisibility(bool visible) override;
+	string GetResourceWindowId() const override { return "GraphPanel"; }
+	void DrawResourceFrame() override;
+	void DrawFileToolbar(EditorUI::ToolbarLayout& toolbar);
 public:
+	virtual bool IsSupported(const std::filesystem::path& assetPath) const override;
+	virtual bool HasUnsavedResourceChanges() const override { return false; }
+	virtual void SetTargetResource(const std::filesystem::path& assetPath) override;
+	bool LoadDocument(const std::filesystem::path& path);
 	void SaveDocument(bool saveAs);
 	void OpenDocument();
 private:
 	Engine::GraphDiagnostic BuildDocumentViews(GraphDocument& document);
-	void DrawDebugToolbar();
+	void DrawDebugToolbar(EditorUI::ToolbarLayout& toolbar);
 	void UpdateLiveDebugging();
-	void DrawExecutionToolbar();
+	void DrawExecutionToolbar(EditorUI::ToolbarLayout& toolbar);
 	void DrawExecutionMenu();
 	void DrawShaderMenu();
 	void DrawExecutionTrace();
@@ -127,7 +135,7 @@ private:
 	static Engine::GraphValue MakeDefaultValue(Engine::EGraphPinType type);
 	
 private:
-	void DrawShaderToolbar();
+	void DrawShaderToolbar(EditorUI::ToolbarLayout& toolbar);
 	void DrawShaderBuildDetails();
 	void DrawShaderPreview();
 	bool GenerateShaderSource();
@@ -190,6 +198,7 @@ private:
 	Engine::EGraphDomain m_Domain = Engine::EGraphDomain::Logic;
 	Engine::GraphDiagnostic m_LastDiagnostic;
 	bool m_Ready = false;
+	bool m_ConfirmOpenRequested = false;
 	Engine::GraphExecutor m_Executor;
 	reflection::Registry m_ExecutionReflection;
 	Engine::GraphNodeId m_TraceNode = 0;

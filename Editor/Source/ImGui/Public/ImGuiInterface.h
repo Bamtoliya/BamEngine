@@ -4,6 +4,7 @@
 #include <SDL3/SDL_events.h>
 #include "ShortcutTypes.h"
 #include "ImGuiSplitter.h"
+#include "EditorUI.h"
 
 BEGIN(Editor)
 enum class EPanelMenuCategory
@@ -21,7 +22,6 @@ class IImGui : public Engine::Base
 {
 public:
 	virtual ~IImGui() = default;
-	// 성공하면 ImGuiManager가 생성 참조를 넘겨받고, 실패하면 호출자가 해제한다.
 	[[nodiscard]] EResult Initialize(void* arg = nullptr);
 	virtual void Draw() BAM_PURE;
 	virtual void Update(f32 dt) {}

@@ -21,7 +21,6 @@ public:
 	bool IsSupported(const std::filesystem::path& assetPath) const override;
 	bool HasUnsavedResourceChanges() const override { return m_IsDirty; }
 	void SetTargetResource(const std::filesystem::path& assetPath) override;
-	void Draw() override;
 	virtual void Update(f32 dt) override;
 	virtual void CaptureState(EditorWorkspace& workspace) const override;
 	virtual void RestoreState(const EditorWorkspace& workspace) override;
@@ -29,8 +28,9 @@ public:
 private:
 	void SetupPreviewModel();
 	void InstantiateModel();
-	void DrawMenuBar();
-	void DrawToolbar();
+	void DrawCustomToolbar() override;
+	void DrawCustomQuickAccess() override;
+	void DrawCustomContent() override;
 	void DrawModelInfo(Engine::Model& model);
 	void DrawMaterialSlots(Engine::Model& model, bool canEdit);
 	void DrawAnimations(Engine::Model& model);

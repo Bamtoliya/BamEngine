@@ -1,5 +1,7 @@
 ﻿#pragma once
 
+#include <initializer_list>
+
 #include "ImGuiInterface.h"
 #include "ChannelFilter.h"
 #include "PostProcess.h"
@@ -88,7 +90,10 @@ protected:
 	void DrawOptionsBar();
 	virtual void DrawCustomOptions();
 	void DrawRenderTargetMenu();
-	void DrawChannelViewButton(float rightReservedWidth = 0.0f);
+	virtual float GetCustomOptionsWidth() const;
+	virtual float GetProjectionButtonsWidth() const { return 0.0f; }
+	virtual void DrawProjectionButtons() {}
+	static float MeasureOptionLabels(std::initializer_list<const char*> labels);
 	void DrawRTItemContextMenu(const wstring& rtName);
 #pragma endregion
 

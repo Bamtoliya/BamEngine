@@ -1,6 +1,8 @@
 ﻿#pragma once
 
 #include "CameraViewportPanel.h"
+#include "EditorUI.h"
+#include <cmath>
 #include "EditorCameraController.h"
 #include "IconsFontAwesome7.h"
 #include "TransformComponent.h"
@@ -66,15 +68,19 @@ void CameraViewportPanel::DrawCustomViewport()
 	DrawRenderTargetImage(m_DisplayRTName);
 }
 
+float CameraViewportPanel::GetCustomOptionsWidth() const
+{
+	const std::string cameraLabel = std::string(ICON_FA_CAMERA " ") + LOCAL("Viewport.CameraMenu");
+	return BaseViewportPanel::GetCustomOptionsWidth() + MeasureOptionLabels({ cameraLabel.c_str() });
+}
+
 void CameraViewportPanel::DrawCustomOptions()
 {
 	DrawResolutionMenu();
 	DrawRenderTargetMenu();
 	DrawCameraMenu();
-	const float dimGroupWidth = (ImGui::GetFrameHeight() * 1.1f) * 2.0f;
-	const float groupSpacing = ImGui::GetStyle().ItemSpacing.x;
-	DrawChannelViewButton(dimGroupWidth + groupSpacing);
-	DrawDimensionToggleButton();
+
+
 }
 void CameraViewportPanel::DrawCameraMenu()
 {
@@ -180,38 +186,24 @@ void CameraViewportPanel::SetOrthographic(bool orthographic)
 #pragma endregion
 
 #pragma region Dimension 
-void CameraViewportPanel::DrawDimensionToggleButton()
+float CameraViewportPanel::GetProjectionButtonsWidth() const
 {
-	const float btnHeight = ImGui::GetFrameHeight();
-	const ImVec2 buttonSize(btnHeight * 1.1f, btnHeight);
-	const float groupWidth = buttonSize.x * 2.0f;
-	const float rightPadding = ImGui::GetStyle().WindowPadding.x;
+	const float width = std::max(EditorUI::GetIconButtonSize("2D", true).x, EditorUI::GetIconButtonSize("3D", true).x);
+	return std::ceil(width) * 2.0f;
+}
 
-	ImGui::SameLine(ImGui::GetWindowWidth() - groupWidth - rightPadding);
-
-	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 0.0f));
+void CameraViewportPanel::DrawProjectionButtons()
+{
+	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, ImGui::GetStyle().ItemSpacing.y));
 	ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 0.0f);
-
-	if (IsOrthographic())
-		ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyle().Colors[ImGuiCol_ButtonActive]);
-	else
-		ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyle().Colors[ImGuiCol_FrameBg]);
-
-	if (ImGui::Button("2D", buttonSize))
-		SetOrthographic();
-	ImGui::PopStyleColor();
-
-	ImGui::SameLine();
-
-	if (IsPerspective())
-		ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyle().Colors[ImGuiCol_ButtonActive]);
-	else
-		ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyle().Colors[ImGuiCol_FrameBg]);
-
-	if (ImGui::Button("3D", buttonSize))
-		SetPerspective();
-	ImGui::PopStyleColor();
-
+	EditorUI::IconButtonOptions options;
+	options.Compact = true;
+	options.Size.x = GetProjectionButtonsWidth() * 0.5f;
+	options.Active = IsOrthographic();
+	if (EditorUI::IconButton("View2D", "2D", "Viewport.Orthographic", options)) SetOrthographic();
+	options.SameLine = true;
+	options.Active = IsPerspective();
+	if (EditorUI::IconButton("View3D", "3D", "Viewport.Perspective", options)) SetPerspective();
 	ImGui::PopStyleVar(2);
 }
 void CameraViewportPanel::RestoreViewportState(const ViewportWorkspace& state)

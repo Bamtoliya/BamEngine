@@ -1,4 +1,6 @@
 #include "InputManager.h"
+#include "EditorUI.h"
+#include <cmath>
 #include "PreviewViewportWidget.h"
 #include "EditorCameraController.h"
 #include "PreviewCameraDefaults.h"
@@ -454,6 +456,37 @@ void PreviewViewportWidget::Draw(const ImVec2& size)
 	const ImVec2 startCursor = ImGui::GetCursorPos();
 	const ImVec2 widgetSize(static_cast<float>(m_Width), static_cast<float>(m_Height));
 
+	// 오버레이 영역은 버튼과 같은 실측 크기로 계산한다.
+	const auto& style = ImGui::GetStyle();
+	const float margin = std::min(ImGui::GetFontSize() * 0.4f, std::min(widgetSize.x, widgetSize.y) * 0.1f);
+	const char* icons[] = { ICON_FA_LAYER_GROUP, ICON_FA_LIGHTBULB, ICON_FA_BORDER_ALL,
+		ICON_FA_BORDER_NONE, ICON_FA_CROSSHAIRS, ICON_FA_PAUSE, ICON_FA_PLAY };
+	ImVec2 slot(0.0f, 0.0f);
+	for (const char* icon : icons)
+	{
+		const auto size = EditorUI::GetIconButtonSize(icon);
+		slot.x = std::max(slot.x, size.x);
+		slot.y = std::max(slot.y, size.y);
+	}
+	const float overlayWidth = std::max(1.0f, widgetSize.x - margin * 2.0f);
+	const float overlayHeight = std::max(1.0f, widgetSize.y - margin * 2.0f);
+	const float channelWidth = std::min(overlayWidth, ChannelFilter::GetButtonsWidth());
+	const auto channelSlot = ChannelFilter::GetButtonSize();
+	const int channelsPerRow = std::clamp(static_cast<int>(channelWidth / channelSlot.x), 1, 4);
+	const int channelRows = (4 + channelsPerRow - 1) / channelsPerRow;
+	const ImVec2 channelSize(channelWidth, std::min(overlayHeight,
+		std::ceil(channelRows * channelSlot.y + (channelRows - 1) * style.ItemSpacing.y)));
+	const float channelX = margin + overlayWidth - channelWidth;
+	const float leftWidth = overlayWidth - channelWidth - style.ItemSpacing.x;
+	const auto fullToolbar = EditorUI::MeasureIconGrid(slot, 5, overlayWidth);
+	const bool shareRow = fullToolbar.x + style.WindowPadding.x * 2.0f <= leftWidth;
+	const float toolbarOffset = shareRow ? 0.0f : channelSize.y + style.ItemSpacing.y;
+	const float toolbarWidth = shareRow ? leftWidth : overlayWidth;
+	const auto grid = EditorUI::MeasureIconGrid(slot, 5, toolbarWidth - style.WindowPadding.x * 2.0f);
+	const bool showToolbar = toolbarOffset < overlayHeight;
+	const ImVec2 toolbarSize(std::min(toolbarWidth, grid.x + style.WindowPadding.x * 2.0f),
+		std::min(overlayHeight - toolbarOffset, grid.y + style.WindowPadding.y * 2.0f));
+
 	// 1. 뷰포트 마우스 입력 캐처 (Alt+LMB 시 ImGui 창 자체가 이동하는 것 방지)
 	ImGui::InvisibleButton("##ViewportInputCatcher", widgetSize,
 		ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight | ImGuiButtonFlags_MouseButtonMiddle);
@@ -462,9 +495,18 @@ void PreviewViewportWidget::Draw(const ImVec2& size)
 	auto& input = Engine::InputManager::Get();
 	const auto& io = ImGui::GetIO();
 
-	m_IsHovered = ImGui::IsItemHovered();
+	const auto origin = ImGui::GetItemRectMin();
+	const auto isOver = [&](float x, float y, const ImVec2& size)
+	{
+		const ImVec2 min(origin.x + x, origin.y + y);
+		return ImGui::IsMouseHoveringRect(min, ImVec2(min.x + size.x, min.y + size.y));
+	};
+	const bool overToolbar = isOver(channelX, margin, channelSize) ||
+		(showToolbar && isOver(margin, margin + toolbarOffset, toolbarSize));
+	m_IsHovered = ImGui::IsItemHovered() && !overToolbar;
 	m_IsFocused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
-	const bool canNavigate = !io.WantTextInput && !io.AppFocusLost;
+	const bool canNavigate = !io.WantTextInput && !io.AppFocusLost &&
+		!ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel);
 
 	if (!canNavigate || !m_IsFocused || !ImGui::IsItemActive())
 		m_CameraDragButton.reset();
@@ -493,19 +535,20 @@ void PreviewViewportWidget::Draw(const ImVec2& size)
 	ImGui::SetCursorPos(startCursor);
 	ImGui::Image(texID, widgetSize);
 
-	// 3. 우측 상단 미니 오버레이 툴바 (자식 윈도우로 Z-order 상위 분리하여 클릭 보장)
-	ImGui::SetCursorPos(ImVec2(startCursor.x + 8.0f, startCursor.y + 8.0f));
-	const ImGuiWindowFlags toolbarFlags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBackground |
-		ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav;
-	const auto& style = ImGui::GetStyle();
-	const float frameHeight = ImGui::GetFrameHeight();
-	const ImVec2 toolbarSize(
-		frameHeight * 5.0f + style.ItemSpacing.x * 4.0f + style.WindowPadding.x * 2.0f,
-		frameHeight + style.WindowPadding.y * 2.0f);
-	if (ImGui::BeginChild("##OverlayToolbarChild", toolbarSize, false, toolbarFlags))
+	const ImGuiWindowFlags toolbarFlags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+		ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing |
+		ImGuiWindowFlags_NoNav;
+	if (showToolbar)
 	{
-		DrawOverlayToolbar();
+		ImGui::SetCursorPos(ImVec2(startCursor.x + margin, startCursor.y + margin + toolbarOffset));
+		if (ImGui::BeginChild("##OverlayToolbarChild", toolbarSize, ImGuiChildFlags_AlwaysUseWindowPadding, toolbarFlags))
+			DrawOverlayToolbar();
+		ImGui::EndChild();
 	}
+
+	ImGui::SetCursorPos(ImVec2(startCursor.x + channelX, startCursor.y + margin));
+	if (ImGui::BeginChild("##OverlayChannelsChild", channelSize, ImGuiChildFlags_None, toolbarFlags))
+		ChannelFilter::DrawButtons(m_ChannelView);
 	ImGui::EndChild();
 
 	ImGui::SetCursorPos(startCursor);
@@ -521,66 +564,37 @@ void PreviewViewportWidget::DrawOverlayToolbar()
 	ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.12f, 0.12f, 0.12f, 0.75f));
 
 	DrawRenderTargetPopup();
-	ImGui::SameLine();
+	EditorUI::SameLineIfFits(EditorUI::GetIconButtonSize(ICON_FA_LIGHTBULB).x);
 	DrawPreviewLightingPopup();
-	ImGui::SameLine();
 
-	// 그리드 On/Off 토글 버튼
-	const char* gridIcon = m_ShowGrid ? ICON_FA_BORDER_ALL : ICON_FA_BORDER_NONE;
-	if (ImGui::Button(gridIcon))
-	{
-		ToggleGrid();
-	}
-	if (ImGui::IsItemHovered())
-	{
-		auto& sm = ShortcutManager::Get();
-		const char* hint = sm.GetShortcutHint("Viewport.ToggleGrid");
-		if (hint && hint[0] != '\0')
-			ImGui::SetTooltip("%s (%s)", LOCAL_CSTR("PreviewViewport.GridToggle"), hint);
-		else
-			ImGui::SetTooltip("%s", LOCAL_CSTR("PreviewViewport.GridToggle"));
-	}
+	EditorUI::IconButtonOptions options;
+	options.SameLine = true;
+	options.Active = m_ShowGrid;
+	options.ShortcutHint = ShortcutManager::Get().GetShortcutHint("Viewport.ToggleGrid");
+	if (EditorUI::IconButton("Grid", m_ShowGrid ? ICON_FA_BORDER_ALL : ICON_FA_BORDER_NONE,
+		"PreviewViewport.GridToggle", options)) ToggleGrid();
 
-	ImGui::SameLine();
-
-	// 카메라 포커스 버튼
-	auto& shortcuts = ShortcutManager::Get();
-
-	ImGui::BeginDisabled(!CanFocusTarget());
-	if (ImGui::Button(ICON_FA_CROSSHAIRS))
+	options.Active = false;
+	options.Enabled = CanFocusTarget();
+	options.ShortcutHint = ShortcutManager::Get().GetShortcutHint("Viewport.Focus");
+	if (EditorUI::IconButton("Focus", ICON_FA_CROSSHAIRS, "PreviewViewport.Focus", options))
 	{
 		s_ShortcutTarget = this;
-		shortcuts.ExecuteAction("Viewport.Focus");
-	}
-	ImGui::EndDisabled();
-
-	if (ImGui::IsItemHovered())
-	{
-		const char* hint = shortcuts.GetShortcutHint("Viewport.Focus");
-		if (hint && hint[0] != '\0')
-			ImGui::SetTooltip("%s (%s)", LOCAL_CSTR("PreviewViewport.Focus"), hint);
-		else
-			ImGui::SetTooltip("%s", LOCAL_CSTR("PreviewViewport.Focus"));
+		ShortcutManager::Get().ExecuteAction("Viewport.Focus");
 	}
 
-	// 씬에 애니메이터가 있다면 바인드 포즈 / 재생 토글 버튼 제공
 	if (m_PreviewScene)
 	{
 		auto animView = m_PreviewScene->GetRegistry().view<Engine::AnimatorComponent>();
 		if (!animView.empty())
 		{
 			auto& anim = animView.get<Engine::AnimatorComponent>(animView.front());
-			ImGui::SameLine();
-			const char* playIcon = anim.isPlaying ? ICON_FA_PAUSE : ICON_FA_PLAY;
-			if (ImGui::Button(playIcon))
-			{
+			options.Enabled = true;
+			options.Active = anim.isPlaying;
+			options.ShortcutHint = nullptr;
+			if (EditorUI::IconButton("PlayMotion", anim.isPlaying ? ICON_FA_PAUSE : ICON_FA_PLAY,
+				anim.isPlaying ? "PreviewViewport.ShowBindPose" : "PreviewViewport.PlayMotion", options))
 				anim.isPlaying = !anim.isPlaying;
-			}
-			if (ImGui::IsItemHovered())
-			{
-				const char* tooltipKey = anim.isPlaying ? "PreviewViewport.ShowBindPose" : "PreviewViewport.PlayMotion";
-				ImGui::SetTooltip("%s", LOCAL_CSTR(tooltipKey));
-			}
 		}
 	}
 
@@ -619,7 +633,7 @@ void PreviewViewportWidget::RefocusTarget()
 
 void PreviewViewportWidget::DrawRenderTargetPopup()
 {
-	if (ImGui::Button(ICON_FA_LAYER_GROUP "##PreviewRenderTargets"))
+	if (EditorUI::IconButton("PreviewRenderTargets", ICON_FA_LAYER_GROUP, "Viewport.RenderTargetsMenu"))
 		ImGui::OpenPopup("##PreviewRenderTargets");
 
 	if (ImGui::IsItemHovered())
@@ -649,8 +663,6 @@ void PreviewViewportWidget::DrawRenderTargetPopup()
 		ImGui::PopID();
 	}
 
-	ImGui::Separator();
-	ChannelFilter::DrawButtons(m_ChannelView);
 	ImGui::EndPopup();
 }
 
@@ -659,7 +671,7 @@ void PreviewViewportWidget::DrawPreviewLightingPopup()
 	constexpr const char* popupId = "##PreviewLightingPopup";
 	auto& settings = EditorSettingsService::Get();
 
-	if (ImGui::Button(ICON_FA_LIGHTBULB "##PreviewLighting"))
+	if (EditorUI::IconButton("PreviewLighting", ICON_FA_LIGHTBULB, "Settings.PreviewLighting"))
 	{
 		m_PreviewLightDraft = settings.GetPreferences().PreviewLightIntensity;
 		ImGui::OpenPopup(popupId);
@@ -692,18 +704,18 @@ void PreviewViewportWidget::DrawPreviewLightingPopup()
 	ImGui::Separator();
 	ImGui::TextUnformatted(LOCAL_CSTR("PreviewViewport.LightingApplyScope"));
 
-	ImGui::BeginDisabled(draft == settings.GetPreferences().PreviewLightIntensity);
-	if (ImGui::Button(LOCAL_LABEL("EditorCommon.Apply").c_str()))
+	const EditorUI::DialogAction actions[] = {
+		{ "EditorCommon.Cancel" }, { "EditorCommon.Apply", draft != settings.GetPreferences().PreviewLightIntensity }
+	};
+	const int action = EditorUI::DialogButtonBar("LightingActions", actions, IM_ARRAYSIZE(actions));
+	if (action == 1)
 	{
 		const auto result = settings.SetPreviewLightIntensity(draft);
 		ImGuiManager::Get().NotifySettingsChange(result);
 		if (result.Applied)
 			ImGui::CloseCurrentPopup();
 	}
-	ImGui::EndDisabled();
-
-	ImGui::SameLine();
-	if (ImGui::Button(LOCAL_LABEL("EditorCommon.Cancel").c_str()))
+	if (action == 0)
 		ImGui::CloseCurrentPopup();
 
 	ImGui::EndPopup();

@@ -1,4 +1,5 @@
 ﻿#include "AssetReferencePanel.h"
+#include "EditorUI.h"
 #include "LocalizationManager.h"
 #include "IconsFontAwesome7.h"
 #include <imgui.h>
@@ -52,8 +53,10 @@ namespace Editor
         ImGui::Combo("##FilterType", &m_FilterType, filterItems, IM_ARRAYSIZE(filterItems));
 
         ImGui::SameLine();
-        ImGui::SetNextItemWidth(200.0f);
-        ImGui::InputTextWithHint("##SearchFilter", LOCAL_CSTR("AssetRef.SearchHint"), m_SearchFilter, sizeof(m_SearchFilter));
+        EditorUI::SearchBarOptions searchOptions;
+        searchOptions.Width = 200.0f;
+        EditorUI::DrawSearchBar("AssetReferenceSearch", m_SearchFilter, sizeof(m_SearchFilter),
+            "AssetRef.SearchHint", searchOptions);
 
         if (!m_StatusMessage.empty())
         {

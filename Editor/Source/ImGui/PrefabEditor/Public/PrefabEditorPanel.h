@@ -17,8 +17,8 @@ public:
 
     virtual bool IsSupported(const std::filesystem::path& assetPath) const override;
     virtual void SetTargetResource(const std::filesystem::path& assetPath) override;
-    virtual void Draw() override;
     virtual EShortcutContext GetShortcutContext() const override { return EShortcutContext::PrefabEditor; }
+    bool HasUnsavedResourceChanges() const override { return m_HasUnsavedChanges; }
     bool CanSaveDocument() const;
     bool SaveDocument();
 
@@ -27,7 +27,11 @@ private:
     bool SavePrefab(const std::filesystem::path& path);
     void CloseSession();
 
-    void DrawToolbar();
+    void DrawCustomQuickAccess() override;
+    void DrawCustomContent() override;
+    ImVec2 GetInitialResourceWindowSize() const override { return ImVec2(800.0f, 600.0f); }
+    void DrawCustomToolbar() override;
+    string GetResourceWindowId() const override { return "PrefabEditorPanel"; }
     void DrawPrefabHierarchy();
     void DrawPrefabInspector();
     void DrawCloseConfirmModal();

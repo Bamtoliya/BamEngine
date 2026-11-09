@@ -1,4 +1,5 @@
 ﻿#include "MaterialPreviewRenderer.h"
+#include "EditorUI.h"
 #include "ResourceManager.h"
 #include "TransformComponent.h"
 #include "StaticMeshRendererComponent.h"
@@ -90,24 +91,25 @@ namespace Editor
 
 	void MaterialPreviewRenderer::DrawUI(Engine::MaterialInterface* material)
 	{
-		// 1. 상단 메쉬 타입 라디오 버튼 & 조작 툴바
-		if (ImGui::RadioButton(LOCAL_LABEL("MaterialPreview.Sphere").c_str(), m_CurrentMeshType == EPreviewMeshType::Sphere))
+		EditorUI::ToolbarLayout toolbar;
+		EditorUI::IconButtonOptions meshOptions;
+		meshOptions.Active = m_CurrentMeshType == EPreviewMeshType::Sphere;
+		if (toolbar.Icon("Sphere", ICON_FA_GLOBE, "MaterialPreview.Sphere", meshOptions))
 			m_CurrentMeshType = EPreviewMeshType::Sphere;
-		ImGui::SameLine();
 
-		if (ImGui::RadioButton(LOCAL_LABEL("MaterialPreview.Cube").c_str(), m_CurrentMeshType == EPreviewMeshType::Cube))
+		meshOptions.Active = m_CurrentMeshType == EPreviewMeshType::Cube;
+		if (toolbar.Icon("Cube", ICON_FA_CUBE, "MaterialPreview.Cube", meshOptions))
 			m_CurrentMeshType = EPreviewMeshType::Cube;
-		ImGui::SameLine();
 
-		if (ImGui::RadioButton(LOCAL_LABEL("MaterialPreview.Plane").c_str(), m_CurrentMeshType == EPreviewMeshType::Plane))
+		meshOptions.Active = m_CurrentMeshType == EPreviewMeshType::Plane;
+		if (toolbar.Icon("Plane", ICON_FA_SQUARE, "MaterialPreview.Plane", meshOptions))
 			m_CurrentMeshType = EPreviewMeshType::Plane;
-		ImGui::SameLine();
 
-		if (ImGui::Button(m_AutoRotate ? ICON_FA_PAUSE : ICON_FA_PLAY))
+		if (toolbar.Icon("AutoRotate", m_AutoRotate ? ICON_FA_PAUSE : ICON_FA_PLAY,
+			m_AutoRotate ? "EditorCommon.Pause" : "EditorCommon.Play"))
 			m_AutoRotate = !m_AutoRotate;
-		ImGui::SameLine();
 
-		if (ImGui::Button(ICON_FA_ROTATE_LEFT "##ResetView"))
+		if (toolbar.Icon("ResetView", ICON_FA_ROTATE_LEFT, "GraphPanel.ResetView"))
 		{
 			auto* trans = m_Widget.GetRegistry().try_get<Engine::TransformComponent>(m_MeshEntity);
 			if (trans) (void)trans->SetEulerRotation(Engine::vec3(0.0f));

@@ -1,4 +1,5 @@
 ﻿#include "ResourceManagerInspector.h"
+#include "EditorUI.h"
 
 BEGIN(Editor)
 
@@ -112,10 +113,7 @@ void ResourceManagerInspector::DrawToolbar()
         ImGui::SetTooltip("%s", LOCAL_CSTR("ResourceInspector.RefreshHint"));
 
     ImGui::SameLine();
-    ImGui::SetNextItemWidth(-FLT_MIN);
-
-    if (ImGui::InputTextWithHint("##ResourceSearch", LOCAL_CSTR("ResourceInspector.Search"), m_Filter.InputBuf,
-        IM_ARRAYSIZE(m_Filter.InputBuf)))
+    if (EditorUI::SearchBar("ResourceSearch", m_Filter.InputBuf, IM_ARRAYSIZE(m_Filter.InputBuf), "ResourceInspector.Search"))
     {
         m_Filter.Build();
         RebuildVisibleRows();

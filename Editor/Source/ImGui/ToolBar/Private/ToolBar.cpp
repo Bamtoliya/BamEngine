@@ -1,6 +1,7 @@
-﻿#pragma once
+#pragma once
 
 #include "imgui.h"
+#include "EditorUI.h"
 #include "ToolBar.h"
 
 #include "SceneManager.h"
@@ -27,10 +28,25 @@
 #include "SceneDocument.h"
 #include "EditorSettingsService.h"
 #include "ModuleBuildManager.h"
+#include <cmath>
 
 
 namespace
 {
+	float GetWindowControlWidth()
+	{
+		float width = ImGui::GetFontSize() * 2.5f;
+		for (const char* icon : { ICON_FA_MINUS, ICON_FA_WINDOW_RESTORE, ICON_FA_WINDOW_MAXIMIZE, ICON_FA_XMARK })
+			width = std::max(width, EditorUI::GetIconButtonSize(icon, true).x);
+		return std::ceil(width);
+	}
+
+	float GetMainMenuRightEdge()
+	{
+		const float contentRight = ImGui::GetCursorScreenPos().x + ImGui::GetContentRegionAvail().x;
+		return std::floor(std::min(contentRight, ImGui::GetWindowDrawList()->GetClipRectMax().x));
+	}
+
 	void DrawActionTooltip(const char* titleKey, const char* actionId, const std::string& details = {})
 	{
 		std::string tooltip = LOCAL(titleKey);
@@ -53,20 +69,33 @@ namespace
 	}
 }
 
-void ToolBar::Draw(SDL_Window* window)
+float ToolBar::Draw(SDL_Window* window)
 {
 	m_MainMenuBarLayout = {};
+	const auto framePadding = ImGui::GetStyle().FramePadding;
+	ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(framePadding.x, std::max(framePadding.y, ImGui::GetFontSize() * 0.15f)));
 	if (ImGui::BeginMainMenuBar())
 	{
-		ImGui::SetCursorPos(ImVec2(8.0f, ImGui::GetCursorPosY())); // 좌측 여백
-		ImGui::Text(ICON_FA_CUBES " BamEngine");
-		ImGui::SameLine(0.0f, 15.0f); // 엔진 이름과 File 메뉴 사이 간격 띄우기
-
-		DrawFileMenu();
-		DrawEditMenu();
-		DrawSceneMenu();
-		DrawWindowMenu();
-		DrawHelpMenu();
+		const float controlWidth = GetWindowControlWidth();
+		const float available = GetMainMenuRightEdge() - ImGui::GetCursorScreenPos().x;
+		const float spacing = ImGui::GetStyle().ItemSpacing.x;
+		const float reserved = window ? controlWidth * 3.0f + spacing : 0.0f;
+		const char* menuKeys[] = { "EditorMenu.File", "EditorMenu.Edit", "Viewport.Scene", "EditorMenu.Window", "EditorMenu.Help" };
+		float menuWidth = ImGui::CalcTextSize(ICON_FA_CUBES " BamEngine").x + ImGui::GetStyle().ItemSpacing.x * 3.0f;
+		for (const char* key : menuKeys)
+			menuWidth += ImGui::CalcTextSize(LOCAL_CSTR(key)).x + ImGui::GetStyle().ItemSpacing.x * 2.0f;
+		const auto drawMenus = [&] { DrawFileMenu(); DrawEditMenu(); DrawSceneMenu(); DrawWindowMenu(); DrawHelpMenu(); };
+		if (menuWidth + reserved <= available)
+		{
+			ImGui::TextUnformatted(ICON_FA_CUBES " BamEngine");
+			drawMenus();
+		}
+		else if (available >= (window ? controlWidth : 0.0f) + ImGui::CalcTextSize(ICON_FA_BARS).x + spacing * 2.0f &&
+			ImGui::BeginMenu(ICON_FA_BARS "###MainMenuOverflow"))
+		{
+			drawMenus();
+			ImGui::EndMenu();
+		}
 
 		const ImVec2 viewportPos = ImGui::GetMainViewport()->Pos;
 		const ImVec2 barPos = ImGui::GetWindowPos();
@@ -79,6 +108,7 @@ void ToolBar::Draw(SDL_Window* window)
 		ImGui::EndMainMenuBar();
 	}
 
+	ImGui::PopStyleVar();
 	const ImGuiViewport* vp = ImGui::GetMainViewport();
 	const float playBarH = GetPlayBarHeight();
 	const float footerBarH = GetFooterBarHeight();
@@ -89,17 +119,17 @@ void ToolBar::Draw(SDL_Window* window)
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.0f, 4.0f));
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowMinSize, ImVec2(1.0f, 1.0f));
 
 	// 1. 상단 Play Bar
 	ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x, vp->WorkPos.y));
 	ImGui::SetNextWindowSize(ImVec2(vp->WorkSize.x, playBarH));
 	ImGui::SetNextWindowViewport(vp->ID);
-	if (ImGui::Begin("##PlayBarRow", nullptr, barFlags))
-	{
-		DrawPlayControls();
-	}
+	const bool playBarVisible = ImGui::Begin("##PlayBarRow", nullptr, barFlags);
+	const float playBarBottom = ImGui::GetWindowPos().y + ImGui::GetWindowHeight();
+	if (playBarVisible) DrawPlayControls();
 	ImGui::End();
-	ImGui::PopStyleVar();
+	ImGui::PopStyleVar(2);
 
 	// 2. 하단 슬림 Footer Bar (WindowMinSize 제한 해제 및 패딩 축소)
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowMinSize, ImVec2(1.0f, 1.0f));
@@ -116,6 +146,7 @@ void ToolBar::Draw(SDL_Window* window)
 	NotificationManager::Get().DrawHistoryPopup();
 	ImGui::PopStyleVar(3);
 	ImGui::PopStyleVar(2);
+	return playBarBottom;
 }
 
 bool ToolBar::IsMainWindowDragArea(const SDL_Point& point) const
@@ -377,6 +408,8 @@ void ToolBar::DrawWindowMenu()
 			ImGui::EndMenu();
 		}
 
+
+
 		ImGui::EndMenu();
 	}
 
@@ -412,7 +445,9 @@ void ToolBar::DrawNewViewportPopup()
 		//{
 		//	m_newViewportDesc.ViewportMode = (EViewportMode)currentViewportMode;
 		//}
-		if (ImGui::Button(LOCAL_LABEL("EditorCommon.Create").c_str()))
+		const EditorUI::DialogAction actions[] = { { "EditorCommon.Cancel" }, { "EditorCommon.Create" } };
+		const int action = EditorUI::DialogButtonBar("CreateViewportActions", actions, IM_ARRAYSIZE(actions));
+		if (action == 1)
 		{
 			m_newViewportDesc.Name = StrToWStr(m_NewViewportNameBuf);
 			auto* panel = new BaseViewportPanel();
@@ -424,8 +459,7 @@ void ToolBar::DrawNewViewportPopup()
 				BAM_LOG(Error, "Editor", "UI", "Viewport initialization failed: {}", ResultToString(result));
 			}
 		}
-		ImGui::SameLine();
-		if (ImGui::Button(LOCAL_LABEL("EditorCommon.Cancel").c_str()))
+		if (action == 0)
 		{
 			ImGui::CloseCurrentPopup();
 		}
@@ -479,15 +513,16 @@ void ToolBar::DrawHelpMenu()
 #pragma region Play Controls
 float ToolBar::GetPlayBarHeight() const
 {
-	return ImGui::GetFrameHeight() + ImGui::GetStyle().FramePadding.y * 2.0f + ImGui::GetStyle().ItemSpacing.y;
+	const auto size = EditorUI::GetIconButtonSize(ICON_FA_PLAY);
+	const auto grid = EditorUI::MeasureIconGrid(size, 3, ImGui::GetMainViewport()->WorkSize.x - 16.0f);
+	return std::ceil(grid.y + 8.0f);
 }
 void ToolBar::DrawPlayControls()
 {
 	PIEManager& pie = PIEManager::Get();
 	EPlayState state = pie.GetState();
 
-	const float btnWidth = 60.f;
-	const float spacing = ImGui::GetStyle().ItemSpacing.x;
+	const auto buttonSize = EditorUI::GetIconButtonSize(ICON_FA_PLAY);
 
 	if (state == EPlayState::Pause)
 	{
@@ -498,46 +533,24 @@ void ToolBar::DrawPlayControls()
 		drawList->AddRectFilled(windowPos, ImVec2(windowPos.x + windowSize.x, windowPos.y + windowSize.y), pauseColor);
 	}
 
-	float totalWidth = btnWidth * 3.0f + spacing * 2.0f;
-	float startX = (ImGui::GetWindowWidth() - totalWidth) * 0.5f;
-	if (startX < 0.0f) startX = 0.0f;
-	ImGui::SetCursorPosX(startX);
-
-	// ▶ Play
-	ImGui::PushID("PlayBtn");
-	if (state != EPlayState::Edit) ImGui::BeginDisabled();
-	if (ImGui::Button(ICON_FA_PLAY, ImVec2(btnWidth, 0))) pie.StartPlay();
-	if (state != EPlayState::Edit) ImGui::EndDisabled();
-	if (ImGui::IsItemHovered()) DrawActionTooltip("ToolBar.PlayTooltip", "PIE.Play");
-	ImGui::PopID();
-
-	ImGui::SameLine();
-
-	// ⏸ Pause / Resume
-	ImGui::PushID("PauseResumeBtn");
-	if (state == EPlayState::Edit) ImGui::BeginDisabled();
-	if (state == EPlayState::Pause)
+	const auto grid = EditorUI::MeasureIconGrid(buttonSize, 3, ImGui::GetContentRegionAvail().x);
+	ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max(0.0f, (ImGui::GetContentRegionAvail().x - grid.x) * 0.5f));
+	EditorUI::ToolbarLayout toolbar;
+	EditorUI::IconButtonOptions options;
+	options.Size = buttonSize;
+	options.Enabled = state == EPlayState::Edit;
+	options.ShortcutHint = ShortcutManager::Get().GetShortcutHint("PIE.Play");
+	if (toolbar.Icon("PlayBtn", ICON_FA_PLAY, "ToolBar.PlayTooltip", options)) pie.StartPlay();
+	options.Enabled = state != EPlayState::Edit;
+	options.ShortcutHint = ShortcutManager::Get().GetShortcutHint("PIE.PauseResume");
+	if (toolbar.Icon("PauseResumeBtn", state == EPlayState::Pause ? ICON_FA_PLAY : ICON_FA_PAUSE,
+		state == EPlayState::Pause ? "ToolBar.ResumeTooltip" : "ToolBar.PauseTooltip", options))
 	{
-		if (ImGui::Button(ICON_FA_PLAY, ImVec2(btnWidth, 0))) pie.Resume();
-		if (ImGui::IsItemHovered()) DrawActionTooltip("ToolBar.ResumeTooltip", "PIE.PauseResume");
+		if (state == EPlayState::Pause) pie.Resume();
+		else pie.Pause();
 	}
-	else
-	{
-		if (ImGui::Button(ICON_FA_PAUSE, ImVec2(btnWidth, 0))) pie.Pause();
-		if (ImGui::IsItemHovered()) DrawActionTooltip("ToolBar.PauseTooltip", "PIE.PauseResume");
-	}
-	if (state == EPlayState::Edit) ImGui::EndDisabled();
-	ImGui::PopID();
-
-	ImGui::SameLine();
-
-	// ■ Stop
-	ImGui::PushID("StopBtn");
-	if (state == EPlayState::Edit) ImGui::BeginDisabled();
-	if (ImGui::Button(ICON_FA_STOP, ImVec2(btnWidth, 0))) pie.Stop();
-	if (state == EPlayState::Edit) ImGui::EndDisabled();
-	if (ImGui::IsItemHovered()) DrawActionTooltip("ToolBar.StopTooltip", "PIE.Stop");
-	ImGui::PopID();
+	options.ShortcutHint = ShortcutManager::Get().GetShortcutHint("PIE.Stop");
+	if (toolbar.Icon("StopBtn", ICON_FA_STOP, "ToolBar.StopTooltip", options)) pie.Stop();
 }
 #pragma endregion
 
@@ -686,48 +699,70 @@ void ToolBar::DrawWindowControls(SDL_Window* window)
 {
 	if (!window) return;
 
-	// 버튼 1개의 너비와 3개의 총 너비 계산
-	const float buttonWidth = 45.0f;
-	const float totalButtonAreaWidth = buttonWidth * 3.0f;
+	const float right = GetMainMenuRightEdge();
+	const float available = right - ImGui::GetCursorScreenPos().x;
+	const float closeMinimum = std::ceil(EditorUI::GetIconButtonSize(ICON_FA_XMARK, true).x);
+	if (available < closeMinimum) return;
 
-	// 💡 우측 끝으로 커서 이동 (드래그 할 수 있는 빈 공간을 확보합니다)
-	ImGui::SameLine(ImGui::GetWindowWidth() - totalButtonAreaWidth);
-	m_MainMenuBarLayout.WindowButtonsBeginX = ImGui::GetCursorScreenPos().x - ImGui::GetMainViewport()->Pos.x;
+	const float buttonWidth = GetWindowControlWidth();
+	const float closeWidth = std::min(available, buttonWidth);
+	const float closeX = right - closeWidth;
+	const float moreWidth = std::ceil(ImGui::CalcTextSize(ICON_FA_WINDOW_MAXIMIZE).x + ImGui::GetStyle().ItemSpacing.x * 2.0f);
+	const bool showAll = available >= buttonWidth * 3.0f;
+	const bool showMore = !showAll && available >= closeWidth + moreWidth;
+	const float controlsX = showAll ? right - buttonWidth * 3.0f : closeX - (showMore ? moreWidth : 0.0f);
+	m_MainMenuBarLayout.WindowButtonsBeginX = controlsX - ImGui::GetMainViewport()->Pos.x;
+	const auto setButtonX = [](float x)
+	{
+		const auto cursor = ImGui::GetCursorScreenPos();
+		ImGui::SetCursorScreenPos(ImVec2(x, cursor.y));
+	};
 
-	// 타이틀바와 어울리도록 버튼 배경을 투명하게 만듭니다.
 	ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
-	ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 0.0f); // 윈도우 버튼은 각져야 예쁨
+	ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 0.0f);
 
-	ImVec2 btnSize(buttonWidth, ImGui::GetFrameHeight());
-
-	// [1] 최소화 버튼 (-)
-	if (ImGui::Button(ICON_FA_MINUS, btnSize))
+	const bool maximized = (SDL_GetWindowFlags(window) & SDL_WINDOW_MAXIMIZED) != 0;
+	const char* maximizeKey = maximized ? "ToolBar.WindowRestore" : "ToolBar.WindowMaximize";
+	const auto toggleMaximize = [&]
 	{
-		SDL_MinimizeWindow(window);
-	}
-	ImGui::SameLine(0, 0); // 버튼 사이 간격 0
-
-	// [2] 최대화 / 창 모드 버튼 (ㅁ)
-	bool isMaximized = (SDL_GetWindowFlags(window) & SDL_WINDOW_MAXIMIZED) != 0;
-	if (ImGui::Button(isMaximized ? ICON_FA_WINDOW_RESTORE : ICON_FA_WINDOW_MAXIMIZE, btnSize))
-	{
-		if (isMaximized) SDL_RestoreWindow(window);
+		if (maximized) SDL_RestoreWindow(window);
 		else SDL_MaximizeWindow(window);
-	}
-	ImGui::SameLine(0, 0);
+	};
 
-	// [3] 닫기 버튼 (X) - 마우스 올렸을 때만 붉은색
+	EditorUI::IconButtonOptions options;
+	options.Compact = true;
+	options.Size = ImVec2(buttonWidth, ImGui::GetFrameHeight());
+	if (showAll)
+	{
+		setButtonX(controlsX);
+		if (EditorUI::IconButton("WindowMinimize", ICON_FA_MINUS, "ToolBar.WindowMinimize", options))
+			SDL_MinimizeWindow(window);
+		setButtonX(closeX - buttonWidth);
+		const char* icon = maximized ? ICON_FA_WINDOW_RESTORE : ICON_FA_WINDOW_MAXIMIZE;
+		if (EditorUI::IconButton("WindowMaximize", icon, maximizeKey, options)) toggleMaximize();
+	}
+	else if (showMore)
+	{
+		setButtonX(controlsX);
+		if (ImGui::BeginMenu(ICON_FA_WINDOW_MAXIMIZE "###WindowActions"))
+		{
+			if (ImGui::MenuItem(LOCAL_LABEL("ToolBar.WindowMinimize").c_str())) SDL_MinimizeWindow(window);
+			if (ImGui::MenuItem(LOCAL_LABEL(maximizeKey).c_str())) toggleMaximize();
+			ImGui::EndMenu();
+		}
+	}
+
+	setButtonX(closeX);
+	options.Size.x = closeWidth;
 	ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.9f, 0.1f, 0.1f, 1.0f));
 	ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.8f, 0.0f, 0.0f, 1.0f));
-	if (ImGui::Button(ICON_FA_XMARK, btnSize))
+	if (EditorUI::IconButton("WindowClose", ICON_FA_XMARK, "EditorCommon.Close", options))
 	{
-		SDL_Event quitEvent;
+		SDL_Event quitEvent{};
 		quitEvent.type = SDL_EVENT_QUIT;
 		SDL_PushEvent(&quitEvent);
 	}
-	ImGui::PopStyleColor(2); // 닫기 버튼 색상 롤백
-
+	ImGui::PopStyleColor(3);
 	ImGui::PopStyleVar();
-	ImGui::PopStyleColor();
 }
 #pragma endregion

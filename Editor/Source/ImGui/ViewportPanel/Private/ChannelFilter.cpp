@@ -1,6 +1,8 @@
 ﻿#pragma once
 
 #include "ChannelFilter.h"
+#include "EditorUI.h"
+#include <cmath>
 #include "PipelineManager.h"
 #include "ResourceManager.h"
 #include "RenderTargetManager.h"
@@ -156,32 +158,45 @@ bool ChannelFilter::CanSampleAsTexture2D(const Engine::RHITexture* texture)
         Engine::HasFlag(texture->GetUsage(), Engine::ETextureUsage::Sampler);
 }
 
+ImVec2 ChannelFilter::GetButtonSize()
+{
+    ImVec2 slot(0.0f, 0.0f);
+    for (const char* label : { "R", "G", "B", "A" })
+    {
+        const auto size = EditorUI::GetIconButtonSize(label, true);
+        slot.x = std::max(slot.x, size.x);
+        slot.y = std::max(slot.y, size.y);
+    }
+    return ImVec2(std::ceil(slot.x), slot.y);
+}
+
+float ChannelFilter::GetButtonsWidth()
+{
+    return GetButtonSize().x * 4.0f;
+}
+
 void ChannelFilter::DrawButtons(EViewportChannelView& view)
 {
-    const float height = ImGui::GetFrameHeight();
-    const ImVec2 buttonSize(height, height);
-
-    const auto drawButton = [&](const char* label, EViewportChannelView flag, const ImVec4& activeColor)
-        {
-            const bool active = HasFlag(view, flag);
-            ImGui::PushStyleColor(ImGuiCol_Button, active ? activeColor : ImGui::GetStyle().Colors[ImGuiCol_FrameBg]);
-
-            if (ImGui::Button(label, buttonSize))
-                view = static_cast<EViewportChannelView>(static_cast<uint8>(view) ^ static_cast<uint8>(flag));
-
-            ImGui::PopStyleColor();
-        };
-
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 0.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, ImGui::GetStyle().ItemSpacing.y));
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 0.0f);
-
-    drawButton("R", EViewportChannelView::R, ImVec4(0.75f, 0.20f, 0.20f, 1.0f));
-    ImGui::SameLine();
-    drawButton("G", EViewportChannelView::G, ImVec4(0.20f, 0.65f, 0.20f, 1.0f));
-    ImGui::SameLine();
-    drawButton("B", EViewportChannelView::B, ImVec4(0.20f, 0.35f, 0.80f, 1.0f));
-    ImGui::SameLine();
-    drawButton("A", EViewportChannelView::A, ImVec4(0.55f, 0.55f, 0.55f, 1.0f));
-
+    const auto slot = GetButtonSize();
+    bool first = true;
+    const auto drawButton = [&](const char* label, const char* key, EViewportChannelView flag, const ImVec4& activeColor)
+    {
+        const bool active = HasFlag(view, flag);
+        EditorUI::IconButtonOptions options;
+        options.Compact = true;
+        options.Size = slot;
+        options.SameLine = !first;
+        first = false;
+        ImGui::PushStyleColor(ImGuiCol_Button, active ? activeColor : ImGui::GetStyle().Colors[ImGuiCol_FrameBg]);
+        if (EditorUI::IconButton(label, label, key, options))
+            view = static_cast<EViewportChannelView>(static_cast<uint8>(view) ^ static_cast<uint8>(flag));
+        ImGui::PopStyleColor();
+    };
+    drawButton("R", "Viewport.ChannelR", EViewportChannelView::R, ImVec4(0.75f, 0.20f, 0.20f, 1.0f));
+    drawButton("G", "Viewport.ChannelG", EViewportChannelView::G, ImVec4(0.20f, 0.65f, 0.20f, 1.0f));
+    drawButton("B", "Viewport.ChannelB", EViewportChannelView::B, ImVec4(0.20f, 0.35f, 0.80f, 1.0f));
+    drawButton("A", "Viewport.ChannelA", EViewportChannelView::A, ImVec4(0.55f, 0.55f, 0.55f, 1.0f));
     ImGui::PopStyleVar(2);
 }

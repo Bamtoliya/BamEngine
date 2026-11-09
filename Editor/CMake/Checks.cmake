@@ -90,7 +90,8 @@ target_precompile_headers(HierarchyEditorCheck PRIVATE
     "${CMAKE_SOURCE_DIR}/Engine/Source/Core/Public/Engine_Includes.h")
 set_target_properties(HierarchyEditorCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
 add_executable(ReflectionInspectorCheck examples/ReflectionInspectorCheck.cpp
-    Source/ImGui/InspectorPanel/Private/ReflectionPropertyDrawer.cpp)
+    Source/ImGui/InspectorPanel/Private/ReflectionPropertyDrawer.cpp
+    Source/ImGui/Private/EditorUI.cpp)
 target_include_directories(ReflectionInspectorCheck PRIVATE
     ${EDITOR_PUBLIC_INCLUDE_DIRS}
     "${EDITOR_SOURCE_DIR}"

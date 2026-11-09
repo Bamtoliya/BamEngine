@@ -1,6 +1,7 @@
-﻿#pragma once
+#pragma once
 
 #include "SceneViewportPanel.h"
+#include "EditorUI.h"
 #include "ShortcutManager.h"
 #include "EditorCameraController.h"
 #include "Application.h"
@@ -399,6 +400,25 @@ void SceneViewportPanel::Draw()
 #pragma endregion
 
 #pragma region Custom Draws
+float SceneViewportPanel::GetCustomOptionsWidth() const
+{
+	const auto& prefabMode = PrefabModeManager::Get();
+	if (prefabMode.IsInPrefabMode())
+	{
+		const std::string title = std::string(ICON_FA_CUBES " ") + LOCAL("PrefabMode.Title") + ": " +
+			prefabMode.GetPrefabPath().filename().string() + (prefabMode.HasUnsavedChanges() ? " *" : "");
+		const std::string backLabel = std::string(ICON_FA_ARROW_LEFT " ") + LOCAL("PrefabMode.BackToScene");
+		const std::string cameraLabel = std::string(ICON_FA_CAMERA " ") + LOCAL("Viewport.CameraMenu");
+		return MeasureOptionLabels({ backLabel.c_str(), title.c_str(), cameraLabel.c_str(),
+			LOCAL_CSTR("Viewport.GizmoMenu") }) + EditorUI::GetIconButtonSize(ICON_FA_FLOPPY_DISK, true).x +
+			ImGui::GetStyle().ItemSpacing.x;
+	}
+	return CameraViewportPanel::GetCustomOptionsWidth() + MeasureOptionLabels({
+		LOCAL_CSTR("Viewport.GizmoMenu"), LOCAL_CSTR("Viewport.DebugMenu"), LOCAL_CSTR("PostProcess.MenuTitle"),
+		LOCAL_CSTR("Viewport.RenderPassesMenu"), LOCAL_CSTR("Viewport.Picking") }) +
+		EditorUI::GetIconButtonSize(ICON_FA_CLOCK, true).x + ImGui::GetStyle().ItemSpacing.x;
+}
+
 void SceneViewportPanel::DrawCustomOptions()
 {
 	auto& prefabMode = PrefabModeManager::Get();
@@ -411,52 +431,18 @@ void SceneViewportPanel::DrawCustomOptions()
 		DrawGizmoMenu();
 		DrawCameraMenu();
 
-		// 3. 우측: [저장] 버튼 및 채널 뷰 / 2D-3D 토글 정렬
-		const float saveBtnWidth = 80.0f;
-		const float dimGroupWidth = (ImGui::GetFrameHeight() * 1.1f) * 2.0f;
-		const float groupSpacing = ImGui::GetStyle().ItemSpacing.x;
-		const float rightReserved = saveBtnWidth + groupSpacing + dimGroupWidth + groupSpacing;
-
-		ImGui::SameLine(ImGui::GetWindowWidth() - rightReserved - ImGui::GetStyle().WindowPadding.x);
-		if (ImGui::Button((std::string(ICON_FA_FLOPPY_DISK " ") + LOCAL("PrefabEditor.Save")).c_str(), ImVec2(saveBtnWidth, 0.0f)))
-		{
+		if (EditorUI::SmallIconButton("SavePrefab", ICON_FA_FLOPPY_DISK, "PrefabEditor.Save"))
 			prefabMode.SavePrefab();
-		}
 
-		DrawChannelViewButton(dimGroupWidth + groupSpacing);
-		DrawDimensionToggleButton();
+
 		return;
 	}
 
-	// 실시간 프리뷰 (Realtime) 토글 버튼
-	const bool wasRealtime = m_IsRealtime;
-	if (wasRealtime)
-	{
-		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.18f, 0.55f, 0.34f, 1.0f));
-		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.22f, 0.65f, 0.40f, 1.0f));
-	}
-
-	std::string realtimeLabel = std::string(ICON_FA_CLOCK " ") + LOCAL("Viewport.Realtime");
-	if (ImGui::Button(realtimeLabel.c_str()))
-	{
-		ToggleRealtime();
-	}
-
-	if (wasRealtime)
-	{
-		ImGui::PopStyleColor(2);
-	}
-
-	if (ImGui::IsItemHovered())
-	{
-		const char* hint = ShortcutManager::Get().GetShortcutHint("Viewport.ToggleRealtime");
-		if (hint && hint[0] != '\0')
-			ImGui::SetTooltip("%s (%s)", LOCAL_CSTR("Viewport.RealtimeTooltip"), hint);
-		else
-			ImGui::SetTooltip("%s", LOCAL_CSTR("Viewport.RealtimeTooltip"));
-	}
-
-	ImGui::SameLine();
+	EditorUI::IconButtonOptions options;
+	options.Compact = true;
+	options.Active = m_IsRealtime;
+	options.ShortcutHint = ShortcutManager::Get().GetShortcutHint("Viewport.ToggleRealtime");
+	if (EditorUI::IconButton("Realtime", ICON_FA_CLOCK, "Viewport.RealtimeTooltip", options)) ToggleRealtime();
 
 	// 일반 씬 뷰포트 헤더바
 	DrawResolutionMenu();
@@ -467,10 +453,8 @@ void SceneViewportPanel::DrawCustomOptions()
 	DrawPostProcessMenu();
 	DrawRenderPassMenu();
 	DrawPickingMenu();
-	const float dimGroupWidth = (ImGui::GetFrameHeight() * 1.1f) * 2.0f;
-	const float groupSpacing = ImGui::GetStyle().ItemSpacing.x;
-	DrawChannelViewButton(dimGroupWidth + groupSpacing);
-	DrawDimensionToggleButton();
+
+
 }
 
 void SceneViewportPanel::DrawCustomViewport()

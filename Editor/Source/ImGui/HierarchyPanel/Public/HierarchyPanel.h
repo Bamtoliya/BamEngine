@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "Base.h"
 #include "ImGuiInterface.h"
@@ -29,6 +29,7 @@ private:
 		function<void()> onContextMenu = nullptr);
 private:
 	void DrawSceneContextMenu(class Scene* scene);
+	void DrawEntityCreationMenu(class Scene* scene);
 private:
 	void DrawEntityHierarchy(class Scene* scene);
 	void DrawEntityName(const wstring& name, bool isSelected);

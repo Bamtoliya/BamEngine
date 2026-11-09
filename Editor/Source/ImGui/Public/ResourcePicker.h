@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ReflectionInspectorSupport.h"
+#include "EditorUI.h"
 #include "InputManager.h"
 #include "Functions.h"
 #include "IconsFontAwesome7.h"
@@ -422,26 +423,13 @@ namespace Editor
 					scanDirectoryRoot(engineResourceRoot);
 			}
 
-			// ── 2. 상단 툴바: [돋보기] [검색창] [X] [크기 슬라이더] ──
-			ImGui::AlignTextToFramePadding();
-			ImGui::Text(ICON_FA_MAGNIFYING_GLASS);
-			ImGui::SameLine();
-
-			if (isAppearing) ImGui::SetKeyboardFocusHere();
-
-			const float clearBtnWidth = 26.0f;
+			// 검색 바 오른쪽에 썸네일 크기 조절 공간을 예약한다.
 			const float sliderWidth = 110.0f;
-			const float spacing = ImGui::GetStyle().ItemSpacing.x;
-			const float searchInputWidth = ImGui::GetContentRegionAvail().x - clearBtnWidth - sliderWidth - (spacing * 2.0f);
-
-			ImGui::SetNextItemWidth(searchInputWidth);
-			const std::string searchHint = LocalizeInspectorText("ResourcePicker.SearchHint");
-			ImGui::InputTextWithHint("##ResourceSearchInput", searchHint.c_str(), s_SearchBuffer, sizeof(s_SearchBuffer));
-
-			ImGui::SameLine();
-			if (ImGui::Button(ICON_FA_XMARK "##ClearSearch", ImVec2(clearBtnWidth, 0.0f)))
-				s_SearchBuffer[0] = '\0';
-
+			EditorUI::SearchBarOptions searchOptions;
+			searchOptions.Width = std::max(1.0f, ImGui::GetContentRegionAvail().x - sliderWidth - ImGui::GetStyle().ItemSpacing.x);
+			searchOptions.FocusOnDraw = isAppearing;
+			EditorUI::DrawSearchBar("ResourcePickerSearch", s_SearchBuffer, sizeof(s_SearchBuffer),
+				"ResourcePicker.SearchHint", searchOptions);
 			ImGui::SameLine();
 			ImGui::SetNextItemWidth(sliderWidth);
 			ImGui::SliderFloat("##ThumbSizeSlider", &s_ThumbnailSize, 40.0f, 120.0f, "%.0f px");

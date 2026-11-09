@@ -1,4 +1,5 @@
 ﻿#include "AnimatorGraphPanel.h"
+#include "EditorUI.h"
 #include "IconsFontAwesome7.h"
 #include "FileDialogs.h"
 #include "SceneManager.h"
@@ -55,76 +56,54 @@ void AnimatorGraphPanel::Update(f32 dt)
 	UpdatePreview(dt);
 }
 
-void AnimatorGraphPanel::Draw()
+string AnimatorGraphPanel::BuildResourceWindowTitle() const
 {
-	m_Focused = false;
-	m_Hovered = false;
-	if (!m_Open) return;
+	const auto caption = std::string(ICON_FA_DIAGRAM_PROJECT " ") + GetDisplayName();
+	if (m_CurrentFilePath.empty()) return caption + "###AnimatorGraphPanel";
+	return caption + " - " + std::filesystem::path(m_CurrentFilePath).filename().string() + "###AnimatorGraphPanel";
+}
 
-	ImGui::SetNextWindowSize(ImVec2(1000.0f, 600.0f), ImGuiCond_FirstUseEver);
-	const std::string title = ICON_FA_DIAGRAM_PROJECT " " + GetDisplayName() + "###AnimatorGraphPanel";
+void AnimatorGraphPanel::OnResourceWindowVisibility(bool visible)
+{
+	if (visible && m_Focused) s_ActivePanel = this;
+}
 
-	ImGuiWindowFlags windowFlags = ImGuiWindowFlags_MenuBar;
-	if (m_IsDirty) windowFlags |= ImGuiWindowFlags_UnsavedDocument;
-
-	bool openState = m_Open;
-	const bool isVisible = BeginPanelWindow(title.c_str(), openState, windowFlags);
-
-	if (!openState)
+void AnimatorGraphPanel::DrawCustomContent()
+{
+	const float totalWidth = ImGui::GetContentRegionAvail().x;
+	const float contentHeight = ImGui::GetContentRegionAvail().y;
+	const float splitterThickness = 4.0f;
+	const float spacingX = ImGui::GetStyle().ItemSpacing.x;
+	// 캔버스 가용 너비 계산 (전체 폭 - 좌측 - 우측 - 스플리터 2개 - 아이템 간격 2개)
+	const float overhead = (splitterThickness * 2.0f) + (spacingX * 2.0f);
+	float canvasWidth = (std::max)(200.0f, totalWidth - m_LeftPaneWidth - m_InspectorWidth - overhead);
+	// ── [좌측 영역] 3D 프리뷰 뷰포트 + 파라미터 독 ──
+	ImGui::BeginChild("LeftPane", ImVec2(m_LeftPaneWidth, contentHeight), true);
+	if (m_ShowPreviewViewport)
 	{
-		RequestClose();
-	}
-
-	if (isVisible)
-	{
-		m_Focused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
-		if (m_Focused) s_ActivePanel = this;
-		m_Hovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows);
-
-		// 메뉴바 및 퀵 툴바
-		DrawMenuBar();
-		DrawToolbar();
+		const float previewHeight = std::min(m_LeftPaneWidth * 0.95f, contentHeight * 0.45f);
+		DrawPreviewSection(m_LeftPaneWidth - 16.0f, previewHeight);
 		ImGui::Separator();
-
-		const float totalWidth = ImGui::GetContentRegionAvail().x;
-		const float contentHeight = ImGui::GetContentRegionAvail().y;
-		const float splitterThickness = 4.0f;
-		const float spacingX = ImGui::GetStyle().ItemSpacing.x;
-		// 캔버스 가용 너비 계산 (전체 폭 - 좌측 - 우측 - 스플리터 2개 - 아이템 간격 2개)
-		const float overhead = (splitterThickness * 2.0f) + (spacingX * 2.0f);
-		float canvasWidth = (std::max)(200.0f, totalWidth - m_LeftPaneWidth - m_InspectorWidth - overhead);
-		// ── [좌측 영역] 3D 프리뷰 뷰포트 + 파라미터 독 ──
-		ImGui::BeginChild("LeftPane", ImVec2(m_LeftPaneWidth, contentHeight), true);
-		if (m_ShowPreviewViewport)
-		{
-			const float previewHeight = std::min(m_LeftPaneWidth * 0.95f, contentHeight * 0.45f);
-			DrawPreviewSection(m_LeftPaneWidth - 16.0f, previewHeight);
-			ImGui::Separator();
-		}
-		DrawParametersTab();
-		ImGui::EndChild();
-		ImGui::SameLine();
-		// ── [좌측 스플리터: 좌측 ↔ 캔버스] ──
-		Editor::SplitterV("##LeftSplitter", &m_LeftPaneWidth, &canvasWidth, 180.0f, 200.0f, contentHeight, splitterThickness);
-		ImGui::SameLine();
-		// ── [중앙 영역] 상태 머신 노드 캔버스 ──
-		ImGui::BeginChild("CanvasPanel", ImVec2(canvasWidth, contentHeight), true,
-			ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-		DrawCanvas();
-		ImGui::EndChild();
-		ImGui::SameLine();
-		// ── [우측 스플리터: 캔버스 ↔ 우측 인스펙터] ──
-		Editor::SplitterV("##RightSplitter", &canvasWidth, &m_InspectorWidth, 200.0f, 200.0f, contentHeight, splitterThickness);
-		ImGui::SameLine();
-		// ── [우측 영역] 인스펙터 패널 ──
-		ImGui::BeginChild("InspectorPanel", ImVec2(m_InspectorWidth, contentHeight), true);
-		DrawSelectionInspector();
-		ImGui::EndChild();
 	}
-	ImGui::End();
-
-	// 2. 미저장 보호 모달은 패널의 Begin/End 외부 최상위 뷰포트에서 독립적으로 렌더링
-	DrawConfirmModal();
+	DrawParametersTab();
+	ImGui::EndChild();
+	ImGui::SameLine();
+	// ── [좌측 스플리터: 좌측 ↔ 캔버스] ──
+	Editor::SplitterV("##LeftSplitter", &m_LeftPaneWidth, &canvasWidth, 180.0f, 200.0f, contentHeight, splitterThickness);
+	ImGui::SameLine();
+	// ── [중앙 영역] 상태 머신 노드 캔버스 ──
+	ImGui::BeginChild("CanvasPanel", ImVec2(canvasWidth, contentHeight), true,
+		ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+	DrawCanvas();
+	ImGui::EndChild();
+	ImGui::SameLine();
+	// ── [우측 스플리터: 캔버스 ↔ 우측 인스펙터] ──
+	Editor::SplitterV("##RightSplitter", &canvasWidth, &m_InspectorWidth, 200.0f, 200.0f, contentHeight, splitterThickness);
+	ImGui::SameLine();
+	// ── [우측 영역] 인스펙터 패널 ──
+	ImGui::BeginChild("InspectorPanel", ImVec2(m_InspectorWidth, contentHeight), true);
+	DrawSelectionInspector();
+	ImGui::EndChild();
 }
 
 bool AnimatorGraphPanel::CanDeleteSelection() const
@@ -177,100 +156,83 @@ void AnimatorGraphPanel::DeleteSelection()
 	SyncPreviewStateMachine();
 }
 
-void AnimatorGraphPanel::DrawMenuBar()
+void AnimatorGraphPanel::DrawCustomToolbar()
 {
-	if (ImGui::BeginMenuBar())
+	if (ImGui::BeginMenu(LOCAL_CSTR("EditorMenu.File")))
 	{
-		if (ImGui::BeginMenu(LOCAL_CSTR("EditorMenu.File")))
-		{
-			auto& sm = ShortcutManager::Get();
-			if (ImGui::MenuItem((ICON_FA_FILE " " + LOCAL_LABEL("EditorCommon.New")).c_str(), sm.GetShortcutHint("Animator.New")))
-				RequestNew();
-			if (ImGui::MenuItem((ICON_FA_FOLDER_OPEN " " + LOCAL_LABEL("EditorCommon.Open")).c_str(), sm.GetShortcutHint("Animator.Open")))
-				RequestOpen();
-			if (ImGui::MenuItem((ICON_FA_FLOPPY_DISK " " + LOCAL_LABEL("EditorCommon.Save")).c_str(), sm.GetShortcutHint("Animator.Save")))
-				SaveDocument(false);
-			if (ImGui::MenuItem((ICON_FA_FLOPPY_DISK " " + LOCAL_LABEL("EditorCommon.SaveAs")).c_str(), sm.GetShortcutHint("Animator.SaveAs")))
-				SaveDocument(true);
-			ImGui::EndMenu();
-		}
+		auto& sm = ShortcutManager::Get();
+		if (ImGui::MenuItem((ICON_FA_FILE " " + LOCAL_LABEL("EditorCommon.New")).c_str(), sm.GetShortcutHint("Animator.New")))
+			RequestNew();
+		if (ImGui::MenuItem((ICON_FA_FOLDER_OPEN " " + LOCAL_LABEL("EditorCommon.Open")).c_str(), sm.GetShortcutHint("Animator.Open")))
+			RequestOpen();
+		if (ImGui::MenuItem((ICON_FA_FLOPPY_DISK " " + LOCAL_LABEL("EditorCommon.Save")).c_str(), sm.GetShortcutHint("Animator.Save")))
+			SaveDocument(false);
+		if (ImGui::MenuItem((ICON_FA_FLOPPY_DISK " " + LOCAL_LABEL("EditorCommon.SaveAs")).c_str(), sm.GetShortcutHint("Animator.SaveAs")))
+			SaveDocument(true);
+		ImGui::EndMenu();
+	}
 
-		if (ImGui::BeginMenu(LOCAL_CSTR("EditorMenu.Edit")))
-		{
-			ACTION_MENU_ITEM((ICON_FA_TRASH " " + LOCAL_LABEL("EditorCommon.Delete")).c_str(), "Animator.DeleteSelection");
-			ImGui::EndMenu();
-		}
+	if (ImGui::BeginMenu(LOCAL_CSTR("EditorMenu.Edit")))
+	{
+		ACTION_MENU_ITEM((ICON_FA_TRASH " " + LOCAL_LABEL("EditorCommon.Delete")).c_str(), "Animator.DeleteSelection");
+		ImGui::EndMenu();
+	}
 
-		if (ImGui::BeginMenu(LOCAL_CSTR("EditorMenu.View")))
-		{
-			if (ImGui::MenuItem(LOCAL_LABEL("AnimatorGraph.ResetView").c_str()))
-				m_CanvasScrolling = ImVec2(0.0f, 0.0f);
-			ImGui::EndMenu();
-		}
-
-		ImGui::EndMenuBar();
+	if (ImGui::BeginMenu(LOCAL_CSTR("EditorMenu.View")))
+	{
+		if (ImGui::MenuItem(LOCAL_LABEL("AnimatorGraph.ResetView").c_str()))
+			m_CanvasScrolling = ImVec2(0.0f, 0.0f);
+		ImGui::EndMenu();
 	}
 }
 
-void AnimatorGraphPanel::DrawToolbar()
+void AnimatorGraphPanel::DrawCustomQuickAccess()
 {
-	// 1줄 퀵 액세스 툴바: [New] [Open] [Save] | [파일상태 배지] | [새 상태]
-	if (ImGui::Button(ICON_FA_FILE "##QuickNew")) RequestNew();
-	if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("EditorCommon.New"));
-	ImGui::SameLine();
-	if (ImGui::Button(ICON_FA_FOLDER_OPEN "##QuickOpen")) RequestOpen();
-	if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("EditorCommon.Open"));
+	EditorUI::ToolbarLayout toolbar;
+	if (toolbar.Icon("QuickNew", ICON_FA_FILE, "EditorCommon.New")) RequestNew();
+	if (toolbar.Icon("QuickOpen", ICON_FA_FOLDER_OPEN, "EditorCommon.Open")) RequestOpen();
+	if (toolbar.Icon("QuickSave", ICON_FA_FLOPPY_DISK, "EditorCommon.Save")) SaveDocument(false);
 
-	ImGui::SameLine();
-	if (ImGui::Button(ICON_FA_FLOPPY_DISK "##QuickSave")) SaveDocument(false);
-	if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("EditorCommon.Save"));
-
-	ImGui::SameLine();
-	ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
-	ImGui::SameLine();
-
-	// 파일 상태 배지
 	const std::string fileName = m_CurrentFilePath.empty()
 		? LOCAL("AnimatorGraph.Unsaved") : std::filesystem::path(m_CurrentFilePath).filename().string();
-	ImGui::TextDisabled("[%s%s]", fileName.c_str(), m_IsDirty ? " *" : "");
+	const std::string status = "[" + fileName + (m_IsDirty ? " *]" : "]");
+	toolbar.Text(status.c_str());
 
-	ImGui::SameLine();
-	ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
-	ImGui::SameLine();
-
-	const char* vpIcon = m_ShowPreviewViewport ? ICON_FA_EYE : ICON_FA_EYE_SLASH;
-	if (ImGui::Button(vpIcon))
-	{
+	EditorUI::IconButtonOptions previewOptions;
+	previewOptions.Active = m_ShowPreviewViewport;
+	if (toolbar.Icon("Preview", m_ShowPreviewViewport ? ICON_FA_EYE : ICON_FA_EYE_SLASH,
+		"AnimatorGraph.TogglePreview", previewOptions))
 		m_ShowPreviewViewport = !m_ShowPreviewViewport;
-	}
-	if (ImGui::IsItemHovered()) ImGui::SetTooltip(LOCAL_CSTR("AnimatorGraph.TogglePreview"));
-
-	if (ImGui::Button((ICON_FA_PLUS " " + LOCAL_LABEL("AnimatorGraph.CreateState")).c_str()))
-	{
+	if (toolbar.Button("CreateState", ICON_FA_PLUS, "AnimatorGraph.CreateState"))
 		AddState(ImVec2(250.0f, 150.0f));
-	}
 
-	// 트랜지션 연결 중 안내 문구 및 취소 버튼
 	if (m_ConnectingSourceIndex >= 0)
 	{
-		ImGui::SameLine();
-		ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "%s", LOCAL_CSTR("AnimatorGraph.SelectTargetToConnect"));
-		ImGui::SameLine();
-		if (ImGui::SmallButton(LOCAL_LABEL("AnimatorGraph.CancelEsc").c_str())) m_ConnectingSourceIndex = -1;
+		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.8f, 0.2f, 1.0f));
+		toolbar.Text(LOCAL_CSTR("AnimatorGraph.SelectTargetToConnect"), false);
+		ImGui::PopStyleColor();
+		if (toolbar.Button("CancelConnection", ICON_FA_XMARK, "AnimatorGraph.CancelEsc")) m_ConnectingSourceIndex = -1;
 		if (Engine::InputManager::Get().IsKeyButtonDown(Engine::EKeyCode::Escape)) m_ConnectingSourceIndex = -1;
 	}
 }
 
-bool AnimatorGraphPanel::OpenDocument()
+bool AnimatorGraphPanel::IsSupported(const std::filesystem::path& assetPath) const
 {
-	std::wstring selectedPath;
-	const std::vector<FileDialogFilter> filters{
-		{ StrToWStr(LOCAL("FileDialog.AnimatorFiles")), L"*.animator" },
-		{ StrToWStr(LOCAL("FileDialog.JsonFiles")), L"*.json" }
-	};
-	if (!FileDialogs::OpenFileDialog(selectedPath, filters)) return false;
+	const auto ext = assetPath.extension().wstring();
+	const std::string lower = Engine::ToLowerStr(Engine::WStrToStr(assetPath.filename().wstring()));
+	return ext == L".bamanimator" || ext == L".animator" ||
+		lower.ends_with(".bamanimator.json") || lower.ends_with(".animator.json");
+}
 
-	const std::string targetPath = WStrToStr(selectedPath);
+void AnimatorGraphPanel::SetTargetResource(const std::filesystem::path& assetPath)
+{
+	ResourceEditorInterface::SetTargetResource(assetPath);
+	LoadFromFile(assetPath);
+}
+
+bool AnimatorGraphPanel::LoadFromFile(const std::filesystem::path& path)
+{
+	const std::string targetPath = WStrToStr(path.wstring());
 	auto tempStateMachine = std::make_shared<Engine::AnimatorStateMachine>();
 	if (!tempStateMachine->LoadFromFile(targetPath))
 	{
@@ -280,12 +242,25 @@ bool AnimatorGraphPanel::OpenDocument()
 
 	m_StateMachine = std::move(tempStateMachine);
 	m_CurrentFilePath = targetPath;
+	m_TargetResourcePath = path;
 	m_SelectedStateIndex = -1;
 	m_SelectedTransitionIndex = -1;
 	m_ConnectingSourceIndex = -1;
 	m_IsDirty = false;
 	SyncPreviewStateMachine();
 	return true;
+}
+
+bool AnimatorGraphPanel::OpenDocument()
+{
+	std::wstring selectedPath;
+	const std::vector<FileDialogFilter> filters{
+		{ StrToWStr(LOCAL("FileDialog.AnimatorFiles")), L"*.bamanimator.json;*.animator.json;*.bamanimator;*.animator" },
+		{ StrToWStr(LOCAL("FileDialog.JsonFiles")), L"*.json" }
+	};
+	if (!FileDialogs::OpenFileDialog(selectedPath, filters)) return false;
+
+	return LoadFromFile(std::filesystem::path(selectedPath));
 }
 
 bool AnimatorGraphPanel::SaveDocument(bool saveAs)
@@ -295,9 +270,9 @@ bool AnimatorGraphPanel::SaveDocument(bool saveAs)
 	{
 		std::wstring selectedPath;
 		const std::vector<FileDialogFilter> filters{
-			{ StrToWStr(LOCAL("FileDialog.AnimatorFiles")), L"*.animator" }
+			{ StrToWStr(LOCAL("FileDialog.AnimatorFiles")), L"*.bamanimator.json;*.animator.json;*.bamanimator;*.animator" }
 		};
-		if (!FileDialogs::SaveFileDialog(selectedPath, filters, L"NewController", L"animator")) return false;
+		if (!FileDialogs::SaveFileDialog(selectedPath, filters, L"NewController.bamanimator.json", L"bamanimator.json")) return false;
 		targetPath = WStrToStr(selectedPath);
 	}
 
@@ -310,6 +285,7 @@ bool AnimatorGraphPanel::SaveDocument(bool saveAs)
 	}
 
 	m_CurrentFilePath = targetPath;
+	m_TargetResourcePath = std::filesystem::path(targetPath);
 	m_IsDirty = false;
 	return true;
 }
@@ -326,9 +302,9 @@ void AnimatorGraphPanel::DrawParametersTab()
 
 	ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f),
 		"%s", LOCAL_CSTR("AnimatorGraph.DefaultParameters"));
-	ImGui::SameLine(ImGui::GetContentRegionAvail().x - 24.0f);
+	EditorUI::SameLineIfFits(EditorUI::GetIconButtonSize(ICON_FA_PLUS, true).x);
 
-	if (ImGui::Button(ICON_FA_PLUS)) ImGui::OpenPopup("AddParamPopup");
+	if (EditorUI::SmallIconButton("AddParameter", ICON_FA_PLUS, "EditorCommon.Add")) ImGui::OpenPopup("AddParamPopup");
 
 	if (ImGui::BeginPopup("AddParamPopup"))
 	{
@@ -368,7 +344,7 @@ void AnimatorGraphPanel::DrawParametersTab()
 	{
 		ImGui::PushID(paramName.c_str());
 
-		if (ImGui::SmallButton(ICON_FA_PEN "##RenameParameter"))
+		if (EditorUI::SmallIconButton("RenameParameter", ICON_FA_PEN, "EditorCommon.Rename"))
 		{
 			m_ParameterRenameDraft = paramName;
 			ImGui::OpenPopup("RenameParameter");
@@ -377,7 +353,7 @@ void AnimatorGraphPanel::DrawParametersTab()
 			ImGui::SetTooltip("%s", LOCAL_CSTR("EditorCommon.Rename"));
 
 		ImGui::SameLine();
-		if (ImGui::SmallButton(ICON_FA_TRASH "##DeleteParameter"))
+		if (EditorUI::SmallIconButton("DeleteParameter", ICON_FA_TRASH, "EditorCommon.Delete"))
 			toDelete = paramName;
 
 		ImGui::SameLine();
@@ -411,16 +387,16 @@ void AnimatorGraphPanel::DrawParametersTab()
 			if (blank || duplicate)
 				ImGui::TextWrapped("%s", LOCAL_CSTR("AnimatorGraph.ParameterNameInvalid"));
 
-			ImGui::BeginDisabled(!changed || blank || duplicate);
-			if (ImGui::Button(LOCAL_LABEL("EditorCommon.Rename").c_str()))
+			const EditorUI::DialogAction actions[] = {
+				{ "EditorCommon.Cancel" }, { "EditorCommon.Rename", changed && !blank && !duplicate }
+			};
+			const int action = EditorUI::DialogButtonBar("RenameActions", actions, IM_ARRAYSIZE(actions));
+			if (action == 1)
 			{
 				toRename = paramName;
 				ImGui::CloseCurrentPopup();
 			}
-			ImGui::EndDisabled();
-
-			ImGui::SameLine();
-			if (ImGui::Button(LOCAL_LABEL("EditorCommon.Cancel").c_str()))
+			if (action == 0)
 				ImGui::CloseCurrentPopup();
 
 			ImGui::EndPopup();
@@ -982,7 +958,7 @@ void AnimatorGraphPanel::DrawStateInspector(Engine::AnimState& state)
 	}
 	ImGui::Text("%s", state.name.c_str());
 	ImGui::SameLine();
-	if (ImGui::SmallButton((ICON_FA_PEN_TO_SQUARE "##RenameStateBtn")))
+	if (EditorUI::SmallIconButton("RenameStateBtn", ICON_FA_PEN_TO_SQUARE, "EditorCommon.Rename"))
 	{
 		m_StateRenameDraft = state.name;
 		ImGui::OpenPopup("RenameState");
@@ -1001,8 +977,11 @@ void AnimatorGraphPanel::DrawStateInspector(Engine::AnimState& state)
 		if (blank || duplicate)
 			ImGui::TextWrapped("%s", LOCAL_CSTR("AnimatorGraph.StateNameInvalid"));
 
-		ImGui::BeginDisabled(!changed || blank || duplicate);
-		if (ImGui::Button(LOCAL_LABEL("EditorCommon.Rename").c_str()))
+		const EditorUI::DialogAction actions[] = {
+			{ "EditorCommon.Cancel" }, { "EditorCommon.Rename", changed && !blank && !duplicate }
+		};
+		const int action = EditorUI::DialogButtonBar("RenameActions", actions, IM_ARRAYSIZE(actions));
+		if (action == 1)
 		{
 			const std::string oldName = state.name;
 			const bool ownsReferences = m_StateMachine->FindState(oldName) == &state;
@@ -1033,10 +1012,7 @@ void AnimatorGraphPanel::DrawStateInspector(Engine::AnimState& state)
 			SyncPreviewStateMachine();
 			ImGui::CloseCurrentPopup();
 		}
-		ImGui::EndDisabled();
-
-		ImGui::SameLine();
-		if (ImGui::Button(LOCAL_LABEL("EditorCommon.Cancel").c_str()))
+		if (action == 0)
 			ImGui::CloseCurrentPopup();
 
 		ImGui::EndPopup();
@@ -1263,9 +1239,9 @@ void AnimatorGraphPanel::DrawStateInspector(Engine::AnimState& state)
 			ImGui::Spacing();
 			ImGui::Text("%s (%d)", LOCAL_CSTR("AnimatorGraph.Samples"),
 				static_cast<int>(state.blendTree.samples.size()));
-			ImGui::SameLine(ImGui::GetContentRegionAvail().x - 24.0f);
+			EditorUI::SameLineIfFits(EditorUI::GetIconButtonSize(ICON_FA_PLUS, true).x);
 
-			if (ImGui::Button(ICON_FA_PLUS "##AddBlendSample"))
+			if (EditorUI::SmallIconButton("AddBlendSample", ICON_FA_PLUS, "EditorCommon.Add"))
 			{
 				const float nextThreshold = state.blendTree.samples.empty()
 					? 0.0f : state.blendTree.samples.back().threshold + 1.0f;
@@ -1279,7 +1255,7 @@ void AnimatorGraphPanel::DrawStateInspector(Engine::AnimState& state)
 			{
 				ImGui::TableSetupColumn(LOCAL_CSTR("AnimatorGraph.Threshold"), ImGuiTableColumnFlags_WidthFixed, 80.0f);
 				ImGui::TableSetupColumn(LOCAL_CSTR("AnimatorGraph.Clip"), ImGuiTableColumnFlags_WidthStretch);
-				ImGui::TableSetupColumn(LOCAL_CSTR("EditorCommon.Delete"), ImGuiTableColumnFlags_WidthFixed, 30.0f);
+				ImGui::TableSetupColumn(LOCAL_CSTR("EditorCommon.Delete"), ImGuiTableColumnFlags_WidthFixed, std::max(EditorUI::GetIconButtonSize(ICON_FA_TRASH, true).x, ImGui::CalcTextSize(LOCAL_CSTR("EditorCommon.Delete")).x));
 				ImGui::TableHeadersRow();
 
 				for (size_t i = 0; i < state.blendTree.samples.size(); ++i)
@@ -1299,7 +1275,7 @@ void AnimatorGraphPanel::DrawStateInspector(Engine::AnimState& state)
 					if (Editor::DrawInspectorResourcePicker(sample.clip, true)) m_IsDirty = true;
 
 					ImGui::TableSetColumnIndex(2);
-					if (ImGui::SmallButton(ICON_FA_TRASH "##DelSample")) sampleToRemove = static_cast<int>(i);
+					if (EditorUI::SmallIconButton("DelSample", ICON_FA_TRASH, "EditorCommon.Delete")) sampleToRemove = static_cast<int>(i);
 
 					ImGui::PopID();
 				}
@@ -1321,8 +1297,8 @@ void AnimatorGraphPanel::DrawStateInspector(Engine::AnimState& state)
 	if (ImGui::CollapsingHeader((ICON_FA_BELL " " + LOCAL("AnimatorGraph.Notifies")).c_str(), ImGuiTreeNodeFlags_DefaultOpen))
 	{
 		ImGui::TextDisabled("%s: %d", LOCAL_CSTR("AnimatorGraph.Notifies"), static_cast<int>(state.notifies.size()));
-		ImGui::SameLine(ImGui::GetContentRegionAvail().x - 24.0f);
-		if (ImGui::Button(ICON_FA_PLUS "##AddNotify"))
+		EditorUI::SameLineIfFits(EditorUI::GetIconButtonSize(ICON_FA_PLUS, true).x);
+		if (EditorUI::SmallIconButton("AddNotify", ICON_FA_PLUS, "EditorCommon.Add"))
 		{
 			state.notifies.push_back(Engine::AnimNotify{ "NewNotify", 0.0f, "" });
 			m_IsDirty = true;
@@ -1334,7 +1310,7 @@ void AnimatorGraphPanel::DrawStateInspector(Engine::AnimState& state)
 			ImGui::TableSetupColumn(LOCAL_CSTR("AnimatorGraph.NotifyTime"), ImGuiTableColumnFlags_WidthFixed, 75.0f);
 			ImGui::TableSetupColumn(LOCAL_CSTR("AnimatorGraph.NotifyName"), ImGuiTableColumnFlags_WidthFixed, 100.0f);
 			ImGui::TableSetupColumn(LOCAL_CSTR("AnimatorGraph.NotifyPayload"), ImGuiTableColumnFlags_WidthStretch);
-			ImGui::TableSetupColumn(LOCAL_CSTR("EditorCommon.Delete"), ImGuiTableColumnFlags_WidthFixed, 28.0f);
+			ImGui::TableSetupColumn(LOCAL_CSTR("EditorCommon.Delete"), ImGuiTableColumnFlags_WidthFixed, std::max(EditorUI::GetIconButtonSize(ICON_FA_TRASH, true).x, ImGui::CalcTextSize(LOCAL_CSTR("EditorCommon.Delete")).x));
 			ImGui::TableHeadersRow();
 
 			for (size_t i = 0; i < state.notifies.size(); ++i)
@@ -1365,7 +1341,7 @@ void AnimatorGraphPanel::DrawStateInspector(Engine::AnimState& state)
 				}
 
 				ImGui::TableSetColumnIndex(3);
-				if (ImGui::SmallButton(ICON_FA_TRASH "##DelNotify")) notifyToRemove = static_cast<int>(i);
+				if (EditorUI::SmallIconButton("DelNotify", ICON_FA_TRASH, "EditorCommon.Delete")) notifyToRemove = static_cast<int>(i);
 
 				ImGui::PopID();
 			}
@@ -1580,7 +1556,7 @@ void AnimatorGraphPanel::DrawTransitionInspector(Engine::AnimTransition& tr)
 		{
 			drawLogic("AnimatorGraph.ConditionLogic", logic);
 
-			if (ImGui::SmallButton(ICON_FA_PLUS "##AddCond"))
+			if (EditorUI::SmallIconButton("AddCond", ICON_FA_PLUS, "EditorCommon.Add"))
 			{
 				Condition condition;
 				if (!m_StateMachine->defaultParameters.empty())
@@ -1642,7 +1618,7 @@ void AnimatorGraphPanel::DrawTransitionInspector(Engine::AnimTransition& tr)
 					ImGui::SameLine();
 				}
 
-				if (ImGui::Button(ICON_FA_TRASH "##DeleteCondition"))
+				if (EditorUI::SmallIconButton("DeleteCondition", ICON_FA_TRASH, "EditorCommon.Delete"))
 					toRemove = static_cast<int>(i);
 
 				ImGui::PopID();
@@ -1679,7 +1655,7 @@ void AnimatorGraphPanel::DrawTransitionInspector(Engine::AnimTransition& tr)
 
 		ImGui::Separator();
 		ImGui::TextUnformatted(LOCAL_FMT("AnimatorGraph.ConditionGroupTitle", i + 2).c_str());
-		if (ImGui::SmallButton(ICON_FA_TRASH "##DeleteGroup"))
+		if (EditorUI::SmallIconButton("DeleteGroup", ICON_FA_TRASH, "EditorCommon.Delete"))
 			groupToRemove = static_cast<int>(i);
 		if (group.conditions.empty())
 			ImGui::TextWrapped("%s", LOCAL_CSTR("AnimatorGraph.EmptyConditionGroup"));
@@ -1776,7 +1752,11 @@ void AnimatorGraphPanel::DrawConfirmModal()
 		ImGui::Separator();
 		ImGui::Spacing();
 
-		if (ImGui::Button(LOCAL_CSTR("EditorDocument.Save"), ImVec2(100.0f, 0.0f)))
+		const EditorUI::DialogAction actions[] = {
+			{ "EditorCommon.Cancel" }, { "EditorDocument.Discard", true, true }, { "EditorDocument.Save" }
+		};
+		const int action = EditorUI::DialogButtonBar("AnimatorDocumentActions", actions, IM_ARRAYSIZE(actions));
+		if (action == 2)
 		{
 			if (SaveDocument(false))
 			{
@@ -1790,15 +1770,13 @@ void AnimatorGraphPanel::DrawConfirmModal()
 			}
 		}
 
-		ImGui::SameLine(0.0f, 8.0f);
-		if (ImGui::Button(LOCAL_CSTR("EditorDocument.Discard"), ImVec2(100.0f, 0.0f)))
+		if (action == 1)
 		{
 			ExecutePendingAction();
 			ImGui::CloseCurrentPopup();
 		}
 
-		ImGui::SameLine(0.0f, 8.0f);
-		if (ImGui::Button(LOCAL_CSTR("EditorCommon.Cancel"), ImVec2(100.0f, 0.0f)))
+		if (action == 0)
 		{
 			m_PendingAction = EPendingAction::None;
 			ImGui::CloseCurrentPopup();

@@ -1,8 +1,9 @@
-﻿#include "WorkspaceSettingsWidget.h"
+#include "WorkspaceSettingsWidget.h"
 #include "BaseViewportPanel.h"
 #include "EditorSettingsService.h"
 #include "Functions.h"
 #include "ImGuiManager.h"
+#include "EditorUI.h"
 #include "LocalizationManager.h"
 #include "NotificationManager.h"
 
@@ -57,12 +58,12 @@ void WorkspaceSettingsWidget::Draw(EditorSettingsService& settings)
     // 1. 뷰포트 해상도 설정
     if (ImGui::CollapsingHeader(LOCAL_CSTR("Settings.SectionViewportResolution"), ImGuiTreeNodeFlags_DefaultOpen))
     {
-        ImGui::Spacing();
         auto states = settings.GetViewportResolutionStates();
 
         if (states.empty())
         {
             m_SelectedViewportName.clear();
+            ImGui::Spacing();
             ImGui::TextWrapped("%s", LOCAL_CSTR("GraphicsSettings.NoViewport"));
         }
         else
@@ -76,121 +77,139 @@ void WorkspaceSettingsWidget::Draw(EditorSettingsService& settings)
             const bool blocked = settings.IsWindowChangePending() || settings.IsVSyncChangePending() || settings.IsViewportResolutionChangePending();
             ImGui::BeginDisabled(blocked);
 
-            // 타깃 뷰포트 선택 콤보
-            ImGui::SetNextItemWidth(220.0f);
-            if (ImGui::BeginCombo(LOCAL_LABEL("GraphicsSettings.TargetViewport").c_str(), selected->DisplayName.c_str()))
+            if (EditorUI::BeginPropertyTable("##ViewportResolutionTable"))
             {
-                for (auto current = states.begin(); current != states.end(); ++current)
+                // 타깃 뷰포트 선택 콤보
+                EditorUI::PropertyRow("GraphicsSettings.TargetViewport");
+                ImGui::SetNextItemWidth(-FLT_MIN);
+                if (ImGui::BeginCombo("###TargetViewport", selected->DisplayName.c_str()))
                 {
-                    const bool isSelected = (current->Name == m_SelectedViewportName);
-                    const auto label = current->DisplayName + "###ResolutionTarget." + WStrToStr(current->Name);
-                    if (ImGui::Selectable(label.c_str(), isSelected))
+                    for (auto current = states.begin(); current != states.end(); ++current)
                     {
-                        m_SelectedViewportName = current->Name;
-                        selected = current;
-                    }
-                    if (isSelected) ImGui::SetItemDefaultFocus();
-                }
-                ImGui::EndCombo();
-            }
-
-            const auto& actual = selected->State;
-            const auto found = m_ViewportDrafts.find(selected->Name);
-            auto draft = found != m_ViewportDrafts.end() ? found->second : actual;
-            bool changed = false;
-
-            static constexpr const char* modeKeys[] = { "Viewport.FreePanelSize", "GraphicsSettings.ViewportPreset", "GraphicsSettings.ViewportCustom" };
-            const std::array<std::string, 7> aspects = { LOCAL("Viewport.FreeAspect"), "16:9", "16:10", "4:3", "21:9", "1:1", "9:16" };
-
-            // 해상도 모드 콤보
-            const auto draftMode = glm::clamp(draft.ResolutionMode, 0, 2);
-            ImGui::SetNextItemWidth(220.0f);
-            if (ImGui::BeginCombo(LOCAL_LABEL("GraphicsSettings.ViewportMode").c_str(), LOCAL_CSTR(modeKeys[draftMode])))
-            {
-                for (int32 index = 0; index < 3; ++index)
-                {
-                    if (ImGui::Selectable(LOCAL_LABEL(modeKeys[index]).c_str(), draft.ResolutionMode == index))
-                    {
-                        draft.ResolutionMode = index;
-                        changed = true;
-                    }
-                }
-                ImGui::EndCombo();
-            }
-
-            // 프리셋 선택
-            if (draft.ResolutionMode == static_cast<int32>(EViewportResolutionMode::Preset))
-            {
-                std::string preview = LOCAL("GraphicsSettings.ViewportPreset");
-                for (const auto& preset : g_ResolutionPresets)
-                {
-                    if (draft.PresetWidth == static_cast<int32>(preset.Width) && draft.PresetHeight == static_cast<int32>(preset.Height))
-                    {
-                        preview = LOCAL(preset.NameKey);
-                        break;
-                    }
-                }
-
-                ImGui::SetNextItemWidth(220.0f);
-                if (ImGui::BeginCombo(LOCAL_LABEL("GraphicsSettings.ViewportPreset").c_str(), preview.c_str()))
-                {
-                    for (const auto& preset : g_ResolutionPresets)
-                    {
-                        const bool isSelected = (draft.PresetWidth == static_cast<int32>(preset.Width) && draft.PresetHeight == static_cast<int32>(preset.Height));
-                        if (ImGui::Selectable(LOCAL_LABEL(preset.NameKey).c_str(), isSelected))
+                        const bool isSelected = (current->Name == m_SelectedViewportName);
+                        const auto label = current->DisplayName + "###ResolutionTarget." + WStrToStr(current->Name);
+                        if (ImGui::Selectable(label.c_str(), isSelected))
                         {
-                            draft.PresetWidth = static_cast<int32>(preset.Width);
-                            draft.PresetHeight = static_cast<int32>(preset.Height);
+                            m_SelectedViewportName = current->Name;
+                            selected = current;
+                        }
+                        if (isSelected) ImGui::SetItemDefaultFocus();
+                    }
+                    ImGui::EndCombo();
+                }
+
+                const auto& actual = selected->State;
+                const auto found = m_ViewportDrafts.find(selected->Name);
+                auto draft = found != m_ViewportDrafts.end() ? found->second : actual;
+                bool changed = false;
+
+                static constexpr const char* modeKeys[] = { "Viewport.FreePanelSize", "GraphicsSettings.ViewportPreset", "GraphicsSettings.ViewportCustom" };
+                const std::array<std::string, 7> aspects = { LOCAL("Viewport.FreeAspect"), "16:9", "16:10", "4:3", "21:9", "1:1", "9:16" };
+
+                // 해상도 모드 콤보
+                EditorUI::PropertyRow("GraphicsSettings.ViewportMode");
+                const auto draftMode = glm::clamp(draft.ResolutionMode, 0, 2);
+                ImGui::SetNextItemWidth(-FLT_MIN);
+                if (ImGui::BeginCombo("###ViewportMode", LOCAL_CSTR(modeKeys[draftMode])))
+                {
+                    for (int32 index = 0; index < 3; ++index)
+                    {
+                        if (ImGui::Selectable(LOCAL_LABEL(modeKeys[index]).c_str(), draft.ResolutionMode == index))
+                        {
+                            draft.ResolutionMode = index;
                             changed = true;
                         }
                     }
                     ImGui::EndCombo();
                 }
-            }
-            else if (draft.ResolutionMode == static_cast<int32>(EViewportResolutionMode::Custom))
-            {
-                ImGui::SetNextItemWidth(120.0f);
-                bool customChanged = ImGui::InputInt(LOCAL_LABEL("EditorCommon.Width").c_str(), &draft.CustomWidth, 50, 100);
-                ImGui::SetNextItemWidth(120.0f);
-                customChanged |= ImGui::InputInt(LOCAL_LABEL("EditorCommon.Height").c_str(), &draft.CustomHeight, 50, 100);
 
-                if (customChanged)
+                // 프리셋 또는 커스텀 크기
+                if (draft.ResolutionMode == static_cast<int32>(EViewportResolutionMode::Preset))
                 {
-                    draft.CustomWidth = glm::clamp(draft.CustomWidth, BaseViewportPanel::MinResolutionDimension, BaseViewportPanel::MaxResolutionWidth);
-                    draft.CustomHeight = glm::clamp(draft.CustomHeight, BaseViewportPanel::MinResolutionDimension, BaseViewportPanel::MaxResolutionHeight);
-                    changed = true;
-                }
-            }
-
-            // 종횡비 콤보
-            const auto draftAspect = glm::clamp(draft.AspectRatioMode, 0, 6);
-            ImGui::SetNextItemWidth(220.0f);
-            if (ImGui::BeginCombo(LOCAL_LABEL("Viewport.AspectRatio").c_str(), aspects[draftAspect].c_str()))
-            {
-                for (int32 index = 0; index < static_cast<int32>(aspects.size()); ++index)
-                {
-                    const auto label = aspects[index] + "###ViewportAspect." + std::to_string(index);
-                    if (ImGui::Selectable(label.c_str(), draft.AspectRatioMode == index))
+                    EditorUI::PropertyRow("GraphicsSettings.ViewportPreset");
+                    std::string preview = LOCAL("GraphicsSettings.ViewportPreset");
+                    for (const auto& preset : g_ResolutionPresets)
                     {
-                        draft.AspectRatioMode = index;
+                        if (draft.PresetWidth == static_cast<int32>(preset.Width) && draft.PresetHeight == static_cast<int32>(preset.Height))
+                        {
+                            preview = LOCAL(preset.NameKey);
+                            break;
+                        }
+                    }
+
+                    ImGui::SetNextItemWidth(-FLT_MIN);
+                    if (ImGui::BeginCombo("###ViewportPresetSelect", preview.c_str()))
+                    {
+                        for (const auto& preset : g_ResolutionPresets)
+                        {
+                            const bool isSelected = (draft.PresetWidth == static_cast<int32>(preset.Width) && draft.PresetHeight == static_cast<int32>(preset.Height));
+                            if (ImGui::Selectable(LOCAL_LABEL(preset.NameKey).c_str(), isSelected))
+                            {
+                                draft.PresetWidth = static_cast<int32>(preset.Width);
+                                draft.PresetHeight = static_cast<int32>(preset.Height);
+                                changed = true;
+                            }
+                        }
+                        ImGui::EndCombo();
+                    }
+                }
+                else if (draft.ResolutionMode == static_cast<int32>(EViewportResolutionMode::Custom))
+                {
+                    EditorUI::PropertyRow("GraphicsSettings.ViewportCustom");
+                    const float separatorWidth = ImGui::CalcTextSize("x").x + ImGui::GetStyle().ItemSpacing.x * 2.0f;
+                    const float dimensionWidth = std::max(1.0f, (ImGui::GetContentRegionAvail().x - separatorWidth) * 0.5f);
+                    ImGui::SetNextItemWidth(dimensionWidth);
+                    bool customChanged = ImGui::InputInt("###CustomWidth", &draft.CustomWidth, 50, 100);
+                    ImGui::SameLine();
+                    ImGui::TextUnformatted("x");
+                    ImGui::SameLine();
+                    ImGui::SetNextItemWidth(dimensionWidth);
+                    customChanged |= ImGui::InputInt("###CustomHeight", &draft.CustomHeight, 50, 100);
+
+                    if (customChanged)
+                    {
+                        draft.CustomWidth = glm::clamp(draft.CustomWidth, BaseViewportPanel::MinResolutionDimension, BaseViewportPanel::MaxResolutionWidth);
+                        draft.CustomHeight = glm::clamp(draft.CustomHeight, BaseViewportPanel::MinResolutionDimension, BaseViewportPanel::MaxResolutionHeight);
                         changed = true;
                     }
                 }
-                ImGui::EndCombo();
-            }
 
-            if (changed)
-                m_ViewportDrafts.insert_or_assign(selected->Name, draft);
+                // 종횡비 콤보
+                EditorUI::PropertyRow("Viewport.AspectRatio");
+                const auto draftAspect = glm::clamp(draft.AspectRatioMode, 0, 6);
+                ImGui::SetNextItemWidth(-FLT_MIN);
+                if (ImGui::BeginCombo("###ViewportAspect", aspects[draftAspect].c_str()))
+                {
+                    for (int32 index = 0; index < static_cast<int32>(aspects.size()); ++index)
+                    {
+                        const auto label = aspects[index] + "###ViewportAspect." + std::to_string(index);
+                        if (ImGui::Selectable(label.c_str(), draft.AspectRatioMode == index))
+                        {
+                            draft.AspectRatioMode = index;
+                            changed = true;
+                        }
+                    }
+                    ImGui::EndCombo();
+                }
 
-            ImGui::Spacing();
-            if (ImGui::Button(LOCAL_LABEL("GraphicsSettings.ApplyViewport").c_str()))
-            {
-                if (settings.RequestViewportResolutionChange(selected->Name, draft) != EResult::Success)
-                    NotificationManager::Get().AddNotification(LOCAL("GraphicsSettings.Title"), LOCAL("GraphicsSettings.ViewportRequestRejected"), ELogLevel::Warn);
+                if (changed)
+                    m_ViewportDrafts.insert_or_assign(selected->Name, draft);
+
+                // 버튼 액션
+                ImGui::TableNextRow();
+                ImGui::TableSetColumnIndex(0);
+                ImGui::TableSetColumnIndex(1);
+                if (ImGui::Button(LOCAL_LABEL("GraphicsSettings.ApplyViewport").c_str()))
+                {
+                    if (settings.RequestViewportResolutionChange(selected->Name, draft) != EResult::Success)
+                        NotificationManager::Get().AddNotification(LOCAL("GraphicsSettings.Title"), LOCAL("GraphicsSettings.ViewportRequestRejected"), ELogLevel::Warn);
+                }
+                ImGui::SameLine();
+                if (ImGui::Button(LOCAL_LABEL("GraphicsSettings.ReloadViewport").c_str()))
+                    m_ViewportDrafts.erase(selected->Name);
+
+                EditorUI::EndPropertyTable();
             }
-            ImGui::SameLine();
-            if (ImGui::Button(LOCAL_LABEL("GraphicsSettings.ReloadViewport").c_str()))
-                m_ViewportDrafts.erase(selected->Name);
 
             ImGui::EndDisabled();
 
@@ -203,10 +222,15 @@ void WorkspaceSettingsWidget::Draw(EditorSettingsService& settings)
     // 2. 콘텐츠 브라우저 환경설정
     if (ImGui::CollapsingHeader(LOCAL_CSTR("Settings.SectionContentBrowser"), ImGuiTreeNodeFlags_DefaultOpen))
     {
-        ImGui::Spacing();
-        ImGui::SetNextItemWidth(220.0f);
-        if (ImGui::SliderFloat(LOCAL_LABEL("Settings.ThumbnailSize").c_str(), &m_DraftThumbnailSize, 32.0f, 128.0f, "%.0f px"))
-            m_WorkspaceDirty = true;
+        if (EditorUI::BeginPropertyTable("##ContentBrowserSettingsTable"))
+        {
+            EditorUI::PropertyRow("Settings.ThumbnailSize");
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            if (ImGui::SliderFloat("###ThumbnailSize", &m_DraftThumbnailSize, 32.0f, 128.0f, "%.0f px"))
+                m_WorkspaceDirty = true;
+
+            EditorUI::EndPropertyTable();
+        }
         ImGui::Spacing();
     }
 
@@ -214,7 +238,7 @@ void WorkspaceSettingsWidget::Draw(EditorSettingsService& settings)
     if (ImGui::CollapsingHeader(LOCAL_CSTR("Settings.SectionDockingLayout"), ImGuiTreeNodeFlags_DefaultOpen))
     {
         ImGui::Spacing();
-        ImGui::TextDisabled(LOCAL_CSTR("Settings.DockLayoutHelp"));
+        ImGui::TextDisabled("%s", LOCAL_CSTR("Settings.DockLayoutHelp"));
         ImGui::Spacing();
     }
 }

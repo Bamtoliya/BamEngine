@@ -22,6 +22,7 @@ namespace Editor
     protected:
         EResult OnInitialize(void* arg) override;
         void DrawCustomOptions() override;
+        float GetCustomOptionsWidth() const override;
         void DrawCustomViewport() override;
 
     private:

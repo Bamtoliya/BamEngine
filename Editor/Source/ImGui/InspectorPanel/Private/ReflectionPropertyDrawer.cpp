@@ -1,4 +1,5 @@
 #include "ReflectionPropertyDrawer.h"
+#include "EditorUI.h"
 #include "InputManager.h"
 #include "Functions.h"
 
@@ -272,14 +273,11 @@ namespace
 		if (ImGui::BeginPopup("SelectEntityPopup"))
 		{
 			static char searchBuffer[128] = "";
-			if (ImGui::IsWindowAppearing())
-			{
+			EditorUI::SearchBarOptions searchOptions;
+			searchOptions.FocusOnDraw = ImGui::IsWindowAppearing();
+			if (searchOptions.FocusOnDraw)
 				searchBuffer[0] = '\0';
-				ImGui::SetKeyboardFocusHere(0);
-			}
-
-			ImGui::SetNextItemWidth(-1.0f);
-			ImGui::InputTextWithHint("##Search", LOCAL_CSTR("Inspector.SearchEntity"), searchBuffer, sizeof(searchBuffer));
+			EditorUI::DrawSearchBar("EntitySearch", searchBuffer, sizeof(searchBuffer), "Inspector.SearchEntity", searchOptions);
 			ImGui::Separator();
 
 			// 상단 검색창은 고정하고, 하단 목록만 스크롤되도록 Child 윈도우 구성
@@ -1373,7 +1371,7 @@ namespace Editor
 			if (property.CanResize() && canEdit)
 			{
 				ImGui::SameLine();
-				if (ImGui::SmallButton((ICON_FA_PLUS "##Add_" + property.Name).c_str()))
+				if (EditorUI::SmallIconButton(("Add_" + property.Name).c_str(), ICON_FA_PLUS, "EditorCommon.Add"))
 				{
 					if (property.TryResize(object, count + 1) == reflection::PropertyAccessError::None)
 					{
@@ -1404,8 +1402,8 @@ namespace Editor
 							{
 								if (property.CanErase() && canEdit)
 								{
-									ImGui::SameLine(ImGui::GetContentRegionAvail().x - 28.0f);
-									if (ImGui::SmallButton(ICON_FA_TRASH "##DelElem")) toRemoveIndex = i;
+									EditorUI::SameLineIfFits(EditorUI::GetIconButtonSize(ICON_FA_TRASH, true).x);
+									if (EditorUI::SmallIconButton("DelElem", ICON_FA_TRASH, "EditorCommon.Delete")) toRemoveIndex = i;
 								}
 
 								changed |= DrawPropertyTable(*elementType, elementResult.Object, registry, editSettings);

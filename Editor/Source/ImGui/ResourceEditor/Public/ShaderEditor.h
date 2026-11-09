@@ -10,7 +10,9 @@ public:
 	virtual ~ShaderEditor() = default;
 public:
 	virtual bool IsSupported(const std::filesystem::path& assetPath) const override;
-	virtual void Draw() override;
+private:
+	void DrawCustomQuickAccess() override { DrawCopyResourcePath(); }
+	void DrawCustomContent() override;
 
 
 };
