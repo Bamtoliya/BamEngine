@@ -2,7 +2,7 @@
 
 #include "ResourceEditorInterface.h"
 #include "CompositeEffect.h"
-#include "Components/Render/CompositeVFXComponent.h"
+#include "CompositeVFXComponent.h"
 #include "PreviewViewportWidget.h"
 #include "CommandHistory.h"
 

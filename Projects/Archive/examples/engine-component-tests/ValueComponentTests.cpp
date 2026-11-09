@@ -4,9 +4,9 @@
 #include <archive/JsonArchive.h>
 #include <reflection/Reflection.h>
 #include <reflection_archive/ReflectionArchiveAdapter.h>
-#include "Components/TagComponent.h"
-#include "Components/IDComponent.h"
-#include "Components/FlagComponent.h"
+#include "TagComponent.h"
+#include "IDComponent.h"
+#include "FlagComponent.h"
 
 #include <filesystem>
 #include <iostream>

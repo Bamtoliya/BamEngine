@@ -1,7 +1,7 @@
 #include "Engine_Includes.h"
 #include "EntityHierarchyView.h"
 #include "Scene.h"
-#include "CoreComponents.h"
+#include "WorldComponents.h"
 #include "TransformSystem.h"
 #include "LocalizationManager.h"
 #include "InputManager.h"

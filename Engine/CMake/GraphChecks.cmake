@@ -9,7 +9,7 @@ reflection_generate(
     CXX_STANDARD 23
     HEADERS
         "${CMAKE_CURRENT_SOURCE_DIR}/examples/GraphReflectionTypes.h"
-        "${ENGINE_SOURCE_DIR}/Graph/Public/GraphLogicLibrary.h"
+        "${ENGINE_SOURCE_DIR}/Graph/Libraries/Public/GraphLogicLibrary.h"
     VISIBILITY PRIVATE
 )
 
@@ -33,7 +33,7 @@ reflection_generate(
     CXX_STANDARD 23
     HEADERS
         "${CMAKE_CURRENT_SOURCE_DIR}/examples/GraphReflectionTypes.h"
-        "${ENGINE_SOURCE_DIR}/Graph/Public/GraphLogicLibrary.h"
+        "${ENGINE_SOURCE_DIR}/Graph/Libraries/Public/GraphLogicLibrary.h"
     VISIBILITY PRIVATE
 )
 

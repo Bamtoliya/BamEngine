@@ -1,12 +1,12 @@
 #include "TestSupport.h"
 #include "EngineComponents.gen.h"
 
-#include "Components/NameComponent.h"
-#include "Components/TagComponent.h"
-#include "Components/IDComponent.h"
-#include "Components/FlagComponent.h"
-#include "Components/TransformComponent.h"
-#include "Components/WorldTransformComponent.h"
+#include "NameComponent.h"
+#include "TagComponent.h"
+#include "IDComponent.h"
+#include "FlagComponent.h"
+#include "TransformComponent.h"
+#include "WorldTransformComponent.h"
 #include "Reflection/ComponentReflectionBindings.h"
 
 #include <reflection/Reflection.h>

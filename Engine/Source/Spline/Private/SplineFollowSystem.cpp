@@ -4,12 +4,12 @@
 #include "SplineCurve.h"
 #include "SplineDistanceTable.h"
 #include "TransformSystem.h"
-#include "Components/Core/TransformComponent.h"
-#include "Components/Core/HierarchyComponent.h"
-#include "Components/Core/FlagComponent.h"
-#include "Components/Physics/RigidBodyComponent.h"
-#include "Components/Physics/RigidBody2DComponent.h"
-#include "Components/Physics/CharacterControllerComponent.h"
+#include "TransformComponent.h"
+#include "HierarchyComponent.h"
+#include "FlagComponent.h"
+#include "RigidBodyComponent.h"
+#include "RigidBody2DComponent.h"
+#include "CharacterControllerComponent.h"
 #include "SplineFrameTable.h"
 
 namespace

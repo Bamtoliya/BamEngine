@@ -15,12 +15,12 @@
 #include "Entity.h"
 #include "FileDialogs.h"
 #include "PlatformPath.h"
-#include "Components/Core/TransformComponent.h"
-#include "Components/Core/WorldTransformComponent.h"
-#include "Components/Core/FlagComponent.h"
-#include "Components/Render/LightComponent.h"
-#include "Components/Render/AnimatorComponent.h"
-#include "Components/Render/SkinnedMeshRendererComponent.h"
+#include "TransformComponent.h"
+#include "WorldTransformComponent.h"
+#include "FlagComponent.h"
+#include "LightComponent.h"
+#include "AnimatorComponent.h"
+#include "SkinnedMeshRendererComponent.h"
 #include "TransformSystem.h"
 #include "LightSystem.h"
 #include <imgui.h>
@@ -28,8 +28,8 @@
 #include <cmath>
 #include "AudioClip.h"
 #include "AudioManager.h"
-#include "Components/Render/ActionTimelineComponent.h"
-#include "Components/Core/NameComponent.h"
+#include "ActionTimelineComponent.h"
+#include "NameComponent.h"
 #include "ShortcutManager.h"
 
 namespace Editor

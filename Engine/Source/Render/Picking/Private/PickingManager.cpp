@@ -2,7 +2,7 @@
 
 #include "PickingManager.h"
 #include "SceneManager.h"
-#include "CoreComponents.h"
+#include "WorldComponents.h"
 #include "RenderComponents.h"
 #include "TransformSystem.h"
 #include "Mesh.h"

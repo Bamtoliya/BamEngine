@@ -2,7 +2,7 @@
 #include "Functions.h"
 #include "ResourcePicker.h"
 #include "IconsFontAwesome7.h"
-#include "CoreComponents.h"
+#include "WorldComponents.h"
 #include "ResourceManager.h"
 #include "InputManager.h"
 #include "Scene.h"

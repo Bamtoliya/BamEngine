@@ -3,7 +3,7 @@
 #include "Scene.h"
 #include "Entity.h"
 #include "EntityFactory.h"
-#include "CoreComponents.h"
+#include "WorldComponents.h"
 #include "RenderComponents.h"
 #include "TransformSystem.h"
 #include "SelectionManager.h"

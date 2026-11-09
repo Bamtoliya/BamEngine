@@ -1,5 +1,5 @@
 ﻿#include "TransformPropertyEditor.h"
-#include "CoreComponents.h"
+#include "WorldComponents.h"
 #include "TransformSystem.h"
 #include "ReflectionRegistry.h"
 

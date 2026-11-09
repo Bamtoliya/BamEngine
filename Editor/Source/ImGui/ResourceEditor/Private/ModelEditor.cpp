@@ -16,7 +16,7 @@
 #include "ResourcePicker.h"
 #include "PIEManager.h"
 #include "IconsFontAwesome7.h"
-#include "Components/Render/AnimatorComponent.h"
+#include "AnimatorComponent.h"
 #include "StaticMeshRendererComponent.h"
 #include "SkinnedMeshRendererComponent.h"
 #include "LODGroupComponent.h" 

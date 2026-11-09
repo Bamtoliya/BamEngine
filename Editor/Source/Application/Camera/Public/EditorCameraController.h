@@ -1,7 +1,7 @@
 ﻿#pragma once
 
 #include "Editor_Includes.h"
-#include "Components/Render/CameraComponent.h"
+#include "CameraComponent.h"
 #include <entt/entt.hpp>
 #include "InputMap.h"
 

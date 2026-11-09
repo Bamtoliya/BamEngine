@@ -33,10 +33,10 @@
 #include "ConfigManager.h"
 #include "PreviewViewportWidget.h"
 #include "EntityFactory.h"
-#include "Components/Render/CameraComponent.h"
-#include "Components/Core/TransformComponent.h"
-#include "Components/Render/LightComponent.h"
-#include "Components/Render/PostProcessComponent.h"
+#include "CameraComponent.h"
+#include "TransformComponent.h"
+#include "LightComponent.h"
+#include "PostProcessComponent.h"
 
 #pragma region Imgui Header
 #include "imgui.h"

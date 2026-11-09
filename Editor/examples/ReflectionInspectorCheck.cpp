@@ -3,7 +3,7 @@
 #include "ReflectionPropertyDrawer.h"
 #include "InputManager.h"
 #include "ReflectionRegistry.h"
-#include "CoreComponents.h"
+#include "WorldComponents.h"
 #include "RenderComponents.h"
 #include "PhysicsComponent.h"
 #include <imgui.h>

@@ -4,7 +4,7 @@
 #include <archive/ArchiveInterface.h>
 #include "LightManager.h"
 #include "PlatformPath.h"
-#include "Components/Core/PrefabInstanceComponent.h"
+#include "PrefabInstanceComponent.h"
 
 IMPLEMENT_SINGLETON(SceneManager)
 

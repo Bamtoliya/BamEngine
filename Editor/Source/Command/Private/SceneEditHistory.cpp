@@ -1,10 +1,10 @@
 ﻿#include "SceneEditHistory.h"
 #include "Scene.h"
-#include "CoreComponents.h"
+#include "WorldComponents.h"
 #include "RenderComponents.h"
 #include "PhysicsComponent.h"
 #include "TransformSystem.h"
-#include "Components/UI/UIInteractionStateComponent.h"
+#include "UIInteractionStateComponent.h"
 #include "ReflectionEditState.h"
 
 struct Editor::SceneEditSnapshot::Data

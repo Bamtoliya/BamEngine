@@ -11,10 +11,10 @@
 #include "TimeManager.h"
 #include "SceneManager.h"
 #include "Scene.h"
-#include "Components/Render/FogComponent.h"
-#include "Components/Render/SkyAtmosphereComponent.h"
-#include "Components/Render/VolumetricCloudComponent.h"
-#include "Components/Render/LightComponent.h"
+#include "FogComponent.h"
+#include "SkyAtmosphereComponent.h"
+#include "VolumetricCloudComponent.h"
+#include "LightComponent.h"
 
 namespace
 {

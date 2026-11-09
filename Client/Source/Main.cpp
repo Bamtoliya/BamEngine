@@ -11,8 +11,8 @@
 #include "Systems.h"
 #include "ModuleManager.h"
 #include "SceneManager.h"
-#include "Components/Render/CameraComponent.h"
-#include "Components/Core/FlagComponent.h"
+#include "CameraComponent.h"
+#include "FlagComponent.h"
 #include "CartPoleEnvironment.h"
 #include "RLServer.h"
 #include <glm/gtc/matrix_transform.hpp>

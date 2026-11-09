@@ -2,8 +2,8 @@
 #include "SplineComponent.h"
 #include "SplineMeshComponent.h"
 #include "SplineMeshDeformer.h"
-#include "CoreComponents.h"
-#include "Components/Render/StaticMeshRendererComponent.h"
+#include "WorldComponents.h"
+#include "StaticMeshRendererComponent.h"
 #include "Mesh.h"
 #include "Renderer.h"
 

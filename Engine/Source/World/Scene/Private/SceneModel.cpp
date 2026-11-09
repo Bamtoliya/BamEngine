@@ -1,7 +1,7 @@
 ﻿#include "Scene.h"
 #include "Model.h"
 #include "MaterialInterface.h"
-#include "CoreComponents.h"
+#include "WorldComponents.h"
 #include "LODGroupComponent.h"
 #include "StaticMeshRendererComponent.h"
 #include "SkinnedMeshRendererComponent.h"

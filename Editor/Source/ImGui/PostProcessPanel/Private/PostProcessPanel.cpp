@@ -7,7 +7,7 @@
 #include "Application.h"
 #include "SceneEditHistory.h"
 #include "PIEManager.h"
-#include "Components/Render/PostProcessComponent.h"
+#include "PostProcessComponent.h"
 #include "NotificationManager.h"
 
 namespace

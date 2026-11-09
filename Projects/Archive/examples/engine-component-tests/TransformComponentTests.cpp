@@ -4,8 +4,8 @@
 #include <archive/JsonArchive.h>
 #include <reflection/Reflection.h>
 #include <reflection_archive/ReflectionArchiveAdapter.h>
-#include "Components/TransformComponent.h"
-#include "Components/WorldTransformComponent.h"
+#include "TransformComponent.h"
+#include "WorldTransformComponent.h"
 #include "Adapters/GlmArchiveAdapter.h"
 
 #include <array>

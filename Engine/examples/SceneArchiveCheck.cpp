@@ -1,6 +1,6 @@
 #include "Scene.h"
 #include "SceneManager.h"
-#include "CoreComponents.h"
+#include "WorldComponents.h"
 #include "PhysicsComponent.h"
 #include "RenderComponents.h"
 #include "UIComponents.h"
@@ -9,7 +9,7 @@
 #include "TransformSystem.h"
 #include <archive/JsonArchive.h>
 #include <archive/BeveArchive.h>
-#include "Adapters/ResourceHandleArchiveAdapter.h"
+#include "ResourceHandleArchiveAdapter.h"
 #include "ResourceReference.h"
 #include <map>
 #include <cstring>

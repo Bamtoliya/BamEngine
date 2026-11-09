@@ -1,7 +1,7 @@
 ﻿#include "MaterialPreviewRenderer.h"
 #include "ResourceManager.h"
-#include "Components/Core/TransformComponent.h"
-#include "Components/Render/StaticMeshRendererComponent.h"
+#include "TransformComponent.h"
+#include "StaticMeshRendererComponent.h"
 #include "IconsFontAwesome7.h"
 
 namespace Editor

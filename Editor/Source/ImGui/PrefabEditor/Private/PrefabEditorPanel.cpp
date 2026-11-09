@@ -1,7 +1,7 @@
 ﻿#include "PrefabEditorPanel.h"
 #include "Scene.h"
 #include "Entity.h"
-#include "CoreComponents.h"
+#include "WorldComponents.h"
 #include "TransformSystem.h"
 #include "ReflectionPropertyDrawer.h"
 #include "FileDialogs.h"

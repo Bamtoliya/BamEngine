@@ -1,14 +1,14 @@
 #include "ReflectionRegistry.h"
 #include "BamEngine.gen.h"
-#include "CoreComponents.h"
+#include "WorldComponents.h"
 #include "Resources.h"
 #include "RenderComponents.h"
 #include "PhysicsComponent.h"
 #include "TransformSystem.h"
 #include "UIComponents.h"
 #include "Adapters/GlmArchiveAdapter.h"
-#include "Adapters/ResourceHandleArchiveAdapter.h"
-#include "Adapters/GraphValueArchiveAdapter.h"
+#include "ResourceHandleArchiveAdapter.h"
+#include "GraphValueArchiveAdapter.h"
 #include "BlendTree1D.h"
 
 #include <reflection_archive/ReflectionArchiveAdapter.h>

@@ -3,7 +3,7 @@
 #include "Application.h"
 #include "Entity.h"
 #include "Scene.h"
-#include "CoreComponents.h"
+#include "WorldComponents.h"
 #include "PhysicsComponent.h"
 #include "RenderComponents.h"
 #include "ResourceHandle.h"

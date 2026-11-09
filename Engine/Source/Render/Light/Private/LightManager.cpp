@@ -6,7 +6,7 @@
 #include "RHI.h"
 #include "SceneManager.h"
 #include "Scene.h"
-#include "Components/Render/LightComponent.h"
+#include "LightComponent.h"
 #include "ResourceManager.h"
 #include "Shader.h"
 #include "RHIPipeline.h"

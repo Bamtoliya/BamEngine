@@ -5,8 +5,8 @@
 #include "SceneManager.h"
 #include "Scene.h"
 #include "GraphSystem.h"
-#include "Components/Graph/GraphBindingComponent.h"
-#include "Components/Core/NameComponent.h"
+#include "GraphBindingComponent.h"
+#include "NameComponent.h"
 #include "ShortcutManager.h"
 
 void GraphPanel::InvalidateExecution()

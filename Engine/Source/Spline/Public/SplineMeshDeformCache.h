@@ -1,7 +1,7 @@
 ﻿#pragma once
 
 #include "Engine_Includes.h"
-#include "Structs/BoundingBox.h"
+#include "BoundingBox.h"
 #include "SplineMeshComponent.h"
 
 namespace Engine

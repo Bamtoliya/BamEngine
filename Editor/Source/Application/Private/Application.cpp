@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "Application.h"
 #include <SDL3/SDL.h>
 #include <archive/JsonArchive.h>
@@ -28,7 +28,7 @@
 #include "ModuleHotReloadManager.h"
 #include "TerrainComponent.h"
 #include "NotificationManager.h"
-#include "Components/Core/IDComponent.h"
+#include "IDComponent.h"
 #include "TerrainUtility.h"
 
 #include "SceneDocument.h"

@@ -1,7 +1,7 @@
 #include "EntityHierarchyView.h"
 #include "InputManager.h"
 #include "Scene.h"
-#include "CoreComponents.h"
+#include "WorldComponents.h"
 #include "RenderComponents.h"
 #include "UIComponents.h"
 #include "LocalizationManager.h"
@@ -11,7 +11,7 @@
 #include <fmt/format.h>
 #include "EntityClipboard.h"
 #include "ShortcutManager.h"
-#include "Components/Core/PrefabInstanceComponent.h"
+#include "PrefabInstanceComponent.h"
 #include "PrefabModeManager.h"
 #include "SelectionManager.h"
 #include "ReflectionInspectorSupport.h"

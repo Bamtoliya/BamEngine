@@ -1,5 +1,5 @@
 ﻿#include "Scene.h"
-#include "CoreComponents.h"
+#include "WorldComponents.h"
 #include "TransformSystem.h"
 #include "UIComponents.h"
 #include <glm/gtx/matrix_decompose.hpp>

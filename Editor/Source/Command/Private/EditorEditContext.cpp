@@ -3,7 +3,7 @@
 #include "SceneManager.h"
 #include "Scene.h"
 #include "Entity.h"
-#include "Components/Core/IDComponent.h"
+#include "IDComponent.h"
 #include "TerrainComponent.h"
 
 #pragma region Constructor&Destructor

@@ -4,7 +4,7 @@
 #include <limits>
 #include <stdexcept>
 #include <string>
-#include "Adapters/GraphValueArchiveAdapter.h"
+#include "GraphValueArchiveAdapter.h"
 #include <archive/JsonArchive.h>
 #include <string_view>
 #include <vector>

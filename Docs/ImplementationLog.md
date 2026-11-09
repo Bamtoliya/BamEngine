@@ -1,6 +1,14 @@
 # BamEngine Implementation Log
 
 This document tracks implementation details, architectural decisions, and technical debt.
+### [2026-11-09] 엔진 파일 내부 구성 기준과 에디터 헤더 경로 갱신
+
+- 범위는 엔진 소스 조직 지침과 에디터 소스·검사 코드의 include다.
+- [소스 조직 가이드 9절](SourceOrganizationGuidelines.md#9-헤더구현의-읽기-순서)에 객체 생명주기 상단 배치, 기능별 공개 구역, 헤더·구현 순서 대응, 헬퍼와 멤버 배치 기준을 기록했다. `SystemManager`는 검토 예제로 사용했으며 `PostProcessPipeline`을 비롯한 후보의 내부 재배치는 후속 작업이다.
+- 엔진 파일 이동에 맞춰 에디터의 41개 파일에서 include 83곳을 갱신했다. 컴포넌트 경로 61곳, `WorldComponents.h` 이름 21곳, `Rect.h` 경로 1곳이다.
+- 정적 확인에서 갱신한 이름마다 대응하는 엔진 공개 헤더가 하나씩 존재했고, 에디터 소스와 검사 코드에서 대상 이전 참조가 사라진 것을 확인했다.
+- 빌드와 CTest 실행 결과는 아직 없다. 에디터 타깃과 관련 검사로 컴파일·실행을 확인한다. 같은 이전 참조는 `Client` 2곳과 `Projects` 15곳에 남아 있다.
+
 
 ### [2026-11-09] 복합 비주얼 이펙트 시스템(Composite Visual Effect) 및 통합 저작 도구(VFXEditorPanel) 구축과 타임라인·인스펙터 UX 고도화
 

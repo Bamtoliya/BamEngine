@@ -3,7 +3,7 @@
 #include "CameraViewportPanel.h"
 #include "EditorCameraController.h"
 #include "IconsFontAwesome7.h"
-#include "Components/Core/TransformComponent.h"
+#include "TransformComponent.h"
 #include "EditorSettings.h"
 
 #pragma region Constructor&Destructor

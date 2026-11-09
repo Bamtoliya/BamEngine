@@ -2,7 +2,7 @@
 
 #include "SplineFrameTable.h"
 #include "Vertex.h"
-#include "Structs/BoundingBox.h"
+#include "BoundingBox.h"
 
 namespace Engine
 {

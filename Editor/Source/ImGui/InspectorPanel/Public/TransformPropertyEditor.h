@@ -1,7 +1,7 @@
 ﻿#pragma once
 
 #include "ReflectionEditState.h"
-#include "Components/Core/TransformComponent.h"
+#include "TransformComponent.h"
 
 #include <entt/entity/registry.hpp>
 #include <optional>

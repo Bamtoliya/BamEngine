@@ -1,7 +1,7 @@
 ﻿#pragma once
 
 #include "Scene.h"
-#include "CoreComponents.h"
+#include "WorldComponents.h"
 #include "Adapters/GlmArchiveAdapter.h"
 
 #pragma region Constructor&Destructor

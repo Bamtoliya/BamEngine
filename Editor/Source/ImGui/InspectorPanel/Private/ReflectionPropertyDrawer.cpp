@@ -20,7 +20,7 @@
 #include "ResourcePicker.h"
 #include "SceneManager.h"
 #include "Scene.h"
-#include "CoreComponents.h"
+#include "WorldComponents.h"
 #pragma push_macro("new")
 #undef new
 #include <imgui_internal.h>

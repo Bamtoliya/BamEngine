@@ -1,11 +1,11 @@
 ﻿#include "PhysicsSystem.h"
 #include "Scene.h"
 #include "PhysicsComponent.h"
-#include "Components/Core/TransformComponent.h"
+#include "TransformComponent.h"
 #include "Collision.h"
 #include "SystemManager.h"
 #include "TransformSystem.h"
-#include "Components/Core/WorldTransformComponent.h"
+#include "WorldTransformComponent.h"
 
 namespace
 {

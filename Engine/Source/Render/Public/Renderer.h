@@ -8,7 +8,7 @@
 #include "FrustumCuller.h"
 #include "RenderCommands.h"
 #include "CameraBuffer.h"
-#include "Components/Render/SkyAtmosphereComponent.h"
+#include "SkyAtmosphereComponent.h"
 
 struct RHIPipelineDesc;
 

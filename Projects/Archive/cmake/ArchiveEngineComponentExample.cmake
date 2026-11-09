@@ -1,5 +1,14 @@
-set(_engine_core_public "${CMAKE_CURRENT_SOURCE_DIR}/../../Engine/Source/Core/Public")
-set(_engine_archive_public "${CMAKE_CURRENT_SOURCE_DIR}/../../Engine/Source/Core/Archive/Public")
+set(_engine_source "${CMAKE_CURRENT_SOURCE_DIR}/../../Engine/Source")
+set(_engine_entity_public "${_engine_source}/World/Entity/Public")
+set(_engine_transform_public "${_engine_source}/World/Transform/Public")
+set(_engine_component_include_dirs
+    "${_engine_source}/Core/Public"
+    "${_engine_source}/Core/Archive/Public"
+    "${_engine_source}/Core/Interface/Public"
+    "${_engine_source}/Core/Reflection/Public"
+    "${_engine_entity_public}"
+    "${_engine_transform_public}"
+)
 
 if(NOT TARGET glm::glm-header-only)
     find_package(glm CONFIG REQUIRED)
@@ -24,7 +33,7 @@ file(GLOB_RECURSE _archive_engine_component_test_sources CONFIGURE_DEPENDS
 
 add_executable(ArchiveEngineComponentExample examples/EngineComponentExample.cpp ${_archive_engine_component_test_sources})
 
-target_include_directories(ArchiveEngineComponentExample PRIVATE "${_engine_core_public}" "${_engine_archive_public}")
+target_include_directories(ArchiveEngineComponentExample PRIVATE ${_engine_component_include_dirs})
 
 target_link_libraries(ArchiveEngineComponentExample PRIVATE
     ReflectionArchive::Adapter glm::glm-header-only EnTT::EnTT
@@ -36,13 +45,13 @@ set_target_properties(ArchiveEngineComponentExample PROPERTIES CXX_EXTENSIONS OF
 reflection_generate(
     TARGET ArchiveEngineComponentExample MODULE EngineComponents
     HEADERS
-        "${_engine_core_public}/Components/NameComponent.h"
-        "${_engine_core_public}/Components/TagComponent.h"
-        "${_engine_core_public}/Components/IDComponent.h"
-        "${_engine_core_public}/Components/FlagComponent.h"
-        "${_engine_core_public}/Components/TransformComponent.h"
-        "${_engine_core_public}/Components/WorldTransformComponent.h"
-    INCLUDE_DIRECTORIES "${_engine_core_public}" ${_engine_glm_include_dirs}
+        "${_engine_entity_public}/NameComponent.h"
+        "${_engine_entity_public}/TagComponent.h"
+        "${_engine_entity_public}/IDComponent.h"
+        "${_engine_entity_public}/FlagComponent.h"
+        "${_engine_transform_public}/TransformComponent.h"
+        "${_engine_transform_public}/WorldTransformComponent.h"
+    INCLUDE_DIRECTORIES ${_engine_glm_include_dirs}
     COMPILE_OPTIONS ${_engine_glm_parser_options}
 )
 

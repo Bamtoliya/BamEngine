@@ -1,5 +1,5 @@
 ﻿#include "Scene.h"
-#include "CoreComponents.h"
+#include "WorldComponents.h"
 #include "TransformSystem.h"
 #include "TransformPropertyEditor.h"
 #include "SceneEditHistory.h"

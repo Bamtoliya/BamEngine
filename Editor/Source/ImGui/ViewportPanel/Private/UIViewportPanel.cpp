@@ -3,7 +3,7 @@
 #include "ShortcutManager.h"
 #include "Application.h"
 #include "SceneManager.h"
-#include "CoreComponents.h"
+#include "WorldComponents.h"
 #include "SelectionManager.h"
 #include "EntityFactory.h"
 #include "ImGuiManager.h"

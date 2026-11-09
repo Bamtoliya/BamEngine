@@ -1,7 +1,7 @@
 ﻿#include "EntityClipboard.h"
 #include "Scene.h"
 #include "Entity.h"
-#include "CoreComponents.h"
+#include "WorldComponents.h"
 #include "SelectionManager.h"
 #include "Application.h"
 #include "SceneEditHistory.h"

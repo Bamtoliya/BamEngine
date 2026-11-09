@@ -2,7 +2,7 @@
 
 #include "ResourceEditorInterface.h"
 #include "ParticleEffect.h"
-#include "Components/Render/ParticleEffectComponent.h"
+#include "ParticleEffectComponent.h"
 #include "PreviewViewportWidget.h"
 #include "CommandHistory.h"
 

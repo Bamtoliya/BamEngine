@@ -1,10 +1,10 @@
 ﻿#include "Scene.h"
-#include "CoreComponents.h"
+#include "WorldComponents.h"
 #include "TransformSystem.h"
 #include "UIComponents.h"
 #include <archive/ArchiveInterface.h>
 #include <reflection_archive/ReflectionArchiveAdapter.h>
-#include "Adapters/ResourceHandleArchiveAdapter.h"
+#include "ResourceHandleArchiveAdapter.h"
 
 namespace
 {

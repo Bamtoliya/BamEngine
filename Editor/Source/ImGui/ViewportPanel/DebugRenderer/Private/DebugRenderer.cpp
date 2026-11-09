@@ -6,9 +6,9 @@
 #include "PipelineManager.h"
 #include "RenderTargetManager.h"
 #include "SceneManager.h"
-#include "CoreComponents.h"
+#include "WorldComponents.h"
 #include "PhysicsComponent.h"
-#include "Components/Camera/SpringArmComponent.h"
+#include "SpringArmComponent.h"
 #include "TransformSystem.h"
 #include "Mesh.h"
 

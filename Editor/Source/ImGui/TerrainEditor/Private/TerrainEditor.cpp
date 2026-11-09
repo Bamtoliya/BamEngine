@@ -3,7 +3,7 @@
 #include "SceneManager.h"
 #include "SelectionManager.h"
 #include "TerrainComponent.h"
-#include "CoreComponents.h"
+#include "WorldComponents.h"
 #include "Scene.h"
 #include "imgui.h"
 #include "FileDialogs.h"

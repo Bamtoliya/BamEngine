@@ -22,7 +22,7 @@
 
 #include "SamplerManager.h"
 #include "SceneManager.h"
-#include "CoreComponents.h"
+#include "WorldComponents.h"
 #include "PickingManager.h"
 
 #include "TimeManager.h"

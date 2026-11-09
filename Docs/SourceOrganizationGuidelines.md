@@ -1,6 +1,6 @@
 # 소스 분류·의존성과 파일 조직 가이드
 
-- 작성일: 2026-10-24 (최종 갱신: 2026-11-07)
+- 작성일: 2026-10-24 (최종 갱신: 2026-11-09)
 - 상태: 적용 기준 / 2026-11-07 `Core` 하위 계층(`Interface`, `Module`, `Reflection`), `Render`(`Vertex`, `Picking`), `Editor/ImGui/PrefabEditor`, `Tools/` 일원화 및 미사용 선언 파일 정리를 반영했다. 남은 도메인별 서비스·리소스 이관은 점진적으로 적용한다.
 - 공통 지침: [EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md)
 - 작업 순서: [DevelopmentPriorities.md](DevelopmentPriorities.md)
@@ -152,14 +152,33 @@ STB_IMAGE_IMPLEMENTATION 같은 구현 생성 헤더를 표준 헤더와 함께 
 
 ## 9. 헤더·구현의 읽기 순서
 
-파일의 역할에 맞춰 관련 타입·생성/종료·공개 기능·내부 처리·멤버 상태의 흐름을 정한다.
-기능별 영역과 그 안의 함수 순서를 헤더와 구현에서 대응시킨다.
-여러 구현 파일로 책임 있게 나눈 SceneArchive·SceneHierarchy 등을 순서 통일 때문에 합치지 않는다.
-MyRegion 같은 임시 영역명과 의미 없는 반복 구분을 정리하고 실제 책임을 이름에 드러낸다.
+### 9.1 공통 구성
 
-멤버는 스트림·인덱스·경계·캐시처럼 관련 상태를 모으고 타입 정의·함수 선언과 섞지 않는다.
-멤버 이동은 초기화 순서·객체 배치·반사 정보·저장 형식·GPU 전달 배치에 미치는 영향을 확인한 뒤 진행한다.
-함수 선언 순서 정리와 이진 헤더·상수 버퍼 필드 재배치를 같은 가독성 수정으로 취급하지 않는다.
+1. 파일 앞에는 include, 전방 선언, 공개 계약을 읽는 데 필요한 설정·결과 타입을 둔다. PCH와 include는 8절의 타깃별 기준을 따른다.
+2. 클래스의 **객체 생명주기**를 상단에서 찾을 수 있게 한다. 생성자·소멸자, `Create`, `Initialize`, `Free`는 접근 수준이 달라도 같은 기능 구역에 둔다. 객체 자체의 해제와 관리 중인 대상 목록을 비우는 API는 역할에 맞는 구역에서 각각 찾을 수 있게 한다.
+3. 공개 API는 등록·조회, 설정, 프레임 실행, 질의, 저장·복원 등 호출 목적과 사용 흐름을 기준으로 묶는다. 반복되는 `public:`은 기능 구역의 경계를 드러낼 때 사용한다. 짧은 구역은 빈 줄로 구분하고, 여러 기능이 있는 클래스에는 책임을 설명하는 구역 이름을 붙인다.
+4. 내부 함수와 상태도 맡은 기능이 드러나게 구성한다. 자원 소유권, 실행 상태, 캐시처럼 함께 읽어야 할 멤버는 주석과 구역으로 구분한다. 멤버 선언 순서를 바꾸려면 초기화 순서, 객체 배치, 리플렉션, 저장 형식, GPU 전달 계약을 먼저 확인한다. 가상 함수 선언 순서와 공개 ABI에 영향을 주는 변경도 별도로 검토한다.
+5. `.cpp`는 헤더의 기능 구역을 따라가고, `.inl`은 대응하는 템플릿 선언 순서에 맞춘다. 한 구현 파일에서만 사용하는 헬퍼는 해당 구현의 사용 지점이나 책임 구역 가까이에 둔다. 여러 구현 파일이 동일한 규칙을 공유할 때는 그 규칙을 소유하는 기능에 공통 함수를 둔다.
+
+매니저는 생명주기 뒤에 등록·조회, 관리 대상 준비, 실행, 대상 정리를 둔다. 시스템은 생명주기 뒤에 프레임 콜백과 외부 기능 API를 구분한다. 리소스는 생명주기 뒤에 로드·저장, 데이터 조회, 런타임 자원 연동을 구분한다. 컴포넌트와 값 타입은 핵심 데이터와 유효 조건을 먼저 보여주고 관련 연산을 가까이 둔다.
+
+### 9.2 적용 범위와 확인 방법
+
+- 첫 변경 단위는 한 클래스의 헤더와 대응 구현이다. 구역 이름과 선언·정의 배치부터 정리하고, 함수 추출·include 축소·멤버 재배치·동작 변경은 각각의 영향 범위를 따로 확인한다.
+- 함수 정의를 옮길 때는 본문을 단위로 유지한다. 초기화·해제, 프레임 호출, 상태 반영과 실패 처리 순서가 그대로인지 확인한다. 예를 들어 고정 갱신과 후속 고정 갱신의 두 순회는 기존 단계 경계를 유지한다.
+- `SceneArchive.cpp`·`SceneHierarchy.cpp`처럼 책임별로 나뉜 구현은 파일명과 헤더의 기능 구역을 서로 대응시킨다. `MyRegion` 같은 이름은 실제 책임을 설명하는 이름으로 갱신한다.
+- 확인 결과에는 정적 대조, 사용자가 실행한 빌드·검사, 확인이 남은 실행 흐름을 구분해서 기록한다.
+
+### 9.3 적용 후보
+
+아래는 재배치 제안 목록이다. `SystemManager`는 검토 예제로 사용했으며, 각 파일의 내부 재배치는 적용 대상으로 남아 있다.
+
+- `SystemManager` — 객체 생명주기인 `Initialize`·`Free`를 위에서 찾고, 시스템 등록·조회와 `ClearSystems`는 관리 대상에 대한 API 구역에서 찾도록 한다. `.inl`의 등록·제거·조회 순서와 헤더의 선언을 맞춘다.
+- `PostProcessPipeline` — 첫 적용 후보. `Initialize`와 `Free`의 정의를 한 구역에 모으고 효과 관리, 프레임 실행, 저장·복원을 구분한다.
+- `InputManager`·`Shader` — 입력 이벤트 수집과 프레임 갱신을 장치 조회·입력 액션과 구분한다. 셰이더는 메타데이터 조회, RHI 연결, 로드 후처리 구역을 구분한다.
+- `PhysicsSystem` — 생명주기와 공개 설정 함수를 큰 헬퍼 구역과 분리하고, 고정 갱신·충돌 질의·트리거를 헤더와 구현에서 대응시킨다.
+- `DirectX12RHI` — 텍스처 전송·읽기와 GPU 동기화·지연 해제 구역을 명시한다. 바인딩과 가상 API 계약을 보존하며 구역 이름과 구현 정의의 배치부터 검토한다.
+- `Renderer`·`ParticleSystem` — 프레임 진입점을 내부 드로우·시뮬레이션과 구분한다. 파티클의 씬 단위 API와 개별 이펙트 갱신 API도 별도 구역에서 찾을 수 있게 한다.
 
 ## 10. 현재 코드의 이관 현황과 남은 적용 경계
 
@@ -172,16 +191,22 @@ MyRegion 같은 임시 영역명과 의미 없는 반복 구분을 정리하고 
 - **미사용 선언·빈 파일 정리**: 구현 및 참조가 없는 `Engine/Source/Physics/Public/PhysicsManager.h`, `Engine/Source/System/Time/Public/TimerManager.h`, `Editor/Source/AssetManager/Importer/Public/AudioImporter.h`, `MaterialImporter.h`, `Editor/Source/ImGui/InspectorPanel/Public/SpriteInspector.h`, `Editor/Source/Rendering/PostProcess/Public/PostProcessInterface.h`, `Editor/Source/ImGui/ViewportPanel`의 빈 `EditorViewportPanel.h/.cpp`, `Editor/Source/ImGui/Managers` 내 3바이트 빈 파일 8개(`MangerInspectorInterface.*` 등) 및 루트 빈 폴더(`Bin/`, `Server/`, `Shared/`, `Editor/Source/Generated/`)를 제거했다.
 - **Editor 프리팹 패널 통합 및 Tools 일원화**: `Editor/Source/ImGui/ResourceEditor`의 `PrefabEditorPanel.h/.cpp`를 `Editor/Source/ImGui/PrefabEditor/Public|Private/`로 통합하고, 최상위 `Utility/`의 코드젠·감사·보조 스크립트를 `Tools/`(`Tools/Converters/`, `Tools/Codegen/`, `Tools/Audit/`, `Tools/Scripts/`, `Tools/VSSnippets/`)로 일원화했다.
 
+### 2026-11-09 도메인별 소스 이관
+
+- 공용 형상·경로·델리게이트는 각각 `Core/Geometry`, `Core/Path`, `Core/Event`에 둔다. 컴포넌트, 리소스와 시스템은 World·Input·Camera·Animation·Render·Physics·Audio·Graph·Sprite·Tilemap·VFX 등 실제 기능 소유 폴더로 옮겼다.
+- `WorldComponents.h`와 도메인별 묶음 헤더를 사용한다. `World/System`에 스케줄러와 시스템 계약을 두고, `SystemManager.inl`에 템플릿 정의를 분리한다.
+- Editor·Client·GameModule·검사 타깃의 include와 Archive 예제·Graph 검사에서 경로를 직접 참조하는 CMake 설정을 대조했다. 새 경로를 사용한 빌드와 리플렉션 생성은 실행 검증이 필요하다.
+
 ### 남은 점진적 검토 후보
-- **Resource/Shader의 공통 타입·반사 처리**: RHI와 리소스가 사용할 Render 공통 계약을 검토한다.
+- **Render/Shader의 공통 타입·반사 처리**: RHI와 리소스가 사용할 Render 공통 계약을 검토한다.
   `ReflectSPIRV`의 SDLGPU 사용을 보존하며 반사 전체를 Editor로 옮기지 않는다.
 - **System의 서비스와 ECS 처리**: Input·Time·Audio 서비스는 기능 확장에 맞춰 도메인 소유로 분리할 수 있으며 공통 스케줄러만 공통 실행 기반에 둔다.
-- **System/Terrain의 TerrainUtility**: 공용 지형 계산·브러시·이미지 입출력과 ECS 갱신의 책임을 구분한다.
+- **Terrain의 TerrainUtility**: 공용 지형 계산·브러시·이미지 입출력과 ECS 갱신의 책임을 구분한다.
   분류 정리를 이유로 필요한 처리까지 Editor 전용으로 만들지 않는다.
-- **Interface의 Delegate와 EventBus**: 이벤트 기능 확장 시 관계를 반영한다. Handle·Result·EnumBit은 `Core/Interface/Public`에서 기반 계약으로 유지한다.
+- **Core/Event의 Delegate와 EventBus**: 이벤트 기능 확장 시 관계를 반영한다. Handle·Result·EnumBit은 `Core/Interface/Public`에서 기반 계약으로 유지한다.
 
 파일이 여러 영역에 있다는 사실만으로 결함으로 판단하지 않는다.
-현재 Resource/Model의 에셋 데이터와 Scene의 책임별 구현 파일은 관련 기능을 실제로 확장할 때 재평가한다.
+현재 Model의 에셋 데이터와 Scene의 책임별 구현 파일은 관련 기능을 실제로 확장할 때 재평가한다.
 
 ## 11. 이관 절차와 검증
 

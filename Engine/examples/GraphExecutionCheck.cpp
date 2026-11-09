@@ -7,7 +7,7 @@
 #include <limits>
 #include <stdexcept>
 #include "TransformSystem.h"
-#include "Components/Core/TransformComponent.h"
+#include "TransformComponent.h"
 
 namespace
 {

@@ -4,7 +4,7 @@
 #include <archive/JsonArchive.h>
 #include <reflection/Reflection.h>
 #include <reflection_archive/ReflectionArchiveAdapter.h>
-#include "Components/NameComponent.h"
+#include "NameComponent.h"
 
 #include <filesystem>
 #include <iostream>

@@ -1,5 +1,5 @@
 ﻿#include "UILayout.h"
-#include "CoreComponents.h"
+#include "WorldComponents.h"
 
 namespace
 {

@@ -3,8 +3,8 @@
 #include "ResourceManager.h"
 #include "AssetManager.h"
 #include "Scene.h"
-#include "Components/Core/TransformComponent.h"
-#include "Components/Render/AnimatorComponent.h"
+#include "TransformComponent.h"
+#include "AnimatorComponent.h"
 #include "IconsFontAwesome7.h"
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>

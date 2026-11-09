@@ -13,7 +13,7 @@
 #include "Scene.h"
 
 #include "EntityFactory.h"
-#include "CoreComponents.h"
+#include "WorldComponents.h"
 #include "ToolBar.h"
 
 #include "FileDialogs.h"
@@ -21,7 +21,7 @@
 #include "NotificationManager.h"
 #include "EntityClipboard.h"
 #include "PrefabModeManager.h"
-#include "Components/Core/PrefabInstanceComponent.h"
+#include "PrefabInstanceComponent.h"
 #include "SceneViewportPanel.h"
 #include "InspectorPanel.h"
 #include "UIViewportPanel.h"

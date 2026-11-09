@@ -1,10 +1,10 @@
 ﻿#include "Scene.h"
-#include "Components/Core/NameComponent.h"
-#include "Components/Core/TransformComponent.h"
+#include "NameComponent.h"
+#include "TransformComponent.h"
 #include "ReflectionRegistry.h"
 #include <archive/JsonArchive.h>
 #include <archive/BeveArchive.h>
-#include "CoreComponents.h"
+#include "WorldComponents.h"
 #include "RenderComponents.h"
 #include "PhysicsComponent.h"
 
@@ -13,7 +13,7 @@
 #include <string>
 #include <cmath>
 
-#include "Components/Core/WorldTransformComponent.h"
+#include "WorldTransformComponent.h"
 #include "Adapters/GlmArchiveAdapter.h"
 
 namespace

@@ -1,6 +1,6 @@
 ﻿#include "SceneEditHistory.h"
 #include "Scene.h"
-#include "CoreComponents.h"
+#include "WorldComponents.h"
 #include "RenderComponents.h"
 #include "PhysicsComponent.h"
 #include "UIComponents.h"

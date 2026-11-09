@@ -2,7 +2,7 @@
 #include "ReflectionRegistry.h"
 #include <archive/JsonArchive.h>
 #include <utility>
-#include "CoreComponents.h"
+#include "WorldComponents.h"
 #include "TransformSystem.h"
 
 #include <iostream>

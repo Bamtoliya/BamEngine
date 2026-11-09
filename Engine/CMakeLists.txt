@@ -1,4 +1,4 @@
-﻿project(Engine)
+project(Engine)
 
 # ==============================================================================
 # 1. CMake Modules & Dependencies (모듈 및 종속성 세팅)
