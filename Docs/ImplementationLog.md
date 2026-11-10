@@ -2,6 +2,12 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-11] 콘텐츠 브라우저 스프라이트 썸네일 조회 재사용
+
+- `ContentBrowserPanel::DrawGridItem()`은 `AssetCache::GetThumbnail()`에서 텍스처와 스프라이트 핸들을 함께 받는다. `ContentBrowserGridItem::DrawThumbnail()`은 핸들로 현재 UV를 읽고, 스프라이트를 찾지 못하면 기존 파일 경로와 리소스 키 조회를 사용한다. 비교용 환경 변수와 계측 분기는 제거했다.
+- 사용자가 Release Editor에서 `Tilemap` 폴더의 공유 시트 스프라이트 234개를 대상으로 교차 비교했다. 그리드 CPU p50은 `full` 0.498–0.502 ms, `cached-sprite` 0.314–0.318 ms로 약 37% 감소했다. 전체 프레임의 p95·p99는 실행별 편차가 있었고 GPU 시간은 계측하지 않았다.
+- 계측 제거 전 일반 실행에서 계측 로그 미출력, 스프라이트 영역 표시와 수정 후 갱신을 사용자 확인했다. 제거 후 소스에서 계측 참조가 사라진 것을 확인했다. 제거 후 Release 빌드·실행과 텍스처 교체, 파일 추가·삭제, 검색·범위 선택은 별도 검증 항목이다. [ImGui 개발 계획](ImGuiDevelopmentPlan.md#콘텐츠-브라우저에서-썸네일-표시-중-지속되는-프레임-저하)
+
 ### [2026-11-10] 공용 에디터 DLL 플러그인 기반
 
 - `PluginHost`가 `Plugins.txt`에서 개발용 타깃을 읽고, 빌드 성공 뒤 이미 활성화된 패널 DLL에 리로드를 요청한다. Probe DLL은 `BamGetPluginV1`에서 두 패널을 반환하고, 두 패널은 하나의 모듈을 공유한다. Sprite는 기존 `EditorResourcePlugins.txt`와 편집 세션 경로를 사용한다.

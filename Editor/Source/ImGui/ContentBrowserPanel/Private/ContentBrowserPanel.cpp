@@ -689,14 +689,16 @@ void ContentBrowserPanel::DrawGridItem(const filesystem::directory_entry& direct
 {
 	const auto& path = directoryEntry.path();
 
-	ImTextureID thumbnailTexID = 0;
+	ImTextureID thumbnailTexID{};
+	Engine::Handle thumbnailSpriteHandle{};
 	if (ImGui::IsRectVisible(ImVec2(m_ThumbnailSize, m_ThumbnailSize)) && !directoryEntry.is_directory())
 	{
-		thumbnailTexID = ImGuiManager::Get().GetImGuiTextureID(AssetCache::Get().GetThumbnail(path));
+		auto* texture = AssetCache::Get().GetThumbnail(path, &thumbnailSpriteHandle);
+		thumbnailTexID = ImGuiManager::Get().GetImGuiTextureID(texture);
 	}
 
 	const auto& activeRoot = GetActiveRootForPath(path);
-	const bool keepAlive = ContentBrowserGridItem::Draw(directoryEntry, activeRoot, thumbnailTexID,
+	const bool keepAlive = ContentBrowserGridItem::Draw(directoryEntry, activeRoot, thumbnailTexID, thumbnailSpriteHandle,
 		m_ThumbnailSize, itemId, m_SelectedGridIds.contains(itemId), m_RenamingPath, m_RenameBuffer,
 		sizeof(m_RenameBuffer), m_CurrentDirectory, m_SearchBuffer);
 

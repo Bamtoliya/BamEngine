@@ -395,7 +395,7 @@ float ContentBrowserGridItem::GetNameBoxHeight()
 }
 
 bool ContentBrowserGridItem::Draw(const std::filesystem::directory_entry& directoryEntry,
-	const std::filesystem::path& rootPath, ImTextureID thumbnailTexID, f32 thumbnailSize,
+	const std::filesystem::path& rootPath, ImTextureID thumbnailTexID, Engine::Handle thumbnailSpriteHandle, f32 thumbnailSize,
 	ImGuiSelectionUserData itemId, bool selected, std::filesystem::path& outRenamingPath,
 	char* renameBuffer, size_t renameBufferSize, std::filesystem::path& currentDirectory, char* searchBuffer)
 {
@@ -440,7 +440,7 @@ bool ContentBrowserGridItem::Draw(const std::filesystem::directory_entry& direct
 	}
 
 	if (visible)
-		DrawThumbnail(directoryEntry, thumbnailTexID, thumbnailSize, tileMin);
+		DrawThumbnail(directoryEntry, thumbnailTexID, thumbnailSpriteHandle, thumbnailSize, tileMin);
 
 	if (outRenamingPath == path)
 	{
@@ -463,7 +463,7 @@ bool ContentBrowserGridItem::Draw(const std::filesystem::directory_entry& direct
 }
 
 void ContentBrowserGridItem::DrawThumbnail(const std::filesystem::directory_entry& directoryEntry,
-	ImTextureID thumbnailTexID, float thumbnailSize, const ImVec2& cursorPos)
+	ImTextureID thumbnailTexID, Engine::Handle thumbnailSpriteHandle, float thumbnailSize, const ImVec2& cursorPos)
 {
 	const AssetVisualDesc visual = DescribeAssetVisual(directoryEntry.path(), directoryEntry.is_directory());
 	ImDrawList* drawList = ImGui::GetWindowDrawList();
@@ -494,17 +494,24 @@ void ContentBrowserGridItem::DrawThumbnail(const std::filesystem::directory_entr
 		if (lowerFilename.ends_with(".bamsprite") || lowerFilename.ends_with(".bamsprite.json"))
 		{
 			auto& rm = Engine::ResourceManager::Get();
-			Engine::Handle handle = rm.FindHandleByFilePath(path);
-			if (!handle.IsValid())
+			auto* sprite = thumbnailSpriteHandle.IsValid()
+				? dynamic_cast<Engine::Sprite*>(rm.GetResource(thumbnailSpriteHandle))
+				: nullptr;
+
+			if (!sprite)
 			{
-				const std::wstring relPath = Engine::PlatformPath::ToProjectRelative(path).wstring();
-				handle = rm.FindHandleByKey(relPath);
-				if (!handle.IsValid() && lowerFilename.ends_with(".bamsprite.json"))
+				auto handle = rm.FindHandleByFilePath(path);
+				if (!handle.IsValid())
 				{
-					handle = rm.FindHandleByKey(relPath.substr(0, relPath.size() - 5));
+					const auto relPath = Engine::PlatformPath::ToProjectRelative(path).wstring();
+					handle = rm.FindHandleByKey(relPath);
+					if (!handle.IsValid() && lowerFilename.ends_with(".bamsprite.json"))
+						handle = rm.FindHandleByKey(relPath.substr(0, relPath.size() - 5));
 				}
+				sprite = dynamic_cast<Engine::Sprite*>(rm.GetResource(handle));
 			}
-			if (auto* sprite = dynamic_cast<Engine::Sprite*>(rm.GetResource(handle)))
+
+			if (sprite)
 			{
 				const vec4 uv = sprite->GetUVTransform();
 				if (std::isfinite(uv.x) && std::isfinite(uv.y) && std::isfinite(uv.z) && std::isfinite(uv.w) && uv.z > 0.0f && uv.w > 0.0f)

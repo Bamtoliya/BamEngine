@@ -7,13 +7,13 @@ class ContentBrowserGridItem
 {
 public:
 	static bool Draw(const std::filesystem::directory_entry& directoryEntry, const std::filesystem::path& rootPath,
-		ImTextureID thumbnailTexID, f32 thumbnailSize, ImGuiSelectionUserData itemId, bool selected,
+		ImTextureID thumbnailTexID, Engine::Handle thumbnailSpriteHandle, f32 thumbnailSize, ImGuiSelectionUserData itemId, bool selected,
 		std::filesystem::path& outRenamingPath, char* renameBuffer, size_t renameBufferSize,
 		std::filesystem::path& currentDirectory, char* searchBuffer);
 	static float GetNameBoxHeight();
 
 private:
-	static void DrawThumbnail(const std::filesystem::directory_entry& directoryEntry, ImTextureID thumbnailTexID,
+	static void DrawThumbnail(const std::filesystem::directory_entry& directoryEntry, ImTextureID thumbnailTexID, Engine::Handle thumbnailSpriteHandle,
 		float thumbnailSize, const ImVec2& tileMin);
 	static void ContextMenu(const std::filesystem::path& path, std::filesystem::path& outRenamingPath, char* renameBuffer, size_t renameBufferSize, std::filesystem::path& currentDirectory, char* searchBuffer);
 	static void ToolTip(const std::filesystem::directory_entry& directoryEntry);
