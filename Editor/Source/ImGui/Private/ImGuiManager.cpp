@@ -42,6 +42,7 @@
 #include "TransformComponent.h"
 #include "LightComponent.h"
 #include "PostProcessComponent.h"
+#include "PluginDiscovery.h"
 
 #pragma region Imgui Header
 #include "imgui.h"
@@ -211,6 +212,7 @@ void ImGuiManager::Free()
 	for (auto& panel : m_ImGuiPanels)
 		Safe_Release(panel);
 	m_ImGuiPanels.clear();
+	m_PluginHost.Clear();
 
 	if (m_RendererBackendInitialized)
 	{
@@ -257,6 +259,7 @@ void ImGuiManager::Free()
 
 void ImGuiManager::Update(f32 dt)
 {
+	m_PluginHost.Update(*this);
 	auto& settings = EditorSettingsService::Get();
 	settings.ProcessPendingViewportResolutionChange();
 
@@ -790,6 +793,11 @@ EResult ImGuiManager::CreateDefaultPanels()
 
 	if (const EResult result = CreateResourceEditors(); result != EResult::Success)
 		return result;
+
+	const auto& settings = EditorSettingsService::Get();
+	m_PluginHost.Initialize(Engine::PlatformPath::GetExecutableDirectory(), settings.GetProjectRoot(),
+		settings.GetPreferencesPath());
+
 	if (!InitializePanel(new PluginManagerPanel()))
 		return EResult::Fail;
 
@@ -814,24 +822,10 @@ EResult ImGuiManager::CreateResourceEditors()
 		!initializeClosed(new VFXEditorPanel()))
 		return EResult::Fail;
 
-	std::ifstream catalog(Engine::PlatformPath::GetExecutableDirectory() / "EditorResourcePlugins.txt");
-	std::string line;
-	while (std::getline(catalog, line))
+	const auto catalog = Engine::PlatformPath::GetExecutableDirectory() / "EditorResourcePlugins.txt";
+	for (const auto& entry : ReadPluginDevelopmentList(catalog))
 	{
-		if (line.empty())
-			continue;
-		const auto separator = line.find('|');
-		const auto target = line.substr(0, separator);
-		if (separator == std::string::npos || separator + 1 == line.size() || target.empty() ||
-			target.find_first_not_of("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-") !=
-				std::string::npos || GetPluginResourceEditor(target))
-		{
-			EDITOR_LOG_WARN("Invalid or duplicate resource plugin entry: {}", line);
-			continue;
-		}
-
-		const auto path = std::filesystem::u8path(line.substr(separator + 1));
-		auto* plugin = new PluginResourceEditor(target, path);
+		auto* plugin = new PluginResourceEditor(entry.Target, entry.SourceDirectory);
 		if (initializeClosed(plugin))
 			m_PluginResourceEditors.push_back(plugin);
 	}

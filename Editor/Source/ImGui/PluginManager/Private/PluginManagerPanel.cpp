@@ -13,8 +13,28 @@
 #include <imgui.h>
 #include <algorithm>
 #include <sstream>
-#include "PluginPanel.h"
 #include "PluginResourceEditor.h"
+
+namespace
+{
+	ModuleBuildManager* FindBuilderForPluginItem(const PluginModuleItem& item)
+	{
+		if (!HotReloadManager::IsCreated())
+			return nullptr;
+
+		auto& reloadManager = HotReloadManager::Get();
+		if (item.IsGameModule)
+			return &reloadManager.GetModuleBuilder();
+
+		if (item.HostIndex)
+		{
+			const auto& entry = ImGuiManager::Get().GetPluginHost().GetEntry(*item.HostIndex);
+			return entry.Development ? reloadManager.GetPluginBuilder(entry.Development->Target) : nullptr;
+		}
+
+		return item.IsResourcePlugin ? reloadManager.GetPluginBuilder(item.Id) : nullptr;
+	}
+}
 
 BEGIN(Editor)
 
@@ -57,6 +77,21 @@ void PluginManagerPanel::InitModuleList()
 		item.Icon = ICON_FA_PUZZLE_PIECE;
 		item.Category = EPluginCategory::EditorTools;
 		item.IsResourcePlugin = true;
+		m_Modules.push_back(std::move(item));
+	}
+
+	const auto& host = ImGuiManager::Get().GetPluginHost();
+	for (std::size_t index = 0; index < host.GetCount(); ++index)
+	{
+		const auto& entry = host.GetEntry(index);
+
+		PluginModuleItem item;
+		item.Id = entry.Id;
+		item.DisplayName = entry.DisplayName;
+		item.Version = entry.Version;
+		item.Icon = ICON_FA_PUZZLE_PIECE;
+		item.Category = EPluginCategory::EditorTools;
+		item.HostIndex = index;
 		m_Modules.push_back(std::move(item));
 	}
 
@@ -149,7 +184,13 @@ EPluginStatus PluginManagerPanel::DetermineModuleStatus(const PluginModuleItem& 
 {
 	if (item.IsResourcePlugin)
 	{
-		const auto* builder = HotReloadManager::Get().GetEditorPluginBuilder(item.Id);
+		if (item.HostIndex)
+		{
+			const auto status = ImGuiManager::Get().GetPluginHost().GetStatus(*item.HostIndex);
+			return status.IsLoaded ? EPluginStatus::Loaded : EPluginStatus::Unloaded;
+		}
+
+		const auto* builder = HotReloadManager::Get().GetPluginBuilder(item.Id);
 		if (builder && builder->IsCompiling())
 			return EPluginStatus::Compiling;
 		if (builder && builder->GetStatus() == EModuleBuildStatus::Failed)
@@ -244,42 +285,42 @@ void PluginManagerPanel::Draw()
 	const std::string title = LOCAL("PluginManager.Title") + "###PluginManager";
 	if (BeginPanelWindow(title.c_str(), m_Open, ImGuiWindowFlags_None))
 	{
-
-#if defined(_WIN32)
-		if (ImGui::CollapsingHeader(LOCAL_LABEL("PanelLifecycleProbe.Title").c_str()))
-		{
-			static constexpr wchar_t probeId[] = L"Editor.BuiltIn.PanelLifecycleProbe";
-
-			auto& manager = ImGuiManager::Get();
-			auto* probe = dynamic_cast<PluginPanel*>(manager.FindRegisteredPanel(probeId));
-			EditorUI::ToolbarLayout toolbar;
-
-			if (!probe)
-			{
-				if (toolbar.Button("RegisterProbe", ICON_FA_PLUS, "PanelLifecycleProbe.Register"))
-				{
-					manager.RegisterImGuiPanel(probeId, []() -> IImGui* {
-						return new PluginPanel(probeId, L"EditorPanelLifecycleProbe.dll",
-							"PanelLifecycleProbe.Title", EPanelMenuCategory::Diagnostics);
-						});
-				}
-			}
-			else
-			{
-				if (toolbar.Button("FocusProbe", ICON_FA_EYE, "PluginManager.OpenPanel"))
-					probe->Focus();
-				if (toolbar.Button("ReloadProbe", ICON_FA_ARROWS_ROTATE, "PanelLifecycleProbe.Reload"))
-					probe->RequestReload();
-				if (toolbar.Button("RemoveProbe", ICON_FA_MINUS, "PanelLifecycleProbe.Remove"))
-					manager.RemoveImGuiPanel(probe);
-			}
-		}
-#endif
 		DrawMasterList();
 		ImGui::SameLine();
 		DrawDetailView();
+		DrawApprovalDialog();
 	}
 	ImGui::End();
+}
+
+void PluginManagerPanel::DrawApprovalDialog()
+{
+	auto& host = ImGuiManager::Get().GetPluginHost();
+	const auto* prompt = host.GetApprovalPrompt();
+	if (!prompt)
+		return;
+
+	const auto title = LOCAL("PluginManager.ApprovePluginTitle") + "###PluginApproval";
+	if (!ImGui::IsPopupOpen(title.c_str()))
+		ImGui::OpenPopup(title.c_str());
+	if (!ImGui::BeginPopupModal(title.c_str(), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+		return;
+
+	ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + ImGui::GetFontSize() * 38.0f);
+	ImGui::TextUnformatted(LOCAL_CSTR("PluginManager.ApprovePluginWarning"));
+	ImGui::TextUnformatted(prompt->DisplayName.c_str());
+	ImGui::TextUnformatted(prompt->Approval.binary.c_str());
+	ImGui::TextUnformatted(prompt->Approval.sha256.c_str());
+	ImGui::PopTextWrapPos();
+
+	const EditorUI::DialogAction actions[] = {{"EditorCommon.Cancel"}, {"PluginManager.ApproveAndLoad"}};
+	const int action = EditorUI::DialogButtonBar("PluginApprovalActions", actions, IM_ARRAYSIZE(actions));
+	if (action >= 0)
+	{
+		host.ResolveApproval(action == 1);
+		ImGui::CloseCurrentPopup();
+	}
+	ImGui::EndPopup();
 }
 
 void PluginManagerPanel::DrawMasterList()
@@ -416,10 +457,16 @@ void PluginManagerPanel::DrawDetailView()
 	ImGui::Text("%s  %s", item.Icon ? item.Icon : ICON_FA_PUZZLE_PIECE, displayName.c_str());
 	ImGui::PopFont();
 
-	ImGui::SameLine();
-	ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.55f, 0.55f, 0.55f, 1.0f));
-	ImGui::Text("v%s  by %s", item.Version.c_str(), item.Author.c_str());
-	ImGui::PopStyleColor();
+	if (!item.Version.empty())
+	{
+		ImGui::SameLine();
+		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.55f, 0.55f, 0.55f, 1.0f));
+		if (item.Author.empty())
+			ImGui::Text("v%s", item.Version.c_str());
+		else
+			ImGui::Text("v%s  by %s", item.Version.c_str(), item.Author.c_str());
+		ImGui::PopStyleColor();
+	}
 
 	ImGui::Spacing();
 	ImGui::PushTextWrapPos(ImGui::GetContentRegionAvail().x);
@@ -448,7 +495,7 @@ void PluginManagerPanel::DrawDetailView()
 
 	ImGui::Spacing();
 
-	if (item.IsGameModule || item.IsResourcePlugin)
+	if (item.IsGameModule || item.IsResourcePlugin || item.HostIndex)
 	{
 		DrawBuildConsole(item);
 	}
@@ -459,9 +506,94 @@ void PluginManagerPanel::DrawDetailView()
 void PluginManagerPanel::DrawHeaderToolbar(const PluginModuleItem& item)
 {
 	EditorUI::ToolbarLayout toolbar;
+	if (item.HostIndex)
+	{
+		auto& host = ImGuiManager::Get().GetPluginHost();
+		const auto index = *item.HostIndex;
+		const auto& entry = host.GetEntry(index);
+		const auto status = host.GetStatus(index);
+		if (!entry.Development && entry.Status != EPluginCatalogStatus::Ready && entry.Status != EPluginCatalogStatus::NeedsApproval)
+		{
+			if (status.IsLoaded && toolbar.Button("Unload", ICON_FA_EJECT, "PluginManager.Unload"))
+				host.Request(index, EPluginHostAction::Unload);
+
+			const char* messageKey = "PluginManager.PackageUnavailable";
+			switch (entry.Status)
+			{
+			case EPluginCatalogStatus::Ready:
+			case EPluginCatalogStatus::NeedsApproval:
+				break;
+			case EPluginCatalogStatus::InvalidManifest:
+				messageKey = "PluginManager.PackageInvalidManifest";
+				break;
+			case EPluginCatalogStatus::IncompatibleSdk:
+				messageKey = "PluginManager.PackageIncompatibleSdk";
+				break;
+			case EPluginCatalogStatus::UnsupportedEditorModules:
+				messageKey = "PluginManager.PackageUnsupportedModules";
+				break;
+			case EPluginCatalogStatus::MissingBinary:
+				messageKey = "PluginManager.PackageMissingBinary";
+				break;
+			case EPluginCatalogStatus::UnsafeBinaryPath:
+				messageKey = "PluginManager.PackageUnsafePath";
+				break;
+			case EPluginCatalogStatus::DuplicatePackageId:
+				messageKey = "PluginManager.PackageDuplicateId";
+				break;
+			}
+
+			ImGui::TextWrapped("%s", LOCAL_CSTR(messageKey));
+			return;
+		}
+		auto* builder = FindBuilderForPluginItem(item);
+		const bool compiling = builder && builder->IsCompiling();
+
+		ImGui::BeginDisabled(compiling);
+		if (status.IsLoaded)
+		{
+			if (toolbar.Button("Reload", ICON_FA_ARROWS_ROTATE, "PluginManager.Reload"))
+				host.Request(index, EPluginHostAction::Reload);
+		}
+		else if (toolbar.Button("Load", ICON_FA_PLAY, "PluginManager.Load"))
+		{
+			host.Request(index, EPluginHostAction::Load);
+		}
+
+		if (builder)
+		{
+			const char* label = status.IsLoaded ? "PluginManager.RebuildAndReload" : "PluginManager.Build";
+			if (toolbar.Button("Build", ICON_FA_HAMMER, label))
+				builder->RequestBuild();
+		}
+		ImGui::EndDisabled();
+
+		if (status.IsLoaded && toolbar.Button("Unload", ICON_FA_EJECT, "PluginManager.Unload"))
+			host.Request(index, EPluginHostAction::Unload);
+
+		if (builder)
+		{
+			bool autoCompile = builder->IsAutoCompileEnabled();
+			if (ImGui::Checkbox(LOCAL_LABEL("PluginManager.AutoCompileOnSave").c_str(), &autoCompile))
+				builder->SetAutoCompileEnabled(autoCompile);
+
+			const auto buildStatus = builder->GetStatus();
+			if (buildStatus == EModuleBuildStatus::Compiling)
+				ImGui::TextUnformatted(LOCAL_CSTR("PluginManager.StatusCompiling"));
+			else if (buildStatus == EModuleBuildStatus::Failed)
+				ImGui::TextUnformatted(LOCAL_CSTR("PluginManager.BuildFailed"));
+			else if (buildStatus == EModuleBuildStatus::Succeeded)
+				ImGui::TextUnformatted(LOCAL_CSTR("PluginManager.BuildSucceeded"));
+		}
+
+		if (status.LastActionFailed)
+			ImGui::TextUnformatted(LOCAL_CSTR("PluginManager.LastPluginOperationFailed"));
+
+		return;
+	}
 	if (item.IsResourcePlugin)
 	{
-		auto* builder = HotReloadManager::Get().GetEditorPluginBuilder(item.Id);
+		auto* builder = HotReloadManager::Get().GetPluginBuilder(item.Id);
 		auto* panel = ImGuiManager::Get().GetPluginResourceEditor(item.Id);
 		const bool compiling = builder && builder->IsCompiling();
 
@@ -579,8 +711,29 @@ void PluginManagerPanel::DrawMetadataTable(const PluginModuleItem& item)
 		ImGui::TextUnformatted(LOCAL_CSTR("PluginManager.PropIdentifier"));
 		ImGui::TableSetColumnIndex(1);
 		ImGui::TextUnformatted(item.Id.c_str());
+		if (item.HostIndex)
+		{
+			const auto& entry = ImGuiManager::Get().GetPluginHost().GetEntry(*item.HostIndex);
+			const char* originKey = "PluginManager.OriginDevelopment";
+			if (entry.Origin == EPluginOrigin::Builtin)
+				originKey = "PluginManager.OriginBuiltin";
+			else if (entry.Origin == EPluginOrigin::Custom)
+				originKey = "PluginManager.OriginCustom";
 
-		if (item.IsGameModule)
+			EditorUI::PropertyRow("PluginManager.PropOrigin");
+			ImGui::TextUnformatted(LOCAL_CSTR(originKey));
+			if (entry.Development)
+			{
+				EditorUI::PropertyRow("PluginManager.PropSourceDir");
+				const auto source = WStrToStr(entry.Development->SourceDirectory.wstring());
+				ImGui::TextUnformatted(source.c_str());
+			}
+
+			EditorUI::PropertyRow("PluginManager.PropOriginalDll");
+			const auto binary = WStrToStr(entry.BinaryPath.wstring());
+			ImGui::TextUnformatted(binary.empty() ? "-" : binary.c_str());
+		}
+		else if (item.IsGameModule)
 		{
 			auto& reloadMgr = HotReloadManager::Get().GetModuleReloader();
 			auto& buildMgr = HotReloadManager::Get().GetModuleBuilder();
@@ -628,7 +781,7 @@ void PluginManagerPanel::DrawMetadataTable(const PluginModuleItem& item)
 		}
 		else if (item.IsResourcePlugin)
 		{
-			if (const auto* builder = HotReloadManager::Get().GetEditorPluginBuilder(item.Id))
+			if (const auto* builder = HotReloadManager::Get().GetPluginBuilder(item.Id))
 			{
 				ImGui::TableNextRow();
 				ImGui::TableSetColumnIndex(0);
@@ -705,6 +858,23 @@ void PluginManagerPanel::DrawProvidedFeatures(const PluginModuleItem& item)
 		}
 		ImGui::Unindent();
 	}
+	else if (item.HostIndex)
+	{
+		auto& gui = ImGuiManager::Get();
+		auto& host = gui.GetPluginHost();
+		const auto index = *item.HostIndex;
+		const auto panels = host.GetPanels(index);
+
+		if (panels.empty())
+			ImGui::TextUnformatted(LOCAL_CSTR("PluginManager.NoRegisteredPanels"));
+
+		for (const auto& panel : panels)
+		{
+			const auto label = LOCAL(panel.TitleKey) + "###" + WStrToStr(panel.Id);
+			if (ImGui::Selectable(label.c_str()))
+				host.FocusPanel(index, panel.Id, gui);
+		}
+	}
 	else if (item.IsResourcePlugin)
 	{
 		if (const auto* panel = ImGuiManager::Get().GetPluginResourceEditor(item.Id))
@@ -728,7 +898,7 @@ void PluginManagerPanel::DrawProvidedFeatures(const PluginModuleItem& item)
 void PluginManagerPanel::DrawBuildConsole(const PluginModuleItem& item)
 {
 	auto& reloadManager = HotReloadManager::Get();
-	auto* builder = item.IsGameModule ? &reloadManager.GetModuleBuilder() : reloadManager.GetEditorPluginBuilder(item.Id);
+	auto* builder = FindBuilderForPluginItem(item);
 	if (!builder)
 		return;
 	auto& buildMgr = *builder;

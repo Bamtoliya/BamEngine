@@ -1,21 +1,20 @@
 # 에디터 플러그인 아키텍처 설계
 
 - 작성일: 2026-11-10
-- 상태: 개정 설계안. 네 가지 생성 템플릿과 공용 Window/Panel 계약을 기준으로 진행한다.
+- 상태: Editor 공용 발견·수동 활성화·DLL 교체 및 Custom 승인 저장 구현. 최신 Debug 빌드와 설치형 실행 검증 대기. [현재 진행 상태](#8-현재-진행-상태-2026-11-10)
 - 대상: Windows x64 네이티브 Editor·Runtime 확장과 코드 없는 콘텐츠 패키지. Builtin과 Custom을 같은 발견·활성화 경로에서 다룬다.
 - 관련 문서: [엔진·에디터·클라이언트 기준](EngineEditorClientGuidelines.md), [소스 구성 기준](SourceOrganizationGuidelines.md), [에디터 UI 계획](ImGuiDevelopmentPlan.md), [개발 우선순위](DevelopmentPriorities.md).
 
 ## 1. 현재 구현과 전환 목표
 
-- CMake의 `bam_add_resource_panel_plugin()`이 `EditorResourcePlugins.txt`를 생성한다. `ImGuiManager::CreateResourceEditors()`가 목록을 읽어 `PluginResourceEditor`를 만들고, `HotReloadManager`는 해당 패널 목록으로 빌더를 등록한다. 새 DLL의 발견, 빌드 및 등록이 리소스 편집기 타입에 연결돼 있다. [CMake](../Editor/Plugins/CMakeLists.txt) · [패널 생성](../Editor/Source/ImGui/Private/ImGuiManager.cpp) · [빌더 등록](../Editor/Source/HotReload/Private/HotReloadManager.cpp)
-- Sprite DLL은 에셋 열기·저장과 편집 세션을 소유한다. 현재 호스트는 새 DLL에서 같은 스냅샷 계약을 확인하고, 새 세션 복원 후 이전 세션을 해제한다. 일반 진단 샘플은 같은 섀도 복사 로더에 별도의 진입점을 연결한다. [Sprite 구현](../Editor/Plugins/SpriteAnimationTools/Private/SpriteAnimationTools.cpp) · [리소스 패널 호스트](../Editor/Source/ImGui/ResourceEditor/Private/PluginResourceEditor.cpp) · [진단 패널 호스트](../Editor/Source/ImGui/PanelLifecycleProbe/Private/PluginPanel.cpp)
-- 전환 후에는 공용 호스트가 **플러그인 발견 → 모듈 로드 → 기능 등록**을 처리한다. 일반 패널과 리소스 편집기부터 이 경로를 공유한다. 메뉴·단축키 액션, 속성 편집기, 임포터는 각각 실제 사용처에 맞는 계약을 추가한다.
-- 위 내용은 소스와 문서의 정적 대조 결과다. 이번 설계 작성에서 Editor 빌드, UI 실행 및 성능 계측은 수행하지 않았다.
+- 일반 창 예제와 게임 기능 예제가 각각 DLL 로드와 공개 API 호출을 검증하는 출발점이다. 공용 호스트의 목표 흐름은 **패키지 발견·활성화 → 환경에 맞는 모듈 로드 → 제공 기능 등록 또는 API 연결**이다.
+- 에디터에서는 진단 샘플로 공용 Window/Panel 흐름을 먼저 검증한다. 리소스 열기·저장은 실제 사용처를 옮길 때 패널에 붙이는 선택 기능이다. 기존 Sprite 실험의 구조는 8절에 현황으로 기록한다.
+- 로컬 개발은 모듈 타깃 빌드와 코드 교체를 다룬다. 설치된 패키지는 메타데이터와 바이너리로 발견·활성화한다. 두 경로는 로더와 기능 계약을 공유하며, 빌드 타깃 이름과 배포용 플러그인 ID는 따로 관리한다.
 
 ## 2. 플러그인, 모듈, 등록 기능
 
 - **플러그인**은 관리자에 표시되고 설치·활성화되는 단위다. 안정적인 플러그인 ID, 버전, 호환 범위와 DLL 위치를 선언한다.
-- **모듈**은 빌드와 코드 교체의 단위다. 패키지 형식은 모듈 목록을 표현한다. 첫 구현은 모듈이 없는 콘텐츠 패키지와 네이티브 DLL 하나가 있는 패키지를 검증한다. DLL 하나는 여러 창과 액션을 등록할 수 있다. 한 패키지에서 Editor·Runtime DLL을 함께 로드하는 기능은 각 환경의 로딩 경로를 검증한 뒤 추가한다.
+- **모듈**은 빌드와 코드 교체의 단위다. 패키지 형식은 모듈 목록을 표현한다. 현재 Editor 호스트는 Editor 모듈 선언이 하나인 패키지를 처리하고, DLL 하나로 여러 패널을 등록할 수 있다. 콘텐츠 전용 활성화와 Runtime 모듈 선택은 후속 범위다.
 - **등록 기능**은 Editor가 사용할 구체적인 동작이다. 패널, 액션, 속성 편집기, 임포터처럼 호출 시점과 소유권이 다른 기능을 각각 등록한다. 리소스 편집은 일반 패널에 붙이는 선택 기능이다.
 - **Builtin Plugin**은 에디터 설치본이 제공하는 확장이다. **Custom Plugin**은 사용자가 명시적으로 설치하거나 연결한 확장이다. 두 출처는 같은 패키지 형식과 기능 등록 계약을 사용한다. 네이티브 모듈은 공용 SDK를 사용한다. 에디터의 기본 도킹·문서·입력 기반은 본체가 소유한다. 관리자에 표시되는 GameModule, 셰이더 재컴파일, 에셋 변경 감시는 각 서비스의 기존 수명 주기를 사용한다. [게임 모듈 로더](../Editor/Source/HotReload/Private/ModuleHotReloadManager.cpp)
 
@@ -23,21 +22,21 @@
 
 ### 패키지 메타데이터
 
-모든 패키지에 `plugin.json`을 둔다. 패키지는 네이티브 모듈, 콘텐츠 또는 둘을 함께 제공할 수 있다. 관리자는 코드를 실행하기 전에 메타데이터와 로드 가능 여부를 표시한다. 아래 두 예시는 같은 형식을 사용한다.
+패키지 루트에 `plugin.json`을 둔다. 첫 예시는 현재 호스트에서 확인할 수 있는 Probe용 매니페스트다. `sdkCompatibility`는 DLL과 Editor를 빌드한 구성에 맞게 [`PluginSdkCompatibility`](../Editor/Source/HotReload/Public/EditorPanelPluginApi.h#L32) 값으로 바꾼다. 두 번째는 콘텐츠 전용 패키지의 계획 형식이다.
 
 ```json
 {
   "manifestVersion": 1,
-  "id": "bam.sprite-animation",
-  "name": "Sprite Animation Tools",
+  "id": "bam.panel-lifecycle-probe",
+  "name": "Panel Lifecycle Probe",
   "version": "1.0.0",
   "modules": [
     {
-      "id": "sprite-animation-editor",
+      "id": "panel-lifecycle-probe-editor",
       "environment": "Editor",
       "apiVersion": 1,
       "sdkCompatibility": "<SDK가 제공한 호환 식별자>",
-      "binary": "Binaries/Win64/EditorSpriteAnimationTools.dll"
+      "binary": "Binaries/Win64/EditorPanelLifecycleProbe.dll"
     }
   ]
 }
@@ -61,8 +60,8 @@
 
 ### Builtin과 Custom 정책
 
-- **Builtin**은 설치본이 지정한 플러그인 위치에서 발견한다. 설치본 목록이 기본 활성화 여부를 정하고, 사용자는 선택형 도구를 관리자에서 비활성화할 수 있다.
-- **Custom**은 프로젝트에서 사용자가 추가한 플러그인 위치 또는 명시적으로 등록한 외부 위치에서 발견한다. 발견 직후에는 목록과 호환 상태만 표시한다. 사용자가 해당 패키지를 승인하고 활성화해야 네이티브 코드가 실행된다. 승인 범위는 프로젝트, 설치 출처와 바이너리 버전이다. 로컬 개발용 소스를 승인한 경우, 연결된 타깃의 빌드 결과를 반복 교체할 수 있다.
+- **Builtin**은 실행 파일 옆 `BuiltinPlugins`에서 발견한다. 현재 관리자의 수동 로드·언로드를 사용한다. 설치본 목록에서 기본 활성화 여부를 지정하는 정책은 후속 범위다.
+- **Custom**은 프로젝트 루트의 `Plugins`에서 발견한다. 처음 로드할 때 사용자가 승인하며, 프로젝트·패키지·DLL 식별 정보와 SHA-256이 일치하면 이후 수동 로드에서 승인을 재사용한다. 외부 폴더 등록은 후속 범위다. 로컬 개발 타깃의 빌드와 반복 교체는 `Plugins.txt` 경로에서 다룬다.
 - 동일한 ID의 Custom이 Builtin을 덮어쓸 수 없다. Custom끼리 ID가 겹치면 충돌 상태로 표시하고, 사용자가 출처를 하나 선택하기 전에는 둘 다 실행하지 않는다. 활성화 후 기능 ID 충돌이 발견되면 신규 등록 전체를 거부한다.
 - Custom DLL은 Editor 프로세스에서 실행된다. 신뢰 설정은 로드 여부를 제어하며, DLL 실행 중의 접근 권한은 Editor 프로세스와 같다.
 - 프로젝트별 활성화 설정과 설치본의 기본값은 별개로 보관한다. 로드된 모듈 세대, 빌드 진행 및 인스턴스 포인터는 런타임 상태로 관리한다.
@@ -85,9 +84,9 @@
 
 ## 4. 개발자가 사용하는 SDK
 
-DLL은 버전이 있는 공용 진입점 `BamGetEditorPluginV1`을 제공한다. SDK는 고정 크기 값, 크기·버전이 있는 구조체, 함수 포인터와 불투명 핸들을 사용한다. C++ 작성용 래퍼는 구현에 필요한 호출을 줄이고, STL 객체나 Editor 내부 클래스의 소유권은 모듈 경계를 넘기지 않는다. ImGui 등 엔진과 공유하는 타입은 호환 식별자가 일치하는 내부 SDK 범위에서 사용한다.
+DLL은 버전이 있는 공용 진입점 `BamGetPluginV1`을 제공한다. SDK는 고정 크기 값, 크기·버전이 있는 구조체, 함수 포인터와 불투명 핸들을 사용한다. C++ 작성용 래퍼는 구현에 필요한 호출을 줄이고, STL 객체나 Editor 내부 클래스의 소유권은 모듈 경계를 넘기지 않는다. ImGui 등 엔진과 공유하는 타입은 호환 식별자가 일치하는 내부 SDK 범위에서 사용한다.
 
-Window와 Panel은 동일한 `RegisterPanel()` 계약을 사용한다. 작성자는 **고정 ID, 제목 로캘 키, 메뉴 위치, Draw 콜백**을 전달한다. Editor는 독립 창과 도킹 상태, 포커스와 Workspace 복원을 관리한다. 업데이트와 세션은 필요할 때 선언한다. 콘텐츠 브라우저와 연결할 때 파일 열기 기능을 추가하고, 편집 가능한 도구는 미저장 확인과 저장을 함께 추가한다. 기존 Sprite는 창 ID, `SpriteAnimation.Save`와 Workspace 키를 유지하거나 명시적인 이전 규칙을 적용한다.
+Window와 Panel은 공용 등록 계약을 사용한다. 현재 V1 진단 샘플은 **고정 ID, 제목 로캘 키, Draw 콜백**의 배열을 반환하고 메뉴 위치는 호스트가 정한다. 아래 `RegisterPanel()` 표기는 작성용 SDK 구상이다. Editor는 독립 창과 도킹 상태, 포커스와 Workspace 복원을 관리한다. 업데이트와 세션은 필요할 때 선언한다. 콘텐츠 브라우저와 연결할 때 파일 열기 기능을 추가하고, 편집 가능한 도구는 미저장 확인과 저장을 함께 추가한다. 향후 Sprite를 옮길 때 창 ID, `SpriteAnimation.Save`와 Workspace 키의 유지 또는 이전 규칙을 정한다.
 
 ```text
 RegisterPanel(진단 패널)
@@ -121,13 +120,15 @@ RegisterAction(창 없이 실행하는 명령)
 
 ## 6. 구현 순서와 완료 기준
 
-1. **공용 발견과 Window/Panel 전환.** `EditorResourcePlugins.txt`에 묶인 발견과 빌더 등록을 모듈 단위로 옮긴다. 진단과 Sprite를 같은 `RegisterPanel()` 경로에 연결한다. 일반 창은 도킹·분리가 되고, Sprite는 F5 상태에서 미저장 FPS와 도킹을 유지하며 리로드된 뒤 기존 `Ctrl+S`로 저장되어야 한다. 두 창을 한 DLL에서 교체하는 경우와 컴파일·진입점 검증 실패도 확인한다.
-2. **Blank와 Editor Standalone Window 생성.** 관리자에서 이름과 템플릿만 골라 생성·빌드하도록 공용 빌드 틀과 시작 코드를 연결한다. 같은 예제를 설치본 Builtin과 프로젝트 Custom 위치에서 각각 등록한다. 미승인 Custom, 중복 ID, 누락 DLL, SDK 불일치에서 활성 상태가 바뀌지 않아야 한다. Custom 작성 시 `Editor/Source`와 엔진의 CMake 목록을 수정할 필요가 없어야 한다.
+먼저 작은 Editor 모듈 하나로 본체 재링크 없이 도구를 수정하는 흐름을 검증한다. 이 단계에서 빌드·교체 시간과 에디터 시작 시간을 따로 비교한다. 범용 등록의 범위는 후속 예제로 확인한다. 창 없는 액션은 기능 등록의 확장성을, GameplayScore는 게임 측 모듈 수명과 공개 API를 검증하는 데 사용한다. 기존 내장 도구를 어디까지 DLL로 분리할지는 의존성, 상태 복원 비용과 실제 빌드 시간 차이를 보고 정한다.
+
+1. **범용 Editor 모듈 발견과 수동 교체.** 먼저 공용 V1 진단 DLL을 개발용 목록에서 발견하고, 전용 버튼 없이 같은 경로로 로드·등록·리로드·언로드한다. 관리자 UI는 요청과 상태 표시를 맡고, 모듈 수명과 패널 등록은 호스트가 관리한다. 완료 기준은 두 창의 도킹·분리, 한 번의 리로드로 두 콜백 교체, 진입점이나 패널 ID 검증 실패 시 기존 창 유지, 언로드 후 두 등록 제거다. 별도 리소스 패널 실험은 이 단계의 검증 대상에서 제외한다.
+2. **모듈별 빌드 연결과 패키지 발견.** 공용 경로가 검증되면 먼저 수동 빌드 후 리로드를 연결하고, 이어서 소스 저장 감시를 붙인다. 빌드 실패 시 기존 DLL이 유지되고, 에디터 본체를 다시 링크하지 않고 두 창에 코드 변경이 반영되는지 확인한다. 그다음 `plugin.json`으로 같은 예제를 Builtin과 Custom에서 발견·활성화하고 Blank와 Editor Standalone Window 생성 화면을 연결한다. 미승인 Custom, 중복 ID, 누락 DLL, SDK 불일치에서 활성 상태가 바뀌지 않아야 한다. Custom 작성 시 `Editor/Source`와 엔진의 CMake 목록을 수정할 필요가 없어야 한다.
 3. **Blank의 Runtime 선택.** `GameplayScore`를 첫 사용 사례로 삼아 프로젝트가 선택한 런타임 모듈을 시작 시 연결한다. Editor의 PIE와 빌드 출력의 Client에서 함수 호출 결과를 확인하고, 선택 모듈을 끄면 기능이 호출되지 않는지 검증한다. Runtime 적용은 다음 게임 실행부터 처리한다.
 4. **Third Party Library 생성.** 외부 정적 또는 동적 라이브러리를 부르는 작은 래퍼로 타깃 생성과 의존 파일 배치를 검증한다. 정상 호출, DLL 누락, 호환되지 않는 바이너리의 로드 실패를 구분해 보여주고, 실패 뒤 이전 모듈이 계속 동작해야 한다.
 5. **Game Feature (Content Only) 생성.** 패키지 하나를 빌드 도구 없이 생성하고 활성화한다. 에셋 목록 노출, 저장한 참조의 재개방, 동일 파일 이름을 가진 패키지 간 경로 분리, 비활성화 후 누락 진단을 확인한다. 독립 Client 배포 패키징은 기존 보류 범위를 따른다.
 
-각 템플릿은 생성 파일, 첫 빌드 또는 활성화, 수정 후 적용 절차를 문서화한다. 창이 없는 액션은 Blank의 다음 예제로 검증한다. 속성 편집기와 임포터는 해당 등록 계약과 해제 조건이 필요해진 시점에 추가한다.
+각 템플릿은 생성 파일, 첫 빌드 또는 활성화, 수정 후 적용 절차를 문서화한다. 창이 없는 액션은 Blank의 다음 예제로 검증한다. 에셋 열기·저장, 속성 편집기와 임포터는 구체적인 도구를 붙일 때 소유권과 등록 해제 조건을 정한다. 기존 Sprite 이관 여부는 범용 기반을 검증한 뒤 결정한다.
 
 ## 7. GameModule에서 사용하는 런타임 플러그인
 
@@ -159,8 +160,128 @@ Editor 타깃이 GameModule과 예제 DLL을 함께 빌드한다. 시작 후 로
 
 2026-11-10 사용자 Debug 로그에서 `GameplayScore`와 `GameModule`의 DLL 빌드를 확인했다. 시작·종료 로그와 실행 중 교체는 후속 검증 항목이다.
 
-## 8. 현재 진단 패널 전환 상태 (2026-11-10)
+## 8. 현재 진행 상태 (2026-11-10)
 
-Sprite 리소스 편집기는 CMake 카탈로그의 `ResourcePanelPluginApiV1` 경로를 사용한다. 진단 샘플은 `BamGetEditorPluginV1`으로 창의 ID·제목 키·그리기 콜백을 노출하며, 플러그인 관리자가 `PluginPanel`로 이 DLL을 등록한다. 호스트는 크기, 단일 패널 계약, 등록 ID와 콜백을 확인한 뒤 모듈을 교체한다.
+### 코드에 있는 범위
 
-진단 DLL은 `ModuleApiExport.h`에서 내보내기 매크로를 가져온다. 런타임 모듈은 `ModuleInterface.h`를 통해 같은 매크로를 사용한다. 2026-11-10 사용자 Debug 로그에서 `Editor`와 `EditorPanelLifecycleProbe`의 빌드 성공을 확인했다. 진단 패널의 등록·다시 로드·제거와 Sprite 편집 세션 승계는 UI 실행 확인이 필요하다.
+- **개발용 패널.** CMake가 `Plugins.txt`에 기록한 개발 타깃을 `PluginHost`가 읽고 관리자가 로드·빌드 요청을 연결한다. `EditorPanelLifecycleProbe.dll`은 `BamGetPluginV1`으로 두 패널을 등록한다. 두 패널은 하나의 `PluginPanelModule`을 공유하며, 기존 패널 ID 집합과 V1 계약을 확인한 뒤 DLL을 교체한다. [CMake](../Editor/Plugins/CMakeLists.txt) · [공용 창과 모듈](../Editor/Source/ImGui/PanelLifecycleProbe/Private/PluginPanel.cpp)
+- **설치형 패널.** 실행 파일 옆 `BuiltinPlugins/<폴더>/plugin.json`과 프로젝트 루트의 `Plugins/<폴더>/plugin.json`을 시작 시 발견한다. 관리자가 요청하면 설치 위치·매니페스트·SDK·중복 ID를 다시 검사한 뒤 DLL을 섀도 복사한다. Builtin은 수동 로드할 수 있고, Custom은 프로젝트 경로·패키지 ID와 버전·패키지와 DLL 경로·DLL SHA-256이 기존 승인 기록과 일치하거나 사용자가 이번 로드를 승인해야 한다. [호스트](../Editor/Source/Plugin/Private/PluginHost.cpp) · [관리자](../Editor/Source/ImGui/PluginManager/Private/PluginManagerPanel.cpp)
+- **승인 기록.** Editor 로컬 환경설정 폴더의 `PluginApprovals.json`에 패널 등록 또는 교체가 성공한 뒤 저장한다. 확인창을 띄운 뒤 파일이 바뀌면 로드를 중단한다. 교체가 실패하면 기존 패널 모듈이 계속 사용된다. 시작 시에는 설치 목록을 구성하고 로드는 사용자의 요청으로 시작한다. 새 패키지나 매니페스트 버전을 목록에 반영하려면 Editor를 다시 시작한다. [승인 저장](../Editor/Source/Plugin/Private/PluginApproval.cpp)
+- **Sprite 리소스 패널.** `EditorSpriteAnimationTools`는 별도로 생성하는 `EditorResourcePlugins.txt`를 사용한다. `ImGuiManager`가 리소스 에디터를 등록하고 `HotReloadManager`가 빌더를 연결한다. [기존 목록 소비자](../Editor/Source/ImGui/Private/ImGuiManager.cpp) · [빌더](../Editor/Source/HotReload/Private/HotReloadManager.cpp)
+- **Runtime 샘플.** `GameModule::OnLoad()`가 기존 `ModuleManager`를 통해 `GameplayScore.dll`을 직접 로드하고 `BamGetGameplayScoreV1`에서 점수 계산 API를 얻는다. 공개 API 내보내기에는 Editor 샘플과 같은 `EXPORT_PLUGIN_API_ENTRY` 매크로를 사용한다. 프로젝트가 활성화한 패키지 목록으로 Runtime 모듈을 선택하는 경로는 설계 단계다. [호출부](../Projects/GameModule/Source/GameModule.cpp) · [DLL 샘플](../Projects/Plugins/GameplayScore/Private/GameplayScoreModule.cpp)
+
+### 확인한 범위와 재개 지점
+
+- 이전 사용자 Debug 로그에서 Editor·진단 DLL·GameplayScore DLL 빌드를 확인했다. 사용자는 이후 진단 창의 수동 로드와 리로드가 동작한다고 보고했다.
+- 이번 기록은 작업 트리의 소스·설정 대조다. 최신 트리의 빌드·실행, 두 창의 동시 교체와 제거를 구분한 재현 기록, 잘못된 후보 DLL에서 기존 창 유지, GameplayScore의 PIE·Client 실행, 빌드 시간과 시작 시간은 별도 확인이 필요하다.
+- **재개 지점.** 아래 절차로 설치형 활성화와 개발용 교체를 확인한다. 이후 템플릿 생성 UI와 설치형 배포를 이어가며, Client 관련 작업은 빌드·패키징 단계에서 다룬다.
+
+### 사용자 실행 검증
+
+저장소 루트에서 기존 Debug 빌드 트리의 Editor 타깃을 빌드한다.
+
+```powershell
+cmake --build out/build/x64-debug --config Debug --target Editor
+```
+
+1. **개발용.** 플러그인 관리자에서 `EditorPanelLifecycleProbe`를 로드한다. 두 창을 열고 빌드 후 리로드가 두 창에 적용되는지, 언로드 시 두 패널의 등록이 사라지는지 확인한다.
+2. **Builtin.** 3절 매니페스트와 Probe DLL을 실행 파일 옆 `BuiltinPlugins/Probe` 아래에 배치하고 Editor를 다시 시작한다. 관리자에서 수동 로드하고 두 패널이 등록되는지 확인한다. 설치형 검증 전에는 같은 패널 ID를 사용하는 개발용 Probe를 언로드한다.
+3. **Custom.** 같은 패키지를 프로젝트의 `Plugins/Probe`로 옮기고 Editor를 다시 시작한다. 최초 로드에서 취소하면 패널이 등록되지 않아야 한다. 승인해 로드한 뒤 Editor를 재시작하고, 같은 DLL을 수동 로드할 때 승인을 재사용하는지 확인한다.
+4. **교체 실패.** Custom이 활성 상태일 때 패키지 DLL을 같은 V1의 다른 빌드로 바꾼다. 리로드에서 재승인을 요구하는지, 확인창을 띄운 사이 DLL을 다시 교체하면 기존 패널을 유지하는지 확인한다. V1 진입점 또는 패널 ID가 맞지 않는 후보도 기존 패널을 교체하지 않아야 한다.
+
+## 9. DLL 플러그인 구현과 호출 흐름
+
+BamEngine의 Editor 플러그인은 **실행 중에 DLL을 열고, DLL이 반환한 함수 테이블을 통해 패널을 그린다.** CMake는 DLL을 만들고, `PluginHost`는 언제 로드할지 결정하며, `PluginModule`은 Windows DLL 핸들을 관리한다. 패널 창, 도킹, 포커스, 로캘 처리는 Editor가 맡는다.
+
+설치형 **패키지**는 `plugin.json`으로 식별하는 배포 단위다. **DLL**은 로드하고 교체하는 실행 코드 단위다. **패널**은 DLL이 제공하는 기능이다. 현재 `EditorPanelLifecycleProbe.dll` 하나가 서로 다른 ID를 가진 패널 두 개를 제공한다. 두 패널은 같은 DLL을 공유하므로 한 번의 리로드로 두 콜백이 교체된다. [Probe DLL 구현](../Editor/Plugins/PanelLifecycleProbe/PanelLifecycleProbe.cpp#L20)
+
+### 9.1 발견부터 화면 표시까지
+
+```mermaid
+flowchart TD
+    A["Editor 시작<br/>PluginHost::Initialize"]
+    A --> B["BuildPluginCatalog<br/>개발용 Plugins.txt + 설치형 plugin.json"]
+    B --> C["PluginManagerPanel<br/>목록 표시 및 Load 요청"]
+    C --> D{"PluginHost::Update<br/>요청한 DLL의 출처"}
+    D -->|개발용| E["Load → PluginPanelModule::Reload<br/>PluginModule::Open"]
+    D -->|Builtin / Custom| F["ActivateInstalled<br/>패키지 재검사, 섀도 복사, SHA-256 계산"]
+    F --> G{"Builtin 또는 같은 DLL의 승인 기록이 있는가?"}
+    G -->|예| I["OpenApproved<br/>섀도 DLL 해시 재검사"]
+    G -->|미승인 Custom| H["DrawApprovalDialog<br/>DLL 경로와 SHA-256 표시"]
+    H -->|승인| J["다음 Update에서 후보를 다시 준비<br/>승인창의 정보와 대조"]
+    H -->|취소| X["로드 요청 종료"]
+    J -->|일치| I
+    J -->|불일치| X
+    E --> K["LoadLibraryExW<br/>섀도 DLL을 Editor 프로세스에 로드"]
+    I --> K
+    K --> L["PluginPanelModule::Adopt<br/>BamGetPluginV1 조회·호출·검사"]
+    L -->|성공| M["RegisterPanels<br/>ImGuiManager에 패널 등록 예약"]
+    L -->|실패| X
+    M --> N["PluginPanel::Draw<br/>패널 ID로 현재 Draw 콜백 호출"]
+```
+
+1. **목록을 만든다.** 개발용 DLL은 CMake가 실행 파일 옆에 생성한 `Plugins.txt`의 `타깃|소스 폴더`에서 찾는다. 설치형은 실행 파일 옆 `BuiltinPlugins`와 프로젝트의 `Plugins` 아래에서 `plugin.json`을 찾는다. `ReadPluginManifest()`가 형식을 읽고, `BuildPluginCatalog()`가 Editor 모듈 선언, SDK 식별자, 실제 DLL 경로, 중복 패키지 ID를 확인한다. 이 단계에서는 목록과 상태를 구성한다. [플러그인 CMake](../Editor/Plugins/CMakeLists.txt#L1) · [매니페스트 읽기](../Editor/Source/Plugin/Private/PluginDiscovery.cpp#L98) · [패키지 카탈로그](../Editor/Source/Plugin/Private/PluginCatalog.cpp#L171)
+2. **사용자 요청을 처리한다.** `PluginManagerPanel`은 `Request()`로 로드·리로드·언로드를 예약한다. `ImGuiManager::Update()`가 호출하는 `PluginHost::Update()`에서 실제 작업을 수행한다. 패널 추가·제거도 예약하고, `ImGuiManager`가 기존 패널의 `Draw()` 순회를 마친 뒤 목록에 반영한다. [호스트 요청 처리](../Editor/Source/Plugin/Private/PluginHost.cpp#L82) · [ImGui 패널 목록 반영](../Editor/Source/ImGui/Private/ImGuiManager.cpp#L353)
+3. **설치형 DLL을 승인한다.** `PrepareInstalled()`가 DLL을 별도 경로에 복사한다. Custom 승인은 프로젝트 경로, 패키지 ID와 버전, 패키지와 DLL 경로, SHA-256을 묶어서 기록한다. 승인창에서 확인한 뒤 후보를 다시 준비하므로, 창을 띄운 사이 파일이 바뀌면 로드를 중단한다. `OpenApproved()`는 열려 있는 복사본의 해시를 로드 직전에 다시 확인한다. 새 승인은 패널 등록 또는 교체가 성공한 뒤 Editor 로컬 설정 폴더의 `PluginApprovals.json`에 저장한다. [설치형 활성화](../Editor/Source/Plugin/Private/PluginHost.cpp#L223) · [해시 재검사](../Editor/Source/HotReload/Private/PluginModule.cpp#L178) · [승인 저장](../Editor/Source/Plugin/Private/PluginApproval.cpp#L60)
+
+### 9.2 어떤 헤더를 왜 만들었는가
+
+- **`EditorPanelPluginApi.h`**는 DLL 작성자와 Editor가 같이 읽는 호출 규격이다. `GetPluginApiV1`은 진입점의 함수 포인터 타입, `PluginApiV1`은 테이블과 구조체 크기, `PanelRegistrationV1`은 패널 ID·제목 로캘 키·`Draw` 함수, `PanelDrawContextV1`은 Editor가 그릴 때 전달하는 프레임 번호와 `TextInteger` 콜백을 정의한다. 이 헤더를 공유해야 양쪽이 같은 메모리 배치와 함수 시그니처로 접근한다. `PluginSdkCompatibility`는 설치형 매니페스트에 사용할 Windows x64·MSVC 버전·빌드 구성 식별자를 제공한다. [공용 API 헤더](../Editor/Source/HotReload/Public/EditorPanelPluginApi.h#L7)
+- **`ModuleApiExport.h`**는 `EXPORT_PLUGIN_API_ENTRY(...)`로 DLL에 진입점을 내보낸다. `extern "C"`로 C 링크 이름을 사용하고 `__declspec(dllexport)`로 내보내므로 Editor가 `GetProcAddress`에 `BamGetPluginV1`을 전달해 주소를 찾을 수 있다. Probe는 이 헤더와 공용 API 헤더를 포함하고, 진입점에서 DLL 내부의 `PluginApi` 주소를 반환한다. [내보내기 매크로](../Engine/Source/Core/Module/Public/ModuleApiExport.h#L3) · [Microsoft GetProcAddress 문서](https://learn.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-getprocaddress)
+- **`PluginDiscovery.h`, `PluginCatalog.h`, `PluginApproval.h`**는 각각 **파일에 적힌 데이터**, **검사한 목록과 상태**, **승인할 DLL의 식별 정보**를 정의한다. 이 구분 덕분에 관리자는 DLL을 열기 전에 누락·호환 실패·중복 상태를 표시할 수 있다. 승인 구현에서는 Glaze로 JSON을 읽고 쓰며, 저장은 기존 `IArchive::SaveEncodedToFile()`을 사용한다. [발견 헤더](../Editor/Source/Plugin/Public/PluginDiscovery.h#L10) · [카탈로그 헤더](../Editor/Source/Plugin/Public/PluginCatalog.h#L11) · [승인 헤더](../Editor/Source/Plugin/Public/PluginApproval.h#L8)
+- **`PluginHost.h`, `PluginModule.h`, `PluginPanel.h`**는 Editor 내부의 역할을 나눈다. `PluginHost`는 **언제** 로드할지, `PluginModule`은 Windows에서 **어떻게** 복사·로드·심볼 조회·해제할지, `PluginPanelModule`과 `PluginPanel`은 로드된 DLL의 함수를 **어떤 패널에서** 호출할지 담당한다. `PluginModule`은 복사를 금지하고 `Swap()`으로 핸들의 소유권을 교환한다. 내부 헤더는 Editor 구현에 필요하며, Probe 작성에는 위의 공용 API와 내보내기 헤더만 사용한다. [호스트 헤더](../Editor/Source/Plugin/Public/PluginHost.h#L41) · [로더 헤더](../Editor/Source/HotReload/Public/PluginModule.h#L10) · [패널 헤더](../Editor/Source/ImGui/PanelLifecycleProbe/Public/PluginPanel.h#L13)
+
+DLL에서 콜백까지 연결하는 핵심은 다음 두 줄이다. `FindSymbol()`로 얻은 주소를 공용 헤더의 함수 타입으로 해석하고, 호출해서 테이블을 얻는다. 이어서 `Adopt()`가 구조체 크기, 패널 배열, 필수 값과 콜백, 패널 ID 중복을 검사한다. `PluginPanel::Draw()`는 등록된 ID로 콜백을 다시 찾고, DLL의 그리기 함수는 전달받은 `TextInteger`를 호출해 Editor의 로캘·ImGui 처리를 사용한다. [Adopt 구현](../Editor/Source/ImGui/PanelLifecycleProbe/Private/PluginPanel.cpp#L27) · [Draw 구현](../Editor/Source/ImGui/PanelLifecycleProbe/Private/PluginPanel.cpp#L81)
+
+```cpp
+const auto getApi = reinterpret_cast<GetPluginApiV1>(candidate.FindSymbol(PluginEntryV1));
+const auto* api = getApi ? getApi() : nullptr;
+```
+
+`plugin.json`의 `manifestVersion`은 **JSON 형식 버전**, `version`은 **패키지 배포 버전**, `apiVersion`과 `BamGetPluginV1`의 `V1`은 **Editor와 DLL 사이의 호출 규격 버전**이다. 패널 그리기 코드만 바꾸면 V1을 계속 사용한다. 현재처럼 크기가 정확히 일치해야 하는 규격에서 구조체 배치나 함수 시그니처를 바꾸면 새로운 규격이 필요하다. [매니페스트 자료형](../Editor/Source/Plugin/Public/PluginDiscovery.h#L16) · [V1 검사](../Editor/Source/ImGui/PanelLifecycleProbe/Private/PluginPanel.cpp#L27)
+
+### 9.3 리로드가 기존 창을 유지하는 방식
+
+```mermaid
+sequenceDiagram
+    participant UI as 플러그인 관리자
+    participant H as PluginHost
+    participant C as 후보 DLL
+    participant A as 활성 PluginPanelModule
+
+    UI->>H: Request(Reload)
+    H->>C: 새 섀도 복사본 준비 및 로드
+    alt 후보 DLL 로드 성공
+        H->>A: Adopt(candidate)
+        A->>C: BamGetPluginV1 조회 및 호출
+        alt API 검사 통과 및 기존 패널 ID 집합 일치
+            A->>A: DLL 핸들과 패널 목록 교체
+            Note over H,A: 이전 DLL 정리, 기존 창은 새 콜백 사용
+        else 진입점·API·패널 ID 검사 실패
+            Note over H,A: 후보만 정리, 기존 DLL과 콜백 유지
+        end
+    else 후보 DLL 로드 실패
+        Note over H,A: 후보만 정리, 기존 DLL과 콜백 유지
+    end
+```
+
+- **섀도 복사**는 빌드 출력 DLL을 직접 열었을 때 생기는 파일 교체 문제를 피하고, 기존 DLL과 새 후보를 동시에 유지할 수 있게 한다. `PrepareShadowCopy()`로 복사하고, `LoadLibraryExW()`로 열고, `GetProcAddress()`로 진입점을 찾는다. `Close()`는 `FreeLibrary()`로 모듈 참조를 해제한 뒤 섀도 파일을 정리한다. 후보 로드는 코드가 Editor 프로세스에서 실행되는 시점이므로 Custom 승인 확인이 먼저다. [로더 구현](../Editor/Source/HotReload/Private/PluginModule.cpp#L49) · [Microsoft LoadLibraryExW 문서](https://learn.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-loadlibraryexw) · [Microsoft FreeLibrary 문서](https://learn.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-freelibrary)
+- **개발용 빌드 후 리로드**는 `ModuleBuildManager::RequestBuild()`가 백그라운드에서 해당 CMake 타깃을 빌드하고, 성공 콜백이 이미 로드된 플러그인에만 `Request(Reload)`를 보낸다. 소스 저장 시 자동 빌드는 개발용 항목에서 켤 수 있으며 기본값은 꺼져 있다. [빌드 요청](../Editor/Source/HotReload/Private/ModuleBuildManager.cpp#L143) · [성공 후 리로드 연결](../Editor/Source/HotReload/Private/HotReloadManager.cpp#L91)
+- **창과 DLL의 수명**은 분리돼 있다. 두 `PluginPanel`이 같은 `PluginPanelModule`을 공유하므로 교체 후에도 Editor가 소유한 창과 ID는 유지된다. DLL 안의 Probe 정적 카운터는 새 DLL에서 다시 시작한다. 언로드 시에는 호스트가 패널을 닫고 제거를 예약한다. 제거가 반영되어 마지막 소유권이 해제되면 DLL 핸들도 정리된다. [패널 모듈 소유권](../Editor/Source/ImGui/PanelLifecycleProbe/Public/PluginPanel.h#L32) · [언로드 처리](../Editor/Source/Plugin/Private/PluginHost.cpp#L292)
+
+### 9.4 Sprite와 GameplayScore는 어디서 갈라지는가
+
+- **Sprite Animation Tools**는 `PluginModule`로 DLL을 여는 부분을 공유한다. 발견에는 `EditorResourcePlugins.txt`, 호출에는 `ResourcePanelPluginApi.h`의 `BamGetResourcePanelPluginV1`을 쓴다. 이 경로는 일반 패널의 `Draw`에 더해 에셋 열기·저장·편집 세션을 다룬다. 리로드 시 `PluginResourceEditor::Reload()`가 이전 세션 상태를 캡처하고 새 세션을 준비한 뒤 교체한다. [리소스 패널 API](../Editor/Source/HotReload/Public/ResourcePanelPluginApi.h#L25) · [Sprite 세션 교체 경로](../Editor/Source/ImGui/ResourceEditor/Private/PluginResourceEditor.cpp#L48)
+- **GameplayScore**는 `GameModule::OnLoad()`가 엔진의 `ModuleManager::LoadModule()`로 별도 DLL을 여는 런타임 예제다. `ModuleInterface.h`의 `IMPLEMENT_MODULE`이 객체 수명을 위한 `CreateModule`과 `DestroyModule`을 내보낸다. 게임 기능 호출은 `GameplayScoreApi.h`의 `BamGetGameplayScoreV1`으로 테이블을 얻고 `CalculateComboScore(100, 3)`을 호출하는 별도 단계다. CMake의 `add_dependencies`는 빌드 순서를 정하고, 실제 함수 주소는 실행 중에 얻는다. [GameModule 호출부](../Projects/GameModule/Source/GameModule.cpp#L79) · [모듈 인터페이스](../Engine/Source/Core/Module/Public/ModuleInterface.h#L36) · [GameplayScore API](../Projects/Plugins/GameplayScore/Public/GameplayScoreApi.h#L5)
+
+### 9.5 구현과 검증 범위
+
+이 문서는 현재 소스와 빌드 설정을 기준으로 작성했다. 앞선 사용자 보고와 최신 코드에 대한 확인 절차는 [8절](#8-현재-진행-상태-2026-11-10)에 구분해 기록한다.
+
+## 10. Editor 기능별 이관 범위
+
+- **현재 공용 패널 API로 가능한 기능.** DLL 내부의 계산이나 프레임 카운터를 정수 텍스트로 표시하는 독립 진단 창을 등록할 수 있다. 기존 패널을 이관하려면 각 패널이 사용하던 데이터·UI·입력 연결을 확인해야 한다. [공용 패널 API](../Editor/Source/HotReload/Public/EditorPanelPluginApi.h#L7)
+- **읽기 중심의 선택 도구.** Metrics, Network Profiler, Console의 표시부는 이관 후보다. Metrics에는 통계와 갱신 시점, Network Profiler에는 연결 상태와 접속 명령, Console에는 로그 조회가 필요하다. 수집을 지속해야 하는 통계와 로그는 호스트에서 유지하고, DLL에는 필요한 값을 전달한다. [Metrics 갱신](../Editor/Source/ImGui/MetricsPanel/Private/MetricsPanel.cpp#L10) · [Network Profiler](../Editor/Source/ImGui/NetworkProfilerPanel/Private/NetworkProfilerPanel.cpp#L117) · [Console 로그 수집](../Editor/Source/ImGui/ConsolePanel/Private/ConsolePanel.cpp#L37)
+- **에셋별 편집기.** Sprite Animation Tools는 별도 DLL 경로에서 열기·저장·미저장 상태·세션 교체를 제공한다. Texture는 썸네일 조회와 표시가 필요한 후보다. Material·Animator Graph·VFX는 저장과 편집 상태, 리소스 핸들의 수명을 함께 확인한다. [리소스 패널 API](../Editor/Source/HotReload/Public/ResourcePanelPluginApi.h#L25) · [TextureEditor](../Editor/Source/ImGui/ResourceEditor/Private/TextureEditor.cpp#L16)
+- **등록 접점이 필요한 확장.** Inspector 속성 위젯, 파일 형식별 임포터, 단축키 명령, 그래프 노드는 각각 기존 레지스트리와 연결하고 DLL 교체 시 콜백을 해제하는 경로가 필요하다. 실행 중인 임포트 작업은 완료까지 해당 DLL을 유지한다. 게임에서 실행하는 노드는 Runtime 쪽 등록이 필요하다. [기능별 계약](#기능별-계약과-적용-순서)
+- **Editor가 소유하는 기반.** 플러그인 관리자·호스트, DockSpace·Workspace, 씬 문서, 선택·Undo, 입력·단축키 처리는 Editor에 둔다. 기본 Viewport와 Hierarchy·Inspector 전체는 현재 구체 클래스 간 호출이 있으므로, 독립 확장부터 분리한다. PIE 입력은 `Application`에서 `GameViewportPanel`을 직접 조회한다. [PIE 입력 연결](../Editor/Source/Application/Private/Application.cpp#L709) · [Hierarchy 연동](../Editor/Source/ImGui/HierarchyPanel/Private/HierarchyPanel.cpp#L451)

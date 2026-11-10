@@ -1896,3 +1896,28 @@ PanelLifecycleProbe,Register,Load DLL,DLL 로드
 PanelLifecycleProbe,Remove,Unload DLL,DLL 언로드
 PanelLifecycleProbe,DrawCount,DLL draw calls {0},DLL 그리기 호출 {0}회
 PanelLifecycleProbe,Reload,Reload DLL,DLL 다시 로드
+PanelLifecycleProbe,SecondTitle,Second panel probe,두 번째 패널 진단
+PluginManager,Build,Build,빌드
+PluginManager,BuildFailed,Build failed,빌드 실패
+PluginManager,BuildSucceeded,Build succeeded,빌드 성공
+Notification,CompilingNamedModule,Building {0}...,{0} 빌드 중...
+Notification,NamedModuleBuildFailed,{0} build failed. See the console.,{0} 빌드 실패. 콘솔을 확인하세요.
+Notification,NamedModuleBuildSucceeded,{0} build succeeded.,{0} 빌드 성공.
+PluginManager,LastPluginOperationFailed,The last plugin operation failed.,마지막 플러그인 작업이 실패했습니다.
+PluginManager,NoRegisteredPanels,No registered panels.,등록된 패널이 없습니다.
+PluginManager,PropOrigin,Source,출처
+PluginManager,OriginDevelopment,Development,개발용
+PluginManager,OriginBuiltin,Builtin,기본 제공
+PluginManager,OriginCustom,Custom,사용자 추가
+PluginManager,PackageDiscovered,Package discovered. Activation is pending.,패키지를 찾았습니다. 활성화 연결을 기다리는 중입니다.
+PluginManager,PackageNeedsApproval,This package requires approval.,이 패키지는 사용자 승인이 필요합니다.
+PluginManager,PackageUnavailable,This package is unavailable.,이 패키지를 사용할 수 없습니다.
+PluginManager,PackageInvalidManifest,The package manifest is invalid or unreadable.,패키지 매니페스트가 잘못됐거나 읽을 수 없습니다.
+PluginManager,PackageIncompatibleSdk,The package SDK does not match this Editor build.,패키지 SDK가 현재 에디터 빌드와 호환되지 않습니다.
+PluginManager,PackageUnsupportedModules,The package must declare one Editor module.,패키지에 에디터 모듈이 하나 있어야 합니다.
+PluginManager,PackageMissingBinary,The package DLL is missing.,패키지 DLL을 찾을 수 없습니다.
+PluginManager,PackageUnsafePath,The package DLL path is invalid or outside the package.,DLL 경로가 잘못됐거나 패키지 폴더 밖을 가리킵니다.
+PluginManager,PackageDuplicateId,The package ID conflicts with another package.,패키지 ID가 다른 패키지와 충돌합니다.
+PluginManager,ApprovePluginTitle,Approve Plugin,플러그인 승인
+PluginManager,ApprovePluginWarning,This DLL runs inside the Editor process. Approve it only if you trust its source.,이 DLL은 에디터 프로세스 안에서 실행됩니다. 출처를 신뢰할 수 있을 때만 승인하세요.
+PluginManager,ApproveAndLoad,Approve and Load,승인 후 로드

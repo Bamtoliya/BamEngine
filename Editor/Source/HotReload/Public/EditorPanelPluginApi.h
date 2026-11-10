@@ -19,7 +19,7 @@ namespace Editor
         DrawPanelV1 Draw;
     };
 
-    struct EditorPluginApiV1
+    struct PluginApiV1
     {
         std::uint32_t Size;
         std::uint32_t PanelSize;
@@ -28,6 +28,23 @@ namespace Editor
         const PanelRegistrationV1* Panels;
     };
 
-    using GetEditorPluginApiV1 = const EditorPluginApiV1* (*)() noexcept;
-    inline constexpr char EditorPluginEntryV1[] = "BamGetEditorPluginV1";
+    using GetPluginApiV1 = const PluginApiV1* (*)() noexcept;
+#if defined(_WIN32) && defined(_M_X64) && defined(_MSC_VER) && !defined(__clang__)
+#define BAM_PLUGIN_SDK_STRING_IMPL(value) #value
+#define BAM_PLUGIN_SDK_STRING(value) BAM_PLUGIN_SDK_STRING_IMPL(value)
+
+#if defined(_DEBUG)
+    inline constexpr char PluginSdkCompatibility[] = "bam-panel-v1-win64-msvc-"
+        BAM_PLUGIN_SDK_STRING(_MSC_VER) "-debug";
+#else
+    inline constexpr char PluginSdkCompatibility[] = "bam-panel-v1-win64-msvc-"
+        BAM_PLUGIN_SDK_STRING(_MSC_VER) "-release";
+#endif
+
+#undef BAM_PLUGIN_SDK_STRING
+#undef BAM_PLUGIN_SDK_STRING_IMPL
+#else
+    inline constexpr char PluginSdkCompatibility[] = "";
+#endif
+    inline constexpr char PluginEntryV1[] = "BamGetPluginV1";
 }

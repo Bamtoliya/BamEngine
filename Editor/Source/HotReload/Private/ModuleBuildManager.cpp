@@ -117,7 +117,7 @@ void ModuleBuildManager::Update()
             m_Status = EModuleBuildStatus::Succeeded;
             EDITOR_LOG_INFO("[ModuleBuildManager] {} build succeeded", WStrToStr(m_TargetName));
             NotificationManager::Get().AddNotification(
-                LOCAL("ToolBar.ModuleCompile"), LOCAL("Notification.CompileSuccess"), ELogLevel::Info, 3.0f);
+                LOCAL("ToolBar.ModuleCompile"), LOCAL_FMT("Notification.NamedModuleBuildSucceeded", WStrToStr(m_TargetName)), ELogLevel::Info, 3.0f);
 
             // 빌드가 완전히 끝났으므로 안전하게 모듈 핫로드 실행
             if (m_TargetName == L"GameModule")
@@ -128,7 +128,7 @@ void ModuleBuildManager::Update()
             m_Status = EModuleBuildStatus::Failed;
             EDITOR_LOG_ERROR("[ModuleBuildManager] {} build failed:\n{}", WStrToStr(m_TargetName), m_LastBuildOutput);
             NotificationManager::Get().AddNotification(
-                LOCAL("ToolBar.ModuleCompile"), LOCAL("Notification.CompileFailed"), ELogLevel::Error, 5.0f);
+                LOCAL("ToolBar.ModuleCompile"), LOCAL_FMT("Notification.NamedModuleBuildFailed", WStrToStr(m_TargetName)), ELogLevel::Error, 5.0f);
         }
 
         if (m_OnBuildCompleted) m_OnBuildCompleted(m_LastBuildSuccess, m_LastBuildOutput);
@@ -149,7 +149,7 @@ bool ModuleBuildManager::RequestBuild()
     m_Status = EModuleBuildStatus::Compiling;
     EDITOR_LOG_INFO("[ModuleBuildManager] Starting background build for {}", WStrToStr(m_TargetName));
     NotificationManager::Get().AddNotification(
-        LOCAL("ToolBar.ModuleCompile"), LOCAL("Notification.CompilingModule"), ELogLevel::Info, 2.0f);
+        LOCAL("ToolBar.ModuleCompile"), LOCAL_FMT("Notification.CompilingNamedModule", WStrToStr(m_TargetName)), ELogLevel::Info, 2.0f);
 
     m_BuildThread = std::thread(&ModuleBuildManager::ExecuteBuildAsync, this);
     return true;

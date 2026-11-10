@@ -1,11 +1,11 @@
-#pragma once
+﻿#pragma once
 
 #include "ImGuiInterface.h"
 #include <string>
 #include <vector>
+#include <memory>
 
 BEGIN(Editor)
-
 enum class EPluginCategory : uint8
 {
 	All,
@@ -36,6 +36,7 @@ struct PluginModuleItem
 	bool IsAssetModule = false;
 	bool IsResourcePlugin = false;
 	std::wstring AssociatedPanelName;
+	std::optional<std::size_t> HostIndex;
 };
 
 class PluginManagerPanel final : public IImGui
@@ -46,7 +47,6 @@ public:
 
 	void Draw() override;
 	EPanelMenuCategory GetPanelMenuCategory() const override { return EPanelMenuCategory::Diagnostics; }
-
 protected:
 	EResult OnInitialize(void* arg) override;
 
@@ -54,6 +54,7 @@ private:
 	void InitModuleList();
 	void DrawMasterList();
 	void DrawDetailView();
+	void DrawApprovalDialog();
 	void DrawHeaderToolbar(const PluginModuleItem& item);
 	void DrawMetadataTable(const PluginModuleItem& item);
 	void DrawProvidedFeatures(const PluginModuleItem& item);

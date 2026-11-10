@@ -7,6 +7,7 @@
 #include "EditorDocumentController.h"
 #include <unordered_set>
 #include <string_view>
+#include "PluginHost.h"
 
 BEGIN(Engine)
 class RHITexture;
@@ -66,6 +67,7 @@ public:
 	bool RequestOpenResourceEditor(const std::filesystem::path& path);
 	IImGui* GetFocusedClosablePanel() const;
 	void RequestCloseFocusedPanel();
+	PluginHost& GetPluginHost() { return m_PluginHost; }
 private:
 	EResult CreateDefaultPanels();
 private:
@@ -186,6 +188,8 @@ private:
 	bool m_RendererBackendInitialized = false;
 	std::unique_ptr<EditorDocumentController> m_DocumentController;
 	std::unordered_set<Engine::RHITexture*> m_FrameTextures;
+private:
+	PluginHost m_PluginHost;
 #pragma region DirectX12
 	struct ID3D12DescriptorHeap* m_ImGuiSrvDescHeap = nullptr;
 	uint32 m_ImGuiSrvDescriptorSize = 0;

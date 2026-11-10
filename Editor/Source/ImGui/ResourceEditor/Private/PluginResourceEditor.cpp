@@ -49,7 +49,7 @@ void PluginResourceEditor::Reload()
 {
 	if (HotReloadManager::IsCreated())
 	{
-		const auto* builder = HotReloadManager::Get().GetEditorPluginBuilder(m_Target);
+		const auto* builder = HotReloadManager::Get().GetPluginBuilder(m_Target);
 		if (builder && builder->IsCompiling())
 		{
 			RequestReload();
@@ -58,7 +58,7 @@ void PluginResourceEditor::Reload()
 	}
 
 	m_ReloadFailed = true;
-	EditorPluginModule candidate;
+	PluginModule candidate;
 	const std::wstring dllName = std::wstring(m_Target.begin(), m_Target.end()) + L".dll";
 	if (!candidate.Open(dllName.c_str()))
 		return;

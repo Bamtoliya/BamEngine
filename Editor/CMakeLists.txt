@@ -46,6 +46,7 @@ add_executable(Editor
 
 if(WIN32)
     target_compile_definitions(Editor PRIVATE "BAM_EDITOR_CMAKE_COMMAND=L\"${CMAKE_COMMAND}\"")
+    target_link_libraries(Editor PRIVATE bcrypt)
     if(CMAKE_GENERATOR MATCHES "^Visual Studio")
         target_compile_definitions(Editor PRIVATE BAM_EDITOR_MSBUILD)
     endif()

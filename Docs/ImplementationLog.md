@@ -2,6 +2,14 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-10] 공용 에디터 DLL 플러그인 기반
+
+- `PluginHost`가 `Plugins.txt`에서 개발용 타깃을 읽고, 빌드 성공 뒤 이미 활성화된 패널 DLL에 리로드를 요청한다. Probe DLL은 `BamGetPluginV1`에서 두 패널을 반환하고, 두 패널은 하나의 모듈을 공유한다. Sprite는 기존 `EditorResourcePlugins.txt`와 편집 세션 경로를 사용한다.
+- `PluginHost`에 Builtin·Custom 패키지의 로드·리로드·언로드를 연결하고, 관리자 상세 화면에서 해당 동작을 요청하도록 했다. Custom 승인창에는 패키지 이름과 DLL 경로, SHA-256을 표시한다.
+- 승인에 사용한 프로젝트·패키지·DLL 정보와 현재 후보를 다시 대조한 뒤 기존 V1 패널 등록 경로로 활성화한다. 성공한 승인은 Editor 로컬 환경설정 폴더에 저장하며, 동시에 저장하려는 다른 프로세스와 충돌하면 기존 파일을 보존한다.
+- [플러그인 설계](EditorPluginArchitecturePlan.md#8-현재-진행-상태-2026-11-10)에 검증 절차, 함수·헤더의 역할과 Mermaid 흐름도, 기능별 이관 범위를 정리했다.
+- 사용자는 승인 기능 적용 전 Debug 빌드와 Probe의 수동 로드·리로드 성공을 보고했다. 이번 변경은 소스·설정과 로캘 데이터를 정적으로 대조했다. 최신 Debug 빌드, 승인 취소·재사용·변경 DLL 재승인, 교체 실패와 언로드는 사용자 확인 전이다.
+
 ### [2026-11-10] Debug 회귀 수정 및 사용자 검증
 
 - `PhysicsSystem`의 위치 보정 반복에 2D 침투도 반영했다. 2D 전용 씬에서 3D 접촉 유무에 따라 보정이 조기 종료되던 경로를 수정했다. 사용자가 실행한 `Physics2DCheck`에서 키네마틱 접촉을 포함한 검사가 통과했다.

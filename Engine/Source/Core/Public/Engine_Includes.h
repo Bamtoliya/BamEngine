@@ -140,6 +140,7 @@ using Microsoft::WRL::ComPtr;
 #include "EnumBit.h"
 #include "Handle.h"
 #include "Logger.h"
+#include "PlatformPath.h"
 #pragma endregion
 using namespace Engine;
 

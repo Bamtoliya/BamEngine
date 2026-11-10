@@ -1,7 +1,7 @@
 #pragma once
 
 #include "ResourceEditorInterface.h"
-#include "EditorPluginModule.h"
+#include "PluginModule.h"
 #include "ResourcePanelPluginApi.h"
 
 BEGIN(Editor)
@@ -40,7 +40,7 @@ private:
 
 	std::string m_Target;
 	std::filesystem::path m_SourceDirectory;
-	EditorPluginModule m_Module;
+	PluginModule m_Module;
 	const ResourcePanelPluginApi* m_Api = nullptr;
 	void* m_Session = nullptr;
 	std::string m_SaveActionId;
