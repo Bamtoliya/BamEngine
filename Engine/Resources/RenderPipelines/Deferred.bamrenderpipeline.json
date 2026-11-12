@@ -1,0 +1,56 @@
+{
+    "Version": 1,
+    "Passes": [
+        {
+            "Id": "Shadow",
+            "Type": "DirectionalShadow",
+            "Settings": {
+                "Resolution": 4096
+            }
+        },
+        {
+            "Id": "PointShadow",
+            "Type": "PointShadow",
+            "Settings": {
+                "Resolution": 1024
+            }
+        },
+        {
+            "Id": "Geometry",
+            "Type": "GBuffer"
+        },
+        {
+            "Id": "Lighting",
+            "Type": "DeferredLighting",
+            "Inputs": {
+                "GBuffer": "Geometry.GBuffer",
+                "DirectionalShadow": "Shadow.Depth",
+                "PointShadow": "PointShadow.Depth"
+            }
+        },
+        {
+            "Id": "Opaque",
+            "Type": "ForwardOpaque",
+            "Inputs": {
+                "Color": "Lighting.HdrColor",
+                "Depth": "Geometry.Depth"
+            }
+        },
+        {
+            "Id": "Transparent",
+            "Type": "ForwardTransparent",
+            "Inputs": {
+                "Color": "Opaque.Color",
+                "Depth": "Opaque.Depth"
+            }
+        },
+        {
+            "Id": "PostProcess",
+            "Type": "ScenePostProcess",
+            "Inputs": {
+                "Color": "Transparent.Color"
+            }
+        }
+    ],
+    "Output": "PostProcess.Color"
+}

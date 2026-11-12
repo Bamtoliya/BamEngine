@@ -121,3 +121,15 @@ endif()
 if(BUILD_TESTING)
     add_test(NAME SpriteAtlasCheck COMMAND SpriteAtlasCheck)
 endif()
+
+add_executable(RenderPipelineProfileCheck examples/RenderPipelineProfileCheck.cpp)
+target_link_libraries(RenderPipelineProfileCheck PRIVATE BamEngine::Engine)
+set_target_properties(RenderPipelineProfileCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
+
+if(BUILD_TESTING)
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/render-pipeline-profile-check")
+    add_test(NAME RenderPipelineProfileCheck COMMAND RenderPipelineProfileCheck
+        "${CMAKE_CURRENT_SOURCE_DIR}/Resources/RenderPipelines/Deferred.bamrenderpipeline.json")
+    set_tests_properties(RenderPipelineProfileCheck PROPERTIES
+        WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/render-pipeline-profile-check")
+endif()

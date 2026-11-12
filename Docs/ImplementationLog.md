@@ -4391,3 +4391,9 @@ Use this as the primary execution list until a playable 2D vertical slice is com
 
 - 로컬 Client 내보내기 폴더를 Git 제외 목록에 추가했다. Editor의 DirectX12 ImGui 백엔드와 공용 인터페이스에 필요한 헤더를 명시하고, 나머지 편집기·엔진 소스의 인코딩 및 공백 변경을 정리했다.
 - 커밋 전 변경 구간과 파일 분류를 정적으로 확인했다. 이 정리에서 Editor·Engine 빌드나 런타임 테스트를 새로 실행하지 않았다.
+
+### [2026-11-13] 렌더 파이프라인 프로필 파일과 공용 검증기
+
+- Engine 리소스에 기본 Deferred 프로필을 추가하고 `JsonArchive` 기반 파일 읽기·쓰기와 GPU 초기화 없이 수행하는 슬롯 검증을 연결했다. 순서, 슬롯 타입, 필수 입력, 제자리 갱신 이후의 이전 출력과 최종 색상 출력을 검사한다.
+- `RenderPipelineProfileCheck`에 파일 왕복, 대표 오류 경로와 실패 시 기존 상태 보존 검증을 추가했다. 이번 작업에서는 소스·기본 JSON·공백을 정적으로 대조했다. C++ 빌드와 체크 실행은 남아 있다.
+- Game View·Client 제출, GPU 리소스 수명과 빌드 패널의 프로필 선택·패키징 연결은 후속 단계다. [렌더 프로필 설계 및 검증 명령](RenderPipelineProfilePlan.md)

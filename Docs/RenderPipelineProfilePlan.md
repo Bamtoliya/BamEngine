@@ -1,7 +1,7 @@
 # Render Pipeline Profile 설계
 
 - 갱신일: 2026-11-13
-- 상태: 설계. 프로필 파일, 로더, 패스 재구성과 내보내기 연동은 구현 전이다.
+- 상태: 1단계 코드 반영. 기본 Deferred 파일과 GPU 초기화 없는 JSON 로더·저장·검증기를 추가했다. 빌드와 실행 검증은 남아 있다.
 - 관련 문서: [빌드·패키징 계획](BuildAndPackagingPlan.md), [렌더링 개발 계획](RenderingDevelopmentPlan.md), [셰이더 바인딩](Shader/BINDING_LAYOUT.md)
 
 ## 목적과 현재 상태
@@ -13,50 +13,18 @@ Editor의 Game View와 배포 Client가 동일한 프로필을 읽어 동일한 
 ## 소유권과 파일 형식
 
 - `ProjectSettings.RenderPipelineProfilePath`는 프로젝트의 기본 프로필 URI를 가리킨다. Editor Game View와 Client가 같은 경로를 사용하고, 빌드 패널은 현재 경로를 표시한다. 배포본의 `Config/Project.json`에 실제로 사용한 경로를 기록한다.
-- 프로필에는 버전, 순서가 있는 패스 목록, 패스별 설정, 입력 연결, 최종 색상 출력을 저장한다. 첫 후보 경로는 `Project://RenderPipelines/Deferred.bamrenderpipeline.json`이다.
+- 프로필에는 버전, 순서가 있는 패스 목록, 패스별 설정, 입력 연결, 최종 색상 출력을 저장한다. 기본 파일은 `Engine://RenderPipelines/Deferred.bamrenderpipeline.json`에 두고, 프로젝트별 프로필은 `Project://RenderPipelines/`에서 관리한다.
 - 씬은 카메라, 조명, 안개와 `PostProcessComponent::PipelineSettings`를 소유한다. 프로필의 `ScenePostProcess` 패스는 씬의 후처리 설정을 적용한다. 화면 크기와 표시 대상은 호스트가 지정한다.
 - Engine은 패스 종류별 입출력 규격과 실행 코드를 소유한다. 인스턴스마다 생성하는 패스 ID, 렌더 타깃과 GPU 객체는 런타임 상태다. 프로필에서 등록된 패스를 다시 조합할 수 있으며, 새로운 실행 동작은 Engine의 패스 구현으로 추가한다.
 
-첫 버전은 `Version`, `Passes[]`, `Output`으로 구성한다. 패스마다 `Id`, `Type`, 필요한 경우 `Inputs`와 `Settings`를 가진다. `Inputs`와 `Output`은 `패스ID.출력슬롯`으로 연결한다. 아래는 초기 Deferred 프로필의 설계 예시다.
-
-```json
-{
-  "Version": 1,
-  "Passes": [
-    { "Id": "Shadow", "Type": "DirectionalShadow", "Settings": { "Resolution": 4096 } },
-    { "Id": "PointShadow", "Type": "PointShadow", "Settings": { "Resolution": 1024 } },
-    { "Id": "Geometry", "Type": "GBuffer" },
-    {
-      "Id": "Lighting", "Type": "DeferredLighting",
-      "Inputs": {
-        "GBuffer": "Geometry.GBuffer",
-        "DirectionalShadow": "Shadow.Depth",
-        "PointShadow": "PointShadow.Depth"
-      }
-    },
-    {
-      "Id": "Opaque", "Type": "ForwardOpaque",
-      "Inputs": { "Color": "Lighting.HdrColor", "Depth": "Geometry.Depth" }
-    },
-    {
-      "Id": "Transparent", "Type": "ForwardTransparent",
-      "Inputs": { "Color": "Opaque.Color", "Depth": "Opaque.Depth" }
-    },
-    {
-      "Id": "PostProcess", "Type": "ScenePostProcess",
-      "Inputs": { "Color": "Transparent.Color" }
-    }
-  ],
-  "Output": "PostProcess.Color"
-}
-```
+첫 버전은 `Version`, `Passes[]`, `Output`으로 구성한다. 패스마다 `Id`, `Type`, 필요한 경우 `Inputs`와 `Settings`를 가진다. `Inputs`와 `Output`은 `패스ID.출력슬롯`으로 연결한다. 초기 구성은 [Deferred 프로필](../Engine/Resources/RenderPipelines/Deferred.bamrenderpipeline.json)에 기록했다.
 
 패스는 배열 순서대로 실행하며 앞에 정의된 출력만 읽을 수 있다. `GBuffer` 출력 묶음의 Diffuse·Normal·PBR·Emission·Position 포맷과 슬롯은 패스 규격으로 고정한다. Forward 패스가 색상·깊이 타깃을 제자리에서 갱신하는 경우 출력은 다음 논리 버전으로 취급한다. 이후 패스가 덮어쓰기 전 버전을 요구하면 검증 오류로 처리한다. 활성 효과가 없는 `ScenePostProcess`는 입력 색상을 최종 출력으로 전달할 수 있다.
 
 ## 로드, 검증과 런타임 수명
 
 1. 기존 `JsonArchive` 계열을 사용해 프로필을 읽고 쓴다. 프로필 스키마 버전은 `ProjectSettings` 버전과 별도로 관리한다.
-2. GPU 없이 실행 순서와 연결을 검증한다. 지원 버전, 중복 ID, 알 수 없는 타입·설정, 빠진 입력, 타입·포맷 불일치, 앞에서 정의되지 않은 입력, 덮어쓴 출력 참조, 최종 색상 출력을 검사한다. 오류에는 프로필 경로, 패스 ID, 필드, 실패 원인을 포함한다. 프로필 경로가 비어 있는 기존 프로젝트는 기존 경로로 실행하고, 명시한 프로필이 잘못됐으면 원인을 표시한다.
+2. GPU 없이 실행 순서와 연결을 검증한다. 지원 버전, 중복 ID, 알 수 없는 타입·설정, 빠진 입력, 슬롯 타입 불일치, 앞에서 정의되지 않은 입력, 덮어쓴 출력 참조, 최종 색상 출력을 검사한다. 실제 GPU 포맷 지원과 셰이더 바인딩은 실행 경로 연결 시 검사한다. 파일 읽기·쓰기 오류에는 프로필 경로, 패스 인덱스를 포함한 필드 경로, 실패 원인을 포함한다. 프로필 경로가 비어 있는 기존 프로젝트는 기존 경로로 실행하고, 명시한 프로필이 잘못됐으면 원인을 표시한다.
 3. 실행 가능한 구성을 만들 때 기존 `RenderTargetManager`, `RenderPassManager`, `Renderer`에 연결한다. 각 인스턴스가 고유한 렌더 타깃과 패스 ID를 소유한다. 생성 실패 시 이번 인스턴스가 등록한 항목을 역순으로 정리한다.
 4. 현재 개별 패스 등록 해제 API를 보강한다. 프레임 경계에서 카메라 등록, 큐, 패스별 콜백을 제거한 뒤 패스와 타깃을 해제한다. GPU 리소스는 RHI의 사용 완료 및 지연 해제 규칙을 따른다. 리사이즈에서는 화면 크기에 종속된 타깃을 갱신한다.
 
@@ -74,3 +42,17 @@ Editor의 Game View와 배포 Client가 동일한 프로필을 읽어 동일한 
 3. **Windows 내보내기.** 배포본의 설정에 프로필 경로를 기록하고 저장소 밖에서 실행한다. PIE와 Client가 같은 프로필과 패스 목록을 사용하고, 씬 Exposure와 프로필 그림자 해상도를 각각 바꿨을 때 두 호스트에서 결과가 반영되는지 확인한다. 필수 셰이더를 누락한 경우 패키지가 게시되기 전에 실패해야 한다.
 
 2026-11-13에 소스와 기존 배포 로그를 대조했다. 로그는 `RaytracingScene3` 로드와 Client 초기화 성공을 기록했고 Animator 컨트롤러 경로 오류도 남겼다. 현재 씬의 일부 절대 경로 참조 정리, 저장소 밖 실행, 프로필 기반 화면 일치는 검증 대상으로 남는다.
+
+## 1단계 수동 검증
+
+`RenderPipelineProfileCheck`는 기본 프로필의 로드·저장·재로드, 필수 입력과 슬롯 타입,
+앞선 출력만 참조하는 규칙, 제자리 갱신 이후의 이전 출력, 지원하지 않는 설정 필드,
+실패한 로드·저장이 기존 상태에 미치는 영향을 확인한다. 이 체크는 Editor나 GPU 초기화 없이 실행한다.
+
+새 Git 워크트리에서는 기존 Engine 빌드가 사용하는 FMOD SDK와 Reflection LLVM 의존성을 먼저 준비한다.
+
+```powershell
+cmake --preset x64-debug -DBUILD_TESTING=ON
+cmake --build out/build/x64-debug --config Debug --target RenderPipelineProfileCheck
+ctest --test-dir out/build/x64-debug -C Debug -R "^RenderPipelineProfileCheck$" --output-on-failure
+```
