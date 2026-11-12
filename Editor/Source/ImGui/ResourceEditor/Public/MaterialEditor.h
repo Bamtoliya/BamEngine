@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "ResourceEditorInterface.h"
 #include "MaterialInterface.h"
@@ -33,12 +33,13 @@ private:
 	void DrawShaderSettings();
 	void DrawTextureBindings();
 	void DrawParameters();
+	void SaveTarget();
 
 private:
 	Engine::ResourceHandle<Engine::MaterialInterface> m_MaterialHandle;
 	Engine::MaterialInterface* m_Material = nullptr;
 	bool m_IsDirty = false;
-
+	bool m_IsReadOnly = false;
 	// 새 파라미터 추가용 입력 버퍼
 	char m_NewParamName[128] = "";
 	int m_NewParamTypeIndex = 0;

@@ -57,6 +57,7 @@ bool MaterialEditor::IsSupported(const std::filesystem::path& assetPath) const
 void MaterialEditor::SetTargetResource(const std::filesystem::path& assetPath)
 {
 	m_TargetResourcePath = assetPath;
+	m_IsReadOnly = Engine::PlatformPath::IsReadOnlyTarget(m_TargetResourcePath);
 	m_Material = nullptr;
 	m_MaterialHandle = {};
 	m_IsDirty = false;
@@ -145,36 +146,38 @@ void MaterialEditor::DrawCustomContent()
 	ImGui::EndChild();
 }
 
+void MaterialEditor::SaveTarget()
+{
+	if (!m_Material || m_IsReadOnly)
+		return;
+
+	auto& manager = Engine::ResourceManager::Get();
+	const std::string path = m_TargetResourcePath.string();
+	const EResult result = path.ends_with(".json")
+		? manager.SaveToJsonFile(m_Material, m_TargetResourcePath.wstring())
+		: manager.SaveToBinaryFile(m_Material, m_TargetResourcePath.wstring());
+
+	if (result != EResult::Success)
+	{
+		EDITOR_LOG_ERROR("Failed to save material: {}", path);
+		return;
+	}
+
+	m_IsDirty = false;
+	if (AssetCache::IsCreated())
+		AssetCache::Get().RequestInvalidate(m_TargetResourcePath);
+	EDITOR_LOG_INFO("Material saved: {}", path);
+}
+
 void MaterialEditor::DrawCustomToolbar()
 {
 	if (!m_Material) return;
 
 	if (ImGui::BeginMenu(LOCAL_LABEL("EditorMenu.File").c_str()))
 	{
-		const bool canSave = m_Material != nullptr;
-		ImGui::BeginDisabled(!canSave);
-		auto& sm = ShortcutManager::Get();
-		if (ImGui::MenuItem((ICON_FA_FLOPPY_DISK " " + LOCAL_LABEL("EditorCommon.Save")).c_str(), sm.GetShortcutHint("Animator.Save")))
-		{
-			const std::string pathStr = m_TargetResourcePath.string();
-			EResult result = EResult::Fail;
-			if (pathStr.ends_with(".json"))
-				result = Engine::ResourceManager::Get().SaveToJsonFile(m_Material, m_TargetResourcePath.wstring());
-			else
-				result = Engine::ResourceManager::Get().SaveToBinaryFile(m_Material, m_TargetResourcePath.wstring());
-
-			if (result == EResult::Success)
-			{
-				m_IsDirty = false;
-				if (AssetCache::IsCreated())
-					AssetCache::Get().RequestInvalidate(m_TargetResourcePath);
-				EDITOR_LOG_INFO("Material saved: {}", pathStr);
-			}
-			else
-			{
-				EDITOR_LOG_ERROR("Failed to save material: {}", pathStr);
-			}
-		}
+		ImGui::BeginDisabled(m_IsReadOnly);
+		if (ImGui::MenuItem((ICON_FA_FLOPPY_DISK " " + LOCAL_LABEL("EditorCommon.Save")).c_str()))
+			SaveTarget();
 
 		if (ImGui::MenuItem((ICON_FA_ROTATE_LEFT " " + LOCAL_LABEL("MaterialEditor.Revert")).c_str()))
 		{
@@ -227,29 +230,12 @@ void MaterialEditor::DrawCustomQuickAccess()
 
 	EditorUI::ToolbarLayout toolbar;
 
-	if (toolbar.Icon("SaveMaterial", ICON_FA_FLOPPY_DISK, "EditorCommon.Save"))
-	{
-		const std::string pathStr = m_TargetResourcePath.string();
-		EResult result = EResult::Fail;
-		if (pathStr.ends_with(".json"))
-			result = Engine::ResourceManager::Get().SaveToJsonFile(m_Material, m_TargetResourcePath.wstring());
-		else
-			result = Engine::ResourceManager::Get().SaveToBinaryFile(m_Material, m_TargetResourcePath.wstring());
+	EditorUI::IconButtonOptions editOptions;
+	editOptions.Enabled = !m_IsReadOnly;
+	if (toolbar.Icon("SaveMaterial", ICON_FA_FLOPPY_DISK, "EditorCommon.Save", editOptions))
+		SaveTarget();
 
-		if (result == EResult::Success)
-		{
-			m_IsDirty = false;
-			if (AssetCache::IsCreated())
-				AssetCache::Get().RequestInvalidate(m_TargetResourcePath);
-			EDITOR_LOG_INFO("Material saved: {}", pathStr);
-		}
-		else
-		{
-			EDITOR_LOG_ERROR("Failed to save material: {}", pathStr);
-		}
-	}
-
-	if (toolbar.Icon("RevertMaterial", ICON_FA_ROTATE_LEFT, "MaterialEditor.Revert"))
+	if (toolbar.Icon("RevertMaterial", ICON_FA_ROTATE_LEFT, "MaterialEditor.Revert", editOptions))
 	{
 		if (m_Material && m_Material->Reload(m_TargetResourcePath) == EResult::Success)
 		{
@@ -276,12 +262,20 @@ void MaterialEditor::DrawCustomQuickAccess()
 	const std::string fileName = m_TargetResourcePath.empty()
 		? LOCAL("AnimatorGraph.Unsaved") : m_TargetResourcePath.filename().string();
 	toolbar.Text(("[" + fileName + (m_IsDirty ? " *]" : "]")).c_str());
+
+	if (m_IsReadOnly)
+	{
+		const std::string label = ICON_FA_LOCK " " + LOCAL("ContentBrowser.EngineReadOnlyBadge");
+		toolbar.Text(label.c_str());
+	}
 }
 
 void MaterialEditor::DrawPipelineSettings()
 {
 	if (!ImGui::CollapsingHeader(LOCAL_CSTR("MaterialEditor.PipelineSettings"), ImGuiTreeNodeFlags_DefaultOpen))
 		return;
+
+	ImGui::BeginDisabled(m_IsReadOnly);
 
 	auto* inst = dynamic_cast<Engine::MaterialInstance*>(m_Material);
 	if (inst)
@@ -300,7 +294,7 @@ void MaterialEditor::DrawPipelineSettings()
 		ImGui::SameLine();
 		// 베이스 머티리얼을 다시 연결할 수 있는 피커 슬롯 제공
 		ImGui::PushID("BaseMaterialSlot");
-		if (Editor::DrawInspectorResourcePicker(baseHandle, true))
+		if (Editor::DrawInspectorResourcePicker(baseHandle, !m_IsReadOnly) && !m_IsReadOnly)
 		{
 			inst->SetBaseMaterial(baseHandle);
 			m_IsDirty = true;
@@ -360,12 +354,17 @@ void MaterialEditor::DrawPipelineSettings()
 		m_Material->SetDepthCompareOp(static_cast<Engine::ECompareOp>(opIdx));
 		m_IsDirty = true;
 	}
+
+	ImGui::EndDisabled();
 }
 
 void MaterialEditor::DrawShaderSettings()
 {
 	if (!ImGui::CollapsingHeader(LOCAL_CSTR("MaterialEditor.ShaderSettings"), ImGuiTreeNodeFlags_DefaultOpen))
 		return;
+
+	ImGui::BeginDisabled(m_IsReadOnly);
+
 	auto DrawShaderSlot = [&](const std::string& slotId, const std::string& label, Engine::ResourceHandle<Engine::Shader> currentShader, float btnWidth, auto onAssign)
 		{
 			if (!label.empty())
@@ -375,7 +374,7 @@ void MaterialEditor::DrawShaderSettings()
 			}
 			ImGui::PushID(slotId.c_str());
 			if (btnWidth > 0.0f) ImGui::SetNextItemWidth(btnWidth);
-			if (Editor::DrawInspectorResourcePicker(currentShader, true))
+			if (Editor::DrawInspectorResourcePicker(currentShader, !m_IsReadOnly) && !m_IsReadOnly)
 			{
 				onAssign(currentShader);
 				m_IsDirty = true;
@@ -464,12 +463,16 @@ void MaterialEditor::DrawShaderSettings()
 		}
 	}
 	ImGui::PopID();
+
+	ImGui::EndDisabled();
 }
 
 void MaterialEditor::DrawTextureBindings()
 {
 	if (!ImGui::CollapsingHeader(LOCAL_CSTR("MaterialEditor.TextureBindings"), ImGuiTreeNodeFlags_DefaultOpen))
 		return;
+
+	ImGui::BeginDisabled(m_IsReadOnly);
 
 	auto* inst = dynamic_cast<Engine::MaterialInstance*>(m_Material);
 	Engine::Material* baseMat = inst ? inst->GetBaseMaterial() : nullptr;
@@ -645,7 +648,7 @@ void MaterialEditor::DrawTextureBindings()
 			// Column 3: Texture Resource Picker Slot (클릭 시 피커 팝업 + 드래그 앤 드롭 동시 지원)
 			ImGui::TableSetColumnIndex(3);
 			auto texHandle = row.texture;
-			if (Editor::DrawInspectorResourcePicker(texHandle, true, false))
+			if (Editor::DrawInspectorResourcePicker(texHandle, !m_IsReadOnly, false) && !m_IsReadOnly)
 			{
 				m_Material->SetTextureBinding(row.name, row.slot, texHandle);
 				m_IsDirty = true;
@@ -699,12 +702,16 @@ void MaterialEditor::DrawTextureBindings()
 		m_IsDirty = true;
 	}
 	ImGui::PopID();
+
+	ImGui::EndDisabled();
 }
 
 void MaterialEditor::DrawParameters()
 {
 	if (!ImGui::CollapsingHeader(LOCAL_CSTR("MaterialEditor.Parameters"), ImGuiTreeNodeFlags_DefaultOpen))
 		return;
+
+	ImGui::BeginDisabled(m_IsReadOnly);
 
 	const auto& params = m_Material->GetParameters();
 	std::string paramToRemove = "";
@@ -837,6 +844,8 @@ void MaterialEditor::DrawParameters()
 		}
 	}
 	ImGui::PopID();
+
+	ImGui::EndDisabled();
 }
 
 void MaterialEditor::CaptureState(EditorWorkspace& workspace) const
