@@ -4369,3 +4369,7 @@ Use this as the primary execution list until a playable 2D vertical slice is com
 
 - `SceneManager`의 씬 저장·로드를 별도 구역으로 배치하고 `Scene`의 활성·정지 플래그 변경을 인라인으로 옮겼다. 저장·로드의 후보 씬 생성과 교체 순서는 정적으로 대조했다.
 - 소스 조직 지침에 호출부, 소유권, 상태 반영 순서, 호환성 확인 기준을 추가했다. 씬 저장·재열기, 프리팹 인스턴스화와 실패 시 기존 씬 보존은 실행 검증 대상이다. [코드 조직 지침](SourceOrganizationGuidelines.md#13-엔진-코드-리팩토링-기준)
+
+### [2026-11-13] Editor 플러그인 승인 문서 타입 정리
+
+- JSON 승인 문서의 내부 타입을 `Editor` 네임스페이스로 배치했다. 스키마 버전과 승인 기록 필드는 유지한다. 기존 승인 파일을 읽고 갱신하는 흐름은 실행 검증 대상이다. [Editor 플러그인 설계](EditorPluginArchitecturePlan.md)

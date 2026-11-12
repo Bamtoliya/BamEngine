@@ -1,4 +1,4 @@
-#include "PluginApproval.h"
+﻿#include "PluginApproval.h"
 
 #include <archive/ArchiveInterface.h>
 #include <glaze/glaze.hpp>
@@ -17,16 +17,14 @@
 
 namespace Editor
 {
+    struct PluginApprovalDocument
+    {
+        std::uint32_t schemaVersion = 0;
+        std::vector<PluginApproval> approvals;
+    };
     namespace
     {
         constexpr std::uint32_t PluginApprovalSchemaVersion = 1;
-
-        struct PluginApprovalDocument
-        {
-            std::uint32_t schemaVersion = 0;
-            std::vector<PluginApproval> approvals;
-        };
-
         bool ReadPluginApprovalDocument(const std::filesystem::path& path, PluginApprovalDocument& document)
         {
             if (path.empty())
