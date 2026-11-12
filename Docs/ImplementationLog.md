@@ -2,6 +2,12 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-11] 콘텐츠 브라우저 다중 선택 경로 복사와 씬 배치
+
+- 콘텐츠 브라우저의 선택된 타일에서 우클릭하면 선택한 경로를 줄 단위로 복사한다. 선택 밖 타일의 우클릭은 해당 항목의 메뉴를 연다.
+- 씬 뷰포트의 다중 드롭에서 지원하는 모델과 프리팹을 배치한다. 성공한 항목은 한 편집 이력으로 기록하고, 일부 항목을 배치하지 못하면 결과 개수를 표시한다.
+- 변경부의 공백 검사와 로캘 키를 정적으로 확인했다. Editor 빌드, 다중 경로 복사, 모델·프리팹 배치와 Undo/Redo, 기존 단일 드롭은 사용자 확인 전이다. [다중 선택 계획](ImGuiDevelopmentPlan.md#f-콘텐츠-브라우저-그리드-다중-선택)
+
 ### [2026-11-11] 콘텐츠 브라우저 스프라이트 썸네일 조회 재사용
 
 - `ContentBrowserPanel::DrawGridItem()`은 `AssetCache::GetThumbnail()`에서 텍스처와 스프라이트 핸들을 함께 받는다. `ContentBrowserGridItem::DrawThumbnail()`은 핸들로 현재 UV를 읽고, 스프라이트를 찾지 못하면 기존 파일 경로와 리소스 키 조회를 사용한다. 비교용 환경 변수와 계측 분기는 제거했다.

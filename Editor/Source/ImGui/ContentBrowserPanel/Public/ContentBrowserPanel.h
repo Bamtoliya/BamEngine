@@ -26,6 +26,8 @@ struct FileDropConflict
 
 class ContentBrowserPanel : public IImGui
 {
+	friend class ContentBrowserGridItem;
+
 public:
 	ContentBrowserPanel() = default;
 	virtual ~ContentBrowserPanel() = default;
@@ -76,6 +78,7 @@ private:
 	void ContentFilter();
 private:
 	void DrawGridItem(const filesystem::directory_entry& directoryEntry, ImGuiSelectionUserData itemId);
+	vector<filesystem::path> GetInteractionPaths(ImGuiSelectionUserData itemId, const filesystem::path& path) const;
 	void RebuildGridItems(const vector<filesystem::directory_entry>& source);
 	void ApplyGridSelectionRequests(const ImGuiMultiSelectIO& selection);
 private:
@@ -117,6 +120,9 @@ private:
 	filesystem::path m_RenameTargetPath;
 	filesystem::path m_RenamingPath;
 	vector<filesystem::path> m_InteractionPaths;
+	vector<filesystem::path> m_ContextMenuPaths;
+	wstring m_DragPayload;
+	size_t m_DragAssetCount = 0;
 	char m_RenameBuffer[256];
 private:
 	struct GridSelectionItem

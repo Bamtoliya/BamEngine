@@ -206,6 +206,8 @@ ContentBrowser,ReadOnlyProtected,Cannot modify or import into a read-only Engine
 ContentBrowser,CopyToProjectAssets,Copy to Project Assets,프로젝트 에셋으로 복사본 생성
 ContentBrowser,Skip,Skip,건너뛰기
 ContentBrowser,Title,Content Browser,콘텐츠 브라우저
+ContentBrowser,DragAssetCount,{} selected items,선택 항목 {}개
+ContentBrowser,PlaceAssetsResult,Placed {} of {} selected items. The rest were unsupported or could not be loaded.,선택 항목 {}개 배치 (전체 {}개). 나머지는 지원하지 않는 항목이거나 불러오기에 실패했습니다.
 EditorCommon,All,All,전체
 EditorCommon,Apply,Apply,적용
 EditorCommon,Cancel,Cancel,취소
@@ -582,6 +584,7 @@ History,Cleared,Command history cleared.,명령 이력을 비웠습니다.
 History,Command.AddComponent,Add component,컴포넌트 추가
 History,Command.CanvasResolution,Canvas resolution,캔버스 해상도
 History,Command.CreateEntity,Create entity,엔티티 생성
+History,Command.PlaceAssets,Place assets,에셋 일괄 배치
 History,Command.DeleteEntity,Delete entity,엔티티 삭제
 History,Command.EditProperties,Properties,속성 편집
 History,Command.EditProperty,Edit Property,속성 편집

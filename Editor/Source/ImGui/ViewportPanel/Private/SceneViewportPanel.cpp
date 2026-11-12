@@ -42,6 +42,7 @@
 #include "TilePalettePanel.h"
 #include "SplineCurve.h"
 #include "ImGuiManager.h"
+#include "ContentBrowserDragPayload.h"
 
 #pragma region Helper
 struct LightingPassData
@@ -454,8 +455,98 @@ void SceneViewportPanel::DrawCustomOptions()
 	DrawPostProcessMenu();
 	DrawRenderPassMenu();
 	DrawPickingMenu();
+}
 
+static Engine::Entity* InstantiateDroppedModel(Engine::Scene& scene, const std::wstring& path)
+{
+	auto& resources = Engine::ResourceManager::Get();
+	const Engine::ResourceHandle<Engine::Model> model(resources.LoadFile(path));
+	if (!model.IsValid())
+		return nullptr;
 
+	const wchar_t* materialPath = model->GetSkeleton().IsValid()
+		? L"Resources/Material/SkinningMaterial.bammat.json"
+		: L"Resources/Material/GBufferMaterial.bammat.json";
+	const Engine::ResourceHandle<Engine::MaterialInterface> material(resources.LoadFile(materialPath));
+	Engine::Entity* root = nullptr;
+	if (material.IsValid() && scene.InstantiateLinkedModel(model, material, root) == Engine::EResult::Success)
+		return root;
+	return nullptr;
+}
+
+static void PlaceDroppedAssets(const ImGuiPayload& payload, bool multiple)
+{
+	const auto paths = ContentBrowser::DecodeDragPaths(payload.Data, payload.DataSize);
+	if (multiple ? paths.size() < 2 : paths.size() != 1)
+		return;
+
+	auto& sceneManager = SceneManager::Get();
+	auto* scene = sceneManager.GetCurrentScene();
+	if (!scene)
+		return;
+
+	auto& history = Application::Get().GetEditHistory();
+	SceneEditSnapshot before;
+	const char* historyLabel = "History.Command.PlaceAssets";
+	std::vector<Engine::Entity*> spawnedRoots;
+	bool attemptedPlacement = false;
+	for (const auto& path : paths)
+	{
+		const std::filesystem::path file(path);
+		const auto filename = Engine::ToLowerStr(Engine::WStrToStr(file.filename().wstring()));
+		const bool isModel = filename.ends_with(".bammodel") || filename.ends_with(".bammodel.json");
+		const bool isPrefab = !isModel && (filename.ends_with(".bamprefab") || filename.ends_with(".prefab") ||
+			(multiple ? filename.ends_with(".bamprefab.json") || filename.ends_with(".prefab.json") : filename.ends_with(".json")));
+		if (!isModel && !isPrefab)
+			continue;
+
+		if (!attemptedPlacement && history.Enabled())
+			before = SceneEditSnapshot::Capture(*scene);
+		attemptedPlacement = true;
+
+		Engine::Entity* root = nullptr;
+		if (isModel)
+			root = InstantiateDroppedModel(*scene, path);
+		else
+		{
+			archive::JsonArchive ar;
+			if (sceneManager.InstantiatePrefab(ar, path, root, nullptr) != Engine::EResult::Success)
+				root = nullptr;
+		}
+		if (!root)
+		{
+			if (multiple)
+				EDITOR_LOG_WARN("Failed to place dropped asset: {}", Engine::WStrToStr(path));
+			continue;
+		}
+
+		spawnedRoots.push_back(root);
+		if (!multiple)
+		{
+			historyLabel = isModel ? "History.Command.CreateEntity" : "History.Command.InstantiatePrefab";
+			if (isPrefab)
+				NotificationManager::Get().AddNotification(LOCAL("ResourceType.Prefab"),
+					LOCAL_FMT("Notification.PrefabInstantiated", Engine::WStrToStr(file.stem().wstring())), ELogLevel::Info, 3.0f);
+		}
+	}
+
+	if (!spawnedRoots.empty())
+	{
+		if (before)
+			history.Record(std::move(before), SceneEditSnapshot::Capture(*scene), historyLabel);
+
+		auto& selection = SelectionManager::Get();
+		if (!selection.IsPrimarySelectionLocked())
+		{
+			selection.ClearSelection();
+			for (auto* root : spawnedRoots)
+				selection.AddToSelection(root);
+		}
+	}
+
+	if (multiple && spawnedRoots.size() != paths.size())
+		NotificationManager::Get().AddNotification(LOCAL("ContentBrowser.Title"),
+			LOCAL_FMT("ContentBrowser.PlaceAssetsResult", spawnedRoots.size(), paths.size()), ELogLevel::Warn);
 }
 
 void SceneViewportPanel::DrawCustomViewport()
@@ -474,54 +565,10 @@ void SceneViewportPanel::DrawCustomViewport()
 
 	if (ImGui::BeginDragDropTarget())
 	{
-		if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM"))
-		{
-			std::filesystem::path p((const wchar_t*)payload->Data);
-			std::string filename = p.filename().string();
-			for (char& c : filename) c = static_cast<char>(tolower(c));
-			std::string ext = p.extension().string();
-			for (char& c : ext) c = static_cast<char>(tolower(c));
-
-			if (ext == ".bammodel" || filename.ends_with(".bammodel.json"))
-			{
-				if (Scene* currentScene = SceneManager::Get().GetCurrentScene())
-				{
-					auto& rm = Engine::ResourceManager::Get();
-					Engine::ResourceHandle<Engine::Model> model(rm.LoadFile(p.wstring()));
-					const wchar_t* matPath = (model.IsValid() && model->GetSkeleton().IsValid())
-						? L"Resources/Material/SkinningMaterial.bammat.json"
-						: L"Resources/Material/GBufferMaterial.bammat.json";
-					Engine::ResourceHandle<Engine::MaterialInterface> mat(rm.LoadFile(matPath));
-					if (model.IsValid() && mat.IsValid())
-					{
-						auto& history = Application::Get().GetEditHistory();
-						auto before = history.Enabled() ? SceneEditSnapshot::Capture(*currentScene) : SceneEditSnapshot{};
-						Engine::Entity* root = nullptr;
-						if (currentScene->InstantiateLinkedModel(model, mat, root) == Engine::EResult::Success && root)
-						{
-							if (before) history.Record(std::move(before), SceneEditSnapshot::Capture(*currentScene), "History.Command.CreateEntity");
-							SelectionManager::Get().SetSelectedEntity(root);
-						}
-					}
-				}
-			}
-			else if (filename.ends_with(".bamprefab.json") || filename.ends_with(".prefab.json") || ext == ".bamprefab" || ext == ".prefab" || ext == ".json")
-			{
-				if (Scene* currentScene = SceneManager::Get().GetCurrentScene())
-				{
-					archive::JsonArchive ar;
-					Engine::Entity* spawned = nullptr;
-					auto& history = Application::Get().GetEditHistory();
-					auto before = history.Enabled() ? SceneEditSnapshot::Capture(*currentScene) : SceneEditSnapshot{};
-					if (SceneManager::Get().InstantiatePrefab(ar, p.wstring(), spawned, nullptr) == Engine::EResult::Success && spawned)
-					{
-						if (before) history.Record(std::move(before), SceneEditSnapshot::Capture(*currentScene), "History.Command.InstantiatePrefab");
-						SelectionManager::Get().SetSelectedEntity(spawned);
-						NotificationManager::Get().AddNotification(LOCAL("ResourceType.Prefab"), LOCAL_FMT("Notification.PrefabInstantiated", p.stem().string()), ELogLevel::Info, 3.0f);
-					}
-				}
-			}
-		}
+		if (const auto* payload = ImGui::AcceptDragDropPayload(ContentBrowser::MultipleItemsPayload))
+			PlaceDroppedAssets(*payload, true);
+		else if (const auto* single = ImGui::AcceptDragDropPayload(ContentBrowser::SingleItemPayload))
+			PlaceDroppedAssets(*single, false);
 		ImGui::EndDragDropTarget();
 	}
 

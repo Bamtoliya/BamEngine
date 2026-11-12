@@ -1,6 +1,7 @@
-#pragma once
+﻿#pragma once
 #include "ImGuiManager.h"
 #include "ContentBrowserGridItem.h"
+#include "ContentBrowserDragPayload.h"
 #include "SelectionManager.h"
 #include "ModelImporter.h"
 #include "Mesh.h"
@@ -394,8 +395,8 @@ float ContentBrowserGridItem::GetNameBoxHeight()
 	return std::max(ImGui::GetTextLineHeight() * 2.0f + 12.0f, ImGui::GetFrameHeight());
 }
 
-bool ContentBrowserGridItem::Draw(const std::filesystem::directory_entry& directoryEntry,
-	const std::filesystem::path& rootPath, ImTextureID thumbnailTexID, Engine::Handle thumbnailSpriteHandle, f32 thumbnailSize,
+bool ContentBrowserGridItem::Draw(ContentBrowserPanel& browser, const std::filesystem::directory_entry& directoryEntry,
+	ImTextureID thumbnailTexID, Engine::Handle thumbnailSpriteHandle, f32 thumbnailSize,
 	ImGuiSelectionUserData itemId, bool selected, std::filesystem::path& outRenamingPath,
 	char* renameBuffer, size_t renameBufferSize, std::filesystem::path& currentDirectory, char* searchBuffer)
 {
@@ -406,7 +407,7 @@ bool ContentBrowserGridItem::Draw(const std::filesystem::directory_entry& direct
 	const ImVec2 nameMin(tileMin.x, tileMin.y + thumbnailSize);
 	const ImVec2 tileMax(tileMin.x + thumbnailSize, nameMin.y + nameHeight);
 
-	ImGui::PushID(path.string().c_str());
+	ImGui::PushID(Engine::WStrToStr(path.wstring()).c_str());
 	// 타일 사이에 박스 선택을 시작할 여백을 남긴다.
 	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 0.0f));
 	ImGui::BeginDisabled(renaming);
@@ -431,10 +432,9 @@ bool ContentBrowserGridItem::Draw(const std::filesystem::directory_entry& direct
 			!input.IsCtrlPressed() && !input.IsShiftPressed();
 
 		ToolTip(directoryEntry);
-		ContextMenu(path, outRenamingPath, renameBuffer, renameBufferSize, currentDirectory, searchBuffer);
+		ContextMenu(browser, itemId, path, currentDirectory, searchBuffer);
 		contextMenuOpen = ImGui::IsPopupOpen("##AssetContextMenu");
-		const auto payloadPath = rootPath.filename() / path.lexically_relative(rootPath);
-		dragging = DragAndDropTarget(payloadPath);
+		dragging = DrawDragSource(browser, itemId, path);
 		if (open && !dragging)
 			OpenAssetOrFolder(path, directoryEntry.is_directory(), currentDirectory, searchBuffer);
 	}
@@ -557,19 +557,38 @@ void ContentBrowserGridItem::DrawThumbnail(const std::filesystem::directory_entr
 			ImGui::GetColorU32(ImVec4(0.95f, 0.78f, 0.25f, 1.0f)), ICON_FA_LOCK);
 	}
 }
-void ContentBrowserGridItem::ContextMenu(const std::filesystem::path& path,
-	std::filesystem::path& outRenamingPath, char* renameBuffer, size_t renameBufferSize,
+void ContentBrowserGridItem::ContextMenu(ContentBrowserPanel& browser, ImGuiSelectionUserData itemId,
+	const std::filesystem::path& path,
 	std::filesystem::path& currentDirectory, char* searchBuffer)
 {
-	auto* browser = dynamic_cast<ContentBrowserPanel*>(ImGuiManager::Get().GetImGuiPanel(L"Content Browser"));
-	if (browser && ImGui::IsItemHovered())
-		browser->SetRenameTarget(path);
+	if (ImGui::IsItemHovered())
+		browser.SetRenameTarget(path);
 	if (ImGui::BeginPopupContextItem("##AssetContextMenu"))
 	{
+		if (ImGui::IsWindowAppearing())
+			browser.m_ContextMenuPaths = browser.GetInteractionPaths(itemId, path);
+
+		if (browser.m_ContextMenuPaths.size() > 1)
+		{
+			browser.SetRenameTarget({});
+			if (ImGui::MenuItem((ICON_FA_COPY " " + LOCAL_LABEL("EditorCommon.CopyPath")).c_str()))
+			{
+				std::string clipboardText;
+				for (const auto& selectedPath : browser.m_ContextMenuPaths)
+				{
+					if (!clipboardText.empty())
+						clipboardText += '\n';
+					clipboardText += Engine::WStrToStr(selectedPath.wstring());
+				}
+				ImGui::SetClipboardText(clipboardText.c_str());
+			}
+			ImGui::EndPopup();
+			return;
+		}
+
 		const bool isDir = std::filesystem::is_directory(path);
 		const bool isReadOnly = Engine::PlatformPath::IsReadOnlyTarget(path);
-		if (browser)
-			browser->SetRenameTarget(path);
+		browser.SetRenameTarget(path);
 		// 1. 최상단 [열기]: 더블클릭과 동일한 공통 동작
 		if (ImGui::MenuItem((ICON_FA_FOLDER_OPEN " " + LOCAL_LABEL("EditorCommon.Open")).c_str()))
 			OpenAssetOrFolder(path, isDir, currentDirectory, searchBuffer);
@@ -603,7 +622,7 @@ void ContentBrowserGridItem::ContextMenu(const std::filesystem::path& path,
 		ImGui::EndDisabled();
 
 		if (ImGui::MenuItem((ICON_FA_COPY " " + LOCAL_LABEL("EditorCommon.CopyPath")).c_str()))
-			ImGui::SetClipboardText(path.string().c_str());
+			ImGui::SetClipboardText(Engine::WStrToStr(path.wstring()).c_str());
 
 		if (isReadOnly && !isDir)
 		{
@@ -643,7 +662,7 @@ void ContentBrowserGridItem::ContextMenu(const std::filesystem::path& path,
 				{
 					NotificationManager::Get().AddNotification(LOCAL("ContentBrowser.Title"),
 						copyDest.filename().string(), ELogLevel::Info, 3.0f);
-					if (browser) browser->RequestRefresh();
+					browser.RequestRefresh();
 				}
 			}
 		}
@@ -788,13 +807,38 @@ void ContentBrowserGridItem::ToolTip(const std::filesystem::directory_entry& dir
 		ImGui::EndTooltip();
 	}
 }
-bool ContentBrowserGridItem::DragAndDropTarget(const std::filesystem::path& relativePath)
+bool ContentBrowserGridItem::DrawDragSource(ContentBrowserPanel& browser, ImGuiSelectionUserData itemId,
+	const std::filesystem::path& path)
 {
 	if (!ImGui::BeginDragDropSource())
 		return false;
-	std::wstring wPath = Engine::NormalizePath(relativePath.wstring());
-	ImGui::SetDragDropPayload("CONTENT_BROWSER_ITEM", wPath.c_str(), (wPath.length() + 1) * sizeof(wchar_t));
-	ImGui::Text("%s", relativePath.filename().string().c_str());
+
+	const auto* payload = ImGui::GetDragDropPayload();
+	if (!payload || payload->DataSize == 0)
+	{
+		const auto paths = browser.GetInteractionPaths(itemId, path);
+		browser.m_DragAssetCount = paths.size();
+		browser.m_DragPayload.clear();
+		for (const auto& selectedPath : paths)
+		{
+			auto payloadPath = Engine::PlatformPath::ToProjectRelative(selectedPath);
+			if (paths.size() == 1)
+			{
+				const auto& root = browser.GetActiveRootForPath(selectedPath);
+				payloadPath = root.filename() / selectedPath.lexically_relative(root);
+			}
+			browser.m_DragPayload += Engine::NormalizePath(payloadPath.wstring());
+			browser.m_DragPayload += L'\0';
+		}
+	}
+
+	const bool multiple = browser.m_DragAssetCount > 1;
+	const char* type = multiple ? ContentBrowser::MultipleItemsPayload : ContentBrowser::SingleItemPayload;
+	ImGui::SetDragDropPayload(type, browser.m_DragPayload.data(), browser.m_DragPayload.size() * sizeof(wchar_t), ImGuiCond_Once);
+	if (multiple)
+		ImGui::TextUnformatted(LOCAL_FMT("ContentBrowser.DragAssetCount", browser.m_DragAssetCount).c_str());
+	else
+		ImGui::TextUnformatted(Engine::WStrToStr(path.filename().wstring()).c_str());
 	ImGui::EndDragDropSource();
 	return true;
 }

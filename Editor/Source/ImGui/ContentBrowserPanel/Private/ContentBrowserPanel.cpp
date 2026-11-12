@@ -697,13 +697,27 @@ void ContentBrowserPanel::DrawGridItem(const filesystem::directory_entry& direct
 		thumbnailTexID = ImGuiManager::Get().GetImGuiTextureID(texture);
 	}
 
-	const auto& activeRoot = GetActiveRootForPath(path);
-	const bool keepAlive = ContentBrowserGridItem::Draw(directoryEntry, activeRoot, thumbnailTexID, thumbnailSpriteHandle,
+	const bool keepAlive = ContentBrowserGridItem::Draw(*this, directoryEntry, thumbnailTexID, thumbnailSpriteHandle,
 		m_ThumbnailSize, itemId, m_SelectedGridIds.contains(itemId), m_RenamingPath, m_RenameBuffer,
 		sizeof(m_RenameBuffer), m_CurrentDirectory, m_SearchBuffer);
 
 	if (keepAlive)
 		m_InteractionPaths.push_back(path);
+}
+
+vector<filesystem::path> ContentBrowserPanel::GetInteractionPaths(ImGuiSelectionUserData itemId, const filesystem::path& path) const
+{
+	if (m_SelectedGridIds.size() <= 1 || !m_SelectedGridIds.contains(itemId))
+		return { path };
+
+	vector<filesystem::path> paths;
+	paths.reserve(m_SelectedGridIds.size());
+	for (const auto& item : m_GridSelectionItems)
+	{
+		if (m_SelectedGridIds.contains(item.Id))
+			paths.push_back(item.Path);
+	}
+	return paths;
 }
 
 void ContentBrowserPanel::RebuildGridItems(const vector<filesystem::directory_entry>& source)
