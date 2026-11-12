@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "Engine_Includes.h"
 #include "ResourceHandle.h"
@@ -55,6 +55,8 @@ struct SpriteDrawCommand
 	glm::vec4 uvTransform = { 0.0f, 0.0f, 1.0f, 1.0f };
 	RenderObjectId objectId{};
 	uint32 pickingId = 0;
+	int32 sortingLayerID = 0;
+	int32 orderInLayer = 0;
 };
 
 struct UIImageDrawCommand

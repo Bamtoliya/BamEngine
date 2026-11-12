@@ -1924,6 +1924,7 @@ PluginManager,PackageDuplicateId,The package ID conflicts with another package.,
 PluginManager,ApprovePluginTitle,Approve Plugin,플러그인 승인
 PluginManager,ApprovePluginWarning,This DLL runs inside the Editor process. Approve it only if you trust its source.,이 DLL은 에디터 프로세스 안에서 실행됩니다. 출처를 신뢰할 수 있을 때만 승인하세요.
 PluginManager,ApproveAndLoad,Approve and Load,승인 후 로드
+Viewport,PixelPerfectTargetTooLarge,Enlarge Game View or lower the render resolution for 1:1 display.,1:1 표시를 위해 게임 뷰를 넓히거나 렌더 해상도를 낮추세요.
 BuildProfile,Open,Build and Package…,빌드 및 패키징…
 BuildProfile,Title,Build and Package,빌드 및 패키징
 BuildProfile,Target,Build Target,빌드 대상

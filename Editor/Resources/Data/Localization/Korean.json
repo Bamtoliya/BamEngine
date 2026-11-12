@@ -1924,6 +1924,7 @@
         "PluginManager.ApprovePluginTitle": "플러그인 승인",
         "PluginManager.ApprovePluginWarning": "이 DLL은 에디터 프로세스 안에서 실행됩니다. 출처를 신뢰할 수 있을 때만 승인하세요.",
         "PluginManager.ApproveAndLoad": "승인 후 로드",
+        "Viewport.PixelPerfectTargetTooLarge": "1:1 표시를 위해 게임 뷰를 넓히거나 렌더 해상도를 낮추세요.",
         "BuildProfile.Open": "빌드 및 패키징…",
         "BuildProfile.Title": "빌드 및 패키징",
         "BuildProfile.Target": "빌드 대상",

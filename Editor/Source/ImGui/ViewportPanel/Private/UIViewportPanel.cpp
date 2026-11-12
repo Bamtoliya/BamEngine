@@ -174,11 +174,7 @@ void Editor::UIViewportPanel::Update(f32 dt)
     auto* pass = RenderPassManager::Get().GetRenderPassByID(m_UIOverlayPassID);
     Renderer::Get().RegisterUICanvas(HasTarget() ? m_TargetScene : nullptr, m_TargetCanvas, pass);
     m_CanvasToDraw = m_CanvasRTName;
-    if (m_ChannelView != EViewportChannelView::RGBA)
-    {
-        m_ChannelFilter.SetChannelView(m_ChannelView);
-        m_ChannelFilter.SubmitChannelPreviewPass(m_CanvasRTName, m_CanvasToDraw);
-    }
+    m_ChannelFilter.SubmitChannelPreviewPass(m_CanvasRTName, m_CanvasToDraw);
     m_PreviewReady = true;
 }
 

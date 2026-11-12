@@ -58,6 +58,7 @@ public:
 protected:
 	float GetProjectionButtonsWidth() const override;
 	void DrawProjectionButtons() override;
+	virtual void RequestProjectionMode(bool perspective) { SetPerspective(perspective); }
 #pragma endregion
 
 #pragma region Workspace State
@@ -71,6 +72,7 @@ public:
 protected:
 	EditorCameraController* m_CameraController = { nullptr };
 	bool m_OwnCamera = { false }; // true면 패널이 카메라를 소유, false면 외부에서 할당받은 카메라
+	bool m_PixelPerfectViewEnabled = false;
 #pragma endregion
 };
 END

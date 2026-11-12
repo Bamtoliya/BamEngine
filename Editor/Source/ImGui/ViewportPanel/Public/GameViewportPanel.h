@@ -56,6 +56,7 @@ private:
 	bool m_HasActiveCamera = false;
 	ImGuiID m_GameplayImageWindowId = 0;
 	uint32 m_GameplayMouseButtons = 0;
+	bool m_UsePixelPerfectView = false;
 };
 
 END

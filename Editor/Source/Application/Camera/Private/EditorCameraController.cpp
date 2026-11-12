@@ -76,17 +76,17 @@ void EditorCameraController::Free()
     Engine::Base::Free();
 }
 
-void EditorCameraController::HandleInput(Engine::f32 dt, bool allowScroll)
+void EditorCameraController::HandleInput(Engine::f32 dt, bool allowScroll, Engine::f32 imageHeight)
 {
     auto& input = Engine::InputManager::Get();
     ApplyInput(dt, allowScroll, input.IsMouseButtonPressed(Engine::EMouseButton::Left),
-        input.IsMouseButtonPressed(Engine::EMouseButton::Middle), input.IsMouseButtonPressed(Engine::EMouseButton::Right));
+        input.IsMouseButtonPressed(Engine::EMouseButton::Middle), input.IsMouseButtonPressed(Engine::EMouseButton::Right), imageHeight);
 }
 
 void EditorCameraController::HandleInput(Engine::f32 dt, bool allowScroll, std::optional<Engine::EMouseButton> dragButton)
 {
     ApplyInput(dt, allowScroll, dragButton == Engine::EMouseButton::Left,
-        dragButton == Engine::EMouseButton::Middle, dragButton == Engine::EMouseButton::Right);
+        dragButton == Engine::EMouseButton::Middle, dragButton == Engine::EMouseButton::Right, 0.0f);
 }
 
 void EditorCameraController::SetControlRotation(const Engine::vec3& eulerAngles)
@@ -247,7 +247,7 @@ void EditorCameraController::RefreshMatrices()
     Engine::CameraSystem::UpdateCameras(registry);
 }
 
-void EditorCameraController::ApplyInput(Engine::f32 dt, bool allowScroll, bool isLMB, bool isMMB, bool isRMB)
+void EditorCameraController::ApplyInput(Engine::f32 dt, bool allowScroll, bool isLMB, bool isMMB, bool isRMB, f32 imageHeight)
 {
     auto* transform = GetTransformComponent();
     auto* camera = GetCameraComponent();
@@ -364,6 +364,29 @@ void EditorCameraController::ApplyInput(Engine::f32 dt, bool allowScroll, bool i
         if (KEY_PRESSED(Engine::EKeyCode::D)) moveDirection += Engine::vec3(1.0f, 0.0f, 0.0f);
         if (KEY_PRESSED(Engine::EKeyCode::Q)) moveDirection += Engine::vec3(0.0f, 1.0f, 0.0f);
         if (KEY_PRESSED(Engine::EKeyCode::E)) moveDirection -= Engine::vec3(0.0f, 1.0f, 0.0f);
+    }
+    else if (imageHeight > 0.0f)
+    {
+        Engine::vec2 offset(0.0f);
+        if (isMMB)
+            offset = Engine::vec2(-mouseX, mouseY) * (camera->OrthographicSize / imageHeight);
+
+        if (!inputManager.IsCtrlPressed() && !inputManager.IsAltPressed() && !inputManager.IsShiftPressed())
+        {
+            using Engine::EKeyCode;
+            const float x = float(inputManager.IsKeyButtonPressed(EKeyCode::D)) -
+                float(inputManager.IsKeyButtonPressed(EKeyCode::A));
+            const float y = float(inputManager.IsKeyButtonPressed(EKeyCode::W)) -
+                float(inputManager.IsKeyButtonPressed(EKeyCode::S));
+            const Engine::vec2 direction(x, y);
+
+            if (glm::length2(direction) > 0.0f)
+                offset += glm::normalize(direction) * (camera->OrthographicSize * 0.75f * dt);
+        }
+
+        const Engine::vec3 delta = transform->GetLocalRight() * offset.x + transform->GetLocalUp() * offset.y;
+        if (glm::length2(delta) > 0.0f && transform->SetLocalPosition(transform->position + delta))
+            changed = true;
     }
 
     if (glm::length2(moveDirection) > 0.001f)

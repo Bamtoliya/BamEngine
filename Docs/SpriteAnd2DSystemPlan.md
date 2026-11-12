@@ -139,6 +139,8 @@ flowchart TD
    - `cropFrameX`, `cropFrameY` 옵션에 따라 정수비 바운드 고정 및 에디터 뷰포트(`GameViewportPanel`) 실시간 해상도 연동 완료.
    - 단위 테스트 `PixelPerfectCameraCheck`를 통해 5대 시나리오 자동 검증 완료.
 
+2026-11-13 코드에는 Game View의 1:1 이미지 표시와 Point 샘플링, 스프라이트·타일맵 드로우의 정렬 레이어 전달이 반영됐다. 공용 이미지 그리기는 기본 뷰포트와 프리뷰에서 사용한다. 이 변경 이후 DPI별 표시, 투영 모드 전환과 겹친 레이어의 실제 표시 순서는 재검증 대상이다.
+
 ---
 
 ### Phase 4: 2D 타일맵 시스템 (Chunked Tilemap & Tile Palette) [구현 완료]

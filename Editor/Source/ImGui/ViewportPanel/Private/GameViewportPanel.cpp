@@ -1,4 +1,4 @@
-#include "GameViewportPanel.h"
+﻿#include "GameViewportPanel.h"
 #include "SceneManager.h"
 #include "Scene.h"
 #include "CameraComponent.h"
@@ -13,6 +13,7 @@
 #include "Renderer.h"
 #include "RenderPassManager.h"
 #include "SceneViewportPanel.h"
+#include "PixelPerfectCameraComponent.h"
 
 EResult GameViewportPanel::OnInitialize(void* arg)
 {
@@ -128,6 +129,8 @@ void GameViewportPanel::Update(f32 dt)
 		return;
 
 	const auto cameraBuffer = FindActiveGameCameraBuffer();
+	if (auto* pass = RenderPassManager::Get().GetRenderPassByID(m_Pipeline.GetGeometryPassID()))
+		pass->SetPointSpriteSampling(m_UsePixelPerfectView);
 	m_HasActiveCamera = cameraBuffer.has_value();
 	if (!m_HasActiveCamera) return;
 
@@ -140,11 +143,7 @@ void GameViewportPanel::Update(f32 dt)
 	RenderPassManager::Get().GetRenderPassByID(m_UIOverlayPassID)->SetColorAttachments({ currentRT });
 	m_DisplayRTName = currentRT;
 
-	if (m_ChannelView != EViewportChannelView::RGBA)
-	{
-		m_ChannelFilter.SetChannelView(m_ChannelView);
-		m_ChannelFilter.SubmitChannelPreviewPass(m_DisplayRTName, m_DisplayRTName);
-	}
+	m_ChannelFilter.SubmitChannelPreviewPass(m_DisplayRTName, m_DisplayRTName);
 }
 
 void GameViewportPanel::Draw()
@@ -210,7 +209,7 @@ void GameViewportPanel::DrawCustomViewport()
 {
 	if (m_HasActiveCamera)
 	{
-		DrawRenderTargetImage(m_DisplayRTName);
+		DrawRenderTargetImage(m_DisplayRTName, m_UsePixelPerfectView);
 		m_GameplayImageWindowId = ImGui::GetCurrentWindowRead()->ID;
 		return;
 	}
@@ -231,6 +230,7 @@ void GameViewportPanel::DrawCustomOptions()
 
 std::optional<CameraBuffer> GameViewportPanel::FindActiveGameCameraBuffer()
 {
+	m_UsePixelPerfectView = false;
 	if (m_RenderWidth == 0 || m_RenderHeight == 0)
 		return std::nullopt;
 
@@ -267,6 +267,10 @@ std::optional<CameraBuffer> GameViewportPanel::FindActiveGameCameraBuffer()
 				camera.AspectRatio = previousAspectRatio;
 				continue;
 			}
+
+			const auto* pixelPerfect = registry.try_get<Engine::PixelPerfectCameraComponent>(entity);
+			m_UsePixelPerfectView = camera.CameraType == Engine::ECameraType::Orthographic &&
+				pixelPerfect && pixelPerfect->assetsPPU > 0.0f;
 
 			return camera.GetCameraBuffer();
 		}

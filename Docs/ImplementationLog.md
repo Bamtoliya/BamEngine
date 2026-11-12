@@ -4338,3 +4338,9 @@ Use this as the primary execution list until a playable 2D vertical slice is com
 - 사용자는 Windows Release 빌드 산출물을 확인했다. 기존 배포 로그에는 `RaytracingScene3`의 로드와 Client 초기화 성공 및 Animator 컨트롤러 경로 오류가 기록됐다. 사용자가 보고한 A/D 입력, 기본 도형 표시, 조명과 후처리 차이는 해소 여부를 검증하지 않았다.
 - Editor Game View와 배포 Client가 같은 파일을 읽어 등록된 패스를 구성하도록 [Render Pipeline Profile 설계](RenderPipelineProfilePlan.md)를 기록했다. 첫 구현 단위는 기본 Deferred 프로필과 GPU 없이 실행 가능한 로더·검증기다.
 - 작업 트리와 기존 로그를 정적으로 대조했다. 이번 기록을 위해 새 빌드, PIE, 내보내기나 저장소 밖 실행을 수행하지 않았다. 프로필 로더·패스 재구성·배포 설정 연동은 구현 전이다.
+
+### [2026-11-13] 뷰포트 이미지 공용화와 2D 표시
+
+- `ViewportImage`를 통해 기본·프리뷰 뷰포트의 렌더 타깃 조회와 그리기를 공유한다. 픽셀 퍼펙트 Game View에는 1:1 이미지 표시와 영역 부족 안내를 적용한다.
+- Scene View의 직교 카메라는 이미지 위에서 입력을 받아 이동·확대하고, 원근 투영으로 돌아갈 때 이전 카메라 위치·회전·피벗을 복원한다. 채널 미리보기의 제출 경로도 정리했다.
+- 스프라이트와 타일맵이 정렬 레이어·순서를 드로우 명령에 전달한다. Geometry 패스의 스프라이트 정렬과 픽셀 퍼펙트 Game View의 Point 샘플링을 연결했다. 실제 DPI별 1:1 표시, 채널 선택, 카메라 전환과 겹친 2D 레이어의 표시 순서는 검증 대상이다. [2D 렌더링 계획](SpriteAnd2DSystemPlan.md#phase-3-픽셀-퍼펙트-카메라-및-서브픽셀-스냅-pixel-perfect-camera-구현-완료)

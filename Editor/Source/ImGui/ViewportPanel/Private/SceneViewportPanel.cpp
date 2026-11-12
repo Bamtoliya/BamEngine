@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "SceneViewportPanel.h"
 #include "EditorUI.h"
@@ -332,7 +332,27 @@ void SceneViewportPanel::Update(f32 dt)
 
 	// 1. 에디터 카메라 입력: PIE 실행 중에는 에디터 카메라 이동을 차단
 	if (m_Open && m_CameraController && m_Focused && m_Hovered)
-		m_CameraController->HandleInput(dt);
+	{
+		if (!IsOrthographic())
+		{
+			m_CameraController->HandleInput(dt);
+		}
+		else
+		{
+			const vec2 mouse = InputManager::Get().GetScreenMousePosition();
+			vec2 uv;
+			const bool imageHovered = PickingManager::TryGetViewportUV(
+				mouse, vec2(m_ImageScreenPos.x, m_ImageScreenPos.y), vec2(m_ImageSize.x, m_ImageSize.y), uv);
+			const bool popupOpen = ImGui::IsPopupOpen(
+				nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel);
+
+			if (imageHovered && !popupOpen && !ImGui::GetIO().WantTextInput && !ImGui::IsAnyItemActive() &&
+				!ShortcutManager::Get().IsCapturing())
+			{
+				m_CameraController->HandleInput(dt, true, m_ImageSize.y);
+			}
+		}
+	}
 
 	if (m_CameraController)
 	{
@@ -376,11 +396,7 @@ void SceneViewportPanel::Update(f32 dt)
 	const bool canDrawSceneOverlays = displayTexture &&
 		HasFlag(displayTexture->GetUsage(), Engine::ETextureUsage::RenderTarget);
 
-	if (m_ChannelView != EViewportChannelView::RGBA)
-	{
-		m_ChannelFilter.SetChannelView(m_ChannelView);
-		m_ChannelFilter.SubmitChannelPreviewPass(m_DisplayRTName, m_DisplayRTName);
-	}
+	m_ChannelFilter.SubmitChannelPreviewPass(m_DisplayRTName, m_DisplayRTName);
 
 	// 기존 격자·디버그 선 제출 블록을 교체
 	if (cameraBuffer.has_value() && canDrawSceneOverlays)
@@ -677,7 +693,6 @@ void SceneViewportPanel::DrawSceneRenderTargetMenu()
 		ImGui::EndMenu();
 	}
 }
-
 void SceneViewportPanel::DrawGizmoMenu()
 {
 	if (ImGui::BeginMenu(LOCAL_CSTR("Viewport.GizmoMenu")))
@@ -726,7 +741,6 @@ void SceneViewportPanel::DrawGizmoMenu()
 		ImGui::EndMenu(); // 1번만 호출되도록 정리
 	}
 }
-
 void SceneViewportPanel::DrawDebugMenu()
 {
 	if (ImGui::BeginMenu(LOCAL_CSTR("Viewport.DebugMenu")))
@@ -736,13 +750,10 @@ void SceneViewportPanel::DrawDebugMenu()
 		ImGui::EndMenu();
 	}
 }
-
 void SceneViewportPanel::DrawPostProcessMenu()
 {
 	m_PostProcessChain.DrawImGuiMenu();
 }
-
-// SceneViewportPanel.cpp의 DrawRenderPassMenu (약 564번째 줄 교체)
 void SceneViewportPanel::DrawRenderPassMenu()
 {
 	if (ImGui::BeginMenu(LOCAL_CSTR("Viewport.RenderPassesMenu")))
@@ -933,7 +944,7 @@ void SceneViewportPanel::DrawImGuizmo()
 
 void SceneViewportPanel::DrawImViewGuizmo()
 {
-	if (!m_CameraController || m_ImageSize.x <= 0.0f || m_ImageSize.y <= 0.0f)
+	if (IsOrthographic() || !m_CameraController || m_ImageSize.x <= 0.0f || m_ImageSize.y <= 0.0f)
 		return;
 
 	TransformComponent* cameraTransform = m_CameraController->GetTransformComponent();
@@ -2375,4 +2386,50 @@ bool SceneViewportPanel::DrawSplinePointEditor(bool imageHovered)
 	return m_SplinePointIndex >= 0;
 }
 
+#pragma endregion
+
+#pragma region Camera
+void SceneViewportPanel::RequestProjectionMode(bool perspective)
+{
+	if (!m_CameraController || perspective == IsPerspective())
+		return;
+
+	auto* transform = m_CameraController->GetTransformComponent();
+	auto* camera = m_CameraController->GetCameraComponent();
+	if (!transform || !camera)
+		return;
+
+	auto next = *transform;
+	const vec3 pivot = m_CameraController->GetPivotPoint();
+
+	if (perspective)
+	{
+		const float defaultPitch = glm::degrees(std::atan2(4.0f, 8.0f));
+		const PerspectiveView view = m_LastPerspectiveView.value_or(PerspectiveView{
+			vec3(0.0f, 4.0f, -8.0f), vec3(defaultPitch, 0.0f, 0.0f), vec3(0.0f, 0.5f, 0.0f)
+			});
+
+		if (!next.SetLocalPosition(view.Position) || !next.SetEulerRotation(view.Rotation))
+			return;
+
+		if (m_LastPerspectiveView)
+			m_LastXYPosition = transform->position;
+
+		m_CameraController->SetPivotPoint(view.Pivot);
+	}
+	else
+	{
+		const vec3 position = m_LastXYPosition.value_or(vec3(pivot.x, pivot.y, -10.0f));
+		if (!next.SetLocalPosition(position) || !next.SetEulerRotation(vec3(0.0f)))
+			return;
+
+		m_LastPerspectiveView = PerspectiveView{ transform->position, transform->eulerRotation, pivot };
+		if (!m_LastXYPosition)
+			camera->OrthographicSize = 10.0f;
+	}
+
+	*transform = next;
+	m_CameraController->SyncControlRotationFromTransform();
+	SetPerspective(perspective);
+}
 #pragma endregion

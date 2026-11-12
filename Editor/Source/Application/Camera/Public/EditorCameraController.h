@@ -24,7 +24,7 @@ public:
     static EditorCameraController* Create(const std::wstring& name, const Engine::CameraComponent& settings);
     void Free() override;
 
-    void HandleInput(Engine::f32 dt, bool allowScroll = true);
+    void HandleInput(Engine::f32 dt, bool allowScroll = true, Engine::f32 imageHeight = 0.0f);
     void HandleInput(Engine::f32 dt, bool allowScroll, std::optional<Engine::EMouseButton> dragButton);
     void SetControlRotation(const Engine::vec3& eulerAngles);
     void SyncControlRotationFromTransform();
@@ -53,7 +53,7 @@ public:
     void SetZoomSpeed2D(Engine::f32 speed) { m_ZoomSpeed2D = speed; }
     void SetFOVZoom(bool zoomType) { m_IsFOVZoom = zoomType; }
 private:
-    void ApplyInput(Engine::f32 dt, bool allowScroll, bool isLMB, bool isMMB, bool isRMB);
+    void ApplyInput(Engine::f32 dt, bool allowScroll, bool isLMB, bool isMMB, bool isRMB, Engine::f32 imageHeight);
 private:
     Engine::Scene* m_EditorScene = nullptr;
     entt::entity m_CameraEntity = entt::null;
@@ -63,5 +63,6 @@ private:
     Engine::f32 m_ZoomSpeed2D = 0.5f;
     Engine::vec3 m_ControlRotation = Engine::vec3(0.0f);
     Engine::vec3 m_PivotPoint = Engine::vec3(0.0f, 0.5f, 0.0f);
+	bool m_PixelPerfect = false;
 };
 END

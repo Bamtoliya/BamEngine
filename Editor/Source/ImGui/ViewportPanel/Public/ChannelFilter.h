@@ -38,12 +38,9 @@ public:
 #pragma endregion
 
 public:
-	void SetChannelView(EViewportChannelView view) { m_ChannelView = view; }
-	EViewportChannelView GetChannelView() const { return m_ChannelView; }
-
 	EResult EnsureChannelPreviewRT(const wstring& sourceRTName);
 	EResult Resize(const wstring& sourceRTName);
-	void SubmitChannelPreviewPass(const wstring& sourceRTName, wstring& outRTName);
+	void SubmitChannelPreviewPass(const wstring& sourceRTName, wstring& outRTName, bool showRGBAAsRGB = false);
 
 	const wstring& GetChannelPreviewRTName() const { return m_ChannelPreviewRTName; }
 	RenderTarget* GetChannelPreviewRT() const;
@@ -52,7 +49,7 @@ public:
 
 	static ImVec2 GetButtonSize();
 	static float GetButtonsWidth();
-	static void DrawButtons(EViewportChannelView& view);
+	void DrawButtons();
 private:
 	EViewportChannelView m_ChannelView = EViewportChannelView::RGBA;
 	RenderPassID m_ChannelPreviewPassID = INVALID_PASS_ID;

@@ -1,4 +1,4 @@
-#include "SpriteRenderSystem.h"
+﻿#include "SpriteRenderSystem.h"
 #include "WorldComponents.h"
 #include "RenderComponents.h"
 #include "ResourceHandle.h"
@@ -158,6 +158,8 @@ void SpriteRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>
                     command.color = spriteRenderer.color;
                     command.uvTransform = baseUV;
                     command.pickingId = pickingId;
+                    command.sortingLayerID = spriteRenderer.sortingLayerID;
+                    command.orderInLayer = spriteRenderer.orderInLayer;
                     command.worldMatrix = finalWorldMatrix * quadMatrix;
                     renderer.SubmitSprite(command, target.renderPass->GetID());
                 }
@@ -219,6 +221,8 @@ void SpriteRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>
                             command.color = spriteRenderer.color;
                             command.uvTransform = vec4(uCoords[x], vCoords[y + 1], uCoords[x + 1] - uCoords[x], vCoords[y] - vCoords[y + 1]);
                             command.pickingId = pickingId;
+                            command.sortingLayerID = spriteRenderer.sortingLayerID;
+                            command.orderInLayer = spriteRenderer.orderInLayer;
                             command.worldMatrix = finalWorldMatrix * patchMatrix;
                             renderer.SubmitSprite(command, target.renderPass->GetID());
 
@@ -261,6 +265,8 @@ void SpriteRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>
                             command.color = spriteRenderer.color;
                             command.uvTransform = vec4(baseUV.x, baseUV.y, baseUV.z * fracX, baseUV.w * fracY);
                             command.pickingId = pickingId;
+                            command.sortingLayerID = spriteRenderer.sortingLayerID;
+                            command.orderInLayer = spriteRenderer.orderInLayer;
                             command.worldMatrix = finalWorldMatrix * patchMatrix;
                             renderer.SubmitSprite(command, target.renderPass->GetID());
                         }
@@ -301,6 +307,8 @@ void SpriteRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>
                     command.color = spriteRenderer.color;
                     command.uvTransform = filledUV;
                     command.pickingId = pickingId;
+                    command.sortingLayerID = spriteRenderer.sortingLayerID;
+                    command.orderInLayer = spriteRenderer.orderInLayer;
                     command.worldMatrix = finalWorldMatrix * quadMatrix;
                     renderer.SubmitSprite(command, target.renderPass->GetID());
                 }

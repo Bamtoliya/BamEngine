@@ -47,7 +47,6 @@ void ChannelFilter::Free()
     m_ChannelPreviewPassID = INVALID_PASS_ID;
     m_ChannelPreviewPipeline = nullptr;
     m_ChannelPreviewRTName.clear();
-    m_ChannelView = EViewportChannelView::RGBA;
 }
 #pragma endregion
 
@@ -89,15 +88,20 @@ EResult ChannelFilter::Resize(const wstring& sourceRTName)
     return result == EResult::NotImplemented ? EResult::Success : result;
 }
 
-void ChannelFilter::SubmitChannelPreviewPass(const wstring& sourceRTName, wstring& outRTName)
+void ChannelFilter::SubmitChannelPreviewPass(const wstring& sourceRTName, wstring& outRTName, bool showRGBAAsRGB)
 {
     outRTName = sourceRTName;
 
     if (sourceRTName.empty() || sourceRTName == m_ChannelPreviewRTName)
         return;
 
-    if (m_ChannelView == EViewportChannelView::RGBA)
+    auto view = m_ChannelView;
+    if (showRGBAAsRGB && view == EViewportChannelView::RGBA)
+        view = EViewportChannelView::RGB;
+
+    if (view == EViewportChannelView::RGBA)
         return;
+
     if (!IsReady())
         return;
 
@@ -114,7 +118,7 @@ void ChannelFilter::SubmitChannelPreviewPass(const wstring& sourceRTName, wstrin
     channelPass->SetColorAttachments({ m_ChannelPreviewRTName });
 
     const wstring capturedRead = sourceRTName;
-    const uint32 capturedFlags = static_cast<uint32>(m_ChannelView);
+    const uint32 capturedFlags = static_cast<uint32>(view);
 
     Engine::Renderer::Get().SubmitCustomCommand(
         [this, capturedRead, capturedFlags](f32 dt, Engine::RenderPass* pass) -> EResult
@@ -175,15 +179,15 @@ float ChannelFilter::GetButtonsWidth()
     return GetButtonSize().x * 4.0f;
 }
 
-void ChannelFilter::DrawButtons(EViewportChannelView& view)
+void ChannelFilter::DrawButtons()
 {
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, ImGui::GetStyle().ItemSpacing.y));
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 0.0f);
     const auto slot = GetButtonSize();
     bool first = true;
-    const auto drawButton = [&](const char* label, const char* key, EViewportChannelView flag, const ImVec4& activeColor)
+    const auto drawButton = [this, &first, slot](const char* label, const char* key, EViewportChannelView flag, const ImVec4& activeColor)
     {
-        const bool active = HasFlag(view, flag);
+        const bool active = HasFlag(m_ChannelView, flag);
         EditorUI::IconButtonOptions options;
         options.Compact = true;
         options.Size = slot;
@@ -191,7 +195,7 @@ void ChannelFilter::DrawButtons(EViewportChannelView& view)
         first = false;
         ImGui::PushStyleColor(ImGuiCol_Button, active ? activeColor : ImGui::GetStyle().Colors[ImGuiCol_FrameBg]);
         if (EditorUI::IconButton(label, label, key, options))
-            view = static_cast<EViewportChannelView>(static_cast<uint8>(view) ^ static_cast<uint8>(flag));
+            m_ChannelView = static_cast<EViewportChannelView>(static_cast<uint8>(m_ChannelView) ^ static_cast<uint8>(flag));
         ImGui::PopStyleColor();
     };
     drawButton("R", "Viewport.ChannelR", EViewportChannelView::R, ImVec4(0.75f, 0.20f, 0.20f, 1.0f));

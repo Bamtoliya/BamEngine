@@ -126,6 +126,8 @@ void TilemapRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*
 							command.color = cell.color;
 							command.uvTransform = sprite->GetUVTransform();
 							command.pickingId = pickingId;
+							command.sortingLayerID = tilemap.sortingLayerID;
+							command.orderInLayer = tilemap.orderInLayer;
 							command.worldMatrix = worldMatrix * localQuad;
 
 							renderer.SubmitSprite(command, target.renderPass->GetID());

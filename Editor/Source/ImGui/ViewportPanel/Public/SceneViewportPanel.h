@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "CameraViewportPanel.h"
 #include "DebugRenderer.h"
@@ -128,6 +128,12 @@ private:
 	class Entity* PickOverlayEntity(const ImVec2& mousePos) const;
 #pragma endregion
 
+#pragma region Camera
+protected:
+	void RequestProjectionMode(bool perspective) override;
+#pragma endregion
+
+
 private:
 	std::optional<CameraBuffer> GetActiveCameraBuffer();
 	void HandleTerrainSculpting(bool imageHovered);
@@ -232,5 +238,19 @@ private:
 	bool m_IsSculptStrokeActive = false;
 	bool m_SculptModified = false;
 #pragma endregion
+
+#pragma region Camera
+private:
+	struct PerspectiveView
+	{
+		vec3 Position;
+		vec3 Rotation;
+		vec3 Pivot;
+	};
+
+	std::optional<PerspectiveView> m_LastPerspectiveView;
+	std::optional<vec3> m_LastXYPosition;
+#pragma endregion
+
 };
 END

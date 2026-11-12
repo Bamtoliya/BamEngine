@@ -37,6 +37,7 @@ public:
 	EBlendMode GetAcceptedBlendModes() const { return m_Desc.acceptedBlendModes; }
 	bool IsAcceptsBlendMode(EBlendMode mode) const { return (m_Desc.acceptedBlendModes & mode) != EBlendMode::None; }
 	bool IsEnabled() const { return m_Desc.isEnabled; }
+	bool UsesPointSpriteSampling() const { return m_PointSpriteSampling; }
 #pragma endregion
 
 #pragma region Setter
@@ -57,6 +58,7 @@ public:
 	void SetPassType(ERenderPassType passType) { m_Desc.passType = passType; }
 	void SetAcceptedBlendModes(EBlendMode blendModes) { m_Desc.acceptedBlendModes = blendModes; }
 	void SetEnabled(bool enabled) { m_Desc.isEnabled = enabled; }
+	void SetPointSpriteSampling(bool enabled) { m_PointSpriteSampling = enabled; }
 #pragma endregion
 
 #pragma region Pass Constant Buffer Interface
@@ -85,6 +87,7 @@ public:
 private:
 	DESC m_Desc;
 	unordered_map<uint32, vector<uint8>> m_PassConstants;
+	bool m_PointSpriteSampling = false;
 #pragma endregion
 };
 END

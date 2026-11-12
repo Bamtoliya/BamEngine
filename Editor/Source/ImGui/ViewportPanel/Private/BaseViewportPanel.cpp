@@ -5,9 +5,9 @@
 #include "RenderTargetManager.h"
 #include "SelectionManager.h"
 #include "InputManager.h"
-#include "DirectX12Texture.h"
 #include "ImGuiManager.h"
 #include "EditorSettings.h"
+#include "ViewportImage.h"
 
 #pragma region Contructor&Destructor
 EResult BaseViewportPanel::OnInitialize(void* arg)
@@ -34,11 +34,7 @@ void BaseViewportPanel::Update(f32 dt)
 		return;
 	m_IsRenderTargetViewer = true;
 	m_DisplayRTName = m_SelectedRTName;
-	if (m_ChannelView != EViewportChannelView::RGBA)
-	{
-		m_ChannelFilter.SetChannelView(m_ChannelView);
-		m_ChannelFilter.SubmitChannelPreviewPass(m_SelectedRTName, m_DisplayRTName);
-	}
+	m_ChannelFilter.SubmitChannelPreviewPass(m_SelectedRTName, m_DisplayRTName);
 }
 void BaseViewportPanel::Draw()
 {
@@ -91,14 +87,13 @@ void BaseViewportPanel::DrawCustomViewport()
 {
 	DrawRenderTargetImage(m_DisplayRTName);
 }
-void BaseViewportPanel::DrawRenderTargetImage(const wstring& rtName)
+void BaseViewportPanel::DrawRenderTargetImage(const wstring& rtName, bool nativePixels)
 {
-	m_ImageSize = ImVec2(0.f, 0.f);
+	m_ImageSize = ImVec2(0.0f, 0.0f);
 	if (!m_RenderTargetsValid)
 	{
 		m_Focused = false;
 		m_Hovered = false;
-		m_ImageSize = ImVec2(0.f, 0.f);
 		ImGui::TextWrapped("%s", LOCAL_CSTR("Viewport.RenderTargetsUnavailable"));
 		return;
 	}
@@ -106,77 +101,67 @@ void BaseViewportPanel::DrawRenderTargetImage(const wstring& rtName)
 	ImVec2 panelSize = ImGui::GetContentRegionAvail();
 	panelSize.x = glm::max(panelSize.x, 1.0f);
 	panelSize.y = glm::max(panelSize.y, 1.0f);
-
 	m_PanelWidth = static_cast<uint32>(panelSize.x);
 	m_PanelHeight = static_cast<uint32>(panelSize.y);
 
-	uint32 width = m_PanelWidth;
-	uint32 height = m_PanelHeight;
-	f32 panelAspectRatio = static_cast<f32>(width) / static_cast<f32>(height);
-
-	RenderTarget* currentRT = RenderTargetManager::Get().GetRenderTarget(rtName);
-	if (currentRT)
+	const auto image = ResolveViewportImage(rtName);
+	if (image.Status == EViewportImageStatus::Unsupported)
 	{
-		RHITexture* texture = currentRT->GetTexture();
-		if (texture)
-		{
-			if (!ChannelFilter::CanSampleAsTexture2D(texture))
-			{
-				m_Focused = false;
-				m_Hovered = false;
-				ImGui::TextWrapped("%s", LOCAL_CSTR("Viewport.RenderTargetPreviewUnsupported"));
-				return;
-			}
-
-			f32 imageWidth = (f32)currentRT->GetWidth();
-			f32 imageHeight = (f32)currentRT->GetHeight();
-
-			f32 imageRatio = imageWidth / imageHeight;
-
-			ImVec2 finalSize = panelSize;
-
-			if (panelAspectRatio > imageRatio)
-			{
-				finalSize.y = panelSize.y;
-				finalSize.x = finalSize.y * imageRatio;
-			}
-			else
-			{
-				finalSize.x = panelSize.x;
-				finalSize.y = finalSize.x / imageRatio;
-			}
-
-			m_Focused = ImGui::IsWindowFocused();
-			m_Hovered = ImGui::IsWindowHovered();
-
-			ImVec2 cursorStart = ImGui::GetCursorPos();
-			float offsetX = (panelSize.x - finalSize.x) * 0.5f;
-			float offsetY = (panelSize.y - finalSize.y) * 0.5f;
-			ImGui::SetCursorPos(ImVec2((float)(int)(cursorStart.x + offsetX), (float)(int)(cursorStart.y + offsetY)));
-			m_ImageScreenPos = ImGui::GetCursorScreenPos();
-			m_ImageSize = finalSize;
-			ImGui::GetWindowDrawList()->AddRectFilled(
-				m_ImageScreenPos,
-				ImVec2(m_ImageScreenPos.x + finalSize.x, m_ImageScreenPos.y + finalSize.y),
-				IM_COL32(50, 50, 50, 255));
-			ImTextureID textureID = NULL;
-			textureID = ImGuiManager::Get().GetImGuiTextureID(texture);
-			//if (auto* dxTex = dynamic_cast<DirectX12Texture*>(texture))
-			//{
-			//	// DX12 + imgui_impl_dx12 규약: ImTextureID = GPU SRV handle.ptr
-			//	const D3D12_GPU_DESCRIPTOR_HANDLE gpu = dxTex->GetSRVGPUHandle();
-			//	IM_ASSERT(gpu.ptr != 0);
-			//	textureID = static_cast<ImTextureID>(gpu.ptr);
-			//}
-			//else
-			//{
-			//	// 다른 백엔드 fallback
-			//	textureID = (ImTextureID)texture->GetNativeHandle();
-			//}
-
-			ImGui::Image(textureID, finalSize);
-		}
+		m_Focused = false;
+		m_Hovered = false;
+		ImGui::TextWrapped("%s", LOCAL_CSTR("Viewport.RenderTargetPreviewUnsupported"));
+		return;
 	}
+	if (image.Status != EViewportImageStatus::Ready)
+		return;
+
+	const float imageWidth = image.SourceSize.x;
+	const float imageHeight = image.SourceSize.y;
+	ImVec2 finalSize = panelSize;
+
+	m_Focused = ImGui::IsWindowFocused();
+	m_Hovered = ImGui::IsWindowHovered();
+
+	if (nativePixels)
+	{
+		const ImGuiViewport* viewport = ImGui::GetWindowViewport();
+		const ImVec2 scale = viewport->FramebufferScale;
+		const ImVec2 start = ImGui::GetCursorScreenPos();
+		if (!(scale.x > 0.0f && scale.y > 0.0f))
+			return;
+
+		const float left = std::ceil((start.x - viewport->Pos.x) * scale.x);
+		const float top = std::ceil((start.y - viewport->Pos.y) * scale.y);
+		const float right = std::floor((start.x + panelSize.x - viewport->Pos.x) * scale.x);
+		const float bottom = std::floor((start.y + panelSize.y - viewport->Pos.y) * scale.y);
+		if (right - left < imageWidth || bottom - top < imageHeight)
+		{
+			ImGui::TextWrapped("%s", LOCAL_CSTR("Viewport.PixelPerfectTargetTooLarge"));
+			return;
+		}
+
+		finalSize = ImVec2(imageWidth / scale.x, imageHeight / scale.y);
+		const float x = left + std::floor((right - left - imageWidth) * 0.5f);
+		const float y = top + std::floor((bottom - top - imageHeight) * 0.5f);
+		ImGui::SetCursorScreenPos(ImVec2(viewport->Pos.x + x / scale.x, viewport->Pos.y + y / scale.y));
+	}
+	else
+	{
+		const float panelRatio = static_cast<float>(m_PanelWidth) / static_cast<float>(m_PanelHeight);
+		const float imageRatio = imageWidth / imageHeight;
+		if (panelRatio > imageRatio)
+			finalSize.x = finalSize.y * imageRatio;
+		else
+			finalSize.y = finalSize.x / imageRatio;
+
+		const ImVec2 start = ImGui::GetCursorPos();
+		const float x = start.x + (panelSize.x - finalSize.x) * 0.5f;
+		const float y = start.y + (panelSize.y - finalSize.y) * 0.5f;
+		ImGui::SetCursorPos(ImVec2(static_cast<float>(static_cast<int>(x)), static_cast<float>(static_cast<int>(y))));
+	}
+
+	m_ImageScreenPos = DrawViewportImage(image, finalSize, IM_COL32(50, 50, 50, 255));
+	m_ImageSize = finalSize;
 }
 #pragma endregion
 
@@ -189,12 +174,10 @@ float BaseViewportPanel::MeasureOptionLabels(std::initializer_list<const char*> 
 		width += ImGui::CalcTextSize(label).x + style.ItemSpacing.x * 2.0f + style.FramePadding.x * 2.0f;
 	return width;
 }
-
 float BaseViewportPanel::GetCustomOptionsWidth() const
 {
 	return MeasureOptionLabels({ LOCAL_CSTR("Viewport.Resolution"), LOCAL_CSTR("Viewport.RenderTargetsMenu") });
 }
-
 void BaseViewportPanel::DrawOptionsBar()
 {
 	if (!ImGui::BeginMenuBar()) return;
@@ -223,7 +206,7 @@ void BaseViewportPanel::DrawOptionsBar()
 	if (fitsMenuBar)
 	{
 		alignRight(right, togglesWidth);
-		ChannelFilter::DrawButtons(m_ChannelView);
+		m_ChannelFilter.DrawButtons();
 		if (projectionWidth > 0.0f)
 		{
 			ImGui::SameLine(0.0f, gap);
@@ -238,7 +221,7 @@ void BaseViewportPanel::DrawOptionsBar()
 	const bool fitsOneRow = togglesWidth <= bodyRight - ImGui::GetCursorScreenPos().x;
 	alignRight(bodyRight, fitsOneRow ? togglesWidth : channelsWidth);
 	ImGui::BeginGroup();
-	ChannelFilter::DrawButtons(m_ChannelView);
+	m_ChannelFilter.DrawButtons();
 	ImGui::EndGroup();
 	if (projectionWidth > 0.0f)
 	{
@@ -247,7 +230,6 @@ void BaseViewportPanel::DrawOptionsBar()
 		DrawProjectionButtons();
 	}
 }
-
 void BaseViewportPanel::DrawCustomOptions()
 {
 	DrawResolutionMenu();

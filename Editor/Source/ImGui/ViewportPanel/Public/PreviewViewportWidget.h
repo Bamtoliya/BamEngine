@@ -111,7 +111,6 @@ private:
 	// 채널 필터링
 	std::wstring m_SelectedRTName;
 	ChannelFilter m_ChannelFilter;
-	EViewportChannelView m_ChannelView = EViewportChannelView::RGBA;
 };
 
 END

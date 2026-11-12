@@ -82,7 +82,7 @@ public:
 #pragma region Draw Image
 protected:
 	virtual void DrawCustomViewport();
-	void DrawRenderTargetImage(const wstring& rtName);
+	void DrawRenderTargetImage(const wstring& rtName, bool nativePixels = false);
 #pragma endregion
 
 #pragma region Options Bar
@@ -124,10 +124,9 @@ public:
 	virtual ViewportWorkspace CaptureViewportState() const;
 #pragma endregion
 
-#pragma region Members
+#pragma region Variables
 protected: //Viewport Display
 	ChannelFilter m_ChannelFilter;
-	EViewportChannelView m_ChannelView = EViewportChannelView::RGBA;
 	string m_WindowID;
 	bool m_IsRenderTargetViewer = false;
 	wstring m_SelectedRTName;

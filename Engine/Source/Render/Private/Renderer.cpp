@@ -174,6 +174,21 @@ EResult Renderer::Render(f32 dt)
 					return std::less<Mesh*>{}(a.mesh, b.mesh);
 				});
 		}
+		const auto spriteIt = m_SpriteDrawCommands.find(pid);
+		if (spriteIt != m_SpriteDrawCommands.end() && passType == ERenderPassType::Geometry &&
+			pass->GetSortType() == ERenderSortType::FrontToBack)
+		{
+			auto& commands = spriteIt->second;
+			const auto higherPriorityFirst = [](const SpriteDrawCommand& a, const SpriteDrawCommand& b)
+				{
+					if (a.sortingLayerID != b.sortingLayerID)
+						return a.sortingLayerID > b.sortingLayerID;
+					return a.orderInLayer > b.orderInLayer;
+				};
+
+			if (!std::is_sorted(commands.begin(), commands.end(), higherPriorityFirst))
+				std::stable_sort(commands.begin(), commands.end(), higherPriorityFirst);
+		}
 		static const vector<ViewportJob> s_DefaultJobs = { ViewportJob{} };
 		const vector<ViewportJob>& jobs = hasJobs ? jobsIt->second : s_DefaultJobs;
 
@@ -713,7 +728,17 @@ EResult Renderer::RenderSprite(f32 dt, vector<SpriteDrawCommand>& commands, ERen
 	static_assert(offsetof(SpriteUBO, pickingData) == 96);
 	static_assert(sizeof(SpriteUBO) == 112);
 
-	RHISampler* sampler = SamplerManager::Get().GetDefaultSampler();
+	auto& samplerManager = SamplerManager::Get();
+	RHISampler* sampler = samplerManager.GetDefaultSampler();
+
+	if (renderPass->UsesPointSpriteSampling())
+	{
+		SamplerDesc desc{};
+		desc.MinFilter = ESamplerFilter::Point;
+		desc.MagFilter = ESamplerFilter::Point;
+		desc.MipFilter = ESamplerFilter::Point;
+		sampler = samplerManager.GetOrCreateSampler(desc);
+	}
 
 	if (!sampler)
 		return EResult::Fail;

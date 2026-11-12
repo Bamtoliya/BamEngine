@@ -49,11 +49,7 @@ void CameraViewportPanel::Update(f32 dt)
 		m_CameraController->RefreshMatrices();
 	}
 
-	if (m_ChannelView != EViewportChannelView::RGBA)
-	{
-		m_ChannelFilter.SetChannelView(m_ChannelView);
-		m_ChannelFilter.SubmitChannelPreviewPass(m_SelectedRTName, m_DisplayRTName);
-	}
+	m_ChannelFilter.SubmitChannelPreviewPass(m_SelectedRTName, m_DisplayRTName);
 }
 
 void CameraViewportPanel::Draw()
@@ -79,8 +75,6 @@ void CameraViewportPanel::DrawCustomOptions()
 	DrawResolutionMenu();
 	DrawRenderTargetMenu();
 	DrawCameraMenu();
-
-
 }
 void CameraViewportPanel::DrawCameraMenu()
 {
@@ -132,6 +126,7 @@ void CameraViewportPanel::DrawCameraMenu()
 				camera->OrthographicSize = size;
 				m_CameraController->RefreshMatrices();
 			}
+			ImGui::MenuItem(LOCAL_LABEL("Viewport.PixelPerfectView").c_str(), nullptr, &m_PixelPerfectViewEnabled, IsOrthographic());
 		}
 
 		// 4. 카메라 이동 속도 조절
@@ -200,10 +195,10 @@ void CameraViewportPanel::DrawProjectionButtons()
 	options.Compact = true;
 	options.Size.x = GetProjectionButtonsWidth() * 0.5f;
 	options.Active = IsOrthographic();
-	if (EditorUI::IconButton("View2D", "2D", "Viewport.Orthographic", options)) SetOrthographic();
+	if (EditorUI::IconButton("View2D", "2D", "Viewport.Orthographic", options)) RequestProjectionMode(false);
 	options.SameLine = true;
 	options.Active = IsPerspective();
-	if (EditorUI::IconButton("View3D", "3D", "Viewport.Perspective", options)) SetPerspective();
+	if (EditorUI::IconButton("View3D", "3D", "Viewport.Perspective", options)) RequestProjectionMode(true);
 	ImGui::PopStyleVar(2);
 }
 void CameraViewportPanel::RestoreViewportState(const ViewportWorkspace& state)

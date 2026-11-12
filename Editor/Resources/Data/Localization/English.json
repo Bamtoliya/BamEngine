@@ -1924,6 +1924,7 @@
         "PluginManager.ApprovePluginTitle": "Approve Plugin",
         "PluginManager.ApprovePluginWarning": "This DLL runs inside the Editor process. Approve it only if you trust its source.",
         "PluginManager.ApproveAndLoad": "Approve and Load",
+        "Viewport.PixelPerfectTargetTooLarge": "Enlarge Game View or lower the render resolution for 1:1 display.",
         "BuildProfile.Open": "Build and Package…",
         "BuildProfile.Title": "Build and Package",
         "BuildProfile.Target": "Build Target",

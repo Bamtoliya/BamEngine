@@ -1,4 +1,4 @@
-#include "InputManager.h"
+﻿#include "InputManager.h"
 #include "EditorUI.h"
 #include <cmath>
 #include "PreviewViewportWidget.h"
@@ -32,6 +32,7 @@
 #include "ParticleSystem.h"
 #include "CompositeVFXSystem.h"
 #include <vector>
+#include "ViewportImage.h"
 
 PreviewViewportWidget::~PreviewViewportWidget()
 {
@@ -97,7 +98,6 @@ void PreviewViewportWidget::Free()
 	m_PostProcessChain.Free();
 	m_ChannelFilter.Free();
 	m_SelectedRTName.clear();
-	m_ChannelView = EViewportChannelView::RGBA;
 	m_Pipeline.Free();
 
 	Engine::Safe_Release(m_CameraController);
@@ -399,16 +399,7 @@ void PreviewViewportWidget::Submit(Engine::f32 dt)
 		? m_PostProcessChain.ExecuteChain(dt, m_Pipeline.GetFinalColorRTName())
 		: m_SelectedRTName;
 
-	auto channelView = m_ChannelView;
-	if (!showFinalOutput && channelView == EViewportChannelView::RGBA)
-		channelView = EViewportChannelView::RGB;
-
-	if (channelView != EViewportChannelView::RGBA)
-	{
-		m_ChannelFilter.SetChannelView(channelView);
-		m_ChannelFilter.SubmitChannelPreviewPass(m_DisplayRTName, m_DisplayRTName);
-	}
-
+	m_ChannelFilter.SubmitChannelPreviewPass(m_DisplayRTName, m_DisplayRTName, !showFinalOutput);
 	if (showFinalOutput && m_ShowGrid)
 	{
 		m_Grid.SubmitGrid(cameraBuffer, m_CameraController->IsOrthographic(),
@@ -428,15 +419,8 @@ void PreviewViewportWidget::Draw(const ImVec2& size)
 		RefocusTarget();
 	}
 
-	auto& rtm = Engine::RenderTargetManager::Get();
-	auto* colorRT = rtm.GetRenderTarget(m_DisplayRTName);
-	if (!colorRT || !colorRT->GetTexture())
-	{
-		ImGui::Dummy(avail);
-		return;
-	}
-
-	if (!ChannelFilter::CanSampleAsTexture2D(colorRT->GetTexture()))
+	const auto image = ResolveViewportImage(m_DisplayRTName);
+	if (image.Status == EViewportImageStatus::Unsupported)
 	{
 		m_SelectedRTName.clear();
 		m_IsHovered = false;
@@ -445,9 +429,7 @@ void PreviewViewportWidget::Draw(const ImVec2& size)
 		ImGui::TextWrapped("%s", LOCAL_CSTR("Viewport.RenderTargetPreviewUnsupported"));
 		return;
 	}
-
-	ImTextureID texID = ImGuiManager::Get().GetImGuiTextureID(colorRT->GetTexture());
-	if (!texID)
+	if (image.Status != EViewportImageStatus::Ready)
 	{
 		ImGui::Dummy(avail);
 		return;
@@ -533,7 +515,7 @@ void PreviewViewportWidget::Draw(const ImVec2& size)
 
 	// 2. 뷰포트 렌더타깃 이미지 렌더링
 	ImGui::SetCursorPos(startCursor);
-	ImGui::Image(texID, widgetSize);
+	DrawViewportImage(image, widgetSize);
 
 	const ImGuiWindowFlags toolbarFlags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
 		ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing |
@@ -548,7 +530,7 @@ void PreviewViewportWidget::Draw(const ImVec2& size)
 
 	ImGui::SetCursorPos(ImVec2(startCursor.x + channelX, startCursor.y + margin));
 	if (ImGui::BeginChild("##OverlayChannelsChild", channelSize, ImGuiChildFlags_None, toolbarFlags))
-		ChannelFilter::DrawButtons(m_ChannelView);
+		m_ChannelFilter.DrawButtons();
 	ImGui::EndChild();
 
 	ImGui::SetCursorPos(startCursor);
