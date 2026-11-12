@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <reflection/Annotations.h>
 
@@ -25,7 +25,7 @@ namespace Editor
     };
 
     STRUCT()
-        struct EditorPreferences
+    struct EditorPreferences
     {
         static constexpr std::uint32_t CurrentSchemaVersion = 1;
         static constexpr float MinUIScale = 0.5f;

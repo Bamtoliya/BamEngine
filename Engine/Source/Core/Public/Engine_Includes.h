@@ -129,7 +129,6 @@ using Microsoft::WRL::ComPtr;
 
 #pragma endregion
 
-
 #pragma region BamEngineHeader
 #include "Engine_API.h"
 #include "Types.h"

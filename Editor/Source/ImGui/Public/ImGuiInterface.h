@@ -5,6 +5,7 @@
 #include "ShortcutTypes.h"
 #include "ImGuiSplitter.h"
 #include "EditorUI.h"
+#include "ShortcutManager.h"
 
 BEGIN(Editor)
 enum class EPanelMenuCategory

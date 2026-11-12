@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "imgui.h"
 #include "EditorUI.h"
@@ -192,6 +192,7 @@ void ToolBar::DrawFileMenu()
 			if (auto* panel = dynamic_cast<UnifiedSettingsPanel*>(ImGuiManager::Get().GetImGuiPanel(L"UnifiedSettings")))
 				panel->OpenWithCategory(EUnifiedSettingsCategory::General);
 		}
+
 		ImGui::EndMenu();
 	}
 }

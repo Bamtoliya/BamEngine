@@ -1,4 +1,4 @@
-#include "GraphSystem.h"
+﻿#include "GraphSystem.h"
 #include "GraphFile.h"
 #include "GraphReflection.h"
 #include "ReflectionRegistry.h"

@@ -4386,3 +4386,8 @@ Use this as the primary execution list until a playable 2D vertical slice is com
 
 - `Tools/WebGPUProbe/main.cpp`에 Emscripten 기반 어댑터·디바이스 요청, 캔버스 서피스 설정, 브라우저 프레임 루프와 삼각형 렌더링을 담았다. 독립 프로브이며 Client 씬 로드와 배포는 별도 구현 범위다.
 - 소스와 기존 대화 기록을 대조했다. 이번 정리에서는 브라우저 실행이나 GPU 동작을 재검증하지 않았다. [빌드·패키징 계획](BuildAndPackagingPlan.md)
+
+### [2026-11-13] 로컬 산출물 제외와 소스 정리
+
+- 로컬 Client 내보내기 폴더를 Git 제외 목록에 추가했다. Editor의 DirectX12 ImGui 백엔드와 공용 인터페이스에 필요한 헤더를 명시하고, 나머지 편집기·엔진 소스의 인코딩 및 공백 변경을 정리했다.
+- 커밋 전 변경 구간과 파일 분류를 정적으로 확인했다. 이 정리에서 Editor·Engine 빌드나 런타임 테스트를 새로 실행하지 않았다.

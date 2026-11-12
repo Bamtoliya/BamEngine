@@ -744,8 +744,7 @@ void EditorSettingsService::ProcessPendingWindowChange(const EditorApplicationSt
     m_WindowRequestDeadline = std::chrono::steady_clock::now() + WindowApplyTimeout;
 }
 
-bool EditorSettingsService::MatchesWindowRequest(
-    const EditorWindowRequest& request, const EditorApplicationState& state)
+bool EditorSettingsService::MatchesWindowRequest(const EditorWindowRequest& request, const EditorApplicationState& state)
 {
     if (!state.HasWindow || !state.HasWindowSize || state.WindowMinimized ||
         state.WindowFullscreen != request.Fullscreen)
@@ -883,8 +882,7 @@ void EditorSettingsService::QueueWindowRestore(EEditorWindowRequestStatus reason
     m_WindowCaptureBlocked = true;
 }
 
-void EditorSettingsService::FinishWindowChange(
-    EEditorWindowRequestStatus status, const EditorApplicationState& state)
+void EditorSettingsService::FinishWindowChange(EEditorWindowRequestStatus status, const EditorApplicationState& state)
 {
     if (status == EEditorWindowRequestStatus::RestoreFailed)
         m_WindowCaptureBlocked = true;

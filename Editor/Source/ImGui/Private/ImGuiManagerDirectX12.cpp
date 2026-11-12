@@ -1,5 +1,8 @@
 ﻿#include "ImGuiManager.h"
 #include "imgui_impl_dx12.h"
+#include "imgui_impl_sdl3.h"
+#include "DirectX12RHI.h"
+#include "DirectX12Texture.h"
 
 #pragma region DirectX12 Helper
 EResult ImGuiManager::InitializeImGuiDirectX12()
