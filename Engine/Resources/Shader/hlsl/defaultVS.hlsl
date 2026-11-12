@@ -20,29 +20,25 @@ struct VS_OUTPUT
     float4 Color        : COLOR;
 };
 
-struct ObjectData
+struct InstanceData
 {
-    matrix WorldMatrix;
+    float4x4 WorldMatrix;
+    float4 PickingData;
 };
-ConstantBuffer<ObjectData> ubo : register(b0, space2);
 
-VS_OUTPUT main(VS_INPUT input)
+StructuredBuffer<InstanceData> g_Instances : register(t0, space2);
+
+VS_OUTPUT main(VS_INPUT input, uint instanceId : SV_InstanceID)
 {
     VS_OUTPUT output;
-
-    float4 worldPosition = mul(ubo.WorldMatrix, float4(input.Position, 1.0f));
+    float4x4 world = g_Instances[instanceId].WorldMatrix;
+    float4 worldPosition = mul(world, float4(input.Position, 1.0f));
 
     output.Position = mul(commonData.ViewProjection, worldPosition);
-
-    output.Normal = normalize(mul(ubo.WorldMatrix, float4(input.Normal, 0.0f)).xyz);
-
+    output.Normal = normalize(mul(world, float4(input.Normal, 0.0f)).xyz);
     output.TexCoord = input.TexCoord;
-
-    output.Tangent = mul(ubo.WorldMatrix, float4(input.Tangent, 0.0f)).xyz;
-
-    output.Binormal = mul(ubo.WorldMatrix, float4(input.Binormal, 0.0f)).xyz;
-
+    output.Tangent = mul(world, float4(input.Tangent, 0.0f)).xyz;
+    output.Binormal = mul(world, float4(input.Binormal, 0.0f)).xyz;
     output.Color = input.Color;
-
     return output;
 }

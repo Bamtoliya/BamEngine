@@ -4359,3 +4359,8 @@ Use this as the primary execution list until a playable 2D vertical slice is com
 
 - 읽기 전용 경로의 머티리얼은 편집·저장·되돌리기 UI를 비활성화한다. 메뉴와 퀵 툴바는 하나의 저장 경로를 사용하며 저장에 성공하면 에셋 캐시를 갱신한다.
 - 엔진 에셋에서 셰이더와 텍스처 변경이 차단되는지, 프로젝트 JSON·바이너리 머티리얼을 저장하고 재열 수 있는지는 실행 검증 대상이다.
+
+### [2026-11-13] DefaultVS 정적 메시 인스턴스 바인딩
+
+- `defaultVS.hlsl`이 드로우 인스턴스 ID로 `t0, space2`의 월드 행렬을 읽도록 변경했다. 정적 메시 렌더러의 인스턴스 제출 경로와 맞춘다.
+- DXIL·SPIR-V 생성, DefaultVS를 쓰는 머티리얼의 기존 드로우와 Editor·Client 화면은 실행 검증 대상이다. [바인딩 규약](Shader/BINDING_LAYOUT.md)
