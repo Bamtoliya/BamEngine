@@ -4373,3 +4373,7 @@ Use this as the primary execution list until a playable 2D vertical slice is com
 ### [2026-11-13] Editor 플러그인 승인 문서 타입 정리
 
 - JSON 승인 문서의 내부 타입을 `Editor` 네임스페이스로 배치했다. 스키마 버전과 승인 기록 필드는 유지한다. 기존 승인 파일을 읽고 갱신하는 흐름은 실행 검증 대상이다. [Editor 플러그인 설계](EditorPluginArchitecturePlan.md)
+
+### [2026-11-13] 복원 팝업 위치
+
+- 복원 팝업을 주 뷰포트 작업 영역 중앙에 띄우고 창 배치를 저장하지 않도록 했다. 기존 복원 대상 선택과 복원 취소 흐름, 다중 모니터에서의 위치는 실행 검증 대상이다. [복원 계획](CrashHandlingAndRecoveryPlan.md)
