@@ -359,6 +359,7 @@
         "PROP_ENABLE_TIME_CYCLE": "Enable Time Cycle",
         "PROP_EULER_ROTATION": "EulerRotation",
         "PROP_EXTINCTION": "Extinction Factor",
+        "PROP_FADE_OUT_DURATION": "Fade Out Duration",
         "PROP_FADE_START_TIME": "Fade Start Time",
         "PROP_FAR_PLANE": "Far Plane",
         "PROP_FILL_AMOUNT": "Fill Amount",

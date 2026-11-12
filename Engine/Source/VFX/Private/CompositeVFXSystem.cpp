@@ -24,6 +24,13 @@
 #include <glm/gtc/quaternion.hpp>
 #include <cmath>
 #include <algorithm>
+#include <fmod.hpp>
+
+void Engine::VFXSoundChannelStop::operator()(FMOD::Channel* channel) const noexcept
+{
+	if (AudioManager::IsCreated() && AudioManager::Get().GetFMODSystem())
+		(void)channel->stop();
+}
 
 EResult CompositeVFXSystem::Initialize(void* arg)
 {
@@ -61,19 +68,24 @@ void CompositeVFXSystem::SimulateSceneVFX(Scene* scene, f32 dt)
 	auto view = scene->GetRegistry().view<CompositeVFXComponent, WorldTransformComponent, FlagComponent>();
 	for (auto [entity, vfxComp, transform, flag] : view.each())
 	{
-		if (!flag.IsActiveInHierarchy() || HasFlag(flag.effectiveFlags, EEntityFlag::Dead)) continue;
+		if (!flag.IsActiveInHierarchy() || HasFlag(flag.effectiveFlags, EEntityFlag::Dead))
+		{
+			vfxComp.StopSoundTracks();
+			continue;
+		}
 		UpdateVFXEntity(scene, entity, vfxComp, transform, dt);
 	}
 }
 
 void CompositeVFXSystem::UpdateVFXEntity(Scene* scene, entt::entity entity, CompositeVFXComponent& vfxComp, const WorldTransformComponent& transform, f32 dt)
 {
-	if (!vfxComp.isPlaying) return;
-
-	CompositeEffect* effect = vfxComp.effectHandle.Get();
-	if (!effect) return;
-
-	const f32 totalDuration = effect->GetTotalDuration();
+	CompositeEffect* effect = vfxComp.isPlaying ? vfxComp.effectHandle.Get() : nullptr;
+	const f32 totalDuration = effect ? effect->GetTotalDuration() : 0.0f;
+	if (!std::isfinite(totalDuration) || totalDuration <= 0.0f)
+	{
+		vfxComp.StopSoundTracks();
+		return;
+	}
 	vfxComp.prevTime = vfxComp.currentTime;
 	const f32 playbackDelta = dt * vfxComp.playRate;
 	vfxComp.currentTime += playbackDelta;
@@ -145,29 +157,69 @@ void CompositeVFXSystem::UpdateVFXEntity(Scene* scene, entt::entity entity, Comp
 
 	// 5. 사운드 트랙 (SFX) 타이밍 1회 트리거
 	const auto& soundTracks = effect->GetSoundTracks();
-	if (vfxComp.soundPlayed.size() != soundTracks.size())
+	if (vfxComp.soundRuntimes.size() != soundTracks.size())
 	{
-		vfxComp.soundPlayed.assign(soundTracks.size(), false);
+		vfxComp.soundRuntimes.clear();
+		vfxComp.soundRuntimes.resize(soundTracks.size());
 	}
 
-	for (size_t i = 0; i < soundTracks.size(); ++i)
+	for (std::size_t i = 0; i < soundTracks.size(); ++i)
 	{
 		const auto& track = soundTracks[i];
-		if (!track.enabled || track.isMuted) continue;
+		auto& runtime = vfxComp.soundRuntimes[i];
+		const float time = vfxComp.currentTime;
 
-		if (vfxComp.currentTime < track.startTime)
+		if (!track.enabled || track.isMuted || !std::isfinite(track.startTime))
 		{
-			vfxComp.soundPlayed[i] = false;
+			runtime.channel.reset();
+			continue;
 		}
-		else if (!vfxComp.soundPlayed[i] && vfxComp.currentTime >= track.startTime)
+
+		if (vfxComp.previewSeeking)
 		{
-			AudioClip* clip = track.audioClip.Get();
-			if (!vfxComp.previewSeeking && clip && clip->GetFMODSound())
-			{
-				AudioManager::Get().PlayOneShot(clip->GetFMODSound(), track.volume);
-			}
-			vfxComp.soundPlayed[i] = true;
+			runtime.channel.reset();
+			if (time >= track.startTime)
+				runtime.triggered = true;
+			continue;
 		}
+
+		const bool hasDuration = std::isfinite(track.playDuration) && track.playDuration > 0.0f;
+		const float end = hasDuration ? std::min(totalDuration, track.startTime + track.playDuration) : totalDuration;
+		if (time < track.startTime || time >= end)
+		{
+			runtime.channel.reset();
+			continue;
+		}
+
+		const float fade = std::isfinite(track.fadeOutDuration)
+			? std::clamp(track.fadeOutDuration, 0.0f, end - track.startTime)
+			: 0.0f;
+		const float gain = fade > 0.0f ? std::clamp((end - time) / fade, 0.0f, 1.0f) : 1.0f;
+		const float volume = std::clamp(track.volume, 0.0f, 1.0f) * gain;
+
+		if (runtime.triggered)
+		{
+			if (runtime.channel && runtime.channel->setVolume(volume) != FMOD_OK)
+				runtime.channel.reset();
+			continue;
+		}
+
+		runtime.triggered = true;
+		auto* clip = track.audioClip.Get();
+		if (!clip || !clip->GetFMODSound() || !AudioManager::IsCreated())
+			continue;
+
+		auto& audio = AudioManager::Get();
+		auto* system = audio.GetFMODSystem();
+		FMOD::Channel* channel = nullptr;
+		if (!system || system->playSound(clip->GetFMODSound(), audio.GetSFXGroup(), true, &channel) != FMOD_OK || !channel)
+			continue;
+
+		runtime.channel.reset(channel);
+		if (channel->setVolume(volume) != FMOD_OK ||
+			channel->setVolumeRamp(true) != FMOD_OK ||
+			channel->setPaused(false) != FMOD_OK)
+			runtime.channel.reset();
 	}
 
 	// 6. 트레일 / 리본 트랙 런타임 갱신

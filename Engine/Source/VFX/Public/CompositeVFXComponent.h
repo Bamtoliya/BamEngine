@@ -1,11 +1,11 @@
-#pragma once
+﻿#pragma once
 
 #include "ComponentAnnotations.h"
 #include "ResourceHandle.h"
 #include "CompositeEffect.h"
 #include "ParticleEffectComponent.h"
 #include <vector>
-
+namespace FMOD { class Channel; }
 namespace Engine
 {
 	// 개별 파티클 트랙의 런타임 시뮬레이션 상태
@@ -47,6 +47,32 @@ namespace Engine
 		}
 	};
 
+	struct VFXSoundChannelStop
+	{
+		ENGINE_API void operator()(FMOD::Channel* channel) const noexcept;
+	};
+
+	struct VFXSoundTrackRuntime
+	{
+		std::unique_ptr<FMOD::Channel, VFXSoundChannelStop> channel;
+		bool triggered = false;
+
+		VFXSoundTrackRuntime() = default;
+		VFXSoundTrackRuntime(const VFXSoundTrackRuntime& other) noexcept : triggered(other.triggered) {}
+		VFXSoundTrackRuntime& operator=(const VFXSoundTrackRuntime& other) noexcept
+		{
+			if (this != &other)
+			{
+				channel.reset();
+				triggered = other.triggered;
+			}
+			return *this;
+		}
+
+		VFXSoundTrackRuntime(VFXSoundTrackRuntime&&) noexcept = default;
+		VFXSoundTrackRuntime& operator=(VFXSoundTrackRuntime&&) noexcept = default;
+	};
+
 	STRUCT(COMPONENT, DISPLAY_NAME("STRUCT_COMPOSITE_VFX"), CATEGORY("CATEGORY_RENDER"))
 	struct CompositeVFXComponent
 	{
@@ -76,7 +102,7 @@ namespace Engine
 		std::vector<VFXParticleTrackRuntime> particleRuntimes;
 
 		// 런타임 사운드 트랙 1회 재생 추적 플래그 (effectHandle의 m_SoundTracks와 1:1 대응)
-		std::vector<bool> soundPlayed;
+		std::vector<VFXSoundTrackRuntime> soundRuntimes;
 
 		// 런타임 트레일 트랙 인스턴스 배열 (effectHandle의 m_TrailTracks와 1:1 대응)
 		std::vector<VFXTrailTrackRuntime> trailRuntimes;
@@ -97,9 +123,16 @@ namespace Engine
 			isFinished = false;
 		}
 
+		void StopSoundTracks()
+		{
+			for (auto& runtime : soundRuntimes)
+				runtime.channel.reset();
+		}
+
 		void Pause()
 		{
 			isPlaying = false;
+			StopSoundTracks();
 		}
 
 		void Stop()
@@ -126,7 +159,7 @@ namespace Engine
 				rt.Reset();
 			for (auto& rt : trailRuntimes)
 				rt.Reset();
-			std::fill(soundPlayed.begin(), soundPlayed.end(), false);
+			soundRuntimes.clear();
 			currentCameraShakeOffset = vec3(0.0f);
 			hasActiveLight = false;
 		}

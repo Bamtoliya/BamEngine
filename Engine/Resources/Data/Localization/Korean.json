@@ -359,6 +359,7 @@
         "PROP_ENABLE_TIME_CYCLE": "시간 주기 활성화",
         "PROP_EULER_ROTATION": "회전(각도)",
         "PROP_EXTINCTION": "빛 흡수 계수",
+        "PROP_FADE_OUT_DURATION": "페이드 아웃 시간",
         "PROP_FADE_START_TIME": "페이드 시작 시간",
         "PROP_FAR_PLANE": "원거리 평면",
         "PROP_FILL_AMOUNT": "채우기 진행도",

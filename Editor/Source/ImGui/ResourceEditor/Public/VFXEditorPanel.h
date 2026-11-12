@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "ResourceEditorInterface.h"
 #include "EffectTimelineView.h"
@@ -59,7 +59,17 @@ private:
 	ImVec2 GetInitialResourceWindowSize() const override { return ImVec2(1280.0f, 760.0f); }
 	void DrawCustomToolbar() override;
 	ImGuiWindowFlags GetResourceWindowFlags() const override { return ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse; }
-	void OnResourceWindowVisibility(bool visible) override { if (!visible) m_Timeline.Drag.reset(); }
+	void OnResourceWindowVisibility(bool visible) override
+	{
+		if (!visible)
+		{
+			m_Timeline.Drag.reset();
+			m_SoundStartEdit.reset();
+		}
+
+		if (!m_Open)
+			StopPreviewSounds();
+	}
 	float GetTimelineDuration() const;
 	void DrawTrackList();
 	void DrawViewport();
@@ -68,6 +78,7 @@ private:
 	void SelectTrack(SelectedVFXTrack selection);
 	void DeleteSelectedTrack();
 	void ApplyTimelineEdit(const EditorUI::TimelineEdit& edit);
+	void StopPreviewSounds();
 
 	// 파일 관리
 	void NewEffect();
@@ -85,6 +96,7 @@ private:
 
 	// 선택된 트랙
 	SelectedVFXTrack m_SelectedTrack;
+	std::optional<EditorUI::TimelineEdit> m_SoundStartEdit;
 
 	// 재생 제어 상태
 	bool m_IsPlaying = true;

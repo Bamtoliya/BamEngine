@@ -1,4 +1,4 @@
-#include "CompositeEffect.h"
+﻿#include "CompositeEffect.h"
 #include <archive/JsonArchive.h>
 #include <algorithm>
 
@@ -86,7 +86,8 @@ namespace Engine
 
 		for (const auto& track : m_SoundTracks)
 		{
-			maxTime = std::max(maxTime, track.startTime + 0.5f);
+			const float duration = track.playDuration > 0.0f ? track.playDuration : 0.5f;
+			maxTime = std::max(maxTime, track.startTime + duration);
 		}
 
 		for (const auto& track : m_TrailTracks)

@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "Resource.h"
 #include "ResourceHandle.h"
@@ -243,6 +243,12 @@ struct ENGINE_API VFXSoundTrack
 
 	PROPERTY(EDITABLE, DISPLAY_NAME("PROP_PITCH"))
 	f32 pitch = 1.0f;
+
+	PROPERTY(EDITABLE, ALLOW_MISSING, DISPLAY_NAME("PROP_DURATION"))
+	f32 playDuration = 0.0f;
+
+	PROPERTY(EDITABLE, ALLOW_MISSING, DISPLAY_NAME("PROP_FADE_OUT_DURATION"))
+	f32 fadeOutDuration = 0.0f;
 };
 
 // 6. 트레일 / 리본 트랙 (검기 슬래시, 투사체 궤적 스트립)

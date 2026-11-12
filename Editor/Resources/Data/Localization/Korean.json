@@ -1924,6 +1924,8 @@
         "PluginManager.ApprovePluginTitle": "플러그인 승인",
         "PluginManager.ApprovePluginWarning": "이 DLL은 에디터 프로세스 안에서 실행됩니다. 출처를 신뢰할 수 있을 때만 승인하세요.",
         "PluginManager.ApproveAndLoad": "승인 후 로드",
+        "VFXEditor.PropSoundDuration": "사운드 지속 시간 (0 = 이펙트 종료)",
+        "VFXEditor.PropFadeOutDuration": "페이드 아웃 시간",
         "Viewport.PixelPerfectTargetTooLarge": "1:1 표시를 위해 게임 뷰를 넓히거나 렌더 해상도를 낮추세요.",
         "TilePalette.Autotile": "자동 타일",
         "TilePalette.AutotileSelectTilemap": "도로 규칙을 편집할 타일맵을 선택하세요.",

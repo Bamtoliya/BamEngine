@@ -239,6 +239,7 @@ namespace Editor
 			targetTime = std::round(targetTime * EditorUI::EffectTimelineFPS) / EditorUI::EffectTimelineFPS;
 		targetTime = std::clamp(targetTime, 0.0f, duration);
 		m_IsPlaying = false;
+		StopPreviewSounds();
 		if (!m_FixedPreview || targetTime + 0.0001f < m_CurrentTime) RestartSimulation();
 		m_TimelineSeek = targetTime;
 	}
@@ -723,6 +724,7 @@ namespace Editor
 		case PlayPause:
 			if (!m_IsPlaying && time >= GetTimelineDuration()) RestartSimulation();
 			m_IsPlaying = !m_IsPlaying;
+			if (!m_IsPlaying) StopPreviewSounds();
 			break;
 		case Previous: ScrubTime(time - 1.0f / EditorUI::EffectTimelineFPS); break;
 		case Next: ScrubTime(time + 1.0f / EditorUI::EffectTimelineFPS); break;
@@ -1093,7 +1095,40 @@ namespace Editor
 
 				EditorUI::PropertyRow("VFXEditor.PropStartTime");
 				ImGui::SetNextItemWidth(-FLT_MIN);
-				if (ImGui::DragFloat("##StartTime", &track.startTime, 0.02f, 0.0f, 30.0f, "%.2fs")) m_IsDirty = true;
+
+				const auto row = VFXRowId(ESelectedVFXTrackType::Sound, static_cast<std::size_t>(m_SelectedTrack.index));
+				float startTime = m_SoundStartEdit && m_SoundStartEdit->Row == row
+					? m_SoundStartEdit->Start
+					: track.startTime;
+
+				ImGui::PushID(m_SelectedTrack.index);
+				ImGui::DragFloat("##StartTime", &startTime, 0.02f, 0.0f, 30.0f, "%.2fs", ImGuiSliderFlags_AlwaysClamp);
+				const bool active = ImGui::IsItemActive();
+				const bool commit = ImGui::IsItemDeactivatedAfterEdit();
+				ImGui::PopID();
+
+				const EditorUI::TimelineEdit edit{ EditorUI::TimelineDragMode::Move, row, startTime, startTime };
+				if (active)
+					m_SoundStartEdit = edit;
+				else
+					m_SoundStartEdit.reset();
+
+				if (commit && std::isfinite(startTime) && startTime != track.startTime)
+					ApplyTimelineEdit(edit);
+
+				const float maxSoundTime = std::max(30.0f, GetTimelineDuration());
+
+				EditorUI::PropertyRow("VFXEditor.PropSoundDuration");
+				ImGui::SetNextItemWidth(-FLT_MIN);
+				if (ImGui::DragFloat("##SoundDuration", &track.playDuration, 0.02f, 0.0f, maxSoundTime, "%.2fs",
+					ImGuiSliderFlags_AlwaysClamp))
+					InvalidateTimelinePreview();
+
+				EditorUI::PropertyRow("VFXEditor.PropFadeOutDuration");
+				ImGui::SetNextItemWidth(-FLT_MIN);
+				if (ImGui::DragFloat("##FadeOutDuration", &track.fadeOutDuration, 0.01f, 0.0f, maxSoundTime, "%.2fs",
+					ImGuiSliderFlags_AlwaysClamp))
+					InvalidateTimelinePreview();
 
 				if (drawRegistered("VFXEditor.PropAudioClip", "audioClip",
 					[&] { return Editor::DrawInspectorResourcePicker(track.audioClip, true, true); }))
@@ -1317,5 +1352,11 @@ namespace Editor
 				DeleteSelectedTrack();
 			}
 		}
+	}
+
+	void VFXEditorPanel::StopPreviewSounds()
+	{
+		if (auto* scene = m_PreviewWidget.GetScene(); scene && m_PreviewEntity)
+			scene->GetComponent<Engine::CompositeVFXComponent>(*m_PreviewEntity).StopSoundTracks();
 	}
 }

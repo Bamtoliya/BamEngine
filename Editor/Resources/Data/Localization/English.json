@@ -1924,6 +1924,8 @@
         "PluginManager.ApprovePluginTitle": "Approve Plugin",
         "PluginManager.ApprovePluginWarning": "This DLL runs inside the Editor process. Approve it only if you trust its source.",
         "PluginManager.ApproveAndLoad": "Approve and Load",
+        "VFXEditor.PropSoundDuration": "Sound Duration (0 = Effect End)",
+        "VFXEditor.PropFadeOutDuration": "Fade Out Duration",
         "Viewport.PixelPerfectTargetTooLarge": "Enlarge Game View or lower the render resolution for 1:1 display.",
         "TilePalette.Autotile": "Autotile",
         "TilePalette.AutotileSelectTilemap": "Select a tilemap to edit its road rules.",
