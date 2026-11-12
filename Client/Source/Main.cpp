@@ -1,5 +1,4 @@
-#define SDL_MAIN_HANDLED
-#include <SDL3/SDL_main.h>
+﻿#include <SDL3/SDL_main.h>
 #include <archive/JsonArchive.h>
 
 #include "PlatformPath.h"
@@ -18,6 +17,8 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include "BuiltInPrimitiveMeshes.h"
 #include "ResourceManager.h"
+#include "GraphBindingComponent.h"
+#include "InputActionSettings.h"
 
 BEGIN(Client)
 
@@ -95,7 +96,8 @@ public:
 
         // 엔진 독립성을 지키며 호스트 경로 주입
         runtimeDesc.ProjectRoot = m_ProjectRoot;
-        runtimeDesc.AssetRoot = "Resources";
+        runtimeDesc.AssetRoot = std::filesystem::u8path(m_ProjectSettings.AssetDirectory);
+        runtimeDesc.EngineResourceRoot = std::filesystem::u8path(m_ProjectSettings.EngineResourceDirectory);
 
         m_Runtime = Runtime::Create(&runtimeDesc);
         if (!m_Runtime)
@@ -112,12 +114,26 @@ public:
             return configResult;
         }
 
+        InputActionSettings inputSettings;
+        const auto inputPath = m_ProjectRoot / "Config" / "InputActions.json";
+        const auto& registry = ReflectionRegistry::Get().GetRegistry();
+        const auto inputLoad = ConfigManager::Load(inputSettings, inputPath, registry);
+
+        if (inputLoad.Status == EConfigLoadStatus::Failed ||
+            (inputLoad.Status == EConfigLoadStatus::Loaded && !InputManager::Get().SetInputActionSettings(inputSettings)))
+        {
+            BAM_LOG(Error, "Client", "Startup", "Could not load or apply Config/InputActions.json");
+            return EResult::Fail;
+        }
+
         if (IsFailure(InitializeSystems()))
             return EResult::Fail;
 
         InitializeRenderPasses();
         LoadGameModule();
         if (IsFailure(LoadStartupScene()))
+            return EResult::Fail;
+        if (!ValidateStartupGraphs())
             return EResult::Fail;
 
         BAM_LOG(Info, "Client", "Application", "Client initialization finished successfully");
@@ -126,69 +142,78 @@ public:
 
     EResult Run()
     {
-        if (!m_Window || !m_Runtime)
-            return EResult::InvalidArgument;
-
-        auto& timeManager = TimeManager::Get();
-        RHI* rhi = Renderer::Get().GetRHI();
-
-        while (true)
+        bool shouldQuit = false;
+        while (!shouldQuit)
         {
-            bool shouldQuit = false;
-            SDL_Event event = {};
-
-            while (SDL_PollEvent(&event))
-            {
-                InputManager::Get().ProcessEvent(event);
-
-                if (event.type == SDL_EVENT_QUIT)
-                    shouldQuit = true;
-
-                if (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED && event.window.windowID == SDL_GetWindowID(m_Window))
-                    shouldQuit = true;
-            }
-
-            if (shouldQuit)
-                break;
-
-            timeManager.Update();
-            const f32 dt = timeManager.GetDeltaTime();
-
-            if (SDL_GetWindowFlags(m_Window) & SDL_WINDOW_MINIMIZED)
-                continue;
-
-            int width = 0;
-            int height = 0;
-            if (!SDL_GetWindowSizeInPixels(m_Window, &width, &height))
-                return EResult::Fail;
-
-            if (width <= 0 || height <= 0)
-                continue;
-
-            const uint32 pixelWidth = static_cast<uint32>(width);
-            const uint32 pixelHeight = static_cast<uint32>(height);
-
-            if (pixelWidth != rhi->GetSwapChainWidth() || pixelHeight != rhi->GetSwapChainHeight())
-            {
-                const EResult result = rhi->Resize(pixelWidth, pixelHeight);
-                if (result != EResult::Success)
-                    return result;
-            }
-
-            while (timeManager.IsFixedUpdateReady())
-                m_Runtime->FixedUpdate(timeManager.GetFixedStep());
-
-            m_Runtime->Update(dt);
-            m_Runtime->LateUpdate(dt);
-
-            UpdateViewportCamera();
-
-            const EResult result = m_Runtime->Render(dt);
+            const EResult result = RunFrame(shouldQuit);
             if (result != EResult::Success)
                 return result;
         }
 
         return EResult::Success;
+    }
+
+    EResult RunFrame(bool& shouldQuit)
+    {
+        shouldQuit = false;
+        if (!m_Window || !m_Runtime)
+            return EResult::InvalidArgument;
+
+        auto* rhi = Renderer::Get().GetRHI();
+        if (!rhi)
+            return EResult::Fail;
+
+        SDL_Event event = {};
+        while (SDL_PollEvent(&event))
+        {
+            InputManager::Get().ProcessEvent(event);
+
+            if (event.type == SDL_EVENT_QUIT)
+                shouldQuit = true;
+
+            if (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED && event.window.windowID == SDL_GetWindowID(m_Window))
+                shouldQuit = true;
+        }
+
+        if (shouldQuit)
+            return EResult::Success;
+
+        auto& timeManager = TimeManager::Get();
+        timeManager.Update();
+        const f32 dt = timeManager.GetDeltaTime();
+
+        if (SDL_GetWindowFlags(m_Window) & SDL_WINDOW_MINIMIZED)
+            return EResult::Success;
+
+        int width = 0;
+        int height = 0;
+        if (!SDL_GetWindowSizeInPixels(m_Window, &width, &height))
+            return EResult::Fail;
+
+        if (width <= 0 || height <= 0)
+            return EResult::Success;
+
+        const uint32 pixelWidth = static_cast<uint32>(width);
+        const uint32 pixelHeight = static_cast<uint32>(height);
+        if (pixelWidth != rhi->GetSwapChainWidth() || pixelHeight != rhi->GetSwapChainHeight())
+        {
+            const EResult result = rhi->Resize(pixelWidth, pixelHeight);
+            if (result != EResult::Success)
+                return result;
+        }
+
+        auto& input = InputManager::Get();
+        input.Update(dt);
+        input.EvaluateActionMap("Gameplay", SDL_GetKeyboardFocus() == m_Window);
+
+        while (timeManager.IsFixedUpdateReady())
+            m_Runtime->FixedUpdate(timeManager.GetFixedStep());
+
+        m_Runtime->Update(dt, false);
+        m_Runtime->LateUpdate(dt);
+        UpdateViewportCamera();
+
+        return m_Runtime->Render(dt);
     }
 
 private:
@@ -251,7 +276,7 @@ private:
         std::filesystem::path scenePath;
         if (!m_ProjectSettings.StartupScenePath.empty())
         {
-            scenePath = m_ProjectRoot / m_ProjectSettings.StartupScenePath;
+            scenePath = PlatformPath::GetProjectAssetRoot() / std::filesystem::u8path(m_ProjectSettings.StartupScenePath);
             if (!std::filesystem::exists(scenePath))
             {
                 BAM_LOG(Error, "Client", "Startup", "Configured startup scene file does not exist: {}", scenePath.string());
@@ -260,7 +285,7 @@ private:
         }
         else
         {
-            scenePath = m_ProjectRoot / "Resources" / "Scenes" / "NewScene2.json";
+            scenePath = PlatformPath::GetProjectAssetRoot() / "Scenes" / "NewScene2.bamscene.json";
             BAM_LOG(Warn, "Client", "Startup", "StartupScenePath is empty. Falling back to default scene: {}", scenePath.string());
             if (!std::filesystem::exists(scenePath))
             {
@@ -327,6 +352,27 @@ private:
 
         selectedBuffer->time = static_cast<f32>(TimeManager::Get().GetTotalTime());
         Renderer::Get().RegisterViewportCamera(*selectedBuffer, renderPass);
+    }
+
+    bool ValidateStartupGraphs()
+    {
+        auto* scene = SceneManager::Get().GetCurrentScene();
+        auto* graphSystem = SystemManager::Get().GetSystem<GraphSystem>();
+        if (!scene || !graphSystem)
+        {
+            BAM_LOG(Error, "Client", "Startup", "Startup scene or graph system is unavailable.");
+            return false;
+        }
+
+        auto bindings = scene->GetRegistry().view<GraphBindingComponent>();
+        for (const auto entity : bindings)
+        {
+            const auto& binding = bindings.get<GraphBindingComponent>(entity);
+            if (binding.enabled && !binding.graphFile.empty() && !graphSystem->GetOrLoadGraph(binding.graphFile))
+                return false;
+        }
+
+        return true;
     }
 
 private:

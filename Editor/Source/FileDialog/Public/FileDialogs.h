@@ -2,6 +2,7 @@
 
 #include "Editor_Includes.h"
 #include "FileDialogContext.h"
+#include <string_view>
 
 BEGIN(Editor)
 struct FileDialogFilter
@@ -24,7 +25,12 @@ public:
     static bool OpenFileDialog(wstring& outPath, const vector<FileDialogFilter>& filters = {},
         wstring_view initialDir = L"", EFileDialogContext context = EFileDialogContext::General);
 
+    static bool OpenFileDialog(wstring& outPath, const vector<FileDialogFilter>& filters,
+        wstring_view initialDir, std::string_view historyKey);
+
     static bool OpenFolderDialog(wstring& outPath, wstring_view initialDir = L"",
         EFileDialogContext context = EFileDialogContext::General);
+
+    static bool OpenFolderDialog(wstring& outPath, wstring_view initialDir, std::string_view historyKey);
 };
 END

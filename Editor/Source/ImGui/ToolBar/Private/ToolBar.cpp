@@ -178,6 +178,14 @@ void ToolBar::DrawFileMenu()
 			LoadResourceFile();
 		}
 
+		if (ImGui::MenuItem(LOCAL_LABEL("BuildProfile.Open").c_str()))
+		{
+			if (auto* panel = ImGuiManager::Get().GetImGuiPanel(L"BuildProfile"))
+				panel->Focus();
+		}
+
+		ImGui::Separator();
+
 		auto& sm = ShortcutManager::Get();
 		if (ImGui::MenuItem(LOCAL_LABEL("Settings.Title").c_str(), sm.GetShortcutHint("Editor.OpenSettings")))
 		{

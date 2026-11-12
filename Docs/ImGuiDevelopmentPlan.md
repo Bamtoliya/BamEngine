@@ -397,11 +397,12 @@ Visual Studio F5 수동 확인 항목:
 - 완료 기준: 같은 클립을 미리보기와 런타임에서 해석하고, 키 편집·Undo·저장·재실행 복원이 일치한다.
 - 참고: Godot의 [Animation 편집](https://docs.godotengine.org/en/stable/tutorials/animation/introduction.html)은 트랙·키프레임·타임라인과 속성 편집을 연결한다.
 
-### G. `BuildProfilePanel` — 빌드·패키징 단계에서 진행
+### G. `BuildProfilePanel` — 설정, Client 빌드와 폴더 내보내기 연결
 
 - 현재 목표 문서: [BuildAndPackagingPlan.md](BuildAndPackagingPlan.md).
 - 대상 구성·시작 씬·출력 폴더·필수 에셋과 포함 모듈을 선택하고 진행 단계·로그·실패 원인을 보여준다.
-- Build·Cook·Stage·Package 처리는 UI 밖에서도 호출할 수 있는 공통 작업으로 구성한다.
+- `파일 > 빌드 및 패키징…`에서 설정, 씬 참조 검사와 Windows Release Client 빌드를 진행한다. 시작 씬과 출력 폴더 다이얼로그는 서로 다른 문자열 이력 키를 사용한다.
+- Client 빌드와 폴더 내보내기는 Editor 내부 작업에서 실행하며, 패널에 최종 배포 경로, 진행 상태, 완료 로그를 표시한다. 기존 출력과 충돌하면 오류를 표시한다. 변경 후 실제 UI와 독립 실행은 검증해야 한다.
 - 완료 기준은 UI 버튼 동작뿐 아니라 개발 경로 밖의 배포 폴더에서 Client가 실행되는 것이다.
 
 ### H. `AnimatorGraphPanel` (애니메이터 그래프 및 상태 머신 에디터) — 구현 완료 (2026-11-01) / 3D 프리뷰 뷰포트 후속

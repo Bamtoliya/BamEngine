@@ -4310,3 +4310,25 @@ Use this as the primary execution list until a playable 2D vertical slice is com
      - `[무시하고 새 작업]` 클릭 시 스냅샷 및 메타데이터 안전 폐기.
   4. **수동 진단 테스트 및 검증 지원**:
      - 상단 메뉴바 `Help -> Trigger Crash (Diagnostics Test)` 메뉴를 통해 의도적 널 포인터 크래시를 유발하여 미니덤프 생성 및 복원 마법사를 즉시 검증 가능.
+
+## [2026-11-11] 빌드 패널의 다이얼로그 이력과 Windows Release 빌드 연결
+
+- `FileDialogs`가 고정 문자열 키에서 Windows 다이얼로그 GUID를 생성한다. 빌드 패널의 시작 씬과 출력 폴더에 각각 적용했다. 두 창은 새 이력을 사용하고 기존 컨텍스트의 GUID는 유지했다.
+- `ClientBuildJob`이 별도 CMake 구성에서 Editor 지원을 끈 Windows x64 Release Client와 GameModule을 백그라운드에서 빌드한다. 패널은 상태와 완료 로그를 표시한다.
+- 사용자는 변경 전 패널에서 씬 참조 검사가 깨끗함을 확인했다. 변경 후 Editor 빌드, 두 다이얼로그 이력 복원, 빌드 버튼 실행과 산출물 확인은 미검증이다.
+- 다음 단계는 선택한 시작 씬과 필수 산출물을 배포 폴더에 모으고 개발 경로 밖에서 실행을 확인하는 것이다.
+
+## [2026-11-11] Windows Release Client 폴더 내보내기 연결
+
+- 사용자는 기존 패널의 Client 빌드 완료와 빌드 폴더 산출물을 확인했다.
+- 패널의 `빌드 및 내보내기`가 선택한 위치 아래 `BamEngine-Windows-x64`에 알려진 Windows 런타임 바이너리와 실행 리소스를 수집한다. 배포 설정에는 선택한 시작 씬을 기록한다.
+- 빌드 뒤 씬 참조를 검사한다. 임시 폴더의 복사가 성공하면 최종 이름으로 이동한다. 기존 출력과의 충돌, 입력 루트 겹침, 누락 파일은 오류로 보고한다.
+- 이전 Client 로그에 나온 `SkinningMaterial`의 DXIL 경로를 `Engine://` 참조로 갱신했다.
+- 변경 후 Editor 빌드, 패널 내보내기, 기존 목적지 충돌, 저장소 밖의 Client 실행은 미검증이다. 런타임 파일 형식을 넓게 포함하는 초기 수집이며 바이너리 에셋의 전체 참조 분석은 남아 있다.
+
+## [2026-11-13] Client 패키징 현황과 렌더 파이프라인 프로필 설계
+
+- 빌드 패널은 저장된 현재 씬 선택, 시작 씬과 내보내기 위치의 Workspace 저장, 빌드 로그 선택과 복사를 제공한다. Client 코드는 에셋 루트 기준 시작 씬 로드, 시작 그래프 파일 검사, `Gameplay` 액션 맵 로드·평가를 포함한다.
+- 사용자는 Windows Release 빌드 산출물을 확인했다. 기존 배포 로그에는 `RaytracingScene3`의 로드와 Client 초기화 성공 및 Animator 컨트롤러 경로 오류가 기록됐다. 사용자가 보고한 A/D 입력, 기본 도형 표시, 조명과 후처리 차이는 해소 여부를 검증하지 않았다.
+- Editor Game View와 배포 Client가 같은 파일을 읽어 등록된 패스를 구성하도록 [Render Pipeline Profile 설계](RenderPipelineProfilePlan.md)를 기록했다. 첫 구현 단위는 기본 Deferred 프로필과 GPU 없이 실행 가능한 로더·검증기다.
+- 작업 트리와 기존 로그를 정적으로 대조했다. 이번 기록을 위해 새 빌드, PIE, 내보내기나 저장소 밖 실행을 수행하지 않았다. 프로필 로더·패스 재구성·배포 설정 연동은 구현 전이다.

@@ -10,7 +10,9 @@ namespace Editor
     {
         MissingFile,          // 디스크에 대상 파일이 존재하지 않음 (누락)
         ExternalAbsolutePath, // 프로젝트 루트 외부의 절대 경로가 하드코딩됨
-        InvalidExtension      // 확장자가 누락되었거나 구형/손상 바이너리 참조
+        InvalidExtension,      // 확장자가 누락되었거나 구형/손상 바이너리 참조
+        UnreadableDocument,
+        OutsideRuntimeRoots
     };
 
     struct AssetReferenceIssue
@@ -29,6 +31,9 @@ namespace Editor
     public:
         // 단일 파일의 직렬화 참조 검증
         static std::vector<AssetReferenceIssue> ValidateFile(const std::filesystem::path& filePath);
+
+        static std::vector<AssetReferenceIssue> ValidateBuildScene(const std::filesystem::path& scenePath,
+            std::vector<std::filesystem::path>* referencedFiles = nullptr);
 
         // Resources 폴더 내 모든 에셋(씬, 프리팹, 머티리얼, 모델) 전수 검증
         static std::vector<AssetReferenceIssue> ValidateAllResources();

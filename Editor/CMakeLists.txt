@@ -44,6 +44,8 @@ add_executable(Editor
     ${EDITOR_SOURCES}
 )
 
+target_compile_definitions(Editor PRIVATE NOMINMAX)
+
 if(WIN32)
     target_compile_definitions(Editor PRIVATE "BAM_EDITOR_CMAKE_COMMAND=L\"${CMAKE_COMMAND}\"")
     target_link_libraries(Editor PRIVATE bcrypt)

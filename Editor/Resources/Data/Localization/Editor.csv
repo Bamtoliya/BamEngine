@@ -1921,3 +1921,32 @@ PluginManager,PackageDuplicateId,The package ID conflicts with another package.,
 PluginManager,ApprovePluginTitle,Approve Plugin,플러그인 승인
 PluginManager,ApprovePluginWarning,This DLL runs inside the Editor process. Approve it only if you trust its source.,이 DLL은 에디터 프로세스 안에서 실행됩니다. 출처를 신뢰할 수 있을 때만 승인하세요.
 PluginManager,ApproveAndLoad,Approve and Load,승인 후 로드
+BuildProfile,Open,Build and Package…,빌드 및 패키징…
+BuildProfile,Title,Build and Package,빌드 및 패키징
+BuildProfile,Target,Build Target,빌드 대상
+BuildProfile,WindowsRelease,Windows x64 / Release,Windows x64 / Release
+BuildProfile,Format,Output Format,출력 형식
+BuildProfile,Folder,Folder,폴더
+BuildProfile,OutputDirectory,Export Destination,내보낼 위치
+BuildProfile,SceneFiles,BamEngine Scenes (*.bamscene.json),BamEngine 씬 (*.bamscene.json)
+BuildProfile,CheckSceneReferences,Check Scene References,씬 참조 검사
+BuildProfile,SceneReferencesPassed,No issues found in checked JSON references.,검사한 JSON 참조에 문제가 없습니다.
+BuildProfile,SceneReferenceIssueCount,Reference issues found ({0}),참조 문제 {0}건
+BuildProfile,ReferenceMissing,Referenced file is missing,참조 파일이 없습니다
+BuildProfile,ReferenceAbsolute,Reference uses an absolute path,참조가 절대 경로를 사용합니다
+BuildProfile,ReferenceUnreadable,Cannot read the JSON document,JSON 문서를 읽을 수 없습니다
+BuildProfile,ReferenceOutsideRoots,File is outside the project and engine resource folders,프로젝트 및 엔진 리소스 폴더 밖의 파일입니다
+BuildProfile,BuildClient,Build Client,Client 빌드
+BuildProfile,BuildRunning,Building the Release Client…,Release Client 빌드 중…
+BuildProfile,BuildSucceeded,Client build completed.,Client 빌드가 완료됐습니다.
+BuildProfile,BuildFailed,Client build failed. See the output below.,Client 빌드에 실패했습니다. 아래 로그를 확인하세요.
+BuildProfile,BuildAndExport,Build and Export,빌드 및 내보내기
+BuildProfile,ExportRunning,Building and exporting the package…,빌드 및 내보내기 진행 중…
+BuildProfile,ExportSucceeded,Package export completed.,배포 폴더를 내보냈습니다.
+BuildProfile,ExportFailed,Build or export failed. See the output below.,빌드 또는 내보내기에 실패했습니다. 아래 로그를 확인하세요.
+BuildProfile,OpenExportFolder,Open Export Folder,내보낸 폴더 열기
+BuildProfile,NoBuildOutput,No build output yet.,아직 빌드 로그가 없습니다.
+BuildProfile,UseCurrentScene,Use Current Scene,현재 씬 사용
+BuildProfile,SaveCurrentSceneFirst,Save the current scene in Edit mode first.,편집 모드에서 현재 씬을 먼저 저장하세요.
+BuildProfile,InvalidStartupScene,Select a saved BamEngine scene inside the project Assets folder.,프로젝트 Assets 폴더 안에 저장된 BamEngine 씬을 선택하세요.
+BuildProfile,SelectionSaveFailed,Could not save the build settings. Your selection is available for this session.,빌드 설정을 저장하지 못했습니다. 현재 세션에서는 선택한 값을 사용할 수 있습니다.

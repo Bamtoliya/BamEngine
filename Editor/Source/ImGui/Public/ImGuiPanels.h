@@ -16,3 +16,4 @@
 #include "AssetReferencePanel.h"
 #include "AnimationTimelinePanel.h"
 #include "NetworkProfilerPanel.h"
+#include "BuildProfilePanel.h"

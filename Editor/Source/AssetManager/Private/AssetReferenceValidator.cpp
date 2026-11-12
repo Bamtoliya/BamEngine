@@ -5,6 +5,10 @@
 #include <regex>
 #include <unordered_set>
 #include <map>
+#include "Functions.h"
+#include <glaze/glaze.hpp>
+#include <set>
+#include <string_view>
 
 namespace Editor
 {
@@ -35,6 +39,43 @@ namespace Editor
             ss << file.rdbuf();
             outContent = ss.str();
             return true;
+        }
+
+        void CollectBuildReferences(const glz::generic_u64& value, std::set<std::string>& references)
+        {
+            using Json = glz::generic_u64;
+
+            if (const auto* object = value.get_if<Json::object_t>())
+            {
+                const auto nullField = object->find("Null");
+                if (nullField != object->end())
+                {
+                    const auto* isNull = nullField->second.get_if<bool>();
+                    if (isNull && *isNull)
+                        return;
+                }
+
+                const auto readString = [&](const char* key) -> const std::string*
+                    {
+                        const auto field = object->find(key);
+                        return field == object->end() ? nullptr : field->second.get_if<std::string>();
+                    };
+
+                const auto* reference = readString("AssetPath");
+                if (!reference || reference->empty())
+                    reference = readString("AssetKey");
+
+                if (reference && !reference->empty())
+                    references.insert(*reference);
+
+                for (const auto& field : *object)
+                    CollectBuildReferences(field.second, references);
+            }
+            else if (const auto* elements = value.get_if<Json::array_t>())
+            {
+                for (const auto& element : *elements)
+                    CollectBuildReferences(element, references);
+            }
         }
 
         bool WriteTextFileAtomic(const std::filesystem::path& targetPath, const std::string& content)
@@ -167,6 +208,122 @@ namespace Editor
                 }
             }
         }
+        return issues;
+    }
+
+    std::vector<AssetReferenceIssue> AssetReferenceValidator::ValidateBuildScene(const std::filesystem::path& scenePath,
+        std::vector<std::filesystem::path>* referencedFiles)
+    {
+        namespace fs = std::filesystem;
+        using Path = Engine::PlatformPath;
+        using Issue = EAssetReferenceIssueType;
+
+        static const std::set<std::string> builtInMeshes = {
+            "QuadMesh", "CubeMesh", "SphereMesh", "PlaneMesh", "CylinderMesh", "CapsuleMesh"
+        };
+
+        std::vector<AssetReferenceIssue> issues;
+        if (referencedFiles)
+            referencedFiles->clear();
+        const auto report = [&](const fs::path& source, const std::string& target, Issue type)
+            {
+                AssetReferenceIssue issue{};
+                issue.SourceFile = source;
+                issue.TargetReference = target;
+                issue.IssueType = type;
+                issues.push_back(std::move(issue));
+            };
+
+        std::error_code ec;
+        const auto scene = fs::canonical(scenePath, ec);
+        if (ec || !fs::is_regular_file(scene, ec))
+        {
+            report(scenePath, {}, Issue::UnreadableDocument);
+            return issues;
+        }
+
+        if (!Path::IsProjectUri(Path::ToVirtualUri(scene)))
+        {
+            report(scene, {}, Issue::OutsideRuntimeRoots);
+            return issues;
+        }
+
+        std::vector<fs::path> pending{ scene };
+        std::set<fs::path> visited;
+
+        while (!pending.empty())
+        {
+            const auto source = std::move(pending.back());
+            pending.pop_back();
+            if (!visited.insert(source).second)
+                continue;
+
+            std::string text;
+            glz::generic_u64 document;
+            if (ReadTextFile(source, text) && text.starts_with("\xEF\xBB\xBF"))
+                text.erase(0, 3);
+
+            if (text.empty() || glz::validate_json(text) || glz::read_json(document, text) || !document.is_object())
+            {
+                report(source, {}, Issue::UnreadableDocument);
+                continue;
+            }
+
+            if (source == scene && !document.get_object().contains("Scene"))
+            {
+                report(source, {}, Issue::UnreadableDocument);
+                continue;
+            }
+
+            std::set<std::string> references;
+            CollectBuildReferences(document, references);
+            for (const auto& reference : references)
+            {
+                if (builtInMeshes.contains(reference))
+                    continue;
+
+                const auto rawPath = Engine::Utf8ToPath(reference);
+                const auto wideReference = rawPath.wstring();
+                if (!Path::IsVirtualUri(wideReference) && rawPath.has_root_path())
+                {
+                    report(source, reference, Issue::ExternalAbsolutePath);
+                    continue;
+                }
+
+                auto resolved = Path::ResolveUri(wideReference);
+                if (resolved.extension().wstring().starts_with(L".bam"))
+                {
+                    auto jsonPath = resolved;
+                    jsonPath += L".json";
+                    auto bevePath = resolved;
+                    bevePath += L".beve";
+                    if (fs::is_regular_file(jsonPath, ec))
+                        resolved = jsonPath;
+                    else if (fs::is_regular_file(bevePath, ec))
+                        resolved = bevePath;
+                }
+
+                const auto file = fs::canonical(resolved, ec);
+                if (ec || !fs::is_regular_file(file, ec))
+                {
+                    report(source, reference, Issue::MissingFile);
+                    continue;
+                }
+
+                const auto uri = Path::ToVirtualUri(file);
+                if (!Path::IsProjectUri(uri) && !Path::IsEngineUri(uri))
+                {
+                    report(source, reference, Issue::OutsideRuntimeRoots);
+                    continue;
+                }
+
+                if (referencedFiles)
+                    referencedFiles->push_back(file);
+                if (Engine::ToLowerStr(Engine::WStrToStr(file.extension().wstring())) == ".json")
+                    pending.push_back(file);
+            }
+        }
+
         return issues;
     }
 

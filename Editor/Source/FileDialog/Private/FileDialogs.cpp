@@ -1,5 +1,6 @@
 #include "FileDialogs.h"
 #include "Editor_Macros.h"
+#include "Functions.h"
 #include "PlatformPath.h"
 
 #pragma comment(lib, "ole32.lib")
@@ -61,9 +62,28 @@ namespace
         return assetRoot;
     }
 
+    static GUID GetDialogGuid(Editor::EFileDialogContext context, std::string_view historyKey)
+    {
+        if (historyKey.empty())
+        {
+            return { 0xb92137d1, 0xa4e9, 0x41d2,
+                { 0x98, 0x2e, 0x4b, 0x38, 0xd1, 0x65, 0x00, static_cast<unsigned char>(context) } };
+        }
+
+        // Keep the namespace and byte order stable for persisted dialog history.
+        const uint64 hash = Engine::RunTimeHash(historyKey);
+        GUID guid{ 0x5a171d2c, 0x4372, 0x8cf1, {} };
+        for (std::size_t index = 0; index < sizeof(guid.Data4); ++index)
+            guid.Data4[index] = static_cast<unsigned char>(hash >> (index * 8));
+
+        guid.Data4[0] = static_cast<unsigned char>((guid.Data4[0] & 0x3f) | 0x80);
+        return guid;
+    }
+
     static bool ShowDialog(wstring& outPath, bool save, bool pickFolders,
         const vector<FileDialogFilter>& filters, wstring_view defaultFileName,
-        wstring_view defaultExt, wstring_view initialDir, Editor::EFileDialogContext context)
+        wstring_view defaultExt, wstring_view initialDir, Editor::EFileDialogContext context,
+        std::string_view historyKey = {})
     {
         struct FileDialogComScope
         {
@@ -95,12 +115,7 @@ namespace
         if (FAILED(result))
             return fail("CreateDialog", result);
 
-        const GUID contextGuid = {
-            0xb92137d1, 0xa4e9, 0x41d2,
-            { 0x98, 0x2e, 0x4b, 0x38, 0xd1, 0x65, 0x00, static_cast<unsigned char>(context) }
-        };
-
-        result = dialog->SetClientGuid(contextGuid);
+        result = dialog->SetClientGuid(GetDialogGuid(context, historyKey));
         if (FAILED(result))
             return fail("SetClientGuid", result);
 
@@ -244,8 +259,19 @@ namespace Editor
         return ShowDialog(outPath, false, false, filters, L"", L"", initialDir, context);
     }
 
+    bool FileDialogs::OpenFileDialog(wstring& outPath, const vector<FileDialogFilter>& filters,
+        wstring_view initialDir, std::string_view historyKey)
+    {
+        return ShowDialog(outPath, false, false, filters, L"", L"", initialDir, EFileDialogContext::General, historyKey);
+    }
+
     bool FileDialogs::OpenFolderDialog(wstring& outPath, wstring_view initialDir, EFileDialogContext context)
     {
         return ShowDialog(outPath, false, true, {}, L"", L"", initialDir, context);
+    }
+
+    bool FileDialogs::OpenFolderDialog(wstring& outPath, wstring_view initialDir, std::string_view historyKey)
+    {
+        return ShowDialog(outPath, false, true, {}, L"", L"", initialDir, EFileDialogContext::General, historyKey);
     }
 }

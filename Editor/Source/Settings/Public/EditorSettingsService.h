@@ -183,6 +183,13 @@ private:
     void QueueWindowRestore(EEditorWindowRequestStatus reason);
     void FinishWindowChange(EEditorWindowRequestStatus status, const EditorApplicationState& state);
 
+
+#pragma region BuildProfile
+public:
+    EEditorSettingsSaveStatus SetBuildProfileWorkspace(const BuildProfileWorkspace& profile);
+#pragma endregion
+
+
 private:
     reflection::Registry m_SettingsRegistry;
 

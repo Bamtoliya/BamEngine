@@ -399,6 +399,12 @@ EEditorSettingsSaveStatus EditorSettingsService::SaveWorkspace() const
         m_CanSaveEditorWorkspace, "EditorWorkspace");
 }
 
+EEditorSettingsSaveStatus EditorSettingsService::SetBuildProfileWorkspace(const BuildProfileWorkspace& profile)
+{
+    m_EditorWorkspace.BuildProfile = profile;
+    return SaveWorkspace();
+}
+
 void EditorSettingsService::RememberEditedScene(const std::filesystem::path& path)
 {
     if (path.empty())

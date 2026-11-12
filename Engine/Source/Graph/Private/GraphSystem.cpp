@@ -155,7 +155,10 @@ const Graph* GraphSystem::GetOrLoadGraph(const std::wstring& path)
 				targetPath = resPath;
 		}
 	}
-	if (!std::filesystem::exists(targetPath))
+	if (!std::filesystem::is_regular_file(targetPath))
+		targetPath = PlatformPath::ResolveUri(path);
+
+	if (!std::filesystem::is_regular_file(targetPath))
 	{
 		BAM_LOG(Error, "GraphSystem", "Load", "Graph file not found: '{}'", WStrToStr(path));
 		return nullptr;

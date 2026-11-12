@@ -136,6 +136,16 @@ namespace Editor
     };
 
     STRUCT()
+    struct BuildProfileWorkspace
+    {
+        PROPERTY(META("Optional", true))
+        std::string StartupScene;
+
+        PROPERTY(META("Optional", true))
+        std::string OutputDirectory;
+    };
+
+    STRUCT()
     struct EditorWorkspace
     {
         static constexpr std::uint32_t CurrentSchemaVersion = 1;
@@ -185,6 +195,11 @@ namespace Editor
 
         PROPERTY(META("Optional", true))
         std::map<std::wstring, ViewportWorkspace> ViewportStates;
+
+        // EditorWorkspace 내부
+        PROPERTY(META("Optional", true))
+        BuildProfileWorkspace BuildProfile;
+
         // 패널별 스플리터 분할 위치 영속화 맵 (순수 std::string 키 사용)
         PROPERTY(META("Optional", true))
         std::map<std::string, float> SplitterStates;

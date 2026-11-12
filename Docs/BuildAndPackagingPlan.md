@@ -1,7 +1,8 @@
 # 다음 목표: Client 실행 설정과 빌드·패키징
 
-- 작성일: 2026-10-24 (최종 갱신: 2026-11-06)
-- 상태: 일부 구현 / 실행 루트·설정 기반 시작 씬 연결 반영. 과거 독립 실행 기록은 유지하되 현행 패키징은 A01·A02 수정 전 완료로 보지 않는다(2026-11-06).
+- 작성일: 2026-10-24 (최종 갱신: 2026-11-13)
+- 상태: Editor에서 Windows x64 Release 빌드 및 폴더 내보내기 연결. 저장소 밖 실행과 Editor·Client 렌더링 일치 검증은 남아 있다.
+- 렌더링 공유 후속 설계: [Render Pipeline Profile](RenderPipelineProfilePlan.md)
 - 관련 지침: [EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md)의 3절, 12절, 13절
 - 직렬화 지침: [ReflectionArchiveGuidelines.md](ReflectionArchiveGuidelines.md)
 - 분류·이관 기준: [SourceOrganizationGuidelines.md](SourceOrganizationGuidelines.md)
@@ -12,8 +13,8 @@
 
 2026-10-24에는 Client 시작 씬·빌드·패키징을 함께 보류했다.
 2026-11-02 현재 코드는 실행 루트 탐색과 `StartupScenePath` 연결을 이미 포함하므로 그 부분은 구현 반영 상태로 갱신한다.
-시작 매니페스트·설정 실패 정책·Cook/Stage/Package와 저장소 밖 실행은 아직 미완료다.
-이번 문서 갱신은 남은 구현을 자동으로 재개하는 결정이 아니다.
+2026-11-13 기준 Editor 패널에 Windows Release 빌드와 폴더 내보내기가 연결됐다.
+Client 시작 매니페스트 연결, 참조 기반 최소 에셋 수집과 저장소 밖 실행 검증이 남아 있다.
 후속 작업에서는 제작 UI와 공용 로딩/변환 처리를 구분하고, Client에 Editor 의존성을 추가하지 않는다.
 
 2026-11-02 우선순위 조정에서는 **삭제 범위 보호(F03)**와 **기존 Client의 설정 실패 보고(F05 일부)**를 작은 안정화 작업으로 분리한다.
@@ -27,12 +28,12 @@
 ## 2. 현재 코드에서 확인한 상태
 
 - `Engine/Source/Core/Config/Public/Config.h`에 공용 `ProjectSettings`가 있다.
-  `SchemaVersion`, `ProjectName`, `AssetDirectory`, `StartupManifestPath`, `StartupScenePath`, `ShaderSourceDirectory`를 가진다.
-- `Config/Project.json`의 `StartupScenePath`는 `Resources/Scenes/RaytracingScene.json`이다.
+  `SchemaVersion`, `ProjectName`, `AssetDirectory`, `EngineResourceDirectory`, `StartupManifestPath`, `StartupScenePath`, `ShaderSourceDirectory`를 가진다.
+- `Config/Project.json`의 `StartupScenePath`는 `Scenes/RaytracingScene.bamscene.json`이며, 내보내기 시 선택한 씬의 에셋 루트 상대 경로를 배포본에 기록한다.
 - Editor는 `ConfigManager`로 프로젝트 설정을 읽고 `StartupManifestPath`를 시작 리소스 로드에 사용한다.
 - Client는 실행 파일 위치와 프로젝트 마커로 루트를 찾고 Runtime/PlatformPath에 주입한다.
 - `LoadProjectSettings()`가 설정을 읽고 `LoadStartupScene()`이 지정한 씬을 선택한다. 빈 값일 때만 NewScene2로 폴백한다.
-- 설정 로드 결과·스키마 버전을 검사한다. `NotFound`는 경고 후 기본값으로 성공, 파싱 실패는 실패, 0 또는 지원 초과 버전은 InvalidArgument다. `StartupManifestPath`와 `AssetDirectory`의 시작 흐름 연결은 잔여 목표다.
+- 설정 로드 결과·스키마 버전을 검사한다. `NotFound`는 경고 후 기본값으로 성공, 파싱 실패는 실패, 0 또는 지원 초과 버전은 InvalidArgument다. Client의 `StartupManifestPath` 연결이 남아 있다. 현재 Client는 런타임을 생성한 뒤 프로젝트 설정을 읽으므로 사용자 지정 리소스 루트의 초기화 순서는 별도 확인이 필요하다.
 - Client에 기본 프리미티브 메시 등록·카메라 선택·시스템 등록과 단일 백버퍼 Forward 패스가 있다.
   Editor의 디퍼드·조명·HDR/후처리와 동등한 렌더링 경로는 아니다.
 - `Client/CMakeLists.txt`의 Visual Studio 디버거 작업 디렉터리는 소스 루트다. 해당 타깃에 과거 `BAMENGINE_PROJECT_ROOT` 정의는 없다.
@@ -52,7 +53,7 @@ Editor에서 제작하고 저장한 프로젝트를 배포 폴더로 구성하�
 - 실행 위치와 데이터 기준 경로를 명시하고, 임의의 현재 작업 디렉터리에 의존하지 않는다.
 - 실행에 필요한 DLL, 프로젝트 모듈과 리소스를 포함한다.
 - 누락된 설정·파일·의존성은 원인을 식별할 수 있는 로그와 실패 결과로 전달한다.
-- 같은 빌드·패키징 처리를 Editor UI 밖에서도 호출할 수 있게 구성한다.
+- Editor의 `파일 > 빌드 및 패키징…` 패널에서 설정, 실행, 결과 확인과 내보내기를 진행한다.
 
 ## 4. 구현 순서
 
@@ -82,7 +83,9 @@ Editor에서 제작하고 저장한 프로젝트를 배포 폴더로 구성하�
 
 ### 3단계: Build와 Cook
 
-- 우선 Windows에서 Visual Studio로 Release Client와 필요한 프로젝트 모듈을 빌드한다.
+- `BuildProfilePanel`의 `Client 빌드`가 기존 CMake `x64-release` 프리셋을 사용해 별도 `x64-client-release` 폴더에서 Editor 지원을 끈 Windows Release Client와 GameModule을 빌드한다. 패널은 완료 로그를 표시하고 복사할 수 있게 한다.
+- 선택한 시작 씬과 내보내기 위치는 Editor Workspace에 저장한다. `현재 씬 사용`은 편집 모드에서 저장된 현재 씬을 선택한다.
+- 선택한 시작 씬의 저장된 JSON 참조 검사는 패널에서 수행한다. 빌드가 생성하는 셰이더와 배포 대상 참조는 산출물을 기준으로 확인한다.
 - 실행에 필요한 셰이더와 에셋의 변환 결과를 확인한다.
 - 비주얼 스크립트 그래프의 최적화 포장(바이너리 바이트코드 Baking 및 C++ Nativization, [VisualScriptingBlueprintPlan.md](VisualScriptingBlueprintPlan.md) 참고) 대상을 구분한다.
 - 원본 에셋과 실행용 데이터의 포함 기준을 정한다.
@@ -90,6 +93,9 @@ Editor에서 제작하고 저장한 프로젝트를 배포 폴더로 구성하�
 
 ### 4단계: Stage와 Package
 
+- `빌드 및 내보내기`는 Windows x64 Release 빌드 성공 후, 선택한 폴더 아래 `BamEngine-Windows-x64`를 생성한다. 패널에서 최종 경로를 미리 표시하고 성공 후 그 폴더를 열 수 있다.
+- 임시 형제 폴더에 먼저 수집한 뒤 최종 이름으로 이동한다. 기존 목적지가 있거나 에셋 입력과 겹치면 실패한다. 복사 또는 이동 실패 시 로그에 임시 폴더 경로를 남긴다.
+- 첫 폴더 출력은 현재 Windows Client의 알려진 실행 바이너리, 검사로 확인한 파일 및 두 리소스 루트의 런타임 파일 형식을 보존한다. 배포본 `Config/Project.json`에 선택한 씬을 기록한다. 바이너리 참조 분석, 최소 에셋 수집과 실제 독립 실행은 후속 검증 항목이다.
 - 전용 출력 폴더에 실행 파일, Engine DLL, 필요한 런타임 DLL과 프로젝트 모듈을 수집한다.
 - [ResourceAndAssetSeparationPlan.md](ResourceAndAssetSeparationPlan.md)의 원칙에 따라, 런타임 필수 엔진 빌트인 리소스(`Engine/Resources/`)와 시작 씬이 참조하는 프로젝트 애셋(`Assets/`)을 분리 수집한다.
 - 프로젝트 설정, 시작 씬, 시작 매니페스트와 실행 리소스를 경로 규칙에 맞게 배치한다.

@@ -17,12 +17,12 @@
             "passType": 3,
             "pixelShader": {
                 "AssetKey": "Resources/Shader/ShadowDepthPS",
-                "AssetPath": "I:/BamtoliyaGithub/BamEngine/Resources/Shader/bin/dxil/shadowDepthPS.cso",
+                "AssetPath": "Engine://Shader/bin/dxil/shadowDepthPS.cso",
                 "Null": false
             },
             "vertexShader": {
                 "AssetKey": "Resources/Shader/ShadowDepthSkinningVS",
-                "AssetPath": "I:/BamtoliyaGithub/BamEngine/Resources/Shader/bin/dxil/shadowDepthSkinningVS.cso",
+                "AssetPath": "Engine://Shader/bin/dxil/shadowDepthSkinningVS.cso",
                 "Null": false
             }
         }
@@ -30,7 +30,7 @@
     "m_Path": "Resources/Material/SkinningMaterial.bammat.json",
     "m_PixelShaderHandle": {
         "AssetKey": "Resources/Shader/GBufferPS",
-        "AssetPath": "I:/BamtoliyaGithub/BamEngine/Resources/Shader/bin/dxil/gbufferPS.cso",
+        "AssetPath": "Engine://Shader/bin/dxil/gbufferPS.cso",
         "Null": false
     },
     "m_ResourceType": 3,
@@ -58,7 +58,7 @@
     ],
     "m_VertexShaderHandle": {
         "AssetKey": "Resources/Shader/GBufferSkinningVS",
-        "AssetPath": "I:/BamtoliyaGithub/BamEngine/Resources/Shader/bin/dxil/gbufferSkinningVS.cso",
+        "AssetPath": "Engine://Shader/bin/dxil/gbufferSkinningVS.cso",
         "Null": false
     }
 }

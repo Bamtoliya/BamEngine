@@ -784,6 +784,7 @@ EResult ImGuiManager::CreateDefaultPanels()
 		!InitializePanel(new AnimatorGraphPanel()) ||
 		!InitializePanel(new HistoryPanel()) ||
 		!InitializePanel(new UnifiedSettingsPanel()) ||
+		!InitializePanel(new BuildProfilePanel()) ||
 		!InitializePanel(new AssetReferencePanel()) ||
 		!InitializePanel(new AnimationTimelinePanel()) ||
 		!InitializePanel(new NetworkProfilerPanel()) ||

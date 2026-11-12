@@ -7,6 +7,10 @@ file(GLOB_RECURSE CLIENT_SOURCES CONFIGURE_DEPENDS "${CLIENT_SOURCE_DIR}/*.cpp")
 
 add_executable(Client ${CLIENT_HEADERS} ${CLIENT_SOURCES})
 
+if(WIN32)
+    set_property(TARGET Client PROPERTY WIN32_EXECUTABLE "$<CONFIG:Release>")
+endif()
+
 target_link_libraries(Client PRIVATE
     BamEngine::Engine
 )
