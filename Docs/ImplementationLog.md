@@ -4377,3 +4377,7 @@ Use this as the primary execution list until a playable 2D vertical slice is com
 ### [2026-11-13] 복원 팝업 위치
 
 - 복원 팝업을 주 뷰포트 작업 영역 중앙에 띄우고 창 배치를 저장하지 않도록 했다. 기존 복원 대상 선택과 복원 취소 흐름, 다중 모니터에서의 위치는 실행 검증 대상이다. [복원 계획](CrashHandlingAndRecoveryPlan.md)
+
+### [2026-11-13] Animator Graph의 대상 경로 반영 시점
+
+- 파일 읽기에 성공한 뒤 그래프와 대상 경로를 함께 반영하도록 열기 경로를 정리했다. 정상 열기와 잘못된 컨트롤러 파일을 열었을 때 기존 문서 유지 여부는 실행 검증 대상이다. [Animator Graph 계획](AnimatorGraphPlan.md)

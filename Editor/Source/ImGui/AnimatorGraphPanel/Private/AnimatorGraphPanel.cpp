@@ -226,7 +226,6 @@ bool AnimatorGraphPanel::IsSupported(const std::filesystem::path& assetPath) con
 
 void AnimatorGraphPanel::SetTargetResource(const std::filesystem::path& assetPath)
 {
-	ResourceEditorInterface::SetTargetResource(assetPath);
 	LoadFromFile(assetPath);
 }
 
