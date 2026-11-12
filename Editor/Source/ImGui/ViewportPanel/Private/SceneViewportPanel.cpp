@@ -1683,6 +1683,64 @@ void SceneViewportPanel::HandleTerrainSculpting(bool imageHovered)
 	}
 }
 
+static void DrawTilemapCellGrid(const Engine::TilemapComponent& tilemap, const mat4& localToClip,
+	const ImVec2& imagePos, const ImVec2& imageSize)
+{
+	const vec2 cellSize = tilemap.cellSize;
+	const float w = localToClip[3].w;
+	if (!(cellSize.x > 0.0f && cellSize.y > 0.0f && w > 0.0f) || !std::isfinite(w))
+		return;
+
+	const vec3 origin = vec3(localToClip[3]) / w;
+	const vec3 stepX = vec3(localToClip[0]) * (cellSize.x / w);
+	const vec3 stepY = vec3(localToClip[1]) * (cellSize.y / w);
+	const glm::mat2 cellToNdc{ vec2(stepX), vec2(stepY) };
+	const float determinant = glm::determinant(cellToNdc);
+	if (!std::isfinite(determinant) || determinant == 0.0f)
+		return;
+
+	const glm::mat2 ndcToCell = glm::inverse(cellToNdc);
+	const vec2 center = ndcToCell * -vec2(origin);
+	const vec2 halfExtent = glm::abs(ndcToCell[0]) + glm::abs(ndcToCell[1]);
+	const vec2 first = glm::floor(center - halfExtent);
+	const vec2 last = glm::ceil(center + halfExtent);
+	const vec2 span = last - first;
+
+	constexpr float maxVisibleCells = 128.0f;
+	if (!(span.x >= 0.0f && span.y >= 0.0f && span.x <= maxVisibleCells && span.y <= maxVisibleCells))
+		return;
+
+	const vec2 depthPerCell(stepX.z, stepY.z);
+	const float centerDepth = origin.z + glm::dot(depthPerCell, center);
+	const float depthExtent = std::abs(glm::dot(depthPerCell, ndcToCell[0])) +
+		std::abs(glm::dot(depthPerCell, ndcToCell[1]));
+	if (!(centerDepth - depthExtent >= 0.0f && centerDepth + depthExtent <= 1.0f))
+		return;
+
+	const auto toScreen = [&](float x, float y)
+		{
+			const vec2 ndc = vec2(origin) + cellToNdc * vec2(x, y);
+			return ImVec2(imagePos.x + (ndc.x * 0.5f + 0.5f) * imageSize.x,
+				imagePos.y + (0.5f - ndc.y * 0.5f) * imageSize.y);
+		};
+
+	ImDrawList* drawList = ImGui::GetWindowDrawList();
+	drawList->PushClipRect(imagePos, ImVec2(imagePos.x + imageSize.x, imagePos.y + imageSize.y), true);
+	constexpr ImU32 color = IM_COL32(150, 190, 230, 105);
+
+	for (int i = 0; i <= static_cast<int>(span.x); ++i)
+	{
+		const float x = first.x + static_cast<float>(i);
+		drawList->AddLine(toScreen(x, first.y), toScreen(x, last.y), color);
+	}
+	for (int i = 0; i <= static_cast<int>(span.y); ++i)
+	{
+		const float y = first.y + static_cast<float>(i);
+		drawList->AddLine(toScreen(first.x, y), toScreen(last.x, y), color);
+	}
+
+	drawList->PopClipRect();
+}
 
 bool SceneViewportPanel::HandleTilemapPainting(bool imageHovered)
 {
@@ -1700,22 +1758,26 @@ bool SceneViewportPanel::HandleTilemapPainting(bool imageHovered)
 	Entity* targetEntity = SelectionManager::Get().GetPrimarySelectedEntity();
 	auto& registry = activeScene->GetRegistry();
 
+	entt::entity tilemapEntity = entt::null;
 	Engine::TilemapComponent* tilemap = nullptr;
 	Engine::WorldTransformComponent* worldTransform = nullptr;
 
 	if (targetEntity && targetEntity->GetScene() == activeScene)
 	{
-		tilemap = registry.try_get<Engine::TilemapComponent>(targetEntity->GetEntityHandle());
-		worldTransform = registry.try_get<Engine::WorldTransformComponent>(targetEntity->GetEntityHandle());
+		tilemapEntity = targetEntity->GetEntityHandle();
+		tilemap = registry.try_get<Engine::TilemapComponent>(tilemapEntity);
+		worldTransform = registry.try_get<Engine::WorldTransformComponent>(tilemapEntity);
 	}
 
-	if (!tilemap || !worldTransform)
+	const bool hasSelectedTilemap = tilemap != nullptr && worldTransform != nullptr;
+	if (!hasSelectedTilemap)
 	{
 		auto view = registry.view<Engine::TilemapComponent, Engine::WorldTransformComponent, Engine::FlagComponent>();
 		for (auto [ent, tm, wt, flag] : view.each())
 		{
 			if (flag.IsActiveInHierarchy() && !HasFlag(flag.effectiveFlags, Engine::EEntityFlag::Dead))
 			{
+				tilemapEntity = ent;
 				tilemap = &tm;
 				worldTransform = &wt;
 				break;
@@ -1728,6 +1790,17 @@ bool SceneViewportPanel::HandleTilemapPainting(bool imageHovered)
 		m_IsTilemapPaintingActive = false;
 		m_IsTileBoxFillDragging = false;
 		return false;
+	}
+
+	const mat4& worldMatrix = worldTransform->worldMatrix;
+	const auto cameraBuffer = GetActiveCameraBuffer();
+	if (!cameraBuffer.has_value())
+		return false;
+
+	if (IsOrthographic() && hasSelectedTilemap)
+	{
+		DrawTilemapCellGrid(*tilemap, cameraBuffer->viewProjMatrix * worldMatrix,
+			m_ImageScreenPos, m_ImageSize);
 	}
 
 	if (imageHovered && !ImGui::GetIO().WantTextInput)
@@ -1744,7 +1817,6 @@ bool SceneViewportPanel::HandleTilemapPainting(bool imageHovered)
 	const ImVec2 mousePos(screenMouse.x, screenMouse.y);
 	if (!ScreenPosToRay(mousePos, ray, maxDist)) return false;
 
-	const mat4& worldMatrix = worldTransform->worldMatrix;
 	const vec3 planeNormal = glm::normalize(vec3(worldMatrix[2]));
 	const vec3 planePoint = vec3(worldMatrix[3]);
 
@@ -1761,9 +1833,6 @@ bool SceneViewportPanel::HandleTilemapPainting(bool imageHovered)
 	const vec2 cellCoord = tilemap->WorldToCell(vec2(localHit.x, localHit.y));
 	const int32 cellX = static_cast<int32>(cellCoord.x);
 	const int32 cellY = static_cast<int32>(cellCoord.y);
-
-	const std::optional<CameraBuffer> cameraBuffer = GetActiveCameraBuffer();
-	if (!cameraBuffer.has_value()) return false;
 
 	ImDrawList* drawList = ImGui::GetWindowDrawList();
 	const ETileBrushMode brushMode = palette->GetBrushMode();
@@ -1841,80 +1910,100 @@ bool SceneViewportPanel::HandleTilemapPainting(bool imageHovered)
 		}
 	}
 
-	const bool leftDown = InputManager::Get().IsMouseButtonDown(EMouseButton::Left);
-	const bool leftPressed = InputManager::Get().IsMouseButtonPressed(EMouseButton::Left);
-	const bool rightPressed = InputManager::Get().IsMouseButtonPressed(EMouseButton::Right);
+	auto& history = Application::Get().GetEditHistory();
+	auto& input = InputManager::Get();
+	const bool leftDown = input.IsMouseButtonDown(EMouseButton::Left);
+	const bool leftHeld = input.IsMouseButtonPressed(EMouseButton::Left);
+	const bool hasAutotileRule = !tilemap->autotileSprites.empty() && tilemap->autotileSprites.front().IsValid();
 
-	if (rightPressed) return false;
+	const bool canUseBrush = brushMode == ETileBrushMode::Autotile ? hasSelectedTilemap && hasAutotileRule :
+		brushMode == ETileBrushMode::Erase || brushMode == ETileBrushMode::Picker || selectedSprite.IsValid();
 
-	if (imageHovered && leftDown)
+	const bool sameStrokeTarget = m_TilemapStrokeEntity == tilemapEntity &&
+		m_TilemapStrokeRevision == history.Revision();
+	if (m_IsTilemapPaintingActive && !sameStrokeTarget)
 	{
-		m_IsTilemapPaintingActive = true;
-		if (brushMode == ETileBrushMode::BoxFill)
-		{
-			m_TileBoxFillStartCell = vec2(static_cast<f32>(cellX), static_cast<f32>(cellY));
-			m_IsTileBoxFillDragging = true;
-		}
+		m_IsTilemapPaintingActive = false;
+		m_IsTileBoxFillDragging = false;
 	}
 
-	if (m_IsTilemapPaintingActive && leftPressed && imageHovered)
+	if (input.IsMouseButtonPressed(EMouseButton::Right)) return false;
+
+	if (imageHovered && leftDown && canUseBrush)
 	{
-		if (brushMode == ETileBrushMode::Paint)
+		history.Flush();
+		m_IsTilemapPaintingActive = true;
+		m_TilemapStrokeEntity = tilemapEntity;
+		m_TilemapStrokeRevision = history.Revision();
+		m_IsTileBoxFillDragging = brushMode == ETileBrushMode::BoxFill;
+		m_TileBoxFillStartCell = cellCoord;
+	}
+
+	if (!m_IsTilemapPaintingActive) return imageHovered && canUseBrush;
+
+	const auto recordEdit = [&](auto edit, bool merge)
 		{
-			if (selectedSprite.IsValid())
+			const std::array targets{ tilemapEntity };
+			auto before = SceneEditSnapshot::Capture(*activeScene, targets);
+			if (!before || !edit()) return;
+
+			tilemap->SyncSavedTiles();
+			history.Record(std::move(before), SceneEditSnapshot::Capture(*activeScene, targets),
+				"History.Command.PaintTilemap", merge);
+		};
+
+	if (leftHeld && imageHovered && canUseBrush && !m_IsTileBoxFillDragging)
+	{
+		const auto* cell = tilemap->GetTile(cellX, cellY);
+		switch (brushMode)
+		{
+		case ETileBrushMode::Autotile:
+			if (!cell || !cell->isAutotile)
+				recordEdit([&] { return tilemap->SetAutotile(cellX, cellY); }, true);
+			break;
+		case ETileBrushMode::Paint:
+			if (!cell || cell->isAutotile || cell->sprite != selectedSprite || cell->color != vec4(1.0f))
+				recordEdit([&] { return tilemap->SetTile(cellX, cellY, selectedSprite); }, true);
+			break;
+		case ETileBrushMode::Erase:
+			if (cell) recordEdit([&] { return tilemap->ClearTile(cellX, cellY); }, true);
+			break;
+		case ETileBrushMode::Picker:
+			if (leftDown && cell && tilemap->ResolveTileSprite(*cell).IsValid())
 			{
-				tilemap->SetTile(cellX, cellY, selectedSprite);
-				m_TilemapStrokeModified = true;
-			}
-		}
-		else if (brushMode == ETileBrushMode::Erase)
-		{
-			tilemap->ClearTile(cellX, cellY);
-			m_TilemapStrokeModified = true;
-		}
-		else if (brushMode == ETileBrushMode::Picker)
-		{
-			const TileCell* cell = tilemap->GetTile(cellX, cellY);
-			if (cell && cell->sprite.IsValid())
-			{
-				palette->SetSelectedSprite(cell->sprite);
+				palette->SetSelectedSprite(tilemap->ResolveTileSprite(*cell));
 				palette->SetBrushMode(ETileBrushMode::Paint);
 			}
+			break;
+		case ETileBrushMode::BoxFill:
+			break;
 		}
 	}
 
-	if (m_IsTilemapPaintingActive && !leftPressed)
+	if (!leftHeld)
 	{
 		if (m_IsTileBoxFillDragging && brushMode == ETileBrushMode::BoxFill && selectedSprite.IsValid())
 		{
-			const int32 startX = static_cast<int32>(m_TileBoxFillStartCell.x);
-			const int32 startY = static_cast<int32>(m_TileBoxFillStartCell.y);
-			const int32 x0 = std::min(startX, cellX);
-			const int32 x1 = std::max(startX, cellX);
-			const int32 y0 = std::min(startY, cellY);
-			const int32 y1 = std::max(startY, cellY);
-
-			for (int32 y = y0; y <= y1; ++y)
-			{
-				for (int32 x = x0; x <= x1; ++x)
+			recordEdit([&]
 				{
-					tilemap->SetTile(x, y, selectedSprite);
-				}
-			}
-			m_TilemapStrokeModified = true;
-			m_IsTileBoxFillDragging = false;
+					const int32 startX = static_cast<int32>(m_TileBoxFillStartCell.x);
+					const int32 startY = static_cast<int32>(m_TileBoxFillStartCell.y);
+					bool changed = false;
+					for (int32 y = std::min(startY, cellY); y <= std::max(startY, cellY); ++y)
+					{
+						for (int32 x = std::min(startX, cellX); x <= std::max(startX, cellX); ++x)
+							changed |= tilemap->SetTile(x, y, selectedSprite);
+					}
+					return changed;
+				}, false);
 		}
 
-		if (m_TilemapStrokeModified)
-		{
-			tilemap->SyncSavedTiles();
-			m_TilemapStrokeModified = false;
-		}
-
+		history.Flush();
 		m_IsTilemapPaintingActive = false;
+		m_IsTileBoxFillDragging = false;
 	}
 
-	return imageHovered && (m_IsTilemapPaintingActive || (brushMode != ETileBrushMode::Picker && selectedSprite.IsValid()));
+	return imageHovered && (canUseBrush || m_IsTilemapPaintingActive);
 }
 
 void SceneViewportPanel::FocusSelectedEntity()

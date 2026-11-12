@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "ImGuiInterface.h"
 #include "ResourceHandle.h"
@@ -14,7 +14,8 @@ enum class ETileBrushMode : uint8
 	Paint,
 	Erase,
 	BoxFill,
-	Picker
+	Picker,
+	Autotile,
 };
 
 class TilePalettePanel final : public IImGui
@@ -39,13 +40,16 @@ private:
 	void DrawToolbar();
 	void DrawPaletteGrid();
 
+	void DrawAutotileRules();
+
 private:
 	ResourceHandle<Engine::Texture> m_PaletteTexture;
 	std::vector<ResourceHandle<Engine::Sprite>> m_PaletteSprites;
 	ResourceHandle<Engine::Sprite> m_SelectedSprite;
 
 	ETileBrushMode m_BrushMode = ETileBrushMode::Paint;
-	float m_TileThumbnailSize = 48.0f;
+	f32 m_TileThumbnailSize = 48.0f;
+	int32 m_AutotileMask = 0;
 };
 
 END

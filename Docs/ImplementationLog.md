@@ -4344,3 +4344,8 @@ Use this as the primary execution list until a playable 2D vertical slice is com
 - `ViewportImage`를 통해 기본·프리뷰 뷰포트의 렌더 타깃 조회와 그리기를 공유한다. 픽셀 퍼펙트 Game View에는 1:1 이미지 표시와 영역 부족 안내를 적용한다.
 - Scene View의 직교 카메라는 이미지 위에서 입력을 받아 이동·확대하고, 원근 투영으로 돌아갈 때 이전 카메라 위치·회전·피벗을 복원한다. 채널 미리보기의 제출 경로도 정리했다.
 - 스프라이트와 타일맵이 정렬 레이어·순서를 드로우 명령에 전달한다. Geometry 패스의 스프라이트 정렬과 픽셀 퍼펙트 Game View의 Point 샘플링을 연결했다. 실제 DPI별 1:1 표시, 채널 선택, 카메라 전환과 겹친 2D 레이어의 표시 순서는 검증 대상이다. [2D 렌더링 계획](SpriteAnd2DSystemPlan.md#phase-3-픽셀-퍼펙트-카메라-및-서브픽셀-스냅-pixel-perfect-camera-구현-완료)
+
+### [2026-11-13] 타일맵 4방향 자동 타일
+
+- 타일맵에 상하좌우 4비트 연결 규칙과 자동 타일 셀 상태를 추가했다. 배치·삭제 시 주변 마스크를 갱신하고, 렌더링에서 규칙에 맞는 스프라이트를 해석한다.
+- Tile Palette에서 마스크별 스프라이트를 지정하고 Scene View에서 자동 타일을 칠한다. 직교 뷰의 셀 그리드와 붓질·사각형 채우기 편집 이력도 정리했다. 청크 경계, 기본 규칙, 수동 셀 혼용, 저장·재열기와 Undo/Redo는 검증 대상이다. [자동 타일 계획](EngineDevelopmentPlan.md#3단계-이웃-기반-자동-타일-autotile)

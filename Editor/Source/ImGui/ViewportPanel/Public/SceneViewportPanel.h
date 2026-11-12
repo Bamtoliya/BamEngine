@@ -141,7 +141,8 @@ private:
 
 private:
 	bool m_IsTilemapPaintingActive = false;
-	bool m_TilemapStrokeModified = false;
+	entt::entity m_TilemapStrokeEntity = entt::null;
+	uint64 m_TilemapStrokeRevision = 0;
 	vec2 m_TileBoxFillStartCell{ 0.0f, 0.0f };
 	bool m_IsTileBoxFillDragging = false;
 

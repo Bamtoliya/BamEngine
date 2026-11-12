@@ -1,4 +1,4 @@
-#include "TilePalettePanel.h"
+﻿#include "TilePalettePanel.h"
 #include "EditorUI.h"
 #include "ImGuiManager.h"
 #include "ResourceManager.h"
@@ -6,6 +6,14 @@
 #include "Functions.h"
 #include <IconsFontAwesome7.h>
 #include <algorithm>
+#include "Application.h"
+#include "Entity.h"
+#include "PIEManager.h"
+#include "Scene.h"
+#include "SceneManager.h"
+#include "SelectionManager.h"
+#include "TilemapComponent.h"
+#include <array>
 
 namespace Editor
 {
@@ -145,6 +153,10 @@ void TilePalettePanel::Draw()
 	if (BeginPanelWindow(title.c_str(), m_Open))
 	{
 		DrawToolbar();
+
+		if (m_BrushMode == ETileBrushMode::Autotile)
+			DrawAutotileRules();
+
 		ImGui::Separator();
 		DrawPaletteGrid();
 	}
@@ -165,6 +177,7 @@ void TilePalettePanel::DrawToolbar()
     drawTool("Erase", ICON_FA_ERASER, "TilePalette.EraseTool", ETileBrushMode::Erase, true);
     drawTool("BoxFill", ICON_FA_SQUARE, "TilePalette.BoxTool", ETileBrushMode::BoxFill, true);
     drawTool("Picker", ICON_FA_EYE_DROPPER, "TilePalette.PickerTool", ETileBrushMode::Picker, true);
+	drawTool("Autotile", ICON_FA_DIAGRAM_PROJECT, "TilePalette.Autotile", ETileBrushMode::Autotile, true);
 
     const float sliderWidth = ImGui::GetFontSize() * 5.0f;
     EditorUI::SameLineIfFits(sliderWidth);
@@ -188,8 +201,6 @@ void TilePalettePanel::DrawToolbar()
 void TilePalettePanel::DrawPaletteGrid()
 {
 	const ImVec2 avail = ImGui::GetContentRegionAvail();
-	const float spacing = ImGui::GetStyle().ItemSpacing.x;
-	const int cols = (std::max)(1, static_cast<int>((avail.x + spacing) / (m_TileThumbnailSize + spacing)));
 
 	// 전체 패널 영역에서 드래그 앤 드롭 지원 (CONTENT_BROWSER_ITEM 및 ASSET_PATH)
 	auto checkAndHandleDragDrop = [this]()
@@ -227,8 +238,29 @@ void TilePalettePanel::DrawPaletteGrid()
 		return;
 	}
 
-	ImGui::BeginChild("##TileGridChild", avail, false);
+	if (!ImGui::BeginChild("##TileGridChild", ImVec2(0.0f, 0.0f)))
+	{
+		ImGui::EndChild();
+		return;
+	}
+
 	checkAndHandleDragDrop();
+
+	const auto& style = ImGui::GetStyle();
+	const float availableWidth = ImGui::GetContentRegionAvail().x;
+	const float horizontalPadding = 2.0f * style.FramePadding.x;
+
+	if (availableWidth <= horizontalPadding)
+	{
+		ImGui::EndChild();
+		return;
+	}
+
+	const float thumbnailSize = std::min(m_TileThumbnailSize, availableWidth - horizontalPadding);
+	const float buttonWidth = thumbnailSize + horizontalPadding;
+	const float spacing = style.ItemSpacing.x;
+	const int cols = (std::max)(1, static_cast<int>((availableWidth + spacing) / (buttonWidth + spacing)));
+	int visibleCount = 0;
 
 	int spriteToRemove = -1;
 	for (int i = 0; i < static_cast<int>(m_PaletteSprites.size()); ++i)
@@ -244,6 +276,10 @@ void TilePalettePanel::DrawPaletteGrid()
 		ImTextureID texID = ImGuiManager::Get().GetImGuiTextureID(rhiTex);
 		const vec4 uv = sprite->GetUVTransform();
 		const bool isSelected = (m_SelectedSprite == spriteHandle);
+
+		if (visibleCount % cols != 0)
+			ImGui::SameLine();
+		++visibleCount;
 
 		ImGui::PushID(i);
 		if (isSelected)
@@ -292,6 +328,60 @@ void TilePalettePanel::DrawPaletteGrid()
 
 	checkAndHandleDragDrop();
 	ImGui::EndChild();
+}
+
+void TilePalettePanel::DrawAutotileRules()
+{
+	auto* scene = Engine::SceneManager::Get().GetCurrentScene();
+	auto* entity = SelectionManager::Get().GetPrimarySelectedEntity();
+	if (!scene || !entity || entity->GetScene() != scene)
+	{
+		ImGui::TextWrapped("%s", LOCAL_CSTR("TilePalette.AutotileSelectTilemap"));
+		return;
+	}
+
+	const auto handle = entity->GetEntityHandle();
+	auto* tilemap = scene->GetRegistry().try_get<Engine::TilemapComponent>(handle);
+	if (!tilemap)
+	{
+		ImGui::TextWrapped("%s", LOCAL_CSTR("TilePalette.AutotileSelectTilemap"));
+		return;
+	}
+
+	ImGui::TextWrapped("%s", LOCAL_CSTR("TilePalette.AutotileMask"));
+	ImGui::SetNextItemWidth(std::max(1.0f, ImGui::GetContentRegionAvail().x));
+	ImGui::SliderInt("##AutotileMask", &m_AutotileMask, 0, 15);
+	ImGui::TextWrapped("%s", LOCAL_CSTR("TilePalette.AutotileLegend"));
+
+	auto& rules = tilemap->autotileSprites;
+	const auto index = static_cast<std::size_t>(m_AutotileMask);
+	const auto current = index < rules.size() ? rules[index] : ResourceHandle<Engine::Sprite>{};
+	if (const auto* sprite = current.Get())
+		ImGui::TextUnformatted(Engine::WStrToStr(sprite->GetKey()).c_str());
+	else
+		ImGui::TextUnformatted(LOCAL_CSTR("TilePalette.AutotileUnassigned"));
+
+	auto& history = Application::Get().GetEditHistory();
+	const auto* selected = m_SelectedSprite.Get();
+	const auto path = selected ? Engine::ToLowerStr(Engine::WStrToStr(selected->GetPath())) : std::string{};
+	const bool savedSprite = path.ends_with(".bamsprite") || path.ends_with(".bamsprite.json") ||
+		path.ends_with(".bamsprite.beve");
+	const bool canAssign = savedSprite && current != m_SelectedSprite &&
+		PIEManager::Get().IsEditing() && history.CanFinalizeEditsFor(scene);
+
+	ImGui::BeginDisabled(!canAssign);
+	const bool assign = ImGui::Button(LOCAL_LABEL("TilePalette.AutotileAssign").c_str());
+	ImGui::EndDisabled();
+	if (!assign) return;
+
+	const std::array targets{ handle };
+	auto before = SceneEditSnapshot::Capture(*scene, targets);
+	if (!before) return;
+
+	if (rules.size() < 16) rules.resize(16);
+	rules[index] = m_SelectedSprite;
+	history.Record(std::move(before), SceneEditSnapshot::Capture(*scene, targets),
+		"History.Command.EditAutotileRule");
 }
 
 } // namespace Editor

@@ -1,4 +1,4 @@
-#include "TilemapRenderSystem.h"
+﻿#include "TilemapRenderSystem.h"
 #include "WorldComponents.h"
 #include "RenderComponents.h"
 #include "Sprite.h"
@@ -105,7 +105,8 @@ void TilemapRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*
 							const auto& cell = chunk.tiles[idx];
 							if (!cell.sprite.IsValid() || !cell.sprite.Get()) continue;
 
-							auto* sprite = cell.sprite.Get();
+							auto* sprite = tilemap.ResolveTileSprite(cell).Get();
+							if (!sprite) continue;
 							auto* texture = sprite->GetTexture();
 							if (!texture || !texture->GetRHITexture()) continue;
 
