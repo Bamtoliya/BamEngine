@@ -4381,3 +4381,8 @@ Use this as the primary execution list until a playable 2D vertical slice is com
 ### [2026-11-13] Animator Graph의 대상 경로 반영 시점
 
 - 파일 읽기에 성공한 뒤 그래프와 대상 경로를 함께 반영하도록 열기 경로를 정리했다. 정상 열기와 잘못된 컨트롤러 파일을 열었을 때 기존 문서 유지 여부는 실행 검증 대상이다. [Animator Graph 계획](AnimatorGraphPlan.md)
+
+### [2026-11-13] 브라우저 WebGPU 프로브 소스
+
+- `Tools/WebGPUProbe/main.cpp`에 Emscripten 기반 어댑터·디바이스 요청, 캔버스 서피스 설정, 브라우저 프레임 루프와 삼각형 렌더링을 담았다. 독립 프로브이며 Client 씬 로드와 배포는 별도 구현 범위다.
+- 소스와 기존 대화 기록을 대조했다. 이번 정리에서는 브라우저 실행이나 GPU 동작을 재검증하지 않았다. [빌드·패키징 계획](BuildAndPackagingPlan.md)

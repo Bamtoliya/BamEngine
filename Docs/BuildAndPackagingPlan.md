@@ -3,6 +3,7 @@
 - 작성일: 2026-10-24 (최종 갱신: 2026-11-13)
 - 상태: Editor에서 Windows x64 Release 빌드 및 폴더 내보내기 연결. 저장소 밖 실행과 Editor·Client 렌더링 일치 검증은 남아 있다.
 - 렌더링 공유 후속 설계: [Render Pipeline Profile](RenderPipelineProfilePlan.md)
+- WebGPU 진행 상태: `Tools/WebGPUProbe/main.cpp`의 독립 브라우저 렌더링 프로브까지 기록했다. Client 씬 로드와 빌드 패널 내보내기 연결은 후속 범위다.
 - 관련 지침: [EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md)의 3절, 12절, 13절
 - 직렬화 지침: [ReflectionArchiveGuidelines.md](ReflectionArchiveGuidelines.md)
 - 분류·이관 기준: [SourceOrganizationGuidelines.md](SourceOrganizationGuidelines.md)
