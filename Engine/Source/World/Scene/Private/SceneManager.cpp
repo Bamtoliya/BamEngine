@@ -3,12 +3,11 @@
 #include "SceneManager.h"
 #include <archive/ArchiveInterface.h>
 #include "LightManager.h"
-#include "PlatformPath.h"
 #include "PrefabInstanceComponent.h"
 
+#pragma region Constructor&Destructor
 IMPLEMENT_SINGLETON(SceneManager)
 
-#pragma region Constructor&Destructor
 EResult SceneManager::Initialize(void* arg)
 {
 	return EResult::Success;
@@ -65,7 +64,6 @@ EResult SceneManager::CloseScene()
 
 	return EResult::Success;
 }
-
 EResult SceneManager::NewScene(void* arg)
 {
 	Scene* newScene = Scene::Create(arg);
@@ -75,62 +73,6 @@ EResult SceneManager::NewScene(void* arg)
 	Safe_Release(newScene);
 
 	return result;
-}
-
-EResult SceneManager::SaveScene(archive::IArchive& ar, const wstring& filePath)
-{
-	if (filePath.empty())
-		return EResult::InvalidArgument;
-	if (!m_CurrentScene)
-		return EResult::Fail;
-	std::filesystem::path targetPath(filePath);
-	if (targetPath.is_relative())
-		targetPath = PlatformPath::ResolveProjectRelative(targetPath);
-	auto result = m_CurrentScene->WriteArchive(ar);
-	if (result)
-		result = ar.SaveToFile(targetPath);
-	if (!result)
-	{
-		ENGINE_LOG_ERROR("Scene save failed: code={}, field={}, path={}",
-			static_cast<int>(result.Code), result.Field, WStrToStr(filePath));
-		return EResult::Fail;
-	}
-	return EResult::Success;
-}
-
-EResult SceneManager::LoadScene(archive::IArchive& ar, const wstring& filePath)
-{
-	if (filePath.empty())
-		return EResult::InvalidArgument;
-	std::filesystem::path targetPath(filePath);
-	if (targetPath.is_relative())
-		targetPath = PlatformPath::ResolveProjectRelative(targetPath);
-	if (!std::filesystem::exists(targetPath))
-	{
-		const std::string ext = targetPath.extension().string();
-		if (ext == ".json")
-		{
-			const std::string stem = targetPath.stem().string();
-			if (!stem.ends_with(".bamscene"))
-			{
-				const auto candidatePath = targetPath.parent_path() / (stem + ".bamscene.json");
-				if (std::filesystem::exists(candidatePath))
-					targetPath = candidatePath;
-			}
-		}
-	}
-	Scene* candidate = nullptr;
-	auto result = ar.LoadFromFile(targetPath);
-	if (result) result = Scene::CreateFromArchive(ar, candidate);
-	if (!result)
-	{
-		ENGINE_LOG_ERROR("Scene load failed: code={}, field={}, path={}",
-			static_cast<int>(result.Code), result.Field, WStrToStr(filePath));
-		return EResult::Fail;
-	}
-	const EResult openResult = OpenScene(candidate);
-	Safe_Release(candidate);
-	return openResult;
 }
 
 EResult SceneManager::SavePrefab(archive::IArchive& ar, const wstring& filePath, const Entity& rootEntity)
@@ -148,13 +90,12 @@ EResult SceneManager::SavePrefab(archive::IArchive& ar, const wstring& filePath,
 	if (!result)
 	{
 		ENGINE_LOG_ERROR("Prefab save failed: code={}, field={}, path={}",
-			static_cast<int>(result.Code), result.Field, WStrToStr(filePath));
+			static_cast<int32>(result.Code), result.Field, WStrToStr(filePath));
 		return EResult::Fail;
 	}
 
 	return EResult::Success;
 }
-
 EResult SceneManager::InstantiatePrefab(archive::IArchive& ar, const wstring& filePath, Entity*& outRootEntity, Entity* parent)
 {
 	if (filePath.empty() || outRootEntity != nullptr)
@@ -170,7 +111,7 @@ EResult SceneManager::InstantiatePrefab(archive::IArchive& ar, const wstring& fi
 	if (!result)
 	{
 		ENGINE_LOG_ERROR("Prefab load failed: code={}, field={}, path={}",
-			static_cast<int>(result.Code), result.Field, WStrToStr(filePath));
+			static_cast<int32>(result.Code), result.Field, WStrToStr(filePath));
 		return EResult::Fail;
 	}
 
@@ -182,7 +123,6 @@ EResult SceneManager::InstantiatePrefab(archive::IArchive& ar, const wstring& fi
 
 	return EResult::Success;
 }
-
 EResult SceneManager::AddScene(Scene* scene)
 {
 	if (!scene) return EResult::InvalidArgument;
@@ -234,5 +174,57 @@ vector<Scene*> SceneManager::GetActiveScenes()
 }
 #pragma endregion
 
-
-
+#pragma region Save & Load
+EResult SceneManager::SaveScene(archive::IArchive& ar, const wstring& filePath)
+{
+	if (filePath.empty())
+		return EResult::InvalidArgument;
+	if (!m_CurrentScene)
+		return EResult::Fail;
+	std::filesystem::path targetPath(filePath);
+	if (targetPath.is_relative())
+		targetPath = PlatformPath::ResolveProjectRelative(targetPath);
+	auto result = m_CurrentScene->WriteArchive(ar);
+	if (result)
+		result = ar.SaveToFile(targetPath);
+	if (!result)
+	{
+		ENGINE_LOG_ERROR("Scene save failed: code={}, field={}, path={}", static_cast<int32>(result.Code), result.Field, WStrToStr(filePath));
+		return EResult::Fail;
+	}
+	return EResult::Success;
+}
+EResult SceneManager::LoadScene(archive::IArchive& ar, const wstring& filePath)
+{
+	if (filePath.empty())
+		return EResult::InvalidArgument;
+	std::filesystem::path targetPath(filePath);
+	if (targetPath.is_relative())
+		targetPath = PlatformPath::ResolveProjectRelative(targetPath);
+	if (!std::filesystem::exists(targetPath))
+	{
+		const std::string ext = targetPath.extension().string();
+		if (ext == ".json")
+		{
+			const std::string stem = targetPath.stem().string();
+			if (!stem.ends_with(".bamscene"))
+			{
+				const auto candidatePath = targetPath.parent_path() / (stem + ".bamscene.json");
+				if (std::filesystem::exists(candidatePath))
+					targetPath = candidatePath;
+			}
+		}
+	}
+	Scene* candidate = nullptr;
+	auto result = ar.LoadFromFile(targetPath);
+	if (result) result = Scene::CreateFromArchive(ar, candidate);
+	if (!result)
+	{
+		ENGINE_LOG_ERROR("Scene load failed: code={}, field={}, path={}", static_cast<int32>(result.Code), result.Field, WStrToStr(filePath));
+		return EResult::Fail;
+	}
+	const EResult openResult = OpenScene(candidate);
+	Safe_Release(candidate);
+	return openResult;
+}
+#pragma endregion

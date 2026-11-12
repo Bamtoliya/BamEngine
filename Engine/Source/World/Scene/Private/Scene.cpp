@@ -242,16 +242,6 @@ void Scene::ClearEntities()
 #pragma endregion
 
 #pragma region Flag Management
-void Scene::SetActive(bool active)
-{
-	if (active) AddFlag(m_Flags, ESceneFlags::Active);
-	else RemoveFlag(m_Flags, ESceneFlags::Active);
-}
-void Scene::SetPaused(bool paused)
-{
-	if (paused) AddFlag(m_Flags, ESceneFlags::Paused);
-	else RemoveFlag(m_Flags, ESceneFlags::Paused);
-}
 void Scene::UpdateHierarchyFlags()
 {
 	auto& world = m_LocalRegistry;

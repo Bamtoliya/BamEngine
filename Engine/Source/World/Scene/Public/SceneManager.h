@@ -3,17 +3,10 @@
 #include "Scene.h"
 
 BEGIN(Engine)
-enum class ESceneState : uint8
-{
-	Edit,
-	Play,
-	Pause,
-};
-
 class ENGINE_API SceneManager : public Base
 {
-	DECLARE_SINGLETON(SceneManager)
 #pragma region Constructor&Destructor
+	DECLARE_SINGLETON(SceneManager)
 protected:
 	SceneManager() {}
 	virtual ~SceneManager() {}
@@ -24,22 +17,26 @@ public:
 
 #pragma region Scene Management
 public:
-	EResult OpenScene(Scene* newScene);
-	EResult CloseScene();
 	Scene* GetCurrentScene() const { return m_CurrentScene; }
-
-	EResult NewScene(void* arg = nullptr);
-	EResult SaveScene(archive::IArchive& ar, const wstring& filePath);
-	EResult LoadScene(archive::IArchive& ar, const wstring& filePath);
-	EResult SavePrefab(archive::IArchive& ar, const wstring& filePath, const Entity& rootEntity);
-	EResult InstantiatePrefab(archive::IArchive& ar, const wstring& filePath, Entity*& outRootEntity, Entity* parent = nullptr);
-
-	EResult AddScene(Scene* scene);
-	EResult RemoveScene(Scene* scene);
-
 	vector<Scene*> GetActiveScenes();
 	vector<Scene*> GetAllScenes() const { return m_Scenes; }
+public:
+	EResult AddScene(Scene* scene);
+	EResult RemoveScene(Scene* scene);
+	EResult OpenScene(Scene* newScene);
+	EResult CloseScene();
+	EResult NewScene(void* arg = nullptr);
+
+	EResult SavePrefab(archive::IArchive& ar, const wstring& filePath, const Entity& rootEntity);
+	EResult InstantiatePrefab(archive::IArchive& ar, const wstring& filePath, Entity*& outRootEntity, Entity* parent = nullptr);
 #pragma endregion
+
+#pragma region Save & Load
+public:
+	EResult SaveScene(archive::IArchive& ar, const wstring& filePath);
+	EResult LoadScene(archive::IArchive& ar, const wstring& filePath);
+#pragma endregion
+
 
 #pragma region Variable
 protected:

@@ -4364,3 +4364,8 @@ Use this as the primary execution list until a playable 2D vertical slice is com
 
 - `defaultVS.hlsl`이 드로우 인스턴스 ID로 `t0, space2`의 월드 행렬을 읽도록 변경했다. 정적 메시 렌더러의 인스턴스 제출 경로와 맞춘다.
 - DXIL·SPIR-V 생성, DefaultVS를 쓰는 머티리얼의 기존 드로우와 Editor·Client 화면은 실행 검증 대상이다. [바인딩 규약](Shader/BINDING_LAYOUT.md)
+
+### [2026-11-13] 씬 관리 코드와 리팩토링 기준 정리
+
+- `SceneManager`의 씬 저장·로드를 별도 구역으로 배치하고 `Scene`의 활성·정지 플래그 변경을 인라인으로 옮겼다. 저장·로드의 후보 씬 생성과 교체 순서는 정적으로 대조했다.
+- 소스 조직 지침에 호출부, 소유권, 상태 반영 순서, 호환성 확인 기준을 추가했다. 씬 저장·재열기, 프리팹 인스턴스화와 실패 시 기존 씬 보존은 실행 검증 대상이다. [코드 조직 지침](SourceOrganizationGuidelines.md#13-엔진-코드-리팩토링-기준)

@@ -127,18 +127,15 @@ private:
 #pragma region Flag Mangement
 public:
 	bool IsActive() const { return HasFlag(m_Flags, ESceneFlags::Active); }
-	void SetActive(bool active);
-
+	void SetActive(bool active) { active ? AddFlag(m_Flags, ESceneFlags::Active) : RemoveFlag(m_Flags, ESceneFlags::Active); }
 	bool IsPaused() const { return HasFlag(m_Flags, ESceneFlags::Paused); }
-	void SetPaused(bool paused);
-
+	void SetPaused(bool paused) { paused ? AddFlag(m_Flags, ESceneFlags::Paused) : RemoveFlag(m_Flags, ESceneFlags::Paused); }
 	void UpdateHierarchyFlags();
 #pragma endregion
 
 #pragma region Save&Load
 public:
-	[[nodiscard]]
-	archive::ArchiveResult WriteArchive(archive::IArchive& ar) const;
+	[[nodiscard]] archive::ArchiveResult WriteArchive(archive::IArchive& ar) const;
 	[[nodiscard]] static archive::ArchiveResult CreateFromArchive(const archive::IArchive& ar, Scene*& scene);
 	[[nodiscard]] archive::ArchiveResult WritePrefabArchive(archive::IArchive& ar, const Entity& rootEntity) const;
 	[[nodiscard]] archive::ArchiveResult InstantiatePrefabArchive(const archive::IArchive& ar, Entity*& outRootEntity, Entity* parent = nullptr);
