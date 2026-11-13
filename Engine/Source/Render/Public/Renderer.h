@@ -36,6 +36,7 @@ struct ViewportCameraInfo
 	class Scene* uiScene = nullptr;
 	entt::entity uiCanvas = entt::null;
 	bool filterUICanvas = false;
+	bool acceptsSceneSubmissions = true;
 };
 
 class ENGINE_API Renderer final : public Base
@@ -83,7 +84,7 @@ public: //Entity Submit
 
 #pragma region Viewport Camera Management
 public:
-	void RegisterViewportCamera(const CameraBuffer& cameraBuffer, RenderPass* renderPass);
+	void RegisterViewportCamera(const CameraBuffer& cameraBuffer, RenderPass* renderPass, bool acceptsSceneSubmissions = true);
 	void RegisterViewportCamera(RenderPass* renderPass);
 	void RegisterUICanvas(class Scene* scene, entt::entity canvas, RenderPass* renderPass);
 	void UnregisterViewportCamera(RenderPassID passID);

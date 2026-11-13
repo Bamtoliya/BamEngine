@@ -18,6 +18,7 @@
 #include "PhysicsSystem.h"
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/constants.hpp>
+#include <algorithm>
 #include <cmath>
 
 namespace
@@ -750,7 +751,13 @@ void Engine::ParticleSystem::SubmitSceneParticles(Scene* scene, const CameraBuff
 	if (!scene) return;
 
 	auto& renderer = Renderer::Get();
-	auto* renderPass = RenderPassManager::Get().GetRenderPassByID(targetPassId);
+	const auto* renderPass = RenderPassManager::Get().GetRenderPassByID(targetPassId);
+	if (!renderPass || !renderPass->IsEnabled()) return;
+
+	EBlendMode acceptedBlendModes = renderPass->GetAcceptedBlendModes();
+	// Preview Geometry excludes the active scenes but still draws its own opaque and masked particles.
+	if (acceptedBlendModes == EBlendMode::None && renderPass->GetPassType() == ERenderPassType::Geometry)
+		acceptedBlendModes = EBlendMode::Opaque | EBlendMode::Masked;
 
 	auto& resourceManager = ResourceManager::Get();
 	Mesh* defaultQuadMesh = resourceManager.GetResourceHandle<Mesh>(L"QuadMesh").Get();
@@ -778,7 +785,7 @@ void Engine::ParticleSystem::SubmitSceneParticles(Scene* scene, const CameraBuff
 
 		if (!mesh || !material || !texture) continue;
 		if (!texture->GetRHITexture() || !mesh->GetIndexBuffer()) continue;
-		if (renderPass && renderPass->GetAcceptedBlendModes() != EBlendMode::None && !renderPass->IsAcceptsBlendMode(material->GetBlendMode())) continue;
+		if ((acceptedBlendModes & material->GetBlendMode()) == EBlendMode::None) continue;
 
 		const uint32 pickingId = PickingManager::Get().RegisterPickingEntity(scene, entity);
 		const bool isWorldSpace = (emitter.simulationSpace == EParticleSimulationSpace::World);
@@ -862,7 +869,7 @@ void Engine::ParticleSystem::SubmitSceneParticles(Scene* scene, const CameraBuff
 
 			if (!mesh || !material || !texture) continue;
 			if (!texture->GetRHITexture() || !mesh->GetIndexBuffer()) continue;
-			if (renderPass && renderPass->GetAcceptedBlendModes() != EBlendMode::None && !renderPass->IsAcceptsBlendMode(material->GetBlendMode())) continue;
+			if ((acceptedBlendModes & material->GetBlendMode()) == EBlendMode::None) continue;
 
 			const bool isWorldSpace = (emitterData.simulationSpace == EParticleSimulationSpace::World);
 
@@ -968,7 +975,7 @@ void Engine::ParticleSystem::SubmitSceneParticles(Scene* scene, const CameraBuff
 
 				if (!mesh || !material || !texture) continue;
 				if (!texture->GetRHITexture() || !mesh->GetIndexBuffer()) continue;
-				if (renderPass && renderPass->GetAcceptedBlendModes() != EBlendMode::None && !renderPass->IsAcceptsBlendMode(material->GetBlendMode())) continue;
+				if ((acceptedBlendModes & material->GetBlendMode()) == EBlendMode::None) continue;
 
 				const bool isWorldSpace = (emitterData.simulationSpace == EParticleSimulationSpace::World);
 
@@ -1045,14 +1052,24 @@ void Engine::ParticleSystem::SubmitSceneParticles(Scene* scene, const CameraBuff
 
 void Engine::ParticleSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& activeScenes, f32 dt)
 {
-	auto& renderer = Renderer::Get();
-	const auto geometryTargets = renderer.CollectGeometryViewportCameras();
-	if (geometryTargets.empty()) return;
+	vector<ViewportCameraInfo> targets;
+	for (const auto& viewport : Renderer::Get().GetActiveViewportCameras())
+	{
+		const auto* pass = viewport.renderPass;
+		if (!viewport.hasCamera || !viewport.acceptsSceneSubmissions || !pass || !pass->IsEnabled()) continue;
+
+		const auto type = pass->GetPassType();
+		if (type != ERenderPassType::Geometry && type != ERenderPassType::ForwardTransparent) continue;
+		if (pass->GetAcceptedBlendModes() == EBlendMode::None) continue;
+
+		if (std::ranges::find(targets, viewport.renderPass, &ViewportCameraInfo::renderPass) == targets.end())
+			targets.push_back(viewport);
+	}
 
 	for (Scene* scene : activeScenes)
 	{
 		if (!scene) continue;
-		for (const auto& target : geometryTargets)
+		for (const auto& target : targets)
 		{
 			SubmitSceneParticles(scene, target.cameraBuffer, target.renderPass->GetID());
 		}

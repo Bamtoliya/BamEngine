@@ -107,7 +107,7 @@ void Engine::DeferredSceneRenderer::Submit(const CameraBuffer& cameraBuffer, Sce
 	// 2. GeometryPass 카메라 등록 (씬 메쉬들이 GBuffer에 렌더링됨)
 	auto* geomPass = rpm.GetRenderPassByID(passes.Geometry);
 	if (geomPass && geomPass->IsEnabled())
-		renderer.RegisterViewportCamera(cameraBuffer, geomPass);
+		renderer.RegisterViewportCamera(cameraBuffer, geomPass, passes.AcceptSceneMeshes);
 
 	// 3. ForwardPass & ForwardTransparentPass 카메라 등록 (스카이 데이터 상수버퍼 slot 3 주입)
 	auto* forwardPass = rpm.GetRenderPassByID(passes.ForwardOpaque);
@@ -119,7 +119,7 @@ void Engine::DeferredSceneRenderer::Submit(const CameraBuffer& cameraBuffer, Sce
 
 	auto* forwardTransPass = rpm.GetRenderPassByID(passes.ForwardTransparent);
 	if (forwardTransPass && forwardTransPass->IsEnabled())
-		renderer.RegisterViewportCamera(cameraBuffer, forwardTransPass);
+		renderer.RegisterViewportCamera(cameraBuffer, forwardTransPass, passes.AcceptSceneMeshes);
 
 	// 4. LightingPass 풀스크린 조명 커스텀 커맨드 제출
 	auto* lightingPass = rpm.GetRenderPassByID(passes.Lighting);

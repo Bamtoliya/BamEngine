@@ -241,8 +241,24 @@ EResult Renderer::Render(f32 dt)
 				const bool isCubeShadow = (depthRT && depthRT->GetTexture() &&
 					depthRT->GetTexture()->GetDimension() == ETextureDimension::TextureCube);
 
-				auto meshIt = m_StaticDrawCommands.find(pass->GetID());
-				if (meshIt != m_StaticDrawCommands.end())
+				const auto meshIt = m_StaticDrawCommands.find(pid);
+				const auto skinnedIt = m_SkinnedDrawCommands.find(pid);
+				const bool hasStaticCasters = meshIt != m_StaticDrawCommands.end() && !meshIt->second.empty();
+				const bool hasSkinnedCasters = skinnedIt != m_SkinnedDrawCommands.end() && !skinnedIt->second.empty();
+				const auto renderShadowCasters = [&](const CameraBuffer& lightCamera) -> EResult
+				{
+					if (hasStaticCasters)
+					{
+						const Frustum frustum = FrustumCuller::ExtractFrustum(lightCamera.viewProjMatrix);
+						const EResult result = RenderMeshes(meshIt->second, pass, &frustum);
+						if (IsFailure(result)) return result;
+					}
+					if (hasSkinnedCasters)
+						return RenderSkinnedMeshes(dt, skinnedIt->second, pass->GetSortType(), pass);
+					return EResult::Success;
+				};
+
+				if (hasStaticCasters || hasSkinnedCasters)
 				{
 					if (isCubeShadow)
 					{
@@ -267,8 +283,7 @@ EResult Renderer::Render(f32 dt)
 									return EResult::Fail;
 								}
 
-								const Frustum faceFrustum = FrustumCuller::ExtractFrustum(faceCam.viewProjMatrix);
-								const EResult result = RenderMeshes(meshIt->second, pass, &faceFrustum);
+								const EResult result = renderShadowCasters(faceCam);
 								if (IsFailure(result))
 								{
 									ENGINE_LOG_ERROR("Point shadow mesh rendering failed for face: {}", face);
@@ -302,8 +317,7 @@ EResult Renderer::Render(f32 dt)
 								return viewportResult;
 							}
 
-							const Frustum cascadeFrustum = FrustumCuller::ExtractFrustum(cascadeCam.viewProjMatrix);
-							const EResult result = RenderMeshes(meshIt->second, pass, &cascadeFrustum);
+							const EResult result = renderShadowCasters(cascadeCam);
 							if (IsFailure(result))
 							{
 								ENGINE_LOG_ERROR("Shadow mesh rendering failed for cascade: {}", c);
@@ -332,8 +346,7 @@ EResult Renderer::Render(f32 dt)
 								return viewportResult;
 							}
 
-							const Frustum spotFrustum = FrustumCuller::ExtractFrustum(spotCam.viewProjMatrix);
-							const EResult result = RenderMeshes(meshIt->second, pass, &spotFrustum);
+							const EResult result = renderShadowCasters(spotCam);
 							if (IsFailure(result))
 							{
 								ENGINE_LOG_ERROR("Spot shadow mesh rendering failed.");
@@ -972,10 +985,12 @@ void Renderer::SubmitUIImage(const UIImageDrawCommand& command, RenderPassID pas
 
 #pragma region Viewport Camera Management
 
-void Renderer::RegisterViewportCamera(const CameraBuffer& cameraBuffer, RenderPass* renderPass)
+void Renderer::RegisterViewportCamera(const CameraBuffer& cameraBuffer, RenderPass* renderPass, bool acceptsSceneSubmissions)
 {
 	if (!renderPass) return;
-	m_ViewportCameras.push_back({ cameraBuffer, true, renderPass });
+	ViewportCameraInfo viewport{ cameraBuffer, true, renderPass };
+	viewport.acceptsSceneSubmissions = acceptsSceneSubmissions;
+	m_ViewportCameras.push_back(viewport);
 }
 
 void Renderer::RegisterViewportCamera(RenderPass* renderPass)

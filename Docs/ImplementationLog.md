@@ -2,6 +2,12 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-13] Deferred 파이프라인 스키닝 그림자와 파티클 합성
+
+- 방향광 캐스케이드, 스포트라이트 사분면과 점광원 큐브맵 각 면에서 스키닝 그림자 큐도 그린다. `RaytracingScene3`의 Fox는 본 행렬과 월드 변환을 본체 드로우와 동일하게 사용한다.
+- 기본 알파·가산 파티클 머티리얼은 하늘 다음의 `ForwardTransparent`에서 HDR 컬러에 합성하고 씬 깊이를 읽는다. 불투명·마스크드 파티클은 Geometry에서 그린다. 독립 프리뷰에는 프리뷰 씬의 파티클을 패스별로 제출한다.
+- 두 파티클 머티리얼 JSON의 파싱과 변경부 공백을 확인했다. Editor와 Windows 패키지에서 Fox의 애니메이션 그림자, 하늘 앞 파티클, 불투명 물체에 가려지는 파티클과 독립 프리뷰를 확인해야 한다. 빌드와 실행 검증은 미실시다. [렌더 파이프라인 검증 절차](RenderPipelineProfilePlan.md)
+
 ### [2026-11-11] 콘텐츠 브라우저 다중 선택 경로 복사와 씬 배치
 
 - 콘텐츠 브라우저의 선택된 타일에서 우클릭하면 선택한 경로를 줄 단위로 복사한다. 선택 밖 타일의 우클릭은 해당 항목의 메뉴를 연다.

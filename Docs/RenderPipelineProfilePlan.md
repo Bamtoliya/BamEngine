@@ -89,6 +89,9 @@ cmake --build out/build/x64-debug --config Debug --target Editor
 
 5. Client에서 Fox 캐릭터를 이동시켜 `Locomotion.animator`의 대기·이동 전환과 클립 재생을 확인한다. 씬을 다시 저장한 뒤 참조 검사를 반복한다. 컨트롤러 또는 연결된 클립을 별도의 로컬 검증 사본에서 누락시키면 패키지 게시 전에 누락 파일이 보고돼야 한다.
 
+6. `RaytracingScene3`의 PIE와 새 Windows 배포본에서 Fox를 이동시킨다. 바닥에 투영된 그림자 실루엣이 애니메이션과 함께 변하는지 확인한다. 스키닝 메시만 그림자를 드리우는 장면에서도 확인한다. 광원 종류별로 확인할 때는 방향광, 스포트라이트, 점광원의 그림자를 각각 활성화한다.
+7. `LargeFloorSphere`의 파티클을 하늘과 불투명 물체가 모두 보이는 카메라 각도에서 확인한다. 하늘 앞과 물체 앞의 입자는 보여야 하고, 물체 뒤의 입자는 깊이 검사로 가려져야 한다. 독립 VFX 프리뷰에는 현재 씬의 입자가 섞이지 않아야 한다. 새 배포본의 `Engine/Resources/Shader/bin/dxil/forwardParticlePS.cso`를 확인한다.
+
 이 워크트리의 검증용 씬과 애셋은 Git 제외 대상인 `Assets/`에 있다. FMOD는 워크트리의 로컬 복사본을 쓰고, Reflection LLVM은 원본 체크아웃의 설치를 정션으로 참조한다. 기존 DXIL/SPIR-V 파일을 로컬 참조 검사에 사용했다. 새 `clientPresentPS.cso`는 사용자가 빌드할 때 생성된다.
 
 공용 리소스 저장 경로의 회귀 검사는 기존 `SceneArchiveCheck`에 추가했다.
