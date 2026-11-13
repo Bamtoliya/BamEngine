@@ -150,6 +150,26 @@ void BloomEffect::ResetAllParameters()
 
 void BloomEffect::Free()
 {
+	if (RenderPassManager::IsCreated())
+	{
+		auto& passes = RenderPassManager::Get();
+		passes.RemoveRenderPass(m_PrefilterPassID);
+		for (const auto id : m_DownPassIDs)
+			passes.RemoveRenderPass(id);
+		for (const auto id : m_UpPassIDs)
+			passes.RemoveRenderPass(id);
+	}
+	m_PrefilterPassID = INVALID_PASS_ID;
+	m_DownPassIDs.fill(INVALID_PASS_ID);
+	m_UpPassIDs.fill(INVALID_PASS_ID);
+
+	for (auto& name : m_DownRTNames)
+	{
+		if (!name.empty() && RenderTargetManager::IsCreated())
+			RenderTargetManager::Get().RemoveRenderTarget(name);
+		name.clear();
+	}
+
 	m_PrefilterPipeline = nullptr;
 	m_DownsamplePipeline = nullptr;
 	m_UpsamplePipeline = nullptr;

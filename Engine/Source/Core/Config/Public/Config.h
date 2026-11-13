@@ -30,6 +30,9 @@ namespace Engine
         std::string StartupScenePath = "Scenes/RaytracingScene.bamscene.json";
 
         PROPERTY(META("Optional", true))
+        std::string RenderPipelineProfilePath;
+
+        PROPERTY(META("Optional", true))
         std::string ShaderSourceDirectory = "Engine/Resources/Shader/hlsl";
     };
 }

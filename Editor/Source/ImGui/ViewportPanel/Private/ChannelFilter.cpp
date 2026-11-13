@@ -44,6 +44,11 @@ void ChannelFilter::Initialize(const wstring& ownerPrefix)
 
 void ChannelFilter::Free()
 {
+    if (RenderPassManager::IsCreated())
+        RenderPassManager::Get().RemoveRenderPass(m_ChannelPreviewPassID);
+    if (!m_ChannelPreviewRTName.empty() && RenderTargetManager::IsCreated())
+        RenderTargetManager::Get().RemoveRenderTarget(m_ChannelPreviewRTName);
+
     m_ChannelPreviewPassID = INVALID_PASS_ID;
     m_ChannelPreviewPipeline = nullptr;
     m_ChannelPreviewRTName.clear();

@@ -71,6 +71,7 @@ private: //Entity Render
 public:
 	void SubmitCustomCommand(const CustomRenderCommand& command, RenderPassID passID);
 	void ClearRenderQueue(RenderPassID passID);
+	void ForgetRenderPass(RenderPassID passID);
 	void ClearAllRenderQueues();
 public: //Entity Submit
 	void SubmitStatic(const StaticDrawCommand& command, RenderPassID passID);

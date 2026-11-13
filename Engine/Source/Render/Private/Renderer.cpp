@@ -943,6 +943,13 @@ void Renderer::ClearAllRenderQueues()
 	m_ViewportJobsPerPass.clear();
 }
 
+void Renderer::ForgetRenderPass(RenderPassID passID)
+{
+	ClearRenderQueue(passID);
+	UnregisterViewportCamera(passID);
+	m_RenderPassDelegates.erase(passID);
+}
+
 //Entity Submit
 void Renderer::SubmitStatic(const StaticDrawCommand& command, RenderPassID passID)
 {

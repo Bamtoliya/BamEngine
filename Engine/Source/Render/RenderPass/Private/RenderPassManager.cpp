@@ -1,5 +1,6 @@
 ﻿#pragma once
 #include "RenderPassManager.h"
+#include "Renderer.h"
 
 IMPLEMENT_SINGLETON(RenderPassManager)
 
@@ -30,7 +31,6 @@ RenderPassID RenderPassManager::RegisterRenderPass(const wstring& name, vector<w
 	uint32 priority, ERenderSortType sortType, ERenderPassType passType, EBlendMode acceptedModes)
 {
 	RenderPassDesc newPass = {};
-	newPass.ID = m_NextRenderPassID++;
 	newPass.name = name;
 	newPass.renderTargetNames = renderTargetNames;
 	newPass.depthStencilName = depthstencilName;
@@ -44,10 +44,36 @@ RenderPassID RenderPassManager::RegisterRenderPass(const wstring& name, vector<w
 	newPass.passType = passType;
 	newPass.acceptedBlendModes = acceptedModes;
 
-	RenderPass* pass = RenderPass::Create(&newPass);
+	return RegisterRenderPass(std::move(newPass));
+}
+
+RenderPassID RenderPassManager::RegisterRenderPass(RenderPassDesc desc)
+{
+	if (m_NextRenderPassID == INVALID_PASS_ID)
+		return INVALID_PASS_ID;
+
+	desc.ID = m_NextRenderPassID;
+	RenderPass* pass = RenderPass::Create(&desc);
+	if (!pass)
+		return INVALID_PASS_ID;
+
+	++m_NextRenderPassID;
 	m_RenderPasses.push_back(pass);
 	SortRenderPasses();
-	return newPass.ID;
+	return desc.ID;
+}
+
+void RenderPassManager::RemoveRenderPass(RenderPassID id)
+{
+	const auto pass = std::find_if(m_RenderPasses.begin(), m_RenderPasses.end(),
+		[id](const RenderPass* candidate) { return candidate->GetID() == id; });
+	if (pass == m_RenderPasses.end())
+		return;
+
+	if (Renderer::IsCreated())
+		Renderer::Get().ForgetRenderPass(id);
+	Safe_Release(*pass);
+	m_RenderPasses.erase(pass);
 }
 
 RenderPassID RenderPassManager::GetRenderPassIDByName(const wstring& name)

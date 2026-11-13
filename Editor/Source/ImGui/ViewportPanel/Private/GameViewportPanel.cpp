@@ -14,6 +14,8 @@
 #include "RenderPassManager.h"
 #include "SceneViewportPanel.h"
 #include "PixelPerfectCameraComponent.h"
+#include "EditorSettingsService.h"
+#include "PlatformPath.h"
 
 EResult GameViewportPanel::OnInitialize(void* arg)
 {
@@ -22,11 +24,32 @@ EResult GameViewportPanel::OnInitialize(void* arg)
 	if (result != EResult::Success)
 		return result;
 
-	// 뷰포트 디퍼드 파이프라인 초기화 (접두사: L"GameView")
-	m_Pipeline.Initialize(m_Name, m_RenderWidth, m_RenderHeight);
-	m_PostProcessChain.Initialize(m_Name);
-	m_PostProcessChain.PrepareResources(m_RenderWidth, m_RenderHeight); // <-- 이 줄 추가
-	m_PostProcessChain.GetPipeline().SaveToString(m_DefaultPostProcessSettings);
+	m_UseScenePostProcess = true;
+	const auto& profilePath = EditorSettingsService::Get().GetProjectSettings().RenderPipelineProfilePath;
+	if (profilePath.empty())
+	{
+		if (!m_Pipeline.Initialize(m_Name, m_RenderWidth, m_RenderHeight))
+			return EResult::Fail;
+	}
+	else
+	{
+		Engine::RenderPipelineProfile profile;
+		auto profileResult = Engine::LoadRenderPipelineProfile(Engine::PlatformPath::ResolveUri(profilePath), profile);
+		if (profileResult)
+			profileResult = m_Pipeline.Initialize(profile, m_Name, m_RenderWidth, m_RenderHeight);
+		if (!profileResult)
+		{
+			EDITOR_LOG_ERROR("Game View render profile '{}', field '{}': {}", profilePath, profileResult.Field, profileResult.Message);
+			return EResult::Fail;
+		}
+		m_UseScenePostProcess = m_Pipeline.UsesScenePostProcess();
+	}
+	if (m_UseScenePostProcess)
+	{
+		m_PostProcessChain.Initialize(m_Name);
+		m_PostProcessChain.PrepareResources(m_RenderWidth, m_RenderHeight);
+		m_PostProcessChain.GetPipeline().SaveToString(m_DefaultPostProcessSettings);
+	}
 
 	RenderPassManager& rpMgr = RenderPassManager::Get();
 	m_UIOverlayPassID = rpMgr.RegisterRenderPass(
@@ -37,13 +60,14 @@ EResult GameViewportPanel::OnInitialize(void* arg)
 		EBlendMode::Opaque | EBlendMode::Masked | EBlendMode::AlphaBlend | EBlendMode::Additive | EBlendMode::NonPremultiplied);
 
 	m_SelectedRTName = m_DisplayRTName = m_Pipeline.GetFinalColorRTName();
-	return EResult::Success;
+	return m_UIOverlayPassID != INVALID_PASS_ID ? EResult::Success : EResult::Fail;
 }
 
 void GameViewportPanel::Free()
 {
-	Renderer::Get().ClearRenderQueue(m_UIOverlayPassID);
-	Renderer::Get().UnregisterViewportCamera(m_UIOverlayPassID);
+	if (RenderPassManager::IsCreated())
+		RenderPassManager::Get().RemoveRenderPass(m_UIOverlayPassID);
+	m_UIOverlayPassID = INVALID_PASS_ID;
 	m_PostProcessChain.Free();
 	m_Pipeline.Free();
 	__super::Free();
@@ -52,7 +76,7 @@ void GameViewportPanel::Free()
 EResult GameViewportPanel::ResizeRenderTargets(uint32 width, uint32 height)
 {
 	const auto pipelineResult = m_Pipeline.Resize(width, height);
-	const auto ppResult = m_PostProcessChain.Resize(width, height);
+	const auto ppResult = m_UseScenePostProcess ? m_PostProcessChain.Resize(width, height) : EResult::Success;
 	const auto channelResult = BaseViewportPanel::ResizeRenderTargets(width, height);
 
 	if (pipelineResult != EResult::Success) return pipelineResult;
@@ -139,7 +163,8 @@ void GameViewportPanel::Update(f32 dt)
 	Renderer::Get().RegisterViewportCamera(RenderPassManager::Get().GetRenderPassByID(m_UIOverlayPassID));
 	std::wstring currentRT = m_Pipeline.GetFinalColorRTName();
 
-	SubmitPostProcessPass(dt, currentRT);
+	if (m_UseScenePostProcess)
+		SubmitPostProcessPass(dt, currentRT);
 	RenderPassManager::Get().GetRenderPassByID(m_UIOverlayPassID)->SetColorAttachments({ currentRT });
 	m_DisplayRTName = currentRT;
 

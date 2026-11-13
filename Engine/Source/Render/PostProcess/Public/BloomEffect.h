@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "PostProcessInterface.h"
+#include <array>
 
 BEGIN(Engine)
 
@@ -51,8 +52,12 @@ private:
 
 	// 서브 렌더패스 IDs
 	RenderPassID m_PrefilterPassID = INVALID_PASS_ID;
-	RenderPassID m_DownPassIDs[BLOOM_MIP_LEVELS - 1] = { INVALID_PASS_ID };
-	RenderPassID m_UpPassIDs[BLOOM_MIP_LEVELS - 1] = { INVALID_PASS_ID };
+	std::array<RenderPassID, BLOOM_MIP_LEVELS - 1> m_DownPassIDs = {
+		INVALID_PASS_ID, INVALID_PASS_ID, INVALID_PASS_ID
+	};
+	std::array<RenderPassID, BLOOM_MIP_LEVELS - 1> m_UpPassIDs = {
+		INVALID_PASS_ID, INVALID_PASS_ID, INVALID_PASS_ID
+	};
 
 	// 파이프라인 PSOs
 	RHIPipeline* m_PrefilterPipeline = nullptr;

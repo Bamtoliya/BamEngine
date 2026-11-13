@@ -18,6 +18,9 @@ public:
 
 #pragma region RenderPass Management
 public:
+	RenderPassID RegisterRenderPass(RenderPassDesc desc);
+	// Remove at a frame boundary, outside render pass execution.
+	void RemoveRenderPass(RenderPassID id);
 	RenderPassID RegisterRenderPass(
 		const wstring& name,
 		vector<wstring> renderTargetNames,

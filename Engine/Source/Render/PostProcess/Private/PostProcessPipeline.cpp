@@ -319,6 +319,14 @@ wstring PostProcessPipeline::Execute(f32 dt, const wstring& inputRT)
 
 void PostProcessPipeline::Free()
 {
+	if (RenderPassManager::IsCreated())
+	{
+		auto& passes = RenderPassManager::Get();
+		for (const auto pass : m_PassIDs)
+			passes.RemoveRenderPass(pass);
+	}
+	m_PassIDs.clear();
+
 	for (auto* effect : m_Effects)
 	{
 		if (effect)
@@ -328,7 +336,13 @@ void PostProcessPipeline::Free()
 		}
 	}
 	m_Effects.clear();
-	m_PassIDs.clear();
+	for (auto& name : m_PPRTNames)
+	{
+		if (!name.empty() && RenderTargetManager::IsCreated())
+			RenderTargetManager::Get().RemoveRenderTarget(name);
+		name.clear();
+	}
+	m_Width = m_Height = 0;
 }
 
 void PostProcessPipeline::AddEffect(IPostProcessEffect* effect)

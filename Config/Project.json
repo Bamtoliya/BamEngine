@@ -5,6 +5,7 @@
     "AssetDirectory": "Assets",
     "EngineResourceDirectory": "Engine/Resources",
     "StartupManifestPath": "Config/Startup/StartupManifest.json",
-    "StartupScenePath": "Scenes/RaytracingScene.bamscene.json"
+    "StartupScenePath": "Scenes/RaytracingScene.bamscene.json",
+    "RenderPipelineProfilePath": "Engine://RenderPipelines/Deferred.bamrenderpipeline.json"
   }
 }

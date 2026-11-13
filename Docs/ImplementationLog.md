@@ -4397,3 +4397,10 @@ Use this as the primary execution list until a playable 2D vertical slice is com
 - Engine 리소스에 기본 Deferred 프로필을 추가하고 `JsonArchive` 기반 파일 읽기·쓰기와 GPU 초기화 없이 수행하는 슬롯 검증을 연결했다. 순서, 슬롯 타입, 필수 입력, 제자리 갱신 이후의 이전 출력과 최종 색상 출력을 검사한다.
 - `RenderPipelineProfileCheck`에 파일 왕복, 대표 오류 경로와 실패 시 기존 상태 보존 검증을 추가했다. 이번 작업에서는 소스·기본 JSON·공백을 정적으로 대조했다. C++ 빌드와 체크 실행은 남아 있다.
 - Game View·Client 제출, GPU 리소스 수명과 빌드 패널의 프로필 선택·패키징 연결은 후속 단계다. [렌더 프로필 설계 및 검증 명령](RenderPipelineProfilePlan.md)
+
+### [2026-11-13] Deferred 렌더 프로필의 Game View 연결
+
+- Game View가 프로젝트의 `RenderPipelineProfilePath`에서 파일을 읽는다. Engine에서 프로필 순서대로 패스와 타깃을 생성하고, 논리 입력을 실제 G-Buffer·그림자·HDR 타깃에 연결한다. 기존 Game View 조명·후처리 코드를 재사용하고 `ScenePostProcess` 유무에 따라 후처리를 적용한다.
+- 패스 해제 시 Renderer의 드로우 큐·카메라·콜백을 먼저 정리한다. 뷰포트와 후처리·Bloom·채널 미리보기에서 등록 해제와 타깃 정리를 연결했다.
+- 기존 프로젝트와 빈 설정은 기존 Deferred 경로를 사용한다. 기본 프로젝트는 내장 Deferred 파일을 선택한다. 방향광 그림자 아틀라스는 기존 투영 기준에 따라 4096으로 제한한다.
+- 소스의 등록·해제 경로와 설정을 정적으로 대조했다. Editor 빌드, `RaytracingScene3` 화면 비교와 GPU 수명은 실행 확인 전이다. Windows Client와 패키징 연결은 다음 단계다. [렌더 프로필 설계 및 수동 검증](RenderPipelineProfilePlan.md#2단계-수동-검증)

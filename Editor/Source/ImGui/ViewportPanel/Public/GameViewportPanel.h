@@ -27,8 +27,8 @@ public:
 public:
 	virtual void Update(f32 dt) override;
 	virtual void Draw() override;
-	virtual PostProcessChain* GetPostProcessChain() override { return &m_PostProcessChain; }
-	virtual const PostProcessChain* GetPostProcessChain() const override { return &m_PostProcessChain; }
+	virtual PostProcessChain* GetPostProcessChain() override { return m_UseScenePostProcess ? &m_PostProcessChain : nullptr; }
+	virtual const PostProcessChain* GetPostProcessChain() const override { return m_UseScenePostProcess ? &m_PostProcessChain : nullptr; }
 
 public:
 	bool HitTestGameplayImage(const vec2& screenPosition) const;
@@ -53,6 +53,7 @@ private:
 	entt::entity m_LastPostProcessEntity = entt::null;
 	uint64 m_LastSyncedScenePipelineVersion = 0;
 	bool m_PostProcessStateUsable = true;
+	bool m_UseScenePostProcess = true;
 	bool m_HasActiveCamera = false;
 	ImGuiID m_GameplayImageWindowId = 0;
 	uint32 m_GameplayMouseButtons = 0;

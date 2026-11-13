@@ -16,6 +16,7 @@
 #include "VolumetricCloudComponent.h"
 #include "LightComponent.h"
 #include "CompositeVFXSystem.h"
+#include <algorithm>
 
 namespace
 {
@@ -46,7 +47,7 @@ ViewportDeferredPipeline::~ViewportDeferredPipeline()
 bool ViewportDeferredPipeline::Initialize(const std::wstring& viewportPrefix, uint32 width, uint32 height,
 	bool acceptSceneMeshes)
 {
-	if (width == 0 || height == 0)
+	if (width == 0 || height == 0 || !m_OwnedRTNames.empty())
 		return false;
 
 	m_Prefix = viewportPrefix.empty() ? L"VP_" : viewportPrefix + L"_";
@@ -80,10 +81,30 @@ bool ViewportDeferredPipeline::Initialize(const std::wstring& viewportPrefix, ui
 
 void ViewportDeferredPipeline::Free()
 {
-	auto& rtm = Engine::RenderTargetManager::Get();
-	for (const auto& name : m_OwnedRTNames)
-		rtm.RemoveRenderTarget(name);
+	if (m_ProfilePasses.GetTargets().empty())
+	{
+		if (Engine::RenderPassManager::IsCreated())
+		{
+			auto& passes = Engine::RenderPassManager::Get();
+			for (auto id : { m_ForwardTransparentPassID, m_ForwardPassID, m_LightingPassID,
+				m_GeometryPassID, m_PointShadowPassID, m_ShadowPassID })
+				passes.RemoveRenderPass(id);
+		}
+		if (Engine::RenderTargetManager::IsCreated())
+		{
+			auto& targets = Engine::RenderTargetManager::Get();
+			for (const auto& name : m_OwnedRTNames)
+				targets.RemoveRenderTarget(name);
+		}
+	}
+	m_ProfilePasses.Free();
 	m_OwnedRTNames.clear();
+	m_LightingInputs = {};
+	m_ShadowDepthName.clear();
+	m_PointShadowDepthName.clear();
+	m_DepthName.clear();
+	m_LightingColorName.clear();
+	m_Width = m_Height = 0;
 
 	for (auto& buf : m_LocalLightBuffer)
 	{
@@ -98,6 +119,41 @@ void ViewportDeferredPipeline::Free()
 	m_ForwardPassID = Engine::INVALID_PASS_ID;
 	m_ForwardTransparentPassID = Engine::INVALID_PASS_ID;
 	m_LightingPipeline = nullptr;
+}
+
+Engine::RenderPipelineProfileResult ViewportDeferredPipeline::Initialize(const Engine::RenderPipelineProfile& profile,
+	const std::wstring& viewportPrefix, uint32 width, uint32 height)
+{
+	if (!m_OwnedRTNames.empty())
+		return { {}, {}, "The viewport pipeline is already initialized." };
+
+	auto result = m_ProfilePasses.Initialize(profile, viewportPrefix, width, height);
+	if (!result)
+		return result;
+
+	CreateLightingPipeline();
+	if (!m_LightingPipeline || !m_LightingPipeline->GetNativeHandle())
+	{
+		Free();
+		return { {}, "DeferredLighting", "Could not create the lighting pipeline. Check FullscreenQuadVS and LightingPS." };
+	}
+
+	m_Width = width;
+	m_Height = height;
+	m_AcceptSceneMeshes = true;
+	m_OwnedRTNames = m_ProfilePasses.GetTargets();
+	m_LightingInputs = m_ProfilePasses.GetLightingInputs();
+	m_ShadowDepthName = m_LightingInputs.back();
+	m_PointShadowDepthName = m_ProfilePasses.GetPointShadowInput();
+	m_LightingColorName = m_ProfilePasses.GetColorTarget();
+	m_ShadowPassID = m_ProfilePasses.GetPass("DirectionalShadow");
+	m_PointShadowPassID = m_ProfilePasses.GetPass("PointShadow");
+	m_GeometryPassID = m_ProfilePasses.GetPass("GBuffer");
+	m_LightingPassID = m_ProfilePasses.GetPass("DeferredLighting");
+	m_ForwardPassID = m_ProfilePasses.GetPass("ForwardOpaque");
+	m_ForwardTransparentPassID = m_ProfilePasses.GetPass("ForwardTransparent");
+	m_DepthName = Engine::RenderPassManager::Get().GetRenderPassByID(m_GeometryPassID)->GetDepthStencilName();
+	return {};
 }
 
 void ViewportDeferredPipeline::CreateRenderTargets(uint32 width, uint32 height)
@@ -127,6 +183,7 @@ void ViewportDeferredPipeline::CreateRenderTargets(uint32 width, uint32 height)
 	}
 
 	m_ShadowDepthName = m_OwnedRTNames[5];
+	std::copy_n(m_OwnedRTNames.begin(), m_LightingInputs.size(), m_LightingInputs.begin());
 	m_DepthName = m_OwnedRTNames[6];
 	m_LightingColorName = m_OwnedRTNames[7];
 
@@ -381,10 +438,7 @@ void ViewportDeferredPipeline::SubmitLightingPass(const CameraBuffer& cameraBuff
 			if (!rhi || !sampler || !m_LightingPipeline) return Engine::EResult::Fail;
 			CameraBuffer camBuf = cameraBuffer;
 			camBuf.time = static_cast<f32>(Engine::TimeManager::Get().GetTotalTime());
-			const std::wstring sourceNames[] = {
-				m_Prefix + L"GBuffer_Diffuse", m_Prefix + L"GBuffer_Normal", m_Prefix + L"GBuffer_PBR",
-				m_Prefix + L"GBuffer_Emission", m_Prefix + L"GBuffer_Position", m_ShadowDepthName
-			};
+			const auto& sourceNames = m_LightingInputs;
 			auto& lightManager = Engine::LightManager::Get();
 			// 1. 타일 기반 광원 컬링 Compute Shader 디스패치 (메인 씬인 경우에만 그래픽스 상태 확립 전에 선행 실행)
 			if (m_AcceptSceneMeshes)
