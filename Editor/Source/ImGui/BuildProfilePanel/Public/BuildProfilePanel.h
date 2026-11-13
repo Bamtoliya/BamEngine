@@ -21,9 +21,14 @@ public:
 private:
     void DrawSceneReferenceCheck();
     void DrawClientBuild();
+    void DrawReplacePackageDialog();
+    void StartExport(ClientPackageRequest request);
 
     std::filesystem::path m_StartupScene;
     std::filesystem::path m_OutputDirectory;
+    std::string m_PackageDirectoryName = ClientPackageRequest::DefaultDirectoryName;
+    std::string m_ProgramName = ClientPackageRequest::DefaultProgramName;
+    std::optional<ClientPackageRequest> m_PendingReplacement;
     std::vector<AssetReferenceIssue> m_SceneReferenceIssues;
     bool m_HasSceneReferenceResult = false;
     ClientBuildJob m_ClientBuild;

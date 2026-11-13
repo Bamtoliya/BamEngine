@@ -106,6 +106,16 @@ namespace Editor
         }
     }
 
+    void ClientBuildJob::SetExportPreparationError(std::string output)
+    {
+        if (m_Status == Status::Running)
+            return;
+        m_Status = Status::Failed;
+        m_IsExport = true;
+        m_ExportedDirectory.clear();
+        m_Output = std::move(output);
+    }
+
     void ClientBuildJob::Update()
     {
         if (!m_Future.valid() || m_Future.wait_for(std::chrono::seconds(0)) != std::future_status::ready)
@@ -134,8 +144,26 @@ namespace Editor
         const char* configureArgs[] = { cmake.c_str(), "--preset", "x64-release", "-B", buildDirectory,
             "-A", "x64", "-DBAMENGINE_WITH_EDITOR=OFF", nullptr };
 
-        const auto destination = package ? ResolveClientPackageDestination(*package) : std::filesystem::path{};
         Result result;
+        if (package)
+        {
+            try
+            {
+                const auto destination = InspectClientPackageDestination(projectRoot, *package);
+                if (destination.Directory != package->Destination.Directory ||
+                    destination.ExistingPackage != package->Destination.ExistingPackage)
+                {
+                    result.Output = "Export destination changed after selection. Start the export again.";
+                    return result;
+                }
+            }
+            catch (const std::exception& error)
+            {
+                result.Output = error.what();
+                return result;
+            }
+        }
+
         result.Output = "[CMake configure]\n";
         if (!RunCMake(configureArgs, workingDirectory, result.Output))
             return result;
@@ -166,8 +194,8 @@ namespace Editor
             result.Output += "\n\n[Package export]\n";
             try
             {
-                ExportClientPackage(projectRoot, binDirectory, package->StartupScene, destination, result.Output);
-                result.ExportedDirectory = destination;
+                ExportClientPackage(projectRoot, binDirectory, *package, result.Output);
+                result.ExportedDirectory = package->Destination.Directory;
             }
             catch (const std::exception& error)
             {

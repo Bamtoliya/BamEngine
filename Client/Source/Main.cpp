@@ -73,7 +73,8 @@ public:
         }
 
         m_SDLInitialized = true;
-        m_Window = SDL_CreateWindow("BamEngine Client", 1280, 720, SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
+        const char* title = m_ProjectSettings.WindowTitle.empty() ? "BamEngine Client" : m_ProjectSettings.WindowTitle.c_str();
+        m_Window = SDL_CreateWindow(title, 1280, 720, SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
 
         if (!m_Window)
         {

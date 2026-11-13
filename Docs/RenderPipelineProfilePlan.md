@@ -83,8 +83,8 @@ cmake --build out/build/x64-debug --config Debug --target Editor
 ## 3단계 수동 검증
 
 1. 2단계 명령으로 Editor를 빌드하고 이 워크트리의 로컬 `Assets/Scenes/RaytracingScene3.bamscene.json`을 연다. 빌드 및 패키징 패널에서 **현재 씬 사용 → 씬 참조 검사**를 실행한다. 기본 Deferred 프로필 경로가 표시되고 참조 문제가 0건인지 확인한다.
-2. **빌드 및 내보내기**로 새 출력 폴더에 게시한다. 배포본 `Config/Project.json`의 프로필 URI와 해당 JSON, `Engine/Resources/Shader/bin/dxil`의 셰이더를 확인한다. 게시 로그에 `Render profile:`과 `Exported package:`가 남아야 한다.
-3. 배포 폴더를 저장소 외부에서 열고 `Client.exe`를 실행한다. `Logs/Client.log`에서 프로필 로드 성공을 확인한다. 같은 카메라·해상도로 PIE Game View와 Client의 기본 도형, G-Buffer 머티리얼, 방향광과 점광원 그림자, 투명 오브젝트, ACES와 게임 UI를 비교한다. Client 창 리사이즈와 Gameplay 입력도 확인한다.
+2. 프로그램 이름과 패키지 폴더 이름을 입력하고 **빌드 및 내보내기**를 실행한다. 배포본 `Config/Project.json`의 프로필 URI와 해당 JSON, `Engine/Resources/Shader/bin/dxil`의 셰이더를 확인한다. 게시 로그에 `Render profile:`, `Exported package:`, `Executable:`이 남아야 한다. 동일 경로에 다시 내보낼 때 취소하면 배포본이 유지되고, 덮어쓰면 새 배포본과 이전 패키지 백업이 생기는지 확인한다.
+3. 배포 폴더를 저장소 외부에서 열고 패널에 표시된 실행 파일을 실행한다. 창 제목과 `Logs/Client.log`의 프로필 로드 성공을 확인한다. 같은 카메라·해상도로 PIE Game View와 Client의 기본 도형, G-Buffer 머티리얼, 방향광과 점광원 그림자, 투명 오브젝트, ACES와 게임 UI를 비교한다. Client 창 리사이즈와 Gameplay 입력도 확인한다.
 4. 씬의 Exposure와 프로필의 `PointShadow` 해상도를 각각 변경한 뒤 재내보낸다. 두 호스트에 반영되는지 확인한다. 내보낸 복사본에서 `clientPresentPS.cso`를 잠시 옮기면 다음 Client 시작에서 누락 셰이더 로그가 남고 초기화가 종료돼야 한다. 빌드로 셰이더가 재생성될 수 있으므로 패키저 누락 검증은 빌드 후 스테이징 입력에서 확인한다.
 
 5. Client에서 Fox 캐릭터를 이동시켜 `Locomotion.animator`의 대기·이동 전환과 클립 재생을 확인한다. 씬을 다시 저장한 뒤 참조 검사를 반복한다. 컨트롤러 또는 연결된 클립을 별도의 로컬 검증 사본에서 누락시키면 패키지 게시 전에 누락 파일이 보고돼야 한다.
@@ -99,3 +99,5 @@ ctest --test-dir out/build/x64-debug -C Debug -R "^SceneArchiveCheck$" --output-
 ```
 
 로컬 파일의 정적 확인에서 씬과 연결 문서 5개를 순회해 참조 대상 20개를 확인했고, Editor 시작 매니페스트의 84개 항목이 존재함을 확인했다. Editor·Client 빌드, CTest, D3D12 실행과 배포 폴더 검증은 사용자 실행이 필요하다.
+
+기존 배포본의 2026-11-13 10:58:43 로그는 `code=5` (`FileOpenFailed`)와 배포 폴더 아래의 잘못된 `Project:\Data\Animation\Locomotion.animator` 경로를 남겼다. 실제 컨트롤러는 같은 배포본의 `Assets/Data/Animation/Locomotion.animator`에 있었다. 해당 `Engine.dll`에는 URI를 해석하는 `ResolveControllerPath`가 없었고, 배포 설정에도 렌더 프로필이 없었다. 최신 워크트리에서 Client와 Engine을 함께 다시 내보낸 뒤 프로필과 Animator 로드를 비교한다.

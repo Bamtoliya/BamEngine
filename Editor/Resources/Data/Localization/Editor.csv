@@ -1943,6 +1943,13 @@ BuildProfile,Format,Output Format,출력 형식
 BuildProfile,Folder,Folder,폴더
 BuildProfile,RenderPipelineProfile,Render Pipeline Profile,렌더 파이프라인 프로필
 BuildProfile,OutputDirectory,Export Destination,내보낼 위치
+BuildProfile,ProgramName,Program Name,프로그램 이름
+BuildProfile,PackageDirectoryName,Package Folder Name,패키지 폴더 이름
+BuildProfile,PackageExecutablePath,Exported Executable,내보낼 실행 파일
+BuildProfile,InvalidPackageDestination,Could not prepare the export destination. Check the details below.,내보낼 위치를 준비하지 못했습니다. 아래 내용을 확인하세요.
+BuildProfile,ReplacePackageTitle,Replace Existing Package,기존 패키지 덮어쓰기
+BuildProfile,ReplacePackageMessage,Replace this package after the new build is ready? The previous package will be kept in a backup folder.,새 빌드가 준비되면 이 패키지를 덮어쓸까요? 이전 패키지는 백업 폴더에 보관됩니다.
+BuildProfile,ReplacePackage,Overwrite,덮어쓰기
 BuildProfile,SceneFiles,BamEngine Scenes (*.bamscene.json),BamEngine 씬 (*.bamscene.json)
 BuildProfile,CheckSceneReferences,Check Scene References,씬 참조 검사
 BuildProfile,SceneReferencesPassed,No issues found in checked JSON references.,검사한 JSON 참조에 문제가 없습니다.

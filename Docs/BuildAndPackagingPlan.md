@@ -85,7 +85,7 @@ Editor에서 제작하고 저장한 프로젝트를 배포 폴더로 구성하�
 ### 3단계: Build와 Cook
 
 - `BuildProfilePanel`의 `Client 빌드`가 기존 CMake `x64-release` 프리셋을 사용해 별도 `x64-client-release` 폴더에서 Editor 지원을 끈 Windows Release Client와 GameModule을 빌드한다. 패널은 완료 로그를 표시하고 복사할 수 있게 한다.
-- 선택한 시작 씬과 내보내기 위치는 Editor Workspace에 저장한다. `현재 씬 사용`은 편집 모드에서 저장된 현재 씬을 선택한다.
+- 시작 씬, 내보낼 상위 폴더, 패키지 폴더 이름과 프로그램 이름은 Editor Workspace에 저장한다. `현재 씬 사용`은 편집 모드에서 저장된 현재 씬을 선택한다.
 - 선택한 시작 씬의 저장된 JSON 참조 검사는 패널에서 수행한다. 빌드가 생성하는 셰이더와 배포 대상 참조는 산출물을 기준으로 확인한다.
 - `AnimatorComponent.controllerPath`와 컨트롤러 문서에 들어 있는 클립 참조를 같은 검사에서 따라간다. Runtime과 패키저는 동일한 컨트롤러 경로 해석을 사용한다.
 - 실행에 필요한 셰이더와 에셋의 변환 결과를 확인한다.
@@ -95,8 +95,9 @@ Editor에서 제작하고 저장한 프로젝트를 배포 폴더로 구성하�
 
 ### 4단계: Stage와 Package
 
-- `빌드 및 내보내기`는 Windows x64 Release 빌드 성공 후, 선택한 폴더 아래 `BamEngine-Windows-x64`를 생성한다. 패널에서 최종 경로를 미리 표시하고 성공 후 그 폴더를 열 수 있다.
-- 임시 형제 폴더에 먼저 수집한 뒤 최종 이름으로 이동한다. 기존 목적지가 있거나 에셋 입력과 겹치면 실패한다. 복사 또는 이동 실패 시 로그에 임시 폴더 경로를 남긴다.
+- `빌드 및 내보내기`는 Windows x64 Release 빌드 성공 후 사용자가 정한 폴더를 게시한다. 기본값은 `BamEngine-Windows-x64`와 `Client.exe`다. 프로그램 이름에는 확장자를 붙이지 않으며 같은 값을 배포 설정의 `WindowTitle`에 기록한다. 패널에서 최종 실행 파일 경로를 확인하고 성공 후 배포 폴더를 열 수 있다.
+- 기존 BamEngine Client 폴더에는 전체 경로를 보여주는 **취소 / 덮어쓰기** 확인을 표시한다. 스테이징 검증이 끝나면 승인 시점의 폴더가 그대로인지 확인한 뒤 이전 패키지를 형제 백업 폴더로 옮기고 새 패키지를 게시한다. 게시 실패 시 복원하며, 복원 실패 또는 성공 후 이전 패키지의 위치는 로그에 남긴다. 기존 배포본은 백업에 보관한다.
+- 대상이 일반 폴더가 아니거나 프로젝트 루트 또는 에셋·엔진 리소스·빌드 입력과 겹치면 내보내기를 거부한다. 이 기능이 만든 패키지는 `.bam-client-package` 마커로, 이전 기본 패키지는 `Client.exe`, `Engine.dll`, `Config/Project.json` 조합으로 식별한다.
 - 첫 폴더 출력은 현재 Windows Client의 알려진 실행 바이너리, 검사로 확인한 파일 및 두 리소스 루트의 런타임 파일 형식을 보존한다. 배포본 `Config/Project.json`에 선택한 씬을 기록한다. 바이너리 참조 분석, 최소 에셋 수집과 실제 독립 실행은 후속 검증 항목이다.
 - 전용 출력 폴더에 실행 파일, Engine DLL, 필요한 런타임 DLL과 프로젝트 모듈을 수집한다.
 - [ResourceAndAssetSeparationPlan.md](ResourceAndAssetSeparationPlan.md)의 원칙에 따라, 런타임 필수 엔진 빌트인 리소스(`Engine/Resources/`)와 시작 씬이 참조하는 프로젝트 애셋(`Assets/`)을 분리 수집한다.

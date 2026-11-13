@@ -2,6 +2,8 @@
 #include "EditorSettingsService.h"
 #include "FileDialogs.h"
 #include "Functions.h"
+#include <imgui_stdlib.h>
+#include <exception>
 #include <shellapi.h>
 #include "Application.h"
 #include "SceneDocument.h"
@@ -28,6 +30,10 @@ EResult BuildProfilePanel::OnInitialize(void*)
         m_StartupScene = Engine::PlatformPath::GetProjectAssetRoot() / std::filesystem::u8path(startup);
 
     m_OutputDirectory = std::filesystem::u8path(profile.OutputDirectory);
+    if (!profile.PackageDirectoryName.empty())
+        m_PackageDirectoryName = profile.PackageDirectoryName;
+    if (!profile.ProgramName.empty())
+        m_ProgramName = profile.ProgramName;
     return EResult::Success;
 }
 
@@ -59,7 +65,8 @@ void BuildProfilePanel::SaveSelection()
     const auto output = m_OutputDirectory.generic_u8string();
 
     const BuildProfileWorkspace profile{
-        std::string(scene.begin(), scene.end()), std::string(output.begin(), output.end())
+        std::string(scene.begin(), scene.end()), std::string(output.begin(), output.end()),
+        m_PackageDirectoryName, m_ProgramName
     };
     if (EditorSettingsService::Get().SetBuildProfileWorkspace(profile) != EEditorSettingsSaveStatus::Saved)
     {
@@ -146,8 +153,33 @@ void BuildProfilePanel::Draw()
             }
             else
             {
-                const auto destination = m_OutputDirectory / ClientPackageRequest::DirectoryName;
-                ImGui::TextWrapped("%s", Engine::WStrToStr(destination.wstring()).c_str());
+                ImGui::TextWrapped("%s", Engine::WStrToStr(m_OutputDirectory.wstring()).c_str());
+            }
+
+            EditorUI::PropertyRow("BuildProfile.ProgramName");
+            ImGui::BeginDisabled(running);
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            ImGui::InputText("##ProgramName", &m_ProgramName);
+            if (ImGui::IsItemDeactivatedAfterEdit())
+                SaveSelection();
+            ImGui::EndDisabled();
+
+            EditorUI::PropertyRow("BuildProfile.PackageDirectoryName");
+            ImGui::BeginDisabled(running);
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            ImGui::InputText("##PackageDirectoryName", &m_PackageDirectoryName);
+            if (ImGui::IsItemDeactivatedAfterEdit())
+                SaveSelection();
+            ImGui::EndDisabled();
+
+            EditorUI::PropertyRow("BuildProfile.PackageExecutablePath");
+            if (m_OutputDirectory.empty() || m_PackageDirectoryName.empty() || m_ProgramName.empty())
+                ImGui::TextUnformatted(LOCAL_CSTR("EditorCommon.None"));
+            else
+            {
+                const auto output = Engine::WStrToStr(m_OutputDirectory.generic_wstring()) + "/" +
+                    m_PackageDirectoryName + "/" + m_ProgramName + ".exe";
+                ImGui::TextWrapped("%s", output.c_str());
             }
 
             EditorUI::EndPropertyTable();
@@ -155,6 +187,7 @@ void BuildProfilePanel::Draw()
 
         DrawSceneReferenceCheck();
         DrawClientBuild();
+        DrawReplacePackageDialog();
     }
     ImGui::End();
 }
@@ -221,12 +254,28 @@ void BuildProfilePanel::DrawClientBuild()
     ImGui::EndDisabled();
 
     ImGui::SameLine();
-    ImGui::BeginDisabled(running || m_StartupScene.empty() || m_OutputDirectory.empty());
+    ImGui::BeginDisabled(running || m_StartupScene.empty() || m_OutputDirectory.empty() ||
+        m_PackageDirectoryName.empty() || m_ProgramName.empty());
     if (ImGui::Button(LOCAL_LABEL("BuildProfile.BuildAndExport").c_str()))
     {
-        m_ClientBuild.Start(projectRoot, ClientPackageRequest{ m_StartupScene, m_OutputDirectory });
-        m_ScrollBuildLogToEnd = true;
-        m_BuildLogText.clear();
+        try
+        {
+            ClientPackageRequest request{ m_StartupScene, m_OutputDirectory, m_PackageDirectoryName, m_ProgramName };
+            request.Destination = InspectClientPackageDestination(projectRoot, request);
+            if (request.Destination.ExistingPackage)
+            {
+                m_PendingReplacement = std::move(request);
+                ImGui::OpenPopup(LOCAL_LABEL("BuildProfile.ReplacePackageTitle").c_str());
+            }
+            else
+                StartExport(std::move(request));
+        }
+        catch (const std::exception& error)
+        {
+            m_ClientBuild.SetExportPreparationError(LOCAL("BuildProfile.InvalidPackageDestination") + '\n' + error.what());
+            m_BuildLogText.clear();
+            m_ScrollBuildLogToEnd = true;
+        }
     }
     ImGui::EndDisabled();
 
@@ -284,6 +333,46 @@ void BuildProfilePanel::DrawClientBuild()
     }
 
     ImGui::InputTextMultiline("##ClientBuildOutput", &m_BuildLogText, logSize, ImGuiInputTextFlags_ReadOnly);
+}
+
+void BuildProfilePanel::StartExport(ClientPackageRequest request)
+{
+    const auto& settings = EditorSettingsService::Get();
+    m_ClientBuild.Start(settings.GetProjectRoot(), std::move(request));
+    m_ScrollBuildLogToEnd = true;
+    m_BuildLogText.clear();
+}
+
+void BuildProfilePanel::DrawReplacePackageDialog()
+{
+    const auto title = LOCAL_LABEL("BuildProfile.ReplacePackageTitle");
+    if (!ImGui::BeginPopupModal(title.c_str(), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        return;
+
+    if (m_PendingReplacement)
+    {
+        ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 34.f * ImGui::GetFontSize());
+        ImGui::TextWrapped("%s", LOCAL_CSTR("BuildProfile.ReplacePackageMessage"));
+        const auto path = Engine::WStrToStr(m_PendingReplacement->Destination.Directory.wstring());
+        ImGui::TextWrapped("%s", path.c_str());
+        ImGui::PopTextWrapPos();
+        ImGui::Separator();
+
+        const EditorUI::DialogAction actions[] = {
+            { "EditorCommon.Cancel" }, { "BuildProfile.ReplacePackage", true, true }
+        };
+        const int action = EditorUI::DialogButtonBar("ReplacePackageActions", actions, IM_ARRAYSIZE(actions));
+        if (action >= 0)
+        {
+            if (action == 1)
+                StartExport(std::move(*m_PendingReplacement));
+            m_PendingReplacement.reset();
+            ImGui::CloseCurrentPopup();
+        }
+    }
+    else
+        ImGui::CloseCurrentPopup();
+    ImGui::EndPopup();
 }
 
 END

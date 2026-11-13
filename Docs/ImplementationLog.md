@@ -4417,3 +4417,9 @@ Use this as the primary execution list until a playable 2D vertical slice is com
 - 공용 리소스 핸들 직렬화가 두 런타임 루트 아래의 절대 `AssetPath`를 URI로 저장한다. 씬의 `ResourceReferences`에도 같은 값을 기록하고 기존 리소스 키는 보존한다. 기존 `SceneArchiveCheck`에 회귀 검사를 추가했다.
 - Animator 로더와 빌드 참조 검사가 같은 경로 해석을 사용한다. 씬에 저장된 컨트롤러 경로와 컨트롤러가 읽는 클립도 내보내기 전에 확인한다.
 - 파일 수준에서 연결 문서 5개와 참조 대상 20개, 시작 매니페스트 항목 84개를 확인했다. 빌드, CTest와 Editor·Client 실행은 남아 있다. [Windows 수동 검증](RenderPipelineProfilePlan.md#3단계-수동-검증)
+
+### [2026-11-13] Windows 배포 이름과 패키지 덮어쓰기
+
+- 빌드 패널에서 프로그램 이름과 패키지 폴더 이름을 입력하고 최종 실행 파일 경로를 확인한다. 이름은 Workspace에 저장하며 프로그램 이름은 내보낸 EXE와 Client 창 제목에 반영한다.
+- 기존 패키지는 확인 모달에서 승인한 폴더만 교체한다. 스테이징 검증 후 이전 패키지를 형제 폴더에 백업한다. 게시 실패 시 원래 경로로 복원하고, 원래 위치를 다시 사용할 수 없으면 백업 경로를 로그에 기록한다.
+- 가장 최근에 확인한 배포 로그의 Animator 오류는 컨트롤러 누락이 아니라 이전 Engine이 `Project://`를 디스크 경로로 처리해 발생한 `FileOpenFailed`다. 새 실패 로그에는 원본 참조와 해석된 경로를 함께 기록한다. 파일과 소스를 대조했으며 Editor 빌드, 모달, 재게시 및 Client 실행은 사용자 검증 대상이다. [Windows 수동 검증](RenderPipelineProfilePlan.md#3단계-수동-검증)

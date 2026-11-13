@@ -143,6 +143,12 @@ namespace Editor
 
         PROPERTY(META("Optional", true))
         std::string OutputDirectory;
+
+        PROPERTY(META("Optional", true))
+        std::string PackageDirectoryName;
+
+        PROPERTY(META("Optional", true))
+        std::string ProgramName;
     };
 
     STRUCT()

@@ -565,8 +565,8 @@ bool AnimatorStateMachine::LoadFromFile(const std::string& filePath)
 	const auto loadRes = ar.LoadFromFile(resolvedPath);
 	if (!loadRes)
 	{
-		BAM_LOG(Error, "Engine", "Asset", "[Animator] LoadFromFile failed: code={}, field={}, path={}",
-			static_cast<int>(loadRes.Code), loadRes.Field, WStrToStr(resolvedPath.wstring()));
+		BAM_LOG(Error, "Engine", "Asset", "[Animator] LoadFromFile failed: code={}, field={}, reference='{}', resolved='{}'",
+			static_cast<int>(loadRes.Code), loadRes.Field, filePath, WStrToStr(resolvedPath.wstring()));
 		return false;
 	}
 	const auto& refl = Engine::ReflectionRegistry::Get();

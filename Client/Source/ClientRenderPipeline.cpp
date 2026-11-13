@@ -22,6 +22,8 @@ EResult Client::ClientRenderPipeline::Initialize(const std::string& profileUri, 
             ERenderPassLoadOperation::RPLO_Clear, ERenderPassStoreOperation::RPSO_Store,
             vec4(0.08f, 0.12f, 0.18f, 1.0f), 0, ERenderSortType::FrontToBack,
             ERenderPassType::Forward, EBlendMode::Forward | EBlendMode::Opaque | EBlendMode::Masked);
+        if (m_ForwardPass != INVALID_PASS_ID)
+            BAM_LOG(Info, "Client", "Rendering", "Using legacy Forward pipeline because RenderPipelineProfilePath is empty.");
         return m_ForwardPass == INVALID_PASS_ID ? EResult::Fail : EResult::Success;
     }
 

@@ -12,6 +12,7 @@
 #include <windows.h>
 #include <algorithm>
 #include <chrono>
+#include <cwctype>
 #include <fstream>
 #include <iterator>
 #include <stdexcept>
@@ -27,6 +28,7 @@ namespace
         L"Client.exe", L"Engine.dll", L"GameModule.dll", L"GameplayScore.dll", L"SDL3.dll", L"fmod.dll",
         L"fmt.dll", L"lz4.dll"
     };
+    constexpr auto PackageMarker = L".bam-client-package";
 
     std::string DisplayPath(const fs::path& path)
     {
@@ -40,6 +42,103 @@ namespace
                 return CompareStringOrdinal(lhs.c_str(), -1, rhs.c_str(), -1, TRUE) == CSTR_EQUAL;
             };
         return std::mismatch(path.begin(), path.end(), root.begin(), root.end(), sameComponent).second == root.end();
+    }
+
+    bool IsValidWindowsName(const std::wstring& name, std::size_t maxLength)
+    {
+        if (name.empty() || name.size() > maxLength || name.back() == L'.' || name.back() == L' ' ||
+            name.find_first_of(L"<>:\"/\\|?*") != std::wstring::npos ||
+            std::ranges::any_of(name, [](wchar_t c) { return c < 32; }))
+            return false;
+
+        auto stem = name.substr(0, name.find(L'.'));
+        const auto last = stem.find_last_not_of(L' ');
+        if (last == std::wstring::npos)
+            return false;
+        stem.resize(last + 1);
+        std::transform(stem.begin(), stem.end(), stem.begin(), [](wchar_t c) { return static_cast<wchar_t>(std::towupper(c)); });
+        if (stem == L"CON" || stem == L"PRN" || stem == L"AUX" || stem == L"NUL" ||
+            stem == L"CONIN$" || stem == L"CONOUT$")
+            return false;
+        return !(stem.size() == 4 && (stem.starts_with(L"COM") || stem.starts_with(L"LPT")) &&
+            std::wstring_view(L"123456789\u00b9\u00b2\u00b3").find(stem.back()) != std::wstring_view::npos);
+    }
+
+    std::optional<Editor::ClientPackageIdentity> ReadPackageIdentity(const fs::path& directory)
+    {
+        const DWORD attributes = GetFileAttributesW(directory.c_str());
+        if (attributes == INVALID_FILE_ATTRIBUTES)
+        {
+            const DWORD error = GetLastError();
+            if (error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND)
+                return std::nullopt;
+            throw fs::filesystem_error("Could not inspect export destination", directory, { static_cast<int>(error), std::system_category() });
+        }
+        if ((attributes & FILE_ATTRIBUTE_DIRECTORY) == 0 || (attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0)
+            throw std::runtime_error("Export destination is not a regular directory: " + DisplayPath(directory));
+
+        const auto regularFile = [&](const fs::path& relative)
+        {
+            const DWORD value = GetFileAttributesW((directory / relative).c_str());
+            return value != INVALID_FILE_ATTRIBUTES && (value & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT)) == 0;
+        };
+        if ((!regularFile(PackageMarker) && !regularFile(L"Client.exe")) ||
+            !regularFile(L"Engine.dll") || !regularFile(L"Config/Project.json"))
+            throw std::runtime_error("The existing folder is not a BamEngine Client package: " + DisplayPath(directory));
+
+        const HANDLE handle = CreateFileW(directory.c_str(), FILE_READ_ATTRIBUTES,
+            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING,
+            FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
+        if (handle == INVALID_HANDLE_VALUE)
+            throw fs::filesystem_error("Could not open existing package", directory, { static_cast<int>(GetLastError()), std::system_category() });
+        BY_HANDLE_FILE_INFORMATION info{};
+        const BOOL read = GetFileInformationByHandle(handle, &info);
+        const DWORD error = read ? ERROR_SUCCESS : GetLastError();
+        CloseHandle(handle);
+        if (!read)
+            throw fs::filesystem_error("Could not identify existing package", directory, { static_cast<int>(error), std::system_category() });
+        if ((info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0 || (info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0)
+            throw std::runtime_error("Export destination changed: " + DisplayPath(directory));
+        return Editor::ClientPackageIdentity{
+            static_cast<std::uint32_t>(info.dwVolumeSerialNumber),
+            (static_cast<std::uint64_t>(info.nFileIndexHigh) << 32) | info.nFileIndexLow
+        };
+    }
+
+    void MovePackage(const fs::path& source, const fs::path& target, const char* message)
+    {
+        if (!MoveFileW(source.c_str(), target.c_str()))
+            throw fs::filesystem_error(message, source, target, { static_cast<int>(GetLastError()), std::system_category() });
+    }
+
+    void PublishPackage(const Editor::ClientPackageDestination& destination, const fs::path& staging,
+        const fs::path& backup, std::string& output)
+    {
+        if (ReadPackageIdentity(destination.Directory) != destination.ExistingPackage)
+            throw std::runtime_error("Export destination changed after selection: " + DisplayPath(destination.Directory));
+
+        if (destination.ExistingPackage)
+        {
+            output += "Previous package: " + DisplayPath(backup) + '\n';
+            MovePackage(destination.Directory, backup, "Could not move the previous package aside");
+        }
+        try
+        {
+            if (destination.ExistingPackage && ReadPackageIdentity(backup) != destination.ExistingPackage)
+                throw std::runtime_error("The previous package changed during publication.");
+            MovePackage(staging, destination.Directory, "Could not publish the package");
+        }
+        catch (...)
+        {
+            if (destination.ExistingPackage)
+            {
+                if (MoveFileW(backup.c_str(), destination.Directory.c_str()))
+                    output += "Previous package restored.\n";
+                else
+                    output += "Could not restore previous package. It is available at: " + DisplayPath(backup) + '\n';
+            }
+            throw;
+        }
     }
 
     fs::path RelativeToInput(const fs::path& path, const fs::path& root)
@@ -101,7 +200,7 @@ namespace
     };
 
     std::string MakePackageSettings(const fs::path& source, const fs::path& startupSceneRelative,
-        const fs::path& assetRoot, const fs::path& engineRoot, PackageProfile& packageProfile)
+        const fs::path& assetRoot, const fs::path& engineRoot, std::string_view programName, PackageProfile& packageProfile)
     {
         std::ifstream input(source, std::ios::binary);
         if (!input)
@@ -128,6 +227,7 @@ namespace
         values["StartupScenePath"] = DisplayPath(startupSceneRelative);
         values["AssetDirectory"] = std::string("Assets");
         values["EngineResourceDirectory"] = std::string("Engine/Resources");
+        values["WindowTitle"] = std::string(programName);
 
         if (const auto entry = values.find("RenderPipelineProfilePath"); entry != values.end())
         {
@@ -174,7 +274,7 @@ namespace
 
 namespace Editor
 {
-    fs::path ResolveClientPackageDestination(const ClientPackageRequest& request)
+    ClientPackageDestination InspectClientPackageDestination(const fs::path& projectRoot, const ClientPackageRequest& request)
     {
         if (request.OutputParent.empty() || request.StartupScene.empty())
             throw std::runtime_error("Select a startup scene and an export location.");
@@ -183,26 +283,33 @@ namespace Editor
         if (!fs::is_directory(parent))
             throw std::runtime_error("Export location is not a directory: " + DisplayPath(parent));
 
-        const auto destination = parent / ClientPackageRequest::DirectoryName;
-        if (fs::exists(fs::symlink_status(destination)))
-            throw std::runtime_error("Export destination already exists: " + DisplayPath(destination));
+        const auto directoryName = Engine::Utf8ToPath(request.DirectoryName).wstring();
+        const auto programName = Engine::Utf8ToPath(request.ProgramName).wstring();
+        if (!IsValidWindowsName(directoryName, 255))
+            throw std::runtime_error("Invalid Windows package folder name: " + request.DirectoryName);
+        if (!IsValidWindowsName(programName, 251) || Engine::ToLowerStr(request.ProgramName).ends_with(".exe"))
+            throw std::runtime_error("Enter a valid Windows program name without the .exe extension: " + request.ProgramName);
 
-        if (IsWithin(destination, fs::canonical(Path::GetProjectAssetRoot()))
-            || IsWithin(destination, fs::canonical(Path::GetEngineResourceRoot())))
-            throw std::runtime_error("Export destination overlaps runtime resource inputs: " + DisplayPath(destination));
+        const auto destination = parent / directoryName;
+        const auto source = fs::canonical(projectRoot);
+        const auto assetRoot = fs::canonical(Path::GetProjectAssetRoot());
+        const auto engineRoot = fs::canonical(Path::GetEngineResourceRoot());
+        const auto buildRoot = fs::weakly_canonical(source / "out" / "build");
+        if (IsWithin(source, destination) || IsWithin(destination, assetRoot) || IsWithin(assetRoot, destination) ||
+            IsWithin(destination, engineRoot) || IsWithin(engineRoot, destination) ||
+            IsWithin(destination, buildRoot) || IsWithin(buildRoot, destination))
+            throw std::runtime_error("Export destination overlaps the project or package inputs: " + DisplayPath(destination));
 
-        return destination;
+        return { destination, ReadPackageIdentity(destination) };
     }
 
-    void ExportClientPackage(const fs::path& projectRoot, const fs::path& binDirectory, const fs::path& startupScene,
-        const fs::path& destination, std::string& output)
+    void ExportClientPackage(const fs::path& projectRoot, const fs::path& binDirectory,
+        const ClientPackageRequest& request, std::string& output)
     {
         const auto assetRoot = fs::canonical(Path::GetProjectAssetRoot());
         const auto engineRoot = fs::canonical(Path::GetEngineResourceRoot());
-        const auto scene = fs::canonical(startupScene);
-        if (IsWithin(destination, assetRoot) || IsWithin(destination, engineRoot)
-            || IsWithin(destination, fs::canonical(binDirectory)))
-            throw std::runtime_error("Export destination overlaps package inputs: " + DisplayPath(destination));
+        const auto scene = fs::canonical(request.StartupScene);
+        const auto& destination = request.Destination.Directory;
 
         if (!IsWithin(scene, assetRoot) || !Engine::ToLowerStr(DisplayPath(scene.filename())).ends_with(".bamscene.json"))
             throw std::runtime_error("Choose a saved scene inside the project asset folder: " + DisplayPath(scene));
@@ -229,17 +336,18 @@ namespace Editor
 
         PackageProfile packageProfile;
         const auto settings = MakePackageSettings(projectRoot / "Config" / "Project.json",
-            RelativeToInput(scene, assetRoot), assetRoot, engineRoot, packageProfile);
+            RelativeToInput(scene, assetRoot), assetRoot, engineRoot, request.ProgramName, packageProfile);
         VerifyRenderProfileResources(packageProfile, engineRoot);
         const auto suffix = std::chrono::steady_clock::now().time_since_epoch().count();
-        auto staging = destination;
-        staging += L".staging-" + std::to_wstring(suffix);
+        const auto staging = destination.parent_path() / (L".bam-staging-" + std::to_wstring(suffix));
+        const auto backup = destination.parent_path() / (L".bam-previous-" + std::to_wstring(suffix));
         if (!fs::create_directory(staging))
             throw std::runtime_error("Could not create a fresh staging folder: " + DisplayPath(staging));
 
         output += "Staging: " + DisplayPath(staging) + '\n';
+        const auto executableName = Engine::Utf8ToPath(request.ProgramName + ".exe");
         for (const auto* name : RuntimeBinaries)
-            CopyPackageFile(binDirectory / name, staging / name);
+            CopyPackageFile(binDirectory / name, staging / (std::wstring_view(name) == L"Client.exe" ? executableName : fs::path(name)));
 
         const auto stagedAssets = staging / "Assets";
         const auto stagedEngine = staging / "Engine" / "Resources";
@@ -291,10 +399,18 @@ namespace Editor
         if (fs::is_regular_file(inputActions))
             CopyPackageFile(inputActions, configDirectory / "InputActions.json");
 
-        if (!MoveFileW(staging.c_str(), destination.c_str()))
-            throw fs::filesystem_error("Could not publish the package", staging, destination,
-                std::error_code(GetLastError(), std::system_category()));
+        std::ofstream marker;
+        marker.exceptions(std::ios::failbit | std::ios::badbit);
+        marker.open(staging / PackageMarker, std::ios::binary);
+        marker << "BamEngine Windows Client\n" << request.ProgramName << ".exe\n";
+        marker.close();
 
-        output += "Exported package: " + DisplayPath(destination);
+        const auto inspected = InspectClientPackageDestination(projectRoot, request);
+        if (inspected.Directory != destination || inspected.ExistingPackage != request.Destination.ExistingPackage)
+            throw std::runtime_error("Export destination changed during the build: " + DisplayPath(destination));
+        PublishPackage(request.Destination, staging, backup, output);
+
+        output += "Exported package: " + DisplayPath(destination) + '\n';
+        output += "Executable: " + DisplayPath(destination / executableName);
     }
 }

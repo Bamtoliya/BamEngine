@@ -18,6 +18,9 @@ namespace Engine
         std::string ProjectName = "Untitled";
 
         PROPERTY(META("Optional", true))
+        std::string WindowTitle;
+
+        PROPERTY(META("Optional", true))
         std::string AssetDirectory = "Assets";
 
         PROPERTY(META("Optional", true))
