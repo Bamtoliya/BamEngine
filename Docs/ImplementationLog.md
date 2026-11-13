@@ -2,11 +2,23 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-13] 독립 WebGPU 씬 프리뷰
+
+- `Client/Web`에서 `.bamscene.json` v1을 읽고, 활성 카메라와 계층 변환을 적용한 `CubeMesh`·`SphereMesh`를 깊이 검사와 함께 표시한다. 프로젝트 `Gameplay`의 이동 바인딩은 브라우저 카메라에 연결한다.
+- 별도 CMake 구성으로 시작 씬, 입력 설정과 정적 페이지를 한 폴더에 수집한다. 씬 경로는 프로젝트 애셋 루트 기준으로 선택한다.
+- 사용자가 `RaytracingScene3` 프리뷰를 열고 Windows와 다른 렌더링 및 애니메이션 객체의 부재를 확인했다. 프리뷰는 정적 기본 도형을 지원한다. 실제 Wasm Client, Fox 애니메이션, Render Pipeline Profile 실행과 Editor의 WebGPU 내보내기는 후속 범위다. [프리뷰 실행과 이식 순서](BuildAndPackagingPlan.md#webgpu-씬-프리뷰와-client-이식)
+
 ### [2026-11-13] Windows Client 패키지 포함 목록 비교 로그
 
 - `빌드 및 내보내기`의 `[Package inventory]`에 프로젝트 애셋·엔진 리소스의 파일 수와 바이트를 기록한다. 시작 씬, 확인된 씬 참조, 렌더 프로필과 필수 렌더 리소스에는 포함 이유를 표시한다. 의존성을 아직 확인하지 못한 파일은 건수와 예시를 남긴다.
 - 고정 런타임 바이너리 목록의 이름·수·바이트를 출력한다. 현재 수집·복사·검증·게시 순서는 유지하며, 예시는 삭제 대상 판정에 쓰지 않는다. [빌드·패키징 계획](BuildAndPackagingPlan.md#54-적용-순서와-완료-기준)
 - 변경부 공백과 수집 분기를 정적으로 확인했다. Debug Editor에서 `RaytracingScene3`를 내보내고 렌더 프로필 유무와 같은 파일을 여러 곳에서 참조하는 경우를 확인한다. 실제 패키지의 파일·바이트 수 비교와 Client 독립 실행은 사용자 검증 전이다.
+
+### [2026-11-13] Client 빌드 워커의 SDL TLS 정리
+
+- `ClientBuildJob::Build()`는 `std::async`에서 SDL로 CMake 출력을 읽는다. SDL 3.4의 Windows 파이프 읽기가 출력을 기다리면 `SDL_Delay()`가 스레드 로컬 타이머 또는 이벤트 핸들을 등록한다. SDL 오류 경로도 스레드 로컬 버퍼를 만들 수 있다.
+- 빌드 워커의 스코프 종료에서 `SDL_CleanupTLS()`를 호출한다. configure·build·패키징의 성공, 조기 반환, 예외에서 워커 스레드가 끝나기 전에 정리한다. 기존 프로세스와 출력 버퍼의 해제 경로를 유지한다. [빌드 워커](../Editor/Source/Build/Private/ClientBuildJob.cpp) · [SDL API](https://wiki.libsdl.org/SDL3/SDL_CleanupTLS)
+- SDL 소스와 변경부를 정적으로 확인했다. Debug Editor에서 작업 없이 종료, Client 빌드 후 종료, 빌드 및 내보내기 후 종료를 각각 비교한다. Visual Studio 출력에서 누수 덤프가 사라지는지, 반복 빌드 후 프로세스 핸들 수가 계속 늘지 않는지 확인해야 한다. 빌드와 재현 검증은 미실시다.
 
 ### [2026-11-13] 선택적 쿠킹과 증분 내보내기 설계
 

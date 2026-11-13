@@ -3,6 +3,7 @@
 #include "Functions.h"
 
 #include <SDL3/SDL_process.h>
+#include <SDL3/SDL_thread.h>
 #include <chrono>
 #include <exception>
 #include <memory>
@@ -138,6 +139,13 @@ namespace Editor
     ClientBuildJob::Result ClientBuildJob::Build(const std::filesystem::path& projectRoot,
         const std::optional<ClientPackageRequest>& package)
     {
+        // SDL does not clean up TLS for the std::async worker.
+        struct SdlTlsCleanup
+        {
+            ~SdlTlsCleanup() { SDL_CleanupTLS(); }
+        };
+        const SdlTlsCleanup tlsCleanup{};
+
         const auto cmake = Engine::WStrToStr(BAM_EDITOR_CMAKE_COMMAND);
         const auto workingDirectory = Engine::WStrToStr(projectRoot.wstring());
         constexpr auto buildDirectory = "out/build/x64-client-release";
