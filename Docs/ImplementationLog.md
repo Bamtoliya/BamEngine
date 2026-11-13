@@ -2,6 +2,11 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-13] 선택적 쿠킹과 증분 내보내기 설계
+
+- Windows 폴더 내보내기에서 참조된 애셋과 엔진 리소스, 선택한 런타임 모듈과 시스템을 수집하는 기준을 기록했다. 런타임 동적 로드는 명시적 의존성으로 수집하는 방향이다.
+- 대상별 Cook 캐시와 직전 배포본을 이용한 스테이징 재사용, 누락 시 실패·복구 흐름과 비교 지표를 문서화했다. 선택적 수집과 캐시 구현은 후속 작업이다. [빌드·패키징 계획](BuildAndPackagingPlan.md#5단계-선택적-쿠킹과-증분-스테이징)
+
 ### [2026-11-13] Windows Client 3인칭 조작 복구
 
 - Client 초기화에 `ThirdPersonControllerSystem`을 등록해 배포 씬의 3인칭 입력과 캐릭터 이동을 처리한다.
