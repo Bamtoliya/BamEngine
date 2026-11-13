@@ -47,7 +47,7 @@ Game View와 Windows Client는 `Config/Project.json`에서 프로필 경로를 �
 2. **Game View 적용.** 같은 카메라와 해상도에서 기존 `RaytracingScene3`의 G-Buffer, 그림자, 조명, 투명 처리와 ACES 결과를 비교한다. 인스턴스를 반복 생성·해제해도 패스나 렌더 타깃이 누적되지 않아야 한다.
 3. **Windows 내보내기.** 공용 조명·후처리 실행을 Client에 연결하고, 배포본의 설정에 프로필 경로를 기록한 뒤 저장소 밖에서 실행한다. PIE와 Client가 같은 프로필과 패스 목록을 사용하고, 씬 Exposure와 프로필의 `PointShadow` 해상도를 각각 바꿨을 때 두 호스트에서 결과가 반영되는지 확인한다. 필수 셰이더를 누락한 경우 패키지가 게시되기 전에 실패해야 한다.
 
-2026-11-13에 소스와 기존 배포 로그를 대조했다. 로그는 `RaytracingScene3` 로드와 Client 초기화 성공을 기록했고 Animator 컨트롤러 경로 오류도 남겼다. 현재 씬의 일부 절대 경로 참조 정리, 저장소 밖 실행, 프로필 기반 화면 일치는 검증 대상으로 남는다.
+2026-11-13에 이전 배포 로그에서 `RaytracingScene3` 로드와 Animator 컨트롤러 경로 오류를 확인했다. 이후 렌더 프로필 워크트리의 로컬 씬 사본에서 절대 참조를 정리하고 컨트롤러와 클립을 포함했다. 현재 코드의 저장소 밖 실행과 프로필 기반 화면 일치는 검증 대상으로 남는다.
 
 ## 1단계 수동 검증
 
@@ -82,9 +82,20 @@ cmake --build out/build/x64-debug --config Debug --target Editor
 
 ## 3단계 수동 검증
 
-1. 2단계 명령으로 Editor를 빌드하고 이 워크트리의 프로젝트를 연다. 로컬 `RaytracingScene3`의 절대 참조를 정리한 뒤 빌드 및 패키징 패널의 **씬 참조 검사**를 통과시킨다. 패널에 기본 Deferred 프로필 경로가 표시되는지 확인한다.
+1. 2단계 명령으로 Editor를 빌드하고 이 워크트리의 로컬 `Assets/Scenes/RaytracingScene3.bamscene.json`을 연다. 빌드 및 패키징 패널에서 **현재 씬 사용 → 씬 참조 검사**를 실행한다. 기본 Deferred 프로필 경로가 표시되고 참조 문제가 0건인지 확인한다.
 2. **빌드 및 내보내기**로 새 출력 폴더에 게시한다. 배포본 `Config/Project.json`의 프로필 URI와 해당 JSON, `Engine/Resources/Shader/bin/dxil`의 셰이더를 확인한다. 게시 로그에 `Render profile:`과 `Exported package:`가 남아야 한다.
 3. 배포 폴더를 저장소 외부에서 열고 `Client.exe`를 실행한다. `Logs/Client.log`에서 프로필 로드 성공을 확인한다. 같은 카메라·해상도로 PIE Game View와 Client의 기본 도형, G-Buffer 머티리얼, 방향광과 점광원 그림자, 투명 오브젝트, ACES와 게임 UI를 비교한다. Client 창 리사이즈와 Gameplay 입력도 확인한다.
 4. 씬의 Exposure와 프로필의 `PointShadow` 해상도를 각각 변경한 뒤 재내보낸다. 두 호스트에 반영되는지 확인한다. 내보낸 복사본에서 `clientPresentPS.cso`를 잠시 옮기면 다음 Client 시작에서 누락 셰이더 로그가 남고 초기화가 종료돼야 한다. 빌드로 셰이더가 재생성될 수 있으므로 패키저 누락 검증은 빌드 후 스테이징 입력에서 확인한다.
 
-소스 검토에서는 Client와 패키저가 같은 DXIL 목록을 소비하고, 패스가 Backbuffer 크기를 독립적으로 사용하는 경로를 확인했다. 이번 변경의 Editor·Client 빌드, D3D12 실행과 배포 폴더 검증은 사용자 실행이 필요하다.
+5. Client에서 Fox 캐릭터를 이동시켜 `Locomotion.animator`의 대기·이동 전환과 클립 재생을 확인한다. 씬을 다시 저장한 뒤 참조 검사를 반복한다. 컨트롤러 또는 연결된 클립을 별도의 로컬 검증 사본에서 누락시키면 패키지 게시 전에 누락 파일이 보고돼야 한다.
+
+이 워크트리의 검증용 씬과 애셋은 Git 제외 대상인 `Assets/`에 있다. FMOD는 워크트리의 로컬 복사본을 쓰고, Reflection LLVM은 원본 체크아웃의 설치를 정션으로 참조한다. 기존 DXIL/SPIR-V 파일을 로컬 참조 검사에 사용했다. 새 `clientPresentPS.cso`는 사용자가 빌드할 때 생성된다.
+
+공용 리소스 저장 경로의 회귀 검사는 기존 `SceneArchiveCheck`에 추가했다.
+
+```powershell
+cmake --build out/build/x64-debug --config Debug --target SceneArchiveCheck
+ctest --test-dir out/build/x64-debug -C Debug -R "^SceneArchiveCheck$" --output-on-failure
+```
+
+로컬 파일의 정적 확인에서 씬과 연결 문서 5개를 순회해 참조 대상 20개를 확인했고, Editor 시작 매니페스트의 84개 항목이 존재함을 확인했다. Editor·Client 빌드, CTest, D3D12 실행과 배포 폴더 검증은 사용자 실행이 필요하다.

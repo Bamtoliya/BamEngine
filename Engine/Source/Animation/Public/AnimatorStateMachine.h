@@ -7,6 +7,7 @@
 #include "BlendTree1D.h"
 #include "BlendTree2D.h"
 #include "ReflectionMacro.h"
+#include <filesystem>
 #include <string>
 #include <vector>
 #include <unordered_map>
@@ -226,6 +227,7 @@ public:
 
 	bool SaveToFile(const std::string& filePath) const;
 	bool LoadFromFile(const std::string& filePath);
+	static std::filesystem::path ResolveControllerPath(const std::filesystem::path& path);
 };
 
 class ENGINE_API AnimatorRuntimeState

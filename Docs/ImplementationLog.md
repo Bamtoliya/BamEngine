@@ -4410,3 +4410,10 @@ Use this as the primary execution list until a playable 2D vertical slice is com
 - Game View와 Client가 Engine의 Deferred 씬 제출과 `PostProcessComponent` 적용 코드를 공유한다. Client는 프로필 셰이더를 키로 등록하고 UI 합성 결과를 전체 화면 패스로 백버퍼에 그린다. 뷰포트 크기에 종속된 타깃만 Client 창 크기에 맞춰 갱신한다. 메시 제출에서 `ForwardTransparent`도 대상으로 포함한다.
 - 빌드 패널에 프로젝트 프로필 경로를 표시한다. Windows 폴더 내보내기는 배포 설정의 URI를 정규화하고 소스와 스테이징에서 프로필 및 필수 DXIL을 검사한다. 기존 애셋 수집 범위는 동일하다.
 - 소스 호출 경로, 셰이더 파일명과 키, 변경부 공백을 정적으로 확인했다. 이 작업에서 빌드·실행은 수행하지 않았다. 원본 저장소의 로컬 `RaytracingScene3` 사본에는 일부 절대 참조가 있어 배포 검증에 사용할 씬의 참조 정리가 필요하다. [Windows 수동 검증](RenderPipelineProfilePlan.md#3단계-수동-검증)
+
+### [2026-11-13] RaytracingScene3 배포 검증 사본과 참조 저장
+
+- 렌더 프로필 워크트리의 로컬 씬 사본에서 절대 경로 26개를 `Project://`·`Engine://` URI로 바꿨다. Fox 모델과 애니메이션, 컨트롤러, 시작 매니페스트의 의존 파일을 워크트리에 준비했다. 로컬 애셋은 Git 제외 대상이다.
+- 공용 리소스 핸들 직렬화가 두 런타임 루트 아래의 절대 `AssetPath`를 URI로 저장한다. 씬의 `ResourceReferences`에도 같은 값을 기록하고 기존 리소스 키는 보존한다. 기존 `SceneArchiveCheck`에 회귀 검사를 추가했다.
+- Animator 로더와 빌드 참조 검사가 같은 경로 해석을 사용한다. 씬에 저장된 컨트롤러 경로와 컨트롤러가 읽는 클립도 내보내기 전에 확인한다.
+- 파일 수준에서 연결 문서 5개와 참조 대상 20개, 시작 매니페스트 항목 84개를 확인했다. 빌드, CTest와 Editor·Client 실행은 남아 있다. [Windows 수동 검증](RenderPipelineProfilePlan.md#3단계-수동-검증)

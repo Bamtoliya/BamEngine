@@ -226,18 +226,31 @@ namespace archive_resource
                 (resource->GetKey().empty() && resource->GetPath().empty()))
                 return { archive::ArchiveErrorCode::InvalidValue, std::string(key) };
         }
+        Engine::ResourceReference reference;
+        if (resource)
+        {
+            reference.AssetKey = resource->GetKey();
+            reference.AssetPath = resource->GetPath();
+            const std::filesystem::path path(reference.AssetPath);
+            if (!Engine::PlatformPath::IsVirtualUri(reference.AssetPath) && path.is_absolute())
+            {
+                const auto uri = Engine::PlatformPath::ToVirtualUri(path);
+                if (Engine::PlatformPath::IsEngineUri(uri) || Engine::PlatformPath::IsProjectUri(uri))
+                    reference.AssetPath = uri;
+            }
+        }
         const auto result = ar.WriteObject(key, empty, [&](archive::IArchive& object, bool isNull) -> archive::ArchiveResult
             {
                 auto written = object.Write("Null", isNull);
-                if (written && !isNull) written = object.Write("AssetKey", resource->GetKey());
-                if (written && !isNull) written = object.Write("AssetPath", resource->GetPath());
+                if (written && !isNull) written = object.Write("AssetKey", reference.AssetKey);
+                if (written && !isNull) written = object.Write("AssetPath", reference.AssetPath);
                 return written;
             });
 
         if (result && resource)
         {
             if (auto* references = ar.GetWriteContext<Engine::ResourceReferenceSet>())
-                references->insert({ resource->GetKey(), resource->GetPath() });
+                references->insert(std::move(reference));
         }
 
         return result;

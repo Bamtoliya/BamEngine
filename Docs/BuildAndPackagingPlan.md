@@ -87,6 +87,7 @@ Editor에서 제작하고 저장한 프로젝트를 배포 폴더로 구성하�
 - `BuildProfilePanel`의 `Client 빌드`가 기존 CMake `x64-release` 프리셋을 사용해 별도 `x64-client-release` 폴더에서 Editor 지원을 끈 Windows Release Client와 GameModule을 빌드한다. 패널은 완료 로그를 표시하고 복사할 수 있게 한다.
 - 선택한 시작 씬과 내보내기 위치는 Editor Workspace에 저장한다. `현재 씬 사용`은 편집 모드에서 저장된 현재 씬을 선택한다.
 - 선택한 시작 씬의 저장된 JSON 참조 검사는 패널에서 수행한다. 빌드가 생성하는 셰이더와 배포 대상 참조는 산출물을 기준으로 확인한다.
+- `AnimatorComponent.controllerPath`와 컨트롤러 문서에 들어 있는 클립 참조를 같은 검사에서 따라간다. Runtime과 패키저는 동일한 컨트롤러 경로 해석을 사용한다.
 - 실행에 필요한 셰이더와 에셋의 변환 결과를 확인한다.
 - 비주얼 스크립트 그래프의 최적화 포장(바이너리 바이트코드 Baking 및 C++ Nativization, [VisualScriptingBlueprintPlan.md](VisualScriptingBlueprintPlan.md) 참고) 대상을 구분한다.
 - 원본 에셋과 실행용 데이터의 포함 기준을 정한다.

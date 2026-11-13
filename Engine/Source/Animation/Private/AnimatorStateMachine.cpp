@@ -546,14 +546,27 @@ bool AnimatorStateMachine::SaveToFile(const std::string& filePath) const
 	}
 	return true;
 }
+std::filesystem::path AnimatorStateMachine::ResolveControllerPath(const std::filesystem::path& path)
+{
+	if (!PlatformPath::IsVirtualUri(path.wstring()))
+	{
+		const auto projectRelative = PlatformPath::ResolveProjectRelative(path);
+		std::error_code error;
+		if (std::filesystem::is_regular_file(projectRelative, error))
+			return projectRelative;
+	}
+	return PlatformPath::ResolveUri(path);
+}
+
 bool AnimatorStateMachine::LoadFromFile(const std::string& filePath)
 {
-	const std::string resolvedPath = PlatformPath::ResolveProjectRelative(filePath).string();
+	const auto resolvedPath = ResolveControllerPath(Utf8ToPath(filePath));
 	archive::JsonArchive ar;
 	const auto loadRes = ar.LoadFromFile(resolvedPath);
 	if (!loadRes)
 	{
-		BAM_LOG(Error, "Engine", "Asset", "[Animator] LoadFromFile failed: code={}, field={}, path={}", static_cast<int>(loadRes.Code), loadRes.Field, resolvedPath);
+		BAM_LOG(Error, "Engine", "Asset", "[Animator] LoadFromFile failed: code={}, field={}, path={}",
+			static_cast<int>(loadRes.Code), loadRes.Field, WStrToStr(resolvedPath.wstring()));
 		return false;
 	}
 	const auto& refl = Engine::ReflectionRegistry::Get();

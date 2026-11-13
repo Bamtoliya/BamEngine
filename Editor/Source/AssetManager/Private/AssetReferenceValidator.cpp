@@ -1,5 +1,6 @@
 ﻿#include "AssetReferenceValidator.h"
 #include "PlatformPath.h"
+#include "AnimatorStateMachine.h"
 #include "Logger.h"
 #include <fstream>
 #include <regex>
@@ -41,7 +42,8 @@ namespace Editor
             return true;
         }
 
-        void CollectBuildReferences(const glz::generic_u64& value, std::set<std::string>& references)
+        void CollectBuildReferences(const glz::generic_u64& value, std::set<std::string>& references,
+            std::set<std::string>& controllers)
         {
             using Json = glz::generic_u64;
 
@@ -55,26 +57,37 @@ namespace Editor
                         return;
                 }
 
-                const auto readString = [&](const char* key) -> const std::string*
+                const auto readString = [](const Json::object_t& fields, const char* key) -> const std::string*
                     {
-                        const auto field = object->find(key);
-                        return field == object->end() ? nullptr : field->second.get_if<std::string>();
+                        const auto field = fields.find(key);
+                        return field == fields.end() ? nullptr : field->second.get_if<std::string>();
                     };
 
-                const auto* reference = readString("AssetPath");
+                const auto* reference = readString(*object, "AssetPath");
                 if (!reference || reference->empty())
-                    reference = readString("AssetKey");
+                    reference = readString(*object, "AssetKey");
 
                 if (reference && !reference->empty())
                     references.insert(*reference);
 
+                const auto* type = readString(*object, "Type");
+                const auto data = object->find("Data");
+                if (type && *type == "Engine::AnimatorComponent" && data != object->end())
+                {
+                    if (const auto* fields = data->second.get_if<Json::object_t>())
+                    {
+                        if (const auto* controller = readString(*fields, "controllerPath"); controller && !controller->empty())
+                            controllers.insert(*controller);
+                    }
+                }
+
                 for (const auto& field : *object)
-                    CollectBuildReferences(field.second, references);
+                    CollectBuildReferences(field.second, references, controllers);
             }
             else if (const auto* elements = value.get_if<Json::array_t>())
             {
                 for (const auto& element : *elements)
-                    CollectBuildReferences(element, references);
+                    CollectBuildReferences(element, references, controllers);
             }
         }
 
@@ -276,7 +289,9 @@ namespace Editor
             }
 
             std::set<std::string> references;
-            CollectBuildReferences(document, references);
+            std::set<std::string> controllers;
+            CollectBuildReferences(document, references, controllers);
+            references.insert(controllers.begin(), controllers.end());
             for (const auto& reference : references)
             {
                 if (builtInMeshes.contains(reference))
@@ -290,8 +305,10 @@ namespace Editor
                     continue;
                 }
 
-                auto resolved = Path::ResolveUri(wideReference);
-                if (resolved.extension().wstring().starts_with(L".bam"))
+                const bool isController = controllers.contains(reference);
+                auto resolved = isController ? Engine::AnimatorStateMachine::ResolveControllerPath(rawPath)
+                    : Path::ResolveUri(wideReference);
+                if (!isController && resolved.extension().wstring().starts_with(L".bam"))
                 {
                     auto jsonPath = resolved;
                     jsonPath += L".json";
@@ -319,7 +336,8 @@ namespace Editor
 
                 if (referencedFiles)
                     referencedFiles->push_back(file);
-                if (Engine::ToLowerStr(Engine::WStrToStr(file.extension().wstring())) == ".json")
+                const auto extension = Engine::ToLowerStr(Engine::WStrToStr(file.extension().wstring()));
+                if (isController || extension == ".json" || extension == ".animator" || extension == ".bamanimator")
                     pending.push_back(file);
             }
         }

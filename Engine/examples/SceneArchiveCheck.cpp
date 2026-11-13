@@ -710,6 +710,30 @@ namespace
             return false;
         }
 
+        {
+            const auto projectAssets = Engine::PlatformPath::GetProjectAssetRoot();
+            const auto testAssets = std::filesystem::current_path() / "portable-assets";
+            Engine::PlatformPath::SetProjectAssetRoot(testAssets);
+            const auto originalPath = meshHandle->GetPath();
+            meshHandle->SetPath((testAssets / "Models" / "portable.bammesh").wstring());
+            Engine::ResourceReferenceSet references;
+            archive::JsonArchive writer;
+            writer.SetWriteContext(&references);
+            const auto written = archive_resource::WriteHandle(writer, "Mesh", meshHandle);
+            meshHandle->SetPath(originalPath);
+            Engine::PlatformPath::SetProjectAssetRoot(projectAssets);
+
+            const Engine::ResourceReferenceSet expected = {
+                { meshHandle->GetKey(), L"Project://Models/portable.bammesh" }
+            };
+            std::string json;
+            if (!written || references != expected || !writer.Encode(json) ||
+                json.find("Project://Models/portable.bammesh") == std::string::npos)
+            {
+                return Fail("Mounted absolute resource path was not serialized as a portable reference.");
+            }
+        }
+
         archive::BeveArchive binaryWriter;
 
         if (!scene->WriteArchive(binaryWriter) || !scene->WritePrefabArchive(binaryWriter, *prefabRoot))
