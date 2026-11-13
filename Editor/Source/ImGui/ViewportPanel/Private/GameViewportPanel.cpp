@@ -1,11 +1,10 @@
-﻿#include "GameViewportPanel.h"
+#include "GameViewportPanel.h"
 #include "SceneManager.h"
 #include "Scene.h"
 #include "CameraComponent.h"
 #include "TransformComponent.h"
 #include "WorldTransformComponent.h"
 #include "FlagComponent.h"
-#include "PostProcessComponent.h"
 #include "CameraSystem.h"
 #include "PIEManager.h"
 #include "LocalizationManager.h"
@@ -34,7 +33,8 @@ EResult GameViewportPanel::OnInitialize(void* arg)
 	else
 	{
 		Engine::RenderPipelineProfile profile;
-		auto profileResult = Engine::LoadRenderPipelineProfile(Engine::PlatformPath::ResolveUri(profilePath), profile);
+		const auto file = Engine::PlatformPath::ResolveUri(Engine::Utf8ToPath(profilePath).wstring());
+		auto profileResult = Engine::LoadRenderPipelineProfile(file, profile);
 		if (profileResult)
 			profileResult = m_Pipeline.Initialize(profile, m_Name, m_RenderWidth, m_RenderHeight);
 		if (!profileResult)
@@ -48,7 +48,8 @@ EResult GameViewportPanel::OnInitialize(void* arg)
 	{
 		m_PostProcessChain.Initialize(m_Name);
 		m_PostProcessChain.PrepareResources(m_RenderWidth, m_RenderHeight);
-		m_PostProcessChain.GetPipeline().SaveToString(m_DefaultPostProcessSettings);
+		if (!m_ScenePostProcess.CaptureDefaults(m_PostProcessChain.GetPipeline()))
+			return EResult::Fail;
 	}
 
 	RenderPassManager& rpMgr = RenderPassManager::Get();
@@ -69,6 +70,7 @@ void GameViewportPanel::Free()
 		RenderPassManager::Get().RemoveRenderPass(m_UIOverlayPassID);
 	m_UIOverlayPassID = INVALID_PASS_ID;
 	m_PostProcessChain.Free();
+	m_ScenePostProcess.Reset();
 	m_Pipeline.Free();
 	__super::Free();
 }
@@ -82,56 +84,6 @@ EResult GameViewportPanel::ResizeRenderTargets(uint32 width, uint32 height)
 	if (pipelineResult != EResult::Success) return pipelineResult;
 	if (ppResult != EResult::Success) return ppResult;
 	return channelResult;
-}
-
-void GameViewportPanel::SubmitPostProcessPass(f32 dt, std::wstring& currentRT)
-{
-	Engine::Scene* activeScene = Engine::SceneManager::Get().GetCurrentScene();
-	if (activeScene)
-	{
-		auto view = activeScene->GetRegistry().view<Engine::PostProcessComponent>();
-		for (auto [entity, source] : view.each())
-		{
-			if (!source.IsEnabled) continue;
-
-			const bool unchanged = m_LastPostProcessEntity == entity &&
-				m_LastPostProcessPreset == source.PresetName && m_LastPostProcessSettings == source.PipelineSettings;
-
-			if (!unchanged)
-			{
-				m_LastPostProcessEntity = entity;
-				m_LastPostProcessPreset = source.PresetName;
-				m_LastPostProcessSettings = source.PipelineSettings;
-
-				auto& pipeline = m_PostProcessChain.GetPipeline();
-				bool applied = pipeline.LoadFromString(m_DefaultPostProcessSettings);
-				if (applied && !source.PipelineSettings.empty())
-					applied = pipeline.LoadFromString(source.PipelineSettings);
-				else if (applied && !source.PresetName.empty())
-					applied = pipeline.LoadFromFile(StrToWStr("Resources/Config/PostProcess/Presets/" + source.PresetName + ".json"));
-
-				m_PostProcessStateUsable = applied;
-			}
-
-			if (m_PostProcessStateUsable)
-				currentRT = m_PostProcessChain.ExecuteChain(dt, currentRT);
-			return;
-		}
-	}
-
-	const bool wasDefaultState = (m_LastPostProcessEntity == entt::null);
-	if (!wasDefaultState)
-	{
-		m_LastPostProcessEntity = entt::null;
-		m_LastPostProcessPreset.clear();
-		m_LastPostProcessSettings.clear();
-		if (!m_DefaultPostProcessSettings.empty())
-			m_PostProcessStateUsable = m_PostProcessChain.GetPipeline().LoadFromString(m_DefaultPostProcessSettings);
-	}
-
-	// 씬에 활성화된 PostProcessComponent가 없더라도 기본 톤매핑 체인을 실행
-	if (m_PostProcessStateUsable)
-		currentRT = m_PostProcessChain.ExecuteChain(dt, currentRT);
 }
 
 void GameViewportPanel::Update(f32 dt)
@@ -163,8 +115,8 @@ void GameViewportPanel::Update(f32 dt)
 	Renderer::Get().RegisterViewportCamera(RenderPassManager::Get().GetRenderPassByID(m_UIOverlayPassID));
 	std::wstring currentRT = m_Pipeline.GetFinalColorRTName();
 
-	if (m_UseScenePostProcess)
-		SubmitPostProcessPass(dt, currentRT);
+	if (m_UseScenePostProcess && m_ScenePostProcess.Apply(m_PostProcessChain.GetPipeline(), activeScene))
+		currentRT = m_PostProcessChain.ExecuteChain(dt, currentRT);
 	RenderPassManager::Get().GetRenderPassByID(m_UIOverlayPassID)->SetColorAttachments({ currentRT });
 	m_DisplayRTName = currentRT;
 

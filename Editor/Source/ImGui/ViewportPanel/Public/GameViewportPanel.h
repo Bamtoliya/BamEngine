@@ -3,6 +3,7 @@
 #include "BaseViewportPanel.h"
 #include "ViewportDeferredPipeline.h"
 #include "PostProcess.h"
+#include "ScenePostProcessSettings.h"
 
 BEGIN(Engine)
 class InputManager;
@@ -41,18 +42,12 @@ protected:
 
 private:
 	std::optional<CameraBuffer> FindActiveGameCameraBuffer();
-	void SubmitPostProcessPass(f32 dt, std::wstring& currentRT);
 
 private:
 	ViewportDeferredPipeline m_Pipeline;
 	PostProcessChain m_PostProcessChain;
 	RenderPassID m_UIOverlayPassID = INVALID_PASS_ID;
-	string m_DefaultPostProcessSettings;
-	string m_LastPostProcessPreset;
-	string m_LastPostProcessSettings;
-	entt::entity m_LastPostProcessEntity = entt::null;
-	uint64 m_LastSyncedScenePipelineVersion = 0;
-	bool m_PostProcessStateUsable = true;
+	Engine::ScenePostProcessSettings m_ScenePostProcess;
 	bool m_UseScenePostProcess = true;
 	bool m_HasActiveCamera = false;
 	ImGuiID m_GameplayImageWindowId = 0;

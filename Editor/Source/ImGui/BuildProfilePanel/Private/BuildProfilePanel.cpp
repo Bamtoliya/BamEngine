@@ -86,6 +86,10 @@ void BuildProfilePanel::Draw()
             EditorUI::PropertyRow("BuildProfile.Format");
             ImGui::TextUnformatted(LOCAL_CSTR("BuildProfile.Folder"));
 
+            EditorUI::PropertyRow("BuildProfile.RenderPipelineProfile");
+            const auto& profile = EditorSettingsService::Get().GetProjectSettings().RenderPipelineProfilePath;
+            ImGui::TextWrapped("%s", profile.empty() ? LOCAL_CSTR("EditorCommon.None") : profile.c_str());
+
             EditorUI::PropertyRow("Settings.StartupScene");
             const bool running = m_ClientBuild.GetStatus() == ClientBuildJob::Status::Running;
             ImGui::BeginDisabled(running);

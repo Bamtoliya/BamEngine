@@ -19,6 +19,8 @@
 #include "ResourceManager.h"
 #include "GraphBindingComponent.h"
 #include "InputActionSettings.h"
+#include "ClientRenderPipeline.h"
+#include "PixelPerfectCameraComponent.h"
 
 BEGIN(Client)
 
@@ -31,8 +33,11 @@ public:
 
     ~Application()
     {
+        m_RenderPipeline.Free();
         if (m_Runtime)
             Runtime::Destroy();
+        else if (ReflectionRegistry::IsCreated())
+            ReflectionRegistry::Destroy();
 
         if (m_Window)
             SDL_DestroyWindow(m_Window);
@@ -55,6 +60,11 @@ public:
             return EResult::Fail;
 
         m_LoggerInitialized = true;
+
+        if (!ReflectionRegistry::Create())
+            return EResult::Fail;
+        if (const auto result = LoadProjectSettings(); result != EResult::Success)
+            return result;
 
         if (!SDL_Init(SDL_INIT_VIDEO))
         {
@@ -106,14 +116,6 @@ public:
         // 엔진 기본 프리미티브 메시(CubeMesh, SphereMesh 등) 등록
         Engine::RegisterBuiltInPrimitiveMeshes(Engine::ResourceManager::Get());
 
-        // 엔진 초기화 후 ProjectSettings 로드
-        const EResult configResult = LoadProjectSettings();
-        if (IsFailure(configResult))
-        {
-            BAM_LOG(Fatal, "Client", "Application", "Project settings validation failed: {}", ResultToString(configResult));
-            return configResult;
-        }
-
         InputActionSettings inputSettings;
         const auto inputPath = m_ProjectRoot / "Config" / "InputActions.json";
         const auto& registry = ReflectionRegistry::Get().GetRegistry();
@@ -126,10 +128,10 @@ public:
             return EResult::Fail;
         }
 
+        if (m_RenderPipeline.Initialize(m_ProjectSettings.RenderPipelineProfilePath, rhiDesc.width, rhiDesc.height) != EResult::Success)
+            return EResult::Fail;
         if (IsFailure(InitializeSystems()))
             return EResult::Fail;
-
-        InitializeRenderPasses();
         LoadGameModule();
         if (IsFailure(LoadStartupScene()))
             return EResult::Fail;
@@ -200,6 +202,11 @@ public:
             const EResult result = rhi->Resize(pixelWidth, pixelHeight);
             if (result != EResult::Success)
                 return result;
+            if (const auto targetResult = m_RenderPipeline.Resize(pixelWidth, pixelHeight); IsFailure(targetResult))
+            {
+                BAM_LOG(Error, "Client", "Rendering", "Could not resize render profile targets to {}x{}", pixelWidth, pixelHeight);
+                return targetResult;
+            }
         }
 
         auto& input = InputManager::Get();
@@ -211,7 +218,7 @@ public:
 
         m_Runtime->Update(dt, false);
         m_Runtime->LateUpdate(dt);
-        UpdateViewportCamera();
+        SubmitRenderPipeline(dt, pixelWidth, pixelHeight);
 
         return m_Runtime->Render(dt);
     }
@@ -223,7 +230,7 @@ private:
         if (!systemManager.AddSystem<TransformSystem>()) return EResult::Fail;
         if (!systemManager.AddSystem<SpringArmSystem>()) return EResult::Fail;
         if (!systemManager.AddSystem<CameraSystem>()) return EResult::Fail;
-        if (!systemManager.AddSystem<LightSystem>()) return EResult::Fail;
+        if (!m_RenderPipeline.UsesDeferredProfile() && !systemManager.AddSystem<LightSystem>()) return EResult::Fail;
         if (!systemManager.AddSystem<MeshRenderSystem>()) return EResult::Fail;
         if (!systemManager.AddSystem<SpriteRenderSystem>()) return EResult::Fail;
         if (!systemManager.AddSystem<SpriteAnimationSystem>()) return EResult::Fail;
@@ -240,17 +247,6 @@ private:
         if (!systemManager.AddSystem<PhysicsSystem>()) return EResult::Fail;
         if (!systemManager.AddSystem<GraphSystem>()) return EResult::Fail;
         return EResult::Success;
-    }
-
-    void InitializeRenderPasses()
-    {
-        // 스왑체인 백버퍼로 직접 출력하는 Forward 렌더 패스 등록
-        m_ForwardPassID = RenderPassManager::Get().RegisterRenderPass(
-            L"Client Forward Pass", {}, L"",
-            ERenderPassLoadOperation::RPLO_Clear, ERenderPassStoreOperation::RPSO_Store,
-            ERenderPassLoadOperation::RPLO_Clear, ERenderPassStoreOperation::RPSO_Store,
-            vec4(0.08f, 0.12f, 0.18f, 1.0f), 0, ERenderSortType::FrontToBack,
-            ERenderPassType::Forward, EBlendMode::Forward | EBlendMode::Opaque | EBlendMode::Masked);
     }
 
     void LoadGameModule()
@@ -304,17 +300,16 @@ private:
         return EResult::Success;
     }
 
-    void UpdateViewportCamera()
+    void SubmitRenderPipeline(f32 dt, uint32 width, uint32 height)
     {
-        auto* renderPass = RenderPassManager::Get().GetRenderPassByID(m_ForwardPassID);
-        if (!renderPass) return;
-
         auto* currentScene = SceneManager::Get().GetCurrentScene();
         if (!currentScene) return;
 
         auto& registry = currentScene->GetRegistry();
         auto cameraView = registry.view<CameraComponent, FlagComponent>();
         std::optional<CameraBuffer> selectedBuffer;
+        bool pixelPerfect = false;
+        const f32 aspectRatio = static_cast<f32>(width) / static_cast<f32>(height);
 
         for (auto entity : cameraView)
         {
@@ -322,12 +317,23 @@ private:
             if (!flag.IsActiveInHierarchy() || HasFlag(flag.effectiveFlags, EEntityFlag::Dead))
                 continue;
 
-            const auto& camera = cameraView.get<CameraComponent>(entity);
+            auto& camera = cameraView.get<CameraComponent>(entity);
+            const auto previousAspect = camera.AspectRatio;
+            camera.AspectRatio = aspectRatio;
+            if (!CameraSystem::UpdateCamera(registry, entity, width, height))
+            {
+                camera.AspectRatio = previousAspect;
+                continue;
+            }
             const auto buffer = camera.GetCameraBuffer();
             if (!buffer) continue;
 
             if (!selectedBuffer || camera.IsMainCamera)
+            {
                 selectedBuffer = buffer;
+                const auto* pixelCamera = registry.try_get<PixelPerfectCameraComponent>(entity);
+                pixelPerfect = camera.CameraType == ECameraType::Orthographic && pixelCamera && pixelCamera->assetsPPU > 0.0f;
+            }
 
             if (camera.IsMainCamera)
                 break;
@@ -341,7 +347,7 @@ private:
             const vec3 at(0.0f, 0.0f, 0.0f);
             const vec3 up(0.0f, 1.0f, 0.0f);
             fallback.viewMatrix = glm::lookAt(eye, at, up);
-            fallback.projMatrix = glm::perspective(glm::radians(60.0f), 1280.0f / 720.0f, 0.1f, 1000.0f);
+            fallback.projMatrix = glm::perspective(glm::radians(60.0f), aspectRatio, 0.1f, 1000.0f);
             fallback.invViewMatrix = glm::inverse(fallback.viewMatrix);
             fallback.invProjMatrix = glm::inverse(fallback.projMatrix);
             fallback.viewProjMatrix = fallback.projMatrix * fallback.viewMatrix;
@@ -351,7 +357,14 @@ private:
         }
 
         selectedBuffer->time = static_cast<f32>(TimeManager::Get().GetTotalTime());
-        Renderer::Get().RegisterViewportCamera(*selectedBuffer, renderPass);
+        m_RenderPipeline.Submit(*selectedBuffer, *currentScene, dt, pixelPerfect);
+        if (m_RenderPipeline.UsesDeferredProfile())
+        {
+            // Cascade projection reads the geometry pass camera registered above.
+            for (auto* scene : SceneManager::Get().GetActiveScenes())
+                if (scene)
+                    LightSystem::UpdateLights(scene->GetRegistry());
+        }
     }
 
     bool ValidateStartupGraphs()
@@ -434,7 +447,7 @@ private:
 private:
     SDL_Window* m_Window = nullptr;
     Runtime* m_Runtime = nullptr;
-    RenderPassID m_ForwardPassID = 0;
+    ClientRenderPipeline m_RenderPipeline;
     bool m_SDLInitialized = false;
     bool m_LoggerInitialized = false;
     std::filesystem::path m_ProjectRoot;

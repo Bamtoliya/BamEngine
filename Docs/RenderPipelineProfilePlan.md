@@ -1,14 +1,14 @@
 # Render Pipeline Profile 설계
 
 - 갱신일: 2026-11-13
-- 상태: 2단계 Game View 연결을 코드에 반영했다. 빌드와 화면 비교는 남아 있다. Windows Client와 패키저 연결은 3단계다.
+- 상태: Game View와 Windows Client의 공용 실행 경로 및 Windows 폴더 패키징을 코드에 반영했다. Editor·Client 빌드, 저장소 밖 실행과 화면 비교는 남아 있다.
 - 관련 문서: [빌드·패키징 계획](BuildAndPackagingPlan.md), [렌더링 개발 계획](RenderingDevelopmentPlan.md), [셰이더 바인딩](Shader/BINDING_LAYOUT.md)
 
 ## 목적과 현재 상태
 
 Editor의 Game View와 배포 Client가 동일한 프로필을 읽어 동일한 렌더링 구성을 생성한다. 첫 기준 씬은 `RaytracingScene3`이며 `GBufferMaterial`, 그림자, HDR 조명과 씬의 ACES 설정을 비교한다.
 
-Game View는 `Config/Project.json`에서 프로필 경로를 읽는다. Engine의 `DeferredProfilePasses`는 파일 순서대로 패스를 등록하고 `Geometry.GBuffer` 같은 연결을 실제 렌더 타깃 이름에 매핑한다. Game View는 그 결과를 사용해 기존 `ViewportDeferredPipeline`에서 카메라와 조명을 제출한다. `ScenePostProcess`가 있으면 기존 후처리 체인이 씬의 `PostProcessComponent`를 적용한 뒤 Game View가 UI를 합성한다. 현재 Client는 단일 Forward 패스를 등록한다.
+Game View와 Windows Client는 `Config/Project.json`에서 프로필 경로를 읽는다. Engine의 `DeferredProfilePasses`는 파일 순서대로 패스를 등록하고 `Geometry.GBuffer` 같은 연결을 실제 렌더 타깃에 매핑한다. 두 호스트는 `DeferredSceneRenderer`에서 카메라와 조명을 제출하고, `ScenePostProcess`가 있으면 `ScenePostProcessSettings`에서 씬의 `PostProcessComponent`를 읽는다. UI 합성은 각 호스트가 등록한다. Client는 UI 합성까지 끝난 색상 타깃을 전체 화면 패스로 백버퍼에 그린다.
 
 ## 소유권과 파일 형식
 
@@ -31,8 +31,8 @@ Game View는 `Config/Project.json`에서 프로필 경로를 읽는다. Engine�
 ## 호스트와 패키저 연결
 
 - Game View는 프로필 인스턴스에 씬, 카메라, 뷰포트 크기를 전달하고 최종 색상을 패널에 표시한다. 기존 게임 UI 합성은 Game View에 둔다. 프로필이 후처리를 실행하는 경로에서는 기존 Game View 후처리 호출을 함께 실행하지 않는다. Scene View·썸네일·머티리얼 프리뷰 전환은 Game View 검증 이후에 평가한다.
-- Windows Client는 배포 설정과 씬을 읽고 필요한 셰이더를 런타임 리소스로 등록한 뒤 프로필 인스턴스를 생성한다. 최종 색상은 Client의 표시 패스로 백버퍼에 출력한다. `FullscreenQuadVS`, `LightingPS`, `PostProcess_ToneMappingPS`처럼 이름으로 찾는 셰이더는 파일 포함과 런타임 키 등록을 둘 다 확인한다.
-- 패키저는 프로필을 명시적으로 읽어 공용 검증기를 호출한다. 패스 타입이 선언한 셰이더와 프로필·씬의 애셋 참조를 모아 대상 플랫폼용 산출물을 스테이징에 포함한다. 최종 게시 전 스테이징 루트에서 프로필과 필수 파일을 다시 검사한다. 누락 또는 미지원 기능은 게시 전에 보고한다.
+- Windows Client는 배포 설정을 Runtime보다 먼저 읽어 리소스 루트를 전달한다. `GetDeferredProfileShaders`에 등록된 DXIL을 런타임 리소스 키로 등록한 뒤 프로필 인스턴스를 생성한다. 빈 프로필 경로는 기존 단일 Forward 경로를 사용한다.
+- Windows 폴더 패키저는 프로필을 읽고 Deferred 실행 제약을 검증한다. 프로필을 리소스 루트 안에 보존하고 배포 설정에는 `Engine://` 또는 `Project://` URI를 기록한다. 게시 전에 스테이징에서 프로필과 필수 DXIL 및 UI 머티리얼을 다시 검사한다. 일반 애셋 수집은 기존 확장자 기반 복사와 씬 참조 검사를 사용한다.
 - 첫 실행 검증은 Windows D3D12를 기준으로 한다. Web은 같은 파일 형식을 사용할 수 있으며, WebGPU 패스 구현과 대상 셰이더를 갖춘 뒤 해당 구성을 검증한다.
 
 ## Game View 실행 제약
@@ -79,3 +79,12 @@ cmake --build out/build/x64-debug --config Debug --target Editor
 4. 복사본에서 `DeferredLighting`의 G-Buffer 입력을 누락시킨 뒤 Editor 로그에 프로필 경로와 실패한 필드가 남는지 확인한다. 확인 후 기본 파일 경로를 복원한다.
 
 이번 단계의 소스 검토에서는 패스 등록 해제 시 큐·카메라·콜백을 제거한 뒤 소유 타깃을 해제하는 순서를 확인했다. 빌드, 실제 화면 비교와 인스턴스 반복 생성·해제의 실행 검증은 남아 있다.
+
+## 3단계 수동 검증
+
+1. 2단계 명령으로 Editor를 빌드하고 이 워크트리의 프로젝트를 연다. 로컬 `RaytracingScene3`의 절대 참조를 정리한 뒤 빌드 및 패키징 패널의 **씬 참조 검사**를 통과시킨다. 패널에 기본 Deferred 프로필 경로가 표시되는지 확인한다.
+2. **빌드 및 내보내기**로 새 출력 폴더에 게시한다. 배포본 `Config/Project.json`의 프로필 URI와 해당 JSON, `Engine/Resources/Shader/bin/dxil`의 셰이더를 확인한다. 게시 로그에 `Render profile:`과 `Exported package:`가 남아야 한다.
+3. 배포 폴더를 저장소 외부에서 열고 `Client.exe`를 실행한다. `Logs/Client.log`에서 프로필 로드 성공을 확인한다. 같은 카메라·해상도로 PIE Game View와 Client의 기본 도형, G-Buffer 머티리얼, 방향광과 점광원 그림자, 투명 오브젝트, ACES와 게임 UI를 비교한다. Client 창 리사이즈와 Gameplay 입력도 확인한다.
+4. 씬의 Exposure와 프로필의 `PointShadow` 해상도를 각각 변경한 뒤 재내보낸다. 두 호스트에 반영되는지 확인한다. 내보낸 복사본에서 `clientPresentPS.cso`를 잠시 옮기면 다음 Client 시작에서 누락 셰이더 로그가 남고 초기화가 종료돼야 한다. 빌드로 셰이더가 재생성될 수 있으므로 패키저 누락 검증은 빌드 후 스테이징 입력에서 확인한다.
+
+소스 검토에서는 Client와 패키저가 같은 DXIL 목록을 소비하고, 패스가 Backbuffer 크기를 독립적으로 사용하는 경로를 확인했다. 이번 변경의 Editor·Client 빌드, D3D12 실행과 배포 폴더 검증은 사용자 실행이 필요하다.

@@ -14,16 +14,10 @@ namespace Engine
         Free();
     }
 
-    RenderPipelineProfileResult DeferredProfilePasses::Initialize(const RenderPipelineProfile& profile,
-        const std::wstring& prefix, uint32 width, uint32 height)
+    RenderPipelineProfileResult ValidateDeferredProfile(const RenderPipelineProfile& profile)
     {
-        if (!m_Passes.empty() || !m_Targets.empty())
-            return { {}, {}, "The deferred profile instance is already initialized." };
         if (auto result = ValidateRenderPipelineProfile(profile); !result)
             return result;
-        if (!Renderer::IsCreated() || !Renderer::Get().GetRHI() || !RenderTargetManager::IsCreated() ||
-            !RenderPassManager::IsCreated() || width == 0 || height == 0)
-            return { {}, {}, "An active RHI, render managers and a valid viewport size are required." };
 
         std::set<std::string_view> types;
         for (std::size_t index = 0; index < profile.Passes.size(); ++index)
@@ -39,6 +33,19 @@ namespace Engine
         }
         if (!types.contains("DeferredLighting"))
             return { {}, "Passes", "DeferredLighting is required by this renderer." };
+        return {};
+    }
+
+    RenderPipelineProfileResult DeferredProfilePasses::Initialize(const RenderPipelineProfile& profile,
+        const std::wstring& prefix, uint32 width, uint32 height)
+    {
+        if (!m_Passes.empty() || !m_Targets.empty())
+            return { {}, {}, "The deferred profile instance is already initialized." };
+        if (auto result = ValidateDeferredProfile(profile); !result)
+            return result;
+        if (!Renderer::IsCreated() || !Renderer::Get().GetRHI() || !RenderTargetManager::IsCreated() ||
+            !RenderPassManager::IsCreated() || width == 0 || height == 0)
+            return { {}, {}, "An active RHI, render managers and a valid viewport size are required." };
 
         auto& targets = RenderTargetManager::Get();
         auto& passes = RenderPassManager::Get();
@@ -195,6 +202,24 @@ namespace Engine
         m_PointShadowInput.clear();
         m_ColorTarget.clear();
         m_UsesScenePostProcess = false;
+    }
+
+    EResult DeferredProfilePasses::Resize(uint32 width, uint32 height)
+    {
+        if (width == 0 || height == 0 || m_Targets.empty())
+            return EResult::InvalidArgument;
+
+        auto& targets = RenderTargetManager::Get();
+        bool succeeded = true;
+        for (const auto& name : m_Targets)
+        {
+            if (name == m_LightingInputs.back() || name == m_PointShadowInput)
+                continue;
+            auto* target = targets.GetRenderTarget(name);
+            if (!target || target->Resize(width, height) != EResult::Success)
+                succeeded = false;
+        }
+        return succeeded ? EResult::Success : EResult::Fail;
     }
 
     RenderPassID DeferredProfilePasses::GetPass(std::string_view type) const

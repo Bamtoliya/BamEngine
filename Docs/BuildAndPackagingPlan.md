@@ -1,7 +1,7 @@
 # 다음 목표: Client 실행 설정과 빌드·패키징
 
 - 작성일: 2026-10-24 (최종 갱신: 2026-11-13)
-- 상태: Editor에서 Windows x64 Release 빌드 및 폴더 내보내기 연결. 저장소 밖 실행과 Editor·Client 렌더링 일치 검증은 남아 있다.
+- 상태: Editor의 Windows x64 Release 빌드 및 폴더 내보내기에 Deferred 렌더 프로필 검증과 배포 경로 기록을 연결했다. 저장소 밖 실행과 Editor·Client 렌더링 일치 검증은 남아 있다.
 - 렌더링 공유 후속 설계: [Render Pipeline Profile](RenderPipelineProfilePlan.md)
 - WebGPU 진행 상태: `Tools/WebGPUProbe/main.cpp`의 독립 브라우저 렌더링 프로브까지 기록했다. Client 씬 로드와 빌드 패널 내보내기 연결은 후속 범위다.
 - 관련 지침: [EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md)의 3절, 12절, 13절
@@ -34,8 +34,8 @@ Client 시작 매니페스트 연결, 참조 기반 최소 에셋 수집과 저�
 - Editor는 `ConfigManager`로 프로젝트 설정을 읽고 `StartupManifestPath`를 시작 리소스 로드에 사용한다.
 - Client는 실행 파일 위치와 프로젝트 마커로 루트를 찾고 Runtime/PlatformPath에 주입한다.
 - `LoadProjectSettings()`가 설정을 읽고 `LoadStartupScene()`이 지정한 씬을 선택한다. 빈 값일 때만 NewScene2로 폴백한다.
-- 설정 로드 결과·스키마 버전을 검사한다. `NotFound`는 경고 후 기본값으로 성공, 파싱 실패는 실패, 0 또는 지원 초과 버전은 InvalidArgument다. Client의 `StartupManifestPath` 연결이 남아 있다. 현재 Client는 런타임을 생성한 뒤 프로젝트 설정을 읽으므로 사용자 지정 리소스 루트의 초기화 순서는 별도 확인이 필요하다.
-- Client에 기본 프리미티브 메시 등록·카메라 선택·시스템 등록과 단일 백버퍼 Forward 패스가 있다.
+- 설정 로드 결과·스키마 버전을 검사한다. `NotFound`는 경고 후 기본값으로 성공, 파싱 실패는 실패, 0 또는 지원 초과 버전은 InvalidArgument다. Runtime을 만들기 전에 설정을 읽어 리소스 루트를 전달한다. Client의 범용 `StartupManifestPath` 연결은 남아 있다.
+- Client는 프로필 경로를 지정하면 Deferred 타깃, 조명, 씬 후처리, UI와 백버퍼 출력 패스를 구성한다. 빈 경로는 기존 단일 Forward 패스를 사용한다. [렌더 프로필 수동 검증](RenderPipelineProfilePlan.md#3단계-수동-검증)
   Editor의 디퍼드·조명·HDR/후처리와 동등한 렌더링 경로는 아니다.
 - `Client/CMakeLists.txt`의 Visual Studio 디버거 작업 디렉터리는 소스 루트다. 해당 타깃에 과거 `BAMENGINE_PROJECT_ROOT` 정의는 없다.
 - `StartupResourceLoader`는 현재 Editor의 AssetManager 소스 영역에 있다.

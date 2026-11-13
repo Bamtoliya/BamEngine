@@ -1941,6 +1941,7 @@ BuildProfile,Target,Build Target,빌드 대상
 BuildProfile,WindowsRelease,Windows x64 / Release,Windows x64 / Release
 BuildProfile,Format,Output Format,출력 형식
 BuildProfile,Folder,Folder,폴더
+BuildProfile,RenderPipelineProfile,Render Pipeline Profile,렌더 파이프라인 프로필
 BuildProfile,OutputDirectory,Export Destination,내보낼 위치
 BuildProfile,SceneFiles,BamEngine Scenes (*.bamscene.json),BamEngine 씬 (*.bamscene.json)
 BuildProfile,CheckSceneReferences,Check Scene References,씬 참조 검사

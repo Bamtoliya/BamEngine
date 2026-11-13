@@ -3,6 +3,8 @@
 #include "AssetReferenceValidator.h"
 #include "ClientBuildJob.h"
 #include "Config.h"
+#include "DeferredProfilePasses.h"
+#include "DeferredProfileShaders.h"
 #include "Functions.h"
 #include "PlatformPath.h"
 
@@ -91,7 +93,15 @@ namespace
         }
     }
 
-    std::string MakePackageSettings(const fs::path& source, const fs::path& startupSceneRelative)
+    struct PackageProfile
+    {
+        Engine::RenderPipelineProfile Profile;
+        fs::path RelativePath;
+        bool InEngine = false;
+    };
+
+    std::string MakePackageSettings(const fs::path& source, const fs::path& startupSceneRelative,
+        const fs::path& assetRoot, const fs::path& engineRoot, PackageProfile& packageProfile)
     {
         std::ifstream input(source, std::ios::binary);
         if (!input)
@@ -119,10 +129,46 @@ namespace
         values["AssetDirectory"] = std::string("Assets");
         values["EngineResourceDirectory"] = std::string("Engine/Resources");
 
+        if (const auto entry = values.find("RenderPipelineProfilePath"); entry != values.end())
+        {
+            const auto* path = entry->second.get_if<std::string>();
+            if (!path)
+                throw std::runtime_error("RenderPipelineProfilePath must be a string: " + DisplayPath(source));
+            if (!path->empty())
+            {
+                const auto file = fs::canonical(Path::ResolveUri(Engine::Utf8ToPath(*path).wstring()));
+                packageProfile.InEngine = IsWithin(file, engineRoot);
+                packageProfile.RelativePath = RelativeToInput(file, packageProfile.InEngine ? engineRoot : assetRoot);
+                auto result = Engine::LoadRenderPipelineProfile(file, packageProfile.Profile);
+                if (result)
+                    result = Engine::ValidateDeferredProfile(packageProfile.Profile);
+                if (!result)
+                    throw std::runtime_error("Render profile " + DisplayPath(file) + " [" + result.Field + "]: " + result.Message);
+
+                values["RenderPipelineProfilePath"] =
+                    std::string(packageProfile.InEngine ? "Engine://" : "Project://") + DisplayPath(packageProfile.RelativePath);
+            }
+        }
+
         std::string output;
         if (glz::write_json(config, output))
             throw std::runtime_error("Could not serialize package settings.");
         return output;
+    }
+
+    void VerifyRenderProfileResources(const PackageProfile& packageProfile, const fs::path& engineRoot)
+    {
+        if (packageProfile.RelativePath.empty())
+            return;
+
+        const auto require = [](const fs::path& path)
+        {
+            if (!fs::is_regular_file(path) || fs::file_size(path) == 0)
+                throw std::runtime_error("Required render profile resource is missing or empty: " + DisplayPath(path));
+        };
+        for (const auto& shader : Engine::GetDeferredProfileShaders(packageProfile.Profile))
+            require(engineRoot / "Shader" / "bin" / "dxil" / shader.DxilFile);
+        require(engineRoot / "Material" / "UIMaterial.bammat.json");
     }
 }
 
@@ -181,7 +227,10 @@ namespace Editor
                 throw std::runtime_error("Required binary is missing: " + DisplayPath(binDirectory / name));
         }
 
-        const auto settings = MakePackageSettings(projectRoot / "Config" / "Project.json", RelativeToInput(scene, assetRoot));
+        PackageProfile packageProfile;
+        const auto settings = MakePackageSettings(projectRoot / "Config" / "Project.json",
+            RelativeToInput(scene, assetRoot), assetRoot, engineRoot, packageProfile);
+        VerifyRenderProfileResources(packageProfile, engineRoot);
         const auto suffix = std::chrono::steady_clock::now().time_since_epoch().count();
         auto staging = destination;
         staging += L".staging-" + std::to_wstring(suffix);
@@ -204,6 +253,30 @@ namespace Editor
             const auto target = (inProject ? stagedAssets : stagedEngine) / relative;
             if (!fs::is_regular_file(target))
                 CopyPackageFile(source, target);
+        }
+
+        if (!packageProfile.RelativePath.empty())
+        {
+            const auto stagedProfile = (packageProfile.InEngine ? stagedEngine : stagedAssets) / packageProfile.RelativePath;
+            fs::create_directories(stagedProfile.parent_path());
+            if (!fs::is_regular_file(stagedProfile))
+            {
+                const auto saved = Engine::SaveRenderPipelineProfile(stagedProfile, packageProfile.Profile);
+                if (!saved)
+                    throw std::runtime_error("Could not stage render profile: " + DisplayPath(stagedProfile) + ": " + saved.Message);
+            }
+
+            Engine::RenderPipelineProfile reloaded;
+            auto checked = Engine::LoadRenderPipelineProfile(stagedProfile, reloaded);
+            if (checked)
+                checked = Engine::ValidateDeferredProfile(reloaded);
+            if (!checked)
+                throw std::runtime_error("Staged render profile did not validate: " + DisplayPath(stagedProfile) + ": " + checked.Message);
+            if (reloaded != packageProfile.Profile)
+                throw std::runtime_error("The render profile changed during export: " + DisplayPath(stagedProfile));
+            VerifyRenderProfileResources(packageProfile, stagedEngine);
+            output += "Render profile: " + std::string(packageProfile.InEngine ? "Engine://" : "Project://") +
+                DisplayPath(packageProfile.RelativePath) + '\n';
         }
 
         const auto configDirectory = staging / "Config";

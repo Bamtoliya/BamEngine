@@ -93,8 +93,6 @@ EResult Renderer::Render(f32 dt)
 	for (auto& [passID, jobs] : jobsPerPass)
 		jobs.clear();
 
-	uint32 rtWidth = m_RHI->GetSwapChainWidth();
-	uint32 rtHeight = m_RHI->GetSwapChainHeight();
 	for (const auto& viewportInfo : m_ViewportCameras)
 	{
 		if (!viewportInfo.renderPass) continue;
@@ -201,6 +199,8 @@ EResult Renderer::Render(f32 dt)
 				return beginResult;
 			}
 
+			uint32 rtWidth = m_RHI->GetSwapChainWidth();
+			uint32 rtHeight = m_RHI->GetSwapChainHeight();
 			if (pass->GetRenderTargetCount() > 0)
 			{
 				RenderTarget* rt = RenderTargetManager::Get().GetRenderTarget(pass->GetRenderTargetName(0));

@@ -4,6 +4,7 @@
 #include "RenderPassTypes.h"
 #include "CameraBuffer.h"
 #include "DeferredProfilePasses.h"
+#include "DeferredSceneRenderer.h"
 
 BEGIN(Engine)
 class Scene;
@@ -53,9 +54,6 @@ public:
 private:
 	void CreateRenderTargets(uint32 width, uint32 height);
 	void RegisterRenderPasses();
-	void CreateLightingPipeline();
-	Engine::SkyAtmosphereData BuildSkyAtmosphereData(Engine::Scene* scene);
-	void SubmitLightingPass(const CameraBuffer& cameraBuffer, Engine::Scene* targetScene, const Engine::SkyAtmosphereData& skyData);
 
 private:
 	std::wstring m_Prefix;
@@ -80,10 +78,7 @@ private:
 	Engine::RenderPassID m_ForwardPassID = Engine::INVALID_PASS_ID;
 	Engine::RenderPassID m_ForwardTransparentPassID = Engine::INVALID_PASS_ID;
 
-	// 풀스크린 쿼드 조명 합성 파이프라인
-	Engine::RHIPipeline* m_LightingPipeline = nullptr;
-
-	Engine::RHIBuffer* m_LocalLightBuffer[MAX_SWAPCHAIN_BUFFERS] = {};
+	Engine::DeferredSceneRenderer m_SceneRenderer;
 };
 
 END

@@ -4404,3 +4404,9 @@ Use this as the primary execution list until a playable 2D vertical slice is com
 - 패스 해제 시 Renderer의 드로우 큐·카메라·콜백을 먼저 정리한다. 뷰포트와 후처리·Bloom·채널 미리보기에서 등록 해제와 타깃 정리를 연결했다.
 - 기존 프로젝트와 빈 설정은 기존 Deferred 경로를 사용한다. 기본 프로젝트는 내장 Deferred 파일을 선택한다. 방향광 그림자 아틀라스는 기존 투영 기준에 따라 4096으로 제한한다.
 - 소스의 등록·해제 경로와 설정을 정적으로 대조했다. Editor 빌드, `RaytracingScene3` 화면 비교와 GPU 수명은 실행 확인 전이다. Windows Client와 패키징 연결은 다음 단계다. [렌더 프로필 설계 및 수동 검증](RenderPipelineProfilePlan.md#2단계-수동-검증)
+
+### [2026-11-13] Windows Client와 패키징의 Deferred 렌더 프로필 연결
+
+- Game View와 Client가 Engine의 Deferred 씬 제출과 `PostProcessComponent` 적용 코드를 공유한다. Client는 프로필 셰이더를 키로 등록하고 UI 합성 결과를 전체 화면 패스로 백버퍼에 그린다. 뷰포트 크기에 종속된 타깃만 Client 창 크기에 맞춰 갱신한다. 메시 제출에서 `ForwardTransparent`도 대상으로 포함한다.
+- 빌드 패널에 프로젝트 프로필 경로를 표시한다. Windows 폴더 내보내기는 배포 설정의 URI를 정규화하고 소스와 스테이징에서 프로필 및 필수 DXIL을 검사한다. 기존 애셋 수집 범위는 동일하다.
+- 소스 호출 경로, 셰이더 파일명과 키, 변경부 공백을 정적으로 확인했다. 이 작업에서 빌드·실행은 수행하지 않았다. 원본 저장소의 로컬 `RaytracingScene3` 사본에는 일부 절대 참조가 있어 배포 검증에 사용할 씬의 참조 정리가 필요하다. [Windows 수동 검증](RenderPipelineProfilePlan.md#3단계-수동-검증)

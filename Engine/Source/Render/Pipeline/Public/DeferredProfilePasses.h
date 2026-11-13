@@ -8,6 +8,8 @@
 
 namespace Engine
 {
+    [[nodiscard]] ENGINE_API RenderPipelineProfileResult ValidateDeferredProfile(const RenderPipelineProfile& profile);
+
     // Owns the render passes and attachments of one deferred profile instance.
     class ENGINE_API DeferredProfilePasses
     {
@@ -20,6 +22,7 @@ namespace Engine
         [[nodiscard]] RenderPipelineProfileResult Initialize(const RenderPipelineProfile& profile,
             const std::wstring& prefix, uint32 width, uint32 height);
         void Free();
+        EResult Resize(uint32 width, uint32 height);
 
         [[nodiscard]] RenderPassID GetPass(std::string_view type) const;
         [[nodiscard]] const std::vector<std::wstring>& GetTargets() const { return m_Targets; }
