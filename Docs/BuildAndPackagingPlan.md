@@ -107,7 +107,7 @@ Editor에서 제작하고 저장한 프로젝트를 배포 폴더로 구성하�
 
 ### 5단계: 선택적 쿠킹과 증분 스테이징
 
-**상태:** 후속 설계. 첫 적용 대상은 Windows x64 Release 폴더 내보내기다. 현재 `ClientPackage.cpp`는 고정된 DLL 목록을 복사하고 `Assets/`와 `Engine/Resources/`에서 허용 확장자의 파일을 모두 순회한다. `AssetReferenceValidator`는 시작 씬에서 JSON과 Animator 컨트롤러 참조를 따라가지만, 바이너리 에셋 내부와 런타임 코드의 동적 로드까지 수집하지는 못한다. [패키저](../Editor/Source/Build/Private/ClientPackage.cpp) · [참조 검사](../Editor/Source/AssetManager/Private/AssetReferenceValidator.cpp)
+**상태:** Windows x64 Release 폴더 내보내기에 배포 목록 비교 로그를 추가했다. 선택적 수집과 증분 스테이징은 후속 작업이다. 현재 `ClientPackage.cpp`는 고정된 DLL 목록을 복사하고 `Assets/`와 `Engine/Resources/`에서 허용 확장자의 파일을 모두 순회한다. `AssetReferenceValidator`는 시작 씬에서 JSON과 Animator 컨트롤러 참조를 따라가지만, 바이너리 에셋 내부와 런타임 코드의 동적 로드까지 수집하지는 못한다. [패키저](../Editor/Source/Build/Private/ClientPackage.cpp) · [참조 검사](../Editor/Source/AssetManager/Private/AssetReferenceValidator.cpp)
 
 #### 5.1 배포에 필요한 항목 수집
 
@@ -130,7 +130,7 @@ Editor에서 제작하고 저장한 프로젝트를 배포 폴더로 구성하�
 
 #### 5.4 적용 순서와 완료 기준
 
-1. 기존 전체 수집을 유지하면서 새 수집 목록을 함께 계산한다. 패널 로그에서 포함 이유, 누락 후보, 애셋·엔진 리소스·모듈별 파일 수와 바이트를 비교한다.
+1. Windows 폴더 내보내기의 `[Package inventory]`에서 스테이징한 프로젝트 애셋과 엔진 리소스의 전체 크기, 확인된 의존성, 분류가 필요한 파일의 수·바이트와 예시를 비교한다. 확인된 의존성은 시작 씬, 참조 검사 결과, 선택한 렌더 프로필과 필수 렌더 리소스를 포함한다. 런타임 바이너리는 현재 고정 목록의 이름·수·바이트를 기록한다. 생성 설정과 패키지 마커는 이 집계에서 제외한다. 분류가 필요한 파일에는 동적 로드·미지원 포맷 의존성이 있을 수 있으므로, 파일의 필요 여부를 확인한 뒤 선택적 수집을 적용한다.
 2. `RaytracingScene3`로 선택적 수집을 검증한다. Fox의 조작·애니메이션·스키닝 그림자, 하늘 앞 파티클, 런타임에서 로드하는 프리팹이나 추가 씬이 PIE와 저장소 밖 Client에서 동작해야 한다. 미사용 대용량 에셋과 비활성 선택 모듈은 빠지고, 필수 파일이나 모듈 누락은 기존 배포본을 교체하기 전에 보고돼야 한다.
 3. 같은 입력으로 다시 내보내고, 이후 텍스처 변경·애셋 삭제·렌더 프로필 변경을 각각 확인한다. 변경된 입력만 다시 변환·복사되고, 제거된 파일이 남지 않으며, 사용하던 출력 경로와 새 경로 모두 독립 실행이 가능해야 한다. Cook 캐시 적중률, 재사용 파일 수, 실제 복사 바이트, 단계별 시간과 최종 패키지 크기를 전체 수집 기준값과 비교한다.
 

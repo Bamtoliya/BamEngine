@@ -8,13 +8,17 @@
 #include "Functions.h"
 #include "PlatformPath.h"
 
+#include <fmt/format.h>
 #include <glaze/glaze.hpp>
 #include <windows.h>
 #include <algorithm>
 #include <chrono>
+#include <cstdint>
 #include <cwctype>
 #include <fstream>
 #include <iterator>
+#include <map>
+#include <vector>
 #include <stdexcept>
 #include <string_view>
 #include <system_error>
@@ -170,7 +174,72 @@ namespace
         fs::copy_file(source, target);
     }
 
-    void CopyRuntimeResources(const fs::path& sourceRoot, const fs::path& targetRoot)
+    struct PackageFileStats
+    {
+        std::size_t Count = 0;
+        std::uintmax_t Bytes = 0;
+
+        void Add(std::uintmax_t size)
+        {
+            ++Count;
+            Bytes += size;
+        }
+    };
+
+    struct PackageResourceInventory
+    {
+        struct PathLess
+        {
+            bool operator()(const fs::path& lhs, const fs::path& rhs) const
+            {
+                return CompareStringOrdinal(lhs.c_str(), -1, rhs.c_str(), -1, TRUE) == CSTR_LESS_THAN;
+            }
+        };
+
+        void Expect(fs::path relative, std::string_view reason)
+        {
+            Reasons.try_emplace(relative.make_preferred(), reason);
+        }
+
+        void Record(fs::path relative, std::uintmax_t size)
+        {
+            const auto reason = Reasons.find(relative.make_preferred());
+            if (reason != Reasons.end())
+            {
+                Identified.Add(size);
+                if (IdentifiedExamples.size() < ExampleLimit)
+                    IdentifiedExamples.push_back(fmt::format("{} [{}]", DisplayPath(relative), reason->second));
+                return;
+            }
+
+            Unclassified.Add(size);
+            if (UnclassifiedExamples.size() < ExampleLimit)
+                UnclassifiedExamples.push_back(DisplayPath(relative));
+        }
+
+        void Append(std::string_view label, std::string& output) const
+        {
+            output += fmt::format("{}: {} files / {} bytes staged\n", label,
+                Identified.Count + Unclassified.Count, Identified.Bytes + Unclassified.Bytes);
+            output += fmt::format("  Known dependencies: {} files / {} bytes\n", Identified.Count, Identified.Bytes);
+            for (const auto& example : IdentifiedExamples)
+                output += "    " + example + '\n';
+            output += fmt::format("  Dependencies not yet identified: {} files / {} bytes\n",
+                Unclassified.Count, Unclassified.Bytes);
+            for (const auto& example : UnclassifiedExamples)
+                output += "    " + example + '\n';
+        }
+
+    private:
+        static constexpr std::size_t ExampleLimit = 6;
+        std::map<fs::path, std::string_view, PathLess> Reasons;
+        PackageFileStats Identified;
+        PackageFileStats Unclassified;
+        std::vector<std::string> IdentifiedExamples;
+        std::vector<std::string> UnclassifiedExamples;
+    };
+
+    void CopyRuntimeResources(const fs::path& sourceRoot, const fs::path& targetRoot, PackageResourceInventory& inventory)
     {
         fs::create_directories(targetRoot);
         for (auto entry = fs::recursive_directory_iterator(sourceRoot); entry != fs::recursive_directory_iterator{}; ++entry)
@@ -188,7 +257,12 @@ namespace
             }
 
             if ((attributes & FILE_ATTRIBUTE_DIRECTORY) == 0 && IsRuntimeResource(source))
-                CopyPackageFile(source, targetRoot / source.lexically_relative(sourceRoot));
+            {
+                const auto relative = source.lexically_relative(sourceRoot);
+                const auto target = targetRoot / relative;
+                CopyPackageFile(source, target);
+                inventory.Record(relative, fs::file_size(target));
+            }
         }
     }
 
@@ -256,19 +330,26 @@ namespace
         return output;
     }
 
-    void VerifyRenderProfileResources(const PackageProfile& packageProfile, const fs::path& engineRoot)
+    std::vector<fs::path> GetRenderProfileResources(const PackageProfile& packageProfile)
     {
-        if (packageProfile.RelativePath.empty())
-            return;
-
-        const auto require = [](const fs::path& path)
+        std::vector<fs::path> resources;
+        if (!packageProfile.RelativePath.empty())
         {
+            for (const auto& shader : Engine::GetDeferredProfileShaders(packageProfile.Profile))
+                resources.push_back(fs::path("Shader") / "bin" / "dxil" / shader.DxilFile);
+            resources.emplace_back("Material/UIMaterial.bammat.json");
+        }
+        return resources;
+    }
+
+    void VerifyRenderProfileResources(const std::vector<fs::path>& resources, const fs::path& engineRoot)
+    {
+        for (const auto& relative : resources)
+        {
+            const auto path = engineRoot / relative;
             if (!fs::is_regular_file(path) || fs::file_size(path) == 0)
                 throw std::runtime_error("Required render profile resource is missing or empty: " + DisplayPath(path));
-        };
-        for (const auto& shader : Engine::GetDeferredProfileShaders(packageProfile.Profile))
-            require(engineRoot / "Shader" / "bin" / "dxil" / shader.DxilFile);
-        require(engineRoot / "Material" / "UIMaterial.bammat.json");
+        }
     }
 }
 
@@ -334,10 +415,29 @@ namespace Editor
                 throw std::runtime_error("Required binary is missing: " + DisplayPath(binDirectory / name));
         }
 
+        const auto startupSceneRelative = RelativeToInput(scene, assetRoot);
         PackageProfile packageProfile;
         const auto settings = MakePackageSettings(projectRoot / "Config" / "Project.json",
-            RelativeToInput(scene, assetRoot), assetRoot, engineRoot, request.ProgramName, packageProfile);
-        VerifyRenderProfileResources(packageProfile, engineRoot);
+            startupSceneRelative, assetRoot, engineRoot, request.ProgramName, packageProfile);
+        const auto profileResources = GetRenderProfileResources(packageProfile);
+        VerifyRenderProfileResources(profileResources, engineRoot);
+
+        PackageResourceInventory projectInventory;
+        PackageResourceInventory engineInventory;
+        projectInventory.Expect(startupSceneRelative, "startup scene");
+        if (!packageProfile.RelativePath.empty())
+        {
+            auto& profileInventory = packageProfile.InEngine ? engineInventory : projectInventory;
+            profileInventory.Expect(packageProfile.RelativePath, "render pipeline profile");
+            for (const auto& relative : profileResources)
+                engineInventory.Expect(relative, "render pipeline dependency");
+        }
+        for (const auto& source : references)
+        {
+            const bool inProject = IsWithin(source, assetRoot);
+            auto& inventory = inProject ? projectInventory : engineInventory;
+            inventory.Expect(RelativeToInput(source, inProject ? assetRoot : engineRoot), "startup scene dependency");
+        }
         const auto suffix = std::chrono::steady_clock::now().time_since_epoch().count();
         const auto staging = destination.parent_path() / (L".bam-staging-" + std::to_wstring(suffix));
         const auto backup = destination.parent_path() / (L".bam-previous-" + std::to_wstring(suffix));
@@ -346,13 +446,19 @@ namespace Editor
 
         output += "Staging: " + DisplayPath(staging) + '\n';
         const auto executableName = Engine::Utf8ToPath(request.ProgramName + ".exe");
+        PackageFileStats binaries;
         for (const auto* name : RuntimeBinaries)
-            CopyPackageFile(binDirectory / name, staging / (std::wstring_view(name) == L"Client.exe" ? executableName : fs::path(name)));
+        {
+            const auto fileName = std::wstring_view(name) == L"Client.exe" ? executableName : fs::path(name);
+            const auto target = staging / fileName;
+            CopyPackageFile(binDirectory / name, target);
+            binaries.Add(fs::file_size(target));
+        }
 
         const auto stagedAssets = staging / "Assets";
         const auto stagedEngine = staging / "Engine" / "Resources";
-        CopyRuntimeResources(assetRoot, stagedAssets);
-        CopyRuntimeResources(engineRoot, stagedEngine);
+        CopyRuntimeResources(assetRoot, stagedAssets, projectInventory);
+        CopyRuntimeResources(engineRoot, stagedEngine, engineInventory);
 
         for (const auto& source : references)
         {
@@ -360,7 +466,11 @@ namespace Editor
             const auto relative = RelativeToInput(source, inProject ? assetRoot : engineRoot);
             const auto target = (inProject ? stagedAssets : stagedEngine) / relative;
             if (!fs::is_regular_file(target))
+            {
                 CopyPackageFile(source, target);
+                auto& inventory = inProject ? projectInventory : engineInventory;
+                inventory.Record(relative, fs::file_size(target));
+            }
         }
 
         if (!packageProfile.RelativePath.empty())
@@ -372,6 +482,8 @@ namespace Editor
                 const auto saved = Engine::SaveRenderPipelineProfile(stagedProfile, packageProfile.Profile);
                 if (!saved)
                     throw std::runtime_error("Could not stage render profile: " + DisplayPath(stagedProfile) + ": " + saved.Message);
+                auto& inventory = packageProfile.InEngine ? engineInventory : projectInventory;
+                inventory.Record(packageProfile.RelativePath, fs::file_size(stagedProfile));
             }
 
             Engine::RenderPipelineProfile reloaded;
@@ -382,7 +494,7 @@ namespace Editor
                 throw std::runtime_error("Staged render profile did not validate: " + DisplayPath(stagedProfile) + ": " + checked.Message);
             if (reloaded != packageProfile.Profile)
                 throw std::runtime_error("The render profile changed during export: " + DisplayPath(stagedProfile));
-            VerifyRenderProfileResources(packageProfile, stagedEngine);
+            VerifyRenderProfileResources(profileResources, stagedEngine);
             output += "Render profile: " + std::string(packageProfile.InEngine ? "Engine://" : "Project://") +
                 DisplayPath(packageProfile.RelativePath) + '\n';
         }
@@ -404,6 +516,17 @@ namespace Editor
         marker.open(staging / PackageMarker, std::ios::binary);
         marker << "BamEngine Windows Client\n" << request.ProgramName << ".exe\n";
         marker.close();
+
+        output += "\n[Package inventory]\n";
+        output += "Current collection policy: full runtime resource scan. Listed paths are examples.\n";
+        projectInventory.Append("Project assets", output);
+        engineInventory.Append("Engine resources", output);
+        output += fmt::format("Runtime binaries (fixed list): {} files / {} bytes\n", binaries.Count, binaries.Bytes);
+        for (const auto* name : RuntimeBinaries)
+        {
+            const auto fileName = std::wstring_view(name) == L"Client.exe" ? executableName : fs::path(name);
+            output += "    " + DisplayPath(fileName) + '\n';
+        }
 
         const auto inspected = InspectClientPackageDestination(projectRoot, request);
         if (inspected.Directory != destination || inspected.ExistingPackage != request.Destination.ExistingPackage)
