@@ -240,6 +240,7 @@ private:
         if (!systemManager.AddSystem<ParticleSystem>()) return EResult::Fail;
         if (!systemManager.AddSystem<ActionTimelineSystem>()) return EResult::Fail;
         if (!systemManager.AddSystem<CompositeVFXSystem>()) return EResult::Fail;
+        if (!systemManager.AddSystem<ThirdPersonControllerSystem>()) return EResult::Fail;
         if (!systemManager.AddSystem<KinematicCharacterSystem>()) return EResult::Fail;
         if (!systemManager.AddSystem<NetworkSystem>()) return EResult::Fail;
         if (!systemManager.AddSystem<UIRenderSystem>()) return EResult::Fail;

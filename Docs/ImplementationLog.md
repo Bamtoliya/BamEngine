@@ -2,6 +2,11 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-13] Windows Client 3인칭 조작 복구
+
+- Client 초기화에 `ThirdPersonControllerSystem`을 등록해 배포 씬의 3인칭 입력과 캐릭터 이동을 처리한다.
+- 사용자가 시스템 등록 후 Client 조작 복구를 확인했다. 이번 커밋에서 등록 위치를 정적으로 확인했다. [Client 초기화](../Client/Source/Main.cpp)
+
 ### [2026-11-13] Deferred 파이프라인 스키닝 그림자와 파티클 합성
 
 - 방향광 캐스케이드, 스포트라이트 사분면과 점광원 큐브맵 각 면에서 스키닝 그림자 큐도 그린다. `RaytracingScene3`의 Fox는 본 행렬과 월드 변환을 본체 드로우와 동일하게 사용한다.
