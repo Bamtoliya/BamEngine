@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="ko">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>BamEngine WebGPU Client</title>
+    <style>
+        body { margin: 0; background: #101820; color: #edf2f5; font: 1rem system-ui, sans-serif; }
+        main { max-width: 76rem; margin: auto; padding: 1rem; }
+        canvas { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; background: #182633; }
+        canvas:focus-visible { outline: 2px solid #93d8ff; outline-offset: 3px; }
+        p { margin: .65rem 0; }
+        #status[data-error] { color: #ffb9af; }
+    </style>
+</head>
+<body>
+    <main>
+        <canvas id="canvas" width="1280" height="720" tabindex="0" aria-label="BamEngine 게임 화면" aria-describedby="controls"></canvas>
+        <p id="status" role="status">씬을 불러오는 중입니다.</p>
+        <p id="controls" hidden></p>
+    </main>
+    <script type="module" src="./main.js"></script>
+</body>
+</html>

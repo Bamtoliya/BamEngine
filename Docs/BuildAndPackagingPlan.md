@@ -3,7 +3,7 @@
 - 작성일: 2026-10-24 (최종 갱신: 2026-11-13)
 - 상태: Editor의 Windows x64 Release 빌드 및 폴더 내보내기에 Deferred 렌더 프로필 검증과 배포 경로 기록을 연결했다. 저장소 밖 실행과 Editor·Client 렌더링 일치 검증은 남아 있다.
 - 렌더링 공유 후속 설계: [Render Pipeline Profile](RenderPipelineProfilePlan.md)
-- WebGPU 진행 상태: `Tools/WebGPUProbe/main.cpp`의 독립 브라우저 렌더링 프로브까지 기록했다. Client 씬 로드와 빌드 패널 내보내기 연결은 후속 범위다.
+- WebGPU 진행 상태: `Client/Web`에 저장된 씬을 읽는 독립 WebGPU 프리뷰를 추가했다. 실제 BamEngine Wasm Client와 Editor 빌드 패널 내보내기는 후속 범위다.
 - 관련 지침: [EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md)의 3절, 12절, 13절
 - 직렬화 지침: [ReflectionArchiveGuidelines.md](ReflectionArchiveGuidelines.md)
 - 분류·이관 기준: [SourceOrganizationGuidelines.md](SourceOrganizationGuidelines.md)
@@ -133,6 +133,21 @@ Editor에서 제작하고 저장한 프로젝트를 배포 폴더로 구성하�
 1. Windows 폴더 내보내기의 `[Package inventory]`에서 스테이징한 프로젝트 애셋과 엔진 리소스의 전체 크기, 확인된 의존성, 분류가 필요한 파일의 수·바이트와 예시를 비교한다. 확인된 의존성은 시작 씬, 참조 검사 결과, 선택한 렌더 프로필과 필수 렌더 리소스를 포함한다. 런타임 바이너리는 현재 고정 목록의 이름·수·바이트를 기록한다. 생성 설정과 패키지 마커는 이 집계에서 제외한다. 분류가 필요한 파일에는 동적 로드·미지원 포맷 의존성이 있을 수 있으므로, 파일의 필요 여부를 확인한 뒤 선택적 수집을 적용한다.
 2. `RaytracingScene3`로 선택적 수집을 검증한다. Fox의 조작·애니메이션·스키닝 그림자, 하늘 앞 파티클, 런타임에서 로드하는 프리팹이나 추가 씬이 PIE와 저장소 밖 Client에서 동작해야 한다. 미사용 대용량 에셋과 비활성 선택 모듈은 빠지고, 필수 파일이나 모듈 누락은 기존 배포본을 교체하기 전에 보고돼야 한다.
 3. 같은 입력으로 다시 내보내고, 이후 텍스처 변경·애셋 삭제·렌더 프로필 변경을 각각 확인한다. 변경된 입력만 다시 변환·복사되고, 제거된 파일이 남지 않으며, 사용하던 출력 경로와 새 경로 모두 독립 실행이 가능해야 한다. Cook 캐시 적중률, 재사용 파일 수, 실제 복사 바이트, 단계별 시간과 최종 패키지 크기를 전체 수집 기준값과 비교한다.
+
+### WebGPU 씬 프리뷰와 Client 이식
+
+`Client/Web`은 별도 CMake 구성으로 정적 프리뷰를 만든다. CMake는 프로젝트의 `AssetDirectory`에서 지정한 씬을 찾고, 씬 원본과 `Config/InputActions.json`을 정적 페이지와 함께 `site`에 복사한다. 시작 씬을 지정하지 않으면 프로젝트의 `StartupScenePath`를 사용한다. Editor의 `빌드 및 패키징`은 현재 Windows x64 Release 폴더 내보내기를 수행한다.
+
+```powershell
+cmake -S Client/Web -B out/build/webgpu-client -G Ninja "-DBAM_WEB_STARTUP_SCENE=Scenes/RaytracingScene3.bamscene.json"
+py -m http.server 8765 --bind 127.0.0.1 --directory out/build/webgpu-client/site
+```
+
+WebGPU를 지원하는 브라우저에서 `http://localhost:8765/`를 연다. `RaytracingScene3`의 저장된 카메라와 큐브·구체의 배치를 확인한다. 화면을 클릭한 뒤 `Gameplay`의 WASD 바인딩으로 카메라를 이동하고, 포커스를 잃은 뒤 이동이 멈추는지 확인한다. 창 크기를 바꾸면 캔버스와 깊이 타깃이 함께 조정돼야 한다. 배포 시 `site` 폴더의 내용을 HTTPS 정적 호스팅에 올린다.
+
+프리뷰는 씬 v1의 Transform, Camera, Flag와 `CubeMesh`·`SphereMesh` 정적 메시를 읽어 자체 WGSL로 그린다. 사용자는 `RaytracingScene3`가 브라우저에 표시된 뒤 Windows 화면과 다른 렌더링 및 Fox의 부재를 보고했다. 프리뷰의 입력·리사이즈 동작은 별도 확인 항목이다.
+
+실제 웹 내보내기는 Client의 씬 로드와 게임 시스템 실행을 플랫폼별 창·프레임·RHI 초기화에서 분리하는 작업부터 시작한다. 이후 Wasm Client에서 같은 씬을 읽고 WebGPU에서 Fox 모델과 이동 애니메이션을 실행한다. Editor 빌드 패널에는 씬·Wasm·필수 리소스를 함께 내보내는 WebGPU 대상을 추가하고, 같은 카메라에서 Deferred 조명과 후처리를 비교한다.
 
 ## 5. 초기 배포 폴더 후보
 
