@@ -2,7 +2,7 @@
 (Crash Handling, Diagnostics & Work Recovery System Plan)
 
 - **작성일**: 2026-11-08
-- **상태**: Windows 핸들러 및 Editor 복원 경로 반영. 실행 검증 대기.
+- **상태**: Windows 핸들러, Editor 복원 경로 및 독립 Client 진입점·활성 씬·진단 문구 분기 반영(`B05` 해소). 실 크래시·복원 실행 검증 대기.
 - **연계 문서**:
   - [엔진·에디터·클라이언트 개발 지침 (EngineEditorClientGuidelines.md)](EngineEditorClientGuidelines.md) 3절, 12절
   - [빌드 구성 및 전처리기 지침 (BuildConfigurationAndPreprocessing.md)](BuildConfigurationAndPreprocessing.md) 3.1절
@@ -250,4 +250,4 @@ sequenceDiagram
 
 ## 8. 현재 연결 범위 (2026-11-10)
 
-정적 확인에서 Editor의 초기화·종료·갱신과 복원 모달에 연결되어 있다. 독립 Client 진입점의 핸들러 등록과 Client 전용 정책은 실행 경로를 별도로 연결하고 확인해야 한다. 덤프 생성, 로그 기록, 강제 종료 후 복원, 원본 씬 저장·폐기 동작은 사용자 확인 항목이다.
+정적 확인에서 Editor의 초기화·종료·갱신·복원 모달과 함께, 독립 Client 진입점([Client/Source/Main.cpp](../Client/Source/Main.cpp))의 `CrashHandler::Initialize(m_ProjectRoot / "Logs" / "Crashes")`·`SetCustomContext("Host", "Client")`·`Shutdown()`, 시작 씬 로드([ClientGameRuntime.cpp](../Client/Source/Execution/Private/ClientGameRuntime.cpp))의 `SetActiveScenePath()`, 그리고 `CrashHandler_Win32.cpp`의 `s_EmergencyCallback` 등록 여부에 따른 Editor/Client 안내 메시지박스 분기가 연결되어 있다(`B05` 해소). 독립 Client 실제 크래시 시 `.dmp`/`.crash.json` 생성, 로그 플러시, Editor 강제 종료 후 복원, 원본 씬 저장·폐기 동작은 사용자 확인 항목이다.

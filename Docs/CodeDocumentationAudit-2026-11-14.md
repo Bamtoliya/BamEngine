@@ -12,7 +12,7 @@
 
 1. `2026-11-06` 점검의 **A01~A10** 중 패키징 경로/생성 보호(A01·A02), 에셋 감시자 UTF-8/예외 경계(A03), RT 큐브맵 차원 방어(A04), 스플리터 선호값 보존(A05), 타일 컬링 디스패치 크기 일치(A06 후속), 비정상 PNG 제거(A07), 패키지 마커 기반 설정 정책(A08), 스키닝 `t0, space2` 바인딩 문서(A09), 가상 URI 선행 후 `Engine/Resources/`·`Assets/` 물리 분리(A10)는 코드와 문서에 반영되었다. 단, 다수 광원 257개 초과 폴백(A06 본체)과 일부 실행 검증은 여전히 남아 있다.
 2. 현재 작업 트리는 **Windows Client 실행·패키징 안정화**에서 **WebGPU/Wasm Client 이식 준비**로 넘어가는 과도기 상태다. Windows 네이티브 경로의 `ClientGameRuntime` 분리와 `StartupResourceLoader` 공용화는 방향이 타당하나, 아직 Emscripten/WebGPU 툴체인으로 컴파일·실행 검증되지 않았다.
-3. WebGPU 전환 경로에서 확인된 선결 과제(**B01** `StartupResourceLoader`↔`Shader` WGSL 경로 연결, **B02** `ShaderImporter`·`ShaderHotReloadManager` 경로 정규화, **B03** `ClientGameRuntime`의 `NetworkSystem`/FMOD/DXIL 고정 의존성 정리) 및 **B04**(5개 논리 커밋 분리)는 2026-11-14 코드 반영과 Windows `x64-debug` 빌드·CTest 36/36 통과로 해소되었다. Emscripten/Tint 실 툴체인 실행 검증과 **B05**가 후속 과제로 남아 있다.
+3. WebGPU 전환 경로와 패키징·진단 경로에서 확인된 **B01~B05**(`StartupResourceLoader`↔`Shader` WGSL 연결, `ShaderImporter`·`ShaderHotReloadManager` 경로 정규화, `ClientGameRuntime`의 `NetworkSystem`/FMOD/DXIL 의존성 정리, 5개 논리 커밋 분리, 독립 Client `CrashHandler` 연결 및 `PackageClient.ps1` 현행화)는 2026-11-14 코드·스크립트 반영으로 해소되었다(`x64-debug` B01~B03 CTest 36/36 및 `PackageClient.ps1` 경로 차단 가드 4건 확인). Emscripten/Tint 실 툴체인 실행 검증과 `Client.exe` 실 크래시·패키지 실행 검증이 후속 과제로 남아 있다.
 
 ## 3. 2026-11-06 이후 반영 현황 및 작업 트리 상태
 
@@ -103,7 +103,9 @@
 - 영향: `FMOD_COMMON_H`의 콜백 플래그(`FMOD_SYSTEM_CALLBACK_MIDMIX` 제거 등) 및 구조체 필드(`FMOD_ADVANCEDSETTINGS`) 변경이 Windows 기존 빌드에 미치는 영향을 다른 변경과 분리해 검증하기 어려워진다.
 - 최소 개선: 루트 0바이트 파일(`cd`, `emcc`, `emcmake`)을 삭제하고, 기능/SDK 변경을 논리 단위(FMOD 2.03.15 갱신, StartupResourceLoader 공용화, ClientGameRuntime 분리, Emscripten/WGSL 초안)로 나누어 빌드 확인 후 커밋한다.
 
-### B05 — 낮음 / 독립 Client의 `CrashHandler` 미연결 및 구형 `PackageClient.ps1` 병존
+### B05 — 낮음 / 독립 Client의 `CrashHandler` 미연결 및 구형 `PackageClient.ps1` 병존 [해소 완료: 2026-11-14]
+
+- **해소 결과 (2026-11-14):** `Client/Source/Main.cpp`의 `Logger` 초기화/종료 지점에 `CrashHandler::Initialize`/`Shutdown` 및 `SetCustomContext("Host", "Client")`, `ResolveProjectRoot()`의 `.bam-client-package` 마커 검사를 연결했고, `ClientGameRuntime::LoadStartupScene()`에 `CrashHandler::SetActiveScenePath()`를, `CrashHandler_Win32.cpp`에 `s_EmergencyCallback` 유무별 메시지박스 분기를 반영했다. 또한 `Tools/Scripts/PackageClient.ps1`에 공식 에디터 패키저 구분 주석·경고, `Engine/Resources` + `Assets` + `.bam-client-package` 현행 구조, `out/package/<하위폴더>` 제한·핵심 폴더 차단·리파스 포인트 거부·`.staging` 선행 교체 가드를 적용하고 4건(`.`, `Client`, `Assets`, `Utility`)의 `Security Violation` 차단을 확인했다(실 크래시 덤프 생성·정상 스테이징 실행은 실측 대기).
 
 - 위치: `Client/Source/Main.cpp`, `Editor/Source/Build/Private/ClientPackage.cpp`, `Tools/Scripts/PackageClient.ps1`.
 - 현재 동작:

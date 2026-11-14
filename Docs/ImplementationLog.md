@@ -2,6 +2,19 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-14] 독립 Client CrashHandler 연결 및 PackageClient.ps1 현행화 (B05)
+
+- **배경 및 범위**: [2026-11-14 코드·원칙·계획 점검](CodeDocumentationAudit-2026-11-14.md)의 마지막 코드·스크립트 과제(`B05`)와 루트 임시 셰이더 테스트 산출물(`test_vs.spv`, `test_vs.wgsl`) 정리를 수행하고, 병행 작성된 [ShaderToolchainEvaluation.md](ShaderToolchainEvaluation.md)를 함께 문서화했다.
+- **주요 변경 내용**:
+  - [Client/Source/Main.cpp](file:///i:/BamtoliyaGithub/BamEngine/Client/Source/Main.cpp): `Logger::Initialize(logPath)` 직후 `#if defined(_WIN32)` 조건에서 `Engine::CrashHandler::Initialize(m_ProjectRoot / "Logs" / "Crashes")` 및 `SetCustomContext("Host", "Client")`를 호출하고, 소멸자에서 `Engine::CrashHandler::Shutdown()`을 호출하도록 연결했다. 또한 `ResolveProjectRoot()`가 `.bam-client-package` 마커 및 `Config` 폴더를 우선 확인하도록 갱신했다.
+  - [ClientGameRuntime.cpp](file:///i:/BamtoliyaGithub/BamEngine/Client/Source/Execution/Private/ClientGameRuntime.cpp): `LoadStartupScene()` 성공 시 `#if defined(_WIN32)` 조건에서 `Engine::CrashHandler::SetActiveScenePath(m_ProjectSettings.StartupScenePath)`를 등록하도록 추가했다.
+  - [CrashHandler_Win32.cpp](file:///i:/BamtoliyaGithub/BamEngine/Engine/Source/Core/Diagnostics/Private/CrashHandler_Win32.cpp): `BamUnhandledExceptionFilter()` 안내 메시지박스에서 `s_EmergencyCallback` 등록 여부에 따라 `Editor`(작업 복원 스냅샷 안내 포함)와 `Client`(복원 안내 제외) 문구를 분기했다.
+  - [PackageClient.ps1](file:///i:/BamtoliyaGithub/BamEngine/Tools/Scripts/PackageClient.ps1): 공식 배포 경로가 에디터 내장 패키저([ClientPackage.cpp](file:///i:/BamtoliyaGithub/BamEngine/Editor/Source/Build/Private/ClientPackage.cpp))임을 명시한 CLI 로컬 스테이징 보조 스크립트로 구분하고, 구형 `Resources/` 복사를 `Engine/Resources` + `Assets` + `.bam-client-package` 구조로 현행화했다. 아울러 `out/package/<하위폴더>` 전용 제한, `Client`/`Assets`/`Utility`/`ThirdParty` 등 핵심 폴더 차단, 리파스 포인트 거부, `.staging` 선행 작성 후 교체를 반영했다.
+- **검증 상태**: `PackageClient.ps1` 경로 차단 가드 4건(`.`, `Client`, `Assets`, `Utility` → `Security Violation` 예외 중단) 사용자 실행 확인, 루트 `test_vs.spv`·`test_vs.wgsl` 삭제 완료.
+- **미검증 항목**: `B05` 반영분 포함 Windows `x64-debug`/`x64-release` 재빌드·실행, `Client.exe` 실제 크래시 유발 시 `.dmp`/`.crash.json` 생성 확인, `PackageClient.ps1` 정상 스테이징 및 Emscripten/Tint 실 툴체인 실행 검증.
+
+---
+
 ### [2026-11-14] WebGPU·Emscripten 이식 선결 과제 해소 (B01~B03)
 
 - **배경 및 범위**: [2026-11-14 코드·원칙·계획 점검](CodeDocumentationAudit-2026-11-14.md)에서 도출된 `B01`(StartupResourceLoader↔Shader WGSL 경로 단절), `B02`(ShaderImporter 구형 경로 하드코딩 및 HotReload WGSL 누락), `B03`(ClientGameRuntime·Engine/CMakeLists.txt·ClientRenderPipeline의 Emscripten/RHI 경계 불일치)을 순차 수정했다.

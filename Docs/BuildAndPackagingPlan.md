@@ -40,7 +40,7 @@ Client 시작 매니페스트 연결, 참조 기반 최소 에셋 수집과 저�
 - `Client/CMakeLists.txt`의 Visual Studio 디버거 작업 디렉터리는 소스 루트다. 해당 타깃에 과거 `BAMENGINE_PROJECT_ROOT` 정의는 없다.
 - `StartupResourceLoader`는 Engine Resource의 공용 로더이며 Editor와 Client가 공유한다. 매니페스트 카테고리·설정 JSON·직접 참조 리소스를 검증하고 `Compute` 셰이더 타입을 지원하며 알 수 없는 타입은 실패한다.
 - `Editor/Source/Build/Private/ClientPackage.cpp`는 에디터 내장 Windows Release 패키징 공식 경로로 `Assets/`·`Engine/Resources/` 분리 구조, `.bam-client-package` 마커, Render Pipeline Profile 및 `StartupResourceLoader::CollectPipelineFiles()` 검증, 스테이징·백업·원자적 게시와 `[Package inventory]` 비교 로그를 수행한다.
-- 반면 `Tools/Scripts/PackageClient.ps1`에는 바이너리 탐색·설정 수집·일부 경로 삭제 거부가 있으나 여전히 구형 `Resources/` 하위 폴더 구조를 복사하는 레거시 스크립트다(B05). 또한 `Client`/`Utility`와 임의 외부 출력 삭제를 막지 못하며, 기존 출력 삭제 후 `New-Item -LiteralPath`에서 실패할 수 있어(A01·A02) 과거 독립 실행 기록은 현행 스크립트 성공의 근거가 아니다.
+- 반면 `Tools/Scripts/PackageClient.ps1`은 공식 경로가 아닌 **로컬 개발용 CLI 스테이징 보조 스크립트**로 구분하며, 2026-11-14 `B05` 보강을 통해 구형 `Resources/` 복사를 제거하고 현행 `Engine/Resources` + `Assets` + `.bam-client-package` 구조로 동기화했다. 또한 `out/package/<하위폴더>` 전용 제한, `Client`/`Assets`/`Utility`/`ThirdParty` 등 핵심 폴더 차단, 리파스 포인트 거부, `.staging` 선행 작성 후 교체를 반영했고 경로 차단 가드 4건(`.`, `Client`, `Assets`, `Utility`)의 예외 차단을 확인했다(정상 스테이징·외부 실행 검증은 별도 확인 대상).
 
 기존 ImplementationLog에는 다른 CWD에서 Client 초기화·지오메트리 표시를 확인한 기록이 있다.
 이번 갱신은 소스와 기존 로그의 대조이며 해당 실행이나 저장소 밖 배포를 새로 검증한 결과가 아니다.
