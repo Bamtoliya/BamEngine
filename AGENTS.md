@@ -177,6 +177,8 @@ AGENTS.md는 학습 중심 작업 방식과 공통 평가 기준을 정의한다
   `Docs/Shader/BINDING_LAYOUT.md`
 - 다음 작업 선택, 여러 개발 계획의 선행 조건·우선순위·보류 상태 판단:
   `Docs/DevelopmentPriorities.md`와 여기서 연결하는 해당 기능의 개발 계획
+- 에디터 UI/UX 사용성 테스트, 계층별(정적·헤드리스 CTest·실환경) 검증 및 Pass/Fail 판정 기준:
+  `Docs/EditorUXTestGuidelines.md`
 
 ### 세부 요구사항 확인 절차
 
@@ -239,6 +241,7 @@ AGENTS.md는 학습 중심 작업 방식과 공통 평가 기준을 정의한다
 
 비슷한 역할을 수행하는 에디터 UI(검색·필터 바, 모달 대화상자, 인스펙터 속성 행, 도구 모음, 리스트·트리 뷰, 빈 상태 표시 등)는 패널마다 임의의 레이아웃이나 규칙으로 파편화하지 않고 통일된 패턴과 스타일을 준수한다.
 세부 기준은 `Docs/EngineEditorClientGuidelines.md`의 19절을 읽고 따른다.
+에디터 UI/UX 변경에 대한 사용성 테스트, 환경 매트릭스 및 Pass/Fail 판정 기준은 `Docs/EditorUXTestGuidelines.md`를 따른다.
 
 - **유사 UI 파편화 금지**: 동일한 목적의 UI를 구현할 때 기존에 확립된 규격(위젯 높이, 정렬, 마진, 버튼 순서)을 무시하고 자의적인 규칙을 도입하지 않는다.
 - **상호작용 규칙의 일관성**:
