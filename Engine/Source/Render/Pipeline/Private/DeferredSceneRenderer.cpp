@@ -1,4 +1,4 @@
-#include "DeferredSceneRenderer.h"
+﻿#include "DeferredSceneRenderer.h"
 
 #include "CompositeVFXSystem.h"
 #include "FogComponent.h"
@@ -294,15 +294,15 @@ void Engine::DeferredSceneRenderer::SubmitLightingPass(const CameraBuffer& camer
 				// [격리] 독립 프리뷰(Thumbnail, MatPreview)는 자체 버퍼를 바인딩하여 씬 뷰포트의 LightManager 오염 방지
 				const uint32 frameIndex = rhi->GetFrameResourceIndex();
 				constexpr uint32 headerSize = sizeof(LightBufferHeader);
-				constexpr uint32 totalSize = headerSize + sizeof(GPULight) * MAX_LIGHTS;
+				const uint32 totalSize = headerSize + static_cast<uint32>(sizeof(GPULight)) * MAX_LIGHTS;
 				if (!m_LocalLightBuffer[frameIndex])
 				{
-					std::array<uint8, totalSize> zeros{};
+					std::vector<uint8> zeros(totalSize, 0);
 					m_LocalLightBuffer[frameIndex] = rhi->CreateBuffer(zeros.data(), totalSize, sizeof(GPULight), ERHIBufferType::Structured);
 				}
 				if (m_LocalLightBuffer[frameIndex])
 				{
-					std::array<uint8, totalSize> data{};
+					std::vector<uint8> data(totalSize, 0);
 					auto* header = reinterpret_cast<LightBufferHeader*>(data.data());
 					auto* gpuLights = reinterpret_cast<GPULight*>(data.data() + headerSize);
 					uint32 count = 0;

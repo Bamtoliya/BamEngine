@@ -74,8 +74,8 @@ EResult LightManager::UpdateLightBuffer(Scene* targetScene)
 	if (IsFailure(EnsureBuffer())) return EResult::Fail;
 	const uint32 frameIndex = m_RHI->GetFrameResourceIndex();
 	constexpr uint32 headerSize = sizeof(LightBufferHeader);
-	constexpr uint32 totalSize = headerSize + sizeof(GPULight) * MAX_LIGHTS;
-	std::array<uint8, totalSize> data{};
+	const uint32 totalSize = headerSize + static_cast<uint32>(sizeof(GPULight)) * MAX_LIGHTS;
+	std::vector<uint8> data(totalSize, 0);
 	auto* header = reinterpret_cast<LightBufferHeader*>(data.data());
 	auto* gpuLights = reinterpret_cast<GPULight*>(data.data() + headerSize);
 	uint32 currentLightIndex = 0;
@@ -181,19 +181,16 @@ EResult LightManager::EnsureBuffer()
 	if (frameCount == 0 || frameCount > MAX_SWAPCHAIN_BUFFERS || frameIndex >= frameCount)
 		return EResult::Fail;
 
-	constexpr uint32 totalSize = sizeof(LightBufferHeader) + sizeof(GPULight) * MAX_LIGHTS;
-
-	for (uint32 i = 0; i < frameCount; ++i)
+	const uint32 totalSize = static_cast<uint32>(sizeof(LightBufferHeader) + sizeof(GPULight) * MAX_LIGHTS);
+	for (uint32 i = 0; i < MAX_SWAPCHAIN_BUFFERS; ++i)
 	{
-		if (m_LightBuffers[i]) continue;
-
-		std::array<uint8, totalSize> zeros{};
-		m_LightBuffers[i] = m_RHI->CreateBuffer(zeros.data(), totalSize, sizeof(GPULight), ERHIBufferType::Structured);
-		if (!m_LightBuffers[i]) return EResult::Fail;
-
-		m_BufferDirty[i] = true;
+		if (!m_LightBuffers[i])
+		{
+			std::vector<uint8> zeros(totalSize, 0);
+			m_LightBuffers[i] = m_RHI->CreateBuffer(zeros.data(), totalSize, sizeof(GPULight), ERHIBufferType::Structured);
+			if (!m_LightBuffers[i]) return EResult::Fail;
+		}
 	}
-
 	return EResult::Success;
 }
 

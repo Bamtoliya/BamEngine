@@ -184,15 +184,17 @@ bool FindBlocker(float3 projCoord, float depthBias, float2 searchRadius, float2x
 
 float3 GetTileHeatmapColor(uint count)
 {
-	if (count == 0u)
-		return float3(0.02f, 0.02f, 0.05f);
-	if (count <= 3u)
-		return lerp(float3(0.0f, 0.2f, 0.8f), float3(0.0f, 0.8f, 0.4f), count / 3.0f);
-	if (count <= 8u)
-		return lerp(float3(0.0f, 0.8f, 0.4f), float3(0.9f, 0.9f, 0.0f), (count - 3.0f) / 5.0f);
-	if (count <= 20u)
-		return lerp(float3(0.9f, 0.9f, 0.0f), float3(1.0f, 0.2f, 0.0f), (count - 8.0f) / 12.0f);
-	return float3(1.0f, 0.0f, 0.5f);
+    if (count == 0u)
+        return float3(0.02f, 0.02f, 0.05f);
+    if (count <= 3u)
+        return lerp(float3(0.0f, 0.2f, 0.8f), float3(0.0f, 0.8f, 0.4f), count / 3.0f);
+    if (count <= 8u)
+        return lerp(float3(0.0f, 0.8f, 0.4f), float3(0.9f, 0.9f, 0.0f), (count - 3.0f) / 5.0f);
+    if (count <= 20u)
+        return lerp(float3(0.9f, 0.9f, 0.0f), float3(1.0f, 0.2f, 0.0f), (count - 8.0f) / 12.0f);
+    if (count <= 256u)
+        return float3(1.0f, 0.0f, 0.5f); // 20~256: 핫핑크
+    return float3(1.0f, 0.0f, 0.0f); // 256 초과 (오버플로 타일): 경고용 순수 레드
 }
 
 float3 ApplyTileHeatmapDebug(float3 baseColor, uint count, float2 screenPos)
@@ -654,6 +656,7 @@ float4 main(PS_INPUT input) : SV_TARGET
     uint loopCount = 0u;
     uint tileStart = 0u;
     bool useTiled = (gLightingData.UseTiledCulling != 0u);
+    uint tileLightCount = 0u;
     if (useTiled)
     {
         uint width, height;
@@ -662,13 +665,26 @@ float4 main(PS_INPUT input) : SV_TARGET
         uint2 tileCoord = uint2(input.Position.xy) / 16u;
         uint tileIndex = tileCoord.y * tilesX + tileCoord.x;
         uint2 tileInfo = gTileLightGrid[tileIndex];
-        tileStart = tileInfo.x;
-        loopCount = min(tileInfo.y, 256u);
+        tileLightCount = tileInfo.y;
+        if (tileInfo.y > 256u)
+        {
+            // [A06 본체] 타일 광원 용량(256개) 초과 시 안전한 전체 순회 폴백
+            // 타일 인덱스 리스트에 담기지 못한 257번째 이후 광원의 조도 누락을 방지하기 위해
+            // 해당 타일에 한해 전체 광원 버퍼를 직접 순회한다.
+            useTiled = false;
+            loopCount = numLights;
+        }
+        else
+        {
+            tileStart = tileInfo.x;
+            loopCount = tileInfo.y;
+        }
     }
     else
     {
-        // 독립 프리뷰 모드(Thumbnail, MatPreview): 타일 컬링을 건너뛰고 전체 스튜디오 광원을 직접 순회
-        loopCount = min(numLights, 32u);
+        // 독립 프리뷰 모드(Thumbnail, MatPreview) 또는 타일 컬링 미사용: 전체 광원 직접 순회
+        loopCount = numLights;
+        tileLightCount = numLights;
     }
     for (uint i = 0u; i < loopCount; ++i)
     {

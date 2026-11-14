@@ -145,7 +145,10 @@ void main(uint3 groupID : SV_GroupID, uint3 groupThreadID : SV_GroupThreadID, ui
         uint count = min(s_TileLightCount, (uint) MAX_LIGHTS_PER_TILE);
         uint startIndex = tileIndex * MAX_LIGHTS_PER_TILE;
 
-        g_TileLightGrid[tileIndex] = uint2(startIndex, count);
+        // [A06] y 성분에 실제 컬링된 광원 수(s_TileLightCount)를 그대로 기록한다.
+        // 256개 이하: 정상적인 타일 인덱스 리스트 순회
+        // 256개 초과: lightingPS에서 오버플로를 감지하고 안전한 전체 광원 순회 폴백을 트리거
+        g_TileLightGrid[tileIndex] = uint2(startIndex, s_TileLightCount);
 
         for (uint i = 0; i < count; ++i)
         {
