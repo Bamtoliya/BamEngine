@@ -1113,9 +1113,12 @@ namespace
                 }
             };
 
+        const std::wstring expectedWgslPath = L"Shaders/GraphMaterialPS.wgsl";
+
         auto* shader = Engine::Shader::Create(&desc);
         std::unique_ptr<Engine::Resource, decltype(releaseResource)> source(shader, releaseResource);
-        if (!shader || shader->GetDxilPath() != desc.Path || shader->GetSpirvPath() != desc.spirvPath)
+        if (!shader || shader->GetDxilPath() != desc.Path || shader->GetSpirvPath() != desc.spirvPath ||
+            shader->GetWgslPath() != expectedWgslPath)
             return Fail("Shader binary path initialization failed.");
 
         if (Engine::IsFailure(manager.SaveToJsonFile(source.get(), assetPath)))
@@ -1132,7 +1135,7 @@ namespace
                 return Fail("Shader archive load failed.");
 
             if (loaded->GetPath() != assetPath || loaded->GetDxilPath() != desc.Path ||
-                loaded->GetSpirvPath() != desc.spirvPath)
+                loaded->GetSpirvPath() != desc.spirvPath || loaded->GetWgslPath() != expectedWgslPath)
                 return Fail("Shader asset and binary paths were not preserved.");
 
             if (Engine::IsFailure(manager.SaveToJsonFile(loaded.Get(), assetPath)))

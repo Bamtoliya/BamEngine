@@ -275,7 +275,7 @@ void ShaderHotReloadManager::ProcessModifiedFile(const std::filesystem::path& hl
 		std::filesystem::path resKeyPath = shader->GetKey();
 		std::filesystem::path resFilePath = rhiType == Engine::ERHIType::DirectX12
 			? shader->GetDxilPath()
-			: shader->GetSpirvPath();
+			: (rhiType == Engine::ERHIType::WebGPU ? shader->GetWgslPath() : shader->GetSpirvPath());
 
 		std::string keyStem = resKeyPath.stem().string();
 		for (char& c : keyStem) c = static_cast<char>(tolower(c));
@@ -315,12 +315,18 @@ void ShaderHotReloadManager::ProcessModifiedFile(const std::filesystem::path& hl
 	{
 		ShaderDesc desc;
 		const std::wstring stemW = hlslPath.stem().wstring();
+		const std::filesystem::path binRoot = result.OutputPath.empty()
+			? (hlslPath.parent_path().parent_path() / L"bin")
+			: result.OutputPath.parent_path().parent_path();
 		desc.Key = Engine::PlatformPath::ToVirtualUri(hlslPath);
 		if (desc.Key.empty())
 		{
 			desc.Key = L"Engine://Shader/" + stemW;
 		}
 		desc.shaderType = shaderType;
+		desc.dxilPath = (binRoot / L"dxil" / (stemW + L".cso")).wstring();
+		desc.spirvPath = (binRoot / L"spirv" / (stemW + L".spv")).wstring();
+		desc.wgslPath = (binRoot / L"wgsl" / (stemW + L".wgsl")).wstring();
 		if (rhiType == Engine::ERHIType::DirectX12)
 		{
 			desc.dxilPath = result.OutputPath.wstring();

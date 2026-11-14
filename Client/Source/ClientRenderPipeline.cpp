@@ -1,4 +1,4 @@
-#include "Engine_Includes.h"
+﻿#include "Engine_Includes.h"
 #include "ClientRenderPipeline.h"
 
 #include "DeferredProfileShaders.h"
@@ -41,16 +41,22 @@ EResult Client::ClientRenderPipeline::Initialize(const std::string& profileUri, 
         return fail(result.Field, result.Message);
 
     auto& resources = ResourceManager::Get();
-    const auto dxilRoot = PlatformPath::GetEngineResourceRoot() / "Shader" / "bin" / "dxil";
+    const ERHIType rhiType = Renderer::IsCreated() ? Renderer::Get().GetRHIType() : ERHIType::DirectX12;
+    const auto binRoot = PlatformPath::GetEngineResourceRoot() / "Shader" / "bin";
     for (const auto& shader : GetDeferredProfileShaders(profile))
     {
+        const std::wstring stemW = std::filesystem::path(shader.DxilFile).stem().wstring();
         ShaderDesc desc{};
         desc.Key = shader.Key;
-        desc.Path = (dxilRoot / shader.DxilFile).wstring();
+        desc.dxilPath = (binRoot / "dxil" / shader.DxilFile).wstring();
+        desc.spirvPath = (binRoot / "spirv" / (stemW + L".spv")).wstring();
+        desc.wgslPath = (binRoot / "wgsl" / (stemW + L".wgsl")).wstring();
+        desc.Path = (rhiType == ERHIType::DirectX12) ? desc.dxilPath :
+            (rhiType == ERHIType::WebGPU ? desc.wgslPath : desc.spirvPath);
         desc.shaderType = shader.Type;
         const auto handle = resources.LoadResource<Shader>(&desc);
         if (!handle.Get() || !handle->GetRHIShader() || handle->GetRHIShader()->GetRawShaderBytecode().empty())
-            return fail(WStrToStr(desc.Key), "Could not register the required DXIL shader: " + WStrToStr(desc.Path));
+            return fail(WStrToStr(desc.Key), "Could not register the required shader: " + WStrToStr(desc.Path));
     }
 
     result = m_Passes.Initialize(profile, L"Client", width, height);

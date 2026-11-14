@@ -1,4 +1,4 @@
-#include "StartupResourceLoader.h"
+﻿#include "StartupResourceLoader.h"
 
 #include "Logger.h"
 #include "PlatformPath.h"
@@ -32,6 +32,7 @@ namespace Engine::StartupResourceLoaderDetail
 		std::string Key;
 		std::string DxilPath;
 		std::string SpirvPath;
+		std::string WgslPath;
 		std::string Type = "Vertex";
 		std::string EntryPoint = "main";
 		uint32_t Samplers = 0;
@@ -135,9 +136,24 @@ namespace Engine::StartupResourceLoaderDetail
 		return true;
 	}
 
-	const std::string& GetStartupShaderPath(const ShaderItemConfig& item, ERHIType rhiType)
+	std::string DeriveStartupWgslPath(const std::string& spirvPath)
 	{
-		if (rhiType == ERHIType::SDLGPU && !item.SpirvPath.empty())
+		if (spirvPath.empty())
+			return {};
+
+		std::filesystem::path wgslPath = Engine::Utf8ToPath(spirvPath);
+		const auto directory = wgslPath.parent_path();
+		if (directory.filename() == L"spirv")
+			wgslPath = directory.parent_path() / L"wgsl" / wgslPath.filename();
+		wgslPath.replace_extension(L".wgsl");
+		return Engine::WStrToStr(wgslPath.generic_wstring());
+	}
+
+	std::string GetStartupShaderPath(const ShaderItemConfig& item, ERHIType rhiType)
+	{
+		if (rhiType == ERHIType::WebGPU)
+			return !item.WgslPath.empty() ? item.WgslPath : DeriveStartupWgslPath(item.SpirvPath);
+		if ((rhiType == ERHIType::SDLGPU || rhiType == ERHIType::Vulkan) && !item.SpirvPath.empty())
 			return item.SpirvPath;
 		return item.DxilPath;
 	}
@@ -169,7 +185,7 @@ namespace Engine::StartupResourceLoaderDetail
 				EShaderType shaderType = EShaderType::Unknown;
 				if (!TryParseStartupShaderType(item.Type, shaderType))
 					return ReportStartupError(error, "Unsupported shader type '" + item.Type + "' for key: " + item.Key);
-				const auto& shaderPath = GetStartupShaderPath(item, rhiType);
+				const std::string shaderPath = GetStartupShaderPath(item, rhiType);
 				if (shaderPath.empty())
 					return ReportStartupError(error, "No shader binary path for key: " + item.Key);
 				if (!AppendStartupFile(ResolveStartupUri(shaderPath), "shader", files, error))
@@ -316,10 +332,22 @@ bool Engine::StartupResourceLoader::LoadShaders(const std::filesystem::path& con
 			continue;
 		}
 
-		const auto& path = GetStartupShaderPath(item, rhiType);
+		const std::string path = GetStartupShaderPath(item, rhiType);
+		if (path.empty())
+		{
+			BAM_LOG(Error, "Engine", "StartupResourceLoader", "No shader binary path for key={}", item.Key);
+			success = false;
+			continue;
+		}
+
+		const std::string wgslPath = !item.WgslPath.empty() ? item.WgslPath : DeriveStartupWgslPath(item.SpirvPath);
+
 		ShaderDesc desc = {};
 		desc.Key = Engine::Utf8ToPath(item.Key).wstring();
 		desc.Path = ResolveStartupUri(path).wstring();
+		if (!item.DxilPath.empty()) desc.dxilPath = ResolveStartupUri(item.DxilPath).wstring();
+		if (!item.SpirvPath.empty()) desc.spirvPath = ResolveStartupUri(item.SpirvPath).wstring();
+		if (!wgslPath.empty()) desc.wgslPath = ResolveStartupUri(wgslPath).wstring();
 		desc.shaderType = shaderType;
 		desc.entryPoint = item.EntryPoint.empty() ? "main" : item.EntryPoint;
 		desc.numSamplers = item.Samplers;

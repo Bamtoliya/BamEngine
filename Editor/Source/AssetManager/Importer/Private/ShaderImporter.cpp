@@ -4,6 +4,8 @@
 #include "ShaderCompiler.h"
 #include "ShaderReflection.h"
 #include "ResourceManager.h"
+#include "PlatformPath.h"
+#include "Renderer.h"
 #include "Logger.h"
 
 namespace
@@ -61,22 +63,44 @@ EResult ShaderImporter::Import(const filesystem::path& sourcePath, const filesys
             return EResult::Fail;
         }
         const std::wstring stemW = sourcePath.stem().wstring();
+        const std::filesystem::path binRoot = compileResult.OutputPath.empty()
+            ? (sourcePath.parent_path().parent_path() / L"bin")
+            : compileResult.OutputPath.parent_path().parent_path();
+
         ShaderDesc desc = {};
-        desc.Key = L"Resources/Shader/" + stemW;
+        desc.Key = PlatformPath::ToVirtualUri(sourcePath);
+        if (desc.Key.empty())
+            desc.Key = L"Engine://Shader/" + stemW;
         desc.shaderType = shaderType;
-        desc.dxilPath = L"Resources/Shader/bin/dxil/" + stemW + L".cso";
-        desc.spirvPath = L"Resources/Shader/bin/spirv/" + stemW + L".spv";
-        desc.wgslPath = L"Resources/Shader/bin/wgsl/" + stemW + L".wgsl";
-        if (rhiType == ERHIType::WebGPU)
-            desc.wgslPath = compileResult.OutputPath.wstring();
+        desc.dxilPath = (binRoot / L"dxil" / (stemW + L".cso")).wstring();
+        desc.spirvPath = (binRoot / L"spirv" / (stemW + L".spv")).wstring();
+        desc.wgslPath = (binRoot / L"wgsl" / (stemW + L".wgsl")).wstring();
+        if (!compileResult.OutputPath.empty())
+        {
+            if (rhiType == ERHIType::DirectX12)
+                desc.dxilPath = compileResult.OutputPath.wstring();
+            else if (rhiType == ERHIType::WebGPU)
+                desc.wgslPath = compileResult.OutputPath.wstring();
+            else
+                desc.spirvPath = compileResult.OutputPath.wstring();
+        }
         desc.Path = (rhiType == ERHIType::DirectX12) ? desc.dxilPath :
             (rhiType == ERHIType::WebGPU ? desc.wgslPath : desc.spirvPath);
+
         ResourceManager& rm = ResourceManager::Get();
-        auto existing = rm.GetResourceHandle<Shader>(desc.Key);
-        if (existing.IsValid() && existing.Get())
+        const std::wstring candidateKeys[] = {
+            desc.Key,
+            L"Engine://Shader/" + stemW,
+            L"Resources/Shader/" + stemW,
+            stemW
+        };
+        for (const auto& candidateKey : candidateKeys)
         {
-            return existing.Get()->UpdateBytecode(compileResult.Bytecode);
+            auto existing = rm.GetResourceHandle<Shader>(candidateKey);
+            if (existing.IsValid() && existing.Get())
+                return existing.Get()->UpdateBytecode(compileResult.Bytecode);
         }
+
         auto handle = rm.LoadResource<Shader>(&desc);
         return handle.IsValid() ? EResult::Success : EResult::Fail;
     }

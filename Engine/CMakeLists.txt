@@ -1,4 +1,4 @@
-project(Engine)
+﻿project(Engine)
 
 # ==============================================================================
 # 1. CMake Modules & Dependencies (모듈 및 종속성 세팅)
@@ -143,6 +143,13 @@ if(WIN32)
         dbghelp.lib
         $<$<CONFIG:Debug>:${CMAKE_SOURCE_DIR}/ThirdParty/FMOD/lib/x64/fmodL_vc.lib>
         $<$<NOT:$<CONFIG:Debug>>:${CMAKE_SOURCE_DIR}/ThirdParty/FMOD/lib/x64/fmod_vc.lib>
+    )
+elseif(EMSCRIPTEN)
+    target_link_libraries(Engine PUBLIC
+        $<$<CONFIG:Debug>:${CMAKE_SOURCE_DIR}/ThirdParty/FMOD/lib/w32/fmodL_wasm.a>
+        $<$<CONFIG:Debug>:${CMAKE_SOURCE_DIR}/ThirdParty/FMOD/lib/w32/fmodL_bindings.a>
+        $<$<NOT:$<CONFIG:Debug>>:${CMAKE_SOURCE_DIR}/ThirdParty/FMOD/lib/w32/fmod_wasm.a>
+        $<$<NOT:$<CONFIG:Debug>>:${CMAKE_SOURCE_DIR}/ThirdParty/FMOD/lib/w32/fmod_bindings.a>
     )
 endif()
 

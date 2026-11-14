@@ -1,4 +1,4 @@
-#include "Engine_Includes.h"
+﻿#include "Engine_Includes.h"
 #include "ClientGameRuntime.h"
 
 #include <archive/JsonArchive.h>
@@ -214,7 +214,9 @@ Engine::EResult Client::ClientGameRuntime::InitializeSystems()
     if (!systemManager.AddSystem<Engine::CompositeVFXSystem>()) return Engine::EResult::Fail;
     if (!systemManager.AddSystem<Engine::ThirdPersonControllerSystem>()) return Engine::EResult::Fail;
     if (!systemManager.AddSystem<Engine::KinematicCharacterSystem>()) return Engine::EResult::Fail;
+#if !defined(__EMSCRIPTEN__)
     if (!systemManager.AddSystem<Engine::NetworkSystem>()) return Engine::EResult::Fail;
+#endif
     if (!systemManager.AddSystem<Engine::UIRenderSystem>()) return Engine::EResult::Fail;
     if (!systemManager.AddSystem<Engine::AudioSystem>()) return Engine::EResult::Fail;
     if (!systemManager.AddSystem<Engine::TerrainSystem>()) return Engine::EResult::Fail;

@@ -22,7 +22,9 @@
 #include "ActionTimelineSystem.h"
 #include "CompositeVFXSystem.h"
 
+#if !defined(__EMSCRIPTEN__)
 #include "NetworkSystem.h"
+#endif
 #include "KinematicCharacterSystem.h"
 #include "ThirdPersonControllerSystem.h"
 #include "SplineFollowSystem.h"
