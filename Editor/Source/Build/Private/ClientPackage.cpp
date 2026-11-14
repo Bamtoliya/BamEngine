@@ -7,6 +7,8 @@
 #include "DeferredProfileShaders.h"
 #include "Functions.h"
 #include "PlatformPath.h"
+#include "Renderer.h"
+#include "StartupResourceLoader.h"
 
 #include <fmt/format.h>
 #include <glaze/glaze.hpp>
@@ -273,8 +275,17 @@ namespace
         bool InEngine = false;
     };
 
+    struct PackageStartupPipeline
+    {
+        fs::path ManifestPath;
+        fs::path RelativePath;
+        bool InEngine = false;
+        std::vector<fs::path> Files;
+    };
+
     std::string MakePackageSettings(const fs::path& source, const fs::path& startupSceneRelative,
-        const fs::path& assetRoot, const fs::path& engineRoot, std::string_view programName, PackageProfile& packageProfile)
+        const fs::path& assetRoot, const fs::path& engineRoot, std::string_view programName,
+        PackageProfile& packageProfile, PackageStartupPipeline& startupPipeline)
     {
         std::ifstream input(source, std::ios::binary);
         if (!input)
@@ -298,9 +309,42 @@ namespace
         if (!schema || *schema == 0 || *schema > Engine::ProjectSettings::CurrentSchemaVersion)
             throw std::runtime_error("Unsupported project settings schema: " + DisplayPath(source));
 
+        Engine::ProjectSettings defaults;
+        std::string startupManifestUri = defaults.StartupManifestPath;
+        if (const auto entry = values.find("StartupManifestPath"); entry != values.end())
+        {
+            const auto* path = entry->second.get_if<std::string>();
+            if (!path || path->empty())
+                throw std::runtime_error("StartupManifestPath must be a non-empty string: " + DisplayPath(source));
+            startupManifestUri = *path;
+        }
+
+        const auto startupManifest = Path::ResolveUri(Engine::Utf8ToPath(startupManifestUri).wstring());
+        std::string startupError;
+        if (!Engine::StartupResourceLoader::CollectPipelineFiles(startupManifest, Engine::ERHIType::DirectX12,
+            startupPipeline.Files, startupError))
+            throw std::runtime_error("Startup resource pipeline validation failed: " + startupError);
+
+        startupPipeline.ManifestPath = fs::canonical(startupManifest);
+        startupPipeline.InEngine = IsWithin(startupPipeline.ManifestPath, engineRoot);
+        if (!startupPipeline.InEngine && !IsWithin(startupPipeline.ManifestPath, assetRoot))
+            throw std::runtime_error("Startup manifest is outside project and engine resource folders: " +
+                DisplayPath(startupPipeline.ManifestPath));
+        startupPipeline.RelativePath = RelativeToInput(startupPipeline.ManifestPath,
+            startupPipeline.InEngine ? engineRoot : assetRoot);
+
+        for (auto& file : startupPipeline.Files)
+        {
+            file = fs::canonical(file);
+            if (!IsWithin(file, assetRoot) && !IsWithin(file, engineRoot))
+                throw std::runtime_error("Startup resource is outside project and engine resource folders: " + DisplayPath(file));
+        }
+
         values["StartupScenePath"] = DisplayPath(startupSceneRelative);
         values["AssetDirectory"] = std::string("Assets");
         values["EngineResourceDirectory"] = std::string("Engine/Resources");
+        values["StartupManifestPath"] =
+            std::string(startupPipeline.InEngine ? "Engine://" : "Project://") + DisplayPath(startupPipeline.RelativePath);
         values["WindowTitle"] = std::string(programName);
 
         if (const auto entry = values.find("RenderPipelineProfilePath"); entry != values.end())
@@ -417,8 +461,9 @@ namespace Editor
 
         const auto startupSceneRelative = RelativeToInput(scene, assetRoot);
         PackageProfile packageProfile;
+        PackageStartupPipeline startupPipeline;
         const auto settings = MakePackageSettings(projectRoot / "Config" / "Project.json",
-            startupSceneRelative, assetRoot, engineRoot, request.ProgramName, packageProfile);
+            startupSceneRelative, assetRoot, engineRoot, request.ProgramName, packageProfile, startupPipeline);
         const auto profileResources = GetRenderProfileResources(packageProfile);
         VerifyRenderProfileResources(profileResources, engineRoot);
 
@@ -437,6 +482,13 @@ namespace Editor
             const bool inProject = IsWithin(source, assetRoot);
             auto& inventory = inProject ? projectInventory : engineInventory;
             inventory.Expect(RelativeToInput(source, inProject ? assetRoot : engineRoot), "startup scene dependency");
+        }
+        for (const auto& file : startupPipeline.Files)
+        {
+            const bool inProject = IsWithin(file, assetRoot);
+            auto& inventory = inProject ? projectInventory : engineInventory;
+            inventory.Expect(RelativeToInput(file, inProject ? assetRoot : engineRoot),
+                file == startupPipeline.ManifestPath ? "startup resource manifest" : "startup resource dependency");
         }
         const auto suffix = std::chrono::steady_clock::now().time_since_epoch().count();
         const auto staging = destination.parent_path() / (L".bam-staging-" + std::to_wstring(suffix));
@@ -472,6 +524,22 @@ namespace Editor
                 inventory.Record(relative, fs::file_size(target));
             }
         }
+
+        for (const auto& source : startupPipeline.Files)
+        {
+            const bool inProject = IsWithin(source, assetRoot);
+            const auto relative = RelativeToInput(source, inProject ? assetRoot : engineRoot);
+            const auto target = (inProject ? stagedAssets : stagedEngine) / relative;
+            if (!fs::is_regular_file(target))
+            {
+                CopyPackageFile(source, target);
+                auto& inventory = inProject ? projectInventory : engineInventory;
+                inventory.Record(relative, fs::file_size(target));
+            }
+        }
+
+        output += "Startup manifest: " + std::string(startupPipeline.InEngine ? "Engine://" : "Project://") +
+            DisplayPath(startupPipeline.RelativePath) + '\n';
 
         if (!packageProfile.RelativePath.empty())
         {

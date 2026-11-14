@@ -588,7 +588,7 @@ bool Application::InitializeResources()
     const auto manifestPath =
         Engine::PlatformPath::ResolveUri(EditorSettingsService::Get().GetProjectSettings().StartupManifestPath);
 
-    return StartupResourceLoader::LoadPipeline(manifestPath);
+    return Engine::StartupResourceLoader::LoadPipeline(manifestPath);
 }
 void Application::InitializeMeshes()
 {
