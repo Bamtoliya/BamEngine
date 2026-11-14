@@ -62,7 +62,9 @@
 - 추가 확인. `ConsolePanel::DrawLog()`는 `activeDetailHeight`를 계산한 뒤 `m_DetailViewHeight`에도 대입한다. 콘솔 창 높이를 줄일 때 같은 저장값 덮어쓰기가 발생한다. 통합 설정의 `DrawSidebarLayout`이 표시값 분리와 실제 드래그 감지를 이미 구현하고 있다.
 - 완료 조건. 창을 넓혔다 줄인 뒤 다시 넓히거나 좁은 상태에서 종료·재실행해도 선호 크기가 유지된다. 모델 임포트 모달을 다시 열 때도 같은 값을 복원한다.
 
-### A06 — 보통 / 타일 광원 초과 폴백이 여전히 없음 (기존 F10)
+### A06 — 보통 / 타일 광원 초과 폴백이 여전히 없음 (기존 F10) [해소 완료: 2026-11-15]
+
+- **해소 결과 (2026-11-15):** `tiledLightCullingCS.hlsl`에서 `g_TileLightGrid[tileIndex].y`에 실제 누적 광원 수 `s_TileLightCount`를 그대로 기록하도록 수정하고, `lightingPS.hlsl`에서 `tileInfo.y > 256u`일 때 전체 광원 버퍼를 직접 순회하는 안전한 전체 순회 폴백(`useTiled = false; loopCount = numLights;`)을 적용하여 조도 누락을 원천 차단했다. 또한 `LightManager.h`의 `MAX_LIGHTS`를 32에서 1024로 확장하고 버퍼 할당을 힙 벡터(`std::vector<uint8>`)로 전환하여 `x64-debug` 빌드 및 CTest 36/36 통과를 확인했다.
 
 - 위치: `tiledLightCullingCS.hlsl:5, 100~102, 133~146`, `lightingPS.hlsl:664~666`.
 - 근거: atomic 카운트는 증가하지만 256개까지만 저장하고 최종 개수도 clamp한다. Lighting도 최대 256개만 순회한다.

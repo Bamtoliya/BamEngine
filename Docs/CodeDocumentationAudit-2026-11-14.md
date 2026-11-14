@@ -10,7 +10,7 @@
 
 ## 2. 핵심 판단
 
-1. `2026-11-06` 점검의 **A01~A10** 중 패키징 경로/생성 보호(A01·A02), 에셋 감시자 UTF-8/예외 경계(A03), RT 큐브맵 차원 방어(A04), 스플리터 선호값 보존(A05), 타일 컬링 디스패치 크기 일치(A06 후속), 비정상 PNG 제거(A07), 패키지 마커 기반 설정 정책(A08), 스키닝 `t0, space2` 바인딩 문서(A09), 가상 URI 선행 후 `Engine/Resources/`·`Assets/` 물리 분리(A10)는 코드와 문서에 반영되었다. 단, 다수 광원 257개 초과 폴백(A06 본체)과 일부 실행 검증은 여전히 남아 있다.
+1. `2026-11-06` 점검의 **A01~A10** 중 패키징 경로/생성 보호(A01·A02), 에셋 감시자 UTF-8/예외 경계(A03), RT 큐브맵 차원 방어(A04), 스플리터 선호값 보존(A05), 타일 컬링 디스패치 크기 일치(A06 후속), 비정상 PNG 제거(A07), 패키지 마커 기반 설정 정책(A08), 스키닝 `t0, space2` 바인딩 문서(A09), 가상 URI 선행 후 `Engine/Resources/`·`Assets/` 물리 분리(A10)에 이어 다수 광원 257개 초과 폴백(A06 본체)까지 2026-11-15 코드 반영 및 `x64-debug` CTest 36/36 통과로 전량 해소되었다. 일부 플랫폼/GPU 실행 검증이 잔여 과제로 남아 있다.
 2. 현재 작업 트리는 **Windows Client 실행·패키징 안정화**에서 **WebGPU/Wasm Client 이식 준비**로 넘어가는 과도기 상태다. Windows 네이티브 경로의 `ClientGameRuntime` 분리와 `StartupResourceLoader` 공용화는 방향이 타당하나, 아직 Emscripten/WebGPU 툴체인으로 컴파일·실행 검증되지 않았다.
 3. WebGPU 전환 경로와 패키징·진단 경로에서 확인된 **B01~B05**(`StartupResourceLoader`↔`Shader` WGSL 연결, `ShaderImporter`·`ShaderHotReloadManager` 경로 정규화, `ClientGameRuntime`의 `NetworkSystem`/FMOD/DXIL 의존성 정리, 5개 논리 커밋 분리, 독립 Client `CrashHandler` 연결 및 `PackageClient.ps1` 현행화)는 2026-11-14 코드·스크립트 반영으로 해소되었다(`x64-debug` B01~B03 CTest 36/36 및 `PackageClient.ps1` 경로 차단 가드 4건 확인). Emscripten/Tint 실 툴체인 실행 검증과 `Client.exe` 실 크래시·패키지 실행 검증이 후속 과제로 남아 있다.
 

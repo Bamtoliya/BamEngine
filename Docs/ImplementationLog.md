@@ -2,6 +2,19 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-15] 타일 컬링(Tiled Light Culling) 257개 초과 광원 안전 폴백 및 다수 광원 지원 확장 (A06 본체)
+
+- **배경 및 범위**: `2026-11-06` 점검 항목 중 유일한 렌더링 잔여 결함이었던 `A06 본체`(타일당 광원 256개 상한 초과 시 257번째 이후 광원 누락 문제)를 해소하고, `LightManager`의 씬 광원 상한을 확장했다.
+- **주요 변경 내용**:
+  - [tiledLightCullingCS.hlsl](file:///i:/BamtoliyaGithub/BamEngine/Engine/Resources/Shader/hlsl/tiledLightCullingCS.hlsl): 전역 버퍼 `g_TileLightGrid[tileIndex].y`에 클램핑된 count 대신 실제 컬링된 광원 수(`s_TileLightCount`)를 그대로 기록하도록 수정. `g_TileLightIndexList`에는 버퍼 범위 내에서 최대 256개까지만 기록하여 VRAM 오버런 방지.
+  - [lightingPS.hlsl](file:///i:/BamtoliyaGithub/BamEngine/Engine/Resources/Shader/hlsl/lightingPS.hlsl): `tileInfo.y > 256u`일 때 타일 오버플로를 감지하고, 불완전한 타일 인덱스 리스트 대신 전체 광원 버퍼(`gLightBuffer`, 0 ~ `numLights - 1`)를 직접 순회하는 **안전한 전체 순회 폴백(Full Traversal Fallback)**을 적용하여 조도 누락을 원천 차단. 또한 `tileLightCount` 변수 스코프를 선언하고, `GetTileHeatmapColor()`에서 256개 초과 타일을 순수 레드(`1.0, 0.0, 0.0`) 경고 색상으로 시각화.
+  - [LightManager.h](file:///i:/BamtoliyaGithub/BamEngine/Engine/Source/Render/Light/Public/LightManager.h) / [LightManager.cpp](file:///i:/BamtoliyaGithub/BamEngine/Engine/Source/Render/Light/Private/LightManager.cpp): `MAX_LIGHTS`를 32에서 `1024`로 확장하고, 스택 `std::array`를 힙 기반 `std::vector<uint8>`로 교체하여 스택 오버플로 방지.
+  - [DeferredSceneRenderer.cpp](file:///i:/BamtoliyaGithub/BamEngine/Engine/Source/Render/Pipeline/Private/DeferredSceneRenderer.cpp): 독립 프리뷰 로컬 광원 버퍼 할당 및 데이터 준비에서도 `std::vector<uint8>` 적용 및 `MAX_LIGHTS` 동기화.
+- **검증 상태**: `x64-debug` 멀티코어 빌드 및 셰이더 컴파일(DXIL `.cso`, SPIR-V `.spv`) 성공, CTest 전체 36/36 통과 확인(사용자 실행 결과).
+- **미검증 항목**: `x64-release` 빌드, 실제 257개 이상 광원이 배치된 씬에서의 실시간 렌더링 화면 비교 및 GPU 프로파일링 계측.
+
+---
+
 ### [2026-11-14] 독립 Client CrashHandler 연결 및 PackageClient.ps1 현행화 (B05)
 
 - **배경 및 범위**: [2026-11-14 코드·원칙·계획 점검](CodeDocumentationAudit-2026-11-14.md)의 마지막 코드·스크립트 과제(`B05`)와 루트 임시 셰이더 테스트 산출물(`test_vs.spv`, `test_vs.wgsl`) 정리를 수행하고, 병행 작성된 [ShaderToolchainEvaluation.md](ShaderToolchainEvaluation.md)를 함께 문서화했다.

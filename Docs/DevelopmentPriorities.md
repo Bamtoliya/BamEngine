@@ -2,7 +2,7 @@
 
 - 작성일: 2026-10-24 (최종 갱신: 2026-11-14)
 - 상태: 2026-11-05~11-07 우선순위 0~1(CrashHandler·Recovery, A01~A10 후속) 및 2026-11-08~11-14 리소스/에셋 경로 분리(Phase 1~3B), 텍스처 밉맵, 2D 확장(Phase 1~5), 파티클 물리·CompositeVFX(Phase 1~4), 3줄 리소스 편집기·공용 UI·PluginHost, Render Pipeline Profile·Windows 내장 패키징, `ClientGameRuntime` 분리 및 `Client/Web`·WGSL sidecar 초안 구현 반영(정적 확인 기준). 일부 미커밋 작업과 빌드·UI·GPU·Emscripten·FMOD Web 미검증 항목이 남아 있다.
-- 최신 근거: [2026-11-14 코드·원칙·계획 점검](CodeDocumentationAudit-2026-11-14.md) (B01~B06; 2026-11-14 당일 B01~B05 전량 코드·스크립트 반영 완료) 및 [2026-11-06 점검](CodeDocumentationAudit-2026-11-06.md) (A01~A10). **현재 작업 선택은 11절을 우선한다.** 위 상태와 10절의 과거 완료 표시는 당시 기록이며 A06(257개 초과 폴백) 및 미검증 빌드/실행 항목(x64-release·Emscripten 툴체인·실 크래시·수동 비교)을 해소한 뜻이 아니다.
+- 최신 근거: [2026-11-14 코드·원칙·계획 점검](CodeDocumentationAudit-2026-11-14.md) (B01~B06 및 A06 본체 전량 코드 반영 완료) 및 [2026-11-06 점검](CodeDocumentationAudit-2026-11-06.md) (A01~A10). **현재 작업 선택은 11절을 우선한다.** 위 상태와 10절의 과거 완료 표시는 당시 기록이며 미검증 빌드/실행 항목(x64-release·Emscripten 툴체인·실 크래시·수동 비교)을 해소한 뜻이 아니다.
 - 공통 기준: [EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md)
 - 분류와 이관: [SourceOrganizationGuidelines.md](SourceOrganizationGuidelines.md), [BuildConfigurationAndPreprocessing.md](BuildConfigurationAndPreprocessing.md)
 
@@ -555,7 +555,7 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
 
 ### 11.2 사용 조건에 따라 앞당길 작업
 
-- **다수 광원 지원 확장 — A06 본체 / F10**: 현행 씬 광원 업로드 상한은 32개다. 이 상한을 확장할 때 CPU 버퍼 용량·셰이더 순회 범위와 타일당 256개 초과 계측·폴백을 함께 검증한다.
+- **다수 광원 지원 확장 — A06 본체 / F10 [해소 완료: 2026-11-15]**: `LightManager`의 씬 광원 상한을 1024개(`MAX_LIGHTS`)로 확장하고, `tiledLightCullingCS.hlsl`의 실제 누적 카운트(`s_TileLightCount`) 보존 및 `lightingPS.hlsl`의 256개 초과 타일 안전 전체 순회 폴백(`useTiled = false; loopCount = numLights;`)을 적용하여 조도 누락을 해소했다(`x64-debug` 빌드 및 CTest 36/36 통과 확인).
 - **재임포트 작업**: Overwrite/SaveToFile 조합, 기존 핸들 유지, 중간 파일 저장/부모 머티리얼 실패를 확인한다. 정적 검토만으로 다중 파일 트랜잭션 완료를 선언하지 않는다.
 - **클라이언트 빌드 시 에디터·디버그 코드 스트립 및 안전 실행 보장 (No-Op 스텁화 / ABI 보호)**: 엔진 내 에디터 및 디버깅 전용 함수를 식별하고, 클라이언트 DLL/바이너리 빌드 시 전처리기로 완전히 제거(Strip)하되 링크 오류 및 널 크래시를 방지하기 위해 No-Op 인라인 스텁 및 안전 매크로를 적용한다. 코어 데이터 구조의 ABI 불변성과 호출부 널 안전성을 보장한다. (참조: [BuildConfigurationAndPreprocessing.md](BuildConfigurationAndPreprocessing.md) 3.1절)
 - **비정상 종료 진단(크래시 리포터) 및 에디터 작업 복원 시스템 (Crash Recovery)**: Windows SEH 및 미니덤프(`MiniDumpWriteDump`) 연동, 블랙박스 로그 플러시, 구조화된 크래시 리포트(`.crash.json`), 5분 주기 하트비트 자동 저장(Heartbeat Auto-Save) 및 차기 실행 시 복원 마법사 구축. (참조: [CrashHandlingAndRecoveryPlan.md](CrashHandlingAndRecoveryPlan.md))
@@ -601,10 +601,10 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
 
 1. **작업 트리 정리 완료 (`B04`) 및 Windows 기준선 후속 검증**: 미커밋 변경분의 5개 논리 커밋 분리(`1a798d3d`, `5083be3c`, `e5cd4e4b`, `c426a4c2`, `13f1c821`) 및 `x64-debug` 멀티코어 빌드·CTest 36/36 통과(2026-11-14)는 완료했다. `x64-release` 빌드 및 `RenderPipelineProfilePlan` 2·3단계 수동 비교·FMOD 오디오 재생 확인이 남아 있다.
 2. **WebGPU/Emscripten 이식 선결 해소 (`B01` → `B02` → `B03` 코드 반영 완료 / 툴체인 검증 대기)**: `StartupResourceLoader`·`SceneArchiveCheck` WGSL 경로 연결 및 직렬화 검증(`B01`), `ShaderImporter`·`ShaderHotReloadManager` 경로 정규화(`B02`), `Systems.h`/`ClientGameRuntime`/`Engine/CMakeLists.txt`/`ClientRenderPipeline`의 Emscripten `NetworkSystem`/FMOD Wasm/RHI 셰이더 경계 정리(`B03`)를 반영하고 Windows `x64-debug` 빌드·CTest 36/36 통과를 확인했다. 다음 단계로 호스트 `ReflectionGenerator` + `Tint` 기반 `Tools/WebGPUProbe` 및 Emscripten 정적 빌드·실행을 검증한다.
-3. **안정성·후속 기능 마무리 (`B05` 반영 완료 / 2D Phase 5·A06)**: `Client/Source/Main.cpp`·`ClientGameRuntime.cpp`·`CrashHandler_Win32.cpp` `CrashHandler` 연결과 `PackageClient.ps1` 현행화·경로 차단 가드 보강(`B05`)은 반영 및 가드 검증을 완료했다(`Client.exe` 실 크래시 덤프 생성은 실측 대기). 이후 2D Phase 5 드로우 배칭 연결과 A06 257개 초과 광원 폴백을 후속 과제로 진행한다.
+3. **안정성·후속 기능 마무리 (`B05`·`A06 본체` 반영 완료 / 2D Phase 5)**: `Client` `CrashHandler` 연결 및 `PackageClient.ps1` 현행화(`B05`), 타일 컬링 257개 초과 안전 전체 순회 폴백 및 `MAX_LIGHTS` 1024 확장(`A06 본체`) 반영을 완료했다(`x64-debug` CTest 36/36 확인). 후속으로 2D Phase 5 드로우 배칭 연결을 진행한다.
 
 ### 11.5 상태·검증 기록 규칙
 
-- 2026-11-07 기준 CMake Debug 빌드 및 CTest 전체 29개(29/29 Passed) 통과 확인 완료; 2026-11-14 `Engine/CMake/Dependencies.cmake`의 `spirv_cross_*` 순서 수정 후 `x64-debug` 멀티코어 빌드 및 CTest 36/36(5.03 sec) 통과, 이어 `B01~B03` 코드 반영(`SceneArchiveCheck` WGSL 라운드트립 포함) 후 `x64-debug` 빌드 및 CTest 36/36 통과 재확인 완료; `B05` 반영 후 `PackageClient.ps1` 경로 차단 가드 4건(`.`, `Client`, `Assets`, `Utility`) 예외 중단 확인 완료(`x64-release`·`B05` 실 크래시 덤프 생성·실 오디오/UI/GPU 수동 비교·Emscripten/Tint 실 툴체인은 미검증).
+- 2026-11-07 기준 CMake Debug 빌드 및 CTest 전체 29개(29/29 Passed) 통과 확인 완료; 2026-11-14 `spirv_cross_*` 순서 수정 후 `x64-debug` CTest 36/36 통과, `B01~B03` 코드 반영 후 CTest 36/36 통과, `B05` 가드 4건 검증 완료, 2026-11-15 `A06 본체` 타일 컬링 초과 폴백 및 `MAX_LIGHTS 1024` 반영 후 `x64-debug` 빌드 및 CTest 36/36 통과 확인 완료(`x64-release`·실 크래시 덤프 생성·실 오디오/UI/GPU 수동 비교·Emscripten/Tint 실 툴체인은 미검증).
 - 기준 커밋, 미커밋 범위, 구성, 검사 이름과 실제 실행 개수, 실패 시나리오, UI/GPU 미검증을 기록한다.
 - 소스 전면 이동·싱글턴 전면 교체·모든 문서의 장기 목표 구현을 완료 조건으로 추가하지 않는다.

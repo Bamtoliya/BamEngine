@@ -7,7 +7,7 @@
 - 연계 계획: [ImGuiDevelopmentPlan.md](ImGuiDevelopmentPlan.md), [BuildAndPackagingPlan.md](BuildAndPackagingPlan.md), [RenderPipelineProfilePlan.md](RenderPipelineProfilePlan.md), [ShaderToolchainEvaluation.md](ShaderToolchainEvaluation.md)
 - 분류·이관 기준: [SourceOrganizationGuidelines.md](SourceOrganizationGuidelines.md)
 - 통합 우선순위: [DevelopmentPriorities.md](DevelopmentPriorities.md)
-- 최신 정적 대조: [2026-11-14 코드·원칙·계획 점검](CodeDocumentationAudit-2026-11-14.md) (B01~B03 2026-11-14 해소 완료) 및 [2026-11-06 점검](CodeDocumentationAudit-2026-11-06.md) A06·A09. 타일 컬링 257개 초과 폴백(A06 본체)과 GPU/WebGPU 실측 검증은 잔여 범위다.
+- 최신 정적 대조: [2026-11-14 코드·원칙·계획 점검](CodeDocumentationAudit-2026-11-14.md) (B01~B03 해소 완료) 및 [2026-11-06 점검](CodeDocumentationAudit-2026-11-06.md) A06·A09 (타일 컬링 257개 초과 폴백 A06 본체 2026-11-15 해소 완료). GPU/WebGPU 실측 검증은 잔여 범위다.
 - 검증 한계: 아래의 과거 시간·드로우콜 관찰을 최신 동일 조건 비교 실험으로 확대하지 않는다. 이번 갱신에서 새 빌드·GPU 실행·WebGPU 실행·성능 측정은 하지 않았다.
 
 ## 1. 목표와 우선순위
@@ -56,7 +56,7 @@ IBL처럼 비교적 독립적인 화질 개선은 측정·바인딩 기반이 �
   - `lightingPS.hlsl`에 반구형 Sky Irradiance·거칠기 기반 수렴(`LIGHT_TYPE_SKY` + `EnvBRDFApprox`), 접촉 그림자 소프트닝, `ShadowStrength` 및 큐브맵 기반 Split-Sum PBR IBL(`gLightingData.HasIBLMaps != 0u`, `gIrradianceMap`, `gPrefilteredEnvMap`, `gBRDFLut`)이 반영되었다.
   - `DirectX12RHI`의 큐브맵 Null SRV 차원(`D3D12_SRV_DIMENSION_TEXTURECUBE`) 안전장치가 보강되었으며, `SceneViewportPanel`의 중복 디퍼드 패스 코드를 `ViewportDeferredPipeline`으로 통합하여 Scene View, Game View, Material Preview 전반의 렌더링 일관성을 확보했다.
   - **선형 HDR 및 포스트프로세스 일원화**: `lightingPS.hlsl`의 내장 Reinhard/감마 보정을 제거하고 `LightingColor` 렌더타깃을 `R16G16B16A16_FLOAT`로 승격하여 선형 HDR 광량을 보존하며, `PostProcessPipeline`(8종 효과 및 `PostProcessComponent` 부재 시 Default ACES 톤매핑 + 감마 2.2 자동 폴백)이 Scene View와 Game View 모두에 일관되게 적용된다.
-  - **2026-11-08~14 추가 반영(정적 및 Windows `x64-debug` 검증 기준)**: `meshoptimizer` 기반 자동 메시 LOD 및 `ModelEditor` LOD 검사기(S5), `Engine/Resources/RenderPipelines/Deferred.bamrenderpipeline.json` 공용 프로필·Game View·`ClientRenderPipeline` 연결, 스키닝 그림자 및 하늘 앞 파티클 합성 보강, `Shader.h/.cpp`·`ShaderCompiler.cpp`·`ShaderBuild.cmake`의 `ERHIType::WebGPU` WGSL sidecar 변환 초안에 이어, `B01`(`StartupResourceLoader`↔`Shader` WGSL 경로 연결), `B02`(`ShaderImporter`·`ShaderHotReloadManager` 경로 정규화), `B03`(`ClientRenderPipeline` RHI별 3종 셰이더 경로 연결)이 반영되었고 `x64-debug` 빌드·CTest 36/36 통과를 확인했다. 다수 광원 257개 초과 폴백(`A06 본체`)과 GPU/WebGPU 실측 검증은 남아 있다.
+  - **2026-11-08~15 추가 반영(정적 및 Windows `x64-debug` 검증 기준)**: `meshoptimizer` 기반 자동 메시 LOD 및 `ModelEditor` LOD 검사기(S5), `Engine/Resources/RenderPipelines/Deferred.bamrenderpipeline.json` 공용 프로필·Game View·`ClientRenderPipeline` 연결, 스키닝 그림자 및 하늘 앞 파티클 합성 보강, `Shader.h/.cpp`·`ShaderCompiler.cpp`·`ShaderBuild.cmake`의 `ERHIType::WebGPU` WGSL sidecar 변환 초안, `B01~B03` 셰이더·런타임 경계 정리, `B05` Client `CrashHandler` 연결 및 `A06 본체`(타일당 256개 초과 시 안전 전체 순회 폴백, `tiledLightCullingCS.hlsl` 누적 카운트 보존, `LightManager` 씬 광원 상한 1024 확장)가 반영되었고 `x64-debug` 빌드·CTest 36/36 통과를 확인했다. GPU/WebGPU 실측 검증은 남아 있다.
 
 주요 확인 파일:
 
@@ -179,7 +179,7 @@ IBL처럼 비교적 독립적인 화질 개선은 측정·바인딩 기반이 �
 
 ### S4. Compute 실행 기반과 Tiled/Clustered Lighting
 
-2026-11-07 정적 확인. 씬 광원 업로드 상한은 32개다. 타일당 256개 초과 계측과 폴백(A06/F10)은 다수 광원 지원을 확장할 때 검증한다.
+2026-11-15 갱신. `LightManager`의 씬 광원 업로드 상한이 1024개(`MAX_LIGHTS`)로 확장되었으며, 타일당 256개 초과 계측(`s_TileLightCount` 보존)과 초과 타일 안전 전체 순회 폴백(`lightingPS.hlsl`, A06 본체/F10)이 반영되어 `x64-debug` 빌드 및 CTest 36/36 통과를 확인했다. 다수 광원 배치 씬에서의 실시간 렌더링 화면 비교 및 GPU 프로파일링 계측은 실측 검증으로 남긴다.
 
 먼저 `LightManager::DispatchLightCulling()`에서 할당된 타일 버퍼의 용량과 이번에 실행할 타일 격자를 구분한다. 큰 버퍼를 재사용할 때도 현재 G-Buffer 위치 텍스처의 너비와 높이로 디스패치 그룹 수를 계산한다. 크기가 서로 다른 씬·게임 뷰와 해상도 축소·복원에서 타일이 중복 기록되지 않는지 확인한다. 현행 코드에서 찾은 문제이며 실행 검증이 남아 있다.
 
