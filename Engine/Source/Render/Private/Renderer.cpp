@@ -737,19 +737,6 @@ EResult Renderer::RenderSprite(f32 dt, vector<SpriteDrawCommand>& commands, ERen
 
 	const ERenderPassType passType = renderPass->GetPassType();
 
-	struct SpriteUBO
-	{
-		mat4 worldMatrix;
-		vec4 color;
-		vec4 uvTransform;
-		vec4 pickingData;
-	};
-
-	static_assert(offsetof(SpriteUBO, color) == 64);
-	static_assert(offsetof(SpriteUBO, uvTransform) == 80);
-	static_assert(offsetof(SpriteUBO, pickingData) == 96);
-	static_assert(sizeof(SpriteUBO) == 112);
-
 	auto& samplerManager = SamplerManager::Get();
 	RHISampler* sampler = samplerManager.GetDefaultSampler();
 
@@ -769,44 +756,94 @@ EResult Renderer::RenderSprite(f32 dt, vector<SpriteDrawCommand>& commands, ERen
 	Mesh* lastMesh = nullptr;
 	Texture* lastTexture = nullptr;
 
+	MaterialInterface* batchMaterial = nullptr;
+	Mesh* batchMesh = nullptr;
+	Texture* batchTexture = nullptr;
+	vector<SpriteInstanceData> instanceBatch;
+	instanceBatch.reserve(128);
+
+	auto flushBatch = [&]() -> EResult
+		{
+			if (instanceBatch.empty() || !batchMesh || !batchMaterial || !batchTexture)
+				return EResult::Success;
+
+			if (batchMaterial != lastMaterial || batchMesh != lastMesh)
+			{
+				const auto bindResult = BindMeshPipeline(batchMesh, batchMaterial, passType, pipelineDesc);
+				if (bindResult != EResult::Success)
+				{
+					instanceBatch.clear();
+					return EResult::Success;
+				}
+				lastMaterial = batchMaterial;
+			}
+
+			if (batchTexture != lastTexture)
+			{
+				RHITexture* rhiTexture = batchTexture->GetRHITexture();
+				if (!rhiTexture || IsFailure(m_RHI->BindTextureSampler(rhiTexture, sampler, 0)))
+				{
+					instanceBatch.clear();
+					return EResult::Fail;
+				}
+				lastTexture = batchTexture;
+			}
+
+			if (batchMesh != lastMesh)
+			{
+				if (IsFailure(batchMesh->Bind(0)))
+				{
+					instanceBatch.clear();
+					return EResult::Fail;
+				}
+				lastMesh = batchMesh;
+			}
+
+			const uint32 instanceCount = static_cast<uint32>(instanceBatch.size());
+			if (IsFailure(m_RHI->BindInstanceBuffer(instanceBatch.data(), instanceCount, sizeof(SpriteInstanceData))))
+			{
+				instanceBatch.clear();
+				return EResult::Fail;
+			}
+
+			const EResult result = batchMesh->GetIndexBuffer()
+				? m_RHI->DrawIndexedInstanced(batchMesh->GetIndexCount(), instanceCount)
+				: m_RHI->DrawInstanced(batchMesh->GetVertexCount(), instanceCount);
+
+			instanceBatch.clear();
+			return result;
+		};
+
 	for (const auto& command : commands)
 	{
 		if (!command.mesh || !command.material || !command.texture)
 			return EResult::Fail;
+
 		RHITexture* texture = command.texture->GetRHITexture();
 		if (!texture || !command.mesh->GetIndexBuffer())
 			return EResult::Fail;
-		if (command.material != lastMaterial || command.mesh != lastMesh)
+
+		// 머티리얼·메시·텍스처 상태가 변경되거나 최대 인스턴스 배치 수(1024) 도달 시 이전 배치 일괄 제출
+		if (batchMesh && (command.material != batchMaterial || command.mesh != batchMesh ||
+			command.texture != batchTexture || instanceBatch.size() >= 1024))
 		{
-			if (IsFailure(BindMeshPipeline(command.mesh, command.material, passType, pipelineDesc)))
+			if (IsFailure(flushBatch()))
 				return EResult::Fail;
-			lastMaterial = command.material;
 		}
-		// 텍스처가 이전 커맨드와 다를 때만 무거운 Sampler 바인딩 갱신
-		if (command.texture != lastTexture)
-		{
-			if (IsFailure(m_RHI->BindTextureSampler(texture, sampler, 0)))
-				return EResult::Fail;
-			lastTexture = command.texture;
-		}
-		SpriteUBO objectData{};
-		objectData.worldMatrix = command.worldMatrix;
-		objectData.color = command.color;
-		objectData.uvTransform = command.uvTransform;
-		objectData.pickingData = vec4(static_cast<float>(command.pickingId), 0.0f, 0.0f, 0.0f);
-		if (IsFailure(m_RHI->BindConstantBuffer(&objectData, sizeof(objectData), 1)))
-			return EResult::Fail;
-		if (command.mesh != lastMesh)
-		{
-			if (IsFailure(command.mesh->Bind(0)))
-				return EResult::Fail;
-			lastMesh = command.mesh;
-		}
-		if (IsFailure(m_RHI->DrawIndexed(command.mesh->GetIndexCount())))
-			return EResult::Fail;
+
+		batchMaterial = command.material;
+		batchMesh = command.mesh;
+		batchTexture = command.texture;
+
+		SpriteInstanceData inst{};
+		inst.worldMatrix = command.worldMatrix;
+		inst.color = command.color;
+		inst.uvTransform = command.uvTransform;
+		inst.pickingData = vec4(static_cast<float>(command.pickingId), 0.0f, 0.0f, 0.0f);
+		instanceBatch.push_back(inst);
 	}
 
-	return EResult::Success;
+	return flushBatch();
 }
 
 EResult Renderer::RenderUIImages(const vector<UIImageDrawCommand>& commands, RenderPass* renderPass)

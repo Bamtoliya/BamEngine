@@ -2,6 +2,20 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-15] 2D Phase 5 스프라이트 인스턴싱 드로우콜 배칭 및 기본 Unlit 머티리얼·Fallback 연결
+
+- **배경 및 범위**: [SpriteAnd2DSystemPlan.md](SpriteAnd2DSystemPlan.md)의 잔여 과제인 Phase 5를 완결하여, 스프라이트·타일맵 렌더링 시 발생하는 개별 드로우콜 및 상수 버퍼 업로드 병목을 인스턴싱 기반 배치 렌더링으로 해소하고, 미지정 스프라이트의 기본 Unlit 머티리얼 및 쿼드 메시 자동 Fallback을 연결했다.
+- **주요 변경 내용**:
+  - [InstanceData.h](file:///i:/BamtoliyaGithub/BamEngine/Engine/Source/Render/Public/InstanceData.h): `SpriteInstanceData` (112바이트: `worldMatrix` 64B, `color` 16B, `uvTransform` 16B, `pickingData` 16B) 구조체 및 크기 검증 `static_assert` 추가.
+  - [gbufferSpriteVS.hlsl](file:///i:/BamtoliyaGithub/BamEngine/Engine/Resources/Shader/hlsl/gbufferSpriteVS.hlsl): 단일 `b0, space2` 상수 버퍼 대신 `StructuredBuffer<SpriteInstanceData> g_SpriteInstances : register(t0, space2);`와 `SV_InstanceID`를 참조하도록 셰이더를 인스턴싱 구조로 전환.
+  - [Renderer.cpp](file:///i:/BamtoliyaGithub/BamEngine/Engine/Source/Render/Private/Renderer.cpp): `RenderSprite`에서 기존 개별 `DrawIndexed` 호출 루프를 `flushBatch` 람다 및 `DrawIndexedInstanced` 기반 배치 파이프라인으로 교체. 연속된 동일 상태(material, mesh, texture) 명령을 `instanceBatch`에 최대 1024개까지 모아 1회의 인스턴스 드로우콜로 일괄 제출하며, `sortingLayerID` 및 `orderInLayer` 정렬 순서를 보존.
+  - [SpriteRenderSystem.cpp](file:///i:/BamtoliyaGithub/BamEngine/Engine/Source/Sprite/Private/SpriteRenderSystem.cpp): `SpriteRendererComponent`의 `meshHandle` 및 `materialHandle`이 비어있을 때 `Engine://Mesh/Quad`와 `Engine://Material/SpriteMaterial.bammat.json`으로 자동 Fallback하는 안전 로직 추가.
+  - [SpriteMaterial_AlphaBlend.bammat.json](file:///i:/BamtoliyaGithub/BamEngine/Engine/Resources/Material/SpriteMaterial_AlphaBlend.bammat.json): 반투명 스프라이트용 Unlit 머티리얼(`m_BlendMode: 2`, `m_DepthMode: 1`) 신규 구비.
+- **검증 상태**: Windows `x64-debug` 빌드 및 셰이더 컴파일(`gbufferSpriteVS.cso`, `gbufferSpriteVS.spv`) 성공, CTest 전체 36/36(`SpriteAtlasCheck`, `TilemapCheck`, `PixelPerfectCameraCheck` 등) 통과 확인(사용자 실행 결과).
+- **미검증 항목**: `x64-release` 빌드, 수만 개 스프라이트/타일 밀집 씬에서의 RHI FrameMetrics 드로우콜/프레임 타임 수동 계측.
+
+---
+
 ### [2026-11-15] 타일 컬링(Tiled Light Culling) 257개 초과 광원 안전 폴백 및 다수 광원 지원 확장 (A06 본체)
 
 - **배경 및 범위**: `2026-11-06` 점검 항목 중 유일한 렌더링 잔여 결함이었던 `A06 본체`(타일당 광원 256개 상한 초과 시 257번째 이후 광원 누락 문제)를 해소하고, `LightManager`의 씬 광원 상한을 확장했다.

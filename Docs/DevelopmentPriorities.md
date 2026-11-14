@@ -566,12 +566,12 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
 - **트랙 A (렌더링 품질 — S2-D) [완료: 2026-11-08]**: 텍스처 밉맵(Mipmap) 체인 생성 및 RHI 다중 서브리소스 업로드 (`stb_image_resize2` 기반 CPU 밉맵 체인 생성, `DirectX12RHI` 다중 서브리소스 업로드, 삼선형 필터링 연동 및 `TextureMipmapCheck` 단위 테스트 완결).
 - **트랙 B (모델 파이프라인 — InteractiveModelImport Phase 5) [완료: 2026-11-07]**: `meshoptimizer`(`meshopt_simplify`) 기반 자동 메시 LOD 생성 파이프라인 및 `ModelEditor` 실시간 LOD 검사기 완결.
 - **트랙 C (에셋 아키텍처 — ResourceAndAssetSeparation Phase 1~3-B) [완료: 2026-11-08]**: 가상 마운트 URI(`Engine://`, `Editor://`, `Project://`) 해석 계층 구축, 빌트인 리소스 보강, 에디터 로캘 분리 및 `Assets/` 물리 폴더 완전 이관 완결. (※ Phase 4 배포 패키징 연동은 2026-11-08 사용자 결정에 따라 핵심 기능 구현 완료 후 최종 배포 단계로 최대한 뒤로 보류)
-- **트랙 D (2D 제작 워크플로 — [SpriteAnd2DSystemPlan.md](SpriteAnd2DSystemPlan.md)) [Phase 5 렌더 제출 연결 대기]**:
+- **트랙 D (2D 제작 워크플로 — [SpriteAnd2DSystemPlan.md](SpriteAnd2DSystemPlan.md)) [구현 완료: 2026-11-15]**:
   - Phase 1 [완료]: 스프라이트 에디터(`SpriteEditor`) 인터랙티브 시트 3대 슬라이서(Grid by Cell Size, Cell Count, Auto Alpha Connected Components) 및 원클릭 액션 애니메이션 클립(`.spriteanim`) 일괄 생성 위저드 완성.
   - Phase 2: 스프라이트 렌더링 모드(Simple, Sliced 9-Slice, Tiled, Filled)와 2D 정렬 필드가 있다. 정렬 필드의 렌더 제출 연결은 Phase 5에서 다룬다.
   - Phase 3 [완료]: 픽셀 퍼펙트 카메라(`PixelPerfectCameraComponent`), 서브픽셀 카메라 스냅(`snapSubpixel`), 가상 레퍼런스 해상도 기준 정수 줌 배율 자동 계산 및 OrthographicSize 완벽 동기화, `GameViewportPanel` 연동 및 `PixelPerfectCameraCheck` 단위 테스트 완성.
   - Phase 4 [완료]: 2D 타일맵 시스템(`TilemapComponent`), 16x16 청크 분할 및 직렬화/복원, `TilemapRenderSystem` 및 머티리얼/메시 fallback, `TilePalettePanel`(B, E, U, I 브러시 툴바), `SceneViewportPanel` 인터랙티브 실시간 타일 페인팅 및 `TilemapCheck` 단위 테스트 완성.
-  - [Phase 5](SpriteAnd2DSystemPlan.md#phase-5-스프라이트-아틀라스-및-드로우콜-배칭) [기반 구현]: MaxRects 배치 계산, CPU 버킷 및 `SpriteAtlasCheck`가 있다. 같은 시트의 기본 쿼드에서 실제 배칭을 연결·계측하고, 여러 텍스처가 배치를 분리하는 경우 아틀라스 생성·제출을 연결한다.
+  - [Phase 5](SpriteAnd2DSystemPlan.md#phase-5-스프라이트-아틀라스-및-드로우콜-배칭) [구현 완료]: MaxRects 패킹, 런타임 스프라이트 인스턴싱 드로우콜 배칭(SpriteInstanceData, RenderSprite 루프, DrawIndexedInstanced 1회 제출), Unlit 머티리얼·Fallback 연결 및 CTest 36/36 검증 완료.
 - **트랙 E (모듈 및 플러그인 GUI 제어 파이프라인 — PluginManagerPanel, [ImGuiDevelopmentPlan 26절](ImGuiDevelopmentPlan.md#26-플러그인-및-모듈-관리-패널pluginmanagerpanel-구현-완료)) [구현 완료]**:
   - Phase 1 [완료]: `PluginManagerPanel` 에디터 패널 신설 (`Editor/Source/ImGui/PluginManager/Public/PluginManagerPanel.h`, `Private/PluginManagerPanel.cpp`).
   - Phase 2 [완료]: 마스터-디테일 2열 레이아웃(좌측 270px 목록 + 필터 + 상태 뱃지, 우측 상세 인스펙터 및 제어 툴바) 구축.
@@ -601,10 +601,10 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
 
 1. **작업 트리 정리 완료 (`B04`) 및 Windows 기준선 후속 검증**: 미커밋 변경분의 5개 논리 커밋 분리(`1a798d3d`, `5083be3c`, `e5cd4e4b`, `c426a4c2`, `13f1c821`) 및 `x64-debug` 멀티코어 빌드·CTest 36/36 통과(2026-11-14)는 완료했다. `x64-release` 빌드 및 `RenderPipelineProfilePlan` 2·3단계 수동 비교·FMOD 오디오 재생 확인이 남아 있다.
 2. **WebGPU/Emscripten 이식 선결 해소 (`B01` → `B02` → `B03` 코드 반영 완료 / 툴체인 검증 대기)**: `StartupResourceLoader`·`SceneArchiveCheck` WGSL 경로 연결 및 직렬화 검증(`B01`), `ShaderImporter`·`ShaderHotReloadManager` 경로 정규화(`B02`), `Systems.h`/`ClientGameRuntime`/`Engine/CMakeLists.txt`/`ClientRenderPipeline`의 Emscripten `NetworkSystem`/FMOD Wasm/RHI 셰이더 경계 정리(`B03`)를 반영하고 Windows `x64-debug` 빌드·CTest 36/36 통과를 확인했다. 다음 단계로 호스트 `ReflectionGenerator` + `Tint` 기반 `Tools/WebGPUProbe` 및 Emscripten 정적 빌드·실행을 검증한다.
-3. **안정성·후속 기능 마무리 (`B05`·`A06 본체` 반영 완료 / 2D Phase 5)**: `Client` `CrashHandler` 연결 및 `PackageClient.ps1` 현행화(`B05`), 타일 컬링 257개 초과 안전 전체 순회 폴백 및 `MAX_LIGHTS` 1024 확장(`A06 본체`) 반영을 완료했다(`x64-debug` CTest 36/36 확인). 후속으로 2D Phase 5 드로우 배칭 연결을 진행한다.
+3. **안정성·후속 기능 마무리 (`B05`·`A06 본체`·`2D Phase 5` 반영 완료)**: `Client` `CrashHandler` 연결 및 `PackageClient.ps1` 현행화(`B05`), 타일 컬링 257개 초과 안전 전체 순회 폴백 및 `MAX_LIGHTS` 1024 확장(`A06 본체`), 2D Phase 5 스프라이트 인스턴싱 드로우콜 배칭 및 Unlit 머티리얼·Fallback 연결 반영을 완료했다(`x64-debug` CTest 36/36 확인).
 
 ### 11.5 상태·검증 기록 규칙
 
-- 2026-11-07 기준 CMake Debug 빌드 및 CTest 전체 29개(29/29 Passed) 통과 확인 완료; 2026-11-14 `spirv_cross_*` 순서 수정 후 `x64-debug` CTest 36/36 통과, `B01~B03` 코드 반영 후 CTest 36/36 통과, `B05` 가드 4건 검증 완료, 2026-11-15 `A06 본체` 타일 컬링 초과 폴백 및 `MAX_LIGHTS 1024` 반영 후 `x64-debug` 빌드 및 CTest 36/36 통과 확인 완료(`x64-release`·실 크래시 덤프 생성·실 오디오/UI/GPU 수동 비교·Emscripten/Tint 실 툴체인은 미검증).
+- 2026-11-07 기준 CMake Debug 빌드 및 CTest 전체 29개(29/29 Passed) 통과 확인 완료; 2026-11-14 `spirv_cross_*` 순서 수정 후 `x64-debug` CTest 36/36 통과, `B01~B03` 코드 반영 후 CTest 36/36 통과, `B05` 가드 4건 검증 완료, 2026-11-15 `A06 본체` 타일 컬링 초과 폴백 및 `MAX_LIGHTS 1024` 반영 후 `x64-debug` 빌드 및 CTest 36/36 통과 확인 완료; 2026-11-15 2D Phase 5 스프라이트 인스턴싱 드로우콜 배칭 및 Unlit 머티리얼·Fallback 반영 후 `x64-debug` CTest 36/36 통과 확인 완료(`x64-release`·실 크래시 덤프 생성·실 오디오/UI/GPU 수동 비교·Emscripten/Tint 실 툴체인은 미검증).
 - 기준 커밋, 미커밋 범위, 구성, 검사 이름과 실제 실행 개수, 실패 시나리오, UI/GPU 미검증을 기록한다.
 - 소스 전면 이동·싱글턴 전면 교체·모든 문서의 장기 목표 구현을 완료 조건으로 추가하지 않는다.

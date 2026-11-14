@@ -211,7 +211,7 @@ flowchart TD
 | **Phase 2** | **Sprite 렌더링 모드 확장** | Sliced(9-Slice), Tiled, Filled, 2D Sorting Layer & Order in Layer | **[모드 구현]**<br>(정렬 필드의 제출 연결은 Phase 5에서 진행) |
 | **Phase 3** | **Pixel Perfect Camera** | 레퍼런스 해상도/PPU 자동 줌, 서브픽셀 카메라 스냅, 정수배 렌더링 | **[구현 완료]**<br>(PixelPerfectCameraComponent, CameraSystem 연동 및 단위 테스트) |
 | **Phase 4** | **2D Tilemap System** | Chunked Tilemap Mesh Batching, Tile Palette 저작 도구 | **[구현 완료]**<br>(TilemapComponent, TilePalettePanel, SceneViewportPanel 페인팅 및 TilemapCheck) |
-| **Phase 5** | **Sprite Atlas & Batcher** | MaxRects 패킹, 런타임 스프라이트 배칭 | **[기반 구현]**<br>(실제 렌더 제출·아틀라스 생성 연결 및 실측 대기) |
+| **Phase 5** | **Sprite Atlas & Batcher** | MaxRects 패킹, 런타임 스프라이트 인스턴싱 드로우콜 배칭, Unlit 머티리얼·Fallback 연결 | **[구현 완료]**<br>(SpriteInstanceData, RenderSprite 인스턴싱 루프, SpriteMaterial Fallback) |
 
 ---
 

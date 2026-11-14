@@ -2,6 +2,7 @@
 #include "WorldComponents.h"
 #include "RenderComponents.h"
 #include "ResourceHandle.h"
+#include "ResourceManager.h" 
 #include "Sprite.h"
 #include "Mesh.h"
 #include "MaterialInterface.h"
@@ -54,10 +55,27 @@ void SpriteRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>
             if (!flag.IsActiveInHierarchy() || !flag.IsVisibleInHierarchy() || HasFlag(flag.effectiveFlags, EEntityFlag::Dead)) continue;
 
             Sprite* sprite = spriteRenderer.spriteHandle.Get();
-            Mesh* mesh = spriteRenderer.meshHandle.Get();
-            MaterialInterface* material = spriteRenderer.materialHandle.Get();
+            if (!sprite) continue;
 
-            if (!sprite || !mesh || !material) continue;
+            Mesh* mesh = spriteRenderer.meshHandle.Get();
+            if (!mesh)
+            {
+                static ResourceHandle<Mesh> defaultMesh = ResourceManager::Get().GetResourceHandle<Mesh>(L"Engine://Mesh/Quad");
+                if (!defaultMesh.IsValid())
+                    defaultMesh = ResourceManager::Get().GetResourceHandle<Mesh>(L"Resources/Mesh/Quad.bammesh");
+                mesh = defaultMesh.Get();
+            }
+
+            MaterialInterface* material = spriteRenderer.materialHandle.Get();
+            if (!material)
+            {
+                static ResourceHandle<MaterialInterface> defaultMat = ResourceManager::Get().GetResourceHandle<MaterialInterface>(L"Engine://Material/SpriteMaterial.bammat.json");
+                if (!defaultMat.IsValid())
+                    defaultMat = ResourceManager::Get().GetResourceHandle<MaterialInterface>(L"Resources/Material/SpriteMaterial.bammat.json");
+                material = defaultMat.Get();
+            }
+
+            if (!mesh || !material) continue;
 
             Texture* texture = sprite->GetTexture();
             if (!texture || !texture->GetRHITexture()) continue;
