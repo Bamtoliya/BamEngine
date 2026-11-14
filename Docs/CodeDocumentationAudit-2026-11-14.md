@@ -12,7 +12,7 @@
 
 1. `2026-11-06` 점검의 **A01~A10** 중 패키징 경로/생성 보호(A01·A02), 에셋 감시자 UTF-8/예외 경계(A03), RT 큐브맵 차원 방어(A04), 스플리터 선호값 보존(A05), 타일 컬링 디스패치 크기 일치(A06 후속), 비정상 PNG 제거(A07), 패키지 마커 기반 설정 정책(A08), 스키닝 `t0, space2` 바인딩 문서(A09), 가상 URI 선행 후 `Engine/Resources/`·`Assets/` 물리 분리(A10)는 코드와 문서에 반영되었다. 단, 다수 광원 257개 초과 폴백(A06 본체)과 일부 실행 검증은 여전히 남아 있다.
 2. 현재 작업 트리는 **Windows Client 실행·패키징 안정화**에서 **WebGPU/Wasm Client 이식 준비**로 넘어가는 과도기 상태다. Windows 네이티브 경로의 `ClientGameRuntime` 분리와 `StartupResourceLoader` 공용화는 방향이 타당하나, 아직 Emscripten/WebGPU 툴체인으로 컴파일·실행 검증되지 않았다.
-3. 특히 WebGPU 전환 경로에서 `StartupResourceLoader`↔`Shader` 간 WGSL 경로 단절(**B01**), `ShaderImporter`의 구형 `Resources/Shader/` 하드코딩(**B02**), `ClientGameRuntime`의 `NetworkSystem`/FMOD/DXIL 고정 의존성(**B03**)이 정적 대조로 확인되었으므로 Emscripten Client 타깃 연결 전에 먼저 정리해야 한다.
+3. WebGPU 전환 경로에서 확인된 선결 과제(**B01** `StartupResourceLoader`↔`Shader` WGSL 경로 연결, **B02** `ShaderImporter`·`ShaderHotReloadManager` 경로 정규화, **B03** `ClientGameRuntime`의 `NetworkSystem`/FMOD/DXIL 고정 의존성 정리) 및 **B04**(5개 논리 커밋 분리)는 2026-11-14 코드 반영과 Windows `x64-debug` 빌드·CTest 36/36 통과로 해소되었다. Emscripten/Tint 실 툴체인 실행 검증과 **B05**가 후속 과제로 남아 있다.
 
 ## 3. 2026-11-06 이후 반영 현황 및 작업 트리 상태
 
@@ -52,7 +52,9 @@
 
 ## 4. 신규 결함·위험·문서 불일치 (`B01~B06`)
 
-### B01 — 보통 / `StartupResourceLoader`와 `Shader` 간의 WebGPU(WGSL) 경로 연결 단절
+### B01 — 보통 / `StartupResourceLoader`와 `Shader` 간의 WebGPU(WGSL) 경로 연결 단절 [해소 완료: 2026-11-14]
+
+- **해소 결과 (2026-11-14):** `StartupResourceLoader.cpp`에서 `ShaderItemConfig::WgslPath`, `DeriveStartupWgslPath()`, `GetStartupShaderPath(WebGPU/Vulkan)`, `LoadShaders()`의 `dxilPath`·`spirvPath`·`wgslPath` 채우기를 구현하고, `SceneArchiveCheck.cpp`의 `CheckShaderPathRoundTrip()`에 `GetWgslPath() == L"Shaders/GraphMaterialPS.wgsl"` 초기값 및 3회 라운드트립 검증을 추가하여 `x64-debug` CTest(36/36) 통과를 확인했다.
 
 - 위치:
   - `Engine/Source/Resource/Private/StartupResourceLoader.cpp:30~40, 138~143, 172~176, 319~328`
@@ -66,7 +68,9 @@
 - 최소 개선: `ShaderItemConfig`에 선택적 `WgslPath`를 추가하고 `GetStartupShaderPath()`에 `ERHIType::WebGPU` 분기(`WgslPath` 우선, 없으면 `SpirvPath` 기반 `bin/wgsl/*.wgsl` 유도 또는 `SpirvPath` 반환)를 연결한다. `LoadShaders()`에서는 `desc.dxilPath`, `desc.spirvPath`, `desc.wgslPath`를 함께 채워 `Shader::BuildRHIShaderDesc()`와 일관되게 맞춘다.
 - 완료 조건: `DirectX12`, `SDLGPU`, `WebGPU` 각 `ERHIType`에 대해 `CollectPipelineFiles()`와 `LoadShaders()`가 의도한 바이너리 확장자(`.cso`, `.spv`, `.wgsl`)와 `Shader` 경로 필드를 올바르게 채우는지 확인한다.
 
-### B02 — 보통 / `ShaderImporter.cpp`의 구형 `Resources/Shader/...` 경로 하드코딩 잔류
+### B02 — 보통 / `ShaderImporter.cpp`의 구형 `Resources/Shader/...` 경로 하드코딩 잔류 [해소 완료: 2026-11-14]
+
+- **해소 결과 (2026-11-14):** `ShaderImporter.cpp`의 `.hlsl` 분기에서 `PlatformPath::ToVirtualUri(sourcePath)`(폴백 `Engine://Shader/<stem>`)와 `binRoot` 기준 `dxil`/`spirv`/`wgsl` 경로 생성 및 후보 키 기반 `UpdateBytecode`를 적용했고, `ShaderHotReloadManager.cpp`에 `ERHIType::WebGPU` 분기와 3종 백엔드 경로 등록을 반영하여 `x64-debug` 빌드·CTest(36/36) 통과를 확인했다.
 
 - 위치: `Editor/Source/AssetManager/Importer/Private/ShaderImporter.cpp:64~73` (참고: `Client/Source/ClientRenderPipeline.cpp:71` 구형 키 `L"Resources/Material/UIMaterial.bammat.json"`).
 - 현재 동작: `ShaderHotReloadManager.cpp:318~336`은 `PlatformPath::ToVirtualUri(hlslPath)`(폴백 `Engine://Shader/...`)와 `result.OutputPath`를 사용하지만, `ShaderImporter::Import()`의 `.hlsl` 분기는 `desc.Key = L"Resources/Shader/" + stemW`, `desc.dxilPath = L"Resources/Shader/bin/dxil/" + ...`, `desc.spirvPath = L"Resources/Shader/bin/spirv/" + ...`, `desc.wgslPath = L"Resources/Shader/bin/wgsl/" + ...`로 구형 물리 경로를 하드코딩한다. (`rhiType == ERHIType::WebGPU`일 때만 `desc.wgslPath`를 `compileResult.OutputPath`로 덮어쓴다.)
@@ -74,7 +78,9 @@
 - 최소 개선: `ShaderImporter::Import()`에서도 `PlatformPath::ToVirtualUri(sourcePath)`(폴백 `Engine://Shader/` + `stemW`)와 `compileResult.OutputPath`(및 동일 `bin/` 루트 상대 경로)를 사용하도록 정규화한다.
 - 완료 조건: HLSL 임포트와 핫 리로드가 생성하는 `Shader` 키 및 `dxilPath`/`spirvPath`/`wgslPath`가 동일한 `Engine://Shader/...` 규약과 실제 출력 파일을 가리키는지 확인한다.
 
-### B03 — 보통 / `ClientGameRuntime`의 시스템·셰이더 의존성과 Emscripten 빌드 경계 불일치
+### B03 — 보통 / `ClientGameRuntime`의 시스템·셰이더 의존성과 Emscripten 빌드 경계 불일치 [해소 완료: 2026-11-14]
+
+- **해소 결과 (2026-11-14):** `Systems.h`와 `ClientGameRuntime.cpp`에서 `NetworkSystem` 포함·등록을 `#if !defined(__EMSCRIPTEN__)`로 감쌌고, `Engine/CMakeLists.txt`에 `EMSCRIPTEN` FMOD Wasm(`ThirdParty/FMOD/lib/w32/fmodL_wasm.a`+`fmodL_bindings.a` / `fmod_wasm.a`+`fmod_bindings.a`) 링크 분기를 추가했으며, `ClientRenderPipeline.cpp`에서 `binRoot`(`Shader/bin`) 기반 3종 셰이더 경로 및 RHI별 `desc.Path` 선택으로 정리했다(Windows `x64-debug` 빌드·CTest 36/36 확인, Emscripten 툴체인 실측은 미검증).
 
 - 위치:
   - `Client/Source/Execution/Private/ClientGameRuntime.cpp:200~223`
@@ -88,7 +94,9 @@
 - 최소 개선: Emscripten Client 구성 전에 (1) `NetworkSystem` 등록의 조건부 제외 또는 플랫폼 중립 null/stub 제공, (2) Emscripten용 FMOD Wasm 라이브러리 링크 또는 오디오 백엔드 경계 분리, (3) `ClientRenderPipeline`의 RHI 타입별 셰이더 경로 선택을 결정한다.
 - 완료 조건: Emscripten 환경에서 `Engine` 정적 라이브러리와 최소 Web Client 타깃이 링크 오류 없이 구성·빌드되는지 확인한다.
 
-### B04 — 낮음 / 작업 트리 내 0바이트 임시 파일 잔존 및 다목적 변경 혼재
+### B04 — 낮음 / 작업 트리 내 0바이트 임시 파일 잔존 및 다목적 변경 혼재 [해소 완료: 2026-11-14]
+
+- **해소 결과 (2026-11-14):** 작업 트리의 기존 변경을 `1a798d3d`(FMOD 2.03.15), `5083be3c`(StartupResourceLoader·ClientPackage), `e5cd4e4b`(ClientGameRuntime 분리), `c426a4c2`(Emscripten·WGSL·spirv_cross), `13f1c821`(문서·점검) 5개 논리 커밋으로 분리 완료했다.
 
 - 위치: 저장소 루트 `cd`, `emcc`, `emcmake` (각 0바이트 untracked), 및 현재 미커밋 변경 전체(183개 파일 diff + untracked 항목).
 - 근거: 쉘 작업 중 생성된 0바이트 파일 3개가 루트에 남아 있고, FMOD 2.03.15 SDK 교체, `StartupResourceLoader` 공용화, `ClientGameRuntime` 분리, Emscripten/WGSL 빌드 경계 초안이 커밋 없이 한 작업 트리에 섞여 있다.

@@ -2,6 +2,18 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-14] WebGPU·Emscripten 이식 선결 과제 해소 (B01~B03)
+
+- **배경 및 범위**: [2026-11-14 코드·원칙·계획 점검](CodeDocumentationAudit-2026-11-14.md)에서 도출된 `B01`(StartupResourceLoader↔Shader WGSL 경로 단절), `B02`(ShaderImporter 구형 경로 하드코딩 및 HotReload WGSL 누락), `B03`(ClientGameRuntime·Engine/CMakeLists.txt·ClientRenderPipeline의 Emscripten/RHI 경계 불일치)을 순차 수정했다.
+- **주요 변경 내용**:
+  - `B01`: [StartupResourceLoader.cpp](file:///i:/BamtoliyaGithub/BamEngine/Engine/Source/Resource/Private/StartupResourceLoader.cpp)의 `ShaderItemConfig::WgslPath`, `DeriveStartupWgslPath()`, `GetStartupShaderPath()`(`ERHIType::WebGPU`·`Vulkan`), `LoadShaders()`(`dxilPath`/`spirvPath`/`wgslPath`)를 연결했고, [SceneArchiveCheck.cpp](file:///i:/BamtoliyaGithub/BamEngine/Engine/examples/SceneArchiveCheck.cpp)의 `CheckShaderPathRoundTrip()`에 `GetWgslPath()` 초기값 및 3회 저장/로드 검증을 추가했다.
+  - `B02`: [ShaderImporter.cpp](file:///i:/BamtoliyaGithub/BamEngine/Editor/Source/AssetManager/Importer/Private/ShaderImporter.cpp)의 `.hlsl` 분기에서 `PlatformPath::ToVirtualUri(sourcePath)`와 `binRoot` 기준 `dxil`·`spirv`·`wgsl` 경로 및 후보 키 기반 `UpdateBytecode`를 적용했고, [ShaderHotReloadManager.cpp](file:///i:/BamtoliyaGithub/BamEngine/Editor/Source/HotReload/Private/ShaderHotReloadManager.cpp)에 `ERHIType::WebGPU` 선택 및 3종 백엔드 경로 등록을 반영했다.
+  - `B03`: [Systems.h](file:///i:/BamtoliyaGithub/BamEngine/Engine/Source/World/System/Public/Systems.h)와 [ClientGameRuntime.cpp](file:///i:/BamtoliyaGithub/BamEngine/Client/Source/Execution/Private/ClientGameRuntime.cpp)에서 `NetworkSystem` 포함·등록을 `#if !defined(__EMSCRIPTEN__)`로 감쌌고, [Engine/CMakeLists.txt](file:///i:/BamtoliyaGithub/BamEngine/Engine/CMakeLists.txt)에 `EMSCRIPTEN` FMOD Wasm(`ThirdParty/FMOD/lib/w32/fmodL_wasm.a`+`fmodL_bindings.a` / `fmod_wasm.a`+`fmod_bindings.a`) 링크를 추가했으며, [ClientRenderPipeline.cpp](file:///i:/BamtoliyaGithub/BamEngine/Client/Source/ClientRenderPipeline.cpp)의 셰이더 로드를 `binRoot`(`Shader/bin`) 기반 3종 백엔드 경로 및 RHI별 `desc.Path` 선택으로 변경했다.
+- **검증 상태**: Windows `x64-debug` 빌드 및 CTest 전체 36/36 통과 확인(사용자 실행 결과).
+- **미검증 항목**: `x64-release` 빌드, Emscripten SDK / Tint 실 툴체인 빌드 및 WebGPU 런타임 실행, `RenderPipelineProfilePlan` 2·3단계 수동 비교, `B05`(독립 Client `CrashHandler` 연결 및 레거시 `PackageClient.ps1` 정리).
+
+---
+
 ### [2026-11-14] 에디터 사용성(UX) 테스트 및 검증 기준 문서화
 
 - **배경/목적**: `EngineEditorClientGuidelines.md`와 `ImGuiDevelopmentPlan.md`에 분산된 에디터 UI/UX 구현 규칙에 대응해, 신규 패널 추가 및 공용 UI 회귀 확인 시 일관되게 적용할 테스트 계층, 경계 조건 및 Pass/Fail 판정 기준을 수립했다.

@@ -162,11 +162,11 @@ WebGPU를 지원하는 브라우저에서 `http://localhost:8765/`를 연다. `R
 
 남은 작업은 Tint 변환을 실행 검증하고 Emscripten 빌드 경계를 도구 체인으로 검증하는 것이다. 이어서 WebGPU RHI의 디바이스·surface·자원·pipeline·draw 계약과 비동기 Client 시작 경로를 연결한다. 이후 Wasm Client 호스트와 정적 게임 코드 등록 경로를 연결해 같은 씬에서 Fox 모델과 이동 애니메이션을 실행한다. Editor 빌드 패널에는 씬·Wasm·필수 리소스를 함께 내보내는 WebGPU 대상을 추가하고, 같은 카메라에서 Deferred 조명과 후처리를 비교한다.
 
-2026-11-14 정적 점검에서 확인한 이식 선결 과제 (`CodeDocumentationAudit-2026-11-14.md` B01~B03):
+2026-11-14 정적 점검에서 확인한 이식 선결 과제 (`CodeDocumentationAudit-2026-11-14.md` B01~B03 — 2026-11-14 코드 반영 및 `x64-debug` CTest 36/36 통과로 해소 완료):
 
-- **B01 (`StartupResourceLoader`↔`Shader` WGSL 경로 단절)**: `ShaderItemConfig`에 `WgslPath`를 추가하고 `GetStartupShaderPath()`에 `ERHIType::WebGPU` 분기(`WgslPath` 우선 또는 `SpirvPath` 기반 `bin/wgsl/*.wgsl` 유도)를 연결하며, `LoadShaders()`가 `dxilPath`·`spirvPath`·`wgslPath`를 함께 채우도록 맞춘다.
-- **B02 (`ShaderImporter` 구형 경로 하드코딩)**: `Editor/Source/AssetManager/Importer/Private/ShaderImporter.cpp`의 `.hlsl` 분기가 사용하는 구형 `Resources/Shader/...` 하드코딩을 `Engine://Shader/...` 규약(`PlatformPath::ToVirtualUri`)과 `compileResult.OutputPath`로 정규화한다. (참고: `ClientRenderPipeline.cpp:71`의 `L"Resources/Material/UIMaterial.bammat.json"` 구형 키도 함께 정리 대상이다.)
-- **B03 (`ClientGameRuntime`의 Emscripten 빌드 경계 불일치)**: `Engine/CMakeLists.txt`의 `EMSCRIPTEN` 소스 제외 목록(`/Network/`)과 `ClientGameRuntime::InitializeSystems()`의 무조건 `NetworkSystem` 등록 간 충돌을 해소하고, Emscripten FMOD Wasm(`ThirdParty/FMOD/lib/wasm` 또는 `js`) 링크/오디오 백엔드 경계와 `ClientRenderPipeline`의 RHI별 셰이더 경로(`bin/dxil` 고정 로드 대체)를 연결한다.
+- **B01 (`StartupResourceLoader`↔`Shader` WGSL 경로 단절) [해소 완료: 2026-11-14]**: `ShaderItemConfig`에 `WgslPath`를 추가하고 `GetStartupShaderPath()`에 `ERHIType::WebGPU`·`Vulkan` 분기(`WgslPath` 우선 또는 `SpirvPath` 기반 `bin/wgsl/*.wgsl` 유도)를 연결했으며, `LoadShaders()`가 `dxilPath`·`spirvPath`·`wgslPath`를 채우도록 수정했다(`SceneArchiveCheck` WGSL 라운드트립 검증 통과).
+- **B02 (`ShaderImporter` 구형 경로 하드코딩) [해소 완료: 2026-11-14]**: `Editor/Source/AssetManager/Importer/Private/ShaderImporter.cpp`의 `.hlsl` 분기가 `PlatformPath::ToVirtualUri(sourcePath)`(폴백 `Engine://Shader/<stem>`)와 `binRoot` 기준 `dxil`·`spirv`·`wgsl` 경로 및 후보 키 `UpdateBytecode`를 사용하도록 정규화했고, `ShaderHotReloadManager.cpp`에 `ERHIType::WebGPU` 분기 및 3종 백엔드 경로 등록을 반영했다. (참고: `ClientRenderPipeline.cpp`의 `UIMaterial` 키는 `Renderer.cpp`·`UIRenderSystem.cpp` 폴백 조회 키와 동기화 유지 대상이다.)
+- **B03 (`ClientGameRuntime`의 Emscripten 빌드 경계 불일치) [해소 완료: 2026-11-14]**: `Systems.h` 및 `ClientGameRuntime::InitializeSystems()`의 `NetworkSystem` 포함·등록을 `#if !defined(__EMSCRIPTEN__)`로 감쌌고, `Engine/CMakeLists.txt`에 `EMSCRIPTEN` FMOD Wasm(`ThirdParty/FMOD/lib/w32/fmod*_wasm.a` + `fmod*_bindings.a`) 링크를 추가했으며, `ClientRenderPipeline.cpp`에서 `binRoot`(`Shader/bin`) 기반 3종 백엔드 경로와 RHI별 `desc.Path`를 사용하도록 수정했다(Emscripten 실 툴체인 검증은 추후 수행).
 
 ## 5. 초기 배포 폴더 후보
 

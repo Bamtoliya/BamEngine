@@ -4,10 +4,10 @@
 - 상태: 개발 계획 및 2026-11-14 정적 점검 반영(S2-D CPU 밉맵/자동 LOD, Deferred Render Pipeline Profile·ClientRenderPipeline 연결, 스키닝 `t0, space2`·하늘 앞 파티클 보강, WGSL sidecar 초안) / 일부 코드·셰이더 존재 여부는 전체 GPU 실행·성능 측정·WebGPU 검증 완료를 의미하지 않는다.
 - 범위: 후처리 효과 추가보다 장면 제출, 가시성, 기하 처리, 재질, 조명과 GPU 자원 관리에 집중한다.
 - 관련 지침: [EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md), [Shader/BINDING_LAYOUT.md](Shader/BINDING_LAYOUT.md)
-- 연계 계획: [ImGuiDevelopmentPlan.md](ImGuiDevelopmentPlan.md), [BuildAndPackagingPlan.md](BuildAndPackagingPlan.md), [RenderPipelineProfilePlan.md](RenderPipelineProfilePlan.md)
+- 연계 계획: [ImGuiDevelopmentPlan.md](ImGuiDevelopmentPlan.md), [BuildAndPackagingPlan.md](BuildAndPackagingPlan.md), [RenderPipelineProfilePlan.md](RenderPipelineProfilePlan.md), [ShaderToolchainEvaluation.md](ShaderToolchainEvaluation.md)
 - 분류·이관 기준: [SourceOrganizationGuidelines.md](SourceOrganizationGuidelines.md)
 - 통합 우선순위: [DevelopmentPriorities.md](DevelopmentPriorities.md)
-- 최신 정적 대조: [2026-11-14 코드·원칙·계획 점검](CodeDocumentationAudit-2026-11-14.md) B01·B02·B03 및 [2026-11-06 점검](CodeDocumentationAudit-2026-11-06.md) A06·A09. 타일 컬링 257개 초과 폴백(A06 본체), `StartupResourceLoader`↔`Shader` WGSL 경로 단절(B01), `ShaderImporter` 구형 `Resources/Shader/` 하드코딩(B02), `ClientRenderPipeline`의 DXIL 고정 의존(B03)은 잔여 범위다.
+- 최신 정적 대조: [2026-11-14 코드·원칙·계획 점검](CodeDocumentationAudit-2026-11-14.md) (B01~B03 2026-11-14 해소 완료) 및 [2026-11-06 점검](CodeDocumentationAudit-2026-11-06.md) A06·A09. 타일 컬링 257개 초과 폴백(A06 본체)과 GPU/WebGPU 실측 검증은 잔여 범위다.
 - 검증 한계: 아래의 과거 시간·드로우콜 관찰을 최신 동일 조건 비교 실험으로 확대하지 않는다. 이번 갱신에서 새 빌드·GPU 실행·WebGPU 실행·성능 측정은 하지 않았다.
 
 ## 1. 목표와 우선순위
@@ -56,7 +56,7 @@ IBL처럼 비교적 독립적인 화질 개선은 측정·바인딩 기반이 �
   - `lightingPS.hlsl`에 반구형 Sky Irradiance·거칠기 기반 수렴(`LIGHT_TYPE_SKY` + `EnvBRDFApprox`), 접촉 그림자 소프트닝, `ShadowStrength` 및 큐브맵 기반 Split-Sum PBR IBL(`gLightingData.HasIBLMaps != 0u`, `gIrradianceMap`, `gPrefilteredEnvMap`, `gBRDFLut`)이 반영되었다.
   - `DirectX12RHI`의 큐브맵 Null SRV 차원(`D3D12_SRV_DIMENSION_TEXTURECUBE`) 안전장치가 보강되었으며, `SceneViewportPanel`의 중복 디퍼드 패스 코드를 `ViewportDeferredPipeline`으로 통합하여 Scene View, Game View, Material Preview 전반의 렌더링 일관성을 확보했다.
   - **선형 HDR 및 포스트프로세스 일원화**: `lightingPS.hlsl`의 내장 Reinhard/감마 보정을 제거하고 `LightingColor` 렌더타깃을 `R16G16B16A16_FLOAT`로 승격하여 선형 HDR 광량을 보존하며, `PostProcessPipeline`(8종 효과 및 `PostProcessComponent` 부재 시 Default ACES 톤매핑 + 감마 2.2 자동 폴백)이 Scene View와 Game View 모두에 일관되게 적용된다.
-  - **2026-11-08~14 추가 반영(정적 기준)**: `meshoptimizer` 기반 자동 메시 LOD 및 `ModelEditor` LOD 검사기(S5), `Engine/Resources/RenderPipelines/Deferred.bamrenderpipeline.json` 공용 프로필·Game View·`ClientRenderPipeline` 연결, 스키닝 그림자 및 하늘 앞 파티클 합성 보강, `Shader.h/.cpp`·`ShaderCompiler.cpp`·`ShaderBuild.cmake`의 `ERHIType::WebGPU` WGSL sidecar 변환 초안이 추가되었다. 단, `StartupResourceLoader`↔`Shader` WGSL 경로 단절(`B01`), `ShaderImporter` 구형 `Resources/Shader/` 하드코딩(`B02`), `ClientRenderPipeline`의 DXIL 고정 로드(`B03`), 다수 광원 257개 초과 폴백(`A06 본체`)과 GPU/WebGPU 실측 검증은 남아 있다.
+  - **2026-11-08~14 추가 반영(정적 및 Windows `x64-debug` 검증 기준)**: `meshoptimizer` 기반 자동 메시 LOD 및 `ModelEditor` LOD 검사기(S5), `Engine/Resources/RenderPipelines/Deferred.bamrenderpipeline.json` 공용 프로필·Game View·`ClientRenderPipeline` 연결, 스키닝 그림자 및 하늘 앞 파티클 합성 보강, `Shader.h/.cpp`·`ShaderCompiler.cpp`·`ShaderBuild.cmake`의 `ERHIType::WebGPU` WGSL sidecar 변환 초안에 이어, `B01`(`StartupResourceLoader`↔`Shader` WGSL 경로 연결), `B02`(`ShaderImporter`·`ShaderHotReloadManager` 경로 정규화), `B03`(`ClientRenderPipeline` RHI별 3종 셰이더 경로 연결)이 반영되었고 `x64-debug` 빌드·CTest 36/36 통과를 확인했다. 다수 광원 257개 초과 폴백(`A06 본체`)과 GPU/WebGPU 실측 검증은 남아 있다.
 
 주요 확인 파일:
 
