@@ -1,14 +1,14 @@
 # 렌더링 개발 목표
 
-- 작성일: 2026-10-24 (최종 갱신: 2026-11-01)
-- 상태: 개발 계획 및 2026-11-01 정적 점검·실측 검증 반영 / 아래 장기 목표와 일부 코드 존재 여부는 전체 GPU 실행·성능 측정 완료를 의미하지 않는다.
+- 작성일: 2026-10-24 (최종 갱신: 2026-11-14)
+- 상태: 개발 계획 및 2026-11-14 정적 점검 반영(S2-D CPU 밉맵/자동 LOD, Deferred Render Pipeline Profile·ClientRenderPipeline 연결, 스키닝 `t0, space2`·하늘 앞 파티클 보강, WGSL sidecar 초안) / 일부 코드·셰이더 존재 여부는 전체 GPU 실행·성능 측정·WebGPU 검증 완료를 의미하지 않는다.
 - 범위: 후처리 효과 추가보다 장면 제출, 가시성, 기하 처리, 재질, 조명과 GPU 자원 관리에 집중한다.
 - 관련 지침: [EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md), [Shader/BINDING_LAYOUT.md](Shader/BINDING_LAYOUT.md)
-- 연계 계획: [ImGuiDevelopmentPlan.md](ImGuiDevelopmentPlan.md), [BuildAndPackagingPlan.md](BuildAndPackagingPlan.md)
+- 연계 계획: [ImGuiDevelopmentPlan.md](ImGuiDevelopmentPlan.md), [BuildAndPackagingPlan.md](BuildAndPackagingPlan.md), [RenderPipelineProfilePlan.md](RenderPipelineProfilePlan.md)
 - 분류·이관 기준: [SourceOrganizationGuidelines.md](SourceOrganizationGuidelines.md)
 - 통합 우선순위: [DevelopmentPriorities.md](DevelopmentPriorities.md)
-- 최신 정적 대조: [2026-11-02 코드·문서 점검](CodeDocumentationAudit-2026-11-02.md) 2.6절·F08·F10. 기본 슬롯 실패와 타일 광원 용량 초과는 잔여 범위다.
-- 검증 한계: 아래의 과거 시간·드로우콜 관찰을 최신 동일 조건 비교 실험으로 확대하지 않는다. 이번 갱신에서 새 빌드·GPU 실행·성능 측정은 하지 않았다.
+- 최신 정적 대조: [2026-11-14 코드·원칙·계획 점검](CodeDocumentationAudit-2026-11-14.md) B01·B02·B03 및 [2026-11-06 점검](CodeDocumentationAudit-2026-11-06.md) A06·A09. 타일 컬링 257개 초과 폴백(A06 본체), `StartupResourceLoader`↔`Shader` WGSL 경로 단절(B01), `ShaderImporter` 구형 `Resources/Shader/` 하드코딩(B02), `ClientRenderPipeline`의 DXIL 고정 의존(B03)은 잔여 범위다.
+- 검증 한계: 아래의 과거 시간·드로우콜 관찰을 최신 동일 조건 비교 실험으로 확대하지 않는다. 이번 갱신에서 새 빌드·GPU 실행·WebGPU 실행·성능 측정은 하지 않았다.
 
 ## 1. 목표와 우선순위
 
@@ -41,7 +41,7 @@ IBL처럼 비교적 독립적인 화질 개선은 측정·바인딩 기반이 �
   - [Shader/BINDING_LAYOUT.md](Shader/BINDING_LAYOUT.md)를 `DirectX12RHI::CreateRootSignature()`의 실제 `space0`~`space3`(Root Parameter `[0]`~`[10]`) 구조와 일치하도록 갱신했다.
   - `MaterialInterface::Bind()`에서 G-Buffer 슬롯(0: Diffuse, 1: Normal, 2: PBR, 3: Emission) 점유 여부를 추적하고, 미지정 슬롯을 안전한 기본 더미 텍스처(`white1x1`, `blue1x1`, `black1x1`)로 리셋하여 이전 드로우콜의 텍스처 잔류 누수 현상을 즉시 차단했다 (후속으로 S2-C 플래그 기반 샘플링 분기 계획 수립).
   - `SDLGPURHI`는 `DrawIndexedInstanced`(`NotImplemented`), `BindInstanceBuffer`, Compute 인터페이스가 미구현 상태로, 미지원 시 안전 폴백 경로를 유지한다.
-  - **텍스처 밉맵 상태:** 현재 `Texture.cpp` 및 `DirectX12RHI`는 `MipLevels == 1` 단일 레벨만 지원하여 원거리 텍스처 앨리어싱(자글거림) 및 캐시 미스가 존재하며, 후속으로 S2-D 밉맵 체인 생성 및 RHI 다중 서브리소스 업로드 계획을 수립했다.
+  - **텍스처 밉맵 상태 (2026-11-08 정적 반영):** `stb_image_resize2` 기반 CPU 밉맵 체인 생성, `DirectX12RHI` 다중 서브리소스 업로드 및 `TextureMipmapCheck` 테스트가 추가되었다(S2-D 1차 반영). 오프라인 BC7/DDS 텍스처 베이킹은 후속 범위이며, 실제 GPU 앨리어싱·프레임 비용 비교는 실측 확인이 필요하다.
 - **S3 (정적 메시 인스턴싱, 다중 패스 독립 LOD 및 GPU 스키닝 제출 — 구현 및 배칭 실측 완료)**:
   - `InstanceData`(`worldMatrix`, `normalMatrix`, `pickingID`), `LODGroupComponent`가 추가되었다.
   - `MeshRenderSystem::OnSubmit()`에서 `PassTarget` 구조체를 통해 활성 뷰포트/패스별 고유 카메라(위치, `projY`) 기준으로 독립적인 화면 덮개 비율(Screen Coverage) + 히스테리시스 LOD를 평가·제출하며, 주 뷰포트(`isPrimaryGeometry`)일 때만 `lodGroup->currentLODIndex`를 갱신하여 보조 패스로 인한 LOD 상태 오염을 차단했다.
@@ -56,6 +56,7 @@ IBL처럼 비교적 독립적인 화질 개선은 측정·바인딩 기반이 �
   - `lightingPS.hlsl`에 반구형 Sky Irradiance·거칠기 기반 수렴(`LIGHT_TYPE_SKY` + `EnvBRDFApprox`), 접촉 그림자 소프트닝, `ShadowStrength` 및 큐브맵 기반 Split-Sum PBR IBL(`gLightingData.HasIBLMaps != 0u`, `gIrradianceMap`, `gPrefilteredEnvMap`, `gBRDFLut`)이 반영되었다.
   - `DirectX12RHI`의 큐브맵 Null SRV 차원(`D3D12_SRV_DIMENSION_TEXTURECUBE`) 안전장치가 보강되었으며, `SceneViewportPanel`의 중복 디퍼드 패스 코드를 `ViewportDeferredPipeline`으로 통합하여 Scene View, Game View, Material Preview 전반의 렌더링 일관성을 확보했다.
   - **선형 HDR 및 포스트프로세스 일원화**: `lightingPS.hlsl`의 내장 Reinhard/감마 보정을 제거하고 `LightingColor` 렌더타깃을 `R16G16B16A16_FLOAT`로 승격하여 선형 HDR 광량을 보존하며, `PostProcessPipeline`(8종 효과 및 `PostProcessComponent` 부재 시 Default ACES 톤매핑 + 감마 2.2 자동 폴백)이 Scene View와 Game View 모두에 일관되게 적용된다.
+  - **2026-11-08~14 추가 반영(정적 기준)**: `meshoptimizer` 기반 자동 메시 LOD 및 `ModelEditor` LOD 검사기(S5), `Engine/Resources/RenderPipelines/Deferred.bamrenderpipeline.json` 공용 프로필·Game View·`ClientRenderPipeline` 연결, 스키닝 그림자 및 하늘 앞 파티클 합성 보강, `Shader.h/.cpp`·`ShaderCompiler.cpp`·`ShaderBuild.cmake`의 `ERHIType::WebGPU` WGSL sidecar 변환 초안이 추가되었다. 단, `StartupResourceLoader`↔`Shader` WGSL 경로 단절(`B01`), `ShaderImporter` 구형 `Resources/Shader/` 하드코딩(`B02`), `ClientRenderPipeline`의 DXIL 고정 로드(`B03`), 다수 광원 257개 초과 폴백(`A06 본체`)과 GPU/WebGPU 실측 검증은 남아 있다.
 
 주요 확인 파일:
 
@@ -63,7 +64,7 @@ IBL처럼 비교적 독립적인 화질 개선은 측정·바인딩 기반이 �
 - [MeshRenderSystem.cpp](../Engine/Source/System/Render/Private/MeshRenderSystem.cpp), [LODGroupComponent.h](../Engine/Source/Core/Public/Components/Render/LODGroupComponent.h)
 - [RHI.h](../Engine/Source/Render/RHI/Public/RHI.h), [RHIFrameMetrics.h](../Engine/Source/Render/RHI/Public/RHIFrameMetrics.h)
 - [DirectX12RHI.cpp](../Engine/Source/Render/RHI/Platform/DirectX12/Private/DirectX12RHI.cpp), [SDLGPURHI.cpp](../Engine/Source/Render/RHI/Platform/SDLGPU/Private/SDLGPURHI.cpp)
-- [tiledLightCullingCS.hlsl](../Resources/Shader/hlsl/tiledLightCullingCS.hlsl), [lightingPS.hlsl](../Resources/Shader/hlsl/lightingPS.hlsl), [ShaderBuild.cmake](../Engine/CMake/ShaderBuild.cmake)
+- [tiledLightCullingCS.hlsl](../Engine/Resources/Shader/hlsl/tiledLightCullingCS.hlsl), [lightingPS.hlsl](../Engine/Resources/Shader/hlsl/lightingPS.hlsl), [ShaderBuild.cmake](../Engine/CMake/ShaderBuild.cmake)
 
 ## 3. 도입 원칙
 

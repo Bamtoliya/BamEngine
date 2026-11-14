@@ -1,7 +1,7 @@
 # 엔진 기능 개발 계획
 
-- 작성일: 2026-10-24 (최종 갱신: 2026-11-06)
-- 상태: 개발 목표 및 2026-11-01 구현 현황 반영 / 기능별 구현·실행·성능 검증은 별도 기록
+- 작성일: 2026-10-24 (최종 갱신: 2026-11-14)
+- 상태: 개발 목표 및 2026-11-14 정적 점검 반영(리소스/에셋 URI 분리, KCC/3인칭, 파티클/CompositeVFX Phase 1~4, 2D 확장, `CrashHandler`, `ClientGameRuntime` 분리, FMOD 2.03.15·Emscripten 경계 초안) / 기능별 구현·빌드·실행·성능 검증은 별도 기록
 - 최종 결과물: 2D·3D 게임, AI 강화학습 시뮬레이터, 2D·3D V-Tuber 실행·방송 및 모델·리깅 제작 도구
 - 범위: 공통 실행 기반, 게임 제작 모듈, 학습 환경·외부 학습 연동, 아바타 제작·추적·표현·출력
 - 조사 갱신: 2026-11-01 / 공식 규격·제품 문서를 기능과 경계의 근거로 사용하며 구현 시 의존성 버전을 다시 확정
@@ -13,7 +13,7 @@
 - GPU 연결 지침: [Shader/BINDING_LAYOUT.md](Shader/BINDING_LAYOUT.md)
 - 분류·이관 기준: [SourceOrganizationGuidelines.md](SourceOrganizationGuidelines.md)
 - 통합 우선순위: [DevelopmentPriorities.md](DevelopmentPriorities.md)
-- 최신 대조: [2026-11-02 코드·문서 점검](CodeDocumentationAudit-2026-11-02.md). 계층 애니메이터·Client 시작 경로의 반영 범위와 실패 처리·검증 잔여를 구분한다.
+- 최신 대조: [2026-11-14 코드·원칙·계획 점검](CodeDocumentationAudit-2026-11-14.md) (B01~B05) 및 [2026-11-06 점검](CodeDocumentationAudit-2026-11-06.md) (A01~A10). `StartupResourceLoader` 공용화, `ClientGameRuntime` 분리(무조건 등록 19종 + 조건부 `LightSystem`), FMOD 2.03.15·Emscripten 경계 초안의 잔여 과제와 빌드/실행 미검증 범위를 구분한다.
 
 ## 1. 목표와 문서의 역할
 
@@ -49,7 +49,8 @@ Inspector·전용 패널·콘텐츠 브라우저의 열기·검색·썸네일은
 - **Script 리소스 틀은 있다.** `Resource/Script`의 `Script`는 생성·초기화·해제 기반이며, 확인한 파일에는 텍스트 소스 실행·VM·객체별 인스턴스·엔진 이벤트 바인딩이 없다. C++ 프로젝트 모듈·리플렉션 함수·Visual Scripting과 텍스트 스크립트 실행을 같은 완료 항목으로 묶지 않는다.
 - **스플라인:** 경로 평가·추종, 제어점 편집, 반복 배치와 CPU 메시 변형의 1차 구현을 추가했다. 검증 범위와 남은 항목은 5절에 기록한다.
 - **파티클·트레일:** 각 작업은 4·7절의 기준을 따른다.
-- **SystemManager 실행 루프:** `FixedUpdate`·`Update`·`LateUpdate`·`OnSubmit` 단계가 있으며, `Editor`와 `Client/Source/Main.cpp` 모두 `TransformSystem`, `CameraSystem`, `LightSystem`, `MeshRenderSystem`, `SpriteRenderSystem`, `SpriteAnimationSystem`, `AnimationSystem`, `UIRenderSystem`, `AudioSystem`, `TerrainSystem`, `PhysicsSystem`, `GraphSystem`을 등록해 구동한다.
+- **SystemManager 실행 루프 (2026-11-14 반영):** `FixedUpdate`·`Update`·`LateUpdate`·`OnSubmit` 단계가 있으며, 독립 Client는 `ClientGameRuntime::InitializeSystems()`에서 `TransformSystem`, `SpringArmSystem`, `CameraSystem`, `MeshRenderSystem`, `SpriteRenderSystem`, `SpriteAnimationSystem`, `TilemapRenderSystem`, `AnimationSystem`, `ParticleSystem`, `ActionTimelineSystem`, `CompositeVFXSystem`, `ThirdPersonControllerSystem`, `KinematicCharacterSystem`, `NetworkSystem`, `UIRenderSystem`, `AudioSystem`, `TerrainSystem`, `PhysicsSystem`, `GraphSystem`(무조건 등록 19종)과 `!m_RenderPipeline.UsesDeferredProfile()` 조건부 `LightSystem`을 등록해 구동한다. (단, `Engine/CMakeLists.txt`의 `EMSCRIPTEN` 제외 목록과 `NetworkSystem`·FMOD 의존성 간 불일치는 `B03` 미해결 과제다.)
+- **2026-11-07~14 추가 구현(정적 확인 기준):** `Engine://`·`Editor://`·`Project://` 가상 URI(`PlatformPath::ResolveUri`) 및 `Engine/Source/Resource/` 공용 `StartupResourceLoader`, 키네마틱 캐릭터 컨트롤러(KCC) 및 3인칭 로코모션, 파티클 물리 충돌/컬 노이즈·`CompositeEffect` Phase 1~4, 2D 3대 슬라이서·9-Slice·픽셀 퍼펙트 카메라·16×16 타일맵·4방향 자동 타일(실제 드로우 배칭 Phase 5 잔여), Windows `CrashHandler`(`Client/Source/Main.cpp`는 `B05` 미연결), `ThirdParty/FMOD` 2.03.15 갱신 및 Emscripten 빌드 경계 초안이 반영되었다. (빌드·FMOD 재생·CTest 실행 검증은 미수행 상태다.)
 - **강화학습 첫 헤드리스 환경 (P2-C 기본 예제 반영):** `Engine/Source/Simulation/`의 `IRLEnvironment`, 수치 CartPole(50Hz), loopback TCP `RLServer`, `Client.exe --rl`, Python 어댑터가 있다. 과거 에피소드 실행 기록은 유지하되 전체 계약 검증 완료로 확대하지 않는다. seed=0·요청 파싱/송신·Gymnasium 미설치 폴백은 [점검 F09](CodeDocumentationAudit-2026-11-02.md)의 잔여 문제다. 씬 물리·벡터화·영상 센서·ONNX는 15절 후속 범위다.
 - **V-Tuber 및 아바타 확장:** RHI의 `ReadTexturePixel()`이나 기본 골격 임포트만으로 전체 비동기 센서 읽기·방송 공유 텍스처·VRM·표정 모프·2D 변형·추적 입력을 지원한다고 판단하지 않으며 16·17절 단계에서 진행한다.
 

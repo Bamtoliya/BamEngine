@@ -2,6 +2,62 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-14] 에디터 사용성(UX) 테스트 및 검증 기준 문서화
+
+- **배경/목적**: `EngineEditorClientGuidelines.md`와 `ImGuiDevelopmentPlan.md`에 분산된 에디터 UI/UX 구현 규칙에 대응해, 신규 패널 추가 및 공용 UI 회귀 확인 시 일관되게 적용할 테스트 계층, 경계 조건 및 Pass/Fail 판정 기준을 수립했다.
+- **수행 내용**:
+  - [`Docs/EditorUXTestGuidelines.md`](EditorUXTestGuidelines.md) 신설:
+    - 검증 3계층 정의 (Tier 1 정적·데이터 감사, Tier 2 헤드리스 ImGui CTest, Tier 3 실환경 대화형·GPU 검증).
+    - 표준 테스트 환경 매트릭스(한·영 실시간 전환, UI 배율 `1.0x`/`1.5x`/`2.0x`, 도킹 폭 표준/좁음/극한 경계) 정의.
+    - 6대 핵심 UX 영역별 Pass/Fail 기준(`UX-1` 레이아웃 적응성, `UX-2` 입력·단축키 격리, `UX-3` 공용 UI 패턴, `UX-4` 편집 데이터 보호, `UX-5` 문맥 전환·영속 복원, `UX-6` 프레임 비용 예산) 및 미검증 공용 UI 회귀 점검 시트·`EditorUICheck` 확장 후보 정리.
+  - 진입 문서 및 연결 갱신: [`AGENTS.md`](../AGENTS.md)(10절·12절), [`Docs/EngineEditorClientGuidelines.md`](EngineEditorClientGuidelines.md)(19절), [`Docs/DevelopmentPriorities.md`](DevelopmentPriorities.md)(1절), [`Docs/ImGuiDevelopmentPlan.md`](ImGuiDevelopmentPlan.md)(상단 메타데이터).
+- **검증 및 미검증 범위**:
+  - 기존 CTest 검사 소스(`MainMenuBarLayoutCheck`, `ShortcutManagerCheck`, `ReflectionInspectorCheck`, `HierarchyEditorCheck`, `EditorHistoryCheck`, `CanvasViewCheck`, `GraphMessageLocalizationCheck`), `LocalizationBuild.cmake` 및 `audit_localization.py` 대조 후 문서화했으며, C++ 코드 변경이나 빌드·테스트 실행은 수행하지 않았다.
+  - 문서 내 `5절 미검증 공용 UI 실환경 회귀 점검 시트`의 실행 검증과 `6절 EditorUICheck` 구현은 후속 사용자 검증 및 작업 범위로 남긴다.
+
+### [2026-11-14] 프로젝트 현황 및 코드·문서 정합성 점검 (B01~B06)
+
+- **배경/목적**: `2026-11-06` 점검(`ecca09da`, A01~A10) 이후 누적 커밋(`fabcf611`)과 현재 작업 트리의 미커밋 변경 4갈래(`StartupResourceLoader` 공용화, `ClientGameRuntime` 분리, Emscripten/WGSL 빌드 경계 초안, `ThirdParty/FMOD` 2.03.15 갱신)를 대조하고 핵심 계획 문서를 최신화하기 위해 정적 점검을 수행했다.
+- **수행 내용**:
+  - 신규 점검 보고서 [`Docs/CodeDocumentationAudit-2026-11-14.md`](CodeDocumentationAudit-2026-11-14.md) 작성 (`A01~A10` 반영 현황 정리 및 신규 `B01~B06` 식별).
+  - [`Docs/DevelopmentPriorities.md`](DevelopmentPriorities.md) 상단 상태·기준 문서 목록·P2-E·11절 우선순위 재평가(트랙 H·I·J, 작업 트리 정리 및 단기 후속 순서 `B01~B05`) 갱신.
+  - [`Docs/BuildAndPackagingPlan.md`](BuildAndPackagingPlan.md), [`Docs/RenderingDevelopmentPlan.md`](RenderingDevelopmentPlan.md), [`Docs/EngineDevelopmentPlan.md`](EngineDevelopmentPlan.md), [`Docs/ImGuiDevelopmentPlan.md`](ImGuiDevelopmentPlan.md)의 최신 현황 및 미완료/이식 선결 과제 동기화.
+- **식별된 주요 미해결 항목 (`B01~B05`)**:
+  - `B01`: `StartupResourceLoader`↔`Shader` 간 `ERHIType::WebGPU`/WGSL 경로 연결 단절.
+  - `B02`: `Editor/Source/AssetManager/Importer/Private/ShaderImporter.cpp`의 구형 `Resources/Shader/` 하드코딩 잔류.
+  - `B03`: `ClientGameRuntime`의 `NetworkSystem`·FMOD·DXIL 고정 의존성과 `Engine/CMakeLists.txt` `EMSCRIPTEN` 제외 경계 불일치.
+  - `B04`: 저장소 루트 0바이트 untracked 파일(`cd`, `emcc`, `emcmake`) 잔존 및 183개 파일 다목적 미커밋 혼재.
+  - `B05`: 독립 `Client/Source/Main.cpp`의 `CrashHandler` 미연결 및 레거시 `Tools/Scripts/PackageClient.ps1` 병존.
+- **검증 및 미검증 범위**:
+  - 정적 코드·CMake·문서 대조 및 `Docs/` 줄 끝/공백 점검 완료.
+  - `Engine/CMake/Dependencies.cmake`의 `spirv_cross_c` 선행 호출 오류(`find_package` 순서/스코프 불일치) 수정 후 사용자 환경에서 `x64-debug` CMake 멀티코어 빌드 및 CTest **36/36 통과(5.03 sec)** 확인 완료.
+  - Windows `x64-release` 빌드, 실행 시 FMOD 2.03.15 오디오 재생, UI/GPU 수동 비교(`RenderPipelineProfilePlan.md` 2·3단계, `SDL_CleanupTLS()`), Emscripten/Tint 툴체인 검증은 아직 미실행 상태다.
+
+### [2026-11-14] WGSL 셰이더 sidecar 경로 초안
+
+- `Shader`에 선택적 `wgslPath`를 추가하고 WebGPU RHI 선택 시 WGSL 경로를 사용하도록 했다. ResourceManager와 ShaderImporter는 `.wgsl` 리소스 및 빌드 산출물 경로를 인식한다.
+- `BAMENGINE_BUILD_WGSL_SHADERS=ON`이면 호스트 Tint로 기존 SPIR-V를 `Engine/Resources/Shader/bin/wgsl`에 변환하는 CMake 단계를 추가했다. 네이티브 `ShaderCompiler`도 WebGPU용 HLSL을 DXC → SPIR-V → Tint → WGSL로 변환하며, SPIR-V import와 Editor 핫 리로드가 WGSL 바이트코드를 사용하도록 연결했다. Emscripten 구성은 네이티브 `ShaderCompiler.cpp`를 제외한다.
+- Tint 실행 파일, 변환 CLI, Reflection 코드 생성, 빌드와 브라우저 실행은 검증하지 않았다. Tint 실행 파일은 CMake에서 `TINT_EXECUTABLE`로 지정하거나, 네이티브 import·핫 리로드 실행 시 `TINT_EXECUTABLE` 환경 변수 또는 PATH에 제공해야 한다. 이 변경만으로 WebGPU RHI나 Client 실행이 완성된 것은 아니다. [WebGPU 이식 계획](BuildAndPackagingPlan.md#webgpu-씬-프리뷰와-client-이식)
+- `Tools/WebGPUProbe/CMakeLists.txt`에 Engine 종속성 없이 `emdawnwebgpu` 포트를 빌드·링크하는 독립 Emscripten 타깃을 추가했다. 현재 환경에는 Emscripten과 Tint가 없어 이 프로브, 셰이더 변환, Engine WebGPU RHI 및 Client는 아직 실행 검증되지 않았다.
+
+### [2026-11-14] Emscripten 빌드 경계 초안
+
+- Emscripten 구성에서 Engine 타깃을 정적으로 만들고, 네이티브 그래픽 백엔드·셰이더 컴파일·Win32 전용 소스와 앱/도구 타깃을 제외하도록 CMake 및 vcpkg 의존성 조건을 분리했다. Reflection 파서는 Emscripten 전처리 조건을 읽으며, 코드 생성에는 호스트용 ReflectionGenerator와 Clang 리소스 디렉터리를 요구한다.
+- 이 단계에는 WebGPU RHI, WGSL, 브라우저 Client 호스트와 게임 모듈의 정적 등록은 포함되지 않는다. Emscripten 도구 체인이 없어 구성·빌드·실행 검증은 하지 않았다. 사용자가 Emscripten 환경에서 CMake 구성과 Engine 정적 라이브러리 빌드를 확인해야 한다. [WebGPU 이식 계획](BuildAndPackagingPlan.md#webgpu-씬-프리뷰와-client-이식)
+
+### [2026-11-14] WebGPU 이식을 위한 Client 실행 계층 분리
+
+- `ClientGameRuntime`으로 프로젝트 설정, Engine Runtime, 시스템·씬 초기화, 입력 갱신, 리사이즈와 프레임 렌더 제출을 분리했다. Windows `Application`은 SDL 이벤트·창·D3D12 RHI와 `GameModule.dll` 로드를 맡고, 모듈 로드 시점은 콜백으로 공유 실행 계층에 전달한다.
+- 기존 시작 순서와 Client 렌더·시뮬레이션 흐름을 유지하도록 코드 경계를 이동했다. Engine CMake의 Windows 전용 링크 의존성, WebGPU RHI/셰이더 경로, Wasm 대상 및 Editor 내보내기는 아직 구현하지 않았다.
+- 정적 검토만 수행했으며 저장소 지침에 따라 빌드와 테스트는 직접 실행하지 않았다. 사용자가 Windows Client 빌드와 실행 성공을 확인했다. 설정·시작 씬·모듈 경로의 세부 검증과 WebAssembly 대상은 아직 확인되지 않았다. [WebGPU 이식 계획](BuildAndPackagingPlan.md#webgpu-씬-프리뷰와-client-이식)
+
+### [2026-11-13] Client 시작 리소스 파이프라인 공용화
+
+- `StartupResourceLoader`를 Editor AssetManager에서 Engine Resource로 이동해 Editor와 Client가 동일한 시작 매니페스트·카테고리 로더를 사용한다. `Compute` 셰이더 타입을 명시 지원하고 지원하지 않는 타입이나 누락된 직접 참조 리소스는 오류로 처리한다.
+- Client는 Runtime 리소스 경로를 설정한 뒤 시작 매니페스트를 로드한다. 패키지 마커가 있는 실행에서 `Config/Project.json` 누락과 빈 `StartupScenePath`는 실패하며 빈 씬 경로의 기본 씬 폴백을 제거했다.
+- Windows D3D12 패키저는 매니페스트, 카테고리 설정과 직접 참조 리소스를 사전 검증하고 인벤토리에 기록한다. 전체 런타임 리소스 스캔에서 누락된 시작 의존성은 staging에 복사한다. 선택적 수집은 아직 적용하지 않았다.
+- 코드·경로·실패 분기를 정적으로 확인했다. 프로젝트 지침에 따라 빌드와 테스트는 실행하지 않았다. Editor·Client 빌드, Compute 셰이더 프리로드, 개발 설정 누락과 패키지 설정 누락, staging 결과 및 저장소 밖 독립 실행은 사용자 검증 전이다. [빌드·패키징 계획](BuildAndPackagingPlan.md)
+
 ### [2026-11-13] 독립 WebGPU 씬 프리뷰
 
 - `Client/Web`에서 `.bamscene.json` v1을 읽고, 활성 카메라와 계층 변환을 적용한 `CubeMesh`·`SphereMesh`를 깊이 검사와 함께 표시한다. 프로젝트 `Gameplay`의 이동 바인딩은 브라우저 카메라에 연결한다.

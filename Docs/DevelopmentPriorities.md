@@ -1,8 +1,8 @@
 # 통합 개발 우선순위와 완료 기준
 
-- 작성일: 2026-10-24 (최종 갱신: 2026-11-06)
-- 상태: 2026-11-05 단계 1(F02), 단계 2(F05, F06, F07, F08), 단계 3(P1-E/3-A, 3-B), 단계 4(F12), 빌드/배포(F13, F04) 및 강화학습(F09) 구현 반영, Standalone Client 독립 실행 및 Unity 빌드 정합성 검증 완료, 단일 CPU 파티클 시스템 1단계 코어(Engine 4절) 구축, AnimationTimelineEditorPlan(에디터 저작 도구 및 런타임 액션 타임라인 재생 시스템 Phase 1~5) 구축 완료, 네트워크 기초 파이프라인 및 키네마틱 캐릭터 컨트롤러 구축 완료, 3인칭 캐릭터 Locomotion 1D 블렌드 트리 위상 동기화(Phase Matching) 및 루프 크로스페이드·속도 연동 재생 배속 완성, 모델 재임포트 인플레이스 핫 리로드 및 대화형 3D 임포트 모달(ModelImportModal) 구축 완료.
-- 최신 근거: [2026-11-06 코드·원칙·계획 점검](CodeDocumentationAudit-2026-11-06.md). **현재 작업 선택은 11절을 우선한다.** 위 상태와 10절의 완료 표시는 당시 기록이며 A01~A10의 현행 잔여 사항을 해소한 뜻이 아니다.
+- 작성일: 2026-10-24 (최종 갱신: 2026-11-14)
+- 상태: 2026-11-05~11-07 우선순위 0~1(CrashHandler·Recovery, A01~A10 후속) 및 2026-11-08~11-14 리소스/에셋 경로 분리(Phase 1~3B), 텍스처 밉맵, 2D 확장(Phase 1~5), 파티클 물리·CompositeVFX(Phase 1~4), 3줄 리소스 편집기·공용 UI·PluginHost, Render Pipeline Profile·Windows 내장 패키징, `ClientGameRuntime` 분리 및 `Client/Web`·WGSL sidecar 초안 구현 반영(정적 확인 기준). 일부 미커밋 작업과 빌드·UI·GPU·Emscripten·FMOD Web 미검증 항목이 남아 있다.
+- 최신 근거: [2026-11-14 코드·원칙·계획 점검](CodeDocumentationAudit-2026-11-14.md) (B01~B06) 및 [2026-11-06 점검](CodeDocumentationAudit-2026-11-06.md) (A01~A10). **현재 작업 선택은 11절을 우선한다.** 위 상태와 10절의 과거 완료 표시는 당시 기록이며 A06(257개 초과 폴백)·B01~B05 및 미검증 빌드/실행 항목을 해소한 뜻이 아니다.
 - 공통 기준: [EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md)
 - 분류와 이관: [SourceOrganizationGuidelines.md](SourceOrganizationGuidelines.md), [BuildConfigurationAndPreprocessing.md](BuildConfigurationAndPreprocessing.md)
 
@@ -35,6 +35,10 @@ Engine·Render·Editor·Client 계획에서 무엇을 먼저 연결하고 무엇
 - [CompositeVisualEffectPlan.md](CompositeVisualEffectPlan.md): 계층형 통합 비주얼 이펙트 시스템(VFX Composite), 메쉬 이펙트/트레일/라이트 섬광 및 트랙 기반 오케스트레이터 계획.
 - [SpriteAnd2DSystemPlan.md](SpriteAnd2DSystemPlan.md): 스프라이트 시트 슬라이싱, 9-Slice/Filled 렌더링, 픽셀 퍼펙트 카메라, 2D 타일맵 시스템 및 애니메이션 자동 연동 계획.
 - [CrashHandlingAndRecoveryPlan.md](CrashHandlingAndRecoveryPlan.md): 비정상 종료 진단(SEH/미니덤프, 크래시 리포트) 및 에디터 하트비트 자동 저장/작업 복원 계획.
+- [ResourceAndAssetSeparationPlan.md](ResourceAndAssetSeparationPlan.md): 빌트인 리소스(`Engine/Resources`)와 프로젝트 애셋(`Assets`) 분리 및 가상 마운트 URI(`Engine://`, `Project://`) 계획.
+- [EditorPluginArchitecturePlan.md](EditorPluginArchitecturePlan.md): Builtin·Custom·개발용 에디터 DLL 플러그인 발견, 승인, 핫리로드 및 런타임 모듈 확장 계획.
+- [RenderPipelineProfilePlan.md](RenderPipelineProfilePlan.md): Game View와 Client의 공용 Deferred 렌더 파이프라인 프로필 검증 및 실행 계획.
+- [EditorUXTestGuidelines.md](EditorUXTestGuidelines.md): 에디터 사용성(UX) 테스트 3계층, 환경 매트릭스, 6대 영역별 Pass/Fail 기준 및 미검증 UI 회귀 체크리스트.
 
 전체 작업 선택은 이 문서, 기능 내부의 구현 순서·실패 정책은 상세 계획을 따른다.
 새 사용자 결정이 우선하며 충돌이 생기면 이 문서와 해당 계획을 함께 갱신한다.
@@ -289,13 +293,19 @@ Engine·Render·Editor·Client 계획에서 무엇을 먼저 연결하고 무엇
     3. **아바타 및 2D 변형 확장**: 2D 변형 메시/파라미터 평가(스프라이트 애니메이션과 독립 경로), 표정/모프·VRM 등 필요한 16·17절 기반 확장.
 - 완료 기준: 같은 에셋의 두 실행 인스턴스와 Editor 미리보기가 상태를 공유하지 않고 저장 결과를 다시 재생한다. 코어 구현과 과거 기록은 있으나 전체 경계 조건·저장 보호·PIE/Client 동등성은 추가 검증 대상이다.
 
-### P2-E. Client 시작·배포 — 시작 경로 일부 반영 / 배포 미완료
+### P2-E. Client 시작·배포 — Windows 내장 패키징·실행 분리 반영 / WebGPU 이식(`B01~B03`)·`B05`·실행 검증 미완료
 
+- **2026-11-14 정적 반영**:
+  - Windows 호스트(`Client/Source/Main.cpp`)와 플랫폼 중립 실행 계층 `ClientGameRuntime`(`Client/Source/Execution/Private/ClientGameRuntime.cpp`, 무조건 등록 시스템 19종 + `!UsesDeferredProfile()` 조건부 `LightSystem`), `ClientRenderPipeline`(Deferred 프로필 지원)이 분리되었다.
+  - `Editor/Source/Build/Private/ClientPackage.cpp`가 에디터 내장 Windows Release 패키징 공식 경로(`Assets/`·`Engine/Resources/` 분리, `.bam-client-package`, `StartupResourceLoader::CollectPipelineFiles()` 검증, 스테이징·원자적 게시·`[Package inventory]`, `SDL_CleanupTLS()`)로 연결되었다.
+  - `Client/Web/` 정적 프리뷰, `Tools/WebGPUProbe`, `Engine/CMakeLists.txt` Emscripten 경계 및 호스트 Tint WGSL sidecar 초안이 추가되었다. 단, `StartupResourceLoader`↔`Shader` WGSL 경로 단절(**B01**), `ShaderImporter` 구형 `Resources/Shader/` 하드코딩(**B02**), `ClientGameRuntime`의 `NetworkSystem`·FMOD·DXIL 고정 의존성 불일치(**B03**), 독립 Client `CrashHandler` 미연결 및 레거시 `PackageClient.ps1` 병존(**B05**)이 정적 대조로 확인되었으며 Emscripten/Windows 실행 검증은 미수행 상태다.
+
+- **2026-11-13 정적 반영**: Engine Resource로 옮긴 공용 `StartupResourceLoader`를 Editor와 Client가 사용한다. Client는 시작 매니페스트를 씬 로드 전에 처리하며 빈 `StartupScenePath`는 실패한다. `.bam-client-package`가 표시된 실행에서 `Config/Project.json`이 없으면 실패하고 개발 실행은 기본값 경로를 유지한다. 패키저는 Windows D3D12용 시작 파이프라인의 설정·직접 참조 파일을 검증해 staging 및 인벤토리에 반영한다. 빌드·패키지 실행 검증은 수행하지 않았다.
 - **2026-11-01 현황**:
-  - `Tools/Scripts/PackageClient.ps1` 기본 복사 스크립트 초안이 추가되었고 `Client/Source/Main.cpp`에 `LoadGameModule()`, `--rl` 헤드리스 강화학습 서버 엔트리포인트, 그리고 `InitializeSystems()`의 필수 시스템(`TransformSystem`, `CameraSystem`, `LightSystem`, `MeshRenderSystem`, `SpriteRenderSystem`, `SpriteAnimationSystem`, `AnimationSystem`, `UIRenderSystem`, `AudioSystem`, `TerrainSystem`, `PhysicsSystem`, `GraphSystem`) 등록이 모두 완료되었다.
-  - **2026-11-02 정적 갱신**: 실행 파일 기반 루트 탐색·Runtime 경로 주입·기본 메시 등록·설정 로드·`StartupScenePath` 선택·카메라 등록이 있다. 빈 시작 씬에서만 NewScene2로 폴백한다.
-  - `StartupManifestPath`와 `AssetDirectory` 적용, 설정 실패·스키마 검사, 공통 기본 리소스 확보, 디퍼드/후처리 연결은 미완료다.
-  - 패키징 초안은 출력 경로 삭제 보호·구성별 바이너리 위치·Config/Model/Scripts 수집·필수 누락 실패 처리가 필요하다([점검 F03~F05](CodeDocumentationAudit-2026-11-02.md)).
+  - `Tools/Scripts/PackageClient.ps1` 기본 복사 스크립트 초안이 추가되었고 당시 `Client/Source/Main.cpp`에 `LoadGameModule()`, `--rl` 헤드리스 강화학습 서버, `InitializeSystems()` 기본 12종 등록이 반영되었다(2026-11-14 작업 트리에서는 `ClientGameRuntime::InitializeSystems()`로 이관되어 무조건 19종 + `!UsesDeferredProfile()` 조건부 `LightSystem`을 등록한다).
+  - **2026-11-02 정적 갱신**: 실행 파일 기반 루트 탐색·Runtime 경로 주입·기본 메시 등록·설정 로드·`StartupScenePath` 선택·카메라 등록이 있다.
+  - **2026-11-14 기준 잔여**: Emscripten/WebGPU 이식 선결 과제(`B01` WGSL 경로 단절·`B02` `ShaderImporter` 구형 경로·`B03` `NetworkSystem`/FMOD/DXIL 고정 의존), 독립 Client `CrashHandler` 미연결 및 레거시 `PackageClient.ps1` 정리(`B05`), `RenderPipelineProfilePlan` 2·3단계(Game View vs 외부 패키지 비교, `SDL_CleanupTLS()` 누수 해소) 및 패키지 외부 독립 실행 검증은 미완료다.
+  - 남은 배포 범위는 `ClientPackage.cpp`의 `StartupResourceLoader::CollectPipelineFiles()` 기반 직접 참조 수집을 동적 참조 분석·선택적 프루닝·다중 플랫폼(Emscripten/Wasm) 대상으로 확장하고, 레거시 `PackageClient.ps1` 정리(`B05`) 및 패키지 외부 독립 실행 검증을 마치는 것이다(이전 전체 스캔 구조 기준은 [점검 F04~F05](CodeDocumentationAudit-2026-11-02.md)).
 - 과거 보류 대상 중 이미 반영된 시작 경로는 현재 사실로 기록한다. 남은 배포 구현을 이 문서 갱신만으로 자동 재개하지 않는다.
 - 후속 진행 시 설정 실패 계약·시작 리소스/씬→Build/Cook→Stage/Package 순서로 남은 범위를 검증한다.
 - 관련 기능의 Client 실행이 현재 고정 시작 씬에서 확인된 것과 저장소 밖 배포 검증을 구분한다.
@@ -435,9 +445,9 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
   - 비반복 애니메이션 종료 시 clamp 적용으로 마지막 포즈 정상 보존 (`fmod(duration, duration) == 0` 리셋 버그 해결).
   - 부분 트랙 누락 채널에서 0/identity 대신 본의 원래 바인드 로컬 TRS를 분해하여 보존하도록 `SampleLocalTRS` 보완.
   - ASM `isLooping` 제어, `Stop()` 시간 리셋 및 `controllerPath` 상대 경로 정규화 완료.
-- **기존 Client의 실패 보고 — P2-E / F05 일부 [완료]**:
-  - `ConfigManager::Load` 반환 결과를 검사한다. 현행은 설정 파일 부재 시 경고·기본값 성공, 파싱 실패 시 실패 반환이다. 배포의 누락 정책은 A08에 따라 별도 확정한다.
-  - `SchemaVersion` 유효성(0 검사) 및 최대 지원 버전 초과 검사 추가, 시작 씬 부재 시 명확한 `FileNotFound` 반환 연결 완료.
+- **기존 Client의 실패 보고 — P2-E / F05 일부 [정책 반영 / 실행 검증 대기]**:
+  - `ConfigManager::Load` 반환 결과와 `SchemaVersion`을 검사한다. 개발 실행은 설정 파일 부재 시 경고·기본값을 사용하고 파싱 실패 시 종료한다.
+  - A08 정책에 따라 패키지 마커가 있으면 `Project.json` 누락으로 실패한다. 빈 `StartupScenePath`도 `InvalidArgument`로 실패하며 실행 검증은 남아 있다.
 
 ### 10.5 단계 3 — 머티리얼 기능 확장 (P1-E / 렌더링 S2-C) [완료]
 
@@ -514,9 +524,9 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
 
 코드 직접 수정·빌드·테스트 권한은 사용자 요청과 AGENTS.md를 따르며 이 문서가 실행 허가를 대신하지 않는다.
 
-## 11. 현재 작업 트리 기준 우선순위 재평가 (2026-11-07 갱신)
+## 11. 현재 작업 트리 기준 우선순위 재평가 (2026-11-14 갱신)
 
-근거는 [2026-11-06 점검 A01~A10](CodeDocumentationAudit-2026-11-06.md) 및 2026-11-07 우선순위 0~1 구현이다. 10절의 과거 완료 기록보다 이 절의 잔여 범위와 작업 순서를 우선한다.
+근거는 [2026-11-14 점검 B01~B06](CodeDocumentationAudit-2026-11-14.md), [2026-11-06 점검 A01~A10](CodeDocumentationAudit-2026-11-06.md) 및 2026-11-07~14 반영 현황(트랙 A~J 및 현재 미커밋 4갈래)이다. 10절의 과거 완료 기록보다 이 절의 잔여 범위와 작업 순서를 우선한다.
 
 ### 11.1 선행 안정화 및 결함 해결 내역 [우선순위 0·1 완료]
 
@@ -579,8 +589,21 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
   - Phase 3 [완료]: Tier 1 하트비트 주기적 자동 저장(`RecoveryManager`), 씬 dirty 상태 감지 시 5분 주기 `.tmp` 임시 파일 안전 교체(원자적 쓰기) 스냅샷 생성.
   - Phase 4 [완료]: `Temp/Session.lock` 세션 생명주기 관리, 에디터 시작 시 비정상 종료 감지 및 작업 복원 마법사 모달(`DrawRecoveryModal`) 연동, `Help -> Trigger Crash (Diagnostics Test)` 메뉴를 통한 즉각 검증 지원 완료.
 
-### 11.4 상태·검증 기록 규칙
+- **트랙 H — 에디터 공용 UI·3줄 리소스 편집기·콘텐츠 브라우저 통합 [정적 완료 / UI·GPU 미검증]**
+  - `ResourceEditorInterface` 기반 3줄 공통 헤더(12개 리소스 편집기 전환), `EditorUI` 공통 검색 바·모달 버튼·반응형 툴바·테이블 확대, `ContentBrowser`의 `Assets/`/`Engine/Resources/` 분리 및 읽기 전용 보호·썸네일 재사용·다중 드롭 반영 완료.
+- **트랙 I — Render Pipeline Profile·Windows 내장 패키징·Client 실행 분리 [정적 반영 / 미커밋 포함 / 실행·누수 미검증]**
+  - `Deferred.bamrenderpipeline.json`, `RenderPipelineProfile`, `ClientRenderPipeline`, `Editor/Source/Build/Private/ClientPackage.cpp`, `StartupResourceLoader` Engine 공용화, `ClientGameRuntime` 분리(무조건 19종 + 조건부 `LightSystem`), 빌드 워커 `SDL_CleanupTLS()` 반영 완료. `Client/Source/Main.cpp`의 `CrashHandler` 미연결 및 레거시 `PackageClient.ps1` 병존(**B05**), 패키지 외부 실행/누수 검증은 잔여 범위다.
+- **트랙 J — WebGPU 씬 프리뷰 및 Emscripten/WGSL 이식 경계 [초안 / `B01~B03` 선결 필요 / 툴체인 미검증]**
+  - `Client/Web/` 정적 프리뷰, `Tools/WebGPUProbe`, `Engine/CMakeLists.txt` `EMSCRIPTEN` 제외 경계, 호스트 `Tint` WGSL sidecar 초안, `ThirdParty/FMOD` 2.03.15 갱신이 작업 트리에 반영되었다. `StartupResourceLoader`↔`Shader` WGSL 경로 연결(**B01**), `ShaderImporter` 구형 경로 정규화(**B02**), `ClientGameRuntime`의 `NetworkSystem`/FMOD/DXIL 고정 의존 해소(**B03**) 후 툴체인 검증을 진행한다.
 
-- 2026-11-07 기준 CMake Debug 빌드 및 CTest 전체 29개 테스트(29/29 Passed) 100% 통과 확인 완료.
+### 11.4 현행 작업 트리 정리 및 단기 후속 순서 (`B01~B05`)
+
+1. **작업 트리 정리 및 Windows 기준선 검증 (`B04`)**: `x64-debug` 멀티코어 빌드 및 CTest 36/36 통과(2026-11-14 확인)에 이어, `x64-release` 빌드 및 `RenderPipelineProfilePlan` 2·3단계 수동 비교·FMOD 오디오 재생을 확인하고 미커밋 4갈래(`StartupResourceLoader`·`ClientGameRuntime`·Emscripten/WGSL·FMOD 2.03.15)와 문서를 논리 단위로 분리 커밋한다(임시 파일 `cd`/`emcc`/`emcmake`가 남아 있다면 함께 정리).
+2. **WebGPU/Emscripten 이식 선결 해소 (`B01` → `B02` → `B03`)**: `ShaderItemConfig`/`GetStartupShaderPath`/`LoadShaders`에 WGSL 분기를 연결하고(`B01`), `ShaderImporter`·`ClientRenderPipeline`의 구형 `Resources/...` 경로를 정리한 뒤(`B02`), `ClientGameRuntime`의 `NetworkSystem`/FMOD/DXIL 의존성을 `Engine/CMakeLists.txt` `EMSCRIPTEN` 경계와 맞춘다(`B03`). 이후 호스트 `ReflectionGenerator` + `Tint`로 `Tools/WebGPUProbe`와 Emscripten 정적 빌드를 검증한다.
+3. **안정성·후속 기능 마무리 (`B05`, 2D Phase 5, A06)**: `Client/Source/Main.cpp`에 `CrashHandler`를 연결하고 레거시 `PackageClient.ps1`을 정리 또는 명시적 구형 구분(`B05`)하며, 2D Phase 5 드로우 배칭 연결과 A06 257개 초과 광원 폴백을 후속 과제로 진행한다.
+
+### 11.5 상태·검증 기록 규칙
+
+- 2026-11-07 기준 CMake Debug 빌드 및 CTest 전체 29개(29/29 Passed) 통과 확인 완료; 2026-11-14 `Engine/CMake/Dependencies.cmake`의 `spirv_cross_*` 순서 수정 후 `x64-debug` 멀티코어 빌드 및 CTest 전체 36개(36/36 Passed, 5.03 sec) 통과 확인 완료(`x64-release`·실 오디오/UI/GPU 수동 비교·Emscripten 툴체인은 미검증).
 - 기준 커밋, 미커밋 범위, 구성, 검사 이름과 실제 실행 개수, 실패 시나리오, UI/GPU 미검증을 기록한다.
 - 소스 전면 이동·싱글턴 전면 교체·모든 문서의 장기 목표 구현을 완료 조건으로 추가하지 않는다.

@@ -1,15 +1,15 @@
 ﻿# 차기 ImGui 개발 목표
 
-- 작성일: 2026-10-24
-- 상태: 개발 계획 / 항목별 구현·검증 상태는 별도 확인
+- 작성일: 2026-10-24 (최종 갱신: 2026-11-14)
+- 상태: 개발 계획 및 2026-11-14 정적 반영(`ResourceEditorInterface` 3줄 편집기 12종·`EditorUI` 공용 위젯·`ContentBrowser` 분리/읽기 전용·`PluginManagerPanel`·`RecoveryManager` 모달·`BuildProfilePanel`) / 항목별 실제 UI·GPU·재실행 검증 상태는 별도 확인
 - 우선 목표: `GraphicsSettingPanel`, 프리팹 편집, 콘텐츠 브라우저·리소스 선택과 제작 작업 흐름 보완
-- 관련 지침: [EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md), [ReflectionArchiveGuidelines.md](ReflectionArchiveGuidelines.md)
+- 관련 지침: [EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md), [EditorUXTestGuidelines.md](EditorUXTestGuidelines.md), [ReflectionArchiveGuidelines.md](ReflectionArchiveGuidelines.md)
 - Client 후속 범위: [BuildAndPackagingPlan.md](BuildAndPackagingPlan.md)
 - Engine 실행 기능 계획: [EngineDevelopmentPlan.md](EngineDevelopmentPlan.md)
 - 애니메이터 그래프 계획: [AnimatorGraphPlan.md](AnimatorGraphPlan.md)
 - 분류·이관 기준: [SourceOrganizationGuidelines.md](SourceOrganizationGuidelines.md)
 - 통합 우선순위: [DevelopmentPriorities.md](DevelopmentPriorities.md)
-- 최신 정적 대조: [2026-11-02 코드·문서 점검](CodeDocumentationAudit-2026-11-02.md). 애니메이터 파일 보호·입력, 피커 CWD/확장자, 썸네일 예산의 잔여는 F01·F06·F11·F12를 따른다.
+- 최신 정적 대조: [2026-11-14 코드·원칙·계획 점검](CodeDocumentationAudit-2026-11-14.md) (B02·B04·B06) 및 [2026-11-06 점검](CodeDocumentationAudit-2026-11-06.md). 공용 `EditorUI`/`ResourceEditorInterface`, `PluginManagerPanel`, `RecoveryManager` 모달, `BuildProfilePanel`의 반영 범위와 실 UI·GPU 미검증 상태를 구분한다.
 
 ## 1. 목표
 
@@ -41,6 +41,7 @@
 - 프리팹 파이프라인(생성·배치, 뷰포트 격리 편집 모드 `PrefabModeManager`, 단일 원천 루트 `PrefabInstanceComponent` 및 Apply/Revert/Unpack, 저장 기준점 Undo 연동)과 엔티티 다중 복사·붙여넣기(`EntityClipboard`)가 구현 완료되었다 (10절, 17절).
 - 인스펙터 리소스 피커(`ResourcePicker.h`)의 템플릿 인자 `T`별 호환 확장자 필터링 및 팝업 진입 시 1회 스캔 캐싱과, 콘텐츠 브라우저(`ContentBrowserGridItem`/`ContentBrowserPanel`)의 공통 열기(`OpenAssetOrFolder`), 외부 프로그램 실행(`ShellExecuteW`), 검색 범위 토글(`현재 폴더` vs `전체 리소스 폴더`)이 구현되었다 (14절 A, B, E).
 - 전용 리소스/그래프 에디터로 2D `SpriteAnimationEditor`(필름스트립 타임라인·피벗 프리뷰, `ResourceHandle` 참조)와 3D `AnimatorGraphPanel`(상태 머신 캔버스·파라미터 독·트랜지션 인스펙터·활성 상태 하이라이트, 11절 H)이 구현되었으며, `GraphPanel` 상단 도구 모음이 윈도우 메뉴바(`File`, `Edit`, `View`, `Mode`, `Debug/Build`) + 1줄 퀵 액세스 툴바로 리팩터링되었다 (18절).
+- **2026-11-08~13 추가 반영(정적 기준)**: `ResourceEditorInterface` 기반 3줄 공통 헤더(12개 리소스 편집기 전환), `EditorUI` 공통 검색 바·모달 액션 바·반응형 툴바·테이블 확대, `ContentBrowser`의 `Assets/`/`Engine/Resources/` 분리 및 읽기 전용 보호·썸네일 재사용·다중 드롭, `PluginManagerPanel`/`PluginHost`, `RecoveryManager` 비정상 종료 복원 모달(`DrawRecoveryModal`), `BuildProfilePanel`의 Windows Release 패키지 내보내기 UI가 구현되었다.
 - EditorSettingsCheck의 파일 입출력·데이터 검사는 통과했다.
   이는 실제 UI·GPU·재실행 복원 검증 완료를 의미하지 않는다.
 

@@ -1,14 +1,14 @@
 # 다음 목표: Client 실행 설정과 빌드·패키징
 
-- 작성일: 2026-10-24 (최종 갱신: 2026-11-13)
+- 작성일: 2026-10-24 (최종 갱신: 2026-11-14)
 - 상태: Editor의 Windows x64 Release 빌드 및 폴더 내보내기에 Deferred 렌더 프로필 검증과 배포 경로 기록을 연결했다. 저장소 밖 실행과 Editor·Client 렌더링 일치 검증은 남아 있다.
 - 렌더링 공유 후속 설계: [Render Pipeline Profile](RenderPipelineProfilePlan.md)
-- WebGPU 진행 상태: `Client/Web`에 저장된 씬을 읽는 독립 WebGPU 프리뷰를 추가했다. 실제 BamEngine Wasm Client와 Editor 빌드 패널 내보내기는 후속 범위다.
+- WebGPU 진행 상태: `Client/Web`에는 저장된 씬을 읽는 독립 프리뷰가 있다. Client의 공유 실행 계층을 플랫폼 호스트에서 분리했지만, 실제 Wasm Client·WebGPU 렌더링과 Editor 내보내기는 후속 범위다.
 - 관련 지침: [EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md)의 3절, 12절, 13절
 - 직렬화 지침: [ReflectionArchiveGuidelines.md](ReflectionArchiveGuidelines.md)
 - 분류·이관 기준: [SourceOrganizationGuidelines.md](SourceOrganizationGuidelines.md)
 - 통합 우선순위: [DevelopmentPriorities.md](DevelopmentPriorities.md)의 P2-E
-- 최신 대조: [2026-11-06 점검](CodeDocumentationAudit-2026-11-06.md) A01·A02·A08·A10. 이번 갱신에서 새 빌드·실행·패키징은 하지 않았다.
+- 최신 대조: [2026-11-14 점검](CodeDocumentationAudit-2026-11-14.md) B01~B05 (이전 점검: [2026-11-06 점검](CodeDocumentationAudit-2026-11-06.md) A01·A02·A08·A10). 이번 갱신에서 새 빌드·실행·패키징은 하지 않았다.
 
 ## 1. 진행 결정
 
@@ -33,14 +33,14 @@ Client 시작 매니페스트 연결, 참조 기반 최소 에셋 수집과 저�
 - `Config/Project.json`의 `StartupScenePath`는 `Scenes/RaytracingScene.bamscene.json`이며, 내보내기 시 선택한 씬의 에셋 루트 상대 경로를 배포본에 기록한다.
 - Editor는 `ConfigManager`로 프로젝트 설정을 읽고 `StartupManifestPath`를 시작 리소스 로드에 사용한다.
 - Client는 실행 파일 위치와 프로젝트 마커로 루트를 찾고 Runtime/PlatformPath에 주입한다.
-- `LoadProjectSettings()`가 설정을 읽고 `LoadStartupScene()`이 지정한 씬을 선택한다. 빈 값일 때만 NewScene2로 폴백한다.
-- 설정 로드 결과·스키마 버전을 검사한다. `NotFound`는 경고 후 기본값으로 성공, 파싱 실패는 실패, 0 또는 지원 초과 버전은 InvalidArgument다. Runtime을 만들기 전에 설정을 읽어 리소스 루트를 전달한다. Client의 범용 `StartupManifestPath` 연결은 남아 있다.
+- `LoadProjectSettings()`가 설정을 읽고 `LoadStartupScene()`이 지정한 씬을 선택한다. 빈 `StartupScenePath`는 `InvalidArgument`로 실패하며 기본 씬으로 폴백하지 않는다.
+- 설정 로드 결과·스키마 버전을 검사한다. 개발 실행에서 `NotFound`는 경고 후 기본값을 사용하지만 `.bam-client-package` 마커가 있으면 `Config/Project.json` 누락으로 실패한다. Runtime을 만들기 전에 설정을 읽어 리소스 루트를 전달한다.
 - Client는 프로필 경로를 지정하면 Deferred 타깃, 조명, 씬 후처리, UI와 백버퍼 출력 패스를 구성한다. 빈 경로는 기존 단일 Forward 패스를 사용한다. [렌더 프로필 수동 검증](RenderPipelineProfilePlan.md#3단계-수동-검증)
   Editor의 디퍼드·조명·HDR/후처리와 동등한 렌더링 경로는 아니다.
 - `Client/CMakeLists.txt`의 Visual Studio 디버거 작업 디렉터리는 소스 루트다. 해당 타깃에 과거 `BAMENGINE_PROJECT_ROOT` 정의는 없다.
-- `StartupResourceLoader`는 현재 Editor의 AssetManager 소스 영역에 있다.
-  Client에서 재사용할 범위와 의존성은 빌드·패키징 작업에서 검토한다.
-- `PackageClient.ps1`에는 바이너리 탐색·설정 수집·일부 경로 삭제 거부가 있다. 그러나 `Client`/`Utility`와 임의 외부 출력 삭제를 막지 못하며, 기존 출력 삭제 후 `New-Item -LiteralPath`에서 실패할 수 있다. 과거 독립 실행 기록은 현행 스크립트 성공의 근거가 아니다(A01·A02).
+- `StartupResourceLoader`는 Engine Resource의 공용 로더이며 Editor와 Client가 공유한다. 매니페스트 카테고리·설정 JSON·직접 참조 리소스를 검증하고 `Compute` 셰이더 타입을 지원하며 알 수 없는 타입은 실패한다.
+- `Editor/Source/Build/Private/ClientPackage.cpp`는 에디터 내장 Windows Release 패키징 공식 경로로 `Assets/`·`Engine/Resources/` 분리 구조, `.bam-client-package` 마커, Render Pipeline Profile 및 `StartupResourceLoader::CollectPipelineFiles()` 검증, 스테이징·백업·원자적 게시와 `[Package inventory]` 비교 로그를 수행한다.
+- 반면 `Tools/Scripts/PackageClient.ps1`에는 바이너리 탐색·설정 수집·일부 경로 삭제 거부가 있으나 여전히 구형 `Resources/` 하위 폴더 구조를 복사하는 레거시 스크립트다(B05). 또한 `Client`/`Utility`와 임의 외부 출력 삭제를 막지 못하며, 기존 출력 삭제 후 `New-Item -LiteralPath`에서 실패할 수 있어(A01·A02) 과거 독립 실행 기록은 현행 스크립트 성공의 근거가 아니다.
 
 기존 ImplementationLog에는 다른 CWD에서 Client 초기화·지오메트리 표시를 확인한 기록이 있다.
 이번 갱신은 소스와 기존 로그의 대조이며 해당 실행이나 저장소 밖 배포를 새로 검증한 결과가 아니다.
@@ -63,23 +63,22 @@ Editor에서 제작하고 저장한 프로젝트를 배포 폴더로 구성하�
 - 빌드·패키징 단계가 시작되면 A01/A02를 먼저 처리한다. 출력은 관리 영역의 전용 하위 폴더로 제한하고 실제 경로·입력 겹침을 검증한다.
 - 모든 필수 바이너리·설정을 기존 출력 삭제 전에 검사한다. 지원되는 디렉터리 생성 API로 staging을 만든 뒤 성공한 결과만 교체한다.
 - 경로 거부 검사는 삭제 없이 수행하며 소스 경로를 실제 재귀 삭제하는 테스트를 하지 않는다.
-- A08에 따라 배포의 설정 누락 실패 정책을 확정한다. 현행 기본값 폴백을 문서만으로 변경 완료 처리하지 않는다.
+- A08 정책은 개발 실행의 기본값 폴백과 패키지 마커가 있는 실행의 설정 누락 실패로 반영했다. 실제 배포 실행 검증은 남아 있다.
 
-### 1단계: 실행 경로와 설정 계약 — 경로 헬퍼 반영 / 실패 정책 미완료
+### 1단계: 실행 경로와 설정 계약 — 누락·빈 시작 경로 정책 반영 / 실행 검증 대기
 
 - 실행 파일, 프로젝트 루트, 설정, 리소스와 로그의 기준 경로를 정한다.
 - 실행 파일 위치를 배포 루트의 기본 후보로 검토하고, 개발 실행과 배포 실행의 차이를 명시한다.
 - `Config/Project.json`의 배치 위치와 경로 해석 규칙을 정한다.
-- 시작 씬의 빈 값, 잘못된 스키마 버전과 지원하지 않는 경로에 대한 실패 정책을 정한다.
+- 시작 씬의 빈 값은 실패하고 잘못된 스키마 버전은 거부한다. 패키지 마커가 있는 실행에서 `Project.json`이 누락되면 실패한다. 실행 확인과 추가 경로 경계 검증은 남아 있다.
 - 에디터 작업 복원용 `LastScenePath`와 배포 실행용 `StartupScenePath`의 용도를 구분한다.
 
-### 2단계: Client 시작 흐름 연결 — 설정 기반 씬 반영 / 매니페스트 미연결
+### 2단계: Client 시작 흐름 연결 — 공용 시작 매니페스트 연결 / 실행 검증 대기
 
 - ReflectionRegistry가 준비된 뒤 기존 `ConfigManager`로 `ProjectSettings`를 읽는다.
-- 설정 기반 씬 선택은 반영되었다. 설정 검증과 빈 시작 씬의 명시적 실패/폴백 정책을 마무리한다.
-- `StartupManifestPath`의 리소스 로드와 시작 씬 로드 순서를 연결한다.
-- 실행 리소스 로드는 Engine/Client에서 재사용할 수 있는 위치와 인터페이스로 정리한다.
-  Editor의 임포트 UI나 편집 상태를 Client 의존성으로 가져오지 않는다.
+- 설정 기반 씬 선택과 빈 시작 씬 실패를 반영했다.
+- Engine Resource의 공용 로더를 Client 초기화에 연결해 `StartupManifestPath`의 리소스를 씬 로드 전에 프리로드한다. Editor의 임포트 UI나 편집 상태를 Client 의존성으로 가져오지 않는다.
+- Editor와 Client가 같은 매니페스트 해석을 사용한다. 패키저는 Windows D3D12 기준으로 카테고리 설정과 직접 참조 리소스를 검증하고 staging 및 인벤토리에 포함한다.
 - 설정 파싱·경로 검증·리소스 초기화·씬 복원 실패를 구분해 보고한다.
 
 ### 3단계: Build와 Cook
@@ -102,6 +101,7 @@ Editor에서 제작하고 저장한 프로젝트를 배포 폴더로 구성하�
 - 전용 출력 폴더에 실행 파일, Engine DLL, 필요한 런타임 DLL과 프로젝트 모듈을 수집한다.
 - [ResourceAndAssetSeparationPlan.md](ResourceAndAssetSeparationPlan.md)의 원칙에 따라, 런타임 필수 엔진 빌트인 리소스(`Engine/Resources/`)와 시작 씬이 참조하는 프로젝트 애셋(`Assets/`)을 분리 수집한다.
 - 프로젝트 설정, 시작 씬, 시작 매니페스트와 실행 리소스를 경로 규칙에 맞게 배치한다.
+- 현재 패키저는 시작 매니페스트의 설정·직접 리소스 파일을 검증하고, 전체 런타임 리소스 스캔에서 빠진 파일도 명시적으로 staging한다. 선택적 수집은 아직 적용하지 않았다.
 - Editor 개인 설정, `.bam/User` 작업 상태, 에디터 전용 리소스(`Editor.csv`, 에디터 아이콘/셰이더 등), 미사용 원본 테스트 파일(`.zip`, `.blend`) 및 개발 로그는 배포 대상에서 제외한다.
 - 첫 완료 목표는 실행 가능한 배포 폴더로 삼는다. 압축 배포나 설치 프로그램은 이후 범위로 둔다.
 
@@ -138,6 +138,19 @@ Editor에서 제작하고 저장한 프로젝트를 배포 폴더로 구성하�
 
 `Client/Web`은 별도 CMake 구성으로 정적 프리뷰를 만든다. CMake는 프로젝트의 `AssetDirectory`에서 지정한 씬을 찾고, 씬 원본과 `Config/InputActions.json`을 정적 페이지와 함께 `site`에 복사한다. 시작 씬을 지정하지 않으면 프로젝트의 `StartupScenePath`를 사용한다. Editor의 `빌드 및 패키징`은 현재 Windows x64 Release 폴더 내보내기를 수행한다.
 
+- **2026-11-14 코드 반영 및 Windows 검증**: `ClientGameRuntime`이 프로젝트 설정, Engine Runtime, 시스템·씬 초기화와 프레임 갱신/렌더 제출을 담당한다. Windows `Application`은 SDL 창·이벤트·D3D12 RHI 생성과 게임 모듈 로드를 담당하며, 공용 실행 계층을 초기화 순서에 연결한다. 사용자가 Windows Client의 빌드와 실행 성공을 확인했다. 이 변경은 플랫폼 경계의 첫 분리이며 Wasm 빌드나 WebGPU 렌더링 지원을 의미하지 않는다.
+- **2026-11-14 Emscripten 빌드 경계 코드 반영 (미검증)**: Emscripten에서 Engine을 정적 라이브러리로 구성하고 Windows·Vulkan·SDL GPU 구현, Win32 CrashHandler, 네트워크 소켓·RL 서버와 네이티브 셰이더/툴 타깃을 제외하도록 CMake 경계를 나눴다. Editor·동적 게임 모듈·현재 Client 타깃도 이 구성에서 생략한다. Reflection 코드는 별도 호스트용 생성기와 Clang 리소스 디렉터리가 필요하다. Emscripten 도구 체인이 현재 환경에 없어 구성과 빌드는 검증하지 않았으며, 이 경계는 WebGPU RHI나 Wasm Client 실행 파일을 제공하지 않는다.
+- **2026-11-14 WGSL 자산 경로 초안 (미검증)**: `Shader` 메타데이터는 선택적 `wgslPath`를 보유하고, WebGPU RHI 선택 시 WGSL 파일을 전달한다. 기본 셰이더 빌드는 `BAMENGINE_BUILD_WGSL_SHADERS=ON`과 호스트 Tint 실행 파일을 지정해 SPIR-V에서 `Engine/Resources/Shader/bin/wgsl` sidecar를 생성한다. 네이티브 HLSL import·핫 리로드는 DXC → SPIR-V → Tint 변환을 사용하고, WebGPU에서 SPIR-V를 직접 import할 때도 WGSL sidecar를 생성한다. CMake 단계에는 `TINT_EXECUTABLE`, 네이티브 변환 실행에는 `TINT_EXECUTABLE` 환경 변수 또는 PATH가 필요하다. Emscripten 빌드에서 Tint를 실행하지 않는다. Tint 변환·Reflection 생성·Emscripten 빌드와 실행 검증은 남아 있다.
+- **WebGPU 툴체인 사전 확인**: `Tools/WebGPUProbe`는 Engine 의존성을 거치지 않는 독립 Emscripten 타깃이다. Emscripten 설치 뒤 이 타깃을 빌드·브라우저 실행해 `emdawnwebgpu` 포트와 브라우저 WebGPU 초기화를 확인한다. 이는 Engine RHI나 Client 씬 렌더링 검증으로 간주하지 않는다.
+
+```powershell
+emcmake cmake -S Tools/WebGPUProbe -B out/build/webgpu-probe -G Ninja
+cmake --build out/build/webgpu-probe --config Release
+py -m http.server 8765 --bind 127.0.0.1 --directory out/build/webgpu-probe/site
+```
+
+브라우저에서 `http://localhost:8765/WebGPUProbe.html`을 연다. 이 프로브가 성공해도 Engine Client 통합은 아직 검증되지 않는다.
+
 ```powershell
 cmake -S Client/Web -B out/build/webgpu-client -G Ninja "-DBAM_WEB_STARTUP_SCENE=Scenes/RaytracingScene3.bamscene.json"
 py -m http.server 8765 --bind 127.0.0.1 --directory out/build/webgpu-client/site
@@ -147,7 +160,13 @@ WebGPU를 지원하는 브라우저에서 `http://localhost:8765/`를 연다. `R
 
 프리뷰는 씬 v1의 Transform, Camera, Flag와 `CubeMesh`·`SphereMesh` 정적 메시를 읽어 자체 WGSL로 그린다. 사용자는 `RaytracingScene3`가 브라우저에 표시된 뒤 Windows 화면과 다른 렌더링 및 Fox의 부재를 보고했다. 프리뷰의 입력·리사이즈 동작은 별도 확인 항목이다.
 
-실제 웹 내보내기는 Client의 씬 로드와 게임 시스템 실행을 플랫폼별 창·프레임·RHI 초기화에서 분리하는 작업부터 시작한다. 이후 Wasm Client에서 같은 씬을 읽고 WebGPU에서 Fox 모델과 이동 애니메이션을 실행한다. Editor 빌드 패널에는 씬·Wasm·필수 리소스를 함께 내보내는 WebGPU 대상을 추가하고, 같은 카메라에서 Deferred 조명과 후처리를 비교한다.
+남은 작업은 Tint 변환을 실행 검증하고 Emscripten 빌드 경계를 도구 체인으로 검증하는 것이다. 이어서 WebGPU RHI의 디바이스·surface·자원·pipeline·draw 계약과 비동기 Client 시작 경로를 연결한다. 이후 Wasm Client 호스트와 정적 게임 코드 등록 경로를 연결해 같은 씬에서 Fox 모델과 이동 애니메이션을 실행한다. Editor 빌드 패널에는 씬·Wasm·필수 리소스를 함께 내보내는 WebGPU 대상을 추가하고, 같은 카메라에서 Deferred 조명과 후처리를 비교한다.
+
+2026-11-14 정적 점검에서 확인한 이식 선결 과제 (`CodeDocumentationAudit-2026-11-14.md` B01~B03):
+
+- **B01 (`StartupResourceLoader`↔`Shader` WGSL 경로 단절)**: `ShaderItemConfig`에 `WgslPath`를 추가하고 `GetStartupShaderPath()`에 `ERHIType::WebGPU` 분기(`WgslPath` 우선 또는 `SpirvPath` 기반 `bin/wgsl/*.wgsl` 유도)를 연결하며, `LoadShaders()`가 `dxilPath`·`spirvPath`·`wgslPath`를 함께 채우도록 맞춘다.
+- **B02 (`ShaderImporter` 구형 경로 하드코딩)**: `Editor/Source/AssetManager/Importer/Private/ShaderImporter.cpp`의 `.hlsl` 분기가 사용하는 구형 `Resources/Shader/...` 하드코딩을 `Engine://Shader/...` 규약(`PlatformPath::ToVirtualUri`)과 `compileResult.OutputPath`로 정규화한다. (참고: `ClientRenderPipeline.cpp:71`의 `L"Resources/Material/UIMaterial.bammat.json"` 구형 키도 함께 정리 대상이다.)
+- **B03 (`ClientGameRuntime`의 Emscripten 빌드 경계 불일치)**: `Engine/CMakeLists.txt`의 `EMSCRIPTEN` 소스 제외 목록(`/Network/`)과 `ClientGameRuntime::InitializeSystems()`의 무조건 `NetworkSystem` 등록 간 충돌을 해소하고, Emscripten FMOD Wasm(`ThirdParty/FMOD/lib/wasm` 또는 `js`) 링크/오디오 백엔드 경계와 `ClientRenderPipeline`의 RHI별 셰이더 경로(`bin/dxil` 고정 로드 대체)를 연결한다.
 
 ## 5. 초기 배포 폴더 후보
 
@@ -185,12 +204,13 @@ Package/
 - `Client/CMakeLists.txt`
 - `Engine/Source/Core/Config/Public/Config.h`
 - `Engine/Source/Core/Config/Public/ConfigManager.h`
+- `Engine/Source/Resource/Public/StartupResourceLoader.h`
+- `Engine/Source/Resource/Private/StartupResourceLoader.cpp`
 - `Engine/Source/Runtime/Private/Runtime.cpp`
 - `Editor/Source/Application/Private/Application.cpp`
-- `Editor/Source/AssetManager/Public/StartupResourceLoader.h`
-- `Editor/Source/AssetManager/Private/StartupResourceLoader.cpp`
+- `Editor/Source/Build/Private/ClientPackage.cpp`
 - `Config/Project.json`
-- `Resources/Config/Startup/StartupManifest.json`
+- `Assets/Config/Startup/StartupManifest.json`
 
 재개할 때는 이 목록의 최신 코드와 실제 배포 산출물을 다시 확인한다.
 이전에 제안한 Client 코드 조각은 적용 완료로 간주하지 않는다.
