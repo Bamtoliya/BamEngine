@@ -1,26 +1,11 @@
 ﻿#include <SDL3/SDL_main.h>
-#include <archive/JsonArchive.h>
-
 #include "PlatformPath.h"
-#include "Config.h"
-#include "ConfigManager.h"
-#include "ReflectionRegistry.h"
-
-#include "Runtime.h"
-#include "Systems.h"
 #include "ModuleManager.h"
-#include "SceneManager.h"
-#include "CameraComponent.h"
-#include "FlagComponent.h"
+#include "InputManager.h"
+#include "Logger.h"
 #include "CartPoleEnvironment.h"
 #include "RLServer.h"
-#include <glm/gtc/matrix_transform.hpp>
-#include "BuiltInPrimitiveMeshes.h"
-#include "ResourceManager.h"
-#include "GraphBindingComponent.h"
-#include "InputActionSettings.h"
-#include "ClientRenderPipeline.h"
-#include "PixelPerfectCameraComponent.h"
+#include "ClientGameRuntime.h"
 
 BEGIN(Client)
 
@@ -33,11 +18,7 @@ public:
 
     ~Application()
     {
-        m_RenderPipeline.Free();
-        if (m_Runtime)
-            Runtime::Destroy();
-        else if (ReflectionRegistry::IsCreated())
-            ReflectionRegistry::Destroy();
+        m_ClientRuntime.Free();
 
         if (m_Window)
             SDL_DestroyWindow(m_Window);
@@ -46,130 +27,89 @@ public:
             SDL_Quit();
 
         if (m_LoggerInitialized)
-            Logger::Shutdown();
+            Engine::Logger::Shutdown();
     }
 
-    EResult Initialize()
+    Engine::EResult Initialize()
     {
         // 1. 프로젝트 루트를 가장 먼저 확정
         m_ProjectRoot = ResolveProjectRoot();
 
         // 2. 로거를 프로젝트 루트 기준으로 안전하게 초기화
         const auto logPath = m_ProjectRoot / "Logs" / "Client.log";
-        if (!Logger::Initialize(logPath))
-            return EResult::Fail;
+        if (!Engine::Logger::Initialize(logPath))
+            return Engine::EResult::Fail;
 
         m_LoggerInitialized = true;
 
-        if (!ReflectionRegistry::Create())
-            return EResult::Fail;
-        if (const auto result = LoadProjectSettings(); result != EResult::Success)
+        if (const auto result = m_ClientRuntime.LoadProject(m_ProjectRoot); result != Engine::EResult::Success)
             return result;
 
         if (!SDL_Init(SDL_INIT_VIDEO))
         {
             BAM_LOG(Error, "Client", "Application", "SDL_Init failed: {}", SDL_GetError());
-            return EResult::Fail;
+            return Engine::EResult::Fail;
         }
 
         m_SDLInitialized = true;
-        const char* title = m_ProjectSettings.WindowTitle.empty() ? "BamEngine Client" : m_ProjectSettings.WindowTitle.c_str();
+        const auto& settings = m_ClientRuntime.GetProjectSettings();
+        const char* title = settings.WindowTitle.empty() ? "BamEngine Client" : settings.WindowTitle.c_str();
         m_Window = SDL_CreateWindow(title, 1280, 720, SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
 
         if (!m_Window)
         {
             BAM_LOG(Error, "Client", "Application", "SDL_CreateWindow failed: {}", SDL_GetError());
-            return EResult::Fail;
+            return Engine::EResult::Fail;
         }
 
         int width = 0;
         int height = 0;
         if (!SDL_GetWindowSizeInPixels(m_Window, &width, &height) || width <= 0 || height <= 0)
-            return EResult::Fail;
+            return Engine::EResult::Fail;
 
         const SDL_PropertiesID properties = SDL_GetWindowProperties(m_Window);
         if (!properties)
-            return EResult::Fail;
+            return Engine::EResult::Fail;
 
         HWND hwnd = static_cast<HWND>(SDL_GetPointerProperty(properties, SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr));
         if (!hwnd)
-            return EResult::Fail;
+            return Engine::EResult::Fail;
 
         DirectX12RHIDesc rhiDesc = {};
         rhiDesc.windowHandle = hwnd;
-        rhiDesc.width = static_cast<uint32>(width);
-        rhiDesc.height = static_cast<uint32>(height);
+        rhiDesc.width = static_cast<Engine::uint32>(width);
+        rhiDesc.height = static_cast<Engine::uint32>(height);
         rhiDesc.isVSync = true;
 
-        RUNTIMEDESC runtimeDesc = {};
-        runtimeDesc.RendererDesc.rhiType = ERHIType::DirectX12;
-        runtimeDesc.RendererDesc.rhiDesc = &rhiDesc;
-
-        // 엔진 독립성을 지키며 호스트 경로 주입
-        runtimeDesc.ProjectRoot = m_ProjectRoot;
-        runtimeDesc.AssetRoot = std::filesystem::u8path(m_ProjectSettings.AssetDirectory);
-        runtimeDesc.EngineResourceRoot = std::filesystem::u8path(m_ProjectSettings.EngineResourceDirectory);
-
-        m_Runtime = Runtime::Create(&runtimeDesc);
-        if (!m_Runtime)
-            return EResult::Fail;
-
-        // 엔진 기본 프리미티브 메시(CubeMesh, SphereMesh 등) 등록
-        Engine::RegisterBuiltInPrimitiveMeshes(Engine::ResourceManager::Get());
-
-        InputActionSettings inputSettings;
-        const auto inputPath = m_ProjectRoot / "Config" / "InputActions.json";
-        const auto& registry = ReflectionRegistry::Get().GetRegistry();
-        const auto inputLoad = ConfigManager::Load(inputSettings, inputPath, registry);
-
-        if (inputLoad.Status == EConfigLoadStatus::Failed ||
-            (inputLoad.Status == EConfigLoadStatus::Loaded && !InputManager::Get().SetInputActionSettings(inputSettings)))
-        {
-            BAM_LOG(Error, "Client", "Startup", "Could not load or apply Config/InputActions.json");
-            return EResult::Fail;
-        }
-
-        if (m_RenderPipeline.Initialize(m_ProjectSettings.RenderPipelineProfilePath, rhiDesc.width, rhiDesc.height) != EResult::Success)
-            return EResult::Fail;
-        if (IsFailure(InitializeSystems()))
-            return EResult::Fail;
-        LoadGameModule();
-        if (IsFailure(LoadStartupScene()))
-            return EResult::Fail;
-        if (!ValidateStartupGraphs())
-            return EResult::Fail;
-
-        BAM_LOG(Info, "Client", "Application", "Client initialization finished successfully");
-        return EResult::Success;
+        Engine::RendererDesc rendererDesc = {};
+        rendererDesc.rhiType = Engine::ERHIType::DirectX12;
+        rendererDesc.rhiDesc = &rhiDesc;
+        return m_ClientRuntime.Initialize(rendererDesc, [this] { LoadGameModule(); });
     }
 
-    EResult Run()
+    Engine::EResult Run()
     {
         bool shouldQuit = false;
         while (!shouldQuit)
         {
-            const EResult result = RunFrame(shouldQuit);
-            if (result != EResult::Success)
+            const Engine::EResult result = RunFrame(shouldQuit);
+            if (result != Engine::EResult::Success)
                 return result;
         }
 
-        return EResult::Success;
+        return Engine::EResult::Success;
     }
 
-    EResult RunFrame(bool& shouldQuit)
+    Engine::EResult RunFrame(bool& shouldQuit)
     {
         shouldQuit = false;
-        if (!m_Window || !m_Runtime)
-            return EResult::InvalidArgument;
-
-        auto* rhi = Renderer::Get().GetRHI();
-        if (!rhi)
-            return EResult::Fail;
+        if (!m_Window)
+            return Engine::EResult::InvalidArgument;
 
         SDL_Event event = {};
         while (SDL_PollEvent(&event))
         {
-            InputManager::Get().ProcessEvent(event);
+            Engine::InputManager::Get().ProcessEvent(event);
 
             if (event.type == SDL_EVENT_QUIT)
                 shouldQuit = true;
@@ -179,81 +119,27 @@ public:
         }
 
         if (shouldQuit)
-            return EResult::Success;
-
-        auto& timeManager = TimeManager::Get();
-        timeManager.Update();
-        const f32 dt = timeManager.GetDeltaTime();
+            return Engine::EResult::Success;
 
         if (SDL_GetWindowFlags(m_Window) & SDL_WINDOW_MINIMIZED)
-            return EResult::Success;
+            return m_ClientRuntime.RunFrame(0, 0, false, true);
 
         int width = 0;
         int height = 0;
         if (!SDL_GetWindowSizeInPixels(m_Window, &width, &height))
-            return EResult::Fail;
+            return Engine::EResult::Fail;
 
         if (width <= 0 || height <= 0)
-            return EResult::Success;
+            return m_ClientRuntime.RunFrame(0, 0, false, false);
 
-        const uint32 pixelWidth = static_cast<uint32>(width);
-        const uint32 pixelHeight = static_cast<uint32>(height);
-        if (pixelWidth != rhi->GetSwapChainWidth() || pixelHeight != rhi->GetSwapChainHeight())
-        {
-            const EResult result = rhi->Resize(pixelWidth, pixelHeight);
-            if (result != EResult::Success)
-                return result;
-            if (const auto targetResult = m_RenderPipeline.Resize(pixelWidth, pixelHeight); IsFailure(targetResult))
-            {
-                BAM_LOG(Error, "Client", "Rendering", "Could not resize render profile targets to {}x{}", pixelWidth, pixelHeight);
-                return targetResult;
-            }
-        }
-
-        auto& input = InputManager::Get();
-        input.Update(dt);
-        input.EvaluateActionMap("Gameplay", SDL_GetKeyboardFocus() == m_Window);
-
-        while (timeManager.IsFixedUpdateReady())
-            m_Runtime->FixedUpdate(timeManager.GetFixedStep());
-
-        m_Runtime->Update(dt, false);
-        m_Runtime->LateUpdate(dt);
-        SubmitRenderPipeline(dt, pixelWidth, pixelHeight);
-
-        return m_Runtime->Render(dt);
+        return m_ClientRuntime.RunFrame(static_cast<Engine::uint32>(width), static_cast<Engine::uint32>(height),
+            SDL_GetKeyboardFocus() == m_Window, false);
     }
 
 private:
-    EResult InitializeSystems()
-    {
-        auto& systemManager = SystemManager::Get();
-        if (!systemManager.AddSystem<TransformSystem>()) return EResult::Fail;
-        if (!systemManager.AddSystem<SpringArmSystem>()) return EResult::Fail;
-        if (!systemManager.AddSystem<CameraSystem>()) return EResult::Fail;
-        if (!m_RenderPipeline.UsesDeferredProfile() && !systemManager.AddSystem<LightSystem>()) return EResult::Fail;
-        if (!systemManager.AddSystem<MeshRenderSystem>()) return EResult::Fail;
-        if (!systemManager.AddSystem<SpriteRenderSystem>()) return EResult::Fail;
-        if (!systemManager.AddSystem<SpriteAnimationSystem>()) return EResult::Fail;
-        if (!systemManager.AddSystem<TilemapRenderSystem>()) return EResult::Fail;
-        if (!systemManager.AddSystem<AnimationSystem>()) return EResult::Fail;
-        if (!systemManager.AddSystem<ParticleSystem>()) return EResult::Fail;
-        if (!systemManager.AddSystem<ActionTimelineSystem>()) return EResult::Fail;
-        if (!systemManager.AddSystem<CompositeVFXSystem>()) return EResult::Fail;
-        if (!systemManager.AddSystem<ThirdPersonControllerSystem>()) return EResult::Fail;
-        if (!systemManager.AddSystem<KinematicCharacterSystem>()) return EResult::Fail;
-        if (!systemManager.AddSystem<NetworkSystem>()) return EResult::Fail;
-        if (!systemManager.AddSystem<UIRenderSystem>()) return EResult::Fail;
-        if (!systemManager.AddSystem<AudioSystem>()) return EResult::Fail;
-        if (!systemManager.AddSystem<TerrainSystem>()) return EResult::Fail;
-        if (!systemManager.AddSystem<PhysicsSystem>()) return EResult::Fail;
-        if (!systemManager.AddSystem<GraphSystem>()) return EResult::Fail;
-        return EResult::Success;
-    }
-
     void LoadGameModule()
     {
-        const auto exeDir = PlatformPath::GetExecutableDirectory();
+        const auto exeDir = Engine::PlatformPath::GetExecutableDirectory();
         std::filesystem::path modulePath = exeDir / L"GameModule.dll";
         if (!std::filesystem::exists(modulePath))
             modulePath = m_ProjectRoot / L"GameModule.dll";
@@ -264,136 +150,15 @@ private:
             return;
         }
 
-        const EResult result = ModuleManager::Get().LoadModule(L"GameModule", modulePath);
-        if (IsFailure(result))
-            BAM_LOG(Error, "Client", "Module", "Failed to load GameModule: {}", ResultToString(result));
-    }
-
-    EResult LoadStartupScene()
-    {
-        std::filesystem::path scenePath;
-        if (!m_ProjectSettings.StartupScenePath.empty())
-        {
-            scenePath = PlatformPath::GetProjectAssetRoot() / std::filesystem::u8path(m_ProjectSettings.StartupScenePath);
-            if (!std::filesystem::exists(scenePath))
-            {
-                BAM_LOG(Error, "Client", "Startup", "Configured startup scene file does not exist: {}", scenePath.string());
-                return EResult::FileNotFound;
-            }
-        }
-        else
-        {
-            scenePath = PlatformPath::GetProjectAssetRoot() / "Scenes" / "NewScene2.bamscene.json";
-            BAM_LOG(Warn, "Client", "Startup", "StartupScenePath is empty. Falling back to default scene: {}", scenePath.string());
-            if (!std::filesystem::exists(scenePath))
-            {
-                BAM_LOG(Error, "Client", "Startup", "Default startup scene file does not exist: {}", scenePath.string());
-                return EResult::FileNotFound;
-            }
-        }
-        archive::JsonArchive ar;
-        const EResult result = SceneManager::Get().LoadScene(ar, scenePath.wstring());
-        if (result != EResult::Success)
-        {
-            BAM_LOG(Error, "Client", "Startup", "Failed to load startup scene: {}", ResultToString(result));
-            return result;
-        }
-        BAM_LOG(Info, "Client", "Startup", "Loaded startup scene: {}", scenePath.string());
-        return EResult::Success;
-    }
-
-    void SubmitRenderPipeline(f32 dt, uint32 width, uint32 height)
-    {
-        auto* currentScene = SceneManager::Get().GetCurrentScene();
-        if (!currentScene) return;
-
-        auto& registry = currentScene->GetRegistry();
-        auto cameraView = registry.view<CameraComponent, FlagComponent>();
-        std::optional<CameraBuffer> selectedBuffer;
-        bool pixelPerfect = false;
-        const f32 aspectRatio = static_cast<f32>(width) / static_cast<f32>(height);
-
-        for (auto entity : cameraView)
-        {
-            const auto& flag = cameraView.get<FlagComponent>(entity);
-            if (!flag.IsActiveInHierarchy() || HasFlag(flag.effectiveFlags, EEntityFlag::Dead))
-                continue;
-
-            auto& camera = cameraView.get<CameraComponent>(entity);
-            const auto previousAspect = camera.AspectRatio;
-            camera.AspectRatio = aspectRatio;
-            if (!CameraSystem::UpdateCamera(registry, entity, width, height))
-            {
-                camera.AspectRatio = previousAspect;
-                continue;
-            }
-            const auto buffer = camera.GetCameraBuffer();
-            if (!buffer) continue;
-
-            if (!selectedBuffer || camera.IsMainCamera)
-            {
-                selectedBuffer = buffer;
-                const auto* pixelCamera = registry.try_get<PixelPerfectCameraComponent>(entity);
-                pixelPerfect = camera.CameraType == ECameraType::Orthographic && pixelCamera && pixelCamera->assetsPPU > 0.0f;
-            }
-
-            if (camera.IsMainCamera)
-                break;
-        }
-
-        // 씬 내에 카메라가 없을 경우 기본 폴백 카메라 제공
-        if (!selectedBuffer)
-        {
-            CameraBuffer fallback = {};
-            const vec3 eye(0.0f, 20.0f, -50.0f);
-            const vec3 at(0.0f, 0.0f, 0.0f);
-            const vec3 up(0.0f, 1.0f, 0.0f);
-            fallback.viewMatrix = glm::lookAt(eye, at, up);
-            fallback.projMatrix = glm::perspective(glm::radians(60.0f), aspectRatio, 0.1f, 1000.0f);
-            fallback.invViewMatrix = glm::inverse(fallback.viewMatrix);
-            fallback.invProjMatrix = glm::inverse(fallback.projMatrix);
-            fallback.viewProjMatrix = fallback.projMatrix * fallback.viewMatrix;
-            fallback.invViewProjMatrix = glm::inverse(fallback.viewProjMatrix);
-            fallback.cameraPosition = eye;
-            selectedBuffer = fallback;
-        }
-
-        selectedBuffer->time = static_cast<f32>(TimeManager::Get().GetTotalTime());
-        m_RenderPipeline.Submit(*selectedBuffer, *currentScene, dt, pixelPerfect);
-        if (m_RenderPipeline.UsesDeferredProfile())
-        {
-            // Cascade projection reads the geometry pass camera registered above.
-            for (auto* scene : SceneManager::Get().GetActiveScenes())
-                if (scene)
-                    LightSystem::UpdateLights(scene->GetRegistry());
-        }
-    }
-
-    bool ValidateStartupGraphs()
-    {
-        auto* scene = SceneManager::Get().GetCurrentScene();
-        auto* graphSystem = SystemManager::Get().GetSystem<GraphSystem>();
-        if (!scene || !graphSystem)
-        {
-            BAM_LOG(Error, "Client", "Startup", "Startup scene or graph system is unavailable.");
-            return false;
-        }
-
-        auto bindings = scene->GetRegistry().view<GraphBindingComponent>();
-        for (const auto entity : bindings)
-        {
-            const auto& binding = bindings.get<GraphBindingComponent>(entity);
-            if (binding.enabled && !binding.graphFile.empty() && !graphSystem->GetOrLoadGraph(binding.graphFile))
-                return false;
-        }
-
-        return true;
+        const Engine::EResult result = Engine::ModuleManager::Get().LoadModule(L"GameModule", modulePath);
+        if (Engine::IsFailure(result))
+            BAM_LOG(Error, "Client", "Module", "Failed to load GameModule: {}", Engine::ResultToString(result));
     }
 
 private:
     std::filesystem::path ResolveProjectRoot() const
         {
-            const auto exeDir = PlatformPath::GetExecutableDirectory();
+            const auto exeDir = Engine::PlatformPath::GetExecutableDirectory();
             std::error_code ec;
 
             // 1. 배포 환경: 실행 파일 바로 옆에 Resources 폴더나 Config 폴더가 있는 경우
@@ -415,45 +180,12 @@ private:
 
             return exeDir;
         }
-
-    EResult LoadProjectSettings()
-    {
-        const auto projectJsonPath = m_ProjectRoot / "Config" / "Project.json";
-        const auto& registry = ReflectionRegistry::Get().GetRegistry();
-        const auto loadResult = Engine::ConfigManager::Load(m_ProjectSettings, projectJsonPath, registry);
-        if (loadResult.Status == Engine::EConfigLoadStatus::NotFound)
-        {
-            BAM_LOG(Warn, "Client", "Config", "Project settings file not found: {}. Using defaults.", projectJsonPath.string());
-            return EResult::Success;
-        }
-        if (loadResult.Status == Engine::EConfigLoadStatus::Failed)
-        {
-            BAM_LOG(Error, "Client", "Config", "Failed to load project settings from {}: code={}, field={}, fileError={}",
-                projectJsonPath.string(), static_cast<int>(loadResult.Error.Code), loadResult.Error.Field, loadResult.FileError.message());
-            return EResult::Fail;
-        }
-        if (m_ProjectSettings.SchemaVersion == 0)
-        {
-            BAM_LOG(Error, "Client", "Config", "Invalid ProjectSettings SchemaVersion: 0 in {}", projectJsonPath.string());
-            return EResult::InvalidArgument;
-        }
-        if (m_ProjectSettings.SchemaVersion > Engine::ProjectSettings::CurrentSchemaVersion)
-        {
-            BAM_LOG(Error, "Client", "Config", "Unsupported ProjectSettings SchemaVersion: {} (Max: {}) in {}",
-                m_ProjectSettings.SchemaVersion, Engine::ProjectSettings::CurrentSchemaVersion, projectJsonPath.string());
-            return EResult::InvalidArgument;
-        }
-        BAM_LOG(Info, "Client", "Config", "Loaded project settings (SchemaVersion={}) from {}", m_ProjectSettings.SchemaVersion, projectJsonPath.string());
-        return EResult::Success;
-    }
 private:
     SDL_Window* m_Window = nullptr;
-    Runtime* m_Runtime = nullptr;
-    ClientRenderPipeline m_RenderPipeline;
+    ClientGameRuntime m_ClientRuntime;
     bool m_SDLInitialized = false;
     bool m_LoggerInitialized = false;
     std::filesystem::path m_ProjectRoot;
-    Engine::ProjectSettings m_ProjectSettings;
 };
 
 END
@@ -487,14 +219,14 @@ int main(int argc, char* argv[])
     SDL_SetMainReady();
 
     Client::Application application;
-    EResult result = application.Initialize();
+    Engine::EResult result = application.Initialize();
 
-    if (result == EResult::Success)
+    if (result == Engine::EResult::Success)
         result = application.Run();
 
-    if (result != EResult::Success)
+    if (result != Engine::EResult::Success)
     {
-        fmt::print(stderr, "Client failed: {}\n", ResultToString(result));
+        fmt::print(stderr, "Client failed: {}\n", Engine::ResultToString(result));
         return 1;
     }
 

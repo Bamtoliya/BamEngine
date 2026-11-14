@@ -7,6 +7,11 @@ file(GLOB_RECURSE CLIENT_SOURCES CONFIGURE_DEPENDS "${CLIENT_SOURCE_DIR}/*.cpp")
 
 add_executable(Client ${CLIENT_HEADERS} ${CLIENT_SOURCES})
 
+target_include_directories(Client PRIVATE
+    "${CLIENT_SOURCE_DIR}"
+    "${CLIENT_SOURCE_DIR}/Execution/Public"
+)
+
 if(WIN32)
     set_property(TARGET Client PROPERTY WIN32_EXECUTABLE "$<CONFIG:Release>")
 endif()
