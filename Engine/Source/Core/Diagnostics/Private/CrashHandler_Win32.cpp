@@ -1,4 +1,4 @@
-#include "CrashHandler.h"
+﻿#include "CrashHandler.h"
 #include "Logger.h"
 
 #define WIN32_LEAN_AND_MEAN
@@ -286,17 +286,31 @@ namespace
 
 		GenerateCrashReport(reportPath, code, addr, ctx);
 
-		// 6. 안내 메시지박스
+		// 6. 안내 메시지박스 (복원 콜백 등록 여부에 따라 Editor/Client 문구 분기)
 		char msg[512];
-		std::snprintf(msg, sizeof(msg),
-			"BamEngine has encountered a fatal error and must close.\n\n"
-			"Exception: %s\n"
-			"Crash Dump: %s\n"
-			"Crash Report: %s\n\n"
-			"Your unsaved work has been saved to the recovery snapshot directory.",
-			GetExceptionCodeString(code),
-			dumpPath.string().c_str(),
-			reportPath.string().c_str());
+		if (s_EmergencyCallback)
+		{
+			std::snprintf(msg, sizeof(msg),
+				"BamEngine has encountered a fatal error and must close.\n\n"
+				"Exception: %s\n"
+				"Crash Dump: %s\n"
+				"Crash Report: %s\n\n"
+				"Your unsaved work has been saved to the recovery snapshot directory.",
+				GetExceptionCodeString(code),
+				dumpPath.string().c_str(),
+				reportPath.string().c_str());
+		}
+		else
+		{
+			std::snprintf(msg, sizeof(msg),
+				"BamEngine Client has encountered a fatal error and must close.\n\n"
+				"Exception: %s\n"
+				"Crash Dump: %s\n"
+				"Crash Report: %s",
+				GetExceptionCodeString(code),
+				dumpPath.string().c_str(),
+				reportPath.string().c_str());
+		}
 
 		MessageBoxA(nullptr, msg, "BamEngine Crash Diagnostics", MB_OK | MB_ICONERROR | MB_TASKMODAL);
 

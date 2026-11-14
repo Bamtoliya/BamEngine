@@ -6,6 +6,9 @@
 #include "CartPoleEnvironment.h"
 #include "RLServer.h"
 #include "ClientGameRuntime.h"
+#if defined(_WIN32)
+#include "CrashHandler.h"
+#endif
 
 BEGIN(Client)
 
@@ -27,7 +30,12 @@ public:
             SDL_Quit();
 
         if (m_LoggerInitialized)
+        {
+#if defined(_WIN32)
+            Engine::CrashHandler::Shutdown();
+#endif
             Engine::Logger::Shutdown();
+        }
     }
 
     Engine::EResult Initialize()
@@ -41,6 +49,10 @@ public:
             return Engine::EResult::Fail;
 
         m_LoggerInitialized = true;
+#if defined(_WIN32)
+        Engine::CrashHandler::Initialize(m_ProjectRoot / "Logs" / "Crashes");
+        Engine::CrashHandler::SetCustomContext("Host", "Client");
+#endif
 
         if (const auto result = m_ClientRuntime.LoadProject(m_ProjectRoot); result != Engine::EResult::Success)
             return result;
@@ -157,29 +169,29 @@ private:
 
 private:
     std::filesystem::path ResolveProjectRoot() const
+    {
+        const auto exeDir = Engine::PlatformPath::GetExecutableDirectory();
+        std::error_code ec;
+        // 1. 배포 환경: 실행 파일 옆에 패키지 마커(.bam-client-package) 또는 Config 폴더가 있는 경우
+        if (std::filesystem::exists(exeDir / ".bam-client-package", ec) ||
+            std::filesystem::exists(exeDir / "Config", ec))
         {
-            const auto exeDir = Engine::PlatformPath::GetExecutableDirectory();
-            std::error_code ec;
-
-            // 1. 배포 환경: 실행 파일 바로 옆에 Resources 폴더나 Config 폴더가 있는 경우
-            if (std::filesystem::exists(exeDir / "Resources", ec) || std::filesystem::exists(exeDir / "Config", ec))
-                return exeDir;
-
-            // 2. 개발 환경: 상위 부모 디렉터리를 거슬러 올라가며 마커(Config/Project.json 또는 .bam) 탐색
-            std::filesystem::path cur = exeDir;
-            for (int i = 0; i < 7; ++i)
-            {
-                if (std::filesystem::exists(cur / "Config" / "Project.json", ec) ||
-                    std::filesystem::exists(cur / ".bam", ec))
-                {
-                    return cur;
-                }
-                if (!cur.has_parent_path()) break;
-                cur = cur.parent_path();
-            }
-
             return exeDir;
         }
+        // 2. 개발 환경: 상위 부모 디렉터리를 거슬러 올라가며 마커(Config/Project.json 또는 .bam) 탐색
+        std::filesystem::path cur = exeDir;
+        for (int i = 0; i < 7; ++i)
+        {
+            if (std::filesystem::exists(cur / "Config" / "Project.json", ec) ||
+                std::filesystem::exists(cur / ".bam", ec))
+            {
+                return cur;
+            }
+            if (!cur.has_parent_path()) break;
+            cur = cur.parent_path();
+        }
+        return exeDir;
+    }
 private:
     SDL_Window* m_Window = nullptr;
     ClientGameRuntime m_ClientRuntime;

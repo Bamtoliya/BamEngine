@@ -7,6 +7,9 @@
 #include "BuiltInPrimitiveMeshes.h"
 #include "CameraComponent.h"
 #include "ConfigManager.h"
+#if defined(_WIN32)
+#include "CrashHandler.h"
+#endif
 #include "FlagComponent.h"
 #include "GraphBindingComponent.h"
 #include "InputActionSettings.h"
@@ -249,6 +252,9 @@ Engine::EResult Client::ClientGameRuntime::LoadStartupScene()
         BAM_LOG(Error, "Client", "Startup", "Failed to load startup scene: {}", Engine::ResultToString(result));
         return result;
     }
+#if defined(_WIN32)
+    Engine::CrashHandler::SetActiveScenePath(m_ProjectSettings.StartupScenePath);
+#endif
     BAM_LOG(Info, "Client", "Startup", "Loaded startup scene: {}", scenePath.string());
     return Engine::EResult::Success;
 }
