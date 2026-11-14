@@ -105,3 +105,12 @@ Assets/asphalt_02_4k.blend/
 Assets/kenney_city-kit-roads/
 Assets
 Client/결과
+managed-scene.json
+shader-path-round-trip.bamshader.json
+test-anim.bamanim.json
+test-mat.bammat.json
+test-mesh.bammesh.json
+test-mi.bammatinst.json
+test-model.bammodel.json
+test-skel.bamskel.json
+test-vs.bamshader.json
