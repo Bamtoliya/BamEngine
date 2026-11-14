@@ -4,6 +4,7 @@
 #include "ShaderCompiler.h"
 #include "ShaderReflection.h"
 #include "ResourceManager.h"
+#include "Logger.h"
 
 namespace
 {
@@ -54,14 +55,22 @@ EResult ShaderImporter::Import(const filesystem::path& sourcePath, const filesys
         const ERHIType rhiType = Renderer::IsCreated() ? Renderer::Get().GetRHIType() : ERHIType::DirectX12;
         const ShaderCompileResult compileResult = ShaderCompiler::Compile(sourcePath, shaderType, rhiType);
         if (!compileResult.Success)
+        {
+            ENGINE_LOG_ERROR("Failed to compile shader '{}' for import: {}",
+                sourcePath.string(), compileResult.ErrorMessage);
             return EResult::Fail;
+        }
         const std::wstring stemW = sourcePath.stem().wstring();
         ShaderDesc desc = {};
         desc.Key = L"Resources/Shader/" + stemW;
         desc.shaderType = shaderType;
         desc.dxilPath = L"Resources/Shader/bin/dxil/" + stemW + L".cso";
         desc.spirvPath = L"Resources/Shader/bin/spirv/" + stemW + L".spv";
-        desc.Path = (rhiType == ERHIType::DirectX12) ? desc.dxilPath : desc.spirvPath;
+        desc.wgslPath = L"Resources/Shader/bin/wgsl/" + stemW + L".wgsl";
+        if (rhiType == ERHIType::WebGPU)
+            desc.wgslPath = compileResult.OutputPath.wstring();
+        desc.Path = (rhiType == ERHIType::DirectX12) ? desc.dxilPath :
+            (rhiType == ERHIType::WebGPU ? desc.wgslPath : desc.spirvPath);
         ResourceManager& rm = ResourceManager::Get();
         auto existing = rm.GetResourceHandle<Shader>(desc.Key);
         if (existing.IsValid() && existing.Get())
@@ -80,7 +89,7 @@ EResult ShaderImporter::Import(const filesystem::path& sourcePath, const filesys
 
     ShaderReflectionInfo info = ReflectSPIRV(shaderBytecode);
 
-    
+    const ERHIType rhiType = Renderer::IsCreated() ? Renderer::Get().GetRHIType() : ERHIType::DirectX12;
     filesystem::path outputPath = destDir.empty() ? sourcePath.parent_path() : destDir;
     outputPath /= sourcePath.filename();
     outputPath.replace_extension(L".bamshader");
@@ -90,6 +99,21 @@ EResult ShaderImporter::Import(const filesystem::path& sourcePath, const filesys
     desc.Key = outputPath.stem().wstring();
 
     desc.spirvPath = sourcePath.wstring();
+    auto wgslPath = sourcePath;
+    if (wgslPath.parent_path().filename() == L"spirv")
+        wgslPath = wgslPath.parent_path().parent_path() / L"wgsl" / wgslPath.filename();
+    wgslPath.replace_extension(L".wgsl");
+    desc.wgslPath = wgslPath.wstring();
+    if (rhiType == ERHIType::WebGPU)
+    {
+        std::string errorMessage;
+        if (!ShaderCompiler::TranslateSpirvToWgsl(sourcePath, wgslPath, errorMessage))
+        {
+            ENGINE_LOG_ERROR("Failed to translate imported shader '{}' to WGSL: {}",
+                sourcePath.string(), errorMessage);
+            return EResult::Fail;
+        }
+    }
     desc.entryPoint = !info.DefaultEntryPoint.empty() ? info.DefaultEntryPoint : "main";
     desc.shaderType = (info.DefaultShaderType != EShaderType::Unknown)
         ? info.DefaultShaderType

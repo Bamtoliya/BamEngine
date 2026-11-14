@@ -12,7 +12,12 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
 endif()
 
 option(REFLECTION_BUILD_EXAMPLE "Build the reflection example" OFF)
-option(REFLECTION_BUILD_GENERATOR "Build the Clang-based reflection generator" ON)
+if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
+    set(_reflection_generator_default OFF)
+else()
+    set(_reflection_generator_default ON)
+endif()
+option(REFLECTION_BUILD_GENERATOR "Build the Clang-based reflection generator" ${_reflection_generator_default})
 
 set(REFLECTION_GENERATOR_EXECUTABLE "" CACHE FILEPATH "Existing generator executable used when not building it")
 set(REFLECTION_CLANG_RESOURCE_DIR "" CACHE PATH "Resource directory belonging to the generator's Clang version")

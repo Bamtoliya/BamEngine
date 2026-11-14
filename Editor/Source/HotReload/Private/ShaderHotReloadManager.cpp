@@ -325,6 +325,10 @@ void ShaderHotReloadManager::ProcessModifiedFile(const std::filesystem::path& hl
 		{
 			desc.dxilPath = result.OutputPath.wstring();
 		}
+		else if (rhiType == Engine::ERHIType::WebGPU)
+		{
+			desc.wgslPath = result.OutputPath.wstring();
+		}
 		else
 		{
 			desc.spirvPath = result.OutputPath.wstring();

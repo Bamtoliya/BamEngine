@@ -1,6 +1,6 @@
 ﻿#pragma once
 
-#ifdef WIN32
+#if defined(_WIN32)
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -84,7 +84,9 @@
 
 #pragma region ThirdParty Library
 // 2. Third Party Library (변경 빈도가 가장 낮음)
+#if !defined(__EMSCRIPTEN__)
 #include "imgui.h"
+#endif
 
 // fmt
 #include <fmt/core.h>
@@ -112,14 +114,18 @@
 using namespace glm;
 
 // Vulkan
+#if !defined(__EMSCRIPTEN__)
 #include <vulkan/vulkan.h>
+#endif
 
 // DirectX 12
+#if defined(_WIN32)
 #include <directx/d3d12.h>
 #include <dxgi1_6.h>
 #include <wrl.h>
 using Microsoft::WRL::ComPtr;
 #include <directx/d3dx12.h>
+#endif
 
 // Glaze
 #include <glaze/glaze.hpp>

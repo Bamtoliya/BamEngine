@@ -16,6 +16,7 @@ EResult Shader::Initialize(void* arg)
 	m_EntryPoint = desc->entryPoint;
 	m_DxilPath = desc->dxilPath;
 	m_SpirvPath = desc->spirvPath;
+	m_WgslPath = desc->wgslPath;
 	ResolveLegacyBinaryPaths();
 	m_NumSamplers = desc->numSamplers;
 	m_NumStorageTextures = desc->numStorageTextures;
@@ -81,7 +82,8 @@ RHIShaderDesc Shader::BuildRHIShaderDesc() const
 	desc.entryPoint = m_EntryPoint;
 
 	const bool useDxil = Renderer::IsCreated() && Renderer::Get().GetRHIType() == ERHIType::DirectX12;
-	desc.filePath = useDxil ? m_DxilPath : m_SpirvPath;
+	const bool useWgsl = Renderer::IsCreated() && Renderer::Get().GetRHIType() == ERHIType::WebGPU;
+	desc.filePath = useDxil ? m_DxilPath : (useWgsl ? m_WgslPath : m_SpirvPath);
 
 	desc.numSamplers = m_NumSamplers;
 	desc.numStorageTextures = m_NumStorageTextures;
@@ -117,5 +119,22 @@ void Shader::ResolveLegacyBinaryPaths()
 
 	if (m_SpirvPath.empty() && extension == L".spv")
 		m_SpirvPath = m_Path;
+
+	if (m_WgslPath.empty())
+	{
+		if (extension == L".wgsl")
+		{
+			m_WgslPath = m_Path;
+		}
+		else if (!m_SpirvPath.empty())
+		{
+			std::filesystem::path wgslPath(m_SpirvPath);
+			const auto directory = wgslPath.parent_path();
+			if (directory.filename() == L"spirv")
+				wgslPath = directory.parent_path() / L"wgsl" / wgslPath.filename();
+			wgslPath.replace_extension(L".wgsl");
+			m_WgslPath = wgslPath.wstring();
+		}
+	}
 }
 #pragma endregion

@@ -14,6 +14,8 @@ struct ENGINE_API ShaderBinaryHeader
 	string entryPoint = { "main" };
 	PROPERTY()
 	wstring spirvPath = {};
+	PROPERTY()
+	wstring wgslPath = {};
 
 	PROPERTY()
 	uint32 numSamplers = { 0 };
@@ -30,6 +32,7 @@ struct ShaderDesc : public ResourceCreateDesc {
 	string entryPoint = { "main" };
 	wstring dxilPath = {};
 	wstring spirvPath = {};
+	wstring wgslPath = {};
 
 	uint32 numSamplers = { 0 };
 	uint32 numStorageTextures = { 0 };
@@ -79,6 +82,7 @@ public:
 	const string& GetEntryPoint() const { return m_EntryPoint; }
 	const wstring& GetDxilPath() const { return m_DxilPath; }
 	const wstring& GetSpirvPath() const { return m_SpirvPath; }
+	const wstring& GetWgslPath() const { return m_WgslPath; }
 
 	uint32 GetNumSamplers() const { return m_NumSamplers; }
 	uint32 GetNumStorageTextures() const { return m_NumStorageTextures; }
@@ -126,6 +130,8 @@ private:
 	wstring m_DxilPath = {};
 	PROPERTY(READONLY)
 	wstring m_SpirvPath = {};
+	PROPERTY(READONLY)
+	wstring m_WgslPath = {};
 	PROPERTY()
 	string m_EntryPoint = "main";
 

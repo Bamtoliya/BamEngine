@@ -5,24 +5,53 @@
     "fmt",
     {
       "name": "sdl3",
-      "features": [ "vulkan" ]
+      "features": [ "vulkan" ],
+      "platform": "!emscripten"
+    },
+    {
+      "name": "sdl3",
+      "platform": "emscripten"
     },
     "glm",
-    "vulkan",
     "glaze",
-    "assimp",
-    "imguizmo",
     "stb",
-    "glslang",
-    "spirv-tools",
-    "spirv-cross",
-    "efsw",
     "cppcodec",
-    "directxtex",
     "lz4",
     "entt",
-    "directx-headers",
     "meshoptimizer",
+    {
+      "name": "vulkan",
+      "platform": "!emscripten"
+    },
+    {
+      "name": "assimp",
+      "platform": "!emscripten"
+    },
+    {
+      "name": "imguizmo",
+      "platform": "!emscripten"
+    },
+    {
+      "name": "glslang",
+      "platform": "!emscripten"
+    },
+    {
+      "name": "spirv-tools",
+      "platform": "!emscripten"
+    },
+    "spirv-cross",
+    {
+      "name": "efsw",
+      "platform": "!emscripten"
+    },
+    {
+      "name": "directxtex",
+      "platform": "windows"
+    },
+    {
+      "name": "directx-headers",
+      "platform": "windows"
+    },
     {
       "name": "imgui",
       "features": [
@@ -32,12 +61,14 @@
         "docking-experimental",
         "sdl3-renderer-binding",
         "sdlgpu3-binding"
-      ]
+      ],
+      "platform": "!emscripten"
     },
     {
       "name": "qtbase",
       "default-features": false,
-      "features": [ "widgets" ]
+      "features": [ "widgets" ],
+      "platform": "windows"
     }
   ]
 }

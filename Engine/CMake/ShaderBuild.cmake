@@ -19,6 +19,13 @@ endif()
 message(STATUS "디버그 - 현재 CMake가 인식한 VULKAN_SDK: '$ENV{VULKAN_SDK}'")
 message(STATUS "디버그 - 최종적으로 찾은 DXC_COMPILER 경로: '${DXC_COMPILER}'")
 
+if(BAMENGINE_BUILD_WGSL_SHADERS)
+    find_program(TINT_EXECUTABLE NAMES tint tint.exe)
+    if(NOT TINT_EXECUTABLE)
+        message(FATAL_ERROR "BAMENGINE_BUILD_WGSL_SHADERS requires a host Tint executable; set TINT_EXECUTABLE.")
+    endif()
+endif()
+
 # 2. 셰이더 소스 폴더 세팅 (.hlsl, .hlsli 스캔)
 set(SHADER_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Resources/Shader")
 file(GLOB_RECURSE HLSL_SOURCES CONFIGURE_DEPENDS "${SHADER_SOURCE_DIR}/*.hlsl")
@@ -31,6 +38,25 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${HLSL_SOURCES} $
 set(DXIL_OUT_DIR "${SHADER_SOURCE_DIR}/bin/dxil")
 set(SPIRV_OUT_DIR "${SHADER_SOURCE_DIR}/bin/spirv")
 file(MAKE_DIRECTORY "${DXIL_OUT_DIR}" "${SPIRV_OUT_DIR}")
+
+if(BAMENGINE_BUILD_WGSL_SHADERS)
+    set(WGSL_OUT_DIR "${SHADER_SOURCE_DIR}/bin/wgsl")
+    file(MAKE_DIRECTORY "${WGSL_OUT_DIR}")
+endif()
+
+set(_shader_build_cmake_file "${CMAKE_CURRENT_LIST_FILE}")
+function(add_wgsl_shader_output SPIRV_INPUT OUT_VARIABLE)
+    get_filename_component(_shader_name "${SPIRV_INPUT}" NAME_WE)
+    set(_wgsl_output "${WGSL_OUT_DIR}/${_shader_name}.wgsl")
+    add_custom_command(
+        OUTPUT "${_wgsl_output}"
+        COMMAND "${TINT_EXECUTABLE}" --format wgsl "${SPIRV_INPUT}" -o "${_wgsl_output}"
+        DEPENDS "${SPIRV_INPUT}" "${_shader_build_cmake_file}"
+        COMMENT "Translating ${_shader_name} (SPIR-V to WGSL)..."
+        VERBATIM
+    )
+    set(${OUT_VARIABLE} "${_wgsl_output}" PARENT_SCOPE)
+endfunction()
 
 # 특정 셰이더 파일이 직접/간접적으로 #include 하는 헤더(.hlsli) 목록만 추출하는 함수
 function(collect_hlsl_dependencies ENTRY_FILE OUT_DEPENDENCIES)
@@ -88,6 +114,10 @@ foreach(SHADER_FILE ${HLSL_SOURCES})
             COMMENT "Compiling ${SHADER_NAME_WE} (SPIR-V, VS)..."
         )
         list(APPEND ALL_SHADER_OUTPUTS "${DXIL_OUT}" "${SPIRV_OUT}")
+        if(BAMENGINE_BUILD_WGSL_SHADERS)
+            add_wgsl_shader_output("${SPIRV_OUT}" WGSL_OUT)
+            list(APPEND ALL_SHADER_OUTPUTS "${WGSL_OUT}")
+        endif()
 
     elseif(UPPER_NAME MATCHES "PS$" OR UPPER_NAME MATCHES "_PS$")
         set(DXIL_OUT "${DXIL_OUT_DIR}/${SHADER_NAME_WE}.cso")
@@ -106,6 +136,10 @@ foreach(SHADER_FILE ${HLSL_SOURCES})
             COMMENT "Compiling ${SHADER_NAME_WE} (SPIR-V, PS)..."
         )
         list(APPEND ALL_SHADER_OUTPUTS "${DXIL_OUT}" "${SPIRV_OUT}")
+        if(BAMENGINE_BUILD_WGSL_SHADERS)
+            add_wgsl_shader_output("${SPIRV_OUT}" WGSL_OUT)
+            list(APPEND ALL_SHADER_OUTPUTS "${WGSL_OUT}")
+        endif()
 
     elseif(UPPER_NAME MATCHES "CS$" OR UPPER_NAME MATCHES "_CS$")
         set(DXIL_OUT "${DXIL_OUT_DIR}/${SHADER_NAME_WE}.cso")
@@ -124,6 +158,10 @@ foreach(SHADER_FILE ${HLSL_SOURCES})
             COMMENT "Compiling ${SHADER_NAME_WE} (SPIR-V, CS)..."
         )
         list(APPEND ALL_SHADER_OUTPUTS "${DXIL_OUT}" "${SPIRV_OUT}")
+        if(BAMENGINE_BUILD_WGSL_SHADERS)
+            add_wgsl_shader_output("${SPIRV_OUT}" WGSL_OUT)
+            list(APPEND ALL_SHADER_OUTPUTS "${WGSL_OUT}")
+        endif()
 
     else()
         message(WARNING "Shader '${SHADER_NAME_WE}.hlsl' does not end with 'VS', 'PS', or 'CS'. Skipping compilation.")

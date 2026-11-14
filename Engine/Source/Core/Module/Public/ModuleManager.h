@@ -6,11 +6,17 @@
 
 BEGIN(Engine)
 
+#if defined(_WIN32)
+using NativeModuleHandle = HMODULE;
+#else
+using NativeModuleHandle = void*;
+#endif
+
 struct LoadedModuleInfo
 {
     std::wstring Name;
     std::filesystem::path DllPath;
-    HMODULE Handle = nullptr;
+    NativeModuleHandle Handle = nullptr;
     IModule* Instance = nullptr;
     DestroyModuleFunc DestroyFunc = nullptr;
 };

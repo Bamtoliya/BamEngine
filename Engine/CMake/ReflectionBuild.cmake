@@ -30,6 +30,9 @@ if(WIN32)
         "$<$<CONFIG:Debug>:-D_DEBUG>"
     )
 endif()
+if(EMSCRIPTEN)
+    list(APPEND _engine_parser_options -D__EMSCRIPTEN__)
+endif()
 
 # Conditional members must be generated separately for each build configuration.
 set(_engine_generated_directory "${CMAKE_CURRENT_BINARY_DIR}/Generated/$<CONFIG>")

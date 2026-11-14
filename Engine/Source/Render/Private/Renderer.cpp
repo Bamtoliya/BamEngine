@@ -3,7 +3,12 @@
 #include "Renderer.h"
 //RHI
 #include "RHI.h"
+#if !defined(__EMSCRIPTEN__)
 #include "SDLGPURHI.h"
+#endif
+#if defined(_WIN32)
+#include "DirectX12RHI.h"
+#endif
 //Rendering
 #include "RenderPassManager.h"
 #include "RenderTargetManager.h"
@@ -38,12 +43,16 @@ EResult Renderer::Initialize(void* arg)
 	m_RHIType = desc->rhiType;
 	switch (m_RHIType)
 	{
+#if !defined(__EMSCRIPTEN__)
 	case ERHIType::SDLGPU:
 		m_RHI = SDLGPURHI::Create(desc->rhiDesc);
 		break;
+#endif
+#if defined(_WIN32)
 	case ERHIType::DirectX12:
 		m_RHI = DirectX12RHI::Create(desc->rhiDesc);
 		break;
+#endif
 	default:
 		return EResult::Fail;
 	}

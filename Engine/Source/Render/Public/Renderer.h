@@ -19,7 +19,8 @@ enum class ERHIType
 	SDLGPU,
 	DirectX12,		// LH, Z:[0,1], Y-UP Row-Major (adjust needed)
 	Vulkan,			// LH, Z:[0,1], Y-DOWN Column-Major
-	Metal			// LH, Z:[0,1], Y-UP Column-Major
+	Metal,			// LH, Z:[0,1], Y-UP Column-Major
+	WebGPU
 };
 
 struct RendererDesc

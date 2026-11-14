@@ -214,7 +214,7 @@ void ResourceManager::RegisterExplicitLoader()
 			desc.Key = key;
 			desc.Path = effectivePath;
 
-			if (ext == L".cso" || ext == L".dxil" || ext == L".spv")
+			if (ext == L".cso" || ext == L".dxil" || ext == L".spv" || ext == L".wgsl")
 			{
 				wstring stem = filePath.stem().wstring();
 				std::transform(stem.begin(), stem.end(), stem.begin(), ::towupper);
@@ -223,13 +223,14 @@ void ResourceManager::RegisterExplicitLoader()
 				else if (stem.ends_with(L"CS") || stem.ends_with(L"_CS")) desc.shaderType = EShaderType::Compute;
 
 				if (ext == L".spv") desc.spirvPath = effectivePath;
+				else if (ext == L".wgsl") desc.wgslPath = effectivePath;
 				else desc.dxilPath = effectivePath;
 			}
 
 			return this->LoadResource<Shader>(&desc).GetRawHandle();
 		};
 
-	for (const wchar_t* extension : { L".bamshader", L".cso", L".dxil", L".spv" })
+	for (const wchar_t* extension : { L".bamshader", L".cso", L".dxil", L".spv", L".wgsl" })
 		m_LoaderRegistry[extension] = shaderLoader;
 }
 EResult ResourceManager::DestroyResource(const Handle& handle)

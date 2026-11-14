@@ -18,6 +18,20 @@ file(GLOB_RECURSE ENGINE_HEADERS CONFIGURE_DEPENDS "${ENGINE_SOURCE_DIR}/*.h")
 file(GLOB_RECURSE ENGINE_SOURCES CONFIGURE_DEPENDS "${ENGINE_SOURCE_DIR}/*.cpp")
 file(GLOB_RECURSE ENGINE_INLINE CONFIGURE_DEPENDS "${ENGINE_SOURCE_DIR}/*.inl")
 
+option(BAMENGINE_BUILD_WGSL_SHADERS "Generate WGSL shader sidecars with a host Tint executable" OFF)
+
+if(EMSCRIPTEN)
+    list(FILTER ENGINE_SOURCES EXCLUDE REGEX "/Render/RHI/Platform/(DirectX12|SDLGPU|Vulkan)/")
+    list(FILTER ENGINE_INLINE EXCLUDE REGEX "/Render/RHI/Platform/(DirectX12|SDLGPU|Vulkan)/")
+    list(FILTER ENGINE_SOURCES EXCLUDE REGEX "/Core/Diagnostics/Private/CrashHandler_Win32\\.cpp$")
+    list(FILTER ENGINE_SOURCES EXCLUDE REGEX "/Render/Shader/Private/ShaderCompiler\\.cpp$")
+    list(FILTER ENGINE_SOURCES EXCLUDE REGEX "/Network/")
+    list(FILTER ENGINE_SOURCES EXCLUDE REGEX "/Simulation/Private/RLServer\\.cpp$")
+    if(BAMENGINE_BUILD_WGSL_SHADERS)
+        message(FATAL_ERROR "Generate WGSL shader sidecars with a host build, not the Emscripten toolchain.")
+    endif()
+endif()
+
 # 소스 목록 취합 및 필터 폴더(Tree) 구조 생성
 list(APPEND ENGINE_SOURCES ${ENGINE_INLINE})
 source_group(TREE "${ENGINE_SOURCE_DIR}" FILES ${ENGINE_HEADERS} ${ENGINE_SOURCES})
@@ -38,10 +52,11 @@ endif()
 # ==============================================================================
 # 3. Main Target Creation (엔진 라이브러리 타겟 생성)
 # ==============================================================================
-add_library(Engine SHARED
-    ${ENGINE_HEADERS}
-    ${ENGINE_SOURCES}
-)
+if(EMSCRIPTEN)
+    add_library(Engine STATIC ${ENGINE_HEADERS} ${ENGINE_SOURCES})
+else()
+    add_library(Engine SHARED ${ENGINE_HEADERS} ${ENGINE_SOURCES})
+endif()
 add_library(BamEngine::Engine ALIAS Engine)
 
 # ==============================================================================
@@ -107,11 +122,20 @@ target_link_libraries(Engine
         fmt::fmt
         SDL3::SDL3
         glm::glm
-        Microsoft::DirectX-Headers
+        lz4::lz4
+        spirv-cross-c
+)
+
+if(NOT EMSCRIPTEN)
+    target_link_libraries(Engine PUBLIC
         Vulkan::Vulkan
         glslang::glslang
-        spirv-cross-c
-        lz4::lz4
+    )
+endif()
+
+if(WIN32)
+    target_link_libraries(Engine PUBLIC
+        Microsoft::DirectX-Headers
         d3d12.lib
         dxgi.lib
         dxguid.lib
@@ -119,16 +143,21 @@ target_link_libraries(Engine
         dbghelp.lib
         $<$<CONFIG:Debug>:${CMAKE_SOURCE_DIR}/ThirdParty/FMOD/lib/x64/fmodL_vc.lib>
         $<$<NOT:$<CONFIG:Debug>>:${CMAKE_SOURCE_DIR}/ThirdParty/FMOD/lib/x64/fmod_vc.lib>
-)
+    )
+endif()
 
 # ==============================================================================
 # 6. Custom Build Steps & Checks
 # ==============================================================================
-include(ShaderBuild)
+if(NOT EMSCRIPTEN)
+    include(ShaderBuild)
+endif()
 include(ReflectionBuild)
-include(LocalizationExport)
 
-add_dependencies(Engine CompileShaders)
+if(NOT EMSCRIPTEN)
+    include(LocalizationExport)
+    add_dependencies(Engine CompileShaders)
+endif()
 
 if(BAMENGINE_BUILD_REFLECTION_CHECK)
     include(Checks)
@@ -142,9 +171,11 @@ endif()
 # ==============================================================================
 # 7. Post-Build FMOD DLL Copy
 # ==============================================================================
-add_custom_command(TARGET Engine POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "$<IF:$<CONFIG:Debug>,${CMAKE_SOURCE_DIR}/ThirdParty/FMOD/lib/x64/fmodL.dll,${CMAKE_SOURCE_DIR}/ThirdParty/FMOD/lib/x64/fmod.dll>"
-        "$<TARGET_FILE_DIR:Engine>/"
-    COMMENT "Copying FMOD runtime DLL to target output directory"
-)
+if(WIN32)
+    add_custom_command(TARGET Engine POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "$<IF:$<CONFIG:Debug>,${CMAKE_SOURCE_DIR}/ThirdParty/FMOD/lib/x64/fmodL.dll,${CMAKE_SOURCE_DIR}/ThirdParty/FMOD/lib/x64/fmod.dll>"
+            "$<TARGET_FILE_DIR:Engine>/"
+        COMMENT "Copying FMOD runtime DLL to target output directory"
+    )
+endif()

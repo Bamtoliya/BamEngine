@@ -1,7 +1,9 @@
 #include "PlatformPath.h"
 #include <SDL3/SDL_filesystem.h>
+#if defined(_WIN32)
 #include <windows.h>
 #include <shlobj.h>
+#endif
 #include <algorithm>
 #include <cwctype>
 
@@ -415,15 +417,21 @@ namespace Engine
                 return Normalize(std::filesystem::u8path(basePath));
             }
 
+#if defined(_WIN32)
             wchar_t buffer[MAX_PATH] = {};
             GetModuleFileNameW(nullptr, buffer, MAX_PATH);
             return Normalize(std::filesystem::path(buffer).parent_path());
+#else
+            std::error_code ec;
+            return Normalize(std::filesystem::current_path(ec));
+#endif
             }();
         return cachedPath;
     }
 
     std::filesystem::path PlatformPath::GetSystemFontDirectory()
     {
+#if defined(_WIN32)
         wchar_t path[MAX_PATH] = {};
         if (SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_FONTS, nullptr, SHGFP_TYPE_CURRENT, path)))
             return Normalize(std::filesystem::path(path));
@@ -433,6 +441,9 @@ namespace Engine
             return Normalize(std::filesystem::path(windir) / "Fonts");
 
         return Normalize(std::filesystem::path("C:/Windows/Fonts"));
+#else
+        return {};
+#endif
     }
 
     std::filesystem::path PlatformPath::Normalize(const std::filesystem::path& path)

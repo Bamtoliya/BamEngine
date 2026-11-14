@@ -20,6 +20,9 @@ EResult ModuleManager::LoadModule(const std::wstring& moduleName, const std::fil
     if (moduleName.empty() || dllPath.empty())
         return EResult::InvalidArgument;
 
+#if !defined(_WIN32)
+    return EResult::NotImplemented;
+#else
     if (m_Modules.find(moduleName) != m_Modules.end())
     {
         BAM_LOG(Warn, "Engine","ModuleManager", "Module already loaded: {}", WStrToStr(moduleName));
@@ -74,6 +77,7 @@ EResult ModuleManager::LoadModule(const std::wstring& moduleName, const std::fil
         WStrToStr(moduleName), dllPath.string());
 
     return EResult::Success;
+#endif
 }
 
 EResult ModuleManager::UnloadModule(const std::wstring& moduleName)
@@ -92,11 +96,13 @@ EResult ModuleManager::UnloadModule(const std::wstring& moduleName)
         info.Instance = nullptr;
     }
 
+#if defined(_WIN32)
     if (info.Handle)
     {
         FreeLibrary(info.Handle);
         info.Handle = nullptr;
     }
+#endif
 
     BAM_LOG(Info, "Engine","ModuleManager", "Module unloaded: {}", WStrToStr(moduleName));
     m_Modules.erase(it);
@@ -106,6 +112,11 @@ EResult ModuleManager::UnloadModule(const std::wstring& moduleName)
 
 EResult ModuleManager::ReloadModule(const std::wstring& moduleName, const std::filesystem::path& newDllPath)
 {
+#if !defined(_WIN32)
+    (void)moduleName;
+    (void)newDllPath;
+    return EResult::NotImplemented;
+#else
     auto it = m_Modules.find(moduleName);
     if (it == m_Modules.end())
         return EResult::Fail;
@@ -134,6 +145,7 @@ EResult ModuleManager::ReloadModule(const std::wstring& moduleName, const std::f
                 
     BAM_LOG(Info, "Engine","ModuleManager", "Module reload completed: {}", WStrToStr(moduleName));
     return EResult::Success;
+#endif
 }
 
 void ModuleManager::UnloadAllModules()

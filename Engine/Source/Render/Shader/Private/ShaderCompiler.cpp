@@ -37,6 +37,79 @@ std::filesystem::path ShaderCompiler::FindDxcPath()
     return cachedPath = "dxc.exe";
 }
 
+std::filesystem::path ShaderCompiler::FindTintPath()
+{
+    static std::filesystem::path cachedPath;
+    if (!cachedPath.empty() && std::filesystem::exists(cachedPath))
+        return cachedPath;
+
+    if (const char* tintEnv = std::getenv("TINT_EXECUTABLE"))
+    {
+        std::filesystem::path candidate = tintEnv;
+        if (std::filesystem::exists(candidate))
+            return cachedPath = candidate;
+    }
+
+    return cachedPath = "tint.exe";
+}
+
+bool ShaderCompiler::TranslateSpirvToWgsl(
+    const std::filesystem::path& spirvPath,
+    const std::filesystem::path& wgslPath,
+    std::string& errorMessage)
+{
+    std::error_code ec;
+    if (!std::filesystem::exists(spirvPath, ec))
+    {
+        errorMessage = "SPIR-V source file not found: " + spirvPath.string();
+        return false;
+    }
+
+    if (!wgslPath.parent_path().empty())
+        std::filesystem::create_directories(wgslPath.parent_path(), ec);
+    if (ec)
+    {
+        errorMessage = "Could not create WGSL output directory: " + wgslPath.parent_path().string();
+        return false;
+    }
+
+    const std::wstring tintCommand = L"\"" + FindTintPath().wstring() + L"\" --format wgsl \"" +
+        spirvPath.wstring() + L"\" -o \"" + wgslPath.wstring() + L"\" 2>&1";
+    const std::wstring fullTintCommand = L"\"" + tintCommand + L"\"";
+    FILE* tintPipe = _wpopen(fullTintCommand.c_str(), L"rt");
+    if (!tintPipe)
+    {
+        errorMessage = "Failed to launch Tint shader converter.";
+        return false;
+    }
+
+    char buffer[512];
+    while (fgets(buffer, sizeof(buffer), tintPipe) != nullptr)
+        errorMessage += buffer;
+
+    const int tintExitCode = _pclose(tintPipe);
+    if (tintExitCode != 0)
+    {
+        errorMessage += "Tint exited with code " + std::to_string(tintExitCode) + ".";
+        return false;
+    }
+
+    if (!std::filesystem::exists(wgslPath, ec) || ec)
+    {
+        errorMessage += "WGSL output file was not created: " + wgslPath.string();
+        return false;
+    }
+
+    const auto wgslSize = std::filesystem::file_size(wgslPath, ec);
+    if (ec || wgslSize == 0)
+    {
+        errorMessage += "WGSL output file is empty or unreadable: " + wgslPath.string();
+        return false;
+    }
+
+    return true;
+}
+
 EShaderType ShaderCompiler::DeduceShaderTypeFromPath(const std::filesystem::path& hlslPath)
 {
     std::string stem = hlslPath.stem().string();
@@ -163,7 +236,50 @@ ShaderCompileResult ShaderCompiler::Compile(
 
     outFile.close();
 
+    if (rhiType == ERHIType::WebGPU)
+    {
+        const std::filesystem::path wgslOutDir = hlslPath.parent_path().parent_path() / "bin" / "wgsl";
+        const std::filesystem::path wgslOutPath = wgslOutDir / (stem + ".wgsl");
+        if (!TranslateSpirvToWgsl(outPath, wgslOutPath, result.ErrorMessage))
+        {
+            result.Bytecode.clear();
+            return result;
+        }
+
+        std::ifstream wgslFile(wgslOutPath, std::ios::binary | std::ios::ate);
+        if (!wgslFile.is_open())
+        {
+            result.Bytecode.clear();
+            result.ErrorMessage += "WGSL output file could not be opened: " + wgslOutPath.string();
+            return result;
+        }
+
+        const auto wgslLength = static_cast<std::streamoff>(wgslFile.tellg());
+        if (wgslLength <= 0 ||
+            static_cast<std::uintmax_t>(wgslLength) > result.Bytecode.max_size() ||
+            static_cast<std::uintmax_t>(wgslLength) >
+                static_cast<std::uintmax_t>(std::numeric_limits<std::streamsize>::max()))
+        {
+            result.Bytecode.clear();
+            result.ErrorMessage += "WGSL output file is empty, unreadable, or too large: " + wgslOutPath.string();
+            return result;
+        }
+
+        result.Bytecode.resize(static_cast<std::size_t>(wgslLength));
+        wgslFile.seekg(0, std::ios::beg);
+        wgslFile.read(reinterpret_cast<char*>(result.Bytecode.data()), static_cast<std::streamsize>(wgslLength));
+        if (!wgslFile || wgslFile.gcount() != static_cast<std::streamsize>(wgslLength))
+        {
+            result.Bytecode.clear();
+            result.ErrorMessage += "WGSL output file could not be read completely: " + wgslOutPath.string();
+            return result;
+        }
+
+        result.OutputPath = wgslOutPath;
+    }
+
     result.Success = true;
-    result.OutputPath = outPath;
+    if (rhiType != ERHIType::WebGPU)
+        result.OutputPath = outPath;
     return result;
 }
