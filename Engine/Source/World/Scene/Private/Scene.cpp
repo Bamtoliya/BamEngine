@@ -231,12 +231,12 @@ bool Engine::Scene::MoveSiblingOrder(entt::entity entity, int direction)
 }
 void Scene::ClearEntities()
 {
+	m_LocalRegistry.clear();
 	for (auto& pair : m_EntityMap)
 	{
 		Safe_Delete(pair.second);
 	}
 	m_EntityMap.clear();
-	m_LocalRegistry.clear();
 	m_NextEntityId = 1;
 }
 #pragma endregion

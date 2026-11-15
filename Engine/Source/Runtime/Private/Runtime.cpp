@@ -72,39 +72,34 @@ EResult Runtime::Initialize(void* arg)
 
 void Runtime::Free()
 {
-	// Frame snapshots/commands retain scenes and UI assets; release them before their managers.
+	// ── 0. 씬(Scene)을 참조하는 프레임 큐 및 피킹 타겟 정리 ──
 	if (m_Renderer)
 	{
 		m_Renderer->ClearAllRenderQueues();
 	}
-
+	Safe_Destroy(m_PickingManager);
+	// ── 1. 씬 (모든 외부 참조가 해제되어 SceneManager에서 즉시 소멸됨) ──
+	Safe_Destroy(m_SceneManager);
+	// ── 2. 동적 모듈 (씬 엔티티 소멸 후 언로드 - SystemManager가 살아있으므로 모듈 시스템 정상 해제) ──
 	Safe_Destroy(m_ModuleManager);
-	
-	// ── 1. 게임 로직 (RHI 무관) ──
+	// ── 3. 시스템 (모듈 시스템 해제 완료 후 남아있는 엔진 내장 시스템 해제) ──
+	Safe_Destroy(m_SystemManager);
+	// ── 4. 게임 로직 (RHI 무관) ──
 	Safe_Destroy(m_TimeManager);
 	Safe_Destroy(m_InputManager);
 	Safe_Destroy(m_LocalizationManager);
-	Safe_Destroy(m_PickingManager);
 	Safe_Destroy(m_AudioManager);
-
-	// ── 2. 씬 (Component가 Pipeline/Buffer 참조) ──
-	Safe_Destroy(m_SceneManager);
-	Safe_Destroy(m_SystemManager);
-
-	// ── 3. 리소스 (RHI 리소스: Mesh, Texture, Shader) ──
+	// ── 5. 리소스 (RHI 리소스: Mesh, Texture, Shader) ──
 	Safe_Destroy(m_ResourceManager);
-
-	// ── 4. 렌더링 인프라 (RHI 리소스) ──
+	// ── 6. 렌더링 인프라 (RHI 리소스) ──
 	Safe_Destroy(m_LightManager);
 	Safe_Destroy(m_SamplerManager);
 	Safe_Destroy(m_PipelineManager);
 	Safe_Destroy(m_RenderTargetManager);
 	Safe_Destroy(m_RenderPassManager);
-
-	// ── 5. RHI (GPU Device) — 가장 마지막 ──
+	// ── 7. RHI (GPU Device) — 가장 마지막 ──
 	Safe_Destroy(m_Renderer);
-
-	// ── 6. Reflection ──
+	// ── 8. Reflection ──
 	Safe_Destroy(m_ReflectionRegistry);
 }
 #pragma endregion

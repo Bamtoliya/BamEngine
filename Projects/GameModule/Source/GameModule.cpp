@@ -43,19 +43,19 @@ public:
 	void OnUnload() override
 	{
 		BAM_LOG(Info, "GameModule", "Lifecycle", "[GameModule] Unregistering Systems...");
-		Engine::SystemManager::Get().RemoveSystem<SkyAtmosphereSystem>();
-
+		if (Engine::SystemManager::IsCreated())
+		{
+			Engine::SystemManager::Get().RemoveSystem<SkyAtmosphereSystem>();
+		}
 		// 3. 모듈 언로드 시 컴포넌트 및 리플렉션 심볼 일괄 해제
 		if (Engine::ReflectionRegistry::IsCreated())
 		{
 			// [매크로 적용] 모듈 컴포넌트 일괄 해제
 			UNREGISTER_MODULE_COMPONENTS(GameModule);
-
 			auto& registry = Engine::ReflectionRegistry::Get().GetMutableRegistry();
 			const size_t removed = registry.UnregisterModule(GameModuleId);
 			BAM_LOG(Info, "GameModule", "Lifecycle", "[GameModule] Unregistered {} reflection symbols.", removed);
 		}
-
 		if (m_OwnsScoreModule && Engine::ModuleManager::IsCreated())
 		{
 			auto& modules = Engine::ModuleManager::Get();

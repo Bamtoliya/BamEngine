@@ -2,6 +2,39 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-15] Runtime 수명주기 역전 해소 및 PickingManager 지연 소멸·모듈 언로드 크래시 해결
+
+- **배경 및 범위**: 독립 클라이언트(`Client.exe`) 종료 시 `EXCEPTION_ACCESS_VIOLATION (0xC0000005)` 크래시가 발생하는 문제를 진단하고, 런타임 종료 단계(`Runtime::Free`)에서의 매니저 수명주기 역전 및 `PickingManager`에 의한 씬 참조 카운트 지연 소멸 문제를 완벽히 해결했다.
+- **주요 변경 내용**:
+  - [Runtime.cpp](file:///i:/BamtoliyaGithub/BamEngine/Engine/Source/Runtime/Private/Runtime.cpp): `Runtime::Free()`의 매니저 소멸 순서를 의존성에 맞게 전면 재정렬했다.
+    1. `m_Renderer->ClearAllRenderQueues()` 및 `Safe_Destroy(m_PickingManager)`를 가장 먼저 실행하여 프레임 큐와 피킹 타겟(`m_CompletedPickingTargets`)이 쥐고 있던 씬 참조 카운트를 즉시 반환(`Safe_Release`).
+    2. `Safe_Destroy(m_SceneManager)`를 호출하여 외부 참조가 모두 해제된 씬을 즉시 소멸(`Scene::ClearEntities`). 이때 모듈 코드 및 시스템이 온전히 살아있어 모든 컴포넌트 소멸자가 안전하게 실행됨.
+    3. `Safe_Destroy(m_ModuleManager)`를 호출하여 동적 모듈(`GameModule.dll`)을 언로드. 이때 `SystemManager`가 살아있어 모듈의 `OnUnload()`가 등록된 시스템(`SkyAtmosphereSystem`)을 안전하게 제거(`RemoveSystem`).
+    4. `Safe_Destroy(m_SystemManager)`를 호출하여 남은 엔진 내장 시스템들을 정리.
+    5. 그 후 게임 로직, 리소스, 렌더링 인프라, RHI, 리플렉션 순으로 안전하게 해제.
+  - [Scene.cpp](file:///i:/BamtoliyaGithub/BamEngine/Engine/Source/World/Scene/Private/Scene.cpp): `Scene::ClearEntities()`에서 엔티티 래퍼(`m_EntityMap`)를 삭제하기 전에 `m_LocalRegistry.clear()`를 먼저 호출하도록 변경하여, 컴포넌트 소멸자 실행 도중 엔티티 래퍼가 유효하도록 안전성 보장.
+  - [GameModule.cpp](file:///i:/BamtoliyaGithub/BamEngine/Projects/GameModule/Source/GameModule.cpp): `GameModule::OnUnload()`에 `if (Engine::SystemManager::IsCreated())` 방어 코드를 추가하여 싱글톤 파괴 후 역참조 방지.
+  - [ReflectionRegistry.h](file:///i:/BamtoliyaGithub/BamEngine/Engine/Source/Core/Reflection/Public/ReflectionRegistry.h): `REGISTER_MODULE_COMPONENTS`, `UNREGISTER_MODULE_COMPONENTS` 매크로에 `(void)` 캐스트를 추가하여 C4834 `[[nodiscard]]` 경고 해결.
+- **검증 상태**: 독립 패키지 클라이언트(`Client.exe`) 실행 후 창 종료 시 `0xC0000005` 오류 대화상자 없이 클린하게 정상 종료됨을 사용자 실환경에서 확인 완료.
+- **미검증 항목**: 다중 동적 모듈 동시 로드/언로드 시나리오.
+
+---
+
+### [2026-11-15] 클라이언트 비동기 패키징 실시간 로그 스트리밍 및 DIA SDK·에셋 참조 검증 개선
+
+- **배경 및 범위**: 에디터 내장 클라이언트 패키징(`BuildProfilePanel`) 시 빌드 및 패키징 로그가 실시간으로 출력되지 않고 멈춰 보이던 문제를 개선하고, DIA SDK 탐색 경로 보강 및 2D 스프라이트/타일맵 패키지 에셋 익스포트 검증 오류를 해소했다.
+- **주요 변경 내용**:
+  - [ClientBuildJob.h](file:///i:/BamtoliyaGithub/BamEngine/Editor/Source/Build/Public/ClientBuildJob.h) / [ClientBuildJob.cpp](file:///i:/BamtoliyaGithub/BamEngine/Editor/Source/Build/Private/ClientBuildJob.cpp): 기존 `std::future` 단일 대기 방식에서 `std::thread` 작업자 스레드 및 `OutputCallback`(`std::function<void(std::string_view)>`) 기반 실시간 로그 스트리밍 구조로 전환.
+  - [ClientPackage.h](file:///i:/BamtoliyaGithub/BamEngine/Editor/Source/Build/Private/ClientPackage.h) / [ClientPackage.cpp](file:///i:/BamtoliyaGithub/BamEngine/Editor/Source/Build/Private/ClientPackage.cpp): `ExportClientPackage`에 `OutputCallback`을 연결하여 파일 복사 및 검증 진행 상황을 실시간 콘솔로 스트리밍.
+  - [BuildProfilePanel.cpp](file:///i:/BamtoliyaGithub/BamEngine/Editor/Source/ImGui/BuildProfilePanel/Private/BuildProfilePanel.cpp): 빌드/패키징 중 실시간으로 누적되는 로그를 `ImGui::BeginChild` 스크롤 뷰에 즉시 렌더링하고 `ImGui::SetScrollHereY(1.0f)`로 자동 스크롤 연동.
+  - [AssetReferenceValidator.cpp](file:///i:/BamtoliyaGithub/BamEngine/Editor/Source/AssetManager/Private/AssetReferenceValidator.cpp): `ValidateBuildScene()`에서 가상 URI(`AssetKey`)를 우선 검증하고, 절대 경로가 프로젝트/엔진 루트 하위일 경우 가상 URI로 정상 변환하여 외부 경로로 오탐되는 문제 해결 (`tilemap.png` 참조 오류 해소).
+  - [ReflectionGenerator.cmake](file:///i:/BamtoliyaGithub/BamEngine/Projects/Reflection/cmake/ReflectionGenerator.cmake) / [ReflectionEnTT/CMakeLists.txt](file:///i:/BamtoliyaGithub/BamEngine/Projects/ReflectionEnTT/CMakeLists.txt): Visual Studio 18 2026 및 VS 2022 환경의 DIA SDK 라이브러리(`diaguids.lib`) 탐색 힌트(`_dia_sdk_hints`) 보강.
+  - [CMakePresets.json](file:///i:/BamtoliyaGithub/BamEngine/CMakePresets.json): Ninja 빌드 프리셋(`windows-ninja-base`, `x64-ninja-debug`, `x64-ninja-release`, `x64-client-release`) 구성 보강.
+- **검증 상태**: `BuildProfilePanel`을 통한 클라이언트 패키지 빌드 및 `Client/결과/BamEngine-Windows-x64/` 패키지 생성 성공, 씬 에셋 참조 검증 통과 사용자 실행 확인 완료.
+- **미검증 항목**: Linux/macOS 등 비-Windows 플랫폼 패키징 툴체인.
+
+---
+
 ### [2026-11-15] 2D Phase 5 스프라이트 인스턴싱 드로우콜 배칭 및 기본 Unlit 머티리얼·Fallback 연결
 
 - **배경 및 범위**: [SpriteAnd2DSystemPlan.md](SpriteAnd2DSystemPlan.md)의 잔여 과제인 Phase 5를 완결하여, 스프라이트·타일맵 렌더링 시 발생하는 개별 드로우콜 및 상수 버퍼 업로드 병목을 인스턴싱 기반 배치 렌더링으로 해소하고, 미지정 스프라이트의 기본 Unlit 머티리얼 및 쿼드 메시 자동 Fallback을 연결했다.

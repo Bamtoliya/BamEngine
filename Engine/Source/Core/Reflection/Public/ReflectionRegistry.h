@@ -230,12 +230,12 @@ END
 
 
 #define REGISTER_MODULE_COMPONENTS(ModuleName) \
-    reflection_generated::ForEach_##ModuleName##_Type([&]<typename T>() { \
+    (void)reflection_generated::ForEach_##ModuleName##_Type([&]<typename T>() { \
         return Engine::ReflectionRegistry::Get().RegisterComponent<T>(); \
     })
 
 #define UNREGISTER_MODULE_COMPONENTS(ModuleName) \
-    reflection_generated::ForEach_##ModuleName##_Type([&]<typename T>() { \
+    (void)reflection_generated::ForEach_##ModuleName##_Type([&]<typename T>() { \
         Engine::ReflectionRegistry::Get().UnregisterComponent<T>(); \
         return true; \
     })

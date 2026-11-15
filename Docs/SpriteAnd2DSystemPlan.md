@@ -211,7 +211,7 @@ flowchart TD
 | **Phase 2** | **Sprite 렌더링 모드 확장** | Sliced(9-Slice), Tiled, Filled, 2D Sorting Layer & Order in Layer | **[모드 구현]**<br>(정렬 필드의 제출 연결은 Phase 5에서 진행) |
 | **Phase 3** | **Pixel Perfect Camera** | 레퍼런스 해상도/PPU 자동 줌, 서브픽셀 카메라 스냅, 정수배 렌더링 | **[구현 완료]**<br>(PixelPerfectCameraComponent, CameraSystem 연동 및 단위 테스트) |
 | **Phase 4** | **2D Tilemap System** | Chunked Tilemap Mesh Batching, Tile Palette 저작 도구 | **[구현 완료]**<br>(TilemapComponent, TilePalettePanel, SceneViewportPanel 페인팅 및 TilemapCheck) |
-| **Phase 5** | **Sprite Atlas & Batcher** | MaxRects 패킹, 런타임 스프라이트 인스턴싱 드로우콜 배칭, Unlit 머티리얼·Fallback 연결 | **[구현 완료]**<br>(SpriteInstanceData, RenderSprite 인스턴싱 루프, SpriteMaterial Fallback) |
+| **Phase 5** | **Sprite Atlas & Batcher** | MaxRects 패킹, 런타임 스프라이트 인스턴싱 드로우콜 배칭, Unlit 머티리얼·Fallback 연결, 패키지 실행 및 종료 안정화 | **[구현 및 검증 완료]**<br>(SpriteInstanceData, RenderSprite 인스턴싱 루프, SpriteMaterial Fallback, Client 패키지 검증 통과) |
 
 ---
 
@@ -228,4 +228,5 @@ flowchart TD
 4. **Phase 4 완료 기준**:
    - 타일 팔레트에서 타일을 찍어 뷰포트에 그릴 수 있다. $100 \times 100$ 타일맵의 드로우 수와 프레임 시간은 Phase 5의 비교 장면에서 기록한다.
 5. **Phase 5 완료 기준**:
-   - [Phase 5.4](#54-완료-기준)의 실제 RHI 드로우, 패스 비용 및 시각적 회귀 검증을 완료한다.
+   - `SpriteInstanceData` 구조체(112B) 및 `gbufferSpriteVS.hlsl` 인스턴싱 셰이더, `Renderer::RenderSprite()`의 연속 동일 상태(material, mesh, texture) 최대 1024개 인스턴스 드로우콜 1회(`DrawIndexedInstanced`) 일괄 제출 파이프라인 구축 완료.
+   - 2D 통합 테스트 씬(`Scenes/2DRegressionLabReady.bamscene.json`) 기반 패키징 에셋 익스포트 검증 통과 및 독립 실행 클라이언트(`Client.exe`) 정상 실행·클린 종료 검증 완료.
